@@ -4,13 +4,11 @@ Run (headless, reproducible), after build_airside_props.py has written the piece
   blender.exe --background --factory-startup --python-exit-code 1 --python \
     'C:\\Users\\chulf\\Gotta-make-my-flight\\tools\\blender\\airside\\render_airside_plates.py' [-- stage ...]
 
-Stages (all when none is named): six, poses, glyphs, stand, pushback, sheet. Everything
+Stages (all when none is named): six, glyphs, stand, pushback, sheet. Everything
 is written under tools/blender/out/airside-props/ (gitignored); nothing in game/ is
 touched. The plates re-import the WRITTEN .glb files from game/assets/airside/props/
 and the pack's plane 05 from game/assets/planes/tp_plane_05a.glb:
 - six_axis/<piece>.png: six orthographic views at one scale, true scale, a 1 m cube;
-- poses.png: the bridge from the side at rest, at the medium sill (1.59 m) and at the
-  large sills (2.4 m, 2.9 m), each target marked by a red bar, with a 1 m cube;
 - glyphs.png: the sign from the front with each letter A-E on both panels and both
   arrows, plus its back;
 - stand.png: plane 05 parked at a medium stand (stand_placement.gd geometry: wall line
@@ -25,7 +23,7 @@ and the pack's plane 05 from game/assets/planes/tp_plane_05a.glb:
 - contact_sheet.png: every plate above, downscaled.
 Each plate proves its subjects are in frame (every vertex inside the margin) and
 visible (camera rays reach the subject first); on failure PROBE_INVALID and exit 1.
-The pose stages print the Mount_Door to door-sill error and the bogie height.
+The stand stage prints the Mount_Door to door-sill error of the docked nose-loader.
 These are Blender plates: the in-engine look needs a windowed Godot render.
 """
 
@@ -109,47 +107,53 @@ def box_obj(name, lo, hi, rgb):
 # ---------------------------------------------------------------- bridge pose
 
 
+def set_bridge(o, slide, height, yaw, extend):
+    """Set the nose-loader's joints as JetBridgePose.apply() does."""
+    for name in ("Walk_Slide", "Stair_Rise", "Curtain_Low", "Floor_Lift", "Curtain_High", "Cab_Yaw",
+                 "Bellows_Extend"):
+        o[name].rotation_mode = "XYZ"
+    o["Walk_Slide"].location = (0.0, -slide, 0.0)
+    o["Stair_Rise"].scale = (1.0, 1.0, height)
+    o["Curtain_Low"].scale = (1.0, 1.0, max(height - bp.CURTAIN_GAP, bp.CURTAIN_MIN))
+    o["Floor_Lift"].location = (0.0, 0.0, height)
+    over = bp.BOX_TOP - bp.SKIN_T - height - (bp.CAB_IN + bp.CURTAIN_GAP)
+    o["Curtain_High"].scale = (1.0, 1.0, max(over, bp.CURTAIN_MIN))
+    o["Cab_Yaw"].rotation_euler = (0.0, 0.0, yaw)
+    o["Bellows_Extend"].location = (0.0, -extend, 0.0)
+    bpy.context.view_layer.update()
+
+
+def park_bridge(o):
+    """The parked pose (JetBridgePose.parked())."""
+    set_bridge(o, 0.0, bp.H_PARK, math.pi / 2.0, bp.E_MIN)
+
+
 def pose_bridge(o, holder, p_world, n_world, label):
-    """Apply the pose math of build_airside_props.py so Mount_Door lands on p_world
-    with the cab facing -n_world. Returns (yaw, pitch, slide, error, foot_z)."""
+    """JetBridgePose.solve(): slide, lift, turn and extend the nose-loader so
+    Mount_Door lands on p_world with the cab facing -n_world. Returns (slide,
+    height, yaw, extend, error)."""
     inv = holder.matrix_world.inverted()
     pl = inv @ Vector(p_world)
     nl = inv.to_3x3() @ Vector(n_world)
     # Blender local -> Godot local.
     P = (pl.x, pl.z, -pl.y)
-    n = (nl.x, nl.z, -nl.y)
-    C = (P[0] + n[0] * bp.MOUNT_DOOR_Z, P[1], P[2] + n[2] * bp.MOUNT_DOOR_Z)
-    yaw = math.atan2(C[0], C[2])
-    d = math.hypot(C[0], C[2]) - bp.HINGE_Z
-    dh = C[1] - bp.ROT_FLOOR
-    th = math.atan2(dh, d)
-    s = math.hypot(d, dh) - bp.CAB_Z
-    h = bp.ROT_FLOOR - bp.TUN_B_SINK * math.cos(th) + (bp.DRIVE_Z + s) * math.sin(th)
-    cab = math.atan2(-n[0], -n[2]) - yaw
-    for name in ("Tunnel_Yaw", "Tunnel_Pitch", "Tunnel_Slide", "Cab_Level", "Cab_Yaw", "Drive_Level", "Drive_Foot"):
-        o[name].rotation_mode = "XYZ"
-    o["Tunnel_Yaw"].rotation_euler = (0.0, 0.0, yaw)
-    o["Tunnel_Pitch"].rotation_euler = (-th, 0.0, 0.0)
-    o["Tunnel_Slide"].location = (0.0, -s, 0.0)
-    o["Cab_Level"].rotation_euler = (th, 0.0, 0.0)
-    o["Drive_Level"].rotation_euler = (th, 0.0, 0.0)
-    o["Cab_Yaw"].rotation_euler = (0.0, 0.0, cab)
-    o["Drive_Foot"].location = (0.0, 0.0, -h)
-    bpy.context.view_layer.update()
-    got = o["Mount_Door"].matrix_world.translation
-    err = (got - Vector(p_world)).length
-    foot = rap.world_points([o["Drive_Foot_Mesh"]])
-    foot_z = float(foot[:, 2].min()) - holder.matrix_world.translation.z
-    log("POSE %s yaw=%.1f pitch=%.2f slide=%.3f (0..%.1f) cab_yaw=%.1f drive_h=%.3f mount_err=%.4f "
-        "bogie_min_z=%.4f"
-        % (label, math.degrees(yaw), math.degrees(th), s, bp.SLIDE_MAX, math.degrees(cab), h, err, foot_z))
+    f = (-nl.x, 0.0, nl.y)
+    flen = math.hypot(f[0], f[2])
+    f = (f[0] / flen, 0.0, f[2] / flen)
+    yaw = math.atan2(f[0], f[2])
+    extend = P[0] / f[0] - bp.MOUNT_DOOR_Z
+    slide = P[2] - f[2] * (bp.MOUNT_DOOR_Z + extend) - bp.CAB_Z
+    height = P[1]
+    set_bridge(o, slide, height, yaw, extend)
+    err = (o["Mount_Door"].matrix_world.translation - Vector(p_world)).length
+    log("POSE %s slide=%.3f (0..%.2f) height=%.3f (%.2f..%.2f) cab_yaw=%.1f extend=%.3f mount_err=%.4f"
+        % (label, slide, bp.SLIDE_MAX, height, bp.H_MIN, bp.H_MAX, math.degrees(yaw), extend, err))
     if err > 0.005:
         invalid("%s: Mount_Door is %.4f m off the target" % (label, err))
-    if not (-1e-6 <= s <= bp.SLIDE_MAX + 1e-6) or abs(math.degrees(th)) > bp.PITCH_MAX_DEG or h > bp.DRIVE_H_MAX:
-        invalid("%s: pose out of reach (slide %.3f, pitch %.2f)" % (label, s, math.degrees(th)))
-    if abs(foot_z) > 0.005:
-        invalid("%s: the drive bogie is %.4f m off the ground" % (label, foot_z))
-    return yaw, th, s, err, foot_z
+    if (not -1e-4 <= slide <= bp.SLIDE_MAX + 1e-4 or not bp.H_MIN - 1e-4 <= height <= bp.H_MAX + 1e-4
+            or not bp.E_MIN - 1e-4 <= extend <= bp.E_MAX + 1e-4):
+        invalid("%s: pose out of reach (slide %.3f, height %.3f, extend %.3f)" % (label, slide, height, extend))
+    return slide, height, yaw, extend, err
 
 
 # ---------------------------------------------------------------- six-axis
@@ -189,52 +193,6 @@ def six_axis(piece, keep=None):
     out = os.path.join(OUT, "six_axis", piece + ".png")
     rap.save_array(rap.grid(tiles, 3), out)
     return out
-
-
-# ---------------------------------------------------------------- poses
-
-
-def poses():
-    """Side view (from Godot +x) of the bridge at rest and at three sills."""
-    scene = rap.reset_scene(1800, 800, 1.5)
-    reach = bp.HINGE_Z + bp.CAB_Z + bp.MOUNT_DOOR_Z
-    targets = [("rest", None), ("medium_05_1.59m", (1.59, reach + 0.6)), ("large_06_2.40m", (2.40, reach + 2.6)),
-               ("large_07_2.90m", (2.90, reach + 4.6))]
-    allp = []
-    groups = {}
-    for k, (label, tgt) in enumerate(targets):
-        # Rows along Blender z would overlap; stack the four bridges vertically in the
-        # side view by lifting each 7 m (a plate layout only; the ground bar shows 0).
-        lift = (len(targets) - 1 - k) * 7.0
-        objs, holder = place(prop("jet_bridge"), label, (0.0, lift, 0.0))
-        o = by_name(objs)
-        box_obj("Ground_" + label, g2b(-2.0, lift - 0.05, -3.5), g2b(2.0, lift, reach + 6.5), rap.FLOOR_RGB)
-        if tgt is not None:
-            sill, z = tgt
-            p = g2b(0.0, lift + sill, z)
-            # The fuselage is ahead (+z); its outward normal points back at the bridge.
-            pose_bridge(o, holder, p, Vector(g2b(0.0, 0.0, -1.0)), label)
-            mark = box_obj("Sill_" + label, g2b(-1.0, lift + sill - 0.04, z), g2b(1.0, lift + sill, z + 0.5), MARK_RGB)
-            objs = objs + [mark]
-        groups[label] = objs
-        allp.append(rap.world_points(objs))
-    ref = rap.cube(tuple(g2b(0.0, 0.5, -3.0)))
-    ref_pts = rap.world_points([ref])
-    pts = np.concatenate(allp + [ref_pts])
-    rot = rap.look_rot((1.0, 0.0, 0.0), (0.0, 0.0, 1.0))
-    inv = np.array(rot.to_matrix().inverted())
-    loc = pts @ inv.T
-    w = (loc[:, 0].max() - loc[:, 0].min()) / (1.0 - 2 * MARGIN - 0.03)
-    hgt = (loc[:, 1].max() - loc[:, 1].min()) / (1.0 - 2 * MARGIN - 0.03)
-    scale = max(w, hgt * 1800 / 800)
-    cam = rap.ortho_camera(scene, rot, pts, scale)
-    for label, objs in groups.items():
-        rap.prove_in_frame("poses %s" % label, scene, cam, rap.world_points(objs))
-    rap.prove_in_frame("poses cube", scene, cam, ref_pts)
-    out = os.path.join(OUT, "poses.png")
-    rap.save_array(rap.over(rap.render(scene, os.path.join(OUT, "poses_raw.png")), BACKDROP), out)
-    return out
-
 
 # ---------------------------------------------------------------- glyphs
 
@@ -356,24 +314,16 @@ def stand_scene(pushed_m, with_tug, docked):
     term = box_obj("Terminal", g2b(-26.0, 0.0, 14.0), g2b(26.0, 5.2, 0.0), TERMINAL_RGB)
     rap.floor_plane((-40.0, -14.0), (40.0, 62.0))
     subjects = {"plane_05": plane}
-    # The bridge: its link stub backs onto the wall (root turned 180 degrees, so its
-    # -z points at the terminal), the rotunda port of the door, reach mid-range.
+    # The nose-loader as JetBridgePose.root_for() places it (board 0adca5c6): rooted on
+    # the exit door's sill (x 0 on the wall line), turned 180 degrees.
     p_door = Vector((skin_x, mid_y, sill_z))
-    c = Vector((skin_x + bp.MOUNT_DOOR_Z, mid_y - pushed_m))  # the parked stand door
-    rz = -(bp.LINK_Z + 0.3)
-    want = bp.HINGE_Z + bp.CAB_Z + 1.5
-    dz = rz - (-c.y)
-    rx = c.x + math.sqrt(max(want * want - dz * dz, 0.0))
-    bridge, bh = place(prop("jet_bridge"), "jet_bridge", (rx, 0.0, rz), 180.0)
+    bridge, bh = place(prop("jet_bridge"), "jet_bridge", (0.0, 0.0, 0.0), 180.0)
     bo = by_name(bridge)
     if docked:
         pose_bridge(bo, bh, p_door, Vector((1.0, 0.0, 0.0)), "stand plane_05")
     else:
-        bo["Tunnel_Yaw"].rotation_mode = "XYZ"
-        bo["Tunnel_Yaw"].rotation_euler = (0.0, 0.0, math.radians(-70.0))
-        bpy.context.view_layer.update()
-    log("BRIDGE root_godot=(%.2f, 0, %.2f) column_to_exit_x=%.2f link_back_godot_z=%.2f docked=%s"
-        % (rx, rz, rx, -bo["Mount_Link"].matrix_world.translation.y, docked))
+        park_bridge(bo)
+    log("BRIDGE root_godot=(0, 0, 0) docked=%s" % docked)
     subjects["jet_bridge"] = bridge
     # The taxi sign at the stand's lead-in, north of the bridge, facing the camera side.
     sign, _sh = place(prop("taxi_sign"), "taxi_sign", (13.0, 0.0, -26.0), 125.0)
@@ -448,7 +398,7 @@ def main():
     for sub in ("six_axis", "glyphs"):
         os.makedirs(os.path.join(OUT, sub), exist_ok=True)
     only = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
-    known = ["six", "poses", "glyphs", "stand", "pushback", "sheet"]
+    known = ["six", "glyphs", "stand", "pushback", "sheet"]
     unknown = [s for s in only if s not in known]
     if unknown:
         invalid("unknown stages %s; known: %s" % (unknown, known))
@@ -458,8 +408,6 @@ def main():
         made.append(six_axis("jet_bridge"))
         made.append(six_axis("pushback_tug"))
         made.append(six_axis("taxi_sign", {"Glyph_Loc_A", "Glyph_Dir_B", "Glyph_Arrow_R"}))
-    if "poses" in stages:
-        made.append(poses())
     if "glyphs" in stages:
         made.append(glyphs())
     if "stand" in stages:
@@ -467,7 +415,7 @@ def main():
     if "pushback" in stages:
         made.extend(pushback())
     if "sheet" in stages:
-        names = ["six_axis/jet_bridge.png", "six_axis/pushback_tug.png", "six_axis/taxi_sign.png", "poses.png",
+        names = ["six_axis/jet_bridge.png", "six_axis/pushback_tug.png", "six_axis/taxi_sign.png",
                  "glyphs.png", "stand.png", "stand_bridge.png", "stand_sign.png", "pushback.png", "pushback_tug.png", "pushback_tug_side.png"]
         paths = [os.path.join(OUT, n) for n in names if os.path.exists(os.path.join(OUT, n))]
         sheet(paths)

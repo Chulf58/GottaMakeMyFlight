@@ -5,9 +5,10 @@ Run (headless, reproducible):
     'C:\\Users\\chulf\\Gotta-make-my-flight\\tools\\blender\\airside\\build_airside_props.py' [-- piece ...]
 
 Pieces (written to game/assets/airside/props/<piece>.glb):
-- jet_bridge: a fixed telescoping passenger bridge, visual only. One rig serves the
-  medium sill (plane 05, 1.59 m) and the large sills (06 at 2.4 m, 07 at 2.9 m) and
-  every reach from REACH_MIN to REACH_MAX (see the pose math below).
+- jet_bridge: a nose-loader (pedestal) passenger bridge at a gate's exit door (board
+  0adca5c6; rulings jet-bridges-are-nose-loader-pedestal-bridges-an-enclosed-wal,
+  nose-loader-bridge-design-stair-landing-and-cab-share-one-fl and plane-03-boards-
+  on-foot-from-the-apron-plane-04-docks-the-no). Visual only.
 - pushback_tug: a low towbarless tug (user ruling 2026-11-07) that cradles the nose
   wheel in a slot at its rear and runs forward under and past the nose; its origin
   and Mount_NoseGear are the nose wheel's ground contact, and Cradle_Lift raises the
@@ -18,54 +19,56 @@ Pieces (written to game/assets/airside/props/<piece>.glb):
 
 The builder reuses tools/blender/interior/build_interior_kit.py: its box and cylinder
 helpers, the measured palette atlas swatches (every face on one swatch of
-TP_Atlas_1A_D or TP_Atlas_Lights_1A_D; material names exactly the ones
-game/assets/toon_post_import.gd binds), its export and its verify_written() re-read
-of the WRITTEN file (materials, zero images, node names, world bounds, UVs inside
-their swatches). check_rig() then re-reads each written GLB's node tree and checks
-every pivot's parent, rest translation and rest rotation against the constants here.
+TP_Atlas_1A_D or TP_Atlas_Lights_1A_D, glass on TP_Glass_1A_D; material names exactly
+the ones game/assets/toon_post_import.gd binds), its export and its verify_written()
+re-read of the WRITTEN file (materials, zero images, node names, world bounds, UVs
+inside their swatches). check_rig() then re-reads each written GLB's node tree and
+checks every pivot's parent, rest translation and rest rotation against the constants
+here, and walk_report() prints every walk mount from the written file.
 
 Axes. Every dimension below is in Godot axes (x right, y up, z = the piece's front),
 converted once by gb()/gbox(): Blender x = Godot x, Blender y = -Godot z, Blender z =
-Godot y. Each piece's origin is on the ground; the bridge's is on its column axis.
+Godot y. Each piece's origin is on the ground.
 
-Jet bridge rig (all empties export with zero rest rotation):
+Jet bridge. The root is the exit door's sill on the terminal's wall line; +z points
+out from the wall (JetBridgePose.root_for() turns the root 180 degrees, so +z is north
+and +x is west, toward the plane's port door). A glazed vestibule stands on the exit
+door with a ground-floor apron door on its west side (plane 03's passengers walk out of
+it). A glazed stair enclosure runs straight out from it; the stair rises to a short
+level landing on a pedestal and the cab stands at the landing's end. The stair, the
+landing and the cab share one floor height H, the docked plane's door sill (0.63 to
+2.91 m): the stair keeps its tread count and its rise per step is H / RISERS. The cab
+turns to face the plane door and its bellows reach the door sill; its roof top is
+H + CAB_TOP (2.25 m), 2.1 m inside. All walls carry real window openings with glass.
+Rig (all empties export with zero rest rotation and unit scale):
   JetBridge_ROOT
-    JetBridge_Body        column, rotunda drum, roof, fixed-link stub (static)
-    Mount_Link            at (0, ROT_FLOOR, -LINK_Z): the stub's back face, floor
-                          level, where a link corridor or the terminal wall meets it
-    Tunnel_Yaw            at (0, ROT_FLOOR, 0): rotate about Y to aim the tunnel
-      Tunnel_Pitch        at (0, 0, HINGE_Z) on the drum face, floor height: rotate
-                          about X to slope the tunnel; its mesh is tunnel A
-        Tunnel_Slide      at (0, 0, 0): translate along +Z by s in [0, SLIDE_MAX];
-                          its mesh is tunnel B, the larger cab-side section
-          Drive_Level     at (0, -TUN_B_SINK, DRIVE_Z) under tunnel B: counter-pitch
-                          so it stays upright; its mesh is the cross beam and sleeve
-            Drive_Foot    at (0, -(ROT_FLOOR - TUN_B_SINK), 0): its origin is the wheel
-                          contact; set y so the bogie stands on the ground
-          Cab_Level       at (0, 0, CAB_Z), B's outer end on the floor line:
-                          counter-pitch so the cab floor is level
-            Cab_Yaw       at (0, 0, 0): rotate about Y to face the fuselage; its mesh is
-                          the cab, roof and bellows
-              Mount_Door  at (0, 0, MOUNT_DOOR_Z): the bellows' front, floor level;
-                          the wiring puts it on the aircraft door sill
-
-Pose math (Godot, in the bridge root's frame). Given the door sill point P (the
-fuselage skin at the door's middle, sill height) and the horizontal unit normal n
-pointing out of the fuselage toward the bridge:
-  C   = P + n * MOUNT_DOOR_Z                 (Cab_Yaw origin, C.y = P.y)
-  yaw = atan2(C.x, C.z)                      Tunnel_Yaw.rotation.y
-  d   = hypot(C.x, C.z) - HINGE_Z            horizontal hinge-to-cab distance
-  dh  = C.y - ROT_FLOOR
-  th  = atan2(dh, d)                         Tunnel_Pitch.rotation.x = -th
-  s   = hypot(d, dh) - CAB_Z                 Tunnel_Slide.position.z = s, 0..SLIDE_MAX
-  Cab_Level.rotation.x = th; Drive_Level.rotation.x = th
-  Cab_Yaw.rotation.y = atan2(-n.x, -n.z) - yaw
-  h   = ROT_FLOOR - TUN_B_SINK * cos(th) + (DRIVE_Z + s) * sin(th)
-  Drive_Foot.position.y = -h
-A pose with s outside [0, SLIDE_MAX], |th| above PITCH_MAX_DEG or h above DRIVE_H_MAX
-(where the drive leg would leave its sleeve) is out of reach.
-render_airside_plates.py applies exactly this math and prints the Mount_Door error.
+    JetBridge_Body        the collar at the exit door and the vestibule (static)
+    Mount_ExitSill        (0, 0, 0): the exit door's sill on the wall line
+    Mount_ApronDoor       (VEST_HALF, 0, APRON_Z): the vestibule's apron door, outside
+    Walk_Slide            (0, 0, 0): translate along +z by D in [0, SLIDE_MAX], so the
+                          cab reaches a plane door further out (model 04); its mesh is
+                          the stair enclosure, its ground floor and the pedestal base under the cab
+      Mount_StairFoot     (0, 0, STAIR_Z0 - STEP_OFF): before the first step
+      Stair_Rise          (0, 0, 0): scale y = H; its mesh is the stair for a 1 m rise
+                          and the cab's pedestal post
+      Curtain_Low         (0, 0, LANDING_END - CURTAIN_T): scale y = H - CURTAIN_GAP;
+                          closes the enclosure's open end under the cab
+      Floor_Lift          (0, 0, 0): translate y = H; its mesh is the landing
+        Mount_StairTop    (0, 0, STAIR_Z1 + STEP_OFF): past the top step
+        Curtain_High      (0, CAB_IN + CURTAIN_GAP, LANDING_END - CURTAIN_T): scale y =
+                          BOX_TOP - SKIN_T - H - (CAB_IN + CURTAIN_GAP), at least
+                          CURTAIN_MIN; closes the enclosure's open end over the cab
+        Cab_Yaw           (0, 0, CAB_Z): rotate about y to face the door; its mesh is
+                          the cab, entered from its +x side
+          Mount_CabFloor  (0, 0, 0): the cab floor's centre
+          Bellows_Extend  (0, 0, 0): translate along +z by E in [E_MIN, E_MAX]; its mesh
+                          is the bellows
+            Mount_Door    (0, 0, MOUNT_DOOR_Z): the bellows' front at floor level; the
+                          wiring puts it on the plane's door sill
+JetBridgePose (game/airside/jet_bridge_pose.gd) solves D, H, the cab yaw and E from the
+door and its normal, and returns every walk mount in world space.
 """
+
 
 import math
 import os
@@ -96,29 +99,53 @@ kit.PALETTE.update({
 })
 
 # ---------------------------------------------------------------- jet bridge
-ROT_FLOOR = 2.75        # rotunda and tunnel floor line at rest, above the ground
-DRUM_R = 1.70
-HINGE_Z = DRUM_R        # the pitch hinge sits on the drum face
-TUN_A_LEN = 6.5         # tunnel A, hinge-local z from -0.6 (sunk in the drum) to 6.5
-TUN_A_HALF_W = 1.20
-TUN_A_H = 2.50
-TUN_B_LEN = 6.0         # tunnel B (larger, slides over A), rest z 0.8 .. 6.8
-TUN_B_HALF_W = 1.35
-TUN_B_H = 2.75
-TUN_B_SINK = 0.30       # B's floor slab underside below the floor line
-CAB_Z = TUN_A_LEN + 0.3  # B's outer end = the cab pivot at rest
-SLIDE_MAX = 5.0
-DRIVE_H_MAX = 2.90       # the leg top (foot + 2.25) stays 0.10 m inside the sleeve (bottom -0.75)
-DRIVE_Z = CAB_Z - 1.6
+SKIN_T = 0.08           # wall, roof and end-wall thickness of every hollow part
+COLLAR_GAP = 0.16       # the exit door collar stops this short of the wall line
+COLLAR_TOP = 2.25       # under the terminal roof's fascia (0.25 m out, 2.3 m up)
+COLLAR_DOOR_TOP = 2.12
+DOOR_HALF = 0.55        # the exit door opening
+DOOR_OPEN_TOP = 2.30
+BOX_GAP = 0.30          # the vestibule's terminal face off the wall line
+VEST_HALF = 1.10        # the vestibule's outer half width
+VEST_END = 2.30         # the vestibule's far end, out from the wall
+VEST_TOP = 5.30
+APRON_Z = 0.80          # the apron door's middle, out from the wall: the walk to it stays
+                        # short of the first riser (STAIR_Z0)
+APRON_HALF = 0.40
+APRON_TOP = 2.20
+BOX_HALF = 1.00         # the sliding stair enclosure's outer half width
+BOX_Z0 = BOX_GAP        # its near end, inside the vestibule
+BOX_TOP = 5.20          # its roof top: under plane 04's rotor disc (5.46 m)
+RISERS = 16
+TREADS = RISERS - 1
+TREAD = 0.25
+STAIR_Z0 = 0.80
+STAIR_Z1 = STAIR_Z0 + TREADS * TREAD
+STEP_OFF = 0.10         # the stair mounts stand this far off the first and last riser
 CAB_HALF = 1.50
-CAB_TOP = 2.85
+CAB_Z = 6.30            # the cab pivot at D = 0
+LANDING_END = CAB_Z - CAB_HALF
+CAB_IN = 2.10           # the cab's inside height and its door openings
+CAB_TOP = 2.25          # the cab's roof top above its floor
+CAB_LOW = 0.30          # the cab's underside below its floor
+# The pedestal post stands under the cab's near side, clear of plane 03's wing (its
+# leading edge 6.0 m out, under the parked cab).
+POST_Z = CAB_Z - 1.10
 BELLOWS_D = 0.60
 MOUNT_DOOR_Z = CAB_HALF + BELLOWS_D
-PITCH_MAX_DEG = 9.0
-REACH_MIN = HINGE_Z + CAB_Z
-REACH_MAX = REACH_MIN + SLIDE_MAX
-BOGIE_TOP = 0.60
-LINK_Z = DRUM_R + 0.9   # the stub's back face behind the column axis
+CURTAIN_T = 0.04
+CURTAIN_GAP = 0.10
+CURTAIN_MIN = 0.01
+SLIDE_MAX = 1.90
+E_MIN, E_MAX = -0.15, 0.30
+H_MIN, H_MAX = 0.63, 2.91
+H_PARK = 3.05           # parked: over plane 03's wing (2.57 m), under 04's rotor (5.46 m)
+WIN_LOW = (0.90, 2.90)
+WIN_HIGH = (3.10, 4.90)
+# The walk from the exit door to the plane door, in walk order, and plane 03's way
+# out to the apron.
+WALK_MOUNTS = ["Mount_ExitSill", "Mount_StairFoot", "Mount_StairTop", "Mount_CabFloor", "Mount_Door"]
+APRON_MOUNTS = ["Mount_ExitSill", "Mount_ApronDoor"]
 
 # ---------------------------------------------------------------- pushback tug
 # A towbarless tug; z is measured from the nose wheel's ground contact (the origin).
@@ -208,77 +235,183 @@ def pivot(piece, name, parent, c, at):
     return empty(name, parent, c, at)
 
 
+def panels(a, b, width, gap):
+    """As many (u0, u1) spans of `width` with `gap` between them as fit in [a, b],
+    centred in it."""
+    n = int((b - a + gap) // (width + gap))
+    start = a + (b - a - (n * width + (n - 1) * gap)) / 2.0
+    return [(start + i * (width + gap), start + i * (width + gap) + width) for i in range(n)]
+
+
+def holed_wall(name, axis, u_rng, v_rng, w_rng, holes, pal, parent, c):
+    """One closed wall slab with rectangular openings, built on a shared-vertex grid
+    so the outline draws only its rim and the openings' edges (no seams between
+    panels). axis "x": the wall's normal is Godot x (it runs along z, u = z); axis
+    "z": its normal is z (it runs along x, u = x). v is height, w the thickness
+    range. holes: (u0, u1, v0, v1, glass); a glass opening gets a pane in the
+    middle of the wall, named <name>_Glass_<i>."""
+    def at(u, v, w):
+        return gb(w, v, u) if axis == "x" else gb(u, v, w)
+
+    us = sorted({u_rng[0], u_rng[1]} | {h[k] for h in holes for k in (0, 1)})
+    vs = sorted({v_rng[0], v_rng[1]} | {h[k] for h in holes for k in (2, 3)})
+    nu, nv = len(us) - 1, len(vs) - 1
+
+    def solid(i, j):
+        if i < 0 or j < 0 or i >= nu or j >= nv:
+            return False
+        um, vm = (us[i] + us[i + 1]) / 2.0, (vs[j] + vs[j + 1]) / 2.0
+        return not any(h[0] < um < h[1] and h[2] < vm < h[3] for h in holes)
+
+    bm = bmesh.new()
+    verts = {}
+
+    def vert(i, j, side):
+        key = (i, j, side)
+        if key not in verts:
+            verts[key] = bm.verts.new(at(us[i], vs[j], w_rng[side]))
+        return verts[key]
+
+    for i in range(nu):
+        for j in range(nv):
+            if not solid(i, j):
+                continue
+            bm.faces.new([vert(i, j, 1), vert(i + 1, j, 1), vert(i + 1, j + 1, 1), vert(i, j + 1, 1)])
+            bm.faces.new([vert(i, j + 1, 0), vert(i + 1, j + 1, 0), vert(i + 1, j, 0), vert(i, j, 0)])
+            # A side face on every cell edge that borders an opening or the rim.
+            for (di, dj), (a, b) in (((0, -1), ((i, j), (i + 1, j))), ((1, 0), ((i + 1, j), (i + 1, j + 1))),
+                                     ((0, 1), ((i + 1, j + 1), (i, j + 1))), ((-1, 0), ((i, j + 1), (i, j)))):
+                if not solid(i + di, j + dj):
+                    bm.faces.new([vert(*a, 1), vert(*a, 0), vert(*b, 0), vert(*b, 1)])
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    wall = kit._finish_mesh(name, bm, pal, parent, c)
+    mid = (w_rng[0] + w_rng[1]) / 2.0
+    for k, h in enumerate(holes):
+        if not h[4]:
+            continue
+        lo, hi = (mid - 0.008, h[2], h[0]), (mid + 0.008, h[3], h[1])
+        if axis == "z":
+            lo, hi = (h[0], h[2], mid - 0.008), (h[1], h[3], mid + 0.008)
+        gbox("%s_Glass_%d" % (name, k), lo, hi, "glass", parent, c)
+    return wall
+
+
+def window_row(spans, v0, v1):
+    return [(a, b, v0, v1, True) for a, b in spans]
+
+
 # ---------------------------------------------------------------- jet bridge
+
+
+def glazed_walls(name, half, z0, z1, y_top, holes_by_side, pal, parent, c):
+    """The two long walls (x = +-half, thickness SKIN_T inward) from z0 to z1, ground to
+    y_top, each with WIN_LOW and WIN_HIGH window rows plus that side's extra holes
+    (holes_by_side[+1] for +x, [-1] for -x)."""
+    spans = panels(z0 + 0.15, z1 - 0.1, 0.9, 0.15)
+    for sx in (-1, 1):
+        holes = list(holes_by_side.get(sx, []))
+        blocked = [(h[0], h[1]) for h in holes]
+        for v0, v1 in (WIN_LOW, WIN_HIGH):
+            for a, b in spans:
+                # A window that would meet an extra opening stays shut.
+                if v0 < APRON_TOP and any(a < hb and b > ha for ha, hb in blocked):
+                    continue
+                holes.append((a, b, v0, v1, True))
+        x0, x1 = sorted((sx * (half - SKIN_T), sx * half))
+        holed_wall("%s_%d" % (name, sx), "x", (z0, z1), (0.0, y_top), (x0, x1), holes, pal, parent, c)
 
 
 def build_jet_bridge(root, c):
     p = "jet_bridge"
-    # Static: plinth, column, rotunda drum with a window band, roof.
-    gbox("Plinth", (-0.7, 0.0, -0.7), (0.7, 0.15, 0.7), "concrete", root, c, bevel=0.03)
-    gcyl_y("Column", 0.0, 0.0, 0.15, ROT_FLOOR - 0.25, 0.45, "concrete", root, c)
-    gcyl_y("Drum_Floor", 0.0, 0.0, ROT_FLOOR - 0.25, ROT_FLOOR, DRUM_R + 0.05, "metal", root, c)
-    gcyl_y("Drum_Wall", 0.0, 0.0, ROT_FLOOR, ROT_FLOOR + 2.35, DRUM_R, "white", root, c)
-    gcyl_y("Drum_Windows", 0.0, 0.0, ROT_FLOOR + 1.0, ROT_FLOOR + 1.6, DRUM_R + 0.02, "window", root, c)
-    gcyl_y("Drum_Roof", 0.0, 0.0, ROT_FLOOR + 2.35, ROT_FLOOR + 2.55, DRUM_R + 0.15, "light_grey", root, c)
-    # The fixed-link stub on the back (Godot -z), toward the terminal; Mount_Link is its
-    # back face at floor level, where a link corridor or the terminal wall meets it.
-    gbox("Link_Stub", (-1.0, ROT_FLOOR - 0.25, -LINK_Z), (1.0, ROT_FLOOR + 2.4, -DRUM_R + 0.4), "white", root, c,
-         bevel=0.03)
-    gbox("Link_Band", (-1.02, ROT_FLOOR - 0.25, -LINK_Z - 0.02), (1.02, ROT_FLOOR + 0.05, -DRUM_R + 0.4), "blue",
+    pivot(p, "Mount_ExitSill", root, c, (0.0, 0.0, 0.0))
+    pivot(p, "Mount_ApronDoor", root, c, (VEST_HALF, 0.0, APRON_Z))
+    # The collar at the exit door, under the roof fascia.
+    for sx in (-1, 1):
+        x0, x1 = sorted((sx * DOOR_HALF, sx * (DOOR_HALF + 0.15)))
+        gbox("Collar_%d" % sx, (x0, 0.0, COLLAR_GAP), (x1, COLLAR_TOP, BOX_GAP), "frame", root, c)
+    gbox("Collar_Top", (-DOOR_HALF, COLLAR_DOOR_TOP, COLLAR_GAP), (DOOR_HALF, COLLAR_TOP, BOX_GAP), "frame", root, c)
+    # The vestibule: a glazed box over the exit door, the apron door on its +x (west)
+    # side, its far end a frame round the sliding stair enclosure.
+    vtop = VEST_TOP - SKIN_T
+    apron = (APRON_Z - APRON_HALF, APRON_Z + APRON_HALF, 0.0, APRON_TOP, False)
+    glazed_walls("Vest_Wall", VEST_HALF, BOX_GAP, VEST_END, vtop, {1: [apron]}, "white", root, c)
+    holed_wall("Vest_Front", "z", (-VEST_HALF, VEST_HALF), (0.0, vtop), (BOX_GAP, BOX_GAP + SKIN_T),
+               [(-DOOR_HALF, DOOR_HALF, 0.0, DOOR_OPEN_TOP, False), (-0.5, 0.5, WIN_HIGH[0], WIN_HIGH[1], True)],
+               "white", root, c)
+    holed_wall("Vest_Ring", "z", (-VEST_HALF, VEST_HALF), (0.0, vtop), (VEST_END - SKIN_T, VEST_END),
+               [(-BOX_HALF - 0.01, BOX_HALF + 0.01, 0.0, BOX_TOP + 0.01, False)], "white", root, c)
+    gbox("Vest_Roof", (-VEST_HALF - 0.04, vtop, BOX_GAP), (VEST_HALF + 0.04, VEST_TOP, VEST_END + 0.04), "light_grey",
          root, c)
-    pivot(p, "Mount_Link", root, c, (0.0, ROT_FLOOR, -LINK_Z))
-
-    yaw = pivot(p, "Tunnel_Yaw", root, c, (0.0, ROT_FLOOR, 0.0))
-    pitch = pivot(p, "Tunnel_Pitch", yaw, c, (0.0, 0.0, HINGE_Z))
-    # Tunnel A, hinge-local: starts inside the drum so its corners stay sunk at any yaw.
-    w, h = TUN_A_HALF_W, TUN_A_H
-    gbox("TunA_Shell", (-w, -0.20, -0.6), (w, h, TUN_A_LEN), "white", pitch, c, bevel=0.04)
+    gbox("Vest_Floor", (-VEST_HALF + SKIN_T, 0.0, BOX_GAP + SKIN_T), (VEST_HALF - SKIN_T, 0.02, VEST_END - SKIN_T),
+         "floor", root, c)
     for sx in (-1, 1):
-        x0, x1 = sorted((sx * w, sx * (w + 0.02)))
-        gbox("TunA_Window_%d" % sx, (x0, 1.0, 0.1), (x1, 1.75, TUN_A_LEN - 0.2), "window", pitch, c)
-        gbox("TunA_Band_%d" % sx, (x0, -0.20, -0.3), (x1, 0.12, TUN_A_LEN), "blue", pitch, c)
+        x0, x1 = sorted((sx * VEST_HALF, sx * (VEST_HALF + 0.02)))
+        # The band stops either side of the apron door, so its sill is level.
+        spans = [(BOX_GAP, VEST_END)] if sx < 0 else [(BOX_GAP, APRON_Z - APRON_HALF),
+                                                      (APRON_Z + APRON_HALF, VEST_END)]
+        for k, (z0, z1) in enumerate(spans):
+            gbox("Vest_Band_%d_%d" % (sx, k), (x0, 0.0, z0), (x1, 0.12, z1), "blue", root, c)
 
-    slide = pivot(p, "Tunnel_Slide", pitch, c, (0.0, 0.0, 0.0))
-    w, h, b0 = TUN_B_HALF_W, TUN_B_H, CAB_Z - TUN_B_LEN
-    gbox("TunB_Shell", (-w, -TUN_B_SINK, b0), (w, h, CAB_Z), "white", slide, c, bevel=0.04)
-    gbox("TunB_Mouth", (-w - 0.03, -TUN_B_SINK - 0.03, b0), (w + 0.03, h + 0.03, b0 + 0.15), "light_grey",
-         slide, c)
+    # The sliding stair enclosure, its ground floor and the pedestal base.
+    slide = pivot(p, "Walk_Slide", root, c, (0.0, 0.0, 0.0))
+    pivot(p, "Mount_StairFoot", slide, c, (0.0, 0.0, STAIR_Z0 - STEP_OFF))
+    btop = BOX_TOP - SKIN_T
+    apron_in = (APRON_Z - APRON_HALF, APRON_Z + APRON_HALF, 0.0, APRON_TOP, False)
+    glazed_walls("Box_Wall", BOX_HALF, BOX_Z0, LANDING_END, btop, {1: [apron_in]}, "white", slide, c)
+    gbox("Box_Roof", (-BOX_HALF, btop, BOX_Z0), (BOX_HALF, BOX_TOP, LANDING_END), "light_grey", slide, c)
+    inner = BOX_HALF - SKIN_T
+    gbox("Box_Floor", (-inner, 0.0, BOX_Z0), (inner, 0.03, STAIR_Z0), "floor", slide, c)
     for sx in (-1, 1):
-        x0, x1 = sorted((sx * w, sx * (w + 0.02)))
-        gbox("TunB_Window_%d" % sx, (x0, 1.05, b0 + 0.4), (x1, 1.85, CAB_Z - 1.7), "window", slide, c)
-        gbox("TunB_Band_%d" % sx, (x0, -TUN_B_SINK, b0 + 0.15), (x1, 0.08, CAB_Z), "blue", slide, c)
+        x0, x1 = sorted((sx * BOX_HALF, sx * (BOX_HALF + 0.02)))
+        gbox("Box_Band_%d" % sx, (x0, 0.0, VEST_END), (x1, 0.12, LANDING_END), "blue", slide, c)
+    gbox("Pedestal_Base", (-0.35, 0.0, POST_Z - 0.35), (0.35, 0.25, POST_Z + 0.35), "concrete", slide, c)
 
-    drive = pivot(p, "Drive_Level", slide, c, (0.0, -TUN_B_SINK, DRIVE_Z))
-    gbox("Drive_Beam", (-1.15, -0.22, -0.25), (1.15, 0.0, 0.25), "metal", drive, c)
-    gbox("Drive_Sleeve", (-0.17, -0.75, -0.17), (0.17, -0.22, 0.17), "metal", drive, c)
-    foot = pivot(p, "Drive_Foot", drive, c, (0.0, -(ROT_FLOOR - TUN_B_SINK), 0.0))
-    gbox("Drive_Leg", (-0.12, BOGIE_TOP - 0.05, -0.12), (0.12, 2.25, 0.12), "light_grey", foot, c)
-    gbox("Drive_Bogie", (-0.95, 0.32, -0.28), (0.95, BOGIE_TOP, 0.28), "tug_yellow", foot, c, bevel=0.03)
-    for sx in (-1, 1):
-        gcyl_x("Drive_Wheel_%d" % sx, sx * 0.62 - 0.14, sx * 0.62 + 0.14, 0.32, 0.0, 0.32, "ink", foot, c, segs=12)
-        gcyl_x("Drive_Hub_%d" % sx, sx * 0.62 - 0.16, sx * 0.62 + 0.16, 0.32, 0.0, 0.13, "light_grey",
-               foot, c, segs=8)
+    # The stair, built for a 1 m rise and scaled to H by Stair_Rise.
+    rise = pivot(p, "Stair_Rise", slide, c, (0.0, 0.0, 0.0))
+    for i in range(1, RISERS):
+        z0 = STAIR_Z0 + (i - 1) * TREAD
+        gbox("Step_%02d" % i, (-inner, 0.0, z0), (inner, i / float(RISERS), z0 + TREAD), "metal", rise, c)
+    # The pedestal post under the cab's near side scales with the stair from the ground to
+    # 0.95 H, inside the cab's floor band (H - 0.30 to H - 0.08) at every height.
+    gbox("Pedestal_Post", (-0.18, 0.0, POST_Z - 0.18), (0.18, 0.95, POST_Z + 0.18), "concrete", rise, c)
 
-    level = pivot(p, "Cab_Level", slide, c, (0.0, 0.0, CAB_Z))
-    cab = pivot(p, "Cab_Yaw", level, c, (0.0, 0.0, 0.0))
+    # The curtains close the enclosure's open end under and over the cab.
+    low = pivot(p, "Curtain_Low", slide, c, (0.0, 0.0, LANDING_END - CURTAIN_T))
+    gbox("Curtain_Low_Panel", (-inner, 0.0, -CURTAIN_T), (inner, 1.0, CURTAIN_T), "white", low, c)
+
+    lift = pivot(p, "Floor_Lift", slide, c, (0.0, 0.0, 0.0))
+    pivot(p, "Mount_StairTop", lift, c, (0.0, 0.0, STAIR_Z1 + STEP_OFF))
+    gbox("Landing", (-inner, -0.25, STAIR_Z1), (inner, 0.0, LANDING_END), "metal", lift, c)
+    high = pivot(p, "Curtain_High", lift, c, (0.0, CAB_IN + CURTAIN_GAP, LANDING_END - CURTAIN_T))
+    gbox("Curtain_High_Panel", (-inner, 0.0, -CURTAIN_T), (inner, 1.0, CURTAIN_T), "white", high, c)
+
+    # The cab: hollow, entered from its +x side, its front (+z) open into the bellows.
+    cab = pivot(p, "Cab_Yaw", lift, c, (0.0, 0.0, CAB_Z))
+    pivot(p, "Mount_CabFloor", cab, c, (0.0, 0.0, 0.0))
     k = CAB_HALF
-    gbox("Cab_Shell", (-k, -0.35, -k), (k, CAB_TOP, k), "white", cab, c, bevel=0.05)
-    gbox("Cab_Roof", (-k - 0.05, CAB_TOP, -k - 0.05), (k + 0.05, CAB_TOP + 0.13, k + 0.05), "light_grey",
-         cab, c, bevel=0.03)
-    for sx in (-1, 1):
-        x0, x1 = sorted((sx * k, sx * (k + 0.02)))
-        gbox("Cab_Window_%d" % sx, (x0, 1.15, -1.1), (x1, 2.05, 1.1), "window", cab, c)
-    gbox("Cab_Window_Back", (-1.1, 1.15, -k - 0.02), (1.1, 2.05, -k), "window", cab, c)
-    gbox("Cab_Band", (-k - 0.02, -0.35, -k - 0.02), (k + 0.02, 0.05, k + 0.02), "blue", cab, c)
-    # The bellows: five accordion folds, alternating big and small, dark.
+    wall_top = CAB_IN + 0.07
+    gbox("Cab_Floor", (-k, -0.08, -k), (k, 0.0, k), "metal", cab, c)
+    gbox("Cab_Band", (-k - 0.02, -CAB_LOW, -k - 0.02), (k + 0.02, -0.08, k + 0.02), "blue", cab, c)
+    gbox("Cab_Ceiling", (-k, CAB_IN, -k), (k, wall_top, k), "white", cab, c)
+    gbox("Cab_Roof", (-k - 0.05, wall_top, -k - 0.05), (k + 0.05, CAB_TOP, k + 0.05), "light_grey", cab, c,
+         bevel=0.02)
+    window = (1.0, 1.9)
+    door = (-0.9, 0.9, 0.0, CAB_IN, False)
+    holed_wall("Cab_Entry", "x", (-k, k), (0.0, wall_top), (k - SKIN_T, k), [door], "white", cab, c)
+    holed_wall("Cab_Side", "x", (-k, k), (0.0, wall_top), (-k, -k + SKIN_T), [(-1.1, 1.1) + window + (True,)],
+               "white", cab, c)
+    holed_wall("Cab_Back", "z", (-k + SKIN_T, k - SKIN_T), (0.0, wall_top), (-k, -k + SKIN_T),
+               [(-1.1, 1.1) + window + (True,)], "white", cab, c)
+    holed_wall("Cab_Front", "z", (-k + SKIN_T, k - SKIN_T), (0.0, wall_top), (k - SKIN_T, k), [door], "white", cab, c)
+    # The bellows: five accordion folds round the door opening, on Bellows_Extend.
+    bel = pivot(p, "Bellows_Extend", cab, c, (0.0, 0.0, 0.0))
     step = BELLOWS_D / 5.0
     for i in range(5):
         z0 = k + i * step
-        big = i % 2 == 0
-        e = 0.0 if big else 0.08
-        gbox("Bellows_%d" % i, (-1.42 + e, -0.28 + e, z0), (1.42 - e, CAB_TOP - 0.05 - e, z0 + step),
-             "ink" if big else "dark", cab, c)
-    pivot(p, "Mount_Door", cab, c, (0.0, 0.0, MOUNT_DOOR_Z))
+        e = 0.0 if i % 2 == 0 else 0.08
+        holed_wall("Bellows_%d" % i, "z", (-1.42 + e, 1.42 - e), (-0.28 + e, CAB_IN + 0.10 - e), (z0, z0 + step),
+                   [door], "ink" if i % 2 == 0 else "dark", bel, c)
+    pivot(p, "Mount_Door", bel, c, (0.0, 0.0, MOUNT_DOOR_Z))
 
 
 # ---------------------------------------------------------------- pushback tug
@@ -530,15 +663,11 @@ def blender_bounds(lo_g, hi_g):
     return (lo_g[0], -hi_g[2], lo_g[1]), (hi_g[0], -lo_g[2], hi_g[1])
 
 
-def drum_extent(r, segs=12):
-    """create_cone puts vertices at k * 360/segs degrees from +x: the x and y extents."""
-    angs = [2.0 * math.pi * k / segs for k in range(segs)]
-    return max(r * math.cos(a) for a in angs), max(r * math.sin(a) for a in angs)
-
-
-_rx, _ry = drum_extent(DRUM_R + 0.15)
-BRIDGE_LO = (-_rx, 0.0, -LINK_Z - 0.02)
-BRIDGE_HI = (_rx, ROT_FLOOR + CAB_TOP + 0.13, HINGE_Z + CAB_Z + MOUNT_DOOR_Z)
+# At rest (D 0, the landing at y 0, a 1 m stair, the cab facing +z): the cab roof on x,
+# the cab's underside below the landing, the vestibule roof on top, the collar toward
+# the terminal and the bellows' front along +z.
+BRIDGE_LO = (-CAB_HALF - 0.05, -CAB_LOW, COLLAR_GAP)
+BRIDGE_HI = (CAB_HALF + 0.05, VEST_TOP, CAB_Z + MOUNT_DOOR_Z)
 TUG_LO = (-TUG_HALF_W - 0.01, 0.0, TUG_REAR - 0.07)
 TUG_HI = (TUG_HALF_W + 0.01, TUG_TOP, TUG_FRONT + 0.01)
 SIGN_LO = (-SIGN_HALF_W, 0.0, -FACE_Z - 0.024)
@@ -550,9 +679,10 @@ PIECES = {
     "taxi_sign": (build_taxi_sign, (0, 0)) + blender_bounds(SIGN_LO, SIGN_HI),
 }
 EXTRA_NODES = {
-    "jet_bridge": ["Tunnel_Yaw", "Tunnel_Pitch", "Tunnel_Pitch_Mesh", "Tunnel_Slide", "Tunnel_Slide_Mesh",
-                   "Drive_Level", "Drive_Level_Mesh", "Drive_Foot", "Drive_Foot_Mesh", "Cab_Level", "Cab_Yaw",
-                   "Cab_Yaw_Mesh", "Mount_Door", "Mount_Link"],
+    "jet_bridge": ["Walk_Slide", "Walk_Slide_Mesh", "Stair_Rise", "Stair_Rise_Mesh", "Curtain_Low",
+                   "Curtain_Low_Mesh", "Floor_Lift", "Floor_Lift_Mesh", "Curtain_High", "Curtain_High_Mesh",
+                   "Cab_Yaw", "Cab_Yaw_Mesh", "Bellows_Extend", "Bellows_Extend_Mesh", "Mount_ApronDoor"]
+    + WALK_MOUNTS,
     "pushback_tug": ["Cradle_Lift", "Cradle_Lift_Mesh", "Mount_NoseGear"],
     "taxi_sign": [n for ch in LETTERS for n in ("Glyph_Loc_" + ch, "Glyph_Loc_%s_Mesh" % ch,
                                                  "Glyph_Dir_" + ch, "Glyph_Dir_%s_Mesh" % ch)]
@@ -611,10 +741,37 @@ def check_rig(written):
             off = any(abs(v) > 1e-5 for v in nd.get("translation", [0, 0, 0])) or "rotation" in nd
             if owner != want or off:
                 kit.fail("%s: mesh %s hangs on %s (expected %s) offset=%s" % (piece, nd.get("name"), owner, want, off))
-    kit.log("RIG reach_min=%.2f reach_max=%.2f mount_door_z=%.2f slide_max=%.2f rot_floor=%.2f hinge_z=%.2f "
-            "cab_z=%.2f drive_z=%.2f tun_b_sink=%.2f tug_front=%.2f tug_rear=%.2f deck_top=%.2f cab_z0=%.2f"
-            % (REACH_MIN, REACH_MAX, MOUNT_DOOR_Z, SLIDE_MAX, ROT_FLOOR, HINGE_Z, CAB_Z, DRIVE_Z, TUN_B_SINK, TUG_FRONT,
-               TUG_REAR, DECK_TOP, CAB_Z0))
+    kit.log("BRIDGE risers=%d tread=%.2f stair_z=%.2f..%.2f landing_end=%.2f cab_z=%.2f cab_in=%.2f cab_top=%.2f "
+            "mount_door_z=%.2f h=%.2f..%.2f h_park=%.2f slide_max=%.2f extend=%.2f..%.2f box_top=%.2f vest_top=%.2f"
+            % (RISERS, TREAD, STAIR_Z0, STAIR_Z1, LANDING_END, CAB_Z, CAB_IN, CAB_TOP, MOUNT_DOOR_Z, H_MIN, H_MAX,
+               H_PARK, SLIDE_MAX, E_MIN, E_MAX, BOX_TOP, VEST_TOP))
+    kit.log("TUG tug_front=%.2f tug_rear=%.2f deck_top=%.2f cab_z0=%.2f" % (TUG_FRONT, TUG_REAR, DECK_TOP, CAB_Z0))
+    walk_report(written)
+
+
+def walk_report(written):
+    """Re-read the written jet_bridge.glb: every walk mount's parent chain and its
+    position in the root's frame at rest (D 0, the landing at y 0, the cab facing +z)."""
+    for piece, out in written:
+        if piece != "jet_bridge":
+            continue
+        js, _n = kit.parse_glb(out)
+        nodes = js.get("nodes", [])
+        parent = {ch: i for i, nd in enumerate(nodes) for ch in nd.get("children", [])}
+        by_name = {nd.get("name"): i for i, nd in enumerate(nodes)}
+        for name in WALK_MOUNTS + APRON_MOUNTS[1:]:
+            i = by_name.get(name)
+            if i is None:
+                kit.fail("jet_bridge: walk mount %s missing from the written file" % name)
+                continue
+            at = Vector((0.0, 0.0, 0.0))
+            chain = []
+            while i is not None:
+                at += Vector(nodes[i].get("translation", [0.0, 0.0, 0.0]))
+                chain.append(nodes[i].get("name"))
+                i = parent.get(i)
+            kit.log("WALK %-16s rest_root=(%.3f, %.3f, %.3f) chain=%s"
+                    % (name, at.x, at.y, at.z, "/".join(reversed(chain))))
 
 
 def guard(pieces):
