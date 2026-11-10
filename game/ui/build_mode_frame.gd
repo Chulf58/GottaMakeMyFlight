@@ -100,18 +100,12 @@ func _build_sign() -> void:
 	# The theme holds the sign's look (the stripes' YELLOW and DARK).
 	_sign.theme = HUD_THEME
 	_sign.theme_type_variation = &"HudBuildSign"
-	# The theme's 24 px text with the sign's 4 px margins would make the panel
-	# 42 px tall; the row's slot is BUTTON_H. The text sits in a holder that
-	# asks for no height, so the panel keeps the slot's size.
-	var holder := Control.new()
-	holder.name = "SignText"
-	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_sign.add_child(holder)
+	# The theme's 24 px text with HudBuildSign's 3 px margins is BUTTON_H tall.
+	_sign.custom_minimum_size = TopRow.SLOT_SIZE
 	var label := Label.new()
 	label.text = SIGN_TEXT
 	label.theme_type_variation = &"HudBuildSignText"
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	holder.add_child(label)
-	label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_sign.add_child(label)

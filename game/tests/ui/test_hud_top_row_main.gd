@@ -39,6 +39,12 @@ func test_the_top_row_and_the_clock_panel_overlap_in_no_pair() -> void:
 			assert_bool(a.intersects(b)).is_false()
 
 
+func test_the_top_row_windows_are_all_button_height() -> void:
+	(_main.get_node("BuildMenu") as BuildMenu).press_category(0)
+	for node_name in ["MoneySlot", "RatingCard", "BuildModeSign", "RunwayButton", "OffersButton"]:
+		assert_float(_rect(node_name).size.y).is_equal_approx(float(HudLayout.BUTTON_H), 0.5)
+
+
 func test_an_open_sheet_ends_left_of_the_clock_panel() -> void:
 	var clock_panel := _rect("FlightPanel")
 	for pair in [["RunwayCard", "RunwaySheet"], ["OfferPanel", "OfferSheet"]]:

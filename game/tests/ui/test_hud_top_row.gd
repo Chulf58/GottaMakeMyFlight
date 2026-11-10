@@ -137,6 +137,28 @@ func test_every_top_row_window_has_its_top_on_the_margin() -> void:
 		_set_build_mode(world, false)
 
 
+func test_the_rating_card_ends_a_gap_before_the_sign_slot() -> void:
+	for world in _worlds:
+		var rects := _top_row(world)
+		var rating: Rect2 = rects["rating"]
+		var sign_slot: Rect2 = rects["sign"]
+		assert_float(sign_slot.position.x - rating.end.x).is_greater_equal(
+			float(HudLayout.GAP) - 0.5
+		)
+
+
+func test_every_top_row_window_is_button_height() -> void:
+	for world in _worlds:
+		_set_build_mode(world, true)
+		var rects := _top_row(world)
+		for key in rects:
+			print("%s height %s" % [key, (rects[key] as Rect2).size.y])
+			assert_float((rects[key] as Rect2).size.y).is_equal_approx(
+				float(HudLayout.BUTTON_H), 0.5
+			)
+		_set_build_mode(world, false)
+
+
 func test_money_and_rating_sit_in_one_row_from_the_margin() -> void:
 	for world in _worlds:
 		var rects := _top_row(world)
