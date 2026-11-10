@@ -71,7 +71,8 @@ func test_the_card_lines_show_airline_destination_departure_size_passengers_and_
 		. is_equal(
 			[
 				"Blue Fjord to Rome",
-				"Departs 07:15 daily   Medium plane",
+				"Departs 07:15 daily",
+				"Medium plane",
 				"41 passengers booked   $30 per passenger",
 			]
 		)
@@ -151,6 +152,26 @@ func test_with_no_open_offers_the_sheet_says_when_more_arrive() -> void:
 	assert_array(_panel.card_ids()).is_empty()
 	assert_str(_panel.message()).is_equal(OfferPanel.EMPTY_TEXT)
 	assert_str(_panel.toggle_button().text).is_equal("Offers (0)")
+
+
+func test_the_accept_message_is_gone_when_the_sheet_is_closed_and_opened_again() -> void:
+	_panel.open()
+	_panel.accept_button("O0N1").pressed.emit()
+	assert_str(_panel.message()).contains("Accepted")
+	_panel.close()
+	_panel.open()
+	assert_str(_panel.message()).is_empty()
+
+
+func test_closing_after_accepting_the_last_offer_leaves_the_empty_board_text() -> void:
+	_panel.open()
+	_desk.board.decline("O0N2")
+	_desk.board.decline("O0N3")
+	_panel.accept_button("O0N1").pressed.emit()
+	assert_str(_panel.message()).contains("Accepted")
+	_panel.close()
+	_panel.open()
+	assert_str(_panel.message()).is_equal(OfferPanel.EMPTY_TEXT)
 
 
 func test_a_panel_without_a_desk_builds_nothing_instead_of_showing_no_offers() -> void:

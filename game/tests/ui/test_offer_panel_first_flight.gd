@@ -6,6 +6,7 @@ extends GdUnitTestSuite
 ## while it is closed starts at the opening).
 
 const NOON := 12 * 60
+const HUD_THEME := preload("res://ui/hud_theme.tres")
 
 var _port: SubViewport
 var _desk: OfferDesk
@@ -51,7 +52,7 @@ func test_a_slot_that_has_passed_says_the_first_flight_is_tomorrow() -> void:
 
 func test_a_slot_still_ahead_says_nothing_extra() -> void:
 	_at(NOON)
-	assert_str(_panel.card_text("O0N2")).contains("Departs 20:00 daily   ")
+	assert_str(_panel.card_text("O0N2")).contains("Departs 20:00 daily\nSmall plane")
 	assert_str(_panel.card_text("O0N2")).not_contains("first flight")
 	assert_str(_panel.card_text("O0N2")).not_contains("Gate")
 
@@ -146,7 +147,38 @@ func test_a_slot_two_days_out_names_the_day() -> void:
 
 func test_card_lines_without_a_note_are_unchanged() -> void:
 	var offer := TestOfferBoard.record("O0N9", 0, 600)
-	assert_str(OfferPanel.card_lines(offer)[1]).is_equal("Departs 10:00 daily   Small plane")
+	assert_str(OfferPanel.card_lines(offer)[1]).is_equal("Departs 10:00 daily")
 	assert_str(OfferPanel.card_lines(offer, "first flight tomorrow")[1]).is_equal(
-		"Departs 10:00 daily, first flight tomorrow   Small plane"
+		"Departs 10:00 daily, first flight tomorrow"
 	)
+
+
+func test_the_departure_plane_and_money_lines_fit_the_card_text_width() -> void:
+	var label := Label.new()
+	label.theme = HUD_THEME
+	label.theme_type_variation = &"HudSmall"
+	var font := label.get_theme_font("font")
+	var size := label.get_theme_font_size("font_size")
+	assert_int(size).is_greater(0)
+	var offer := TestOfferBoard.record("O0N9", 0, 600)
+	offer["plane_size"] = "medium"
+	offer["booked_passengers"] = 120
+	offer["fee_per_passenger"] = 60
+	var widest := 0.0
+	for note in ["first flight tomorrow", "first flight on Day 12"]:
+		var lines := OfferPanel.card_lines(offer, note)
+		for i in [1, 2, 3]:
+			var width := font.get_string_size(lines[i], HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
+			widest = maxf(widest, width)
+			(
+				assert_float(width)
+				. override_failure_message(
+					(
+						"line %d is %.0f px wide, card text is %.0f: %s"
+						% [i, width, OfferPanel.CARD_TEXT_W, lines[i]]
+					)
+				)
+				. is_less_equal(OfferPanel.CARD_TEXT_W)
+			)
+	label.free()
+	assert_float(widest).is_greater(100.0)

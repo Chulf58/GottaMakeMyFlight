@@ -130,8 +130,9 @@ static func lead_text(ticks: int) -> String:
 	return " ".join(parts)
 
 
-## The text lines of an offer's card: who and where, when and what plane, and
-## the money. `note` (first_flight_note) follows the departure when not empty.
+## The text lines of an offer's card: who and where, when, the plane, and the
+## money. `note` (first_flight_note) follows the departure when not empty. The
+## plane size has its own line so a long note still fits the departure line.
 static func card_lines(offer: Dictionary, note := "") -> PackedStringArray:
 	var minute: int = offer["departure_minute"]
 	var time := GameCalendar.clock_text(GameCalendar.tick_at(0, minute))
@@ -140,7 +141,8 @@ static func card_lines(offer: Dictionary, note := "") -> PackedStringArray:
 	return PackedStringArray(
 		[
 			"%s to %s" % [offer["airline"], offer["destination"]],
-			"Departs %s daily%s   %s plane" % [time, then, size.capitalize()],
+			"Departs %s daily%s" % [time, then],
+			"%s plane" % size.capitalize(),
 			(
 				"%d passengers booked   $%d per passenger"
 				% [offer["booked_passengers"], offer["fee_per_passenger"]]
@@ -216,6 +218,7 @@ func close() -> void:
 		return
 	_sheet.visible = false
 	_clear_refusals()
+	_say_idle()
 	_restore_clock()
 
 
@@ -367,7 +370,7 @@ func _refresh() -> void:
 	_button.text = "Offers (%d)" % offers.size()
 	_offers_waiting = offers.size() > 0
 	_style_button()
-	_say(EMPTY_TEXT if offers.is_empty() else "")
+	_say_idle()
 	_noted_tick = flights.tick
 
 
@@ -568,6 +571,12 @@ func _in_words(problem: String) -> String:
 		push_warning("OfferPanel: unreadable clash refusal from FlightSim: %s" % problem)
 		return "it clashes with another flight"
 	return problem
+
+
+## What the sheet says when nothing was just done: EMPTY_TEXT with no open
+## offer, else nothing. A closed sheet drops its last accept's confirmation.
+func _say_idle() -> void:
+	_say(EMPTY_TEXT if desk.board.open_offers().is_empty() else "")
 
 
 ## Shows `text` under the cards, hiding the line when it is empty.
