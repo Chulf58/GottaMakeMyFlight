@@ -238,6 +238,9 @@ var _no_b1_plate := false
 var _b1_views := false
 ## Passenger ids traced (--trace=): sampled frames near an arch, contact bones.
 var _trace := {}
+## Pinned draws (--pin=5@508.121,15@980.317): [passenger id, sim time] each,
+## drawn at exactly that time (_pin_measure()); every one must be measured.
+var _pins: Array = []
 
 
 func _initialize() -> void:
@@ -263,6 +266,9 @@ func _initialize() -> void:
 		if arg.begins_with("--trace="):
 			for id in arg.get_slice("=", 1).split(","):
 				_trace[int(id)] = true
+		if arg.begins_with("--pin="):
+			for pin in arg.get_slice("=", 1).split(","):
+				_pins.append([int(pin.get_slice("@", 0)), float(pin.get_slice("@", 1))])
 	print("PROBE out_dir=", _out_dir, " close_dir=", _close_dir, " lane_mode=", _lane_mode)
 	_run.call_deferred()
 
@@ -596,6 +602,13 @@ func _lead_plate_scan() -> void:
 ## the move is first drawn at k 0 and its plate steps the clock to each moment.
 ## A hard case's turn to the front is plated first, when asked (CaseTurnPlates).
 func _on_tick(_tick: int) -> void:
+	var due := _pins.filter(func(pin: Array) -> bool: return int(pin[1]) == _clock.tick)
+	if not due.is_empty():
+		# Held here; _pin_measure() draws each pinned time of this tick.
+		_clock.set_paused(true)
+		_clock._accumulator = 0.0
+		_pin_measure.call_deferred(due)
+		return
 	if CaseTurnPlates.scan(self) or _plate_task or _hold_frame >= 0:
 		return
 	var props := _views.carry_on_props()
@@ -1342,6 +1355,11 @@ func _bag_in_bag_scan(id: int) -> void:
 		rec["control"] = maxi(
 			CarryContact.inside_meshes(moved, a), CarryContact.inside_meshes(back, b)
 		)
+		# And the crossing count's control: b drawn for a moment at a's centre.
+		var kept := b.global_transform
+		b.global_position += shift
+		rec["cross_control"] = AirsideKit.crossings(a, b)["count"]
+		b.global_transform = kept
 	rec["frames"] += 1
 	# The nearest two surface points while a bag moves into the tray, a
 	# diagnostic of how close they pass (settled, they lie end to end).
@@ -1427,6 +1445,71 @@ func _post_clearance(id: int, body: Node3D, nodes: Array, rec: Dictionary) -> vo
 					rec[pair[0]] = [d, part[0]]
 
 
+## The pinned draws (--pin=) of this tick, each drawn at its exact sim time
+## with the clock paused: passenger `pin[0]` at `pin[1]`. Prints its booth
+## contacts (the bones of the points inside a lane arch part), its bag homes
+## and drawn bag origins, and the world transforms of both feet and both hands,
+## so two runs (two schedules) can be compared at the same sim time.
+func _pin_measure(due: Array) -> void:
+	for pin: Array in due:
+		_pins.erase(pin)
+		_clock._accumulator = (float(pin[1]) - _clock.tick) * SimClock.STEP
+		await _frames(3)
+		var id: int = pin[0]
+		var p := _sim.get_passenger(id)
+		var body := _views.node_for(id)
+		if p == null or body == null:
+			_invalid("pinned passenger %d is not drawn at %.3f" % [id, pin[1]])
+			continue
+		var owned := CarryContact.body_points_owned(body, [])
+		var bones := {}
+		for k in (owned[0] as PackedVector3Array).size():
+			if _contacts(PackedVector3Array([owned[0][k]]), _booths[0]) > 0:
+				bones[owned[1][k]] = bones.get(owned[1][k], 0) + 1
+		var skeleton := body.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
+		var limbs := []
+		for bone in ["Foot.L", "Foot.R", "Hand.L", "Hand.R"]:
+			var xf := (
+				skeleton.global_transform * skeleton.get_bone_global_pose(skeleton.find_bone(bone))
+			)
+			limbs.append(
+				(
+					"%s=%s/%s"
+					% [
+						bone,
+						xf.origin.snapped(Vector3.ONE * 0.0001),
+						xf.basis.get_euler().snapped(Vector3.ONE * 0.0001)
+					]
+				)
+			)
+		var props := _views.carry_on_props()
+		var bags := []
+		for node: Node3D in props.props_of(id)["bags"]:
+			bags.append(node.global_position.snapped(Vector3.ONE * 0.0001))
+		print(
+			(
+				(
+					"PIN passenger=%d sim=%.3f drawn=%.3f phase=%d second=%s homes=%s bags=%s"
+					+ " contacts=%d bones=%s %s"
+				)
+				% [
+					id,
+					pin[1],
+					_clock.tick + _clock._accumulator / SimClock.STEP,
+					p.security_phase,
+					p.incident_resolved,
+					SecurityLooks.bag_homes(_sim, p),
+					bags,
+					bones.values().reduce(func(a: int, b: int) -> int: return a + b, 0),
+					bones,
+					" ".join(limbs)
+				]
+			)
+		)
+	_clock._accumulator = 0.0
+	_clock.set_paused(false)
+
+
 ## A traced passenger's frame near a booth (--trace=): the process frame, the
 ## sim time drawn (tick and the share of the next), where it is in the booth's
 ## frame, its pass and phase, and on a frame with body contacts (`hits`) the
@@ -1499,19 +1582,27 @@ func _report_bag_in_bag() -> void:
 		)
 		print(
 			(
-				"BAG_IN_BAG_MESH passenger=%d edge_crossings_max=%d at %s post_hand_m=%s post_strap_m=%s"
+				(
+					"BAG_IN_BAG_MESH passenger=%d edge_crossings_max=%d crossings_control=%d at %s"
+					+ " post_hand_m=%s post_strap_m=%s"
+				)
 				% [
 					id,
 					rec.get("cross", -1),
+					rec.get("cross_control", -1),
 					rec.get("cross_line", "-"),
 					rec.get("post_hand", ["-"]),
 					rec.get("post_strap", ["-"])
 				]
 			)
 		)
+		if rec.get("cross_control", 0) <= 0:
+			_invalid("passenger %d's bags, centred together, showed no edge crossing" % id)
 		if rec["control"] <= 0:
 			_invalid("passenger %d's bags, centred together, showed no point inside" % id)
 	print("BAG_IN_BAG_TOTAL returners=%d max_points=%d" % [_bag_in_bag.size(), worst])
+	if not _pins.is_empty():
+		_invalid("pinned draws never reached: %s" % [_pins])
 	if _bag_in_bag.is_empty():
 		_invalid("no two-bag returner was sampled on its arch walk")
 	if worst > 0:
