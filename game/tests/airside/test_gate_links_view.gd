@@ -134,7 +134,7 @@ func test_an_unlinked_desk_gets_a_sign_with_why_and_no_line() -> void:
 	print("signs %d captions %s paths %d" % [signs.size(), captions, _view.paths().size()])
 	assert_int(signs.size()).is_equal(1)
 	assert_int(signs[0].get_meta("desk")).is_equal(west.object_id)
-	assert_array(captions).is_equal(["Unlinked: no north exit within 4 cells"])
+	assert_array(captions).is_equal(["Unlinked\nno north exit in 4 cells"])
 	assert_int(_view.paths().size()).is_equal(1)
 	# The sign shows outside build mode too (it is not under the links node),
 	# over the desk's top.
@@ -149,22 +149,27 @@ func test_an_unlinked_desk_gets_a_sign_with_why_and_no_line() -> void:
 
 func test_each_reason_has_its_own_caption() -> void:
 	var texts := [
-		GateLinksView.caption_for({"why": GateDesks.Unlinked.NO_EXIT, "gate": ""}),
-		GateLinksView.caption_for({"why": GateDesks.Unlinked.EXIT_TAKEN, "gate": "B"}),
-		GateLinksView.caption_for({"why": GateDesks.Unlinked.STAND_OVERLAP, "gate": "C"}),
-		GateLinksView.caption_for({"why": GateDesks.Unlinked.NO_LETTER, "gate": ""}),
+		GateLinksView.sign_text({"why": GateDesks.Unlinked.NO_EXIT, "gate": ""}),
+		GateLinksView.sign_text({"why": GateDesks.Unlinked.EXIT_TAKEN, "gate": "B"}),
+		GateLinksView.sign_text({"why": GateDesks.Unlinked.STAND_OVERLAP, "gate": "C"}),
+		GateLinksView.sign_text({"why": GateDesks.Unlinked.NO_LETTER, "gate": ""}),
 	]
 	print("captions %s" % [texts])
+	# Two short lines, the gate caption's form (board f0fbae3c (g)).
 	(
 		assert_array(texts)
 		. is_equal(
 			[
-				"Unlinked: no north exit within 4 cells",
-				"Unlinked: Gate B uses the exit",
-				"Unlinked: stand would overlap Gate C",
-				"Unlinked: every gate letter is in use",
+				"Unlinked\nno north exit in 4 cells",
+				"Unlinked\nGate B uses the exit",
+				"Unlinked\nstand would overlap Gate C",
+				"Unlinked\nevery gate letter in use",
 			]
 		)
+	)
+	# The desk card's status keeps the reason on one line.
+	assert_str(GateLinksView.caption_for({"why": GateDesks.Unlinked.NO_EXIT, "gate": ""})).is_equal(
+		"Unlinked: no north exit in 4 cells"
 	)
 
 
