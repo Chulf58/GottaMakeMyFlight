@@ -127,6 +127,13 @@ func test_long_names_trim_in_the_departures_list_and_the_day_stays_capped() -> v
 			assert_str(day[day.size() - 1]).starts_with("+")
 			assert_int(day.size()).is_equal(DeparturesBoard.MAX_ROWS_PER_DAY + 1)
 	assert_int(collapsed).is_greater(0)
-	assert_int(row_count).is_less_equal(2 * DeparturesBoard.MAX_ROWS_PER_DAY)
+	# Pinned on the rendered rows: all six flights leave tomorrow, so five rows
+	# are drawn and a label reads "+1 more".
+	assert_int(row_count).is_equal(DeparturesBoard.MAX_ROWS_PER_DAY)
+	var more: Array[String] = []
+	for child in rows.get_children():
+		if child is Label and (child as Label).text.begins_with("+"):
+			more.append((child as Label).text)
+	assert_array(more).is_equal(["+1 more"])
 	DirAccess.remove_absolute(board.settings_path)
 	board.free()
