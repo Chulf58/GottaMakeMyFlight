@@ -93,7 +93,11 @@ func _assert_in_column(label: String, banner: Rect2) -> void:
 	assert_float(banner.position.x).is_equal_approx(HudLayout.MARGIN, 1.0)
 	assert_float(banner.size.x).is_equal_approx(HudLayout.LIST_W, 1.0)
 	assert_float(banner.position.y).is_greater_equal(LeftColumn.LIST_TOP - 1.0)
-	assert_float(banner.position.y).is_less(view.x * 9.0 / 16.0 * TOP_BAND)
+	# Changed for HUD 7/7 (board 3bd42402): the Reset hints row joined the column,
+	# so the card starts 48 px lower, past the old top-centre band (TOP_BAND, a
+	# 302 px line). The ruling (checklist-card-moves-to-the-top-left-column-slim-
+	# at-304-px-t) puts the card under the column, so this pins that exact slot.
+	assert_float(banner.position.y).is_equal_approx(LeftColumn.card_top(_main.get_tree()), 1.0)
 	assert_bool(Rect2(Vector2.ZERO, view).encloses(banner)).is_true()
 	var others: Array[Control] = []
 	for node_name in TOP_CONTROLS:

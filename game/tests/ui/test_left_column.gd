@@ -112,6 +112,49 @@ func test_the_three_toggles_are_equal_buttons_stacked_on_the_margin() -> void:
 	)
 
 
+## HUD 7/7 part f: Reset hints is the column's fourth button, the row under
+## Hints, the toggles' size, not a button off to the side of Hints.
+func test_reset_hints_is_the_column_button_under_hints() -> void:
+	var hints := _showing_hint()
+	await _settle()
+	var toggle := hints.toggle_button().get_global_rect()
+	var reset := hints.reset_button().get_global_rect()
+	print("RESET toggle=%s reset=%s" % [toggle, reset])
+	assert_float(reset.size.x).is_equal_approx(HudLayout.TOGGLE_W, 0.5)
+	assert_float(reset.size.y).is_equal_approx(HudLayout.BUTTON_H, 0.5)
+	assert_float(reset.position.x).is_equal_approx(HudLayout.MARGIN, 0.5)
+	assert_float(reset.position.y).is_equal_approx(LeftColumn.slot_top(LeftColumn.SLOT_RESET), 0.5)
+	assert_float(reset.position.y - toggle.end.y).is_equal_approx(HudLayout.GAP, 0.5)
+	# The departures list opens under it, never over it.
+	assert_float(_rect("DeparturesPanel").position.y).is_greater_equal(reset.end.y)
+
+
+## HUD 7/7 (board 3bd42402, conductor ruling: "Card replaces board" means the
+## list): while the inspect card has the board stepped aside, the Departures
+## toggle keeps its column slot and only the list hides.
+func test_stepping_aside_hides_the_list_and_keeps_the_toggle_in_its_slot() -> void:
+	var board := _control("DeparturesBoard") as DeparturesBoard
+	await _settle()
+	# Read at once: the HUD's refresh steps the board back while no card shows.
+	board.step_aside(true)
+	var toggle := _control("DeparturesToggle")
+	var rect := toggle.get_global_rect()
+	var list_shown := _control("DeparturesPanel").is_visible_in_tree()
+	var toggle_shown := toggle.is_visible_in_tree()
+	print("ASIDE toggle=%s visible=%s list=%s" % [rect, toggle_shown, list_shown])
+	board.step_aside(false)
+	assert_bool(toggle_shown).is_true()
+	assert_bool(list_shown).is_false()
+	assert_float(rect.position.x).is_equal_approx(HudLayout.MARGIN, 0.5)
+	assert_float(rect.position.y).is_equal_approx(
+		LeftColumn.slot_top(LeftColumn.SLOT_DEPARTURES), 0.5
+	)
+	assert_float(rect.size.x).is_equal_approx(HudLayout.TOGGLE_W, 0.5)
+	assert_bool(board.is_shown()).is_true()
+	await _settle()
+	assert_bool(_control("DeparturesPanel").is_visible_in_tree()).is_true()
+
+
 func test_the_departures_list_starts_open_on_a_fresh_profile() -> void:
 	await _settle()
 	var board := _control("DeparturesBoard") as DeparturesBoard
@@ -122,7 +165,8 @@ func test_the_departures_list_starts_open_on_a_fresh_profile() -> void:
 func test_the_departures_list_opens_under_the_toggles_at_list_width() -> void:
 	await _settle()
 	var panel := _rect("DeparturesPanel")
-	var hints_bottom := LeftColumn.slot_top(LeftColumn.SLOT_HINTS) + HudLayout.BUTTON_H
+	# HUD 7/7: the list opens under Reset hints, the column's last button.
+	var hints_bottom := LeftColumn.slot_top(LeftColumn.SLOT_RESET) + HudLayout.BUTTON_H
 	print("LIST %s" % [panel])
 	assert_float(panel.size.x).is_equal_approx(HudLayout.LIST_W, 0.5)
 	assert_float(panel.position.x).is_equal_approx(HudLayout.MARGIN, 0.5)
@@ -146,7 +190,8 @@ func test_the_checklist_card_rises_under_the_toggles_when_the_list_is_off() -> v
 	board.set_shown(false)
 	await _settle()
 	var card := _staff.hint_card().get_global_rect()
-	var hints_bottom := LeftColumn.slot_top(LeftColumn.SLOT_HINTS) + HudLayout.BUTTON_H
+	# HUD 7/7: the list opens under Reset hints, the column's last button.
+	var hints_bottom := LeftColumn.slot_top(LeftColumn.SLOT_RESET) + HudLayout.BUTTON_H
 	print("CHECKLIST_NO_LIST card=%s" % [card])
 	board.set_shown(true)
 	assert_float(card.position.y).is_equal_approx(hints_bottom + HudLayout.GAP, 0.5)

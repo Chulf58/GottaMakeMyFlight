@@ -17,7 +17,7 @@ const SUB_CARDS: Array[StringName] = [
 ]
 ## The windows that float over the world and so carry the shadow.
 const SHADOWED: Array[StringName] = [
-	&"HudBar", &"Panel", &"PanelContainer", &"IntroBox", &"HudCostCard", &"HudBuildSign"
+	&"HudBar", &"Panel", &"PanelContainer", &"IntroBox", &"HudBuildSign"
 ]
 
 
