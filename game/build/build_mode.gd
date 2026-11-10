@@ -258,6 +258,9 @@ const WALL_PICK_DISTANCE := 0.4
 const CLICK_SLOP_PX := 6.0
 const VALID_TINT := Color(0.35, 0.9, 0.45, 0.5)
 const INVALID_TINT := Color(0.95, 0.3, 0.25, 0.5)
+## The bar on the wall that refuses a Belt line: INVALID_TINT's red, near
+## opaque, so it reads stronger than the red cells of the refused line.
+const WALL_BLOCK_TINT := Color(INVALID_TINT, 0.9)
 const MARKER_TINT := Color(1.0, 0.85, 0.3, 0.7)
 const AREA_REMOVE_TINT := Color(0.95, 0.55, 0.2, 0.5)
 ## The cells a screen stand being placed would cover (ScreenCoverage; decision
@@ -328,6 +331,8 @@ var _invalid_material := BuildGhost.material(INVALID_TINT)
 var _marker_material := BuildGhost.material(MARKER_TINT)
 var _area_remove_material := BuildGhost.material(AREA_REMOVE_TINT)
 var _coverage_material := BuildGhost.material(COVERAGE_TINT)
+## The red bar on the wall that refuses a Belt line, drawn through other pieces.
+var _wall_block_material := BuildGhost.material(WALL_BLOCK_TINT, true)
 var _status := ""
 var _hover_key := ""
 var _hover_edit: BuildEdit
