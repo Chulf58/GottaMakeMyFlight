@@ -15,7 +15,8 @@ extends VBoxContainer
 ## and a dirty terminal (DirtyAlert). Clicking one glides the camera to the
 ## problem; the next click goes to the next place with the same problem.
 ## Notices are cards another part of the HUD posts (post_notice()): the flight
-## result card now, the Offers notices later. A notice leaves after its
+## result card (green) and the Offers panel's rating warning and ended-contract
+## notices (coral, HUD 6/7). A notice leaves after its
 ## seconds of real time (counted every rendered frame, also while the game is
 ## paused, and at any game speed), on a click, or when its poster drops it, and
 ## its words stay in the history.
@@ -40,8 +41,12 @@ extends VBoxContainer
 
 ## A card was clicked and the camera sent to `target`.
 signal jumped(target: Vector3)
+## reset() has dropped every card and notice; a poster of notices posts again.
+signal reset_done
 
 const SETTING_KEY := "alert_cards"
+## The group the rail joins, so the Offers panel (a sibling layer) can find it.
+const GROUP := &"alert_stack"
 ## The distance a jump zooms in to; a camera already closer keeps its distance.
 const JUMP_DISTANCE := 30.0
 ## The most history lines the tray shows; AlertBoard keeps HISTORY_CAP.
@@ -117,6 +122,7 @@ var _layout_key: Array = []
 
 func _ready() -> void:
 	name = "AlertStack"
+	add_to_group(GROUP)
 	theme = BuildMenu.HUD_THEME
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	anchor_left = 1.0
@@ -154,6 +160,7 @@ func reset() -> void:
 	_shown_revision = _board.revision
 	_sync_cards()
 	_sync_tray()
+	reset_done.emit()
 
 
 ## Reads every cause, updates the cards and the tray. Does nothing without a sim.

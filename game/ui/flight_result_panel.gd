@@ -24,7 +24,7 @@ func _init() -> void:
 	visible = false
 	custom_minimum_size = Vector2(HudLayout.RAIL_W, 0.0)
 	theme = BuildMenu.HUD_THEME
-	add_theme_stylebox_override("panel", green_card())
+	theme_type_variation = &"HudCardGreen"
 	var column := VBoxContainer.new()
 	add_child(column)
 	_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -41,14 +41,11 @@ func _init() -> void:
 	column.add_child(dismiss)
 
 
-## The theme's card (border, corners, margins, shadow) in the theme's green,
-## the colour for good news (decision 0b50e074). The theme has no green card
-## variation, so the card takes the green of its green button.
+## The theme's HudCardGreen look (the card in the green of HudButtonGreen, the
+## colour for good news, decision 0b50e074), for tests and probes to compare
+## against. The card itself takes it through its theme type variation.
 static func green_card() -> StyleBoxFlat:
-	var theme := BuildMenu.HUD_THEME
-	var card := theme.get_stylebox("panel", "PanelContainer").duplicate() as StyleBoxFlat
-	card.bg_color = (theme.get_stylebox("normal", "HudButtonGreen") as StyleBoxFlat).bg_color
-	return card
+	return BuildMenu.HUD_THEME.get_stylebox("panel", "HudCardGreen") as StyleBoxFlat
 
 
 ## The flight number a player knows: a daily occurrence id ("GMF101-d0") shows

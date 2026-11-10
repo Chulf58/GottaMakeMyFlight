@@ -139,12 +139,13 @@ func _run() -> void:
 		elif refused == "" and _flights.accept_problem(terms) != "":
 			_panel.accept_button(id).pressed.emit()
 			refused = id
-	print("PROBE accepted=%s refused=%s message='%s'" % [accepted, refused, _panel.message()])
+	var refusal := _panel.refusal_text(refused) if refused != "" else ""
+	print("PROBE accepted=%s refused=%s refusal='%s'" % [accepted, refused, refusal])
 	_expect(refused != "", "c: no offer was refused")
 	_expect(
 		_flights.contract_ids() == [accepted], "c: the contracts are %s" % [_flights.contract_ids()]
 	)
-	_expect(_panel.message().find("clashes") >= 0, "c: the refusal does not name the clash")
+	_expect(refusal.find("clashes") >= 0, "c: the refusal does not name the clash")
 	await _frames(6)
 	await _plate("c_refusal_1920", _card_buttons())
 
