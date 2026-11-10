@@ -2,10 +2,11 @@ class_name LeftColumn
 extends RefCounted
 ## The top-left column (decisions hud-grid-and-rails-one-spacing-grid-centred-
 ## top-row-right-ra, part 4, and checklist-card-moves-to-the-top-left-column-
-## slim-at-304-px-t): the Mood, Departures and Hints toggles stacked on the
-## margin under the money row, then the departures list, then the checklist or
-## first-time hint card. Every number is HudLayout's. The toggles and the cards
-## live in different scenes, so this holds the one place each takes its slot.
+## slim-at-304-px-t): the Mood, Departures and Hints toggles and the Reset hints
+## button stacked on the margin under the money row, then the departures list,
+## then the checklist or first-time hint card. Every number is HudLayout's. The
+## buttons and the cards live in different scenes, so this holds the one place
+## each takes its slot.
 
 ## The group the departures list joins, so a card finds where the list ends.
 const LIST_GROUP := &"left_column_list"
@@ -14,11 +15,14 @@ const LIST_GROUP := &"left_column_list"
 const SLOT_MOOD := 0
 const SLOT_DEPARTURES := 1
 const SLOT_HINTS := 2
-const SLOTS := 3
+## Reset hints, the row under Hints (HUD 7/7, board 3bd42402). The slot is kept
+## when a run has no hints row (a test or a probe), so the list never moves.
+const SLOT_RESET := 3
+const SLOTS := 4
 
 ## Under the money row (which is BUTTON_H high on the margin), one group gap.
 const TOP := HudLayout.MARGIN + HudLayout.BUTTON_H + HudLayout.GROUP_GAP
-## Where the departures list starts, under the last toggle.
+## Where the departures list starts, under the last column button.
 const LIST_TOP := TOP + SLOTS * (HudLayout.BUTTON_H + HudLayout.GAP)
 
 

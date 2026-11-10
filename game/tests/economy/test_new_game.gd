@@ -31,13 +31,26 @@ func before() -> void:
 		"contracts": flights.contract_ids(),
 		"flights": flights.flight_ids(),
 		"opened_tick": flights.opened_tick,
-		"departures": DepartureList.text(flights, clock.tick),
+		"departures": DeparturesBoard.lines_for(flights, clock.tick),
 		"clock": (hud.find_child("Clock", true, false) as Label).text,
 		"hint": panel.hint_text(),
 	}
 	_open(clock, flights, hud, panel)
 	_opened["panel_texts"] = _panel_texts(hud)
 	_opened["clock"] = (hud.find_child("Clock", true, false) as Label).text
+
+
+## Today's rows on the departures board, one per line. Changed for HUD 7/7
+## (board 3bd42402): DepartureList.text(), the old flight panel's text, had no
+## caller left and was removed, so the departures are read where they are drawn.
+static func _today_rows(flights: FlightSim, tick: int) -> String:
+	var rows := PackedStringArray()
+	for entry in DeparturesBoard.entries_for(flights, tick):
+		if entry["text"] == DeparturesBoard.TOMORROW_HEADING:
+			break
+		if entry["kind"] == "row":
+			rows.append(entry["text"])
+	return "\n".join(rows)
 
 
 static func _panel_texts(hud: PassengerHud) -> PackedStringArray:
@@ -75,7 +88,7 @@ func _open(clock: SimClock, flights: FlightSim, hud: PassengerHud, panel: StaffP
 	_opened["first_start"] = flights.state_start(first, FlightSim.State.SCHEDULED)
 	_opened["pushback"] = flights.state_start(first, FlightSim.State.PUSHBACK)
 	_opened["doors_close"] = flights.state_start(first, FlightSim.State.DOORS_CLOSED)
-	_opened["departures"] = DepartureList.text(flights, clock.tick)
+	_opened["departures"] = _today_rows(flights, clock.tick)
 	hud.refresh()
 	var board := hud.find_child("DeparturesBoard", true, false) as DeparturesBoard
 	_opened["board"] = board.shown_lines()
@@ -93,7 +106,7 @@ func test_a_new_game_is_closed_with_no_contract_and_no_flight() -> void:
 	assert_int(_boot["opened_tick"]).is_equal(-1)
 	assert_array(_boot["contracts"]).is_empty()
 	assert_array(_boot["flights"]).is_empty()
-	assert_str(_boot["departures"]).is_equal(DepartureList.EMPTY_TEXT)
+	assert_array(Array(_boot["departures"])).is_equal([DeparturesBoard.EMPTY_TEXT])
 	assert_str(_boot["clock"]).is_equal("Day 1  06:00")
 
 

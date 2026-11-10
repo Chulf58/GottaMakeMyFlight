@@ -16,8 +16,8 @@ extends Node
 ##
 ## The seen memory and the on/off choice live per profile in the shared HUD
 ## settings file (HudFlagSetting; keys "hint_seen_<id>" and "hints"), never in a
-## save. A visible row at the left holds the on/off toggle (key H) and Reset
-## hints. Off, hints show nothing and mark nothing seen.
+## save. The left column holds the on/off toggle (key H) and, in the row under
+## it, Reset hints (LeftColumn.SLOT_RESET). Off, hints show nothing and mark nothing seen.
 ##
 ## Hints run in a normal launch only. A probe, a test or a PlaytestHook run has
 ## them off, with no row; the explicit switch (--hints, or GMMF_HINTS=1) turns
@@ -88,7 +88,7 @@ var _sim: PassengerSim
 var _card := PanelContainer.new()
 var _caption := Label.new()
 var _body := Label.new()
-var _row := HBoxContainer.new()
+var _row := VBoxContainer.new()
 var _toggle := Button.new()
 var _reset := Button.new()
 
@@ -487,7 +487,7 @@ func _build() -> void:
 	_row.name = "HintsControls"
 	_row.theme = BuildMenu.HUD_THEME
 	_row.position = Vector2(HudLayout.MARGIN, LeftColumn.slot_top(LeftColumn.SLOT_HINTS))
-	_row.add_theme_constant_override("separation", 8)
+	_row.add_theme_constant_override("separation", HudLayout.GAP)
 	add_child(_row)
 	_toggle.name = "HintsToggle"
 	_toggle.text = "Hints (H)"
@@ -499,6 +499,7 @@ func _build() -> void:
 	_row.add_child(_toggle)
 	_reset.name = "HintsReset"
 	_reset.text = "Reset hints"
+	LeftColumn.size_toggle(_reset)
 	_reset.focus_mode = Control.FOCUS_NONE
 	_reset.pressed.connect(reset_seen)
 	_row.add_child(_reset)

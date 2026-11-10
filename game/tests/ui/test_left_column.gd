@@ -112,6 +112,23 @@ func test_the_three_toggles_are_equal_buttons_stacked_on_the_margin() -> void:
 	)
 
 
+## HUD 7/7 part f: Reset hints is the column's fourth button, the row under
+## Hints, the toggles' size, not a button off to the side of Hints.
+func test_reset_hints_is_the_column_button_under_hints() -> void:
+	var hints := _showing_hint()
+	await _settle()
+	var toggle := hints.toggle_button().get_global_rect()
+	var reset := hints.reset_button().get_global_rect()
+	print("RESET toggle=%s reset=%s" % [toggle, reset])
+	assert_float(reset.size.x).is_equal_approx(HudLayout.TOGGLE_W, 0.5)
+	assert_float(reset.size.y).is_equal_approx(HudLayout.BUTTON_H, 0.5)
+	assert_float(reset.position.x).is_equal_approx(HudLayout.MARGIN, 0.5)
+	assert_float(reset.position.y).is_equal_approx(LeftColumn.slot_top(LeftColumn.SLOT_RESET), 0.5)
+	assert_float(reset.position.y - toggle.end.y).is_equal_approx(HudLayout.GAP, 0.5)
+	# The departures list opens under it, never over it.
+	assert_float(_rect("DeparturesPanel").position.y).is_greater_equal(reset.end.y)
+
+
 func test_the_departures_list_starts_open_on_a_fresh_profile() -> void:
 	await _settle()
 	var board := _control("DeparturesBoard") as DeparturesBoard
@@ -122,7 +139,8 @@ func test_the_departures_list_starts_open_on_a_fresh_profile() -> void:
 func test_the_departures_list_opens_under_the_toggles_at_list_width() -> void:
 	await _settle()
 	var panel := _rect("DeparturesPanel")
-	var hints_bottom := LeftColumn.slot_top(LeftColumn.SLOT_HINTS) + HudLayout.BUTTON_H
+	# HUD 7/7: the list opens under Reset hints, the column's last button.
+	var hints_bottom := LeftColumn.slot_top(LeftColumn.SLOT_RESET) + HudLayout.BUTTON_H
 	print("LIST %s" % [panel])
 	assert_float(panel.size.x).is_equal_approx(HudLayout.LIST_W, 0.5)
 	assert_float(panel.position.x).is_equal_approx(HudLayout.MARGIN, 0.5)
@@ -146,7 +164,8 @@ func test_the_checklist_card_rises_under_the_toggles_when_the_list_is_off() -> v
 	board.set_shown(false)
 	await _settle()
 	var card := _staff.hint_card().get_global_rect()
-	var hints_bottom := LeftColumn.slot_top(LeftColumn.SLOT_HINTS) + HudLayout.BUTTON_H
+	# HUD 7/7: the list opens under Reset hints, the column's last button.
+	var hints_bottom := LeftColumn.slot_top(LeftColumn.SLOT_RESET) + HudLayout.BUTTON_H
 	print("CHECKLIST_NO_LIST card=%s" % [card])
 	board.set_shown(true)
 	assert_float(card.position.y).is_equal_approx(hints_bottom + HudLayout.GAP, 0.5)

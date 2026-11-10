@@ -79,7 +79,9 @@ func test_the_toggle_button_follows_the_setting() -> void:
 	assert_bool(button.button_pressed).is_true()
 
 
-func test_the_settings_row_is_visible_with_a_reset_button_beside_the_toggle() -> void:
+## Renamed for HUD 7/7: Reset hints now sits under the toggle in the left
+## column (test_left_column.gd), still in the same settings row node.
+func test_the_settings_row_is_visible_with_a_reset_button_under_the_toggle() -> void:
 	var hints := _hints()
 	assert_bool(hints.settings_row().visible).is_true()
 	assert_str(hints.toggle_button().text).contains("H")

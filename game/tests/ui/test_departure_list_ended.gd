@@ -1,10 +1,14 @@
 class_name TestDepartureListEnded
 extends GdUnitTestSuite
-## An ended contract (FlightSim.end_contract) leaves the departures list from
+## An ended contract (FlightSim.end_contract) leaves a day's departure rows from
 ## its end day on, while the days it already issued still show.
 ##
 ## AM (08:00) and PM (14:00) fly from day 0. AM ends at tick 26900, when AM-d1
 ## is issued and AM-d2 is not, so its end day is 2.
+##
+## Changed for HUD 7/7 (board 3bd42402): these read DepartureList.rows_for_day,
+## which the departures board draws, since DepartureList.text() had no caller
+## left and was removed.
 
 const DAY := GameCalendar.TICKS_PER_DAY
 
@@ -25,20 +29,27 @@ func _run_to(target: int) -> void:
 		_sim.on_tick(t)
 
 
+func _text(day: int) -> String:
+	var lines := PackedStringArray()
+	for row in DepartureList.rows_for_day(_sim, day):
+		lines.append(row["line"])
+	return "\n".join(lines)
+
+
 func test_the_ended_contract_still_shows_on_the_days_it_issued() -> void:
 	assert_int(_sim.contract_end_day("AM")).is_equal(2)
-	var day_one := DepartureList.text(_sim, DAY + 100)
+	var day_one := _text(1)
 	assert_str(day_one).contains("08:00  Oslo  Gotta Air")
 	assert_str(day_one).contains("14:00  Oslo  Gotta Air")
 
 
 func test_the_ended_contract_is_gone_from_its_end_day_on() -> void:
 	for day in [2, 3, 10]:
-		var text := DepartureList.text(_sim, day * DAY + 100)
+		var text := _text(day)
 		assert_str(text).not_contains("08:00")
 		assert_str(text).contains("14:00  Oslo  Gotta Air")
 
 
 func test_with_every_contract_ended_the_list_is_empty() -> void:
 	assert_bool(_sim.end_contract("PM")).is_true()
-	assert_str(DepartureList.text(_sim, 3 * DAY + 100)).is_equal(DepartureList.EMPTY_TEXT)
+	assert_array(DepartureList.rows_for_day(_sim, 3)).is_empty()

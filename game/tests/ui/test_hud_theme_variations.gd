@@ -5,8 +5,8 @@ extends GdUnitTestSuite
 ## look lives (board 30d6a3e0, decision
 ## hud-grid-and-rails-one-spacing-grid-centred-top-row-right-ra part 1): the
 ## Build mode sign (HudBuildSign, HudBuildSignText), the Departures gate and
-## picker buttons (HudButtonCompact) and the build cost card (HudCostCard,
-## checked in test_build_menu_cost_card.gd). The flight result's Dismiss is a
+## picker buttons (HudButtonCompact) and the build status card that holds the
+## cost (HudTopCard, checked in test_build_menu_cost_card.gd). The flight result's Dismiss is a
 ## normal action, so it is teal (decision
 ## hud-look-warm-cozy-cream-cards-with-a-dark-outline-toon-pale).
 

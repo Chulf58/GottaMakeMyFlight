@@ -1,48 +1,20 @@
 class_name DepartureList
 extends RefCounted
-## Today's departures as the flight panel's text (Economy 7/8), a pure
-## function of the FlightSim and the clock tick: one line per flight leaving
-## today, earliest first, as "07:38  Oslo  Gotta Air  Boarding". The next
-## departing flight (the earliest whose doors have not closed) shows
-## "doors close 10:30", the game-clock time its doors close, in place of its
-## status word (decision flight-panel-the-next-departing-flight-s-row-shows-a-
-## doors-c; the clock-time wording is user-ruled 2026-10-29, replacing "doors
-## close in M:SS"). The doors close before the flight leaves, so that time is
-## always today and needs no day prefix;
-## the others keep their status words. A contract
-## shows its destination and airline from its recorded start day
-## (FlightSim.start_days), a one-off flight its id. While the airport is
-## closed no contract is listed, since nothing is scheduled until it opens; a
-## contract accepted then never shows the days it skipped (decision
-## airport-opening-design-stays-open-once-opened-starter-flight-placed-after-
-## opening). An ended contract (FlightSim.end_contract) is listed only for the
-## days before its end day; the flights it had issued by then still fly and
-## show. The list is at most MAX_LINES lines, so the panel keeps its place
-## above the flight result: when more leave today, flights that have departed
-## drop off the top first, then the last line becomes "+n more". When nothing
-## leaves today but an open airport has a contract starting on a later day, the
-## empty text is followed by that flight's day and time, as "Tomorrow  08:00
-## Lisbon  Sunhop".
-
-const MAX_LINES := 3
-const EMPTY_TEXT := "No departures today"
-
-
-static func text(flights: FlightSim, tick: int) -> String:
-	var rows := _rows(flights, GameCalendar.day_of(tick))
-	if rows.is_empty():
-		var upcoming := _upcoming_line(flights, GameCalendar.day_of(tick))
-		return EMPTY_TEXT if upcoming == "" else EMPTY_TEXT + "\n" + upcoming
-	while rows.size() > MAX_LINES and rows[0]["departed"]:
-		rows.pop_front()
-	var next := next_departing(rows, tick)
-	var lines := PackedStringArray()
-	var shown := MAX_LINES - 1 if rows.size() > MAX_LINES else rows.size()
-	for row in rows.slice(0, shown):
-		lines.append(doors_line(row) if row == next else row["line"])
-	if shown < rows.size():
-		lines.append("+%d more" % (rows.size() - shown))
-	return "\n".join(lines)
+## The rows of one day's departures (Economy 7/8), a pure function of the
+## FlightSim: one row per flight leaving that day, earliest first, whose line
+## reads "07:38  Oslo  Gotta Air  Boarding". The departures board
+## (DeparturesBoard) draws them. The next departing flight (the earliest whose
+## doors have not closed) reads "doors close 10:30", the game-clock time its
+## doors close, in place of its status word (doors_line; decision
+## flight-panel-the-next-departing-flight-s-row-shows-a-doors-c, the clock-time
+## wording user-ruled 2026-10-29). A contract shows its destination and airline
+## from its recorded start day (FlightSim.start_days), a one-off flight its id.
+## While the airport is closed no contract is listed, since nothing is scheduled
+## until it opens; a contract accepted then never shows the days it skipped
+## (decision airport-opening-design-stays-open-once-opened-starter-flight-
+## placed-after-opening). An ended contract (FlightSim.end_contract) is listed
+## only for the days before its end day; the flights it had issued by then
+## still fly and show.
 
 
 ## The earliest row whose doors have not closed at `tick`, or an empty one.
@@ -62,41 +34,8 @@ static func doors_text(row: Dictionary) -> String:
 	return "doors close %s" % GameCalendar.clock_text(row["doors"])
 
 
-## The day and time of the earliest contract that starts after `today`, or "".
-## An ended contract never starts, and a closed airport schedules nothing.
-static func _upcoming_line(flights: FlightSim, today: int) -> String:
-	if flights.opened_tick < 0:
-		return ""
-	var best_id := ""
-	var best_when := 0
-	for contract_id in flights.contract_ids():
-		var day := int(flights.start_days[contract_id])
-		var end_day := flights.contract_end_day(contract_id)
-		if day <= today or (end_day >= 0 and day >= end_day):
-			continue
-		var minute := int(flights.contract_of(contract_id)["departure_minute"])
-		var when := day * GameCalendar.MINUTES_PER_DAY + minute
-		if best_id == "" or when < best_when:
-			best_id = contract_id
-			best_when = when
-	if best_id == "":
-		return ""
-	var contract := flights.contract_of(best_id)
-	var day := int(flights.start_days[best_id])
-	var tick := GameCalendar.tick_at(day, int(contract["departure_minute"]))
-	return (
-		"%s  %s  %s  %s"
-		% [
-			"Tomorrow" if day == today + 1 else "Day %d" % (day + 1),
-			GameCalendar.clock_text(tick),
-			contract["destination"],
-			contract["airline"],
-		]
-	)
-
-
-## The rows for each flight leaving on `day`, earliest first (see _rows), for
-## readers that list another day than the flight panel's today.
+## The rows for each flight leaving on `day`, earliest first (see _rows); the
+## departures board reads today's and tomorrow's.
 static func rows_for_day(flights: FlightSim, day: int) -> Array[Dictionary]:
 	return _rows(flights, day)
 

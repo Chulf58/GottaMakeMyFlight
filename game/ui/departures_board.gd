@@ -4,8 +4,7 @@ extends Control
 ## cards-money-hover-departu): a panel listing the flights leaving today that
 ## have not departed and the flights leaving tomorrow, each in time order,
 ## drawn from the FlightSim's contracts and occurrences. Row text is
-## DepartureList's, so a flight reads here as it does in the flight panel
-## ("07:38  Oslo  Gotta Air  Boarding"), except that today's next departing
+## DepartureList's ("07:38  Oslo  Gotta Air  Boarding"), except that today's next departing
 ## flight (the earliest whose doors have not closed) shows "doors close 10:30",
 ## the game-clock time its doors close, in place of its status word (decision
 ## flight-panel-the-next-departing-flight-s-row-shows-a-doors-c, moved here by

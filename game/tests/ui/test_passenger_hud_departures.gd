@@ -1,8 +1,16 @@
 class_name TestPassengerHudDepartures
 extends GdUnitTestSuite
-## The flight panel's list of today's departures (Economy 7/8, DepartureList): every flight
-## leaving today in time order, with how far along it is, drawn from the
-## contracts' timetable and any one-off flight.
+## Today's departures (Economy 7/8, DepartureList): every flight leaving today
+## in time order, with how far along it is, drawn from the contracts' timetable
+## and any one-off flight.
+##
+## Changed for HUD 7/7 (board 3bd42402): DepartureList.text(), the old flight
+## panel's text, had no caller left and was removed. These now read today's rows
+## as the departures board draws them (DeparturesBoard.entries_for), and a
+## departed flight's status word from the day's rows (DepartureList.rows_for_day),
+## since the board drops a departed flight from today. Two tests that covered
+## only text()'s three-line cap were removed with it; the board's own cap of
+## MAX_ROWS_PER_DAY is covered in test_departures_board.gd.
 
 var _world: PassengerTestWorld
 var _hud: PassengerHud
@@ -46,12 +54,36 @@ func _terms(id: String, minute: int, destination: String, airline: String) -> Di
 	}
 
 
-func _text() -> String:
-	return DepartureList.text(_hud.flights, _world.clock.tick)
-
-
+## Today's rows on the departures board, up to its Tomorrow heading.
 func _lines() -> PackedStringArray:
-	return _text().split("\n")
+	var lines := PackedStringArray()
+	for entry in DeparturesBoard.entries_for(_hud.flights, _world.clock.tick):
+		if entry["text"] == DeparturesBoard.TOMORROW_HEADING:
+			break
+		if entry["kind"] == "row":
+			lines.append(entry["text"])
+	return lines
+
+
+func _text() -> String:
+	return "\n".join(_lines())
+
+
+## Today's board row that starts with `prefix`, or "".
+func _line_starting(prefix: String) -> String:
+	for line in _lines():
+		if line.begins_with(prefix):
+			return line
+	return ""
+
+
+## The day's row lines with each flight's status word, departed ones included.
+func _day_rows() -> PackedStringArray:
+	var lines := PackedStringArray()
+	var day := GameCalendar.day_of(_world.clock.tick)
+	for row in DepartureList.rows_for_day(_hud.flights, day):
+		lines.append(row["line"])
+	return lines
 
 
 func test_the_departures_list_today_s_flights_in_time_order() -> void:
@@ -70,23 +102,32 @@ func test_the_departures_list_today_s_flights_in_time_order() -> void:
 	)
 
 
+## Changed for HUD 7/7: "Departed" is read from the day's rows, because the
+## board drops a departed flight from today (asserted too).
 func test_a_one_off_flight_shows_how_far_along_it_is() -> void:
 	_world.run_to(21)
 	assert_str(_lines()[0]).is_equal("06:04  GMF101  Doors closed")
 	_world.run_to(85)
 	assert_str(_lines()[0]).is_equal("06:04  GMF101  Pushback")
 	_world.run_to(705)
-	assert_str(_lines()[0]).is_equal("06:04  GMF101  Departed")
+	assert_str(_day_rows()[0]).is_equal("06:04  GMF101  Departed")
+	assert_str(_text()).not_contains("GMF101")
 
 
+## Changed for HUD 7/7: the flight is found by its time rather than its index,
+## since the departed one-off leaves the board, and "Departed" is read from the
+## day's rows.
 func test_a_contract_flight_boards_then_departs() -> void:
 	_world.flights.accept_contract(_terms("GA100", 11 * 60, "Oslo", "Gotta Air"))
-	assert_str(_lines()[1]).is_equal("11:00  Oslo  Gotta Air")
+	assert_str(_line_starting("11:00")).is_equal("11:00  Oslo  Gotta Air")
 	var starts := FlightTimetable.starts_for(_world.flights.contract_of("GA100"), 0)
 	_world.run_to(starts[FlightSim.State.BOARDING] + 1)
-	assert_str(_lines()[1]).is_equal("11:00  Oslo  Gotta Air  %s" % _doors_text("GA100"))
+	assert_str(_line_starting("11:00")).is_equal(
+		"11:00  Oslo  Gotta Air  %s" % _doors_text("GA100")
+	)
 	_world.run_to(starts[FlightSim.State.DEPARTED] + 1)
-	assert_str(_lines()[1]).is_equal("11:00  Oslo  Gotta Air  Departed")
+	assert_str(_day_rows()[1]).is_equal("11:00  Oslo  Gotta Air  Departed")
+	assert_str(_line_starting("11:00")).is_equal("")
 
 
 func test_a_contract_that_starts_tomorrow_is_not_listed_today() -> void:
@@ -103,30 +144,19 @@ func test_the_list_names_the_day_s_flights_again_after_midnight() -> void:
 	assert_str(_lines()[0]).is_equal("11:00  Oslo  Gotta Air  %s" % _doors_text("GA100"))
 
 
+## Changed for HUD 7/7: the board's empty text, as text()'s is gone.
 func test_no_flights_says_so() -> void:
 	var empty: FlightSim = auto_free(FlightSim.new())
 	empty.bind_clock(_world.clock)
 	_hud.flights = empty
-	assert_str(_text()).is_equal("No departures today")
+	assert_array(Array(DeparturesBoard.lines_for(empty, _world.clock.tick))).is_equal(
+		[DeparturesBoard.EMPTY_TEXT]
+	)
 
 
-func test_a_long_day_shows_the_first_lines_and_counts_the_rest() -> void:
-	# Four 200 minutes apart from 09:00: a fifth at 22:20 would depart in the
-	# quiet night, which Runway R7 refuses.
-	var minutes := [9 * 60, 12 * 60 + 20, 15 * 60 + 40, 19 * 60]
-	for i in minutes.size():
-		(
-			assert_bool(
-				_world.flights.accept_contract(_terms("C%d" % i, minutes[i], "Rome", "Sunhop"))
-			)
-			. is_true()
-		)
-	var lines := _lines()
-	assert_int(lines.size()).is_equal(DepartureList.MAX_LINES)
-	assert_str(lines[0]).is_equal("06:04  GMF101  doors close 06:01")
-	assert_str(lines[lines.size() - 1]).is_equal("+3 more")
-
-
+## Changed for HUD 7/7: text() dropped departed flights only to fit its three
+## lines; the board drops every departed flight from today, so the later ones
+## all show and no "+n more" is needed for four.
 func test_departed_flights_make_room_for_later_ones() -> void:
 	# Four 200 minutes apart from 09:00: a fifth at 22:20 would depart in the
 	# quiet night, which Runway R7 refuses.
@@ -135,8 +165,9 @@ func test_departed_flights_make_room_for_later_ones() -> void:
 		_world.flights.accept_contract(_terms("C%d" % i, minutes[i], "Rome", "Sunhop"))
 	_world.run_to(705)
 	var lines := _lines()
+	assert_int(lines.size()).is_equal(4)
 	assert_str(lines[0]).starts_with("09:00  Rome  Sunhop  doors close ")
-	assert_str(lines[lines.size() - 1]).is_equal("+2 more")
+	assert_str(_text()).not_contains("more")
 
 
 func test_the_departures_list_shows_the_flights() -> void:
@@ -170,14 +201,17 @@ func test_the_doors_time_moves_to_the_following_flight_once_the_doors_close() ->
 	assert_str(lines[2]).is_equal("14:20  Berlin  Nordic Wing")
 
 
+## Changed for HUD 7/7: the flight is found by its time, as above.
 func test_the_doors_time_replaces_the_boarding_word() -> void:
 	_world.flights.accept_contract(_terms("GA100", 11 * 60, "Oslo", "Gotta Air"))
 	_world.run_to(21)
 	var starts := FlightTimetable.starts_for(_world.flights.contract_of("GA100"), 0)
 	_world.run_to(starts[FlightSim.State.BOARDING] + 1)
-	assert_str(_lines()[1]).is_equal("11:00  Oslo  Gotta Air  %s" % _doors_text("GA100"))
+	assert_str(_line_starting("11:00")).is_equal(
+		"11:00  Oslo  Gotta Air  %s" % _doors_text("GA100")
+	)
 	_world.run_to(starts[FlightSim.State.DOORS_CLOSED] + 1)
-	assert_str(_lines()[1]).is_equal("11:00  Oslo  Gotta Air  Doors closed")
+	assert_str(_line_starting("11:00")).is_equal("11:00  Oslo  Gotta Air  Doors closed")
 
 
 func test_no_flight_counts_down_when_every_door_has_closed() -> void:

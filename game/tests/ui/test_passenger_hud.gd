@@ -39,9 +39,9 @@ func test_counts_show_made_and_missed_after_doors_close() -> void:
 	_world.run_to(21)
 	_hud.refresh()
 	assert_str(counts.text).is_equal("Made 0  Missed 1  In terminal 0")
-	assert_str(DepartureList.text(_world.flights, _world.clock.tick)).contains(
-		"GMF101  Doors closed"
-	)
+	# HUD 7/7: the departures board's lines, as DepartureList.text() is gone.
+	var departures := DeparturesBoard.lines_for(_world.flights, _world.clock.tick)
+	assert_str("\n".join(departures)).contains("GMF101  Doors closed")
 
 
 func test_debug_button_spawns_300_and_shows_the_seed() -> void:
