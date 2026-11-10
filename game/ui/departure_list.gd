@@ -35,26 +35,31 @@ static func text(flights: FlightSim, tick: int) -> String:
 		return EMPTY_TEXT if upcoming == "" else EMPTY_TEXT + "\n" + upcoming
 	while rows.size() > MAX_LINES and rows[0]["departed"]:
 		rows.pop_front()
-	var next := _next_departing(rows, tick)
+	var next := next_departing(rows, tick)
 	var lines := PackedStringArray()
 	var shown := MAX_LINES - 1 if rows.size() > MAX_LINES else rows.size()
 	for row in rows.slice(0, shown):
-		lines.append(_countdown_line(row) if row == next else row["line"])
+		lines.append(doors_line(row) if row == next else row["line"])
 	if shown < rows.size():
 		lines.append("+%d more" % (rows.size() - shown))
 	return "\n".join(lines)
 
 
 ## The earliest row whose doors have not closed at `tick`, or an empty one.
-static func _next_departing(rows: Array[Dictionary], tick: int) -> Dictionary:
+static func next_departing(rows: Array[Dictionary], tick: int) -> Dictionary:
 	for row in rows:
 		if tick < row["doors"]:
 			return row
 	return {}
 
 
-static func _countdown_line(row: Dictionary) -> String:
-	return "%s  doors close %s" % [row["base"], GameCalendar.clock_text(row["doors"])]
+static func doors_line(row: Dictionary) -> String:
+	return "%s  %s" % [row["base"], doors_text(row)]
+
+
+## "doors close 10:30": the game-clock time the row's doors close.
+static func doors_text(row: Dictionary) -> String:
+	return "doors close %s" % GameCalendar.clock_text(row["doors"])
 
 
 ## The day and time of the earliest contract that starts after `today`, or "".

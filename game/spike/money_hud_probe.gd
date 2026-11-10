@@ -111,9 +111,15 @@ func _check() -> void:
 	var clock_text := (hud.find_child("Clock", true, false) as Label).text
 	print("LABEL clock=%s" % clock_text)
 	_expect("clock", clock_text, "Day 1  06:00")
-	var departures := (hud.find_child("Departures", true, false) as Label).text
-	print("LABEL departures=%s" % departures.replace("\n", " | "))
-	_expect("departures", departures, DepartureList.EMPTY_TEXT)
+	var departures := (hud.find_child("DeparturesPanel", true, false) as Control).find_children(
+		"*", "Label", true, false
+	)
+	var board_lines := PackedStringArray()
+	for line in departures:
+		board_lines.append((line as Label).text)
+	print("LABEL departures=%s" % " | ".join(board_lines))
+	_expect("clock panel lists no flights", hud.find_child("Departures", true, false), null)
+	_expect("departures", board_lines.has(DeparturesBoard.EMPTY_TEXT), true)
 
 	var prices := {}
 	for tool in [
@@ -207,13 +213,10 @@ func _fill_the_day() -> void:
 		_expect("probe contract %d accepted" % i, flights.accept_contract(terms), true)
 
 
-## With a full list the right rail (alert and result cards) hangs GROUP_GAP
-## under the flight panel, and the list is at its line cap.
+## The right rail (alert and result cards) hangs GROUP_GAP under the clock
+## panel.
 func _check_layout() -> void:
 	var hud: PassengerHud = _main.get_node("PassengerHud")
-	var label := hud.find_child("Departures", true, false) as Label
-	print("LABEL full list=%s" % label.text.replace("\n", " | "))
-	_expect("list lines", label.text.split("\n").size(), DepartureList.MAX_LINES)
 	var panel := hud.get_node("FlightPanel") as Control
 	var bottom := panel.get_global_rect().end.y
 	var rail := (hud.find_child("AlertStack", false, false) as Control).get_global_rect()

@@ -1,6 +1,7 @@
 class_name TestPassengerHud
 extends GdUnitTestSuite
-## The made/missed HUD and the debug spawn button.
+## The made/missed counts (the Departures list header, since HUD 3b) and the
+## debug spawn button.
 
 var _world: PassengerTestWorld
 var _hud: PassengerHud
@@ -31,12 +32,13 @@ func after_test() -> void:
 
 
 func test_counts_show_made_and_missed_after_doors_close() -> void:
+	var counts := _hud.find_child("Counts", true, false) as Label
 	_world.sim.spawn_now(PassengerTestWorld.FLIGHT)
 	_hud.refresh()
-	assert_str(_hud.counts_text()).is_equal("Made 0   Missed 0   In terminal 1")
+	assert_str(counts.text).is_equal("Made 0  Missed 0  In terminal 1")
 	_world.run_to(21)
 	_hud.refresh()
-	assert_str(_hud.counts_text()).is_equal("Made 0   Missed 1   In terminal 0")
+	assert_str(counts.text).is_equal("Made 0  Missed 1  In terminal 0")
 	assert_str(DepartureList.text(_world.flights, _world.clock.tick)).contains(
 		"GMF101  Doors closed"
 	)
@@ -112,7 +114,7 @@ func test_a_refused_debug_batch_after_departure_raises_no_error() -> void:
 
 
 func test_the_departures_follow_the_flight_after_the_doors_close() -> void:
-	var label := _hud.find_child("Departures", true, false) as Label
+	var board := _hud.find_child("DeparturesBoard", true, false) as DeparturesBoard
 	for step in [
 		[21, "Doors closed"],
 		[85, "Pushback"],
@@ -122,7 +124,11 @@ func test_the_departures_follow_the_flight_after_the_doors_close() -> void:
 	]:
 		_world.run_to(step[0])
 		_hud.refresh()
-		assert_str(label.text).is_equal("06:04  GMF101  %s" % step[1])
+		if step[1] == "Departed":
+			# A departed flight leaves today's list.
+			assert_array(board.shown_lines()).not_contains(["06:04  GMF101  Departed"])
+		else:
+			assert_array(board.shown_lines()).contains(["06:04  GMF101  %s" % step[1]])
 
 
 func test_speed_buttons_set_the_clock() -> void:

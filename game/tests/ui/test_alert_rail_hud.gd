@@ -96,8 +96,9 @@ func test_the_rail_starts_a_group_gap_under_the_clock_panel_for_one_and_four_fli
 	var four := _panel()
 	rail = _stack().get_global_rect()
 	print("RAIL_FOUR panel=%s rail=%s" % [four, rail])
-	# Control: four flights make the panel taller than one does.
-	assert_float(four.end.y).is_greater(one.end.y)
+	# Control: the panel lists no flights since HUD 3b, so four flights leave
+	# it as tall as one flight does.
+	assert_float(four.end.y).is_equal_approx(one.end.y, 0.5)
 	assert_float(rail.position.y).is_equal_approx(four.end.y + HudLayout.GROUP_GAP, 0.5)
 
 

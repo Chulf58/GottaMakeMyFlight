@@ -1,10 +1,9 @@
 class_name TestPassengerHudDeparturesCap
 extends GdUnitTestSuite
-## However many flights are accepted, the flight panel's departures label shows
-## at most DepartureList.MAX_LINES lines and the right rail (AlertStack, with
-## the flight result card) hangs GROUP_GAP under the panel, so a long day
-## never pushes the panel into the cards (decision
-## flight-panel-the-next-departing-flight-s-row-shows-a-doors-close-countdown).
+## However many flights are accepted, the right rail (AlertStack, with the
+## flight result card) hangs GROUP_GAP under the clock panel. The panel no
+## longer lists flights (HUD 3b, decision top-right-clock-panel-slims-to-day-
+## time-and-speed-flight-row), so a long day never touches it.
 
 var _world: PassengerTestWorld
 var _hud: PassengerHud
@@ -44,32 +43,8 @@ func _accept_many(count: int, destination: String, airline: String) -> void:
 		assert_bool(_world.flights.accept_contract(terms)).is_true()
 
 
-func _label() -> Label:
-	return _hud.find_child("Departures", true, false) as Label
-
-
-func _panel_bottom() -> float:
-	var panel := _label().get_parent().get_parent() as Control
-	return panel.get_global_rect().end.y
-
-
-func test_five_contracts_still_fill_only_the_capped_lines() -> void:
-	_accept_many(5, "Rome", "Sunhop")
-	_hud.refresh()
-	var label := _label()
-	var lines := label.text.split("\n")
-	assert_int(lines.size()).is_equal(DepartureList.MAX_LINES)
-	# The clock is at 06:04: the 07:00 contract starts tomorrow, so today lists
-	# GMF101 and the four later contracts, and 5 - 2 shown remain.
-	assert_str(lines[DepartureList.MAX_LINES - 1]).is_equal("+3 more")
-	assert_int(label.autowrap_mode).is_equal(TextServer.AUTOWRAP_OFF)
-	assert_int(label.get_line_count()).is_equal(DepartureList.MAX_LINES)
-
-
-func test_long_names_do_not_wrap_into_extra_lines() -> void:
-	_accept_many(5, "Ulaanbaatar International", "Trans Continental Regional Airways")
-	_hud.refresh()
-	assert_int(_label().get_line_count()).is_equal(DepartureList.MAX_LINES)
+func _panel() -> Control:
+	return _hud.find_child("FlightPanel", false, false) as Control
 
 
 func test_the_panel_stays_clear_of_the_result_card_with_many_flights() -> void:
@@ -77,9 +52,9 @@ func test_the_panel_stays_clear_of_the_result_card_with_many_flights() -> void:
 	_hud.refresh()
 	await get_tree().process_frame
 	await get_tree().process_frame
-	var panel_bottom := _panel_bottom()
-	# Control: the panel was laid out, so it has a real height below the label.
-	assert_float(panel_bottom).is_greater(_label().get_global_rect().end.y)
+	var panel_bottom := _panel().get_global_rect().end.y
+	# Control: the panel was laid out, so it has a real height.
+	assert_float(_panel().size.y).is_greater(0.0)
 	_hud.refresh()
 	await get_tree().process_frame
 	var rail := (_hud.find_child("AlertStack", false, false) as Control).get_global_rect()

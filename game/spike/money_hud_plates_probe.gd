@@ -167,7 +167,7 @@ func _scene_a() -> void:
 	_expect(
 		_menu.preview_label().text == "Cost 25", "a: cost line '%s'" % _menu.preview_label().text
 	)
-	var departures := _departures()
+	var departures := _board_lines()
 	var starter := FlightTimetable.occurrence_id(FlightSim.DEFAULT_ID, 0)
 	var doors := GameCalendar.clock_text(
 		_flights.state_start(starter, FlightSim.State.DOORS_CLOSED)
@@ -175,8 +175,8 @@ func _scene_a() -> void:
 	var minute: int = _flights.contract_of(FlightSim.DEFAULT_ID)["departure_minute"]
 	var departs := "%02d:%02d" % [minute / 60, minute % 60]
 	_expect(
-		departures.text == "%s  Oslo  Gotta Air  doors close %s" % [departs, doors],
-		"a: departures '%s'" % departures.text
+		departures.has("%s  Oslo  Gotta Air  doors close %s" % [departs, doors]),
+		"a: departures '%s'" % " | ".join(departures)
 	)
 	var policy := _find_label(_hud, PassengerHud.DEBUG_POLICY_TEXT)
 	_expect(policy != null and policy.is_visible_in_tree(), "a: the policy label is not shown")
@@ -301,8 +301,6 @@ func _scene_d() -> void:
 	_sim.flight_results["GMF101-d0"] = {"made": 3, "missed": 4, "causes": causes}
 	_hud.show_result_for("GMF101-d0")
 	await _frames(8)
-	var lines := _departures().text.split("\n")
-	_expect(lines.size() == 3, "d: %d departure lines" % lines.size())
 	_expect(_hud.is_result_open(), "d: the result panel is closed")
 	var flight := _hud.find_child("FlightPanel", true, false) as Control
 	var result := _hud.find_child("FlightResultPanel", true, false) as Control
@@ -330,8 +328,9 @@ func _scene_d() -> void:
 	_hud.dismiss_result()
 
 
-func _departures() -> Label:
-	return _hud.find_child("Departures", true, false) as Label
+## The Departures list's lines now (the clock panel no longer lists flights).
+func _board_lines() -> PackedStringArray:
+	return DeparturesBoard.lines_for(_flights, (_main.get_node("SimClock") as SimClock).tick)
 
 
 func _tray_cards() -> Array:
@@ -400,10 +399,7 @@ func _plate(label: String, buttons: Array, park_mouse := true) -> void:
 	print(
 		(
 			"  TEXT clock='%s' departures='%s'"
-			% [
-				(_hud.find_child("Clock", true, false) as Label).text,
-				_departures().text.replace("\n", " | ")
-			]
+			% [(_hud.find_child("Clock", true, false) as Label).text, " | ".join(_board_lines())]
 		)
 	)
 	for button: Button in buttons:

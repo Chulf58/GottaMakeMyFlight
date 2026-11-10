@@ -1,11 +1,13 @@
 class_name PassengerHud
 extends CanvasLayer
-## The passenger HUD. Top-right: the in-game day and clock, made and missed
-## counts, today's departures (DepartureList), and the speed buttons (Space
-## toggles the pause, Shift+1/2/3 set the speed; plain number keys stay the
-## build tool keys). On the left edge, the optional DeparturesBoard (B shows
-## and hides it), which steps aside while the inspect card shows. Under the
-## flight panel, the right rail (AlertStack): alert cards, which clear
+## The passenger HUD. Top-right: one row with the in-game day and clock and the
+## speed buttons (Space toggles the pause, Shift+1/2/3 set the speed, shown as
+## the buttons' tooltips; plain number keys stay the build tool keys). The
+## flight rows and the made, missed and in-terminal counts live in the
+## Departures list instead (decision top-right-clock-panel-slims-to-day-time-
+## and-speed-flight-row). On the left edge, the optional DeparturesBoard (B
+## shows and hides it), which steps aside while the inspect card shows. Under
+## the clock panel, the right rail (AlertStack): alert cards, which clear
 ## themselves and jump the camera when clicked, and the flight result card.
 ## Bottom-left: the followed passenger's inspect card (PassengerInspect:
 ## live status, its thoughts, and a pin where a clicked thought happened), or
@@ -48,9 +50,6 @@ const SPEED_KEYS := {KEY_1: 1, KEY_2: 2, KEY_3: 3}
 const DEBUG_W := 260.0
 ## The flight result card's key on the rail.
 const RESULT_KEY := &"flight_result"
-## Gap between the flight panel's rows, tighter than the theme's so the
-## panel leaves the rail under it room for its cards.
-const FLIGHT_PANEL_GAP := 1
 ## The flight panel's word for each state from the doors closing on.
 const AFTER_DOORS_TEXT := {
 	FlightSim.State.DOORS_CLOSED: "Doors closed",
@@ -167,8 +166,6 @@ var alert_settings_path := HudFlagSetting.PATH
 var _departures_board := DeparturesBoard.new()
 var _alerts := AlertStack.new()
 var _hints := Hints.new()
-var _counts_label := Label.new()
-var _departures_label := Label.new()
 var _seed_label := Label.new()
 var _follow_label := Label.new()
 ## The followed passenger's card; the follow text then hides.
@@ -205,35 +202,29 @@ func _ready() -> void:
 	panel.position = Vector2(-HudLayout.MARGIN - HudLayout.RAIL_W, HudLayout.MARGIN)
 	panel.custom_minimum_size = Vector2(HudLayout.RAIL_W, 0.0)
 	add_child(panel)
-	var column := VBoxContainer.new()
-	column.add_theme_constant_override("separation", FLIGHT_PANEL_GAP)
-	panel.add_child(column)
+	var row := HBoxContainer.new()
+	panel.add_child(row)
 	_time_label.name = "Clock"
-	for label in [_time_label, _counts_label]:
-		label.theme_type_variation = &"HudLarge"
-		column.add_child(label)
-	_departures_label.name = "Departures"
-	column.add_child(_departures_label)
-	var speeds := HBoxContainer.new()
-	column.add_child(speeds)
+	_time_label.theme_type_variation = &"HudLarge"
+	_time_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_time_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	row.add_child(_time_label)
 	for value in [0, 1, 2, 3]:
 		var button := Button.new()
 		button.text = "Pause" if value == 0 else "%dx" % value
 		button.toggle_mode = true
-		button.custom_minimum_size = Vector2(72.0, 36.0)
+		button.custom_minimum_size = Vector2(HudLayout.UNIT * 8, HudLayout.BUTTON_H)
+		button.tooltip_text = "Space" if value == 0 else "Shift+%d" % value
 		button.focus_mode = Control.FOCUS_NONE
 		if value == 0:
 			button.pressed.connect(press_pause_toggle)
 		else:
 			button.pressed.connect(press_speed.bind(value))
-		speeds.add_child(button)
+		row.add_child(button)
 		_speed_buttons.append(button)
-	var hint := Label.new()
-	hint.text = "Space pause   Shift+1/2/3 speed"
-	hint.theme_type_variation = &"HudHint"
-	column.add_child(hint)
 	_departures_board.flights = flights
 	_departures_board.clock = clock
+	_departures_board.passengers = sim
 	_departures_board.settings_path = departures_settings_path
 	add_child(_departures_board)
 	# The offer sheet is a sibling layer; the alert cards give way to it when open.
@@ -391,8 +382,6 @@ func refresh() -> void:
 		show_result_for(_unreported.back())
 		_unreported.clear()
 	_time_label.text = time_text()
-	_counts_label.text = counts_text()
-	_departures_label.text = DepartureList.text(flights, clock.tick)
 	_departures_board.refresh()
 	_alerts.refresh()
 	_seed_label.text = seed_text()
@@ -413,13 +402,6 @@ func refresh() -> void:
 ## The in-game day and 24-hour clock, "Day 1  06:00" (GameCalendar).
 func time_text() -> String:
 	return "Day %d  %s" % [GameCalendar.day_of(clock.tick) + 1, GameCalendar.clock_text(clock.tick)]
-
-
-func counts_text() -> String:
-	return (
-		"Made %d   Missed %d   In terminal %d"
-		% [sim.made_count(), sim.missed_count(), sim.active_count()]
-	)
 
 
 func seed_text() -> String:

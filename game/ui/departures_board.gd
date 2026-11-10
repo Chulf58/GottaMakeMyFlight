@@ -5,9 +5,15 @@ extends Control
 ## have not departed and the flights leaving tomorrow, each in time order,
 ## drawn from the FlightSim's contracts and occurrences. Row text is
 ## DepartureList's, so a flight reads here as it does in the flight panel
-## ("07:38  Oslo  Gotta Air  Boarding"). Each day lists at most
+## ("07:38  Oslo  Gotta Air  Boarding"), except that today's next departing
+## flight (the earliest whose doors have not closed) shows "doors close 10:30",
+## the game-clock time its doors close, in place of its status word (decision
+## flight-panel-the-next-departing-flight-s-row-shows-a-doors-c, moved here by
+## top-right-clock-panel-slims-to-day-time-and-speed-flight-row). Each day lists at most
 ## MAX_ROWS_PER_DAY rows, then "+n more"; a day with none says "None", and
-## with nothing on either day the board says EMPTY_TEXT.
+## with nothing on either day the board says EMPTY_TEXT. A header line above
+## the rows reads "Made N  Missed N  In terminal N" from the PassengerSim: the
+## counts the clock panel used to carry (board 05cf0cf6).
 ##
 ## Each row ends in a gate button showing the gate the flight holds (decision
 ## gates-are-placed-gate-desks-each-desk-links-automatically-to: the gate is
@@ -55,12 +61,15 @@ const MAX_ROWS_PER_DAY := 5
 
 @export var flights: FlightSim
 @export var clock: SimClock
+## Where the header's Made / Missed / In terminal counts come from.
+var passengers: PassengerSim
 ## Where the on/off choice is kept; tests point it at a per-process file.
 var settings_path := SETTINGS_PATH
 
 var _shown := true
 var _toggle := Button.new()
 var _panel := PanelContainer.new()
+var _counts := Label.new()
 var _rows := VBoxContainer.new()
 var _lines := PackedStringArray()
 var _entries: Array[Dictionary] = []
@@ -85,8 +94,8 @@ static func lines_for(sim: FlightSim, tick: int) -> PackedStringArray:
 ## text}, and for a "row" also {contract, day, gate, key}.
 static func entries_for(sim: FlightSim, tick: int) -> Array[Dictionary]:
 	var today := GameCalendar.day_of(tick)
-	var todays := _day_entries(sim, today, true)
-	var tomorrows := _day_entries(sim, today + 1, false)
+	var todays := _day_entries(sim, today, true, tick)
+	var tomorrows := _day_entries(sim, today + 1, false, tick)
 	var entries: Array[Dictionary] = []
 	if todays.is_empty() and tomorrows.is_empty():
 		entries.append({"kind": "text", "text": EMPTY_TEXT})
@@ -106,20 +115,30 @@ static func _append_day(entries: Array[Dictionary], day_entries: Array[Dictionar
 
 
 ## One day's rows in time order, flights that have departed dropped when
-## `drop_departed`, capped at MAX_ROWS_PER_DAY with a "+n more" entry after.
-static func _day_entries(sim: FlightSim, day: int, drop_departed: bool) -> Array[Dictionary]:
+## `drop_departed` (today), capped at MAX_ROWS_PER_DAY with a "+n more" entry
+## after. On today the next departing flight at `tick` shows its doors time.
+static func _day_entries(
+	sim: FlightSim, day: int, drop_departed: bool, tick: int
+) -> Array[Dictionary]:
 	var entries: Array[Dictionary] = []
 	var kept: Array[Dictionary] = []
-	for row in DepartureList.rows_for_day(sim, day):
+	var all := DepartureList.rows_for_day(sim, day)
+	var next := DepartureList.next_departing(all, tick) if drop_departed else {}
+	for row in all:
 		if not (drop_departed and row["departed"]):
 			kept.append(row)
 	for row in kept.slice(0, MAX_ROWS_PER_DAY):
+		var is_next: bool = row == next
 		(
 			entries
 			. append(
 				{
 					"kind": "row",
-					"text": row["line"],
+					"text": DepartureList.doors_line(row) if is_next else row["line"],
+					# The row's own line; the doors time of the next flight is
+					# drawn under it, where the narrow list has room for it.
+					"title": row["base"] if is_next else row["line"],
+					"doors": DepartureList.doors_text(row) if is_next else "",
 					"contract": row["contract"],
 					"day": day,
 					"gate": row["gate"],
@@ -153,8 +172,16 @@ func _ready() -> void:
 	_panel.position.y = LeftColumn.LIST_TOP - LeftColumn.TOP
 	_panel.add_to_group(LeftColumn.LIST_GROUP)
 	add_child(_panel)
+	var body := VBoxContainer.new()
+	body.add_theme_constant_override("separation", 1)
+	_panel.add_child(body)
+	_counts.name = "Counts"
+	_counts.theme_type_variation = &"HudHint"
+	_counts.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	body.add_child(_counts)
+	_rows.name = "Rows"
 	_rows.add_theme_constant_override("separation", 1)
-	_panel.add_child(_rows)
+	body.add_child(_rows)
 	_shown = _load_setting()
 	_apply_shown()
 	_toggle.toggled.connect(set_shown)
@@ -219,9 +246,21 @@ func refresh() -> void:
 	_refresh(false)
 
 
+## "Made 3  Missed 1  In terminal 12", or "" while no PassengerSim is set.
+func counts_text() -> String:
+	if passengers == null:
+		return ""
+	return (
+		"Made %d  Missed %d  In terminal %d"
+		% [passengers.made_count(), passengers.missed_count(), passengers.active_count()]
+	)
+
+
 func _refresh(force: bool) -> void:
 	if not _shown or flights == null or clock == null:
 		return
+	_counts.text = counts_text()
+	_counts.visible = passengers != null
 	var entries := entries_for(flights, clock.tick)
 	var gates := flights.gate_ids()
 	if not force and entries == _entries and gates == _gates:
@@ -260,7 +299,7 @@ func _picker_row_live() -> bool:
 func _add_row(entry: Dictionary) -> void:
 	var row := HBoxContainer.new()
 	var label := Label.new()
-	label.text = entry["text"]
+	label.text = entry["title"]
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
@@ -277,6 +316,13 @@ func _add_row(entry: Dictionary) -> void:
 	row.add_child(button)
 	_rows.add_child(row)
 	_compact(button)
+	if entry["doors"] != "":
+		var doors := Label.new()
+		doors.name = "DoorsClose"
+		doors.text = entry["doors"]
+		doors.theme_type_variation = &"HudHint"
+		doors.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_rows.add_child(doors)
 	if key != "" and key == _picker_key:
 		_add_picker(entry)
 	if key != "" and key == _message_key and _message != "":
