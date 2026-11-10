@@ -64,6 +64,7 @@ extends SceneTree
 
 const PlateSight := preload("res://spike/plate_sight.gd")
 const CarryContact := preload("res://spike/carry_contact.gd")
+const AirsideKit := preload("res://tests/airside/airside_props_kit.gd")
 const CarryChecks := preload("res://spike/carry_probe_checks.gd")
 const FloatCheck := preload("res://spike/carry_float_check.gd")
 const PlateSteps := preload("res://spike/carry_plate_steps.gd")
@@ -229,6 +230,17 @@ var _reach_dir := ""
 ## "bag_line"}, the widest arm point and the widest point of a bag it holds or
 ## wears, across the arch's axis (board 40d26b16).
 var _returner_reach := {}
+## Lane mode, two-bag returners' put-in (_bag_in_bag_scan()): passenger id ->
+## {"frames", "max", "line"}, the most surface points of one of its bags inside
+## the other's meshes on any frame of its arch walk (board 521e46a5).
+var _bag_in_bag := {}
+var _no_b1_plate := false
+var _b1_views := false
+## Passenger ids traced (--trace=): sampled frames near an arch, contact bones.
+var _trace := {}
+## Pinned draws (--pin=5@508.121,15@980.317): [passenger id, sim time] each,
+## drawn at exactly that time (_pin_measure()); every one must be measured.
+var _pins: Array = []
 
 
 func _initialize() -> void:
@@ -244,6 +256,19 @@ func _initialize() -> void:
 	_reach_dir = ProjectSettings.globalize_path(REACH_OUT_REL + run).simplify_path()
 	DirAccess.make_dir_recursive_absolute(_reach_dir)
 	_lane_mode = OS.get_cmdline_user_args().has("--lane")
+	# Board 521e46a5 re-check: --no-b1-plate leaves out the second bag's put-in
+	# plate (its clock pause shifts the frames sampled after it), --b1-views
+	# adds a side and a high plate of it, --trace=5,15 prints those
+	# passengers' sampled frames near an arch and each booth contact's bones.
+	_no_b1_plate = OS.get_cmdline_user_args().has("--no-b1-plate")
+	_b1_views = OS.get_cmdline_user_args().has("--b1-views")
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--trace="):
+			for id in arg.get_slice("=", 1).split(","):
+				_trace[int(id)] = true
+		if arg.begins_with("--pin="):
+			for pin in arg.get_slice("=", 1).split(","):
+				_pins.append([int(pin.get_slice("@", 0)), float(pin.get_slice("@", 1))])
 	print("PROBE out_dir=", _out_dir, " close_dir=", _close_dir, " lane_mode=", _lane_mode)
 	_run.call_deferred()
 
@@ -523,6 +548,8 @@ func _cross() -> void:
 			next_send = _clock.tick + SEND_GAP_TICKS
 		for id in _sim.passenger_ids():
 			_check(id)
+			if _lane_mode:
+				_bag_in_bag_scan(id)
 		for id in _sent:
 			var sent := _sim.get_passenger(id)
 			if _lane_mode and sent != null and sent.stage == Passenger.Stage.SECURITY:
@@ -575,6 +602,13 @@ func _lead_plate_scan() -> void:
 ## the move is first drawn at k 0 and its plate steps the clock to each moment.
 ## A hard case's turn to the front is plated first, when asked (CaseTurnPlates).
 func _on_tick(_tick: int) -> void:
+	var due := _pins.filter(func(pin: Array) -> bool: return int(pin[1]) == _clock.tick)
+	if not due.is_empty():
+		# Held here; _pin_measure() draws each pinned time of this tick.
+		_clock.set_paused(true)
+		_clock._accumulator = 0.0
+		_pin_measure.call_deferred(due)
+		return
 	if CaseTurnPlates.scan(self) or _plate_task or _hold_frame >= 0:
 		return
 	var props := _views.carry_on_props()
@@ -888,7 +922,10 @@ func _check(id: int) -> void:
 				)
 			)
 		s["phases"][p.security_phase] = true
-		s["body_contacts"] += _contacts(points, booth, s["parts"])
+		var body_hits := _contacts(points, booth, s["parts"])
+		s["body_contacts"] += body_hits
+		if _trace.has(id):
+			_trace_frame(id, p, local, owned, booth, body_hits)
 		if absf(local.x) < 0.3 and absf(local.z) < 1.2:
 			s["through"] += _through(points, booth) + _through(carried_points, booth)
 		var bag_hits := _contacts(bag_points, booth, s["parts"])
@@ -1163,13 +1200,17 @@ func _returner_entry(id: int, booth: Array, local: Vector3, arm: Array, context:
 
 
 ## Lane mode, a returner (`p`, second pass, in ARCH) whose bag is half way into
-## its tray: plated close once per passenger with the bag (board 40d26b16), so
-## the hand on the bag and the body's place before the arch can be read.
+## its tray: plated close once per passenger and bag (board 40d26b16; each of
+## two bags since board 521e46a5), so the hand on the bag, the body's place
+## before the arch and the other bag beside it can be read.
 func _putin_scan(id: int, p: Passenger, bags: Array[Node3D], props: CarryOnProps) -> void:
-	var key := "putin_p%d" % id
-	if _plate_task or _reach_plated.has(key) or p.security_phase != SecurityRuntime.Phase.ARCH:
+	if _plate_task or p.security_phase != SecurityRuntime.Phase.ARCH:
 		return
 	for i in bags.size():
+		# Each bag of two plated half way in (board 521e46a5), the first as before.
+		var key := "putin_p%d" % id + ("_b%d" % i if i > 0 else "")
+		if _reach_plated.has(key) or (i > 0 and _no_b1_plate):
+			continue
 		var k := props.transfer_progress(id, i)
 		if FloatCheck.move_of(props, id, i).ends_with(">tray") and k >= 0.4 and k <= 0.7:
 			_reach_plated[key] = false
@@ -1211,6 +1252,15 @@ func _plate_putin(id: int, i: int, key: String) -> void:
 		else:
 			# Not failed here: at least one put-in plate is required at the end.
 			print("PUTIN_PLATE_MISSED passenger=%d no heading framed it" % id)
+		if _b1_views and i > 0:
+			# The same moment from the side (a quarter turn on) and from high up.
+			var yaw := body.global_rotation.y
+			for view in [["_side", PI / 2.0, 0.0], ["_high", 0.0, 1.6]]:
+				var name: String = "reach_" + key + view[0]
+				var ok := await _plate_close(id, bags[i], name, _reach_dir, yaw + view[1], view[2])
+				print("PUTIN_VIEW %s saved=%s" % [name, ok])
+				if not ok:
+					_invalid("the %s plate of passenger %d was not framed" % [name, id])
 		for node in others:
 			node.visible = true
 	_clock.set_paused(false)
@@ -1263,6 +1313,303 @@ func _report_returner_entry() -> void:
 		_invalid("no returner's second pass was sampled at the arch's entry")
 	if over > 0:
 		_invalid("%d returner passes reach past the arch's half opening at its entry" % over)
+
+
+## Lane mode, one frame of a returner with two bags on its arch walk (from the
+## return route's end through the unpack cell, SecurityLooks.return_walk_mm(),
+## where its bags go into the tray): how many surface points of each bag lie
+## inside the other's meshes (CarryContact.inside_meshes(), a ray-parity test,
+## not the bounding box), the larger kept per passenger with its frame's walk,
+## each bag's move and progress, and the bag centres in the body's frame.
+func _bag_in_bag_scan(id: int) -> void:
+	var p := _sim.get_passenger(id)
+	var body := _views.node_for(id)
+	if p == null or body == null or not body.is_visible_in_tree():
+		return
+	var walk := SecurityLooks.return_walk_mm(_sim, p)
+	var props := _views.carry_on_props()
+	var nodes: Array = props.props_of(id).get("bags", [])
+	if is_nan(walk) or nodes.size() != 2:
+		return
+	var a: Node3D = nodes[0]
+	var b: Node3D = nodes[1]
+	if not (a.is_visible_in_tree() and b.is_visible_in_tree()):
+		return
+	var on_a := CarryChecks.surface(a)
+	var on_b := CarryChecks.surface(b)
+	var a_in_b := CarryContact.inside_meshes(on_a, b)
+	var b_in_a := CarryContact.inside_meshes(on_b, a)
+	var rec: Dictionary = _bag_in_bag.get_or_add(
+		id, {"frames": 0, "max": -1, "line": "", "gap": INF, "control": 0}
+	)
+	if rec["frames"] == 0:
+		# The control: b's surface moved to a's centre has points inside a (or
+		# a's inside b), so the parity test sees these meshes' insides at all.
+		var shift := _centre_of(a) - _centre_of(b)
+		var moved := PackedVector3Array()
+		for point in on_b:
+			moved.append(point + shift)
+		var back := PackedVector3Array()
+		for point in on_a:
+			back.append(point - shift)
+		rec["control"] = maxi(
+			CarryContact.inside_meshes(moved, a), CarryContact.inside_meshes(back, b)
+		)
+		# And the crossing count's control: b drawn for a moment at a's centre.
+		var kept := b.global_transform
+		b.global_position += shift
+		rec["cross_control"] = AirsideKit.crossings(a, b)["count"]
+		b.global_transform = kept
+	rec["frames"] += 1
+	# The nearest two surface points while a bag moves into the tray, a
+	# diagnostic of how close they pass (settled, they lie end to end).
+	var moving := false
+	for i in 2:
+		var move := FloatCheck.move_of(props, id, i)
+		moving = moving or (move.ends_with(">tray") and props.transfer_progress(id, i) < 1.0)
+	if moving:
+		rec["moving"] = rec.get("moving", 0) + 1
+	var gap := INF
+	if moving:
+		for x in on_a:
+			for y in on_b:
+				gap = minf(gap, x.distance_to(y))
+		# Mesh against mesh: edges of either bag's triangles crossing the
+		# other's (AirsideKit.crossings(), the R11 clip count), the check
+		# that sees two meshes meet where no sampled point lies inside.
+		var crossed: int = AirsideKit.crossings(a, b)["count"]
+		if crossed > rec.get("cross", -1):
+			rec["cross"] = crossed
+			rec["cross_line"] = (
+				"walk_mm=%.0f k=%.2f/%.2f"
+				% [walk, props.transfer_progress(id, 0), props.transfer_progress(id, 1)]
+			)
+		_post_clearance(id, body, nodes, rec)
+	var worst := maxi(a_in_b, b_in_a)
+	# The line of the frame with the most points inside, or with none, the
+	# closest moving frame.
+	var closer: bool = gap < rec["gap"]
+	rec["gap"] = minf(rec["gap"], gap)
+	if worst > rec["max"] or (worst == rec["max"] and closer):
+		rec["max"] = worst
+		var to_body := body.global_transform.affine_inverse()
+		var kinds: Array = props.props_of(id)["kinds"]
+		rec["line"] = (
+			"walk_mm=%.0f a_in_b=%d b_in_a=%d bag0=%s/%s k=%.2f at=%s bag1=%s/%s k=%.2f at=%s"
+			% [
+				walk,
+				a_in_b,
+				b_in_a,
+				KIND_NAMES[kinds[0]],
+				FloatCheck.move_of(props, id, 0),
+				props.transfer_progress(id, 0),
+				(to_body * a.global_position).snapped(Vector3.ONE * 0.01),
+				KIND_NAMES[kinds[1]],
+				FloatCheck.move_of(props, id, 1),
+				props.transfer_progress(id, 1),
+				(to_body * b.global_position).snapped(Vector3.ONE * 0.01)
+			]
+		)
+
+
+## For a two-bag returner's frame with a bag moving into the tray: the least
+## distance from its hands' points (Hand, Fingers, Fingertips, Thumb,
+## Thumb_Tip) and from a moving shoulder bag's strap meshes to the bounds of
+## each lane arch part (in the part's own frame; for a box-shaped post the
+## distance to it), kept in `rec` with the part's name ("post_hand",
+## "post_strap").
+func _post_clearance(id: int, body: Node3D, nodes: Array, rec: Dictionary) -> void:
+	var owned := CarryContact.body_points_owned(body, [])
+	var hands := PackedVector3Array()
+	for k in (owned[0] as PackedVector3Array).size():
+		var bone: String = owned[1][k]
+		if CarryContact.HAND_CHAIN.has(bone.get_slice(".", 0)):
+			hands.append(owned[0][k])
+	var straps := PackedVector3Array()
+	var props := _views.carry_on_props()
+	for i in nodes.size():
+		var moving := props.transfer_progress(id, i) < 1.0
+		if not moving or props.props_of(id)["kinds"][i] != SecurityLooks.Kind.SHOULDER:
+			continue
+		for mi: MeshInstance3D in (nodes[i] as Node3D).find_children("*", "MeshInstance3D"):
+			if String(mi.name).contains("Strap") or String(mi.get_parent().name).contains("Strap"):
+				for f in mi.mesh.get_faces():
+					straps.append(mi.global_transform * f)
+	for pair in [["post_hand", hands], ["post_strap", straps]]:
+		for part in _booths[0][2]:
+			for pt: Vector3 in pair[1]:
+				var lp: Vector3 = (part[2] as Transform3D) * pt
+				var box: AABB = part[4]
+				var d := (lp - lp.clamp(box.position, box.end)).length()
+				if d < rec.get(pair[0], [INF])[0]:
+					rec[pair[0]] = [d, part[0]]
+
+
+## The pinned draws (--pin=) of this tick, each drawn at its exact sim time
+## with the clock paused: passenger `pin[0]` at `pin[1]`. Prints its booth
+## contacts (the bones of the points inside a lane arch part), its bag homes
+## and drawn bag origins, and the world transforms of both feet and both hands,
+## so two runs (two schedules) can be compared at the same sim time.
+func _pin_measure(due: Array) -> void:
+	for pin: Array in due:
+		_pins.erase(pin)
+		_clock._accumulator = (float(pin[1]) - _clock.tick) * SimClock.STEP
+		await _frames(3)
+		var id: int = pin[0]
+		var p := _sim.get_passenger(id)
+		var body := _views.node_for(id)
+		if p == null or body == null:
+			_invalid("pinned passenger %d is not drawn at %.3f" % [id, pin[1]])
+			continue
+		var owned := CarryContact.body_points_owned(body, [])
+		var bones := {}
+		for k in (owned[0] as PackedVector3Array).size():
+			if _contacts(PackedVector3Array([owned[0][k]]), _booths[0]) > 0:
+				bones[owned[1][k]] = bones.get(owned[1][k], 0) + 1
+		var skeleton := body.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
+		var limbs := []
+		for bone in ["Foot.L", "Foot.R", "Hand.L", "Hand.R"]:
+			var xf := (
+				skeleton.global_transform * skeleton.get_bone_global_pose(skeleton.find_bone(bone))
+			)
+			limbs.append(
+				(
+					"%s=%s/%s"
+					% [
+						bone,
+						xf.origin.snapped(Vector3.ONE * 0.0001),
+						xf.basis.get_euler().snapped(Vector3.ONE * 0.0001)
+					]
+				)
+			)
+		var props := _views.carry_on_props()
+		var bags := []
+		for node: Node3D in props.props_of(id)["bags"]:
+			bags.append(node.global_position.snapped(Vector3.ONE * 0.0001))
+		print(
+			(
+				(
+					"PIN passenger=%d sim=%.3f drawn=%.3f phase=%d second=%s homes=%s bags=%s"
+					+ " contacts=%d bones=%s %s"
+				)
+				% [
+					id,
+					pin[1],
+					_clock.tick + _clock._accumulator / SimClock.STEP,
+					p.security_phase,
+					p.incident_resolved,
+					SecurityLooks.bag_homes(_sim, p),
+					bags,
+					bones.values().reduce(func(a: int, b: int) -> int: return a + b, 0),
+					bones,
+					" ".join(limbs)
+				]
+			)
+		)
+	_clock._accumulator = 0.0
+	_clock.set_paused(false)
+
+
+## A traced passenger's frame near a booth (--trace=): the process frame, the
+## sim time drawn (tick and the share of the next), where it is in the booth's
+## frame, its pass and phase, and on a frame with body contacts (`hits`) the
+## bones of the points inside a booth part.
+func _trace_frame(
+	id: int, p: Passenger, local: Vector3, owned: Array, booth: Array, hits: int
+) -> void:
+	if absf(local.z) > 1.2:
+		return
+	var drawn := _clock.tick + _clock._accumulator / SimClock.STEP
+	var bones := {}
+	if hits > 0:
+		for k in (owned[0] as PackedVector3Array).size():
+			if _contacts(PackedVector3Array([owned[0][k]]), booth) > 0:
+				bones[owned[1][k]] = bones.get(owned[1][k], 0) + 1
+	print(
+		(
+			"TRACE passenger=%d frame=%d sim=%.3f x=%+.3f z=%+.3f second=%s phase=%d contacts=%d bones=%s"
+			% [
+				id,
+				Engine.get_process_frames(),
+				drawn,
+				local.x,
+				local.z,
+				p.incident_resolved,
+				p.security_phase,
+				hits,
+				bones
+			]
+		)
+	)
+
+
+## The centre of `node`'s drawn meshes' bounds, in the world.
+func _centre_of(node: Node3D) -> Vector3:
+	var box := AABB()
+	var first := true
+	for mi: MeshInstance3D in node.find_children("*", "MeshInstance3D", true, false):
+		var world := mi.global_transform * mi.get_aabb()
+		box = world if first else box.merge(world)
+		first = false
+	return box.get_center()
+
+
+## The two-bag returners' put-in (_bag_in_bag_scan()), one line per passenger
+## and a total: no surface point of one bag inside the other, and at least one
+## two-bag returner sampled (the control), else PROBE_INVALID.
+func _report_bag_in_bag() -> void:
+	var worst := 0
+	for id: int in _bag_in_bag:
+		var rec: Dictionary = _bag_in_bag[id]
+		worst = maxi(worst, rec["max"])
+		print(
+			(
+				(
+					"BAG_IN_BAG passenger=%d runner=%s frames=%d moving_frames=%d max_points=%d"
+					+ " moving_min_gap_m=%.3f control=%d %s"
+				)
+				% [
+					id,
+					_runners.has(id),
+					rec["frames"],
+					rec.get("moving", 0),
+					rec["max"],
+					rec["gap"],
+					rec["control"],
+					rec["line"]
+				]
+			)
+		)
+		print(
+			(
+				(
+					"BAG_IN_BAG_MESH passenger=%d edge_crossings_max=%d crossings_control=%d at %s"
+					+ " post_hand_m=%s post_strap_m=%s"
+				)
+				% [
+					id,
+					rec.get("cross", -1),
+					rec.get("cross_control", -1),
+					rec.get("cross_line", "-"),
+					rec.get("post_hand", ["-"]),
+					rec.get("post_strap", ["-"])
+				]
+			)
+		)
+		if rec.get("cross_control", 0) <= 0:
+			_invalid("passenger %d's bags, centred together, showed no edge crossing" % id)
+		if rec["control"] <= 0:
+			_invalid("passenger %d's bags, centred together, showed no point inside" % id)
+		# The put-in itself was measured mesh against mesh, and no edge crossed.
+		if rec.get("moving", 0) == 0 or rec.get("cross", -1) < 0:
+			_invalid("passenger %d's put-in was never measured with a bag moving" % id)
+		elif rec["cross"] > 0:
+			_invalid("passenger %d's bags cross mesh into mesh (%d edges)" % [id, rec["cross"]])
+	print("BAG_IN_BAG_TOTAL returners=%d max_points=%d" % [_bag_in_bag.size(), worst])
+	if _bag_in_bag.is_empty():
+		_invalid("no two-bag returner was sampled on its arch walk")
+	if worst > 0:
+		_invalid("a two-bag returner's bags are drawn one inside the other (%d points)" % worst)
 
 
 ## The returners sampled at the arch's entry on their second pass (`reach`,
@@ -1838,7 +2185,11 @@ func _plate_arch(id: int) -> void:
 ## person_shown(): sight lines land on it, none blocked), and at least two of five
 ## sight lines to the bag land on it, blocked by nothing but the passenger. Each
 ## heading prints its numbers. The camera, the HUD and the game camera are put back.
-func _plate_close(id: int, bag: Node3D, name: String, dir := "", base_yaw := NAN) -> bool:
+## `lift` (m) raises the camera and brings it in to 0.4 of the way, looking
+## steeply down (a high plate).
+func _plate_close(
+	id: int, bag: Node3D, name: String, dir := "", base_yaw := NAN, lift := 0.0
+) -> bool:
 	var out_dir := _close_dir if dir == "" else dir
 	var body := _views.node_for(id)
 	if body == null:
@@ -1874,8 +2225,8 @@ func _plate_close(id: int, bag: Node3D, name: String, dir := "", base_yaw := NAN
 	for h in 8:
 		var look := body.global_position + Vector3(0.0, aim, 0.0)
 		var yaw := (body.global_rotation.y if is_nan(base_yaw) else base_yaw) + h * PI / 4.0
-		var out := Basis(Vector3.UP, yaw) * Vector3(0.0, 0.0, back)
-		var up := Vector3(0.0, CLOSE_HEIGHT_M - AIM_M + aim, 0.0)
+		var out := Basis(Vector3.UP, yaw) * Vector3(0.0, 0.0, back * (0.4 if lift > 0.0 else 1.0))
+		var up := Vector3(0.0, CLOSE_HEIGHT_M - AIM_M + aim + lift, 0.0)
 		cam.global_position = body.global_position + out + up
 		cam.look_at(look)
 		await _frames(2)
@@ -2125,6 +2476,7 @@ func _report() -> void:
 		_report_lane()
 		_report_reach()
 		_report_returner_entry()
+		_report_bag_in_bag()
 	else:
 		_report_booth()
 	if totals["frames"] < 100:
@@ -2145,6 +2497,12 @@ func _report() -> void:
 	for stem in CrossingBodies.report(_bodies):
 		_invalid("no sent passenger showed body %s" % stem)
 	print("LEAD_PLATED %s gave_up=%s" % [_lead_plated.keys(), _lead_given_up().keys()])
+	# A move given up after LEAD_TRIES unframed tries is not plated: it fails,
+	# by name, rather than counting as covered (Sol review of 354e95a).
+	if not _lead_given_up().is_empty():
+		_invalid("hand-led move plates given up: %s" % [_lead_given_up().keys()])
+	if not _pins.is_empty():
+		_invalid("pinned draws never reached: %s" % [_pins])
 	PlateSteps.lead_sheet(_close_dir)
 	if _floats["float"] > 0 or _floats["grip_off"] > 0:
 		_invalid("bags float or are held off their grip (GRIP_ON): %s" % [_floats])
