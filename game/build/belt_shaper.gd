@@ -205,6 +205,10 @@ class Plan:
 	## [def id, cell, facing] for each new cell and each reshaped neighbour.
 	var shapes: Array = []
 	var result := BuildResult.accepted()
+	## The wall edge a BELT_WALL refusal stopped at, seen from the path cell
+	## before it: the ghost draws its bar there. wall_side is -1 for none.
+	var wall_cell := Vector2i.ZERO
+	var wall_side := -1
 
 
 static func plan_line(grid: BuildGrid, from: Vector2i, to: Vector2i, turn: int) -> Plan:
@@ -212,8 +216,11 @@ static func plan_line(grid: BuildGrid, from: Vector2i, to: Vector2i, turn: int) 
 	plan.cells = path(from, to)
 	var scene := Scene.new(grid)
 	for i in range(1, plan.cells.size()):
-		if not scene.open(plan.cells[i - 1], plan.cells[i] - plan.cells[i - 1]):
+		var step := plan.cells[i] - plan.cells[i - 1]
+		if not scene.open(plan.cells[i - 1], step):
 			plan.result = BuildResult.refused(BuildResult.Reason.BELT_WALL)
+			plan.wall_cell = plan.cells[i - 1]
+			plan.wall_side = BuildGrid.SIDE_STEP.find(step)
 			return plan
 	for cell in plan.cells:
 		if scene.is_belt(cell):

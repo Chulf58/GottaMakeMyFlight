@@ -74,3 +74,9 @@ func test_a_clash_shaped_reason_the_parser_misses_shows_no_ids() -> void:
 	var text := _panel._in_words("contract O0N2 clashes with O0N1 at the gate")
 	assert_str(text).is_equal("it clashes with another flight")
 	assert_object(_ids.search(text)).is_null()
+
+
+func test_a_reason_that_only_mentions_clashes_is_not_taken_for_a_clash() -> void:
+	_open_panel([600, 900, 1200])
+	var reason := "no gate has a stand that clashes with the plane"
+	assert_str(_panel._in_words(reason)).is_equal(reason)

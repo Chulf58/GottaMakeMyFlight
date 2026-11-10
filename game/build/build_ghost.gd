@@ -5,12 +5,23 @@ extends RefCounted
 ## helpers over the BuildMode `mode` that owns the ghost node, its materials and
 ## the hover key; BuildMode keeps one-line delegates for what tests call.
 
+## The bar on the wall that refuses a Belt line lies on the floor along the wall
+## line, in the form of the roof's wall-gap bar (GapMarkers). It is as tall as a
+## cut-away wall stub, the height an interior wall is drawn at, so it never
+## stands over the room, and this deep across the wall line.
+const WALL_BLOCK_HEIGHT := InteriorKit.STUB_HEIGHT
+const WALL_BLOCK_DEPTH := 0.5
 
-static func material(tint: Color) -> StandardMaterial3D:
+
+## A tinted ghost material; `through` draws it over what stands in front of it.
+static func material(tint: Color, through := false) -> StandardMaterial3D:
 	var standard := StandardMaterial3D.new()
 	standard.albedo_color = tint
 	standard.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	standard.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	if through:
+		standard.no_depth_test = true
+		standard.render_priority = 10
 	return standard
 
 
@@ -39,6 +50,9 @@ static func hover_belt(mode: BuildMode, point: Variant) -> void:
 
 ## The shaped pieces a Belt line from `from` to `to` would lay or reshape,
 ## tinted by whether it can be laid; a refused line tints its cells instead.
+## A line a wall refuses also draws a red bar, seen through other pieces, on
+## the wall edge the plan says blocked it (decision
+## a-belt-refused-by-a-wall-draws-a-red-bar-on-the-blocking-wal).
 static func draw_belt(mode: BuildMode, from: Vector2i, to: Vector2i) -> void:
 	var key := "belt:%s:%s:%d" % [from, to, mode.facing]
 	if key == mode._hover_key:
@@ -57,6 +71,8 @@ static func draw_belt(mode: BuildMode, from: Vector2i, to: Vector2i) -> void:
 		for cell in mode._belt_plan.cells:
 			if mode.grid.in_bounds(cell):
 				tile(mode, cell, tint)
+		if mode._belt_plan.wall_side >= 0:
+			wall_block(mode, mode._belt_plan.wall_cell, mode._belt_plan.wall_side)
 	mode._show_status(result)
 
 
@@ -169,6 +185,16 @@ static func wall(mode: BuildMode, cell: Vector2i, side: int, tint: Material, gro
 		extent += Vector3(0.04, 0.1, 0.0)
 	var box_node := box(mode, extent, tint)
 	box_node.transform = BuildView.wall_transform(mode.grid, cell, side).translated_local(
+		Vector3(0.0, extent.y / 2.0, 0.0)
+	)
+
+
+## The low see-through red bar on the wall edge of `cell` on `side` that refuses a
+## Belt line, standing on the floor.
+static func wall_block(mode: BuildMode, cell: Vector2i, side: int) -> void:
+	var extent := Vector3(1.04, WALL_BLOCK_HEIGHT, WALL_BLOCK_DEPTH)
+	var bar := box(mode, extent, mode._wall_block_material)
+	bar.transform = BuildView.wall_transform(mode.grid, cell, side).translated_local(
 		Vector3(0.0, extent.y / 2.0, 0.0)
 	)
 
