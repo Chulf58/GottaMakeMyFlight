@@ -16,10 +16,14 @@ extends CanvasLayer
 ##
 ## While the desk's AirportRating is below RatingFormula.WARN_BELOW the airlines
 ## warn (decision airport-rating-1-5-stars-over-a-rolling-3-days-mostly-made-o):
-## the sheet shows the warning with the low days left before contracts end, the
-## button turns coral and carries the same text as its tooltip, so it is seen
-## with the sheet closed. It follows the rating's changed signal and does not
-## rebuild the cards.
+## a coral card on the right rail (AlertStack.post_notice, HUD 6/7, decision
+## hud-grid-and-rails-one-spacing-grid-centred-top-row-right-ra part 6) says so
+## with the low days left before contracts end, the button turns coral and
+## carries the same text as its tooltip. The card stays until clicked and goes
+## when the rating recovers; it follows the rating's changed signal, is posted
+## again only when its words change and does not rebuild the cards. An airline
+## ending its contract posts a second coral card that stays until clicked. The
+## sheet itself shows only offers; a clash refusal stays on its offer's sheet.
 ##
 ## While the sheet is open the game clock is paused (decision the-airline-offers-
 ## panel-pauses-the-game-while-it-is-open); closing it gives back the speed the
@@ -31,6 +35,11 @@ extends CanvasLayer
 
 const SHEET_W := TopRow.SHEET_W
 const CARD_TEXT_W := 380.0
+## Rail keys, and the history titles, of the two coral notices.
+const WARNING_KEY := &"offer_warning"
+const ENDED_KEY := &"offer_ended"
+const WARNING_TITLE := "Low airport rating"
+const ENDED_TITLE := "Contract ended"
 const EMPTY_TEXT := "No offers right now. New offers arrive at midnight."
 
 @export var desk: OfferDesk
@@ -41,13 +50,19 @@ const EMPTY_TEXT := "No offers right now. New offers arrive at midnight."
 @export var build_mode: BuildMode
 ## A successful load replaces the world the sheet was opened over, so it closes.
 @export var save_game: SaveGame
+## The right rail the warning and ending notices go on; null finds the one in
+## AlertStack.GROUP (the HUD builds it, so the scene does not wire it).
+var alerts: AlertStack
 
 var _button: Button
 var _sheet: PanelContainer
 var _cards: VBoxContainer
 var _message: Label
-var _warning: Label
-var _notice: Label
+## The warning as the rating words it now, and as the card on the rail words it
+## ("" while none is up); the ending line the tooltip adds under the warning.
+var _warning_text := ""
+var _warning_posted := ""
+var _ended_text := ""
 var _offers_waiting := false
 var _card_nodes: Dictionary = {}
 var _accept_buttons: Dictionary = {}
@@ -244,23 +259,10 @@ func card_text(id: String) -> String:
 	return "\n".join(lines)
 
 
-## The airlines' warning shown on the sheet, "" when the rating is fine.
+## The airlines' warning, as the Offers button's tooltip says it; "" when the
+## rating is fine.
 func warning_text() -> String:
-	return _warning.text
-
-
-func warning_label() -> Label:
-	return _warning
-
-
-## The last airline to end its contract, shown under the warning until the
-## rating recovers, "" when none has (it is not saved, so a load clears it).
-func notice_text() -> String:
-	return _notice.text
-
-
-func notice_label() -> Label:
-	return _notice
+	return _warning_text
 
 
 ## What the sheet says under the cards: the last accept's result or refusal,
@@ -274,8 +276,6 @@ func _build() -> void:
 	_sheet = PanelContainer.new()
 	_cards = VBoxContainer.new()
 	_message = Label.new()
-	_warning = Label.new()
-	_notice = Label.new()
 	_button.name = "OffersButton"
 	_button.theme = BuildMenu.HUD_THEME
 	TopRow.place_in_slot(_button, TopRow.OFFERS_SLOT)
@@ -297,18 +297,6 @@ func _build() -> void:
 	title.text = "Today's offers"
 	_style_label(title, &"HudTitle")
 	sheet_column.add_child(title)
-	_warning.name = "OfferWarning"
-	_warning.visible = false
-	_warning.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_warning.custom_minimum_size = Vector2(SHEET_W - 30.0, 0.0)
-	_style_label(_warning, &"HudProblemText")
-	sheet_column.add_child(_warning)
-	_notice.name = "OfferNotice"
-	_notice.visible = false
-	_notice.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_notice.custom_minimum_size = Vector2(SHEET_W - 30.0, 0.0)
-	_style_label(_notice, &"HudProblemText")
-	sheet_column.add_child(_notice)
 	_cards.name = "OfferCards"
 	_cards.add_theme_constant_override("separation", 6)
 	sheet_column.add_child(_cards)
@@ -333,6 +321,15 @@ func _on_loaded(ok: bool) -> void:
 		return
 	_holding_clock = false
 	close()
+	# The rail starts again with the loaded world (and the ending notice is not
+	# saved), so a warning still due is posted again once the rating is loaded.
+	var rail := _rail()
+	if rail != null:
+		rail.drop_notice(WARNING_KEY)
+		rail.drop_notice(ENDED_KEY)
+	_warning_posted = ""
+	_ended_text = ""
+	_refresh_warning.call_deferred()
 
 
 func _on_tool_changed(_tool: BuildMode.Tool) -> void:
@@ -375,38 +372,77 @@ func _refresh_notes() -> void:
 		(_departs_labels[id] as Label).text = card_lines(offer, _note_for(offer))[1]
 
 
-## Shows or clears the airlines' warning from the rating, on the sheet and as
-## the button's tooltip.
+## Posts or drops the airlines' warning card from the rating, and words the
+## button's tooltip. A card is posted again only when its words change, so a
+## card the player clicked away stays away until the low-day count moves on.
 func _refresh_warning() -> void:
 	var rating := desk.rating
-	var text := ""
+	_warning_text = ""
 	if rating != null and rating.warning():
-		text = warning_message(rating.low_days())
-	_warning.text = text
-	_warning.visible = text != ""
-	if text == "":
-		_set_notice("")
+		_warning_text = warning_message(rating.low_days())
+	var rail := _rail()
+	if _warning_text == "":
+		_ended_text = ""
+		_button.tooltip_text = ""
+		_warning_posted = ""
+		if rail != null:
+			rail.drop_notice(WARNING_KEY)
 	else:
-		_button.tooltip_text = text if _notice.text == "" else "%s\n%s" % [text, _notice.text]
+		_button.tooltip_text = (
+			_warning_text if _ended_text == "" else "%s\n%s" % [_warning_text, _ended_text]
+		)
+		if rail != null and _warning_text != _warning_posted:
+			_warning_posted = _warning_text
+			_post(rail, WARNING_KEY, WARNING_TITLE, _warning_text)
 	_style_button()
 
 
 func _on_contract_ended(contract: Dictionary) -> void:
-	_set_notice(ended_message(contract["airline"], contract["destination"]))
+	_ended_text = ended_message(contract["airline"], contract["destination"])
+	var rail := _rail()
+	if rail == null:
+		push_warning("OfferPanel: no alert rail to tell the player: %s" % _ended_text)
+	else:
+		_post(rail, ENDED_KEY, ENDED_TITLE, _ended_text)
 	_refresh_warning()
 
 
-## Shows `text` as the ending notice, hiding the line when it is empty.
-func _set_notice(text: String) -> void:
-	_notice.text = text
-	_notice.visible = text != ""
-	if text == "":
-		_button.tooltip_text = ""
+## The right rail, found through its group the first time it is needed.
+func _rail() -> AlertStack:
+	if not is_instance_valid(alerts):
+		alerts = get_tree().get_first_node_in_group(AlertStack.GROUP) as AlertStack
+	return alerts
+
+
+## A coral notice that stays on the rail until clicked, with its history line.
+static func _post(rail: AlertStack, key: StringName, title: String, detail: String) -> void:
+	rail.post_notice(key, coral_card(key, title, detail), 0.0, title, detail)
+
+
+## A rail card in the theme's HudCardCoral look (coral means a problem, decision
+## 0b50e074): a title over the words, RAIL_W wide like the other cards.
+static func coral_card(key: StringName, title: String, detail: String) -> PanelContainer:
+	var card := PanelContainer.new()
+	card.name = "OfferNotice_%s" % key
+	card.theme = BuildMenu.HUD_THEME
+	card.theme_type_variation = &"HudCardCoral"
+	card.custom_minimum_size = Vector2(HudLayout.RAIL_W, 0.0)
+	var column := VBoxContainer.new()
+	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	card.add_child(column)
+	for part in [[title, &"HudCardName"], [detail, &"HudSmall"]]:
+		var label := Label.new()
+		label.text = part[0]
+		label.theme_type_variation = part[1]
+		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		column.add_child(label)
+	return card
 
 
 ## Coral while the airlines warn, yellow while offers wait, else teal.
 func _style_button() -> void:
-	if _warning.visible:
+	if _warning_text != "":
 		_button.theme_type_variation = &"HudButtonCoral"
 	elif _offers_waiting:
 		_button.theme_type_variation = &"HudButtonYellow"
