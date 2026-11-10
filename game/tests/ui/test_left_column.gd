@@ -15,6 +15,7 @@ const MONEY_ROW_BOTTOM := HudLayout.MARGIN + HudLayout.BUTTON_H
 var _settings_path := SaveTestKit.run_path("left_column_alerts")
 var _hints_path := SaveTestKit.run_path("left_column_hints")
 var _mood_path := SaveTestKit.run_path("left_column_mood")
+var _departures_path := SaveTestKit.run_path("left_column_departures")
 
 var _main: Node
 var _hud: PassengerHud
@@ -26,7 +27,11 @@ func before() -> void:
 	_main = load(SaveTestKit.MAIN).instantiate()
 	(_main.get_node("SimClock") as SimClock).seed_rng(SEED)
 	(_main.get_node("SimClock") as SimClock).set_paused(true)
+	# Isolated settings, set before the scene enters the tree and reads them, so
+	# the player's own Departures and Mood choices never reach the test.
 	(_main.get_node("PassengerHud") as PassengerHud).alert_settings_path = _settings_path
+	(_main.get_node("PassengerHud") as PassengerHud).departures_settings_path = _departures_path
+	(_main.get_node("MoodOverlay") as MoodOverlay).settings_path = _mood_path
 	add_child(_main)
 	_hud = _main.get_node("PassengerHud")
 	_staff = _main.get_node("StaffPanel")
@@ -40,6 +45,8 @@ func after() -> void:
 	DirAccess.remove_absolute(_hints_path + ".tmp")
 	DirAccess.remove_absolute(_mood_path)
 	DirAccess.remove_absolute(_mood_path + ".tmp")
+	DirAccess.remove_absolute(_departures_path)
+	DirAccess.remove_absolute(_departures_path + ".tmp")
 
 
 func before_test() -> void:
@@ -103,6 +110,13 @@ func test_the_three_toggles_are_equal_buttons_stacked_on_the_margin() -> void:
 	assert_float(toggles[0].position.y).is_greater_equal(
 		MONEY_ROW_BOTTOM + HudLayout.GROUP_GAP - 0.5
 	)
+
+
+func test_the_departures_list_starts_open_on_a_fresh_profile() -> void:
+	await _settle()
+	var board := _control("DeparturesBoard") as DeparturesBoard
+	assert_bool(board.is_shown()).is_true()
+	assert_bool(_control("DeparturesPanel").is_visible_in_tree()).is_true()
 
 
 func test_the_departures_list_opens_under_the_toggles_at_list_width() -> void:
@@ -221,7 +235,6 @@ func test_the_templates_panel_sits_on_the_margin() -> void:
 ## and it shows only while the overlay is on.
 func test_the_mood_legend_sits_on_a_card_beside_the_toggle() -> void:
 	var mood := _main.get_node("MoodOverlay") as MoodOverlay
-	mood.settings_path = _mood_path
 	var legend := _control("MoodLegend") as Label
 	var card := legend.get_parent() as PanelContainer
 	assert_object(card).is_not_null()
