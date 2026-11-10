@@ -22,9 +22,10 @@ extends SceneTree
 ## For every state it walks the scene for every visible HUD window (a Button, or
 ## a Panel or PanelContainer that draws a panel; a window's children are part of
 ## it), prints each rect, proves the state's subjects are showing and inside the
-## view, then checks that no two windows overlap unless the pair is in ALLOWED,
-## and that every edge nearer a screen edge than MARGIN + UNIT sits exactly
-## MARGIN from it. A failed check prints PROBE_INVALID and the probe exits 1.
+## view, then checks that no two windows overlap unless a sheet covers a window
+## below the top row (_allowed), and that every edge nearer a screen edge than
+## MARGIN + UNIT sits exactly MARGIN from it. A failed check prints PROBE_INVALID
+## and the probe exits 1.
 ## Each size also gets a contact sheet.
 ##
 ## Run (one windowed Godot run project-wide; hold tools/blender/out/.windowed.lock):
@@ -57,13 +58,13 @@ const FLIGHTS := [
 	["W2", 17 * 60, "Berlin", "Nordic Wing"],
 	["W3", 20 * 60 + 20, "Lisbon", "Sunhop"],
 ]
-## The window pairs that may overlap, as [cover, covered] window keys; "*"
-## matches any window. A sheet is modal (it pauses the game) and may cover the
-## world and anything under the top row.
-const ALLOWED := [
-	["sheet:offers", "*"],
-	["sheet:runway", "*"],
-]
+## The only windows allowed to overlap another: the modal sheets (they pause the
+## game). A sheet may cover a window whose top is at or below TOP_ROW_BOTTOM,
+## never the top row or the clock panel (_allowed).
+const SHEETS: Array[String] = ["sheet:offers", "sheet:runway"]
+## The bottom of the top row: money, rating, the centred row and the clock all
+## start on the margin and are at least BUTTON_H tall.
+const TOP_ROW_BOTTOM := HudLayout.MARGIN + HudLayout.BUTTON_H
 
 var _out_dir := ""
 var _failed := false
@@ -476,17 +477,13 @@ func _key(c: Control, taken: Dictionary) -> String:
 	return at
 
 
-func _allowed(a: String, b: String) -> bool:
-	for pair in ALLOWED:
-		if _matches(pair[0], a) and _matches(pair[1], b):
-			return true
-		if _matches(pair[0], b) and _matches(pair[1], a):
-			return true
-	return false
-
-
-func _matches(pattern: String, key: String) -> bool:
-	return pattern == "*" or pattern == key
+## True when one of the pair is a sheet and the other window starts at or below
+## the top row's bottom (TOP_ROW_BOTTOM): a sheet may cover the column, the
+## rail and the world under the row, never the row itself or the clock panel.
+func _allowed(a: String, ra: Rect2, b: String, rb: Rect2) -> bool:
+	if SHEETS.has(a) and rb.position.y >= TOP_ROW_BOTTOM - 0.5:
+		return true
+	return SHEETS.has(b) and ra.position.y >= TOP_ROW_BOTTOM - 0.5
 
 
 ## Checks one state against the grid, prints every rect and saves the plate.
@@ -521,8 +518,8 @@ func _overlaps(name: String, windows: Dictionary) -> void:
 		_invalid("%s: %s" % [name, miss])
 
 
-## Every pair of windows that overlaps by more than half a pixel and is not in
-## ALLOWED, as text.
+## Every pair of windows that overlaps by more than half a pixel and that
+## _allowed does not excuse, as text.
 func _overlap_misses(windows: Dictionary) -> Array[String]:
 	var misses: Array[String] = []
 	var keys := windows.keys()
@@ -533,7 +530,7 @@ func _overlap_misses(windows: Dictionary) -> Array[String]:
 			var meet := a.intersection(b)
 			if meet.size.x <= 0.5 or meet.size.y <= 0.5:
 				continue
-			if _allowed(keys[i], keys[j]):
+			if _allowed(keys[i], a, keys[j], b):
 				print("  OVERLAP allowed %s / %s" % [keys[i], keys[j]])
 				continue
 			misses.append("%s %s overlaps %s %s" % [keys[i], a, keys[j], b])
@@ -579,6 +576,21 @@ func _self_check() -> void:
 	print("PROBE self_check overlaps=%s margins=%s" % [overlaps, margins])
 	_expect(overlaps.size() == 1, "self check: the overlap check missed a b")
 	_expect(margins.size() == 1, "self check: the margin check missed c at x 8")
+	# A sheet over a column card under the row is allowed; a sheet that rises
+	# over a top-row button is not.
+	var over_column := {
+		"sheet:offers": [Rect2(200.0, 64.0, 560.0, 300.0), null],
+		"StaffHintCard": [Rect2(16.0, 264.0, 304.0, 120.0), null],
+	}
+	var over_row := {
+		"sheet:runway": [Rect2(600.0, 40.0, 560.0, 300.0), null],
+		"OffersButton": [Rect2(864.0, 16.0, 176.0, 40.0), null],
+	}
+	var column_misses := _overlap_misses(over_column)
+	var row_misses := _overlap_misses(over_row)
+	print("PROBE self_check sheet_column=%s sheet_row=%s" % [column_misses, row_misses])
+	_expect(column_misses.is_empty(), "self check: a sheet over a column card was refused")
+	_expect(row_misses.size() == 1, "self check: a sheet over the top row was allowed")
 
 
 func _contact_sheet(tag: String, paths: Array[String]) -> void:
