@@ -6,7 +6,8 @@ extends RefCounted
 ## valid as the player builds (decision player-built-terminal-
 ## technical-design-site-plot-indoor-mask-passenger-eligibility, point 6).
 ##
-## After every graph change (revalidate()) each walker outside checks the
+## After every graph change (revalidate()) each walker outside, except one
+## boarding through the docked jet bridge (docks_at()), checks the
 ## walk it has left: every grid cell on it must still be open ground, with no
 ## wall across it, and a road walker's entrance must still be one passengers
 ## may use. A walker whose walk fails takes a new one from where it stands: a
@@ -23,6 +24,9 @@ extends RefCounted
 
 ## Spacing of the points a walk left is checked at, in metres.
 const CHECK_STEP_M := 0.25
+## How near the door cell's outer edge must lie to the stand's exit sill for
+## the stand's jet bridge to stand on that exit, in metres.
+const SAME_POINT_M := 0.01
 
 ## How many distance fields revalidate() has searched since the game started
 ## (one per entrance, and one to the plane, per call at most). A count only
@@ -39,7 +43,14 @@ static func arrival(sim: PassengerSim, entrance: int) -> Array[Vector3]:
 
 
 ## The walk from exit `exit_door`'s cell to the door of a plane drawn with
-## `model` ("" for the stand's door), or empty when there is none. With no
+## `model` ("" for the stand's door), or empty when there is none. On a site
+## it is chosen whole here (decision bridge-boarding-sim-route-chosen-at-
+## departure-from-the-fligh): through the jet bridge when the stand's bridge
+## stands on this exit and `model` docks and is in reach (the door cell's
+## centre, then JetBridgePose's walk from the exit sill up the stair and
+## through the cab to the plane door); out of the bridge's apron door for a
+## model that does not dock (plane 03) while that walk crosses only open
+## ground; otherwise over the open cells to the stand (SiteRoutes). With no
 ## site (a test grid): the cell's centre, its outer edge, a metre beyond, then
 ## PassengerSim.apron_waypoints, whatever the model.
 static func departure(sim: PassengerSim, exit_door: int, model := "") -> Array[Vector3]:
@@ -47,6 +58,9 @@ static func departure(sim: PassengerSim, exit_door: int, model := "") -> Array[V
 		return _default_departure(sim, exit_door)
 	if not sim.layout.outside_routes.has(exit_door):
 		return [] as Array[Vector3]
+	var bridge := _bridge_walk(sim, exit_door, model)
+	if not bridge.is_empty():
+		return bridge
 	return SiteRoutes.departure(
 		sim.grid,
 		sim.site,
@@ -54,6 +68,17 @@ static func departure(sim: PassengerSim, exit_door: int, model := "") -> Array[V
 		sim.layout.stand_of(sim.grid, exit_door),
 		model
 	)
+
+
+## Whether a walker of a plane drawn with `model` leaving by exit `exit_door`
+## boards through the docked jet bridge: on a site, the stand's bridge stands
+## on this exit and reaches the model's door (JetBridgePose.reaches()). It
+## depends only on the model and the stand, which moves only between
+## turnarounds, so it cannot change while the walker is out, and nothing about
+## it is saved.
+static func docks_at(sim: PassengerSim, exit_door: int, model: String) -> bool:
+	var stand := _bridge_stand(sim, exit_door)
+	return not stand.is_empty() and JetBridgePose.reaches(stand, model, sim.site.ground_height)
 
 
 ## Whether a road walker at the end of its walk may come in through the
@@ -79,6 +104,11 @@ static func revalidate(sim: PassengerSim) -> void:
 		if p.stage == Passenger.Stage.SPAWNED:
 			_check_arrival(sim, p, to_doors)
 		elif p.stage == Passenger.Stage.APRON:
+			var model := PlaneClasses.flight_model(sim.flights, p.flight_id)
+			# A walker boarding through the docked jet bridge is off the open
+			# ground: its walk, chosen at departure, is never rerouted.
+			if docks_at(sim, p.exit_object, model):
+				continue
 			var door := sim.layout.door_cell(sim.grid, p.exit_object)
 			if _clear_ahead(sim, p, door):
 				_walk_on(p)
@@ -96,8 +126,11 @@ static func revalidate(sim: PassengerSim) -> void:
 				p.stuck = Passenger.Stuck.NO_ROUTE
 				continue
 			var walk: Array[Vector3] = [p.apron_position()]
-			var model := PlaneClasses.flight_model(sim.flights, p.flight_id)
-			walk.append_array(SiteRoutes.to_plane(sim.grid, sim.site, cells, stand, model))
+			var tail := SiteRoutes.to_plane(sim.grid, sim.site, cells, stand, model)
+			# It walks on to where its walk ended, its apron file's plane door:
+			# beside the plane, or plane 03's door on the ground.
+			tail[tail.size() - 1] = p.apron.back()
+			walk.append_array(tail)
 			_take(p, walk)
 			sim.files.reroute(sim, p)
 
@@ -268,6 +301,47 @@ static func _entrance_at(sim: PassengerSim, cell: Vector2i) -> int:
 		if sim.layout.door_cell(sim.grid, door) == cell:
 			return door
 	return 0
+
+
+## The stand of exit `exit_door` when its jet bridge stands on that exit (the
+## bridge's root, the exit sill, on the door cell's outer edge), else {}.
+static func _bridge_stand(sim: PassengerSim, exit_door: int) -> Dictionary:
+	if sim.site == null:
+		return {}
+	var stand := sim.layout.stand_of(sim.grid, exit_door)
+	var cell := sim.layout.door_cell(sim.grid, exit_door)
+	if stand.is_empty() or cell == BuildObjectDef.NO_CELL:
+		return {}
+	var step := sim.layout.door_outward(sim.grid, exit_door)
+	var edge := sim.grid.cell_to_world(cell) + Vector3(step.x, 0.0, step.y) * 0.5
+	var sill := Vector2(float(stand["x"]), float(stand["wall_z"]))
+	if Vector2(edge.x, edge.z).distance_to(sill) > SAME_POINT_M:
+		return {}
+	return stand
+
+
+## departure()'s walk through the jet bridge, or out of its apron door, from
+## the door cell's centre; empty when neither applies.
+static func _bridge_walk(sim: PassengerSim, exit_door: int, model: String) -> Array[Vector3]:
+	var walk: Array[Vector3] = []
+	var stand := _bridge_stand(sim, exit_door)
+	if stand.is_empty() or not PlaneModels.PLANES.has(model):
+		return walk
+	var ground := sim.site.ground_height
+	var docked := JetBridgePose.reaches(stand, model, ground)
+	if JetBridgePose.docks(model) and not docked:
+		return walk
+	var pose := JetBridgePose.pose_for(stand, model, docked, ground)
+	var cell := sim.layout.door_cell(sim.grid, exit_door)
+	# The exit sill, the bridge walk's first point, is the cell's outer edge.
+	walk.append(sim.grid.cell_to_world(cell))
+	walk.append_array(Array(pose["walk"] if docked else pose["apron_walk"]))
+	if not docked:
+		var on_foot := Passenger.new()
+		on_foot.apron = walk
+		if not _clear_ahead(sim, on_foot, cell):
+			return [] as Array[Vector3]
+	return walk
 
 
 ## departure() with no site: out through the cell's outer edge, a metre on,

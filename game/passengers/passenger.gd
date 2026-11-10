@@ -280,11 +280,11 @@ func apron_total_mm() -> int:
 	return mm
 
 
-## Measured on the ground (x and z), so a change of height costs no time.
+## Measured in 3D, so a climb (the jet bridge's stair) costs walk time, and
+## the spacing, the forecast and the boarding files all read the same length
+## (decision bridge-boarding-sim-route-chosen-at-departure-from-the-fligh).
 func apron_segment_mm(i: int) -> int:
-	var a := apron[i - 1]
-	var b := apron[i]
-	return roundi(Vector2(a.x, a.z).distance_to(Vector2(b.x, b.z)) * 1000.0)
+	return roundi(apron[i - 1].distance_to(apron[i]) * 1000.0)
 
 
 ## World position along the walk outside at the current progress.

@@ -274,13 +274,16 @@ static func exits_for(sim: PassengerSim, p: Passenger) -> Array[int]:
 	return sim.layout.open_exits_for(sim.grid, gate)
 
 
-## The walk from an exit door's cell to the plane door (OutsideWalks).
-static func apron_points(sim: PassengerSim, exit_door: int) -> Array[Vector3]:
-	return OutsideWalks.departure(sim, exit_door)
+## The walk from an exit door's cell to the door of a plane drawn with `model`
+## (OutsideWalks.departure()). With "" no plane is named, so no jet bridge
+## docks: the ground walk to the stand's door.
+static func apron_points(sim: PassengerSim, exit_door: int, model := "") -> Array[Vector3]:
+	return OutsideWalks.departure(sim, exit_door, model)
 
 
-## The apron walk from an exit door to the plane, in millimetres.
-static func apron_length_mm(sim: PassengerSim, exit_door: int) -> int:
+## The apron walk from an exit door to the door of a plane drawn with `model`
+## ("" as apron_points() takes it), in millimetres.
+static func apron_length_mm(sim: PassengerSim, exit_door: int, model := "") -> int:
 	var walk := Passenger.new()
-	walk.apron = apron_points(sim, exit_door)
+	walk.apron = apron_points(sim, exit_door, model)
 	return walk.apron_total_mm()

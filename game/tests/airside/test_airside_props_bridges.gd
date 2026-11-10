@@ -166,14 +166,13 @@ func test_pose_for_names_the_drawn_pose_and_mounts() -> void:
 
 func test_a_bridge_parks_only_when_no_plane_reports_its_gate() -> void:
 	var props := _airside.props
-	var door: Vector3 = JetBridgePose.plane_door(_stand, "tp_plane_06a")["door"]
-	props.dock_plane(7, "A", door, Vector3.RIGHT)
-	props.dock_plane(8, "A", door, Vector3.RIGHT)
+	props.dock_plane(7, "A", "tp_plane_06a")
+	props.dock_plane(8, "A", "tp_plane_06a")
 	assert_bool(props.bridges["A"]["docked"]).is_true()
 	assert_bool(props.bridges["B"]["docked"]).is_false()
 	props.release_plane(7)
 	assert_bool(props.bridges["A"]["docked"]).is_true()
-	props.dock_plane(8, "B", JetBridgePose.plane_door(_east, "tp_plane_06a")["door"], Vector3.RIGHT)
+	props.dock_plane(8, "B", "tp_plane_06a")
 	assert_bool(props.bridges["A"]["docked"]).is_false()
 	assert_bool(props.bridges["B"]["docked"]).is_true()
 	props.release_plane(8)

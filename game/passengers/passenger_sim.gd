@@ -461,9 +461,10 @@ func bubble_text(p: Passenger) -> String:
 	return ""
 
 
-## The apron walk from an exit door to the plane, in millimetres.
-func apron_length_mm(exit_door: int) -> int:
-	return PassengerGates.apron_length_mm(self, exit_door)
+## The apron walk from an exit door to the door of a plane drawn with `model`
+## ("" for the ground walk to the stand's door), in millimetres.
+func apron_length_mm(exit_door: int, model := "") -> int:
+	return PassengerGates.apron_length_mm(self, exit_door, model)
 
 
 ## JSON-safe state for a save. Reads only: it changes nothing in the sim or
