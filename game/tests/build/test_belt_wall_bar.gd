@@ -7,6 +7,8 @@ extends GdUnitTestSuite
 ## (anti_pattern a-build-ghost-or-preview-that-copies-the-sim-s-cell-rules-dr).
 
 const WALL_CELL := Vector2i(5, 4)
+## A wall along x, on the south edge of this cell, for lines laid north and south.
+const ROW_WALL_CELL := Vector2i(10, 8)
 
 var _mode: BuildMode
 
@@ -21,6 +23,7 @@ func before() -> void:
 			edits.append(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
 	_mode.grid.apply_batch(edits)
 	_mode.grid.apply(BuildEdit.place_wall(WALL_CELL, BuildGrid.Side.EAST))
+	_mode.grid.apply(BuildEdit.place_wall(ROW_WALL_CELL, BuildGrid.Side.SOUTH))
 	_mode.set_tool(BuildMode.Tool.BELT)
 
 
@@ -46,6 +49,29 @@ func _live_bars() -> Array[MeshInstance3D]:
 	return out
 
 
+## Draws the line from `from` to `to` and checks the one bar it draws stands on
+## the wall edge of `cell` on `side`, lying along the wall.
+func _assert_bar_on(from: Vector2i, to: Vector2i, cell: Vector2i, side: int) -> void:
+	BuildGhost.draw_belt(_mode, from, to)
+	var bars := _live_bars()
+	assert_int(bars.size()).is_equal(1)
+	if bars.size() != 1:
+		return
+	var bar := bars[0]
+	var edge := BuildView.wall_transform(_mode.grid, cell, side)
+	var along := bar.transform.basis.x.normalized()
+	var wall_along := edge.basis.x.normalized()
+	print(
+		(
+			"bar=%s along=%s edge=%s wall_along=%s"
+			% [bar.transform.origin, along, edge.origin, wall_along]
+		)
+	)
+	assert_float(bar.transform.origin.x).is_equal_approx(edge.origin.x, 0.001)
+	assert_float(bar.transform.origin.z).is_equal_approx(edge.origin.z, 0.001)
+	assert_float(absf(along.dot(wall_along))).is_equal_approx(1.0, 0.001)
+
+
 func test_a_line_across_a_wall_names_the_blocking_edge() -> void:
 	var plan := BeltShaper.plan_line(_mode.grid, Vector2i(3, 4), Vector2i(8, 4), 0)
 	print(
@@ -63,6 +89,26 @@ func test_a_line_laid_the_other_way_names_the_same_edge_from_its_side() -> void:
 	assert_int(plan.wall_side).is_equal(BuildGrid.Side.WEST)
 	# The same edge: the grid holds a wall there seen from either side.
 	assert_bool(_mode.grid.has_wall(plan.wall_cell, plan.wall_side)).is_true()
+
+
+func test_a_line_laid_south_across_a_wall_along_x_names_its_south_edge() -> void:
+	var plan := BeltShaper.plan_line(_mode.grid, Vector2i(10, 6), Vector2i(10, 11), 0)
+	print("wall_cell=%s wall_side=%d" % [plan.wall_cell, plan.wall_side])
+	assert_int(plan.result.reason).is_equal(BuildResult.Reason.BELT_WALL)
+	assert_that(plan.wall_cell).is_equal(ROW_WALL_CELL)
+	assert_int(plan.wall_side).is_equal(BuildGrid.Side.SOUTH)
+	_assert_bar_on(Vector2i(10, 6), Vector2i(10, 11), ROW_WALL_CELL, BuildGrid.Side.SOUTH)
+
+
+func test_a_line_laid_north_across_a_wall_along_x_names_its_north_edge() -> void:
+	var plan := BeltShaper.plan_line(_mode.grid, Vector2i(10, 11), Vector2i(10, 6), 0)
+	print("wall_cell=%s wall_side=%d" % [plan.wall_cell, plan.wall_side])
+	assert_int(plan.result.reason).is_equal(BuildResult.Reason.BELT_WALL)
+	assert_that(plan.wall_cell).is_equal(ROW_WALL_CELL + Vector2i(0, 1))
+	assert_int(plan.wall_side).is_equal(BuildGrid.Side.NORTH)
+	assert_bool(_mode.grid.has_wall(plan.wall_cell, plan.wall_side)).is_true()
+	# Drawn on the same edge as the south-facing case, from the other cell.
+	_assert_bar_on(Vector2i(10, 11), Vector2i(10, 6), ROW_WALL_CELL, BuildGrid.Side.SOUTH)
 
 
 func test_a_clear_line_names_no_edge() -> void:
@@ -90,14 +136,14 @@ func test_the_ghost_draws_a_see_through_red_bar_on_the_blocking_edge() -> void:
 	assert_float(tint.r).is_equal_approx(BuildMode.INVALID_TINT.r, 0.001)
 	assert_float(tint.g).is_equal_approx(BuildMode.INVALID_TINT.g, 0.001)
 	assert_float(tint.b).is_equal_approx(BuildMode.INVALID_TINT.b, 0.001)
+	assert_float(tint.a).is_equal_approx(BuildMode.WALL_BLOCK_TINT.a, 0.001)
 	assert_float(tint.a).is_greater(BuildMode.INVALID_TINT.a)
-	assert_float(tint.a).is_greater_equal(0.85)
-	# A low bar on the floor, no taller than the cut-away wall stub it marks
+	# A low bar on the floor as tall as the cut-away wall stub it marks
 	# (GapMarkers' form), and much thicker than the wall, so it reads at range.
 	var size := (bar.mesh as BoxMesh).size
 	print("bar size=%s stub=%.2f" % [size, InteriorKit.STUB_HEIGHT])
 	# BoxMesh keeps its size in 32-bit floats, so 0.3 reads back a hair over.
-	assert_float(size.y).is_less_equal(InteriorKit.STUB_HEIGHT + 0.001)
+	assert_float(size.y).is_equal_approx(InteriorKit.STUB_HEIGHT, 0.001)
 	assert_float(bar.transform.origin.y - edge.origin.y).is_equal_approx(size.y / 2.0, 0.001)
 	assert_float(size.z).is_greater(BuildView.WALL_THICKNESS * 3.0)
 
