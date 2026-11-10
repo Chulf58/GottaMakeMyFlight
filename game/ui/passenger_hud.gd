@@ -4,9 +4,9 @@ extends CanvasLayer
 ## counts, today's departures (DepartureList), and the speed buttons (Space
 ## toggles the pause, Shift+1/2/3 set the speed; plain number keys stay the
 ## build tool keys). On the left edge, the optional DeparturesBoard (B shows
-## and hides it), which steps aside while the inspect card shows. Left of the
-## flight panel, under the top row, the alert cards (AlertStack), which clear
-## themselves and jump the camera when clicked.
+## and hides it), which steps aside while the inspect card shows. Under the
+## flight panel, the right rail (AlertStack): alert cards, which clear
+## themselves and jump the camera when clicked, and the flight result card.
 ## Bottom-left: the followed passenger's inspect card (PassengerInspect:
 ## live status, its thoughts, and a pin where a clicked thought happened), or
 ## the followed vehicle's story, kept left of BuildMenu's centre column and
@@ -19,9 +19,10 @@ extends CanvasLayer
 ## and the text shows its passengers, their flight and the drop-off delay so
 ## far (VehicleInspect); a click inside a vehicle's drawn box picks the vehicle
 ## before any passenger near it. One selection at a time.
-## When a flight's doors close, a dismissible FlightResultPanel opens under
-## the top-right panel: made, missed and the main reasons; a later closing
-## flight replaces it, and it hides itself when the game day changes. On
+## When a flight's doors close, a green FlightResultPanel goes on the rail:
+## made, missed and the main reasons; a later closing flight replaces it, and
+## it leaves after FlightResultPanel.SHOW_SECONDS of real time or on a click,
+## staying in the alerts history. On
 ## ready the camera frames the built area (StartView) inside the screen share
 ## the open panels leave free (PanelRoom, which keeps telling the camera as
 ## panels open and close). A new game opens paused under the
@@ -45,11 +46,10 @@ const FOLLOW_TOP := 96.0
 const SPEED_KEYS := {KEY_1: 1, KEY_2: 2, KEY_3: 3}
 ## The Debug panel's fixed width; its labels wrap inside it.
 const DEBUG_W := 260.0
-## The result panel's top edge, below the flight panel and well above the
-## build tray.
-const RESULT_TOP := 258.0
+## The flight result card's key on the rail.
+const RESULT_KEY := &"flight_result"
 ## Gap between the flight panel's rows, tighter than the theme's so the
-## departures list fits above the result panel.
+## panel leaves the rail under it room for its cards.
 const FLIGHT_PANEL_GAP := 1
 ## The flight panel's word for each state from the doors closing on.
 const AFTER_DOORS_TEXT := {
@@ -185,13 +185,11 @@ var _batch_refused := false
 var _time_label := Label.new()
 var _speed_buttons: Array[Button] = []
 var _debug_panel := PanelContainer.new()
-var _result := FlightResultPanel.new()
 var _panel_room := PanelRoom.new()
 ## Flights whose doors closed and whose result is not summarized yet, oldest
-## first, each with the game day it closed on (the clock can pass midnight
-## before the next refresh). The sim marks the passengers missed after the doors_closed signal,
+## first. The sim marks the passengers missed after the doors_closed signal,
 ## so a result waits for the next refresh.
-var _unreported: Array[Dictionary] = []
+var _unreported: Array[String] = []
 var _intro_layer: CanvasLayer
 var _intro: IntroDialogue
 ## The camera's input state when the intro opened, restored when it closes.
@@ -204,8 +202,8 @@ func _ready() -> void:
 	panel.name = "FlightPanel"
 	panel.theme = BuildMenu.HUD_THEME
 	panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	panel.position = Vector2(-460.0, 12.0)
-	panel.custom_minimum_size = Vector2(440.0, 0.0)
+	panel.position = Vector2(-HudLayout.MARGIN - HudLayout.RAIL_W, HudLayout.MARGIN)
+	panel.custom_minimum_size = Vector2(HudLayout.RAIL_W, 0.0)
 	add_child(panel)
 	var column := VBoxContainer.new()
 	column.add_theme_constant_override("separation", FLIGHT_PANEL_GAP)
@@ -234,9 +232,6 @@ func _ready() -> void:
 	hint.text = "Space pause   Shift+1/2/3 speed"
 	hint.theme_type_variation = &"HudHint"
 	column.add_child(hint)
-	_result.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	_result.position = Vector2(-460.0, RESULT_TOP)
-	add_child(_result)
 	_departures_board.flights = flights
 	_departures_board.clock = clock
 	_departures_board.settings_path = departures_settings_path
@@ -246,7 +241,7 @@ func _ready() -> void:
 	var offers := get_node_or_null("../OfferPanel") as OfferPanel
 	if offers != null:
 		_alerts.covered = func() -> bool: return offers.is_node_ready() and offers.is_open()
-	_alerts.avoid = _banner_rect
+	_alerts.above = panel
 	_alerts.camera = camera
 	_alerts.settings_path = alert_settings_path
 	add_child(_alerts)
@@ -288,7 +283,6 @@ func _ready() -> void:
 	_panel_room.name = "PanelRoom"
 	_panel_room.camera = camera
 	_panel_room.scene_root = get_parent()
-	_panel_room.result_card = _result
 	_panel_room.banner_rect = _banner_rect
 	_panel_room.alert_stack = _alerts
 	add_child(_panel_room)
@@ -390,13 +384,10 @@ func dirty_alert() -> DirtyAlert:
 
 func refresh() -> void:
 	_drop_retired_selection()
-	# The panel always shows the latest flight to close, replacing an open one
-	# that was not dismissed, so it never holds an earlier day's result.
+	# The card always shows the latest flight to close, replacing an open one.
 	if not _unreported.is_empty():
-		var latest: Dictionary = _unreported.back()
-		_result.show_result(_result_summary(latest["flight"]), latest["day"])
+		show_result_for(_unreported.back())
 		_unreported.clear()
-	_result.expire_on_new_day(_today())
 	_time_label.text = time_text()
 	_counts_label.text = counts_text()
 	_departures_label.text = DepartureList.text(flights, clock.tick)
@@ -504,9 +495,15 @@ func press_debug_spawn() -> void:
 	print("DEBUG_BATCH spawn %d passengers seed=%d tick=%d" % [DEBUG_BATCH, seed, clock.tick])
 
 
-## Opens the result panel for a flight, from the passengers' recorded fates.
+## Posts a flight's result card to the rail, from the passengers' recorded
+## fates, replacing the one up; its full text goes in the alerts history.
 func show_result_for(flight_id: String) -> void:
-	_result.show_result(_result_summary(flight_id), _today())
+	var card := FlightResultPanel.new()
+	card.show_result(_result_summary(flight_id))
+	card.dismissed.connect(dismiss_result)
+	var lines := card.result_text().split("\n")
+	var detail := "\n".join(lines.slice(1))
+	_alerts.post_notice(RESULT_KEY, card, FlightResultPanel.SHOW_SECONDS, lines[0], detail)
 
 
 ## The flight's FlightResult summary, titled with its contract's name.
@@ -517,20 +514,16 @@ func _result_summary(flight_id: String) -> Dictionary:
 
 
 func dismiss_result() -> void:
-	_result.dismiss_result()
-
-
-## The game day the clock is on.
-func _today() -> int:
-	return GameCalendar.day_of(clock.tick)
+	_alerts.drop_notice(RESULT_KEY)
 
 
 func is_result_open() -> bool:
-	return _result.visible
+	return _alerts.notice_card(RESULT_KEY) != null
 
 
 func result_text() -> String:
-	return _result.result_text()
+	var card := _alerts.notice_card(RESULT_KEY) as FlightResultPanel
+	return "" if card == null else card.result_text()
 
 
 ## 0 pauses; 1 to 3 run at that speed.
@@ -768,7 +761,7 @@ func _frame_start_view() -> void:
 
 
 ## The banner slot's screen rectangle while the status banner or a first-time
-## hint shows there, empty otherwise: the alert cards step down under it.
+## hint shows there, empty otherwise; PanelRoom cuts it from the camera room.
 func _banner_rect() -> Rect2:
 	var rect := Rect2()
 	var staff := get_parent().get_node_or_null("StaffPanel") as StaffPanel
@@ -783,7 +776,7 @@ func _banner_rect() -> Rect2:
 
 
 func _on_doors_closed(flight_id: String) -> void:
-	_unreported.append({"flight": flight_id, "day": GameCalendar.day_of(flights.tick)})
+	_unreported.append(flight_id)
 
 
 func _is_pristine(grid: BuildGrid) -> bool:

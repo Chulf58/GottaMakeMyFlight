@@ -1,9 +1,9 @@
 class_name TestPassengerHudDeparturesCap
 extends GdUnitTestSuite
 ## However many flights are accepted, the flight panel's departures label shows
-## at most DepartureList.MAX_LINES lines and the panel stays clear of the
-## flight result card (PassengerHud.RESULT_TOP), so a long day never pushes
-## the panel into the card (decision
+## at most DepartureList.MAX_LINES lines and the right rail (AlertStack, with
+## the flight result card) hangs GROUP_GAP under the panel, so a long day
+## never pushes the panel into the cards (decision
 ## flight-panel-the-next-departing-flight-s-row-shows-a-doors-close-countdown).
 
 var _world: PassengerTestWorld
@@ -80,4 +80,7 @@ func test_the_panel_stays_clear_of_the_result_card_with_many_flights() -> void:
 	var panel_bottom := _panel_bottom()
 	# Control: the panel was laid out, so it has a real height below the label.
 	assert_float(panel_bottom).is_greater(_label().get_global_rect().end.y)
-	assert_float(panel_bottom).is_less(PassengerHud.RESULT_TOP)
+	_hud.refresh()
+	await get_tree().process_frame
+	var rail := (_hud.find_child("AlertStack", false, false) as Control).get_global_rect()
+	assert_float(rail.position.y).is_equal_approx(panel_bottom + HudLayout.GROUP_GAP, 0.5)
