@@ -35,6 +35,8 @@ extends CanvasLayer
 
 const SHEET_W := TopRow.SHEET_W
 const CARD_TEXT_W := 380.0
+## Index of the first-flight note line in a card's lines (under the departure).
+const NOTE_LINE := 2
 ## Rail keys, and the history titles, of the two coral notices.
 const WARNING_KEY := &"offer_warning"
 const ENDED_KEY := &"offer_ended"
@@ -71,7 +73,7 @@ var _offers_waiting := false
 var _card_nodes: Dictionary = {}
 var _accept_buttons: Dictionary = {}
 var _decline_buttons: Dictionary = {}
-var _departs_labels: Dictionary = {}
+var _note_labels: Dictionary = {}
 var _refusal_labels: Dictionary = {}
 var _noted_tick := -1
 ## True from open() until the player changes the clock or the sheet closes.
@@ -131,17 +133,16 @@ static func lead_text(ticks: int) -> String:
 
 
 ## The text lines of an offer's card: who and where, when, the plane, and the
-## money. `note` (first_flight_note) follows the departure when not empty. The
-## plane size has its own line so a long note still fits the departure line.
+## money. `note` (first_flight_note) gets its own line under the departure when
+## not empty, so no line wraps. A card without a note has 4 lines, with one 5.
 static func card_lines(offer: Dictionary, note := "") -> PackedStringArray:
 	var minute: int = offer["departure_minute"]
 	var time := GameCalendar.clock_text(GameCalendar.tick_at(0, minute))
 	var size: String = offer["plane_size"]
-	var then := ", %s" % note if note != "" else ""
-	return PackedStringArray(
+	var lines := PackedStringArray(
 		[
 			"%s to %s" % [offer["airline"], offer["destination"]],
-			"Departs %s daily%s" % [time, then],
+			"Departs %s daily" % time,
 			"%s plane" % size.capitalize(),
 			(
 				"%d passengers booked   $%d per passenger"
@@ -149,6 +150,14 @@ static func card_lines(offer: Dictionary, note := "") -> PackedStringArray:
 			),
 		]
 	)
+	if note != "":
+		lines.insert(NOTE_LINE, note_line(note))
+	return lines
+
+
+## A first-flight note as it reads on a line of its own.
+static func note_line(note: String) -> String:
+	return note.left(1).to_upper() + note.substr(1)
 
 
 func _ready() -> void:
@@ -264,7 +273,8 @@ func decline_button(id: String) -> Button:
 func card_text(id: String) -> String:
 	var lines := PackedStringArray()
 	for label in _card_nodes[id].find_children("*", "Label", true, false):
-		lines.append((label as Label).text)
+		if (label as Label).visible:
+			lines.append((label as Label).text)
 	return "\n".join(lines)
 
 
@@ -362,7 +372,7 @@ func _refresh() -> void:
 	_card_nodes.clear()
 	_accept_buttons.clear()
 	_decline_buttons.clear()
-	_departs_labels.clear()
+	_note_labels.clear()
 	_refusal_labels.clear()
 	var offers := desk.board.open_offers()
 	for offer in offers:
@@ -383,12 +393,17 @@ func _note_for(offer: Dictionary) -> String:
 	return first_flight_note(offer, flights.tick)
 
 
-## Rewrites each card's departure line for the sim's current tick.
+## Rewrites each card's note line for the sim's current tick, hiding it while
+## there is no note.
 func _refresh_notes() -> void:
 	_noted_tick = flights.tick
-	for id in _departs_labels:
-		var offer := desk.board.offer_of(id)
-		(_departs_labels[id] as Label).text = card_lines(offer, _note_for(offer))[1]
+	for id in _note_labels:
+		_set_note(_note_labels[id], _note_for(desk.board.offer_of(id)))
+
+
+func _set_note(label: Label, note: String) -> void:
+	label.text = note_line(note)
+	label.visible = note != ""
 
 
 ## Posts or drops the airlines' warning card from the rating, and words the
@@ -501,16 +516,15 @@ func _add_card(offer: Dictionary) -> void:
 	var texts := VBoxContainer.new()
 	texts.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(texts)
-	var lines := card_lines(offer, _note_for(offer))
+	var lines := card_lines(offer)
 	for i in lines.size():
-		var label := Label.new()
-		if i == 1:
-			_departs_labels[id] = label
-		label.text = lines[i]
-		label.custom_minimum_size = Vector2(CARD_TEXT_W, 0.0)
-		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		_style_label(label, &"HudTitle" if i == 0 else &"HudSmall")
-		texts.add_child(label)
+		texts.add_child(_card_label(lines[i], &"HudTitle" if i == 0 else &"HudSmall"))
+	var note := _card_label("", &"HudSmall")
+	note.name = "Note_%s" % id
+	_set_note(note, _note_for(offer))
+	texts.add_child(note)
+	texts.move_child(note, NOTE_LINE)
+	_note_labels[id] = note
 	var refusal := Label.new()
 	refusal.name = "Refusal_%s" % id
 	refusal.visible = false
@@ -529,6 +543,15 @@ func _add_card(offer: Dictionary) -> void:
 	decline.pressed.connect(_on_decline.bind(id))
 	buttons.add_child(decline)
 	_decline_buttons[id] = decline
+
+
+func _card_label(text: String, variation: StringName) -> Label:
+	var label := Label.new()
+	label.text = text
+	label.custom_minimum_size = Vector2(CARD_TEXT_W, 0.0)
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_style_label(label, variation)
+	return label
 
 
 func _card_button(text: String, variation: StringName, id: String) -> Button:
