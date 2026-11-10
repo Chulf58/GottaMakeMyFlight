@@ -751,6 +751,9 @@ func _on_save_loaded(ok: bool) -> void:
 	if ok:
 		# A loaded world may reuse the selected id for another item.
 		_built.clear()
+		# A flight that closed before the load belongs to the old world: its
+		# result must not reach the rail after the reset.
+		_unreported.clear()
 		_alerts.reset()
 		_inspect.on_loaded(ok)
 		_frame_start_view()
