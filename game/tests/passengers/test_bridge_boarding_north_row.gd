@@ -20,6 +20,7 @@ const MODEL_05 := "tp_plane_05a"
 
 var _world: PassengerTestWorld
 var _exit := 0
+var _exit_b := 0
 
 
 func before() -> void:
@@ -41,7 +42,7 @@ func before_test() -> void:
 	PassengerTestWorld.place(grid, &"checkin_desk", Vector2i(23, 11), 0)
 	PassengerTestWorld.place(grid, &"security_scanner", Vector2i(24, 6), 0)
 	_exit = PassengerTestWorld.place(grid, &"exit_door", EXIT_A, 0)
-	PassengerTestWorld.place(grid, &"exit_door", EXIT_B, 0)
+	_exit_b = PassengerTestWorld.place(grid, &"exit_door", EXIT_B, 0)
 	EnclosureKit.close_floor(grid)
 	_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
 	_world.sim.site = SITE
@@ -106,3 +107,50 @@ func test_a_north_row_bridge_walk_is_where_the_drawn_bridge_has_it() -> void:
 	# drawn floors by that height.
 	assert_float(old_best).is_greater(0.1)
 	airside.props.release_plane(1)
+
+
+## Without gates every exit walks to the one live stand. Exit B's sill is not
+## gate A's stand's, so B's walkers take the ground walk (SiteRoutes), which
+## ends beside the north-row plane on the ground that plane is drawn on, off
+## the paved site, not at the site's ground height.
+func test_a_north_row_ground_walk_ends_on_the_ground_the_plane_is_drawn_on() -> void:
+	var layout := _world.sim.layout
+	var stand := layout.stand_of(_world.grid, _exit)
+	layout.by_gate = false
+	layout.stand = stand
+	var walk := OutsideWalks.departure(_world.sim, _exit_b, MODEL_05)
+	var end: Vector3 = walk.back()
+	var door := StandPlacement.door_point(stand, MODEL_05)
+	var drawn := PlaneView.ground_height_at(end)
+	var p := Passenger.new()
+	p.apron = walk
+	var site_end := Passenger.new()
+	site_end.apron = walk.duplicate()
+	site_end.apron[walk.size() - 1] = Vector3(end.x, SITE.ground_height, end.z)
+	print(
+		(
+			(
+				"exit B under gate A's stand: docks_at %s, walk %d points ends %s, stand door %s;"
+				+ " drawn ground %.3f (bridge ground %.3f); %d mm in 3D, %d mm with the end on the"
+				+ " site's ground"
+			)
+			% [
+				OutsideWalks.docks_at(_world.sim, _exit_b, MODEL_05),
+				walk.size(),
+				end,
+				door,
+				drawn,
+				JetBridgePose.ground_y(stand),
+				p.apron_total_mm(),
+				site_end.apron_total_mm()
+			]
+		)
+	)
+	assert_bool(OutsideWalks.docks_at(_world.sim, _exit_b, MODEL_05)).is_false()
+	assert_float(end.x).is_equal_approx(door.x, 0.0001)
+	assert_float(end.z).is_equal_approx(door.z, 0.0001)
+	assert_float(end.y).is_equal_approx(drawn, 0.0001)
+	assert_float(drawn).is_equal_approx(JetBridgePose.ground_y(stand), 0.0001)
+	# The control: the plane stands off the paved site, so the site's ground
+	# height would put the walk's end 0.2 m over the drawn ground.
+	assert_float(SITE.ground_height - end.y).is_equal_approx(0.2, 0.0001)
