@@ -37,7 +37,8 @@ func test_the_build_mode_sign_uses_its_theme_variation() -> void:
 	# The sign keeps the hazard stripes' yellow and dark.
 	assert_object((style as StyleBoxFlat).bg_color).is_equal(BuildModeFrame.YELLOW)
 	assert_object((style as StyleBoxFlat).border_color).is_equal(BuildModeFrame.DARK)
-	var label := sign_panel.get_child(0) as Label
+	# The text sits in a holder (SignText) so the panel keeps the top row's 40 px.
+	var label := sign_panel.find_children("*", "Label", true, false)[0] as Label
 	assert_str(str(label.theme_type_variation)).is_equal("HudBuildSignText")
 	assert_bool(label.has_theme_font_size_override("font_size")).is_false()
 	assert_bool(label.has_theme_color_override("font_color")).is_false()

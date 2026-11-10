@@ -103,7 +103,11 @@ func _assert_inside_and_clear(ui_scale: float) -> void:
 	var sign_rect := _on_screen(frame.sign_panel())
 	print("scale %.2f sign: %s" % [ui_scale, sign_rect])
 	assert_bool(VIEWPORT.encloses(sign_rect)).is_true()
-	assert_float(sign_rect.get_center().x).is_equal_approx(VIEWPORT.get_center().x, 1.0)
+	# The sign is the first slot of the centred top row (HUD 2/7), one slot plus
+	# a gap left of the viewport centre.
+	var slot_step := (HudLayout.TOGGLE_W + HudLayout.GAP) * ui_scale
+	assert_float(sign_rect.get_center().x).is_equal_approx(VIEWPORT.get_center().x - slot_step, 1.0)
+	assert_float(sign_rect.position.y).is_equal_approx(HudLayout.MARGIN * ui_scale, 0.5)
 	assert_bool(sign_rect.intersects(_on_screen(money))).is_false()
 	for i in 4:
 		assert_bool(sign_rect.intersects(_on_screen(frame.band(i)))).is_false()

@@ -232,8 +232,8 @@ static func build_money(menu: BuildMenu) -> void:
 	var panel := menu._money_slot
 	panel.name = "MoneySlot"
 	panel.theme = BuildMenu.HUD_THEME
-	panel.position = Vector2(16.0, 12.0)
-	panel.custom_minimum_size = Vector2(220.0, 0.0)
+	panel.position = Vector2(HudLayout.MARGIN, HudLayout.MARGIN)
+	panel.custom_minimum_size = Vector2(HudLayout.MONEY_W, 0.0)
 	menu.add_child(panel)
 	menu._money.text = BuildMenu.MONEY_TEXT
 	menu._money.theme_type_variation = &"HudMoney"

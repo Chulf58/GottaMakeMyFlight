@@ -2,7 +2,8 @@ class_name BuildModeFrame
 extends Control
 ## What tells the player they are in build mode: a black and yellow diagonal
 ## hazard-stripe border round the screen edges and a roadworks-style
-## "Build mode" sign at top centre. Hidden until set_building(true). Every part
+## "Build mode" sign in the first slot of the centred top row (TopRow), left of
+## Runway and Offers. Hidden until set_building(true). Every part
 ## ignores the mouse, and the border is BuildMenu.MARGIN thick so it stays off
 ## the bottom bar, the money slot and the flight panel.
 
@@ -13,7 +14,6 @@ const STRIPE_SHADER := preload("res://ui/build_mode_stripes.gdshader")
 const THICKNESS := 8.0
 const STRIPE_PERIOD := 22.0
 const SIGN_TEXT := "Build mode"
-const SIGN_TOP := THICKNESS + 6.0
 const YELLOW := Color(0.99, 0.8, 0.1)
 const DARK := Color(0.1, 0.1, 0.12)
 
@@ -80,8 +80,8 @@ func _fit() -> void:
 	_place(1, Vector2(0.0, size_now.y - t), Vector2(size_now.x, t))
 	_place(2, Vector2(0.0, t), Vector2(t, size_now.y - 2.0 * t))
 	_place(3, Vector2(size_now.x - t, t), Vector2(t, size_now.y - 2.0 * t))
-	_sign.size = _sign.get_combined_minimum_size()
-	_sign.position = Vector2((size_now.x - _sign.size.x) / 2.0, SIGN_TOP)
+	_sign.size = TopRow.SLOT_SIZE
+	_sign.position = Vector2(TopRow.slot_left(TopRow.SIGN_SLOT, size_now.x), TopRow.TOP)
 
 
 func _place(index: int, at: Vector2, extent: Vector2) -> void:
@@ -100,8 +100,18 @@ func _build_sign() -> void:
 	# The theme holds the sign's look (the stripes' YELLOW and DARK).
 	_sign.theme = HUD_THEME
 	_sign.theme_type_variation = &"HudBuildSign"
+	# The theme's 24 px text with the sign's 4 px margins would make the panel
+	# 42 px tall; the row's slot is BUTTON_H. The text sits in a holder that
+	# asks for no height, so the panel keeps the slot's size.
+	var holder := Control.new()
+	holder.name = "SignText"
+	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_sign.add_child(holder)
 	var label := Label.new()
 	label.text = SIGN_TEXT
 	label.theme_type_variation = &"HudBuildSignText"
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_sign.add_child(label)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	holder.add_child(label)
+	label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)

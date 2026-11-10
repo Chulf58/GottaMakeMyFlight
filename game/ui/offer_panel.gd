@@ -1,7 +1,8 @@
 class_name OfferPanel
 extends CanvasLayer
-## Today's airline offers (Economy 6/8b). A button at the top right shows how
-## many offers are open; it opens a cream card sheet below it with one card per
+## Today's airline offers (Economy 6/8b). A button in the centred top row
+## (TopRow's last slot) shows how many offers are open; it opens a cream card
+## sheet below the row with one card per
 ## open offer: airline, destination, departure, plane size, booked
 ## passengers and fee per passenger, with Accept and Decline. No gate is named:
 ## the player builds the terminal, which has none to name. Look follows
@@ -28,11 +29,7 @@ extends CanvasLayer
 ## A card says "first flight tomorrow" when the sim would not fly today's slot
 ## (FlightTimetable.first_day), once the airport is open.
 
-const SHEET_W := 560.0
-const TOP := 12.0
-## The panel sits at the top, left of PassengerHud's 440 px flight panel (which
-## starts 460 px from the right edge).
-const RIGHT_CLEARANCE := 472.0
+const SHEET_W := TopRow.SHEET_W
 const CARD_TEXT_W := 380.0
 const EMPTY_TEXT := "No offers right now. New offers arrive at midnight."
 
@@ -139,6 +136,7 @@ func _ready() -> void:
 		set_process_unhandled_input(false)
 		return
 	layer = 2
+	add_to_group(TopRow.SHEET_GROUP)
 	_build()
 	desk.board.changed.connect(_refresh)
 	if desk.rating != null:
@@ -181,6 +179,7 @@ func sheet() -> Control:
 func open() -> void:
 	if _sheet.visible:
 		return
+	TopRow.close_others(self)
 	_sheet.visible = true
 	_refresh_notes()
 	if clock != null:
@@ -277,28 +276,19 @@ func _build() -> void:
 	_message = Label.new()
 	_warning = Label.new()
 	_notice = Label.new()
-	var column := VBoxContainer.new()
-	column.name = "OfferColumn"
-	column.theme = BuildMenu.HUD_THEME
-	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	column.custom_minimum_size = Vector2(SHEET_W, 0.0)
-	column.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE)
-	column.offset_right = -RIGHT_CLEARANCE
-	column.offset_left = -RIGHT_CLEARANCE - SHEET_W
-	column.offset_top = TOP
-	column.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	add_child(column)
 	_button.name = "OffersButton"
-	_button.size_flags_horizontal = Control.SIZE_SHRINK_END
-	_button.custom_minimum_size = Vector2(170.0, 40.0)
+	_button.theme = BuildMenu.HUD_THEME
+	TopRow.place_in_slot(_button, TopRow.OFFERS_SLOT)
 	_button.focus_mode = Control.FOCUS_NONE
 	_button.theme_type_variation = &"HudButtonTeal"
 	_button.pressed.connect(_on_toggle)
-	column.add_child(_button)
+	add_child(_button)
 	_sheet.name = "OfferSheet"
+	_sheet.theme = BuildMenu.HUD_THEME
 	_sheet.visible = false
 	_sheet.mouse_filter = Control.MOUSE_FILTER_STOP
-	column.add_child(_sheet)
+	TopRow.place_sheet(_sheet)
+	add_child(_sheet)
 	var sheet_column := VBoxContainer.new()
 	sheet_column.add_theme_constant_override("separation", 6)
 	_sheet.add_child(sheet_column)
