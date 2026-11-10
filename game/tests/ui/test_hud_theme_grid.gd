@@ -129,3 +129,26 @@ func test_every_hud_text_size_is_on_the_type_scale() -> void:
 
 func test_card_names_use_the_caption_size() -> void:
 	assert_int(THEME.get_font_size("font_size", "HudCardName")).is_equal(HudLayout.CAPTION)
+
+
+## HudLayout's numbers are the ruling's, so each is pinned to its literal.
+func test_hud_layout_holds_the_ruled_grid() -> void:
+	assert_int(HudLayout.UNIT).is_equal(8)
+	assert_int(HudLayout.MARGIN).is_equal(16)
+	assert_int(HudLayout.GAP).is_equal(8)
+	assert_int(HudLayout.GROUP_GAP).is_equal(16)
+	assert_int(HudLayout.CHIP_H).is_equal(32)
+	assert_int(HudLayout.BUTTON_H).is_equal(40)
+	assert_int(HudLayout.BAR_H).is_equal(52)
+	assert_int(HudLayout.TOGGLE_W).is_equal(176)
+	assert_int(HudLayout.MONEY_W).is_equal(224)
+	assert_int(HudLayout.LIST_W).is_equal(304)
+	assert_int(HudLayout.RAIL_W).is_equal(440)
+	assert_int(HudLayout.SHEET_W).is_equal(560)
+	assert_int(HudLayout.TRAY_W).is_equal(640)
+	assert_int(HudLayout.CAPTION).is_equal(14)
+	assert_int(HudLayout.BODY).is_equal(16)
+	assert_int(HudLayout.TITLE).is_equal(18)
+	assert_int(HudLayout.PANEL_TITLE).is_equal(22)
+	assert_int(HudLayout.FIGURE).is_equal(24)
+	assert_array(HudLayout.TYPE_SCALE).is_equal([14, 16, 18, 22, 24])

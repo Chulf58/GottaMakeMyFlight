@@ -61,17 +61,35 @@ func _initialize() -> void:
 	var probe_seed := randi()
 	seed(probe_seed)
 	print("PROBE seed=", probe_seed)
-	var out_rel := OUT_REL
-	# `-- --out=<dir>` names another folder under tools/blender/out/.
-	for arg in OS.get_cmdline_user_args():
-		if arg.begins_with("--out="):
-			out_rel = OUT_BASE.path_join(arg.trim_prefix("--out="))
-	_out_dir = ProjectSettings.globalize_path(out_rel).simplify_path()
+	_out_dir = _pick_out_dir()
+	if _out_dir == "":
+		quit(1)
+		return
 	DirAccess.make_dir_recursive_absolute(_out_dir)
 	print("PROBE out_dir=", _out_dir)
 	_start_ms = Time.get_ticks_msec()
 	_guard.start(_watch)
 	_run.call_deferred()
+
+
+## The plate folder: OUT_REL, or `-- --out=<dir>` for another folder under
+## tools/blender/out/. An absolute path, a `..` part or a folder that ends up
+## outside OUT_BASE prints PROBE_INVALID and returns "".
+func _pick_out_dir() -> String:
+	var base := ProjectSettings.globalize_path(OUT_BASE).simplify_path()
+	var out := ProjectSettings.globalize_path(OUT_REL).simplify_path()
+	for arg in OS.get_cmdline_user_args():
+		if not arg.begins_with("--out="):
+			continue
+		var sub := arg.trim_prefix("--out=").replace("\\", "/")
+		if sub == "" or sub.is_absolute_path() or ".." in sub.split("/") or ":" in sub:
+			print("PROBE_INVALID: --out must be a folder under %s, got '%s'" % [base, sub])
+			return ""
+		out = base.path_join(sub).simplify_path()
+	if not out.begins_with(base + "/"):
+		print("PROBE_INVALID: plate folder %s is outside %s" % [out, base])
+		return ""
+	return out
 
 
 func _watch() -> void:

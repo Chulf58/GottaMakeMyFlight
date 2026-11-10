@@ -11,7 +11,9 @@ extends GdUnitTestSuite
 ## hud-look-warm-cozy-cream-cards-with-a-dark-outline-toon-pale).
 
 const THEME := preload("res://ui/hud_theme.tres")
-const STATES: Array[StringName] = [&"normal", &"hover", &"pressed", &"disabled"]
+## Every state a Button draws with; a missing one falls back to Button's
+## 6 px padding.
+const STATES: Array[StringName] = [&"normal", &"hover", &"pressed", &"hover_pressed", &"disabled"]
 
 
 func _assert_no_style_overrides(control: Control, names: Array[StringName]) -> void:
@@ -77,8 +79,14 @@ func test_departures_gate_buttons_use_the_compact_variation() -> void:
 
 func test_the_compact_buttons_keep_the_button_look() -> void:
 	for state in STATES:
+		var own := THEME.has_stylebox(state, "HudButtonCompact")
+		assert_bool(own).override_failure_message("no compact %s" % state).is_true()
+		if not own:
+			continue
 		var compact := THEME.get_stylebox(state, "HudButtonCompact") as StyleBoxFlat
 		var plain := THEME.get_stylebox(state, "Button") as StyleBoxFlat
+		assert_float(compact.content_margin_top).is_equal(1.0)
+		assert_float(compact.content_margin_bottom).is_equal(1.0)
 		assert_object(compact.bg_color).is_equal(plain.bg_color)
 		assert_object(compact.border_color).is_equal(plain.border_color)
 		assert_float(compact.content_margin_left).is_equal(plain.content_margin_left)

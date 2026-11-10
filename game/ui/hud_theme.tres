@@ -558,6 +558,22 @@ corner_radius_top_right = 12
 corner_radius_bottom_right = 12
 corner_radius_bottom_left = 12
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_cmphp"]
+content_margin_left = 8.0
+content_margin_top = 1.0
+content_margin_right = 8.0
+content_margin_bottom = 1.0
+bg_color = Color(0.55, 0.808, 0.808, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.1, 0.13, 0.26, 1)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+
 [resource]
 default_font = SubResource("FontVariation_74y5s")
 default_font_size = 18
@@ -591,6 +607,7 @@ HudButtonCoral/styles/pressed = SubResource("StyleBoxFlat_xdm10")
 HudButtonCompact/base_type = &"Button"
 HudButtonCompact/styles/disabled = SubResource("StyleBoxFlat_cmpd")
 HudButtonCompact/styles/hover = SubResource("StyleBoxFlat_cmph")
+HudButtonCompact/styles/hover_pressed = SubResource("StyleBoxFlat_cmphp")
 HudButtonCompact/styles/normal = SubResource("StyleBoxFlat_cmpn")
 HudButtonCompact/styles/pressed = SubResource("StyleBoxFlat_cmpp")
 HudButtonGreen/base_type = &"Button"
