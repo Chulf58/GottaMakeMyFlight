@@ -14,6 +14,7 @@ const MONEY_ROW_BOTTOM := HudLayout.MARGIN + HudLayout.BUTTON_H
 
 var _settings_path := SaveTestKit.run_path("left_column_alerts")
 var _hints_path := SaveTestKit.run_path("left_column_hints")
+var _mood_path := SaveTestKit.run_path("left_column_mood")
 
 var _main: Node
 var _hud: PassengerHud
@@ -37,6 +38,8 @@ func after() -> void:
 	DirAccess.remove_absolute(_settings_path)
 	DirAccess.remove_absolute(_hints_path)
 	DirAccess.remove_absolute(_hints_path + ".tmp")
+	DirAccess.remove_absolute(_mood_path)
+	DirAccess.remove_absolute(_mood_path + ".tmp")
 
 
 func before_test() -> void:
@@ -211,3 +214,29 @@ func test_the_templates_panel_sits_on_the_margin() -> void:
 	var dock := _rect("TemplatesDock")
 	print("TEMPLATES %s" % [dock])
 	assert_float(dock.position.x).is_equal_approx(HudLayout.MARGIN, 0.5)
+
+
+## The legend is on a card of its own (plate d_mood_1920: bare 14 px text over
+## the dark ground was unreadable), level with the toggle and one gap right of it,
+## and it shows only while the overlay is on.
+func test_the_mood_legend_sits_on_a_card_beside_the_toggle() -> void:
+	var mood := _main.get_node("MoodOverlay") as MoodOverlay
+	mood.settings_path = _mood_path
+	var legend := _control("MoodLegend") as Label
+	var card := legend.get_parent() as PanelContainer
+	assert_object(card).is_not_null()
+	await _settle()
+	assert_bool(card.is_visible_in_tree()).is_false()
+	mood.set_shown(true)
+	await _settle()
+	var toggle := _rect("MoodToggle")
+	var rect := card.get_global_rect()
+	print("LEGEND toggle=%s card=%s" % [toggle, rect])
+	assert_bool(card.is_visible_in_tree()).is_true()
+	assert_float(rect.position.x - toggle.end.x).is_equal_approx(HudLayout.GAP, 0.5)
+	assert_float(rect.position.y).is_equal_approx(toggle.position.y, 0.5)
+	assert_float(rect.size.y).is_equal_approx(HudLayout.BUTTON_H, 0.5)
+	assert_bool(rect.encloses(legend.get_global_rect())).is_true()
+	mood.set_shown(false)
+	await _settle()
+	assert_bool(card.is_visible_in_tree()).is_false()

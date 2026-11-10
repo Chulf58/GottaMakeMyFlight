@@ -50,6 +50,8 @@ var _tint := MultiMeshInstance3D.new()
 var _layer := CanvasLayer.new()
 var _toggle := Button.new()
 var _legend := Label.new()
+## The legend's card: bare text is unreadable over the dark ground at the top left.
+var _legend_card := PanelContainer.new()
 
 
 func _init() -> void:
@@ -158,7 +160,10 @@ func _build_controls() -> Control:
 	_legend.theme_type_variation = &"HudHint"
 	_legend.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_legend.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	row.add_child(_legend)
+	_legend_card.name = "MoodLegendCard"
+	_legend_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_legend_card.add_child(_legend)
+	row.add_child(_legend_card)
 	return row
 
 
@@ -193,6 +198,7 @@ func _on_graph_changed(_cells: Array[Vector2i]) -> void:
 func _apply_shown() -> void:
 	_tint.visible = _shown
 	_legend.visible = _shown
+	_legend_card.visible = _shown
 	_toggle.set_pressed_no_signal(_shown)
 	if not _shown:
 		_cells = {}
