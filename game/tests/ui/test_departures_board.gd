@@ -56,7 +56,8 @@ func test_today_and_tomorrow_list_their_flights_in_time_order() -> void:
 		. contains_exactly(
 			[
 				DeparturesBoard.TODAY_HEADING,
-				"11:20  Oslo  Gotta Air",
+				# Today's next departing flight shows its doors time (HUD 3b).
+				"11:20  Oslo  Gotta Air  doors close 11:17",
 				"20:00  Rome  Sunhop",
 				DeparturesBoard.TOMORROW_HEADING,
 				"08:00  Lisbon  Sunhop",
@@ -78,7 +79,7 @@ func test_a_departed_flight_drops_off_and_tomorrow_keeps_its_row() -> void:
 	var after := DeparturesBoard.lines_for(_sim, _clock.tick)
 	var today := after.slice(1, after.find(DeparturesBoard.TOMORROW_HEADING))
 	print("after the 11:20 left, today: %s" % " | ".join(today))
-	assert_array(today).contains_exactly(["20:00  Rome  Sunhop"])
+	assert_array(today).contains_exactly(["20:00  Rome  Sunhop  doors close 19:57"])
 	assert_array(after).contains(["11:20  Oslo  Gotta Air"])
 
 

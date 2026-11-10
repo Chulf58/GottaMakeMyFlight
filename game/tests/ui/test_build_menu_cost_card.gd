@@ -1,7 +1,8 @@
 class_name TestBuildMenuCostCard
 extends GdUnitTestSuite
 ## The build menu's CostLine sits on a cream HUD card with a dark outline, so
-## it reads over the busy apron stripes (board 72ed0ceb; rulings
+## it reads over the busy apron stripes (board 72ed0ceb; since HUD 5/7, board
+## a2e95d4e, the card is the one status card the status line shares; rulings
 ## hud-look-warm-cozy-cream-cards-with-a-dark-outline-toon-pale and
 ## hud-steal-list-self-clearing-alert-cards-money-hover-departu). Costs stay
 ## neutral, never red; the card shows only while a cost does.
@@ -32,7 +33,7 @@ func after_test() -> void:
 
 
 func _card_style() -> StyleBoxFlat:
-	return _menu.preview_label().get_theme_stylebox("normal") as StyleBoxFlat
+	return _menu.status_card().get_theme_stylebox("panel") as StyleBoxFlat
 
 
 func test_the_cost_line_sits_on_the_hud_card_style() -> void:
@@ -50,17 +51,17 @@ func test_the_card_is_a_copy_not_the_shared_hud_bar_style() -> void:
 	assert_object(_card_style()).is_not_same(hud)
 
 
-## The card is the theme's HudCostCard style, not one built in code (board
-## 30d6a3e0); HudCostCard is based on HudCardName, so the text matches the
-## tray's card names.
-func test_the_card_is_the_theme_cost_card_variation() -> void:
-	var label := _menu.preview_label()
-	assert_str(str(label.theme_type_variation)).is_equal("HudCostCard")
-	assert_bool(label.has_theme_stylebox_override("normal")).is_false()
-	var theme_card := BuildMenu.HUD_THEME.get_stylebox("normal", "HudCostCard")
+## Changed for HUD 5/7: the cream card is now the status card's HudTopCard
+## (the top row's card style, BUTTON_H tall) rather than the cost label's own
+## HudCostCard, because the status text shares the card. The cost label's text
+## is still HudCardName, so it matches the tray's card names.
+func test_the_card_is_the_theme_top_card_variation() -> void:
+	var card := _menu.status_card()
+	assert_str(str(card.theme_type_variation)).is_equal("HudTopCard")
+	assert_bool(card.has_theme_stylebox_override("panel")).is_false()
+	var theme_card := BuildMenu.HUD_THEME.get_stylebox("panel", "HudTopCard")
 	assert_object(_card_style()).is_same(theme_card)
-	var base := BuildMenu.HUD_THEME.get_type_variation_base(&"HudCostCard")
-	assert_str(str(base)).is_equal("HudCardName")
+	assert_str(str(_menu.preview_label().theme_type_variation)).is_equal("HudCardName")
 
 
 func test_the_cost_text_is_dark_on_the_card_and_neutral() -> void:
@@ -78,8 +79,7 @@ func test_the_card_shows_while_a_cost_shows_and_hides_with_it() -> void:
 	assert_bool(label.visible).is_true()
 	assert_str(label.text).is_equal("Cost 400")
 	assert_object(_card_style()).is_not_null()
-	var padding := _card_style().get_minimum_size()
-	assert_float(label.get_combined_minimum_size().x).is_greater(padding.x)
+	assert_bool(_menu.status_card().visible).is_true()
 	_mode.set_tool(BuildMode.Tool.REMOVE)
 	_menu.refresh_preview()
 	assert_bool(label.visible).is_false()

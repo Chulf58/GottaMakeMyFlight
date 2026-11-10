@@ -47,8 +47,12 @@ func _parts(frame: BuildModeFrame) -> Array[Control]:
 	return out
 
 
-func test_the_border_is_as_thick_as_the_menu_margin() -> void:
-	assert_float(BuildModeFrame.THICKNESS).is_equal(BuildMenu.MARGIN)
+## Changed from BuildMenu.MARGIN: the menu's margin is now the 16 px grid margin
+## (HUD 5/7), and the frame stays one grid step thick, inside it, so it still
+## stays off the bar.
+func test_the_border_is_one_grid_step_thick_and_inside_the_menu_margin() -> void:
+	assert_float(BuildModeFrame.THICKNESS).is_equal(float(HudLayout.UNIT))
+	assert_float(BuildModeFrame.THICKNESS).is_less_equal(BuildMenu.MARGIN)
 
 
 func test_the_frame_shows_exactly_while_build_mode_lasts() -> void:

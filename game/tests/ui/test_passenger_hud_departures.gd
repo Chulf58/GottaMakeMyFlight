@@ -139,12 +139,11 @@ func test_departed_flights_make_room_for_later_ones() -> void:
 	assert_str(lines[lines.size() - 1]).is_equal("+2 more")
 
 
-func test_the_flight_panel_shows_the_list() -> void:
+func test_the_departures_list_shows_the_flights() -> void:
 	_world.flights.accept_contract(_terms("GA100", 11 * 60, "Oslo", "Gotta Air"))
 	_hud.refresh()
-	var label := _hud.find_child("Departures", true, false) as Label
-	assert_str(label.text).is_equal(_text())
-	assert_str(label.text).contains("11:00  Oslo  Gotta Air")
+	var board := _hud.find_child("DeparturesBoard", true, false) as DeparturesBoard
+	assert_array(board.shown_lines()).contains(["11:00  Oslo  Gotta Air"])
 
 
 func _doors_text(contract_id: String) -> String:

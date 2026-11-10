@@ -31,7 +31,7 @@ func before() -> void:
 		"contracts": flights.contract_ids(),
 		"flights": flights.flight_ids(),
 		"opened_tick": flights.opened_tick,
-		"departures": (hud.find_child("Departures", true, false) as Label).text,
+		"departures": DepartureList.text(flights, clock.tick),
 		"clock": (hud.find_child("Clock", true, false) as Label).text,
 		"hint": panel.hint_text(),
 	}
@@ -76,6 +76,9 @@ func _open(clock: SimClock, flights: FlightSim, hud: PassengerHud, panel: StaffP
 	_opened["pushback"] = flights.state_start(first, FlightSim.State.PUSHBACK)
 	_opened["doors_close"] = flights.state_start(first, FlightSim.State.DOORS_CLOSED)
 	_opened["departures"] = DepartureList.text(flights, clock.tick)
+	hud.refresh()
+	var board := hud.find_child("DeparturesBoard", true, false) as DeparturesBoard
+	_opened["board"] = board.shown_lines()
 	_opened["pending"] = (_main.get_node("PassengerSim") as PassengerSim).pending_spawns()
 
 
@@ -132,10 +135,12 @@ func test_staffed_it_opens_on_the_next_tick_with_the_starter_contract() -> void:
 	)
 
 
-## The clock and the timetable replace the elapsed time and the one-flight row.
+## The clock panel holds the clock only (HUD 3b); the Departures list holds the
+## timetable row.
 func test_the_flight_panel_shows_the_clock_and_no_flight_id() -> void:
 	var texts: PackedStringArray = _opened["panel_texts"]
-	assert_array(texts).contains([_opened["clock"], _opened["departures"]])
+	assert_array(texts).is_equal([_opened["clock"]])
+	assert_array(_opened["board"]).contains([_opened["departures"]])
 	for text in texts:
 		assert_str(text).not_contains("Time ")
 		assert_str(text).not_contains("Scheduled")

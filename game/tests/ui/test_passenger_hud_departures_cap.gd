@@ -1,10 +1,9 @@
 class_name TestPassengerHudDeparturesCap
 extends GdUnitTestSuite
-## However many flights are accepted, the flight panel's departures label shows
-## at most DepartureList.MAX_LINES lines and the right rail (AlertStack, with
-## the flight result card) hangs GROUP_GAP under the panel, so a long day
-## never pushes the panel into the cards (decision
-## flight-panel-the-next-departing-flight-s-row-shows-a-doors-close-countdown).
+## However many flights are accepted, the right rail (AlertStack, with the
+## flight result card) hangs GROUP_GAP under the clock panel. The panel no
+## longer lists flights (HUD 3b, decision top-right-clock-panel-slims-to-day-
+## time-and-speed-flight-row), so a long day never touches it.
 
 var _world: PassengerTestWorld
 var _hud: PassengerHud
@@ -27,10 +26,12 @@ func before_test() -> void:
 	_hud.clock = _world.clock
 	_hud.flights = _world.flights
 	_hud.sim = _world.sim
+	_hud.departures_settings_path = SaveTestKit.run_path("departures_cap_settings")
 	add_child(_hud)
 
 
 func after_test() -> void:
+	DirAccess.remove_absolute(_hud.departures_settings_path)
 	_hud.free()
 	_world.free_all()
 
@@ -44,32 +45,8 @@ func _accept_many(count: int, destination: String, airline: String) -> void:
 		assert_bool(_world.flights.accept_contract(terms)).is_true()
 
 
-func _label() -> Label:
-	return _hud.find_child("Departures", true, false) as Label
-
-
-func _panel_bottom() -> float:
-	var panel := _label().get_parent().get_parent() as Control
-	return panel.get_global_rect().end.y
-
-
-func test_five_contracts_still_fill_only_the_capped_lines() -> void:
-	_accept_many(5, "Rome", "Sunhop")
-	_hud.refresh()
-	var label := _label()
-	var lines := label.text.split("\n")
-	assert_int(lines.size()).is_equal(DepartureList.MAX_LINES)
-	# The clock is at 06:04: the 07:00 contract starts tomorrow, so today lists
-	# GMF101 and the four later contracts, and 5 - 2 shown remain.
-	assert_str(lines[DepartureList.MAX_LINES - 1]).is_equal("+3 more")
-	assert_int(label.autowrap_mode).is_equal(TextServer.AUTOWRAP_OFF)
-	assert_int(label.get_line_count()).is_equal(DepartureList.MAX_LINES)
-
-
-func test_long_names_do_not_wrap_into_extra_lines() -> void:
-	_accept_many(5, "Ulaanbaatar International", "Trans Continental Regional Airways")
-	_hud.refresh()
-	assert_int(_label().get_line_count()).is_equal(DepartureList.MAX_LINES)
+func _panel() -> Control:
+	return _hud.find_child("FlightPanel", false, false) as Control
 
 
 func test_the_panel_stays_clear_of_the_result_card_with_many_flights() -> void:
@@ -77,10 +54,86 @@ func test_the_panel_stays_clear_of_the_result_card_with_many_flights() -> void:
 	_hud.refresh()
 	await get_tree().process_frame
 	await get_tree().process_frame
-	var panel_bottom := _panel_bottom()
-	# Control: the panel was laid out, so it has a real height below the label.
-	assert_float(panel_bottom).is_greater(_label().get_global_rect().end.y)
+	var panel_bottom := _panel().get_global_rect().end.y
+	# Control: the panel was laid out, so it has a real height.
+	assert_float(_panel().size.y).is_greater(0.0)
 	_hud.refresh()
 	await get_tree().process_frame
 	var rail := (_hud.find_child("AlertStack", false, false) as Control).get_global_rect()
 	assert_float(rail.position.y).is_equal_approx(panel_bottom + HudLayout.GROUP_GAP, 0.5)
+
+
+## The Departures list is the one flight list since HUD 3b, so the guard the
+## clock panel's line-cap tests gave long names lives here: every rendered row
+## label trims with an ellipsis, never wraps, and stays one line tall, and a
+## day still lists at most DeparturesBoard.MAX_ROWS_PER_DAY rows then "+n more".
+func test_long_names_trim_in_the_departures_list_and_the_day_stays_capped() -> void:
+	# A bare FlightSim and clock, as TestDeparturesBoard builds them: at 22:00
+	# two gates take six flights tomorrow, 100 minutes apart.
+	var sim: FlightSim = auto_free(FlightSim.new())
+	var clock: SimClock = auto_free(SimClock.new())
+	sim.open_airport()
+	var tick := GameCalendar.tick_at(0, 22 * 60)
+	for t in range(sim.tick + 1, tick + 1):
+		sim.on_tick(t)
+	clock.tick = tick
+	sim.gate_source = func() -> Array[String]: return ["C", "D"] as Array[String]
+	for i in DeparturesBoard.MAX_ROWS_PER_DAY + 1:
+		var terms := TestFlightContracts.terms("L%d" % i, 7 * 60 + i * 100)
+		terms["destination"] = "Ulaanbaatar International"
+		terms["airline"] = "Trans Continental Regional Airways"
+		assert_bool(sim.accept_contract(terms)).is_true()
+	var board := DeparturesBoard.new()
+	board.settings_path = SaveTestKit.run_path("departures_cap_board")
+	board.flights = sim
+	board.clock = clock
+	add_child(board)
+	for i in 3:
+		await get_tree().process_frame
+	var rows := board.find_child("Rows", true, false)
+	var reference := Label.new()
+	reference.theme = BuildMenu.HUD_THEME
+	reference.text = "Ag"
+	add_child(reference)
+	await get_tree().process_frame
+	var one_line := reference.get_minimum_size().y
+	reference.free()
+	var trimmed := 0
+	var row_count := 0
+	for row in rows.get_children():
+		if not row is HBoxContainer or row.name == "Picker":
+			continue
+		var label := row.get_child(0) as Label
+		row_count += 1
+		assert_int(label.autowrap_mode).is_equal(TextServer.AUTOWRAP_OFF)
+		assert_int(label.text_overrun_behavior).is_equal(TextServer.OVERRUN_TRIM_ELLIPSIS)
+		assert_int(label.get_line_count()).is_equal(1)
+		assert_float(label.get_minimum_size().y).is_equal_approx(one_line, 0.5)
+		var font := label.get_theme_font("font")
+		var wide := font.get_string_size(label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, 16).x
+		if wide > label.size.x:
+			trimmed += 1
+	# Control: the long names really overflowed, so the ellipsis did the work.
+	assert_int(trimmed).is_greater(0)
+	# Each day lists at most MAX_ROWS_PER_DAY rows, then one "+n more".
+	var lines := board.shown_lines()
+	var tomorrow := lines.find(DeparturesBoard.TOMORROW_HEADING)
+	var days := [lines.slice(1, tomorrow), lines.slice(tomorrow + 1)]
+	var collapsed := 0
+	for day in days:
+		assert_int(day.size()).is_less_equal(DeparturesBoard.MAX_ROWS_PER_DAY + 1)
+		if (day[day.size() - 1] as String).ends_with(" more"):
+			collapsed += 1
+			assert_str(day[day.size() - 1]).starts_with("+")
+			assert_int(day.size()).is_equal(DeparturesBoard.MAX_ROWS_PER_DAY + 1)
+	assert_int(collapsed).is_greater(0)
+	# Pinned on the rendered rows: all six flights leave tomorrow, so five rows
+	# are drawn and a label reads "+1 more".
+	assert_int(row_count).is_equal(DeparturesBoard.MAX_ROWS_PER_DAY)
+	var more: Array[String] = []
+	for child in rows.get_children():
+		if child is Label and (child as Label).text.begins_with("+"):
+			more.append((child as Label).text)
+	assert_array(more).is_equal(["+1 more"])
+	DirAccess.remove_absolute(board.settings_path)
+	board.free()

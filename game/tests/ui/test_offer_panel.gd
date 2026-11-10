@@ -94,11 +94,28 @@ func test_a_refused_accept_shows_the_reason_and_keeps_the_offer() -> void:
 	var reason := _sim.accept_problem(TestFlightContracts.terms("O0N2", 660))
 	_panel.accept_button("O0N2").pressed.emit()
 	assert_str(reason).is_not_empty()
-	assert_str(_panel.message()).starts_with("Can't accept Gotta Air to Oslo: ")
-	assert_str(_panel.message()).not_contains("O0N")
+	assert_str(_panel.refusal_text("O0N2")).starts_with("Can't accept Gotta Air to Oslo: ")
+	assert_str(_panel.refusal_text("O0N2")).not_contains("O0N")
+	assert_str(_panel.message()).is_empty()
+	assert_bool(_panel.refusal_label("O0N2").is_visible_in_tree()).is_true()
+	assert_bool(_panel.card("O0N2").is_ancestor_of(_panel.refusal_label("O0N2"))).is_true()
+	assert_str(_panel.refusal_text("O0N3")).is_empty()
+	assert_bool(_panel.refusal_label("O0N3").visible).is_false()
 	assert_array(_sim.contract_ids()).is_equal(["O0N1"])
 	assert_str(_desk.board.offer_of("O0N2")["status"]).is_equal(OfferBoard.OPEN)
 	assert_array(_panel.card_ids()).is_equal(["O0N2", "O0N3"])
+
+
+func test_a_refusal_is_gone_when_the_sheet_is_closed_and_opened_again() -> void:
+	_panel.open()
+	_panel.accept_button("O0N1").pressed.emit()
+	_panel.accept_button("O0N2").pressed.emit()
+	assert_str(_panel.refusal_text("O0N2")).is_not_empty()
+	_panel.close()
+	assert_str(_panel.refusal_text("O0N2")).is_empty()
+	_panel.open()
+	assert_str(_panel.refusal_text("O0N2")).is_empty()
+	assert_bool(_panel.refusal_label("O0N2").visible).is_false()
 
 
 func test_a_refused_offer_can_still_be_declined() -> void:

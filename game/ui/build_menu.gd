@@ -1,9 +1,11 @@
+# gdlint:disable = max-public-methods
 class_name BuildMenu
 extends CanvasLayer
 ## The build menu (decision hud-layout-bottom-category-bar-with-an-item-tray-time-and-fl):
 ## a bar of categories along the bottom edge; clicking one opens a tray of
 ## item cards above it (thumbnail, name, size, price, key hint); the status
-## and refusal text sits at one fixed place above the tray's reserved space;
+## and refusal text and the cost line share one card at a fixed place above the
+## tray's reserved space (HUD 5/7);
 ## a money slot sits top-left. BuildMode keeps the tool logic: the menu calls
 ## set_tool() and rotate_facing() and follows tool_changed and status_changed.
 ## Opening a category picks no tool; picking a card does, and a tool picked by
@@ -68,15 +70,15 @@ const LOCKED_TINT := Color(0.5, 0.5, 0.55)
 const MONEY_TEXT := "Money  --"
 
 ## Geometry in pixels, measured up from the bottom edge.
-const MARGIN := 8.0
-const BAR_H := 52.0
-const GAP := 6.0
+const MARGIN := float(HudLayout.MARGIN)
+const BAR_H := float(HudLayout.BAR_H)
+const GAP := float(HudLayout.GAP)
 const TRAY_H := 196.0
-const STATUS_H := 52.0
-const COST_H := 26.0
+## The status card's height; it grows upward only while a long hold message wraps.
+const STATUS_H := float(HudLayout.BUTTON_H)
 ## Width of the centre column the tray and status line live in; PassengerHud
 ## keeps the follow text left of it.
-const COLUMN_W := 640.0
+const COLUMN_W := float(HudLayout.TRAY_W)
 const CARD_SIZE := Vector2(112.0, 176.0)
 const THUMB_SIZE := 72.0
 ## The card hint labels' font size, as HudHint sets it.
@@ -129,7 +131,12 @@ var _tray := PanelContainer.new()
 var _rows: Array[HBoxContainer] = []
 var _category_buttons: Array[Button] = []
 var _cards: Dictionary = {}
+## The status line and the cost line on one card (HUD 5/7): the status text,
+## the "R rotate" hint (RotateHint) in a slot of its own so a long refusal never
+## pushes it onto a second line, and the cost.
+var _status_card := PanelContainer.new()
 var _status := Label.new()
+var _rotate_hint := Label.new()
 var _money := Label.new()
 var _money_slot := MoneySlot.new()
 var _cost := Label.new()
@@ -151,7 +158,7 @@ var _holding := false
 ## Counts grants, so only the latest grant's timer ends the hold.
 var _hold_generation := 0
 var _held_status := ""
-## The latest status text, before the rotate hint (RotateHint) is added to it.
+## The latest status text; the rotate hint has its own label.
 var _raw_status := ""
 ## True while the hold shows a rescue grant's message, false for a wage one.
 var _hold_is_grant := false
@@ -228,9 +235,8 @@ func _ready() -> void:
 	add_child(build_frame)
 	BuildMenuLayout.build_bar(self)
 	BuildMenuLayout.build_tray(self)
-	BuildMenuLayout.build_status(self)
+	BuildMenuLayout.build_status_card(self)
 	BuildMenuLayout.build_money(self)
-	BuildMenuLayout.build_cost(self)
 	templates_page.attach(self)
 	add_child(_room_panel)
 	_ghost_reason.build_mode = build_mode
@@ -275,8 +281,30 @@ func _ready() -> void:
 		_money_slot.watch(day_ledger, settlement)
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	refresh_preview()
+	var ghost := Rect2()
+	if build_mode != null:
+		ghost = GhostBounds.build_rect(build_mode, get_viewport().get_camera_3d())
+	fade_for(ghost, delta)
+
+
+## Fades the status card to StaffPanel.FADED_ALPHA while `ghost` (the build
+## ghost's bounds on screen, empty when there is none) overlaps it, and back to
+## full opacity when it does not, `delta` seconds of the fade (decision
+## status-banner-fades-under-the-build-ghost-room-labels-slide). The card never
+## takes a click, and a faded card still counts as an obstacle for the refusal
+## card's nudge.
+func fade_for(ghost: Rect2, delta: float) -> void:
+	var covered := (
+		ghost.has_area()
+		and _status_card.visible
+		and _status_card.get_global_rect().intersects(ghost)
+	)
+	var target := StaffPanel.FADED_ALPHA if covered else 1.0
+	_status_card.modulate.a = move_toward(
+		_status_card.modulate.a, target, delta * StaffPanel.FADE_SPEED
+	)
 
 
 ## The open category, or NO_CATEGORY when the tray is closed.
@@ -344,6 +372,16 @@ func status_label() -> Label:
 	return _status
 
 
+## The one card the status line, the rotate hint and the cost line sit on.
+func status_card() -> PanelContainer:
+	return _status_card
+
+
+## The "R rotate" hint, in its own slot at the end of the status line.
+func rotate_hint_label() -> Label:
+	return _rotate_hint
+
+
 func money_label() -> Label:
 	return _money
 
@@ -389,12 +427,17 @@ func preview_text() -> String:
 ## the pointer is over a cell of the grid (or a rectangle drag is held by the
 ## pointer being over the HUD, where the line says why), so
 ## a stale hint such as "Facing auto" or the "Outside the building area"
-## refusal does not stay over the world. A grant message is never hidden.
+## refusal does not stay over the world. A grant message is never hidden. The
+## card shows while any of its three parts does.
 func refresh_preview() -> void:
 	_cost.text = preview_text()
 	_cost.visible = _cost.text != ""
 	_status.visible = (
 		_holding or build_mode == null or _pointer_on_grid() or build_mode.drag_held_by_ui()
+	)
+	_rotate_hint.visible = (_status.visible and not _holding and RotateHint.applies(build_mode))
+	_status_card.visible = (
+		(_status.visible and _status.text != "") or _rotate_hint.visible or _cost.visible
 	)
 
 
@@ -508,11 +551,25 @@ func _on_status_changed(text: String) -> void:
 	_show_status()
 
 
-## The status line: the latest status text and, while a piece or a template that
-## can turn is armed, the "R rotate" hint (RotateHint). A hold keeps its message.
+## The status line: the latest status text, and the "R rotate" hint (RotateHint)
+## in its own label while a piece or a template that can turn is armed. A hold
+## keeps its message.
 func _show_status() -> void:
 	if not _holding:
-		_status.text = RotateHint.compose(_raw_status, build_mode)
+		_status.text = _raw_status
+		_wrap_status(false)
+		_rotate_hint.visible = _status.visible and RotateHint.applies(build_mode)
+
+
+## Wraps the status text onto up to three lines (a held message), or keeps it on
+## one line and cuts it short with an ellipsis (every other status). A clipped
+## label reports no height of its own, so the card could not grow for the wrap.
+func _wrap_status(wrap: bool) -> void:
+	_status.autowrap_mode = (TextServer.AUTOWRAP_WORD_SMART if wrap else TextServer.AUTOWRAP_OFF)
+	_status.clip_text = not wrap
+	_status.text_overrun_behavior = (
+		TextServer.OVERRUN_NO_TRIMMING if wrap else TextServer.OVERRUN_TRIM_ELLIPSIS
+	)
 
 
 ## A rescue message always wins the status line. A wages-paid message it cuts
@@ -529,6 +586,10 @@ func _start_hold(message: String, is_grant: bool) -> void:
 	_holding = true
 	_hold_is_grant = is_grant
 	_status.text = message
+	# A held message is long on purpose (a rescue grant); it wraps and the card
+	# grows upward instead of cutting it short.
+	_wrap_status(true)
+	_rotate_hint.visible = false
 	_hold_generation += 1
 	var timer := get_tree().create_timer(grant_hold_s)
 	timer.timeout.connect(_on_hold_timeout.bind(_hold_generation))
@@ -611,10 +672,18 @@ func _sync() -> void:
 	build_session.set_building(_open != NO_CATEGORY or tool != BuildMode.Tool.NONE)
 
 
-## Height, from the bottom edge, of the top of the tray, status and cost stack:
+## Height, from the bottom edge, of the top of the tray and status card stack:
 ## what a card that must not cover any of them docks above.
 static func tray_stack_top() -> float:
-	return MARGIN + BAR_H + GAP + TRAY_H + GAP + STATUS_H + COST_H
+	return MARGIN + BAR_H + GAP + TRAY_H + GAP + STATUS_H
+
+
+## tray_stack_top() with the status card's height as it is now: a held rescue or
+## wages message wraps and grows the card upward, and what docks above the stack
+## must clear that too. A hidden card reserves its usual STATUS_H.
+func stack_top() -> float:
+	var card_h := _status_card.size.y if _status_card.visible else STATUS_H
+	return MARGIN + BAR_H + GAP + TRAY_H + GAP + maxf(STATUS_H, card_h)
 
 
 ## Anchors a control to the bottom centre with its bottom edge `bottom` px up;

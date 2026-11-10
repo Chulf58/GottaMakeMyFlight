@@ -53,7 +53,8 @@ func test_the_button_sits_outside_the_bar_and_opens_the_page() -> void:
 	# Changed from BuildMenu.MARGIN (8): the panel sits on the 16 px grid margin
 	# (decision hud-grid-and-rails-one-spacing-grid-centred-top-row-right-ra).
 	assert_float(dock.position.x).is_equal(float(HudLayout.MARGIN))
-	assert_float(dock.end.y).is_equal(bar.position.y - BuildMenu.GAP)
+	# HUD 5/7: on the bar's baseline, not above the bar.
+	assert_float(dock.end.y).is_equal(bar.end.y)
 	_mode.set_tool(BuildMode.Tool.FLOOR)
 	_menu.press_category(BuildMenu.TEMPLATES_PAGE)
 	assert_bool(_menu.is_tray_open()).is_true()
@@ -85,15 +86,14 @@ func test_save_room_then_its_card_arms_the_paste_with_status_and_cost() -> void:
 	assert_int(_mode.templates.armed).is_equal(0)
 	assert_bool(_page.card(0).button_pressed).is_true()
 	assert_bool(_page.visible).is_true()
-	assert_str(_menu.status_label().text).is_equal(
-		TemplatePaste.PLACE_HINT % "Cafe 5x4" + "  " + RotateHint.TEXT
-	)
+	# The "R rotate" hint has its own label on the status card (HUD 5/7), so the
+	# line is the paste's text alone while the hint applies.
+	assert_bool(RotateHint.applies(_mode)).is_true()
+	assert_str(_menu.status_label().text).is_equal(TemplatePaste.PLACE_HINT % "Cafe 5x4")
 	# BuildMode's own hover clears its line with no tool; the paste's text stays.
 	_mode.status_changed.emit("")
-	assert_str(_menu.status_label().text).is_equal(
-		TemplatePaste.PLACE_HINT % "Cafe 5x4" + "  " + RotateHint.TEXT
-	)
+	assert_str(_menu.status_label().text).is_equal(TemplatePaste.PLACE_HINT % "Cafe 5x4")
 	_mode.status_changed.emit(UndoStack.UNDONE)
-	assert_str(_menu.status_label().text).is_equal(UndoStack.UNDONE + "  " + RotateHint.TEXT)
+	assert_str(_menu.status_label().text).is_equal(UndoStack.UNDONE)
 	_menu.press_category(BuildMenu.TEMPLATES_PAGE)
 	assert_int(_mode.templates.armed).is_equal(-1)

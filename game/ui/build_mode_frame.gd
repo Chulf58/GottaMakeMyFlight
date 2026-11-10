@@ -4,14 +4,13 @@ extends Control
 ## hazard-stripe border round the screen edges and a roadworks-style
 ## "Build mode" sign in the first slot of the centred top row (TopRow), left of
 ## Runway and Offers. Hidden until set_building(true). Every part
-## ignores the mouse, and the border is BuildMenu.MARGIN thick so it stays off
-## the bottom bar, the money slot and the flight panel.
+## ignores the mouse, and the border is one grid unit (HudLayout.UNIT) thick, so it
+## lies inside the HUD's 16 px margin and stays off the bottom bar, the money slot
+## and the flight panel.
 
 const HUD_THEME := preload("res://ui/hud_theme.tres")
 const STRIPE_SHADER := preload("res://ui/build_mode_stripes.gdshader")
-## BuildMenu.MARGIN (BuildMenu names this class, so it cannot be read back here;
-## test_build_mode_frame.gd holds the two equal).
-const THICKNESS := 8.0
+const THICKNESS := float(HudLayout.UNIT)
 const STRIPE_PERIOD := 22.0
 const SIGN_TEXT := "Build mode"
 const YELLOW := Color(0.99, 0.8, 0.1)
