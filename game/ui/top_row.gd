@@ -15,6 +15,9 @@ const OFFERS_SLOT := 2
 const SLOT_COUNT := 3
 ## A sheet's group: every owner of a sheet joins it, so one open closes the rest.
 const SHEET_GROUP := &"top_row_sheets"
+## The sheets' CanvasLayer: above the HUD's layer 2, so an open sheet is not
+## covered by the checklist card (StaffPanel) or an alert, and below the intro.
+const SHEET_LAYER := 3
 const SLOT_SIZE := Vector2(HudLayout.TOGGLE_W, HudLayout.BUTTON_H)
 const SHEET_W := float(HudLayout.SHEET_W)
 const TOP := float(HudLayout.MARGIN)

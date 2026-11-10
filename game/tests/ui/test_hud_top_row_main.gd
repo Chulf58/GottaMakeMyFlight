@@ -45,6 +45,16 @@ func test_the_top_row_windows_are_all_button_height() -> void:
 		assert_float(_rect(node_name).size.y).is_equal_approx(float(HudLayout.BUTTON_H), 0.5)
 
 
+## The checklist card (StaffPanel, layer 2) draws over the top centre; a sheet
+## opened from the row must draw over it, and under the intro.
+func test_the_sheets_draw_over_the_checklist_card_and_under_the_intro() -> void:
+	var staff := _main.get_node("StaffPanel") as CanvasLayer
+	for owner_name in ["RunwayCard", "OfferPanel"]:
+		var sheet_layer := (_main.get_node(owner_name) as CanvasLayer).layer
+		assert_int(sheet_layer).is_greater(staff.layer)
+		assert_int(sheet_layer).is_less(PassengerHud.INTRO_LAYER)
+
+
 func test_an_open_sheet_ends_left_of_the_clock_panel() -> void:
 	var clock_panel := _rect("FlightPanel")
 	for pair in [["RunwayCard", "RunwaySheet"], ["OfferPanel", "OfferSheet"]]:

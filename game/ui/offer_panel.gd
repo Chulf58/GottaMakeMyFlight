@@ -135,7 +135,7 @@ func _ready() -> void:
 		set_process(false)
 		set_process_unhandled_input(false)
 		return
-	layer = 2
+	layer = TopRow.SHEET_LAYER
 	add_to_group(TopRow.SHEET_GROUP)
 	_build()
 	desk.board.changed.connect(_refresh)
