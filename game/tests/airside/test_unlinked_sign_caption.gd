@@ -169,13 +169,9 @@ func test_a_seat_row_behind_the_sign_lifts_the_caption_over_it() -> void:
 	assert_float(foot.y - caption.offset.y).is_equal_approx(placed[0].end.y, 0.01)
 
 
-func test_a_wall_gap_sign_over_the_desk_lifts_the_caption_over_it() -> void:
-	_look(25.0, 54.0)
-	_view.layout_signs()
-	var caption := _view.caption_of(_view.signs()[0])
-	var over := MissMarkers.SIGN_PX + MissMarkers.CAPTION_GAP_PX
-	# The control: with no wall-gap sign the caption stands right over its sign.
-	assert_float(caption.offset.y).is_equal(over)
+## A wall-gap mark as GapMarkers draws it: a fixed-size sign standing on its
+## point and a "Wall gap" caption hung CAPTION_GAP_PX under its foot.
+func _gap_marks(at: Vector3) -> Node3D:
 	var gaps := Node3D.new()
 	_port.add_child(gaps)
 	var gap_sign := Sprite3D.new()
@@ -185,19 +181,74 @@ func test_a_wall_gap_sign_over_the_desk_lifts_the_caption_over_it() -> void:
 	gap_sign.offset = Vector2(0.0, MarkerIcons.SIZE / 2.0)
 	gap_sign.pixel_size = _view.signs()[0].pixel_size
 	gaps.add_child(gap_sign)
-	# A sign's height (SIGN_PX) over the unlinked sign: where the caption was.
+	gap_sign.global_position = at
+	var label := Label3D.new()
+	label.text = "Wall gap"
+	label.fixed_size = true
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.pixel_size = _view.caption_of(_view.signs()[0]).pixel_size
+	label.font_size = MissMarkers.CAPTION_FONT
+	label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	label.offset = Vector2(0.0, -MissMarkers.CAPTION_GAP_PX)
+	gap_sign.add_child(label)
+	return gaps
+
+
+## The unlinked sign's icon on screen as drawn: its point, slid by its offset.
+func _drawn_icon() -> Rect2:
 	var marker: Sprite3D = _view.signs()[0]
+	var slide := marker.offset.x * MissMarkers.SIGN_PX / MarkerIcons.SIZE
+	return Rect2(_icon().position + Vector2(slide, 0.0), _icon().size)
+
+
+func test_a_wall_gap_sign_on_the_unlinked_sign_moves_it_sideways() -> void:
+	_look(25.0, 54.0)
+	_view.layout_signs()
+	var marker: Sprite3D = _view.signs()[0]
+	var caption := _view.caption_of(marker)
+	# A wall-gap sign up and to the right, its caption over the grey sign, as
+	# taking the gate's exit away leaves it (round 1 plate after_b_close_up).
 	var foot := _camera.unproject_position(marker.global_position)
 	var depth := _camera.global_position.distance_to(marker.global_position)
-	var lifted := foot - Vector2(0.0, MissMarkers.SIGN_PX + MissMarkers.CAPTION_GAP_PX)
-	gap_sign.global_position = _camera.project_position(lifted, depth)
+	var at := _camera.project_position(foot + Vector2(20.0, -40.0), depth)
+	var gaps := _gap_marks(at)
+	var marks := GateLinksView.marker_rects(gaps, _camera, _to_output())
+	var unshifted := _icon()
+	# The control: unshifted, the grey sign meets the wall-gap sign and its
+	# caption.
+	assert_int(marks.size()).is_equal(2)
+	assert_bool(unshifted.intersects(marks[0])).is_true()
+	assert_bool(unshifted.intersects(marks[1])).is_true()
 	_view.gaps = gaps
 	var placed := _view.layout_signs()
-	var icon: Rect2 = GateLinksView.marker_rects(gaps, _camera, _to_output())[0]
-	print("gap sign %s placed %s offset %.1f" % [icon, placed, caption.offset.y])
-	assert_float(caption.offset.y).is_greater(over)
-	assert_bool(placed[0].grow(MissMarkers.CAPTION_MARGIN_PX).intersects(icon)).is_false()
+	var icon := _drawn_icon()
+	var boxes := _boxes()
+	print(
+		(
+			"marks %s unshifted %s icon %s caption %s offset %s boxes %s"
+			% [marks, unshifted, icon, placed, caption.offset, boxes]
+		)
+	)
+	# The grey sign moved sideways, away from the wall-gap sign (to the left).
+	assert_float(icon.position.x).is_less(unshifted.position.x)
+	assert_float(icon.position.y).is_equal_approx(unshifted.position.y, 0.01)
+	for mark in marks:
+		assert_bool(icon.intersects(mark)).is_false()
+		assert_bool(placed[0].intersects(mark)).is_false()
+	# Its caption is right over it: no lift, slid with it.
+	assert_float(caption.offset.y).is_equal(GateLinksView.SIGN_OVER_PX)
+	assert_float(caption.offset.x).is_equal_approx(icon.position.x - unshifted.position.x, 0.01)
+	assert_float(placed[0].get_center().x).is_equal_approx(icon.get_center().x, 0.01)
+	var gap := icon.position.y - placed[0].end.y
+	assert_float(gap).is_equal_approx(MissMarkers.CAPTION_GAP_PX, 0.01)
+	# Both stay clear of the desk and the seat rows.
+	for box in boxes:
+		assert_bool(placed[0].grow(MissMarkers.CAPTION_MARGIN_PX).intersects(box)).is_false()
+	for box in boxes.slice(1):
+		assert_bool(icon.intersects(box)).is_false()
+	# With the wall-gap mark gone the sign goes back over its desk.
 	_view.gaps = null
 	gaps.free()
 	_view.layout_signs()
-	assert_float(caption.offset.y).is_equal(over)
+	assert_float(marker.offset.x).is_equal(0.0)
+	assert_vector(caption.offset).is_equal(Vector2(0.0, GateLinksView.SIGN_OVER_PX))

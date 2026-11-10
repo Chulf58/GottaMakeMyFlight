@@ -21,9 +21,14 @@ extends SceneTree
 ## desk's or the seats' screen box (the control); an after plate's caption that
 ## meets either prints PROBE_FAIL and the run exits 1. A contact sheet of the
 ## four is saved last. No click is pushed. A guard thread ends a hang.
+## Round 2 (user ruling "Separate the two signs"): plates go to round2/. A
+## before plate's unshifted grey sign must meet the wall-gap sign or its
+## caption (the control); on an after plate the grey sign as drawn must meet
+## neither and its caption must stand right over it (offset SIGN_OVER_PX,
+## centred on the slid sign), else PROBE_FAIL.
 
 const MAIN := "res://main/main.tscn"
-const OUT_REL := "res://../tools/blender/out/gate-caption"
+const OUT_REL := "res://../tools/blender/out/gate-caption/round2"
 const HANG_LIMIT_MS := 60000
 const TOTAL_LIMIT_MS := 300000
 const MARGIN_PX := 8.0
@@ -96,6 +101,7 @@ func _run() -> void:
 	caption.text = OLD_TEXT
 	caption.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	caption.offset = Vector2(0.0, -MissMarkers.CAPTION_GAP_PX)
+	marker.offset.x = 0.0
 	for shot in [["before_a_play_distance", 80.0], ["before_b_close_up", 25.0]]:
 		await _plate(shot[0], shot[1], true)
 		if _done:
@@ -190,7 +196,7 @@ func _caption_rect(marker: Sprite3D, caption: Label3D, to_output: float) -> Rect
 	var y := foot.y - caption.offset.y
 	if caption.vertical_alignment == VERTICAL_ALIGNMENT_BOTTOM:
 		y -= size.y
-	return Rect2(foot.x - size.x / 2.0, y, size.x, size.y)
+	return Rect2(foot.x + caption.offset.x - size.x / 2.0, y, size.x, size.y)
 
 
 func _plate(label: String, distance: float, before: bool) -> void:
@@ -262,6 +268,31 @@ func _plate(label: String, distance: float, before: bool) -> void:
 	if not before and not gap_hits.is_empty():
 		print("PROBE_FAIL %s: the caption meets a wall-gap mark" % label)
 		_overlap = true
+	# Round 2: the grey sign as drawn (slid by its offset) meets no wall-gap
+	# mark, and its caption stands right over it (no lift).
+	var slide := marker.offset.x * MissMarkers.SIGN_PX / MarkerIcons.SIZE
+	var foot := _cam.unproject_position(marker.global_position) * to_output
+	var side := MissMarkers.SIGN_PX
+	var icon := Rect2(foot.x + slide - side / 2.0, foot.y - side, side, side)
+	var icon_hits := gap_rects.filter(func(other: Rect2) -> bool: return icon.intersects(other))
+	print("  GREY SIGN %s slid %.1f, meets wall-gap marks %s" % [icon, slide, icon_hits])
+	if before and icon_hits.is_empty():
+		_fail("%s: the control (unshifted sign) meets no wall-gap mark" % label)
+		return
+	if not before:
+		var right_over := (
+			is_equal_approx(caption.offset.y, GateLinksView.SIGN_OVER_PX)
+			and is_equal_approx(rect.get_center().x, icon.get_center().x)
+		)
+		print("  CAPTION right over its sign %s (offset %s)" % [right_over, caption.offset])
+		if not icon_hits.is_empty() or not right_over:
+			print(
+				(
+					"PROBE_FAIL %s: the grey sign meets a wall-gap mark or its caption is lifted"
+					% label
+				)
+			)
+			_overlap = true
 	await RenderingServer.frame_post_draw
 	var path := _out_dir.path_join(label + ".png")
 	var err := root.get_texture().get_image().save_png(path)
