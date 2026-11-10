@@ -41,6 +41,8 @@ extends VBoxContainer
 
 ## A card was clicked and the camera sent to `target`.
 signal jumped(target: Vector3)
+## reset() has dropped every card and notice; a poster of notices posts again.
+signal reset_done
 
 const SETTING_KEY := "alert_cards"
 ## The group the rail joins, so the Offers panel (a sibling layer) can find it.
@@ -158,6 +160,7 @@ func reset() -> void:
 	_shown_revision = _board.revision
 	_sync_cards()
 	_sync_tray()
+	reset_done.emit()
 
 
 ## Reads every cause, updates the cards and the tray. Does nothing without a sim.

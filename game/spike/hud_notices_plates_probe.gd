@@ -5,7 +5,8 @@ extends SceneTree
 ## two stars through its own record_passenger, then:
 ##   01_rail_notices: the coral rating warning and an ended-contract card on the
 ##      right rail, newest first (ended, then warning)
-##   02_offers_sheet: the Offers sheet open with offers only, no warning line
+##   02_offers_sheet: the Offers sheet open with offers only, no warning line,
+##      and a refused Accept showing its reason inline on its own card
 ## Every plate prints what it compared: the rail on the margin RAIL_W wide, each
 ## notice card visible, inside the view and clear of the clock panel, drawn in
 ## the theme's HudCardCoral fill, the sheet's offer cards inside the view and
@@ -75,6 +76,10 @@ func _run() -> void:
 		_desk.board.ensure_day(0, RandomNumberGenerator.new())
 	_panel.open()
 	await _frames(10)
+	# Accepting the second offer on the start world (no gate) is refused: the
+	# reason shows on that card only.
+	_panel.accept_button(_panel.card_ids()[1]).pressed.emit()
+	await _frames(10)
 	await _plate_sheet("02_offers_sheet")
 	_main.queue_free()
 	await process_frame
@@ -123,6 +128,22 @@ func _plate_sheet(label: String) -> void:
 		print("PLATE %s card %s rect=%s" % [label, id, r])
 		if not Rect2(Vector2.ZERO, view).encloses(r):
 			_invalid("%s card %s leaves the view" % [label, id])
+	for i in ids.size():
+		var refusal := _panel.refusal_label(ids[i])
+		var inside := _panel.card(ids[i]).is_ancestor_of(refusal)
+		var rect := refusal.get_global_rect()
+		print(
+			(
+				"PLATE %s refusal %s shown=%s inside=%s rect=%s '%s'"
+				% [label, ids[i], refusal.is_visible_in_tree(), inside, rect, refusal.text]
+			)
+		)
+		if not inside or refusal.is_visible_in_tree() != (i == 1):
+			_invalid("%s refusal of card %d is wrong" % [label, i])
+		if i == 1 and not _panel.card(ids[i]).get_global_rect().encloses(rect):
+			_invalid("%s refusal leaves its card" % label)
+	if _panel.message() != "":
+		_invalid("%s the sheet-wide line says %s" % [label, _panel.message()])
 	for node in _panel.find_children("*", "Label", true, false):
 		var text := (node as Label).text
 		if text.contains("below") or text.contains("ended its contract"):

@@ -10,7 +10,7 @@ extends CanvasLayer
 ## cards, a dark navy outline and text, a Toon accent per element.
 ##
 ## Accept asks FlightSim.accept_problem first, so a refusal (a gate clash, say)
-## shows its reason on the sheet and the offer stays open; otherwise the board
+## shows its reason on that offer's own card and the offer stays open; otherwise the board
 ## turns the offer into a contract. The sheet rebuilds whenever the board
 ## changes, so midnight expiry and the new day's offers appear on their own.
 ##
@@ -62,12 +62,15 @@ var _message: Label
 ## ("" while none is up); the ending line the tooltip adds under the warning.
 var _warning_text := ""
 var _warning_posted := ""
+## Instance id of the rail the warning was posted to (0 before any).
+var _posted_rail := 0
 var _ended_text := ""
 var _offers_waiting := false
 var _card_nodes: Dictionary = {}
 var _accept_buttons: Dictionary = {}
 var _decline_buttons: Dictionary = {}
 var _departs_labels: Dictionary = {}
+var _refusal_labels: Dictionary = {}
 var _noted_tick := -1
 ## True from open() until the player changes the clock or the sheet closes.
 var _holding_clock := false
@@ -265,8 +268,18 @@ func warning_text() -> String:
 	return _warning_text
 
 
-## What the sheet says under the cards: the last accept's result or refusal,
-## or EMPTY_TEXT when no offer is open.
+## The refusal shown on offer `id`'s own card (a clash, say), "" when it shows
+## none.
+func refusal_text(id: String) -> String:
+	return (_refusal_labels[id] as Label).text
+
+
+func refusal_label(id: String) -> Label:
+	return _refusal_labels[id]
+
+
+## What the sheet says under the cards: the last accept's confirmation, or
+## EMPTY_TEXT when no offer is open. A refusal is on its card, not here.
 func message() -> String:
 	return _message.text
 
@@ -345,6 +358,7 @@ func _refresh() -> void:
 	_accept_buttons.clear()
 	_decline_buttons.clear()
 	_departs_labels.clear()
+	_refusal_labels.clear()
 	var offers := desk.board.open_offers()
 	for offer in offers:
 		_add_card(offer)
@@ -407,11 +421,24 @@ func _on_contract_ended(contract: Dictionary) -> void:
 	_refresh_warning()
 
 
-## The right rail, found through its group the first time it is needed.
+## The right rail, found through its group the first time it is needed. A rail
+## other than the one the warning was posted to starts the warning again: it has
+## no card, and the old rail's click dismissal does not carry over.
 func _rail() -> AlertStack:
 	if not is_instance_valid(alerts):
 		alerts = get_tree().get_first_node_in_group(AlertStack.GROUP) as AlertStack
+	if alerts != null and alerts.get_instance_id() != _posted_rail:
+		_posted_rail = alerts.get_instance_id()
+		_warning_posted = ""
+		alerts.reset_done.connect(_on_rail_reset)
 	return alerts
+
+
+## The rail dropped every card (a load or a new world): the warning, if the
+## rating still calls for one, goes up again.
+func _on_rail_reset() -> void:
+	_warning_posted = ""
+	_refresh_warning()
 
 
 ## A coral notice that stays on the rail until clicked, with its history line.
@@ -473,6 +500,14 @@ func _add_card(offer: Dictionary) -> void:
 		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		_style_label(label, &"HudTitle" if i == 0 else &"HudSmall")
 		texts.add_child(label)
+	var refusal := Label.new()
+	refusal.name = "Refusal_%s" % id
+	refusal.visible = false
+	refusal.custom_minimum_size = Vector2(CARD_TEXT_W, 0.0)
+	refusal.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_style_label(refusal, &"HudProblemText")
+	texts.add_child(refusal)
+	_refusal_labels[id] = refusal
 	var buttons := VBoxContainer.new()
 	row.add_child(buttons)
 	var accept := _card_button("Accept", &"HudButtonGreen", id)
@@ -499,12 +534,12 @@ func _on_accept(id: String) -> void:
 	var offer := desk.board.offer_of(id)
 	var problem := flights.accept_problem(OfferBoard.terms_of(offer))
 	if problem != "":
-		_say(
+		_refuse(
+			id,
 			(
 				"Can't accept %s to %s: %s"
 				% [offer["airline"], offer["destination"], _in_words(problem)]
-			),
-			&"HudProblemText"
+			)
 		)
 		return
 	var note := _note_for(offer)
@@ -528,10 +563,20 @@ func _in_words(problem: String) -> String:
 
 
 ## Shows `text` under the cards, hiding the line when it is empty.
-func _say(text: String, variation := &"HudSmall") -> void:
+func _say(text: String) -> void:
 	_message.text = text
 	_message.visible = text != ""
-	_message.theme_type_variation = variation
+
+
+## Shows a refusal on the offer's own card, in place of any refusal on another.
+func _refuse(id: String, text: String) -> void:
+	_say("")
+	for other: String in _refusal_labels:
+		(_refusal_labels[other] as Label).text = ""
+		(_refusal_labels[other] as Label).visible = false
+	var label: Label = _refusal_labels[id]
+	label.text = text
+	label.visible = true
 
 
 func _on_decline(id: String) -> void:
