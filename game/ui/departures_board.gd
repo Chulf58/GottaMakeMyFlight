@@ -35,11 +35,12 @@ extends Control
 ## board is built. On is the default. B is free of the build tool keys 1 to 0,
 ## the speed keys (Space, Shift+1/2/3) and the camera keys (WASD, Q, E, Home).
 ##
-## While a passenger is inspected the whole board, its toggle too, steps aside
-## for the inspect card (step_aside(), decision passenger-inspect-thoughts-
-## recorded-at-sim-outcomes-saved-pin-marks-where point 6, user ruling "Card
-## replaces board"); B still turns the setting on and off meanwhile, and the
-## board comes back as that setting says when the passenger is deselected.
+## While a passenger is inspected the list steps aside for the inspect card
+## (step_aside(), decision passenger-inspect-thoughts-recorded-at-sim-outcomes-
+## saved-pin-marks-where point 6, user ruling "Card replaces board", which means
+## the list: the toggle keeps its column slot, conductor ruling for HUD 7/7);
+## B still turns the setting on and off meanwhile, and the list comes back as
+## that setting says when the passenger is deselected.
 
 ## The input action for the toggle key, bound to B in project.godot.
 const ACTION := &"toggle_departures_board"
@@ -66,6 +67,8 @@ var passengers: PassengerSim
 var settings_path := SETTINGS_PATH
 
 var _shown := true
+## True while the inspect card has the list stepped aside (step_aside()).
+var _aside := false
 var _toggle := Button.new()
 var _panel := PanelContainer.new()
 var _counts := Label.new()
@@ -189,10 +192,19 @@ func _ready() -> void:
 	refresh()
 
 
-## Hides the whole board while `aside` (PassengerHud, while the inspect card
-## shows) and brings it back after; the on/off setting is left as it is.
+## Hides the list while `aside` (PassengerHud, while the inspect card shows)
+## and brings it back after, as the setting says; the toggle keeps its column
+## slot, and the on/off setting is left as it is.
 func step_aside(aside: bool) -> void:
-	visible = not aside
+	if aside == _aside:
+		return
+	_aside = aside
+	_apply_shown()
+
+
+## True while the inspect card has the list stepped aside.
+func is_aside() -> bool:
+	return _aside
 
 
 ## True while the panel is on.
@@ -455,7 +467,7 @@ func _shortcut_input(event: InputEvent) -> void:
 
 
 func _apply_shown() -> void:
-	_panel.visible = _shown
+	_panel.visible = _shown and not _aside
 	_toggle.set_pressed_no_signal(_shown)
 	if not _shown:
 		_lines = PackedStringArray()

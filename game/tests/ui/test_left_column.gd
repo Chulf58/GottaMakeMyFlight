@@ -129,6 +129,32 @@ func test_reset_hints_is_the_column_button_under_hints() -> void:
 	assert_float(_rect("DeparturesPanel").position.y).is_greater_equal(reset.end.y)
 
 
+## HUD 7/7 (board 3bd42402, conductor ruling: "Card replaces board" means the
+## list): while the inspect card has the board stepped aside, the Departures
+## toggle keeps its column slot and only the list hides.
+func test_stepping_aside_hides_the_list_and_keeps_the_toggle_in_its_slot() -> void:
+	var board := _control("DeparturesBoard") as DeparturesBoard
+	await _settle()
+	# Read at once: the HUD's refresh steps the board back while no card shows.
+	board.step_aside(true)
+	var toggle := _control("DeparturesToggle")
+	var rect := toggle.get_global_rect()
+	var list_shown := _control("DeparturesPanel").is_visible_in_tree()
+	var toggle_shown := toggle.is_visible_in_tree()
+	print("ASIDE toggle=%s visible=%s list=%s" % [rect, toggle_shown, list_shown])
+	board.step_aside(false)
+	assert_bool(toggle_shown).is_true()
+	assert_bool(list_shown).is_false()
+	assert_float(rect.position.x).is_equal_approx(HudLayout.MARGIN, 0.5)
+	assert_float(rect.position.y).is_equal_approx(
+		LeftColumn.slot_top(LeftColumn.SLOT_DEPARTURES), 0.5
+	)
+	assert_float(rect.size.x).is_equal_approx(HudLayout.TOGGLE_W, 0.5)
+	assert_bool(board.is_shown()).is_true()
+	await _settle()
+	assert_bool(_control("DeparturesPanel").is_visible_in_tree()).is_true()
+
+
 func test_the_departures_list_starts_open_on_a_fresh_profile() -> void:
 	await _settle()
 	var board := _control("DeparturesBoard") as DeparturesBoard

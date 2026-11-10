@@ -217,24 +217,41 @@ func _b_key() -> InputEventKey:
 	return event
 
 
+func _list() -> Control:
+	return _board().find_child("DeparturesPanel", true, false) as Control
+
+
+func _toggle() -> Control:
+	return _board().find_child("DeparturesToggle", true, false) as Control
+
+
+## Changed for HUD 7/7 (board 3bd42402, conductor ruling): "Card replaces board"
+## means the list, so the list steps aside and the toggle stays.
 func test_the_board_steps_aside_while_a_passenger_is_inspected() -> void:
 	_hud.refresh()
-	assert_bool(_board().visible).is_true()
+	assert_bool(_list().is_visible_in_tree()).is_true()
 	assert_bool(_board().is_shown()).is_true()
 	_select()
-	print("inspecting: board visible %s, shown %s" % [_board().visible, _board().is_shown()])
+	print(
+		(
+			"inspecting: list visible %s, toggle visible %s, shown %s"
+			% [_list().is_visible_in_tree(), _toggle().is_visible_in_tree(), _board().is_shown()]
+		)
+	)
 	assert_bool(_inspect.visible).is_true()
-	assert_bool(_board().visible).is_false()
+	assert_bool(_list().is_visible_in_tree()).is_false()
+	assert_bool(_toggle().is_visible_in_tree()).is_true()
 	assert_bool(_board().is_shown()).is_true()
 	# Stepping aside writes nothing: the player's choice stays as it was.
 	assert_bool(FileAccess.file_exists(_settings)).is_false()
 	_views.selected_id = 0
 	_hud.refresh()
 	assert_bool(_inspect.visible).is_false()
-	assert_bool(_board().visible).is_true()
+	assert_bool(_list().is_visible_in_tree()).is_true()
 	assert_bool(_board().is_shown()).is_true()
 
 
+## Changed for HUD 7/7: the list, not the whole board, stays aside.
 func test_b_while_inspecting_changes_the_setting_and_the_board_stays_aside() -> void:
 	_select()
 	_board()._shortcut_input(_b_key())
@@ -244,11 +261,12 @@ func test_b_while_inspecting_changes_the_setting_and_the_board_stays_aside() -> 
 		assert_bool(HudFlagSetting.load_flag(_settings, DeparturesBoard.SETTING_KEY, true, "test"))
 		. is_false()
 	)
-	assert_bool(_board().visible).is_false()
+	assert_bool(_list().is_visible_in_tree()).is_false()
 	_board()._shortcut_input(_b_key())
 	_hud.refresh()
 	assert_bool(_board().is_shown()).is_true()
-	assert_bool(_board().visible).is_false()
+	assert_bool(_list().is_visible_in_tree()).is_false()
+	assert_bool(_toggle().is_visible_in_tree()).is_true()
 	_board()._shortcut_input(_b_key())
 	_views.selected_id = 0
 	_hud.refresh()
