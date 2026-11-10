@@ -52,8 +52,6 @@ const TAKEN_TEXT := "%s is taken by the %s %s flight"
 const TAKEN_ONE_OFF_TEXT := "%s is taken by the %s flight"
 const BUSY_TEXT := "Gate %s is busy when this flight needs it"
 const MAX_ROWS_PER_DAY := 5
-## Top and bottom padding of the gate buttons, below the theme's 6.
-const BUTTON_PAD_Y := 1.0
 const BOARD_LEFT := 16.0
 ## Below the room panel's usual place (top-left, under the money slot) and
 ## above the follow text at the bottom.
@@ -332,15 +330,10 @@ func _add_picker(entry: Dictionary) -> void:
 			_compact(piece)
 
 
-## Trims the theme's button padding so a button is no taller than the text
-## beside it and the board stays short. Needs `button` in the tree, so it
-## reads the HUD theme.
+## Gives a button the theme's short HudButtonCompact padding, so it is no
+## taller than the text beside it and the board stays short.
 func _compact(button: Button) -> void:
-	for state in [&"normal", &"hover", &"pressed", &"disabled"]:
-		var box := button.get_theme_stylebox(state).duplicate() as StyleBox
-		box.content_margin_top = BUTTON_PAD_Y
-		box.content_margin_bottom = BUTTON_PAD_Y
-		button.add_theme_stylebox_override(state, box)
+	button.theme_type_variation = &"HudButtonCompact"
 
 
 func _on_gate_pressed(key: String) -> void:

@@ -23,7 +23,8 @@ extends SceneTree
 ##     --rendering-driver vulkan --audio-driver Dummy \
 ##     --path C:/Users/chulf/Gotta-make-my-flight/game -s res://tests/ui/build_hud_plates_probe.gd
 
-const OUT_REL := "res://../tools/blender/out/hud-6-7"
+const OUT_BASE := "res://../tools/blender/out"
+const OUT_REL := OUT_BASE + "/hud-6-7"
 ## The least gap between the bar's right end and the Debug button.
 const DEBUG_GAP := 24.0
 ## How long the pointer rests on a bar icon before its tooltip is plated.
@@ -60,7 +61,12 @@ func _initialize() -> void:
 	var probe_seed := randi()
 	seed(probe_seed)
 	print("PROBE seed=", probe_seed)
-	_out_dir = ProjectSettings.globalize_path(OUT_REL).simplify_path()
+	var out_rel := OUT_REL
+	# `-- --out=<dir>` names another folder under tools/blender/out/.
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--out="):
+			out_rel = OUT_BASE.path_join(arg.trim_prefix("--out="))
+	_out_dir = ProjectSettings.globalize_path(out_rel).simplify_path()
 	DirAccess.make_dir_recursive_absolute(_out_dir)
 	print("PROBE out_dir=", _out_dir)
 	_start_ms = Time.get_ticks_msec()

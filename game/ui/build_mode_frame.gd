@@ -97,20 +97,11 @@ func _place(index: int, at: Vector2, extent: Vector2) -> void:
 func _build_sign() -> void:
 	_sign.name = "BuildModeSign"
 	_sign.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var style := StyleBoxFlat.new()
-	style.bg_color = YELLOW
-	style.border_color = DARK
-	style.set_border_width_all(4)
-	style.set_corner_radius_all(8)
-	style.content_margin_left = 18.0
-	style.content_margin_right = 18.0
-	style.content_margin_top = 4.0
-	style.content_margin_bottom = 4.0
-	_sign.add_theme_stylebox_override("panel", style)
+	# The theme holds the sign's look (the stripes' YELLOW and DARK).
+	_sign.theme = HUD_THEME
+	_sign.theme_type_variation = &"HudBuildSign"
 	var label := Label.new()
 	label.text = SIGN_TEXT
-	label.theme = HUD_THEME
-	label.add_theme_color_override("font_color", DARK)
-	label.add_theme_font_size_override("font_size", 24)
+	label.theme_type_variation = &"HudBuildSignText"
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_sign.add_child(label)

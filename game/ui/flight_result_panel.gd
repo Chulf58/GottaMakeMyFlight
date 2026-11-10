@@ -28,8 +28,9 @@ func _init() -> void:
 	dismiss.text = "Dismiss"
 	dismiss.size_flags_horizontal = Control.SIZE_SHRINK_END
 	dismiss.focus_mode = Control.FOCUS_NONE
-	# The panel's accent: it waits for the player to dismiss it.
-	dismiss.theme_type_variation = &"HudButtonYellow"
+	# A normal action, so teal; yellow means needs-you (decision
+	# hud-look-warm-cozy-cream-cards-with-a-dark-outline-toon-pale).
+	dismiss.theme_type_variation = &"HudButtonTeal"
 	dismiss.pressed.connect(dismiss_result)
 	column.add_child(dismiss)
 
