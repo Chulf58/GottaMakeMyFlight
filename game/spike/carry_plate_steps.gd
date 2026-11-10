@@ -355,23 +355,6 @@ static func lines_on_points(cam: Camera3D, aims: Array[Vector3]) -> int:
 	return on
 
 
-## How many of five sight lines from `cam` to `box` (its middle and four points
-## a sixth of its size out across and up) hit a body tagged "bag" first.
-static func lines_on_bag(cam: Camera3D, box: AABB) -> int:
-	var space := cam.get_world_3d().direct_space_state
-	var right := cam.global_transform.basis.x
-	var up := cam.global_transform.basis.y
-	var reach := box.size.length() / 6.0
-	var on := 0
-	for off in [Vector3.ZERO, right * reach, -right * reach, up * reach, -up * reach]:
-		var at: Vector3 = box.get_center() + off
-		var to := at + (at - cam.global_position).normalized() * 3.0
-		var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(cam.global_position, to))
-		if not hit.is_empty() and str((hit.collider as Node).get_meta("subject", "")) == "bag":
-			on += 1
-	return on
-
-
 ## The SELF check of the head and neck at a hand-led move's plate moment (a
 ## floor set-down or pickup stoops over the bag; the booth SELF check counts
 ## only bags whose home is a hand): how many vertices skinned mostly to a bone
