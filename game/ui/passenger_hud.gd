@@ -166,6 +166,9 @@ var alert_settings_path := HudFlagSetting.PATH
 var _departures_board := DeparturesBoard.new()
 var _alerts := AlertStack.new()
 var _hints := Hints.new()
+## The new-tier dialog and the "New" card marks (UnlockGuide); on in a normal
+## launch only, like the hints.
+var _unlock_guide := UnlockGuide.new()
 var _seed_label := Label.new()
 var _follow_label := Label.new()
 ## The followed passenger's card; the follow text then hides.
@@ -283,6 +286,7 @@ func _ready() -> void:
 	_hints.hud = self
 	_hints.scene_root = get_parent()
 	add_child(_hints)
+	_wire_unlock_guide()
 	_frame_start_view()
 	refresh()
 
@@ -521,6 +525,27 @@ func press_speed(value: int) -> void:
 ## Pauses, or resumes at the speed the clock had.
 func press_pause_toggle() -> void:
 	clock.set_paused(not clock.paused)
+
+
+## Gives the unlock guide the tiers and the clock, holds the camera still while
+## its dialog is open, and hands it to the build menu for the "New" marks.
+func _wire_unlock_guide() -> void:
+	if _in_current_scene() and not _playtest_switch_on():
+		if not Hints.launched_by_script(OS.get_cmdline_args()):
+			_unlock_guide.mode = UnlockGuide.Mode.PROFILE
+	if build_mode != null:
+		_unlock_guide.unlocks = build_mode.unlocks
+	_unlock_guide.clock = clock
+	_unlock_guide.dialog_changed.connect(_gate_camera)
+	add_child(_unlock_guide)
+	var menu := get_node_or_null("../BuildMenu") as BuildMenu
+	if menu != null:
+		menu.watch_guide(_unlock_guide)
+
+
+## The unlock guide: its dialog and marks, or null before the HUD is ready.
+func unlock_guide() -> UnlockGuide:
+	return _unlock_guide
 
 
 ## Opens the intro dialogue, pauses the clock and stops the camera. Refused

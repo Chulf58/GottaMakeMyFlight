@@ -24,6 +24,9 @@ extends Node
 signal tier_changed(tier: int)
 ## A tier opened by play: the facilities it brings, ready to show.
 signal unlocked(tier: int, text: String)
+## Tiers `first_tier` to `last_tier` opened together by play (never by a load),
+## sent between tier_changed and unlocked; UnlockGuide shows its dialog from it.
+signal tiers_opened(first_tier: int, last_tier: int)
 
 ## The tier a new game starts at, and the one that opens the cafe.
 const START_TIER := 1
@@ -398,8 +401,10 @@ func _open_to(reached: int) -> void:
 	var opened := []
 	for i in range(_tier, reached):
 		opened.append(TIERS[i]["facilities"])
+	var first := _tier + 1
 	_tier = reached
 	tier_changed.emit(_tier)
+	tiers_opened.emit(first, reached)
 	unlocked.emit(_tier, "Unlocked: %s" % "; ".join(opened))
 
 

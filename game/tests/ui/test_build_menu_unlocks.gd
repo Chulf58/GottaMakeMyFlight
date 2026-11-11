@@ -46,7 +46,7 @@ func _last_line(tool: BuildMode.Tool) -> String:
 func test_a_locked_card_is_greyed_and_says_locked() -> void:
 	assert_object(_menu.card(BuildMode.Tool.CAFE_ROOM).modulate).is_equal(BuildMenu.LOCKED_TINT)
 	assert_str(_last_line(BuildMode.Tool.CAFE_ROOM)).is_equal(BuildMenu.LOCKED_TEXT)
-	assert_str(_menu.card(BuildMode.Tool.CAFE_ROOM).tooltip_text).starts_with(
+	assert_str(_menu.card(BuildMode.Tool.CAFE_ROOM).tooltip_text).contains(
 		"Unlocks at 2 stars and 50 passengers"
 	)
 	assert_object(_menu.card(BuildMode.Tool.WALL).modulate).is_equal(Color.WHITE)

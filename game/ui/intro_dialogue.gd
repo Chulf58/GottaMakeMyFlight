@@ -48,6 +48,9 @@ const DIM_COLOR := Color(0.03, 0.04, 0.06, 0.45)
 static var shown_this_session := false
 
 var _done := false
+var _title_text := TITLE_TEXT
+var _body_text := BODY_TEXT
+var _box_height := BOX_SIZE.y
 ## Holds the portrait, box and nameplate at their 1080p layout; _place moves it
 ## and scales it down on a smaller screen.
 var _group := Control.new()
@@ -65,7 +68,13 @@ static func should_show(already_shown: bool, in_current_scene: bool, playtest_on
 	return not already_shown and in_current_scene and not playtest_on
 
 
-func _init() -> void:
+## The first-day intro by default; UnlockGuide passes its own title, body and a
+## taller box for a new tier's dialog, which reuses the same portrait, box and
+## Continue. The box grows upward from its fixed bottom edge.
+func _init(title_text := TITLE_TEXT, body_text := BODY_TEXT, box_height := BOX_SIZE.y) -> void:
+	_title_text = title_text
+	_body_text = body_text
+	_box_height = box_height
 	name = "IntroDialogue"
 	theme = BuildMenu.HUD_THEME
 	set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -92,8 +101,8 @@ func _init() -> void:
 	_portrait.position = Vector2.ZERO
 	_portrait.size = Vector2.ONE * PORTRAIT_SIZE
 	_group.add_child(_portrait)
-	_box.position = Vector2(PORTRAIT_SIZE - PORTRAIT_OVERLAP, PORTRAIT_SIZE - BOX_SIZE.y)
-	_box.size = BOX_SIZE
+	_box.position = Vector2(PORTRAIT_SIZE - PORTRAIT_OVERLAP, PORTRAIT_SIZE - _box_height)
+	_box.size = Vector2(BOX_SIZE.x, _box_height)
 	_nameplate.position = _box.position + Vector2(TEXT_LEFT - 20.0, 22.0 - NAMEPLATE_SIZE.y)
 	_nameplate.size = NAMEPLATE_SIZE
 	_place()
@@ -167,7 +176,7 @@ func _build_box() -> void:
 	inner.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_box.add_child(inner)
 	_body.name = "Body"
-	_body.text = BODY_TEXT
+	_body.text = _body_text
 	_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_body.theme_type_variation = &"IntroBody"
 	_body.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -205,7 +214,7 @@ func _build_nameplate() -> void:
 	column.add_child(title)
 	var role := Label.new()
 	role.name = "Title"
-	role.text = TITLE_TEXT
+	role.text = _title_text
 	role.theme_type_variation = &"IntroRole"
 	column.add_child(role)
 
