@@ -387,10 +387,10 @@ func from_snapshot(data: Dictionary) -> bool:
 	_made = int(data["made"])
 	_checked_day = NO_DAY
 	_shown.clear()
-	for tier in data.get("shown", []):
+	for tier in data["shown"]:
 		_shown[int(tier)] = true
 	_seen.clear()
-	for tool_name in data.get("seen", []):
+	for tool_name in data["seen"]:
 		_seen[BuildMode.Tool[tool_name]] = true
 	tier_changed.emit(_tier)
 	return true
@@ -416,21 +416,32 @@ static func _snapshot_problem(data: Dictionary) -> String:
 	return _marks_problem(data)
 
 
-## The "shown" tiers must be open tiers above the start one; the "seen" entries
-## must name tools of open tiers. Either key may be absent (nothing marked).
+## "shown" and "seen" are required lists (save version 15). Each shown tier is
+## an open tier above the start one, each seen entry the name of a card tool of
+## an open tier above the start one (NONE, REMOVE and the start set are not
+## cards that can be new), and neither list repeats an entry.
 static func _marks_problem(data: Dictionary) -> String:
-	var tier := int(data["tier"])
 	for key in ["shown", "seen"]:
-		if data.has(key) and not data[key] is Array:
+		if not data.has(key) or not data[key] is Array:
 			return "'%s' must be a list" % key
-	for entry in data.get("shown", []):
+	var tier := int(data["tier"])
+	var shown := {}
+	for entry in data["shown"]:
 		if not WholeNumber.is_whole(entry) or int(entry) <= START_TIER or int(entry) > tier:
 			return "shown tier %s is not an open tier above the start" % str(entry)
-	for entry in data.get("seen", []):
+		if shown.has(int(entry)):
+			return "shown tier %s is listed twice" % str(entry)
+		shown[int(entry)] = true
+	var seen := {}
+	for entry in data["seen"]:
 		if not entry is String or not BuildMode.Tool.has(entry):
 			return "seen entry %s is not a tool name" % str(entry)
-		if tier_of(BuildMode.Tool[entry]) > tier:
-			return "seen tool %s is above tier %d" % [entry, tier]
+		var tool_tier := tier_of(BuildMode.Tool[entry])
+		if tool_tier <= START_TIER or tool_tier > tier:
+			return "seen tool %s is not a card of an open tier above the start" % entry
+		if seen.has(entry):
+			return "seen tool %s is listed twice" % entry
+		seen[entry] = true
 	return ""
 
 

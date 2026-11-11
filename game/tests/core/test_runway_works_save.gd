@@ -48,7 +48,7 @@ func after_test() -> void:
 func before_test() -> void:
 	_flights.runway.size = PlaneClasses.SMALL
 	_flights.runway.works.clear()
-	_unlocks.from_snapshot({"tier": 2, "made": 50})
+	_unlocks.from_snapshot({"tier": 2, "made": 50, "shown": [], "seen": []})
 
 
 func test_a_new_game_starts_small_and_draws_a_small_runway() -> void:

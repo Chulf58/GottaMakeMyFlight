@@ -45,7 +45,7 @@ func test_build_mode_refuses_a_locked_tool_and_takes_it_once_unlocked() -> void:
 	mode.set_tool(BuildMode.Tool.CAFE_ROOM)
 	assert_int(mode.tool).is_equal(BuildMode.Tool.WALL)
 	assert_str(mode.status_text()).contains("Unlocks at 2 stars and 50 passengers")
-	_unlocks.from_snapshot({"tier": 2, "made": 50})
+	_unlocks.from_snapshot({"tier": 2, "made": 50, "shown": [], "seen": []})
 	mode.set_tool(BuildMode.Tool.CAFE_ROOM)
 	assert_int(mode.tool).is_equal(BuildMode.Tool.CAFE_ROOM)
 	mode.set_tool(BuildMode.Tool.TREE)
@@ -84,7 +84,7 @@ func test_the_edits_of_a_plan_are_locked_by_their_room_and_their_pieces() -> voi
 		BuildUnlocks.NOT_WIRED_TEXT
 	)
 	assert_str(BuildUnlocks.edits_lock_text(null, false, cafe_room)).is_empty()
-	_unlocks.from_snapshot({"tier": 2, "made": 50})
+	_unlocks.from_snapshot({"tier": 2, "made": 50, "shown": [], "seen": []})
 	assert_str(BuildUnlocks.edits_lock_text(_unlocks, true, cafe_room)).is_empty()
 	assert_str(BuildUnlocks.edits_lock_text(_unlocks, true, cafe_piece)).is_empty()
 

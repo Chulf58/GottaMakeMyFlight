@@ -24,7 +24,9 @@ func before() -> void:
 	# The car parks and the curb bay sit above the start tier.
 	(
 		assert_bool(
-			(_main.get_node("BuildUnlocks") as BuildUnlocks).from_snapshot({"tier": 4, "made": 600})
+			(_main.get_node("BuildUnlocks") as BuildUnlocks).from_snapshot(
+				{"tier": 4, "made": 600, "shown": [], "seen": []}
+			)
 		)
 		. is_true()
 	)

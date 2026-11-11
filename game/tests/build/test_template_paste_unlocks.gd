@@ -86,7 +86,7 @@ func test_a_template_with_a_locked_room_and_pieces_is_refused_whole() -> void:
 
 ## The control: the same paste goes down and is charged once the tier is open.
 func test_the_same_paste_is_placed_once_the_tier_is_open() -> void:
-	assert_bool(_unlocks.from_snapshot({"tier": 2, "made": 50})).is_true()
+	assert_bool(_unlocks.from_snapshot({"tier": 2, "made": 50, "shown": [], "seen": []})).is_true()
 	var balance := _mode.wallet().balance
 	var result := _paste.paste_at(BARE_CENTRE)
 	print("unlocked paste: %s, balance %d -> %d" % [result.ok, balance, _mode.wallet().balance])
@@ -140,7 +140,7 @@ func test_a_tier_1_template_holding_a_belt_is_refused_whole() -> void:
 ## The control: the same belt template goes down once the Belt tool is open.
 func test_the_same_belt_template_is_placed_at_tier_2() -> void:
 	_arm_toilet_with_belt()
-	assert_bool(_unlocks.from_snapshot({"tier": 2, "made": 50})).is_true()
+	assert_bool(_unlocks.from_snapshot({"tier": 2, "made": 50, "shown": [], "seen": []})).is_true()
 	var balance := _mode.wallet().balance
 	var result := _paste.paste_at(BARE_CENTRE)
 	print(

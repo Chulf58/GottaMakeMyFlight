@@ -156,15 +156,15 @@ func _close_dialog() -> void:
 	dialog_changed.emit(false)
 
 
-## A load replaced the world, clock included (it was saved paused by this very
-## dialog): the dialog ends and the clock goes back to what it was before it.
+## A load replaced the world, clock included: SaveGame.load_world() leaves it
+## paused at 1x before it emits `loaded` (decision loading-a-save-always-comes-
+## back-paused-at-1x-speed-with-hin). The dialog ends and its hold is dropped
+## without touching the clock.
 func _on_loaded(ok: bool) -> void:
 	if not ok or _dialog == null:
 		return
 	_free_dialog()
 	set_process(false)
-	if clock != null and _holding_clock:
-		clock.set_paused(_held_paused)
 	_holding_clock = false
 	dialog_changed.emit(false)
 

@@ -87,7 +87,7 @@ func test_the_phone_ring_hook_fires_with_the_dialog() -> void:
 
 
 func test_a_load_opens_no_dialog() -> void:
-	assert_bool(_unlocks.from_snapshot({"tier": 3, "made": 260})).is_true()
+	assert_bool(_unlocks.from_snapshot({"tier": 3, "made": 260, "shown": [], "seen": []})).is_true()
 	assert_bool(_guide.is_open()).is_false()
 	assert_array(_rings).is_empty()
 
@@ -192,17 +192,29 @@ func test_leaving_the_tree_with_the_dialog_open_does_not_leave_the_game_paused()
 	_guide.free()
 
 
-func test_a_save_and_load_with_the_dialog_open_shows_nothing_and_holds_nothing() -> void:
+func test_a_load_with_the_dialog_open_closes_it_and_leaves_the_clock_as_loaded() -> void:
+	_clock.set_speed(2)
 	_clock.set_paused(false)
 	_earn(50)
 	assert_bool(_guide.is_open()).is_true()
 	var data := JSON.parse_string(JSON.stringify(_unlocks.to_snapshot())) as Dictionary
-	# The saved clock was paused by the dialog; the load replaces it.
 	assert_bool(_unlocks.from_snapshot(data)).is_true()
+	# What SaveGame.load_world() does before it emits loaded (decision loading-a-
+	# save-always-comes-back-paused-at-1x-speed-with-hin): a load always waits
+	# for the player, at 1x.
+	_clock.set_paused(true)
+	_clock.set_speed(1)
 	_save.loaded.emit(true)
 	assert_bool(_guide.is_open()).is_false()
-	assert_bool(_clock.paused).is_false()
+	assert_bool(_clock.paused).is_true()
+	assert_int(_clock.speed).is_equal(1)
 	assert_array(_rings).is_equal([2])
+	# Nothing of the old hold is left to act on a later change of the clock.
+	_clock.set_paused(false)
+	_clock.set_speed(3)
+	_guide.dismiss()
+	assert_bool(_clock.paused).is_false()
+	assert_int(_clock.speed).is_equal(3)
 	_earn(0)
 	assert_bool(_guide.is_open()).is_false()
 	assert_array(_rings).is_equal([2])
