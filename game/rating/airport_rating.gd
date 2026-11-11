@@ -22,6 +22,17 @@ extends Node
 ## RatingFormula.WEIGHT_BAGS says how much they weigh. Set `baggage` before
 ## bind() (the scene wires it); without it no bag is recorded.
 ##
+## Incident adjustments (RatingAdjustments, decision daily-incidents-technical-
+## design-incidentdirector-shared-clo) move the stars by half stars after
+## RatingFormula.stars(), clamped to 1-5, while the window has passengers; with
+## none the stars stay STARTING_STARS. add_adjustment() adds one (the
+## IncidentDirector's call) and active_adjustments() lists them. stars() is the
+## adjusted value, and every reader goes through it or through the same
+## _adjusted_stars(): the HUD badge and tooltip, the offer desk's tier, the
+## build unlocks, warning() and the day-end low count, so the badge and the
+## contract penalties always agree. An adjustment is dropped on the tick that
+## reaches its expiry, which emits changed.
+##
 ## For the HUD: stars(), parts(), has_data() and the changed signal. For the
 ## offer board: stars() against RatingFormula.TIER_STARS (RatingFormula.tier).
 ## For contracts: warning() while the rating is below RatingFormula.WARN_BELOW,
@@ -30,7 +41,8 @@ extends Node
 ## Emitted when the totals, the day or the low-day count change.
 signal changed
 
-const SAVE_VERSION := 1
+## 2: the incident adjustments ("adjustments"); version 1 is refused.
+const SAVE_VERSION := 2
 
 @export var clock: SimClock
 @export var flights: FlightSim
@@ -49,6 +61,7 @@ var _low_days := 0
 var _pending: Array[Dictionary] = []
 ## True while the signals of clock, flights and passengers are connected.
 var _bound := false
+var _adjustments := RatingAdjustments.new()
 
 
 func _ready() -> void:
@@ -124,10 +137,10 @@ func note_doors_closed(flight_id: String, tick: int) -> void:
 	_pending.append({"flight": flight_id, "tick": tick})
 
 
-## The stars over the window, 1 to 5 in half steps; STARTING_STARS with no data.
+## The stars over the window with the active incident adjustments, 1 to 5 in
+## half steps; STARTING_STARS with no data.
 func stars() -> float:
-	var window := _window(current_day())
-	return _stars_of(window)
+	return _adjusted_stars(_window(current_day()), _tick)
 
 
 ## False until a passenger (or no-show) is inside the window.
@@ -138,7 +151,9 @@ func has_data() -> bool:
 
 ## The parts the HUD tooltip shows: {"stars", "made", "missed", "passengers",
 ## "made_share" 0..1, "mood_avg" 0..100 of those who made it, "bags" settled,
-## "bags_missed" of them and their "bags_missed_share" 0..1, "days" with data}.
+## "bags_missed" of them and their "bags_missed_share" 0..1, "days" with data,
+## "base_stars" before the incident adjustments and "adjustment", their sum in
+## stars before the clamp}.
 func parts() -> Dictionary:
 	var window := _window(current_day())
 	var total: int = window["made"] + window["missed"]
@@ -162,12 +177,14 @@ func parts() -> Dictionary:
 		"bags_missed": window["bags_missed"],
 		"bags_missed_share": bags_missed_share,
 		"days": window["days"],
+		"base_stars": _stars_of(window),
+		"adjustment": _adjustments.half_stars_at(_tick) * 0.5,
 	}
 
 
 ## True while the rating is below RatingFormula.WARN_BELOW: airlines warn.
 func warning() -> bool:
-	return _is_low(_window(current_day()))
+	return _is_low(_window(current_day()), _tick)
 
 
 ## Consecutive day ends at which the rating was below WARN_BELOW.
@@ -213,9 +230,34 @@ func days_held() -> Array[int]:
 	return held
 
 
+## Adds an incident adjustment of `half_star_delta` half stars (not 0, at most
+## RatingAdjustments.MAX_HALF_STAR_DELTA either way), active from `outcome_tick`
+## up to `expiry_tick` (RatingAdjustments.expiry_for gives the window's end).
+## The rating first rolls to `outcome_tick`. `id` names it and must be new.
+## Pushes an error and returns false, changing nothing, when any of that fails,
+## the expiry is not after the rating's tick, or MAX_COUNT are held.
+func add_adjustment(id: String, outcome_tick: int, expiry_tick: int, half_star_delta: int) -> bool:
+	var problem := _adjustments.add_problem(
+		id, outcome_tick, expiry_tick, half_star_delta, maxi(_tick, outcome_tick)
+	)
+	if problem != "":
+		push_error("AirportRating.add_adjustment: %s" % problem)
+		return false
+	_roll_to(outcome_tick)
+	_adjustments.add(id, outcome_tick, expiry_tick, half_star_delta)
+	changed.emit()
+	return true
+
+
+## The incident adjustments held now, each {"id", "outcome_tick",
+## "expiry_tick", "half_star_delta"}, in the order they were added.
+func active_adjustments() -> Array[Dictionary]:
+	return _adjustments.active()
+
+
 ## JSON-safe state for a save.
 func to_snapshot() -> Dictionary:
-	return RatingSnapshot.save(_tick, _days, _low_days, _pending)
+	return RatingSnapshot.save(_tick, _days, _low_days, _pending, _adjustments.active())
 
 
 ## Restores a to_snapshot() dictionary, including one that went through JSON.
@@ -230,6 +272,7 @@ func from_snapshot(data: Dictionary) -> bool:
 	_days = loaded["days"]
 	_low_days = loaded["low_days"]
 	_pending = loaded["pending"]
+	_adjustments.replace(loaded["adjustments"])
 	changed.emit()
 	return true
 
@@ -345,37 +388,51 @@ func _window(last_day: int) -> Dictionary:
 
 ## Moves to `tick`'s day: each day that ends is checked against WARN_BELOW,
 ## then days that left the window are dropped. A jump of more than the window
-## leaves nothing to check: the data and the low count are cleared.
+## leaves nothing to check: the data and the low count are cleared. Incident
+## adjustments that expire by `tick` are dropped after the ended days are
+## checked, so each day end sees those active on its last tick.
 func _roll_to(tick: int) -> void:
 	if tick <= _tick:
 		return
 	var old_day := current_day()
 	_tick = tick
 	var new_day := current_day()
-	if new_day == old_day:
-		return
-	if new_day - old_day > RatingFormula.WINDOW_DAYS:
-		_days.clear()
-		_low_days = 0
-	else:
-		for ended in range(old_day, new_day):
-			_close_day(ended)
-	for day in _days.keys():
-		if day <= new_day - RatingFormula.WINDOW_DAYS:
-			_days.erase(day)
-	changed.emit()
+	if new_day != old_day:
+		if new_day - old_day > RatingFormula.WINDOW_DAYS:
+			_days.clear()
+			_low_days = 0
+		else:
+			for ended in range(old_day, new_day):
+				_close_day(ended)
+		for day in _days.keys():
+			if day <= new_day - RatingFormula.WINDOW_DAYS:
+				_days.erase(day)
+	var expired := _adjustments.drop_expired(_tick)
+	if new_day != old_day or expired:
+		changed.emit()
 
 
 func _close_day(day: int) -> void:
-	_low_days = _low_days + 1 if _is_low(_window(day)) else 0
+	var last_tick := GameCalendar.day_start(day + 1) - 1
+	_low_days = _low_days + 1 if _is_low(_window(day), last_tick) else 0
 
 
-## True when a window has passengers and its stars are below WARN_BELOW.
-static func _is_low(window: Dictionary) -> bool:
+## True when a window has passengers and its stars, with the adjustments
+## active at `at_tick`, are below WARN_BELOW.
+func _is_low(window: Dictionary, at_tick: int) -> bool:
 	var total: int = window["made"] + window["missed"]
 	if total == 0:
 		return false
-	return _stars_of(window) < RatingFormula.WARN_BELOW
+	return _adjusted_stars(window, at_tick) < RatingFormula.WARN_BELOW
+
+
+## The stars of a pooled window with the adjustments active at `at_tick`; a
+## window with no passengers keeps STARTING_STARS.
+func _adjusted_stars(window: Dictionary, at_tick: int) -> float:
+	var base := _stars_of(window)
+	if window["made"] + window["missed"] == 0:
+		return base
+	return RatingAdjustments.apply(base, _adjustments.half_stars_at(at_tick))
 
 
 ## The stars of a pooled window.
