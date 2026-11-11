@@ -51,15 +51,54 @@ func test_ending_before_the_first_sync_leaves_the_clock_alone() -> void:
 	assert_bool(_clock.paused).is_false()
 
 
-func test_ending_clears_the_undo_history_and_ctrl_z_is_then_a_no_op() -> void:
+func test_ending_keeps_the_undo_history_until_the_next_tick() -> void:
 	_session.set_building(true)
 	_mode.set_tool(BuildMode.Tool.FLOOR)
 	assert_bool(_mode.apply_at(_mode.grid.cell_to_world(Vector2i(1, 1))).ok).is_true()
 	assert_int(_mode.undo_history().size()).is_equal(1)
 	_session.set_building(false)
+	assert_int(_mode.undo_history().size()).is_equal(1)
+	assert_bool(_mode.undo().ok).is_true()
+	assert_int(_mode.grid.floor_at(Vector2i(1, 1))).is_equal(BuildGrid.FLOOR_NONE)
+
+
+func test_a_tick_after_ending_clears_the_undo_history_and_ctrl_z_is_then_a_no_op() -> void:
+	_session.set_building(true)
+	_mode.set_tool(BuildMode.Tool.FLOOR)
+	assert_bool(_mode.apply_at(_mode.grid.cell_to_world(Vector2i(1, 1))).ok).is_true()
+	_session.set_building(false)
+	_clock.advance(SimClock.STEP)
 	assert_int(_mode.undo_history().size()).is_equal(0)
 	assert_object(_mode.undo()).is_null()
 	assert_int(_mode.grid.floor_at(Vector2i(1, 1))).is_not_equal(BuildGrid.FLOOR_NONE)
+
+
+func test_a_paused_clock_ticks_nothing_so_the_history_stays() -> void:
+	_session.set_building(true)
+	_mode.set_tool(BuildMode.Tool.FLOOR)
+	assert_bool(_mode.apply_at(_mode.grid.cell_to_world(Vector2i(1, 1))).ok).is_true()
+	_clock.set_paused(true)
+	_session.set_building(false)
+	_clock.advance(SimClock.STEP)
+	assert_int(_mode.undo_history().size()).is_equal(1)
+
+
+func test_starting_again_before_a_tick_keeps_the_history() -> void:
+	_session.set_building(true)
+	_mode.set_tool(BuildMode.Tool.FLOOR)
+	assert_bool(_mode.apply_at(_mode.grid.cell_to_world(Vector2i(1, 1))).ok).is_true()
+	_session.set_building(false)
+	_session.set_building(true)
+	assert_int(_mode.undo_history().size()).is_equal(1)
+
+
+func test_abandon_clears_the_history_at_once_and_a_later_tick_has_nothing_left_to_clear() -> void:
+	_session.set_building(true)
+	_mode.set_tool(BuildMode.Tool.FLOOR)
+	assert_bool(_mode.apply_at(_mode.grid.cell_to_world(Vector2i(1, 1))).ok).is_true()
+	_session.abandon()
+	assert_int(_mode.undo_history().size()).is_equal(0)
+	assert_int(_clock.ticked.get_connections().size()).is_equal(0)
 
 
 func test_a_clock_the_player_changed_is_not_restored() -> void:
