@@ -28,6 +28,13 @@ extends Control
 ## of which fits, NO_FIT_TEXT. A one-off flight or an ended contract shows
 ## its gate on a disabled button.
 ##
+## A running contract's row also has an End button (decision end-contract-
+## button-in-the-departures-list-lets-the-player-e): it asks "End this
+## contract?" under the row, and the confirm calls FlightSim.end_contract.
+## Flights already booked for today still fly. When FlightSim.end_refusal()
+## says ending would leave another flight with no taxi plan, nothing is ended
+## and the row says which flight, so the player can move that flight first.
+##
 ## It is an optional piece with an on/off setting, so the HUD can be rolled
 ## back if it turns into information overload: a toggle button (always
 ## visible) and the B key show and hide the panel, and the choice is kept in a
@@ -57,6 +64,10 @@ const MOVED_TEXT := "%s now uses gate %s for the days not yet issued"
 const TAKEN_TEXT := "%s is taken by the %s %s flight"
 const TAKEN_ONE_OFF_TEXT := "%s is taken by the %s flight"
 const BUSY_TEXT := "Gate %s is busy when this flight needs it"
+const END_PROMPT := "End this contract?"
+const ENDED_TEXT := "%s contract ended. Flights already booked still fly"
+const END_REFUSED_TEXT := "Can't end this contract: %s would have no taxi plan"
+const END_REFUSED_OTHER_TEXT := "Can't end this contract: another flight would have no taxi plan"
 const MAX_ROWS_PER_DAY := 5
 
 @export var flights: FlightSim
@@ -81,6 +92,8 @@ var _gates: Array[String] = []
 var _picker_key := ""
 var _message_key := ""
 var _message := ""
+## The row key whose "End this contract?" question is open, or "".
+var _confirm_key := ""
 
 
 ## The board's lines for the clock at `tick`: "Today" and its rows, then
@@ -233,6 +246,21 @@ func gate_button(contract_id: String, day: int) -> Button:
 	return find_child("Gate_%s_%d" % [contract_id, day], true, false) as Button
 
 
+## The End button on the row of `contract_id` on `day`, or null.
+func end_button(contract_id: String, day: int) -> Button:
+	return find_child("End_%s_%d" % [contract_id, day], true, false) as Button
+
+
+## The confirm button of the open "End this contract?" question, or null.
+func confirm_end_button() -> Button:
+	return find_child("ConfirmEnd", true, false) as Button
+
+
+## The Keep button of the open "End this contract?" question, or null.
+func keep_button() -> Button:
+	return find_child("KeepContract", true, false) as Button
+
+
 ## The button for `gate_id` in the open picker, or null.
 func picker_button(gate_id: String) -> Button:
 	return find_child("Pick_%s" % gate_id, true, false) as Button
@@ -278,7 +306,7 @@ func _refresh(force: bool) -> void:
 		return
 	_entries = entries
 	_gates = gates
-	if _picker_key != "" and not _picker_row_live():
+	if (_picker_key != "" or _confirm_key != "") and not _open_row_live():
 		_close_picker()
 	_lines = PackedStringArray()
 	for entry in entries:
@@ -298,10 +326,12 @@ func _refresh(force: bool) -> void:
 			_rows.add_child(label)
 
 
-## True while the open picker's row is listed and its contract still runs.
-func _picker_row_live() -> bool:
+## True while the row of the open picker or question is listed and its
+## contract still runs.
+func _open_row_live() -> bool:
+	var open_key := _picker_key if _picker_key != "" else _confirm_key
 	for entry in _entries:
-		if entry["kind"] == "row" and entry["key"] == _picker_key:
+		if entry["kind"] == "row" and entry["key"] == open_key:
 			return entry["active"]
 	return false
 
@@ -325,8 +355,19 @@ func _add_row(entry: Dictionary) -> void:
 		button.tooltip_text = "Move this flight to another gate"
 		button.pressed.connect(_on_gate_pressed.bind(key))
 	row.add_child(button)
+	var end_btn: Button = null
+	if entry["active"]:
+		end_btn = Button.new()
+		end_btn.name = "End_%s" % key
+		end_btn.text = "End"
+		end_btn.tooltip_text = "End this airline contract"
+		end_btn.focus_mode = Control.FOCUS_NONE
+		end_btn.pressed.connect(_on_end_pressed.bind(key, entry["contract"]))
+		row.add_child(end_btn)
 	_rows.add_child(row)
 	_compact(button)
+	if end_btn != null:
+		_compact(end_btn)
 	if entry["doors"] != "":
 		var doors := Label.new()
 		doors.name = "DoorsClose"
@@ -336,6 +377,8 @@ func _add_row(entry: Dictionary) -> void:
 		_rows.add_child(doors)
 	if key != "" and key == _picker_key:
 		_add_picker(entry)
+	if key != "" and key == _confirm_key:
+		_add_end_confirm(entry["contract"])
 	if key != "" and key == _message_key and _message != "":
 		var note := Label.new()
 		note.name = "Message"
@@ -344,6 +387,32 @@ func _add_row(entry: Dictionary) -> void:
 		note.theme_type_variation = &"HudHint"
 		note.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_rows.add_child(note)
+
+
+## The question under a row after End: confirm or keep the contract.
+func _add_end_confirm(contract_id: String) -> void:
+	var box := HBoxContainer.new()
+	box.name = "EndConfirm"
+	var prompt := Label.new()
+	prompt.text = END_PROMPT
+	prompt.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	prompt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	box.add_child(prompt)
+	var confirm := Button.new()
+	confirm.name = "ConfirmEnd"
+	confirm.text = "End contract"
+	confirm.focus_mode = Control.FOCUS_NONE
+	confirm.pressed.connect(_on_end_confirmed.bind(contract_id))
+	box.add_child(confirm)
+	var keep := Button.new()
+	keep.name = "KeepContract"
+	keep.text = "Keep"
+	keep.focus_mode = Control.FOCUS_NONE
+	keep.pressed.connect(_on_end_kept)
+	box.add_child(keep)
+	_rows.add_child(box)
+	_compact(confirm)
+	_compact(keep)
 
 
 ## The picker under a row: a button for each other gate the contract fits at
@@ -404,8 +473,58 @@ func _on_gate_pressed(key: String) -> void:
 
 func _close_picker() -> void:
 	_picker_key = ""
+	_confirm_key = ""
 	_message_key = ""
 	_message = ""
+
+
+## Opens the "End this contract?" question under the row, or closes it on a
+## second press. A contract whose ending FlightSim refuses gets the reason
+## under its row instead of the question.
+func _on_end_pressed(key: String, contract_id: String) -> void:
+	var was_open := _confirm_key == key
+	_close_picker()
+	if not was_open:
+		_message_key = key
+		_message = end_refusal_text(contract_id)
+		if _message == "":
+			_confirm_key = key
+	_refresh(true)
+
+
+## Ends the contract unless FlightSim now refuses; the world may have changed
+## since the question opened.
+func _on_end_confirmed(contract_id: String) -> void:
+	var key := _confirm_key
+	var refusal := end_refusal_text(contract_id)
+	_close_picker()
+	_message_key = key
+	if refusal != "":
+		_message = refusal
+	elif flights.end_contract(contract_id):
+		_message = ENDED_TEXT % flights.contract_of(contract_id)["destination"]
+	_refresh(true)
+
+
+func _on_end_kept() -> void:
+	_close_picker()
+	_refresh(true)
+
+
+## Why ending `contract_id` is refused, in words naming the flight it would
+## strand by departure time, airline and destination, or "" when it can end.
+func end_refusal_text(contract_id: String) -> String:
+	var refusal := flights.end_refusal(contract_id)
+	if refusal.is_empty():
+		return ""
+	var id: String = refusal["id"]
+	var parts := FlightTimetable.parse_occurrence(id)
+	var label := FlightLabel.of(
+		flights, parts.is_empty(), id if parts.is_empty() else parts["contract"]
+	)
+	if label == "":
+		return END_REFUSED_OTHER_TEXT
+	return END_REFUSED_TEXT % label
 
 
 ## Moves the contract to `gate_id`, or says why not. FlightSim names the
