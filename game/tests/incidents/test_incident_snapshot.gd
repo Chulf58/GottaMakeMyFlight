@@ -24,6 +24,7 @@ static func _good() -> Dictionary:
 				"mess_id": 4,
 				"place": "Check-in",
 				"outcome": "",
+				"shown": false,
 			},
 			{
 				"id": 2,
@@ -35,6 +36,7 @@ static func _good() -> Dictionary:
 				"mess_id": 0,
 				"place": "",
 				"outcome": "",
+				"shown": false,
 			},
 		],
 	}
@@ -53,6 +55,16 @@ func test_a_good_part_loads_also_after_json() -> void:
 	assert_int(typeof(loaded["incidents"][0]["fire_tick"])).is_equal(TYPE_INT)
 	assert_object(loaded["incidents"][0]["cell"]).is_equal(Vector2i(12, 7))
 	assert_int(loaded["last_rolled_day"]).is_equal(3)
+
+
+func test_the_shown_flag_loads_as_saved_also_after_json() -> void:
+	var data := _good()
+	data["incidents"][0]["shown"] = true
+	var loaded := IncidentSnapshot.load(JSON.parse_string(JSON.stringify(data)))
+	assert_bool(loaded.has("error")).is_false()
+	assert_bool(loaded["incidents"][0]["shown"]).is_true()
+	assert_bool(loaded["incidents"][1]["shown"]).is_false()
+	assert_int(IncidentSnapshot.SAVE_VERSION).is_equal(2)
 
 
 func test_a_spill_that_had_no_place_loads_as_done_with_its_outcome() -> void:
@@ -116,7 +128,7 @@ func test_each_malformed_field_is_refused() -> void:
 	var cases := {
 		"missing key 'next_major_day'": func(d: Dictionary) -> void: d.erase("next_major_day"),
 		"unknown key 'extra'": func(d: Dictionary) -> void: d["extra"] = 1,
-		"save_version must be": func(d: Dictionary) -> void: d["save_version"] = 2,
+		"save_version must be": func(d: Dictionary) -> void: d["save_version"] = 1,
 		"enabled must be a bool": func(d: Dictionary) -> void: d["enabled"] = 1,
 		"last_rolled_day must be": func(d: Dictionary) -> void: d["last_rolled_day"] = -2,
 		"incidents must be an array": func(d: Dictionary) -> void: d["incidents"] = {},
@@ -132,6 +144,10 @@ func test_each_malformed_field_is_refused() -> void:
 		"unknown outcome": func(d: Dictionary) -> void: d["incidents"][1]["outcome"] = "lost",
 		"outcome but is not done":
 		func(d: Dictionary) -> void: d["incidents"][1]["outcome"] = IncidentSnapshot.NO_PLACE,
+		"missing key 'shown'": func(d: Dictionary) -> void: d["incidents"][0].erase("shown"),
+		"shown must be a bool": func(d: Dictionary) -> void: d["incidents"][0]["shown"] = 1,
+		"scheduled but already shown":
+		func(d: Dictionary) -> void: d["incidents"][1]["shown"] = true,
 	}
 	for want: String in cases:
 		var data := _good()

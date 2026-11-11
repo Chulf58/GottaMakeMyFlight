@@ -54,6 +54,7 @@ func _schedule_spill(ahead: int) -> StringName:
 				"mess_id": 0,
 				"place": "",
 				"outcome": "",
+				"shown": false,
 			}
 		)
 	)
@@ -85,6 +86,14 @@ func test_the_scene_wires_the_director_and_starts_with_incidents_off() -> void:
 	assert_bool(_director.is_enabled()).is_false()
 	assert_bool(_save.snapshot().has("incidents")).is_true()
 	assert_object(_rail).is_not_null()
+
+
+func test_the_scene_wires_the_major_panel_to_the_director_clock_and_save() -> void:
+	var panel := _main.get_node("IncidentPanel") as IncidentPanel
+	assert_object(panel.director).is_same(_director)
+	assert_object(panel.clock).is_same(_clock)
+	assert_object(panel.save_game).is_same(_save)
+	assert_bool(panel.is_open()).is_false()
 
 
 func test_a_spill_fires_at_its_tick_and_posts_a_card_naming_the_cause() -> void:

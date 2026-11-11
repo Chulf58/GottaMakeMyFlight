@@ -35,6 +35,9 @@ signal started(incident: Dictionary)
 signal ended(incident: Dictionary)
 ## A load replaced every incident; the cards are posted again.
 signal restored
+## A major incident was announced or offered (present()); the panel
+## (IncidentPanel) shows it. A copy of its record.
+signal major_presented(incident: Dictionary)
 
 ## A spill may come this long before the day's first departure: two hours.
 const BUSY_LEAD_TICKS := 2 * 60 * GameCalendar.TICKS_PER_MINUTE
@@ -160,6 +163,58 @@ func last_rolled_day() -> int:
 	return _last_rolled_day
 
 
+## What a major incident's turn at the player looks like (slice G calls these
+## from a major's fire tick; the panel answers through answer() and
+## acknowledge()). A major is announced (the player is told, then closes the
+## panel) or offered (the player accepts or declines). Both pause the game while
+## the panel is open. A minor never comes here.
+##
+## Moves the scheduled incident `id` to announced, or to offered when
+## `as_offer`, and emits major_presented. False, changing nothing, for an id that
+## is not a scheduled incident.
+func present(id: int, as_offer: bool) -> bool:
+	var incident := _record(id)
+	if incident.is_empty() or incident["state"] != IncidentCatalogue.SCHEDULED:
+		return false
+	incident["state"] = IncidentCatalogue.OFFERED if as_offer else IncidentCatalogue.ANNOUNCED
+	major_presented.emit(incident.duplicate())
+	return true
+
+
+## The player's answer to an offer: accepted or declined. False, changing
+## nothing, for an id that is not an offer waiting for its answer.
+func answer(id: int, accepted: bool) -> bool:
+	var incident := _record(id)
+	if incident.is_empty() or incident["state"] != IncidentCatalogue.OFFERED:
+		return false
+	incident["state"] = IncidentCatalogue.ACCEPTED if accepted else IncidentCatalogue.DECLINED
+	return true
+
+
+## The player closed an announcement: it is shown, and a load does not show it
+## again. False for an id that is not an announcement not yet shown.
+func acknowledge(id: int) -> bool:
+	var incident := _record(id)
+	if incident.is_empty() or incident["state"] != IncidentCatalogue.ANNOUNCED or incident["shown"]:
+		return false
+	incident["shown"] = true
+	return true
+
+
+## Copies of the majors the player has yet to deal with, oldest first: every
+## offer not answered and every announcement not closed. After a load these are
+## the ones the panel shows again.
+func pending_presentation() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for incident in _incidents:
+		var state: String = incident["state"]
+		if state == IncidentCatalogue.OFFERED:
+			out.append(incident.duplicate())
+		elif state == IncidentCatalogue.ANNOUNCED and not incident["shown"]:
+			out.append(incident.duplicate())
+	return out
+
+
 ## Whether a cleaner is on the staff, for the card's words.
 func cleaner_hired() -> bool:
 	var staff := passengers.staff
@@ -267,6 +322,7 @@ func _roll(day: int, tick: int) -> void:
 				"mess_id": 0,
 				"place": "",
 				"outcome": "",
+				"shown": false,
 			}
 		)
 	)
@@ -300,6 +356,14 @@ func _fire(incident: Dictionary) -> void:
 func _no_place(incident: Dictionary) -> void:
 	incident["state"] = IncidentCatalogue.DONE
 	incident["outcome"] = IncidentSnapshot.NO_PLACE
+
+
+## The kept record of incident `id` itself (not a copy), or {} for none.
+func _record(id: int) -> Dictionary:
+	for incident in _incidents:
+		if incident["id"] == id:
+			return incident
+	return {}
 
 
 func _is_over(incident: Dictionary) -> bool:

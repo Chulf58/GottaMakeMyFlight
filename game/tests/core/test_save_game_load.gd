@@ -121,20 +121,20 @@ func test_parts_saved_on_different_ticks_are_refused() -> void:
 ## 10 with gates, version 11 with the stations the player closed, version 12
 ## with the build unlocks, version 13 with the runway's size, 14 with its works,
 ## 15 with the unlock guide's marks, 16 with the rating's incident adjustments,
-## 17 with the incidents: a version 6 save
+## 17 with the incidents, 18 with their shown flag: a version 6 save
 ## (from the Toon shell), a version 7 one (before the airside moved north), a
 ## version 8 one (no land), a version 9 one (no gates), a version 10 one (no
 ## closed stations), a version 11 one (no unlocks), a version 12 one (no
 ## runway) and so on up to a version 16 one (no incidents part) are
 ## refused whole, with no migration, and change nothing.
 func test_a_version_6_save_from_the_toon_shell_is_refused() -> void:
-	assert_int(SaveGame.SAVE_VERSION).is_equal(17)
+	assert_int(SaveGame.SAVE_VERSION).is_equal(18)
 	for version in [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]:
 		var old := _older()
 		old["save_version"] = version
 		_assert_refused(old, "version %d" % version)
 		print("version %d: '%s'" % [version, _save.message_text()])
-		assert_str(_save.message_text()).contains("save_version must be 17")
+		assert_str(_save.message_text()).contains("save_version must be 18")
 
 
 ## A grid saved in another frame than the site's (the Toon shell's 66 x 30

@@ -82,7 +82,10 @@ signal loaded(ok: bool)
 ## rolled day, the next day a major may come and every incident's saved ticks);
 ## required whenever the scene has a director. Version 16 saves are refused (no
 ## migration before a release).
-const SAVE_VERSION := 17
+## 18: every saved incident also says whether its announcement was shown
+## (IncidentSnapshot version 2, "shown"); version 17 saves are refused (no
+## migration before a release).
+const SAVE_VERSION := 18
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"

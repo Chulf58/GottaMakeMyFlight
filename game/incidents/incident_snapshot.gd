@@ -9,19 +9,23 @@ extends RefCounted
 ##
 ## {"save_version", "enabled", "last_rolled_day" (-1 before the first roll),
 ##  "next_major_day", "next_id", "incidents": [{"id", "kind", "roll_day",
-##  "state", "fire_tick", "cell": [x, y], "mess_id", "place", "outcome"}]}
+##  "state", "fire_tick", "cell": [x, y], "mess_id", "place", "outcome",
+##  "shown"}]}
+## "shown" is true once the player has seen a major's announcement and closed it
+## (IncidentDirector.acknowledge), so a load does not show it again; a scheduled
+## incident is never shown.
 ## A scheduled incident has no cell ([-1, -1]), no mess (0) and no place ("");
 ## an active one has all three, its place one of IncidentCatalogue.SPILL_PLACES;
 ## a done one has all three or none, and none when its outcome is NO_PLACE.
 ## The outcome is "" or, on a done incident only, NO_PLACE (it never happened).
 ## links_problem() checks an active spill against the staged messes.
 
-const SAVE_VERSION := 1
+const SAVE_VERSION := 2
 const KEYS: Array[String] = [
 	"save_version", "enabled", "last_rolled_day", "next_major_day", "next_id", "incidents"
 ]
 const INCIDENT_KEYS: Array[String] = [
-	"id", "kind", "roll_day", "state", "fire_tick", "cell", "mess_id", "place", "outcome"
+	"id", "kind", "roll_day", "state", "fire_tick", "cell", "mess_id", "place", "outcome", "shown"
 ]
 const NO_CELL := Vector2i(-1, -1)
 ## The outcome of a spill that was due with nowhere to happen.
@@ -42,6 +46,7 @@ static func save_incident(incident: Dictionary) -> Dictionary:
 		"mess_id": incident["mess_id"],
 		"place": incident["place"],
 		"outcome": incident["outcome"],
+		"shown": incident["shown"],
 	}
 
 
@@ -133,6 +138,7 @@ static func _incident(entry: Variant, next_id: int) -> Dictionary:
 		"mess_id": int(data["mess_id"]),
 		"place": data["place"],
 		"outcome": data["outcome"],
+		"shown": data["shown"],
 	}
 
 
@@ -151,6 +157,10 @@ static func _kind_problem(data: Dictionary) -> String:
 		return "incident %d has an unknown outcome %s" % [int(data["id"]), str(data["outcome"])]
 	if data["outcome"] != "" and data["state"] != IncidentCatalogue.DONE:
 		return "incident %d has an outcome but is not done" % int(data["id"])
+	if typeof(data["shown"]) != TYPE_BOOL:
+		return "incident %d shown must be a bool" % int(data["id"])
+	if data["shown"] and data["state"] == IncidentCatalogue.SCHEDULED:
+		return "incident %d is scheduled but already shown" % int(data["id"])
 	return ""
 
 

@@ -70,6 +70,7 @@ func _schedule_spill(fire_tick: int) -> void:
 			"mess_id": 0,
 			"place": "",
 			"outcome": "",
+			"shown": false,
 		}
 	]
 	assert_bool(_director.from_snapshot(data)).is_true()
