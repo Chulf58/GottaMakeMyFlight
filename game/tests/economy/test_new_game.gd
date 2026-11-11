@@ -15,12 +15,19 @@ const CI_HIRE := "Check-in desk and an agent: hire an agent on Staff"
 const SEC_HIRE := "Security scanner and an officer: hire an officer on Staff"
 
 var _main: Node
+var _alerts_path := SaveTestKit.run_path("new_game_alerts")
+var _departures_path := SaveTestKit.run_path("new_game_departures")
 var _boot := {}
 var _opened := {}
 
 
 func before() -> void:
 	_main = load(MAIN).instantiate()
+	# Per-process settings, set before the scene enters the tree and reads them,
+	# so the player's own Departures choice in user://hud_settings.cfg (B hides
+	# the board) never reaches the test.
+	(_main.get_node("PassengerHud") as PassengerHud).alert_settings_path = _alerts_path
+	(_main.get_node("PassengerHud") as PassengerHud).departures_settings_path = _departures_path
 	add_child(_main)
 	var clock: SimClock = _main.get_node("SimClock")
 	clock.set_paused(true)
@@ -65,6 +72,8 @@ static func _panel_texts(hud: PassengerHud) -> PackedStringArray:
 
 func after() -> void:
 	_main.free()
+	DirAccess.remove_absolute(_alerts_path)
+	DirAccess.remove_absolute(_departures_path)
 
 
 ## Builds the starter terminal, seats staff at every station and steps to the
