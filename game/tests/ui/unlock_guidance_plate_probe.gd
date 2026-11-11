@@ -1,8 +1,8 @@
 extends SceneTree
 ## Windowed plates of the unlock guidance (board c91fac99): the new-tier dialog,
 ## and the tray with "New" tints and a hovered locked card. The probe opens tier 2
-## by play (rating and made flights), with the guide switched on and a settings
-## file of its own, so the player's hud_settings.cfg is never touched.
+## by play (rating and made flights), with the guide switched on. Nothing is
+## saved: what the guide shows and sees lives in the game, not in a profile file.
 ##
 ## Run (one windowed Godot run project-wide; take the slot first):
 ##   timeout 300 Godot_v4.7.2-stable_win64_console.exe --display-driver windows \
@@ -12,7 +12,6 @@ extends SceneTree
 ## Plates go to tools/blender/out/unlock-guidance/ in the main checkout.
 
 const OUT_DIR := "C:/Users/chulf/Gotta-make-my-flight/tools/blender/out/unlock-guidance"
-const SETTINGS := "user://unlock_guidance_probe.cfg"
 ## Frames the tooltip may take to appear (its delay is wall-clock time).
 const TOOLTIP_FRAMES := 240
 const MARGIN := 8.0
@@ -24,8 +23,6 @@ func _initialize() -> void:
 
 func _run() -> void:
 	DirAccess.make_dir_recursive_absolute(OUT_DIR)
-	if FileAccess.file_exists(SETTINGS):
-		DirAccess.remove_absolute(ProjectSettings.globalize_path(SETTINGS))
 	var main: Node3D = (load("res://main/main.tscn") as PackedScene).instantiate()
 	var clock := main.get_node("SimClock") as SimClock
 	var world_seed := randi()
@@ -33,7 +30,6 @@ func _run() -> void:
 	print("PROBE sim_seed=", world_seed)
 	var hud := main.find_children("*", "PassengerHud", true, false)[0] as PassengerHud
 	hud.unlock_guide().mode = UnlockGuide.Mode.PROFILE
-	hud.unlock_guide().settings_path = SETTINGS
 	root.content_scale_factor = 1.0
 	root.add_child(main)
 	clock.set_paused(true)
@@ -64,6 +60,11 @@ func _run() -> void:
 	)
 	if not view.encloses(box):
 		_invalid("the dialog box is out of view")
+		return
+	var status := menu.status_label()
+	print("PROBE status_text='%s' visible=%s" % [status.text, menu.status_card().visible])
+	if status.text.begins_with("Unlocked:"):
+		_invalid("the Unlocked line holds the status while the dialog is open")
 		return
 	_save("unlock_dialog.png")
 	guide.dismiss()
@@ -151,8 +152,6 @@ func _invalid(reason: String) -> void:
 
 
 func _finish(code: int) -> void:
-	if FileAccess.file_exists(SETTINGS):
-		DirAccess.remove_absolute(ProjectSettings.globalize_path(SETTINGS))
 	quit(code)
 
 

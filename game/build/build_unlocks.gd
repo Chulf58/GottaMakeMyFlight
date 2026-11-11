@@ -18,7 +18,9 @@ extends Node
 ## BuildMode.set_tool() asks lock_text() and a template paste asks
 ## edits_lock_text() for every room and piece it holds; BuildMenu greys the
 ## locked cards with the same text. The save keeps the tier and the made-flight count (part
-## "unlocks", SaveGame).
+## "unlocks", SaveGame), and with them what UnlockGuide has shown and the player
+## has seen (the tiers whose dialog showed, the tools hovered or picked), so a
+## new game starts with none and a load restores them.
 
 ## The tier changed (a new game, an unlock or a load).
 signal tier_changed(tier: int)
@@ -186,6 +188,10 @@ static var _tool_by_room: Dictionary = {}
 var _tier := START_TIER
 var _made := 0
 var _checked_day := NO_DAY
+## Tier -> true once its unlock dialog showed; Tool -> true once the player
+## hovered or picked its card (both set by UnlockGuide, kept in the snapshot).
+var _shown: Dictionary = {}
+var _seen: Dictionary = {}
 
 
 func _ready() -> void:
@@ -339,9 +345,34 @@ func note_made() -> void:
 	_made = mini(_made + 1, MAX_MADE)
 
 
-## JSON-safe state for a save: the highest tier and the made-flight count.
+## True once the unlock dialog of `tier` has shown in this game.
+func dialog_shown(tier: int) -> bool:
+	return _shown.has(tier)
+
+
+func mark_dialog_shown(tier: int) -> void:
+	_shown[tier] = true
+
+
+## True once the player hovered or picked the card of `tool` in this game.
+func tool_seen(tool: BuildMode.Tool) -> bool:
+	return _seen.has(tool)
+
+
+func mark_tool_seen(tool: BuildMode.Tool) -> void:
+	_seen[tool] = true
+
+
+## JSON-safe state for a save: the highest tier, the made-flight count, the
+## tiers whose dialog showed and the names of the tools the player has seen.
 func to_snapshot() -> Dictionary:
-	return {"tier": _tier, "made": _made}
+	var shown := _shown.keys()
+	shown.sort()
+	var seen := []
+	for tool in _seen:
+		seen.append(String(BuildMode.Tool.find_key(tool)))
+	seen.sort()
+	return {"tier": _tier, "made": _made, "shown": shown, "seen": seen}
 
 
 ## Restores a to_snapshot() dictionary, including one that went through JSON.
@@ -355,13 +386,19 @@ func from_snapshot(data: Dictionary) -> bool:
 	_tier = int(data["tier"])
 	_made = int(data["made"])
 	_checked_day = NO_DAY
+	_shown.clear()
+	for tier in data.get("shown", []):
+		_shown[int(tier)] = true
+	_seen.clear()
+	for tool_name in data.get("seen", []):
+		_seen[BuildMode.Tool[tool_name]] = true
 	tier_changed.emit(_tier)
 	return true
 
 
 static func _snapshot_problem(data: Dictionary) -> String:
 	for key in data.keys():
-		if key != "tier" and key != "made":
+		if not key in ["tier", "made", "shown", "seen"]:
 			return "unknown key '%s'" % key
 	for key in ["tier", "made"]:
 		if not data.has(key) or not WholeNumber.is_whole(data[key]):
@@ -376,6 +413,24 @@ static func _snapshot_problem(data: Dictionary) -> String:
 			"tier %d needs %d passengers made, not %d"
 			% [int(data["tier"]), need, int(data["made"])]
 		)
+	return _marks_problem(data)
+
+
+## The "shown" tiers must be open tiers above the start one; the "seen" entries
+## must name tools of open tiers. Either key may be absent (nothing marked).
+static func _marks_problem(data: Dictionary) -> String:
+	var tier := int(data["tier"])
+	for key in ["shown", "seen"]:
+		if data.has(key) and not data[key] is Array:
+			return "'%s' must be a list" % key
+	for entry in data.get("shown", []):
+		if not WholeNumber.is_whole(entry) or int(entry) <= START_TIER or int(entry) > tier:
+			return "shown tier %s is not an open tier above the start" % str(entry)
+	for entry in data.get("seen", []):
+		if not entry is String or not BuildMode.Tool.has(entry):
+			return "seen entry %s is not a tool name" % str(entry)
+		if tier_of(BuildMode.Tool[entry]) > tier:
+			return "seen tool %s is above tier %d" % [entry, tier]
 	return ""
 
 

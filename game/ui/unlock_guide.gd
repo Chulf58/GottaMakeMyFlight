@@ -9,16 +9,16 @@ extends Node
 ##   closes, as the Offers sheet does (decision 64aef33b; OfferPanel.open()).
 ##   The phone ring is a silent hook for now: `phone_ring` fires as the dialog
 ##   opens and the audio work (board e612caf3) plays it later.
-## - A "New" mark on the cards of the newest opened tier (is_new()), kept until
-##   the player hovers or picks the card (mark_seen()). BuildMenu tints them.
+## - A "New" mark on every unlocked card the player has not hovered or picked
+##   yet (is_new()), however many tiers ago it opened. BuildMenu tints them.
 ##
-## Both memories live per profile in the shared HUD settings file, as the
-## first-time hints' do (HudFlagSetting; keys "unlock_dialog_<tier>" and
-## "unlock_seen_<tool>"), never in a save. A load therefore re-shows neither: a
-## load emits no tiers_opened, and a tier opened again by replaying an earlier
-## save was already shown. The guide is off (mode OFF: no dialog, no mark) in a
-## probe, a test or a PlaytestHook run, like the hints; PassengerHud sets the
-## mode, and a test sets it with a settings_path of its own.
+## What was shown and seen is game state, kept in BuildUnlocks (dialog_shown(),
+## tool_seen()) and so in the save's "unlocks" part: a new game starts with none,
+## a load restores them. A load opens no dialog (it emits no tiers_opened) and
+## ends one that is open, giving the clock back as it was before the dialog. The
+## dialog shows for exactly the tiers not shown yet, so a tier skip never shows a
+## tier twice. The guide is off (mode OFF: no dialog, no mark) in a probe, a test
+## or a PlaytestHook run, like the hints; PassengerHud sets the mode.
 
 ## The dialog opened or closed (PassengerHud holds the camera still meanwhile).
 signal dialog_changed(open: bool)
@@ -30,9 +30,6 @@ signal phone_ring(tier: int)
 
 enum Mode { OFF, PROFILE }
 
-const WHO := "UnlockGuide"
-const DIALOG_PREFIX := "unlock_dialog_"
-const SEEN_PREFIX := "unlock_seen_"
 ## The dialog's canvas layer: with the intro, over the HUD and the build menu.
 const LAYER := 10
 const TITLE_TEXT := "Your airport has grown"
@@ -41,13 +38,11 @@ const FOOTER_TEXT := "The clock goes on when you close this."
 const BOX_HEIGHT := 400.0
 
 var mode := Mode.OFF
-## Where the memories are kept.
-var settings_path := HudFlagSetting.PATH
 var unlocks: BuildUnlocks
 var clock: SimClock
+## Optional: a load ends an open dialog.
+var save_game: SaveGame
 
-var _first_new := 0
-var _seen: Dictionary = {}
 var _layer: CanvasLayer
 var _dialog: IntroDialogue
 var _held_paused := false
@@ -62,7 +57,8 @@ func _ready() -> void:
 		return
 	unlocks.tier_changed.connect(_on_tier_changed)
 	unlocks.tiers_opened.connect(_on_tiers_opened)
-	_on_tier_changed(unlocks.tier())
+	if save_game != null:
+		save_game.loaded.connect(_on_loaded)
 
 
 func _process(_delta: float) -> void:
@@ -76,27 +72,20 @@ func _exit_tree() -> void:
 	_restore_clock()
 
 
-## True for a card of the newest opened tier that the player has not hovered
-## or picked yet.
+## True for an unlocked card the player has not hovered or picked yet.
 func is_new(tool: BuildMode.Tool) -> bool:
-	if mode == Mode.OFF or _first_new < BuildUnlocks.CAFE_TIER or unlocks == null:
+	if mode == Mode.OFF or unlocks == null:
 		return false
 	var tier := BuildUnlocks.tier_of(tool)
-	return tier >= _first_new and tier <= unlocks.tier() and not _is_seen(tool)
+	return tier >= BuildUnlocks.CAFE_TIER and tier <= unlocks.tier() and not unlocks.tool_seen(tool)
 
 
 ## The player hovered or picked the card: it is no longer new, for good.
 func mark_seen(tool: BuildMode.Tool) -> void:
 	if not is_new(tool):
 		return
-	_seen[tool] = true
-	HudFlagSetting.save_flag(settings_path, _seen_key(tool), true, WHO)
+	unlocks.mark_tool_seen(tool)
 	changed.emit()
-
-
-## True once the dialog for `tier` has been shown on this profile.
-func dialog_shown(tier: int) -> bool:
-	return HudFlagSetting.load_flag(settings_path, DIALOG_PREFIX + str(tier), false, WHO)
 
 
 func is_open() -> bool:
@@ -114,39 +103,36 @@ func dismiss() -> void:
 		_dialog.dismiss()
 
 
-## The dialog's text for tiers `first` to `last`: one line per family, then the
-## note about the clock.
-static func body_for(first: int, last: int) -> String:
-	return "\n".join(UnlockFamilies.lines(first, last)) + "\n" + FOOTER_TEXT
+## The dialog's text for the listed tiers: one line per family, then the note
+## about the clock.
+static func body_for(tiers: Array) -> String:
+	return "\n".join(UnlockFamilies.lines(tiers)) + "\n" + FOOTER_TEXT
 
 
-func _on_tier_changed(tier: int) -> void:
-	_first_new = tier if tier >= BuildUnlocks.CAFE_TIER else 0
+func _on_tier_changed(_tier: int) -> void:
 	changed.emit()
 
 
-## Tiers opened by play: the marks cover all of them, and the dialog shows for
-## the ones not shown before.
+## Tiers opened by play: the dialog shows for the ones not shown before, and
+## only those.
 func _on_tiers_opened(first: int, last: int) -> void:
-	_first_new = first
 	changed.emit()
-	var due := first
-	while due <= last and dialog_shown(due):
-		due += 1
-	if due > last:
-		return
-	for tier in range(due, last + 1):
-		HudFlagSetting.save_flag(settings_path, DIALOG_PREFIX + str(tier), true, WHO)
-	_open_dialog(due, last)
+	var due := []
+	for tier in range(first, last + 1):
+		if not unlocks.dialog_shown(tier):
+			due.append(tier)
+			unlocks.mark_dialog_shown(tier)
+	if not due.is_empty():
+		open_dialog(due)
 
 
-func _open_dialog(first: int, last: int) -> void:
+func open_dialog(tiers: Array) -> void:
 	if _dialog != null:
 		_free_dialog()
 	_layer = CanvasLayer.new()
 	_layer.name = "UnlockLayer"
 	_layer.layer = LAYER
-	_dialog = IntroDialogue.new(TITLE_TEXT, body_for(first, last), BOX_HEIGHT)
+	_dialog = IntroDialogue.new(TITLE_TEXT, body_for(tiers), BOX_HEIGHT)
 	_layer.add_child(_dialog)
 	add_child(_layer)
 	_dialog.dismissed.connect(_close_dialog)
@@ -158,7 +144,7 @@ func _open_dialog(first: int, last: int) -> void:
 		clock.set_paused(true)
 		_holding_clock = true
 		set_process(true)
-	phone_ring.emit(last)
+	phone_ring.emit(tiers.back())
 	dialog_changed.emit(true)
 
 
@@ -167,6 +153,19 @@ func _close_dialog() -> void:
 		return
 	_free_dialog()
 	_restore_clock()
+	dialog_changed.emit(false)
+
+
+## A load replaced the world, clock included (it was saved paused by this very
+## dialog): the dialog ends and the clock goes back to what it was before it.
+func _on_loaded(ok: bool) -> void:
+	if not ok or _dialog == null:
+		return
+	_free_dialog()
+	set_process(false)
+	if clock != null and _holding_clock:
+		clock.set_paused(_held_paused)
+	_holding_clock = false
 	dialog_changed.emit(false)
 
 
@@ -188,13 +187,3 @@ func _restore_clock() -> void:
 	if not clock.paused or clock.speed != _held_speed:
 		return
 	clock.set_paused(_held_paused)
-
-
-func _is_seen(tool: BuildMode.Tool) -> bool:
-	if not _seen.has(tool):
-		_seen[tool] = HudFlagSetting.load_flag(settings_path, _seen_key(tool), false, WHO)
-	return _seen[tool]
-
-
-static func _seen_key(tool: BuildMode.Tool) -> String:
-	return SEEN_PREFIX + String(BuildMode.Tool.find_key(tool))

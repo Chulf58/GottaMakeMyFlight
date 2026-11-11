@@ -72,11 +72,14 @@ static func family_of(tool: BuildMode.Tool) -> StringName:
 	return FAMILY_OF.get(tool, OTHER)
 
 
-## The tools tiers `first` to `last` bring, grouped by family; only families
-## with a tool (or, for the runway, a size that opens) appear, in ORDER.
-static func grouped(first: int, last: int) -> Dictionary:
+## The tools of the listed `tiers` grouped by family; only families with a tool
+## (or, for the runway, a size that opens) appear, in ORDER. The start tier and
+## a tier no TIERS entry lists bring nothing: nothing opens for them.
+static func grouped(tiers: Array) -> Dictionary:
 	var groups := {}
-	for tier in range(maxi(first, 1), mini(last, BuildUnlocks.TIERS.size()) + 1):
+	for tier: int in tiers:
+		if tier <= BuildUnlocks.START_TIER or tier > BuildUnlocks.TIERS.size():
+			continue
 		for tool: BuildMode.Tool in BuildUnlocks.TIERS[tier - 1]["tools"]:
 			var family := family_of(tool)
 			if not groups.has(family):
@@ -92,10 +95,10 @@ static func grouped(first: int, last: int) -> Dictionary:
 	return ordered
 
 
-## One line per family the tiers `first` to `last` bring.
-static func lines(first: int, last: int) -> Array[String]:
+## One line per family the listed `tiers` bring.
+static func lines(tiers: Array) -> Array[String]:
 	var out: Array[String] = []
-	var groups := grouped(first, last)
+	var groups := grouped(tiers)
 	for family: StringName in groups:
 		if family == OTHER:
 			out.append(LINES[OTHER] % ", ".join(_names(groups[family])))

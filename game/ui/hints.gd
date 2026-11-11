@@ -396,11 +396,11 @@ func _banner() -> StaffPanel:
 	return _find("StaffPanel") as StaffPanel
 
 
-## True while the intro, the Offers sheet or an extra modal is open.
+## True while the intro, the unlock dialog, the Offers sheet or an extra modal is open.
 func _modal() -> bool:
 	if modal.is_valid() and modal.call():
 		return true
-	if hud != null and hud.intro() != null:
+	if hud != null and (hud.intro() != null or hud.unlock_guide().is_open()):
 		return true
 	var offers := _find("OfferPanel") as OfferPanel
 	return offers != null and offers.is_open()

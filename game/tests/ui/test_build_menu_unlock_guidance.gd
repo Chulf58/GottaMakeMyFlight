@@ -1,9 +1,10 @@
 class_name TestBuildMenuUnlockGuidance
 extends GdUnitTestSuite
 ## The tray's part of the unlock guidance (decision new-unlock-tier-phone-ring-
-## and-a-short-per-family-dialog-onc): the cards of the newest tier carry the
-## "New" tint until hovered or picked, and a locked card shows its description
-## with a requirement worked out when the hover card is built, not at setup.
+## and-a-short-per-family-dialog-onc): the unlocked cards the player has not
+## seen carry the "New" tint until hovered or picked by any route, a locked card
+## shows its description with a requirement worked out when the hover card is
+## built, and the "Unlocked:" status line gives way to the dialog.
 
 var _port: SubViewport
 var _mode: BuildMode
@@ -12,11 +13,9 @@ var _unlocks: BuildUnlocks
 var _rating: AirportRating
 var _pax: PassengerSim
 var _guide: UnlockGuide
-var _path := SaveTestKit.run_path("test_build_menu_unlock_guidance")
 
 
 func before_test() -> void:
-	_remove_files()
 	_port = SubViewport.new()
 	_port.size = Vector2i(1280, 720)
 	add_child(_port)
@@ -29,7 +28,6 @@ func before_test() -> void:
 	_port.add_child(_unlocks)
 	_guide = UnlockGuide.new()
 	_guide.mode = UnlockGuide.Mode.PROFILE
-	_guide.settings_path = _path
 	_guide.unlocks = _unlocks
 	_port.add_child(_guide)
 	_mode = BuildMode.new()
@@ -45,21 +43,19 @@ func before_test() -> void:
 
 func after_test() -> void:
 	_port.free()
-	_remove_files()
 
 
-func _remove_files() -> void:
-	for file in [_path, _path + ".tmp"]:
-		if FileAccess.file_exists(file):
-			DirAccess.remove_absolute(file)
-
-
-func _open_cafe_tier() -> void:
+## Opens the cafe tier by play; the guide's dialog is open afterwards.
+func _earn_cafe_tier() -> void:
 	for i in 60:
 		_rating.record_passenger(0, true, PassengerSim.MOOD_MAX)
 	for i in 50:
 		_pax.outcome.emit(i, true)
 	_unlocks.check()
+
+
+func _open_cafe_tier() -> void:
+	_earn_cafe_tier()
 	_guide.dismiss()
 
 
@@ -90,12 +86,45 @@ func test_picking_a_new_card_clears_its_tint() -> void:
 	assert_bool(_new_look(BuildMode.Tool.COUNTER)).is_false()
 
 
+func test_a_tool_picked_by_key_clears_its_tint_too() -> void:
+	_open_cafe_tier()
+	# What a number key does: BuildMode picks the tool without the card.
+	_mode.set_tool(BuildMode.Tool.TABLE)
+	assert_int(_mode.tool).is_equal(BuildMode.Tool.TABLE)
+	assert_bool(_new_look(BuildMode.Tool.TABLE)).is_false()
+	assert_bool(_new_look(BuildMode.Tool.COUNTER)).is_true()
+
+
+func test_a_refused_pick_leaves_the_tint_and_the_mark() -> void:
+	_open_cafe_tier()
+	_mode.set_tool(BuildMode.Tool.TREE)
+	assert_int(_mode.tool).is_not_equal(BuildMode.Tool.TREE)
+	assert_bool(_unlocks.tool_seen(BuildMode.Tool.TREE)).is_false()
+
+
 func test_without_a_guide_no_card_is_tinted() -> void:
 	var bare: BuildMenu = auto_free(BuildMenu.new())
 	bare.build_mode = _mode
 	_port.add_child(bare)
 	_open_cafe_tier()
 	assert_object(bare.card(BuildMode.Tool.CAFE_ROOM).modulate).is_equal(Color.WHITE)
+
+
+func test_the_unlocked_status_line_gives_way_to_the_open_dialog() -> void:
+	_earn_cafe_tier()
+	assert_bool(_guide.is_open()).is_true()
+	assert_str(_menu.status_label().text).not_contains("Unlocked:")
+
+
+func test_the_unlocked_status_line_still_shows_without_a_dialog() -> void:
+	var bare_guide: UnlockGuide = auto_free(UnlockGuide.new())
+	bare_guide.mode = UnlockGuide.Mode.OFF
+	bare_guide.unlocks = _unlocks
+	_port.add_child(bare_guide)
+	_menu.watch_guide(bare_guide)
+	_earn_cafe_tier()
+	assert_bool(bare_guide.is_open()).is_false()
+	assert_str(_menu.status_label().text).starts_with("Unlocked:")
 
 
 func test_a_locked_card_shows_its_description_and_the_requirement() -> void:

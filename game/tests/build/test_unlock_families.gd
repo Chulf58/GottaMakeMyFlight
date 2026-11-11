@@ -7,7 +7,7 @@ extends GdUnitTestSuite
 
 
 func _families(first: int, last: int) -> Array:
-	return UnlockFamilies.grouped(first, last).keys()
+	return UnlockFamilies.grouped(range(first, last + 1)).keys()
 
 
 func test_the_cafe_tier_brings_every_named_family_and_the_medium_runway() -> void:
@@ -42,7 +42,7 @@ func test_a_jump_over_two_tiers_joins_their_families() -> void:
 func test_every_tool_of_a_tier_is_in_exactly_one_family() -> void:
 	for tier in range(2, BuildUnlocks.TIERS.size() + 1):
 		var seen := 0
-		var groups := UnlockFamilies.grouped(tier, tier)
+		var groups := UnlockFamilies.grouped([tier])
 		for family: StringName in groups:
 			for tool: BuildMode.Tool in groups[family]:
 				assert_str(UnlockFamilies.family_of(tool)).is_equal(family)
@@ -52,7 +52,7 @@ func test_every_tool_of_a_tier_is_in_exactly_one_family() -> void:
 
 
 func test_one_line_per_family_and_other_names_its_pieces() -> void:
-	var lines := UnlockFamilies.lines(2, 2)
+	var lines := UnlockFamilies.lines([2])
 	assert_int(lines.size()).is_equal(6)
 	assert_str(lines[0]).starts_with("Food:")
 	assert_str(lines[5]).starts_with("Also new:")
@@ -60,5 +60,5 @@ func test_one_line_per_family_and_other_names_its_pieces() -> void:
 
 
 func test_the_tools_of_the_start_tier_and_an_out_of_range_tier_bring_nothing() -> void:
-	assert_array(_families(1, 1)).not_contains([UnlockFamilies.FOOD])
+	assert_array(_families(1, 1)).is_empty()
 	assert_array(_families(5, 9)).is_empty()

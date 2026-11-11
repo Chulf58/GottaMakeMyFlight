@@ -536,6 +536,7 @@ func _wire_unlock_guide() -> void:
 	if build_mode != null:
 		_unlock_guide.unlocks = build_mode.unlocks
 	_unlock_guide.clock = clock
+	_unlock_guide.save_game = save_game
 	_unlock_guide.dialog_changed.connect(_gate_camera)
 	add_child(_unlock_guide)
 	var menu := get_node_or_null("../BuildMenu") as BuildMenu

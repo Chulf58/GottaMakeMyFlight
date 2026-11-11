@@ -357,13 +357,12 @@ func press_staff() -> void:
 
 ## A card click: picks its tool.
 func press_card(tool: BuildMode.Tool) -> void:
-	if guide != null:
-		guide.mark_seen(tool)
 	build_mode.set_tool(tool)
 
 
-## Follows `new_guide`: its "New" marks tint the cards and the pointer resting on
-## a marked card clears it. Called once, by whoever builds the HUD.
+## Follows `new_guide`: its "New" marks tint the cards, and the pointer resting on
+## a marked card or any tool picked (card or number key) clears it. Called once,
+## by whoever builds the HUD.
 func watch_guide(new_guide: UnlockGuide) -> void:
 	guide = new_guide
 	guide.changed.connect(_refresh_locks)
@@ -484,6 +483,8 @@ func _set_staff_open(open: bool) -> void:
 
 
 func _on_tool_changed(tool: BuildMode.Tool) -> void:
+	if guide != null and tool != BuildMode.Tool.NONE:
+		guide.mark_seen(tool)
 	if tool == BuildMode.Tool.NONE:
 		if not _browsing:
 			_open = NO_CATEGORY
@@ -550,7 +551,11 @@ func _on_tier_changed(_tier: int) -> void:
 	_refresh_locks()
 
 
+## The "Unlocked: ..." line holds the status unless the unlock dialog is open,
+## which names the families itself.
 func _on_unlocked(_tier: int, text: String) -> void:
+	if guide != null and guide.is_open():
+		return
 	_start_hold(text, false)
 
 
