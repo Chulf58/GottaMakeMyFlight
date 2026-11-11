@@ -78,7 +78,11 @@ signal loaded(ok: bool)
 ## 16: the rating part holds the incident adjustments (AirportRating save
 ## version 2, RatingAdjustments); version 15 saves are refused (no migration
 ## before a release).
-const SAVE_VERSION := 16
+## 17: the incidents (part "incidents", IncidentDirector: on or off, the last
+## rolled day, the next day a major may come and every incident's saved ticks);
+## required whenever the scene has a director. Version 16 saves are refused (no
+## migration before a release).
+const SAVE_VERSION := 17
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"
@@ -107,6 +111,9 @@ const MESSAGE_SECONDS := 4.0
 @export var gates: GateDesks
 ## The build unlocks; none (a test world) saves no "unlocks" part.
 @export var unlocks: BuildUnlocks
+## The incidents; none (a test world) saves no "incidents" part. With one, a
+## save without the part is refused.
+@export var incidents: IncidentDirector
 ## Where F5 and F8 save and load. Tests point it at their own file.
 @export var quick_save_path := QUICK_SAVE_PATH
 
@@ -247,6 +254,19 @@ func parts() -> Array[SavePart]:
 				unlocks.to_snapshot,
 				SavePart.scratch(BuildUnlocks),
 				unlocks.from_snapshot
+			)
+		)
+	if incidents != null:
+		# Last: its install follows the clock, whose tick sets the day it is on.
+		list.append(
+			SavePart.new(
+				"incidents",
+				incidents.to_snapshot,
+				SavePart.checked(
+					"incidents",
+					func(data: Dictionary) -> Dictionary: return IncidentSnapshot.load(data)
+				),
+				incidents.from_snapshot
 			)
 		)
 	return list
@@ -460,6 +480,10 @@ func _stage_all(data: Dictionary, staged: Dictionary) -> String:
 	var across := _ticks_problem(data)
 	if across == "":
 		across = SaveLinks.problem(data, staged)
+	if across == "" and staged.has("incidents"):
+		# Every active spill names a SPILL mess at its own cell.
+		across = IncidentSnapshot.links_problem(staged["incidents"], staged["messes"])
+		across = "incidents: %s" % across if across != "" else ""
 	if across == "":
 		across = _runway_problem(data, staged)
 	return across
