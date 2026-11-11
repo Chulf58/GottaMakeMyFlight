@@ -1,8 +1,9 @@
 class_name TestIntroDialogue
 extends GdUnitTestSuite
-## The intro dialogue PassengerHud opens a new game with: it pauses the clock,
-## is modal while open, closes on Continue, Space or Enter and then starts the
-## clock at 1x, and opens once per session.
+## The intro dialogue PassengerHud opens a new game with: it holds the clock
+## paused, is modal while open, closes on Continue, Space or Enter and then
+## starts the clock at the player's own speed (a hold on SimClock.holds; it no
+## longer forces 1x), and opens once per session.
 
 ## Held W (pan forward) and Q (rotate left); TycoonCamera polls them each frame.
 const CAMERA_ACTIONS: Array[StringName] = [&"cam_forward", &"cam_rotate_left"]
@@ -146,14 +147,14 @@ func test_on_a_smaller_screen_the_box_still_clears_the_build_tray() -> void:
 		)
 
 
-func test_continue_starts_the_clock_at_1x() -> void:
+func test_continue_starts_the_clock_at_the_players_speed() -> void:
 	_world.clock.set_speed(3)
 	_hud.open_intro()
 	var button: Button = _hud.intro().continue_button()
 	_click(button.get_global_rect().get_center())
 	assert_bool(_hud.intro() != null).is_false()
 	assert_bool(_world.clock.paused).is_false()
-	assert_int(_world.clock.speed).is_equal(1)
+	assert_int(_world.clock.speed).is_equal(3)
 	var tick := _world.clock.tick
 	_world.clock.advance(1.0)
 	assert_int(_world.clock.tick).is_greater(tick)
@@ -246,8 +247,8 @@ func test_freeing_the_dialogue_directly_starts_the_clock_once() -> void:
 	_hud.intro().free()
 	assert_bool(_hud.intro() != null).is_false()
 	assert_bool(_world.clock.paused).is_false()
-	assert_int(_world.clock.speed).is_equal(1)
-	# The emptied layer goes next frame; that must not reset the speed again.
+	assert_int(_world.clock.speed).is_equal(3)
+	# The emptied layer goes next frame; that must not change the speed.
 	_world.clock.set_speed(2)
 	await _frames(2)
 	assert_int(_world.clock.speed).is_equal(2)

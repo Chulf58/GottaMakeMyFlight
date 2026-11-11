@@ -10,9 +10,20 @@ extends Node
 ## (QuietNight) names the tick a fast-forward may run to. Until that tick the
 ## clock runs at FAST_FORWARD_SPEED instead of `speed`, still one tick at a time
 ## and within MAX_STEPS_PER_FRAME, and it stops on that exact tick; the rest of
-## the frame runs at `speed`. `speed` itself never changes, so the panels'
-## held-speed checks see the player's setting, and nothing of the fast-forward
-## is saved: a load ends it.
+## the frame runs at `speed`. `speed` itself never changes, and nothing of the
+## fast-forward is saved: a load ends it.
+##
+## Pause is two things (decision daily-incidents-technical-design-
+## incidentdirector-shared-clo): the player's own pause (set_paused: Space, the
+## speed buttons) and the holds that dialogs and build mode take (`holds`, a
+## ClockHolds). `paused` is true while either pauses the clock; `speed` is only
+## ever the player's. Releasing a hold restores nothing: with no hold left, the
+## player's pause and speed apply again. Resuming or picking another speed
+## while held ends the pause of the holds that give way to the player (build
+## mode, the Offers sheet, which keeps its exclusive turn until it closes); a
+## modal dialog's hold keeps the clock paused, and the
+## player's choice applies once it closes. Installing a snapshot (a load)
+## drops every hold.
 ##
 ## A ticked listener that pauses the clock (UnlockGuide opening at midnight)
 ## ends the frame on that tick, at any speed; the steps the frame still owed
@@ -38,7 +49,20 @@ const SNAPSHOT_KEYS := [
 
 var tick: int = 0
 var speed: int = 1
-var paused: bool = false
+## True while the player paused the clock or any hold is held. Setting it is
+## set_paused(): it sets the player's pause only.
+var paused: bool:
+	get:
+		return _player_paused or holds.is_holding()
+	set(value):
+		set_paused(value)
+## The player's own pause, apart from the holds. Read it only; set_paused()
+## sets it.
+var player_paused: bool:
+	get:
+		return _player_paused
+## Every dialog's and build mode's hold on the clock.
+var holds := ClockHolds.new()
 var rng := RandomNumberGenerator.new()
 ## Asked once a frame while running: returns the tick a fast-forward may run
 ## to, or -1 for none. Unset, the clock never fast-forwards. Not saved.
@@ -53,6 +77,7 @@ var alpha: float:
 		return _accumulator / STEP
 
 var _accumulator: float = 0.0
+var _player_paused := false
 ## True while `ticked` is being emitted, so SaveGame can refuse to save or
 ## load from inside a tick.
 var _in_tick := false
@@ -104,16 +129,24 @@ func is_fast_forwarding() -> bool:
 	return not paused and fast_forward_until > tick
 
 
+## Sets the player's pause. Resuming (false) also ends every hold that gives
+## way to the player.
 func set_paused(value: bool) -> void:
-	paused = value
+	_player_paused = value
+	if not value:
+		holds.yield_to_player()
 
 
 ## Returns false and leaves the speed unchanged when `value` is not in SPEEDS.
+## A new speed also ends every hold that gives way to the player.
 func set_speed(value: int) -> bool:
 	if not SPEEDS.has(value):
 		push_error("SimClock: unsupported speed %d" % value)
 		return false
+	var changed := value != speed
 	speed = value
+	if changed:
+		holds.yield_to_player()
 	return true
 
 
@@ -145,7 +178,8 @@ func to_snapshot() -> Dictionary:
 ## Restores a to_snapshot() dictionary, including one that went through JSON
 ## (which turns ints into floats). Pushes an error and returns false, leaving
 ## the clock unchanged, when any key is missing or unknown, or has a bad type
-## or value.
+## or value. A restored snapshot is a replaced world: every hold is dropped and
+## the saved "paused" becomes the player's pause.
 func from_snapshot(data: Dictionary) -> bool:
 	var problem := _snapshot_problem(data)
 	if problem != "":
@@ -153,7 +187,8 @@ func from_snapshot(data: Dictionary) -> bool:
 		return false
 	tick = str(data["tick"]).to_int()
 	speed = int(data["speed"])
-	paused = data["paused"]
+	holds.clear()
+	_player_paused = data["paused"]
 	_accumulator = float(data["accumulator"])
 	fast_forward_until = -1
 	restore_rng(str(data["rng_seed"]).to_int(), str(data["rng_state"]).to_int())

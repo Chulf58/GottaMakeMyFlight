@@ -60,6 +60,30 @@ func test_a_load_while_paused_at_2x_comes_back_paused_at_1x() -> void:
 	assert_int(_clock.speed).is_equal(1)
 
 
+## Holds taken before the load (the Offers sheet, build mode) all end with it
+## (decision daily-incidents-technical-design-incidentdirector-shared-clo): the
+## game waits paused at 1x, and the player's first resume runs it.
+func test_a_load_drops_every_hold_and_the_first_resume_runs_the_game() -> void:
+	var hud := _main.get_node("PassengerHud") as PassengerHud
+	hud.press_speed(3)
+	(_main.get_node("OfferPanel") as OfferPanel).open()
+	var session := (_main.get_node("BuildMenu") as BuildMenu).build_session
+	session.set_building(true)
+	session.sync()
+	assert_int(_clock.holds.count()).is_equal(2)
+	assert_bool(_save.load_from_file(_path)).is_true()
+	assert_int(_clock.holds.count()).is_equal(0)
+	assert_bool(_clock.paused).is_true()
+	assert_int(_clock.speed).is_equal(1)
+	assert_bool((_main.get_node("OfferPanel") as OfferPanel).is_open()).is_false()
+	assert_bool(session.active).is_false()
+	hud.press_speed(2)
+	assert_bool(_clock.paused).is_false()
+	var tick := _clock.tick
+	_clock.advance(0.11)
+	assert_int(_clock.tick - tick).is_equal(4)
+
+
 func test_a_refused_load_leaves_the_speed_and_pause_alone() -> void:
 	_clock.set_paused(false)
 	assert_bool(_clock.set_speed(3)).is_true()

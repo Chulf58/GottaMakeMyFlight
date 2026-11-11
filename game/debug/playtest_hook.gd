@@ -25,11 +25,16 @@ extends Node
 ##     stuck_too_long, no_route, off_grid, view_drift, view_missing, frame_time;
 ##   - answers snapshot() and events_since() for the Godot MCP's run_script.
 ## --playtest-seed=<n> seeds the scene's SimClock before anything draws from
-## it, so a logged seed can be played again. It does nothing while the hook is off.
+## it, so a logged seed can be played again. --playtest-incidents turns the
+## scene's incidents on (a playtest runs no new-game dialog, so they start off),
+## and --playtest-incidents=<kind> also makes every roll that kind
+## (IncidentDirector.forced_kind); force_incidents() does the same from the
+## Godot MCP's run_script. Both do nothing while the hook is off.
 
 const SETTING := "debug/playtest/enabled"
 const ARG := "--playtest"
 const SEED_ARG := "--playtest-seed="
+const INCIDENTS_ARG := "--playtest-incidents"
 const ENV := "GMMF_PLAYTEST"
 const LOG_DIR := "user://playtest"
 const KEEP_SESSIONS := 10
@@ -135,11 +140,22 @@ static func seed_arg(user_args: PackedStringArray) -> Variant:
 	return null
 
 
+## The incident switch: null without --playtest-incidents, "" with it bare,
+## the kind given after "=" otherwise.
+static func incidents_arg(user_args: PackedStringArray) -> Variant:
+	for arg in user_args:
+		if arg == INCIDENTS_ARG:
+			return ""
+		if arg.begins_with(INCIDENTS_ARG + "="):
+			return arg.substr(INCIDENTS_ARG.length() + 1)
+	return null
+
+
 ## The user arguments a session records: the playtest ones only.
 static func recorded_args(user_args: PackedStringArray) -> Array[String]:
 	var out: Array[String] = []
 	for arg in user_args:
-		if arg == ARG or arg.begins_with(SEED_ARG):
+		if arg == ARG or arg.begins_with(SEED_ARG) or arg.begins_with(INCIDENTS_ARG):
 			out.append(arg)
 	return out
 
@@ -486,10 +502,39 @@ func _new_session_name() -> String:
 	return name
 
 
+## Turns the attached scene's incidents on and, with a `kind`, makes every roll
+## that kind. False (with an error) when the hook is off, no scene is attached,
+## the scene has no IncidentDirector or the kind is unknown.
+func force_incidents(kind := "") -> bool:
+	if not enabled or _scene == null:
+		push_error("PlaytestHook.force_incidents: the hook is off or attached to no scene")
+		return false
+	var director := _scene.get_node_or_null("IncidentDirector") as IncidentDirector
+	if director == null:
+		push_error("PlaytestHook.force_incidents: the scene has no IncidentDirector")
+		return false
+	return force_on(director, kind)
+
+
+static func force_on(director: IncidentDirector, kind: String) -> bool:
+	if kind != "" and not IncidentCatalogue.kinds().has(kind):
+		push_error("PlaytestHook: unknown incident kind '%s'" % kind)
+		return false
+	director.set_enabled(true)
+	director.forced_kind = kind
+	print("PLAYTEST incidents on, forced kind '%s'" % kind)
+	return true
+
+
 func _on_node_added(node: Node) -> void:
-	if not node is SimClock or node.get_parent() == null:
+	if node.get_parent() == null or node.get_parent().get_parent() != get_tree().root:
 		return
-	if node.get_parent().get_parent() != get_tree().root:
+	if node is IncidentDirector:
+		var forced: Variant = incidents_arg(OS.get_cmdline_user_args())
+		if forced != null:
+			force_on(node as IncidentDirector, forced)
+		return
+	if not node is SimClock:
 		return
 	var given: Variant = seed_arg(OS.get_cmdline_user_args())
 	if given != null:

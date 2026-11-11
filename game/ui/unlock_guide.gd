@@ -4,9 +4,12 @@ extends Node
 ## phone-ring-and-a-short-per-family-dialog-onc). Two things:
 ##
 ## - A short dialog, the IntroDialogue's portrait and box with one line per
-##   family the tier brings (UnlockFamilies). It shows once per tier. It pauses
-##   the clock while it is open and gives back the speed the player had when it
-##   closes, as the Offers sheet does (decision 64aef33b; OfferPanel.open()).
+##   family the tier brings (UnlockFamilies). It shows once per tier. It holds
+##   the clock paused while it is open (a hold on SimClock.holds that does not
+##   give way to the player, as its text promises), and closing it releases
+##   the hold, so the player's own speed applies again unless another hold
+##   still pauses the game. It is one of the exclusive dialogs: opened while
+##   another has the turn (the Offers sheet), it shows when that one closes.
 ##   The phone ring is a silent hook for now: `phone_ring` fires as the dialog
 ##   opens and the audio work (board e612caf3) plays it later.
 ## - A "New" mark on every unlocked card the player has not hovered or picked
@@ -15,7 +18,7 @@ extends Node
 ## What was shown and seen is game state, kept in BuildUnlocks (dialog_shown(),
 ## tool_seen()) and so in the save's "unlocks" part: a new game starts with none,
 ## a load restores them. A load opens no dialog (it emits no tiers_opened) and
-## ends one that is open, giving the clock back as it was before the dialog. The
+## ends one that is open or waiting, leaving the clock as loaded. The
 ## dialog shows for exactly the tiers not shown yet, so a tier skip never shows a
 ## tier twice. The guide is off (mode OFF: no dialog, no mark) in a probe, a test
 ## or a PlaytestHook run, like the hints; PassengerHud sets the mode.
@@ -45,14 +48,15 @@ var save_game: SaveGame
 
 var _layer: CanvasLayer
 var _dialog: IntroDialogue
-var _held_paused := false
-var _held_speed := 1
-var _holding_clock := false
+## The dialog's hold on the clock, from open_dialog() until it closes or a load
+## drops it. It does not give way to the player.
+var _hold := ClockHolds.NONE
+## The tiers of a dialog waiting for its turn.
+var _waiting_tiers: Array = []
 
 
 func _ready() -> void:
 	name = "UnlockGuide"
-	set_process(false)
 	if unlocks == null or mode == Mode.OFF:
 		return
 	unlocks.tier_changed.connect(_on_tier_changed)
@@ -61,15 +65,10 @@ func _ready() -> void:
 		save_game.loaded.connect(_on_loaded)
 
 
-func _process(_delta: float) -> void:
-	if _holding_clock and (not clock.paused or clock.speed != _held_speed):
-		_holding_clock = false
-
-
 ## A guide that leaves the tree while its dialog is open must not leave the
-## game paused.
+## game paused (the holds also end a hold whose owner leaves).
 func _exit_tree() -> void:
-	_restore_clock()
+	_release_clock()
 
 
 ## True for an unlocked card the player has not hovered or picked yet.
@@ -126,7 +125,27 @@ func _on_tiers_opened(first: int, last: int) -> void:
 		open_dialog(due)
 
 
+## Pauses the clock and shows the dialog for `tiers`: at once, or, while another
+## exclusive dialog has the turn (the Offers sheet, the intro), when that one
+## closes. Tiers that open while it waits join the same dialog.
 func open_dialog(tiers: Array) -> void:
+	if clock == null or _dialog != null:
+		_show_dialog(tiers)
+		return
+	if clock.holds.has(_hold):
+		_waiting_tiers.append_array(tiers)
+		return
+	_waiting_tiers = tiers.duplicate()
+	_hold = clock.holds.take_turn(self, _on_turn)
+
+
+func _on_turn() -> void:
+	var tiers := _waiting_tiers
+	_waiting_tiers = []
+	_show_dialog(tiers)
+
+
+func _show_dialog(tiers: Array) -> void:
 	if _dialog != null:
 		_free_dialog()
 	_layer = CanvasLayer.new()
@@ -135,38 +154,38 @@ func open_dialog(tiers: Array) -> void:
 	_dialog = IntroDialogue.new(TITLE_TEXT, body_for(tiers), BOX_HEIGHT)
 	_layer.add_child(_dialog)
 	add_child(_layer)
-	_dialog.dismissed.connect(_close_dialog)
-	_dialog.tree_exiting.connect(_close_dialog)
-	_layer.tree_exiting.connect(_close_dialog)
-	if clock != null and not _holding_clock:
-		_held_paused = clock.paused
-		_held_speed = clock.speed
-		clock.set_paused(true)
-		_holding_clock = true
-		set_process(true)
+	# Each close names its own layer, so a replaced dialog's layer leaving the
+	# tree a frame later cannot close the dialog that replaced it.
+	var close := _close_dialog.bind(_layer)
+	_dialog.dismissed.connect(close)
+	_dialog.tree_exiting.connect(close)
+	_layer.tree_exiting.connect(close)
 	phone_ring.emit(tiers.back())
 	dialog_changed.emit(true)
 
 
-func _close_dialog() -> void:
-	if _dialog == null:
+## Closes the dialog shown on `layer`; a layer that is no longer the current
+## one (replaced, or already closed) closes nothing.
+func _close_dialog(layer: CanvasLayer) -> void:
+	if _dialog == null or layer != _layer:
 		return
 	_free_dialog()
-	_restore_clock()
+	_release_clock()
 	dialog_changed.emit(false)
 
 
 ## A load replaced the world, clock included: SaveGame.load_world() leaves it
 ## paused at 1x before it emits `loaded` (decision loading-a-save-always-comes-
-## back-paused-at-1x-speed-with-hin). The dialog ends and its hold is dropped
-## without touching the clock.
+## back-paused-at-1x-speed-with-hin), and installing the clock dropped every
+## hold. The dialog ends, or stops waiting, and the clock is left as loaded.
 func _on_loaded(ok: bool) -> void:
-	if not ok or _dialog == null:
+	if not ok:
 		return
+	var was_open := _dialog != null
 	_free_dialog()
-	set_process(false)
-	_holding_clock = false
-	dialog_changed.emit(false)
+	_release_clock()
+	if was_open:
+		dialog_changed.emit(false)
 
 
 func _free_dialog() -> void:
@@ -177,13 +196,10 @@ func _free_dialog() -> void:
 		layer.queue_free()
 
 
-## Gives back the paused state the player had, unless they changed the clock
-## while the dialog was open.
-func _restore_clock() -> void:
-	set_process(false)
-	if clock == null or not _holding_clock:
-		return
-	_holding_clock = false
-	if not clock.paused or clock.speed != _held_speed:
-		return
-	clock.set_paused(_held_paused)
+## Ends the dialog's hold, waiting or shown. Nothing is restored: with no hold
+## left, the player's own pause and speed apply.
+func _release_clock() -> void:
+	_waiting_tiers = []
+	if is_instance_valid(clock):
+		clock.holds.release(_hold)
+	_hold = ClockHolds.NONE
