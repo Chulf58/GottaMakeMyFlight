@@ -57,7 +57,6 @@ func _place_exit_door() -> Vector2i:
 func test_a_door_placed_on_the_starter_terminal_survives_the_sim_and_undoes() -> void:
 	var before_steps := _mode.undo_history().size()
 	var cell := _place_exit_door()
-	print("door cell: %s, history before %d" % [cell, before_steps])
 	assert_vector(cell).is_not_equal(Vector2i(-1, -1))
 	assert_int(_mode.undo_history().size()).is_equal(before_steps + 1)
 	var door := _mode.grid.object_at(cell)
@@ -67,12 +66,12 @@ func test_a_door_placed_on_the_starter_terminal_survives_the_sim_and_undoes() ->
 		_clock.advance(SimClock.STEP)
 		await get_tree().process_frame
 	_clock.set_paused(true)
-	print("history after the sim ran: %d" % _mode.undo_history().size())
-	assert_int(_mode.undo_history().size()).is_equal(before_steps + 1)
+	var steps := _mode.undo_history().size()
+	var why := "history after the sim ran: %d, before %d" % [steps, before_steps]
+	assert_int(steps).override_failure_message(why).is_equal(before_steps + 1)
 	var undone := _mode.undo()
 	assert_object(undone).is_not_null()
-	print("undo: %s" % [undone.reason_text() if not undone.ok else "ok"])
-	assert_bool(undone.ok).is_true()
+	assert_bool(undone.ok).override_failure_message("undo: " + undone.reason_text()).is_true()
 	assert_dict(_mode.grid.get_object(door)).is_empty()
 	assert_int(_mode.grid.wall_kind(cell, NORTH)).is_equal(BuildGrid.WallKind.PLAIN)
 
@@ -94,7 +93,6 @@ func test_escape_then_ctrl_z_undoes_the_door_until_a_tick_runs() -> void:
 	assert_bool(menu.build_session.active).is_false()
 	assert_int(_mode.undo_history().size()).is_equal(1)
 	_mode._unhandled_input(_key(KEY_Z, true))
-	print("status after Esc, Ctrl+Z: %s" % _mode.status_text())
 	assert_str(_mode.status_text()).contains(UndoStack.UNDONE)
 	assert_int(_mode.grid.object_at(cell)).is_equal(0)
 	assert_bool(menu.build_session.active).is_false()
@@ -115,7 +113,6 @@ func test_escape_then_a_tick_then_ctrl_z_has_nothing_to_undo() -> void:
 	_clock.set_paused(true)
 	assert_int(_mode.undo_history().size()).is_equal(0)
 	_mode._unhandled_input(_key(KEY_Z, true))
-	print("status after Esc, tick, Ctrl+Z: %s" % _mode.status_text())
 	assert_str(_mode.status_text()).is_equal(UndoStack.NOTHING_TO_UNDO)
 	assert_int(_mode.grid.object_at(cell)).is_not_equal(0)
 

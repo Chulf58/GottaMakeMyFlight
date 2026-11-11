@@ -111,3 +111,33 @@ func test_actions_in_the_new_session_are_undone_in_order_without_the_ones_before
 	# The curb from before the reopening stays.
 	assert_object(_mode.undo()).is_null()
 	assert_bool(_sim.curbs_built[0]).is_true()
+
+
+## A rescue grant or an outside grid edit invalidates the whole history
+## (decision build-mode-undo-design-action-receipts-with-before-values-at,
+## point 5), landside actions included, even while it waits for a tick.
+func test_a_rescue_grant_after_esc_forgets_a_landside_action_too() -> void:
+	_session.set_building(true)
+	_mode.set_tool(BuildMode.Tool.CURB)
+	assert_bool(_mode.apply_at(IN_BAY_0).ok).is_true()
+	_session.set_building(false)
+	assert_int(_mode.landside_placement().undo_size()).is_equal(1)
+	assert_bool(_finances.wallet.credit(1000, Wallet.Category.GRANT)).is_true()
+	assert_int(_mode.landside_placement().undo_size()).is_equal(0)
+	var paid := _balance()
+	assert_object(_mode.undo()).is_null()
+	assert_bool(_sim.curbs_built[0]).is_true()
+	assert_int(_balance()).is_equal(paid)
+
+
+func test_an_outside_grid_edit_after_esc_forgets_a_landside_action_too() -> void:
+	_session.set_building(true)
+	_mode.set_tool(BuildMode.Tool.CURB)
+	assert_bool(_mode.apply_at(IN_BAY_0).ok).is_true()
+	_session.set_building(false)
+	assert_int(_mode.landside_placement().undo_size()).is_equal(1)
+	var edits: Array[BuildEdit] = [BuildEdit.paint_floor(Vector2i(10, 10), BuildGrid.FLOOR_TILE, 1)]
+	_mode.grid.apply_batch(edits)
+	assert_int(_mode.landside_placement().undo_size()).is_equal(0)
+	assert_object(_mode.undo()).is_null()
+	assert_bool(_sim.curbs_built[0]).is_true()

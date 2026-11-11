@@ -51,13 +51,11 @@ func test_a_door_placed_over_a_wall_is_one_undo_step_that_restores_the_wall() ->
 	var balance := _finances.wallet.balance
 	var layout := _mode.grid.to_snapshot()
 	var placed := _place_door()
-	print("placed: %s" % [placed.reason_text() if not placed.ok else "ok"])
-	assert_bool(placed.ok).is_true()
+	assert_bool(placed.ok).override_failure_message("placed: " + placed.reason_text()).is_true()
 	assert_int(_mode.grid.wall_kind(DOOR, NORTH)).is_equal(BuildGrid.WallKind.NONE)
 	assert_int(_mode.undo_history().size()).is_equal(1)
 	var undone := _mode.undo()
-	print("undo: %s" % [undone.reason_text() if not undone.ok else "ok"])
-	assert_bool(undone.ok).is_true()
+	assert_bool(undone.ok).override_failure_message("undo: " + undone.reason_text()).is_true()
 	assert_int(_mode.grid.wall_kind(DOOR, NORTH)).is_equal(BuildGrid.WallKind.PLAIN)
 	assert_int(_finances.wallet.balance).is_equal(balance)
 	var after := _mode.grid.to_snapshot()
@@ -70,5 +68,5 @@ func test_frames_after_a_door_placement_keep_the_history() -> void:
 	assert_bool(_place_door().ok).is_true()
 	for i in 5:
 		await get_tree().process_frame
-	print("history after frames: %d" % _mode.undo_history().size())
-	assert_int(_mode.undo_history().size()).is_equal(1)
+	var steps := _mode.undo_history().size()
+	assert_int(steps).override_failure_message("history after frames: %d" % steps).is_equal(1)
