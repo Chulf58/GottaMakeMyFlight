@@ -23,6 +23,7 @@ static func _good() -> Dictionary:
 				"cell": [12, 7],
 				"mess_id": 4,
 				"place": "Check-in",
+				"outcome": "",
 			},
 			{
 				"id": 2,
@@ -33,6 +34,7 @@ static func _good() -> Dictionary:
 				"cell": [-1, -1],
 				"mess_id": 0,
 				"place": "",
+				"outcome": "",
 			},
 		],
 	}
@@ -53,6 +55,35 @@ func test_a_good_part_loads_also_after_json() -> void:
 	assert_int(loaded["last_rolled_day"]).is_equal(3)
 
 
+func test_a_spill_that_had_no_place_loads_as_done_with_its_outcome() -> void:
+	var data := _good()
+	data["incidents"][1]["state"] = IncidentCatalogue.DONE
+	data["incidents"][1]["outcome"] = IncidentSnapshot.NO_PLACE
+	var loaded := IncidentSnapshot.load(data)
+	assert_bool(loaded.has("error")).is_false()
+	assert_str(loaded["incidents"][1]["outcome"]).is_equal(IncidentSnapshot.NO_PLACE)
+
+
+## The cross-part check (SaveGame staging): an active spill names a SPILL mess
+## of the staged messes at its own cell.
+func test_an_active_spill_must_name_a_spill_mess_at_its_cell() -> void:
+	var incidents := IncidentSnapshot.load(_good())
+	var spill := {"cell": Vector2i(12, 7), "kind": MessSim.Kind.SPILL}
+	var cases := {
+		"": {4: spill},
+		"no mess 4": {5: spill},
+		"not a spill": {4: {"cell": Vector2i(12, 7), "kind": MessSim.Kind.LITTER}},
+		"not at the incident's cell": {4: {"cell": Vector2i(12, 8), "kind": MessSim.Kind.SPILL}},
+	}
+	for want: String in cases:
+		var got := IncidentSnapshot.links_problem(incidents, {"messes": cases[want]})
+		print("'%s' -> '%s'" % [want, got])
+		if want == "":
+			assert_str(got).is_empty()
+		else:
+			assert_str(got).contains(want)
+
+
 func test_each_malformed_field_is_refused() -> void:
 	var cases := {
 		"missing key 'next_major_day'": func(d: Dictionary) -> void: d.erase("next_major_day"),
@@ -69,6 +100,10 @@ func test_each_malformed_field_is_refused() -> void:
 		"saved twice": func(d: Dictionary) -> void: d["incidents"][1]["id"] = 1,
 		"cell must be": func(d: Dictionary) -> void: d["incidents"][0]["cell"] = [1.5, 2],
 		"fire_tick must be": func(d: Dictionary) -> void: d["incidents"][0]["fire_tick"] = "9",
+		"not a spill place": func(d: Dictionary) -> void: d["incidents"][0]["place"] = "Gate",
+		"unknown outcome": func(d: Dictionary) -> void: d["incidents"][1]["outcome"] = "lost",
+		"outcome but is not done":
+		func(d: Dictionary) -> void: d["incidents"][1]["outcome"] = IncidentSnapshot.NO_PLACE,
 	}
 	for want: String in cases:
 		var data := _good()

@@ -53,6 +53,7 @@ func _schedule_spill(ahead: int) -> StringName:
 				"cell": [-1, -1],
 				"mess_id": 0,
 				"place": "",
+				"outcome": "",
 			}
 		)
 	)
@@ -155,6 +156,40 @@ func test_a_malformed_incidents_part_is_refused_at_staging_and_changes_nothing()
 	var data: Dictionary = JSON.parse_string(JSON.stringify(_save.snapshot()))
 	data["incidents"]["enabled"] = "yes"
 	_assert_refused(data, "incidents: enabled must be a bool")
+
+
+## An active spill must name a SPILL mess of the same save at its own cell
+## (IncidentSnapshot.links_problem at staging): a missing mess, a mess of
+## another kind or another cell refuses the whole load and installs nothing;
+## the unchanged save loads.
+func test_an_active_spill_without_its_mess_in_the_save_is_refused() -> void:
+	_schedule_spill(2)
+	_steps(2)
+	var active := _director.active_incidents()
+	assert_int(active.size()).is_greater(0)
+	var spill: Dictionary = active.back()
+	var good: Dictionary = JSON.parse_string(JSON.stringify(_save.snapshot()))
+	var at := -1
+	var saved_incidents: Array = good["incidents"]["incidents"]
+	for index in saved_incidents.size():
+		if int(saved_incidents[index]["id"]) == spill["id"]:
+			at = index
+	assert_int(at).is_greater_equal(0)
+	var no_mess := good.duplicate(true)
+	no_mess["incidents"]["incidents"][at]["mess_id"] = 999
+	_assert_refused(no_mess, "no mess 999")
+	var litter := good.duplicate(true)
+	for mess: Dictionary in litter["messes"]["messes"]:
+		if int(mess["id"]) == spill["mess_id"]:
+			mess["kind"] = MessSim.Kind.LITTER
+	_assert_refused(litter, "not a spill")
+	var moved := good.duplicate(true)
+	var cell: Vector2i = spill["cell"]
+	moved["incidents"]["incidents"][at]["cell"] = [cell.x + 1, cell.y]
+	_assert_refused(moved, "not at the incident's cell")
+	# The control: the save as taken loads.
+	assert_bool(_save.load_world(good)).is_true()
+	assert_int(_director.active_incidents().size()).is_equal(active.size())
 
 
 ## Moved on from the save first, so any part installed from it would show.

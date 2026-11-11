@@ -12,6 +12,10 @@ const FRAME := 1.0 / 60.0
 var _world: PassengerTestWorld
 var _director: IncidentDirector
 var _quiet: QuietNight
+## The one check-in desk, the only place a spill can happen in this world.
+var _desk := 0
+var _rail: AlertStack
+var _started: Array[Dictionary] = []
 
 
 func before() -> void:
@@ -25,15 +29,25 @@ func after() -> void:
 func before_test() -> void:
 	var grid := PassengerTestWorld.floored(Vector2i(8, 6))
 	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(0, 5), 3)
+	_desk = PassengerTestWorld.place(grid, &"checkin_desk", Vector2i(3, 1), 0)
 	_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(FIRST))
 	_director = auto_free(IncidentDirector.new()) as IncidentDirector
 	_director.bind(_world.clock, _world.flights, _world.sim)
+	_started.clear()
+	_director.started.connect(func(incident: Dictionary) -> void: _started.append(incident))
+	_rail = AlertStack.new()
+	_rail.sim = _world.sim
+	add_child(_rail)
+	var cards := auto_free(IncidentCards.new()) as IncidentCards
+	cards.rail = _rail
+	cards.bind(_director)
 	_quiet = auto_free(QuietNight.new()) as QuietNight
 	_quiet.bind(_world.clock, _world.flights, _world.sim, _director)
 	_world.flights.open_airport()
 
 
 func after_test() -> void:
+	_rail.free()
 	_world.free_all()
 
 
@@ -55,6 +69,7 @@ func _schedule_spill(fire_tick: int) -> void:
 			"cell": [-1, -1],
 			"mess_id": 0,
 			"place": "",
+			"outcome": "",
 		}
 	]
 	assert_bool(_director.from_snapshot(data)).is_true()
@@ -77,6 +92,37 @@ func test_the_stop_comes_before_a_spill_fire_ahead_of_the_flight() -> void:
 	assert_int(_world.clock.tick).is_equal(fire - QuietNight.LEAD_TICKS)
 	_world.clock.advance(FRAME)
 	assert_bool(_world.clock.is_fast_forwarding()).is_false()
+	# The control for the no-place case below: at its tick the spill happens.
+	while _world.clock.tick < fire:
+		_world.clock.advance(FRAME)
+	print("fired: %s" % [_director.incidents()])
+	assert_str(_director.incidents()[0]["state"]).is_equal(IncidentCatalogue.ACTIVE)
+	assert_int(_world.sim.messes.mess_count()).is_equal(1)
+	assert_int(_started.size()).is_equal(1)
+	assert_object(_rail.notice_card(IncidentCards.key_of({"id": 1}))).is_not_null()
+
+
+## With its only place removed before it is due, a spill neither slows the
+## night nor happens: the fast-forward runs through its old fire tick, and at
+## that tick it is done with the no_place outcome, with no mess and no card.
+func test_a_spill_with_no_place_left_neither_slows_the_night_nor_happens() -> void:
+	var fire := 6000
+	_schedule_spill(fire)
+	assert_int(_director.spill_places().size()).is_equal(1)
+	assert_int(_quiet.stop_tick()).is_equal(fire - QuietNight.LEAD_TICKS)
+	assert_bool(_world.grid.apply(BuildEdit.remove_object(_desk)).ok).is_true()
+	assert_int(_director.spill_places().size()).is_equal(0)
+	print("stop=%d flight stop=%d" % [_quiet.stop_tick(), _flight_stop()])
+	assert_int(_quiet.stop_tick()).is_equal(_flight_stop())
+	var frames := _fast_through(0, fire + 100)
+	var done: Dictionary = _director.incidents()[0]
+	print("frames=%d tick=%d incident=%s" % [frames, _world.clock.tick, done])
+	assert_int(frames).is_greater(500)
+	assert_str(done["state"]).is_equal(IncidentCatalogue.DONE)
+	assert_str(done["outcome"]).is_equal(IncidentSnapshot.NO_PLACE)
+	assert_int(_world.sim.messes.mess_count()).is_equal(0)
+	assert_int(_started.size()).is_equal(0)
+	assert_object(_rail.notice_card(IncidentCards.key_of({"id": 1}))).is_null()
 
 
 ## Fast-forwards frame by frame until the clock passes `until`, and asserts that

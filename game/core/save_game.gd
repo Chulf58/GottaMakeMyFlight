@@ -480,6 +480,10 @@ func _stage_all(data: Dictionary, staged: Dictionary) -> String:
 	var across := _ticks_problem(data)
 	if across == "":
 		across = SaveLinks.problem(data, staged)
+	if across == "" and staged.has("incidents"):
+		# Every active spill names a SPILL mess at its own cell.
+		across = IncidentSnapshot.links_problem(staged["incidents"], staged["messes"])
+		across = "incidents: %s" % across if across != "" else ""
 	if across == "":
 		across = _runway_problem(data, staged)
 	return across

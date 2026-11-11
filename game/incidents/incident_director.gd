@@ -15,7 +15,11 @@ extends Node
 ## FIRE_FLOOR_TICKS after the roll. When the fire tick comes the
 ## spill picks its place (a check-in desk's or a scanner's passenger spot, from
 ## its own stream) and leaves a SPILL mess there (MessSim.add); it is active
-## until that mess is gone, then done. A minor never pauses the game; the card
+## until that mess is gone, then done. A spill with no place when it is due (no
+## desk or scanner left, or a mess MessSim.add() would put on another cell at
+## the cap) does not happen: it is done with the NO_PLACE outcome, no mess and
+## no card, and while it has no place it is no quiet-night stop either. A minor
+## never pauses the game; the card
 ## naming its cause is IncidentCards', which listens to started and ended.
 ##
 ## Incidents are on or off per game, saved with it. A world no new-game dialog
@@ -40,8 +44,8 @@ const BUSY_LEAD_TICKS := 2 * 60 * GameCalendar.TICKS_PER_MINUTE
 ## ticks; the next frame then still finds the stop (LEAD_TICKS before the
 ## fire) ahead of the clock, so the day boundary itself need not be a stop.
 const FIRE_FLOOR_TICKS := QuietNight.LEAD_TICKS + SimClock.MAX_STEPS_PER_FRAME
-const CHECKIN_PLACE := "Check-in"
-const SECURITY_PLACE := "Security"
+const CHECKIN_PLACE := IncidentCatalogue.CHECKIN_PLACE
+const SECURITY_PLACE := IncidentCatalogue.SECURITY_PLACE
 
 ## The clock whose day boundaries roll. A scene must set it, with the flights
 ## and passengers; tests call bind().
@@ -116,15 +120,21 @@ func on_tick(tick: int) -> void:
 
 
 ## The next tick something of the incidents is due: the earliest scheduled
-## fire, or -1 for none. The day boundary is not an event (a stop before every
-## midnight would slow each quiet night for no reason the player can see,
-## decision quiet-nights-fast-forward-automatically-when-nothing-is-due): a
-## roll there schedules no fire sooner than FIRE_FLOOR_TICKS, and QuietNight
-## asks again every frame. `_now` is kept for the visits of the majors.
+## fire that can happen now (a spill needs a place), or -1 for none. The day
+## boundary is not an event (a stop before every midnight would slow each
+## quiet night for no reason the player can see, decision quiet-nights-fast-
+## forward-automatically-when-nothing-is-due): a roll there schedules no fire
+## sooner than FIRE_FLOOR_TICKS, and QuietNight asks again every frame.
+## `_now` is kept for the visits of the majors.
 func next_event_tick(_now: int) -> int:
 	var next := -1
+	var placed := -1
 	for incident in _incidents:
-		if incident["state"] == IncidentCatalogue.SCHEDULED:
+		if incident["state"] != IncidentCatalogue.SCHEDULED:
+			continue
+		if placed < 0:
+			placed = 1 if not spill_places().is_empty() else 0
+		if placed == 1:
 			next = _earliest(next, incident["fire_tick"])
 	return next
 
@@ -256,6 +266,7 @@ func _roll(day: int, tick: int) -> void:
 				"cell": IncidentSnapshot.NO_CELL,
 				"mess_id": 0,
 				"place": "",
+				"outcome": "",
 			}
 		)
 	)
@@ -263,11 +274,12 @@ func _roll(day: int, tick: int) -> void:
 
 
 ## A spill picks its place from its own stream and leaves its mess there. With
-## no place left, or a mess refused at the cap, it is done without happening.
+## no place left, or no mess of its own at that cell (refused, or merged into
+## another cell's spill at the cap), it is done without happening.
 func _fire(incident: Dictionary) -> void:
 	var places := spill_places()
 	if places.is_empty():
-		incident["state"] = IncidentCatalogue.DONE
+		_no_place(incident)
 		return
 	var purpose := "place:%d" % incident["id"]
 	var draws := IncidentRoll.stream(
@@ -275,14 +287,19 @@ func _fire(incident: Dictionary) -> void:
 	)
 	var chosen: Dictionary = places[draws.below(places.size())]
 	var mess := passengers.messes.add(MessSim.Kind.SPILL, chosen["cell"])
-	if mess == 0:
-		incident["state"] = IncidentCatalogue.DONE
+	if mess == 0 or passengers.messes.get_mess(mess)["cell"] != chosen["cell"]:
+		_no_place(incident)
 		return
 	incident["cell"] = chosen["cell"]
 	incident["mess_id"] = mess
 	incident["place"] = chosen["place"]
 	incident["state"] = IncidentCatalogue.ACTIVE
 	started.emit(incident.duplicate())
+
+
+func _no_place(incident: Dictionary) -> void:
+	incident["state"] = IncidentCatalogue.DONE
+	incident["outcome"] = IncidentSnapshot.NO_PLACE
 
 
 func _is_over(incident: Dictionary) -> bool:

@@ -9,18 +9,23 @@ extends RefCounted
 ##
 ## {"save_version", "enabled", "last_rolled_day" (-1 before the first roll),
 ##  "next_major_day", "next_id", "incidents": [{"id", "kind", "roll_day",
-##  "state", "fire_tick", "cell": [x, y], "mess_id", "place"}]}
+##  "state", "fire_tick", "cell": [x, y], "mess_id", "place", "outcome"}]}
 ## A scheduled incident has no cell ([-1, -1]), no mess (0) and no place ("");
-## an active one has all three.
+## an active one has all three, its place one of IncidentCatalogue.SPILL_PLACES.
+## The outcome is "" or, on a done incident only, NO_PLACE (it never happened).
+## links_problem() checks an active spill against the staged messes.
 
 const SAVE_VERSION := 1
 const KEYS: Array[String] = [
 	"save_version", "enabled", "last_rolled_day", "next_major_day", "next_id", "incidents"
 ]
 const INCIDENT_KEYS: Array[String] = [
-	"id", "kind", "roll_day", "state", "fire_tick", "cell", "mess_id", "place"
+	"id", "kind", "roll_day", "state", "fire_tick", "cell", "mess_id", "place", "outcome"
 ]
 const NO_CELL := Vector2i(-1, -1)
+## The outcome of a spill that was due with nowhere to happen.
+const NO_PLACE := "no_place"
+const OUTCOMES: Array[String] = ["", NO_PLACE]
 
 
 ## The JSON-safe form of one incident.
@@ -35,7 +40,27 @@ static func save_incident(incident: Dictionary) -> Dictionary:
 		"cell": [cell.x, cell.y],
 		"mess_id": incident["mess_id"],
 		"place": incident["place"],
+		"outcome": incident["outcome"],
 	}
+
+
+## "" or why the loaded part (load()) does not match the staged messes
+## (MessSim.checked()): every active spill names a SPILL mess at its own cell.
+static func links_problem(incidents: Dictionary, messes: Dictionary) -> String:
+	var by_id: Dictionary = messes["messes"]
+	for incident: Dictionary in incidents["incidents"]:
+		if incident["state"] != IncidentCatalogue.ACTIVE:
+			continue
+		var id: int = incident["id"]
+		var mess_id: int = incident["mess_id"]
+		if not by_id.has(mess_id):
+			return "incident %d names no mess %d" % [id, mess_id]
+		var mess: Dictionary = by_id[mess_id]
+		if int(mess["kind"]) != MessSim.Kind.SPILL:
+			return "incident %d: mess %d is not a spill" % [id, mess_id]
+		if mess["cell"] != incident["cell"]:
+			return "incident %d: mess %d is not at the incident's cell" % [id, mess_id]
+	return ""
 
 
 static func load(data: Dictionary) -> Dictionary:
@@ -106,6 +131,7 @@ static func _incident(entry: Variant, next_id: int) -> Dictionary:
 		"cell": cell,
 		"mess_id": int(data["mess_id"]),
 		"place": data["place"],
+		"outcome": data["outcome"],
 	}
 
 
@@ -120,6 +146,10 @@ static func _kind_problem(data: Dictionary) -> String:
 		)
 	if typeof(data["place"]) != TYPE_STRING:
 		return "incident %d place must be a string" % int(data["id"])
+	if typeof(data["outcome"]) != TYPE_STRING or not OUTCOMES.has(data["outcome"]):
+		return "incident %d has an unknown outcome %s" % [int(data["id"]), str(data["outcome"])]
+	if data["outcome"] != "" and data["state"] != IncidentCatalogue.DONE:
+		return "incident %d has an outcome but is not done" % int(data["id"])
 	return ""
 
 
@@ -133,6 +163,8 @@ static func _state_problem(data: Dictionary, cell: Vector2i) -> String:
 	var whole: bool = cell != NO_CELL and int(data["mess_id"]) > 0 and data["place"] != ""
 	if data["state"] == IncidentCatalogue.ACTIVE and not whole:
 		return "incident %d is active but lacks its cell, mess or place" % id
+	if whole and not IncidentCatalogue.SPILL_PLACES.has(data["place"]):
+		return "incident %d place %s is not a spill place" % [id, data["place"]]
 	return ""
 
 

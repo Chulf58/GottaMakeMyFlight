@@ -182,6 +182,56 @@ func test_a_spill_fires_at_its_saved_tick_at_a_valid_cell() -> void:
 	assert_int(_ended[0]["id"]).is_equal(active["id"])
 
 
+## A floor cell with a cleaner's way to it, near `cell` (within MERGE_RANGE)
+## and on none of `avoid`, or NO_CELL.
+func _near_floor(cell: Vector2i, avoid: Array) -> Vector2i:
+	var grid := _world.grid
+	for step: Vector2i in [Vector2i(0, 2), Vector2i(2, 0), Vector2i(0, -2), Vector2i(-2, 0)]:
+		var at := cell + step
+		if avoid.has(at) or grid.floor_at(at) == BuildGrid.FLOOR_NONE:
+			continue
+		if MessSim.approach_for(grid, at) != MessSim.NO_CELL:
+			return at
+	return MessSim.NO_CELL
+
+
+## At the mess cap MessSim.add() merges a new spill into one up to MERGE_RANGE
+## away. That mess is not at the spill's cell, so the spill does not happen:
+## done with the no_place outcome, no mess added or recorded, no card.
+func test_a_spill_merged_into_another_cell_at_the_cap_does_not_happen() -> void:
+	_forced_spill(_director)
+	_director.on_tick(GameCalendar.day_start(1))
+	var fire: int = _director.incidents()[0]["fire_tick"]
+	var messes := _world.sim.messes
+	var places: Array = _director.spill_places().map(
+		func(p: Dictionary) -> Vector2i: return p["cell"]
+	)
+	for cell: Vector2i in places:
+		var near := _near_floor(cell, places)
+		assert_object(near).is_not_equal(MessSim.NO_CELL)
+		assert_int(messes.add(MessSim.Kind.SPILL, near)).is_greater(0)
+	var grid := _world.grid
+	for x in grid.size.x:
+		for y in grid.size.y:
+			var at := Vector2i(x, y)
+			if messes.mess_count() >= MessSim.MAX_MESSES or places.has(at):
+				continue
+			if grid.floor_at(at) != BuildGrid.FLOOR_NONE and grid.is_walkable(at):
+				messes.add(MessSim.Kind.LITTER, at)
+	assert_int(messes.mess_count()).is_equal(MessSim.MAX_MESSES)
+	var ids := messes.mess_ids()
+	var merged := messes.merged
+	_director.on_tick(fire)
+	var done: Dictionary = _director.incidents()[0]
+	print("at the cap: %s, merged %d -> %d" % [done, merged, messes.merged])
+	assert_int(messes.merged).is_equal(merged + 1)
+	assert_str(done["state"]).is_equal(IncidentCatalogue.DONE)
+	assert_str(done["outcome"]).is_equal(IncidentSnapshot.NO_PLACE)
+	assert_int(done["mess_id"]).is_equal(0)
+	assert_array(messes.mess_ids()).is_equal(ids)
+	assert_int(_started.size()).is_equal(0)
+
+
 ## Only a scheduled fire is an event: the day boundary is not one, so a quiet
 ## night is not slowed before midnight (decision quiet-nights-fast-forward-
 ## automatically-when-nothing-is-due).

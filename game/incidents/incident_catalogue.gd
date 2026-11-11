@@ -25,6 +25,10 @@ const DECLINED := "declined"
 const ACTIVE := "active"
 const DONE := "done"
 const STATES: Array[String] = [SCHEDULED, ANNOUNCED, OFFERED, ACCEPTED, DECLINED, ACTIVE, DONE]
+## Where a spill can happen: a check-in desk's or a scanner's passenger spot.
+const CHECKIN_PLACE := "Check-in"
+const SECURITY_PLACE := "Security"
+const SPILL_PLACES: Array[String] = [CHECKIN_PLACE, SECURITY_PLACE]
 ## Catalogue order, which is the weighted draw's order.
 const ORDER: Array[String] = [NONE, SPILL]
 const KINDS := {
