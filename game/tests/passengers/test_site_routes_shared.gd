@@ -116,6 +116,18 @@ func test_an_edit_undone_gives_the_distances_it_had() -> void:
 	assert_int(_at(restored, PROBE)).is_equal(9)
 
 
+func test_a_caller_changing_a_returned_field_does_not_change_later_answers() -> void:
+	var first := SiteRoutes.distances(_grid, SITE, _road)
+	var expected := SiteRoutes.search(_grid, SITE, _road)
+	first[PROBE.y * _grid.size.x + PROBE.x] = 777
+	var second := SiteRoutes.distances(_grid, SITE, _road)
+	assert_int(_at(second, PROBE)).is_equal(9)
+	second[PROBE.y * _grid.size.x + PROBE.x] = 888
+	var third := SiteRoutes.distances(_grid, SITE, _road)
+	assert_int(_at(third, PROBE)).is_equal(9)
+	assert_array(third).is_equal(expected)
+
+
 func test_another_grid_is_not_answered_from_this_ones_search() -> void:
 	SiteRoutes.distances(_grid, SITE, _road)
 	var other := BuildGrid.new(SITE.grid_size, SITE.grid_origin)

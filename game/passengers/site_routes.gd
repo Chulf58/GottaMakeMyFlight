@@ -20,7 +20,7 @@ const UNREACHED := 1 << 30
 ## How many whole-site searches (search()) have run: a count for tests and
 ## timing probes.
 static var searches := 0
-## The grid cells (BuildGrid.route_state()), grid size and site obstacles the
+## The grid cells (BuildGrid.copy_route_state()), grid size and site obstacles the
 ## kept fields were searched on (see distances()).
 static var _cells: Array = []
 static var _size := Vector2i.ZERO
@@ -63,22 +63,19 @@ static func edge_cells(grid: BuildGrid, site: SiteDefinition, step: Vector2i) ->
 ## cell data the search reads (floors, objects, walls, the site's obstacles), not
 ## against a signal or counter: any change to that data, by any route, makes the
 ## next call search again, and the same data again (an undone edit, another grid
-## built alike) has the same answer.
+## built alike) has the same answer. Every call returns its own copy, so a
+## caller that changes the field changes nothing kept.
 static func distances(
 	grid: BuildGrid, site: SiteDefinition, seeds: Array[Vector2i]
 ) -> PackedInt32Array:
-	var cells: Array = grid.route_state()
-	if cells != _cells or grid.size != _size or site.obstacles != _obstacles:
-		# The grid changes its arrays in place, so keep copies of them.
-		_cells = cells.map(func(part: Variant) -> Variant: return part.duplicate())
+	if not grid.route_state_equals(_cells) or grid.size != _size or site.obstacles != _obstacles:
+		_cells = grid.copy_route_state()
 		_size = grid.size
 		_obstacles = site.obstacles.duplicate()
 		_fields = {}
-	if _fields.has(seeds):
-		return _fields[seeds]
-	var dist := search(grid, site, seeds)
-	_fields[seeds.duplicate()] = dist
-	return dist
+	if not _fields.has(seeds):
+		_fields[seeds.duplicate()] = search(grid, site, seeds)
+	return (_fields[seeds] as PackedInt32Array).duplicate()
 
 
 ## Drops the kept fields, so a test that counts searches starts with none.

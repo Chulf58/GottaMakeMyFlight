@@ -232,11 +232,23 @@ func room_ids() -> Array[int]:
 
 
 ## The cell data a walk outside reads: floors, objects, horizontal walls and
-## vertical walls, as [PackedByteArray, PackedInt32Array, PackedByteArray,
-## PackedByteArray]. The grid's own arrays, not copies: a caller that keeps them
-## to compare with a later call's duplicates each first (SiteRoutes.distances()).
-func route_state() -> Array:
-	return [_floor, _occupant, _h_walls, _v_walls]
+## vertical walls, as copies: [PackedByteArray, PackedInt32Array,
+## PackedByteArray, PackedByteArray]. Changing them changes nothing on the
+## grid. route_state_equals() compares a copy with the grid as it stands now
+## (SiteRoutes.distances()).
+func copy_route_state() -> Array:
+	return [_floor.duplicate(), _occupant.duplicate(), _h_walls.duplicate(), _v_walls.duplicate()]
+
+
+## Whether `snapshot`, a copy_route_state() result, is the grid's cell data now.
+func route_state_equals(snapshot: Array) -> bool:
+	return (
+		snapshot.size() == 4
+		and _floor == snapshot[0]
+		and _occupant == snapshot[1]
+		and _h_walls == snapshot[2]
+		and _v_walls == snapshot[3]
+	)
 
 
 ## Where a passenger stands to use the object, or BuildObjectDef.NO_CELL.
