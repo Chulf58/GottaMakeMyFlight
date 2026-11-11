@@ -44,7 +44,7 @@ func test_a_new_game_has_a_small_runway_and_the_save_holds_it() -> void:
 	assert_str(_new_game_size).is_equal(PlaneClasses.SMALL)
 	_flights.runway.size = _new_game_size
 	var data := _taken()
-	assert_int(int(data["save_version"])).is_equal(14)
+	assert_int(int(data["save_version"])).is_equal(SaveGame.SAVE_VERSION)
 	assert_int(int(data["runway"]["save_version"])).is_equal(Runway.SAVE_VERSION)
 	assert_str(data["runway"]["size"]).is_equal("small")
 	var works: Dictionary = data["runway"]["works"]

@@ -66,6 +66,9 @@ const PRICE_TEXT := "Free"
 ## A locked card's last line, and its tint (the hover text says what unlocks it).
 const LOCKED_TEXT := "Locked"
 const LOCKED_TINT := Color(0.5, 0.5, 0.55)
+## The tint of a card of the newest opened tier until the player hovers or picks
+## it (UnlockGuide.is_new); it multiplies the affordability tint.
+const NEW_TINT := Color(1.0, 0.88, 0.45)
 ## The money slot when BuildMode has no wallet.
 const MONEY_TEXT := "Money  --"
 
@@ -110,6 +113,9 @@ const GRANT_HOLD_S := 8.0
 @export var save_game: SaveGame
 ## Optional: paused while build mode lasts (BuildSession).
 @export var clock: SimClock
+## Optional: marks the cards of a newly opened tier "New" (PassengerHud wires
+## it with watch_guide()); without it no card carries the mark.
+var guide: UnlockGuide
 
 ## True while the hiring card is open; press_staff() changes it.
 var staff_open := false
@@ -267,6 +273,8 @@ func _ready() -> void:
 		# unchanged; the Buy land card must follow.
 		build_mode.land_tool.land.changed.connect(_refresh_money)
 	_refresh_money()
+	for tool in _cards:
+		_cards[tool].mouse_entered.connect(_on_card_hovered.bind(tool))
 	if build_mode != null and build_mode.unlocks != null:
 		build_mode.unlocks.tier_changed.connect(_on_tier_changed)
 		build_mode.unlocks.unlocked.connect(_on_unlocked)
@@ -350,6 +358,16 @@ func press_staff() -> void:
 ## A card click: picks its tool.
 func press_card(tool: BuildMode.Tool) -> void:
 	build_mode.set_tool(tool)
+
+
+## Follows `new_guide`: its "New" marks tint the cards, and the pointer resting on
+## a marked card or any tool picked (card or number key) clears it. Called once,
+## by whoever builds the HUD.
+func watch_guide(new_guide: UnlockGuide) -> void:
+	guide = new_guide
+	guide.changed.connect(_refresh_locks)
+	if is_node_ready():
+		_refresh_locks()
 
 
 func category_button(index: int) -> Button:
@@ -465,6 +483,8 @@ func _set_staff_open(open: bool) -> void:
 
 
 func _on_tool_changed(tool: BuildMode.Tool) -> void:
+	if guide != null and tool != BuildMode.Tool.NONE:
+		guide.mark_seen(tool)
 	if tool == BuildMode.Tool.NONE:
 		if not _browsing:
 			_open = NO_CATEGORY
@@ -504,20 +524,26 @@ func _lock_text(tool: BuildMode.Tool) -> String:
 func _card_tint(tool: BuildMode.Tool) -> Color:
 	if _lock_text(tool) != "":
 		return LOCKED_TINT
-	return Color.WHITE if is_card_affordable(tool) else unaffordable_tint()
+	var tint := Color.WHITE if is_card_affordable(tool) else unaffordable_tint()
+	return tint * NEW_TINT if guide != null and guide.is_new(tool) else tint
 
 
-## Greys the locked cards, with "Locked" on the last line and the requirement
-## (and how far the game is from it) in place of the hover card; an unlocked
-## card gets its own line and hover card back.
+func _on_card_hovered(tool: BuildMode.Tool) -> void:
+	if guide != null:
+		guide.mark_seen(tool)
+
+
+## Greys the locked cards, with "Locked" on the last line. Every card keeps its
+## description in the hover card; a locked one adds what unlocks it, worked out
+## each time the hover card is built so the "now" numbers are current. Also
+## repaints the "New" tints.
 func _refresh_locks() -> void:
 	for tool in _cards:
 		var text := _lock_text(tool)
 		var card_item := item(tool)
 		_hint_labels[tool].text = LOCKED_TEXT if text != "" else _hint_texts[tool]
-		_cards[tool].set_info(card_item[0], [] if text != "" else ItemInfo.of(tool))
-		if text != "":
-			_cards[tool].tooltip_text = text
+		_cards[tool].requirement = _lock_text.bind(tool) if text != "" else Callable()
+		_cards[tool].set_info(card_item[0], ItemInfo.of(tool))
 		_cards[tool].modulate = _card_tint(tool)
 
 
@@ -525,7 +551,11 @@ func _on_tier_changed(_tier: int) -> void:
 	_refresh_locks()
 
 
+## The "Unlocked: ..." line holds the status unless the unlock dialog is open,
+## which names the families itself.
 func _on_unlocked(_tier: int, text: String) -> void:
+	if guide != null and guide.is_open():
+		return
 	_start_hold(text, false)
 
 

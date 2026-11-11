@@ -46,12 +46,12 @@ func test_a_new_game_is_on_the_start_tier_with_hunger_off_and_the_gate_wired() -
 
 
 func test_the_tier_and_the_count_survive_a_save_and_a_load() -> void:
-	assert_bool(_unlocks.from_snapshot({"tier": 3, "made": 260})).is_true()
+	assert_bool(_unlocks.from_snapshot({"tier": 3, "made": 260, "shown": [], "seen": []})).is_true()
 	SaveTestKit.step(_main)
 	assert_bool(_save.snapshot().has("unlocks")).is_true()
 	assert_bool(_save.save_to_file(_path)).is_true()
 	# The game moves on, then the save comes back.
-	assert_bool(_unlocks.from_snapshot({"tier": 1, "made": 0})).is_true()
+	assert_bool(_unlocks.from_snapshot({"tier": 1, "made": 0, "shown": [], "seen": []})).is_true()
 	assert_bool(_pax.cafes.hunger_enabled).is_false()
 	assert_bool(_save.load_from_file(_path)).is_true()
 	print("after load: tier %d, made %d" % [_unlocks.tier(), _unlocks.made_total()])
@@ -67,10 +67,10 @@ func test_the_tier_and_the_count_survive_a_save_and_a_load() -> void:
 ## count opens) is refused whole while it is staged: the world after the
 ## refusal is the world before it, the earlier parts included.
 func test_a_malformed_unlocks_part_refuses_the_whole_load_and_changes_nothing() -> void:
-	assert_bool(_unlocks.from_snapshot({"tier": 2, "made": 70})).is_true()
+	assert_bool(_unlocks.from_snapshot({"tier": 2, "made": 70, "shown": [], "seen": []})).is_true()
 	SaveTestKit.step(_main)
 	var data: Dictionary = JSON.parse_string(JSON.stringify(_save.snapshot(), "", true, true))
-	data["unlocks"] = {"tier": 4, "made": 0}
+	data["unlocks"] = {"tier": 4, "made": 0, "shown": [], "seen": []}
 	# Moved on from the save, so a part installed from it would show.
 	for i in 5:
 		SaveTestKit.step(_main)

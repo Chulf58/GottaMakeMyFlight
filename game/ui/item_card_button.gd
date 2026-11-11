@@ -24,6 +24,10 @@ const CARD_GAP := 6.0
 ## The item's name and its [about, how, needs] text.
 var title := ""
 var info: Array = []
+## Returns why the item is locked, asked each time the hover card is built so
+## the numbers in it are current (BuildMenu sets it on a locked card; an empty
+## Callable or an empty text leaves the card as it was).
+var requirement := Callable()
 
 ## The card last handed to the tooltip popup.
 var _card: Control
@@ -33,18 +37,32 @@ var _card: Control
 func set_info(with_title: String, with_info: Array) -> void:
 	title = with_title
 	info = with_info
-	tooltip_text = card_text(title, info)
+	tooltip_text = card_text(title, info, requirement_now())
 
 
-## The info as plain text, one part per line under the name; "" with no info.
-## It is also what makes Godot ask for the hover card at all.
-static func card_text(card_title: String, card_info: Array) -> String:
-	if card_info.size() < 3:
-		return ""
-	return (
-		"%s\n%s\n%s: %s\n%s: %s"
-		% [card_title, card_info[0], HOW_HEADING, card_info[1], NEEDS_HEADING, card_info[2]]
-	)
+## Why the item is locked right now, "" when it is not.
+func requirement_now() -> String:
+	return requirement.call() if requirement.is_valid() else ""
+
+
+## The info as plain text, one part per line under the name, and under the name
+## the `needs` line of a locked item; "" with no info and no requirement. It is
+## also what makes Godot ask for the hover card at all.
+static func card_text(card_title: String, card_info: Array, needs := "") -> String:
+	var lines: Array[String] = [card_title]
+	if needs != "":
+		lines.append(needs)
+	if card_info.size() >= 3:
+		lines.append(card_info[0])
+		lines.append("%s: %s" % [HOW_HEADING, card_info[1]])
+		lines.append("%s: %s" % [NEEDS_HEADING, card_info[2]])
+	return "\n".join(lines) if lines.size() > 1 else ""
+
+
+## The hover text, asked afresh each time the pointer rests on the card, so a
+## locked card's "now" numbers are current and not those of the menu's setup.
+func _get_tooltip(_at_position: Vector2) -> String:
+	return card_text(title, info, requirement_now())
 
 
 ## The info card: the name, what the item is, then the two headed parts.
@@ -53,11 +71,17 @@ func make_card() -> Control:
 	box.theme = HUD_THEME
 	box.name = "ItemInfoCard"
 	box.add_child(_text(title, &"HudTitle"))
-	box.add_child(_text(info[0], &""))
-	box.add_child(_text(HOW_HEADING, &"HudHint"))
-	box.add_child(_text(info[1], &""))
-	box.add_child(_text(NEEDS_HEADING, &"HudHint"))
-	box.add_child(_text(info[2], &""))
+	var needs := requirement_now()
+	if needs != "":
+		var lock := _text(needs, &"HudAttentionText")
+		lock.name = "Requirement"
+		box.add_child(lock)
+	if info.size() >= 3:
+		box.add_child(_text(info[0], &""))
+		box.add_child(_text(HOW_HEADING, &"HudHint"))
+		box.add_child(_text(info[1], &""))
+		box.add_child(_text(NEEDS_HEADING, &"HudHint"))
+		box.add_child(_text(info[2], &""))
 	return box
 
 
@@ -71,7 +95,7 @@ func _text(text: String, variation: StringName) -> Label:
 
 
 func _make_custom_tooltip(_for_text: String) -> Object:
-	if info.size() < 3:
+	if info.size() < 3 and requirement_now() == "":
 		return null
 	_card = make_card()
 	_card.tree_entered.connect(_place_card, CONNECT_ONE_SHOT | CONNECT_DEFERRED)

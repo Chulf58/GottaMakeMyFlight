@@ -18,12 +18,17 @@ extends Node
 ## BuildMode.set_tool() asks lock_text() and a template paste asks
 ## edits_lock_text() for every room and piece it holds; BuildMenu greys the
 ## locked cards with the same text. The save keeps the tier and the made-flight count (part
-## "unlocks", SaveGame).
+## "unlocks", SaveGame), and with them what UnlockGuide has shown and the player
+## has seen (the tiers whose dialog showed, the tools hovered or picked), so a
+## new game starts with none and a load restores them.
 
 ## The tier changed (a new game, an unlock or a load).
 signal tier_changed(tier: int)
 ## A tier opened by play: the facilities it brings, ready to show.
 signal unlocked(tier: int, text: String)
+## Tiers `first_tier` to `last_tier` opened together by play (never by a load),
+## sent between tier_changed and unlocked; UnlockGuide shows its dialog from it.
+signal tiers_opened(first_tier: int, last_tier: int)
 
 ## The tier a new game starts at, and the one that opens the cafe.
 const START_TIER := 1
@@ -183,6 +188,10 @@ static var _tool_by_room: Dictionary = {}
 var _tier := START_TIER
 var _made := 0
 var _checked_day := NO_DAY
+## Tier -> true once its unlock dialog showed; Tool -> true once the player
+## hovered or picked its card (both set by UnlockGuide, kept in the snapshot).
+var _shown: Dictionary = {}
+var _seen: Dictionary = {}
 
 
 func _ready() -> void:
@@ -336,9 +345,34 @@ func note_made() -> void:
 	_made = mini(_made + 1, MAX_MADE)
 
 
-## JSON-safe state for a save: the highest tier and the made-flight count.
+## True once the unlock dialog of `tier` has shown in this game.
+func dialog_shown(tier: int) -> bool:
+	return _shown.has(tier)
+
+
+func mark_dialog_shown(tier: int) -> void:
+	_shown[tier] = true
+
+
+## True once the player hovered or picked the card of `tool` in this game.
+func tool_seen(tool: BuildMode.Tool) -> bool:
+	return _seen.has(tool)
+
+
+func mark_tool_seen(tool: BuildMode.Tool) -> void:
+	_seen[tool] = true
+
+
+## JSON-safe state for a save: the highest tier, the made-flight count, the
+## tiers whose dialog showed and the names of the tools the player has seen.
 func to_snapshot() -> Dictionary:
-	return {"tier": _tier, "made": _made}
+	var shown := _shown.keys()
+	shown.sort()
+	var seen := []
+	for tool in _seen:
+		seen.append(String(BuildMode.Tool.find_key(tool)))
+	seen.sort()
+	return {"tier": _tier, "made": _made, "shown": shown, "seen": seen}
 
 
 ## Restores a to_snapshot() dictionary, including one that went through JSON.
@@ -352,13 +386,19 @@ func from_snapshot(data: Dictionary) -> bool:
 	_tier = int(data["tier"])
 	_made = int(data["made"])
 	_checked_day = NO_DAY
+	_shown.clear()
+	for tier in data["shown"]:
+		_shown[int(tier)] = true
+	_seen.clear()
+	for tool_name in data["seen"]:
+		_seen[BuildMode.Tool[tool_name]] = true
 	tier_changed.emit(_tier)
 	return true
 
 
 static func _snapshot_problem(data: Dictionary) -> String:
 	for key in data.keys():
-		if key != "tier" and key != "made":
+		if not key in ["tier", "made", "shown", "seen"]:
 			return "unknown key '%s'" % key
 	for key in ["tier", "made"]:
 		if not data.has(key) or not WholeNumber.is_whole(data[key]):
@@ -373,6 +413,35 @@ static func _snapshot_problem(data: Dictionary) -> String:
 			"tier %d needs %d passengers made, not %d"
 			% [int(data["tier"]), need, int(data["made"])]
 		)
+	return _marks_problem(data)
+
+
+## "shown" and "seen" are required lists (save version 15). Each shown tier is
+## an open tier above the start one, each seen entry the name of a card tool of
+## an open tier above the start one (NONE, REMOVE and the start set are not
+## cards that can be new), and neither list repeats an entry.
+static func _marks_problem(data: Dictionary) -> String:
+	for key in ["shown", "seen"]:
+		if not data.has(key) or not data[key] is Array:
+			return "'%s' must be a list" % key
+	var tier := int(data["tier"])
+	var shown := {}
+	for entry in data["shown"]:
+		if not WholeNumber.is_whole(entry) or int(entry) <= START_TIER or int(entry) > tier:
+			return "shown tier %s is not an open tier above the start" % str(entry)
+		if shown.has(int(entry)):
+			return "shown tier %s is listed twice" % str(entry)
+		shown[int(entry)] = true
+	var seen := {}
+	for entry in data["seen"]:
+		if not entry is String or not BuildMode.Tool.has(entry):
+			return "seen entry %s is not a tool name" % str(entry)
+		var tool_tier := tier_of(BuildMode.Tool[entry])
+		if tool_tier <= START_TIER or tool_tier > tier:
+			return "seen tool %s is not a card of an open tier above the start" % entry
+		if seen.has(entry):
+			return "seen tool %s is listed twice" % entry
+		seen[entry] = true
 	return ""
 
 
@@ -398,8 +467,10 @@ func _open_to(reached: int) -> void:
 	var opened := []
 	for i in range(_tier, reached):
 		opened.append(TIERS[i]["facilities"])
+	var first := _tier + 1
 	_tier = reached
 	tier_changed.emit(_tier)
+	tiers_opened.emit(first, reached)
 	unlocked.emit(_tier, "Unlocked: %s" % "; ".join(opened))
 
 
