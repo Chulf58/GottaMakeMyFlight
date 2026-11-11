@@ -275,6 +275,8 @@ func open_airport() -> bool:
 		var day := FlightTimetable.opening_day(contract, tick)
 		_start_day[contract["id"]] = day
 		_next_day[contract["id"]] = day
+	# The contracts' days moved, so every cached day plan is of the closed world.
+	_changed()
 	_issue_due()
 	return true
 
@@ -1090,9 +1092,7 @@ func _contracts_refusal(
 		subjects.append(contract["id"])
 	var days := FlightPlans.days_from(world, from_day)
 	if trial:
-		if _trial_plans == null:
-			_trial_plans = FlightPlans.new()
-		return _trial_plans.refusal(world, _trial_day_plan, days, subjects)
+		return _trial_planner().refusal(world, _trial_day_plan, days, subjects)
 	return _plans.refusal(world, _day_plan, days, subjects)
 
 
@@ -1170,8 +1170,15 @@ func _trial_day_plan(day: int) -> Dictionary:
 		_trial_day_plans.clear()
 		_trial_plans_key = key
 	if not _trial_day_plans.has(day):
-		_trial_day_plans[day] = _trial_plans.plan_day(_world(grounds), day)
+		_trial_day_plans[day] = _trial_planner().plan_day(_world(grounds), day)
 	return _trial_day_plans[day]
+
+
+## The trial planner, made on first use.
+func _trial_planner() -> FlightPlans:
+	if _trial_plans == null:
+		_trial_plans = FlightPlans.new()
+	return _trial_plans
 
 
 ## A change to the contracts or flights that can change a plan.
@@ -1242,6 +1249,9 @@ func _prune() -> void:
 			for day: int in _day_plans.keys():
 				if day < today:
 					_day_plans.erase(day)
+	for day: int in _trial_day_plans.keys():
+		if day < today:
+			_trial_day_plans.erase(day)
 
 
 func _advance(flight: Dictionary) -> void:
