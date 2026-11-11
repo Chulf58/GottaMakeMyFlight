@@ -267,6 +267,12 @@ func first_free(from: Vector2i, gate_cells: Array[Vector2i] = [], roller := fals
 	return NO_SPOT
 
 
+## Every spot in the route region of `from`, in free_nearest()'s order, taken
+## or not (GateWalk reads the first place a gate would give).
+func ordered_from(from: Vector2i, gate_cells: Array[Vector2i] = []) -> Array[int]:
+	return _ordered(from, gate_cells)
+
+
 ## Every spot in the route region of `from`, in free_nearest()'s order. The
 ## order depends only on the spots, so it is kept until the next rebuild.
 func _ordered(from: Vector2i, gate_cells: Array[Vector2i]) -> Array[int]:
