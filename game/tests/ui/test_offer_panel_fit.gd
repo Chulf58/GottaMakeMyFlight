@@ -67,6 +67,21 @@ func test_the_click_refusal_and_the_fit_line_are_separate() -> void:
 	assert_str(_panel.card_text("O0N2")).contains(FlightFit.ANOTHER_GATE_TEXT)
 
 
+## The fit line is the card's small text size whether it fits (green) or not
+## (problem look), the same size as the refusal line.
+func test_the_fit_line_has_the_small_text_size_in_both_looks() -> void:
+	_panel.open()
+	var small := _panel.refusal_label("O0N1").get_theme_font_size("font_size")
+	print("refusal line %d px" % small)
+	assert_int(small).is_greater(0)
+	var fits := _panel.fit_label("O0N1").get_theme_font_size("font_size")
+	print("green fit line %d px" % fits)
+	assert_int(fits).is_equal(small)
+	_panel.accept_button("O0N1").pressed.emit()
+	assert_str(_panel.fit_label("O0N2").theme_type_variation).is_equal("HudProblemText")
+	assert_int(_panel.fit_label("O0N2").get_theme_font_size("font_size")).is_equal(small)
+
+
 ## Every fit line FlightFit can give fits on one card line, in the HUD font.
 func test_every_fit_line_fits_the_card_text_width() -> void:
 	var label := Label.new()

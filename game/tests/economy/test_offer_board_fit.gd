@@ -12,6 +12,14 @@ extends GdUnitTestSuite
 const SEEDS := [1, 42, 2024, 7_654_321]
 ## One gate whose day is full: 195 minutes apart from 07:00 to 20:00.
 const FULL_DAY := [420, 615, 810, 1005, 1200]
+## Seed -> the fitted N1, N2 and N3 departures on one gate busy at 10:00 and
+## 16:40 (test_golden_fitted_departures_on_a_busy_gate).
+const GOLDEN_BUSY := {
+	1: [1215, 795, 510],
+	42: [1215, 795, 690],
+	2024: [1230, 795, 555],
+	7_654_321: [1215, 795, 450],
+}
 
 
 func _sim(gates: Array[String], minutes: Array) -> FlightSim:
@@ -184,7 +192,65 @@ func test_a_fitted_day_is_saved_and_never_fitted_again_on_load() -> void:
 	assert_dict(loaded.to_snapshot()).is_equal(board.to_snapshot())
 
 
-## Cost of one day-boundary fit on a busy two-gate timetable, measured headless.
+## The pick floor(r * n / 57), table driven: r 0..56 spreads evenly over n
+## candidates, both ends land on the first and last, and a remainder (r % n)
+## would give other answers in most rows.
+func test_the_drawn_slot_maps_onto_n_candidates_by_floor_r_n_over_57() -> void:
+	# [drawn slot r, candidates n, expected index]
+	var table := [
+		[0, 1, 0],
+		[56, 1, 0],
+		[0, 57, 0],
+		[56, 57, 56],
+		[28, 2, 0],
+		[29, 2, 1],
+		[56, 2, 1],
+		[5, 10, 0],
+		[6, 10, 1],
+		[56, 10, 9],
+		[18, 3, 0],
+		[19, 3, 1],
+		[38, 3, 2],
+		[40, 24, 16],
+	]
+	for row: Array in table:
+		(
+			assert_int(OfferBoard._pick(row[0], row[1]))
+			. override_failure_message("r %d over %d candidates" % [row[0], row[1]])
+			. is_equal(row[2])
+		)
+	# Every r picks a valid index, and each of n candidates is picked by
+	# floor(57 / n) or one more of the 57 draws.
+	for n in [1, 2, 3, 7, 10, 24, 56, 57]:
+		var counts := {}
+		for r in range(OfferBoard.DEPARTURE_SLOTS + 1):
+			var index := OfferBoard._pick(r, n)
+			assert_int(index).is_between(0, n - 1)
+			counts[index] = counts.get(index, 0) + 1
+		assert_int(counts.size()).is_equal(n)
+		for index: int in counts:
+			assert_int(counts[index]).is_between(floori(57.0 / n), floori(57.0 / n) + 1)
+
+
+## Golden fitted departures for fixed seeds on one gate busy at 10:00 and
+## 16:40 (13:15 and 20:00 to 21:00 are free): measured on 71f5059f, the build
+## the review read, so a change to the candidate lists, the pick or the pair
+## search shows here.
+func test_golden_fitted_departures_on_a_busy_gate() -> void:
+	var golden := GOLDEN_BUSY
+	var sim := _sim(["C"] as Array[String], [600, 1000])
+	var found := {}
+	for seed_value in SEEDS:
+		var board := OfferBoard.new()
+		board.ensure_day(0, _rng(seed_value), 0, PlaneClasses.LARGE, sim)
+		found[seed_value] = _minutes(board)
+	print("busy gate fitted departures: %s" % [found])
+	for seed_value in SEEDS:
+		assert_array(found[seed_value]).is_equal(golden.get(seed_value, []))
+
+
+## Cost of one day-boundary fit on a busy two-gate timetable, measured headless
+## and printed for the report; machine speed varies, so no time is asserted.
 func test_the_cost_of_a_day_boundary_fit_on_two_busy_gates() -> void:
 	var sim := _sim(["C", "D"] as Array[String], [450, 600, 840, 1200])
 	var board := OfferBoard.new()
@@ -194,14 +260,14 @@ func test_the_cost_of_a_day_boundary_fit_on_two_busy_gates() -> void:
 	for seed_value in SEEDS:
 		var day_board := OfferBoard.new()
 		var started := Time.get_ticks_usec()
-		day_board.ensure_day(0, _rng(seed_value), 1, PlaneClasses.LARGE, sim)
+		var ids := day_board.ensure_day(0, _rng(seed_value), 1, PlaneClasses.LARGE, sim)
 		var ms := (Time.get_ticks_usec() - started) / 1000.0
 		worst = maxf(worst, ms)
 		total += ms
+		assert_array(ids).has_size(OfferBoard.OFFERS_PER_DAY)
 	print(
 		(
 			"FIT_COST two busy gates: mean %.1f ms, worst %.1f ms over %d days"
 			% [total / SEEDS.size(), worst, SEEDS.size()]
 		)
 	)
-	assert_float(total).is_greater(0.0)

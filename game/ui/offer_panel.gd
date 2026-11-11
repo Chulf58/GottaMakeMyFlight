@@ -36,10 +36,12 @@ extends CanvasLayer
 ## Each card has a fit line before Accept (decision airline-offers-2-a-day-fit-
 ## the-free-gate-slots-1-needs-more, point 6): FlightFit's words for whether
 ## the offer fits now and why not, in the good-text look when it fits and the
-## problem look when not. It is advice, kept apart from the click refusal: it
-## is worked out again when the sheet opens, when the cards rebuild (an accept,
-## a decline, a new day, a load) and when a contract ends; the gates, stands
-## and runway works change only while the sheet is closed.
+## problem look when not, at the small text size. It is advice, kept apart from
+## the click refusal: it is worked out again when the sheet opens, when the
+## cards rebuild (an accept, a decline, a new day, a load), when a contract
+## ends, and on FlightSim.planning_changed (the gates, their stands, the runway
+## or its works), which the open sheet checks for every frame because those
+## change while the clock is paused under it.
 
 const SHEET_W := TopRow.SHEET_W
 const CARD_TEXT_W := 380.0
@@ -182,6 +184,7 @@ func _ready() -> void:
 	if desk.rating != null:
 		desk.rating.changed.connect(_refresh_warning)
 	desk.contract_ended.connect(_on_contract_ended)
+	flights.planning_changed.connect(_refresh_fits)
 	if build_mode != null:
 		build_mode.tool_changed.connect(_on_tool_changed)
 	if save_game != null:
@@ -197,6 +200,7 @@ func _process(_delta: float) -> void:
 		_holding_clock = false
 	if flights.tick != _noted_tick:
 		_refresh_notes()
+	flights.check_planning_changed()
 
 
 ## Esc closes the sheet and is not passed on, so it does not also drop a tool.
@@ -222,6 +226,7 @@ func open() -> void:
 	TopRow.close_others(self)
 	_sheet.visible = true
 	_refresh_notes()
+	flights.check_planning_changed()
 	_refresh_fits()
 	if clock != null:
 		_held_paused = clock.paused
@@ -437,6 +442,11 @@ func _set_fit(label: Label, offer: Dictionary) -> void:
 	var assessment := FlightFit.assess(flights, OfferBoard.terms_of(offer))
 	label.text = FlightFit.text(assessment, offer["plane_size"])
 	label.theme_type_variation = &"HudGoodText" if assessment["fits"] else &"HudProblemText"
+	# HudGoodText is larger than the card's other small lines; both looks keep
+	# the HudSmall size.
+	label.add_theme_font_size_override(
+		"font_size", BuildMenu.HUD_THEME.get_font_size("font_size", &"HudSmall")
+	)
 
 
 ## Posts or drops the airlines' warning card from the rating, and words the

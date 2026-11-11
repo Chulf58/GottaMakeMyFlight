@@ -102,6 +102,45 @@ func test_assessing_changes_nothing() -> void:
 	assert_array(_sim.gate_ids()).is_equal(["C", "D"])
 
 
+## The live planner and its cached day plans: everything a trial must leave as
+## it found it.
+func _live_planning() -> Dictionary:
+	var planner: GroundPlanner = _sim._plans.planner
+	return {
+		"bookings": planner._bookings.duplicate(true),
+		"buckets": planner._buckets.duplicate(true),
+		"held": planner._held_until,
+		"restarts": planner.restarts,
+		"shapes": planner._cache.keys(),
+		"day_plans": _sim._day_plans.duplicate(true),
+		"day_plans_revision": _sim._day_plans_revision,
+	}
+
+
+## A trial plans on a planner of its own: the live planner's bookings, clash
+## buckets, held time, restart count and shape cache, and the cached day plans,
+## are the same after any number of trials, a spare stand and medium planes
+## included. Control: the live state is not empty, so a change would show.
+func test_trials_never_touch_the_live_planner_or_its_cached_plans() -> void:
+	assert_bool(_sim.accept_contract(terms("A1", 600))).is_true()
+	assert_bool(_sim.accept_contract(terms("A2", 1000))).is_true()
+	_sim._day_plan(0)
+	var before := _live_planning()
+	print(
+		(
+			"live planner: %d bookings, %d shapes, %d day plans"
+			% [before["bookings"].size(), before["shapes"].size(), before["day_plans"].size()]
+		)
+	)
+	assert_int(before["bookings"].size()).is_greater(0)
+	assert_int(before["day_plans"].size()).is_greater(0)
+	for minute in [420, 720, 795, 1200]:
+		for size in [PlaneClasses.SMALL, PlaneClasses.MEDIUM]:
+			FlightFit.assess(_sim, terms("X", minute, size), [terms("Y", 1245)])
+			_sim.trial_assignment(terms("X", minute, size), [], true)
+	assert_dict(_live_planning()).is_equal(before)
+
+
 ## Fits exactly when the click-time check would accept.
 func test_the_assessment_agrees_with_accept_problem() -> void:
 	assert_bool(_sim.accept_contract(terms("A1", 600))).is_true()

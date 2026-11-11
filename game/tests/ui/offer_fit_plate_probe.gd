@@ -51,9 +51,19 @@ func _run() -> void:
 	var panel := panels[0] as OfferPanel
 	panel.open()
 	await _frames(8)
+	var expected := {
+		"O0N1": FlightFit.GATE_AND_TAXI_TEXT,
+		"O0N2": FlightFit.ANOTHER_GATE_TEXT,
+		"O0N3": FlightFit.FITS_TEXT,
+	}
 	var shown := 0
 	for id in panel.card_ids():
 		print("CARD ", id, " | ", panel.card_text(id).replace("\n", " / "))
+		print("PROBE %s fit line '%s' expected '%s'" % [id, panel.fit_text(id), expected.get(id)])
+		if panel.fit_text(id) != expected.get(id, ""):
+			print("PROBE_INVALID card %s does not show its expected fit line" % id)
+			quit(1)
+			return
 		shown += 1
 	var sheet := panel.sheet().get_global_rect()
 	var inside := Rect2(Vector2.ZERO, root.get_visible_rect().size).encloses(sheet)
@@ -64,7 +74,12 @@ func _run() -> void:
 		return
 	var img := root.get_texture().get_image()
 	var path := out_dir.path_join("offer_fit_cards.png")
-	print("PLATE saved ", path, " err=", img.save_png(path))
+	var saved := img.save_png(path)
+	print("PLATE saved ", path, " err=", saved)
+	if saved != OK:
+		print("PROBE_INVALID the plate could not be written")
+		quit(1)
+		return
 	quit(0)
 
 

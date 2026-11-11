@@ -67,6 +67,10 @@ signal contract_ended(contract_id: String)
 ## Fires after from_snapshot() installs a save, so readers of the open state
 ## (AirportGate) can refresh. The only signal a load emits.
 signal snapshot_loaded
+## Fires from check_planning_changed() when the gates, their stands, the
+## runway's size or its works differ from the last check, so an answer of
+## trial_assignment() (an offer card's fit line) may have changed.
+signal planning_changed
 
 enum State {
 	SCHEDULED,
@@ -219,6 +223,14 @@ var _grounds_tick := -1
 ## Flights already reported as having no plan, so a view asking every frame
 ## reports each once.
 var _reported := {}
+## trial_assignment()'s own planner and day plans of the sim now, kept apart
+## from _plans and _day_plans so an advisory trial changes no live planning
+## state. Made on the first trial.
+var _trial_plans: FlightPlans
+var _trial_day_plans := {}
+var _trial_plans_key := ""
+## The planning state planning_changed last saw (check_planning_changed()).
+var _planning_key := ""
 
 
 func _ready() -> void:
@@ -381,7 +393,7 @@ func _trial(terms: Dictionary, extra: Array[Dictionary], ignore_gate: bool) -> D
 		return _assigned("", problem, {}, BLOCKER_TERMS)
 	if not runway.takes(terms["plane_size"]):
 		return _assigned("", RUNWAY_TOO_SHORT_TEXT % terms["plane_size"], {}, BLOCKER_RUNWAY)
-	return _assignment(terms, extra, ignore_gate)
+	return _assignment(terms, extra, ignore_gate, true)
 
 
 ## The gates with a stand now, sorted, from gate_source (DEFAULT_GATES while it
@@ -613,6 +625,21 @@ func on_tick(new_tick: int) -> void:
 	for flight in _flights:
 		_advance(flight)
 	_prune()
+	check_planning_changed()
+
+
+## Emits planning_changed when the gates, their stands, the runway's size or
+## its works differ from what the last call saw; the first call only takes note.
+## Each tick calls it, and so do start_works and a view that must follow edits
+## made while the clock is paused (OfferPanel, every frame it is open).
+func check_planning_changed() -> void:
+	var key := "%s %s %s" % [gate_grounds(), runway.size, runway.works.fixed_bookings()]
+	if key == _planning_key:
+		return
+	var first := _planning_key == ""
+	_planning_key = key
+	if not first:
+		planning_changed.emit()
 
 
 ## The tick the runway works that build a `target` runway would start if booked
@@ -651,9 +678,11 @@ func start_works(target: String) -> bool:
 		return false
 	if opened_tick < 0:
 		runway.size = target
+		check_planning_changed()
 		return true
 	runway.works.begin(target, start)
 	_changed()
+	check_planning_changed()
 	return true
 
 
@@ -942,7 +971,7 @@ static func _best_fit(grounds: Dictionary, plane_class: String) -> Array[String]
 ## result says whether the shared ground would take the flight if its gate
 ## were free (trial_assignment).
 func _assignment(
-	terms: Dictionary, extra: Array[Dictionary] = [], ignore_gate := false
+	terms: Dictionary, extra: Array[Dictionary] = [], ignore_gate := false, trial := false
 ) -> Dictionary:
 	var gates := gate_ids()
 	if gates.is_empty():
@@ -969,7 +998,7 @@ func _assignment(
 		for other in extra:
 			from_day = mini(from_day, other["first_day"])
 		var refusal := _contracts_refusal(
-			running + [candidate], candidate, from_day, grounds, extra
+			running + [candidate], candidate, from_day, grounds, extra, trial
 		)
 		if refusal.is_empty():
 			return _assigned(gate_id, "", {}, "")
@@ -1036,9 +1065,15 @@ func _move_problem(
 ## `subject` (a contract, new or moved, whose own occurrences must plan) or an
 ## existing flight it would leave with no plan; {} for none. Every new
 ## contract in `contracts` starts on its first_day. The contracts of `also`
-## (new ones planned as if already accepted) must plan too.
+## (new ones planned as if already accepted) must plan too. A `trial` plans
+## both worlds on the trial planner (_trial_plans), never on the live one.
 func _contracts_refusal(
-	contracts: Array, subject: Dictionary, from_day: int, grounds: Dictionary, also := []
+	contracts: Array,
+	subject: Dictionary,
+	from_day: int,
+	grounds: Dictionary,
+	also := [],
+	trial := false
 ) -> Dictionary:
 	var world := _world(grounds)
 	world["contracts"] = contracts
@@ -1054,6 +1089,10 @@ func _contracts_refusal(
 	for contract: Dictionary in also:
 		subjects.append(contract["id"])
 	var days := FlightPlans.days_from(world, from_day)
+	if trial:
+		if _trial_plans == null:
+			_trial_plans = FlightPlans.new()
+		return _trial_plans.refusal(world, _trial_day_plan, days, subjects)
 	return _plans.refusal(world, _day_plan, days, subjects)
 
 
@@ -1118,6 +1157,21 @@ func _day_plan(day: int) -> Dictionary:
 	if not _day_plans.has(day):
 		_day_plans[day] = _plans.plan_day(_world(grounds), day)
 	return _day_plans[day]
+
+
+## The plan of calendar day `day` for the sim now as the trial planner makes
+## it: the same plan _day_plan() gives (planning is a function of the world),
+## cached apart from it, so a trial never fills, reads or replans the live
+## planner or its cache.
+func _trial_day_plan(day: int) -> Dictionary:
+	var grounds := gate_grounds()
+	var key := "%d %s %s" % [_revision, grounds, runway.works.fixed_bookings()]
+	if key != _trial_plans_key:
+		_trial_day_plans.clear()
+		_trial_plans_key = key
+	if not _trial_day_plans.has(day):
+		_trial_day_plans[day] = _trial_plans.plan_day(_world(grounds), day)
+	return _trial_day_plans[day]
 
 
 ## A change to the contracts or flights that can change a plan.
