@@ -400,6 +400,8 @@ func refresh() -> void:
 		_unreported.clear()
 	_time_label.text = time_text()
 	_departures_board.refresh()
+	# Before the rail, so it hangs under the chip on the frame the chip shows.
+	_refresh_quiet_chip()
 	_alerts.refresh()
 	_seed_label.text = seed_text()
 	_seed_label.visible = _seed_label.text != ""
@@ -414,7 +416,6 @@ func refresh() -> void:
 		for i in _speed_buttons.size():
 			var on := clock.paused if i == 0 else not clock.paused and clock.speed == i
 			_speed_buttons[i].set_pressed_no_signal(on)
-	_refresh_quiet_chip()
 
 
 func _build_quiet_chip() -> void:

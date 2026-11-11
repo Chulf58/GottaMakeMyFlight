@@ -13,6 +13,10 @@ extends Node
 ## the frame runs at `speed`. `speed` itself never changes, so the panels'
 ## held-speed checks see the player's setting, and nothing of the fast-forward
 ## is saved: a load ends it.
+##
+## A ticked listener that pauses the clock (UnlockGuide opening at midnight)
+## ends the frame on that tick, at any speed; the steps the frame still owed
+## are dropped, as the step cap drops a backlog.
 
 signal ticked(tick: int)
 
@@ -73,17 +77,19 @@ func advance(real_delta: float) -> void:
 	_accumulator += real_delta * (FAST_FORWARD_SPEED if fast else speed)
 	var steps := 0
 	while _accumulator >= STEP and steps < MAX_STEPS_PER_FRAME:
-		if fast and tick >= fast_forward_until:
-			# The stop: what is left of the frame runs at the player's speed.
-			fast = false
-			_accumulator *= float(speed) / FAST_FORWARD_SPEED
-			continue
 		_accumulator -= STEP
 		tick += 1
 		steps += 1
 		_in_tick = true
 		ticked.emit(tick)
 		_in_tick = false
+		if fast and (paused or tick >= fast_forward_until):
+			# The stop: what is left of the frame is player-speed time.
+			fast = false
+			_accumulator *= float(speed) / FAST_FORWARD_SPEED
+		# A listener paused (UnlockGuide at midnight): no tick runs under it.
+		if paused:
+			break
 	if _accumulator >= STEP:
 		_accumulator = fposmod(_accumulator, STEP)
 

@@ -98,6 +98,34 @@ func test_the_clock_panel_keeps_one_label_and_the_speed_buttons_show_the_player_
 	assert_array(pressed).is_equal(["2x"])
 
 
+## The rail moves in the same refresh that shows or hides the chip, never a
+## refresh later.
+func test_the_rail_moves_on_the_refresh_that_shows_or_hides_the_chip() -> void:
+	await _settle()
+	var panel := (_hud.find_child("FlightPanel", false, false) as Control).get_global_rect()
+	var rail := _hud.find_child("AlertStack", false, false) as Control
+	assert_float(rail.get_global_rect().position.y).is_equal_approx(
+		panel.end.y + HudLayout.GROUP_GAP, 0.5
+	)
+	_stop = 1_000_000
+	_world.clock.advance(FRAME)
+	_hud.refresh()
+	var chip := _chip().get_global_rect()
+	print("first fast refresh: chip=%s rail=%s" % [chip, rail.get_global_rect()])
+	assert_bool(_chip().visible).is_true()
+	assert_float(chip.size.y).is_greater(0.0)
+	assert_float(rail.get_global_rect().position.y).is_equal_approx(
+		chip.end.y + HudLayout.GROUP_GAP, 0.5
+	)
+	_stop = -1
+	_world.clock.advance(FRAME)
+	_hud.refresh()
+	assert_bool(_chip().visible).is_false()
+	assert_float(rail.get_global_rect().position.y).is_equal_approx(
+		panel.end.y + HudLayout.GROUP_GAP, 0.5
+	)
+
+
 func test_the_chip_sits_under_the_clock_panel_and_the_rail_under_the_chip() -> void:
 	_stop = 1_000_000
 	_world.clock.advance(FRAME)

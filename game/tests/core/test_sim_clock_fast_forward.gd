@@ -20,6 +20,13 @@ func _frames(clock: SimClock, count: int) -> void:
 		clock.advance(FRAME)
 
 
+## A ticked listener that pauses `clock` on tick `at`, as UnlockGuide does when
+## a new tier opens at midnight.
+func _pause_on(tick: int, clock: SimClock, at: int) -> void:
+	if tick == at:
+		clock.set_paused(true)
+
+
 func _source_at(stop: int) -> Callable:
 	return func() -> int:
 		_asked += 1
@@ -67,10 +74,66 @@ func test_steps_per_frame_stay_within_the_cap() -> void:
 		most = maxi(most, clock.tick - before)
 	print("most steps in one frame=%d" % most)
 	assert_int(most).is_equal(SimClock.MAX_STEPS_PER_FRAME)
-	# The backlog of a long frame is dropped, so the next frame is a normal one.
-	var before_next := clock.tick
+
+
+## The 2 s frame at 30x owes 1190 more ticks; the cap drops them, so with the
+## source gone a STEP-long frame at 2x runs exactly two ticks and leaves the
+## leftover fraction where it was.
+func test_a_long_fast_frame_drops_its_backlog() -> void:
+	var clock := _new_clock()
+	clock.set_speed(2)
+	clock.fast_forward_source = _source_at(1_000_000)
+	clock.advance(2.0 + SimClock.STEP * 0.4 / SimClock.FAST_FORWARD_SPEED)
+	assert_int(clock.tick).is_equal(SimClock.MAX_STEPS_PER_FRAME)
+	var alpha := clock.alpha
+	assert_float(alpha).is_equal_approx(0.4, 0.001)
+	clock.fast_forward_source = Callable()
+	clock.advance(SimClock.STEP)
+	print("after the long frame: ticks=%d alpha %f -> %f" % [clock.tick, alpha, clock.alpha])
+	assert_int(clock.tick).is_equal(SimClock.MAX_STEPS_PER_FRAME + 2)
+	assert_float(clock.alpha).is_equal_approx(alpha, 0.0001)
+
+
+func test_a_listener_that_pauses_stops_a_fast_frame_on_its_tick() -> void:
+	var clock := _new_clock()
+	clock.fast_forward_source = _source_at(1_000_000)
+	clock.ticked.connect(_pause_on.bind(clock, 4))
 	clock.advance(FRAME)
-	assert_int(clock.tick - before_next).is_less_equal(SimClock.MAX_STEPS_PER_FRAME)
+	print("paused in a fast frame: tick=%d alpha=%f" % [clock.tick, clock.alpha])
+	assert_int(clock.tick).is_equal(4)
+	assert_bool(clock.paused).is_true()
+	assert_float(clock.alpha).is_less(1.0)
+	assert_bool(clock.is_fast_forwarding()).is_false()
+
+
+## The same holds without a fast-forward, in any frame of more than one step.
+func test_a_listener_that_pauses_stops_a_3x_frame_on_its_tick() -> void:
+	var clock := _new_clock()
+	clock.set_speed(3)
+	clock.ticked.connect(_pause_on.bind(clock, 3))
+	clock.advance(0.2)
+	print("paused in a 3x frame: tick=%d alpha=%f" % [clock.tick, clock.alpha])
+	assert_int(clock.tick).is_equal(3)
+	assert_float(clock.alpha).is_less(1.0)
+	# Control: the frame had steps to spare (12 owed, 10 allowed).
+	clock.set_paused(false)
+	clock.advance(0.2)
+	assert_int(clock.tick).is_equal(3 + SimClock.MAX_STEPS_PER_FRAME)
+
+
+## Reaching the stop with less than a step left still turns that leftover into
+## player-speed time: 0.5 STEP of fast time is 0.5 / 30 STEP at 1x.
+func test_the_leftover_at_the_stop_is_rescaled_at_once() -> void:
+	var clock := _new_clock()
+	clock.fast_forward_source = _source_at(1)
+	clock.advance(SimClock.STEP * 1.5 / SimClock.FAST_FORWARD_SPEED)
+	print("at the stop: tick=%d alpha=%f" % [clock.tick, clock.alpha])
+	assert_int(clock.tick).is_equal(1)
+	assert_float(clock.alpha).is_equal_approx(0.5 / SimClock.FAST_FORWARD_SPEED, 0.0001)
+	clock.advance(SimClock.STEP * 0.9)
+	assert_int(clock.tick).is_equal(1)
+	clock.advance(SimClock.STEP * 0.1)
+	assert_int(clock.tick).is_equal(2)
 
 
 func test_the_fast_forward_stops_on_the_stop_tick() -> void:
