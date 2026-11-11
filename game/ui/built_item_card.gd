@@ -90,6 +90,7 @@ func _init() -> void:
 		_labels[field] = label
 		add_child(label)
 	(_labels["where"] as Label).theme_type_variation = &"HudHint"
+	walk.changed.connect(invalidate)
 
 
 ## Shows the selected item, or hides the card with none.
@@ -324,7 +325,7 @@ func _gate_walk(desk: int) -> String:
 		return ""
 	for binding in gates.bindings:
 		if binding["desk"] == desk:
-			walk.bind(sim)
+			walk.bind(sim, gates)
 			return GateWalk.card_line(walk.minutes(binding["gate"]))
 	return ""
 

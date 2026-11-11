@@ -18,9 +18,18 @@ extends RefCounted
 ## counts for nothing; a gate no exit reaches, or a world with no security
 ## exit, has NO_ROUTE.
 ##
-## Worked out again only when the grid was edited or a gate's desk changed,
-## on the first read after, never per frame: minutes() compares a small key
-## and answers from the last result. View only; nothing here changes the sim.
+## Driven by events, never polled (anti-pattern a-view-that-reacts-to-moving-
+## sim-objects-must-check-them-on): a grid edit, a change of the gate links
+## (GateDesks.changed) or a rebuild of the standing spots marks the figures
+## stale and emits `changed`; the next minutes() works them out again and
+## keeps them. While the standing spots wait to be derived again after an edit
+## (StandingSpots.stale) a result is never kept, so a gate whose first place is
+## a spot is not left with an answer worked out from the old spots; the rebuild
+## emits `changed` again. View only; nothing here changes the sim.
+
+## Something that can change a figure happened: readers redraw (on the next
+## frame, once the rest of the edit has settled).
+signal changed
 
 ## What minutes() answers for a gate no security exit reaches.
 const NO_ROUTE := -1
@@ -34,20 +43,24 @@ const CAPTION_TEXT := "%d min walk"
 var computed := 0
 
 var _sim: PassengerSim
-var _watched: BuildGrid
-var _edits := 0
-var _key := []
+var _gates: GateDesks
+var _grid: BuildGrid
+var _standing: StandingSpots
 var _worked := false
 ## Gate letter -> minutes, as the last working out found them.
 var _minutes := {}
 
 
-## Reads the walks of `sim`'s gates. Another sim starts over.
-func bind(sim: PassengerSim) -> void:
+## Reads the walks of `sim`'s gates; `gates`, when given, says when the gate
+## links changed. Another sim starts over.
+func bind(sim: PassengerSim, gates: GateDesks = null) -> void:
+	if gates != null and gates != _gates:
+		_gates = gates
+		_gates.changed.connect(_stale)
 	if sim == _sim:
 		return
 	_sim = sim
-	_worked = false
+	_stale()
 
 
 ## The desk card's line for `minutes`.
@@ -66,34 +79,40 @@ func minutes(gate: String) -> int:
 	if _sim == null or _sim.grid == null:
 		return NO_ROUTE
 	_watch()
-	var key := [_edits, _sim.layout.gate_desk_ids.hash(), _sim.layout.gate_desks.hash()]
-	if not _worked or key != _key:
-		_key = key
+	if not _worked:
 		_work_out()
 	return _minutes.get(gate, NO_ROUTE)
 
 
+## Follows the sim's grid and standing spots, which a load replaces.
 func _watch() -> void:
-	if _sim.grid == _watched:
-		return
-	_watched = _sim.grid
-	_watched.graph_changed.connect(_on_graph_changed)
-	_watched.edit_applied.connect(_on_edit_applied)
-	_edits += 1
+	if _sim.grid != _grid:
+		_grid = _sim.grid
+		_grid.graph_changed.connect(_on_graph_changed)
+		_grid.edit_applied.connect(_on_edit_applied)
+		_worked = false
+	if _sim.standing != _standing:
+		_standing = _sim.standing
+		_standing.rebuilt.connect(_stale)
+		_worked = false
 
 
 func _on_graph_changed(_cells: Array[Vector2i]) -> void:
-	_edits += 1
+	_stale()
 
 
 func _on_edit_applied(_edit: BuildEdit, _result: BuildResult) -> void:
-	_edits += 1
+	_stale()
+
+
+func _stale() -> void:
+	_worked = false
+	changed.emit()
 
 
 func _work_out() -> void:
 	computed += 1
 	_minutes.clear()
-	_worked = true
 	var exits := _exits()
 	for gate: String in _sim.layout.gate_desks:
 		var near: Array[Vector2i] = []
@@ -102,6 +121,8 @@ func _work_out() -> void:
 		for exit in exits:
 			longest = maxi(longest, _first_place_mm(exit, near))
 		_minutes[gate] = NO_ROUTE if longest < 0 else _to_minutes(longest)
+	# Kept only while the spots stand as derived; the rebuild says when to look again.
+	_worked = not _sim.standing.stale
 
 
 ## The security exit cells, one each, in station order.
@@ -142,15 +163,12 @@ func _seat_mm(exit: Vector2i, seat: Dictionary) -> int:
 	return -1 if path.is_empty() else Passenger.path_mm(path)
 
 
-## The walk to the first standing spot of the gate that has a way there. While
-## the spots wait to be derived again (StandingSpots.stale, after an edit) the
-## figure is worked out again on the next read.
+## The walk to the first standing spot of the gate that has a way there.
 func _spot_mm(exit: Vector2i, near: Array[Vector2i]) -> int:
 	var standing := _sim.standing
 	for spot in standing.ordered_from(exit, near):
 		var mm := _sim.routes.walk_mm(exit, standing.cell_of(spot))
 		if mm < JourneyForecast.NEVER_MM:
-			_worked = not standing.stale
 			return mm
 	return -1
 

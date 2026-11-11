@@ -124,6 +124,7 @@ var walk := GateWalk.new()
 ## cache (tests read it).
 var sign_layouts := 0
 var _markers_looked := false
+var _walk_queued := false
 
 var _grid: BuildGrid
 var _gates: GateDesks
@@ -337,20 +338,30 @@ static func caption_text(
 
 ## Reads the gates' walks from security off `sim` for the captions' third line.
 func bind_walk(sim: PassengerSim) -> void:
-	walk.bind(sim)
+	walk.bind(sim, _gates)
+	if not walk.changed.is_connected(_queue_walk):
+		walk.changed.connect(_queue_walk)
 	refresh_walk()
 
 
-## Sets each gate caption's text again from the gate's class and walk. The walk
-## is worked out again only after an edit (GateWalk), so this is cheap to call
-## every frame; the text changes only when a figure did.
+## Sets each gate caption's text again from the gate's class and walk. Event
+## driven (GateWalk.changed, through _queue_walk()), never called per frame.
 func refresh_walk() -> void:
+	_walk_queued = false
 	if _gates == null:
 		return
 	for i in mini(_captions.size(), _gates.bindings.size()):
 		var text := _caption_for(_gates.bindings[i]["gate"])
 		if _captions[i].text != text:
 			_captions[i].text = text
+
+
+## One refresh on the next idle frame, however many changes came, so the sim
+## has settled the whole edit (layout, gate links) before the figures are read.
+func _queue_walk() -> void:
+	if not _walk_queued:
+		_walk_queued = true
+		refresh_walk.call_deferred()
 
 
 func _caption_for(gate: String) -> String:
@@ -423,7 +434,6 @@ func _process(_delta: float) -> void:
 	update_sizes()
 	layout_signs()
 	if _links.visible:
-		refresh_walk()
 		layout_captions()
 
 

@@ -24,6 +24,11 @@ var near_station := 0
 var far_station := 0
 var desk := 0
 var row := 0
+## Set by attach_views().
+var finances: Finances
+var mode: BuildMode
+var card: BuiltItemCard
+var view: GateLinksView
 ## Passenger id -> the tick each stage was first entered, by stage.
 var stage_ticks := {}
 ## Passenger id -> the cell it stood on when it first entered each stage.
@@ -97,7 +102,46 @@ func run_until_stage(id: int, stage: Passenger.Stage, limit := 4000) -> bool:
 	return tick_of(id, stage) >= 0
 
 
+## Puts a desk card on gate A's desk and a gate links view over the gates, both
+## reading this world's sim, as the game wires them. Nodes go under `suite`,
+## which free_all() frees them from.
+func attach_views(suite: GdUnitTestSuite) -> void:
+	finances = Finances.new()
+	suite.add_child(finances)
+	mode = BuildMode.new()
+	mode.site = SITE
+	mode.finances = finances
+	suite.add_child(mode)
+	mode.set_process(false)
+	card = BuiltItemCard.new()
+	card.sim = world.sim
+	card.build_mode = mode
+	card.gates = gates
+	card.selection = BuiltSelection.new()
+	card.selection.kind = BuiltSelection.Kind.OBJECT
+	card.selection.id = desk
+	suite.add_child(card)
+	view = GateLinksView.new()
+	suite.add_child(view)
+	view.bind(world.grid, gates)
+	view.bind_walk(world.sim)
+
+
+## Puts back whichever of the two scanners an edit took away (the id of a
+## placed one changes), and steps one tick so the standing spots are derived
+## again.
+func restore_scanners() -> void:
+	if world.grid.get_object(near_station).is_empty():
+		near_station = PassengerTestWorld.place(world.grid, &"security_scanner", NEAR_SCANNER, 0)
+	if world.grid.get_object(far_station).is_empty():
+		far_station = PassengerTestWorld.place(world.grid, &"security_scanner", FAR_SCANNER, 0)
+	world.step()
+
+
 func free_all() -> void:
+	for node: Node in [view, card, mode, finances]:
+		if node != null and is_instance_valid(node):
+			node.free()
 	world.free_all()
 
 

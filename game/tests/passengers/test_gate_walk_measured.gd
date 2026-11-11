@@ -8,25 +8,27 @@ extends GdUnitTestSuite
 ## spot), and no more than one game minute over them. The control proves the
 ## passenger walked and that the exits are not the same distance away.
 
+## One world per case, each built once for the file: a case's passenger walks
+## in its own world.
+var _seated: GateWalkWorld
+var _spotted: GateWalkWorld
 var _gate: GateWalkWorld
 
 
 func before() -> void:
 	PassengerTestWorld.tracker = self
+	_seated = GateWalkWorld.make(self, true)
+	_spotted = GateWalkWorld.make(self, false)
 
 
 func after() -> void:
 	PassengerTestWorld.tracker = null
+	_seated.free_all()
+	_spotted.free_all()
 
 
-func after_test() -> void:
-	if _gate != null:
-		_gate.free_all()
-	_gate = null
-
-
-func _measure(seats: bool, arrive: Passenger.Stage) -> void:
-	_gate = GateWalkWorld.make(self, seats)
+func _measure(world: GateWalkWorld, arrive: Passenger.Stage) -> void:
+	_gate = world
 	var sim := _gate.world.sim
 	var walk := GateWalk.new()
 	walk.bind(sim)
@@ -61,8 +63,8 @@ func _measure(seats: bool, arrive: Passenger.Stage) -> void:
 
 
 func test_the_seat_walk_from_the_far_exit_matches_the_readout() -> void:
-	_measure(true, Passenger.Stage.SITTING_DOWN)
+	_measure(_seated, Passenger.Stage.SITTING_DOWN)
 
 
 func test_the_standing_spot_walk_from_the_far_exit_matches_the_readout() -> void:
-	_measure(false, Passenger.Stage.STANDING)
+	_measure(_spotted, Passenger.Stage.STANDING)

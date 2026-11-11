@@ -54,6 +54,9 @@ extends RefCounted
 ## so a stood roller never stands in the desk, whichever way its passenger
 ## faces (board 34a0d0aa).
 
+## The spots were derived again (rebuild()); GateWalk redoes its figures then.
+signal rebuilt
+
 const NO_SPOT := -1
 const PITCH_MM := 600
 const CELL_MM := 1000
@@ -190,6 +193,7 @@ func rebuild(sim: PassengerSim) -> void:
 	_orders = {}
 	_ids.assign(spots.keys())
 	_ids.sort()
+	rebuilt.emit()
 
 
 ## The spot a passenger holds, or NO_SPOT.
