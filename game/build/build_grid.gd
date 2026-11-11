@@ -231,6 +231,14 @@ func room_ids() -> Array[int]:
 	return ids
 
 
+## The cell data a walk outside reads: floors, objects, horizontal walls and
+## vertical walls, as [PackedByteArray, PackedInt32Array, PackedByteArray,
+## PackedByteArray]. The grid's own arrays, not copies: a caller that keeps them
+## to compare with a later call's duplicates each first (SiteRoutes.distances()).
+func route_state() -> Array:
+	return [_floor, _occupant, _h_walls, _v_walls]
+
+
 ## Where a passenger stands to use the object, or BuildObjectDef.NO_CELL.
 func interaction_cell(object_id: int) -> Vector2i:
 	if not _objects.has(object_id):
