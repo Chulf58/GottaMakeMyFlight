@@ -77,21 +77,45 @@ func test_a_door_placed_on_the_starter_terminal_survives_the_sim_and_undoes() ->
 	assert_int(_mode.grid.wall_kind(cell, NORTH)).is_equal(BuildGrid.WallKind.PLAIN)
 
 
-## What the playtest saw (input log: Esc, then Ctrl+Z 53 ms later): Esc drops
-## the tool and closes the tray, which ends build mode and clears the history
-## (decision build-mode-pauses-the-game-while-a-build-tray-is-open-closin), so
-## the Ctrl+Z that follows has nothing to undo. Ctrl+Z without the Esc undoes.
-func test_escape_ends_build_mode_so_the_ctrl_z_after_it_has_nothing_to_undo() -> void:
+## What the playtest saw (input log: Esc, then Ctrl+Z 53 ms later). Esc drops
+## the tool and closes the tray, which ends build mode. This test used to pin
+## that the Ctrl+Z then had nothing to undo; the 2026-11-11 ruling (decision
+## build-mode-pauses-the-game-while-a-build-tray-is-open-closin) replaced that:
+## the history survives until the sim clock advances a tick, so the Ctrl+Z
+## after the Esc undoes the door and no tray opens.
+func test_escape_then_ctrl_z_undoes_the_door_until_a_tick_runs() -> void:
 	var menu := _main.get_node("BuildMenu") as BuildMenu
+	_mode.clear_undo()
 	var cell := _place_exit_door()
 	assert_vector(cell).is_not_equal(Vector2i(-1, -1))
 	assert_bool(menu.build_session.active).is_true()
-	assert_int(_mode.undo_history().size()).is_greater(0)
+	assert_int(_mode.undo_history().size()).is_equal(1)
 	_mode._unhandled_input(_key(KEY_ESCAPE, false))
 	assert_bool(menu.build_session.active).is_false()
-	assert_int(_mode.undo_history().size()).is_equal(0)
+	assert_int(_mode.undo_history().size()).is_equal(1)
 	_mode._unhandled_input(_key(KEY_Z, true))
 	print("status after Esc, Ctrl+Z: %s" % _mode.status_text())
+	assert_str(_mode.status_text()).contains(UndoStack.UNDONE)
+	assert_int(_mode.grid.object_at(cell)).is_equal(0)
+	assert_bool(menu.build_session.active).is_false()
+	assert_bool(menu.is_tray_open()).is_false()
+
+
+## The other half of the same rule: once a tick has run after the Esc, the
+## history is gone and the Ctrl+Z has nothing to undo.
+func test_escape_then_a_tick_then_ctrl_z_has_nothing_to_undo() -> void:
+	var menu := _main.get_node("BuildMenu") as BuildMenu
+	_mode.clear_undo()
+	var cell := _place_exit_door()
+	assert_vector(cell).is_not_equal(Vector2i(-1, -1))
+	_mode._unhandled_input(_key(KEY_ESCAPE, false))
+	assert_bool(menu.build_session.active).is_false()
+	_clock.set_paused(false)
+	_clock.advance(SimClock.STEP)
+	_clock.set_paused(true)
+	assert_int(_mode.undo_history().size()).is_equal(0)
+	_mode._unhandled_input(_key(KEY_Z, true))
+	print("status after Esc, tick, Ctrl+Z: %s" % _mode.status_text())
 	assert_str(_mode.status_text()).is_equal(UndoStack.NOTHING_TO_UNDO)
 	assert_int(_mode.grid.object_at(cell)).is_not_equal(0)
 
