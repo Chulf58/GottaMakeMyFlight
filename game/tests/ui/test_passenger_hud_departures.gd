@@ -34,10 +34,16 @@ func before_test() -> void:
 	_hud.clock = _world.clock
 	_hud.flights = _world.flights
 	_hud.sim = _world.sim
+	# Per-process settings, so the player's own Departures choice in
+	# user://hud_settings.cfg (B hides the board) never reaches the test.
+	_hud.alert_settings_path = SaveTestKit.run_path("hud_departures_alerts")
+	_hud.departures_settings_path = SaveTestKit.run_path("hud_departures_board")
 	add_child(_hud)
 
 
 func after_test() -> void:
+	DirAccess.remove_absolute(_hud.alert_settings_path)
+	DirAccess.remove_absolute(_hud.departures_settings_path)
 	_hud.free()
 	_world.free_all()
 
