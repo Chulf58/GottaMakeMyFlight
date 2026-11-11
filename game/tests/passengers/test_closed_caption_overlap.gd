@@ -507,15 +507,86 @@ func test_a_staff_spot_caption_with_room_keeps_its_lifted_clear_spot() -> void:
 	_assert_clear_by_the_margin([_rect_of(pair[0]), _rect_of(pair[1])])
 
 
+## The pair stands side by side on one row in open space, the rest parked along
+## the bottom, so no icon reaches either caption and only the captions meet.
 func test_of_two_overlapping_plain_closed_captions_the_leftmost_stays() -> void:
 	_frame_closed_signs(HOME_DISTANCE)
-	var pair := _leftmost_pair()
+	var stations: Array[int] = []
+	stations.assign(MissSignals.closed_stations(_world.sim))
+	for i in stations.size():
+		_place_sign(stations[i], Vector2(100.0 + 200.0 * i, 950.0))
+	_place_sign(stations[0], Vector2(900.0, 500.0))
+	_place_sign(stations[1], Vector2(940.0, 500.0))
+	var pair: Array[int] = [stations[0], stations[1]]
 	_set_pair(pair, MissMarkers.CLOSED_CAPTION, MissMarkers.CLOSED_CAPTION)
 	assert_bool(_pair_overlaps(pair)).is_true()
 	var left := pair[0] if _point_of(pair[0]).x <= _point_of(pair[1]).x else pair[1]
 	var right := pair[1] if left == pair[0] else pair[0]
 	assert_bool(_caption_of(left).visible).is_true()
 	assert_bool(_caption_of(right).visible).is_false()
+
+
+## Parks every closed sign along the bottom of the screen except `a` and `b`,
+## puts `a` at (900, 500) with `a_text`, and puts `b` one sign-height and a bit
+## above it, just right of `a`'s caption by `offset_x` pixels, so its icon covers
+## the lower right corner of that caption when `offset_x` is 0. `b` gets the
+## one-letter caption "x", which stays clear of `a`'s. Returns `a`'s caption
+## rectangle at its own place.
+func _icon_over_caption(a: int, b: int, a_text: String, offset_x: float) -> Rect2:
+	var stations: Array[int] = []
+	stations.assign(MissSignals.closed_stations(_world.sim))
+	for i in stations.size():
+		_place_sign(stations[i], Vector2(100.0 + 200.0 * i, 950.0))
+	var a_point := Vector2(900.0, 500.0)
+	var own := MissMarkers.caption_rect(a_point, a_text)
+	var half_x := MissMarkers.caption_size("x").x / 2.0
+	var b_point := Vector2(
+		own.end.x + MissMarkers.CAPTION_MARGIN_PX + half_x + 2.0 + offset_x, a_point.y - 60.0
+	)
+	_place_sign(a, a_point)
+	_place_sign(b, b_point)
+	_caption_of(a).text = a_text
+	_caption_of(b).text = "x"
+	_nudge_camera()
+	return own
+
+
+func _two_closed_stations() -> Array[int]:
+	var stations: Array[int] = []
+	stations.assign(MissSignals.closed_stations(_world.sim))
+	return [stations[0], stations[1]]
+
+
+func test_a_plain_caption_under_another_signs_icon_is_hidden() -> void:
+	_frame_closed_signs(HOME_DISTANCE)
+	var pair := _two_closed_stations()
+	var own := _icon_over_caption(pair[0], pair[1], MissMarkers.CLOSED_CAPTION, 0.0)
+	var b_caption := MissMarkers.caption_rect(_point_of(pair[1]), "x")
+	# Controls: the icon covers the caption, the two captions do not meet, and
+	# the other caption shows, so the icon alone is what hides the plain one.
+	assert_bool(_icon_rect_of(pair[1]).intersects(own)).is_true()
+	assert_bool(b_caption.grow(MissMarkers.CAPTION_MARGIN_PX).intersects(own)).is_false()
+	assert_bool(_caption_of(pair[1]).visible).is_true()
+	assert_bool(_caption_of(pair[0]).visible).is_false()
+
+
+func test_a_staff_spot_caption_under_another_signs_icon_is_not_hidden() -> void:
+	_frame_closed_signs(HOME_DISTANCE)
+	var pair := _two_closed_stations()
+	var own := _icon_over_caption(pair[0], pair[1], MissMarkers.UNREACHABLE_CAPTION, 0.0)
+	assert_bool(_icon_rect_of(pair[1]).intersects(own)).is_true()
+	assert_bool(_caption_of(pair[0]).visible).is_true()
+	assert_bool(_rect_of(pair[0]).intersects(_icon_rect_of(pair[1]))).is_false()
+
+
+func test_a_plain_caption_beside_another_signs_icon_stays() -> void:
+	_frame_closed_signs(HOME_DISTANCE)
+	var pair := _two_closed_stations()
+	# Pushed right until the icon's left edge is past the caption's right edge.
+	var own := _icon_over_caption(pair[0], pair[1], MissMarkers.CLOSED_CAPTION, 40.0)
+	assert_bool(_icon_rect_of(pair[1]).intersects(own)).is_false()
+	assert_bool(_caption_of(pair[0]).visible).is_true()
+	assert_bool(_caption_of(pair[1]).visible).is_true()
 
 
 ## caption_size() is checked against a TextLine shaped from the Label3D's own

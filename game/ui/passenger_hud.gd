@@ -48,6 +48,8 @@ const FOLLOW_TOP := FOLLOW_BOTTOM + HudLayout.CHIP_H
 const SPEED_KEYS := {KEY_1: 1, KEY_2: 2, KEY_3: 3}
 ## The Debug panel's fixed width; its labels wrap inside it.
 const DEBUG_W := 260.0
+## Frames from a click that selected a built item to the camera deciding on a pan.
+const REVEAL_FRAMES := 2
 ## The flight result card's key on the rail.
 const RESULT_KEY := &"flight_result"
 ## The flight panel's word for each state from the doors closing on.
@@ -177,6 +179,9 @@ var _inspect := PassengerInspect.new()
 ## inspect card shows its info in place of a passenger's.
 var _built := BuiltSelection.new()
 var _outline := BuiltOutline.new()
+## Frames until a click that selected a built item decides whether the camera
+## must pan to show it: the inspect window that opens is laid out a frame late.
+var _reveal_frames := 0
 var _status_label := Label.new()
 var _status := ""
 ## True after a refused debug batch, until the next spawned one: the earlier
@@ -293,6 +298,10 @@ func _ready() -> void:
 
 func _process(_delta: float) -> void:
 	refresh()
+	if _reveal_frames > 0:
+		_reveal_frames -= 1
+		if _reveal_frames == 0:
+			_reveal_built()
 
 
 ## A followed passenger the sim has retired is gone: clear the selection and
@@ -329,12 +338,36 @@ func _unhandled_input(event: InputEvent) -> void:
 	_built.clear()
 	if vehicle == 0 and views.selected_id == 0:
 		_pick_built(eye, click.position)
+	_reveal_frames = REVEAL_FRAMES if _built.is_selected() else 0
 	if vehicle != 0:
 		camera.follow(landside_views.follow_anchor)
 	elif views.selected_id != 0:
 		camera.follow(views.follow_anchor)
 	else:
 		camera.stop_follow()
+
+
+## Pans the camera just far enough to show the selected built item when it is off
+## screen or under the inspect window or another panel; an item in plain view
+## leaves the camera alone (decision clicking-a-built-desk-outside-build-mode-
+## moves-the-camera-on).
+func _reveal_built() -> void:
+	if camera == null or build_mode == null or not _built.is_selected():
+		return
+	var eye := camera.get_node("Camera3D") as Camera3D
+	var panels := _panel_room.open_rects()
+	if _inspect.visible:
+		panels.append(_inspect.get_global_rect())
+	var target: Variant = SelectReveal.focus_target(
+		eye,
+		camera.position,
+		_built.outline_rect(build_mode.grid, build_mode.landside_placement()),
+		build_mode.grid.origin.y,
+		eye.get_viewport().get_visible_rect(),
+		panels
+	)
+	if target != null:
+		camera.glide_to(target)
 
 
 ## Picks the built item under a click that met no vehicle and no passenger.
