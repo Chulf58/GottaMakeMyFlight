@@ -17,7 +17,13 @@ extends RefCounted
 ## rescue grant paying (Wallet.Category.GRANT; undoing the removals that made
 ## the airport stuck would keep the grant) and a new game's starting budget
 ## (Wallet.Category.OPENING). A grid replaced from a snapshot in the middle of
-## an action (BuildTransaction rolling a commit back) clears it too.
+## an action (BuildTransaction rolling a commit back) clears it too. Each of
+## these also emits `invalidated`, so BuildMode drops the landside actions kept
+## beside this history (they hang on the same grid and wallet).
+
+## The history was cleared because something outside the player's actions
+## changed the grid or the build money (not by clear()).
+signal invalidated
 
 const CAPACITY := 20
 const NOTHING_TO_UNDO := "Nothing to undo"
@@ -73,7 +79,7 @@ func end_action() -> void:
 	var receipt := _receipt
 	_receipt = null
 	if receipt.replaced:
-		clear()
+		_invalidate()
 	elif not receipt.is_empty():
 		_receipts.append(receipt)
 		if _receipts.size() > CAPACITY:
@@ -96,16 +102,21 @@ func undo() -> BuildResult:
 
 func _on_edit_applied(_edit: BuildEdit, _result: BuildResult) -> void:
 	if _depth == 0:
-		clear()
+		_invalidate()
 
 
 func _on_graph_changed(_cells: Array[Vector2i]) -> void:
 	if _depth == 0:
-		clear()
+		_invalidate()
 
 
 func _on_transaction(amount: int, category: int, _claimed: Dictionary, _tick: int) -> void:
 	if category == Wallet.Category.GRANT or category == Wallet.Category.OPENING:
-		clear()
+		_invalidate()
 	elif category == Wallet.Category.BUILD and _receipt != null:
 		_receipt.money += amount
+
+
+func _invalidate() -> void:
+	clear()
+	invalidated.emit()

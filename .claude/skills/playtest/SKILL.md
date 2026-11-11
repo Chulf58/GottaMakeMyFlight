@@ -27,21 +27,24 @@ Runtime tools take one command at a time. A `take_screenshot` sent while `get_ui
 
 `click_element` resolves a node path or node name, never the visible text. `click_element` with `"Starter terminal"` fails with "could not find UI element". Most HUD buttons are generated nodes named `@Button@14` and the numbers change when the UI changes, so always copy the full `path` from a fresh `get_ui_elements` (a path with `@` in it works). Named nodes are `DebugToggle`, `CardFloor`, `CardWall`, `CardGlass`, `CardDoor`, `StatusLine`, `FollowText`.
 
-**Keys.** `simulate_input` `type: "key"` taps (press and release) unless you set `pressed`; use `pressed: true` then `pressed: false` to hold, for the camera keys. The game's keys: `Space` pause, `Shift+1/2/3` speed, `1` Floor, `2` Wall, `3` Desk, `4` Scanner, `5` Seats, `6` Remove, `7` Glass, `8` Door, `9` Entrance, `0` Exit, `Esc` no tool, `R` rotate, camera on `W` `A` `S` `D`, `Q`/`E` to rotate, the wheel to zoom, `Home` to reset. Check `game/project.godot` `[input]` if a key does nothing. Plain number keys are build tools; speed needs Shift.
+**`click_element` does not press buttons reliably, and the rects are not click coordinates.** `get_ui_elements` reports rects in viewport units, but `click_element` clicks the rect centre as window pixels. The game runs with a content scale factor of 1.25, so the click lands on another control (smoke playtest 12: an Offers click hit the Runway button, and `DebugToggle` never toggled in four tries). Press a button the way the mouse recipe below does: take the rect centre from `get_ui_elements`, warp the viewport mouse to it, and send a parsed click at that centre times 1.25. Check the result in the next `get_ui_elements` or a screenshot, not in the click's reported hit.
+
+**Keys.** `simulate_input` `type: "key"` taps (press and release) unless you set `pressed`; use `pressed: true` then `pressed: false` to hold, for the camera keys. The game's keys: `Space` pause, `Shift+1/2/3` speed, `1` Floor, `2` Wall, `3` Desk, `4` Scanner, `5` Seats, `6` Remove, `7` Glass, `8` Door, `9` Entrance, `0` Exit, `Esc` no tool (it also closes the tray, which ends build mode; the undo history survives until the sim clock advances a tick, so Esc then Ctrl+Z still undoes the last build and an Esc, a tick, then Ctrl+Z has nothing to undo), `R` rotate, camera on `W` `A` `S` `D`, `Q`/`E` to rotate, the wheel to zoom, `Home` to reset. Check `game/project.godot` `[input]` if a key does nothing. Plain number keys are build tools; speed needs Shift.
 
 **The mouse needs a workaround.** The build tools read the viewport's mouse position, not the position carried by an injected event. A `mouse_button` or `mouse_motion` from `simulate_input` reports a position but leaves the viewport mouse where the real cursor is, so a click lands somewhere else (a refusal such as `OUT_OF_BOUNDS` for a cell far outside the grid is the sign). Move the viewport mouse with `run_script`, then send the input:
 
 ```gdscript
 extends RefCounted
 
-const AT := Vector2(900, 627)   # screen pixels, 1920x1080
+const AT := Vector2(900, 627)   # VIEWPORT coordinates (the layout space), not window pixels
 
 func execute(scene_tree: SceneTree) -> Variant:
 	scene_tree.root.warp_mouse(AT)
 	return scene_tree.root.get_mouse_position()
 ```
 
-- **One placement, one call.** To place with a tool, one `run_script` can warp and queue the whole input: `warp_mouse(AT)`, then `Input.parse_input_event` for the tool key (press and release `InputEventKey` with `physical_keycode` and `keycode` set), then a left `InputEventMouseButton` press and release. This goes through the game's real input handlers and is logged in the input record.
+- **Two coordinate spaces.** `warp_mouse` takes viewport coordinates, the layout space that `get_ui_elements` reports (1536x864 at the content scale factor of 1.25). The `position` of a parsed `InputEventMouse*` must be in window pixels: the viewport point times the scale factor, or `scene_tree.root.get_final_transform() * point`. Using the same number in both places lands on the wrong cell or control.
+- **One placement, one call.** To place with a tool, one `run_script` can warp and queue the whole input: `warp_mouse(AT)`, then `Input.parse_input_event` for the tool key (press and release `InputEventKey` with `physical_keycode` and `keycode` set), then a left `InputEventMouseButton` press and release, its `position` set to the window-pixel point. This goes through the game's real input handlers and is logged in the input record.
 - **Several warp-and-click steps in one `run_script` need a frame between them.** The viewport mouse position updates on the next frame, so without a pause every click lands on the last warp. Put `await scene_tree.process_frame` after each `warp_mouse` (before the event that reads the position); a whole build, floor drags included, then works in one script:
 
 ```gdscript
