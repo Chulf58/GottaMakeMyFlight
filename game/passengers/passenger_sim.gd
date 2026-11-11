@@ -38,7 +38,7 @@ signal stage_changed(id: int, stage: Passenger.Stage)
 signal checked_in(id: int, desk: int)
 
 ## The history of SAVE_VERSION is in PassengerSimSave.
-const SAVE_VERSION := 32
+const SAVE_VERSION := 33
 ## 1.96 m/s; the Toon walk clips cover 1.92-1.95 m/s.
 const WALK_MM := 98
 ## 3.5 m/s, a jog (user-ruled); the Toon run clips cover 4.17-5.30 m/s,
@@ -163,6 +163,9 @@ var _next_id := 1
 var _schedule: Array[Dictionary] = []
 ## Flights whose arrivals are scheduled and whose doors have not closed.
 var _scheduled: Dictionary = {}
+## Occurrence id -> extra passengers added when it is scheduled
+## (BookingOverrides); saved.
+var _booking_overrides: Dictionary = {}
 ## Station id -> {"lane": Array[int], "holding": Array[int], "serving": int}.
 var _queues: Dictionary = {}
 ## Derived: station id -> passengers walking to it.
@@ -230,12 +233,14 @@ func bind(with_clock: SimClock, with_flights: FlightSim, with_grid: BuildGrid) -
 ## that, never before the next tick. With a LandsideSim they are booked in
 ## parties that share a car or taxi instead (ArrivalBookings.schedule()). A
 ## flight is scheduled once: a second call, or a flight whose doors have
-## closed, is refused with an error.
+## closed, is refused with an error. The flight's extra passengers
+## (set_booking_override()) are added to `count`, once.
 func schedule_flight(flight_id: String, count: int) -> bool:
 	if _scheduled.has(flight_id) or flights.is_doors_closed(flight_id):
 		push_error("PassengerSim.schedule_flight: '%s' is scheduled or closed" % flight_id)
 		return false
 	_scheduled[flight_id] = true
+	count += BookingOverrides.take(self, flight_id)
 	if landside != null:
 		arrivals.schedule(flight_id, count)
 		return true
@@ -245,6 +250,28 @@ func schedule_flight(flight_id: String, count: int) -> bool:
 		var at := clock.rng.randi_range(span.x, span.y)
 		PassengerLifecycle.add_spawn(self, at, flight_id, clock.rng.randi_range(0, 1), arrival)
 	return true
+
+
+## Books `extra` more passengers on a contract occurrence, added when its
+## passengers are scheduled (an occurrence is scheduled as it is issued, so this
+## is for one not issued yet: "<contract>-d<day>"). Replaces an earlier
+## override. Refused (ok false, with a reason) for an occurrence already
+## scheduled or departed, a flight with no contract, extra under 1 or a booking
+## past the plane class maximum. Always returns {"ok", "reason", "headroom"},
+## the most extra passengers the occurrence can take.
+func set_booking_override(flight_id: String, extra: int) -> Dictionary:
+	return BookingOverrides.set_extra(self, flight_id, extra)
+
+
+## The most extra passengers `flight_id` can take: the plane class maximum
+## less the contract's booked passengers (0 for a flight with no contract).
+func booking_headroom(flight_id: String) -> int:
+	return BookingOverrides.headroom(self, flight_id)
+
+
+## The extra passengers waiting for `flight_id` to be scheduled; 0 when none.
+func booking_override_of(flight_id: String) -> int:
+	return BookingOverrides.extra_of(self, flight_id)
 
 
 ## The debug batch: `count` passengers for the first flight still boarding,
