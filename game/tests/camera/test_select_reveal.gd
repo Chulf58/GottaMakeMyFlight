@@ -109,3 +109,26 @@ func test_a_pan_stays_on_the_ground_plane() -> void:
 	)
 	assert_bool(target != null).is_true()
 	assert_float((target as Vector3).y).is_equal(0.0)
+
+
+func test_a_footprint_with_a_corner_behind_the_eye_still_pans_to_its_middle() -> void:
+	# The far corners lie behind the eye's plane; the middle is in front of it.
+	var long_room := Rect2(-5.0, -5.0, 10.0, 300.0)
+	assert_bool(_eye.is_position_behind(Vector3(0.0, 0.0, 295.0))).is_true()
+	assert_bool(_eye.is_position_behind(Vector3(0.0, 0.0, 145.0))).is_false()
+	var target: Variant = SelectReveal.focus_target(
+		_eye, Vector3.ZERO, long_room, 0.0, _viewport(), []
+	)
+	print("long room target %s" % [target])
+	assert_bool(target != null).is_true()
+	assert_float((target as Vector3).z).is_equal_approx(145.0, 0.01)
+
+
+func test_an_item_wholly_behind_the_eye_pans_to_it() -> void:
+	var behind := Rect2(-1.0, 300.0, 2.0, 2.0)
+	assert_bool(_eye.is_position_behind(Vector3(0.0, 0.0, 301.0))).is_true()
+	var target: Variant = SelectReveal.focus_target(
+		_eye, Vector3.ZERO, behind, 0.0, _viewport(), []
+	)
+	assert_bool(target != null).is_true()
+	assert_float((target as Vector3).z).is_equal_approx(301.0, 0.01)

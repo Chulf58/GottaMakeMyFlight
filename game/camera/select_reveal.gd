@@ -18,7 +18,7 @@ const MARGIN := 12.0
 
 ## The screen box that holds `world` (an xz rectangle in metres) standing on the
 ## plane at `floor_y`, as seen from `eye`, grown by MARGIN. Empty when any
-## corner is behind the eye.
+## corner is behind the eye, where no box can be projected.
 static func screen_box(eye: Camera3D, world: Rect2, floor_y: float) -> Rect2:
 	var low := Vector2(INF, INF)
 	var high := Vector2(-INF, -INF)
@@ -69,13 +69,15 @@ static func focus_target(
 ) -> Variant:
 	if not world.has_area():
 		return null
+	var centre := Vector3(world.get_center().x, floor_y, world.get_center().y)
 	var box := screen_box(eye, world, floor_y)
 	if not box.has_area():
-		return null
+		# A corner is behind the eye, so the footprint has no screen box (it is
+		# off screen or crosses the eye's plane): focus on its middle.
+		return Vector3(centre.x, focus.y, centre.z)
 	var shift := shift_for(box, viewport, panels)
 	if shift == Vector2.ZERO:
 		return null
-	var centre := Vector3(world.get_center().x, floor_y, world.get_center().y)
 	var seen_at := eye.unproject_position(centre) + shift
 	var landing: Variant = BuildMode.ground_point(
 		eye.project_ray_origin(seen_at), eye.project_ray_normal(seen_at), floor_y
