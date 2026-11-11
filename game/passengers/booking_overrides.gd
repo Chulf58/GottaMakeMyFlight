@@ -14,7 +14,9 @@ extends RefCounted
 
 const SCHEDULED := "the flight's passengers are already scheduled"
 const DEPARTED := "the flight's doors have closed"
-const PAST := "the flight's day has passed"
+const PAST := "the flight's day has passed or will not be flown"
+const ISSUED := "the flight is already issued"
+const ENDED := "the flight's contract has ended"
 const NO_CONTRACT := "the flight is not a contract occurrence"
 const TOO_FEW := "extra passengers must be 1 or more"
 const OVER_MAX := "the booking would pass the plane class maximum"
@@ -48,11 +50,11 @@ static func set_extra(sim: PassengerSim, flight_id: String, extra: int) -> Dicti
 		reason = SCHEDULED
 	elif sim.flights.is_doors_closed(flight_id):
 		reason = DEPARTED
-	elif FlightTimetable.parse_occurrence(flight_id)["day"] < GameCalendar.day_of(sim.tick):
-		reason = PAST
-	elif extra < 1:
+	else:
+		reason = _open_problem(sim.flights, contract, flight_id, GameCalendar.day_of(sim.tick))
+	if reason == "" and extra < 1:
 		reason = TOO_FEW
-	elif extra > room:
+	elif reason == "" and extra > room:
 		reason = OVER_MAX
 	if reason == "":
 		sim._booking_overrides[flight_id] = extra
@@ -69,6 +71,14 @@ static func take(sim: PassengerSim, flight_id: String) -> int:
 	var extra := extra_of(sim, flight_id)
 	sim._booking_overrides.erase(flight_id)
 	return extra
+
+
+## Drops the overrides of an ended contract: its days from the end day on are
+## never issued, so they would stay saved for ever.
+static func clear_contract(sim: PassengerSim, contract_id: String) -> void:
+	for flight_id: String in sim._booking_overrides.keys():
+		if FlightTimetable.parse_occurrence(flight_id).get("contract", "") == contract_id:
+			sim._booking_overrides.erase(flight_id)
 
 
 ## Drops the overrides of occurrences whose doors have closed without them
@@ -92,10 +102,12 @@ static func to_list(sim: PassengerSim) -> Array:
 ## The saved "booking_overrides" in `data` checked: {"overrides": {id:
 ## extra}} or {"error": why}. Each names a canonical occurrence id once, that
 ## is not among the saved scheduled flights, with 1 or more extra passengers
-## and no more than the largest plane class maximum. When `flights` already
-## holds the occurrence's contract the class maximum is checked too. A save of
-## the current version must carry the list; an older migrated one has none.
-## Changes no sim state: from_snapshot() installs the result.
+## and no more than the largest plane class maximum. With `flights` (the saved
+## flights, staged or restored) each must also be one set() could have made:
+## its contract on record and running, its day not past and not issued, and
+## within the contract's class maximum. A save of the current version must
+## carry the list; an older migrated one has none. Changes no sim state:
+## from_snapshot() installs the result.
 static func checked(data: Dictionary, flights: FlightSim) -> Dictionary:
 	var overrides := {}
 	if not data.has("booking_overrides"):
@@ -106,8 +118,9 @@ static func checked(data: Dictionary, flights: FlightSim) -> Dictionary:
 	if typeof(list) != TYPE_ARRAY:
 		return {"error": "booking_overrides must be a list"}
 	var scheduled: Array = data.get("scheduled", [])
+	var today := GameCalendar.day_of(str(data.get("tick", "0")).to_int())
 	for entry: Variant in list:
-		var problem := _entry_problem(entry, overrides, scheduled, flights)
+		var problem := _entry_problem(entry, overrides, scheduled, flights, today)
 		if problem != "":
 			return {"error": problem}
 		overrides[entry["flight"]] = int(entry["extra"])
@@ -115,7 +128,7 @@ static func checked(data: Dictionary, flights: FlightSim) -> Dictionary:
 
 
 static func _entry_problem(
-	entry: Variant, seen: Dictionary, scheduled: Array, flights: FlightSim
+	entry: Variant, seen: Dictionary, scheduled: Array, flights: FlightSim, today: int
 ) -> String:
 	if typeof(entry) != TYPE_DICTIONARY or (entry as Dictionary).keys().size() != KEYS.size():
 		return "booking override %s is malformed" % str(entry).left(80)
@@ -133,10 +146,31 @@ static func _entry_problem(
 	var room := _largest_headroom()
 	if flights != null:
 		var contract := flights.contract_of(FlightTimetable.parse_occurrence(id)["contract"])
-		if not contract.is_empty():
-			room = _headroom_of(contract)
+		if contract.is_empty():
+			return "booking override for %s names no contract on record" % id
+		var why := _open_problem(flights, contract, id, today)
+		if why != "":
+			return "booking override for %s: %s" % [id, why]
+		room = _headroom_of(contract)
 	if extra > room:
 		return "booking override extra for %s passes the plane class maximum" % id
+	return ""
+
+
+## Why an override cannot be set for occurrence `flight_id` of `contract` with
+## `flights` as they are and `today` the calendar day: its contract ended, it
+## is already issued, or its day has passed or comes before the contract's
+## first day (so it is never issued). "" when it can.
+static func _open_problem(
+	flights: FlightSim, contract: Dictionary, flight_id: String, today: int
+) -> String:
+	var day: int = FlightTimetable.parse_occurrence(flight_id)["day"]
+	if flights.contract_end_day(contract["id"]) >= 0:
+		return ENDED
+	if flights.state_of(flight_id) >= 0:
+		return ISSUED
+	if day < today or day < int(contract["first_day"]):
+		return PAST
 	return ""
 
 

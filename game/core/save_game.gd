@@ -614,7 +614,7 @@ func _stage_passengers(data: Dictionary, staged: Dictionary) -> String:
 	sim.security.bind(sim)
 	# The checks PassengerSim.from_snapshot() runs at install: info desks,
 	# standing spots, boarding files, ParkSide's saved stamps, then the booking
-	# overrides (their shape; the class maximum is checked at install).
+	# overrides against the staged flights.
 	var by_id := {}
 	for p: Passenger in loaded["passengers"]:
 		by_id[p.id] = p
@@ -626,13 +626,28 @@ func _stage_passengers(data: Dictionary, staged: Dictionary) -> String:
 	if not held.has("error"):
 		held = PassengerSimSave.checked_park_side(data, by_id)
 	if not held.has("error"):
-		held = BookingOverrides.checked(data, null)
+		held = _checked_booking_overrides(data, staged)
 	if held.has("error"):
 		sim.free()
 		return str(held["error"])
 	staged["passengers"] = loaded
 	staged["sim"] = sim
 	return ""
+
+
+## The saved booking overrides checked against the staged flights, so the
+## class maximum and the contracts are the save's own: the staged FlightSim
+## _stage_gate_exits() made, or one made here for the live gate set.
+func _checked_booking_overrides(data: Dictionary, staged: Dictionary) -> Dictionary:
+	var held: FlightSim = staged.get("staged_flights")
+	var own := held == null and staged.has("flights_data")
+	if own:
+		held = _staged_flight_sim(staged)
+		held.from_snapshot(staged["flights_data"])
+	var result := BookingOverrides.checked(data, held)
+	if own:
+		held.free()
+	return result
 
 
 ## Gives the staged sim the saved gates' exits and stands, and a staged

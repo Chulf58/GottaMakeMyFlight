@@ -58,3 +58,37 @@ func test_a_bad_booking_override_is_refused_before_anything_installs() -> void:
 	var sum := SaveTestKit.checksum(_main)
 	assert_bool(_save.load_world(old)).is_true()
 	assert_str(SaveTestKit.checksum(_main)).is_not_equal(sum)
+
+
+## An override past the saved contract's plane class maximum, and one for a
+## contract the save does not hold, are refused at staging too: the staged
+## flights give the class maximum, so nothing is installed before the sim
+## would have refused them.
+func test_an_override_the_saved_contract_cannot_carry_is_refused_before_anything_installs() -> void:
+	var old := _older()
+	var contracts: Array = old["flights"]["contracts"]
+	assert_bool(contracts.is_empty()).is_false()
+	var contract: Dictionary = contracts[0]
+	var limits := PlaneClasses.passenger_range(contract["plane_size"])
+	var room: int = int(limits[1]) - int(contract["booked_passengers"])
+	print("contract %s has room for %d" % [contract["id"], room])
+	var key := FlightTimetable.occurrence_id(contract["id"], 400)
+	var over := old.duplicate(true)
+	over["passengers"]["booking_overrides"] = [{"flight": key, "extra": room + 1}]
+	var unknown := old.duplicate(true)
+	unknown["passengers"]["booking_overrides"] = [{"flight": "FUT-d400", "extra": 1}]
+	for bad: Dictionary in [over, unknown]:
+		var clock := _main.get_node("SimClock") as SimClock
+		var tick := clock.tick
+		var before := SaveTestKit.checksum(_main)
+		assert_bool(_save.load_world(bad)).is_false()
+		print("refused: %s" % _save.message_text())
+		assert_str(_save.message_text()).starts_with("Load failed")
+		assert_str(_save.message_text()).contains("booking")
+		assert_int(clock.tick).is_equal(tick)
+		assert_str(SaveTestKit.checksum(_main)).is_equal(before)
+	# The control: the same override at the contract's room loads.
+	var fits := old.duplicate(true)
+	fits["passengers"]["booking_overrides"] = [{"flight": key, "extra": room}]
+	assert_int(room).is_greater(0)
+	assert_bool(_save.load_world(fits)).is_true()

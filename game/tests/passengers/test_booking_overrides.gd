@@ -255,3 +255,44 @@ func test_a_bad_saved_override_is_refused_whole() -> void:
 	assert_int(_b.sim.booking_override_of(OCCURRENCE)).is_equal(0)
 	assert_bool(_b.sim.from_snapshot(good)).is_true()
 	assert_int(_b.sim.booking_override_of(OCCURRENCE)).is_equal(2)
+
+
+## An override a live world could never have set: for a contract that is not
+## on record, one already issued, a day gone by, and a contract that ended.
+## Each save is refused whole with the flights as they are, and the sim keeps
+## no override.
+func test_a_saved_override_no_live_world_could_hold_is_refused() -> void:
+	_a = _world([MINUTE])
+	assert_bool(_a.sim.set_booking_override(OCCURRENCE, 2)["ok"]).is_true()
+	var good: Dictionary = _save(_a)["passengers"]
+	var unknown := good.duplicate(true)
+	unknown["booking_overrides"] = [{"flight": "FUT-d5", "extra": 5}]
+	# Issued: the flights hold the occurrence, but the save does not list it
+	# as scheduled.
+	_b = _world([MINUTE])
+	_b.run_to(ISSUED + 60)
+	var issued: Dictionary = _save(_b)["passengers"]
+	issued["scheduled"] = []
+	issued["booking_overrides"] = [{"flight": OCCURRENCE, "extra": 2}]
+	var past := good.duplicate(true)
+	past["tick"] = str(GameCalendar.day_start(3))
+	past["booking_overrides"] = [{"flight": "OVR-d1", "extra": 2}]
+	var cases := {"unknown contract": unknown, "issued": issued, "past day": past}
+	for label: String in cases:
+		assert_bool(_b.sim.from_snapshot(cases[label])).override_failure_message(label).is_false()
+	_a.flights.end_contract(CONTRACT)
+	assert_bool(_a.sim.from_snapshot(good)).override_failure_message("ended").is_false()
+
+
+func test_ending_a_contract_clears_its_overrides_and_refuses_new_ones() -> void:
+	_a = _world([MINUTE, OTHER_MINUTE])
+	assert_bool(_a.sim.set_booking_override("OVR-d3", 2)["ok"]).is_true()
+	assert_bool(_a.sim.set_booking_override("OTH-d3", 2)["ok"]).is_true()
+	assert_bool(_a.flights.end_contract(CONTRACT)).is_true()
+	assert_int(_a.sim.booking_override_of("OVR-d3")).is_equal(0)
+	assert_int(_a.sim.booking_override_of("OTH-d3")).is_equal(2)
+	var late := _a.sim.set_booking_override("OVR-d4", 2)
+	assert_bool(late["ok"]).is_false()
+	assert_str(late["reason"]).is_equal(BookingOverrides.ENDED)
+	var saved: Array = _save(_a)["passengers"]["booking_overrides"]
+	assert_int(saved.size()).is_equal(1)

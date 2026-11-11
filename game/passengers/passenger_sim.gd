@@ -221,6 +221,7 @@ func bind(with_clock: SimClock, with_flights: FlightSim, with_grid: BuildGrid) -
 	grid.edit_applied.connect(_on_edit_applied)
 	if auto_schedule:
 		flights.occurrence_added.connect(_on_occurrence_added)
+	flights.contract_ended.connect(_on_contract_ended)
 	# After the layout handler above, so staff read a rebuilt layout on edits.
 	if staff != null:
 		staff.bind(self)
@@ -538,6 +539,11 @@ func checked_info_desks(data: Dictionary, by_id: Dictionary, at: int) -> Diction
 ## runs the same check.
 func checked_boarding(data: Dictionary, by_id: Dictionary) -> Dictionary:
 	return PassengerSimSave.checked_boarding(self, data, by_id)
+
+
+## A contract ended: its days are never issued, so their overrides go.
+func _on_contract_ended(contract_id: String) -> void:
+	BookingOverrides.clear_contract(self, contract_id)
 
 
 ## An occurrence was issued: its booked passengers arrive within its window.
