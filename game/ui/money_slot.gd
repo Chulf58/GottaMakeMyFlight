@@ -4,7 +4,8 @@ extends PanelContainer
 ## categorised-wallet-transactions-feed-a-sa, point 5). Hovering the slot shows
 ## today's money from the DayLedger: airline fees, shops, parking, wages paid,
 ## room upkeep paid and the operating result they add up to; then building (net),
-## the rescue grant and the cash change today; and owed wages and owed upkeep,
+## the rescue grant, incident money (only on a day that has some) and the cash
+## change today; and owed wages and owed upkeep,
 ## each in the attention style while some is owed. After a load of a save that
 ## held no ledger the card is headed "Since load".
 ##
@@ -88,8 +89,12 @@ static func rows(day_ledger: DayLedger, owed: int, owed_upkeep := 0) -> Array:
 		["Operating result", signed(day_ledger.operating_result()), &""],
 		["Building", signed(day_ledger.amount(Wallet.Category.BUILD)), &""],
 		["Rescue grant", signed(day_ledger.amount(Wallet.Category.GRANT)), &""],
-		[cash_label, signed(day_ledger.cash_change()), &""],
 	]
+	# Most days have no incident money, so the row shows only on a day that has.
+	var incident := day_ledger.amount(Wallet.Category.INCIDENT)
+	if incident != 0:
+		out.append(["Incidents", signed(incident), &""])
+	out.append([cash_label, signed(day_ledger.cash_change()), &""])
 	if owed > 0:
 		out.append(["Owed wages", str(owed), ATTENTION])
 	if owed_upkeep > 0:

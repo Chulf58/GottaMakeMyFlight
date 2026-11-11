@@ -96,6 +96,7 @@ static func close_doors(sim: PassengerSim) -> void:
 	for flight_id in sim._scheduled.keys():
 		if sim.flights.is_doors_closed(flight_id):
 			sim._scheduled.erase(flight_id)
+	BookingOverrides.clear_closed(sim)
 	for p in sim._passengers:
 		if not p.is_done() and sim.flights.is_doors_closed(p.flight_id):
 			finish(sim, p, false)

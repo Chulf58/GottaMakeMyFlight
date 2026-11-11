@@ -75,7 +75,10 @@ signal loaded(ok: bool)
 ## 15: the unlocks part also holds the tiers whose unlock dialog showed and the
 ## tools the player has seen (BuildUnlocks "shown" and "seen"); version 14 saves
 ## are refused (no migration before a release).
-const SAVE_VERSION := 15
+## 16: the rating part holds the incident adjustments (AirportRating save
+## version 2, RatingAdjustments); version 15 saves are refused (no migration
+## before a release).
+const SAVE_VERSION := 16
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"
@@ -613,7 +616,8 @@ func _stage_passengers(data: Dictionary, staged: Dictionary) -> String:
 	# runtime reads from its host's layout (a live sim binds it in bind()).
 	sim.security.bind(sim)
 	# The checks PassengerSim.from_snapshot() runs at install: info desks,
-	# standing spots, boarding files, then ParkSide's saved stamps.
+	# standing spots, boarding files, ParkSide's saved stamps, then the booking
+	# overrides against the staged flights.
 	var by_id := {}
 	for p: Passenger in loaded["passengers"]:
 		by_id[p.id] = p
@@ -624,12 +628,29 @@ func _stage_passengers(data: Dictionary, staged: Dictionary) -> String:
 		held = sim.checked_boarding(data, by_id)
 	if not held.has("error"):
 		held = PassengerSimSave.checked_park_side(data, by_id)
+	if not held.has("error"):
+		held = _checked_booking_overrides(data, staged)
 	if held.has("error"):
 		sim.free()
 		return str(held["error"])
 	staged["passengers"] = loaded
 	staged["sim"] = sim
 	return ""
+
+
+## The saved booking overrides checked against the staged flights, so the
+## class maximum and the contracts are the save's own: the staged FlightSim
+## _stage_gate_exits() made, or one made here for the live gate set.
+func _checked_booking_overrides(data: Dictionary, staged: Dictionary) -> Dictionary:
+	var held: FlightSim = staged.get("staged_flights")
+	var own := held == null and staged.has("flights_data")
+	if own:
+		held = _staged_flight_sim(staged)
+		held.from_snapshot(staged["flights_data"])
+	var result := BookingOverrides.checked(data, held)
+	if own:
+		held.free()
+	return result
 
 
 ## Gives the staged sim the saved gates' exits and stands, and a staged

@@ -76,6 +76,9 @@ extends RefCounted
 ## walker of a docking plane boards through the jet bridge (board 927ed9e0), so
 ## a version 31 save's apron_mm is ground distance along a ground walk; it is
 ## refused with no migration (the same decision).
+## 33: BookingOverrides' extra passengers per occurrence not yet scheduled
+## ("booking_overrides", board c6c13a5a); a version 32 save has none and is
+## refused with no migration (the same decision).
 
 
 ## JSON-safe state for a save (PassengerSim.to_snapshot()). Reads only: it
@@ -102,6 +105,7 @@ static func to_snapshot(sim: PassengerSim) -> Dictionary:
 		claims[str(station)] = sim._claims[station]
 	data["claims"] = claims
 	data["park_side"] = park_side_list(sim)
+	data["booking_overrides"] = BookingOverrides.to_list(sim)
 	return data
 
 
@@ -143,6 +147,10 @@ static func from_snapshot(sim: PassengerSim, data: Dictionary) -> bool:
 	if sides.has("error"):
 		push_error("PassengerSim.from_snapshot: %s" % sides["error"])
 		return false
+	var booking := BookingOverrides.checked(data, sim.flights)
+	if booking.has("error"):
+		push_error("PassengerSim.from_snapshot: %s" % booking["error"])
+		return false
 	spots.restore(claims["claims"], by_id)
 	sim.gates.restore(claims["gate"], spots, by_id)
 	sim.standing = spots
@@ -153,6 +161,7 @@ static func from_snapshot(sim: PassengerSim, data: Dictionary) -> bool:
 	sim.no_shows = loaded["no_shows"]
 	sim.flight_results = loaded["flight_results"]
 	sim._scheduled = loaded["scheduled"]
+	sim._booking_overrides = booking["overrides"]
 	sim._made = loaded["made"]
 	sim._missed = loaded["missed"]
 	sim._schedule = loaded["schedule"]

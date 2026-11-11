@@ -128,7 +128,7 @@ func test_a_save_while_held_at_the_desk_plays_on_exactly() -> void:
 		"grid": _world.grid.to_snapshot(),
 		"passengers": _world.sim.to_snapshot(),
 	}
-	assert_int(int(data["passengers"]["save_version"])).is_equal(32)
+	assert_int(int(data["passengers"]["save_version"])).is_equal(33)
 	var grid := BuildGrid.new()
 	assert_bool(grid.from_snapshot(data["grid"])).is_true()
 	_other = PassengerTestWorld.make(grid, FlightSim.schedule_starts(0), 99)

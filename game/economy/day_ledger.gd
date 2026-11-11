@@ -22,7 +22,9 @@ extends Node
 ## OPENING (the starting budget) is recorded but is not earnings: it is in
 ## neither the operating result nor the cash change. The rescue grant is
 ## counted apart from the operating result. Wages and upkeep are both costs in
-## the operating result; parking fees are earnings in it.
+## the operating result; parking fees are earnings in it. Incident bonuses and
+## costs (INCIDENT) are in the cash change but not the operating result, like
+## the rescue grant: they are one-off, not the airport's running business.
 
 ## The totals changed: a transaction, a new day, a load.
 signal changed
@@ -37,6 +39,7 @@ const CATEGORY_KEYS := {
 	Wallet.Category.WAGES: "wages",
 	Wallet.Category.UPKEEP: "upkeep",
 	Wallet.Category.PARKING: "parking",
+	Wallet.Category.INCIDENT: "incident",
 }
 ## Totals added after the ledger was first saved: a saved ledger without one
 ## loads it as 0.
@@ -124,7 +127,12 @@ func operating_result() -> int:
 
 ## The day's change in the balance, the starting budget left out.
 func cash_change() -> int:
-	return operating_result() + amount(Wallet.Category.BUILD) + amount(Wallet.Category.GRANT)
+	return (
+		operating_result()
+		+ amount(Wallet.Category.BUILD)
+		+ amount(Wallet.Category.GRANT)
+		+ amount(Wallet.Category.INCIDENT)
+	)
 
 
 ## Wallet.transaction: adds a movement to the day of its tick.

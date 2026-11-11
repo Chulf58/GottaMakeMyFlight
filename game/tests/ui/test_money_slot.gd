@@ -84,6 +84,19 @@ func test_upkeep_paid_is_an_operating_row_and_the_rows_add_up() -> void:
 	assert_int(_ledger.operating_result()).is_equal(240)
 
 
+## Daily incidents: incident money has an "Incidents" row above the cash
+## change only on a day it is not zero (the sample day above has none).
+func test_incident_money_shows_as_its_own_row_only_when_not_zero() -> void:
+	_sample_day()
+	assert_bool(_wallet.spend(120, C.INCIDENT)).is_true()
+	var text := _slot.card_text()
+	print(text)
+	assert_str(text).contains("Rescue grant  +500\nIncidents  -120\nCash change today  +380")
+	assert_str(_slot.tooltip_text).is_equal(text)
+	assert_bool(_wallet.credit(120, C.INCIDENT)).is_true()
+	assert_str(_slot.card_text()).not_contains("Incidents")
+
+
 func test_owed_upkeep_shows_in_the_attention_style_only_while_above_zero() -> void:
 	for row in MoneySlot.rows(_ledger, 0, 0):
 		assert_str(row[0]).is_not_equal("Owed upkeep")
