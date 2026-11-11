@@ -458,9 +458,16 @@ static func caption_size(text: String) -> Vector2:
 ## Lifts each shown gate caption, in desk order, by the fewest steps (its height
 ## plus MissMarkers.CAPTION_MARGIN_PX, at most MissMarkers.MAX_LIFTS) at which,
 ## grown by that margin, it meets none of the gate captions already placed and
-## none of the shown signs and captions of `markers`. With no clear lift it
-## stays on its desk. Returns the screen rectangles (pixels) placed, in desk
-## order.
+## none of the shown signs and captions of `markers` and none of the HUD's
+## rectangles (HudRects), and still on screen. With no clear lift it stays on
+## its desk; a caption that then touches the HUD (the sign near the top of the
+## screen, under the top row) slides toward the middle of the view to the
+## nearest spot clear of the HUD and of everything a lift keeps clear of (the
+## captions placed, the signs, the markers), as the room labels slide
+## (RoomLabelLayout.slide_clear, decision
+## status-banner-fades-under-the-build-ghost-room-labels-slide). With no such
+## spot it stays where the lift left it. Returns the screen rectangles (pixels)
+## placed, in desk order.
 func layout_captions() -> Array[Rect2]:
 	var placed: Array[Rect2] = []
 	var camera := get_viewport().get_camera_3d() if is_inside_tree() else null
@@ -468,7 +475,9 @@ func layout_captions() -> Array[Rect2]:
 		return placed
 	_find_markers()
 	var to_output := get_viewport().get_stretch_transform().get_scale().y
-	var blocked := marker_rects(markers, camera, to_output) + _sign_rects
+	var view_size := get_viewport().get_visible_rect().size * to_output
+	var hud := HudRects.collect(self, to_output)
+	var blocked := marker_rects(markers, camera, to_output) + _sign_rects + hud
 	for caption in gate_captions():
 		caption.offset = Vector2.ZERO
 		if camera.is_position_behind(caption.global_position):
@@ -476,16 +485,27 @@ func layout_captions() -> Array[Rect2]:
 		var point := camera.unproject_position(caption.global_position) * to_output
 		var size := caption_size(caption.text)
 		var step := size.y + MissMarkers.CAPTION_MARGIN_PX
-		var chosen := Rect2(point.x - size.x / 2.0, point.y - size.y, size.x, size.y)
+		var home := Rect2(point.x - size.x / 2.0, point.y - size.y, size.x, size.y)
+		var chosen := home
 		for lifts in MissMarkers.MAX_LIFTS:
-			var rect := Rect2(chosen.position - Vector2(0.0, step * lifts), size)
+			var rect := Rect2(home.position - Vector2(0.0, step * lifts), size)
 			var padded := rect.grow(MissMarkers.CAPTION_MARGIN_PX)
-			if not (placed + blocked).any(
-				func(other: Rect2) -> bool: return padded.intersects(other)
+			if (
+				rect.position.y >= 0.0
+				and not (placed + blocked).any(
+					func(other: Rect2) -> bool: return padded.intersects(other)
+				)
 			):
 				chosen = rect
 				break
-		caption.offset = Vector2(0.0, point.y - size.y - chosen.position.y)
+		var padded_now := chosen.grow(MissMarkers.CAPTION_MARGIN_PX)
+		if hud.any(func(other: Rect2) -> bool: return padded_now.intersects(other)):
+			var spot := RoomLabelLayout.slide_clear(chosen, placed + blocked, view_size)
+			if spot.size != Vector2.ZERO:
+				chosen = spot
+		caption.offset = Vector2(
+			chosen.position.x - home.position.x, home.position.y - chosen.position.y
+		)
 		placed.append(chosen)
 	return placed
 
