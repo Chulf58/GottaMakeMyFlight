@@ -154,6 +154,20 @@ func test_an_override_is_capped_at_the_class_maximum_and_reports_the_headroom() 
 	assert_int(_scheduled_total(_a)).is_equal(BOOKED + HEADROOM)
 
 
+func test_an_override_for_a_past_day_is_refused() -> void:
+	_a = _world([MINUTE])
+	# Day 2 has begun; day 1 was never issued here, and neither will it be.
+	_a.sim.tick = GameCalendar.day_start(2)
+	var past := _a.sim.set_booking_override("OVR-d1", 3)
+	print("past day: %s" % [past])
+	assert_bool(past["ok"]).is_false()
+	assert_str(past["reason"]).is_equal(BookingOverrides.PAST)
+	assert_int(_a.sim.booking_override_of("OVR-d1")).is_equal(0)
+	# The control: the day itself and a later one are still open.
+	assert_bool(_a.sim.set_booking_override("OVR-d2", 3)["ok"]).is_true()
+	assert_bool(_a.sim.set_booking_override("OVR-d3", 3)["ok"]).is_true()
+
+
 func test_an_override_under_one_or_without_a_contract_is_refused() -> void:
 	_a = _world([MINUTE])
 	for extra in [0, -4]:

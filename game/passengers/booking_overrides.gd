@@ -14,6 +14,7 @@ extends RefCounted
 
 const SCHEDULED := "the flight's passengers are already scheduled"
 const DEPARTED := "the flight's doors have closed"
+const PAST := "the flight's day has passed"
 const NO_CONTRACT := "the flight is not a contract occurrence"
 const TOO_FEW := "extra passengers must be 1 or more"
 const OVER_MAX := "the booking would pass the plane class maximum"
@@ -47,6 +48,8 @@ static func set_extra(sim: PassengerSim, flight_id: String, extra: int) -> Dicti
 		reason = SCHEDULED
 	elif sim.flights.is_doors_closed(flight_id):
 		reason = DEPARTED
+	elif FlightTimetable.parse_occurrence(flight_id)["day"] < GameCalendar.day_of(sim.tick):
+		reason = PAST
 	elif extra < 1:
 		reason = TOO_FEW
 	elif extra > room:
