@@ -40,7 +40,9 @@ extends Node3D
 ## analytic-bookings-planned-pauses, section 3) is outlined on the ground in the
 ## same sky blue, thinner (ENVELOPE_PX), from the stand out along the way north
 ## to the taxi lane, and the class is the second line of the gate's caption over
-## its desk ("Gate A" / "up to large planes"), the gate ribbon's form (decision
+## its desk ("Gate A" / "up to large planes"; a third line "N min walk" gives
+## the longest walk from security, GateWalk, once bind_walk() has the sim), the
+## gate ribbon's form (decision
 ## gates-2-4-as-built-toon-gate-desk-model-sky-blue-link-line-f). Both show only
 ## while build mode lasts, with the links. Gates can stand 19 m apart, closer on
 ## screen than a caption is wide when zoomed out, so every frame in build mode
@@ -115,10 +117,14 @@ var markers: Node3D
 ## captions keep clear of (taking a gate's exit away leaves a gap by its
 ## desk). Unset, the first GapMarkers in the tree is taken, looked for once.
 var gaps: Node3D
+## The gates' walks from security, for the captions' third line; reads nothing
+## until bind_walk() gives it the sim.
+var walk := GateWalk.new()
 ## How many times layout_signs() ran its layout rather than answering from the
 ## cache (tests read it).
 var sign_layouts := 0
 var _markers_looked := false
+var _walk_queued := false
 
 var _grid: BuildGrid
 var _gates: GateDesks
@@ -258,7 +264,7 @@ func rebuild() -> void:
 		for binding in _gates.bindings:
 			var path := link_points(_grid, binding)
 			_paths.append(path)
-			gate_texts.append(caption_text(binding["gate"], _gates.max_class(binding["gate"])))
+			gate_texts.append(_caption_for(binding["gate"]))
 			desk_tops.append(_desk_top(binding["desk"]))
 	_draw_lines()
 	_draw_ends()
@@ -319,10 +325,47 @@ func envelope_paths() -> Array[PackedVector3Array]:
 
 
 ## The caption over gate `gate`'s desk: "Gate A", then its biggest plane
-## (GateDesks.max_class, "" for none) on a second line.
-static func caption_text(gate: String, plane_class: String) -> String:
+## (GateDesks.max_class, "" for none) on a second line, then its walk from
+## security ("12 min walk") on a third when `walk_minutes` is one (GateWalk).
+static func caption_text(
+	gate: String, plane_class: String, walk_minutes := GateWalk.NO_ROUTE
+) -> String:
 	var second := CLASS_LINE % plane_class if plane_class != "" else NO_CLASS_LINE
-	return "Gate %s\n%s" % [gate, second]
+	var text := "Gate %s\n%s" % [gate, second]
+	var third := GateWalk.caption_line(walk_minutes)
+	return text if third == "" else "%s\n%s" % [text, third]
+
+
+## Reads the gates' walks from security off `sim` for the captions' third line.
+func bind_walk(sim: PassengerSim) -> void:
+	walk.bind(sim, _gates)
+	if not walk.changed.is_connected(_queue_walk):
+		walk.changed.connect(_queue_walk)
+	refresh_walk()
+
+
+## Sets each gate caption's text again from the gate's class and walk. Event
+## driven (GateWalk.changed, through _queue_walk()), never called per frame.
+func refresh_walk() -> void:
+	_walk_queued = false
+	if _gates == null:
+		return
+	for i in mini(_captions.size(), _gates.bindings.size()):
+		var text := _caption_for(_gates.bindings[i]["gate"])
+		if _captions[i].text != text:
+			_captions[i].text = text
+
+
+## One refresh on the next idle frame, however many changes came, so the sim
+## has settled the whole edit (layout, gate links) before the figures are read.
+func _queue_walk() -> void:
+	if not _walk_queued:
+		_walk_queued = true
+		refresh_walk.call_deferred()
+
+
+func _caption_for(gate: String) -> String:
+	return caption_text(gate, _gates.max_class(gate), walk.minutes(gate))
 
 
 func envelope_node() -> MeshInstance3D:

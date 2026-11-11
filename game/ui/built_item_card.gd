@@ -4,7 +4,8 @@ extends VBoxContainer
 ## (decision built-items-selectable-reuse-the-selection-window-move-delete-
 ## close-open): its name, then one line each for where it is, its reachable
 ## seats (only when some cannot be reached), status (open or closed and why),
-## a gate desk's biggest plane, staff, queue and upkeep, a line left out when
+## a gate desk's biggest plane and walk from security (GateWalk), staff, queue
+## and upkeep, a line left out when
 ## it does not apply. Info
 ## only; the actions come in later slices. PassengerInspect shows this in place
 ## of the passenger rows while a BuiltSelection holds an item.
@@ -34,7 +35,9 @@ const KIND_OF_DEF := {
 	SecurityLanes.ARCH: Kind.ARCH,
 	GateDesks.DESK: Kind.GATE_DESK,
 }
-const FIELDS: Array[String] = ["where", "seats", "status", "planes", "staff", "queue", "upkeep"]
+const FIELDS: Array[String] = [
+	"where", "seats", "status", "planes", "walk", "staff", "queue", "upkeep"
+]
 ## A linked gate desk's biggest plane: its gate's max_class (GateDesks; decision
 ## runway-and-taxi-technical-design-movement-plan-analytic-bookings-planned-
 ## pauses, section 3).
@@ -50,6 +53,8 @@ var selection: BuiltSelection
 var build_mode: BuildMode
 ## The gate links, for a gate desk's status; optional.
 var gates: GateDesks
+## A gate desk's walk from security (worked out again only after an edit).
+var walk := GateWalk.new()
 
 ## How many times each half was worked out, for the tests.
 var static_builds := 0
@@ -85,6 +90,7 @@ func _init() -> void:
 		_labels[field] = label
 		add_child(label)
 	(_labels["where"] as Label).theme_type_variation = &"HudHint"
+	walk.changed.connect(invalidate)
 
 
 ## Shows the selected item, or hides the card with none.
@@ -250,7 +256,11 @@ func _build_live() -> Dictionary:
 		Kind.ARCH:
 			out = _arch_live(_static["id"])
 		Kind.GATE_DESK:
-			out = {"status": _gate_status(_static["id"]), "planes": _gate_planes(_static["id"])}
+			out = {
+				"status": _gate_status(_static["id"]),
+				"planes": _gate_planes(_static["id"]),
+				"walk": _gate_walk(_static["id"]),
+			}
 		Kind.LANE_PART:
 			var in_lane := sim.layout.security_lanes.lane_of_piece(_static["id"]) != 0
 			var text := "Part of a ready security lane" if in_lane else "Not in a whole lane"
@@ -304,6 +314,19 @@ func _gate_planes(desk: int) -> String:
 			if plane_class == "":
 				return NO_PLANE_TEXT
 			return PLANES_TEXT % plane_class.capitalize()
+	return ""
+
+
+## "Walk from security: 12 min" for a linked desk's gate, "...: no route" when no
+## security exit reaches it, or "" for an unlinked desk. GateWalk answers from
+## its last result until the grid or the gate links change.
+func _gate_walk(desk: int) -> String:
+	if gates == null:
+		return ""
+	for binding in gates.bindings:
+		if binding["desk"] == desk:
+			walk.bind(sim, gates)
+			return GateWalk.card_line(walk.minutes(binding["gate"]))
 	return ""
 
 

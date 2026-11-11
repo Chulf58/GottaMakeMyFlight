@@ -177,6 +177,8 @@ func bind(
 		live = {}
 		gates.changed.connect(refresh)
 		_links_view.bind(grid, gates)
+		if passengers != null:
+			_links_view.bind_walk(passengers)
 	else:
 		live = StandPlacement.starter_stand(grid, site)
 		grid.graph_changed.connect(_on_graph_changed)

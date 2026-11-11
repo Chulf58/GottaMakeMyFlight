@@ -54,6 +54,9 @@ extends RefCounted
 ## so a stood roller never stands in the desk, whichever way its passenger
 ## faces (board 34a0d0aa).
 
+## The spots were derived again (rebuild()); GateWalk redoes its figures then.
+signal rebuilt
+
 const NO_SPOT := -1
 const PITCH_MM := 600
 const CELL_MM := 1000
@@ -190,6 +193,7 @@ func rebuild(sim: PassengerSim) -> void:
 	_orders = {}
 	_ids.assign(spots.keys())
 	_ids.sort()
+	rebuilt.emit()
 
 
 ## The spot a passenger holds, or NO_SPOT.
@@ -265,6 +269,12 @@ func first_free(from: Vector2i, gate_cells: Array[Vector2i] = [], roller := fals
 		if is_free(id, roller):
 			return id
 	return NO_SPOT
+
+
+## Every spot in the route region of `from`, in free_nearest()'s order, taken
+## or not (GateWalk reads the first place a gate would give).
+func ordered_from(from: Vector2i, gate_cells: Array[Vector2i] = []) -> Array[int]:
+	return _ordered(from, gate_cells)
 
 
 ## Every spot in the route region of `from`, in free_nearest()'s order. The
