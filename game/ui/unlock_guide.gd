@@ -154,15 +154,20 @@ func _show_dialog(tiers: Array) -> void:
 	_dialog = IntroDialogue.new(TITLE_TEXT, body_for(tiers), BOX_HEIGHT)
 	_layer.add_child(_dialog)
 	add_child(_layer)
-	_dialog.dismissed.connect(_close_dialog)
-	_dialog.tree_exiting.connect(_close_dialog)
-	_layer.tree_exiting.connect(_close_dialog)
+	# Each close names its own layer, so a replaced dialog's layer leaving the
+	# tree a frame later cannot close the dialog that replaced it.
+	var close := _close_dialog.bind(_layer)
+	_dialog.dismissed.connect(close)
+	_dialog.tree_exiting.connect(close)
+	_layer.tree_exiting.connect(close)
 	phone_ring.emit(tiers.back())
 	dialog_changed.emit(true)
 
 
-func _close_dialog() -> void:
-	if _dialog == null:
+## Closes the dialog shown on `layer`; a layer that is no longer the current
+## one (replaced, or already closed) closes nothing.
+func _close_dialog(layer: CanvasLayer) -> void:
+	if _dialog == null or layer != _layer:
 		return
 	_free_dialog()
 	_release_clock()

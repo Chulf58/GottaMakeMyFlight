@@ -189,6 +189,31 @@ func test_the_unlock_dialog_opened_under_offers_shows_when_the_sheet_closes() ->
 	assert_int(_clock.speed).is_equal(2)
 
 
+## The old dialog's layer leaves the tree a frame after a replacement; that
+## must not close the new dialog or end its hold.
+func test_a_replaced_unlock_dialog_leaving_never_closes_the_new_one() -> void:
+	_press_speed(2)
+	_guide.open_dialog([2])
+	var old_layer := _guide.dialog().get_parent()
+	_guide.open_dialog([3])
+	var current := _guide.dialog()
+	assert_object(current.get_parent()).is_not_same(old_layer)
+	for i in 5:
+		if not is_instance_valid(old_layer):
+			break
+		await get_tree().process_frame
+	assert_bool(is_instance_valid(old_layer)).is_false()
+	assert_bool(_guide.is_open()).is_true()
+	assert_object(_guide.dialog()).is_same(current)
+	assert_bool(_clock.paused).is_true()
+	assert_int(_ticks_after(0.11)).is_equal(0)
+	# Control: closing the new dialog releases the hold.
+	_guide.dismiss()
+	assert_bool(_guide.is_open()).is_false()
+	assert_bool(_clock.paused).is_false()
+	assert_int(_ticks_after(0.11)).is_equal(4)
+
+
 func test_a_load_drops_every_holders_hold_and_the_clock_comes_back_paused_at_1x() -> void:
 	_press_speed(3)
 	_start_building()
