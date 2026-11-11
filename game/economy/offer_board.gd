@@ -14,6 +14,11 @@ extends RefCounted
 ## Decision airline-offers-expire-at-the-end-of-their-day: an offer still OPEN
 ## when a later day starts becomes EXPIRED, so the open list is always today's
 ## choices. ensure_day does it, being the call made at each day boundary.
+##
+## Given the FlightSim, ensure_day fits the new day's departures to it (decision
+## airline-offers-2-a-day-fit-the-free-gate-slots-1-needs-more): two offers at
+## slots the gates have room for, one where another gate is needed. The fitted
+## minute is the offer's saved departure, so a load never fits again.
 
 ## Fires when offers arrive, one is accepted or declined, or a save is loaded.
 signal changed
@@ -79,6 +84,10 @@ const DEPARTURE_LAST_MINUTE := 21 * 60
 const DEPARTURE_STEP := 15
 @warning_ignore("integer_division")
 const DEPARTURE_SLOTS := (DEPARTURE_LAST_MINUTE - DEPARTURE_FIRST_MINUTE) / DEPARTURE_STEP
+## With flights to fit to, a day's first FIT_OFFERS offers depart at slots the
+## gates have room for and the others where another gate is needed (decision
+## airline-offers-2-a-day-fit-the-free-gate-slots-1-needs-more).
+const FIT_OFFERS := 2
 
 ## Offers in the order they were drawn.
 var _offers: Array[Dictionary] = []
@@ -121,11 +130,17 @@ static func terms_of(offer: Dictionary) -> Dictionary:
 ## runway's size, Runway.size) limits the plane classes the offers may have to
 ## those the runway takes, and drops the airlines that fly none of them; it
 ## does not change how far `rng` advances either, so a seed replays whatever
-## the runway. `changed` fires once when anything expired or was drawn. A day
+## the runway. With `flights`, the drawn departures are then fitted to it
+## (_fit), which does not touch `rng` either; without, they stay as drawn.
+## `changed` fires once when anything expired or was drawn. A day
 ## outside 0..FlightContract.MAX_DAY, a tier outside 0..MAX_TIER or a runway
 ## class that is not a plane class pushes an error and changes nothing.
 func ensure_day(
-	day: int, rng: RandomNumberGenerator, tier := 0, runway_class := PlaneClasses.LARGE
+	day: int,
+	rng: RandomNumberGenerator,
+	tier := 0,
+	runway_class := PlaneClasses.LARGE,
+	flights: FlightSim = null
 ) -> Array[String]:
 	var ids: Array[String] = []
 	if day < 0 or day > FlightContract.MAX_DAY:
@@ -140,8 +155,12 @@ func ensure_day(
 	var expired := _expire_before(day)
 	var drawn := not _has_day(day)
 	if drawn:
+		var fresh: Array[Dictionary] = []
 		for number in range(1, OFFERS_PER_DAY + 1):
-			var offer := _draw(day, number, rng, tier, runway_class)
+			fresh.append(_draw(day, number, rng, tier, runway_class))
+		if flights != null:
+			_fit(fresh, flights)
+		for offer in fresh:
 			_offers.append(offer)
 			ids.append(offer["id"])
 	if expired or drawn:
@@ -246,6 +265,114 @@ func _draw(
 		"fee_per_passenger": rng.randi_range(fees[0], fees[1]),
 		"status": OPEN,
 	}
+
+
+## Moves the departures of a day's freshly drawn `offers` (in draw order) onto
+## the slots `flights` has room for now (decision airline-offers-2-a-day-fit-
+## the-free-gate-slots-1-needs-more, points 1 to 3). The first FIT_OFFERS get
+## slots they fit at, the rest a slot where only a free gate is missing
+## (FlightFit.another_gate_helps). Each offer's drawn slot index r
+## (0..DEPARTURE_SLOTS) picks from its n candidate slots, earliest first, by
+## floor(r * n / (DEPARTURE_SLOTS + 1)), so nothing is drawn again. The two fit
+## offers must also fit together, whichever is accepted first: from their
+## picks on, the first slot of the second that joins the first's is taken,
+## and only when none does is the first's next slot tried, so a pair is found
+## whenever one exists. An offer with no candidate slot keeps the slot it was
+## drawn with, and its card says why it does not fit. Read-only on `flights`:
+## every check is a trial on copies of its planning state.
+static func _fit(offers: Array[Dictionary], flights: FlightSim) -> void:
+	var drawn: Array[int] = []
+	for offer in offers:
+		@warning_ignore("integer_division")
+		drawn.append((int(offer["departure_minute"]) - DEPARTURE_FIRST_MINUTE) / DEPARTURE_STEP)
+	var cache := {}
+	var first: Dictionary = offers[0]
+	var second: Dictionary = offers[1]
+	var firsts := _slots_where(flights, first, cache, true)
+	var seconds := _slots_where(flights, second, cache, true)
+	var paired := false
+	if not firsts.is_empty():
+		var start := _pick(drawn[0], firsts.size())
+		first["departure_minute"] = firsts[start]
+		for step in firsts.size():
+			var minute: int = firsts[(start + step) % firsts.size()]
+			var joined := _joined_slot(flights, _terms_at(first, minute), second, seconds, drawn[1])
+			if joined >= 0:
+				first["departure_minute"] = minute
+				second["departure_minute"] = joined
+				paired = true
+				break
+	if not paired and not seconds.is_empty():
+		second["departure_minute"] = seconds[_pick(drawn[1], seconds.size())]
+	for index in range(FIT_OFFERS, offers.size()):
+		var pushes := _slots_where(flights, offers[index], cache, false)
+		if not pushes.is_empty():
+			offers[index]["departure_minute"] = pushes[_pick(drawn[index], pushes.size())]
+
+
+## The departure minutes, earliest first, at which `offer` fits `flights` now
+## (`fitting`), or at which only a free gate is missing (not `fitting`).
+## `cache` keeps each plane size's FlightFit assessments per minute: an offer's
+## fit depends only on its plane size and departure, not its other terms. The
+## second look at a gate blocker is taken only when a push slot is asked for.
+static func _slots_where(
+	flights: FlightSim, offer: Dictionary, cache: Dictionary, fitting: bool
+) -> Array[int]:
+	var size: String = offer["plane_size"]
+	if not cache.has(size):
+		var by_minute := {}
+		for slot in range(DEPARTURE_SLOTS + 1):
+			var minute := DEPARTURE_FIRST_MINUTE + slot * DEPARTURE_STEP
+			by_minute[minute] = FlightFit.assess(flights, _terms_at(offer, minute), [], false)
+		cache[size] = by_minute
+	var out: Array[int] = []
+	for minute: int in cache[size]:
+		var assessment: Dictionary = cache[size][minute]
+		if fitting:
+			if assessment["fits"]:
+				out.append(minute)
+		elif assessment["blocker"] == FlightSim.BLOCKER_GATE:
+			if not assessment.has("looked_again"):
+				assessment["looked_again"] = true
+				assessment["another_gate_helps"] = FlightFit.another_gate_helps(
+					flights, _terms_at(offer, minute)
+				)
+			if assessment["another_gate_helps"]:
+				out.append(minute)
+	return out
+
+
+## The first minute of `seconds` (where `second` fits alone), from the one
+## drawn slot index `drawn` picks on and round, at which `second` and the
+## contract of `first_terms` both fit, whichever is accepted first; -1 for none.
+static func _joined_slot(
+	flights: FlightSim, first_terms: Dictionary, second: Dictionary, seconds: Array[int], drawn: int
+) -> int:
+	var start := _pick(drawn, seconds.size())
+	for step in seconds.size():
+		var minute: int = seconds[(start + step) % seconds.size()]
+		var second_terms := _terms_at(second, minute)
+		if (
+			FlightFit.fits(flights, second_terms, [first_terms])
+			and FlightFit.fits(flights, first_terms, [second_terms])
+		):
+			return minute
+	return -1
+
+
+## The candidate of `count` that drawn slot index `drawn` (0..DEPARTURE_SLOTS)
+## maps to: floor(drawn * count / (DEPARTURE_SLOTS + 1)), which spreads the
+## draws evenly over the candidates (a remainder would favour the first ones).
+static func _pick(drawn: int, count: int) -> int:
+	@warning_ignore("integer_division")
+	return drawn * count / (DEPARTURE_SLOTS + 1)
+
+
+## The contract terms of `offer` departing at `minute` instead.
+static func _terms_at(offer: Dictionary, minute: int) -> Dictionary:
+	var terms := terms_of(offer)
+	terms["departure_minute"] = minute
+	return terms
 
 
 ## Marks every open offer drawn before `day` expired; true if any was.

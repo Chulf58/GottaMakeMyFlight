@@ -59,13 +59,18 @@ func bind_clock(sim_clock: SimClock) -> void:
 	clock.ticked.connect(on_tick)
 
 
+## A new day first ends a contract the low rating has made due, then draws the
+## day's offers, so they are fitted to the timetable as midnight leaves it
+## (decision airline-offers-2-a-day-fit-the-free-gate-slots-1-needs-more,
+## point 4). Ending a contract draws nothing from the RNG, so the order does
+## not change the draws.
 func on_tick(tick: int) -> void:
 	var day := GameCalendar.day_of(tick)
 	if day == _day:
 		return
 	_day = day
-	_draw(day)
 	_end_contract_if_due()
+	_draw(day)
 
 
 ## When the rating's low days have run out, the oldest contract still running
@@ -85,8 +90,9 @@ func _end_contract_if_due() -> void:
 		contract_ended.emit(contract)
 
 
-## Draws `day`'s offers for the biggest plane class the runway takes, or pushes
-## an error and draws nothing when the desk has no runway to ask.
+## Draws `day`'s offers for the biggest plane class the runway takes, fitted to
+## the flights' timetable when the desk has flights, or pushes an error and
+## draws nothing when the desk has no runway to ask.
 func _draw(day: int) -> void:
 	var source := runway
 	if source == null and flights != null:
@@ -94,7 +100,7 @@ func _draw(day: int) -> void:
 	if source == null:
 		push_error("OfferDesk: no runway set, so no offers are drawn")
 		return
-	board.ensure_day(day, clock.rng, _tier(), source.size)
+	board.ensure_day(day, clock.rng, _tier(), source.size, flights)
 
 
 ## The airline tier the rating has unlocked, 0 with no rating.
