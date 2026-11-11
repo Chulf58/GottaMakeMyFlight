@@ -3,17 +3,20 @@ extends RefCounted
 ## The clock's holds (decision daily-incidents-technical-design-incidentdirector-
 ## shared-clo): every dialog or mode that pauses the game takes a token here and
 ## gives it back. SimClock owns one (SimClock.holds) and is paused while the
-## player paused it or any token is held, so closing one holder never starts
-## the clock under another. A release restores nothing: once no token is left,
-## the player's own pause and speed simply apply again.
+## player paused it or any hold still pauses (is_holding(); a hold pauses from
+## the moment it is taken until it is released or gives way, see pauses()), so
+## closing one holder never starts the clock under another. A release restores
+## nothing: once no hold pauses, the player's own pause and speed simply apply
+## again.
 ##
 ## - acquire() takes a plain hold (build mode).
 ## - take_turn() takes a hold that also queues for the one exclusive turn
 ##   (the Offers sheet, the intro, the unlock dialog, later the incident
 ##   panel). The first such hold in line has the turn; its on_turn runs when it
 ##   reaches the front, at once if nobody is ahead. The line moves only when a
-##   hold leaves it (a release, the owner leaving the tree, the player taking
-##   over), never on a tick: a tick-driven wait would never move while paused.
+##   hold leaves it (a release or the owner leaving the tree), never on a tick
+##   (a tick-driven wait would never move while paused) and never when the
+##   player takes over, since a hold in line that gives way keeps its place.
 ## - A hold taken with yields_to_player gives way when the player resumes or
 ##   picks another speed (SimClock.set_paused(false), set_speed() to a new
 ##   value): a plain one ends, and one in line stops pausing the clock but
