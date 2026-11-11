@@ -2,8 +2,12 @@ class_name RatingSnapshot
 extends RefCounted
 ## The JSON shape of AirportRating's state and its checks on load. A load is
 ## strict: a bad save is refused whole and the rating is left as it was.
+##
+## Save version 2 added "adjustments", the incident adjustments
+## (RatingAdjustments checks them); a version 1 save is refused (no migration
+## before a release).
 
-const KEYS := ["save_version", "tick", "days", "low_days", "pending"]
+const KEYS := ["save_version", "tick", "days", "low_days", "pending", "adjustments"]
 const DAY_KEYS := ["day", "made", "missed", "mood_sum"]
 ## Added with missed bags (Baggage B4). A day from before them has neither and
 ## loads with no bags; the two come as a pair.
@@ -16,9 +20,13 @@ const MAX_PENDING := 64
 
 
 ## `days` maps day -> {"made", "missed", "mood_sum", "bags", "bags_missed"}; `pending` holds
-## {"flight", "tick"} entries.
+## {"flight", "tick"} entries; `adjustments` RatingAdjustments.active() entries.
 static func save(
-	tick: int, days: Dictionary, low_days: int, pending: Array[Dictionary]
+	tick: int,
+	days: Dictionary,
+	low_days: int,
+	pending: Array[Dictionary],
+	adjustments: Array[Dictionary] = []
 ) -> Dictionary:
 	var day_ids: Array = days.keys()
 	day_ids.sort()
@@ -43,10 +51,12 @@ static func save(
 		"days": day_list,
 		"low_days": low_days,
 		"pending": pending_list,
+		"adjustments": adjustments.duplicate(true),
 	}
 
 
-## {"tick", "days", "low_days", "pending"} ready to install, or {"error"}.
+## {"tick", "days", "low_days", "pending", "adjustments"} ready to install, or
+## {"error"}.
 static func load(data: Dictionary) -> Dictionary:
 	var problem := _top_problem(data)
 	if problem != "":
@@ -59,9 +69,18 @@ static func load(data: Dictionary) -> Dictionary:
 	var pending: Array[Dictionary] = []
 	if problem == "":
 		problem = _read_pending(data["pending"], tick, pending)
+	var adjustments: Array[Dictionary] = []
+	if problem == "":
+		problem = RatingAdjustments.read(data["adjustments"], tick, adjustments)
 	if problem != "":
 		return {"error": problem}
-	return {"tick": tick, "days": days, "low_days": int(data["low_days"]), "pending": pending}
+	return {
+		"tick": tick,
+		"days": days,
+		"low_days": int(data["low_days"]),
+		"pending": pending,
+		"adjustments": adjustments,
+	}
 
 
 static func _top_problem(data: Dictionary) -> String:

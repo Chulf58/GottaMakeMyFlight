@@ -68,11 +68,15 @@ func summary_text() -> String:
 	return "%.1f" % rating.stars() if rating.has_data() else NO_DATA_TEXT
 
 
-## The card's tooltip: made share, mood and days counted over the window.
+## The card's tooltip: made share, mood, the incident adjustment (only while it
+## is not zero) and days counted over the window.
 func tooltip_text() -> String:
 	if not rating.has_data():
 		return NO_DATA_TIP
 	var parts := rating.parts()
+	var adjustment := ""
+	if parts["adjustment"] != 0.0:
+		adjustment = "Incident adjustment: %+.1f stars\n" % parts["adjustment"]
 	return (
 		(
 			"Airport rating: %.1f of 5\nMade it: %d%% (%d of %d passengers)\nMood: %d of %d\n"
@@ -85,6 +89,7 @@ func tooltip_text() -> String:
 				PassengerSim.MOOD_MAX,
 			]
 		)
+		+ adjustment
 		+ "Days counted: %d of %d" % [parts["days"], RatingFormula.WINDOW_DAYS]
 	)
 
