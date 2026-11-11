@@ -157,19 +157,22 @@ func test_a_note_is_a_fifth_card_line_under_the_departure() -> void:
 	assert_str(noted[3]).is_equal(plain[2])
 
 
+## The card's 4 lines are followed by its fit line (TestOfferPanelFit), so a
+## card shows 5 lines, 6 with a note.
 func test_the_note_line_follows_the_clock_and_is_gone_with_no_note() -> void:
 	_at(NOON)
 	var lines := _panel.card_text("O0N2").split("\n")
-	assert_int(lines.size()).is_equal(4)
+	assert_int(lines.size()).is_equal(5)
+	assert_str(lines[4]).is_equal(_panel.fit_text("O0N2"))
 	_sim.tick = GameCalendar.tick_at(0, 21 * 60)
 	await get_tree().process_frame
 	lines = _panel.card_text("O0N2").split("\n")
-	assert_int(lines.size()).is_equal(5)
+	assert_int(lines.size()).is_equal(6)
 	assert_str(lines[1]).is_equal("Departs 20:00 daily")
 	assert_str(lines[2]).is_equal("First flight tomorrow")
 	_sim.tick = GameCalendar.tick_at(0, 8 * 60)
 	await get_tree().process_frame
-	assert_int(_panel.card_text("O0N2").split("\n").size()).is_equal(4)
+	assert_int(_panel.card_text("O0N2").split("\n").size()).is_equal(5)
 
 
 func test_every_card_line_fits_the_card_text_width() -> void:

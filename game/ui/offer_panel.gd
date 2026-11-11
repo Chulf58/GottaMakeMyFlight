@@ -32,6 +32,14 @@ extends CanvasLayer
 ##
 ## A card says "first flight tomorrow" when the sim would not fly today's slot
 ## (FlightTimetable.first_day), once the airport is open.
+##
+## Each card has a fit line before Accept (decision airline-offers-2-a-day-fit-
+## the-free-gate-slots-1-needs-more, point 6): FlightFit's words for whether
+## the offer fits now and why not, in the good-text look when it fits and the
+## problem look when not. It is advice, kept apart from the click refusal: it
+## is worked out again when the sheet opens, when the cards rebuild (an accept,
+## a decline, a new day, a load) and when a contract ends; the gates, stands
+## and runway works change only while the sheet is closed.
 
 const SHEET_W := TopRow.SHEET_W
 const CARD_TEXT_W := 380.0
@@ -75,6 +83,7 @@ var _accept_buttons: Dictionary = {}
 var _decline_buttons: Dictionary = {}
 var _note_labels: Dictionary = {}
 var _refusal_labels: Dictionary = {}
+var _fit_labels: Dictionary = {}
 var _noted_tick := -1
 ## True from open() until the player changes the clock or the sheet closes.
 var _holding_clock := false
@@ -213,6 +222,7 @@ func open() -> void:
 	TopRow.close_others(self)
 	_sheet.visible = true
 	_refresh_notes()
+	_refresh_fits()
 	if clock != null:
 		_held_paused = clock.paused
 		_held_speed = clock.speed
@@ -292,6 +302,16 @@ func refusal_text(id: String) -> String:
 
 func refusal_label(id: String) -> Label:
 	return _refusal_labels[id]
+
+
+## The fit line on offer `id`'s card (FlightFit.text): advice that Accept
+## checks again at the click.
+func fit_text(id: String) -> String:
+	return (_fit_labels[id] as Label).text
+
+
+func fit_label(id: String) -> Label:
+	return _fit_labels[id]
 
 
 ## What the sheet says under the cards: the last accept's confirmation, or
@@ -374,6 +394,7 @@ func _refresh() -> void:
 	_decline_buttons.clear()
 	_note_labels.clear()
 	_refusal_labels.clear()
+	_fit_labels.clear()
 	var offers := desk.board.open_offers()
 	for offer in offers:
 		_add_card(offer)
@@ -404,6 +425,18 @@ func _refresh_notes() -> void:
 func _set_note(label: Label, note: String) -> void:
 	label.text = note_line(note)
 	label.visible = note != ""
+
+
+## Rewrites each card's fit line for the sim as it is now.
+func _refresh_fits() -> void:
+	for id: String in _fit_labels:
+		_set_fit(_fit_labels[id], desk.board.offer_of(id))
+
+
+func _set_fit(label: Label, offer: Dictionary) -> void:
+	var assessment := FlightFit.assess(flights, OfferBoard.terms_of(offer))
+	label.text = FlightFit.text(assessment, offer["plane_size"])
+	label.theme_type_variation = &"HudGoodText" if assessment["fits"] else &"HudProblemText"
 
 
 ## Posts or drops the airlines' warning card from the rating, and words the
@@ -439,6 +472,7 @@ func _on_contract_ended(contract: Dictionary) -> void:
 	else:
 		_post(rail, ENDED_KEY, ENDED_TITLE, _ended_text)
 	_refresh_warning()
+	_refresh_fits()
 
 
 ## The right rail, found through its group the first time it is needed. A rail
@@ -525,6 +559,11 @@ func _add_card(offer: Dictionary) -> void:
 	texts.add_child(note)
 	texts.move_child(note, NOTE_LINE)
 	_note_labels[id] = note
+	var fit := _card_label("", &"HudSmall")
+	fit.name = "Fit_%s" % id
+	_set_fit(fit, offer)
+	texts.add_child(fit)
+	_fit_labels[id] = fit
 	var refusal := Label.new()
 	refusal.name = "Refusal_%s" % id
 	refusal.visible = false
