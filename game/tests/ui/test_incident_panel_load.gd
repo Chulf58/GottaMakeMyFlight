@@ -64,12 +64,27 @@ func test_a_shown_announcement_is_not_shown_again_after_a_load() -> void:
 	assert_bool(_clock.paused).is_true()
 
 
-func test_an_announcement_not_closed_before_the_load_is_shown_again() -> void:
-	_k.announce()
+## The ruling: an announcement already shown is dropped on a load. One that is
+## up on the screen has been shown, closed or not.
+func test_an_announcement_open_at_the_load_is_not_shown_again() -> void:
+	var id := _k.announce()
 	assert_bool(_panel.is_open()).is_true()
+	assert_bool(_k.is_shown(id)).is_true()
+	_k.load_happens()
+	assert_bool(_panel.is_open()).is_false()
+	assert_int(_clock.holds.count()).is_equal(0)
+	assert_array(_director.pending_presentation()).is_empty()
+
+
+func test_an_announcement_that_never_reached_the_screen_is_shown_after_the_load() -> void:
+	_k.sheet_takes_the_turn()
+	var id := _k.announce()
+	assert_bool(_panel.is_open()).is_false()
+	assert_bool(_k.is_shown(id)).is_false()
 	_k.load_happens()
 	assert_bool(_panel.is_open()).is_true()
 	assert_str(_panel.dialog().body_text()).contains("A test crew")
+	assert_bool(_k.is_shown(id)).is_true()
 	_panel.dialog().continue_button().pressed.emit()
 	assert_array(_director.pending_presentation()).is_empty()
 

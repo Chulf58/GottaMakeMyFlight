@@ -55,6 +55,13 @@ func state_of(id: int) -> String:
 	return ""
 
 
+func is_shown(id: int) -> bool:
+	for incident in director.incidents():
+		if incident["id"] == id:
+			return incident["shown"]
+	return false
+
+
 ## The offers sheet's way of taking the turn (OfferPanel: yields to the player).
 func sheet_takes_the_turn() -> int:
 	return clock.holds.take_turn(sheet, func() -> void: sheet_turns += 1, true)

@@ -40,6 +40,16 @@ func test_an_announcement_pauses_and_continue_gives_back_the_players_speed() -> 
 	assert_array(_director.pending_presentation()).is_empty()
 
 
+func test_an_announcement_is_shown_once_it_is_up_and_continue_only_closes_it() -> void:
+	var id := _k.announce()
+	assert_bool(_panel.is_open()).is_true()
+	assert_bool(_k.is_shown(id)).is_true()
+	assert_array(_director.pending_presentation()).is_empty()
+	_panel.dialog().continue_button().pressed.emit()
+	assert_bool(_k.is_shown(id)).is_true()
+	assert_str(_k.state_of(id)).is_equal(IncidentCatalogue.ANNOUNCED)
+
+
 func test_the_players_own_speed_change_does_not_end_the_pause() -> void:
 	_clock.set_paused(false)
 	_k.announce()

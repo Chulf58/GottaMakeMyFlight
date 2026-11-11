@@ -83,7 +83,16 @@ func test_an_answer_is_taken_once_and_only_for_an_offer() -> void:
 	assert_bool(_director.answer(999, true)).is_false()
 
 
-func test_closing_an_announcement_marks_it_shown_once() -> void:
+func test_a_minor_is_never_presented_and_stays_scheduled() -> void:
+	var spill := _director.add_scheduled(IncidentCatalogue.SPILL)
+	assert_bool(_director.present(spill, false)).is_false()
+	assert_bool(_director.present(spill, true)).is_false()
+	assert_str(_state_of(spill)).is_equal(IncidentCatalogue.SCHEDULED)
+	assert_array(_presented).is_empty()
+	assert_array(_director.pending_presentation()).is_empty()
+
+
+func test_an_announcement_is_marked_shown_once() -> void:
 	var id := _director.add_scheduled()
 	_director.present(id, false)
 	assert_bool(_shown(id)).is_false()

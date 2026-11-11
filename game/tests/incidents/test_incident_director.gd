@@ -66,6 +66,25 @@ func test_a_new_director_is_off_and_never_rolls() -> void:
 	assert_int(_director.last_rolled_day()).is_equal(8)
 
 
+func test_presenting_a_scheduled_spill_is_refused_and_it_still_fires() -> void:
+	_forced_spill(_director)
+	_director.on_tick(GameCalendar.day_start(1))
+	var scheduled := _director.incidents()
+	assert_int(scheduled.size()).is_equal(1)
+	var presented: Array[Dictionary] = []
+	_director.major_presented.connect(
+		func(incident: Dictionary) -> void: presented.append(incident)
+	)
+	assert_bool(_director.present(scheduled[0]["id"], true)).is_false()
+	assert_bool(_director.present(scheduled[0]["id"], false)).is_false()
+	assert_array(presented).is_empty()
+	assert_str(_director.incidents()[0]["state"]).is_equal(IncidentCatalogue.SCHEDULED)
+	_director.on_tick(scheduled[0]["fire_tick"])
+	assert_int(_director.active_incidents().size()).is_equal(1)
+	assert_int(_started.size()).is_equal(1)
+	assert_array(_director.pending_presentation()).is_empty()
+
+
 func test_no_roll_while_closed_or_on_the_opening_day() -> void:
 	var flights := auto_free(FlightSim.new()) as FlightSim
 	var director := auto_free(IncidentDirector.new()) as IncidentDirector

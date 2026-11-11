@@ -63,6 +63,9 @@ const SECURITY_PLACE := IncidentCatalogue.SECURITY_PLACE
 
 ## Debug only (PlaytestHook): every roll is this kind. Not saved.
 var forced_kind := ""
+## Whether a kind is a major, which present() requires. Tests replace it to
+## classify a made-up kind as one, since no major is in the catalogue yet.
+var is_major_kind: Callable = IncidentCatalogue.is_major
 
 var _enabled := false
 var _last_rolled_day := -1
@@ -166,15 +169,19 @@ func last_rolled_day() -> int:
 ## What a major incident's turn at the player looks like (slice G calls these
 ## from a major's fire tick; the panel answers through answer() and
 ## acknowledge()). A major is announced (the player is told, then closes the
-## panel) or offered (the player accepts or declines). Both pause the game while
-## the panel is open. A minor never comes here.
+## panel; it counts as shown from the moment the panel opens) or offered (the
+## player accepts or declines). Both pause the game while the panel is open. A
+## minor never comes here.
 ##
 ## Moves the scheduled incident `id` to announced, or to offered when
 ## `as_offer`, and emits major_presented. False, changing nothing, for an id that
-## is not a scheduled incident.
+## is not a scheduled incident of a major kind (a minor is never presented and
+## still fires on its tick).
 func present(id: int, as_offer: bool) -> bool:
 	var incident := _record(id)
 	if incident.is_empty() or incident["state"] != IncidentCatalogue.SCHEDULED:
+		return false
+	if not is_major_kind.call(incident["kind"]):
 		return false
 	incident["state"] = IncidentCatalogue.OFFERED if as_offer else IncidentCatalogue.ANNOUNCED
 	major_presented.emit(incident.duplicate())
@@ -191,8 +198,9 @@ func answer(id: int, accepted: bool) -> bool:
 	return true
 
 
-## The player closed an announcement: it is shown, and a load does not show it
-## again. False for an id that is not an announcement not yet shown.
+## The announcement is in front of the player (the panel calls this as it opens):
+## it is shown, and a load does not show it again. False for an id that is not
+## an announcement not yet shown.
 func acknowledge(id: int) -> bool:
 	var incident := _record(id)
 	if incident.is_empty() or incident["state"] != IncidentCatalogue.ANNOUNCED or incident["shown"]:
@@ -202,8 +210,8 @@ func acknowledge(id: int) -> bool:
 
 
 ## Copies of the majors the player has yet to deal with, oldest first: every
-## offer not answered and every announcement not closed. After a load these are
-## the ones the panel shows again.
+## offer not answered and every announcement not shown yet. After a load these
+## are the ones the panel shows again.
 func pending_presentation() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for incident in _incidents:

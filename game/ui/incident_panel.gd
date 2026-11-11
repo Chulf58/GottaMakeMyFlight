@@ -5,8 +5,8 @@ extends Node
 ## incidentdirector-shared-clo): the IntroDialogue's portrait and box, over the
 ## game, with the clock paused while it is open. Two forms:
 ##
-## - An announcement: the words of the incident and Continue. Closing it tells
-##   the director (acknowledge), which keeps it as shown.
+## - An announcement: the words of the incident and Continue, which only closes
+##   it. The director is told (acknowledge) as it opens, and keeps it as shown.
 ## - An offer: the words, the reward and what happens if it fails, and Accept
 ##   or Decline, which go to the director (answer). No key chooses.
 ##
@@ -20,10 +20,10 @@ extends Node
 ## A load replaces the world: the clock comes back paused at 1x and every hold
 ## is gone (decision loading-a-save-always-comes-back-paused-at-1x-speed-with-
 ## hin). The open panel ends, and whatever the director still has pending (an
-## offer not answered, an announcement not closed) is shown again, so a player
-## cannot save and load their way out of an offer, while an announcement already
-## closed stays closed. Nothing is saved here: the director's states and its
-## shown flag are the memory.
+## offer not answered, an announcement that never reached the screen) is shown
+## again, so a player cannot save and load their way out of an offer, while an
+## announcement that was up, closed or not, stays shown. Nothing is saved here:
+## the director's states and its shown flag are the memory.
 ##
 ## The words come from IncidentCatalogue.panel_copy (slice G fills it in); a
 ## major without title and body, or an offer without reward and failure, is not
@@ -167,7 +167,10 @@ func _show(incident: Dictionary) -> bool:
 	if offer:
 		_dialog.chosen.connect(_on_chosen.bind(_shown_id))
 	else:
-		_dialog.dismissed.connect(_on_continued.bind(_shown_id))
+		# Shown from the moment it is up, not when Continue closes it: a save
+		# taken meanwhile must not show it again (the ruling: an announcement
+		# already shown is dropped on a load).
+		director.acknowledge(_shown_id)
 	# Each close names its own layer, so a replaced dialog's layer leaving the
 	# tree a frame later cannot close the dialog that replaced it.
 	var close := _close.bind(_layer)
@@ -190,10 +193,6 @@ static func _copy_ok(copy: Dictionary, offer: bool) -> bool:
 
 func _on_chosen(accepted: bool, id: int) -> void:
 	director.answer(id, accepted)
-
-
-func _on_continued(id: int) -> void:
-	director.acknowledge(id)
 
 
 ## Closes the dialog shown on `layer`; a layer that is no longer the current

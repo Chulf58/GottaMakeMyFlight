@@ -58,13 +58,36 @@ func test_a_good_part_loads_also_after_json() -> void:
 
 
 func test_the_shown_flag_loads_as_saved_also_after_json() -> void:
-	var data := _good()
-	data["incidents"][0]["shown"] = true
-	var loaded := IncidentSnapshot.load(JSON.parse_string(JSON.stringify(data)))
+	var loaded := IncidentSnapshot.load(JSON.parse_string(JSON.stringify(_good())))
 	assert_bool(loaded.has("error")).is_false()
-	assert_bool(loaded["incidents"][0]["shown"]).is_true()
+	assert_bool(loaded["incidents"][0]["shown"]).is_false()
 	assert_bool(loaded["incidents"][1]["shown"]).is_false()
 	assert_int(IncidentSnapshot.SAVE_VERSION).is_equal(2)
+
+
+## Only an announcement can be shown. No major kind is in the catalogue yet, so
+## the rule is checked on the state check itself, which takes no kind.
+func test_only_an_announcement_can_be_shown() -> void:
+	var cases := {
+		IncidentCatalogue.ANNOUNCED: true,
+		IncidentCatalogue.SCHEDULED: false,
+		IncidentCatalogue.OFFERED: false,
+		IncidentCatalogue.ACCEPTED: false,
+		IncidentCatalogue.DECLINED: false,
+		IncidentCatalogue.DONE: false,
+	}
+	for state: String in cases:
+		var incident := _good()["incidents"][1] as Dictionary
+		incident["state"] = state
+		incident["shown"] = true
+		var got := IncidentSnapshot._state_problem(incident, IncidentSnapshot.NO_CELL)
+		print("%s shown -> '%s'" % [state, got])
+		if cases[state]:
+			assert_str(got).is_empty()
+		else:
+			assert_str(got).contains("shown but is not an announcement")
+		incident["shown"] = false
+		assert_str(IncidentSnapshot._state_problem(incident, IncidentSnapshot.NO_CELL)).is_empty()
 
 
 func test_a_spill_that_had_no_place_loads_as_done_with_its_outcome() -> void:
@@ -146,8 +169,8 @@ func test_each_malformed_field_is_refused() -> void:
 		func(d: Dictionary) -> void: d["incidents"][1]["outcome"] = IncidentSnapshot.NO_PLACE,
 		"missing key 'shown'": func(d: Dictionary) -> void: d["incidents"][0].erase("shown"),
 		"shown must be a bool": func(d: Dictionary) -> void: d["incidents"][0]["shown"] = 1,
-		"scheduled but already shown":
-		func(d: Dictionary) -> void: d["incidents"][1]["shown"] = true,
+		"shown but is not an announcement":
+		func(d: Dictionary) -> void: d["incidents"][0]["shown"] = true,
 	}
 	for want: String in cases:
 		var data := _good()

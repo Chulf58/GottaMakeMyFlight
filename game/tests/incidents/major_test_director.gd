@@ -8,12 +8,18 @@ extends IncidentDirector
 const KIND := "test_major"
 
 
+func _init() -> void:
+	is_major_kind = func(kind: String) -> bool:
+		return kind == KIND or IncidentCatalogue.is_major(kind)
+
+
 func _ready() -> void:
 	pass
 
 
-## Keeps a scheduled record of KIND and returns its id.
-func add_scheduled() -> int:
+## Keeps a scheduled record of `kind` (KIND, the made-up major, by default)
+## and returns its id.
+func add_scheduled(kind := KIND) -> int:
 	var id := _next_id
 	_next_id += 1
 	(
@@ -21,7 +27,7 @@ func add_scheduled() -> int:
 		. append(
 			{
 				"id": id,
-				"kind": KIND,
+				"kind": kind,
 				"roll_day": 1,
 				"state": IncidentCatalogue.SCHEDULED,
 				"fire_tick": 0,
