@@ -1,6 +1,6 @@
 class_name TestBridgeBoardingOldSave
 extends GdUnitTestSuite
-## A version 31 passenger save is refused (PassengerSim.SAVE_VERSION 32, board
+## A version 31 passenger save is refused (since PassengerSim.SAVE_VERSION 32, board
 ## 927ed9e0): from 32 a walk outside is measured in 3D and a docking plane's
 ## walker boards through the jet bridge, so a 31 save's apron_mm is ground
 ## distance along a ground walk. No migration before the first release
@@ -25,10 +25,10 @@ func test_a_version_31_save_with_an_apron_walker_is_refused() -> void:
 			]
 		)
 	)
-	assert_int(PassengerSim.SAVE_VERSION).is_equal(32)
-	assert_str(old.get("error", "")).is_equal("save_version must be 32")
-	# The control: the version is what refuses it; at 32 the same fixture gets
-	# past the version check.
+	assert_int(PassengerSim.SAVE_VERSION).is_equal(33)
+	assert_str(old.get("error", "")).is_equal("save_version must be 33")
+	# The control: the version is what refuses it; at the current version the same
+	# fixture gets past the version check.
 	assert_str(str(current.get("error", ""))).not_contains("save_version")
 
 
