@@ -11,7 +11,8 @@ extends RefCounted
 ##  "next_major_day", "next_id", "incidents": [{"id", "kind", "roll_day",
 ##  "state", "fire_tick", "cell": [x, y], "mess_id", "place", "outcome"}]}
 ## A scheduled incident has no cell ([-1, -1]), no mess (0) and no place ("");
-## an active one has all three, its place one of IncidentCatalogue.SPILL_PLACES.
+## an active one has all three, its place one of IncidentCatalogue.SPILL_PLACES;
+## a done one has all three or none, and none when its outcome is NO_PLACE.
 ## The outcome is "" or, on a done incident only, NO_PLACE (it never happened).
 ## links_problem() checks an active spill against the staged messes.
 
@@ -163,6 +164,13 @@ static func _state_problem(data: Dictionary, cell: Vector2i) -> String:
 	var whole: bool = cell != NO_CELL and int(data["mess_id"]) > 0 and data["place"] != ""
 	if data["state"] == IncidentCatalogue.ACTIVE and not whole:
 		return "incident %d is active but lacks its cell, mess or place" % id
+	# Done after it happened (whole), or before it was placed (nothing); one
+	# that never happened (NO_PLACE) has nothing.
+	if data["state"] == IncidentCatalogue.DONE:
+		if data["outcome"] == NO_PLACE and placed:
+			return "incident %d did not happen but has a cell, mess or place" % id
+		if placed and not whole:
+			return "incident %d is done but only partly placed" % id
 	if whole and not IncidentCatalogue.SPILL_PLACES.has(data["place"]):
 		return "incident %d place %s is not a spill place" % [id, data["place"]]
 	return ""

@@ -66,6 +66,34 @@ func test_a_spill_that_had_no_place_loads_as_done_with_its_outcome() -> void:
 
 ## The cross-part check (SaveGame staging): an active spill names a SPILL mess
 ## of the staged messes at its own cell.
+## A done incident is placed all the way (it happened) or not at all; one that
+## never happened (no_place) has no cell, mess or place.
+func test_a_done_incident_is_placed_whole_or_not_at_all() -> void:
+	var never := "did not happen but has"
+	var partly := "only partly placed"
+	var cases := [
+		[never, {"cell": [3, 2], "outcome": IncidentSnapshot.NO_PLACE}],
+		[never, {"mess_id": 5, "outcome": IncidentSnapshot.NO_PLACE}],
+		[never, {"place": "Security", "outcome": IncidentSnapshot.NO_PLACE}],
+		[partly, {"cell": [3, 2], "mess_id": 5}],
+		[partly, {"place": "Security"}],
+	]
+	for entry: Array in cases:
+		var data := _good()
+		data["incidents"][1]["state"] = IncidentCatalogue.DONE
+		(data["incidents"][1] as Dictionary).merge(entry[1], true)
+		var got := _refusal(data)
+		print("%s -> %s" % [entry[1], got])
+		assert_str(got).contains(entry[0])
+	# The controls: done after it happened, and done before it was placed.
+	var happened := _good()
+	happened["incidents"][0]["state"] = IncidentCatalogue.DONE
+	assert_str(_refusal(happened)).is_empty()
+	var dropped := _good()
+	dropped["incidents"][1]["state"] = IncidentCatalogue.DONE
+	assert_str(_refusal(dropped)).is_empty()
+
+
 func test_an_active_spill_must_name_a_spill_mess_at_its_cell() -> void:
 	var incidents := IncidentSnapshot.load(_good())
 	var spill := {"cell": Vector2i(12, 7), "kind": MessSim.Kind.SPILL}
