@@ -33,25 +33,23 @@ func test_an_adjustment_shifts_the_stars_by_half_steps() -> void:
 	assert_float(base).is_equal(3.5)
 	assert_bool(_rating.add_adjustment("vip-0", _noon(0), _noon(2), -2)).is_true()
 	assert_float(_rating.stars()).is_equal(base - 1.0)
-	assert_bool(_rating.add_adjustment("favour-0", _noon(0), _noon(2), 1)).is_true()
-	assert_float(_rating.stars()).is_equal(base - 0.5)
+	assert_bool(_rating.add_adjustment("spill-0", _noon(0), _noon(2), -1)).is_true()
+	assert_float(_rating.stars()).is_equal(base - 1.5)
 	var parts := _rating.parts()
 	assert_float(parts["stars"]).is_equal(_rating.stars())
 	assert_float(parts["base_stars"]).is_equal(base)
-	assert_float(parts["adjustment"]).is_equal(-0.5)
+	assert_float(parts["adjustment"]).is_equal(-1.5)
 	assert_array(_rating.active_adjustments()).has_size(2)
 
 
-func test_the_adjusted_stars_are_clamped_to_one_to_five() -> void:
+func test_the_adjusted_stars_are_clamped_at_one() -> void:
 	_record(_noon(0), 10, PassengerSim.MOOD_MAX, 0)
-	assert_float(_rating.stars()).is_equal(RatingFormula.MAX_STARS)
-	assert_bool(_rating.add_adjustment("up", _noon(0), _noon(1), 2)).is_true()
 	assert_float(_rating.stars()).is_equal(RatingFormula.MAX_STARS)
 	var most := RatingAdjustments.MAX_HALF_STAR_DELTA
 	assert_bool(_rating.add_adjustment("down-a", _noon(0), _noon(1), -most)).is_true()
 	assert_bool(_rating.add_adjustment("down-b", _noon(0), _noon(1), -most)).is_true()
 	print("adjustment %.1f stars" % _rating.parts()["adjustment"])
-	assert_float(_rating.parts()["adjustment"]).is_equal((2 - 2 * most) * 0.5)
+	assert_float(_rating.parts()["adjustment"]).is_equal(-float(most))
 	assert_float(_rating.stars()).is_equal(RatingFormula.MIN_STARS)
 
 
@@ -124,28 +122,55 @@ func test_the_day_end_low_count_uses_the_adjusted_stars() -> void:
 	assert_int(_rating.low_days()).is_equal(0)
 
 
-func test_with_no_passengers_the_adjustment_leaves_the_starting_stars() -> void:
-	assert_bool(_rating.add_adjustment("early", 0, 500, -4)).is_true()
-	assert_float(_rating.stars()).is_equal(RatingFormula.STARTING_STARS)
+## The ruling applies adjustments after RatingFormula.stars(), so they move the
+## STARTING_STARS of a window with no passengers too, and stars() (the tier
+## readers' value) shows it. Without passengers there is still no warning and
+## the badge still says "No flights yet", so the two still agree.
+func test_with_no_passengers_the_adjustment_moves_the_starting_stars() -> void:
+	var badge := auto_free(RatingBadge.new()) as RatingBadge
+	badge.rating = _rating
+	add_child(badge)
+	assert_bool(_rating.add_adjustment("early", 0, 500, -2)).is_true()
+	print("no passengers: stars %.1f" % _rating.stars())
+	assert_float(_rating.stars()).is_equal(RatingFormula.STARTING_STARS - 1.0)
+	assert_int(RatingFormula.tier(_rating.stars())).is_equal(0)
 	assert_bool(_rating.warning()).is_false()
+	assert_str(badge.label().text).is_equal(RatingBadge.NO_DATA_TEXT)
 	_rating.record_passenger(10, true, PassengerSim.MOOD_MAX)
-	assert_float(_rating.stars()).is_equal(RatingFormula.MAX_STARS - 2.0)
+	assert_float(_rating.stars()).is_equal(RatingFormula.MAX_STARS - 1.0)
 
 
+## An outcome on a day that has already closed would never be counted at that
+## day's end, so the badge could go low while low_days stays 0: refused.
+func test_an_outcome_before_the_ratings_tick_is_refused() -> void:
+	_record(_noon(0), 5, 0, 5)
+	_rating.on_tick(_noon(1))
+	var before := JSON.stringify(_rating.to_snapshot())
+	assert_bool(_rating.add_adjustment("late", _noon(0), _noon(2), -2)).is_false()
+	assert_bool(_rating.add_adjustment("late", _noon(1) - 1, _noon(2), -2)).is_false()
+	assert_str(JSON.stringify(_rating.to_snapshot())).is_equal(before)
+	assert_float(_rating.stars()).is_equal(2.5)
+	assert_bool(_rating.add_adjustment("now", _noon(1), _noon(2), -2)).is_true()
+
+
+## Adjustments are penalties only (conductor ruling on the Sol review): a
+## reward is paid as money (Wallet.Category.INCIDENT), so no adjustment can
+## open a build tier for good.
 func test_bad_adjustments_are_refused_and_change_nothing() -> void:
 	_rating.on_tick(1000)
-	assert_bool(_rating.add_adjustment("held", 1000, 2000, 1)).is_true()
+	assert_bool(_rating.add_adjustment("held", 1000, 2000, -1)).is_true()
 	var before := JSON.stringify(_rating.to_snapshot())
 	var most := RatingAdjustments.MAX_HALF_STAR_DELTA
 	var cases := {
-		"empty id": ["", 1000, 2000, 1],
-		"id already held": ["held", 1000, 2000, 1],
+		"empty id": ["", 1000, 2000, -1],
+		"id already held": ["held", 1000, 2000, -1],
 		"zero delta": ["z", 1000, 2000, 0],
-		"delta above the most": ["big", 1000, 2000, most + 1],
+		"positive delta": ["up", 1000, 2000, 1],
+		"largest positive delta": ["big", 1000, 2000, most],
 		"delta below the least": ["small", 1000, 2000, -most - 1],
-		"negative outcome": ["neg", -1, 2000, 1],
-		"expiry at the outcome": ["same", 1000, 1000, 1],
-		"expiry already past": ["past", 900, 1000, 1],
+		"negative outcome": ["neg", -1, 2000, -1],
+		"expiry at the outcome": ["same", 1000, 1000, -1],
+		"outcome before the tick": ["past", 900, 2000, -1],
 	}
 	for name: String in cases:
 		var args: Array = cases[name]
@@ -158,8 +183,8 @@ func test_bad_adjustments_are_refused_and_change_nothing() -> void:
 
 func test_a_full_list_refuses_one_more() -> void:
 	for i in RatingAdjustments.MAX_COUNT:
-		assert_bool(_rating.add_adjustment("a%d" % i, 0, 5000, 1)).is_true()
-	assert_bool(_rating.add_adjustment("one-more", 0, 5000, 1)).is_false()
+		assert_bool(_rating.add_adjustment("a%d" % i, 0, 5000, -1)).is_true()
+	assert_bool(_rating.add_adjustment("one-more", 0, 5000, -1)).is_false()
 	assert_array(_rating.active_adjustments()).has_size(RatingAdjustments.MAX_COUNT)
 
 

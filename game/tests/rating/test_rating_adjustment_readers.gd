@@ -29,9 +29,10 @@ func test_the_tooltip_shows_the_incident_adjustment_only_while_it_is_not_zero() 
 	print(tip)
 	assert_str(tip).contains("Airport rating: 2.5 of 5")
 	assert_str(tip).contains("Incident adjustment: -1.0 stars")
-	# Two that cancel out leave no line.
-	assert_bool(_rating.add_adjustment("favour", 10, 500, 2)).is_true()
-	assert_str(badge.card().tooltip_text).not_contains("Incident adjustment")
+	assert_bool(_rating.add_adjustment("spill", 10, 400, -1)).is_true()
+	assert_str(badge.card().tooltip_text).contains("Incident adjustment: -1.5 stars")
+	_rating.on_tick(400)
+	assert_str(badge.card().tooltip_text).contains("Incident adjustment: -1.0 stars")
 	_rating.on_tick(500)
 	assert_str(badge.card().tooltip_text).not_contains("Incident adjustment")
 
@@ -60,22 +61,28 @@ func test_the_offer_desk_draws_at_the_tier_of_the_adjusted_stars() -> void:
 	assert_array(desk.board.open_offers()).is_equal(_board_at(0))
 
 
-## All missed is 1 star; two stars of adjustment meet tier 2's 2.0 stars.
-func test_build_unlocks_open_a_tier_on_the_adjusted_stars() -> void:
+## Three made at mood 0 of ten is exactly tier 2's 2.0 stars; a half-star
+## penalty keeps the tier shut until it expires.
+func test_build_unlocks_check_the_adjusted_stars() -> void:
 	var pax := auto_free(PassengerSim.new()) as PassengerSim
 	var unlocks := auto_free(BuildUnlocks.new()) as BuildUnlocks
 	unlocks.rating = _rating
 	unlocks.passengers = pax
 	unlocks.manual = true
 	add_child(unlocks)
-	for i in 10:
+	for i in 3:
+		_rating.record_passenger(0, true, 0)
+	for i in 7:
 		_rating.record_passenger(0, false, 0)
 	for i in 50:
 		pax.outcome.emit(i, true)
-	unlocks.check()
-	assert_int(unlocks.tier()).is_equal(1)
-	assert_bool(_rating.add_adjustment("favour", 0, 500, 2)).is_true()
 	assert_float(_rating.stars()).is_equal(2.0)
+	assert_bool(_rating.add_adjustment("spill", 0, 500, -1)).is_true()
+	assert_float(_rating.stars()).is_equal(1.5)
+	unlocks.check()
+	print("tier %d at %.1f stars" % [unlocks.tier(), _rating.stars()])
+	assert_int(unlocks.tier()).is_equal(1)
+	_rating.on_tick(500)
 	unlocks.check()
 	print("tier %d at %.1f stars" % [unlocks.tier(), _rating.stars()])
 	assert_int(unlocks.tier()).is_equal(2)

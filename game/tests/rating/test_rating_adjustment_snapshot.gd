@@ -24,7 +24,7 @@ func _filled() -> void:
 		_rating.record_passenger(_noon(0), true, PassengerSim.MOOD_MAX)
 		_rating.record_passenger(_noon(0), false, 0)
 	assert_bool(_rating.add_adjustment("inspector-0", _noon(0), _noon(2), -2)).is_true()
-	assert_bool(_rating.add_adjustment("vip-1", _noon(1), _noon(1) + 50, 1)).is_true()
+	assert_bool(_rating.add_adjustment("vip-1", _noon(1), _noon(1) + 50, -1)).is_true()
 
 
 func _json() -> Dictionary:
@@ -44,7 +44,7 @@ func test_adjustments_round_trip_through_json() -> void:
 	assert_bool(_other.from_snapshot(saved)).is_true()
 	assert_array(_other.active_adjustments()).is_equal(_rating.active_adjustments())
 	assert_float(_other.stars()).is_equal(_rating.stars())
-	assert_float(_other.stars()).is_equal(3.0)
+	assert_float(_other.stars()).is_equal(2.0)
 	assert_str(_text(_other)).is_equal(_text(_rating))
 
 
@@ -80,6 +80,7 @@ func test_bad_adjustments_refuse_the_snapshot_and_leave_the_rating_unchanged() -
 		"zero delta": func(d): d["adjustments"][0]["half_star_delta"] = 0,
 		"fractional delta": func(d): d["adjustments"][0]["half_star_delta"] = -1.5,
 		"string delta": func(d): d["adjustments"][0]["half_star_delta"] = "-2",
+		"positive delta": func(d): d["adjustments"][0]["half_star_delta"] = 1,
 		"delta above the most": func(d): d["adjustments"][0]["half_star_delta"] = most + 1,
 		"delta below the least": func(d): d["adjustments"][0]["half_star_delta"] = -most - 1,
 		"negative outcome": func(d): d["adjustments"][0]["outcome_tick"] = -1,
@@ -101,7 +102,7 @@ func test_bad_adjustments_refuse_the_snapshot_and_leave_the_rating_unchanged() -
 func _overfill(data: Dictionary) -> void:
 	var list: Array = []
 	for i in RatingAdjustments.MAX_COUNT + 1:
-		var entry := {"id": "a%d" % i, "half_star_delta": 1}
+		var entry := {"id": "a%d" % i, "half_star_delta": -1}
 		entry["outcome_tick"] = data["tick"]
 		entry["expiry_tick"] = data["tick"] + 10
 		list.append(entry)

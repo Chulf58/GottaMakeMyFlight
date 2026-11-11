@@ -23,9 +23,10 @@ extends Node
 ## bind() (the scene wires it); without it no bag is recorded.
 ##
 ## Incident adjustments (RatingAdjustments, decision daily-incidents-technical-
-## design-incidentdirector-shared-clo) move the stars by half stars after
-## RatingFormula.stars(), clamped to 1-5, while the window has passengers; with
-## none the stars stay STARTING_STARS. add_adjustment() adds one (the
+## design-incidentdirector-shared-clo) lower the stars by half stars after
+## RatingFormula.stars(), clamped to 1-5, STARTING_STARS included; they are
+## penalties only. A window with no passengers is still never low, as the
+## badge then shows no stars. add_adjustment() adds one (the
 ## IncidentDirector's call) and active_adjustments() lists them. stars() is the
 ## adjusted value, and every reader goes through it or through the same
 ## _adjusted_stars(): the HUD badge and tooltip, the offer desk's tier, the
@@ -138,7 +139,7 @@ func note_doors_closed(flight_id: String, tick: int) -> void:
 
 
 ## The stars over the window with the active incident adjustments, 1 to 5 in
-## half steps; STARTING_STARS with no data.
+## half steps; with no data, STARTING_STARS with the adjustments.
 func stars() -> float:
 	return _adjusted_stars(_window(current_day()), _tick)
 
@@ -230,16 +231,14 @@ func days_held() -> Array[int]:
 	return held
 
 
-## Adds an incident adjustment of `half_star_delta` half stars (not 0, at most
-## RatingAdjustments.MAX_HALF_STAR_DELTA either way), active from `outcome_tick`
-## up to `expiry_tick` (RatingAdjustments.expiry_for gives the window's end).
-## The rating first rolls to `outcome_tick`. `id` names it and must be new.
-## Pushes an error and returns false, changing nothing, when any of that fails,
-## the expiry is not after the rating's tick, or MAX_COUNT are held.
+## Adds an incident penalty of `half_star_delta` half stars (-1 down to
+## -RatingAdjustments.MAX_HALF_STAR_DELTA), active from `outcome_tick` up to
+## `expiry_tick` (RatingAdjustments.expiry_for gives the window's end). The
+## outcome may not be before the rating's tick, and the rating first rolls to
+## it. `id` names it and must be new. Pushes an error and returns false,
+## changing nothing, when any of that fails or MAX_COUNT are held.
 func add_adjustment(id: String, outcome_tick: int, expiry_tick: int, half_star_delta: int) -> bool:
-	var problem := _adjustments.add_problem(
-		id, outcome_tick, expiry_tick, half_star_delta, maxi(_tick, outcome_tick)
-	)
+	var problem := _adjustments.add_problem(id, outcome_tick, expiry_tick, half_star_delta, _tick)
 	if problem != "":
 		push_error("AirportRating.add_adjustment: %s" % problem)
 		return false
@@ -418,7 +417,8 @@ func _close_day(day: int) -> void:
 
 
 ## True when a window has passengers and its stars, with the adjustments
-## active at `at_tick`, are below WARN_BELOW.
+## active at `at_tick`, are below WARN_BELOW. A window with no passengers is
+## never low, whatever the adjustments: the badge shows no stars then.
 func _is_low(window: Dictionary, at_tick: int) -> bool:
 	var total: int = window["made"] + window["missed"]
 	if total == 0:
@@ -426,13 +426,10 @@ func _is_low(window: Dictionary, at_tick: int) -> bool:
 	return _adjusted_stars(window, at_tick) < RatingFormula.WARN_BELOW
 
 
-## The stars of a pooled window with the adjustments active at `at_tick`; a
-## window with no passengers keeps STARTING_STARS.
+## The stars of a pooled window (STARTING_STARS with no passengers) with the
+## adjustments active at `at_tick`.
 func _adjusted_stars(window: Dictionary, at_tick: int) -> float:
-	var base := _stars_of(window)
-	if window["made"] + window["missed"] == 0:
-		return base
-	return RatingAdjustments.apply(base, _adjustments.half_stars_at(at_tick))
+	return RatingAdjustments.apply(_stars_of(window), _adjustments.half_stars_at(at_tick))
 
 
 ## The stars of a pooled window.

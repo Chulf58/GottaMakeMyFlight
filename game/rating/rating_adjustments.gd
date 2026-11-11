@@ -4,7 +4,16 @@ extends RefCounted
 ## technical-design-incidentdirector-shared-clo): each moves the stars by a
 ## whole number of half stars, after RatingFormula.stars(), from its outcome
 ## tick up to but not including its expiry tick. They are never passenger
-## records, so they leave the made share and the mood alone.
+## records, so they leave the made share and the mood alone. They apply to a
+## window with no passengers too, moving STARTING_STARS.
+##
+## They are penalties only: half_star_delta is from -MAX_HALF_STAR_DELTA to
+## -1. An incident's reward is paid as money (Wallet.Category.INCIDENT), so an
+## adjustment can never open a BuildUnlocks tier, which stays open for good.
+##
+## An adjustment is added at or after the rating's tick, never before it: a day
+## that has already closed is not checked again, so a back-dated one would
+## lower the badge without counting at that day's end.
 ##
 ## Expiry: an adjustment is active while outcome_tick <= tick < expiry_tick.
 ## expiry_for() gives the tick at which an incident's day leaves the rolling
@@ -20,8 +29,7 @@ extends RefCounted
 const KEYS := ["id", "outcome_tick", "expiry_tick", "half_star_delta"]
 ## Most adjustments held at once; incidents roll at most once a day.
 const MAX_COUNT := 64
-## Largest shift one adjustment may make either way, in half stars: the whole
-## 1 to 5 scale.
+## Largest drop one adjustment may make, in half stars: the whole 1 to 5 scale.
 const MAX_HALF_STAR_DELTA := 8
 
 var _list: Array[Dictionary] = []
@@ -37,13 +45,14 @@ static func apply(stars: float, half_stars: int) -> float:
 	return clampf(stars + half_stars * 0.5, RatingFormula.MIN_STARS, RatingFormula.MAX_STARS)
 
 
-## "" if an adjustment with these values may be added at `now`, else why not.
+## "" if an adjustment with these values may be added when the rating is at
+## tick `now`, else why not. Its expiry is after its outcome, so after `now`.
 func add_problem(
 	id: String, outcome_tick: int, expiry_tick: int, half_star_delta: int, now: int
 ) -> String:
 	var problem := _value_problem(id, outcome_tick, expiry_tick, half_star_delta)
-	if problem == "" and expiry_tick <= now:
-		problem = "expiry tick %d is not after the rating's tick %d" % [expiry_tick, now]
+	if problem == "" and outcome_tick < now:
+		problem = "outcome tick %d is before the rating's tick %d" % [outcome_tick, now]
 	if problem == "" and _has(id):
 		problem = "adjustment '%s' is already held" % id
 	if problem == "" and _list.size() >= MAX_COUNT:
@@ -146,10 +155,10 @@ static func _value_problem(
 		return "outcome tick %d is before the game began" % outcome_tick
 	if expiry_tick <= outcome_tick or expiry_tick > RatingSnapshot.MAX_TICK:
 		return "expiry tick %d must be after outcome tick %d" % [expiry_tick, outcome_tick]
-	if half_star_delta == 0 or absi(half_star_delta) > MAX_HALF_STAR_DELTA:
+	if half_star_delta >= 0 or half_star_delta < -MAX_HALF_STAR_DELTA:
 		return (
-			"half_star_delta %d must be from -%d to %d and not 0"
-			% [half_star_delta, MAX_HALF_STAR_DELTA, MAX_HALF_STAR_DELTA]
+			"half_star_delta %d must be from -%d to -1: adjustments are penalties only"
+			% [half_star_delta, MAX_HALF_STAR_DELTA]
 		)
 	return ""
 
