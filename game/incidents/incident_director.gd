@@ -11,7 +11,8 @@ extends Node
 ##
 ## Everything the roll decides is saved as ticks. A spill's fire tick lands in
 ## that day's busy window, from BUSY_LEAD_TICKS before its first departure to
-## its last, so it never happens unseen at night. When the fire tick comes the
+## its last, so it never happens unseen at night, and never sooner than
+## FIRE_FLOOR_TICKS after the roll. When the fire tick comes the
 ## spill picks its place (a check-in desk's or a scanner's passenger spot, from
 ## its own stream) and leaves a SPILL mess there (MessSim.add); it is active
 ## until that mess is gone, then done. A minor never pauses the game; the card
@@ -21,7 +22,8 @@ extends Node
 ## made (tests, probes, playtests) starts with them off; the dialog and the
 ## settings menu (slice E) call set_enabled(). Turned off, no roll happens and
 ## a scheduled incident is dropped; one already on the floor plays out.
-## next_event_tick() feeds the quiet-night fast-forward stop (QuietNight).
+## next_event_tick() (the scheduled fires) feeds the quiet-night fast-forward
+## stop (QuietNight).
 
 ## An incident happened (a spill is on the floor). A copy of its record.
 signal started(incident: Dictionary)
@@ -32,6 +34,12 @@ signal restored
 
 ## A spill may come this long before the day's first departure: two hours.
 const BUSY_LEAD_TICKS := 2 * 60 * GameCalendar.TICKS_PER_MINUTE
+## A fire comes no sooner than this after the roll: the quiet-night lead plus
+## the most ticks one frame may run. The roll is on the midnight tick, perhaps
+## inside a fast-forward frame that runs on up to MAX_STEPS_PER_FRAME - 1 more
+## ticks; the next frame then still finds the stop (LEAD_TICKS before the
+## fire) ahead of the clock, so the day boundary itself need not be a stop.
+const FIRE_FLOOR_TICKS := QuietNight.LEAD_TICKS + SimClock.MAX_STEPS_PER_FRAME
 const CHECKIN_PLACE := "Check-in"
 const SECURITY_PLACE := "Security"
 
@@ -107,16 +115,17 @@ func on_tick(tick: int) -> void:
 			ended.emit(incident.duplicate())
 
 
-## The next tick something of the incidents is due after `now`: a scheduled
-## fire or, while incidents are on and the airport open, the next day boundary,
-## where a roll may schedule one. -1 for none.
-func next_event_tick(now: int) -> int:
+## The next tick something of the incidents is due: the earliest scheduled
+## fire, or -1 for none. The day boundary is not an event (a stop before every
+## midnight would slow each quiet night for no reason the player can see,
+## decision quiet-nights-fast-forward-automatically-when-nothing-is-due): a
+## roll there schedules no fire sooner than FIRE_FLOOR_TICKS, and QuietNight
+## asks again every frame. `_now` is kept for the visits of the majors.
+func next_event_tick(_now: int) -> int:
 	var next := -1
 	for incident in _incidents:
 		if incident["state"] == IncidentCatalogue.SCHEDULED:
 			next = _earliest(next, incident["fire_tick"])
-	if _enabled and flights.opened_tick >= 0:
-		next = _earliest(next, GameCalendar.day_start(GameCalendar.day_of(now) + 1))
 	return next
 
 
@@ -148,8 +157,8 @@ func cleaner_hired() -> bool:
 
 
 ## The inclusive tick range a fire on `day` may land in, from BUSY_LEAD_TICKS
-## before its first departure to its last, never at or before `now`; x > y
-## when the day has no departure left.
+## before its first departure to its last, never sooner than FIRE_FLOOR_TICKS
+## after `now`; x > y when the day has no departure left after that.
 func busy_window(day: int, now: int) -> Vector2i:
 	var first := -1
 	var last := -1
@@ -158,7 +167,7 @@ func busy_window(day: int, now: int) -> Vector2i:
 		last = maxi(last, departure)
 	if first < 0:
 		return Vector2i(1, 0)
-	return Vector2i(maxi(first - BUSY_LEAD_TICKS, now + 1), last)
+	return Vector2i(maxi(first - BUSY_LEAD_TICKS, now + FIRE_FLOOR_TICKS), last)
 
 
 ## The places a spill can happen now: each check-in desk's and scanner's

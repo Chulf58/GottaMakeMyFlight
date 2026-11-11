@@ -8,8 +8,9 @@ extends Node
 ## counts as paused. While quiet, SimClock asks stop_tick() once a frame and
 ## fast-forwards to LEAD_TICKS before the next event: the earlier of the next
 ## flight event (FlightSim.next_event_tick) and the incidents' next one
-## (IncidentDirector.next_event_tick: a fire, or the day boundary a roll may
-## schedule one at, while incidents are on). Inside that lead the airport is
+## (IncidentDirector.next_event_tick: a scheduled fire; a roll at midnight
+## schedules none sooner than IncidentDirector.FIRE_FLOOR_TICKS, so midnight
+## itself is no stop). Inside that lead the airport is
 ## still quiet, but the stop is not ahead any more, so nothing restarts the
 ## fast-forward until after the event: it never flips on and off for reasons
 ## the player cannot see. Keeps no state and is not saved.

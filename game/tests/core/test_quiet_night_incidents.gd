@@ -79,9 +79,64 @@ func test_the_stop_comes_before_a_spill_fire_ahead_of_the_flight() -> void:
 	assert_bool(_world.clock.is_fast_forwarding()).is_false()
 
 
-func test_on_incidents_stop_ahead_of_the_next_day_boundary() -> void:
+## Fast-forwards frame by frame until the clock passes `until`, and asserts that
+## every frame from `from` on ran fast: a slow frame at 1x moves at most 1 tick.
+func _fast_through(from: int, until: int) -> int:
+	var frames := 0
+	while _world.clock.tick < until:
+		var before_frame := _world.clock.tick
+		_world.clock.advance(FRAME)
+		if before_frame >= from and _world.clock.tick < until:
+			frames += 1
+			assert_bool(_world.clock.is_fast_forwarding()).is_true()
+			assert_int(_world.clock.tick - before_frame).is_greater(1)
+	return frames
+
+
+## With incidents on and nothing rolled, midnight is no stop: the night runs
+## fast straight through 23:50 and on to the flight's stop.
+func test_on_incidents_fast_forward_straight_through_midnight() -> void:
 	_director.set_enabled(true)
 	var boundary := GameCalendar.day_start(1)
-	print("stop=%d boundary=%d flight stop=%d" % [_quiet.stop_tick(), boundary, _flight_stop()])
 	assert_int(boundary).is_less(_flight_stop())
-	assert_int(_quiet.stop_tick()).is_equal(boundary - QuietNight.LEAD_TICKS)
+	assert_int(_quiet.stop_tick()).is_equal(_flight_stop())
+	var frames := _fast_through(boundary - 2 * QuietNight.LEAD_TICKS, boundary + 400)
+	print("fast frames around midnight=%d tick=%d" % [frames, _world.clock.tick])
+	# 800 ticks at MAX_STEPS_PER_FRAME (10) a frame, less the frame at each end.
+	assert_int(frames).is_greater_equal(78)
+	assert_int(_director.last_rolled_day()).is_equal(1)
+	assert_int(_quiet.stop_tick()).is_equal(_flight_stop())
+
+
+## A spill rolled at that midnight with the earliest fire tick the floor allows
+## still gets its full lead: the fast-forward runs on after midnight and stops
+## exactly LEAD_TICKS before the fire.
+func test_a_spill_rolled_at_midnight_still_stops_lead_before_its_fire() -> void:
+	var director := auto_free(FloorWindow.new()) as IncidentDirector
+	director.bind(_world.clock, _world.flights, _world.sim)
+	director.set_enabled(true)
+	director.forced_kind = IncidentCatalogue.SPILL
+	_quiet.bind(_world.clock, _world.flights, _world.sim, director)
+	var boundary := GameCalendar.day_start(1)
+	_fast_through(boundary - 2 * QuietNight.LEAD_TICKS, boundary)
+	var rolled := director.incidents()
+	assert_int(rolled.size()).is_equal(1)
+	var fire: int = rolled[0]["fire_tick"]
+	print("boundary=%d fire=%d tick=%d" % [boundary, fire, _world.clock.tick])
+	assert_int(fire).is_equal(boundary + IncidentDirector.FIRE_FLOOR_TICKS)
+	# The frame that crossed midnight cannot have reached the stop yet.
+	assert_int(_world.clock.tick).is_less(fire - QuietNight.LEAD_TICKS)
+	_fast_through(boundary, fire - QuietNight.LEAD_TICKS)
+	assert_int(_world.clock.tick).is_equal(fire - QuietNight.LEAD_TICKS)
+	_world.clock.advance(FRAME)
+	assert_bool(_world.clock.is_fast_forwarding()).is_false()
+
+
+## A director whose busy window is the earliest its floor allows, whatever the
+## flights: the worst case for the quiet-night stop.
+class FloorWindow:
+	extends IncidentDirector
+
+	func busy_window(_day: int, now: int) -> Vector2i:
+		var at := now + IncidentDirector.FIRE_FLOOR_TICKS
+		return Vector2i(at, at)

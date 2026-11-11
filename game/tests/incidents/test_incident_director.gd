@@ -129,9 +129,21 @@ func test_the_busy_window_runs_from_two_hours_before_the_first_departure_to_the_
 	print("window %s departs %d" % [window, departs])
 	assert_int(window.x).is_equal(departs - IncidentDirector.BUSY_LEAD_TICKS)
 	assert_int(window.y).is_equal(departs)
-	# Never at or before now.
+
+
+## A fire is never sooner than FIRE_FLOOR_TICKS after the roll (more than the
+## quiet-night lead), so the quiet-night stop always lies ahead of the clock.
+func test_the_busy_window_starts_no_sooner_than_the_fire_floor_after_now() -> void:
+	assert_int(IncidentDirector.FIRE_FLOOR_TICKS).is_greater(QuietNight.LEAD_TICKS)
+	var departs := GameCalendar.tick_at(1, DEPARTS)
+	var now := departs - IncidentDirector.BUSY_LEAD_TICKS - 100
+	var early := _director.busy_window(1, now)
+	print("early window %s now %d" % [early, now])
+	assert_int(early.x).is_equal(now + IncidentDirector.FIRE_FLOOR_TICKS)
+	assert_int(early.y).is_equal(departs)
+	# Too late for the floor: no window, so the day stays quiet.
 	var late := _director.busy_window(1, departs - 10)
-	assert_int(late.x).is_equal(departs - 9)
+	assert_bool(late.x > late.y).is_true()
 
 
 func test_a_spill_fires_at_its_saved_tick_at_a_valid_cell() -> void:
@@ -170,11 +182,14 @@ func test_a_spill_fires_at_its_saved_tick_at_a_valid_cell() -> void:
 	assert_int(_ended[0]["id"]).is_equal(active["id"])
 
 
-func test_next_event_tick_is_the_next_fire_or_the_next_boundary() -> void:
+## Only a scheduled fire is an event: the day boundary is not one, so a quiet
+## night is not slowed before midnight (decision quiet-nights-fast-forward-
+## automatically-when-nothing-is-due).
+func test_next_event_tick_is_the_next_fire_and_never_the_boundary() -> void:
 	var boundary := GameCalendar.day_start(1)
 	assert_int(_director.next_event_tick(boundary - 50)).is_equal(-1)
 	_director.set_enabled(true)
-	assert_int(_director.next_event_tick(boundary - 50)).is_equal(boundary)
+	assert_int(_director.next_event_tick(boundary - 50)).is_equal(-1)
 	_director.forced_kind = IncidentCatalogue.SPILL
 	_director.on_tick(boundary)
 	var fire: int = _director.incidents()[0]["fire_tick"]
