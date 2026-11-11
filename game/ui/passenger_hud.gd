@@ -5,7 +5,9 @@ extends CanvasLayer
 ## the buttons' tooltips; plain number keys stay the build tool keys). The
 ## flight rows and the made, missed and in-terminal counts live in the
 ## Departures list instead (decision top-right-clock-panel-slims-to-day-time-
-## and-speed-flight-row). On the left edge, the optional DeparturesBoard (B
+## and-speed-flight-row). While the clock fast-forwards a quiet night, a
+## "Quiet night: fast-forwarding" chip shows under that panel (QuietNight).
+## On the left edge, the optional DeparturesBoard (B
 ## shows and hides it), which steps aside while the inspect card shows. Under
 ## the clock panel, the right rail (AlertStack): alert cards, which clear
 ## themselves and jump the camera when clicked, and the flight result card.
@@ -50,6 +52,9 @@ const SPEED_KEYS := {KEY_1: 1, KEY_2: 2, KEY_3: 3}
 const DEBUG_W := 260.0
 ## The flight result card's key on the rail.
 const RESULT_KEY := &"flight_result"
+## The chip under the clock panel while the clock fast-forwards a quiet night
+## (decision quiet-nights-fast-forward-automatically-when-nothing-is-due).
+const QUIET_NIGHT_TEXT := "Quiet night: fast-forwarding"
 ## The flight panel's word for each state from the doors closing on.
 const AFTER_DOORS_TEXT := {
 	FlightSim.State.DOORS_CLOSED: "Doors closed",
@@ -184,6 +189,11 @@ var _status := ""
 var _batch_refused := false
 var _time_label := Label.new()
 var _speed_buttons: Array[Button] = []
+var _clock_panel: Control
+## Shown GROUP_GAP under the clock panel while the clock fast-forwards; the
+## clock panel itself stays one row (decision top-right-clock-panel-slims-to-
+## day-time-and-speed-flight-row), and the rail hangs under the chip instead.
+var _quiet_chip := PanelContainer.new()
 var _debug_panel := PanelContainer.new()
 var _panel_room := PanelRoom.new()
 ## Flights whose doors closed and whose result is not summarized yet, oldest
@@ -225,6 +235,8 @@ func _ready() -> void:
 			button.pressed.connect(press_speed.bind(value))
 		row.add_child(button)
 		_speed_buttons.append(button)
+	_clock_panel = panel
+	_build_quiet_chip()
 	_departures_board.flights = flights
 	_departures_board.clock = clock
 	_departures_board.passengers = sim
@@ -402,6 +414,31 @@ func refresh() -> void:
 		for i in _speed_buttons.size():
 			var on := clock.paused if i == 0 else not clock.paused and clock.speed == i
 			_speed_buttons[i].set_pressed_no_signal(on)
+	_refresh_quiet_chip()
+
+
+func _build_quiet_chip() -> void:
+	_quiet_chip.name = "QuietNightChip"
+	_quiet_chip.theme = BuildMenu.HUD_THEME
+	_quiet_chip.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_quiet_chip.custom_minimum_size = Vector2(HudLayout.RAIL_W, 0.0)
+	_quiet_chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_quiet_chip.visible = false
+	var label := Label.new()
+	label.text = QUIET_NIGHT_TEXT
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_quiet_chip.add_child(label)
+	add_child(_quiet_chip)
+
+
+## Shows the chip while the clock fast-forwards, under the clock panel's real
+## bottom, and hangs the rail under the chip while it shows.
+func _refresh_quiet_chip() -> void:
+	var fast := clock != null and clock.is_fast_forwarding()
+	_quiet_chip.visible = fast
+	var top := _clock_panel.position.y + _clock_panel.size.y + HudLayout.GROUP_GAP
+	_quiet_chip.position = Vector2(_clock_panel.position.x, top)
+	_alerts.above = _quiet_chip if fast else _clock_panel
 
 
 ## The in-game day and 24-hour clock, "Day 1  06:00" (GameCalendar).

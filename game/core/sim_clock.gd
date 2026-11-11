@@ -4,6 +4,15 @@ extends Node
 ## consumed in fixed STEP-second steps; views interpolate with `alpha`.
 ## Also owns the sim's RandomNumberGenerator, kept apart from cosmetic
 ## randomness so a save can restore it (see seed_rng and restore_rng).
+##
+## Quiet-night fast-forward (decision quiet-nights-fast-forward-automatically-
+## when-nothing-is-due): once a frame, before any step, fast_forward_source
+## (QuietNight) names the tick a fast-forward may run to. Until that tick the
+## clock runs at FAST_FORWARD_SPEED instead of `speed`, still one tick at a time
+## and within MAX_STEPS_PER_FRAME, and it stops on that exact tick; the rest of
+## the frame runs at `speed`. `speed` itself never changes, so the panels'
+## held-speed checks see the player's setting, and nothing of the fast-forward
+## is saved: a load ends it.
 
 signal ticked(tick: int)
 
@@ -13,6 +22,11 @@ const SPEEDS: Array[int] = [1, 2, 3]
 ## Most steps one frame may run. Past this the backlog is dropped, so a long
 ## stall does not make the next frame run even longer.
 const MAX_STEPS_PER_FRAME := 10
+## Times the 1x rate a quiet-night fast-forward runs at: 600 ticks a second,
+## which is MAX_STEPS_PER_FRAME at 60 frames a second, so a faster rate would
+## only feed the backlog the cap drops. A 13.5-hour night (16,200 ticks, about
+## 270 s at 3x) then passes in about 27 s.
+const FAST_FORWARD_SPEED := 30
 const SAVE_VERSION := 1
 const SNAPSHOT_KEYS := [
 	"save_version", "tick", "speed", "paused", "accumulator", "rng_seed", "rng_state"
@@ -22,6 +36,11 @@ var tick: int = 0
 var speed: int = 1
 var paused: bool = false
 var rng := RandomNumberGenerator.new()
+## Asked once a frame while running: returns the tick a fast-forward may run
+## to, or -1 for none. Unset, the clock never fast-forwards. Not saved.
+var fast_forward_source := Callable()
+## The tick the running fast-forward stops on, or -1. Not saved.
+var fast_forward_until := -1
 
 ## Leftover accumulator over the step, in [0, 1). Views draw between the last
 ## two ticks with it.
@@ -45,10 +64,20 @@ func _process(delta: float) -> void:
 
 func advance(real_delta: float) -> void:
 	if paused:
+		fast_forward_until = -1
 		return
-	_accumulator += real_delta * speed
+	fast_forward_until = -1
+	if fast_forward_source.is_valid():
+		fast_forward_until = int(fast_forward_source.call())
+	var fast := is_fast_forwarding()
+	_accumulator += real_delta * (FAST_FORWARD_SPEED if fast else speed)
 	var steps := 0
 	while _accumulator >= STEP and steps < MAX_STEPS_PER_FRAME:
+		if fast and tick >= fast_forward_until:
+			# The stop: what is left of the frame runs at the player's speed.
+			fast = false
+			_accumulator *= float(speed) / FAST_FORWARD_SPEED
+			continue
 		_accumulator -= STEP
 		tick += 1
 		steps += 1
@@ -62,6 +91,11 @@ func advance(real_delta: float) -> void:
 ## True from the moment a tick is emitted until every listener has returned.
 func is_in_tick() -> bool:
 	return _in_tick
+
+
+## True while a quiet-night fast-forward runs: running, with its stop ahead.
+func is_fast_forwarding() -> bool:
+	return not paused and fast_forward_until > tick
 
 
 func set_paused(value: bool) -> void:
@@ -115,6 +149,7 @@ func from_snapshot(data: Dictionary) -> bool:
 	speed = int(data["speed"])
 	paused = data["paused"]
 	_accumulator = float(data["accumulator"])
+	fast_forward_until = -1
 	restore_rng(str(data["rng_seed"]).to_int(), str(data["rng_state"]).to_int())
 	return true
 
