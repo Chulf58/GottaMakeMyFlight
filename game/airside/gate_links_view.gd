@@ -461,10 +461,13 @@ static func caption_size(text: String) -> Vector2:
 ## none of the shown signs and captions of `markers` and none of the HUD's
 ## rectangles (HudRects), and still on screen. With no clear lift it stays on
 ## its desk; a caption that then touches the HUD (the sign near the top of the
-## screen, under the top row) slides clear of it toward the middle of the view,
-## as the room labels do (RoomLabelLayout.slide_clear, decision
-## status-banner-fades-under-the-build-ghost-room-labels-slide). Returns the
-## screen rectangles (pixels) placed, in desk order.
+## screen, under the top row) slides toward the middle of the view to the
+## nearest spot clear of the HUD and of everything a lift keeps clear of (the
+## captions placed, the signs, the markers), as the room labels slide
+## (RoomLabelLayout.slide_clear, decision
+## status-banner-fades-under-the-build-ghost-room-labels-slide). With no such
+## spot it stays where the lift left it. Returns the screen rectangles (pixels)
+## placed, in desk order.
 func layout_captions() -> Array[Rect2]:
 	var placed: Array[Rect2] = []
 	var camera := get_viewport().get_camera_3d() if is_inside_tree() else null
@@ -495,9 +498,11 @@ func layout_captions() -> Array[Rect2]:
 			):
 				chosen = rect
 				break
-		var spot := RoomLabelLayout.slide_clear(chosen, hud, view_size)
-		if spot.size != Vector2.ZERO:
-			chosen = spot
+		var padded_now := chosen.grow(MissMarkers.CAPTION_MARGIN_PX)
+		if hud.any(func(other: Rect2) -> bool: return padded_now.intersects(other)):
+			var spot := RoomLabelLayout.slide_clear(chosen, placed + blocked, view_size)
+			if spot.size != Vector2.ZERO:
+				chosen = spot
 		caption.offset = Vector2(
 			chosen.position.x - home.position.x, home.position.y - chosen.position.y
 		)
