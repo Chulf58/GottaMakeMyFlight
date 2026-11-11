@@ -207,6 +207,9 @@ var _panel_room := PanelRoom.new()
 var _unreported: Array[String] = []
 var _intro_layer: CanvasLayer
 var _intro: IntroDialogue
+## The intro's hold on the clock (SimClock.holds), which does not give way to
+## the player: the clock starts when the intro closes, as its text says.
+var _intro_hold := ClockHolds.NONE
 ## The camera's input state when the intro opened, restored when it closes.
 var _camera_was_processing := true
 var _camera_was_taking_input := true
@@ -593,7 +596,10 @@ func press_speed(value: int) -> void:
 		clock.set_speed(value)
 
 
-## Pauses, or resumes at the speed the clock had.
+## Pauses, or resumes at the speed the clock had. It acts on the player's own
+## pause: on a clock a hold pauses (build mode, the Offers sheet, a dialog) it
+## resumes, which ends the holds that give way to the player; a dialog's hold
+## keeps the clock paused until the dialog closes, and the game then runs.
 func press_pause_toggle() -> void:
 	clock.set_paused(not clock.paused)
 
@@ -620,12 +626,18 @@ func unlock_guide() -> UnlockGuide:
 	return _unlock_guide
 
 
-## Opens the intro dialogue, pauses the clock and stops the camera. Refused
-## (false) when it was already shown this session or is open.
+## Pauses the clock and opens the intro dialogue, which stops the camera: at
+## once, or, while another exclusive dialog has the turn, when that one closes.
+## Refused (false) when it was already shown this session or is open.
 func open_intro() -> bool:
 	if IntroDialogue.shown_this_session or _intro != null or clock == null:
 		return false
 	IntroDialogue.shown_this_session = true
+	_intro_hold = clock.holds.take_turn(self, _show_intro)
+	return true
+
+
+func _show_intro() -> void:
 	_intro_layer = CanvasLayer.new()
 	_intro_layer.name = "IntroLayer"
 	_intro_layer.layer = INTRO_LAYER
@@ -637,9 +649,7 @@ func open_intro() -> bool:
 	_intro.dismissed.connect(_close_intro)
 	_intro.tree_exiting.connect(_close_intro)
 	_intro_layer.tree_exiting.connect(_close_intro)
-	clock.set_paused(true)
 	_gate_camera(true)
-	return true
 
 
 ## Closes the intro as Continue would; does nothing when it is not open.
@@ -768,8 +778,9 @@ func _fit_follow() -> void:
 
 
 ## Ends the intro once, however it ended: frees its layer (unless that is
-## already on its way out), gives the camera its input back and starts the
-## clock at 1x. Later calls find nothing open and do nothing.
+## already on its way out), gives the camera its input back and releases the
+## intro's hold, so the clock runs at the player's own speed unless another
+## hold still pauses it. Later calls find nothing open and do nothing.
 func _close_intro() -> void:
 	if _intro_layer == null:
 		return
@@ -780,8 +791,8 @@ func _close_intro() -> void:
 		layer.queue_free()
 	_gate_camera(false)
 	if is_instance_valid(clock):
-		clock.set_paused(false)
-		clock.set_speed(1)
+		clock.holds.release(_intro_hold)
+	_intro_hold = ClockHolds.NONE
 
 
 ## The camera-input gate. Marking events handled cannot stop TycoonCamera,

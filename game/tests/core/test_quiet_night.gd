@@ -137,6 +137,8 @@ func test_a_build_hold_stops_it_and_gives_back_the_held_speed() -> void:
 	assert_bool(_world.clock.is_fast_forwarding()).is_true()
 	var session := auto_free(BuildSession.new()) as BuildSession
 	session.clock = _world.clock
+	# A hold's owner must be in the tree (ClockHolds), so its hold ends with it.
+	add_child(session)
 	session.set_building(true)
 	session.sync()
 	assert_bool(_world.clock.paused).is_true()

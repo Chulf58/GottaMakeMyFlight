@@ -47,6 +47,9 @@ func _build_from_running_2x_then_load_paused_2x() -> void:
 	assert_bool(_mode.apply_at(_mode.grid.cell_to_world(Vector2i(1, 1))).ok).is_true()
 	assert_int(_mode.undo_history().size()).is_equal(1)
 	assert_bool(_clock.paused).is_true()
+	# The loaded clock is paused by the player's own pause, as SaveGame.load_world()
+	# leaves it; build mode's hold is not the player's pause.
+	_clock.set_paused(true)
 	_save.loaded.emit(true)
 
 
