@@ -72,7 +72,10 @@ signal loaded(ok: bool)
 ## 14: the runway part holds the upgrade works too (Runway save version 2:
 ## RunwayWorks, the size they build and the ticks they run); version 13 saves
 ## are refused (no migration before a release).
-const SAVE_VERSION := 14
+## 15: the unlocks part also holds the tiers whose unlock dialog showed and the
+## tools the player has seen (BuildUnlocks "shown" and "seen"); version 14 saves
+## are refused (no migration before a release).
+const SAVE_VERSION := 15
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"

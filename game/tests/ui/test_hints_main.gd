@@ -144,3 +144,25 @@ func test_a_probe_can_stop_the_world_reading_and_keep_the_card_docking() -> void
 	assert_float(hints.card().get_global_rect().position.y).is_equal_approx(
 		LeftColumn.card_top(get_tree()), 1.5
 	)
+
+
+## The unlock dialog is a modal like the intro and the Offers sheet: no hint is
+## picked and nothing is marked seen while it is open.
+func test_no_hint_is_picked_while_the_unlock_dialog_is_open() -> void:
+	var hints := _live()
+	var guide := _hud().unlock_guide()
+	guide.open_dialog([2])
+	assert_bool(guide.is_open()).is_true()
+	var left := Hints.IDLE_S + 5.0
+	while left > 0.0:
+		hints.advance(0.25, _world(), ["Check-in"])
+		left -= 0.25
+	assert_bool(hints.is_showing()).is_false()
+	assert_bool(hints.is_seen(HintRules.PLACE_CHECKIN)).is_false()
+	guide.dismiss()
+	assert_bool(guide.is_open()).is_false()
+	left = HintRules.HOLD_S + 0.5
+	while left > 0.0:
+		hints.advance(0.25, _world(), ["Check-in"])
+		left -= 0.25
+	assert_str(hints.shown_id()).is_equal(HintRules.PLACE_CHECKIN)

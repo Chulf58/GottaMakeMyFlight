@@ -25,7 +25,10 @@ func before_test() -> void:
 
 func _tier(tier: int) -> void:
 	var need: int = BuildUnlocks.TIERS[tier - 1]["passengers"]
-	assert_bool(_unlocks.from_snapshot({"tier": tier, "made": need})).is_true()
+	(
+		assert_bool(_unlocks.from_snapshot({"tier": tier, "made": need, "shown": [], "seen": []}))
+		. is_true()
+	)
 
 
 func test_locked_the_card_says_what_the_tier_asks_for_and_the_button_is_off() -> void:

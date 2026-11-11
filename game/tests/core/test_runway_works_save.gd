@@ -48,7 +48,7 @@ func after_test() -> void:
 func before_test() -> void:
 	_flights.runway.size = PlaneClasses.SMALL
 	_flights.runway.works.clear()
-	_unlocks.from_snapshot({"tier": 2, "made": 50})
+	_unlocks.from_snapshot({"tier": 2, "made": 50, "shown": [], "seen": []})
 
 
 func test_a_new_game_starts_small_and_draws_a_small_runway() -> void:
@@ -123,7 +123,7 @@ func test_a_save_whose_works_are_already_over_is_refused() -> void:
 
 func test_a_version_1_runway_part_without_works_is_refused_unchanged() -> void:
 	var data := JSON.parse_string(JSON.stringify(_save.snapshot(), "", true, true)) as Dictionary
-	assert_int(int(data["save_version"])).is_equal(14)
+	assert_int(int(data["save_version"])).is_equal(SaveGame.SAVE_VERSION)
 	data["runway"] = {"save_version": 1, "size": "small"}
 	var before := SaveTestKit.checksum(_main)
 	assert_bool(_save.load_world(data)).is_false()
