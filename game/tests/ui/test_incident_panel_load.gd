@@ -3,8 +3,9 @@ extends GdUnitTestSuite
 ## What a load does to the major incident panel (decision loading-a-save-always-
 ## comes-back-paused-at-1x-speed-with-hin): the clock comes back paused at 1x
 ## with every hold dropped, so the open panel ends and the director's pending
-## majors show again. An unanswered offer and an announcement not yet closed
-## do; an announcement already closed does not; a refused load changes nothing.
+## majors show again. An unanswered offer and an announcement that never
+## reached the screen do; an announcement that was up (visibility marks it
+## shown), closed or not, does not; a refused load changes nothing.
 ## The scene is the one TestIncidentPanel builds (IncidentPanelKit).
 
 var _k := IncidentPanelKit.new()

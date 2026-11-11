@@ -3,7 +3,7 @@ extends GdUnitTestSuite
 ## What a major incident's panel needs of the IncidentDirector (slice F): a
 ## scheduled major becomes an announcement or an offer and says so
 ## (major_presented); the player's answer moves an offer to accepted or
-## declined; closing an announcement marks it shown; pending_presentation()
+## declined; visibility marks an announcement shown; pending_presentation()
 ## lists what the player has not dealt with yet, which is what a load
 ## re-presents. A MajorTestDirector stands in for the majors of slice G.
 
