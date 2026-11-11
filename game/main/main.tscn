@@ -1,4 +1,4 @@
-[gd_scene load_steps=45 format=3]
+[gd_scene load_steps=46 format=3]
 
 [ext_resource type="PackedScene" path="res://camera/tycoon_camera.tscn" id="1_cam"]
 [ext_resource type="Script" path="res://core/sim_clock.gd" id="2_clock"]
@@ -42,6 +42,7 @@
 [ext_resource type="Script" path="res://build/build_unlocks.gd" id="43_unlocks"]
 [ext_resource type="Script" path="res://airside/runway_view.gd" id="44_runwayview"]
 [ext_resource type="Script" path="res://ui/runway_card.gd" id="45_runwaycard"]
+[ext_resource type="Script" path="res://core/quiet_night.gd" id="46_quietnight"]
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_ground"]
 size = Vector2(2400, 2400)
@@ -232,6 +233,12 @@ build_mode = NodePath("../BuildMode")
 finances = NodePath("../Finances")
 staff = NodePath("../Staff")
 landside = NodePath("../LandsideSim")
+
+[node name="QuietNight" type="Node" parent="." node_paths=PackedStringArray("clock", "flights", "passengers")]
+script = ExtResource("46_quietnight")
+clock = NodePath("../SimClock")
+flights = NodePath("../FlightSim")
+passengers = NodePath("../PassengerSim")
 
 [node name="GateDesks" type="Node" parent="." node_paths=PackedStringArray("build_mode", "flights")]
 script = ExtResource("36_gatedesks")

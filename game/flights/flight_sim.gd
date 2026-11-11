@@ -757,6 +757,38 @@ func is_doors_closed(id: String) -> bool:
 	return state_of(id) >= State.DOORS_CLOSED
 
 
+## True while any flight is past SCHEDULED and not yet DEPARTED: on approach,
+## on the ground or taxiing out. QuietNight reads it.
+func has_moving_flight() -> bool:
+	for flight in _flights:
+		if flight["state"] > State.SCHEDULED and flight["state"] < State.DEPARTED:
+			return true
+	return false
+
+
+## The next tick something is due: the next state change of a flight not yet
+## departed or, while the airport is open, the next occurrence a running
+## contract issues (the tick its passengers are booked). -1 when nothing is.
+## Read-only; QuietNight stops a fast-forward ahead of it.
+func next_event_tick() -> int:
+	var next := -1
+	for flight in _flights:
+		if flight["state"] < State.DEPARTED:
+			next = _earliest(next, flight["starts"][flight["state"] + 1])
+	if opened_tick < 0:
+		return next
+	for contract in _contracts:
+		if not _ended.has(contract["id"]):
+			var day: int = _next_day[contract["id"]]
+			next = _earliest(next, FlightTimetable.issue_tick(contract, day))
+	return next
+
+
+## The earlier of two ticks, where -1 is none.
+static func _earliest(a: int, b: int) -> int:
+	return b if a < 0 else mini(a, b)
+
+
 ## How far through its current state a flight is at sim time `time` (a tick
 ## plus the clock's alpha), from 0 to 1. A final state reads 1.
 func phase_progress(id: String, time: float) -> float:
