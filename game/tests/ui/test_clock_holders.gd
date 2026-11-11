@@ -189,6 +189,28 @@ func test_the_unlock_dialog_opened_under_offers_shows_when_the_sheet_closes() ->
 	assert_int(_clock.speed).is_equal(2)
 
 
+## Play running under the open sheet (the player resumed) reaches a tier: the
+## sheet keeps the exclusive turn, so the dialog waits, holding the clock at
+## the tier, and opens when the sheet closes.
+func test_an_unlock_reached_while_play_runs_under_offers_waits_for_the_sheet() -> void:
+	_press_speed(1)
+	_panel.open()
+	_press_speed(3)
+	assert_bool(_clock.paused).is_false()
+	assert_int(_ticks_after(0.11)).is_equal(6)
+	_guide.open_dialog([2])
+	assert_bool(_guide.is_open()).is_false()
+	assert_bool(_panel.is_open()).is_true()
+	assert_bool(_clock.paused).is_true()
+	assert_int(_ticks_after(0.11)).is_equal(0)
+	_panel.close()
+	assert_bool(_guide.is_open()).is_true()
+	assert_bool(_clock.paused).is_true()
+	_guide.dismiss()
+	assert_bool(_clock.paused).is_false()
+	assert_int(_clock.speed).is_equal(3)
+
+
 ## The old dialog's layer leaves the tree a frame after a replacement; that
 ## must not close the new dialog or end its hold.
 func test_a_replaced_unlock_dialog_leaving_never_closes_the_new_one() -> void:

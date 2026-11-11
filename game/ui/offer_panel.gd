@@ -32,8 +32,10 @@ extends CanvasLayer
 ## pauses the game. The hold gives way to the player: resuming or picking
 ## another speed while it is open runs the game under the sheet. The sheet is
 ## one of the exclusive dialogs: opened while another has the turn (the unlock
-## dialog), it shows when that one closes. The sheet closes on Esc and when a
-## build tool is picked.
+## dialog), it shows when that one closes, and it keeps the turn until it
+## closes even while the game runs under it, so a dialog that comes up meanwhile
+## holds the clock and shows once the sheet closes. The sheet closes on Esc and
+## when a build tool is picked.
 ##
 ## A card says "first flight tomorrow" when the sim would not fly today's slot
 ## (FlightTimetable.first_day), once the airport is open.

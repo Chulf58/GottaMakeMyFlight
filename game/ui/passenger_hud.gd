@@ -598,7 +598,7 @@ func press_speed(value: int) -> void:
 
 ## Pauses, or resumes at the speed the clock had. It acts on the player's own
 ## pause: on a clock a hold pauses (build mode, the Offers sheet, a dialog) it
-## resumes, which ends the holds that give way to the player; a dialog's hold
+## resumes, which ends the pause of the holds that give way; a dialog's hold
 ## keeps the clock paused until the dialog closes, and the game then runs.
 func press_pause_toggle() -> void:
 	clock.set_paused(not clock.paused)

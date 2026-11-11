@@ -14,9 +14,12 @@ extends RefCounted
 ##   reaches the front, at once if nobody is ahead. The line moves only when a
 ##   hold leaves it (a release, the owner leaving the tree, the player taking
 ##   over), never on a tick: a tick-driven wait would never move while paused.
-## - A hold taken with yields_to_player ends when the player resumes or picks
-##   another speed (SimClock.set_paused(false), set_speed() to a new value);
-##   the others keep the clock paused until their owner releases them.
+## - A hold taken with yields_to_player gives way when the player resumes or
+##   picks another speed (SimClock.set_paused(false), set_speed() to a new
+##   value): a plain one ends, and one in line stops pausing the clock but
+##   keeps its place and its turn until its owner releases it, so a dialog that
+##   comes up meanwhile still waits for it (with the clock held). The others
+##   keep the clock paused until their owner releases them.
 ## - A hold ends by itself when its owner leaves the tree.
 ## - clear() drops every hold and the line without running any on_turn: a load
 ##   replaced the world, and each holder ends its own dialog on the load.
@@ -30,12 +33,15 @@ var _next := 1
 var _order: Array[int] = []
 ## token -> _Hold.
 var _holds: Dictionary = {}
+## How many holds pause the clock now (a hold in line that gave way does not).
+var _pausing := 0
 
 
 class _Hold:
 	var owner: Node
 	var yields: bool
 	var exclusive: bool
+	var pauses := true
 	var on_turn: Callable
 	var turn_given := false
 	## Bound to the owner's tree_exiting; kept to disconnect on release.
@@ -60,9 +66,9 @@ func take_turn(owner: Node, on_turn: Callable, yields_to_player := false) -> int
 	return token
 
 
-## Ends a hold and moves the line on. False, and nothing changes, for a token
-## that is not held (released already, dropped for the player, cleared by a
-## load, or NONE).
+## Ends a hold, its turn included, and moves the line on. False, and nothing
+## changes, for a token that is not held (released already, ended for the
+## player, cleared by a load, or NONE).
 func release(token: int) -> bool:
 	if not _holds.has(token):
 		return false
@@ -71,8 +77,14 @@ func release(token: int) -> bool:
 	return true
 
 
+## True while `token` is held, as a pause or only as a place in line.
 func has(token: int) -> bool:
 	return _holds.has(token)
+
+
+## True while `token` pauses the clock (false once it gave way to the player).
+func pauses(token: int) -> bool:
+	return _holds.has(token) and _holds[token].pauses
 
 
 ## True when `token` is first in line for the exclusive turn and its on_turn ran.
@@ -80,11 +92,12 @@ func has_turn(token: int) -> bool:
 	return _holds.has(token) and _first_in_line() == token and _holds[token].turn_given
 
 
-## True while any hold is held: the clock is paused.
+## True while any hold pauses the clock.
 func is_holding() -> bool:
-	return not _holds.is_empty()
+	return _pausing > 0
 
 
+## Holds of either kind, a place in line that gave way included.
 func count() -> int:
 	return _holds.size()
 
@@ -95,16 +108,19 @@ func clear() -> void:
 		_drop(token)
 
 
-## The player resumed or picked another speed: every hold that gives way to the
-## player ends, and the line moves on.
+## The player resumed or picked another speed: every plain hold that gives way
+## ends, and every one in line that gives way stops pausing but keeps its place
+## and turn. Plain holds are never in line, so the line does not move.
 func yield_to_player() -> void:
-	var dropped := false
 	for token in _order.duplicate():
-		if _holds[token].yields:
+		var hold: _Hold = _holds[token]
+		if not hold.yields:
+			continue
+		if not hold.exclusive:
 			_drop(token)
-			dropped = true
-	if dropped:
-		_give_turn()
+		elif hold.pauses:
+			hold.pauses = false
+			_pausing -= 1
 
 
 func _add(owner: Node, yields: bool, exclusive: bool, on_turn: Callable) -> int:
@@ -122,6 +138,7 @@ func _add(owner: Node, yields: bool, exclusive: bool, on_turn: Callable) -> int:
 	owner.tree_exiting.connect(hold.on_exit)
 	_holds[token] = hold
 	_order.append(token)
+	_pausing += 1
 	return token
 
 
@@ -133,6 +150,8 @@ func _drop(token: int) -> void:
 	var hold: _Hold = _holds[token]
 	_holds.erase(token)
 	_order.erase(token)
+	if hold.pauses:
+		_pausing -= 1
 	if is_instance_valid(hold.owner) and hold.owner.tree_exiting.is_connected(hold.on_exit):
 		hold.owner.tree_exiting.disconnect(hold.on_exit)
 

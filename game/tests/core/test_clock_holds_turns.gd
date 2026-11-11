@@ -89,13 +89,27 @@ func test_an_owner_leaving_the_tree_passes_the_turn_on() -> void:
 	assert_array(_turns).is_equal(["A", "B"])
 
 
-func test_resuming_passes_the_turn_from_a_hold_that_gives_way() -> void:
+## A resume ends the pause of a hold in line that gives way, never its turn: a
+## dialog behind the open sheet waits for the sheet to close.
+func test_resuming_keeps_the_turn_of_a_hold_that_gives_way_and_ends_its_pause() -> void:
 	var giving := _clock.holds.take_turn(_a, _turn_of("A"), true)
-	var keeping := _clock.holds.take_turn(_b, _turn_of("B"))
 	_clock.set_paused(false)
-	assert_bool(_clock.holds.has(giving)).is_false()
+	assert_bool(_clock.holds.has(giving)).is_true()
+	assert_bool(_clock.holds.pauses(giving)).is_false()
+	assert_bool(_clock.holds.has_turn(giving)).is_true()
+	assert_bool(_clock.paused).is_false()
+	var waiting := _clock.holds.take_turn(_b, _turn_of("B"))
+	assert_array(_turns).is_equal(["A"])
+	assert_bool(_clock.paused).is_true()
+	# A second resume changes nothing: the waiting hold does not give way.
+	_clock.set_paused(false)
+	assert_bool(_clock.paused).is_true()
+	_clock.holds.release(giving)
 	assert_array(_turns).is_equal(["A", "B"])
-	assert_bool(_clock.holds.has_turn(keeping)).is_true()
+	assert_bool(_clock.holds.has_turn(waiting)).is_true()
+	_clock.holds.release(waiting)
+	assert_bool(_clock.paused).is_false()
+	assert_int(_clock.holds.count()).is_equal(0)
 
 
 func test_a_turn_handler_may_release_its_own_hold() -> void:

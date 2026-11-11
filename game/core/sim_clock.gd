@@ -19,8 +19,9 @@ extends Node
 ## ClockHolds). `paused` is true while either pauses the clock; `speed` is only
 ## ever the player's. Releasing a hold restores nothing: with no hold left, the
 ## player's pause and speed apply again. Resuming or picking another speed
-## while held ends the holds that give way to the player (build mode, the
-## Offers sheet); a modal dialog's hold keeps the clock paused, and the
+## while held ends the pause of the holds that give way to the player (build
+## mode, the Offers sheet, which keeps its exclusive turn until it closes); a
+## modal dialog's hold keeps the clock paused, and the
 ## player's choice applies once it closes. Installing a snapshot (a load)
 ## drops every hold.
 ##
