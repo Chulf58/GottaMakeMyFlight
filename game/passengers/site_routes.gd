@@ -17,6 +17,17 @@ extends RefCounted
 
 const UNREACHED := 1 << 30
 
+## How many whole-site searches (search()) have run: a count for tests and
+## timing probes.
+static var searches := 0
+## The grid cells (BuildGrid.copy_route_state()), grid size and site obstacles the
+## kept fields were searched on (see distances()).
+static var _cells: Array = []
+static var _size := Vector2i.ZERO
+static var _obstacles: Array[Vector2i] = []
+## Seeds -> the distances() field searched from them on that state.
+static var _fields := {}
+
 
 ## Whether a walk outside may cross `cell`.
 static func is_open_ground(grid: BuildGrid, site: SiteDefinition, cell: Vector2i) -> bool:
@@ -45,9 +56,39 @@ static func edge_cells(grid: BuildGrid, site: SiteDefinition, step: Vector2i) ->
 
 ## Grid steps from every cell to the nearest of `seeds` over open ground, one
 ## int per cell at x + y * size.x; UNREACHED where there is no way.
+##
+## A flood fill of the whole site, and one build edit asks for several with the
+## same seeds (a gate's door field for its stand and for its walk check), so the
+## fields found on the grid as it stands are kept. They are kept against the
+## cell data the search reads (floors, objects, walls, the site's obstacles), not
+## against a signal or counter: any change to that data, by any route, makes the
+## next call search again, and the same data again (an undone edit, another grid
+## built alike) has the same answer. Every call returns its own copy, so a
+## caller that changes the field changes nothing kept.
 static func distances(
 	grid: BuildGrid, site: SiteDefinition, seeds: Array[Vector2i]
 ) -> PackedInt32Array:
+	if not grid.route_state_equals(_cells) or grid.size != _size or site.obstacles != _obstacles:
+		_cells = grid.copy_route_state()
+		_size = grid.size
+		_obstacles = site.obstacles.duplicate()
+		_fields = {}
+	if not _fields.has(seeds):
+		_fields[seeds.duplicate()] = search(grid, site, seeds)
+	return (_fields[seeds] as PackedInt32Array).duplicate()
+
+
+## Drops the kept fields, so a test that counts searches starts with none.
+static func forget() -> void:
+	_cells = []
+	_fields = {}
+
+
+## distances() searched afresh, kept nowhere.
+static func search(
+	grid: BuildGrid, site: SiteDefinition, seeds: Array[Vector2i]
+) -> PackedInt32Array:
+	searches += 1
 	var w := grid.size.x
 	var dist := PackedInt32Array()
 	dist.resize(w * grid.size.y)
