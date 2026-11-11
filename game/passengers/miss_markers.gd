@@ -37,11 +37,12 @@ extends Node3D
 ## Sizes are screen pixels, for the camera's field of view and the rendered
 ## view's height. Neighbouring stations stand closer on screen than a caption
 ## is wide when zoomed out, so draw() hides a caption that would overlap one
-## already shown, and every icon stays; the captions return as the camera moves
-## in. The two staff-spot reasons are never hidden: one that would overlap is
-## moved clear instead, up first and then to either side, staying inside the
-## view and off every icon; with no such spot no error is raised and it takes
-## the best one found, else is clamped into the view (see _clear_spot).
+## already shown, or one that would sit under another sign's icon, and every
+## icon stays; the captions return as the camera moves in. The two staff-spot
+## reasons are never hidden: one that would overlap is moved clear instead, up
+## first and then to either side, staying inside the view and off every icon;
+## with no such spot no error is raised and it takes the best one found, else
+## is clamped into the view (see _clear_spot).
 ## Otherwise the widest caption wins, then the leftmost.
 ## The layout runs only when the camera (its presence, identity, pose and field
 ## of view), the view size, the signs or (while a lane hint shows) the HUD
@@ -295,7 +296,7 @@ func draw() -> void:
 
 
 ## Lays the captions out on the screen: each is shown only if it clears the
-## captions already placed. The two staff-spot reasons go first and are never
+## captions already placed and every icon. The two staff-spot reasons go first and are never
 ## hidden (one that would overlap is lifted instead); then the widest, then the
 ## leftmost. `to_output` converts the camera's viewport coordinates to the
 ## screen pixels the captions are sized in; `view_size` is the screen's size in
@@ -394,7 +395,10 @@ func _place_caption(i: int, view_size: Vector2) -> void:
 			caption.offset += Vector2(
 				rect.position.x - _rects[i].position.x, _rects[i].end.y - rect.end.y
 			)
-		if RectBins.hits(rect.grow(CAPTION_MARGIN_PX), _bins, _placed):
+		if (
+			RectBins.hits(rect.grow(CAPTION_MARGIN_PX), _bins, _placed)
+			or RectBins.hits(rect, _icon_bins, _icons)
+		):
 			caption.visible = false
 			caption.offset = Vector2(0.0, SIGN_PX + CAPTION_GAP_PX)
 			return
