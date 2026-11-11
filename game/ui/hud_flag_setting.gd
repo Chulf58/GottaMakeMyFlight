@@ -17,11 +17,16 @@ extends RefCounted
 const PATH := "user://hud_settings.cfg"
 const SECTION := "hud"
 
+## The file a script run leaves alone. PATH in every run; a test points it at a
+## file of its own to watch the shield without touching the player's file, and
+## puts PATH back afterwards.
+static var protected_path := PATH
 
-## True when `path` is the player's settings file and this process is a script
-## run, which must leave that file alone.
+
+## True when `path` is the protected settings file (the player's, PATH) and this
+## process is a script run, which must leave that file alone.
 static func is_shielded(path: String) -> bool:
-	return path == PATH and Hints.launched_by_script(OS.get_cmdline_args())
+	return path == protected_path and Hints.launched_by_script(OS.get_cmdline_args())
 
 
 ## The saved choice for `key`, `default` when nothing is saved yet.
