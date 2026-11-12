@@ -47,15 +47,16 @@ const SPRITE := "VipCrown"
 const OUTLINE_POINTS: Array[Vector2] = [
 	Vector2(-42.0, 38.0),
 	Vector2(42.0, 38.0),
-	Vector2(48.0, -24.0),
+	Vector2(46.0, -24.0),
 	Vector2(21.0, 2.0),
 	Vector2(0.0, -34.0),
 	Vector2(-21.0, 2.0),
-	Vector2(-48.0, -24.0),
+	Vector2(-46.0, -24.0),
 ]
-## A ball on each point's tip.
-const BALLS: Array[Vector2] = [Vector2(-48.0, -30.0), Vector2(0.0, -42.0), Vector2(48.0, -30.0)]
-const BALL_RADIUS := 10.0
+## A ball on each point's tip, wide enough that gold shows inside its outline
+## (at 10 px the outline left 1 px of gold and the balls read as dark dots).
+const BALLS: Array[Vector2] = [Vector2(-46.0, -30.0), Vector2(0.0, -42.0), Vector2(46.0, -30.0)]
+const BALL_RADIUS := 15.0
 
 static var _texture: ImageTexture
 

@@ -1,10 +1,11 @@
 extends SceneTree
 ## Windowed plates of the VIP crown (board 2348c245, VipMarker) over a passenger
 ## in a crowd: one at the home zoom, one close up. Boots main.tscn with the
-## starter shell, opens the airport, lets a crowd of passengers arrive (some
-## hungry, so the close-up shows the crown over a need icon row), picks the one
-## with the most others around it and marks it as an accepted VIP through the
-## director's snapshot, the door a load uses. The HUD's CanvasLayers are hidden
+## starter shell, opens the airport, lets a crowd of passengers arrive, picks
+## the one with the most others around it, gives it a toilet need (the starter
+## has no cafe, so CafeSim keeps hunger at 0) so the close-up shows the crown over
+## a need icon row, and marks it as an accepted VIP through the director's
+## snapshot, the door a load uses. The HUD's CanvasLayers are hidden
 ## for the plates (anti-pattern a-plate-probe-s-occlusion-rays-see-only-meshes-
 ## so-a-hud-pane).
 ##
@@ -13,7 +14,9 @@ extends SceneTree
 ## camera; a physics ray from the camera to the head is not stopped more than
 ## BLOCK_M short of it; the subject's crown is visible and is the only crown
 ## shown (a control: every other passenger has none); at least CROWD_MIN other
-## passengers are in frame; and the crown does not overlap its own need icons.
+## passengers are in frame; on the close-up the subject shows a need icon row
+## (a control: no row would make the overlap check pass by accident) and the
+## crown does not overlap it.
 ## Otherwise PROBE_INVALID, exit 1. A guard thread calls OS.crash() on a stall.
 ##
 ## Run (one windowed Godot run project-wide; take the slot first):
@@ -37,8 +40,9 @@ const CROWD_MIN := 3
 ## Frames after a camera move before the plate, so roof fades settle
 ## (anti-pattern a-plate-probe-that-waits-a-fixed-frame-count-can-take-its-si).
 const SETTLE_FRAMES := 45
-## The shots: a name and the camera distance as a fraction of home_distance.
-const SHOTS := [["home", 1.0], ["close", 0.5]]
+## The shots: a name, the camera distance as a fraction of home_distance, and
+## whether the subject's need icon row must show (they hide at the home zoom).
+const SHOTS := [["home", 1.0, false], ["close", 0.5, true]]
 
 var _out_dir := ""
 var _failed := false
@@ -93,9 +97,7 @@ func _run() -> void:
 		return
 	_beat("arrivals")
 	for i in WANT_PASSENGERS:
-		var id := _sim.spawn_now(StarterFlight.first_flight())
-		if i % 3 == 0:
-			_sim.get_passenger(id).hunger = 100
+		_sim.spawn_now(StarterFlight.first_flight())
 	_clock.set_paused(false)
 	var until := _clock.tick + ARRIVE_TICKS
 	while _clock.tick < until:
@@ -106,7 +108,7 @@ func _run() -> void:
 		_invalid("no passenger stands in a crowd of %d within %.1f m" % [CROWD_MIN, CROWD_M])
 		_finish()
 		return
-	_sim.get_passenger(subject).hunger = 100
+	_sim.get_passenger(subject).toilet_need = 100
 	if not _mark_vip(subject):
 		_invalid("the director refused the VIP snapshot")
 		_finish()
@@ -122,7 +124,7 @@ func _run() -> void:
 	await _frames(4)
 	for shot: Array in SHOTS:
 		_beat("plate_%s" % shot[0])
-		await _plate(subject, shot[0], shot[1])
+		await _plate(subject, shot[0], shot[1], shot[2])
 	_contact_sheet()
 	_finish()
 
@@ -156,7 +158,7 @@ func _mark_vip(target: int) -> bool:
 	return _director.from_snapshot(data)
 
 
-func _plate(subject: int, shot: String, ratio: float) -> void:
+func _plate(subject: int, shot: String, ratio: float, want_row: bool) -> void:
 	var node := _views.node_for(subject)
 	if node == null:
 		_invalid("%s: the subject has no view" % shot)
@@ -218,6 +220,8 @@ func _plate(subject: int, shot: String, ratio: float) -> void:
 		problem = "%d crowns are shown, want 1" % crowns
 	elif in_frame < CROWD_MIN:
 		problem = "only %d other passengers in frame" % in_frame
+	elif want_row and own.is_empty():
+		problem = "the subject shows no need icon row to stack the crown over"
 	elif overlap > 0:
 		problem = "the crown overlaps its own need icons"
 	elif not ok:

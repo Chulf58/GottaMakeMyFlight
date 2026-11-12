@@ -143,12 +143,63 @@ func test_a_load_shows_the_crown_over_the_loaded_vip_only() -> void:
 	assert_array(_run["after_load"]).contains_exactly([_run["first"]])
 
 
-func test_the_crown_is_laid_out_over_the_head_with_its_texture() -> void:
+func test_the_marked_view_wears_the_crown_texture() -> void:
 	var node := _views.node_for(_run["first"])
 	var crown := node.get_node(VipMarker.SPRITE) as Sprite3D
 	assert_bool(node.get_meta(&"vip", false)).is_true()
-	assert_float(crown.position.y).is_greater_equal(NeedIcons.LIFT_M)
 	assert_object(crown.texture).is_same(VipMarker.texture())
+
+
+func test_layout_puts_the_crown_over_the_head_at_crown_px() -> void:
+	var node := _layout_node(20.0)
+	var crown := _lay_out(node)
+	assert_bool(crown.visible).is_true()
+	assert_vector(crown.position).is_equal(Vector3(0.0, NeedIcons.LIFT_M, 0.0))
+	assert_float(crown.offset.y).is_equal_approx(VipMarker.SIZE / 2.0, 0.001)
+	var pixel := VipMarker.CROWN_PX * _unit() / VipMarker.SIZE
+	assert_float(crown.pixel_size).is_equal_approx(pixel, pixel * 0.001)
+	node.free()
+
+
+func test_layout_lifts_the_crown_over_a_need_icon_row() -> void:
+	var node := _layout_node(20.0)
+	(node.get_node(NeedIcons.SPRITES[0]) as Sprite3D).visible = true
+	var crown := _lay_out(node)
+	var lift := (NeedIcons.ICON_PX + NeedIcons.GAP_PX) * VipMarker.SIZE / VipMarker.CROWN_PX
+	assert_float(crown.offset.y).is_equal_approx(VipMarker.SIZE / 2.0 + lift, 0.001)
+	node.free()
+
+
+func test_layout_lifts_the_crown_over_a_wish_bubble() -> void:
+	var node := _layout_node(20.0)
+	(node.get_node(NeedIcons.SPRITES[0]) as Sprite3D).visible = true
+	(node.get_node(WishIconView.SPRITE) as Sprite3D).visible = true
+	var crown := _lay_out(node)
+	var lift := (WishIconView.WISH_PX + NeedIcons.GAP_PX) * VipMarker.SIZE / VipMarker.CROWN_PX
+	assert_float(crown.offset.y).is_equal_approx(VipMarker.SIZE / 2.0 + lift, 0.001)
+	node.free()
+
+
+func test_layout_puts_the_crown_on_top_of_a_speech_bubble_and_its_row() -> void:
+	var node := _layout_node(20.0)
+	(node.get_node(NeedIcons.SPRITES[0]) as Sprite3D).visible = true
+	var bubble := node.get_node("Bubble") as Label3D
+	bubble.text = "I'm late!"
+	var crown := _lay_out(node)
+	var row_only := (NeedIcons.ICON_PX + NeedIcons.GAP_PX) * VipMarker.SIZE / VipMarker.CROWN_PX
+	assert_vector(crown.position).is_equal(bubble.position)
+	assert_float(crown.offset.y).is_greater(VipMarker.SIZE / 2.0 + row_only)
+	node.free()
+
+
+func test_layout_hides_an_unmarked_crown_and_one_near_the_lens() -> void:
+	var node := _layout_node(20.0)
+	VipMarker.mark(node, false)
+	assert_bool(_lay_out(node).visible).is_false()
+	node.free()
+	var near := _layout_node(NeedIcons.NEAR_HIDDEN_M - 1.0)
+	assert_bool(_lay_out(near).visible).is_false()
+	near.free()
 
 
 func test_the_crown_texture_is_gold_inside_and_clear_outside() -> void:
@@ -166,6 +217,57 @@ func test_the_crown_texture_is_gold_inside_and_clear_outside() -> void:
 
 func test_marked_ids_reads_accepted_vips_with_a_target_only() -> void:
 	assert_dict(VipMarker.marked_ids(null)).is_empty()
-	var marked := VipMarker.marked_ids(_director)
-	assert_dict(marked).contains_key_value(_run["first"], true)
-	assert_int(marked.size()).is_equal(1)
+	var director := IncidentDirector.new()
+	(
+		director
+		. _incidents
+		. assign(
+			[
+				_record(IncidentCatalogue.VIP, IncidentCatalogue.ACCEPTED, 7),
+				_record(IncidentCatalogue.VIP, IncidentCatalogue.ACCEPTED, 0),
+				_record(IncidentCatalogue.VIP, IncidentCatalogue.DONE, 8),
+				_record(IncidentCatalogue.VIP, IncidentCatalogue.OFFERED, 9),
+				_record(IncidentCatalogue.FAVOUR, IncidentCatalogue.ACCEPTED, 10),
+			]
+		)
+	)
+	assert_array(VipMarker.marked_ids(director).keys()).contains_exactly([7])
+	director.free()
+
+
+## A bare incident record of `kind` in `state` whose plan targets `target`.
+func _record(kind: String, state: String, target: int) -> Dictionary:
+	return {"kind": kind, "state": state, "plan": {"target": target}}
+
+
+## A passenger-like node with the sprites PassengerViews gives one, marked as a
+## VIP and placed `distance` metres in front of the game camera, every icon and
+## the bubble hidden.
+func _layout_node(distance: float) -> Node3D:
+	var camera := _views.get_viewport().get_camera_3d()
+	var node := Node3D.new()
+	var bubble := Label3D.new()
+	bubble.name = "Bubble"
+	bubble.font_size = 56
+	bubble.outline_size = 14
+	bubble.pixel_size = 0.006
+	bubble.position = Vector3(0.0, PassengerViews.BUBBLE_HEIGHT, 0.0)
+	node.add_child(bubble)
+	for sprite_name in NeedIcons.SPRITES:
+		node.add_child(NeedIcons.make_sprite(sprite_name))
+	node.add_child(WishIconView.make_sprite())
+	node.add_child(VipMarker.make_sprite())
+	_main.add_child(node)
+	node.global_position = camera.global_position - camera.global_basis.z * distance
+	VipMarker.mark(node, true)
+	return node
+
+
+func _unit() -> float:
+	return NeedIcons.unit_of(_views.get_viewport(), _views.get_viewport().get_camera_3d())
+
+
+func _lay_out(node: Node3D) -> Sprite3D:
+	var camera := _views.get_viewport().get_camera_3d()
+	VipMarker.layout(node, node.get_node("Bubble") as Label3D, camera, _unit())
+	return node.get_node(VipMarker.SPRITE) as Sprite3D
