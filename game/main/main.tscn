@@ -1,4 +1,4 @@
-[gd_scene load_steps=48 format=3]
+[gd_scene load_steps=49 format=3]
 
 [ext_resource type="PackedScene" path="res://camera/tycoon_camera.tscn" id="1_cam"]
 [ext_resource type="Script" path="res://core/sim_clock.gd" id="2_clock"]
@@ -45,6 +45,7 @@
 [ext_resource type="Script" path="res://core/quiet_night.gd" id="46_quietnight"]
 [ext_resource type="Script" path="res://incidents/incident_director.gd" id="47_incidents"]
 [ext_resource type="Script" path="res://ui/incident_cards.gd" id="48_incidentcards"]
+[ext_resource type="Script" path="res://ui/incident_panel.gd" id="49_incidentpanel"]
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_ground"]
 size = Vector2(2400, 2400)
@@ -371,6 +372,12 @@ passengers = NodePath("../PassengerSim")
 [node name="IncidentCards" type="Node" parent="." node_paths=PackedStringArray("director")]
 script = ExtResource("48_incidentcards")
 director = NodePath("../IncidentDirector")
+
+[node name="IncidentPanel" type="Node" parent="." node_paths=PackedStringArray("director", "clock", "save_game")]
+script = ExtResource("49_incidentpanel")
+director = NodePath("../IncidentDirector")
+clock = NodePath("../SimClock")
+save_game = NodePath("../SaveGame")
 
 [node name="OfferPanel" type="CanvasLayer" parent="." node_paths=PackedStringArray("desk", "flights", "clock", "build_mode", "save_game")]
 layer = 2

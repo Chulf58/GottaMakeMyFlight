@@ -7,8 +7,14 @@ extends Control
 ## clock at 1x. While it is open it is modal: a dim backdrop takes every click
 ## and wheel event, and _input takes every key, so nothing behind it acts.
 ## PassengerHud opens it once per session (see should_show).
+##
+## The offer form (the major incident panel's) swaps Continue for Accept and
+## Decline: choosing emits `chosen(accepted)` and then closes as Continue does.
+## No key chooses for the player, so a stray Space cannot accept an offer.
 
 signal dismissed
+## The offer form only: the player picked Accept (true) or Decline (false).
+signal chosen(accepted: bool)
 
 const PORTRAIT := preload("res://assets/ui/intro_manager_portrait.png")
 const NAME_TEXT := "TERMINAL MANAGER"
@@ -21,6 +27,8 @@ const BODY_TEXT := (
 	+ "The clock starts when you close this."
 )
 const CONTINUE_TEXT := "Continue (Space)"
+const ACCEPT_TEXT := "Accept"
+const DECLINE_TEXT := "Decline"
 ## Sizes at a 1920x1080 screen.
 const BOX_SIZE := Vector2(1060.0, 300.0)
 const PORTRAIT_SIZE := 520.0
@@ -51,6 +59,7 @@ var _done := false
 var _title_text := TITLE_TEXT
 var _body_text := BODY_TEXT
 var _box_height := BOX_SIZE.y
+var _offer := false
 ## Holds the portrait, box and nameplate at their 1080p layout; _place moves it
 ## and scales it down on a smaller screen.
 var _group := Control.new()
@@ -59,6 +68,8 @@ var _nameplate := PanelContainer.new()
 var _portrait := TextureRect.new()
 var _body := Label.new()
 var _continue := Button.new()
+var _accept: Button
+var _decline: Button
 
 
 ## True when a new game should open with the intro: not shown yet this session,
@@ -70,11 +81,15 @@ static func should_show(already_shown: bool, in_current_scene: bool, playtest_on
 
 ## The first-day intro by default; UnlockGuide passes its own title, body and a
 ## taller box for a new tier's dialog, which reuses the same portrait, box and
-## Continue. The box grows upward from its fixed bottom edge.
-func _init(title_text := TITLE_TEXT, body_text := BODY_TEXT, box_height := BOX_SIZE.y) -> void:
+## Continue. The box grows upward from its fixed bottom edge. `offer` swaps
+## Continue for Accept and Decline.
+func _init(
+	title_text := TITLE_TEXT, body_text := BODY_TEXT, box_height := BOX_SIZE.y, offer := false
+) -> void:
 	_title_text = title_text
 	_body_text = body_text
 	_box_height = box_height
+	_offer = offer
 	name = "IntroDialogue"
 	theme = BuildMenu.HUD_THEME
 	set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -121,7 +136,7 @@ func _input(event: InputEvent) -> void:
 	if _done or not visible or key == null or not key.pressed:
 		return
 	get_viewport().set_input_as_handled()
-	if key.echo:
+	if key.echo or _offer:
 		return
 	var space := key.physical_keycode == KEY_SPACE and not key.shift_pressed
 	if space or key.physical_keycode in [KEY_ENTER, KEY_KP_ENTER]:
@@ -141,6 +156,15 @@ func is_dismissed() -> bool:
 	return _done
 
 
+## The offer form's answer: emits chosen(accepted), then closes. Does nothing
+## once closed, or on a dialogue that is not an offer.
+func choose(accepted: bool) -> void:
+	if _done or not _offer:
+		return
+	chosen.emit(accepted)
+	dismiss()
+
+
 func body_text() -> String:
 	return _body.text
 
@@ -158,6 +182,15 @@ func part_rects() -> Dictionary:
 
 func continue_button() -> Button:
 	return _continue
+
+
+## The offer form's buttons; null on the plain dialogue.
+func accept_button() -> Button:
+	return _accept
+
+
+func decline_button() -> Button:
+	return _decline
 
 
 func _build_box() -> void:
@@ -197,6 +230,28 @@ func _build_box() -> void:
 	_continue.offset_bottom = -20.0
 	_continue.pressed.connect(dismiss)
 	_box.add_child(_continue)
+	if _offer:
+		_continue.visible = false
+		_accept = _corner_button("Accept", ACCEPT_TEXT, 0.0)
+		_accept.pressed.connect(choose.bind(true))
+		_decline = _corner_button("Decline", DECLINE_TEXT, 210.0)
+		_decline.pressed.connect(choose.bind(false))
+
+
+## A button in the box's bottom-right corner, `shift` pixels left of where
+## Continue stands.
+func _corner_button(button_name: String, text: String, shift: float) -> Button:
+	var button := Button.new()
+	button.name = button_name
+	button.text = text
+	button.focus_mode = Control.FOCUS_NONE
+	button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	button.offset_left = _continue.offset_left - shift
+	button.offset_top = _continue.offset_top
+	button.offset_right = _continue.offset_right - shift
+	button.offset_bottom = _continue.offset_bottom
+	_box.add_child(button)
+	return button
 
 
 func _build_nameplate() -> void:

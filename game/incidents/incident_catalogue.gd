@@ -89,6 +89,14 @@ static func states_for(kind: String) -> Array[String]:
 	return out
 
 
+## The words of a major's panel (IncidentPanel): {"title", "body"}, and for an
+## offer also {"reward", "failure"}, each a short plain sentence naming what the
+## player gets and what it costs. {} for a kind with none: no minor has a panel,
+## and the majors (slice G) add theirs here.
+static func panel_copy(_kind: String) -> Dictionary:
+	return {}
+
+
 ## The card's title for an active incident.
 static func card_title(incident: Dictionary) -> String:
 	if incident.get("kind", "") == SPILL:

@@ -2,7 +2,8 @@ class_name TestBuildMenuSession
 extends GdUnitTestSuite
 ## Build mode (decision build-mode-pauses-the-game-while-a-build-tray-is-open-
 ## closin): a tray open or a tool picked pauses the sim; closing it gives the
-## clock back as the player had it and clears the undo history. Space or a
+## clock back as the player had it; the undo history clears on the next tick
+## (test_build_undo_after_esc.gd covers Esc then Ctrl+Z). Space or a
 ## speed key while building ends it, and the Staff panel is not build mode.
 ## The clock is taken on the session's next sync(), which the tests call.
 
@@ -130,13 +131,14 @@ func test_switching_category_or_tool_stays_in_one_build_mode() -> void:
 	assert_int(_clock.speed).is_equal(2)
 
 
-func test_closing_build_mode_clears_the_undo_history() -> void:
+func test_closing_build_mode_clears_the_undo_history_on_the_next_tick() -> void:
 	_menu.press_category(STRUCTURE)
 	assert_bool(_paint(Vector2i(1, 1)).ok).is_true()
 	assert_bool(_paint(Vector2i(2, 1)).ok).is_true()
 	assert_int(_steps()).is_equal(2)
 	_port.push_input(_key(KEY_ESCAPE))
-	print("history after closing: %d steps" % _steps())
+	assert_int(_steps()).is_equal(2)
+	_clock.advance(SimClock.STEP)
 	assert_int(_steps()).is_equal(0)
 
 
@@ -149,10 +151,20 @@ func test_undo_works_inside_build_mode() -> void:
 	assert_int(_mode.grid.floor_at(Vector2i(1, 1))).is_equal(BuildGrid.FLOOR_NONE)
 
 
-func test_ctrl_z_outside_build_mode_changes_nothing() -> void:
+func test_ctrl_z_after_esc_undoes_the_last_build_until_a_tick_runs() -> void:
 	_menu.press_category(STRUCTURE)
 	assert_bool(_paint(Vector2i(1, 1)).ok).is_true()
 	_port.push_input(_key(KEY_ESCAPE))
+	_port.push_input(_key(KEY_Z, true))
+	assert_int(_mode.grid.floor_at(Vector2i(1, 1))).is_equal(BuildGrid.FLOOR_NONE)
+	assert_str(_mode.status_text()).contains(UndoStack.UNDONE)
+
+
+func test_ctrl_z_after_esc_and_a_tick_changes_nothing() -> void:
+	_menu.press_category(STRUCTURE)
+	assert_bool(_paint(Vector2i(1, 1)).ok).is_true()
+	_port.push_input(_key(KEY_ESCAPE))
+	_clock.advance(SimClock.STEP)
 	_port.push_input(_key(KEY_Z, true))
 	assert_int(_mode.grid.floor_at(Vector2i(1, 1))).is_not_equal(BuildGrid.FLOOR_NONE)
 	assert_str(_mode.status_text()).contains(UndoStack.NOTHING_TO_UNDO)
@@ -195,12 +207,14 @@ func test_a_speed_key_in_a_game_paused_before_ends_build_mode() -> void:
 	assert_bool(_clock.paused).is_false()
 
 
-func test_ending_by_the_clock_clears_the_undo_history() -> void:
+func test_ending_by_the_clock_clears_the_undo_history_on_the_next_tick() -> void:
 	_menu.press_category(STRUCTURE)
 	_sync()
 	assert_bool(_paint(Vector2i(1, 1)).ok).is_true()
 	_clock.set_paused(false)
 	_sync()
+	assert_int(_steps()).is_equal(1)
+	_clock.advance(SimClock.STEP)
 	assert_int(_steps()).is_equal(0)
 
 

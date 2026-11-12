@@ -403,6 +403,7 @@ func _ready() -> void:
 	if finances != null:
 		finances.wallet.changed.connect(_on_balance_changed)
 	_history.watch(grid, wallet())
+	_history.invalidated.connect(_landside_placement.clear_undo)
 	add_child(templates)
 	add_child(room_mover)
 	set_tool(tool)
