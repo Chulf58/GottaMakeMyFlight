@@ -411,6 +411,25 @@ func _settle_built_selection() -> void:
 		_built.prune(build_mode.grid, build_mode.landside_placement())
 
 
+## Esc with a card open: drops the selected built item and the followed passenger
+## or vehicle, lets the camera go and returns true. False when nothing is selected,
+## and Esc then opens the game menu.
+func _close_selection() -> bool:
+	var vehicle := landside_views != null and landside_views.selected_id != 0
+	var passenger := views != null and views.selected_id != 0
+	if not (vehicle or passenger or _built.is_selected()):
+		return false
+	if landside_views != null:
+		landside_views.select(0)
+	if views != null:
+		views.selected_id = 0
+	_built.clear()
+	_reveal_frames = 0
+	if camera != null:
+		camera.stop_follow()
+	return true
+
+
 ## Space toggles the pause; Shift+1/2/3 set the speed. These run before
 ## BuildMode's unhandled input, so Shift+1 never also picks the Floor tool.
 ## A held key's repeats are swallowed without acting again.
@@ -634,6 +653,7 @@ func _wire_dialog_gates() -> void:
 	_game_menu = get_node_or_null("../GameMenu") as GameMenu
 	if _game_menu != null:
 		_game_menu.dialog_changed.connect(_gate_camera)
+		_game_menu.esc_closes = _close_selection
 	var incident_panel := get_node_or_null("../IncidentPanel") as IncidentPanel
 	if incident_panel != null:
 		incident_panel.dialog_changed.connect(_gate_camera)
