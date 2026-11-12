@@ -6,7 +6,12 @@ extends Control
 ## drawn from the FlightSim's contracts and occurrences. Row text is
 ## DepartureList's ("07:38  Oslo  Gotta Air  Boarding"), except that today's next departing
 ## flight (the earliest whose doors have not closed) shows "doors close 10:30",
-## the game-clock time its doors close, in place of its status word (decision
+## the game-clock time its doors close, in place of its status word. Each row
+## is two lines (decision departures-list-row-shows-the-airline-on-a-second-
+## line, user-ruled 2026-11-12): line 1 has the time, the destination and the
+## Gate and End buttons; line 2, small grey text (HudHint), has the airline's
+## full name, never trimmed, then the status word; the "doors close" caption
+## goes under line 2 (decision
 ## flight-panel-the-next-departing-flight-s-row-shows-a-doors-c, moved here by
 ## top-right-clock-panel-slims-to-day-time-and-speed-flight-row). Each day lists at most
 ## MAX_ROWS_PER_DAY rows, then "+n more"; a day with none says "None", and
@@ -150,9 +155,12 @@ static func _day_entries(
 				{
 					"kind": "row",
 					"text": DepartureList.doors_line(row) if is_next else row["line"],
-					# The row's own line; the doors time of the next flight is
-					# drawn under it, where the narrow list has room for it.
-					"title": row["base"] if is_next else row["line"],
+					# Line 1 is the time and destination; line 2 the airline and the
+					# status word. The doors time of the next flight replaces the
+					# status word and is drawn under line 2.
+					"head": row["head"],
+					"airline": row["airline"],
+					"status": "" if is_next else row["status"],
 					"doors": DepartureList.doors_text(row) if is_next else "",
 					"contract": row["contract"],
 					"day": day,
@@ -340,7 +348,7 @@ func _open_row_live() -> bool:
 func _add_row(entry: Dictionary) -> void:
 	var row := HBoxContainer.new()
 	var label := Label.new()
-	label.text = entry["title"]
+	label.text = entry["head"]
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
@@ -368,6 +376,17 @@ func _add_row(entry: Dictionary) -> void:
 	_compact(button)
 	if end_btn != null:
 		_compact(end_btn)
+	var second: String = entry["airline"]
+	if entry["status"] != "":
+		second += "  " + entry["status"] if second != "" else entry["status"]
+	if second != "":
+		var airline := Label.new()
+		airline.name = "Airline_%s" % key if key != "" else "Airline"
+		airline.text = second
+		airline.theme_type_variation = &"HudHint"
+		airline.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		airline.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_rows.add_child(airline)
 	if entry["doors"] != "":
 		var doors := Label.new()
 		doors.name = "DoorsClose"
