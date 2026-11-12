@@ -78,6 +78,8 @@ func _put_in_records() -> void:
 		"max_full_queue": 0,
 		"pass_money": 77,
 		"fail_half_stars": 3,
+		"seen_messes": 0,
+		"seen_full_queue": 0,
 	}
 	var favour := _record_data(_favour, IncidentCatalogue.FAVOUR)
 	favour["state"] = IncidentCatalogue.OFFERED
@@ -191,3 +193,37 @@ func test_a_declined_offer_after_a_load_changes_nothing() -> void:
 	assert_str(_record(_favour)["state"]).is_equal(IncidentCatalogue.DECLINED)
 	assert_int(_sim.wallet.balance).is_equal(before)
 	assert_int(_sim.booking_override_of(_flight)).is_equal(0)
+
+
+## The visit's counts are saved with the plan, so the failure card after a load
+## names the same breach: the one mess against a limit of none, and no queue.
+func test_a_failed_visit_keeps_its_counts_through_a_save_and_names_only_the_breach() -> void:
+	_put_in_records()
+	# The visit is due now, so the penalty is dated at the clock (a save refuses a
+	# rating adjustment from a tick the clock has not reached).
+	var data := _director.to_snapshot()
+	for saved: Dictionary in data["incidents"]:
+		if saved["id"] == _inspector:
+			saved["plan"]["visit_tick"] = _clock.tick
+			saved["shown"] = true
+	assert_bool(_director.from_snapshot(data)).is_true()
+	_director.on_tick(_clock.tick)
+	assert_str(_record(_inspector)["outcome"]).is_equal(IncidentMajors.FAILED)
+	assert_bool(_record(_inspector)["shown"]).is_false()
+	assert_int(_record(_inspector)["plan"]["seen_messes"]).is_equal(1)
+	assert_int(_record(_inspector)["plan"]["seen_full_queue"]).is_equal(0)
+	assert_bool(_save.save_to_file(_path)).is_true()
+	assert_bool(_save.load_from_file(_path)).is_true()
+	var plan: Dictionary = _record(_inspector)["plan"]
+	assert_int(plan["seen_messes"]).is_equal(1)
+	assert_int(plan["seen_full_queue"]).is_equal(0)
+	var rail := _main.get_tree().get_first_node_in_group(AlertStack.GROUP) as AlertStack
+	var card := rail.notice_card(IncidentCards.key_of({"id": _inspector}))
+	assert_object(card).is_not_null()
+	var parts := PackedStringArray()
+	for label in card.find_children("*", "Label", true, false):
+		parts.append((label as Label).text)
+	var text := "\n".join(parts)
+	print(text)
+	assert_str(text).contains("1 mess on the floor (none allowed)")
+	assert_str(text).not_contains("queue")

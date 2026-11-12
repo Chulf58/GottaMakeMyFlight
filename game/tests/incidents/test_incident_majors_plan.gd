@@ -15,6 +15,8 @@ const INSPECTOR_PLAN := {
 	"max_full_queue": 0,
 	"pass_money": 77,
 	"fail_half_stars": 3,
+	"seen_messes": 0,
+	"seen_full_queue": 0,
 }
 const VIP_PLAN := {
 	"flight": VIP_FLIGHT,

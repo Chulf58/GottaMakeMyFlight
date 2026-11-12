@@ -47,6 +47,16 @@ const VIP_NEUTRAL_RESULT := (
 )
 const VIP_MISSED_RESULT := "Your rating drops by {penalty}."
 
+## The result cards of the inspector's visit: the title and the words for each
+## outcome (IncidentMajors.PASSED, FAILED).
+const INSPECTOR_PASSED_TITLE := "The inspector was happy"
+const INSPECTOR_FAILED_TITLE := "The inspector was not happy"
+const INSPECTOR_PASSED_RESULT := "You earn {bonus} money."
+const INSPECTOR_FAILED_RESULT := "The inspector found {found}. Your rating drops by {penalty}."
+## The breaches a failed visit names, each with the count seen and the limit.
+const INSPECTOR_MESSES_FOUND := "{seen} on the floor ({allowed} allowed)"
+const INSPECTOR_QUEUE_FOUND := "{seen} stuck in a full queue ({allowed} allowed)"
+
 
 ## The unfilled words of a major's panel: {"title", "body"} and, for an offer,
 ## {"reward", "failure"}. {} for any other kind.
@@ -134,6 +144,52 @@ static func vip_result(incident: Dictionary) -> Dictionary:
 		_:
 			return {}
 	return fill(words, incident, incident["fire_tick"])
+
+
+## The result card of a finished inspector visit, {"title", "detail"}, filled
+## from its plan; {} for an incident that is not an inspector or has no result.
+static func inspector_result(incident: Dictionary) -> Dictionary:
+	if incident.get("kind", "") != IncidentCatalogue.INSPECTOR:
+		return {}
+	var words := {}
+	match incident.get("outcome", ""):
+		IncidentMajors.PASSED:
+			words = {"title": INSPECTOR_PASSED_TITLE, "detail": INSPECTOR_PASSED_RESULT}
+		IncidentMajors.FAILED:
+			words = {"title": INSPECTOR_FAILED_TITLE, "detail": INSPECTOR_FAILED_RESULT}
+		_:
+			return {}
+	var out := fill(words, incident, incident["fire_tick"])
+	if incident["outcome"] == IncidentMajors.FAILED:
+		out["detail"] = out["detail"].format({"found": _inspector_found(incident["plan"])})
+	return out
+
+
+## The rules a failed visit broke, in words: "4 messes on the floor (2 allowed)",
+## "3 passengers stuck in a full queue (none allowed)" or both joined by "and".
+## A count within its limit is not named.
+static func _inspector_found(plan: Dictionary) -> String:
+	var parts := PackedStringArray()
+	if plan["seen_messes"] > plan["max_messes"]:
+		var seen := _counted(plan["seen_messes"], "mess", "messes")
+		parts.append(
+			INSPECTOR_MESSES_FOUND.format({"seen": seen, "allowed": _limit(plan, "max_messes")})
+		)
+	if plan["seen_full_queue"] > plan["max_full_queue"]:
+		var seen := _counted(plan["seen_full_queue"], "passenger", "passengers")
+		parts.append(
+			INSPECTOR_QUEUE_FOUND.format({"seen": seen, "allowed": _limit(plan, "max_full_queue")})
+		)
+	return " and ".join(parts)
+
+
+static func _counted(count: int, one: String, many: String) -> String:
+	return "%d %s" % [count, one if count == 1 else many]
+
+
+## A plan limit in words: "none" for 0.
+static func _limit(plan: Dictionary, key: String) -> String:
+	return "none" if plan[key] == 0 else str(plan[key])
 
 
 ## "today's", "tomorrow's" or "day N's" for a flight leaving at `departs`, seen
