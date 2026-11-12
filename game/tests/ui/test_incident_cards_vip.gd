@@ -1,7 +1,8 @@
 class_name TestIncidentCardsVip
 extends MajorTestBase
 ## The result cards of a VIP (IncidentCards, board 3717fc7d): every outcome of
-## an accepted VIP posts exactly one coral card on the rail with the plan's
+## an accepted VIP posts exactly one rail card (green when the VIP made the
+## flight, coral when they missed it) with the plan's
 ## numbers (bonus, made without the bonus, missed), no pause, and the card
 ## comes back when the rail resets or the director loads. A VIP whose flight
 ## is dropped posts none.

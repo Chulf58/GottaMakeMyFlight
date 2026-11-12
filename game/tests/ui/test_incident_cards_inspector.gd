@@ -1,8 +1,8 @@
 class_name TestIncidentCardsInspector
 extends MajorTestBase
 ## The result cards of the inspector's visit (IncidentCards, board a392ed0a):
-## a passed visit posts one coral card on the rail that names the reward, a
-## failed visit posts one that names only the rule it broke (the messes, the
+## a passed visit posts one green card on the rail that names the reward, a
+## failed visit posts one coral card that names only the rule it broke (the messes, the
 ## full queue, or both) with the count seen and the limit allowed, and the
 ## rating drop. All numbers come from the incident's saved plan. The card
 ## comes back when the rail resets or the director loads and is never posted
