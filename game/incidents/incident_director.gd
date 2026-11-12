@@ -180,6 +180,22 @@ func active_incidents() -> Array[Dictionary]:
 	return out
 
 
+## Clears `into` and fills it with the ids of the passengers an accepted VIP
+## incident marked (plan "target", not 0), as keys with the value true. A read
+## for views on every tick: it copies no incident (VipMarker).
+func vip_targets(into: Dictionary) -> void:
+	into.clear()
+	for incident in _incidents:
+		if (
+			incident["kind"] != IncidentCatalogue.VIP
+			or incident["state"] != IncidentCatalogue.ACCEPTED
+		):
+			continue
+		var target: int = incident["plan"].get("target", 0)
+		if target != 0:
+			into[target] = true
+
+
 func last_rolled_day() -> int:
 	return _last_rolled_day
 
