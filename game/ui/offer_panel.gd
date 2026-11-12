@@ -532,10 +532,22 @@ static func _post(rail: AlertStack, key: StringName, title: String, detail: Stri
 ## A rail card in the theme's HudCardCoral look (coral means a problem, decision
 ## 0b50e074): a title over the words, RAIL_W wide like the other cards.
 static func coral_card(key: StringName, title: String, detail: String) -> PanelContainer:
+	return _rail_card(&"HudCardCoral", key, title, detail)
+
+
+## The same card in the theme's HudCardGreen look, the flight result card's
+## (green means good news, decision 0b50e074).
+static func green_card(key: StringName, title: String, detail: String) -> PanelContainer:
+	return _rail_card(&"HudCardGreen", key, title, detail)
+
+
+static func _rail_card(
+	variation: StringName, key: StringName, title: String, detail: String
+) -> PanelContainer:
 	var card := PanelContainer.new()
 	card.name = "OfferNotice_%s" % key
 	card.theme = BuildMenu.HUD_THEME
-	card.theme_type_variation = &"HudCardCoral"
+	card.theme_type_variation = variation
 	card.custom_minimum_size = Vector2(HudLayout.RAIL_W, 0.0)
 	var column := VBoxContainer.new()
 	column.mouse_filter = Control.MOUSE_FILTER_IGNORE

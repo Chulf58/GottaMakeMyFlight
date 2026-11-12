@@ -1,8 +1,8 @@
 class_name TestIncidentCardsInspector
 extends MajorTestBase
 ## The result cards of the inspector's visit (IncidentCards, board a392ed0a):
-## a passed visit posts one coral card on the rail that names the reward, a
-## failed visit posts one that names only the rule it broke (the messes, the
+## a passed visit posts one green card on the rail that names the reward, a
+## failed visit posts one coral card that names only the rule it broke (the messes, the
 ## full queue, or both) with the count seen and the limit allowed, and the
 ## rating drop. All numbers come from the incident's saved plan. The card
 ## comes back when the rail resets or the director loads and is never posted
@@ -173,3 +173,24 @@ func test_an_inspector_still_waiting_posts_no_card() -> void:
 	_rail.reset()
 	_director.restored.emit()
 	assert_object(_rail.notice_card(IncidentCards.key_of({"id": id}))).is_null()
+
+
+## Good news is a green rail card (the flight result card's look), a failed
+## visit a coral one (decision hud-grid-and-rails-one-spacing-grid-centred-
+## top-row-right-ra, colour meanings per 0b50e074).
+func test_a_passed_visit_posts_a_green_card() -> void:
+	var id := _announced_inspector()
+	_visit(id)
+	assert_str(_record(id)["outcome"]).is_equal(IncidentMajors.PASSED)
+	var card := _rail.notice_card(IncidentCards.key_of({"id": id})) as PanelContainer
+	assert_str(card.theme_type_variation).is_equal("HudCardGreen")
+	assert_bool(card.has_theme_stylebox_override("panel")).is_false()
+
+
+func test_a_failed_visit_posts_a_coral_card() -> void:
+	var id := _announced_inspector()
+	_add_messes(MAX_MESSES + 1)
+	_visit(id)
+	assert_str(_record(id)["outcome"]).is_equal(IncidentMajors.FAILED)
+	var card := _rail.notice_card(IncidentCards.key_of({"id": id})) as PanelContainer
+	assert_str(card.theme_type_variation).is_equal("HudCardCoral")
