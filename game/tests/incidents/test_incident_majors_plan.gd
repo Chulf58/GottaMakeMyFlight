@@ -55,7 +55,7 @@ func _put(kind: String, state: String, plan: Dictionary) -> int:
 
 func test_an_inspector_card_and_visit_follow_the_plan_not_the_tuning() -> void:
 	var id := _put(IncidentCatalogue.INSPECTOR, IncidentCatalogue.ANNOUNCED, INSPECTOR_PLAN)
-	var copy := IncidentCopy.fill(IncidentCatalogue.panel_copy("inspector"), _record(id))
+	var copy := IncidentCopy.fill(IncidentCatalogue.panel_copy("inspector"), _record(id), 0)
 	var text: String = copy["body"]
 	print(text)
 	assert_str(text).contains("77 money")
@@ -87,7 +87,7 @@ func test_an_inspector_pass_pays_the_money_in_the_plan() -> void:
 
 func test_a_vip_card_and_outcome_follow_the_plan_not_the_tuning() -> void:
 	var offer := _put(IncidentCatalogue.VIP, IncidentCatalogue.ACCEPTED, VIP_PLAN)
-	var copy := IncidentCopy.fill(IncidentCatalogue.panel_copy("vip"), _record(offer))
+	var copy := IncidentCopy.fill(IncidentCatalogue.panel_copy("vip"), _record(offer), 0)
 	print(copy)
 	assert_str(copy["reward"]).contains("123 money")
 	assert_str(copy["failure"]).contains("1.5 stars")

@@ -18,8 +18,9 @@ func _ready() -> void:
 
 
 ## Keeps a scheduled record of `kind` (KIND, the made-up major, by default)
-## with the saved `plan` it would have after its fire, and returns its id.
-func add_scheduled(kind := KIND, plan := {}) -> int:
+## with the saved `plan` it would have after its fire, fired at `fire_tick`, and
+## returns its id.
+func add_scheduled(kind := KIND, plan := {}, fire_tick := 0) -> int:
 	var id := _next_id
 	_next_id += 1
 	(
@@ -30,7 +31,7 @@ func add_scheduled(kind := KIND, plan := {}) -> int:
 				"kind": kind,
 				"roll_day": 1,
 				"state": IncidentCatalogue.SCHEDULED,
-				"fire_tick": 0,
+				"fire_tick": fire_tick,
 				"cell": IncidentSnapshot.NO_CELL,
 				"mess_id": 0,
 				"place": "",
