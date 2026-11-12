@@ -13,9 +13,9 @@ extends RefCounted
 ## "another_gate_helps": bool}. A gate clash does not prove that another gate
 ## would help (FlightSim skips the taxi plan when the gate clashes), so for a
 ## gate blocker the assignment runs again with the gate overlap ignored, at the
-## stands the airport has now and at one spare stand east of them (FlightSim.
-## trial_assignment): another gate helps when the runway and lane would then
-## take the flight.
+## stands the airport has now and at one spare stand the player could build
+## (FlightSim.spare_stand_source, SpareStand): another gate helps when the
+## runway and lane would then take the flight.
 
 ## The card's fit line for each kind of answer.
 const FITS_TEXT := "Fits a free gate at this time"

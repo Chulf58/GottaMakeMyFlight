@@ -175,6 +175,11 @@ var gate_source := Callable()
 ## largest plane class it holds} for the gates of gate_source (GateDesks sets
 ## it). Unset: FlightGround.fallback() for each gate.
 var stand_source := Callable()
+## Called as spare_stand_source(plane_class) for the stand one more gate could
+## have for that class (StandPlacement stand), {} when the player could build
+## none (GateDesks sets it from the build grid and SpareStand). Unset (a sim
+## with no grid): a stand FlightGround.FALLBACK_SPACING_M east of the eastmost.
+var spare_stand_source := Callable()
 ## The airport's runway. Its size decides the plane classes a contract may have
 ## (accept_problem) and, through OfferDesk, the classes the offer board draws.
 ## SaveGame saves it as the "runway" part.
@@ -1016,7 +1021,7 @@ func _assignment(
 		return _assigned("", QUIET_NIGHT_TEXT, night, BLOCKER_NIGHT)
 	var grounds := gate_grounds()
 	if ignore_gate:
-		grounds = _with_spare_gate(grounds)
+		grounds = _with_spare_gate(grounds, terms["plane_size"])
 	var running: Array[Dictionary] = []
 	running.append_array(_contracts)
 	running.append_array(extra)
@@ -1046,24 +1051,33 @@ func _assignment(
 	return _assigned("", "no gate takes a %s plane" % terms["plane_size"], {}, BLOCKER_STAND)
 
 
-## `grounds` with one spare gate added: the first free letter, on a stand
-## FlightGround.FALLBACK_SPACING_M east of the eastmost stand, taking any class.
-## The run that ignores gate overlap tries it as well, so a flight that meets
-## only the planes parked at today's stands can still be told another gate
-## would help; the runway and the lane it shares stay booked as they are. Not
-## guaranteed: that the player could place a stand there.
-static func _with_spare_gate(grounds: Dictionary) -> Dictionary:
-	var east: Dictionary = {}
-	for gate_id: String in grounds:
-		var stand: Dictionary = grounds[gate_id]["stand"]
-		if east.is_empty() or float(stand["x"]) > float(east["x"]):
-			east = stand
+## `grounds` with one spare gate added: the first free letter, on the stand
+## spare_stand_source gives for `plane_class` (none: grounds as they are), or
+## with no source FlightGround.FALLBACK_SPACING_M east of the eastmost stand,
+## taking any class. The run that ignores gate overlap tries it as well, so a
+## flight that meets only the planes parked at today's stands can still be told
+## another gate would help; the runway and the lane it shares stay booked as
+## they are. Not guaranteed: that the player can afford the gate, or place an
+## exit door at the source's stand.
+func _with_spare_gate(grounds: Dictionary, plane_class: String) -> Dictionary:
+	var spare: Dictionary = {}
+	var max_class := PlaneClasses.LARGE
+	if spare_stand_source.is_valid():
+		spare = spare_stand_source.call(plane_class)
+		max_class = plane_class
+	else:
+		for gate_id: String in grounds:
+			var stand: Dictionary = grounds[gate_id]["stand"]
+			if spare.is_empty() or float(stand["x"]) > float(spare["x"]):
+				spare = stand.duplicate()
+		if not spare.is_empty():
+			spare["x"] = float(spare["x"]) + FlightGround.FALLBACK_SPACING_M
 	var out := grounds.duplicate()
+	if spare.is_empty():
+		return out
 	for letter in FlightGround.LETTERS:
-		if not grounds.has(letter) and not east.is_empty():
-			var spare := east.duplicate()
-			spare["x"] = float(east["x"]) + FlightGround.FALLBACK_SPACING_M
-			out[letter] = {"stand": spare, "max_class": PlaneClasses.LARGE}
+		if not grounds.has(letter):
+			out[letter] = {"stand": spare, "max_class": max_class}
 			break
 	return out
 
