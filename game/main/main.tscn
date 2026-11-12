@@ -1,4 +1,4 @@
-[gd_scene load_steps=49 format=3]
+[gd_scene load_steps=50 format=3]
 
 [ext_resource type="PackedScene" path="res://camera/tycoon_camera.tscn" id="1_cam"]
 [ext_resource type="Script" path="res://core/sim_clock.gd" id="2_clock"]
@@ -46,6 +46,7 @@
 [ext_resource type="Script" path="res://incidents/incident_director.gd" id="47_incidents"]
 [ext_resource type="Script" path="res://ui/incident_cards.gd" id="48_incidentcards"]
 [ext_resource type="Script" path="res://ui/incident_panel.gd" id="49_incidentpanel"]
+[ext_resource type="Script" path="res://ui/game_menu.gd" id="50_gamemenu"]
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_ground"]
 size = Vector2(2400, 2400)
@@ -377,6 +378,14 @@ director = NodePath("../IncidentDirector")
 script = ExtResource("49_incidentpanel")
 director = NodePath("../IncidentDirector")
 clock = NodePath("../SimClock")
+save_game = NodePath("../SaveGame")
+
+[node name="GameMenu" type="Node" parent="." node_paths=PackedStringArray("director", "clock", "build_menu", "build_mode", "save_game")]
+script = ExtResource("50_gamemenu")
+director = NodePath("../IncidentDirector")
+clock = NodePath("../SimClock")
+build_menu = NodePath("../BuildMenu")
+build_mode = NodePath("../BuildMode")
 save_game = NodePath("../SaveGame")
 
 [node name="OfferPanel" type="CanvasLayer" parent="." node_paths=PackedStringArray("desk", "flights", "clock", "build_mode", "save_game")]
