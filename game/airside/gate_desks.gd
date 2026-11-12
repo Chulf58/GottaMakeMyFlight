@@ -104,6 +104,10 @@ var classes: Dictionary = {}
 var stands: Dictionary = {}
 ## "x|wall_z|class" -> the envelope's cells, which only the stand decides.
 var _envelope_cells: Dictionary = {}
+## Plane class -> spare_stand()'s answer, kept until the next refresh() or a
+## change of owned land: the offer fit asks for it dozens of times a night.
+var _spare_stands: Dictionary = {}
+var _spare_land := ""
 
 
 func _ready() -> void:
@@ -119,6 +123,7 @@ func bind(on_grid: BuildGrid, on_flights: FlightSim) -> void:
 	flights = on_flights
 	flights.gate_source = gate_ids
 	flights.stand_source = gate_grounds
+	flights.spare_stand_source = spare_stand
 	grid.graph_changed.connect(_on_graph_changed)
 	grid.edit_applied.connect(_on_edit_applied)
 	refresh()
@@ -154,6 +159,7 @@ func refresh() -> void:
 	bindings.assign(links.filter(func(link: Dictionary) -> bool: return link["gate"] != ""))
 	classes = {}
 	stands = {}
+	_spare_stands.clear()
 	for binding in bindings:
 		var stand := StandPlacement.for_exit(grid, binding["exit"])
 		stands[binding["gate"]] = stand
@@ -167,6 +173,21 @@ func gate_grounds() -> Dictionary:
 	for gate: String in stands:
 		out[gate] = {"stand": stands[gate], "max_class": classes[gate]}
 	return out
+
+
+## The stand of `plane_class` one more gate could have on the grid as it is, or
+## {} (FlightSim.spare_stand_source; SpareStand has the rules).
+func spare_stand(plane_class: String) -> Dictionary:
+	var land: LandPlots = (grid as SiteGrid).land if grid is SiteGrid else null
+	var owned := str(land.owned_plots()) if land != null else ""
+	if owned != _spare_land:
+		_spare_stands.clear()
+		_spare_land = owned
+	if not _spare_stands.has(plane_class):
+		var taken: Array[Dictionary] = []
+		taken.assign(stands.values())
+		_spare_stands[plane_class] = SpareStand.find(grid, taken, plane_class)
+	return _spare_stands[plane_class]
 
 
 ## The largest plane class gate `gate`'s stand holds now, or "" (also for no
