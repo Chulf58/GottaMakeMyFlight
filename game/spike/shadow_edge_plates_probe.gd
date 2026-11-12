@@ -245,6 +245,11 @@ func _boot() -> void:
 	hud.alert_settings_path = SETTINGS
 	hud.departures_settings_path = SETTINGS
 	(_main.get_node("MoodOverlay") as MoodOverlay).settings_path = SETTINGS
+	# --angles calls set_angle_step(), which saves the angle; keep it, and the
+	# need-icon toggle, off the player's settings file too (anti-pattern
+	# 1639342a). SETTINGS is removed at the end of the run.
+	(_main.get_node("TycoonCamera") as TycoonCamera).settings_path = SETTINGS
+	_main.get_node("PassengerViews").need_icons_toggle.settings_path = SETTINGS
 	root.add_child(_main)
 	_clock.set_paused(true)
 	_cam = _main.get_node("TycoonCamera") as TycoonCamera
