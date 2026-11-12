@@ -19,9 +19,12 @@ var _board: DeparturesBoard
 var _rows: Control
 
 
-func before_test() -> void:
-	_sim = auto_free(FlightSim.new()) as FlightSim
-	_clock = auto_free(SimClock.new()) as SimClock
+## The world and the board are built once for the file; no case changes them
+## (the status word cases, which move the clock, are in
+## test_departures_board_airline_status.gd).
+func before() -> void:
+	_sim = FlightSim.new()
+	_clock = SimClock.new()
 	_sim.gate_source = func() -> Array[String]: return GATES
 	_sim.open_airport()
 	_accept("X", 600, "Oslo", LONGEST)
@@ -36,10 +39,13 @@ func before_test() -> void:
 	_rows = _board.find_child("Rows", true, false)
 
 
-func after_test() -> void:
+func after() -> void:
 	var path := _board.settings_path
 	_board.free()
+	_sim.free()
+	_clock.free()
 	DirAccess.remove_absolute(path)
+	DirAccess.remove_absolute(path + ".tmp")
 
 
 func _accept(id: String, minute: int, destination: String, airline: String) -> void:
