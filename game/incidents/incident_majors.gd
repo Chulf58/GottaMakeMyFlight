@@ -11,7 +11,8 @@ extends RefCounted
 ## - Inspector (announced on day D): the visit lands inside the busy window of
 ##   day D+1. At the visit tick it counts the messes on the floor and the
 ##   passengers stuck in a full queue; within IncidentTuning's limits it pays
-##   INCIDENT money (passed), else it adds a rating penalty (failed).
+##   INCIDENT money (passed), else it adds a rating penalty (failed). Either
+##   result is told on a card (the director's inspector_resolved).
 ## - Holiday rush (announced on day D): extra passengers are booked on up to
 ##   RUSH_MAX_FLIGHTS of day D+1's flights not yet issued, RUSH_EXTRA each,
 ##   capped by the plane class maximum (PassengerSim.set_booking_override). The
@@ -266,9 +267,10 @@ func _visit(incident: Dictionary, tick: int) -> void:
 	if messes <= plan["max_messes"] and full <= plan["max_full_queue"]:
 		_pay(plan["pass_money"])
 		_done(incident, PASSED)
-		return
-	_penalize(incident, tick, plan["fail_half_stars"])
-	_done(incident, FAILED)
+	else:
+		_penalize(incident, tick, plan["fail_half_stars"])
+		_done(incident, FAILED)
+	_director.inspector_resolved.emit(incident.duplicate(true))
 
 
 func _done(incident: Dictionary, outcome: String) -> void:

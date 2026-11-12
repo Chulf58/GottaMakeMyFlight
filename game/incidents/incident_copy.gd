@@ -47,6 +47,16 @@ const VIP_NEUTRAL_RESULT := (
 )
 const VIP_MISSED_RESULT := "Your rating drops by {penalty}."
 
+## The result cards of the inspector's visit: the title and the words for each
+## outcome (IncidentMajors.PASSED, FAILED).
+const INSPECTOR_PASSED_TITLE := "The inspector was happy"
+const INSPECTOR_FAILED_TITLE := "The inspector was not happy"
+const INSPECTOR_PASSED_RESULT := "You earn {bonus} money."
+const INSPECTOR_FAILED_RESULT := (
+	"The inspector found more than {max_messes} messes on the floor or passengers "
+	+ "stuck in a full queue. Your rating drops by {penalty}."
+)
+
 
 ## The unfilled words of a major's panel: {"title", "body"} and, for an offer,
 ## {"reward", "failure"}. {} for any other kind.
@@ -131,6 +141,22 @@ static func vip_result(incident: Dictionary) -> Dictionary:
 			words = {"title": VIP_MADE_TITLE, "detail": VIP_NEUTRAL_RESULT}
 		IncidentMajors.PENALTY:
 			words = {"title": VIP_MISSED_TITLE, "detail": VIP_MISSED_RESULT}
+		_:
+			return {}
+	return fill(words, incident, incident["fire_tick"])
+
+
+## The result card of a finished inspector visit, {"title", "detail"}, filled
+## from its plan; {} for an incident that is not an inspector or has no result.
+static func inspector_result(incident: Dictionary) -> Dictionary:
+	if incident.get("kind", "") != IncidentCatalogue.INSPECTOR:
+		return {}
+	var words := {}
+	match incident.get("outcome", ""):
+		IncidentMajors.PASSED:
+			words = {"title": INSPECTOR_PASSED_TITLE, "detail": INSPECTOR_PASSED_RESULT}
+		IncidentMajors.FAILED:
+			words = {"title": INSPECTOR_FAILED_TITLE, "detail": INSPECTOR_FAILED_RESULT}
 		_:
 			return {}
 	return fill(words, incident, incident["fire_tick"])
