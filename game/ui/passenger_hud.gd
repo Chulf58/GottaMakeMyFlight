@@ -417,7 +417,8 @@ func _settle_built_selection() -> void:
 func _close_selection() -> bool:
 	var vehicle := landside_views != null and landside_views.selected_id != 0
 	var passenger := views != null and views.selected_id != 0
-	if not (vehicle or passenger or _built.is_selected()):
+	var item := _built.is_selected()
+	if not (vehicle or passenger or item):
 		return false
 	if landside_views != null:
 		landside_views.select(0)
@@ -427,6 +428,9 @@ func _close_selection() -> bool:
 	_reveal_frames = 0
 	if camera != null:
 		camera.stop_follow()
+		# A built item's reveal glide is heading for the card just dismissed.
+		if item:
+			camera.stop_glide()
 	return true
 
 

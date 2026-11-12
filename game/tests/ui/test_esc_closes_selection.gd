@@ -13,6 +13,7 @@ const FLIGHT_ID := "GMF101"
 const STRUCTURE := 0
 
 var _settings_path := SaveTestKit.run_path("esc_selection_alerts")
+var _camera_path := SaveTestKit.run_path("esc_selection_camera")
 var _departures_path := SaveTestKit.run_path("esc_selection_departures")
 
 var _main: Node
@@ -21,6 +22,7 @@ var _mode: BuildMode
 var _sim: PassengerSim
 var _views: PassengerViews
 var _eye: Camera3D
+var _rig: TycoonCamera
 var _inspect: PassengerInspect
 var _menu: GameMenu
 var _clock: SimClock
@@ -36,6 +38,7 @@ func before() -> void:
 	_hud = _main.get_node("PassengerHud")
 	_hud.alert_settings_path = _settings_path
 	_hud.departures_settings_path = _departures_path
+	(_main.get_node("TycoonCamera") as TycoonCamera).settings_path = _camera_path
 	add_child(_main)
 	_mode = _main.get_node("BuildMode")
 	_sim = _main.get_node("PassengerSim")
@@ -43,7 +46,8 @@ func before() -> void:
 	_menu = _main.get_node("GameMenu")
 	_build_menu = _main.get_node("BuildMenu")
 	(_main.get_node("IncidentDirector") as IncidentDirector).set_enabled(false)
-	(_main.get_node("TycoonCamera") as TycoonCamera).set_process(false)
+	_rig = _main.get_node("TycoonCamera")
+	_rig.set_process(false)
 	_eye = _main.get_node("TycoonCamera/Camera3D")
 	_inspect = _hud.find_child("PassengerInspect", true, false) as PassengerInspect
 	_hud.press_starter_terminal()
@@ -55,6 +59,7 @@ func after() -> void:
 	_main.free()
 	DirAccess.remove_absolute(_settings_path)
 	DirAccess.remove_absolute(_departures_path)
+	DirAccess.remove_absolute(_camera_path)
 
 
 func before_test() -> void:
@@ -98,8 +103,9 @@ func _click_world(at: Vector3) -> void:
 	_hud.refresh()
 
 
-func _esc() -> void:
+func _esc(echo := false) -> void:
 	var event := InputEventKey.new()
+	event.echo = echo
 	event.keycode = KEY_ESCAPE
 	event.physical_keycode = KEY_ESCAPE
 	event.pressed = true
@@ -176,3 +182,32 @@ func test_esc_with_a_tray_open_closes_the_tray_and_leaves_the_selected_card() ->
 	assert_bool(_menu.is_open()).is_false()
 	_esc()
 	assert_bool(_menu.is_open()).is_true()
+
+
+func test_a_held_esc_closes_the_card_once_and_its_repeats_open_no_menu() -> void:
+	await _select_desk()
+	_esc(true)
+	assert_int(_selection().kind).is_equal(BuiltSelection.Kind.OBJECT)
+	_esc()
+	assert_int(_selection().kind).is_equal(BuiltSelection.Kind.NONE)
+	_esc(true)
+	_esc(true)
+	assert_bool(_menu.is_open()).is_false()
+	assert_bool(_menu.has_hold()).is_false()
+	# The control: a fresh press still opens it.
+	_esc()
+	assert_bool(_menu.is_open()).is_true()
+	# And a repeat does not close it again.
+	_esc(true)
+	assert_bool(_menu.is_open()).is_true()
+
+
+func test_esc_during_a_reveal_glide_stops_the_camera() -> void:
+	await _select_desk()
+	_rig.position += Vector3(90.0, 0.0, 0.0)
+	_hud._reveal_built()
+	assert_bool(_rig.is_gliding()).is_true()
+	_esc()
+	assert_int(_selection().kind).is_equal(BuiltSelection.Kind.NONE)
+	assert_bool(_rig.is_gliding()).is_false()
+	assert_bool(_rig.is_following()).is_false()

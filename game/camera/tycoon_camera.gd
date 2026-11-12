@@ -269,6 +269,11 @@ func stop_follow() -> void:
 	_follow_target = null
 
 
+## Drops a glide in progress where the camera stands; a follow is left alone.
+func stop_glide() -> void:
+	_gliding = false
+
+
 func is_following() -> bool:
 	return _follow_target != null
 
