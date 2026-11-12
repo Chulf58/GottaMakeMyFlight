@@ -7,10 +7,10 @@ extends Node
 ## IncidentDirector). Esc again, or Resume, closes it.
 ##
 ## Esc belongs to build mode first (decision build-mode-pauses-the-game-while-a-
-## build-tray-is-open-closin): while a tray is open, a tool is picked, a
-## template paste or room move is running, or the room panel is up, the menu
-## leaves the key alone and BuildMode, which handles Esc later in the same
-## input pass, closes the tray as before. The Offers sheet and the runway card
+## build-tray-is-open-closin): while a tray or the Staff card is open, a tool is
+## picked, a template paste or room move is running, or the room panel is up,
+## the menu leaves the key alone and BuildMode, which handles Esc later in the
+## same input pass, closes the tray as before. The Offers sheet and the runway card
 ## sit later in the tree and take their own Esc ahead of this node.
 ##
 ## The menu takes the clock's exclusive turn (clock.holds.take_turn) like the
@@ -181,6 +181,7 @@ func _in_build_mode() -> bool:
 	if build_menu != null:
 		if (
 			build_menu.is_tray_open()
+			or build_menu.staff_open
 			or build_menu.build_session.active
 			or build_menu.room_panel().visible
 		):

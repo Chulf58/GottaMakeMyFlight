@@ -216,6 +216,9 @@ var _game_menu: GameMenu
 ## The camera's input state when the intro opened, restored when it closes.
 var _camera_was_processing := true
 var _camera_was_taking_input := true
+## How many dialogs hold the camera now. A queued dialog opens inside the close
+## of the one ahead of it, before that one says it closed, so two can overlap.
+var _camera_gates := 0
 
 
 func _ready() -> void:
@@ -818,16 +821,25 @@ func _close_intro() -> void:
 ## The camera-input gate. Marking events handled cannot stop TycoonCamera,
 ## which polls held keys in _process, so while the intro is open its _process
 ## (WASD, Q/E, easing) and _unhandled_input (wheel, drags, Home) are switched
-## off, and switched back to what they were when it closes.
+## off, and switched back to what they were when the last one closes. Only the
+## first gate saves the state, so overlapping gates cannot save the gated one.
 func _gate_camera(closed: bool) -> void:
 	if not is_instance_valid(camera):
 		return
 	if closed:
+		_camera_gates += 1
+		if _camera_gates > 1:
+			return
 		_camera_was_processing = camera.is_processing()
 		_camera_was_taking_input = camera.is_processing_unhandled_input()
 		camera.set_process(false)
 		camera.set_process_unhandled_input(false)
 	else:
+		if _camera_gates == 0:
+			return
+		_camera_gates -= 1
+		if _camera_gates > 0:
+			return
 		camera.set_process(_camera_was_processing)
 		camera.set_process_unhandled_input(_camera_was_taking_input)
 

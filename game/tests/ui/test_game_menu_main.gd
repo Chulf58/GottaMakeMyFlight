@@ -19,16 +19,23 @@ var _hud: PassengerHud
 var _build_menu: BuildMenu
 var _camera: Node
 var _shown_before := false
+var _alerts_path := SaveTestKit.run_path("game_menu_alerts")
+var _departures_path := SaveTestKit.run_path("game_menu_departures")
 
 
 func before() -> void:
 	_shown_before = IntroDialogue.shown_this_session
 	IntroDialogue.shown_this_session = false
-	_main = SaveTestKit.boot(self, SEED)
+	_main = load(SaveTestKit.MAIN).instantiate()
+	_hud = _main.get_node("PassengerHud")
+	_hud.alert_settings_path = _alerts_path
+	_hud.departures_settings_path = _departures_path
 	_clock = _main.get_node("SimClock")
+	_clock.seed_rng(SEED)
+	_clock.set_paused(true)
+	add_child(_main)
 	_menu = _main.get_node("GameMenu")
 	_director = _main.get_node("IncidentDirector")
-	_hud = _main.get_node("PassengerHud")
 	_build_menu = _main.get_node("BuildMenu")
 	_camera = _main.get_node("TycoonCamera")
 	_hud.press_starter_terminal()
@@ -38,6 +45,8 @@ func before() -> void:
 func after() -> void:
 	IntroDialogue.shown_this_session = _shown_before
 	_main.free()
+	DirAccess.remove_absolute(_alerts_path)
+	DirAccess.remove_absolute(_departures_path)
 
 
 func before_test() -> void:
@@ -154,3 +163,56 @@ func test_the_hud_holds_the_camera_still_while_the_major_panel_is_open() -> void
 	assert_bool(_camera.is_processing()).is_false()
 	panel.dialog_changed.emit(false)
 	assert_bool(_camera.is_processing()).is_true()
+
+
+## The panel's close frees the turn to a queued dialog, which opens (and says
+## so) before the panel says it closed: the camera must come back after the
+## last of them closes.
+func test_the_camera_comes_back_after_a_queued_dialog_takes_over_from_the_panel() -> void:
+	var panel: IncidentPanel = _main.get_node("IncidentPanel")
+	panel.dialog_changed.emit(true)
+	_menu.open()
+	panel.dialog_changed.emit(false)
+	assert_bool(_menu.is_open()).is_true()
+	assert_bool(_camera.is_processing()).is_false()
+	_menu.press_resume()
+	assert_bool(_camera.is_processing()).is_true()
+	assert_bool(_camera.is_processing_unhandled_input()).is_true()
+
+
+## The same handoff with real dialogs: the menu queued behind the new-game
+## question opens inside the question's close, before the question says so.
+func test_the_camera_comes_back_after_the_menu_takes_over_from_the_question() -> void:
+	assert_bool(_menu.ask_incidents()).is_true()
+	assert_bool(_menu.open()).is_true()
+	assert_bool(_menu.is_open()).is_false()
+	assert_bool(_camera.is_processing()).is_false()
+	_menu.question().decline_button().pressed.emit()
+	assert_bool(_menu.is_open()).is_true()
+	assert_bool(_camera.is_processing()).is_false()
+	_menu.press_resume()
+	assert_bool(_camera.is_processing()).is_true()
+	assert_bool(_camera.is_processing_unhandled_input()).is_true()
+
+
+func test_esc_with_the_staff_card_open_closes_it_and_does_not_open_the_menu() -> void:
+	_build_menu.press_staff()
+	assert_bool(_build_menu.staff_open).is_true()
+	_esc()
+	assert_bool(_build_menu.staff_open).is_false()
+	assert_bool(_menu.is_open()).is_false()
+	assert_bool(_menu.has_hold()).is_false()
+	# The control: with the card closed, the next Esc opens the menu.
+	_esc()
+	assert_bool(_menu.is_open()).is_true()
+
+
+func test_esc_with_remove_picked_drops_it_and_does_not_open_the_menu() -> void:
+	_build_menu.press_category(_build_menu.remove_category())
+	var mode: BuildMode = _main.get_node("BuildMode")
+	assert_int(mode.tool).is_equal(BuildMode.Tool.REMOVE)
+	assert_bool(_build_menu.is_tray_open()).is_false()
+	_esc()
+	assert_int(mode.tool).is_equal(BuildMode.Tool.NONE)
+	assert_bool(_menu.is_open()).is_false()
+	_build_menu.build_session.sync()
