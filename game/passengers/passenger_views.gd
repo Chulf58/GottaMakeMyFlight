@@ -29,6 +29,9 @@ const BUBBLE_HEIGHT := 2.5
 ## captions (user ruling: a kept bubble's text is never covered).
 const BUBBLE_PRIORITY := MissMarkers.CAPTION_PRIORITY + 2
 const PICK_RADIUS_PX := 40.0
+## The drawn body pick_body() reads: a capsule this wide and this tall, in metres.
+const BODY_RADIUS_M := 0.35
+const BODY_HEIGHT_M := 1.7
 
 @export var clock: SimClock
 @export var sim: PassengerSim
@@ -424,6 +427,28 @@ func pick(camera: Camera3D, screen: Vector2) -> int:
 			continue
 		var px := camera.unproject_position(at).distance_to(screen)
 		if px < best_px:
+			best = id
+			best_px = px
+	return best
+
+
+## The passenger whose drawn body is under a screen point, or 0: the nearest
+## within BODY_RADIUS_M of the line from feet to head, projected. Tighter than
+## pick(), for a click that also meets a built item.
+func pick_body(camera: Camera3D, screen: Vector2) -> int:
+	var best := 0
+	var best_px := INF
+	var right := camera.global_basis.x
+	for id in _nodes:
+		var feet: Vector3 = (_nodes[id] as Node3D).position
+		var head := feet + Vector3(0.0, BODY_HEIGHT_M, 0.0)
+		if camera.is_position_behind(feet) or camera.is_position_behind(head):
+			continue
+		var from := camera.unproject_position(feet)
+		var to := camera.unproject_position(head)
+		var radius_px := from.distance_to(camera.unproject_position(feet + right * BODY_RADIUS_M))
+		var px := screen.distance_to(Geometry2D.get_closest_point_to_segment(screen, from, to))
+		if px <= radius_px and px < best_px:
 			best = id
 			best_px = px
 	return best

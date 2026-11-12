@@ -358,8 +358,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		landside_views.select(vehicle)
 	views.selected_id = 0 if vehicle != 0 else views.pick(eye, click.position)
 	_built.clear()
-	if vehicle == 0 and views.selected_id == 0:
+	if vehicle == 0:
 		_pick_built(eye, click.position)
+		if views.selected_id != 0:
+			_settle_passenger_against_item(eye, click.position)
 	_reveal_frames = REVEAL_FRAMES if _built.is_selected() else 0
 	if vehicle != 0:
 		camera.follow(landside_views.follow_anchor)
@@ -397,6 +399,20 @@ func _pick_built(eye: Camera3D, at: Vector2) -> void:
 	var view := build_mode.get_node_or_null("BuildView") as BuildView
 	if view != null:
 		_built.pick(build_mode.grid, view, build_mode.landside_placement(), eye, at)
+
+
+## A click that met both a passenger (within the pick circle) and a built object
+## selects the passenger only when their body is under the cursor; otherwise the
+## object wins, so a queue beside a desk never steals a click on the desk. A room
+## floor does not count: passengers stand on it everywhere, so the circle stands.
+func _settle_passenger_against_item(eye: Camera3D, at: Vector2) -> void:
+	if _built.kind != BuiltSelection.Kind.OBJECT:
+		_built.clear()
+		return
+	var body := views.pick_body(eye, at)
+	if body != 0:
+		_built.clear()
+	views.selected_id = body
 
 
 ## A built item stays selected only while no build interaction owns the clicks
