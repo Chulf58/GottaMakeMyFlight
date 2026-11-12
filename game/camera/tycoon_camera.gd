@@ -80,6 +80,8 @@ var distance: float:
 var _distance := 80.0
 var _follow_target: Node3D
 var _gliding := false
+## Counts the glides begun, so a caller can stop its own glide and no later one.
+var _glide_serial := 0
 var _glide_position := Vector3.ZERO
 var _glide_yaw := NAN
 var _room_target := WHOLE_VIEW
@@ -186,9 +188,11 @@ func zoom(factor: float) -> void:
 
 
 ## Glides the focus to `world_point` (its height is ignored), and the distance
-## to `to_distance` unless that is negative. Cancels any follow.
-func glide_to(world_point: Vector3, to_distance := -1.0) -> void:
+## to `to_distance` unless that is negative. Cancels any follow. Returns the
+## glide's serial, for stop_glide().
+func glide_to(world_point: Vector3, to_distance := -1.0) -> int:
 	_begin_glide(world_point, to_distance, NAN)
+	return _glide_serial
 
 
 ## Glides back to the start view: position, distance and yaw. A framed start
@@ -269,9 +273,11 @@ func stop_follow() -> void:
 	_follow_target = null
 
 
-## Drops a glide in progress where the camera stands; a follow is left alone.
-func stop_glide() -> void:
-	_gliding = false
+## Drops the glide with this serial (from glide_to) where the camera stands.
+## A later glide, a Home press or a pan since then is left alone.
+func stop_glide(serial: int) -> void:
+	if serial == _glide_serial:
+		_gliding = false
 
 
 func is_following() -> bool:
@@ -286,6 +292,7 @@ func _begin_glide(world_point: Vector3, to_distance: float, to_yaw: float) -> vo
 	stop_follow()
 	_at_home = false
 	_gliding = true
+	_glide_serial += 1
 	_glide_position = _clamp_to_bounds(Vector3(world_point.x, 0.0, world_point.z))
 	_glide_yaw = to_yaw
 	if to_distance >= 0.0:

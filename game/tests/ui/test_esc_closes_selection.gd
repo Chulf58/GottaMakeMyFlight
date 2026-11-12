@@ -23,6 +23,7 @@ var _sim: PassengerSim
 var _views: PassengerViews
 var _eye: Camera3D
 var _rig: TycoonCamera
+var _cars: LandsideViews
 var _inspect: PassengerInspect
 var _menu: GameMenu
 var _clock: SimClock
@@ -47,6 +48,7 @@ func before() -> void:
 	_build_menu = _main.get_node("BuildMenu")
 	(_main.get_node("IncidentDirector") as IncidentDirector).set_enabled(false)
 	_rig = _main.get_node("TycoonCamera")
+	_cars = _main.get_node("LandsideViews")
 	_rig.set_process(false)
 	_eye = _main.get_node("TycoonCamera/Camera3D")
 	_inspect = _hud.find_child("PassengerInspect", true, false) as PassengerInspect
@@ -211,3 +213,44 @@ func test_esc_during_a_reveal_glide_stops_the_camera() -> void:
 	assert_int(_selection().kind).is_equal(BuiltSelection.Kind.NONE)
 	assert_bool(_rig.is_gliding()).is_false()
 	assert_bool(_rig.is_following()).is_false()
+
+
+func test_esc_during_a_reveal_glide_leaves_a_later_home_glide_running() -> void:
+	await _select_desk()
+	_rig.position += Vector3(90.0, 0.0, 0.0)
+	_hud._reveal_built()
+	_rig.go_home()
+	assert_bool(_rig.is_gliding()).is_true()
+	_esc()
+	assert_int(_selection().kind).is_equal(BuiltSelection.Kind.NONE)
+	assert_bool(_rig.is_gliding()).is_true()
+	_rig.set_process(true)
+	for i in 600:
+		if not _rig.is_gliding():
+			break
+		await await_idle_frame()
+	_rig.set_process(false)
+	assert_bool(_rig.is_gliding()).is_false()
+	assert_vector(_rig.position).is_equal_approx(_rig.home_position, Vector3.ONE * 0.05)
+	assert_float(_rig.target_distance).is_equal_approx(_rig.home_distance, 0.05)
+
+
+func test_esc_with_a_vehicle_followed_clears_it_and_opens_no_menu() -> void:
+	var land: LandsideSim = _main.get_node("LandsideSim")
+	var id := land.add_vehicle(LandsideVehicle.Kind.CAR, LandsideVehicle.Intent.DROP, [])
+	_cars.sync()
+	_cars.draw()
+	assert_bool(_cars.has_vehicle(id)).is_true()
+	var at := _cars.node_for(id).global_position + Vector3(0.0, 1.0, 0.0)
+	_eye.look_at_from_position(at + Vector3(0.0, 25.0, 12.0), at)
+	await _click_world(at)
+	assert_int(_cars.selected_id).is_equal(id)
+	assert_bool(_rig.is_following()).is_true()
+	_esc()
+	assert_int(_cars.selected_id).is_equal(0)
+	assert_bool(_rig.is_following()).is_false()
+	assert_bool(_menu.is_open()).is_false()
+	assert_bool(_menu.has_hold()).is_false()
+	# The control: the next Esc opens the menu.
+	_esc()
+	assert_bool(_menu.is_open()).is_true()

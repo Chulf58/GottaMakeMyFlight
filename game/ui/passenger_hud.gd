@@ -187,6 +187,8 @@ var _outline := BuiltOutline.new()
 ## Frames until a click that selected a built item decides whether the camera
 ## must pan to show it: the inspect window that opens is laid out a frame late.
 var _reveal_frames := 0
+## The camera serial of the glide _reveal_built() began, so Esc stops that one and no later glide.
+var _reveal_glide := 0
 var _status_label := Label.new()
 var _status := ""
 ## True after a refused debug batch, until the next spawned one: the earlier
@@ -389,7 +391,7 @@ func _reveal_built() -> void:
 		panels
 	)
 	if target != null:
-		camera.glide_to(target)
+		_reveal_glide = camera.glide_to(target)
 
 
 ## Picks the built item under a click that met no vehicle and no passenger.
@@ -430,7 +432,7 @@ func _close_selection() -> bool:
 		camera.stop_follow()
 		# A built item's reveal glide is heading for the card just dismissed.
 		if item:
-			camera.stop_glide()
+			camera.stop_glide(_reveal_glide)
 	return true
 
 

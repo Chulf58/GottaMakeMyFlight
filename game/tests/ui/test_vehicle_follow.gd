@@ -142,17 +142,3 @@ func test_a_followed_vehicle_that_leaves_the_map_ends_the_follow() -> void:
 	assert_int(_cars.selected_id).is_equal(0)
 	assert_bool(_camera.is_following()).is_false()
 	assert_str(_hud.follow_text()).is_equal("")
-
-
-func test_esc_closes_a_followed_vehicle_and_lets_the_camera_go() -> void:
-	var id := _drawn_vehicle()
-	assert_int(id).is_greater(0)
-	var at := _eye.unproject_position(_cars.node_for(id).global_position + Vector3(0.0, 1.0, 0.0))
-	_click(at)
-	assert_int(_cars.selected_id).is_equal(id)
-	assert_bool(_camera.is_following()).is_true()
-	assert_bool(_hud._close_selection()).is_true()
-	assert_int(_cars.selected_id).is_equal(0)
-	assert_bool(_camera.is_following()).is_false()
-	# Nothing left to close: Esc then falls through to the menu.
-	assert_bool(_hud._close_selection()).is_false()
