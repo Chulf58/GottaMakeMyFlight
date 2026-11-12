@@ -4,16 +4,38 @@ extends RefCounted
 ## decided, as plain whole numbers and ids, so a load plays the incident on
 ## exactly. Empty for a minor, for a scheduled major and for a major that was
 ## never held (outcome not_held). Keys by kind:
-##   inspector: window_from, window_to (the visit may land in), visit_tick
+##   inspector: window_from, window_to (the visit may land in), visit_tick, and the
+##              rules it scores by: max_messes, max_full_queue, pass_money,
+##              fail_half_stars
 ##   rush:      flights [{flight, extra, departs}], total, until (tick)
-##   vip:       flight, departs, bonus, target (the marked passenger id, 0
-##              until one is marked)
+##   vip:       flight, departs, bonus, good_mood, miss_half_stars, target (the
+##              marked passenger id, 0 until one is marked)
 ##   favour:    flight, departs, extra, bonus
+## Every number that decides an outcome or a card is here, copied from
+## IncidentTuning when the plan is made, so a later retune changes no incident
+## that already rolled. A rating penalty is 1 to RatingAdjustments.
+## MAX_HALF_STAR_DELTA half stars (penalties only) and a mood is 0 to 100.
+
+## Keys whose value has a range tighter than "0 or more": [least, most].
+const RANGES := {
+	"fail_half_stars": [1, RatingAdjustments.MAX_HALF_STAR_DELTA],
+	"miss_half_stars": [1, RatingAdjustments.MAX_HALF_STAR_DELTA],
+	"good_mood": [0, PassengerSim.MOOD_MAX],
+}
 
 const INT_KEYS := {
-	IncidentCatalogue.INSPECTOR: ["window_from", "window_to", "visit_tick"],
+	IncidentCatalogue.INSPECTOR:
+	[
+		"window_from",
+		"window_to",
+		"visit_tick",
+		"max_messes",
+		"max_full_queue",
+		"pass_money",
+		"fail_half_stars"
+	],
 	IncidentCatalogue.RUSH: ["total", "until"],
-	IncidentCatalogue.VIP: ["departs", "bonus", "target"],
+	IncidentCatalogue.VIP: ["departs", "bonus", "target", "good_mood", "miss_half_stars"],
 	IncidentCatalogue.FAVOUR: ["departs", "extra", "bonus"],
 }
 const STRING_KEYS := {
@@ -47,6 +69,10 @@ static func load(kind: String, plan: Variant, may_be_empty: bool) -> Dictionary:
 		if not data.has(key) or not WholeNumber.is_whole(data[key]) or int(data[key]) < 0:
 			return {"error": "%s plan %s must be a whole number, 0 or more" % [kind, key]}
 		out[key] = int(data[key])
+		if RANGES.has(key) and (out[key] < RANGES[key][0] or out[key] > RANGES[key][1]):
+			return {
+				"error": "%s plan %s must be %d to %d" % [kind, key, RANGES[key][0], RANGES[key][1]]
+			}
 	for key: String in strings:
 		if not data.has(key) or typeof(data[key]) != TYPE_STRING or data[key] == "":
 			return {"error": "%s plan %s must be a text" % [kind, key]}

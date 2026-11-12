@@ -18,8 +18,8 @@ extends RefCounted
 ##   plan keeps the exact counts the panel shows.
 ## - VIP (offer): the plan names the next flight not yet issued. Accepted, the
 ##   first passenger spawned for it is marked (plan "target"); an ordinary
-##   passenger otherwise. A made flight with mood at least VIP_GOOD_MOOD pays
-##   VIP_BONUS_MONEY; a miss adds a penalty; the passenger's ordinary made or
+##   passenger otherwise. A made flight with mood at least the plan's good_mood pays
+##   its bonus; a miss adds a penalty; the passenger's ordinary made or
 ##   missed record is the sim's own and is not written again.
 ## - Airline favour (offer): the plan names the next flight with headroom and
 ##   how many extra passengers fit. Accepted, they are booked at once (capped by
@@ -89,13 +89,13 @@ func finished(incident: Dictionary, passenger_id: int, made: bool, tick: int) ->
 	if not _waiting_vip(incident) or incident["plan"]["target"] != passenger_id:
 		return
 	var p := _director.passengers.get_passenger(passenger_id)
-	if made and p.mood >= IncidentTuning.VIP_GOOD_MOOD:
+	if made and p.mood >= incident["plan"]["good_mood"]:
 		_pay(incident["plan"]["bonus"])
 		_done(incident, BONUS)
 	elif made:
 		_done(incident, NEUTRAL)
 	else:
-		_penalize(incident, tick, IncidentTuning.VIP_MISS_HALF_STARS)
+		_penalize(incident, tick, incident["plan"]["miss_half_stars"])
 		_done(incident, PENALTY)
 
 
@@ -111,7 +111,7 @@ func step(incident: Dictionary, tick: int) -> void:
 			if tick >= plan["until"]:
 				_done(incident, APPLIED)
 		[IncidentCatalogue.VIP, IncidentCatalogue.ACCEPTED]:
-			if plan["target"] == 0 and _director.flights.is_doors_closed(plan["flight"]):
+			if plan["target"] == 0 and _flight_lost(plan["flight"]):
 				_done(incident, NOT_HELD)
 
 
@@ -121,6 +121,22 @@ func due_tick(incident: Dictionary) -> int:
 		if incident["state"] == IncidentCatalogue.ANNOUNCED:
 			return incident["plan"]["visit_tick"]
 	return -1
+
+
+## Whether a VIP's flight can no longer carry a passenger the VIP could be: its
+## doors have closed, or it is an occurrence not issued yet whose contract ended
+## (or is gone) so that its day is never issued.
+func _flight_lost(flight_id: String) -> bool:
+	var flights := _director.flights
+	if flights.is_doors_closed(flight_id):
+		return true
+	var parts := FlightTimetable.parse_occurrence(flight_id)
+	if parts.is_empty() or flights.state_of(flight_id) >= 0:
+		return false
+	if flights.contract_of(parts["contract"]).is_empty():
+		return true
+	var end_day := flights.contract_end_day(parts["contract"])
+	return end_day >= 0 and parts["day"] >= end_day
 
 
 func _waiting_vip(incident: Dictionary) -> bool:
@@ -144,6 +160,10 @@ func _inspector_plan(incident: Dictionary, tick: int) -> Dictionary:
 		"window_from": window.x,
 		"window_to": window.y,
 		"visit_tick": window.x + draws.below(window.y - window.x + 1),
+		"max_messes": IncidentTuning.INSPECTOR_MAX_MESSES,
+		"max_full_queue": IncidentTuning.INSPECTOR_MAX_FULL_QUEUE,
+		"pass_money": IncidentTuning.INSPECTOR_PASS_MONEY,
+		"fail_half_stars": IncidentTuning.INSPECTOR_FAIL_HALF_STARS,
 	}
 
 
@@ -174,6 +194,8 @@ func _vip_plan(tick: int) -> Dictionary:
 		"departs": open[0]["departs"],
 		"bonus": IncidentTuning.VIP_BONUS_MONEY,
 		"target": 0,
+		"good_mood": IncidentTuning.VIP_GOOD_MOOD,
+		"miss_half_stars": IncidentTuning.VIP_MISS_HALF_STARS,
 	}
 
 
@@ -238,14 +260,12 @@ func _visit(incident: Dictionary, tick: int) -> void:
 		if not p.is_done() and p.stuck == Passenger.Stuck.QUEUE_FULL:
 			full += 1
 	var messes := sim.messes.mess_ids().size()
-	if (
-		messes <= IncidentTuning.INSPECTOR_MAX_MESSES
-		and full <= IncidentTuning.INSPECTOR_MAX_FULL_QUEUE
-	):
-		_pay(IncidentTuning.INSPECTOR_PASS_MONEY)
+	var plan: Dictionary = incident["plan"]
+	if messes <= plan["max_messes"] and full <= plan["max_full_queue"]:
+		_pay(plan["pass_money"])
 		_done(incident, PASSED)
 		return
-	_penalize(incident, tick, IncidentTuning.INSPECTOR_FAIL_HALF_STARS)
+	_penalize(incident, tick, plan["fail_half_stars"])
 	_done(incident, FAILED)
 
 

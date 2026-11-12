@@ -94,6 +94,8 @@ func _accepted_vip(flight: String) -> int:
 					"flight": flight,
 					"departs": 1,
 					"bonus": IncidentTuning.VIP_BONUS_MONEY,
+					"good_mood": IncidentTuning.VIP_GOOD_MOOD,
+					"miss_half_stars": IncidentTuning.VIP_MISS_HALF_STARS,
 					"target": 0,
 				},
 			}

@@ -69,14 +69,24 @@ func _put_in_records() -> void:
 	data["next_id"] = _favour + 1
 	var inspector := _record_data(_inspector, IncidentCatalogue.INSPECTOR)
 	inspector["state"] = IncidentCatalogue.ANNOUNCED
+	# Rules unlike IncidentTuning's: no mess is allowed, so the one on the floor fails it.
 	inspector["plan"] = {
-		"window_from": _visit - 500, "window_to": _visit + 500, "visit_tick": _visit
+		"window_from": _visit - 500,
+		"window_to": _visit + 500,
+		"visit_tick": _visit,
+		"max_messes": 0,
+		"max_full_queue": 0,
+		"pass_money": 77,
+		"fail_half_stars": 3,
 	}
 	var favour := _record_data(_favour, IncidentCatalogue.FAVOUR)
 	favour["state"] = IncidentCatalogue.OFFERED
 	favour["plan"] = {"flight": _flight, "departs": departs, "extra": EXTRA, "bonus": BONUS}
 	(data["incidents"] as Array).append_array([inspector, favour])
 	assert_bool(_director.from_snapshot(data)).is_true()
+	var places := _director.spill_places()
+	assert_array(places).is_not_empty()
+	assert_int(_sim.messes.add(MessSim.Kind.SPILL, places[0]["cell"])).is_greater(0)
 
 
 func _record_data(id: int, kind: String) -> Dictionary:
@@ -109,6 +119,8 @@ func _effects() -> Dictionary:
 		"extra": _sim.booking_override_of(_flight),
 		"state": _record(_favour)["state"],
 		"outcome": _record(_favour)["outcome"],
+		"visit": _record(_inspector)["outcome"],
+		"adjustments": _director.rating.active_adjustments(),
 	}
 
 
@@ -126,12 +138,17 @@ func test_an_offered_and_an_announced_major_round_trip_with_identical_effects() 
 	# state, so mirror what it does to the announcement (it is shown).
 	assert_bool(_director.answer(_favour, true)).is_true()
 	_director.acknowledge(_inspector)
+	_director.on_tick(_visit)
 	var unbroken := _effects()
 	var unbroken_sum := SaveTestKit.checksum(_main)
 	print("unbroken: %s" % [unbroken])
 	assert_int(unbroken["extra"]).is_equal(EXTRA)
 	assert_int(unbroken["balance"]).is_equal(start_balance + BONUS)
 	assert_str(unbroken["outcome"]).is_equal(IncidentMajors.APPLIED)
+	# The visit scored by the saved plan's rules (no mess allowed): a fail.
+	assert_str(unbroken["visit"]).is_equal(IncidentMajors.FAILED)
+	assert_int(unbroken["adjustments"].size()).is_equal(1)
+	assert_int(unbroken["adjustments"][0]["half_star_delta"]).is_equal(-3)
 
 	assert_bool(_save.load_from_file(_path)).is_true()
 	assert_int(_clock.tick).is_equal(saved_tick)
@@ -154,6 +171,7 @@ func test_an_offered_and_an_announced_major_round_trip_with_identical_effects() 
 	assert_int(_director.next_event_tick(_clock.tick)).is_equal(_visit)
 
 	assert_bool(_director.answer(_favour, true)).is_true()
+	_director.on_tick(_visit)
 	assert_dict(_effects()).is_equal(unbroken)
 	assert_str(SaveTestKit.checksum(_main)).is_equal(unbroken_sum)
 

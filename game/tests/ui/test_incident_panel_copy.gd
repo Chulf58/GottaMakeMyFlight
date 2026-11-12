@@ -52,7 +52,15 @@ func test_a_rush_card_names_the_counts_the_reward_and_the_failure() -> void:
 
 
 func test_an_inspector_card_names_the_window_the_reward_and_the_failure() -> void:
-	var plan := {"window_from": 50_000, "window_to": 58_000, "visit_tick": 52_000}
+	var plan := {
+		"window_from": 50_000,
+		"window_to": 58_000,
+		"visit_tick": 52_000,
+		"max_messes": IncidentTuning.INSPECTOR_MAX_MESSES,
+		"max_full_queue": IncidentTuning.INSPECTOR_MAX_FULL_QUEUE,
+		"pass_money": IncidentTuning.INSPECTOR_PASS_MONEY,
+		"fail_half_stars": IncidentTuning.INSPECTOR_FAIL_HALF_STARS,
+	}
 	var text := _words(IncidentCatalogue.INSPECTOR, plan)
 	print(text)
 	assert_str(text).contains(GameCalendar.clock_text(50_000))
@@ -64,7 +72,14 @@ func test_an_inspector_card_names_the_window_the_reward_and_the_failure() -> voi
 
 
 func test_a_vip_offer_names_the_flight_the_bonus_and_the_penalty() -> void:
-	var plan := {"flight": "AM-d1", "departs": DEPARTS, "bonus": 500, "target": 0}
+	var plan := {
+		"flight": "AM-d1",
+		"departs": DEPARTS,
+		"bonus": 500,
+		"target": 0,
+		"good_mood": 75,
+		"miss_half_stars": 2,
+	}
 	var text := _words(IncidentCatalogue.VIP, plan)
 	print(text)
 	assert_str(text).contains("the %s flight" % GameCalendar.clock_text(DEPARTS))

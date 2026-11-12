@@ -2,8 +2,9 @@ class_name IncidentCopy
 extends RefCounted
 ## The words of the four major incidents' panel: the cause, the reward and the
 ## failure, in plain sentences with {name} slots (template()). fill() puts in
-## the numbers of the incident's saved plan and of IncidentTuning, so the panel
-## says exactly what will happen: the counts of a holiday rush are the ones
+## the numbers of the incident's saved plan alone (never IncidentTuning, which
+## only fills a plan when it is made), so the panel says exactly what will happen:
+## the counts of a holiday rush are the ones
 ## already booked. An announcement (inspector, rush) carries all three in its
 ## body, since its panel has no reward and failure lines; an offer (VIP,
 ## favour) keeps them in "reward" and "failure".
@@ -11,8 +12,8 @@ extends RefCounted
 const INSPECTOR_BODY := (
 	"The airport inspector visits tomorrow, some time between {from} and {to}. "
 	+ "The inspector looks at messes on the floor and at queues that are full.\n"
-	+ "Reward: {bonus} money if there are at most {max_messes} messes and nobody is "
-	+ "stuck in a full queue at the visit.\n"
+	+ "Reward: {bonus} money if there are at most {max_messes} messes and at most "
+	+ "{max_full_queue} passengers stuck in a full queue at the visit.\n"
 	+ "If it fails: your rating drops by {penalty}."
 )
 const RUSH_BODY := (
@@ -81,9 +82,10 @@ static func vars_of(incident: Dictionary) -> Dictionary:
 			return {
 				"from": GameCalendar.clock_text(plan["window_from"]),
 				"to": GameCalendar.clock_text(plan["window_to"]),
-				"bonus": IncidentTuning.INSPECTOR_PASS_MONEY,
-				"max_messes": IncidentTuning.INSPECTOR_MAX_MESSES,
-				"penalty": stars_text(IncidentTuning.INSPECTOR_FAIL_HALF_STARS),
+				"bonus": plan["pass_money"],
+				"max_messes": plan["max_messes"],
+				"max_full_queue": plan["max_full_queue"],
+				"penalty": stars_text(plan["fail_half_stars"]),
 			}
 		IncidentCatalogue.RUSH:
 			return _rush_vars(plan)
@@ -91,7 +93,7 @@ static func vars_of(incident: Dictionary) -> Dictionary:
 			return {
 				"time": GameCalendar.clock_text(plan["departs"]),
 				"bonus": plan["bonus"],
-				"penalty": stars_text(IncidentTuning.VIP_MISS_HALF_STARS),
+				"penalty": stars_text(plan["miss_half_stars"]),
 			}
 		IncidentCatalogue.FAVOUR:
 			return {
