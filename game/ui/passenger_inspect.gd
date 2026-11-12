@@ -38,6 +38,7 @@ var actions := BuiltItemActions.new()
 
 var _passenger_rows := VBoxContainer.new()
 var _name := Button.new()
+var _vip := Label.new()
 var _stage := Label.new()
 var _flight := Label.new()
 var _status := Label.new()
@@ -69,7 +70,7 @@ func _init() -> void:
 	_name.tooltip_text = "Follow this passenger"
 	_name.pressed.connect(press_name)
 	column.add_child(_name)
-	for label in [_stage, _flight, _status, _now]:
+	for label in [_vip, _stage, _flight, _status, _now]:
 		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		column.add_child(label)
 	_now.theme_type_variation = &"HudProblemText"
@@ -125,6 +126,8 @@ func refresh() -> void:
 	if p == null:
 		return
 	_name.text = "Passenger %d" % p.id
+	_vip.text = _vip_line(p)
+	_vip.visible = _vip.text != ""
 	_stage.text = PassengerHud.stage_text(sim, p)
 	_flight.text = _flight_line(p)
 	_status.text = (
@@ -212,6 +215,12 @@ func name_text() -> String:
 	return _name.text
 
 
+## "VIP for today's 15:15 flight" while an accepted VIP incident marked the
+## passenger, else "" (the crown over their head, VipMarker).
+func vip_text() -> String:
+	return _vip.text if _vip.visible else ""
+
+
 func status_text() -> String:
 	return _status.text
 
@@ -238,6 +247,13 @@ func _selected() -> Passenger:
 	if sim == null or views == null or views.selected_id == 0:
 		return null
 	return sim.get_passenger(views.selected_id)
+
+
+func _vip_line(p: Passenger) -> String:
+	if views == null or views.incidents == null or clock == null:
+		return ""
+	var plan := views.incidents.vip_plan_of(p.id)
+	return IncidentCopy.vip_line(plan, clock.tick) if not plan.is_empty() else ""
 
 
 ## "Flight Sunhop Lisbon, boards 10:40" (FlightResultPanel.title_for).

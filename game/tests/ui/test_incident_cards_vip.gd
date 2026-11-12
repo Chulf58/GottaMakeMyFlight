@@ -121,3 +121,20 @@ func test_the_result_card_comes_back_after_the_director_loads() -> void:
 	assert_bool(_director.from_snapshot(saved)).is_true()
 	assert_object(_rail.notice_card(key)).is_not_null()
 	assert_str(_words(id)).contains("The VIP made the flight")
+
+
+## Good news is a green rail card (the flight result card's look), a missed
+## flight a coral one (decision hud-grid-and-rails-one-spacing-grid-centred-
+## top-row-right-ra, colour meanings per 0b50e074).
+func test_a_vip_who_makes_it_posts_a_green_card_with_or_without_the_bonus() -> void:
+	for mood in [GOOD_MOOD, GOOD_MOOD - 1]:
+		var id := _finished_vip(true, mood)
+		var card := _rail.notice_card(IncidentCards.key_of({"id": id})) as PanelContainer
+		assert_str(card.theme_type_variation).is_equal("HudCardGreen")
+		assert_bool(card.has_theme_stylebox_override("panel")).is_false()
+
+
+func test_a_vip_who_misses_posts_a_coral_card() -> void:
+	var id := _finished_vip(false, GOOD_MOOD)
+	var card := _rail.notice_card(IncidentCards.key_of({"id": id})) as PanelContainer
+	assert_str(card.theme_type_variation).is_equal("HudCardCoral")

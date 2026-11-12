@@ -215,6 +215,12 @@ static func stars_text(half_stars: int) -> String:
 	return "%.1f stars" % (half_stars * 0.5)
 
 
+## The passenger inspect card's line for the VIP, "VIP for today's 15:15
+## flight", from the VIP plan.
+static func vip_line(plan: Dictionary, now_tick: int) -> String:
+	return "VIP for %s" % _flight_text(plan, now_tick)
+
+
 ## "today's 10:29 flight": the plan's flight, seen from the day of `now_tick`.
 static func _flight_text(plan: Dictionary, now_tick: int) -> String:
 	var when := GameCalendar.clock_text(plan["departs"])
