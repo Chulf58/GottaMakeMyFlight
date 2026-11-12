@@ -10,7 +10,7 @@ extends RefCounted
 ## {"save_version", "enabled", "last_rolled_day" (-1 before the first roll),
 ##  "next_major_day", "next_id", "incidents": [{"id", "kind", "roll_day",
 ##  "state", "fire_tick", "cell": [x, y], "mess_id", "place", "outcome",
-##  "shown"}]}
+##  "shown", "plan"}]}
 ## "shown" is true once a major's announcement was put in front of the player
 ## (IncidentDirector.acknowledge), so a load does not show it again. Only an
 ## announced incident can be shown; every other state has it false.
@@ -19,18 +19,42 @@ extends RefCounted
 ## a done one has all three or none, and none when its outcome is NO_PLACE.
 ## The outcome is "" or, on a done incident only, NO_PLACE (it never happened).
 ## links_problem() checks an active spill against the staged messes.
+## Only a spill has a cell, a mess and a place. A major (inspector, rush, VIP,
+## favour) has none, and keeps what it decided in "plan" (IncidentPlan): empty
+## until it is announced or offered, and for a major that was never held. Its
+## outcome, on a done incident only, is one of OUTCOMES.
 
-const SAVE_VERSION := 2
+const SAVE_VERSION := 3
 const KEYS: Array[String] = [
 	"save_version", "enabled", "last_rolled_day", "next_major_day", "next_id", "incidents"
 ]
 const INCIDENT_KEYS: Array[String] = [
-	"id", "kind", "roll_day", "state", "fire_tick", "cell", "mess_id", "place", "outcome", "shown"
+	"id",
+	"kind",
+	"roll_day",
+	"state",
+	"fire_tick",
+	"cell",
+	"mess_id",
+	"place",
+	"outcome",
+	"shown",
+	"plan",
 ]
 const NO_CELL := Vector2i(-1, -1)
 ## The outcome of a spill that was due with nowhere to happen.
 const NO_PLACE := "no_place"
-const OUTCOMES: Array[String] = ["", NO_PLACE]
+const OUTCOMES: Array[String] = [
+	"",
+	NO_PLACE,
+	IncidentMajors.NOT_HELD,
+	IncidentMajors.APPLIED,
+	IncidentMajors.PASSED,
+	IncidentMajors.FAILED,
+	IncidentMajors.BONUS,
+	IncidentMajors.NEUTRAL,
+	IncidentMajors.PENALTY,
+]
 
 
 ## The JSON-safe form of one incident.
@@ -47,6 +71,7 @@ static func save_incident(incident: Dictionary) -> Dictionary:
 		"place": incident["place"],
 		"outcome": incident["outcome"],
 		"shown": incident["shown"],
+		"plan": incident["plan"].duplicate(true),
 	}
 
 
@@ -126,6 +151,13 @@ static func _incident(entry: Variant, next_id: int) -> Dictionary:
 		problem = "incident %d cell must be two whole numbers" % int(data["id"])
 	if problem == "":
 		problem = _state_problem(data, cell)
+	var plan := {}
+	if problem == "":
+		var read := IncidentPlan.load(
+			data["kind"], data["plan"], _may_lack_plan(data["kind"], data["state"])
+		)
+		problem = read.get("error", "")
+		plan = read.get("plan", {})
 	if problem != "":
 		return {"error": problem}
 	return {
@@ -139,7 +171,18 @@ static func _incident(entry: Variant, next_id: int) -> Dictionary:
 		"place": data["place"],
 		"outcome": data["outcome"],
 		"shown": data["shown"],
+		"plan": plan,
 	}
+
+
+## Whether a plan may be empty: a minor has none, a major has none before it is
+## announced or offered, and none when it was never held.
+static func _may_lack_plan(kind: String, state: String) -> bool:
+	return (
+		not IncidentCatalogue.is_major(kind)
+		or state == IncidentCatalogue.SCHEDULED
+		or state == IncidentCatalogue.DONE
+	)
 
 
 static func _kind_problem(data: Dictionary) -> String:
@@ -169,6 +212,8 @@ static func _state_problem(data: Dictionary, cell: Vector2i) -> String:
 	if data["shown"] and data["state"] != IncidentCatalogue.ANNOUNCED:
 		return "incident %d is shown but is not an announcement" % id
 	var placed: bool = cell != NO_CELL or int(data["mess_id"]) != 0 or data["place"] != ""
+	if placed and data["kind"] != IncidentCatalogue.SPILL:
+		return "incident %d is not a spill but has a cell, mess or place" % id
 	if data["state"] == IncidentCatalogue.SCHEDULED and placed:
 		return "incident %d is scheduled but has a cell, mess or place" % id
 	var whole: bool = cell != NO_CELL and int(data["mess_id"]) > 0 and data["place"] != ""

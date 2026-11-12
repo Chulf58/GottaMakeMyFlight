@@ -71,6 +71,7 @@ func _schedule_spill(fire_tick: int) -> void:
 			"place": "",
 			"outcome": "",
 			"shown": false,
+			"plan": {},
 		}
 	]
 	assert_bool(_director.from_snapshot(data)).is_true()

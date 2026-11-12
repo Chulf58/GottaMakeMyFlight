@@ -7,7 +7,10 @@ extends Node
 ## day_of), the director draws from that day's own stream (IncidentRoll, never
 ## SimClock.rng) one kind from the tier-gated catalogue, weighted by what is
 ## built, "none" included so some days stay quiet. A major may come at most
-## once every 2 to 3 days (next_major_day); there are no majors yet.
+## once every 2 to 3 days (next_major_day): the inspector, the holiday rush, the
+## VIP and the airline favour, whose effects are IncidentMajors'. A major's fire tick
+## announces or offers it (_fire_major), with the numbers it will use saved in
+## its plan.
 ##
 ## Everything the roll decides is saved as ticks. A spill's fire tick lands in
 ## that day's busy window, from BUSY_LEAD_TICKS before its first departure to
@@ -75,6 +78,9 @@ var _incidents: Array[Dictionary] = []
 ## The day the clock was last seen on. Derived from the tick, never saved.
 var _day := -1
 var _bound: SimClock
+var _bound_sim: PassengerSim
+## What the majors do (inspector, rush, VIP, favour).
+var _majors := IncidentMajors.new(self)
 
 
 func _ready() -> void:
@@ -94,6 +100,7 @@ func bind(with_clock: SimClock, with_flights: FlightSim, with_passengers: Passen
 	_bound = clock
 	_day = GameCalendar.day_of(clock.tick)
 	clock.ticked.connect(on_tick)
+	_follow_passengers(with_passengers)
 
 
 func is_enabled() -> bool:
@@ -119,24 +126,35 @@ func on_tick(tick: int) -> void:
 			_roll(day, tick)
 	for incident in _incidents:
 		if incident["state"] == IncidentCatalogue.SCHEDULED and incident["fire_tick"] <= tick:
-			_fire(incident)
+			if IncidentCatalogue.is_major(incident["kind"]):
+				_fire_major(incident, tick)
+			else:
+				_fire(incident)
 		elif incident["state"] == IncidentCatalogue.ACTIVE and _is_over(incident):
 			incident["state"] = IncidentCatalogue.DONE
-			ended.emit(incident.duplicate())
+			ended.emit(incident.duplicate(true))
+		elif IncidentCatalogue.is_major(incident["kind"]):
+			_majors.step(incident, tick)
 
 
 ## The next tick something of the incidents is due: the earliest scheduled
-## fire that can happen now (a spill needs a place), or -1 for none. The day
+## fire that can happen now (a spill needs a place) and the inspector's visit,
+## or -1 for none. The day
 ## boundary is not an event (a stop before every midnight would slow each
 ## quiet night for no reason the player can see, decision quiet-nights-fast-
 ## forward-automatically-when-nothing-is-due): a roll there schedules no fire
 ## sooner than FIRE_FLOOR_TICKS, and QuietNight asks again every frame.
-## `_now` is kept for the visits of the majors.
 func next_event_tick(_now: int) -> int:
 	var next := -1
 	var placed := -1
 	for incident in _incidents:
+		var visit := _majors.due_tick(incident)
+		if visit >= 0:
+			next = _earliest(next, visit)
 		if incident["state"] != IncidentCatalogue.SCHEDULED:
+			continue
+		if IncidentCatalogue.is_major(incident["kind"]):
+			next = _earliest(next, incident["fire_tick"])
 			continue
 		if placed < 0:
 			placed = 1 if not spill_places().is_empty() else 0
@@ -149,7 +167,7 @@ func next_event_tick(_now: int) -> int:
 func incidents() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for incident in _incidents:
-		out.append(incident.duplicate())
+		out.append(incident.duplicate(true))
 	return out
 
 
@@ -158,7 +176,7 @@ func active_incidents() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for incident in _incidents:
 		if incident["state"] == IncidentCatalogue.ACTIVE:
-			out.append(incident.duplicate())
+			out.append(incident.duplicate(true))
 	return out
 
 
@@ -166,7 +184,7 @@ func last_rolled_day() -> int:
 	return _last_rolled_day
 
 
-## What a major incident's turn at the player looks like (slice G calls these
+## What a major incident's turn at the player looks like (_fire_major calls these
 ## from a major's fire tick; the panel answers through answer() and
 ## acknowledge()). A major is announced (the player is told, then closes the
 ## panel; it counts as shown from the moment the panel opens) or offered (the
@@ -184,7 +202,7 @@ func present(id: int, as_offer: bool) -> bool:
 	if not is_major_kind.call(incident["kind"]):
 		return false
 	incident["state"] = IncidentCatalogue.OFFERED if as_offer else IncidentCatalogue.ANNOUNCED
-	major_presented.emit(incident.duplicate())
+	major_presented.emit(incident.duplicate(true))
 	return true
 
 
@@ -195,6 +213,8 @@ func answer(id: int, accepted: bool) -> bool:
 	if incident.is_empty() or incident["state"] != IncidentCatalogue.OFFERED:
 		return false
 	incident["state"] = IncidentCatalogue.ACCEPTED if accepted else IncidentCatalogue.DECLINED
+	if accepted:
+		_majors.accepted(incident)
 	return true
 
 
@@ -217,9 +237,9 @@ func pending_presentation() -> Array[Dictionary]:
 	for incident in _incidents:
 		var state: String = incident["state"]
 		if state == IncidentCatalogue.OFFERED:
-			out.append(incident.duplicate())
+			out.append(incident.duplicate(true))
 		elif state == IncidentCatalogue.ANNOUNCED and not incident["shown"]:
-			out.append(incident.duplicate())
+			out.append(incident.duplicate(true))
 	return out
 
 
@@ -304,9 +324,17 @@ func _roll_due(day: int) -> bool:
 func _roll(day: int, tick: int) -> void:
 	_last_rolled_day = day
 	_incidents = _incidents.filter(
-		func(incident: Dictionary) -> bool: return incident["state"] != IncidentCatalogue.DONE
+		func(incident: Dictionary) -> bool:
+			return (
+				incident["state"] != IncidentCatalogue.DONE
+				and incident["state"] != IncidentCatalogue.DECLINED
+			)
 	)
-	var world := {"tier": _tier(), "places": spill_places().size()}
+	var world := {
+		"tier": _tier(),
+		"places": spill_places().size(),
+		"contracts": flights.active_contract_ids().size(),
+	}
 	var candidates := IncidentCatalogue.candidates(world)
 	if forced_kind != "":
 		candidates = [
@@ -331,6 +359,7 @@ func _roll(day: int, tick: int) -> void:
 				"place": "",
 				"outcome": "",
 				"shown": false,
+				"plan": {},
 			}
 		)
 	)
@@ -358,7 +387,39 @@ func _fire(incident: Dictionary) -> void:
 	incident["mess_id"] = mess
 	incident["place"] = chosen["place"]
 	incident["state"] = IncidentCatalogue.ACTIVE
-	started.emit(incident.duplicate())
+	started.emit(incident.duplicate(true))
+
+
+## A major's day has come: it decides its plan and is announced or offered. One
+## that cannot be held (no flight to land on, no window for a visit) is done
+## without being shown.
+func _fire_major(incident: Dictionary, tick: int) -> void:
+	var plan := _majors.prepare(incident, tick)
+	if plan.is_empty():
+		incident["state"] = IncidentCatalogue.DONE
+		incident["outcome"] = IncidentMajors.NOT_HELD
+		return
+	incident["plan"] = plan
+	present(incident["id"], IncidentCatalogue.is_offer(incident["kind"]))
+
+
+func _follow_passengers(sim: PassengerSim) -> void:
+	if _bound_sim != null:
+		_bound_sim.passenger_spawned.disconnect(_on_spawned)
+		_bound_sim.outcome.disconnect(_on_outcome)
+	_bound_sim = sim
+	sim.passenger_spawned.connect(_on_spawned)
+	sim.outcome.connect(_on_outcome)
+
+
+func _on_spawned(passenger_id: int) -> void:
+	for incident in _incidents:
+		_majors.spawned(incident, passenger_id)
+
+
+func _on_outcome(passenger_id: int, made: bool) -> void:
+	for incident in _incidents:
+		_majors.finished(incident, passenger_id, made, clock.tick)
 
 
 func _no_place(incident: Dictionary) -> void:
