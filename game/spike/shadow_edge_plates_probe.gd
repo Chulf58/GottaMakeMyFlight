@@ -11,16 +11,19 @@ extends SceneTree
 ##   before     Godot's defaults, which the game used until board 1f05ff29:
 ##              a 4096 directional atlas, the Soft Low filter, 100 m distance
 ##   after      the settings as committed (project.godot and the Sun)
-##   the rest   diagnostics (DIAGNOSTICS): split layouts, shadow distance, filter
+##   the rest   diagnostics (DIAGNOSTICS): the round-two splits and distance at
+##              blur 1.0, 1.5, 2.0 and 3.0, with the 8192 and the 4096 atlas
 ## and a third shot at the farthest zoom, where the after plate must show cast
-## shadows (a twin with the sun shadow off is the control).
+## shadows (a twin with the sun shadow off is the control). With -- --angles it
+## draws only before and after, at the TOP_DOWN, MEDIUM and LOW camera angles.
 ## Every subject (a wall, a seat row, a check-in desk, a scanner, a passenger)
 ## is projected into the viewport with a margin and checked with a sight line
-## from the camera that must land on the subject's own mesh first; a failure
+## from the camera (ten for an object or a person, aimed inside its box) that
+## must land on the subject's own mesh first; a failure
 ## prints PROBE_INVALID and exits 1. The probe also counts the pixels that
 ## differ between before and after, so a setting that did nothing cannot pass.
 ## For each variant it prints the GPU time of the frozen frame, then measures
-## frame time and GPU time for before and after at 1x and 3x with vsync off.
+## frame time and GPU time for every variant at 1x and 3x with vsync off.
 ##
 ## Run (one windowed Godot run project-wide; hold tools/blender/out/.windowed.lock):
 ##   timeout 900 Godot_v4.7.2-stable_win64_console.exe --display-driver windows \
@@ -57,6 +60,7 @@ const NEW: Dictionary = {
 }
 ## Name -> the settings that differ from NEW. "after" is read at boot.
 const DIAGNOSTICS := {
+	"blur10": {"blur": 1.0},
 	"blur15": {"blur": 1.5},
 	"blur20": {"blur": 2.0},
 	"blur30": {"blur": 3.0},
@@ -65,7 +69,9 @@ const DIAGNOSTICS := {
 	"a4096_blur30": {"atlas": 4096, "blur": 3.0},
 }
 ## The blur steps laid side by side in crop_strip_home.png.
-const STRIP: Array[String] = ["after", "blur15", "blur20", "blur30"]
+const STRIP: Array[String] = ["blur10", "blur15", "blur20", "blur30"]
+## The committed blur at both atlas sizes, side by side in crop_atlas_home.png.
+const ATLAS_PAIR: Array[String] = ["blur20", "a4096_blur20"]
 ## With -- --angles: only before and after, Home, close and the farthest zoom
 ## at each camera angle step, then the frame times.
 const ANGLES := [
@@ -308,7 +314,8 @@ func _shots() -> void:
 		return
 	if not _angles:
 		await _views_at("", subjects)
-		_strip()
+		_strip(STRIP, "crop_strip_home.png")
+		_strip(ATLAS_PAIR, "crop_atlas_home.png")
 		return
 	for step in ANGLES:
 		_cam.set_angle_step(step)
@@ -537,15 +544,36 @@ func _check_subjects(shot: String, subjects: Dictionary) -> Rect2:
 	var from := cam.global_position
 	var area := Rect2()
 	for tag in TAGS:
-		var target: Vector3 = subjects[tag] if tag == "wall" else _top(bounds.get(tag, AABB()))
+		var box: AABB = bounds.get(tag, AABB())
+		var target: Vector3 = subjects[tag] if tag == "wall" else box.get_center()
 		var at := cam.unproject_position(target)
 		area = Rect2(at, Vector2.ZERO) if tag == TAGS[0] else area.expand(at)
-		var hit := space.intersect_ray(
-			PhysicsRayQueryParameters3D.create(from, target + (target - from).normalized() * 3.0)
-		)
-		var hit_tag := "" if hit.is_empty() else str((hit.collider as Node).get_meta("subject", ""))
-		var miss := INF if hit.is_empty() else (hit["position"] as Vector3).distance_to(target)
-		var seen := hit_tag == tag if tag != "wall" else miss < 0.3
+		var seen := false
+		var hit_tag := ""
+		var miss := INF
+		if tag == "wall":
+			var hit := space.intersect_ray(
+				PhysicsRayQueryParameters3D.create(
+					from, target + (target - from).normalized() * 3.0
+				)
+			)
+			miss = INF if hit.is_empty() else (hit["position"] as Vector3).distance_to(target)
+			seen = miss < 0.3
+		else:
+			# Ten lines into the subject's own box; one that first hits the
+			# subject's mesh shows it.
+			var on := 0
+			for p in _inner_points(box):
+				var hit := space.intersect_ray(
+					PhysicsRayQueryParameters3D.create(from, p + (p - from).normalized() * 3.0)
+				)
+				if (
+					not hit.is_empty()
+					and str((hit.collider as Node).get_meta("subject", "")) == tag
+				):
+					on += 1
+			hit_tag = "%s:%d/10" % [tag, on]
+			seen = on > 0
 		# At the farthest zoom a subject is a few pixels; only the frame counts.
 		seen = seen or shot.begins_with("max_zoom")
 		var inside := view.has_point(at) and not cam.is_position_behind(target)
@@ -561,10 +589,19 @@ func _check_subjects(shot: String, subjects: Dictionary) -> Rect2:
 	return area.grow(60.0)
 
 
-## The middle of a box's top face, a little inside it.
-func _top(box: AABB) -> Vector3:
+## Ten points inside a box: a 3 x 3 grid at 30, 50 and 70 percent of its width
+## and depth, at 30, 50 and 70 percent of its height, and the top middle.
+func _inner_points(box: AABB) -> Array[Vector3]:
+	var out: Array[Vector3] = []
+	for i in 3:
+		for j in 3:
+			var f := Vector3(0.3 + 0.2 * i, 0.3 + 0.2 * j, 0.3 + 0.2 * ((i + j) % 3))
+			out.append(box.position + box.size * f)
+	# The middle of the top face, a little inside: an arch (the scanner) is
+	# open in the middle, so oblique lines into its box pass through it.
 	var c := box.get_center()
-	return Vector3(c.x, box.end.y - 0.05, c.z)
+	out.append(Vector3(c.x, box.end.y - 0.05, c.z))
+	return out
 
 
 func _measure() -> void:
@@ -595,10 +632,10 @@ func _measure() -> void:
 		_clock.set_paused(true)
 
 
-## The Home crops of the blur steps side by side, at half size.
-func _strip() -> void:
+## The Home crops of `names` side by side, at half size, saved as `file`.
+func _strip(names: Array[String], file: String) -> void:
 	var parts: Array[Image] = []
-	for name in STRIP:
+	for name in names:
 		var img := Image.load_from_file(_out_dir.path_join("crop_home_%s.png" % name))
 		if img == null:
 			_invalid("no crop for %s" % name)
@@ -610,8 +647,8 @@ func _strip() -> void:
 	var strip := Image.create(cell.x * parts.size(), cell.y, false, Image.FORMAT_RGB8)
 	for i in parts.size():
 		strip.blit_rect(parts[i], Rect2i(Vector2i.ZERO, cell), Vector2i(i * cell.x, 0))
-	var path := _out_dir.path_join("crop_strip_home.png")
-	print("PLATE strip %s order=%s err=%d" % [path, STRIP, strip.save_png(path)])
+	var path := _out_dir.path_join(file)
+	print("PLATE strip %s order=%s err=%d" % [path, names, strip.save_png(path)])
 
 
 func _contact_sheet() -> void:
