@@ -37,7 +37,6 @@ const SIZE := Vector2i(1920, 1080)
 const SOFT_LOW := RenderingServer.SHADOW_QUALITY_SOFT_LOW
 const SOFT_HIGH := RenderingServer.SHADOW_QUALITY_SOFT_HIGH
 const FOUR := DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
-const TWO := DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
 ## Godot defaults, which the game used until board 1f05ff29.
 const BEFORE: Dictionary = {
 	"atlas": 4096,
@@ -47,18 +46,31 @@ const BEFORE: Dictionary = {
 	"mode": FOUR,
 	"splits": Vector3(0.1, 0.2, 0.5),
 }
-## Name -> the settings that differ from BEFORE. "after" is read at boot. A
-## max_distance of FAR is the depth the camera sees at its farthest zoom, and
-## a split of NEAR_M / FAR puts the first split boundary NEAR_M metres out.
-const FAR := -1.0
-const NEAR_M := 40.0
-const DIAGNOSTICS := {
-	"near4": {"atlas": 8192, "quality": SOFT_HIGH, "splits": Vector3(0.4, 0.6, 0.8)},
-	"two": {"atlas": 8192, "quality": SOFT_HIGH, "mode": TWO, "splits": Vector3(0.4, 0.6, 0.8)},
-	"far4": {"atlas": 8192, "quality": SOFT_HIGH, "max_distance": FAR},
-	"far2": {"atlas": 8192, "quality": SOFT_HIGH, "max_distance": FAR, "mode": TWO},
-	"hard": {"atlas": 8192, "quality": RenderingServer.SHADOW_QUALITY_HARD},
+## Round two of board 1f05ff29: splits that put the Home view in the first
+## split, and a distance that reaches the farthest zoom.
+const NEW: Dictionary = {
+	"atlas": 8192,
+	"quality": SOFT_HIGH,
+	"max_distance": 410.0,
+	"mode": FOUR,
+	"splits": Vector3(0.1, 0.3, 0.6),
 }
+## Name -> the settings that differ from NEW. "after" is read at boot.
+const DIAGNOSTICS := {
+	"blur15": {"blur": 1.5},
+	"blur20": {"blur": 2.0},
+	"blur30": {"blur": 3.0},
+	"a4096_blur15": {"atlas": 4096, "blur": 1.5},
+	"a4096_blur20": {"atlas": 4096, "blur": 2.0},
+	"a4096_blur30": {"atlas": 4096, "blur": 3.0},
+}
+## The blur steps laid side by side in crop_strip_home.png.
+const STRIP: Array[String] = ["after", "blur15", "blur20", "blur30"]
+## With -- --angles: only before and after, Home, close and the farthest zoom
+## at each camera angle step, then the frame times.
+const ANGLES := [
+	TycoonCamera.AngleStep.TOP_DOWN, TycoonCamera.AngleStep.MEDIUM, TycoonCamera.AngleStep.LOW
+]
 const MARGIN_PX := 24.0
 const CLOSE_DISTANCE := 15.0
 const MIN_PASSENGERS := 3
@@ -79,6 +91,7 @@ var _cam: TycoonCamera
 var _views: Node
 var _sun: DirectionalLight3D
 var _variants: Dictionary = {}
+var _angles := OS.get_cmdline_user_args().has("--angles")
 var _plates: Array[String] = []
 var _guard := Thread.new()
 var _lock := Mutex.new()
@@ -190,20 +203,14 @@ func _read_variants() -> void:
 		),
 	}
 	_variants = {"before": BEFORE, "after": after}
-	for name in DIAGNOSTICS:
-		var v := BEFORE.duplicate()
-		v.merge(DIAGNOSTICS[name], true)
-		_variants[name] = v
-
-
-## Fills in FAR once the farthest view depth is known.
-func _resolve_far(far: float) -> void:
+	if not _angles:
+		for name in DIAGNOSTICS:
+			var v := BEFORE.duplicate()
+			v.merge(NEW, true)
+			v.merge(DIAGNOSTICS[name], true)
+			_variants[name] = v
 	for name in _variants:
-		var v: Dictionary = _variants[name]
-		if v["max_distance"] == FAR:
-			v["max_distance"] = far
-			v["splits"] = Vector3(NEAR_M / far, 0.3, 0.6)
-		print("PROBE variant %s %s" % [name, v])
+		print("PROBE variant %s %s" % [name, _variants[name]])
 
 
 func _set_variant(name: String) -> void:
@@ -299,15 +306,23 @@ func _shots() -> void:
 	var subjects := _subjects(grid)
 	if _failed:
 		return
-	_cam.go_home()
-	await _settle()
-	_cam.distance = _cam.max_distance
-	await _settle()
-	_resolve_far(ceilf(_far_depth() * 1.1 / 10.0) * 10.0)
+	if not _angles:
+		await _views_at("", subjects)
+		_strip()
+		return
+	for step in ANGLES:
+		_cam.set_angle_step(step)
+		print("PROBE angle step=%d pitch=%.1f" % [step, _cam.pitch_degrees()])
+		await _views_at("_%s" % ["low", "medium", "top"][step], subjects)
+
+
+## Home, close and the farthest zoom at the current angle; shot names end in
+## `suffix`.
+func _views_at(suffix: String, subjects: Dictionary) -> void:
 	_cam.go_home()
 	await _settle()
 	var home_distance := _cam.distance
-	await _shoot("home", subjects)
+	await _shoot("home" + suffix, subjects)
 	# The nearest view that holds every subject, but no farther than CLOSE_DISTANCE.
 	var first: Vector3 = (subjects["desk"] as Node3D).global_position
 	var box := Rect2(Vector2(first.x, first.z), Vector2.ZERO)
@@ -320,12 +335,13 @@ func _shots() -> void:
 	await _settle()
 	_expect(_cam.distance < home_distance, "the close view is not closer than Home")
 	print("PROBE distances home=%.1f close=%.1f" % [home_distance, _cam.distance])
-	await _shoot("close", subjects)
+	await _shoot("close" + suffix, subjects)
 	_cam.go_home()
 	await _settle()
 	_cam.distance = _cam.max_distance
 	await _settle()
-	await _shoot("max_zoom", subjects)
+	_far_depth()
+	await _shoot("max_zoom" + suffix, subjects)
 
 
 ## The deepest view depth (along the camera axis) of the ground at the four
@@ -339,7 +355,8 @@ func _far_depth() -> float:
 		var hit: Variant = ground.intersects_ray(
 			cam.project_ray_origin(corner), cam.project_ray_normal(corner)
 		)
-		_expect(hit != null, "the view corner %s sees above the horizon" % corner)
+		if hit == null:
+			print("PROBE far corner %s sees above the horizon" % [corner])
 		if hit != null:
 			var depth: float = (hit - cam.global_position).dot(-cam.global_transform.basis.z)
 			deepest = maxf(deepest, depth)
@@ -426,7 +443,7 @@ func _shoot(shot: String, subjects: Dictionary) -> void:
 	await _frames(240)
 	var area := _check_subjects(shot, subjects)
 	var bare: Image = null
-	if shot == "max_zoom":
+	if shot.begins_with("max_zoom"):
 		_sun.shadow_enabled = false
 		await _frames(30)
 		bare = root.get_texture().get_image()
@@ -469,7 +486,7 @@ func _shoot(shot: String, subjects: Dictionary) -> void:
 	var noise := _diff(images["before"], images["before_again"], area)
 	var changed := _diff(images["before"], images["after"], area)
 	print("PLATE %s before_vs_after changed_px=%d noise_px=%d" % [shot, changed, noise])
-	if shot != "max_zoom":
+	if not shot.begins_with("max_zoom"):
 		_expect(changed > 2 * noise + 500, "%s: after differs from noise too little" % shot)
 
 
@@ -530,7 +547,7 @@ func _check_subjects(shot: String, subjects: Dictionary) -> Rect2:
 		var miss := INF if hit.is_empty() else (hit["position"] as Vector3).distance_to(target)
 		var seen := hit_tag == tag if tag != "wall" else miss < 0.3
 		# At the farthest zoom a subject is a few pixels; only the frame counts.
-		seen = seen or shot == "max_zoom"
+		seen = seen or shot.begins_with("max_zoom")
 		var inside := view.has_point(at) and not cam.is_position_behind(target)
 		print(
 			(
@@ -551,6 +568,7 @@ func _top(box: AABB) -> Vector3:
 
 
 func _measure() -> void:
+	_cam.set_angle_step(TycoonCamera.AngleStep.TOP_DOWN)
 	_cam.go_home()
 	await _settle()
 	var vp := root.get_viewport_rid()
@@ -575,6 +593,25 @@ func _measure() -> void:
 				)
 			)
 		_clock.set_paused(true)
+
+
+## The Home crops of the blur steps side by side, at half size.
+func _strip() -> void:
+	var parts: Array[Image] = []
+	for name in STRIP:
+		var img := Image.load_from_file(_out_dir.path_join("crop_home_%s.png" % name))
+		if img == null:
+			_invalid("no crop for %s" % name)
+			return
+		img.convert(Image.FORMAT_RGB8)
+		img.resize(img.get_width() / 2, img.get_height() / 2, Image.INTERPOLATE_LANCZOS)
+		parts.append(img)
+	var cell := parts[0].get_size()
+	var strip := Image.create(cell.x * parts.size(), cell.y, false, Image.FORMAT_RGB8)
+	for i in parts.size():
+		strip.blit_rect(parts[i], Rect2i(Vector2i.ZERO, cell), Vector2i(i * cell.x, 0))
+	var path := _out_dir.path_join("crop_strip_home.png")
+	print("PLATE strip %s order=%s err=%d" % [path, STRIP, strip.save_png(path)])
 
 
 func _contact_sheet() -> void:
