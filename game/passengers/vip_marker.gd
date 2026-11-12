@@ -24,7 +24,7 @@ extends RefCounted
 ## depth test and would land on another passenger's face.
 ##
 ## PassengerViews gives every pooled passenger node one sprite (make_sprite()),
-## reads the marked ids from the director on every sync (marked_ids()), sets the
+## fills the marked ids from the director on every sync (marked_ids()), sets the
 ## sprite each tick (mark()) and lays it out each frame after the need icons
 ## (layout()): CROWN_PX on screen, over the head, or on top of the thought
 ## bubble and the need icon row while they show. It holds no tick: a load reads
@@ -61,22 +61,15 @@ const BALL_RADIUS := 15.0
 static var _texture: ImageTexture
 
 
-## The ids of the passengers marked by an accepted VIP incident of `director`,
-## as keys; empty with no director.
-static func marked_ids(director: IncidentDirector) -> Dictionary:
-	var out := {}
+## Clears `into` and fills it with the ids of the passengers marked by an
+## accepted VIP incident of `director` (IncidentDirector.vip_targets(), which
+## copies no incident), as keys; empty with no director. The caller keeps one
+## dictionary and passes it on every sync.
+static func marked_ids(director: IncidentDirector, into: Dictionary) -> void:
 	if director == null:
-		return out
-	for incident in director.incidents():
-		if (
-			incident["kind"] != IncidentCatalogue.VIP
-			or incident["state"] != IncidentCatalogue.ACCEPTED
-		):
-			continue
-		var target: int = incident["plan"].get("target", 0)
-		if target != 0:
-			out[target] = true
-	return out
+		into.clear()
+		return
+	director.vip_targets(into)
 
 
 static func texture() -> Texture2D:

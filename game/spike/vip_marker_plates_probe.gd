@@ -115,7 +115,9 @@ func _run() -> void:
 		return
 	_clock.advance(SimClock.STEP)
 	_clock.set_paused(true)
-	print("PROBE marked=%s" % [VipMarker.marked_ids(_director).keys()])
+	var marked := {}
+	VipMarker.marked_ids(_director, marked)
+	print("PROBE marked=%s" % [marked.keys()])
 	for layer in _main.find_children("*", "CanvasLayer", true, false):
 		(layer as CanvasLayer).visible = false
 	_rig = _main.get_node("TycoonCamera") as TycoonCamera

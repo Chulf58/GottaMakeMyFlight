@@ -94,9 +94,9 @@ var _turns := PassengerTurns.new()
 ## way it walked in (SecurityLooks.arrival_yaw()) for a view first drawn after.
 ## Holds no tick; snap() and release erase it.
 var _setoffs: Dictionary = {}
-## Passenger ids an accepted VIP incident marked, as keys (VipMarker.marked_ids),
-## read again from the director on every sync, so a load reads the loaded ones.
-## Holds no tick.
+## Passenger ids an accepted VIP incident marked, as keys: one dictionary,
+## cleared and filled again from the director on every sync
+## (VipMarker.marked_ids), so a load reads the loaded ones. Holds no tick.
 var _vips: Dictionary = {}
 ## True while snap() syncs: the step from the pre-load position is no heading.
 var _snapping := false
@@ -215,7 +215,7 @@ func sync() -> void:
 	# before _props.sync(); true for a node made on this sync.
 	var steers := {}
 	var fresh := {}
-	_vips = VipMarker.marked_ids(incidents)
+	VipMarker.marked_ids(incidents, _vips)
 	for id in sim.passenger_ids():
 		var p := sim.get_passenger(id)
 		if not _visible(p):

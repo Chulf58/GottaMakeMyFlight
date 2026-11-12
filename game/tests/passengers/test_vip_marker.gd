@@ -216,7 +216,9 @@ func test_the_crown_texture_is_gold_inside_and_clear_outside() -> void:
 
 
 func test_marked_ids_reads_accepted_vips_with_a_target_only() -> void:
-	assert_dict(VipMarker.marked_ids(null)).is_empty()
+	var into := {99: true}
+	VipMarker.marked_ids(null, into)
+	assert_dict(into).is_empty()
 	var director := IncidentDirector.new()
 	(
 		director
@@ -231,8 +233,28 @@ func test_marked_ids_reads_accepted_vips_with_a_target_only() -> void:
 			]
 		)
 	)
-	assert_array(VipMarker.marked_ids(director).keys()).contains_exactly([7])
+	# A reused dictionary loses what it held: a stale id goes.
+	into[99] = true
+	VipMarker.marked_ids(director, into)
+	assert_array(into.keys()).contains_exactly([7])
+	# The director's query matches the filter over copied incidents it replaced.
+	var query := {}
+	director.vip_targets(query)
+	assert_dict(query).is_equal(_copied_targets(director))
 	director.free()
+
+
+## The marked ids read the old way, from the deep copies incidents() returns:
+## the reference the director's vip_targets() must match.
+func _copied_targets(director: IncidentDirector) -> Dictionary:
+	var out := {}
+	for incident in director.incidents():
+		var vip: bool = incident["kind"] == IncidentCatalogue.VIP
+		var accepted: bool = incident["state"] == IncidentCatalogue.ACCEPTED
+		var target: int = incident["plan"].get("target", 0)
+		if vip and accepted and target != 0:
+			out[target] = true
+	return out
 
 
 ## A bare incident record of `kind` in `state` whose plan targets `target`.
