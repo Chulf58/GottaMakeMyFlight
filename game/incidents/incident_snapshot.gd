@@ -24,7 +24,8 @@ extends RefCounted
 ## until it is announced or offered, and for a major that was never held. Its
 ## outcome, on a done incident only, is one of OUTCOMES.
 
-const SAVE_VERSION := 3
+## Version 4: an inspector's plan also keeps the counts the visit saw.
+const SAVE_VERSION := 4
 const KEYS: Array[String] = [
 	"save_version", "enabled", "last_rolled_day", "next_major_day", "next_id", "incidents"
 ]

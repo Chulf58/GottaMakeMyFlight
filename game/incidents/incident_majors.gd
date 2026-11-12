@@ -167,6 +167,8 @@ func _inspector_plan(incident: Dictionary, tick: int) -> Dictionary:
 		"max_full_queue": IncidentTuning.INSPECTOR_MAX_FULL_QUEUE,
 		"pass_money": IncidentTuning.INSPECTOR_PASS_MONEY,
 		"fail_half_stars": IncidentTuning.INSPECTOR_FAIL_HALF_STARS,
+		"seen_messes": 0,
+		"seen_full_queue": 0,
 	}
 
 
@@ -264,6 +266,8 @@ func _visit(incident: Dictionary, tick: int) -> void:
 			full += 1
 	var messes := sim.messes.mess_ids().size()
 	var plan: Dictionary = incident["plan"]
+	plan["seen_messes"] = messes
+	plan["seen_full_queue"] = full
 	if messes <= plan["max_messes"] and full <= plan["max_full_queue"]:
 		_pay(plan["pass_money"])
 		_done(incident, PASSED)
@@ -276,6 +280,9 @@ func _visit(incident: Dictionary, tick: int) -> void:
 func _done(incident: Dictionary, outcome: String) -> void:
 	incident["state"] = IncidentCatalogue.DONE
 	incident["outcome"] = outcome
+	# Only an announcement can be shown (IncidentSnapshot refuses a done one
+	# that is), so a seen inspector or rush must not carry the flag past its end.
+	incident["shown"] = false
 
 
 func _pay(amount: int) -> void:

@@ -64,7 +64,7 @@ func test_the_shown_flag_loads_as_saved_also_after_json() -> void:
 	assert_bool(loaded.has("error")).is_false()
 	assert_bool(loaded["incidents"][0]["shown"]).is_false()
 	assert_bool(loaded["incidents"][1]["shown"]).is_false()
-	assert_int(IncidentSnapshot.SAVE_VERSION).is_equal(3)
+	assert_int(IncidentSnapshot.SAVE_VERSION).is_equal(4)
 
 
 ## Only an announcement can be shown. The rule is checked on the state check itself,
