@@ -464,6 +464,12 @@ func _on_loaded(ok: bool) -> void:
 		snap()
 
 
+## Whether passenger `p` is drawn: false once they have boarded, and once a
+## missed passenger has lingered out, when their body goes back to the pool.
+func shows(p: Passenger) -> bool:
+	return _visible(p)
+
+
 func _visible(p: Passenger) -> bool:
 	if p.stage == Passenger.Stage.MADE:
 		return false
