@@ -6,6 +6,10 @@ extends GdUnitTestSuite
 ## ties go to the lower passenger id, and bubbles that clear each other all stay.
 
 const SIZE := Vector2(100.0, 30.0)
+## Screen pixels between two neighbours in a check-in queue, and the margin
+## BubbleDeclutter used before the thinning change.
+const QUEUE_PITCH_PX := 46.0
+const OLD_MARGIN_PX := 6.0
 
 
 func _entry(id: int, text: String, rank: int, at: Vector2) -> Dictionary:
@@ -68,14 +72,54 @@ func test_bubbles_closer_than_the_margin_count_as_overlapping() -> void:
 
 func test_a_hidden_bubble_does_not_hide_the_one_behind_it() -> void:
 	# 1 and 3 overlap 2 but not each other: 2 is hidden by 1, so 3 stays.
+	var far := SIZE.x + BubbleDeclutter.MARGIN_PX + 2.0
 	var entries: Array[Dictionary] = [
 		_entry(1, "Queue full", 0, Vector2(0.0, 0.0)),
-		_entry(2, "Queue full", 1, Vector2(60.0, 0.0)),
-		_entry(3, "Queue full", 2, Vector2(120.0, 0.0)),
+		_entry(2, "Queue full", 1, Vector2(far / 2.0, 0.0)),
+		_entry(3, "Queue full", 2, Vector2(far, 0.0)),
 	]
 	var hidden := BubbleDeclutter.hidden(entries)
 	hidden.sort()
 	assert_array(hidden).is_equal([2])
+
+
+## A packed check-in queue: late bubbles one queue cell apart on screen, about 46
+## px at 1920x1080 and the default zoom (plate 20261112-smoke14), the text about
+## 20 px tall. Board 6d5b1044, user-ruled "Thin them out": about every second
+## late passenger shows, the front one always.
+func _late_column(count: int) -> Array[Dictionary]:
+	var entries: Array[Dictionary] = []
+	for i in count:
+		var at := Vector2(960.0, 120.0 + QUEUE_PITCH_PX * i)
+		var rect := BubbleDeclutter.rect_of(at, BubbleDeclutter.LATE_TEXT, 56, 14, 0.2)
+		entries.append(BubbleDeclutter.entry(100 + i, BubbleDeclutter.LATE_TEXT, i, rect))
+	return entries
+
+
+func test_in_a_packed_queue_about_every_second_late_bubble_shows() -> void:
+	var entries := _late_column(12)
+	assert_float(entries[0]["rect"].size.y).is_between(18.0, 24.0)
+	var hidden := BubbleDeclutter.hidden(entries)
+	var kept: Array[int] = []
+	for i in 12:
+		if not hidden.has(100 + i):
+			kept.append(i)
+	assert_int(kept[0]).is_equal(0)
+	assert_int(kept.size()).is_between(4, 6)
+	for i in range(1, kept.size()):
+		assert_int(kept[i] - kept[i - 1]).is_greater(1)
+
+
+func test_the_old_margin_kept_every_late_bubble_in_the_same_queue() -> void:
+	# Control: at the margin before board 6d5b1044 no two neighbours overlap, so
+	# the thinning above comes from the new margin and not from the geometry.
+	var entries := _late_column(12)
+	var half := OLD_MARGIN_PX / 2.0
+	for i in 11:
+		var upper: Rect2 = entries[i]["rect"]
+		var lower: Rect2 = entries[i + 1]["rect"]
+		assert_bool(upper.grow(half).intersects(lower.grow(half))).is_false()
+	assert_float(BubbleDeclutter.MARGIN_PX).is_greater(OLD_MARGIN_PX)
 
 
 func test_a_walker_outside_every_queue_ranks_behind_a_queued_passenger() -> void:
