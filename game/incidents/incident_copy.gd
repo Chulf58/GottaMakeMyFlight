@@ -74,9 +74,10 @@ static func template(kind: String) -> Dictionary:
 
 
 ## `copy` with its {name} slots filled from `incident`'s plan. A copy without
-## slots, or an incident without a plan, comes back as it was.
-static func fill(copy: Dictionary, incident: Dictionary) -> Dictionary:
-	var vars := vars_of(incident)
+## slots, or an incident without a plan, comes back as it was. `now_tick` is the
+## clock when the words are shown: a flight is "today's" or "tomorrow's" by it.
+static func fill(copy: Dictionary, incident: Dictionary, now_tick: int) -> Dictionary:
+	var vars := vars_of(incident, now_tick)
 	var out := {}
 	for key: String in copy:
 		out[key] = str(copy[key]).format(vars)
@@ -84,7 +85,7 @@ static func fill(copy: Dictionary, incident: Dictionary) -> Dictionary:
 
 
 ## The slot values of an incident's plan.
-static func vars_of(incident: Dictionary) -> Dictionary:
+static func vars_of(incident: Dictionary, now_tick: int) -> Dictionary:
 	var plan: Dictionary = incident.get("plan", {})
 	if plan.is_empty():
 		return {}
@@ -102,14 +103,14 @@ static func vars_of(incident: Dictionary) -> Dictionary:
 			return _rush_vars(plan)
 		IncidentCatalogue.VIP:
 			return {
-				"flight": _flight_text(plan, incident),
+				"flight": _flight_text(plan, now_tick),
 				"bonus": plan["bonus"],
 				"good_mood": plan["good_mood"],
 				"penalty": stars_text(plan["miss_half_stars"]),
 			}
 		IncidentCatalogue.FAVOUR:
 			return {
-				"flight": _flight_text(plan, incident),
+				"flight": _flight_text(plan, now_tick),
 				"extra": plan["extra"],
 				"bonus": plan["bonus"],
 			}
@@ -132,7 +133,7 @@ static func vip_result(incident: Dictionary) -> Dictionary:
 			words = {"title": VIP_MISSED_TITLE, "detail": VIP_MISSED_RESULT}
 		_:
 			return {}
-	return fill(words, incident)
+	return fill(words, incident, incident["fire_tick"])
 
 
 ## "today's", "tomorrow's" or "day N's" for a flight leaving at `departs`, seen
@@ -158,10 +159,10 @@ static func stars_text(half_stars: int) -> String:
 	return "%.1f stars" % (half_stars * 0.5)
 
 
-## "today's 10:29 flight": the plan's flight, from the day the offer was made.
-static func _flight_text(plan: Dictionary, incident: Dictionary) -> String:
+## "today's 10:29 flight": the plan's flight, seen from the day of `now_tick`.
+static func _flight_text(plan: Dictionary, now_tick: int) -> String:
 	var when := GameCalendar.clock_text(plan["departs"])
-	return "%s %s flight" % [day_word(plan["departs"], incident["fire_tick"]), when]
+	return "%s %s flight" % [day_word(plan["departs"], now_tick), when]
 
 
 static func _rush_vars(plan: Dictionary) -> Dictionary:

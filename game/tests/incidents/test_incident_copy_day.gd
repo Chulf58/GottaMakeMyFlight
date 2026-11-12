@@ -23,7 +23,7 @@ func _incident(kind: String, fired: int, departs_day: int) -> Dictionary:
 
 func _vip_words(fired: int, departs_day: int) -> Dictionary:
 	var copy := IncidentCatalogue.panel_copy(IncidentCatalogue.VIP)
-	return IncidentCopy.fill(copy, _incident(IncidentCatalogue.VIP, fired, departs_day))
+	return IncidentCopy.fill(copy, _incident(IncidentCatalogue.VIP, fired, departs_day), fired)
 
 
 func test_a_vip_flight_later_today_is_todays() -> void:
@@ -59,8 +59,8 @@ func test_a_flight_two_days_ahead_names_its_day_number() -> void:
 func test_a_favour_names_its_day_the_same_way() -> void:
 	var copy := IncidentCatalogue.panel_copy(IncidentCatalogue.FAVOUR)
 	var fired := GameCalendar.tick_at(2, 8 * 60 + 46)
-	var today := IncidentCopy.fill(copy, _incident(IncidentCatalogue.FAVOUR, fired, 2))
-	var tomorrow := IncidentCopy.fill(copy, _incident(IncidentCatalogue.FAVOUR, fired, 3))
+	var today := IncidentCopy.fill(copy, _incident(IncidentCatalogue.FAVOUR, fired, 2), fired)
+	var tomorrow := IncidentCopy.fill(copy, _incident(IncidentCatalogue.FAVOUR, fired, 3), fired)
 	assert_str(today["body"]).contains("onto today's 10:29 flight")
 	assert_str(tomorrow["body"]).contains("onto tomorrow's 10:29 flight")
 	assert_str(today["body"]).contains("fit 4 more passengers")
