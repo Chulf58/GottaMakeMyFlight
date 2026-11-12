@@ -41,6 +41,9 @@ signal restored
 ## A major incident was announced or offered (present()); the panel
 ## (IncidentPanel) shows it. A copy of its record.
 signal major_presented(incident: Dictionary)
+## An accepted VIP has its result (bonus, neutral or penalty): IncidentCards
+## posts the result card. A copy of its record.
+signal vip_resolved(incident: Dictionary)
 
 ## A spill may come this long before the day's first departure: two hours.
 const BUSY_LEAD_TICKS := 2 * 60 * GameCalendar.TICKS_PER_MINUTE

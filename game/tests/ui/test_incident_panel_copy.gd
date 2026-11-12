@@ -82,8 +82,9 @@ func test_a_vip_offer_names_the_flight_the_bonus_and_the_penalty() -> void:
 	}
 	var text := _words(IncidentCatalogue.VIP, plan)
 	print(text)
-	assert_str(text).contains("the %s flight" % GameCalendar.clock_text(DEPARTS))
-	assert_str(text).contains("Reward: 500 money if the VIP makes the flight in a good mood.")
+	assert_str(text).contains("fly on day 3's %s flight" % GameCalendar.clock_text(DEPARTS))
+	assert_str(text).contains("Reward: 500 money if the VIP makes the flight in a good mood")
+	assert_str(text).contains("a mood of 75 or higher when boarding")
 	assert_str(text).contains("If it fails: your rating drops by 1 star")
 	assert_str(text).contains(IncidentPanel.OFFER_FOOTER)
 	assert_object(_k.panel.dialog().accept_button()).is_not_null()

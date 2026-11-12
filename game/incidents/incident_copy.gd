@@ -23,18 +23,29 @@ const RUSH_BODY := (
 	+ "If it fails: queues grow, and passengers who miss their flight lower your "
 	+ "rating as usual."
 )
-const VIP_BODY := (
-	"A VIP wants to fly on the {time} flight. The first passenger to arrive for that "
-	+ "flight is the VIP."
+const VIP_BODY := "A VIP wants to fly on {flight}. The first passenger to arrive for it is the VIP."
+const VIP_REWARD := (
+	"{bonus} money if the VIP makes the flight in a good mood (a mood of {good_mood} or "
+	+ "higher when boarding)."
 )
-const VIP_REWARD := "{bonus} money if the VIP makes the flight in a good mood."
 const VIP_FAILURE := "your rating drops by {penalty} if the VIP misses the flight."
-const FAVOUR_BODY := "An airline asks you to fit {extra} more passengers onto its {time} flight."
+const FAVOUR_BODY := "An airline asks you to fit {extra} more passengers onto {flight}."
 const FAVOUR_REWARD := "{bonus} money now, and {extra} more passengers paying their fees."
 const FAVOUR_FAILURE := (
 	"the extra passengers need check-in and security too, and any who miss the flight "
 	+ "lower your rating as usual."
 )
+
+## The result cards of a VIP, posted by IncidentCards when it ends: the title
+## and the words for each outcome (IncidentMajors.BONUS, NEUTRAL, PENALTY).
+const VIP_MADE_TITLE := "The VIP made the flight"
+const VIP_MISSED_TITLE := "The VIP missed the flight"
+const VIP_BONUS_RESULT := "The VIP boarded in a good mood. You earn {bonus} money."
+const VIP_NEUTRAL_RESULT := (
+	"The VIP made the flight, but their mood was below {good_mood} when boarding, "
+	+ "so there is no bonus."
+)
+const VIP_MISSED_RESULT := "Your rating drops by {penalty}."
 
 
 ## The unfilled words of a major's panel: {"title", "body"} and, for an offer,
@@ -91,17 +102,48 @@ static func vars_of(incident: Dictionary) -> Dictionary:
 			return _rush_vars(plan)
 		IncidentCatalogue.VIP:
 			return {
-				"time": GameCalendar.clock_text(plan["departs"]),
+				"flight": _flight_text(plan, incident),
 				"bonus": plan["bonus"],
+				"good_mood": plan["good_mood"],
 				"penalty": stars_text(plan["miss_half_stars"]),
 			}
 		IncidentCatalogue.FAVOUR:
 			return {
-				"time": GameCalendar.clock_text(plan["departs"]),
+				"flight": _flight_text(plan, incident),
 				"extra": plan["extra"],
 				"bonus": plan["bonus"],
 			}
 	return {}
+
+
+## The result card of a finished VIP, {"title", "detail"}, filled from its plan;
+## {} for an incident that is not a VIP or ended without a result to tell
+## (IncidentMajors.NOT_HELD).
+static func vip_result(incident: Dictionary) -> Dictionary:
+	if incident.get("kind", "") != IncidentCatalogue.VIP:
+		return {}
+	var words := {}
+	match incident.get("outcome", ""):
+		IncidentMajors.BONUS:
+			words = {"title": VIP_MADE_TITLE, "detail": VIP_BONUS_RESULT}
+		IncidentMajors.NEUTRAL:
+			words = {"title": VIP_MADE_TITLE, "detail": VIP_NEUTRAL_RESULT}
+		IncidentMajors.PENALTY:
+			words = {"title": VIP_MISSED_TITLE, "detail": VIP_MISSED_RESULT}
+		_:
+			return {}
+	return fill(words, incident)
+
+
+## "today's", "tomorrow's" or "day N's" for a flight leaving at `departs`, seen
+## from `now`: the days the departures board heads its list with.
+static func day_word(departs: int, now: int) -> String:
+	var ahead := GameCalendar.day_of(departs) - GameCalendar.day_of(now)
+	if ahead == 0:
+		return "%s's" % DeparturesBoard.TODAY_HEADING.to_lower()
+	if ahead == 1:
+		return "%s's" % DeparturesBoard.TOMORROW_HEADING.to_lower()
+	return "day %d's" % (GameCalendar.day_of(departs) + 1)
 
 
 ## Half stars as words: "1 star", "half a star", "1.5 stars".
@@ -114,6 +156,12 @@ static func stars_text(half_stars: int) -> String:
 		@warning_ignore("integer_division")
 		return "%d stars" % (half_stars / 2)
 	return "%.1f stars" % (half_stars * 0.5)
+
+
+## "today's 10:29 flight": the plan's flight, from the day the offer was made.
+static func _flight_text(plan: Dictionary, incident: Dictionary) -> String:
+	var when := GameCalendar.clock_text(plan["departs"])
+	return "%s %s flight" % [day_word(plan["departs"], incident["fire_tick"]), when]
 
 
 static func _rush_vars(plan: Dictionary) -> Dictionary:
