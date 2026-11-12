@@ -9,8 +9,12 @@ extends RefCounted
 
 ## The sim's text for a late passenger (PassengerSim.bubble_text).
 const LATE_TEXT := "I'm late!"
-## Bubbles closer than this on screen, in pixels, count as overlapping.
-const MARGIN_PX := 6.0
+## Bubbles closer than this on screen, in pixels, count as overlapping. Set from
+## a packed check-in queue (rows about 46 px apart, late text about 21 px tall):
+## the gap to the next row is about 25 px and to the second row about 71 px, so
+## 48 hides the next row and keeps the second, which shows every second late
+## passenger for rows 35 to 69 px apart (board 6d5b1044, user-ruled).
+const MARGIN_PX := 48.0
 ## Rank of a passenger in no queue: behind every queued one.
 const NO_QUEUE := 1 << 30
 
