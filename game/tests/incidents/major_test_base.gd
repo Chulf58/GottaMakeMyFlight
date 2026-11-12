@@ -70,7 +70,17 @@ func _record(id: int) -> Dictionary:
 
 
 ## An accepted VIP waiting for its passenger, put in through the director's load.
-func _accepted_vip(flight: String) -> int:
+## `plan_values` replace the tuning values the plan is made with.
+func _accepted_vip(flight: String, plan_values := {}) -> int:
+	var plan := {
+		"flight": flight,
+		"departs": 1,
+		"bonus": IncidentTuning.VIP_BONUS_MONEY,
+		"good_mood": IncidentTuning.VIP_GOOD_MOOD,
+		"miss_half_stars": IncidentTuning.VIP_MISS_HALF_STARS,
+		"target": 0,
+	}
+	plan.merge(plan_values, true)
 	var data := _director.to_snapshot()
 	var id: int = data["next_id"]
 	data["next_id"] = id + 1
@@ -89,15 +99,7 @@ func _accepted_vip(flight: String) -> int:
 				"place": "",
 				"outcome": "",
 				"shown": false,
-				"plan":
-				{
-					"flight": flight,
-					"departs": 1,
-					"bonus": IncidentTuning.VIP_BONUS_MONEY,
-					"good_mood": IncidentTuning.VIP_GOOD_MOOD,
-					"miss_half_stars": IncidentTuning.VIP_MISS_HALF_STARS,
-					"target": 0,
-				},
+				"plan": plan,
 			}
 		)
 	)

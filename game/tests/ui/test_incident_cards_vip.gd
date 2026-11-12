@@ -6,6 +6,13 @@ extends MajorTestBase
 ## comes back when the rail resets or the director loads. A VIP whose flight
 ## is dropped posts none.
 
+## The VIP's plan numbers, none of them the tuning's, so a card that read
+## IncidentTuning instead of the saved plan would say the wrong thing.
+const BONUS := 123
+const GOOD_MOOD := 90
+const MISS_HALF_STARS := 3
+const PLAN := {"bonus": BONUS, "good_mood": GOOD_MOOD, "miss_half_stars": MISS_HALF_STARS}
+
 var _rail: AlertStack
 var _cards: IncidentCards
 
@@ -25,13 +32,21 @@ func after_test() -> void:
 	super.after_test()
 
 
-## The VIP on its flight, finished: made or missed, at `mood`. Returns the incident id.
+## The VIP (PLAN) on its flight, finished: made or missed, at `mood`. The card
+## never pauses the clock: it is neither held nor changed in speed. Returns the
+## incident id.
 func _finished_vip(made: bool, mood: int) -> int:
-	var id := _accepted_vip(VIP_FLIGHT)
+	var id := _accepted_vip(VIP_FLIGHT, PLAN)
 	var vip := _world.sim.spawn_now(VIP_FLIGHT)
 	var p := _world.sim.get_passenger(vip)
 	p.mood = mood
+	var speed := _world.clock.speed
+	var paused := _world.clock.paused
 	PassengerLifecycle.finish(_world.sim, p, made)
+	assert_object(_rail.notice_card(IncidentCards.key_of({"id": id}))).is_not_null()
+	assert_bool(_world.clock.holds.is_holding()).is_false()
+	assert_int(_world.clock.speed).is_equal(speed)
+	assert_bool(_world.clock.paused).is_equal(paused)
 	return id
 
 
@@ -45,34 +60,36 @@ func _words(id: int) -> String:
 
 
 func test_a_vip_who_makes_it_in_a_good_mood_posts_a_bonus_card() -> void:
-	var id := _finished_vip(true, IncidentTuning.VIP_GOOD_MOOD)
+	var id := _finished_vip(true, GOOD_MOOD)
 	var text := _words(id)
 	print(text)
 	assert_str(text).contains("The VIP made the flight")
 	assert_str(text).contains("good mood")
-	assert_str(text).contains("%d money" % IncidentTuning.VIP_BONUS_MONEY)
+	assert_str(text).contains("You earn 123 money")
+	assert_str(text).not_contains("%d" % IncidentTuning.VIP_BONUS_MONEY)
 
 
 func test_a_vip_who_makes_it_in_a_low_mood_posts_a_no_bonus_card() -> void:
-	var id := _finished_vip(true, IncidentTuning.VIP_GOOD_MOOD - 1)
+	var id := _finished_vip(true, GOOD_MOOD - 1)
 	var text := _words(id)
 	print(text)
 	assert_str(text).contains("The VIP made the flight")
 	assert_str(text).contains("no bonus")
-	assert_str(text).contains("%d" % IncidentTuning.VIP_GOOD_MOOD)
+	assert_str(text).contains("below 90 when boarding")
+	assert_str(text).not_contains("%d" % IncidentTuning.VIP_GOOD_MOOD)
 	assert_str(text).not_contains("money")
 
 
 func test_a_vip_who_misses_posts_a_rating_card() -> void:
-	var id := _finished_vip(false, IncidentTuning.VIP_GOOD_MOOD)
+	var id := _finished_vip(false, GOOD_MOOD)
 	var text := _words(id)
 	print(text)
 	assert_str(text).contains("The VIP missed the flight")
-	assert_str(text).contains("Your rating drops by 1 star")
+	assert_str(text).contains("Your rating drops by 1.5 stars")
 
 
 func test_an_outcome_posts_one_card_and_a_repeat_posts_no_other() -> void:
-	var id := _finished_vip(true, IncidentTuning.VIP_GOOD_MOOD)
+	var id := _finished_vip(true, GOOD_MOOD)
 	var key := IncidentCards.key_of({"id": id})
 	var first := _rail.notice_card(key)
 	assert_object(first).is_not_null()
@@ -97,7 +114,7 @@ func test_the_result_card_comes_back_after_the_rail_resets() -> void:
 
 
 func test_the_result_card_comes_back_after_the_director_loads() -> void:
-	var id := _finished_vip(true, IncidentTuning.VIP_GOOD_MOOD)
+	var id := _finished_vip(true, GOOD_MOOD)
 	var key := IncidentCards.key_of({"id": id})
 	var saved := JSON.parse_string(JSON.stringify(_director.to_snapshot())) as Dictionary
 	_rail.drop_notice(key)
