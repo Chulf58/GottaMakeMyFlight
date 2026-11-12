@@ -210,9 +210,15 @@ var _intro: IntroDialogue
 ## The intro's hold on the clock (SimClock.holds), which does not give way to
 ## the player: the clock starts when the intro closes, as its text says.
 var _intro_hold := ClockHolds.NONE
+## The game menu, which also asks the new-game incidents question; null in a
+## scene without one.
+var _game_menu: GameMenu
 ## The camera's input state when the intro opened, restored when it closes.
 var _camera_was_processing := true
 var _camera_was_taking_input := true
+## How many dialogs hold the camera now. A queued dialog opens inside the close
+## of the one ahead of it, before that one says it closed, so two can overlap.
+var _camera_gates := 0
 
 
 func _ready() -> void:
@@ -307,6 +313,7 @@ func _ready() -> void:
 	_hints.scene_root = get_parent()
 	add_child(_hints)
 	_wire_unlock_guide()
+	_wire_dialog_gates()
 	_frame_start_view()
 	refresh()
 
@@ -621,6 +628,17 @@ func _wire_unlock_guide() -> void:
 		menu.watch_guide(_unlock_guide)
 
 
+## Holds the camera still while the game menu, the new-game question or a major
+## incident panel is open, as it is for the intro and the unlock dialog.
+func _wire_dialog_gates() -> void:
+	_game_menu = get_node_or_null("../GameMenu") as GameMenu
+	if _game_menu != null:
+		_game_menu.dialog_changed.connect(_gate_camera)
+	var incident_panel := get_node_or_null("../IncidentPanel") as IncidentPanel
+	if incident_panel != null:
+		incident_panel.dialog_changed.connect(_gate_camera)
+
+
 ## The unlock guide: its dialog and marks, or null before the HUD is ready.
 func unlock_guide() -> UnlockGuide:
 	return _unlock_guide
@@ -785,11 +803,16 @@ func _close_intro() -> void:
 	if _intro_layer == null:
 		return
 	var layer := _intro_layer
+	var continued := _intro != null and _intro.is_dismissed()
 	_intro_layer = null
 	_intro = null
 	if is_instance_valid(layer) and not layer.is_queued_for_deletion():
 		layer.queue_free()
 	_gate_camera(false)
+	# The new-game question takes its place in line before the intro lets go, so
+	# the clock stays held from the welcome page to the answer.
+	if continued and is_instance_valid(_game_menu) and _game_menu.is_inside_tree():
+		_game_menu.ask_incidents()
 	if is_instance_valid(clock):
 		clock.holds.release(_intro_hold)
 	_intro_hold = ClockHolds.NONE
@@ -798,16 +821,25 @@ func _close_intro() -> void:
 ## The camera-input gate. Marking events handled cannot stop TycoonCamera,
 ## which polls held keys in _process, so while the intro is open its _process
 ## (WASD, Q/E, easing) and _unhandled_input (wheel, drags, Home) are switched
-## off, and switched back to what they were when it closes.
+## off, and switched back to what they were when the last one closes. Only the
+## first gate saves the state, so overlapping gates cannot save the gated one.
 func _gate_camera(closed: bool) -> void:
 	if not is_instance_valid(camera):
 		return
 	if closed:
+		_camera_gates += 1
+		if _camera_gates > 1:
+			return
 		_camera_was_processing = camera.is_processing()
 		_camera_was_taking_input = camera.is_processing_unhandled_input()
 		camera.set_process(false)
 		camera.set_process_unhandled_input(false)
 	else:
+		if _camera_gates == 0:
+			return
+		_camera_gates -= 1
+		if _camera_gates > 0:
+			return
 		camera.set_process(_camera_was_processing)
 		camera.set_process_unhandled_input(_camera_was_taking_input)
 

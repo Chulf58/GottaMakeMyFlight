@@ -55,6 +55,7 @@ func _schedule_spill(ahead: int) -> StringName:
 				"place": "",
 				"outcome": "",
 				"shown": false,
+				"plan": {},
 			}
 		)
 	)

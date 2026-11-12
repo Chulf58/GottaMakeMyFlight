@@ -4,15 +4,20 @@ extends RefCounted
 ## a-card-and-a-cau): each kind's category (minor or major), the airline tier
 ## it needs, its weight from what the player has built, the states it moves
 ## through and its card words. For now one minor kind, the spill, and "none",
-## whose weight keeps some days quiet. Majors (slices F and G) add entries
-## here; their states (announced, offered, accepted, declined) are already in
-## the save shape.
+## whose weight keeps some days quiet, and the four majors: the inspector's
+## visit and the holiday rush (announced), the VIP and the airline favour
+## (offers). Their numbers are IncidentTuning's, their words IncidentCopy's,
+## their effects IncidentMajors'.
 
 ## Bumped whenever a kind or a weight changes: it is part of every roll's seed
 ## (IncidentRoll), so an old seed never replays against a new catalogue.
-const VERSION := 1
+const VERSION := 2
 const NONE := "none"
 const SPILL := "spill"
+const INSPECTOR := "inspector"
+const RUSH := "rush"
+const VIP := "vip"
+const FAVOUR := "favour"
 const MINOR := "minor"
 const MAJOR := "major"
 ## Every state an incident can be in. A minor is scheduled when rolled, active
@@ -30,10 +35,16 @@ const CHECKIN_PLACE := "Check-in"
 const SECURITY_PLACE := "Security"
 const SPILL_PLACES: Array[String] = [CHECKIN_PLACE, SECURITY_PLACE]
 ## Catalogue order, which is the weighted draw's order.
-const ORDER: Array[String] = [NONE, SPILL]
+const ORDER: Array[String] = [NONE, SPILL, INSPECTOR, RUSH, VIP, FAVOUR]
+## "offer" is true for an opt-in major the player accepts or declines; the
+## others are announced.
 const KINDS := {
 	NONE: {"category": MINOR, "tier": 0},
 	SPILL: {"category": MINOR, "tier": 0},
+	INSPECTOR: {"category": MAJOR, "tier": IncidentTuning.INSPECTOR_TIER, "offer": false},
+	RUSH: {"category": MAJOR, "tier": IncidentTuning.RUSH_TIER, "offer": false},
+	VIP: {"category": MAJOR, "tier": IncidentTuning.VIP_TIER, "offer": true},
+	FAVOUR: {"category": MAJOR, "tier": IncidentTuning.FAVOUR_TIER, "offer": true},
 }
 ## The weight of a quiet day. Tuning value.
 const NONE_WEIGHT := 4
@@ -60,14 +71,29 @@ static func tier(kind: String) -> int:
 	return int(KINDS.get(kind, {}).get("tier", 0))
 
 
+## Whether a major is an opt-in offer (VIP, favour) rather than an announcement.
+static func is_offer(kind: String) -> bool:
+	return KINDS.get(kind, {}).get("offer", false)
+
+
 ## The weight of `kind` in `world`: {"tier": the airline tier, "places": the
-## places a spill can happen}.
+## places a spill can happen, "contracts": the running contracts}. The rush,
+## the VIP and the favour need a running contract to land on.
 static func weight(kind: String, world: Dictionary) -> int:
+	var contracts := int(world.get("contracts", 0)) > 0
 	match kind:
 		NONE:
 			return NONE_WEIGHT
 		SPILL:
 			return mini(int(world.get("places", 0)), SPILL_MOST)
+		INSPECTOR:
+			return IncidentTuning.INSPECTOR_WEIGHT
+		RUSH:
+			return IncidentTuning.RUSH_WEIGHT if contracts else 0
+		VIP:
+			return IncidentTuning.VIP_WEIGHT if contracts else 0
+		FAVOUR:
+			return IncidentTuning.FAVOUR_WEIGHT if contracts else 0
 	return 0
 
 
@@ -84,17 +110,25 @@ static func candidates(world: Dictionary) -> Array[Dictionary]:
 ## The states `kind` moves through.
 static func states_for(kind: String) -> Array[String]:
 	var out: Array[String] = []
-	if kind == SPILL:
-		out.assign([SCHEDULED, ACTIVE, DONE])
+	match kind:
+		SPILL:
+			out.assign([SCHEDULED, ACTIVE, DONE])
+		INSPECTOR, RUSH:
+			out.assign([SCHEDULED, ANNOUNCED, DONE])
+		VIP:
+			out.assign([SCHEDULED, OFFERED, ACCEPTED, DECLINED, DONE])
+		FAVOUR:
+			out.assign([SCHEDULED, OFFERED, DECLINED, DONE])
 	return out
 
 
 ## The words of a major's panel (IncidentPanel): {"title", "body"}, and for an
 ## offer also {"reward", "failure"}, each a short plain sentence naming what the
-## player gets and what it costs. {} for a kind with none: no minor has a panel,
-## and the majors (slice G) add theirs here.
-static func panel_copy(_kind: String) -> Dictionary:
-	return {}
+## player gets and what it costs. They hold {name} slots that
+## IncidentCopy.fill() fills from the incident's plan, so the numbers shown are
+## the ones in force. {} for a kind with none (every minor).
+static func panel_copy(kind: String) -> Dictionary:
+	return IncidentCopy.template(kind)
 
 
 ## The card's title for an active incident.

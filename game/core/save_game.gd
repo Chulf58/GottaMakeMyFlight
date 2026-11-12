@@ -85,7 +85,10 @@ signal loaded(ok: bool)
 ## 18: every saved incident also says whether its announcement was shown
 ## (IncidentSnapshot version 2, "shown"); version 17 saves are refused (no
 ## migration before a release).
-const SAVE_VERSION := 18
+## 19: the major incidents (inspector, rush, VIP, favour) keep what they decided
+## in a saved plan (IncidentSnapshot version 3, "plan"); version 18 saves are
+## refused (no migration before a release).
+const SAVE_VERSION := 19
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"

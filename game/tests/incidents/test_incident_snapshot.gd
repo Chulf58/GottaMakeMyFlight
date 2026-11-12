@@ -25,6 +25,7 @@ static func _good() -> Dictionary:
 				"place": "Check-in",
 				"outcome": "",
 				"shown": false,
+				"plan": {},
 			},
 			{
 				"id": 2,
@@ -37,6 +38,7 @@ static func _good() -> Dictionary:
 				"place": "",
 				"outcome": "",
 				"shown": false,
+				"plan": {},
 			},
 		],
 	}
@@ -62,11 +64,11 @@ func test_the_shown_flag_loads_as_saved_also_after_json() -> void:
 	assert_bool(loaded.has("error")).is_false()
 	assert_bool(loaded["incidents"][0]["shown"]).is_false()
 	assert_bool(loaded["incidents"][1]["shown"]).is_false()
-	assert_int(IncidentSnapshot.SAVE_VERSION).is_equal(2)
+	assert_int(IncidentSnapshot.SAVE_VERSION).is_equal(3)
 
 
-## Only an announcement can be shown. No major kind is in the catalogue yet, so
-## the rule is checked on the state check itself, which takes no kind.
+## Only an announcement can be shown. The rule is checked on the state check itself,
+## which takes no kind.
 func test_only_an_announcement_can_be_shown() -> void:
 	var cases := {
 		IncidentCatalogue.ANNOUNCED: true,
