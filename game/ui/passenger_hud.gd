@@ -328,8 +328,9 @@ func _process(_delta: float) -> void:
 			_reveal_built()
 
 
-## A followed passenger the sim has retired is gone: clear the selection and
-## let the camera go, instead of following the frozen anchor.
+## A followed passenger the sim has retired, or whose view is released on
+## boarding, is gone: clear the selection and let the camera go where it stands,
+## instead of following the frozen anchor.
 func _drop_retired_selection() -> void:
 	_settle_built_selection()
 	if landside_views != null and landside_views.selected_id != 0:
@@ -337,7 +338,10 @@ func _drop_retired_selection() -> void:
 			landside_views.selected_id = 0
 			if camera != null:
 				camera.stop_follow()
-	if views == null or views.selected_id == 0 or sim.get_passenger(views.selected_id) != null:
+	if views == null or views.selected_id == 0:
+		return
+	var followed := sim.get_passenger(views.selected_id)
+	if followed != null and views.shows(followed):
 		return
 	views.selected_id = 0
 	if camera != null:
