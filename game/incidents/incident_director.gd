@@ -41,6 +41,9 @@ signal restored
 ## A major incident was announced or offered (present()); the panel
 ## (IncidentPanel) shows it. A copy of its record.
 signal major_presented(incident: Dictionary)
+## An accepted VIP has its result (bonus, neutral or penalty): IncidentCards
+## posts the result card. A copy of its record.
+signal vip_resolved(incident: Dictionary)
 
 ## A spill may come this long before the day's first departure: two hours.
 const BUSY_LEAD_TICKS := 2 * 60 * GameCalendar.TICKS_PER_MINUTE
@@ -178,6 +181,22 @@ func active_incidents() -> Array[Dictionary]:
 		if incident["state"] == IncidentCatalogue.ACTIVE:
 			out.append(incident.duplicate(true))
 	return out
+
+
+## Clears `into` and fills it with the ids of the passengers an accepted VIP
+## incident marked (plan "target", not 0), as keys with the value true. A read
+## for views on every tick: it copies no incident (VipMarker).
+func vip_targets(into: Dictionary) -> void:
+	into.clear()
+	for incident in _incidents:
+		if (
+			incident["kind"] != IncidentCatalogue.VIP
+			or incident["state"] != IncidentCatalogue.ACCEPTED
+		):
+			continue
+		var target: int = incident["plan"].get("target", 0)
+		if target != 0:
+			into[target] = true
 
 
 func last_rolled_day() -> int:

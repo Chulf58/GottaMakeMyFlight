@@ -6,8 +6,9 @@ extends Node3D
 ## clock's alpha. A node is taken from the pool for a passenger's whole visit
 ## and returned when the passenger boards or a while after missing the flight.
 ## It reads the sim and never writes to it; animation never drives the sim.
-## Each node carries its thought bubble, its need icons (NeedIcons) and its
-## shopping wish icon (WishIconView), set each tick and laid out each frame.
+## Each node carries its thought bubble, its need icons (NeedIcons), its
+## shopping wish icon (WishIconView) and its VIP crown (VipMarker), set each
+## tick and laid out each frame.
 
 ## Bodies, tints, bag colours and clip speeds: PassengerLooks.
 const SIT_CLIP_SECONDS := 1.2
@@ -33,6 +34,9 @@ const PICK_RADIUS_PX := 40.0
 @export var sim: PassengerSim
 ## When set, a finished load snaps every view to the loaded world.
 @export var save_game: SaveGame
+## When set, the passenger an accepted VIP incident marked wears the VIP crown
+## (VipMarker).
+@export var incidents: IncidentDirector
 
 ## Moves with the selected passenger, for a camera to follow.
 var follow_anchor := Node3D.new()
@@ -90,6 +94,10 @@ var _turns := PassengerTurns.new()
 ## way it walked in (SecurityLooks.arrival_yaw()) for a view first drawn after.
 ## Holds no tick; snap() and release erase it.
 var _setoffs: Dictionary = {}
+## Passenger ids an accepted VIP incident marked, as keys: one dictionary,
+## cleared and filled again from the director on every sync
+## (VipMarker.marked_ids), so a load reads the loaded ones. Holds no tick.
+var _vips: Dictionary = {}
 ## True while snap() syncs: the step from the pre-load position is no heading.
 var _snapping := false
 ## Working array of _declutter_bubbles, reused each frame.
@@ -207,6 +215,7 @@ func sync() -> void:
 	# before _props.sync(); true for a node made on this sync.
 	var steers := {}
 	var fresh := {}
+	VipMarker.marked_ids(incidents, _vips)
 	for id in sim.passenger_ids():
 		var p := sim.get_passenger(id)
 		if not _visible(p):
@@ -227,6 +236,7 @@ func sync() -> void:
 		_cur[id] = now
 		steers[id] = steer
 		_turn(_nodes[id], p, _pose(_nodes[id], p))
+		VipMarker.mark(_nodes[id], _vips.has(id))
 		_stages[id] = p.stage
 		_odometers[id] = p.odometer_mm
 	for id in _nodes.keys():
@@ -364,7 +374,9 @@ func draw() -> void:
 	_declutter_bubbles(camera, unit)
 	for id in _nodes:
 		var node: Node3D = _nodes[id]
-		NeedIcons.layout(node, node.get_node("Bubble") as Label3D, camera, unit, icons_shown)
+		var bubble := node.get_node("Bubble") as Label3D
+		NeedIcons.layout(node, bubble, camera, unit, icons_shown)
+		VipMarker.layout(node, bubble, camera, unit)
 	_props.draw()
 	_markers.draw()
 
@@ -462,6 +474,7 @@ func _take(p: Passenger) -> Node3D:
 	for sprite_name in NeedIcons.SPRITES:
 		node.add_child(NeedIcons.make_sprite(sprite_name))
 	node.add_child(WishIconView.make_sprite())
+	node.add_child(VipMarker.make_sprite())
 	var fade := ClipCrossfade.new()
 	fade.name = "ClipCrossfade"
 	var skeleton := node.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
@@ -480,6 +493,7 @@ func _release(id: int) -> void:
 	fade.stop()
 	fade.drawn = false
 	node.set_meta(&"clip", "")
+	VipMarker.mark(node, false)
 	_pool[node.get_meta(&"body")].append(node)
 	_nodes.erase(id)
 	_offsets.erase(id)

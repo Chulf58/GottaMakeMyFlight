@@ -89,7 +89,10 @@ func test_a_rush_books_capped_extra_passengers_and_the_card_says_the_same_counts
 	# Capped by the plane class maximum: 6 were asked, 4 fit.
 	assert_int(booked).is_equal(HEADROOM)
 	assert_int(plan["total"]).is_equal(booked)
-	var text: String = IncidentCopy.fill(IncidentCatalogue.panel_copy("rush"), incident)["body"]
+	var words := IncidentCopy.fill(
+		IncidentCatalogue.panel_copy("rush"), incident, _world.clock.tick
+	)
+	var text: String = words["body"]
 	assert_str(text).contains("%d extra passengers" % plan["total"])
 	assert_str(text).contains("08:00 +%d" % HEADROOM)
 	assert_str(text).contains("Reward:")
@@ -115,7 +118,9 @@ func test_a_favour_offer_names_extra_passengers_within_the_headroom() -> void:
 	assert_int(plan["extra"]).is_equal(HEADROOM)
 	assert_bool(IncidentTuning.FAVOUR_EXTRA > HEADROOM).is_true()
 	assert_int(_world.sim.booking_override_of(plan["flight"])).is_equal(0)
-	var copy := IncidentCopy.fill(IncidentCatalogue.panel_copy("favour"), incident)
+	var copy := IncidentCopy.fill(
+		IncidentCatalogue.panel_copy("favour"), incident, _world.clock.tick
+	)
 	assert_str(copy["body"]).contains("%d more passengers" % HEADROOM)
 	assert_str(copy["reward"]).contains("%d money" % IncidentTuning.FAVOUR_BONUS_MONEY)
 	assert_str(copy["failure"]).contains("lower your rating")
