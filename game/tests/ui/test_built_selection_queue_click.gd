@@ -11,6 +11,9 @@ const FLIGHT_ID := "GMF101"
 ## Metres beside the click: far enough that the passenger's body is not under the
 ## cursor, near enough that the 40 px circle still reaches it.
 const BESIDE_M := 0.6
+## TycoonCamera.min_distance: the closest zoom, where a body is largest on screen.
+const CLOSE_M := 6.0
+const FAR_AWAY := Vector3(500.0, 0.0, 500.0)
 
 var _settings_path := SaveTestKit.run_path("queue_click_alerts")
 
@@ -23,6 +26,7 @@ var _eye: Camera3D
 var _inspect: PassengerInspect
 var _desk := 0
 var _plain_cell := Vector2i(-1, -1)
+var _stood: Array[int] = []
 
 
 func before() -> void:
@@ -115,8 +119,12 @@ func _desk_centre() -> Vector3:
 
 
 ## A passenger drawn standing with their feet at `at`.
+## Passengers stood by earlier cases are sent far off first.
 func _stand(at: Vector3) -> int:
+	for earlier in _stood:
+		_views.node_for(earlier).position = FAR_AWAY
 	var passenger := _sim.spawn_now(FLIGHT_ID)
+	_stood.append(passenger)
 	_views.sync()
 	_views.node_for(passenger).position = at
 	return passenger
@@ -182,3 +190,76 @@ func test_on_open_floor_a_passenger_beside_the_click_is_still_picked() -> void:
 	await _click_screen(click)
 	assert_int(_views.selected_id).is_equal(passenger)
 	assert_int(_selection().kind).is_equal(BuiltSelection.Kind.NONE)
+
+
+## The camera at its closest zoom (TycoonCamera.min_distance) looking at
+## `target` from the south at pitch `degrees`.
+func _look_close(target: Vector3, degrees: float) -> void:
+	var pitch := deg_to_rad(degrees)
+	var offset := Vector3(0.0, sin(pitch), cos(pitch)) * CLOSE_M
+	_eye.look_at_from_position(target + offset, target)
+
+
+func test_at_closest_zoom_a_click_on_the_body_beyond_40_px_picks_the_passenger_over_the_desk(
+) -> void:
+	var centre := _desk_centre()
+	var passenger := _stand(centre)
+	for degrees in TycoonCamera.STEP_PITCH_DEGREES:
+		# The awaited click lets a frame move the node on; stand it back.
+		_views.node_for(passenger).position = centre
+		_look_close(centre, degrees)
+		var side := centre + _eye.global_basis.x * 0.25 + Vector3(0.0, 0.3, 0.0)
+		var click := _eye.unproject_position(side)
+		var probe := BuiltSelection.new()
+		var seen := probe.pick(
+			_mode.grid, _mode.get_node("BuildView") as BuildView, null, _eye, click
+		)
+		var circle := _views.pick(_eye, click)
+		print(
+			(
+				"pitch %.0f: desk under click %s kind %d id %d, circle pick %d, body pick %d"
+				% [degrees, seen, probe.kind, probe.id, circle, _views.pick_body(_eye, click)]
+			)
+		)
+		assert_int(probe.id).is_equal(_desk)
+		assert_int(circle).is_equal(0)
+		assert_int(_views.pick_body(_eye, click)).is_equal(passenger)
+		await _click_screen(click)
+		assert_int(_views.selected_id).is_equal(passenger)
+		assert_int(_selection().kind).is_equal(BuiltSelection.Kind.NONE)
+		_views.selected_id = 0
+
+
+func test_at_closest_zoom_the_body_is_picked_near_the_head_and_not_beside_it() -> void:
+	var centre := _desk_centre()
+	var passenger := _stand(centre)
+	for degrees in TycoonCamera.STEP_PITCH_DEGREES:
+		_look_close(centre, degrees)
+		var right := _eye.global_basis.x
+		var head := Vector3(0.0, 1.6, 0.0)
+		var inside := _eye.unproject_position(centre + head + right * 0.3)
+		var outside := _eye.unproject_position(centre + head + right * 0.5)
+		print(
+			(
+				"pitch %.0f: head click inside -> %d, outside -> %d"
+				% [degrees, _views.pick_body(_eye, inside), _views.pick_body(_eye, outside)]
+			)
+		)
+		assert_int(_views.pick_body(_eye, inside)).is_equal(passenger)
+		assert_int(_views.pick_body(_eye, outside)).is_equal(0)
+
+
+func test_at_closest_zoom_a_click_on_the_desk_beside_the_queue_still_selects_the_desk() -> void:
+	var centre := _desk_centre()
+	var passenger := _stand(centre + Vector3(BESIDE_M, 0.0, 0.0))
+	for degrees in TycoonCamera.STEP_PITCH_DEGREES:
+		_views.node_for(passenger).position = centre + Vector3(BESIDE_M, 0.0, 0.0)
+		_look_close(centre, degrees)
+		var click := _eye.unproject_position(centre + Vector3(0.0, 0.4, 0.0))
+		print("pitch %.0f: body pick %d" % [degrees, _views.pick_body(_eye, click)])
+		assert_int(_views.pick_body(_eye, click)).is_equal(0)
+		await _click_screen(click)
+		assert_int(_selection().kind).is_equal(BuiltSelection.Kind.OBJECT)
+		assert_int(_selection().id).is_equal(_desk)
+		assert_int(_views.selected_id).is_equal(0)
+		_selection().clear()

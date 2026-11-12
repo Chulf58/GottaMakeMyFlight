@@ -32,6 +32,8 @@ const PICK_RADIUS_PX := 40.0
 ## The drawn body pick_body() reads: a capsule this wide and this tall, in metres.
 const BODY_RADIUS_M := 0.35
 const BODY_HEIGHT_M := 1.7
+## How far along the click ray pick_body() looks, in metres.
+const BODY_PICK_RANGE_M := 1000.0
 
 @export var clock: SimClock
 @export var sim: PassengerSim
@@ -432,25 +434,24 @@ func pick(camera: Camera3D, screen: Vector2) -> int:
 	return best
 
 
-## The passenger whose drawn body is under a screen point, or 0: the nearest
-## within BODY_RADIUS_M of the line from feet to head, projected. Tighter than
-## pick(), for a click that also meets a built item.
+## The passenger whose drawn body the click ray at a screen point passes through,
+## or 0: the nearest axis within BODY_RADIUS_M of the ray, the body being the
+## capsule round the line from feet to head, in world space, so the reach is the
+## same at every zoom and angle. Tighter than pick(), for a click that also
+## meets a built item.
 func pick_body(camera: Camera3D, screen: Vector2) -> int:
 	var best := 0
-	var best_px := INF
-	var right := camera.global_basis.x
+	var best_m := INF
+	var from := camera.project_ray_origin(screen)
+	var to := from + camera.project_ray_normal(screen) * BODY_PICK_RANGE_M
 	for id in _nodes:
 		var feet: Vector3 = (_nodes[id] as Node3D).position
 		var head := feet + Vector3(0.0, BODY_HEIGHT_M, 0.0)
-		if camera.is_position_behind(feet) or camera.is_position_behind(head):
-			continue
-		var from := camera.unproject_position(feet)
-		var to := camera.unproject_position(head)
-		var radius_px := from.distance_to(camera.unproject_position(feet + right * BODY_RADIUS_M))
-		var px := screen.distance_to(Geometry2D.get_closest_point_to_segment(screen, from, to))
-		if px <= radius_px and px < best_px:
+		var closest := Geometry3D.get_closest_points_between_segments(from, to, feet, head)
+		var gap_m := closest[0].distance_to(closest[1])
+		if gap_m <= BODY_RADIUS_M and gap_m < best_m:
 			best = id
-			best_px = px
+			best_m = gap_m
 	return best
 
 
