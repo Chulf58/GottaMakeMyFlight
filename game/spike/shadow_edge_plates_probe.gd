@@ -236,6 +236,8 @@ func _set_variant(name: String) -> void:
 
 func _boot() -> void:
 	_beat("boot main")
+	# A run cut short leaves its last camera angle in SETTINGS; start clean.
+	DirAccess.remove_absolute(SETTINGS)
 	_main = load(MAIN_SCENE).instantiate()
 	_clock = _main.get_node("SimClock")
 	var sim_seed := randi()
