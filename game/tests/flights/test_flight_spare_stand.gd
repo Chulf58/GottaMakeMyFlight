@@ -5,8 +5,8 @@ extends GdUnitTestSuite
 ## rules a gate desk is refused by: owned land, the existing stands' swing
 ## squares and a clear envelope. One gate A, whose exit is at (32, 112) in the
 ## second plot of the row (cells 22 to 43), is booked at 10:00; an offer at
-## 11:00 meets A1 at the gate, and its taxi plan clashes there too, so only a
-## second gate would take it.
+## 12:00 meets A1 only at the gate (its ground route is free), so another
+## gate would take it.
 
 const SITE := preload("res://build/terminal_site.tres")
 const SHIFT := Vector2i(12, 0)
@@ -40,7 +40,7 @@ func _own(plots: Array) -> void:
 
 
 func _later_offer() -> Dictionary:
-	return FlightFit.assess(_flights, TestFlightFit.terms("X", 660))
+	return FlightFit.assess(_flights, TestFlightFit.terms("X", 720))
 
 
 ## Control: with the plot east of the gate owned as well, a stand fits there,

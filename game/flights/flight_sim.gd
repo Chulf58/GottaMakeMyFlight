@@ -1008,7 +1008,9 @@ static func _best_fit(grounds: Dictionary, plane_class: String) -> Array[String]
 ## (made by _candidate) planned as if already accepted, and they must still
 ## plan beside it. With `ignore_gate` a clash at a gate is not counted, so the
 ## result says whether the shared ground would take the flight if its gate
-## were free (trial_assignment).
+## were free (trial_assignment). With a spare_stand_source only the spare gate
+## it adds can be the answer, so a site with no room for one gives no gate; the
+## gates already standing stay in the planning for the flights running there.
 func _assignment(
 	terms: Dictionary, extra: Array[Dictionary] = [], ignore_gate := false, trial := false
 ) -> Dictionary:
@@ -1020,14 +1022,18 @@ func _assignment(
 		var night := {"reason": GroundPlanner.QUIET_NIGHT, "flight": ""}
 		return _assigned("", QUIET_NIGHT_TEXT, night, BLOCKER_NIGHT)
 	var grounds := gate_grounds()
+	var existing := grounds.keys()
 	if ignore_gate:
 		grounds = _with_spare_gate(grounds, terms["plane_size"])
+	var tried := _best_fit(grounds, terms["plane_size"])
+	if ignore_gate and spare_stand_source.is_valid():
+		tried = tried.filter(func(gate_id: String) -> bool: return not existing.has(gate_id))
 	var running: Array[Dictionary] = []
 	running.append_array(_contracts)
 	running.append_array(extra)
 	var clash := ""
 	var busy := {}
-	for gate_id in _best_fit(grounds, terms["plane_size"]):
+	for gate_id in tried:
 		var candidate := _candidate(terms, gate_id)
 		var problem := "" if ignore_gate else _gate_problem(candidate, running)
 		if problem != "":
