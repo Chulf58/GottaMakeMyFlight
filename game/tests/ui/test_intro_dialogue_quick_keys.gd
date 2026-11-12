@@ -50,11 +50,12 @@ func after_test() -> void:
 	_k.port.free()
 
 
-func _press(code: Key, shift := false) -> void:
+func _press(code: Key, shift := false, echo := false) -> void:
 	var event := InputEventKey.new()
 	event.keycode = code
 	event.physical_keycode = code
 	event.shift_pressed = shift
+	event.echo = echo
 	event.pressed = true
 	_k.port.push_input(event)
 
@@ -97,3 +98,12 @@ func test_every_other_key_is_still_taken_by_the_open_offer() -> void:
 	assert_int(_counting.saves).is_equal(0)
 	assert_int(_counting.loads).is_equal(0)
 	assert_bool(_k.panel.is_open()).is_true()
+
+
+func test_a_held_quick_key_is_taken_like_any_other() -> void:
+	_k.offer()
+	_press(SaveGame.QUICK_SAVE_KEY, false, true)
+	_press(SaveGame.QUICK_LOAD_KEY, false, true)
+	assert_int(_behind.keys).is_equal(0)
+	assert_int(_counting.saves).is_equal(0)
+	assert_int(_counting.loads).is_equal(0)

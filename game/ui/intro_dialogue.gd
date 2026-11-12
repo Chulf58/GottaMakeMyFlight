@@ -147,9 +147,10 @@ func _input(event: InputEvent) -> void:
 		dismiss()
 
 
-## F5 or F8 with no modifier: the keys SaveGame answers (it ignores a modified one).
+## A first press of F5 or F8 with no modifier: the keys SaveGame answers (it
+## ignores a held key's echoes and a modified one).
 func _is_quick_key(key: InputEventKey) -> bool:
-	if key.ctrl_pressed or key.alt_pressed or key.shift_pressed or key.meta_pressed:
+	if key.echo or key.ctrl_pressed or key.alt_pressed or key.shift_pressed or key.meta_pressed:
 		return false
 	return key.keycode in [SaveGame.QUICK_SAVE_KEY, SaveGame.QUICK_LOAD_KEY]
 
