@@ -818,6 +818,23 @@ func _close_intro() -> void:
 	_intro_hold = ClockHolds.NONE
 
 
+## A load replaced the world and dropped every hold: the intro ends without
+## asking the new-game incident question, so the loaded game keeps its own
+## incident setting. Its hold is already gone, as incident_panel's is.
+func _end_intro_on_load() -> void:
+	if _intro_layer == null:
+		return
+	var layer := _intro_layer
+	_intro_layer = null
+	_intro = null
+	if is_instance_valid(layer) and not layer.is_queued_for_deletion():
+		layer.queue_free()
+	_gate_camera(false)
+	if is_instance_valid(clock):
+		clock.holds.release(_intro_hold)
+	_intro_hold = ClockHolds.NONE
+
+
 ## The camera-input gate. Marking events handled cannot stop TycoonCamera,
 ## which polls held keys in _process, so while the intro is open its _process
 ## (WASD, Q/E, easing) and _unhandled_input (wheel, drags, Home) are switched
@@ -872,6 +889,7 @@ func _has_open_flight() -> bool:
 ## A loaded world is a new start: frame the camera on what the save built.
 func _on_save_loaded(ok: bool) -> void:
 	if ok:
+		_end_intro_on_load()
 		# A loaded world may reuse the selected id for another item.
 		_built.clear()
 		# A flight that closed before the load belongs to the old world: its

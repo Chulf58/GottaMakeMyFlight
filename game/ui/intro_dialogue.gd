@@ -128,12 +128,16 @@ func _ready() -> void:
 	_place()
 
 
-## Every key press is taken while the dialogue is open; Space (without Shift),
-## Enter and keypad Enter close it. The key is marked handled before closing, so
-## the HUD's Space pause toggle never sees the same press.
+## Every key press is taken while the dialogue is open, except the bare quick
+## save and quick load keys, which pass on to SaveGame (decision quicksave-f5-
+## and-quickload-f8-work-while-a-dialog-is-open). Space (without Shift), Enter
+## and keypad Enter close it. The key is marked handled before closing, so the
+## HUD's Space pause toggle never sees the same press.
 func _input(event: InputEvent) -> void:
 	var key := event as InputEventKey
 	if _done or not visible or key == null or not key.pressed:
+		return
+	if _is_quick_key(key):
 		return
 	get_viewport().set_input_as_handled()
 	if key.echo or _offer:
@@ -141,6 +145,14 @@ func _input(event: InputEvent) -> void:
 	var space := key.physical_keycode == KEY_SPACE and not key.shift_pressed
 	if space or key.physical_keycode in [KEY_ENTER, KEY_KP_ENTER]:
 		dismiss()
+
+
+## A first press of F5 or F8 with no modifier: the keys SaveGame answers (it
+## ignores a held key's echoes and a modified one).
+func _is_quick_key(key: InputEventKey) -> bool:
+	if key.echo or key.ctrl_pressed or key.alt_pressed or key.shift_pressed or key.meta_pressed:
+		return false
+	return key.keycode in [SaveGame.QUICK_SAVE_KEY, SaveGame.QUICK_LOAD_KEY]
 
 
 ## Closes the dialogue once; later calls do nothing.
