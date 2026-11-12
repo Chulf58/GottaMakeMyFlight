@@ -82,8 +82,9 @@ func test_a_vip_offer_names_the_flight_the_bonus_and_the_penalty() -> void:
 	}
 	var text := _words(IncidentCatalogue.VIP, plan)
 	print(text)
-	assert_str(text).contains("the %s flight" % GameCalendar.clock_text(DEPARTS))
-	assert_str(text).contains("Reward: 500 money if the VIP makes the flight in a good mood.")
+	assert_str(text).contains("fly on day 3's %s flight" % GameCalendar.clock_text(DEPARTS))
+	assert_str(text).contains("Reward: 500 money if the VIP makes the flight in a good mood")
+	assert_str(text).contains("a mood of 75 or higher when boarding")
 	assert_str(text).contains("If it fails: your rating drops by 1 star")
 	assert_str(text).contains(IncidentPanel.OFFER_FOOTER)
 	assert_object(_k.panel.dialog().accept_button()).is_not_null()
@@ -104,3 +105,49 @@ func test_the_penalty_words_follow_the_half_stars() -> void:
 	assert_str(IncidentCopy.stars_text(2)).is_equal("1 star")
 	assert_str(IncidentCopy.stars_text(3)).is_equal("1.5 stars")
 	assert_str(IncidentCopy.stars_text(4)).is_equal("2 stars")
+
+
+## The saved plan of a VIP flight at 10:29 on day 3.
+func _vip_plan() -> Dictionary:
+	return {
+		"flight": "AM-d3",
+		"departs": GameCalendar.tick_at(3, 10 * 60 + 29),
+		"bonus": 500,
+		"target": 0,
+		"good_mood": 75,
+		"miss_half_stars": 2,
+	}
+
+
+## A VIP offer that fired on day 2 at 23:50, presented with the clock at `now`.
+func _late_offer(now: int) -> int:
+	_k.clock.tick = now
+	var fired := GameCalendar.tick_at(2, 23 * 60 + 50)
+	var id := _k.director.add_scheduled(IncidentCatalogue.VIP, _vip_plan(), fired)
+	assert_bool(_k.director.present(id, true)).is_true()
+	return id
+
+
+func test_an_offer_shown_after_midnight_says_today() -> void:
+	_late_offer(GameCalendar.tick_at(3, 10))
+	assert_bool(_k.panel.is_open()).is_true()
+	var text := _k.panel.dialog().body_text()
+	print(text)
+	assert_str(text).contains("today's 10:29 flight")
+	assert_str(text).not_contains("tomorrow")
+
+
+func test_an_offer_shown_before_midnight_says_tomorrow() -> void:
+	_late_offer(GameCalendar.tick_at(2, 23 * 60 + 55))
+	assert_str(_k.panel.dialog().body_text()).contains("tomorrow's 10:29 flight")
+
+
+func test_an_offer_queued_behind_a_dialog_is_worded_when_it_opens() -> void:
+	var token := _k.sheet_takes_the_turn()
+	_late_offer(GameCalendar.tick_at(2, 23 * 60 + 55))
+	assert_bool(_k.panel.is_open()).is_false()
+	# Midnight passes while the other dialog is up, then it gives the turn back.
+	_k.clock.tick = GameCalendar.tick_at(3, 10)
+	_k.clock.holds.release(token)
+	assert_bool(_k.panel.is_open()).is_true()
+	assert_str(_k.panel.dialog().body_text()).contains("today's 10:29 flight")

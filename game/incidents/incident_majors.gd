@@ -20,7 +20,8 @@ extends RefCounted
 ##   first passenger spawned for it is marked (plan "target"); an ordinary
 ##   passenger otherwise. A made flight with mood at least the plan's good_mood pays
 ##   its bonus; a miss adds a penalty; the passenger's ordinary made or
-##   missed record is the sim's own and is not written again.
+##   missed record is the sim's own and is not written again. Each of the three
+##   results is told on a card (the director's vip_resolved).
 ## - Airline favour (offer): the plan names the next flight with headroom and
 ##   how many extra passengers fit. Accepted, they are booked at once (capped by
 ##   headroom) and the money is paid. Declined, nothing happens.
@@ -97,6 +98,7 @@ func finished(incident: Dictionary, passenger_id: int, made: bool, tick: int) ->
 	else:
 		_penalize(incident, tick, incident["plan"]["miss_half_stars"])
 		_done(incident, PENALTY)
+	_director.vip_resolved.emit(incident.duplicate(true))
 
 
 ## One tick of a major that already happened: the inspector's visit, the end of
