@@ -6,7 +6,8 @@ extends RefCounted
 ## never held (outcome not_held). Keys by kind:
 ##   inspector: window_from, window_to (the visit may land in), visit_tick, and the
 ##              rules it scores by: max_messes, max_full_queue, pass_money,
-##              fail_half_stars
+##              fail_half_stars, and what the visit saw: seen_messes,
+##              seen_full_queue (0 until the visit)
 ##   rush:      flights [{flight, extra, departs}], total, until (tick)
 ##   vip:       flight, departs, bonus, good_mood, miss_half_stars, target (the
 ##              marked passenger id, 0 until one is marked)
@@ -32,7 +33,9 @@ const INT_KEYS := {
 		"max_messes",
 		"max_full_queue",
 		"pass_money",
-		"fail_half_stars"
+		"fail_half_stars",
+		"seen_messes",
+		"seen_full_queue",
 	],
 	IncidentCatalogue.RUSH: ["total", "until"],
 	IncidentCatalogue.VIP: ["departs", "bonus", "target", "good_mood", "miss_half_stars"],

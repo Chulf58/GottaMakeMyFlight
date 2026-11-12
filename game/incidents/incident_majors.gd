@@ -11,7 +11,8 @@ extends RefCounted
 ## - Inspector (announced on day D): the visit lands inside the busy window of
 ##   day D+1. At the visit tick it counts the messes on the floor and the
 ##   passengers stuck in a full queue; within IncidentTuning's limits it pays
-##   INCIDENT money (passed), else it adds a rating penalty (failed).
+##   INCIDENT money (passed), else it adds a rating penalty (failed). Either
+##   result is told on a card (the director's inspector_resolved).
 ## - Holiday rush (announced on day D): extra passengers are booked on up to
 ##   RUSH_MAX_FLIGHTS of day D+1's flights not yet issued, RUSH_EXTRA each,
 ##   capped by the plane class maximum (PassengerSim.set_booking_override). The
@@ -166,6 +167,8 @@ func _inspector_plan(incident: Dictionary, tick: int) -> Dictionary:
 		"max_full_queue": IncidentTuning.INSPECTOR_MAX_FULL_QUEUE,
 		"pass_money": IncidentTuning.INSPECTOR_PASS_MONEY,
 		"fail_half_stars": IncidentTuning.INSPECTOR_FAIL_HALF_STARS,
+		"seen_messes": 0,
+		"seen_full_queue": 0,
 	}
 
 
@@ -263,17 +266,23 @@ func _visit(incident: Dictionary, tick: int) -> void:
 			full += 1
 	var messes := sim.messes.mess_ids().size()
 	var plan: Dictionary = incident["plan"]
+	plan["seen_messes"] = messes
+	plan["seen_full_queue"] = full
 	if messes <= plan["max_messes"] and full <= plan["max_full_queue"]:
 		_pay(plan["pass_money"])
 		_done(incident, PASSED)
-		return
-	_penalize(incident, tick, plan["fail_half_stars"])
-	_done(incident, FAILED)
+	else:
+		_penalize(incident, tick, plan["fail_half_stars"])
+		_done(incident, FAILED)
+	_director.inspector_resolved.emit(incident.duplicate(true))
 
 
 func _done(incident: Dictionary, outcome: String) -> void:
 	incident["state"] = IncidentCatalogue.DONE
 	incident["outcome"] = outcome
+	# Only an announcement can be shown (IncidentSnapshot refuses a done one
+	# that is), so a seen inspector or rush must not carry the flag past its end.
+	incident["shown"] = false
 
 
 func _pay(amount: int) -> void:

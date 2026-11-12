@@ -356,10 +356,13 @@ func _unhandled_input(event: InputEvent) -> void:
 	var vehicle := landside_views.pick(eye, click.position) if landside_views != null else 0
 	if landside_views != null:
 		landside_views.select(vehicle)
-	views.selected_id = 0 if vehicle != 0 else views.pick(eye, click.position)
+	views.selected_id = 0
 	_built.clear()
-	if vehicle == 0 and views.selected_id == 0:
+	if vehicle == 0:
 		_pick_built(eye, click.position)
+		views.selected_id = _passenger_at(eye, click.position)
+		if views.selected_id != 0:
+			_built.clear()
 	_reveal_frames = REVEAL_FRAMES if _built.is_selected() else 0
 	if vehicle != 0:
 		camera.follow(landside_views.follow_anchor)
@@ -397,6 +400,16 @@ func _pick_built(eye: Camera3D, at: Vector2) -> void:
 	var view := build_mode.get_node_or_null("BuildView") as BuildView
 	if view != null:
 		_built.pick(build_mode.grid, view, build_mode.landside_placement(), eye, at)
+
+
+## The passenger a click selects, after _pick_built() has looked under it. Over a
+## built object only a passenger whose body the click ray passes through counts,
+## so a queue beside a desk never steals a click on the desk. Anywhere else,
+## room floor included (passengers stand on it everywhere), the 40 px circle.
+func _passenger_at(eye: Camera3D, at: Vector2) -> int:
+	if _built.kind == BuiltSelection.Kind.OBJECT:
+		return views.pick_body(eye, at)
+	return views.pick(eye, at)
 
 
 ## A built item stays selected only while no build interaction owns the clicks
@@ -818,6 +831,23 @@ func _close_intro() -> void:
 	_intro_hold = ClockHolds.NONE
 
 
+## A load replaced the world and dropped every hold: the intro ends without
+## asking the new-game incident question, so the loaded game keeps its own
+## incident setting. Its hold is already gone, as incident_panel's is.
+func _end_intro_on_load() -> void:
+	if _intro_layer == null:
+		return
+	var layer := _intro_layer
+	_intro_layer = null
+	_intro = null
+	if is_instance_valid(layer) and not layer.is_queued_for_deletion():
+		layer.queue_free()
+	_gate_camera(false)
+	if is_instance_valid(clock):
+		clock.holds.release(_intro_hold)
+	_intro_hold = ClockHolds.NONE
+
+
 ## The camera-input gate. Marking events handled cannot stop TycoonCamera,
 ## which polls held keys in _process, so while the intro is open its _process
 ## (WASD, Q/E, easing) and _unhandled_input (wheel, drags, Home) are switched
@@ -872,6 +902,7 @@ func _has_open_flight() -> bool:
 ## A loaded world is a new start: frame the camera on what the save built.
 func _on_save_loaded(ok: bool) -> void:
 	if ok:
+		_end_intro_on_load()
 		# A loaded world may reuse the selected id for another item.
 		_built.clear()
 		# A flight that closed before the load belongs to the old world: its

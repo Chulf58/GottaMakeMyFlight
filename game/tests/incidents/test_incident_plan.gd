@@ -10,7 +10,12 @@ const RUSH_PLAN := {
 }
 
 const INSPECTOR_RULES := {
-	"max_messes": 2, "max_full_queue": 0, "pass_money": 400, "fail_half_stars": 2
+	"max_messes": 2,
+	"max_full_queue": 0,
+	"pass_money": 400,
+	"fail_half_stars": 2,
+	"seen_messes": 0,
+	"seen_full_queue": 0,
 }
 const VIP_RULES := {"good_mood": 75, "miss_half_stars": 2}
 

@@ -8,9 +8,11 @@ extends Node
 ## stays until the incident is over or the player clicks it away; a minor never
 ## pauses the game. An accepted VIP gets one result card of the same look when
 ## it ends: made in a good mood (the bonus), made below the mood bar (no bonus)
-## or missed (the rating penalty). Notices are not saved, so after the rail
-## resets (a load or a new world, reset_done) or the director loads (restored),
-## every incident still active and every VIP result still kept is posted again.
+## or missed (the rating penalty). The inspector's visit gets one when it
+## resolves: passed (the money) or failed (the rating penalty). Notices are not
+## saved, so after the rail resets (a load or a new world, reset_done) or the
+## director loads (restored), every incident still active and every VIP or
+## inspector result still kept is posted again.
 
 ## The incidents whose cards these are. A scene must set it; tests call bind().
 @export var director: IncidentDirector
@@ -34,6 +36,7 @@ func bind(with_director: IncidentDirector) -> void:
 	director.ended.connect(_on_ended)
 	director.restored.connect(post_active)
 	director.vip_resolved.connect(_post_result)
+	director.inspector_resolved.connect(_post_result)
 
 
 ## The rail key of an incident's card.
@@ -50,11 +53,13 @@ func post_active() -> void:
 		_post_result(incident)
 
 
-## The result card of a finished VIP, told once when it ends (a coral card that
-## stays until clicked away, like a minor's). Nothing for any other incident or
-## a VIP dropped without a result.
+## The result card of a finished VIP or inspector visit, told once when it ends
+## (a coral card that stays until clicked away, like a minor's). Nothing for any
+## other incident or a VIP dropped without a result.
 func _post_result(incident: Dictionary) -> void:
 	var words := IncidentCopy.vip_result(incident)
+	if words.is_empty():
+		words = IncidentCopy.inspector_result(incident)
 	if words.is_empty():
 		return
 	var on := _rail()
