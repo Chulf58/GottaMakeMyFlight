@@ -25,9 +25,10 @@ extends Node
 ## announcement that was up, closed or not, stays shown. Nothing is saved here:
 ## the director's states and its shown flag are the memory.
 ##
-## The words come from IncidentCatalogue.panel_copy (slice G fills it in); a
-## major without title and body, or an offer without reward and failure, is not
-## shown and a warning says so.
+## The words come from IncidentCatalogue.panel_copy, with the numbers of the
+## incident's own plan put in (IncidentCopy.fill), so a card says the counts and
+## times that will happen. A major without title and body, or an offer without
+## reward and failure, is not shown and a warning says so.
 
 ## The panel opened or closed. PassengerHud can hold the camera still meanwhile.
 signal dialog_changed(open: bool)
@@ -151,7 +152,7 @@ func _pending(id: int) -> Dictionary:
 
 func _show(incident: Dictionary) -> bool:
 	var offer: bool = incident["state"] == IncidentCatalogue.OFFERED
-	var copy: Dictionary = copy_for.call(incident["kind"])
+	var copy := IncidentCopy.fill(copy_for.call(incident["kind"]), incident)
 	if not _copy_ok(copy, offer):
 		push_warning(
 			"IncidentPanel: no words for %s incident %d" % [incident["kind"], incident["id"]]

@@ -18,8 +18,8 @@ func _ready() -> void:
 
 
 ## Keeps a scheduled record of `kind` (KIND, the made-up major, by default)
-## and returns its id.
-func add_scheduled(kind := KIND) -> int:
+## with the saved `plan` it would have after its fire, and returns its id.
+func add_scheduled(kind := KIND, plan := {}) -> int:
 	var id := _next_id
 	_next_id += 1
 	(
@@ -36,6 +36,7 @@ func add_scheduled(kind := KIND) -> int:
 				"place": "",
 				"outcome": "",
 				"shown": false,
+				"plan": plan,
 			}
 		)
 	)
