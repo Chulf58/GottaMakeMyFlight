@@ -301,11 +301,12 @@ flights = NodePath("../FlightSim")
 passengers = NodePath("../PassengerSim")
 build_mode = NodePath("../BuildMode")
 
-[node name="PassengerViews" type="Node3D" parent="." node_paths=PackedStringArray("clock", "sim", "save_game")]
+[node name="PassengerViews" type="Node3D" parent="." node_paths=PackedStringArray("clock", "sim", "save_game", "incidents")]
 script = ExtResource("11_paxview")
 clock = NodePath("../SimClock")
 sim = NodePath("../PassengerSim")
 save_game = NodePath("../SaveGame")
+incidents = NodePath("../IncidentDirector")
 
 [node name="BaggageViews" type="Node3D" parent="." node_paths=PackedStringArray("clock", "sim", "save_game")]
 script = ExtResource("27_bagview")
