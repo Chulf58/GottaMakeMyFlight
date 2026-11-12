@@ -202,6 +202,19 @@ func vip_targets(into: Dictionary) -> void:
 			into[target] = true
 
 
+## A copy of the plan of the accepted VIP incident that marked passenger
+## `passenger_id`, {} when it marked no one (the inspect card's VIP line).
+func vip_plan_of(passenger_id: int) -> Dictionary:
+	for incident in _incidents:
+		if (
+			incident["kind"] == IncidentCatalogue.VIP
+			and incident["state"] == IncidentCatalogue.ACCEPTED
+			and incident["plan"].get("target", 0) == passenger_id
+		):
+			return incident["plan"].duplicate()
+	return {}
+
+
 func last_rolled_day() -> int:
 	return _last_rolled_day
 

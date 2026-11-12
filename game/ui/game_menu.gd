@@ -48,6 +48,10 @@ const INCIDENTS_TEXT := "Incidents"
 @export var build_mode: BuildMode
 ## Optional: a load ends an open menu or question.
 @export var save_game: SaveGame
+## Optional: called by an Esc the menu would open on; true means it closed a card
+## (a selected built item or a followed passenger or vehicle) and took the key.
+## PassengerHud sets it, so the first Esc closes the card and the next opens the menu.
+var esc_closes: Callable
 
 var _layer: CanvasLayer
 var _question_layer: CanvasLayer
@@ -76,7 +80,8 @@ func _exit_tree() -> void:
 	_question_hold = ClockHolds.NONE
 
 
-## Esc outside build mode opens the menu; Esc with the menu up closes it.
+## Esc outside build mode opens the menu, unless a card is open: then it closes
+## the card first. Esc with the menu up closes it.
 func _input(event: InputEvent) -> void:
 	if not _shown:
 		return
@@ -92,6 +97,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not event.is_action_pressed("build_tool_none"):
 		return
 	if _shown or _in_build_mode() or has_hold():
+		return
+	if esc_closes.is_valid() and esc_closes.call():
+		get_viewport().set_input_as_handled()
 		return
 	if open():
 		get_viewport().set_input_as_handled()

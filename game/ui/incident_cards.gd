@@ -7,9 +7,10 @@ extends Node
 ## up.", or "Hire a cleaner to clean it." while no cleaner is hired. The card
 ## stays until the incident is over or the player clicks it away; a minor never
 ## pauses the game. An accepted VIP gets one result card of the same look when
-## it ends: made in a good mood (the bonus), made below the mood bar (no bonus)
-## or missed (the rating penalty). The inspector's visit gets one when it
-## resolves: passed (the money) or failed (the rating penalty). Notices are not
+## it ends, green when made in a good mood (the bonus) or below the mood bar (no
+## bonus), coral when missed (the rating penalty). The inspector's visit gets one
+## when it resolves: green when passed (the money), coral when failed (the
+## rating penalty). Notices are not
 ## saved, so after the rail resets (a load or a new world, reset_done) or the
 ## director loads (restored), every incident still active and every VIP or
 ## inspector result still kept is posted again.
@@ -54,8 +55,9 @@ func post_active() -> void:
 
 
 ## The result card of a finished VIP or inspector visit, told once when it ends
-## (a coral card that stays until clicked away, like a minor's). Nothing for any
-## other incident or a VIP dropped without a result.
+## (a card that stays until clicked away, like a minor's: green when it went
+## well, coral when it did not). Nothing for any other incident or a VIP dropped
+## without a result.
 func _post_result(incident: Dictionary) -> void:
 	var words := IncidentCopy.vip_result(incident)
 	if words.is_empty():
@@ -67,9 +69,23 @@ func _post_result(incident: Dictionary) -> void:
 		push_warning("IncidentCards: no alert rail to show incident %d" % incident["id"])
 		return
 	var key := key_of(incident)
-	var card := OfferPanel.coral_card(key, words["title"], words["detail"])
+	var card: PanelContainer
+	if _is_good(incident):
+		card = OfferPanel.green_card(key, words["title"], words["detail"])
+	else:
+		card = OfferPanel.coral_card(key, words["title"], words["detail"])
 	card.name = "IncidentNotice_%s" % key
 	on.post_notice(key, card, 0.0, words["title"], words["detail"])
+
+
+## Whether a finished VIP or inspector visit is good news: a VIP who made the
+## flight (with or without the bonus) or an inspector who passed. Green means
+## good, coral a problem (decision hud-grid-and-rails-one-spacing-grid-centred-
+## top-row-right-ra).
+static func _is_good(incident: Dictionary) -> bool:
+	return (
+		incident["outcome"] in [IncidentMajors.BONUS, IncidentMajors.NEUTRAL, IncidentMajors.PASSED]
+	)
 
 
 func _post(incident: Dictionary) -> void:
