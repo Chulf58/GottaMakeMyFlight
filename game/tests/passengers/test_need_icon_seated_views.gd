@@ -3,7 +3,9 @@ extends GdUnitTestSuite
 ## The seated icon anchor (NeedIcons.head_anchor, board bd08ed8e) is set by the
 ## real PassengerViews, not by hand: a passenger settled on a gate chair or a
 ## lounge sofa gets it; standing up, walking, the upright shower and a released
-## and reused node get the standing anchor. The node meta &"seated" keeps its
+## and reused node get the standing anchor. A nap pod visitor in the recline
+## gets the pod's own anchor (NeedIcons.RECLINE_LIFT_M, board 4773e61e). The
+## node meta &"seated" keeps its
 ## wider turn-lock meaning (standing up and the shower still carry it, the
 ## control that the icon anchor is a narrower signal).
 
@@ -91,8 +93,10 @@ func test_a_released_and_reused_node_starts_with_the_standing_anchor() -> void:
 	var p := _sitter()
 	var node := _views.node_for(p.id)
 	assert_bool(node.get_meta(&"icon_seated", false)).is_true()
+	node.set_meta(&"icon_reclined", true)
 	_views._release(p.id)
 	assert_bool(node.get_meta(&"icon_seated", true)).is_false()
+	assert_bool(node.get_meta(&"icon_reclined", true)).is_false()
 	assert_vector(NeedIcons.head_anchor(node)).is_equal(STANDING)
 	# The same passenger, now walking, takes the pooled node back (the only free
 	# node of its body) and draws it with the standing anchor.
@@ -133,3 +137,55 @@ func test_a_sofa_sitter_is_seated_and_a_shower_guest_is_not() -> void:
 		_views = null
 		_world.free_all()
 		_world = null
+
+
+## The seated and standing anchors keep their values (board 4773e61e added the
+## nap pod's own anchor beside them).
+func test_the_seated_and_standing_anchors_keep_their_values() -> void:
+	var p := _sitter()
+	var node := _views.node_for(p.id)
+	assert_bool(node.get_meta(&"icon_reclined", true)).is_false()
+	assert_vector(NeedIcons.head_anchor(node)).is_equal_approx(
+		Vector3(0.0, 2.2, -0.54), Vector3.ONE * 0.0001
+	)
+	node = _stage(p, Passenger.Stage.TO_GATE)
+	assert_vector(NeedIcons.head_anchor(node)).is_equal(Vector3(0.0, 2.0, 0.0))
+
+
+## A nap pod visitor in the full recline gets the pod's anchor over its reclined
+## head (board 4773e61e, measured by game/spike/nap_pod_icon_plates_probe.gd),
+## not the chair's; standing up out of the pod gives the standing anchor back,
+## and a released node starts without it.
+func test_a_nap_pod_visitor_reclined_gets_the_recline_anchor() -> void:
+	var grid := BuildGrid.new()
+	ActivityTestLayout.build(grid, &"nap_pod")
+	_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
+	_world.sim.shops.wishes = func(_p: Passenger) -> StringName: return WishTable.NONE
+	_world.auto_staff_roles = [StaffMember.Role.CHECKIN, StaffMember.Role.SECURITY]
+	_world.run_to(10)
+	_open_views()
+	var p := ShopTestLayout.airside_guest(_world, 80, ShopTestLayout.AIRSIDE_CELL)
+	assert_int(NeedsPolicy.arbitrate(_world.sim, p)).is_equal(NeedsPolicy.Need.BOREDOM)
+	var limit := _world.clock.tick + 3000
+	while ActivityPoses.recline(_world.sim, p) < 1.0 and _world.clock.tick < limit:
+		_world.step()
+	assert_int(ActivityPoses.kind(_world.sim, p)).is_equal(ActivityPoses.Kind.RECLINE)
+	assert_int(ActivityPoses.pose(_world.sim, p)).is_equal(StageKinds.Pose.SEATED)
+	assert_float(ActivityPoses.recline(_world.sim, p)).is_equal(1.0)
+	var node := _views.node_for(p.id)
+	assert_bool(node.get_meta(&"seated", false)).is_true()
+	assert_bool(node.get_meta(&"icon_seated", true)).is_false()
+	assert_bool(node.get_meta(&"icon_reclined", false)).is_true()
+	var recline := Vector3(0.0, NeedIcons.RECLINE_LIFT_M, -NeedIcons.RECLINE_BACK_M)
+	assert_vector(NeedIcons.head_anchor(node)).is_equal_approx(
+		Vector3(0.0, 2.15, -0.55), Vector3.ONE * 0.0001
+	)
+	assert_vector(NeedIcons.head_anchor(node)).is_equal(recline)
+	while (
+		ActivityPoses.pose(_world.sim, p) != StageKinds.Pose.STANDING_UP
+		and _world.clock.tick < limit
+	):
+		_world.step()
+	assert_int(ActivityPoses.pose(_world.sim, p)).is_equal(StageKinds.Pose.STANDING_UP)
+	assert_bool(node.get_meta(&"icon_reclined", true)).is_false()
+	assert_vector(NeedIcons.head_anchor(node)).is_equal(STANDING)
