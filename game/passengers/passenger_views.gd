@@ -221,6 +221,8 @@ func sync() -> void:
 	var steers := {}
 	var fresh := {}
 	VipMarker.marked_ids(incidents, _vips)
+	# Read once for the whole sync, not per passenger: every icon row asks it.
+	var built := NeedIcons.provided(sim)
 	for id in sim.passenger_ids():
 		var p := sim.get_passenger(id)
 		if not _visible(p):
@@ -240,7 +242,7 @@ func sync() -> void:
 		_prev[id] = _cur[id]
 		_cur[id] = now
 		steers[id] = steer
-		_turn(_nodes[id], p, _pose(_nodes[id], p))
+		_turn(_nodes[id], p, _pose(_nodes[id], p, built))
 		VipMarker.mark(_nodes[id], _vips.has(id))
 		_stages[id] = p.stage
 		_odometers[id] = p.odometer_mm
@@ -544,7 +546,7 @@ func _release(id: int) -> void:
 ## Sets the clip, dress, bubble and icons for this tick and returns the yaw
 ## the passenger faces on this tick (NAN where it faces its walk or keeps its
 ## turn).
-func _pose(node: Node3D, p: Passenger) -> float:
+func _pose(node: Node3D, p: Passenger, built: Dictionary) -> float:
 	var face := NAN
 	var clip := "idle"
 	var base := 1.0
@@ -686,7 +688,6 @@ func _pose(node: Node3D, p: Passenger) -> float:
 		BubbleDeclutter.rank_of(sim, p) if bubble_text != "" else BubbleDeclutter.NO_QUEUE
 	)
 	var wish := WishIconView.read(sim.shops, p)
-	var built := NeedIcons.provided(sim)
 	NeedIcons.show_needs(node, NeedIcons.shown(p, wish[1] != WishTable.State.NONE, built))
 	WishIconView.show_wish(node, wish)
 	# A boarding-file waiter on its wait spot (FileWaiters) faces its way out,

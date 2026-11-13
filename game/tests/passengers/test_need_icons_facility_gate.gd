@@ -6,6 +6,17 @@ extends GdUnitTestSuite
 ## views: a room with no piece (the control) then the piece placed in the same
 ## world.
 
+
+## A ToiletSim that counts its layout refreshes (NeedIcons.provided() calls
+## refresh() once per read) and builds nothing.
+class CountingToilets:
+	extends ToiletSim
+	var refreshes := 0
+
+	func refresh() -> void:
+		refreshes += 1
+
+
 var _world: PassengerTestWorld
 var _views: PassengerViews
 
@@ -133,3 +144,19 @@ func test_a_need_not_named_is_not_gated() -> void:
 		[NeedIcons.Need.HUNGER, NeedIcons.Need.BOREDOM]
 	)
 	assert_array(NeedIcons.shown(p)).has_size(3)
+
+
+func test_the_facility_read_happens_once_per_sync_not_per_passenger() -> void:
+	var grid := BuildGrid.new()
+	ToiletTestLayout.build(grid, 0)
+	_start(grid)
+	for i in 5:
+		_calm_passenger(func(p: Passenger) -> void: p.toilet_need = ToiletSim.NEED_MAX)
+	var counting := CountingToilets.new()
+	auto_free(counting)
+	_world.sim.toilets = counting
+	_views.sync()
+	assert_int(_world.sim.passenger_ids().size()).is_greater_equal(5)
+	assert_int(counting.refreshes).is_equal(1)
+	_views.sync()
+	assert_int(counting.refreshes).is_equal(2)
