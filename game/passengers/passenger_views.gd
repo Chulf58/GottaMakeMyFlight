@@ -129,9 +129,16 @@ var _badges: Array[Sprite3D] = []
 var _badge_root: Node3D
 ## The badges drawn this frame: {"kind", "count", "rect"} (screen pixels).
 var _badges_drawn: Array[Dictionary] = []
+## Passenger id -> the screen pixels from its row's anchor up to the top of a
+## count badge drawn over it (anchored on it, with the gap over), so a VIP's
+## crown stands over the badge (VipMarker.layout()). Rebuilt every frame.
+var _badge_lifts := {}
 
 
 func _ready() -> void:
+	# After the passengers' animation players (priority 0), so the icon rows
+	# read the heads as posed this frame, not the frame before.
+	process_priority = 1
 	follow_anchor.name = "FollowAnchor"
 	add_child(follow_anchor)
 	var torus := TorusMesh.new()
@@ -413,7 +420,7 @@ func draw() -> void:
 		var node: Node3D = _nodes[id]
 		var bubble := node.get_node("Bubble") as Label3D
 		NeedIcons.layout(node, bubble, camera, unit, icons_shown, masks.get(id, 0))
-		VipMarker.layout(node, bubble, camera, unit)
+		VipMarker.layout(node, bubble, camera, unit, _badge_lifts.get(id, 0.0))
 	_props.draw()
 	_markers.draw()
 
@@ -469,6 +476,7 @@ func need_badges() -> Array[Dictionary]:
 ## and hides every badge.
 func _cluster_icons(camera: Camera3D, unit: float, icons_shown: bool) -> Dictionary:
 	_badges_drawn.clear()
+	_badge_lifts.clear()
 	if not cluster_needs or not icons_shown or camera == null or unit <= 0.0:
 		need_clusters.clear()
 		_hide_badges(0)
@@ -516,9 +524,12 @@ func _cluster_icons(camera: Camera3D, unit: float, icons_shown: bool) -> Diction
 	var anchors: Array[Array] = []
 	var wanted: Array[Rect2] = []
 	var ids: Array = []
+	var holders: Array[int] = []
 	for cluster in clusters:
 		var members: Array = cluster["members"]
-		var row: Array = rows[NeedCluster.anchor_member(members, points[cluster["kind"]])]
+		var holder := NeedCluster.anchor_member(members, points[cluster["kind"]])
+		var row: Array = rows[holder]
+		holders.append(holder)
 		var under := NeedCluster.badge_rect(Vector2.ZERO, members.size()).end.y
 		var centre_px := Vector2(0.0, -float(row[2]) - under)
 		anchors.append([row, centre_px])
@@ -534,6 +545,12 @@ func _cluster_icons(camera: Camera3D, unit: float, icons_shown: bool) -> Diction
 		var centre_px: Vector2 = anchors[i][1] + placed[i].position - wanted[i].position
 		NeedCluster.show_badge(_badge(i), kind, count, row[0], centre_px, unit, row[4])
 		_badges_drawn.append({"id": ids[i], "kind": kind, "count": count, "rect": placed[i]})
+		# A badge over its owner's head, in the crown's column, lifts the crown.
+		var rect: Rect2 = placed[i]
+		var base: Vector2 = row[1]
+		if absf(rect.get_center().x - base.x) < (rect.size.x + VipMarker.CROWN_PX) / 2.0:
+			var over := base.y - rect.position.y + NeedIcons.GAP_PX
+			_badge_lifts[holders[i]] = maxf(_badge_lifts.get(holders[i], 0.0), over)
 	_hide_badges(clusters.size())
 	return masks
 

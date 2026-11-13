@@ -19,14 +19,18 @@ const TOILET := NeedIcons.Need.TOILET
 ## Pitch (degrees) -> the tallest head's reach over its Head bone along the
 ## camera's up, metres.
 const REACH_M := {70.0: 0.208, 38.0: 0.240}
-## Mesh vertices this high over the node's root count as the head.
-const HEAD_FROM_M := 1.4
+## Mesh vertices over the Head bone and this near it across (horizontally) count
+## as the head. The rest pose holds the arms out, and at a quarter turn an arm
+## tip stands over the head on screen, which is no head.
+const HEAD_NEAR_M := 0.3
 ## How much more than HEAD_GAP_PX a lower head may leave under the row at
 ## DISTANCE_M (the plainest head reaches 0.09 to 0.1 m less than the tallest).
 const MESH_SLACK_PX := 12.0
 ## The camera's distance from the head, and the two angle steps measured.
 const DISTANCE_M := 12.0
 const PITCHES: Array[float] = [70.0, 38.0]
+## The body yaws (degrees) the mesh top is measured at.
+const YAWS: Array[float] = [0.0, 90.0, 180.0, 270.0]
 ## The gap every row and wish bubble keeps over the tallest head's top, in
 ## screen pixels (NeedIcons.HEAD_GAP_PX plus the ball's 0.015 m margin over
 ## REACH_M), and how far off it a measurement may be.
@@ -39,6 +43,14 @@ const RISE_TICKS: Array[int] = [0, 4, 8, 12, 16, 20, 24]
 const RISE_MIN_PX := 2.0
 const RISE_MAX_PX := 12.0
 const RISE_STEP_PX := 4.0
+## The largest change in a row's gap from one rendered frame to the next while a
+## clip plays (0.4 px at most at 3x), the frames played after the clip ends (the
+## crossfade out of it), and the most frames a clip takes.
+const FRAME_STEP_PX := 1.0
+## How far a row's anchor may be from the head centre as posed this frame, metres.
+const TRAIL_M := 0.002
+const SETTLE_AFTER := 20
+const MAX_FRAMES := 4000
 ## The standing queue's length.
 const QUEUE := 6
 ## Frames a settled sit takes to pose the skeleton.
@@ -95,22 +107,30 @@ func test_a_standing_row_and_wish_bubble_keep_the_gap_at_both_angles(
 	_check_gaps(node, tag + "+wish", true)
 
 
-## Against the body's mesh, not its bones: before any frame poses it the body
-## stands in its rest pose (the control: its Head bone at the skeleton's rest
-## height), where the mesh's vertices are where they are drawn. The row's
-## bottom stands HEAD_GAP_PX or more over the highest drawn vertex and never
-## far over it, so a wrong bone picked by NeedIcons.find_head() fails here.
+## Against the body's mesh, not its bones, for every one of the twelve bodies
+## (PassengerLooks.SCENES) at both camera steps and four yaws: before any frame
+## poses it the body stands in its rest pose (the control: its Head bone at the
+## skeleton's rest height), where the mesh's vertices are where they are drawn.
+## The row's bottom stands HEAD_GAP_PX or more over the highest drawn vertex and
+## never far over it, so a wrong bone picked by NeedIcons.find_head(), or a
+## body whose hair or bun reaches past the fitted ball, fails here.
 func test_a_rest_pose_row_clears_the_drawn_mesh_top(
-	variant: int, _test_parameters := [[0], [1]]
+	body: int, _test_parameters := [[0], [1], [2], [3], [4], [5], [6], [7], [8], [9], [10], [11]]
 ) -> void:
 	_world = _facility_world()
 	_open_views()
-	var id := _world.sim.spawn_now(PassengerTestWorld.FLIGHT)
-	_world.passenger(id).variant = variant
+	# The passengers spawned on the way to this body's look stand at the same
+	# cell, and their icons would merge into one badge with the row's.
+	_views.cluster_needs = false
+	var variant := body / PassengerLooks.PER_VARIANT
+	var id := _world.sim.spawn_now(PassengerTestWorld.FLIGHT, variant)
+	while PassengerLooks.body_of(id, variant) != body:
+		id = _world.sim.spawn_now(PassengerTestWorld.FLIGHT, variant)
 	ToiletTestLayout.calm(_world.passenger(id))
 	_world.step()
 	_views.sync()
 	var node := _views.node_for(id)
+	assert_int(node.get_meta(&"body", -1)).is_equal(body)
 	var skeleton := node.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
 	var bone := skeleton.find_bone(NeedIcons.HEAD_BONE)
 	assert_vector(skeleton.get_bone_global_pose(bone).origin).is_equal_approx(
@@ -119,18 +139,22 @@ func test_a_rest_pose_row_clears_the_drawn_mesh_top(
 	var needs: Array[NeedIcons.Need] = [TOILET]
 	NeedIcons.show_needs(node, needs)
 	(node.get_node("Bubble") as Label3D).text = ""
-	for pitch in PITCHES:
-		_aim(_head_bone(node), pitch)
-		_views.draw()
-		_views.draw()
-		var row := _bottom_y(node.get_node(NeedIcons.SPRITES[0]), false)
-		var gap := _mesh_top_y(node) - row
-		print("rest pose variant %d at %.0f degrees: mesh gap %.1f px" % [variant, pitch, gap])
-		(
-			assert_float(gap)
-			. override_failure_message("variant %d at %.0f: gap %.1f px" % [variant, pitch, gap])
-			. is_between(NeedIcons.HEAD_GAP_PX - 0.5, NeedIcons.HEAD_GAP_PX + MESH_SLACK_PX)
-		)
+	for yaw in YAWS:
+		# The views draw the node with its turn's yaw, so the yaw is set there.
+		_views._turns.place(id, deg_to_rad(yaw))
+		for pitch in PITCHES:
+			_views.draw()
+			_aim(_head_bone(node), pitch)
+			_views.draw()
+			assert_float(absf(angle_difference(node.rotation.y, deg_to_rad(yaw)))).is_less(0.001)
+			var row := _bottom_y(node.get_node(NeedIcons.SPRITES[0]), false)
+			var gap := _mesh_top_y(node) - row
+			var tag := "body %d yaw %.0f at %.0f degrees" % [body, yaw, pitch]
+			print("rest pose %s: mesh gap %.1f px" % [tag, gap])
+			var spr := node.get_node(NeedIcons.SPRITES[0]) as Sprite3D
+			assert_float(gap).override_failure_message("%s: gap %.1f px" % [tag, gap]).is_between(
+				NeedIcons.HEAD_GAP_PX - 0.5, NeedIcons.HEAD_GAP_PX + MESH_SLACK_PX
+			)
 
 
 ## A VIP's crown stands GAP_PX over its icon row at both angles, not over the
@@ -223,6 +247,109 @@ func test_a_rising_row_keeps_the_gap_through_the_stand_up() -> void:
 					. is_less_equal(RISE_STEP_PX)
 				)
 			last[pitch] = gap
+
+
+## Through the stand-up and the sit-down played frame by frame, as the game
+## plays them (the clock advanced by each frame's real delta, the animation
+## player running, the crossfade easing, at 1x and 3x speed): at every frame the
+## row's anchor is the head as posed that frame (within TRAIL_M), the row stands
+## GAP_PX over it within TOLERANCE_PX and moves at most FRAME_STEP_PX from one
+## frame to the next. A row laid out from the bone read before the animation
+## moved it this frame trails the head by a frame's motion (PassengerViews runs
+## after the animation players, process_priority).
+func test_the_row_follows_the_head_through_real_frames(
+	stage: Passenger.Stage,
+	speed: int,
+	pitch: float,
+	_test_parameters := [
+		[Passenger.Stage.STANDING_UP, 1, 70.0],
+		[Passenger.Stage.STANDING_UP, 3, 70.0],
+		[Passenger.Stage.STANDING_UP, 1, 38.0],
+		[Passenger.Stage.STANDING_UP, 3, 38.0],
+		[Passenger.Stage.SITTING_DOWN, 1, 70.0],
+		[Passenger.Stage.SITTING_DOWN, 3, 70.0],
+		[Passenger.Stage.SITTING_DOWN, 1, 38.0],
+		[Passenger.Stage.SITTING_DOWN, 3, 38.0],
+	]
+) -> void:
+	# A world with a toilet built, or the toilet icon is not shown at all.
+	var p := _sitter(1, true)
+	p.toilet_need = ToiletSim.NEED_MAX
+	# Settled where the clip starts: seated to stand up, standing to sit down.
+	p.stage = (
+		Passenger.Stage.SEATED if stage == Passenger.Stage.STANDING_UP else Passenger.Stage.STANDING
+	)
+	_views.snap()
+	for i in SETTLE_FRAMES:
+		await await_idle_frame()
+	var node := _views.node_for(p.id)
+	var row := node.get_node(NeedIcons.SPRITES[0]) as Sprite3D
+	_aim(node.global_position + Vector3(0.0, 1.4, 0.0), pitch)
+	_world.clock.set_speed(speed)
+	p.stage = stage
+	p.stage_tick = _world.sim.tick
+	_views.sync()
+	var tag := "%s at %dx, %.0f degrees" % [Passenger.Stage.keys()[stage], speed, pitch]
+	var frames := 0
+	var after := 0
+	var seen := 0
+	var trail := 0.0
+	var last := INF
+	var low := INF
+	var high := -INF
+	var worst := 0.0
+	while after < SETTLE_AFTER and frames < MAX_FRAMES:
+		var delta := clampf(_views.get_process_delta_time(), 0.001, 0.1)
+		_world.clock.advance(delta)
+		await await_idle_frame()
+		frames += 1
+		if p.stage != stage:
+			after += 1
+		if not row.visible:
+			continue
+		seen += 1
+		var bubble := node.get_node("Bubble") as Label3D
+		assert_str(bubble.text).override_failure_message("%s: a speech bubble" % tag).is_empty()
+		# The row's anchor is where the head is posed now, not a frame back.
+		var centre := node.global_transform * NeedIcons.head_centre(node)
+		trail = maxf(trail, row.global_position.distance_to(centre))
+		var gap := _head_top_y(node, pitch) - _bottom_y(row, false)
+		if last < INF:
+			worst = maxf(worst, absf(gap - last))
+		last = gap
+		low = minf(low, gap)
+		high = maxf(high, gap)
+	print(
+		(
+			"%s: %d frames (%d seen), gap %.1f to %.1f px, step %.2f px, trail %.4f m"
+			% [tag, frames, seen, low, high, worst, trail]
+		)
+	)
+	# The control: the row was drawn for most of the clip's frames.
+	(
+		assert_int(seen)
+		. override_failure_message("%s: the row showed %d frames" % [tag, seen])
+		. is_greater(frames / 2)
+	)
+	(
+		assert_bool(p.stage != stage)
+		. override_failure_message("%s: the clip never ended" % tag)
+		. is_true()
+	)
+	assert_float(low).override_failure_message("%s: gap %.1f px" % [tag, low]).is_greater_equal(
+		GAP_PX - TOLERANCE_PX
+	)
+	assert_float(high).override_failure_message("%s: gap %.1f px" % [tag, high]).is_less_equal(
+		GAP_PX + TOLERANCE_PX
+	)
+	(
+		assert_float(trail)
+		. override_failure_message("%s: the row trails the head by %.4f m" % [tag, trail])
+		. is_less_equal(TRAIL_M)
+	)
+	assert_float(worst).override_failure_message("%s: step %.2f px" % [tag, worst]).is_less_equal(
+		FRAME_STEP_PX
+	)
 
 
 ## A standing queue with the toilet need, one passenger a cell running away
@@ -324,8 +451,8 @@ func _open_views() -> void:
 
 
 ## A passenger settled on the first gate chair of the reference terminal.
-func _sitter(variant := 1) -> Passenger:
-	_world = PassengerTestWorld.reference_world()
+func _sitter(variant := 1, facilities := false) -> Passenger:
+	_world = _facility_world() if facilities else PassengerTestWorld.reference_world()
 	_world.run_to(10)
 	_open_views()
 	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
@@ -396,16 +523,19 @@ func _head_top_y(node: Node3D, pitch: float) -> float:
 
 
 ## The top on screen (y, pixels) of `node`'s body mesh as drawn in the rest
-## pose: the highest projected vertex HEAD_FROM_M or more over the root. Read
+## pose: the highest projected vertex over the Head bone within HEAD_NEAR_M of it
+## across. Read
 ## off the mesh, not the skeleton.
 func _mesh_top_y(node: Node3D) -> float:
 	var mesh := PassengerLooks.body_mesh(node)
+	var head := _head_bone(node)
 	var top := INF
 	for s in mesh.mesh.get_surface_count():
 		var verts: PackedVector3Array = mesh.mesh.surface_get_arrays(s)[Mesh.ARRAY_VERTEX]
 		for v in verts:
 			var at := mesh.global_transform * v
-			if at.y - node.global_position.y >= HEAD_FROM_M:
+			var across := Vector2(at.x - head.x, at.z - head.z).length()
+			if at.y >= head.y and across <= HEAD_NEAR_M:
 				top = minf(top, _camera.unproject_position(at).y)
 	return top
 
