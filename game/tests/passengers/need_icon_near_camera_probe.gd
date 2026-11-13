@@ -170,12 +170,17 @@ func _plate(ratio: float) -> void:
 		var sprite := other.get_node(NeedIcons.SPRITES[0]) as Sprite3D
 		print(
 			(
-				"WHO %s id=%d dist_m=%.2f stage=%s needs=%d root_plate=%s head_plate=%s anchor_plate=%s"
+				(
+					"WHO %s id=%d dist_m=%.2f stage=%s seated=%s bone_head_m=%s needs=%d "
+					+ "root_plate=%s head_plate=%s anchor_plate=%s"
+				)
 				% [
 					tag.get_slice(" ", 0),
 					id,
 					_cam.global_position.distance_to(other.global_position),
 					Passenger.Stage.keys()[_sim.get_passenger(id).stage],
+					other.get_meta(&"icon_seated", false),
+					_head_point(other) - other.global_position,
 					other.get_meta(&"needs", 0),
 					(_cam.unproject_position(other.global_position) * to_plate).round(),
 					(
@@ -213,10 +218,28 @@ func _plate(ratio: float) -> void:
 	var gap := INF
 	for rect in own:
 		gap = minf(gap, head_rect.position.y - rect.end.y)
+	# The same gap to the head bone's top (+0.12 m), the real head of a seated
+	# subject: the skinned bounds above keep the standing pose's height.
+	var bone_rect := _head_rect(_head_point(node) + Vector3(0.0, 0.12, 0.0))
+	var bone_gap := INF
+	for rect in own:
+		bone_gap = minf(bone_gap, bone_rect.position.y - rect.end.y)
 	print(
 		(
-			"PLATE %s head_rect=%s own_icons=%d OWN_GAP=%.1f FOREIGN=%d other_icons=%d"
-			% [tag, head_rect, own.size(), gap, foreign, other_icons]
+			(
+				"PLATE %s head_rect=%s own_icons=%d OWN_GAP=%.1f BONE_GAP=%.1f seated=%s "
+				+ "FOREIGN=%d other_icons=%d"
+			)
+			% [
+				tag,
+				head_rect,
+				own.size(),
+				gap,
+				bone_gap,
+				node.get_meta(&"icon_seated", false),
+				foreign,
+				other_icons
+			]
 		)
 	)
 	if other_icons == 0:
@@ -303,6 +326,10 @@ func _pick_subject() -> int:
 		if node == null or node.get_meta(&"needs", 0) == 0:
 			continue
 		var d := node.global_position.distance_to(_rig.global_position)
+		# A passenger whose icon a count cluster draws (NeedCluster) has no icon
+		# of its own to measure: the plate's own-icon check would flag it.
+		if not (node.get_node(NeedIcons.SPRITES[0]) as Sprite3D).visible:
+			d += 1000.0
 		if d < best_d:
 			best = id
 			best_d = d
