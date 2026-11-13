@@ -109,6 +109,8 @@ const NEAR_FULL_M := 9.0
 const SPRITES := ["NeedIcon0", "NeedIcon1", "NeedIcon2"]
 
 static var _textures: Dictionary = {}
+## The clips clip_weight() has reported broken (clip name -> true).
+static var _clip_errors: Dictionary = {}
 
 
 ## Which needs something built can meet, as need -> bool (decision crowd-need-
@@ -351,8 +353,22 @@ static func rise_weight(node: Node3D) -> float:
 	var clip := player.assigned_animation
 	if clip != RISE_CLIP and clip != SINK_CLIP:
 		return 1.0
-	var length := player.get_animation(clip).length
-	var t := smoothstep(0.0, 1.0, player.current_animation_position / length)
+	var animation: Animation = player.get_animation(clip) if player.has_animation(clip) else null
+	return clip_weight(clip, animation, player.current_animation_position)
+
+
+## rise_weight() for `clip` (RISE_CLIP or SINK_CLIP) played `at` seconds into
+## `animation`. A missing or zero-length animation reports once per clip
+## (push_error) and gives the clip's start pose, seated for a stand-up and
+## standing for a sit-down, never a NaN that would carry into the icons, the
+## crown and the badges' head rects.
+static func clip_weight(clip: String, animation: Animation, at: float) -> float:
+	if animation == null or animation.length <= 0.0:
+		if not _clip_errors.has(clip):
+			_clip_errors[clip] = true
+			push_error("NeedIcons.clip_weight: the %s clip is missing or has no length" % clip)
+		return 0.0 if clip == RISE_CLIP else 1.0
+	var t := smoothstep(0.0, 1.0, at / animation.length)
 	return t if clip == RISE_CLIP else 1.0 - t
 
 

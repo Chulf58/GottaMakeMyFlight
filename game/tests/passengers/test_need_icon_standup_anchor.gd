@@ -206,3 +206,27 @@ func test_the_anchor_sinks_with_the_head_through_the_sit_down() -> void:
 	node.set_meta(&"icon_rise", NeedIcons.Rise.NONE)
 	var old := NeedIcons.head_anchor(node)
 	assert_bool(_over(old, heads[END])).override_failure_message(str(old)).is_false()
+
+
+## A missing clip (no Animation to divide by) reports once and gives the
+## clip's start pose, a finite anchor, never a NaN; a real clip still blends
+## (the control).
+func test_a_missing_clip_reports_and_gives_a_finite_start_pose() -> void:
+	NeedIcons._clip_errors.clear()
+	var standing := Vector3(0.0, NeedIcons.LIFT_M, 0.0)
+	var seated := Vector3(0.0, NeedIcons.SEATED_LIFT_M, -NeedIcons.SEATED_BACK_M)
+	var start := {NeedIcons.RISE_CLIP: seated, NeedIcons.SINK_CLIP: standing}
+	for clip: String in start:
+		var weights := []
+		(
+			assert_error(func() -> void: weights.append(NeedIcons.clip_weight(clip, null, 0.6)))
+			. is_push_error("NeedIcons.clip_weight: the %s clip is missing or has no length" % clip)
+		)
+		var anchor := seated.lerp(standing, weights[0])
+		assert_bool(anchor.is_finite()).override_failure_message(str(anchor)).is_true()
+		assert_vector(anchor).is_equal(start[clip])
+	NeedIcons._clip_errors.clear()
+	var real := Animation.new()
+	real.length = 1.2
+	assert_float(NeedIcons.clip_weight(NeedIcons.RISE_CLIP, real, 0.6)).is_equal_approx(0.5, 1e-6)
+	assert_float(NeedIcons.clip_weight(NeedIcons.SINK_CLIP, real, 1.2)).is_equal_approx(0.0, 1e-6)
