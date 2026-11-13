@@ -124,15 +124,37 @@ func test_the_result_card_comes_back_after_the_director_loads() -> void:
 	assert_str(_words(id)).contains("The VIP made the flight")
 
 
-## Good news is a green rail card (the flight result card's look), a missed
-## flight a coral one (decision hud-grid-and-rails-one-spacing-grid-centred-
-## top-row-right-ra, colour meanings per 0b50e074).
-func test_a_vip_who_makes_it_posts_a_green_card_with_or_without_the_bonus() -> void:
-	for mood in [GOOD_MOOD, GOOD_MOOD - 1]:
-		var id := _finished_vip(true, mood)
-		var card := _rail.notice_card(IncidentCards.key_of({"id": id})) as PanelContainer
-		assert_str(card.theme_type_variation).is_equal("HudCardGreen")
-		assert_bool(card.has_theme_stylebox_override("panel")).is_false()
+## Green is for the bonus alone, a missed flight is a coral card (decision
+## hud-grid-and-rails-one-spacing-grid-centred-top-row-right-ra, colour meanings
+## per 0b50e074). User-ruled 2026-11-13, "Plain cream card (Recommended)":
+## "Green only when you earned the bonus. The no-bonus result gets the ordinary
+## cream card, so a reward stands out and a near-miss doesn't look like a win."
+## This case used to expect green for the no-bonus result too (mood below the
+## bar); that half moved to the cream-card case below.
+func test_a_vip_who_makes_it_in_a_good_mood_posts_a_green_card() -> void:
+	var id := _finished_vip(true, GOOD_MOOD)
+	var card := _rail.notice_card(IncidentCards.key_of({"id": id})) as PanelContainer
+	assert_str(card.theme_type_variation).is_equal("HudCardGreen")
+	assert_bool(card.has_theme_stylebox_override("panel")).is_false()
+
+
+## The made-it-below-the-bar result (outcome neutral, no bonus) is the ordinary
+## cream card: no HudCard variation, so the theme's PanelContainer panel, not
+## HudCardGreen. The bonus card posted beside it is the control and stays green.
+func test_a_vip_who_makes_it_below_the_mood_bar_posts_a_plain_cream_card() -> void:
+	var bonus_id := _finished_vip(true, GOOD_MOOD)
+	var neutral_id := _finished_vip(true, GOOD_MOOD - 1)
+	var bonus := _rail.notice_card(IncidentCards.key_of({"id": bonus_id})) as PanelContainer
+	var neutral := _rail.notice_card(IncidentCards.key_of({"id": neutral_id})) as PanelContainer
+	assert_str(_words(neutral_id)).contains("no bonus")
+	assert_str(bonus.theme_type_variation).is_equal("HudCardGreen")
+	assert_str(neutral.theme_type_variation).is_equal("")
+	assert_bool(neutral.has_theme_stylebox_override("panel")).is_false()
+	var cream := BuildMenu.HUD_THEME.get_stylebox("panel", "PanelContainer")
+	assert_object(neutral.get_theme_stylebox("panel")).is_same(cream)
+	assert_object(neutral.get_theme_stylebox("panel")).is_not_same(
+		bonus.get_theme_stylebox("panel")
+	)
 
 
 func test_a_vip_who_misses_posts_a_coral_card() -> void:

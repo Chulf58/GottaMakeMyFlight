@@ -7,10 +7,10 @@ extends Node
 ## up.", or "Hire a cleaner to clean it." while no cleaner is hired. The card
 ## stays until the incident is over or the player clicks it away; a minor never
 ## pauses the game. An accepted VIP gets one result card of the same look when
-## it ends, green when made in a good mood (the bonus) or below the mood bar (no
-## bonus), coral when missed (the rating penalty). The inspector's visit gets one
-## when it resolves: green when passed (the money), coral when failed (the
-## rating penalty). Notices are not
+## it ends, green when made in a good mood (the bonus), the ordinary cream card
+## when made below the mood bar (no bonus), coral when missed (the rating
+## penalty). The inspector's visit gets one when it resolves: green when passed
+## (the money), coral when failed (the rating penalty). Notices are not
 ## saved, so after the rail resets (a load or a new world, reset_done) or the
 ## director loads (restored), every incident still active and every VIP or
 ## inspector result still kept is posted again.
@@ -74,18 +74,26 @@ func _post_result(incident: Dictionary) -> void:
 		card = OfferPanel.green_card(key, words["title"], words["detail"])
 	else:
 		card = OfferPanel.coral_card(key, words["title"], words["detail"])
+		if _is_plain(incident):
+			# No variation: the theme's ordinary cream PanelContainer look.
+			card.theme_type_variation = &""
 	card.name = "IncidentNotice_%s" % key
 	on.post_notice(key, card, 0.0, words["title"], words["detail"])
 
 
-## Whether a finished VIP or inspector visit is good news: a VIP who made the
-## flight (with or without the bonus) or an inspector who passed. Green means
+## Whether a finished VIP or inspector visit earned a green card: a VIP who made
+## the flight in a good mood (the bonus) or an inspector who passed. Green means
 ## good, coral a problem (decision hud-grid-and-rails-one-spacing-grid-centred-
-## top-row-right-ra).
+## top-row-right-ra); a reward stands out (user-ruled 2026-11-13).
 static func _is_good(incident: Dictionary) -> bool:
-	return (
-		incident["outcome"] in [IncidentMajors.BONUS, IncidentMajors.NEUTRAL, IncidentMajors.PASSED]
-	)
+	return incident["outcome"] in [IncidentMajors.BONUS, IncidentMajors.PASSED]
+
+
+## Whether the result is the plain cream card: a VIP who made the flight below
+## the mood bar (no bonus), so a near-miss does not look like a win (user-ruled
+## 2026-11-13, "Plain cream card (Recommended)").
+static func _is_plain(incident: Dictionary) -> bool:
+	return incident["outcome"] == IncidentMajors.NEUTRAL
 
 
 func _post(incident: Dictionary) -> void:
