@@ -686,7 +686,8 @@ func _pose(node: Node3D, p: Passenger) -> float:
 		BubbleDeclutter.rank_of(sim, p) if bubble_text != "" else BubbleDeclutter.NO_QUEUE
 	)
 	var wish := WishIconView.read(sim.shops, p)
-	NeedIcons.show_needs(node, NeedIcons.shown(p, wish[1] != WishTable.State.NONE))
+	var built := NeedIcons.provided(sim)
+	NeedIcons.show_needs(node, NeedIcons.shown(p, wish[1] != WishTable.State.NONE, built))
 	WishIconView.show_wish(node, wish)
 	# A boarding-file waiter on its wait spot (FileWaiters) faces its way out,
 	# not back along its walk to the spot.

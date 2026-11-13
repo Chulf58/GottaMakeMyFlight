@@ -22,6 +22,9 @@ extends RefCounted
 ## lists the needs. A passenger's icons also fade out as the
 ## camera comes very close to that passenger (near_alpha()).
 ##
+## No icon shows for a need while nothing built can meet it (provided(): no
+## cafe, no toilet stall, no shop that relieves boredom, screen or prize car).
+##
 ## PassengerViews gives every passenger node three Sprite3D icons (make_sprite())
 ## at one point over the head, so the body's turn never moves them, and lays
 ## them out each frame (layout()): they keep ICON_PX on screen at every zoom,
@@ -62,11 +65,42 @@ const SPRITES := ["NeedIcon0", "NeedIcon1", "NeedIcon2"]
 static var _textures: Dictionary = {}
 
 
+## Which needs something built can meet, as need -> bool (decision crowd-need-
+## display-mood-overlay-gains-hunger-toilet-and-bore, point 3: a need icon is
+## hidden while nothing built can meet that need). Hunger: a usable cafe;
+## toilet: a usable stall (the same layouts HintRules.read_world() counts for
+## the toilet and food hints); boredom: a ready kiosk-style shop that relieves
+## it, a screen stand or a prize car, the three things BoredomSim treats as
+## meeting it. Refreshes the toilet, cafe and shop layouts if an edit left them
+## stale, as read_world() does.
+static func provided(sim: PassengerSim) -> Dictionary:
+	sim.toilets.refresh()
+	sim.cafes.refresh()
+	sim.shops.refresh()
+	var relieving := false
+	for shop in sim.shops.layout.shops:
+		if RoomTypes.get_type(sim.grid.get_room(shop["room"])["type"]).relieves_boredom:
+			relieving = true
+			break
+	return {
+		Need.HUNGER: not sim.cafes.layout.cafes.is_empty(),
+		Need.TOILET: not sim.toilets.layout.stalls.is_empty(),
+		Need.BOREDOM:
+		(
+			relieving
+			or not sim.boredom.screens.cells().is_empty()
+			or not sim.boredom.prize.cells().is_empty()
+		),
+	}
+
+
 ## The needs whose icons show over `p`: hunger, toilet, boredom. With
 ## `wishing` (a shopping wish shows over `p`, WishIconView) the wish bubble
 ## takes the boredom icon's place in the row (user ruling shopping-wish-icon-
-## replaces-the-boredom-hourglass-for-wishers), so boredom is left out.
-static func shown(p: Passenger, wishing := false) -> Array[Need]:
+## replaces-the-boredom-hourglass-for-wishers), so boredom is left out. A need
+## `built` (provided()) maps to false is left out too; a need it does not name
+## is not gated, so the default, an empty `built`, gates nothing.
+static func shown(p: Passenger, wishing := false, built := {}) -> Array[Need]:
 	var out: Array[Need] = []
 	if p.stage == Passenger.Stage.MISSED or p.stage == Passenger.Stage.MADE:
 		return out
@@ -74,11 +108,16 @@ static func shown(p: Passenger, wishing := false) -> Array[Need]:
 	var facility := StageKinds.facility(p.stage)
 	var eating := at_facility and facility == StageKinds.Facility.CAFE
 	var in_stall := at_facility and facility == StageKinds.Facility.TOILET
-	if p.hunger >= CafeSim.HUNGRY_AT and not eating:
+	if p.hunger >= CafeSim.HUNGRY_AT and not eating and built.get(Need.HUNGER, true):
 		out.append(Need.HUNGER)
-	if p.toilet_need >= ToiletSim.NEED_AT and not in_stall:
+	if p.toilet_need >= ToiletSim.NEED_AT and not in_stall and built.get(Need.TOILET, true):
 		out.append(Need.TOILET)
-	if BoredomSim.is_bored(p) and p.stage != Passenger.Stage.SHOP_BROWSE and not wishing:
+	if (
+		BoredomSim.is_bored(p)
+		and p.stage != Passenger.Stage.SHOP_BROWSE
+		and not wishing
+		and built.get(Need.BOREDOM, true)
+	):
 		out.append(Need.BOREDOM)
 	return out
 

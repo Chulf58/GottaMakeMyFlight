@@ -21,7 +21,7 @@ func after() -> void:
 
 func before_test() -> void:
 	var grid := BuildGrid.new()
-	ToiletTestLayout.build(grid)
+	NeedFacilityKit.build(grid)
 	_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
 	_world.run_to(10)
 	_views = PassengerTestWorld.views()
