@@ -133,7 +133,7 @@ func _node(seated: bool) -> Node3D:
 	node.add_child(WishIconView.make_sprite())
 	node.add_child(VipMarker.make_sprite())
 	add_child(node)
-	node.set_meta(&"seated", seated)
+	node.set_meta(&"icon_seated", seated)
 	return node
 
 

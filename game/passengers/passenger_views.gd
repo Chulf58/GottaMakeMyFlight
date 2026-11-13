@@ -684,6 +684,7 @@ func _release(id: int) -> void:
 	fade.stop()
 	fade.drawn = false
 	node.set_meta(&"clip", "")
+	node.set_meta(&"icon_seated", false)
 	VipMarker.mark(node, false)
 	_pool[node.get_meta(&"body")].append(node)
 	_nodes.erase(id)
@@ -768,6 +769,16 @@ func _pose(node: Node3D, p: Passenger, built: Dictionary) -> float:
 	)
 	var staying := activity != ActivityPoses.Kind.NONE
 	node.set_meta(&"seated", at_gate or at_cafe or at_stall or staying)
+	# The icon row's seated anchor (NeedIcons.head_anchor): only a settled sit
+	# on a chair, sofa or toilet seat, not &"seated"'s wider turn lock (standing
+	# up, the upright shower, the reclined nap pod).
+	node.set_meta(
+		&"icon_seated",
+		(
+			seat_pose == StageKinds.Pose.SEATED
+			and (at_gate or at_cafe or at_stall or activity == ActivityPoses.Kind.SEAT)
+		)
+	)
 	var works := SecurityLooks.face(sim, p)
 	node.set_meta(&"faces", works != Vector2.ZERO)
 	if at_gate:

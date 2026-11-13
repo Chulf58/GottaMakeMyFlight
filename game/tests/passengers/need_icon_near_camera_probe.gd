@@ -179,7 +179,7 @@ func _plate(ratio: float) -> void:
 					id,
 					_cam.global_position.distance_to(other.global_position),
 					Passenger.Stage.keys()[_sim.get_passenger(id).stage],
-					other.get_meta(&"seated", false),
+					other.get_meta(&"icon_seated", false),
 					_head_point(other) - other.global_position,
 					other.get_meta(&"needs", 0),
 					(_cam.unproject_position(other.global_position) * to_plate).round(),
@@ -236,7 +236,7 @@ func _plate(ratio: float) -> void:
 				own.size(),
 				gap,
 				bone_gap,
-				node.get_meta(&"seated", false),
+				node.get_meta(&"icon_seated", false),
 				foreign,
 				other_icons
 			]

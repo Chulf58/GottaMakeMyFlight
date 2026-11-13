@@ -54,7 +54,7 @@ const ICON_PX := 30.0
 const GAP_PX := 4.0
 ## Height over the passenger's root of the icons' anchor, just over the head.
 const LIFT_M := 2.0
-## The same for a seated passenger (node meta &"seated", board bd08ed8e, user
+## The same for a seated passenger (node meta &"icon_seated", board bd08ed8e, user
 ## ruling "Lift icons for seated"), and SEATED_BACK_M the anchor's shift toward
 ## the seat's back. A seated body is drawn about 0.54 m behind its root (the
 ## chair's front edge), its head top near 1.46 m. The game camera starts at
@@ -267,7 +267,7 @@ static func layout(
 ## the root, or SEATED_LIFT_M high and SEATED_BACK_M behind it while the node is
 ## seated. The VIP crown anchors here too.
 static func head_anchor(node: Node3D) -> Vector3:
-	if node.get_meta(&"seated", false):
+	if node.get_meta(&"icon_seated", false):
 		return Vector3(0.0, SEATED_LIFT_M, -SEATED_BACK_M)
 	return Vector3(0.0, LIFT_M, 0.0)
 
