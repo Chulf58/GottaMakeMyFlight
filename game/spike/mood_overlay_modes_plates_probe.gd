@@ -6,8 +6,8 @@ extends SceneTree
 ## own needs have barely risen by then, so the probe spreads hunger, toilet need
 ## and boredom over the passengers (printed), to show every colour band; the sim
 ## is paused, so nothing changes them back. The same camera frames:
-##   01 Mood mode (need icons stay)
-##   02 Hunger mode   03 Toilet mode   04 Boredom mode (need icons hidden)
+##   01 Mood mode (no need icons)
+##   02 Hunger mode   03 Toilet mode   04 Boredom mode (that need's icons)
 ## each through the real legend buttons. Each fails with PROBE_INVALID and exit 1
 ## when the tinted patch leaves the frame or sits under a HUD panel, when a mode
 ## button did not switch the mode, or when a plate's tint did not change on

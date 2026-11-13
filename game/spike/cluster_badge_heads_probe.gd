@@ -201,7 +201,15 @@ func _spread_needs() -> void:
 		given[1] += 1
 		given[2] += int(i % 3 == 0)
 		i += 1
+	_open_overlay(MoodTint.Mode.TOILET)
 	print("PROBE needs set: hunger=%d toilet=%d boredom=%d" % given)
+
+
+## Opens the Mood overlay in `mode`: need icons show only in a need mode.
+func _open_overlay(mode: MoodTint.Mode) -> void:
+	var overlay := _main.get_node("MoodOverlay") as MoodOverlay
+	overlay.set_mode(mode)
+	overlay.set_shown(true)
 
 
 func _plates() -> void:

@@ -16,11 +16,12 @@ extends RefCounted
 ## passenger is at the facility meeting it (at a cafe table, inside a toilet
 ## stall, browsing at a kiosk) and for a passenger who missed the flight. All
 ## icons hide
-## while the game camera is at its home zoom or farther out (shown_at()) and
-## while the N key has turned them off (NeedIconsToggle, on by default, decision
-## passenger-need-icons-toggle-key-n-on-by-default); the follow panel still
-## lists the needs. A passenger's icons also fade out as the
-## camera comes very close to that passenger (near_alpha()).
+## while the game camera is at its home zoom or farther out (shown_at()). They
+## show only while the Mood overlay is open in its Hunger, Toilet or Boredom
+## mode, and then only that need's (decision need-icons-show-only-in-the-mood-
+## overlay-need-modes-n-key-removed); the default view and plain Mood mode show
+## none, and the inspect card still lists the needs. A passenger's icons also
+## fade out as the camera comes very close to that passenger (near_alpha()).
 ##
 ## No icon shows for a need while nothing built can meet it (provided(): no
 ## cafe, no toilet stall, no shop that relieves boredom, screen or prize car).
@@ -273,12 +274,20 @@ static func unit_of(view: Viewport, camera: Camera3D) -> float:
 ## thought bubble while it shows. A shopping wish bubble the node shows
 ## (WishIconView.SPRITE) ends the row, WishIconView.WISH_PX on screen, in the
 ## place the boredom icon would take. Does nothing with no camera.
-## With `shown` false (the camera at the home zoom or farther out, shown_at())
-## the node's icons and wish bubble are hidden for this frame. `mask` holds a
-## bit (1 << Need) for each need whose icon a count cluster badge draws
-## instead (NeedCluster); those icons hide and the rest close up the row.
+## With `shown` false (no need mode on, or the camera at the home zoom or
+## farther out) the node's need icons are hidden for this frame; `wish_shown`
+## false (the camera at the home zoom or farther out, shown_at()) hides its wish
+## bubble. `mask` holds a bit (1 << Need) for each need whose icon is hidden,
+## drawn by a count cluster badge (NeedCluster) or not wanted in this mode;
+## the rest close up the row.
 static func layout(
-	node: Node3D, bubble: Label3D, camera: Camera3D, unit: float, shown := true, mask := 0
+	node: Node3D,
+	bubble: Label3D,
+	camera: Camera3D,
+	unit: float,
+	shown := true,
+	mask := 0,
+	wish_shown := true
 ) -> void:
 	var count: int = node.get_meta(&"needs", 0)
 	var kinds: Array = node.get_meta(&"need_kinds", [])
@@ -286,6 +295,7 @@ static func layout(
 	if camera != null:
 		alpha = near_alpha(camera.global_position.distance_to(node.global_position))
 	var drawn := shown and alpha > 0.0
+	var wish_drawn := wish_shown and alpha > 0.0
 	var kept: Array[int] = []
 	for i in count:
 		var icon := node.get_node(SPRITES[i]) as Sprite3D
@@ -297,9 +307,10 @@ static func layout(
 	var wish := node.get_node_or_null(WishIconView.SPRITE) as Sprite3D
 	var wishing: bool = wish != null and node.get_meta(&"wish", "") != ""
 	if wish != null:
-		wish.visible = drawn and wishing
+		wish.visible = wish_drawn and wishing
 		wish.modulate.a = alpha
-	if (kept.is_empty() and not wishing) or not drawn or camera == null or unit <= 0.0:
+	wishing = wishing and wish_drawn
+	if (kept.is_empty() and not wishing) or camera == null or unit <= 0.0:
 		return
 	var at := row_anchor(node, bubble, camera, unit)
 	var anchor: Vector3 = at[0]

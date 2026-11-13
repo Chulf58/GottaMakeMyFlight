@@ -88,13 +88,41 @@ static func reference_world(seed := 1) -> PassengerTestWorld:
 	return make(on_grid, FlightSim.schedule_starts(0), seed)
 
 
-## A PassengerViews whose need icon toggle reads an isolated settings path (never
-## the player's user://hud_settings.cfg, where N may have turned the icons off), as
-## every test view must be made. Set its clock and sim, then add_child() it.
+## A PassengerViews as every test view must be made. Set its clock and sim, then
+## add_child() it. Its need icons stay hidden until show_need() opens the Mood
+## overlay in a need mode.
 static func views() -> PassengerViews:
-	var made := PassengerViews.new()
-	made.need_icons_toggle.settings_path = SaveTestKit.run_path("test_views_hud_settings")
-	return made
+	return PassengerViews.new()
+
+
+## Opens a MoodOverlay on `views`' sim (made on the first call, a child of the
+## views, on a fresh settings path) in the mode that shows `need`'s icons,
+## and points the views at it. Call it after the views entered the tree and
+## their sim has a grid; draw() the views to see the icons.
+static func show_need(views: PassengerViews, need: NeedIcons.Need) -> MoodOverlay:
+	var overlay := ensure_overlay(views)
+	overlay.set_shown(true)
+	match need:
+		NeedIcons.Need.HUNGER:
+			overlay.set_mode(MoodTint.Mode.HUNGER)
+		NeedIcons.Need.TOILET:
+			overlay.set_mode(MoodTint.Mode.TOILET)
+		NeedIcons.Need.BOREDOM:
+			overlay.set_mode(MoodTint.Mode.BOREDOM)
+	return overlay
+
+
+## The views' MoodOverlay, made and wired when there is none yet, left as it is.
+static func ensure_overlay(views: PassengerViews) -> MoodOverlay:
+	if views.mood_overlay == null:
+		var overlay := MoodOverlay.new()
+		# A file an earlier test saved would open the overlay in its old mode.
+		overlay.settings_path = SaveTestKit.run_path("test_views_mood_overlay")
+		DirAccess.remove_absolute(overlay.settings_path)
+		overlay.sim = views.sim
+		views.add_child(overlay)
+		views.mood_overlay = overlay
+	return views.mood_overlay
 
 
 ## A grid of `size` with floor on every cell, walled in along the grid border

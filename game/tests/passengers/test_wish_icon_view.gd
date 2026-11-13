@@ -355,6 +355,7 @@ func test_a_bored_passenger_with_no_wish_keeps_the_hourglass() -> void:
 	var p := ShopTestLayout.airside_guest(_world, BoredomSim.MAX)
 	_views.sync()
 	var node := _views.node_for(p.id)
+	PassengerTestWorld.show_need(_views, NeedIcons.Need.BOREDOM)
 	_views.draw()
 	assert_int(node.get_meta(&"needs", 0)).is_equal(1)
 	assert_bool(_need_sprite(node, 0).visible).is_true()
@@ -373,6 +374,7 @@ func test_a_hungry_wisher_shows_the_hunger_icon_then_the_bubble() -> void:
 	_views.sync()
 	var node := _views.node_for(p.id)
 	(node.get_node("Bubble") as Label3D).text = ""
+	PassengerTestWorld.show_need(_views, NeedIcons.Need.HUNGER)
 	_views.draw()
 	var hunger := _need_sprite(node, 0)
 	var wish := _sprite(node)

@@ -7,8 +7,10 @@ extends Node3D
 ## or stuck), by MoodTint's mapping, with a small legend while it is on. Four
 ## buttons on the legend card pick the mode: Mood, or Hunger, Toilet or Boredom,
 ## which tint the same patches green, orange or red for that need (decision
-## crowd-need-display-mood-overlay-gains-hunger-toilet-and-bore). While a need
-## mode is on PassengerViews hides every need icon (hides_need_icons).
+## crowd-need-display-mood-overlay-gains-hunger-toilet-and-bore). PassengerViews
+## floats a need's icons over the passengers only while its mode is on
+## (shown_need(); decision need-icons-show-only-in-the-mood-overlay-need-modes-
+## n-key-removed).
 ## Nothing is tinted where no passenger stands. View only: it reads the
 ## PassengerSim and changes nothing in it, and it is never saved with a game.
 ##
@@ -32,6 +34,8 @@ const ACTION := &"toggle_mood_overlay"
 const SETTING_KEY := "mood_overlay"
 const WHO := "MoodOverlay"
 const SETTING_MODE_KEY := "mood_overlay_mode"
+## shown_need() when no need's icons show.
+const NO_NEED := -1
 ## The legend line per mode, indexed by MoodTint.Mode.
 const LEGEND_TEXTS: Array[String] = [
 	"green fine, red waiting long or unhappy",
@@ -137,11 +141,20 @@ func mode() -> MoodTint.Mode:
 	return _mode
 
 
-## True while a Hunger, Toilet or Boredom mode is on: PassengerViews hides every
-## need icon then (the tint shows the need instead). Plain Mood mode and an
-## overlay that is off leave the icons alone.
-func hides_need_icons() -> bool:
-	return _shown and MoodTint.is_need_mode(_mode)
+## The need (NeedIcons.Need) whose icons PassengerViews shows while the overlay
+## is on in a Hunger, Toilet or Boredom mode, else NO_NEED: plain Mood mode and
+## an overlay that is off show no need icons.
+func shown_need() -> int:
+	if not _shown:
+		return NO_NEED
+	match _mode:
+		MoodTint.Mode.HUNGER:
+			return NeedIcons.Need.HUNGER
+		MoodTint.Mode.TOILET:
+			return NeedIcons.Need.TOILET
+		MoodTint.Mode.BOREDOM:
+			return NeedIcons.Need.BOREDOM
+	return NO_NEED
 
 
 ## Picks what the tint shows and keeps the choice. The mode buttons come through

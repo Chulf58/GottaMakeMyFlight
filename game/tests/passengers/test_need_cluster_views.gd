@@ -18,7 +18,6 @@ var _camera: Camera3D
 ## The views draw into a 1600 x 900 viewport with no stretch, as a game window
 ## would; the headless root is 64 pixels high on output.
 var _screen: SubViewport
-var _path: String
 
 
 func before() -> void:
@@ -30,7 +29,6 @@ func after() -> void:
 
 
 func before_test() -> void:
-	_path = SaveTestKit.run_path("need_cluster_views")
 	var grid := BuildGrid.new()
 	NeedFacilityKit.build(grid)
 	_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
@@ -39,7 +37,6 @@ func before_test() -> void:
 	_views = PassengerTestWorld.views()
 	_views.clock = _world.clock
 	_views.sim = _world.sim
-	_views.need_icons_toggle.settings_path = _path
 	_screen = SubViewport.new()
 	_screen.size = Vector2i(1600, 900)
 	add_child(_screen)
@@ -47,17 +44,27 @@ func before_test() -> void:
 	_camera = Camera3D.new()
 	_screen.add_child(_camera)
 	_camera.make_current()
+	PassengerTestWorld.ensure_overlay(_views)
 
 
 func after_test() -> void:
-	DirAccess.remove_absolute(_path)
 	_screen.free()
 	_world.free_all()
 
 
+## Opens the Mood overlay in `need`'s mode and draws: only that need's icons and
+## badges show (decision need-icons-show-only-in-the-mood-overlay-need-modes-n-
+## key-removed).
+func _show(need: NeedIcons.Need) -> void:
+	PassengerTestWorld.show_need(_views, need)
+	_views.draw()
+
+
 ## `count` calm passengers given `needs` (need -> true), ticked, drawn and
-## framed by the camera from about 15 m, so they stand close on screen.
+## framed by the camera from about 15 m, so they stand close on screen, with the
+## overlay open in the mode of the first need.
 func _crowd(count: int, needs: Array) -> Array[int]:
+	PassengerTestWorld.show_need(_views, needs[0])
 	var ids: Array[int] = []
 	for i in count:
 		var id := _world.sim.spawn_now(PassengerTestWorld.FLIGHT)
@@ -110,7 +117,7 @@ func _visible_badges() -> Array[Sprite3D]:
 
 func test_ten_close_toilet_needs_show_one_badge_of_ten() -> void:
 	var ids := _crowd(10, [TOILET])
-	# Two of them are hungry too: two hunger icons stay icons.
+	# Two of them are hungry too: in toilet mode their hunger icons stay hidden.
 	for id in ids.slice(0, 2):
 		_world.passenger(id).hunger = CafeSim.HUNGER_MAX
 	_world.step()
@@ -128,7 +135,12 @@ func test_ten_close_toilet_needs_show_one_badge_of_ten() -> void:
 	var hunger_drawn := ids.filter(func(id: int) -> bool: return _drawn(id, HUNGER)).size()
 	print("toilet icons drawn %d, hunger icons drawn %d" % [toilets_drawn, hunger_drawn])
 	assert_int(toilets_drawn).is_equal(0)
-	assert_int(hunger_drawn).is_equal(2)
+	assert_int(hunger_drawn).is_equal(0)
+	# In hunger mode the same two are two plain icons, no badge.
+	_show(HUNGER)
+	assert_int(_views.need_badges().size()).is_equal(0)
+	assert_int(ids.filter(func(id: int) -> bool: return _drawn(id, HUNGER)).size()).is_equal(2)
+	assert_int(ids.filter(func(id: int) -> bool: return _drawn(id, TOILET)).size()).is_equal(0)
 
 
 func test_two_close_passengers_keep_their_own_icons() -> void:
@@ -140,38 +152,31 @@ func test_two_close_passengers_keep_their_own_icons() -> void:
 		assert_bool(_drawn(id, TOILET)).is_true()
 
 
-func test_three_needs_give_three_badges_that_do_not_overlap() -> void:
+func test_each_need_mode_gives_only_its_own_badge() -> void:
 	var ids := _crowd(10, [TOILET, HUNGER, BOREDOM])
-	var badges := _views.need_badges()
-	print("badges ", badges)
-	assert_int(badges.size()).is_equal(3)
-	var kinds := {}
-	for badge in badges:
-		kinds[badge["kind"]] = badge["count"]
-	assert_dict(kinds).is_equal({TOILET: 10, HUNGER: 10, BOREDOM: 10})
-	for i in badges.size():
-		for j in range(i + 1, badges.size()):
-			var a: Rect2 = badges[i]["rect"]
-			var b: Rect2 = badges[j]["rect"]
-			(
-				assert_bool(a.intersects(b))
-				. override_failure_message("%s overlaps %s" % [a, b])
-				. is_false()
-			)
-	for id in ids:
-		assert_bool(_drawn(id, TOILET) or _drawn(id, HUNGER) or _drawn(id, BOREDOM)).is_false()
-	# The drawn sprites stand where the badges were placed, and the room labels
-	# see them (RoomLabelLayout.icon_rects(), decision 77c15d41).
-	var seen := RoomLabelLayout.icon_rects(_views, _camera, _to_output())
-	print("room label blockers ", seen)
-	assert_int(seen.size()).is_equal(3)
-	for badge in badges:
-		var placed: Rect2 = badge["rect"]
-		var near := seen.filter(
-			func(r: Rect2) -> bool: return r.get_center().distance_to(placed.get_center()) < 1.0
-		)
+	for need: NeedIcons.Need in [TOILET, HUNGER, BOREDOM]:
+		_show(need)
+		var badges := _views.need_badges()
+		print("mode ", need, " badges ", badges)
+		assert_int(badges.size()).is_equal(1)
+		assert_int(badges[0]["kind"]).is_equal(need)
+		assert_int(badges[0]["count"]).is_equal(10)
+		assert_int(_visible_badges().size()).is_equal(1)
+		for id in ids:
+			for other: NeedIcons.Need in [TOILET, HUNGER, BOREDOM]:
+				assert_bool(_drawn(id, other)).is_false()
+		# The drawn badge stands where it was placed, and the room labels see it
+		# (RoomLabelLayout.icon_rects(), decision 77c15d41).
+		var seen := RoomLabelLayout.icon_rects(_views, _camera, _to_output())
+		print("room label blockers ", seen)
+		assert_int(seen.size()).is_equal(1)
+		var placed: Rect2 = badges[0]["rect"]
 		var missing := "no drawn badge at %s" % placed
-		assert_int(near.size()).override_failure_message(missing).is_equal(1)
+		(
+			assert_float(seen[0].get_center().distance_to(placed.get_center()))
+			. override_failure_message(missing)
+			. is_less(1.0)
+		)
 
 
 func test_the_clusters_start_over_on_a_load_and_a_release() -> void:
@@ -194,10 +199,10 @@ func test_the_clusters_start_over_on_a_load_and_a_release() -> void:
 	assert_int(members.size()).is_equal(3)
 
 
-func test_no_badge_shows_while_the_icons_are_off() -> void:
+func test_no_badge_shows_while_the_overlay_is_off() -> void:
 	_crowd(10, [TOILET])
 	assert_int(_visible_badges().size()).is_equal(1)
-	_views.need_icons_toggle.set_shown(false)
+	_views.mood_overlay.set_shown(false)
 	_views.draw()
 	print(
 		(

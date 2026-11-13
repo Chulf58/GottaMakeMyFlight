@@ -62,14 +62,14 @@ var cluster_needs := true
 ## The count clusters of close need icons (NeedCluster). View state with no
 ## tick: snap() and the icons hiding clear it, and a released id leaves it.
 var need_clusters := NeedCluster.new()
-## The N key's on/off choice for the need icons (NeedIconsToggle); a test points
-## its settings_path at a per-process file before the views enter the tree.
-var need_icons_toggle := NeedIconsToggle.new()
 var selected_id := 0
 ## Moved pieces still in use, drawn at their old spot (RelocationGhosts).
 ## Holds no tick: it compares with the sim every frame.
 var ghosts := RelocationGhosts.new()
 
+## The need whose icons the Mood overlay shows this frame (NeedIcons.Need), or
+## MoodOverlay.NO_NEED; draw() sets it for the cluster and crown passes.
+var _only_need: int = MoodOverlay.NO_NEED
 ## Free nodes per body (PassengerLooks.BODIES).
 var _pool: Array[Array] = []
 ## Passenger id -> node.
@@ -172,7 +172,6 @@ func _ready() -> void:
 	_props.sim = sim
 	_props.views = self
 	add_child(_props)
-	add_child(need_icons_toggle)
 	_badge_root = Node3D.new()
 	_badge_root.name = NeedCluster.ROOT
 	add_child(_badge_root)
@@ -388,9 +387,17 @@ func draw() -> void:
 	var paused := clock == null or clock.paused
 	var camera := get_viewport().get_camera_3d() if is_inside_tree() else null
 	var unit := NeedIcons.unit_of(get_viewport() if is_inside_tree() else null, camera)
-	var icons_shown := need_icons_toggle.is_shown() and NeedIcons.shown_at(camera)
-	if mood_overlay != null and mood_overlay.hides_need_icons():
-		icons_shown = false
+	# Need icons show only while the Mood overlay is in a need mode, and only
+	# that need's (decision need-icons-show-only-in-the-mood-overlay-need-modes-
+	# n-key-removed); wish bubbles show in every view, at the same zoom.
+	_only_need = mood_overlay.shown_need() if mood_overlay != null else MoodOverlay.NO_NEED
+	var zoomed_in := NeedIcons.shown_at(camera)
+	var icons_shown := _only_need != MoodOverlay.NO_NEED and zoomed_in
+	var hidden_needs := 0
+	if _only_need != MoodOverlay.NO_NEED:
+		for kind: int in NeedIcons.Need.values():
+			if kind != _only_need:
+				hidden_needs |= 1 << kind
 	for id in _nodes:
 		var node: Node3D = _nodes[id]
 		var before: Vector3 = _prev[id]
@@ -419,7 +426,9 @@ func draw() -> void:
 	for id in _nodes:
 		var node: Node3D = _nodes[id]
 		var bubble := node.get_node("Bubble") as Label3D
-		NeedIcons.layout(node, bubble, camera, unit, icons_shown, masks.get(id, 0))
+		NeedIcons.layout(
+			node, bubble, camera, unit, icons_shown, masks.get(id, 0) | hidden_needs, zoomed_in
+		)
 		VipMarker.layout(node, bubble, camera, unit, _badge_lifts.get(id, 0.0))
 	_props.draw()
 	_markers.draw()
@@ -494,7 +503,7 @@ func _cluster_icons(camera: Camera3D, unit: float, icons_shown: bool) -> Diction
 	var forward := -camera.global_basis.z
 	for id: int in _nodes:
 		var node: Node3D = _nodes[id]
-		var kinds: Array = node.get_meta(&"need_kinds", [])
+		var kinds := _shown_kinds(node)
 		var wishing: bool = node.get_meta(&"wish", "") != ""
 		if kinds.is_empty() and not wishing:
 			continue
@@ -591,11 +600,18 @@ func _lift_crowns(
 				_badge_lifts[id] = maxf(_badge_lifts.get(id, 0.0), over)
 
 
+## The needs of `node` the overlay shows this frame: only its mode's need,
+## none with no need mode on.
+func _shown_kinds(node: Node3D) -> Array:
+	var kinds: Array = node.get_meta(&"need_kinds", [])
+	return kinds.filter(func(kind: int) -> bool: return kind == _only_need)
+
+
 ## The screen height `node`'s drawn icon row takes with the gap over it (what
 ## VipMarker lifts the crown by), from the needs a badge does not mask, or 0.
 func _row_height_px(node: Node3D, mask: int) -> float:
 	var row := 0.0
-	for kind: int in node.get_meta(&"need_kinds", []):
+	for kind: int in _shown_kinds(node):
 		if mask & (1 << kind) == 0:
 			row = NeedIcons.ICON_PX
 	if node.get_meta(&"wish", "") != "":
@@ -624,7 +640,7 @@ func _badge_obstacles(rows: Dictionary, masks: Dictionary, screen: Rect2) -> Arr
 		var row: Array = rows[id]
 		var mask: int = masks.get(id, 0)
 		var kept := 0
-		for kind: int in (_nodes[id] as Node3D).get_meta(&"need_kinds", []):
+		for kind: int in _shown_kinds(_nodes[id] as Node3D):
 			if mask & (1 << kind) == 0:
 				kept += 1
 		var wishing: bool = row[3]

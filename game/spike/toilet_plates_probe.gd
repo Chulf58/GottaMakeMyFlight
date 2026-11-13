@@ -145,6 +145,7 @@ func _run() -> void:
 		p.toilet_cooldown = 0
 		p.hunger = CafeSim.HUNGER_MAX if i % 2 == 0 else 0
 		p.carry_on = [2, 1, 2, 0][i % 4]
+	_open_overlay(MoodTint.Mode.TOILET)
 	_rig = _main.get_node("TycoonCamera") as TycoonCamera
 	_cam = _rig.get_node("Camera3D") as Camera3D
 	_cam.make_current()
@@ -711,6 +712,13 @@ func _save(img: Image, file: String) -> void:
 		_invalid("could not save %s" % path)
 		return
 	print("PLATE saved %s size=%s" % [path, img.get_size()])
+
+
+## Opens the Mood overlay in `mode`: need icons show only in a need mode.
+func _open_overlay(mode: MoodTint.Mode) -> void:
+	var overlay := _main.get_node("MoodOverlay") as MoodOverlay
+	overlay.set_mode(mode)
+	overlay.set_shown(true)
 
 
 func _beat(stage: String) -> void:
