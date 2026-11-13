@@ -509,14 +509,18 @@ func _cluster_icons(camera: Camera3D, unit: float, icons_shown: bool) -> Diction
 	var clusters := need_clusters.clusters().duplicate()
 	clusters.sort_custom(NeedCluster.placed_before)
 	# Per cluster: the row of the member nearest its centroid, the badge's
-	# centre from that row's anchor (its bottom edge where the row's is).
+	# centre from that row's anchor: the bottom edge of the badge with its
+	# count chip, which hangs under the icon, where the row's is, so the chip
+	# keeps the row's gap over the head (decision need-icons-and-wish-bubbles-
+	# sit-a-fixed-screen-gap-above-the).
 	var anchors: Array[Array] = []
 	var wanted: Array[Rect2] = []
 	var ids: Array = []
 	for cluster in clusters:
 		var members: Array = cluster["members"]
 		var row: Array = rows[NeedCluster.anchor_member(members, points[cluster["kind"]])]
-		var centre_px := Vector2(0.0, -float(row[2]) - NeedCluster.BADGE_PX / 2.0)
+		var under := NeedCluster.badge_rect(Vector2.ZERO, members.size()).end.y
+		var centre_px := Vector2(0.0, -float(row[2]) - under)
 		anchors.append([row, centre_px])
 		wanted.append(NeedCluster.badge_rect((row[1] as Vector2) + centre_px, members.size()))
 		ids.append(cluster["id"])
@@ -570,9 +574,11 @@ func _badge_obstacles(rows: Dictionary, masks: Dictionary, screen: Rect2) -> Arr
 
 
 ## Adds to `out` the screen rect (output pixels) of every drawn passenger's
-## head, from the top of the head (NeedIcons.head_top(), standing, seated or
-## reclined) HEAD_RECT_M down and as wide, so a badge's dodge does not land
-## on a head (board 769f210d: a badge shifted down onto a seated row's heads).
+## head, from the top of the head as drawn (NeedIcons.head_centre() moved
+## NeedIcons.HEAD_RADIUS_M along the camera's up, standing, seated or
+## reclined, the top the icon row keeps its gap over) HEAD_RECT_M down and as
+## wide, so a badge's dodge does not land on a head (board 769f210d: a badge
+## shifted down onto a seated row's heads).
 ## Heads nearer than the camera's near plane or off screen are left out, and
 ## a rect is never wider than HEAD_RECT_MAX_PX, since size over depth grows
 ## without bound near the lens (anti-pattern a-screen-rectangle-measured-from-
@@ -585,7 +591,8 @@ func _add_head_rects(
 		var node: Node3D = _nodes[id]
 		if not node.visible:
 			continue
-		var top: Vector3 = node.global_transform * NeedIcons.head_top(node)
+		var centre: Vector3 = node.global_transform * NeedIcons.head_centre(node)
+		var top := centre + camera.global_basis.y * NeedIcons.HEAD_RADIUS_M
 		var depth := (top - camera.global_position).dot(forward)
 		if depth <= camera.near:
 			continue
@@ -684,6 +691,7 @@ func _take(p: Passenger) -> Node3D:
 	var node := PassengerLooks.SCENES[body].instantiate() as Node3D
 	node.set_meta(&"variant", p.variant)
 	node.set_meta(&"body", body)
+	NeedIcons.find_head(node)
 	PassengerLooks.paint_body(node, body, PassengerLooks.tint_of(p.id))
 	var bubble := Label3D.new()
 	bubble.name = "Bubble"

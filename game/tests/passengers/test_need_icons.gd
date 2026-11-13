@@ -227,7 +227,15 @@ func test_with_a_camera_the_row_keeps_its_screen_size_and_clears_a_bubble() -> v
 	var icon := _sprite(node, 1)
 	print("unit %.6f pixel_size %.6f offset %s" % [unit, icon.pixel_size, icon.offset])
 	assert_float(icon.pixel_size).is_equal_approx(NeedIcons.ICON_PX * unit / NeedIcons.SIZE, 1e-9)
-	assert_vector(icon.offset).is_equal(NeedIcons.offset_of(1, 2))
+	# Over the head the row stands HEAD_GAP_PX over the head's top on screen
+	# (decision need-icons-and-wish-bubbles-sit-a-fixed-screen-gap-above-the).
+	var bare := node.get_node("Bubble") as Label3D
+	var head_lift: float = NeedIcons.row_anchor(node, bare, camera, unit)[1]
+	assert_float(head_lift).is_greater(NeedIcons.HEAD_GAP_PX)
+	assert_vector(icon.position).is_equal(NeedIcons.head_centre(node))
+	assert_vector(icon.offset).is_equal_approx(
+		NeedIcons.offset_of(1, 2, head_lift), Vector2.ONE * 0.001
+	)
 	var bubble := node.get_node("Bubble") as Label3D
 	bubble.text = "I'm late!"
 	_views.draw()
@@ -250,11 +258,13 @@ func test_with_a_camera_the_row_keeps_its_screen_size_and_clears_a_bubble() -> v
 	assert_vector(icon.offset).is_equal_approx(
 		NeedIcons.offset_of(1, 2, lift_px), Vector2.ONE * 0.001
 	)
-	# A bubble hidden by the declutter leaves no gap: the row sits at the head.
+	# A bubble hidden by the declutter leaves no gap: the row sits over the head.
 	bubble.visible = false
 	NeedIcons.layout(node, bubble, camera, unit)
-	assert_vector(icon.position).is_equal(Vector3(0.0, NeedIcons.LIFT_M, 0.0))
-	assert_vector(icon.offset).is_equal(NeedIcons.offset_of(1, 2))
+	assert_vector(icon.position).is_equal(NeedIcons.head_centre(node))
+	assert_vector(icon.offset).is_equal_approx(
+		NeedIcons.offset_of(1, 2, head_lift), Vector2.ONE * 0.001
+	)
 	camera.free()
 
 

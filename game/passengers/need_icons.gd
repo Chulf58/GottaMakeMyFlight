@@ -26,11 +26,13 @@ extends RefCounted
 ## cafe, no toilet stall, no shop that relieves boredom, screen or prize car).
 ##
 ## PassengerViews gives every passenger node three Sprite3D icons (make_sprite())
-## at one point over the head, so the body's turn never moves them, and lays
-## them out each frame (layout()): they keep ICON_PX on screen at every zoom,
-## like the station signs, and stand side by side along the screen's x through
-## their offsets in the billboard plane. While the passenger's thought bubble
-## shows, the row sits on top of the bubble instead of over the head.
+## and lays them out each frame (layout()): they keep ICON_PX on screen at every
+## zoom, like the station signs, and stand side by side along the screen's x
+## through their offsets in the billboard plane. The row stands HEAD_GAP_PX on
+## screen over the top of the head as drawn, at every camera angle, standing,
+## seated, reclined and in between (row_anchor(), decision need-icons-and-wish-
+## bubbles-sit-a-fixed-screen-gap-above-the). While the passenger's thought
+## bubble shows, the row sits on top of the bubble instead of over the head.
 ## A bored passenger with a shopping wish shows its wish bubble (WishIconView)
 ## at the end of the row instead of the hourglass (user ruling shopping-wish-
 ## icon-replaces-the-boredom-hourglass-for-wishers); one with no wish keeps the
@@ -88,11 +90,31 @@ const SEATED_BACK_M := 0.54
 const RECLINE_LIFT_M := 2.15
 const RECLINE_BACK_M := 0.55
 ## The top of the head over the root, standing, seated and reclined (the
-## measurements above; a standing body is about 1.7 m tall). Count badges keep
-## clear of it (head_top(), PassengerViews._badge_obstacles(), board 769f210d).
+## measurements above; a standing body is about 1.7 m tall), for a node
+## PassengerViews did not make (no Head bone found by find_head()); a body's
+## own head top is read off its Head bone (head_top()).
 const HEAD_TOP_M := 1.7
 const SEATED_HEAD_TOP_M := 1.46
 const RECLINE_HEAD_TOP_M := 1.40
+## The bone a body's head top is read off, and how far the top of the head
+## stands over it (the head top the need_icon_near_camera probe measured).
+## The bone itself moves with the body's clip: standing it stands 1.68 m up
+## on a female body and 1.81 m on a male one (PassengerLooks' bodies of one
+## gender share one skeleton), walking 1.65 and 1.72 m, about 0.1 m further
+## forward, and seated 1.28 and 1.34 m (test_need_icon_head_gap.gd), so no
+## one height per pose fits every body.
+const HEAD_BONE := "Head"
+const HEAD_OVER_BONE_M := 0.12
+## The head drawn as a ball HEAD_RADIUS_M round a centre that far under
+## head_top(): its top on screen is the centre moved HEAD_RADIUS_M along the
+## camera's up, at every angle. Seen from the 70 degree step that is the back
+## of the head, above where head_top() itself projects; seen from 38 degrees
+## it is near the crown.
+const HEAD_RADIUS_M := 0.12
+## Screen pixels between the top of the head as drawn and the bottom of the
+## icon row and wish bubble (decision need-icons-and-wish-bubbles-sit-a-fixed-
+## screen-gap-above-the): the same at every angle step, zoom and pose.
+const HEAD_GAP_PX := 6.0
 ## The clips a passenger stands up from and sits down on a seat in (Rise,
 ## rise_weight()).
 const RISE_CLIP := "stand_up"
@@ -316,14 +338,44 @@ static func head_anchor(node: Node3D) -> Vector3:
 ## The top of a node's head, in the node's space: standing over the root, or
 ## SEATED_BACK_M or RECLINE_BACK_M behind it while seated or reclined, as
 ## head_anchor() places the row over it (standing up and sitting down
-## included).
+## included). A node find_head() has run on reads it off its Head bone as the
+## body is posed now: HEAD_OVER_BONE_M over the bone, so it follows every
+## body, clip and blend, the stand-up and sit-down included.
 static func head_top(node: Node3D) -> Vector3:
+	var skeleton: Skeleton3D = node.get_meta(&"head_skeleton", null)
+	if skeleton != null:
+		var to_node: Transform3D = node.get_meta(&"head_to_node")
+		var bone := skeleton.get_bone_global_pose(node.get_meta(&"head_bone"))
+		return to_node * bone.origin + Vector3(0.0, HEAD_OVER_BONE_M, 0.0)
 	return _posed(
 		node,
 		Vector3(0.0, HEAD_TOP_M, 0.0),
 		Vector3(0.0, SEATED_HEAD_TOP_M, -SEATED_BACK_M),
 		Vector3(0.0, RECLINE_HEAD_TOP_M, -RECLINE_BACK_M)
 	)
+
+
+## Keeps on a passenger node its body's Head bone for head_top(): the
+## skeleton (&"head_skeleton"), the bone (&"head_bone") and the skeleton's
+## transform in the node's space (&"head_to_node"). PassengerViews calls it
+## once per node it makes; a node keeps its body for life. A body with no Head
+## bone is reported and keeps the fixed heights.
+static func find_head(node: Node3D) -> void:
+	for child in node.find_children("*", "Skeleton3D", true, false):
+		var skeleton := child as Skeleton3D
+		var bone := skeleton.find_bone(HEAD_BONE)
+		if bone < 0:
+			continue
+		var to_node := Transform3D.IDENTITY
+		var at: Node = skeleton
+		while at != node and at is Node3D:
+			to_node = (at as Node3D).transform * to_node
+			at = at.get_parent()
+		node.set_meta(&"head_skeleton", skeleton)
+		node.set_meta(&"head_bone", bone)
+		node.set_meta(&"head_to_node", to_node)
+		return
+	push_error("NeedIcons.find_head: %s has no %s bone" % [node.name, HEAD_BONE])
 
 
 ## `standing`, `seated` or `reclined` as the node is posed now, and while it
@@ -372,20 +424,34 @@ static func clip_weight(clip: String, animation: Animation, at: float) -> float:
 	return t if clip == RISE_CLIP else 1.0 - t
 
 
-## Where a node's icon row stands this frame: [the anchor in the node's space
-## (over the head, or the bubble's position while the bubble shows), the
-## screen pixels the row's bottom edge is lifted over it (over the bubble's
-## top while it shows, else 0)].
+## Where a node's icon row stands this frame: [the anchor in the node's space,
+## the screen pixels the row's bottom edge is lifted over it]. Over the head
+## the anchor is the head's centre (head_centre()) and the lift reaches
+## HEAD_GAP_PX over the head's top as drawn (HEAD_RADIUS_M along the camera's
+## up), so the gap on screen is the same at every angle (decision need-icons-
+## and-wish-bubbles-sit-a-fixed-screen-gap-above-the). While the bubble shows
+## the anchor is the bubble's position and the lift reaches GAP_PX over its
+## top.
 static func row_anchor(node: Node3D, bubble: Label3D, camera: Camera3D, unit: float) -> Array:
-	var anchor := head_anchor(node)
-	var lift_px := 0.0
+	var anchor := head_centre(node)
+	var over_m := HEAD_RADIUS_M
+	var gap := HEAD_GAP_PX
 	if bubble.text != "" and bubble.visible:
 		anchor = bubble.position
-		var at := node.global_transform * bubble.position
-		var depth := (at - camera.global_position).dot(-camera.global_basis.z)
-		if depth > 0.0:
-			lift_px = bubble_top_m(bubble) / (depth * unit) + GAP_PX
+		over_m = bubble_top_m(bubble)
+		gap = GAP_PX
+	var at := node.global_transform * anchor
+	var depth := (at - camera.global_position).dot(-camera.global_basis.z)
+	var lift_px := gap
+	if depth > 0.0:
+		lift_px += over_m / (depth * unit)
 	return [anchor, lift_px]
+
+
+## The centre of the head drawn as a ball (HEAD_RADIUS_M under head_top()), in
+## the node's space, standing, seated, reclined or in between.
+static func head_centre(node: Node3D) -> Vector3:
+	return head_top(node) - Vector3(0.0, HEAD_RADIUS_M, 0.0)
 
 
 ## The widths (screen pixels) of a row of `count` icons, ended by the wish

@@ -4,9 +4,10 @@ extends GdUnitTestSuite
 ## the head (board bd08ed8e, user ruling 2026-11-13 "Lift icons for seated"). A
 ## seated body is drawn about 0.54 m behind its root, so from the game camera's
 ## start pitch (70 degrees) its head lands above the screen point of a row
-## anchored 2.0 m over the root. The row (and the VIP crown and count clusters,
-## which take their place from it) anchors NeedIcons.SEATED_LIFT_M high and
-## SEATED_BACK_M behind the root; a standing passenger's anchor does not move.
+## anchored 2.0 m over the root. The VIP crown anchors NeedIcons.SEATED_LIFT_M
+## high and SEATED_BACK_M behind the root; the row now anchors at the seated
+## head and stands a fixed screen gap over it (decision need-icons-and-wish-
+## bubbles-sit-a-fixed-screen-gap-above-the, test_need_icon_head_gap.gd).
 
 ## The seated head the near-camera probe measured on a gate chair (bone_head_m
 ## 1.28 to 1.34 high, 0.54 m behind the root) with the head's top 0.12 m over it.
@@ -26,24 +27,37 @@ func after_test() -> void:
 	_camera.free()
 
 
-func test_a_seated_row_anchors_higher_than_a_standing_row() -> void:
+## The row anchors at the head's centre (decision need-icons-and-wish-bubbles-
+## sit-a-fixed-screen-gap-above-the replaced the world lifts SEATED_LIFT_M and
+## LIFT_M for the row; the crown keeps them): behind the root and lower while
+## seated, over the root standing. These bare nodes have no Head bone, so they
+## take the fixed head heights.
+func test_a_seated_row_anchors_at_the_seated_head() -> void:
 	var seated := _node(true)
 	var standing := _node(false)
 	var seated_at := NeedIcons.row_anchor(seated, _bubble(seated), _camera, 0.001)
 	var standing_at := NeedIcons.row_anchor(standing, _bubble(standing), _camera, 0.001)
 	var anchor: Vector3 = seated_at[0]
-	assert_float(anchor.y).is_equal_approx(NeedIcons.SEATED_LIFT_M, 0.0001)
+	var below := NeedIcons.SEATED_HEAD_TOP_M - NeedIcons.HEAD_RADIUS_M
+	assert_float(anchor.y).is_equal_approx(below, 0.0001)
 	assert_float(anchor.z).is_equal_approx(-NeedIcons.SEATED_BACK_M, 0.0001)
-	assert_float(anchor.y).is_greater((standing_at[0] as Vector3).y + 0.1)
+	assert_float(anchor.y).is_less((standing_at[0] as Vector3).y - 0.1)
 	seated.free()
 	standing.free()
 
 
-func test_a_standing_row_stays_at_the_old_anchor() -> void:
+func test_a_standing_row_anchors_at_the_head_centre_lifted_on_screen() -> void:
 	var standing := _node(false)
 	var at := NeedIcons.row_anchor(standing, _bubble(standing), _camera, 0.001)
-	assert_vector(at[0]).is_equal(Vector3(0.0, NeedIcons.LIFT_M, 0.0))
-	assert_float(NeedIcons.LIFT_M).is_equal(2.0)
+	var centre := Vector3(0.0, NeedIcons.HEAD_TOP_M - NeedIcons.HEAD_RADIUS_M, 0.0)
+	assert_vector(at[0]).is_equal_approx(centre, Vector3.ONE * 0.0001)
+	# The lift reaches the head's top on screen and the gap over it (the camera
+	# looks from 10 m in front of the head).
+	_camera.global_position = Vector3(0.0, 1.6, 10.0)
+	at = NeedIcons.row_anchor(standing, _bubble(standing), _camera, 0.001)
+	var depth := 10.0
+	var expected := NeedIcons.HEAD_GAP_PX + NeedIcons.HEAD_RADIUS_M / (depth * 0.001)
+	assert_float(at[1]).is_equal_approx(expected, 0.5)
 	standing.free()
 
 
@@ -65,9 +79,10 @@ func test_layout_puts_a_seated_icon_at_the_seated_anchor() -> void:
 	var icon := seated.get_node(NeedIcons.SPRITES[0]) as Sprite3D
 	assert_bool(icon.visible).is_true()
 	assert_vector(icon.position).is_equal_approx(
-		NeedIcons.head_anchor(seated), Vector3.ONE * 0.0001
+		NeedIcons.head_centre(seated), Vector3.ONE * 0.0001
 	)
-	assert_float(icon.position.y).is_equal_approx(NeedIcons.SEATED_LIFT_M, 0.0001)
+	var lift: float = NeedIcons.row_anchor(seated, _bubble(seated), _camera, 0.001)[1]
+	assert_vector(icon.offset).is_equal_approx(NeedIcons.offset_of(0, 1, lift), Vector2.ONE * 0.001)
 	seated.free()
 
 

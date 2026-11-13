@@ -49,6 +49,10 @@ const SHOTS := [
 ]
 
 var _out_dir := ""
+var _out_rel := OUT_REL
+## The camera's angle steps plated: the 70 degree default, or with
+## --steps=both also 38 degrees (board b679fd1d).
+var _steps: Array[int] = [TycoonCamera.AngleStep.TOP_DOWN]
 var _tag := "run"
 var _failed := false
 var _seed := 0
@@ -76,7 +80,11 @@ func _initialize() -> void:
 			_seed = int(arg.get_slice("=", 1))
 		elif arg.begins_with("--tag="):
 			_tag = arg.get_slice("=", 1)
-	_out_dir = ProjectSettings.globalize_path(OUT_REL).simplify_path()
+		elif arg == "--steps=both":
+			_steps = [TycoonCamera.AngleStep.TOP_DOWN, TycoonCamera.AngleStep.LOW]
+		elif arg.begins_with("--out="):
+			_out_rel = "res://../tools/blender/out/" + arg.get_slice("=", 1)
+	_out_dir = ProjectSettings.globalize_path(_out_rel).simplify_path()
 	DirAccess.make_dir_recursive_absolute(_out_dir)
 	print("PROBE sim_seed=%d tag=%s out_dir=%s" % [_seed, _tag, _out_dir])
 	_beat("boot")
@@ -192,8 +200,15 @@ func _pod() -> void:
 	print("HEAD_TOP local=%s" % [to_local * (head + Vector3.UP * HEAD_TOP_M)])
 	print("ANCHOR head_anchor=%s" % [NeedIcons.head_anchor(node)])
 	print("POD_TOP m=%.2f" % _pod_top())
-	for shot: Array in SHOTS:
-		await _plate(shot[0], shot[1], shot[2], node)
+	var tag := _tag
+	for step in _steps:
+		# Set directly: set_angle_step() would save the angle to the user's settings.
+		_rig.angle_step = step as TycoonCamera.AngleStep
+		if _steps.size() > 1:
+			_tag = "%s_%ddeg" % [tag, int(TycoonCamera.STEP_PITCH_DEGREES[step])]
+		for shot: Array in SHOTS:
+			await _plate(shot[0], shot[1], shot[2], node)
+	_tag = tag
 
 
 ## One plate through the game camera, its focus on the passenger.

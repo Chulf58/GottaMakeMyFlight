@@ -331,10 +331,15 @@ func test_a_bored_wisher_shows_the_bubble_in_the_row_and_no_hourglass() -> void:
 		assert_bool(_need_sprite(node, i).visible).is_false()
 	assert_bool(wish.visible).is_true()
 	assert_object(wish.texture).is_same(WishIconView.texture(&"kiosk", WishTable.State.WANTED))
-	# In the row, alone: centred, its bottom on the row's anchor over the head.
-	assert_vector(wish.position).is_equal(Vector3(0.0, NeedIcons.LIFT_M, 0.0))
-	assert_vector(wish.offset).is_equal_approx(WishIconView.offset_for(0.0), Vector2.ONE * 0.001)
-	var unit := NeedIcons.unit_of(get_viewport(), rig.get_node("Camera3D") as Camera3D)
+	# In the row, alone: centred, its bottom the row's gap over the head
+	# (decision need-icons-and-wish-bubbles-sit-a-fixed-screen-gap-above-the).
+	var camera := rig.get_node("Camera3D") as Camera3D
+	var unit := NeedIcons.unit_of(get_viewport(), camera)
+	var bubble := node.get_node("Bubble") as Label3D
+	var lift: float = NeedIcons.row_anchor(node, bubble, camera, unit)[1]
+	assert_float(lift).is_greater(NeedIcons.HEAD_GAP_PX)
+	assert_vector(wish.position).is_equal(NeedIcons.head_centre(node))
+	assert_vector(wish.offset).is_equal_approx(WishIconView.offset_for(lift), Vector2.ONE * 0.001)
 	assert_float(wish.pixel_size).is_equal_approx(
 		WishIconView.WISH_PX * unit / WishIconView.SIZE, 1e-9
 	)
@@ -386,8 +391,15 @@ func test_a_hungry_wisher_shows_the_hunger_icon_then_the_bubble() -> void:
 	var row_left := left - NeedIcons.ICON_PX / 2.0
 	var row_right := right + WishIconView.WISH_PX / 2.0
 	assert_float(row_left + row_right).is_equal_approx(0.0, 0.01)
-	assert_float(hunger.offset.y).is_equal_approx(NeedIcons.SIZE / 2.0, 0.001)
-	assert_float(wish.offset.y).is_equal_approx(WishIconView.offset_for(0.0).y, 0.001)
+	# Both bottoms the row's gap over the head (decision need-icons-and-wish-
+	# bubbles-sit-a-fixed-screen-gap-above-the).
+	var camera := rig.get_node("Camera3D") as Camera3D
+	var unit := NeedIcons.unit_of(get_viewport(), camera)
+	var bubble := node.get_node("Bubble") as Label3D
+	var lift: float = NeedIcons.row_anchor(node, bubble, camera, unit)[1]
+	assert_float(lift).is_greater(NeedIcons.HEAD_GAP_PX)
+	assert_float(hunger.offset.y).is_equal_approx(NeedIcons.offset_of(0, 1, lift).y, 0.001)
+	assert_float(wish.offset.y).is_equal_approx(WishIconView.offset_for(lift).y, 0.001)
 	assert_vector(hunger.position).is_equal(wish.position)
 	rig.free()
 
