@@ -495,8 +495,9 @@ func refresh() -> void:
 	_follow_label.text = follow_text()
 	_inspect.refresh()
 	_follow_label.visible = not _inspect.visible
-	# The card takes the board's place on the left edge (decision 500fd5a0, point 6).
-	_departures_board.step_aside(_inspect.visible)
+	# A passenger card takes the board's place on the left edge (decision 500fd5a0,
+	# point 6); a desk, room or car-park card leaves the list showing.
+	_departures_board.step_aside(_inspect.shows_passenger())
 	if clock != null:
 		for i in _speed_buttons.size():
 			var on := clock.paused if i == 0 else not clock.paused and clock.speed == i
