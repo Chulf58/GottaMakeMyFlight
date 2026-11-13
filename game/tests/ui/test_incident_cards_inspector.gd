@@ -5,7 +5,8 @@ extends MajorTestBase
 ## failed visit posts one coral card that names only the rule it broke (the messes, the
 ## full queue, or both) with the count seen and the limit allowed, and the
 ## rating drop. All numbers come from the incident's saved plan. The card
-## comes back when the rail resets or the director loads and is never posted
+## leaves the rail after FlightResultPanel.SHOW_SECONDS of real time, is not
+## posted again when the rail resets or the director loads, and is never posted
 ## twice.
 
 ## The plan numbers, none of them the tuning's, so a card that read
@@ -136,17 +137,22 @@ func test_the_visit_posts_one_card_and_a_later_tick_posts_no_other() -> void:
 	assert_object(_rail.notice_card(key)).is_same(first)
 
 
-func test_the_card_comes_back_after_the_rail_resets() -> void:
+## User-ruled 2026-11-13, "All fade after 20 s (Recommended)": "Green, cream and
+## coral incident results all leave after 20 seconds of real time, like the
+## flight result card. The words stay in the alerts history, so nothing is
+## lost." These three cases used to expect the result card to come back after
+## a rail reset or a director load; a result whose 20 s already ran must not
+## return, so they now expect none.
+func test_the_card_is_not_posted_again_after_the_rail_resets() -> void:
 	var id := _announced_inspector()
 	_add_messes(MAX_MESSES + 1)
 	_visit(id)
 	var key := IncidentCards.key_of({"id": id})
 	_rail.reset()
-	assert_object(_rail.notice_card(key)).is_not_null()
-	assert_str(_words(id)).contains("4 messes on the floor (3 allowed)")
+	assert_object(_rail.notice_card(key)).is_null()
 
 
-func test_the_card_comes_back_after_the_director_loads() -> void:
+func test_the_card_is_not_posted_again_after_the_director_loads() -> void:
 	var id := _announced_inspector()
 	_add_full_queue(MAX_FULL_QUEUE + 1)
 	_visit(id)
@@ -154,18 +160,45 @@ func test_the_card_comes_back_after_the_director_loads() -> void:
 	var saved := JSON.parse_string(JSON.stringify(_director.to_snapshot())) as Dictionary
 	_rail.drop_notice(key)
 	assert_bool(_director.from_snapshot(saved)).is_true()
-	assert_object(_rail.notice_card(key)).is_not_null()
-	assert_str(_words(id)).contains("3 passengers stuck in a full queue (2 allowed)")
+	assert_object(_rail.notice_card(key)).is_null()
 
 
-func test_a_passed_card_comes_back_after_the_director_loads() -> void:
+func test_a_passed_card_is_not_posted_again_after_the_director_loads() -> void:
 	var id := _announced_inspector()
 	_visit(id)
 	var key := IncidentCards.key_of({"id": id})
 	var saved := JSON.parse_string(JSON.stringify(_director.to_snapshot())) as Dictionary
 	_rail.drop_notice(key)
 	assert_bool(_director.from_snapshot(saved)).is_true()
-	assert_str(_words(id)).contains("You earn 123 money")
+	assert_object(_rail.notice_card(key)).is_null()
+
+
+## A passed (green) and a failed (coral) visit each leave the rail after the
+## flight result card's 20 s of real time; the history keeps their words.
+func test_a_passed_inspector_card_leaves_the_rail_after_the_flight_result_seconds() -> void:
+	var id := _announced_inspector()
+	_visit(id)
+	var key := IncidentCards.key_of({"id": id})
+	assert_str(_record(id)["outcome"]).is_equal(IncidentMajors.PASSED)
+	assert_float(FlightResultPanel.SHOW_SECONDS).is_equal(20.0)
+	_rail.advance(FlightResultPanel.SHOW_SECONDS - 0.5)
+	assert_object(_rail.notice_card(key)).is_not_null()
+	_rail.advance(1.0)
+	assert_object(_rail.notice_card(key)).is_null()
+	assert_int(_rail.board().history().size()).is_equal(1)
+
+
+func test_a_failed_inspector_card_leaves_the_rail_after_the_flight_result_seconds() -> void:
+	var id := _announced_inspector()
+	_add_messes(MAX_MESSES + 1)
+	_visit(id)
+	var key := IncidentCards.key_of({"id": id})
+	assert_str(_record(id)["outcome"]).is_equal(IncidentMajors.FAILED)
+	_rail.advance(FlightResultPanel.SHOW_SECONDS - 0.5)
+	assert_object(_rail.notice_card(key)).is_not_null()
+	_rail.advance(1.0)
+	assert_object(_rail.notice_card(key)).is_null()
+	assert_int(_rail.board().history().size()).is_equal(1)
 
 
 func test_an_inspector_still_waiting_posts_no_card() -> void:
