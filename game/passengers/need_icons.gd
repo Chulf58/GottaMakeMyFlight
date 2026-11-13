@@ -74,6 +74,12 @@ const SEATED_BACK_M := 0.54
 ## one does, so it clears the hood.
 const RECLINE_LIFT_M := 2.15
 const RECLINE_BACK_M := 0.55
+## The top of the head over the root, standing, seated and reclined (the
+## measurements above; a standing body is about 1.7 m tall). Count badges keep
+## clear of it (head_top(), PassengerViews._badge_obstacles(), board 769f210d).
+const HEAD_TOP_M := 1.7
+const SEATED_HEAD_TOP_M := 1.46
+const RECLINE_HEAD_TOP_M := 1.40
 ## A passenger's icons fade out as the camera comes within NEAR_FULL_M of it and
 ## are gone at NEAR_HIDDEN_M. Icons draw with no depth test at a 2.0 m anchor, so
 ## near the lens one passenger's row lands on another's face. Read off the
@@ -283,6 +289,17 @@ static func head_anchor(node: Node3D) -> Vector3:
 	if node.get_meta(&"icon_seated", false):
 		return Vector3(0.0, SEATED_LIFT_M, -SEATED_BACK_M)
 	return Vector3(0.0, LIFT_M, 0.0)
+
+
+## The top of a node's head, in the node's space: standing over the root, or
+## SEATED_BACK_M or RECLINE_BACK_M behind it while seated or reclined, as
+## head_anchor() places the row over it.
+static func head_top(node: Node3D) -> Vector3:
+	if node.get_meta(&"icon_reclined", false):
+		return Vector3(0.0, RECLINE_HEAD_TOP_M, -RECLINE_BACK_M)
+	if node.get_meta(&"icon_seated", false):
+		return Vector3(0.0, SEATED_HEAD_TOP_M, -SEATED_BACK_M)
+	return Vector3(0.0, HEAD_TOP_M, 0.0)
 
 
 ## Where a node's icon row stands this frame: [the anchor in the node's space
