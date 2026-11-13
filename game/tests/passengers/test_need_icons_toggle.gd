@@ -70,6 +70,15 @@ func _visible_icons(nodes: Array[Node3D]) -> int:
 	return count
 
 
+## The need icons drawn as count badges (NeedCluster): close passengers' icons of
+## one kind merge into one badge, so a crowd's needs are the icons plus these.
+func _badged() -> int:
+	var count := 0
+	for badge in _views.need_badges():
+		count += badge["count"]
+	return count
+
+
 func _n_key(pressed := true) -> InputEventKey:
 	var event := InputEventKey.new()
 	event.keycode = KEY_N
@@ -159,11 +168,11 @@ func test_the_zoomed_out_hide_still_applies_while_the_toggle_is_on() -> void:
 	for distance in [12.0, 60.0]:
 		rig.distance = distance
 		_views.draw()
-		seen[distance] = _visible_icons(nodes)
+		seen[distance] = _visible_icons(nodes) + _badged()
 	_views.need_icons_toggle.set_shown(false)
 	rig.distance = 12.0
 	_views.draw()
-	var off_close := _visible_icons(nodes)
+	var off_close := _visible_icons(nodes) + _badged()
 	print("on: close %d, zoomed out %d; off, close: %d" % [seen[12.0], seen[60.0], off_close])
 	rig.free()
 	assert_int(seen[12.0]).is_equal(6)

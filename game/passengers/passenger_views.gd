@@ -8,7 +8,8 @@ extends Node3D
 ## It reads the sim and never writes to it; animation never drives the sim.
 ## Each node carries its thought bubble, its need icons (NeedIcons), its
 ## shopping wish icon (WishIconView) and its VIP crown (VipMarker), set each
-## tick and laid out each frame.
+## tick and laid out each frame. Close need icons of one kind are drawn as one
+## count badge instead (NeedCluster, _cluster_icons()).
 
 ## Bodies, tints, bag colours and clip speeds: PassengerLooks.
 const SIT_CLIP_SECONDS := 1.2
@@ -51,6 +52,12 @@ const BODY_PICK_RANGE_M := 1000.0
 var follow_anchor := Node3D.new()
 ## False shows every speech bubble, overlapping or not (plate probes compare).
 var declutter_bubbles := true
+## False draws every need icon on its own, with no count badges (plate probes
+## compare).
+var cluster_needs := true
+## The count clusters of close need icons (NeedCluster). View state with no
+## tick: snap() and the icons hiding clear it, and a released id leaves it.
+var need_clusters := NeedCluster.new()
 ## The N key's on/off choice for the need icons (NeedIconsToggle); a test points
 ## its settings_path at a per-process file before the views enter the tree.
 var need_icons_toggle := NeedIconsToggle.new()
@@ -111,6 +118,11 @@ var _vips: Dictionary = {}
 var _snapping := false
 ## Working array of _declutter_bubbles, reused each frame.
 var _bubble_entries: Array[Dictionary] = []
+## The count badges, pooled (NeedCluster.make_badge()), under _badge_root.
+var _badges: Array[Sprite3D] = []
+var _badge_root := Node3D.new()
+## The badges drawn this frame: {"kind", "count", "rect"} (screen pixels).
+var _badges_drawn: Array[Dictionary] = []
 
 
 func _ready() -> void:
@@ -148,6 +160,8 @@ func _ready() -> void:
 	_props.views = self
 	add_child(_props)
 	add_child(need_icons_toggle)
+	_badge_root.name = NeedCluster.ROOT
+	add_child(_badge_root)
 	if clock != null:
 		clock.ticked.connect(_on_ticked)
 	if save_game != null:
@@ -288,6 +302,7 @@ func _resteer(steers: Dictionary, fresh: Dictionary) -> void:
 ## blend from before the load.
 func snap() -> void:
 	_turns.clear()
+	need_clusters.clear()
 	_setoffs.clear()
 	_stages.clear()
 	_odometers.clear()
@@ -385,10 +400,12 @@ func draw() -> void:
 	# The icons lift over a bubble only while it shows, so they are laid out
 	# after the declutter has set each bubble's visibility for this frame.
 	_declutter_bubbles(camera, unit)
+	# Clustered icons are masked before the crown measures the row.
+	var masks := _cluster_icons(camera, unit, icons_shown)
 	for id in _nodes:
 		var node: Node3D = _nodes[id]
 		var bubble := node.get_node("Bubble") as Label3D
-		NeedIcons.layout(node, bubble, camera, unit, icons_shown)
+		NeedIcons.layout(node, bubble, camera, unit, icons_shown, masks.get(id, 0))
 		VipMarker.layout(node, bubble, camera, unit)
 	_props.draw()
 	_markers.draw()
@@ -425,6 +442,137 @@ func _declutter_bubbles(camera: Camera3D, unit: float) -> void:
 		return
 	for id in BubbleDeclutter.hidden(entries):
 		((_nodes[id] as Node3D).get_node("Bubble") as Label3D).visible = false
+
+
+## The count badges drawn this frame, each {"id": cluster id, "kind":
+## NeedIcons.Need, "count": int, "rect": Rect2 in screen pixels}.
+func need_badges() -> Array[Dictionary]:
+	return _badges_drawn
+
+
+## Merges close need icons of one kind into count badges for this frame
+## (NeedCluster; decision need-icon-count-clusters-technical-design-screen-
+## space-clust) and returns passenger id -> the mask of kinds a badge draws, for
+## NeedIcons.layout(). Each icon's screen point is its row's anchor, projected
+## once per passenger, plus its place in the row as drawn with no mask. Left
+## out: anchors nearer than the camera's near plane, icons off screen and
+## passengers faded out near the camera. Badges are placed clear of each
+## other, the kept speech bubbles and the icons still drawn. With the icons
+## hidden, or cluster_needs off, it clears the clusters and hides every badge.
+func _cluster_icons(camera: Camera3D, unit: float, icons_shown: bool) -> Dictionary:
+	_badges_drawn.clear()
+	if not cluster_needs or not icons_shown or camera == null or unit <= 0.0:
+		need_clusters.clear()
+		_hide_badges(0)
+		return {}
+	var view := get_viewport()
+	var to_output := view.get_stretch_transform().get_scale().y
+	var screen := Rect2(Vector2.ZERO, view.get_visible_rect().size * to_output)
+	var half := Vector2.ONE * NeedIcons.ICON_PX / 2.0
+	var points := {}
+	for kind: int in NeedIcons.Need.values():
+		points[kind] = {}
+	# Passenger id -> [anchor in this node's space, its screen point, lift_px,
+	# wishing, alpha].
+	var rows := {}
+	var forward := -camera.global_basis.z
+	for id: int in _nodes:
+		var node: Node3D = _nodes[id]
+		var kinds: Array = node.get_meta(&"need_kinds", [])
+		var wishing: bool = node.get_meta(&"wish", "") != ""
+		if kinds.is_empty() and not wishing:
+			continue
+		var alpha := NeedIcons.near_alpha(camera.global_position.distance_to(node.global_position))
+		if alpha <= 0.0:
+			continue
+		var at := NeedIcons.row_anchor(node, node.get_node("Bubble") as Label3D, camera, unit)
+		var world: Vector3 = node.global_transform * (at[0] as Vector3)
+		if (world - camera.global_position).dot(forward) <= camera.near:
+			continue
+		var base := camera.unproject_position(world) * to_output
+		rows[id] = [node.transform * (at[0] as Vector3), base, at[1], wishing, alpha]
+		for i in kinds.size():
+			var centre := base + NeedIcons.icon_centre_px(i, kinds.size(), wishing, at[1])
+			if screen.intersects(Rect2(centre - half, half * 2.0)):
+				(points[kinds[i]] as Dictionary)[id] = centre
+	need_clusters.update(points)
+	var masks := need_clusters.mask()
+	# The biggest counts are placed first, so they keep their anchors.
+	var clusters := need_clusters.clusters().duplicate()
+	clusters.sort_custom(NeedCluster.placed_before)
+	# Per cluster: the row of the member nearest its centroid, the badge's
+	# centre from that row's anchor (its bottom edge where the row's is).
+	var anchors: Array[Array] = []
+	var wanted: Array[Rect2] = []
+	var ids: Array = []
+	for cluster in clusters:
+		var members: Array = cluster["members"]
+		var row: Array = rows[NeedCluster.anchor_member(members, points[cluster["kind"]])]
+		var centre_px := Vector2(0.0, -float(row[2]) - NeedCluster.BADGE_PX / 2.0)
+		anchors.append([row, centre_px])
+		wanted.append(NeedCluster.badge_rect((row[1] as Vector2) + centre_px, members.size()))
+		ids.append(cluster["id"])
+	var placed := need_clusters.place(wanted, ids, _badge_obstacles(rows, masks, screen))
+	for i in clusters.size():
+		var kind: int = clusters[i]["kind"]
+		var count: int = (clusters[i]["members"] as Array).size()
+		var row: Array = anchors[i][0]
+		var centre_px: Vector2 = anchors[i][1] + placed[i].position - wanted[i].position
+		NeedCluster.show_badge(_badge(i), kind, count, row[0], centre_px, unit, row[4])
+		_badges_drawn.append({"id": ids[i], "kind": kind, "count": count, "rect": placed[i]})
+	_hide_badges(clusters.size())
+	return masks
+
+
+## What a badge is kept clear of: the speech bubbles kept on screen, the
+## icons and wish bubbles still drawn (each row closed up past its masked
+## icons, as NeedIcons.layout() draws it) and the station captions shown (as
+## the last frame placed them; MissMarkers draws after this pass), in screen
+## pixels.
+func _badge_obstacles(rows: Dictionary, masks: Dictionary, screen: Rect2) -> Array[Rect2]:
+	var out: Array[Rect2] = []
+	for rect in _markers.placed_captions():
+		if screen.intersects(rect):
+			out.append(rect)
+	for e: Dictionary in _bubble_entries:
+		var rect: Rect2 = e["rect"]
+		var bubble := (_nodes[e["id"]] as Node3D).get_node("Bubble") as Label3D
+		if bubble.visible and screen.intersects(rect):
+			out.append(rect)
+	var icon := Vector2.ONE * NeedIcons.ICON_PX
+	var wish := Vector2.ONE * WishIconView.WISH_PX
+	for id: int in rows:
+		var row: Array = rows[id]
+		var mask: int = masks.get(id, 0)
+		var kept := 0
+		for kind: int in (_nodes[id] as Node3D).get_meta(&"need_kinds", []):
+			if mask & (1 << kind) == 0:
+				kept += 1
+		var wishing: bool = row[3]
+		for j in kept:
+			var centre: Vector2 = row[1] + NeedIcons.icon_centre_px(j, kept, wishing, row[2])
+			out.append(Rect2(centre - icon / 2.0, icon))
+		if wishing:
+			var x := NeedIcons.row_x_px(kept, NeedIcons.row_widths(kept, true))
+			var y := -float(row[2]) - WishIconView.WISH_PX / 2.0
+			out.append(Rect2((row[1] as Vector2) + Vector2(x, y) - wish / 2.0, wish))
+	return out
+
+
+## Pooled badge `i`, made when the pool is short.
+func _badge(i: int) -> Sprite3D:
+	while _badges.size() <= i:
+		var badge := NeedCluster.make_badge()
+		badge.name = "NeedBadge%d" % _badges.size()
+		_badge_root.add_child(badge)
+		_badges.append(badge)
+	return _badges[i]
+
+
+## Hides the pooled badges from number `from` on.
+func _hide_badges(from: int) -> void:
+	for i in range(from, _badges.size()):
+		_badges[i].visible = false
 
 
 ## The passenger drawn nearest a screen point within PICK_RADIUS_PX, or 0.
@@ -547,6 +695,7 @@ func _release(id: int) -> void:
 	_cur.erase(id)
 	_stages.erase(id)
 	_odometers.erase(id)
+	need_clusters.forget(id)
 
 
 ## Sets the clip, dress, bubble and icons for this tick and returns the yaw

@@ -35,6 +35,9 @@ extends RefCounted
 ## at the end of the row instead of the hourglass (user ruling shopping-wish-
 ## icon-replaces-the-boredom-hourglass-for-wishers); one with no wish keeps the
 ## hourglass.
+##
+## Close icons of one kind merge into one bigger icon with a count (NeedCluster,
+## drawn by PassengerViews); layout()'s mask hides the members' own icons.
 
 enum Need { HUNGER, TOILET, BOREDOM }
 
@@ -146,6 +149,8 @@ static func make_sprite(sprite_name: String) -> Sprite3D:
 
 
 ## Shows `needs` on a passenger node's sprites, in order, and hides the rest.
+## Keeps the needs on the node (&"need_kinds") for layout()'s mask and the
+## count clusters (NeedCluster).
 static func show_needs(node: Node3D, needs: Array[Need]) -> void:
 	for i in SPRITES.size():
 		var sprite := node.get_node(SPRITES[i]) as Sprite3D
@@ -153,6 +158,7 @@ static func show_needs(node: Node3D, needs: Array[Need]) -> void:
 		if sprite.visible:
 			sprite.texture = texture(needs[i])
 	node.set_meta(&"needs", needs.size())
+	node.set_meta(&"need_kinds", needs)
 
 
 ## The offset, in texture pixels, of icon `index` of a row of `count`: centred
@@ -197,26 +203,61 @@ static func unit_of(view: Viewport, camera: Camera3D) -> float:
 ## (WishIconView.SPRITE) ends the row, WishIconView.WISH_PX on screen, in the
 ## place the boredom icon would take. Does nothing with no camera.
 ## With `shown` false (the camera at the home zoom or farther out, shown_at())
-## the node's icons and wish bubble are hidden for this frame.
+## the node's icons and wish bubble are hidden for this frame. `mask` holds a
+## bit (1 << Need) for each need whose icon a count cluster badge draws
+## instead (NeedCluster); those icons hide and the rest close up the row.
 static func layout(
-	node: Node3D, bubble: Label3D, camera: Camera3D, unit: float, shown := true
+	node: Node3D, bubble: Label3D, camera: Camera3D, unit: float, shown := true, mask := 0
 ) -> void:
 	var count: int = node.get_meta(&"needs", 0)
+	var kinds: Array = node.get_meta(&"need_kinds", [])
 	var alpha := 1.0
 	if camera != null:
 		alpha = near_alpha(camera.global_position.distance_to(node.global_position))
 	var drawn := shown and alpha > 0.0
+	var kept: Array[int] = []
 	for i in count:
 		var icon := node.get_node(SPRITES[i]) as Sprite3D
-		icon.visible = drawn
+		var masked := i < kinds.size() and mask & (1 << int(kinds[i])) != 0
+		icon.visible = drawn and not masked
 		icon.modulate.a = alpha
+		if icon.visible:
+			kept.append(i)
 	var wish := node.get_node_or_null(WishIconView.SPRITE) as Sprite3D
 	var wishing: bool = wish != null and node.get_meta(&"wish", "") != ""
 	if wish != null:
 		wish.visible = drawn and wishing
 		wish.modulate.a = alpha
-	if (count == 0 and not wishing) or not drawn or camera == null or unit <= 0.0:
+	if (kept.is_empty() and not wishing) or not drawn or camera == null or unit <= 0.0:
 		return
+	var at := row_anchor(node, bubble, camera, unit)
+	var anchor: Vector3 = at[0]
+	var lift_px: float = at[1]
+	var shown_count := kept.size()
+	if not wishing:
+		for j in shown_count:
+			var sprite := node.get_node(SPRITES[kept[j]]) as Sprite3D
+			sprite.position = anchor
+			sprite.pixel_size = ICON_PX * unit / SIZE
+			sprite.offset = offset_of(j, shown_count, lift_px)
+		return
+	var widths := row_widths(shown_count, true)
+	for j in shown_count:
+		var sprite := node.get_node(SPRITES[kept[j]]) as Sprite3D
+		sprite.position = anchor
+		sprite.pixel_size = ICON_PX * unit / SIZE
+		sprite.offset = Vector2(row_x_px(j, widths) * SIZE / ICON_PX, offset_of(0, 1, lift_px).y)
+	wish.position = anchor
+	wish.pixel_size = WishIconView.WISH_PX * unit / WishIconView.SIZE
+	var wish_x := row_x_px(shown_count, widths) * WishIconView.SIZE / WishIconView.WISH_PX
+	wish.offset = Vector2(wish_x, WishIconView.offset_for(lift_px).y)
+
+
+## Where a node's icon row stands this frame: [the anchor in the node's space
+## (over the head, or the bubble's position while the bubble shows), the
+## screen pixels the row's bottom edge is lifted over it (over the bubble's
+## top while it shows, else 0)].
+static func row_anchor(node: Node3D, bubble: Label3D, camera: Camera3D, unit: float) -> Array:
 	var anchor := Vector3(0.0, LIFT_M, 0.0)
 	var lift_px := 0.0
 	if bubble.text != "" and bubble.visible:
@@ -225,26 +266,28 @@ static func layout(
 		var depth := (at - camera.global_position).dot(-camera.global_basis.z)
 		if depth > 0.0:
 			lift_px = bubble_top_m(bubble) / (depth * unit) + GAP_PX
-	if not wishing:
-		for i in count:
-			var sprite := node.get_node(SPRITES[i]) as Sprite3D
-			sprite.position = anchor
-			sprite.pixel_size = ICON_PX * unit / SIZE
-			sprite.offset = offset_of(i, count, lift_px)
-		return
+	return [anchor, lift_px]
+
+
+## The widths (screen pixels) of a row of `count` icons, ended by the wish
+## bubble when `wishing`.
+static func row_widths(count: int, wishing: bool) -> Array[float]:
 	var widths: Array[float] = []
 	for i in count:
 		widths.append(ICON_PX)
-	widths.append(WishIconView.WISH_PX)
-	for i in count:
-		var sprite := node.get_node(SPRITES[i]) as Sprite3D
-		sprite.position = anchor
-		sprite.pixel_size = ICON_PX * unit / SIZE
-		sprite.offset = Vector2(row_x_px(i, widths) * SIZE / ICON_PX, offset_of(0, 1, lift_px).y)
-	wish.position = anchor
-	wish.pixel_size = WishIconView.WISH_PX * unit / WishIconView.SIZE
-	var wish_x := row_x_px(count, widths) * WishIconView.SIZE / WishIconView.WISH_PX
-	wish.offset = Vector2(wish_x, WishIconView.offset_for(lift_px).y)
+	if wishing:
+		widths.append(WishIconView.WISH_PX)
+	return widths
+
+
+## The screen centre of icon `index` of a row of `count` icons (ended by the
+## wish bubble when `wishing`), relative to the row's projected anchor, in
+## screen pixels with y down; `lift_px` from row_anchor(). The same geometry
+## layout() draws.
+static func icon_centre_px(index: int, count: int, wishing: bool, lift_px: float) -> Vector2:
+	if not wishing:
+		return Vector2((index - (count - 1) / 2.0) * (ICON_PX + GAP_PX), -lift_px - ICON_PX / 2.0)
+	return Vector2(row_x_px(index, row_widths(count, true)), -lift_px - ICON_PX / 2.0)
 
 
 ## The centre of item `index` of a row of items `widths` wide (screen
