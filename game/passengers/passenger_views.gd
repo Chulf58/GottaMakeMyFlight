@@ -35,6 +35,10 @@ const BODY_RADIUS_M := 0.35
 const BODY_HEIGHT_M := 1.7
 ## How far along the click ray pick_body() looks, in metres.
 const BODY_PICK_RANGE_M := 1000.0
+## The height and width of the head a count badge keeps clear of, metres
+## from the head's top, and the most screen pixels its rect may span.
+const HEAD_RECT_M := 0.35
+const HEAD_RECT_MAX_PX := 96.0
 
 @export var clock: SimClock
 @export var sim: PassengerSim
@@ -460,8 +464,9 @@ func need_badges() -> Array[Dictionary]:
 ## once per passenger, plus its place in the row as drawn with no mask. Left
 ## out: anchors nearer than the camera's near plane, icons off screen and
 ## passengers faded out near the camera. Badges are placed clear of each
-## other, the kept speech bubbles and the icons still drawn. With the icons
-## hidden, or cluster_needs off, it clears the clusters and hides every badge.
+## other, the kept speech bubbles, the icons still drawn and the passengers'
+## heads. With the icons hidden, or cluster_needs off, it clears the clusters
+## and hides every badge.
 func _cluster_icons(camera: Camera3D, unit: float, icons_shown: bool) -> Dictionary:
 	_badges_drawn.clear()
 	if not cluster_needs or not icons_shown or camera == null or unit <= 0.0:
@@ -515,7 +520,9 @@ func _cluster_icons(camera: Camera3D, unit: float, icons_shown: bool) -> Diction
 		anchors.append([row, centre_px])
 		wanted.append(NeedCluster.badge_rect((row[1] as Vector2) + centre_px, members.size()))
 		ids.append(cluster["id"])
-	var placed := need_clusters.place(wanted, ids, _badge_obstacles(rows, masks, screen))
+	var obstacles := _badge_obstacles(rows, masks, screen)
+	_add_head_rects(obstacles, camera, unit, to_output, screen)
+	var placed := need_clusters.place(wanted, ids, obstacles)
 	for i in clusters.size():
 		var kind: int = clusters[i]["kind"]
 		var count: int = (clusters[i]["members"] as Array).size()
@@ -560,6 +567,33 @@ func _badge_obstacles(rows: Dictionary, masks: Dictionary, screen: Rect2) -> Arr
 			var y := -float(row[2]) - WishIconView.WISH_PX / 2.0
 			out.append(Rect2((row[1] as Vector2) + Vector2(x, y) - wish / 2.0, wish))
 	return out
+
+
+## Adds to `out` the screen rect (output pixels) of every drawn passenger's
+## head, from the top of the head (NeedIcons.head_top(), standing, seated or
+## reclined) HEAD_RECT_M down and as wide, so a badge's dodge does not land
+## on a head (board 769f210d: a badge shifted down onto a seated row's heads).
+## Heads nearer than the camera's near plane or off screen are left out, and
+## a rect is never wider than HEAD_RECT_MAX_PX, since size over depth grows
+## without bound near the lens (anti-pattern a-screen-rectangle-measured-from-
+## a-3d-point-as-size-depth-gr).
+func _add_head_rects(
+	out: Array[Rect2], camera: Camera3D, unit: float, to_output: float, screen: Rect2
+) -> void:
+	var forward := -camera.global_basis.z
+	for id: int in _nodes:
+		var node: Node3D = _nodes[id]
+		if not node.visible:
+			continue
+		var top: Vector3 = node.global_transform * NeedIcons.head_top(node)
+		var depth := (top - camera.global_position).dot(forward)
+		if depth <= camera.near:
+			continue
+		var side := minf(HEAD_RECT_M / (depth * unit), HEAD_RECT_MAX_PX)
+		var at := camera.unproject_position(top) * to_output
+		var rect := Rect2(at - Vector2(side / 2.0, 0.0), Vector2(side, side))
+		if screen.intersects(rect):
+			out.append(rect)
 
 
 ## Pooled badge `i`, made when the pool is short.
