@@ -720,6 +720,7 @@ func _release(id: int) -> void:
 	node.set_meta(&"clip", "")
 	node.set_meta(&"icon_seated", false)
 	node.set_meta(&"icon_reclined", false)
+	node.set_meta(&"icon_rise", NeedIcons.Rise.NONE)
 	VipMarker.mark(node, false)
 	_pool[node.get_meta(&"body")].append(node)
 	_nodes.erase(id)
@@ -820,6 +821,19 @@ func _pose(node: Node3D, p: Passenger, built: Dictionary) -> float:
 		&"icon_reclined",
 		seat_pose == StageKinds.Pose.SEATED and activity == ActivityPoses.Kind.RECLINE
 	)
+	# Standing up from either (the stand_up clip playing, not yet stepping off)
+	# or sitting down onto it (the sit_down clip, after any SitHold set-down):
+	# the anchor moves with the body between the seat's or the pod's and the
+	# standing one (NeedIcons.Rise, board 3a5e1d0d).
+	var rise := NeedIcons.Rise.NONE
+	var rising := seat_pose == StageKinds.Pose.STANDING_UP and clip == NeedIcons.RISE_CLIP
+	var sinking := seat_pose == StageKinds.Pose.SITTING_DOWN and clip == NeedIcons.SINK_CLIP
+	if rising or sinking:
+		if activity == ActivityPoses.Kind.RECLINE:
+			rise = NeedIcons.Rise.RECLINE
+		elif at_gate or at_cafe or at_stall or activity == ActivityPoses.Kind.SEAT:
+			rise = NeedIcons.Rise.SEAT
+	node.set_meta(&"icon_rise", rise)
 	var works := SecurityLooks.face(sim, p)
 	node.set_meta(&"faces", works != Vector2.ZERO)
 	if at_gate:
