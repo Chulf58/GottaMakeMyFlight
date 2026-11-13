@@ -129,8 +129,8 @@ var _badges: Array[Sprite3D] = []
 var _badge_root: Node3D
 ## The badges drawn this frame: {"kind", "count", "rect"} (screen pixels).
 var _badges_drawn: Array[Dictionary] = []
-## Passenger id -> the screen pixels from its row's anchor up to the top of a
-## count badge drawn over it (anchored on it, with the gap over), so a VIP's
+## Passenger id -> the screen pixels from its row anchor up to the top of a
+## placed count badge its VIP crown would sit on (with the gap over), so the
 ## crown stands over the badge (VipMarker.layout()). Rebuilt every frame.
 var _badge_lifts := {}
 
@@ -524,12 +524,10 @@ func _cluster_icons(camera: Camera3D, unit: float, icons_shown: bool) -> Diction
 	var anchors: Array[Array] = []
 	var wanted: Array[Rect2] = []
 	var ids: Array = []
-	var holders: Array[int] = []
 	for cluster in clusters:
 		var members: Array = cluster["members"]
-		var holder := NeedCluster.anchor_member(members, points[cluster["kind"]])
-		var row: Array = rows[holder]
-		holders.append(holder)
+		var anchor_id := NeedCluster.anchor_member(members, points[cluster["kind"]])
+		var row: Array = rows[anchor_id]
 		var under := NeedCluster.badge_rect(Vector2.ZERO, members.size()).end.y
 		var centre_px := Vector2(0.0, -float(row[2]) - under)
 		anchors.append([row, centre_px])
@@ -545,14 +543,64 @@ func _cluster_icons(camera: Camera3D, unit: float, icons_shown: bool) -> Diction
 		var centre_px: Vector2 = anchors[i][1] + placed[i].position - wanted[i].position
 		NeedCluster.show_badge(_badge(i), kind, count, row[0], centre_px, unit, row[4])
 		_badges_drawn.append({"id": ids[i], "kind": kind, "count": count, "rect": placed[i]})
-		# A badge over its owner's head, in the crown's column, lifts the crown.
-		var rect: Rect2 = placed[i]
-		var base: Vector2 = row[1]
-		if absf(rect.get_center().x - base.x) < (rect.size.x + VipMarker.CROWN_PX) / 2.0:
-			var over := base.y - rect.position.y + NeedIcons.GAP_PX
-			_badge_lifts[holders[i]] = maxf(_badge_lifts.get(holders[i], 0.0), over)
 	_hide_badges(clusters.size())
+	_lift_crowns(camera, unit, to_output, rows, masks, placed)
 	return masks
+
+
+## Records in _badge_lifts, for every VIP-marked passenger, how far over its row
+## anchor its crown must stand to clear the placed badges it would sit on: a
+## badge, whoever anchors it, that the crown (VipMarker.CROWN_PX square, over
+## the row it stands on) overlaps. The crown then stands over the badge's top
+## with the row's gap.
+func _lift_crowns(
+	camera: Camera3D,
+	unit: float,
+	to_output: float,
+	rows: Dictionary,
+	masks: Dictionary,
+	placed: Array
+) -> void:
+	if placed.is_empty():
+		return
+	var forward := -camera.global_basis.z
+	for id: int in _nodes:
+		var node: Node3D = _nodes[id]
+		if not node.get_meta(&"vip", false):
+			continue
+		var base: Vector2
+		var lift: float
+		if rows.has(id):
+			base = rows[id][1]
+			lift = rows[id][2]
+		else:
+			var at := NeedIcons.row_anchor(node, node.get_node("Bubble") as Label3D, camera, unit)
+			var world: Vector3 = node.global_transform * (at[0] as Vector3)
+			if (world - camera.global_position).dot(forward) <= camera.near:
+				continue
+			base = camera.unproject_position(world) * to_output
+			lift = at[1]
+		var stands := lift + _row_height_px(node, masks.get(id, 0))
+		var crown := Rect2(
+			Vector2(base.x - VipMarker.CROWN_PX / 2.0, base.y - stands - VipMarker.CROWN_PX),
+			Vector2.ONE * VipMarker.CROWN_PX
+		)
+		for rect: Rect2 in placed:
+			if rect.intersects(crown):
+				var over := base.y - rect.position.y + NeedIcons.GAP_PX
+				_badge_lifts[id] = maxf(_badge_lifts.get(id, 0.0), over)
+
+
+## The screen height `node`'s drawn icon row takes with the gap over it (what
+## VipMarker lifts the crown by), from the needs a badge does not mask, or 0.
+func _row_height_px(node: Node3D, mask: int) -> float:
+	var row := 0.0
+	for kind: int in node.get_meta(&"need_kinds", []):
+		if mask & (1 << kind) == 0:
+			row = NeedIcons.ICON_PX
+	if node.get_meta(&"wish", "") != "":
+		row = WishIconView.WISH_PX
+	return row + NeedIcons.GAP_PX if row > 0.0 else 0.0
 
 
 ## What a badge is kept clear of: the speech bubbles kept on screen, the

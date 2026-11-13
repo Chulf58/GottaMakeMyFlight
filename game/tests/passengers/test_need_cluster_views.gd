@@ -222,7 +222,18 @@ func test_a_vip_that_anchors_a_badge_over_a_speech_bubble_wears_the_crown_over_i
 	_check_crown_over_badge(true)
 
 
-func _check_crown_over_badge(with_bubble: bool) -> void:
+## The same for a VIP that is only a member of the cluster: its crown stands in
+## the badge's column too, so it clears the badge whoever anchors it.
+func test_a_vip_member_that_does_not_anchor_the_badge_wears_the_crown_over_it() -> void:
+	_check_crown_over_badge(false, false)
+
+
+func test_a_vip_member_that_does_not_anchor_the_badge_over_a_speech_bubble_wears_the_crown_over_it(
+) -> void:
+	_check_crown_over_badge(true, false)
+
+
+func _check_crown_over_badge(with_bubble: bool, anchors := true) -> void:
 	var ids := _crowd(10, [TOILET])
 	if with_bubble:
 		# Every passenger speaks, so the badge keeps its anchor member.
@@ -244,6 +255,11 @@ func _check_crown_over_badge(with_bubble: bool) -> void:
 			best = d
 			holder = node
 	assert_float(best).is_less(0.01)
+	if not anchors:
+		for id in ids:
+			if _views.node_for(id) != holder:
+				holder = _views.node_for(id)
+				break
 	VipMarker.mark(holder, true)
 	_views.draw()
 	var bubble := holder.get_node("Bubble") as Label3D
@@ -258,7 +274,12 @@ func _check_crown_over_badge(with_bubble: bool) -> void:
 		Vector2(at.x - VipMarker.CROWN_PX / 2.0, bottom - VipMarker.CROWN_PX),
 		Vector2.ONE * VipMarker.CROWN_PX
 	)
-	print("bubble %s: badge %s, crown %s (bottom %.1f)" % [with_bubble, placed, rect, bottom])
+	print(
+		(
+			"bubble %s anchor %s: badge %s, crown %s (bottom %.1f)"
+			% [with_bubble, anchors, placed, rect, bottom]
+		)
+	)
 	assert_bool(rect.intersects(placed)).override_failure_message("crown over badge").is_false()
 	assert_float(bottom).is_less_equal(placed.position.y + 0.5)
 

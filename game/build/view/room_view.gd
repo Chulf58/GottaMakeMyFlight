@@ -29,8 +29,9 @@ const LABEL_OUTLINE := 4
 const LABEL_PRIORITY := 2
 ## The name main.tscn gives PassengerViews, whose need icons labels slide clear of.
 const PASSENGER_VIEWS := "PassengerViews"
-## Higher than PassengerViews' process priority, so the layout runs after it.
-const LAYOUT_PRIORITY := 1
+## Higher than PassengerViews' process priority (1, which puts it after the
+## passengers' animation players), so the layout runs after it.
+const LAYOUT_PRIORITY := 2
 
 ## PassengerViews, whose passengers' need icons the labels slide clear of. Found
 ## as a child named PASSENGER_VIEWS of an ancestor when not set.
@@ -63,7 +64,7 @@ func watch(grid: BuildGrid) -> void:
 	redraw()
 
 
-## Processes after PassengerViews (default priority 0), which draws this
+## Processes after PassengerViews (priority 1), which draws this
 ## frame's need icons first, so labels slide clear of where the icons are now,
 ## not where they were last frame (Sol review of 0537708).
 func _init() -> void:

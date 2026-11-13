@@ -75,23 +75,15 @@ func test_a_removed_room_loses_its_label_and_a_load_draws_the_saved_ones() -> vo
 ## built from its script or placed by main.tscn (read from the scene's saved
 ## properties, so no main scene is built).
 func test_room_labels_lay_out_after_the_passenger_views_draw() -> void:
+	# PassengerViews sets its priority in _ready, so it is read once in the tree.
 	var bare := PassengerTestWorld.views()
+	add_child(bare)
 	var bare_priority := bare.process_priority
-	_free_unadded_members(bare)
+	bare.free()
 	var placed_priority := _placed_priority("res://main/main.tscn", "PassengerViews")
 	var room_priority := _view().process_priority
 	assert_int(room_priority).is_greater(bare_priority)
 	assert_int(room_priority).is_greater(placed_priority)
-
-
-## Frees `node` and the member nodes its field initialisers made, which are
-## only parented by _ready (never run here).
-func _free_unadded_members(node: Node) -> void:
-	for property in node.get_property_list():
-		var member: Variant = node.get(property.name)
-		if member is Node and member.get_parent() == null:
-			member.free()
-	node.free()
 
 
 ## The process_priority the scene saves for its node `node_name`, or the Node
