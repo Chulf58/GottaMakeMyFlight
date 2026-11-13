@@ -118,7 +118,7 @@ static func layout(node: Node3D, bubble: Label3D, camera: Camera3D, unit: float)
 	var alpha := NeedIcons.near_alpha(camera.global_position.distance_to(node.global_position))
 	crown.visible = alpha > 0.0
 	crown.modulate.a = alpha
-	var anchor := Vector3(0.0, NeedIcons.LIFT_M, 0.0)
+	var anchor := NeedIcons.head_anchor(node)
 	var lift_px := 0.0
 	if bubble.text != "" and bubble.visible:
 		anchor = bubble.position

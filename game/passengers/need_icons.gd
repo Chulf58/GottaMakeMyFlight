@@ -54,6 +54,16 @@ const ICON_PX := 30.0
 const GAP_PX := 4.0
 ## Height over the passenger's root of the icons' anchor, just over the head.
 const LIFT_M := 2.0
+## The same for a seated passenger (node meta &"seated", board bd08ed8e, user
+## ruling "Lift icons for seated"), and SEATED_BACK_M the anchor's shift toward
+## the seat's back. A seated body is drawn about 0.54 m behind its root (the
+## chair's front edge), its head top near 1.46 m. The game camera starts at
+## 70 degrees (TycoonCamera TOP_DOWN), where that head lands 0.3 m higher on
+## screen than a 2.0 m anchor over the root, so the row sat over the torso and
+## face. A lift alone never fixes it (0.4 m of lift moves the row 0.14 m on
+## screen at 70 degrees), so the anchor stands over the head, 0.2 m higher.
+const SEATED_LIFT_M := 2.2
+const SEATED_BACK_M := 0.54
 ## A passenger's icons fade out as the camera comes within NEAR_FULL_M of it and
 ## are gone at NEAR_HIDDEN_M. Icons draw with no depth test at a 2.0 m anchor, so
 ## near the lens one passenger's row lands on another's face. Read off the
@@ -253,12 +263,21 @@ static func layout(
 	wish.offset = Vector2(wish_x, WishIconView.offset_for(lift_px).y)
 
 
+## The anchor over a passenger node's head, in the node's space: LIFT_M over
+## the root, or SEATED_LIFT_M high and SEATED_BACK_M behind it while the node is
+## seated. The VIP crown anchors here too.
+static func head_anchor(node: Node3D) -> Vector3:
+	if node.get_meta(&"seated", false):
+		return Vector3(0.0, SEATED_LIFT_M, -SEATED_BACK_M)
+	return Vector3(0.0, LIFT_M, 0.0)
+
+
 ## Where a node's icon row stands this frame: [the anchor in the node's space
 ## (over the head, or the bubble's position while the bubble shows), the
 ## screen pixels the row's bottom edge is lifted over it (over the bubble's
 ## top while it shows, else 0)].
 static func row_anchor(node: Node3D, bubble: Label3D, camera: Camera3D, unit: float) -> Array:
-	var anchor := Vector3(0.0, LIFT_M, 0.0)
+	var anchor := head_anchor(node)
 	var lift_px := 0.0
 	if bubble.text != "" and bubble.visible:
 		anchor = bubble.position
