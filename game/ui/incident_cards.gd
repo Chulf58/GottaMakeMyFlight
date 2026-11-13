@@ -10,10 +10,12 @@ extends Node
 ## it ends, green when made in a good mood (the bonus), the ordinary cream card
 ## when made below the mood bar (no bonus), coral when missed (the rating
 ## penalty). The inspector's visit gets one when it resolves: green when passed
-## (the money), coral when failed (the rating penalty). Notices are not
-## saved, so after the rail resets (a load or a new world, reset_done) or the
-## director loads (restored), every incident still active and every VIP or
-## inspector result still kept is posted again.
+## (the money), coral when failed (the rating penalty). A result card leaves
+## the rail after FlightResultPanel.SHOW_SECONDS of real time, like the flight
+## result card (user-ruled 2026-11-13), its words kept in the alerts history.
+## Notices are not saved, so after the rail resets (a load or a new world,
+## reset_done) or the director loads (restored), every incident still active is
+## posted again; a result is not, because its time ran in the earlier session.
 
 ## The incidents whose cards these are. A scene must set it; tests call bind().
 @export var director: IncidentDirector
@@ -45,20 +47,19 @@ static func key_of(incident: Dictionary) -> StringName:
 	return StringName("incident_%d" % incident["id"])
 
 
-## Posts the card of every active incident and the result card of every VIP
-## that has its result again, replacing any still up.
+## Posts the card of every active incident again, replacing any still up. Result
+## cards are left out: they fade after SHOW_SECONDS and a load starts a new
+## session, so an old result would come back for another 20 s.
 func post_active() -> void:
 	for incident in director.active_incidents():
 		_post(incident)
-	for incident in director.incidents():
-		_post_result(incident)
 
 
 ## The result card of a finished VIP or inspector visit, told once when it ends
-## (a card that stays until clicked away, like a minor's: green for a VIP bonus or
-## an inspector pass, the plain cream card for a VIP without the bonus, coral for a
-## miss or a fail). Nothing for any other incident or a VIP dropped
-## without a result.
+## (a card that leaves after FlightResultPanel.SHOW_SECONDS of real time or when
+## clicked away: green for a VIP bonus or an inspector pass, the plain cream card
+## for a VIP without the bonus, coral for a miss or a fail). Nothing for any
+## other incident or a VIP dropped without a result.
 func _post_result(incident: Dictionary) -> void:
 	var words := IncidentCopy.vip_result(incident)
 	if words.is_empty():
@@ -79,7 +80,7 @@ func _post_result(incident: Dictionary) -> void:
 			# No variation: the theme's ordinary cream PanelContainer look.
 			card.theme_type_variation = &""
 	card.name = "IncidentNotice_%s" % key
-	on.post_notice(key, card, 0.0, words["title"], words["detail"])
+	on.post_notice(key, card, FlightResultPanel.SHOW_SECONDS, words["title"], words["detail"])
 
 
 ## Whether a finished VIP or inspector visit earned a green card: a VIP who made

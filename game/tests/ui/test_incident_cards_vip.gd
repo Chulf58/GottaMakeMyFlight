@@ -4,7 +4,8 @@ extends MajorTestBase
 ## an accepted VIP posts exactly one rail card (green for the bonus, the plain
 ## cream card when made without it, coral when missed) with the plan's
 ## numbers (bonus, made without the bonus, missed), no pause, and the card
-## comes back when the rail resets or the director loads. A VIP whose flight
+## leaves the rail after FlightResultPanel.SHOW_SECONDS of real time and is not
+## posted again when the rail resets or the director loads. A VIP whose flight
 ## is dropped posts none.
 
 ## The VIP's plan numbers, none of them the tuning's, so a card that read
@@ -106,22 +107,54 @@ func test_a_vip_whose_flight_is_dropped_posts_no_card() -> void:
 	assert_object(_rail.notice_card(IncidentCards.key_of({"id": id}))).is_null()
 
 
-func test_the_result_card_comes_back_after_the_rail_resets() -> void:
+## User-ruled 2026-11-13, "All fade after 20 s (Recommended)": "Green, cream and
+## coral incident results all leave after 20 seconds of real time, like the
+## flight result card. The words stay in the alerts history, so nothing is
+## lost." These two cases used to expect the result card to come back after a
+## rail reset or a director load; a result whose 20 s already ran must not
+## return, so they now expect none.
+func test_the_result_card_is_not_posted_again_after_the_rail_resets() -> void:
 	var id := _finished_vip(false, 10)
 	var key := IncidentCards.key_of({"id": id})
 	_rail.reset()
-	assert_object(_rail.notice_card(key)).is_not_null()
-	assert_str(_words(id)).contains("The VIP missed the flight")
+	assert_object(_rail.notice_card(key)).is_null()
 
 
-func test_the_result_card_comes_back_after_the_director_loads() -> void:
+func test_the_result_card_is_not_posted_again_after_the_director_loads() -> void:
 	var id := _finished_vip(true, GOOD_MOOD)
 	var key := IncidentCards.key_of({"id": id})
 	var saved := JSON.parse_string(JSON.stringify(_director.to_snapshot())) as Dictionary
 	_rail.drop_notice(key)
 	assert_bool(_director.from_snapshot(saved)).is_true()
+	assert_object(_rail.notice_card(key)).is_null()
+
+
+## Each VIP result (bonus green, no-bonus cream, missed coral) leaves the rail
+## after the flight result card's 20 s of real time; the rail's history keeps
+## the words of all three.
+func test_every_vip_result_card_leaves_the_rail_after_the_flight_result_seconds() -> void:
+	var ids: Array[int] = [_finished_vip(true, GOOD_MOOD), _finished_vip(true, GOOD_MOOD - 1)]
+	ids.append(_finished_vip(false, GOOD_MOOD))
+	assert_float(FlightResultPanel.SHOW_SECONDS).is_equal(20.0)
+	_rail.advance(FlightResultPanel.SHOW_SECONDS - 0.5)
+	for id in ids:
+		assert_object(_rail.notice_card(IncidentCards.key_of({"id": id}))).is_not_null()
+	_rail.advance(1.0)
+	for id in ids:
+		assert_object(_rail.notice_card(IncidentCards.key_of({"id": id}))).is_null()
+	assert_int(_rail.board().history().size()).is_equal(3)
+
+
+## The control: a minor incident card has no timeout, it ends with its incident.
+func test_a_minor_incident_card_has_no_timeout() -> void:
+	var spill := {"id": 9001, "kind": IncidentCatalogue.SPILL, "place": "Check-in"}
+	_director.started.emit(spill)
+	var key := IncidentCards.key_of(spill)
 	assert_object(_rail.notice_card(key)).is_not_null()
-	assert_str(_words(id)).contains("The VIP made the flight")
+	_rail.advance(FlightResultPanel.SHOW_SECONDS * 10.0)
+	assert_object(_rail.notice_card(key)).is_not_null()
+	_director.ended.emit(spill)
+	assert_object(_rail.notice_card(key)).is_null()
 
 
 ## Green is for the bonus alone, a missed flight is a coral card (decision

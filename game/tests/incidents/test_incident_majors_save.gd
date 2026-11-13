@@ -218,12 +218,16 @@ func test_a_failed_visit_keeps_its_counts_through_a_save_and_names_only_the_brea
 	assert_int(plan["seen_messes"]).is_equal(1)
 	assert_int(plan["seen_full_queue"]).is_equal(0)
 	var rail := _main.get_tree().get_first_node_in_group(AlertStack.GROUP) as AlertStack
-	var card := rail.notice_card(IncidentCards.key_of({"id": _inspector}))
-	assert_object(card).is_not_null()
-	var parts := PackedStringArray()
-	for label in card.find_children("*", "Label", true, false):
-		parts.append((label as Label).text)
-	var text := "\n".join(parts)
+	# User-ruled 2026-11-13, "All fade after 20 s (Recommended)": "Green, cream
+	# and coral incident results all leave after 20 seconds of real time, like
+	# the flight result card. The words stay in the alerts history, so nothing
+	# is lost." This case used to read the breach off the failure card back on
+	# the rail after the load; the card is no longer re-posted, so the same
+	# words are read from the saved incident's plan through IncidentCopy, the
+	# text the card is built from.
+	assert_object(rail.notice_card(IncidentCards.key_of({"id": _inspector}))).is_null()
+	var words := IncidentCopy.inspector_result(_record(_inspector))
+	var text := "%s\n%s" % [words["title"], words["detail"]]
 	print(text)
 	assert_str(text).contains("1 mess on the floor (none allowed)")
 	assert_str(text).not_contains("queue")
