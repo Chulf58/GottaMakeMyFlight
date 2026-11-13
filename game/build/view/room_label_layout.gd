@@ -260,7 +260,8 @@ func _place(
 
 ## Screen boxes (screen pixels) of the need icons and wish bubbles shown over
 ## the passenger nodes under `views` (PassengerViews: its children with a
-## &"body"), in view. Empty with no camera or while need icons are hidden at
+## &"body"), and of the need icon count badges with their counts
+## (NeedCluster.ROOT), in view. Empty with no camera or while need icons are hidden at
 ## this zoom (NeedIcons.shown_at()).
 static func icon_rects(views: Node, camera: Camera3D, to_output: float) -> Array[Rect2]:
 	var rects: Array[Rect2] = []
@@ -280,6 +281,21 @@ static func icon_rects(views: Node, camera: Camera3D, to_output: float) -> Array
 			var rect := sprite_rect(sprite, camera, unit)
 			if rect.has_area() and view.intersects(rect):
 				rects.append(Rect2(rect.position * to_output, rect.size * to_output))
+	var badges := views.get_node_or_null(NodePath(NeedCluster.ROOT))
+	if badges == null:
+		return rects
+	for child in badges.get_children():
+		var badge := child as Sprite3D
+		if badge == null or not badge.visible:
+			continue
+		var rect := sprite_rect(badge, camera, unit)
+		if not rect.has_area() or not view.intersects(rect):
+			continue
+		# The icon box scaled up to the badge with its count (badge_rect()).
+		var per_px := rect.size.y * to_output / NeedCluster.BADGE_PX
+		var box := NeedCluster.badge_rect(Vector2.ZERO, badge.get_meta(&"count", 0))
+		var centre := rect.get_center() * to_output
+		rects.append(Rect2(centre + box.position * per_px, box.size * per_px))
 	return rects
 
 
