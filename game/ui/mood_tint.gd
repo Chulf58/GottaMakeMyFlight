@@ -7,6 +7,16 @@ extends RefCounted
 ## how long it has queued; a floor cell takes the worst badness standing on it
 ## and lends half of that to its four neighbours, so a queue reads as a patch.
 ## Read only: nothing here changes the sim.
+##
+## The overlay has four modes (decision crowd-need-display-mood-overlay-gains-
+## hunger-toilet-and-bore): Mood, as above, and one per need (Hunger, Toilet,
+## Boredom). A need mode reads that one number off each passenger: green below
+## the threshold the sim itself acts on, orange at it, blending to red from
+## NEED_BAD_AT. Spread to the neighbours works as in Mood.
+
+## Which number the floor shows. MOOD is mood and queue wait; the others are the
+## passenger's hunger, toilet need and boredom.
+enum Mode { MOOD, HUNGER, TOILET, BOREDOM }
 
 ## Mood at or above this is fine, at or below BAD_MOOD is as bad as it gets.
 ## Passengers start at Passenger.MOOD_START, 70, and sit in the low 60s within
@@ -19,10 +29,15 @@ const OK_WAIT_TICKS := 200
 const BAD_WAIT_TICKS := 1000
 ## How much of a cell's badness its four neighbours get.
 const SPREAD := 0.5
+## A need at or above this is as bad as it gets (red).
+const NEED_BAD_AT := 85
 ## Fine, halfway and bad. The overlay draws them at ALPHA.
 const GOOD_COLOR := Color(0.12, 0.7, 0.25)
 const MIDDLE_COLOR := Color(0.98, 0.8, 0.1)
 const BAD_COLOR := Color(0.88, 0.1, 0.1)
+## The need modes' halfway colour: MIDDLE_COLOR reads yellow, and a need at its
+## threshold is a warning to act on, not a halfway mood.
+const ORANGE_COLOR := Color(0.98, 0.5, 0.1)
 const ALPHA := 0.7
 const NEIGHBOURS: Array[Vector2i] = [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN]
 ## The stages that are a wait in a queue for a station.
@@ -54,13 +69,57 @@ static func badness_of(p: Passenger, tick: int) -> float:
 	return bad
 
 
-## Green at 0, yellow at 0.5, red at 1, with the overlay's alpha.
-static func color_of(badness: float) -> Color:
+## Whether the mode is one of the three need modes.
+static func is_need_mode(mode: Mode) -> bool:
+	return mode != Mode.MOOD
+
+
+## The number the need mode reads, at which the sim acts on it.
+static func need_threshold(mode: Mode) -> int:
+	match mode:
+		Mode.HUNGER:
+			return CafeSim.HUNGRY_AT
+		Mode.TOILET:
+			return ToiletSim.NEED_AT
+		Mode.BOREDOM:
+			return BoredomSim.BORED_AT
+	return 0
+
+
+## The passenger's number for the need mode.
+static func need_value(p: Passenger, mode: Mode) -> int:
+	match mode:
+		Mode.HUNGER:
+			return p.hunger
+		Mode.TOILET:
+			return p.toilet_need
+		Mode.BOREDOM:
+			return p.boredom
+	return 0
+
+
+## 0 below the mode's threshold, 0.5 at it, 1 from NEED_BAD_AT, linear between.
+static func need_badness(mode: Mode, value: int) -> float:
+	var at := need_threshold(mode)
+	if value < at:
+		return 0.0
+	return 0.5 + 0.5 * clampf(float(value - at) / float(NEED_BAD_AT - at), 0.0, 1.0)
+
+
+## The passenger's badness for the overlay's mode: Mood mode is badness_of.
+static func badness_for(p: Passenger, tick: int, mode: Mode) -> float:
+	if is_need_mode(mode):
+		return need_badness(mode, need_value(p, mode))
+	return badness_of(p, tick)
+
+
+## Green at 0, yellow at 0.5, red at 1, with the overlay's alpha. A need mode
+## goes through orange instead of yellow.
+static func color_of(badness: float, mode := Mode.MOOD) -> Color:
 	var t := clampf(badness, 0.0, 1.0)
+	var middle := ORANGE_COLOR if is_need_mode(mode) else MIDDLE_COLOR
 	var color := (
-		GOOD_COLOR.lerp(MIDDLE_COLOR, t * 2.0)
-		if t < 0.5
-		else MIDDLE_COLOR.lerp(BAD_COLOR, (t - 0.5) * 2.0)
+		GOOD_COLOR.lerp(middle, t * 2.0) if t < 0.5 else middle.lerp(BAD_COLOR, (t - 0.5) * 2.0)
 	)
 	color.a = ALPHA
 	return color
@@ -75,15 +134,15 @@ static func on_floor(p: Passenger) -> bool:
 
 ## Cell -> badness for every floor cell the overlay tints, read from `sim`:
 ## the cells passengers stand on at their own badness, their neighbours at
-## SPREAD of it, only on cells that hold floor.
-static func cells_for(sim: PassengerSim) -> Dictionary:
+## SPREAD of it, only on cells that hold floor. `mode` picks the badness.
+static func cells_for(sim: PassengerSim, mode := Mode.MOOD) -> Dictionary:
 	var own := {}
 	for id in sim.passenger_ids():
 		var p := sim.get_passenger(id)
 		if p == null or not on_floor(p):
 			continue
 		var cell := sim.grid.world_to_cell(sim.world_position(p))
-		own[cell] = maxf(own.get(cell, 0.0), badness_of(p, sim.tick))
+		own[cell] = maxf(own.get(cell, 0.0), badness_for(p, sim.tick, mode))
 	var cells := {}
 	for cell: Vector2i in own:
 		cells[cell] = maxf(cells.get(cell, 0.0), own[cell])

@@ -277,12 +277,15 @@ func test_the_templates_panel_sits_on_the_margin() -> void:
 
 ## The legend is on a card of its own (plate d_mood_1920: bare 14 px text over
 ## the dark ground was unreadable), level with the toggle and one gap right of it,
-## and it shows only while the overlay is on.
+## and it shows only while the overlay is on. It holds the legend line and the
+## four mode buttons, so it is taller than the toggle but stays inside the Mood
+## and Departures slots' height.
 func test_the_mood_legend_sits_on_a_card_beside_the_toggle() -> void:
 	var mood := _main.get_node("MoodOverlay") as MoodOverlay
 	var legend := _control("MoodLegend") as Label
-	var card := legend.get_parent() as PanelContainer
+	var card := _control("MoodLegendCard") as PanelContainer
 	assert_object(card).is_not_null()
+	assert_bool(card.is_ancestor_of(legend)).is_true()
 	await _settle()
 	assert_bool(card.is_visible_in_tree()).is_false()
 	mood.set_shown(true)
@@ -293,8 +296,11 @@ func test_the_mood_legend_sits_on_a_card_beside_the_toggle() -> void:
 	assert_bool(card.is_visible_in_tree()).is_true()
 	assert_float(rect.position.x - toggle.end.x).is_equal_approx(HudLayout.GAP, 0.5)
 	assert_float(rect.position.y).is_equal_approx(toggle.position.y, 0.5)
-	assert_float(rect.size.y).is_equal_approx(HudLayout.BUTTON_H, 0.5)
+	assert_float(rect.size.y).is_greater(HudLayout.BUTTON_H)
+	assert_float(rect.size.y).is_less(float(LeftColumn.LIST_TOP - LeftColumn.TOP))
 	assert_bool(rect.encloses(legend.get_global_rect())).is_true()
+	for mode_name in MoodOverlay.MODE_NAMES:
+		assert_bool(rect.encloses(_rect("Mode" + mode_name))).is_true()
 	mood.set_shown(false)
 	await _settle()
 	assert_bool(card.is_visible_in_tree()).is_false()

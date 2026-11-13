@@ -43,6 +43,10 @@ const BODY_PICK_RANGE_M := 1000.0
 ## (VipMarker).
 @export var incidents: IncidentDirector
 
+## When set, its Hunger, Toilet and Boredom modes hide every need icon (the
+## tinted floor shows the need instead).
+@export var mood_overlay: MoodOverlay
+
 ## Moves with the selected passenger, for a camera to follow.
 var follow_anchor := Node3D.new()
 ## False shows every speech bubble, overlapping or not (plate probes compare).
@@ -221,6 +225,8 @@ func sync() -> void:
 	var steers := {}
 	var fresh := {}
 	VipMarker.marked_ids(incidents, _vips)
+	# Read once for the whole sync, not per passenger: every icon row asks it.
+	var built := NeedIcons.provided(sim)
 	for id in sim.passenger_ids():
 		var p := sim.get_passenger(id)
 		if not _visible(p):
@@ -240,7 +246,7 @@ func sync() -> void:
 		_prev[id] = _cur[id]
 		_cur[id] = now
 		steers[id] = steer
-		_turn(_nodes[id], p, _pose(_nodes[id], p))
+		_turn(_nodes[id], p, _pose(_nodes[id], p, built))
 		VipMarker.mark(_nodes[id], _vips.has(id))
 		_stages[id] = p.stage
 		_odometers[id] = p.odometer_mm
@@ -354,6 +360,8 @@ func draw() -> void:
 	var camera := get_viewport().get_camera_3d() if is_inside_tree() else null
 	var unit := NeedIcons.unit_of(get_viewport() if is_inside_tree() else null, camera)
 	var icons_shown := need_icons_toggle.is_shown() and NeedIcons.shown_at(camera)
+	if mood_overlay != null and mood_overlay.hides_need_icons():
+		icons_shown = false
 	for id in _nodes:
 		var node: Node3D = _nodes[id]
 		var before: Vector3 = _prev[id]
@@ -544,7 +552,7 @@ func _release(id: int) -> void:
 ## Sets the clip, dress, bubble and icons for this tick and returns the yaw
 ## the passenger faces on this tick (NAN where it faces its walk or keeps its
 ## turn).
-func _pose(node: Node3D, p: Passenger) -> float:
+func _pose(node: Node3D, p: Passenger, built: Dictionary) -> float:
 	var face := NAN
 	var clip := "idle"
 	var base := 1.0
@@ -686,7 +694,7 @@ func _pose(node: Node3D, p: Passenger) -> float:
 		BubbleDeclutter.rank_of(sim, p) if bubble_text != "" else BubbleDeclutter.NO_QUEUE
 	)
 	var wish := WishIconView.read(sim.shops, p)
-	NeedIcons.show_needs(node, NeedIcons.shown(p, wish[1] != WishTable.State.NONE))
+	NeedIcons.show_needs(node, NeedIcons.shown(p, wish[1] != WishTable.State.NONE, built))
 	WishIconView.show_wish(node, wish)
 	# A boarding-file waiter on its wait spot (FileWaiters) faces its way out,
 	# not back along its walk to the spot.

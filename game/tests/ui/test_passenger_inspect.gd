@@ -280,3 +280,49 @@ func test_b_while_inspecting_changes_the_setting_and_the_board_stays_aside() -> 
 	assert_bool(_board().visible).is_true()
 	assert_bool(_board().is_shown()).is_false()
 	assert_bool(panel.visible).is_false()
+
+
+## User ruling 2026-11-13 ("Passenger card only"): a desk, room or car-park card
+## leaves the list showing; only a passenger card makes it step aside (point 6).
+func test_a_built_item_card_leaves_the_departures_list_showing() -> void:
+	var built := _inspect.built_card
+	# In the tree, so its own member nodes are parented and freed with it.
+	var mode := BuildMode.new()
+	add_child(mode)
+	mode.set_process(false)
+	mode.grid = _world.sim.grid
+	mode.tool = BuildMode.Tool.NONE
+	_hud.build_mode = mode
+	built.build_mode = mode
+	built.selection.kind = BuiltSelection.Kind.OBJECT
+	built.selection.id = _world.sim.layout.passenger_entrances[0]
+	_hud.refresh()
+	print(
+		(
+			"item card: inspect %s, item %s, list visible %s"
+			% [_inspect.visible, built.name_text(), _list().is_visible_in_tree()]
+		)
+	)
+	# Control: the card is up, so a pass here is not an absent card.
+	assert_bool(_inspect.visible).is_true()
+	assert_str(built.name_text()).is_not_empty()
+	assert_bool(_list().is_visible_in_tree()).is_true()
+	# A passenger takes the card's place and the list steps aside.
+	_select()
+	assert_bool(_list().is_visible_in_tree()).is_false()
+	_hud.build_mode = null
+	built.build_mode = null
+	mode.free()
+
+
+## User ruling 2026-11-13 ("doors close 10:24"): the card shows the doors-close
+## time the Departures list shows, not the boarding time.
+func test_the_flight_line_gives_the_doors_close_time() -> void:
+	_select()
+	var doors := _world.flights.doors_close_tick(PassengerTestWorld.FLIGHT)
+	var boards := _world.passenger(_id).boarding_tick
+	var want := "doors close %s" % GameCalendar.clock_text(doors)
+	print("flight line '%s' (doors %d, boards %d)" % [_inspect.flight_text(), doors, boards])
+	assert_int(doors).is_equal(20)
+	assert_str(_inspect.flight_text()).contains(want)
+	assert_str(_inspect.flight_text()).not_contains("boards")

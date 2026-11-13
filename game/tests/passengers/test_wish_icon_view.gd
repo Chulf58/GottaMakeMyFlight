@@ -360,6 +360,8 @@ func test_a_bored_passenger_with_no_wish_keeps_the_hourglass() -> void:
 
 func test_a_hungry_wisher_shows_the_hunger_icon_then_the_bubble() -> void:
 	var rig := _rig_over([&"kiosk"], &"pharmacy")
+	# The hunger icon shows only where a cafe stands (NeedIcons.provided()).
+	NeedFacilityKit.add_landside_cafe(_world.grid)
 	var p := ShopTestLayout.airside_guest(_world, BoredomSim.MAX)
 	p.hunger = CafeSim.HUNGRY_AT
 	p.cafe_cooldown = 1000000
