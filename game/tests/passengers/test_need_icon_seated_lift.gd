@@ -98,10 +98,15 @@ func test_the_crown_follows_a_seated_row_up() -> void:
 	VipMarker.layout(standing, _bubble(standing), _camera, 0.001)
 	var crown := seated.get_node(VipMarker.SPRITE) as Sprite3D
 	var plain := standing.get_node(VipMarker.SPRITE) as Sprite3D
+	# The crown stands where the row does, over the seated head (decision
+	# need-icons-and-wish-bubbles-sit-a-fixed-screen-gap-above-the).
 	assert_vector(crown.position).is_equal_approx(
-		Vector3(0.0, NeedIcons.SEATED_LIFT_M, -NeedIcons.SEATED_BACK_M), Vector3.ONE * 0.0001
+		NeedIcons.head_centre(seated), Vector3.ONE * 0.0001
 	)
-	assert_vector(plain.position).is_equal(Vector3(0.0, NeedIcons.LIFT_M, 0.0))
+	assert_float(crown.position.z).is_equal_approx(-NeedIcons.SEATED_BACK_M, 0.0001)
+	assert_vector(plain.position).is_equal_approx(
+		NeedIcons.head_centre(standing), Vector3.ONE * 0.0001
+	)
 	seated.free()
 	standing.free()
 

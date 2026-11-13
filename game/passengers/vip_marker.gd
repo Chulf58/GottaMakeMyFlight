@@ -118,16 +118,12 @@ static func layout(node: Node3D, bubble: Label3D, camera: Camera3D, unit: float)
 	var alpha := NeedIcons.near_alpha(camera.global_position.distance_to(node.global_position))
 	crown.visible = alpha > 0.0
 	crown.modulate.a = alpha
-	var anchor := NeedIcons.head_anchor(node)
-	var lift_px := 0.0
-	if bubble.text != "" and bubble.visible:
-		anchor = bubble.position
-		var at := node.global_transform * bubble.position
-		var depth := (at - camera.global_position).dot(-camera.global_basis.z)
-		if depth > 0.0:
-			lift_px = NeedIcons.bubble_top_m(bubble) / (depth * unit) + NeedIcons.GAP_PX
-	lift_px += _row_px(node)
-	crown.position = anchor
+	# Where the row stands (the head gap over the head, or on the bubble), so
+	# the crown stacks on the row (decision need-icons-and-wish-bubbles-sit-a-
+	# fixed-screen-gap-above-the).
+	var at := NeedIcons.row_anchor(node, bubble, camera, unit)
+	var lift_px: float = at[1] + _row_px(node)
+	crown.position = at[0]
 	crown.pixel_size = CROWN_PX * unit / SIZE
 	crown.offset = Vector2(0.0, SIZE / 2.0 + lift_px * SIZE / CROWN_PX)
 

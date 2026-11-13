@@ -97,20 +97,24 @@ const HEAD_TOP_M := 1.7
 const SEATED_HEAD_TOP_M := 1.46
 const RECLINE_HEAD_TOP_M := 1.40
 ## The bone a body's head top is read off, and how far the top of the head
-## stands over it (the head top the need_icon_near_camera probe measured).
-## The bone itself moves with the body's clip: standing it stands 1.68 m up
-## on a female body and 1.81 m on a male one (PassengerLooks' bodies of one
-## gender share one skeleton), walking 1.65 and 1.72 m, about 0.1 m further
-## forward, and seated 1.28 and 1.34 m (test_need_icon_head_gap.gd), so no
-## one height per pose fits every body.
+## stands over it. The bone moves with the body's clip: standing it stands
+## 1.68 m up on a female body and 1.81 m on a male one (PassengerLooks'
+## bodies of one gender share one skeleton), walking 1.65 and 1.72 m, about
+## 0.1 m further forward, and seated 1.28 and 1.34 m
+## (test_need_icon_head_gap.gd), so no one height per pose fits every body.
 const HEAD_BONE := "Head"
-const HEAD_OVER_BONE_M := 0.12
+const HEAD_OVER_BONE_M := 0.27
 ## The head drawn as a ball HEAD_RADIUS_M round a centre that far under
-## head_top(): its top on screen is the centre moved HEAD_RADIUS_M along the
-## camera's up, at every angle. Seen from the 70 degree step that is the back
-## of the head, above where head_top() itself projects; seen from 38 degrees
-## it is near the crown.
-const HEAD_RADIUS_M := 0.12
+## head_top() (0.07 m over the bone): its top on screen is the centre moved
+## HEAD_RADIUS_M along the camera's up, at every angle. Fitted to the twelve
+## bodies' meshes, hair and buns included, in the rest pose: the furthest any
+## vertex reaches from the Head bone along the camera's up, over 24 yaws, is
+## 0.240 m at the 38 degree step, 0.226 m at 54 and 0.208 m at 70 (female
+## character 11's bun and male character 02's hair; the plainest heads reach
+## 0.165 m and 0.119 m). The ball reaches 0.255, 0.241 and 0.224 m, so the
+## row clears the tallest head by HEAD_GAP_PX and a lower one by up to about
+## 11 px more at 10 m.
+const HEAD_RADIUS_M := 0.20
 ## Screen pixels between the top of the head as drawn and the bottom of the
 ## icon row and wish bubble (decision need-icons-and-wish-bubbles-sit-a-fixed-
 ## screen-gap-above-the): the same at every angle step, zoom and pose.

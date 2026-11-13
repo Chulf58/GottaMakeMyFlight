@@ -6,24 +6,31 @@ extends GdUnitTestSuite
 ## a count badge's chip keeps clear of the heads in a standing crowd (decision
 ## need-icons-and-wish-bubbles-sit-a-fixed-screen-gap-above-the, board
 ## b679fd1d). Measured on the real PassengerViews from the real Head bone, not
-## from NeedIcons' constants: the head is taken as a ball HEAD_UP_M round the
-## bone (the head top the need_icon_near_camera probe measured, 0.12 m over
-## the bone), so its top on screen is the bone moved HEAD_UP_M along the
-## camera's up. Before the ruling a seated row stood about 50 px over the head
-## at 38 degrees, while a standing one at 70 degrees touched it. NeedIcons
-## reads the same bone now, so this checks the projection and the drawn
-## offsets; the windowed plates (game/spike/icon_head_gap_plates_probe.gd)
-## check the head as drawn.
+## from NeedIcons' constants: the top of the tallest head on screen is the
+## bone moved REACH_M along the camera's up (the furthest any of the twelve
+## bodies' head or hair vertices reach from the bone that way, over 24 yaws,
+## in the rest pose). Before the ruling a seated row stood about 50 px over
+## the head at 38 degrees, while a standing one at 70 degrees touched it.
+## NeedIcons reads the same bone, so test_a_rest_pose_row_clears_the_drawn_
+## mesh_top checks against the body's mesh instead; the windowed plates
+## (game/spike/icon_head_gap_plates_probe.gd) check the head as drawn.
 
 const TOILET := NeedIcons.Need.TOILET
-const HEAD_UP_M := 0.12
+## Pitch (degrees) -> the tallest head's reach over its Head bone along the
+## camera's up, metres.
+const REACH_M := {70.0: 0.208, 38.0: 0.240}
+## Mesh vertices this high over the node's root count as the head.
+const HEAD_FROM_M := 1.4
+## How much more than HEAD_GAP_PX a lower head may leave under the row at
+## DISTANCE_M (the plainest head reaches 0.09 to 0.1 m less than the tallest).
+const MESH_SLACK_PX := 12.0
 ## The camera's distance from the head, and the two angle steps measured.
 const DISTANCE_M := 12.0
 const PITCHES: Array[float] = [70.0, 38.0]
-## The gap every row and wish bubble keeps over the head top, in screen
-## pixels, and how far off it a measurement may be (the bone moves a little
-## between the layout and the reading, and the ball is a model of the head).
-const GAP_PX := 6.0
+## The gap every row and wish bubble keeps over the tallest head's top, in
+## screen pixels (NeedIcons.HEAD_GAP_PX plus the ball's 0.015 m margin over
+## REACH_M), and how far off it a measurement may be.
+const GAP_PX := 7.5
 const TOLERANCE_PX := 3.0
 ## Ticks into the stand-up sampled (PassengerSim.STAND_UP_TICKS is the clip).
 const RISE_TICKS: Array[int] = [0, 4, 8, 12, 16, 20, 24]
@@ -86,6 +93,72 @@ func test_a_standing_row_and_wish_bubble_keep_the_gap_at_both_angles(
 	_check_gaps(node, tag)
 	WishIconView.show_wish(node, [&"kiosk", WishTable.State.WANTED])
 	_check_gaps(node, tag + "+wish", true)
+
+
+## Against the body's mesh, not its bones: before any frame poses it the body
+## stands in its rest pose (the control: its Head bone at the skeleton's rest
+## height), where the mesh's vertices are where they are drawn. The row's
+## bottom stands HEAD_GAP_PX or more over the highest drawn vertex and never
+## far over it, so a wrong bone picked by NeedIcons.find_head() fails here.
+func test_a_rest_pose_row_clears_the_drawn_mesh_top(
+	variant: int, _test_parameters := [[0], [1]]
+) -> void:
+	_world = _facility_world()
+	_open_views()
+	var id := _world.sim.spawn_now(PassengerTestWorld.FLIGHT)
+	_world.passenger(id).variant = variant
+	ToiletTestLayout.calm(_world.passenger(id))
+	_world.step()
+	_views.sync()
+	var node := _views.node_for(id)
+	var skeleton := node.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
+	var bone := skeleton.find_bone(NeedIcons.HEAD_BONE)
+	assert_vector(skeleton.get_bone_global_pose(bone).origin).is_equal_approx(
+		skeleton.get_bone_global_rest(bone).origin, Vector3.ONE * 0.001
+	)
+	var needs: Array[NeedIcons.Need] = [TOILET]
+	NeedIcons.show_needs(node, needs)
+	(node.get_node("Bubble") as Label3D).text = ""
+	for pitch in PITCHES:
+		_aim(_head_bone(node), pitch)
+		_views.draw()
+		_views.draw()
+		var row := _bottom_y(node.get_node(NeedIcons.SPRITES[0]), false)
+		var gap := _mesh_top_y(node) - row
+		print("rest pose variant %d at %.0f degrees: mesh gap %.1f px" % [variant, pitch, gap])
+		(
+			assert_float(gap)
+			. override_failure_message("variant %d at %.0f: gap %.1f px" % [variant, pitch, gap])
+			. is_between(NeedIcons.HEAD_GAP_PX - 0.5, NeedIcons.HEAD_GAP_PX + MESH_SLACK_PX)
+		)
+
+
+## A VIP's crown stands GAP_PX over its icon row at both angles, not over the
+## old fixed lift (decision need-icons-and-wish-bubbles-sit-a-fixed-screen-gap-
+## above-the).
+func test_a_crown_stacks_over_the_row_at_both_angles() -> void:
+	_world = _facility_world()
+	_open_views()
+	var id := _world.sim.spawn_now(PassengerTestWorld.FLIGHT)
+	ToiletTestLayout.calm(_world.passenger(id))
+	_world.step()
+	_views.sync()
+	var node := _views.node_for(id)
+	VipMarker.mark(node, true)
+	var needs: Array[NeedIcons.Need] = [TOILET]
+	NeedIcons.show_needs(node, needs)
+	(node.get_node("Bubble") as Label3D).text = ""
+	var crown := node.get_node(VipMarker.SPRITE) as Sprite3D
+	for pitch in PITCHES:
+		_aim(_head_bone(node), pitch)
+		_views.draw()
+		_views.draw()
+		var row_top := _bottom_y(node.get_node(NeedIcons.SPRITES[0]), false) - NeedIcons.ICON_PX
+		assert_bool(crown.visible).is_true()
+		var lift := (crown.offset.y - VipMarker.SIZE / 2.0) * VipMarker.CROWN_PX / VipMarker.SIZE
+		var crown_bottom := _camera.unproject_position(crown.global_position).y - lift
+		print("crown at %.0f degrees: %.1f px over the row" % [pitch, row_top - crown_bottom])
+		assert_float(row_top - crown_bottom).is_equal_approx(NeedIcons.GAP_PX, 0.5)
 
 
 func test_a_seated_row_keeps_the_gap_at_both_angles(
@@ -189,7 +262,7 @@ func test_a_badge_and_its_chip_keep_clear_of_a_standing_queue() -> void:
 			. override_failure_message("no count badge at %.0f degrees" % pitch)
 			. is_greater(0)
 		)
-		var heads := _head_rects()
+		var heads := _head_rects(pitch)
 		for b: Dictionary in badges:
 			var rect: Rect2 = b["rect"]
 			# Where the badge wants to be before any dodge: over its anchor's
@@ -293,7 +366,7 @@ func _check_gaps(node: Node3D, tag: String, wish := false, strict := true) -> Di
 		_aim(_head_bone(node), pitch)
 		_views.draw()
 		_views.draw()
-		var top := _head_top_y(node)
+		var top := _head_top_y(node, pitch)
 		var gaps: Array[float] = [top - _bottom_y(node.get_node(NeedIcons.SPRITES[0]), false)]
 		if wish:
 			gaps.append(top - _bottom_y(node.get_node(WishIconView.SPRITE), true))
@@ -315,11 +388,26 @@ func _check_gaps(node: Node3D, tag: String, wish := false, strict := true) -> Di
 	return out
 
 
-## The head's top on screen (y, pixels): the Head bone moved HEAD_UP_M along
-## the camera's up.
-func _head_top_y(node: Node3D) -> float:
+## The tallest head's top on screen (y, pixels) at `pitch`: the Head bone
+## moved REACH_M along the camera's up.
+func _head_top_y(node: Node3D, pitch: float) -> float:
 	var head := _head_bone(node)
-	return _camera.unproject_position(head + _camera.global_basis.y * HEAD_UP_M).y
+	return _camera.unproject_position(head + _camera.global_basis.y * float(REACH_M[pitch])).y
+
+
+## The top on screen (y, pixels) of `node`'s body mesh as drawn in the rest
+## pose: the highest projected vertex HEAD_FROM_M or more over the root. Read
+## off the mesh, not the skeleton.
+func _mesh_top_y(node: Node3D) -> float:
+	var mesh := PassengerLooks.body_mesh(node)
+	var top := INF
+	for s in mesh.mesh.get_surface_count():
+		var verts: PackedVector3Array = mesh.mesh.surface_get_arrays(s)[Mesh.ARRAY_VERTEX]
+		for v in verts:
+			var at := mesh.global_transform * v
+			if at.y - node.global_position.y >= HEAD_FROM_M:
+				top = minf(top, _camera.unproject_position(at).y)
+	return top
 
 
 ## The bottom edge on screen (y, pixels) of a need icon sprite, or of the wish
@@ -333,17 +421,18 @@ func _bottom_y(sprite: Sprite3D, wish: bool) -> float:
 	return _camera.unproject_position(sprite.global_position).y - lift
 
 
-## Passenger id -> its head's screen rect: a square HEAD_UP_M * 2 across from
-## the head's top on screen down.
-func _head_rects() -> Dictionary:
+## Passenger id -> its head's screen rect at `pitch`: a square twice REACH_M
+## across from the tallest head's top on screen down.
+func _head_rects(pitch: float) -> Dictionary:
 	var out := {}
+	var reach: float = REACH_M[pitch]
 	for id in _world.sim.passenger_ids():
 		var node := _views.node_for(id)
 		if node == null:
 			continue
 		var head := _head_bone(node)
-		var top := _camera.unproject_position(head + _camera.global_basis.y * HEAD_UP_M)
-		var side := _camera.unproject_position(head + _camera.global_basis.x * HEAD_UP_M)
+		var top := _camera.unproject_position(head + _camera.global_basis.y * reach)
+		var side := _camera.unproject_position(head + _camera.global_basis.x * reach)
 		var wide := 2.0 * side.distance_to(_camera.unproject_position(head))
 		out[id] = Rect2(top - Vector2(wide / 2.0, 0.0), Vector2.ONE * wide)
 	return out

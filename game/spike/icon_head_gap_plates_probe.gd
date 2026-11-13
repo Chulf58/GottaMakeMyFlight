@@ -6,19 +6,20 @@ extends SceneTree
 ## crowd and steps the clock until SEATED_WANT passengers sit at the gate,
 ## gives every passenger the toilet need, every other one hunger and one in
 ## three boredom, then pauses the clock and plates:
-##   seated, standing, rising (a seated passenger 12 ticks into its stand-up)
-##   and wish (a wish bubble shown on a standing passenger), each alone with
-##   clustering off at SUBJECT_M;
+##   seated, standing, rising (a seated passenger 12 ticks into its stand-up),
+##   wish (a wish bubble shown on a standing passenger) and vip (a crowned
+##   standing passenger with its row), each alone with clustering off at
+##   SUBJECT_M, the closest zoom at which the icons are not faded
+##   (NeedIcons.NEAR_FULL_M is 9 m);
 ##   crowd (the seated gate rows) and queue (QUEUE passengers set standing one
-##   cell apart in a line) with clustering on at CROWD_M.
+##   cell apart in a line) with clustering on at CROWD_M and QUEUE_M.
 ## The nap pod plates come from nap_pod_icon_plates_probe.gd (--steps=both).
 ##
-## For a subject it prints, in viewport pixels: the head top (the Head bone
-## moved HEAD_UP_M along the camera's up), the row's bottom edge as laid out,
-## the model gap between them, and the MEASURED gap: in the plate and a twin
-## with the subject hidden, the clear rows between the icon and the head in a
-## band of columns over the head. For a badge plate it prints every badge rect
-## and the heads (squares from the bone-measured head top) it overlaps.
+## For a subject it prints, in output pixels: the tallest head's top (the Head
+## bone moved HEAD_UP_M along the camera's up), the row's bottom edge as laid
+## out and the gap between them, the head's and the body's height on screen,
+## and for the vip the crown's height over the row. For a badge plate it prints
+## every badge rect and the heads (squares from that head top) it overlaps.
 ## Proofs before a plate is saved: the subject's feet, head top and row anchor
 ## project inside the frame by MARGIN_PX, a ray from the camera to the head is
 ## not blocked short of it, and the subject-hidden twin differs by
@@ -42,11 +43,14 @@ const ARRIVE_LIMIT_TICKS := 6000
 const FADE_LIMIT_FRAMES := 120
 const MARGIN_PX := 12.0
 const STEPS: Array[int] = [TycoonCamera.AngleStep.TOP_DOWN, TycoonCamera.AngleStep.LOW]
-const SUBJECT_M := 12.0
+const SUBJECT_M := 9.5
+## The seated rows cluster at 70 degrees only from about 12 m (NeedCluster.ADMIT_PX).
 const CROWD_M := 14.0
+const QUEUE_M := 11.0
 const SUBJECT_YAW := 0.35
-const HEAD_UP_M := 0.12
-const BAND_PX := 2
+## The tallest head's reach over its Head bone along the camera's up (the 38
+## degree figure NeedIcons.HEAD_RADIUS_M was fitted to).
+const HEAD_UP_M := 0.24
 const MIN_SUBJECT_PX := 200
 const QUEUE := 7
 const CROP_PX := 200
@@ -206,6 +210,9 @@ func _plates() -> void:
 		await _subject("rising", riser, step)
 		WishIconView.show_wish(wish, [&"kiosk", WishTable.State.WANTED])
 		await _subject("wish", wisher, step)
+		VipMarker.mark(_views.node_for(stander), true)
+		await _subject("vip", stander, step)
+		VipMarker.mark(_views.node_for(stander), false)
 	_views.cluster_needs = true
 	for step in STEPS:
 		_rig.angle_step = step as TycoonCamera.AngleStep
@@ -216,7 +223,7 @@ func _plates() -> void:
 		return
 	for step in STEPS:
 		_rig.angle_step = step as TycoonCamera.AngleStep
-		await _aim(line, CROWD_M, 0.0)
+		await _aim(line, QUEUE_M, 0.0)
 		await _badge_plate("queue", step)
 
 
@@ -297,13 +304,31 @@ func _subject(what: String, id: int, step: int) -> void:
 	var around := Rect2i(Vector2i((top * k) - Vector2.ONE * CROP_PX / 2.0), Vector2i.ONE * CROP_PX)
 	around = around.intersection(Rect2i(Vector2i.ZERO, img.get_size()))
 	var changed := _diff(img, bare, around)
-	var measured := _measured_gap(img, bare, int(top.x * k), int((bottom - px / 2.0) * k))
+	var up := _cam.global_basis.y * 0.12
+	var head_px := (
+		(_cam.unproject_position(head - up).y - _cam.unproject_position(head + up).y) * to_output
+	)
+	var body_px := _cam.unproject_position(node.global_position).y * to_output - top.y
+	var crown := node.get_node(VipMarker.SPRITE) as Sprite3D
+	var crown_gap := NAN
+	if crown.visible:
+		var crown_lift := (
+			(crown.offset.y - VipMarker.SIZE / 2.0) * VipMarker.CROWN_PX / VipMarker.SIZE
+		)
+		var crown_bottom := (
+			_cam.unproject_position(crown.global_position).y * to_output - crown_lift
+		)
+		var wish_shown := (node.get_node(WishIconView.SPRITE) as Sprite3D).visible
+		var row_h := WishIconView.WISH_PX if wish_shown else NeedIcons.ICON_PX
+		crown_gap = bottom - row_h - crown_bottom
+	elif what == "vip":
+		_invalid("%s: the crown is not drawn" % tag)
 	print(
 		(
 			(
 				"PLATE %s id=%d pitch=%.0f cam_dist_m=%.2f head_top_px=%s row_bottom_y=%.1f"
-				+ " model_gap_px=%.1f measured_gap_px=%.1f subject_diff_px=%d in_frame=%s"
-				+ " stage=%s rise=%s"
+				+ " gap_to_tallest_head_px=%.1f head_px=%.0f body_px=%.0f crown_over_row_px=%.1f"
+				+ " subject_diff_px=%d in_frame=%s stage=%s rise=%s"
 			)
 			% [
 				tag,
@@ -313,7 +338,9 @@ func _subject(what: String, id: int, step: int) -> void:
 				top.round(),
 				bottom,
 				top.y - bottom,
-				measured / k if measured >= 0 else -1.0,
+				head_px,
+				body_px,
+				crown_gap,
 				changed,
 				ok,
 				Passenger.Stage.keys()[_sim.get_passenger(id).stage],
@@ -412,29 +439,6 @@ func _in_frame(point: Vector3, label: String) -> bool:
 	var inside := Rect2(Vector2.ONE * MARGIN_PX, size - Vector2.ONE * MARGIN_PX * 2.0).has_point(at)
 	print("FRAME %s at=%s inside=%s" % [label, at.round(), inside])
 	return inside and not _cam.is_position_behind(point)
-
-
-## Clear rows between the subject's icon and its head: from `y` (inside the
-## icon) down past the icon's pixels, then the rows where the plate and the
-## subject-hidden twin agree in the band round `x`, until they differ again
-## (the head). -1 when the band never reaches the head.
-func _measured_gap(full: Image, bare: Image, x: int, y: int) -> int:
-	var h := full.get_height()
-	while y < h and _band(full, bare, x, y):
-		y += 1
-	var start := y
-	while y < h and not _band(full, bare, x, y):
-		y += 1
-	return y - start if y < h else -1
-
-
-func _band(a: Image, b: Image, x: int, y: int) -> bool:
-	for dx in range(-BAND_PX, BAND_PX + 1):
-		var c := a.get_pixel(x + dx, y)
-		var d := b.get_pixel(x + dx, y)
-		if absf(c.r - d.r) + absf(c.g - d.g) + absf(c.b - d.b) > 0.08:
-			return true
-	return false
 
 
 func _diff(a: Image, b: Image, area: Rect2i) -> int:
