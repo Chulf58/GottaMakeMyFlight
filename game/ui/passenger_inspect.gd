@@ -243,6 +243,12 @@ func marked_text() -> String:
 	return _marked_text
 
 
+## True while a passenger (not a built item) is selected: the card that makes
+## the departures list step aside.
+func shows_passenger() -> bool:
+	return _selected() != null
+
+
 func _selected() -> Passenger:
 	if sim == null or views == null or views.selected_id == 0:
 		return null
@@ -256,15 +262,15 @@ func _vip_line(p: Passenger) -> String:
 	return IncidentCopy.vip_line(plan, clock.tick) if not plan.is_empty() else ""
 
 
-## "Flight Sunhop Lisbon, boards 10:40" (FlightResultPanel.title_for).
+## "Flight Sunhop Lisbon, doors close 10:40": the time the Departures list shows
+## (user ruling 2026-11-13). Once the flight is gone from the schedule there is
+## no time to give, so only the flight shows.
 func _flight_line(p: Passenger) -> String:
-	return (
-		"Flight %s, boards %s"
-		% [
-			FlightResultPanel.title_for(flights, p.flight_id),
-			GameCalendar.clock_text(p.boarding_tick)
-		]
-	)
+	var title := FlightResultPanel.title_for(flights, p.flight_id)
+	var doors := flights.doors_close_tick(p.flight_id) if flights != null else -1
+	if doors < 0:
+		return "Flight %s" % title
+	return "Flight %s, doors close %s" % [title, GameCalendar.clock_text(doors)]
 
 
 func _age(tick: int) -> String:
