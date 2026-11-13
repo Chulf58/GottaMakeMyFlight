@@ -4,14 +4,19 @@ extends Node3D
 ## clearing-alert-cards-money-hover-departu, point 5; Two Point Hospital and
 ## Parkitect have the same toggled overlays): a key tints the floor under the
 ## passengers from green (fine) through yellow to red (queuing long, unhappy
-## or stuck), by MoodTint's mapping, with a small legend while it is on.
+## or stuck), by MoodTint's mapping, with a small legend while it is on. Four
+## buttons on the legend card pick the mode: Mood, or Hunger, Toilet or Boredom,
+## which tint the same patches green, orange or red for that need (decision
+## crowd-need-display-mood-overlay-gains-hunger-toilet-and-bore). While a need
+## mode is on PassengerViews hides every need icon (hides_need_icons).
 ## Nothing is tinted where no passenger stands. View only: it reads the
 ## PassengerSim and changes nothing in it, and it is never saved with a game.
 ##
 ## It is an optional piece with an on/off setting, so the HUD can be rolled
 ## back if it turns into information overload: a toggle button (always
 ## visible) and the M key show and hide it, and the choice is kept in the HUD
-## settings file under "mood_overlay" (HudFlagSetting). Off is the default:
+## settings file under "mood_overlay" (HudFlagSetting), the last mode under
+## "mood_overlay_mode". Off is the default:
 ## the overlay is a view the player asks for. M is free of the build tool keys
 ## 1 to 0, R, Z, B, Escape, the speed keys (Space, Shift+1/2/3), the camera
 ## keys (WASD, Q, E, Home) and the save keys (F5, F8).
@@ -26,7 +31,16 @@ extends Node3D
 const ACTION := &"toggle_mood_overlay"
 const SETTING_KEY := "mood_overlay"
 const WHO := "MoodOverlay"
-const LEGEND_TEXT := "green fine, red waiting long or unhappy"
+const SETTING_MODE_KEY := "mood_overlay_mode"
+## The legend line per mode, indexed by MoodTint.Mode.
+const LEGEND_TEXTS: Array[String] = [
+	"green fine, red waiting long or unhappy",
+	"green fed, orange hungry, red starving",
+	"green fine, orange needs the toilet, red desperate",
+	"green content, orange bored, red very bored",
+]
+## The mode buttons' captions, indexed by MoodTint.Mode; the node is "Mode" + it.
+const MODE_NAMES: Array[String] = ["Mood", "Hunger", "Toilet", "Boredom"]
 ## The tint lies this far over the grid's floor height, above the floor tiles.
 const LIFT_M := 0.06
 ## The tint is redrawn when the sim has moved on this many ticks (a quarter
@@ -34,10 +48,11 @@ const LIFT_M := 0.06
 const REFRESH_TICKS := 5
 
 @export var sim: PassengerSim
-## Where the on/off choice is kept; tests point it at a per-process file.
+## Where the on/off choice and the mode are kept; tests point it at a per-process file.
 var settings_path := HudFlagSetting.PATH
 
 var _shown := false
+var _mode := MoodTint.Mode.MOOD
 var _cells := {}
 var _last_tick := -1
 ## True while the grid's edits have not been drawn yet.
@@ -52,6 +67,7 @@ var _toggle := Button.new()
 var _legend := Label.new()
 ## The legend's card: bare text is unreadable over the dark ground at the top left.
 var _legend_card := PanelContainer.new()
+var _mode_buttons: Array[Button] = []
 
 
 func _init() -> void:
@@ -116,6 +132,30 @@ func set_shown(value: bool) -> void:
 	refresh()
 
 
+## The mode the tint is drawn in (MoodTint.Mode).
+func mode() -> MoodTint.Mode:
+	return _mode
+
+
+## True while a Hunger, Toilet or Boredom mode is on: PassengerViews hides every
+## need icon then (the tint shows the need instead). Plain Mood mode and an
+## overlay that is off leave the icons alone.
+func hides_need_icons() -> bool:
+	return _shown and MoodTint.is_need_mode(_mode)
+
+
+## Picks what the tint shows and keeps the choice. The mode buttons come through
+## here; it works with the overlay off too, so M reopens at the last mode.
+func set_mode(value: MoodTint.Mode) -> void:
+	if value == _mode:
+		return
+	_mode = value
+	_apply_mode()
+	if _active:
+		HudFlagSetting.save_int(settings_path, SETTING_MODE_KEY, _mode, WHO)
+	refresh()
+
+
 ## Cell -> badness of the tint now drawn: empty while the overlay is off.
 func tinted_cells() -> Dictionary:
 	return _cells
@@ -127,7 +167,7 @@ func refresh() -> void:
 		return
 	_dirty = false
 	_last_tick = sim.tick
-	_cells = MoodTint.cells_for(sim)
+	_cells = MoodTint.cells_for(sim, _mode)
 	_redraw()
 
 
@@ -152,19 +192,45 @@ func _build_controls() -> Control:
 	_toggle.name = "MoodToggle"
 	_toggle.text = "Mood (M)"
 	LeftColumn.size_toggle(_toggle)
+	_toggle.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	_toggle.toggle_mode = true
 	_toggle.focus_mode = Control.FOCUS_NONE
 	row.add_child(_toggle)
 	_legend.name = "MoodLegend"
-	_legend.text = LEGEND_TEXT
+	_legend.text = LEGEND_TEXTS[_mode]
 	_legend.theme_type_variation = &"HudHint"
 	_legend.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_legend.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var card_body := VBoxContainer.new()
+	card_body.add_theme_constant_override("separation", 4)
+	card_body.add_child(_legend)
+	card_body.add_child(_build_mode_buttons())
 	_legend_card.name = "MoodLegendCard"
 	_legend_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_legend_card.add_child(_legend)
+	_legend_card.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	_legend_card.add_child(card_body)
 	row.add_child(_legend_card)
 	return row
+
+
+## The small Mood, Hunger, Toilet and Boredom buttons under the legend line.
+func _build_mode_buttons() -> Control:
+	var buttons := HBoxContainer.new()
+	buttons.name = "MoodModes"
+	buttons.add_theme_constant_override("separation", 4)
+	var group := ButtonGroup.new()
+	for mode in MODE_NAMES.size():
+		var button := Button.new()
+		button.name = "Mode" + MODE_NAMES[mode]
+		button.text = MODE_NAMES[mode]
+		button.toggle_mode = true
+		button.button_group = group
+		button.focus_mode = Control.FOCUS_NONE
+		button.custom_minimum_size = Vector2(0, HudLayout.CHIP_H)
+		button.set_pressed_no_signal(mode == _mode)
+		button.toggled.connect(_on_mode_toggled.bind(mode))
+		buttons.add_child(button)
+		_mode_buttons.append(button)
+	return buttons
 
 
 ## Takes the saved choice and starts watching the grid once a sim with a grid
@@ -176,6 +242,9 @@ func _try_activate() -> void:
 	_active = true
 	_watch(sim.grid)
 	_shown = HudFlagSetting.load_flag(settings_path, SETTING_KEY, false, WHO)
+	var saved := HudFlagSetting.load_int(settings_path, SETTING_MODE_KEY, MoodTint.Mode.MOOD, WHO)
+	_mode = saved if saved in MoodTint.Mode.values() else MoodTint.Mode.MOOD
+	_apply_mode()
 	_apply_shown()
 	refresh()
 
@@ -193,6 +262,18 @@ func _watch(grid: BuildGrid) -> void:
 
 func _on_graph_changed(_cells: Array[Vector2i]) -> void:
 	_dirty = true
+
+
+## A mode button went down (its group lets the one before it up, which is ignored).
+func _on_mode_toggled(on: bool, mode: MoodTint.Mode) -> void:
+	if on:
+		set_mode(mode)
+
+
+func _apply_mode() -> void:
+	_legend.text = LEGEND_TEXTS[_mode]
+	for i in _mode_buttons.size():
+		_mode_buttons[i].set_pressed_no_signal(i == _mode)
 
 
 func _apply_shown() -> void:
@@ -215,5 +296,5 @@ func _redraw() -> void:
 		multimesh.set_instance_transform(
 			i, Transform3D(Basis.IDENTITY, sim.grid.cell_to_world(cell) + lift)
 		)
-		multimesh.set_instance_color(i, MoodTint.color_of(_cells[cell]))
+		multimesh.set_instance_color(i, MoodTint.color_of(_cells[cell], _mode))
 		i += 1

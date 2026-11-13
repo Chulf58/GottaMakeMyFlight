@@ -43,6 +43,10 @@ const BODY_PICK_RANGE_M := 1000.0
 ## (VipMarker).
 @export var incidents: IncidentDirector
 
+## When set, its Hunger, Toilet and Boredom modes hide every need icon (the
+## tinted floor shows the need instead).
+@export var mood_overlay: MoodOverlay
+
 ## Moves with the selected passenger, for a camera to follow.
 var follow_anchor := Node3D.new()
 ## False shows every speech bubble, overlapping or not (plate probes compare).
@@ -356,6 +360,8 @@ func draw() -> void:
 	var camera := get_viewport().get_camera_3d() if is_inside_tree() else null
 	var unit := NeedIcons.unit_of(get_viewport() if is_inside_tree() else null, camera)
 	var icons_shown := need_icons_toggle.is_shown() and NeedIcons.shown_at(camera)
+	if mood_overlay != null and mood_overlay.hides_need_icons():
+		icons_shown = false
 	for id in _nodes:
 		var node: Node3D = _nodes[id]
 		var before: Vector3 = _prev[id]
