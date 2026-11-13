@@ -40,6 +40,16 @@ extends RefCounted
 ## drawn by PassengerViews); layout()'s mask hides the members' own icons.
 
 enum Need { HUNGER, TOILET, BOREDOM }
+## Where a passenger standing up came from (node meta &"icon_rise", set by
+## PassengerViews._pose() while its RISE_CLIP plays, board 3a5e1d0d). Its
+## anchor and head top go from the seat's (or the pod's) to the standing ones
+## by rise_weight(). Measured through the stand_up clip from a gate chair
+## (game/spike/standup_icon_anchor_probe.gd): the Head bone goes from 1.28 m
+## up and 0.55 m behind the root to 1.68 m up and 0.06 m behind it, its
+## height within 0.01 m of a smoothstep of the clip's progress at every
+## twelfth. The standing anchor, taken at once, sat 25 px under the head top
+## seen from the front at 10 m.
+enum Rise { NONE, SEAT, RECLINE }
 
 const SIZE := 128
 const OUTLINE_PX := 9.0
@@ -80,6 +90,8 @@ const RECLINE_BACK_M := 0.55
 const HEAD_TOP_M := 1.7
 const SEATED_HEAD_TOP_M := 1.46
 const RECLINE_HEAD_TOP_M := 1.40
+## The clip a passenger stands up from a seat in (Rise, rise_weight()).
+const RISE_CLIP := "stand_up"
 ## A passenger's icons fade out as the camera comes within NEAR_FULL_M of it and
 ## are gone at NEAR_HIDDEN_M. Icons draw with no depth test at a 2.0 m anchor, so
 ## near the lens one passenger's row lands on another's face. Read off the
@@ -282,24 +294,55 @@ static func layout(
 ## The anchor over a passenger node's head, in the node's space: LIFT_M over
 ## the root, SEATED_LIFT_M high and SEATED_BACK_M behind it while the node is
 ## seated, or RECLINE_LIFT_M high and RECLINE_BACK_M behind it while it is
-## reclined in a nap pod. The VIP crown anchors here too.
+## reclined in a nap pod, and between the two while it stands up (Rise). The
+## VIP crown anchors here too.
 static func head_anchor(node: Node3D) -> Vector3:
-	if node.get_meta(&"icon_reclined", false):
-		return Vector3(0.0, RECLINE_LIFT_M, -RECLINE_BACK_M)
-	if node.get_meta(&"icon_seated", false):
-		return Vector3(0.0, SEATED_LIFT_M, -SEATED_BACK_M)
-	return Vector3(0.0, LIFT_M, 0.0)
+	return _posed(
+		node,
+		Vector3(0.0, LIFT_M, 0.0),
+		Vector3(0.0, SEATED_LIFT_M, -SEATED_BACK_M),
+		Vector3(0.0, RECLINE_LIFT_M, -RECLINE_BACK_M)
+	)
 
 
 ## The top of a node's head, in the node's space: standing over the root, or
 ## SEATED_BACK_M or RECLINE_BACK_M behind it while seated or reclined, as
-## head_anchor() places the row over it.
+## head_anchor() places the row over it (standing up included).
 static func head_top(node: Node3D) -> Vector3:
+	return _posed(
+		node,
+		Vector3(0.0, HEAD_TOP_M, 0.0),
+		Vector3(0.0, SEATED_HEAD_TOP_M, -SEATED_BACK_M),
+		Vector3(0.0, RECLINE_HEAD_TOP_M, -RECLINE_BACK_M)
+	)
+
+
+## `standing`, `seated` or `reclined` as the node is posed now, and while it
+## stands up (meta &"icon_rise") the seat's or the pod's value moved toward
+## `standing` by rise_weight().
+static func _posed(node: Node3D, standing: Vector3, seated: Vector3, reclined: Vector3) -> Vector3:
 	if node.get_meta(&"icon_reclined", false):
-		return Vector3(0.0, RECLINE_HEAD_TOP_M, -RECLINE_BACK_M)
+		return reclined
 	if node.get_meta(&"icon_seated", false):
-		return Vector3(0.0, SEATED_HEAD_TOP_M, -SEATED_BACK_M)
-	return Vector3(0.0, HEAD_TOP_M, 0.0)
+		return seated
+	match node.get_meta(&"icon_rise", Rise.NONE):
+		Rise.SEAT:
+			return seated.lerp(standing, rise_weight(node))
+		Rise.RECLINE:
+			return reclined.lerp(standing, rise_weight(node))
+	return standing
+
+
+## How far (0 to 1) a node standing up has risen: a smoothstep of its
+## RISE_CLIP's progress (the measured head path), read off its AnimationPlayer
+## each frame so the icons move with the drawn body, not tick by tick; 1 once
+## the clip has ended.
+static func rise_weight(node: Node3D) -> float:
+	var player := node.get_node("AnimationPlayer") as AnimationPlayer
+	if player.current_animation != RISE_CLIP or player.current_animation_length <= 0.0:
+		return 1.0
+	var t := player.current_animation_position / player.current_animation_length
+	return smoothstep(0.0, 1.0, t)
 
 
 ## Where a node's icon row stands this frame: [the anchor in the node's space
