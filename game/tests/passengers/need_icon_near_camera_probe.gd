@@ -2,8 +2,10 @@ extends SceneTree
 ## Windowed plates of need icons over a passenger close to the camera (board
 ## 73e15dd7 part 6: "at close zoom a need icon sits on the head of a passenger
 ## right under the camera"). The room label at close zoom (part 5) is already
-## plated by game/spike/room_label_zoom_plate_probe.gd. Boots main.tscn with the starter shell,
-## opens the airport, lets passengers arrive and makes every one hungry. The
+## plated by game/spike/room_label_zoom_plate_probe.gd. Boots main.tscn with
+## NeedFacilityKit's terminal (a cafe is built, so a hunger icon is allowed to
+## show: decision crowd-need-display-mood-overlay-gains-hunger-toilet-and-bore,
+## point 3), opens the airport, lets passengers arrive and makes every one hungry. The
 ## camera goes to its closest zoom (TycoonCamera.min_distance) with the
 ## passenger nearest the focus placed in front of the camera, so it stands
 ## close to the lens.
@@ -72,11 +74,21 @@ func _run() -> void:
 	var world_seed := randi()
 	_clock.seed_rng(world_seed)
 	print("PROBE sim_seed=", world_seed)
+	# The probe builds its own terminal on an empty grid, with the cafe that lets
+	# the hunger icon show (anti-pattern a-main-tscn-probe-that-builds-its-own-
+	# terminal-at-raw-cells): the starter shell would refuse its first wall.
+	var mode := _main.get_node("BuildMode") as BuildMode
+	mode.starter_shell = false
 	root.add_child(_main)
 	_clock.set_paused(true)
 	await _frames(5)
-	(_main.get_node("PassengerHud") as PassengerHud).press_starter_terminal()
-	(_main.get_node("BuildMode") as BuildMode).set_tool(BuildMode.Tool.NONE)
+	NeedFacilityKit.build(mode.grid)
+	if not StarterFlight.add_gate_desk(mode.grid):
+		_invalid("the gate desk was refused")
+		_finish()
+		return
+	(mode.get_node("BuildView") as BuildView).refresh(mode.grid)
+	mode.set_tool(BuildMode.Tool.NONE)
 	await _frames(20)
 	_clock.set_process(false)
 	_sim = _main.get_node("PassengerSim") as PassengerSim
@@ -101,7 +113,12 @@ func _run() -> void:
 		for id in _sim.passenger_ids():
 			_sim.get_passenger(id).hunger = 100
 	await _frames(2)
-	print("PROBE passengers=%d" % _sim.passenger_ids().size())
+	var built := NeedIcons.provided(_sim)
+	print("PROBE passengers=%d provided=%s" % [_sim.passenger_ids().size(), built])
+	if not built[NeedIcons.Need.HUNGER]:
+		_invalid("no cafe is usable, so the hunger icon would stay hidden")
+		_finish()
+		return
 	_rig = _main.get_node("TycoonCamera") as TycoonCamera
 	_cam = _rig.get_node("Camera3D") as Camera3D
 	_cam.make_current()
