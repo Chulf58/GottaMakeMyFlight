@@ -64,6 +64,16 @@ const LIFT_M := 2.0
 ## screen at 70 degrees), so the anchor stands over the head, 0.2 m higher.
 const SEATED_LIFT_M := 2.2
 const SEATED_BACK_M := 0.54
+## The same for a passenger reclined in a nap pod (node meta &"icon_reclined",
+## board 4773e61e). Measured in the full recline (PodRecline at 1) through the
+## game camera (game/spike/nap_pod_icon_plates_probe.gd): the Head bone stands
+## 1.28 m up and 0.55 m behind the root, 0.03 m to the side, its head top near
+## 1.40 m and under the pod's hood (1.82 m). The standing anchor put the row on
+## the face seen from the front and in the air beside the pod seen from the
+## side. The anchor stands over the head, 0.75 m over its top as the seated
+## one does, so it clears the hood.
+const RECLINE_LIFT_M := 2.15
+const RECLINE_BACK_M := 0.55
 ## A passenger's icons fade out as the camera comes within NEAR_FULL_M of it and
 ## are gone at NEAR_HIDDEN_M. Icons draw with no depth test at a 2.0 m anchor, so
 ## near the lens one passenger's row lands on another's face. Read off the
@@ -264,9 +274,12 @@ static func layout(
 
 
 ## The anchor over a passenger node's head, in the node's space: LIFT_M over
-## the root, or SEATED_LIFT_M high and SEATED_BACK_M behind it while the node is
-## seated. The VIP crown anchors here too.
+## the root, SEATED_LIFT_M high and SEATED_BACK_M behind it while the node is
+## seated, or RECLINE_LIFT_M high and RECLINE_BACK_M behind it while it is
+## reclined in a nap pod. The VIP crown anchors here too.
 static func head_anchor(node: Node3D) -> Vector3:
+	if node.get_meta(&"icon_reclined", false):
+		return Vector3(0.0, RECLINE_LIFT_M, -RECLINE_BACK_M)
 	if node.get_meta(&"icon_seated", false):
 		return Vector3(0.0, SEATED_LIFT_M, -SEATED_BACK_M)
 	return Vector3(0.0, LIFT_M, 0.0)
