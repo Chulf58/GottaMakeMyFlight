@@ -67,6 +67,8 @@ const COUNT := "Count"
 const PILL := "Pill"
 
 static var _font: Font
+## The shifts place() tries after the kept one (see _offsets()).
+static var _shift_order: Array[Vector2] = []
 ## Pill width in screen pixels -> its texture.
 static var _pills: Dictionary = {}
 ## Count text -> its width on screen, in pixels.
@@ -160,13 +162,10 @@ func place(wanted: Array[Rect2], ids: Array, obstacles: Array[Rect2]) -> Array[R
 	var shifts := {}
 	for i in wanted.size():
 		var rect := wanted[i]
-		var tries: Array[Vector2] = []
-		if _shifts.has(ids[i]):
-			tries.append(_shifts[ids[i]])
-		tries.append_array(_offsets())
-		var chosen := _first_clear(rect, tries, _bins, _placed)
+		var kept: Vector2 = _shifts.get(ids[i], Vector2(NAN, NAN))
+		var chosen := _first_clear(rect, kept, _bins, _placed)
 		if is_nan(chosen.x):
-			chosen = _first_clear(rect, tries, _badge_bins, _badge_rects)
+			chosen = _first_clear(rect, kept, _badge_bins, _badge_rects)
 		if is_nan(chosen.x):
 			chosen = Vector2.ZERO
 		shifts[ids[i]] = chosen
@@ -180,20 +179,30 @@ func place(wanted: Array[Rect2], ids: Array, obstacles: Array[Rect2]) -> Array[R
 	return out
 
 
-## The first of `tries` that moves `rect` clear of the rectangles in `bins`,
-## or a NAN vector when none does.
+## The first shift that moves `rect` clear of the rectangles in `bins`, or a
+## NAN vector when none does: `kept` first (skipped when NAN), then _offsets()
+## in order.
 static func _first_clear(
-	rect: Rect2, tries: Array[Vector2], bins: Dictionary, rects: Array[Rect2]
+	rect: Rect2, kept: Vector2, bins: Dictionary, rects: Array[Rect2]
 ) -> Vector2:
-	for shift in tries:
+	if not is_nan(kept.x):
+		if not RectBins.hits(Rect2(rect.position + kept, rect.size), bins, rects):
+			return kept
+	for shift in _offsets():
 		if not RectBins.hits(Rect2(rect.position + shift, rect.size), bins, rects):
 			return shift
 	return Vector2(NAN, NAN)
 
 
 ## The shifts place() tries after the kept one: none, then rings out to
-## MAX_SHIFT_PX, up first.
+## MAX_SHIFT_PX, up first. Built on first use and shared; never change it.
 static func _offsets() -> Array[Vector2]:
+	if _shift_order.is_empty():
+		_shift_order = _build_offsets()
+	return _shift_order
+
+
+static func _build_offsets() -> Array[Vector2]:
 	var out: Array[Vector2] = [Vector2.ZERO]
 	var r := SHIFT_STEP_PX
 	while r <= MAX_SHIFT_PX:
