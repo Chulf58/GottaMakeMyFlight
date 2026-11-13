@@ -120,7 +120,9 @@ var _snapping := false
 var _bubble_entries: Array[Dictionary] = []
 ## The count badges, pooled (NeedCluster.make_badge()), under _badge_root.
 var _badges: Array[Sprite3D] = []
-var _badge_root := Node3D.new()
+## Made and parented in _ready(), so a views node that never enters the tree
+## leaves no orphan behind.
+var _badge_root: Node3D
 ## The badges drawn this frame: {"kind", "count", "rect"} (screen pixels).
 var _badges_drawn: Array[Dictionary] = []
 
@@ -160,6 +162,7 @@ func _ready() -> void:
 	_props.views = self
 	add_child(_props)
 	add_child(need_icons_toggle)
+	_badge_root = Node3D.new()
 	_badge_root.name = NeedCluster.ROOT
 	add_child(_badge_root)
 	if clock != null:
