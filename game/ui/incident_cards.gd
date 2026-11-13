@@ -55,8 +55,9 @@ func post_active() -> void:
 
 
 ## The result card of a finished VIP or inspector visit, told once when it ends
-## (a card that stays until clicked away, like a minor's: green when it went
-## well, coral when it did not). Nothing for any other incident or a VIP dropped
+## (a card that stays until clicked away, like a minor's: green for a VIP bonus or
+## an inspector pass, the plain cream card for a VIP without the bonus, coral for a
+## miss or a fail). Nothing for any other incident or a VIP dropped
 ## without a result.
 func _post_result(incident: Dictionary) -> void:
 	var words := IncidentCopy.vip_result(incident)
