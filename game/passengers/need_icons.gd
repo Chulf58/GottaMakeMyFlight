@@ -40,6 +40,19 @@ extends RefCounted
 ## drawn by PassengerViews); layout()'s mask hides the members' own icons.
 
 enum Need { HUNGER, TOILET, BOREDOM }
+## Where a passenger standing up came from (node meta &"icon_rise", set by
+## PassengerViews._pose() while its RISE_CLIP plays, board 3a5e1d0d). Its
+## anchor and head top go from the seat's (or the pod's) to the standing ones
+## by rise_weight(). Measured through the stand_up clip from a gate chair
+## (game/spike/standup_icon_anchor_probe.gd): the Head bone goes from 1.28 m
+## up and 0.55 m behind the root to 1.68 m up and 0.06 m behind it, its
+## height within 0.01 m of a smoothstep of the clip's progress at every
+## twelfth. The standing anchor, taken at once, sat 25 px under the head top
+## seen from the front at 10 m. The sit_down clip (SINK_CLIP) is the same path
+## played backwards, sample for sample, so a passenger sitting down (after any
+## SitHold set-down, which it stands through) is marked the same way and
+## goes from the standing values to the seat's.
+enum Rise { NONE, SEAT, RECLINE }
 
 const SIZE := 128
 const OUTLINE_PX := 9.0
@@ -80,6 +93,10 @@ const RECLINE_BACK_M := 0.55
 const HEAD_TOP_M := 1.7
 const SEATED_HEAD_TOP_M := 1.46
 const RECLINE_HEAD_TOP_M := 1.40
+## The clips a passenger stands up from and sits down on a seat in (Rise,
+## rise_weight()).
+const RISE_CLIP := "stand_up"
+const SINK_CLIP := "sit_down"
 ## A passenger's icons fade out as the camera comes within NEAR_FULL_M of it and
 ## are gone at NEAR_HIDDEN_M. Icons draw with no depth test at a 2.0 m anchor, so
 ## near the lens one passenger's row lands on another's face. Read off the
@@ -92,6 +109,8 @@ const NEAR_FULL_M := 9.0
 const SPRITES := ["NeedIcon0", "NeedIcon1", "NeedIcon2"]
 
 static var _textures: Dictionary = {}
+## The clips clip_weight() has reported broken (clip name -> true).
+static var _clip_errors: Dictionary = {}
 
 
 ## Which needs something built can meet, as need -> bool (decision crowd-need-
@@ -282,24 +301,75 @@ static func layout(
 ## The anchor over a passenger node's head, in the node's space: LIFT_M over
 ## the root, SEATED_LIFT_M high and SEATED_BACK_M behind it while the node is
 ## seated, or RECLINE_LIFT_M high and RECLINE_BACK_M behind it while it is
-## reclined in a nap pod. The VIP crown anchors here too.
+## reclined in a nap pod, and between the two while it stands up or sits down
+## (Rise). The
+## VIP crown anchors here too.
 static func head_anchor(node: Node3D) -> Vector3:
-	if node.get_meta(&"icon_reclined", false):
-		return Vector3(0.0, RECLINE_LIFT_M, -RECLINE_BACK_M)
-	if node.get_meta(&"icon_seated", false):
-		return Vector3(0.0, SEATED_LIFT_M, -SEATED_BACK_M)
-	return Vector3(0.0, LIFT_M, 0.0)
+	return _posed(
+		node,
+		Vector3(0.0, LIFT_M, 0.0),
+		Vector3(0.0, SEATED_LIFT_M, -SEATED_BACK_M),
+		Vector3(0.0, RECLINE_LIFT_M, -RECLINE_BACK_M)
+	)
 
 
 ## The top of a node's head, in the node's space: standing over the root, or
 ## SEATED_BACK_M or RECLINE_BACK_M behind it while seated or reclined, as
-## head_anchor() places the row over it.
+## head_anchor() places the row over it (standing up and sitting down
+## included).
 static func head_top(node: Node3D) -> Vector3:
+	return _posed(
+		node,
+		Vector3(0.0, HEAD_TOP_M, 0.0),
+		Vector3(0.0, SEATED_HEAD_TOP_M, -SEATED_BACK_M),
+		Vector3(0.0, RECLINE_HEAD_TOP_M, -RECLINE_BACK_M)
+	)
+
+
+## `standing`, `seated` or `reclined` as the node is posed now, and while it
+## stands up or sits down (meta &"icon_rise") between the seat's or the pod's
+## value and `standing` by rise_weight().
+static func _posed(node: Node3D, standing: Vector3, seated: Vector3, reclined: Vector3) -> Vector3:
 	if node.get_meta(&"icon_reclined", false):
-		return Vector3(0.0, RECLINE_HEAD_TOP_M, -RECLINE_BACK_M)
+		return reclined
 	if node.get_meta(&"icon_seated", false):
-		return Vector3(0.0, SEATED_HEAD_TOP_M, -SEATED_BACK_M)
-	return Vector3(0.0, HEAD_TOP_M, 0.0)
+		return seated
+	match node.get_meta(&"icon_rise", Rise.NONE):
+		Rise.SEAT:
+			return seated.lerp(standing, rise_weight(node))
+		Rise.RECLINE:
+			return reclined.lerp(standing, rise_weight(node))
+	return standing
+
+
+## How far (0 seated, 1 standing) a node standing up or sitting down stands:
+## a smoothstep of its RISE_CLIP's progress, or one minus it for SINK_CLIP
+## (the measured head paths), read off its AnimationPlayer each frame so the
+## icons move with the drawn body, not tick by tick. The assigned clip and its
+## position outlast the clip's end, so an ended stand-up stays standing and an
+## ended sit-down seated; 1 for any other clip.
+static func rise_weight(node: Node3D) -> float:
+	var player := node.get_node("AnimationPlayer") as AnimationPlayer
+	var clip := player.assigned_animation
+	if clip != RISE_CLIP and clip != SINK_CLIP:
+		return 1.0
+	var animation: Animation = player.get_animation(clip) if player.has_animation(clip) else null
+	return clip_weight(clip, animation, player.current_animation_position)
+
+
+## rise_weight() for `clip` (RISE_CLIP or SINK_CLIP) played `at` seconds into
+## `animation`. A missing or zero-length animation reports once per clip
+## (push_error) and gives the clip's start pose, seated for a stand-up and
+## standing for a sit-down, never a NaN that would carry into the icons, the
+## crown and the badges' head rects.
+static func clip_weight(clip: String, animation: Animation, at: float) -> float:
+	if animation == null or animation.length <= 0.0:
+		if not _clip_errors.has(clip):
+			_clip_errors[clip] = true
+			push_error("NeedIcons.clip_weight: the %s clip is missing or has no length" % clip)
+		return 0.0 if clip == RISE_CLIP else 1.0
+	var t := smoothstep(0.0, 1.0, at / animation.length)
+	return t if clip == RISE_CLIP else 1.0 - t
 
 
 ## Where a node's icon row stands this frame: [the anchor in the node's space
