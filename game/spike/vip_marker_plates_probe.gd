@@ -1,9 +1,11 @@
 extends SceneTree
 ## Windowed plates of the VIP crown (board 2348c245, VipMarker) over a passenger
-## in a crowd: one at the home zoom, one close up. Boots main.tscn with the
-## starter shell, opens the airport, lets a crowd of passengers arrive, picks
-## the one with the most others around it, gives it a toilet need (the starter
-## has no cafe, so CafeSim keeps hunger at 0) so the close-up shows the crown over
+## in a crowd: one at the home zoom, one close up. Boots main.tscn with
+## NeedFacilityKit's terminal (a toilet room, a cafe and a screen stand, so a
+## need icon is allowed to show: decision crowd-need-display-mood-overlay-gains-
+## hunger-toilet-and-bore, point 3), opens the airport, lets a crowd of
+## passengers arrive, picks the one with the most others around it, gives it a
+## toilet need so the close-up shows the crown over
 ## a need icon row, and marks it as an accepted VIP through the director's
 ## snapshot, the door a load uses. The HUD's CanvasLayers are hidden
 ## for the plates (anti-pattern a-plate-probe-s-occlusion-rays-see-only-meshes-
@@ -75,11 +77,21 @@ func _run() -> void:
 	var world_seed := randi()
 	_clock.seed_rng(world_seed)
 	print("PROBE sim_seed=", world_seed)
+	# The probe builds its own terminal on an empty grid, with the toilet room and
+	# cafe that let a need icon show (anti-pattern a-main-tscn-probe-that-builds-
+	# its-own-terminal-at-raw-cells): the starter shell would refuse its first wall.
+	var mode := _main.get_node("BuildMode") as BuildMode
+	mode.starter_shell = false
 	root.add_child(_main)
 	_clock.set_paused(true)
 	await _frames(5)
-	(_main.get_node("PassengerHud") as PassengerHud).press_starter_terminal()
-	(_main.get_node("BuildMode") as BuildMode).set_tool(BuildMode.Tool.NONE)
+	NeedFacilityKit.build(mode.grid)
+	if not StarterFlight.add_gate_desk(mode.grid):
+		_invalid("the gate desk was refused")
+		_finish()
+		return
+	(mode.get_node("BuildView") as BuildView).refresh(mode.grid)
+	mode.set_tool(BuildMode.Tool.NONE)
 	await _frames(20)
 	_clock.set_process(false)
 	_sim = _main.get_node("PassengerSim") as PassengerSim
@@ -102,8 +114,23 @@ func _run() -> void:
 	var until := _clock.tick + ARRIVE_TICKS
 	while _clock.tick < until:
 		_clock.advance(SimClock.STEP)
+	var built := NeedIcons.provided(_sim)
+	print("PROBE provided=", built)
+	if not built[NeedIcons.Need.TOILET]:
+		_invalid("no toilet stall is usable, so the toilet icon would stay hidden")
+		_finish()
+		return
 	var subject := _pick_subject()
-	print("PROBE passengers=%d subject=%d" % [_sim.passenger_ids().size(), subject])
+	print(
+		(
+			"PROBE passengers=%d subject=%d stage=%s"
+			% [
+				_sim.passenger_ids().size(),
+				subject,
+				Passenger.Stage.keys()[_sim.get_passenger(subject).stage] if subject != 0 else "-"
+			]
+		)
+	)
 	if subject == 0:
 		_invalid("no passenger stands in a crowd of %d within %.1f m" % [CROWD_MIN, CROWD_M])
 		_finish()
@@ -113,8 +140,9 @@ func _run() -> void:
 		_invalid("the director refused the VIP snapshot")
 		_finish()
 		return
-	_clock.advance(SimClock.STEP)
+	# No tick: one more would send the subject to a stall, where its icon hides.
 	_clock.set_paused(true)
+	_views.sync()
 	var marked := {}
 	VipMarker.marked_ids(_director, marked)
 	print("PROBE marked=%s" % [marked.keys()])
@@ -253,6 +281,10 @@ func _pick_subject() -> int:
 	for id in _sim.passenger_ids():
 		var node := _views.node_for(id)
 		if node == null:
+			continue
+		# A passenger inside a stall or at a table shows no need icon.
+		var stage := _sim.get_passenger(id).stage
+		if StageKinds.location(stage) == StageKinds.Location.FACILITY_SEAT:
 			continue
 		var near := 0
 		for other_id in _sim.passenger_ids():
