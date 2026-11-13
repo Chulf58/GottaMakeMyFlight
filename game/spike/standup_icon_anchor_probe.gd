@@ -46,6 +46,8 @@ const SAMPLE_TICKS := [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24]
 const SCREEN_YAWS := [0.0, PI / 2.0, PI, -PI / 2.0]
 const FADE_LIMIT_FRAMES := 120
 const THUMB := Vector2i(640, 360)
+const LIVE_MS := 1800
+const LIVE_STEP_MS := 150
 
 var _out_dir := ""
 var _tag := "run"
@@ -75,7 +77,10 @@ func _invalid(msg: String) -> void:
 
 func _run() -> void:
 	if await _boot():
-		await _measure()
+		await _measure(Passenger.Stage.STANDING_UP)
+		await _measure(Passenger.Stage.SITTING_DOWN)
+		await _live(Passenger.Stage.STANDING_UP)
+		await _live(Passenger.Stage.SITTING_DOWN)
 		await _plates()
 		_contact_sheet()
 	print("PROBE done failed=%s plates=%d" % [_failed, _saved.size()])
@@ -156,9 +161,9 @@ func _seated() -> Array[int]:
 	return out
 
 
-## Freezes the subject `ticks` into its stand-up clip.
-func _freeze(ticks: int) -> Node3D:
-	_subject.stage = Passenger.Stage.STANDING_UP
+## Freezes the subject `ticks` into `stage` (its stand-up or sit-down clip).
+func _freeze(ticks: int, stage := Passenger.Stage.STANDING_UP) -> Node3D:
+	_subject.stage = stage
 	_subject.stage_tick = _clock.tick - ticks
 	_views.snap()
 	await _frames(3)
@@ -175,12 +180,22 @@ func _head_bone(node: Node3D) -> Vector3:
 	return node.global_position
 
 
-func _measure() -> void:
-	var node := _views.node_for(_subject.id)
+func _measure(stage: Passenger.Stage) -> void:
+	var node := await _freeze(0, stage)
 	var player := node.get_node("AnimationPlayer") as AnimationPlayer
-	print("PROBE stand_up length=%.3f" % player.get_animation("stand_up").length)
+	print(
+		(
+			"PROBE %s stand_up length=%.3f sit_down length=%.3f held=%d"
+			% [
+				Passenger.Stage.keys()[stage],
+				player.get_animation("stand_up").length,
+				player.get_animation("sit_down").length,
+				SitHold.held_ticks(_views.carry_on_props(), _sim, _subject)
+			]
+		)
+	)
 	for ticks: int in SAMPLE_TICKS:
-		node = await _freeze(ticks)
+		node = await _freeze(ticks, stage)
 		player = node.get_node("AnimationPlayer") as AnimationPlayer
 		var head := _head_bone(node)
 		var local := node.global_transform.affine_inverse() * head
@@ -195,10 +210,11 @@ func _measure() -> void:
 		print(
 			(
 				(
-					"SAMPLE ticks=%d clip_pos=%.3f clip=%s head_local=%s anchor=%s head_top=%s"
+					"SAMPLE stage=%s ticks=%d clip_pos=%.3f clip=%s head_local=%s anchor=%s head_top=%s"
 					+ " anchor_over_head_px=%s"
 				)
 				% [
+					Passenger.Stage.keys()[stage],
 					ticks,
 					player.current_animation_position if player.current_animation != "" else -1.0,
 					player.current_animation,
@@ -209,6 +225,40 @@ func _measure() -> void:
 				]
 			)
 		)
+
+
+## A live run: the subject's clip played to its natural end by the frames
+## (the clock unpaused, its ticks still stopped so the stage holds), printing
+## the clip and the anchor every LIVE_STEP_MS for LIVE_MS, past the clip's
+## 1.2 s end.
+func _live(stage: Passenger.Stage) -> void:
+	var node := await _freeze(0, stage)
+	var player := node.get_node("AnimationPlayer") as AnimationPlayer
+	_clock.set_paused(false)
+	var start := Time.get_ticks_msec()
+	var next := 0
+	var i := 0
+	while Time.get_ticks_msec() - start < LIVE_MS:
+		await process_frame
+		i += 1
+		if Time.get_ticks_msec() - start < next:
+			continue
+		next += LIVE_STEP_MS
+		print(
+			(
+				"LIVE stage=%s frame=%d clip=%s assigned=%s pos=%.3f playing=%s anchor=%s"
+				% [
+					Passenger.Stage.keys()[stage],
+					i,
+					player.current_animation,
+					player.assigned_animation,
+					player.current_animation_position,
+					player.is_playing(),
+					NeedIcons.head_anchor(node)
+				]
+			)
+		)
+	_clock.set_paused(true)
 
 
 func _plates() -> void:
@@ -225,6 +275,9 @@ func _plates() -> void:
 		await _plate("close_%s_%dm" % [label, int(CLOSE_M)], node)
 		await _aim(node.global_position, SIDE_M, 1.2)
 		await _plate("close_%s_%dm_side" % [label, int(SIDE_M)], node)
+	var sinking := await _freeze(12, Passenger.Stage.SITTING_DOWN)
+	await _aim(sinking.global_position, CLOSE_M, 0.0)
+	await _plate("close_sit_mid_%dm" % int(CLOSE_M), sinking)
 	# The distance shot at FAR_M: icons hide beyond NeedIcons.shown_at()'s zoom,
 	# so the home zoom shows none (finding e9d49c8a: plate at 10 to 16 m).
 	var mid := await _freeze(12)

@@ -48,7 +48,10 @@ enum Need { HUNGER, TOILET, BOREDOM }
 ## up and 0.55 m behind the root to 1.68 m up and 0.06 m behind it, its
 ## height within 0.01 m of a smoothstep of the clip's progress at every
 ## twelfth. The standing anchor, taken at once, sat 25 px under the head top
-## seen from the front at 10 m.
+## seen from the front at 10 m. The sit_down clip (SINK_CLIP) is the same path
+## played backwards, sample for sample, so a passenger sitting down (after any
+## SitHold set-down, which it stands through) is marked the same way and
+## goes from the standing values to the seat's.
 enum Rise { NONE, SEAT, RECLINE }
 
 const SIZE := 128
@@ -90,8 +93,10 @@ const RECLINE_BACK_M := 0.55
 const HEAD_TOP_M := 1.7
 const SEATED_HEAD_TOP_M := 1.46
 const RECLINE_HEAD_TOP_M := 1.40
-## The clip a passenger stands up from a seat in (Rise, rise_weight()).
+## The clips a passenger stands up from and sits down on a seat in (Rise,
+## rise_weight()).
 const RISE_CLIP := "stand_up"
+const SINK_CLIP := "sit_down"
 ## A passenger's icons fade out as the camera comes within NEAR_FULL_M of it and
 ## are gone at NEAR_HIDDEN_M. Icons draw with no depth test at a 2.0 m anchor, so
 ## near the lens one passenger's row lands on another's face. Read off the
@@ -294,7 +299,8 @@ static func layout(
 ## The anchor over a passenger node's head, in the node's space: LIFT_M over
 ## the root, SEATED_LIFT_M high and SEATED_BACK_M behind it while the node is
 ## seated, or RECLINE_LIFT_M high and RECLINE_BACK_M behind it while it is
-## reclined in a nap pod, and between the two while it stands up (Rise). The
+## reclined in a nap pod, and between the two while it stands up or sits down
+## (Rise). The
 ## VIP crown anchors here too.
 static func head_anchor(node: Node3D) -> Vector3:
 	return _posed(
@@ -307,7 +313,8 @@ static func head_anchor(node: Node3D) -> Vector3:
 
 ## The top of a node's head, in the node's space: standing over the root, or
 ## SEATED_BACK_M or RECLINE_BACK_M behind it while seated or reclined, as
-## head_anchor() places the row over it (standing up included).
+## head_anchor() places the row over it (standing up and sitting down
+## included).
 static func head_top(node: Node3D) -> Vector3:
 	return _posed(
 		node,
@@ -318,8 +325,8 @@ static func head_top(node: Node3D) -> Vector3:
 
 
 ## `standing`, `seated` or `reclined` as the node is posed now, and while it
-## stands up (meta &"icon_rise") the seat's or the pod's value moved toward
-## `standing` by rise_weight().
+## stands up or sits down (meta &"icon_rise") between the seat's or the pod's
+## value and `standing` by rise_weight().
 static func _posed(node: Node3D, standing: Vector3, seated: Vector3, reclined: Vector3) -> Vector3:
 	if node.get_meta(&"icon_reclined", false):
 		return reclined
@@ -333,16 +340,20 @@ static func _posed(node: Node3D, standing: Vector3, seated: Vector3, reclined: V
 	return standing
 
 
-## How far (0 to 1) a node standing up has risen: a smoothstep of its
-## RISE_CLIP's progress (the measured head path), read off its AnimationPlayer
-## each frame so the icons move with the drawn body, not tick by tick; 1 once
-## the clip has ended.
+## How far (0 seated, 1 standing) a node standing up or sitting down stands:
+## a smoothstep of its RISE_CLIP's progress, or one minus it for SINK_CLIP
+## (the measured head paths), read off its AnimationPlayer each frame so the
+## icons move with the drawn body, not tick by tick. The assigned clip and its
+## position outlast the clip's end, so an ended stand-up stays standing and an
+## ended sit-down seated; 1 for any other clip.
 static func rise_weight(node: Node3D) -> float:
 	var player := node.get_node("AnimationPlayer") as AnimationPlayer
-	if player.current_animation != RISE_CLIP or player.current_animation_length <= 0.0:
+	var clip := player.assigned_animation
+	if clip != RISE_CLIP and clip != SINK_CLIP:
 		return 1.0
-	var t := player.current_animation_position / player.current_animation_length
-	return smoothstep(0.0, 1.0, t)
+	var length := player.get_animation(clip).length
+	var t := smoothstep(0.0, 1.0, player.current_animation_position / length)
+	return t if clip == RISE_CLIP else 1.0 - t
 
 
 ## Where a node's icon row stands this frame: [the anchor in the node's space

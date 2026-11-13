@@ -4,8 +4,9 @@ extends GdUnitTestSuite
 ## (NeedIcons.head_anchor, head_top, board 3a5e1d0d) rise with the drawn body:
 ## the seated value at the clip's start, halfway at its middle, the standing
 ## value at its end, and over the real Head bone throughout. Measured on the
-## real PassengerViews: the stage is set by hand and snap() starts the
-## stand_up clip where the sim is in it, as a load does (no crossfade).
+## real PassengerViews, and the mirror while sitting down: the stage is set by
+## hand and snap() starts the clip where the sim is in it, as a load does (no
+## crossfade).
 
 ## Ticks into the stand-up (PassengerSim.STAND_UP_TICKS is the whole clip).
 const START := 0
@@ -65,9 +66,9 @@ func _sitter() -> Passenger:
 	return p
 
 
-## The passenger frozen `ticks` into its stand-up.
-func _rising(p: Passenger, ticks: int) -> Node3D:
-	p.stage = Passenger.Stage.STANDING_UP
+## The passenger frozen `ticks` into its stand-up (or into `stage`).
+func _rising(p: Passenger, ticks: int, stage := Passenger.Stage.STANDING_UP) -> Node3D:
+	p.stage = stage
 	p.stage_tick = _world.sim.tick - ticks
 	_views.snap()
 	return _views.node_for(p.id)
@@ -156,3 +157,52 @@ func test_walking_off_and_a_released_node_drop_the_rise() -> void:
 	node = _rising(p, MIDDLE)
 	_views._release(p.id)
 	assert_int(node.get_meta(&"icon_rise", NeedIcons.Rise.SEAT)).is_equal(NeedIcons.Rise.NONE)
+
+
+## The mirror while sitting down onto the chair (the sit_down clip): the
+## standing value at its start, halfway at its middle, the seated value at its
+## end, over the real Head bone throughout. This sitter carries no roller, so
+## no SitHold set-down comes first (held 0) and the clip spans SIT_DOWN_TICKS.
+func test_the_anchor_sinks_with_the_head_through_the_sit_down() -> void:
+	var p := _sitter()
+	var sit := Passenger.Stage.SITTING_DOWN
+	_rising(p, START, sit)
+	assert_int(SitHold.held_ticks(_views.carry_on_props(), _world.sim, p)).is_equal(0)
+	assert_int(SitHold.sit_ticks(_world.sim, p)).is_equal(PassengerSim.SIT_DOWN_TICKS)
+	var standing := Vector3(0.0, NeedIcons.LIFT_M, 0.0)
+	var seated := Vector3(0.0, NeedIcons.SEATED_LIFT_M, -NeedIcons.SEATED_BACK_M)
+	var want := {START: standing, MIDDLE: seated.lerp(standing, 0.5), END: seated}
+	var heads := {}
+	for ticks: int in want:
+		var node := _rising(p, ticks, sit)
+		var tag := "sit ticks %d" % ticks
+		var player := node.get_node("AnimationPlayer") as AnimationPlayer
+		assert_str(player.assigned_animation).override_failure_message(tag).is_equal("sit_down")
+		assert_int(node.get_meta(&"icon_rise", NeedIcons.Rise.NONE)).is_equal(NeedIcons.Rise.SEAT)
+		var anchor := NeedIcons.head_anchor(node)
+		assert_vector(anchor).override_failure_message(tag + " anchor %s" % anchor).is_equal_approx(
+			want[ticks], Vector3.ONE * 0.02
+		)
+		var head := _head(node)
+		heads[ticks] = head
+		(
+			assert_bool(_over(anchor, head))
+			. override_failure_message("%s: anchor %s, head bone %s" % [tag, anchor, head])
+			. is_true()
+		)
+		var top := NeedIcons.head_top(node)
+		var bone_top := head + Vector3.UP * HEAD_UP_M
+		(
+			assert_float(Vector2(top.y - bone_top.y, top.z - bone_top.z).length())
+			. override_failure_message("%s: head_top %s, bone top %s" % [tag, top, bone_top])
+			. is_less_equal(TOP_NEAR_M)
+		)
+	# The head really sank and went back over the clip (the subject moved).
+	assert_float((heads[START] as Vector3).y - (heads[END] as Vector3).y).is_greater(0.3)
+	assert_float((heads[START] as Vector3).z - (heads[END] as Vector3).z).is_greater(0.4)
+	# The mutation control: the standing anchor kept to the sit-down's end (the
+	# old behaviour, icon_rise cleared by hand) fails the same check.
+	var node := _views.node_for(p.id)
+	node.set_meta(&"icon_rise", NeedIcons.Rise.NONE)
+	var old := NeedIcons.head_anchor(node)
+	assert_bool(_over(old, heads[END])).override_failure_message(str(old)).is_false()
