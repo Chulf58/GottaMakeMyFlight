@@ -137,6 +137,13 @@ var _placed: Array[Rect2] = []
 var _bins: Dictionary = {}
 
 
+## The screen rectangles (screen pixels) of the captions the last layout
+## placed and showed. Read-only: the need icon count badges keep clear of
+## them (NeedCluster.place()).
+func placed_captions() -> Array[Rect2]:
+	return _placed
+
+
 func sign_for(station: int) -> Node3D:
 	return _signs.get(station)
 
