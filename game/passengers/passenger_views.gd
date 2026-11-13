@@ -685,6 +685,7 @@ func _release(id: int) -> void:
 	fade.drawn = false
 	node.set_meta(&"clip", "")
 	node.set_meta(&"icon_seated", false)
+	node.set_meta(&"icon_reclined", false)
 	VipMarker.mark(node, false)
 	_pool[node.get_meta(&"body")].append(node)
 	_nodes.erase(id)
@@ -778,6 +779,12 @@ func _pose(node: Node3D, p: Passenger, built: Dictionary) -> float:
 			seat_pose == StageKinds.Pose.SEATED
 			and (at_gate or at_cafe or at_stall or activity == ActivityPoses.Kind.SEAT)
 		)
+	)
+	# The nap pod's own anchor over the reclined head, for the same settled sit
+	# (the lean eases in over its first ActivityPoses.EASE_TICKS).
+	node.set_meta(
+		&"icon_reclined",
+		seat_pose == StageKinds.Pose.SEATED and activity == ActivityPoses.Kind.RECLINE
 	)
 	var works := SecurityLooks.face(sim, p)
 	node.set_meta(&"faces", works != Vector2.ZERO)
