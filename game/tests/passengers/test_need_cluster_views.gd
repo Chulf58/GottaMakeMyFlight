@@ -210,6 +210,80 @@ func test_no_badge_shows_while_the_icons_are_off() -> void:
 	assert_int(_views.need_clusters.clusters().size()).is_equal(0)
 
 
+## A VIP whose own icon sits in a count badge has no row (its icon is masked),
+## so the crown stands over the badge it anchors, not on the badge's line
+## (board b679fd1d review): the crown rect clears the badge rect and its
+## bottom is no lower than the badge's top, with and without a speech bubble.
+func test_a_vip_that_anchors_a_badge_wears_the_crown_over_it() -> void:
+	_check_crown_over_badge(false)
+
+
+func test_a_vip_that_anchors_a_badge_over_a_speech_bubble_wears_the_crown_over_it() -> void:
+	_check_crown_over_badge(true)
+
+
+## The same for a VIP that is only a member of the cluster: its crown stands in
+## the badge's column too, so it clears the badge whoever anchors it.
+func test_a_vip_member_that_does_not_anchor_the_badge_wears_the_crown_over_it() -> void:
+	_check_crown_over_badge(false, false)
+
+
+func test_a_vip_member_that_does_not_anchor_the_badge_over_a_speech_bubble_wears_the_crown_over_it(
+) -> void:
+	_check_crown_over_badge(true, false)
+
+
+func _check_crown_over_badge(with_bubble: bool, anchors := true) -> void:
+	var ids := _crowd(10, [TOILET])
+	if with_bubble:
+		# Every passenger speaks, so the badge keeps its anchor member.
+		_views.declutter_bubbles = false
+		for id in ids:
+			(_views.node_for(id).get_node("Bubble") as Label3D).text = "I'm late!"
+		_views.draw()
+	var badge := _visible_badges()[0]
+	# The badge hangs off its anchor member's head: that passenger is the VIP.
+	var holder: Node3D = null
+	var best := INF
+	for id in _world.sim.passenger_ids():
+		var node := _views.node_for(id)
+		var anchor := NeedIcons.head_centre(node)
+		if with_bubble:
+			anchor = (node.get_node("Bubble") as Label3D).position
+		var d := (node.global_transform * anchor).distance_to(badge.global_position)
+		if d < best:
+			best = d
+			holder = node
+	assert_float(best).is_less(0.01)
+	if not anchors:
+		for id in ids:
+			if _views.node_for(id) != holder:
+				holder = _views.node_for(id)
+				break
+	VipMarker.mark(holder, true)
+	_views.draw()
+	var bubble := holder.get_node("Bubble") as Label3D
+	assert_bool(bubble.text != "" and bubble.visible).is_equal(with_bubble)
+	var crown := holder.get_node(VipMarker.SPRITE) as Sprite3D
+	assert_bool(crown.visible).is_true()
+	var placed: Rect2 = _views.need_badges()[0]["rect"]
+	var lift := (crown.offset.y - VipMarker.SIZE / 2.0) * VipMarker.CROWN_PX / VipMarker.SIZE
+	var at := _camera.unproject_position(crown.global_position) * _to_output()
+	var bottom := at.y - lift
+	var rect := Rect2(
+		Vector2(at.x - VipMarker.CROWN_PX / 2.0, bottom - VipMarker.CROWN_PX),
+		Vector2.ONE * VipMarker.CROWN_PX
+	)
+	print(
+		(
+			"bubble %s anchor %s: badge %s, crown %s (bottom %.1f)"
+			% [with_bubble, anchors, placed, rect, bottom]
+		)
+	)
+	assert_bool(rect.intersects(placed)).override_failure_message("crown over badge").is_false()
+	assert_float(bottom).is_less_equal(placed.position.y + 0.5)
+
+
 func test_cluster_needs_off_draws_every_icon() -> void:
 	var ids := _crowd(10, [TOILET])
 	_views.cluster_needs = false

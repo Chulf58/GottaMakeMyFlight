@@ -154,8 +154,13 @@ func test_layout_puts_the_crown_over_the_head_at_crown_px() -> void:
 	var node := _layout_node(20.0)
 	var crown := _lay_out(node)
 	assert_bool(crown.visible).is_true()
-	assert_vector(crown.position).is_equal(Vector3(0.0, NeedIcons.LIFT_M, 0.0))
-	assert_float(crown.offset.y).is_equal_approx(VipMarker.SIZE / 2.0, 0.001)
+	# Where the icon row would stand: the head gap over the head (decision
+	# need-icons-and-wish-bubbles-sit-a-fixed-screen-gap-above-the).
+	var head := _head_lift(node)
+	assert_float(head).is_greater(NeedIcons.HEAD_GAP_PX)
+	assert_vector(crown.position).is_equal(NeedIcons.head_centre(node))
+	var above := head * VipMarker.SIZE / VipMarker.CROWN_PX
+	assert_float(crown.offset.y).is_equal_approx(VipMarker.SIZE / 2.0 + above, 0.001)
 	var pixel := VipMarker.CROWN_PX * _unit() / VipMarker.SIZE
 	assert_float(crown.pixel_size).is_equal_approx(pixel, pixel * 0.001)
 	node.free()
@@ -165,7 +170,8 @@ func test_layout_lifts_the_crown_over_a_need_icon_row() -> void:
 	var node := _layout_node(20.0)
 	(node.get_node(NeedIcons.SPRITES[0]) as Sprite3D).visible = true
 	var crown := _lay_out(node)
-	var lift := (NeedIcons.ICON_PX + NeedIcons.GAP_PX) * VipMarker.SIZE / VipMarker.CROWN_PX
+	var row := _head_lift(node) + NeedIcons.ICON_PX + NeedIcons.GAP_PX
+	var lift := row * VipMarker.SIZE / VipMarker.CROWN_PX
 	assert_float(crown.offset.y).is_equal_approx(VipMarker.SIZE / 2.0 + lift, 0.001)
 	node.free()
 
@@ -175,7 +181,8 @@ func test_layout_lifts_the_crown_over_a_wish_bubble() -> void:
 	(node.get_node(NeedIcons.SPRITES[0]) as Sprite3D).visible = true
 	(node.get_node(WishIconView.SPRITE) as Sprite3D).visible = true
 	var crown := _lay_out(node)
-	var lift := (WishIconView.WISH_PX + NeedIcons.GAP_PX) * VipMarker.SIZE / VipMarker.CROWN_PX
+	var row := _head_lift(node) + WishIconView.WISH_PX + NeedIcons.GAP_PX
+	var lift := row * VipMarker.SIZE / VipMarker.CROWN_PX
 	assert_float(crown.offset.y).is_equal_approx(VipMarker.SIZE / 2.0 + lift, 0.001)
 	node.free()
 
@@ -287,6 +294,12 @@ func _layout_node(distance: float) -> Node3D:
 
 func _unit() -> float:
 	return NeedIcons.unit_of(_views.get_viewport(), _views.get_viewport().get_camera_3d())
+
+
+## The screen lift NeedIcons.row_anchor() gives the node's row over its head.
+func _head_lift(node: Node3D) -> float:
+	var camera := _views.get_viewport().get_camera_3d()
+	return NeedIcons.row_anchor(node, node.get_node("Bubble") as Label3D, camera, _unit())[1]
 
 
 func _lay_out(node: Node3D) -> Sprite3D:

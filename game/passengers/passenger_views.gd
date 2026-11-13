@@ -129,9 +129,16 @@ var _badges: Array[Sprite3D] = []
 var _badge_root: Node3D
 ## The badges drawn this frame: {"kind", "count", "rect"} (screen pixels).
 var _badges_drawn: Array[Dictionary] = []
+## Passenger id -> the screen pixels from its row anchor up to the top of a
+## placed count badge its VIP crown would sit on (with the gap over), so the
+## crown stands over the badge (VipMarker.layout()). Rebuilt every frame.
+var _badge_lifts := {}
 
 
 func _ready() -> void:
+	# After the passengers' animation players (priority 0), so the icon rows
+	# read the heads as posed this frame, not the frame before.
+	process_priority = 1
 	follow_anchor.name = "FollowAnchor"
 	add_child(follow_anchor)
 	var torus := TorusMesh.new()
@@ -413,7 +420,7 @@ func draw() -> void:
 		var node: Node3D = _nodes[id]
 		var bubble := node.get_node("Bubble") as Label3D
 		NeedIcons.layout(node, bubble, camera, unit, icons_shown, masks.get(id, 0))
-		VipMarker.layout(node, bubble, camera, unit)
+		VipMarker.layout(node, bubble, camera, unit, _badge_lifts.get(id, 0.0))
 	_props.draw()
 	_markers.draw()
 
@@ -469,6 +476,7 @@ func need_badges() -> Array[Dictionary]:
 ## and hides every badge.
 func _cluster_icons(camera: Camera3D, unit: float, icons_shown: bool) -> Dictionary:
 	_badges_drawn.clear()
+	_badge_lifts.clear()
 	if not cluster_needs or not icons_shown or camera == null or unit <= 0.0:
 		need_clusters.clear()
 		_hide_badges(0)
@@ -509,14 +517,19 @@ func _cluster_icons(camera: Camera3D, unit: float, icons_shown: bool) -> Diction
 	var clusters := need_clusters.clusters().duplicate()
 	clusters.sort_custom(NeedCluster.placed_before)
 	# Per cluster: the row of the member nearest its centroid, the badge's
-	# centre from that row's anchor (its bottom edge where the row's is).
+	# centre from that row's anchor: the bottom edge of the badge with its
+	# count chip, which hangs under the icon, where the row's is, so the chip
+	# keeps the row's gap over the head (decision need-icons-and-wish-bubbles-
+	# sit-a-fixed-screen-gap-above-the).
 	var anchors: Array[Array] = []
 	var wanted: Array[Rect2] = []
 	var ids: Array = []
 	for cluster in clusters:
 		var members: Array = cluster["members"]
-		var row: Array = rows[NeedCluster.anchor_member(members, points[cluster["kind"]])]
-		var centre_px := Vector2(0.0, -float(row[2]) - NeedCluster.BADGE_PX / 2.0)
+		var anchor_id := NeedCluster.anchor_member(members, points[cluster["kind"]])
+		var row: Array = rows[anchor_id]
+		var under := NeedCluster.badge_rect(Vector2.ZERO, members.size()).end.y
+		var centre_px := Vector2(0.0, -float(row[2]) - under)
 		anchors.append([row, centre_px])
 		wanted.append(NeedCluster.badge_rect((row[1] as Vector2) + centre_px, members.size()))
 		ids.append(cluster["id"])
@@ -531,7 +544,63 @@ func _cluster_icons(camera: Camera3D, unit: float, icons_shown: bool) -> Diction
 		NeedCluster.show_badge(_badge(i), kind, count, row[0], centre_px, unit, row[4])
 		_badges_drawn.append({"id": ids[i], "kind": kind, "count": count, "rect": placed[i]})
 	_hide_badges(clusters.size())
+	_lift_crowns(camera, unit, to_output, rows, masks, placed)
 	return masks
+
+
+## Records in _badge_lifts, for every VIP-marked passenger, how far over its row
+## anchor its crown must stand to clear the placed badges it would sit on: a
+## badge, whoever anchors it, that the crown (VipMarker.CROWN_PX square, over
+## the row it stands on) overlaps. The crown then stands over the badge's top
+## with the row's gap.
+func _lift_crowns(
+	camera: Camera3D,
+	unit: float,
+	to_output: float,
+	rows: Dictionary,
+	masks: Dictionary,
+	placed: Array
+) -> void:
+	if placed.is_empty():
+		return
+	var forward := -camera.global_basis.z
+	for id: int in _nodes:
+		var node: Node3D = _nodes[id]
+		if not node.get_meta(&"vip", false):
+			continue
+		var base: Vector2
+		var lift: float
+		if rows.has(id):
+			base = rows[id][1]
+			lift = rows[id][2]
+		else:
+			var at := NeedIcons.row_anchor(node, node.get_node("Bubble") as Label3D, camera, unit)
+			var world: Vector3 = node.global_transform * (at[0] as Vector3)
+			if (world - camera.global_position).dot(forward) <= camera.near:
+				continue
+			base = camera.unproject_position(world) * to_output
+			lift = at[1]
+		var stands := lift + _row_height_px(node, masks.get(id, 0))
+		var crown := Rect2(
+			Vector2(base.x - VipMarker.CROWN_PX / 2.0, base.y - stands - VipMarker.CROWN_PX),
+			Vector2.ONE * VipMarker.CROWN_PX
+		)
+		for rect: Rect2 in placed:
+			if rect.intersects(crown):
+				var over := base.y - rect.position.y + NeedIcons.GAP_PX
+				_badge_lifts[id] = maxf(_badge_lifts.get(id, 0.0), over)
+
+
+## The screen height `node`'s drawn icon row takes with the gap over it (what
+## VipMarker lifts the crown by), from the needs a badge does not mask, or 0.
+func _row_height_px(node: Node3D, mask: int) -> float:
+	var row := 0.0
+	for kind: int in node.get_meta(&"need_kinds", []):
+		if mask & (1 << kind) == 0:
+			row = NeedIcons.ICON_PX
+	if node.get_meta(&"wish", "") != "":
+		row = WishIconView.WISH_PX
+	return row + NeedIcons.GAP_PX if row > 0.0 else 0.0
 
 
 ## What a badge is kept clear of: the speech bubbles kept on screen, the
@@ -570,9 +639,11 @@ func _badge_obstacles(rows: Dictionary, masks: Dictionary, screen: Rect2) -> Arr
 
 
 ## Adds to `out` the screen rect (output pixels) of every drawn passenger's
-## head, from the top of the head (NeedIcons.head_top(), standing, seated or
-## reclined) HEAD_RECT_M down and as wide, so a badge's dodge does not land
-## on a head (board 769f210d: a badge shifted down onto a seated row's heads).
+## head, from the top of the head as drawn (NeedIcons.head_centre() moved
+## NeedIcons.HEAD_RADIUS_M along the camera's up, standing, seated or
+## reclined, the top the icon row keeps its gap over) HEAD_RECT_M down and as
+## wide, so a badge's dodge does not land on a head (board 769f210d: a badge
+## shifted down onto a seated row's heads).
 ## Heads nearer than the camera's near plane or off screen are left out, and
 ## a rect is never wider than HEAD_RECT_MAX_PX, since size over depth grows
 ## without bound near the lens (anti-pattern a-screen-rectangle-measured-from-
@@ -585,7 +656,8 @@ func _add_head_rects(
 		var node: Node3D = _nodes[id]
 		if not node.visible:
 			continue
-		var top: Vector3 = node.global_transform * NeedIcons.head_top(node)
+		var centre: Vector3 = node.global_transform * NeedIcons.head_centre(node)
+		var top := centre + camera.global_basis.y * NeedIcons.HEAD_RADIUS_M
 		var depth := (top - camera.global_position).dot(forward)
 		if depth <= camera.near:
 			continue
@@ -684,6 +756,7 @@ func _take(p: Passenger) -> Node3D:
 	var node := PassengerLooks.SCENES[body].instantiate() as Node3D
 	node.set_meta(&"variant", p.variant)
 	node.set_meta(&"body", body)
+	NeedIcons.find_head(node)
 	PassengerLooks.paint_body(node, body, PassengerLooks.tint_of(p.id))
 	var bubble := Label3D.new()
 	bubble.name = "Bubble"
