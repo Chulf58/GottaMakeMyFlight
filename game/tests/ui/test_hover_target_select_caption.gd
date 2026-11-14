@@ -149,3 +149,13 @@ func test_a_pinning_sign_keeps_its_caption_after_the_click() -> void:
 	print("after the pinning click: tooltip %s, text %s" % [shown, words])
 	assert_bool(shown).is_true()
 	assert_str(words).is_equal("A gap in the wall")
+
+
+func test_a_successful_load_shows_the_caption_again_under_the_same_pointer() -> void:
+	var at := _closed_sign_centre()
+	await _click_at(at)
+	assert_bool(_tip_visible()).is_false()
+	_hover.save_game.loaded.emit(true)
+	await await_idle_frame()
+	print("after load: hovered %s, tooltip %s" % [_hover.hovered_target(), _tip_visible()])
+	assert_bool(_tip_visible()).is_true()

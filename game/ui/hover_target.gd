@@ -256,6 +256,7 @@ func _on_loaded(ok: bool) -> void:
 	if not ok:
 		return
 	_pinned_sign = null
+	_selected_sign = null
 	_pinned_passenger = 0
 	_pin_from_click = false
 	_hovered = null
