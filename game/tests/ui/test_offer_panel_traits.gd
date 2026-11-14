@@ -54,7 +54,7 @@ func test_the_plain_offer_says_plain_terms_and_shows_no_downside() -> void:
 	assert_str(_label("O0N3", "Up").text).is_equal(OfferTraits.PLAIN_LABEL)
 	assert_str(_label("O0N3", "Up").theme_type_variation).is_equal("HudHint")
 	assert_bool(_label("O0N3", "Down").visible).is_false()
-	assert_str(_panel.card_text("O0N3")).ends_with(OfferTraits.PLAIN_LABEL)
+	assert_str(_panel.card_text("O0N3")).contains("\n%s\nDeparts " % OfferTraits.PLAIN_LABEL)
 
 
 func test_the_trait_line_sits_right_under_the_verdict_row() -> void:

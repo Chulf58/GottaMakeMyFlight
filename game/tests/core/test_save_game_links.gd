@@ -98,9 +98,11 @@ func test_an_open_offer_marked_accepted_without_a_contract_is_refused() -> void:
 func test_an_accepted_offer_whose_terms_differ_from_its_contract_is_refused() -> void:
 	var bad := _taken()
 	var offer: Dictionary = bad["offers"]["offers"][_offer_index(bad, _accepted)]
-	offer["fee_per_passenger"] = int(offer["fee_per_passenger"]) + 1
-	if int(offer["fee_per_passenger"]) > OfferBoard.FEE_MAX:
-		offer["fee_per_passenger"] = OfferBoard.FEE_MIN
+	# One off the contract fee, inside what the offer's tier and traits can draw.
+	var fees: Array = OfferBoard.TIER_FEES[OfferBoard.tier_of(offer["airline"])]
+	var dearest := OfferTraits.fee_of(fees[1], offer["traits"])
+	var fee := int(offer["fee_per_passenger"])
+	offer["fee_per_passenger"] = fee + 1 if fee < dearest else fee - 1
 	_assert_refused(bad, "has another fee_per_passenger than its offer")
 
 

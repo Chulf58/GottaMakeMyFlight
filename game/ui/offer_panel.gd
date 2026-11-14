@@ -643,8 +643,19 @@ func _add_card(offer: Dictionary) -> void:
 	texts.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(texts)
 	var lines := card_lines(offer)
-	for i in lines.size():
-		texts.add_child(_card_label(lines[i], &"HudTitle" if i == 0 else &"HudSmall"))
+	texts.add_child(_card_label(lines[0], &"HudTitle"))
+	# The departure and the plane share one row, so the trait line below the
+	# verdict row costs the sheet no height (it stays inside 720 px at 1.5).
+	var when := HBoxContainer.new()
+	when.name = "When_%s" % id
+	texts.add_child(when)
+	for i in [1, 2]:
+		var part := _card_label(lines[i], &"HudSmall")
+		part.custom_minimum_size.x = VERDICT_FIT_W if i == 1 else 0.0
+		part.autowrap_mode = TextServer.AUTOWRAP_OFF
+		when.add_child(part)
+	for i in range(3, lines.size()):
+		texts.add_child(_card_label(lines[i], &"HudSmall"))
 	var note := _card_label("", &"HudSmall")
 	note.name = "Note_%s" % id
 	_set_note(note, _note_for(offer))

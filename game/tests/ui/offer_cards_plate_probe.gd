@@ -5,17 +5,26 @@ extends SceneTree
 ## C, with a 10:00 contract, and the day's offers are set to one departure the
 ## gate cannot take (found with FlightFit) and two it can, each with its own
 ## passengers and fee, so the cards read "Needs another gate" and two "Fits your
-## gates now". Prints each card's text and checks the sheet is in view before
-## saving.
+## gates now". Two offers are paired with traits and one is plain (decision
+## airline-offer-traits-each-offer-pairs-an-upside-with-a-downs), so each card's
+## trait line shows. Prints each card's text and checks the trait lines and that
+## the sheet is in view before saving.
 ##
 ## Run (one windowed Godot run project-wide; take the slot first):
 ##   timeout 300 Godot_v4.7.2-stable_win64_console.exe --display-driver windows \
 ##     --rendering-driver vulkan --audio-driver Dummy \
 ##     --path game -s res://tests/ui/offer_cards_plate_probe.gd
 ##
-## The plates go to tools/blender/out/offer_cards_20261114/.
+## The plates go to tools/blender/out/offer_traits_20261114/.
 
-const OUT_REL := "res://../tools/blender/out/offer_cards_20261114"
+const OUT_REL := "res://../tools/blender/out/offer_traits_20261114"
+## Per card: booked, fee and traits (the fees inside each trait's draw range).
+const TERMS := [
+	[16, 40, {"up": "top_fare", "down": "rush_crowd", "level": 2}],
+	[14, 25, {"up": "full_flight", "down": "heavy_bags", "level": 1}],
+	[15, 23, {}],
+]
+const TRAIT_LINES := ["Top fare +30%   Big rush crowd", "Full flight   Heavy bags", "Plain terms"]
 
 
 func _initialize() -> void:
@@ -65,10 +74,10 @@ func _run() -> void:
 		quit(1)
 		return
 	var offers := TestOfferBoard.day_records(day, [needs_gate, fits[0], fits[1]])
-	var terms := [[16, 32], [12, 25], [15, 32]]
 	for i in offers.size():
-		offers[i]["booked_passengers"] = terms[i][0]
-		offers[i]["fee_per_passenger"] = terms[i][1]
+		offers[i]["booked_passengers"] = TERMS[i][0]
+		offers[i]["fee_per_passenger"] = TERMS[i][1]
+		offers[i]["traits"] = TERMS[i][2]
 	print("PROBE board loaded=", desk.board.from_snapshot(TestOfferBoard.save_of(offers)))
 	var panel := panels[0] as OfferPanel
 	panel.open()
@@ -87,6 +96,12 @@ func _run() -> void:
 				print("PROBE_INVALID card %s says '%s'" % [id, panel.fit_text(id)])
 				quit(1)
 				return
+			var line := _trait_line(panel.trait_row(id))
+			print("PROBE %s trait line '%s' expected '%s'" % [id, line, TRAIT_LINES[shown]])
+			if line != TRAIT_LINES[shown]:
+				print("PROBE_INVALID card %s shows the wrong trait line" % id)
+				quit(1)
+				return
 			shown += 1
 		var sheet := panel.sheet().get_global_rect()
 		var view := root.get_visible_rect()
@@ -102,7 +117,7 @@ func _run() -> void:
 			quit(1)
 			return
 		var img := root.get_texture().get_image()
-		var path := out_dir.path_join("offer_cards_s%d.png" % int(ui_scale * 100.0))
+		var path := out_dir.path_join("offer_traits_s%d.png" % int(ui_scale * 100.0))
 		var saved := img.save_png(path)
 		print("PLATE saved ", path, " size=", img.get_size(), " err=", saved)
 		if saved != OK:
@@ -110,6 +125,15 @@ func _run() -> void:
 			quit(1)
 			return
 	quit(0)
+
+
+## The visible labels of a trait row, three spaces apart.
+static func _trait_line(row: HBoxContainer) -> String:
+	var parts := PackedStringArray()
+	for label: Label in row.get_children():
+		if label.visible:
+			parts.append(label.text)
+	return "   ".join(parts)
 
 
 func _frames(count: int) -> void:

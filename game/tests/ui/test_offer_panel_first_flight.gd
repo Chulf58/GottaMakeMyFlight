@@ -47,7 +47,9 @@ func _at(minute: int) -> void:
 
 func test_a_slot_that_has_passed_says_the_first_flight_is_tomorrow() -> void:
 	_at(NOON)
-	assert_str(_panel.card_text("O0N1")).contains("Departs 10:00 daily\nFirst flight tomorrow")
+	assert_str(_panel.card_text("O0N1")).contains(
+		"Departs 10:00 daily\nSmall plane\nFirst flight tomorrow"
+	)
 
 
 func test_a_slot_still_ahead_says_nothing_extra() -> void:
@@ -89,7 +91,9 @@ func test_the_note_appears_when_the_clock_passes_the_slot_while_open() -> void:
 	assert_str(_panel.card_text("O0N2")).not_contains("Gate")
 	_sim.tick = GameCalendar.tick_at(0, 21 * 60)
 	await get_tree().process_frame
-	assert_str(_panel.card_text("O0N2")).contains("Departs 20:00 daily\nFirst flight tomorrow")
+	assert_str(_panel.card_text("O0N2")).contains(
+		"Departs 20:00 daily\nSmall plane\nFirst flight tomorrow"
+	)
 
 
 func test_a_closed_airport_names_the_lead_the_first_flight_needs_after_opening() -> void:
@@ -98,7 +102,7 @@ func test_a_closed_airport_names_the_lead_the_first_flight_needs_after_opening()
 	for id in ["O0N1", "O0N2"]:
 		assert_str(_panel.card_text(id)).contains("First flight 4 h 13 min after opening")
 	assert_str(_panel.card_text("O0N2")).contains(
-		"Departs 20:00 daily\nFirst flight 4 h 13 min after opening"
+		"Departs 20:00 daily\nSmall plane\nFirst flight 4 h 13 min after opening"
 	)
 
 
@@ -157,22 +161,23 @@ func test_a_note_is_a_fifth_card_line_under_the_departure() -> void:
 	assert_str(noted[3]).is_equal(plain[2])
 
 
-## The card's 4 lines sit under its fit and earnings lines (TestOfferPanelChoice),
-## so a card shows 6 lines, 7 with a note.
+## The card's 4 lines sit under its fit and earnings lines (TestOfferPanelChoice)
+## and its two trait labels (TestOfferPanelTraits), so a card shows 8 lines, 9
+## with a note, which follows the departure and plane row.
 func test_the_note_line_follows_the_clock_and_is_gone_with_no_note() -> void:
 	_at(NOON)
 	var lines := _panel.card_text("O0N2").split("\n")
-	assert_int(lines.size()).is_equal(6)
+	assert_int(lines.size()).is_equal(8)
 	assert_str(lines[1]).is_equal(_panel.fit_text("O0N2"))
 	_sim.tick = GameCalendar.tick_at(0, 21 * 60)
 	await get_tree().process_frame
 	lines = _panel.card_text("O0N2").split("\n")
-	assert_int(lines.size()).is_equal(7)
-	assert_str(lines[3]).is_equal("Departs 20:00 daily")
-	assert_str(lines[4]).is_equal("First flight tomorrow")
+	assert_int(lines.size()).is_equal(9)
+	assert_str(lines[5]).is_equal("Departs 20:00 daily")
+	assert_str(lines[7]).is_equal("First flight tomorrow")
 	_sim.tick = GameCalendar.tick_at(0, 8 * 60)
 	await get_tree().process_frame
-	assert_int(_panel.card_text("O0N2").split("\n").size()).is_equal(6)
+	assert_int(_panel.card_text("O0N2").split("\n").size()).is_equal(8)
 
 
 func test_every_card_line_fits_the_card_text_width() -> void:
