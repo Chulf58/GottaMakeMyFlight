@@ -167,6 +167,10 @@ func restore(loaded: Dictionary) -> void:
 
 func _settle_closed(landside: LandsideSim) -> void:
 	var no_entrance := _sim.layout.passenger_entrances.is_empty()
+	# With the line outside the entrance full as the doors close, nobody aboard
+	# could have got out: cars queued behind one kept for the line wait for it
+	# too, so their misses are check-in congestion as well.
+	var line_full := not no_entrance and _sim.entrance.room_for_arrivals(_sim) == 0
 	var listed: Array[ArrivalBooking] = _bookings.duplicate()
 	for b in listed:
 		if not _sim.flights.is_doors_closed(b.flight_id):
@@ -177,7 +181,7 @@ func _settle_closed(landside: LandsideSim) -> void:
 		b.state = ArrivalBooking.State.SETTLED
 		_drop(b)
 		# Kept aboard because the line outside was full: check-in congestion.
-		var held_for_line: bool = _sim.entrance.held.has(b.id)
+		var held_for_line: bool = _sim.entrance.held.has(b.id) or line_full
 		_sim.entrance.held.erase(b.id)
 		if aboard and not no_entrance and held_for_line:
 			var line_missed := _sim.entrance.held_missed

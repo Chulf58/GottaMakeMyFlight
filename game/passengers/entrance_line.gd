@@ -28,8 +28,10 @@ extends RefCounted
 ## When the room shrinks after an edit, the passengers admitted last and still
 ## outside go back to the front of the line while it has places. Not
 ## guaranteed: with every place taken, such a walker goes on in and waits on
-## the door cell; and with no check-in desk open at all (no room to count)
-## passengers walk in as before and wait inside with NO_CHECKIN.
+## the door cell. Desks that are all closed count as no free place, so arrivals
+## wait outside; only a terminal with no check-in desk lets everyone in, to
+## wait inside with NO_CHECKIN as before. Admitted walkers keep a gap on the
+## way to the door (step_of()), so they reach it one at a time.
 
 ## The first place is this many cells out from the door cell.
 const START_STEPS := 2
@@ -38,6 +40,9 @@ const MAX_PLACES := 16
 ## The most arrivals let in at once when the room is not counted (no check-in
 ## desk open).
 const UNLIMITED := 1 << 30
+## Admitted walkers keep this far apart on the way to the door (step_of()),
+## the boarding files' gap.
+const GAP_MM := 700
 ## How far off a line a point may lie and still be on it, in metres.
 const ON_LINE_M := 0.25
 ## The empty saved line.
@@ -58,6 +63,9 @@ var held_missed := {}
 ## the walk in.
 var places: Array[Vector3] = []
 var beside: Array[Vector3] = []
+## Admitted walker id -> its walk left to the door as the tick began
+## (step_of()); rebuilt every step().
+var _left := {}
 
 var _door := Vector3.ZERO
 var _edge := Vector3.ZERO
@@ -129,12 +137,14 @@ func has_claim(id: int) -> bool:
 
 ## The check-in places free for a passenger walking in now: free places on
 ## the lines of the open desks, less the passengers inside looking for one and
-## the claims of those admitted and still outside. UNLIMITED when no desk is
-## open (PassengerStations._room() is -1).
+## the claims of those admitted and still outside. Desks that are all closed
+## or unusable have no free place (0, so arrivals wait outside); only a
+## terminal with no check-in desk at all lets everyone in (UNLIMITED), and
+## they wait inside with NO_CHECKIN as before.
 func admit_room(sim: PassengerSim) -> int:
-	var room := PassengerStations._room(sim, sim.layout.desks)
-	if room < 0:
+	if sim.layout.desks.is_empty():
 		return UNLIMITED
+	var room := maxi(PassengerStations._room(sim, sim.layout.desks), 0)
 	var seekers := 0
 	for p in sim._passengers:
 		if not p.is_done() and PassengerStations.is_seeking(sim, p, true):
@@ -173,6 +183,7 @@ func take(sim: PassengerSim, p: Passenger) -> void:
 	_prune(sim)
 	if order.is_empty() and admit_room(sim) > 0 and _reachable(sim):
 		claims.append(p.id)
+		_left[p.id] = p.apron_total_mm() - p.apron_mm
 		return
 	order.append(p.id)
 	if order.size() <= capacity():
@@ -204,6 +215,27 @@ func step(sim: PassengerSim) -> void:
 		claims.append(head.id)
 		_walk_to_door(sim, head)
 	_send_to_places(sim)
+	_left.clear()
+	for id in claims:
+		var p: Passenger = sim.get_passenger(id)
+		_left[id] = p.apron_total_mm() - p.apron_mm
+
+
+## How far admitted walker `p` may walk this tick at `speed`: no closer to
+## the door, along its walk, than GAP_MM behind the admitted walker ahead of
+## it as the tick began (the nearest with less walk left, ties to the lower
+## id). Their walks all end on the door cell, so two never reach it together.
+func step_of(p: Passenger, speed: int) -> int:
+	var mine := p.apron_total_mm() - p.apron_mm
+	var start: int = _left.get(p.id, mine)
+	var ahead := -1
+	for id: int in _left:
+		var left: int = _left[id]
+		if id != p.id and (left < start or (left == start and id < p.id)):
+			ahead = maxi(ahead, left)
+	if ahead < 0:
+		return speed
+	return clampi(mine - ahead - GAP_MM, 0, speed)
 
 
 ## Ticks the line adds to `p`'s forecast: the walk from its place to the door
@@ -233,16 +265,17 @@ func forecast_ticks(sim: PassengerSim, p: Passenger) -> int:
 	return JourneyForecast.walk_ticks(walk_mm) + turns * PassengerSim.CHECKIN_TICKS
 
 
-## JSON-safe state for a save.
-func to_dict() -> Dictionary:
+## JSON-safe state for a save, with only the passengers still outside (one
+## moved on since the last tick is dropped, as the next step() would). Reads only.
+func to_dict(sim: PassengerSim) -> Dictionary:
 	var missed := {}
 	for flight_id: String in held_missed:
 		missed[flight_id] = held_missed[flight_id]
 	var held_ids := held.keys()
 	held_ids.sort()
 	return {
-		"order": order.duplicate(),
-		"claims": claims.duplicate(),
+		"order": order.filter(func(id: int) -> bool: return _outside(sim, id)),
+		"claims": claims.filter(func(id: int) -> bool: return _outside(sim, id)),
 		"held": held_ids,
 		"held_missed": missed,
 	}
@@ -285,10 +318,10 @@ static func checked(data: Variant, by_id: Dictionary) -> Dictionary:
 ## Whether a passenger walking in now could set off from the door cell to a
 ## free place on an open desk's line (StationQueue.set_off(), as
 ## PassengerStations.choose() does), so the one admitted does not stand on the
-## door cell for want of a way to the place it was admitted for. True when no
-## desk is open: then nobody's room is counted (admit_room()).
+## door cell for want of a way to the place it was admitted for. True with no
+## check-in desk at all: then nobody's room is counted (admit_room()).
 func _reachable(sim: PassengerSim) -> bool:
-	if PassengerStations._room(sim, sim.layout.desks) < 0:
+	if sim.layout.desks.is_empty():
 		return true
 	for desk in sim.layout.desks:
 		if not sim._is_open(desk) or not sim.layout.is_usable(desk):
@@ -321,7 +354,7 @@ func _outside(sim: PassengerSim, id: int) -> bool:
 ## last admitted first, while the room is short of their claims and the line
 ## has a place for each.
 func _recall(sim: PassengerSim) -> void:
-	if PassengerStations._room(sim, sim.layout.desks) < 0:
+	if sim.layout.desks.is_empty():
 		return
 	var i := claims.size() - 1
 	while i >= 0 and admit_room(sim) < 0 and order.size() < capacity():

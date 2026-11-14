@@ -491,9 +491,14 @@ func bubble_text(p: Passenger) -> String:
 	}
 	if p.stage == Passenger.Stage.MISSED:
 		return "Missed my flight!"
-	if p.stuck != Passenger.Stuck.NONE:
+	# Waiting outside while every check-in desk is closed (EntranceLine).
+	var closed_outside := entrance.waiting(p.id) and not _any_open(layout.desks)
+	if p.stuck != Passenger.Stuck.NONE or closed_outside:
 		# A usable station that stands unstaffed is closed, not missing.
-		if p.stuck == Passenger.Stuck.NO_CHECKIN and layout.desks.any(layout.is_usable):
+		var unstaffed := (
+			p.stuck == Passenger.Stuck.NO_CHECKIN and layout.desks.any(layout.is_usable)
+		)
+		if closed_outside or unstaffed:
 			return "Check-in is closed"
 		if p.stuck == Passenger.Stuck.NO_SECURITY and layout.scanners.any(layout.is_usable):
 			return "Security is closed"
@@ -648,6 +653,9 @@ func _move(p: Passenger) -> void:
 	# The line outside moves up together at a walk, so it keeps its spacing.
 	if entrance.waiting(p.id):
 		speed = mini(speed, WALK_MM)
+	elif p.stage == Passenger.Stage.SPAWNED and entrance.has_claim(p.id):
+		# Admitted walkers reach the door one at a time, a gap apart.
+		speed = entrance.step_of(p, speed)
 	if p.stage == Passenger.Stage.APRON or p.stage == Passenger.Stage.SPAWNED:
 		var total := p.apron_total_mm()
 		p.odometer_mm += mini(speed, total - p.apron_mm)

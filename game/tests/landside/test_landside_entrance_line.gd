@@ -139,6 +139,10 @@ func test_cars_hold_passengers_only_while_the_line_is_full_and_such_a_miss_is_ch
 	var texts := {}
 	for reason: Dictionary in result["reasons"]:
 		texts[reason["text"]] = reason["count"]
-	assert_int(int(texts.get(FlightResult.ENTRANCE_LINE_TEXT, 0))).is_greater(
-		EntranceLine.MAX_PLACES
+	# Every booking missed aboard, kept for the line or queued behind a car that
+	# was: all of it is check-in congestion, none reads as a road delay.
+	assert_int(int(sim.entrance.held_missed.get(PassengerTestWorld.FLIGHT, 0))).is_equal(12)
+	assert_bool(texts.has(FlightResult.WAITING_FOR_DROP_OFF)).is_false()
+	assert_int(int(texts.get(FlightResult.ENTRANCE_LINE_TEXT, 0))).is_equal(
+		EntranceLine.MAX_PLACES + 12
 	)

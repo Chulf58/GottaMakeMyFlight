@@ -110,7 +110,7 @@ static func to_snapshot(sim: PassengerSim) -> Dictionary:
 	data["claims"] = claims
 	data["park_side"] = park_side_list(sim)
 	data["booking_overrides"] = BookingOverrides.to_list(sim)
-	data["entrance_line"] = sim.entrance.to_dict()
+	data["entrance_line"] = sim.entrance.to_dict(sim)
 	return data
 
 

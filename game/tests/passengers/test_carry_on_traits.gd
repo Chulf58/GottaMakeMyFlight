@@ -106,6 +106,8 @@ func test_spawn_draws_the_traits_right_after_hunger_then_the_toilet_need() -> vo
 	mirror.seed = SEED
 	for i in 25:
 		var id := _a.sim.spawn_now(PassengerTestWorld.FLIGHT, 0)
+		# Only the draws are under test: it takes no place in the line outside.
+		_a.sim.entrance.forget(id)
 		var hunger := mirror.randi_range(CafeSim.HUNGER_START_MIN, CafeSim.HUNGER_START_MAX)
 		var want := Passenger.new()
 		CarryOnTraits.draw(mirror, want)
@@ -125,9 +127,9 @@ func test_a_current_version_save_keeps_the_traits_and_plays_out_the_same() -> vo
 	for i in 10:
 		_a.sim.spawn_now(PassengerTestWorld.FLIGHT)
 	_a.run_to(205)
-	assert_int(PassengerSim.SAVE_VERSION).is_equal(33)
+	assert_int(PassengerSim.SAVE_VERSION).is_equal(34)
 	var data: Dictionary = JSON.parse_string(JSON.stringify(_a.sim.to_snapshot()))
-	assert_int(int(data["save_version"])).is_equal(33)
+	assert_int(int(data["save_version"])).is_equal(34)
 	var seen := {}
 	for record: Dictionary in data["passengers"]:
 		seen[int(record["carry_on"])] = true

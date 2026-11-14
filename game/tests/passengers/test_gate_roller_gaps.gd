@@ -82,6 +82,8 @@ func before() -> void:
 	var wanted := [LONG_FRONTS, 3, 3]
 	while _pool[0].size() < wanted[0] or _pool[1].size() < 3 or _pool[2].size() < 3:
 		var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+		# A fixture guest, not an arrival: it takes no place in the line outside.
+		_world.sim.entrance.forget(p.id)
 		ToiletTestLayout.calm(p)
 		p.carry_on = 0
 		var first := SecurityLooks.bag_kind(p, 0) == SecurityLooks.Kind.ROLLER

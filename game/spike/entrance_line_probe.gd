@@ -13,6 +13,10 @@ const StarterFlight := preload("res://spike/starter_flight.gd")
 var _main: Node
 var _clock: SimClock
 var _sim: PassengerSim
+var _last := {}
+var _reported := {}
+var _who := {}
+var _dumps := 0
 
 
 func _initialize() -> void:
@@ -73,7 +77,9 @@ func _run() -> void:
 	var max_held := 0
 	var max_door := 0
 	while _clock.tick < doors:
+		_note_outside()
 		_clock.advance(SimClock.STEP)
+		_report_door_waiters(door)
 		var counts := _standing(door)
 		max_share = maxi(max_share, counts.x)
 		max_door = maxi(max_door, counts.y)
@@ -104,6 +110,7 @@ func _run() -> void:
 ## (TO_CHECKIN, QUEUE_FULL) on its cell. y: how many wait on the door cell.
 func _standing(door: Vector2i) -> Vector2i:
 	var cells := {}
+	_who = {}
 	var on_door := 0
 	for id in _sim.passenger_ids():
 		var p := _sim.get_passenger(id)
@@ -117,9 +124,60 @@ func _standing(door: Vector2i) -> Vector2i:
 		if cell == Passenger.NO_CELL:
 			continue
 		cells[cell] = int(cells.get(cell, 0)) + 1
+		var who: Array = _who.get(cell, [])
+		who.append(
+			(
+				"%d:%s claim=%s line=%s late=%s mm=%d/%d"
+				% [
+					id,
+					Passenger.Stage.keys()[p.stage],
+					_sim.entrance.has_claim(id),
+					_sim.entrance.waiting(id),
+					p.late,
+					p.apron_mm,
+					p.apron_total_mm()
+				]
+			)
+		)
+		_who[cell] = who
 		if cell == door:
 			on_door += 1
 	var most := 0
 	for cell in cells:
 		most = maxi(most, cells[cell])
+		if cells[cell] > 1 and _dumps < 6:
+			_dumps += 1
+			print("SHARED t=%d cell=%s %s" % [_clock.tick, cell, _who[cell]])
 	return Vector2i(most, on_door)
+
+
+## Each passenger still outside, as the last tick before it walked in left
+## it: whether it held a claim, the desk room, open desks and desk seekers.
+func _note_outside() -> void:
+	var room := PassengerStations._room(_sim, _sim.layout.desks)
+	var open := 0
+	for desk in _sim.layout.desks:
+		open += int(_sim._is_open(desk))
+	for id in _sim.passenger_ids():
+		var p := _sim.get_passenger(id)
+		if p.stage == Passenger.Stage.SPAWNED:
+			_last[id] = [_sim.entrance.has_claim(id), room, open, _sim.entrance.admit_room(_sim)]
+
+
+## Prints, once each, the passengers waiting inside on the door cell with
+## what they held before walking in (_note_outside()).
+func _report_door_waiters(door: Vector2i) -> void:
+	for id in _sim.passenger_ids():
+		var p := _sim.get_passenger(id)
+		if p.is_done() or _reported.has(id) or p.at != door:
+			continue
+		if p.stage != Passenger.Stage.TO_CHECKIN or p.stuck == Passenger.Stuck.NONE:
+			continue
+		_reported[id] = true
+		var before: Array = _last.get(id, [])
+		print(
+			(
+				"DOOR_WAITER t=%d id=%d stuck=%s entered=%d claim,room,open,admit=%s"
+				% [_clock.tick, id, Passenger.Stuck.keys()[p.stuck], p.stage_tick, before]
+			)
+		)
