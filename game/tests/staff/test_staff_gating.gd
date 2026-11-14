@@ -47,26 +47,50 @@ func _spawn(count: int) -> Array[int]:
 func test_with_no_staff_nobody_checks_in() -> void:
 	var ids := _spawn(4)
 	_w.run_to(_w.clock.tick + 400)
-	var stuck := 0
+	# Closed desks hold arrivals in the line outside, so nobody reaches check-in
+	# (decision arrivals-wait-in-a-tidy-line-outside-the-entrance-when-check,
+	# 051b5d51).
+	var waiting := 0
 	for id in ids:
 		var p := _w.passenger(id)
-		stuck += int(p.stuck == Passenger.Stuck.NO_CHECKIN)
-		assert_int(p.stage).is_equal(Passenger.Stage.TO_CHECKIN)
+		waiting += int(_w.sim.entrance.waiting(id))
+		assert_str(_w.sim.bubble_text(p)).is_equal("Check-in is closed")
 	print(
 		(
-			"TO_CHECKIN reached %d, CHECKIN reached %d"
+			"waiting outside %d, CHECKIN_QUEUE reached %d, CHECKIN reached %d"
 			% [
-				_reached.get(Passenger.Stage.TO_CHECKIN, 0),
+				waiting,
+				_reached.get(Passenger.Stage.CHECKIN_QUEUE, 0),
 				_reached.get(Passenger.Stage.CHECKIN, 0)
 			]
 		)
 	)
-	assert_int(_reached.get(Passenger.Stage.TO_CHECKIN, 0)).is_equal(4)
-	assert_int(stuck).is_equal(4)
+	assert_int(waiting).is_equal(4)
 	assert_int(_reached.get(Passenger.Stage.CHECKIN_QUEUE, 0)).is_equal(0)
 	assert_int(_reached.get(Passenger.Stage.CHECKIN, 0)).is_equal(0)
 	for desk in _ids["desks"]:
 		assert_array(_w.sim.queue_of(desk)).is_empty()
+
+
+## Control: only a terminal with no check-in desk at all keeps the walk-in with
+## NO_CHECKIN (the line outside holds arrivals only while desks exist).
+func test_a_terminal_with_no_check_in_desk_keeps_the_walk_in_with_no_checkin() -> void:
+	var grid := PassengerTestWorld.floored(Vector2i(8, 6))
+	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(0, 5), 3)
+	var world := PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(4000, 5000))
+	var id := world.sim.spawn_now(PassengerTestWorld.FLIGHT)
+	world.run_to(world.clock.tick + 60)
+	var p := world.passenger(id)
+	print(
+		(
+			"no desk: waiting %s, stage %d, stuck %d"
+			% [world.sim.entrance.waiting(id), p.stage, p.stuck]
+		)
+	)
+	assert_bool(world.sim.entrance.waiting(id)).is_false()
+	assert_int(p.stage).is_equal(Passenger.Stage.TO_CHECKIN)
+	assert_int(p.stuck).is_equal(Passenger.Stuck.NO_CHECKIN)
+	world.free_all()
 
 
 func test_a_passenger_with_no_open_desk_is_stuck_not_late() -> void:
