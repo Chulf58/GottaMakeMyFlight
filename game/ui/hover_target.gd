@@ -25,9 +25,10 @@ extends Node
 ##   tooltip text, plus an optional "select": the grid object id the sign marks
 ##   (a station, a gate desk, an arch). A click on a sign with "select" selects
 ##   that object exactly as a click on the object does (PassengerHud.
-##   _select_built_object) and pins nothing; its tooltip still shows on hover. A
-##   sign without "select" (a wall gap) pins on click. It is asked every frame; a
-##   sign it stops reporting is gone. A freed provider is dropped.
+##   _select_built_object) and pins nothing; its tooltip shows on hover, except
+##   after that click while the pointer stays on the sign. A sign without
+##   "select" (a wall gap) pins on click. It is asked every frame; a sign it
+##   stops reporting is gone. A freed provider is dropped.
 ## - Passenger text: passenger_text is a Callable (passenger id -> String) that
 ##   lane B sets; unset or "" shows no tooltip for a passenger.
 ##
@@ -90,6 +91,9 @@ var _hovered: Target
 var _pinned: Target
 var _pinned_sign: Target
 var _pinned_passenger := 0
+## The sign whose click selected its station: its caption stays hidden until the
+## pointer has left it.
+var _selected_sign: Target
 ## Set by a world click that met no sign: the next resolve pins the passenger
 ## PassengerHud selected for it.
 var _pin_from_click := false
@@ -207,8 +211,10 @@ func refresh() -> void:
 	_settle_passenger_pin()
 	_hovered = null if taken else _target_at(_pointer(), signs, eye)
 	_pinned = _pinned_now(signs, eye)
+	if _selected_sign != null and not _selected_sign.same_as(_hovered):
+		_selected_sign = null
 	var shown := shown_target()
-	if shown == null or shown.text == "":
+	if shown == null or shown.text == "" or _selected_sign != null:
 		_tip.hide_tip()
 	else:
 		_tip.show_at(shown.text, shown.rect, _avoid_rects(_hud_rects()))
@@ -230,6 +236,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		_pin_from_click = false
 		if sign.select_id != 0 and hud != null:
 			_pinned_sign = null
+			_selected_sign = sign
 			hud._select_built_object(sign.select_id)
 			get_viewport().set_input_as_handled()
 			return
@@ -249,6 +256,7 @@ func _on_loaded(ok: bool) -> void:
 	if not ok:
 		return
 	_pinned_sign = null
+	_selected_sign = null
 	_pinned_passenger = 0
 	_pin_from_click = false
 	_hovered = null
