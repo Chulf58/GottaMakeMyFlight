@@ -118,7 +118,7 @@ func test_a_rest_pose_row_clears_the_drawn_mesh_top(
 	# The passengers spawned on the way to this body's look stand at the same
 	# cell, and their icons would merge into one badge with the row's.
 	_views.cluster_needs = false
-	var variant := body / PassengerLooks.PER_VARIANT
+	var variant := PassengerLooks.variant_of(body)
 	var id := _world.sim.spawn_now(PassengerTestWorld.FLIGHT, variant)
 	while PassengerLooks.body_of(id, variant) != body:
 		id = _world.sim.spawn_now(PassengerTestWorld.FLIGHT, variant)

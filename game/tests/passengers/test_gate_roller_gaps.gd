@@ -538,7 +538,7 @@ static func _leg_depth(q: Passenger, hand: int) -> float:
 	var toward := (hand == 1 and slide > 0.0) or (hand == 0 and slide < 0.0)
 	var at := 0 if not toward else (1 if absf(slide) < GateRoller.FAR_SLIDE_M else 2)
 	var scale_by := SecurityLooks.bag_scale(q)
-	var variant := look / PassengerLooks.PER_VARIANT
+	var variant := PassengerLooks.variant_of(look)
 	var need: float = LEG_NEED_M[0 if scale_by >= 1.0 else 1][at][variant][hand]
 	return need - 0.01 - absf(GateRoller.spot(q, hand).origin.x)
 

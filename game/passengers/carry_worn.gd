@@ -17,12 +17,15 @@ const BACK_TOP_OVER_SPINE_M := 0.06
 ## worn_back_sweep_probe.gd's TOPS_M, whose largest gap over the clips is
 ## least (a top level with the shoulders meets them as they move; the male
 ## shoulders reach a one-bag pack's top corners unless it hangs 6-9 cm lower).
-## Measured by game/spike/worn_back_sweep_probe.gd (12 bodies, both clips at
-## 64 moments, the least gap read on an outline 1 cm wider, EDGE_M). The sweep
-## reads the torso only, so the one-bag rows of bodies 9 and 11 put the pack's
-## bottom in the left buttock (skinned to Quad.L) at the walk's stride; they
-## are set from the stride instead, 1 cm clear of the legs with the panel
-## resting on the back (test_worn_back_stride_clear.gd, board 0dd2c787).
+## Measured by game/spike/worn_back_sweep_probe.gd (every body, both clips at
+## 64 moments, the least gap read on an outline 1 cm wider, EDGE_M; the rows of
+## male 04 and 05 and female 06, 09 and 12 added for board 3fcd8e5a). The sweep
+## reads the torso only, so the one-bag rows of female_05 and female_11 put the
+## pack's bottom in the left buttock (skinned to Quad.L) at the walk's stride,
+## and so did those of female_06, _09 and _12; they are set from the stride
+## instead, 1 cm clear of the legs with the panel resting on the back
+## (test_worn_back_stride_clear.gd, boards 0dd2c787 and 3fcd8e5a; female_09's
+## rests at 0.0296 m, under the 0.03 m limit).
 const BACK_ON_SPINE_M: Array[Vector4] = [
 	Vector4(0.086, -0.09, 0.097, 0.03),
 	Vector4(0.082, -0.06, 0.100, 0.00),
@@ -30,11 +33,16 @@ const BACK_ON_SPINE_M: Array[Vector4] = [
 	Vector4(0.081, -0.06, 0.100, 0.00),
 	Vector4(0.081, -0.06, 0.081, -0.06),
 	Vector4(0.086, -0.09, 0.102, 0.00),
+	Vector4(0.086, -0.09, 0.102, 0.00),
+	Vector4(0.081, -0.06, 0.100, 0.00),
 	Vector4(0.081, -0.03, 0.110, 0.06),
 	Vector4(0.073, -0.03, 0.110, 0.06),
 	Vector4(0.072, -0.03, 0.110, 0.06),
 	Vector4(0.088, 0.03, 0.110, 0.06),
 	Vector4(0.065, -0.03, 0.092, 0.03),
+	Vector4(0.088, 0.03, 0.110, 0.06),
+	Vector4(0.088, 0.03, 0.110, 0.06),
+	Vector4(0.090, 0.03, 0.110, 0.06),
 	Vector4(0.088, 0.03, 0.110, 0.06),
 ]
 ## The least panel gap BACK_ON_SPINE_M is measured for.

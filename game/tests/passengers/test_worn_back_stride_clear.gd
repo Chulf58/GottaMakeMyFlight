@@ -11,6 +11,8 @@ extends GdUnitTestSuite
 ## two (SecurityLooks.TWO_BAG_SCALE). Leg points must stay LEG_CLEAR_M out of
 ## the pack's box, torso points out of the box itself, and the panel must still
 ## rest on the back (its least torso gap at most WORN_GAP_M on every moment).
+## The five bodies board 3fcd8e5a added (male 04 and 05, female 06, 09, 12)
+## are checked the same way, as their rows were set by the same sweep.
 
 const MOMENTS := 32
 const CLIPS: Array[String] = ["walk", "idle"]
@@ -18,21 +20,30 @@ const CLIPS: Array[String] = ["walk", "idle"]
 const LEG_CLEAR_M := 0.01
 ## The resting limit of the worn-backpack float check (spike/worn_back_gap.gd).
 const WORN_GAP_M := 0.03
-const BODIES_CHECKED: Array[int] = [9, 11]
+const BODIES_CHECKED: Array[String] = [
+	"tcp_female_character_05",
+	"tcp_female_character_11",
+	"tcp_male_character_04",
+	"tcp_male_character_05",
+	"tcp_female_character_06",
+	"tcp_female_character_09",
+	"tcp_female_character_12",
+]
 const LEGS: Array[String] = ["Quad", "Shin", "Foot", "Toes", "Knee", "Thigh"]
 const ARMS: Array[String] = [
 	"Arm", "Forearm", "Hand", "Fingers", "Fingertips", "Thumb", "Thumb_Tip"
 ]
 
 
-## Bodies 9 and 11 with one bag and two: no leg vertex within LEG_CLEAR_M of
+## Female 05 and 11 and the added bodies with one bag and two: no leg vertex within LEG_CLEAR_M of
 ## the pack, no torso vertex in it, and the panel resting on the back.
-func test_worn_pack_clears_the_stride_of_bodies_9_and_11() -> void:
+func test_worn_pack_clears_the_stride_of_the_checked_bodies() -> void:
 	var legs_in := 0
 	var torso_in := 0
 	var worst_rest := 0.0
 	for run in BODIES_CHECKED.size() * 2:
-		var b := BODIES_CHECKED[run / 2]
+		var b := PassengerLooks.BODIES.find(BODIES_CHECKED[run / 2])
+		assert_int(b).is_greater_equal(0)
 		var scale_by := 1.0 if run % 2 == 0 else SecurityLooks.TWO_BAG_SCALE
 		var got := _measure(b, scale_by)
 		print(

@@ -11,7 +11,7 @@ func test_a_body_stays_within_its_variant_and_every_body_is_drawn() -> void:
 	for variant in 2:
 		for id in range(1, 61):
 			var body := PassengerLooks.body_of(id, variant)
-			assert_int(body / PassengerLooks.PER_VARIANT).is_equal(variant)
+			assert_int(PassengerLooks.variant_of(body)).is_equal(variant)
 			seen[body] = true
 	print("bodies seen: %s" % [seen.keys()])
 	assert_int(seen.size()).is_equal(PassengerLooks.BODIES.size())

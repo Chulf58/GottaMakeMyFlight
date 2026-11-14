@@ -271,7 +271,7 @@ func test_print_the_seat_side_each_body_needs() -> void:
 				" %s: stand %.3f booth %.3f gate %.3f"
 				% [["right", "left"][hand], stand, booth, gate]
 			)
-			var key := "%d %d" % [b / PassengerLooks.PER_VARIANT, hand]
+			var key := "%d %d" % [PassengerLooks.variant_of(b), hand]
 			worst[key] = maxf(float(worst.get(key, 0.0)), maxf(stand, booth))
 		print(line)
 	print(

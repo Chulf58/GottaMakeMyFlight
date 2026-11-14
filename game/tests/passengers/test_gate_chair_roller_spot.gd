@@ -107,7 +107,7 @@ func test_the_old_spot_fails_for_the_male_bodies() -> void:
 			var n := _inside(_idle[b], Transform3D.IDENTITY, _lying(hand, OLD_SIDE_M), 1.0)
 			line += " %s %d" % [["right", "left"][hand], n]
 			if n > 0:
-				counts[b / PassengerLooks.PER_VARIANT][hand] += 1
+				counts[PassengerLooks.variant_of(b)][hand] += 1
 		print(line)
 	print("bodies with vertices inside [variant][hand]: %s" % [counts])
 	assert_int(counts[0][0]).is_equal(PassengerLooks.PER_VARIANT)

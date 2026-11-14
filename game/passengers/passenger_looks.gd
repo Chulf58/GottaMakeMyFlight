@@ -1,6 +1,6 @@
 class_name PassengerLooks
 extends RefCounted
-## How a passenger is drawn: one of six Toon City People bodies of its gender,
+## How a passenger is drawn: one of the Toon City People bodies of its gender,
 ## a clothing tint and a bag colour (decision comic-life-and-variety-visuals-
 ## first-passengers-get-10-more). All three are chosen here, in the view, from
 ## the sim's variant (0 male, 1 female) and the passenger's stable id, so the
@@ -25,12 +25,17 @@ const BODIES: Array[String] = [
 	"tcp_male_character_06",
 	"tcp_male_character_08",
 	"tcp_male_character_09",
+	"tcp_male_character_04",
+	"tcp_male_character_05",
 	"tcp_female_character_01",
 	"tcp_female_character_03",
 	"tcp_female_character_04",
 	"tcp_female_character_05",
 	"tcp_female_character_08",
 	"tcp_female_character_11",
+	"tcp_female_character_06",
+	"tcp_female_character_09",
+	"tcp_female_character_12",
 ]
 const SCENES: Array[PackedScene] = [
 	preload("res://assets/people/tcp_male_character_01.glb"),
@@ -39,29 +44,70 @@ const SCENES: Array[PackedScene] = [
 	preload("res://assets/people/tcp_male_character_06.glb"),
 	preload("res://assets/people/tcp_male_character_08.glb"),
 	preload("res://assets/people/tcp_male_character_09.glb"),
+	preload("res://assets/people/tcp_male_character_04.glb"),
+	preload("res://assets/people/tcp_male_character_05.glb"),
 	preload("res://assets/people/tcp_female_character_01.glb"),
 	preload("res://assets/people/tcp_female_character_03.glb"),
 	preload("res://assets/people/tcp_female_character_04.glb"),
 	preload("res://assets/people/tcp_female_character_05.glb"),
 	preload("res://assets/people/tcp_female_character_08.glb"),
 	preload("res://assets/people/tcp_female_character_11.glb"),
+	preload("res://assets/people/tcp_female_character_06.glb"),
+	preload("res://assets/people/tcp_female_character_09.glb"),
+	preload("res://assets/people/tcp_female_character_12.glb"),
 ]
-## Bodies per variant: BODIES holds the males, then the females.
-const PER_VARIANT := 6
+## The male bodies' count: BODIES holds PER_VARIANT males, then the females
+## (variant_of()). Board 3fcd8e5a added male 04 and 05 and female 06, 09 and
+## 12, so there is one female more; female 02 is left out (her shower clip
+## cannot be fitted) and male 10 too (a roller lying beside his left foot at a
+## seat park takes in his shoe, test_roller_stand_clearance.gd).
+const PER_VARIANT := 8
 ## Clip speeds measured by the Toon pipeline (its SPEED lines), per body. The
 ## bodies of one gender share one skeleton, so their speeds agree.
 const CLIP_WALK_MPS: Array[float] = [
-	1.952, 1.952, 1.952, 1.952, 1.952, 1.952, 1.922, 1.922, 1.922, 1.922, 1.922, 1.922
+	1.952,
+	1.952,
+	1.952,
+	1.952,
+	1.952,
+	1.952,
+	1.952,
+	1.952,
+	1.922,
+	1.922,
+	1.922,
+	1.922,
+	1.922,
+	1.922,
+	1.922,
+	1.922,
+	1.922,
 ]
 const CLIP_RUN_MPS: Array[float] = [
-	5.295, 5.295, 5.295, 5.295, 5.295, 5.295, 4.173, 4.173, 4.173, 4.173, 4.173, 4.173
+	5.295,
+	5.295,
+	5.295,
+	5.295,
+	5.295,
+	5.295,
+	5.295,
+	5.295,
+	4.173,
+	4.173,
+	4.173,
+	4.173,
+	4.173,
+	4.173,
+	4.173,
+	4.173,
+	4.173,
 ]
 ## Per body, how far a body seated on a gate seat row is drawn forward (x) and
 ## up (y) of the sim's spot, so no part of it is inside the chair: the hips
 ## clear the backrest and the backs of the female bodies' knees clear the pan's
 ## front edge (their feet already sit forward in sit_idle, tools/blender/anim/
 ## toon_clips.py SIT_SHIN_LEAN_DEG). A lift only where a dress hangs into the
-## pan (female_01 and female_05).
+## pan (female_01, female_05 and female_06).
 ## Measured by game/spike/passenger_looks_plates_probe.gd --parts=seated
 ## --sweep (the least step leaving no body point inside the row) plus 1 cm.
 const SEAT_SHIFT_M: Array[Vector2] = [
@@ -71,18 +117,23 @@ const SEAT_SHIFT_M: Array[Vector2] = [
 	Vector2(0.025, 0.0),
 	Vector2(0.035, 0.0),
 	Vector2(0.03, 0.0),
+	Vector2(0.03, 0.0),
+	Vector2(0.025, 0.0),
 	Vector2(0.07, 0.02),
 	Vector2(0.06, 0.0),
 	Vector2(0.065, 0.0),
 	Vector2(0.06, 0.015),
 	Vector2(0.08, 0.0),
 	Vector2(0.065, 0.0),
+	Vector2(0.06, 0.02),
+	Vector2(0.07, 0.0),
+	Vector2(0.075, 0.0),
 ]
 ## Per body, how far a body seated on a cafe_table chair is drawn towards the
 ## table (x) and up (y) of the sim's seat root (CafeChairs), so no part of it is
 ## inside the chair's back posts, back or frame: at the bare root the hips and
-## lower spine sit 1.9-2 cm into the chair back. A lift only for female_01,
-## whose dress hangs into the pan (without it she needs 18.5 cm).
+## lower spine sit 1.9-2 cm into the chair back. A lift only for female_01 and
+## female_06, whose dresses hang into the pan (without it they need 18.5 cm).
 ## Measured by game/spike/passenger_looks_plates_probe.gd --parts=cafe --sweep
 ## (the least step leaving no body point inside the cafe_table) plus 1 cm.
 const CAFE_SEAT_SHIFT_M: Array[Vector2] = [
@@ -92,21 +143,28 @@ const CAFE_SEAT_SHIFT_M: Array[Vector2] = [
 	Vector2(0.085, 0.0),
 	Vector2(0.10, 0.0),
 	Vector2(0.09, 0.0),
+	Vector2(0.09, 0.0),
+	Vector2(0.085, 0.0),
 	Vector2(0.115, 0.01),
 	Vector2(0.10, 0.0),
 	Vector2(0.10, 0.0),
 	Vector2(0.10, 0.0),
 	Vector2(0.105, 0.0),
 	Vector2(0.095, 0.0),
+	Vector2(0.115, 0.01),
+	Vector2(0.105, 0.0),
+	Vector2(0.105, 0.0),
 ]
 ## Per body, the step (as CAFE_SEAT_SHIFT_M) for a body seated on a cushion of
 ## the services kit (board 3405a04b): its seats are shaped around the bare root
 ## (build_services_kit.py), and the cafe chair's step puts the forearms into
 ## the dining table top. Only a lift where a dress hangs into the cushion
-## (female_01 2 cm, female_05 1 cm), no step towards the table. Measured by
+## (female_01 and female_06 2 cm, female_05 1 cm), no step towards the table. Measured by
 ## game/spike/food_seat_plates_probe.gd --parts=sweep (the least lift leaving
 ## no body point inside the piece).
 const SERVICES_SEAT_SHIFT_M: Array[Vector2] = [
+	Vector2.ZERO,
+	Vector2.ZERO,
 	Vector2.ZERO,
 	Vector2.ZERO,
 	Vector2.ZERO,
@@ -119,14 +177,19 @@ const SERVICES_SEAT_SHIFT_M: Array[Vector2] = [
 	Vector2(0.0, 0.01),
 	Vector2.ZERO,
 	Vector2.ZERO,
+	Vector2(0.0, 0.02),
+	Vector2.ZERO,
+	Vector2.ZERO,
 ]
 ## Per body, the step for a body seated on the restaurant booth's bench: as
 ## SERVICES_SEAT_SHIFT_M, plus a step towards the table where the hips reach
-## into the tilted back cushion (the least step plus 1 cm; female_01 needs her
-## 2 cm lift as well).
+## into the tilted back cushion (the least step plus 1 cm; female_01 and
+## female_06 need their 2 cm lift as well).
 const BOOTH_SEAT_SHIFT_M: Array[Vector2] = [
 	Vector2.ZERO,
 	Vector2(0.015, 0.0),
+	Vector2.ZERO,
+	Vector2.ZERO,
 	Vector2.ZERO,
 	Vector2.ZERO,
 	Vector2.ZERO,
@@ -136,6 +199,9 @@ const BOOTH_SEAT_SHIFT_M: Array[Vector2] = [
 	Vector2(0.025, 0.0),
 	Vector2(0.025, 0.0),
 	Vector2(0.025, 0.0),
+	Vector2(0.025, 0.0),
+	Vector2(0.02, 0.02),
+	Vector2(0.03, 0.0),
 	Vector2(0.025, 0.0),
 ]
 ## Piece -> its per-body seat step, for the pieces whose seats do not take
@@ -158,7 +224,7 @@ const TINTS: Array[Vector4] = [
 	Vector4(0.07, 0.66, 0.50, 0.40),  # orange over dark teal
 	Vector4(0.13, 0.64, 0.07, 0.45),  # mustard over brown
 	Vector4(0.30, 0.50, 0.10, 0.35),  # leaf green over khaki
-	Vector4(0.48, 0.56, 0.63, 0.45),  # teal over navy
+	Vector4(0.48, 0.56, 0.97, 0.40),  # teal over burgundy
 	Vector4(0.59, 0.56, 0.11, 0.40),  # cornflower blue over khaki
 	Vector4(0.78, 0.46, 0.00, 0.06),  # lilac over charcoal
 	Vector4(0.93, 0.52, 0.60, 0.40),  # rose over denim
@@ -220,7 +286,14 @@ static func seat_shift(def_id: StringName, body: int) -> Vector2:
 
 ## The body index (into BODIES) a passenger is drawn with.
 static func body_of(id: int, variant: int) -> int:
-	return variant * PER_VARIANT + pick(id, 0, PER_VARIANT)
+	var count := PER_VARIANT if variant == 0 else BODIES.size() - PER_VARIANT
+	return variant * PER_VARIANT + pick(id, 0, count)
+
+
+## The variant (0 male, 1 female) of body `body` (BODIES index). The variants
+## have different counts, so `body / PER_VARIANT` is 2 for the last female.
+static func variant_of(body: int) -> int:
+	return 0 if body < PER_VARIANT else 1
 
 
 ## The clothing tint index (into TINTS) of a passenger.
