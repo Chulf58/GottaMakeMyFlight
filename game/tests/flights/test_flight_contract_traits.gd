@@ -28,6 +28,17 @@ func test_terms_without_traits_make_a_plain_contract() -> void:
 	assert_bool(traits.is_read_only()).is_true()
 
 
+## Contracts gained the traits term in flight save version 8; a version 7 save
+## is refused, with no migration.
+func test_a_version_7_save_of_the_flights_is_refused() -> void:
+	assert_int(FlightSim.SAVE_VERSION).is_equal(8)
+	assert_bool(_sim.accept_contract(_terms("OLD"))).is_true()
+	var data: Dictionary = JSON.parse_string(JSON.stringify(_sim.to_snapshot()))
+	data["save_version"] = 7
+	var loaded: FlightSim = auto_free(FlightSim.new())
+	assert_bool(loaded.from_snapshot(data)).is_false()
+
+
 func test_a_contract_keeps_a_frozen_copy_of_its_traits() -> void:
 	var source := TRAITS.duplicate()
 	assert_bool(_sim.accept_contract(_terms("PAIRED", source))).is_true()

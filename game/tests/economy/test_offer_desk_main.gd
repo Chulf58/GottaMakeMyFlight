@@ -35,6 +35,18 @@ func test_the_desk_follows_the_scenes_own_rating_and_flights() -> void:
 	assert_object((_main.get_node("OfferPanel") as OfferPanel).desk).is_same(_desk)
 
 
+## The scene wires its BaggageSim, so the bag and shopper traits can be drawn; a
+## new game has no bag room and no shop, so neither is live yet.
+func test_the_desk_reads_the_scenes_baggage_for_its_trait_needs() -> void:
+	var bags := _main.get_node("BaggageSim") as BaggageSim
+	assert_object(_desk.baggage).is_same(bags)
+	assert_object(bags.grid).is_not_null()
+	var needs := _desk.live_needs()
+	assert_bool(needs[OfferTraits.NEEDS_BAGS]).is_equal(bags.has_ready_bag_room())
+	assert_bool(needs[OfferTraits.NEEDS_BAGS]).is_false()
+	assert_bool(needs[OfferTraits.NEEDS_SHOPS]).is_false()
+
+
 func test_three_low_day_ends_end_the_oldest_contract_of_the_scene() -> void:
 	assert_bool(_flights.open_airport()).is_true()
 	# The test contracts are medium planes; a new game's runway is small.

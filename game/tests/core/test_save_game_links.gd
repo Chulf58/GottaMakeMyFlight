@@ -106,6 +106,25 @@ func test_an_accepted_offer_whose_terms_differ_from_its_contract_is_refused() ->
 	_assert_refused(bad, "has another fee_per_passenger than its offer")
 
 
+## Traits are a term: an accepted offer whose traits differ from its contract's
+## is refused, even when both are valid traits.
+func test_an_accepted_offer_whose_traits_differ_from_its_contract_is_refused() -> void:
+	var bad := _taken()
+	var contract: Dictionary = {}
+	for entry: Dictionary in bad["flights"]["contracts"]:
+		if entry["id"] == _accepted:
+			contract = entry
+	var other := {"up": "top_fare", "down": "heavy_bags", "level": 1}
+	if _same_traits(contract["traits"], other):
+		other = {"up": "full_flight", "down": "rush_crowd", "level": 1}
+	contract["traits"] = other
+	_assert_refused(bad, "has another traits than its offer")
+
+
+static func _same_traits(a: Dictionary, b: Dictionary) -> bool:
+	return JSON.stringify(OfferTraits.frozen(a)) == JSON.stringify(OfferTraits.frozen(b))
+
+
 func test_a_contract_whose_offer_is_not_accepted_is_refused() -> void:
 	var bad := _taken()
 	bad["offers"]["offers"][_offer_index(bad, _accepted)]["status"] = OfferBoard.DECLINED
