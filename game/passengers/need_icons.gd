@@ -276,8 +276,9 @@ static func unit_of(view: Viewport, camera: Camera3D) -> float:
 ## place the boredom icon would take. Does nothing with no camera.
 ## With `shown` false (no need mode on, or the camera at the home zoom or
 ## farther out) the node's need icons are hidden for this frame; `wish_shown`
-## false (the camera at the home zoom or farther out, shown_at()) hides its wish
-## bubble. `mask` holds a bit (1 << Need) for each need whose icon is hidden,
+## false (the camera at the home zoom or farther out, shown_at(), or neither
+## Boredom mode nor a focused passenger, as PassengerViews decides) hides its
+## wish bubble. `mask` holds a bit (1 << Need) for each need whose icon is hidden,
 ## drawn by a count cluster badge (NeedCluster) or not wanted in this mode;
 ## the rest close up the row.
 static func layout(

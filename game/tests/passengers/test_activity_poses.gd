@@ -134,8 +134,23 @@ func test_each_piece_draws_its_own_pose() -> void:
 		# Only a showering passenger has its clothes off.
 		assert_bool(node.has_meta(&"dressed")).is_equal(showers)
 		assert_bool(node.get_meta(&"seated")).is_equal(type != &"play_area")
-		# The thought bubble is still drawn over a showering passenger.
-		assert_bool((node.get_node("Bubble") as Label3D).visible).is_true()
+		# The thought bubble is still drawn over the visitor: make it late so
+		# it has words, and focus it (the calm view shows speech on focus only).
+		var bubble := node.get_node("Bubble") as Label3D
+		_views.draw()
+		print("%s: default view bubble '%s'" % [type, bubble.text])
+		assert_str(bubble.text).override_failure_message("%s: default view" % type).is_empty()
+		p.late = true
+		_views.sync()
+		assert_str(node.get_meta(&"speech", "")).is_equal(BubbleDeclutter.LATE_TEXT)
+		assert_str(bubble.text).override_failure_message("%s: unfocused" % type).is_empty()
+		_views.selected_id = p.id
+		_views.draw()
+		print("%s: focused bubble '%s' visible %s" % [type, bubble.text, bubble.visible])
+		assert_str(bubble.text).override_failure_message("%s: focused" % type).is_equal(
+			BubbleDeclutter.LATE_TEXT
+		)
+		assert_bool(bubble.visible).is_true()
 		_free()
 
 

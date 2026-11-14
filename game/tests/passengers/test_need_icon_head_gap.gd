@@ -134,7 +134,7 @@ func test_a_rest_pose_row_clears_the_drawn_mesh_top(
 	)
 	var needs: Array[NeedIcons.Need] = [TOILET]
 	NeedIcons.show_needs(node, needs)
-	(node.get_node("Bubble") as Label3D).text = ""
+	node.set_meta(&"speech", "")
 	for yaw in YAWS:
 		# The views draw the node with its turn's yaw, so the yaw is set there.
 		_views._turns.place(id, deg_to_rad(yaw))
@@ -167,7 +167,7 @@ func test_a_crown_stacks_over_the_row_at_both_angles() -> void:
 	VipMarker.mark(node, true)
 	var needs: Array[NeedIcons.Need] = [TOILET]
 	NeedIcons.show_needs(node, needs)
-	(node.get_node("Bubble") as Label3D).text = ""
+	node.set_meta(&"speech", "")
 	var crown := node.get_node(VipMarker.SPRITE) as Sprite3D
 	for pitch in PITCHES:
 		_aim(_head_bone(node), pitch)
@@ -432,6 +432,10 @@ func _facility_world() -> PassengerTestWorld:
 ## The views drawn into a 1920 x 1080 viewport, as the game window draws.
 func _open_views() -> void:
 	_views = PassengerTestWorld.views()
+	# These layout tests measure bubbles over passengers, which the calm view
+	# shows only on focus or in a mode (decision calm-cozy-default-view-quiet-
+	# world-detail-on-ask-soft-statio); every bubble shows here.
+	_views.all_bubbles = true
 	_views.clock = _world.clock
 	_views.sim = _world.sim
 	_screen = SubViewport.new()
@@ -481,7 +485,7 @@ func _check_gaps(node: Node3D, tag: String, wish := false, strict := true) -> Di
 	var needs: Array[NeedIcons.Need] = [TOILET]
 	NeedIcons.show_needs(node, needs)
 	# No speech bubble: the row would stand on it instead (row_anchor()).
-	(node.get_node("Bubble") as Label3D).text = ""
+	node.set_meta(&"speech", "")
 	var bone := node.global_transform.affine_inverse() * _head_bone(node)
 	print("%s: head bone %s, body %d" % [tag, bone, node.get_meta(&"body", -1)])
 	for pitch in PITCHES:
