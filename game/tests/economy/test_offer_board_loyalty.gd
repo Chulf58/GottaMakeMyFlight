@@ -7,6 +7,9 @@ extends GdUnitTestSuite
 ## Also the save check on a traited fee: a fee loads only when some base fee of
 ## the tier maps to it.
 
+## Gotta Air flew its fifth Loyal day on day 5, so its day 6 offers may be loyal.
+const LOYAL_BY_DAY_5 := {"Gotta Air": {"days": 5, "last_day": 5}}
+
 var _rng: RandomNumberGenerator
 
 
@@ -145,14 +148,41 @@ func test_a_saved_fee_loads_only_when_a_base_fee_maps_to_it() -> void:
 		[top, true, 18, false],
 	]
 	for case in cases:
-		var offers := TestOfferBoard.day_records(0, [600, 720, 840])
+		var offers := TestOfferBoard.day_records(6, [600, 720, 840])
 		offers[0]["traits"] = case[0]
 		offers[0]["loyal"] = case[1]
 		offers[0]["fee_per_passenger"] = case[2]
+		var data := TestOfferBoard.save_of(offers)
+		data["loyalty"] = LOYAL_BY_DAY_5
 		(
-			assert_bool(OfferBoard.new().from_snapshot(TestOfferBoard.save_of(offers)))
+			assert_bool(OfferBoard.new().from_snapshot(data))
 			. override_failure_message(str(case))
 			. is_equal(case[3])
+		)
+
+
+## A loyal mark is possible only when the airline's saved count is full and the
+## offer was drawn after the last counted day; a count's last day is at least
+## its days - 1.
+func test_a_loyal_mark_the_count_cannot_explain_is_refused() -> void:
+	var cases: Array = [
+		[{}, 6, false],
+		[{"Gotta Air": {"days": 4, "last_day": 5}}, 6, false],
+		[LOYAL_BY_DAY_5, 5, false],
+		[LOYAL_BY_DAY_5, 6, true],
+		[{"Gotta Air": {"days": 5, "last_day": 3}}, 6, false],
+		[{"Gotta Air": {"days": 5, "last_day": 4}}, 6, true],
+	]
+	for case in cases:
+		var offers := TestOfferBoard.day_records(case[1], [600, 720, 840])
+		offers[0]["loyal"] = true
+		offers[0]["fee_per_passenger"] = OfferTraits.loyal_fee_of(25, true)
+		var data := TestOfferBoard.save_of(offers)
+		data["loyalty"] = case[0]
+		(
+			assert_bool(OfferBoard.new().from_snapshot(data))
+			. override_failure_message(str(case))
+			. is_equal(case[2])
 		)
 
 

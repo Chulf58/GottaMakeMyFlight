@@ -34,7 +34,9 @@ func fine_miss(flights: FlightSim, flight_id: String, wallet: Wallet) -> int:
 
 ## Pays the signing bonus into `wallet` when departed flight `flight_id` is the
 ## first of its contract to depart and the contract has Signing bonus. True when
-## it paid.
+## it paid. A bonus the wallet cannot take (it would pass Wallet.MAX_BALANCE) is
+## forfeited (conductor ruling): the contract is still marked paid, so it is
+## never paid later.
 func on_departed(flights: FlightSim, flight_id: String, wallet: Wallet) -> bool:
 	var contract := _contract_of(flights, flight_id)
 	if contract.is_empty() or _bonus_paid.has(contract["id"]):
@@ -42,10 +44,12 @@ func on_departed(flights: FlightSim, flight_id: String, wallet: Wallet) -> bool:
 	var bonus := OfferTraits.signing_bonus(contract[FlightContract.TRAITS_KEY])
 	if bonus <= 0:
 		return false
+	_bonus_paid[contract["id"]] = true
+	if not wallet.can_credit(bonus, Wallet.Category.SIGNING_BONUS):
+		return false
 	if not wallet.credit(bonus, Wallet.Category.SIGNING_BONUS):
 		push_error("TraitPayouts: the wallet refused the signing bonus of %s" % contract["id"])
 		return false
-	_bonus_paid[contract["id"]] = true
 	return true
 
 
@@ -56,6 +60,8 @@ func bonuses_paid() -> Array:
 
 ## "" when `saved` is a list of distinct contract ids; otherwise what is wrong.
 static func bonuses_problem(saved: Variant) -> String:
+	if saved == null:
+		return "missing key 'bonuses_paid'"
 	if typeof(saved) != TYPE_ARRAY:
 		return "bonuses_paid must be a list"
 	var seen := {}

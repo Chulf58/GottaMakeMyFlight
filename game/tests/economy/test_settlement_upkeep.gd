@@ -234,7 +234,7 @@ func test_a_save_from_before_upkeep_loads_with_none_owed() -> void:
 	assert_bool(_kit.settlement.from_snapshot(data)).is_true()
 	assert_int(_kit.settlement.upkeep_owed()).is_equal(0)
 	# Older still: no wage keys either.
-	assert_bool(_kit.settlement.from_snapshot({"owed": []})).is_true()
+	assert_bool(_kit.settlement.from_snapshot({"owed": [], "bonuses_paid": []})).is_true()
 	assert_int(_kit.settlement.upkeep_owed()).is_equal(0)
 
 

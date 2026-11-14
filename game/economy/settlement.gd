@@ -52,7 +52,8 @@ extends Node
 ## balance of 0 with the rest unpaid; Signing bonus pays when the contract's
 ## first flight departs (FlightSim.state_changed to DEPARTED, which a load never
 ## emits). The contracts whose bonus was paid are saved under BONUS_SNAPSHOT_KEY,
-## optional like the other added keys: a save without it has paid none.
+## and it is required: a save without it is refused (no migration before a
+## release; SaveGame version 21).
 ##
 ## On the same tick, after the wages, every ready toilet room is charged its
 ## upkeep (decision toilet-design-queue-free-reservable-stalls-per-stall-daily-u,
@@ -291,7 +292,7 @@ func from_snapshot(data: Dictionary) -> bool:
 		_awaiting_bag[str(entry["passenger"]).to_int()] = [
 			str(entry["fee"]).to_int(), str(entry["missed_fee"]).to_int()
 		]
-	_payouts.load_bonuses(data.get(BONUS_SNAPSHOT_KEY, []))
+	_payouts.load_bonuses(data[BONUS_SNAPSHOT_KEY])
 	# A load rewinds the session: the passengers it holds may finish again.
 	_settled.clear()
 	return true
@@ -331,8 +332,8 @@ func _snapshot_problem(data: Dictionary) -> String:
 		and not _in_range(data[UPKEEP_SNAPSHOT_KEY], 0, MAX_UPKEEP)
 	):
 		problem = "'%s' is not 0 to %d" % [UPKEEP_SNAPSHOT_KEY, MAX_UPKEEP]
-	if problem == "" and data.has(BONUS_SNAPSHOT_KEY):
-		problem = TraitPayouts.bonuses_problem(data[BONUS_SNAPSHOT_KEY])
+	if problem == "":
+		problem = TraitPayouts.bonuses_problem(data.get(BONUS_SNAPSHOT_KEY))
 	return problem
 
 

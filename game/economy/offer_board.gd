@@ -291,6 +291,8 @@ func from_snapshot(data: Dictionary) -> bool:
 	var problem := _load_problem(data, loaded)
 	if problem == "":
 		problem = _loyalty_problem(data["loyalty"], loyalty)
+	if problem == "":
+		problem = _loyal_marks_problem(loaded, loyalty)
 	if problem != "":
 		push_error("OfferBoard.from_snapshot: %s" % problem)
 		return false
@@ -613,6 +615,23 @@ static func _fee_drawable(fee: int, fees: Array, traits: Dictionary, loyal: bool
 	return false
 
 
+## "" when every offer marked loyal could have been drawn so: its airline's
+## saved count is OfferTraits.LOYAL_DAYS (the count only grows and stops there)
+## and the offer's day is after the last counted day (a day's offers are drawn
+## at its start, before any of its flights depart).
+static func _loyal_marks_problem(offers: Array[Dictionary], loyalty: Dictionary) -> String:
+	for offer in offers:
+		if not offer[LOYAL_KEY]:
+			continue
+		var entry: Dictionary = loyalty.get(offer["airline"], {"days": 0, "last_day": -1})
+		if entry["days"] < OfferTraits.LOYAL_DAYS or offer["day"] <= entry["last_day"]:
+			return (
+				"offer %s is marked loyal but %s was not loyal on day %d"
+				% [offer["id"], offer["airline"], offer["day"]]
+			)
+	return ""
+
+
 ## "" and `into` filled with the saved Loyal airline count, or what is wrong.
 static func _loyalty_problem(saved: Variant, into: Dictionary) -> String:
 	if typeof(saved) != TYPE_DICTIONARY:
@@ -631,7 +650,8 @@ static func _loyalty_problem(saved: Variant, into: Dictionary) -> String:
 		if not WholeNumber.is_whole(days) or days < 1 or days > OfferTraits.LOYAL_DAYS:
 			return "loyalty days of %s must be 1 to %d" % [airline, OfferTraits.LOYAL_DAYS]
 		var last: Variant = entry["last_day"]
-		if not WholeNumber.is_whole(last) or last < 0 or last > FlightContract.MAX_DAY:
-			return "loyalty last_day of %s must be a day" % airline
+		# Each counted day is a different day from 0 on, so the last is at least days - 1.
+		if not WholeNumber.is_whole(last) or last < days - 1 or last > FlightContract.MAX_DAY:
+			return "loyalty last_day of %s must be a day from %d" % [airline, days - 1]
 		into[airline] = {"days": int(days), "last_day": int(last)}
 	return ""

@@ -28,6 +28,8 @@ const TERMS := [
 	[14, 25, {"up": "loyal_airline", "down": "miss_fine", "level": 1}, false],
 	[15, 25, {}, true],
 ]
+## The game day the plate is taken on: Gotta Air became loyal on day 5.
+const PLATE_DAY := 6
 const TRAIT_LINES := [
 	"Signing bonus $300   Very heavy bags   Loyal: +10%",
 	"Loyal airline   Miss fine $10",
@@ -47,6 +49,10 @@ func _run() -> void:
 	var world_seed := randi()
 	clock.seed_rng(world_seed)
 	print("PROBE sim_seed=", world_seed)
+	# Day PLATE_DAY at 06:00, so Gotta Air's five Loyal days (up to the day
+	# before) can have made its offers loyal (OfferBoard refuses a loyal mark its
+	# count cannot explain).
+	clock.tick = GameCalendar.day_start(PLATE_DAY) + 6 * 60 * GameCalendar.TICKS_PER_MINUTE
 	root.add_child(main)
 	clock.set_paused(true)
 	await _frames(5)
@@ -87,13 +93,17 @@ func _run() -> void:
 		offers[i]["fee_per_passenger"] = TERMS[i][1]
 		offers[i]["traits"] = TERMS[i][2]
 		offers[i]["loyal"] = TERMS[i][3]
-	print("PROBE board loaded=", desk.board.from_snapshot(TestOfferBoard.save_of(offers)))
+	var board_save := TestOfferBoard.save_of(offers)
+	board_save["loyalty"] = {"Gotta Air": {"days": OfferTraits.LOYAL_DAYS, "last_day": day - 1}}
+	# Checked with the sheet below, before any plate is saved.
+	var loaded := desk.board.from_snapshot(board_save) and day == PLATE_DAY
+	print("PROBE day=%d board loaded=%s" % [day, loaded])
 	var panel := panels[0] as OfferPanel
 	panel.open()
 	var expected := {
-		"O0N1": OfferPanel.NEEDS_GATE_TEXT,
-		"O0N2": OfferPanel.FITS_TEXT,
-		"O0N3": OfferPanel.FITS_TEXT,
+		"O%dN1" % PLATE_DAY: OfferPanel.NEEDS_GATE_TEXT,
+		"O%dN2" % PLATE_DAY: OfferPanel.FITS_TEXT,
+		"O%dN3" % PLATE_DAY: OfferPanel.FITS_TEXT,
 	}
 	for ui_scale: float in [1.25, 1.5]:
 		root.content_scale_factor = ui_scale
@@ -121,8 +131,8 @@ func _run() -> void:
 				% [ui_scale, shown, sheet, view, inside]
 			)
 		)
-		if shown != 3 or not inside or not panel.sheet().visible:
-			print("PROBE_INVALID the sheet does not show three cards in view")
+		if shown != 3 or not inside or not panel.sheet().visible or not loaded:
+			print("PROBE_INVALID the sheet does not show three loaded cards in view")
 			quit(1)
 			return
 		var img := root.get_texture().get_image()

@@ -91,7 +91,11 @@ signal loaded(ok: bool)
 ## 20: an inspector's plan also keeps the messes and full-queue passengers its
 ## visit counted (IncidentSnapshot version 4); version 19 saves are refused (no
 ## migration before a release).
-const SAVE_VERSION := 20
+## 21: the settlement part requires "bonuses_paid" (the contracts whose Signing
+## bonus was paid), the offers part is OfferBoard save version 5 (the Loyal
+## airline count) and the day ledger holds the fines and the signing bonus;
+## version 20 saves are refused (no migration before a release).
+const SAVE_VERSION := 21
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"

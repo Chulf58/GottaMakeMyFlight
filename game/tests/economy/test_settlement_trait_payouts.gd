@@ -155,6 +155,32 @@ func test_bad_saved_bonuses_are_refused() -> void:
 		var data := base.duplicate()
 		data["bonuses_paid"] = bad
 		assert_bool(_settlement.from_snapshot(data)).override_failure_message(str(bad)).is_false()
+	# The key is required: a save without it is refused and changes nothing.
+	_depart(OCCURRENCE)
+	var paid := _settlement.to_snapshot()
 	var without := base.duplicate()
 	without.erase("bonuses_paid")
-	assert_bool(_settlement.from_snapshot(without)).is_true()
+	assert_bool(_settlement.from_snapshot(without)).is_false()
+	assert_dict(_settlement.to_snapshot()).is_equal(paid)
+
+
+## Conductor ruling: a bonus the wallet cannot take at Wallet.MAX_BALANCE is
+## forfeited, and the contract is marked paid so it is never paid later.
+func test_a_bonus_that_does_not_fit_the_wallet_is_forfeited_and_marked_paid() -> void:
+	for start in [Wallet.MAX_BALANCE, Wallet.MAX_BALANCE - 149]:
+		_make(BONUS, start)
+		_depart(OCCURRENCE)
+		assert_int(_world.sim.wallet.balance).override_failure_message(str(start)).is_equal(start)
+		assert_array(_settlement.to_snapshot()["bonuses_paid"]).is_equal([CONTRACT])
+		assert_bool(_world.sim.wallet.spend(1000, Wallet.Category.BUILD)).is_true()
+		_depart("OCC-d1")
+		assert_int(_world.sim.wallet.balance).is_equal(start - 1000)
+		assert_int(_ledger.amount(Wallet.Category.SIGNING_BONUS)).is_equal(0)
+		after_test()
+
+
+func test_a_bonus_that_just_fits_below_the_cap_is_paid() -> void:
+	_make(BONUS, Wallet.MAX_BALANCE - 150)
+	_depart(OCCURRENCE)
+	assert_int(_world.sim.wallet.balance).is_equal(Wallet.MAX_BALANCE)
+	assert_int(_ledger.amount(Wallet.Category.SIGNING_BONUS)).is_equal(150)
