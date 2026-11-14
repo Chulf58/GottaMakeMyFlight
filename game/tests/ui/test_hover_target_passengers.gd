@@ -224,6 +224,57 @@ func test_a_clicked_passenger_stays_pinned_while_hovering_elsewhere_until_a_clic
 	assert_int(_hover.pinned_passenger()).is_equal(0)
 
 
+func test_a_sign_click_ends_the_selection_and_follow_and_one_esc_clears_the_sign() -> void:
+	var centre := _mode.grid.cell_to_world(_plain_cell)
+	_look_at(centre)
+	var passenger := _stand(centre)
+	var rig := _main.get_node("TycoonCamera") as TycoonCamera
+	var menu := _main.get_node("GameMenu") as GameMenu
+	var head := _eye.unproject_position(centre + Vector3.UP)
+	await _click_screen(head)
+	var selected := _views.selected_id
+	var following := rig.is_following()
+	var sign_at := head + Vector2(120.0, 0.0)
+	_signs.add(&"sign", Rect2(sign_at - Vector2(10.0, 10.0), Vector2(20.0, 20.0)), "Closed")
+	_hover.register_provider(_signs)
+	await _click_screen(sign_at)
+	_hover.refresh()
+	var pinned := _hover.pinned_target()
+	var pinned_key: Variant = pinned.key if pinned else null
+	var esc := InputEventAction.new()
+	esc.action = &"build_tool_none"
+	esc.pressed = true
+	get_viewport().push_input(esc)
+	await await_idle_frame()
+	_hover.refresh()
+	print(
+		(
+			(
+				"before: selected %d following %s; after sign click: selected %d following %s "
+				+ "item %d pinned %s; after one Esc: pinned %s menu open %s"
+			)
+			% [
+				selected,
+				following,
+				_views.selected_id,
+				rig.is_following(),
+				_inspect.built_card.selection.kind,
+				pinned_key,
+				_hover.pinned_target(),
+				menu.is_open()
+			]
+		)
+	)
+	assert_int(selected).is_equal(passenger)
+	assert_bool(following).is_true()
+	assert_that(pinned_key).is_equal(&"sign")
+	assert_int(_views.selected_id).is_equal(0)
+	assert_bool(rig.is_following()).is_false()
+	assert_int(_inspect.built_card.selection.kind).is_equal(BuiltSelection.Kind.NONE)
+	assert_object(_hover.pinned_target()).is_null()
+	assert_bool(menu.is_open()).is_false()
+
+
 func test_esc_clears_a_pinned_passenger() -> void:
 	var centre := _mode.grid.cell_to_world(_plain_cell)
 	_look_at(centre)
@@ -280,17 +331,24 @@ func test_passenger_views_draw_resolves_the_target_before_its_layout() -> void:
 	_hover.set_process(false)
 	_hover.pointer_override = _eye.unproject_position(centre + Vector3.UP)
 	var before := _hover.hovered_passenger()
+	# What the bubble and icon layout would read, at the moment it begins.
+	var seen := {}
+	var record := func() -> void:
+		seen["passenger"] = _hover.hovered_passenger()
+		seen["frame"] = _hover.resolved_frame()
+	_views.layout_started.connect(record)
 	_views.draw()
+	_views.layout_started.disconnect(record)
 	var frame := Engine.get_process_frames()
 	print(
 		(
-			"before draw %d, after draw %d, resolved frame %d now %d"
-			% [before, _hover.hovered_passenger(), _hover.resolved_frame(), frame]
+			"before draw %d; at layout start: passenger %s frame %s; now frame %d"
+			% [before, seen.get("passenger"), seen.get("frame"), frame]
 		)
 	)
 	assert_int(before).is_equal(0)
-	assert_int(_hover.hovered_passenger()).is_equal(passenger)
-	assert_int(_hover.resolved_frame()).is_equal(frame)
+	assert_that(seen.get("passenger")).is_equal(passenger)
+	assert_that(seen.get("frame")).is_equal(frame)
 
 
 func test_in_a_real_frame_passenger_views_resolves_the_target() -> void:

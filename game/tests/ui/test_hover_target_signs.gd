@@ -133,14 +133,49 @@ func test_a_click_elsewhere_unpins() -> void:
 
 
 func test_esc_unpins_and_takes_the_key_only_while_a_sign_is_pinned() -> void:
+	var heard := [0]
+	var probe := func(event: InputEvent) -> void:
+		if event.is_action_pressed(&"build_tool_none"):
+			heard[0] += 1
+	var spy := _UnhandledSpy.new(probe)
+	add_child(spy)
+	# Earlier in the tree than HoverTarget: it hears only an Esc HoverTarget leaves.
+	move_child(spy, 0)
 	_click(SIGN.get_center())
 	_hover.pointer_override = Vector2(100.0, 100.0)
+	var pinned: Variant = _sign_key(_hover.pinned_target())
 	var esc := InputEventAction.new()
 	esc.action = &"build_tool_none"
 	esc.pressed = true
 	get_viewport().push_input(esc)
 	_hover.refresh()
-	assert_object(_hover.pinned_target()).is_null()
+	var heard_pinned: int = heard[0]
+	var after: Variant = _sign_key(_hover.pinned_target())
+	get_viewport().push_input(esc)
+	var heard_unpinned: int = heard[0] - heard_pinned
+	print(
+		(
+			"pinned %s; Esc while pinned: spy heard %d, pin after %s; Esc unpinned: spy heard %d"
+			% [pinned, heard_pinned, after, heard_unpinned]
+		)
+	)
+	assert_that(pinned).is_equal(&"desk")
+	assert_int(heard_pinned).is_equal(0)
+	assert_that(after).is_null()
+	assert_int(heard_unpinned).is_equal(1)
+	spy.free()
+
+
+func test_a_failed_load_keeps_the_pin() -> void:
+	_click(SIGN.get_center())
+	_hover.pointer_override = Vector2(100.0, 100.0)
+	var pinned: Variant = _sign_key(_hover.pinned_target())
+	_save.loaded.emit(false)
+	_hover.refresh()
+	var after: Variant = _sign_key(_hover.pinned_target())
+	print("pinned %s, after a failed load %s" % [pinned, after])
+	assert_that(pinned).is_equal(&"desk")
+	assert_that(after).is_equal(&"desk")
 
 
 func test_the_pin_and_hover_clear_when_the_sign_goes() -> void:

@@ -11,6 +11,10 @@ extends Node3D
 ## tick and laid out each frame. Close need icons of one kind are drawn as one
 ## count badge instead (NeedCluster, _cluster_icons()).
 
+## Emitted in draw() once the bodies are placed, as the bubble, icon and badge
+## layout begins: anything it reads from hover_target is already this frame's.
+signal layout_started
+
 ## Bodies, tints, bag colours and clip speeds: PassengerLooks.
 const SIT_CLIP_SECONDS := 1.2
 ## On an activity visit, a sit_down or stand_up clip more than this many
@@ -424,6 +428,7 @@ func draw() -> void:
 		follow_anchor.position = (_nodes[selected_id] as Node3D).position
 		_ring.position = follow_anchor.position + Vector3(0.0, 0.05, 0.0)
 	_ring.visible = _nodes.has(selected_id)
+	layout_started.emit()
 	# The icons lift over a bubble only while it shows, so they are laid out
 	# after the declutter has set each bubble's visibility for this frame.
 	_declutter_bubbles(camera, unit)

@@ -460,9 +460,10 @@ passenger_views = NodePath("../PassengerViews")
 landside_views = NodePath("../LandsideViews")
 save_game = NodePath("../SaveGame")
 
-[node name="HoverTarget" type="Node" parent="." node_paths=PackedStringArray("views", "build_mode", "landside_views", "save_game")]
+[node name="HoverTarget" type="Node" parent="." node_paths=PackedStringArray("views", "build_mode", "landside_views", "save_game", "hud")]
 script = ExtResource("51_hovertarget")
 views = NodePath("../PassengerViews")
 build_mode = NodePath("../BuildMode")
 landside_views = NodePath("../LandsideViews")
 save_game = NodePath("../SaveGame")
+hud = NodePath("../PassengerHud")

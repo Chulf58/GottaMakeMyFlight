@@ -38,15 +38,18 @@ extends Node
 ## click order must change _passenger_under() too.
 ##
 ## Pins: a left click on a sign pins that sign and takes the click, so nothing
-## behind the sign is selected. Any other world click unpins the sign, and the
-## passenger PassengerHud selects for that click becomes the pinned passenger. The
+## behind the sign is selected, and ends any passenger, vehicle or built selection
+## and the camera follow through PassengerHud. Any other world click unpins the
+## sign, and the passenger PassengerHud selects for that click becomes the pinned
+## passenger. The
 ## pin lasts until a click elsewhere or Esc (a pinned sign takes the Esc; a pinned
 ## passenger ends with PassengerHud's selection), and is cleared when its target
 ## goes (the sign is no longer reported, the passenger's view is released) and on a
-## load. The pin survives hovering something else.
+## successful load. The pin survives hovering something else.
 ##
 ## Frame order: PassengerViews.draw() calls resolve() first, before it lays out
-## bubbles, icons and badges, so they can read this frame's target. PassengerViews
+## bubbles, icons and badges (PassengerViews.layout_started marks where that
+## layout begins), so they can read this frame's target. PassengerViews
 ## runs after the AnimationPlayers (process_priority 1) and RoomView after it (2);
 ## resolving inside draw() keeps the target ahead of the layout whatever those
 ## numbers become, where a priority of its own would race them. The target reads
@@ -68,6 +71,9 @@ const TOOLTIP_LAYER := 3
 @export var build_mode: BuildMode
 @export var landside_views: LandsideViews
 @export var save_game: SaveGame
+## When set, a click a sign takes also ends the passenger, vehicle or built
+## selection and the camera follow, as a click elsewhere would.
+@export var hud: PassengerHud
 
 ## (passenger id) -> String, the tooltip text of a passenger; set by lane B.
 var passenger_text: Callable
@@ -217,13 +223,20 @@ func _unhandled_input(event: InputEvent) -> void:
 		_pinned_sign = sign
 		_pinned_passenger = 0
 		_pin_from_click = false
+		# The click is the sign's: what was selected before ends as a click
+		# elsewhere would end it (PassengerHud's Esc path, also used by GameMenu).
+		if hud != null:
+			hud._close_selection()
 		get_viewport().set_input_as_handled()
 		return
 	_pinned_sign = null
 	_pin_from_click = true
 
 
-func _on_loaded(_ok: bool) -> void:
+## A failed load leaves the world as it was, and the pins with it.
+func _on_loaded(ok: bool) -> void:
+	if not ok:
+		return
 	_pinned_sign = null
 	_pinned_passenger = 0
 	_pin_from_click = false
