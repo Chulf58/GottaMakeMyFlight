@@ -34,6 +34,13 @@ func clear() -> void:
 	spot = -1
 
 
+## Selects the grid object `object_id`, as a click on it would.
+func select_object(object_id: int) -> void:
+	clear()
+	kind = Kind.OBJECT
+	id = object_id
+
+
 func is_selected() -> bool:
 	return kind != Kind.NONE
 

@@ -11,7 +11,8 @@ extends VBoxContainer
 ## list-self-clearing-alert-cards-money-hover-departu) are one per problem that
 ## is true right now, each clearing itself when its cause is solved
 ## (AlertBoard). The causes are a full check-in or security queue, passengers
-## with no walkable route, passengers waiting for a gate place (AlertSources)
+## with no walkable route, passengers waiting for a gate place, stations closed
+## with nobody on duty or with a staff spot staff cannot use (AlertSources)
 ## and a dirty terminal (DirtyAlert). Clicking one glides the camera to the
 ## problem; the next click goes to the next place with the same problem.
 ## Notices are cards another part of the HUD posts (post_notice()): the flight
@@ -107,6 +108,7 @@ var _shown_revision := -1
 ## The no-route cause read at _scanned_tick; -1 means none kept.
 var _route_causes: Array[Dictionary] = []
 var _gate_causes: Array[Dictionary] = []
+var _staff_causes: Array[Dictionary] = []
 var _scanned_tick := -1
 ## Key -> how many clicks its card has had, to step through its targets.
 var _clicks: Dictionary = {}
@@ -176,10 +178,12 @@ func refresh() -> void:
 		scans += 1
 		_route_causes = AlertSources.no_route(sim)
 		_gate_causes = AlertSources.gate_full(sim)
+		_staff_causes = AlertSources.closed_stations(sim)
 	var causes: Array[Dictionary] = []
 	causes.append_array(AlertSources.queue_full(sim))
 	causes.append_array(_route_causes)
 	causes.append_array(_gate_causes)
+	causes.append_array(_staff_causes)
 	causes.append_array(_dirty.cause())
 	_board.update(causes, sim.tick)
 	if _board.revision != _shown_revision:

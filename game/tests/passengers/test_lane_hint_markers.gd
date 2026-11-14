@@ -1,6 +1,6 @@
 class_name TestLaneHintMarkers
 extends GdUnitTestSuite
-## An arch without a whole lane gets a sign whose caption names the first thing
+## An arch without a whole lane gets a sign whose hover text names the first thing
 ## missing (SecurityLanes.status_text), a whole lane gets the Closed and the
 ## queue-full signs a basic scanner gets.
 
@@ -97,17 +97,44 @@ func test_a_blocked_cell_of_the_lane_room_is_named() -> void:
 	_assert_hint(S.NO_QUEUE_ROOM)
 
 
-func test_the_hint_sign_stands_over_the_arch_and_is_a_plain_caption() -> void:
+func test_the_hint_sign_stands_over_the_arch_with_the_table_glyph() -> void:
 	_attach([SecurityLanes.TRAY_TABLE])
 	var hint := _markers.hint_sign_for(_arch)
 	var def := BuildCatalog.get_def(SecurityLanes.ARCH)
 	var cell_x := _world.grid.cell_to_world(ANCHOR).x
 	assert_float(hint.position.x).is_equal_approx(cell_x, 0.6)
 	assert_float(hint.position.y).is_greater(def.height)
-	# Only the two staff-spot reasons are never hidden by the caption layout; a
-	# lane hint hides when it overlaps, like "Closed" and "Queue full".
-	for status: int in SecurityLanes.STATUS_TEXT:
-		assert_bool(MissMarkers.is_staff_spot_caption(SecurityLanes.STATUS_TEXT[status])).is_false()
+	assert_int(MissMarkers.glyph_of(hint)).is_equal(MarkerIcons.Glyph.TRAY_TABLE)
+	assert_int(hint.find_children("*", "Label3D", true, false).size()).is_equal(0)
+
+
+## A lane hint is a build hint: its words reach HoverTarget only in build mode
+## (decision calm-cozy-default-view-quiet-world-detail-on-ask-soft-statio,
+## part 2), while its sign shows either way.
+func test_the_hint_words_are_reported_only_in_build_mode() -> void:
+	_attach([SecurityLanes.TRAY_TABLE])
+	var session: BuildSession = auto_free(BuildSession.new())
+	_markers.build_session = session
+	var camera: Camera3D = auto_free(Camera3D.new())
+	add_child(camera)
+	var at := _markers.hint_sign_for(_arch).global_position
+	var eye := at + Vector3(0.0, 8.0, 8.0)
+	camera.global_transform = Transform3D.IDENTITY.translated(eye).looking_at(at)
+	camera.make_current()
+	var keys := func() -> Array:
+		return _markers.hover_signs().map(func(e: Dictionary) -> String: return e["key"])
+	var outside: Array = keys.call()
+	session.active = true
+	var inside := _markers.hover_signs()
+	print("outside build mode %s; in build mode %s" % [outside, inside])
+	assert_bool(outside.has("hint:%d" % _arch)).is_false()
+	assert_bool(_markers.hint_sign_for(_arch).visible).is_true()
+	var hint: Array = inside.filter(
+		func(e: Dictionary) -> bool: return e["key"] == "hint:%d" % _arch
+	)
+	assert_int(hint.size()).is_equal(1)
+	assert_str(hint[0]["text"]).is_equal(SecurityLanes.STATUS_TEXT[S.NO_TRAY_TABLE])
+	remove_child(camera)
 
 
 func test_completing_the_lane_drops_the_hint_at_once() -> void:
@@ -138,7 +165,7 @@ func test_a_whole_lane_with_nobody_on_duty_shows_closed_not_a_hint() -> void:
 	assert_array(MissSignals.closed_stations(_world.sim)).is_equal([_arch])
 	assert_object(_markers.hint_sign_for(_arch)).is_null()
 	assert_object(_markers.closed_sign_for(_arch)).is_not_null()
-	assert_str(_markers.closed_text(_arch)).is_equal(MissMarkers.CLOSED_CAPTION)
+	assert_str(_markers.closed_text(_arch)).is_equal(MissMarkers.CLOSED_TEXT)
 
 
 func test_a_staffed_whole_lane_shows_no_closed_sign_and_no_hint() -> void:

@@ -130,11 +130,11 @@ func test_an_unlinked_desk_gets_a_sign_with_why_and_no_line() -> void:
 	var signs := _view.signs()
 	var captions := []
 	for marker in signs:
-		captions.append(_view.caption_of(marker).text)
+		captions.append(GateLinksView.text_of(marker))
 	print("signs %d captions %s paths %d" % [signs.size(), captions, _view.paths().size()])
 	assert_int(signs.size()).is_equal(1)
 	assert_int(signs[0].get_meta("desk")).is_equal(west.object_id)
-	assert_array(captions).is_equal(["Unlinked\nno north exit in 4 cells"])
+	assert_array(captions).is_equal(["Unlinked: no north exit in 4 cells"])
 	assert_int(_view.paths().size()).is_equal(1)
 	# The sign shows outside build mode too (it is not under the links node),
 	# over the desk's top.
@@ -147,52 +147,37 @@ func test_an_unlinked_desk_gets_a_sign_with_why_and_no_line() -> void:
 	assert_int(_view.paths().size()).is_equal(2)
 
 
-func test_each_reason_has_its_own_caption() -> void:
+func test_each_reason_has_its_own_hover_text() -> void:
 	var texts := [
-		GateLinksView.sign_text({"why": GateDesks.Unlinked.NO_EXIT, "gate": ""}),
-		GateLinksView.sign_text({"why": GateDesks.Unlinked.EXIT_TAKEN, "gate": "B"}),
-		GateLinksView.sign_text({"why": GateDesks.Unlinked.STAND_OVERLAP, "gate": "C"}),
-		GateLinksView.sign_text({"why": GateDesks.Unlinked.NO_LETTER, "gate": ""}),
+		GateLinksView.caption_for({"why": GateDesks.Unlinked.NO_EXIT, "gate": ""}),
+		GateLinksView.caption_for({"why": GateDesks.Unlinked.EXIT_TAKEN, "gate": "B"}),
+		GateLinksView.caption_for({"why": GateDesks.Unlinked.STAND_OVERLAP, "gate": "C"}),
+		GateLinksView.caption_for({"why": GateDesks.Unlinked.NO_LETTER, "gate": ""}),
 	]
-	print("captions %s" % [texts])
-	# Two short lines, the gate caption's form (board f0fbae3c (g)).
+	print("hover texts %s" % [texts])
+	# One line, as the desk card's status shows it; the tooltip shows it on hover.
 	(
 		assert_array(texts)
 		. is_equal(
 			[
-				"Unlinked\nno north exit in 4 cells",
-				"Unlinked\nGate B uses the exit",
-				"Unlinked\nstand would overlap Gate C",
-				"Unlinked\nevery gate letter in use",
+				"Unlinked: no north exit in 4 cells",
+				"Unlinked: Gate B uses the exit",
+				"Unlinked: stand would overlap Gate C",
+				"Unlinked: every gate letter in use",
 			]
 		)
 	)
-	# The desk card's status keeps the reason on one line.
-	assert_str(GateLinksView.caption_for({"why": GateDesks.Unlinked.NO_EXIT, "gate": ""})).is_equal(
-		"Unlinked: no north exit in 4 cells"
-	)
 
 
-func test_the_unlinked_icon_is_its_own_slate_sign() -> void:
-	var icon := GateLinksView.unlinked_icon().get_image()
-	var queue := MarkerIcons.queue_full_image()
-	var half := MarkerIcons.SIZE / 2
-	var differ := 0
-	var white := 0
-	for y in MarkerIcons.SIZE:
-		for x in MarkerIcons.SIZE:
-			var c := icon.get_pixel(x, y)
-			if not c.is_equal_approx(queue.get_pixel(x, y)):
-				differ += 1
-			if c.a > 0.9 and c.r > 0.95 and c.g > 0.95 and c.b > 0.95:
-				white += 1
-	# A pixel inside the rounded square, away from the glyph: the slate fill.
-	var fill := icon.get_pixel(half - 44, half + 40)
-	print("differ %d white %d fill %s" % [differ, white, fill])
-	assert_int(differ).is_greater(1000)
-	assert_int(white).is_greater(300)
-	assert_float(fill.r).is_equal_approx(MissMarkers.CLOSED_FILL.r, 0.02)
-	assert_float(fill.b).is_equal_approx(MissMarkers.CLOSED_FILL.b, 0.02)
+func test_the_unlinked_icon_is_the_broken_link_build_hint() -> void:
+	var icon := GateLinksView.unlinked_icon()
+	assert_object(icon).is_same(MarkerIcons.icon(MarkerIcons.Glyph.UNLINKED_GATE))
+	var image := MarkerIcons.image(MarkerIcons.Glyph.UNLINKED_GATE)
+	# A pixel inside the disc, away from the glyph: the build-hint cream.
+	var fill := image.get_pixel(MarkerIcons.SIZE / 2 - 40, MarkerIcons.SIZE / 2 - 28)
+	print("fill %s" % fill)
+	assert_float(fill.r).is_equal_approx(MarkerIcons.HINT_FILL.r, 0.02)
+	assert_float(fill.b).is_equal_approx(MarkerIcons.HINT_FILL.b, 0.02)
 
 
 func test_the_gate_desk_draws_its_own_piece_and_card_thumbnail() -> void:

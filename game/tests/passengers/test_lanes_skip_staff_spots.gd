@@ -98,6 +98,9 @@ func test_a_station_closed_by_a_blocked_spot_says_why() -> void:
 	var markers := views.get_node("MissMarkers") as MissMarkers
 	markers.sync()
 	print("captions: '%s', '%s'" % [markers.closed_text(blocked), markers.closed_text(desks[1])])
-	assert_str(markers.closed_text(blocked)).is_equal(MissMarkers.SPOT_BLOCKED_CAPTION)
-	assert_str(markers.closed_text(desks[1])).is_equal(MissMarkers.CLOSED_CAPTION)
+	assert_str(markers.closed_text(blocked)).is_equal(MissMarkers.SPOT_BLOCKED_TEXT)
+	assert_int(MissMarkers.glyph_of(markers.closed_sign_for(blocked))).is_equal(
+		MarkerIcons.Glyph.STAFF_BLOCKED
+	)
+	assert_str(markers.closed_text(desks[1])).is_equal(MissMarkers.CLOSED_TEXT)
 	views.free()

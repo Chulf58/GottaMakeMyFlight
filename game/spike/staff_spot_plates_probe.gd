@@ -16,8 +16,8 @@ extends SceneTree
 ##     plated wide and close (desk_row_*); diagnostic: a desk nobody reaches is
 ##     printed as a STAFFED line with entrance_path_cells=0 and does not fail the run
 ##   5 legacy: a save edited past today's rules (a seat row on a desk's spot)
-##     loaded through SaveGame.load_world(), plated with its sign caption
-##     (legacy_spot_blocked)
+##     loaded through SaveGame.load_world(), plated with its sign (legacy_spot_blocked), its reason
+##     read from its hover entry
 ## A staff member counts as shown when PlateSight.person_shown() passes and its
 ## drawn feet are on the floor; a station counts as shown when its centre
 ## projects inside the frame and a sight line to it is not blocked before it.
@@ -62,7 +62,6 @@ const LEGACY_DESK := Vector2i(20, 12)
 const LEGACY_SEATS := Vector2i(19, 11)
 const STRIP_FRAMES := 5
 const STRIP_EVERY_TICKS := 20
-const CAPTION_OUTLINE_PX := 8.0
 
 var _out_dir := ""
 var _failed := false
@@ -691,7 +690,7 @@ func _phase_legacy() -> void:
 	var text := _markers.closed_text(desk)
 	print(
 		(
-			"LEGACY desk=%d spot=%s blocked=%s usable=%s reason=%s caption=%s"
+			"LEGACY desk=%d spot=%s blocked=%s usable=%s reason=%s hover=%s"
 			% [
 				desk,
 				_staff.spot_of(desk),
@@ -702,8 +701,8 @@ func _phase_legacy() -> void:
 			]
 		)
 	)
-	if text != MissMarkers.SPOT_BLOCKED_CAPTION:
-		_invalid("legacy: the sign caption is %s" % text)
+	if text != MissMarkers.SPOT_BLOCKED_TEXT:
+		_invalid("legacy: the sign's hover text is %s" % text)
 		return
 	var none: Array[int] = []
 	var stations: Array[int] = [desk]
@@ -718,8 +717,9 @@ func _phase_legacy() -> void:
 	_invalid("legacy: the station or its sign not shown from any side")
 
 
-## The station's sign is visible and its icon and caption rects (computed from
-## the font, not measured) lie inside the frame. No HUD-overlap check here.
+## The station's sign is visible, its icon rect lies inside the frame and its
+## hover entry (MissMarkers.hover_signs()) has text. The sign has no caption, so
+## only the icon is framed. No HUD-overlap check here.
 func _sign_shown(station: int, img: Image) -> bool:
 	var sign := _markers.closed_sign_for(station)
 	if sign == null or not sign.visible or _cam.is_position_behind(sign.global_position):
@@ -729,25 +729,13 @@ func _sign_shown(station: int, img: Image) -> bool:
 	var anchor := _cam.unproject_position(sign.global_position)
 	var sign_px := MissMarkers.SIGN_PX * per_screen
 	var icon := Rect2(anchor - Vector2(sign_px / 2.0, sign_px), Vector2.ONE * sign_px)
-	var text := _markers.closed_text(station)
-	var size := (
-		ThemeDB.fallback_font.get_string_size(
-			text, HORIZONTAL_ALIGNMENT_LEFT, -1, MissMarkers.CAPTION_FONT
-		)
-		* per_screen
-	)
-	var lift := (MissMarkers.SIGN_PX + MissMarkers.CAPTION_GAP_PX) * per_screen + size.y
-	var caption := Rect2(anchor + Vector2(-size.x / 2.0, -lift), size).grow(
-		CAPTION_OUTLINE_PX * per_screen
-	)
-	var inside := _frame_rect().encloses(icon) and _frame_rect().encloses(caption)
-	print(
-		(
-			"SIGN station=%d text=%s icon=%s caption=%s in_frame=%s"
-			% [station, text, icon, caption, inside]
-		)
-	)
-	return inside
+	var inside := _frame_rect().encloses(icon)
+	var text := ""
+	for entry in _markers.hover_signs():
+		if entry["key"] == "closed:%d" % station:
+			text = entry["text"]
+	print("SIGN station=%d icon=%s in_frame=%s hover_text='%s'" % [station, icon, inside, text])
+	return inside and text != ""
 
 
 # ------------------------------------------------------------ output
