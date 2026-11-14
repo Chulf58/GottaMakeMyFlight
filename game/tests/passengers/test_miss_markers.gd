@@ -63,6 +63,10 @@ func _hold_service(desk: int) -> void:
 
 
 func _spawn_spaced(count: int, spacing := 12) -> void:
+	# Desks staffed before the first arrives (with every desk closed they would
+	# wait in the line outside, EntranceLine): they walk straight in.
+	if _world.clock.tick == 0:
+		_world.step()
 	for i in count:
 		_world.sim.spawn_now(PassengerTestWorld.FLIGHT)
 		_world.run_to(_world.clock.tick + spacing)

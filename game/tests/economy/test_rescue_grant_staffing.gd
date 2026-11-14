@@ -38,12 +38,14 @@ func test_closed_stations_on_a_working_path_get_no_grant() -> void:
 	for i in 3:
 		ids.append(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
 	_world.run_to(_world.clock.tick + 300)
+	# Closed desks hold arrivals in the line outside (decision arrivals-wait-in-a-
+	# tidy-line-outside-the-entrance-when-check, 051b5d51).
 	var stuck := 0
 	for id in ids:
-		stuck += int(_world.passenger(id).stuck == Passenger.Stuck.NO_CHECKIN)
+		stuck += int(_world.sim.entrance.waiting(id))
 	print(
 		(
-			"balance %d, stuck at closed desks %d, working path %s, paid %d"
+			"balance %d, held outside closed desks %d, working path %s, paid %d"
 			% [_world.sim.wallet.balance, stuck, _grant.has_working_path(), paid[0]]
 		)
 	)

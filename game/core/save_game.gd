@@ -489,6 +489,8 @@ func _stage_all(data: Dictionary, staged: Dictionary) -> String:
 	var across := _ticks_problem(data)
 	if across == "":
 		across = SaveLinks.problem(data, staged)
+	if across == "":
+		across = _entrance_links_problem(staged)
 	if across == "" and staged.has("incidents"):
 		# Every active spill names a SPILL mess at its own cell.
 		across = IncidentSnapshot.links_problem(staged["incidents"], staged["messes"])
@@ -649,8 +651,8 @@ func _stage_passengers(data: Dictionary, staged: Dictionary) -> String:
 	# runtime reads from its host's layout (a live sim binds it in bind()).
 	sim.security.bind(sim)
 	# The checks PassengerSim.from_snapshot() runs at install: info desks,
-	# standing spots, boarding files, ParkSide's saved stamps, then the booking
-	# overrides against the staged flights.
+	# standing spots, boarding files, ParkSide's saved stamps, the line outside
+	# the entrance, then the booking overrides against the staged flights.
 	var by_id := {}
 	for p: Passenger in loaded["passengers"]:
 		by_id[p.id] = p
@@ -661,6 +663,9 @@ func _stage_passengers(data: Dictionary, staged: Dictionary) -> String:
 		held = sim.checked_boarding(data, by_id)
 	if not held.has("error"):
 		held = PassengerSimSave.checked_park_side(data, by_id)
+	if not held.has("error"):
+		held = PassengerSimSave.checked_entrance(data, by_id)
+		staged["entrance_line"] = held.get("line")
 	if not held.has("error"):
 		held = _checked_booking_overrides(data, staged)
 	if held.has("error"):
@@ -718,6 +723,35 @@ func _stage_messes(data: Dictionary, staged: Dictionary) -> String:
 ## staged messes.
 func _stage_staff(data: Dictionary, staged: Dictionary) -> String:
 	return str(StaffSnapshot.load(data, staged["sim"], staged["messes"]).get("error", ""))
+
+
+## The line outside the entrance (EntranceLine) against the staged landside:
+## every booking it holds as kept aboard for the line is a booking still in its
+## vehicle, and each flight's misses kept aboard for the line are some of that
+## flight's transport misses (ArrivalBookings.missed_by_flight), from 1 up to
+## all of them. "" or the first that is not.
+static func _entrance_links_problem(staged: Dictionary) -> String:
+	var line: EntranceLine = staged.get("entrance_line")
+	if line == null:
+		return ""
+	var landside: Dictionary = staged["landside"]
+	var aboard := {}
+	for b: ArrivalBooking in landside["bookings"]:
+		if b.state == ArrivalBooking.State.IN_VEHICLE:
+			aboard[b.id] = true
+	for id: int in line.held:
+		if not aboard.has(id):
+			return "passengers: entrance line held booking %d is not a booking in its vehicle" % id
+	var missed: Dictionary = landside["missed"]
+	for flight_id: String in line.held_missed:
+		var count: int = line.held_missed[flight_id]
+		var road := int(missed.get(flight_id, 0))
+		if count <= 0 or count > road:
+			return (
+				"passengers: entrance line held misses of %s (%d) are not among its %d transport misses"
+				% [flight_id, count, road]
+			)
+	return ""
 
 
 ## Checked against the scene's landside definition; kept for the links.

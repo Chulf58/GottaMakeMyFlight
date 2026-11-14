@@ -46,7 +46,9 @@ func test_a_passenger_at_unstaffed_desks_says_check_in_is_closed() -> void:
 	var id := _world.sim.spawn_now(PassengerTestWorld.FLIGHT)
 	_world.run_to(_world.clock.tick + 30)
 	var p := _world.passenger(id)
-	assert_int(p.stuck).is_equal(Passenger.Stuck.NO_CHECKIN)
+	# Desks that are all closed have no free place: it waits in the line outside
+	# (decision arrivals-wait-in-a-tidy-line-outside-the-entrance-when-check).
+	assert_bool(_world.sim.entrance.waiting(id)).is_true()
 	assert_str(_world.sim.bubble_text(p)).is_equal("Check-in is closed")
 
 

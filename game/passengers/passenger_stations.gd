@@ -126,6 +126,8 @@ static func _room_now(sim: PassengerSim, p: Passenger) -> bool:
 		return false
 	var to_desk := p.stage == Passenger.Stage.TO_CHECKIN
 	var room := _room(sim, sim.layout.desks if to_desk else sim.layout.scanners)
+	if to_desk and room >= 0:
+		room -= sim.entrance.claim_count(sim)
 	return room > 0 and room > seekers_before(sim, p, to_desk)
 
 
@@ -287,7 +289,12 @@ static func hold_ticks(lane: bool, p: Passenger) -> int:
 	return SecurityRuntime.work_for(SecurityRuntime.Phase.UNPACK, p) + LANE_ARCH_TICKS
 
 
-static func choose(sim: PassengerSim, p: Passenger) -> void:
+## Chooses `p`'s station, or leaves it waiting where it is. With `claimed`, it
+## walks in from the line outside on the claim it was admitted with
+## (EntranceLine): the place is its own, so no seeker inside goes first. A desk
+## seeker inside never takes a place an admitted passenger outside holds: a
+## desk's places held by claims (EntranceLine.claims_on()) count as taken.
+static func choose(sim: PassengerSim, p: Passenger, claimed := false) -> void:
 	var to_desk := p.stage == Passenger.Stage.TO_CHECKIN
 	var candidates := sim.layout.desks if to_desk else sim.layout.scanners
 	if candidates.is_empty():
@@ -302,7 +309,8 @@ static func choose(sim: PassengerSim, p: Passenger) -> void:
 		p.clear_path()
 		return
 	var room := _room(sim, candidates)
-	if room >= 0 and room <= seekers_before(sim, p, to_desk):
+	var reserved := sim.entrance.claim_count(sim) if to_desk else 0
+	if room >= 0 and not claimed and room - reserved <= seekers_before(sim, p, to_desk):
 		_wait_full(p)
 		return
 	var full := false
@@ -314,7 +322,8 @@ static func choose(sim: PassengerSim, p: Passenger) -> void:
 			continue
 		var line := sim.layout.line_of(station)
 		var at := slot(sim, station)
-		if at >= line.size():
+		var held := sim.entrance.claims_on(sim, station) if to_desk else 0
+		if at + held >= line.size():
 			full = full or not line.is_empty()
 			continue
 		var path := StationQueue.set_off(sim.grid, sim._queue(station), line, sim._by_id, p.at, at)

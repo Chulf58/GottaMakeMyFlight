@@ -28,10 +28,15 @@ static func booked_passengers(sim: PassengerSim, flight_id: String) -> int:
 	return PassengerSim.DEFAULT_PASSENGERS if contract.is_empty() else contract["booked_passengers"]
 
 
+## The schedule's passengers now due, in order, while the entrance line lets
+## arrivals in (EntranceLine.room_for_arrivals()); the rest wait on the
+## schedule, still due, so a debug batch is held back like a car is.
 static func spawn_due(sim: PassengerSim) -> void:
 	if sim.layout.passenger_entrances.is_empty():
 		return
-	while not sim._schedule.is_empty() and sim._schedule[0]["tick"] <= sim.tick:
+	var room := sim.entrance.room_for_arrivals(sim)
+	while not sim._schedule.is_empty() and sim._schedule[0]["tick"] <= sim.tick and room > 0:
+		room -= 1
 		var entry: Dictionary = sim._schedule.pop_front()
 		sim._spawn(entry["flight"], entry["variant"], entry["arrival"])
 
@@ -72,6 +77,7 @@ static func spawn(
 			p.apron.append_array(road.slice(1))
 	sim._passengers.append(p)
 	sim._by_id[p.id] = p
+	sim.entrance.take(sim, p)
 	sim.passenger_spawned.emit(p.id)
 	return p
 
@@ -83,7 +89,9 @@ static func close_doors(sim: PassengerSim) -> void:
 	var cause := "no_entrance" if sim.layout.passenger_entrances.is_empty() else "late"
 	var kept: Array[Dictionary] = []
 	for entry in sim._schedule:
-		if sim.flights.is_doors_closed(entry["flight"]):
+		if sim.flights.is_doors_closed(entry["flight"]) and _held_outside(sim, entry):
+			_count_line_miss(sim, entry["flight"])
+		elif sim.flights.is_doors_closed(entry["flight"]):
 			var counts: Dictionary = sim.no_shows.get(
 				entry["flight"], {"no_entrance": 0, "late": 0}
 			)
@@ -107,6 +115,13 @@ static func finish(sim: PassengerSim, p: Passenger, made: bool) -> void:
 		p.missed_stage = p.stage
 		# Held up by people traffic or a full gate, the miss is the terminal's.
 		p.missed_stuck = GateCapacity.miss_cause(sim, p)
+		# Waiting in the line outside for a check-in place: check-in congestion
+		# (FlightResult.ENTRANCE_LINE_TEXT).
+		# One marked NO_ROUTE outside (an unreachable desk) keeps that cause.
+		var waiting := p.stage == Passenger.Stage.SPAWNED and sim.entrance.waiting(p.id)
+		if waiting and p.stuck == Passenger.Stuck.NONE:
+			p.missed_stuck = Passenger.Stuck.QUEUE_FULL
+	sim.entrance.forget(p.id)
 	sim._leave_station(p)
 	sim._release_seat(p)
 	sim.cafes.cleanup(p)
@@ -133,6 +148,26 @@ static func finish(sim: PassengerSim, p: Passenger, made: bool) -> void:
 		p.clear_path()
 	sim.flight_results[p.flight_id] = result
 	sim.outcome.emit(p.id, made)
+
+
+## Whether schedule `entry` was due and held back because the entrance line
+## was full (spawn_due()): the terminal had an entrance, so it would have
+## spawned.
+static func _held_outside(sim: PassengerSim, entry: Dictionary) -> bool:
+	return not sim.layout.passenger_entrances.is_empty() and entry["tick"] <= sim.tick
+
+
+## A scheduled passenger held back by the full line when its flight closed: a
+## miss at the entrance, waiting outside for check-in (FlightResult).
+static func _count_line_miss(sim: PassengerSim, flight_id: String) -> void:
+	var result: Dictionary = sim.flight_results.get(
+		flight_id, {"made": 0, "missed": 0, "causes": {}}
+	)
+	sim._missed += 1
+	result["missed"] += 1
+	var cause := Vector2i(Passenger.Stage.SPAWNED, Passenger.Stuck.QUEUE_FULL)
+	result["causes"][cause] = int(result["causes"].get(cause, 0)) + 1
+	sim.flight_results[flight_id] = result
 
 
 ## Retires the settled passengers kept for SETTLED_KEEP_TICKS. One that still
@@ -193,6 +228,9 @@ static func prune_results(sim: PassengerSim) -> void:
 		return
 	var live := sim.flights.flight_ids()
 	sim.arrivals.prune(live)
+	for flight_id in sim.entrance.held_missed.keys():
+		if not live.has(flight_id):
+			sim.entrance.held_missed.erase(flight_id)
 	for results in [sim.flight_results, sim.no_shows]:
 		for flight_id in results.keys():
 			if not live.has(flight_id):

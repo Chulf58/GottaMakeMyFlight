@@ -47,6 +47,10 @@ func before() -> void:
 	_rig.distance = VIEW_DISTANCE
 	for i in 60:
 		_rig._process(0.1)
+	# The panel room reports its free area a few frames after the panels lay
+	# out, and the real _process then eases the focus toward its middle, which
+	# moves every sign under the pointer. The view is held where it was set.
+	_rig.set_process(false)
 	await await_idle_frame()
 
 

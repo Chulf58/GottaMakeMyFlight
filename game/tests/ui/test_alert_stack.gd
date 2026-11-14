@@ -159,6 +159,9 @@ func test_a_paused_build_edit_updates_the_queue_card_without_a_tick() -> void:
 	var second := PassengerTestWorld.place(grid, &"checkin_desk", Vector2i(6, 1), 0)
 	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(0, 4), 3)
 	var world := PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(4000, 5000))
+	# Desks staffed before anyone arrives (with every desk closed the arrivals
+	# would wait in the line outside, EntranceLine): they walk in and queue.
+	world.step()
 	for i in 12:
 		world.sim.spawn_now(PassengerTestWorld.FLIGHT)
 		world.run_to(world.clock.tick + 12)

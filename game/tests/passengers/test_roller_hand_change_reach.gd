@@ -105,9 +105,12 @@ func _cafe_guest() -> Passenger:
 	add_child(_views)
 	RenderingServer.frame_pre_draw.disconnect(_views.carry_on_props()._unposed)
 	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	# A fixture draw, not an arrival under test: no place in the line outside.
+	_world.sim.entrance.forget(p.id)
 	while SecurityLooks.bag_kind(p, 0) != ROLLER:
 		p.carry_on = 0
 		p = _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+		_world.sim.entrance.forget(p.id)
 	p.carry_on = 1
 	p.hunger = 0
 	p.cafe_cooldown = 1000000

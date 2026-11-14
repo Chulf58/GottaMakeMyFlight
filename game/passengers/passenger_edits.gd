@@ -83,6 +83,10 @@ static func graph_changed(sim: PassengerSim, cells: Array[Vector2i]) -> void:
 	for arch in SecurityLanes.broken(before, sim.layout.security_lanes):
 		for id in sim.security.drop(arch):
 			sim._send_back(sim._by_id[id])
+	# The line outside the entrance takes its NO_ROUTE marks off first, so a
+	# mark left after the check below is that check's own (EntranceLine.unmark()).
+	sim.entrance.unmark(sim)
+	sim.entrance.invalidate()
 	# Walkers outside keep a walk that is still there, or stop (site only).
 	OutsideWalks.revalidate(sim)
 
@@ -110,4 +114,6 @@ static func set_gate_stands(
 ## Any accepted edit: the standing spots are derived again on the next tick.
 static func edit_applied(sim: PassengerSim) -> void:
 	sim.standing.stale = true
+	# A desk placed or taken away: the line's check-in room is found again.
+	sim.entrance.invalidate()
 	sim.files.clear_derived()

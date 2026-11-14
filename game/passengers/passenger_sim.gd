@@ -38,7 +38,7 @@ signal stage_changed(id: int, stage: Passenger.Stage)
 signal checked_in(id: int, desk: int)
 
 ## The history of SAVE_VERSION is in PassengerSimSave.
-const SAVE_VERSION := 33
+const SAVE_VERSION := 36
 ## 1.96 m/s; the Toon walk clips cover 1.92-1.95 m/s.
 const WALK_MM := 98
 ## 3.5 m/s, a jog (user-ruled); the Toon run clips cover 4.17-5.30 m/s,
@@ -123,6 +123,9 @@ var gates := GateCapacity.new()
 ## The ordered files walkers keep to on the way out to the plane, so they do
 ## not walk through each other (BoardingFiles).
 var files := BoardingFiles.new()
+## The line arrivals wait in outside the entrance while check-in is full, and
+## the claims of those admitted and walking in (EntranceLine).
+var entrance := EntranceLine.new()
 ## Where cafe visits pay: the Finances node's wallet in a scene; tests set it.
 var wallet: Wallet
 var grid: BuildGrid
@@ -139,6 +142,8 @@ var site: SiteDefinition:
 			layout.rebuild(grid)
 var tick := 0
 var last_batch_seed := 0
+## Why the last spawn_now() was refused; "" when it was not.
+var spawn_refusal := ""
 ## Scheduled passengers dropped when their flight's doors closed, by flight id:
 ## {"no_entrance": n, "late": n}. "no_entrance" counts those dropped while the
 ## terminal had no entrance, "late" those who simply had not arrived yet.
@@ -299,9 +304,17 @@ func spawn_batch(count: int, seed: int) -> bool:
 
 ## Spawns one passenger at the entrance now and returns its id, or 0 (with an
 ## error) when there is no entrance. `variant` -1 draws one from the sim RNG.
+## It takes the entrance line's admission like any arrival (EntranceLine): with
+## check-in full it waits in the line, and with the line full too it is
+## refused, 0, with the reason in spawn_refusal and a warning.
 func spawn_now(flight_id: String, variant := -1) -> int:
+	spawn_refusal = ""
 	if layout.passenger_entrances.is_empty():
 		push_error("PassengerSim.spawn_now: the terminal has no entrance")
+		return 0
+	if entrance.room_for_arrivals(self) <= 0:
+		spawn_refusal = "check-in is full and the line outside the entrance is full"
+		push_warning("PassengerSim.spawn_now: refused, %s" % spawn_refusal)
 		return 0
 	if variant < 0:
 		variant = clock.rng.randi_range(0, 1)
@@ -311,6 +324,7 @@ func spawn_now(flight_id: String, variant := -1) -> int:
 func on_tick(new_tick: int) -> void:
 	var started := Time.get_ticks_usec()
 	tick = new_tick
+	entrance.step(self)
 	arrivals.step()
 	PassengerLifecycle.spawn_due(self)
 	if staff != null:
@@ -477,9 +491,14 @@ func bubble_text(p: Passenger) -> String:
 	}
 	if p.stage == Passenger.Stage.MISSED:
 		return "Missed my flight!"
-	if p.stuck != Passenger.Stuck.NONE:
+	# Waiting outside while every check-in desk is closed (EntranceLine).
+	var closed_outside := entrance.waiting(p.id) and not _any_open(layout.desks)
+	if p.stuck != Passenger.Stuck.NONE or closed_outside:
 		# A usable station that stands unstaffed is closed, not missing.
-		if p.stuck == Passenger.Stuck.NO_CHECKIN and layout.desks.any(layout.is_usable):
+		var unstaffed := (
+			p.stuck == Passenger.Stuck.NO_CHECKIN and layout.desks.any(layout.is_usable)
+		)
+		if closed_outside or unstaffed:
 			return "Check-in is closed"
 		if p.stuck == Passenger.Stuck.NO_SECURITY and layout.scanners.any(layout.is_usable):
 			return "Security is closed"
@@ -594,7 +613,8 @@ func _advance(p: Passenger) -> void:
 			# An entrance passengers may not use is not entered: with no site the
 			# walker waits at its door until the gap is closed again; on a site
 			# OutsideWalks.revalidate() sends it to another entrance first.
-			if p.apron_mm < p.apron_total_mm():
+			# One waiting in the line outside stands at its place (EntranceLine).
+			if p.apron_mm < p.apron_total_mm() or entrance.waiting(p.id):
 				pass
 			elif not OutsideWalks.may_enter(self, p):
 				p.stuck = Passenger.Stuck.NO_ROUTE
@@ -602,8 +622,9 @@ func _advance(p: Passenger) -> void:
 				p.stuck = Passenger.Stuck.NONE
 				p.apron = []
 				p.apron_mm = 0
+				var claimed := entrance.entered(p)
 				_set_stage(p, Passenger.Stage.TO_CHECKIN)
-				PassengerStations.seek(self, p)
+				PassengerStations.choose(self, p, claimed)
 		Passenger.Stage.TO_CHECKIN, Passenger.Stage.TO_SECURITY:
 			PassengerStations.seek(self, p)
 		Passenger.Stage.CHECKIN_QUEUE, Passenger.Stage.SECURITY_QUEUE:
@@ -629,6 +650,12 @@ func _move(p: Passenger) -> void:
 	var speed := p.pace_mm()
 	if files.holds(p.id) or files.waiters.back_mm(p.id) > 0:
 		speed = files.step_of(self, p, speed)
+	# The line outside moves up together at a walk, so it keeps its spacing.
+	if entrance.waiting(p.id):
+		speed = mini(speed, WALK_MM)
+	elif p.stage == Passenger.Stage.SPAWNED and entrance.has_claim(p.id):
+		# Admitted walkers reach the door one at a time, a gap apart.
+		speed = entrance.step_of(p, speed)
 	if p.stage == Passenger.Stage.APRON or p.stage == Passenger.Stage.SPAWNED:
 		var total := p.apron_total_mm()
 		p.odometer_mm += mini(speed, total - p.apron_mm)
@@ -652,7 +679,10 @@ func _beat(p: Passenger) -> void:
 	var change := 0
 	if p.stage in QUEUE_STAGES:
 		change -= 1
-	if p.stuck != Passenger.Stuck.NONE:
+	# On the road in (the line outside the entrance) a stuck passenger is out of
+	# the terminal's reach: no stuck mood loss and no info desk help.
+	var on_road := p.stage == Passenger.Stage.SPAWNED
+	if p.stuck != Passenger.Stuck.NONE and not on_road:
 		change -= info_desks.stuck_loss(p)
 	# A bored passenger gets nothing from its seat (BoredomSim).
 	if p.stage == Passenger.Stage.SEATED and not BoredomSim.is_bored(p):
@@ -681,7 +711,8 @@ func _beat(p: Passenger) -> void:
 	shops.beat(p)
 	if not info_desks.holds(p):
 		NeedsPolicy.arbitrate(self, p)
-		info_desks.beat(p)
+		if not on_road:
+			info_desks.beat(p)
 	_late_due.append(p)
 
 

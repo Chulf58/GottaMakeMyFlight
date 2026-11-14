@@ -91,10 +91,21 @@ var lots_paid: Array[int] = []
 ## Per curb spot: whether a curb bay stands there, and its price as above.
 var curbs_built: Array[bool] = []
 var curbs_paid: Array[int] = []
+## The bookings the last step() kept aboard for want of budget, in order.
+var denied: Array[int] = []
+## Vehicle id -> true: the vehicles the last step() kept waiting for the line
+## outside the entrance (its budget): one with a passenger denied; one still
+## in its unload gap that was kept on the step before (`kept`); one queued at
+## the stop for a berth while a berth it could take holds one of those; and one held back
+## on the road a gap behind one of those. Rebuilt every step, so a car is kept
+## only while the hold lasts.
+var line_held := {}
 
 var _vehicles: Array[LandsideVehicle] = []
 ## The doors-close tick of each booking aboard's flight, as step() was given.
 var _closes := {}
+## The step's release budget left (step()); -1 for none.
+var _budget := -1
 var _by_id := {}
 var _next_id := 1
 ## Derived from the vehicles: the vehicle holding each curb berth (pulling in,
@@ -333,14 +344,28 @@ func get_vehicle(id: int) -> LandsideVehicle:
 ## that tick, for the bookings aboard), when they all get out at once. An empty
 ## `closes` means no doors-close limit; a booking aboard missing from a non-empty
 ## one is an error and gets its party out at once. `rng` draws parked stays.
+## `budget`, when 0 or more, is how many passengers may get out this tick in
+## all (the free places of the line outside the entrance, EntranceLine): one
+## each, in the order the vehicles let passengers out, so a party of four
+## with one place lets one out, and the doors-close rush never gets past it.
+## A booking that would have got out without the budget is listed in `denied`
+## until the next step, and its vehicle in `line_held`. `kept` holds the
+## vehicles kept for the line on the step before (line_held as it was then).
 func step(
-	now: int, can_release: bool, rng: RandomNumberGenerator, closes := {}
+	now: int, can_release: bool, rng: RandomNumberGenerator, closes := {}, budget := -1, kept := {}
 ) -> Array[Dictionary]:
 	tick = now
 	_closes = closes
+	_budget = budget
+	denied.clear()
+	line_held.clear()
 	var released: Array[Dictionary] = []
 	for v in _vehicles:
 		v.release_wait = maxi(v.release_wait - 1, 0)
+		# Between two passengers getting out, a car kept for the line is still
+		# kept: the rest of its party were refused a place.
+		if kept.has(v.id) and not v.bookings.is_empty() and v.release_wait > 0:
+			line_held[v.id] = true
 	_step_leaving()
 	for spot in definition.lots.size():
 		_step_lot(spot, can_release, released, rng)
@@ -544,19 +569,27 @@ func _drive_road(waiting: int, can_release: bool, released: Array[Dictionary]) -
 			return a.id < b.id if by_axis == 0 else by_axis > 0
 	)
 	var leader := FAR_MM
+	# Whether the car the next one keeps its gap behind is kept for the line.
+	var leader_held := false
 	for v in road:
+		var next := leader
 		if v.lane == LandsideVehicle.Lane.ROAD_IN:
-			leader = _drive_road_in(v, leader, waiting)
+			next = _drive_road_in(v, leader, waiting, leader_held)
 		elif v.stage == LandsideVehicle.Stage.DRIVE:
-			leader = _pull_in(v, leader, can_release, released)
+			next = _pull_in(v, leader, can_release, released)
 		else:
-			leader = _pull_out(v, leader)
+			next = _pull_out(v, leader)
+		if next != leader:
+			leader_held = line_held.has(v.id)
+		leader = next
 
 
 ## One car on road_in: to its stop, then into its lot's access lane, or into
 ## the berth path of the nearest free berth. Returns the road position it
-## holds the car behind to.
-func _drive_road_in(v: LandsideVehicle, leader: int, waiting: int) -> int:
+## holds the car behind to. Held back by a car kept for the line
+## (`leader_held`), or waiting at the stop while a berth it could take holds
+## one (_berth_kept()), it is kept for the line too (line_held).
+func _drive_road_in(v: LandsideVehicle, leader: int, waiting: int, leader_held: bool) -> int:
 	# An empty car never parks, however it got here (a save included).
 	if v.bookings.is_empty():
 		v.intent = LandsideVehicle.Intent.DROP
@@ -565,6 +598,8 @@ func _drive_road_in(v: LandsideVehicle, leader: int, waiting: int) -> int:
 	if spot >= 0:
 		stop = definition.lots[spot].branch_mm
 	var held := _drive(v, leader, stop)
+	if held and leader_held:
+		line_held[v.id] = true
 	if v.pos_mm < stop:
 		_set_moving(v, held)
 		return v.pos_mm
@@ -576,6 +611,8 @@ func _drive_road_in(v: LandsideVehicle, leader: int, waiting: int) -> int:
 		return v.pos_mm
 	var berth := _free_berth(v.pos_mm, waiting)
 	if berth < 0:
+		if _berth_kept(v.pos_mm, waiting):
+			line_held[v.id] = true
 		_set_moving(v, true)
 		return v.pos_mm
 	_berths[berth] = v.id
@@ -735,7 +772,15 @@ func _release(v: LandsideVehicle, walk: Array, released: Array[Dictionary]) -> v
 	var last := tick + v.release_wait + (v.bookings.size() - 1) * RELEASE_GAP_TICKS
 	var out: Array[int] = []
 	while not v.bookings.is_empty() and (out.is_empty() or last >= close):
+		if _budget == 0:
+			denied.append(v.bookings[0])
+			line_held[v.id] = true
+			break
 		out.append(v.bookings.pop_front())
+		if _budget > 0:
+			_budget -= 1
+	if out.is_empty():
+		return
 	released.append({"vehicle": v.id, "bookings": out, "walk": points})
 	v.release_wait = 0 if v.bookings.is_empty() else RELEASE_GAP_TICKS
 
@@ -832,6 +877,19 @@ func _nearest_berth(pos_mm: int) -> int:
 		if best < 0 or _berth_mm[i] < _berth_mm[best]:
 			best = i
 	return best
+
+
+## Whether a berth that a car at `pos_mm` could take, were it free, holds a
+## car kept for the line this step (line_held): built, its path leaving the
+## road ahead of the car, and standing before `before_mm` (_free_berth()). A
+## kept car in a berth the waiting car could not take anyway does not keep it.
+func _berth_kept(pos_mm: int, before_mm: int) -> bool:
+	for i in _berths.size():
+		if _berths[i] == 0 or not line_held.has(_berths[i]):
+			continue
+		if _berth_built(i) and paths.berth_split[i] >= pos_mm and _berth_mm[i] < before_mm:
+			return true
+	return false
 
 
 func _berth_built(i: int) -> bool:

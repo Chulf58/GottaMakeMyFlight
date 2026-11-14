@@ -46,6 +46,9 @@ func _hold_service(desk: int) -> void:
 func test_first_choice_is_the_desk_that_finishes_soonest() -> void:
 	_world = PassengerTestWorld.reference_world()
 	var ids := ReferenceTerminal.object_ids(_world.grid)
+	# Desks staffed before it arrives (with every desk closed it would wait in
+	# the line outside, EntranceLine): it walks straight in, as the case means.
+	_world.step()
 	var first := _world.sim.spawn_now(PassengerTestWorld.FLIGHT)
 	_world.step()
 	# The east desk is nearer the entrance, so it finishes first.
@@ -60,6 +63,9 @@ func test_equal_estimates_choose_the_lower_station_id() -> void:
 	# Entrance at x = 4. Lanes at x = 1 and x = 6: the nearer east desk wins,
 	# which proves the walk counts.
 	var near := _two_desk_world(6)
+	# Desks staffed before it arrives (with every desk closed it would wait in
+	# the line outside, EntranceLine): it walks straight in, as the case means.
+	near.step()
 	var id := near.sim.spawn_now(PassengerTestWorld.FLIGHT)
 	near.step()
 	assert_int(near.passenger(id).station).is_equal(near.sim.get_meta(&"east"))
@@ -68,6 +74,7 @@ func test_equal_estimates_choose_the_lower_station_id() -> void:
 	_world = _two_desk_world(7)
 	var west: int = _world.sim.get_meta(&"west")
 	assert_int(west).is_less(_world.sim.get_meta(&"east"))
+	_world.step()
 	var other := _world.sim.spawn_now(PassengerTestWorld.FLIGHT)
 	_world.step()
 	assert_int(_world.passenger(other).station).is_equal(west)
@@ -166,6 +173,9 @@ func test_desk_nearly_done_is_not_counted_a_full_service_slower() -> void:
 	PassengerTestWorld.place(grid, &"checkin_desk", Vector2i(7, 1), 0)
 	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(2, 5), 2)
 	_world = PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(4000, 5000))
+	# Desks staffed before it arrives (with every desk closed it would wait in
+	# the line outside, EntranceLine): it walks straight in, as the case means.
+	_world.step()
 	var busy := _world.sim.spawn_now(PassengerTestWorld.FLIGHT)
 	var served := _world.passenger(busy)
 	served.stage = Passenger.Stage.CHECKIN
