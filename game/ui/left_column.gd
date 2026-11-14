@@ -12,6 +12,9 @@ extends RefCounted
 const LIST_GROUP := &"left_column_list"
 ## The group the checklist and hint card joins, so the list leaves it room.
 const CARD_GROUP := &"left_column_card"
+## The group a card of its own size (the first-time hint card) joins: the list
+## leaves it the height it has now, not CARD_RESERVE.
+const HINT_GROUP := &"left_column_hint"
 ## What the list leaves the card under it when the card shows: the card's padding,
 ## its title, one line and a "+N more" line.
 const CARD_RESERVE := 136.0
@@ -84,10 +87,20 @@ static func room_below(top: float, layer: Vector2, bar_width: float) -> float:
 
 
 ## The height the departures list may take: the room under the toggles, less what
-## the card under it needs while the card shows (CARD_RESERVE) and the gap between.
+## the card under it needs while one shows and the gap between. The checklist card
+## folds to fit, so it is given CARD_RESERVE; the first-time hint card is kept
+## whole, so it is given the height it has. The two share one slot and the larger
+## is kept. A scene can hold several hint cards (a test's own), so every one in
+## the group is looked at.
 static func list_room(tree: SceneTree, layer: Vector2, bar_width: float) -> float:
+	var need := 0.0
+	for card in tree.get_nodes_in_group(CARD_GROUP):
+		if (card as Control).is_visible_in_tree():
+			need = maxf(need, CARD_RESERVE)
+	for card in tree.get_nodes_in_group(HINT_GROUP):
+		if (card as Control).is_visible_in_tree():
+			need = maxf(need, (card as Control).get_combined_minimum_size().y)
 	var room := room_below(float(LIST_TOP), layer, bar_width)
-	var card := tree.get_first_node_in_group(CARD_GROUP) as Control
-	if card != null and card.is_visible_in_tree():
-		room -= CARD_RESERVE + HudLayout.GAP
+	if need > 0.0:
+		room -= need + HudLayout.GAP
 	return maxf(0.0, room)

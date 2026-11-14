@@ -20,6 +20,11 @@ var _title := Label.new()
 var _rows := VBoxContainer.new()
 ## The "+N more" line under the rows a short column folded away (fit()).
 var _more := Label.new()
+## Bumped when the rows are rebuilt, so fit() knows its last answer is stale.
+var _revision := 0
+## What the last fit() worked from, and how many times it worked at all.
+var _fit_key: Array = []
+var _fit_runs := 0
 ## The lines shown now, so an unchanged refresh rebuilds nothing.
 var _shown: Array[Dictionary] = []
 
@@ -59,6 +64,7 @@ func show_lines(title: String, lines: Array[Dictionary]) -> void:
 	if lines == _shown:
 		return
 	_shown = lines.duplicate(true)
+	_revision += 1
 	for child in _rows.get_children():
 		_rows.remove_child(child)
 		child.queue_free()
@@ -73,10 +79,16 @@ func show_lines(title: String, lines: Array[Dictionary]) -> void:
 ## row-right-ra). Heights come from the font, so a row that is folded away costs
 ## nothing to measure; every row shows again when `room` grows.
 func fit(room: float) -> void:
-	var rows := _rows.get_children()
 	var text_w := FALLBACK_TEXT_W
 	if _rows.size.x > 0.0:
 		text_w = _rows.size.x - BOX - ROW_GAP
+	# The same room, width, rows and title as the last call give the same answer.
+	var key := [room, text_w, _revision, _title.visible, _title.text]
+	if key == _fit_key:
+		return
+	_fit_key = key
+	_fit_runs += 1
+	var rows := _rows.get_children()
 	var gap := float(get_theme_constant("separation"))
 	var spent := 0.0
 	if _title.visible:
@@ -95,6 +107,11 @@ func fit(room: float) -> void:
 		(rows[i] as Control).visible = i < shown
 	_more.text = MORE_TEXT % (rows.size() - shown)
 	_more.visible = shown < rows.size()
+
+
+## How many times fit() measured the rows rather than returning early, for tests.
+func fit_runs() -> int:
+	return _fit_runs
 
 
 func lines() -> Array[Dictionary]:

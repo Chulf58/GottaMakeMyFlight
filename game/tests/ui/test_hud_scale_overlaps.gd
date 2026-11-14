@@ -44,6 +44,9 @@ const CHECKLIST_LINES := [
 	"Seats near the gate",
 ]
 
+## The offers drawn for day 0 come from this seed, so two of them always fit.
+const SEED := 4_070_093
+
 var _port: SubViewport
 var _main: Node
 
@@ -59,6 +62,7 @@ func _boot(size: Vector2i) -> void:
 	_port.size = size
 	add_child(_port)
 	_main = load(SaveTestKit.MAIN).instantiate()
+	(_main.get_node("SimClock") as SimClock).seed_rng(SEED)
 	(_main.get_node("SimClock") as SimClock).set_paused(true)
 	_port.add_child(_main)
 	await await_idle_frame()
@@ -91,7 +95,11 @@ func _rects(names: Array, layout: Vector2) -> Dictionary:
 	var rects := {}
 	for node_name in names:
 		var control := _find(node_name)
-		assert_bool(control.is_visible_in_tree()).is_true()
+		(
+			assert_bool(control.is_visible_in_tree())
+			. override_failure_message("%s hidden" % node_name)
+			. is_true()
+		)
 		rects[node_name] = _rect(control)
 	var menu := _main.get_node("BuildMenu") as BuildMenu
 	if menu.tray().is_visible_in_tree():
@@ -329,3 +337,69 @@ func _visible_rows(card: ChecklistCard) -> int:
 		if (row as Control).visible:
 			count += 1
 	return count
+
+
+## The first-time hint card takes the checklist card's slot (the checklist yields
+## to it), so the list leaves it its own height and it ends a GAP above the dock.
+func test_a_first_time_hint_card_clears_the_bar_and_the_dock_with_a_full_list() -> void:
+	var memory := SaveTestKit.run_path("leftcol_hint_memory.cfg")
+	for ui_scale in LAYOUTS:
+		await _boot(LAYOUTS[ui_scale])
+		await _schedule_two_contracts()
+		var hints := Hints.new()
+		hints.forced_mode = Hints.Mode.PROFILE
+		hints.settings_path = memory
+		hints.hud = _main.get_node("PassengerHud") as PassengerHud
+		hints.scene_root = _main
+		hints.reads_world = false
+		hints.hud.add_child(hints)
+		# The rules show a hint only on a bare floor, so the card is shown directly.
+		hints._show(HintRules.TOILET)
+		await await_idle_frame()
+		await await_idle_frame()
+		assert_bool(hints.is_showing()).is_true()
+		var layout := Vector2(LAYOUTS[ui_scale])
+		var rects := _rects(RESTING + ["DeparturesPanel"], layout)
+		assert_bool(hints.card().is_visible_in_tree()).is_true()
+		rects["HintCard"] = _rect(hints.card())
+		var found := _overlaps(rects)
+		var dock := _find("TemplatesButton").get_parent_control().get_global_rect()
+		var panel: Rect2 = rects["DeparturesPanel"]
+		var card: Rect2 = rects["HintCard"]
+		print(
+			(
+				"ui scale %.2f hint: list %s card %s dock %s overlaps %s"
+				% [ui_scale, panel, card, dock, found]
+			)
+		)
+		assert_array(found).is_empty()
+		assert_float(panel.size.y).is_greater(60.0)
+		assert_float(card.position.y - panel.end.y).is_greater_equal(float(HudLayout.GAP) - 0.5)
+		assert_float(card.end.y).is_less_equal(dock.position.y - HudLayout.GAP + 0.5)
+		_port.free()
+		_port = null
+	DirAccess.remove_absolute(memory)
+
+
+## The column's fits measure once and then wait for a change: an unchanged frame
+## does not measure the checklist again or touch the list's scroll height.
+func test_the_column_fits_are_not_recomputed_on_an_unchanged_frame() -> void:
+	await _boot(LAYOUTS[1.5])
+	await _schedule_two_contracts()
+	var checklist := (_main.get_node("StaffPanel") as StaffPanel).checklist()
+	var board := _find("DeparturesBoard") as DeparturesBoard
+	await await_idle_frame()
+	var runs := checklist.fit_runs()
+	var sets := board.scroll_sets()
+	assert_int(runs).is_greater(0)
+	assert_int(sets).is_greater(0)
+	for i in 3:
+		await await_idle_frame()
+	assert_int(checklist.fit_runs()).is_equal(runs)
+	assert_int(board.scroll_sets()).is_equal(sets)
+	# A change of layout is a change: both fit again.
+	_port.size = Vector2i(1536, 864)
+	await await_idle_frame()
+	await await_idle_frame()
+	assert_int(checklist.fit_runs()).is_greater(runs)
+	assert_int(board.scroll_sets()).is_greater(sets)

@@ -101,6 +101,8 @@ var _counts := Label.new()
 var _rows := VBoxContainer.new()
 ## The rows scroll when the column leaves them less room than they take (_process).
 var _scroll := ScrollContainer.new()
+## How many times the scroll area's height was changed, for tests.
+var _scroll_sets := 0
 var _lines := PackedStringArray()
 var _entries: Array[Dictionary] = []
 ## {flight id: passengers running late}, read from the PassengerSim again only
@@ -249,9 +251,15 @@ func _process(_delta: float) -> void:
 	var bar_w := 0.0 if menu == null else menu.bar().get_combined_minimum_size().x
 	var room := LeftColumn.list_room(get_tree(), get_viewport().get_visible_rect().size, bar_w)
 	var chrome := _panel.get_combined_minimum_size().y - _scroll.get_combined_minimum_size().y
-	_scroll.custom_minimum_size.y = minf(
-		_rows.get_combined_minimum_size().y, maxf(0.0, room - chrome)
-	)
+	var height := minf(_rows.get_combined_minimum_size().y, maxf(0.0, room - chrome))
+	if not is_equal_approx(_scroll.custom_minimum_size.y, height):
+		_scroll.custom_minimum_size.y = height
+		_scroll_sets += 1
+
+
+## How many times the scroll area's height was set, for tests.
+func scroll_sets() -> int:
+	return _scroll_sets
 
 
 ## Hides the list while `aside` (PassengerHud, while the inspect card shows)
