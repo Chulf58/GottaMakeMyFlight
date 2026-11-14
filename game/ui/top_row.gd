@@ -58,9 +58,13 @@ static func row_left(layer_width: float) -> float:
 
 ## The sheet's left edge and width in a layer `layer_width` wide: from the row's
 ## left edge, SHEET_W wide, moved left (never past SHEET_MIN_LEFT) so it ends a
-## GAP before the clock panel.
+## GAP before the clock panel. In a layout too narrow to leave a sheet any room
+## (the rail starts left of SHEET_MIN_LEFT) the width is 0 and the sheet is as
+## wide as its content.
 static func sheet_extent(layer_width: float) -> Vector2:
 	var right := _span_right(layer_width)
+	if right <= SHEET_MIN_LEFT:
+		return Vector2(SHEET_MIN_LEFT, 0.0)
 	var left := clampf(minf(row_left(layer_width), right - SHEET_W), SHEET_MIN_LEFT, right)
 	return Vector2(left, minf(SHEET_W, right - left))
 

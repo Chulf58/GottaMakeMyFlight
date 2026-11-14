@@ -30,8 +30,8 @@ const IN_BUILD_MODE := ["BuildModeSign", "DebugPanel"]
 ## Where the rating card ends at most (16 + 224 + 8 + 240).
 const RATING_END := 488.0
 ## The bar leaves room for the docks beside it from this layout width up
-## (a 1096 px bar plus 144 px each side).
-const WIDE_FROM := 1384.0
+## (the 1104 px bar, its 4 px margins included, plus 144 px each side).
+const WIDE_FROM := 1392.0
 
 var _port: SubViewport
 var _main: Node
@@ -152,17 +152,22 @@ func _assert_geometry(rects: Dictionary, layout: Vector2) -> void:
 
 ## Each sheet, opened from the row, ends left of the clock panel and starts right
 ## of the top-left toggles.
-func _assert_sheets_clear_the_clock() -> void:
+func _assert_sheets_clear_the_clock(layout: Vector2) -> void:
 	var clock := _rect(_find("FlightPanel"))
 	var toggles := _rect(_find("MoodToggle"))
 	for pair in [["RunwayCard", "RunwaySheet"], ["OfferPanel", "OfferSheet"]]:
 		var owner_node := _main.get_node(pair[0])
 		owner_node.open()
 		await await_idle_frame()
-		var sheet := _rect(_find(pair[1]))
+		var control := _find(pair[1])
+		assert_bool(control.is_visible_in_tree()).is_true()
+		var sheet := _rect(control)
 		owner_node.close()
 		print("%s %s vs FlightPanel %s" % [pair[1], sheet, clock])
-		assert_float(sheet.end.x).is_less(clock.position.x)
+		assert_float(sheet.size.x).is_equal_approx(560.0, 0.5)
+		assert_float(sheet.size.y).is_greater(0.0)
+		assert_bool(Rect2(Vector2.ZERO, layout).encloses(sheet)).is_true()
+		assert_float(clock.position.x - sheet.end.x).is_greater_equal(float(HudLayout.GAP) - 0.5)
 		assert_float(sheet.position.x).is_greater(toggles.end.x)
 
 
@@ -194,7 +199,7 @@ func test_build_mode_keeps_the_ruled_geometry_and_overlaps_nothing_at_any_ui_sca
 func test_an_open_sheet_ends_left_of_the_clock_panel_at_any_ui_scale() -> void:
 	for ui_scale in LAYOUTS:
 		await _boot(LAYOUTS[ui_scale])
-		await _assert_sheets_clear_the_clock()
+		await _assert_sheets_clear_the_clock(Vector2(LAYOUTS[ui_scale]))
 		_port.free()
 		_port = null
 
@@ -215,4 +220,14 @@ func test_a_live_viewport_resize_relays_the_hud_out() -> void:
 		print("resized to %s overlaps %s" % [size, found])
 		assert_array(found).is_empty()
 		_assert_geometry(rects, layout)
-		await _assert_sheets_clear_the_clock()
+		await _assert_sheets_clear_the_clock(layout)
+
+
+## A layout too narrow for a sheet beside the rail never gets a negative width.
+func test_the_sheet_extent_is_never_negative_in_a_degraded_layout() -> void:
+	for width in [640.0, 664.0, 700.0, 1280.0, 1536.0]:
+		var extent := TopRow.sheet_extent(width)
+		assert_float(extent.y).is_greater_equal(0.0)
+		assert_float(extent.x).is_greater_equal(TopRow.SHEET_MIN_LEFT)
+	assert_float(TopRow.sheet_extent(640.0).y).is_equal(0.0)
+	assert_float(TopRow.sheet_extent(1280.0).y).is_equal(560.0)
