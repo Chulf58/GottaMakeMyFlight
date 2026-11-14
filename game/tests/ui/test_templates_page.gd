@@ -17,7 +17,10 @@ var _room := 0
 
 func before() -> void:
 	_port = SubViewport.new()
-	_port.size = Vector2i(1280, 720)
+	# The project's 1.25 layout: wide enough that the dock stands beside the bar
+	# (BottomDocks lifts it above the bar at 1280 wide, tested in
+	# test_hud_scale_overlaps.gd).
+	_port.size = Vector2i(1536, 864)
 	add_child(_port)
 	_finances = Finances.new()
 	_port.add_child(_finances)
@@ -65,6 +68,31 @@ func test_the_button_sits_outside_the_bar_and_opens_the_page() -> void:
 	_menu.press_category(BuildMenu.TEMPLATES_PAGE)
 	assert_bool(_menu.is_tray_open()).is_false()
 	assert_bool(_page.visible).is_false()
+
+
+## A 1280 px layout (UI scale 1.5): the centred bar leaves no room beside it, so
+## the dock lifts onto the row above the bar, still on the left margin and still
+## the bar's height, a GAP above the bar (board 8d9a8f13).
+func test_the_dock_lifts_above_the_bar_at_a_1280_layout() -> void:
+	var port := SubViewport.new()
+	port.size = Vector2i(1280, 720)
+	add_child(port)
+	var mode := BuildMode.new()
+	mode.grid_size = Vector2i(20, 20)
+	port.add_child(mode)
+	mode.set_process(false)
+	var menu := BuildMenu.new()
+	menu.build_mode = mode
+	port.add_child(menu)
+	await await_idle_frame()
+	await await_idle_frame()
+	var dock := menu.templates_page.dock.get_global_rect()
+	var bar := menu.bar().get_global_rect()
+	assert_float(dock.position.x).is_equal(float(HudLayout.MARGIN))
+	assert_float(dock.size.y).is_equal_approx(float(HudLayout.BAR_H), 0.5)
+	assert_float(dock.end.y).is_equal_approx(bar.position.y - HudLayout.GAP, 0.5)
+	assert_bool(dock.intersects(bar)).is_false()
+	port.free()
 
 
 func test_save_room_then_its_card_arms_the_paste_with_status_and_cost() -> void:

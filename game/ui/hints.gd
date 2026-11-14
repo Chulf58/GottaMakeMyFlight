@@ -484,6 +484,7 @@ func _build() -> void:
 	_body.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	column.add_child(_body)
 	LeftColumn.dock_card(_card)
+	_card.add_to_group(LeftColumn.HINT_GROUP)
 	_row.name = "HintsControls"
 	_row.theme = BuildMenu.HUD_THEME
 	_row.position = Vector2(HudLayout.MARGIN, LeftColumn.slot_top(LeftColumn.SLOT_HINTS))

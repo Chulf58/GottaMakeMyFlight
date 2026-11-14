@@ -1,6 +1,6 @@
 class_name TestOfferPanelTraits
 extends GdUnitTestSuite
-## Each offer card has one trait line under its fit line: the upside in
+## Each offer card has one trait line under its verdict row: the upside in
 ## HudGoodText and the downside in HudProblemText, or a muted "Plain terms" on
 ## the plain offer (decision airline-offer-traits-each-offer-pairs-an-upside-
 ## with-a-downs).
@@ -57,9 +57,9 @@ func test_the_plain_offer_says_plain_terms_and_shows_no_downside() -> void:
 	assert_str(_panel.card_text("O0N3")).ends_with(OfferTraits.PLAIN_LABEL)
 
 
-func test_the_trait_line_sits_right_under_the_fit_line() -> void:
+func test_the_trait_line_sits_right_under_the_verdict_row() -> void:
 	for id in _panel.card_ids():
-		var fit := _panel.fit_label(id)
+		var verdict := _panel.fit_label(id).get_parent()
 		var row := _panel.trait_row(id)
-		assert_object(row.get_parent()).is_same(fit.get_parent())
-		assert_int(row.get_index()).is_equal(fit.get_index() + 1)
+		assert_object(row.get_parent()).is_same(verdict.get_parent())
+		assert_int(row.get_index()).is_equal(verdict.get_index() + 1)

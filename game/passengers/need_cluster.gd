@@ -463,7 +463,8 @@ static func _billboard(priority: int) -> Sprite3D:
 ## Draws `badge` for a cluster of `kind` with `count` members at `anchor`
 ## (PassengerViews space), its icon centred `centre_px` screen pixels from
 ## the anchor's projection (y down); `unit` from NeedIcons.unit_of(). Sets
-## the count's text and pill only when the count changes.
+## the count's text and pill only when the count changes. `icon` replaces the
+## need icon of `kind` (a wish badge's bubble, WishBadges).
 static func show_badge(
 	badge: Sprite3D,
 	kind: int,
@@ -471,10 +472,11 @@ static func show_badge(
 	anchor: Vector3,
 	centre_px: Vector2,
 	unit: float,
-	alpha: float
+	alpha: float,
+	icon: Texture2D = null
 ) -> void:
 	badge.visible = true
-	badge.texture = NeedIcons.texture(kind)
+	badge.texture = icon if icon != null else NeedIcons.texture(kind)
 	badge.position = anchor
 	badge.pixel_size = BADGE_PX * unit / NeedIcons.SIZE
 	badge.offset = Vector2(centre_px.x, -centre_px.y) * NeedIcons.SIZE / BADGE_PX

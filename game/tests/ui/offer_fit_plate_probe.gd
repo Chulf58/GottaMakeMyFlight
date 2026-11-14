@@ -3,8 +3,8 @@ extends SceneTree
 ## airline-offers-2-a-day-fit-the-free-gate-slots-1-needs-more, point 6). The
 ## real main.tscn boots; the airport opens on one gate, C, with a 10:00
 ## contract, and the day's offers are set to 10:00, 12:00 and 20:00, so the
-## three cards read "No gate free, and the taxi lane is busy then", "No gate
-## free at this time: build another gate" and "Fits a free gate at this time".
+## three cards read "No gate free, and the taxi lane is busy then", "Needs
+## another gate" and "Fits your gates now".
 ## Prints each card's text and checks the sheet is in view before saving.
 ##
 ## Run (one windowed Godot run project-wide; take the slot first):
@@ -53,8 +53,8 @@ func _run() -> void:
 	await _frames(8)
 	var expected := {
 		"O0N1": FlightFit.GATE_AND_TAXI_TEXT,
-		"O0N2": FlightFit.ANOTHER_GATE_TEXT,
-		"O0N3": FlightFit.FITS_TEXT,
+		"O0N2": OfferPanel.NEEDS_GATE_TEXT,
+		"O0N3": OfferPanel.FITS_TEXT,
 	}
 	var shown := 0
 	for id in panel.card_ids():

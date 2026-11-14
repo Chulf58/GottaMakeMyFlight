@@ -138,9 +138,10 @@ func test_the_hint_does_not_take_mouse_input() -> void:
 	var controls: Array[Control] = [_panel.hint_card()]
 	for node in _panel.hint_card().find_children("*", "Control", true, false):
 		controls.append(node as Control)
-	# The card, its title, its rows, their tick boxes and their labels.
+	# The card, its title, its rows, their tick boxes and their labels, and the
+	# "+N more" line.
 	assert_int(_panel.checklist().rows().size()).is_greater(0)
-	assert_int(controls.size()).is_equal(4 + 3 * _panel.checklist().rows().size())
+	assert_int(controls.size()).is_equal(5 + 3 * _panel.checklist().rows().size())
 	for control in controls:
 		(
 			assert_int(control.mouse_filter)

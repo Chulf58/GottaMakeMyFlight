@@ -88,6 +88,9 @@ var passengers: PassengerSim:
 		_late_key = []
 ## Where the on/off choice is kept; tests point it at a per-process file.
 var settings_path := SETTINGS_PATH
+## The bar the list stands over, for how much room the column has; unset, the
+## bar is taken to leave no room beside it.
+var menu: BuildMenu
 
 var _shown := true
 ## True while the inspect card has the list stepped aside (step_aside()).
@@ -96,13 +99,18 @@ var _toggle := Button.new()
 var _panel := PanelContainer.new()
 var _counts := Label.new()
 var _rows := VBoxContainer.new()
+## The rows scroll when the column leaves them less room than they take (_process).
+var _scroll := ScrollContainer.new()
+## How many times the scroll area's height was changed, for tests.
+var _scroll_sets := 0
 var _lines := PackedStringArray()
 var _entries: Array[Dictionary] = []
 ## {flight id: passengers running late}, read from the PassengerSim again only
 ## when _late_signature() changes, so a frame between ticks costs no passenger
-## scan. The signature holds more than the tick: a snapshot load installs
-## fresh Passenger objects at a tick that may equal the one before it (load
-## pauses the clock), and the counts must follow it (board 7f89cf1e).
+## scan. The signature is the sim's revision, not its tick: a snapshot load
+## installs fresh Passenger objects at a tick that may equal the one before it
+## (load pauses the clock), and the counts must follow it (boards 7f89cf1e,
+## 6c08350c).
 var _late := {}
 var _late_key := []
 var _gates: Array[String] = []
@@ -221,13 +229,37 @@ func _ready() -> void:
 	body.add_child(_counts)
 	_rows.name = "Rows"
 	_rows.add_theme_constant_override("separation", 1)
-	body.add_child(_rows)
+	_rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_scroll.name = "RowsScroll"
+	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_scroll.add_child(_rows)
+	body.add_child(_scroll)
 	_shown = _load_setting()
 	_apply_shown()
 	_toggle.toggled.connect(set_shown)
 	if flights != null:
 		flights.snapshot_loaded.connect(_on_snapshot_loaded)
 	refresh()
+
+
+## Lets the rows scroll in the room the column leaves the list (LeftColumn.
+## list_room), so the checklist card under it always has its share and the
+## cards never reach the Templates dock.
+func _process(_delta: float) -> void:
+	if not _panel.is_visible_in_tree():
+		return
+	var bar_w := 0.0 if menu == null else menu.bar().get_combined_minimum_size().x
+	var room := LeftColumn.list_room(get_tree(), get_viewport().get_visible_rect().size, bar_w)
+	var chrome := _panel.get_combined_minimum_size().y - _scroll.get_combined_minimum_size().y
+	var height := minf(_rows.get_combined_minimum_size().y, maxf(0.0, room - chrome))
+	if not is_equal_approx(_scroll.custom_minimum_size.y, height):
+		_scroll.custom_minimum_size.y = height
+		_scroll_sets += 1
+
+
+## How many times the scroll area's height was set, for tests.
+func scroll_sets() -> int:
+	return _scroll_sets
 
 
 ## Hides the list while `aside` (PassengerHud, while the inspect card shows)
@@ -335,18 +367,12 @@ func _late_counts() -> Dictionary:
 	return _late
 
 
-## What identifies the passenger state the late counts were read from: the sim,
-## its tick, and how many passengers it holds and which objects stand first and
-## last. A snapshot install replaces every Passenger object, so any load moves
-## the signature even at the same tick and with the same counts.
+## What identifies the passenger state the late counts were read from: the sim
+## and its revision, an O(1) read that holds no passenger scan. The revision
+## moves on every tick, spawn, stage change, outcome and snapshot load, so a
+## load at the same tick, or a change inside one tick, moves the signature.
 func _late_signature() -> Array:
-	var ids := passengers.passenger_ids()
-	var first := 0
-	var last := 0
-	if not ids.is_empty():
-		first = passengers.get_passenger(ids[0]).get_instance_id()
-		last = passengers.get_passenger(ids[-1]).get_instance_id()
-	return [passengers.get_instance_id(), passengers.tick, ids.size(), first, last]
+	return [passengers.get_instance_id(), passengers.revision]
 
 
 func _refresh(force: bool) -> void:
