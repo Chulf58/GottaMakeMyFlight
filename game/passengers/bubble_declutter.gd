@@ -66,6 +66,10 @@ static func entry(id: int, text: String, rank: int, rect: Rect2, focused := fals
 ## overlay's Late mode (MoodOverlay.shows_late()), which shows LATE_TEXT over
 ## every late passenger whatever the sim's text puts first. `every` shows each
 ## passenger's speech, as before the calm view (a probe and test seam).
+## The rule: a focused passenger shows its speech in every view and overlay mode
+## (decision calm-cozy-default-view-quiet-world-detail-on-ask-soft-statio:
+## hovering a passenger shows its bubble); a passenger that is not focused shows
+## none, except a late one in Late mode.
 static func shown_text(
 	speech: String, late: bool, focused: bool, late_mode: bool, every := false
 ) -> String:

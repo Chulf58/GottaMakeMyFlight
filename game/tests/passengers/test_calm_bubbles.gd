@@ -274,6 +274,48 @@ func test_the_declutter_still_runs_in_late_mode_and_keeps_the_focused_bubble() -
 	assert_bool(shown.has(_cast["late"])).is_false()
 
 
+func test_a_focused_speaker_shows_its_speech_in_every_mode_and_an_unfocused_one_does_not() -> void:
+	_open()
+	var speaker: int = _cast["speaker"]
+	var modes := {
+		"off": null,
+		"mood": MoodTint.Mode.MOOD,
+		"hunger": MoodTint.Mode.HUNGER,
+		"toilet": MoodTint.Mode.TOILET,
+		"boredom": MoodTint.Mode.BOREDOM,
+		"late": MoodTint.Mode.LATE,
+	}
+	for label: String in modes:
+		# Unfocused: the speaker (not late) shows nothing in any mode.
+		_hover.pointer_override = Vector2(-1.0, -1.0)
+		_views.selected_id = 0
+		if modes[label] == null:
+			_mode(MoodTint.Mode.MOOD, false)
+		else:
+			_mode(modes[label])
+		var unfocused := _shown_bubbles()
+		# Focused (hovered): the same passenger shows its own speech.
+		_hover.pointer_override = _over(speaker)
+		_views.draw()
+		var focused := _shown_bubbles()
+		print("%s mode: unfocused %s, hovered %s" % [label, unfocused, focused])
+		assert_bool(unfocused.has(speaker)).override_failure_message(label).is_false()
+		assert_str(focused.get(speaker, "")).override_failure_message(label).is_equal("Queue full")
+		# Pinned or inspected shows it the same way.
+		_hover.pointer_override = Vector2(-1.0, -1.0)
+		_views.selected_id = speaker
+		_views.draw()
+		assert_str(_shown_bubbles().get(speaker, "")).override_failure_message(label).is_equal(
+			"Queue full"
+		)
+		# Only Late mode shows anyone else's bubble: the late passengers.
+		var others := focused.keys().filter(func(id: int) -> bool: return id != speaker)
+		if label == "late":
+			assert_array(others).contains_exactly_in_any_order([_cast["late"], _cast["late_stuck"]])
+		else:
+			assert_array(others).is_empty()
+
+
 func test_the_shown_text_rules() -> void:
 	var late := BubbleDeclutter.LATE_TEXT
 	assert_str(BubbleDeclutter.shown_text("Queue full", true, false, false)).is_empty()

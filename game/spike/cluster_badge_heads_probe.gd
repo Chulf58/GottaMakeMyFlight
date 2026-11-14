@@ -228,6 +228,8 @@ func _plates() -> void:
 		centre += _views.node_for(id).global_position
 	centre /= seated.size()
 	print("PROBE seated_centre=%s" % centre)
+	_focus_speaker(seated)
+	await _frames(2)
 	await _sweep(centre)
 	for yaw: float in YAWS:
 		for distance: float in CLOSE_M:
@@ -279,6 +281,10 @@ func _plate(name: String, centre: Vector3, need_badge: bool) -> void:
 	_plates_with_badges += 1
 	var heads := _head_rects(to_output)
 	var others := _other_rects()
+	var bubbles := _bubble_rects().size()
+	print("PROBE plate=%s bubble_obstacles=%d" % [name, bubbles])
+	if bubbles == 0:
+		_invalid("%s: no speech bubble is drawn, so badge separation checks nothing" % name)
 	var on_heads := 0
 	var inside := 0
 	for b: Dictionary in _views.need_badges():
@@ -382,11 +388,33 @@ func _head_rects(to_output: float) -> Dictionary:
 func _other_rects() -> Array[Rect2]:
 	var out: Array[Rect2] = []
 	out.append_array(_views._markers.placed_captions())
+	out.append_array(_bubble_rects())
+	return out
+
+
+## The kept speech bubbles alone, in output pixels. Bubbles show only for a
+## focused passenger (calm view), so this is empty unless _focus_speaker() ran.
+func _bubble_rects() -> Array[Rect2]:
+	var out: Array[Rect2] = []
 	for e: Dictionary in _views._bubble_entries:
 		var bubble := _views.node_for(e["id"]).get_node("Bubble") as Label3D
-		if bubble.visible:
+		if bubble.visible and bubble.text != "":
 			out.append(e["rect"])
 	return out
+
+
+## Makes one seated passenger late (so it has words) and inspects it: the calm
+## view draws a speech bubble only over a focused passenger, and without one
+## the badge-versus-bubble separation below would be checked against nothing.
+func _focus_speaker(seated: Array[int]) -> void:
+	var p := _sim.get_passenger(seated[0])
+	p.late = true
+	_views.sync()
+	_views.selected_id = p.id
+	var speech: String = _views.node_for(p.id).get_meta(&"speech", "")
+	print("PROBE speaker id=%d speech='%s'" % [p.id, speech])
+	if speech == "":
+		_invalid("the focused passenger has nothing to say, so no bubble is drawn")
 
 
 func _head_point(node: Node3D) -> Vector3:

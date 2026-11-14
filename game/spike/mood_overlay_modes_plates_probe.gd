@@ -162,6 +162,20 @@ func _plates() -> void:
 		paused = true
 		var plate := await PlateSight.grab(self)
 		paused = false
+		var counts := _late_counts()
+		var discs := _late_discs()
+		print("PROBE late discs=%d late_drawn=%d not_late_drawn=%d" % [discs, counts.x, counts.y])
+		if counts.x == 0 or counts.y == 0:
+			_invalid("%d late and %d not late drawn: no controls" % [counts.x, counts.y])
+		# Late mode marks exactly the late passengers drawn; no other mode marks any.
+		var want_discs := counts.x if mode == MoodTint.Mode.LATE else 0
+		if discs != want_discs:
+			_invalid(
+				(
+					"%s mode drew %d late discs, wanted %d"
+					% [MoodOverlay.MODE_NAMES[mode], discs, want_discs]
+				)
+			)
 		if mode == MoodTint.Mode.MOOD:
 			mood_plate = plate
 		else:
@@ -180,14 +194,19 @@ func _plates() -> void:
 
 
 ## Gives each passenger on the floor its own hunger, toilet need and boredom,
-## spread over green, orange and red for its mode, and prints the lot.
+## spread over green, orange and red for its mode, and prints the lot. Every
+## third passenger is late and the rest are not, so Late mode has both marked
+## passengers and controls it must leave alone.
 func _spread_needs() -> void:
 	var i := 0
+	var late := 0
 	for id in _sim.passenger_ids():
 		var p := _sim.get_passenger(id)
 		p.hunger = (i * 37) % 101
 		p.toilet_need = (i * 53 + 20) % 101
 		p.boredom = (i * 29 + 60) % 101
+		p.late = i % 3 == 0
+		late += int(p.late)
 		print(
 			(
 				"PROBE need id=%d hunger=%d toilet=%d boredom=%d"
@@ -195,6 +214,31 @@ func _spread_needs() -> void:
 			)
 		)
 		i += 1
+	print("PROBE late=%d not_late=%d" % [late, i - late])
+	if late == 0 or late == i:
+		_invalid("late=%d of %d: Late mode needs late passengers and controls" % [late, i])
+	_main.get_node("PassengerViews").sync()
+
+
+## The late discs drawn under the passengers (PassengerViews' LateMarks).
+func _late_discs() -> int:
+	var marks := _main.get_node("PassengerViews/LateMarks") as MultiMeshInstance3D
+	return marks.multimesh.visible_instance_count
+
+
+## Late passengers drawn on screen, and passengers that are not late.
+func _late_counts() -> Vector2i:
+	var views := _main.get_node("PassengerViews") as PassengerViews
+	var counts := Vector2i.ZERO
+	for id in _sim.passenger_ids():
+		var node := views.node_for(id)
+		if node == null or not node.visible:
+			continue
+		if MoodTint.is_late(_sim.get_passenger(id)):
+			counts.x += 1
+		else:
+			counts.y += 1
+	return counts
 
 
 func _icons_visible() -> int:
