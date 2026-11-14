@@ -88,6 +88,9 @@ var passengers: PassengerSim:
 		_late_key = []
 ## Where the on/off choice is kept; tests point it at a per-process file.
 var settings_path := SETTINGS_PATH
+## The bar the list stands over, for how much room the column has; unset, the
+## bar is taken to leave no room beside it.
+var menu: BuildMenu
 
 var _shown := true
 ## True while the inspect card has the list stepped aside (step_aside()).
@@ -96,6 +99,8 @@ var _toggle := Button.new()
 var _panel := PanelContainer.new()
 var _counts := Label.new()
 var _rows := VBoxContainer.new()
+## The rows scroll when the column leaves them less room than they take (_process).
+var _scroll := ScrollContainer.new()
 var _lines := PackedStringArray()
 var _entries: Array[Dictionary] = []
 ## {flight id: passengers running late}, read from the PassengerSim again only
@@ -222,13 +227,31 @@ func _ready() -> void:
 	body.add_child(_counts)
 	_rows.name = "Rows"
 	_rows.add_theme_constant_override("separation", 1)
-	body.add_child(_rows)
+	_rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_scroll.name = "RowsScroll"
+	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_scroll.add_child(_rows)
+	body.add_child(_scroll)
 	_shown = _load_setting()
 	_apply_shown()
 	_toggle.toggled.connect(set_shown)
 	if flights != null:
 		flights.snapshot_loaded.connect(_on_snapshot_loaded)
 	refresh()
+
+
+## Lets the rows scroll in the room the column leaves the list (LeftColumn.
+## list_room), so the checklist card under it always has its share and the
+## cards never reach the Templates dock.
+func _process(_delta: float) -> void:
+	if not _panel.is_visible_in_tree():
+		return
+	var bar_w := 0.0 if menu == null else menu.bar().get_combined_minimum_size().x
+	var room := LeftColumn.list_room(get_tree(), get_viewport().get_visible_rect().size, bar_w)
+	var chrome := _panel.get_combined_minimum_size().y - _scroll.get_combined_minimum_size().y
+	_scroll.custom_minimum_size.y = minf(
+		_rows.get_combined_minimum_size().y, maxf(0.0, room - chrome)
+	)
 
 
 ## Hides the list while `aside` (PassengerHud, while the inspect card shows)

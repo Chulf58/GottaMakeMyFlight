@@ -33,6 +33,17 @@ const RATING_END := 488.0
 ## (the 1104 px bar, its 4 px margins included, plus 144 px each side).
 const WIDE_FROM := 1392.0
 
+## The lines of the first checklist a new game shows (plate offer_cards_s150.png).
+## Ticks the starter airport gets to open (staff walk to their stations).
+const OPEN_LIMIT_TICKS := 5000
+const CHECKLIST_LINES := [
+	"Entrance with a way through check-in and security to an exit",
+	"Check-in desk and an agent: place a desk",
+	"Security scanner and an officer: place a scanner",
+	"Gate desk by an exit that faces the planes",
+	"Seats near the gate",
+]
+
 var _port: SubViewport
 var _main: Node
 
@@ -231,3 +242,90 @@ func test_the_sheet_extent_is_never_negative_in_a_degraded_layout() -> void:
 		assert_float(extent.x).is_greater_equal(TopRow.SHEET_MIN_LEFT)
 	assert_float(TopRow.sheet_extent(640.0).y).is_equal(0.0)
 	assert_float(TopRow.sheet_extent(1280.0).y).is_equal(560.0)
+
+
+## Board 0faf2ef4: the status card grows with Today and Tomorrow rows and pushed
+## the "To open the airport" checklist down over the bar's left end and the
+## Templates dock at UI scale 1.5. Two contracts are scheduled, so the departures
+## list is long, and the opening checklist is still full.
+func _schedule_two_contracts() -> void:
+	var flights := _main.get_node("FlightSim") as FlightSim
+	var board := (_main.get_node("OfferDesk") as OfferDesk).board
+	SaveTestKit.start_airport(_main)
+	var clock := _main.get_node("SimClock") as SimClock
+	while flights.opened_tick < 0 and clock.tick < OPEN_LIMIT_TICKS:
+		SaveTestKit.step(_main)
+	assert_bool(flights.opened_tick >= 0).is_true()
+	for offer in board.open_offers():
+		if flights.contract_ids().size() < 2:
+			if flights.accept_problem(OfferBoard.terms_of(offer)) == "":
+				board.accept(offer["id"], flights)
+	assert_int(flights.contract_ids().size()).is_equal(2)
+	(_find("DeparturesBoard") as DeparturesBoard).refresh()
+	await await_idle_frame()
+	# The checklist as a new game shows it: the contracts need an open airport, which
+	# ticks every line, so the card is given one line per need.
+	var lines: Array[Dictionary] = []
+	for text in CHECKLIST_LINES:
+		lines.append(Checklist.line(text, false))
+	(_main.get_node("StaffPanel") as StaffPanel).checklist().show_lines(
+		"To open the airport", lines
+	)
+	await await_idle_frame()
+	await await_idle_frame()
+
+
+## Nothing in the left column reaches the Templates dock or the bar: each card
+## ends a GAP above the dock, at every layout.
+func test_the_left_column_cards_clear_the_bar_and_the_dock_with_flights_scheduled() -> void:
+	for ui_scale in LAYOUTS:
+		await _boot(LAYOUTS[ui_scale])
+		await _schedule_two_contracts()
+		var layout := Vector2(LAYOUTS[ui_scale])
+		var names: Array = RESTING + ["DeparturesPanel", "StaffHintCard"]
+		var rects := _rects(names, layout)
+		var found := _overlaps(rects)
+		var dock := _find("TemplatesButton").get_parent_control().get_global_rect()
+		var panel: Rect2 = rects["DeparturesPanel"]
+		var card: Rect2 = rects["StaffHintCard"]
+		var staff := _main.get_node("StaffPanel") as StaffPanel
+		var more := _find("ChecklistMore")
+		print(
+			"rows ",
+			staff.checklist().rows().size(),
+			(
+				" ui scale %.2f list %s card %s dock %s more %s %s overlaps %s"
+				% [ui_scale, panel, card, dock, more.visible, (more as Label).text, found]
+			)
+		)
+		assert_array(found).is_empty()
+		# The list is long: two contracts, a row each for today and tomorrow.
+		assert_float(panel.size.y).is_greater(100.0)
+		var rows := (_find("Rows") as Control).get_combined_minimum_size().y
+		var shown := (_find("RowsScroll") as Control).size.y
+		assert_float(card.position.y - panel.end.y).is_greater_equal(float(HudLayout.GAP) - 0.5)
+		assert_float(card.end.y).is_less_equal(dock.position.y - HudLayout.GAP + 0.5)
+		assert_float(panel.end.y).is_less_equal(dock.position.y - HudLayout.GAP + 0.5)
+		# The card is on show with at least one line and its title; a short layout
+		# folds the rest into "+N more", a tall one shows every line.
+		assert_bool(staff.checklist().rows().size() > 0).is_true()
+		assert_bool(_visible_rows(staff.checklist()) > 0).is_true()
+		var folded := _visible_rows(staff.checklist()) < staff.checklist().rows().size()
+		assert_bool(more.visible).is_equal(folded)
+		print("rows content %.0f shown %.0f" % [rows, shown])
+		if ui_scale == 1.5:
+			assert_bool(folded).is_true()
+			assert_float(shown).is_less(rows)
+		if ui_scale == 1.0:
+			assert_bool(folded).is_false()
+			assert_float(shown).is_equal_approx(rows, 0.5)
+		_port.free()
+		_port = null
+
+
+func _visible_rows(card: ChecklistCard) -> int:
+	var count := 0
+	for row in card.rows():
+		if (row as Control).visible:
+			count += 1
+	return count

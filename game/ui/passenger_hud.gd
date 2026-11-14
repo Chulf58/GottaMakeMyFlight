@@ -258,6 +258,7 @@ func _ready() -> void:
 	_departures_board.clock = clock
 	_departures_board.passengers = sim
 	_departures_board.settings_path = departures_settings_path
+	_departures_board.menu = get_node_or_null("../BuildMenu") as BuildMenu
 	add_child(_departures_board)
 	# The offer sheet is a sibling layer; the alert cards give way to it when open.
 	# The panel comes later in the scene, so it has no sheet until its _ready.

@@ -10,6 +10,11 @@ extends RefCounted
 
 ## The group the departures list joins, so a card finds where the list ends.
 const LIST_GROUP := &"left_column_list"
+## The group the checklist and hint card joins, so the list leaves it room.
+const CARD_GROUP := &"left_column_card"
+## What the list leaves the card under it when the card shows: the card's padding,
+## its title, one line and a "+N more" line.
+const CARD_RESERVE := 136.0
 
 ## The toggles' slots, top to bottom.
 const SLOT_MOOD := 0
@@ -68,3 +73,21 @@ static func follow(card: Control) -> void:
 	if not is_equal_approx(card.offset_top, top):
 		card.offset_top = top
 		card.offset_bottom = top
+
+
+## The height a card at `top` may take in a layer `layer` big: down to a GAP above
+## the Templates dock (BottomDocks), which the column's x-range always reaches
+## (the dock sits on the same margin), so the cards never cover the bar's left
+## end or the dock.
+static func room_below(top: float, layer: Vector2, bar_width: float) -> float:
+	return maxf(0.0, BottomDocks.top(layer, bar_width) - HudLayout.GAP - top)
+
+
+## The height the departures list may take: the room under the toggles, less what
+## the card under it needs while the card shows (CARD_RESERVE) and the gap between.
+static func list_room(tree: SceneTree, layer: Vector2, bar_width: float) -> float:
+	var room := room_below(float(LIST_TOP), layer, bar_width)
+	var card := tree.get_first_node_in_group(CARD_GROUP) as Control
+	if card != null and card.is_visible_in_tree():
+		room -= CARD_RESERVE + HudLayout.GAP
+	return maxf(0.0, room)

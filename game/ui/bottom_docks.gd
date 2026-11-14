@@ -21,3 +21,9 @@ static func beside_bar(layer_width: float, bar_width: float) -> bool:
 static func bottom(beside: bool) -> float:
 	var base := float(HudLayout.MARGIN)
 	return base if beside else base + HudLayout.BAR_H + HudLayout.GAP
+
+
+## The y of the docks' top edge in a layer `layer` big, whichever row they stand
+## on: what stands above them in the left column ends a GAP higher (LeftColumn).
+static func top(layer: Vector2, bar_width: float) -> float:
+	return layer.y - bottom(beside_bar(layer.x, bar_width)) - HudLayout.BAR_H

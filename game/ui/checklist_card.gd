@@ -8,10 +8,18 @@ extends VBoxContainer
 ## column and fills it on each refresh. The rows take the card's width and wrap.
 
 const BOX := 18.0
+## Space between a row's tick box and its text.
+const ROW_GAP := 8.0
 const BOX_COLOUR := Color(0.6, 0.38, 0.0)
+## The row text's width before the card has been laid out: the card's LIST_W less its
+## padding and the tick column.
+const FALLBACK_TEXT_W := 250.0
+const MORE_TEXT := "+%d more"
 
 var _title := Label.new()
 var _rows := VBoxContainer.new()
+## The "+N more" line under the rows a short column folded away (fit()).
+var _more := Label.new()
 ## The lines shown now, so an unchanged refresh rebuilds nothing.
 var _shown: Array[Dictionary] = []
 
@@ -31,6 +39,12 @@ func _init() -> void:
 	_rows.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_rows.add_theme_constant_override("separation", 4)
 	add_child(_rows)
+	_more.name = "ChecklistMore"
+	_more.theme_type_variation = &"HudAttentionText"
+	_more.add_theme_font_size_override("font_size", HudLayout.CAPTION)
+	_more.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_more.visible = false
+	add_child(_more)
 
 
 func title_label() -> Label:
@@ -51,6 +65,36 @@ func show_lines(title: String, lines: Array[Dictionary]) -> void:
 	for entry in lines:
 		if not entry["done"]:
 			_rows.add_child(_row(entry["text"]))
+
+
+## Shows as many of the unmet rows as fit in `room` px of card content (the title
+## and the rows), top first, and folds the rest into one "+N more" line, the way
+## the alert rail does (decision hud-grid-and-rails-one-spacing-grid-centred-top-
+## row-right-ra). Heights come from the font, so a row that is folded away costs
+## nothing to measure; every row shows again when `room` grows.
+func fit(room: float) -> void:
+	var rows := _rows.get_children()
+	var text_w := FALLBACK_TEXT_W
+	if _rows.size.x > 0.0:
+		text_w = _rows.size.x - BOX - ROW_GAP
+	var gap := float(get_theme_constant("separation"))
+	var spent := 0.0
+	if _title.visible:
+		spent = _title.get_combined_minimum_size().y + gap
+	var more_h := _more.get_combined_minimum_size().y + gap
+	var rows_sep := float(_rows.get_theme_constant("separation"))
+	var shown := 0
+	for row in rows:
+		var needed := spent + _row_height(row, text_w) + (rows_sep if shown > 0 else 0.0)
+		var left_over := rows.size() - shown - 1
+		if needed + (more_h if left_over > 0 else 0.0) > room:
+			break
+		spent = needed
+		shown += 1
+	for i in rows.size():
+		(rows[i] as Control).visible = i < shown
+	_more.text = MORE_TEXT % (rows.size() - shown)
+	_more.visible = shown < rows.size()
 
 
 func lines() -> Array[Dictionary]:
@@ -78,11 +122,32 @@ func row_texts() -> PackedStringArray:
 	return out
 
 
+## The height `row` takes when its text wraps at `text_w`.
+func _row_height(row: Control, text_w: float) -> float:
+	var label := row.get_node("Text") as Label
+	var font := label.get_theme_font("font")
+	var size := HudLayout.CAPTION
+	var text_h := (
+		font
+		. get_multiline_string_size(
+			label.text,
+			HORIZONTAL_ALIGNMENT_LEFT,
+			text_w,
+			size,
+			-1,
+			TextServer.BREAK_WORD_BOUND | TextServer.BREAK_ADAPTIVE
+		)
+		. y
+	)
+	var line_count := maxi(1, roundi(text_h / font.get_height(size)))
+	return maxf(BOX, text_h + (line_count - 1) * label.get_theme_constant("line_spacing"))
+
+
 func _row(text: String) -> Control:
 	var row := HBoxContainer.new()
 	row.name = "Row"
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_theme_constant_override("separation", 8)
+	row.add_theme_constant_override("separation", int(ROW_GAP))
 	row.add_child(Tick.new())
 	var label := Label.new()
 	label.name = "Text"

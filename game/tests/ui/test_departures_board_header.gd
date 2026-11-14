@@ -85,8 +85,9 @@ func test_the_header_sits_above_the_rows() -> void:
 	var header := _board.find_child("Counts", true, false) as Control
 	var rows := _board.find_child("DeparturesPanel", true, false).find_child("Rows", true, false)
 	assert_object(rows).is_not_null()
-	assert_object(header.get_parent()).is_same(rows.get_parent())
-	assert_int(header.get_index()).is_less(rows.get_index())
+	# The rows scroll in a container of their own, under the header.
+	assert_object(header.get_parent()).is_same(rows.get_parent().get_parent())
+	assert_int(header.get_index()).is_less(rows.get_parent().get_index())
 	assert_bool(header.is_visible_in_tree()).is_true()
 
 
