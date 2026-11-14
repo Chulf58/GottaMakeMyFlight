@@ -12,8 +12,13 @@ extends CanvasLayer
 ## Clicking a bar of a running contract selects it and opens, under the grid,
 ## the Move to / End choices the Departures list has: the same gates, the same
 ## words, the same FlightSim calls (DeparturesBoard.move_choices, move_outcome,
-## end_outcome). Departure times never change here. A bar of a one-off flight or
-## an ended contract cannot be selected.
+## end_outcome). Slice 2: a bar can also be dragged (PlannerBar) onto another
+## gate row (PlannerTrack). While it is dragged, the rows FlightSim refuses are
+## greyed and the message line says why for the row under the pointer, since
+## Godot shows no tooltip during a drag; a fitting row says the flight moves
+## there and that days already issued keep their gate. A drop goes through
+## move_outcome like a Move to choice. Departure times never change here. A bar
+## of a one-off flight or an ended contract cannot be selected or dragged.
 ##
 ## The sheet pauses the game while open, as the Offers sheet does (decision
 ## the-airline-offers-panel-pauses-the-game-while-it-is-open): a hold on the
@@ -32,7 +37,14 @@ const ACTION := &"toggle_flight_planner"
 const LAYER := TopRow.SHEET_LAYER + 1
 const TOGGLE_TEXT := "Planner (P)"
 const TITLE_TEXT := "Flight planner"
-const HINT_TEXT := "Click a flight to move it to another gate or end its contract."
+const HINT_TEXT := (
+	"Click a flight to move it or end its contract, or drag it to another gate."
+	+ " Days already issued keep their gate."
+)
+## The message while a flight is dragged and the pointer is not over a row it fits.
+const DRAG_TEXT := "Drop the flight on another gate's row."
+## The message over a row the dragged flight fits: destination, gate.
+const DROP_TEXT := "Drop to move %s to gate %s. Days already issued keep their gate."
 const EMPTY_TEXT := "No gate has a stand yet, so there is nothing to plan."
 ## The gate header's width, in layout pixels.
 const HEAD_W := 80.0
@@ -73,6 +85,10 @@ var _selected_day := -1
 var _confirming := false
 var _hold := ClockHolds.NONE
 var _rebuilds := 0
+## The bar being dragged ({contract, day, gate}), {} for none, and the gate of the
+## row its pointer was last over.
+var _drag := {}
+var _drag_over := ""
 
 
 func _ready() -> void:
@@ -106,6 +122,32 @@ func _shortcut_input(event: InputEvent) -> void:
 	if not key.echo:
 		_on_toggle()
 	get_viewport().set_input_as_handled()
+
+
+## A planner bar picked up greys the rows that refuse it; the drag ending clears
+## them. A drop that did not land leaves a refusal shown, and clears the rest.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_DRAG_BEGIN:
+		var drag := PlannerBar.drag_of(get_viewport().gui_get_drag_data())
+		if drag.is_empty() or not _sheet.visible or flights == null:
+			return
+		_drag = drag
+		_drag_over = ""
+		_message.text = DRAG_TEXT
+		_show_drag()
+	elif what == NOTIFICATION_DRAG_END and not _drag.is_empty():
+		var landed := get_viewport().gui_is_drag_successful()
+		var refused := _refusal_of(_drag_over)
+		_drag = {}
+		_drag_over = ""
+		_show_drag()
+		if not landed and refused == "":
+			_message.text = ""
+
+
+## The text a drag over a row the flight fits shows: "Drop to move Rome to gate C. ...".
+static func drop_text(destination: String, gate_id: String) -> String:
+	return DROP_TEXT % [destination, gate_id]
 
 
 ## Esc closes the sheet and is not passed on, so it does not also drop a tool.
@@ -386,6 +428,7 @@ func _rebuild() -> void:
 		_rows.add_child(empty)
 	for row in _shown:
 		_add_row(row)
+	_show_drag()
 	if _selected != "" and _selected_bar().is_empty():
 		_deselect()
 	_show_actions()
@@ -414,6 +457,9 @@ func _add_row(row: Dictionary) -> void:
 	line.add_child(head)
 	var lane := PlannerTrack.new()
 	lane.name = "Track_%s" % gate_id
+	lane.gate = gate_id
+	lane.drag_hovered.connect(_on_track_hovered)
+	lane.dropped.connect(_on_track_dropped)
 	lane.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	lane.custom_minimum_size = Vector2(0.0, ROW_H)
 	line.add_child(lane)
@@ -424,7 +470,10 @@ func _add_row(row: Dictionary) -> void:
 
 
 func _make_bar(bar: Dictionary) -> Button:
-	var button := Button.new()
+	var button := PlannerBar.new()
+	button.contract = bar["contract"]
+	button.day = bar["day"]
+	button.gate = bar["gate"]
 	var key: String = bar["contract"] if bar["contract"] != "" else bar["flight"]
 	button.name = "Bar_%s_%d" % [key, bar["day"]]
 	button.text = bar["label"]
@@ -543,6 +592,49 @@ static func _keep_label_clear(button: Button, label: Label) -> void:
 	)
 	if label.text != text:
 		label.text = text
+
+
+## Greys each row the dragged flight cannot go to and marks its own row, or, with
+## nothing dragged, clears every row. Run again after a rebuild mid-drag.
+func _show_drag() -> void:
+	var refusals := {}
+	var home := ""
+	if not _drag.is_empty():
+		refusals = PlannerBar.refusals(flights, _drag["contract"], flights.gate_ids())
+		home = flights.contract_of(_drag["contract"]).get("gate", "")
+	for track in _tracks:
+		track.clear_drag()
+		if _drag.is_empty():
+			continue
+		track.home = track.gate == home
+		track.refusal = refusals.get(track.gate, "")
+
+
+func _refusal_of(gate_id: String) -> String:
+	for track in _tracks:
+		if track.gate == gate_id:
+			return track.refusal
+	return ""
+
+
+## The message line follows the row under the dragged flight.
+func _on_track_hovered(track: PlannerTrack) -> void:
+	if _drag.is_empty():
+		return
+	_drag_over = track.gate
+	var text := track.refusal
+	if text == "":
+		text = DRAG_TEXT
+		if not track.home:
+			var destination: String = flights.contract_of(_drag["contract"])["destination"]
+			text = drop_text(destination, track.gate)
+	if _message.text != text:
+		_message.text = text
+
+
+## A drop moves the contract through the Move to choice's own path and words.
+func _on_track_dropped(track: PlannerTrack, drag: Dictionary) -> void:
+	_on_move_pressed(drag["contract"], track.gate)
 
 
 func _day_start() -> int:
