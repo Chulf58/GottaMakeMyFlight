@@ -19,8 +19,8 @@ extends PanelContainer
 ## ledger the slot has no card.
 
 const ATTENTION := &"HudAttentionText"
-## The first rows are the operating result and its five parts; a rule follows them.
-const OPERATING_ROWS := 6
+## The first rows are the operating result and its six parts; a rule follows them.
+const OPERATING_ROWS := 7
 ## The grid's theme type: room between a label and its value.
 const GRID := &"HudMoneyGrid"
 ## Space between the slot and the card opened under it.
@@ -86,6 +86,7 @@ static func rows(day_ledger: DayLedger, owed: int, owed_upkeep := 0) -> Array:
 		["Parking", signed(day_ledger.amount(Wallet.Category.PARKING)), &""],
 		["Wages paid", signed(-day_ledger.wages_paid()), &""],
 		["Upkeep paid", signed(-day_ledger.upkeep_paid()), &""],
+		["Airline fines", signed(day_ledger.amount(Wallet.Category.FINES)), &""],
 		["Operating result", signed(day_ledger.operating_result()), &""],
 		["Building", signed(day_ledger.amount(Wallet.Category.BUILD)), &""],
 		["Rescue grant", signed(day_ledger.amount(Wallet.Category.GRANT)), &""],
@@ -94,7 +95,15 @@ static func rows(day_ledger: DayLedger, owed: int, owed_upkeep := 0) -> Array:
 	var incident := day_ledger.amount(Wallet.Category.INCIDENT)
 	if incident != 0:
 		out.append(["Incidents", signed(incident), &""])
+	# A signing bonus is paid once per contract, so its row shows only on that day.
+	var bonus := day_ledger.amount(Wallet.Category.SIGNING_BONUS)
+	if bonus != 0:
+		out.append(["Signing bonus", signed(bonus), &""])
 	out.append([cash_label, signed(day_ledger.cash_change()), &""])
+	# Fines the wallet could not pay moved no money, so they sit below the cash
+	# change, in the attention style, and only on a day that has some.
+	if day_ledger.fines_unpaid() > 0:
+		out.append(["Unpaid fines", str(day_ledger.fines_unpaid()), ATTENTION])
 	if owed > 0:
 		out.append(["Owed wages", str(owed), ATTENTION])
 	if owed_upkeep > 0:
