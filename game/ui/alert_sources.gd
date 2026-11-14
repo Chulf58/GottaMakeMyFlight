@@ -4,7 +4,7 @@ extends RefCounted
 ## holds the cause format). Each reuses the check the world already draws, so a
 ## card and the sign over the station never disagree:
 ## - a full check-in or security queue is MissSignals.full_stations(), less the
-##   closed stations, exactly the stations with a red "Queue full" sign. One
+##   closed stations, exactly the stations with a queue-full sign. One
 ##   card for all full desks and one for all full security lanes, pointing at
 ##   the fullest first; a queue that is full only for a moment does not raise
 ##   it (QUEUE_HOLD_TICKS each way).
@@ -12,6 +12,8 @@ extends RefCounted
 ##   get there" (Passenger.Stuck.NO_ROUTE): one card, pointing at them.
 ## - passengers waiting for a gate place (GateCapacity.shortage()): one card,
 ##   pointing at them.
+## - stations closed with nobody on duty, and stations whose staff spot staff
+##   cannot use (closed_stations()): one card each, pointing at them.
 ## The dirty terminal card is DirtyAlert.cause(), which keeps its own band.
 ## It only reads the sim.
 
@@ -19,6 +21,8 @@ const QUEUE_CHECKIN := &"queue_full_checkin"
 const QUEUE_SECURITY := &"queue_full_security"
 const NO_ROUTE := &"no_route"
 const GATE_FULL := &"gate_full"
+const NO_STAFF := &"stations_no_staff"
+const STAFF_SPOT := &"staff_spot_unusable"
 ## Three game minutes (one real second is one game minute at 1x).
 const QUEUE_HOLD_TICKS := 3 * GameCalendar.TICKS_PER_MINUTE
 ## A stuck passenger re-plans now and then; a minute each way keeps a passing
@@ -99,6 +103,85 @@ static func gate_full(sim: PassengerSim) -> Array[Dictionary]:
 			"clear_after": ROUTE_HOLD_TICKS,
 		}
 	]
+
+
+## The closed-station causes: none, one or both of NO_STAFF (desks, scanners
+## and shop counters with nobody on duty) and STAFF_SPOT (their staff spot is
+## blocked or staff have no way to it), read from the same reasons as the
+## station signs (MissSignals.staff_reason), so the station's words that moved
+## into its hover tooltip still reach the player (decision calm-view-technical-
+## design-shared-hover-target-reusing-click, part 3). A station the player
+## closed is left out: closing it was their choice. Pointing at the stations in
+## id order. Nothing without a StaffSim.
+static func closed_stations(sim: PassengerSim) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	if sim.staff == null:
+		return out
+	var stations := MissSignals.closed_stations(sim)
+	stations.append_array(ShopCounters.closed(sim))
+	stations.sort()
+	var idle: Array[int] = []
+	var spots: Array[int] = []
+	for station in stations:
+		match MissSignals.staff_reason(sim, station):
+			MissSignals.NO_STAFF_REASON:
+				idle.append(station)
+			MissSignals.SPOT_BLOCKED_REASON, MissSignals.UNREACHABLE_REASON:
+				spots.append(station)
+	if not idle.is_empty():
+		var what := _stations_phrase(idle.size(), "is", "are")
+		out.append(
+			_station_cause(
+				sim,
+				idle,
+				NO_STAFF,
+				"Nobody on duty",
+				"%s closed · hire staff on the Staff card" % what,
+				QUEUE_HOLD_TICKS
+			)
+		)
+	if not spots.is_empty():
+		var what := _stations_phrase(spots.size(), "is", "are")
+		out.append(
+			_station_cause(
+				sim,
+				spots,
+				STAFF_SPOT,
+				"Staff can't get to work",
+				"%s closed · staff can't reach the staff spot" % what,
+				ROUTE_HOLD_TICKS
+			)
+		)
+	return out
+
+
+## "1 station is" or "3 stations are".
+static func _stations_phrase(count: int, one: String, many: String) -> String:
+	if count == 1:
+		return "1 station %s" % one
+	return "%d stations %s" % [count, many]
+
+
+static func _station_cause(
+	sim: PassengerSim,
+	stations: Array[int],
+	key: StringName,
+	title: String,
+	detail: String,
+	hold: int
+) -> Dictionary:
+	var targets: Array[Vector3] = []
+	for station in stations:
+		if targets.size() < MAX_TARGETS:
+			targets.append(object_point(sim.grid, station))
+	return {
+		"key": key,
+		"title": title,
+		"detail": detail,
+		"targets": targets,
+		"show_after": hold,
+		"clear_after": hold,
+	}
 
 
 ## The ground point under the middle of object `id`'s footprint.

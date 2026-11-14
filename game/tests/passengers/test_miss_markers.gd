@@ -84,7 +84,7 @@ func test_a_full_desk_gets_a_sign_above_it() -> void:
 	var sign := _markers.sign_for(desk)
 	assert_object(sign).is_not_null()
 	assert_bool(sign.visible).is_true()
-	assert_str(_markers.sign_text(desk)).is_equal("Queue full")
+	assert_str(_markers.sign_text(desk)).is_equal("Queue full · 3 waiting")
 	var centre := _desk_centre(desk)
 	var flat := Vector2(sign.position.x, sign.position.z)
 	assert_float(flat.distance_to(Vector2(centre.x, centre.z))).is_less(0.001)
@@ -104,7 +104,10 @@ func test_the_sign_caption_counts_the_passengers_held_outside_the_lane() -> void
 		_world.step()
 		_hold_service(desk)
 	assert_int(_world.sim.holding_of(desk).size()).is_equal(2)
-	assert_str(_markers.sign_text(desk)).is_equal("Queue full · +2 waiting")
+	var waiting := _world.sim.queue_of(desk).size() + 2
+	print("queue %d held 2 text %s" % [_world.sim.queue_of(desk).size(), _markers.sign_text(desk)])
+	assert_int(waiting).is_greater(2)
+	assert_str(_markers.sign_text(desk)).is_equal("Queue full · %d waiting" % waiting)
 
 
 func test_the_sign_goes_when_the_queue_drains() -> void:
@@ -124,7 +127,7 @@ func test_the_sign_goes_when_the_queue_drains() -> void:
 	assert_int(_world.sim.queue_of(desk).size()).is_equal(3)
 	assert_object(_markers.sign_for(desk)).is_same(sign)
 	assert_bool(sign.visible).is_true()
-	assert_str(_markers.sign_text(desk)).is_equal("Queue full")
+	assert_str(_markers.sign_text(desk)).is_equal("Queue full · 3 waiting")
 
 
 func test_a_desk_removed_while_paused_loses_its_sign_at_once() -> void:
@@ -188,7 +191,7 @@ func test_a_lane_shortened_while_paused_shows_its_sign_at_once() -> void:
 	var sign := _markers.sign_for(desk)
 	assert_object(sign).is_not_null()
 	assert_bool(sign.visible).is_true()
-	assert_str(_markers.sign_text(desk)).is_equal("Queue full")
+	assert_str(_markers.sign_text(desk)).is_equal("Queue full · 3 waiting")
 
 
 ## The sign is SIGN_PX on screen whatever the UI scale (content_scale_factor):
@@ -206,15 +209,11 @@ func test_the_sign_keeps_its_screen_size_at_every_ui_scale() -> void:
 	_markers.draw()
 	var layout_height := window.get_visible_rect().size.y
 	var sign_size := sign.pixel_size
-	var caption_size := (sign.get_node("Caption") as Label3D).pixel_size
 	window.content_scale_factor = 1.25
 	_markers.draw()
 	# Control: the UI scale took hold, so the layout got shorter.
 	assert_float(window.get_visible_rect().size.y).is_less(layout_height - 1.0)
 	assert_float(sign.pixel_size).is_equal_approx(sign_size, 1e-7)
-	assert_float((sign.get_node("Caption") as Label3D).pixel_size).is_equal_approx(
-		caption_size, 1e-7
-	)
 	var camera := window.get_camera_3d()
 	var fov := camera.fov if camera != null else MissMarkers.FALLBACK_FOV
 	# The window size in pixels is what the 3D view renders at.
@@ -223,3 +222,37 @@ func test_the_sign_keeps_its_screen_size_at_every_ui_scale() -> void:
 		sign.pixel_size * MarkerIcons.SIZE * rendered / (2.0 * tan(deg_to_rad(fov) / 2.0))
 	)
 	assert_float(on_screen).is_equal_approx(MissMarkers.SIGN_PX, 0.01)
+
+
+## The sign is the queue glyph with no caption, and HoverTarget gets its screen
+## rect and words (decision calm-view-technical-design-shared-hover-target-
+## reusing-click, parts 2 and 4).
+func test_the_full_sign_is_the_queue_glyph_and_reports_its_hover_rect() -> void:
+	_attach(_short_lane_world())
+	var desk: int = _world.sim.get_meta(&"desk")
+	_spawn_spaced(3)
+	_world.run_to(_world.clock.tick + 25)
+	var sign := _markers.sign_for(desk) as Sprite3D
+	assert_int(MissMarkers.glyph_of(sign)).is_equal(MarkerIcons.Glyph.QUEUE_FULL)
+	assert_object(sign.texture).is_same(MarkerIcons.icon(MarkerIcons.Glyph.QUEUE_FULL))
+	assert_int(sign.find_children("*", "Label3D", true, false).size()).is_equal(0)
+	var camera: Camera3D = auto_free(Camera3D.new())
+	add_child(camera)
+	var at := sign.global_position
+	var eye := at + Vector3(0.0, 6.0, 6.0)
+	camera.global_transform = Transform3D.IDENTITY.translated(eye).looking_at(at)
+	camera.make_current()
+	var entries := _markers.hover_signs()
+	var foot := camera.unproject_position(at)
+	print("hover signs %s, foot %s" % [entries, foot])
+	assert_int(entries.size()).is_equal(1)
+	assert_str(entries[0]["key"]).is_equal("queue:%d" % desk)
+	assert_str(entries[0]["text"]).is_equal("Queue full · 3 waiting")
+	assert_int(entries[0]["select"]).is_equal(desk)
+	var rect: Rect2 = entries[0]["rect"]
+	var side := MissMarkers.SIGN_PX / get_tree().root.get_stretch_transform().get_scale().y
+	assert_vector(rect.size).is_equal_approx(Vector2.ONE * side, Vector2.ONE * 0.01)
+	# Standing on its foot, centred over it.
+	assert_float(rect.end.y).is_equal_approx(foot.y, 0.01)
+	assert_float(rect.get_center().x).is_equal_approx(foot.x, 0.01)
+	remove_child(camera)

@@ -50,6 +50,13 @@ const ROW_A := Vector2i(14, 8)
 ## The scene's floor, walls and paving are cream and grey (blue at or under
 ## red); the faint pass over a cream wall measured 0.22.
 const BLUE_OVER_RED := 0.15
+## The unlinked sign's disc: a fill point clear of the broken-link glyph and a point
+## on its dark rim, in icon pixels from the icon's middle; how far each channel of
+## the plate pixel may stand from MarkerIcons.HINT_FILL; the rim's luminance ceiling.
+const FILL_POINT := Vector2(-34.0, -24.0)
+const RIM_POINT := Vector2(-54.0, 0.0)
+const CREAM_TOLERANCE := 0.12
+const RIM_MAX_LUMINANCE := 0.45
 ## Scene nodes whose visible meshes can hide a desk.
 const OCCLUDER_OWNERS: Array[String] = ["Airside/Terminal", "BuildMode", "RoofView"]
 
@@ -405,22 +412,15 @@ func _plate(
 			print("  SIGN desk %d missing" % desk)
 			ok = false
 			continue
-		# A point on the icon's slate fill, clear of the glyph: (-43.5, 40.5) of
-		# the 128 px icon from its middle, which stands half the sign's height
-		# over its foot. Screen pixels, turned into layout pixels.
-		var foot := _cam.unproject_position(marker.global_position)
-		var scale := MissMarkers.SIGN_PX / MarkerIcons.SIZE
-		var from_foot := Vector2(-43.5 * scale, 40.5 * scale - MissMarkers.SIGN_PX / 2.0)
-		var icon_px := foot + from_foot * _layout_per_px()
-		var sign_ok := _slate(img, icon_px)
-		print(
-			(
-				"  SIGN desk %d caption '%s' fill at %s slate=%s"
-				% [desk, _links.caption_of(marker).text, icon_px, sign_ok]
-			)
-		)
+		# The sign is the cream broken-link disc: a point on its fill clear of the
+		# glyph, and one on its dark rim as the control that the point is on the
+		# disc (icon pixels from the icon's middle).
+		var icon_px := _icon_point(marker, FILL_POINT)
+		var rim_px := _icon_point(marker, RIM_POINT)
+		var sign_ok := _cream(img, icon_px) and _rim(img, rim_px)
 		ok = ok and sign_ok
 		ok = _sign_framed(desk, marker) and ok
+		ok = _sign_words(desk, marker, lines_on) and ok
 		# Where a line out of its exit edge would run: 3 m out from that cell.
 		var exit := _grid.cell_to_world(pair[1] + _offset)
 		var would := exit + Vector3(0.0, GateLinksView.LIFT_M, -3.0)
@@ -455,34 +455,53 @@ func _camera_still() -> bool:
 	return false
 
 
-## Whether the whole unlinked sign and its whole caption lie inside the frame
-## margin, in layout pixels: the icon a SIGN_PX square standing on its foot,
-## the caption (MissMarkers.caption_size(), outline included) centred under the
-## foot a CAPTION_GAP_PX gap below it, both sized in screen pixels and turned
-## into layout pixels. Prints both rectangles.
+## Whether the whole unlinked sign lies inside the frame margin, in layout
+## pixels: the icon a SIGN_PX square standing on its foot, sized in screen
+## pixels and turned into layout pixels. The sign has no world caption, so the
+## icon is all there is to frame. Prints the rectangle.
 func _sign_framed(desk: int, marker: Sprite3D) -> bool:
 	if _cam.is_position_behind(marker.global_position):
 		print("  SIGN BOUNDS desk %d: behind the camera" % desk)
 		return false
 	var foot := _cam.unproject_position(marker.global_position)
-	var per := _layout_per_px()
-	var icon := MissMarkers.SIGN_PX * per
+	var icon := MissMarkers.SIGN_PX * _layout_per_px()
 	var sign_rect := Rect2(foot.x - icon / 2.0, foot.y - icon, icon, icon)
-	var text := _links.caption_of(marker).text
-	var size := MissMarkers.caption_size(text) * per
-	var caption_rect := Rect2(
-		foot.x - size.x / 2.0, foot.y + MissMarkers.CAPTION_GAP_PX * per, size.x, size.y
-	)
 	var frame := _frame_rect()
 	var sign_in := frame.encloses(sign_rect)
-	var caption_in := frame.encloses(caption_rect)
+	print("  SIGN BOUNDS desk %d sign %s in_frame=%s frame %s" % [desk, sign_rect, sign_in, frame])
+	return sign_in
+
+
+## The sign's words are not drawn in the world: no Label3D hangs on it, and
+## they reach HoverTarget only in build mode (`building`), through
+## GateLinksView.hover_signs(), with the sign's text and a rect around its icon.
+func _sign_words(desk: int, marker: Sprite3D, building: bool) -> bool:
+	var labels := marker.find_children("*", "Label3D", true, false).size()
+	var entries: Array[Dictionary] = []
+	for entry in _links.hover_signs():
+		if int(entry["key"]) == desk:
+			entries.append(entry)
+	var words := GateLinksView.text_of(marker)
+	var want := 1 if building else 0
+	var good := labels == 0 and words != "" and entries.size() == want
+	if building and entries.size() == 1:
+		good = good and entries[0]["text"] == words
+		good = (
+			good
+			and (entries[0]["rect"] as Rect2).has_point(
+				(
+					_cam.unproject_position(marker.global_position)
+					+ Vector2(0.0, -MissMarkers.SIGN_PX / 2.0)
+				)
+			)
+		)
 	print(
 		(
-			"  SIGN BOUNDS desk %d sign %s in_frame=%s caption %s in_frame=%s frame %s"
-			% [desk, sign_rect, sign_in, caption_rect, caption_in, frame]
+			"  SIGN WORDS desk %d labels %d hover entries %d (want %d) text '%s' ok=%s"
+			% [desk, labels, entries.size(), want, words, good]
 		)
 	)
-	return sign_in and caption_in
+	return good
 
 
 func _framed(what: String, point: Vector3) -> bool:
@@ -552,16 +571,41 @@ func _line_blue(img: Image, point: Vector3) -> bool:
 	return blue
 
 
-## Whether the plate pixel at `layout_px` is the sign's slate (the game's
-## grading draws MissMarkers.CLOSED_FILL lighter, about (0.6, 0.67, 0.76)):
-## blue a little over red, not as far as the line's sky blue, and darker than
-## the cream floor and walls, which have no blue cast.
-func _slate(img: Image, layout_px: Vector2) -> bool:
+## Whether the plate pixel at `layout_px` is the build-hint disc's cream
+## (MarkerIcons.HINT_FILL, the game's grading drawing it a little darker or
+## lighter): each channel within CREAM_TOLERANCE of it.
+func _cream(img: Image, layout_px: Vector2) -> bool:
 	var got := _pixel(img, layout_px)
-	var cast := got.b - got.r
-	var slate := cast > 0.08 and cast < 0.3 and got.g < 0.8 and got.b < 0.85
-	print("    pixel got %s slate=%s" % [got, slate])
-	return slate
+	var want := MarkerIcons.HINT_FILL
+	var cream := (
+		absf(got.r - want.r) < CREAM_TOLERANCE
+		and absf(got.g - want.g) < CREAM_TOLERANCE
+		and absf(got.b - want.b) < CREAM_TOLERANCE
+	)
+	print("    pixel got %s want %s cream=%s" % [got, want, cream])
+	return cream
+
+
+## Whether the plate pixel at `layout_px` is the disc's dark outline (the
+## control that the cream point lies on the sign): dark and clearly unlike the
+## cream.
+func _rim(img: Image, layout_px: Vector2) -> bool:
+	var got := _pixel(img, layout_px)
+	var dark := got.get_luminance() < RIM_MAX_LUMINANCE
+	print("    pixel got %s rim dark=%s" % [got, dark])
+	return dark
+
+
+## Where `at` (icon pixels from the icon's middle) falls in layout pixels on
+## `marker`'s sign, its sideways slide included: the middle stands half the
+## sign's height over its foot.
+func _icon_point(marker: Sprite3D, at: Vector2) -> Vector2:
+	var foot := _cam.unproject_position(marker.global_position)
+	var scale := MissMarkers.SIGN_PX / MarkerIcons.SIZE
+	var from_foot := (
+		(at + Vector2(marker.offset.x, 0.0)) * scale + Vector2(0.0, -MissMarkers.SIGN_PX / 2.0)
+	)
+	return foot + from_foot * _layout_per_px()
 
 
 ## The plate pixel at layout pixel `layout_px`, or transparent black outside.

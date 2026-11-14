@@ -105,7 +105,10 @@ func test_unstaffed_stations_get_a_closed_sign_that_goes_when_staffed() -> void:
 	var scanner: int = layout.scanners[0]
 	assert_object(_markers.closed_sign_for(desk)).is_not_null()
 	assert_object(_markers.closed_sign_for(scanner)).is_not_null()
-	assert_str(_markers.closed_text(desk)).is_equal("Closed")
+	assert_str(_markers.closed_text(desk)).is_equal("Closed · no staff on duty")
+	assert_int(MissMarkers.glyph_of(_markers.closed_sign_for(desk))).is_equal(
+		MarkerIcons.Glyph.CLOSED
+	)
 	assert_bool(_markers.closed_sign_for(desk).visible).is_true()
 	var sign := _markers.closed_sign_for(desk)
 	assert_float(sign.position.y).is_greater(BuildCatalog.get_def(&"checkin_desk").height)

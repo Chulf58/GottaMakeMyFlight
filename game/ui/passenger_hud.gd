@@ -378,6 +378,20 @@ func _unhandled_input(event: InputEvent) -> void:
 		camera.stop_follow()
 
 
+## Selects the built object `object_id` as a click on it does: a vehicle,
+## passenger and the camera follow end, the item is selected and revealed. A
+## station sign that takes the click calls this (HoverTarget).
+func _select_built_object(object_id: int) -> void:
+	if landside_views != null:
+		landside_views.select(0)
+	if views != null:
+		views.selected_id = 0
+	_built.select_object(object_id)
+	_reveal_frames = REVEAL_FRAMES
+	if camera != null:
+		camera.stop_follow()
+
+
 ## Pans the camera just far enough to show the selected built item when it is off
 ## screen or under the inspect window or another panel; an item in plain view
 ## leaves the camera alone (decision clicking-a-built-desk-outside-build-mode-

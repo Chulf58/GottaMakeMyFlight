@@ -5,47 +5,43 @@ extends Node3D
 ## builds-the-terminal-floor-outer-walls-auto-roof-land-plots-starter-one-
 ## floor, point 2: "an open gap is shown on screen"). Every gap edge gets a low
 ## red bar on the floor along the open wall line, all drawn as one multimesh,
-## and every run of gap edges gets a wall-gap sign over its middle: an amber
-## rounded square with a broken wall in white and the caption "Wall gap" under
-## it (user ruling player-built-terminal-roof-tall-5-2-m-roof-with-the-facade-f,
-## point 3), so the red "!" keeps meaning a full queue. The sign has the
-## queue-full sign's form (decision queue-full-marker-a-red-sign-with-a-queue-
-## full-n-waiting-cap): MarkerIcons' rounded square, outline and size, 56 px on
-## screen whatever the zoom, with MissMarkers' caption font and outline, both
-## billboards drawn over walls and roof (no depth test). The gap captions are
-## not part of MissMarkers' declutter layout (decision station-captions-
-## declutter-on-screen-overlap-staff-spot-reas), but they keep clear of the HUD
-## by the same search as the room labels (decision status-banner-fades-under-
-## the-build-ghost-room-labels-slide, rule 2; RoomLabelLayout.slide_clear): a
-## caption under a HUD control slides toward the screen's middle, then tries
-## rings of other spots, and hides only with no clear spot. The sign's icon
-## stays where it stands. Redrawn when the grid's graph changes. View only.
+## and every run of gap edges gets a wall-gap sign over its middle: MarkerIcons'
+## build-hint disc with the broken-wall glyph (MarkerIcons.Glyph.WALL_GAP),
+## MissMarkers.SIGN_PX on screen whatever the zoom, drawn over walls and roof
+## (no depth test). It has no caption (decision calm-cozy-default-view-quiet-
+## world-detail-on-ask-soft-statio, part 2): a wall gap is a build hint, so its
+## words (HOVER_TEXT) show in the HoverTarget tooltip only in build mode, through
+## hover_signs(). The sign itself stays outside build mode, small and soft.
+## Redrawn when the grid's graph changes. View only.
 ##
 ## Like BuildView it draws in world space, so it sits at the world origin.
 
 ## The bar on each open edge: as long as the edge, this tall and deep.
 const BAR_HEIGHT := 0.12
 const BAR_DEPTH := 0.16
+const BAR_FILL := Color(0.847, 0.263, 0.231)
 ## The sign's foot stands this high over the run's middle.
 const SIGN_LIFT_M := 1.6
-const CAPTION := "Wall gap"
-const GAP_FILL := Color(0.937, 0.6, 0.137)
+const HOVER_TEXT := "Wall gap · close the outer wall so the roof can go on"
 ## The camera's field of view and the view's height when there is no camera.
 const FALLBACK_FOV := 55.0
 const FALLBACK_HEIGHT := 1080.0
 ## Hidden signs kept for reuse when gaps close; any more are freed.
 const SPARE_SIGNS := 4
 
-static var _icon: ImageTexture
-
 ## The build mode whose grid's gaps are marked; main.tscn sets it, and
 ## _ready() binds its grid.
 @export var build_mode: BuildMode
+## Unset, the first BuildSession in the tree is taken, looked for until found: the
+## hover text shows only while it is active.
+var build_session: BuildSession
 
 var _grid: BuildGrid
 var _bars := MultiMeshInstance3D.new()
 var _signs: Array[Sprite3D] = []
 var _shown_signs := 0
+## Each shown sign's stable hover key: its run's first edge (cell, side) and length.
+var _run_keys: Array[Vector4i] = []
 ## The screen unit the shown signs were last sized for.
 var _unit := 0.0
 ## Where each bar is drawn, kept here because a headless run reads the
@@ -59,7 +55,7 @@ func _init() -> void:
 	bar.size = Vector3(1.0, BAR_HEIGHT, BAR_DEPTH)
 	var material := StandardMaterial3D.new()
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.albedo_color = MarkerIcons.QUEUE_FILL
+	material.albedo_color = BAR_FILL
 	bar.material = material
 	var multimesh := MultiMesh.new()
 	multimesh.transform_format = MultiMesh.TRANSFORM_3D
@@ -72,6 +68,9 @@ func _init() -> void:
 func _ready() -> void:
 	if build_mode != null:
 		bind(build_mode.grid)
+	var hover := HoverTarget.find(get_tree())
+	if hover != null:
+		hover.register_provider(self)
 
 
 ## Marks `grid`'s gaps and redraws them whenever its graph changes.
@@ -103,6 +102,9 @@ func rebuild() -> void:
 		var surplus: Sprite3D = _signs.pop_back()
 		remove_child(surplus)
 		surplus.queue_free()
+	_run_keys.clear()
+	for run in runs:
+		_run_keys.append(Vector4i(run.cell.x, run.cell.y, run.side, run.length))
 	for i in _signs.size():
 		var shown := i < runs.size()
 		_signs[i].visible = shown
@@ -142,6 +144,41 @@ func bar_transforms() -> Array[Transform3D]:
 	return _bar_transforms.duplicate()
 
 
+## The HoverTarget provider contract: in build mode, every shown sign's screen
+## rect this frame (viewport px) and HOVER_TEXT; nothing outside build mode.
+func hover_signs() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	if not is_inside_tree() or not is_building():
+		return out
+	var camera := get_viewport().get_camera_3d()
+	if camera == null:
+		return out
+	var side := MissMarkers.SIGN_PX / get_viewport().get_stretch_transform().get_scale().y
+	for i in _shown_signs:
+		if camera.is_position_behind(_signs[i].global_position):
+			continue
+		var foot := camera.unproject_position(_signs[i].global_position)
+		(
+			out
+			. append(
+				{
+					"key": _run_keys[i],
+					"rect": Rect2(foot.x - side / 2.0, foot.y - side, side, side),
+					"text": HOVER_TEXT,
+				}
+			)
+		)
+	return out
+
+
+## True while build mode lasts (build_session, else the first BuildSession in
+## the tree, looked for until one is found).
+func is_building() -> bool:
+	if build_session == null and is_inside_tree():
+		build_session = MissMarkers.find_session(get_tree())
+	return build_session != null and build_session.active
+
+
 func _on_graph_changed(_cells: Array[Vector2i]) -> void:
 	rebuild()
 
@@ -157,11 +194,10 @@ func _bar_transform(edge: Vector3i) -> Transform3D:
 	return Transform3D(basis, at)
 
 
-## Keeps the signs MissMarkers.SIGN_PX tall on screen and the captions at
-## their font size, as MissMarkers sizes its signs.
+## Keeps the signs MissMarkers.SIGN_PX tall on screen, as MissMarkers sizes
+## its signs.
 func _process(_delta: float) -> void:
 	update_sizes()
-	update_captions()
 
 
 ## Works out the screen unit from the camera's field of view and the rendered
@@ -183,62 +219,12 @@ func update_sizes(force := false) -> void:
 		_size_signs(unit)
 
 
-## Lays the captions out for the camera and the HUD as they are now.
-func update_captions() -> void:
-	if _shown_signs == 0 or not is_inside_tree():
-		return
-	var view := get_viewport()
-	var camera := view.get_camera_3d()
-	var scale := view.get_stretch_transform().get_scale()
-	var hud: Array[Rect2] = []
-	if camera != null:
-		hud = HudRects.collect(self, scale.y)
-	layout_captions(camera, scale.y, view.get_visible_rect().size * scale, hud)
-
-
-## Puts each shown sign's caption back under its icon, then slides it clear of
-## `hud` (screen-pixel rectangles) when it touches one: toward the middle of a
-## view of `view_size`, else to the nearest clear spot on rings, else hidden.
-## `to_output` converts the camera's viewport coordinates to screen pixels, the
-## unit the captions are sized in. The slide is the caption's pixel offset, so
-## its world anchor, under the sign, stays put.
-func layout_captions(
-	camera: Camera3D, to_output: float, view_size: Vector2, hud: Array[Rect2]
-) -> void:
-	var view := Rect2(Vector2.ZERO, view_size)
-	var size := MissMarkers.caption_size(CAPTION)
-	for i in _shown_signs:
-		var caption := caption_of(_signs[i])
-		caption.visible = true
-		caption.offset = Vector2(0.0, -MissMarkers.CAPTION_GAP_PX)
-		if camera == null or camera.is_position_behind(_signs[i].global_position):
-			continue
-		var point := camera.unproject_position(_signs[i].global_position) * to_output
-		var rect := Rect2(
-			Vector2(point.x - size.x / 2.0, point.y + MissMarkers.CAPTION_GAP_PX), size
-		)
-		if not view.intersects(rect):
-			continue
-		var spot := RoomLabelLayout.slide_clear(rect, hud, view_size)
-		if spot.size == Vector2.ZERO:
-			caption.visible = false
-			continue
-		var shift := spot.position - rect.position
-		caption.offset += Vector2(shift.x, -shift.y)
-
-
 ## Sizes the shown signs for the screen unit `unit`; hidden spares are sized
 ## when they are shown again.
 func _size_signs(unit: float) -> void:
 	_unit = unit
 	for i in _shown_signs:
 		_signs[i].pixel_size = MissMarkers.SIGN_PX * unit / MarkerIcons.SIZE
-		(_signs[i].get_node("Caption") as Label3D).pixel_size = unit
-
-
-## The caption under a sign.
-func caption_of(marker: Sprite3D) -> Label3D:
-	return marker.get_node("Caption") as Label3D
 
 
 func _make_sign() -> Sprite3D:
@@ -249,69 +235,13 @@ func _make_sign() -> Sprite3D:
 	marker.fixed_size = true
 	marker.no_depth_test = true
 	marker.shaded = false
-	marker.render_priority = 11
+	marker.render_priority = MissMarkers.SIGN_PRIORITY
 	marker.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	marker.offset = Vector2(0.0, MarkerIcons.SIZE / 2.0)
-	var caption := Label3D.new()
-	caption.name = "Caption"
-	caption.text = CAPTION
-	caption.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	caption.fixed_size = true
-	caption.no_depth_test = true
-	caption.render_priority = 12
-	caption.outline_render_priority = 11
-	caption.font_size = MissMarkers.CAPTION_FONT
-	caption.outline_size = MissMarkers.CAPTION_OUTLINE
-	caption.outline_modulate = MarkerIcons.OUTLINE
-	# Under the sign: its top edge a gap below the sign's foot.
-	caption.vertical_alignment = VERTICAL_ALIGNMENT_TOP
-	caption.offset = Vector2(0.0, -MissMarkers.CAPTION_GAP_PX)
-	marker.add_child(caption)
 	add_child(marker)
 	return marker
 
 
-## The wall-gap icon, painted once: MarkerIcons' rounded square and outline
-## filled amber, with a white wall line broken in the middle and an arrow
-## passing down through the opening, drawn with MarkerIcons.shape_distance and
-## segment_distance so the queue-full sign's shape is reused, not copied.
+## The wall-gap icon: MarkerIcons' build-hint disc with the broken-wall glyph.
 static func wall_gap_icon() -> Texture2D:
-	if _icon != null:
-		return _icon
-	var size := MarkerIcons.SIZE
-	var img := Image.create(size, size, false, Image.FORMAT_RGBA8)
-	var half := size / 2.0
-	for y in size:
-		for x in size:
-			var p := Vector2(x + 0.5 - half, y + 0.5 - half)
-			var edge := MarkerIcons.shape_distance(p)
-			var cover := clampf(0.5 - edge, 0.0, 1.0)
-			if cover <= 0.0:
-				img.set_pixel(x, y, Color(MarkerIcons.OUTLINE, 0.0))
-				continue
-			var inside := clampf(0.5 - (edge + MarkerIcons.OUTLINE_PX), 0.0, 1.0)
-			var colour := MarkerIcons.OUTLINE.lerp(GAP_FILL, inside)
-			var glyph := clampf(0.5 - _broken_wall(p), 0.0, 1.0) * inside
-			colour = colour.lerp(MarkerIcons.GLYPH, glyph)
-			colour.a = cover
-			img.set_pixel(x, y, colour)
-	img.generate_mipmaps()
-	_icon = ImageTexture.create_from_image(img)
-	return _icon
-
-
-## Signed distance in pixels to the white broken wall. Image y runs down.
-static func _broken_wall(p: Vector2) -> float:
-	# A thick wall line broken in the middle...
-	var wall := minf(
-		MarkerIcons.segment_distance(p, Vector2(-36.0, -4.0), Vector2(-17.0, -4.0)),
-		MarkerIcons.segment_distance(p, Vector2(17.0, -4.0), Vector2(36.0, -4.0))
-	)
-	wall -= 9.0
-	# ...and an arrow passing down through the opening.
-	var shaft := MarkerIcons.segment_distance(p, Vector2(0.0, -34.0), Vector2(0.0, 24.0))
-	var head := minf(
-		MarkerIcons.segment_distance(p, Vector2(0.0, 30.0), Vector2(-13.0, 15.0)),
-		MarkerIcons.segment_distance(p, Vector2(0.0, 30.0), Vector2(13.0, 15.0))
-	)
-	return minf(wall, minf(shaft, head) - 5.0)
+	return MarkerIcons.icon(MarkerIcons.Glyph.WALL_GAP)

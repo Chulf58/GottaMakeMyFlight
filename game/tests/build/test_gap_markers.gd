@@ -89,10 +89,10 @@ func test_spare_signs_are_bounded_when_many_gaps_close() -> void:
 	assert_int(kept).is_equal(GapMarkers.SPARE_SIGNS)
 
 
-## The sign is MissMarkers.SIGN_PX (56 px) on screen, worked out as the
-## MissMarkers test does: pixel size times the icon's pixels, over the view's
-## size at one metre, at the window's rendered height.
-func test_the_sign_is_56_px_on_screen() -> void:
+## The sign is MissMarkers.SIGN_PX on screen, worked out as the MissMarkers
+## test does: pixel size times the icon's pixels, over the view's size at one
+## metre, at the window's rendered height.
+func test_the_sign_is_sign_px_on_screen() -> void:
 	_remove(Vector2i(5, 2), BuildGrid.Side.EAST)
 	_markers.update_sizes(true)
 	var marker: Sprite3D = _markers.signs()[0]
@@ -103,47 +103,101 @@ func test_the_sign_is_56_px_on_screen() -> void:
 	var on_screen := (
 		marker.pixel_size * MarkerIcons.SIZE * rendered / (2.0 * tan(deg_to_rad(fov) / 2.0))
 	)
+	print("wall gap sign on screen: %.2f px" % on_screen)
 	assert_float(on_screen).is_equal_approx(MissMarkers.SIGN_PX, 0.01)
-	var caption := _markers.caption_of(marker)
-	assert_float(caption.pixel_size * MarkerIcons.SIZE).is_equal_approx(
-		marker.pixel_size * MarkerIcons.SIZE * MarkerIcons.SIZE / MissMarkers.SIGN_PX, 1e-6
-	)
 
 
-## The wall-gap sign is its own icon, not the queue-full "!", with the caption
-## "Wall gap" under it (user ruling player-built-terminal-roof-tall-5-2-m-
-## roof-with-the-facade-f, point 3), drawn over walls and roof.
-func test_the_sign_is_the_wall_gap_icon_with_its_caption_under_it() -> void:
+## The wall-gap sign is the broken-wall build hint, drawn over walls and roof,
+## with no caption (decision calm-cozy-default-view-quiet-world-detail-on-ask-
+## soft-statio, part 2).
+func test_the_sign_is_the_wall_gap_glyph_with_no_caption() -> void:
 	_remove(Vector2i(5, 2), BuildGrid.Side.EAST)
 	var marker: Sprite3D = _markers.signs()[0]
-	assert_object(marker.texture).is_same(GapMarkers.wall_gap_icon())
-	assert_object(marker.texture).is_not_same(MarkerIcons.queue_full())
+	assert_object(marker.texture).is_same(MarkerIcons.icon(MarkerIcons.Glyph.WALL_GAP))
+	assert_object(marker.texture).is_not_same(MarkerIcons.icon(MarkerIcons.Glyph.QUEUE_FULL))
 	assert_bool(marker.no_depth_test).is_true()
-	var caption := _markers.caption_of(marker)
-	assert_str(caption.text).is_equal("Wall gap")
-	assert_bool(caption.no_depth_test).is_true()
-	assert_int(caption.vertical_alignment).is_equal(VERTICAL_ALIGNMENT_TOP)
-	assert_float(caption.offset.y).is_less(0.0)
-	# On the left half of the wall line the gap icon is white and the
-	# queue-full icon is its red fill. The queue-full icon is read as painted
-	# (queue_full_image): under the headless renderer the texture's own image
-	# can have been repainted by MissMarkers' Closed sign in an earlier suite.
-	var at := Vector2i(MarkerIcons.SIZE / 2 - 26, MarkerIcons.SIZE / 2 - 4)
-	var gap_pixel := GapMarkers.wall_gap_icon().get_image().get_pixelv(at)
-	var queue_pixel := MarkerIcons.queue_full_image().get_pixelv(at)
-	assert_float(gap_pixel.b).is_greater(0.9)
-	assert_float(queue_pixel.b).is_less(0.4)
-	assert_bool(gap_pixel.is_equal_approx(queue_pixel)).is_false()
+	assert_int(marker.find_children("*", "Label3D", true, false).size()).is_equal(0)
 
 
-## MarkerIcons.queue_full_image() is a fresh copy each time: repainting one
-## (as MissMarkers repaints the image it reads for its Closed sign) leaves the
-## next one red.
-func test_the_queue_full_image_is_a_fresh_copy() -> void:
-	var at := Vector2i(MarkerIcons.SIZE / 2 - 26, MarkerIcons.SIZE / 2 - 4)
-	var first := MarkerIcons.queue_full_image()
-	assert_float(first.get_pixelv(at).b).is_less(0.4)
-	first.set_pixelv(at, Color.WHITE)
-	var second := MarkerIcons.queue_full_image()
-	assert_float(second.get_pixelv(at).b).is_less(0.4)
-	assert_object(second).is_not_same(first)
+## Its words reach HoverTarget only in build mode; the sign stays outside it.
+func test_the_hover_text_is_reported_only_in_build_mode() -> void:
+	var port: SubViewport = auto_free(SubViewport.new())
+	port.size = Vector2i(1920, 1080)
+	add_child(port)
+	var markers: GapMarkers = GapMarkers.new()
+	port.add_child(markers)
+	markers.bind(_grid)
+	var camera := Camera3D.new()
+	port.add_child(camera)
+	camera.make_current()
+	var at := _grid.origin + Vector3(6.0, 0.0, 2.5)
+	var eye := at + Vector3(0.0, 14.0, 12.0)
+	camera.global_transform = Transform3D.IDENTITY.translated(eye).looking_at(at)
+	_remove(Vector2i(5, 2), BuildGrid.Side.EAST)
+	var session: BuildSession = auto_free(BuildSession.new())
+	markers.build_session = session
+	assert_int(markers.sign_count()).is_equal(1)
+	print("outside build mode: %d hover signs" % markers.hover_signs().size())
+	assert_int(markers.hover_signs().size()).is_equal(0)
+	assert_bool(markers.signs()[0].visible).is_true()
+	session.active = true
+	var signs := markers.hover_signs()
+	print("in build mode: %s" % [signs])
+	assert_int(signs.size()).is_equal(1)
+	assert_str(signs[0]["text"]).is_equal(GapMarkers.HOVER_TEXT)
+	assert_bool(signs[0].has("select")).is_false()
+	var foot := camera.unproject_position(markers.signs()[0].global_position)
+	var rect: Rect2 = signs[0]["rect"]
+	assert_bool(rect.has_point(foot + Vector2(0.0, -rect.size.y / 2.0))).is_true()
+	assert_float(rect.size.y).is_greater(0.0)
+
+
+## A pinned gap tooltip belongs to its gap: when that gap closes, the pin ends
+## instead of moving to the other gap that took its place in the list.
+func test_a_pinned_gap_clears_when_it_closes_instead_of_moving() -> void:
+	var port: SubViewport = auto_free(SubViewport.new())
+	port.size = Vector2i(1920, 1080)
+	add_child(port)
+	var markers: GapMarkers = GapMarkers.new()
+	port.add_child(markers)
+	markers.bind(_grid)
+	var camera := Camera3D.new()
+	port.add_child(camera)
+	camera.make_current()
+	var at := _grid.origin + Vector3(3.5, 0.0, 3.5)
+	camera.global_transform = Transform3D.IDENTITY.translated(at + Vector3(0.0, 16.0, 10.0))
+	camera.look_at(at)
+	var session: BuildSession = auto_free(BuildSession.new())
+	session.active = true
+	markers.build_session = session
+	# Two gaps: the north-west corner's north edge (first run), and the east edge.
+	_remove(Vector2i(2, 2), BuildGrid.Side.NORTH)
+	_remove(Vector2i(5, 3), BuildGrid.Side.EAST)
+	var hover: HoverTarget = auto_free(HoverTarget.new())
+	port.add_child(hover)
+	hover.register_provider(markers)
+	var signs := markers.hover_signs()
+	print("two gaps: %s" % [signs])
+	assert_int(signs.size()).is_equal(2)
+	assert_bool(signs[0]["key"] != signs[1]["key"]).is_true()
+	# Pin the first gap with a click on its sign.
+	var first_rect: Rect2 = signs[0]["rect"]
+	var click := InputEventMouseButton.new()
+	click.button_index = MOUSE_BUTTON_LEFT
+	click.pressed = true
+	click.position = first_rect.get_center()
+	hover._unhandled_input(click)
+	hover.pointer_override = Vector2(-500.0, -500.0)
+	hover.refresh()
+	var pinned := hover.pinned_target()
+	assert_object(pinned).is_not_null()
+	assert_that(pinned.key).is_equal(signs[0]["key"])
+	# Close the pinned gap: the other gap is now the only (first) sign.
+	(
+		assert_bool(_grid.apply(BuildEdit.place_wall(Vector2i(2, 2), BuildGrid.Side.NORTH)).ok)
+		. is_true()
+	)
+	assert_int(markers.sign_count()).is_equal(1)
+	hover.refresh()
+	print("after closing: pinned %s, signs %s" % [hover.pinned_target(), markers.hover_signs()])
+	assert_object(hover.pinned_target()).is_null()

@@ -11,12 +11,13 @@ extends SceneTree
 ##   03 the same far view after doors close: no sign left
 ## Every plate prints the screen rectangles it checked, in layout (canvas)
 ## pixels, which is what unproject_position returns. Each fails with
-## PROBE_INVALID and exit 1 when the sign, caption or desk leaves the frame;
+## PROBE_INVALID and exit 1 when the sign or desk leaves the frame;
 ## when the HUD draws over any of them (the plate against a twin rendered with
 ## the HUD's canvas layers hidden); when the desk is not seen (sight lines
 ## against every visible mesh of the shell, the build and the plane must land
-## on the desk's own meshes with no blocker); or when the sign's red fill
-## measured in the plate is not SIGN_PX on screen.
+## on the desk's own meshes with no blocker); or when the sign's disc fill
+## (MarkerIcons.PROBLEM_FILL) measured in the plate is not SIGN_PX on screen.
+## The sign has no caption (its words show in the hover tooltip), so none is framed.
 ##
 ## Run (one windowed Godot run project-wide); --ui-scale overrides the content
 ## scale from project.godot, and the plate names carry the scale:
@@ -40,14 +41,16 @@ const WAIT_LIMIT_MS := 120000
 const STALL_LIMIT_MS := 5000
 const FAR := 80.0
 const NEAR := 12.0
-const CAPTION_OUTLINE_PX := 8.0
 ## Scene nodes whose visible meshes can hide the desk.
 const OCCLUDER_OWNERS: Array[String] = ["Airside/Terminal", "BuildMode", "PlaneView"]
-## How far the measured red fill may be from SIGN_PX scale, in screen pixels
+## How far the measured disc fill may be from SIGN_PX scale, in screen pixels
 ## (linear mipmap filtering blurs each edge by about one pixel).
 const SIZE_TOLERANCE_PX := 2.0
 ## How close a plate pixel must be to the sampled fill colour to count.
 const FILL_TOLERANCE := 0.1
+## How far each channel of the sampled plate fill may stand from
+## MarkerIcons.PROBLEM_FILL (the game's grading shifts it a little).
+const PROBLEM_FILL_TOLERANCE := 0.15
 
 var _out_dir := ""
 var _failed := false
@@ -247,22 +250,12 @@ func _plate_sign(desk: int, bounds: AABB, distance: float, name: String) -> void
 	var anchor := _cam.unproject_position(sign.global_position)
 	var icon := Rect2(anchor - Vector2(sign_px / 2.0, sign_px), Vector2.ONE * sign_px)
 	var text := _markers.sign_text(desk)
-	var size := (
-		ThemeDB.fallback_font.get_string_size(
-			text, HORIZONTAL_ALIGNMENT_LEFT, -1, MissMarkers.CAPTION_FONT
-		)
-		* per_screen
-	)
-	var lift := (MissMarkers.SIGN_PX + MissMarkers.CAPTION_GAP_PX) * per_screen + size.y
-	var caption := Rect2(anchor + Vector2(-size.x / 2.0, -lift), size).grow(
-		CAPTION_OUTLINE_PX * per_screen
-	)
 	var desk_px := _cam.unproject_position(bounds.get_center())
 	print(
 		(
 			(
 				"PLATE %s%s tick=%d distance=%.0f plate=%s per_screen=%.3f"
-				+ ' sign_icon=%s caption=%s "%s" desk_px=%s'
+				+ ' sign_icon=%s "%s" desk_px=%s'
 			)
 			% [
 				name,
@@ -272,19 +265,17 @@ func _plate_sign(desk: int, bounds: AABB, distance: float, name: String) -> void
 				img.get_size(),
 				per_screen,
 				icon,
-				caption,
 				text,
 				desk_px
 			]
 		)
 	)
 	var ok := _framed("sign", icon)
-	ok = _framed("caption", caption) and ok
 	ok = _framed("desk", Rect2(desk_px, Vector2.ZERO)) and ok
 	var seen := await _desk_seen(desk, bounds)
 	ok = not seen.is_empty() and ok
 	# The HUD check covers the desk where the sight lines landed on it.
-	var subjects: Array[Rect2] = [icon, caption]
+	var subjects: Array[Rect2] = [icon]
 	for at in seen:
 		subjects.append(Rect2(_cam.unproject_position(at) - Vector2.ONE * 3.0, Vector2.ONE * 6.0))
 	ok = await _clear_of_hud(img, subjects, per_screen) and ok
@@ -293,7 +284,7 @@ func _plate_sign(desk: int, bounds: AABB, distance: float, name: String) -> void
 	if ok:
 		_save(img, name)
 	else:
-		_invalid("%s: sign, caption or desk out of frame, under the HUD, hidden or off size" % name)
+		_invalid("%s: sign or desk out of frame, under the HUD, hidden or off size" % name)
 
 
 ## In the frame with a margin, in layout pixels.
@@ -323,7 +314,7 @@ func _clear_of_hud(img: Image, rects: Array[Rect2], per_screen: float) -> bool:
 		ok = ok and count == 0
 	print(
 		(
-			"HUD layers_hidden=%d plate_px_changed=%d sign_caption_deskhits_px_under_hud=%s ok=%s"
+			"HUD layers_hidden=%d plate_px_changed=%d sign_deskhits_px_under_hud=%s ok=%s"
 			% [twin["layers"], changed, under, ok]
 		)
 	)
@@ -373,9 +364,9 @@ func _desk_seen(desk: int, bounds: AABB) -> Array[Vector3]:
 	return on_desk
 
 
-## The sign's red fill measured in the plate (screen pixels) against the icon's
+## The sign's disc fill measured in the plate (screen pixels) against the icon's
 ## fill scaled to SIGN_PX: the connected region of the fill colour around a
-## pixel a quarter in from the icon's left edge (clear of the white glyph).
+## pixel a quarter in from the icon's left edge (clear of the glyph).
 func _sign_size_ok(img: Image, icon: Rect2, per_screen: float) -> bool:
 	var screen := Rect2(icon.position / per_screen, icon.size / per_screen)
 	var box := Rect2i(screen.grow(12.0)).intersection(Rect2i(Vector2i.ZERO, img.get_size()))
@@ -396,9 +387,13 @@ func _sign_size_ok(img: Image, icon: Rect2, per_screen: float) -> bool:
 				todo.append(q)
 	var measured := Vector2(hi - lo + Vector2i.ONE)
 	var expected := _fill_texels() * MissMarkers.SIGN_PX / MarkerIcons.SIZE
-	var red := fill.r > fill.g + 0.3 and fill.r > fill.b + 0.3
+	var problem_fill := (
+		absf(fill.r - MarkerIcons.PROBLEM_FILL.r) < PROBLEM_FILL_TOLERANCE
+		and absf(fill.g - MarkerIcons.PROBLEM_FILL.g) < PROBLEM_FILL_TOLERANCE
+		and absf(fill.b - MarkerIcons.PROBLEM_FILL.b) < PROBLEM_FILL_TOLERANCE
+	)
 	var ok := (
-		red
+		problem_fill
 		and absf(measured.x - expected.x) <= SIZE_TOLERANCE_PX
 		and absf(measured.y - expected.y) <= SIZE_TOLERANCE_PX
 	)
@@ -411,15 +406,15 @@ func _sign_size_ok(img: Image, icon: Rect2, per_screen: float) -> bool:
 	return ok
 
 
-## The icon texture's red fill extent, in texels.
+## The icon texture's disc fill extent, in texels.
 func _fill_texels() -> Vector2:
-	var tex := MarkerIcons.queue_full().get_image()
+	var tex := MarkerIcons.image(MarkerIcons.Glyph.QUEUE_FULL)
 	var lo := tex.get_size()
 	var hi := -Vector2i.ONE
 	for y in tex.get_height():
 		for x in tex.get_width():
 			var c := tex.get_pixel(x, y)
-			if c.a > 0.99 and _near(c, MarkerIcons.QUEUE_FILL):
+			if c.a > 0.99 and _near(c, MarkerIcons.PROBLEM_FILL):
 				lo = lo.min(Vector2i(x, y))
 				hi = hi.max(Vector2i(x, y))
 	return Vector2(hi - lo + Vector2i.ONE)

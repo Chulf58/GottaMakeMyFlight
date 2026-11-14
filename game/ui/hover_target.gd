@@ -22,8 +22,12 @@ extends Node
 ##   A provider is any object with hover_signs() -> Array[Dictionary], each entry
 ##   {"key": Variant, "rect": Rect2, "text": String}: the sign's visible screen
 ##   rect this frame (viewport px, as Camera3D.unproject_position gives) and its
-##   tooltip text. It is asked every frame; a sign it stops reporting is gone. A
-##   freed provider is dropped.
+##   tooltip text, plus an optional "select": the grid object id the sign marks
+##   (a station, a gate desk, an arch). A click on a sign with "select" selects
+##   that object exactly as a click on the object does (PassengerHud.
+##   _select_built_object) and pins nothing; its tooltip still shows on hover. A
+##   sign without "select" (a wall gap) pins on click. It is asked every frame; a
+##   sign it stops reporting is gone. A freed provider is dropped.
 ## - Passenger text: passenger_text is a Callable (passenger id -> String) that
 ##   lane B sets; unset or "" shows no tooltip for a passenger.
 ##
@@ -37,8 +41,8 @@ extends Node
 ## This mirrors PassengerHud._unhandled_input and _passenger_at; a change to that
 ## click order must change _passenger_under() too.
 ##
-## Pins: a left click on a sign pins that sign and takes the click, so nothing
-## behind the sign is selected, and ends any passenger, vehicle or built selection
+## Pins: a left click on a sign without "select" pins that sign and takes the
+## click, so nothing behind the sign is selected, and ends any passenger, vehicle or built selection
 ## and the camera follow through PassengerHud. Any other world click unpins the
 ## sign, and the passenger PassengerHud selects for that click becomes the pinned
 ## passenger. The
@@ -106,6 +110,8 @@ class Target:
 	var key: Variant
 	var rect := Rect2()
 	var text := ""
+	## The grid object a click on this sign selects, 0 for none (the sign pins).
+	var select_id := 0
 
 	func same_as(other: Target) -> bool:
 		if other == null or other.kind != kind:
@@ -220,9 +226,14 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	var sign := _sign_at(click.position, _current_signs())
 	if sign != null:
-		_pinned_sign = sign
 		_pinned_passenger = 0
 		_pin_from_click = false
+		if sign.select_id != 0 and hud != null:
+			_pinned_sign = null
+			hud._select_built_object(sign.select_id)
+			get_viewport().set_input_as_handled()
+			return
+		_pinned_sign = sign
 		# The click is the sign's: what was selected before ends as a click
 		# elsewhere would end it (PassengerHud's Esc path, also used by GameMenu).
 		if hud != null:
@@ -348,6 +359,7 @@ func _current_signs() -> Array[Target]:
 			sign.key = entry.get("key")
 			sign.rect = entry.get("rect", Rect2())
 			sign.text = entry.get("text", "")
+			sign.select_id = entry.get("select", 0)
 			signs.append(sign)
 	return signs
 
