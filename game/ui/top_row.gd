@@ -24,24 +24,25 @@ const TOP := float(HudLayout.MARGIN)
 ## Where a sheet opens: under the row, one GAP below the buttons.
 const SHEET_TOP := float(HudLayout.MARGIN + HudLayout.BUTTON_H + HudLayout.GAP)
 
-## The layout width the row is designed for: the project's 1.25 UI scale.
-const DESIGN_W := 1536.0
 ## The widest the rating card gets (it is built to stay inside 240 px), so the
 ## row can start a gap after it.
 const RATING_W := 240.0
 ## The narrowest slot, when the layout is too narrow for three TOGGLE_W slots.
-const MIN_SLOT_W := 96.0
+const MIN_SLOT_W := 88.0
+## The left-most a sheet starts: right of the top-left column of toggle buttons.
+const SHEET_MIN_LEFT := float(HudLayout.MARGIN + HudLayout.TOGGLE_W + HudLayout.GAP)
 
 
-## The slot width in a layer `layer_width` wide: TOGGLE_W while the centred row
-## clears the rating card and the clock panel, else the widest grid step of
-## three slots that fit the span between them (UI scale 1.5 is 1280 wide).
+## The slot width in a layer `layer_width` wide: TOGGLE_W while the row, centred
+## on the layer, clears the rating card and the clock panel by a GAP, else the
+## widest grid step of three slots whose centred row does (UI scale 1.5 is a
+## 1280 px layout, where the slots are 88 wide).
 static func slot_width(layer_width: float) -> float:
-	var span := _span_right(layer_width) - _span_left()
-	if span >= row_width():
+	var half := minf(layer_width / 2.0 - _span_left(), _span_right(layer_width) - layer_width / 2.0)
+	if half * 2.0 >= row_width():
 		return float(HudLayout.TOGGLE_W)
 	var step := float(HudLayout.UNIT)
-	var fit := floorf((span - (SLOT_COUNT - 1) * HudLayout.GAP) / SLOT_COUNT / step) * step
+	var fit := floorf((half * 2.0 - (SLOT_COUNT - 1) * HudLayout.GAP) / SLOT_COUNT / step) * step
 	return maxf(MIN_SLOT_W, fit)
 
 
@@ -50,15 +51,18 @@ static func row_width(slot_w: float = HudLayout.TOGGLE_W) -> float:
 	return SLOT_COUNT * slot_w + (SLOT_COUNT - 1) * HudLayout.GAP
 
 
-## The row's left edge in a layer `layer_width` wide: centred on the layer, or
-## moved right to start a GAP after the rating card when the layer is narrow
-## (at 1280 the slots are 96 wide and the row ends a GAP before the clock panel).
+## The row's left edge in a layer `layer_width` wide: the row is always centred.
 static func row_left(layer_width: float) -> float:
-	var row := row_width(slot_width(layer_width))
-	var centred := (layer_width - row) / 2.0
-	var low := _span_left()
-	var high := _span_right(layer_width) - row
-	return clampf(centred, low, maxf(low, high))
+	return (layer_width - row_width(slot_width(layer_width))) / 2.0
+
+
+## The sheet's left edge and width in a layer `layer_width` wide: from the row's
+## left edge, SHEET_W wide, moved left (never past SHEET_MIN_LEFT) so it ends a
+## GAP before the clock panel.
+static func sheet_extent(layer_width: float) -> Vector2:
+	var right := _span_right(layer_width)
+	var left := clampf(minf(row_left(layer_width), right - SHEET_W), SHEET_MIN_LEFT, right)
+	return Vector2(left, minf(SHEET_W, right - left))
 
 
 ## The left edge of `slot` in a layer that is `layer_width` wide.
@@ -80,10 +84,10 @@ static func place_in_slot(control: Control, slot: int, host: Node) -> void:
 		control.remove_theme_font_size_override("font_size")
 
 
-## Puts `sheet` under the row: SHEET_W wide, starting at the row's left edge.
-## Its height is its content's.
+## Puts `sheet` under the row (see sheet_extent). Its height is its content's.
 static func place_sheet(sheet: Control, host: Node) -> void:
-	_anchor_top_left(sheet, row_left(_layer_width(host)), SHEET_TOP, Vector2(SHEET_W, 0.0))
+	var extent := sheet_extent(_layer_width(host))
+	_anchor_top_left(sheet, extent.x, SHEET_TOP, Vector2(extent.y, 0.0))
 
 
 ## Closes every other sheet of the row; call before showing `opening`.

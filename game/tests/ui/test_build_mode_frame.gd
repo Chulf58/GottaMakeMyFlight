@@ -6,16 +6,21 @@ extends GdUnitTestSuite
 ## off the bottom bar and the money slot.
 
 const STRUCTURE := 0
-const VIEWPORT := Rect2(0.0, 0.0, 1280.0, 720.0)
+## The layout width of the fixture's world at its default: 1280 px at scale 1.0.
+const DEFAULT_LAYOUT_W := 1280.0
 
 var _port: SubViewport
+var _view := Rect2(0.0, 0.0, 1280.0, 720.0)
 var _mode: BuildMode
 var _menu: BuildMenu
 
 
-func _world(ui_scale: float) -> void:
+## A world whose layout is `layout_w` wide at `ui_scale`: the viewport is that
+## many layout px times the scale, as the stretch makes it.
+func _world(ui_scale: float, layout_w := DEFAULT_LAYOUT_W) -> void:
 	_port = SubViewport.new()
-	_port.size = Vector2i(1280, 720)
+	_view = Rect2(0.0, 0.0, layout_w * ui_scale, layout_w * 9.0 / 16.0 * ui_scale)
+	_port.size = Vector2i(_view.size)
 	add_child(_port)
 	_mode = BuildMode.new()
 	_mode.initial_tool = BuildMode.Tool.NONE
@@ -90,8 +95,8 @@ func test_nothing_in_the_frame_takes_the_mouse() -> void:
 		assert_int(part.mouse_filter).is_equal(Control.MOUSE_FILTER_IGNORE)
 
 
-func _assert_inside_and_clear(ui_scale: float) -> void:
-	_world(ui_scale)
+func _assert_inside_and_clear(ui_scale: float, layout_w := DEFAULT_LAYOUT_W) -> void:
+	_world(ui_scale, layout_w)
 	_menu.press_category(STRUCTURE)
 	var frame := _menu.build_frame
 	var bar := _menu.category_button(0).get_parent().get_parent() as Control
@@ -101,19 +106,27 @@ func _assert_inside_and_clear(ui_scale: float) -> void:
 		print("scale %.2f band %d: %s" % [ui_scale, i, rect])
 		assert_float(rect.size.x).is_greater(0.0)
 		assert_float(rect.size.y).is_greater(0.0)
-		assert_bool(VIEWPORT.grow(0.5).encloses(rect)).is_true()
+		assert_bool(_view.grow(0.5).encloses(rect)).is_true()
 		assert_bool(rect.intersects(_on_screen(bar))).is_false()
 		assert_bool(rect.intersects(_on_screen(money))).is_false()
 	var sign_rect := _on_screen(frame.sign_panel())
 	print("scale %.2f sign: %s" % [ui_scale, sign_rect])
-	assert_bool(VIEWPORT.encloses(sign_rect)).is_true()
-	# The sign is the first slot of the top row (HUD 2/7): this 1280 px viewport is
-	# a narrow layout, so the row is the narrow one (board 8d9a8f13).
-	var layout_w := VIEWPORT.size.x / ui_scale
-	assert_float(sign_rect.position.x).is_equal_approx(
-		TopRow.slot_left(TopRow.SIGN_SLOT, layout_w) * ui_scale, 1.0
+	assert_bool(_view.encloses(sign_rect)).is_true()
+	# The sign is the first slot of the top row (HUD 2/7), checked against the
+	# ruling, not against TopRow: three grid-sized slots GAP apart whose row is
+	# centred on the viewport, clears the rating card, ends a GAP before the clock
+	# panel's rail (board 8d9a8f13).
+	var slot_w := sign_rect.size.x / ui_scale
+	var row_w := 3.0 * slot_w + 2.0 * HudLayout.GAP
+	assert_float(fposmod(slot_w, float(HudLayout.UNIT))).is_equal_approx(0.0, 0.01)
+	assert_float(slot_w).is_between(88.0, float(HudLayout.TOGGLE_W))
+	assert_float(sign_rect.position.x + row_w * ui_scale / 2.0).is_equal_approx(
+		_view.get_center().x, 1.0
 	)
-	assert_float(sign_rect.size.x).is_equal_approx(TopRow.slot_width(layout_w) * ui_scale, 1.0)
+	var rating_end := float(HudLayout.MARGIN + HudLayout.MONEY_W + HudLayout.GAP) + 240.0
+	assert_float(sign_rect.position.x / ui_scale).is_greater_equal(rating_end + HudLayout.GAP)
+	var rail_left := _view.size.x / ui_scale - HudLayout.MARGIN - HudLayout.RAIL_W
+	assert_float(sign_rect.position.x / ui_scale + row_w).is_less_equal(rail_left - HudLayout.GAP)
 	assert_float(sign_rect.position.y).is_equal_approx(HudLayout.MARGIN * ui_scale, 0.5)
 	assert_bool(sign_rect.intersects(_on_screen(money))).is_false()
 	for i in 4:
@@ -125,4 +138,8 @@ func test_the_frame_stays_inside_the_viewport_and_clear_of_the_hud_at_scale_one(
 
 
 func test_the_frame_stays_inside_the_viewport_and_clear_of_the_hud_at_scale_1_25() -> void:
-	_assert_inside_and_clear(1.25)
+	_assert_inside_and_clear(1.25, 1536.0)
+
+
+func test_the_frame_stays_inside_the_viewport_and_clear_of_the_hud_at_scale_1_5() -> void:
+	_assert_inside_and_clear(1.5, 1280.0)
