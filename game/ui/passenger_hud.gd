@@ -171,6 +171,9 @@ var departures_settings_path := DeparturesBoard.SETTINGS_PATH
 var alert_settings_path := HudFlagSetting.PATH
 
 var _departures_board := DeparturesBoard.new()
+## The full-screen flight planner and its toggle on the Departures row; built
+## only when the HUD has a FlightSim and a clock.
+var _planner := FlightPlanner.new()
 var _alerts := AlertStack.new()
 var _hints := Hints.new()
 ## The new-tier dialog and the "New" card marks (UnlockGuide); on in a normal
@@ -260,6 +263,11 @@ func _ready() -> void:
 	_departures_board.settings_path = departures_settings_path
 	_departures_board.menu = get_node_or_null("../BuildMenu") as BuildMenu
 	add_child(_departures_board)
+	if flights != null and clock != null:
+		_planner.flights = flights
+		_planner.clock = clock
+		_planner.build_mode = build_mode
+		add_child(_planner)
 	# The offer sheet is a sibling layer; the alert cards give way to it when open.
 	# The panel comes later in the scene, so it has no sheet until its _ready.
 	var offers := get_node_or_null("../OfferPanel") as OfferPanel

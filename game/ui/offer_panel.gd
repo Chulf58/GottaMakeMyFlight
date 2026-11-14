@@ -266,6 +266,9 @@ func open() -> void:
 	if clock == null:
 		_show()
 		return
+	# Another top-row sheet holds the exclusive turn until it closes, so it is
+	# closed first; the turn then comes at once.
+	TopRow.close_others(self)
 	_hold = clock.holds.take_turn(self, _show, true)
 
 
