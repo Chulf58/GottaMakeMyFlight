@@ -41,8 +41,8 @@ extends CanvasLayer
 ## (FlightTimetable.first_day), once the airport is open.
 ##
 ## Each card reads as a choice (decision airline-offers-stay-accept-many-the-
-## three-offer-cards-read-a): directly under the title come a fit line and a
-## daily earnings line ("$480 a day", passengers times the fee), so the three
+## three-offer-cards-read-a): one row under the title holds a fit line and the
+## daily earnings ("$480 a day", passengers times the fee), so the three
 ## compare at a glance. The fit line (decision airline-offers-2-a-day-fit-
 ## the-free-gate-slots-1-needs-more, point 6) says "Fits your gates now" or
 ## "Needs another gate", and FlightFit's words for any other reason, in the
@@ -56,6 +56,10 @@ extends CanvasLayer
 
 const SHEET_W := TopRow.SHEET_W
 const CARD_TEXT_W := 380.0
+## The widths the fit and earnings lines share on the row under the title: the
+## fit line may wrap in the space left of the earnings, which stay on one line.
+const VERDICT_FIT_W := 200.0
+const VERDICT_EARNINGS_W := 150.0
 ## Index of the first-flight note line in a card's lines (under the departure).
 const NOTE_LINE := 2
 ## Rail keys, and the history titles, of the two coral notices.
@@ -368,6 +372,10 @@ func earnings_text_of(id: String) -> String:
 	return (_earnings_labels[id] as Label).text
 
 
+func earnings_label(id: String) -> Label:
+	return _earnings_labels[id]
+
+
 ## What the sheet says under the cards: the last accept's confirmation, or
 ## EMPTY_TEXT when no offer is open. A refusal is on its card, not here.
 func message() -> String:
@@ -636,18 +644,25 @@ func _add_card(offer: Dictionary) -> void:
 	texts.add_child(note)
 	texts.move_child(note, NOTE_LINE)
 	_note_labels[id] = note
+	# The verdict and the daily earnings share one row straight under the title,
+	# so the cards compare by reading down it without making the sheet taller.
+	var verdict := HBoxContainer.new()
+	verdict.name = "Verdict_%s" % id
+	texts.add_child(verdict)
+	texts.move_child(verdict, 1)
 	var fit := _card_label("", &"HudSmall")
 	fit.name = "Fit_%s" % id
+	fit.custom_minimum_size.x = VERDICT_FIT_W
+	fit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_set_fit(fit, offer)
-	texts.add_child(fit)
+	verdict.add_child(fit)
 	_fit_labels[id] = fit
 	var earnings := _card_label(earnings_text(offer), &"HudSmall")
 	earnings.name = "Earnings_%s" % id
-	texts.add_child(earnings)
+	earnings.custom_minimum_size.x = VERDICT_EARNINGS_W
+	earnings.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	verdict.add_child(earnings)
 	_earnings_labels[id] = earnings
-	# The verdict and the money come straight under the title.
-	texts.move_child(fit, 1)
-	texts.move_child(earnings, 2)
 	var refusal := Label.new()
 	refusal.name = "Refusal_%s" % id
 	refusal.visible = false

@@ -90,6 +90,17 @@ func test_the_fit_and_earnings_lines_follow_the_title() -> void:
 		assert_str(lines[3]).starts_with("Departs ")
 
 
+## The two share one row, so the sheet grows by one line a card, not two (the
+## HUD scale test keeps three cards inside the 720 px layout at UI scale 1.5).
+func test_the_fit_and_earnings_share_one_row() -> void:
+	for id in _panel.card_ids():
+		var fit := _panel.fit_label(id)
+		var earnings := _panel.earnings_label(id)
+		assert_object(fit.get_parent()).is_same(earnings.get_parent())
+		assert_bool(fit.get_parent() is HBoxContainer).is_true()
+		assert_bool(_panel.card(id).is_ancestor_of(fit)).is_true()
+
+
 func test_the_new_lines_fit_the_card_text_width() -> void:
 	var label := Label.new()
 	label.theme = HUD_THEME
@@ -100,11 +111,11 @@ func test_the_new_lines_fit_the_card_text_width() -> void:
 	var offer := TestOfferBoard.record("O0N9", 0, 600)
 	offer["booked_passengers"] = 120
 	offer["fee_per_passenger"] = 60
-	for text: String in [
-		OfferPanel.FITS_TEXT, OfferPanel.NEEDS_GATE_TEXT, OfferPanel.earnings_text(offer)
-	]:
+	var earnings := OfferPanel.earnings_text(offer)
+	for text: String in [OfferPanel.FITS_TEXT, OfferPanel.NEEDS_GATE_TEXT, earnings]:
 		var width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
-		print("%.0f px: %s" % [width, text])
+		var room := OfferPanel.VERDICT_EARNINGS_W if text == earnings else OfferPanel.VERDICT_FIT_W
+		print("%.0f px of %.0f: %s" % [width, room, text])
 		assert_float(width).is_greater(50.0)
-		assert_float(width).is_less_equal(OfferPanel.CARD_TEXT_W)
+		assert_float(width).is_less_equal(room)
 	label.free()
