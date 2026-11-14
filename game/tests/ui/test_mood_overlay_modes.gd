@@ -2,11 +2,11 @@ class_name TestMoodOverlayModes
 extends GdUnitTestSuite
 ## The mood overlay's mode buttons (decision crowd-need-display-mood-overlay-
 ## gains-hunger-toilet-and-bore): Mood, Hunger, Toilet and Boredom tint the
-## floor for their own need, the last mode is kept, and while a need mode is on
-## every need icon hides.
+## floor for their own need, the last mode is kept, and the need icons show only
+## in a need mode, only that need's (decision need-icons-show-only-in-the-mood-
+## overlay-need-modes-n-key-removed).
 
 var _path: String
-var _views_path: String
 var _world: PassengerTestWorld
 var _views: PassengerViews
 
@@ -21,7 +21,6 @@ func after() -> void:
 
 func before_test() -> void:
 	_path = SaveTestKit.run_path("mood_overlay_modes")
-	_views_path = SaveTestKit.run_path("mood_overlay_modes_icons")
 	var grid := PassengerTestWorld.floored(Vector2i(8, 6))
 	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(2, 5), 2)
 	_world = PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(10, 20))
@@ -30,7 +29,6 @@ func before_test() -> void:
 
 func after_test() -> void:
 	DirAccess.remove_absolute(_path)
-	DirAccess.remove_absolute(_views_path)
 	if is_instance_valid(_views):
 		_views.free()
 	_world.free_all()
@@ -69,14 +67,14 @@ func _tinted(overlay: MoodOverlay, mode: MoodTint.Mode) -> int:
 	return count
 
 
-func _visible_icons() -> int:
-	var count := 0
-	for id in _world.sim.passenger_ids():
-		var node := _views.node_for(id)
-		for sprite_name in NeedIcons.SPRITES:
-			if (node.get_node(sprite_name) as Sprite3D).visible:
-				count += 1
-	return count
+## The kinds of need icon `node` shows now, need -> count.
+func _icons_by_need(node: Node3D) -> Dictionary:
+	var out := {}
+	var kinds: Array = node.get_meta(&"need_kinds", [])
+	for i in kinds.size():
+		if (node.get_node(NeedIcons.SPRITES[i]) as Sprite3D).visible:
+			out[kinds[i]] = out.get(kinds[i], 0) + 1
+	return out
 
 
 func _drawn_views(overlay: MoodOverlay) -> void:
@@ -146,10 +144,10 @@ func test_a_saved_mode_out_of_range_opens_in_mood_mode() -> void:
 	assert_int(_overlay().mode()).is_equal(MoodTint.Mode.MOOD)
 
 
-func test_need_icons_hide_in_need_modes_and_show_in_mood_mode_and_when_off() -> void:
+func test_need_icons_show_only_in_the_matching_need_mode() -> void:
 	_world.free_all()
 	var grid := BuildGrid.new()
-	ToiletTestLayout.build(grid)
+	NeedFacilityKit.build(grid)
 	_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
 	_world.run_to(10)
 	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
@@ -158,35 +156,42 @@ func test_need_icons_hide_in_need_modes_and_show_in_mood_mode_and_when_off() -> 
 	p.toilet_need = ToiletSim.NEED_MAX
 	var overlay := _overlay()
 	_drawn_views(overlay)
-	var off := _visible_icons()
+	var node := _views.node_for(p.id)
+	var kinds: Array = node.get_meta(&"need_kinds", [])
+	# The control: the passenger has both needs, so an icon of each could show.
+	assert_array(kinds).contains([NeedIcons.Need.HUNGER, NeedIcons.Need.TOILET])
+	var off := _icons_by_need(node)
 	overlay.set_shown(true)
 	_views.draw()
-	var mood := _visible_icons()
+	var mood := _icons_by_need(node)
 	overlay.set_mode(MoodTint.Mode.HUNGER)
 	_views.draw()
-	var hunger := _visible_icons()
+	var hunger := _icons_by_need(node)
+	var hunger_need := overlay.shown_need()
+	overlay.set_mode(MoodTint.Mode.TOILET)
+	_views.draw()
+	var toilet := _icons_by_need(node)
 	overlay.set_mode(MoodTint.Mode.BOREDOM)
 	_views.draw()
-	var boredom := _visible_icons()
-	overlay.set_mode(MoodTint.Mode.MOOD)
-	_views.draw()
-	var back := _visible_icons()
+	var boredom := _icons_by_need(node)
 	overlay.set_mode(MoodTint.Mode.TOILET)
 	overlay.set_shown(false)
 	_views.draw()
-	var closed := _visible_icons()
+	var closed := _icons_by_need(node)
 	print(
 		(
-			"icons: off %d, mood %d, hunger %d, boredom %d, mood again %d, closed in toilet %d"
-			% [off, mood, hunger, boredom, back, closed]
+			"icons {hunger, toilet}: off %s, mood %s, hunger %s, toilet %s, boredom %s, closed %s"
+			% [off, mood, hunger, toilet, boredom, closed]
 		)
 	)
-	assert_int(off).is_greater(0)
-	assert_int(mood).is_equal(off)
-	assert_int(hunger).is_equal(0)
-	assert_int(boredom).is_equal(0)
-	assert_int(back).is_equal(off)
-	assert_int(closed).is_equal(off)
+	assert_dict(off).is_equal({})
+	assert_dict(mood).is_equal({})
+	assert_dict(hunger).is_equal({NeedIcons.Need.HUNGER: 1})
+	assert_dict(toilet).is_equal({NeedIcons.Need.TOILET: 1})
+	assert_dict(boredom).is_equal({})
+	assert_dict(closed).is_equal({})
+	assert_int(hunger_need).is_equal(NeedIcons.Need.HUNGER)
+	assert_int(overlay.shown_need()).is_equal(MoodOverlay.NO_NEED)
 
 
 func test_main_scene_gives_the_views_the_overlay() -> void:

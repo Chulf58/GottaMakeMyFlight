@@ -60,7 +60,6 @@ var _world: PassengerTestWorld
 var _views: PassengerViews
 var _camera: Camera3D
 var _screen: SubViewport
-var _path: String
 
 
 func before() -> void:
@@ -72,9 +71,6 @@ func after() -> void:
 
 
 func after_test() -> void:
-	if _path != "":
-		DirAccess.remove_absolute(_path)
-		_path = ""
 	if _screen != null:
 		_screen.free()
 		_screen = null
@@ -435,11 +431,9 @@ func _facility_world() -> PassengerTestWorld:
 
 ## The views drawn into a 1920 x 1080 viewport, as the game window draws.
 func _open_views() -> void:
-	_path = SaveTestKit.run_path("need_icon_head_gap")
 	_views = PassengerTestWorld.views()
 	_views.clock = _world.clock
 	_views.sim = _world.sim
-	_views.need_icons_toggle.settings_path = _path
 	_screen = SubViewport.new()
 	_screen.size = Vector2i(1920, 1080)
 	add_child(_screen)
@@ -448,6 +442,7 @@ func _open_views() -> void:
 	_camera.fov = 55.0
 	_screen.add_child(_camera)
 	_camera.make_current()
+	PassengerTestWorld.show_need(_views, NeedIcons.Need.TOILET)
 
 
 ## A passenger settled on the first gate chair of the reference terminal.
