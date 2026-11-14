@@ -40,10 +40,11 @@ static func rows_for_day(flights: FlightSim, day: int) -> Array[Dictionary]:
 	return _rows(flights, day)
 
 
-## {tick, doors, head, airline, status, base, line, departed, contract, gate}
+## {tick, doors, head, airline, status, base, line, departed, contract, gate, flight}
 ## for each flight leaving on `today`, earliest first; `doors` is the tick its
 ## doors close, `contract` the contract id ("" for a one-off) and `gate` the
-## gate the flight holds.
+## gate the flight holds; `flight` is the flight id its passengers carry (the
+## occurrence id for a contract).
 static func _rows(flights: FlightSim, today: int) -> Array[Dictionary]:
 	var rows: Array[Dictionary] = []
 	var open := flights.opened_tick >= 0
@@ -63,7 +64,8 @@ static func _rows(flights: FlightSim, today: int) -> Array[Dictionary]:
 		if gate == "":
 			gate = contract["gate"]
 		var place_airline := [contract["destination"], contract["airline"]]
-		rows.append(_row(tick, doors, place_airline, state, contract_id, gate))
+		var occurrence := FlightTimetable.occurrence_id(contract_id, today)
+		rows.append(_row(tick, doors, place_airline, state, contract_id, gate, occurrence))
 	for id in flights.flight_ids():
 		if flights.flight_contract_id(id) != "":
 			continue
@@ -71,7 +73,7 @@ static func _rows(flights: FlightSim, today: int) -> Array[Dictionary]:
 		if GameCalendar.day_of(tick) == today:
 			var doors := flights.doors_close_tick(id)
 			var state := flights.state_of(id)
-			rows.append(_row(tick, doors, [id, ""], state, "", flights.flight_gate(id)))
+			rows.append(_row(tick, doors, [id, ""], state, "", flights.flight_gate(id), id))
 	rows.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["tick"] < b["tick"])
 	return rows
 
@@ -81,7 +83,13 @@ static func _rows(flights: FlightSim, today: int) -> Array[Dictionary]:
 ## name (line 2), `status` the status word; `base` and `line` stay the one-line
 ## text.
 static func _row(
-	tick: int, doors: int, place_airline: Array, state: int, contract_id: String, gate: String
+	tick: int,
+	doors: int,
+	place_airline: Array,
+	state: int,
+	contract_id: String,
+	gate: String,
+	flight_id: String
 ) -> Dictionary:
 	var place: String = place_airline[0]
 	var airline: String = place_airline[1]
@@ -106,4 +114,5 @@ static func _row(
 		"departed": state == FlightSim.State.DEPARTED,
 		"contract": contract_id,
 		"gate": gate,
+		"flight": flight_id,
 	}
