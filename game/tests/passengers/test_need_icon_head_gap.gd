@@ -103,15 +103,15 @@ func test_a_standing_row_and_wish_bubble_keep_the_gap_at_both_angles(
 	_check_gaps(node, tag + "+wish", true)
 
 
-## Against the body's mesh, not its bones, for every one of the twelve bodies
-## (PassengerLooks.SCENES) at both camera steps and four yaws: before any frame
-## poses it the body stands in its rest pose (the control: its Head bone at the
+## Against the body's mesh, not its bones, for every body (PassengerLooks.SCENES,
+## one case each from _every_body()) at both camera steps and four yaws: before
+## any frame poses it the body stands in its rest pose (the control: its Head bone at the
 ## skeleton's rest height), where the mesh's vertices are where they are drawn.
 ## The row's bottom stands HEAD_GAP_PX or more over the highest drawn vertex and
 ## never far over it, so a wrong bone picked by NeedIcons.find_head(), or a
 ## body whose hair or bun reaches past the fitted ball, fails here.
 func test_a_rest_pose_row_clears_the_drawn_mesh_top(
-	body: int, _test_parameters := [[0], [1], [2], [3], [4], [5], [6], [7], [8], [9], [10], [11]]
+	body: int, _test_parameters := _every_body()
 ) -> void:
 	_world = _facility_world()
 	_open_views()
@@ -593,3 +593,11 @@ func _head_bone(node: Node3D) -> Vector3:
 				return bones.global_transform * bones.get_bone_global_pose(i).origin
 	fail("no head bone on passenger %s" % node.name)
 	return Vector3.ZERO
+
+
+## One test case per passenger body: [[0], [1], ...], from PassengerLooks.BODIES.
+func _every_body() -> Array:
+	var out := []
+	for body in PassengerLooks.BODIES.size():
+		out.append([body])
+	return out

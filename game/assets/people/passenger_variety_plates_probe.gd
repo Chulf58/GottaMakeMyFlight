@@ -3,9 +3,11 @@ extends "res://spike/passenger_looks_plates_probe.gd"
 ## 3fcd8e5a: male 04 and 05 and female 06, 09 and 12), built on the passenger
 ## looks plates probe:
 ## - crowd: its crowd of passengers in spawn order (--seed=N);
-## - seated: the bodies on their own gate seat rows in groups of three (the base
-##   probe shoots the first twelve only), with SEAT_OVERLAP checks and, with
-##   --sweep, the least step out of the row per body;
+## - seated: every body on its own gate seat row in groups of three, the last
+##   group short when the count is not a multiple of three (_seated() here; the
+##   base probe's needs full groups), with SEAT_OVERLAP checks and, with
+##   --sweep, the least step out of the row per body; a body no saved plate
+##   shows is PROBE_INVALID;
 ## - cafe: every body on the cafe_table chair (CAFE_SWEEP with --sweep);
 ## - carry: each added body standing in its idle with a roller parked beside
 ##   it as a queue stand (RollerPark.queue_park) and with a backpack worn from
@@ -30,6 +32,9 @@ const ADDED: Array[String] = [
 	"tcp_female_character_12",
 ]
 
+## Body indices a saved seated plate shows.
+var _seated_shot := {}
+
 
 func _run() -> void:
 	var seed := 777
@@ -48,12 +53,12 @@ func _run() -> void:
 		await _crowd(seed)
 	if "seated" in parts:
 		var close: Array[Image] = []
-		# The base probe seats three bodies per group; a remainder is named, never
-		# passed silently.
-		for group in PassengerLooks.BODIES.size() / 3:
+		for group in ceili(PassengerLooks.BODIES.size() / 3.0):
 			await _seated(group, close)
-		for body in range(PassengerLooks.BODIES.size() / 3 * 3, PassengerLooks.BODIES.size()):
-			print("SEATED_NOT_SHOT %s (not in a group of three)" % PassengerLooks.BODIES[body])
+		for body in PassengerLooks.BODIES.size():
+			if not _seated_shot.has(body):
+				_invalid("%s: no seated plate shows it" % PassengerLooks.BODIES[body])
+		print("SEATED_SHOT %d of %d" % [_seated_shot.size(), PassengerLooks.BODIES.size()])
 		_save(_sheet(close, 9, 240), "seated_close_sheet.png", VARIETY_REL)
 	if "cafe" in parts:
 		var cafe: Array[Image] = []
@@ -112,3 +117,78 @@ func _carry(body: int, kind: SecurityLooks.Kind, tiles: Array[Image]) -> void:
 	if ok:
 		_save(img, label + ".png", VARIETY_REL)
 		tiles.append(img)
+
+
+## The base probe's _seated() (the bodies of `group`, group * 3 onwards, each in
+## sit_idle on the middle chair of its own gate seat row, placed as PassengerSim
+## and GateChairs place a seated passenger, shot side-on, SEAT_GAP printed,
+## _overlaps() checked, close-ups appended to `close`), with the last group as
+## short as the body count leaves it.
+func _seated(group: int, close: Array[Image]) -> void:
+	_clear()
+	var chairs := Node3D.new()
+	_stage.add_child(chairs)
+	var subjects := {}
+	var people: Array[Node3D] = []
+	for k in mini(3, PassengerLooks.BODIES.size() - group * 3):
+		var body := group * 3 + k
+		var row := InteriorKit.instantiate(&"seat_row")
+		chairs.add_child(row)
+		row.position = Vector3(0, 0, k * 2.6)
+		# The row's origin is its footprint's centre, the middle cell's centre.
+		var shift := PassengerLooks.SEAT_SHIFT_M[body]
+		var at := (
+			row.position
+			+ Vector3(GateChairs.CHAIR_OFFSET_M[1], shift.y, PassengerSim.SIT_FORWARD_M + shift.x)
+		)
+		var node := _person(body, 0, at, 0.0, 0.0, "sit_idle")
+		subjects[node] = PassengerLooks.BODIES[body]
+		people.append(node)
+		# The chair is part of what the plate shows of the person sitting on it.
+		subjects[row] = subjects[node]
+	_cam.projection = Camera3D.PROJECTION_ORTHOGONAL
+	_cam.keep_aspect = Camera3D.KEEP_WIDTH
+	_cam.size = 8.0
+	var centre := Vector3(0, 0.8, 2.6)
+	_cam.global_position = centre + Vector3(12, 0, 0)
+	_cam.look_at(centre)
+	for i in 3:
+		await process_frame
+	var owners: Array[Node] = [chairs]
+	var holder := PlateSight.colliders(root, owners, {})
+	await physics_frame
+	await physics_frame
+	var space := _cam.get_world_3d().direct_space_state
+	for node in people:
+		var skel := node.find_child("Skeleton3D", true, false) as Skeleton3D
+		var hips := skel.global_transform * skel.get_bone_global_pose(skel.find_bone("Hips")).origin
+		var down := PhysicsRayQueryParameters3D.create(
+			Vector3(hips.x, 1.2, hips.z), Vector3(hips.x, 0.0, hips.z)
+		)
+		var hit := space.intersect_ray(down)
+		var mi := PassengerLooks.body_mesh(node)
+		var baked := mi.bake_mesh_from_current_skeleton_pose()
+		var low := INF
+		for s in baked.get_surface_count():
+			for v: Vector3 in baked.surface_get_arrays(s)[Mesh.ARRAY_VERTEX]:
+				var w := mi.global_transform * v
+				if Vector2(w.x - hips.x, w.z - hips.z).length() < SEAT_PROBE_M:
+					low = minf(low, w.y)
+		var pan: float = hit["position"].y if not hit.is_empty() else NAN
+		print(
+			(
+				"SEAT_GAP %s hips=%s pan_top=%.3f body_low=%.3f gap_m=%.3f"
+				% [subjects[node], hips, pan, low, low - pan]
+			)
+		)
+		if hit.is_empty():
+			_invalid("%s: no seat pan under the hips" % subjects[node])
+	holder.free()
+	await _overlaps(group, people, chairs, subjects)
+	var ok: bool = await _proven("seated_%d" % group, subjects, false)
+	var img: Image = await _grab(false)
+	if ok:
+		_save(img, "seated_%d.png" % group, VARIETY_REL)
+		for k in people.size():
+			_seated_shot[group * 3 + k] = true
+	await _close_ups(people, chairs, subjects, close)
