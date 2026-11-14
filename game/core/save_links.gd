@@ -120,8 +120,9 @@ static func _offer_problem(saved: Array, board: OfferBoard, contracts: Array) ->
 			continue
 		if contract.is_empty():
 			return "offers: offer %s is accepted but flights hold no contract %s" % [id, id]
-		for key in FlightContract.TERM_KEYS:
-			if not _same(contract[key], offer[key]):
+		var keys: Array = FlightContract.TERM_KEYS + [FlightContract.TRAITS_KEY]
+		for key in keys:
+			if not _same(contract.get(key), offer.get(key)):
 				return "offers: contract %s has another %s than its offer" % [id, key]
 	for id in by_id:
 		if not offer_ids.has(id) and id != FlightSim.DEFAULT_ID:
@@ -221,4 +222,16 @@ static func _same(a: Variant, b: Variant) -> bool:
 	var numbers := [TYPE_INT, TYPE_FLOAT]
 	if typeof(a) in numbers and typeof(b) in numbers:
 		return float(a) == float(b)
+	if typeof(a) == TYPE_DICTIONARY and typeof(b) == TYPE_DICTIONARY:
+		return _same_dictionary(a, b)
 	return a == b
+
+
+## Two dictionaries with the same keys whose values are _same (a traits term).
+static func _same_dictionary(a: Dictionary, b: Dictionary) -> bool:
+	if a.size() != b.size():
+		return false
+	for key in a:
+		if not b.has(key) or not _same(a[key], b[key]):
+			return false
+	return true

@@ -10,9 +10,11 @@ const DAYS := 30
 ## The sim RNG state after DAYS days of offers drawn from SEED with the board as
 ## it was before the runway limit existed (measured on the code before this
 ## change, for every tier), and the hash of the JSON of the offers each tier
-## then held.
+## then held. The hashes were measured again when offers gained traits (offer
+## save version 4), which change the saved fees, bookings and keys but not the
+## RNG state (test_offer_board_traits checks the base draw against a replay).
 const STATE_AFTER := 7055581944236607464
-const BEFORE_HASHES := [3228316092, 309898749, 582938641]
+const BEFORE_HASHES := [3922563330, 27901550, 2302796582]
 
 
 func _rng() -> RandomNumberGenerator:

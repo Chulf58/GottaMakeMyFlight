@@ -106,6 +106,7 @@ var _note_labels: Dictionary = {}
 var _refusal_labels: Dictionary = {}
 var _fit_labels: Dictionary = {}
 var _earnings_labels: Dictionary = {}
+var _trait_rows: Dictionary = {}
 var _noted_tick := -1
 ## The sheet's hold on the clock, from open() until it closes, the player
 ## resumes or picks another speed, or a load drops it.
@@ -376,6 +377,11 @@ func earnings_label(id: String) -> Label:
 	return _earnings_labels[id]
 
 
+## The trait line on offer `id`'s card: an HBoxContainer of the Up and Down labels.
+func trait_row(id: String) -> HBoxContainer:
+	return _trait_rows[id]
+
+
 ## What the sheet says under the cards: the last accept's confirmation, or
 ## EMPTY_TEXT when no offer is open. A refusal is on its card, not here.
 func message() -> String:
@@ -463,6 +469,7 @@ func _refresh() -> void:
 	_refusal_labels.clear()
 	_fit_labels.clear()
 	_earnings_labels.clear()
+	_trait_rows.clear()
 	var offers := desk.board.open_offers()
 	for offer in offers:
 		_add_card(offer)
@@ -636,8 +643,19 @@ func _add_card(offer: Dictionary) -> void:
 	texts.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(texts)
 	var lines := card_lines(offer)
-	for i in lines.size():
-		texts.add_child(_card_label(lines[i], &"HudTitle" if i == 0 else &"HudSmall"))
+	texts.add_child(_card_label(lines[0], &"HudTitle"))
+	# The departure and the plane share one row, so the trait line below the
+	# verdict row costs the sheet no height (it stays inside 720 px at 1.5).
+	var when := HBoxContainer.new()
+	when.name = "When_%s" % id
+	texts.add_child(when)
+	for i in [1, 2]:
+		var part := _card_label(lines[i], &"HudSmall")
+		part.custom_minimum_size.x = VERDICT_FIT_W if i == 1 else 0.0
+		part.autowrap_mode = TextServer.AUTOWRAP_OFF
+		when.add_child(part)
+	for i in range(3, lines.size()):
+		texts.add_child(_card_label(lines[i], &"HudSmall"))
 	var note := _card_label("", &"HudSmall")
 	note.name = "Note_%s" % id
 	_set_note(note, _note_for(offer))
@@ -663,6 +681,10 @@ func _add_card(offer: Dictionary) -> void:
 	earnings.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	verdict.add_child(earnings)
 	_earnings_labels[id] = earnings
+	var traits := _trait_row(offer)
+	texts.add_child(traits)
+	texts.move_child(traits, verdict.get_index() + 1)
+	_trait_rows[id] = traits
 	var refusal := Label.new()
 	refusal.name = "Refusal_%s" % id
 	refusal.visible = false
@@ -681,6 +703,33 @@ func _add_card(offer: Dictionary) -> void:
 	decline.pressed.connect(_on_decline.bind(id))
 	buttons.add_child(decline)
 	_decline_buttons[id] = decline
+
+
+## The trait line under the verdict row (OfferTraits.card_labels): the upside in
+## HudGoodText and the downside in HudProblemText, each with its numbers as a
+## tooltip; a plain offer shows PLAIN_LABEL in HudHint and no downside.
+static func _trait_row(offer: Dictionary) -> HBoxContainer:
+	var traits: Dictionary = offer[FlightContract.TRAITS_KEY]
+	var plain := OfferTraits.is_plain(traits)
+	var labels := OfferTraits.card_labels(traits)
+	var tips := OfferTraits.card_tips(traits)
+	var row := HBoxContainer.new()
+	row.name = "Traits_%s" % offer["id"]
+	row.add_theme_constant_override("separation", 18)
+	var variations: Array[StringName] = [&"HudHint" if plain else &"HudGoodText", &"HudProblemText"]
+	for i in 2:
+		var label := Label.new()
+		label.name = ["Up", "Down"][i]
+		label.text = labels[i]
+		label.tooltip_text = tips[i]
+		label.mouse_filter = Control.MOUSE_FILTER_PASS
+		label.visible = labels[i] != ""
+		label.theme_type_variation = variations[i]
+		label.add_theme_font_size_override(
+			"font_size", BuildMenu.HUD_THEME.get_font_size("font_size", &"HudSmall")
+		)
+		row.add_child(label)
+	return row
 
 
 func _card_label(text: String, variation: StringName) -> Label:

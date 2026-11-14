@@ -4,6 +4,10 @@ extends GdUnitTestSuite
 ## offers removed, and a save that keeps offers and dispositions so loading
 ## never re-rolls.
 
+## Traits that change neither the fee nor the bookings (OfferTraits), so a
+## record's draw ranges are the plain draw's.
+const NEUTRAL_TRAITS := {"up": OfferTraits.SHOPPERS, "down": OfferTraits.HEAVY_BAGS, "level": 1}
+
 var _board: OfferBoard
 var _rng: RandomNumberGenerator
 var _changes := 0
@@ -28,6 +32,7 @@ static func record(id: String, day: int, minute: int, status := OfferBoard.OPEN)
 		"plane_size": "small",
 		"booked_passengers": 12,
 		"fee_per_passenger": 25,
+		"traits": NEUTRAL_TRAITS.duplicate(),
 		"status": status,
 	}
 
@@ -66,10 +71,15 @@ func test_a_day_draws_the_daily_count_of_valid_starter_offers() -> void:
 			)
 			var slot: int = offer["departure_minute"] - OfferBoard.DEPARTURE_FIRST_MINUTE
 			assert_int(slot % OfferBoard.DEPARTURE_STEP).is_equal(0)
+			var traits: Dictionary = offer["traits"]
+			assert_str(OfferTraits.problem(traits)).is_empty()
 			var booked_range: Array = OfferBoard.STARTER_SIZES[offer["plane_size"]]
-			assert_int(offer["booked_passengers"]).is_between(booked_range[0], booked_range[1])
+			assert_int(offer["booked_passengers"]).is_between(
+				OfferTraits.fewest_booked(booked_range[0], booked_range[1], traits), booked_range[1]
+			)
 			assert_int(offer["fee_per_passenger"]).is_between(
-				OfferBoard.FEE_MIN, OfferBoard.FEE_MAX
+				OfferTraits.fee_of(OfferBoard.FEE_MIN, traits),
+				OfferTraits.fee_of(OfferBoard.FEE_MAX, traits)
 			)
 
 

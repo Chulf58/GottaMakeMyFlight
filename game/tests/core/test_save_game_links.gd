@@ -98,10 +98,31 @@ func test_an_open_offer_marked_accepted_without_a_contract_is_refused() -> void:
 func test_an_accepted_offer_whose_terms_differ_from_its_contract_is_refused() -> void:
 	var bad := _taken()
 	var offer: Dictionary = bad["offers"]["offers"][_offer_index(bad, _accepted)]
-	offer["fee_per_passenger"] = int(offer["fee_per_passenger"]) + 1
-	if int(offer["fee_per_passenger"]) > OfferBoard.FEE_MAX:
-		offer["fee_per_passenger"] = OfferBoard.FEE_MIN
+	# One off the contract fee, inside what the offer's tier and traits can draw.
+	var fees: Array = OfferBoard.TIER_FEES[OfferBoard.tier_of(offer["airline"])]
+	var dearest := OfferTraits.fee_of(fees[1], offer["traits"])
+	var fee := int(offer["fee_per_passenger"])
+	offer["fee_per_passenger"] = fee + 1 if fee < dearest else fee - 1
 	_assert_refused(bad, "has another fee_per_passenger than its offer")
+
+
+## Traits are a term: an accepted offer whose traits differ from its contract's
+## is refused, even when both are valid traits.
+func test_an_accepted_offer_whose_traits_differ_from_its_contract_is_refused() -> void:
+	var bad := _taken()
+	var contract: Dictionary = {}
+	for entry: Dictionary in bad["flights"]["contracts"]:
+		if entry["id"] == _accepted:
+			contract = entry
+	var other := {"up": "top_fare", "down": "heavy_bags", "level": 1}
+	if _same_traits(contract["traits"], other):
+		other = {"up": "full_flight", "down": "rush_crowd", "level": 1}
+	contract["traits"] = other
+	_assert_refused(bad, "has another traits than its offer")
+
+
+static func _same_traits(a: Dictionary, b: Dictionary) -> bool:
+	return JSON.stringify(OfferTraits.frozen(a)) == JSON.stringify(OfferTraits.frozen(b))
 
 
 func test_a_contract_whose_offer_is_not_accepted_is_refused() -> void:

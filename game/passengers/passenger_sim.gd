@@ -253,11 +253,14 @@ func schedule_flight(flight_id: String, count: int) -> bool:
 		return false
 	_scheduled[flight_id] = true
 	count += BookingOverrides.take(self, flight_id)
+	# The contract's arrival traits, resolved once for both ways of arriving.
+	var contract := BookingOverrides.contract_of(self, flight_id)
+	var shares := ArrivalTypes.shares_for(contract.get(FlightContract.TRAITS_KEY, {}))
 	if landside != null:
-		arrivals.schedule(flight_id, count)
+		arrivals.schedule(flight_id, count, shares)
 		return true
 	for i in count:
-		var arrival := ArrivalTypes.draw(clock.rng)
+		var arrival := ArrivalTypes.draw(clock.rng, shares)
 		var span := ArrivalTypes.window(arrival, flights, flight_id, clock.tick)
 		var at := clock.rng.randi_range(span.x, span.y)
 		PassengerLifecycle.add_spawn(self, at, flight_id, clock.rng.randi_range(0, 1), arrival)

@@ -180,7 +180,7 @@ func test_a_fitted_day_is_saved_and_never_fitted_again_on_load() -> void:
 	var board := OfferBoard.new()
 	board.ensure_day(0, _rng(42), 0, PlaneClasses.LARGE, sim)
 	var saved: Dictionary = JSON.parse_string(JSON.stringify(board.to_snapshot()))
-	assert_int(int(saved["save_version"])).is_equal(3)
+	assert_int(int(saved["save_version"])).is_equal(4)
 	var loaded := OfferBoard.new()
 	assert_bool(loaded.from_snapshot(saved)).is_true()
 	assert_bool(sim.accept_contract(TestFlightFit.terms("LATE", 1200))).is_true()

@@ -64,8 +64,9 @@ func bind(sim: PassengerSim, spawn: Callable) -> void:
 
 
 ## Forms `count` passengers of `flight_id` into parties and books them, from
-## the sim RNG.
-func schedule(flight_id: String, count: int) -> void:
+## the sim RNG, each party's arrival type drawn with `shares`
+## (ArrivalTypes.shares_for the flight's contract).
+func schedule(flight_id: String, count: int, shares: Array[int] = ArrivalTypes.SHARES) -> void:
 	var rng := _sim.clock.rng
 	var left := count
 	while left > 0:
@@ -76,7 +77,7 @@ func schedule(flight_id: String, count: int) -> void:
 		var intent := LandsideVehicle.Intent.DROP
 		if kind == LandsideVehicle.Kind.CAR and rng.randi_range(0, 99) < PARK_SHARE:
 			intent = LandsideVehicle.Intent.PARK
-		var arrival := ArrivalTypes.draw(rng)
+		var arrival := ArrivalTypes.draw(rng, shares)
 		var span := ArrivalTypes.window(arrival, _sim.flights, flight_id, _sim.clock.tick)
 		# The party gets out one at a time (LandsideSim.RELEASE_GAP_TICKS apart), so
 		# its last member is out by the window's end (the drawn time is clamped, so

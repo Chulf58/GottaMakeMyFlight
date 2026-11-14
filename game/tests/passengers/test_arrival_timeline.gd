@@ -103,6 +103,7 @@ func test_the_timeline_and_contract_fields_are_unchanged() -> void:
 				"booked_passengers",
 				"fee_per_passenger",
 				"first_day",
+				"traits",
 			]
 		)
 	)

@@ -30,13 +30,30 @@ const ARRIVAL_OPENS_BEFORE_DEPARTURE_TICKS := 1960
 const RUSHED_SPAN_TICKS := 300
 
 
-static func draw(rng: RandomNumberGenerator) -> Type:
+## One type drawn with `shares` (whole percent per type, Type order, summing to
+## 100: SHARES or shares_for()). One RNG draw whatever the shares.
+static func draw(rng: RandomNumberGenerator, shares: Array[int] = SHARES) -> Type:
 	var roll := rng.randi_range(0, 99)
 	for type in Type.values():
-		roll -= SHARES[type]
+		roll -= shares[type]
 		if roll < 0:
 			return type
 	return Type.TYPICAL
+
+
+## The shares of a flight whose contract has `traits` (OfferTraits): Shoppers
+## sets the relaxed share, Rush crowd the rushed share, and the typical share
+## takes the rest. SHARES for a plain contract or a one-off flight ({}).
+static func shares_for(traits: Dictionary) -> Array[int]:
+	var shares: Array[int] = SHARES.duplicate()
+	var relaxed := OfferTraits.value(traits, OfferTraits.SHOPPERS)
+	if relaxed >= 0:
+		shares[Type.RELAXED] = relaxed
+	var rushed := OfferTraits.value(traits, OfferTraits.RUSH_CROWD)
+	if rushed >= 0:
+		shares[Type.RUSHED] = rushed
+	shares[Type.TYPICAL] = 100 - shares[Type.RUSHED] - shares[Type.RELAXED]
+	return shares
 
 
 ## [first, last] spawn ticks for `type` on flight `flight_id`, never before

@@ -52,10 +52,10 @@ func _saved(world: Array) -> Dictionary:
 	return JSON.parse_string(text)
 
 
-func test_version_is_7_with_the_opening_tick_start_days_and_ended() -> void:
-	assert_int(FlightSim.SAVE_VERSION).is_equal(7)
+func test_version_is_8_with_the_opening_tick_start_days_and_ended() -> void:
+	assert_int(FlightSim.SAVE_VERSION).is_equal(8)
 	var data: Dictionary = _saved(_opened_world(OPENED + 100))["flights"]
-	assert_int(int(data["save_version"])).is_equal(7)
+	assert_int(int(data["save_version"])).is_equal(8)
 	assert_int(int(data["opened_tick"])).is_equal(OPENED)
 	assert_int(int(data["start_day"]["AM"])).is_equal(3)
 	assert_int(int(data["start_day"]["LATE"])).is_equal(2)
@@ -143,9 +143,11 @@ func test_saves_of_other_versions_or_with_the_wrong_keys_for_theirs_are_refused(
 	v5["save_version"] = 5
 	var v6 := good.duplicate(true)
 	v6["save_version"] = 6
-	var v8 := good.duplicate(true)
-	v8["save_version"] = 8
-	for bad in [v2_with_open, v3_without, v1, v4, v5, v6, v8]:
+	var v7 := good.duplicate(true)
+	v7["save_version"] = 7
+	var v9 := good.duplicate(true)
+	v9["save_version"] = 9
+	for bad in [v2_with_open, v3_without, v1, v4, v5, v6, v7, v9]:
 		var target: FlightSim = auto_free(FlightSim.new())
 		assert_bool(target.from_snapshot(bad)).override_failure_message(str(bad)).is_false()
 		assert_int(target.opened_tick).is_equal(-1)

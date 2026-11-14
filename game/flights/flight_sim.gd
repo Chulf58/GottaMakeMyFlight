@@ -130,7 +130,9 @@ const STARTER_TERMS := {
 ## ("stand"), today's pruned occurrences are kept ("landed"), and a load
 ## re-plans every live flight and refuses a save whose plan fails. Every older
 ## version is refused; there is no migration.
-const SAVE_VERSION := 7
+## 8: every contract holds its offer's "traits" term (FlightContract.TRAITS_KEY,
+## OfferTraits). A version 7 save is refused; there is no migration.
+const SAVE_VERSION := 8
 ## The refusal of a flight no taxi pause fits (user ruling a-gate-has-no-size-
 ## planes-use-any-stand-they-fit-neighbours-share-apron-space).
 const TAXI_BUSY_TEXT := GroundPlanner.TAXI_BUSY_TEXT

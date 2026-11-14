@@ -87,7 +87,10 @@ func test_the_fit_and_earnings_lines_follow_the_title() -> void:
 		assert_str(lines[0]).is_equal("%s to %s" % [offer["airline"], offer["destination"]])
 		assert_str(lines[1]).is_equal(_panel.fit_text(id))
 		assert_str(lines[2]).is_equal(OfferPanel.earnings_text(offer))
-		assert_str(lines[3]).starts_with("Departs ")
+		var labels := OfferTraits.card_labels(offer["traits"])
+		assert_str(lines[3]).is_equal(labels[0])
+		var after := 4 if labels[1] == "" else 5
+		assert_str(lines[after]).starts_with("Departs ")
 
 
 ## The two share one row, so the sheet grows by one line a card, not two (the

@@ -190,7 +190,11 @@ func test_a_save_whose_gate_shrank_below_a_contract_is_refused_while_staged() ->
 	var offers := board.to_snapshot()
 	for offer: Dictionary in offers["offers"]:
 		offer["plane_size"] = PlaneClasses.MEDIUM
-		offer["booked_passengers"] = PlaneClasses.passenger_range(PlaneClasses.MEDIUM)[0]
+		# The fewest the offer's traits allow (Full flight books from the top).
+		var medium := PlaneClasses.passenger_range(PlaneClasses.MEDIUM)
+		offer["booked_passengers"] = OfferTraits.fewest_booked(
+			medium[0], medium[1], offer["traits"]
+		)
 	assert_bool(board.from_snapshot(offers)).is_true()
 	for offer in board.open_offers():
 		if taken == "" and _flights.accept_problem(OfferBoard.terms_of(offer)) == "":

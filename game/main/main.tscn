@@ -365,11 +365,12 @@ menu = NodePath("../BuildMenu")
 script = ExtResource("42_moodoverlay")
 sim = NodePath("../PassengerSim")
 
-[node name="OfferDesk" type="Node" parent="." node_paths=PackedStringArray("clock", "rating", "flights")]
+[node name="OfferDesk" type="Node" parent="." node_paths=PackedStringArray("clock", "rating", "flights", "baggage")]
 script = ExtResource("17_offerdesk")
 clock = NodePath("../SimClock")
 rating = NodePath("../AirportRating")
 flights = NodePath("../FlightSim")
+baggage = NodePath("../BaggageSim")
 
 [node name="IncidentDirector" type="Node" parent="." node_paths=PackedStringArray("clock", "rating", "flights", "passengers")]
 script = ExtResource("47_incidents")

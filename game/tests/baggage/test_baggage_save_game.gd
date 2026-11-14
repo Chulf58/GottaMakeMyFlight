@@ -120,7 +120,9 @@ func test_a_bag_that_does_not_fit_the_saved_grid_is_refused() -> void:
 
 ## The saved settlement holds a fee for `passenger` while the bag is on its way.
 func _await_bag(data: Dictionary, passenger: int) -> void:
-	data["settlement"]["bags_awaited"].append({"passenger": str(passenger), "fee": "50"})
+	data["settlement"]["bags_awaited"].append(
+		{"passenger": str(passenger), "fee": "50", "missed_fee": "25"}
+	)
 
 
 ## The passenger of the first bag in `data` that is not settled (no outcome yet).
