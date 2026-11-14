@@ -7,8 +7,10 @@ extends SceneTree
 ## of them all three needs and frames the same busy gate at the 38 degree angle
 ## step and about 11 m in four states: the overlay off, Mood mode, Toilet mode
 ## and Boredom mode. Each plate prints the need icons and badges drawn, per
-## kind, and the subject's projected position (in frame with a margin); a plate
-## whose counts break the ruling, or whose subject is out of frame, prints
+## kind, and the subject's projected position (in frame with a margin, and a sight
+## line from the camera to its head lands on its own body with nothing in front,
+## after a control line through that body came back blocked); a plate whose counts
+## break the ruling, or whose subject is out of frame or hidden, prints
 ## PROBE_INVALID and the run exits 1. The HUD layers are hidden for the plates,
 ## so the legend does not cover the crowd.
 ##
@@ -29,6 +31,14 @@ const SPREAD_TICKS := 300
 const MARGIN_PX := 16.0
 const DISTANCE_M := 11.0
 const FADE_LIMIT_FRAMES := 120
+## What the sight lines' occluders are drawn from, and the tags: the subject's
+## colliders carry SUBJECT_TAG; NO_TAG matches no collider (anti_pattern: an
+## empty tag counts every hit as the subject).
+const OCCLUDER_OWNERS: Array[String] = ["Airside/Terminal", "BuildMode", "PassengerViews"]
+const SUBJECT_TAG := "subject"
+const NO_TAG := "no_subject"
+## The control line runs this far on past the head, through the body.
+const CONTROL_RUN_M := 1.0
 ## Metres around a passenger counted as its neighbours, to find the busiest spot.
 const BUSY_RADIUS_M := 4.0
 ## The states framed: plate name, whether the overlay is open, its mode, and the
@@ -49,6 +59,7 @@ var _clock: SimClock
 var _sim: PassengerSim
 var _views: PassengerViews
 var _subject := 0
+var _colliders: Node3D
 
 
 func _initialize() -> void:
@@ -187,11 +198,13 @@ func _plates() -> void:
 	var busy := _busiest()
 	_subject = _nearest_to(busy)
 	await _aim(busy, DISTANCE_M)
+	await _build_colliders()
 	var overlay := _main.get_node("MoodOverlay") as MoodOverlay
 	for state: Array in STATES:
 		overlay.set_mode(state[2])
 		overlay.set_shown(state[1])
 		await _plate(state[0], state[3])
+	_colliders.free()
 
 
 ## Id of the drawn passenger nearest `at`.
@@ -266,6 +279,7 @@ func _plate(name: String, need: int) -> void:
 	)
 	if not frame.has_point(head_px):
 		_invalid("%s: the subject's head is out of frame" % name)
+	_check_head_seen(name, head)
 	var shown_total := 0
 	for kind in NeedIcons.Need.values():
 		shown_total += drawn[kind] + int(badge_kinds.get(kind, 0))
@@ -281,6 +295,48 @@ func _plate(name: String, need: int) -> void:
 		_invalid("could not save " + path)
 		return
 	print("PLATE saved %s size=%s" % [path, plate.get_size()])
+
+
+## Makes colliders of the meshes a sight line can meet, the subject's tagged, and
+## waits for the physics server to take them.
+func _build_colliders() -> void:
+	var owners: Array[Node] = []
+	for path in OCCLUDER_OWNERS:
+		owners.append(_main.get_node(path))
+	_colliders = PlateSight.colliders(root, owners, {_views.node_for(_subject): SUBJECT_TAG})
+	await physics_frame
+	await physics_frame
+	var unbaked: Array = _colliders.get_meta("unbaked")
+	var bounds: Dictionary = _colliders.get_meta("bounds")
+	print(
+		"PROBE colliders unbaked=%d subject_bounds=%s" % [unbaked.size(), bounds.get(SUBJECT_TAG)]
+	)
+	if not bounds.has(SUBJECT_TAG):
+		_invalid("the subject has no collider, so no sight line can find it")
+
+
+## Fails the plate when the line from the camera to the subject's `head` does not
+## land on the subject, or something stands in front of it. The control is the
+## same line run on past the head and tagged for nobody: it must come back
+## blocked by the subject's own body, or a clear line proves nothing.
+func _check_head_seen(name: String, head: Vector3) -> void:
+	var space := _cam.get_world_3d().direct_space_state
+	var from := _cam.global_position
+	var targets: Array[Vector3] = [head]
+	var lines := PlateSight.sight_lines(space, from, targets, SUBJECT_TAG)
+	var through: Array[Vector3] = [head + (head - from).normalized() * CONTROL_RUN_M]
+	var control := PlateSight.sight_lines(space, from, through, NO_TAG)
+	var control_blockers: Array[String] = control["blockers"]
+	print(
+		(
+			"PROBE sight plate=%s on_subject=%d blockers=%s control_blocked_by=%s"
+			% [name, (lines["on_subject"] as Array).size(), lines["blockers"], control_blockers]
+		)
+	)
+	if control_blockers.is_empty():
+		_invalid("%s: the control line through the subject's body was not blocked" % name)
+	if (lines["on_subject"] as Array).is_empty() or not (lines["blockers"] as Array).is_empty():
+		_invalid("%s: the subject's head is hidden behind %s" % [name, lines["blockers"]])
 
 
 ## The drawn passenger with the most others within BUSY_RADIUS_M.

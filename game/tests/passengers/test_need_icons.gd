@@ -181,22 +181,32 @@ func test_the_views_show_a_passengers_needs_over_its_head() -> void:
 	_world.step()
 	var node := _views.node_for(p.id)
 	assert_object(node).is_not_null()
+	# Each need shows in its own Mood overlay mode only (decision need-icons-
+	# show-only-in-the-mood-overlay-need-modes-n-key-removed), so each check
+	# opens that mode and draws before it reads the sprite.
+	PassengerTestWorld.show_need(_views, NeedIcons.Need.HUNGER)
+	_views.draw()
 	assert_bool(_sprite(node, 0).visible).is_false()
 	assert_bool(_sprite(node, 1).visible).is_false()
 	p.hunger = CafeSim.HUNGRY_AT
 	p.cafe_cooldown = 1000000
 	_world.step()
+	_views.draw()
 	assert_bool(_sprite(node, 0).visible).is_true()
 	assert_object(_sprite(node, 0).texture).is_same(NeedIcons.texture(NeedIcons.Need.HUNGER))
 	assert_bool(_sprite(node, 1).visible).is_false()
 	p.toilet_need = ToiletSim.NEED_MAX
 	p.toilet_cooldown = 1000000
 	_world.step()
+	PassengerTestWorld.show_need(_views, NeedIcons.Need.TOILET)
+	_views.draw()
 	assert_bool(_sprite(node, 1).visible).is_true()
 	assert_object(_sprite(node, 1).texture).is_same(NeedIcons.texture(NeedIcons.Need.TOILET))
 	assert_bool(_sprite(node, 2).visible).is_false()
 	p.boredom = BoredomSim.MAX
 	_world.step()
+	PassengerTestWorld.show_need(_views, NeedIcons.Need.BOREDOM)
+	_views.draw()
 	assert_bool(_sprite(node, 2).visible).is_true()
 	assert_object(_sprite(node, 2).texture).is_same(NeedIcons.texture(NeedIcons.Need.BOREDOM))
 	var icon := _sprite(node, 0)

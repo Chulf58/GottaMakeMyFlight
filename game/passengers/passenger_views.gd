@@ -48,8 +48,9 @@ const HEAD_RECT_MAX_PX := 96.0
 ## (VipMarker).
 @export var incidents: IncidentDirector
 
-## When set, its Hunger, Toilet and Boredom modes hide every need icon (the
-## tinted floor shows the need instead).
+## When set, its Hunger, Toilet and Boredom modes show that need's icons over
+## the heads, and no other view shows any (decision need-icons-show-only-in-the-
+## mood-overlay-need-modes-n-key-removed). With none set, no need icon shows.
 @export var mood_overlay: MoodOverlay
 
 ## Moves with the selected passenger, for a camera to follow.

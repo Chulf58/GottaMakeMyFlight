@@ -3,10 +3,10 @@ extends GdUnitTestSuite
 ## Need icon count clusters through the real PassengerViews (decision need-
 ## icon-count-clusters-technical-design-screen-space-clust): a close crowd's
 ## icons of one kind become one badge with the count, its members' icons of
-## that kind hide while their other kinds still show, two passengers stay
-## icons (the control), three needs give three badges that do not overlap, the
-## state starts over on a load and on a release, and no badge shows while the
-## icons are off.
+## that kind hide while another need's icons stay hidden in this mode, two
+## passengers stay icons (the control), each Mood overlay need mode gives only its own need's
+## badge, the state starts over on a load and on a release, and no badge shows
+## while the overlay is off.
 
 const TOILET := NeedIcons.Need.TOILET
 const HUNGER := NeedIcons.Need.HUNGER

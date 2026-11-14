@@ -1,12 +1,12 @@
 class_name NeedCluster
 extends RefCounted
 ## Count clusters of need icons (user ruling crowd-need-display-mood-overlay-
-## gains-hunger-toilet-and-bore, point 2: in normal view, need icons of the
-## same kind that sit close together on screen merge into one bigger icon with
-## a count; decision need-icon-count-clusters-technical-design-screen-space-
-## clust). Pure logic on screen points, no scene: PassengerViews projects each
-## shown icon and calls update() once a frame, then hides the members' icons
-## (mask()) and draws one badge per cluster where place() puts it.
+## gains-hunger-toilet-and-bore, point 2: in a Mood overlay need mode, the
+## shown need's icons that sit close together on screen merge into one bigger
+## icon with a count; decision need-icon-count-clusters-technical-design-
+## screen-space-clust). Pure logic on screen points, no scene: PassengerViews
+## projects each shown icon and calls update() once a frame, then hides the
+## members' icons (mask()) and draws one badge per cluster where place() puts it.
 ##
 ## Clusters are per need kind and keep a view-only id, a representative
 ## passenger and a member set from frame to frame, so a moving crowd keeps its
