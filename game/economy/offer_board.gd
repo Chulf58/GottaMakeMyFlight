@@ -615,19 +615,22 @@ static func _fee_drawable(fee: int, fees: Array, traits: Dictionary, loyal: bool
 	return false
 
 
-## "" when every offer marked loyal could have been drawn so: its airline's
-## saved count is OfferTraits.LOYAL_DAYS (the count only grows and stops there)
-## and the offer's day is after the last counted day (a day's offers are drawn
-## at its start, before any of its flights depart).
+## "" when every offer's loyal mark is the one the saved count gives it: an
+## offer is loyal exactly when its airline's count is OfferTraits.LOYAL_DAYS
+## (the count only grows and stops there) and the offer's day is after the last
+## counted day (a day's offers are drawn at its start, before any of its flights
+## depart). Both a loyal mark the count cannot explain and a missing one are
+## refused.
 static func _loyal_marks_problem(offers: Array[Dictionary], loyalty: Dictionary) -> String:
 	for offer in offers:
-		if not offer[LOYAL_KEY]:
-			continue
 		var entry: Dictionary = loyalty.get(offer["airline"], {"days": 0, "last_day": -1})
-		if entry["days"] < OfferTraits.LOYAL_DAYS or offer["day"] <= entry["last_day"]:
+		var loyal: bool = (
+			entry["days"] >= OfferTraits.LOYAL_DAYS and offer["day"] > entry["last_day"]
+		)
+		if offer[LOYAL_KEY] != loyal:
 			return (
-				"offer %s is marked loyal but %s was not loyal on day %d"
-				% [offer["id"], offer["airline"], offer["day"]]
+				"offer %s is marked loyal %s but %s's count makes it %s on day %d"
+				% [offer["id"], offer[LOYAL_KEY], offer["airline"], loyal, offer["day"]]
 			)
 	return ""
 

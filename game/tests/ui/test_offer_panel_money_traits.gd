@@ -28,6 +28,8 @@ func before_test() -> void:
 	records[1]["traits"] = {}
 	records[1]["loyal"] = true
 	records[1]["fee_per_passenger"] = 25
+	# An airline with no Loyal count, so its offer carries no loyal mark.
+	records[2]["airline"] = "Sunhop"
 	var data := TestOfferBoard.save_of(records)
 	data["loyalty"] = {"Gotta Air": {"days": OfferTraits.LOYAL_DAYS, "last_day": 5}}
 	assert_bool(_desk.board.from_snapshot(data)).is_true()

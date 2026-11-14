@@ -93,6 +93,8 @@ func _run() -> void:
 		offers[i]["fee_per_passenger"] = TERMS[i][1]
 		offers[i]["traits"] = TERMS[i][2]
 		offers[i]["loyal"] = TERMS[i][3]
+		# Only Gotta Air has a Loyal count, so an offer without the mark is Sunhop's.
+		offers[i]["airline"] = "Gotta Air" if TERMS[i][3] else "Sunhop"
 	var board_save := TestOfferBoard.save_of(offers)
 	board_save["loyalty"] = {"Gotta Air": {"days": OfferTraits.LOYAL_DAYS, "last_day": day - 1}}
 	# Checked with the sheet below, before any plate is saved.

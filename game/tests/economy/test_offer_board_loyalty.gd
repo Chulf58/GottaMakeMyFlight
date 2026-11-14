@@ -152,8 +152,12 @@ func test_a_saved_fee_loads_only_when_a_base_fee_maps_to_it() -> void:
 		offers[0]["traits"] = case[0]
 		offers[0]["loyal"] = case[1]
 		offers[0]["fee_per_passenger"] = case[2]
+		# The other two offers fly for an airline with no count, so only the
+		# case's offer depends on the loyalty state.
+		for other in [1, 2]:
+			offers[other]["airline"] = "Sunhop"
 		var data := TestOfferBoard.save_of(offers)
-		data["loyalty"] = LOYAL_BY_DAY_5
+		data["loyalty"] = LOYAL_BY_DAY_5 if case[1] else {}
 		(
 			assert_bool(OfferBoard.new().from_snapshot(data))
 			. override_failure_message(str(case))
@@ -175,8 +179,9 @@ func test_a_loyal_mark_the_count_cannot_explain_is_refused() -> void:
 	]
 	for case in cases:
 		var offers := TestOfferBoard.day_records(case[1], [600, 720, 840])
-		offers[0]["loyal"] = true
-		offers[0]["fee_per_passenger"] = OfferTraits.loyal_fee_of(25, true)
+		for offer in offers:
+			offer["loyal"] = true
+			offer["fee_per_passenger"] = OfferTraits.loyal_fee_of(25, true)
 		var data := TestOfferBoard.save_of(offers)
 		data["loyalty"] = case[0]
 		(
@@ -184,6 +189,30 @@ func test_a_loyal_mark_the_count_cannot_explain_is_refused() -> void:
 			. override_failure_message(str(case))
 			. is_equal(case[2])
 		)
+
+
+## The inverse: an offer drawn after its airline's count was full must carry the
+## loyal mark, so a day 6 offer from an airline loyal by day 5 saved without it
+## is refused; its day 5 offers, drawn before the fifth day flew, are not loyal.
+func test_a_missing_loyal_mark_the_count_requires_is_refused() -> void:
+	var day_6 := TestOfferBoard.day_records(6, [600, 720, 840])
+	var data := TestOfferBoard.save_of(day_6)
+	data["loyalty"] = LOYAL_BY_DAY_5
+	assert_bool(OfferBoard.new().from_snapshot(data)).is_false()
+	for offer in day_6:
+		offer["loyal"] = true
+		offer["fee_per_passenger"] = OfferTraits.loyal_fee_of(25, true)
+	var day_5 := TestOfferBoard.day_records(5, [600, 720, 840])
+	for offer in day_5:
+		offer["status"] = OfferBoard.EXPIRED
+	data = TestOfferBoard.save_of(day_5 + day_6)
+	data["loyalty"] = LOYAL_BY_DAY_5
+	assert_bool(OfferBoard.new().from_snapshot(data)).is_true()
+	day_5[0]["loyal"] = true
+	day_5[0]["fee_per_passenger"] = OfferTraits.loyal_fee_of(25, true)
+	data = TestOfferBoard.save_of(day_5 + day_6)
+	data["loyalty"] = LOYAL_BY_DAY_5
+	assert_bool(OfferBoard.new().from_snapshot(data)).is_false()
 
 
 func test_a_saved_loyal_mark_must_be_a_boolean() -> void:

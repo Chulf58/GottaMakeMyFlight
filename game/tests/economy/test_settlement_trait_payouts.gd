@@ -66,6 +66,9 @@ func _finish(made: bool) -> Passenger:
 	return p
 
 
+## FlightSim's departure signal for `flight_id`. A later departure of the
+## contract is the issued occurrence's signal again: only an issued occurrence
+## resolves to its contract, and the bonus is kept per contract, not per flight.
 func _depart(flight_id: String) -> void:
 	_world.flights.state_changed.emit(flight_id, FlightSim.State.DEPARTED)
 
@@ -123,7 +126,7 @@ func test_the_signing_bonus_is_paid_when_the_first_flight_departs_and_only_then(
 	assert_int(_world.sim.wallet.balance).is_equal(150)
 	assert_int(_ledger.amount(Wallet.Category.SIGNING_BONUS)).is_equal(150)
 	_depart(OCCURRENCE)
-	_depart("OCC-d1")
+	_depart(OCCURRENCE)
 	assert_int(_world.sim.wallet.balance).is_equal(150)
 
 
@@ -135,7 +138,7 @@ func test_the_bonus_is_never_paid_again_after_a_json_save_and_load() -> void:
 	_settlement.free()
 	_settlement = _new_settlement()
 	assert_bool(_settlement.from_snapshot(saved)).is_true()
-	_depart("OCC-d1")
+	_depart(OCCURRENCE)
 	assert_int(_world.sim.wallet.balance).is_equal(150)
 	assert_dict(_settlement.to_snapshot()).is_equal(saved)
 
@@ -164,18 +167,35 @@ func test_bad_saved_bonuses_are_refused() -> void:
 	assert_dict(_settlement.to_snapshot()).is_equal(paid)
 
 
-## Conductor ruling: a bonus the wallet cannot take at Wallet.MAX_BALANCE is
-## forfeited, and the contract is marked paid so it is never paid later.
-func test_a_bonus_that_does_not_fit_the_wallet_is_forfeited_and_marked_paid() -> void:
-	for start in [Wallet.MAX_BALANCE, Wallet.MAX_BALANCE - 149]:
-		_make(BONUS, start)
+## Conductor ruling: a bonus the wallet cannot take (it would pass
+## Wallet.MAX_BALANCE) stays unpaid and the contract is not marked paid, also
+## across a save and load; a later departure pays it once, when it fits.
+func test_a_bonus_that_does_not_fit_waits_for_a_later_departure_with_room() -> void:
+	var cases: Array = [
+		[Wallet.MAX_BALANCE, BONUS, 150],
+		[Wallet.MAX_BALANCE - 149, BONUS, 150],
+		[Wallet.MAX_BALANCE, {"up": "signing_bonus", "down": "miss_fine", "level": 2}, 300],
+	]
+	for case in cases:
+		var start: int = case[0]
+		var bonus: int = case[2]
+		_make(case[1], start)
 		_depart(OCCURRENCE)
-		assert_int(_world.sim.wallet.balance).override_failure_message(str(start)).is_equal(start)
-		assert_array(_settlement.to_snapshot()["bonuses_paid"]).is_equal([CONTRACT])
-		assert_bool(_world.sim.wallet.spend(1000, Wallet.Category.BUILD)).is_true()
-		_depart("OCC-d1")
-		assert_int(_world.sim.wallet.balance).is_equal(start - 1000)
+		assert_int(_world.sim.wallet.balance).override_failure_message(str(case)).is_equal(start)
 		assert_int(_ledger.amount(Wallet.Category.SIGNING_BONUS)).is_equal(0)
+		var saved: Dictionary = JSON.parse_string(JSON.stringify(_settlement.to_snapshot()))
+		assert_array(saved["bonuses_paid"]).is_empty()
+		_settlement.free()
+		_settlement = _new_settlement()
+		assert_bool(_settlement.from_snapshot(saved)).is_true()
+		assert_array(_settlement.to_snapshot()["bonuses_paid"]).is_empty()
+		assert_bool(_world.sim.wallet.spend(1000, Wallet.Category.BUILD)).is_true()
+		_depart(OCCURRENCE)
+		assert_int(_world.sim.wallet.balance).is_equal(start - 1000 + bonus)
+		assert_int(_ledger.amount(Wallet.Category.SIGNING_BONUS)).is_equal(bonus)
+		assert_array(_settlement.to_snapshot()["bonuses_paid"]).is_equal([CONTRACT])
+		_depart(OCCURRENCE)
+		assert_int(_world.sim.wallet.balance).is_equal(start - 1000 + bonus)
 		after_test()
 
 
