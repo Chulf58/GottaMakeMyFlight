@@ -288,18 +288,66 @@ func test_the_overlay_off_shows_no_badge_and_only_the_focused_wish() -> void:
 	assert_array(_wish_badges()).is_empty()
 
 
-func test_wish_codes_name_the_kind_and_the_badge_and_round_trip() -> void:
+func test_wishes_of_one_kind_in_any_state_merge_into_one_wanted_badge() -> void:
+	_open()
+	var ids := _group(&"pharmacy", 6)
+	_draw()
+	# The first three stay wanted, then two fulfilled (tick) and one
+	# substituted (cross), as the planner's visits would leave them.
+	var states: Array[WishTable.State] = [
+		WishTable.State.WANTED,
+		WishTable.State.WANTED,
+		WishTable.State.WANTED,
+		WishTable.State.FULFILLED,
+		WishTable.State.FULFILLED,
+		WishTable.State.SUBSTITUTED,
+	]
+	for i in ids.size():
+		WishIconView.show_wish(_views.node_for(ids[i]), [&"pharmacy", states[i]])
+	_views.draw()
+	var badges := _wish_badges()
+	print("mixed states: badges %s, own wishes %s" % [badges, _own_wishes(ids)])
+	assert_int(badges.size()).is_equal(1)
+	assert_int(badges[0]["count"]).is_equal(6)
+	# The aggregate is the plain wish bubble of the kind.
+	assert_str(badges[0]["wish"]).is_equal(WishIconView.key_of(&"pharmacy", WishTable.State.WANTED))
+	var shown := _shown_badge_sprites()
+	assert_int(shown.size()).is_equal(1)
+	assert_object(shown[0].texture).is_same(
+		WishIconView.texture(&"pharmacy", WishTable.State.WANTED)
+	)
+	assert_array(_own_wishes(ids)).is_empty()
+	# A focused passenger keeps its own bubble, tick and all.
+	_views.selected_id = ids[3]
+	_views.draw()
+	assert_array(_own_wishes(ids)).is_equal([ids[3]])
+	assert_object(_wish(ids[3]).texture).is_same(
+		WishIconView.texture(&"pharmacy", WishTable.State.FULFILLED)
+	)
+	assert_int(_wish_badges()[0]["count"]).is_equal(5)
+
+
+func test_wish_codes_are_one_per_shop_kind_and_round_trip() -> void:
+	# One cluster identity per shop kind, whatever the wish's state (user
+	# ruling: wishes merge per shop kind): the tick or cross is drawn only on a
+	# passenger's own bubble.
 	var seen := {}
 	for kind: StringName in WishTable.CANDIDATES:
-		for state: WishTable.State in [
-			WishTable.State.WANTED, WishTable.State.FULFILLED, WishTable.State.SUBSTITUTED
-		]:
-			var key := WishIconView.key_of(kind, state)
-			var code := WishBadges.code_of(key)
-			assert_bool(seen.has(code)).override_failure_message(key).is_false()
-			seen[code] = true
-			assert_str(WishBadges.key_of_code(code)).is_equal(key)
-			assert_object(WishBadges.texture_of_code(code)).is_same(
-				WishIconView.texture(kind, state)
-			)
-	assert_int(seen.size()).is_equal(12)
+		var code := WishBadges.code_of(kind)
+		assert_bool(seen.has(code)).override_failure_message(kind).is_false()
+		seen[code] = true
+		assert_str(WishBadges.key_of_code(code)).is_equal(
+			WishIconView.key_of(kind, WishTable.State.WANTED)
+		)
+		assert_object(WishBadges.texture_of_code(code)).is_same(
+			WishIconView.texture(kind, WishTable.State.WANTED)
+		)
+	assert_int(seen.size()).is_equal(WishTable.CANDIDATES.size())
+	# A node's wish kind is cached when its wish changes: -1 with none.
+	var node := Node3D.new()
+	node.add_child(WishIconView.make_sprite())
+	WishIconView.show_wish(node, [&"duty_free", WishTable.State.FULFILLED])
+	assert_int(node.get_meta(WishIconView.KIND_META)).is_equal(WishBadges.code_of(&"duty_free"))
+	WishIconView.show_wish(node, [WishTable.NONE, WishTable.State.NONE])
+	assert_int(node.get_meta(WishIconView.KIND_META)).is_equal(-1)
+	node.free()

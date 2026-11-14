@@ -652,7 +652,7 @@ func _cluster_icons(camera: Camera3D, unit: float, icons_shown: bool) -> Diction
 		# A wish bubble stands at the end of the row (the focused passenger's
 		# keeps its own, so it is never a member).
 		if wishing and not focused(id):
-			var code := WishBadges.code_of(node.get_meta(&"wish"))
+			var code: int = node.get_meta(WishIconView.KIND_META)
 			if not wish_points.has(code):
 				wish_points[code] = {}
 			var wish_at := base + NeedIcons.wish_centre_px(kinds.size(), at[1])

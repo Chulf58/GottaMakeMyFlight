@@ -60,6 +60,8 @@ const BADGE_RADIUS := 27.0
 const WISH_PX := 48.0
 ## The sprite's name on a passenger node.
 const SPRITE := "WishIcon"
+## The node meta holding the wish's cluster kind (WishBadges), -1 for none.
+const KIND_META := &"wish_kind"
 
 static var _textures: Dictionary = {}
 
@@ -125,12 +127,15 @@ static func make_sprite() -> Sprite3D:
 
 
 ## Shows `wish` ([kind, WishTable.State] from read()) on a passenger node's
-## sprite. Sets the texture only when the icon changes.
+## sprite. Sets the texture only when the icon changes, and then caches the
+## wish's cluster kind (WishBadges.code_of(), -1 with no wish) in KIND_META, so
+## the per-frame count clustering parses nothing.
 static func show_wish(node: Node3D, wish: Array) -> void:
 	var key := key_of(wish[0], wish[1])
 	if node.get_meta(&"wish", "") == key:
 		return
 	node.set_meta(&"wish", key)
+	node.set_meta(KIND_META, WishBadges.code_of(wish[0]) if key != "" else -1)
 	var sprite := node.get_node(SPRITE) as Sprite3D
 	sprite.visible = key != ""
 	if sprite.visible:
