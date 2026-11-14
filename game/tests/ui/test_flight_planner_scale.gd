@@ -69,18 +69,17 @@ func test_the_sheet_and_its_rows_and_bars_fit_at_every_ui_scale() -> void:
 			assert_bool(sheet.encloses(rect)).is_true()
 			# The label's room ends before the departure tick.
 			var tick := _rect(bar.find_child("DepartureTick", false, false) as Control)
-			var room_end := (
-				rect.end.x - (bar.get_theme_stylebox("normal") as StyleBoxFlat).content_margin_right
-			)
+			var room_end := _rect(FlightPlanner.bar_label(bar)).end.x
 			print("  label room ends %.1f, tick at %.1f" % [room_end, tick.position.x])
 			assert_float(room_end).is_less(tick.position.x)
 			# Tight: the destination alone, whole; roomy: time and destination.
 			var full: String = bar.get_meta(FlightPlanner.FULL_TEXT)
 			var place: String = bar.get_meta(FlightPlanner.SHORT_TEXT)
-			print("  text '%s' (full '%s', destination '%s')" % [bar.text, full, place])
-			assert_bool(bar.text == full or bar.text == place).is_true()
+			var shown := FlightPlanner.bar_text(bar)
+			print("  text '%s' (full '%s', destination '%s')" % [shown, full, place])
+			assert_bool(shown == full or shown == place).is_true()
 			if ui_scale == 1.5:
-				assert_str(bar.text).is_equal(place)
+				assert_str(shown).is_equal(place)
 				assert_bool(place.contains(":")).is_false()
 				var font := bar.get_theme_font("font")
 				var width := font.get_string_size(
@@ -89,7 +88,7 @@ func test_the_sheet_and_its_rows_and_bars_fit_at_every_ui_scale() -> void:
 				var left := bar.get_theme_stylebox("normal").get_content_margin(SIDE_LEFT)
 				assert_float(left + width.x).is_less_equal(room_end - rect.position.x)
 			if ui_scale == 1.0:
-				assert_str(bar.text).is_equal(full)
+				assert_str(shown).is_equal(full)
 		var toggle := _rect(_planner.toggle_button())
 		assert_bool(Rect2(Vector2.ZERO, layout).encloses(toggle)).is_true()
 		assert_float(toggle.end.x).is_equal_approx(float(HudLayout.MARGIN + HudLayout.LIST_W), 0.5)

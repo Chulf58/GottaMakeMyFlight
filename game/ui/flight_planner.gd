@@ -43,6 +43,8 @@ const LABEL_GAP := 6.0
 ## alone that replaces it when the room before the departure tick is too tight.
 const FULL_TEXT := &"full_text"
 const SHORT_TEXT := &"short_text"
+## The child Label that draws the text of a bar with a departure tick.
+const BAR_LABEL := "BarLabel"
 const HOURS := 24
 
 @export var flights: FlightSim
@@ -431,7 +433,8 @@ func _make_bar(bar: Dictionary) -> Button:
 	button.clip_text = true
 	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	button.focus_mode = Control.FOCUS_NONE
-	button.theme_type_variation = &"HudButtonCompact"
+	var selected: bool = bar["contract"] == _selected and bar["day"] == _selected_day
+	button.theme_type_variation = GateColours.variation_of(bar["gate"], selected)
 	button.disabled = not bar["active"]
 	button.anchor_left = bar["from"]
 	button.anchor_right = bar["to"]
@@ -440,11 +443,8 @@ func _make_bar(bar: Dictionary) -> Button:
 	button.offset_top = 4.0
 	button.offset_bottom = -4.0
 	button.tooltip_text = _bar_tooltip(bar)
-	GateColours.tint_button(button, bar["gate"])
 	if bar["active"]:
 		button.pressed.connect(_on_bar_pressed.bind(bar["contract"], bar["day"]))
-	if bar["contract"] == _selected and bar["day"] == _selected_day:
-		_outline(button)
 	_add_departure_tick(button, bar)
 	return button
 
@@ -487,25 +487,51 @@ func _add_departure_tick(button: Button, bar: Dictionary) -> void:
 	tick.offset_left = -2.0
 	tick.offset_right = 0.0
 	button.add_child(tick)
-	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	button.resized.connect(_keep_label_clear.bind(button, local))
+	var label := Label.new()
+	label.name = BAR_LABEL
+	label.text = button.text
+	button.accessibility_name = button.text
+	button.text = ""
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	label.anchor_left = 0.0
+	label.anchor_right = local
+	label.anchor_top = 0.0
+	label.anchor_bottom = 1.0
+	label.offset_right = -LABEL_GAP
+	button.add_child(label)
+	button.resized.connect(_keep_label_clear.bind(button, label))
 
 
-## Ends the label's room a few pixels before the departure tick, at `local` of the
-## bar's width, so the text never runs through the tick. The text is the full
-## "HH:MM  Destination" while that fits before the tick; when it does not, the
-## time goes (the tick already shows it) and the destination stays, trimmed with
-## an ellipsis only if even that does not fit.
-static func _keep_label_clear(button: Button, local: float) -> void:
-	var margin := button.size.x * (1.0 - local) + LABEL_GAP
-	for state in ["normal", "hover", "pressed", "focus", "disabled"]:
-		var box := button.get_theme_stylebox(state) as StyleBoxFlat
-		if box != null:
-			box.content_margin_right = margin
-	var normal := button.get_theme_stylebox("normal")
-	var room := button.size.x - margin - normal.get_content_margin(SIDE_LEFT)
-	var font := button.get_theme_font("font")
-	var font_size := button.get_theme_font_size("font_size")
+## The label child of a bar that carries a departure tick, or null for a bar
+## without one (its text is the button's own).
+static func bar_label(bar: Button) -> Label:
+	return bar.find_child(BAR_LABEL, false, false) as Label
+
+
+## The text a bar shows: its label's when it has one, else the button's.
+static func bar_text(bar: Button) -> String:
+	var label := bar_label(bar)
+	return bar.text if label == null else label.text
+
+
+## Ends the label's room a few pixels before the departure tick (the label's right
+## anchor sits at the tick and LABEL_GAP stops it short), so the text never runs
+## through the tick. The label is a child of the bar, not the button's own text,
+## so no per-bar margin is written into the HudGate theme StyleBoxes that every
+## button of that gate colour shares. The label takes its look from the theme, with
+## no per-node override: the Label type resolves to the same font, size and navy as a
+## gate button, enabled or disabled. The text is the full "HH:MM  Destination" while
+## that fits before the tick; when it does not, the time goes (the tick already shows
+## it) and the destination stays, trimmed with an ellipsis only if even that does
+## not fit.
+static func _keep_label_clear(button: Button, label: Label) -> void:
+	var left := button.get_theme_stylebox("normal").get_content_margin(SIDE_LEFT)
+	label.offset_left = left
+	var font := label.get_theme_font("font")
+	var font_size := label.get_theme_font_size("font_size")
+	var room := button.size.x * label.anchor_right - LABEL_GAP - left
 	var full: String = button.get_meta(FULL_TEXT)
 	var text := (
 		(
@@ -515,19 +541,12 @@ static func _keep_label_clear(button: Button, local: float) -> void:
 		)
 		as String
 	)
-	if button.text != text:
-		button.text = text
+	if label.text != text:
+		label.text = text
 
 
 func _day_start() -> int:
 	return GameCalendar.day_start(_shown_day)
-
-
-static func _outline(button: Button) -> void:
-	var box := button.get_theme_stylebox("normal").duplicate() as StyleBoxFlat
-	box.set_border_width_all(3)
-	box.border_color = GateColours.TEXT
-	button.add_theme_stylebox_override("normal", box)
 
 
 func _on_bar_pressed(contract_id: String, day: int) -> void:
@@ -600,7 +619,7 @@ func _add_move_choices(bar: Dictionary) -> void:
 		choice.focus_mode = Control.FOCUS_NONE
 		choice.pressed.connect(_on_move_pressed.bind(bar["contract"], gate_id))
 		_actions.add_child(choice)
-		GateColours.tint_button(choice, gate_id)
+		choice.theme_type_variation = GateColours.variation_of(gate_id)
 
 
 func _add_end_confirm() -> void:

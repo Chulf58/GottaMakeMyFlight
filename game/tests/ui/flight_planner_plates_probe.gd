@@ -13,10 +13,13 @@ extends SceneTree
 ##   timeout 300 Godot_v4.7.2-stable_win64_console.exe --display-driver windows \
 ##     --rendering-driver vulkan --audio-driver Dummy \
 ##     --path game -s res://tests/ui/flight_planner_plates_probe.gd
+## With `-- --gate-theme` it plates the Departures list, the planner and a selected bar
+## at UI scale 1.25, to tools/blender/out/gate_theme_20261114/.
 ##
 ## The plates go to tools/blender/out/flight_planner_20261114/.
 
 const OUT_REL := "res://../tools/blender/out/flight_planner_20261114"
+const GATE_THEME_REL := "res://../tools/blender/out/gate_theme_20261114"
 const SCALES := [1.0, 1.25, 1.5]
 
 var _main: Node3D
@@ -28,7 +31,9 @@ func _initialize() -> void:
 
 
 func _run() -> void:
-	_out_dir = ProjectSettings.globalize_path(OUT_REL).simplify_path()
+	var gate_theme_only := "--gate-theme" in OS.get_cmdline_user_args()
+	var out_rel := GATE_THEME_REL if gate_theme_only else OUT_REL
+	_out_dir = ProjectSettings.globalize_path(out_rel).simplify_path()
 	DirAccess.make_dir_recursive_absolute(_out_dir)
 	_main = (load("res://main/main.tscn") as PackedScene).instantiate()
 	var clock := _main.get_node("SimClock") as SimClock
@@ -61,6 +66,9 @@ func _run() -> void:
 		print("PROBE_INVALID no FlightPlanner in the HUD")
 		quit(1)
 		return
+	if gate_theme_only:
+		await _run_gate_theme(planner)
+		return
 	for ui_scale: float in SCALES:
 		root.content_scale_factor = ui_scale
 		planner.open()
@@ -82,6 +90,23 @@ func _run() -> void:
 	if not await _plate_toggle_only(planner, "departures_gate_colours_s100"):
 		return
 	quit(0)
+
+
+## The gate colour plates at UI scale 1.25: the Departures list, the open planner
+## and the planner with a bar selected (its Move to choices show).
+func _run_gate_theme(planner: FlightPlanner) -> void:
+	root.content_scale_factor = 1.25
+	await _frames(8)
+	if not await _plate_toggle_only(planner, "departures_gate_colours_s125"):
+		return
+	planner.open()
+	await _frames(8)
+	if not await _plate(planner, "planner_s125"):
+		return
+	planner.bar_button("P2", 0).pressed.emit()
+	await _frames(8)
+	if await _plate(planner, "planner_selected_s125"):
+		quit(0)
 
 
 ## Proves the sheet, a bar centre and the toggle are in view, then saves.
@@ -115,7 +140,8 @@ func _plate_toggle_only(planner: FlightPlanner, plate_name: String) -> bool:
 		quit(1)
 		return false
 	for button: Button in gate_buttons:
-		var fill := (button.get_theme_stylebox("normal") as StyleBoxFlat).bg_color
+		var box := button.get_theme_stylebox("normal") as StyleBoxFlat
+		var fill := box.bg_color
 		print("PROBE   %s '%s' fill=%s" % [button.name, button.text, fill])
 	return _save(plate_name)
 
