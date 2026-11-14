@@ -23,6 +23,7 @@ const RESTING := [
 	"FlightPanel",
 	"MoodToggle",
 	"DeparturesToggle",
+	"PlannerToggle",
 	"TemplatesButton",
 	"DebugToggle",
 ]

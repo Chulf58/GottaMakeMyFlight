@@ -446,6 +446,7 @@ func _add_row(entry: Dictionary) -> void:
 		row.add_child(end_btn)
 	_rows.add_child(row)
 	_compact(button)
+	GateColours.tint_button(button, entry["gate"])
 	if end_btn != null:
 		_compact(end_btn)
 	var parts := PackedStringArray()
@@ -510,15 +511,9 @@ func _add_end_confirm(contract_id: String) -> void:
 ## The picker under a row: a button for each other gate the contract fits at
 ## now, or a note when there is none.
 func _add_picker(entry: Dictionary) -> void:
-	var current: String = flights.contract_of(entry["contract"])["gate"]
-	var others: Array[String] = []
-	var any_other := false
-	for gate_id in _gates:
-		if gate_id == current:
-			continue
-		any_other = true
-		if flights.reassign_problem(entry["contract"], gate_id) == "":
-			others.append(gate_id)
+	var choices := move_choices(flights, entry["contract"], _gates)
+	var others: Array[String] = choices["fitting"]
+	var any_other: bool = choices["any_other"]
 	var picker := HBoxContainer.new()
 	picker.name = "Picker"
 	if others.is_empty():
@@ -588,14 +583,50 @@ func _on_end_pressed(key: String, contract_id: String) -> void:
 ## since the question opened.
 func _on_end_confirmed(contract_id: String) -> void:
 	var key := _confirm_key
-	var refusal := end_refusal_text(contract_id)
 	_close_picker()
 	_message_key = key
-	if refusal != "":
-		_message = refusal
-	elif flights.end_contract(contract_id):
-		_message = ENDED_TEXT % flights.contract_of(contract_id)["destination"]
+	_message = end_outcome(flights, contract_id)
 	_refresh(true)
+
+
+## The gates other than the contract's own, from `gates`: {fitting: the ones it
+## fits now (FlightSim.reassign_problem is ""), any_other: whether there is any
+## other gate at all}. The Move to picker here and the flight planner's both list
+## these.
+static func move_choices(sim: FlightSim, contract_id: String, gates: Array[String]) -> Dictionary:
+	var current: String = sim.contract_of(contract_id)["gate"]
+	var fitting: Array[String] = []
+	var any_other := false
+	for gate_id in gates:
+		if gate_id == current:
+			continue
+		any_other = true
+		if sim.reassign_problem(contract_id, gate_id) == "":
+			fitting.append(gate_id)
+	return {"fitting": fitting, "any_other": any_other}
+
+
+## Moves the contract to `gate_id` unless FlightSim refuses: {moved, text}, the
+## text the confirmation or the refusal in the player's words.
+static func move_outcome(sim: FlightSim, contract_id: String, gate_id: String) -> Dictionary:
+	var problem := sim.reassign_problem(contract_id, gate_id)
+	if problem != "":
+		return {"moved": false, "text": reason_text(sim, problem, gate_id)}
+	sim.reassign_gate(contract_id, gate_id)
+	var destination: String = sim.contract_of(contract_id)["destination"]
+	return {"moved": true, "text": MOVED_TEXT % [destination, gate_id]}
+
+
+## Ends the contract unless FlightSim now refuses, and says what happened: the
+## ENDED_TEXT confirmation, or the refusal's words. "" when FlightSim could not
+## end it for another reason.
+static func end_outcome(sim: FlightSim, contract_id: String) -> String:
+	var refusal := end_refusal_words(sim, contract_id)
+	if refusal != "":
+		return refusal
+	if sim.end_contract(contract_id):
+		return ENDED_TEXT % sim.contract_of(contract_id)["destination"]
+	return ""
 
 
 func _on_end_kept() -> void:
@@ -606,13 +637,17 @@ func _on_end_kept() -> void:
 ## Why ending `contract_id` is refused, in words naming the flight it would
 ## strand by departure time, airline and destination, or "" when it can end.
 func end_refusal_text(contract_id: String) -> String:
-	var refusal := flights.end_refusal(contract_id)
+	return end_refusal_words(flights, contract_id)
+
+
+static func end_refusal_words(sim: FlightSim, contract_id: String) -> String:
+	var refusal := sim.end_refusal(contract_id)
 	if refusal.is_empty():
 		return ""
 	var id: String = refusal["id"]
 	var parts := FlightTimetable.parse_occurrence(id)
 	var label := FlightLabel.of(
-		flights, parts.is_empty(), id if parts.is_empty() else parts["contract"]
+		sim, parts.is_empty(), id if parts.is_empty() else parts["contract"]
 	)
 	if label == "":
 		return END_REFUSED_OTHER_TEXT
@@ -622,14 +657,10 @@ func end_refusal_text(contract_id: String) -> String:
 ## Moves the contract to `gate_id`, or says why not. FlightSim names the
 ## reason; a refusal keeps the picker open so another gate can be tried.
 func _on_pick_pressed(contract_id: String, gate_id: String) -> void:
-	var problem := flights.reassign_problem(contract_id, gate_id)
+	var outcome := move_outcome(flights, contract_id, gate_id)
 	_message_key = _picker_key
-	if problem != "":
-		_message = friendly_reason(problem, gate_id)
-	else:
-		flights.reassign_gate(contract_id, gate_id)
-		var contract := flights.contract_of(contract_id)
-		_message = MOVED_TEXT % [contract["destination"], gate_id]
+	_message = outcome["text"]
+	if outcome["moved"]:
 		_picker_key = ""
 	_refresh(true)
 
@@ -649,10 +680,14 @@ func _on_snapshot_loaded() -> void:
 ## by the 10:00 Oslo flight". A reason that is not a clash, or a flight that
 ## cannot be resolved, reads "Gate A is busy when this flight needs it".
 func friendly_reason(reason: String, gate_id: String) -> String:
+	return reason_text(flights, reason, gate_id)
+
+
+static func reason_text(sim: FlightSim, reason: String, gate_id: String) -> String:
 	var found := FlightLabel.parse_clash(reason)
 	if found.is_empty():
 		return BUSY_TEXT % gate_id
-	var label := FlightLabel.parts(flights, found["is_flight"], found["id"])
+	var label := FlightLabel.parts(sim, found["is_flight"], found["id"])
 	if label.is_empty():
 		return BUSY_TEXT % gate_id
 	var subject := "Gate %s" % found["gate"]
