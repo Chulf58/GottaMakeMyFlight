@@ -96,9 +96,14 @@ static func key_of(kind: StringName, state: WishTable.State) -> String:
 
 ## The icon for `kind` in `state`, painted once and kept.
 static func texture(kind: StringName, state: WishTable.State) -> Texture2D:
-	var key := key_of(kind, state)
+	return texture_for(kind, badge_of(state))
+
+
+## The icon for `kind` with `badge`, painted once and kept.
+static func texture_for(kind: StringName, badge: Badge) -> Texture2D:
+	var key := "%s/%d" % [kind, badge]
 	if not _textures.has(key):
-		_textures[key] = _paint(kind, badge_of(state))
+		_textures[key] = _paint(kind, badge)
 	return _textures[key]
 
 
