@@ -13,8 +13,9 @@ extends RefCounted
 ## and every other vertex black. A tinted body draws a copy of its mesh split
 ## in two surfaces: the clothes on the tint's atlas, everything else (skin,
 ## hair, shoes, jewellery) on the shared atlas. Tint 0 keeps the vendor
-## colours; the others turn the hue of the swatches the clothes sample and give
-## grey ones a light colour, keeping each swatch's own shading. Each tint's
+## colours; each other tint is a colour family that sets the hue and
+## saturation of the swatches the clothes sample outright (one for light
+## swatches, one for dark), keeping each swatch's own shading. Each tint's
 ## atlas and each body's split mesh is made on first use and then shared.
 
 const BODIES: Array[String] = [
@@ -144,22 +145,39 @@ const PIECE_SEAT_SHIFT_M := {
 	&"restaurant_booth": BOOTH_SEAT_SHIFT_M,
 	&"bar_counter": SERVICES_SEAT_SHIFT_M,
 }
-## Clothing tints: [hue turn of coloured swatches, hue given to grey swatches].
-## Tint 0 is the vendor's own colours.
-const TINTS := [[0.0, -1.0], [0.5, 0.6], [0.17, 0.08], [0.83, 0.95], [0.33, 0.3], [0.67, 0.5]]
-## A swatch pixel below this saturation is grey: it takes the tint's grey hue
-## at GREY_SAT instead of a hue turn, which would leave it grey.
-const GREY_BELOW := 0.15
-const GREY_SAT := 0.3
-## Cozy, not neon: a tinted swatch keeps at most this saturation, and a
-## swatch cell whose mean saturation is above SATURATED turns its hue by only
-## SATURATED_SCALE of the tint's turn (at most 0.15 of the wheel: a strong red
-## dress turns to a coral or a berry, never to lime). The choice is made per
-## atlas cell (SWATCH_PX), so one garment's gradient never splits in bands.
-const SAT_CAP := 0.55
-const SATURATED := 0.6
-const SATURATED_SCALE := 0.3
+## Clothing tints (board 3fcd8e5a; decision passenger-looks-add-the-unused-
+## toon-city-people-bodies-and-b): (hue, saturation) given to the light
+## swatches, then (hue, saturation) given to the dark ones, so a light top
+## over dark trousers keeps two colours. A tint sets the hue outright instead
+## of turning the vendor's, so two passengers in different tints are in
+## different colour families whatever their bodies' own colours. Tint 0 is the
+## vendor's own colours (its entry is not read). Warm Toon accents, no neon.
+const TINTS: Array[Vector4] = [
+	Vector4(-1.0, 0.0, -1.0, 0.0),
+	Vector4(0.01, 0.62, 0.62, 0.45),  # brick red over navy
+	Vector4(0.07, 0.66, 0.50, 0.40),  # orange over dark teal
+	Vector4(0.13, 0.64, 0.07, 0.45),  # mustard over brown
+	Vector4(0.30, 0.50, 0.10, 0.35),  # leaf green over khaki
+	Vector4(0.48, 0.56, 0.63, 0.45),  # teal over navy
+	Vector4(0.59, 0.56, 0.11, 0.40),  # cornflower blue over khaki
+	Vector4(0.78, 0.46, 0.00, 0.06),  # lilac over charcoal
+	Vector4(0.93, 0.52, 0.60, 0.40),  # rose over denim
+]
+## A swatch cell (SWATCH_PX; the vendor atlas holds one swatch, a top-to-
+## bottom gradient, per cell) whose clothes' texels average below this value is
+## dark and takes a tint's second colour. The choice is made per cell, so one
+## garment's gradient never splits in bands.
+const DARK_BELOW := 0.42
 const SWATCH_PX := Vector2i(32, 64)
+## A tinted texel's value is lifted to at least this (black trousers would show
+## no colour), keeping the swatch's shading above it.
+const VALUE_FLOOR := 0.18
+## Cozy, not neon: above value BRIGHT_FROM the saturation falls linearly, by
+## BRIGHT_DIM of itself at full value, so light garments go pastel. With the
+## highest tint saturation the strongest colour (saturation times value) is
+## 0.53.
+const BRIGHT_FROM := 0.8
+const BRIGHT_DIM := 0.4
 ## Texels recoloured around each clothes triangle's UV box, so filtering at
 ## its edge blends tinted texels only.
 const TEXEL_MARGIN := 1
@@ -351,42 +369,38 @@ static func tint_image(atlas: Image, texels: PackedInt32Array, tint: int) -> Ima
 	if out.has_mipmaps():
 		out.clear_mipmaps()
 	var width := out.get_width()
-	var turn: float = TINTS[tint][0]
-	var grey_hue: float = TINTS[tint][1]
-	var saturated := saturated_cells(out, texels)
+	var family := TINTS[tint]
+	var dark := dark_cells(out, texels)
 	var cols := width / SWATCH_PX.x
 	var done := {}
 	for t in texels:
 		var x := t % width
 		var y := t / width
-		var strong: bool = saturated[(y / SWATCH_PX.y) * cols + x / SWATCH_PX.x]
+		var low: bool = dark[(y / SWATCH_PX.y) * cols + x / SWATCH_PX.x]
 		var c := out.get_pixel(x, y)
-		var key := c.to_rgba32() * 2 + int(strong)
+		var key := c.to_rgba32() * 2 + int(low)
 		if not done.has(key):
-			done[key] = tinted(c, turn, grey_hue, strong)
+			done[key] = (tinted(c, family.z, family.w) if low else tinted(c, family.x, family.y))
 		out.set_pixel(x, y, done[key])
 	out.generate_mipmaps()
 	return out
 
 
-## Colour `c` under a tint: a hue turn (scaled down when it lies in a
-## saturated swatch) at no more than SAT_CAP saturation, or for a grey the
-## tint's grey hue.
-static func tinted(c: Color, turn: float, grey_hue: float, saturated := false) -> Color:
-	if turn == 0.0 and grey_hue < 0.0:
+## Colour `c` in hue `hue` at saturation `sat`: its value lifted to at least
+## VALUE_FLOOR (shading kept), the saturation falling above BRIGHT_FROM. A
+## negative hue leaves `c` as it is. Smooth in the value, so a swatch's
+## gradient stays a gradient.
+static func tinted(c: Color, hue: float, sat: float) -> Color:
+	if hue < 0.0:
 		return c
-	if c.s < GREY_BELOW:
-		return Color.from_hsv(grey_hue, maxf(c.s, GREY_SAT), c.v, c.a)
-	# The turn as the shorter way round the wheel, -0.5..0.5.
-	var signed := fposmod(turn + 0.5, 1.0) - 0.5
-	if saturated:
-		signed *= SATURATED_SCALE
-	return Color.from_hsv(fposmod(c.h + signed, 1.0), minf(c.s, SAT_CAP), c.v, c.a)
+	var v := VALUE_FLOOR + (1.0 - VALUE_FLOOR) * c.v
+	var bright := clampf((v - BRIGHT_FROM) / (1.0 - BRIGHT_FROM), 0.0, 1.0)
+	return Color.from_hsv(hue, sat * (1.0 - BRIGHT_DIM * bright), v, c.a)
 
 
-## Atlas cell (SWATCH_PX) index -> true when the mean saturation of `texels`
-## in it is above SATURATED.
-static func saturated_cells(atlas: Image, texels: PackedInt32Array) -> Dictionary:
+## Atlas cell (SWATCH_PX) index -> true when the mean value of `texels` in it is
+## below DARK_BELOW.
+static func dark_cells(atlas: Image, texels: PackedInt32Array) -> Dictionary:
 	var width := atlas.get_width()
 	var cols := width / SWATCH_PX.x
 	var sums := {}
@@ -395,10 +409,10 @@ static func saturated_cells(atlas: Image, texels: PackedInt32Array) -> Dictionar
 		var y := t / width
 		var cell := (y / SWATCH_PX.y) * cols + x / SWATCH_PX.x
 		var sum: Vector2 = sums.get(cell, Vector2.ZERO)
-		sums[cell] = sum + Vector2(atlas.get_pixel(x, y).s, 1.0)
+		sums[cell] = sum + Vector2(atlas.get_pixel(x, y).v, 1.0)
 	var out := {}
 	for cell: int in sums:
-		out[cell] = sums[cell].x / sums[cell].y > SATURATED
+		out[cell] = sums[cell].x / sums[cell].y < DARK_BELOW
 	return out
 
 
