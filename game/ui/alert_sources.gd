@@ -205,15 +205,16 @@ static func _queue_cause(
 	stations.sort_custom(
 		func(a: int, b: int) -> bool: return full[a] > full[b] or (full[a] == full[b] and a < b)
 	)
-	var held := 0
+	var waiting := 0
 	var targets: Array[Vector3] = []
 	for station in stations:
-		held += int(full[station])
+		waiting += MissMarkers.waiting_at(sim, station, int(full[station]))
 		if targets.size() < MAX_TARGETS:
 			targets.append(object_point(sim.grid, station))
-	var detail := "%d %s%s full" % [stations.size(), noun, "" if stations.size() == 1 else "s"]
-	if held > 0:
-		detail += " · +%d waiting" % held
+	# A full station always has someone waiting (its lane is at capacity or
+	# passengers are held), so the count is never zero.
+	var noun_s := "" if stations.size() == 1 else "s"
+	var detail := "%d %s%s full · %d waiting" % [stations.size(), noun, noun_s, waiting]
 	return {
 		"key": key,
 		"title": title,

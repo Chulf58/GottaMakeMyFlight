@@ -215,6 +215,7 @@ var _intro_hold := ClockHolds.NONE
 ## The game menu, which also asks the new-game incidents question; null in a
 ## scene without one.
 var _game_menu: GameMenu
+var _debug_docks: Array[VBoxContainer] = []
 ## The camera's input state when the intro opened, restored when it closes.
 var _camera_was_processing := true
 var _camera_was_taking_input := true
@@ -789,6 +790,12 @@ func _build_debug() -> void:
 	var dock := _bottom_right_dock(
 		"DebugPanelDock", BuildMenu.MARGIN + BuildMenu.BAR_H + BuildMenu.GAP
 	)
+	_debug_docks = [corner, dock]
+	_place_debug_docks()
+	get_viewport().size_changed.connect(_place_debug_docks)
+	var menu := get_node_or_null("../BuildMenu") as BuildMenu
+	if menu != null:
+		menu.bar().minimum_size_changed.connect(_place_debug_docks)
 	_debug_panel.name = "DebugPanel"
 	_debug_panel.visible = false
 	_debug_panel.custom_minimum_size = Vector2(DEBUG_W, 0.0)
@@ -818,6 +825,22 @@ func _build_debug() -> void:
 	toggle.focus_mode = Control.FOCUS_NONE
 	toggle.toggled.connect(set_debug_open)
 	corner.add_child(toggle)
+
+
+## The Debug toggle beside the bar's right end, or lifted a bar height when the
+## bar leaves no room (BottomDocks); its panel stays a gap above the toggle.
+func _place_debug_docks() -> void:
+	var menu := get_node_or_null("../BuildMenu") as BuildMenu
+	var bar_w := 0.0 if menu == null else menu.bar().get_combined_minimum_size().x
+	var beside := BottomDocks.beside_bar(get_viewport().get_visible_rect().size.x, bar_w)
+	var corner_bottom := BottomDocks.bottom(beside)
+	var panel_bottom := BuildMenu.MARGIN + BuildMenu.BAR_H + BuildMenu.GAP
+	if not beside:
+		panel_bottom = corner_bottom + HudLayout.BUTTON_H + HudLayout.GAP
+	for i in 2:
+		var bottom := corner_bottom if i == 0 else panel_bottom
+		_debug_docks[i].offset_top = -bottom
+		_debug_docks[i].offset_bottom = -bottom
 
 
 ## A column anchored to the bottom-right corner, MARGIN in, with its bottom edge

@@ -491,6 +491,14 @@ static func icon_centre_px(index: int, count: int, wishing: bool, lift_px: float
 	return Vector2(row_x_px(index, row_widths(count, true)), -lift_px - ICON_PX / 2.0)
 
 
+## The screen centre of the wish bubble that ends a row of `count` icons,
+## relative to the row's projected anchor, in screen pixels with y down;
+## `lift_px` from row_anchor(). The same geometry layout() draws.
+static func wish_centre_px(count: int, lift_px: float) -> Vector2:
+	var x := row_x_px(count, row_widths(count, true))
+	return Vector2(x, -lift_px - WishIconView.WISH_PX / 2.0)
+
+
 ## The centre of item `index` of a row of items `widths` wide (screen
 ## pixels), GAP_PX apart and centred on the anchor, in screen pixels along x.
 static func row_x_px(index: int, widths: Array[float]) -> float:

@@ -85,6 +85,9 @@ var cluster_needs := true
 ## The count clusters of close need icons (NeedCluster). View state with no
 ## tick: snap() and the icons hiding clear it, and a released id leaves it.
 var need_clusters := NeedCluster.new()
+## The count clusters of close wish bubbles (board c8b16621; WishBadges): the
+## cluster kind is a wish icon's code, the same view state as need_clusters.
+var wish_clusters := NeedCluster.new()
 var selected_id := 0
 ## Moved pieces still in use, drawn at their old spot (RelocationGhosts).
 ## Holds no tick: it compares with the sim every frame.
@@ -99,6 +102,9 @@ var _only_need: int = MoodOverlay.NO_NEED
 var _hovered := 0
 var _wishes_on := false
 var _late_on := false
+## Passenger id -> true for the passengers whose own wish bubble a count badge
+## draws this frame (wish_clusters.mask()); rebuilt by _cluster_icons().
+var _wish_masked := {}
 ## The Late mode's discs under the late passengers (LATE_MARK_*), made and
 ## parented in _ready(), so a views node that never enters the tree leaves no
 ## orphan behind.
@@ -160,7 +166,8 @@ var _badges: Array[Sprite3D] = []
 ## Made and parented in _ready(), so a views node that never enters the tree
 ## leaves no orphan behind.
 var _badge_root: Node3D
-## The badges drawn this frame: {"kind", "count", "rect"} (screen pixels).
+## The badges drawn this frame: {"id", "kind", "count", "rect"} (screen
+## pixels), and a wish badge's "wish" icon key.
 var _badges_drawn: Array[Dictionary] = []
 ## Passenger id -> the screen pixels from its row anchor up to the top of a
 ## placed count badge its VIP crown would sit on (with the gap over), so the
@@ -351,6 +358,7 @@ func _resteer(steers: Dictionary, fresh: Dictionary) -> void:
 func snap() -> void:
 	_turns.clear()
 	need_clusters.clear()
+	wish_clusters.clear()
 	_setoffs.clear()
 	_stages.clear()
 	_odometers.clear()
@@ -477,7 +485,7 @@ func draw() -> void:
 			unit,
 			icons_shown,
 			masks.get(id, 0) | hidden_needs,
-			zoomed_in and (_wishes_on or focused(id))
+			zoomed_in and (_wishes_on or focused(id)) and not _wish_masked.has(id)
 		)
 		VipMarker.layout(node, bubble, camera, unit, _badge_lifts.get(id, 0.0))
 	_props.draw()
@@ -603,8 +611,10 @@ func need_badges() -> Array[Dictionary]:
 func _cluster_icons(camera: Camera3D, unit: float, icons_shown: bool) -> Dictionary:
 	_badges_drawn.clear()
 	_badge_lifts.clear()
+	_wish_masked = {}
 	if not cluster_needs or not icons_shown or camera == null or unit <= 0.0:
 		need_clusters.clear()
+		wish_clusters.clear()
 		_hide_badges(0)
 		return {}
 	var view := get_viewport()
@@ -614,6 +624,8 @@ func _cluster_icons(camera: Camera3D, unit: float, icons_shown: bool) -> Diction
 	var points := {}
 	for kind: int in NeedIcons.Need.values():
 		points[kind] = {}
+	# Wish code (WishBadges) -> the same, for the wish bubbles that show.
+	var wish_points := {}
 	# Passenger id -> [anchor in this node's space, its screen point, lift_px,
 	# wishing, alpha].
 	var rows := {}
@@ -637,11 +649,45 @@ func _cluster_icons(camera: Camera3D, unit: float, icons_shown: bool) -> Diction
 			var centre := base + NeedIcons.icon_centre_px(i, kinds.size(), wishing, at[1])
 			if screen.intersects(Rect2(centre - half, half * 2.0)):
 				(points[kinds[i]] as Dictionary)[id] = centre
+		# A wish bubble stands at the end of the row (the focused passenger's
+		# keeps its own, so it is never a member).
+		if wishing and not focused(id):
+			var code: int = node.get_meta(WishIconView.KIND_META)
+			if not wish_points.has(code):
+				wish_points[code] = {}
+			var wish_at := base + NeedIcons.wish_centre_px(kinds.size(), at[1])
+			if screen.intersects(Rect2(wish_at - half, half * 2.0)):
+				(wish_points[code] as Dictionary)[id] = wish_at
 	need_clusters.update(points)
+	wish_clusters.update(wish_points)
 	var masks := need_clusters.mask()
-	# The biggest counts are placed first, so they keep their anchors.
-	var clusters := need_clusters.clusters().duplicate()
-	clusters.sort_custom(NeedCluster.placed_before)
+	_wish_masked = wish_clusters.mask()
+	# Need badges and wish badges: the biggest counts are placed first, so they
+	# keep their anchors. A wish badge's id is its cluster id negated in the
+	# shared placement, so it never meets a need badge's.
+	var clusters: Array[Dictionary] = []
+	for cluster in need_clusters.clusters():
+		clusters.append(
+			{"cluster": cluster, "points": points[cluster["kind"]], "id": cluster["id"], "wish": ""}
+		)
+	for cluster in wish_clusters.clusters():
+		(
+			clusters
+			. append(
+				{
+					"cluster": cluster,
+					"points": wish_points[cluster["kind"]],
+					"id": -int(cluster["id"]),
+					"wish": WishBadges.key_of_code(cluster["kind"]),
+				}
+			)
+		)
+	clusters.sort_custom(
+		func(a: Dictionary, b: Dictionary) -> bool:
+			var na: int = (a["cluster"]["members"] as Array).size()
+			var nb: int = (b["cluster"]["members"] as Array).size()
+			return na > nb or (na == nb and a["id"] < b["id"])
+	)
 	# Per cluster: the row of the member nearest its centroid, the badge's
 	# centre from that row's anchor: the bottom edge of the badge with its
 	# count chip, which hangs under the icon, where the row's is, so the chip
@@ -650,25 +696,30 @@ func _cluster_icons(camera: Camera3D, unit: float, icons_shown: bool) -> Diction
 	var anchors: Array[Array] = []
 	var wanted: Array[Rect2] = []
 	var ids: Array = []
-	for cluster in clusters:
-		var members: Array = cluster["members"]
-		var anchor_id := NeedCluster.anchor_member(members, points[cluster["kind"]])
+	for entry in clusters:
+		var members: Array = entry["cluster"]["members"]
+		var anchor_id := NeedCluster.anchor_member(members, entry["points"])
 		var row: Array = rows[anchor_id]
 		var under := NeedCluster.badge_rect(Vector2.ZERO, members.size()).end.y
 		var centre_px := Vector2(0.0, -float(row[2]) - under)
 		anchors.append([row, centre_px])
 		wanted.append(NeedCluster.badge_rect((row[1] as Vector2) + centre_px, members.size()))
-		ids.append(cluster["id"])
+		ids.append(entry["id"])
 	var obstacles := _badge_obstacles(rows, masks, screen)
 	_add_head_rects(obstacles, camera, unit, to_output, screen)
 	var placed := need_clusters.place(wanted, ids, obstacles)
 	for i in clusters.size():
-		var kind: int = clusters[i]["kind"]
-		var count: int = (clusters[i]["members"] as Array).size()
+		var kind: int = clusters[i]["cluster"]["kind"]
+		var count: int = (clusters[i]["cluster"]["members"] as Array).size()
 		var row: Array = anchors[i][0]
 		var centre_px: Vector2 = anchors[i][1] + placed[i].position - wanted[i].position
-		NeedCluster.show_badge(_badge(i), kind, count, row[0], centre_px, unit, row[4])
-		_badges_drawn.append({"id": ids[i], "kind": kind, "count": count, "rect": placed[i]})
+		var wish: String = clusters[i]["wish"]
+		var icon: Texture2D = WishBadges.texture_of_code(kind) if wish != "" else null
+		NeedCluster.show_badge(_badge(i), kind, count, row[0], centre_px, unit, row[4], icon)
+		var drawn := {"id": ids[i], "kind": kind, "count": count, "rect": placed[i]}
+		if wish != "":
+			drawn["wish"] = wish
+		_badges_drawn.append(drawn)
 	_hide_badges(clusters.size())
 	_lift_crowns(camera, unit, to_output, rows, masks, placed)
 	return masks
@@ -731,7 +782,7 @@ func _row_height_px(id: int, node: Node3D, mask: int) -> float:
 	for kind: int in _shown_kinds(node):
 		if mask & (1 << kind) == 0:
 			row = NeedIcons.ICON_PX
-	if _wishing(id, node):
+	if _wishing(id, node) and not _wish_masked.has(id):
 		row = WishIconView.WISH_PX
 	return row + NeedIcons.GAP_PX if row > 0.0 else 0.0
 
@@ -760,14 +811,13 @@ func _badge_obstacles(rows: Dictionary, masks: Dictionary, screen: Rect2) -> Arr
 		for kind: int in _shown_kinds(_nodes[id] as Node3D):
 			if mask & (1 << kind) == 0:
 				kept += 1
-		var wishing: bool = row[3]
+		var wishing: bool = row[3] and not _wish_masked.has(id)
 		for j in kept:
 			var centre: Vector2 = row[1] + NeedIcons.icon_centre_px(j, kept, wishing, row[2])
 			out.append(Rect2(centre - icon / 2.0, icon))
 		if wishing:
-			var x := NeedIcons.row_x_px(kept, NeedIcons.row_widths(kept, true))
-			var y := -float(row[2]) - WishIconView.WISH_PX / 2.0
-			out.append(Rect2((row[1] as Vector2) + Vector2(x, y) - wish / 2.0, wish))
+			var centre: Vector2 = row[1] + NeedIcons.wish_centre_px(kept, row[2])
+			out.append(Rect2(centre - wish / 2.0, wish))
 	return out
 
 
@@ -942,6 +992,7 @@ func _release(id: int) -> void:
 	_stages.erase(id)
 	_odometers.erase(id)
 	need_clusters.forget(id)
+	wish_clusters.forget(id)
 
 
 ## Sets the clip, dress, bubble and icons for this tick and returns the yaw
