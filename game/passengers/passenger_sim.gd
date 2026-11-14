@@ -141,6 +141,12 @@ var site: SiteDefinition:
 		if grid != null:
 			layout.rebuild(grid)
 var tick := 0
+## Counts every change to the passengers' state: each tick, spawn, stage change,
+## settled outcome and snapshot load. A reader that caches something derived
+## from passenger state (the departures board's late counts) compares this one
+## int instead of scanning the passengers. Code that writes a Passenger field
+## directly (debug, tests) calls mark_changed().
+var revision := 0
 var last_batch_seed := 0
 ## Why the last spawn_now() was refused; "" when it was not.
 var spawn_refusal := ""
@@ -324,6 +330,7 @@ func spawn_now(flight_id: String, variant := -1) -> int:
 func on_tick(new_tick: int) -> void:
 	var started := Time.get_ticks_usec()
 	tick = new_tick
+	mark_changed()
 	entrance.step(self)
 	arrivals.step()
 	PassengerLifecycle.spawn_due(self)
@@ -357,6 +364,13 @@ func on_tick(new_tick: int) -> void:
 	tick_usec_max = maxi(tick_usec_max, tick_usec_last)
 	tick_usec_total += tick_usec_last
 	ticks_measured += 1
+
+
+## Moves `revision`: the passengers' state changed. The sim calls it itself
+## wherever it changes that state; call it after writing a Passenger field
+## directly, so a cache keyed on `revision` reads again.
+func mark_changed() -> void:
+	revision += 1
 
 
 func get_passenger(id: int) -> Passenger:
@@ -530,7 +544,10 @@ func to_snapshot() -> Dictionary:
 ## is missing, mistyped or inconsistent. The layout is rebuilt from the grid,
 ## which must already hold the saved grid.
 func from_snapshot(data: Dictionary) -> bool:
-	return PassengerSimSave.from_snapshot(self, data)
+	var loaded := PassengerSimSave.from_snapshot(self, data)
+	if loaded:
+		mark_changed()
+	return loaded
 
 
 ## The standing spots derived from the loaded grid and the saved claims,
@@ -577,10 +594,12 @@ func _on_occurrence_added(flight_id: String) -> void:
 func _spawn(
 	flight_id: String, variant: int, arrival := ArrivalTypes.Type.TYPICAL, walk: Array[Vector3] = []
 ) -> Passenger:
+	mark_changed()
 	return PassengerLifecycle.spawn(self, flight_id, variant, arrival, walk)
 
 
 func _finish(p: Passenger, made: bool) -> void:
+	mark_changed()
 	PassengerLifecycle.finish(self, p, made)
 
 
@@ -842,6 +861,7 @@ func _retry_now(p: Passenger) -> bool:
 
 
 func _set_stage(p: Passenger, stage: Passenger.Stage) -> void:
+	mark_changed()
 	gates.stage_set(self, p, stage)
 	# A standing spot is held only on the way to the gate and standing there,
 	# and kept on setting off from it for the exit until the walker is off its

@@ -100,9 +100,10 @@ var _lines := PackedStringArray()
 var _entries: Array[Dictionary] = []
 ## {flight id: passengers running late}, read from the PassengerSim again only
 ## when _late_signature() changes, so a frame between ticks costs no passenger
-## scan. The signature holds more than the tick: a snapshot load installs
-## fresh Passenger objects at a tick that may equal the one before it (load
-## pauses the clock), and the counts must follow it (board 7f89cf1e).
+## scan. The signature is the sim's revision, not its tick: a snapshot load
+## installs fresh Passenger objects at a tick that may equal the one before it
+## (load pauses the clock), and the counts must follow it (boards 7f89cf1e,
+## 6c08350c).
 var _late := {}
 var _late_key := []
 var _gates: Array[String] = []
@@ -335,18 +336,12 @@ func _late_counts() -> Dictionary:
 	return _late
 
 
-## What identifies the passenger state the late counts were read from: the sim,
-## its tick, and how many passengers it holds and which objects stand first and
-## last. A snapshot install replaces every Passenger object, so any load moves
-## the signature even at the same tick and with the same counts.
+## What identifies the passenger state the late counts were read from: the sim
+## and its revision, an O(1) read that holds no passenger scan. The revision
+## moves on every tick, spawn, stage change, outcome and snapshot load, so a
+## load at the same tick, or a change inside one tick, moves the signature.
 func _late_signature() -> Array:
-	var ids := passengers.passenger_ids()
-	var first := 0
-	var last := 0
-	if not ids.is_empty():
-		first = passengers.get_passenger(ids[0]).get_instance_id()
-		last = passengers.get_passenger(ids[-1]).get_instance_id()
-	return [passengers.get_instance_id(), passengers.tick, ids.size(), first, last]
+	return [passengers.get_instance_id(), passengers.revision]
 
 
 func _refresh(force: bool) -> void:
