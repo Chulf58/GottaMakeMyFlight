@@ -37,8 +37,8 @@ func after_test() -> void:
 func test_every_card_says_it_fits_on_an_empty_timetable() -> void:
 	for id in _panel.card_ids():
 		print("%s: %s" % [id, _panel.fit_text(id)])
-		assert_str(_panel.fit_text(id)).is_equal(FlightFit.FITS_TEXT)
-		assert_str(_panel.card_text(id)).contains(FlightFit.FITS_TEXT)
+		assert_str(_panel.fit_text(id)).is_equal(OfferPanel.FITS_TEXT)
+		assert_str(_panel.card_text(id)).contains(OfferPanel.FITS_TEXT)
 		assert_str(_panel.fit_label(id).theme_type_variation).is_equal("HudGoodText")
 
 
@@ -49,9 +49,9 @@ func test_an_accept_rewrites_the_other_cards_fit_line() -> void:
 	_panel.accept_button("O0N1").pressed.emit()
 	assert_str(_desk.board.offer_of("O0N1")["status"]).is_equal(OfferBoard.ACCEPTED)
 	print("after accepting 10:00: 12:00 says '%s'" % _panel.fit_text("O0N2"))
-	assert_str(_panel.fit_text("O0N2")).is_equal(FlightFit.ANOTHER_GATE_TEXT)
+	assert_str(_panel.fit_text("O0N2")).is_equal(OfferPanel.NEEDS_GATE_TEXT)
 	assert_str(_panel.fit_label("O0N2").theme_type_variation).is_equal("HudProblemText")
-	assert_str(_panel.fit_text("O0N3")).is_equal(FlightFit.FITS_TEXT)
+	assert_str(_panel.fit_text("O0N3")).is_equal(OfferPanel.FITS_TEXT)
 	assert_bool(_panel.refusal_label("O0N2").visible).is_false()
 
 
@@ -63,8 +63,8 @@ func test_the_click_refusal_and_the_fit_line_are_separate() -> void:
 	_panel.accept_button("O0N2").pressed.emit()
 	assert_str(_desk.board.offer_of("O0N2")["status"]).is_equal(OfferBoard.OPEN)
 	assert_str(_panel.refusal_text("O0N2")).contains("Can't accept")
-	assert_str(_panel.fit_text("O0N2")).is_equal(FlightFit.ANOTHER_GATE_TEXT)
-	assert_str(_panel.card_text("O0N2")).contains(FlightFit.ANOTHER_GATE_TEXT)
+	assert_str(_panel.fit_text("O0N2")).is_equal(OfferPanel.NEEDS_GATE_TEXT)
+	assert_str(_panel.card_text("O0N2")).contains(OfferPanel.NEEDS_GATE_TEXT)
 
 
 ## The fit line is the card's small text size whether it fits (green) or not
@@ -91,8 +91,8 @@ func test_every_fit_line_fits_the_card_text_width() -> void:
 	var size := label.get_theme_font_size("font_size")
 	assert_int(size).is_greater(0)
 	for text: String in [
-		FlightFit.FITS_TEXT,
-		FlightFit.ANOTHER_GATE_TEXT,
+		OfferPanel.FITS_TEXT,
+		OfferPanel.NEEDS_GATE_TEXT,
 		FlightFit.GATE_AND_TAXI_TEXT,
 		FlightFit.TAXI_TEXT,
 		FlightFit.NIGHT_TEXT,
@@ -109,9 +109,9 @@ func test_every_fit_line_fits_the_card_text_width() -> void:
 
 ## A contract taken while the sheet was closed shows on the cards when it opens.
 func test_opening_the_sheet_rewrites_the_fit_lines() -> void:
-	assert_str(_panel.fit_text("O0N3")).is_equal(FlightFit.FITS_TEXT)
+	assert_str(_panel.fit_text("O0N3")).is_equal(OfferPanel.FITS_TEXT)
 	assert_bool(_sim.accept_contract(TestFlightFit.terms("EVE", 1260))).is_true()
 	_panel.open()
 	print("after a 21:00 contract, 20:00 says '%s'" % _panel.fit_text("O0N3"))
-	assert_str(_panel.fit_text("O0N3")).is_not_equal(FlightFit.FITS_TEXT)
-	assert_str(_panel.fit_text("O0N1")).is_equal(FlightFit.FITS_TEXT)
+	assert_str(_panel.fit_text("O0N3")).is_not_equal(OfferPanel.FITS_TEXT)
+	assert_str(_panel.fit_text("O0N1")).is_equal(OfferPanel.FITS_TEXT)
