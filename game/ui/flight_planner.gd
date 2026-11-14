@@ -57,6 +57,8 @@ const FULL_TEXT := &"full_text"
 const SHORT_TEXT := &"short_text"
 ## The child Label that draws the text of a bar with a departure tick.
 const BAR_LABEL := "BarLabel"
+## The Label variation a disabled bar's label takes: the gate buttons' disabled text.
+const DISABLED_LABEL := &"HudBarLabelDisabled"
 const HOURS := 24
 
 @export var flights: FlightSim
@@ -542,6 +544,8 @@ func _add_departure_tick(button: Button, bar: Dictionary) -> void:
 	button.accessibility_name = button.text
 	button.text = ""
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if button.disabled:
+		label.theme_type_variation = DISABLED_LABEL
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	label.anchor_left = 0.0
@@ -571,7 +575,8 @@ static func bar_text(bar: Button) -> String:
 ## so no per-bar margin is written into the HudGate theme StyleBoxes that every
 ## button of that gate colour shares. The label takes its look from the theme, with
 ## no per-node override: the Label type resolves to the same font, size and navy as a
-## gate button, enabled or disabled. The text is the full "HH:MM  Destination" while
+## gate button, and on a disabled bar the DISABLED_LABEL variation gives it the gate
+## button's softer disabled text. The text is the full "HH:MM  Destination" while
 ## that fits before the tick; when it does not, the time goes (the tick already shows
 ## it) and the destination stays, trimmed with an ellipsis only if even that does
 ## not fit.
