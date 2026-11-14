@@ -412,6 +412,7 @@ func hover_signs() -> Array[Dictionary]:
 					"key": marker.get_meta("desk"),
 					"rect": Rect2(foot.x - side / 2.0, foot.y - side, side, side),
 					"text": text_of(marker),
+					"select": marker.get_meta("desk"),
 				}
 			)
 		)

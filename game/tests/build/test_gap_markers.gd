@@ -145,6 +145,7 @@ func test_the_hover_text_is_reported_only_in_build_mode() -> void:
 	print("in build mode: %s" % [signs])
 	assert_int(signs.size()).is_equal(1)
 	assert_str(signs[0]["text"]).is_equal(GapMarkers.HOVER_TEXT)
+	assert_bool(signs[0].has("select")).is_false()
 	var foot := camera.unproject_position(markers.signs()[0].global_position)
 	var rect: Rect2 = signs[0]["rect"]
 	assert_bool(rect.has_point(foot + Vector2(0.0, -rect.size.y / 2.0))).is_true()

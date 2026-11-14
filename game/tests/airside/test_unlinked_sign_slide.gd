@@ -125,6 +125,7 @@ func test_the_hover_text_is_reported_only_in_build_mode() -> void:
 	print("hover signs in build mode: %s" % [signs])
 	assert_int(signs.size()).is_equal(1)
 	assert_int(signs[0]["key"]).is_equal(_desk_id)
+	assert_int(signs[0]["select"]).is_equal(_desk_id)
 	assert_str(signs[0]["text"]).is_equal("Unlinked: no north exit in 4 cells")
 	# The rect is the drawn icon, in viewport px.
 	var rect: Rect2 = signs[0]["rect"]

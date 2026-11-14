@@ -254,6 +254,7 @@ func hover_signs() -> Array[Dictionary]:
 						"key": "%s:%d" % [group[1], station],
 						"rect": Rect2(foot.x - side / 2.0, foot.y - side, side, side),
 						"text": sign.get_meta(&"text", ""),
+						"select": station,
 					}
 				)
 			)

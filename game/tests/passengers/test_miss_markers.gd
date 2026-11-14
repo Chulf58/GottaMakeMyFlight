@@ -248,6 +248,7 @@ func test_the_full_sign_is_the_queue_glyph_and_reports_its_hover_rect() -> void:
 	assert_int(entries.size()).is_equal(1)
 	assert_str(entries[0]["key"]).is_equal("queue:%d" % desk)
 	assert_str(entries[0]["text"]).is_equal("Queue full · 3 waiting")
+	assert_int(entries[0]["select"]).is_equal(desk)
 	var rect: Rect2 = entries[0]["rect"]
 	var side := MissMarkers.SIGN_PX / get_tree().root.get_stretch_transform().get_scale().y
 	assert_vector(rect.size).is_equal_approx(Vector2.ONE * side, Vector2.ONE * 0.01)
