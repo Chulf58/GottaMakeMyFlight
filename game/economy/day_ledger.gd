@@ -25,6 +25,11 @@ extends Node
 ## the operating result; parking fees are earnings in it. Incident bonuses and
 ## costs (INCIDENT) are in the cash change but not the operating result, like
 ## the rescue grant: they are one-off, not the airport's running business.
+## Airline fines (FINES, a Miss fine contract's charge per missed passenger) are
+## a running cost in the operating result; a signing bonus (SIGNING_BONUS) is
+## one-off and in the cash change only. A fine the wallet could not pay in full
+## (Wallet.unpaid) is added up as the day's unpaid fines, beside the totals: it
+## moved no money, so it is in neither result.
 
 ## The totals changed: a transaction, a new day, a load.
 signal changed
@@ -40,11 +45,15 @@ const CATEGORY_KEYS := {
 	Wallet.Category.UPKEEP: "upkeep",
 	Wallet.Category.PARKING: "parking",
 	Wallet.Category.INCIDENT: "incident",
+	Wallet.Category.FINES: "fines",
+	Wallet.Category.SIGNING_BONUS: "signing_bonus",
 }
+## The day's unpaid fines, a decimal string from 0.
+const FINES_UNPAID_KEY := "fines_unpaid"
 ## Totals added after the ledger was first saved: a saved ledger without one
 ## loads it as 0.
 const OPTIONAL_CATEGORY_KEYS := ["upkeep"]
-const SNAPSHOT_KEYS := ["day", "since_load"]
+const SNAPSHOT_KEYS := ["day", "since_load", FINES_UNPAID_KEY]
 ## Far beyond a day's money; a saved total past it is refused. Any total may
 ## be either sign, since the Wallet takes any category in either direction.
 const MAX_TOTAL := 1_000_000_000_000_000_000
@@ -60,6 +69,8 @@ var _day := NO_DAY
 var _since_load := false
 ## Wallet.Category -> signed total for the day.
 var _totals: Dictionary = {}
+## Fines charged today that the wallet could not pay, as a positive amount.
+var _fines_unpaid := 0
 
 
 func _init() -> void:
@@ -78,11 +89,13 @@ func _ready() -> void:
 func bind(wallet: Wallet, with_clock: SimClock) -> void:
 	if _wallet != null and _wallet.transaction.is_connected(record):
 		_wallet.transaction.disconnect(record)
+		_wallet.unpaid.disconnect(record_unpaid)
 	if _clock != null and _clock.ticked.is_connected(on_tick):
 		_clock.ticked.disconnect(on_tick)
 	_wallet = wallet
 	_clock = with_clock
 	_wallet.transaction.connect(record)
+	_wallet.unpaid.connect(record_unpaid)
 	_clock.ticked.connect(on_tick)
 	if _day == NO_DAY:
 		_day = GameCalendar.day_of(_clock.tick)
@@ -114,12 +127,19 @@ func upkeep_paid() -> int:
 	return -amount(Wallet.Category.UPKEEP)
 
 
-## Airline fees, shop sales and parking fees less wages and upkeep paid.
+## Fines that could not be paid today, as a positive amount.
+func fines_unpaid() -> int:
+	return _fines_unpaid
+
+
+## Airline fees, shop sales and parking fees less wages, upkeep and airline
+## fines paid.
 func operating_result() -> int:
 	return (
 		amount(Wallet.Category.FEES)
 		+ amount(Wallet.Category.SHOP)
 		+ amount(Wallet.Category.PARKING)
+		+ amount(Wallet.Category.FINES)
 		- wages_paid()
 		- upkeep_paid()
 	)
@@ -132,6 +152,7 @@ func cash_change() -> int:
 		+ amount(Wallet.Category.BUILD)
 		+ amount(Wallet.Category.GRANT)
 		+ amount(Wallet.Category.INCIDENT)
+		+ amount(Wallet.Category.SIGNING_BONUS)
 	)
 
 
@@ -146,6 +167,19 @@ func record(gross: int, category: int, claimed: Dictionary, tick: int) -> void:
 	_totals[category] += gross
 	for debt in claimed:
 		_totals[debt] -= claimed[debt]
+	changed.emit()
+
+
+## Wallet.unpaid: adds the unpaid part of a fine to the day of its tick. Only
+## fines are charged with Wallet.charge; another category pushes an error and is
+## not counted.
+func record_unpaid(unpaid: int, category: int, tick: int) -> void:
+	if category != Wallet.Category.FINES:
+		push_error("DayLedger: an unpaid %d in category %d is not a fine" % [unpaid, category])
+		return
+	if tick != Wallet.NO_TICK:
+		_roll_to(GameCalendar.day_of(tick))
+	_fines_unpaid += unpaid
 	changed.emit()
 
 
@@ -167,7 +201,7 @@ func start_since_load() -> void:
 ## JSON-safe state for a save: the day, the since-load mark and each
 ## category's total as decimal strings.
 func to_snapshot() -> Dictionary:
-	var data := {"day": str(_day), "since_load": _since_load}
+	var data := {"day": str(_day), "since_load": _since_load, FINES_UNPAID_KEY: str(_fines_unpaid)}
 	for category in CATEGORY_KEYS:
 		data[CATEGORY_KEYS[category]] = str(_totals[category])
 	return data
@@ -184,6 +218,7 @@ func from_snapshot(data: Dictionary) -> bool:
 		return false
 	_day = str(data["day"]).to_int()
 	_since_load = data["since_load"]
+	_fines_unpaid = str(data[FINES_UNPAID_KEY]).to_int()
 	for category in CATEGORY_KEYS:
 		_totals[category] = str(data.get(CATEGORY_KEYS[category], "0")).to_int()
 	changed.emit()
@@ -247,6 +282,7 @@ func _roll_to(new_day: int) -> void:
 
 
 func _clear() -> void:
+	_fines_unpaid = 0
 	for category in CATEGORY_KEYS:
 		_totals[category] = 0
 
@@ -263,6 +299,13 @@ func _snapshot_problem(data: Dictionary) -> String:
 		return "'day' is not a day"
 	if typeof(data["since_load"]) != TYPE_BOOL:
 		return "'since_load' must be true or false"
+	return _totals_problem(data)
+
+
+## Why the saved unpaid fines or a saved category total is refused, or "".
+func _totals_problem(data: Dictionary) -> String:
+	if not _whole_in(data[FINES_UNPAID_KEY], 0, MAX_TOTAL):
+		return "'%s' is not a decimal string from 0 to %d" % [FINES_UNPAID_KEY, MAX_TOTAL]
 	for key in CATEGORY_KEYS.values():
 		if data.has(key) and not _whole_in(data[key], -MAX_TOTAL, MAX_TOTAL):
 			return "'%s' is not a decimal string from %d to %d" % [key, -MAX_TOTAL, MAX_TOTAL]

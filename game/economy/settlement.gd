@@ -46,6 +46,14 @@ extends Node
 ## or settled long ago) pays the full fee, as does any passenger when no
 ## BaggageSim is set.
 ##
+## Two offer traits are paid here too, through TraitPayouts: Miss fine charges
+## for each missed passenger of a contract's flight (a missed outcome, or a road
+## miss announced by PassengerSim.arrivals), once per passenger, down to a
+## balance of 0 with the rest unpaid; Signing bonus pays when the contract's
+## first flight departs (FlightSim.state_changed to DEPARTED, which a load never
+## emits). The contracts whose bonus was paid are saved under BONUS_SNAPSHOT_KEY,
+## optional like the other added keys: a save without it has paid none.
+##
 ## On the same tick, after the wages, every ready toilet room is charged its
 ## upkeep (decision toilet-design-queue-free-reservable-stalls-per-stall-daily-u,
 ## point 2): RoomRules.daily_upkeep, PriceTable.TOILET_STALL_UPKEEP per stall.
@@ -99,6 +107,8 @@ const WAGE_TIMING_LAST_TICK := "1"
 const BAG_SNAPSHOT_KEYS := ["bag_missed", "bags_awaited"]
 ## Sorted, so a saved entry's keys can be compared with it.
 const AWAITED_KEYS := ["fee", "missed_fee", "passenger"]
+## Added with the Signing bonus trait: the contracts whose bonus was paid.
+const BONUS_SNAPSHOT_KEY := "bonuses_paid"
 ## Far past any passenger id a game hands out.
 const MAX_PASSENGER_ID := 1_000_000_000_000
 ## No day charged yet. Ticks are never negative, so no day is.
@@ -151,6 +161,8 @@ var _bag_missed: Dictionary = {}
 ## Passenger id -> [the fee, the fee if the bag misses] of a passenger who made
 ## the flight while their bag was still on its way, held until the bag settles.
 var _awaiting_bag: Dictionary = {}
+## Miss fines and signing bonuses.
+var _payouts := TraitPayouts.new()
 
 
 func _ready() -> void:
@@ -179,10 +191,14 @@ func bind(sim: PassengerSim, wallet: Wallet) -> void:
 	if _sim != null:
 		_sim.outcome.disconnect(_on_outcome)
 		_sim.clock.ticked.disconnect(_on_tick)
+		_sim.arrivals.missed.disconnect(_on_road_miss)
+		_sim.flights.state_changed.disconnect(_on_flight_state)
 	_sim = sim
 	_settled.clear()
 	_sim.outcome.connect(_on_outcome)
 	_sim.clock.ticked.connect(_on_tick)
+	_sim.arrivals.missed.connect(_on_road_miss)
+	_sim.flights.state_changed.connect(_on_flight_state)
 
 
 ## The fees owed, oldest first.
@@ -238,6 +254,7 @@ func to_snapshot() -> Dictionary:
 		UPKEEP_SNAPSHOT_KEY: str(_upkeep_owed),
 		"bag_missed": missed,
 		"bags_awaited": awaited,
+		BONUS_SNAPSHOT_KEY: _payouts.bonuses_paid(),
 	}
 
 
@@ -274,6 +291,7 @@ func from_snapshot(data: Dictionary) -> bool:
 		_awaiting_bag[str(entry["passenger"]).to_int()] = [
 			str(entry["fee"]).to_int(), str(entry["missed_fee"]).to_int()
 		]
+	_payouts.load_bonuses(data.get(BONUS_SNAPSHOT_KEY, []))
 	# A load rewinds the session: the passengers it holds may finish again.
 	_settled.clear()
 	return true
@@ -296,6 +314,7 @@ func _snapshot_problem(data: Dictionary) -> String:
 			and key != UPKEEP_SNAPSHOT_KEY
 			and not OPTIONAL_SNAPSHOT_KEYS.has(key)
 			and not BAG_SNAPSHOT_KEYS.has(key)
+			and key != BONUS_SNAPSHOT_KEY
 		):
 			return "unknown key '%s'" % key
 	if not data.has("owed") or typeof(data["owed"]) != TYPE_ARRAY:
@@ -312,6 +331,8 @@ func _snapshot_problem(data: Dictionary) -> String:
 		and not _in_range(data[UPKEEP_SNAPSHOT_KEY], 0, MAX_UPKEEP)
 	):
 		problem = "'%s' is not 0 to %d" % [UPKEEP_SNAPSHOT_KEY, MAX_UPKEEP]
+	if problem == "" and data.has(BONUS_SNAPSHOT_KEY):
+		problem = TraitPayouts.bonuses_problem(data[BONUS_SNAPSHOT_KEY])
 	return problem
 
 
@@ -477,6 +498,7 @@ func _on_outcome(id: int, made: bool) -> void:
 	var bag_missed := _bag_missed.has(id)
 	_bag_missed.erase(id)
 	if not made:
+		_fine_missed(id)
 		return
 	var p := _sim.get_passenger(id)
 	if p == null or p.stage != Passenger.Stage.MADE:
@@ -503,6 +525,31 @@ func _on_outcome(id: int, made: bool) -> void:
 	if fee > 0:
 		_owed.append(fee)
 	_pay_owed()
+
+
+## Fines a passenger who missed their flight (Miss fine), once per passenger the
+## sim still holds, like a fee.
+func _fine_missed(id: int) -> void:
+	var p := _sim.get_passenger(id)
+	if p == null:
+		push_error("Settlement: passenger %d missed the flight but is not in the sim" % id)
+		return
+	_forget_retired()
+	if _settled.has(id):
+		return
+	_settled[id] = true
+	_payouts.fine_miss(_sim.flights, p.flight_id, _wallet)
+
+
+## ArrivalBookings.missed: a passenger still on the road when the doors closed.
+func _on_road_miss(flight_id: String) -> void:
+	_payouts.fine_miss(_sim.flights, flight_id, _wallet)
+
+
+## FlightSim.state_changed: a departure may pay a signing bonus.
+func _on_flight_state(flight_id: String, state: int) -> void:
+	if state == FlightSim.State.DEPARTED:
+		_payouts.on_departed(_sim.flights, flight_id, _wallet)
 
 
 ## True while passenger `id` has a bag in the BaggageSim that is not settled.

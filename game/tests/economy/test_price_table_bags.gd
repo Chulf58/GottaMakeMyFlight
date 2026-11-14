@@ -30,3 +30,14 @@ func test_the_cut_fee_is_rounded_down() -> void:
 func test_cutting_a_fee_that_is_no_price_stays_an_error() -> void:
 	assert_int(PriceTable.fee_after_missed_bag(PriceTable.NO_PRICE)).is_equal(PriceTable.NO_PRICE)
 	assert_int(PriceTable.fee_after_missed_bag(0)).is_equal(0)
+
+
+func test_a_paid_percent_outside_0_to_100_is_refused() -> void:
+	for percent in [-1, 101, 250]:
+		(
+			assert_int(PriceTable.fee_after_missed_bag(40, percent))
+			. override_failure_message(str(percent))
+			. is_equal(PriceTable.NO_PRICE)
+		)
+	assert_int(PriceTable.fee_after_missed_bag(40, 0)).is_equal(0)
+	assert_int(PriceTable.fee_after_missed_bag(40, 100)).is_equal(40)

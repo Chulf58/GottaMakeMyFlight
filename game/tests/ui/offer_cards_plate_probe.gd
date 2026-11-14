@@ -7,24 +7,32 @@ extends SceneTree
 ## passengers and fee, so the cards read "Needs another gate" and two "Fits your
 ## gates now". Two offers are paired with traits and one is plain (decision
 ## airline-offer-traits-each-offer-pairs-an-upside-with-a-downs), so each card's
-## trait line shows. Prints each card's text and checks the trait lines and that
-## the sheet is in view before saving.
+## trait line shows. The cards carry the slice 2 money traits: the longest line
+## (Signing bonus $300, Very heavy bags and a loyal airline's "Loyal: +10%"),
+## Loyal airline with Miss fine, and a plain offer from a loyal airline. Prints
+## each card's text and checks the trait lines and that the sheet is in view
+## before saving.
 ##
 ## Run (one windowed Godot run project-wide; take the slot first):
 ##   timeout 300 Godot_v4.7.2-stable_win64_console.exe --display-driver windows \
 ##     --rendering-driver vulkan --audio-driver Dummy \
 ##     --path game -s res://tests/ui/offer_cards_plate_probe.gd
 ##
-## The plates go to tools/blender/out/offer_traits_20261114/.
+## The plates go to tools/blender/out/offer_traits2_20261114/.
 
-const OUT_REL := "res://../tools/blender/out/offer_traits_20261114"
-## Per card: booked, fee and traits (the fees inside each trait's draw range).
+const OUT_REL := "res://../tools/blender/out/offer_traits2_20261114"
+## Per card: booked, fee, traits and the loyal mark (each fee one the tier-0
+## draw gives with those traits: 35 -> 39 loyal, 25 stays, 25 -> 23 plain -> 25).
 const TERMS := [
-	[16, 40, {"up": "top_fare", "down": "rush_crowd", "level": 2}],
-	[14, 25, {"up": "full_flight", "down": "heavy_bags", "level": 1}],
-	[15, 23, {}],
+	[16, 39, {"up": "signing_bonus", "down": "heavy_bags", "level": 2}, true],
+	[14, 25, {"up": "loyal_airline", "down": "miss_fine", "level": 1}, false],
+	[15, 25, {}, true],
 ]
-const TRAIT_LINES := ["Top fare +30%   Big rush crowd", "Full flight   Heavy bags", "Plain terms"]
+const TRAIT_LINES := [
+	"Signing bonus $300   Very heavy bags   Loyal: +10%",
+	"Loyal airline   Miss fine $10",
+	"Plain terms   Loyal: +10%",
+]
 
 
 func _initialize() -> void:
@@ -78,6 +86,7 @@ func _run() -> void:
 		offers[i]["booked_passengers"] = TERMS[i][0]
 		offers[i]["fee_per_passenger"] = TERMS[i][1]
 		offers[i]["traits"] = TERMS[i][2]
+		offers[i]["loyal"] = TERMS[i][3]
 	print("PROBE board loaded=", desk.board.from_snapshot(TestOfferBoard.save_of(offers)))
 	var panel := panels[0] as OfferPanel
 	panel.open()
@@ -117,7 +126,7 @@ func _run() -> void:
 			quit(1)
 			return
 		var img := root.get_texture().get_image()
-		var path := out_dir.path_join("offer_traits_s%d.png" % int(ui_scale * 100.0))
+		var path := out_dir.path_join("offer_traits2_s%d.png" % int(ui_scale * 100.0))
 		var saved := img.save_png(path)
 		print("PLATE saved ", path, " size=", img.get_size(), " err=", saved)
 		if saved != OK:

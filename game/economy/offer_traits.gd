@@ -24,9 +24,14 @@ const BAG_COVER := "bag_cover"
 const FULL_FLIGHT := "full_flight"
 const RUSH_CROWD := "rush_crowd"
 const HEAVY_BAGS := "heavy_bags"
+const SIGNING_BONUS := "signing_bonus"
+const LOYAL_AIRLINE := "loyal_airline"
+const MISS_FINE := "miss_fine"
 ## Upsides and downsides in table order (the order pairs are listed in).
-const UPS: Array[String] = [TOP_FARE, SHOPPERS, BAG_COVER, FULL_FLIGHT]
-const DOWNS: Array[String] = [RUSH_CROWD, HEAVY_BAGS]
+const UPS: Array[String] = [
+	TOP_FARE, SHOPPERS, BAG_COVER, FULL_FLIGHT, SIGNING_BONUS, LOYAL_AIRLINE
+]
+const DOWNS: Array[String] = [RUSH_CROWD, HEAVY_BAGS, MISS_FINE]
 const LEVELS: Array[int] = [1, 2]
 const KEYS := ["down", "level", "up"]
 
@@ -42,6 +47,10 @@ const NEEDS_SHOPS := "shops"
 ## HEAVY_BAGS: the percent of the fee a missed bag costs (PriceTable's default
 ## is 100 - MISSED_BAG_FEE_PERCENT). FULL_FLIGHT: bookings come from the top
 ## this percent of the plane size's range. RUSH_CROWD: the rushed arrival share.
+## SIGNING_BONUS: dollars paid once, when the contract's first flight departs
+## (Settlement). LOYAL_AIRLINE: the percent more the airline's later offers pay
+## once it is loyal (LOYAL_FEE_PERCENT, the same at both levels; OfferBoard
+## counts the days). MISS_FINE: dollars per passenger who misses the flight.
 const TABLE := {
 	TOP_FARE:
 	{
@@ -105,6 +114,39 @@ const TABLE := {
 		"values": [75, 100],
 		"needs": NEEDS_BAGS,
 	},
+	SIGNING_BONUS:
+	{
+		"labels": ["Signing bonus $150", "Signing bonus $300"],
+		"tips":
+		[
+			"Pays $150 once, when this contract's first flight leaves.",
+			"Pays $300 once, when this contract's first flight leaves.",
+		],
+		"values": [150, 300],
+		"needs": "",
+	},
+	LOYAL_AIRLINE:
+	{
+		"labels": ["Loyal airline", "Loyal airline"],
+		"tips":
+		[
+			"After 5 days this flight leaves, the airline's later offers pay 10% more.",
+			"After 5 days this flight leaves, the airline's later offers pay 10% more.",
+		],
+		"values": [10, 10],
+		"needs": "",
+	},
+	MISS_FINE:
+	{
+		"labels": ["Miss fine $10", "Miss fine $20"],
+		"tips":
+		[
+			"Each passenger who misses this flight costs $10.",
+			"Each passenger who misses this flight costs $20.",
+		],
+		"values": [10, 20],
+		"needs": "",
+	},
 }
 ## Pairs that cancel out, never drawn and refused on load.
 const FORBIDDEN: Array = [[SHOPPERS, RUSH_CROWD], [BAG_COVER, HEAVY_BAGS]]
@@ -115,7 +157,15 @@ const PLAIN_TIP := "No catch, and 10% less pay."
 ## Percent chance a paired offer is level 2, by airline tier (RatingFormula.tier):
 ## tier 0 draws level 1 only, tier 1 mixes, tier 2 favours level 2.
 const LEVEL_2_CHANCE: Array[int] = [0, 50, 75]
-const SEED_VERSION := 1
+## 2: Signing bonus, Loyal airline and Miss fine joined the table.
+const SEED_VERSION := 2
+## An airline is loyal after this many days on which one of its contracts with
+## LOYAL_AIRLINE had a flight depart; from then on its offers pay
+## LOYAL_FEE_PERCENT more, once, however many such contracts it has.
+const LOYAL_DAYS := 5
+const LOYAL_FEE_PERCENT := 10
+const LOYAL_LABEL := "Loyal: +10%"
+const LOYAL_TIP := "This airline is loyal to you: its offers pay 10% more."
 
 
 ## "" when `traits` is {} or a valid pair from the table; otherwise what is
@@ -162,6 +212,27 @@ static func fee_of(fee: int, traits: Dictionary) -> int:
 		return _percent_of(fee, PLAIN_FEE_PERCENT)
 	var more := value(traits, TOP_FARE)
 	return _percent_of(fee, 100 + more) if more >= 0 else fee
+
+
+## An offer fee `fee` (already fee_of) from a loyal airline when `loyal`:
+## LOYAL_FEE_PERCENT more, rounded half up; unchanged otherwise.
+static func loyal_fee_of(fee: int, loyal: bool) -> int:
+	return _percent_of(fee, 100 + LOYAL_FEE_PERCENT) if loyal else fee
+
+
+## The dollars each missed passenger costs under `traits`, 0 without Miss fine.
+static func miss_fine(traits: Dictionary) -> int:
+	return maxi(value(traits, MISS_FINE), 0)
+
+
+## The dollars the first departure pays under `traits`, 0 without Signing bonus.
+static func signing_bonus(traits: Dictionary) -> int:
+	return maxi(value(traits, SIGNING_BONUS), 0)
+
+
+## Whether a contract of `traits` counts its days toward its airline's loyalty.
+static func builds_loyalty(traits: Dictionary) -> bool:
+	return value(traits, LOYAL_AIRLINE) >= 0
 
 
 ## The bookings of an offer whose drawn count `booked` is in [low, high]: with
