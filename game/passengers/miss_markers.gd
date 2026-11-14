@@ -139,6 +139,13 @@ static func _closed_icon() -> Texture2D:
 	return MarkerIcons.icon(MarkerIcons.Glyph.CLOSED)
 
 
+## Passengers waiting at a full `station`: its lane plus the `held` outside it
+## (the value MissSignals.full_stations() gives). The sign text and the
+## queue-full alert card both count this way.
+static func waiting_at(on_sim: PassengerSim, station: int, held: int) -> int:
+	return on_sim.queue_of(station).size() + held
+
+
 ## What `station` is called in its hover text: a "desk", "scanner" or "counter".
 static func station_noun(on_sim: PassengerSim, station: int) -> String:
 	if on_sim.layout.desks.has(station):
@@ -178,7 +185,7 @@ func sync() -> void:
 		if not full.has(station):
 			_drop_sign(_signs, station)
 	for station: int in full:
-		var waiting: int = sim.queue_of(station).size() + int(full[station])
+		var waiting := waiting_at(sim, station, int(full[station]))
 		_show_sign(
 			_signs, station, "QueueFullSign", MarkerIcons.Glyph.QUEUE_FULL, QUEUE_TEXT % waiting
 		)
