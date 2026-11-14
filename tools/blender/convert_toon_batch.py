@@ -197,9 +197,16 @@ for _stem in CLEANER_STEMS:
         "Poses\\TCP_%s_Idle_01.fbx" % _g,
         "Prefabs\\%s Character Sources\\TCP_%s_Character_%s.prefab" % (_g, _g, _n),
     )
-# Passenger bodies beyond 01 (decision comic-life-and-variety-visuals-first-passengers-get-10-more):
-# PassengerViews draws a passenger with one of the six bodies of its gender.
-PASSENGER_BODIES = {"male": ("02", "03", "06", "08", "09"), "female": ("03", "04", "05", "08", "11")}
+# Passenger bodies beyond 01 (decisions comic-life-and-variety-visuals-first-passengers-get-10-more
+# and passenger-looks-add-the-unused-toon-city-people-bodies-and-b): PassengerViews draws a
+# passenger with one of the bodies of its gender (8 male, 9 female). Female_02 is left out:
+# her shower clip cannot be fitted (toon_shower.py stops: "a hand ray on Spine_02 misses the
+# skin"). Male_10 is left out: a roller lying beside his left foot at a seat park takes in
+# his shoe (game/tests/passengers/test_roller_stand_clearance.gd).
+PASSENGER_BODIES = {
+    "male": ("02", "03", "06", "08", "09", "04", "05"),
+    "female": ("03", "04", "05", "08", "11", "06", "09", "12"),
+}
 for _gender, _numbers in PASSENGER_BODIES.items():
     _g = _gender.capitalize()
     for _n in _numbers:

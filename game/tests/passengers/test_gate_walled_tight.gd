@@ -267,4 +267,4 @@ static func _need(q: Passenger, hand: int) -> float:
 	var at := 0 if not toward else (1 if absf(slide) < GateRoller.FAR_SLIDE_M else 2)
 	var scale_by := SecurityLooks.bag_scale(q)
 	var need: Array = TestGateRollerGaps.LEG_NEED_M
-	return need[0 if scale_by >= 1.0 else 1][at][look / PassengerLooks.PER_VARIANT][hand]
+	return need[0 if scale_by >= 1.0 else 1][at][PassengerLooks.variant_of(look)][hand]

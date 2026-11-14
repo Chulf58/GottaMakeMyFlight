@@ -281,7 +281,7 @@ func _guest(body: int, roller: bool) -> Passenger:
 	var p: Passenger = null
 	for attempt in 200:
 		var id := _sim.spawn_now(
-			FlightTimetable.occurrence_id(FlightSim.DEFAULT_ID, 0), floori(body / 6.0)
+			FlightTimetable.occurrence_id(FlightSim.DEFAULT_ID, 0), PassengerLooks.variant_of(body)
 		)
 		p = _sim.get_passenger(id)
 		ToiletTestLayout.calm(p)

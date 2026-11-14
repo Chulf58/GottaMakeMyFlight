@@ -11,7 +11,7 @@ func test_a_body_stays_within_its_variant_and_every_body_is_drawn() -> void:
 	for variant in 2:
 		for id in range(1, 61):
 			var body := PassengerLooks.body_of(id, variant)
-			assert_int(body / PassengerLooks.PER_VARIANT).is_equal(variant)
+			assert_int(PassengerLooks.variant_of(body)).is_equal(variant)
 			seen[body] = true
 	print("bodies seen: %s" % [seen.keys()])
 	assert_int(seen.size()).is_equal(PassengerLooks.BODIES.size())
@@ -79,7 +79,7 @@ func test_neighbours_in_spawn_order_differ() -> void:
 			tints[PassengerLooks.tint_of(id)] = true
 			bags[PassengerLooks.bag_of(id)] = true
 		assert_int(bodies.size()).is_equal(PassengerLooks.LOOK_BLOCK)
-		assert_int(tints.size()).is_equal(PassengerLooks.TINTS.size())
+		assert_int(tints.size()).is_equal(PassengerLooks.LOOK_BLOCK)
 		assert_int(bags.size()).is_equal(PassengerLooks.BAG_TINTS.size())
 	for id in range(1, 301):
 		if (
@@ -101,35 +101,76 @@ func test_cloth_split_follows_the_clothes_mark() -> void:
 	assert_array(Array(parts[1])).is_equal([3, 4, 5])
 
 
-func test_a_tint_turns_hues_and_colours_greys() -> void:
+## A tint sets the hue and saturation outright, keeps the shading (value
+## order) and lifts black off the floor; tint 0 changes nothing.
+func test_a_tint_sets_its_colour_and_keeps_the_shading() -> void:
 	var red := Color.from_hsv(0.0, 0.8, 0.6)
-	var grey := Color(0.5, 0.5, 0.5)
-	assert_that(PassengerLooks.tinted(red, 0.0, -1.0)).is_equal(red)
-	var turned := PassengerLooks.tinted(red, 0.5, 0.6, true)
-	print(
-		"red %s -> %s, grey %s -> %s" % [red, turned, grey, PassengerLooks.tinted(grey, 0.5, 0.6)]
-	)
-	# A saturated swatch turns by SATURATED_SCALE of the turn and is toned down to
-	# SAT_CAP (no neon); a muted one takes the full turn.
-	var moved := minf(turned.h, 1.0 - turned.h)
-	assert_float(moved).is_equal_approx(0.5 * PassengerLooks.SATURATED_SCALE, 0.01)
-	assert_float(turned.s).is_equal_approx(PassengerLooks.SAT_CAP, 0.01)
-	assert_float(turned.v).is_equal_approx(0.6, 0.01)
-	var muted := PassengerLooks.tinted(Color.from_hsv(0.0, 0.4, 0.6), 0.33, 0.3)
-	assert_float(muted.h).is_equal_approx(0.33, 0.01)
-	assert_float(muted.s).is_equal_approx(0.4, 0.01)
+	assert_that(PassengerLooks.tinted(red, -1.0, 0.0)).is_equal(red)
+	var grey := PassengerLooks.tinted(Color(0.5, 0.5, 0.5), 0.59, 0.56)
+	var dark := PassengerLooks.tinted(Color(0.1, 0.1, 0.1), 0.59, 0.56)
+	var black := PassengerLooks.tinted(Color.BLACK, 0.59, 0.56)
+	print("grey -> %s, dark -> %s, black -> %s" % [grey, dark, black])
+	assert_float(grey.h).is_equal_approx(0.59, 0.01)
+	assert_float(grey.s).is_equal_approx(0.56, 0.01)
+	assert_float(dark.v).is_less(grey.v)
+	assert_float(black.v).is_equal_approx(PassengerLooks.VALUE_FLOOR, 0.01)
+	assert_float(black.s).is_equal_approx(0.56, 0.01)
+	# A red swatch in a blue tint is blue: the hue is set, not turned.
+	assert_float(PassengerLooks.tinted(red, 0.59, 0.56).h).is_equal_approx(0.59, 0.01)
+
+
+## Cozy, not neon: no tinted colour is stronger (saturation times value) than
+## 0.53, white goes pastel, and a gradient's step is never larger than its
+## source's (no bands).
+func test_tints_stay_cozy_and_smooth() -> void:
 	var most := 0.0
+	var worst_step := 0.0
 	for tint in range(1, PassengerLooks.TINTS.size()):
-		for k in 20:
-			var c := Color.from_hsv(k / 20.0, 1.0, 0.9)
-			var t: Array = PassengerLooks.TINTS[tint]
-			most = maxf(most, PassengerLooks.tinted(c, t[0], t[1]).s)
-	print("most saturated tinted swatch: %.3f" % most)
-	assert_float(most).is_less_equal(PassengerLooks.SAT_CAP + 0.01)
-	var coloured := PassengerLooks.tinted(grey, 0.5, 0.6)
-	assert_float(coloured.h).is_equal_approx(0.6, 0.01)
-	assert_float(coloured.s).is_equal_approx(PassengerLooks.GREY_SAT, 0.01)
-	assert_float(coloured.v).is_equal_approx(0.5, 0.01)
+		var family := PassengerLooks.TINTS[tint]
+		for pair in [Vector2(family.x, family.y), Vector2(family.z, family.w)]:
+			var last := PassengerLooks.tinted(Color.BLACK, pair.x, pair.y)
+			for k in range(1, 101):
+				var c := PassengerLooks.tinted(Color.from_hsv(0.3, 0.2, k / 100.0), pair.x, pair.y)
+				most = maxf(most, c.s * c.v)
+				var step := Vector3(c.r - last.r, c.g - last.g, c.b - last.b).length()
+				worst_step = maxf(worst_step, step)
+				last = c
+		var white := PassengerLooks.tinted(Color.WHITE, family.x, family.y)
+		assert_float(white.s).is_less_equal(family.y * (1.0 - PassengerLooks.BRIGHT_DIM) + 0.01)
+	print("strongest tinted colour %.3f, largest step per 0.01 value %.4f" % [most, worst_step])
+	assert_float(most).is_less_equal(0.53)
+	assert_float(most).is_greater(0.4)
+	assert_float(worst_step).is_less(0.03)
+
+
+## The tints are different colour families: every two light hues are at least
+## 0.05 of the wheel apart, and there are at least eight besides the vendor's.
+func test_tints_are_different_colour_families() -> void:
+	assert_int(PassengerLooks.TINTS.size()).is_greater_equal(9)
+	var closest := 1.0
+	for a in range(1, PassengerLooks.TINTS.size()):
+		for b in range(a + 1, PassengerLooks.TINTS.size()):
+			var d := absf(PassengerLooks.TINTS[a].x - PassengerLooks.TINTS[b].x)
+			closest = minf(closest, minf(d, 1.0 - d))
+	print("closest two light hues: %.3f" % closest)
+	assert_float(closest).is_greater_equal(0.05)
+
+
+## A dark swatch cell takes the tint's second colour, a light one its first.
+func test_dark_cells_take_the_second_colour() -> void:
+	var atlas := Image.create(64, 64, false, Image.FORMAT_RGBA8)
+	atlas.fill_rect(Rect2i(0, 0, 32, 64), Color(0.9, 0.9, 0.9))
+	atlas.fill_rect(Rect2i(32, 0, 32, 64), Color(0.15, 0.15, 0.15))
+	var texels := PackedInt32Array([10 * 64 + 5, 10 * 64 + 40])
+	var dark := PassengerLooks.dark_cells(atlas, texels)
+	assert_bool(dark[0]).is_false()
+	assert_bool(dark[1]).is_true()
+	var out := PassengerLooks.tint_image(atlas, texels, 1)
+	var family := PassengerLooks.TINTS[1]
+	print("light %s dark %s" % [out.get_pixel(5, 10), out.get_pixel(40, 10)])
+	assert_float(out.get_pixel(5, 10).h).is_equal_approx(family.x, 0.02)
+	assert_float(out.get_pixel(40, 10).h).is_equal_approx(family.z, 0.02)
+	assert_that(out.get_pixel(6, 20)).is_equal(atlas.get_pixel(6, 20))
 
 
 ## Every body carries the clothes' mark, and a tinted body draws the clothes on

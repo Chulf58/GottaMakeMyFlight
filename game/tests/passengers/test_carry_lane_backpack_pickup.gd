@@ -76,7 +76,7 @@ func _send(bags: int, body: int, mirror: int) -> void:
 	_views.sim = _world.world.sim
 	add_child(_views)
 	RenderingServer.frame_pre_draw.disconnect(_views.carry_on_props()._unposed)
-	var variant := body / PassengerLooks.PER_VARIANT
+	var variant := PassengerLooks.variant_of(body)
 	for i in 200:
 		var p := _world.world.passenger(_world.send(bags))
 		if PassengerLooks.body_of(p.id, variant) == body:

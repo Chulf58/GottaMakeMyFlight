@@ -1,6 +1,6 @@
 class_name PassengerLooks
 extends RefCounted
-## How a passenger is drawn: one of six Toon City People bodies of its gender,
+## How a passenger is drawn: one of the Toon City People bodies of its gender,
 ## a clothing tint and a bag colour (decision comic-life-and-variety-visuals-
 ## first-passengers-get-10-more). All three are chosen here, in the view, from
 ## the sim's variant (0 male, 1 female) and the passenger's stable id, so the
@@ -13,8 +13,9 @@ extends RefCounted
 ## and every other vertex black. A tinted body draws a copy of its mesh split
 ## in two surfaces: the clothes on the tint's atlas, everything else (skin,
 ## hair, shoes, jewellery) on the shared atlas. Tint 0 keeps the vendor
-## colours; the others turn the hue of the swatches the clothes sample and give
-## grey ones a light colour, keeping each swatch's own shading. Each tint's
+## colours; each other tint is a colour family that sets the hue and
+## saturation of the swatches the clothes sample outright (one for light
+## swatches, one for dark), keeping each swatch's own shading. Each tint's
 ## atlas and each body's split mesh is made on first use and then shared.
 
 const BODIES: Array[String] = [
@@ -24,12 +25,17 @@ const BODIES: Array[String] = [
 	"tcp_male_character_06",
 	"tcp_male_character_08",
 	"tcp_male_character_09",
+	"tcp_male_character_04",
+	"tcp_male_character_05",
 	"tcp_female_character_01",
 	"tcp_female_character_03",
 	"tcp_female_character_04",
 	"tcp_female_character_05",
 	"tcp_female_character_08",
 	"tcp_female_character_11",
+	"tcp_female_character_06",
+	"tcp_female_character_09",
+	"tcp_female_character_12",
 ]
 const SCENES: Array[PackedScene] = [
 	preload("res://assets/people/tcp_male_character_01.glb"),
@@ -38,29 +44,70 @@ const SCENES: Array[PackedScene] = [
 	preload("res://assets/people/tcp_male_character_06.glb"),
 	preload("res://assets/people/tcp_male_character_08.glb"),
 	preload("res://assets/people/tcp_male_character_09.glb"),
+	preload("res://assets/people/tcp_male_character_04.glb"),
+	preload("res://assets/people/tcp_male_character_05.glb"),
 	preload("res://assets/people/tcp_female_character_01.glb"),
 	preload("res://assets/people/tcp_female_character_03.glb"),
 	preload("res://assets/people/tcp_female_character_04.glb"),
 	preload("res://assets/people/tcp_female_character_05.glb"),
 	preload("res://assets/people/tcp_female_character_08.glb"),
 	preload("res://assets/people/tcp_female_character_11.glb"),
+	preload("res://assets/people/tcp_female_character_06.glb"),
+	preload("res://assets/people/tcp_female_character_09.glb"),
+	preload("res://assets/people/tcp_female_character_12.glb"),
 ]
-## Bodies per variant: BODIES holds the males, then the females.
-const PER_VARIANT := 6
+## The male bodies' count: BODIES holds PER_VARIANT males, then the females
+## (variant_of()). Board 3fcd8e5a added male 04 and 05 and female 06, 09 and
+## 12, so there is one female more; female 02 is left out (her shower clip
+## cannot be fitted) and male 10 too (a roller lying beside his left foot at a
+## seat park takes in his shoe, test_roller_stand_clearance.gd).
+const PER_VARIANT := 8
 ## Clip speeds measured by the Toon pipeline (its SPEED lines), per body. The
 ## bodies of one gender share one skeleton, so their speeds agree.
 const CLIP_WALK_MPS: Array[float] = [
-	1.952, 1.952, 1.952, 1.952, 1.952, 1.952, 1.922, 1.922, 1.922, 1.922, 1.922, 1.922
+	1.952,
+	1.952,
+	1.952,
+	1.952,
+	1.952,
+	1.952,
+	1.952,
+	1.952,
+	1.922,
+	1.922,
+	1.922,
+	1.922,
+	1.922,
+	1.922,
+	1.922,
+	1.922,
+	1.922,
 ]
 const CLIP_RUN_MPS: Array[float] = [
-	5.295, 5.295, 5.295, 5.295, 5.295, 5.295, 4.173, 4.173, 4.173, 4.173, 4.173, 4.173
+	5.295,
+	5.295,
+	5.295,
+	5.295,
+	5.295,
+	5.295,
+	5.295,
+	5.295,
+	4.173,
+	4.173,
+	4.173,
+	4.173,
+	4.173,
+	4.173,
+	4.173,
+	4.173,
+	4.173,
 ]
 ## Per body, how far a body seated on a gate seat row is drawn forward (x) and
 ## up (y) of the sim's spot, so no part of it is inside the chair: the hips
 ## clear the backrest and the backs of the female bodies' knees clear the pan's
 ## front edge (their feet already sit forward in sit_idle, tools/blender/anim/
 ## toon_clips.py SIT_SHIN_LEAN_DEG). A lift only where a dress hangs into the
-## pan (female_01 and female_05).
+## pan (female_01, female_05 and female_06).
 ## Measured by game/spike/passenger_looks_plates_probe.gd --parts=seated
 ## --sweep (the least step leaving no body point inside the row) plus 1 cm.
 const SEAT_SHIFT_M: Array[Vector2] = [
@@ -70,18 +117,23 @@ const SEAT_SHIFT_M: Array[Vector2] = [
 	Vector2(0.025, 0.0),
 	Vector2(0.035, 0.0),
 	Vector2(0.03, 0.0),
+	Vector2(0.03, 0.0),
+	Vector2(0.025, 0.0),
 	Vector2(0.07, 0.02),
 	Vector2(0.06, 0.0),
 	Vector2(0.065, 0.0),
 	Vector2(0.06, 0.015),
 	Vector2(0.08, 0.0),
 	Vector2(0.065, 0.0),
+	Vector2(0.06, 0.02),
+	Vector2(0.07, 0.0),
+	Vector2(0.075, 0.0),
 ]
 ## Per body, how far a body seated on a cafe_table chair is drawn towards the
 ## table (x) and up (y) of the sim's seat root (CafeChairs), so no part of it is
 ## inside the chair's back posts, back or frame: at the bare root the hips and
-## lower spine sit 1.9-2 cm into the chair back. A lift only for female_01,
-## whose dress hangs into the pan (without it she needs 18.5 cm).
+## lower spine sit 1.9-2 cm into the chair back. A lift only for female_01 and
+## female_06, whose dresses hang into the pan (without it they need 18.5 cm).
 ## Measured by game/spike/passenger_looks_plates_probe.gd --parts=cafe --sweep
 ## (the least step leaving no body point inside the cafe_table) plus 1 cm.
 const CAFE_SEAT_SHIFT_M: Array[Vector2] = [
@@ -91,21 +143,28 @@ const CAFE_SEAT_SHIFT_M: Array[Vector2] = [
 	Vector2(0.085, 0.0),
 	Vector2(0.10, 0.0),
 	Vector2(0.09, 0.0),
+	Vector2(0.09, 0.0),
+	Vector2(0.085, 0.0),
 	Vector2(0.115, 0.01),
 	Vector2(0.10, 0.0),
 	Vector2(0.10, 0.0),
 	Vector2(0.10, 0.0),
 	Vector2(0.105, 0.0),
 	Vector2(0.095, 0.0),
+	Vector2(0.115, 0.01),
+	Vector2(0.105, 0.0),
+	Vector2(0.105, 0.0),
 ]
 ## Per body, the step (as CAFE_SEAT_SHIFT_M) for a body seated on a cushion of
 ## the services kit (board 3405a04b): its seats are shaped around the bare root
 ## (build_services_kit.py), and the cafe chair's step puts the forearms into
 ## the dining table top. Only a lift where a dress hangs into the cushion
-## (female_01 2 cm, female_05 1 cm), no step towards the table. Measured by
+## (female_01 and female_06 2 cm, female_05 1 cm), no step towards the table. Measured by
 ## game/spike/food_seat_plates_probe.gd --parts=sweep (the least lift leaving
 ## no body point inside the piece).
 const SERVICES_SEAT_SHIFT_M: Array[Vector2] = [
+	Vector2.ZERO,
+	Vector2.ZERO,
 	Vector2.ZERO,
 	Vector2.ZERO,
 	Vector2.ZERO,
@@ -118,14 +177,19 @@ const SERVICES_SEAT_SHIFT_M: Array[Vector2] = [
 	Vector2(0.0, 0.01),
 	Vector2.ZERO,
 	Vector2.ZERO,
+	Vector2(0.0, 0.02),
+	Vector2.ZERO,
+	Vector2.ZERO,
 ]
 ## Per body, the step for a body seated on the restaurant booth's bench: as
 ## SERVICES_SEAT_SHIFT_M, plus a step towards the table where the hips reach
-## into the tilted back cushion (the least step plus 1 cm; female_01 needs her
-## 2 cm lift as well).
+## into the tilted back cushion (the least step plus 1 cm; female_01 and
+## female_06 need their 2 cm lift as well).
 const BOOTH_SEAT_SHIFT_M: Array[Vector2] = [
 	Vector2.ZERO,
 	Vector2(0.015, 0.0),
+	Vector2.ZERO,
+	Vector2.ZERO,
 	Vector2.ZERO,
 	Vector2.ZERO,
 	Vector2.ZERO,
@@ -136,6 +200,9 @@ const BOOTH_SEAT_SHIFT_M: Array[Vector2] = [
 	Vector2(0.025, 0.0),
 	Vector2(0.025, 0.0),
 	Vector2(0.025, 0.0),
+	Vector2(0.02, 0.02),
+	Vector2(0.03, 0.0),
+	Vector2(0.025, 0.0),
 ]
 ## Piece -> its per-body seat step, for the pieces whose seats do not take
 ## CAFE_SEAT_SHIFT_M (seat_shift()).
@@ -144,22 +211,39 @@ const PIECE_SEAT_SHIFT_M := {
 	&"restaurant_booth": BOOTH_SEAT_SHIFT_M,
 	&"bar_counter": SERVICES_SEAT_SHIFT_M,
 }
-## Clothing tints: [hue turn of coloured swatches, hue given to grey swatches].
-## Tint 0 is the vendor's own colours.
-const TINTS := [[0.0, -1.0], [0.5, 0.6], [0.17, 0.08], [0.83, 0.95], [0.33, 0.3], [0.67, 0.5]]
-## A swatch pixel below this saturation is grey: it takes the tint's grey hue
-## at GREY_SAT instead of a hue turn, which would leave it grey.
-const GREY_BELOW := 0.15
-const GREY_SAT := 0.3
-## Cozy, not neon: a tinted swatch keeps at most this saturation, and a
-## swatch cell whose mean saturation is above SATURATED turns its hue by only
-## SATURATED_SCALE of the tint's turn (at most 0.15 of the wheel: a strong red
-## dress turns to a coral or a berry, never to lime). The choice is made per
-## atlas cell (SWATCH_PX), so one garment's gradient never splits in bands.
-const SAT_CAP := 0.55
-const SATURATED := 0.6
-const SATURATED_SCALE := 0.3
+## Clothing tints (board 3fcd8e5a; decision passenger-looks-add-the-unused-
+## toon-city-people-bodies-and-b): (hue, saturation) given to the light
+## swatches, then (hue, saturation) given to the dark ones, so a light top
+## over dark trousers keeps two colours. A tint sets the hue outright instead
+## of turning the vendor's, so two passengers in different tints are in
+## different colour families whatever their bodies' own colours. Tint 0 is the
+## vendor's own colours (its entry is not read). Warm Toon accents, no neon.
+const TINTS: Array[Vector4] = [
+	Vector4(-1.0, 0.0, -1.0, 0.0),
+	Vector4(0.01, 0.62, 0.62, 0.45),  # brick red over navy
+	Vector4(0.07, 0.66, 0.50, 0.40),  # orange over dark teal
+	Vector4(0.13, 0.64, 0.07, 0.45),  # mustard over brown
+	Vector4(0.30, 0.50, 0.10, 0.35),  # leaf green over khaki
+	Vector4(0.48, 0.56, 0.97, 0.40),  # teal over burgundy
+	Vector4(0.59, 0.56, 0.11, 0.40),  # cornflower blue over khaki
+	Vector4(0.78, 0.46, 0.00, 0.06),  # lilac over charcoal
+	Vector4(0.93, 0.52, 0.60, 0.40),  # rose over denim
+]
+## A swatch cell (SWATCH_PX; the vendor atlas holds one swatch, a top-to-
+## bottom gradient, per cell) whose clothes' texels average below this value is
+## dark and takes a tint's second colour. The choice is made per cell, so one
+## garment's gradient never splits in bands.
+const DARK_BELOW := 0.42
 const SWATCH_PX := Vector2i(32, 64)
+## A tinted texel's value is lifted to at least this (black trousers would show
+## no colour), keeping the swatch's shading above it.
+const VALUE_FLOOR := 0.18
+## Cozy, not neon: above value BRIGHT_FROM the saturation falls linearly, by
+## BRIGHT_DIM of itself at full value, so light garments go pastel. With the
+## highest tint saturation the strongest colour (saturation times value) is
+## 0.53.
+const BRIGHT_FROM := 0.8
+const BRIGHT_DIM := 0.4
 ## Texels recoloured around each clothes triangle's UV box, so filtering at
 ## its edge blends tinted texels only.
 const TEXEL_MARGIN := 1
@@ -202,7 +286,14 @@ static func seat_shift(def_id: StringName, body: int) -> Vector2:
 
 ## The body index (into BODIES) a passenger is drawn with.
 static func body_of(id: int, variant: int) -> int:
-	return variant * PER_VARIANT + pick(id, 0, PER_VARIANT)
+	var count := PER_VARIANT if variant == 0 else BODIES.size() - PER_VARIANT
+	return variant * PER_VARIANT + pick(id, 0, count)
+
+
+## The variant (0 male, 1 female) of body `body` (BODIES index). The variants
+## have different counts, so `body / PER_VARIANT` is 2 for the last female.
+static func variant_of(body: int) -> int:
+	return 0 if body < PER_VARIANT else 1
 
 
 ## The clothing tint index (into TINTS) of a passenger.
@@ -351,42 +442,38 @@ static func tint_image(atlas: Image, texels: PackedInt32Array, tint: int) -> Ima
 	if out.has_mipmaps():
 		out.clear_mipmaps()
 	var width := out.get_width()
-	var turn: float = TINTS[tint][0]
-	var grey_hue: float = TINTS[tint][1]
-	var saturated := saturated_cells(out, texels)
+	var family := TINTS[tint]
+	var dark := dark_cells(out, texels)
 	var cols := width / SWATCH_PX.x
 	var done := {}
 	for t in texels:
 		var x := t % width
 		var y := t / width
-		var strong: bool = saturated[(y / SWATCH_PX.y) * cols + x / SWATCH_PX.x]
+		var low: bool = dark[(y / SWATCH_PX.y) * cols + x / SWATCH_PX.x]
 		var c := out.get_pixel(x, y)
-		var key := c.to_rgba32() * 2 + int(strong)
+		var key := c.to_rgba32() * 2 + int(low)
 		if not done.has(key):
-			done[key] = tinted(c, turn, grey_hue, strong)
+			done[key] = (tinted(c, family.z, family.w) if low else tinted(c, family.x, family.y))
 		out.set_pixel(x, y, done[key])
 	out.generate_mipmaps()
 	return out
 
 
-## Colour `c` under a tint: a hue turn (scaled down when it lies in a
-## saturated swatch) at no more than SAT_CAP saturation, or for a grey the
-## tint's grey hue.
-static func tinted(c: Color, turn: float, grey_hue: float, saturated := false) -> Color:
-	if turn == 0.0 and grey_hue < 0.0:
+## Colour `c` in hue `hue` at saturation `sat`: its value lifted to at least
+## VALUE_FLOOR (shading kept), the saturation falling above BRIGHT_FROM. A
+## negative hue leaves `c` as it is. Smooth in the value, so a swatch's
+## gradient stays a gradient.
+static func tinted(c: Color, hue: float, sat: float) -> Color:
+	if hue < 0.0:
 		return c
-	if c.s < GREY_BELOW:
-		return Color.from_hsv(grey_hue, maxf(c.s, GREY_SAT), c.v, c.a)
-	# The turn as the shorter way round the wheel, -0.5..0.5.
-	var signed := fposmod(turn + 0.5, 1.0) - 0.5
-	if saturated:
-		signed *= SATURATED_SCALE
-	return Color.from_hsv(fposmod(c.h + signed, 1.0), minf(c.s, SAT_CAP), c.v, c.a)
+	var v := VALUE_FLOOR + (1.0 - VALUE_FLOOR) * c.v
+	var bright := clampf((v - BRIGHT_FROM) / (1.0 - BRIGHT_FROM), 0.0, 1.0)
+	return Color.from_hsv(hue, sat * (1.0 - BRIGHT_DIM * bright), v, c.a)
 
 
-## Atlas cell (SWATCH_PX) index -> true when the mean saturation of `texels`
-## in it is above SATURATED.
-static func saturated_cells(atlas: Image, texels: PackedInt32Array) -> Dictionary:
+## Atlas cell (SWATCH_PX) index -> true when the mean value of `texels` in it is
+## below DARK_BELOW.
+static func dark_cells(atlas: Image, texels: PackedInt32Array) -> Dictionary:
 	var width := atlas.get_width()
 	var cols := width / SWATCH_PX.x
 	var sums := {}
@@ -395,10 +482,10 @@ static func saturated_cells(atlas: Image, texels: PackedInt32Array) -> Dictionar
 		var y := t / width
 		var cell := (y / SWATCH_PX.y) * cols + x / SWATCH_PX.x
 		var sum: Vector2 = sums.get(cell, Vector2.ZERO)
-		sums[cell] = sum + Vector2(atlas.get_pixel(x, y).s, 1.0)
+		sums[cell] = sum + Vector2(atlas.get_pixel(x, y).v, 1.0)
 	var out := {}
 	for cell: int in sums:
-		out[cell] = sums[cell].x / sums[cell].y > SATURATED
+		out[cell] = sums[cell].x / sums[cell].y < DARK_BELOW
 	return out
 
 
