@@ -33,8 +33,9 @@ func _older() -> Dictionary:
 	return old
 
 
-## A line naming a passenger the save does not hold, and one whose held
-## bookings are not a list: each load is refused, says so, and leaves the tick
+## A line naming a passenger the save does not hold, one whose held
+## bookings are not a list, and one listing a booking held on the last step
+## that is not among its held bookings: each load is refused, says so, and leaves the tick
 ## and every part as they were. Control: the same save untouched loads and
 ## changes the world.
 func test_a_bad_entrance_line_is_refused_before_anything_installs() -> void:
@@ -44,7 +45,10 @@ func test_a_bad_entrance_line_is_refused_before_anything_installs() -> void:
 	stranger["passengers"]["entrance_line"]["order"] = [987654]
 	var bad_held := old.duplicate(true)
 	bad_held["passengers"]["entrance_line"]["held"] = "none"
-	for bad: Dictionary in [stranger, bad_held]:
+	var bad_now := old.duplicate(true)
+	bad_now["passengers"]["entrance_line"]["held"] = []
+	bad_now["passengers"]["entrance_line"]["held_now"] = [987654]
+	for bad: Dictionary in [stranger, bad_held, bad_now]:
 		var clock := _main.get_node("SimClock") as SimClock
 		var tick := clock.tick
 		var before := SaveTestKit.checksum(_main)

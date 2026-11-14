@@ -229,3 +229,70 @@ func test_a_car_queued_behind_one_kept_for_the_line_misses_for_check_in() -> voi
 	)
 	assert_int(int(sim.entrance.held_missed.get(PassengerTestWorld.FLIGHT, 0))).is_equal(aboard)
 	assert_bool(texts.has(FlightResult.WAITING_FOR_DROP_OFF)).is_false()
+
+
+## A car of `bookings` standing in berth `berth` of `sim`, in its unload gap
+## (`gap` ticks left) or, with 0, about to let its next passenger out.
+static func _in_berth(sim: LandsideSim, berth: int, bookings: Array[int], gap: int) -> int:
+	var id := sim.add_vehicle(LandsideVehicle.Kind.TAXI, LandsideVehicle.Intent.DROP, bookings)
+	var v := sim.get_vehicle(id)
+	v.lane = LandsideVehicle.Lane.BERTH
+	v.stage = LandsideVehicle.Stage.DWELL
+	v.stop = berth
+	v.pos_mm = sim.paths.berth_stand[berth]
+	v.release_wait = gap
+	return id
+
+
+## The curb with bay 0 built (berths 4 and 5, upstream of the starter curb's
+## four): every berth but 4 holds a car in its unload gap, berth 4 a car kept
+## for the line, and a car waits on road_in at the stop, or with
+## `starter_stop` at the starter curb's stop. One step with no line budget;
+## whether that waiting car is kept for the line.
+func _queued_kept(starter_stop: bool) -> bool:
+	var sim := _bare()
+	assert_bool(sim.build_curb(0)).is_true()
+	var pos_mm := LandsideTestWorld.STARTER.curb.stop_mm if starter_stop else sim.curb_stop_mm()
+	var booking := 1
+	for berth in [0, 1, 2, 3, 5]:
+		var party: Array[int] = [booking]
+		_in_berth(sim, berth, party, 5)
+		booking += 1
+	var kept_party: Array[int] = [booking]
+	var kept := _in_berth(sim, 4, kept_party, 0)
+	var queued_party: Array[int] = [booking + 1]
+	var queued := sim.add_vehicle(
+		LandsideVehicle.Kind.TAXI, LandsideVehicle.Intent.DROP, queued_party
+	)
+	sim.get_vehicle(queued).pos_mm = pos_mm
+	sim.get_vehicle(queued).stage = LandsideVehicle.Stage.QUEUE
+	sim._rederive()
+	sim.step(1, true, RandomNumberGenerator.new(), {}, 0)
+	prints(
+		"waiting at",
+		pos_mm,
+		"stop",
+		sim.curb_stop_mm(),
+		"berth 4 split",
+		sim.paths.berth_split[4],
+		"line held",
+		sim.line_held.keys(),
+		"denied",
+		sim.denied
+	)
+	# Control: the car in berth 4 was kept for the line, and the waiting car
+	# found no berth free.
+	assert_bool(sim.line_held.has(kept)).is_true()
+	assert_array(sim.denied).is_equal([booking])
+	assert_int(sim.get_vehicle(queued).lane).is_equal(LandsideVehicle.Lane.ROAD_IN)
+	return sim.line_held.has(queued)
+
+
+## A car waiting at the stop is kept for the line only by a kept car in a
+## berth it could have taken: one already past that berth's way in (at the
+## starter curb's stop, downstream of bay 0) is held up by the cars in their
+## unload gap, a road delay, not by the line.
+func test_a_kept_car_in_a_berth_the_waiting_car_cannot_take_does_not_keep_it() -> void:
+	# Control: at the stop before bay 0 it could take berth 4, so it is kept.
+	assert_bool(_queued_kept(false)).is_true()
+	assert_bool(_queued_kept(true)).is_false()

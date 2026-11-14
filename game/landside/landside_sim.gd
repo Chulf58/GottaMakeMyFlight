@@ -96,7 +96,7 @@ var denied: Array[int] = []
 ## Vehicle id -> true: the vehicles the last step() kept waiting for the line
 ## outside the entrance (its budget): one with a passenger denied; one still
 ## in its unload gap that was kept on the step before (`kept`); one queued at
-## the stop for a berth while a berth holds one of those; and one held back
+## the stop for a berth while a berth it could take holds one of those; and one held back
 ## on the road a gap behind one of those. Rebuilt every step, so a car is kept
 ## only while the hold lasts.
 var line_held := {}
@@ -587,8 +587,8 @@ func _drive_road(waiting: int, can_release: bool, released: Array[Dictionary]) -
 ## One car on road_in: to its stop, then into its lot's access lane, or into
 ## the berth path of the nearest free berth. Returns the road position it
 ## holds the car behind to. Held back by a car kept for the line
-## (`leader_held`), or waiting at the stop while a berth holds one, it is
-## kept for the line too (line_held).
+## (`leader_held`), or waiting at the stop while a berth it could take holds
+## one (_berth_kept()), it is kept for the line too (line_held).
 func _drive_road_in(v: LandsideVehicle, leader: int, waiting: int, leader_held: bool) -> int:
 	# An empty car never parks, however it got here (a save included).
 	if v.bookings.is_empty():
@@ -611,7 +611,7 @@ func _drive_road_in(v: LandsideVehicle, leader: int, waiting: int, leader_held: 
 		return v.pos_mm
 	var berth := _free_berth(v.pos_mm, waiting)
 	if berth < 0:
-		if _berth_kept():
+		if _berth_kept(v.pos_mm, waiting):
 			line_held[v.id] = true
 		_set_moving(v, true)
 		return v.pos_mm
@@ -879,10 +879,15 @@ func _nearest_berth(pos_mm: int) -> int:
 	return best
 
 
-## Whether a berth holds a car kept for the line this step (line_held).
-func _berth_kept() -> bool:
-	for id in _berths:
-		if id != 0 and line_held.has(id):
+## Whether a berth that a car at `pos_mm` could take, were it free, holds a
+## car kept for the line this step (line_held): built, its path leaving the
+## road ahead of the car, and standing before `before_mm` (_free_berth()). A
+## kept car in a berth the waiting car could not take anyway does not keep it.
+func _berth_kept(pos_mm: int, before_mm: int) -> bool:
+	for i in _berths.size():
+		if _berths[i] == 0 or not line_held.has(_berths[i]):
+			continue
+		if _berth_built(i) and paths.berth_split[i] >= pos_mm and _berth_mm[i] < before_mm:
 			return true
 	return false
 
