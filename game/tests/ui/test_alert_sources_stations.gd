@@ -139,3 +139,40 @@ func test_the_nobody_on_duty_card_appears_and_clears_itself() -> void:
 	assert_dict(board.alert(AlertSources.NO_STAFF)).is_not_empty()
 	board.update(AlertSources.closed_stations(_w.sim), fixed + AlertSources.QUEUE_HOLD_TICKS)
 	assert_dict(board.alert(AlertSources.NO_STAFF)).is_empty()
+
+
+## Through the real AlertStack (what the game draws): a station with nobody on
+## duty and a blocked staff spot each get a card once the cause has held, and
+## each card clears itself when its cause is fixed.
+func test_both_station_causes_reach_the_alert_stack_and_clear_through_it() -> void:
+	var blocked := _blocked_spot_world()
+	# Firing the check-in staff closes the other desk too: both causes at once.
+	_w.staff.fire(StaffMember.Role.CHECKIN)
+	_w.auto_staff = false
+	var stack: AlertStack = auto_free(AlertStack.new())
+	stack.settings_path = SaveTestKit.run_path("alert_stack_stations")
+	stack.sim = _w.sim
+	add_child(stack)
+	stack.refresh()
+	assert_array(stack.card_keys()).is_empty()
+	_w.run_to(_w.sim.tick + AlertSources.QUEUE_HOLD_TICKS)
+	stack.refresh()
+	print("cards after the hold: %s" % [stack.card_keys()])
+	assert_array(stack.card_keys()).contains_exactly(
+		[AlertSources.NO_STAFF, AlertSources.STAFF_SPOT]
+	)
+	assert_str(stack.card_text(AlertSources.NO_STAFF)).contains("Nobody on duty")
+	assert_str(stack.card_text(AlertSources.STAFF_SPOT)).contains("Staff can't get to work")
+	# Fix both: hire everyone and take the seat row off the staff spot.
+	var seat: int = _w.sim.grid.object_at(Vector2i(11, 10))
+	assert_int(seat).is_greater(0)
+	assert_bool(_w.grid.apply(BuildEdit.remove_object(seat)).ok).is_true()
+	StaffTestKit.staff_all(_w.staff)
+	_w.step()
+	assert_bool(MissSignals.closed_stations(_w.sim).has(blocked)).is_false()
+	assert_array(AlertSources.closed_stations(_w.sim)).is_empty()
+	stack.refresh()
+	_w.run_to(_w.sim.tick + AlertSources.QUEUE_HOLD_TICKS)
+	stack.refresh()
+	print("cards after the fix: %s" % [stack.card_keys()])
+	assert_array(stack.card_keys()).is_empty()

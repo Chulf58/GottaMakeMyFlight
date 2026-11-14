@@ -40,6 +40,8 @@ var _grid: BuildGrid
 var _bars := MultiMeshInstance3D.new()
 var _signs: Array[Sprite3D] = []
 var _shown_signs := 0
+## Each shown sign's stable hover key: its run's first edge (cell, side) and length.
+var _run_keys: Array[Vector4i] = []
 ## The screen unit the shown signs were last sized for.
 var _unit := 0.0
 ## Where each bar is drawn, kept here because a headless run reads the
@@ -100,6 +102,9 @@ func rebuild() -> void:
 		var surplus: Sprite3D = _signs.pop_back()
 		remove_child(surplus)
 		surplus.queue_free()
+	_run_keys.clear()
+	for run in runs:
+		_run_keys.append(Vector4i(run.cell.x, run.cell.y, run.side, run.length))
 	for i in _signs.size():
 		var shown := i < runs.size()
 		_signs[i].visible = shown
@@ -157,7 +162,7 @@ func hover_signs() -> Array[Dictionary]:
 			out
 			. append(
 				{
-					"key": i,
+					"key": _run_keys[i],
 					"rect": Rect2(foot.x - side / 2.0, foot.y - side, side, side),
 					"text": HOVER_TEXT,
 				}

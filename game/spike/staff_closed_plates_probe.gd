@@ -10,9 +10,11 @@ extends SceneTree
 ##   02 the Staff button pressed: the hiring card above the bar in the tray's
 ##      place, the hint still shown
 ## Every plate proves its subjects before it is saved: each station's Closed
-## sign, its caption and the station's centre project inside the frame with a
-## margin; the plate against a twin rendered with the HUD's canvas layers hidden
-## shows no HUD pixel over the signs or captions, and does show the HUD over the
+## sign (an icon: its words are the hover tooltip's) and the station's centre
+## project inside the frame with a margin; the sign's hover entry (the provider
+## HoverTarget asks) carries the full reason, MissMarkers.CLOSED_TEXT here; the
+## plate against a twin rendered with the HUD's canvas layers hidden
+## shows no HUD pixel over the signs, and does show the HUD over the
 ## hint (and the card on plate 02); the hint, the bar and the card rects lie in
 ## the window and overlap none of each other; the card reads as the closed
 ## airport ("To open the airport" over a row still to do). The control: after
@@ -37,7 +39,6 @@ const MAIN_SCENE := "res://main/main.tscn"
 const MARGIN_PX := 8.0
 const HANG_LIMIT_MS := 60000
 const DISTANCE := 24.0
-const CAPTION_OUTLINE_PX := 8.0
 
 var _out_dir := ""
 var _failed := false
@@ -229,27 +230,12 @@ func _plate(name: String, card_open: bool) -> void:
 		var anchor := _cam.unproject_position(sign.global_position)
 		var sign_px := MissMarkers.SIGN_PX * per_screen
 		var icon := Rect2(anchor - Vector2(sign_px / 2.0, sign_px), Vector2.ONE * sign_px)
-		var text := _markers.closed_text(station)
-		var size := (
-			ThemeDB.fallback_font.get_string_size(
-				text, HORIZONTAL_ALIGNMENT_LEFT, -1, MissMarkers.CAPTION_FONT
-			)
-			* per_screen
-		)
-		var lift := (MissMarkers.SIGN_PX + MissMarkers.CAPTION_GAP_PX) * per_screen + size.y
-		var caption := Rect2(anchor + Vector2(-size.x / 2.0, -lift), size).grow(
-			CAPTION_OUTLINE_PX * per_screen
-		)
-		var inside := _frame_rect().encloses(icon) and _frame_rect().encloses(caption)
-		print(
-			(
-				"SIGN station=%d text=%s icon=%s caption=%s in_frame=%s"
-				% [station, text, icon, caption, inside]
-			)
-		)
-		ok = ok and inside and text == MissMarkers.CLOSED_CAPTION
+		var entry := _hover_entry(station)
+		var text := String(entry.get("text", ""))
+		var inside := _frame_rect().encloses(icon)
+		print("SIGN station=%d hover text='%s' icon=%s in_frame=%s" % [station, text, icon, inside])
+		ok = ok and inside and text == MissMarkers.CLOSED_TEXT
 		subjects.append(icon)
-		subjects.append(caption)
 		bodies.append(Rect2(anchor - Vector2(60.0, 0.0), Vector2(120.0, 110.0)))
 	var under: Array[int] = []
 	for rect in subjects:
@@ -268,8 +254,16 @@ func _plate(name: String, card_open: bool) -> void:
 		_invalid("%s: signs, hint, bar or card failed their checks" % name)
 
 
+## The hover entry (MissMarkers.hover_signs()) of `station`'s Closed sign, or {}.
+func _hover_entry(station: int) -> Dictionary:
+	for entry in _markers.hover_signs():
+		if entry["key"] == "closed:%d" % station:
+			return entry
+	return {}
+
+
 ## The hint's card must cover no station (the screen box under its sign) and no
-## sign or caption: it has its own backing, so it must not hide the world.
+## sign: it has its own backing, so it must not hide the world.
 func _hint_clear_of_stations(bodies: Array[Rect2], signs: Array[Rect2]) -> bool:
 	var box := _panel.hint_card().get_global_rect()
 	var ok := true

@@ -149,3 +149,54 @@ func test_the_hover_text_is_reported_only_in_build_mode() -> void:
 	var rect: Rect2 = signs[0]["rect"]
 	assert_bool(rect.has_point(foot + Vector2(0.0, -rect.size.y / 2.0))).is_true()
 	assert_float(rect.size.y).is_greater(0.0)
+
+
+## A pinned gap tooltip belongs to its gap: when that gap closes, the pin ends
+## instead of moving to the other gap that took its place in the list.
+func test_a_pinned_gap_clears_when_it_closes_instead_of_moving() -> void:
+	var port: SubViewport = auto_free(SubViewport.new())
+	port.size = Vector2i(1920, 1080)
+	add_child(port)
+	var markers: GapMarkers = GapMarkers.new()
+	port.add_child(markers)
+	markers.bind(_grid)
+	var camera := Camera3D.new()
+	port.add_child(camera)
+	camera.make_current()
+	var at := _grid.origin + Vector3(3.5, 0.0, 3.5)
+	camera.global_transform = Transform3D.IDENTITY.translated(at + Vector3(0.0, 16.0, 10.0))
+	camera.look_at(at)
+	var session: BuildSession = auto_free(BuildSession.new())
+	session.active = true
+	markers.build_session = session
+	# Two gaps: the north-west corner's north edge (first run), and the east edge.
+	_remove(Vector2i(2, 2), BuildGrid.Side.NORTH)
+	_remove(Vector2i(5, 3), BuildGrid.Side.EAST)
+	var hover: HoverTarget = auto_free(HoverTarget.new())
+	port.add_child(hover)
+	hover.register_provider(markers)
+	var signs := markers.hover_signs()
+	print("two gaps: %s" % [signs])
+	assert_int(signs.size()).is_equal(2)
+	assert_bool(signs[0]["key"] != signs[1]["key"]).is_true()
+	# Pin the first gap with a click on its sign.
+	var first_rect: Rect2 = signs[0]["rect"]
+	var click := InputEventMouseButton.new()
+	click.button_index = MOUSE_BUTTON_LEFT
+	click.pressed = true
+	click.position = first_rect.get_center()
+	hover._unhandled_input(click)
+	hover.pointer_override = Vector2(-500.0, -500.0)
+	hover.refresh()
+	var pinned := hover.pinned_target()
+	assert_object(pinned).is_not_null()
+	assert_that(pinned.key).is_equal(signs[0]["key"])
+	# Close the pinned gap: the other gap is now the only (first) sign.
+	(
+		assert_bool(_grid.apply(BuildEdit.place_wall(Vector2i(2, 2), BuildGrid.Side.NORTH)).ok)
+		. is_true()
+	)
+	assert_int(markers.sign_count()).is_equal(1)
+	hover.refresh()
+	print("after closing: pinned %s, signs %s" % [hover.pinned_target(), markers.hover_signs()])
+	assert_object(hover.pinned_target()).is_null()
