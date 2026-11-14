@@ -40,10 +40,14 @@ extends CanvasLayer
 ## A card says "first flight tomorrow" when the sim would not fly today's slot
 ## (FlightTimetable.first_day), once the airport is open.
 ##
-## Each card has a fit line before Accept (decision airline-offers-2-a-day-fit-
-## the-free-gate-slots-1-needs-more, point 6): FlightFit's words for whether
-## the offer fits now and why not, in the good-text look when it fits and the
-## problem look when not, at the small text size. It is advice, kept apart from
+## Each card reads as a choice (decision airline-offers-stay-accept-many-the-
+## three-offer-cards-read-a): directly under the title come a fit line and a
+## daily earnings line ("$480 a day", passengers times the fee), so the three
+## compare at a glance. The fit line (decision airline-offers-2-a-day-fit-
+## the-free-gate-slots-1-needs-more, point 6) says "Fits your gates now" or
+## "Needs another gate", and FlightFit's words for any other reason, in the
+## good-text look when it fits and the problem look when not, at the small
+## text size. It is advice, kept apart from
 ## the click refusal: it is worked out again when the sheet opens, when the
 ## cards rebuild (an accept, a decline, a new day, a load), when a contract
 ## ends, and on FlightSim.planning_changed (the gates, their stands, the runway
@@ -60,6 +64,10 @@ const ENDED_KEY := &"offer_ended"
 const WARNING_TITLE := "Low airport rating"
 const ENDED_TITLE := "Contract ended"
 const EMPTY_TEXT := "No offers right now. New offers arrive at midnight."
+## The card's fit line when the offer fits the gates now, and when another gate
+## would take it. Any other blocker keeps FlightFit's own words.
+const FITS_TEXT := "Fits your gates now"
+const NEEDS_GATE_TEXT := "Needs another gate"
 
 @export var desk: OfferDesk
 @export var flights: FlightSim
@@ -93,6 +101,7 @@ var _decline_buttons: Dictionary = {}
 var _note_labels: Dictionary = {}
 var _refusal_labels: Dictionary = {}
 var _fit_labels: Dictionary = {}
+var _earnings_labels: Dictionary = {}
 var _noted_tick := -1
 ## The sheet's hold on the clock, from open() until it closes, the player
 ## resumes or picks another speed, or a load drops it.
@@ -170,6 +179,26 @@ static func card_lines(offer: Dictionary, note := "") -> PackedStringArray:
 	if note != "":
 		lines.insert(NOTE_LINE, note_line(note))
 	return lines
+
+
+## What an offer pays each day it flies: booked passengers times the fee.
+static func daily_earnings(offer: Dictionary) -> int:
+	return int(offer["booked_passengers"]) * int(offer["fee_per_passenger"])
+
+
+## The earnings line on a card, the figure the three offers are compared by.
+static func earnings_text(offer: Dictionary) -> String:
+	return "$%d a day" % daily_earnings(offer)
+
+
+## The card's fit line for `assessment` of an offer with `plane_size`: the short
+## fits / needs-another-gate words, else FlightFit's reason.
+static func fit_line(assessment: Dictionary, plane_size: String) -> String:
+	if assessment["fits"]:
+		return FITS_TEXT
+	if assessment["blocker"] == FlightSim.BLOCKER_GATE and assessment["another_gate_helps"]:
+		return NEEDS_GATE_TEXT
+	return FlightFit.text(assessment, plane_size)
 
 
 ## A first-flight note as it reads on a line of its own.
@@ -323,14 +352,19 @@ func refusal_label(id: String) -> Label:
 	return _refusal_labels[id]
 
 
-## The fit line on offer `id`'s card (FlightFit.text): advice that Accept
-## checks again at the click.
+## The fit line on offer `id`'s card (fit_line): advice that Accept checks
+## again at the click.
 func fit_text(id: String) -> String:
 	return (_fit_labels[id] as Label).text
 
 
 func fit_label(id: String) -> Label:
 	return _fit_labels[id]
+
+
+## The daily earnings line on offer `id`'s card.
+func earnings_text_of(id: String) -> String:
+	return (_earnings_labels[id] as Label).text
 
 
 ## What the sheet says under the cards: the last accept's confirmation, or
@@ -413,6 +447,7 @@ func _refresh() -> void:
 	_note_labels.clear()
 	_refusal_labels.clear()
 	_fit_labels.clear()
+	_earnings_labels.clear()
 	var offers := desk.board.open_offers()
 	for offer in offers:
 		_add_card(offer)
@@ -453,7 +488,7 @@ func _refresh_fits() -> void:
 
 func _set_fit(label: Label, offer: Dictionary) -> void:
 	var assessment := FlightFit.assess(flights, OfferBoard.terms_of(offer))
-	label.text = FlightFit.text(assessment, offer["plane_size"])
+	label.text = fit_line(assessment, offer["plane_size"])
 	label.theme_type_variation = &"HudGoodText" if assessment["fits"] else &"HudProblemText"
 	# HudGoodText is larger than the card's other small lines; both looks keep
 	# the HudSmall size.
@@ -599,6 +634,13 @@ func _add_card(offer: Dictionary) -> void:
 	_set_fit(fit, offer)
 	texts.add_child(fit)
 	_fit_labels[id] = fit
+	var earnings := _card_label(earnings_text(offer), &"HudSmall")
+	earnings.name = "Earnings_%s" % id
+	texts.add_child(earnings)
+	_earnings_labels[id] = earnings
+	# The verdict and the money come straight under the title.
+	texts.move_child(fit, 1)
+	texts.move_child(earnings, 2)
 	var refusal := Label.new()
 	refusal.name = "Refusal_%s" % id
 	refusal.visible = false

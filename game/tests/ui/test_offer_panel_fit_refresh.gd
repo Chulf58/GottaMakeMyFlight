@@ -54,17 +54,17 @@ func _frame() -> void:
 func test_a_new_gate_rewrites_the_cards_while_the_sheet_is_open() -> void:
 	assert_bool(_sim.accept_contract(TestFlightFit.terms("K10", 600))).is_true()
 	_open([1200, 720, 1260])
-	assert_str(_panel.fit_text("O0N2")).is_equal(FlightFit.ANOTHER_GATE_TEXT)
+	assert_str(_panel.fit_text("O0N2")).is_equal(OfferPanel.NEEDS_GATE_TEXT)
 	_sim.gate_source = func() -> Array[String]: return ["C", "D"] as Array[String]
 	await _frame()
 	print("after gate D: '%s', planning_changed %d" % [_panel.fit_text("O0N2"), _planning_changes])
-	assert_str(_panel.fit_text("O0N2")).is_equal(FlightFit.FITS_TEXT)
+	assert_str(_panel.fit_text("O0N2")).is_equal(OfferPanel.FITS_TEXT)
 	assert_int(_planning_changes).is_equal(1)
 
 
 func test_a_smaller_stand_rewrites_the_cards_while_the_sheet_is_open() -> void:
 	_open([600, 720, 1200], PlaneClasses.MEDIUM)
-	assert_str(_panel.fit_text("O0N1")).is_equal(FlightFit.FITS_TEXT)
+	assert_str(_panel.fit_text("O0N1")).is_equal(OfferPanel.FITS_TEXT)
 	var stand: Dictionary = FlightGround.fallback("C")["stand"]
 	_sim.stand_source = func() -> Dictionary:
 		return {"C": {"stand": stand, "max_class": PlaneClasses.SMALL}}
@@ -76,7 +76,7 @@ func test_a_smaller_stand_rewrites_the_cards_while_the_sheet_is_open() -> void:
 
 func test_a_runway_size_change_rewrites_the_cards_while_the_sheet_is_open() -> void:
 	_open([600, 720, 1200], PlaneClasses.MEDIUM)
-	assert_str(_panel.fit_text("O0N1")).is_equal(FlightFit.FITS_TEXT)
+	assert_str(_panel.fit_text("O0N1")).is_equal(OfferPanel.FITS_TEXT)
 	_sim.runway.size = PlaneClasses.SMALL
 	await _frame()
 	print("after a small runway: '%s'" % _panel.fit_text("O0N1"))
@@ -90,7 +90,7 @@ func test_runway_works_rewrite_the_cards_while_the_sheet_is_open() -> void:
 	_sim.runway.size = PlaneClasses.MEDIUM
 	_sim.tick = GameCalendar.tick_at(1, 3 * 60)
 	_open([420, 720, 1200])
-	assert_str(_panel.fit_text("O0N1")).is_equal(FlightFit.FITS_TEXT)
+	assert_str(_panel.fit_text("O0N1")).is_equal(OfferPanel.FITS_TEXT)
 	var changes_before := _planning_changes
 	assert_bool(_sim.start_works(PlaneClasses.LARGE)).is_true()
 	await _frame()
@@ -100,7 +100,7 @@ func test_runway_works_rewrite_the_cards_while_the_sheet_is_open() -> void:
 			% [_sim.runway.works.start, _sim.runway.works.finish, _panel.fit_text("O0N1")]
 		)
 	)
-	assert_str(_panel.fit_text("O0N1")).is_not_equal(FlightFit.FITS_TEXT)
+	assert_str(_panel.fit_text("O0N1")).is_not_equal(OfferPanel.FITS_TEXT)
 	assert_int(_planning_changes - changes_before).is_equal(1)
 
 
@@ -110,4 +110,4 @@ func test_no_change_says_nothing() -> void:
 	await _frame()
 	await _frame()
 	assert_int(_planning_changes).is_equal(0)
-	assert_str(_panel.fit_text("O0N1")).is_equal(FlightFit.FITS_TEXT)
+	assert_str(_panel.fit_text("O0N1")).is_equal(OfferPanel.FITS_TEXT)
