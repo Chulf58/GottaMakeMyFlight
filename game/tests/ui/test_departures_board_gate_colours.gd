@@ -33,8 +33,17 @@ func _accept(id: String, minute: int) -> void:
 	assert_bool(_sim.accept_contract(TestFlightContracts.terms(id, minute))).is_true()
 
 
+func _assert_colour(actual: Color, expected: Color) -> void:
+	(
+		assert_bool(actual.is_equal_approx(expected))
+		. override_failure_message("%s is not %s" % [actual, expected])
+		. is_true()
+	)
+
+
+## The colour the button draws its normal fill in: the theme fill times the tint.
 func _fill(button: Button) -> Color:
-	return (button.get_theme_stylebox("normal") as StyleBoxFlat).bg_color
+	return (button.get_theme_stylebox("normal") as StyleBoxFlat).bg_color * button.self_modulate
 
 
 func test_each_gate_button_takes_its_gates_colour() -> void:
@@ -44,19 +53,19 @@ func test_each_gate_button_takes_its_gates_colour() -> void:
 	var x := _board.gate_button("X", 0)
 	var y := _board.gate_button("Y", 0)
 	print("gate buttons: ", x.text, " ", _fill(x), "  ", y.text, " ", _fill(y))
-	assert_object(_fill(x)).is_equal(GateColours.of("A"))
-	assert_object(_fill(y)).is_equal(GateColours.of("B"))
+	_assert_colour(_fill(x), GateColours.of("A"))
+	_assert_colour(_fill(y), GateColours.of("B"))
 	assert_object(_fill(x)).is_not_equal(_fill(y))
 
 
 func test_the_colour_follows_a_move_to_another_gate() -> void:
 	_accept("X", 660)
 	_board.refresh()
-	assert_object(_fill(_board.gate_button("X", 0))).is_equal(GateColours.of("A"))
+	_assert_colour(_fill(_board.gate_button("X", 0)), GateColours.of("A"))
 	_board.gate_button("X", 0).pressed.emit()
 	_board.picker_button("C").pressed.emit()
 	assert_str(_board.gate_button("X", 0).text).is_equal("Gate C")
-	assert_object(_fill(_board.gate_button("X", 0))).is_equal(GateColours.of("C"))
+	_assert_colour(_fill(_board.gate_button("X", 0)), GateColours.of("C"))
 
 
 func test_the_shared_entry_points_match_the_pickers_words() -> void:

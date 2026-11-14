@@ -446,7 +446,7 @@ func _add_row(entry: Dictionary) -> void:
 		row.add_child(end_btn)
 	_rows.add_child(row)
 	_compact(button)
-	GateColours.tint_button(button, entry["gate"])
+	GateColours.tint_themed(button, entry["gate"])
 	if end_btn != null:
 		_compact(end_btn)
 	var parts := PackedStringArray()

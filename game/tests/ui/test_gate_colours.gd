@@ -26,6 +26,22 @@ func test_every_colour_is_light_enough_for_navy_text() -> void:
 		assert_float(shade).is_greater(0.45)
 
 
+func test_tint_themed_colours_the_button_without_a_theme_override() -> void:
+	var button: Button = auto_free(Button.new())
+	button.theme = BuildMenu.HUD_THEME
+	button.theme_type_variation = &"HudButtonCompact"
+	add_child(button)
+	GateColours.tint_themed(button, "B")
+	var normal := button.get_theme_stylebox("normal") as StyleBoxFlat
+	var drawn := normal.bg_color * button.self_modulate
+	print("themed tint: fill ", normal.bg_color, " drawn ", drawn)
+	assert_bool(drawn.is_equal_approx(GateColours.of("B"))).is_true()
+	assert_str(str(button.theme_type_variation)).is_equal("HudButtonCompact")
+	for state in [&"normal", &"hover", &"pressed", &"disabled"]:
+		assert_bool(button.has_theme_stylebox_override(state)).is_false()
+	assert_bool(button.has_theme_color_override("font_color")).is_false()
+
+
 func test_tint_button_colours_every_state_and_keeps_the_padding() -> void:
 	var button: Button = auto_free(Button.new())
 	button.theme = BuildMenu.HUD_THEME

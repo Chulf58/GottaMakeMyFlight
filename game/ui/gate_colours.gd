@@ -34,6 +34,20 @@ static func slot_of(gate_id: String) -> int:
 	return posmod(gate_id.to_upper().unicode_at(0) - "A".unicode_at(0), PALETTE.size())
 
 
+## Gives a themed button the colour of `gate_id` without any theme override
+## (decision hud-theme-file-game-ui-hud-theme-tres-nunito-font-set-on-eac): the
+## button keeps its theme variation and the theme's styleboxes, and its
+## self_modulate scales the theme's normal fill to the gate colour. Hover,
+## pressed and disabled keep the theme's own states, shifted by the same tint.
+static func tint_themed(button: Button, gate_id: String) -> void:
+	var base := of(gate_id)
+	var box := button.get_theme_stylebox("normal")
+	var fill := (box as StyleBoxFlat).bg_color if box is StyleBoxFlat else Color.WHITE
+	button.self_modulate = Color(
+		base.r / maxf(fill.r, 0.01), base.g / maxf(fill.g, 0.01), base.b / maxf(fill.b, 0.01)
+	)
+
+
 ## Gives `button` the colour of `gate_id` in every state, keeping the theme's
 ## padding and outline. A disabled button is the same colour, softened.
 static func tint_button(button: Button, gate_id: String) -> void:
