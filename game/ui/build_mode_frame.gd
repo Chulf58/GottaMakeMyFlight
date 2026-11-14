@@ -13,11 +13,14 @@ const STRIPE_SHADER := preload("res://ui/build_mode_stripes.gdshader")
 const THICKNESS := float(HudLayout.UNIT)
 const STRIPE_PERIOD := 22.0
 const SIGN_TEXT := "Build mode"
+## The sign's text in a narrow slot, where its 18 px margins leave no room for SIGN_TEXT.
+const SIGN_TEXT_NARROW := "Build"
 const YELLOW := Color(0.99, 0.8, 0.1)
 const DARK := Color(0.1, 0.1, 0.12)
 
 var _bands: Array[ColorRect] = []
 var _sign := PanelContainer.new()
+var _sign_text := Label.new()
 
 
 func _init() -> void:
@@ -79,7 +82,14 @@ func _fit() -> void:
 	_place(1, Vector2(0.0, size_now.y - t), Vector2(size_now.x, t))
 	_place(2, Vector2(0.0, t), Vector2(t, size_now.y - 2.0 * t))
 	_place(3, Vector2(size_now.x - t, t), Vector2(t, size_now.y - 2.0 * t))
-	_sign.size = TopRow.SLOT_SIZE
+	var slot_w := TopRow.slot_width(size_now.x)
+	if slot_w < HudLayout.TOGGLE_W:
+		_sign_text.add_theme_font_size_override("font_size", HudLayout.CAPTION)
+		_sign_text.text = SIGN_TEXT_NARROW
+	else:
+		_sign_text.remove_theme_font_size_override("font_size")
+		_sign_text.text = SIGN_TEXT
+	_sign.size = Vector2(slot_w, HudLayout.BUTTON_H)
 	_sign.position = Vector2(TopRow.slot_left(TopRow.SIGN_SLOT, size_now.x), TopRow.TOP)
 
 
@@ -100,8 +110,8 @@ func _build_sign() -> void:
 	_sign.theme = HUD_THEME
 	_sign.theme_type_variation = &"HudBuildSign"
 	# The theme's 24 px text with HudBuildSign's 3 px margins is BUTTON_H tall.
-	_sign.custom_minimum_size = TopRow.SLOT_SIZE
-	var label := Label.new()
+	_sign.custom_minimum_size = Vector2(0.0, HudLayout.BUTTON_H)
+	var label := _sign_text
 	label.text = SIGN_TEXT
 	label.theme_type_variation = &"HudBuildSignText"
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE

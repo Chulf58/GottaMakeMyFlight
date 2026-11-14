@@ -24,28 +24,74 @@ const TOP := float(HudLayout.MARGIN)
 ## Where a sheet opens: under the row, one GAP below the buttons.
 const SHEET_TOP := float(HudLayout.MARGIN + HudLayout.BUTTON_H + HudLayout.GAP)
 
+## The widest the rating card gets (it is built to stay inside 240 px), so the
+## row can start a gap after it.
+const RATING_W := 240.0
+## The narrowest slot, when the layout is too narrow for three TOGGLE_W slots.
+const MIN_SLOT_W := 88.0
+## The left-most a sheet starts: right of the top-left column of toggle buttons.
+const SHEET_MIN_LEFT := float(HudLayout.MARGIN + HudLayout.TOGGLE_W + HudLayout.GAP)
+
+
+## The slot width in a layer `layer_width` wide: TOGGLE_W while the row, centred
+## on the layer, clears the rating card and the clock panel by a GAP, else the
+## widest grid step of three slots whose centred row does (UI scale 1.5 is a
+## 1280 px layout, where the slots are 88 wide).
+static func slot_width(layer_width: float) -> float:
+	var half := minf(layer_width / 2.0 - _span_left(), _span_right(layer_width) - layer_width / 2.0)
+	if half * 2.0 >= row_width():
+		return float(HudLayout.TOGGLE_W)
+	var step := float(HudLayout.UNIT)
+	var fit := floorf((half * 2.0 - (SLOT_COUNT - 1) * HudLayout.GAP) / SLOT_COUNT / step) * step
+	return maxf(MIN_SLOT_W, fit)
+
 
 ## The row's width: the slots and the gaps between them.
-static func row_width() -> float:
-	return float(SLOT_COUNT * HudLayout.TOGGLE_W + (SLOT_COUNT - 1) * HudLayout.GAP)
+static func row_width(slot_w: float = HudLayout.TOGGLE_W) -> float:
+	return SLOT_COUNT * slot_w + (SLOT_COUNT - 1) * HudLayout.GAP
+
+
+## The row's left edge in a layer `layer_width` wide: the row is always centred.
+static func row_left(layer_width: float) -> float:
+	return (layer_width - row_width(slot_width(layer_width))) / 2.0
+
+
+## The sheet's left edge and width in a layer `layer_width` wide: from the row's
+## left edge, SHEET_W wide, moved left (never past SHEET_MIN_LEFT) so it ends a
+## GAP before the clock panel. In a layout too narrow to leave a sheet any room
+## (the rail starts left of SHEET_MIN_LEFT) the width is 0 and the sheet is as
+## wide as its content.
+static func sheet_extent(layer_width: float) -> Vector2:
+	var right := _span_right(layer_width)
+	if right <= SHEET_MIN_LEFT:
+		return Vector2(SHEET_MIN_LEFT, 0.0)
+	var left := clampf(minf(row_left(layer_width), right - SHEET_W), SHEET_MIN_LEFT, right)
+	return Vector2(left, minf(SHEET_W, right - left))
 
 
 ## The left edge of `slot` in a layer that is `layer_width` wide.
 static func slot_left(slot: int, layer_width: float) -> float:
-	return (layer_width - row_width()) / 2.0 + slot * (HudLayout.TOGGLE_W + HudLayout.GAP)
+	return row_left(layer_width) + slot * (slot_width(layer_width) + HudLayout.GAP)
 
 
-## Puts `control` in `slot` of the row with anchors on the layer's centre, so
-## the row stays centred when the layer's width changes.
-static func place_in_slot(control: Control, slot: int) -> void:
-	var left := -row_width() / 2.0 + slot * (HudLayout.TOGGLE_W + HudLayout.GAP)
-	_anchor_top_centre(control, left, TOP, SLOT_SIZE)
+## Puts `control` in `slot` of the row for the layout width of `host`'s viewport.
+## The owner calls it again when that viewport's size_changed fires (a UI scale
+## change).
+static func place_in_slot(control: Control, slot: int, host: Node) -> void:
+	var width := _layer_width(host)
+	var slot_w := slot_width(width)
+	_anchor_top_left(control, slot_left(slot, width), TOP, Vector2(slot_w, HudLayout.BUTTON_H))
+	# A narrow slot takes the caption size, so "Offers (12)" stays inside it.
+	if slot_w < HudLayout.TOGGLE_W:
+		control.add_theme_font_size_override("font_size", HudLayout.CAPTION)
+	else:
+		control.remove_theme_font_size_override("font_size")
 
 
-## Puts `sheet` under the row: SHEET_W wide, starting at the row's left edge.
-## Its height is its content's.
-static func place_sheet(sheet: Control) -> void:
-	_anchor_top_centre(sheet, -row_width() / 2.0, SHEET_TOP, Vector2(SHEET_W, 0.0))
+## Puts `sheet` under the row (see sheet_extent). Its height is its content's.
+static func place_sheet(sheet: Control, host: Node) -> void:
+	var extent := sheet_extent(_layer_width(host))
+	_anchor_top_left(sheet, extent.x, SHEET_TOP, Vector2(extent.y, 0.0))
 
 
 ## Closes every other sheet of the row; call before showing `opening`.
@@ -57,9 +103,9 @@ static func close_others(opening: Node) -> void:
 			other.close()
 
 
-static func _anchor_top_centre(control: Control, left: float, top: float, extent: Vector2) -> void:
-	control.anchor_left = 0.5
-	control.anchor_right = 0.5
+static func _anchor_top_left(control: Control, left: float, top: float, extent: Vector2) -> void:
+	control.anchor_left = 0.0
+	control.anchor_right = 0.0
 	control.anchor_top = 0.0
 	control.anchor_bottom = 0.0
 	control.offset_left = left
@@ -68,3 +114,15 @@ static func _anchor_top_centre(control: Control, left: float, top: float, extent
 	control.offset_bottom = top + extent.y
 	control.grow_horizontal = Control.GROW_DIRECTION_END
 	control.grow_vertical = Control.GROW_DIRECTION_END
+
+
+static func _span_left() -> float:
+	return float(HudLayout.MARGIN + HudLayout.MONEY_W + HudLayout.GAP) + RATING_W + HudLayout.GAP
+
+
+static func _span_right(layer_width: float) -> float:
+	return layer_width - HudLayout.MARGIN - HudLayout.RAIL_W - HudLayout.GAP
+
+
+static func _layer_width(host: Node) -> float:
+	return host.get_viewport().get_visible_rect().size.x
