@@ -232,7 +232,7 @@ func test_bag_state_round_trips_through_json_and_still_cuts_the_fee() -> void:
 	_make_it(waiting)
 	var text := JSON.stringify(_settlement.to_snapshot())
 	var data := JSON.parse_string(text) as Dictionary
-	assert_bool(_settlement.from_snapshot({"owed": []})).is_true()
+	assert_bool(_settlement.from_snapshot({"owed": [], "bonuses_paid": []})).is_true()
 	assert_array(_settlement.to_snapshot()["bag_missed"]).is_empty()
 	assert_bool(_settlement.from_snapshot(data)).is_true()
 	assert_str(JSON.stringify(_settlement.to_snapshot())).is_equal(text)
@@ -244,7 +244,7 @@ func test_bag_state_round_trips_through_json_and_still_cuts_the_fee() -> void:
 
 func test_a_save_from_before_bags_loads_with_no_bag_state() -> void:
 	_make()
-	assert_bool(_settlement.from_snapshot({"owed": ["37"]})).is_true()
+	assert_bool(_settlement.from_snapshot({"owed": ["37"], "bonuses_paid": []})).is_true()
 	assert_array(_settlement.to_snapshot()["bag_missed"]).is_empty()
 	assert_array(_settlement.to_snapshot()["bags_awaited"]).is_empty()
 
@@ -253,6 +253,7 @@ func test_bad_bag_state_in_a_snapshot_is_refused_and_changes_nothing() -> void:
 	_make()
 	var good := {
 		"owed": [],
+		"bonuses_paid": [],
 		"bag_missed": ["3"],
 		"bags_awaited": [{"passenger": "4", "fee": "50", "missed_fee": "25"}],
 	}

@@ -196,7 +196,7 @@ func test_a_malformed_settlement_snapshot_is_refused_and_changes_nothing() -> vo
 	assert_bool(_settlement.from_snapshot({"owed": ["0"]})).is_false()
 	assert_bool(_settlement.from_snapshot({"owed": [], "extra": 1})).is_false()
 	assert_array(_settlement.owed()).is_empty()
-	assert_bool(_settlement.from_snapshot({"owed": ["37"]})).is_true()
+	assert_bool(_settlement.from_snapshot({"owed": ["37"], "bonuses_paid": []})).is_true()
 	assert_array(_settlement.owed()).is_equal([37])
 
 

@@ -119,7 +119,7 @@ func test_owed_wages_and_the_paid_total_survive_a_save() -> void:
 func test_a_save_from_before_wages_loads_with_no_debt_and_charges_from_the_next_midnight() -> void:
 	_kit.hire(CHECKIN)
 	_kit.near_midnight(3, 2000)
-	assert_bool(_kit.settlement.from_snapshot({"owed": ["37"]})).is_true()
+	assert_bool(_kit.settlement.from_snapshot({"owed": ["37"], "bonuses_paid": []})).is_true()
 	assert_int(_kit.settlement.wages_owed()).is_equal(0)
 	assert_int(_kit.settlement.wages_paid_today()).is_equal(0)
 	assert_array(_kit.settlement.owed()).is_equal([37])
@@ -178,7 +178,7 @@ func test_the_wage_keys_come_as_a_group_and_a_partial_set_is_refused() -> void:
 				data[keys[k]] = good[keys[k]]
 		assert_bool(_kit.settlement.from_snapshot(data)).is_false()
 		assert_bool(_kit.settlement.from_snapshot(good)).is_true()
-	assert_bool(_kit.settlement.from_snapshot({"owed": []})).is_true()
+	assert_bool(_kit.settlement.from_snapshot({"owed": [], "bonuses_paid": []})).is_true()
 
 
 func test_a_day_other_than_the_clock_day_is_a_broken_link() -> void:

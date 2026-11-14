@@ -710,23 +710,28 @@ func _add_card(offer: Dictionary) -> void:
 
 ## The trait line under the verdict row (OfferTraits.card_labels): the upside in
 ## HudGoodText and the downside in HudProblemText, each with its numbers as a
-## tooltip; a plain offer shows PLAIN_LABEL in HudHint and no downside.
+## tooltip; a plain offer shows PLAIN_LABEL in HudHint and no downside. An offer
+## from a loyal airline (OfferBoard's "loyal" mark) ends the line with
+## OfferTraits.LOYAL_LABEL in HudGoodText.
 static func _trait_row(offer: Dictionary) -> HBoxContainer:
 	var traits: Dictionary = offer[FlightContract.TRAITS_KEY]
 	var plain := OfferTraits.is_plain(traits)
-	var labels := OfferTraits.card_labels(traits)
-	var tips := OfferTraits.card_tips(traits)
+	var labels := Array(OfferTraits.card_labels(traits)) + [OfferTraits.LOYAL_LABEL]
+	var tips := Array(OfferTraits.card_tips(traits)) + [OfferTraits.LOYAL_TIP]
+	var shown: Array[bool] = [true, labels[1] != "", offer[OfferBoard.LOYAL_KEY]]
 	var row := HBoxContainer.new()
 	row.name = "Traits_%s" % offer["id"]
 	row.add_theme_constant_override("separation", 18)
-	var variations: Array[StringName] = [&"HudHint" if plain else &"HudGoodText", &"HudProblemText"]
-	for i in 2:
+	var variations: Array[StringName] = [
+		&"HudHint" if plain else &"HudGoodText", &"HudProblemText", &"HudGoodText"
+	]
+	for i in 3:
 		var label := Label.new()
-		label.name = ["Up", "Down"][i]
+		label.name = ["Up", "Down", "Loyal"][i]
 		label.text = labels[i]
 		label.tooltip_text = tips[i]
 		label.mouse_filter = Control.MOUSE_FILTER_PASS
-		label.visible = labels[i] != ""
+		label.visible = shown[i]
 		label.theme_type_variation = variations[i]
 		label.add_theme_font_size_override(
 			"font_size", BuildMenu.HUD_THEME.get_font_size("font_size", &"HudSmall")

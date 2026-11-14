@@ -243,10 +243,14 @@ static func wage_of(role: int) -> int:
 ## The fee paid for a passenger whose bag missed the flight, rounded down:
 ## `paid_percent` of it (MISSED_BAG_FEE_PERCENT unless the contract's traits
 ## say otherwise, OfferTraits.missed_bag_paid_percent). A negative fee
-## (NO_PRICE) stays NO_PRICE, so a failed lookup never reads as a cut fee.
+## (NO_PRICE) stays NO_PRICE, so a failed lookup never reads as a cut fee, and
+## so does a `paid_percent` outside 0 to 100.
 static func fee_after_missed_bag(fee: int, paid_percent := MISSED_BAG_FEE_PERCENT) -> int:
 	if fee < 0:
 		push_error("PriceTable: cannot cut fee %d" % fee)
+		return NO_PRICE
+	if paid_percent < 0 or paid_percent > 100:
+		push_error("PriceTable: a missed bag cannot pay %d%% of the fee" % paid_percent)
 		return NO_PRICE
 	return fee * paid_percent / 100
 

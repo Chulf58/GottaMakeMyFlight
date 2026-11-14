@@ -12,9 +12,11 @@ const DAYS := 30
 ## change, for every tier), and the hash of the JSON of the offers each tier
 ## then held. The hashes were measured again when offers gained traits (offer
 ## save version 4), which change the saved fees, bookings and keys but not the
-## RNG state (test_offer_board_traits checks the base draw against a replay).
+## RNG state (test_offer_board_traits checks the base draw against a replay),
+## and again for save version 5 (the loyal mark, the loyalty count and the
+## slice 2 traits in the trait draw).
 const STATE_AFTER := 7055581944236607464
-const BEFORE_HASHES := [3922563330, 27901550, 2302796582]
+const BEFORE_HASHES := [3726096300, 18523968, 2977914032]
 
 
 func _rng() -> RandomNumberGenerator:
@@ -113,10 +115,9 @@ func test_the_rng_advance_is_the_same_for_every_runway_size_and_as_before() -> v
 func test_the_offers_of_a_runway_that_takes_every_class_are_the_old_offers() -> void:
 	for tier in range(OfferBoard.MAX_TIER + 1):
 		var board := _board(tier, PlaneClasses.LARGE, _rng())
-		(
-			assert_int(JSON.stringify(board.to_snapshot()).hash())
-			. override_failure_message("tier %d" % tier)
-			. is_equal(BEFORE_HASHES[tier])
+		var hashed := JSON.stringify(board.to_snapshot()).hash()
+		assert_int(hashed).override_failure_message("tier %d hash %d" % [tier, hashed]).is_equal(
+			BEFORE_HASHES[tier]
 		)
 		var default_board := OfferBoard.new()
 		var rng := _rng()

@@ -33,6 +33,7 @@ static func record(id: String, day: int, minute: int, status := OfferBoard.OPEN)
 		"booked_passengers": 12,
 		"fee_per_passenger": 25,
 		"traits": NEUTRAL_TRAITS.duplicate(),
+		"loyal": false,
 		"status": status,
 	}
 
@@ -46,7 +47,7 @@ static func day_records(day: int, minutes: Array) -> Array:
 
 
 static func save_of(offers: Array) -> Dictionary:
-	return {"save_version": OfferBoard.SAVE_VERSION, "offers": offers}
+	return {"save_version": OfferBoard.SAVE_VERSION, "offers": offers, "loyalty": {}}
 
 
 func test_a_day_draws_the_daily_count_of_valid_starter_offers() -> void:

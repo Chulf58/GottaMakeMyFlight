@@ -21,7 +21,8 @@ signal contract_ended(contract: Dictionary)
 ## rating must tick before the desk does (it sits earlier in the scene): the
 ## new day then counts. Without one every day is drawn at the starter tier.
 @export var rating: AirportRating
-## The flights whose contracts a low rating ends. Without it nothing ends.
+## The flights whose contracts a low rating ends, and whose departures count the
+## Loyal airline days (on_flight_state). Without it nothing ends or counts.
 @export var flights: FlightSim
 ## The bags whose ready bag room (BaggageSim.has_ready_bag_room) lets a day's
 ## offers carry the bag traits, and whose grid's ready shop or food rooms let
@@ -62,8 +63,23 @@ func bind_clock(sim_clock: SimClock) -> void:
 	_bound = sim_clock
 	clock = sim_clock
 	_day = GameCalendar.day_of(clock.tick)
+	if flights != null and not flights.state_changed.is_connected(on_flight_state):
+		flights.state_changed.connect(on_flight_state)
 	_draw(_day)
 	clock.ticked.connect(on_tick)
+
+
+## FlightSim.state_changed: a departed flight of a contract with the Loyal
+## airline trait counts its day toward that airline's loyalty on the board
+## (OfferBoard.note_flown counts each day once). A load emits no departure, and
+## the saved count already holds the days flown before it.
+func on_flight_state(flight_id: String, state: int) -> void:
+	if state != FlightSim.State.DEPARTED:
+		return
+	var contract := flights.contract_of(flights.flight_contract_id(flight_id))
+	if contract.is_empty() or not OfferTraits.builds_loyalty(contract[FlightContract.TRAITS_KEY]):
+		return
+	board.note_flown(contract["airline"], FlightTimetable.parse_occurrence(flight_id)["day"])
 
 
 ## A new day first ends a contract the low rating has made due, then draws the

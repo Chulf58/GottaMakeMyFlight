@@ -15,13 +15,30 @@ signal changed(balance: int)
 ## sum; empty for a spend or a credit no debt took from). `tick` is the clock's
 ## tick, or NO_TICK when the wallet has no clock.
 signal transaction(amount: int, category: int, claimed: Dictionary, tick: int)
+## A charge() the balance could not cover in full: `amount` is the part left
+## unpaid, which is not owed and never taken later. `tick` as for transaction.
+signal unpaid(amount: int, category: int, tick: int)
 
 ## What a movement is for. There is deliberately no catch-all: every caller
 ## says which one. UPKEEP is the daily running cost of rooms (toilet stalls).
 ## PARKING is a car park's fee, credited when a car parks (LandsideSim).
 ## INCIDENT is a daily incident's bonus or cost (decision daily-incidents-
-## technical-design-incidentdirector-shared-clo), either way.
-enum Category { FEES, SHOP, GRANT, OPENING, BUILD, WAGES, UPKEEP, PARKING, INCIDENT }
+## technical-design-incidentdirector-shared-clo), either way. FINES are the
+## airline fines a Miss fine contract charges (Settlement, via charge()), and
+## SIGNING_BONUS the one-off bonus a Signing bonus contract pays (OfferTraits).
+enum Category {
+	FEES,
+	SHOP,
+	GRANT,
+	OPENING,
+	BUILD,
+	WAGES,
+	UPKEEP,
+	PARKING,
+	INCIDENT,
+	FINES,
+	SIGNING_BONUS,
+}
 
 ## Upper bound on the balance, far below 2^53, so a JSON round trip and any
 ## sum of in-range amounts stay exact.
@@ -93,6 +110,22 @@ func spend(amount: int, category: Category) -> bool:
 	_set_balance(balance - amount)
 	_emit(-amount, category, {})
 	return true
+
+
+## Takes what it can of `amount`, down to a balance of 0, and returns what it
+## took (a spend of that much). The rest is announced by `unpaid` and dropped:
+## the balance never goes negative and nothing is owed. A negative amount or an
+## unknown category pushes an error and takes nothing.
+func charge(amount: int, category: Category) -> int:
+	if amount < 0:
+		push_error("Wallet.charge: cannot charge %d" % amount)
+		return 0
+	var paid := mini(amount, balance)
+	if not spend(paid, category):
+		return 0
+	if amount > paid:
+		unpaid.emit(amount - paid, category, clock.tick if is_instance_valid(clock) else NO_TICK)
+	return paid
 
 
 ## JSON-safe state for a save. The balance is a decimal string, like the

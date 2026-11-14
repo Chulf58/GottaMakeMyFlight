@@ -206,12 +206,12 @@ func test_a_starter_airline_cannot_carry_a_higher_tiers_terms() -> void:
 	assert_bool(OfferBoard.new().from_snapshot(_day_with_first(dear))).is_false()
 
 
-## Tier 2 airlines now offer medium planes, so the offers a board saves changed.
-func test_the_offer_save_version_is_4_and_a_version_3_save_is_refused() -> void:
-	assert_int(OfferBoard.SAVE_VERSION).is_equal(4)
+## Version 5 added the Loyal airline count and each offer's loyal mark.
+func test_the_offer_save_version_is_5_and_a_version_4_save_is_refused() -> void:
+	assert_int(OfferBoard.SAVE_VERSION).is_equal(5)
 	var board := OfferBoard.new()
 	board.ensure_day(0, _rng, OfferBoard.MAX_TIER)
 	var data := board.to_snapshot()
-	assert_int(int(data["save_version"])).is_equal(4)
-	data["save_version"] = 3
+	assert_int(int(data["save_version"])).is_equal(5)
+	data["save_version"] = 4
 	assert_bool(OfferBoard.new().from_snapshot(data)).is_false()

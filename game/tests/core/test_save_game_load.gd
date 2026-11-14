@@ -95,6 +95,14 @@ func test_an_older_save_loads_back_into_the_same_world() -> void:
 	assert_str(SaveTestKit.checksum(_main)).is_equal(old_sum)
 
 
+## Offer traits slice 2: the settlement's paid signing bonuses are required, so
+## a save without them is refused whole and changes nothing.
+func test_a_settlement_without_its_paid_bonuses_is_refused() -> void:
+	var bad := _older()
+	(bad["settlement"] as Dictionary).erase(Settlement.BONUS_SNAPSHOT_KEY)
+	_assert_refused(bad, "settlement bonuses_paid")
+
+
 func test_a_refusal_in_the_last_part_installs_none_of_the_earlier_ones() -> void:
 	var bad := _older()
 	bad["rating"]["save_version"] = 999
@@ -126,16 +134,17 @@ func test_parts_saved_on_different_ticks_are_refused() -> void:
 ## (from the Toon shell), a version 7 one (before the airside moved north), a
 ## version 8 one (no land), a version 9 one (no gates), a version 10 one (no
 ## closed stations), a version 11 one (no unlocks), a version 12 one (no
-## runway) and so on up to a version 16 one (no incidents part) are
+## runway) and so on up to a version 16 one (no incidents part), and a version
+## 20 one (no signing bonuses or Loyal airline count) are
 ## refused whole, with no migration, and change nothing.
 func test_a_version_6_save_from_the_toon_shell_is_refused() -> void:
-	assert_int(SaveGame.SAVE_VERSION).is_equal(20)
-	for version in [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]:
+	assert_int(SaveGame.SAVE_VERSION).is_equal(21)
+	for version in [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 20]:
 		var old := _older()
 		old["save_version"] = version
 		_assert_refused(old, "version %d" % version)
 		print("version %d: '%s'" % [version, _save.message_text()])
-		assert_str(_save.message_text()).contains("save_version must be 20")
+		assert_str(_save.message_text()).contains("save_version must be 21")
 
 
 ## A grid saved in another frame than the site's (the Toon shell's 66 x 30

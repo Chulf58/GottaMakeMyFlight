@@ -53,6 +53,7 @@ func test_the_card_shows_a_sample_day() -> void:
 						"Parking  0",
 						"Wages paid  -90",
 						"Upkeep paid  0",
+						"Airline fines  0",
 						"Operating result  +250",
 						"Building  -250",
 						"Rescue grant  +500",
@@ -82,6 +83,37 @@ func test_upkeep_paid_is_an_operating_row_and_the_rows_add_up() -> void:
 		parts += int(rows[i][1])
 	assert_int(parts).is_equal(_ledger.operating_result())
 	assert_int(_ledger.operating_result()).is_equal(240)
+
+
+## Offer traits slice 2: airline fines are an operating row, a signing bonus
+## shows above the cash change on its day, and the rows add up to the cash
+## change; fines the wallet could not pay show below it in the attention style.
+func test_a_day_with_a_fine_and_a_bonus_adds_up_to_the_cash_change() -> void:
+	_sample_day()
+	assert_int(_wallet.charge(40, C.FINES)).is_equal(40)
+	assert_bool(_wallet.credit(300, C.SIGNING_BONUS)).is_true()
+	var rows := MoneySlot.rows(_ledger, 0)
+	print(rows)
+	assert_array(rows[5]).is_equal(["Airline fines", "-40", &""])
+	assert_array(rows[MoneySlot.OPERATING_ROWS - 1]).is_equal(["Operating result", "+210", &""])
+	var cash_row: int = rows.size() - 1
+	assert_array(rows[cash_row - 1]).is_equal(["Signing bonus", "+300", &""])
+	assert_array(rows[cash_row]).is_equal(["Cash change today", "+760", &""])
+	var parts := 0
+	for i in range(MoneySlot.OPERATING_ROWS - 1, cash_row):
+		parts += int(rows[i][1])
+	assert_int(parts).is_equal(_ledger.cash_change())
+	assert_int(_ledger.cash_change()).is_equal(760)
+	assert_str(_slot.card_text()).not_contains("Unpaid fines")
+
+
+func test_unpaid_fines_show_below_the_cash_change_in_the_attention_style() -> void:
+	assert_bool(_wallet.credit(15, C.FEES)).is_true()
+	assert_int(_wallet.charge(40, C.FINES)).is_equal(15)
+	var rows := MoneySlot.rows(_ledger, 0)
+	assert_array(rows[rows.size() - 2]).is_equal(["Cash change today", "0", &""])
+	assert_array(rows.back()).is_equal(["Unpaid fines", "25", MoneySlot.ATTENTION])
+	assert_str(_slot.card_text()).contains("Airline fines  -15")
 
 
 ## Daily incidents: incident money has an "Incidents" row above the cash
