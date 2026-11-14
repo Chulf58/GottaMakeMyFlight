@@ -52,6 +52,9 @@ const HEAD_RECT_MAX_PX := 96.0
 ## the heads, and no other view shows any (decision need-icons-show-only-in-the-
 ## mood-overlay-need-modes-n-key-removed). With none set, no need icon shows.
 @export var mood_overlay: MoodOverlay
+## When set, draw() resolves this frame's hover and pin target first, so the
+## layout below reads it the same frame (HoverTarget, Frame order).
+@export var hover_target: HoverTarget
 
 ## Moves with the selected passenger, for a camera to follow.
 var follow_anchor := Node3D.new()
@@ -383,6 +386,8 @@ func walk_heading(p: Passenger) -> Vector2:
 
 ## Places every node between its last two tick positions.
 func draw() -> void:
+	if hover_target != null:
+		hover_target.resolve()
 	var alpha := clock.alpha if clock != null else 1.0
 	var now := _now()
 	var paused := clock == null or clock.paused

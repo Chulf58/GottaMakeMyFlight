@@ -1,4 +1,4 @@
-[gd_scene load_steps=50 format=3]
+[gd_scene load_steps=51 format=3]
 
 [ext_resource type="PackedScene" path="res://camera/tycoon_camera.tscn" id="1_cam"]
 [ext_resource type="Script" path="res://core/sim_clock.gd" id="2_clock"]
@@ -47,6 +47,7 @@
 [ext_resource type="Script" path="res://ui/incident_cards.gd" id="48_incidentcards"]
 [ext_resource type="Script" path="res://ui/incident_panel.gd" id="49_incidentpanel"]
 [ext_resource type="Script" path="res://ui/game_menu.gd" id="50_gamemenu"]
+[ext_resource type="Script" path="res://ui/hover_target.gd" id="51_hovertarget"]
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_ground"]
 size = Vector2(2400, 2400)
@@ -305,13 +306,14 @@ flights = NodePath("../FlightSim")
 passengers = NodePath("../PassengerSim")
 build_mode = NodePath("../BuildMode")
 
-[node name="PassengerViews" type="Node3D" parent="." node_paths=PackedStringArray("clock", "sim", "save_game", "incidents", "mood_overlay")]
+[node name="PassengerViews" type="Node3D" parent="." node_paths=PackedStringArray("clock", "sim", "save_game", "incidents", "mood_overlay", "hover_target")]
 script = ExtResource("11_paxview")
 clock = NodePath("../SimClock")
 sim = NodePath("../PassengerSim")
 save_game = NodePath("../SaveGame")
 incidents = NodePath("../IncidentDirector")
 mood_overlay = NodePath("../MoodOverlay")
+hover_target = NodePath("../HoverTarget")
 
 [node name="BaggageViews" type="Node3D" parent="." node_paths=PackedStringArray("clock", "sim", "save_game")]
 script = ExtResource("27_bagview")
@@ -455,5 +457,12 @@ save_game = NodePath("../SaveGame")
 script = ExtResource("33_birdflock")
 clock = NodePath("../SimClock")
 passenger_views = NodePath("../PassengerViews")
+landside_views = NodePath("../LandsideViews")
+save_game = NodePath("../SaveGame")
+
+[node name="HoverTarget" type="Node" parent="." node_paths=PackedStringArray("views", "build_mode", "landside_views", "save_game")]
+script = ExtResource("51_hovertarget")
+views = NodePath("../PassengerViews")
+build_mode = NodePath("../BuildMode")
 landside_views = NodePath("../LandsideViews")
 save_game = NodePath("../SaveGame")
