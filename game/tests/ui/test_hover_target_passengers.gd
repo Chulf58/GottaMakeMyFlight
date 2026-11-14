@@ -241,6 +241,9 @@ func test_a_sign_click_ends_the_selection_and_follow_and_one_esc_clears_the_sign
 	_hover.refresh()
 	var pinned := _hover.pinned_target()
 	var pinned_key: Variant = pinned.key if pinned else null
+	var after_selected := _views.selected_id
+	var after_following := rig.is_following()
+	var after_item := _inspect.built_card.selection.kind
 	var esc := InputEventAction.new()
 	esc.action = &"build_tool_none"
 	esc.pressed = true
@@ -256,9 +259,9 @@ func test_a_sign_click_ends_the_selection_and_follow_and_one_esc_clears_the_sign
 			% [
 				selected,
 				following,
-				_views.selected_id,
-				rig.is_following(),
-				_inspect.built_card.selection.kind,
+				after_selected,
+				after_following,
+				after_item,
 				pinned_key,
 				_hover.pinned_target(),
 				menu.is_open()
@@ -268,9 +271,9 @@ func test_a_sign_click_ends_the_selection_and_follow_and_one_esc_clears_the_sign
 	assert_int(selected).is_equal(passenger)
 	assert_bool(following).is_true()
 	assert_that(pinned_key).is_equal(&"sign")
-	assert_int(_views.selected_id).is_equal(0)
-	assert_bool(rig.is_following()).is_false()
-	assert_int(_inspect.built_card.selection.kind).is_equal(BuiltSelection.Kind.NONE)
+	assert_int(after_selected).is_equal(0)
+	assert_bool(after_following).is_false()
+	assert_int(after_item).is_equal(BuiltSelection.Kind.NONE)
 	assert_object(_hover.pinned_target()).is_null()
 	assert_bool(menu.is_open()).is_false()
 
