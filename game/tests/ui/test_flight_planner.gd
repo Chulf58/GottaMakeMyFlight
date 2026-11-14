@@ -83,7 +83,10 @@ func test_each_contract_is_one_bar_on_its_gate_in_the_gate_colour() -> void:
 	assert_object(x.get_parent()).is_equal(_planner.part("Track_" + "A"))
 	assert_object(y.get_parent()).is_equal(_planner.part("Track_" + "B"))
 	assert_object(z.get_parent()).is_equal(_planner.part("Track_" + "A"))
-	assert_str(x.text).is_equal("10:00  Oslo")
+	# The text is the full label or, when the bar is too tight, the destination alone.
+	assert_str(x.get_meta(FlightPlanner.FULL_TEXT)).is_equal("10:00  Oslo")
+	assert_str(x.get_meta(FlightPlanner.SHORT_TEXT)).is_equal("Oslo")
+	assert_array(["10:00  Oslo", "Oslo"]).contains([x.text])
 	assert_object((x.get_theme_stylebox("normal") as StyleBoxFlat).bg_color).is_equal(
 		GateColours.of("A")
 	)

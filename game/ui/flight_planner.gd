@@ -39,6 +39,10 @@ const HEAD_W := 80.0
 const ROW_H := 44.0
 ## Pixels kept clear between a bar's label and its departure tick.
 const LABEL_GAP := 6.0
+## Meta keys on a bar button: its "HH:MM  Destination" text, and the destination
+## alone that replaces it when the room before the departure tick is too tight.
+const FULL_TEXT := &"full_text"
+const SHORT_TEXT := &"short_text"
 const HOURS := 24
 
 @export var flights: FlightSim
@@ -422,6 +426,8 @@ func _make_bar(bar: Dictionary) -> Button:
 	var key: String = bar["contract"] if bar["contract"] != "" else bar["flight"]
 	button.name = "Bar_%s_%d" % [key, bar["day"]]
 	button.text = bar["label"]
+	button.set_meta(FULL_TEXT, bar["label"])
+	button.set_meta(SHORT_TEXT, bar["place"])
 	button.clip_text = true
 	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	button.focus_mode = Control.FOCUS_NONE
@@ -486,13 +492,31 @@ func _add_departure_tick(button: Button, bar: Dictionary) -> void:
 
 
 ## Ends the label's room a few pixels before the departure tick, at `local` of the
-## bar's width, so the text is trimmed instead of running through the tick.
+## bar's width, so the text never runs through the tick. The text is the full
+## "HH:MM  Destination" while that fits before the tick; when it does not, the
+## time goes (the tick already shows it) and the destination stays, trimmed with
+## an ellipsis only if even that does not fit.
 static func _keep_label_clear(button: Button, local: float) -> void:
 	var margin := button.size.x * (1.0 - local) + LABEL_GAP
 	for state in ["normal", "hover", "pressed", "focus", "disabled"]:
 		var box := button.get_theme_stylebox(state) as StyleBoxFlat
 		if box != null:
 			box.content_margin_right = margin
+	var normal := button.get_theme_stylebox("normal")
+	var room := button.size.x - margin - normal.get_content_margin(SIDE_LEFT)
+	var font := button.get_theme_font("font")
+	var font_size := button.get_theme_font_size("font_size")
+	var full: String = button.get_meta(FULL_TEXT)
+	var text := (
+		(
+			full
+			if font.get_string_size(full, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x <= room
+			else button.get_meta(SHORT_TEXT)
+		)
+		as String
+	)
+	if button.text != text:
+		button.text = text
 
 
 func _day_start() -> int:

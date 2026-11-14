@@ -76,6 +76,7 @@ static func _bar(
 		"end": hold.end,
 		"departure": row["tick"],
 		"label": row["head"],
+		"place": String(row["head"]).get_slice("  ", 1),
 		"airline": row["airline"],
 		"active": row["contract"] != "" and active.has(row["contract"]),
 		"from": float(shown_start - day_start) / DAY,
