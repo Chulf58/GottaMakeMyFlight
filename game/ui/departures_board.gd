@@ -80,8 +80,12 @@ const MAX_ROWS_PER_DAY := 5
 
 @export var flights: FlightSim
 @export var clock: SimClock
-## Where the header's Made / Missed / In terminal counts come from.
-var passengers: PassengerSim
+## Where the header's Made / Missed / In terminal counts come from. Setting
+## another sim drops the late counts read from the old one.
+var passengers: PassengerSim:
+	set(value):
+		passengers = value
+		_late_key = []
 ## Where the on/off choice is kept; tests point it at a per-process file.
 var settings_path := SETTINGS_PATH
 
@@ -95,9 +99,12 @@ var _rows := VBoxContainer.new()
 var _lines := PackedStringArray()
 var _entries: Array[Dictionary] = []
 ## {flight id: passengers running late}, read from the PassengerSim again only
-## when its tick moves, so a frame between ticks costs no passenger scan.
+## when _late_signature() changes, so a frame between ticks costs no passenger
+## scan. The signature holds more than the tick: a snapshot load installs
+## fresh Passenger objects at a tick that may equal the one before it (load
+## pauses the clock), and the counts must follow it (board 7f89cf1e).
 var _late := {}
-var _late_tick := -1
+var _late_key := []
 var _gates: Array[String] = []
 ## The row key ("contract_day") whose picker is open, and the row key the
 ## message under it belongs to; both "" for none.
@@ -321,10 +328,25 @@ func late_count_of(flight_id: String) -> int:
 func _late_counts() -> Dictionary:
 	if passengers == null:
 		return {}
-	if passengers.tick != _late_tick:
-		_late_tick = passengers.tick
+	var key := _late_signature()
+	if key != _late_key:
+		_late_key = key
 		_late = LateCount.by_flight(passengers)
 	return _late
+
+
+## What identifies the passenger state the late counts were read from: the sim,
+## its tick, and how many passengers it holds and which objects stand first and
+## last. A snapshot install replaces every Passenger object, so any load moves
+## the signature even at the same tick and with the same counts.
+func _late_signature() -> Array:
+	var ids := passengers.passenger_ids()
+	var first := 0
+	var last := 0
+	if not ids.is_empty():
+		first = passengers.get_passenger(ids[0]).get_instance_id()
+		last = passengers.get_passenger(ids[-1]).get_instance_id()
+	return [passengers.get_instance_id(), passengers.tick, ids.size(), first, last]
 
 
 func _refresh(force: bool) -> void:

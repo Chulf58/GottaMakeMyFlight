@@ -120,16 +120,22 @@ func test_the_worst_line_two_fits_the_list_on_one_line() -> void:
 		await get_tree().process_frame
 	var rows := _board.find_child("Rows", true, false) as Control
 	# The longest airline name (OfferBoard), "Boarding" (the last status a late
-	# passenger can see) and a two-digit count, drawn as the board draws them.
+	# passenger can see) and the largest count a flight can reach (its plane
+	# class's top booking, three digits for a large plane), drawn as the board
+	# draws them.
+	var most := 0
+	for plane_class: String in PlaneClasses.ORDER:
+		most = maxi(most, int(PlaneClasses.passenger_range(plane_class)[1]))
 	var label := Label.new()
 	label.theme_type_variation = &"HudHint"
 	_board.add_child(label)
-	label.text = "Skyline Global  Boarding  %s" % LateCount.text_for(99)
+	label.text = "Skyline Global  Boarding  %s" % LateCount.text_for(most)
 	var font := label.get_theme_font("font")
 	var size := label.get_theme_font_size("font_size")
 	var wide := font.get_string_size(label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
 	label.free()
-	print("worst line 2 width ", wide, " of rows width ", rows.size.x, " font size ", size)
+	print("worst line 2 width ", wide, " of rows width ", rows.size.x, " for ", most)
+	assert_int(most).is_greater(99)
 	# Control: the rows were laid out and the text has a real width.
 	assert_float(rows.size.x).is_greater(100.0)
 	assert_float(wide).is_greater(100.0)
@@ -156,3 +162,47 @@ func test_each_contract_flight_row_counts_its_own_late_passengers() -> void:
 	print("first: ", first_line.text, " second: ", second_line.text)
 	assert_str(first_line.text).is_equal("Gotta Air  1 running late")
 	assert_str(second_line.text).is_equal("Skyline Global  2 running late")
+
+
+func test_a_load_at_the_same_tick_updates_the_line() -> void:
+	_world.run_to(1850)
+	var late_id := _world.sim.spawn_now(PassengerTestWorld.FLIGHT)
+	_world.run_to(1875)
+	assert_bool(_world.passenger(late_id).late).is_true()
+	var with_late := _world.sim.to_snapshot()
+	_world.passenger(late_id).late = false
+	var without_late := _world.sim.to_snapshot()
+	assert_bool(with_late.is_empty() or without_late.is_empty()).is_false()
+	_world.passenger(late_id).late = true
+	_board.refresh()
+	assert_int(_board.late_count_of(PassengerTestWorld.FLIGHT)).is_equal(1)
+	# Loading pauses the clock, so the tick stays the same: the line must
+	# follow the load alone, to nobody late and back.
+	var tick := _world.sim.tick
+	assert_bool(_world.sim.from_snapshot(without_late)).is_true()
+	assert_int(_world.sim.tick).is_equal(tick)
+	_board.refresh()
+	print("load without late at ", tick, ": ", _board.late_count_of(PassengerTestWorld.FLIGHT))
+	assert_int(_board.late_count_of(PassengerTestWorld.FLIGHT)).is_equal(0)
+	assert_str(_second_line()).not_contains("running late")
+	assert_bool(_world.sim.from_snapshot(with_late)).is_true()
+	assert_int(_world.sim.tick).is_equal(tick)
+	_board.refresh()
+	assert_int(_board.late_count_of(PassengerTestWorld.FLIGHT)).is_equal(1)
+	assert_str(_second_line()).contains("1 running late")
+
+
+func test_another_sim_at_the_same_tick_drops_the_old_counts() -> void:
+	_world.run_to(1850)
+	var late_id := _world.sim.spawn_now(PassengerTestWorld.FLIGHT)
+	_world.run_to(1875)
+	assert_bool(_world.passenger(late_id).late).is_true()
+	_board.refresh()
+	assert_int(_board.late_count_of(PassengerTestWorld.FLIGHT)).is_equal(1)
+	var other := PassengerTestWorld.reference_world()
+	other.run_to(1875)
+	assert_int(other.sim.tick).is_equal(_world.sim.tick)
+	_board.passengers = other.sim
+	_board.refresh()
+	assert_int(_board.late_count_of(PassengerTestWorld.FLIGHT)).is_equal(0)
+	other.free_all()
