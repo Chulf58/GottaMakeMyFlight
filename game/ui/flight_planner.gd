@@ -37,6 +37,8 @@ const EMPTY_TEXT := "No gate has a stand yet, so there is nothing to plan."
 ## The gate header's width, in layout pixels.
 const HEAD_W := 80.0
 const ROW_H := 44.0
+## Pixels kept clear between a bar's label and its departure tick.
+const LABEL_GAP := 6.0
 const HOURS := 24
 
 @export var flights: FlightSim
@@ -127,6 +129,9 @@ func open() -> void:
 	if clock == null:
 		_show()
 		return
+	# Another top-row sheet holds the exclusive turn until it closes, so it is
+	# closed first; the turn then comes at once.
+	TopRow.close_others(self)
 	_hold = clock.holds.take_turn(self, _show, true)
 
 
@@ -476,6 +481,18 @@ func _add_departure_tick(button: Button, bar: Dictionary) -> void:
 	tick.offset_left = -2.0
 	tick.offset_right = 0.0
 	button.add_child(tick)
+	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	button.resized.connect(_keep_label_clear.bind(button, local))
+
+
+## Ends the label's room a few pixels before the departure tick, at `local` of the
+## bar's width, so the text is trimmed instead of running through the tick.
+static func _keep_label_clear(button: Button, local: float) -> void:
+	var margin := button.size.x * (1.0 - local) + LABEL_GAP
+	for state in ["normal", "hover", "pressed", "focus", "disabled"]:
+		var box := button.get_theme_stylebox(state) as StyleBoxFlat
+		if box != null:
+			box.content_margin_right = margin
 
 
 func _day_start() -> int:

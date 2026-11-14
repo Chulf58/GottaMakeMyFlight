@@ -67,6 +67,13 @@ func test_the_sheet_and_its_rows_and_bars_fit_at_every_ui_scale() -> void:
 			print("  %s %s" % [bar.name, rect])
 			assert_float(rect.size.x).is_greater(60.0)
 			assert_bool(sheet.encloses(rect)).is_true()
+			# The label's room ends before the departure tick.
+			var tick := _rect(bar.find_child("DepartureTick", false, false) as Control)
+			var room_end := (
+				rect.end.x - (bar.get_theme_stylebox("normal") as StyleBoxFlat).content_margin_right
+			)
+			print("  label room ends %.1f, tick at %.1f" % [room_end, tick.position.x])
+			assert_float(room_end).is_less(tick.position.x)
 		var toggle := _rect(_planner.toggle_button())
 		assert_bool(Rect2(Vector2.ZERO, layout).encloses(toggle)).is_true()
 		assert_float(toggle.end.x).is_equal_approx(float(HudLayout.MARGIN + HudLayout.LIST_W), 0.5)

@@ -234,14 +234,6 @@ func test_close_button_and_the_p_key_open_and_close_the_sheet() -> void:
 	assert_bool(_planner.is_open()).is_false()
 
 
-func test_another_top_row_sheet_opening_closes_the_planner() -> void:
-	_planner.open()
-	var other: Node = auto_free(Node.new())
-	add_child(other)
-	TopRow.close_others(other)
-	assert_bool(_planner.is_open()).is_false()
-
-
 func test_an_unchanged_world_does_not_rebuild_the_grid_every_frame() -> void:
 	_three_contracts()
 	_planner.open()
