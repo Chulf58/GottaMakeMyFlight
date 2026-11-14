@@ -148,6 +148,9 @@ func test_the_late_text_is_the_one_the_sim_says() -> void:
 
 func _views_with_camera(world: PassengerTestWorld, ids: Array[int]) -> PassengerViews:
 	var views := PassengerTestWorld.views()
+	# The declutter is measured over every bubble, as before the calm view
+	# (decision calm-cozy-default-view-quiet-world-detail-on-ask-soft-statio).
+	views.all_bubbles = true
 	views.clock = world.clock
 	views.sim = world.sim
 	add_child(views)
@@ -241,6 +244,9 @@ func _assert_front_of_lane_kept(world: PassengerTestWorld, station: int) -> void
 	var back := world.sim.world_position(world.passenger(ids[ids.size() - 1])) + lift
 	assert_float(front.distance_to(back)).is_greater(0.5)
 	var views := PassengerTestWorld.views()
+	# The declutter is measured over every bubble, as before the calm view
+	# (decision calm-cozy-default-view-quiet-world-detail-on-ask-soft-statio).
+	views.all_bubbles = true
 	views.clock = world.clock
 	views.sim = world.sim
 	add_child(views)
