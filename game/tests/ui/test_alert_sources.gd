@@ -79,7 +79,13 @@ func test_a_full_check_in_queue_is_a_cause_pointing_at_its_desk() -> void:
 	assert_array(_keys(causes)).is_equal([AlertSources.QUEUE_CHECKIN])
 	var cause := causes[0]
 	assert_str(cause["title"]).is_equal("Check-in queue full")
-	assert_str(cause["detail"]).is_equal("1 desk full · +2 waiting")
+	# The card counts waiting passengers as the desk sign does: the lane plus the
+	# holding area (decision queue-full-alert-card-shows-the-same-waiting-total-
+	# as-the-de), not the overflow alone. The wording changed by that ruling.
+	var in_lane := _world.sim.queue_of(desk).size()
+	assert_int(in_lane).is_greater(0)
+	assert_str(cause["detail"]).is_equal("1 desk full · %d waiting" % (in_lane + 2))
+	assert_int(MissMarkers.waiting_at(_world.sim, desk, 2)).is_equal(in_lane + 2)
 	assert_int(cause["show_after"]).is_equal(AlertSources.QUEUE_HOLD_TICKS)
 	assert_int(cause["clear_after"]).is_equal(AlertSources.QUEUE_HOLD_TICKS)
 	var targets: Array = cause["targets"]
