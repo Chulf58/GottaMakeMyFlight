@@ -410,11 +410,13 @@ func _build_hint() -> void:
 	add_child(_hint_box)
 	_hint.name = "StaffHint"
 	_hint_box.add_child(_checklist)
+	_hint_box.add_to_group(LeftColumn.CARD_GROUP)
 	LeftColumn.dock_card(_hint_box)
 
 
 func _process(delta: float) -> void:
 	LeftColumn.follow(_hint_box)
+	_fit_checklist()
 	if gate != null and gate.is_open():
 		_since_poll += delta
 		if _since_poll >= GAP_POLL_S:
@@ -424,6 +426,15 @@ func _process(delta: float) -> void:
 	if menu != null:
 		ghost = GhostBounds.build_rect(menu.build_mode, get_viewport().get_camera_3d())
 	fade_for(ghost, delta)
+
+
+## Folds the checklist's lowest lines into "+N more" when the card would reach
+## the Templates dock or the bar's left end (LeftColumn.room_below).
+func _fit_checklist() -> void:
+	var bar_w := 0.0 if menu == null else menu.bar().get_combined_minimum_size().x
+	var layer := get_viewport().get_visible_rect().size
+	var room := LeftColumn.room_below(_hint_box.offset_top, layer, bar_w)
+	_checklist.fit(room - _hint_box.get_theme_stylebox("panel").get_minimum_size().y)
 
 
 ## Fades the hint card to FADED_ALPHA while `ghost` (the build ghost's bounds on
