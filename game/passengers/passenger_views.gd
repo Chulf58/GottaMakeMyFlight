@@ -11,6 +11,10 @@ extends Node3D
 ## tick and laid out each frame. Close need icons of one kind are drawn as one
 ## count badge instead (NeedCluster, _cluster_icons()).
 
+## Emitted in draw() once the bodies are placed, as the bubble, icon and badge
+## layout begins: anything it reads from hover_target is already this frame's.
+signal layout_started
+
 ## Bodies, tints, bag colours and clip speeds: PassengerLooks.
 const SIT_CLIP_SECONDS := 1.2
 ## On an activity visit, a sit_down or stand_up clip more than this many
@@ -52,6 +56,9 @@ const HEAD_RECT_MAX_PX := 96.0
 ## the heads, and no other view shows any (decision need-icons-show-only-in-the-
 ## mood-overlay-need-modes-n-key-removed). With none set, no need icon shows.
 @export var mood_overlay: MoodOverlay
+## When set, draw() resolves this frame's hover and pin target first, so the
+## layout below reads it the same frame (HoverTarget, Frame order).
+@export var hover_target: HoverTarget
 
 ## Moves with the selected passenger, for a camera to follow.
 var follow_anchor := Node3D.new()
@@ -383,6 +390,8 @@ func walk_heading(p: Passenger) -> Vector2:
 
 ## Places every node between its last two tick positions.
 func draw() -> void:
+	if hover_target != null:
+		hover_target.resolve()
 	var alpha := clock.alpha if clock != null else 1.0
 	var now := _now()
 	var paused := clock == null or clock.paused
@@ -419,6 +428,7 @@ func draw() -> void:
 		follow_anchor.position = (_nodes[selected_id] as Node3D).position
 		_ring.position = follow_anchor.position + Vector3(0.0, 0.05, 0.0)
 	_ring.visible = _nodes.has(selected_id)
+	layout_started.emit()
 	# The icons lift over a bubble only while it shows, so they are laid out
 	# after the declutter has set each bubble's visibility for this frame.
 	_declutter_bubbles(camera, unit)
