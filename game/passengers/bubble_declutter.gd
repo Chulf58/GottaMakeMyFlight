@@ -2,13 +2,25 @@ class_name BubbleDeclutter
 extends RefCounted
 ## Which passenger speech bubbles show when they overlap on screen (decision
 ## passenger-speech-bubbles-that-overlap-on-screen-keep-the-one). Bubbles are
-## placed in order: "I'm late!" first, then by place in the queue (front
+## placed in order: a focused passenger's (see below) first, then "I'm late!",
+## then by place in the queue (front
 ## first), then by passenger id, so a tie goes to the lower id. A bubble is
 ## hidden when it overlaps one already placed; a hidden bubble blocks nothing.
 ## PassengerViews measures the rectangles and applies the result each frame.
+##
+## Which bubbles there are at all (shown_text(); decision calm-cozy-default-
+## view-quiet-world-detail-on-ask-soft-statio, part 3, and calm-view-technical-
+## design-shared-hover-target-reusing-click, part 5): none in the default view;
+## the hovered, pinned or inspected passenger's own bubble; and in the Mood
+## overlay's Late mode the late bubble of every late passenger. A focused
+## passenger's bubble is placed before all others, so the overlap declutter
+## never hides the bubble the player asked for.
 
-## The sim's text for a late passenger (PassengerSim.bubble_text).
+## The sim's text for a late passenger (PassengerSim.bubble_text), and the Late
+## mode's text for every late passenger.
 const LATE_TEXT := "I'm late!"
+## The tier of a focused passenger's bubble: placed first.
+const FOCUS_TIER := -1
 ## Bubbles closer than this on screen, in pixels, count as overlapping. Set from
 ## a packed check-in queue (rows about 46 px apart, late text about 21 px tall):
 ## the gap to the next row is about 25 px and to the second row about 71 px, so
@@ -43,8 +55,23 @@ static func rank_of(sim: PassengerSim, p: Passenger) -> int:
 	return rank_in(sim.queue_of(p.station), sim.holding_of(p.station), p.id)
 
 
-static func entry(id: int, text: String, rank: int, rect: Rect2) -> Dictionary:
-	return {"id": id, "tier": tier_of(text), "rank": rank, "rect": rect}
+## An entry for hidden(); a `focused` passenger's bubble takes FOCUS_TIER.
+static func entry(id: int, text: String, rank: int, rect: Rect2, focused := false) -> Dictionary:
+	return {"id": id, "tier": FOCUS_TIER if focused else tier_of(text), "rank": rank, "rect": rect}
+
+
+## The text a passenger's bubble shows this frame, "" for none. `speech` is the
+## sim's text (PassengerSim.bubble_text()); `late` is MoodTint.is_late(); a
+## `focused` passenger is hovered, pinned or inspected; `late_mode` is the Mood
+## overlay's Late mode (MoodOverlay.shows_late()), which shows LATE_TEXT over
+## every late passenger whatever the sim's text puts first. `every` shows each
+## passenger's speech, as before the calm view (a probe and test seam).
+static func shown_text(
+	speech: String, late: bool, focused: bool, late_mode: bool, every := false
+) -> String:
+	if late_mode and late:
+		return LATE_TEXT
+	return speech if focused or every else ""
 
 
 ## What a bubble covers on screen: its text in the default font plus the

@@ -35,6 +35,10 @@ func before_test() -> void:
 	_world.run_to(10)
 	_world.sim.shops.wishes = func(_p: Passenger) -> StringName: return WishTable.NONE
 	_views = PassengerTestWorld.views()
+	# These layout tests measure bubbles over passengers, which the calm view
+	# shows only on focus or in a mode (decision calm-cozy-default-view-quiet-
+	# world-detail-on-ask-soft-statio); every bubble shows here.
+	_views.all_bubbles = true
 	_views.clock = _world.clock
 	_views.sim = _world.sim
 	_screen = SubViewport.new()
@@ -244,7 +248,7 @@ func _check_crown_over_badge(with_bubble: bool, anchors := true) -> void:
 		# Every passenger speaks, so the badge keeps its anchor member.
 		_views.declutter_bubbles = false
 		for id in ids:
-			(_views.node_for(id).get_node("Bubble") as Label3D).text = "I'm late!"
+			_views.node_for(id).set_meta(&"speech", "I'm late!")
 		_views.draw()
 	var badge := _visible_badges()[0]
 	# The badge hangs off its anchor member's head: that passenger is the VIP.

@@ -87,10 +87,10 @@ func _drawn_views(overlay: MoodOverlay) -> void:
 	_views.draw()
 
 
-func test_it_opens_in_mood_mode_with_four_buttons() -> void:
+func test_it_opens_in_mood_mode_with_five_buttons() -> void:
 	var overlay := _overlay()
 	assert_int(overlay.mode()).is_equal(MoodTint.Mode.MOOD)
-	for mode_name in ["Mood", "Hunger", "Toilet", "Boredom"]:
+	for mode_name in ["Mood", "Hunger", "Toilet", "Boredom", "Late"]:
 		assert_object(_button(overlay, mode_name)).is_not_null()
 	assert_bool(_button(overlay, "Mood").button_pressed).is_true()
 
@@ -124,7 +124,9 @@ func test_the_mode_drives_the_legend_text() -> void:
 	for mode in MoodTint.Mode.values():
 		overlay.set_mode(mode)
 		texts[legend.text] = true
-	assert_int(texts.size()).is_equal(4)
+	# One line per mode; Late (calm view) made it five.
+	assert_int(texts.size()).is_equal(MoodTint.Mode.size())
+	assert_int(texts.size()).is_equal(5)
 
 
 func test_the_last_mode_is_kept_for_the_next_overlay() -> void:
@@ -137,6 +139,62 @@ func test_the_last_mode_is_kept_for_the_next_overlay() -> void:
 	var second := _overlay()
 	assert_int(second.mode()).is_equal(MoodTint.Mode.TOILET)
 	assert_bool(_button(second, "Toilet").button_pressed).is_true()
+
+
+## Every mode button in turn picks its mode, the last one pressed (Late) is
+## saved, and the next overlay opens in it with its button down.
+func test_cycling_the_buttons_to_late_keeps_late_for_the_next_overlay() -> void:
+	var first := _overlay()
+	first.set_shown(true)
+	for mode: MoodTint.Mode in MoodTint.Mode.values():
+		_button(first, MoodOverlay.MODE_NAMES[mode]).button_pressed = true
+		assert_int(first.mode()).is_equal(mode)
+	assert_int(first.mode()).is_equal(MoodTint.Mode.LATE)
+	assert_bool(first.shows_late()).is_true()
+	assert_bool(first.shows_wishes()).is_false()
+	assert_int(first.shown_need()).is_equal(MoodOverlay.NO_NEED)
+	var cfg := ConfigFile.new()
+	assert_int(cfg.load(_path)).is_equal(OK)
+	assert_int(cfg.get_value("hud", "mood_overlay_mode", -1)).is_equal(MoodTint.Mode.LATE)
+	var second := _overlay()
+	assert_int(second.mode()).is_equal(MoodTint.Mode.LATE)
+	assert_bool(_button(second, "Late").button_pressed).is_true()
+
+
+## Boredom mode shows the wishes and Late mode the late bubbles, only while the
+## overlay is on.
+func test_the_bubble_modes_hold_only_while_the_overlay_is_on() -> void:
+	var overlay := _overlay()
+	overlay.set_mode(MoodTint.Mode.BOREDOM)
+	assert_bool(overlay.shows_wishes()).is_false()
+	overlay.set_shown(true)
+	assert_bool(overlay.shows_wishes()).is_true()
+	assert_bool(overlay.shows_late()).is_false()
+	overlay.set_mode(MoodTint.Mode.LATE)
+	assert_bool(overlay.shows_wishes()).is_false()
+	assert_bool(overlay.shows_late()).is_true()
+	overlay.set_shown(false)
+	assert_bool(overlay.shows_late()).is_false()
+
+
+## Late mode tints only where a late passenger stands, soft amber, never red.
+func test_late_mode_tints_only_the_late_passengers_cells() -> void:
+	var overlay := _overlay()
+	overlay.set_shown(true)
+	# The control: the hungry passenger is not late, so nothing tints yet.
+	assert_int(_tinted(overlay, MoodTint.Mode.LATE)).is_equal(0)
+	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	p.at = Vector2i(5, 2)
+	p.stage = Passenger.Stage.STANDING
+	p.late = true
+	overlay.refresh()
+	var cells := overlay.tinted_cells()
+	print("late mode cells %s" % [cells])
+	assert_float(cells.get(Vector2i(5, 2), 0.0)).is_equal(1.0)
+	assert_bool(cells.has(Vector2i(3, 3))).is_false()
+	var colour := MoodTint.color_of(1.0, MoodTint.Mode.LATE)
+	assert_float(colour.r).is_greater(colour.b)
+	assert_float(colour.g).is_greater(MoodTint.BAD_COLOR.g)
 
 
 func test_a_saved_mode_out_of_range_opens_in_mood_mode() -> void:

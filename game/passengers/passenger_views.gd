@@ -9,7 +9,11 @@ extends Node3D
 ## Each node carries its thought bubble, its need icons (NeedIcons), its
 ## shopping wish icon (WishIconView) and its VIP crown (VipMarker), set each
 ## tick and laid out each frame. Close need icons of one kind are drawn as one
-## count badge instead (NeedCluster, _cluster_icons()).
+## count badge instead (NeedCluster, _cluster_icons()). The default view shows
+## no speech or wish bubble: the hovered, pinned or inspected passenger shows
+## its own, the Mood overlay's Boredom mode every wish and its Late mode every
+## late bubble (decision calm-cozy-default-view-quiet-world-detail-on-ask-soft-
+## statio, part 3), chosen each frame after the hover target resolves.
 
 ## Emitted in draw() once the bodies are placed, as the bubble, icon and badge
 ## layout begins: anything it reads from hover_target is already this frame's.
@@ -34,6 +38,12 @@ const BUBBLE_HEIGHT := 2.5
 ## captions (user ruling: a kept bubble's text is never covered).
 const BUBBLE_PRIORITY := MissMarkers.CAPTION_PRIORITY + 2
 const PICK_RADIUS_PX := 40.0
+## In the Mood overlay's Late mode each late passenger stands on a soft amber
+## disc (the floor tint is per cell, and the declutter thins the late bubbles),
+## this wide, this far over its feet; no red, as lateness is not an alarm.
+const LATE_MARK_RADIUS_M := 0.42
+const LATE_MARK_LIFT_M := 0.08
+const LATE_MARK_COLOR := Color(0.96, 0.62, 0.18, 0.8)
 ## The drawn body pick_body() reads: a capsule this wide and this tall, in metres.
 const BODY_RADIUS_M := 0.35
 const BODY_HEIGHT_M := 1.7
@@ -64,6 +74,11 @@ const HEAD_RECT_MAX_PX := 96.0
 var follow_anchor := Node3D.new()
 ## False shows every speech bubble, overlapping or not (plate probes compare).
 var declutter_bubbles := true
+## True shows every passenger's speech and wish bubbles, as the default view
+## drew them before the calm view (decision calm-cozy-default-view-quiet-world-
+## detail-on-ask-soft-statio, part 3): a seam for layout tests and plate probes
+## that measure bubbles over a crowd. The game leaves it false.
+var all_bubbles := false
 ## False draws every need icon on its own, with no count badges (plate probes
 ## compare).
 var cluster_needs := true
@@ -78,6 +93,16 @@ var ghosts := RelocationGhosts.new()
 ## The need whose icons the Mood overlay shows this frame (NeedIcons.Need), or
 ## MoodOverlay.NO_NEED; draw() sets it for the cluster and crown passes.
 var _only_need: int = MoodOverlay.NO_NEED
+## This frame's bubble rules, set by draw() after the hover target resolves:
+## the hovered passenger (0 for none), and whether the Mood overlay shows every
+## wish (Boredom mode) or every late bubble (Late mode).
+var _hovered := 0
+var _wishes_on := false
+var _late_on := false
+## The Late mode's discs under the late passengers (LATE_MARK_*), made and
+## parented in _ready(), so a views node that never enters the tree leaves no
+## orphan behind.
+var _late_marks: MultiMeshInstance3D
 ## Free nodes per body (PassengerLooks.BODIES).
 var _pool: Array[Array] = []
 ## Passenger id -> node.
@@ -183,6 +208,8 @@ func _ready() -> void:
 	_badge_root = Node3D.new()
 	_badge_root.name = NeedCluster.ROOT
 	add_child(_badge_root)
+	_late_marks = _make_late_marks()
+	add_child(_late_marks)
 	if clock != null:
 		clock.ticked.connect(_on_ticked)
 	if save_game != null:
@@ -399,8 +426,13 @@ func draw() -> void:
 	var unit := NeedIcons.unit_of(get_viewport() if is_inside_tree() else null, camera)
 	# Need icons show only while the Mood overlay is in a need mode, and only
 	# that need's (decision need-icons-show-only-in-the-mood-overlay-need-modes-
-	# n-key-removed); wish bubbles show in every view, at the same zoom.
+	# n-key-removed); wish bubbles only in Boredom mode and late bubbles only in
+	# Late mode, besides the focused passenger's own (decision calm-cozy-
+	# default-view-quiet-world-detail-on-ask-soft-statio, part 3).
 	_only_need = mood_overlay.shown_need() if mood_overlay != null else MoodOverlay.NO_NEED
+	_hovered = hover_target.hovered_passenger() if hover_target != null else 0
+	_wishes_on = all_bubbles or (mood_overlay != null and mood_overlay.shows_wishes())
+	_late_on = mood_overlay != null and mood_overlay.shows_late()
 	var zoomed_in := NeedIcons.shown_at(camera)
 	var icons_shown := _only_need != MoodOverlay.NO_NEED and zoomed_in
 	var hidden_needs := 0
@@ -428,6 +460,7 @@ func draw() -> void:
 		follow_anchor.position = (_nodes[selected_id] as Node3D).position
 		_ring.position = follow_anchor.position + Vector3(0.0, 0.05, 0.0)
 	_ring.visible = _nodes.has(selected_id)
+	_draw_late_marks()
 	layout_started.emit()
 	# The icons lift over a bubble only while it shows, so they are laid out
 	# after the declutter has set each bubble's visibility for this frame.
@@ -438,16 +471,81 @@ func draw() -> void:
 		var node: Node3D = _nodes[id]
 		var bubble := node.get_node("Bubble") as Label3D
 		NeedIcons.layout(
-			node, bubble, camera, unit, icons_shown, masks.get(id, 0) | hidden_needs, zoomed_in
+			node,
+			bubble,
+			camera,
+			unit,
+			icons_shown,
+			masks.get(id, 0) | hidden_needs,
+			zoomed_in and (_wishes_on or focused(id))
 		)
 		VipMarker.layout(node, bubble, camera, unit, _badge_lifts.get(id, 0.0))
 	_props.draw()
 	_markers.draw()
 
 
-## Shows each speech bubble, then hides the ones that overlap a bubble kept
-## on screen (BubbleDeclutter: late first, then nearest the front of the
-## queue). Does nothing with no camera.
+## The Late mode's disc mesh, one instance per late passenger, none drawn yet.
+static func _make_late_marks() -> MultiMeshInstance3D:
+	var disc := CylinderMesh.new()
+	disc.top_radius = LATE_MARK_RADIUS_M
+	disc.bottom_radius = LATE_MARK_RADIUS_M
+	disc.height = 0.01
+	disc.radial_segments = 32
+	disc.rings = 1
+	var material := StandardMaterial3D.new()
+	material.albedo_color = LATE_MARK_COLOR
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	disc.material = material
+	var multimesh := MultiMesh.new()
+	multimesh.transform_format = MultiMesh.TRANSFORM_3D
+	multimesh.mesh = disc
+	multimesh.visible_instance_count = 0
+	var marks := MultiMeshInstance3D.new()
+	marks.name = "LateMarks"
+	marks.multimesh = multimesh
+	marks.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return marks
+
+
+## Puts a disc under every drawn late passenger while the Late mode is on, and
+## none otherwise. The buffer only grows (growing clears it, so it grows before
+## any disc is placed); the drawn count follows the frame.
+func _draw_late_marks() -> void:
+	if _late_marks == null:
+		return
+	var multimesh := _late_marks.multimesh
+	var late: Array[Node3D] = []
+	if _late_on:
+		for id in _nodes:
+			var node: Node3D = _nodes[id]
+			if node.visible and node.get_meta(&"late", false):
+				late.append(node)
+	if multimesh.instance_count < late.size():
+		multimesh.instance_count = maxi(late.size() * 2, 16)
+	for i in late.size():
+		var at := late[i].position + Vector3(0.0, LATE_MARK_LIFT_M, 0.0)
+		multimesh.set_instance_transform(i, Transform3D(Basis.IDENTITY, at))
+	multimesh.visible_instance_count = late.size()
+
+
+## Whether passenger `id` is focused this frame: hovered, or pinned or
+## inspected (the selected passenger, whom a pin follows: HoverTarget).
+func focused(id: int) -> bool:
+	return id != 0 and (id == _hovered or id == selected_id)
+
+
+## Whether `node` (passenger `id`) draws its wish bubble this frame: it has a
+## wish, and Boredom mode is on or it is focused.
+func _wishing(id: int, node: Node3D) -> bool:
+	return node.get_meta(&"wish", "") != "" and (_wishes_on or focused(id))
+
+
+## Sets each bubble's text for this frame (BubbleDeclutter.shown_text(): none
+## by default, the focused passenger's own, the late ones in Late mode), then
+## hides the ones that overlap a bubble kept on screen (BubbleDeclutter: the
+## focused first, then late, then nearest the front of the queue). Measures
+## nothing with no camera.
 func _declutter_bubbles(camera: Camera3D, unit: float) -> void:
 	var entries := _bubble_entries
 	entries.clear()
@@ -456,6 +554,14 @@ func _declutter_bubbles(camera: Camera3D, unit: float) -> void:
 	for id in _nodes:
 		var node: Node3D = _nodes[id]
 		var bubble := node.get_node("Bubble") as Label3D
+		var focus := focused(id)
+		bubble.text = BubbleDeclutter.shown_text(
+			node.get_meta(&"speech", ""),
+			node.get_meta(&"late", false),
+			focus,
+			_late_on,
+			all_bubbles
+		)
 		bubble.visible = true
 		if bubble.text == "" or camera == null or unit <= 0.0:
 			continue
@@ -471,7 +577,7 @@ func _declutter_bubbles(camera: Camera3D, unit: float) -> void:
 			bubble.pixel_size / (depth * unit)
 		)
 		var rank: int = node.get_meta(&"bubble_rank", BubbleDeclutter.NO_QUEUE)
-		entries.append(BubbleDeclutter.entry(id, bubble.text, rank, rect))
+		entries.append(BubbleDeclutter.entry(id, bubble.text, rank, rect, focus))
 	if not declutter_bubbles:
 		return
 	for id in BubbleDeclutter.hidden(entries):
@@ -515,7 +621,7 @@ func _cluster_icons(camera: Camera3D, unit: float, icons_shown: bool) -> Diction
 	for id: int in _nodes:
 		var node: Node3D = _nodes[id]
 		var kinds := _shown_kinds(node)
-		var wishing: bool = node.get_meta(&"wish", "") != ""
+		var wishing := _wishing(id, node)
 		if kinds.is_empty() and not wishing:
 			continue
 		var alpha := NeedIcons.near_alpha(camera.global_position.distance_to(node.global_position))
@@ -600,7 +706,7 @@ func _lift_crowns(
 				continue
 			base = camera.unproject_position(world) * to_output
 			lift = at[1]
-		var stands := lift + _row_height_px(node, masks.get(id, 0))
+		var stands := lift + _row_height_px(id, node, masks.get(id, 0))
 		var crown := Rect2(
 			Vector2(base.x - VipMarker.CROWN_PX / 2.0, base.y - stands - VipMarker.CROWN_PX),
 			Vector2.ONE * VipMarker.CROWN_PX
@@ -620,12 +726,12 @@ func _shown_kinds(node: Node3D) -> Array:
 
 ## The screen height `node`'s drawn icon row takes with the gap over it (what
 ## VipMarker lifts the crown by), from the needs a badge does not mask, or 0.
-func _row_height_px(node: Node3D, mask: int) -> float:
+func _row_height_px(id: int, node: Node3D, mask: int) -> float:
 	var row := 0.0
 	for kind: int in _shown_kinds(node):
 		if mask & (1 << kind) == 0:
 			row = NeedIcons.ICON_PX
-	if node.get_meta(&"wish", "") != "":
+	if _wishing(id, node):
 		row = WishIconView.WISH_PX
 	return row + NeedIcons.GAP_PX if row > 0.0 else 0.0
 
@@ -1005,11 +1111,15 @@ func _pose(node: Node3D, p: Passenger, built: Dictionary) -> float:
 			var slack := (SEEK_SLACK_TICKS + speed) * SimClock.STEP * base
 			if absf(player.current_animation_position - at) > slack:
 				player.seek(at, true)
-	var bubble_text := sim.bubble_text(p)
-	(node.get_node("Bubble") as Label3D).text = bubble_text
+	# What the bubble could say; draw() picks per frame whether it shows
+	# (BubbleDeclutter.shown_text()), since the hover changes between ticks.
+	var speech := sim.bubble_text(p)
+	var late := MoodTint.is_late(p)
+	node.set_meta(&"speech", speech)
+	node.set_meta(&"late", late)
 	node.set_meta(
 		&"bubble_rank",
-		BubbleDeclutter.rank_of(sim, p) if bubble_text != "" else BubbleDeclutter.NO_QUEUE
+		BubbleDeclutter.rank_of(sim, p) if speech != "" or late else BubbleDeclutter.NO_QUEUE
 	)
 	var wish := WishIconView.read(sim.shops, p)
 	NeedIcons.show_needs(node, NeedIcons.shown(p, wish[1] != WishTable.State.NONE, built))
