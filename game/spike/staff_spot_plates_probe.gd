@@ -702,7 +702,7 @@ func _phase_legacy() -> void:
 			]
 		)
 	)
-	if text != MissMarkers.SPOT_BLOCKED_CAPTION:
+	if text != MissMarkers.SPOT_BLOCKED_TEXT:
 		_invalid("legacy: the sign caption is %s" % text)
 		return
 	var none: Array[int] = []

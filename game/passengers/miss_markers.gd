@@ -1,105 +1,71 @@
 class_name MissMarkers
 extends Node3D
-## Shows why passengers miss: a red "!" sign, captioned "Queue full" above it,
-## over every full desk or scanner (MissSignals.full_stations), and a grey one
-## captioned "Closed" over every desk or scanner with nobody on duty
-## (MissSignals.closed_stations; a closed station shows only that, since it
-## serves nobody), "Closed: staff spot blocked" when an old save left the
-## station's staff spot blocked, or "Closed: staff can't reach" when staff have
-## no way from an entrance to it (MissSignals.closed_reason). A cafe or kiosk
-## counter with no server on duty gets the same Closed signs
-## (ShopCounters.closed). PassengerViews
-## creates it as a child and calls sync() after each tick and draw() after
-## placing its passengers. It reads the sim and
-## never writes to it.
-##
-## An arch without a whole security lane (MissSignals.incomplete_arches) gets
-## a grey sign too, captioned with what it
-## lacks first ("Needs a tray table", MissSignals.lane_hint). It is an
-## ordinary caption in the layout below: the player is looking at their own
-## half-built lane, the icon always stays, and the build status line says the
-## same words while the pointer is over the arch, so it hides when it overlaps
-## and is never lifted. It is kept readable, though: inside the view by
-## VIEW_MARGIN_PX and clear of everything the HUD draws (the money card, the
-## Offers button, the bottom bar, a passive hint card), moving toward the
-## screen's middle when it has to, so it stays by its station: first along that
-## line by at most MAX_HINT_TRAVEL_PX, then on rings around its own place. With
-## no clear spot anywhere in the view it is hidden for that layout
-## (hint_no_spot_hides counts it); the icon stays. It also hides while its sign
-## is more than one caption width outside the view (user-ruled 2026-10-29: only
-## near the view), uncounted.
-## A whole lane is one station and gets the queue-full and Closed signs like a
-## scanner.
+## One small soft sign over each station with a problem (decision calm-cozy-
+## default-view-quiet-world-detail-on-ask-soft-statio, part 2, and its technical
+## design calm-view-technical-design-shared-hover-target-reusing-click, parts 2
+## and 4): a MarkerIcons disc whose glyph says what is wrong, with no caption.
+## Its words show in the HoverTarget tooltip while the pointer is over the sign
+## or a click pinned it; hover_signs() gives HoverTarget each sign's screen rect
+## and text.
+## - A full desk or scanner (MissSignals.full_stations) gets the queue glyph:
+##   "Queue full · 6 waiting".
+## - A desk or scanner with nobody on duty (MissSignals.closed_stations), and a
+##   cafe or kiosk counter with no server (ShopCounters.closed), gets the padlock
+##   glyph, "Closed · no staff on duty" or "Closed by you". A closed station shows
+##   only that sign, since it serves nobody. When its staff spot is blocked (only
+##   an old save can hold one) or staff have no way from an entrance to it
+##   (MissSignals.closed_reason), it gets the blocked-staff glyph instead: "Closed
+##   · staff spot blocked" or "Closed · staff can't reach the desk". AlertSources
+##   raises a card for the closed and staff-spot stations as well, so a problem
+##   whose words moved off the world still reaches the player (part 3).
+## - An arch without a whole security lane (MissSignals.incomplete_arches) gets
+##   the build-hint table glyph. Its words ("Needs a tray table",
+##   MissSignals.lane_hint) are a build hint: they show on hover only in build
+##   mode, while the sign itself stays (the ruling keeps a missing tray table in
+##   the list of station problems that show an icon). A whole lane is one station
+##   and gets the queue-full and Closed signs like a scanner.
+## PassengerViews creates it as a child and calls sync() after each tick and
+## draw() after placing its passengers. It reads the sim and never writes to it.
 ##
 ## The sign is a billboard drawn over the world (no depth test), like the
-## thought bubbles, and keeps one screen size at every zoom and UI scale. The
-## caption sits above the sign so it does not cover the lane it describes.
-## Sizes are screen pixels, for the camera's field of view and the rendered
-## view's height. Neighbouring stations stand closer on screen than a caption
-## is wide when zoomed out, so draw() hides a caption that would overlap one
-## already shown, or one that would sit under another sign's icon, and every
-## icon stays; the captions return as the camera moves in. The two staff-spot
-## reasons are never hidden: one that would overlap is moved clear instead, up
-## first and then to either side, staying inside the view and off every icon;
-## with no such spot no error is raised and it takes the best one found, else
-## is clamped into the view (see _clear_spot).
-## Otherwise the widest caption wins, then the leftmost.
-## The layout runs only when the camera (its presence, identity, pose and field
-## of view), the view size, the signs or (while a lane hint shows) the HUD
-## controls' rectangles changed.
-##
-## A caption is a Label3D, culled by its bounding box around its world anchor, and
-## a fixed-size label's box is tiny. A caption placed inside the view therefore
-## gets an anchor inside the view too (its sign can be off-screen), with the pixel
-## offset making up the difference.
+## thought bubbles, and keeps one screen size (SIGN_PX) at every zoom and UI
+## scale: sizes are screen pixels, for the camera's field of view and the
+## rendered view's height.
 
 const SIGN_LIFT_M := 0.6
-const SIGN_PX := 56.0
+const SIGN_PX := 32.0
+## Caption metrics other station-sign families still use for their own captions
+## (LandsidePlaces' Closed caption, GateLinksView's build-mode gate captions,
+## GapMarkers' sizes); this node draws no caption.
 const CAPTION_FONT := 22
 const CAPTION_GAP_PX := 4.0
 const CAPTION_OUTLINE := 8
-## Clear space kept between two shown captions.
 const CAPTION_MARGIN_PX := 6.0
-## The most a staff-spot caption is lifted looking for clear space.
 const MAX_LIFTS := 64
-## Draw order of the sign sprites and their captions among the no-depth-test
-## sprites; the passenger speech bubbles draw above both (PassengerViews).
+## Draw order of the sign sprites among the no-depth-test sprites; the
+## passenger speech bubbles draw above them (PassengerViews).
 const SIGN_PRIORITY := 11
 const CAPTION_PRIORITY := 12
 const FALLBACK_FOV := 55.0
 const FALLBACK_HEIGHT := 1080.0
-const FALLBACK_WIDTH := 1920.0
-## A moved staff-spot caption tries this many side steps each way.
-const MAX_SHIFTS := 8
-## A lane-hint caption keeps this far inside the view, clear of every HUD
-## control, and moves toward the screen's middle in HINT_STEP_PX steps, at most
-## MAX_HINT_TRAVEL_PX, to get there.
-const VIEW_MARGIN_PX := 8.0
-const HINT_STEP_PX := 6.0
-const MAX_HINT_TRAVEL_PX := 260.0
-## Past that, spots are tried on rings this far apart, each with a point every
-## HINT_RING_STEP_PX along it (at least this many), so no pocket a caption fits in
-## falls between two points.
-const HINT_RING_STEP_PX := 32.0
-const HINT_RING_POINTS := 16
-## The closed sign is the queue-full icon with its red fill painted grey-blue.
-const CLOSED_FILL := Color(0.47, 0.53, 0.62)
-const FILL_TOLERANCE := 0.1
+## The closed sign's disc, for the families that match it (GateLinksView).
+const CLOSED_FILL := MarkerIcons.PROBLEM_FILL
 const CLOSED_CAPTION := "Closed"
-const PLAYER_CLOSED_CAPTION := "Closed by you"
-const SPOT_BLOCKED_CAPTION := "Closed: staff spot blocked"
-const UNREACHABLE_CAPTION := "Closed: staff can't reach"
+const CLOSED_TEXT := "Closed · no staff on duty"
+const PLAYER_CLOSED_TEXT := "Closed by you"
+const SPOT_BLOCKED_TEXT := "Closed · staff spot blocked"
+const UNREACHABLE_TEXT := "Closed · staff can't reach the %s"
+const QUEUE_TEXT := "Queue full · %d waiting"
 
-static var _closed_texture: ImageTexture
 ## Caption text -> its on-screen size in pixels, measured once.
 static var _caption_sizes: Dictionary = {}
 
 var sim: PassengerSim
-## How many times the caption layout ran; it skips a draw where nothing changed.
-var declutter_runs := 0
-## How many lane-hint captions were hidden because no spot in the view was clear
-## of the HUD, summed over the layouts run.
-var hint_no_spot_hides := 0
+## Unset, the first BuildSession in the tree is taken, looked for until found: the
+## lane hints' words show only while it is active.
+var build_session: BuildSession
+## How many times draw() resized the signs; it skips a draw where nothing changed.
+var size_runs := 0
 
 ## Station id -> sign, for the queue-full signs and the closed signs.
 var _signs: Dictionary = {}
@@ -109,69 +75,27 @@ var _hint_signs: Dictionary = {}
 var _free_signs: Array[Sprite3D] = []
 ## A deferred refresh after a room edit is queued.
 var _room_sync_pending := false
-## Set when a sign or caption changed; with the camera and view size it decides
-## whether draw() has anything to do.
+## Set when a sign was shown; with the camera and view size it decides whether
+## draw() has anything to do.
 var _dirty := true
-var _view_transform := Transform3D()
 var _view_fov := 0.0
 var _view_height := 0.0
-var _view_width := 0.0
-## Instance id of the camera the last layout used, 0 for none.
-var _view_camera := 0
-## The HUD control rectangles (screen pixels) the last layout kept clear of.
-var _view_hud: Array[Rect2] = []
-## Reused by the caption layout: the captions in play, their rectangles and
-## whether each is a staff-spot reason, the order they are placed in, the
-## rectangles placed so far, and a grid of them by cell.
-var _labels: Array[Label3D] = []
-var _points: Array[Vector2] = []
-var _rects: Array[Rect2] = []
-var _mandatory: Array[bool] = []
-var _hints: Array[bool] = []
-var _stations: Array[int] = []
-## The icons in play, for a moved caption to keep off, and a grid of them.
-var _icons: Array[Rect2] = []
-var _icon_bins: Dictionary = {}
-var _order: Array[int] = []
-var _placed: Array[Rect2] = []
-var _bins: Dictionary = {}
+var _no_captions: Array[Rect2] = []
 
 
-## The screen rectangles (screen pixels) of the captions the last layout
-## placed and showed. Read-only: the need icon count badges keep clear of
-## them (NeedCluster.place()).
+## Station captions no longer exist, so the need icon count badges
+## (NeedCluster.place()) have none to keep clear of. Kept for PassengerViews.
 func placed_captions() -> Array[Rect2]:
-	return _placed
+	return _no_captions
 
 
 func sign_for(station: int) -> Node3D:
 	return _signs.get(station)
 
 
+## The hover text of `station`'s queue-full sign, or "".
 func sign_text(station: int) -> String:
-	if not _signs.has(station):
-		return ""
-	return ((_signs[station] as Node).get_node("Caption") as Label3D).text
-
-
-## The queue-full icon with its red fill repainted CLOSED_FILL, once; the
-## outline and the white "!" stay, so the two signs read as one family.
-static func _closed_icon() -> Texture2D:
-	if _closed_texture == null:
-		var img := MarkerIcons.queue_full_image()
-		for y in img.get_height():
-			for x in img.get_width():
-				var c := img.get_pixel(x, y)
-				if (
-					c.a > 0.99
-					and absf(c.r - MarkerIcons.QUEUE_FILL.r) < FILL_TOLERANCE
-					and absf(c.g - MarkerIcons.QUEUE_FILL.g) < FILL_TOLERANCE
-					and absf(c.b - MarkerIcons.QUEUE_FILL.b) < FILL_TOLERANCE
-				):
-					img.set_pixel(x, y, CLOSED_FILL)
-		img.generate_mipmaps()
-		_closed_texture = ImageTexture.create_from_image(img)
-	return _closed_texture
+	return _text_of(_signs, station)
 
 
 ## The Closed sign over a desk or scanner with nobody on duty, or null.
@@ -180,9 +104,7 @@ func closed_sign_for(station: int) -> Node3D:
 
 
 func closed_text(station: int) -> String:
-	if not _closed_signs.has(station):
-		return ""
-	return ((_closed_signs[station] as Node).get_node("Caption") as Label3D).text
+	return _text_of(_closed_signs, station)
 
 
 ## The lane-incomplete sign over an arch without a whole lane, or null.
@@ -191,13 +113,46 @@ func hint_sign_for(arch: int) -> Node3D:
 
 
 func hint_text(arch: int) -> String:
-	if not _hint_signs.has(arch):
-		return ""
-	return ((_hint_signs[arch] as Node).get_node("Caption") as Label3D).text
+	return _text_of(_hint_signs, arch)
+
+
+## The glyph a sign shows (MarkerIcons.Glyph), or -1 for no sign.
+static func glyph_of(sign: Node3D) -> int:
+	return sign.get_meta(&"glyph", -1) if sign != null else -1
+
+
+## The closed station `station`'s glyph and words for the closed `reason`
+## (a MissSignals reason); `noun` names the station ("desk").
+static func closed_look(reason: String, noun: String) -> Array:
+	match reason:
+		MissSignals.PLAYER_CLOSED_REASON:
+			return [MarkerIcons.Glyph.CLOSED, PLAYER_CLOSED_TEXT]
+		MissSignals.SPOT_BLOCKED_REASON:
+			return [MarkerIcons.Glyph.STAFF_BLOCKED, SPOT_BLOCKED_TEXT]
+		MissSignals.UNREACHABLE_REASON:
+			return [MarkerIcons.Glyph.STAFF_BLOCKED, UNREACHABLE_TEXT % noun]
+	return [MarkerIcons.Glyph.CLOSED, CLOSED_TEXT]
+
+
+## The closed sign's icon, for the families that match it (LandsidePlaces).
+static func _closed_icon() -> Texture2D:
+	return MarkerIcons.icon(MarkerIcons.Glyph.CLOSED)
+
+
+## What `station` is called in its hover text: a "desk", "scanner" or "counter".
+static func station_noun(on_sim: PassengerSim, station: int) -> String:
+	if on_sim.layout.desks.has(station):
+		return "desk"
+	if on_sim.layout.scanners.has(station):
+		return "scanner"
+	return "counter"
 
 
 func _ready() -> void:
 	sync()
+	var hover := HoverTarget.find(get_tree())
+	if hover != null:
+		hover.register_provider(self)
 
 
 ## Also called on every grid edit (graph_changed, or edit_applied for a room
@@ -223,286 +178,116 @@ func sync() -> void:
 		if not full.has(station):
 			_drop_sign(_signs, station)
 	for station: int in full:
-		var sign := _show_sign(_signs, station, "QueueFullSign", MarkerIcons.queue_full())
-		var held: int = full[station]
-		var caption := "Queue full"
-		if held > 0:
-			caption += " · +" + str(held) + " waiting"
-		_set_caption(sign, caption)
+		var waiting: int = sim.queue_of(station).size() + int(full[station])
+		_show_sign(
+			_signs, station, "QueueFullSign", MarkerIcons.Glyph.QUEUE_FULL, QUEUE_TEXT % waiting
+		)
 	for station: int in _closed_signs.keys():
 		if not closed.has(station):
 			_drop_sign(_closed_signs, station)
 	for station in closed:
-		var sign := _show_sign(_closed_signs, station, "ClosedSign", _closed_icon())
-		var caption := CLOSED_CAPTION
-		match _closed_reason(station, counters):
-			MissSignals.PLAYER_CLOSED_REASON:
-				caption = PLAYER_CLOSED_CAPTION
-			MissSignals.SPOT_BLOCKED_REASON:
-				caption = SPOT_BLOCKED_CAPTION
-			MissSignals.UNREACHABLE_REASON:
-				caption = UNREACHABLE_CAPTION
-		_set_caption(sign, caption)
+		var look := closed_look(_closed_reason(station, counters), station_noun(sim, station))
+		_show_sign(_closed_signs, station, "ClosedSign", look[0], look[1])
 	var incomplete := MissSignals.incomplete_arches(sim)
 	for arch: int in _hint_signs.keys():
 		if not incomplete.has(arch):
 			_drop_sign(_hint_signs, arch)
 	for arch in incomplete:
-		var sign := _show_sign(_hint_signs, arch, "LaneHintSign", _closed_icon())
-		_set_caption(sign, MissSignals.lane_hint(sim, arch))
+		_show_sign(
+			_hint_signs,
+			arch,
+			"LaneHintSign",
+			MarkerIcons.Glyph.TRAY_TABLE,
+			MissSignals.lane_hint(sim, arch)
+		)
 
 
+## Keeps every sign SIGN_PX tall on screen; does nothing while the camera's
+## field of view, the view's height and the signs are as they were.
 func draw() -> void:
 	var camera := get_viewport().get_camera_3d() if is_inside_tree() else null
 	var fov := camera.fov if camera != null else FALLBACK_FOV
-	## The viewport's output height in screen pixels. The visible rect alone is the
+	## The viewport's output height in screen pixels: the visible rect is the
 	## layout size, which the content scale (project.godot) makes smaller than
-	## the screen, so it is scaled back by the stretch transform. (The viewport
-	## texture's get_size() is no help: under the content scale it reports
-	## neither size.)
+	## the screen, so it is scaled back by the stretch transform.
 	var height := FALLBACK_HEIGHT
-	var width := FALLBACK_WIDTH
-	## Layout coordinates (the camera's) times this are screen pixels.
-	var to_output := 1.0
 	if is_inside_tree():
 		var view := get_viewport()
-		to_output = view.get_stretch_transform().get_scale().y
-		height = view.get_visible_rect().size.y * to_output
-		width = view.get_visible_rect().size.x * view.get_stretch_transform().get_scale().x
-	var xform := camera.global_transform if camera != null else Transform3D()
-	var camera_id := camera.get_instance_id() if camera != null else 0
-	var hud: Array[Rect2] = []
-	if not _hint_signs.is_empty():
-		hud = HudRects.collect(self, to_output)
-	if (
-		not _dirty
-		and camera_id == _view_camera
-		and xform == _view_transform
-		and is_equal_approx(fov, _view_fov)
-		and is_equal_approx(height, _view_height)
-		and is_equal_approx(width, _view_width)
-		and hud == _view_hud
-	):
+		height = view.get_visible_rect().size.y * view.get_stretch_transform().get_scale().y
+	if not _dirty and is_equal_approx(fov, _view_fov) and is_equal_approx(height, _view_height):
 		return
 	_dirty = false
-	_view_hud = hud
-	_view_camera = camera_id
-	_view_transform = xform
 	_view_fov = fov
 	_view_height = height
-	_view_width = width
+	size_runs += 1
 	## World units per screen pixel at one metre: a fixed-size sprite is drawn
 	## as if it stood one metre from the camera.
 	var unit := 2.0 * tan(deg_to_rad(fov) / 2.0) / height
 	for signs: Dictionary in [_signs, _closed_signs, _hint_signs]:
 		for station: int in signs:
-			var sign: Sprite3D = signs[station]
-			sign.pixel_size = SIGN_PX * unit / MarkerIcons.SIZE
-			(sign.get_node("Caption") as Label3D).pixel_size = unit
-	_declutter_captions(camera, to_output, Vector2(width, height))
+			(signs[station] as Sprite3D).pixel_size = SIGN_PX * unit / MarkerIcons.SIZE
 
 
-## Lays the captions out on the screen: each is shown only if it clears the
-## captions already placed and every icon. The two staff-spot reasons go first and are never
-## hidden (one that would overlap is lifted instead); then the widest, then the
-## leftmost. `to_output` converts the camera's viewport coordinates to the
-## screen pixels the captions are sized in; `view_size` is the screen's size in
-## those pixels.
-func _declutter_captions(camera: Camera3D, to_output: float, view_size: Vector2) -> void:
-	declutter_runs += 1
-	_labels.clear()
-	_points.clear()
-	_rects.clear()
-	_mandatory.clear()
-	_hints.clear()
-	_stations.clear()
-	_icons.clear()
-	_icon_bins.clear()
-	_placed.clear()
-	_bins.clear()
-	for signs: Dictionary in [_signs, _closed_signs, _hint_signs]:
+## The HoverTarget provider contract: every shown sign's screen rect this frame
+## (viewport px, as Camera3D.unproject_position gives) and its words. The lane
+## hints are reported only in build mode.
+func hover_signs() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	var camera := get_viewport().get_camera_3d() if is_inside_tree() else null
+	if camera == null:
+		return out
+	var side := SIGN_PX / get_viewport().get_stretch_transform().get_scale().y
+	var groups := [[_signs, &"queue"], [_closed_signs, &"closed"]]
+	if is_building():
+		groups.append([_hint_signs, &"hint"])
+	for group: Array in groups:
+		var signs: Dictionary = group[0]
 		for station: int in signs:
 			var sign: Sprite3D = signs[station]
-			var caption := sign.get_node("Caption") as Label3D
-			caption.visible = true
-			caption.position = Vector3.ZERO
-			caption.offset = Vector2(0.0, SIGN_PX + CAPTION_GAP_PX)
-			if camera == null or camera.is_position_behind(sign.global_position):
+			if camera.is_position_behind(sign.global_position):
 				continue
-			var point := camera.unproject_position(sign.global_position) * to_output
-			if is_same(signs, _hint_signs) and _far_from_view(point, caption.text, view_size):
-				caption.visible = false
-				continue
-			_labels.append(caption)
-			_points.append(point)
-			_rects.append(caption_rect(point, caption.text))
-			_mandatory.append(is_staff_spot_caption(caption.text))
-			_hints.append(is_same(signs, _hint_signs))
-			_stations.append(station)
-			var icon := Rect2(point.x - SIGN_PX / 2.0, point.y - SIGN_PX, SIGN_PX, SIGN_PX)
-			_icons.append(icon)
-			RectBins.file(_icon_bins, icon, _icons.size() - 1)
-	_order.resize(_labels.size())
-	for i in _order.size():
-		_order[i] = i
-	_order.sort_custom(_placed_before)
-	for i in _order:
-		_place_caption(i, view_size)
-	for i in _labels.size():
-		_anchor_in_view(i, camera, to_output, view_size)
-
-
-## True when a lane hint's sign point is more than one caption width outside the
-## view. The caption is hidden then (not counted as a missing spot) and shows
-## again as the sign comes within that distance. A point exactly one width out
-## is still near on every edge (Rect2.has_point excludes the right and bottom).
-static func _far_from_view(point: Vector2, text: String, view_size: Vector2) -> bool:
-	var reach := caption_size(text).x
-	return (
-		point.x < -reach
-		or point.y < -reach
-		or point.x > view_size.x + reach
-		or point.y > view_size.y + reach
-	)
-
-
-## Moves the Label3D of caption `i` to a world point that projects inside the
-## view by VIEW_MARGIN_PX when its sign's point does not, and shifts the pixel
-## offset back so the caption is drawn where the layout put it.
-func _anchor_in_view(i: int, camera: Camera3D, to_output: float, view_size: Vector2) -> void:
-	var caption := _labels[i]
-	if not caption.visible:
-		return
-	var inner := Rect2(Vector2.ZERO, view_size).grow(-VIEW_MARGIN_PX)
-	var point := _points[i]
-	var anchor := point.clamp(inner.position, inner.end)
-	if anchor.is_equal_approx(point):
-		return
-	var depth := -(camera.global_transform.affine_inverse() * caption.global_position).z
-	caption.global_position = camera.project_position(anchor / to_output, depth)
-	caption.offset += Vector2(point.x - anchor.x, anchor.y - point.y)
-
-
-func _place_caption(i: int, view_size: Vector2) -> void:
-	var caption := _labels[i]
-	var rect := _rects[i]
-	if _mandatory[i]:
-		rect = _clear_spot(i, view_size)
-		caption.offset += Vector2(
-			rect.position.x - _rects[i].position.x, _rects[i].end.y - rect.end.y
-		)
-	else:
-		if _hints[i]:
-			rect = _hint_spot(i, view_size)
-			if rect.size == Vector2.ZERO:
-				hint_no_spot_hides += 1
-				caption.visible = false
-				caption.offset = Vector2(0.0, SIGN_PX + CAPTION_GAP_PX)
-				return
-			caption.offset += Vector2(
-				rect.position.x - _rects[i].position.x, _rects[i].end.y - rect.end.y
+			var foot := camera.unproject_position(sign.global_position)
+			(
+				out
+				. append(
+					{
+						"key": "%s:%d" % [group[1], station],
+						"rect": Rect2(foot.x - side / 2.0, foot.y - side, side, side),
+						"text": sign.get_meta(&"text", ""),
+					}
+				)
 			)
-		if (
-			RectBins.hits(rect.grow(CAPTION_MARGIN_PX), _bins, _placed)
-			or RectBins.hits(rect, _icon_bins, _icons)
-		):
-			caption.visible = false
-			caption.offset = Vector2(0.0, SIGN_PX + CAPTION_GAP_PX)
-			return
-	_placed.append(rect)
-	RectBins.file(_bins, rect, _placed.size() - 1)
+	return out
 
 
-## Where staff-spot caption `i` goes: its own spot if clear, else lifted
-## upward, then the same lifts to either side. A spot is valid inside the view,
-## off every icon and clear of the captions placed. With no valid spot the best
-## one found is used: inside the view and clear of the captions, else the
-## caption's own place moved the shortest way into the view, over another
-## caption if need be (a view with no room is a normal camera state, so no error).
-## A caption whose own place and icon are both wholly outside the view keeps its
-## place, so a station far off screen draws nothing. In a view smaller than the caption nothing can
-## be inside, so it is pinned to the view's left and top edges and overhangs the
-## right and bottom (the real view is far wider than a caption; only a test is not).
-func _clear_spot(i: int, view_size: Vector2) -> Rect2:
-	var view := Rect2(Vector2.ZERO, view_size)
-	var text := _labels[i].text
-	var step_y := _rects[i].size.y + CAPTION_MARGIN_PX
-	var step_x := _rects[i].size.x / 2.0 + SIGN_PX / 2.0 + CAPTION_MARGIN_PX
-	var best := _rects[i]
-	var best_found := false
-	for attempt in MAX_SHIFTS * 2 + 1:
-		## 0, then right, left, twice right, twice left, and so on.
-		var side := 0.0
-		if attempt > 0:
-			side = step_x * ceili(attempt / 2.0) * (1.0 if attempt % 2 == 1 else -1.0)
-		for lifts in MAX_LIFTS:
-			var rect := caption_rect(_points[i], text, step_y * lifts, side)
-			if rect.position.y < view.position.y:
-				break
-			if (
-				not view.encloses(rect)
-				or RectBins.hits(rect.grow(CAPTION_MARGIN_PX), _bins, _placed)
-			):
-				continue
-			if not RectBins.hits(rect, _icon_bins, _icons):
-				return rect
-			if not best_found:
-				best = rect
-				best_found = true
-	if best_found or not (view.intersects(best) or view.intersects(_icons[i])):
-		return best
-	var low := view.position
-	var high := (view.end - best.size).max(low)
-	return Rect2(best.position.clamp(low, high), best.size)
+## True while build mode lasts (build_session, else the first BuildSession in
+## the tree, looked for until one is found).
+func is_building() -> bool:
+	if build_session == null and is_inside_tree():
+		build_session = find_session(get_tree())
+	return build_session != null and build_session.active
 
 
-## Where lane-hint caption `i` goes: its own spot when that is inside the view
-## by VIEW_MARGIN_PX and clear of the HUD, else the nearest spot toward the
-## screen's middle (at most MAX_HINT_TRAVEL_PX away) that is also off every
-## icon, else the nearest such spot on rings of growing radius around its own
-## place, tried from the direction of the middle first. A zero-size rectangle
-## means no spot is clear anywhere in the view.
-func _hint_spot(i: int, view_size: Vector2) -> Rect2:
-	var own := _rects[i]
-	var inner := Rect2(Vector2.ZERO, view_size).grow(-VIEW_MARGIN_PX)
-	if _hint_spot_clear(own, inner):
-		return own
-	var toward := view_size / 2.0 - own.get_center()
-	var heading := toward.angle() if not toward.is_zero_approx() else 0.0
-	if not toward.is_zero_approx():
-		var step := toward.normalized() * HINT_STEP_PX
-		for k in range(1, int(MAX_HINT_TRAVEL_PX / HINT_STEP_PX) + 1):
-			var rect := Rect2(own.position + step * k, own.size)
-			if _hint_spot_usable(rect, inner):
-				return rect
-	var radius := HINT_RING_STEP_PX
-	var longest := view_size.length()
-	while radius <= longest:
-		var points := maxi(HINT_RING_POINTS, ceili(TAU * radius / HINT_RING_STEP_PX))
-		for n in points:
-			## 0, then one step either side of the heading, then two, and so on.
-			var turn := ceili(n / 2.0) * (1.0 if n % 2 == 1 else -1.0)
-			var angle := heading + TAU * turn / points
-			var rect := Rect2(own.position + Vector2.from_angle(angle) * radius, own.size)
-			if _hint_spot_usable(rect, inner):
-				return rect
-		radius += HINT_RING_STEP_PX
-	return Rect2()
+## The first BuildSession in `tree`, or null.
+static func find_session(tree: SceneTree) -> BuildSession:
+	if tree == null:
+		return null
+	for node in tree.root.find_children("*", "Node", true, false):
+		if node is BuildSession:
+			return node
+	return null
 
 
-func _hint_spot_usable(rect: Rect2, inner: Rect2) -> bool:
-	return _hint_spot_clear(rect, inner) and not RectBins.hits(rect, _icon_bins, _icons)
-
-
-## True when `rect` is inside `inner` and off every HUD rectangle (by the margin).
-func _hint_spot_clear(rect: Rect2, inner: Rect2) -> bool:
-	if not inner.encloses(rect):
-		return false
-	var padded := rect.grow(CAPTION_MARGIN_PX)
-	for hud in _view_hud:
-		if padded.intersects(hud):
-			return false
-	return true
+## What a caption covers on screen, in pixels, outline included: the text in
+## the default font plus the outline on every side. Measured once per text.
+## For the sign families that still draw a caption of their own.
+static func caption_size(text: String) -> Vector2:
+	if not _caption_sizes.has(text):
+		var font := ThemeDB.fallback_font
+		var size := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, CAPTION_FONT)
+		size.y = font.get_height(CAPTION_FONT)
+		_caption_sizes[text] = size + Vector2.ONE * 2.0 * CAPTION_OUTLINE
+	return _caption_sizes[text]
 
 
 ## True for a Control that puts something on the screen: a panel, a button, a
@@ -522,43 +307,6 @@ static func draws_something(control: Control) -> bool:
 ## A panel or a button: it draws a box and its children lie inside it.
 static func is_box(control: Control) -> bool:
 	return control is Panel or control is PanelContainer or control is BaseButton
-
-
-func _placed_before(a: int, b: int) -> bool:
-	if _mandatory[a] != _mandatory[b]:
-		return _mandatory[a]
-	var ra := _rects[a]
-	var rb := _rects[b]
-	if not is_equal_approx(ra.size.x, rb.size.x):
-		return ra.size.x > rb.size.x
-	if not is_equal_approx(ra.position.x, rb.position.x):
-		return ra.position.x < rb.position.x
-	return ra.position.y < rb.position.y
-
-
-static func is_staff_spot_caption(text: String) -> bool:
-	return text == SPOT_BLOCKED_CAPTION or text == UNREACHABLE_CAPTION
-
-
-## What a caption covers on screen, in pixels, outline included: the text in
-## the default font plus the outline on every side. Measured once per text.
-static func caption_size(text: String) -> Vector2:
-	if not _caption_sizes.has(text):
-		var font := ThemeDB.fallback_font
-		var size := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, CAPTION_FONT)
-		size.y = font.get_height(CAPTION_FONT)
-		_caption_sizes[text] = size + Vector2.ONE * 2.0 * CAPTION_OUTLINE
-	return _caption_sizes[text]
-
-
-## The screen rectangle (pixels) a caption covers over a sign whose bottom edge
-## is at `sign_point`: centred on the sign, its bottom a gap above the icon,
-## `lift` pixels higher and `shift` pixels to the right when a staff-spot
-## caption was moved clear of others.
-static func caption_rect(sign_point: Vector2, text: String, lift := 0.0, shift := 0.0) -> Rect2:
-	var size := caption_size(text)
-	var bottom := sign_point.y - SIGN_PX - CAPTION_GAP_PX - lift
-	return Rect2(Vector2(sign_point.x - size.x / 2.0 + shift, bottom - size.y), size)
 
 
 func _on_graph_changed(_cells: Array[Vector2i]) -> void:
@@ -606,27 +354,28 @@ func _on_member_state(_id: int, _state: StaffMember.State) -> void:
 	sync()
 
 
+static func _text_of(signs: Dictionary, station: int) -> String:
+	if not signs.has(station):
+		return ""
+	return (signs[station] as Node).get_meta(&"text", "")
+
+
 ## The sign of `station` in `signs`, taken from the pool when it has none,
-## placed over the station and given its icon.
-func _show_sign(signs: Dictionary, station: int, sign_name: String, icon: Texture2D) -> Sprite3D:
+## placed over the station and given its glyph and hover text.
+func _show_sign(
+	signs: Dictionary, station: int, sign_name: String, glyph: MarkerIcons.Glyph, text: String
+) -> void:
 	if not signs.has(station):
 		signs[station] = _take_sign()
 		_dirty = true
 	var sign: Sprite3D = signs[station]
 	sign.name = sign_name
-	sign.texture = icon
+	sign.texture = MarkerIcons.icon(glyph)
+	sign.set_meta(&"glyph", glyph)
+	sign.set_meta(&"text", text)
 	var point := _sign_point(station)
 	if not sign.position.is_equal_approx(point):
 		sign.position = point
-		_dirty = true
-	return sign
-
-
-func _set_caption(sign: Sprite3D, text: String) -> void:
-	var caption := sign.get_node("Caption") as Label3D
-	if caption.text != text:
-		caption.text = text
-		_dirty = true
 
 
 ## Above the middle of the station's footprint, clear of its top.
@@ -638,8 +387,7 @@ func _sign_point(station: int) -> Vector3:
 	return centre + Vector3(0.0, def.height + SIGN_LIFT_M, 0.0)
 
 
-## A billboard drawn over the world whose bottom edge sits on its position,
-## with its caption above it.
+## A billboard drawn over the world whose bottom edge sits on its position.
 func _take_sign() -> Sprite3D:
 	if not _free_signs.is_empty():
 		var reused: Sprite3D = _free_signs.pop_back()
@@ -647,7 +395,6 @@ func _take_sign() -> Sprite3D:
 		return reused
 	var sign := Sprite3D.new()
 	sign.name = "QueueFullSign"
-	sign.texture = MarkerIcons.queue_full()
 	sign.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	sign.fixed_size = true
 	sign.no_depth_test = true
@@ -656,19 +403,6 @@ func _take_sign() -> Sprite3D:
 	sign.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	sign.offset = Vector2(0.0, MarkerIcons.SIZE / 2.0)
 	sign.pixel_size = SIGN_PX / FALLBACK_HEIGHT / MarkerIcons.SIZE
-	var caption := Label3D.new()
-	caption.name = "Caption"
-	caption.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	caption.fixed_size = true
-	caption.no_depth_test = true
-	caption.render_priority = CAPTION_PRIORITY
-	caption.outline_render_priority = CAPTION_PRIORITY - 1
-	caption.font_size = CAPTION_FONT
-	caption.outline_size = CAPTION_OUTLINE
-	caption.outline_modulate = MarkerIcons.OUTLINE
-	caption.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
-	caption.offset = Vector2(0.0, SIGN_PX + CAPTION_GAP_PX)
-	sign.add_child(caption)
 	add_child(sign)
 	return sign
 

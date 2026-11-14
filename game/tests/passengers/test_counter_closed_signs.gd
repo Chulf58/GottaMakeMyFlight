@@ -45,7 +45,7 @@ func test_an_unstaffed_counter_shows_closed_until_a_server_is_on_duty() -> void:
 	var counter: int = _ids["air_counter"]
 	_markers.sync()
 	assert_object(_markers.closed_sign_for(counter)).is_not_null()
-	assert_str(_markers.closed_text(counter)).is_equal(MissMarkers.CLOSED_CAPTION)
+	assert_str(_markers.closed_text(counter)).is_equal(MissMarkers.CLOSED_TEXT)
 	StaffTestKit.seat_server(_world.staff, counter)
 	_markers.sync()
 	assert_object(_markers.closed_sign_for(counter)).is_null()
@@ -62,7 +62,7 @@ func test_a_counter_no_server_can_stand_at_says_its_staff_spot_is_blocked() -> v
 	grid.apply(BuildEdit.place_object(&"kiosk_display", Vector2i(24, 3), 0))
 	_attach(grid)
 	_markers.sync()
-	assert_str(_markers.closed_text(counter)).is_equal(MissMarkers.SPOT_BLOCKED_CAPTION)
+	assert_str(_markers.closed_text(counter)).is_equal(MissMarkers.SPOT_BLOCKED_TEXT)
 
 
 func test_an_airside_counter_past_the_divider_is_staffed_through_security() -> void:
@@ -75,7 +75,7 @@ func test_an_airside_counter_past_the_divider_is_staffed_through_security() -> v
 	var counter: int = ids["air_counter"]
 	assert_bool(_world.staff.spot_unreachable(counter)).is_false()
 	_markers.sync()
-	assert_str(_markers.closed_text(counter)).is_equal(MissMarkers.CLOSED_CAPTION)
+	assert_str(_markers.closed_text(counter)).is_equal(MissMarkers.CLOSED_TEXT)
 	var m := _world.staff.get_member(_world.staff.hire(StaffMember.Role.SHOP))
 	while m.state != StaffMember.State.ON_DUTY and _world.clock.tick < 1500:
 		_world.step()

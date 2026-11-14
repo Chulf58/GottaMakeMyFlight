@@ -2,7 +2,7 @@ class_name TestStaffSpotUnreachable
 extends GdUnitTestSuite
 ## A layout saved before the reach rule can hold a desk whose staff spot is
 ## free but sits in a pocket staff cannot walk into from the entrance. It
-## loads; the desk stays closed with "Closed: staff can't reach", StaffSim
+## loads; the desk stays closed with "Closed · staff can't reach the desk", StaffSim
 ## never sends anyone there, and the airport gate names the staff spot rather
 ## than the passengers' way (decision
 ## desk-belts-run-one-row-back-desk-then-the-agent-row-then-the, v3).
@@ -89,9 +89,12 @@ func test_a_pocketed_spot_loads_and_its_desk_says_staff_cannot_reach_it() -> voi
 	var markers := views.get_node("MissMarkers") as MissMarkers
 	markers.sync()
 	print("captions: '%s', '%s'" % [markers.closed_text(_desks[0]), markers.closed_text(scanner)])
-	assert_str(markers.closed_text(_desks[0])).is_equal(MissMarkers.UNREACHABLE_CAPTION)
-	assert_str(markers.closed_text(_desks[0])).is_equal("Closed: staff can't reach")
-	assert_str(markers.closed_text(scanner)).is_equal(MissMarkers.CLOSED_CAPTION)
+	assert_str(markers.closed_text(_desks[0])).is_equal(MissMarkers.UNREACHABLE_TEXT % "desk")
+	assert_str(markers.closed_text(_desks[0])).is_equal("Closed · staff can't reach the desk")
+	assert_int(MissMarkers.glyph_of(markers.closed_sign_for(_desks[0]))).is_equal(
+		MarkerIcons.Glyph.STAFF_BLOCKED
+	)
+	assert_str(markers.closed_text(scanner)).is_equal(MissMarkers.CLOSED_TEXT)
 	views.free()
 
 
@@ -195,5 +198,5 @@ func test_an_on_duty_agent_at_a_pocketed_spot_loads_released() -> void:
 	add_child(views)
 	var markers := views.get_node("MissMarkers") as MissMarkers
 	markers.sync()
-	assert_str(markers.closed_text(desks[0])).is_equal(MissMarkers.UNREACHABLE_CAPTION)
+	assert_str(markers.closed_text(desks[0])).is_equal(MissMarkers.UNREACHABLE_TEXT % "desk")
 	views.free()

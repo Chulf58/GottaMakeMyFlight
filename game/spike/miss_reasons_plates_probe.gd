@@ -411,15 +411,15 @@ func _sign_size_ok(img: Image, icon: Rect2, per_screen: float) -> bool:
 	return ok
 
 
-## The icon texture's red fill extent, in texels.
+## The icon texture's disc fill extent, in texels.
 func _fill_texels() -> Vector2:
-	var tex := MarkerIcons.queue_full().get_image()
+	var tex := MarkerIcons.image(MarkerIcons.Glyph.QUEUE_FULL)
 	var lo := tex.get_size()
 	var hi := -Vector2i.ONE
 	for y in tex.get_height():
 		for x in tex.get_width():
 			var c := tex.get_pixel(x, y)
-			if c.a > 0.99 and _near(c, MarkerIcons.QUEUE_FILL):
+			if c.a > 0.99 and _near(c, MarkerIcons.PROBLEM_FILL):
 				lo = lo.min(Vector2i(x, y))
 				hi = hi.max(Vector2i(x, y))
 	return Vector2(hi - lo + Vector2i.ONE)
