@@ -360,12 +360,20 @@ func _icon_rect(sprite: Sprite3D, img: Image) -> Rect2i:
 func _bubble_clear(id: int, label: String) -> bool:
 	var node := _views.node_for(id)
 	var bubble := node.get_node("Bubble") as Label3D
-	var was := bubble.text
-	bubble.text = "I'm late!"
+	# The calm view draws speech only over a focused passenger, and draw() sets
+	# the label's text from the node's speech, so give it words and focus it
+	# instead of writing the label.
+	var was_speech: Variant = node.get_meta(&"speech", "")
+	var was_selected := _views.selected_id
+	node.set_meta(&"speech", "I'm late!")
+	_views.selected_id = id
 	# Laid out in the same frame the text changes, as the game's first frame
 	# with a new bubble is (NeedIcons.bubble_top_m reads the label's settings).
 	_views.draw()
 	var img: Image = await PlateSight.grab(self, 4)
+	if bubble.text != "I'm late!" or not bubble.visible:
+		_invalid("passenger %d: the focused bubble reads '%s' after draw()" % [id, bubble.text])
+		return false
 	var rects: Array[Rect2i] = []
 	for sprite_name in NeedIcons.SPRITES:
 		var sprite := node.get_node(sprite_name) as Sprite3D
@@ -393,7 +401,8 @@ func _bubble_clear(id: int, label: String) -> bool:
 			% [label, id, bubble_box, icon_box, bubble_box.position.y - icon_box.end.y, clear]
 		)
 	)
-	bubble.text = was
+	node.set_meta(&"speech", was_speech)
+	_views.selected_id = was_selected
 	_views.draw()
 	await PlateSight.grab(self, 2)
 	return clear

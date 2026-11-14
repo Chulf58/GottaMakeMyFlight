@@ -4,13 +4,17 @@ extends Node3D
 ## clearing-alert-cards-money-hover-departu, point 5; Two Point Hospital and
 ## Parkitect have the same toggled overlays): a key tints the floor under the
 ## passengers from green (fine) through yellow to red (queuing long, unhappy
-## or stuck), by MoodTint's mapping, with a small legend while it is on. Four
+## or stuck), by MoodTint's mapping, with a small legend while it is on. Five
 ## buttons on the legend card pick the mode: Mood, or Hunger, Toilet or Boredom,
 ## which tint the same patches green, orange or red for that need (decision
-## crowd-need-display-mood-overlay-gains-hunger-toilet-and-bore). PassengerViews
+## crowd-need-display-mood-overlay-gains-hunger-toilet-and-bore), or Late, which
+## tints only where late passengers stand, in soft amber. PassengerViews
 ## floats a need's icons over the passengers only while its mode is on
 ## (shown_need(); decision need-icons-show-only-in-the-mood-overlay-need-modes-
-## n-key-removed).
+## n-key-removed), the shopping wish bubbles only in Boredom mode
+## (shows_wishes()) and the late bubbles only in Late mode (shows_late());
+## decision calm-cozy-default-view-quiet-world-detail-on-ask-soft-statio,
+## part 3.
 ## Nothing is tinted where no passenger stands. View only: it reads the
 ## PassengerSim and changes nothing in it, and it is never saved with a game.
 ##
@@ -42,9 +46,10 @@ const LEGEND_TEXTS: Array[String] = [
 	"green fed, orange hungry, red starving",
 	"green fine, orange needs the toilet, red desperate",
 	"green content, orange bored, red very bored",
+	"amber where passengers are running late",
 ]
 ## The mode buttons' captions, indexed by MoodTint.Mode; the node is "Mode" + it.
-const MODE_NAMES: Array[String] = ["Mood", "Hunger", "Toilet", "Boredom"]
+const MODE_NAMES: Array[String] = ["Mood", "Hunger", "Toilet", "Boredom", "Late"]
 ## The tint lies this far over the grid's floor height, above the floor tiles.
 const LIFT_M := 0.06
 ## The tint is redrawn when the sim has moved on this many ticks (a quarter
@@ -157,6 +162,19 @@ func shown_need() -> int:
 	return NO_NEED
 
 
+## True while the overlay is on in Boredom mode, where every shopping wish
+## bubble shows (decision calm-cozy-default-view-quiet-world-detail-on-ask-
+## soft-statio, part 3).
+func shows_wishes() -> bool:
+	return _shown and _mode == MoodTint.Mode.BOREDOM
+
+
+## True while the overlay is on in Late mode, where every late passenger shows
+## its late bubble (MoodTint.is_late()).
+func shows_late() -> bool:
+	return _shown and _mode == MoodTint.Mode.LATE
+
+
 ## Picks what the tint shows and keeps the choice. The mode buttons come through
 ## here; it works with the overlay off too, so M reopens at the last mode.
 func set_mode(value: MoodTint.Mode) -> void:
@@ -225,7 +243,7 @@ func _build_controls() -> Control:
 	return row
 
 
-## The small Mood, Hunger, Toilet and Boredom buttons under the legend line.
+## The small Mood, Hunger, Toilet, Boredom and Late buttons under the legend line.
 func _build_mode_buttons() -> Control:
 	var buttons := HBoxContainer.new()
 	buttons.name = "MoodModes"

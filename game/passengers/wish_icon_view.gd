@@ -25,8 +25,10 @@ extends RefCounted
 ## screen, at the end of the need icon row in place of the hourglass (user
 ## ruling shopping-wish-icon-replaces-the-boredom-hourglass-for-wishers), and
 ## hidden at the home zoom or farther out (decision passenger-need-icons-hide-
-## when-the-camera-is-zoomed-out-past, NeedIcons.shown_at()). The bubble shows in
-## the default view; only the need icons wait for a Mood overlay need mode.
+## when-the-camera-is-zoomed-out-past, NeedIcons.shown_at()). The bubble shows
+## only in the Mood overlay's Boredom mode and over the hovered, pinned or
+## inspected passenger (decision calm-cozy-default-view-quiet-world-detail-on-
+## ask-soft-statio, part 3); PassengerViews decides it each frame.
 
 enum Badge { NONE, TICK, CROSS }
 

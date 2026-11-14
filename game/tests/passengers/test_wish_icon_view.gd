@@ -80,6 +80,10 @@ func _wish_world(types: Array, wish: StringName) -> void:
 	_world.sim.shops.wishes = func(_p: Passenger) -> StringName: return wish
 	_world.run_to(10)
 	_views = PassengerTestWorld.views()
+	# These layout tests measure bubbles over passengers, which the calm view
+	# shows only on focus or in a mode (decision calm-cozy-default-view-quiet-
+	# world-detail-on-ask-soft-statio); every bubble shows here.
+	_views.all_bubbles = true
 	_views.clock = _world.clock
 	_views.sim = _world.sim
 	add_child(_views)
@@ -317,7 +321,7 @@ func test_a_bored_wisher_shows_the_bubble_in_the_row_and_no_hourglass() -> void:
 	var p := ShopTestLayout.airside_guest(_world, BoredomSim.MAX)
 	_views.sync()
 	var node := _views.node_for(p.id)
-	(node.get_node("Bubble") as Label3D).text = ""
+	node.set_meta(&"speech", "")
 	_views.draw()
 	var wish := _sprite(node)
 	print(
@@ -373,7 +377,7 @@ func test_a_hungry_wisher_shows_the_hunger_icon_then_the_bubble() -> void:
 	p.cafe_cooldown = 1000000
 	_views.sync()
 	var node := _views.node_for(p.id)
-	(node.get_node("Bubble") as Label3D).text = ""
+	node.set_meta(&"speech", "")
 	PassengerTestWorld.show_need(_views, NeedIcons.Need.HUNGER)
 	_views.draw()
 	var hunger := _need_sprite(node, 0)

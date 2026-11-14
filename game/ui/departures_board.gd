@@ -10,7 +10,10 @@ extends Control
 ## is two lines (decision departures-list-row-shows-the-airline-on-a-second-
 ## line, user-ruled 2026-11-12): line 1 has the time, the destination and the
 ## Gate and End buttons; line 2, small grey text (HudHint), has the airline's
-## full name, never trimmed, then the status word; the "doors close" caption
+## full name, never trimmed, then the status word, then a soft "N running late"
+## when N passengers of that flight are late (LateCount; board 7f89cf1e, decision
+## calm-cozy-default-view-quiet-world-detail-on-ask-soft-statio part 4), nothing
+## at 0; the "doors close" caption
 ## goes under line 2 (decision
 ## flight-panel-the-next-departing-flight-s-row-shows-a-doors-c, moved here by
 ## top-right-clock-panel-slims-to-day-time-and-speed-flight-row). Each day lists at most
@@ -77,8 +80,12 @@ const MAX_ROWS_PER_DAY := 5
 
 @export var flights: FlightSim
 @export var clock: SimClock
-## Where the header's Made / Missed / In terminal counts come from.
-var passengers: PassengerSim
+## Where the header's Made / Missed / In terminal counts come from. Setting
+## another sim drops the late counts read from the old one.
+var passengers: PassengerSim:
+	set(value):
+		passengers = value
+		_late_key = []
 ## Where the on/off choice is kept; tests point it at a per-process file.
 var settings_path := SETTINGS_PATH
 
@@ -91,6 +98,13 @@ var _counts := Label.new()
 var _rows := VBoxContainer.new()
 var _lines := PackedStringArray()
 var _entries: Array[Dictionary] = []
+## {flight id: passengers running late}, read from the PassengerSim again only
+## when _late_signature() changes, so a frame between ticks costs no passenger
+## scan. The signature holds more than the tick: a snapshot load installs
+## fresh Passenger objects at a tick that may equal the one before it (load
+## pauses the clock), and the counts must follow it (board 7f89cf1e).
+var _late := {}
+var _late_key := []
 var _gates: Array[String] = []
 ## The row key ("contract_day") whose picker is open, and the row key the
 ## message under it belongs to; both "" for none.
@@ -111,11 +125,13 @@ static func lines_for(sim: FlightSim, tick: int) -> PackedStringArray:
 
 
 ## What the board draws at `tick`, in order: {kind: "heading" | "text" | "row",
-## text}, and for a "row" also {contract, day, gate, key}.
-static func entries_for(sim: FlightSim, tick: int) -> Array[Dictionary]:
+## text}, and for a "row" also {contract, day, gate, key, late}. `late` is
+## {flight id: passengers running late} (LateCount.by_flight()); a row's "late"
+## is its "N running late" text, "" for none.
+static func entries_for(sim: FlightSim, tick: int, late := {}) -> Array[Dictionary]:
 	var today := GameCalendar.day_of(tick)
-	var todays := _day_entries(sim, today, true, tick)
-	var tomorrows := _day_entries(sim, today + 1, false, tick)
+	var todays := _day_entries(sim, today, true, tick, late)
+	var tomorrows := _day_entries(sim, today + 1, false, tick, late)
 	var entries: Array[Dictionary] = []
 	if todays.is_empty() and tomorrows.is_empty():
 		entries.append({"kind": "text", "text": EMPTY_TEXT})
@@ -138,7 +154,7 @@ static func _append_day(entries: Array[Dictionary], day_entries: Array[Dictionar
 ## `drop_departed` (today), capped at MAX_ROWS_PER_DAY with a "+n more" entry
 ## after. On today the next departing flight at `tick` shows its doors time.
 static func _day_entries(
-	sim: FlightSim, day: int, drop_departed: bool, tick: int
+	sim: FlightSim, day: int, drop_departed: bool, tick: int, late: Dictionary
 ) -> Array[Dictionary]:
 	var entries: Array[Dictionary] = []
 	var kept: Array[Dictionary] = []
@@ -162,6 +178,7 @@ static func _day_entries(
 					"airline": row["airline"],
 					"status": "" if is_next else row["status"],
 					"doors": DepartureList.doors_text(row) if is_next else "",
+					"late": LateCount.text_for(int(late.get(row["flight"], 0))),
 					"contract": row["contract"],
 					"day": day,
 					"gate": row["gate"],
@@ -303,12 +320,41 @@ func counts_text() -> String:
 	)
 
 
+## Passengers of `flight_id` running late as of the last refresh.
+func late_count_of(flight_id: String) -> int:
+	return int(_late.get(flight_id, 0))
+
+
+func _late_counts() -> Dictionary:
+	if passengers == null:
+		return {}
+	var key := _late_signature()
+	if key != _late_key:
+		_late_key = key
+		_late = LateCount.by_flight(passengers)
+	return _late
+
+
+## What identifies the passenger state the late counts were read from: the sim,
+## its tick, and how many passengers it holds and which objects stand first and
+## last. A snapshot install replaces every Passenger object, so any load moves
+## the signature even at the same tick and with the same counts.
+func _late_signature() -> Array:
+	var ids := passengers.passenger_ids()
+	var first := 0
+	var last := 0
+	if not ids.is_empty():
+		first = passengers.get_passenger(ids[0]).get_instance_id()
+		last = passengers.get_passenger(ids[-1]).get_instance_id()
+	return [passengers.get_instance_id(), passengers.tick, ids.size(), first, last]
+
+
 func _refresh(force: bool) -> void:
 	if not _shown or flights == null or clock == null:
 		return
 	_counts.text = counts_text()
 	_counts.visible = passengers != null
-	var entries := entries_for(flights, clock.tick)
+	var entries := entries_for(flights, clock.tick, _late_counts())
 	var gates := flights.gate_ids()
 	if not force and entries == _entries and gates == _gates:
 		return
@@ -376,13 +422,14 @@ func _add_row(entry: Dictionary) -> void:
 	_compact(button)
 	if end_btn != null:
 		_compact(end_btn)
-	var second: String = entry["airline"]
-	if entry["status"] != "":
-		second += "  " + entry["status"] if second != "" else entry["status"]
-	if second != "":
+	var parts := PackedStringArray()
+	for part: String in [entry["airline"], entry["status"], entry["late"]]:
+		if part != "":
+			parts.append(part)
+	if not parts.is_empty():
 		var airline := Label.new()
 		airline.name = "Airline_%s" % key if key != "" else "Airline"
-		airline.text = second
+		airline.text = "  ".join(parts)
 		airline.theme_type_variation = &"HudHint"
 		airline.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		airline.mouse_filter = Control.MOUSE_FILTER_IGNORE

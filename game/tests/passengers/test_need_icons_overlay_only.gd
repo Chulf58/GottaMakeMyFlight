@@ -4,8 +4,10 @@ extends GdUnitTestSuite
 ## Boredom mode, and then only that need's, with the count badges (decision
 ## need-icons-show-only-in-the-mood-overlay-need-modes-n-key-removed). The
 ## default view and plain Mood mode show none, the zoom-out hide still applies
-## inside a need mode, wish bubbles stay in the default view, and the N key's
-## action is gone.
+## inside a need mode, wish bubbles show only in Boredom mode (decision calm-
+## cozy-default-view-quiet-world-detail-on-ask-soft-statio, part 3, which
+## replaced "wish bubbles stay in the default view"), and the N key's action is
+## gone.
 
 const NEEDS := [NeedIcons.Need.HUNGER, NeedIcons.Need.TOILET, NeedIcons.Need.BOREDOM]
 const MODE_OF := {
@@ -196,7 +198,7 @@ func test_zoomed_out_past_home_no_icon_shows_even_in_a_need_mode() -> void:
 	assert_int(_views.need_badges().size()).is_equal(0)
 
 
-func test_a_wish_bubble_shows_with_the_overlay_off_and_in_every_mode() -> void:
+func test_a_wish_bubble_shows_only_in_boredom_mode() -> void:
 	var grid := BuildGrid.new()
 	WishTestLayout.build(grid, [&"kiosk"])
 	_open(grid, &"kiosk")
@@ -213,12 +215,17 @@ func test_a_wish_bubble_shows_with_the_overlay_off_and_in_every_mode() -> void:
 			shown += 1 if (node.get_node(sprite_name) as Sprite3D).visible else 0
 		return shown
 	print("overlay off: wish %s, need icons %d" % [wish.visible, need_icons.call()])
-	assert_bool(wish.visible).is_true()
+	# The control: the passenger does wish.
+	assert_str(node.get_meta(&"wish", "")).is_not_empty()
+	assert_bool(wish.visible).is_false()
 	assert_int(need_icons.call()).is_equal(0)
-	_mode(MoodTint.Mode.MOOD)
-	assert_bool(wish.visible).is_true()
-	_mode(MoodTint.Mode.HUNGER)
-	assert_bool(wish.visible).is_true()
+	for mode: MoodTint.Mode in MoodTint.Mode.values():
+		_mode(mode)
+		print("mode %d: wish %s" % [mode, wish.visible])
+		assert_bool(wish.visible).is_equal(mode == MoodTint.Mode.BOREDOM)
+	# In Boredom mode the wish takes the hourglass's place in the row.
+	_mode(MoodTint.Mode.BOREDOM)
+	assert_int(need_icons.call()).is_equal(0)
 	# The wish hides with the zoom-out rule, as before.
 	_rig.distance = _rig.home_distance
 	_views.draw()

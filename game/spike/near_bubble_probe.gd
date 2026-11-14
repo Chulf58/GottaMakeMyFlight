@@ -101,7 +101,12 @@ func _find_bubble() -> void:
 	if _bubble == null:
 		_fail("no passenger showed a bubble in %d ticks" % BUBBLE_LIMIT_TICKS)
 		return
-	print("PROBE bubble tick=%d text='%s'" % [_clock.tick, _bubble.text])
+	print(
+		(
+			"PROBE bubble tick=%d passenger=%d text='%s'"
+			% [_clock.tick, _views.selected_id, _bubble.text]
+		)
+	)
 	_camera = Camera3D.new()
 	_camera.fov = 55.0
 	root.add_child(_camera)
@@ -110,14 +115,19 @@ func _find_bubble() -> void:
 	_phase = 2
 
 
-## The Bubble label of a drawn passenger whose sim shows a bubble, or null.
+## The Bubble label of a drawn passenger whose sim has words to say, or null.
+## The calm view draws speech only over a focused passenger, so the one found is
+## inspected (selected_id) and drawn, which puts its text on the label.
 func _bubble_label() -> Label3D:
 	_views.sync()
-	var nodes: Dictionary = _views.get("_nodes")
-	for node: Node3D in nodes.values():
-		var bubble := node.get_node_or_null("Bubble") as Label3D
-		if bubble != null and bubble.text != "":
-			return bubble
+	for id in _sim.passenger_ids():
+		var node := _views.node_for(id)
+		if node == null or _sim.bubble_text(_sim.get_passenger(id)) == "":
+			continue
+		_views.selected_id = id
+		_views.draw()
+		var bubble := node.get_node("Bubble") as Label3D
+		return bubble if bubble.text != "" else null
 	return null
 
 
@@ -144,6 +154,9 @@ func _near_frames() -> void:
 
 
 func _report_depth() -> void:
+	if _bubble.text == "":
+		_fail("the focused passenger's bubble has no text, so no rectangle is measured")
+		return
 	var view := root.get_visible_rect().size
 	var unit := NeedIcons.unit_of(root, _camera)
 	var depth := (_bubble.global_position - _camera.global_position).dot(-_camera.global_basis.z)

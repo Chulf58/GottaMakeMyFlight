@@ -134,6 +134,9 @@ func _run() -> void:
 		p.stuck = Passenger.Stuck.NONE if i % 2 == 0 else Passenger.Stuck.QUEUE_FULL
 	print("PROBE forced_bubbles tail=%s (late on even places, queue full on odd)" % [tail])
 	var views := main.get_node("PassengerViews") as PassengerViews
+	# A crowd-declutter probe: the calm view shows a bubble only over a focused
+	# passenger, so show every passenger's speech to give the declutter a crowd.
+	views.all_bubbles = true
 	views.sync()
 	var rig: TycoonCamera = main.get_node("TycoonCamera")
 	var cam: Camera3D = rig.get_node("Camera3D")

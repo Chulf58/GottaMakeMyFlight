@@ -24,6 +24,10 @@ func before_test() -> void:
 	_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
 	_world.run_to(10)
 	_views = PassengerTestWorld.views()
+	# These layout tests measure bubbles over passengers, which the calm view
+	# shows only on focus or in a mode (decision calm-cozy-default-view-quiet-
+	# world-detail-on-ask-soft-statio); every bubble shows here.
+	_views.all_bubbles = true
 	_views.clock = _world.clock
 	_views.sim = _world.sim
 	add_child(_views)
@@ -232,7 +236,7 @@ func test_with_a_camera_the_row_keeps_its_screen_size_and_clears_a_bubble() -> v
 	# Only the overlay mode's need draws: a row of one in hunger mode.
 	PassengerTestWorld.show_need(_views, NeedIcons.Need.HUNGER)
 	var node := _views.node_for(p.id)
-	(node.get_node("Bubble") as Label3D).text = ""
+	node.set_meta(&"speech", "")
 	_views.draw()
 	var unit := NeedIcons.unit_of(get_viewport(), camera)
 	assert_float(unit).is_greater(0.0)
@@ -250,7 +254,7 @@ func test_with_a_camera_the_row_keeps_its_screen_size_and_clears_a_bubble() -> v
 		NeedIcons.offset_of(0, 1, head_lift), Vector2.ONE * 0.001
 	)
 	var bubble := node.get_node("Bubble") as Label3D
-	bubble.text = "I'm late!"
+	node.set_meta(&"speech", "I'm late!")
 	_views.draw()
 	print("with a bubble: at %s offset %s" % [icon.position, icon.offset])
 	assert_vector(icon.position).is_equal(bubble.position)
