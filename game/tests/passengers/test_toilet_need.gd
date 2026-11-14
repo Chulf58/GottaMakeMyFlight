@@ -81,11 +81,14 @@ func test_the_need_is_drawn_at_spawn_and_rises_once_a_second() -> void:
 	var seen := {}
 	for i in 40:
 		var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+		# A fixture draw, not an arrival under test: no place in the line outside.
+		_world.sim.entrance.forget(p.id)
 		assert_int(p.toilet_need).is_between(ToiletSim.NEED_START_MIN, ToiletSim.NEED_START_MAX)
 		seen[p.toilet_need] = true
 	print("40 spawns drew %d distinct needs" % seen.size())
 	assert_int(seen.size()).is_greater(10)
 	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	_world.sim.entrance.forget(p.id)
 	ToiletTestLayout.calm(p)
 	p.toilet_need = 10
 	_world.run_to(_world.clock.tick + 5 * PassengerSim.BEAT_TICKS)

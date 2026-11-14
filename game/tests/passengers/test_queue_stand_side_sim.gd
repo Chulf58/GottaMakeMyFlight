@@ -83,9 +83,12 @@ func _open(cell: Vector2i) -> bool:
 ## having walked east onto it, with `carry_on` bags.
 func _queuer(carry_on := 1) -> Passenger:
 	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	# A fixture draw, not an arrival under test: no place in the line outside.
+	_world.sim.entrance.forget(p.id)
 	while SecurityLooks.bag_kind(p, 0) != ROLLER:
 		p.carry_on = 0
 		p = _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+		_world.sim.entrance.forget(p.id)
 	p.carry_on = carry_on
 	p.late = false
 	p.stage = Passenger.Stage.CHECKIN_QUEUE

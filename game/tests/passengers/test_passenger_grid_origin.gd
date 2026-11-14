@@ -29,6 +29,9 @@ func test_a_passenger_walks_the_terminal_in_the_grid_frame() -> void:
 	var grid := BuildGrid.new(SHELL_SIZE, SHELL_ORIGIN)
 	ReferenceTerminal.build(grid)
 	_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
+	# Desks staffed before it arrives (with every desk closed it would wait in
+	# the line outside, EntranceLine): it walks straight in, as the case means.
+	_world.step()
 	var id := _world.sim.spawn_now(PassengerTestWorld.FLIGHT)
 	var p := _world.passenger(id)
 	var samples := 0

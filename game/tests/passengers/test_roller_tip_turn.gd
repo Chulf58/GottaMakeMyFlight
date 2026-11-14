@@ -289,9 +289,12 @@ func test_a_gate_stander_tips_once_its_way_is_known() -> void:
 ## A calm passenger with one roller, its liquids and alarm off.
 func _roller_guest() -> Passenger:
 	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	# A fixture draw, not an arrival under test: no place in the line outside.
+	_world.sim.entrance.forget(p.id)
 	while SecurityLooks.bag_kind(p, 0) != ROLLER:
 		p.carry_on = 0
 		p = _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+		_world.sim.entrance.forget(p.id)
 	ToiletTestLayout.calm(p)
 	p.carry_on = 1
 	p.liquids = false

@@ -136,6 +136,9 @@ func test_the_late_text_is_the_one_the_sim_says() -> void:
 	var grid := BuildGrid.new()
 	ToiletTestLayout.build(grid)
 	var world := PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
+	# Desks staffed before they arrive (with every desk closed they would wait
+	# in the line outside, EntranceLine): they stand on the entrance, as meant.
+	world.step()
 	var p := world.passenger(world.sim.spawn_now(PassengerTestWorld.FLIGHT))
 	p.late = true
 	p.stuck = Passenger.Stuck.NONE
@@ -171,6 +174,9 @@ func test_views_hide_the_overlapping_bubble_of_the_passenger_further_back() -> v
 	var grid := BuildGrid.new()
 	ToiletTestLayout.build(grid)
 	var world := PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
+	# Desks staffed before they arrive (with every desk closed they would wait
+	# in the line outside, EntranceLine): they stand on the entrance, as meant.
+	world.step()
 	var early := world.sim.spawn_now(PassengerTestWorld.FLIGHT)
 	var full := world.sim.spawn_now(PassengerTestWorld.FLIGHT)
 	var late := world.sim.spawn_now(PassengerTestWorld.FLIGHT)

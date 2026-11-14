@@ -41,6 +41,9 @@ func _make_with_cafes(roomy := false) -> void:
 ## (_no_carry_on()).
 func _spawn_to(stage: Passenger.Stage, hunger: int, limit := 900) -> Passenger:
 	var p := _no_carry_on(_world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT)))
+	# Placed to walk the journey from the entrance at once, not an arrival under
+	# test: no place in the line outside.
+	_world.sim.entrance.forget(p.id)
 	p.hunger = hunger
 	p.cafe_cooldown = 1000000
 	while p.stage != stage and _world.clock.tick < limit:

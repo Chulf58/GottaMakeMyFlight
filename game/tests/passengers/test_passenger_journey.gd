@@ -158,6 +158,9 @@ func test_an_edit_beside_a_diagonal_step_replans_the_committed_path() -> void:
 	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(0, 0), 0)
 	PassengerTestWorld.place(grid, &"checkin_desk", Vector2i(8, 7), 0)
 	_world = PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(4000, 5000))
+	# Desks staffed before it arrives (with every desk closed it would wait in
+	# the line outside, EntranceLine): it walks straight in, as the case means.
+	_world.step()
 	var id := _world.sim.spawn_now(PassengerTestWorld.FLIGHT)
 	_world.step()
 	var p := _world.passenger(id)

@@ -67,6 +67,9 @@ func _doorway(cell: Vector2i, facing: int) -> Vector2:
 
 
 func test_a_new_passenger_starts_on_the_road_and_walks_in_through_the_entrance() -> void:
+	# Desks staffed before it arrives (with every desk closed it would wait in
+	# the line outside, EntranceLine): it walks straight in, as the case means.
+	_world.step()
 	var id := _world.sim.spawn_now(PassengerTestWorld.FLIGHT)
 	var p := _world.passenger(id)
 	var start := _world.sim.world_position(p)
