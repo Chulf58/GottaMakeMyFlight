@@ -58,16 +58,26 @@ func attach(menu: BuildMenu) -> void:
 	dock.anchor_bottom = 1.0
 	dock.offset_left = HudLayout.MARGIN
 	# On the bar's baseline: its bottom edge is the bar's, MARGIN off the screen's.
-	dock.offset_top = -BuildMenu.MARGIN
-	dock.offset_bottom = -BuildMenu.MARGIN
 	dock.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	dock.add_child(button)
 	menu.add_child(dock)
+	_place_dock()
+	menu.bar().minimum_size_changed.connect(_place_dock)
+	menu.get_viewport().size_changed.connect(_place_dock)
 	if menu.build_mode != null:
 		_paste = menu.build_mode.templates
 		_paste.library.changed.connect(_rebuild)
 		_paste.armed_changed.connect(_mark_cards)
 	_rebuild()
+
+
+## Beside the bar on its baseline, or lifted a bar height when the bar leaves no room.
+func _place_dock() -> void:
+	var beside := BottomDocks.beside_bar(
+		_menu.get_viewport().get_visible_rect().size.x, _menu.bar().get_combined_minimum_size().x
+	)
+	dock.offset_top = -BottomDocks.bottom(beside)
+	dock.offset_bottom = -BottomDocks.bottom(beside)
 
 
 ## Shows or hides the page and marks its button.

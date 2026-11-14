@@ -17,7 +17,10 @@ var _room := 0
 
 func before() -> void:
 	_port = SubViewport.new()
-	_port.size = Vector2i(1280, 720)
+	# The project's 1.25 layout: wide enough that the dock stands beside the bar
+	# (BottomDocks lifts it above the bar at 1280 wide, tested in
+	# test_hud_scale_overlaps.gd).
+	_port.size = Vector2i(1536, 864)
 	add_child(_port)
 	_finances = Finances.new()
 	_port.add_child(_finances)

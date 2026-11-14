@@ -186,6 +186,7 @@ func _ready() -> void:
 	layer = TopRow.SHEET_LAYER
 	add_to_group(TopRow.SHEET_GROUP)
 	_build()
+	get_viewport().size_changed.connect(_place_row)
 	desk.board.changed.connect(_refresh)
 	if desk.rating != null:
 		desk.rating.changed.connect(_refresh_warning)
@@ -339,6 +340,12 @@ func message() -> String:
 	return _message.text
 
 
+## Puts the button and the sheet back on the row for the viewport's layout width.
+func _place_row() -> void:
+	TopRow.place_in_slot(_button, TopRow.OFFERS_SLOT, self)
+	TopRow.place_sheet(_sheet, self)
+
+
 func _build() -> void:
 	_button = Button.new()
 	_sheet = PanelContainer.new()
@@ -346,7 +353,7 @@ func _build() -> void:
 	_message = Label.new()
 	_button.name = "OffersButton"
 	_button.theme = BuildMenu.HUD_THEME
-	TopRow.place_in_slot(_button, TopRow.OFFERS_SLOT)
+	TopRow.place_in_slot(_button, TopRow.OFFERS_SLOT, self)
 	_button.focus_mode = Control.FOCUS_NONE
 	_button.theme_type_variation = &"HudButtonTeal"
 	_button.pressed.connect(_on_toggle)
@@ -355,7 +362,7 @@ func _build() -> void:
 	_sheet.theme = BuildMenu.HUD_THEME
 	_sheet.visible = false
 	_sheet.mouse_filter = Control.MOUSE_FILTER_STOP
-	TopRow.place_sheet(_sheet)
+	TopRow.place_sheet(_sheet, self)
 	add_child(_sheet)
 	var sheet_column := VBoxContainer.new()
 	sheet_column.add_theme_constant_override("separation", 6)
