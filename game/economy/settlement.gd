@@ -39,7 +39,10 @@ extends Node
 ## first is kept (_bag_missed) until its passenger finishes; a made passenger
 ## whose bag is still on its way is kept with the fee it earned (_awaiting_bag)
 ## until the bag settles. Both are saved, so a load never pays a full fee for a
-## bag that missed. A passenger with no bag in the BaggageSim (none checked in,
+## bag that missed. The cut is the contract's (OfferTraits.missed_bag_paid_percent
+## of its traits: Bag cover and Heavy bags change it), and a fee held for a bag
+## keeps the cut fee beside it, so a bag that settles after a load is cut the
+## same. A passenger with no bag in the BaggageSim (none checked in,
 ## or settled long ago) pays the full fee, as does any passenger when no
 ## BaggageSim is set.
 ##
@@ -95,7 +98,7 @@ const WAGE_TIMING_LAST_TICK := "1"
 ## loads with no bag state; the two come as a pair, like the wage keys.
 const BAG_SNAPSHOT_KEYS := ["bag_missed", "bags_awaited"]
 ## Sorted, so a saved entry's keys can be compared with it.
-const AWAITED_KEYS := ["fee", "passenger"]
+const AWAITED_KEYS := ["fee", "missed_fee", "passenger"]
 ## Far past any passenger id a game hands out.
 const MAX_PASSENGER_ID := 1_000_000_000_000
 ## No day charged yet. Ticks are never negative, so no day is.
@@ -145,8 +148,8 @@ var _paid_day := NO_DAY
 ## Passenger ids (set of true) whose bag missed while the passenger was still
 ## on their way; dropped when the passenger finishes.
 var _bag_missed: Dictionary = {}
-## Passenger id -> the fee of a passenger who made the flight while their bag
-## was still on its way, held until the bag settles.
+## Passenger id -> [the fee, the fee if the bag misses] of a passenger who made
+## the flight while their bag was still on its way, held until the bag settles.
 var _awaiting_bag: Dictionary = {}
 
 
@@ -213,8 +216,8 @@ func claimed_debt() -> int:
 ## wallet's balance, the wage state (owed wages, last charged day and paid
 ## today) and the owed upkeep as decimal strings, and the bag state: the
 ## passengers whose bag missed ("bag_missed") and the fees held for a bag still
-## on its way ("bags_awaited", each {"passenger", "fee"}), also as decimal
-## strings.
+## on its way ("bags_awaited", each {"passenger", "fee", "missed_fee"}, the
+## last the fee paid if the bag misses), also as decimal strings.
 func to_snapshot() -> Dictionary:
 	var out := []
 	for fee in _owed:
@@ -224,7 +227,8 @@ func to_snapshot() -> Dictionary:
 		missed.append(str(id))
 	var awaited := []
 	for id in _awaiting_bag:
-		awaited.append({"passenger": str(id), "fee": str(_awaiting_bag[id])})
+		var held: Array = _awaiting_bag[id]
+		awaited.append({"passenger": str(id), "fee": str(held[0]), "missed_fee": str(held[1])})
 	return {
 		"owed": out,
 		"wages_owed": str(_wages_owed),
@@ -267,7 +271,9 @@ func from_snapshot(data: Dictionary) -> bool:
 		_bag_missed[str(text).to_int()] = true
 	_awaiting_bag.clear()
 	for entry in data.get("bags_awaited", []):
-		_awaiting_bag[str(entry["passenger"]).to_int()] = str(entry["fee"]).to_int()
+		_awaiting_bag[str(entry["passenger"]).to_int()] = [
+			str(entry["fee"]).to_int(), str(entry["missed_fee"]).to_int()
+		]
 	# A load rewinds the session: the passengers it holds may finish again.
 	_settled.clear()
 	return true
@@ -345,7 +351,10 @@ func _awaited_problem(entry: Variant, missed: Dictionary, awaited: Dictionary) -
 		return "passenger %s is listed twice for a bag" % [entry["passenger"]]
 	if not _in_range(entry["fee"], 1, Wallet.MAX_BALANCE):
 		return "bags_awaited fee %s is not 1 to %d" % [entry["fee"], Wallet.MAX_BALANCE]
-	return ""
+	var cut_ok := _in_range(entry["missed_fee"], 0, str(entry["fee"]).to_int())
+	return (
+		"" if cut_ok else "bags_awaited missed_fee %s is not 0 to its fee" % [entry["missed_fee"]]
+	)
 
 
 ## Why the wage keys are refused, or "" (all absent is allowed).
@@ -485,10 +494,11 @@ func _on_outcome(id: int, made: bool) -> void:
 		return
 	_settled[id] = true
 	var fee: int = contract["fee_per_passenger"]
+	var paid := OfferTraits.missed_bag_paid_percent(contract[FlightContract.TRAITS_KEY])
 	if fee > 0 and bag_missed:
-		fee = PriceTable.fee_after_missed_bag(fee)
+		fee = PriceTable.fee_after_missed_bag(fee, paid)
 	elif fee > 0 and _bag_on_its_way(id):
-		_awaiting_bag[id] = fee
+		_awaiting_bag[id] = [fee, PriceTable.fee_after_missed_bag(fee, paid)]
 		return
 	if fee > 0:
 		_owed.append(fee)
@@ -508,10 +518,9 @@ func _bag_on_its_way(id: int) -> bool:
 ## the passenger is still on their way.
 func _on_bag_settled(_bag_id: int, passenger_id: int, _flight_id: String, loaded: bool) -> void:
 	if _awaiting_bag.has(passenger_id):
-		var fee: int = _awaiting_bag[passenger_id]
+		var held: Array = _awaiting_bag[passenger_id]
 		_awaiting_bag.erase(passenger_id)
-		if not loaded:
-			fee = PriceTable.fee_after_missed_bag(fee)
+		var fee: int = held[0] if loaded else held[1]
 		if fee > 0:
 			_owed.append(fee)
 		_pay_owed()

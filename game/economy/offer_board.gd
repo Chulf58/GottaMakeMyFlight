@@ -19,6 +19,14 @@ extends RefCounted
 ## airline-offers-2-a-day-fit-the-free-gate-slots-1-needs-more): two offers at
 ## slots the gates have room for, one where another gate is needed. The fitted
 ## minute is the offer's saved departure, so a load never fits again.
+##
+## Each offer carries the term "traits" (OfferTraits): two of a day's offers are
+## paired with an upside and a downside, one is plain. The traits come from
+## OfferTraits.draw_day, a stream of their own seeded from the rng's seed (the
+## run seed) and the day, so `rng` advances exactly as it did without traits.
+## The fee and booking traits are folded into the offer's fee_per_passenger and
+## booked_passengers when it is drawn; those stored terms are what a contract
+## pays and books.
 
 ## Fires when offers arrive, one is accepted or declined, or a save is loaded.
 signal changed
@@ -34,7 +42,10 @@ const STATUSES := [OPEN, ACCEPTED, DECLINED, EXPIRED]
 ## 3: tier 2 airlines offer medium planes while large is held back
 ## (PlaneClasses.max_offer_class), so the offers a board saves changed. A
 ## version 2 save is refused; there is no migration.
-const SAVE_VERSION := 3
+## 4: every offer has its "traits" term (OfferTraits), and a traited fee or
+## booking may lie outside the plain draw ranges. A version 3 save is refused;
+## there is no migration.
+const SAVE_VERSION := 4
 const SAVE_KEYS := ["save_version", "offers"]
 const OFFER_KEYS := [
 	"id",
@@ -45,6 +56,7 @@ const OFFER_KEYS := [
 	"plane_size",
 	"booked_passengers",
 	"fee_per_passenger",
+	FlightContract.TRAITS_KEY,
 	"status",
 ]
 
@@ -114,11 +126,13 @@ static func offered_sizes(tier: int, runway_class := PlaneClasses.LARGE) -> Dict
 	return sizes
 
 
-## The contract terms of `offer`, ready for FlightSim.accept_contract.
+## The contract terms of `offer`, its traits included, ready for
+## FlightSim.accept_contract.
 static func terms_of(offer: Dictionary) -> Dictionary:
 	var terms := {}
 	for key in FlightContract.TERM_KEYS:
 		terms[key] = offer[key]
+	terms[FlightContract.TRAITS_KEY] = offer[FlightContract.TRAITS_KEY]
 	return terms
 
 
@@ -132,6 +146,10 @@ static func terms_of(offer: Dictionary) -> Dictionary:
 ## does not change how far `rng` advances either, so a seed replays whatever
 ## the runway. With `flights`, the drawn departures are then fitted to it
 ## (_fit), which does not touch `rng` either; without, they stay as drawn.
+## The offers' traits are drawn by OfferTraits.draw_day from `rng`'s seed, at
+## levels by `tier`, leaving out traits whose need `live` ({OfferTraits.NEEDS_BAGS:
+## bool, OfferTraits.NEEDS_SHOPS: bool}, a missing need is not live) does not
+## hold; that does not touch `rng` either.
 ## `changed` fires once when anything expired or was drawn. A day
 ## outside 0..FlightContract.MAX_DAY, a tier outside 0..MAX_TIER or a runway
 ## class that is not a plane class pushes an error and changes nothing.
@@ -140,7 +158,8 @@ func ensure_day(
 	rng: RandomNumberGenerator,
 	tier := 0,
 	runway_class := PlaneClasses.LARGE,
-	flights: FlightSim = null
+	flights: FlightSim = null,
+	live := {}
 ) -> Array[String]:
 	var ids: Array[String] = []
 	if day < 0 or day > FlightContract.MAX_DAY:
@@ -156,8 +175,11 @@ func ensure_day(
 	var drawn := not _has_day(day)
 	if drawn:
 		var fresh: Array[Dictionary] = []
+		var traits := OfferTraits.draw_day(rng.seed, day, OFFERS_PER_DAY, tier, live)
 		for number in range(1, OFFERS_PER_DAY + 1):
-			fresh.append(_draw(day, number, rng, tier, runway_class))
+			var offer := _draw(day, number, rng, tier, runway_class)
+			_give_traits(offer, traits[number - 1])
+			fresh.append(offer)
 		if flights != null:
 			_fit(fresh, flights)
 		for offer in fresh:
@@ -265,6 +287,17 @@ func _draw(
 		"fee_per_passenger": rng.randi_range(fees[0], fees[1]),
 		"status": OPEN,
 	}
+
+
+## Gives a freshly drawn `offer` its frozen `traits` and folds the fee and
+## booking traits into its fee_per_passenger and booked_passengers.
+static func _give_traits(offer: Dictionary, traits: Dictionary) -> void:
+	var booked_range: Array = TIER_SIZES[tier_of(offer["airline"])][offer["plane_size"]]
+	offer[FlightContract.TRAITS_KEY] = traits
+	offer["fee_per_passenger"] = OfferTraits.fee_of(offer["fee_per_passenger"], traits)
+	offer["booked_passengers"] = OfferTraits.booked_of(
+		offer["booked_passengers"], booked_range[1], traits
+	)
 
 
 ## Moves the departures of a day's freshly drawn `offers` (in draw order) onto
@@ -414,6 +447,7 @@ func _load_problem(data: Dictionary, into: Array[Dictionary]) -> String:
 		for key in OFFER_KEYS:
 			var value: Variant = entry[key]
 			offer[key] = int(value) if typeof(value) == TYPE_FLOAT else value
+		offer[FlightContract.TRAITS_KEY] = OfferTraits.frozen(entry[FlightContract.TRAITS_KEY])
 		if seen.has(offer["id"]):
 			return "offer id '%s' appears twice" % offer["id"]
 		seen[offer["id"]] = true
@@ -495,16 +529,21 @@ func _undrawable_problem(entry: Dictionary) -> String:
 	return _range_problem(entry)
 
 
-## "" when the passengers, fee and departure are values _draw can produce for
-## the entry's airline tier.
+## "" when the passengers, fee and departure are values _draw and its traits
+## (_give_traits) can produce for the entry's airline tier.
 func _range_problem(entry: Dictionary) -> String:
 	var tier := tier_of(entry["airline"])
+	var traits: Dictionary = entry[FlightContract.TRAITS_KEY]
 	var booked_range: Array = TIER_SIZES[tier][entry["plane_size"]]
+	var fewest := OfferTraits.fewest_booked(booked_range[0], booked_range[1], traits)
 	var booked := int(entry["booked_passengers"])
-	if booked < booked_range[0] or booked > booked_range[1]:
+	if booked < fewest or booked > booked_range[1]:
 		return "offer %s books %d passengers outside its size's range" % [entry["id"], booked]
 	var fee := int(entry["fee_per_passenger"])
-	var fees: Array = TIER_FEES[tier]
+	var fees: Array = [
+		OfferTraits.fee_of(TIER_FEES[tier][0], traits),
+		OfferTraits.fee_of(TIER_FEES[tier][1], traits)
+	]
 	if fee < fees[0] or fee > fees[1]:
 		return "offer %s has a fee outside %d..%d" % [entry["id"], fees[0], fees[1]]
 	var offset := int(entry["departure_minute"]) - DEPARTURE_FIRST_MINUTE

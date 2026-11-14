@@ -13,6 +13,12 @@ extends RefCounted
 ## gate-desks-each-desk-links-automatically-to): it is not a term the airline
 ## agreed to. FlightSim gives a contract its gate on accept and
 ## FlightSim.reassign_gate replaces the contract with a copy at another gate.
+##
+## The offer's trade-off traits (OfferTraits, decision offer-traits-technical-
+## design-offertraits-table-frozen-trait) are the term TRAITS_KEY: {} for a plain
+## offer, {"up", "down", "level"} for a paired one. Offer terms may leave it out
+## (plain); a stored contract always has it, so make() adds {} when it is
+## missing, and the nested dictionary is a frozen copy like the contract itself.
 
 ## The terms an offer carries. No gate: FlightSim picks one on accept.
 const TERM_KEYS := [
@@ -35,7 +41,10 @@ const KEYS := [
 	"booked_passengers",
 	"fee_per_passenger",
 	"first_day",
+	"traits",
 ]
+## The traits term: optional in offer terms (TERM_KEYS), required in KEYS.
+const TRAITS_KEY := "traits"
 const TEXT_KEYS := ["airline", "destination", "gate", "plane_size"]
 const PLANE_SIZES := ["small", "medium", "large"]
 const MAX_BOOKED := 999
@@ -49,12 +58,13 @@ static var _id_pattern := RegEx.create_from_string("^[A-Za-z0-9]+$")
 
 
 ## "" when `data` has exactly `keys` (TERM_KEYS or KEYS) with valid values;
-## otherwise what is wrong. JSON whole floats count as whole numbers.
+## otherwise what is wrong. TERM_KEYS data may also hold TRAITS_KEY. JSON whole
+## floats count as whole numbers.
 static func problem(data: Variant, keys: Array) -> String:
 	if typeof(data) != TYPE_DICTIONARY:
 		return "a contract must be a dictionary"
 	for key in data.keys():
-		if not keys.has(key):
+		if not keys.has(key) and key != TRAITS_KEY:
 			return "unknown contract key '%s'" % key
 	for key in keys:
 		if not data.has(key):
@@ -68,6 +78,8 @@ static func problem(data: Variant, keys: Array) -> String:
 	if not PLANE_SIZES.has(data["plane_size"]):
 		return "plane_size must be one of %s" % [PLANE_SIZES]
 	var problem := _number_problem(data, keys)
+	if problem == "" and data.has(TRAITS_KEY):
+		problem = OfferTraits.problem(data[TRAITS_KEY])
 	if problem == "" and not _fits_class(data):
 		var limits := PlaneClasses.passenger_range(data["plane_size"])
 		return (
@@ -77,12 +89,14 @@ static func problem(data: Variant, keys: Array) -> String:
 	return problem
 
 
-## A read-only copy of checked `data`, whole numbers as ints.
+## A read-only copy of checked `data`, whole numbers as ints, with a frozen copy
+## of its traits ({} when it has none).
 static func make(data: Dictionary) -> Dictionary:
 	var contract := {}
 	for key in data.keys():
 		var value: Variant = data[key]
 		contract[key] = int(value) if typeof(value) == TYPE_FLOAT else value
+	contract[TRAITS_KEY] = OfferTraits.frozen(data.get(TRAITS_KEY, {}))
 	contract.make_read_only()
 	return contract
 

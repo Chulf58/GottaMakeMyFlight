@@ -145,7 +145,9 @@ func test_a_made_passenger_whose_bag_is_still_on_its_way_waits_for_the_verdict()
 	_make_it(p)
 	assert_int(_world.sim.wallet.balance).is_equal(0)
 	var awaited: Array = _settlement.to_snapshot()["bags_awaited"]
-	assert_array(awaited).is_equal([{"passenger": str(p.id), "fee": str(FEE)}])
+	assert_array(awaited).is_equal(
+		[{"passenger": str(p.id), "fee": str(FEE), "missed_fee": str(_cut())}]
+	)
 	assert_array(_settlement.owed()).is_empty()
 
 
@@ -252,7 +254,7 @@ func test_bad_bag_state_in_a_snapshot_is_refused_and_changes_nothing() -> void:
 	var good := {
 		"owed": [],
 		"bag_missed": ["3"],
-		"bags_awaited": [{"passenger": "4", "fee": "50"}],
+		"bags_awaited": [{"passenger": "4", "fee": "50", "missed_fee": "25"}],
 	}
 	var cases := {
 		"only bag_missed": func(d): d.erase("bags_awaited"),
@@ -266,6 +268,8 @@ func test_bad_bag_state_in_a_snapshot_is_refused_and_changes_nothing() -> void:
 		"awaited entry missing fee": func(d): d["bags_awaited"] = [{"passenger": "4"}],
 		"awaited entry extra key": func(d): d["bags_awaited"][0]["x"] = 1,
 		"awaited fee zero": func(d): d["bags_awaited"][0]["fee"] = "0",
+		"awaited missed fee over its fee": func(d): d["bags_awaited"][0]["missed_fee"] = "51",
+		"awaited entry missing missed fee": func(d): d["bags_awaited"][0].erase("missed_fee"),
 		"awaited fee over the wallet":
 		func(d): d["bags_awaited"][0]["fee"] = str(Wallet.MAX_BALANCE + 1),
 		"awaited fee not a string": func(d): d["bags_awaited"][0]["fee"] = 50,

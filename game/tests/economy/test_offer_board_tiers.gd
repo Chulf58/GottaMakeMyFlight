@@ -81,10 +81,15 @@ func test_every_offer_follows_the_plane_sizes_and_fees_of_its_airlines_tier() ->
 			var own: int = OfferBoard.tier_of(offer["airline"])
 			var sizes: Dictionary = OfferBoard.TIER_SIZES[own]
 			assert_bool(sizes.has(offer["plane_size"])).is_true()
+			var traits: Dictionary = offer["traits"]
 			var booked: Array = sizes[offer["plane_size"]]
-			assert_int(offer["booked_passengers"]).is_between(booked[0], booked[1])
+			assert_int(offer["booked_passengers"]).is_between(
+				OfferTraits.fewest_booked(booked[0], booked[1], traits), booked[1]
+			)
 			var fees: Array = OfferBoard.TIER_FEES[own]
-			assert_int(offer["fee_per_passenger"]).is_between(fees[0], fees[1])
+			assert_int(offer["fee_per_passenger"]).is_between(
+				OfferTraits.fee_of(fees[0], traits), OfferTraits.fee_of(fees[1], traits)
+			)
 			var terms := OfferBoard.terms_of(offer)
 			assert_str(FlightContract.problem(terms, FlightContract.TERM_KEYS)).is_empty()
 
@@ -202,11 +207,11 @@ func test_a_starter_airline_cannot_carry_a_higher_tiers_terms() -> void:
 
 
 ## Tier 2 airlines now offer medium planes, so the offers a board saves changed.
-func test_the_offer_save_version_is_3_and_a_version_2_save_is_refused() -> void:
-	assert_int(OfferBoard.SAVE_VERSION).is_equal(3)
+func test_the_offer_save_version_is_4_and_a_version_3_save_is_refused() -> void:
+	assert_int(OfferBoard.SAVE_VERSION).is_equal(4)
 	var board := OfferBoard.new()
 	board.ensure_day(0, _rng, OfferBoard.MAX_TIER)
 	var data := board.to_snapshot()
-	assert_int(int(data["save_version"])).is_equal(3)
-	data["save_version"] = 2
+	assert_int(int(data["save_version"])).is_equal(4)
+	data["save_version"] = 3
 	assert_bool(OfferBoard.new().from_snapshot(data)).is_false()

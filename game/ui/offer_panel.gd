@@ -93,6 +93,7 @@ var _decline_buttons: Dictionary = {}
 var _note_labels: Dictionary = {}
 var _refusal_labels: Dictionary = {}
 var _fit_labels: Dictionary = {}
+var _trait_rows: Dictionary = {}
 var _noted_tick := -1
 ## The sheet's hold on the clock, from open() until it closes, the player
 ## resumes or picks another speed, or a load drops it.
@@ -333,6 +334,11 @@ func fit_label(id: String) -> Label:
 	return _fit_labels[id]
 
 
+## The trait line on offer `id`'s card: an HBoxContainer of the Up and Down labels.
+func trait_row(id: String) -> HBoxContainer:
+	return _trait_rows[id]
+
+
 ## What the sheet says under the cards: the last accept's confirmation, or
 ## EMPTY_TEXT when no offer is open. A refusal is on its card, not here.
 func message() -> String:
@@ -413,6 +419,7 @@ func _refresh() -> void:
 	_note_labels.clear()
 	_refusal_labels.clear()
 	_fit_labels.clear()
+	_trait_rows.clear()
 	var offers := desk.board.open_offers()
 	for offer in offers:
 		_add_card(offer)
@@ -599,6 +606,9 @@ func _add_card(offer: Dictionary) -> void:
 	_set_fit(fit, offer)
 	texts.add_child(fit)
 	_fit_labels[id] = fit
+	var traits := _trait_row(offer)
+	texts.add_child(traits)
+	_trait_rows[id] = traits
 	var refusal := Label.new()
 	refusal.name = "Refusal_%s" % id
 	refusal.visible = false
@@ -617,6 +627,33 @@ func _add_card(offer: Dictionary) -> void:
 	decline.pressed.connect(_on_decline.bind(id))
 	buttons.add_child(decline)
 	_decline_buttons[id] = decline
+
+
+## The trait line under the fit line (OfferTraits.card_labels): the upside in
+## HudGoodText and the downside in HudProblemText, each with its numbers as a
+## tooltip; a plain offer shows PLAIN_LABEL in HudHint and no downside.
+static func _trait_row(offer: Dictionary) -> HBoxContainer:
+	var traits: Dictionary = offer[FlightContract.TRAITS_KEY]
+	var plain := OfferTraits.is_plain(traits)
+	var labels := OfferTraits.card_labels(traits)
+	var tips := OfferTraits.card_tips(traits)
+	var row := HBoxContainer.new()
+	row.name = "Traits_%s" % offer["id"]
+	row.add_theme_constant_override("separation", 18)
+	var variations: Array[StringName] = [&"HudHint" if plain else &"HudGoodText", &"HudProblemText"]
+	for i in 2:
+		var label := Label.new()
+		label.name = ["Up", "Down"][i]
+		label.text = labels[i]
+		label.tooltip_text = tips[i]
+		label.mouse_filter = Control.MOUSE_FILTER_PASS
+		label.visible = labels[i] != ""
+		label.theme_type_variation = variations[i]
+		label.add_theme_font_size_override(
+			"font_size", BuildMenu.HUD_THEME.get_font_size("font_size", &"HudSmall")
+		)
+		row.add_child(label)
+	return row
 
 
 func _card_label(text: String, variation: StringName) -> Label:

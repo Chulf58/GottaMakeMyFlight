@@ -23,6 +23,11 @@ signal contract_ended(contract: Dictionary)
 @export var rating: AirportRating
 ## The flights whose contracts a low rating ends. Without it nothing ends.
 @export var flights: FlightSim
+## The bags whose ready bag room (BaggageSim.has_ready_bag_room) lets a day's
+## offers carry the bag traits, and whose grid's ready shop or food rooms let
+## them carry Shoppers (OfferTraits needs). Read when a day is drawn. Without it
+## those traits are never drawn.
+@export var baggage: BaggageSim
 ## The runway whose size limits the offers drawn. Unset, the scene's flights
 ## give it (FlightSim.runway); a desk with neither draws nothing and says so.
 var runway: Runway
@@ -41,6 +46,8 @@ func _ready() -> void:
 		push_error("OfferDesk: no rating set, so every day is drawn at the starter tier")
 	if flights == null:
 		push_error("OfferDesk: no flights set, so no contract will ever end")
+	if baggage == null:
+		push_error("OfferDesk: no baggage set, so no offer carries a bag or shopper trait")
 	bind_clock(clock)
 
 
@@ -100,7 +107,23 @@ func _draw(day: int) -> void:
 	if source == null:
 		push_error("OfferDesk: no runway set, so no offers are drawn")
 		return
-	board.ensure_day(day, clock.rng, _tier(), source.size, flights)
+	board.ensure_day(day, clock.rng, _tier(), source.size, flights, live_needs())
+
+
+## Which trait needs (OfferTraits.NEEDS_BAGS, NEEDS_SHOPS) the airport meets
+## now: a ready bag room, and a ready shop or food room. Neither without baggage.
+func live_needs() -> Dictionary:
+	var live := {OfferTraits.NEEDS_BAGS: false, OfferTraits.NEEDS_SHOPS: false}
+	if baggage == null or baggage.grid == null:
+		return live
+	live[OfferTraits.NEEDS_BAGS] = baggage.has_ready_bag_room()
+	for room_id in baggage.grid.room_ids():
+		var type := RoomTypes.get_type(baggage.grid.get_room(room_id)["type"])
+		if type != null and (type.shop or type.food):
+			if RoomRules.status(baggage.grid, room_id).ok:
+				live[OfferTraits.NEEDS_SHOPS] = true
+				break
+	return live
 
 
 ## The airline tier the rating has unlocked, 0 with no rating.
