@@ -150,6 +150,7 @@ func _boot() -> bool:
 		p.hunger = CafeSim.HUNGER_MAX if i % 2 == 0 else 0
 		p.boredom = BoredomSim.MAX if i % 3 == 0 else 0
 		i += 1
+	_open_overlay(MoodTint.Mode.TOILET)
 	_clock.advance(SimClock.STEP)
 	_clock.set_paused(true)
 	if _main.get_node("PlaneFleet").has_method("update_views"):
@@ -179,6 +180,13 @@ func _standing(skip: Array) -> int:
 			continue
 		return id
 	return 0
+
+
+## Opens the Mood overlay in `mode`: need icons show only in a need mode.
+func _open_overlay(mode: MoodTint.Mode) -> void:
+	var overlay := _main.get_node("MoodOverlay") as MoodOverlay
+	overlay.set_mode(mode)
+	overlay.set_shown(true)
 
 
 func _plates() -> void:

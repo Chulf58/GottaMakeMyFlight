@@ -21,7 +21,6 @@ var _camera: Camera3D
 ## The views draw into a 1600 x 900 viewport, as a game window would; the
 ## headless root is 64 pixels high on output.
 var _screen: SubViewport
-var _path: String
 
 
 func before() -> void:
@@ -33,7 +32,6 @@ func after() -> void:
 
 
 func before_test() -> void:
-	_path = SaveTestKit.run_path("need_cluster_heads")
 	var grid := BuildGrid.new()
 	NeedFacilityKit.build(grid)
 	_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
@@ -42,7 +40,6 @@ func before_test() -> void:
 	_views = PassengerTestWorld.views()
 	_views.clock = _world.clock
 	_views.sim = _world.sim
-	_views.need_icons_toggle.settings_path = _path
 	_screen = SubViewport.new()
 	_screen.size = Vector2i(1600, 900)
 	add_child(_screen)
@@ -50,10 +47,10 @@ func before_test() -> void:
 	_camera = Camera3D.new()
 	_screen.add_child(_camera)
 	_camera.make_current()
+	PassengerTestWorld.show_need(_views, NeedIcons.Need.TOILET)
 
 
 func after_test() -> void:
-	DirAccess.remove_absolute(_path)
 	_screen.free()
 	_world.free_all()
 

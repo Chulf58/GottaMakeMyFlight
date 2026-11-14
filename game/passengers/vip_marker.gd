@@ -17,8 +17,8 @@ extends RefCounted
 ## Unlike the need icons, the crown shows at the home zoom and farther out:
 ## there is one VIP at a time, so it adds no crowding (the reason the need icons
 ## hide there, decision passenger-need-icons-hide-when-the-camera-is-zoomed-out-
-## past), and the player needs to find the VIP at the zoom they play at. The N
-## key does not hide it (it toggles the need icons only). It fades near the lens
+## past), and the player needs to find the VIP at the zoom they play at. The
+## Mood overlay does not hide it (it gates the need icons only). It fades near the lens
 ## with the need icons (NeedIcons.near_alpha(), decision passenger-need-icons-
 ## fade-out-when-the-camera-is-very-close), for the same reason: it draws with no
 ## depth test and would land on another passenger's face.

@@ -181,22 +181,32 @@ func test_the_views_show_a_passengers_needs_over_its_head() -> void:
 	_world.step()
 	var node := _views.node_for(p.id)
 	assert_object(node).is_not_null()
+	# Each need shows in its own Mood overlay mode only (decision need-icons-
+	# show-only-in-the-mood-overlay-need-modes-n-key-removed), so each check
+	# opens that mode and draws before it reads the sprite.
+	PassengerTestWorld.show_need(_views, NeedIcons.Need.HUNGER)
+	_views.draw()
 	assert_bool(_sprite(node, 0).visible).is_false()
 	assert_bool(_sprite(node, 1).visible).is_false()
 	p.hunger = CafeSim.HUNGRY_AT
 	p.cafe_cooldown = 1000000
 	_world.step()
+	_views.draw()
 	assert_bool(_sprite(node, 0).visible).is_true()
 	assert_object(_sprite(node, 0).texture).is_same(NeedIcons.texture(NeedIcons.Need.HUNGER))
 	assert_bool(_sprite(node, 1).visible).is_false()
 	p.toilet_need = ToiletSim.NEED_MAX
 	p.toilet_cooldown = 1000000
 	_world.step()
+	PassengerTestWorld.show_need(_views, NeedIcons.Need.TOILET)
+	_views.draw()
 	assert_bool(_sprite(node, 1).visible).is_true()
 	assert_object(_sprite(node, 1).texture).is_same(NeedIcons.texture(NeedIcons.Need.TOILET))
 	assert_bool(_sprite(node, 2).visible).is_false()
 	p.boredom = BoredomSim.MAX
 	_world.step()
+	PassengerTestWorld.show_need(_views, NeedIcons.Need.BOREDOM)
+	_views.draw()
 	assert_bool(_sprite(node, 2).visible).is_true()
 	assert_object(_sprite(node, 2).texture).is_same(NeedIcons.texture(NeedIcons.Need.BOREDOM))
 	var icon := _sprite(node, 0)
@@ -219,12 +229,15 @@ func test_with_a_camera_the_row_keeps_its_screen_size_and_clears_a_bubble() -> v
 	p.hunger = CafeSim.HUNGER_MAX
 	p.toilet_need = ToiletSim.NEED_MAX
 	_world.step()
+	# Only the overlay mode's need draws: a row of one in hunger mode.
+	PassengerTestWorld.show_need(_views, NeedIcons.Need.HUNGER)
 	var node := _views.node_for(p.id)
 	(node.get_node("Bubble") as Label3D).text = ""
 	_views.draw()
 	var unit := NeedIcons.unit_of(get_viewport(), camera)
 	assert_float(unit).is_greater(0.0)
-	var icon := _sprite(node, 1)
+	var icon := _sprite(node, 0)
+	assert_bool(_sprite(node, 1).visible).is_false()
 	print("unit %.6f pixel_size %.6f offset %s" % [unit, icon.pixel_size, icon.offset])
 	assert_float(icon.pixel_size).is_equal_approx(NeedIcons.ICON_PX * unit / NeedIcons.SIZE, 1e-9)
 	# Over the head the row stands HEAD_GAP_PX over the head's top on screen
@@ -234,7 +247,7 @@ func test_with_a_camera_the_row_keeps_its_screen_size_and_clears_a_bubble() -> v
 	assert_float(head_lift).is_greater(NeedIcons.HEAD_GAP_PX)
 	assert_vector(icon.position).is_equal(NeedIcons.head_centre(node))
 	assert_vector(icon.offset).is_equal_approx(
-		NeedIcons.offset_of(1, 2, head_lift), Vector2.ONE * 0.001
+		NeedIcons.offset_of(0, 1, head_lift), Vector2.ONE * 0.001
 	)
 	var bubble := node.get_node("Bubble") as Label3D
 	bubble.text = "I'm late!"
@@ -256,11 +269,13 @@ func test_with_a_camera_the_row_keeps_its_screen_size_and_clears_a_bubble() -> v
 	# well under a pixel here; the lift must still hold more than the gap.
 	assert_float(lift_px).is_greater(NeedIcons.GAP_PX)
 	assert_vector(icon.offset).is_equal_approx(
-		NeedIcons.offset_of(1, 2, lift_px), Vector2.ONE * 0.001
+		NeedIcons.offset_of(0, 1, lift_px), Vector2.ONE * 0.001
 	)
 	# A bubble hidden by the declutter leaves no gap: the row sits over the head.
+	# Laid out with no mask, both icons draw, a row of two.
 	bubble.visible = false
 	NeedIcons.layout(node, bubble, camera, unit)
+	icon = _sprite(node, 1)
 	assert_vector(icon.position).is_equal(NeedIcons.head_centre(node))
 	assert_vector(icon.offset).is_equal_approx(
 		NeedIcons.offset_of(1, 2, head_lift), Vector2.ONE * 0.001
@@ -281,22 +296,20 @@ func test_icons_hide_at_and_past_the_home_zoom_and_show_closer_in() -> void:
 	camera.make_current()
 	var p := _calm_passenger()
 	p.hunger = CafeSim.HUNGER_MAX
-	p.toilet_need = ToiletSim.NEED_MAX
 	_world.step()
+	PassengerTestWorld.show_need(_views, NeedIcons.Need.HUNGER)
 	var node := _views.node_for(p.id)
 	var seen := {}
 	for distance in [39.0, 40.0, 41.0, 120.0, 12.0]:
 		rig.distance = distance
 		_views.draw()
-		seen[distance] = [
-			NeedIcons.shown_at(camera), _sprite(node, 0).visible, _sprite(node, 1).visible
-		]
-	print("home 40: distance -> [shown_at, icon 0, icon 1] %s" % seen)
-	assert_array(seen[39.0]).is_equal([true, true, true])
-	assert_array(seen[12.0]).is_equal([true, true, true])
-	assert_array(seen[40.0]).is_equal([false, false, false])
-	assert_array(seen[41.0]).is_equal([false, false, false])
-	assert_array(seen[120.0]).is_equal([false, false, false])
+		seen[distance] = [NeedIcons.shown_at(camera), _sprite(node, 0).visible]
+	print("home 40, hunger mode: distance -> [shown_at, icon 0] %s" % seen)
+	assert_array(seen[39.0]).is_equal([true, true])
+	assert_array(seen[12.0]).is_equal([true, true])
+	assert_array(seen[40.0]).is_equal([false, false])
+	assert_array(seen[41.0]).is_equal([false, false])
+	assert_array(seen[120.0]).is_equal([false, false])
 	# A tick while zoomed out keeps them hidden: the frame's layout wins.
 	rig.distance = 60.0
 	_world.step()

@@ -167,6 +167,9 @@ func _pod() -> void:
 		_invalid("the visitor never reclined")
 		return
 	p.hunger = CafeSim.HUNGER_MAX
+	var overlay := _main.get_node("MoodOverlay") as MoodOverlay
+	overlay.set_mode(MoodTint.Mode.HUNGER)
+	overlay.set_shown(true)
 	if not await _until(
 		func() -> bool: return int(_views.node_for(id).get_meta(&"needs", 0)) > 0, 40
 	):
@@ -273,13 +276,12 @@ func _plate(shot: String, yaw: float, distance: float, node: Node3D) -> void:
 	await _frames(3)
 	var hidden := _diff(img, _grab())
 	node.visible = true
-	# The icons off as the N key turns them off (PassengerViews lays the
-	# sprites out every frame, so hiding a sprite would not hold). The flag is
-	# set in memory, so the user's settings file is not written.
-	_views.need_icons_toggle._shown = false
+	# The icons off by closing the overlay (PassengerViews lays the sprites out
+	# every frame, so hiding a sprite would not hold).
+	_views.mood_overlay.set_shown(false)
 	await _frames(3)
 	var no_icons := _diff(img, _grab())
-	_views.need_icons_toggle._shown = true
+	_views.mood_overlay.set_shown(true)
 	await _frames(3)
 	print(
 		(

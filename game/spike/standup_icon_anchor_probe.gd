@@ -145,8 +145,16 @@ func _boot() -> bool:
 	_subject = _sim.get_passenger(seated[0])
 	_subject.hunger = CafeSim.HUNGER_MAX
 	_subject.toilet_need = ToiletSim.NEED_MAX
+	_open_overlay(MoodTint.Mode.TOILET)
 	print("PROBE subject id=%d stage=%s" % [_subject.id, Passenger.Stage.keys()[_subject.stage]])
 	return true
+
+
+## Opens the Mood overlay in `mode`: need icons show only in a need mode.
+func _open_overlay(mode: MoodTint.Mode) -> void:
+	var overlay := _main.get_node("MoodOverlay") as MoodOverlay
+	overlay.set_mode(mode)
+	overlay.set_shown(true)
 
 
 ## Ids of the passengers drawn sitting on a gate chair.

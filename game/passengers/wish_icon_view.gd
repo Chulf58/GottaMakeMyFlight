@@ -24,8 +24,9 @@ extends RefCounted
 ## it out each frame with the need icons (NeedIcons.layout()): WISH_PX on
 ## screen, at the end of the need icon row in place of the hourglass (user
 ## ruling shopping-wish-icon-replaces-the-boredom-hourglass-for-wishers), and
-## hidden with the row at the home zoom or farther out (decision passenger-
-## need-icons-hide-when-the-camera-is-zoomed-out-past, NeedIcons.shown_at()).
+## hidden at the home zoom or farther out (decision passenger-need-icons-hide-
+## when-the-camera-is-zoomed-out-past, NeedIcons.shown_at()). The bubble shows in
+## the default view; only the need icons wait for a Mood overlay need mode.
 
 enum Badge { NONE, TICK, CROSS }
 
