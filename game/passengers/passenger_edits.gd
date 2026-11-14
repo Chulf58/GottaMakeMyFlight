@@ -83,6 +83,9 @@ static func graph_changed(sim: PassengerSim, cells: Array[Vector2i]) -> void:
 	for arch in SecurityLanes.broken(before, sim.layout.security_lanes):
 		for id in sim.security.drop(arch):
 			sim._send_back(sim._by_id[id])
+	# The line outside the entrance takes its NO_ROUTE marks off first, so a
+	# mark left after the check below is that check's own (EntranceLine.unmark()).
+	sim.entrance.unmark(sim)
 	# Walkers outside keep a walk that is still there, or stop (site only).
 	OutsideWalks.revalidate(sim)
 

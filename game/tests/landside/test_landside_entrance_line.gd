@@ -146,3 +146,86 @@ func test_cars_hold_passengers_only_while_the_line_is_full_and_such_a_miss_is_ch
 	assert_int(int(texts.get(FlightResult.ENTRANCE_LINE_TEXT, 0))).is_equal(
 		EntranceLine.MAX_PLACES + 12
 	)
+
+
+## The world on `definition` (the starter road when null) with every desk's
+## line taken and the line outside the entrance full, doors closing at 2400.
+func _full_line(definition: LandsideDefinition) -> void:
+	_world = LandsideTestWorld.make(definition, PassengerTestWorld.starts_with(1500, 2400))
+	var sim := _world.sim
+	_world.world.step()
+	for desk in sim.layout.desks:
+		for i in sim.layout.line_of(desk).size():
+			HoldLineKit.member(_world.world, desk)
+	_world.world.step()
+	for i in sim.entrance.capacity():
+		assert_int(sim.spawn_now(PassengerTestWorld.FLIGHT)).is_greater(0)
+
+
+func _reason_counts() -> Dictionary:
+	var texts := {}
+	for reason: Dictionary in (
+		FlightResult.summarize(_world.sim, PassengerTestWorld.FLIGHT)["reasons"]
+	):
+		texts[reason["text"]] = reason["count"]
+	return texts
+
+
+## Cars still driving in when the doors close, held up by nothing the line
+## does, miss for the road even though the line outside is full then.
+func test_a_road_delay_while_the_line_is_full_is_not_check_in_congestion() -> void:
+	_full_line(null)
+	var sim := _world.sim
+	_world.schedule(4)
+	# Every party sets off so late that the doors close on its car on the road in.
+	for id in sim.arrivals.booking_ids():
+		sim.arrivals.get_booking(id).unload_tick = 2400 + 40
+	_world.run_to(2399)
+	var on_road := 0
+	for id in _world.landside.vehicle_ids():
+		var v := _world.landside.get_vehicle(id)
+		on_road += v.bookings.size()
+		assert_bool(_world.landside.line_held.has(id)).is_false()
+	var room := sim.entrance.room_for_arrivals(sim)
+	_world.run_to(2400 + 2)
+	var texts := _reason_counts()
+	prints("aboard on the road", on_road, "line room", room, "reasons", texts)
+	assert_int(on_road).is_equal(4)
+	assert_int(room).is_equal(0)
+	assert_int(int(sim.arrivals.missed_by_flight.get(PassengerTestWorld.FLIGHT, 0))).is_equal(4)
+	assert_int(int(sim.entrance.held_missed.get(PassengerTestWorld.FLIGHT, 0))).is_equal(0)
+	assert_int(int(texts.get(FlightResult.WAITING_FOR_DROP_OFF, 0))).is_equal(4)
+
+
+## A car queued for the one berth behind a car kept for the line is kept for
+## the line too; a place opening in the line on the closing tick does not
+## turn its miss into a road delay.
+func test_a_car_queued_behind_one_kept_for_the_line_misses_for_check_in() -> void:
+	_full_line(LandsideTestWorld.with_berths(1))
+	var sim := _world.sim
+	var landside := _world.landside
+	_world.schedule(12)
+	_world.run_to(2399)
+	var queued := 0
+	var aboard := 0
+	for id in landside.vehicle_ids():
+		var v := landside.get_vehicle(id)
+		aboard += v.bookings.size()
+		var denied := v.bookings.any(func(b: int) -> bool: return landside.denied.has(b))
+		if landside.line_held.has(id) and not denied:
+			queued += v.bookings.size()
+	assert_bool(sim.flights.is_doors_closed(PassengerTestWorld.FLIGHT)).is_false()
+	# A place opens in the line on the closing tick.
+	var last: int = sim.entrance.order.back()
+	PassengerLifecycle.finish(sim, sim.get_passenger(last), false)
+	assert_int(sim.entrance.room_for_arrivals(sim)).is_greater(0)
+	_world.step()
+	var texts := _reason_counts()
+	prints("aboard", aboard, "queued behind", queued, "reasons", texts)
+	assert_bool(sim.flights.is_doors_closed(PassengerTestWorld.FLIGHT)).is_true()
+	assert_int(queued).is_greater(0)
+	assert_int(int(sim.arrivals.missed_by_flight.get(PassengerTestWorld.FLIGHT, 0))).is_equal(
+		aboard
+	)
+	assert_int(int(sim.entrance.held_missed.get(PassengerTestWorld.FLIGHT, 0))).is_equal(aboard)
+	assert_bool(texts.has(FlightResult.WAITING_FOR_DROP_OFF)).is_false()

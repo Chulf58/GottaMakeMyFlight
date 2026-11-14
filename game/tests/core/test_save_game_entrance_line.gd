@@ -57,3 +57,56 @@ func test_a_bad_entrance_line_is_refused_before_anything_installs() -> void:
 	var sum := SaveTestKit.checksum(_main)
 	assert_bool(_save.load_world(old)).is_true()
 	assert_str(SaveTestKit.checksum(_main)).is_not_equal(sum)
+
+
+## The line's held bookings and held misses checked against the staged
+## landside (SaveGame._entrance_links_problem()): a held id that is no booking,
+## a held booking still awaiting its vehicle, held misses of a flight with no
+## transport misses, and more held misses than the flight's transport misses
+## are each refused whole, leaving the world as it was. Control: a booking really in its vehicle,
+## held, loads. The save is taken once a car or taxi has passengers aboard.
+func test_held_bookings_and_misses_must_match_the_staged_landside() -> void:
+	var aboard := 0
+	for i in 150:
+		for vehicle: Dictionary in _save.snapshot()["landside"]["vehicles"]:
+			if not (vehicle["bookings"] as Array).is_empty():
+				aboard = int(vehicle["bookings"][0])
+		if aboard != 0:
+			break
+		for step in 20:
+			SaveTestKit.step(_main)
+	var old := _older()
+	var awaiting := 0
+	for booking: Dictionary in old["landside"]["bookings"]:
+		if int(booking["state"]) == ArrivalBooking.State.AWAITING:
+			awaiting = int(booking["id"])
+	var flight := str(old["passengers"]["scheduled"][0])
+	var road := 0
+	for entry: Dictionary in old["landside"]["missed"]:
+		if entry["flight"] == flight:
+			road = int(entry["count"])
+	prints("in a vehicle", aboard, "awaiting", awaiting, "flight", flight, "transport misses", road)
+	assert_int(aboard).is_greater(0)
+	assert_int(awaiting).is_greater(0)
+	var stray := old.duplicate(true)
+	stray["passengers"]["entrance_line"]["held"] = [987654]
+	var not_aboard := old.duplicate(true)
+	not_aboard["passengers"]["entrance_line"]["held"] = [awaiting]
+	var no_flight := old.duplicate(true)
+	no_flight["passengers"]["entrance_line"]["held_missed"] = {"NO-SUCH-FLIGHT": 1}
+	var too_many := old.duplicate(true)
+	too_many["passengers"]["entrance_line"]["held_missed"] = {flight: road + 1}
+	for bad: Dictionary in [stray, not_aboard, no_flight, too_many]:
+		var clock := _main.get_node("SimClock") as SimClock
+		var tick := clock.tick
+		var before := SaveTestKit.checksum(_main)
+		assert_bool(_save.load_world(bad)).is_false()
+		print("refused: %s" % _save.message_text())
+		assert_str(_save.message_text()).contains("entrance line held")
+		assert_int(clock.tick).is_equal(tick)
+		assert_str(SaveTestKit.checksum(_main)).is_equal(before)
+	var good := old.duplicate(true)
+	good["passengers"]["entrance_line"]["held"] = [aboard]
+	var sum := SaveTestKit.checksum(_main)
+	assert_bool(_save.load_world(good)).is_true()
+	assert_str(SaveTestKit.checksum(_main)).is_not_equal(sum)

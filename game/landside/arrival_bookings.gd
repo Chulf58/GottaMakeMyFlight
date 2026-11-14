@@ -27,9 +27,12 @@ extends RefCounted
 ## waiting for its vehicle it is a no-show as well. Then LandsideSim steps and
 ## each passenger it lets out is spawned with the walk from where it got
 ## out, no more than the line outside the entrance has room for
-## (EntranceLine.room_for_arrivals()); one kept aboard for that is marked held
-## (EntranceLine.held), and if its flight closes on it, the miss is check-in
-## congestion. Last, the parties now due board new vehicles.
+## (EntranceLine.room_for_arrivals()). Every booking aboard a vehicle the step
+## kept for that line (LandsideSim.line_held: refused a place, or queued on
+## the road behind such a car) is marked held (EntranceLine.held) until the
+## next step; if its flight closes on it while marked, the miss is check-in
+## congestion, and otherwise a road delay. Last, the parties now due board new
+## vehicles.
 
 ## A booking's passenger got out and is Passenger `passenger_id`.
 signal released(booking_id: int, passenger_id: int)
@@ -112,9 +115,11 @@ func step() -> void:
 	var budget := _sim.entrance.room_for_arrivals(_sim)
 	if budget >= EntranceLine.UNLIMITED:
 		budget = -1
-	var events := landside.step(_sim.tick, can_release, _sim.clock.rng, closes, budget)
-	for id in landside.denied:
-		_sim.entrance.held[id] = true
+	var kept := {}
+	for b in _bookings:
+		if b.state == ArrivalBooking.State.IN_VEHICLE and _sim.entrance.held.has(b.id):
+			kept[b.vehicle] = true
+	var events := landside.step(_sim.tick, can_release, _sim.clock.rng, closes, budget, kept)
 	for event in events:
 		var walk: Array[Vector3] = event["walk"]
 		for id: int in event["bookings"]:
@@ -124,6 +129,10 @@ func step() -> void:
 			_drop(b)
 			var p: Passenger = _spawn.call(b.flight_id, b.variant, b.arrival, walk)
 			released.emit(b.id, p.id)
+	_sim.entrance.held.clear()
+	for b in _bookings:
+		if b.state == ArrivalBooking.State.IN_VEHICLE and landside.line_held.has(b.vehicle):
+			_sim.entrance.held[b.id] = true
 	_board(landside)
 
 
@@ -167,10 +176,6 @@ func restore(loaded: Dictionary) -> void:
 
 func _settle_closed(landside: LandsideSim) -> void:
 	var no_entrance := _sim.layout.passenger_entrances.is_empty()
-	# With the line outside the entrance full as the doors close, nobody aboard
-	# could have got out: cars queued behind one kept for the line wait for it
-	# too, so their misses are check-in congestion as well.
-	var line_full := not no_entrance and _sim.entrance.room_for_arrivals(_sim) == 0
 	var listed: Array[ArrivalBooking] = _bookings.duplicate()
 	for b in listed:
 		if not _sim.flights.is_doors_closed(b.flight_id):
@@ -180,8 +185,9 @@ func _settle_closed(landside: LandsideSim) -> void:
 			landside.drop_booking(b.vehicle, b.id)
 		b.state = ArrivalBooking.State.SETTLED
 		_drop(b)
-		# Kept aboard because the line outside was full: check-in congestion.
-		var held_for_line: bool = _sim.entrance.held.has(b.id) or line_full
+		# Kept aboard for the line outside on the last step, itself or queued
+		# behind a car that was (EntranceLine.held): check-in congestion.
+		var held_for_line: bool = _sim.entrance.held.has(b.id)
 		_sim.entrance.held.erase(b.id)
 		if aboard and not no_entrance and held_for_line:
 			var line_missed := _sim.entrance.held_missed

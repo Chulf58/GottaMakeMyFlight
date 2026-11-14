@@ -83,6 +83,9 @@ extends RefCounted
 ## its order, the admitted passengers' claims and the bookings held aboard for
 ## it (board 66be00a0); a version 33 save, whose arrivals waited on the door
 ## cell, is refused with no migration (the same decision).
+## 35: the entrance line's claims each hold a place on one desk ("stations",
+## one per claim) and its own NO_ROUTE marks are listed ("marked"); a version
+## 34 save has neither and is refused with no migration (the same decision).
 
 
 ## JSON-safe state for a save (PassengerSim.to_snapshot()). Reads only: it
@@ -315,7 +318,7 @@ static func checked_park_side(data: Dictionary, by_id: Dictionary) -> Dictionary
 	return {"stamps": stamps}
 
 
-## The saved line outside the entrance (version 34): {"line": EntranceLine} or
+## The saved line outside the entrance (version 35): {"line": EntranceLine} or
 ## {"error": why}. A save migrated from an older version has none, so it has
 ## nobody waiting outside.
 static func checked_entrance(data: Dictionary, by_id: Dictionary) -> Dictionary:

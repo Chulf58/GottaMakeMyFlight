@@ -15,8 +15,11 @@ extends RefCounted
 ##
 ## Every new passenger (PassengerLifecycle.spawn()) is taken in here. With no
 ## one waiting and a check-in place free for it (admit_room()), it is admitted:
-## it holds a claim on that place until it walks in (entered()), and inside
-## passengers looking for a desk cannot take it (PassengerStations.choose()).
+## it holds a claim on a place of one desk that a walk from the door cell
+## reaches (stations), until it walks in (entered()), and inside passengers
+## looking for a desk cannot take it (PassengerStations.choose()). Only places
+## the door reaches count, so one reachable place admits one passenger however
+## many places stand on desks no walk reaches.
 ## Otherwise it takes the next place in the line and walks to it, the line
 ## order is its arrival order, and it stays outside until it is the head and a
 ## place frees, when it is admitted and walks to the door. Arrivals are let in
@@ -25,12 +28,17 @@ extends RefCounted
 ## in their release order), the debug schedule waits, and spawn_now() refuses.
 ## Deadline urgency never lets anyone past: the line is the only way in.
 ##
-## When the room shrinks after an edit, the passengers admitted last and still
-## outside go back to the front of the line while it has places. Not
-## guaranteed: with every place taken, such a walker goes on in and waits on
-## the door cell. Desks that are all closed count as no free place, so arrivals
-## wait outside; only a terminal with no check-in desk lets everyone in, to
-## wait inside with NO_CHECKIN as before. Admitted walkers keep a gap on the
+## Every tick each claim is checked again, in admission order (_revalidate()):
+## it keeps its desk while that desk still has a reachable place for it, or
+## moves to the reachable desk with the most places left. A claim left with no
+## place, and one whose walker is bound for a door that is no longer the
+## entrance (the entrance moved or went), goes back to the front of the line,
+## last admitted first, while the line has places. Not guaranteed: with every
+## place taken, such a walker keeps an empty claim and goes on in (to the new
+## door when the entrance moved), and waits on the door cell. Desks that are
+## all closed count as no free place, so arrivals wait outside; only a
+## terminal with no check-in desk lets everyone in, to wait inside with
+## NO_CHECKIN as before. Admitted walkers keep a gap on the
 ## way to the door (step_of()), so they reach it one at a time.
 
 ## The first place is this many cells out from the door cell.
@@ -46,13 +54,22 @@ const GAP_MM := 700
 ## How far off a line a point may lie and still be on it, in metres.
 const ON_LINE_M := 0.25
 ## The empty saved line.
-const EMPTY := {"order": [], "claims": [], "held": [], "held_missed": {}}
+const EMPTY := {
+	"order": [], "claims": [], "stations": [], "marked": [], "held": [], "held_missed": {}
+}
 
 ## The waiting passengers, head first; each stands at or walks to
 ## places[its index].
 var order: Array[int] = []
 ## Admitted passengers still outside, in admission order.
 var claims: Array[int] = []
+## Admitted passenger id -> the desk its claim holds a place on; 0 for none
+## (an empty claim, or a terminal with no check-in desk).
+var stations := {}
+## Waiting passenger id -> true: the NO_ROUTE marks this line set
+## (_mark_unreachable()), taken off again at the start of every step() and by
+## an edit (unmark()), so a mark another part set is never taken for one.
+var marked := {}
 ## Booking id -> true: bookings LandsideSim kept aboard because the line was
 ## full (released, settled or missed, they are dropped).
 var held := {}
@@ -136,20 +153,41 @@ func has_claim(id: int) -> bool:
 
 
 ## The check-in places free for a passenger walking in now: free places on
-## the lines of the open desks, less the passengers inside looking for one and
-## the claims of those admitted and still outside. Desks that are all closed
-## or unusable have no free place (0, so arrivals wait outside); only a
-## terminal with no check-in desk at all lets everyone in (UNLIMITED), and
-## they wait inside with NO_CHECKIN as before.
+## the lines of the open desks that a walk from the door cell reaches
+## (_reachable_free()), less the passengers inside looking for one and the
+## claims of those admitted and still outside. Desks that are all closed,
+## unusable or out of reach have no free place (0 or less, so arrivals wait
+## outside); only a terminal with no check-in desk at all lets everyone in
+## (UNLIMITED), and they wait inside with NO_CHECKIN as before.
 func admit_room(sim: PassengerSim) -> int:
 	if sim.layout.desks.is_empty():
 		return UNLIMITED
-	var room := maxi(PassengerStations._room(sim, sim.layout.desks), 0)
-	var seekers := 0
-	for p in sim._passengers:
-		if not p.is_done() and PassengerStations.is_seeking(sim, p, true):
-			seekers += 1
-	return room - seekers - claim_count(sim)
+	var free := _reachable_free(sim)
+	var room := 0
+	for desk: int in free:
+		room += free[desk]
+	return room - _seekers(sim) - claim_count(sim)
+
+
+## The claims of admitted passengers still outside that hold a place on desk
+## `station`.
+func claims_on(sim: PassengerSim, station: int) -> int:
+	var count := 0
+	for id in claims:
+		if int(stations.get(id, 0)) == station and _outside(sim, id):
+			count += 1
+	return count
+
+
+## Takes the line's NO_ROUTE marks off its passengers (marked). PassengerEdits
+## calls it before OutsideWalks checks the walks after an edit, so a NO_ROUTE
+## set there is that check's own; the next step() marks again where it holds.
+func unmark(sim: PassengerSim) -> void:
+	for id: int in marked:
+		var p: Passenger = sim.get_passenger(id)
+		if p != null and p.stuck == Passenger.Stuck.NO_ROUTE:
+			p.stuck = Passenger.Stuck.NONE
+	marked.clear()
 
 
 ## The claims of admitted passengers still outside on the road in.
@@ -181,8 +219,10 @@ func room_for_arrivals(sim: PassengerSim) -> int:
 func take(sim: PassengerSim, p: Passenger) -> void:
 	derive(sim)
 	_prune(sim)
-	if order.is_empty() and admit_room(sim) > 0 and _reachable(sim):
+	var station := _next_station(sim) if order.is_empty() else -1
+	if station >= 0:
 		claims.append(p.id)
+		stations[p.id] = station
 		_left[p.id] = p.apron_total_mm() - p.apron_mm
 		return
 	order.append(p.id)
@@ -194,6 +234,7 @@ func take(sim: PassengerSim, p: Passenger) -> void:
 func entered(p: Passenger) -> bool:
 	var had := claims.has(p.id)
 	claims.erase(p.id)
+	stations.erase(p.id)
 	return had
 
 
@@ -201,20 +242,28 @@ func entered(p: Passenger) -> bool:
 func forget(id: int) -> void:
 	order.erase(id)
 	claims.erase(id)
+	stations.erase(id)
+	marked.erase(id)
 
 
-## One tick, before arrivals: the places from the layout, claims taken back
-## when the room shrank, the heads admitted while places free, and every
-## waiting passenger sent to its place.
+## One tick, before arrivals: the places from the layout, the line's marks
+## taken off, the claims checked again (_revalidate()), the heads admitted
+## while reachable places free, every waiting passenger sent to its place, and
+## those standing on theirs marked while the free places are out of reach.
 func step(sim: PassengerSim) -> void:
 	derive(sim)
 	_prune(sim)
-	_recall(sim)
-	var unreachable := not order.is_empty() and admit_room(sim) > 0 and not _reachable(sim)
-	_mark_unreachable(sim, false)
-	while not order.is_empty() and admit_room(sim) > 0 and _reachable(sim):
+	unmark(sim)
+	_revalidate(sim)
+	var unreachable := not order.is_empty() and _open_room(sim) > 0
+	unreachable = unreachable and _reachable_free(sim).is_empty()
+	while not order.is_empty():
+		var station := _next_station(sim)
+		if station < 0:
+			break
 		var head: Passenger = sim.get_passenger(order.pop_front())
 		claims.append(head.id)
+		stations[head.id] = station
 		_walk_to_door(sim, head)
 	_send_to_places(sim)
 	_mark_unreachable(sim, unreachable)
@@ -276,9 +325,15 @@ func to_dict(sim: PassengerSim) -> Dictionary:
 		missed[flight_id] = held_missed[flight_id]
 	var held_ids := held.keys()
 	held_ids.sort()
+	var kept := order.filter(func(id: int) -> bool: return _outside(sim, id))
+	var claimed := claims.filter(func(id: int) -> bool: return _outside(sim, id))
+	var marks := marked.keys().filter(func(id: int) -> bool: return kept.has(id))
+	marks.sort()
 	return {
-		"order": order.filter(func(id: int) -> bool: return _outside(sim, id)),
-		"claims": claims.filter(func(id: int) -> bool: return _outside(sim, id)),
+		"order": kept,
+		"claims": claimed,
+		"stations": claimed.map(func(id: int) -> int: return int(stations.get(id, 0))),
+		"marked": marks,
 		"held": held_ids,
 		"held_missed": missed,
 	}
@@ -304,6 +359,9 @@ static func checked(data: Variant, by_id: Dictionary) -> Dictionary:
 				return {"error": "entrance line passenger %d is not outside" % int(id)}
 			seen[int(id)] = true
 			(line.order if key == "order" else line.claims).append(int(id))
+	var problem := _checked_marks(line, data, by_id)
+	if problem != "":
+		return {"error": problem}
 	if typeof(data["held"]) != TYPE_ARRAY or typeof(data["held_missed"]) != TYPE_DICTIONARY:
 		return {"error": "entrance line held bookings are malformed"}
 	for id: Variant in data["held"]:
@@ -318,14 +376,40 @@ static func checked(data: Variant, by_id: Dictionary) -> Dictionary:
 	return {"line": line}
 
 
-## Whether a passenger walking in now could set off from the door cell to a
-## free place on an open desk's line (StationQueue.set_off(), as
-## PassengerStations.choose() does), so the one admitted does not stand on the
-## door cell for want of a way to the place it was admitted for. True with no
-## check-in desk at all: then nobody's room is counted (admit_room()).
-func _reachable(sim: PassengerSim) -> bool:
-	if sim.layout.desks.is_empty():
-		return true
+## The saved claims' desks ("stations", one per claim) and the line's marks
+## ("marked", waiting passengers standing NO_ROUTE) into `line`: "" or why not.
+static func _checked_marks(line: EntranceLine, data: Dictionary, by_id: Dictionary) -> String:
+	if typeof(data["stations"]) != TYPE_ARRAY or typeof(data["marked"]) != TYPE_ARRAY:
+		return "entrance line stations and marks must be lists"
+	if (data["stations"] as Array).size() != line.claims.size():
+		return (
+			"entrance line has %d claims but %d stations"
+			% [line.claims.size(), (data["stations"] as Array).size()]
+		)
+	for i in line.claims.size():
+		var station: Variant = data["stations"][i]
+		if not WholeNumber.is_whole(station) or int(station) < 0:
+			return "entrance line claim station %s is not a station id" % [station]
+		line.stations[line.claims[i]] = int(station)
+	for id: Variant in data["marked"]:
+		if not WholeNumber.is_whole(id) or not line.order.has(int(id)):
+			return "entrance line mark %s is not a waiting passenger" % [id]
+		if (by_id[int(id)] as Passenger).stuck != Passenger.Stuck.NO_ROUTE:
+			return "entrance line marked passenger %d is not NO_ROUTE" % int(id)
+		line.marked[int(id)] = true
+	return ""
+
+
+## Desk -> its free places that a passenger walking in now could reach: for
+## every open, usable desk, the places left on its line when one setting off
+## from the door cell finds a way to the place it would join
+## (StationQueue.set_off(), as PassengerStations.choose() does), so the one
+## admitted does not stand on the door cell for want of a way to its place.
+## Empty with no entrance.
+func _reachable_free(sim: PassengerSim) -> Dictionary:
+	var free := {}
+	if sim.grid == null or sim.layout.passenger_entrances.is_empty():
+		return free
 	for desk in sim.layout.desks:
 		if not sim._is_open(desk) or not sim.layout.is_usable(desk):
 			continue
@@ -335,8 +419,62 @@ func _reachable(sim: PassengerSim) -> bool:
 			continue
 		var queue := sim._queue(desk)
 		if not StationQueue.set_off(sim.grid, queue, line, sim._by_id, _door_cell, at).is_empty():
-			return true
-	return false
+			free[desk] = line.size() - at
+	return free
+
+
+## The check-in places free on every open desk's line, reached or not, less
+## the seekers inside and the claims outside (the room before the fix round's
+## reach rule): above 0 with free places only out of reach, the line's marks
+## say so (step()).
+func _open_room(sim: PassengerSim) -> int:
+	var room := maxi(PassengerStations._room(sim, sim.layout.desks), 0)
+	return room - _seekers(sim) - claim_count(sim)
+
+
+## The passengers inside looking for a desk (PassengerStations.is_seeking()).
+func _seekers(sim: PassengerSim) -> int:
+	var count := 0
+	for p in sim._passengers:
+		if not p.is_done() and PassengerStations.is_seeking(sim, p, true):
+			count += 1
+	return count
+
+
+## The desk the next passenger admitted claims a place on: the reachable desk
+## with the most places left after its claims (ties to the lower id), while
+## admit_room() is above 0; 0 with no check-in desk at all; -1 for none.
+func _next_station(sim: PassengerSim) -> int:
+	if sim.layout.desks.is_empty():
+		return 0
+	if admit_room(sim) <= 0:
+		return -1
+	return _best_desk(_reachable_free(sim), _claims_by_desk(sim))
+
+
+## The desk in `free` with the most places left over `used` (desk -> places
+## taken), ties to the lower id; -1 when none has one left.
+static func _best_desk(free: Dictionary, used: Dictionary) -> int:
+	var best := -1
+	var best_left := 0
+	var desks := free.keys()
+	desks.sort()
+	for desk: int in desks:
+		var left: int = free[desk] - int(used.get(desk, 0))
+		if left > best_left:
+			best = desk
+			best_left = left
+	return best
+
+
+## Desk -> the claims outside holding a place on it.
+func _claims_by_desk(sim: PassengerSim) -> Dictionary:
+	var used := {}
+	for id in claims:
+		var station: int = stations.get(id, 0)
+		if station != 0 and _outside(sim, id):
+			used[station] = int(used.get(station, 0)) + 1
+	return used
 
 
 ## Drops the ids of passengers no longer outside on the road in: gone, settled
@@ -346,6 +484,10 @@ func _prune(sim: PassengerSim) -> void:
 		for i in range(list.size() - 1, -1, -1):
 			if not _outside(sim, list[i]):
 				list.remove_at(i)
+	for table: Dictionary in [stations, marked]:
+		for id: int in table.keys():
+			if not _outside(sim, id):
+				table.erase(id)
 
 
 func _outside(sim: PassengerSim, id: int) -> bool:
@@ -353,37 +495,66 @@ func _outside(sim: PassengerSim, id: int) -> bool:
 	return p != null and not p.is_done() and p.stage == Passenger.Stage.SPAWNED
 
 
-## The admitted passengers still outside go back to the front of the line,
-## last admitted first, while the room is short of their claims and the line
-## has a place for each.
-func _recall(sim: PassengerSim) -> void:
-	if sim.layout.desks.is_empty():
-		return
-	var i := claims.size() - 1
-	while i >= 0 and admit_room(sim) < 0 and order.size() < capacity():
+## Each claim, in admission order, keeps its desk while that desk has a
+## reachable place left for it (and the reachable room, less the seekers
+## inside, is not spent), or moves to the reachable desk with the most places
+## left; failing both it is empty (0). Then, last admitted first while the line
+## has a place each, a walker with an empty claim, or one bound for a door
+## that is no longer the entrance's, goes back to the front of the line; one
+## bound for an old door that cannot goes on to the new door.
+func _revalidate(sim: PassengerSim) -> void:
+	var desks := not sim.layout.desks.is_empty()
+	if desks:
+		var free := _reachable_free(sim)
+		var budget := -_seekers(sim)
+		for desk: int in free:
+			budget += free[desk]
+		var used := {}
+		for id in claims:
+			var station: int = stations.get(id, 0)
+			var left := int(free.get(station, 0)) - int(used.get(station, 0))
+			if budget <= 0:
+				station = 0
+			elif left <= 0:
+				station = maxi(_best_desk(free, used), 0)
+			stations[id] = station
+			if station != 0:
+				used[station] = int(used.get(station, 0)) + 1
+				budget -= 1
+	var entrance := not sim.layout.passenger_entrances.is_empty()
+	for i in range(claims.size() - 1, -1, -1):
 		var id := claims[i]
 		var p: Passenger = sim.get_passenger(id)
-		if p != null and p.stage == Passenger.Stage.SPAWNED:
+		var moved := entrance and p.at != _door_cell
+		var empty := desks and int(stations.get(id, 0)) == 0
+		# Off the grid's walks (no site) a walker stopped at a door that went is
+		# NO_ROUTE for want of that door (PassengerSim._advance()); sent on from
+		# here, it has a walk again. On the site OutsideWalks owns that mark.
+		if moved and sim.site == null and p.stuck == Passenger.Stuck.NO_ROUTE:
+			p.stuck = Passenger.Stuck.NONE
+		if (moved or empty) and order.size() < capacity():
 			claims.remove_at(i)
+			stations.erase(id)
 			order.push_front(id)
-		i -= 1
+		elif moved:
+			_walk_to_door(sim, p)
 
 
 ## Free check-in places that no walk from the entrance reaches are a build
 ## problem, not congestion: each waiting passenger standing on its place is
-## marked NO_ROUTE ("I can't get there") while `unreachable`, and the mark is
-## taken off again when not (decision arrivals-wait-in-a-tidy-line-outside-
-## the-entrance-when-check, conductor ruling of the fix round). A walker still
-## on its way is never marked, so nobody stops short of its place.
+## marked NO_ROUTE ("I can't get there") while `unreachable` (decision
+## arrivals-wait-in-a-tidy-line-outside-the-entrance-when-check, conductor
+## ruling of the fix round). The marks are the line's own (marked), taken off
+## at the start of the next step(). A walker still on its way is never marked,
+## so nobody stops short of its place.
 func _mark_unreachable(sim: PassengerSim, unreachable: bool) -> void:
+	if not unreachable:
+		return
 	for index in mini(order.size(), capacity()):
 		var p: Passenger = sim.get_passenger(order[index])
-		if not _standing_on(p, index):
-			continue
-		if unreachable and p.stuck == Passenger.Stuck.NONE:
+		if _standing_on(p, index) and p.stuck == Passenger.Stuck.NONE:
 			p.stuck = Passenger.Stuck.NO_ROUTE
-		elif not unreachable and p.stuck == Passenger.Stuck.NO_ROUTE:
-			p.stuck = Passenger.Stuck.NONE
+			marked[p.id] = true
 
 
 ## Whether `p` stands at the end of its walk on place `index`.
@@ -398,10 +569,8 @@ func _standing_on(p: Passenger, index: int) -> bool:
 func _send_to_places(sim: PassengerSim) -> void:
 	for index in order.size():
 		var p: Passenger = sim.get_passenger(order[index])
-		# Marked for an unreachable desk while it stood on its place
-		# (_mark_unreachable()): with its place moved up, it walks on to it.
-		if p.stuck == Passenger.Stuck.NO_ROUTE and _standing_on(p, index + 1):
-			p.stuck = Passenger.Stuck.NONE
+		# The line's own marks are off by now (step()); a NO_ROUTE left is
+		# OutsideWalks' (no walk to any entrance), and it stays where it is.
 		if p.stuck == Passenger.Stuck.NO_ROUTE:
 			continue
 		if index >= capacity():

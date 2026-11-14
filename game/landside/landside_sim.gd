@@ -93,6 +93,13 @@ var curbs_built: Array[bool] = []
 var curbs_paid: Array[int] = []
 ## The bookings the last step() kept aboard for want of budget, in order.
 var denied: Array[int] = []
+## Vehicle id -> true: the vehicles the last step() kept waiting for the line
+## outside the entrance (its budget): one with a passenger denied; one still
+## in its unload gap that was kept on the step before (`kept`); one queued at
+## the stop for a berth while a berth holds one of those; and one held back
+## on the road a gap behind one of those. Rebuilt every step, so a car is kept
+## only while the hold lasts.
+var line_held := {}
 
 var _vehicles: Array[LandsideVehicle] = []
 ## The doors-close tick of each booking aboard's flight, as step() was given.
@@ -342,17 +349,23 @@ func get_vehicle(id: int) -> LandsideVehicle:
 ## each, in the order the vehicles let passengers out, so a party of four
 ## with one place lets one out, and the doors-close rush never gets past it.
 ## A booking that would have got out without the budget is listed in `denied`
-## until the next step.
+## until the next step, and its vehicle in `line_held`. `kept` holds the
+## vehicles kept for the line on the step before (line_held as it was then).
 func step(
-	now: int, can_release: bool, rng: RandomNumberGenerator, closes := {}, budget := -1
+	now: int, can_release: bool, rng: RandomNumberGenerator, closes := {}, budget := -1, kept := {}
 ) -> Array[Dictionary]:
 	tick = now
 	_closes = closes
 	_budget = budget
 	denied.clear()
+	line_held.clear()
 	var released: Array[Dictionary] = []
 	for v in _vehicles:
 		v.release_wait = maxi(v.release_wait - 1, 0)
+		# Between two passengers getting out, a car kept for the line is still
+		# kept: the rest of its party were refused a place.
+		if kept.has(v.id) and not v.bookings.is_empty() and v.release_wait > 0:
+			line_held[v.id] = true
 	_step_leaving()
 	for spot in definition.lots.size():
 		_step_lot(spot, can_release, released, rng)
@@ -556,19 +569,27 @@ func _drive_road(waiting: int, can_release: bool, released: Array[Dictionary]) -
 			return a.id < b.id if by_axis == 0 else by_axis > 0
 	)
 	var leader := FAR_MM
+	# Whether the car the next one keeps its gap behind is kept for the line.
+	var leader_held := false
 	for v in road:
+		var next := leader
 		if v.lane == LandsideVehicle.Lane.ROAD_IN:
-			leader = _drive_road_in(v, leader, waiting)
+			next = _drive_road_in(v, leader, waiting, leader_held)
 		elif v.stage == LandsideVehicle.Stage.DRIVE:
-			leader = _pull_in(v, leader, can_release, released)
+			next = _pull_in(v, leader, can_release, released)
 		else:
-			leader = _pull_out(v, leader)
+			next = _pull_out(v, leader)
+		if next != leader:
+			leader_held = line_held.has(v.id)
+		leader = next
 
 
 ## One car on road_in: to its stop, then into its lot's access lane, or into
 ## the berth path of the nearest free berth. Returns the road position it
-## holds the car behind to.
-func _drive_road_in(v: LandsideVehicle, leader: int, waiting: int) -> int:
+## holds the car behind to. Held back by a car kept for the line
+## (`leader_held`), or waiting at the stop while a berth holds one, it is
+## kept for the line too (line_held).
+func _drive_road_in(v: LandsideVehicle, leader: int, waiting: int, leader_held: bool) -> int:
 	# An empty car never parks, however it got here (a save included).
 	if v.bookings.is_empty():
 		v.intent = LandsideVehicle.Intent.DROP
@@ -577,6 +598,8 @@ func _drive_road_in(v: LandsideVehicle, leader: int, waiting: int) -> int:
 	if spot >= 0:
 		stop = definition.lots[spot].branch_mm
 	var held := _drive(v, leader, stop)
+	if held and leader_held:
+		line_held[v.id] = true
 	if v.pos_mm < stop:
 		_set_moving(v, held)
 		return v.pos_mm
@@ -588,6 +611,8 @@ func _drive_road_in(v: LandsideVehicle, leader: int, waiting: int) -> int:
 		return v.pos_mm
 	var berth := _free_berth(v.pos_mm, waiting)
 	if berth < 0:
+		if _berth_kept():
+			line_held[v.id] = true
 		_set_moving(v, true)
 		return v.pos_mm
 	_berths[berth] = v.id
@@ -749,6 +774,7 @@ func _release(v: LandsideVehicle, walk: Array, released: Array[Dictionary]) -> v
 	while not v.bookings.is_empty() and (out.is_empty() or last >= close):
 		if _budget == 0:
 			denied.append(v.bookings[0])
+			line_held[v.id] = true
 			break
 		out.append(v.bookings.pop_front())
 		if _budget > 0:
@@ -851,6 +877,14 @@ func _nearest_berth(pos_mm: int) -> int:
 		if best < 0 or _berth_mm[i] < _berth_mm[best]:
 			best = i
 	return best
+
+
+## Whether a berth holds a car kept for the line this step (line_held).
+func _berth_kept() -> bool:
+	for id in _berths:
+		if id != 0 and line_held.has(id):
+			return true
+	return false
 
 
 func _berth_built(i: int) -> bool:
