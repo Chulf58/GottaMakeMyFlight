@@ -117,7 +117,9 @@ static func finish(sim: PassengerSim, p: Passenger, made: bool) -> void:
 		p.missed_stuck = GateCapacity.miss_cause(sim, p)
 		# Waiting in the line outside for a check-in place: check-in congestion
 		# (FlightResult.ENTRANCE_LINE_TEXT).
-		if p.stage == Passenger.Stage.SPAWNED and sim.entrance.waiting(p.id):
+		# One marked NO_ROUTE outside (an unreachable desk) keeps that cause.
+		var waiting := p.stage == Passenger.Stage.SPAWNED and sim.entrance.waiting(p.id)
+		if waiting and p.stuck == Passenger.Stuck.NONE:
 			p.missed_stuck = Passenger.Stuck.QUEUE_FULL
 	sim.entrance.forget(p.id)
 	sim._leave_station(p)

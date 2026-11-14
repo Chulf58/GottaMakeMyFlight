@@ -679,7 +679,10 @@ func _beat(p: Passenger) -> void:
 	var change := 0
 	if p.stage in QUEUE_STAGES:
 		change -= 1
-	if p.stuck != Passenger.Stuck.NONE:
+	# On the road in (the line outside the entrance) a stuck passenger is out of
+	# the terminal's reach: no stuck mood loss and no info desk help.
+	var on_road := p.stage == Passenger.Stage.SPAWNED
+	if p.stuck != Passenger.Stuck.NONE and not on_road:
 		change -= info_desks.stuck_loss(p)
 	# A bored passenger gets nothing from its seat (BoredomSim).
 	if p.stage == Passenger.Stage.SEATED and not BoredomSim.is_bored(p):
@@ -708,7 +711,8 @@ func _beat(p: Passenger) -> void:
 	shops.beat(p)
 	if not info_desks.holds(p):
 		NeedsPolicy.arbitrate(self, p)
-		info_desks.beat(p)
+		if not on_road:
+			info_desks.beat(p)
 	_late_due.append(p)
 
 

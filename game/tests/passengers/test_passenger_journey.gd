@@ -95,6 +95,12 @@ func test_no_desk_gives_no_checkin_and_a_walled_desk_gives_no_route() -> void:
 	PassengerTestWorld.place(grid, &"checkin_desk", Vector2i(5, 1), 0)
 	var blocked := _world.sim.spawn_now(PassengerTestWorld.FLIGHT)
 	_world.run_to(_world.clock.tick + 21)
+	# An arrival waits in the line outside: the open desk's free places cannot
+	# be reached from the entrance, a build problem it is marked NO_ROUTE for
+	# (decision arrivals-wait-in-a-tidy-line-outside-the-entrance-when-check).
+	assert_int(_world.passenger(blocked).stage).is_equal(Passenger.Stage.SPAWNED)
+	assert_bool(_world.sim.entrance.waiting(blocked)).is_true()
+	assert_str(_world.sim.bubble_text(_world.passenger(blocked))).is_equal("I can't get there")
 	assert_int(_world.passenger(blocked).stuck).is_equal(Passenger.Stuck.NO_ROUTE)
 	assert_int(_world.passenger(lost).stuck).is_equal(Passenger.Stuck.NO_ROUTE)
 	# Opening the wall lets both retry on their own and reach the desk lane.
@@ -102,6 +108,27 @@ func test_no_desk_gives_no_checkin_and_a_walled_desk_gives_no_route() -> void:
 	_world.run_to(_world.clock.tick + 120)
 	assert_int(_world.passenger(blocked).stuck).is_not_equal(Passenger.Stuck.NO_ROUTE)
 	assert_int(_world.passenger(blocked).stage).is_greater_equal(Passenger.Stage.CHECKIN_QUEUE)
+
+
+## An arrival kept outside by an open desk the entrance cannot reach misses
+## for want of a route, never for a full check-in.
+func test_a_miss_outside_for_an_unreachable_desk_reads_no_walkable_route() -> void:
+	var grid := PassengerTestWorld.floored(Vector2i(8, 6))
+	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(0, 5), 3)
+	for y in 6:
+		grid.apply(BuildEdit.place_wall(Vector2i(4, y), BuildGrid.Side.WEST))
+	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(7, 0), 0)
+	PassengerTestWorld.place(grid, &"checkin_desk", Vector2i(5, 1), 0)
+	_world = PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(4000, 5000))
+	_world.step()
+	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	_world.run_to(_world.clock.tick + 21)
+	assert_bool(_world.sim.entrance.waiting(p.id)).is_true()
+	assert_int(p.stuck).is_equal(Passenger.Stuck.NO_ROUTE)
+	PassengerLifecycle.finish(_world.sim, p, false)
+	var reasons: Array = FlightResult.summarize(_world.sim, PassengerTestWorld.FLIGHT)["reasons"]
+	print("reasons %s" % [reasons])
+	assert_array(reasons).is_equal([{"text": "No walkable route", "count": 1}])
 
 
 func test_made_before_doors_close_and_missed_at_doors_close() -> void:

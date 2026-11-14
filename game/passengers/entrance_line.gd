@@ -210,11 +210,14 @@ func step(sim: PassengerSim) -> void:
 	derive(sim)
 	_prune(sim)
 	_recall(sim)
+	var unreachable := not order.is_empty() and admit_room(sim) > 0 and not _reachable(sim)
+	_mark_unreachable(sim, false)
 	while not order.is_empty() and admit_room(sim) > 0 and _reachable(sim):
 		var head: Passenger = sim.get_passenger(order.pop_front())
 		claims.append(head.id)
 		_walk_to_door(sim, head)
 	_send_to_places(sim)
+	_mark_unreachable(sim, unreachable)
 	_left.clear()
 	for id in claims:
 		var p: Passenger = sim.get_passenger(id)
@@ -366,11 +369,39 @@ func _recall(sim: PassengerSim) -> void:
 		i -= 1
 
 
+## Free check-in places that no walk from the entrance reaches are a build
+## problem, not congestion: each waiting passenger standing on its place is
+## marked NO_ROUTE ("I can't get there") while `unreachable`, and the mark is
+## taken off again when not (decision arrivals-wait-in-a-tidy-line-outside-
+## the-entrance-when-check, conductor ruling of the fix round). A walker still
+## on its way is never marked, so nobody stops short of its place.
+func _mark_unreachable(sim: PassengerSim, unreachable: bool) -> void:
+	for index in mini(order.size(), capacity()):
+		var p: Passenger = sim.get_passenger(order[index])
+		if not _standing_on(p, index):
+			continue
+		if unreachable and p.stuck == Passenger.Stuck.NONE:
+			p.stuck = Passenger.Stuck.NO_ROUTE
+		elif not unreachable and p.stuck == Passenger.Stuck.NO_ROUTE:
+			p.stuck = Passenger.Stuck.NONE
+
+
+## Whether `p` stands at the end of its walk on place `index`.
+func _standing_on(p: Passenger, index: int) -> bool:
+	if index < 0 or index >= capacity() or p.apron.is_empty():
+		return false
+	return p.apron_mm >= p.apron_total_mm() and p.apron.back().is_equal_approx(places[index])
+
+
 ## Each waiting passenger walks to its place when its walk does not end there
 ## already; past the last place it stands where it is.
 func _send_to_places(sim: PassengerSim) -> void:
 	for index in order.size():
 		var p: Passenger = sim.get_passenger(order[index])
+		# Marked for an unreachable desk while it stood on its place
+		# (_mark_unreachable()): with its place moved up, it walks on to it.
+		if p.stuck == Passenger.Stuck.NO_ROUTE and _standing_on(p, index + 1):
+			p.stuck = Passenger.Stuck.NONE
 		if p.stuck == Passenger.Stuck.NO_ROUTE:
 			continue
 		if index >= capacity():
