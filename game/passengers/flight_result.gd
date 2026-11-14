@@ -13,6 +13,10 @@ const NO_SHOW_TEXT := {"no_entrance": NEVER_ARRIVED, "late": ARRIVED_LATE}
 ## A booking still in its car or taxi when the doors closed
 ## (ArrivalBookings.missed_by_flight): a missed flight, never a no-show.
 const WAITING_FOR_DROP_OFF := "Waiting for drop-off"
+## Check-in congestion: a passenger waiting in the line outside the entrance
+## (EntranceLine) when the doors closed, held back from it on the schedule, or
+## kept in its car or taxi because that line was full.
+const ENTRANCE_LINE_TEXT := "Waiting outside: check-in full"
 ## A passenger held up in a boarding line when the doors closed.
 const CROWDED_TEXT := "Held up by crowds at the gate"
 
@@ -58,6 +62,8 @@ const MISSED_TEXT := "Missed the flight"
 
 ## The reason text for a passenger who missed the plane at `stage`.
 static func reason_text(stage: Passenger.Stage, stuck: Passenger.Stuck) -> String:
+	if stage == Passenger.Stage.SPAWNED and stuck == Passenger.Stuck.QUEUE_FULL:
+		return ENTRANCE_LINE_TEXT
 	if STUCK_TEXT.has(stuck):
 		return STUCK_TEXT[stuck]
 	if STAGE_TEXT.has(stage):
@@ -78,8 +84,11 @@ static func summarize(sim: PassengerSim, flight_id: String) -> Dictionary:
 	var on_road: int = sim.arrivals.missed_by_flight.get(flight_id, 0)
 	var missed: int = result.get("missed", 0) + on_road
 	var counts := {}
-	if on_road > 0:
-		counts[WAITING_FOR_DROP_OFF] = on_road
+	var held: int = mini(sim.entrance.held_missed.get(flight_id, 0), on_road)
+	if on_road - held > 0:
+		counts[WAITING_FOR_DROP_OFF] = on_road - held
+	if held > 0:
+		counts[ENTRANCE_LINE_TEXT] = held
 	var causes: Dictionary = result.get("causes", {})
 	for cause: Vector2i in causes:
 		var text := reason_text(cause.x as Passenger.Stage, cause.y as Passenger.Stuck)

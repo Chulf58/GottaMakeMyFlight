@@ -134,6 +134,9 @@ static func _to_gate(sim: PassengerSim, p: Passenger, routed: bool, cleared := -
 		# The road walk to the entrance, on the site, is a leg of
 		# its own: the walk drops leftover distance where it meets the grid.
 		road_ticks = walk_ticks(p.apron_total_mm() - p.apron_mm)
+		# Waiting in the line outside: its walk ends at its place, so the walk
+		# on to the door and the wait for check-in are the line's, once.
+		road_ticks += sim.entrance.forecast_ticks(sim, p)
 	var leg := StageKinds.leg(p.stage)
 	var choosing := p.stage == Passenger.Stage.TO_SECURITY and p.station == 0
 	if leg == StageKinds.Leg.CHECKIN or choosing:

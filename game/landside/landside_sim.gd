@@ -91,10 +91,14 @@ var lots_paid: Array[int] = []
 ## Per curb spot: whether a curb bay stands there, and its price as above.
 var curbs_built: Array[bool] = []
 var curbs_paid: Array[int] = []
+## The bookings the last step() kept aboard for want of budget, in order.
+var denied: Array[int] = []
 
 var _vehicles: Array[LandsideVehicle] = []
 ## The doors-close tick of each booking aboard's flight, as step() was given.
 var _closes := {}
+## The step's release budget left (step()); -1 for none.
+var _budget := -1
 var _by_id := {}
 var _next_id := 1
 ## Derived from the vehicles: the vehicle holding each curb berth (pulling in,
@@ -333,11 +337,19 @@ func get_vehicle(id: int) -> LandsideVehicle:
 ## that tick, for the bookings aboard), when they all get out at once. An empty
 ## `closes` means no doors-close limit; a booking aboard missing from a non-empty
 ## one is an error and gets its party out at once. `rng` draws parked stays.
+## `budget`, when 0 or more, is how many passengers may get out this tick in
+## all (the free places of the line outside the entrance, EntranceLine): one
+## each, in the order the vehicles let passengers out, so a party of four
+## with one place lets one out, and the doors-close rush never gets past it.
+## A booking that would have got out without the budget is listed in `denied`
+## until the next step.
 func step(
-	now: int, can_release: bool, rng: RandomNumberGenerator, closes := {}
+	now: int, can_release: bool, rng: RandomNumberGenerator, closes := {}, budget := -1
 ) -> Array[Dictionary]:
 	tick = now
 	_closes = closes
+	_budget = budget
+	denied.clear()
 	var released: Array[Dictionary] = []
 	for v in _vehicles:
 		v.release_wait = maxi(v.release_wait - 1, 0)
@@ -735,7 +747,14 @@ func _release(v: LandsideVehicle, walk: Array, released: Array[Dictionary]) -> v
 	var last := tick + v.release_wait + (v.bookings.size() - 1) * RELEASE_GAP_TICKS
 	var out: Array[int] = []
 	while not v.bookings.is_empty() and (out.is_empty() or last >= close):
+		if _budget == 0:
+			denied.append(v.bookings[0])
+			break
 		out.append(v.bookings.pop_front())
+		if _budget > 0:
+			_budget -= 1
+	if out.is_empty():
+		return
 	released.append({"vehicle": v.id, "bookings": out, "walk": points})
 	v.release_wait = 0 if v.bookings.is_empty() else RELEASE_GAP_TICKS
 

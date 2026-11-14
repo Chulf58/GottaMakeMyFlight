@@ -79,6 +79,10 @@ extends RefCounted
 ## 33: BookingOverrides' extra passengers per occurrence not yet scheduled
 ## ("booking_overrides", board c6c13a5a); a version 32 save has none and is
 ## refused with no migration (the same decision).
+## 34: the line outside the entrance ("entrance_line", EntranceLine.to_dict()):
+## its order, the admitted passengers' claims and the bookings held aboard for
+## it (board 66be00a0); a version 33 save, whose arrivals waited on the door
+## cell, is refused with no migration (the same decision).
 
 
 ## JSON-safe state for a save (PassengerSim.to_snapshot()). Reads only: it
@@ -106,6 +110,7 @@ static func to_snapshot(sim: PassengerSim) -> Dictionary:
 	data["claims"] = claims
 	data["park_side"] = park_side_list(sim)
 	data["booking_overrides"] = BookingOverrides.to_list(sim)
+	data["entrance_line"] = sim.entrance.to_dict()
 	return data
 
 
@@ -151,10 +156,15 @@ static func from_snapshot(sim: PassengerSim, data: Dictionary) -> bool:
 	if booking.has("error"):
 		push_error("PassengerSim.from_snapshot: %s" % booking["error"])
 		return false
+	var entrance := checked_entrance(data, by_id)
+	if entrance.has("error"):
+		push_error("PassengerSim.from_snapshot: %s" % entrance["error"])
+		return false
 	spots.restore(claims["claims"], by_id)
 	sim.gates.restore(claims["gate"], spots, by_id)
 	sim.standing = spots
 	sim.files = boarding["files"]
+	sim.entrance = entrance["line"]
 	sim.tick = loaded["tick"]
 	sim._next_id = loaded["next_id"]
 	sim.last_batch_seed = loaded["last_batch_seed"]
@@ -303,6 +313,17 @@ static func checked_park_side(data: Dictionary, by_id: Dictionary) -> Dictionary
 			return {"error": "park side %d is not one saved passenger's" % id}
 		stamps[id] = [entry["seat"], int(entry["hand"])]
 	return {"stamps": stamps}
+
+
+## The saved line outside the entrance (version 34): {"line": EntranceLine} or
+## {"error": why}. A save migrated from an older version has none, so it has
+## nobody waiting outside.
+static func checked_entrance(data: Dictionary, by_id: Dictionary) -> Dictionary:
+	if not data.has("entrance_line"):
+		if int(data["save_version"]) >= PassengerSim.SAVE_VERSION:
+			return {"error": "entrance_line missing"}
+		return {"line": EntranceLine.new()}
+	return EntranceLine.checked(data["entrance_line"], by_id)
 
 
 ## The saved claims on the lines' tails (version 28): station -> the id of a

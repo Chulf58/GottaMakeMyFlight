@@ -62,14 +62,19 @@ func test_the_same_seed_spawns_the_same_passengers() -> void:
 	assert_array(_spawned(a)).is_not_equal(_spawned(c))
 
 
-func test_debug_batch_spawns_300_through_normal_spawning_and_records_its_seed() -> void:
+func test_debug_batch_of_300_comes_in_through_the_entrance_line_and_records_its_seed() -> void:
 	var world := _reference(3)
 	world.sim.spawn_batch(300, 987654321)
 	assert_int(world.sim.last_batch_seed).is_equal(987654321)
 	assert_int(world.sim.pending_spawns()).is_equal(300)
 	world.run_to(320)
-	assert_int(world.sim.pending_spawns()).is_equal(0)
-	assert_int(world.sim.passenger_ids().size()).is_equal(300)
+	# A debug batch waits like any arrival (decision arrivals-wait-in-a-tidy-
+	# line-outside-the-entrance-when-check): with check-in and the line outside
+	# full, the rest stay on the schedule.
+	var spawned := world.sim.passenger_ids().size()
+	assert_int(spawned).is_greater(EntranceLine.MAX_PLACES)
+	assert_int(world.sim.pending_spawns()).is_equal(300 - spawned)
+	assert_int(world.sim.entrance.order.size()).is_equal(EntranceLine.MAX_PLACES)
 	var entrance := ReferenceTerminal.ENTRANCE_CELL
 	var first := world.passenger(world.sim.passenger_ids()[0])
 	assert_int(first.spawn_tick).is_greater(0)
