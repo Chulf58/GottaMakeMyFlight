@@ -36,7 +36,9 @@ extends Node
 ## line (taxi_plan()). An accepted contract gets the best-fit gate its whole
 ## timetable fits at (the smallest max_class that takes its plane, then the
 ## lowest letter). An offer is refused with QUIET_NIGHT_TEXT when it departs
-## outside 07:00 to 21:00, and with TAXI_BUSY_TEXT when no pause fits it or
+## outside 07:00 to 21:00, or an Odd hours offer with ODD_HOURS_NIGHT_TEXT
+## outside 06:00 to 22:00 (FlightContract.window_problem, from its frozen
+## traits), and with TAXI_BUSY_TEXT when no pause fits it or
 ## when it would leave an existing contract's occurrence with none (that
 ## occurrence may gain a pause). reassign_gate and move_contracts move a
 ## contract's days not yet issued through the same check; the occurrences
@@ -49,6 +51,11 @@ extends Node
 ## another occurrence with no taxi plan, so when the re-plan without them would
 ## (greedy planning is not monotone) the contract keeps reserving its ground:
 ## FlightPlans plans its days as unrendered reservations (end_refusal()).
+## end_contract_by_player is the player's End: it ends the contract the same way
+## and then fires ended_by_player with end_fee, the Exit fee due (decision
+## odd-hours-and-exit-fee-offer-traits-odd-hours-widens-the-dep), which
+## Settlement charges. The game's own end (low rating) calls end_contract and
+## costs nothing.
 ##
 ## One tick: set the tick, let the gate open the airport, issue due
 ## occurrences in time order, advance every flight, prune. PassengerSim binds
@@ -64,6 +71,10 @@ signal occurrence_added(flight_id: String)
 ## Fires once when end_contract stops a contract's future days. Never fires on
 ## a snapshot load.
 signal contract_ended(contract_id: String)
+## Fires after contract_ended when the player ended the contract
+## (end_contract_by_player), with the Exit fee then due (0 for none). Never
+## fires on a snapshot load or on the game's own end.
+signal ended_by_player(contract_id: String, fee: int)
 ## Fires after from_snapshot() installs a save, so readers of the open state
 ## (AirportGate) can refresh. The only signal a load emits.
 signal snapshot_loaded
@@ -136,7 +147,9 @@ const SAVE_VERSION := 8
 ## The refusal of a flight no taxi pause fits (user ruling a-gate-has-no-size-
 ## planes-use-any-stand-they-fit-neighbours-share-apron-space).
 const TAXI_BUSY_TEXT := GroundPlanner.TAXI_BUSY_TEXT
-const QUIET_NIGHT_TEXT := "it departs in the quiet night, outside 07:00 to 21:00"
+const QUIET_NIGHT_TEXT := FlightContract.QUIET_NIGHT_TEXT
+## An Odd hours contract's window, and the ground planner's guard, which is as wide.
+const ODD_HOURS_NIGHT_TEXT := FlightContract.ODD_HOURS_NIGHT_TEXT
 ## Formatted with the plane class the runway cannot take.
 const RUNWAY_TOO_SHORT_TEXT := "the runway is too short for a %s plane"
 ## What kind of refusal trial_assignment() reports ("blocker"): bad terms or a
@@ -590,6 +603,31 @@ func end_contract(contract_id: String) -> bool:
 	return true
 
 
+## The player's End: end_contract, then ended_by_player with the Exit fee that
+## was due (end_fee) for Settlement to charge. False, with end_contract's
+## error, when it is refused; nothing is charged then.
+func end_contract_by_player(contract_id: String) -> bool:
+	var fee := end_fee(contract_id)
+	if not end_contract(contract_id):
+		return false
+	ended_by_player.emit(contract_id, fee)
+	return true
+
+
+## The dollars ending running contract `contract_id` with the End button costs
+## now: its Exit fee (OfferTraits.exit_fee) on the contract's first day and the
+## OfferTraits.EXIT_FEE_DAYS - 1 days after it, else 0. 0 for a contract without
+## Exit fee, an ended or an unknown one. Read-only; the End confirm shows it.
+func end_fee(contract_id: String) -> int:
+	var contract := contract_of(contract_id)
+	if contract.is_empty() or _ended.has(contract_id):
+		return 0
+	var term_end: int = contract["first_day"] + OfferTraits.EXIT_FEE_DAYS
+	if GameCalendar.day_of(tick) >= term_end:
+		return 0
+	return OfferTraits.exit_fee(contract[FlightContract.TRAITS_KEY])
+
+
 ## The occurrence that ending running contract `contract_id` now and freeing
 ## its ground would leave with no taxi plan: {"id", "reason"}, or {} when every
 ## surviving occurrence keeps one (or the contract is not running). Read-only.
@@ -1019,10 +1057,10 @@ func _assignment(
 	var gates := gate_ids()
 	if gates.is_empty():
 		return _assigned("", "no gate has a stand", {}, BLOCKER_STAND)
-	var probe := _candidate(terms, gates[0])
-	if not GroundPlanner.keeps_quiet_night(FlightTimetable.starts_for(probe, probe["first_day"])):
+	var night_text := FlightContract.window_problem(terms)
+	if night_text != "":
 		var night := {"reason": GroundPlanner.QUIET_NIGHT, "flight": ""}
-		return _assigned("", QUIET_NIGHT_TEXT, night, BLOCKER_NIGHT)
+		return _assigned("", night_text, night, BLOCKER_NIGHT)
 	var grounds := gate_grounds()
 	var existing := grounds.keys()
 	if ignore_gate:
@@ -1153,7 +1191,7 @@ func _contracts_refusal(
 ## The player's words for a taxi refusal ({"reason"}).
 static func _ground_text(refusal: Dictionary) -> String:
 	if refusal["reason"] == GroundPlanner.QUIET_NIGHT:
-		return QUIET_NIGHT_TEXT
+		return ODD_HOURS_NIGHT_TEXT
 	if refusal["reason"] == GroundPlanner.BAD_ROUTE:
 		return "its taxi route cannot be booked"
 	return TAXI_BUSY_TEXT

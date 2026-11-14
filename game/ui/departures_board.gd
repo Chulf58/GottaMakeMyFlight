@@ -38,8 +38,11 @@ extends Control
 ##
 ## A running contract's row also has an End button (decision end-contract-
 ## button-in-the-departures-list-lets-the-player-e): it asks "End this
-## contract?" under the row, and the confirm calls FlightSim.end_contract.
-## Flights already booked for today still fly. When FlightSim.end_refusal()
+## contract?" under the row, and the confirm calls FlightSim.end_contract_by_player.
+## An Exit fee contract within its term asks with its fee instead, "End this
+## contract? Exit fee $60" (end_prompt, FlightSim.end_fee; decision odd-hours-
+## and-exit-fee-offer-traits-odd-hours-widens-the-dep), and Settlement charges
+## it. Flights already booked for today still fly. When FlightSim.end_refusal()
 ## says ending would leave another flight with no taxi plan, nothing is ended
 ## and the row says which flight, so the player can move that flight first.
 ##
@@ -73,6 +76,8 @@ const TAKEN_TEXT := "%s is taken by the %s %s flight"
 const TAKEN_ONE_OFF_TEXT := "%s is taken by the %s flight"
 const BUSY_TEXT := "Gate %s is busy when this flight needs it"
 const END_PROMPT := "End this contract?"
+## Formatted with the Exit fee in dollars.
+const END_FEE_PROMPT := "End this contract? Exit fee $%d"
 const ENDED_TEXT := "%s contract ended. Flights already booked still fly"
 const END_REFUSED_TEXT := "Can't end this contract: %s would have no taxi plan"
 const END_REFUSED_OTHER_TEXT := "Can't end this contract: another flight would have no taxi plan"
@@ -486,7 +491,8 @@ func _add_end_confirm(contract_id: String) -> void:
 	var box := HBoxContainer.new()
 	box.name = "EndConfirm"
 	var prompt := Label.new()
-	prompt.text = END_PROMPT
+	prompt.name = "EndPrompt"
+	prompt.text = end_prompt(flights, contract_id)
 	prompt.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	prompt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	box.add_child(prompt)
@@ -616,14 +622,23 @@ static func move_outcome(sim: FlightSim, contract_id: String, gate_id: String) -
 	return {"moved": true, "text": MOVED_TEXT % [destination, gate_id]}
 
 
-## Ends the contract unless FlightSim now refuses, and says what happened: the
-## ENDED_TEXT confirmation, or the refusal's words. "" when FlightSim could not
-## end it for another reason.
+## The End confirm's question for `contract_id`: END_PROMPT, or END_FEE_PROMPT
+## with the Exit fee ending it now costs (FlightSim.end_fee). The Departures
+## row and the flight planner both ask this.
+static func end_prompt(sim: FlightSim, contract_id: String) -> String:
+	var fee := sim.end_fee(contract_id)
+	return END_FEE_PROMPT % fee if fee > 0 else END_PROMPT
+
+
+## Ends the contract as the player (FlightSim.end_contract_by_player, which has
+## Settlement charge any Exit fee due) unless FlightSim now refuses, and says
+## what happened: the ENDED_TEXT confirmation, or the refusal's words. "" when
+## FlightSim could not end it for another reason.
 static func end_outcome(sim: FlightSim, contract_id: String) -> String:
 	var refusal := end_refusal_words(sim, contract_id)
 	if refusal != "":
 		return refusal
-	if sim.end_contract(contract_id):
+	if sim.end_contract_by_player(contract_id):
 		return ENDED_TEXT % sim.contract_of(contract_id)["destination"]
 	return ""
 

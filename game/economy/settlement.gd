@@ -55,6 +55,12 @@ extends Node
 ## and it is required: a save without it is refused (no migration before a
 ## release; SaveGame version 21).
 ##
+## An Exit fee contract the player ends with the End button within its term
+## (FlightSim.ended_by_player, decision odd-hours-and-exit-fee-offer-traits-odd-
+## hours-widens-the-dep) is charged its fee as an airline fine (Wallet.Category.
+## FINES) through Wallet.charge, like a Miss fine: down to a balance of 0, the
+## rest announced as unpaid and never owed. The game's own end charges nothing.
+##
 ## On the same tick, after the wages, every ready toilet room is charged its
 ## upkeep (decision toilet-design-queue-free-reservable-stalls-per-stall-daily-u,
 ## point 2): RoomRules.daily_upkeep, PriceTable.TOILET_STALL_UPKEEP per stall.
@@ -194,12 +200,14 @@ func bind(sim: PassengerSim, wallet: Wallet) -> void:
 		_sim.clock.ticked.disconnect(_on_tick)
 		_sim.arrivals.missed.disconnect(_on_road_miss)
 		_sim.flights.state_changed.disconnect(_on_flight_state)
+		_sim.flights.ended_by_player.disconnect(_on_ended_by_player)
 	_sim = sim
 	_settled.clear()
 	_sim.outcome.connect(_on_outcome)
 	_sim.clock.ticked.connect(_on_tick)
 	_sim.arrivals.missed.connect(_on_road_miss)
 	_sim.flights.state_changed.connect(_on_flight_state)
+	_sim.flights.ended_by_player.connect(_on_ended_by_player)
 
 
 ## The fees owed, oldest first.
@@ -551,6 +559,12 @@ func _on_road_miss(flight_id: String) -> void:
 func _on_flight_state(flight_id: String, state: int) -> void:
 	if state == FlightSim.State.DEPARTED:
 		_payouts.on_departed(_sim.flights, flight_id, _wallet)
+
+
+## FlightSim.ended_by_player: the Exit fee due when the player ended it.
+func _on_ended_by_player(_contract_id: String, fee: int) -> void:
+	if fee > 0:
+		_wallet.charge(fee, Wallet.Category.FINES)
 
 
 ## True while passenger `id` has a bag in the BaggageSim that is not settled.

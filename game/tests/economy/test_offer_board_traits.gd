@@ -17,16 +17,17 @@ func before_test() -> void:
 
 
 ## The tier 0 draw replayed by hand from `rng`, in _draw's order: airline,
-## destination, slot, size, booked, fee.
-static func _replay(rng: RandomNumberGenerator) -> Dictionary:
+## destination, slot, size, booked, fee. The slot is one draw over the quarter
+## hours of the window `traits` allow: 07:00 to 21:00, 06:00 to 22:00 with Odd hours.
+static func _replay(rng: RandomNumberGenerator, traits: Dictionary) -> Dictionary:
 	var airline: String = OfferBoard.AIRLINES[rng.randi_range(0, OfferBoard.AIRLINES.size() - 1)]
 	var destination: String = OfferBoard.DESTINATIONS[rng.randi_range(
 		0, OfferBoard.DESTINATIONS.size() - 1
 	)]
-	var minute := (
-		OfferBoard.DEPARTURE_FIRST_MINUTE
-		+ rng.randi_range(0, OfferBoard.DEPARTURE_SLOTS) * OfferBoard.DEPARTURE_STEP
-	)
+	var span := FlightContract.window(traits)
+	@warning_ignore("integer_division")
+	var last_slot: int = (span[1] - span[0]) / OfferBoard.DEPARTURE_STEP
+	var minute: int = span[0] + rng.randi_range(0, last_slot) * OfferBoard.DEPARTURE_STEP
 	var sizes: Array = OfferBoard.STARTER_SIZES.keys()
 	var size: String = sizes[rng.randi_range(0, 1) % sizes.size()]
 	var booked_range: Array = OfferBoard.STARTER_SIZES[size]
@@ -52,7 +53,7 @@ func test_the_base_offers_of_a_seed_are_unchanged_and_the_rng_advances_as_before
 		board.ensure_day(day, _rng, 0, PlaneClasses.LARGE, null, ALL_LIVE)
 		for number in range(1, OfferBoard.OFFERS_PER_DAY + 1):
 			var offer := board.offer_of("O%dN%d" % [day, number])
-			var base := _replay(replay)
+			var base := _replay(replay, offer["traits"])
 			for key in ["airline", "destination", "departure_minute", "plane_size"]:
 				assert_that(offer[key]).is_equal(base[key])
 			var traits: Dictionary = offer["traits"]

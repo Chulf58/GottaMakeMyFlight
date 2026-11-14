@@ -27,11 +27,13 @@ const HEAVY_BAGS := "heavy_bags"
 const SIGNING_BONUS := "signing_bonus"
 const LOYAL_AIRLINE := "loyal_airline"
 const MISS_FINE := "miss_fine"
+const ODD_HOURS := "odd_hours"
+const EXIT_FEE := "exit_fee"
 ## Upsides and downsides in table order (the order pairs are listed in).
 const UPS: Array[String] = [
 	TOP_FARE, SHOPPERS, BAG_COVER, FULL_FLIGHT, SIGNING_BONUS, LOYAL_AIRLINE
 ]
-const DOWNS: Array[String] = [RUSH_CROWD, HEAVY_BAGS, MISS_FINE]
+const DOWNS: Array[String] = [RUSH_CROWD, HEAVY_BAGS, MISS_FINE, ODD_HOURS, EXIT_FEE]
 const LEVELS: Array[int] = [1, 2]
 const KEYS := ["down", "level", "up"]
 
@@ -51,6 +53,11 @@ const NEEDS_SHOPS := "shops"
 ## (Settlement). LOYAL_AIRLINE: the percent more the airline's later offers pay
 ## once it is loyal (LOYAL_FEE_PERCENT, the same at both levels; OfferBoard
 ## counts the days). MISS_FINE: dollars per passenger who misses the flight.
+## ODD_HOURS: the minutes the departure window widens at each end, the same at
+## both levels (FlightContract.window: 06:00 to 22:00 instead of 07:00 to 21:00;
+## decision odd-hours-and-exit-fee-offer-traits-odd-hours-widens-the-dep).
+## EXIT_FEE: dollars the player pays to end the contract with the End button
+## within its first EXIT_FEE_DAYS days (FlightSim.end_fee).
 const TABLE := {
 	TOP_FARE:
 	{
@@ -147,8 +154,32 @@ const TABLE := {
 		"values": [10, 20],
 		"needs": "",
 	},
+	ODD_HOURS:
+	{
+		"labels": ["Odd hours", "Odd hours"],
+		"tips":
+		[
+			"May depart as early as 06:00 or as late as 22:00 (usually 07:00 to 21:00).",
+			"May depart as early as 06:00 or as late as 22:00 (usually 07:00 to 21:00).",
+		],
+		"values": [60, 60],
+		"needs": "",
+	},
+	EXIT_FEE:
+	{
+		"labels": ["Exit fee $60", "Exit fee $120"],
+		"tips":
+		[
+			"Ending this contract in its first 7 days costs $60.",
+			"Ending this contract in its first 7 days costs $120.",
+		],
+		"values": [60, 120],
+		"needs": "",
+	},
 }
-## Pairs that cancel out, never drawn and refused on load.
+## Pairs that cancel out, never drawn and refused on load. Odd hours and Exit
+## fee cancel no upside. Signing bonus with Exit fee stays: the fee makes taking
+## the bonus and then ending the contract cost more, it does not undo the bonus.
 const FORBIDDEN: Array = [[SHOPPERS, RUSH_CROWD], [BAG_COVER, HEAVY_BAGS]]
 ## A plain offer pays this percent of its drawn fee, rounded.
 const PLAIN_FEE_PERCENT := 90
@@ -158,7 +189,11 @@ const PLAIN_TIP := "No catch, and 10% less pay."
 ## tier 0 draws level 1 only, tier 1 mixes, tier 2 favours level 2.
 const LEVEL_2_CHANCE: Array[int] = [0, 50, 75]
 ## 2: Signing bonus, Loyal airline and Miss fine joined the table.
-const SEED_VERSION := 2
+## 3: Odd hours and Exit fee joined the table (28 pairs).
+const SEED_VERSION := 3
+## An Exit fee contract's term: ending it with the End button costs its fee on
+## its first day and the EXIT_FEE_DAYS - 1 days after it; then it is free.
+const EXIT_FEE_DAYS := 7
 ## An airline is loyal after this many days on which one of its contracts with
 ## LOYAL_AIRLINE had a flight depart; from then on its offers pay
 ## LOYAL_FEE_PERCENT more, once, however many such contracts it has.
@@ -228,6 +263,17 @@ static func miss_fine(traits: Dictionary) -> int:
 ## The dollars the first departure pays under `traits`, 0 without Signing bonus.
 static func signing_bonus(traits: Dictionary) -> int:
 	return maxi(value(traits, SIGNING_BONUS), 0)
+
+
+## The dollars ending a contract of `traits` early costs, 0 without Exit fee.
+static func exit_fee(traits: Dictionary) -> int:
+	return maxi(value(traits, EXIT_FEE), 0)
+
+
+## The minutes the departure window of `traits` widens at each end, 0 without
+## Odd hours.
+static func window_widening(traits: Dictionary) -> int:
+	return maxi(value(traits, ODD_HOURS), 0)
 
 
 ## Whether a contract of `traits` counts its days toward its airline's loyalty.

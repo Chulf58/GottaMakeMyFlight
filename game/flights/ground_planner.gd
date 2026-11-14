@@ -48,9 +48,10 @@ extends RefCounted
 ## reassigning or ending contracts and placing works never change a plane
 ## already flying. The planner restarts (stops checking against what it booked
 ## before) when a flight starts after every booking has ended, as it does each
-## quiet night. A departure outside FIRST_DEPARTURE_MINUTE to
-## LAST_DEPARTURE_MINUTE would remove that night, so it is refused with
-## QUIET_NIGHT.
+## quiet night. A departure outside EARLIEST_DEPARTURE_MINUTE to
+## LATEST_DEPARTURE_MINUTE would remove that night, so it is refused with
+## QUIET_NIGHT. The guard knows nothing of contracts or traits: which contract
+## may depart in which part of it is FlightContract.window's question.
 ##
 ## Not guaranteed: that the drawn plane stays inside its swing square through
 ## the pushback turn (board 13e98b04 owns that), and that a route is the one
@@ -63,10 +64,16 @@ const QUIET_NIGHT := "quiet_night"
 ## A taxi route with a segment off the x and z axes, which the slices cannot
 ## book (axis_aligned()). Airside never gives one; reported loudly.
 const BAD_ROUTE := "bad_route"
-## Departures 07:00 to 21:00 (OfferBoard draws only these), so every night
-## from about 22:02 to 04:52 holds no booking.
-const FIRST_DEPARTURE_MINUTE := 7 * 60
-const LAST_DEPARTURE_MINUTE := 21 * 60
+## Departures 06:00 to 22:00, the widest window a contract has (an Odd hours
+## one's, FlightContract.window), so every night from about 23:02 to 03:52 holds
+## no booking (decision odd-hours-technical-design-contract-validation-allows-
+## 06-00).
+const EARLIEST_DEPARTURE_MINUTE := 6 * 60
+const LATEST_DEPARTURE_MINUTE := 22 * 60
+## The plain contract window (FlightContract), not the guard: the baggage save
+## test places the starter at its last departure through these names.
+const FIRST_DEPARTURE_MINUTE := FlightContract.FIRST_DEPARTURE_MINUTE
+const LAST_DEPARTURE_MINUTE := FlightContract.LAST_DEPARTURE_MINUTE
 const SLICE_M := 8.0
 ## Booking kinds.
 const SLICE := "slice"
@@ -154,7 +161,7 @@ static func runway_rect(plane_class: String) -> Rect2:
 ## Whether the flight departs inside the day, so the quiet night stays.
 static func keeps_quiet_night(starts: Array) -> bool:
 	var minute := GameCalendar.minute_of_day(starts[FlightSim.State.PUSHBACK])
-	return minute >= FIRST_DEPARTURE_MINUTE and minute <= LAST_DEPARTURE_MINUTE
+	return minute >= EARLIEST_DEPARTURE_MINUTE and minute <= LATEST_DEPARTURE_MINUTE
 
 
 ## Plans every request (request()) in time order after placing the `fixed`

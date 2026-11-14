@@ -7,32 +7,35 @@ extends SceneTree
 ## passengers and fee, so the cards read "Needs another gate" and two "Fits your
 ## gates now". Two offers are paired with traits and one is plain (decision
 ## airline-offer-traits-each-offer-pairs-an-upside-with-a-downs), so each card's
-## trait line shows. The cards carry the slice 2 money traits: the longest line
-## (Signing bonus $300, Very heavy bags and a loyal airline's "Loyal: +10%"),
-## Loyal airline with Miss fine, and a plain offer from a loyal airline. Prints
-## each card's text and checks the trait lines and that the sheet is in view
-## before saving.
+## trait line shows. The cards carry the slice 3 downsides (decision odd-hours-
+## and-exit-fee-offer-traits-odd-hours-widens-the-dep): the longest line
+## (Signing bonus $300, Exit fee $120 and a loyal airline's "Loyal: +10%"),
+## Loyal airline with Odd hours departing at 22:00, and a plain offer from a
+## loyal airline. Prints each card's text and checks the trait lines, the 22:00
+## departure and that the sheet is in view before saving.
 ##
 ## Run (one windowed Godot run project-wide; take the slot first):
 ##   timeout 300 Godot_v4.7.2-stable_win64_console.exe --display-driver windows \
 ##     --rendering-driver vulkan --audio-driver Dummy \
 ##     --path game -s res://tests/ui/offer_cards_plate_probe.gd
 ##
-## The plates go to tools/blender/out/offer_traits2_20261114/.
+## The plates go to tools/blender/out/offer_traits3_20261114/.
 
-const OUT_REL := "res://../tools/blender/out/offer_traits2_20261114"
+const OUT_REL := "res://../tools/blender/out/offer_traits3_20261114"
 ## Per card: booked, fee, traits and the loyal mark (each fee one the tier-0
 ## draw gives with those traits: 35 -> 39 loyal, 25 stays, 25 -> 23 plain -> 25).
 const TERMS := [
-	[16, 39, {"up": "signing_bonus", "down": "heavy_bags", "level": 2}, true],
-	[14, 25, {"up": "loyal_airline", "down": "miss_fine", "level": 1}, false],
+	[16, 39, {"up": "signing_bonus", "down": "exit_fee", "level": 2}, true],
+	[14, 25, {"up": "loyal_airline", "down": "odd_hours", "level": 1}, false],
 	[15, 25, {}, true],
 ]
+## The Odd hours card departs at 22:00, outside the plain window.
+const ODD_MINUTE := 22 * 60
 ## The game day the plate is taken on: Gotta Air became loyal on day 5.
 const PLATE_DAY := 6
 const TRAIT_LINES := [
-	"Signing bonus $300   Very heavy bags   Loyal: +10%",
-	"Loyal airline   Miss fine $10",
+	"Signing bonus $300   Exit fee $120   Loyal: +10%",
+	"Loyal airline   Odd hours",
 	"Plain terms   Loyal: +10%",
 ]
 
@@ -87,7 +90,7 @@ func _run() -> void:
 		)
 		quit(1)
 		return
-	var offers := TestOfferBoard.day_records(day, [needs_gate, fits[0], fits[1]])
+	var offers := TestOfferBoard.day_records(day, [needs_gate, ODD_MINUTE, fits[1]])
 	for i in offers.size():
 		offers[i]["booked_passengers"] = TERMS[i][0]
 		offers[i]["fee_per_passenger"] = TERMS[i][1]
@@ -119,8 +122,11 @@ func _run() -> void:
 				return
 			var line := _trait_line(panel.trait_row(id))
 			print("PROBE %s trait line '%s' expected '%s'" % [id, line, TRAIT_LINES[shown]])
-			if line != TRAIT_LINES[shown]:
-				print("PROBE_INVALID card %s shows the wrong trait line" % id)
+			# The second card is the Odd hours one, which must show its 22:00 departure.
+			var odd_ok := shown != 1 or panel.card_text(id).contains("22:00")
+			print("PROBE %s shows 22:00 where expected: %s" % [id, odd_ok])
+			if line != TRAIT_LINES[shown] or not odd_ok:
+				print("PROBE_INVALID card %s shows the wrong trait line or departure" % id)
 				quit(1)
 				return
 			shown += 1
@@ -138,7 +144,7 @@ func _run() -> void:
 			quit(1)
 			return
 		var img := root.get_texture().get_image()
-		var path := out_dir.path_join("offer_traits2_s%d.png" % int(ui_scale * 100.0))
+		var path := out_dir.path_join("offer_traits3_s%d.png" % int(ui_scale * 100.0))
 		var saved := img.save_png(path)
 		print("PLATE saved ", path, " size=", img.get_size(), " err=", saved)
 		if saved != OK:

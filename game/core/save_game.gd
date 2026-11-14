@@ -95,7 +95,10 @@ signal loaded(ok: bool)
 ## bonus was paid), the offers part is OfferBoard save version 5 (the Loyal
 ## airline count) and the day ledger holds the fines and the signing bonus;
 ## version 20 saves are refused (no migration before a release).
-const SAVE_VERSION := 21
+## 22: the offers part is OfferBoard save version 6 (Odd hours offers depart
+## 06:00 to 22:00, and offers may carry Exit fee); version 21 saves are refused
+## (no migration before a release).
+const SAVE_VERSION := 22
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"

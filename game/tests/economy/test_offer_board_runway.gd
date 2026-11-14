@@ -14,9 +14,10 @@ const DAYS := 30
 ## save version 4), which change the saved fees, bookings and keys but not the
 ## RNG state (test_offer_board_traits checks the base draw against a replay),
 ## and again for save version 5 (the loyal mark, the loyalty count and the
-## slice 2 traits in the trait draw).
+## slice 2 traits in the trait draw), and for save version 6 (Odd hours offers
+## draw their departure from 65 slots, and trait seed version 3).
 const STATE_AFTER := 7055581944236607464
-const BEFORE_HASHES := [3726096300, 18523968, 2977914032]
+const BEFORE_HASHES := [3532329565, 97482766, 597066645]
 
 
 func _rng() -> RandomNumberGenerator:

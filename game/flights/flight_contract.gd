@@ -52,6 +52,15 @@ const MAX_BOOKED := 999
 const MAX_FEE := 1_000_000
 ## Contract days stay small enough that every derived tick fits a JSON number.
 const MAX_DAY := 1_000_000_000
+## The departure window (decision odd-hours-technical-design-contract-
+## validation-allows-06-00): 07:00 to 21:00, widened at each end by
+## OfferTraits.window_widening for an Odd hours contract (06:00 to 22:00).
+## window_problem checks it from the frozen traits; FlightSim asks it on accept
+## and in every fit trial, and FlightSnapshot on load.
+const FIRST_DEPARTURE_MINUTE := 7 * 60
+const LAST_DEPARTURE_MINUTE := 21 * 60
+const QUIET_NIGHT_TEXT := "it departs in the quiet night, outside 07:00 to 21:00"
+const ODD_HOURS_NIGHT_TEXT := "it departs in the quiet night, outside 06:00 to 22:00"
 
 ## Letters and digits only, so "<id>-d<day>" occurrence ids parse one way.
 static var _id_pattern := RegEx.create_from_string("^[A-Za-z0-9]+$")
@@ -99,6 +108,24 @@ static func make(data: Dictionary) -> Dictionary:
 	contract[TRAITS_KEY] = OfferTraits.frozen(data.get(TRAITS_KEY, {}))
 	contract.make_read_only()
 	return contract
+
+
+## The first and last departure minute a contract of `traits` may have.
+static func window(traits: Dictionary) -> Array[int]:
+	var widening := OfferTraits.window_widening(traits)
+	var span: Array[int] = [FIRST_DEPARTURE_MINUTE - widening, LAST_DEPARTURE_MINUTE + widening]
+	return span
+
+
+## "" when checked `data` departs inside the window of its traits ({} when it
+## has none); otherwise the player's words for the quiet night it departs in.
+static func window_problem(data: Dictionary) -> String:
+	var traits: Dictionary = data.get(TRAITS_KEY, {})
+	var span := window(traits)
+	var minute := int(data["departure_minute"])
+	if minute >= span[0] and minute <= span[1]:
+		return ""
+	return ODD_HOURS_NIGHT_TEXT if OfferTraits.window_widening(traits) > 0 else QUIET_NIGHT_TEXT
 
 
 static func _fits_class(data: Dictionary) -> bool:
