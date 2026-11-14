@@ -1118,6 +1118,11 @@ func _pose(node: Node3D, p: Passenger, built: Dictionary) -> float:
 		# Waiting in a cafe queue or ordering: face the counter.
 		var ahead := sim.cafes.counter_facing(p)
 		face = atan2(ahead.x, ahead.y)
+	elif not moving and EntranceLooks.face(sim, p) != Vector2.ZERO:
+		# Standing in the line outside the entrance: face the door, the way the
+		# line moves (board 814a5cfd).
+		var door := EntranceLooks.face(sim, p)
+		face = atan2(door.x, door.y)
 	ActivityPoses.dress(
 		node, ActivityPoses.recline(sim, p), ActivityPoses.foam(sim, p), ActivityPoses.bare(sim, p)
 	)
