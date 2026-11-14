@@ -112,13 +112,23 @@ func test_each_bars_label_room_ends_before_its_own_tick() -> void:
 	_assert_label_ends_before_tick(z)
 
 
-func test_the_label_takes_the_buttons_font_and_colour_and_the_button_text_is_empty() -> void:
+func test_the_label_gets_its_look_from_the_theme_and_the_button_keeps_its_name() -> void:
 	await _boot(Vector2i(1536, 864))
 	var x := _planner.bar_button("X", 0)
 	var label := FlightPlanner.bar_label(x)
 	assert_str(x.text).is_empty()
 	assert_str(label.text).is_equal(x.get_meta(FlightPlanner.FULL_TEXT))
+	# No per-node look: the theme's Label type carries it.
+	assert_bool(label.has_theme_color_override("font_color")).is_false()
+	assert_bool(label.has_theme_font_size_override("font_size")).is_false()
+	assert_bool(label.has_theme_font_override("font")).is_false()
+	# It resolves to what the button's own text had, enabled and disabled.
 	assert_object(label.get_theme_color("font_color")).is_equal(x.get_theme_color("font_color"))
+	assert_object(label.get_theme_color("font_color")).is_equal(
+		x.get_theme_color("font_disabled_color")
+	)
 	assert_int(label.get_theme_font_size("font_size")).is_equal(x.get_theme_font_size("font_size"))
 	assert_object(label.get_theme_font("font")).is_same(x.get_theme_font("font"))
 	assert_int(label.mouse_filter).is_equal(Control.MOUSE_FILTER_IGNORE)
+	# Clearing the button's text leaves it named for assistive tools.
+	assert_str(x.accessibility_name).is_equal(x.get_meta(FlightPlanner.FULL_TEXT))

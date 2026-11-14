@@ -490,6 +490,7 @@ func _add_departure_tick(button: Button, bar: Dictionary) -> void:
 	var label := Label.new()
 	label.name = BAR_LABEL
 	label.text = button.text
+	button.accessibility_name = button.text
 	button.text = ""
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -519,20 +520,17 @@ static func bar_text(bar: Button) -> String:
 ## anchor sits at the tick and LABEL_GAP stops it short), so the text never runs
 ## through the tick. The label is a child of the bar, not the button's own text,
 ## so no per-bar margin is written into the HudGate theme StyleBoxes that every
-## button of that gate colour shares. It takes the button's font, size and colour
-## from the button's theme. The text is the full "HH:MM  Destination" while that
-## fits before the tick; when it does not, the time goes (the tick already shows
+## button of that gate colour shares. The label takes its look from the theme, with
+## no per-node override: the Label type resolves to the same font, size and navy as a
+## gate button, enabled or disabled. The text is the full "HH:MM  Destination" while
+## that fits before the tick; when it does not, the time goes (the tick already shows
 ## it) and the destination stays, trimmed with an ellipsis only if even that does
 ## not fit.
 static func _keep_label_clear(button: Button, label: Label) -> void:
 	var left := button.get_theme_stylebox("normal").get_content_margin(SIDE_LEFT)
 	label.offset_left = left
-	var font := button.get_theme_font("font")
-	var font_size := button.get_theme_font_size("font_size")
-	label.add_theme_font_override("font", font)
-	label.add_theme_font_size_override("font_size", font_size)
-	var colour := "font_disabled_color" if button.disabled else "font_color"
-	label.add_theme_color_override("font_color", button.get_theme_color(colour))
+	var font := label.get_theme_font("font")
+	var font_size := label.get_theme_font_size("font_size")
 	var room := button.size.x * label.anchor_right - LABEL_GAP - left
 	var full: String = button.get_meta(FULL_TEXT)
 	var text := (
