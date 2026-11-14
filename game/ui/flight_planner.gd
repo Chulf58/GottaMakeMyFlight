@@ -431,7 +431,8 @@ func _make_bar(bar: Dictionary) -> Button:
 	button.clip_text = true
 	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	button.focus_mode = Control.FOCUS_NONE
-	button.theme_type_variation = &"HudButtonCompact"
+	var selected: bool = bar["contract"] == _selected and bar["day"] == _selected_day
+	button.theme_type_variation = GateColours.variation_of(bar["gate"], selected)
 	button.disabled = not bar["active"]
 	button.anchor_left = bar["from"]
 	button.anchor_right = bar["to"]
@@ -440,11 +441,8 @@ func _make_bar(bar: Dictionary) -> Button:
 	button.offset_top = 4.0
 	button.offset_bottom = -4.0
 	button.tooltip_text = _bar_tooltip(bar)
-	GateColours.tint_button(button, bar["gate"])
 	if bar["active"]:
 		button.pressed.connect(_on_bar_pressed.bind(bar["contract"], bar["day"]))
-	if bar["contract"] == _selected and bar["day"] == _selected_day:
-		_outline(button)
 	_add_departure_tick(button, bar)
 	return button
 
@@ -523,13 +521,6 @@ func _day_start() -> int:
 	return GameCalendar.day_start(_shown_day)
 
 
-static func _outline(button: Button) -> void:
-	var box := button.get_theme_stylebox("normal").duplicate() as StyleBoxFlat
-	box.set_border_width_all(3)
-	box.border_color = GateColours.TEXT
-	button.add_theme_stylebox_override("normal", box)
-
-
 func _on_bar_pressed(contract_id: String, day: int) -> void:
 	var was_open := _selected == contract_id and _selected_day == day
 	_deselect()
@@ -600,7 +591,7 @@ func _add_move_choices(bar: Dictionary) -> void:
 		choice.focus_mode = Control.FOCUS_NONE
 		choice.pressed.connect(_on_move_pressed.bind(bar["contract"], gate_id))
 		_actions.add_child(choice)
-		GateColours.tint_button(choice, gate_id)
+		choice.theme_type_variation = GateColours.variation_of(gate_id)
 
 
 func _add_end_confirm() -> void:

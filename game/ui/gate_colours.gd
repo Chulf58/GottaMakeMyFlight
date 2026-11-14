@@ -7,6 +7,12 @@ extends RefCounted
 ## from each other. Gate A takes the first, B the second and so on; a gate
 ## past the eighth wraps round, and an id that is not a capital letter takes
 ## the slot its first character falls on.
+##
+## A Gate button takes its colour from the theme, not from code: ui/hud_theme.tres
+## has a variation per slot (HudGateA to HudGateH, each based on HudButtonCompact),
+## so the button carries no override (decision hud-theme-file-game-ui-hud-theme-
+## tres-nunito-font-set-on-eac). The theme holds the colours by hand; shade() is
+## the rule they follow and test_gate_colours checks the two agree.
 
 const PALETTE: Array[Color] = [
 	Color(0.93, 0.52, 0.45),
@@ -34,41 +40,22 @@ static func slot_of(gate_id: String) -> int:
 	return posmod(gate_id.to_upper().unicode_at(0) - "A".unicode_at(0), PALETTE.size())
 
 
-## Gives a themed button the colour of `gate_id` without any theme override
-## (decision hud-theme-file-game-ui-hud-theme-tres-nunito-font-set-on-eac): the
-## button keeps its theme variation and the theme's styleboxes, and its
-## self_modulate scales the theme's normal fill to the gate colour. Hover,
-## pressed and disabled keep the theme's own states, shifted by the same tint.
-static func tint_themed(button: Button, gate_id: String) -> void:
-	var base := of(gate_id)
-	var box := button.get_theme_stylebox("normal")
-	var fill := (box as StyleBoxFlat).bg_color if box is StyleBoxFlat else Color.WHITE
-	button.self_modulate = Color(
-		base.r / maxf(fill.r, 0.01), base.g / maxf(fill.g, 0.01), base.b / maxf(fill.b, 0.01)
-	)
+## The theme type variation of `gate_id`'s buttons: HudGateA for slot 0 and so on.
+## A selected planner bar takes HudGateSelA, the same button with a thicker outline.
+static func variation_of(gate_id: String, selected := false) -> StringName:
+	var prefix := "HudGateSel" if selected else "HudGate"
+	return StringName(prefix + char("A".unicode_at(0) + slot_of(gate_id)))
 
 
-## Gives `button` the colour of `gate_id` in every state, keeping the theme's
-## padding and outline. A disabled button is the same colour, softened.
-static func tint_button(button: Button, gate_id: String) -> void:
+## The fill of `gate_id`'s button in `state` (normal, hover, pressed or disabled):
+## hover lighter, pressed darker, disabled the colour softened toward cream.
+static func shade(gate_id: String, state: StringName) -> Color:
 	var base := of(gate_id)
-	var shades := {
-		"normal": base,
-		"hover": base.lightened(0.18),
-		"pressed": base.darkened(0.15),
-		"focus": base,
-		"disabled": base.lerp(Color(0.87, 0.85, 0.81), 0.45),
-	}
-	for state: String in shades:
-		var box := button.get_theme_stylebox(state)
-		var flat := (box.duplicate() as StyleBoxFlat) if box is StyleBoxFlat else StyleBoxFlat.new()
-		flat.bg_color = shades[state]
-		button.add_theme_stylebox_override(state, flat)
-	for colour_name in [
-		"font_color",
-		"font_hover_color",
-		"font_pressed_color",
-		"font_focus_color",
-		"font_disabled_color",
-	]:
-		button.add_theme_color_override(colour_name, TEXT)
+	match state:
+		&"hover":
+			return base.lightened(0.18)
+		&"pressed":
+			return base.darkened(0.08)
+		&"disabled":
+			return base.lerp(Color(0.87, 0.85, 0.81), 0.45)
+	return base

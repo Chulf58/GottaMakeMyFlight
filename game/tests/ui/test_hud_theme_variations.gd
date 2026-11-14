@@ -4,7 +4,8 @@ extends GdUnitTestSuite
 ## theme variation from ui/hud_theme.tres, so the theme is the one place the
 ## look lives (board 30d6a3e0, decision
 ## hud-grid-and-rails-one-spacing-grid-centred-top-row-right-ra part 1): the
-## Build mode sign (HudBuildSign, HudBuildSignText), the Departures gate and
+## Build mode sign (HudBuildSign, HudBuildSignText), the Departures gate buttons
+## (a HudGateA..H variation per gate colour, each based on HudButtonCompact) and
 ## picker buttons (HudButtonCompact) and the build status card that holds the
 ## cost (HudTopCard, checked in test_build_menu_cost_card.gd). The flight result's Dismiss is a
 ## normal action, so it is teal (decision
@@ -59,10 +60,17 @@ func test_departures_gate_buttons_use_the_compact_variation() -> void:
 	board.refresh()
 	var gate := board.gate_button("X", 0)
 	assert_object(gate).is_not_null()
-	assert_str(str(gate.theme_type_variation)).is_equal("HudButtonCompact")
+	# The Gate button wears its gate's colour through a HudGate* variation whose base
+	# type is HudButtonCompact (board bed80bdd): the colour lives in the theme, the
+	# compact sizing is inherited, and the button still carries no override.
+	var variation := gate.theme_type_variation
+	assert_str(str(variation)).is_equal(str(GateColours.variation_of("A")))
+	assert_str(str(THEME.get_type_variation_base(variation))).is_equal("HudButtonCompact")
 	_assert_no_style_overrides(gate, STATES)
+	assert_bool(gate.has_theme_color_override("font_color")).is_false()
+	assert_bool(gate.has_theme_color_override("font_disabled_color")).is_false()
 	var normal := gate.get_theme_stylebox("normal")
-	assert_object(normal).is_same(THEME.get_stylebox("normal", "HudButtonCompact"))
+	assert_object(normal).is_same(THEME.get_stylebox("normal", variation))
 	assert_float(normal.content_margin_top).is_equal(1.0)
 	assert_float(normal.content_margin_bottom).is_equal(1.0)
 	gate.pressed.emit()

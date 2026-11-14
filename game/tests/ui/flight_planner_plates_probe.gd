@@ -13,8 +13,8 @@ extends SceneTree
 ##   timeout 300 Godot_v4.7.2-stable_win64_console.exe --display-driver windows \
 ##     --rendering-driver vulkan --audio-driver Dummy \
 ##     --path game -s res://tests/ui/flight_planner_plates_probe.gd
-## With `-- --gate-theme` it plates only the Departures list at UI scale 1.25, to
-## tools/blender/out/gate_theme_20261114/.
+## With `-- --gate-theme` it plates the Departures list, the planner and a selected bar
+## at UI scale 1.25, to tools/blender/out/gate_theme_20261114/.
 ##
 ## The plates go to tools/blender/out/flight_planner_20261114/.
 
@@ -67,10 +67,7 @@ func _run() -> void:
 		quit(1)
 		return
 	if gate_theme_only:
-		root.content_scale_factor = 1.25
-		await _frames(8)
-		if await _plate_toggle_only(planner, "departures_gate_colours_s125"):
-			quit(0)
+		await _run_gate_theme(planner)
 		return
 	for ui_scale: float in SCALES:
 		root.content_scale_factor = ui_scale
@@ -93,6 +90,23 @@ func _run() -> void:
 	if not await _plate_toggle_only(planner, "departures_gate_colours_s100"):
 		return
 	quit(0)
+
+
+## The gate colour plates at UI scale 1.25: the Departures list, the open planner
+## and the planner with a bar selected (its Move to choices show).
+func _run_gate_theme(planner: FlightPlanner) -> void:
+	root.content_scale_factor = 1.25
+	await _frames(8)
+	if not await _plate_toggle_only(planner, "departures_gate_colours_s125"):
+		return
+	planner.open()
+	await _frames(8)
+	if not await _plate(planner, "planner_s125"):
+		return
+	planner.bar_button("P2", 0).pressed.emit()
+	await _frames(8)
+	if await _plate(planner, "planner_selected_s125"):
+		quit(0)
 
 
 ## Proves the sheet, a bar centre and the toggle are in view, then saves.
@@ -127,7 +141,7 @@ func _plate_toggle_only(planner: FlightPlanner, plate_name: String) -> bool:
 		return false
 	for button: Button in gate_buttons:
 		var box := button.get_theme_stylebox("normal") as StyleBoxFlat
-		var fill := box.bg_color * button.self_modulate
+		var fill := box.bg_color
 		print("PROBE   %s '%s' fill=%s" % [button.name, button.text, fill])
 	return _save(plate_name)
 

@@ -445,8 +445,7 @@ func _add_row(entry: Dictionary) -> void:
 		end_btn.pressed.connect(_on_end_pressed.bind(key, entry["contract"]))
 		row.add_child(end_btn)
 	_rows.add_child(row)
-	_compact(button)
-	GateColours.tint_themed(button, entry["gate"])
+	button.theme_type_variation = GateColours.variation_of(entry["gate"])
 	if end_btn != null:
 		_compact(end_btn)
 	var parts := PackedStringArray()

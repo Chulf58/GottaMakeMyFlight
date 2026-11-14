@@ -45,6 +45,25 @@ func _press(button: Button) -> void:
 	button.pressed.emit()
 
 
+func test_bars_and_move_choices_take_gate_variations_with_no_override() -> void:
+	_three_contracts()
+	_planner.open()
+	var y := _planner.bar_button("Y", 0)
+	assert_str(str(y.theme_type_variation)).is_equal("HudGateB")
+	_press(y)
+	var selected := _planner.bar_button("Y", 0)
+	assert_str(str(selected.theme_type_variation)).is_equal("HudGateSelB")
+	var choice := _planner.find_child("Move_C", true, false) as Button
+	assert_str(str(choice.theme_type_variation)).is_equal("HudGateC")
+	for button in [_planner.bar_button("X", 0), selected, choice]:
+		for state in [&"normal", &"hover", &"pressed", &"disabled"]:
+			assert_bool(button.has_theme_stylebox_override(state)).is_false()
+		assert_bool(button.has_theme_color_override("font_color")).is_false()
+	var outline := selected.get_theme_stylebox("normal") as StyleBoxFlat
+	assert_int(outline.border_width_left).is_equal(3)
+	assert_object(outline.bg_color).is_equal(GateColours.of("B"))
+
+
 func test_the_sheet_is_hidden_until_opened_and_the_toggle_sits_beside_departures() -> void:
 	var toggle := _planner.toggle_button()
 	print("toggle: ", toggle.position, " ", toggle.size, " ", toggle.text)

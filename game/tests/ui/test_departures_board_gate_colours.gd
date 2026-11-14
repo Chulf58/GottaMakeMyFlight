@@ -41,9 +41,9 @@ func _assert_colour(actual: Color, expected: Color) -> void:
 	)
 
 
-## The colour the button draws its normal fill in: the theme fill times the tint.
+## The normal fill the theme gives the button.
 func _fill(button: Button) -> Color:
-	return (button.get_theme_stylebox("normal") as StyleBoxFlat).bg_color * button.self_modulate
+	return (button.get_theme_stylebox("normal") as StyleBoxFlat).bg_color
 
 
 func test_each_gate_button_takes_its_gates_colour() -> void:
