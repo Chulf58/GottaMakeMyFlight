@@ -98,6 +98,30 @@ func test_a_full_check_in_queue_is_a_cause_pointing_at_its_desk() -> void:
 	assert_array(AlertSources.queue_full(_world.sim)).is_empty()
 
 
+func test_the_check_in_card_sums_what_each_full_desks_sign_counts() -> void:
+	var grid := PassengerTestWorld.floored(Vector2i(10, 5))
+	var first := PassengerTestWorld.place(grid, &"checkin_desk", Vector2i(2, 1), 0)
+	var second := PassengerTestWorld.place(grid, &"checkin_desk", Vector2i(6, 1), 0)
+	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(0, 4), 3)
+	_world = PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(4000, 5000))
+	_world.step()
+	for i in 12:
+		_world.sim.spawn_now(PassengerTestWorld.FLIGHT)
+		_world.run_to(_world.clock.tick + 12)
+	# The second desk's lane fills a little after the first's.
+	_world.run_to(_world.clock.tick + 25 + AlertSources.QUEUE_HOLD_TICKS)
+	var full := MissSignals.full_stations(_world.sim)
+	assert_array(full.keys()).contains_exactly_in_any_order([first, second])
+	var total := 0
+	for desk: int in [first, second]:
+		var waiting := MissMarkers.waiting_at(_world.sim, desk, int(full[desk]))
+		assert_int(waiting).is_greater(0)
+		total += waiting
+	var causes := AlertSources.queue_full(_world.sim)
+	assert_array(_keys(causes)).is_equal([AlertSources.QUEUE_CHECKIN])
+	assert_str(causes[0]["detail"]).is_equal("2 desks full · %d waiting" % total)
+
+
 func test_passengers_with_no_route_are_one_cause_until_the_wall_opens() -> void:
 	# TestPassengerJourney's walled desk: a wall cuts the desk off the entrance.
 	var grid := PassengerTestWorld.floored(Vector2i(8, 6))
