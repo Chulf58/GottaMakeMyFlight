@@ -360,8 +360,13 @@ func _check_bubbles(
 			_invalid("%s: bubbles other than the hovered subject's show" % name)
 		return
 	if mode == MoodTint.Mode.BOREDOM:
-		if not speech_ids.is_empty() or wish_in_frame == 0:
-			_invalid("%s: speech shows, or no wish is in frame" % name)
+		# Close wishes of one shop kind merge into count badges (board c8b16621).
+		var merged := _views.need_badges().filter(
+			func(badge: Dictionary) -> bool: return badge.has("wish")
+		)
+		print("PROBE %s wish_badges=%d merged=%d" % [name, merged.size(), _merged_count(merged)])
+		if not speech_ids.is_empty() or wish_in_frame + merged.size() == 0:
+			_invalid("%s: speech shows, or no wish or wish badge is in frame" % name)
 		return
 	if mode == MoodTint.Mode.LATE:
 		if (
@@ -380,6 +385,14 @@ func _check_bubbles(
 		_invalid(
 			"%s: %d speech and %d wish bubbles show" % [name, speech_ids.size(), wish_ids.size()]
 		)
+
+
+## The wishes the count badges in `badges` stand for, summed.
+func _merged_count(badges: Array) -> int:
+	var total := 0
+	for badge: Dictionary in badges:
+		total += badge["count"]
+	return total
 
 
 func _build_colliders() -> void:
