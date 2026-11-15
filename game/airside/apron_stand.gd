@@ -299,8 +299,9 @@ static func same_stand(a: Dictionary, b: Dictionary) -> bool:
 
 ## The ground the flight at the stand still needs, as world xz rectangles:
 ## everything StandPlacement.swept_rects() covers until it pushes back, then
-## only what lies north of its tail on the way to the taxi lane. Empty while
-## no flight is at the stand.
+## only what lies north of its tail on the way to the taxi lane. With no taxi
+## route to follow (Airside.routes_gate() false) it keeps everything. Empty
+## while no flight is at the stand.
 func guard_rects() -> Array[Rect2]:
 	if gates == null:
 		return _rects_of(busy_flight(), live, "")
@@ -326,6 +327,8 @@ func _rects_of(id: String, stand: Dictionary, gate: String) -> Array[Rect2]:
 		return [] as Array[Rect2]
 	if flights.state_of(id) < FlightSim.State.TAXI_OUT:
 		return StandPlacement.swept_rects(stand)
+	if airside != null and not airside.routes_gate(gate):
+		return StandPlacement.swept_rects(stand)
 	var path := (
 		airside.phase_path(FlightSim.State.TAXI_OUT, gate)
 		if airside != null
@@ -333,6 +336,8 @@ func _rects_of(id: String, stand: Dictionary, gate: String) -> Array[Rect2]:
 			[StandPlacement.pushback_end(stand), StandPlacement.lane_join(stand)]
 		)
 	)
+	if path.is_empty():
+		return StandPlacement.swept_rects(stand)
 	var t := smoothstep(0.0, 1.0, flights.phase_progress(id, flights.tick))
 	var at := FlightPose.point_at(path, FlightPose.path_length(path) * t)
 	return StandPlacement.swept_rects(stand, at.z + StandPlacement.TAIL_M)

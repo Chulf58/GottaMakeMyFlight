@@ -25,6 +25,7 @@ extends SceneTree
 ## hang.
 
 const MAIN := "res://main/main.tscn"
+const IntroClose := preload("res://spike/intro_close.gd")
 const OUT_REL := "res://../tools/blender/out/runway-r7-pause"
 const TICKS_PER_FRAME := 40
 const OPEN_LIMIT := 6000
@@ -73,10 +74,7 @@ var _fleet: PlaneFleet
 func _initialize() -> void:
 	_beat("boot")
 	_guard.start(_watch)
-	var world_seed := randi()
-	for arg in OS.get_cmdline_user_args():
-		if arg.begins_with("--seed="):
-			world_seed = int(arg.get_slice("=", 1))
+	var world_seed := IntroClose.seed_or_random()
 	print("PROBE world_seed=%d" % world_seed)
 	_out_dir = ProjectSettings.globalize_path(OUT_REL).simplify_path()
 	DirAccess.make_dir_recursive_absolute(_out_dir)
@@ -102,14 +100,9 @@ func _run() -> void:
 	_apron = _main.get_node("ApronStand")
 	_gates = _main.get_node("GateDesks")
 	_fleet = _main.get_node("PlaneFleet")
-	_hud.dismiss_intro()
-	# Closing the intro asks the new-game incidents question, whose clock hold
-	# does not give way to the player; decline it, so no incident joins the run.
-	var menu: GameMenu = _main.get_node("GameMenu")
-	if menu.question() != null:
-		menu.question().decline_button().pressed.emit()
-	if _clock.holds.is_holding():
-		_fail("a dialog still holds the clock after the intro")
+	var intro_problem := IntroClose.close(_main)
+	if intro_problem != "":
+		_fail(intro_problem)
 		return
 	_clock.set_paused(true)
 	_hud.press_starter_terminal()

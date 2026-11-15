@@ -30,6 +30,7 @@ extends SceneTree
 ## thread ends a hang.
 
 const MAIN := "res://main/main.tscn"
+const IntroClose := preload("res://spike/intro_close.gd")
 const OUT_REL := "res://../tools/blender/out/gate_walk"
 const HANG_LIMIT_MS := 60000
 const TOTAL_LIMIT_MS := 300000
@@ -67,7 +68,7 @@ var _gates: GateDesks
 func _initialize() -> void:
 	_beat("boot")
 	_guard.start(_watch)
-	var world_seed := randi()
+	var world_seed := IntroClose.seed_or_random()
 	print("PROBE world_seed=%d" % world_seed)
 	_out_dir = ProjectSettings.globalize_path(OUT_REL).simplify_path()
 	DirAccess.make_dir_recursive_absolute(_out_dir)
@@ -90,7 +91,10 @@ func _run() -> void:
 	_cam = _rig.get_node("Camera3D")
 	_apron = _main.get_node("ApronStand")
 	_gates = _main.get_node("GateDesks")
-	_hud.dismiss_intro()
+	var intro_problem := IntroClose.close(_main)
+	if intro_problem != "":
+		_fail(intro_problem)
+		return
 	_clock.set_paused(true)
 	_hud.press_starter_terminal()
 	if not _build_east():
