@@ -14,6 +14,8 @@ var _director: MajorTestDirector
 var _unlocks: BuildUnlocks
 var _guide: UnlockGuide
 var _panel: IncidentPanel
+var _save: SaveGame
+var _changes: Array[bool] = []
 
 
 func before_test() -> void:
@@ -29,8 +31,13 @@ func before_test() -> void:
 	_unlocks.passengers = auto_free(PassengerSim.new())
 	_unlocks.manual = true
 	_port.add_child(_unlocks)
+	_save = SaveGame.new()
+	_port.add_child(_save)
+	_changes.clear()
 	# The guide first, as the HUD's is in the main scene, then the panel.
 	_guide = UnlockGuide.new()
+	_guide.save_game = _save
+	_guide.dialog_changed.connect(func(open: bool) -> void: _changes.append(open))
 	_guide.mode = UnlockGuide.Mode.PROFILE
 	_guide.unlocks = _unlocks
 	_guide.clock = _clock
@@ -105,3 +112,15 @@ func test_the_main_scene_puts_the_hud_before_the_incident_panel() -> void:
 	print("main.tscn node order: PassengerHud %d, IncidentPanel %d" % [hud, panel])
 	assert_int(hud).is_greater(-1)
 	assert_int(panel).is_greater(hud)
+
+
+## One open and one close for the guide, however many dialogs it showed in a
+## row: the HUD counts them, and an open without a close keeps the camera off
+## (test_unlock_guide_camera_gate.gd).
+func test_an_in_place_swap_sends_one_open_and_one_close() -> void:
+	_guide.open_dialog([2])
+	_director.present(_director.add_scheduled(), false)
+	_guide.dismiss()
+	assert_array(_changes).is_equal([true])
+	_guide.dismiss()
+	assert_array(_changes).is_equal([true, false])

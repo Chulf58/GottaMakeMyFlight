@@ -207,7 +207,10 @@ func _words(tiers: Array, firsts: Array) -> Dictionary:
 
 
 func _show_dialog(tiers: Array, firsts: Array = []) -> void:
-	if _dialog != null:
+	# A dialog that replaces an open one is the same open: dialog_changed keeps
+	# one true and one false, which PassengerHud counts to hold the camera.
+	var replacing := _dialog != null
+	if replacing:
 		_free_dialog()
 	_layer = CanvasLayer.new()
 	_layer.name = "UnlockLayer"
@@ -223,7 +226,8 @@ func _show_dialog(tiers: Array, firsts: Array = []) -> void:
 	_dialog.tree_exiting.connect(close)
 	_layer.tree_exiting.connect(close)
 	phone_ring.emit(tiers.back() if not tiers.is_empty() else NO_TIER)
-	dialog_changed.emit(true)
+	if not replacing:
+		dialog_changed.emit(true)
 
 
 ## The player closed the dialog on `layer`: the firsts that came meanwhile show
