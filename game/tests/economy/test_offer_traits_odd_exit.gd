@@ -4,7 +4,8 @@ extends GdUnitTestSuite
 ## widens-the-dep): Odd hours and Exit fee join the downsides. The catalog pairs
 ## 6 upsides with 5 downsides less the 2 forbidden pairs, 28 in all; neither new
 ## downside cancels an upside. Over many seeds only an Odd hours offer departs
-## outside 07:00 to 21:00, and Odd hours offers reach 06:00 and 22:00. The fit
+## outside 07:00 to 21:00, and Odd hours offers depart only at 06:00 or 22:00,
+## both of which occur. The fit
 ## cache keeps plain and Odd hours windows apart whichever comes first.
 
 const LIVE := {OfferTraits.NEEDS_BAGS: true, OfferTraits.NEEDS_SHOPS: true}
@@ -55,22 +56,22 @@ func test_the_card_line_names_the_fee_and_the_hours() -> void:
 	assert_str(OfferTraits.card_tips(ODD)[1]).contains("06:00").contains("22:00")
 
 
-func test_slots_are_57_plain_and_65_with_odd_hours() -> void:
+func test_slots_are_57_plain_and_06_00_or_22_00_with_odd_hours() -> void:
 	var plain := OfferBoard.slots_of({})
 	var odd := OfferBoard.slots_of(ODD)
 	assert_int(plain.size()).is_equal(57)
-	assert_int(odd.size()).is_equal(65)
+	assert_int(odd.size()).is_equal(2)
 	assert_array([plain[0], plain[-1], odd[0], odd[-1]]).is_equal([420, 1260, 360, 1320])
 	# The last drawn slot of either window reaches the last candidate.
-	assert_int(OfferBoard._pick([64, 65], 65)).is_equal(64)
+	assert_int(OfferBoard._pick([1, 2], 2)).is_equal(1)
 	assert_int(OfferBoard._pick([56, 57], 57)).is_equal(56)
-	assert_int(OfferBoard._pick([64, 65], 2)).is_equal(1)
-	assert_int(OfferBoard._pick([0, 65], 2)).is_equal(0)
+	assert_int(OfferBoard._pick([1, 2], 1)).is_equal(0)
+	assert_int(OfferBoard._pick([0, 2], 2)).is_equal(0)
 
 
 ## SEEDS runs of DAYS days at every tier: no offer without Odd hours leaves
-## outside 07:00 to 21:00, every Odd hours offer leaves inside 06:00 to 22:00,
-## and some leave at 06:00 and some at 22:00. The same seed draws the same days.
+## outside 07:00 to 21:00, every Odd hours offer leaves at 06:00 or 22:00, and
+## some leave at each. The same seed draws the same days.
 func test_many_seeds_keep_plain_offers_in_07_to_21_and_odd_hours_reach_06_and_22() -> void:
 	var counts := {"plain": 0, "odd": 0, "plain_outside": 0, "odd_outside": 0, 360: 0, 1320: 0}
 	for seed_value in range(1, SEEDS + 1):
@@ -115,7 +116,7 @@ func test_the_fit_cache_keeps_the_two_windows_apart_in_either_order() -> void:
 	assert_array(odd_first).contains([360, 1320])
 	assert_array(plain_first).not_contains([360, 1320])
 	assert_int(plain_first.size()).is_equal(57)
-	assert_int(odd_first.size()).is_equal(65)
+	assert_array(odd_first).is_equal([360, 1320])
 
 
 ## An Odd hours offer fitted to the flights is accepted at its fitted slot, and
@@ -141,6 +142,7 @@ func test_a_fitted_odd_hours_offer_is_accepted_and_loads() -> void:
 					% [seed_value, offer["id"], offer["departure_minute"]]
 				)
 			)
+			assert_array([360, 1320]).contains([offer["departure_minute"]])
 			assert_bool(board.accept(offer["id"], sim)).is_true()
 			var data: Dictionary = JSON.parse_string(JSON.stringify(sim.to_snapshot()))
 			var loaded := auto_free(FlightSim.new()) as FlightSim
@@ -167,7 +169,7 @@ func _count(offer: Dictionary, counts: Dictionary) -> void:
 	var minute: int = offer["departure_minute"]
 	if OfferTraits.window_widening(offer["traits"]) > 0:
 		counts["odd"] += 1
-		counts["odd_outside"] += 1 if minute < 360 or minute > 1320 else 0
+		counts["odd_outside"] += 0 if minute == 360 or minute == 1320 else 1
 		if counts.has(minute):
 			counts[minute] += 1
 	else:

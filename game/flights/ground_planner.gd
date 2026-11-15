@@ -70,10 +70,6 @@ const BAD_ROUTE := "bad_route"
 ## 06-00).
 const EARLIEST_DEPARTURE_MINUTE := 6 * 60
 const LATEST_DEPARTURE_MINUTE := 22 * 60
-## The plain contract window (FlightContract), not the guard: the baggage save
-## test places the starter at its last departure through these names.
-const FIRST_DEPARTURE_MINUTE := FlightContract.FIRST_DEPARTURE_MINUTE
-const LAST_DEPARTURE_MINUTE := FlightContract.LAST_DEPARTURE_MINUTE
 const SLICE_M := 8.0
 ## Booking kinds.
 const SLICE := "slice"

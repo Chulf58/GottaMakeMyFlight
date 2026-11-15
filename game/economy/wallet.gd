@@ -24,7 +24,8 @@ signal unpaid(amount: int, category: int, tick: int)
 ## PARKING is a car park's fee, credited when a car parks (LandsideSim).
 ## INCIDENT is a daily incident's bonus or cost (decision daily-incidents-
 ## technical-design-incidentdirector-shared-clo), either way. FINES are the
-## airline fines a Miss fine contract charges (Settlement, via charge()), and
+## airline fines Settlement charges via charge(): a Miss fine contract's fine
+## per missed passenger and an Exit fee contract's fee for ending it early, and
 ## SIGNING_BONUS the one-off bonus a Signing bonus contract pays (OfferTraits).
 enum Category {
 	FEES,

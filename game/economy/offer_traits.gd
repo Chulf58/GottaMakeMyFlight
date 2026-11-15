@@ -55,7 +55,8 @@ const NEEDS_SHOPS := "shops"
 ## counts the days). MISS_FINE: dollars per passenger who misses the flight.
 ## ODD_HOURS: the minutes the departure window widens at each end, the same at
 ## both levels (FlightContract.window: 06:00 to 22:00 instead of 07:00 to 21:00;
-## decision odd-hours-and-exit-fee-offer-traits-odd-hours-widens-the-dep).
+## decision odd-hours-and-exit-fee-offer-traits-odd-hours-widens-the-dep). An
+## Odd hours offer is drawn at one of the two ends, 06:00 or 22:00 (OfferBoard).
 ## EXIT_FEE: dollars the player pays to end the contract with the End button
 ## within its first EXIT_FEE_DAYS days (FlightSim.end_fee).
 const TABLE := {
@@ -159,8 +160,8 @@ const TABLE := {
 		"labels": ["Odd hours", "Odd hours"],
 		"tips":
 		[
-			"May depart as early as 06:00 or as late as 22:00 (usually 07:00 to 21:00).",
-			"May depart as early as 06:00 or as late as 22:00 (usually 07:00 to 21:00).",
+			"Departs at 06:00 or 22:00, outside the usual 07:00 to 21:00.",
+			"Departs at 06:00 or 22:00, outside the usual 07:00 to 21:00.",
 		],
 		"values": [60, 60],
 		"needs": "",

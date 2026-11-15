@@ -17,17 +17,21 @@ func before_test() -> void:
 
 
 ## The tier 0 draw replayed by hand from `rng`, in _draw's order: airline,
-## destination, slot, size, booked, fee. The slot is one draw over the quarter
-## hours of the window `traits` allow: 07:00 to 21:00, 06:00 to 22:00 with Odd hours.
+## destination, slot, size, booked, fee. The slot is one draw: over the quarter
+## hours from 07:00 to 21:00, or with Odd hours between 06:00 and 22:00.
 static func _replay(rng: RandomNumberGenerator, traits: Dictionary) -> Dictionary:
 	var airline: String = OfferBoard.AIRLINES[rng.randi_range(0, OfferBoard.AIRLINES.size() - 1)]
 	var destination: String = OfferBoard.DESTINATIONS[rng.randi_range(
 		0, OfferBoard.DESTINATIONS.size() - 1
 	)]
 	var span := FlightContract.window(traits)
-	@warning_ignore("integer_division")
-	var last_slot: int = (span[1] - span[0]) / OfferBoard.DEPARTURE_STEP
-	var minute: int = span[0] + rng.randi_range(0, last_slot) * OfferBoard.DEPARTURE_STEP
+	var minute: int
+	if OfferTraits.window_widening(traits) > 0:
+		minute = span[rng.randi_range(0, 1)]
+	else:
+		@warning_ignore("integer_division")
+		var last_slot: int = (span[1] - span[0]) / OfferBoard.DEPARTURE_STEP
+		minute = span[0] + rng.randi_range(0, last_slot) * OfferBoard.DEPARTURE_STEP
 	var sizes: Array = OfferBoard.STARTER_SIZES.keys()
 	var size: String = sizes[rng.randi_range(0, 1) % sizes.size()]
 	var booked_range: Array = OfferBoard.STARTER_SIZES[size]

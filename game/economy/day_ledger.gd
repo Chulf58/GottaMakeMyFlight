@@ -25,7 +25,8 @@ extends Node
 ## the operating result; parking fees are earnings in it. Incident bonuses and
 ## costs (INCIDENT) are in the cash change but not the operating result, like
 ## the rescue grant: they are one-off, not the airport's running business.
-## Airline fines (FINES, a Miss fine contract's charge per missed passenger) are
+## Airline fines (FINES: a Miss fine contract's charge per missed passenger, and
+## an Exit fee contract's fee when the player ends it within its term) are
 ## a running cost in the operating result; a signing bonus (SIGNING_BONUS) is
 ## one-off and in the cash change only. A fine the wallet could not pay in full
 ## (Wallet.unpaid) is added up as the day's unpaid fines, beside the totals: it

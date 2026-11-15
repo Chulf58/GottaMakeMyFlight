@@ -259,16 +259,21 @@ func test_the_sheet_extent_is_never_negative_in_a_degraded_layout() -> void:
 ## list is long, and the opening checklist is still full.
 func _schedule_two_contracts() -> void:
 	var flights := _main.get_node("FlightSim") as FlightSim
-	var board := (_main.get_node("OfferDesk") as OfferDesk).board
 	SaveTestKit.start_airport(_main)
 	var clock := _main.get_node("SimClock") as SimClock
 	while flights.opened_tick < 0 and clock.tick < OPEN_LIMIT_TICKS:
 		SaveTestKit.step(_main)
 	assert_bool(flights.opened_tick >= 0).is_true()
-	for offer in board.open_offers():
-		if flights.contract_ids().size() < 2:
-			if flights.accept_problem(OfferBoard.terms_of(offer)) == "":
-				board.accept(offer["id"], flights)
+	# Two contracts the test builds, at the first quarter hours they fit, so the
+	# case does not hang on which of the seed's offers happen to fit.
+	var window := FlightContract.window({})
+	for minute in range(window[0], window[1] + 1, OfferBoard.DEPARTURE_STEP):
+		var terms := TestFlightContracts.terms("HS%d" % minute, minute)
+		# A new game's runway takes small planes only (Runway R9).
+		terms["plane_size"] = PlaneClasses.SMALL
+		terms["booked_passengers"] = PlaneClasses.passenger_range(PlaneClasses.SMALL)[0]
+		if flights.contract_ids().size() < 2 and flights.accept_problem(terms) == "":
+			assert_bool(flights.accept_contract(terms)).is_true()
 	assert_int(flights.contract_ids().size()).is_equal(2)
 	(_find("DeparturesBoard") as DeparturesBoard).refresh()
 	await await_idle_frame()

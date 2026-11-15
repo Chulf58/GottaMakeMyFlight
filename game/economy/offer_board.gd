@@ -54,7 +54,7 @@ const STATUSES := [OPEN, ACCEPTED, DECLINED, EXPIRED]
 ## there is no migration.
 ## 5: the Loyal airline count ("loyalty": airline -> {"days", "last_day"}) and
 ## each offer's "loyal" mark. A version 4 save is refused; there is no migration.
-## 6: offers may carry Odd hours (departing 06:00 to 22:00) and Exit fee, and
+## 6: offers may carry Odd hours (departing at 06:00 or 22:00) and Exit fee, and
 ## the traits are drawn from OfferTraits seed version 3. A version 5 save is
 ## refused; there is no migration.
 const SAVE_VERSION := 6
@@ -107,8 +107,8 @@ const TIER_SIZES: Array = [
 const TIER_FEES: Array = [[FEE_MIN, FEE_MAX], [25, 45], [40, 60]]
 const MAX_TIER := 2
 ## Scheduled departures fall on a quarter hour from 07:00 to 21:00, the plain
-## contract window; an Odd hours offer's run over its wider window, 06:00 to
-## 22:00 (FlightContract.window, slots_of). DEPARTURE_SLOTS is the plain window's
+## contract window; an Odd hours offer departs at 06:00 or 22:00, the ends of
+## its wider window (FlightContract.window, slots_of). DEPARTURE_SLOTS is the plain window's
 ## last slot index.
 const DEPARTURE_FIRST_MINUTE := FlightContract.FIRST_DEPARTURE_MINUTE
 const DEPARTURE_LAST_MINUTE := FlightContract.LAST_DEPARTURE_MINUTE
@@ -147,12 +147,17 @@ static func offered_sizes(tier: int, runway_class := PlaneClasses.LARGE) -> Dict
 	return sizes
 
 
-## The departure minutes an offer of `traits` may be drawn or fitted at, on the
-## quarter hours of its FlightContract.window, earliest first: 57 for a plain
-## window, 65 for an Odd hours one.
+## The departure minutes an offer of `traits` may be drawn or fitted at,
+## earliest first: the 57 quarter hours from 07:00 to 21:00, or for an Odd hours
+## offer only the two ends of its FlightContract.window, 06:00 and 22:00 (user
+## ruling odd-hours-and-exit-fee-offer-traits-odd-hours-widens-the-dep: "Odd
+## hours offers draw 06:00 or 22:00, and the card says so up front").
 static func slots_of(traits: Dictionary) -> Array[int]:
 	var span := FlightContract.window(traits)
 	var out: Array[int] = []
+	if OfferTraits.window_widening(traits) > 0:
+		out.append_array([span[0], span[1]])
+		return out
 	for minute in range(span[0], span[1] + 1, DEPARTURE_STEP):
 		out.append(minute)
 	return out
@@ -322,7 +327,7 @@ func from_snapshot(data: Dictionary) -> bool:
 ## Every draw is made for every offer, in this order, so the RNG advances by
 ## the same amount whatever the values turn out to be. The departure is one
 ## draw over the slots of the offer's `traits` (slots_of), so an Odd hours offer
-## draws from 65 slots and every other from 57.
+## draws from its 2 slots and every other from 57: one call either way.
 func _draw(
 	day: int,
 	number: int,
@@ -379,7 +384,7 @@ static func _give_traits(offer: Dictionary, traits: Dictionary, loyal: bool) -> 
 ## the-free-gate-slots-1-needs-more, points 1 to 3). The first FIT_OFFERS get
 ## slots they fit at, the rest a slot where only a free gate is missing
 ## (FlightFit.another_gate_helps). Each offer's drawn slot index r among its d
-## slots (slots_of: 57, or 65 with Odd hours) picks from its n candidate slots,
+## slots (slots_of: 57, or 2 with Odd hours) picks from its n candidate slots,
 ## earliest first, by floor(r * n / d), so nothing is drawn again. The two fit
 ## offers must also fit together, whichever is accepted first: from their
 ## picks on, the first slot of the second that joins the first's is taken,

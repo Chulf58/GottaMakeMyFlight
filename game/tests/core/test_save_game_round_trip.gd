@@ -42,7 +42,7 @@ func before() -> void:
 	_control = SaveTestKit.boot(self, SEED)
 	_source = SaveTestKit.boot(self, SEED)
 	var start := (
-		GameCalendar.tick_at(0, GroundPlanner.LAST_DEPARTURE_MINUTE)
+		GameCalendar.tick_at(0, FlightContract.LAST_DEPARTURE_MINUTE)
 		- FlightTimetable.ISSUE_LEAD_TICKS
 		- FlightTimetable.departure_offset()
 		- DEPARTURE_BEFORE_LAST_TICKS

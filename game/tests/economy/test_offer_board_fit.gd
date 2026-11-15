@@ -14,11 +14,12 @@ const SEEDS := [1, 42, 2024, 7_654_321]
 const FULL_DAY := [420, 615, 810, 1005, 1200]
 ## Seed -> the fitted N1, N2 and N3 departures on one gate busy at 10:00 and
 ## 16:40 (test_golden_fitted_departures_on_a_busy_gate). Seed 2024 was
-## measured again for trait seed version 3, whose day 0 traits changed.
+## measured again for trait seed version 3: its day 0 N1 is now an Odd hours
+## offer, which fits only at 06:00 or 22:00.
 const GOLDEN_BUSY := {
 	1: [1215, 795, 510],
 	42: [1215, 795, 690],
-	2024: [795, 1230, 555],
+	2024: [360, 1230, 555],
 	7_654_321: [1215, 795, 450],
 }
 
@@ -222,8 +223,8 @@ func test_the_drawn_slot_maps_onto_n_candidates_by_floor_r_n_over_57() -> void:
 		)
 	# Every r picks a valid index, and each of n candidates is picked by
 	# floor(d / n) or one more of the d draws, for the plain window's 57 slots
-	# and an Odd hours window's 65.
-	for slots in [57, 65]:
+	# and an Odd hours offer's 2 (06:00 and 22:00).
+	for slots in [57, 2]:
 		for n in [1, 2, 3, 7, 10, 24, 56, 57, 65]:
 			if n > slots:
 				continue
