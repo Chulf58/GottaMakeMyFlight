@@ -338,6 +338,15 @@ func _edge_plate() -> void:
 	var targets: Array[Vector3] = [Vector3(-0.5, 0.2, -97)]
 	if _prove("03_edge", points, _site.find_child("Lot_1_4", true, false), targets):
 		await _save("03_paving_grass_edge.png")
+	# Control for the cause of the old line between owned plots: the kerb on the
+	# z -85 edge between owned (1, 4) and (1, 5), forced on, as before the fix.
+	var inner := _site.find_child("Lot_1_4_S", true, false) as Node3D
+	inner.visible = true
+	print("PROBE control: inner kerb Lot_1_4_S forced visible=%s" % inner.visible)
+	if _prove("03b_control", points, _site.find_child("Lot_1_4", true, false), targets):
+		await _save("03b_control_inner_kerb_forced_on.png")
+	_main.get_node("OwnedPaving").refresh()
+	print("PROBE control: after refresh Lot_1_4_S visible=%s" % inner.visible)
 
 
 func _stand_plates(at: Vector3) -> void:
@@ -349,6 +358,12 @@ func _stand_plates(at: Vector3) -> void:
 	var targets: Array[Vector3] = [at + Vector3(0, 3, 0)]
 	if _prove("04_stand", points, plane, targets):
 		await _save("04_stand_pad_link_plane.png")
+	# Control: the same view with the taxi paving hidden, to tell whether a mark
+	# on the owned paving comes from the asphalt laid under it.
+	_airside.paving.visible = false
+	if _prove("04b_control", points, plane, targets):
+		await _save("04b_control_taxi_paving_hidden.png")
+	_airside.paving.visible = true
 	# The pad's edge over the grass, beside the parked plane.
 	var pad: Rect2 = _airside.paving.pads[0]
 	var corner := Vector3(pad.end.x, 0.18, maxf(pad.position.y, -150.0))

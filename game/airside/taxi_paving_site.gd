@@ -20,6 +20,9 @@ const SITE := preload("res://build/terminal_site.tres")
 const GRASS_Y := -0.1
 const SKIRT_FOOT_M := 0.02
 
+## skirt_material(), made once.
+static var _skirt_material: Material = null
+
 
 ## How far on_site() lifts the paving at `at` (world): SITE_DROP_M under the
 ## plane's ground height (PlaneView.ground_height_at()) on the site, going down
@@ -76,6 +79,10 @@ static func on_site(flat: ArrayMesh) -> ArrayMesh:
 				out_index.append_array(PackedInt32Array([base, base + 1, base + 2]))
 				if asphalt:
 					_note_edges(edges, PackedVector3Array([pts[0], pts[k], pts[k + 1]]))
+	var skirt_verts := PackedVector3Array()
+	var skirt_normals := PackedVector3Array()
+	var skirt_uvs := PackedVector2Array()
+	var skirt_index := PackedInt32Array()
 	for key: String in edges:
 		var edge: Array = edges[key]
 		var a: Vector3 = edge[1]
@@ -84,17 +91,42 @@ static func on_site(flat: ArrayMesh) -> ArrayMesh:
 			continue
 		var top_a := a + Vector3.UP * lift_at(a)
 		var top_b := b + Vector3.UP * lift_at(b)
-		_add_skirt(top_a, top_b, edge[3], out_verts, out_normals, out_uvs, out_index)
+		_add_skirt(top_a, top_b, edge[3], skirt_verts, skirt_normals, skirt_uvs, skirt_index)
 	var out := ArrayMesh.new()
-	var lifted := []
-	lifted.resize(Mesh.ARRAY_MAX)
-	lifted[Mesh.ARRAY_VERTEX] = out_verts
-	lifted[Mesh.ARRAY_NORMAL] = out_normals
-	lifted[Mesh.ARRAY_TEX_UV] = out_uvs
-	lifted[Mesh.ARRAY_INDEX] = out_index
-	out.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, lifted)
-	out.surface_set_material(0, TaxiPaving.MATERIAL)
+	_add_surface(out, out_verts, out_normals, out_uvs, out_index, TaxiPaving.MATERIAL)
+	if not skirt_index.is_empty():
+		_add_surface(out, skirt_verts, skirt_normals, skirt_uvs, skirt_index, skirt_material())
 	return out
+
+
+## The skirts' material: the paving's toon material without its outline pass.
+## A skirt's outline is drawn at the skirt's depth, 1.5 to 3.5 cm under the
+## site's own paving, but pushed a pixel or so up the screen, where the paving
+## lies farther away, so it showed through owned paving as a dotted dark line
+## (user ruling touching-owned-land-plots-pave-as-one-seamless-surface-no-lin).
+static func skirt_material() -> Material:
+	if _skirt_material == null:
+		_skirt_material = TaxiPaving.MATERIAL.duplicate() as Material
+		_skirt_material.next_pass = null
+	return _skirt_material
+
+
+static func _add_surface(
+	mesh: ArrayMesh,
+	verts: PackedVector3Array,
+	normals: PackedVector3Array,
+	uvs: PackedVector2Array,
+	index: PackedInt32Array,
+	material: Material
+) -> void:
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_NORMAL] = normals
+	arrays[Mesh.ARRAY_TEX_UV] = uvs
+	arrays[Mesh.ARRAY_INDEX] = index
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	mesh.surface_set_material(mesh.get_surface_count() - 1, material)
 
 
 ## The x lines, then the z lines, where the plane's ground height starts or

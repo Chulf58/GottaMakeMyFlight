@@ -115,3 +115,66 @@ func test_a_load_repaves_from_the_saved_ownership() -> void:
 	print("loaded owned %s shown %s" % [want, _shown()])
 	assert_int(want.size()).is_greater(6)
 	assert_array(_shown()).is_equal(want)
+
+
+## Whether the kerb on `side` (0 N, 1 E, 2 S, 3 W) of `plot` is shown.
+func _kerb_shown(plot: Vector2i, side: int) -> bool:
+	var kerbs := OwnedPaving.kerb_meshes(_site)
+	return (kerbs[Vector3i(plot.x, plot.y, side)] as Node3D).visible
+
+
+func test_every_inner_plot_side_has_a_kerb_on_its_edge() -> void:
+	var kerbs := OwnedPaving.kerb_meshes(_site)
+	var origin := Vector2(SITE.grid_origin.x, SITE.grid_origin.z)
+	var inner := 0
+	for y in _land.plots.y:
+		for x in _land.plots.x:
+			for side in 4:
+				var plot := Vector2i(x, y)
+				if not _land.in_site(plot + LandPlots.EDGE_STEPS[side]):
+					continue
+				inner += 1
+				var key := Vector3i(x, y, side)
+				assert_bool(kerbs.has(key)).is_true()
+				var mi := kerbs[key] as MeshInstance3D
+				var box := mi.global_transform * mi.get_aabb()
+				var cells := _land.plot_cells(plot)
+				var lo := origin + Vector2(cells.position)
+				var hi := origin + Vector2(cells.end)
+				# On its side's edge, from the paving's top down under the grass.
+				var edge_at: float = [lo.y, hi.x, hi.y, lo.x][side]
+				var along: float = box.position.z if side % 2 == 0 else box.position.x
+				assert_float(along).is_equal_approx(edge_at, 0.01)
+				assert_float(box.end.y).is_equal_approx(SITE.ground_height, 0.001)
+				assert_float(box.position.y).is_less(TaxiPavingSite.GRASS_Y)
+	print("kerb meshes %d, inner plot sides %d" % [kerbs.size(), inner])
+	assert_int(inner).is_equal(76)
+	assert_int(kerbs.size()).is_equal(inner)
+
+
+func test_touching_owned_plots_show_no_kerb_between_them_and_the_grass_edge_does() -> void:
+	_land.own_start(SITE)
+	_paving.bind(_site, _land)
+	# (0, 4) and (1, 4) are both owned: no kerb on either side of their edge.
+	assert_bool(_kerb_shown(Vector2i(0, 4), 1)).is_false()
+	assert_bool(_kerb_shown(Vector2i(1, 4), 3)).is_false()
+	# (1, 4) owned, (2, 4) not: the kerb shows on the owned side only.
+	assert_bool(_kerb_shown(Vector2i(1, 4), 1)).is_true()
+	assert_bool(_kerb_shown(Vector2i(2, 4), 3)).is_false()
+	# Every kerb shows exactly where its plot is owned and the plot across is not.
+	var kerbs := OwnedPaving.kerb_meshes(_site)
+	var shown := 0
+	for key: Vector3i in kerbs:
+		var plot := Vector2i(key.x, key.y)
+		var want := _land.is_owned(plot) and not _land.is_owned(plot + LandPlots.EDGE_STEPS[key.z])
+		assert_bool((kerbs[key] as Node3D).visible).is_equal(want)
+		shown += 1 if want else 0
+	print("kerbs shown on a new game %d of %d" % [shown, kerbs.size()])
+	# The start land's edges toward other plots: 3 plot sides east, 2 north.
+	assert_int(shown).is_equal(5)
+	# Buying (2, 4) joins it without a kerb and puts kerbs on its own open sides.
+	assert_bool(_land.buy(Vector2i(2, 4), null).ok).is_true()
+	assert_bool(_kerb_shown(Vector2i(1, 4), 1)).is_false()
+	assert_bool(_kerb_shown(Vector2i(2, 4), 3)).is_false()
+	assert_bool(_kerb_shown(Vector2i(2, 4), 1)).is_true()
+	assert_bool(_kerb_shown(Vector2i(2, 4), 0)).is_true()

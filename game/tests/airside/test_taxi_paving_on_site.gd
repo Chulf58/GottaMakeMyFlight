@@ -42,19 +42,42 @@ static func surface_at(mesh: ArrayMesh, at: Vector3) -> float:
 	return best
 
 
-## The triangles of `mesh` that face sideways (skirts).
+## The triangles of `mesh`, on any surface, that face sideways (skirts).
 static func _side_triangles(mesh: ArrayMesh) -> Array[PackedVector3Array]:
-	var arrays := mesh.surface_get_arrays(0)
-	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
-	var index: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
 	var out: Array[PackedVector3Array] = []
-	for t in range(0, index.size(), 3):
-		var a := verts[index[t]]
-		var b := verts[index[t + 1]]
-		var c := verts[index[t + 2]]
-		if absf((c - a).cross(b - a).normalized().y) < 0.1:
-			out.append(PackedVector3Array([a, b, c]))
+	for s in mesh.get_surface_count():
+		var arrays := mesh.surface_get_arrays(s)
+		var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var index: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+		for t in range(0, index.size(), 3):
+			var a := verts[index[t]]
+			var b := verts[index[t + 1]]
+			var c := verts[index[t + 2]]
+			if absf((c - a).cross(b - a).normalized().y) < 0.1:
+				out.append(PackedVector3Array([a, b, c]))
 	return out
+
+
+func test_skirts_are_drawn_without_the_outline_pass_and_the_tops_with_it() -> void:
+	var lifted := TaxiPavingSite.on_site(
+		TaxiPaving.mesh_of(
+			[{"rect": Rect2(5, -200, 30, 60), "across_x": true}] as Array[Dictionary]
+		)
+	)
+	print("surfaces %d" % lifted.get_surface_count())
+	assert_int(lifted.get_surface_count()).is_equal(2)
+	assert_object(lifted.surface_get_material(0)).is_same(TaxiPaving.MATERIAL)
+	assert_object(TaxiPaving.MATERIAL.next_pass).is_not_null()
+	var skirts := lifted.surface_get_material(1)
+	assert_object(skirts.next_pass).is_null()
+	assert_object((skirts as ShaderMaterial).shader).is_same(
+		(TaxiPaving.MATERIAL as ShaderMaterial).shader
+	)
+	# Every sideways triangle is on the skirt surface, none on the tops.
+	var tops := ArrayMesh.new()
+	tops.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, lifted.surface_get_arrays(0))
+	assert_int(_side_triangles(tops).size()).is_equal(0)
+	assert_int(_side_triangles(lifted).size()).is_equal(8)
 
 
 func test_inside_the_site_the_asphalt_lies_just_under_the_plane() -> void:
