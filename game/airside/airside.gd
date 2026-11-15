@@ -2,23 +2,22 @@ class_name Airside
 extends Node3D
 ## The one runway and one stand, as Marker3D waypoints placed in the scene
 ## (named children, in this node's own space) plus the taxiway links between
-## them. Builds the TaxiGraph and gives each flight phase its path. The stand
+## them. Keeps the waypoints in its TaxiGraph and gives each flight phase its
+## path from TaxiRoutes, the one route source FlightGround plans on. The stand
 ## moves with the terminal (ApronStand, decision plane-stand-design-airside-
 ## moves-110-m-north-stand-snaps-to): set_stand() puts Stand, PushbackEnd and
 ## StandLane (where the way north meets the taxi lane) where StandPlacement
 ## says and rebuilds the graph. With gate desks (decision gates-technical-
 ## design-gate-desks-link-to-north-exits-one-st, point 3) set_gate_stands()
 ## gives each gate its own Stand_<gate>, PushbackEnd_<gate> and
-## StandLane_<gate>. Every StandLane waypoint sits on the one taxi lane, so
-## the lane is a chain: TaxiEast, the StandLane waypoints in falling x, then
-## TaxiWest (links between two of them in `links` give way to it), and a plane
-## taxis along it past the other gates' joins. Planes land and take off
-## eastbound, leave the runway at its east end and join it again at its west
-## end, so every taxi route runs strictly west along the lane (decision
-## runway-and-taxi-technical-design-movement-plan-analytic-bookings-planned-
-## pauses, point 1). A join east of TaxiEast or west of TaxiWest would break
-## that, and rebuild() refuses it. While gates have stands the one stand's own
-## StandLane is not on the chain.
+## StandLane_<gate>. Every StandLane waypoint sits on the one taxi lane
+## between TaxiWest and TaxiEast. Planes land and take off eastbound, leave the
+## runway at its east end and join it again at its west end, so every taxi
+## route runs strictly west along the lane (decision runway-and-taxi-technical-
+## design-movement-plan-analytic-bookings-planned-pauses, point 1). A join east
+## of TaxiEast or west of TaxiWest would break that, and rebuild() refuses it
+## (TaxiRoutes.joins_lane()). While gates have stands the one stand's own
+## StandLane is not checked.
 ##
 ## Touchdown, Liftoff and ApproachStart are per plane class, never per runway
 ## size (same decision, point 1): the medium class (the reference model 05)
@@ -63,6 +62,8 @@ const REQUIRED_WAYPOINTS: Array[StringName] = [
 	&"Liftoff_large",
 	&"HoldIn",
 	&"HoldRunway",
+	&"TaxiWest",
+	&"TaxiEast",
 ]
 ## Plane class -> the suffix of its Touchdown, Liftoff and ApproachStart
 ## markers. Medium, the class StandPlacement's footprint is built around, uses
@@ -79,8 +80,7 @@ const LEAD_IN_WAYPOINTS: Array[StringName] = [
 	&"ArrivalEntry", &"ArrivalPass", &"ArrivalTurnWest", &"ArrivalTurnNorth"
 ]
 const CLIMB_OUT_WAYPOINTS: Array[StringName] = [&"ClimbEnd", &"DepartureTurn", &"DepartureExit"]
-## The taxi lane's two ends; with every StandLane waypoint they make the lane
-## chain.
+## The taxi lane's two ends; every StandLane waypoint lies between them.
 const LANE_ENDS: Array[StringName] = [&"TaxiWest", &"TaxiEast"]
 const STAND_LANE := "StandLane"
 ## The runway's strip piece, whose width runway_south() reads.
@@ -94,7 +94,8 @@ const SKY_END_STRAIGHT := 45.0
 ## Arc length between the points that sample a turn.
 const SKY_ARC_STEP := 4.0
 
-## Taxiways as "From>To" waypoint pairs; each runs both ways.
+## Taxiways as "From>To" waypoint pairs, as main.tscn declares them. rebuild()
+## checks that each names two waypoints; the routes come from TaxiRoutes.
 @export var links := PackedStringArray()
 
 var graph := TaxiGraph.new()
@@ -112,6 +113,9 @@ var props := AirsideProps.new()
 ## Whether the last rebuild() succeeded. set_gate_stands() skips a call with
 ## the stands already set only while it did, so a failed call fails again.
 var _built := false
+## Whether the last rebuild() found every required waypoint and every stand's
+## join on the lane; phase_path() gives no taxi route while it did not.
+var _routable := false
 
 
 func _init() -> void:
@@ -123,8 +127,9 @@ func _ready() -> void:
 	rebuild()
 
 
-## Rebuilds the graph from the Marker3D children. False (with an error) when a
-## required waypoint is missing or a link names an unknown waypoint.
+## Rebuilds the waypoints from the Marker3D children. False (with an error)
+## when a required waypoint is missing, a link names an unknown waypoint or a
+## stand's join is off the lane.
 func rebuild() -> bool:
 	graph = TaxiGraph.new()
 	for child in get_children():
@@ -135,6 +140,7 @@ func rebuild() -> bool:
 		if not graph.has_waypoint(waypoint):
 			push_error("Airside: missing waypoint '%s'" % waypoint)
 			ok = false
+	_routable = ok and _joins_on_lane()
 	for pair in links:
 		var ends := pair.split(">")
 		var known := (
@@ -142,20 +148,10 @@ func rebuild() -> bool:
 			and graph.has_waypoint(StringName(ends[0]))
 			and graph.has_waypoint(StringName(ends[1]))
 		)
-		# A link between two lane waypoints gives way to the chain below.
-		if known and _on_lane(ends[0]) and _on_lane(ends[1]):
-			continue
-		if not known or not graph.link(StringName(ends[0]), StringName(ends[1])):
+		if not known:
 			push_error("Airside: bad link '%s'" % pair)
 			ok = false
-	for gate: String in gate_stands:
-		graph.link(_gate_point(&"StandLane", gate), _gate_point(&"PushbackEnd", gate))
-		graph.link(_gate_point(&"PushbackEnd", gate), _gate_point(&"Stand", gate))
-	var chain := _lane_chain()
-	if chain.is_empty():
-		ok = false
-	for i in range(1, chain.size()):
-		graph.link(chain[i - 1], chain[i])
+	ok = ok and _routable
 	_show_paving()
 	_built = ok
 	return ok
@@ -268,44 +264,33 @@ static func lead_in_hold_z() -> float:
 	return StandEnvelope.lane_band_south() + reach
 
 
-## The lane chain east to west: TaxiEast, the joins in falling x, TaxiWest
-## (each end when it is a waypoint). Empty (with an error) unless every join
-## lies strictly between the ends: east of TaxiEast or west of TaxiWest a route
-## to it would turn back, and on an end it would add a zero-length step.
-func _lane_chain() -> Array[StringName]:
-	# With gate stands the one stand's StandLane is left off the chain: it would
-	# sit on a gate's join (the starter exit's) and add a zero-length step.
-	var joins: Array[StringName] = []
+## Whether every join lies strictly between the lane's ends (TaxiRoutes.
+## joins_lane(), with an error naming the first that does not). With gate
+## stands the one stand's StandLane is not checked: it sits on a gate's join
+## (the starter exit's).
+func _joins_on_lane() -> bool:
+	var layout := lane_layout()
 	for child in get_children():
-		if child is Marker3D and _on_lane(child.name) and not LANE_ENDS.has(child.name):
-			if gate_stands.is_empty() or child.name != &"StandLane":
-				joins.append(child.name)
-	joins.sort_custom(
-		func(a: StringName, b: StringName) -> bool:
-			return graph.position_of(a).x > graph.position_of(b).x
-	)
-	var east := INF
-	var west := -INF
-	var chain: Array[StringName] = []
-	if graph.has_waypoint(&"TaxiEast"):
-		east = graph.position_of(&"TaxiEast").x
-		chain.append(&"TaxiEast")
-	if graph.has_waypoint(&"TaxiWest"):
-		west = graph.position_of(&"TaxiWest").x
-	for join in joins:
-		var x := graph.position_of(join).x
-		if x >= east or x <= west:
+		if not (child is Marker3D and _on_lane(child.name) and not LANE_ENDS.has(child.name)):
+			continue
+		if not gate_stands.is_empty() and child.name == &"StandLane":
+			continue
+		var join := graph.position_of(child.name)
+		if not TaxiRoutes.joins_lane(join, layout):
 			push_error(
 				(
 					"Airside: '%s' at x %.2f is not strictly inside the lane (%.2f to %.2f)"
-					% [join, x, west, east]
+					% [child.name, join.x, layout["west_x"], layout["east_x"]]
 				)
 			)
-			return []
-		chain.append(join)
-	if graph.has_waypoint(&"TaxiWest"):
-		chain.append(&"TaxiWest")
-	return chain
+			return false
+	return true
+
+
+## The lane layout the routes are built on (TaxiRoutes): the north lane alone,
+## between TaxiWest and TaxiEast.
+func lane_layout() -> Dictionary:
+	return TaxiRoutes.north_only(graph.points())
 
 
 ## Every ground route a plane takes: taxi in, pushback and taxi out, for each
@@ -383,32 +368,40 @@ func set_gate_stands(stands: Dictionary) -> bool:
 
 ## The path a plane of `plane_class` follows in `state`, or an empty array
 ## for a state that stays put. `gate` names the gate whose stand it uses; a
-## gate with no stand waypoints of its own (no gate desks, one stand) uses
-## Stand. The class picks the approach, touchdown and liftoff points; the taxi
-## routes are the same for every class.
+## gate with no stand waypoints of its own uses Stand. The path is TaxiRoutes',
+## from this node's waypoints and the gate's Stand, PushbackEnd and StandLane.
+## The class picks the approach, touchdown and liftoff points; the taxi routes
+## are the same for every class. Empty for every state while a required
+## waypoint is missing, and for the taxi routes while routes_gate() is false.
 func phase_path(state: int, gate := "", plane_class := PlaneClasses.MEDIUM) -> PackedVector3Array:
-	var approach := class_point(&"ApproachStart", plane_class)
-	var touchdown := class_point(&"Touchdown", plane_class)
-	var stand := &"Stand"
-	var pushback := &"PushbackEnd"
-	if gate_stands.has(gate):
-		stand = _gate_point(&"Stand", gate)
-		pushback = _gate_point(&"PushbackEnd", gate)
-	var path := PackedVector3Array()
-	match state:
-		FlightSim.State.APPROACH:
-			path = _points([approach, touchdown])
-		FlightSim.State.LANDING:
-			path = _points([touchdown, &"RunwayExit"])
-		FlightSim.State.TAXI_IN:
-			path = graph.route(&"RunwayExit", stand)
-		FlightSim.State.PUSHBACK:
-			path = _points([stand, pushback])
-		FlightSim.State.TAXI_OUT:
-			path = graph.route(pushback, &"RunwayEntry")
-		FlightSim.State.TAKEOFF:
-			path = _points([&"RunwayEntry", class_point(&"Liftoff", plane_class), &"ClimbEnd"])
-	return path
+	for waypoint in REQUIRED_WAYPOINTS:
+		if not graph.has_waypoint(waypoint):
+			return PackedVector3Array()
+	var taxi := state == FlightSim.State.TAXI_IN or state == FlightSim.State.TAXI_OUT
+	if taxi and not routes_gate(gate):
+		return PackedVector3Array()
+	var gate_name := gate if gate_stands.has(gate) else ""
+	var ends := {
+		"spot": graph.position_of(_stand_point(&"Stand", gate_name)),
+		"back": graph.position_of(_stand_point(&"PushbackEnd", gate_name)),
+		"join": graph.position_of(_stand_point(&"StandLane", gate_name)),
+	}
+	var paths := TaxiRoutes.phase_paths(graph.points(), ends, plane_class, lane_layout())
+	return paths.get(state, PackedVector3Array())
+
+
+## Whether phase_path() gives gate `gate` its taxi routes: the last rebuild()
+## found every required waypoint and every join on the lane, and the gate has
+## a stand of its own, or no gate has one (no gate desks: the one stand serves
+## every gate). With gate stands set, a gate not among them gets none, so a
+## plane is never drawn along a stand nobody planned it for.
+func routes_gate(gate: String) -> bool:
+	return _routable and (gate_stands.is_empty() or gate_stands.has(gate))
+
+
+## The waypoint `base` of gate `gate`'s stand, or of the one stand for "".
+static func _stand_point(base: StringName, gate: String) -> StringName:
+	return _gate_point(base, gate) if gate != "" else base
 
 
 ## The marker `base` (Touchdown, Liftoff or ApproachStart) of `plane_class`.

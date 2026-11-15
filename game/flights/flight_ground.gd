@@ -3,9 +3,8 @@ extends RefCounted
 ## The ground FlightSim plans taxi bookings on (decision runway-and-taxi-
 ## technical-design-movement-plan-analytic-bookings-planned-pauses, sections 5
 ## and 6): the fixed Airside waypoints of main.tscn, read once from the saved
-## scene, and each phase's path for a plane at a stand, as Airside.phase_path()
-## gives it (the lane chain's other joins only add straight points, which change
-## no length, corner or slice). Pure: no node is built.
+## scene, and each phase's path for a plane at a stand from TaxiRoutes, the
+## source Airside.phase_path() draws from too. Pure: no node is built.
 ##
 ## A gate's ground is {"stand": StandPlacement stand, "max_class": the largest
 ## plane class it holds} (FlightSim.stand_source, from GateDesks). With no
@@ -72,25 +71,13 @@ static func fallback(gate: String) -> Dictionary:
 
 
 ## Each phase's path, by FlightSim.State, for a plane of `plane_class` at
-## `stand`: APPROACH, LANDING, TAXI_IN, PUSHBACK, TAXI_OUT and TAKEOFF.
+## `stand`: APPROACH, LANDING, TAXI_IN, PUSHBACK, TAXI_OUT and TAKEOFF, as
+## TaxiRoutes builds them on the north lane.
 static func routes(stand: Dictionary, plane_class: String) -> Dictionary:
 	var p := points()
-	var suffix: String = Airside.CLASS_SUFFIX[plane_class]
-	var spot := StandPlacement.stand_point(stand)
-	var back := StandPlacement.pushback_end(stand)
-	var join := StandPlacement.lane_join(stand)
-	return {
-		FlightSim.State.APPROACH:
-		PackedVector3Array([p[&"ApproachStart" + suffix], p[&"Touchdown" + suffix]]),
-		FlightSim.State.LANDING: PackedVector3Array([p[&"Touchdown" + suffix], p[&"RunwayExit"]]),
-		FlightSim.State.TAXI_IN:
-		PackedVector3Array([p[&"RunwayExit"], p[&"TaxiEast"], join, back, spot]),
-		FlightSim.State.PUSHBACK: PackedVector3Array([spot, back]),
-		FlightSim.State.TAXI_OUT:
-		PackedVector3Array([back, join, p[&"TaxiWest"], p[&"RunwayEntry"]]),
-		FlightSim.State.TAKEOFF:
-		PackedVector3Array([p[&"RunwayEntry"], p[&"Liftoff" + suffix], p[&"ClimbEnd"]]),
-	}
+	return TaxiRoutes.phase_paths(
+		p, TaxiRoutes.stand_ends(stand), plane_class, TaxiRoutes.north_only(p)
+	)
 
 
 ## A GroundPlanner request for flight `id`.

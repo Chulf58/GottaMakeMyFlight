@@ -2,9 +2,9 @@ class_name TestAirsideGateStands
 extends GdUnitTestSuite
 ## One stand per gate on main.tscn's airside (decision gates-technical-design-
 ## gate-desks-link-to-north-exits-one-st, point 3): Airside.set_gate_stands()
-## gives each gate its own stand waypoints, joined to the one taxi lane as a
-## chain in order of x, so a plane taxis along the lane past the other gates'
-## joins; PlaneView draws a gate's flights on that gate's stand; PlaneFleet
+## gives each gate its own stand waypoints, each joined to the one taxi lane, so
+## a plane taxis along the lane past the other gates' joins (TaxiRoutes leaves
+## those straight points out); PlaneView draws a gate's flights on that gate's stand; PlaneFleet
 ## gives every gate with a live flight two views.
 
 const MAIN_SCENE := "res://main/main.tscn"
@@ -57,7 +57,7 @@ func _lane(stand: Dictionary) -> Vector3:
 	return StandPlacement.lane_join(stand)
 
 
-func test_each_gate_taxis_along_the_lane_past_the_other_gates_join() -> void:
+func test_each_gate_taxis_along_the_lane_to_its_own_join() -> void:
 	var a := StandPlacement.stand_point(STAND_A)
 	var b := StandPlacement.stand_point(STAND_B)
 	var in_a := _airside.phase_path(FlightSim.State.TAXI_IN, "A")
@@ -65,17 +65,18 @@ func test_each_gate_taxis_along_the_lane_past_the_other_gates_join() -> void:
 	var out_b := _airside.phase_path(FlightSim.State.TAXI_OUT, "B")
 	var push_b := _airside.phase_path(FlightSim.State.PUSHBACK, "B")
 	print("taxi in A %s\ntaxi in B %s\ntaxi out B %s" % [in_a, in_b, out_b])
-	# B (x 18) is east of A (x -26): A's way in passes B's join on the lane.
+	# B (x 18) is east of A (x -26): A's way in runs along the lane over B's
+	# join, a straight point the route leaves out.
 	assert_array(Array(in_a)).is_equal(
 		[
 			_at(&"RunwayExit"),
 			_at(&"TaxiEast"),
-			_lane(STAND_B),
 			_lane(STAND_A),
 			StandPlacement.pushback_end(STAND_A),
 			a
 		]
 	)
+	assert_float(_lane(STAND_B).x).is_between(in_a[2].x, in_a[1].x)
 	assert_array(Array(in_b)).is_equal(
 		[
 			_at(&"RunwayExit"),
@@ -86,11 +87,11 @@ func test_each_gate_taxis_along_the_lane_past_the_other_gates_join() -> void:
 		]
 	)
 	assert_array(Array(push_b)).is_equal([b, StandPlacement.pushback_end(STAND_B)])
-	# The way out from B passes A's join on its way west; the scene's own
-	# StandLane, on A's x, is off the chain while gates have stands.
+	# The way out from B runs west over A's join to the lane's west end.
 	assert_array(Array(out_b).slice(0, 3)).is_equal(
-		[StandPlacement.pushback_end(STAND_B), _lane(STAND_B), _lane(STAND_A)]
+		[StandPlacement.pushback_end(STAND_B), _lane(STAND_B), _at(&"TaxiWest")]
 	)
+	assert_float(_lane(STAND_A).x).is_between(out_b[2].x, out_b[1].x)
 	assert_vector(out_b[out_b.size() - 1]).is_equal(_at(&"RunwayEntry"))
 	for point in out_b.slice(1, out_b.size() - 1):
 		assert_float(point.z).is_equal(StandPlacement.TAXI_LANE_Z)
@@ -164,3 +165,63 @@ func test_the_fleet_gives_every_gate_with_a_flight_two_views() -> void:
 	assert_array(fleet.gates).is_equal(["A", "B"])
 	assert_array(handed).is_equal([["A", 0], ["A", 1], ["B", 0], ["B", 1]])
 	assert_object(fleet.views[0]).is_same(first)
+
+
+## While gates have stands, a gate without one (and "") gets no taxi route, so
+## no plane is drawn along a stand it was never planned for; its pushback
+## still reads the one stand. With no gate stands every gate taxis to the one
+## stand. Control: gate A routes.
+func test_a_gate_with_no_stand_gets_no_taxi_route_while_gates_have_stands() -> void:
+	for state in [FlightSim.State.TAXI_IN, FlightSim.State.TAXI_OUT]:
+		assert_int(_airside.phase_path(state, "C").size()).is_equal(0)
+		assert_int(_airside.phase_path(state, "").size()).is_equal(0)
+	assert_int(_airside.phase_path(FlightSim.State.TAXI_IN, "A").size()).is_equal(5)
+	assert_int(_airside.phase_path(FlightSim.State.PUSHBACK, "C").size()).is_equal(2)
+	assert_bool(_airside.routes_gate("C")).is_false()
+	assert_bool(_airside.routes_gate("A")).is_true()
+	assert_bool(_airside.set_gate_stands({})).is_true()
+	assert_bool(_airside.routes_gate("C")).is_true()
+	var one_stand := _airside.phase_path(FlightSim.State.TAXI_IN, "")
+	assert_int(one_stand.size()).is_equal(5)
+	assert_array(Array(_airside.phase_path(FlightSim.State.TAXI_IN, "C"))).is_equal(
+		Array(one_stand)
+	)
+
+
+## An airside missing a required waypoint gives empty paths, which a view
+## would index; the fleet hands that gate no view, so the plane hides instead.
+## Control: before the waypoint goes, the same flight is drawn.
+func test_the_fleet_draws_no_plane_for_a_gate_the_airside_cannot_route() -> void:
+	var airside := auto_free(TestStandLaneClearance.scene_airside()) as Airside
+	add_child(airside)
+	var sim := auto_free(FlightSim.new()) as FlightSim
+	sim.gate_source = func() -> Array[String]: return ["B"] as Array[String]
+	var starts := FlightSim.schedule_starts(FIRST)
+	assert_bool(sim.add_flight("AT_B", starts, "B")).is_true()
+	sim.tick = starts[FlightSim.State.BOARDING] + 10
+	var fleet := PlaneFleet.new()
+	fleet.sim = sim
+	fleet.clock = auto_free(SimClock.new()) as SimClock
+	fleet.airside = airside
+	var first := PlaneView.new()
+	first.sim = sim
+	first.clock = fleet.clock
+	first.airside = airside
+	fleet.add_child(first)
+	fleet.views = [first] as Array[PlaneView]
+	add_child(fleet)
+	auto_free(fleet)
+	fleet.update_views()
+	first.update_pose()
+	print("routable: gates %s, view gate %s, visible %s" % [fleet.gates, first.gate, first.visible])
+	assert_array(fleet.gates).is_equal(["B"])
+	assert_bool(first.visible).is_true()
+	airside.get_node("RunwayExit").free()
+	assert_bool(airside.rebuild()).is_false()
+	assert_int(airside.phase_path(FlightSim.State.PUSHBACK, "B").size()).is_equal(0)
+	fleet.update_views()
+	first.update_pose()
+	print("unroutable: gates %s, view '%s', visible %s" % [fleet.gates, first.gate, first.visible])
+	assert_array(fleet.gates).is_empty()
+	assert_str(first.gate).is_equal("")
+	assert_bool(first.visible).is_false()
