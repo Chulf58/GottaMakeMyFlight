@@ -368,18 +368,17 @@ func set_gate_stands(stands: Dictionary) -> bool:
 
 ## The path a plane of `plane_class` follows in `state`, or an empty array
 ## for a state that stays put. `gate` names the gate whose stand it uses; a
-## gate with no stand waypoints of its own (no gate desks, one stand) uses
-## Stand. The path is TaxiRoutes', from this node's waypoints and the gate's
-## Stand, PushbackEnd and StandLane. The class picks the approach, touchdown and
-## liftoff points; the taxi routes are the same for every class. Empty for every
-## state while a required waypoint is missing, and for the taxi routes while a
-## join is off the lane (rebuild()).
+## gate with no stand waypoints of its own uses Stand. The path is TaxiRoutes',
+## from this node's waypoints and the gate's Stand, PushbackEnd and StandLane.
+## The class picks the approach, touchdown and liftoff points; the taxi routes
+## are the same for every class. Empty for every state while a required
+## waypoint is missing, and for the taxi routes while routes_gate() is false.
 func phase_path(state: int, gate := "", plane_class := PlaneClasses.MEDIUM) -> PackedVector3Array:
 	for waypoint in REQUIRED_WAYPOINTS:
 		if not graph.has_waypoint(waypoint):
 			return PackedVector3Array()
 	var taxi := state == FlightSim.State.TAXI_IN or state == FlightSim.State.TAXI_OUT
-	if taxi and not _routable:
+	if taxi and not routes_gate(gate):
 		return PackedVector3Array()
 	var gate_name := gate if gate_stands.has(gate) else ""
 	var ends := {
@@ -389,6 +388,15 @@ func phase_path(state: int, gate := "", plane_class := PlaneClasses.MEDIUM) -> P
 	}
 	var paths := TaxiRoutes.phase_paths(graph.points(), ends, plane_class, lane_layout())
 	return paths.get(state, PackedVector3Array())
+
+
+## Whether phase_path() gives gate `gate` its taxi routes: the last rebuild()
+## found every required waypoint and every join on the lane, and the gate has
+## a stand of its own, or no gate has one (no gate desks: the one stand serves
+## every gate). With gate stands set, a gate not among them gets none, so a
+## plane is never drawn along a stand nobody planned it for.
+func routes_gate(gate: String) -> bool:
+	return _routable and (gate_stands.is_empty() or gate_stands.has(gate))
 
 
 ## The waypoint `base` of gate `gate`'s stand, or of the one stand for "".

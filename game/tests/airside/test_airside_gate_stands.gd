@@ -165,3 +165,63 @@ func test_the_fleet_gives_every_gate_with_a_flight_two_views() -> void:
 	assert_array(fleet.gates).is_equal(["A", "B"])
 	assert_array(handed).is_equal([["A", 0], ["A", 1], ["B", 0], ["B", 1]])
 	assert_object(fleet.views[0]).is_same(first)
+
+
+## While gates have stands, a gate without one (and "") gets no taxi route, so
+## no plane is drawn along a stand it was never planned for; its pushback
+## still reads the one stand. With no gate stands every gate taxis to the one
+## stand. Control: gate A routes.
+func test_a_gate_with_no_stand_gets_no_taxi_route_while_gates_have_stands() -> void:
+	for state in [FlightSim.State.TAXI_IN, FlightSim.State.TAXI_OUT]:
+		assert_int(_airside.phase_path(state, "C").size()).is_equal(0)
+		assert_int(_airside.phase_path(state, "").size()).is_equal(0)
+	assert_int(_airside.phase_path(FlightSim.State.TAXI_IN, "A").size()).is_equal(5)
+	assert_int(_airside.phase_path(FlightSim.State.PUSHBACK, "C").size()).is_equal(2)
+	assert_bool(_airside.routes_gate("C")).is_false()
+	assert_bool(_airside.routes_gate("A")).is_true()
+	assert_bool(_airside.set_gate_stands({})).is_true()
+	assert_bool(_airside.routes_gate("C")).is_true()
+	var one_stand := _airside.phase_path(FlightSim.State.TAXI_IN, "")
+	assert_int(one_stand.size()).is_equal(5)
+	assert_array(Array(_airside.phase_path(FlightSim.State.TAXI_IN, "C"))).is_equal(
+		Array(one_stand)
+	)
+
+
+## An airside missing a required waypoint gives empty paths, which a view
+## would index; the fleet hands that gate no view, so the plane hides instead.
+## Control: before the waypoint goes, the same flight is drawn.
+func test_the_fleet_draws_no_plane_for_a_gate_the_airside_cannot_route() -> void:
+	var airside := auto_free(TestStandLaneClearance.scene_airside()) as Airside
+	add_child(airside)
+	var sim := auto_free(FlightSim.new()) as FlightSim
+	sim.gate_source = func() -> Array[String]: return ["B"] as Array[String]
+	var starts := FlightSim.schedule_starts(FIRST)
+	assert_bool(sim.add_flight("AT_B", starts, "B")).is_true()
+	sim.tick = starts[FlightSim.State.BOARDING] + 10
+	var fleet := PlaneFleet.new()
+	fleet.sim = sim
+	fleet.clock = auto_free(SimClock.new()) as SimClock
+	fleet.airside = airside
+	var first := PlaneView.new()
+	first.sim = sim
+	first.clock = fleet.clock
+	first.airside = airside
+	fleet.add_child(first)
+	fleet.views = [first] as Array[PlaneView]
+	add_child(fleet)
+	auto_free(fleet)
+	fleet.update_views()
+	first.update_pose()
+	print("routable: gates %s, view gate %s, visible %s" % [fleet.gates, first.gate, first.visible])
+	assert_array(fleet.gates).is_equal(["B"])
+	assert_bool(first.visible).is_true()
+	airside.get_node("RunwayExit").free()
+	assert_bool(airside.rebuild()).is_false()
+	assert_int(airside.phase_path(FlightSim.State.PUSHBACK, "B").size()).is_equal(0)
+	fleet.update_views()
+	first.update_pose()
+	print("unroutable: gates %s, view '%s', visible %s" % [fleet.gates, first.gate, first.visible])
+	assert_array(fleet.gates).is_empty()
+	assert_str(first.gate).is_equal("")
+	assert_bool(first.visible).is_false()
