@@ -281,3 +281,51 @@ func test_skipped_ticks_change_no_forecast_across_a_fault() -> void:
 		. override_failure_message("[tick, id, skipping, every tick] %s" % [wrong])
 		. is_empty()
 	)
+
+
+## A loaded fault whose repair tick is at the clock (StationFaults.checked()
+## accepts it; the next StaffSim.step() clears it): a forecast taken before
+## that step treats the station as open from the next tick (nobody sent away, no
+## wake behind the replay's own tick), and equals the measured clearance of
+## everyone committed to it.
+func test_the_forecast_equals_the_sim_when_a_loaded_fault_is_already_due() -> void:
+	_make_world()
+	for i in BURST:
+		_checked_in()
+	var faulted := 0
+	for i in 400:
+		_step()
+		var queued := _sim.queue_of(_sim.layout.scanners[0]).size()
+		if queued >= 2 and _sim.layout.scanners.all(_sim._is_open):
+			faulted = _sim.layout.scanners[0]
+			break
+	assert_int(faulted).is_not_zero()
+	var due := _sim.tick
+	var committed := _committed(faulted)
+	# What a load leaves: the fault is in, its repair tick is the clock's.
+	_world.staff.faults.assign([[faulted, due]])
+	assert_bool(_world.staff.is_open(faulted)).is_false()
+	var forecasts := _forecasts()
+	_step()
+	# The control: the next step repaired it, so it admitted again from tick + 1.
+	assert_bool(_world.staff.faults.is_faulted(faulted)).is_false()
+	assert_bool(_world.staff.is_open(faulted)).is_true()
+	assert_int(_sim.tick).is_equal(due + 1)
+	for i in 6000:
+		if _cleared.size() == _ids.size():
+			break
+		_step()
+	var wrong := []
+	for id: int in forecasts:
+		if forecasts[id] != _cleared.get(id, -1):
+			wrong.append([id, forecasts[id], _cleared.get(id, -1)])
+	print(
+		(
+			"due fault at %d: %d forecasts, %d committed to it, %d wrong %s"
+			% [due, forecasts.size(), committed.size(), wrong.size(), wrong]
+		)
+	)
+	assert_int(_cleared.size()).is_equal(_ids.size())
+	assert_int(committed.size()).is_greater(0)
+	assert_int(forecasts.size()).is_greater(0)
+	assert_array(wrong).override_failure_message("[id, forecast, measured] %s" % [wrong]).is_empty()

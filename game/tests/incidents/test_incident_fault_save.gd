@@ -39,6 +39,16 @@ func after() -> void:
 			DirAccess.remove_absolute(file)
 
 
+## No fault and no fault incident left by an earlier case: the world is shared.
+func before_test() -> void:
+	_staff.faults.assign([])
+	var data := _director.to_snapshot()
+	data["incidents"] = (data["incidents"] as Array).filter(
+		func(i: Dictionary) -> bool: return i["kind"] != IncidentCatalogue.FAULT
+	)
+	assert_bool(_director.from_snapshot(data)).is_true()
+
+
 ## Faults the first scanner until `repair` and puts its active incident in
 ## through the director's own load, as a fire leaves them. Returns the station.
 func _put_in_fault(repair: int) -> int:
@@ -126,3 +136,76 @@ func test_a_save_whose_fault_copies_disagree_is_refused() -> void:
 	assert_bool(_save.load_world(JSON.parse_string(JSON.stringify(good)))).is_true()
 	assert_int(_staff.faults.repair_tick(station)).is_equal(repair)
 	_opens_on(station, repair + 1)
+
+
+## The snapshot of a game with one active fault, as plain data a test may edit.
+func _faulted_snapshot() -> Array:
+	var repair := _clock.tick + REPAIR_IN
+	var station := _put_in_fault(repair)
+	var data: Dictionary = JSON.parse_string(JSON.stringify(_save.snapshot()))
+	return [data, station, repair]
+
+
+## The incident entries of `data` that are scanner faults.
+func _fault_plans(data: Dictionary) -> Array:
+	return (data["incidents"]["incidents"] as Array).filter(
+		func(i: Dictionary) -> bool: return i["kind"] == IncidentCatalogue.FAULT
+	)
+
+
+func test_a_saved_fault_with_no_active_incident_is_refused() -> void:
+	var made := _faulted_snapshot()
+	var data: Dictionary = made[0]
+	var station: int = made[1]
+	var repair: int = made[2]
+	for plan: Dictionary in _fault_plans(data):
+		plan["state"] = IncidentCatalogue.DONE
+	var refused := not _save.load_world(data)
+	print("refused %s: %s" % [refused, _save.message_text()])
+	assert_bool(refused).is_true()
+	assert_str(_save.message_text()).contains(
+		"station %d is saved faulted until %d by no active fault" % [station, repair]
+	)
+	# The control: the same save with its incident active loads.
+	assert_bool(_save.load_world(JSON.parse_string(JSON.stringify(_save.snapshot())))).is_true()
+
+
+func test_an_active_fault_with_no_saved_fault_is_refused() -> void:
+	var made := _faulted_snapshot()
+	var data: Dictionary = made[0]
+	var station: int = made[1]
+	data["staff"]["faults"] = []
+	var refused := not _save.load_world(data)
+	print("refused %s: %s" % [refused, _save.message_text()])
+	assert_bool(refused).is_true()
+	assert_str(_save.message_text()).contains("station %d is not saved faulted" % station)
+
+
+func test_a_saved_fault_matched_by_two_active_incidents_is_refused() -> void:
+	var made := _faulted_snapshot()
+	var data: Dictionary = made[0]
+	var station: int = made[1]
+	var twin: Dictionary = (_fault_plans(data)[0] as Dictionary).duplicate(true)
+	twin["id"] = int(data["incidents"]["next_id"])
+	data["incidents"]["next_id"] = twin["id"] + 1
+	(data["incidents"]["incidents"] as Array).append(twin)
+	var refused := not _save.load_world(data)
+	print("refused %s: %s" % [refused, _save.message_text()])
+	assert_bool(refused).is_true()
+	assert_str(_save.message_text()).contains(
+		"station %d is faulted by two active fault incidents" % station
+	)
+
+
+func test_a_fault_on_a_station_no_longer_on_the_grid_still_loads() -> void:
+	var made := _faulted_snapshot()
+	var data: Dictionary = made[0]
+	var station: int = made[1]
+	# What a save keeps once the faulted object is gone: no staff fault (live()
+	# drops it), the incident still active with its plan.
+	data["staff"]["faults"] = []
+	var gone := {"station": station + 1_000_000, "repair_tick": made[2]}
+	(_fault_plans(data)[0] as Dictionary)["plan"] = gone
+	var staged_problem := IncidentFault.links_problem(data["incidents"]["incidents"], [], _sim.grid)
+	print("gone-station problem: '%s'" % staged_problem)
+	assert_str(staged_problem).is_empty()

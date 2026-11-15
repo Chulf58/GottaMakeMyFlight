@@ -30,7 +30,9 @@ extends RefCounted
 ## only by a scanner fault (StationFaults) admits again from its repair tick,
 ## which the replay plays first on that tick, as StaffSim.step() clears the
 ## fault before the station steps (_reopen()); that tick is an event the
-## replay does not skip past. Staff are not stepped: a lane's
+## replay does not skip past. A repair due on the next tick or behind the clock (a
+## load accepts one) is already done at the replay's start: the station is open,
+## its queue stays (_repaired_next_tick()). Staff are not stepped: a lane's
 ## helper speeds the replayed repacks from the tick StaffPosts.helper_from()
 ## gives (now when on duty, its arrival when walking there, read after the
 ## next staff step when that step will plan its path again or move it to
@@ -338,6 +340,9 @@ func _setup(sim: PassengerSim, station: int, scarce: bool, candidate := 0) -> vo
 		_opens[at] = sim.staff != null and sim.staff.is_open(at)
 		if not _opens[at] and sim.staff != null and sim.staff.faults.open_but_for_fault(at):
 			_repairs[at] = sim.staff.faults.repair_tick(at)
+			if _repairs[at] <= sim.tick + 1:
+				_opens[at] = true
+				_repairs.erase(at)
 		_helper_from[at] = StaffPosts.helper_from(sim.staff, at) if sim.staff != null else -1
 		_cells[at] = sim.layout.lanes[at]
 		_lines[at] = sim.layout.line_of(at)
@@ -386,7 +391,23 @@ static func _leaves_station(sim: PassengerSim, p: Passenger) -> bool:
 		return false
 	if p.stage != Passenger.Stage.TO_SECURITY and p.stage != Passenger.Stage.SECURITY_QUEUE:
 		return false
-	return sim.layout.is_usable(p.station) and not sim._is_open(p.station)
+	return (
+		sim.layout.is_usable(p.station)
+		and not sim._is_open(p.station)
+		and not _repaired_next_tick(sim, p.station)
+	)
+
+
+## Whether `station`, stopped only by a scanner fault, is repaired on the next tick
+## (or is overdue: a load accepts a repair tick at the clock). StaffSim.step()
+## clears it before the station steps, so it admits then and sends nobody away.
+static func _repaired_next_tick(sim: PassengerSim, station: int) -> bool:
+	return (
+		sim.staff != null
+		and sim.staff.faults.is_faulted(station)
+		and sim.staff.faults.open_but_for_fault(station)
+		and sim.staff.faults.repair_tick(station) <= sim.tick + 1
+	)
 
 
 ## A copy of waiting passenger `p` (PassengerStations.is_seeking()): it stands

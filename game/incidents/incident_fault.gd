@@ -94,14 +94,18 @@ static func is_over(incident: Dictionary, tick: int) -> bool:
 	return tick >= int(incident["plan"]["repair_tick"])
 
 
-## "" or why the saved incidents and the saved staff faults disagree: an
-## active fault whose station is on `grid` must be among `faults`
-## ([[station, repair tick], ...], StationFaults.live()) with its own repair
-## tick. One whose station is gone has none (a save keeps no fault of it).
+## "" or why the saved incidents and the saved staff faults disagree: they
+## match one to one. Every active fault whose station is on `grid` must be among
+## `faults` ([[station, repair tick], ...], StationFaults.live()) with its own
+## repair tick, and no other active fault may stop that station. Every saved
+## fault must have its active fault incident (without one the loaded scanner
+## stays closed with no card). An active fault whose station is gone has no
+## saved fault (a save keeps none of it).
 static func links_problem(incidents: Array, faults: Array, grid: BuildGrid) -> String:
 	var by_station := {}
 	for pair: Array in faults:
 		by_station[int(pair[0])] = int(pair[1])
+	var planned := {}
 	for incident: Dictionary in incidents:
 		if incident["kind"] != IncidentCatalogue.FAULT:
 			continue
@@ -115,5 +119,17 @@ static func links_problem(incidents: Array, faults: Array, grid: BuildGrid) -> S
 			return (
 				"incident %d: station %d is not saved faulted until %d"
 				% [incident["id"], station, repair]
+			)
+		if planned.has(station):
+			return (
+				"incident %d: station %d is faulted by two active fault incidents"
+				% [incident["id"], station]
+			)
+		planned[station] = true
+	for station: int in by_station:
+		if not planned.has(station):
+			return (
+				"station %d is saved faulted until %d by no active fault incident"
+				% [station, by_station[station]]
 			)
 	return ""
