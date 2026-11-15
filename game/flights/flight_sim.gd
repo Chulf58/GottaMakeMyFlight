@@ -12,7 +12,10 @@ extends Node
 ## Flights come from two places. Accepted contracts (FlightContract) run a
 ## daily timetable: each day's occurrence is issued ahead of its first state
 ## (FlightTimetable), named "<contract>-d<day>", and pruned after it departs;
-## queries on a pruned occurrence still answer from its immutable contract.
+## queries on a pruned occurrence still answer, from its landed record or,
+## once that is dropped, from its contract (_find()). Each contract flies the
+## taxi pair of its gate's route (TaxiTimes), set with its gate; an issued
+## occurrence keeps the starts it was issued with when its contract moves.
 ## add_flight adds a one-off flight, which is never pruned; add_default_flight
 ## is the one-off GMF101 that tests still use.
 ##
@@ -103,11 +106,14 @@ const STATE_COUNT := 11
 ## farthest gate seat out through the exit and along the apron to the plane
 ## door is about 915 ticks at walking pace (test_boarding_window.gd).
 ## TAXI_IN (1000) and TAXI_OUT (920) keep the peak taxi speed at or under
-## 16 m/s on the longest route a legal stand gives, with no pause and with the
-## longest pause MovementPlan allows (user-ruled in decision runway-and-taxi-
-## technical-design-movement-plan-analytic-bookings-planned-pauses;
-## test_airside_stand.gd). Departure is the start of PUSHBACK, so a longer
-## TAXI_IN only moves the arrival earlier.
+## 16 m/s on the longest route a stand of the first site gives, with no pause
+## and with the longest pause MovementPlan allows (user-ruled in decision
+## runway-and-taxi-technical-design-movement-plan-analytic-bookings-planned-
+## pauses; test_airside_stand.gd). They are TaxiTimes.BASE: a contract flies
+## its own taxi pair (FlightContract.TAXI_KEY), longer where its gate's route
+## is (ruling taxi-time-follows-each-gate-s-route-length-far-side-gates-ta).
+## Departure is the start of PUSHBACK, so a longer TAXI_IN only moves the
+## arrival earlier.
 const PHASE_TICKS: Array[int] = [100, 120, 140, 1000, 40, 1200, 60, 120, 920, 200]
 const DEFAULT_ID := "GMF101"
 ## The gate of add_flight and add_default_flight unless told otherwise.
@@ -143,7 +149,11 @@ const STARTER_TERMS := {
 ## version is refused; there is no migration.
 ## 8: every contract holds its offer's "traits" term (FlightContract.TRAITS_KEY,
 ## OfferTraits). A version 7 save is refused; there is no migration.
-const SAVE_VERSION := 8
+## 9: every contract holds its taxi pair (FlightContract.TAXI_KEY, TaxiTimes),
+## a flight's TAXI_IN and TAXI_OUT may be longer than PHASE_TICKS', and
+## "landed" keeps yesterday's pruned occurrences too. A version 8 save is
+## refused; there is no migration.
+const SAVE_VERSION := 9
 ## The refusal of a flight no taxi pause fits (user ruling a-gate-has-no-size-
 ## planes-use-any-stand-they-fit-neighbours-share-apron-space).
 const TAXI_BUSY_TEXT := GroundPlanner.TAXI_BUSY_TEXT
@@ -229,8 +239,11 @@ var _ended: Dictionary = {}
 ## book their ground (end_contract()). Saved: it depends on the world at the
 ## tick the contract ended, which a load cannot rebuild.
 var _reserving: Dictionary = {}
-## Today's occurrences pruned from _flights, as their records, so a prune never
-## changes a plan (FlightPlans). Dropped once their day is over.
+## Today's and yesterday's occurrences pruned from _flights, as their records,
+## in timetable order: a prune never changes a plan (FlightPlans), and a load
+## can tell an occurrence that was pruned from one that is missing without
+## knowing the taxi pair it flew (FlightSnapshot). Dropped the day after their
+## day.
 var _landed: Array[Dictionary] = []
 var _plans := FlightPlans.new()
 ## Bumped on every change to the contracts or the flights that can change a
@@ -259,10 +272,10 @@ func _ready() -> void:
 
 
 ## Start ticks of every state for a flight whose SCHEDULED state begins at
-## `first_tick`.
-static func schedule_starts(first_tick: int) -> Array[int]:
+## `first_tick` and that taxis with pair `taxi` (TaxiTimes).
+static func schedule_starts(first_tick: int, taxi: Array = TaxiTimes.BASE) -> Array[int]:
 	var starts: Array[int] = [first_tick]
-	for ticks in PHASE_TICKS:
+	for ticks in TaxiTimes.phase_ticks(taxi):
 		starts.append(starts[starts.size() - 1] + ticks)
 	return starts
 
@@ -271,11 +284,14 @@ func bind_clock(clock: SimClock) -> void:
 	clock.ticked.connect(on_tick)
 
 
-## STARTER_TERMS departing so that its first state is ISSUE_LEAD_TICKS after
-## `now`, rounded up to a whole minute: its first occurrence is issued at
-## `now` or within the minute after, never with less than the normal lead.
+## STARTER_TERMS departing FlightTimetable.issue_lead() after `now`, rounded up
+## to a whole minute: its first occurrence is issued at `now` or within the
+## minute after, never with less than the normal lead, at any gate. Issuing is
+## anchored to the departure, so its first state is ISSUE_LEAD_TICKS after the
+## issue at a TaxiTimes.BASE gate and earlier, but not before the issue, at a
+## gate with a longer TAXI_IN.
 static func starter_terms(now: int) -> Dictionary:
-	var departure := now + FlightTimetable.ISSUE_LEAD_TICKS + FlightTimetable.departure_offset()
+	var departure := now + FlightTimetable.issue_lead()
 	var minutes := -GameCalendar.floor_div(-departure, GameCalendar.TICKS_PER_MINUTE)
 	var terms := STARTER_TERMS.duplicate()
 	terms["departure_minute"] = GameCalendar.minute_of_day(minutes * GameCalendar.TICKS_PER_MINUTE)
@@ -333,7 +349,7 @@ func accept_contract(terms: Dictionary) -> bool:
 	if problem != "":
 		push_error("FlightSim.accept_contract: %s" % problem)
 		return false
-	var contract := _candidate(terms, _assignment(terms)["gate"])
+	var contract := _candidate(terms, _assignment(terms)["gate"], gate_grounds())
 	_contracts.append(contract)
 	_next_day[contract["id"]] = contract["first_day"]
 	_start_day[contract["id"]] = contract["first_day"]
@@ -394,11 +410,12 @@ func trial_assignment(
 	terms: Dictionary, before: Array = [], ignore_gate_overlap := false
 ) -> Dictionary:
 	var extra: Array[Dictionary] = []
+	var grounds := gate_grounds()
 	for earlier: Dictionary in before:
 		var assigned := _trial(earlier, extra, false)
 		if assigned["gate"] == "":
 			return assigned
-		extra.append(_candidate(earlier, assigned["gate"]))
+		extra.append(_candidate(earlier, assigned["gate"], grounds))
 	return _trial(terms, extra, ignore_gate_overlap)
 
 
@@ -485,7 +502,7 @@ func reassign_gate(contract_id: String, gate_id: String) -> bool:
 	if problem != "":
 		push_error("FlightSim.reassign_gate: %s" % problem)
 		return false
-	_contracts = _replaced(_contracts, _at_gate(contract_of(contract_id), gate_id))
+	_contracts = _replaced(_contracts, _at_gate(contract_of(contract_id), gate_id, gate_grounds()))
 	_changed()
 	return true
 
@@ -535,7 +552,7 @@ func move_plan(from_gates: Array[String], to_gates: Array[String]) -> Dictionary
 			stuck.append(contract["id"])
 			continue
 		moves[contract["id"]] = to
-		contracts[i] = _at_gate(contract, to)
+		contracts[i] = _at_gate(contract, to, grounds)
 	return {"moves": moves, "stuck": stuck}
 
 
@@ -567,7 +584,7 @@ func move_contracts(plan: Dictionary) -> bool:
 		if problem != "":
 			push_error("FlightSim.move_contracts: nothing moved: %s" % problem)
 			return false
-		scratch[i] = _at_gate(contract, moves[contract["id"]])
+		scratch[i] = _at_gate(contract, moves[contract["id"]], grounds)
 		moved += 1
 	if moved != moves.size():
 		push_error("FlightSim.move_contracts: nothing moved: the plan names unknown contracts")
@@ -664,7 +681,7 @@ func contract_end_day(contract_id: String) -> int:
 
 func on_tick(new_tick: int) -> void:
 	tick = new_tick
-	if runway.settle(tick):
+	if runway.settle(tick, _works_flown_until()):
 		_changed()
 	if opened_tick < 0 and gate != null:
 		gate.try_open()
@@ -680,7 +697,10 @@ func on_tick(new_tick: int) -> void:
 ## Each tick calls it, and so do start_works and a view that must follow edits
 ## made while the clock is paused (OfferPanel, every frame it is open).
 func check_planning_changed() -> void:
-	var key := "%s %s %s" % [gate_grounds(), runway.size, runway.works.fixed_bookings()]
+	var key := (
+		"%s %s %s %s"
+		% [gate_grounds(), FlightGround.layout(), runway.size, runway.works.fixed_bookings()]
+	)
 	if key == _planning_key:
 		return
 	var first := _planning_key == ""
@@ -763,8 +783,9 @@ func flight_contract_id(id: String) -> String:
 
 
 ## The gate a live flight holds: for an occurrence issued before its contract
-## moved, the contract's old gate. A pruned occurrence answers with its
-## contract's gate now. "" for an unknown flight.
+## moved, the contract's old gate. A pruned occurrence answers with the gate it
+## held when it was pruned today or yesterday, and with its contract's gate now
+## when earlier (_find()). "" for an unknown flight.
 func flight_gate(id: String) -> String:
 	return _find(id).get("gate", "")
 
@@ -897,10 +918,11 @@ func load_problem(data: Dictionary) -> String:
 
 ## Why a FlightSnapshot.load() result could not be installed with the gates'
 ## grounds now: a live flight at a stand other than its gate's, a live flight
-## or a running or reserving contract too big for its gate's max_class, or a
-## request of any day the sim will fly (FlightPlans.horizon(): live and landed
-## flights, and every running or reserving contract's occurrences) that has no
-## taxi plan; "" for none.
+## or a running or reserving contract too big for its gate's max_class, a
+## running or reserving contract whose taxi pair is shorter than its gate's
+## stand needs (TaxiTimes.for_stand()), or a request of any day the sim will
+## fly (FlightPlans.horizon(): live and landed flights, and every running or
+## reserving contract's occurrences) that has no taxi plan; "" for none.
 func _load_plan_problem(loaded: Dictionary) -> String:
 	for contract: Dictionary in loaded["contracts"]:
 		if not runway.takes(contract["plane_size"]):
@@ -931,25 +953,43 @@ func _load_plan_problem(loaded: Dictionary) -> String:
 				% [flight["id"], plane_class, flight["gate"], ground["max_class"]]
 			)
 	for contract: Dictionary in loaded["contracts"]:
-		if not FlightPlans.runs(world, contract["id"]):
-			continue
-		var ground: Dictionary = grounds.get(contract["gate"], {})
-		if not FlightGround.class_fits(contract["plane_size"], ground.get("max_class", "")):
-			return (
-				"contract %s needs a %s gate, but gate %s takes %s"
-				% [
-					contract["id"],
-					contract["plane_size"],
-					contract["gate"],
-					ground.get("max_class", "none")
-				]
-			)
+		var problem := (
+			_contract_ground_problem(contract, grounds)
+			if FlightPlans.runs(world, contract["id"])
+			else ""
+		)
+		if problem != "":
+			return problem
 	for day in FlightPlans.horizon(world):
 		var plans := _plans.plan_day(world, day)
 		for request: Dictionary in FlightPlans.requests(world, day):
 			var result: Dictionary = plans[request["id"]]
 			if not result["ok"]:
 				return "flight %s has no taxi plan: %s" % [request["id"], _ground_text(result)]
+	return ""
+
+
+## Why running or reserving `contract` cannot stand at its gate of `grounds`:
+## the gate is too small for its plane, or its stand's routes need a longer taxi
+## pair than the contract's (TaxiTimes.for_stand()); "" for neither.
+static func _contract_ground_problem(contract: Dictionary, grounds: Dictionary) -> String:
+	var ground: Dictionary = grounds.get(contract["gate"], {})
+	if not FlightGround.class_fits(contract["plane_size"], ground.get("max_class", "")):
+		return (
+			"contract %s needs a %s gate, but gate %s takes %s"
+			% [
+				contract["id"],
+				contract["plane_size"],
+				contract["gate"],
+				ground.get("max_class", "none")
+			]
+		)
+	var needed := TaxiTimes.for_stand(ground["stand"])
+	if not TaxiTimes.covers(FlightTimetable.taxi_of(contract), needed):
+		return (
+			"contract %s taxis %s ticks, but gate %s needs %s"
+			% [contract["id"], FlightTimetable.taxi_of(contract), contract["gate"], needed]
+		)
 	return ""
 
 
@@ -998,21 +1038,31 @@ func _one_off_clash(starts: Array[int], gate: String) -> String:
 	return ""
 
 
-## The contract `terms` would become now at `gate_id`, with its first day.
-## Terms must be valid.
-func _candidate(terms: Dictionary, gate_id: String) -> Dictionary:
+## The contract `terms` would become now at `gate_id` of `grounds` (the gates'
+## grounds, real or with a spare gate): the taxi pair its stand needs
+## (FlightContract.assigned()) and its first day for that pair. Terms must be
+## valid.
+func _candidate(terms: Dictionary, gate_id: String, grounds: Dictionary) -> Dictionary:
 	var fields := terms.duplicate()
-	fields["gate"] = gate_id
 	fields["first_day"] = 0
+	fields = FlightContract.assigned(fields, gate_id, grounds[gate_id]["stand"]).duplicate()
 	fields["first_day"] = FlightTimetable.first_day(fields, tick)
 	return FlightContract.make(fields)
 
 
-## A read-only copy of `contract` at `gate_id`.
-static func _at_gate(contract: Dictionary, gate_id: String) -> Dictionary:
-	var fields := contract.duplicate()
-	fields["gate"] = gate_id
-	return FlightContract.make(fields)
+## A read-only copy of `contract` at `gate_id` of `grounds`, with the taxi pair
+## its stand needs (FlightContract.assigned()); its first_day stays.
+static func _at_gate(contract: Dictionary, gate_id: String, grounds: Dictionary) -> Dictionary:
+	return FlightContract.assigned(contract, gate_id, grounds[gate_id]["stand"])
+
+
+## The taxi pair a contract assigned to `gate_id` now would fly (TaxiTimes),
+## from the gate's stand; [] for a gate with no stand. Read-only.
+func gate_taxi(gate_id: String) -> Array:
+	var ground: Dictionary = gate_grounds().get(gate_id, {})
+	if ground.is_empty():
+		return []
+	return TaxiTimes.for_stand(ground["stand"])
 
 
 ## `contracts` with the one of `contract`'s id replaced by it.
@@ -1075,7 +1125,7 @@ func _assignment(
 	var clash := ""
 	var busy := {}
 	for gate_id in tried:
-		var candidate := _candidate(terms, gate_id)
+		var candidate := _candidate(terms, gate_id, grounds)
 		var problem := "" if ignore_gate else _gate_problem(candidate, running)
 		if problem != "":
 			clash = problem if clash == "" else clash
@@ -1145,7 +1195,7 @@ func _move_problem(
 	var ground: Dictionary = grounds.get(gate_id, {})
 	if not FlightGround.class_fits(contract["plane_size"], ground.get("max_class", "")):
 		return "gate %s takes no %s plane" % [gate_id, contract["plane_size"]]
-	var moved := _at_gate(contract, gate_id)
+	var moved := _at_gate(contract, gate_id, grounds)
 	var problem := _gate_problem(moved, contracts)
 	if problem != "":
 		return problem
@@ -1242,7 +1292,7 @@ func _world(grounds := {}) -> Dictionary:
 ## the flights or the gates' grounds change.
 func _day_plan(day: int) -> Dictionary:
 	var grounds := gate_grounds()
-	var key := str(grounds)
+	var key := "%s %s" % [grounds, FlightGround.layout()]
 	if _day_plans_revision != _revision or key != _grounds_key:
 		_day_plans.clear()
 		_day_plans_revision = _revision
@@ -1258,7 +1308,9 @@ func _day_plan(day: int) -> Dictionary:
 ## planner or its cache.
 func _trial_day_plan(day: int) -> Dictionary:
 	var grounds := gate_grounds()
-	var key := "%d %s %s" % [_revision, grounds, runway.works.fixed_bookings()]
+	var key := (
+		"%d %s %s %s" % [_revision, grounds, FlightGround.layout(), runway.works.fixed_bookings()]
+	)
 	if key != _trial_plans_key:
 		_trial_day_plans.clear()
 		_trial_plans_key = key
@@ -1323,28 +1375,55 @@ func _insert(record: Dictionary) -> void:
 	_flights.insert(at, record)
 
 
-## Drops each departed occurrence an hour after it departs, keeping it in
-## _landed for the rest of its day, and drops the landed occurrences of days
-## gone (no plan of today depends on them).
+## Drops each departed occurrence an hour after it departs by its own starts
+## (FlightTimetable.prune_tick(), never its contract's times now), keeping it in
+## _landed, in timetable order, until the day after its day is over, and drops
+## the landed occurrences of days gone (no plan from yesterday on depends on
+## them).
 func _prune() -> void:
 	for i in range(_flights.size() - 1, -1, -1):
 		var flight := _flights[i]
 		if flight["contract"] == "":
 			continue
-		var contract := contract_of(flight["contract"])
-		if tick >= FlightTimetable.prune_tick(contract, flight["day"]):
-			_landed.append(flight)
+		if tick >= FlightTimetable.prune_tick(flight["starts"]):
+			_insert_landed(flight)
 			_flights.remove_at(i)
 	var today := GameCalendar.day_of(tick)
 	for i in range(_landed.size() - 1, -1, -1):
-		if FlightPlans.day_of(_landed[i]["starts"]) < today:
+		if FlightPlans.day_of(_landed[i]["starts"]) < today - 1:
 			_landed.remove_at(i)
 			for day: int in _day_plans.keys():
-				if day < today:
+				if day < today - 1:
 					_day_plans.erase(day)
+	# A trial plans from today on, so it needs no plan of a past day.
 	for day: int in _trial_day_plans.keys():
 		if day < today:
 			_trial_day_plans.erase(day)
+
+
+## Adds a pruned occurrence to _landed in timetable order. Occurrences prune by
+## their own DEPARTED, which with mixed taxi pairs is not first-start order.
+func _insert_landed(record: Dictionary) -> void:
+	var at := _landed.size()
+	while at > 0 and FlightTimetable.flight_before(record, _landed[at - 1]):
+		at -= 1
+	_landed.insert(at, record)
+
+
+## The tick until which a live flight that may have met the runway works flies:
+## the latest DEPARTED of the live flights whose first state comes before the
+## works end; RunwayWorks.NO_TICK with no works or no such flight.
+## Runway.settle() holds the works' booking until then as well. Issued flights
+## keep their starts, so ending or moving a contract never shortens it.
+func _works_flown_until() -> int:
+	var until := RunwayWorks.NO_TICK
+	if runway.works.start == RunwayWorks.NO_TICK:
+		return until
+	for flight in _flights:
+		var starts: Array = flight["starts"]
+		if starts[0] < runway.works.finish:
+			until = maxi(until, starts[State.DEPARTED])
+	return until
 
 
 func _advance(flight: Dictionary) -> void:
@@ -1356,13 +1435,19 @@ func _advance(flight: Dictionary) -> void:
 			doors_closed.emit(flight["id"])
 
 
-## The live record, or for an issued occurrence that was pruned, a departed
-## record rebuilt from its contract; {} for anything else, including the days
-## a contract skipped while the airport was closed.
+## The live record; for an issued occurrence pruned today or yesterday, its
+## landed record; for one pruned before that, a departed record rebuilt from
+## its contract; {} for anything else, including the days a contract skipped
+## while the airport was closed. Not guaranteed: a rebuilt record has the
+## contract's gate and taxi pair now, so after a move its gate, first state and
+## DEPARTED may not be the ones it flew (its departure and doors are).
 func _find(id: String) -> Dictionary:
 	var index := _index_of(id)
 	if index >= 0:
 		return _flights[index]
+	for flight in _landed:
+		if flight["id"] == id:
+			return flight
 	var parts := FlightTimetable.parse_occurrence(id)
 	if parts.is_empty():
 		return {}

@@ -38,7 +38,11 @@ extends CanvasLayer
 ## when a build tool is picked.
 ##
 ## A card says "first flight tomorrow" when the sim would not fly today's slot
-## (FlightTimetable.first_day), once the airport is open.
+## (FlightTimetable.first_day), once the airport is open. Whether it would
+## depends on the taxi pair of the gate the offer gets (TaxiTimes: a longer
+## TAXI_IN starts the flight earlier), so the note reads the pair of the gate
+## the card's fit line found (FlightSim.gate_taxi), kept with the fit; an offer
+## no gate takes now is noted at TaxiTimes.BASE, a first-site gate's times.
 ##
 ## Each card reads as a choice (decision airline-offers-stay-accept-many-the-
 ## three-offer-cards-read-a): one row under the title holds a fit line and the
@@ -105,6 +109,8 @@ var _decline_buttons: Dictionary = {}
 var _note_labels: Dictionary = {}
 var _refusal_labels: Dictionary = {}
 var _fit_labels: Dictionary = {}
+## Offer id -> the taxi pair of the gate its last fit found, for its note.
+var _fit_taxis: Dictionary = {}
 var _earnings_labels: Dictionary = {}
 var _trait_rows: Dictionary = {}
 var _noted_tick := -1
@@ -135,10 +141,13 @@ static func ended_message(airline: String, destination: String) -> String:
 
 
 ## Says when the first flight is if it is not today: "" when the sim would fly
-## today's slot (FlightTimetable.first_day is today), else "first flight
-## tomorrow" or, past that, "first flight on Day N" (the HUD's day number).
-static func first_flight_note(offer: Dictionary, now: int) -> String:
-	var first_day := FlightTimetable.first_day(offer, now)
+## today's slot at a gate with taxi pair `taxi` (FlightTimetable.first_day is
+## today), else "first flight tomorrow" or, past that, "first flight on Day N"
+## (the HUD's day number).
+static func first_flight_note(offer: Dictionary, now: int, taxi: Array) -> String:
+	var timed := offer.duplicate()
+	timed[FlightContract.TAXI_KEY] = taxi
+	var first_day := FlightTimetable.first_day(timed, now)
 	var ahead := first_day - GameCalendar.day_of(now)
 	if ahead <= 0:
 		return ""
@@ -147,9 +156,10 @@ static func first_flight_note(offer: Dictionary, now: int) -> String:
 
 ## Ticks a contract accepted while the airport is closed needs between the
 ## airport opening and its departure to fly the first day's slot: the issue
-## lead plus the preparation before departure (FlightTimetable.opening_day).
+## lead before departure (FlightTimetable.issue_lead() and opening_day), the
+## same at every gate.
 static func opening_lead_ticks() -> int:
-	return FlightTimetable.ISSUE_LEAD_TICKS + FlightTimetable.departure_offset()
+	return FlightTimetable.issue_lead()
 
 
 ## `ticks` as "2 h 50 min", "45 min" or "3 h", rounded up to a whole minute.
@@ -471,6 +481,7 @@ func _refresh() -> void:
 	_note_labels.clear()
 	_refusal_labels.clear()
 	_fit_labels.clear()
+	_fit_taxis.clear()
 	_earnings_labels.clear()
 	_trait_rows.clear()
 	var offers := desk.board.open_offers()
@@ -489,7 +500,7 @@ func _refresh() -> void:
 func _note_for(offer: Dictionary) -> String:
 	if flights.opened_tick < 0:
 		return "first flight %s after opening" % lead_text(opening_lead_ticks())
-	return first_flight_note(offer, flights.tick)
+	return first_flight_note(offer, flights.tick, _fit_taxis.get(offer["id"], TaxiTimes.BASE))
 
 
 ## Rewrites each card's note line for the sim's current tick, hiding it while
@@ -513,6 +524,10 @@ func _refresh_fits() -> void:
 
 func _set_fit(label: Label, offer: Dictionary) -> void:
 	var assessment := FlightFit.assess(flights, OfferBoard.terms_of(offer))
+	var taxi: Array = flights.gate_taxi(assessment["gate"]) if assessment["fits"] else []
+	_fit_taxis[offer["id"]] = taxi if not taxi.is_empty() else TaxiTimes.BASE
+	if _note_labels.has(offer["id"]):
+		_set_note(_note_labels[offer["id"]], _note_for(offer))
 	label.text = fit_line(assessment, offer["plane_size"])
 	label.theme_type_variation = &"HudGoodText" if assessment["fits"] else &"HudProblemText"
 	# HudGoodText is larger than the card's other small lines; both looks keep

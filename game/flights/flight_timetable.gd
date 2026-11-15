@@ -4,15 +4,28 @@ extends RefCounted
 ## immutable contract and a day. The occurrence of day d departs (starts
 ## PUSHBACK) at the contract's departure minute on day d and is named
 ## "<contract>-d<d>". Its preparation window, and its gate reservation, is the
-## half-open interval from its first state (SCHEDULED) to DEPARTED. It is
-## issued ISSUE_LEAD_TICKS before that window opens and pruned
-## PRUNE_AFTER_TICKS after it departs.
+## half-open interval from its first state (SCHEDULED) to DEPARTED.
+##
+## The phase lengths are FlightSim.PHASE_TICKS with the contract's own taxi pair
+## (FlightContract.TAXI_KEY, TaxiTimes; ruling taxi-time-follows-each-gate-s-
+## route-length-far-side-gates-ta). The departure stays where it is, so a
+## longer TAXI_IN only moves the first state earlier and a longer TAXI_OUT only
+## moves DEPARTED later. The pair is the contract's current assignment: an
+## occurrence already issued keeps the starts it was issued with, so it is
+## pruned PRUNE_AFTER_TICKS after its own DEPARTED (prune_tick()), never after
+## the contract's.
+##
+## Issuing is anchored to the departure, not the first state: an occurrence is
+## issued issue_lead() before it departs, which is ISSUE_LEAD_TICKS before the
+## first state of a flight at TaxiTimes.BASE. So which days are issued, and the
+## day a closed airport's contract starts on, never depend on the pair, and a
+## contract that moves to a gate with other taxi times issues its next day at
+## the same tick (TaxiTimes.MAX_IN keeps that at or before its first state).
 
-## Issue an occurrence two game hours before its first state, so listeners
-## can plan it before anything is due. Passenger arrivals start up to
-## ArrivalTypes.RELAXED_LEAD_TICKS before departure (1340 ticks before the
-## first state); this leaves 1060 ticks between the issue and the earliest of
-## them.
+## Issue an occurrence two game hours before the first state of a flight at
+## TaxiTimes.BASE, so listeners can plan it before anything is due. Passenger
+## arrivals are set against the departure (ArrivalTypes) and start at most
+## ArrivalTypes.RELAXED_LEAD_TICKS before it, 1460 ticks after the issue.
 const ISSUE_LEAD_TICKS := 2400
 ## Keep a departed occurrence listed for one game hour, then drop the record.
 const PRUNE_AFTER_TICKS := 1200
@@ -25,12 +38,24 @@ const PRUNE_AFTER_TICKS := 1200
 static var _occurrence_pattern := RegEx.create_from_string("^([A-Za-z0-9]+)-d(0|[1-9][0-9]{0,9})$")
 
 
-## Ticks from the first state to the scheduled departure (start of PUSHBACK).
-static func departure_offset() -> int:
+## The taxi pair of a contract (FlightContract.TAXI_KEY).
+static func taxi_of(contract: Dictionary) -> Array:
+	return contract[FlightContract.TAXI_KEY]
+
+
+## Ticks from the first state to the scheduled departure (start of PUSHBACK)
+## for a flight with taxi pair `taxi`.
+static func departure_offset(taxi: Array = TaxiTimes.BASE) -> int:
+	var ticks := TaxiTimes.phase_ticks(taxi)
 	var offset := 0
 	for state in FlightSim.State.PUSHBACK:
-		offset += FlightSim.PHASE_TICKS[state]
+		offset += ticks[state]
 	return offset
+
+
+## Ticks from an occurrence's issue to its departure, the same for every pair.
+static func issue_lead() -> int:
+	return ISSUE_LEAD_TICKS + departure_offset(TaxiTimes.BASE)
 
 
 static func occurrence_id(contract_id: String, day: int) -> String:
@@ -46,30 +71,30 @@ static func parse_occurrence(id: String) -> Dictionary:
 
 
 static func starts_for(contract: Dictionary, day: int) -> Array[int]:
-	return FlightSim.schedule_starts(_first_start(contract, day))
+	return FlightSim.schedule_starts(_first_start(contract, day), taxi_of(contract))
 
 
 ## The first day >= 0 whose occurrence's first state is at or after `now`.
 ## Nothing of that occurrence is due before `now + 1`: its first transition
 ## comes PHASE_TICKS[0] later, and arrivals are planned after its first state.
 static func first_day(contract: Dictionary, now: int) -> int:
-	var behind := now - _first_start(contract, 0)
-	return maxi(0, -GameCalendar.floor_div(-behind, GameCalendar.TICKS_PER_DAY))
+	return _day_at_or_after(_first_start(contract, 0), now)
 
 
 ## The first day, from the contract's first_day on, that is issued at or after
 ## `opened` (the tick the airport opened): the start of a contract accepted
 ## while the airport was closed. The days before it are never flown.
 static func opening_day(contract: Dictionary, opened: int) -> int:
-	return maxi(int(contract["first_day"]), first_day(contract, opened + ISSUE_LEAD_TICKS))
+	return maxi(int(contract["first_day"]), _day_at_or_after(issue_tick(contract, 0), opened))
 
 
 static func issue_tick(contract: Dictionary, day: int) -> int:
-	return _first_start(contract, day) - ISSUE_LEAD_TICKS
+	return GameCalendar.tick_at(day, int(contract["departure_minute"])) - issue_lead()
 
 
-static func prune_tick(contract: Dictionary, day: int) -> int:
-	return _first_start(contract, day) + reserved_ticks() + PRUNE_AFTER_TICKS
+## The tick a flight with `starts` is pruned: PRUNE_AFTER_TICKS after it departs.
+static func prune_tick(starts: Array) -> int:
+	return int(starts[FlightSim.State.DEPARTED]) + PRUNE_AFTER_TICKS
 
 
 ## The first day not yet issued at `now`.
@@ -80,9 +105,12 @@ static func next_day(contract: Dictionary, now: int) -> int:
 
 
 ## True when two contracts would hold one gate at the same time on some day:
-## they share a gate and their gate holds overlap. Both repeat daily for ever
-## and the gate hold is shorter than a day, so comparing day 0 of one with day
-## -1, 0 and 1 of the other covers all.
+## they share a gate and their gate holds overlap. Both repeat daily for ever.
+## A contract holds its gate from A = 1660 + TAXI_IN ticks before it departs to
+## C = 320 + TAXI_OUT after, so day 0 of one meets day k of the other with
+## |k| >= 2 only when A of one plus C of the other is more than a day. Their
+## pairs' bounds (TaxiTimes.MAX_IN, MAX_OUT) keep that sum at 7460 ticks or
+## less, so comparing day 0 of one with day -1, 0 and 1 of the other covers all.
 static func contracts_share_gate(a: Dictionary, b: Dictionary) -> bool:
 	if a["gate"] != b["gate"]:
 		return false
@@ -96,7 +124,7 @@ static func contracts_share_gate(a: Dictionary, b: Dictionary) -> bool:
 ## Whether a flight at `gate` with `starts` would hold the gate at the same time
 ## as an occurrence of `contract` on a day from its first_day. Only the days
 ## whose gate hold overlaps the flight's are compared; they form one contiguous
-## range, found in closed form.
+## range, found in closed form from the contract's own gate hold.
 static func contract_meets(contract: Dictionary, gate: String, starts: Array) -> bool:
 	var start: int = starts[0]
 	var end: int = starts[FlightSim.State.DEPARTED]
@@ -104,7 +132,8 @@ static func contract_meets(contract: Dictionary, gate: String, starts: Array) ->
 		return false
 	var first := _first_start(contract, 0)
 	var day_size := GameCalendar.TICKS_PER_DAY
-	var lowest := GameCalendar.floor_div(start - first - reserved_ticks(), day_size) + 1
+	var held := reserved_ticks(taxi_of(contract))
+	var lowest := GameCalendar.floor_div(start - first - held, day_size) + 1
 	var highest := -GameCalendar.floor_div(first - end, day_size) - 1
 	for day in range(maxi(lowest, int(contract["first_day"])), highest + 1):
 		if shares_gate(gate, starts, contract["gate"], starts_for(contract, day)):
@@ -152,12 +181,20 @@ static func starts_valid(starts: Array[int]) -> bool:
 
 static func _first_start(contract: Dictionary, day: int) -> int:
 	var departure := GameCalendar.tick_at(day, int(contract["departure_minute"]))
-	return departure - departure_offset()
+	return departure - departure_offset(taxi_of(contract))
 
 
-## Ticks an occurrence holds its gate: from its first state to DEPARTED.
-static func reserved_ticks() -> int:
+## The first day >= 0 whose tick, `day0` on day 0 and a day later each day
+## after, is at or after `now`.
+static func _day_at_or_after(day0: int, now: int) -> int:
+	var behind := now - day0
+	return maxi(0, -GameCalendar.floor_div(-behind, GameCalendar.TICKS_PER_DAY))
+
+
+## Ticks an occurrence with taxi pair `taxi` holds its gate: from its first
+## state to DEPARTED.
+static func reserved_ticks(taxi: Array = TaxiTimes.BASE) -> int:
 	var total := 0
-	for ticks in FlightSim.PHASE_TICKS:
+	for ticks in TaxiTimes.phase_ticks(taxi):
 		total += ticks
 	return total

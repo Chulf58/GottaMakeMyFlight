@@ -9,8 +9,10 @@ extends GdUnitTestSuite
 ## a gate too small for a live flight or a running contract refuses the save.
 ##
 ## The saving sim stands gates A and B on their own stands (FlightGround
-## fallbacks); the loading sim stands B on A's, so two flights of A and B that
-## overlap in time meet on one stand.
+## fallbacks); the loading sim stands A on B's, so two flights of A and B that
+## overlap in time meet on one stand. (A's route is the longer, so X's taxi pair
+## is [1020, 920] and covers B's stand; B on A's stand would refuse N's
+## [1000, 920] before any plan, TaxiTimes.)
 
 const GATES: Array[String] = ["A", "B"]
 ## X departs at 10:00 from A and N 40 minutes later from B (the runway takes both).
@@ -28,12 +30,12 @@ func _sim(grounds := {}) -> FlightSim:
 	return sim
 
 
-## Gate B on gate A's stand.
+## Gate A on gate B's stand.
 static func _shared() -> Dictionary:
-	var a: Dictionary = FlightGround.fallback("A")["stand"]
+	var b: Dictionary = FlightGround.fallback("B")["stand"]
 	return {
-		"A": {"stand": a, "max_class": PlaneClasses.LARGE},
-		"B": {"stand": a.duplicate(), "max_class": PlaneClasses.LARGE},
+		"A": {"stand": b.duplicate(), "max_class": PlaneClasses.LARGE},
+		"B": {"stand": b, "max_class": PlaneClasses.LARGE},
 	}
 
 
@@ -53,11 +55,15 @@ func _saved(n_minute: int, until: int, closed := false) -> Dictionary:
 	return JSON.parse_string(JSON.stringify(sim.to_snapshot()))
 
 
-## The quiet night after day 0: nothing live or landed.
+## The quiet night after day 0: nothing live, and landed holds only day 0's
+## two occurrences (yesterday's are kept since flight save version 9), each on
+## the stand it flew from, so only the contracts' days to come can collide.
 func _quiet_night(n_minute: int) -> Dictionary:
 	var data := _saved(n_minute, GameCalendar.tick_at(1, 0))
 	assert_array(data["flights"]).is_empty()
-	assert_array(data["landed"]).is_empty()
+	assert_int((data["landed"] as Array).size()).is_equal(2)
+	for entry: Dictionary in data["landed"]:
+		assert_int(int(entry["day"])).is_equal(0)
 	return data
 
 
@@ -107,21 +113,22 @@ func test_a_reserving_contract_is_planned_and_refused_when_it_collides() -> void
 
 
 ## Both of day 0's flights have landed and been pruned (landed, none live). The
-## stands are the sim's own; N's landed entry is moved onto X's stand, where it
-## overlaps X's, so only the landed request can fail.
+## stands are the sim's own; X's landed entry is moved onto N's stand, where it
+## overlaps N's, so only the landed request can fail. (X's pair, [1020, 920]
+## from A's longer route, covers N's stand; N's would not cover A's.)
 func test_a_landed_occurrence_that_no_longer_plans_is_refused() -> void:
 	var data := _saved(N_MINUTE, GameCalendar.tick_at(0, 20 * 60))
 	assert_array(data["flights"]).is_empty()
 	assert_int((data["landed"] as Array).size()).is_equal(2)
 	assert_str(_sim().load_problem(data)).is_empty()
 	var moved := data.duplicate(true)
-	var x_stand := {}
-	for entry: Dictionary in moved["landed"]:
-		if entry["contract"] == "X":
-			x_stand = entry["stand"]
+	var n_stand := {}
 	for entry: Dictionary in moved["landed"]:
 		if entry["contract"] == "N":
-			entry["stand"] = x_stand.duplicate()
+			n_stand = entry["stand"]
+	for entry: Dictionary in moved["landed"]:
+		if entry["contract"] == "X":
+			entry["stand"] = n_stand.duplicate()
 	var problem := _sim().load_problem(moved)
 	print("landed, moved: '%s'" % problem)
 	assert_str(problem).contains("has no taxi plan")
@@ -169,7 +176,9 @@ func test_a_gap_of_years_between_next_days_plans_only_the_days_that_differ() -> 
 	}
 	var days := FlightPlans.horizon(world)
 	print("days planned across a 5000 day gap: %s" % [days])
-	assert_array(days).is_equal([1, 5000])
+	# Day 0 is planned too: its landed occurrences are kept on day 1 (flight
+	# save version 9). Still none of the 4999 days between.
+	assert_array(days).is_equal([0, 1, 5000])
 	var refusal := FlightPlans.new().refusal(
 		world, func(_day: int) -> Dictionary: return {}, days, ["X", "N"]
 	)

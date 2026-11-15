@@ -209,14 +209,28 @@ func test_a_save_re_plans_identically_and_a_failing_plan_is_refused() -> void:
 	assert_bool(loaded.from_snapshot(data.duplicate(true))).is_true()
 	assert_dict(_live_plans(loaded)).is_equal(plans)
 	assert_str(JSON.stringify(loaded.to_snapshot())).is_equal(JSON.stringify(_sim.to_snapshot()))
-	# Two live flights at different gates, moved onto one stand.
+	# Two live flights at different gates, moved onto one stand. The moved
+	# flight's taxi pair must cover the stand it is moved to (gates A and F have
+	# longer routes than the rest, TaxiTimes), or the save is refused for that
+	# before any plan; so the first flight is the earliest one some other flight
+	# can join.
 	var flights: Array = data["flights"]
-	var first: Dictionary = flights[0]
+	var first: Dictionary = {}
 	var other: Dictionary = {}
-	for entry: Dictionary in flights:
-		var overlap: bool = entry["starts"][0] < first["starts"][10]
-		if entry["gate"] != first["gate"] and overlap and entry["state"] < FlightSim.State.TAKEOFF:
-			other = entry
+	for candidate: Dictionary in flights:
+		var needed := TaxiTimes.for_stand(FlightSnapshot._stand_of(candidate))
+		for entry: Dictionary in flights:
+			var overlap: bool = (
+				entry["starts"][0] >= candidate["starts"][0]
+				and entry["starts"][0] < candidate["starts"][10]
+			)
+			var covers := TaxiTimes.covers(TaxiTimes.of_starts(entry["starts"]), needed)
+			var moving: bool = entry["state"] < FlightSim.State.TAKEOFF
+			if entry["gate"] != candidate["gate"] and overlap and covers and moving:
+				other = entry
+				break
+		if not other.is_empty():
+			first = candidate
 			break
 	assert_dict(other).is_not_empty()
 	var shared := data.duplicate(true)

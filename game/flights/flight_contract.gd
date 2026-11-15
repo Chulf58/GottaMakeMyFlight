@@ -7,12 +7,18 @@ extends RefCounted
 ##
 ## departure_minute is the scheduled departure (the start of PUSHBACK) in
 ## minutes past midnight; every other deadline of an occurrence derives from
-## it by the fixed phase lengths in FlightSim.PHASE_TICKS.
+## it by the phase lengths in FlightSim.PHASE_TICKS, with the contract's own
+## taxi pair (TAXI_KEY) for TAXI_IN and TAXI_OUT.
 ##
-## The gate is the one field that may change (user ruling gates-are-placed-
+## The gate is the one term that may change (user ruling gates-are-placed-
 ## gate-desks-each-desk-links-automatically-to): it is not a term the airline
 ## agreed to. FlightSim gives a contract its gate on accept and
 ## FlightSim.reassign_gate replaces the contract with a copy at another gate.
+## The gate and the taxi pair it needs (TaxiTimes, ruling taxi-time-follows-
+## each-gate-s-route-length-far-side-gates-ta) are the contract's assignment,
+## always set together by assigned(), the one constructor every accept, trial,
+## reassignment and move goes through. The pair is a frozen copy; the
+## occurrences already issued keep the times they were issued with.
 ##
 ## The offer's trade-off traits (OfferTraits, decision offer-traits-technical-
 ## design-offertraits-table-frozen-trait) are the term TRAITS_KEY: {} for a plain
@@ -30,7 +36,7 @@ const TERM_KEYS := [
 	"booked_passengers",
 	"fee_per_passenger",
 ]
-## A stored contract: the terms plus its gate and first_day.
+## A stored contract: the terms plus its gate, first_day and taxi pair.
 const KEYS := [
 	"id",
 	"airline",
@@ -42,9 +48,13 @@ const KEYS := [
 	"fee_per_passenger",
 	"first_day",
 	"traits",
+	"taxi",
 ]
 ## The traits term: optional in offer terms (TERM_KEYS), required in KEYS.
 const TRAITS_KEY := "traits"
+## The taxi pair [TAXI_IN, TAXI_OUT] of the gate the contract is assigned to
+## (TaxiTimes): never in offer terms, required in KEYS.
+const TAXI_KEY := "taxi"
 const TEXT_KEYS := ["airline", "destination", "gate", "plane_size"]
 const PLANE_SIZES := ["small", "medium", "large"]
 const MAX_BOOKED := 999
@@ -89,6 +99,8 @@ static func problem(data: Variant, keys: Array) -> String:
 	var problem := _number_problem(data, keys)
 	if problem == "" and data.has(TRAITS_KEY):
 		problem = OfferTraits.problem(data[TRAITS_KEY])
+	if problem == "" and keys.has(TAXI_KEY):
+		problem = TaxiTimes.problem(data[TAXI_KEY])
 	if problem == "" and not _fits_class(data):
 		var limits := PlaneClasses.passenger_range(data["plane_size"])
 		return (
@@ -99,15 +111,28 @@ static func problem(data: Variant, keys: Array) -> String:
 
 
 ## A read-only copy of checked `data`, whole numbers as ints, with a frozen copy
-## of its traits ({} when it has none).
+## of its traits ({} when it has none) and of its taxi pair when it has one.
 static func make(data: Dictionary) -> Dictionary:
 	var contract := {}
 	for key in data.keys():
 		var value: Variant = data[key]
 		contract[key] = int(value) if typeof(value) == TYPE_FLOAT else value
 	contract[TRAITS_KEY] = OfferTraits.frozen(data.get(TRAITS_KEY, {}))
+	if data.has(TAXI_KEY):
+		contract[TAXI_KEY] = TaxiTimes.frozen(data[TAXI_KEY])
 	contract.make_read_only()
 	return contract
+
+
+## The assignment constructor: a read-only copy of checked `data` (terms or a
+## stored contract) at gate `gate_id`, whose StandPlacement stand is `stand`,
+## with the taxi pair that stand's routes need (TaxiTimes.for_stand()). Any
+## first_day in `data` is kept; FlightSim sets a new contract's.
+static func assigned(data: Dictionary, gate_id: String, stand: Dictionary) -> Dictionary:
+	var fields := data.duplicate()
+	fields["gate"] = gate_id
+	fields[TAXI_KEY] = TaxiTimes.for_stand(stand)
+	return make(fields)
 
 
 ## The first and last departure minute a contract of `traits` may have.

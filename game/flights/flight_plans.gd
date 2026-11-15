@@ -3,14 +3,15 @@ extends RefCounted
 ## FlightSim's taxi plans (decision runway-and-taxi-technical-design-movement-
 ## plan-analytic-bookings-planned-pauses, sections 5 and 6, wired by Runway R7):
 ## GroundPlanner run over one calendar day at a time. Departures lie between
-## 07:00 and 21:00, so every flight of a day books only between about 04:47 and
-## 22:02 and no day's plan depends on another's: the planner restarts each quiet
-## night anyway.
+## 06:00 and 22:00 and every taxi pair keeps a flight's first state and its
+## DEPARTED inside its day (TaxiTimes), so no day's plan depends on another's:
+## the planner restarts each quiet night anyway.
 ##
 ## A world is {"contracts", "start_day", "next_day", "ended", "reserving",
 ## "flights", "landed", "grounds"}: FlightSim's contracts and their days, its live flights,
-## the occurrences of today it has pruned (landed, kept so a prune never changes
-## a plan), and each gate's ground (FlightGround: stand and max_class). A day's
+## the occurrences of today and yesterday it has pruned (landed, kept so a prune
+## never changes a plan), and each gate's ground (FlightGround: stand and
+## max_class). A day's
 ## flights are its landed and live occurrences, each at the stand it was issued
 ## at (one-off flights, tests and debug only, are not planned),
 ## and every running contract's days not yet issued, at its gate's stand now. So

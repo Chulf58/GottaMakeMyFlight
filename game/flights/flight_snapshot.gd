@@ -32,7 +32,23 @@ extends RefCounted
 ## re-plans every day exactly as the run did (FlightPlans). The shared runway
 ## and lane are GroundPlanner's now: only gate clashes are checked here, and
 ## FlightSim.from_snapshot() re-plans and refuses a save whose plan fails.
-## Only version 7 loads; every older save is refused, with no migration.
+##
+## Version 9 (airside S2, ruling taxi-time-follows-each-gate-s-route-length-
+## far-side-gates-ta) gives every contract its taxi pair (FlightContract.
+## TAXI_KEY), its current assignment's. A contract may have moved since an
+## occurrence was issued, so a saved occurrence is checked against its own
+## record, never against the contract's times now: its fixed phases are
+## FlightSim.PHASE_TICKS', its PUSHBACK is its day's departure, its taxi phases
+## are a valid pair (TaxiTimes.problem) at least as long as its saved stand's
+## routes need, and it is live until PRUNE_AFTER_TICKS after its own DEPARTED.
+## "landed" holds yesterday's pruned occurrences as well as today's, so every
+## issued day from yesterday on must be live or landed (_coverage_problem()):
+## a missing occurrence is found without knowing the pair it flew. Which days
+## are issued, and a closed airport's start days, never depend on the pair
+## (FlightTimetable.issue_tick), so they are checked exactly; first_day, set
+## with the pair the contract had when accepted, is checked against the
+## widest the pair bounds allow. Only version 9 loads; every older save is
+## refused, with no migration.
 
 const KEYS := [
 	"save_version",
@@ -135,6 +151,8 @@ static func load(data: Dictionary, gates: Array[String]) -> Dictionary:
 		problem = _read_landed(
 			data["landed"], contracts, start_day, next_day, tick, flights, landed
 		)
+	if problem == "":
+		problem = _coverage_problem(contracts, start_day, next_day, tick, flights, landed)
 	if problem != "":
 		return {"error": problem}
 	return {
@@ -177,8 +195,11 @@ static func _top_problem(data: Dictionary) -> String:
 	return ""
 
 
-## first_day must be one that accepting between tick 0 and `tick` gives, and the
-## departure one its traits allow (FlightContract.window_problem).
+## first_day must be one that accepting between tick 0 and `tick` gives with a
+## pair inside the bounds (the contract may have moved since, so its pair now
+## need not be the one it was accepted with; a TAXI_IN of TaxiTimes.MAX_IN
+## gives the latest day), and the departure one its traits allow
+## (FlightContract.window_problem).
 static func _read_contracts(
 	entries: Array, tick: int, gates: Array[String], out: Array[Dictionary]
 ) -> String:
@@ -191,8 +212,9 @@ static func _read_contracts(
 		if not gates.has(entry["gate"]):
 			return "contract gate '%s' has no stand" % entry["gate"]
 		var contract := FlightContract.make(entry)
-		var earliest := FlightTimetable.first_day(contract, 0)
-		var latest := FlightTimetable.first_day(contract, tick)
+		var earliest := FlightTimetable.first_day(_with_taxi(contract, TaxiTimes.BASE), 0)
+		var latest_taxi := [TaxiTimes.MAX_IN, TaxiTimes.BASE[1]]
+		var latest := FlightTimetable.first_day(_with_taxi(contract, latest_taxi), tick)
 		if contract["first_day"] < earliest or contract["first_day"] > latest:
 			return "contract %s first_day is not one an acceptance could give" % contract["id"]
 		for other in out:
@@ -200,6 +222,13 @@ static func _read_contracts(
 				return "contract id '%s' is used twice" % contract["id"]
 		out.append(contract)
 	return ""
+
+
+## `contract` with taxi pair `taxi`, to bound what another pair would give.
+static func _with_taxi(contract: Dictionary, taxi: Array) -> Dictionary:
+	var fields := contract.duplicate()
+	fields[FlightContract.TAXI_KEY] = taxi
+	return fields
 
 
 ## Contracts that still run must not hold one gate at the same time; an ended
@@ -248,7 +277,8 @@ static func _read_ended(
 ## Each start day is the contract's first_day, or, for a contract accepted
 ## while closed, the day it starts on after the opening. While the airport is
 ## closed nothing has been moved yet; a contract accepted after the opening
-## has a first_day no earlier than an acceptance at the opening gives.
+## has a first_day no earlier than an acceptance at the opening gives with the
+## shortest pair, TaxiTimes.BASE (it may have been accepted at another gate).
 static func _read_start_days(
 	data: Dictionary, contracts: Array[Dictionary], opened: int, out: Dictionary
 ) -> String:
@@ -268,10 +298,8 @@ static func _read_start_days(
 		var ok := day == first
 		if opened >= 0:
 			var after_opening := FlightTimetable.opening_day(contract, opened)
-			ok = (
-				day == after_opening
-				or (ok and first >= FlightTimetable.first_day(contract, opened))
-			)
+			var base := _with_taxi(contract, TaxiTimes.BASE)
+			ok = day == after_opening or (ok and first >= FlightTimetable.first_day(base, opened))
 		if not ok:
 			return "start_day for %s is not one the opening could give" % contract["id"]
 		out[contract["id"]] = day
@@ -315,7 +343,6 @@ static func _read_flights(
 	out: Array[Dictionary]
 ) -> String:
 	var seen := {}
-	var live := {}
 	for entry in entries:
 		var problem := _flight_problem(entry, seen, gates)
 		if problem == "":
@@ -324,7 +351,6 @@ static func _read_flights(
 				problem = _one_off_problem(entry, starts, contracts, ended)
 			else:
 				problem = _occurrence_problem(entry, starts, contracts, start_day, next_day, tick)
-				live[entry["contract"]] = int(live.get(entry["contract"], 0)) + 1
 			if problem == "" and int(entry["state"]) != FlightTimetable.state_at(starts, tick):
 				problem = "flight %s state does not match the tick" % entry["id"]
 			if problem == "" and not out.is_empty():
@@ -334,10 +360,6 @@ static func _read_flights(
 				out.append(_record(entry, starts))
 		if problem != "":
 			return problem
-	for contract in contracts:
-		var expected := _expected_live(contract, start_day, next_day, tick)
-		if int(live.get(contract["id"], 0)) != expected:
-			return "occurrences of %s are missing" % contract["id"]
 	return _fixed_clash_problem(out, contracts, ended)
 
 
@@ -419,9 +441,10 @@ static func _one_off_problem(
 
 
 ## An occurrence must be issued (from its contract's start day), not yet
-## pruned (unless `tick` is -1: a landed one), and at the times its contract
-## schedules. Its gate may be another than its contract's: the one the contract
-## had when it was issued.
+## pruned by its own starts (unless `tick` is -1: a landed one), and at times
+## its contract could have issued it with (_starts_problem()). Its gate and
+## taxi pair may be others than its contract's: the ones the contract had when
+## it was issued.
 static func _occurrence_problem(
 	entry: Dictionary,
 	starts: Array[int],
@@ -441,27 +464,66 @@ static func _occurrence_problem(
 		return "flight %s was not issued" % entry["id"]
 	if entry["id"] != FlightTimetable.occurrence_id(contract["id"], day):
 		return "flight %s does not match its contract and day" % entry["id"]
-	if starts != FlightTimetable.starts_for(contract, day):
-		return "flight %s does not match its contract's timetable" % entry["id"]
-	if tick >= 0 and tick >= FlightTimetable.prune_tick(contract, day):
+	var problem := _starts_problem(entry, starts, contract, day)
+	if problem != "":
+		return problem
+	if tick >= 0 and tick >= FlightTimetable.prune_tick(starts):
 		return "flight %s should have been pruned" % entry["id"]
 	return ""
 
 
-## How many issued occurrences of `contract` are still live at `tick`.
-static func _expected_live(
-	contract: Dictionary, start_day: Dictionary, next_day: Dictionary, tick: int
-) -> int:
-	var count := 0
-	var day: int = next_day[contract["id"]] - 1
-	while day >= start_day[contract["id"]] and tick < FlightTimetable.prune_tick(contract, day):
-		count += 1
-		day -= 1
-	return count
+## An occurrence of `contract` on `day` with `starts` departs at its day's
+## departure, has the fixed phases of FlightSim.PHASE_TICKS, and taxis with a
+## valid pair (TaxiTimes.problem) no shorter than its saved stand's routes need
+## (TaxiTimes.for_stand); the pair need not be the contract's now.
+static func _starts_problem(
+	entry: Dictionary, starts: Array[int], contract: Dictionary, day: int
+) -> String:
+	var pair := TaxiTimes.of_starts(starts)
+	if TaxiTimes.problem(pair) != "":
+		return "flight %s taxi times %s are not a pair a gate gives" % [entry["id"], pair]
+	var departs := FlightTimetable.starts_for(contract, day)[FlightSim.State.PUSHBACK]
+	var built := FlightSim.schedule_starts(starts[0], pair)
+	if starts != built or starts[FlightSim.State.PUSHBACK] != departs:
+		return "flight %s does not match its contract's timetable" % entry["id"]
+	var needed := TaxiTimes.for_stand(_stand_of(entry))
+	if not TaxiTimes.covers(pair, needed):
+		return "flight %s taxis %s ticks, but its stand needs %s" % [entry["id"], pair, needed]
+	return ""
+
+
+## Each issued day of each contract from yesterday on is a live or a landed
+## occurrence. Today's and yesterday's pruned occurrences are all kept as
+## landed (FlightSim._prune()), and no earlier one can still be live (a day's
+## flight is pruned by 01:00 the next day, TaxiTimes.MAX_OUT), so a missing
+## occurrence is found whatever taxi pair it flew.
+static func _coverage_problem(
+	contracts: Array[Dictionary],
+	start_day: Dictionary,
+	next_day: Dictionary,
+	tick: int,
+	flights: Array[Dictionary],
+	landed: Array[Dictionary]
+) -> String:
+	var listed := {}
+	for list in [flights, landed]:
+		for flight: Dictionary in list:
+			listed[flight["id"]] = true
+	var yesterday := GameCalendar.day_of(tick) - 1
+	for contract in contracts:
+		var id: String = contract["id"]
+		for day in range(maxi(start_day[id], yesterday), next_day[id]):
+			if not listed.has(FlightTimetable.occurrence_id(id, day)):
+				return "occurrence %s is missing" % FlightTimetable.occurrence_id(id, day)
+	return ""
+
+
+static func _stand_of(entry: Dictionary) -> Dictionary:
+	var stand: Dictionary = entry["stand"]
+	return StandPlacement.make(int(stand["exit"]), float(stand["x"]), float(stand["wall_z"]))
 
 
 static func _record(entry: Dictionary, starts: Array[int]) -> Dictionary:
-	var stand: Dictionary = entry["stand"]
 	return {
 		"id": entry["id"],
 		"starts": starts,
@@ -469,7 +531,7 @@ static func _record(entry: Dictionary, starts: Array[int]) -> Dictionary:
 		"gate": entry["gate"],
 		"contract": entry["contract"],
 		"day": int(entry["day"]),
-		"stand": StandPlacement.make(int(stand["exit"]), float(stand["x"]), float(stand["wall_z"])),
+		"stand": _stand_of(entry),
 	}
 
 
@@ -485,9 +547,10 @@ static func _read_reserving(entries: Array, ended: Dictionary, out: Dictionary) 
 	return ""
 
 
-## landed: today's issued occurrences already pruned, every one of them, in
-## timetable order, each DEPARTED at its contract's times and at a stand. Its
-## gate may be one that has gone since, so only its shape is checked.
+## landed: today's and yesterday's issued occurrences already pruned (by their
+## own starts), in timetable order, each DEPARTED at times its contract could
+## have issued it with and at a stand. Its gate may be one that has gone since,
+## so only its shape is checked. That none is missing is _coverage_problem()'s.
 static func _read_landed(
 	entries: Array,
 	contracts: Array[Dictionary],
@@ -513,26 +576,14 @@ static func _read_landed(
 		problem = _occurrence_problem(entry, starts, contracts, start_day, next_day, -1)
 		if problem != "":
 			return problem
-		var contract_id: String = entry["contract"]
-		var contract := {}
-		for candidate in contracts:
-			if candidate["id"] == contract_id:
-				contract = candidate
 		var day := int(entry["day"])
-		if day != today or tick < FlightTimetable.prune_tick(contract, day):
-			return "landed flight %s is not one pruned today" % entry["id"]
+		if day < today - 1 or day > today or tick < FlightTimetable.prune_tick(starts):
+			return "landed flight %s is not one pruned today or yesterday" % entry["id"]
 		if int(entry["state"]) != FlightSim.State.DEPARTED:
 			return "landed flight %s has not departed" % entry["id"]
 		if not out.is_empty() and not FlightTimetable.flight_before(out[out.size() - 1], entry):
 			return "landed flight %s is out of timetable order" % entry["id"]
 		out.append(_record(entry, starts))
-	for contract in contracts:
-		var id: String = contract["id"]
-		var issued: bool = today >= start_day[id] and today < next_day[id]
-		var pruned := tick >= FlightTimetable.prune_tick(contract, today)
-		var listed := seen.has(FlightTimetable.occurrence_id(id, today))
-		if issued and pruned and not listed:
-			return "landed is missing %s" % FlightTimetable.occurrence_id(id, today)
 	return ""
 
 
