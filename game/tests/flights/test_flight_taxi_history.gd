@@ -100,6 +100,40 @@ func test_an_occurrence_prunes_by_its_own_starts_after_its_taxi_out_shortened() 
 	assert_str(_reload_problem(sim, BOTH)).is_empty()
 
 
+## X-d0 flew from the long gate D, then X moved to gate C. While X-d0 is landed
+## (its day and the next) it answers with gate D and its own times; on day 2
+## its record is gone and it is unknown, never rebuilt from X's gate and taxi
+## pair now (gate C, today's pair).
+func test_an_occurrence_dropped_from_landed_is_unknown_not_rebuilt_from_its_contract() -> void:
+	var sim := _open(BOTH)
+	assert_bool(sim.accept_contract(TestFlightContracts.terms("X", DEPARTS))).is_true()
+	assert_bool(sim.reassign_gate("X", "D")).is_true()
+	TestFlightTaxiPairs.run_to(sim, FlightTimetable.issue_tick(sim.contract_of("X"), 0))
+	var flown: Array[int] = []
+	for state in FlightSim.STATE_COUNT:
+		flown.append(sim.state_start("X-d0", state))
+	assert_bool(sim.reassign_gate("X", "C")).is_true()
+	var by_contract := FlightTimetable.starts_for(sim.contract_of("X"), 0)
+	assert_int(by_contract[0]).is_not_equal(flown[0])
+	TestFlightTaxiPairs.run_to(sim, GameCalendar.tick_at(1, 23 * 60))
+	assert_str(sim.flight_gate("X-d0")).is_equal("D")
+	assert_int(sim.state_start("X-d0", FlightSim.State.SCHEDULED)).is_equal(flown[0])
+	assert_int(sim.state_of("X-d0")).is_equal(FlightSim.State.DEPARTED)
+	TestFlightTaxiPairs.run_to(sim, GameCalendar.tick_at(2, 0))
+	var ids := []
+	for entry: Dictionary in sim.to_snapshot()["landed"]:
+		ids.append(entry["id"])
+	print("landed on day 2: %s" % [ids])
+	assert_bool(ids.has("X-d0")).is_false()
+	assert_str(sim.flight_gate("X-d0")).is_equal("")
+	assert_int(sim.state_of("X-d0")).is_equal(-1)
+	assert_int(sim.state_start("X-d0", FlightSim.State.SCHEDULED)).is_equal(-1)
+	assert_str(sim.flight_contract_id("X-d0")).is_equal("")
+	# Yesterday's X-d1 flew from gate C, and still answers with it.
+	assert_str(sim.flight_gate("X-d1")).is_equal("C")
+	assert_str(_reload_problem(sim, BOTH)).is_empty()
+
+
 ## X (long gate, 13:52) and Y (gate C, 14:00): X starts first but departs,
 ## and is pruned, after Y. Landed keeps timetable order, so the save loads.
 func test_landed_keeps_timetable_order_when_prunes_come_in_another() -> void:

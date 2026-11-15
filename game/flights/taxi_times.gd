@@ -45,18 +45,16 @@ static func for_lengths(in_m: float, out_m: float) -> Array[int]:
 
 
 ## The pair for a plane at StandPlacement stand `stand`, from its taxi routes
-## (FlightGround.routes(), the same for every plane class). Pushes an error when
-## the routes need more than MAX_IN or MAX_OUT; the pair is then not valid
-## (problem()), so a contract or save holding it is refused.
+## (FlightGround.routes(), the same for every plane class). Routes longer than
+## MAX_IN or MAX_OUT allow give a pair problem() refuses: a gate with such a
+## stand takes no contract (FlightContract.assignment_problem()), and a save
+## whose flight or contract would need it is refused.
 static func for_stand(stand: Dictionary) -> Array[int]:
 	var routes := FlightGround.routes(stand, PlaneClasses.ORDER[0])
-	var pair := for_lengths(
+	return for_lengths(
 		MovementPlan.path_length(routes[FlightSim.State.TAXI_IN]),
 		MovementPlan.path_length(routes[FlightSim.State.TAXI_OUT])
 	)
-	if problem(pair) != "":
-		push_error("TaxiTimes: the stand's routes need %s ticks: %s" % [pair, problem(pair)])
-	return pair
 
 
 ## "" when `value` is a pair of whole ticks, each a whole STEP_TICKS from BASE

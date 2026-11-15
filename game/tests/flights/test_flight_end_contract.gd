@@ -67,7 +67,12 @@ func test_an_ended_contract_issues_no_later_day_but_issued_flights_still_fly() -
 	assert_array(added.filter(func(line: String) -> bool: return "PM-d2" in line)).is_not_empty()
 	var am_first := GameCalendar.tick_at(0, 480) - FlightTimetable.departure_offset()
 	assert_array(_log).contains(["%d AM-d1 %d" % [DAY + am_first + 100, FlightSim.State.APPROACH]])
-	assert_int(sim.state_of("AM-d1")).is_equal(FlightSim.State.DEPARTED)
+	var departed := DAY + am_first + FlightTimetable.reserved_ticks()
+	assert_array(_log).contains(["%d AM-d1 %d" % [departed, FlightSim.State.DEPARTED]])
+	# On day 3 AM-d1's landed record is gone (kept through the day after its
+	# day), and an occurrence is never rebuilt from its contract (flight save
+	# version 9), so the sim no longer knows it.
+	assert_int(sim.state_of("AM-d1")).is_equal(-1)
 
 
 func test_the_contract_stays_on_record_and_reports_its_end_day() -> void:

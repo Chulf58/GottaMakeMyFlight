@@ -104,7 +104,11 @@ func test_an_open_save_with_skipped_days_round_trips_and_plays_out_the_same() ->
 	)
 	for id in ["AM-d0", "AM-d1", "AM-d2"]:
 		assert_int(loaded[1].state_of(id)).override_failure_message(id).is_equal(-1)
-	assert_int(loaded[1].state_of("AM-d3")).is_equal(FlightSim.State.DEPARTED)
+	# AM-d4 flew yesterday and is landed, so it answers as departed. AM-d3 flew
+	# too, but on day 5 its landed record is gone and an occurrence is never
+	# rebuilt from its contract (flight save version 9), so it is unknown.
+	assert_int(loaded[1].state_of("AM-d4")).is_equal(FlightSim.State.DEPARTED)
+	assert_int(loaded[1].state_of("AM-d3")).is_equal(-1)
 
 
 ## A version 2 save has no open state: it loads as open since tick 0 with

@@ -12,8 +12,9 @@ extends Node
 ## Flights come from two places. Accepted contracts (FlightContract) run a
 ## daily timetable: each day's occurrence is issued ahead of its first state
 ## (FlightTimetable), named "<contract>-d<day>", and pruned after it departs;
-## queries on a pruned occurrence still answer, from its landed record or,
-## once that is dropped, from its contract (_find()). Each contract flies the
+## queries on a pruned occurrence still answer from its landed record until
+## that is dropped the day after its day; after that it is unknown (_find()),
+## never rebuilt from its contract's assignment now. Each contract flies the
 ## taxi pair of its gate's route (TaxiTimes), set with its gate; an issued
 ## occurrence keeps the starts it was issued with when its contract moves.
 ## add_flight adds a one-off flight, which is never pruned; add_default_flight
@@ -164,13 +165,16 @@ const ODD_HOURS_NIGHT_TEXT := FlightContract.ODD_HOURS_NIGHT_TEXT
 const RUNWAY_TOO_SHORT_TEXT := "the runway is too short for a %s plane"
 ## What kind of refusal trial_assignment() reports ("blocker"): bad terms or a
 ## used id, the runway's size, a clash at every gate that takes the plane, no
-## taxi plan, a quiet-night departure, or no gate (with a stand) for the plane.
+## taxi plan, a quiet-night departure, no gate (with a stand) for the plane, or
+## taxi routes too long for any taxi pair at every gate that is not busy
+## (FlightContract.assignment_problem()).
 const BLOCKER_TERMS := "terms"
 const BLOCKER_RUNWAY := "runway"
 const BLOCKER_GATE := "gate"
 const BLOCKER_TAXI := "taxi"
 const BLOCKER_NIGHT := "night"
 const BLOCKER_STAND := "stand"
+const BLOCKER_ROUTE := "route"
 
 ## The clock to follow when this node enters a scene. Tests call bind_clock.
 @export var clock: SimClock
@@ -784,8 +788,8 @@ func flight_contract_id(id: String) -> String:
 
 ## The gate a live flight holds: for an occurrence issued before its contract
 ## moved, the contract's old gate. A pruned occurrence answers with the gate it
-## held when it was pruned today or yesterday, and with its contract's gate now
-## when earlier (_find()). "" for an unknown flight.
+## held while it is landed (today's and yesterday's); "" for an unknown flight,
+## including an occurrence pruned before yesterday (_find()).
 func flight_gate(id: String) -> String:
 	return _find(id).get("gate", "")
 
@@ -1124,7 +1128,12 @@ func _assignment(
 	running.append_array(extra)
 	var clash := ""
 	var busy := {}
+	var too_long := ""
 	for gate_id in tried:
+		var unassignable := FlightContract.assignment_problem(gate_id, grounds[gate_id]["stand"])
+		if unassignable != "":
+			too_long = unassignable if too_long == "" else too_long
+			continue
 		var candidate := _candidate(terms, gate_id, grounds)
 		var problem := "" if ignore_gate else _gate_problem(candidate, running)
 		if problem != "":
@@ -1143,9 +1152,13 @@ func _assignment(
 	if not busy.is_empty():
 		var kind := BLOCKER_NIGHT if busy["reason"] == GroundPlanner.QUIET_NIGHT else BLOCKER_TAXI
 		return _assigned("", _ground_text(busy), busy, kind)
-	if clash != "":
-		return _assigned("", clash, {}, BLOCKER_GATE)
-	return _assigned("", "no gate takes a %s plane" % terms["plane_size"], {}, BLOCKER_STAND)
+	# Then the best fit's clash, then a route too long at every gate tried.
+	var problem := clash if clash != "" else too_long
+	var blocker := BLOCKER_GATE if clash != "" else BLOCKER_ROUTE
+	if problem == "":
+		problem = "no gate takes a %s plane" % terms["plane_size"]
+		blocker = BLOCKER_STAND
+	return _assigned("", problem, {}, blocker)
 
 
 ## `grounds` with one spare gate added: the first free letter, on the stand
@@ -1195,6 +1208,9 @@ func _move_problem(
 	var ground: Dictionary = grounds.get(gate_id, {})
 	if not FlightGround.class_fits(contract["plane_size"], ground.get("max_class", "")):
 		return "gate %s takes no %s plane" % [gate_id, contract["plane_size"]]
+	var unassignable := FlightContract.assignment_problem(gate_id, ground["stand"])
+	if unassignable != "":
+		return unassignable
 	var moved := _at_gate(contract, gate_id, grounds)
 	var problem := _gate_problem(moved, contracts)
 	if problem != "":
@@ -1435,12 +1451,12 @@ func _advance(flight: Dictionary) -> void:
 			doors_closed.emit(flight["id"])
 
 
-## The live record; for an issued occurrence pruned today or yesterday, its
-## landed record; for one pruned before that, a departed record rebuilt from
-## its contract; {} for anything else, including the days a contract skipped
-## while the airport was closed. Not guaranteed: a rebuilt record has the
-## contract's gate and taxi pair now, so after a move its gate, first state and
-## DEPARTED may not be the ones it flew (its departure and doors are).
+## The live record, or for an issued occurrence pruned today or yesterday its
+## landed record; {} for anything else. An occurrence pruned before yesterday is
+## {} too: its record is gone, and rebuilding it from its contract would give
+## the contract's gate and taxi pair now, which after a move are not the ones it
+## flew. Every caller asks about live flights or ones that left within the day
+## (passengers retire PassengerSim.SETTLED_KEEP_TICKS after they settle).
 func _find(id: String) -> Dictionary:
 	var index := _index_of(id)
 	if index >= 0:
@@ -1448,20 +1464,7 @@ func _find(id: String) -> Dictionary:
 	for flight in _landed:
 		if flight["id"] == id:
 			return flight
-	var parts := FlightTimetable.parse_occurrence(id)
-	if parts.is_empty():
-		return {}
-	var contract := contract_of(parts["contract"])
-	var day: int = parts["day"]
-	if contract.is_empty():
-		return {}
-	if day < _start_day[contract["id"]] or day >= _next_day[contract["id"]]:
-		return {}
-	var record := _record(
-		id, FlightTimetable.starts_for(contract, day), contract["gate"], contract["id"], day
-	)
-	record["state"] = State.DEPARTED
-	return record
+	return {}
 
 
 func _index_of(id: String) -> int:

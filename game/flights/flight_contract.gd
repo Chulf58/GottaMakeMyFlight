@@ -124,11 +124,33 @@ static func make(data: Dictionary) -> Dictionary:
 	return contract
 
 
+## Why no contract can be assigned to gate `gate_id` on StandPlacement stand
+## `stand`: its routes need a taxi pair past TaxiTimes' bounds (an issue after
+## the first state, or a flight in the quiet night); "" when they do not. Every
+## path that assigns a gate (accept, trials, reassign, moves) asks it first and
+## refuses with these words, so assigned() never stores a pair that is not
+## valid.
+static func assignment_problem(gate_id: String, stand: Dictionary) -> String:
+	var pair := TaxiTimes.for_stand(stand)
+	if TaxiTimes.problem(pair) == "":
+		return ""
+	return (
+		"gate %s's taxi route is too long: it needs %s ticks, more than %d in or %d out"
+		% [gate_id, pair, TaxiTimes.MAX_IN, TaxiTimes.MAX_OUT]
+	)
+
+
 ## The assignment constructor: a read-only copy of checked `data` (terms or a
 ## stored contract) at gate `gate_id`, whose StandPlacement stand is `stand`,
 ## with the taxi pair that stand's routes need (TaxiTimes.for_stand()). Any
-## first_day in `data` is kept; FlightSim sets a new contract's.
+## first_day in `data` is kept; FlightSim sets a new contract's. The caller has
+## checked assignment_problem(); a stand it refuses is a defect, pushed as an
+## error and answered with {} (nothing to store).
 static func assigned(data: Dictionary, gate_id: String, stand: Dictionary) -> Dictionary:
+	var problem := assignment_problem(gate_id, stand)
+	if problem != "":
+		push_error("FlightContract.assigned: %s" % problem)
+		return {}
 	var fields := data.duplicate()
 	fields["gate"] = gate_id
 	fields[TAXI_KEY] = TaxiTimes.for_stand(stand)
