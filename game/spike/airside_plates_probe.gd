@@ -38,6 +38,7 @@ extends SceneTree
 ## it, and the hold bars on the east stub and on the starter's lead-in from above.
 
 const StarterFlight := preload("res://spike/starter_flight.gd")
+const IntroClose := preload("res://spike/intro_close.gd")
 const OUT_REL := "res://../tools/blender/out/airside_flight"
 const MAIN_SCENE := "res://main/main.tscn"
 const MARGIN_PX := 8.0
@@ -160,7 +161,7 @@ func _watch() -> void:
 func _run() -> void:
 	_main = load(MAIN_SCENE).instantiate()
 	_clock = _main.get_node("SimClock")
-	var world_seed := randi()
+	var world_seed := IntroClose.seed_or_random()
 	_clock.seed_rng(world_seed)
 	print("PROBE world_seed=%d two_gate=%s" % [world_seed, _two_gate])
 	_clock.set_process(false)
@@ -963,7 +964,10 @@ func _two_gate_paving() -> void:
 	_beat("two_gate_build")
 	var mode := _main.get_node("BuildMode") as BuildMode
 	(mode.get_node("Ghost") as Node3D).visible = false
-	(_main.get_node("PassengerHud") as PassengerHud).dismiss_intro()
+	var intro_problem := IntroClose.close(_main)
+	if intro_problem != "":
+		_invalid(intro_problem)
+		return
 	if not _build_two_gates(mode):
 		return
 	await _frames(6)

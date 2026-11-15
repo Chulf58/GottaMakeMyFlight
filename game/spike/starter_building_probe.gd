@@ -34,6 +34,7 @@ extends SceneTree
 ## catch-a-stuck-main-thread).
 
 const MAIN := "res://main/main.tscn"
+const IntroClose := preload("res://spike/intro_close.gd")
 const OUT_REL := "res://../tools/blender/out/starter-building"
 const CLOSED_TICKS := 300
 const TICKS_PER_FRAME := 40
@@ -80,7 +81,7 @@ func _initialize() -> void:
 	_beat("boot")
 	_guard.start(_watch)
 	_plates = OS.get_cmdline_user_args().has("--plates")
-	var world_seed := randi()
+	var world_seed := IntroClose.seed_or_random()
 	print("PROBE world_seed=%d plates=%s" % [world_seed, _plates])
 	if _plates:
 		_out_dir = ProjectSettings.globalize_path(OUT_REL).simplify_path()
@@ -110,7 +111,10 @@ func _run() -> void:
 	_rig = _main.get_node("TycoonCamera")
 	_cam = _rig.get_node("Camera3D")
 	# The intro dialogue covers the view; closing it unpauses the clock.
-	_hud.dismiss_intro()
+	var intro_problem := IntroClose.close(_main)
+	if intro_problem != "":
+		_fail(intro_problem)
+		return
 	_clock.set_paused(true)
 	if not await _shell_and_closed():
 		return

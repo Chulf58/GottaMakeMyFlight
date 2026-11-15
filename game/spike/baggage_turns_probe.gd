@@ -39,6 +39,7 @@ extends SceneTree
 ## Plates go to tools/blender/out/baggage-turns/.
 
 const PlateSight := preload("res://spike/plate_sight.gd")
+const IntroClose := preload("res://spike/intro_close.gd")
 const OUT_REL := "res://../tools/blender/out/baggage-turns"
 const MAIN_SCENE := "res://main/main.tscn"
 const ROOM := Rect2i(15, 13, 3, 3)
@@ -196,7 +197,7 @@ func _boot() -> void:
 	_clock = _main.get_node("SimClock")
 	_build = _main.get_node("BuildMode")
 	_build.starter_shell = false
-	var seed := randi()
+	var seed := IntroClose.seed_or_random()
 	_clock.seed_rng(seed)
 	print("PROBE sim_seed=", seed)
 	root.add_child(_main)
@@ -211,7 +212,10 @@ func _boot() -> void:
 	_grid = _build.grid
 	_shift = ReferenceTerminal.offset_on(_grid)
 	print("PROBE offset=", _shift)
-	_hud.dismiss_intro()
+	var intro_problem := IntroClose.close(_main)
+	if intro_problem != "":
+		_invalid(intro_problem)
+		return
 	_hud.press_starter_terminal()
 	var room := RoomTool.mark(
 		_grid, Rect2i(_cell(ROOM.position), ROOM.size), &"bag_room", _build.wallet()

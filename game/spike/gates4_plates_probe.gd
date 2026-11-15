@@ -26,6 +26,7 @@ extends SceneTree
 ## a-frame-counting-watchdog-cannot-catch-a-stuck-main-thread).
 
 const PlateSight := preload("res://spike/plate_sight.gd")
+const IntroClose := preload("res://spike/intro_close.gd")
 const StarterFlight := preload("res://spike/starter_flight.gd")
 const MAIN := "res://main/main.tscn"
 const OUT_REL := "res://../tools/blender/out/gates-4"
@@ -93,7 +94,7 @@ var _a_people: Array[Passenger] = []
 func _initialize() -> void:
 	_beat("boot")
 	_guard.start(_watch)
-	var world_seed := randi()
+	var world_seed := IntroClose.seed_or_random()
 	print("PROBE world_seed=%d" % world_seed)
 	_out_dir = ProjectSettings.globalize_path(OUT_REL).simplify_path()
 	DirAccess.make_dir_recursive_absolute(_out_dir)
@@ -120,7 +121,10 @@ func _run() -> void:
 	_sim = _main.get_node("PassengerSim")
 	_views = _sim.get_parent().get_node("PassengerViews")
 	(_mode.get_node("Ghost") as Node3D).visible = false
-	_hud.dismiss_intro()
+	var intro_problem := IntroClose.close(_main)
+	if intro_problem != "":
+		_fail(intro_problem)
+		return
 	_clock.set_paused(true)
 	_offset = ReferenceTerminal.offset_on(_grid)
 	if not _build_terminal():

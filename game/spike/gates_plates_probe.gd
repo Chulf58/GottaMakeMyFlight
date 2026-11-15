@@ -22,6 +22,7 @@ extends SceneTree
 ## a-frame-counting-watchdog-cannot-catch-a-stuck-main-thread).
 
 const MAIN := "res://main/main.tscn"
+const IntroClose := preload("res://spike/intro_close.gd")
 const OUT_REL := "res://../tools/blender/out/gates-1b"
 const TICKS_PER_FRAME := 40
 const OPEN_LIMIT := 6000
@@ -58,7 +59,7 @@ var _fleet: PlaneFleet
 func _initialize() -> void:
 	_beat("boot")
 	_guard.start(_watch)
-	var world_seed := randi()
+	var world_seed := IntroClose.seed_or_random()
 	print("PROBE world_seed=%d" % world_seed)
 	_out_dir = ProjectSettings.globalize_path(OUT_REL).simplify_path()
 	DirAccess.make_dir_recursive_absolute(_out_dir)
@@ -84,7 +85,10 @@ func _run() -> void:
 	_apron = _main.get_node("ApronStand")
 	_gates = _main.get_node("GateDesks")
 	_fleet = _main.get_node("PlaneFleet")
-	_hud.dismiss_intro()
+	var intro_problem := IntroClose.close(_main)
+	if intro_problem != "":
+		_fail(intro_problem)
+		return
 	_clock.set_paused(true)
 	_hud.press_starter_terminal()
 	if not _build_east():
