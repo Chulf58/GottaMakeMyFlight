@@ -19,6 +19,7 @@ extends SceneTree
 ##     --audio-driver Dummy -s res://spike/bird_flock_plates_probe.gd
 
 const SIGHT := preload("res://spike/plate_sight.gd")
+const IntroClose := preload("res://spike/intro_close.gd")
 const OUT_REL := "res://../tools/blender/out/birds"
 const MARGIN_PX := 8.0
 const SETTLE_FRAMES := 120
@@ -61,7 +62,7 @@ var _next_tick := 0
 func _initialize() -> void:
 	_out = ProjectSettings.globalize_path(OUT_REL).simplify_path()
 	DirAccess.make_dir_recursive_absolute(_out)
-	var seed_value := randi()
+	var seed_value := IntroClose.seed_or_random()
 	print("PROBE seed=", seed_value, " out=", _out)
 	_main = load("res://main/main.tscn").instantiate()
 	root.add_child(_main)
@@ -108,7 +109,9 @@ func _finish(code: int) -> void:
 
 func _stage_settle() -> bool:
 	if _frame == 10:
-		(_main.get_node("PassengerHud") as PassengerHud).dismiss_intro()
+		var intro_problem := IntroClose.close(_main)
+		if intro_problem != "":
+			return _invalid(intro_problem)
 		_clock.set_paused(false)
 		_rig.glide_to(LANDSIDE_FOCUS, LANDSIDE_DISTANCE)
 	if _frame == SETTLE_FRAMES - 5:
