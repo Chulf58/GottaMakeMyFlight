@@ -72,11 +72,9 @@ func _init(
 	plots = counts.clamp(Vector2i.ONE, grid_size.max(Vector2i.ONE))
 	_column_starts = _starts(grid_size.x, plots.x)
 	if not column_widths.is_empty():
-		error = column_problem(column_widths, grid_size.x)
-		if error != "":
-			push_error("LandPlots: %s" % error)
-			plots = Vector2i.ZERO
-			_column_starts = PackedInt32Array()
+		var problem := column_problem(column_widths, grid_size.x)
+		if problem != "":
+			_refuse(problem)
 			return
 		plots.x = column_widths.size()
 		_column_starts = _edges(column_widths)
@@ -86,15 +84,39 @@ func _init(
 	_owned.fill(0)
 
 
-## Unowned plots over `site`'s grid, or null (the error pushed) when the
-## site's plot_columns do not cut its grid (column_problem()).
+## Makes this a refused land: pushes `problem`, keeps it in `error` and leaves
+## no plots at all, so nothing is owned, for sale or buildable (edit_problem()).
+func _refuse(problem: String) -> void:
+	error = problem
+	push_error("LandPlots: %s" % problem)
+	plots = Vector2i.ZERO
+	_column_starts = PackedInt32Array()
+	_row_starts = PackedInt32Array()
+	open_columns = Vector2i.ZERO
+	_owned = PackedByteArray()
+
+
+## The land plots over `site`'s grid, none owned. When the site's
+## plot_columns do not cut its grid (site_problem(), an empty list included)
+## the land is refused (`error` set, no plots), so building fails closed.
 static func for_site(site: SiteDefinition) -> LandPlots:
+	var problem := site_problem(site)
+	if problem != "":
+		var refused := LandPlots.new(site.grid_size)
+		refused._refuse(problem)
+		return refused
 	var land := LandPlots.new(site.grid_size, site.plot_counts(), site.plot_columns)
-	if land.error != "":
-		return null
 	if not SiteDefinition.SIDE_LAND_OPEN:
 		land.open_columns = site.centre_columns
 	return land
+
+
+## Why `site`'s plot_columns do not cut its grid, or "" (column_problem(); a
+## site with no plot columns is refused too).
+static func site_problem(site: SiteDefinition) -> String:
+	if site.plot_columns.is_empty():
+		return "the site has no plot columns"
+	return column_problem(site.plot_columns, site.grid_size.x)
 
 
 ## Why columns of `widths` cells cannot cut a grid `width` cells wide, or "":
@@ -284,10 +306,13 @@ func own_start(site: SiteDefinition) -> void:
 ## not own, else null. Floor, an object's footprint and a room need every
 ## cell owned; a wall needs an owned cell on one side of its edge, so the
 ## outer wall of owned land can stand on its border. Removals pass, and cells
-## off the grid are left to the grid's own OUT_OF_BOUNDS.
+## off the grid are left to the grid's own OUT_OF_BOUNDS. A refused land
+## (`error` set) refuses every edit that builds.
 func edit_problem(edit: BuildEdit) -> BuildResult:
 	if REMOVALS.has(edit.kind):
 		return null
+	if error != "":
+		return BuildResult.refused(BuildResult.Reason.LAND_NOT_OWNED)
 	var unowned := false
 	if edit.kind == BuildEdit.Kind.PLACE_WALL:
 		var beyond := edit.cell + BuildGrid.SIDE_STEP[edit.side]
@@ -396,8 +421,12 @@ func to_snapshot() -> Dictionary:
 ## be well formed (snapshot_problem()) and a state the game can reach, which
 ## is a new game's start land plus plots bought one at a time beside owned land:
 ## no plot twice, all the start land owned, `bought` the plots beyond it, and
-## every owned plot joined to the start land by edges.
+## every owned plot joined to the start land by edges. First of all the site's
+## plot columns must cut its grid (site_problem()).
 static func problem(data: Dictionary, site: SiteDefinition) -> String:
+	var columns := site_problem(site)
+	if columns != "":
+		return columns
 	var land := LandPlots.for_site(site)
 	var why := land.snapshot_problem(data)
 	if why != "":
@@ -486,6 +515,9 @@ func _owned_problem(owned: Variant) -> String:
 ## land a to_snapshot() dictionary `data` owns, or "". A wall needs an owned
 ## cell on one side, as in edit_problem().
 static func grid_problem(data: Dictionary, site: SiteDefinition, grid: BuildGrid) -> String:
+	var columns := site_problem(site)
+	if columns != "":
+		return columns
 	var land := LandPlots.for_site(site)
 	if not land.from_snapshot(data):
 		return "it was refused (see the error log)"

@@ -388,7 +388,10 @@ func _ready() -> void:
 		grid = BuildGrid.new(grid_size, null if grid_centred else grid_origin)
 	land_tool = LandTool.attach(self)
 	tool = BuildUnlocks.start_tool(unlocks, require_unlocks, tool)
-	if starter_shell and not StarterShell.place(grid):
+	# A refused land (LandPlots.error, already pushed) allows no building, so
+	# no starter either.
+	var land_refused := land_tool.land != null and land_tool.land.error != ""
+	if starter_shell and not land_refused and not StarterShell.place(grid):
 		push_error("BuildMode: the starter shell does not fit this grid; it starts empty")
 	grid.graph_changed.connect(_on_lane_graph_changed)
 	grid.graph_changed.connect(_on_grid_drawn_cells_changed)

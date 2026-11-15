@@ -28,6 +28,10 @@ func before_test() -> void:
 	add_child(_finances)
 	var site := SiteDefinition.new()
 	site.grid_size = Vector2i(20, 20)
+	# One plot over the whole small grid (refused plot columns allow no building).
+	site.plot_columns = PackedInt32Array([20])
+	site.plot_rows = 1
+	site.centre_columns = Vector2i(0, 1)
 	site.obstacles = [] as Array[Vector2i]
 	_mode = BuildMode.new()
 	_mode.site = site

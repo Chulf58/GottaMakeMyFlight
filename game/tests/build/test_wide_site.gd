@@ -83,8 +83,30 @@ func test_a_site_whose_columns_miss_its_grid_gets_no_land() -> void:
 	await assert_error(made).is_push_error(
 		"LandPlots: the column widths add up to 171 cells, not the grid's 256"
 	)
-	assert_object(LandPlots.for_site(bad)).is_null()
-	assert_object(LandPlots.for_site(SITE)).is_not_null()
+	_assert_refused(made.call(), "add up to 171 cells")
+	assert_str(LandPlots.for_site(SITE).error).is_empty()
+
+
+func test_a_site_with_no_plot_columns_gets_no_land() -> void:
+	var empty: SiteDefinition = SITE.duplicate()
+	empty.plot_columns = PackedInt32Array()
+	var made := func() -> LandPlots: return LandPlots.for_site(empty)
+	await assert_error(made).is_push_error("LandPlots: the site has no plot columns")
+	_assert_refused(made.call(), "no plot columns")
+
+
+## A refused land: its error, no plots, nothing owned or for sale, and every
+## build refused (removals still pass).
+func _assert_refused(land: LandPlots, why: String) -> void:
+	print("refused land: '%s', plots %s" % [land.error, land.plots])
+	assert_str(land.error).contains(why)
+	assert_that(land.plots).is_equal(Vector2i.ZERO)
+	land.own_start(SITE)
+	assert_array(land.owned_plots()).is_empty()
+	assert_array(land.buyable_plots()).is_empty()
+	var floor_edit := BuildEdit.paint_floor(Vector2i(100, 120), BuildGrid.FLOOR_TILE, 1)
+	assert_int(land.edit_problem(floor_edit).reason).is_equal(BuildResult.Reason.LAND_NOT_OWNED)
+	assert_object(land.edit_problem(BuildEdit.remove_floor(Vector2i(100, 120)))).is_null()
 
 
 func test_the_first_site_offset_of_the_test_fixtures_is_the_sites() -> void:

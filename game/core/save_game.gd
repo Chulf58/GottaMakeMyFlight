@@ -299,6 +299,9 @@ func parts() -> Array[SavePart]:
 func save_problem() -> String:
 	if clock.is_in_tick():
 		return "the game is in the middle of a tick"
+	var land_tool := build_mode.land_tool
+	if land_tool != null and land_tool.land != null and land_tool.land.error != "":
+		return "the site's land plots were refused: %s" % land_tool.land.error
 	if passengers.cafes.deadlines_stale or baggage.routes_stale or passengers.messes.stale:
 		return "the last build change settles on the next tick"
 	return ""

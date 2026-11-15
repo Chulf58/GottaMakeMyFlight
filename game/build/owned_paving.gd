@@ -53,7 +53,9 @@ func bind(site_root: Node, plots: LandPlots) -> void:
 		land.changed.disconnect(refresh)
 	_meshes = plot_meshes(site_root)
 	_kerbs = kerb_meshes(site_root)
-	if _meshes.size() != plots.plots.x * plots.plots.y:
+	# A refused land (LandPlots.error, already pushed) has no plots: every
+	# plot's paving hides.
+	if plots.error == "" and _meshes.size() != plots.plots.x * plots.plots.y:
 		push_error(
 			(
 				"OwnedPaving: the site has %d plot paving meshes for %d plots"
