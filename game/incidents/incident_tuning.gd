@@ -43,3 +43,12 @@ const VIP_MISS_HALF_STARS := 2
 ## and the money paid when the player accepts.
 const FAVOUR_EXTRA := 8
 const FAVOUR_BONUS_MONEY := 300
+
+## Scanner fault (decision scanner-fault-incident-design-stationfaults-beside-
+## stationcl): its roll weight while a scanner may fault (a tuning value) and
+## its airline tier. Its repair comes 20 to 40 game minutes after it fires,
+## user-ruled 2026-11-15 ("Random 20-40 min").
+const FAULT_WEIGHT := 2
+const FAULT_TIER := 0
+const FAULT_MIN_TICKS := 20 * GameCalendar.TICKS_PER_MINUTE
+const FAULT_MAX_TICKS := 40 * GameCalendar.TICKS_PER_MINUTE

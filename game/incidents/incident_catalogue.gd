@@ -3,21 +3,24 @@ extends RefCounted
 ## The incident kinds (decision daily-incidents-small-ones-just-happen-with-
 ## a-card-and-a-cau): each kind's category (minor or major), the airline tier
 ## it needs, its weight from what the player has built, the states it moves
-## through and its card words. For now one minor kind, the spill, and "none",
-## whose weight keeps some days quiet, and the four majors: the inspector's
+## through and its card words. Two minor kinds, the spill and the scanner
+## fault (IncidentFault), and "none", whose weight keeps some days quiet, and
+## the four majors: the inspector's
 ## visit and the holiday rush (announced), the VIP and the airline favour
 ## (offers). Their numbers are IncidentTuning's, their words IncidentCopy's,
 ## their effects IncidentMajors'.
 
 ## Bumped whenever a kind or a weight changes: it is part of every roll's seed
 ## (IncidentRoll), so an old seed never replays against a new catalogue.
-const VERSION := 2
+## 3: the scanner fault.
+const VERSION := 3
 const NONE := "none"
 const SPILL := "spill"
 const INSPECTOR := "inspector"
 const RUSH := "rush"
 const VIP := "vip"
 const FAVOUR := "favour"
+const FAULT := "fault"
 const MINOR := "minor"
 const MAJOR := "major"
 ## Every state an incident can be in. A minor is scheduled when rolled, active
@@ -35,7 +38,7 @@ const CHECKIN_PLACE := "Check-in"
 const SECURITY_PLACE := "Security"
 const SPILL_PLACES: Array[String] = [CHECKIN_PLACE, SECURITY_PLACE]
 ## Catalogue order, which is the weighted draw's order.
-const ORDER: Array[String] = [NONE, SPILL, INSPECTOR, RUSH, VIP, FAVOUR]
+const ORDER: Array[String] = [NONE, SPILL, INSPECTOR, RUSH, VIP, FAVOUR, FAULT]
 ## "offer" is true for an opt-in major the player accepts or declines; the
 ## others are announced.
 const KINDS := {
@@ -45,6 +48,7 @@ const KINDS := {
 	RUSH: {"category": MAJOR, "tier": IncidentTuning.RUSH_TIER, "offer": false},
 	VIP: {"category": MAJOR, "tier": IncidentTuning.VIP_TIER, "offer": true},
 	FAVOUR: {"category": MAJOR, "tier": IncidentTuning.FAVOUR_TIER, "offer": true},
+	FAULT: {"category": MINOR, "tier": IncidentTuning.FAULT_TIER},
 }
 ## The weight of a quiet day. Tuning value.
 const NONE_WEIGHT := 4
@@ -77,7 +81,8 @@ static func is_offer(kind: String) -> bool:
 
 
 ## The weight of `kind` in `world`: {"tier": the airline tier, "places": the
-## places a spill can happen, "contracts": the running contracts}. The rush,
+## places a spill can happen, "contracts": the running contracts, "faults":
+## the stations a scanner fault may stop, IncidentFault.stations()}. The rush,
 ## the VIP and the favour need a running contract to land on.
 static func weight(kind: String, world: Dictionary) -> int:
 	var contracts := int(world.get("contracts", 0)) > 0
@@ -94,6 +99,8 @@ static func weight(kind: String, world: Dictionary) -> int:
 			return IncidentTuning.VIP_WEIGHT if contracts else 0
 		FAVOUR:
 			return IncidentTuning.FAVOUR_WEIGHT if contracts else 0
+		FAULT:
+			return IncidentTuning.FAULT_WEIGHT if int(world.get("faults", 0)) > 0 else 0
 	return 0
 
 
@@ -111,7 +118,7 @@ static func candidates(world: Dictionary) -> Array[Dictionary]:
 static func states_for(kind: String) -> Array[String]:
 	var out: Array[String] = []
 	match kind:
-		SPILL:
+		SPILL, FAULT:
 			out.assign([SCHEDULED, ACTIVE, DONE])
 		INSPECTOR, RUSH:
 			out.assign([SCHEDULED, ANNOUNCED, DONE])
@@ -133,13 +140,22 @@ static func panel_copy(kind: String) -> Dictionary:
 
 ## The card's title for an active incident.
 static func card_title(incident: Dictionary) -> String:
-	if incident.get("kind", "") == SPILL:
-		return "Spill near %s" % incident["place"]
+	match incident.get("kind", ""):
+		SPILL:
+			return "Spill near %s" % incident["place"]
+		FAULT:
+			return "Scanner fault"
 	return ""
 
 
 ## The card's words for an active incident: the cause, then what happens next.
 static func card_detail(incident: Dictionary, cleaner_hired: bool) -> String:
+	if incident.get("kind", "") == FAULT:
+		var fixed := GameCalendar.clock_text(int(incident["plan"]["repair_tick"]))
+		return (
+			"A scanner stopped working. It is fixed by %s; until then passengers use another scanner."
+			% fixed
+		)
 	if incident.get("kind", "") != SPILL:
 		return ""
 	var cause := "A passenger dropped a coffee."

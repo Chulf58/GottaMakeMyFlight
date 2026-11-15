@@ -27,7 +27,7 @@ extends RefCounted
 ## ids of objects still on the grid (live_ids()).
 
 ## What the inspect window shows for a closable station (status()).
-enum Status { CLOSED_BY_YOU, FINISHING, WAITING_FOR_STAFF, STAFF_ON_THE_WAY, SERVING }
+enum Status { CLOSED_BY_YOU, FINISHING, WAITING_FOR_STAFF, STAFF_ON_THE_WAY, SERVING, FAULT }
 
 const STATUS_TEXT := {
 	Status.CLOSED_BY_YOU: "Closed by you",
@@ -35,6 +35,7 @@ const STATUS_TEXT := {
 	Status.WAITING_FOR_STAFF: "Waiting for staff",
 	Status.STAFF_ON_THE_WAY: "Staff on the way",
 	Status.SERVING: "Serving",
+	Status.FAULT: "Scanner fault",
 }
 
 ## The pieces besides the counters that are closable stations.
@@ -139,11 +140,14 @@ func release_due(m: StaffMember) -> bool:
 
 ## What the window shows for `station`: CLOSED_BY_YOU, or FINISHING while a
 ## member on duty there still finishes a service admitted before the closure
-## (or before a firing); SERVING while it is open; STAFF_ON_THE_WAY while its
-## primary walks there; else WAITING_FOR_STAFF.
+## (or before a firing); FAULT while a scanner fault stops it (StationFaults),
+## never CLOSED_BY_YOU for that alone; SERVING while it is open;
+## STAFF_ON_THE_WAY while its primary walks there; else WAITING_FOR_STAFF.
 func status(station: int) -> Status:
 	if _ids.has(station):
 		return Status.FINISHING if _finishing(station) else Status.CLOSED_BY_YOU
+	if staff.faults.is_faulted(station):
+		return Status.FAULT
 	if staff.is_open(station):
 		return Status.SERVING
 	var id := staff.staff_at(station)
@@ -156,9 +160,18 @@ func status(station: int) -> Status:
 	return Status.WAITING_FOR_STAFF
 
 
-## status() in the window's words (STATUS_TEXT).
+## status() in the window's words (STATUS_TEXT); a fault names the clock time
+## of its repair: "Scanner fault, fixed by 14:30" (fault_text()).
 func status_text(station: int) -> String:
-	return STATUS_TEXT[status(station)]
+	var shown := status(station)
+	if shown == Status.FAULT:
+		return fault_text(staff.faults.repair_tick(station))
+	return STATUS_TEXT[shown]
+
+
+## The words for a scanner fault repaired on tick `repair`.
+static func fault_text(repair: int) -> String:
+	return "%s, fixed by %s" % [STATUS_TEXT[Status.FAULT], GameCalendar.clock_text(repair)]
 
 
 ## Whether closing `station` would leave passengers no check-in desk (role

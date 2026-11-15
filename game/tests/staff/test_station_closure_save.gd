@@ -131,7 +131,7 @@ func test_a_version_4_staff_save_and_bad_closed_lists_are_refused() -> void:
 	var good: Dictionary = JSON.parse_string(JSON.stringify(_w.staff.to_snapshot()))
 	assert_str(str(StaffSnapshot.load(good, _w.sim).get("error", ""))).is_equal("")
 	var cases := {
-		"version 4": [{"save_version": 4}, "save_version 4 is not 5"],
+		"version 4": [{"save_version": 4}, "save_version 4 is not %d" % StaffSim.SAVE_VERSION],
 		"no list": [{"closed": 3}, "closed is not a list"],
 		"not whole": [{"closed": [1.5]}, "a closed station is not a whole number"],
 		"twice": [{"closed": [_a, _a]}, "closed station %d is out of order or listed twice" % _a],

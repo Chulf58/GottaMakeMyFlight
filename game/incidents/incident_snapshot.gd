@@ -19,13 +19,16 @@ extends RefCounted
 ## a done one has all three or none, and none when its outcome is NO_PLACE.
 ## The outcome is "" or, on a done incident only, NO_PLACE (it never happened).
 ## links_problem() checks an active spill against the staged messes.
-## Only a spill has a cell, a mess and a place. A major (inspector, rush, VIP,
+## Only a spill has a cell, a mess and a place. A scanner fault has none and
+## keeps its station and repair tick in "plan" once it happened (IncidentPlan).
+## A major (inspector, rush, VIP,
 ## favour) has none, and keeps what it decided in "plan" (IncidentPlan): empty
 ## until it is announced or offered, and for a major that was never held. Its
 ## outcome, on a done incident only, is one of OUTCOMES.
 
 ## Version 4: an inspector's plan also keeps the counts the visit saw.
-const SAVE_VERSION := 4
+## Version 5: the scanner fault, with its plan {"station", "repair_tick"}.
+const SAVE_VERSION := 5
 const KEYS: Array[String] = [
 	"save_version", "enabled", "last_rolled_day", "next_major_day", "next_id", "incidents"
 ]
@@ -81,7 +84,10 @@ static func save_incident(incident: Dictionary) -> Dictionary:
 static func links_problem(incidents: Dictionary, messes: Dictionary) -> String:
 	var by_id: Dictionary = messes["messes"]
 	for incident: Dictionary in incidents["incidents"]:
-		if incident["state"] != IncidentCatalogue.ACTIVE:
+		if (
+			incident["state"] != IncidentCatalogue.ACTIVE
+			or incident["kind"] != IncidentCatalogue.SPILL
+		):
 			continue
 		var id: int = incident["id"]
 		var mess_id: int = incident["mess_id"]
@@ -176,11 +182,12 @@ static func _incident(entry: Variant, next_id: int) -> Dictionary:
 	}
 
 
-## Whether a plan may be empty: a minor has none, a major has none before it is
-## announced or offered, and none when it was never held.
+## Whether a plan may be empty: a spill has none, a major has none before it
+## is announced or offered, and none when it was never held, and a scanner
+## fault none before it happened or when it never did.
 static func _may_lack_plan(kind: String, state: String) -> bool:
 	return (
-		not IncidentCatalogue.is_major(kind)
+		(not IncidentCatalogue.is_major(kind) and kind != IncidentCatalogue.FAULT)
 		or state == IncidentCatalogue.SCHEDULED
 		or state == IncidentCatalogue.DONE
 	)
@@ -218,7 +225,8 @@ static func _state_problem(data: Dictionary, cell: Vector2i) -> String:
 	if data["state"] == IncidentCatalogue.SCHEDULED and placed:
 		return "incident %d is scheduled but has a cell, mess or place" % id
 	var whole: bool = cell != NO_CELL and int(data["mess_id"]) > 0 and data["place"] != ""
-	if data["state"] == IncidentCatalogue.ACTIVE and not whole:
+	var spill: bool = data["kind"] == IncidentCatalogue.SPILL
+	if data["state"] == IncidentCatalogue.ACTIVE and spill and not whole:
 		return "incident %d is active but lacks its cell, mess or place" % id
 	# Done after it happened (whole), or before it was placed (nothing); one
 	# that never happened (NO_PLACE) has nothing.
