@@ -235,29 +235,40 @@ func test_the_pad_follows_a_change_of_max_class() -> void:
 	assert_float(large.get_area()).is_greater(medium.get_area())
 	assert_float(medium.get_area()).is_greater(small.get_area())
 	# The mesh is rebuilt with it, and a gate with no class gets no pad.
-	var verts: int = _airside.paving.mesh.surface_get_array_len(0)
+	var tops_with_pad: int = _airside.paving.mesh.surface_get_array_len(0)
+	var all_with_pad := _vertex_count(_airside.paving.mesh)
 	_airside.set_gate_classes({"A": ""})
 	assert_array(_airside.paving.pads).is_empty()
 	# The rebuilt mesh is exactly the routes' paving with no pad, laid on the
-	# site (TaxiPavingSite.on_site()), and the pad's vertices are gone from it.
+	# site (TaxiPavingSite.on_site()), on every surface: the asphalt tops and
+	# their skirts, so neither the pad's top nor its skirts are left behind.
 	var marks := _airside.paving.lines.duplicate()
 	marks.append_array(_airside.paving.bars)
-	var want := (
-		TaxiPavingSite
-		. on_site(TaxiPaving.mesh_of(_airside.paving.shown, marks, []))
-		. surface_get_arrays(0)
-	)
-	var got := _airside.paving.mesh.surface_get_arrays(0)
+	var want := TaxiPavingSite.on_site(TaxiPaving.mesh_of(_airside.paving.shown, marks, []))
+	var got := _airside.paving.mesh as ArrayMesh
 	print(
 		(
-			"verts with pad %d without %d"
-			% [verts, (got[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()]
+			"surfaces %d (want %d); vertices with pad %d without %d"
+			% [got.get_surface_count(), want.get_surface_count(), all_with_pad, _vertex_count(got)]
 		)
 	)
-	assert_array(got[Mesh.ARRAY_VERTEX]).is_equal(want[Mesh.ARRAY_VERTEX])
-	assert_array(got[Mesh.ARRAY_INDEX]).is_equal(want[Mesh.ARRAY_INDEX])
-	assert_array(got[Mesh.ARRAY_TEX_UV]).is_equal(want[Mesh.ARRAY_TEX_UV])
-	assert_int(_airside.paving.mesh.surface_get_array_len(0)).is_less(verts)
+	assert_int(got.get_surface_count()).is_equal(want.get_surface_count())
+	for s in want.get_surface_count():
+		var got_arrays := got.surface_get_arrays(s)
+		var want_arrays := want.surface_get_arrays(s)
+		assert_array(got_arrays[Mesh.ARRAY_VERTEX]).is_equal(want_arrays[Mesh.ARRAY_VERTEX])
+		assert_array(got_arrays[Mesh.ARRAY_INDEX]).is_equal(want_arrays[Mesh.ARRAY_INDEX])
+		assert_array(got_arrays[Mesh.ARRAY_TEX_UV]).is_equal(want_arrays[Mesh.ARRAY_TEX_UV])
+	assert_int(got.surface_get_array_len(0)).is_less(tops_with_pad)
+	assert_int(_vertex_count(got)).is_less(all_with_pad)
+
+
+## The number of vertices on every surface of `mesh`.
+static func _vertex_count(mesh: ArrayMesh) -> int:
+	var count := 0
+	for s in mesh.get_surface_count():
+		count += mesh.surface_get_array_len(s)
+	return count
 
 
 func test_every_class_rolls_on_paving_through_taxi_in_pushback_and_taxi_out() -> void:
