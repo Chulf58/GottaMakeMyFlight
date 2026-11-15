@@ -17,7 +17,7 @@ const CLONE_ALLOWED_MS := 60
 const UNDO_TARGET_MS := 100
 const UNDO_ALLOWED_MS := 200
 ## Well east of the starter shell and the plane's area.
-const FREE_CELL := Vector2i(60, 30)
+const FREE_CELL := Vector2i(60, 30) + LandKit.FIRST_SITE
 
 var _grid: SiteGrid
 

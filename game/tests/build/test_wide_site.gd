@@ -50,9 +50,46 @@ func test_the_plot_columns_are_side_land_the_first_site_and_side_land() -> void:
 
 
 func test_column_widths_that_miss_the_grid_width_are_refused_loudly() -> void:
-	var land := LandPlots.new(Vector2i(30, 10), Vector2i(3, 1), PackedInt32Array([10, 10]))
-	assert_that(land.plots).is_equal(Vector2i(3, 1))
-	assert_that(land.plot_cells(Vector2i(2, 0))).is_equal(Rect2i(20, 0, 10, 10))
+	var cases := {
+		"short": [PackedInt32Array([10, 10]), "add up to 20 cells, not the grid's 30"],
+		"zero": [PackedInt32Array([10, 0, 20]), "column 1 is 0 cells wide"],
+		"negative": [PackedInt32Array([40, -10]), "column 1 is -10 cells wide"],
+	}
+	for name: String in cases:
+		var widths: PackedInt32Array = cases[name][0]
+		var why: String = cases[name][1]
+		var made := func() -> LandPlots:
+			return LandPlots.new(Vector2i(30, 10), Vector2i(3, 1), widths)
+		await assert_error(made).is_push_error(
+			"LandPlots: %s" % LandPlots.column_problem(widths, 30)
+		)
+		var land: LandPlots = made.call()
+		print("%s widths %s: error '%s', plots %s" % [name, widths, land.error, land.plots])
+		assert_str(land.error).contains(why)
+		# No other layout stands in: no plots, nothing owned or for sale.
+		assert_that(land.plots).is_equal(Vector2i.ZERO)
+		assert_that(land.plot_of(Vector2i(5, 5))).is_equal(Vector2i(-1, -1))
+		assert_array(land.buyable_plots()).is_empty()
+	# The control: widths that cut the grid are taken as given.
+	var good := LandPlots.new(Vector2i(30, 10), Vector2i(3, 1), PackedInt32Array([5, 10, 15]))
+	assert_str(good.error).is_empty()
+	assert_that(good.plot_cells(Vector2i(2, 0))).is_equal(Rect2i(15, 0, 15, 10))
+
+
+func test_a_site_whose_columns_miss_its_grid_gets_no_land() -> void:
+	var bad: SiteDefinition = SITE.duplicate()
+	bad.plot_columns = PackedInt32Array([22, 21, 21, 21, 22, 22, 21, 21])
+	var made := func() -> LandPlots: return LandPlots.for_site(bad)
+	await assert_error(made).is_push_error(
+		"LandPlots: the column widths add up to 171 cells, not the grid's 256"
+	)
+	assert_object(LandPlots.for_site(bad)).is_null()
+	assert_object(LandPlots.for_site(SITE)).is_not_null()
+
+
+func test_the_first_site_offset_of_the_test_fixtures_is_the_sites() -> void:
+	var west := int(SITE.centre_rect().position.x - SITE.grid_origin.x)
+	assert_that(LandKit.FIRST_SITE).is_equal(Vector2i(west, 0))
 
 
 func test_the_starter_keeps_its_world_place() -> void:

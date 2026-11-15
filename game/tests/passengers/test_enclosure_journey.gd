@@ -30,9 +30,11 @@ func after_test() -> void:
 	_world = null
 
 
-func _set_gap(open: bool) -> void:
+## Opens or closes the gap; `offset` moves it with a terminal built off cell (0, 0).
+func _set_gap(open: bool, offset := Vector2i.ZERO) -> void:
 	var side := BuildGrid.Side.WEST
-	var edit := BuildEdit.remove_wall(GAP, side) if open else BuildEdit.place_wall(GAP, side)
+	var at := GAP + offset
+	var edit := BuildEdit.remove_wall(at, side) if open else BuildEdit.place_wall(at, side)
 	var result := _world.grid.apply(edit)
 	assert_bool(result.ok).override_failure_message(result.reason_text()).is_true()
 
@@ -107,14 +109,14 @@ func test_a_queue_on_floor_that_opens_ends_and_forms_again_once_it_closes() -> v
 ## out of the terminal, and walks on and comes in once the wall is back.
 func test_a_walker_from_the_road_stops_while_its_terminal_is_open() -> void:
 	var grid := BuildGrid.new(SITE.grid_size, SITE.grid_origin)
-	assert_bool(ReferenceTerminal.build(grid)).is_true()
+	assert_bool(ReferenceTerminal.build(grid, LandKit.FIRST_SITE)).is_true()
 	_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
 	_world.sim.site = SITE
 	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
 	assert_int(p.apron_total_mm()).is_greater(0)
 	var started := func(q: Passenger) -> bool: return q.apron_mm > 2000
 	assert_int(_step_until(p, started, 200)).is_less(200)
-	_set_gap(true)
+	_set_gap(true, LandKit.FIRST_SITE)
 	assert_array(_world.sim.layout.passenger_entrances).is_empty()
 	_world.step()
 	var stopped_at := p.apron_mm
@@ -137,7 +139,7 @@ func test_a_walker_from_the_road_stops_while_its_terminal_is_open() -> void:
 	assert_int(p.stuck).is_equal(Passenger.Stuck.NO_ROUTE)
 	assert_int(p.apron_mm).is_equal(stopped_at)
 	assert_int(p.apron_mm).is_less(p.apron_total_mm())
-	_set_gap(false)
+	_set_gap(false, LandKit.FIRST_SITE)
 	assert_int(_world.sim.layout.passenger_entrances.size()).is_equal(1)
 	var inside := func(q: Passenger) -> bool: return q.stage >= Passenger.Stage.TO_CHECKIN
 	assert_int(_step_until(p, inside, 3000)).is_less(3000)

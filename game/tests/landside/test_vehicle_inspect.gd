@@ -29,7 +29,7 @@ func after_test() -> void:
 func _world_without_entrance() -> LandsideTestWorld:
 	var site := LandsideTestWorld.SITE
 	var grid := BuildGrid.new(site.grid_size, site.grid_origin)
-	for edit in ReferenceTerminal.edits():
+	for edit in ReferenceTerminal.edits(LandKit.FIRST_SITE):
 		if edit.kind != BuildEdit.Kind.PLACE_OBJECT or edit.def_id != &"entrance_door":
 			assert_bool(grid.apply(edit).ok).is_true()
 	return LandsideTestWorld.make(null, [], 3, grid)

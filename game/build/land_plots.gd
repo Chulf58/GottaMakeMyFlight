@@ -49,6 +49,8 @@ var bought := 0
 ## the side land is locked while SiteDefinition.SIDE_LAND_OPEN is false, so
 ## only the first site's columns are for sale (for_site()).
 var open_columns := Vector2i.ZERO
+## Why the plots could not be cut (column_problem()), or "" when they were.
+var error := ""
 
 ## 1 per owned plot, at column + row * plots.x.
 var _owned := PackedByteArray()
@@ -60,7 +62,9 @@ var _row_starts := PackedInt32Array()
 
 ## Plots over a grid of `site_grid_size` cells, `counts` across and down cut
 ## as evenly as whole cells allow, or across in columns of `column_widths`
-## cells, west to east, when it is given (they must add up to the grid's width).
+## cells, west to east, when it is given. Widths that are not all positive or
+## do not add up to the grid's width are refused: the error is pushed and kept
+## in `error`, and the land has no plots at all (no other layout stands in).
 func _init(
 	site_grid_size := Vector2i.ONE, counts := Vector2i.ONE, column_widths := PackedInt32Array()
 ) -> void:
@@ -68,29 +72,42 @@ func _init(
 	plots = counts.clamp(Vector2i.ONE, grid_size.max(Vector2i.ONE))
 	_column_starts = _starts(grid_size.x, plots.x)
 	if not column_widths.is_empty():
-		var edges := _edges(column_widths)
-		if edges[edges.size() - 1] == grid_size.x:
-			plots.x = column_widths.size()
-			_column_starts = edges
-		else:
-			push_error(
-				(
-					"LandPlots: column widths add up to %d cells, not the grid's %d; cut evenly instead"
-					% [edges[edges.size() - 1], grid_size.x]
-				)
-			)
+		error = column_problem(column_widths, grid_size.x)
+		if error != "":
+			push_error("LandPlots: %s" % error)
+			plots = Vector2i.ZERO
+			_column_starts = PackedInt32Array()
+			return
+		plots.x = column_widths.size()
+		_column_starts = _edges(column_widths)
 	_row_starts = _starts(grid_size.y, plots.y)
 	open_columns = Vector2i(0, plots.x)
 	_owned.resize(plots.x * plots.y)
 	_owned.fill(0)
 
 
-## Unowned plots over `site`'s grid.
+## Unowned plots over `site`'s grid, or null (the error pushed) when the
+## site's plot_columns do not cut its grid (column_problem()).
 static func for_site(site: SiteDefinition) -> LandPlots:
 	var land := LandPlots.new(site.grid_size, site.plot_counts(), site.plot_columns)
+	if land.error != "":
+		return null
 	if not SiteDefinition.SIDE_LAND_OPEN:
 		land.open_columns = site.centre_columns
 	return land
+
+
+## Why columns of `widths` cells cannot cut a grid `width` cells wide, or "":
+## every width must be at least one cell and together they must make `width`.
+static func column_problem(widths: PackedInt32Array, width: int) -> String:
+	var total := 0
+	for i in widths.size():
+		if widths[i] < 1:
+			return "column %d is %d cells wide; every column needs a cell" % [i, widths[i]]
+		total += widths[i]
+	if total != width:
+		return "the column widths add up to %d cells, not the grid's %d" % [total, width]
+	return ""
 
 
 ## Where columns of `widths` cells start, then where the last one ends.

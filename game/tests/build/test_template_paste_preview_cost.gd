@@ -12,10 +12,10 @@ const SITE := preload("res://build/terminal_site.tres")
 const TARGET_MS := 50
 const ALLOWED_MS := 120
 ## A cafe saved off a floored block east of the starter shell.
-const BLOCK := Rect2i(60, 20, 8, 7)
-const CAFE := Rect2i(61, 21, 5, 4)
+const BLOCK := Rect2i(Vector2i(60, 20) + LandKit.FIRST_SITE, Vector2i(8, 7))
+const CAFE := Rect2i(Vector2i(61, 21) + LandKit.FIRST_SITE, Vector2i(5, 4))
 ## Bare ground the preview moves over, one cell at a time.
-const PATH_START := Vector2i(62, 50)
+const PATH_START := Vector2i(62, 50) + LandKit.FIRST_SITE
 const STEPS := 6
 
 var _mode: BuildMode
@@ -41,8 +41,8 @@ func before() -> void:
 			edits.append(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
 	_mode.grid.apply_batch(edits)
 	var room := _mode.grid.apply(BuildEdit.place_room(CAFE, &"cafe")).room_id
-	_place(&"cafe_counter", Vector2i(62, 21))
-	_place(&"cafe_table", Vector2i(62, 23))
+	_place(&"cafe_counter", Vector2i(62, 21) + LandKit.FIRST_SITE)
+	_place(&"cafe_table", Vector2i(62, 23) + LandKit.FIRST_SITE)
 	assert_object(_paste.save_room(room)).is_not_null()
 	_paste.arm(0)
 

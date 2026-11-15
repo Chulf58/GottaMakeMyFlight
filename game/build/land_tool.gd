@@ -89,10 +89,14 @@ static func attach(build_mode: BuildMode) -> LandTool:
 
 
 ## Makes `build_mode`'s land on its site, owning a new game's start, and hands
-## it to the site's grid.
+## it to the site's grid. Refuses to bind, with an error, when the site's plot
+## columns do not cut its grid (LandPlots.for_site() gives null).
 func bind(build_mode: BuildMode) -> void:
 	mode = build_mode
 	land = LandPlots.for_site(build_mode.site)
+	if land == null:
+		push_error("LandTool: the site's plot columns were refused; the land is not bound")
+		return
 	land.own_start(build_mode.site)
 	(build_mode.grid as SiteGrid).land = land
 	land.changed.connect(_on_land_changed)

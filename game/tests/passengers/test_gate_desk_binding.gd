@@ -10,12 +10,12 @@ extends GdUnitTestSuite
 ## row 5 cells below each desk and 9 from the other one.
 
 const SITE := preload("res://build/terminal_site.tres")
-const EXIT := Vector2i(40, 112)
-const DESK_1 := Vector2i(36, 113)
-const DESK_2 := Vector2i(41, 113)
-const ROW_1 := Vector2i(30, 118)
-const ROW_2 := Vector2i(46, 118)
-const MIDDLE := Vector2i(40, 122)
+const EXIT := Vector2i(40, 112) + LandKit.FIRST_SITE
+const DESK_1 := Vector2i(36, 113) + LandKit.FIRST_SITE
+const DESK_2 := Vector2i(41, 113) + LandKit.FIRST_SITE
+const ROW_1 := Vector2i(30, 118) + LandKit.FIRST_SITE
+const ROW_2 := Vector2i(46, 118) + LandKit.FIRST_SITE
+const MIDDLE := Vector2i(40, 122) + LandKit.FIRST_SITE
 const FLIGHT := "TO_A"
 
 var _world: PassengerTestWorld
@@ -39,10 +39,10 @@ func _build(desk_2_first: bool) -> void:
 	var grid := BuildGrid.new(SITE.grid_size, SITE.grid_origin)
 	var floor: Array[BuildEdit] = []
 	for y in range(112, 126):
-		for x in range(18, 67):
+		for x in range(18 + LandKit.FIRST_SITE.x, 67 + LandKit.FIRST_SITE.x):
 			floor.append(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
 	grid.apply_batch(floor)
-	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(24, 125), 2)
+	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(24, 125) + LandKit.FIRST_SITE, 2)
 	PassengerTestWorld.place(grid, &"exit_door", EXIT, 0)
 	_row_1 = PassengerTestWorld.place(grid, &"seat_row", ROW_1, 0)
 	_row_2 = PassengerTestWorld.place(grid, &"seat_row", ROW_2, 0)

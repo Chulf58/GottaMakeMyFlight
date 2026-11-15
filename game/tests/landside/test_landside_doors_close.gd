@@ -73,7 +73,7 @@ func test_bookings_still_on_the_road_at_doors_close_are_missed_once_with_the_new
 func test_with_no_entrance_they_are_no_shows_not_traffic_misses() -> void:
 	_land.free_all()
 	var grid := BuildGrid.new(LandsideTestWorld.SITE.grid_size, LandsideTestWorld.SITE.grid_origin)
-	for edit in ReferenceTerminal.edits():
+	for edit in ReferenceTerminal.edits(LandKit.FIRST_SITE):
 		if edit.kind != BuildEdit.Kind.PLACE_OBJECT or edit.def_id != &"entrance_door":
 			assert_bool(grid.apply(edit).ok).is_true()
 	_land = LandsideTestWorld.make(null, PassengerTestWorld.starts_with(BOARDING, DOORS), 3, grid)

@@ -77,7 +77,7 @@ func test_a_landside_only_action_cannot_be_undone_after_a_tick() -> void:
 
 func test_interleaved_grid_and_landside_actions_are_all_forgotten_by_a_tick() -> void:
 	var start := _balance()
-	var cell := Vector2i(10, 10)
+	var cell := Vector2i(10, 10) + LandKit.FIRST_SITE
 	_session.set_building(true)
 	_mode.set_tool(BuildMode.Tool.FLOOR)
 	assert_bool(_mode.apply_at(_mode.grid.cell_to_world(cell)).ok).is_true()
@@ -136,7 +136,9 @@ func test_an_outside_grid_edit_after_esc_forgets_a_landside_action_too() -> void
 	assert_bool(_mode.apply_at(IN_BAY_0).ok).is_true()
 	_session.set_building(false)
 	assert_int(_mode.landside_placement().undo_size()).is_equal(1)
-	var edits: Array[BuildEdit] = [BuildEdit.paint_floor(Vector2i(10, 10), BuildGrid.FLOOR_TILE, 1)]
+	var edits: Array[BuildEdit] = [
+		BuildEdit.paint_floor(Vector2i(10, 10) + LandKit.FIRST_SITE, BuildGrid.FLOOR_TILE, 1)
+	]
 	_mode.grid.apply_batch(edits)
 	assert_int(_mode.landside_placement().undo_size()).is_equal(0)
 	assert_object(_mode.undo()).is_null()

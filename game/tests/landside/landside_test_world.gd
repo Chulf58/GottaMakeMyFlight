@@ -32,7 +32,7 @@ static func make(
 ) -> LandsideTestWorld:
 	if grid == null:
 		grid = BuildGrid.new(SITE.grid_size, SITE.grid_origin)
-		ReferenceTerminal.build(grid)
+		ReferenceTerminal.build(grid, LandKit.FIRST_SITE)
 	var out := LandsideTestWorld.new()
 	out.world = PassengerTestWorld.make(
 		grid, starts if not starts.is_empty() else FlightSim.schedule_starts(4000), seed
