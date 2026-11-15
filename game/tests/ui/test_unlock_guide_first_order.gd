@@ -59,6 +59,27 @@ func test_the_big_firsts_dialog_shows_before_the_incident_notice() -> void:
 	assert_str(_panel.dialog().body_text()).contains("A test crew")
 
 
+## A guide dialog is already open when the major comes: the first waits behind
+## it, and closing it moves straight to the first, never to the notice.
+func test_a_first_queued_behind_an_open_dialog_still_shows_before_the_notice() -> void:
+	_guide.open_dialog([2])
+	assert_bool(_guide.is_open()).is_true()
+	var id := _director.add_scheduled()
+	assert_bool(_director.present(id, false)).is_true()
+	assert_bool(_panel.is_open()).is_false()
+	_guide.dismiss()
+	assert_bool(_guide.is_open()).is_true()
+	assert_bool(_panel.is_open()).is_false()
+	assert_str(_guide.dialog().body_text()).is_equal(BigFirsts.body_for([BigFirsts.INCIDENT]))
+	assert_bool(_clock.paused).is_true()
+	_guide.dismiss()
+	assert_bool(_guide.is_open()).is_false()
+	assert_bool(_panel.is_open()).is_true()
+	assert_str(_panel.dialog().body_text()).contains("A test crew")
+	_panel.dialog().dismiss()
+	assert_bool(_clock.paused).is_false()
+
+
 func test_a_second_major_shows_only_the_incident_notice() -> void:
 	var first := _director.add_scheduled()
 	_director.present(first, false)

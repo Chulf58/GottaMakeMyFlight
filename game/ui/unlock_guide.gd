@@ -227,11 +227,17 @@ func _show_dialog(tiers: Array, firsts: Array = []) -> void:
 
 
 ## The player closed the dialog on `layer`: the firsts that came meanwhile show
-## next. Only a close by the player does this, never one by leaving the tree.
+## next, in place of it and under the same hold on the clock. Releasing the hold
+## first would hand the turn to a dialog waiting behind it (the incident
+## panel), which would then open before the firsts. Only a close by the player
+## does this, never one by leaving the tree.
 func _on_dismissed(layer: CanvasLayer) -> void:
-	var queued := _queued_firsts.duplicate()
-	if _close_dialog(layer) and not queued.is_empty():
-		open_dialog([], queued)
+	if _dialog == null or layer != _layer or _queued_firsts.is_empty():
+		_close_dialog(layer)
+		return
+	var queued := _queued_firsts
+	_queued_firsts = []
+	_show_dialog([], queued)
 
 
 ## Closes the dialog shown on `layer`; a layer that is no longer the current
