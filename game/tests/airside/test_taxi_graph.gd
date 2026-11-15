@@ -2,66 +2,66 @@ class_name TestTaxiGraph
 extends GdUnitTestSuite
 
 
-func _graph() -> TaxiGraph:
+func test_waypoints_keep_their_positions() -> void:
 	var graph := TaxiGraph.new()
-	graph.add_waypoint(&"a", Vector3(0, 0, 0))
-	graph.add_waypoint(&"b", Vector3(10, 0, 0))
-	graph.add_waypoint(&"c", Vector3(10, 0, 10))
-	graph.add_waypoint(&"far", Vector3(100, 0, 100))
-	graph.add_waypoint(&"island", Vector3(-50, 0, 0))
-	graph.link(&"a", &"b")
-	graph.link(&"b", &"c")
-	graph.link(&"a", &"far")
-	graph.link(&"c", &"far")
-	return graph
+	assert_bool(graph.add_waypoint(&"a", Vector3(1, 0, 2))).is_true()
+	assert_bool(graph.add_waypoint(&"b", Vector3(10, 0, 0))).is_true()
+	assert_bool(graph.has_waypoint(&"a")).is_true()
+	assert_that(graph.position_of(&"a")).is_equal(Vector3(1, 0, 2))
+	assert_dict(graph.points()).is_equal({&"a": Vector3(1, 0, 2), &"b": Vector3(10, 0, 0)})
 
 
-func test_route_follows_links_in_order() -> void:
-	var route := _graph().route(&"a", &"c")
-	assert_array(Array(route)).is_equal([Vector3(0, 0, 0), Vector3(10, 0, 0), Vector3(10, 0, 10)])
+func test_a_taken_or_unknown_waypoint_is_refused() -> void:
+	var graph := TaxiGraph.new()
+	graph.add_waypoint(&"a", Vector3.ONE)
+	assert_bool(graph.add_waypoint(&"a", Vector3.ZERO)).is_false()
+	assert_that(graph.position_of(&"a")).is_equal(Vector3.ONE)
+	assert_bool(graph.has_waypoint(&"nowhere")).is_false()
+	assert_that(graph.position_of(&"nowhere")).is_equal(Vector3.ZERO)
 
 
-func test_route_is_symmetric_taxiways_run_both_ways() -> void:
-	var back := _graph().route(&"c", &"a")
-	assert_array(Array(back)).is_equal([Vector3(10, 0, 10), Vector3(10, 0, 0), Vector3(0, 0, 0)])
-
-
-func test_route_picks_the_shorter_way_round() -> void:
-	var route := _graph().route(&"a", &"far")
-	assert_int(route.size()).is_equal(2)
-
-
-func test_unknown_or_unreachable_waypoints_give_an_empty_route() -> void:
-	var graph := _graph()
-	assert_int(graph.route(&"a", &"nowhere").size()).is_equal(0)
-	assert_int(graph.route(&"a", &"island").size()).is_equal(0)
-
-
-func test_linking_an_unknown_waypoint_is_refused() -> void:
-	var graph := _graph()
-	assert_bool(graph.link(&"a", &"nowhere")).is_false()
-	assert_bool(graph.add_waypoint(&"a", Vector3.ONE)).is_false()
-	assert_that(graph.position_of(&"a")).is_equal(Vector3.ZERO)
-
-
+## Every required waypoint at x = its name's length, the lane's ends at x -100
+## and 100 so StandLane (x 9) lies between them.
 func _airside() -> Airside:
 	var airside := auto_free(Airside.new()) as Airside
+	var lane_x := {&"TaxiWest": -100.0, &"TaxiEast": 100.0}
 	for name in Airside.REQUIRED_WAYPOINTS:
 		var marker := Marker3D.new()
 		marker.name = name
-		marker.position = Vector3(float(name.length()), 0.0, 0.0)
+		marker.position = Vector3(lane_x.get(name, float(name.length())), 0.0, 0.0)
 		airside.add_child(marker)
 	return airside
 
 
-func test_airside_builds_its_graph_from_marker_children() -> void:
+## The taxi routes come from TaxiRoutes and the marker children, whatever the
+## links say: taxi in runs RunwayExit, TaxiEast, StandLane, PushbackEnd, Stand.
+func test_airside_routes_its_marker_children_through_taxi_routes() -> void:
 	var airside := _airside()
 	airside.links = PackedStringArray(
 		["RunwayExit>Stand", "Stand>PushbackEnd", "PushbackEnd>RunwayEntry"]
 	)
 	assert_bool(airside.rebuild()).is_true()
-	assert_int(airside.phase_path(FlightSim.State.TAXI_IN).size()).is_equal(2)
-	assert_int(airside.phase_path(FlightSim.State.TAXI_OUT).size()).is_equal(2)
+	var at := func(name: StringName) -> Vector3: return airside.graph.position_of(name)
+	(
+		assert_array(Array(airside.phase_path(FlightSim.State.TAXI_IN)))
+		. is_equal(
+			[
+				at.call(&"RunwayExit"),
+				at.call(&"TaxiEast"),
+				at.call(&"StandLane"),
+				at.call(&"PushbackEnd"),
+				at.call(&"Stand"),
+			]
+		)
+	)
+	assert_array(Array(airside.phase_path(FlightSim.State.TAXI_OUT))).is_equal(
+		[
+			at.call(&"PushbackEnd"),
+			at.call(&"StandLane"),
+			at.call(&"TaxiWest"),
+			at.call(&"RunwayEntry")
+		]
+	)
 	assert_int(airside.phase_path(FlightSim.State.BOARDING).size()).is_equal(0)
 
 
@@ -69,6 +69,7 @@ func test_airside_reports_a_missing_waypoint() -> void:
 	var airside := _airside()
 	airside.get_node("Stand").free()
 	assert_bool(airside.rebuild()).is_false()
+	assert_int(airside.phase_path(FlightSim.State.LANDING).size()).is_equal(0)
 
 
 ## An L corner rounded at 100 m: the arc points sit 100 m from the turn's centre
