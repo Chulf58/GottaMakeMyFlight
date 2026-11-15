@@ -87,7 +87,12 @@ func test_the_phone_ring_hook_fires_with_the_dialog() -> void:
 
 
 func test_a_load_opens_no_dialog() -> void:
-	assert_bool(_unlocks.from_snapshot({"tier": 3, "made": 260, "shown": [], "seen": []})).is_true()
+	(
+		assert_bool(
+			_unlocks.from_snapshot({"tier": 3, "made": 260, "shown": [], "seen": [], "firsts": []})
+		)
+		. is_true()
+	)
 	assert_bool(_guide.is_open()).is_false()
 	assert_array(_rings).is_empty()
 

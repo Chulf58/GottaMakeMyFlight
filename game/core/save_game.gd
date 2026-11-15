@@ -98,7 +98,10 @@ signal loaded(ok: bool)
 ## 22: the offers part is OfferBoard save version 6 (Odd hours offers depart
 ## 06:00 to 22:00, and offers may carry Exit fee); version 21 saves are refused
 ## (no migration before a release).
-const SAVE_VERSION := 22
+## 23: the unlocks part also holds the big firsts whose dialog showed
+## (BuildUnlocks "firsts": the runway upgrade and the major incident); version
+## 22 saves are refused (no migration before a release).
+const SAVE_VERSION := 23
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"

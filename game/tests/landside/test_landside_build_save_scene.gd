@@ -25,7 +25,7 @@ func before() -> void:
 	(
 		assert_bool(
 			(_main.get_node("BuildUnlocks") as BuildUnlocks).from_snapshot(
-				{"tier": 4, "made": 600, "shown": [], "seen": []}
+				{"tier": 4, "made": 600, "shown": [], "seen": [], "firsts": []}
 			)
 		)
 		. is_true()

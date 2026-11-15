@@ -14,6 +14,9 @@ extends RefCounted
 
 ## The size changed: the works ended, a load installed one, or code set it.
 signal size_changed(new_size: String)
+## An upgrade made `new_size` by play, never by a load: the works ended (settle),
+## or FlightSim.start_works applied it at once while the airport is closed.
+signal works_done(new_size: String)
 
 const SMALL := PlaneClasses.SMALL
 const MEDIUM := PlaneClasses.MEDIUM
@@ -109,6 +112,7 @@ func settle(tick: int) -> bool:
 		var built := works.target
 		works.target = ""
 		size = built
+		works_done.emit(built)
 		changed = true
 	var held := works.start != RunwayWorks.NO_TICK and not works.scheduled()
 	if held and tick >= works.finish + RunwayWorks.HOLD_TICKS:

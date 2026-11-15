@@ -12,6 +12,13 @@ extends Node
 ##   another has the turn (the Offers sheet), it shows when that one closes.
 ##   The phone ring is a silent hook for now: `phone_ring` fires as the dialog
 ##   opens and the audio work (board e612caf3) plays it later.
+## - The same dialog and ring also come the first time each big moment happens
+##   in a game (BigFirsts, decision phone-ring-and-help-dialog-also-on-big-
+##   firsts-first-runway-u): the runway works finish (Runway.works_done, which a
+##   load never emits) and a major incident is presented
+##   (IncidentDirector.major_presented). A first shows once per game, kept in
+##   BuildUnlocks with the shown tiers; one that comes while this dialog is open
+##   waits for it to close. A load drops a first that was waiting.
 ## - A "New" mark on every unlocked card the player has not hovered or picked
 ##   yet (is_new()), however many tiers ago it opened. BuildMenu tints them.
 ##
@@ -27,11 +34,15 @@ extends Node
 signal dialog_changed(open: bool)
 ## The marks changed: BuildMenu repaints its cards.
 signal changed
-## The phone ring for a newly opened tier. Nothing plays it yet.
+## The phone ring for a newly opened tier, or NO_TIER for a dialog that holds
+## only big firsts. Nothing plays it yet.
 ## TODO(audio board e612caf3): play the ring here once the audio work lands.
 signal phone_ring(tier: int)
 
 enum Mode { OFF, PROFILE }
+
+## What phone_ring sends for a dialog with no tier in it.
+const NO_TIER := 0
 
 ## The dialog's canvas layer: with the intro, over the HUD and the build menu.
 const LAYER := 10
@@ -45,6 +56,10 @@ var unlocks: BuildUnlocks
 var clock: SimClock
 ## Optional: a load ends an open dialog.
 var save_game: SaveGame
+## Optional: the runway whose first upgrade shows a dialog.
+var runway: Runway
+## Optional: the director whose first major incident shows a dialog.
+var director: IncidentDirector
 
 var _layer: CanvasLayer
 var _dialog: IntroDialogue
@@ -53,6 +68,11 @@ var _dialog: IntroDialogue
 var _hold := ClockHolds.NONE
 ## The tiers of a dialog waiting for its turn.
 var _waiting_tiers: Array = []
+## The big firsts of a dialog waiting for its turn.
+var _waiting_firsts: Array = []
+## Big firsts that came while this guide's own dialog was open: they show when
+## the player closes it.
+var _queued_firsts: Array = []
 
 
 func _ready() -> void:
@@ -61,6 +81,10 @@ func _ready() -> void:
 		return
 	unlocks.tier_changed.connect(_on_tier_changed)
 	unlocks.tiers_opened.connect(_on_tiers_opened)
+	if runway != null:
+		runway.works_done.connect(_on_works_done)
+	if director != null:
+		director.major_presented.connect(_on_major_presented)
 	if save_game != null:
 		save_game.loaded.connect(_on_loaded)
 
@@ -128,50 +152,107 @@ func _on_tiers_opened(first: int, last: int) -> void:
 ## Pauses the clock and shows the dialog for `tiers`: at once, or, while another
 ## exclusive dialog has the turn (the Offers sheet, the intro), when that one
 ## closes. Tiers that open while it waits join the same dialog.
-func open_dialog(tiers: Array) -> void:
+func open_dialog(tiers: Array, firsts: Array = []) -> void:
 	if clock == null or _dialog != null:
-		_show_dialog(tiers)
+		_show_dialog(tiers, firsts)
 		return
 	if clock.holds.has(_hold):
 		_waiting_tiers.append_array(tiers)
+		_waiting_firsts.append_array(firsts)
 		return
 	_waiting_tiers = tiers.duplicate()
+	_waiting_firsts = firsts.duplicate()
 	_hold = clock.holds.take_turn(self, _on_turn)
 
 
 func _on_turn() -> void:
 	var tiers := _waiting_tiers
+	var firsts := _waiting_firsts
 	_waiting_tiers = []
-	_show_dialog(tiers)
+	_waiting_firsts = []
+	_show_dialog(tiers, firsts)
 
 
-func _show_dialog(tiers: Array) -> void:
+## The runway works finished and built a bigger size.
+func _on_works_done(_new_size: String) -> void:
+	_open_first(BigFirsts.RUNWAY)
+
+
+## A major incident was announced or offered.
+func _on_major_presented(_incident: Dictionary) -> void:
+	_open_first(BigFirsts.INCIDENT)
+
+
+## Shows the dialog of the big first `kind` the first time it happens in this
+## game. While this guide's own dialog is open it waits for it to close.
+func _open_first(kind: String) -> void:
+	if unlocks.first_shown(kind):
+		return
+	unlocks.mark_first_shown(kind)
 	if _dialog != null:
+		_queued_firsts.append(kind)
+		return
+	open_dialog([], [kind])
+
+
+## The dialog's title and text for the tiers and big firsts it holds: a dialog
+## with a tier is a tier dialog, with the firsts' lines after the families.
+func _words(tiers: Array, firsts: Array) -> Dictionary:
+	if firsts.is_empty():
+		return {"title": TITLE_TEXT, "body": body_for(tiers)}
+	if tiers.is_empty():
+		return {"title": BigFirsts.TITLE_TEXT, "body": BigFirsts.body_for(firsts)}
+	var lines := body_for(tiers).trim_suffix("\n" + FOOTER_TEXT)
+	return {"title": TITLE_TEXT, "body": lines + "\n" + BigFirsts.body_for(firsts)}
+
+
+func _show_dialog(tiers: Array, firsts: Array = []) -> void:
+	# A dialog that replaces an open one is the same open: dialog_changed keeps
+	# one true and one false, which PassengerHud counts to hold the camera.
+	var replacing := _dialog != null
+	if replacing:
 		_free_dialog()
 	_layer = CanvasLayer.new()
 	_layer.name = "UnlockLayer"
 	_layer.layer = LAYER
-	_dialog = IntroDialogue.new(TITLE_TEXT, body_for(tiers), BOX_HEIGHT)
+	var words := _words(tiers, firsts)
+	_dialog = IntroDialogue.new(words["title"], words["body"], BOX_HEIGHT)
 	_layer.add_child(_dialog)
 	add_child(_layer)
 	# Each close names its own layer, so a replaced dialog's layer leaving the
 	# tree a frame later cannot close the dialog that replaced it.
 	var close := _close_dialog.bind(_layer)
-	_dialog.dismissed.connect(close)
+	_dialog.dismissed.connect(_on_dismissed.bind(_layer))
 	_dialog.tree_exiting.connect(close)
 	_layer.tree_exiting.connect(close)
-	phone_ring.emit(tiers.back())
-	dialog_changed.emit(true)
+	phone_ring.emit(tiers.back() if not tiers.is_empty() else NO_TIER)
+	if not replacing:
+		dialog_changed.emit(true)
+
+
+## The player closed the dialog on `layer`: the firsts that came meanwhile show
+## next, in place of it and under the same hold on the clock. Releasing the hold
+## first would hand the turn to a dialog waiting behind it (the incident
+## panel), which would then open before the firsts. Only a close by the player
+## does this, never one by leaving the tree.
+func _on_dismissed(layer: CanvasLayer) -> void:
+	if _dialog == null or layer != _layer or _queued_firsts.is_empty():
+		_close_dialog(layer)
+		return
+	var queued := _queued_firsts
+	_queued_firsts = []
+	_show_dialog([], queued)
 
 
 ## Closes the dialog shown on `layer`; a layer that is no longer the current
-## one (replaced, or already closed) closes nothing.
-func _close_dialog(layer: CanvasLayer) -> void:
+## one (replaced, or already closed) closes nothing. True when it closed one.
+func _close_dialog(layer: CanvasLayer) -> bool:
 	if _dialog == null or layer != _layer:
-		return
+		return false
 	_free_dialog()
 	_release_clock()
 	dialog_changed.emit(false)
+	return true
 
 
 ## A load replaced the world, clock included: SaveGame.load_world() leaves it
@@ -200,6 +281,8 @@ func _free_dialog() -> void:
 ## left, the player's own pause and speed apply.
 func _release_clock() -> void:
 	_waiting_tiers = []
+	_waiting_firsts = []
+	_queued_firsts = []
 	if is_instance_valid(clock):
 		clock.holds.release(_hold)
 	_hold = ClockHolds.NONE

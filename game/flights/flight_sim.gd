@@ -725,6 +725,7 @@ func start_works(target: String) -> bool:
 		return false
 	if opened_tick < 0:
 		runway.size = target
+		runway.works_done.emit(target)
 		check_planning_changed()
 		return true
 	runway.works.begin(target, start)

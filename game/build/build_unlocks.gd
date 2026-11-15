@@ -192,6 +192,8 @@ var _checked_day := NO_DAY
 ## hovered or picked its card (both set by UnlockGuide, kept in the snapshot).
 var _shown: Dictionary = {}
 var _seen: Dictionary = {}
+## The big firsts (BigFirsts) whose dialog showed in this game.
+var _firsts: Dictionary = {}
 
 
 func _ready() -> void:
@@ -363,8 +365,18 @@ func mark_tool_seen(tool: BuildMode.Tool) -> void:
 	_seen[tool] = true
 
 
+## True once the dialog of the big first `kind` (BigFirsts) has shown in this game.
+func first_shown(kind: String) -> bool:
+	return _firsts.has(kind)
+
+
+func mark_first_shown(kind: String) -> void:
+	_firsts[kind] = true
+
+
 ## JSON-safe state for a save: the highest tier, the made-flight count, the
-## tiers whose dialog showed and the names of the tools the player has seen.
+## tiers whose dialog showed, the names of the tools the player has seen and the
+## big firsts whose dialog showed.
 func to_snapshot() -> Dictionary:
 	var shown := _shown.keys()
 	shown.sort()
@@ -372,7 +384,9 @@ func to_snapshot() -> Dictionary:
 	for tool in _seen:
 		seen.append(String(BuildMode.Tool.find_key(tool)))
 	seen.sort()
-	return {"tier": _tier, "made": _made, "shown": shown, "seen": seen}
+	var firsts := _firsts.keys()
+	firsts.sort()
+	return {"tier": _tier, "made": _made, "shown": shown, "seen": seen, "firsts": firsts}
 
 
 ## Restores a to_snapshot() dictionary, including one that went through JSON.
@@ -392,13 +406,16 @@ func from_snapshot(data: Dictionary) -> bool:
 	_seen.clear()
 	for tool_name in data["seen"]:
 		_seen[BuildMode.Tool[tool_name]] = true
+	_firsts.clear()
+	for kind in data["firsts"]:
+		_firsts[kind] = true
 	tier_changed.emit(_tier)
 	return true
 
 
 static func _snapshot_problem(data: Dictionary) -> String:
 	for key in data.keys():
-		if not key in ["tier", "made", "shown", "seen"]:
+		if not key in ["tier", "made", "shown", "seen", "firsts"]:
 			return "unknown key '%s'" % key
 	for key in ["tier", "made"]:
 		if not data.has(key) or not WholeNumber.is_whole(data[key]):
@@ -442,6 +459,20 @@ static func _marks_problem(data: Dictionary) -> String:
 		if seen.has(entry):
 			return "seen tool %s is listed twice" % entry
 		seen[entry] = true
+	return _firsts_problem(data)
+
+
+## "firsts" is a required list (save version 23) of BigFirsts kinds, none twice.
+static func _firsts_problem(data: Dictionary) -> String:
+	if not data.has("firsts") or not data["firsts"] is Array:
+		return "'firsts' must be a list"
+	var firsts := {}
+	for entry in data["firsts"]:
+		if not entry is String or not BigFirsts.is_kind(entry):
+			return "firsts entry %s is not a big first" % str(entry)
+		if firsts.has(entry):
+			return "firsts entry %s is listed twice" % entry
+		firsts[entry] = true
 	return ""
 
 

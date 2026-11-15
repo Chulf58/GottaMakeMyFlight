@@ -198,7 +198,12 @@ func test_a_card_says_what_unlocks_it_and_how_far_the_game_is() -> void:
 
 
 func test_the_state_goes_through_a_snapshot_and_json() -> void:
-	assert_bool(_unlocks.from_snapshot({"tier": 3, "made": 250, "shown": [], "seen": []})).is_true()
+	(
+		assert_bool(
+			_unlocks.from_snapshot({"tier": 3, "made": 250, "shown": [], "seen": [], "firsts": []})
+		)
+		. is_true()
+	)
 	var json := JSON.new()
 	assert_int(json.parse(JSON.stringify(_unlocks.to_snapshot()))).is_equal(OK)
 	var other: BuildUnlocks = auto_free(BuildUnlocks.new())
@@ -211,23 +216,23 @@ func test_the_state_goes_through_a_snapshot_and_json() -> void:
 
 
 func test_a_bad_snapshot_is_refused_and_changes_nothing() -> void:
-	_unlocks.from_snapshot({"tier": 2, "made": 60, "shown": [], "seen": []})
+	_unlocks.from_snapshot({"tier": 2, "made": 60, "shown": [], "seen": [], "firsts": []})
 	var bad := [
-		{"tier": 0, "made": 0, "shown": [], "seen": []},
-		{"tier": 5, "made": 0, "shown": [], "seen": []},
-		{"tier": 2, "made": -1, "shown": [], "seen": []},
-		{"tier": 2, "shown": [], "seen": []},
-		{"made": 5, "shown": [], "seen": []},
+		{"tier": 0, "made": 0, "shown": [], "seen": [], "firsts": []},
+		{"tier": 5, "made": 0, "shown": [], "seen": [], "firsts": []},
+		{"tier": 2, "made": -1, "shown": [], "seen": [], "firsts": []},
+		{"tier": 2, "shown": [], "seen": [], "firsts": []},
+		{"made": 5, "shown": [], "seen": [], "firsts": []},
 		# A snapshot without the marks the guide keeps (save version 15).
 		{"tier": 2, "made": 60},
-		{"tier": "2", "made": 5, "shown": [], "seen": []},
-		{"tier": 2.5, "made": 5, "shown": [], "seen": []},
-		{"tier": 2, "made": 5, "shown": [], "seen": [], "extra": 1},
+		{"tier": "2", "made": 5, "shown": [], "seen": [], "firsts": []},
+		{"tier": 2.5, "made": 5, "shown": [], "seen": [], "firsts": []},
+		{"tier": 2, "made": 5, "shown": [], "seen": [], "firsts": [], "extra": 1},
 		# A tier saved with fewer made-flight passengers than it takes to open it.
-		{"tier": 2, "made": 49, "shown": [], "seen": []},
-		{"tier": 3, "made": 199, "shown": [], "seen": []},
-		{"tier": 4, "made": 0, "shown": [], "seen": []},
-		{"tier": 4, "made": 599, "shown": [], "seen": []},
+		{"tier": 2, "made": 49, "shown": [], "seen": [], "firsts": []},
+		{"tier": 3, "made": 199, "shown": [], "seen": [], "firsts": []},
+		{"tier": 4, "made": 0, "shown": [], "seen": [], "firsts": []},
+		{"tier": 4, "made": 599, "shown": [], "seen": [], "firsts": []},
 	]
 	for data: Dictionary in bad:
 		assert_bool(_unlocks.from_snapshot(data)).is_false()
@@ -237,9 +242,9 @@ func test_a_bad_snapshot_is_refused_and_changes_nothing() -> void:
 
 func test_a_snapshot_at_exactly_the_tier_requirement_is_taken() -> void:
 	for data: Dictionary in [
-		{"tier": 2, "made": 50, "shown": [], "seen": []},
-		{"tier": 3, "made": 200, "shown": [], "seen": []},
-		{"tier": 4, "made": 600, "shown": [], "seen": []}
+		{"tier": 2, "made": 50, "shown": [], "seen": [], "firsts": []},
+		{"tier": 3, "made": 200, "shown": [], "seen": [], "firsts": []},
+		{"tier": 4, "made": 600, "shown": [], "seen": [], "firsts": []}
 	]:
 		assert_bool(_unlocks.from_snapshot(data)).is_true()
 		assert_int(_unlocks.tier()).is_equal(data["tier"])
