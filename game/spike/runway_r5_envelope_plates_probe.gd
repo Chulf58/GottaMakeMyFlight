@@ -178,8 +178,18 @@ func _plates() -> void:
 	for caption in captions:
 		texts.append(caption.text)
 	print("PROBE envelope outlines %d, captions %s" % [paths.size(), texts])
-	var wanted := ["Gate A\nup to large planes", "Gate B\nup to medium planes"]
-	if paths.size() != 2 or texts != wanted:
+	# Each caption is its class line exactly, then the walk line the game gives
+	# the gate (GateWalk): worked out from the same source, never a prefix match.
+	# Gate A must have a walk, so the third line is required there.
+	var walk_a := links.walk.minutes("A")
+	var wanted := [
+		"Gate A\nup to large planes\n%s" % [GateWalk.CAPTION_TEXT % walk_a],
+		"Gate B\nup to medium planes",
+	]
+	var walk_b := links.walk.minutes("B")
+	if walk_b != GateWalk.NO_ROUTE:
+		wanted[1] += "\n%s" % [GateWalk.CAPTION_TEXT % walk_b]
+	if walk_a == GateWalk.NO_ROUTE or paths.size() != 2 or texts != wanted:
 		_fail("the build-mode views do not show both envelopes with their classes")
 		return
 	var stand_a := StandPlacement.stand_point(_apron.gate_stands["A"]["live"])
