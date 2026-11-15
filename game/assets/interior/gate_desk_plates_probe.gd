@@ -18,7 +18,9 @@ extends SceneTree
 ##   b1 the unlinked desk next to the linked one in build mode, b2 the same out
 ##   of build mode (the sign stays, the lines go);
 ## then the east exit goes and a plain wall closes it: b3 a desk with no exit in
-## reach; and c the Gates tray with the gate desk card.
+## reach; then the west exit goes and leaves its wall open: b4 the west desk's
+## sign slid sideways off the wall-gap sign by it (a non-zero offset.x is
+## required); and c the Gates tray with the gate desk card.
 ## Every subject point is projected into the frame with a margin, and each desk
 ## gets sight lines from the camera against every visible mesh (PlateSight):
 ## at least one lands on it and none is blocked. Each line is proved drawn by its
@@ -50,11 +52,20 @@ const ROW_A := Vector2i(14, 8)
 ## The scene's floor, walls and paving are cream and grey (blue at or under
 ## red); the faint pass over a cream wall measured 0.22.
 const BLUE_OVER_RED := 0.15
-## The unlinked sign's disc: a fill point clear of the broken-link glyph and a point
-## on its dark rim, in icon pixels from the icon's middle; how far each channel of
-## the plate pixel may stand from MarkerIcons.HINT_FILL; the rim's luminance ceiling.
+## The unlinked sign's disc: a fill point clear of the broken-link glyph, in icon
+## pixels from the icon's middle; how far each channel of the plate pixel may stand
+## from MarkerIcons.HINT_FILL; the rim's luminance ceiling. The rim is
+## MarkerIcons.OUTLINE_PX wide (1.6 layout pixels at SIGN_PX on the test screen), so
+## it is read as the darkest plate pixel over RIM_SAMPLES points across its width at
+## each of RIM_ANGLES places round the disc.
 const FILL_POINT := Vector2(-34.0, -24.0)
-const RIM_POINT := Vector2(-54.0, 0.0)
+const RIM_SAMPLES := 7
+const RIM_ANGLES := 8
+## Camera distance of the b4 plate, far enough that the west desk's sign and the
+## wall-gap sign by it are within a sign width of each other.
+const SLIDE_VIEW_DISTANCE := 90.0
+## How far the provider's hover rect may sit from the drawn icon square, in layout pixels.
+const HOVER_TOL_PX := 1.5
 const CREAM_TOLERANCE := 0.12
 const RIM_MAX_LUMINANCE := 0.45
 ## Scene nodes whose visible meshes can hide a desk.
@@ -122,6 +133,8 @@ func _run() -> void:
 		_plates_unlinked,
 		_close_east,
 		_plate_no_exit,
+		_open_west_gap,
+		_plate_slide,
 		_plate_tray,
 	]
 	for step in steps:
@@ -236,10 +249,13 @@ func _plates_linked() -> void:
 	await _plate("a3_gate_b_close", [b], [], true)
 	if _done:
 		return
-	# The desk itself, near enough to judge its toon ramp and outline.
-	_view(_grid.cell_to_world(Vector2i(20, 4) + _offset), 9.0, 0.5)
-	# Its line's outside part runs off the top of this near view, so only the
-	# desk is checked (a2 checks the line).
+	# The desk itself, near enough to judge its toon ramp and outline. The camera
+	# pitch is a fixed player step at every zoom (the default is top-down), so
+	# the desk, its exit and the door 7 m out only share the frame from 13 m,
+	# with the focus halfway between them.
+	_view(_grid.cell_to_world(Vector2i(20, 0) + _offset), 13.0, 0.5)
+	# The line is not required drawn here, only its points framed (a2 checks the
+	# line).
 	await _plate("a4_desk_a_near", [a], [], true, false)
 
 
@@ -311,6 +327,39 @@ func _plate_no_exit() -> void:
 	await _plate("b3_unlinked_no_exit", [], [[desk_b, EXIT_B]], true)
 
 
+## The west exit goes again and leaves its wall open: a wall-gap sign stands by
+## the unlinked west desk's sign, which GateLinksView.layout_signs() slides off it.
+func _open_west_gap() -> bool:
+	_stage = "open west gap"
+	if not _apply(BuildEdit.remove_object(_grid.object_at(EXIT_A + _offset))):
+		return false
+	await _frames(SETTLE_FRAMES)
+	var desk_a := _grid.object_at(DESK_A + _offset)
+	var unlinked := _gates.unlinked()
+	print("PROBE after the west exit went: gates %s unlinked %s" % [_gates.bindings, unlinked])
+	if not unlinked.has(desk_a):
+		_fail("the west desk is not unlinked with its exit gone")
+		return false
+	return true
+
+
+func _plate_slide() -> void:
+	var desk_a := _grid.object_at(DESK_A + _offset)
+	_view(_grid.cell_to_world(Vector2i(20, 3) + _offset), SLIDE_VIEW_DISTANCE, 0.25)
+	await _camera_still()
+	await _frames(SETTLE_FRAMES)
+	print("PROBE layout_signs rects (output px) %s" % [_links.layout_signs()])
+	var gaps := _main.find_children("*", "GapMarkers", true, false)
+	var to_output := root.get_stretch_transform().get_scale().y
+	print(
+		(
+			"PROBE gap markers %d, gap sign rects (output px) %s"
+			% [gaps.size(), GateLinksView.marker_rects(gaps[0] if gaps else null, _cam, to_output)]
+		)
+	)
+	await _plate("b4_unlinked_slides_off_gap_sign", [], [[desk_a, EXIT_A]], true, true, true)
+
+
 ## The Gates tray with the gate desk card, HUD and all.
 func _plate_tray() -> void:
 	_stage = "plate tray"
@@ -366,8 +415,16 @@ func _frame_rect() -> Rect2:
 ## desk top, exit and door point in frame, its desk seen, and its line drawn
 ## (`lines_on`) or not drawn; each unlinked [desk, exit cell] in frame, seen,
 ## with its sign drawn and no line where a line out of that exit would run.
+## `slide_required`: at least one of those signs must have slid sideways off a
+## wall-gap sign (a non-zero `offset.x`), the positive control that the slide
+## was exercised.
 func _plate(
-	label: String, linked: Array, unlinked: Array, lines_on: bool, line_in_view := true
+	label: String,
+	linked: Array,
+	unlinked: Array,
+	lines_on: bool,
+	line_in_view := true,
+	slide_required := false
 ) -> void:
 	_stage = "plate %s" % label
 	await _frames(SETTLE_FRAMES)
@@ -416,8 +473,7 @@ func _plate(
 		# glyph, and one on its dark rim as the control that the point is on the
 		# disc (icon pixels from the icon's middle).
 		var icon_px := _icon_point(marker, FILL_POINT)
-		var rim_px := _icon_point(marker, RIM_POINT)
-		var sign_ok := _cream(img, icon_px) and _rim(img, rim_px)
+		var sign_ok := _cream(img, icon_px) and _rim(img, marker)
 		ok = ok and sign_ok
 		ok = _sign_framed(desk, marker) and ok
 		ok = _sign_words(desk, marker, lines_on) and ok
@@ -427,6 +483,14 @@ func _plate(
 		var stray := _line_blue(img, would)
 		print("  NO LINE desk %d at %s line colour there=%s" % [desk, would, stray])
 		ok = ok and not stray
+	if slide_required:
+		var slid: Array[String] = []
+		for pair: Array in unlinked:
+			var shown := _sign_of(pair[0])
+			if shown != null and absf(shown.offset.x) > 0.0:
+				slid.append("desk %d offset.x %.2f" % [pair[0], shown.offset.x])
+		print("  SLIDE signs slid sideways %s (want at least one)" % [slid])
+		ok = ok and not slid.is_empty()
 	if not ok:
 		# Kept apart under its own name, so the failure can be looked at.
 		img.save_png(_out_dir.path_join(label + "_FAILED_CHECK.png"))
@@ -455,26 +519,49 @@ func _camera_still() -> bool:
 	return false
 
 
+## The unlinked sign's icon square where it is drawn, in layout pixels: the
+## SIGN_PX square standing on its foot, moved sideways by the slide
+## GateLinksView.layout_signs() puts in `marker.offset.x` (found from the
+## icon's middle through _icon_point, so the slide is counted the same way).
+func _drawn_icon_rect(marker: Sprite3D) -> Rect2:
+	var icon := MissMarkers.SIGN_PX * _layout_per_px()
+	return Rect2(_icon_point(marker, Vector2.ZERO) - Vector2(icon, icon) / 2.0, Vector2(icon, icon))
+
+
 ## Whether the whole unlinked sign lies inside the frame margin, in layout
 ## pixels: the icon a SIGN_PX square standing on its foot, sized in screen
-## pixels and turned into layout pixels. The sign has no world caption, so the
-## icon is all there is to frame. Prints the rectangle.
+## pixels and turned into layout pixels, at its drawn place (slide included).
+## The sign has no world caption, so the icon is all there is to frame. Prints
+## the rectangle and the slide.
 func _sign_framed(desk: int, marker: Sprite3D) -> bool:
 	if _cam.is_position_behind(marker.global_position):
 		print("  SIGN BOUNDS desk %d: behind the camera" % desk)
 		return false
 	var foot := _cam.unproject_position(marker.global_position)
-	var icon := MissMarkers.SIGN_PX * _layout_per_px()
-	var sign_rect := Rect2(foot.x - icon / 2.0, foot.y - icon, icon, icon)
+	var sign_rect := _drawn_icon_rect(marker)
 	var frame := _frame_rect()
 	var sign_in := frame.encloses(sign_rect)
-	print("  SIGN BOUNDS desk %d sign %s in_frame=%s frame %s" % [desk, sign_rect, sign_in, frame])
+	print(
+		(
+			"  SIGN BOUNDS desk %d foot %s offset.x %.2f slide %.1f layout px drawn %s in_frame=%s frame %s"
+			% [
+				desk,
+				foot,
+				marker.offset.x,
+				sign_rect.get_center().x - foot.x,
+				sign_rect,
+				sign_in,
+				frame
+			]
+		)
+	)
 	return sign_in
 
 
 ## The sign's words are not drawn in the world: no Label3D hangs on it, and
 ## they reach HoverTarget only in build mode (`building`), through
 ## GateLinksView.hover_signs(), with the sign's text and a rect around its icon.
+## That rect must be the drawn icon square (slide included), within HOVER_TOL_PX.
 func _sign_words(desk: int, marker: Sprite3D, building: bool) -> bool:
 	var labels := marker.find_children("*", "Label3D", true, false).size()
 	var entries: Array[Dictionary] = []
@@ -485,14 +572,16 @@ func _sign_words(desk: int, marker: Sprite3D, building: bool) -> bool:
 	var want := 1 if building else 0
 	var good := labels == 0 and words != "" and entries.size() == want
 	if building and entries.size() == 1:
-		good = good and entries[0]["text"] == words
-		good = (
-			good
-			and (entries[0]["rect"] as Rect2).has_point(
-				(
-					_cam.unproject_position(marker.global_position)
-					+ Vector2(0.0, -MissMarkers.SIGN_PX / 2.0)
-				)
+		var drawn := _drawn_icon_rect(marker)
+		var hover: Rect2 = entries[0]["rect"]
+		var gap_pos := (hover.position - drawn.position).abs()
+		var gap_size := (hover.size - drawn.size).abs()
+		var apart := maxf(maxf(gap_pos.x, gap_pos.y), maxf(gap_size.x, gap_size.y))
+		good = good and entries[0]["text"] == words and apart <= HOVER_TOL_PX
+		print(
+			(
+				"  SIGN HOVER desk %d drawn %s hover rect %s apart %.2f px (limit %.1f) offset.x %.2f"
+				% [desk, drawn, hover, apart, HOVER_TOL_PX, marker.offset.x]
 			)
 		)
 	print(
@@ -586,13 +675,39 @@ func _cream(img: Image, layout_px: Vector2) -> bool:
 	return cream
 
 
-## Whether the plate pixel at `layout_px` is the disc's dark outline (the
-## control that the cream point lies on the sign): dark and clearly unlike the
-## cream.
-func _rim(img: Image, layout_px: Vector2) -> bool:
-	var got := _pixel(img, layout_px)
-	var dark := got.get_luminance() < RIM_MAX_LUMINANCE
-	print("    pixel got %s rim dark=%s" % [got, dark])
+## Whether the disc's navy outline shows (the control that the cream point lies
+## on the sign): the darkest plate pixel over RIM_SAMPLES points across the
+## outline's width (MarkerIcons.DISC_RADIUS less OUTLINE_PX up to DISC_RADIUS, the
+## ends left out so a point cannot land on the floor or the cream) at each of
+## RIM_ANGLES places round the disc is under RIM_MAX_LUMINANCE. The outline is
+## thinner than two layout pixels and the sprite is filtered, so where it falls
+## on the pixel grid changes with the sign's place (a slid sign, say): one spot
+## can land on a blend while the ring is dark elsewhere. Prints the darkest
+## pixel and where it was.
+func _rim(img: Image, marker: Sprite3D) -> bool:
+	var darkest := Color.WHITE
+	var at_radius := 0.0
+	var at_degrees := 0.0
+	var from := MarkerIcons.DISC_RADIUS - MarkerIcons.OUTLINE_PX
+	for k in RIM_ANGLES:
+		var angle := TAU * k / RIM_ANGLES
+		for i in RIM_SAMPLES:
+			var radius := from + MarkerIcons.OUTLINE_PX * (i + 1.0) / (RIM_SAMPLES + 1.0)
+			var got := _pixel(img, _icon_point(marker, Vector2.from_angle(angle) * radius))
+			if got.get_luminance() < darkest.get_luminance():
+				darkest = got
+				at_radius = radius
+				at_degrees = rad_to_deg(angle)
+	var dark := darkest.get_luminance() < RIM_MAX_LUMINANCE
+	print(
+		(
+			(
+				"    rim darkest pixel %s at icon radius %.1f angle %.0f of %d x %d samples"
+				+ " (limit luminance %.2f) rim dark=%s"
+			)
+			% [darkest, at_radius, at_degrees, RIM_ANGLES, RIM_SAMPLES, RIM_MAX_LUMINANCE, dark]
+		)
+	)
 	return dark
 
 
