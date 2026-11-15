@@ -2,9 +2,9 @@ class_name TestAirsideGateStands
 extends GdUnitTestSuite
 ## One stand per gate on main.tscn's airside (decision gates-technical-design-
 ## gate-desks-link-to-north-exits-one-st, point 3): Airside.set_gate_stands()
-## gives each gate its own stand waypoints, joined to the one taxi lane as a
-## chain in order of x, so a plane taxis along the lane past the other gates'
-## joins; PlaneView draws a gate's flights on that gate's stand; PlaneFleet
+## gives each gate its own stand waypoints, each joined to the one taxi lane, so
+## a plane taxis along the lane past the other gates' joins (TaxiRoutes leaves
+## those straight points out); PlaneView draws a gate's flights on that gate's stand; PlaneFleet
 ## gives every gate with a live flight two views.
 
 const MAIN_SCENE := "res://main/main.tscn"
@@ -57,7 +57,7 @@ func _lane(stand: Dictionary) -> Vector3:
 	return StandPlacement.lane_join(stand)
 
 
-func test_each_gate_taxis_along_the_lane_past_the_other_gates_join() -> void:
+func test_each_gate_taxis_along_the_lane_to_its_own_join() -> void:
 	var a := StandPlacement.stand_point(STAND_A)
 	var b := StandPlacement.stand_point(STAND_B)
 	var in_a := _airside.phase_path(FlightSim.State.TAXI_IN, "A")
@@ -65,17 +65,18 @@ func test_each_gate_taxis_along_the_lane_past_the_other_gates_join() -> void:
 	var out_b := _airside.phase_path(FlightSim.State.TAXI_OUT, "B")
 	var push_b := _airside.phase_path(FlightSim.State.PUSHBACK, "B")
 	print("taxi in A %s\ntaxi in B %s\ntaxi out B %s" % [in_a, in_b, out_b])
-	# B (x 18) is east of A (x -26): A's way in passes B's join on the lane.
+	# B (x 18) is east of A (x -26): A's way in runs along the lane over B's
+	# join, a straight point the route leaves out.
 	assert_array(Array(in_a)).is_equal(
 		[
 			_at(&"RunwayExit"),
 			_at(&"TaxiEast"),
-			_lane(STAND_B),
 			_lane(STAND_A),
 			StandPlacement.pushback_end(STAND_A),
 			a
 		]
 	)
+	assert_float(_lane(STAND_B).x).is_between(in_a[2].x, in_a[1].x)
 	assert_array(Array(in_b)).is_equal(
 		[
 			_at(&"RunwayExit"),
@@ -86,11 +87,11 @@ func test_each_gate_taxis_along_the_lane_past_the_other_gates_join() -> void:
 		]
 	)
 	assert_array(Array(push_b)).is_equal([b, StandPlacement.pushback_end(STAND_B)])
-	# The way out from B passes A's join on its way west; the scene's own
-	# StandLane, on A's x, is off the chain while gates have stands.
+	# The way out from B runs west over A's join to the lane's west end.
 	assert_array(Array(out_b).slice(0, 3)).is_equal(
-		[StandPlacement.pushback_end(STAND_B), _lane(STAND_B), _lane(STAND_A)]
+		[StandPlacement.pushback_end(STAND_B), _lane(STAND_B), _at(&"TaxiWest")]
 	)
+	assert_float(_lane(STAND_A).x).is_between(out_b[2].x, out_b[1].x)
 	assert_vector(out_b[out_b.size() - 1]).is_equal(_at(&"RunwayEntry"))
 	for point in out_b.slice(1, out_b.size() - 1):
 		assert_float(point.z).is_equal(StandPlacement.TAXI_LANE_Z)

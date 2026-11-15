@@ -6,8 +6,9 @@ extends SceneTree
 ##   Godot_v4.7.2-stable_win64_console.exe --display-driver windows \
 ##     --rendering-driver vulkan --audio-driver Dummy \
 ##     --path C:/Users/chulf/Gotta-make-my-flight/game \
-##     -s res://spike/runway_r7_pause_strip_probe.gd
-## Boots main.tscn with a new random world seed (printed) and builds the two
+##     -s res://spike/runway_r7_pause_strip_probe.gd [-- --seed=N]
+## Boots main.tscn with a new random world seed (printed), or N to replay a
+## run, declines the new-game incidents question and builds the two
 ## gates of gates_plates_probe.gd (the starter shell with desk A, a second
 ## shell 44 cells east with desk B), then opens the airport with the starter at
 ## gate A. It looks for a second contract at gate B that FlightSim plans with a
@@ -73,6 +74,9 @@ func _initialize() -> void:
 	_beat("boot")
 	_guard.start(_watch)
 	var world_seed := randi()
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--seed="):
+			world_seed = int(arg.get_slice("=", 1))
 	print("PROBE world_seed=%d" % world_seed)
 	_out_dir = ProjectSettings.globalize_path(OUT_REL).simplify_path()
 	DirAccess.make_dir_recursive_absolute(_out_dir)
@@ -99,6 +103,14 @@ func _run() -> void:
 	_gates = _main.get_node("GateDesks")
 	_fleet = _main.get_node("PlaneFleet")
 	_hud.dismiss_intro()
+	# Closing the intro asks the new-game incidents question, whose clock hold
+	# does not give way to the player; decline it, so no incident joins the run.
+	var menu: GameMenu = _main.get_node("GameMenu")
+	if menu.question() != null:
+		menu.question().decline_button().pressed.emit()
+	if _clock.holds.is_holding():
+		_fail("a dialog still holds the clock after the intro")
+		return
 	_clock.set_paused(true)
 	_hud.press_starter_terminal()
 	if not _build_east():
