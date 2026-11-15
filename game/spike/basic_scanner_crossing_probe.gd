@@ -520,7 +520,14 @@ func _control() -> void:
 
 
 func _cross() -> void:
+	# At least one role per body in the roster (PassengerLooks.BODIES): ROLES is cycled until
+	# every body can be sent, so a roster that grows is covered without editing the list. The
+	# repeated roles take any bag kind, so the last one is not left waiting for a rare draw.
 	_roles = ROLES.duplicate(true)
+	for i in range(ROLES.size(), PassengerLooks.BODIES.size()):
+		var repeat: Array = (ROLES[i % ROLES.size()] as Array).duplicate(true)
+		repeat[0] = -1
+		_roles.append(repeat)
 	if _lane_mode:
 		_roles.append_array(RUNNER_ROLES.duplicate(true))
 	var spawns := 0
@@ -746,7 +753,11 @@ func _send() -> void:
 	var at := _roles.find_custom(func(r: Array) -> bool: return r[0] == kind)
 	if at < 0:
 		at = _roles.find_custom(func(r: Array) -> bool: return r[0] == -1)
-	if at < 0 or not CrossingBodies.take(p, _bodies, _lane_mode):
+	# More roles than bodies (lane mode): a body is reused only once every one was sent, so
+	# the extra roles never take the places of bodies still unsent.
+	var uses: Dictionary = _bodies.get(CrossingBodies.USES, {})
+	var reuse := _lane_mode and uses.size() >= PassengerLooks.BODIES.size()
+	if at < 0 or not CrossingBodies.take(p, _bodies, reuse):
 		return
 	var traits: Array = _roles.pop_at(at)
 	p.carry_on = traits[1]
