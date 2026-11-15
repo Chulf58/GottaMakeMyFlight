@@ -67,10 +67,10 @@ func test_a_day_draws_the_daily_count_of_valid_starter_offers() -> void:
 			assert_bool(OfferBoard.STARTER_SIZES.has(offer["plane_size"])).is_true()
 			# FlightSim gives the gate on accept; an offer names none.
 			assert_bool(offer.has("gate")).is_false()
-			assert_int(offer["departure_minute"]).is_between(
-				OfferBoard.DEPARTURE_FIRST_MINUTE, OfferBoard.DEPARTURE_LAST_MINUTE
-			)
-			var slot: int = offer["departure_minute"] - OfferBoard.DEPARTURE_FIRST_MINUTE
+			# 07:00 to 21:00, or 06:00 to 22:00 for an Odd hours offer.
+			var span := FlightContract.window(offer["traits"])
+			assert_int(offer["departure_minute"]).is_between(span[0], span[1])
+			var slot: int = offer["departure_minute"] - span[0]
 			assert_int(slot % OfferBoard.DEPARTURE_STEP).is_equal(0)
 			var traits: Dictionary = offer["traits"]
 			assert_str(OfferTraits.problem(traits)).is_empty()

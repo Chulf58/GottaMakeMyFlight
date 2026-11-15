@@ -206,12 +206,18 @@ func test_a_starter_airline_cannot_carry_a_higher_tiers_terms() -> void:
 	assert_bool(OfferBoard.new().from_snapshot(_day_with_first(dear))).is_false()
 
 
-## Version 5 added the Loyal airline count and each offer's loyal mark.
-func test_the_offer_save_version_is_5_and_a_version_4_save_is_refused() -> void:
-	assert_int(OfferBoard.SAVE_VERSION).is_equal(5)
+## Version 5 added the Loyal airline count and each offer's loyal mark; version 6
+## Odd hours and Exit fee, so a version 5 save is refused too.
+func test_the_offer_save_version_is_6_and_versions_4_and_5_are_refused() -> void:
+	assert_int(OfferBoard.SAVE_VERSION).is_equal(6)
 	var board := OfferBoard.new()
 	board.ensure_day(0, _rng, OfferBoard.MAX_TIER)
 	var data := board.to_snapshot()
-	assert_int(int(data["save_version"])).is_equal(5)
+	assert_int(int(data["save_version"])).is_equal(6)
 	data["save_version"] = 4
 	assert_bool(OfferBoard.new().from_snapshot(data)).is_false()
+	data["save_version"] = 5
+	assert_bool(OfferBoard.new().from_snapshot(data)).is_false()
+	# The control: the same save at the current version loads.
+	data["save_version"] = OfferBoard.SAVE_VERSION
+	assert_bool(OfferBoard.new().from_snapshot(data)).is_true()

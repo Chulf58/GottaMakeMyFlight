@@ -22,7 +22,7 @@ func test_every_trait_has_a_label_a_tip_and_a_value_per_level() -> void:
 			assert_bool(["", OfferTraits.NEEDS_BAGS, OfferTraits.NEEDS_SHOPS].has(row["needs"]))
 			. is_true()
 		)
-	assert_int(OfferTraits.TABLE.size()).is_equal(9)
+	assert_int(OfferTraits.TABLE.size()).is_equal(11)
 
 
 func test_plain_and_every_allowed_pair_are_valid_and_the_forbidden_pairs_are_not() -> void:
@@ -37,7 +37,7 @@ func test_plain_and_every_allowed_pair_are_valid_and_the_forbidden_pairs_are_not
 				else:
 					assert_str(problem).is_empty()
 					valid += 1
-	assert_int(valid).is_equal(32)
+	assert_int(valid).is_equal(56)
 	assert_bool(OfferTraits.is_forbidden(OfferTraits.SHOPPERS, OfferTraits.RUSH_CROWD)).is_true()
 	assert_bool(OfferTraits.is_forbidden(OfferTraits.BAG_COVER, OfferTraits.HEAVY_BAGS)).is_true()
 
@@ -110,7 +110,7 @@ func test_a_missed_bag_costs_what_the_bag_traits_say() -> void:
 
 
 func test_pairs_leave_out_forbidden_pairs_and_traits_whose_need_is_not_met() -> void:
-	assert_array(OfferTraits.pairs(ALL_LIVE)).has_size(16)
+	assert_array(OfferTraits.pairs(ALL_LIVE)).has_size(28)
 	for pair in OfferTraits.pairs(ALL_LIVE):
 		assert_bool(OfferTraits.is_forbidden(pair[0], pair[1])).is_false()
 	var none := OfferTraits.pairs({})
@@ -120,19 +120,27 @@ func test_pairs_leave_out_forbidden_pairs_and_traits_whose_need_is_not_met() -> 
 			[
 				[OfferTraits.TOP_FARE, OfferTraits.RUSH_CROWD],
 				[OfferTraits.TOP_FARE, OfferTraits.MISS_FINE],
+				[OfferTraits.TOP_FARE, OfferTraits.ODD_HOURS],
+				[OfferTraits.TOP_FARE, OfferTraits.EXIT_FEE],
 				[OfferTraits.FULL_FLIGHT, OfferTraits.RUSH_CROWD],
 				[OfferTraits.FULL_FLIGHT, OfferTraits.MISS_FINE],
+				[OfferTraits.FULL_FLIGHT, OfferTraits.ODD_HOURS],
+				[OfferTraits.FULL_FLIGHT, OfferTraits.EXIT_FEE],
 				[OfferTraits.SIGNING_BONUS, OfferTraits.RUSH_CROWD],
 				[OfferTraits.SIGNING_BONUS, OfferTraits.MISS_FINE],
+				[OfferTraits.SIGNING_BONUS, OfferTraits.ODD_HOURS],
+				[OfferTraits.SIGNING_BONUS, OfferTraits.EXIT_FEE],
 				[OfferTraits.LOYAL_AIRLINE, OfferTraits.RUSH_CROWD],
 				[OfferTraits.LOYAL_AIRLINE, OfferTraits.MISS_FINE],
+				[OfferTraits.LOYAL_AIRLINE, OfferTraits.ODD_HOURS],
+				[OfferTraits.LOYAL_AIRLINE, OfferTraits.EXIT_FEE],
 			]
 		)
 	)
 	var shops_only := OfferTraits.pairs({OfferTraits.NEEDS_SHOPS: true})
-	assert_array(shops_only).has_size(9)
+	assert_array(shops_only).has_size(19)
 	var bags_only := OfferTraits.pairs({OfferTraits.NEEDS_BAGS: true})
-	assert_array(bags_only).has_size(14)
+	assert_array(bags_only).has_size(24)
 
 
 func test_a_day_has_one_plain_offer_and_paired_offers_at_one_level() -> void:
@@ -182,6 +190,8 @@ func test_levels_follow_the_tier_and_unmet_needs_are_never_drawn() -> void:
 				OfferTraits.LOYAL_AIRLINE,
 				OfferTraits.RUSH_CROWD,
 				OfferTraits.MISS_FINE,
+				OfferTraits.ODD_HOURS,
+				OfferTraits.EXIT_FEE,
 			]
 		)
 	)
@@ -194,7 +204,7 @@ func test_every_live_pair_is_drawn_and_no_forbidden_pair_ever_is() -> void:
 			if not OfferTraits.is_plain(each):
 				assert_bool(OfferTraits.is_forbidden(each["up"], each["down"])).is_false()
 				seen[[each["up"], each["down"]]] = true
-	assert_int(seen.size()).is_equal(16)
+	assert_int(seen.size()).is_equal(28)
 
 
 func test_card_labels_name_both_sides_or_plain_terms() -> void:

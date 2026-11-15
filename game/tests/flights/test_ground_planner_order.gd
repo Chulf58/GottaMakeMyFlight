@@ -256,17 +256,30 @@ func test_planning_time_for_a_week_of_two_gates() -> void:
 
 ## Departures 07:00 to 21:00 leave every night from 22:02 to 04:52 free, so the
 ## planner restarts there (and wherever else nothing is held) and a day planned
-## alone is planned as with the day before it. A departure outside the day is
-## refused.
+## alone is planned as with the day before it. Odd hours departures at 06:00 and
+## 22:00 (decision odd-hours-technical-design-contract-validation-allows-06-00)
+## still leave 23:02 to 03:52 free, so the same holds. The guard is the widest
+## contract window, and a departure outside it is refused.
 func test_the_planner_restarts_each_quiet_night() -> void:
-	assert_int(GroundPlanner.FIRST_DEPARTURE_MINUTE).is_equal(OfferBoard.DEPARTURE_FIRST_MINUTE)
-	assert_int(GroundPlanner.LAST_DEPARTURE_MINUTE).is_equal(OfferBoard.DEPARTURE_LAST_MINUTE)
+	var widest := FlightContract.window(
+		{"up": OfferTraits.TOP_FARE, "down": OfferTraits.ODD_HOURS, "level": 1}
+	)
+	assert_int(GroundPlanner.EARLIEST_DEPARTURE_MINUTE).is_equal(widest[0])
+	assert_int(GroundPlanner.LATEST_DEPARTURE_MINUTE).is_equal(widest[1])
+	_check_quiet_night(420, 1260, 410)
+	_check_quiet_night(360, 1320, 290)
+
+
+## Plans a 12:00 flight between departures at `first` and `last` on days 1 and
+## 2, together and day 2 alone, and checks the quiet stretch between the days is
+## `quiet_minutes` long and day 2 plans the same either way.
+func _check_quiet_night(first: int, last: int, quiet_minutes: int) -> void:
 	var days := {}
 	for day in [1, 2]:
 		days[day] = [
-			_req("M%d" % day, MID, 420, day),
+			_req("M%d" % day, MID, first, day),
 			_req("W%d" % day, WEST, 720, day),
-			_req("E%d" % day, EAST, 1260, day),
+			_req("E%d" % day, EAST, last, day),
 		]
 	var planner := _kit.planner()
 	var both := planner.plan_all(days[1] + days[2])
@@ -284,20 +297,29 @@ func test_the_planner_restarts_each_quiet_night() -> void:
 				low = minf(low, booking["from"])
 				high = maxf(high, booking["to"])
 		spans[day] = Vector2(low, high)
-		var first_allowed := GameCalendar.tick_at(day, 420) - 2560
-		var last_allowed := GameCalendar.tick_at(day, 1260) + 1240
+		var first_allowed := GameCalendar.tick_at(day, first) - 2560
+		var last_allowed := GameCalendar.tick_at(day, last) + 1240
 		assert_float(low).is_greater_equal(first_allowed)
 		assert_float(high).is_less_equal(last_allowed)
 	var quiet: float = spans[2].x - spans[1].y
 	print("day spans %s; quiet stretch %.0f ticks (%.0f minutes)" % [spans, quiet, quiet / 20.0])
-	assert_float(quiet).is_equal(410.0 * GameCalendar.TICKS_PER_MINUTE)
+	assert_float(quiet).is_equal(quiet_minutes * float(GameCalendar.TICKS_PER_MINUTE))
 	var alone := _kit.planner().plan_all(days[2])
 	for flight: Dictionary in days[2]:
 		assert_dict(alone[flight["id"]]).is_equal(both[flight["id"]])
-	# A departure outside 07:00 to 21:00 is refused and books nothing.
+
+
+## A departure outside 06:00 to 22:00 is refused and books nothing, whatever its
+## contract; 06:00 and 22:00 themselves plan (the control).
+func test_a_departure_outside_06_00_to_22_00_is_refused_as_the_quiet_night() -> void:
 	var outside := _kit.planner()
-	var refused := outside.plan_all([_req("N", MID, 405), _req("L", WEST, 1275)])
+	var refused := outside.plan_all([_req("N", MID, 345), _req("L", WEST, 1335)])
 	for id in ["N", "L"]:
 		assert_bool(refused[id]["ok"]).is_false()
 		assert_str(refused[id]["reason"]).is_equal(GroundPlanner.QUIET_NIGHT)
 	assert_array(outside.bookings()).is_empty()
+	var edges := _kit.planner()
+	var planned := edges.plan_all([_req("N", MID, 360), _req("L", WEST, 1320)])
+	for id in ["N", "L"]:
+		assert_bool(planned[id]["ok"]).is_true()
+	assert_int(edges.bookings().size()).is_greater(0)

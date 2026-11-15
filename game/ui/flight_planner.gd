@@ -200,7 +200,7 @@ func bar_buttons() -> Array[Button]:
 
 
 ## The named part of the sheet (GateHead_A, Track_A, Move_C, EndContract,
-## ConfirmEnd, KeepContract, PlannerClose), or null.
+## EndPrompt, ConfirmEnd, KeepContract, PlannerClose), or null.
 func part(part_name: String) -> Control:
 	return _sheet.find_child(part_name, true, false) as Control
 
@@ -650,7 +650,8 @@ func _add_move_choices(bar: Dictionary) -> void:
 
 func _add_end_confirm() -> void:
 	var prompt := Label.new()
-	prompt.text = DeparturesBoard.END_PROMPT
+	prompt.name = "EndPrompt"
+	prompt.text = DeparturesBoard.end_prompt(flights, _selected)
 	_actions.add_child(prompt)
 	var confirm := Button.new()
 	confirm.name = "ConfirmEnd"

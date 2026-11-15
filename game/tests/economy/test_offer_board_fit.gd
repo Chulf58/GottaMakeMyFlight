@@ -13,11 +13,13 @@ const SEEDS := [1, 42, 2024, 7_654_321]
 ## One gate whose day is full: 195 minutes apart from 07:00 to 20:00.
 const FULL_DAY := [420, 615, 810, 1005, 1200]
 ## Seed -> the fitted N1, N2 and N3 departures on one gate busy at 10:00 and
-## 16:40 (test_golden_fitted_departures_on_a_busy_gate).
+## 16:40 (test_golden_fitted_departures_on_a_busy_gate). Seed 2024 was
+## measured again for trait seed version 3: its day 0 N1 is now an Odd hours
+## offer, which fits only at 06:00 or 22:00.
 const GOLDEN_BUSY := {
 	1: [1215, 795, 510],
 	42: [1215, 795, 690],
-	2024: [1230, 795, 555],
+	2024: [360, 1230, 555],
 	7_654_321: [1215, 795, 450],
 }
 
@@ -180,7 +182,7 @@ func test_a_fitted_day_is_saved_and_never_fitted_again_on_load() -> void:
 	var board := OfferBoard.new()
 	board.ensure_day(0, _rng(42), 0, PlaneClasses.LARGE, sim)
 	var saved: Dictionary = JSON.parse_string(JSON.stringify(board.to_snapshot()))
-	assert_int(int(saved["save_version"])).is_equal(5)
+	assert_int(int(saved["save_version"])).is_equal(OfferBoard.SAVE_VERSION)
 	var loaded := OfferBoard.new()
 	assert_bool(loaded.from_snapshot(saved)).is_true()
 	assert_bool(sim.accept_contract(TestFlightFit.terms("LATE", 1200))).is_true()
@@ -215,21 +217,27 @@ func test_the_drawn_slot_maps_onto_n_candidates_by_floor_r_n_over_57() -> void:
 	]
 	for row: Array in table:
 		(
-			assert_int(OfferBoard._pick(row[0], row[1]))
+			assert_int(OfferBoard._pick([row[0], 57], row[1]))
 			. override_failure_message("r %d over %d candidates" % [row[0], row[1]])
 			. is_equal(row[2])
 		)
 	# Every r picks a valid index, and each of n candidates is picked by
-	# floor(57 / n) or one more of the 57 draws.
-	for n in [1, 2, 3, 7, 10, 24, 56, 57]:
-		var counts := {}
-		for r in range(OfferBoard.DEPARTURE_SLOTS + 1):
-			var index := OfferBoard._pick(r, n)
-			assert_int(index).is_between(0, n - 1)
-			counts[index] = counts.get(index, 0) + 1
-		assert_int(counts.size()).is_equal(n)
-		for index: int in counts:
-			assert_int(counts[index]).is_between(floori(57.0 / n), floori(57.0 / n) + 1)
+	# floor(d / n) or one more of the d draws, for the plain window's 57 slots
+	# and an Odd hours offer's 2 (06:00 and 22:00).
+	for slots in [57, 2]:
+		for n in [1, 2, 3, 7, 10, 24, 56, 57, 65]:
+			if n > slots:
+				continue
+			var counts := {}
+			for r in range(slots):
+				var index := OfferBoard._pick([r, slots], n)
+				assert_int(index).is_between(0, n - 1)
+				counts[index] = counts.get(index, 0) + 1
+			assert_int(counts.size()).is_equal(n)
+			for index: int in counts:
+				assert_int(counts[index]).is_between(
+					floori(float(slots) / n), floori(float(slots) / n) + 1
+				)
 
 
 ## Golden fitted departures for fixed seeds on one gate busy at 10:00 and

@@ -123,7 +123,11 @@ func test_a_small_runway_with_a_medium_offer_is_refused_unchanged() -> void:
 	var offers := board.to_snapshot()
 	for offer: Dictionary in offers["offers"]:
 		offer["plane_size"] = PlaneClasses.MEDIUM
-		offer["booked_passengers"] = PlaneClasses.passenger_range(PlaneClasses.MEDIUM)[0]
+		# The fewest the offer's traits allow (Full flight books from the top).
+		var medium := PlaneClasses.passenger_range(PlaneClasses.MEDIUM)
+		offer["booked_passengers"] = OfferTraits.fewest_booked(
+			medium[0], medium[1], offer["traits"]
+		)
 	assert_bool(board.from_snapshot(offers)).is_true()
 	var data := _taken()
 	var before := SaveTestKit.checksum(_main)

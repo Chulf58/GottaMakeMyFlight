@@ -164,8 +164,8 @@ func test_a_gate_full_all_day_opens_with_no_starter_and_no_error() -> void:
 	@warning_ignore("integer_division")
 	var held := FlightTimetable.reserved_ticks() / GameCalendar.TICKS_PER_MINUTE
 	assert_int(held).is_equal(195)
-	var first := GroundPlanner.FIRST_DEPARTURE_MINUTE
-	var last := GroundPlanner.LAST_DEPARTURE_MINUTE
+	var first := FlightContract.FIRST_DEPARTURE_MINUTE
+	var last := FlightContract.LAST_DEPARTURE_MINUTE
 	@warning_ignore("integer_division")
 	var count := (last - first) / held + 1
 	assert_int(count).is_equal(5)

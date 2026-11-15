@@ -177,12 +177,15 @@ static func _top_problem(data: Dictionary) -> String:
 	return ""
 
 
-## first_day must be one that accepting between tick 0 and `tick` gives.
+## first_day must be one that accepting between tick 0 and `tick` gives, and the
+## departure one its traits allow (FlightContract.window_problem).
 static func _read_contracts(
 	entries: Array, tick: int, gates: Array[String], out: Array[Dictionary]
 ) -> String:
 	for entry in entries:
 		var problem := FlightContract.problem(entry, FlightContract.KEYS)
+		if problem == "":
+			problem = FlightContract.window_problem(entry)
 		if problem != "":
 			return problem
 		if not gates.has(entry["gate"]):

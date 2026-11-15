@@ -120,9 +120,9 @@ func test_a_bad_saved_loyalty_count_is_refused() -> void:
 
 func test_an_older_save_version_is_refused() -> void:
 	var data := TestOfferBoard.save_of([])
-	data["save_version"] = 4
+	data["save_version"] = 5
 	assert_bool(OfferBoard.new().from_snapshot(data)).is_false()
-	assert_int(OfferBoard.SAVE_VERSION).is_equal(5)
+	assert_int(OfferBoard.SAVE_VERSION).is_equal(6)
 
 
 ## Tier 0 fees run 15..35. Top fare +15% maps 15 -> 17, 16 -> 18, 17 -> 20, so

@@ -54,7 +54,10 @@ const STATUSES := [OPEN, ACCEPTED, DECLINED, EXPIRED]
 ## there is no migration.
 ## 5: the Loyal airline count ("loyalty": airline -> {"days", "last_day"}) and
 ## each offer's "loyal" mark. A version 4 save is refused; there is no migration.
-const SAVE_VERSION := 5
+## 6: offers may carry Odd hours (departing at 06:00 or 22:00) and Exit fee, and
+## the traits are drawn from OfferTraits seed version 3. A version 5 save is
+## refused; there is no migration.
+const SAVE_VERSION := 6
 const SAVE_KEYS := ["save_version", "offers", "loyalty"]
 ## Sorted, so a saved count's keys can be compared with it.
 const LOYALTY_KEYS := ["days", "last_day"]
@@ -103,9 +106,12 @@ const TIER_SIZES: Array = [
 ]
 const TIER_FEES: Array = [[FEE_MIN, FEE_MAX], [25, 45], [40, 60]]
 const MAX_TIER := 2
-## Scheduled departures fall on a quarter hour from 07:00 to 21:00.
-const DEPARTURE_FIRST_MINUTE := 7 * 60
-const DEPARTURE_LAST_MINUTE := 21 * 60
+## Scheduled departures fall on a quarter hour from 07:00 to 21:00, the plain
+## contract window; an Odd hours offer departs at 06:00 or 22:00, the ends of
+## its wider window (FlightContract.window, slots_of). DEPARTURE_SLOTS is the plain window's
+## last slot index.
+const DEPARTURE_FIRST_MINUTE := FlightContract.FIRST_DEPARTURE_MINUTE
+const DEPARTURE_LAST_MINUTE := FlightContract.LAST_DEPARTURE_MINUTE
 const DEPARTURE_STEP := 15
 @warning_ignore("integer_division")
 const DEPARTURE_SLOTS := (DEPARTURE_LAST_MINUTE - DEPARTURE_FIRST_MINUTE) / DEPARTURE_STEP
@@ -139,6 +145,22 @@ static func offered_sizes(tier: int, runway_class := PlaneClasses.LARGE) -> Dict
 		if PlaneClasses.is_offered(size) and Runway.size_takes(runway_class, size):
 			sizes[size] = TIER_SIZES[tier][size]
 	return sizes
+
+
+## The departure minutes an offer of `traits` may be drawn or fitted at,
+## earliest first: the 57 quarter hours from 07:00 to 21:00, or for an Odd hours
+## offer only the two ends of its FlightContract.window, 06:00 and 22:00 (user
+## ruling odd-hours-and-exit-fee-offer-traits-odd-hours-widens-the-dep: "Odd
+## hours offers draw 06:00 or 22:00, and the card says so up front").
+static func slots_of(traits: Dictionary) -> Array[int]:
+	var span := FlightContract.window(traits)
+	var out: Array[int] = []
+	if OfferTraits.window_widening(traits) > 0:
+		out.append_array([span[0], span[1]])
+		return out
+	for minute in range(span[0], span[1] + 1, DEPARTURE_STEP):
+		out.append(minute)
+	return out
 
 
 ## The contract terms of `offer`, its traits included, ready for
@@ -192,7 +214,7 @@ func ensure_day(
 		var fresh: Array[Dictionary] = []
 		var traits := OfferTraits.draw_day(rng.seed, day, OFFERS_PER_DAY, tier, live)
 		for number in range(1, OFFERS_PER_DAY + 1):
-			var offer := _draw(day, number, rng, tier, runway_class)
+			var offer := _draw(day, number, rng, tier, runway_class, traits[number - 1])
 			_give_traits(offer, traits[number - 1], is_loyal(offer["airline"]))
 			fresh.append(offer)
 		if flights != null:
@@ -303,9 +325,16 @@ func from_snapshot(data: Dictionary) -> bool:
 
 
 ## Every draw is made for every offer, in this order, so the RNG advances by
-## the same amount whatever the values turn out to be.
+## the same amount whatever the values turn out to be. The departure is one
+## draw over the slots of the offer's `traits` (slots_of), so an Odd hours offer
+## draws from its 2 slots and every other from 57: one call either way.
 func _draw(
-	day: int, number: int, rng: RandomNumberGenerator, tier: int, runway_class: String
+	day: int,
+	number: int,
+	rng: RandomNumberGenerator,
+	tier: int,
+	runway_class: String,
+	traits: Dictionary
 ) -> Dictionary:
 	var airlines: Array = []
 	for unlocked in range(tier + 1):
@@ -318,7 +347,8 @@ func _draw(
 	var sizes := offered_sizes(own, runway_class)
 	var fees: Array = TIER_FEES[own]
 	var destination: String = DESTINATIONS[rng.randi_range(0, DESTINATIONS.size() - 1)]
-	var minute := DEPARTURE_FIRST_MINUTE + rng.randi_range(0, DEPARTURE_SLOTS) * DEPARTURE_STEP
+	var slots := slots_of(traits)
+	var minute: int = slots[rng.randi_range(0, slots.size() - 1)]
 	# A pick among one size would skip its draw, so the range is never below two and
 	# the RNG advances the same whatever the offered sizes are.
 	var size: String = sizes.keys()[rng.randi_range(0, maxi(sizes.size(), 2) - 1) % sizes.size()]
@@ -353,9 +383,9 @@ static func _give_traits(offer: Dictionary, traits: Dictionary, loyal: bool) -> 
 ## the slots `flights` has room for now (decision airline-offers-2-a-day-fit-
 ## the-free-gate-slots-1-needs-more, points 1 to 3). The first FIT_OFFERS get
 ## slots they fit at, the rest a slot where only a free gate is missing
-## (FlightFit.another_gate_helps). Each offer's drawn slot index r
-## (0..DEPARTURE_SLOTS) picks from its n candidate slots, earliest first, by
-## floor(r * n / (DEPARTURE_SLOTS + 1)), so nothing is drawn again. The two fit
+## (FlightFit.another_gate_helps). Each offer's drawn slot index r among its d
+## slots (slots_of: 57, or 2 with Odd hours) picks from its n candidate slots,
+## earliest first, by floor(r * n / d), so nothing is drawn again. The two fit
 ## offers must also fit together, whichever is accepted first: from their
 ## picks on, the first slot of the second that joins the first's is taken,
 ## and only when none does is the first's next slot tried, so a pair is found
@@ -363,10 +393,11 @@ static func _give_traits(offer: Dictionary, traits: Dictionary, loyal: bool) -> 
 ## drawn with, and its card says why it does not fit. Read-only on `flights`:
 ## every check is a trial on copies of its planning state.
 static func _fit(offers: Array[Dictionary], flights: FlightSim) -> void:
-	var drawn: Array[int] = []
+	# Per offer: [drawn slot index, how many slots it was drawn from].
+	var drawn: Array[Array] = []
 	for offer in offers:
-		@warning_ignore("integer_division")
-		drawn.append((int(offer["departure_minute"]) - DEPARTURE_FIRST_MINUTE) / DEPARTURE_STEP)
+		var slots := slots_of(offer[FlightContract.TRAITS_KEY])
+		drawn.append([slots.find(int(offer["departure_minute"])), slots.size()])
 	var cache := {}
 	var first: Dictionary = offers[0]
 	var second: Dictionary = offers[1]
@@ -394,22 +425,24 @@ static func _fit(offers: Array[Dictionary], flights: FlightSim) -> void:
 
 ## The departure minutes, earliest first, at which `offer` fits `flights` now
 ## (`fitting`), or at which only a free gate is missing (not `fitting`).
-## `cache` keeps each plane size's FlightFit assessments per minute: an offer's
-## fit depends only on its plane size and departure, not its other terms. The
-## second look at a gate blocker is taken only when a push slot is asked for.
+## `cache` keeps the FlightFit assessments per minute for each plane size and
+## departure window: an offer's fit depends only on its plane size, its
+## departure and the window its traits allow (FlightContract.window), not its
+## other terms. The second look at a gate blocker is taken only when a push slot
+## is asked for.
 static func _slots_where(
 	flights: FlightSim, offer: Dictionary, cache: Dictionary, fitting: bool
 ) -> Array[int]:
-	var size: String = offer["plane_size"]
-	if not cache.has(size):
+	var traits: Dictionary = offer[FlightContract.TRAITS_KEY]
+	var key := "%s|%s" % [offer["plane_size"], FlightContract.window(traits)]
+	if not cache.has(key):
 		var by_minute := {}
-		for slot in range(DEPARTURE_SLOTS + 1):
-			var minute := DEPARTURE_FIRST_MINUTE + slot * DEPARTURE_STEP
+		for minute in slots_of(traits):
 			by_minute[minute] = FlightFit.assess(flights, _terms_at(offer, minute), [], false)
-		cache[size] = by_minute
+		cache[key] = by_minute
 	var out: Array[int] = []
-	for minute: int in cache[size]:
-		var assessment: Dictionary = cache[size][minute]
+	for minute: int in cache[key]:
+		var assessment: Dictionary = cache[key][minute]
 		if fitting:
 			if assessment["fits"]:
 				out.append(minute)
@@ -425,10 +458,15 @@ static func _slots_where(
 
 
 ## The first minute of `seconds` (where `second` fits alone), from the one
-## drawn slot index `drawn` picks on and round, at which `second` and the
-## contract of `first_terms` both fit, whichever is accepted first; -1 for none.
+## drawn slot `drawn` ([index, slot count], as _pick takes it) picks on and
+## round, at which `second` and the contract of `first_terms` both fit,
+## whichever is accepted first; -1 for none.
 static func _joined_slot(
-	flights: FlightSim, first_terms: Dictionary, second: Dictionary, seconds: Array[int], drawn: int
+	flights: FlightSim,
+	first_terms: Dictionary,
+	second: Dictionary,
+	seconds: Array[int],
+	drawn: Array
 ) -> int:
 	var start := _pick(drawn, seconds.size())
 	for step in seconds.size():
@@ -442,12 +480,13 @@ static func _joined_slot(
 	return -1
 
 
-## The candidate of `count` that drawn slot index `drawn` (0..DEPARTURE_SLOTS)
-## maps to: floor(drawn * count / (DEPARTURE_SLOTS + 1)), which spreads the
-## draws evenly over the candidates (a remainder would favour the first ones).
-static func _pick(drawn: int, count: int) -> int:
+## The candidate of `count` that drawn slot `drawn` ([r, d]: index r of the d
+## slots the offer was drawn from) maps to: floor(r * count / d), which spreads
+## the draws evenly over the candidates (a remainder would favour the first
+## ones), and reaches the last candidate from the last slot of either window.
+static func _pick(drawn: Array, count: int) -> int:
 	@warning_ignore("integer_division")
-	return drawn * count / (DEPARTURE_SLOTS + 1)
+	return int(drawn[0]) * count / int(drawn[1])
 
 
 ## The contract terms of `offer` departing at `minute` instead.
@@ -593,8 +632,7 @@ func _range_problem(entry: Dictionary) -> String:
 	var fee := int(entry["fee_per_passenger"])
 	if not _fee_drawable(fee, TIER_FEES[tier], traits, entry[LOYAL_KEY]):
 		return "offer %s has a fee no drawn fee of its tier gives" % entry["id"]
-	var offset := int(entry["departure_minute"]) - DEPARTURE_FIRST_MINUTE
-	if offset < 0 or offset > DEPARTURE_SLOTS * DEPARTURE_STEP or offset % DEPARTURE_STEP != 0:
+	if not slots_of(traits).has(int(entry["departure_minute"])):
 		return "offer %s departs off the board's departure slots" % entry["id"]
 	return ""
 

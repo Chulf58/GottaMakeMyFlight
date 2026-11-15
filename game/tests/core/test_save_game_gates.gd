@@ -77,7 +77,7 @@ func test_the_gates_and_their_stands_are_saved_and_a_lost_gate_loads_back() -> v
 		"save_version %s, gates %s, apron %s" % [data["save_version"], data["gates"], data["apron"]]
 	)
 	assert_int(int(data["save_version"])).is_equal(SaveGame.SAVE_VERSION)
-	assert_int(SaveGame.SAVE_VERSION).is_equal(21)
+	assert_int(SaveGame.SAVE_VERSION).is_equal(22)
 	assert_int((data["gates"]["gates"] as Array).size()).is_equal(2)
 	assert_array((data["apron"]["stands"] as Dictionary).keys()).is_equal(["A", "B"])
 	var saved_bindings := _gates.bindings.duplicate(true)
@@ -195,12 +195,17 @@ func test_a_save_whose_gate_shrank_below_a_contract_is_refused_while_staged() ->
 		offer["booked_passengers"] = OfferTraits.fewest_booked(
 			medium[0], medium[1], offer["traits"]
 		)
-	assert_bool(board.from_snapshot(offers)).is_true()
-	for offer in board.open_offers():
-		if taken == "" and _flights.accept_problem(OfferBoard.terms_of(offer)) == "":
-			assert_bool(board.accept(offer["id"], _flights)).is_true()
-			taken = offer["id"]
+		# The first offer moves to the first of its slots gate A takes it at, so
+		# the case does not hang on where the seed's draw put the departures.
+		for minute in OfferBoard.slots_of(offer["traits"]):
+			var terms := OfferBoard.terms_of(offer)
+			terms["departure_minute"] = minute
+			if taken == "" and _flights.accept_gate(terms) == "A":
+				offer["departure_minute"] = minute
+				taken = offer["id"]
 	assert_str(taken).is_not_empty()
+	assert_bool(board.from_snapshot(offers)).is_true()
+	assert_bool(board.accept(taken, _flights)).is_true()
 	assert_str(_flights.contract_of(taken)["gate"]).is_equal("A")
 	var wide := _taken()
 	var narrow := wide.duplicate(true)

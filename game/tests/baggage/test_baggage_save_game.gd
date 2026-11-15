@@ -25,7 +25,7 @@ func before() -> void:
 	# The starter departs 17 minutes before 21:00, the last departure the quiet night
 	# allows (Runway R7); a later one is refused and the starter leaves next morning.
 	var start := (
-		GameCalendar.tick_at(0, GroundPlanner.LAST_DEPARTURE_MINUTE)
+		GameCalendar.tick_at(0, FlightContract.LAST_DEPARTURE_MINUTE)
 		- FlightTimetable.ISSUE_LEAD_TICKS
 		- FlightTimetable.departure_offset()
 		- DEPARTURE_BEFORE_LAST_TICKS
