@@ -45,7 +45,11 @@ func _process(_delta: float) -> void:
 ## Hands the views out to the gates of the live flights the airside can route.
 func update_views() -> void:
 	var routed: Array[String] = []
-	for gate in live_gates():
+	var live := live_gates()
+	for gate: String in _unroutable.keys():
+		if not live.has(gate):
+			_unroutable.erase(gate)
+	for gate in live:
 		if airside.routes_gate(gate):
 			routed.append(gate)
 			_unroutable.erase(gate)
