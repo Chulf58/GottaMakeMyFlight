@@ -1091,10 +1091,14 @@ func _build_two_gates(mode: BuildMode) -> bool:
 			if best == Vector2i(-1, -1) or not land.buy(best, null).ok:
 				_invalid("two gates: the land toward plot %s could not be bought" % plot)
 				return false
-	for edit in edits:
-		var result := grid.apply(edit)
-		if not result.ok:
-			_invalid("two gates: edit at %s refused: %s" % [edit.cell, result.reason_text()])
+	# One batch, not one apply() per edit: each apply() on the wide site re-reads
+	# the whole grid, which kept this stage from ever finishing building.
+	var results := grid.apply_batch(edits)
+	for i in edits.size():
+		if not results[i].ok:
+			_invalid(
+				"two gates: edit at %s refused: %s" % [edits[i].cell, results[i].reason_text()]
+			)
 			return false
 	return true
 

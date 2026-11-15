@@ -214,8 +214,12 @@ func _build_terminal() -> bool:
 			if best == Vector2i(-1, -1) or not land.buy(best, null).ok:
 				_fail("the land toward plot %s could not be bought" % plot)
 				return false
-	for edit in edits:
-		var result := _grid.apply(edit)
+	# One batch, not one apply() per edit: each apply() on the wide site re-reads
+	# the whole grid, which kept the probe past its hang limit in stage boot.
+	var results := _grid.apply_batch(edits)
+	for i in edits.size():
+		var edit := edits[i]
+		var result := results[i]
 		if not result.ok:
 			_fail("edit at %s refused: %s" % [edit.cell, result.reason_text()])
 			return false
