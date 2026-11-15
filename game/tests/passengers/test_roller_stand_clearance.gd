@@ -140,6 +140,19 @@ func test_the_seat_park_side_is_the_body_s() -> void:
 	for b in [0, PassengerLooks.PER_VARIANT]:
 		var queue := RollerPark.queue_park(Transform3D.IDENTITY, 1, 1.0, b)
 		assert_float((queue * CarryOnProps.ROLLER_AXLE).x).is_greater(RollerPark.PARK_SIDE_M)
+	# Male 10 alone takes his own, wider left side (board a1c067fc: his idle
+	# left foot needs 0.435 m lying at a booth); every other body keeps its
+	# variant's.
+	var male_10 := PassengerLooks.BODIES.find("tcp_male_character_10")
+	assert_int(male_10).is_greater_equal(0)
+	for b in PassengerLooks.BODIES.size():
+		var variant := PassengerLooks.variant_of(b)
+		for hand in 2:
+			var own := RollerPark.seat_side(b, hand)
+			if b == male_10 and hand == 1:
+				assert_float(own).is_greater(RollerPark.SEAT_SIDE_M[variant][hand])
+			else:
+				assert_float(own).is_equal(RollerPark.SEAT_SIDE_M[variant][hand])
 
 
 ## A male body's seat park (RollerPark.seat_side()) holds none of his idle
