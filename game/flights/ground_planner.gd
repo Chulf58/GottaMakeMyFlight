@@ -224,11 +224,15 @@ func holds(req: Dictionary, state: int) -> Array[Dictionary]:
 
 ## The pauses taxi phase `state` may take, in the order they are tried: none,
 ## then each length from the shortest, at each hold line from the earliest.
-## Only pauses MovementPlan.is_valid() accepts are listed.
+## Only options MovementPlan.is_valid() accepts are listed, no pause included:
+## a route too long for its budget under the speed cap has none, so the flight
+## is refused (TAXI_BUSY).
 func phase_options(req: Dictionary, state: int) -> Array[Dictionary]:
 	var route: PackedVector3Array = req["routes"][state]
 	var budget := _budget(req, state)
-	var out: Array[Dictionary] = [{}]
+	var out: Array[Dictionary] = []
+	if MovementPlan.is_valid(MovementPlan.taxi(route, budget)):
+		out.append({})
 	var lines := holds(req, state)
 	var ticks := MovementPlan.PAUSE_STEP_TICKS
 	while ticks <= MovementPlan.MAX_PAUSE_TICKS:

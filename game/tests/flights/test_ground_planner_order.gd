@@ -217,6 +217,33 @@ func test_a_route_off_the_axes_is_refused() -> void:
 	assert_array(booked[0]).is_empty()
 
 
+## A taxi phase whose route cannot be flown inside its budget under the speed
+## cap is refused as TAXI_BUSY and books nothing: the no-pause option is
+## validated like the paused ones, and no pause can help a route that is too
+## long (board 6bb6e0f1). The normal route is the control: it books no pause.
+func test_a_route_too_long_for_its_budget_is_refused_not_booked() -> void:
+	var normal := _req("N", MID, A_MINUTE)
+	var control := _kit.planner()
+	var options := control.phase_options(normal, FlightSim.State.TAXI_IN)
+	assert_dict(options[0]).is_empty()
+	var booked := control.plan_all([normal])
+	assert_bool(booked["N"]["ok"]).is_true()
+	assert_dict(booked["N"]["pauses"][FlightSim.State.TAXI_IN]).is_empty()
+	# Cut TAXI_IN's budget to 10 ticks: its peak speed is far over the cap.
+	var rushed := _req("R", MID, A_MINUTE)
+	rushed["starts"][FlightSim.State.AT_STAND] = rushed["starts"][FlightSim.State.TAXI_IN] + 10
+	var planner := _kit.planner()
+	var plan := MovementPlan.taxi(rushed["routes"][FlightSim.State.TAXI_IN], 10.0)
+	print("rushed no-pause peak speed %.3f m/tick" % MovementPlan.peak_speed(plan))
+	assert_float(MovementPlan.peak_speed(plan)).is_greater(MovementPlan.MAX_PEAK_SPEED)
+	assert_array(planner.phase_options(rushed, FlightSim.State.TAXI_IN)).is_empty()
+	var out := planner.plan_all([rushed])
+	assert_bool(out["R"]["ok"]).is_false()
+	assert_str(out["R"]["reason"]).is_equal(GroundPlanner.TAXI_BUSY)
+	assert_array(out["R"]["bookings"]).is_empty()
+	assert_array(planner.bookings()).is_empty()
+
+
 ## How long planning takes under a week's load: 2 gates with a departure every
 ## 2 hours from 07:00 to 21:00 (8 a day each), 7 days, then the same plus one
 ## new offer, as R7 re-plans per offer. Printed, with a loose bound so a
