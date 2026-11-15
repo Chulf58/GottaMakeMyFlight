@@ -238,8 +238,25 @@ func test_the_pad_follows_a_change_of_max_class() -> void:
 	var verts: int = _airside.paving.mesh.surface_get_array_len(0)
 	_airside.set_gate_classes({"A": ""})
 	assert_array(_airside.paving.pads).is_empty()
-	# Fewer vertices: the pad's four, plus its cut pieces and skirts where it lies
-	# on the site (TaxiPaving.on_site()), so the drop is no longer exactly 4.
+	# The rebuilt mesh is exactly the routes' paving with no pad, laid on the
+	# site (TaxiPavingSite.on_site()), and the pad's vertices are gone from it.
+	var marks := _airside.paving.lines.duplicate()
+	marks.append_array(_airside.paving.bars)
+	var want := (
+		TaxiPavingSite
+		. on_site(TaxiPaving.mesh_of(_airside.paving.shown, marks, []))
+		. surface_get_arrays(0)
+	)
+	var got := _airside.paving.mesh.surface_get_arrays(0)
+	print(
+		(
+			"verts with pad %d without %d"
+			% [verts, (got[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()]
+		)
+	)
+	assert_array(got[Mesh.ARRAY_VERTEX]).is_equal(want[Mesh.ARRAY_VERTEX])
+	assert_array(got[Mesh.ARRAY_INDEX]).is_equal(want[Mesh.ARRAY_INDEX])
+	assert_array(got[Mesh.ARRAY_TEX_UV]).is_equal(want[Mesh.ARRAY_TEX_UV])
 	assert_int(_airside.paving.mesh.surface_get_array_len(0)).is_less(verts)
 
 

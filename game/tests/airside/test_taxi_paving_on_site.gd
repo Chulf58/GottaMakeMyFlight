@@ -11,7 +11,7 @@ const SITE := preload("res://build/terminal_site.tres")
 const LANE_Z := -290.0
 ## How far over the asphalt a plane may ride: the strips lie SITE_DROP_M under
 ## its ground height, the pads PAD_DROP_M more.
-const MAX_FLOAT_M := TaxiPaving.SITE_DROP_M + TaxiPaving.PAD_DROP_M + 0.001
+const MAX_FLOAT_M := TaxiPavingSite.SITE_DROP_M + TaxiPaving.PAD_DROP_M + 0.001
 
 
 ## The asphalt's top under `at` (world x and z): the highest up-facing asphalt
@@ -60,14 +60,14 @@ static func _side_triangles(mesh: ArrayMesh) -> Array[PackedVector3Array]:
 func test_inside_the_site_the_asphalt_lies_just_under_the_plane() -> void:
 	# A link wholly on the site, over land a new game does not own (x 1..43).
 	var strip_list: Array[Dictionary] = [{"rect": Rect2(5, -200, 30, 60), "across_x": true}]
-	var mesh := TaxiPaving.on_site(TaxiPaving.mesh_of(strip_list))
+	var mesh := TaxiPavingSite.on_site(TaxiPaving.mesh_of(strip_list))
 	# Off the quad's diagonal, where neither triangle holds the point strictly.
 	var at := Vector3(21, 0, -168.2)
 	var ground := PlaneView.ground_height_at(at)
 	var top := surface_at(mesh, at)
 	print("ground %.3f asphalt %.3f" % [ground, top])
 	assert_float(ground).is_equal_approx(SITE.ground_height, 0.0001)
-	assert_float(top).is_equal_approx(ground - TaxiPaving.SITE_DROP_M, 0.0001)
+	assert_float(top).is_equal_approx(ground - TaxiPavingSite.SITE_DROP_M, 0.0001)
 	# Under the site's own paving (y 0.2), which covers it on owned land.
 	assert_float(top).is_less(SITE.ground_height)
 
@@ -80,7 +80,7 @@ func test_off_the_site_the_mesh_is_unchanged() -> void:
 	var flat := TaxiPaving.mesh_of(
 		strip_list, [Rect2(4.75, -20, 0.5, 40)], [Rect2(-20, -10, 50, 30)]
 	)
-	var lifted := TaxiPaving.on_site(flat)
+	var lifted := TaxiPavingSite.on_site(flat)
 	var a := flat.surface_get_arrays(0)
 	var b := lifted.surface_get_arrays(0)
 	print(
@@ -96,7 +96,7 @@ func test_off_the_site_the_mesh_is_unchanged() -> void:
 func test_across_the_site_edge_the_asphalt_follows_the_plane_down_the_ramp() -> void:
 	# A link from the lane, north of the site, on to a stand on the site.
 	var strip_list: Array[Dictionary] = [{"rect": Rect2(-41, LANE_Z, 30, 175), "across_x": true}]
-	var mesh := TaxiPaving.on_site(TaxiPaving.mesh_of(strip_list))
+	var mesh := TaxiPavingSite.on_site(TaxiPaving.mesh_of(strip_list))
 	var worst_float := 0.0
 	var worst_sink := 0.0
 	var samples := 0
@@ -114,7 +114,7 @@ func test_across_the_site_edge_the_asphalt_follows_the_plane_down_the_ramp() -> 
 	print("samples %d worst float %.4f worst sink %.4f" % [samples, worst_float, worst_sink])
 	assert_int(samples).is_greater(300)
 	assert_float(worst_sink).is_less_equal(0.0001)
-	assert_float(worst_float).is_less_equal(TaxiPaving.SITE_DROP_M + 0.0001)
+	assert_float(worst_float).is_less_equal(TaxiPavingSite.SITE_DROP_M + 0.0001)
 	# Control: the ramp was crossed, the ground under it ran from 0 to 0.2.
 	assert_float(PlaneView.ground_height_at(Vector3(-26, 0, LANE_Z + 1))).is_equal(0.0)
 	assert_float(PlaneView.ground_height_at(Vector3(-26, 0, -120))).is_equal(SITE.ground_height)
@@ -123,7 +123,7 @@ func test_across_the_site_edge_the_asphalt_follows_the_plane_down_the_ramp() -> 
 func test_a_parked_plane_on_a_pad_over_the_grass_rides_on_it() -> void:
 	var strip_list: Array[Dictionary] = [{"rect": Rect2(-41, LANE_Z, 30, 160), "across_x": true}]
 	var pad := Rect2(-60, -170, 68, 60)
-	var mesh := TaxiPaving.on_site(TaxiPaving.mesh_of(strip_list, [], [pad]))
+	var mesh := TaxiPavingSite.on_site(TaxiPaving.mesh_of(strip_list, [], [pad]))
 	var checked := 0
 	for at: Vector3 in [Vector3(-40, 0, -165), Vector3(0, 0, -150), Vector3(-26, 0, -115)]:
 		var ground := PlaneView.ground_height_at(at)
@@ -136,7 +136,7 @@ func test_a_parked_plane_on_a_pad_over_the_grass_rides_on_it() -> void:
 
 func test_asphalt_over_the_grass_has_skirts_down_into_it() -> void:
 	var strip := Rect2(5, -200, 30, 60)
-	var lifted := TaxiPaving.on_site(
+	var lifted := TaxiPavingSite.on_site(
 		TaxiPaving.mesh_of([{"rect": strip, "across_x": true}] as Array[Dictionary])
 	)
 	var sides := _side_triangles(lifted)
@@ -145,7 +145,10 @@ func test_asphalt_over_the_grass_has_skirts_down_into_it() -> void:
 	for tri in sides:
 		var low := minf(tri[0].y, minf(tri[1].y, tri[2].y))
 		var high := maxf(tri[0].y, maxf(tri[1].y, tri[2].y))
-		if low > TaxiPaving.GRASS_Y or high < SITE.ground_height - TaxiPaving.SITE_DROP_M - 0.001:
+		if (
+			low > TaxiPavingSite.GRASS_Y
+			or high < SITE.ground_height - TaxiPavingSite.SITE_DROP_M - 0.001
+		):
 			continue
 		var mid := (tri[0] + tri[1] + tri[2]) / 3.0
 		if absf(mid.x - strip.position.x) < 0.001:
@@ -163,7 +166,7 @@ func test_asphalt_over_the_grass_has_skirts_down_into_it() -> void:
 func test_every_top_triangle_still_faces_up_after_the_cut() -> void:
 	var strip_list: Array[Dictionary] = [{"rect": Rect2(-41, LANE_Z, 30, 175), "across_x": true}]
 	var arrays := (
-		TaxiPaving
+		TaxiPavingSite
 		. on_site(TaxiPaving.mesh_of(strip_list, [Rect2(-26.25, LANE_Z, 0.5, 175)]))
 		. surface_get_arrays(0)
 	)

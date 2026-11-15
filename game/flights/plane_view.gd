@@ -24,7 +24,7 @@ extends Node3D
 ## the taxiway (y 0) off it, with a PAVING_RAMP_M ramp just outside the site's
 ## edge (ground_height_at()). On the site that is the site's own paving where
 ## the player owns the land (OwnedPaving) and the taxi paving, laid just under
-## this height (TaxiPaving.on_site()), where not. Only the height changes; the
+## this height (TaxiPavingSite.on_site()), where not. Only the height changes; the
 ## Airside paths, and so the taxi lengths and timings, stay as they are.
 ##
 ## A taxi phase plays the pause the sim planned for it (FlightSim.taxi_plan(),
@@ -45,7 +45,7 @@ const PLANE_SCENES := {
 ## The terminal site. Its owned plots are paved flat at its ground_height
 ## (tools/blender/terminal_site/build_terminal_site.py, OwnedPaving; user ruling
 ## site-paving-covers-only-the-owned-land-plots-and-grows-as-ea), and the taxi
-## paving under the planes lies just under it on the rest (TaxiPaving.on_site()).
+## paving under the planes lies just under it on the rest (TaxiPavingSite.on_site()).
 const SITE := preload("res://build/terminal_site.tres")
 ## How far outside the site's edge the ground rises from y 0 to the paving.
 const PAVING_RAMP_M := 4.0
@@ -263,7 +263,7 @@ static func ground_height_at(point: Vector3) -> float:
 
 
 ## PAVING_RAMP_M, for a script that cannot read PlaneView's constants while
-## PlaneView is still loading the scripts it depends on (TaxiPaving.on_site()).
+## PlaneView is still loading the scripts it depends on (TaxiPavingSite.on_site()).
 static func paving_ramp_m() -> float:
 	return PAVING_RAMP_M
 
