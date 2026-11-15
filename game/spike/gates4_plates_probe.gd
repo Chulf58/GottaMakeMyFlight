@@ -430,12 +430,12 @@ func _check_mood() -> void:
 func _plates() -> void:
 	var desk_b_world := _grid.cell_to_world(DESK_B + _offset) + Vector3(0.5, 1.0, 0.0)
 	var focus_b := _grid.cell_to_world(Vector2i(62, 5) + _offset)
-	_view(focus_b, 22.0, 1.45)
+	_view(focus_b, 9.0, 1.0)
 	await _plate("a_gate_b_seated_and_standing", _b_people, [desk_b_world])
 	if _done:
 		return
 	var focus_a := _grid.cell_to_world(Vector2i(14, 5) + _offset)
-	_view(focus_a, 24.0, 0.7)
+	_view(focus_a, 10.0, 0.7)
 	await _plate(
 		"b_gate_a_seated",
 		_a_people,
