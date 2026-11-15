@@ -36,9 +36,11 @@ func before() -> void:
 	SaveTestKit.start_airport(_main)
 	# The test bag room lies off a new game's land and building on unowned land
 	# is refused (LandPlots), so plots are bought out to it; a save accepts that.
-	LandKit.buy_to((_main.get_node("BuildMode") as BuildMode).land_tool.land, Vector2i(0, 0))
+	# The room stands in the first site's north-west corner (side land is locked).
+	LandKit.buy_to((_main.get_node("BuildMode") as BuildMode).land_tool.land, Vector2i(4, 0))
 	# Passengers check no bag until a ready bag room exists.
-	BagRoomKit.add((_main.get_node("BuildMode") as BuildMode).grid)
+	var room := Rect2i(BagRoomKit.AREA.position + LandKit.FIRST_SITE, BagRoomKit.AREA.size)
+	BagRoomKit.add((_main.get_node("BuildMode") as BuildMode).grid, room)
 	_save = SaveTestKit.save_game(_main)
 	_bags = _main.get_node("BaggageSim")
 	while _unsettled() == null and clock.tick < start + LIMIT:
