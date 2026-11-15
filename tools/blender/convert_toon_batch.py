@@ -199,13 +199,13 @@ for _stem in CLEANER_STEMS:
     )
 # Passenger bodies beyond 01 (decisions comic-life-and-variety-visuals-first-passengers-get-10-more
 # and passenger-looks-add-the-unused-toon-city-people-bodies-and-b): PassengerViews draws a
-# passenger with one of the bodies of its gender (8 male, 9 female). Female_02 is left out:
-# her shower clip cannot be fitted (toon_shower.py stops: "a hand ray on Spine_02 misses the
-# skin"). Male_10 is left out: a roller lying beside his left foot at a seat park takes in
-# his shoe (game/tests/passengers/test_roller_stand_clearance.gd).
+# passenger with one of the bodies of its gender (9 male, 10 female). Male_10 and Female_02
+# came last (board a1c067fc): Female_02's shower clip fits since toon_shower.py checks its
+# scrub ring at every frame's angle, and Male_10's seat park has its own left side
+# (RollerPark.SEAT_SIDE_BODY_M).
 PASSENGER_BODIES = {
-    "male": ("02", "03", "06", "08", "09", "04", "05"),
-    "female": ("03", "04", "05", "08", "11", "06", "09", "12"),
+    "male": ("02", "03", "06", "08", "09", "04", "05", "10"),
+    "female": ("03", "04", "05", "08", "11", "06", "09", "12", "02"),
 }
 for _gender, _numbers in PASSENGER_BODIES.items():
     _g = _gender.capitalize()

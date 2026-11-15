@@ -17,6 +17,27 @@ func test_a_body_stays_within_its_variant_and_every_body_is_drawn() -> void:
 	assert_int(seen.size()).is_equal(PassengerLooks.BODIES.size())
 
 
+## The roster (decision passenger-looks-add-the-unused-toon-city-people-bodies-
+## and-b): 19 bodies, 9 male then 10 female, male 10 and female 02 among them
+## (board a1c067fc), each with its own scene and both walk and run speeds.
+func test_the_roster_holds_19_bodies_with_male_10_and_female_02() -> void:
+	print("roster: %d bodies, %d male" % [PassengerLooks.BODIES.size(), PassengerLooks.PER_VARIANT])
+	assert_int(PassengerLooks.BODIES.size()).is_equal(19)
+	assert_int(PassengerLooks.PER_VARIANT).is_equal(9)
+	assert_int(PassengerLooks.SCENES.size()).is_equal(PassengerLooks.BODIES.size())
+	assert_int(PassengerLooks.CLIP_WALK_MPS.size()).is_equal(PassengerLooks.BODIES.size())
+	assert_int(PassengerLooks.CLIP_RUN_MPS.size()).is_equal(PassengerLooks.BODIES.size())
+	for added: Array in [["tcp_male_character_10", 0], ["tcp_female_character_02", 1]]:
+		var b := PassengerLooks.BODIES.find(added[0])
+		assert_int(b).override_failure_message(added[0]).is_greater_equal(0)
+		assert_int(PassengerLooks.variant_of(b)).is_equal(added[1])
+		assert_str(PassengerLooks.SCENES[b].resource_path).contains(added[0])
+	for b in PassengerLooks.BODIES.size():
+		var stem := PassengerLooks.BODIES[b]
+		assert_bool(stem.contains("_male_") == (PassengerLooks.variant_of(b) == 0)).is_true()
+		assert_str(PassengerLooks.SCENES[b].resource_path).contains(stem)
+
+
 ## Every body has a seat shift (game/spike/passenger_looks_plates_probe.gd
 ## measures it against the seat row), never backward or down, and lifted at
 ## most 2 cm: more would show the body floating over the pan.
