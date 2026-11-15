@@ -1,4 +1,4 @@
-[gd_scene load_steps=51 format=3]
+[gd_scene load_steps=52 format=3]
 
 [ext_resource type="PackedScene" path="res://camera/tycoon_camera.tscn" id="1_cam"]
 [ext_resource type="Script" path="res://core/sim_clock.gd" id="2_clock"]
@@ -48,6 +48,7 @@
 [ext_resource type="Script" path="res://ui/incident_panel.gd" id="49_incidentpanel"]
 [ext_resource type="Script" path="res://ui/game_menu.gd" id="50_gamemenu"]
 [ext_resource type="Script" path="res://ui/hover_target.gd" id="51_hovertarget"]
+[ext_resource type="Script" path="res://build/owned_paving.gd" id="52_ownedpaving"]
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_ground"]
 size = Vector2(2400, 2400)
@@ -468,3 +469,8 @@ build_mode = NodePath("../BuildMode")
 landside_views = NodePath("../LandsideViews")
 save_game = NodePath("../SaveGame")
 hud = NodePath("../PassengerHud")
+
+[node name="OwnedPaving" type="Node" parent="." node_paths=PackedStringArray("site", "build_mode")]
+script = ExtResource("52_ownedpaving")
+site = NodePath("../Airside/Terminal")
+build_mode = NodePath("../BuildMode")

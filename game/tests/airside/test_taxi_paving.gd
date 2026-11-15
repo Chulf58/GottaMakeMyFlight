@@ -259,7 +259,9 @@ func test_paving_follows_a_stand_that_moves() -> void:
 	assert_bool(TaxiPaving.covers(_airside.paving.shown, a_leg)).is_false()
 	assert_bool(TaxiPaving.covers(_airside.paving.shown, b_leg)).is_true()
 	assert_object(_airside.paving.mesh).is_not_null()
-	assert_int((_airside.paving.mesh as ArrayMesh).get_surface_count()).is_equal(1)
+	# The asphalt, then its skirts over the grass without the outline pass
+	# (TaxiPavingSite.skirt_material()).
+	assert_int((_airside.paving.mesh as ArrayMesh).get_surface_count()).is_equal(2)
 
 
 func test_a_diagonal_leg_gets_an_oriented_strip_that_covers_it() -> void:

@@ -65,6 +65,17 @@ extends MeshInstance3D
 ## leg, so a bar runs east-west across the strip's width. HoldIn and HoldRunway
 ## lie 2 m inside the runway's 64 m wide asphalt, which would hide a bar there,
 ## so their bars sit just south of it (hold_bars()).
+##
+## On the terminal site the paving lies just under the plane's ground height
+## (TaxiPavingSite.on_site()): SITE_DROP_M under PlaneView.ground_height_at(), which is the
+## site's paving height (y 0.2) over the whole site grid and ramps down to 0
+## over PAVING_RAMP_M outside it. The site's own paving covers only the land
+## plots the player owns (decision site-paving-covers-only-the-owned-land-plots-
+## and-grows-as-ea, OwnedPaving), so over owned land it hides this paving as
+## before, and over land not yet owned a parked or taxiing plane rolls on this
+## asphalt, never on the grass, and neither floats nor sinks. Where it stands
+## over the grass its edges get skirts down into the grass in the band's edge
+## shade, so it reads as a kerbed slab, not a floating one.
 
 const WIDTH_M := 30.0
 ## Height of the paving's top. The runway's asphalt lies at y 0.1 and the
@@ -122,7 +133,7 @@ func show_routes(
 	bars = hold_bars(holds, WIDTH_M, runway_south_z)
 	var marks := lines.duplicate()
 	marks.append_array(bars)
-	mesh = mesh_of(shown, marks, pads)
+	mesh = TaxiPavingSite.on_site(mesh_of(shown, marks, pads))
 
 
 ## `strip_list` (as strips() returns them) with each north-south strip whose

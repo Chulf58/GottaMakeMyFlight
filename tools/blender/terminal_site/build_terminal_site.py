@@ -55,13 +55,25 @@ What it keeps and drops (measured on the shell, see the census this script print
   at z -210"). The re-read proves the whole grown site flat (up-facing heights only 0.2) and
   covered (a 0.25 m sample grid over it, every sample on paving), so the pads run on
   unbroken under the dropped accents and into the north paving.
+- Land plots: the paving is cut into one object per land plot, Lot_<column>_<row>, on the
+  plot lines LandPlots draws (game/build/land_plots.gd: columns of 22, 22, 21 and 21 m
+  from x -43, six rows of 25 m from z -210; ruling land-plots-are-near-even-columns-of-22-
+  22-21-and-21-m-by-25), so the game shows the paving only on the plots the player owns
+  (OwnedPaving; user ruling site-paving-covers-only-the-owned-land-plots-and-grows-as-ea,
+  which replaces point 2 above). split_plots() gives every side a plot shares with another
+  plot a kerb object of its own, Lot_<column>_<row>_<N, E, S or W>, a skirt from PAVE_Y down to
+  SKIRT_FOOT_Y, under the grass (main.tscn's Ground, y -0.1). The game shows a kerb only where
+  its plot is owned and the plot across is not, so an owned plot next to grass reads as a kerbed
+  slab and touching owned plots pave as one surface (user ruling touching-owned-land-plots-pave-
+  as-one-seamless-surface-no-lin). The re-read proves
+  every plot's top lies inside its own plot and reaches all four of its edges.
 - Poles: dropped. Every Poles island stands under the landside canopy between x -25.85 and
   25.85 and is part of its supports and lamps; the canopy goes, so they go.
 - Upper, Canopy, Facade, Porch_1..8, Door_1..8, Doorway_1..8, Lights (all of it): dropped.
 
-The node tree written: TP_Airport_Site_ROOT > Road, Lot.
+The node tree written: TP_Airport_Site_ROOT > Road, Lot_0_0 .. Lot_3_5 and their kerbs Lot_<c>_<r>_<N|E|S|W>.
 The build fails unless the written file holds exactly those, with the shell's two atlases
-(TP_Atlas_Simple_1A_D on Road, TP_Atlas_1A_D on Lot, both on the one image tp_atlas_1a_d, as in the
+(TP_Atlas_Simple_1A_D on Road, TP_Atlas_1A_D on each Lot_, both on the one image tp_atlas_1a_d, as in the
 shell and the Toon source) bound, and no geometry above y 0.35
 or inside the old slab box above y 0.25.
 """
@@ -97,6 +109,11 @@ DIP_HALF_X = 12.0  # the dips run x -12..12
 LOT_HALF_X = 40.0  # the Toon paving stops at x -40 and 40
 BACK_FLARE = ((14.0, -100.0), (13.0, -99.73), (12.27, -99.0), (12.0, -98.0))  # east half; west mirrors
 KEEP = ("Road", "Lot")
+# LandPlots' plot lines on the 86 x 150 site grid (game/build/land_plots.gd).
+COLUMN_X = (-43.0, -21.0, 1.0, 22.0, 43.0)
+ROW_Z = (-210.0, -185.0, -160.0, -135.0, -110.0, -85.0, -60.0)
+SKIRT_FOOT_Y = -0.12  # a plot-edge skirt reaches 2 cm under the grass (y -0.1)
+PLOT_NAMES = tuple("Lot_%d_%d" % (c, r) for r in range(len(ROW_Z) - 1) for c in range(len(COLUMN_X) - 1))
 SHORT_ROWS = ("raised block", "dip", "tile accent")  # census lists only the first 3 of these
 ROOT = "TP_Airport_Site_ROOT"
 
@@ -374,6 +391,163 @@ def fill_plot(lot, pad_loops, skirt_uv):
     return added
 
 
+def plot_index(gx, gz):
+    """The land plot (column, row) whose inside holds Godot world point (gx, gz), or None on a
+    plot line."""
+    for lines, v in ((COLUMN_X, gx), (ROW_Z, gz)):
+        if any(abs(v - line) < 1e-3 for line in lines[1:-1]):
+            return None
+    return (sum(1 for x in COLUMN_X[1:-1] if gx > x), sum(1 for z in ROW_Z[1:-1] if gz > z))
+
+
+def split_plots(lot, root, skirt_uv):
+    """Cut the paved Lot on COLUMN_X and ROW_Z into one object per land plot, Lot_<column>_<row>,
+    parented to root with an identity transform (vertices in world), with the Lot's material;
+    close every edge a plot shares with another plot with a skirt from PAVE_Y down to
+    SKIRT_FOOT_Y in the paving edge skirt's UV; remove the Lot. Returns the skirts as
+    [(corners, normal)] in Godot world for the re-read's normal check."""
+    bm = bmesh.new()
+    bm.from_mesh(lot.data)
+    bm.transform(lot.matrix_world)
+    welded = weld_t_junctions(bm)
+    for x in COLUMN_X[1:-1]:
+        bmesh.ops.bisect_plane(bm, geom=bm.verts[:] + bm.edges[:] + bm.faces[:], dist=1e-5,
+                               plane_co=Vector((x, 0.0, 0.0)), plane_no=Vector((1.0, 0.0, 0.0)))
+    for z in ROW_Z[1:-1]:
+        bmesh.ops.bisect_plane(bm, geom=bm.verts[:] + bm.edges[:] + bm.faces[:], dist=1e-5,
+                               plane_co=Vector((0.0, -(z - OFFSET_Z), 0.0)), plane_no=Vector((0.0, 1.0, 0.0)))
+
+    def face_plot(f):
+        c = f.calc_center_median()
+        return plot_index(c.x, -c.y + OFFSET_Z)
+
+    on_line = [tuple(round(v, 2) for v in g(f.calc_center_median())) for f in bm.faces if face_plot(f) is None]
+    if on_line:
+        die("Lot faces lie on a plot line after the cut: %s" % on_line[:5])
+    skirts = []
+    counts = Counter(face_plot(f) for f in bm.faces)
+
+    def keep(name, mesh_bm):
+        me = bpy.data.meshes.new(name)
+        mesh_bm.to_mesh(me)
+        mesh_bm.free()
+        for m in lot.data.materials:
+            me.materials.append(m)
+        ob = bpy.data.objects.new(name, me)
+        bpy.context.scene.collection.objects.link(ob)
+        ob.parent = root
+        ob.matrix_world = Matrix.Identity(4)
+
+    for name in PLOT_NAMES:
+        col, row = (int(v) for v in name.split("_")[1:])
+        part = bm.copy()
+        bmesh.ops.delete(part, geom=[f for f in part.faces if face_plot(f) != (col, row)], context="FACES")
+        keep(name, part)
+        x0, x1, z0, z1 = COLUMN_X[col], COLUMN_X[col + 1], ROW_Z[row], ROW_Z[row + 1]
+        lo, hi = SKIRT_FOOT_Y, PAVE_Y
+        for side, pts, normal in kerb_sides(col, row, x0, x1, z0, z1, lo, hi):
+            kb = bmesh.new()
+            uvl = kb.loops.layers.uv.new("UVMap")
+            f = kb.faces.new([kb.verts.new(Vector((x, -(z - OFFSET_Z), y))) for x, y, z in pts])
+            f.normal_update()
+            if f.normal.dot(Vector((normal[0], -normal[2], normal[1]))) < 0:
+                bmesh.ops.reverse_faces(kb, faces=[f])
+                f.normal_update()
+            for lp in f.loops:
+                lp[uvl].uv = skirt_uv
+            skirts.append(([Vector(p) for p in pts], Vector(normal)))
+            keep("%s_%s" % (name, side), kb)
+    bm.free()
+    bpy.data.objects.remove(lot, do_unlink=True)
+    rep("Lot T-junctions welded before the cut: %d" % welded)
+    rep("Lot split into %d plot objects on x %s and z %s; Lot faces per plot after the cut %s; "
+        "%d kerb objects (one per plot side facing another plot) from y %.2f down to %.2f" % (
+            len(PLOT_NAMES), COLUMN_X, ROW_Z, sorted(counts.items()), len(skirts), PAVE_Y, SKIRT_FOOT_Y))
+    return skirts
+
+
+def t_junctions(verts, edges):
+    """(vertex index, edge) pairs where a vertex lies strictly inside an edge it is not an end of:
+    a T-junction, where the GPU leaves a hairline crack between the faces that meet there."""
+    out = []
+    for i, j in edges:
+        a, b = verts[i], verts[j]
+        d = b - a
+        length2 = d.length_squared
+        if length2 < 1e-10:
+            continue
+        for k, v in enumerate(verts):
+            if k in (i, j):
+                continue
+            t = (v - a).dot(d) / length2
+            if 1e-6 < t < 1.0 - 1e-6 and (a + d * t - v).length < 1e-4:
+                out.append((k, (i, j)))
+    return out
+
+
+def weld_t_junctions(bm):
+    """Split every edge of bm that has another vertex lying inside it at that vertex and merge the
+    two, so faces that meet share their vertices. A T-junction's crack shows what lies under the
+    paving (the dark stand pad) as a dotted line. The faces are triangulated first, and each
+    triangle a split turns into a quad is cut from the new vertex to its far corner, so the exporter
+    never triangulates it into a sliver along the old edge, which would leave the T-junction in
+    place. Returns the number of splits."""
+    bmesh.ops.triangulate(bm, faces=bm.faces[:])
+    count = 0
+    for _ in range(64):
+        bm.verts.index_update()
+        bm.verts.ensure_lookup_table()
+        bm.edges.ensure_lookup_table()
+        refs = list(bm.verts)
+        verts = [v.co.copy() for v in refs]
+        found = t_junctions(verts, [(e.verts[0].index, e.verts[1].index) for e in bm.edges])
+        if not found:
+            return count
+        done = set()
+        for k, (i, j) in found:
+            if (i, j) in done:
+                continue
+            done.add((i, j))
+            edge = bm.edges.get((refs[i], refs[j]))
+            if edge is None:
+                continue
+            a, b = verts[i], verts[j]
+            t = (verts[k] - a).dot(b - a) / (b - a).length_squared
+            _new_edge, new_vert = bmesh.utils.edge_split(edge, refs[i], t)
+            new_vert.co = verts[k]
+            for face in list(new_vert.link_faces):
+                ring = [lp.vert for lp in face.loops]
+                if len(ring) == 4:
+                    far = ring[(ring.index(new_vert) + 2) % 4]
+                    bmesh.ops.connect_verts(bm, verts=[new_vert, far])
+            count += 1
+        bmesh.ops.remove_doubles(bm, verts=bm.verts[:], dist=1e-5)
+    die("T-junctions left after 64 welding passes")
+
+
+def kerb_names():
+    """Every kerb object's name, Lot_<column>_<row>_<N, E, S or W>."""
+    return tuple("Lot_%d_%d_%s" % (c, r, side) for r in range(len(ROW_Z) - 1) for c in range(len(COLUMN_X) - 1)
+                 for side, _pts, _normal in kerb_sides(c, r, 0, 0, 0, 0, 0, 0))
+
+
+def kerb_sides(col, row, x0, x1, z0, z1, lo, hi):
+    """The sides of plot (col, row) that face another plot, as (N/E/S/W, Godot world corners, outward
+    normal). The game shows a side's kerb only while this plot is owned and the plot across that side
+    is not (OwnedPaving), so touching owned plots pave as one surface (user ruling touching-owned-
+    land-plots-pave-as-one-seamless-surface-no-lin)."""
+    out = []
+    if row > 0:
+        out.append(("N", [(x0, lo, z0), (x1, lo, z0), (x1, hi, z0), (x0, hi, z0)], (0, 0, -1)))
+    if col < len(COLUMN_X) - 2:
+        out.append(("E", [(x1, lo, z0), (x1, lo, z1), (x1, hi, z1), (x1, hi, z0)], (1, 0, 0)))
+    if row < len(ROW_Z) - 2:
+        out.append(("S", [(x0, lo, z1), (x1, lo, z1), (x1, hi, z1), (x0, hi, z1)], (0, 0, 1)))
+    if col > 0:
+        out.append(("W", [(x0, lo, z0), (x0, lo, z1), (x0, hi, z1), (x0, hi, z0)], (-1, 0, 0)))
+    return out
+
+
 def main():
     bpy.ops.wm.read_factory_settings(use_empty=True)
     bpy.ops.import_scene.gltf(filepath=SHELL)
@@ -397,8 +571,9 @@ def main():
     road_dropped = filter_road(objs["Road"])
     pad_loops, skirt_uv = filter_lot(objs["Lot"])
     added = fill_plot(objs["Lot"], pad_loops, skirt_uv)
+    added += split_plots(objs["Lot"], root, skirt_uv)
     for o in list(bpy.context.scene.objects):
-        if o.name not in KEEP and o is not root:
+        if o.name not in ("Road",) + PLOT_NAMES + kerb_names() and o is not root:
             bpy.data.objects.remove(o, do_unlink=True)
     bpy.ops.outliner.orphans_purge(do_recursive=True)
     bpy.context.view_layer.update()
@@ -608,8 +783,9 @@ def plot_holes(lot):
 
 def verify(site, shell, expected, added, road_dropped):
     names = set(site["nodes"])
-    if names != {ROOT, *KEEP}:
-        die("written site nodes %s, want %s" % (sorted(names), sorted({ROOT, *KEEP})))
+    want = {ROOT, "Road", *PLOT_NAMES, *kerb_names()}
+    if names != want:
+        die("written site nodes %s, want %s" % (sorted(names), sorted(want)))
     bad = [n for n, (p, t) in expected.items() if (site["nodes"][n]["parent"], site["nodes"][n]["tris"]) != (p, t)]
     if bad:
         die("re-read differs from the scene for %s" % bad)
@@ -617,8 +793,9 @@ def verify(site, shell, expected, added, road_dropped):
         die("written site has materials %s images %s" % (site["materials"], site["images"]))
     if any(b.endswith("->None") for b in site["binding"]):
         die("material without an atlas image: %s" % site["binding"])
-    if site["nodes"]["Road"]["mats"] != ["TP_Atlas_Simple_1A_D"] or site["nodes"]["Lot"]["mats"] != ["TP_Atlas_1A_D"]:
-        die("node materials changed: Road %s Lot %s" % (site["nodes"]["Road"]["mats"], site["nodes"]["Lot"]["mats"]))
+    plot_mats = sorted({tuple(site["nodes"][n]["mats"]) for n in PLOT_NAMES + kerb_names()})
+    if site["nodes"]["Road"]["mats"] != ["TP_Atlas_Simple_1A_D"] or plot_mats != [("TP_Atlas_1A_D",)]:
+        die("node materials changed: Road %s plots %s" % (site["nodes"]["Road"]["mats"], plot_mats))
     a, b = site["nodes"]["Road"], shell["nodes"]["Road"]
     # The Road is the shell's minus its sidewalk tile accents (user ruling buildable-outline-
     # keeps-a-constant-on-screen-width-at-every-zoom, point 2). Every shell Road triangle
@@ -652,8 +829,49 @@ def verify(site, shell, expected, added, road_dropped):
         die("dropping the Road accents left holes in the sidewalk")
     rep("ROAD unchanged but for the dropped accents: same world transform and every other triangle "
         "at the same positions")
+    # Each plot's top lies inside its own plot and reaches all four of its edges; the checks
+    # below then run on all the plots together as the one paving they were cut from.
+    for name in PLOT_NAMES:
+        col, row = (int(v) for v in name.split("_")[1:])
+        x0, x1, z0, z1 = COLUMN_X[col], COLUMN_X[col + 1], ROW_Z[row], ROW_Z[row + 1]
+        rec = site["nodes"][name]
+        tops = [p for t in rec["tris_world"] if (t[1] - t[0]).cross(t[2] - t[0]).length > 1e-9
+                and abs((t[1] - t[0]).cross(t[2] - t[0]).normalized().y) > 0.9 for p in t]
+        lo, hi = bbox(tops)
+        off = max(x0 - lo.x, lo.x - x0, hi.x - x1, x1 - hi.x, z0 - lo.z, lo.z - z0, hi.z - z1, z1 - hi.z)
+        if off > 1e-3:
+            die("%s top %s is not its plot x %.0f..%.0f z %.0f..%.0f" % (name, fmt(lo, hi), x0, x1, z0, z1))
+    tops = []
+    for name in PLOT_NAMES:
+        for t in site["nodes"][name]["tris_world"]:
+            normal = (t[1] - t[0]).cross(t[2] - t[0])
+            if normal.length > 1e-9 and abs(normal.normalized().y) > 0.9:
+                tops.append(t)
+    keyed = {}
+    for t in tops:
+        for q in t:
+            keyed.setdefault(tuple(round(c, 4) for c in q), q)
+    index = {key: i for i, key in enumerate(keyed)}
+    verts = list(keyed.values())
+
+    def at(q):
+        return index[tuple(round(c, 4) for c in q)]
+
+    edges = {tuple(sorted((at(t[m]), at(t[(m + 1) % 3])))) for t in tops for m in range(3)}
+    found = t_junctions(verts, sorted(edges))
+    rep("PLOTS: T-junctions on the written plot tops (all plots together): %d of %d vertices, %d edges"
+        % (len(found), len(verts), len(edges)))
+    if found:
+        die("the written paving has T-junctions, which show as hairline cracks: %s"
+            % [tuple(round(c, 2) for c in verts[k]) for k, _e in found[:5]])
+    rep("PLOTS: each of the %d plot tops spans exactly its plot (x on %s, z on %s)" % (
+        len(PLOT_NAMES), COLUMN_X, ROW_Z))
+    lot = {"pts": [], "nrm": [], "tris_world": []}
+    for name in PLOT_NAMES + kerb_names():
+        for key in lot:
+            lot[key] += site["nodes"][name][key]
+    lot["lo"], lot["hi"] = bbox(lot["pts"])
     x0, x1, z0, z1 = SLAB_BOX
-    lot = site["nodes"]["Lot"]
     high = [p for p in lot["pts"] if p.y > SIGN_MIN_Y]
     in_slab_high = [p for p in lot["pts"] if x0 < p.x < x1 and z0 < p.z < z1 and p.y > 0.25]
     px0, px1, pz0, pz1 = GROWN
