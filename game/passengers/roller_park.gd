@@ -250,6 +250,8 @@ const QUEUE_SIDE_M: Array[float] = [0.43, 0.37]
 ## plus 1 cm (test_roller_stand_clearance). Female: as before (conductor-
 ## decided). A booth's end panel can cap it (BoothRoller.side_m()).
 const SEAT_SIDE_M: Array = [[0.40, 0.43], [PARK_SIDE_M, PARK_SIDE_M]]
+## Per-body sides over SEAT_SIDE_M: male_10's left foot needs 0.435 m lying (board a1c067fc).
+const SEAT_SIDE_BODY_M := {"tcp_male_character_10": [0.40, 0.445]}
 ## A walker that walks off facing more than this (radians) away from its way
 ## (PassengerViews.walk_heading()) turns toward it as it sets off, over
 ## PassengerTurns.TURN_TICKS: its stood roller's tip waits that long (tip_wait()),
@@ -719,9 +721,12 @@ static func floor_spot(
 	return GateRoller.spot(p, hand)
 
 
-## How far out (SEAT_SIDE_M) a seat park puts the axle of a body of look `look`
-## (PassengerLooks.BODIES index) on the side of `hand` (0 right, 1 left).
+## How far out (SEAT_SIDE_BODY_M, else SEAT_SIDE_M) a seat park puts the axle of a body of
+## look `look` (PassengerLooks.BODIES index) on the side of `hand` (0 right, 1 left).
 static func seat_side(look: int, hand: int) -> float:
+	var stem := PassengerLooks.BODIES[clampi(look, 0, PassengerLooks.BODIES.size() - 1)]
+	if SEAT_SIDE_BODY_M.has(stem):
+		return SEAT_SIDE_BODY_M[stem][hand]
 	var variant := clampi(look / PassengerLooks.PER_VARIANT, 0, SEAT_SIDE_M.size() - 1)
 	return SEAT_SIDE_M[variant][hand]
 

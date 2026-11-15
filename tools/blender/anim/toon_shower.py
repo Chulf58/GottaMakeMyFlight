@@ -48,6 +48,15 @@ PUSH_STEP_M = 0.005
 PUSH_MAX_M = 0.10
 PUSH_SMOOTH_FRAMES = 4
 NUDGE_STEPS = 8  # after smoothing, at most 8 x PUSH_STEP_M more on a frame that still touches
+# Each hand's scrub phase: the two hands circle half a turn apart.
+HAND_PHASE = {".L": 0.0, ".R": math.pi}
+# The scrub angles a Touch is checked at: 16 evenly spaced ones, plus every angle a hand
+# takes on a frame of the loop. A skin gap can be narrower than 1/16 of a turn (Female_02's
+# chest), and a frame's angle then falls in it while all 16 land on skin.
+SCRUB_ANGLES = sorted(
+    {math.tau * i / 16 for i in range(16)}
+    | {(math.tau * SCRUB_HZ * PERIOD_S * k / SHOWER_FRAMES + p) % math.tau for k in range(SHOWER_FRAMES) for p in HAND_PHASE.values()}
+)
 
 HEAD = ("Head",)
 TORSO = ("Hips", "Spine_01", "Spine_02", "Spine_03", "Neck", "Clavicle.L", "Clavicle.R")
@@ -205,7 +214,7 @@ class Touch:
             # the hand never jumps between frames.
             a = self.ray.orthogonal().normalized()
             b = self.ray.cross(a).normalized()
-            ring = [(a * math.cos(w) + b * math.sin(w)) * scrub for w in (math.tau * i / 16 for i in range(16))]
+            ring = [(a * math.cos(w) + b * math.sin(w)) * scrub for w in SCRUB_ANGLES]
             for pull in (1.0, 0.8, 0.6, 0.4, 0.2):
                 p = self.inner * pull
                 if all(self.tree.ray_cast(p + d - self.ray * 0.6, self.ray, 1.0)[0] is not None for d in ring):
@@ -415,7 +424,7 @@ def solve_frame(rig, stand, s_r, tracks, curves, palms, k, push):
         clamps["leg"] = max(clamps["leg"], c)
     mats = rig.fk(rots, hips, ref_r=s_r)
     away = {}
-    for s, phase in ((".L", 0.0), (".R", math.pi)):
+    for s, phase in HAND_PHASE.items():
         keys = tracks[s]
         n_keys = len(keys)
         i, u = segment(keys, t)

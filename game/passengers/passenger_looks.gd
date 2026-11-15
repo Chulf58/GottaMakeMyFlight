@@ -27,6 +27,7 @@ const BODIES: Array[String] = [
 	"tcp_male_character_09",
 	"tcp_male_character_04",
 	"tcp_male_character_05",
+	"tcp_male_character_10",
 	"tcp_female_character_01",
 	"tcp_female_character_03",
 	"tcp_female_character_04",
@@ -36,6 +37,7 @@ const BODIES: Array[String] = [
 	"tcp_female_character_06",
 	"tcp_female_character_09",
 	"tcp_female_character_12",
+	"tcp_female_character_02",
 ]
 const SCENES: Array[PackedScene] = [
 	preload("res://assets/people/tcp_male_character_01.glb"),
@@ -46,6 +48,7 @@ const SCENES: Array[PackedScene] = [
 	preload("res://assets/people/tcp_male_character_09.glb"),
 	preload("res://assets/people/tcp_male_character_04.glb"),
 	preload("res://assets/people/tcp_male_character_05.glb"),
+	preload("res://assets/people/tcp_male_character_10.glb"),
 	preload("res://assets/people/tcp_female_character_01.glb"),
 	preload("res://assets/people/tcp_female_character_03.glb"),
 	preload("res://assets/people/tcp_female_character_04.glb"),
@@ -55,13 +58,14 @@ const SCENES: Array[PackedScene] = [
 	preload("res://assets/people/tcp_female_character_06.glb"),
 	preload("res://assets/people/tcp_female_character_09.glb"),
 	preload("res://assets/people/tcp_female_character_12.glb"),
+	preload("res://assets/people/tcp_female_character_02.glb"),
 ]
 ## The male bodies' count: BODIES holds PER_VARIANT males, then the females
 ## (variant_of()). Board 3fcd8e5a added male 04 and 05 and female 06, 09 and
-## 12, so there is one female more; female 02 is left out (her shower clip
-## cannot be fitted) and male 10 too (a roller lying beside his left foot at a
-## seat park takes in his shoe, test_roller_stand_clearance.gd).
-const PER_VARIANT := 8
+## 12, so there is one female more; board a1c067fc added male 10 (his seat park
+## takes its own left side, RollerPark.SEAT_SIDE_BODY_M) and female 02 (her
+## shower clip fitted once its scrub ring checks every frame's angle).
+const PER_VARIANT := 9
 ## Clip speeds measured by the Toon pipeline (its SPEED lines), per body. The
 ## bodies of one gender share one skeleton, so their speeds agree.
 const CLIP_WALK_MPS: Array[float] = [
@@ -73,6 +77,8 @@ const CLIP_WALK_MPS: Array[float] = [
 	1.952,
 	1.952,
 	1.952,
+	1.952,
+	1.922,
 	1.922,
 	1.922,
 	1.922,
@@ -92,6 +98,8 @@ const CLIP_RUN_MPS: Array[float] = [
 	5.295,
 	5.295,
 	5.295,
+	5.295,
+	4.173,
 	4.173,
 	4.173,
 	4.173,
@@ -119,6 +127,7 @@ const SEAT_SHIFT_M: Array[Vector2] = [
 	Vector2(0.03, 0.0),
 	Vector2(0.03, 0.0),
 	Vector2(0.025, 0.0),
+	Vector2(0.025, 0.0),
 	Vector2(0.07, 0.02),
 	Vector2(0.06, 0.0),
 	Vector2(0.065, 0.0),
@@ -128,6 +137,7 @@ const SEAT_SHIFT_M: Array[Vector2] = [
 	Vector2(0.06, 0.02),
 	Vector2(0.07, 0.0),
 	Vector2(0.075, 0.0),
+	Vector2(0.055, 0.0),
 ]
 ## Per body, how far a body seated on a cafe_table chair is drawn towards the
 ## table (x) and up (y) of the sim's seat root (CafeChairs), so no part of it is
@@ -145,6 +155,7 @@ const CAFE_SEAT_SHIFT_M: Array[Vector2] = [
 	Vector2(0.09, 0.0),
 	Vector2(0.09, 0.0),
 	Vector2(0.085, 0.0),
+	Vector2(0.10, 0.0),
 	Vector2(0.115, 0.01),
 	Vector2(0.10, 0.0),
 	Vector2(0.10, 0.0),
@@ -154,6 +165,7 @@ const CAFE_SEAT_SHIFT_M: Array[Vector2] = [
 	Vector2(0.115, 0.01),
 	Vector2(0.105, 0.0),
 	Vector2(0.105, 0.0),
+	Vector2(0.10, 0.0),
 ]
 ## Per body, the step (as CAFE_SEAT_SHIFT_M) for a body seated on a cushion of
 ## the services kit (board 3405a04b): its seats are shaped around the bare root
@@ -171,6 +183,7 @@ const SERVICES_SEAT_SHIFT_M: Array[Vector2] = [
 	Vector2.ZERO,
 	Vector2.ZERO,
 	Vector2.ZERO,
+	Vector2.ZERO,
 	Vector2(0.0, 0.02),
 	Vector2.ZERO,
 	Vector2.ZERO,
@@ -178,6 +191,7 @@ const SERVICES_SEAT_SHIFT_M: Array[Vector2] = [
 	Vector2.ZERO,
 	Vector2.ZERO,
 	Vector2(0.0, 0.02),
+	Vector2.ZERO,
 	Vector2.ZERO,
 	Vector2.ZERO,
 ]
@@ -194,6 +208,7 @@ const BOOTH_SEAT_SHIFT_M: Array[Vector2] = [
 	Vector2.ZERO,
 	Vector2.ZERO,
 	Vector2.ZERO,
+	Vector2.ZERO,
 	Vector2(0.02, 0.02),
 	Vector2(0.025, 0.0),
 	Vector2(0.025, 0.0),
@@ -202,6 +217,7 @@ const BOOTH_SEAT_SHIFT_M: Array[Vector2] = [
 	Vector2(0.025, 0.0),
 	Vector2(0.02, 0.02),
 	Vector2(0.03, 0.0),
+	Vector2(0.025, 0.0),
 	Vector2(0.025, 0.0),
 ]
 ## Piece -> its per-body seat step, for the pieces whose seats do not take

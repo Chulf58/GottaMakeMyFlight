@@ -12,7 +12,8 @@ extends GdUnitTestSuite
 ## the pack's box, torso points out of the box itself, and the panel must still
 ## rest on the back (its least torso gap at most WORN_GAP_M on every moment).
 ## The five bodies board 3fcd8e5a added (male 04 and 05, female 06, 09, 12)
-## are checked the same way, as their rows were set by the same sweep.
+## are checked the same way, as their rows were set by the same sweep, and
+## so are male 10 and female 02 (board a1c067fc).
 
 const MOMENTS := 32
 const CLIPS: Array[String] = ["walk", "idle"]
@@ -28,6 +29,8 @@ const BODIES_CHECKED: Array[String] = [
 	"tcp_female_character_06",
 	"tcp_female_character_09",
 	"tcp_female_character_12",
+	"tcp_male_character_10",
+	"tcp_female_character_02",
 ]
 const LEGS: Array[String] = ["Quad", "Shin", "Foot", "Toes", "Knee", "Thigh"]
 const ARMS: Array[String] = [
