@@ -14,6 +14,9 @@ extends GdUnitTestSuite
 
 const MAIN_SCENE := "res://main/main.tscn"
 const SITE := preload("res://build/terminal_site.tres")
+## The side land's 85 grid columns west of the first site (SiteDefinition):
+## the cells below are written in the first site's columns and moved by it.
+const SIDE_LAND := Vector2i(85, 0)
 const GROUND: Array[int] = [
 	FlightSim.State.TAXI_IN, FlightSim.State.PUSHBACK, FlightSim.State.TAXI_OUT
 ]
@@ -73,12 +76,15 @@ func _large_gate(stand: Dictionary) -> bool:
 
 
 ## Stands out from north-facing exits on the grid's north row (wall z -210) and
-## south row, at its west edge, middle and east edge, each legal on the empty
+## south row, at the first site's west edge, middle and east edge (side land
+## stands wait on routes that follow what is built), each legal on the empty
 ## grid: the plane's sweep is clear and every class's tail clears the lane band.
 func _legal_stands() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for row in [0, SITE.grid_size.y - 1]:
-		for column in [0, SITE.grid_size.x / 2, SITE.grid_size.x - 1]:
+		var centre: Rect2 = SITE.centre_rect()
+		var west := int(centre.position.x - SITE.grid_origin.x)
+		for column in [west, SITE.grid_size.x / 2, west + int(centre.size.x) - 1]:
 			var stand := StandPlacement.for_cell(_grid, Vector2i(column, row))
 			assert_bool(StandPlacement.aircraft_clear(_grid, SITE, stand)).is_true()
 			for plane_class in PlaneClasses.ORDER:
@@ -183,7 +189,9 @@ func test_the_north_row_model_07_and_05_noses_are_paved_to_the_site() -> void:
 
 func test_a_small_class_pad_leaves_a_large_tail_on_grass() -> void:
 	# A control: the footprint check fails when the pad leaves a class out.
-	var at := StandPlacement.stand_point(StandPlacement.for_cell(_grid, Vector2i(43, 0)))
+	var at := StandPlacement.stand_point(
+		StandPlacement.for_cell(_grid, Vector2i(43, 0) + SIDE_LAND)
+	)
 	var small: Array[String] = [PlaneClasses.SMALL]
 	var pad := TaxiPaving.stand_pad(at, small)
 	var large := TaxiPaving.parked_footprint(at, "tp_plane_07a")

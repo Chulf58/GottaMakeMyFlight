@@ -159,6 +159,8 @@ func buy_at(point: Variant) -> BuildResult:
 func preview_price() -> Vector2i:
 	if _hovered == NO_PLOT or land.is_owned(_hovered) or not land.touches_owned(_hovered):
 		return Vector2i.ZERO
+	if not land.is_open(_hovered):
+		return Vector2i.ZERO
 	var price := land.next_price()
 	return Vector2i(price, price)
 

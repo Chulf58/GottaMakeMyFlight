@@ -12,6 +12,8 @@ extends GdUnitTestSuite
 const MAIN := "res://main/main.tscn"
 const HOOK := preload("res://debug/playtest_hook.gd")
 const SITE := preload("res://build/terminal_site.tres")
+## Side land west of the first site: grid cells shift this far east.
+const SIDE_LAND := Vector2i(85, 0)
 const STUCK_LIMIT_S := 2.0
 ## The desk ticks count from the first passenger's arrival, the late spawn
 ## and the end from the first state of the starter's first flight. The first
@@ -27,7 +29,7 @@ const LATE_SPAWN_BEFORE_DOORS_TICKS := 10
 const END_AFTER_DEPARTURE_TICKS := 20
 ## A cell of the site's open ground, off the starter terminal's floor, on a new
 ## game's land (land not owned refuses with LAND_NOT_OWNED first, LandPlots).
-const OFF_FLOOR_CELL := Vector2i(5, 120)
+const OFF_FLOOR_CELL := Vector2i(5, 120) + SIDE_LAND
 const ERROR_TEXT := "PlaytestHook test error"
 ## The starter contract's booked passengers plus the one spawned too late.
 const PASSENGERS := FlightSim.STARTER_TERMS["booked_passengers"] + 1

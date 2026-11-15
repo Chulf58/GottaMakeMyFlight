@@ -9,11 +9,13 @@ extends GdUnitTestSuite
 ## changes.
 
 const SITE := preload("res://build/terminal_site.tres")
-## Plot (2, 4) touches the start land; (3, 0) does not.
-const BUYABLE := Vector2i(2, 4)
-const OUT_OF_REACH := Vector2i(3, 0)
-## A cell of plot (2, 4).
-const NEW_CELL := Vector2i(60, 110)
+## Plot (6, 4) touches the start land; (7, 0) does not.
+const BUYABLE := Vector2i(6, 4)
+const OUT_OF_REACH := Vector2i(7, 0)
+## The grid columns of side land west of the first site.
+const SIDE_LAND := Vector2i(85, 0)
+## A cell of plot (6, 4).
+const NEW_CELL := Vector2i(60, 110) + SIDE_LAND
 
 var _finances: Finances
 var _mode: BuildMode
@@ -52,7 +54,7 @@ func test_the_tool_shows_a_dim_fill_on_each_buyable_plot_only_while_picked() -> 
 	assert_bool(tool.visible).is_false()
 	_mode.set_tool(BuildMode.Tool.BUY_LAND)
 	assert_bool(tool.visible).is_true()
-	# Two triangles per buyable plot.
+	# Two triangles per buyable plot: 5 on the first site (side land is locked).
 	var buyable := _land().buyable_plots().size()
 	assert_int(buyable).is_equal(5)
 	assert_int(tool.fill_mesh().get_faces().size()).is_equal(buyable * 6)
@@ -142,15 +144,15 @@ func test_a_buy_is_not_an_undo_step() -> void:
 	assert_int(_mode.undo_history().size()).is_equal(0)
 
 
-## After (2, 5) is bought the owned land turns in at cell corner (50, 125):
+## After (6, 5) is bought the owned land turns in at cell corner (129, 125):
 ## the band runs on round that inner corner inside the land, and leaves the
 ## plot not owned to its north-east bare.
 func test_the_outline_band_turns_round_an_inner_corner_inside_the_land() -> void:
 	_mode.set_tool(BuildMode.Tool.BUY_LAND)
-	assert_bool(_mode.apply_at(_middle(Vector2i(2, 5))).ok).is_true()
+	assert_bool(_mode.apply_at(_middle(Vector2i(6, 5))).ok).is_true()
 	var faces := _outline.strip_mesh().get_faces()
 	var o := SITE.grid_origin
-	var corner := Vector2(o.x + 44.0, o.z + 125.0)
+	var corner := Vector2(o.x + SIDE_LAND.x + 44.0, o.z + 125.0)
 	var inside_corner := corner + Vector2(-0.1, 0.1)
 	var along_south := corner + Vector2(3.0, 0.1)
 	var along_west := corner + Vector2(-0.1, -3.0)
@@ -183,7 +185,7 @@ func test_the_buy_land_card_follows_a_load_that_leaves_the_wallet_alone() -> voi
 	assert_bool(_menu.is_card_affordable(BuildMode.Tool.BUY_LAND)).is_true()
 	var owned := _land().owned_plots().map(func(p: Vector2i) -> Array: return [p.x, p.y])
 	owned.append([BUYABLE.x, BUYABLE.y])
-	var snapshot := {"plot_counts": [4, 6], "owned": owned, "bought": 1}
+	var snapshot := {"plot_counts": [12, 6], "owned": owned, "bought": 1}
 	assert_bool(_land().from_snapshot(snapshot)).is_true()
 	# The wallet did not change, so nothing but the land told the menu.
 	assert_int(wallet.balance).is_equal(first)

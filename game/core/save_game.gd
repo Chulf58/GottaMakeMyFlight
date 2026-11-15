@@ -101,7 +101,10 @@ signal loaded(ok: bool)
 ## 23: the unlocks part also holds the big firsts whose dialog showed
 ## (BuildUnlocks "firsts": the runway upgrade and the major incident); version
 ## 22 saves are refused (no migration before a release).
-const SAVE_VERSION := 23
+## 24: the site grid is 256 cells wide with side land west and east (the grid
+## part's frame and cells, the land part's 12 plot columns); version 23 saves
+## are refused (no migration before a release).
+const SAVE_VERSION := 24
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"

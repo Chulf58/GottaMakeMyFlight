@@ -9,8 +9,11 @@ extends GdUnitTestSuite
 
 const MAIN_SCENE := "res://main/main.tscn"
 const SITE := preload("res://build/terminal_site.tres")
+## The side land's 85 grid columns west of the first site (SiteDefinition):
+## the cells below are written in the first site's columns and moved by it.
+const SIDE_LAND := Vector2i(85, 0)
 const EAST := Vector2i(44, 0)
-const DESK_WEST := Vector2i(19, 115)
+const DESK_WEST := Vector2i(19, 115) + SIDE_LAND
 
 var _grid: SiteGrid
 var _gates: GateDesks

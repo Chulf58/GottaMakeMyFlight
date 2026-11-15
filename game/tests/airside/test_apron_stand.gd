@@ -8,14 +8,17 @@ extends GdUnitTestSuite
 ## pass; the live stand survives a save.
 
 const SITE := preload("res://build/terminal_site.tres")
-const STARTER_EXIT := Vector2i(20, 112)
-const WEST_EXIT := Vector2i(11, 112)
+## The side land's 85 grid columns west of the first site (SiteDefinition):
+## the cells below are written in the first site's columns and moved by it.
+const SIDE_LAND := Vector2i(85, 0)
+const STARTER_EXIT := Vector2i(20, 112) + SIDE_LAND
+const WEST_EXIT := Vector2i(11, 112) + SIDE_LAND
 ## Under the parked plane at the starter stand (x -26, z -115).
-const FOOTPRINT_CELL := Vector2i(17, 95)
+const FOOTPRINT_CELL := Vector2i(17, 95) + SIDE_LAND
 ## On the starter stand's way north, z -205.
-const ROUTE_CELL := Vector2i(17, 5)
+const ROUTE_CELL := Vector2i(17, 5) + SIDE_LAND
 ## Well east of everything the plane sweeps (x 17).
-const FREE_CELL := Vector2i(60, 30)
+const FREE_CELL := Vector2i(60, 30) + SIDE_LAND
 ## The first flight's start ticks.
 const FIRST := 1000
 
@@ -50,7 +53,7 @@ func _make_west_better() -> int:
 	assert_bool(_grid.apply(BuildEdit.remove_wall(WEST_EXIT, BuildGrid.Side.NORTH)).ok).is_true()
 	var placed := _grid.apply(BuildEdit.place_object(&"exit_door", WEST_EXIT, 0))
 	assert_bool(placed.ok).is_true()
-	assert_bool(_paint(Vector2i(20, 110)).ok).is_true()
+	assert_bool(_paint(Vector2i(20, 110) + SIDE_LAND).ok).is_true()
 	return placed.object_id
 
 

@@ -18,9 +18,11 @@ extends GdUnitTestSuite
 
 const Kit := preload("res://tests/airside/airside_props_kit.gd")
 const SITE := preload("res://build/terminal_site.tres")
-const EXIT_A := Vector2i(20, 112)
-const EXIT_B := Vector2i(64, 112)
-const ENTRANCE := Vector2i(24, 125)
+## Side land west of the first site: grid cells shift this far east.
+const SIDE_LAND := Vector2i(85, 0)
+const EXIT_A := Vector2i(20, 112) + SIDE_LAND
+const EXIT_B := Vector2i(64, 112) + SIDE_LAND
+const ENTRANCE := Vector2i(24, 125) + SIDE_LAND
 const MODEL_03 := "tp_plane_03a"
 const MODEL_04 := "tp_plane_04a"
 const MODEL_05 := "tp_plane_05a"
@@ -55,12 +57,12 @@ func before_test() -> void:
 	var grid := BuildGrid.new(SITE.grid_size, SITE.grid_origin)
 	var floor: Array[BuildEdit] = []
 	for y in range(112, 126):
-		for x in range(18, 67):
+		for x in range(18 + SIDE_LAND.x, 67 + SIDE_LAND.x):
 			floor.append(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
 	grid.apply_batch(floor)
 	PassengerTestWorld.place(grid, &"entrance_door", ENTRANCE, 2)
-	PassengerTestWorld.place(grid, &"checkin_desk", Vector2i(23, 121), 0)
-	PassengerTestWorld.place(grid, &"security_scanner", Vector2i(24, 116), 0)
+	PassengerTestWorld.place(grid, &"checkin_desk", Vector2i(23, 121) + SIDE_LAND, 0)
+	PassengerTestWorld.place(grid, &"security_scanner", Vector2i(24, 116) + SIDE_LAND, 0)
 	PassengerTestWorld.place(grid, &"exit_door", EXIT_A, 0)
 	PassengerTestWorld.place(grid, &"exit_door", EXIT_B, 0)
 	EnclosureKit.close_floor(grid)
@@ -457,7 +459,8 @@ func test_a_rerouted_plane_03_walker_keeps_its_walks_end() -> void:
 	var stand_door := StandPlacement.door_point(stand, MODEL_03)
 	var cells: Array[BuildEdit] = []
 	for x in [17, 18, 19]:
-		cells.append(BuildEdit.paint_floor(Vector2i(x, EXIT_A.y - 5), BuildGrid.FLOOR_TILE, 1))
+		var at := Vector2i(x, EXIT_A.y - 5) + SIDE_LAND
+		cells.append(BuildEdit.paint_floor(at, BuildGrid.FLOOR_TILE, 1))
 	_world.grid.apply_batch(cells)
 	print(
 		(

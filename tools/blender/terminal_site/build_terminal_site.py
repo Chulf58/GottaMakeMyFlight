@@ -55,10 +55,15 @@ What it keeps and drops (measured on the shell, see the census this script print
   at z -210"). The re-read proves the whole grown site flat (up-facing heights only 0.2) and
   covered (a 0.25 m sample grid over it, every sample on paving), so the pads run on
   unbroken under the dropped accents and into the north paving.
+- Side land: the grid is 256 m wide, x -128..128 (terminal_site.tres; decision land-west-and-
+  east-of-the-site-becomes-buyable-that-side-s-t), so fill_plot() also paves the side land
+  x -128..-43 and 43..128, z -210..-60, flat at PAVE_Y, and the grown site's outer skirts
+  move out to x -128 and 128.
 - Land plots: the paving is cut into one object per land plot, Lot_<column>_<row>, on the
-  plot lines LandPlots draws (game/build/land_plots.gd: columns of 22, 22, 21 and 21 m
-  from x -43, six rows of 25 m from z -210; ruling land-plots-are-near-even-columns-of-22-
-  22-21-and-21-m-by-25), so the game shows the paving only on the plots the player owns
+  plot lines LandPlots draws (game/build/land_plots.gd, SiteDefinition.plot_columns: four
+  side columns of 22, 21, 21 and 21 m from x -128, the first site's 22, 22, 21 and 21 m from
+  x -43, four side columns of 22, 21, 21 and 21 m from x 43, six rows of 25 m from z -210;
+  ruling land-plots-are-near-even-columns-of-22-22-21-and-21-m-by-25), so the game shows the paving only on the plots the player owns
   (OwnedPaving; user ruling site-paving-covers-only-the-owned-land-plots-and-grows-as-ea,
   which replaces point 2 above). split_plots() gives every side a plot shares with another
   plot a kerb object of its own, Lot_<column>_<row>_<N, E, S or W>, a skirt from PAVE_Y down to
@@ -71,7 +76,7 @@ What it keeps and drops (measured on the shell, see the census this script print
   25.85 and is part of its supports and lamps; the canopy goes, so they go.
 - Upper, Canopy, Facade, Porch_1..8, Door_1..8, Doorway_1..8, Lights (all of it): dropped.
 
-The node tree written: TP_Airport_Site_ROOT > Road, Lot_0_0 .. Lot_3_5 and their kerbs Lot_<c>_<r>_<N|E|S|W>.
+The node tree written: TP_Airport_Site_ROOT > Road, Lot_0_0 .. Lot_11_5 and their kerbs Lot_<c>_<r>_<N|E|S|W>.
 The build fails unless the written file holds exactly those, with the shell's two atlases
 (TP_Atlas_Simple_1A_D on Road, TP_Atlas_1A_D on each Lot_, both on the one image tp_atlas_1a_d, as in the
 shell and the Toon source) bound, and no geometry above y 0.35
@@ -100,7 +105,8 @@ SLAB_TOL = 0.05
 SLAB_MIN_Y = 0.29  # an island in the slab box reaching this high is the slab
 SIGN_MIN_Y = 0.35  # any island reaching above this is a sign or facade remnant
 PLOT = (-43.0, 43.0, -100.0, -60.0)  # x0, x1, z0, z1 of the first plot (the Toon paving)
-GROWN = (-43.0, 43.0, -210.0, -60.0)  # x0, x1, z0, z1 of the grown site (terminal_site.tres grid)
+GROWN = (-128.0, 128.0, -210.0, -60.0)  # x0, x1, z0, z1 of the grown site (terminal_site.tres grid)
+CENTRE_X = (-43.0, 43.0)  # x0, x1 of the first site; side land lies west and east of it
 PAVE_Y = 0.2  # the Toon paving pads' top; the plot is paved flat at this height
 PAVE_MAX_Y = 0.21  # above this an island is a raised paving block (tops 0.219, 0.238, 0.257)
 ACCENT_MIN_LIFT = 0.001  # a flat island wholly this far over PAVE_Y is a tile accent (y 0.2031)
@@ -109,8 +115,8 @@ DIP_HALF_X = 12.0  # the dips run x -12..12
 LOT_HALF_X = 40.0  # the Toon paving stops at x -40 and 40
 BACK_FLARE = ((14.0, -100.0), (13.0, -99.73), (12.27, -99.0), (12.0, -98.0))  # east half; west mirrors
 KEEP = ("Road", "Lot")
-# LandPlots' plot lines on the 86 x 150 site grid (game/build/land_plots.gd).
-COLUMN_X = (-43.0, -21.0, 1.0, 22.0, 43.0)
+# LandPlots' plot lines on the 256 x 150 site grid (game/build/land_plots.gd).
+COLUMN_X = (-128.0, -106.0, -85.0, -64.0, -43.0, -21.0, 1.0, 22.0, 43.0, 65.0, 86.0, 107.0, 128.0)
 ROW_Z = (-210.0, -185.0, -160.0, -135.0, -110.0, -85.0, -60.0)
 SKIRT_FOOT_Y = -0.12  # a plot-edge skirt reaches 2 cm under the grass (y -0.1)
 PLOT_NAMES = tuple("Lot_%d_%d" % (c, r) for r in range(len(ROW_Z) - 1) for c in range(len(COLUMN_X) - 1))
@@ -323,7 +329,8 @@ def filter_road(road):
 def fill_plot(lot, pad_loops, skirt_uv):
     """Pave the rest of the plot flat at PAVE_Y: the strips x -43..-40 and 40..43 that the
     Toon paving stops short of, the two dips (x -12..12 at z -64..-60 and -100..-96), and the
-    grown site north of the plot (x -43..43, z -210..-100).
+    grown site north of the plot (x -128..128, z -210..-100), and the side land beside the plot
+    (x -128..-43 and 43..128, z -100..-60).
     Each new top face takes the UV of the nearest existing pad corner (the paving's own
     swatch), each new skirt the paving edge skirt's UV. Skirts close the new edges down to
     y 0, as the Toon paving's own skirts do. Returns [(corners, normal)] in Godot world for
@@ -373,7 +380,14 @@ def fill_plot(lot, pad_loops, skirt_uv):
     # plot's north edge at z -100 (whose Toon skirts filter_lot() dropped).
     gx0, gx1, gz0, _gz1 = GROWN
     quad([(gx0, y, gz0), (gx1, y, gz0), (gx1, y, pz0), (gx0, y, pz0)], (0, 1, 0), pad_uv(0.0, pz0))
-    # Skirts: the grown site's outer sides at x -43 and 43 and its north edge at z -210, and
+    # The side land west and east of the first plot, down to the plot's south edge.
+    cx0, cx1 = CENTRE_X
+    sides = [(gx0, cx0), (cx1, gx1)]
+    for xa, xb in sides:
+        quad([(xa, y, pz0), (xb, y, pz0), (xb, y, pz1), (xa, y, pz1)], (0, 1, 0),
+             pad_uv((cx0 if xb == cx0 else cx1), (pz0 + pz1) / 2))
+    tops = tops + sides
+    # Skirts: the grown site's outer sides at x -128 and 128 and its north edge at z -210, and
     # the south edge along every new top face (the Toon paving keeps its own skirts elsewhere
     # on that edge).
     quad([(gx0, 0.0, gz0), (gx0, 0.0, pz1), (gx0, y, pz1), (gx0, y, gz0)], (-1, 0, 0), skirt_uv)

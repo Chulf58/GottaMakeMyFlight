@@ -10,8 +10,11 @@ extends GdUnitTestSuite
 ## (NO_EXIT).
 
 const SITE := preload("res://build/terminal_site.tres")
-const DESK := Vector2i(19, 115)
-const EXIT := Vector2i(20, 112)
+## The side land's 85 grid columns west of the first site (SiteDefinition):
+## the cells below are written in the first site's columns and moved by it.
+const SIDE_LAND := Vector2i(85, 0)
+const DESK := Vector2i(19, 115) + SIDE_LAND
+const EXIT := Vector2i(20, 112) + SIDE_LAND
 
 var _grid: SiteGrid
 var _flights: FlightSim

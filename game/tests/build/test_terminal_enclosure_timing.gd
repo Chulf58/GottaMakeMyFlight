@@ -114,15 +114,21 @@ func test_time_the_largest_grid() -> void:
 	assert_int(_measure(Vector2i(BuildGrid.MAX_SIDE_CELLS, BuildGrid.MAX_SIDE_CELLS))).is_greater(0)
 
 
-## The full site (SiteDefinition.grid_size, 86x150) floored and walled like the
-## others, its passenger and staff A* graphs built: the wall edit that lets the
-## outside into the whole floor, and the one that closes it again, each stay
-## under SITE_EDIT_BUDGET_USEC, median of SITE_RUNS. Measured 2026-11-01 on
-## the same machine: about 13.3 ms opening and 10.1 ms closing before the
-## flood was kept to the built area and the points switched by index, about
-## 6.7 ms and 3.3 ms after.
+## The whole buildable site floored and walled like the others, its passenger
+## and staff A* graphs built: the wall edit that lets the outside into the whole
+## floor, and the one that closes it again, each stay under
+## SITE_EDIT_BUDGET_USEC, median of SITE_RUNS. Measured 2026-11-01 on the same
+## machine: about 13.3 ms opening and 10.1 ms closing before the flood was kept
+## to the built area and the points switched by index, about 6.7 ms and 3.3 ms
+## after.
+##
+## The buildable site is the first site (SiteDefinition.centre_rect(), 86x150):
+## the side land of the 256 cell wide grid is locked (SiteDefinition.
+## SIDE_LAND_OPEN). With the whole 256x150 grid floored the opening edit took
+## about 20 ms on 2026-11-15, so measure the wide grid again when side land
+## opens (board 16f7f8c2, S7).
 func test_time_the_full_site_with_its_graphs_built() -> void:
-	var size: Vector2i = SITE.grid_size
+	var size := Vector2i(SITE.centre_rect().size)
 	var grid := _site(size)
 	var indoor := _indoor(grid)
 	assert_int(indoor).is_equal((size.x - 2) * (size.y - 2))

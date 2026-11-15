@@ -10,13 +10,16 @@ extends GdUnitTestSuite
 ## and a copy 44 cells east with its exit at (64, 112).
 
 const SITE := preload("res://build/terminal_site.tres")
+## The side land's 85 grid columns west of the first site (SiteDefinition):
+## the cells below are written in the first site's columns and moved by it.
+const SIDE_LAND := Vector2i(85, 0)
 const EAST := Vector2i(44, 0)
-const EXIT_WEST := Vector2i(20, 112)
+const EXIT_WEST := Vector2i(20, 112) + SIDE_LAND
 const EXIT_EAST := EXIT_WEST + EAST
-const DESK_WEST := Vector2i(19, 115)
+const DESK_WEST := Vector2i(19, 115) + SIDE_LAND
 const DESK_EAST := DESK_WEST + EAST
 ## A second north exit in the starter shell's wall, 9 m west of its exit.
-const EXIT_NEAR := Vector2i(11, 112)
+const EXIT_NEAR := Vector2i(11, 112) + SIDE_LAND
 
 var _grid: SiteGrid
 var _flights: FlightSim
@@ -156,7 +159,9 @@ func test_a_usable_farther_exit_means_no_letter_not_an_overlap() -> void:
 
 
 func test_exits_in_reach_are_nearest_first_within_the_link_reach() -> void:
-	var footprint := BuildCatalog.get_def(GateDesks.DESK).footprint(Vector2i(14, 115), 0)
+	var footprint := BuildCatalog.get_def(GateDesks.DESK).footprint(
+		Vector2i(14, 115) + SIDE_LAND, 0
+	)
 	_grid.apply(BuildEdit.remove_wall(EXIT_NEAR, BuildGrid.Side.NORTH))
 	assert_bool(_grid.apply(BuildEdit.place_object(&"exit_door", EXIT_NEAR, 0)).ok).is_true()
 	var near := _grid.object_at(EXIT_NEAR)
@@ -168,5 +173,5 @@ func test_exits_in_reach_are_nearest_first_within_the_link_reach() -> void:
 	assert_array(GateDesks.exits_in_reach(_grid, footprint)).is_equal([near])
 	# A control: a footprint between them reaches both, 4 cells each, so the
 	# lower id (the shell's west exit) first.
-	var between := BuildCatalog.get_def(GateDesks.DESK).footprint(Vector2i(15, 113), 0)
+	var between := BuildCatalog.get_def(GateDesks.DESK).footprint(Vector2i(15, 113) + SIDE_LAND, 0)
 	assert_array(GateDesks.exits_in_reach(_grid, between)).is_equal([west, near])

@@ -11,9 +11,12 @@ extends GdUnitTestSuite
 ## test_gate_desks.gd; the rail is an AlertStack in the tree, found by its group.
 
 const SITE := preload("res://build/terminal_site.tres")
+## The side land's 85 grid columns west of the first site (SiteDefinition):
+## the cells below are written in the first site's columns and moved by it.
+const SIDE_LAND := Vector2i(85, 0)
 const EAST := Vector2i(44, 0)
-const EXIT_WEST := Vector2i(20, 112)
-const DESK_WEST := Vector2i(19, 115)
+const EXIT_WEST := Vector2i(20, 112) + SIDE_LAND
+const DESK_WEST := Vector2i(19, 115) + SIDE_LAND
 const DESK_EAST := DESK_WEST + EAST
 
 var _grid: SiteGrid

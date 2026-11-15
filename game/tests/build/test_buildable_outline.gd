@@ -3,7 +3,8 @@ extends GdUnitTestSuite
 ## The buildable-land outline (user ruling buildable-land-shows-as-an-outline-
 ## only-in-build-mode-the-da): drawn while build mode lasts, hidden outside it,
 ## and running round the land the player owns. These cases own every land plot
-## (LandKit.own_all()), so the outline is the site's whole BuildGrid, 86 x 150 m
+## of the first site (_own_first_site(), not the side land), so the outline is the
+## first site's 86 x 150 m rectangle (SiteDefinition.centre_rect())
 ## from z -210, and the width checks keep the large rectangle they were
 ## measured on; test_build_mode_buy_land.gd covers the outline of a partly owned site.
 
@@ -22,7 +23,7 @@ func before() -> void:
 	_mode.initial_tool = BuildMode.Tool.NONE
 	_mode.site = SITE
 	add_child(_mode)
-	LandKit.own_all(_mode.land_tool.land)
+	_own_first_site(_mode.land_tool.land)
 	_menu = BuildMenu.new()
 	_menu.build_mode = _mode
 	add_child(_menu)
@@ -37,9 +38,22 @@ func after() -> void:
 		node.free()
 
 
-## The site's grid as a rectangle on the ground (x, z).
+## The first site as a rectangle on the ground (x, z).
 func _plot() -> Rect2:
-	return Rect2(SITE.grid_origin.x, SITE.grid_origin.z, SITE.grid_size.x, SITE.grid_size.y)
+	return SITE.centre_rect()
+
+
+## Owns every plot of the first site (SITE.centre_columns, every row), bought
+## count unchanged.
+static func _own_first_site(land: LandPlots) -> void:
+	var owned := []
+	var first: int = SITE.centre_columns.x
+	for y in land.plots.y:
+		for x in range(first, first + SITE.centre_columns.y):
+			owned.append([x, y])
+	var data := {"plot_counts": [land.plots.x, land.plots.y], "owned": owned, "bought": land.bought}
+	var loaded := land.from_snapshot(data)
+	assert(loaded, "the land refused the first site's plots")
 
 
 ## Every test starts and ends outside build mode.

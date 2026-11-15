@@ -64,7 +64,7 @@ func test_the_site_has_one_paving_mesh_per_plot_covering_exactly_that_plot() -> 
 				Vector2(cells.size)
 			)
 			var got := Rect2(box.position.x, box.position.z, box.size.x, box.size.z)
-			if plot == Vector2i(0, 0) or plot == Vector2i(3, 5):
+			if plot == Vector2i(0, 0) or plot == Vector2i(11, 5):
 				print("plot %s paving %s want %s top %.3f" % [plot, got, want, box.end.y])
 			assert_vector(got.position).is_equal_approx(want.position, Vector2.ONE * 0.01)
 			assert_vector(got.end).is_equal_approx(want.end, Vector2.ONE * 0.01)
@@ -81,7 +81,7 @@ func test_a_new_game_paves_only_its_owned_plots() -> void:
 	assert_int(_owned().size()).is_equal(6)
 	assert_array(_shown()).is_equal(_owned())
 	# Control: the rest of the plots are there and hidden.
-	assert_int(OwnedPaving.plot_meshes(_site).size() - _shown().size()).is_equal(18)
+	assert_int(OwnedPaving.plot_meshes(_site).size() - _shown().size()).is_equal(66)
 	assert_bool((_site.find_child("Road", true, false) as Node3D).visible).is_true()
 
 
@@ -89,15 +89,15 @@ func test_buying_a_plot_paves_it_at_once() -> void:
 	_land.own_start(SITE)
 	_paving.bind(_site, _land)
 	var before := _shown().size()
-	# One plot north of the start land and one east of it.
-	for plot: Vector2i in [Vector2i(0, 2), Vector2i(2, 4)]:
+	# Two plots north of the start land and one east of it.
+	for plot: Vector2i in [Vector2i(4, 2), Vector2i(6, 4), Vector2i(5, 2)]:
 		assert_bool(_land.buyable_plots().has(plot)).is_true()
 		assert_bool(_shown().has(plot)).is_false()
 		var result := _land.buy(plot, null)
 		assert_bool(result.ok).is_true()
 		assert_bool(_shown().has(plot)).is_true()
 	print("shown before %d after %d: %s" % [before, _shown().size(), _shown()])
-	assert_int(_shown().size()).is_equal(before + 2)
+	assert_int(_shown().size()).is_equal(before + 3)
 	assert_array(_shown()).is_equal(_owned())
 
 
@@ -106,7 +106,7 @@ func test_a_load_repaves_from_the_saved_ownership() -> void:
 	_paving.bind(_site, _land)
 	var saved := LandPlots.for_site(SITE)
 	saved.own_start(SITE)
-	LandKit.buy_to(saved, Vector2i(3, 0))
+	LandKit.buy_to(saved, Vector2i(7, 0))
 	var data := saved.to_snapshot()
 	assert_bool(_land.from_snapshot(JSON.parse_string(JSON.stringify(data)))).is_true()
 	var want: Array[Vector2i] = []
@@ -148,19 +148,19 @@ func test_every_inner_plot_side_has_a_kerb_on_its_edge() -> void:
 				assert_float(box.end.y).is_equal_approx(SITE.ground_height, 0.001)
 				assert_float(box.position.y).is_less(TaxiPavingSite.GRASS_Y)
 	print("kerb meshes %d, inner plot sides %d" % [kerbs.size(), inner])
-	assert_int(inner).is_equal(76)
+	assert_int(inner).is_equal(252)
 	assert_int(kerbs.size()).is_equal(inner)
 
 
 func test_touching_owned_plots_show_no_kerb_between_them_and_the_grass_edge_does() -> void:
 	_land.own_start(SITE)
 	_paving.bind(_site, _land)
-	# (0, 4) and (1, 4) are both owned: no kerb on either side of their edge.
-	assert_bool(_kerb_shown(Vector2i(0, 4), 1)).is_false()
-	assert_bool(_kerb_shown(Vector2i(1, 4), 3)).is_false()
-	# (1, 4) owned, (2, 4) not: the kerb shows on the owned side only.
-	assert_bool(_kerb_shown(Vector2i(1, 4), 1)).is_true()
-	assert_bool(_kerb_shown(Vector2i(2, 4), 3)).is_false()
+	# (4, 4) and (5, 4) are both owned: no kerb on either side of their edge.
+	assert_bool(_kerb_shown(Vector2i(4, 4), 1)).is_false()
+	assert_bool(_kerb_shown(Vector2i(5, 4), 3)).is_false()
+	# (5, 4) owned, (6, 4) not: the kerb shows on the owned side only.
+	assert_bool(_kerb_shown(Vector2i(5, 4), 1)).is_true()
+	assert_bool(_kerb_shown(Vector2i(6, 4), 3)).is_false()
 	# Every kerb shows exactly where its plot is owned and the plot across is not.
 	var kerbs := OwnedPaving.kerb_meshes(_site)
 	var shown := 0
@@ -170,11 +170,11 @@ func test_touching_owned_plots_show_no_kerb_between_them_and_the_grass_edge_does
 		assert_bool((kerbs[key] as Node3D).visible).is_equal(want)
 		shown += 1 if want else 0
 	print("kerbs shown on a new game %d of %d" % [shown, kerbs.size()])
-	# The start land's edges toward other plots: 3 plot sides east, 2 north.
-	assert_int(shown).is_equal(5)
-	# Buying (2, 4) joins it without a kerb and puts kerbs on its own open sides.
-	assert_bool(_land.buy(Vector2i(2, 4), null).ok).is_true()
-	assert_bool(_kerb_shown(Vector2i(1, 4), 1)).is_false()
-	assert_bool(_kerb_shown(Vector2i(2, 4), 3)).is_false()
-	assert_bool(_kerb_shown(Vector2i(2, 4), 1)).is_true()
-	assert_bool(_kerb_shown(Vector2i(2, 4), 0)).is_true()
+	# The start land's edges toward other plots: 3 plot sides east, 3 west (side land), 2 north.
+	assert_int(shown).is_equal(8)
+	# Buying (6, 4) joins it without a kerb and puts kerbs on its own open sides.
+	assert_bool(_land.buy(Vector2i(6, 4), null).ok).is_true()
+	assert_bool(_kerb_shown(Vector2i(5, 4), 1)).is_false()
+	assert_bool(_kerb_shown(Vector2i(6, 4), 3)).is_false()
+	assert_bool(_kerb_shown(Vector2i(6, 4), 1)).is_true()
+	assert_bool(_kerb_shown(Vector2i(6, 4), 0)).is_true()

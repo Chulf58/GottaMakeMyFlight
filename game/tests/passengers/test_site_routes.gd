@@ -9,8 +9,10 @@ extends GdUnitTestSuite
 
 const SITE := preload("res://build/terminal_site.tres")
 
+## The grid columns of side land west of the first site.
+const SIDE_LAND := Vector2i(85, 0)
 ## ReferenceTerminal's cells on the site grid.
-const AT := Vector2i(0, 110)
+const AT := Vector2i(0, 110) + SIDE_LAND
 
 var _grid: BuildGrid
 var _layout: TerminalLayout
@@ -68,7 +70,7 @@ func test_an_entrance_walks_in_from_the_road_and_an_exit_out_to_the_plane() -> v
 
 func test_an_exit_on_another_wall_walks_round_to_the_plane_door() -> void:
 	# An exit in the shell's east wall, facing east.
-	var cell := Vector2i(21, 120)
+	var cell := Vector2i(21, 120) + SIDE_LAND
 	assert_bool(_grid.apply(BuildEdit.remove_wall(cell, BuildGrid.Side.EAST)).ok).is_true()
 	var placed := _grid.apply(BuildEdit.place_object(&"exit_door", cell, 1))
 	assert_bool(placed.ok).is_true()
@@ -85,8 +87,17 @@ func test_an_exit_on_another_wall_walks_round_to_the_plane_door() -> void:
 
 
 func test_a_built_over_exit_walk_takes_the_exit_out_of_service_and_back() -> void:
-	# Floor round the exit's outward cell (20, 111) leaves it no open ground.
-	_paint([Vector2i(19, 111), Vector2i(21, 111), Vector2i(20, 110)] as Array[Vector2i])
+	# Floor round the exit's outward cell (105, 111) leaves it no open ground.
+	_paint(
+		(
+			[
+				Vector2i(19, 111) + SIDE_LAND,
+				Vector2i(21, 111) + SIDE_LAND,
+				Vector2i(20, 110) + SIDE_LAND
+			]
+			as Array[Vector2i]
+		)
+	)
 	print(
 		(
 			"blocked: open exits %s, out of service %s"
@@ -96,7 +107,7 @@ func test_a_built_over_exit_walk_takes_the_exit_out_of_service_and_back() -> voi
 	assert_array(_layout.open_exits(_grid)).is_empty()
 	assert_array(_layout.out_of_service).contains_exactly([_exit])
 	assert_bool(_layout.outside_routes.has(_exit)).is_false()
-	_clear(Vector2i(20, 110))
+	_clear(Vector2i(20, 110) + SIDE_LAND)
 	print(
 		(
 			"reopened: open exits %s, out of service %s"
@@ -108,7 +119,16 @@ func test_a_built_over_exit_walk_takes_the_exit_out_of_service_and_back() -> voi
 
 
 func test_a_built_over_entrance_walk_takes_the_entrance_out_of_service_and_back() -> void:
-	_paint([Vector2i(17, 128), Vector2i(19, 128), Vector2i(18, 129)] as Array[Vector2i])
+	_paint(
+		(
+			[
+				Vector2i(17, 128) + SIDE_LAND,
+				Vector2i(19, 128) + SIDE_LAND,
+				Vector2i(18, 129) + SIDE_LAND
+			]
+			as Array[Vector2i]
+		)
+	)
 	print(
 		(
 			"blocked: entrances %s, out of service %s"
@@ -118,21 +138,23 @@ func test_a_built_over_entrance_walk_takes_the_entrance_out_of_service_and_back(
 	assert_array(_layout.passenger_entrances).is_empty()
 	assert_array(_layout.entrances).contains_exactly([_entrance])
 	assert_array(_layout.out_of_service).contains_exactly([_entrance])
-	_clear(Vector2i(18, 129))
+	_clear(Vector2i(18, 129) + SIDE_LAND)
 	assert_array(_layout.passenger_entrances).contains_exactly([_entrance])
 	assert_int((_layout.outside_routes[_entrance] as Array).size()).is_greater(2)
 
 
 func test_no_walk_crosses_the_sign_post_cell() -> void:
-	assert_bool(SiteRoutes.is_open_ground(_grid, SITE, Vector2i(57, 149))).is_false()
-	assert_bool(SiteRoutes.is_open_ground(_grid, SITE, Vector2i(56, 149))).is_true()
-	# An entrance straight up column 57 goes round the post to reach the road.
-	_grid.apply(BuildEdit.paint_floor(Vector2i(57, 140), BuildGrid.FLOOR_TILE, 1))
-	_grid.apply(BuildEdit.paint_floor(Vector2i(57, 139), BuildGrid.FLOOR_TILE, 1))
-	var door := _grid.apply(BuildEdit.place_object(&"entrance_door", Vector2i(57, 140), 2))
+	assert_bool(SiteRoutes.is_open_ground(_grid, SITE, Vector2i(57, 149) + SIDE_LAND)).is_false()
+	assert_bool(SiteRoutes.is_open_ground(_grid, SITE, Vector2i(56, 149) + SIDE_LAND)).is_true()
+	# An entrance straight up column 142 goes round the post to reach the road.
+	_grid.apply(BuildEdit.paint_floor(Vector2i(57, 140) + SIDE_LAND, BuildGrid.FLOOR_TILE, 1))
+	_grid.apply(BuildEdit.paint_floor(Vector2i(57, 139) + SIDE_LAND, BuildGrid.FLOOR_TILE, 1))
+	var door := _grid.apply(
+		BuildEdit.place_object(&"entrance_door", Vector2i(57, 140) + SIDE_LAND, 2)
+	)
 	assert_bool(door.ok).is_true()
 	_layout.rebuild(_grid)
 	var cells: Array[Vector2i] = _layout.outside_routes[door.object_id]
-	print("column 57 entrance cells %s" % [cells])
-	assert_bool(cells.has(Vector2i(57, 149))).is_false()
+	print("column 142 entrance cells %s" % [cells])
+	assert_bool(cells.has(Vector2i(57, 149) + SIDE_LAND)).is_false()
 	assert_int(cells.back().y).is_equal(SITE.grid_size.y - 1)

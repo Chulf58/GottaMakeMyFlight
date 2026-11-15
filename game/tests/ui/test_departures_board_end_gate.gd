@@ -6,7 +6,9 @@ extends GdUnitTestSuite
 ## contract, a board on the same FlightSim.
 
 const SITE := preload("res://build/terminal_site.tres")
-const DESK_WEST := Vector2i(19, 115)
+## Side land west of the first site: grid cells shift this far east.
+const SIDE_LAND := Vector2i(85, 0)
+const DESK_WEST := Vector2i(19, 115) + SIDE_LAND
 
 var _grid: SiteGrid
 var _flights: FlightSim
