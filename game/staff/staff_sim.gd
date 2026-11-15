@@ -41,7 +41,9 @@ extends Node
 ## The player can close a station and open it again (`closures`,
 ## StationClosures): a closed station admits nobody and gets no new posting,
 ## and its members finish the service admitted before and are then released
-## idle where they stand.
+## idle where they stand. A scanner fault (`faults`, StationFaults) stops a
+## security station admitting until its repair tick, with its staff kept
+## posted; step() clears it first on that tick.
 
 ## Hiring, firing and loading, or the player closed or opened a station; the
 ## counts or which stations are open may have changed.
@@ -53,9 +55,11 @@ signal member_state_changed(id: int, state: StaffMember.State)
 ## 2: members save their post (slot).
 ## 3: shop servers (Role.SHOP) at counters; a version 2 save has none.
 ## 4: cleaners (Role.CLEANER) and each member's job and work left.
-## 5: the stations the player closed ("closed", StationClosures). Only this
-## version loads; older saves are refused (no migrations before a release).
-const SAVE_VERSION := 5
+## 5: the stations the player closed ("closed", StationClosures).
+## 6: the scanner faults and their repair ticks ("faults", StationFaults).
+## Only this version loads; older saves are refused (no migrations before a
+## release).
+const SAVE_VERSION := 6
 ## Who fire() lets go first: [state, slot] pairs, a helper before a primary
 ## in the same state, so firing keeps stations open where it can.
 const FIRE_ORDER := [
@@ -73,6 +77,8 @@ var sim: PassengerSim
 var forecast := false
 ## The stations the player closed, and what the inspect window asks of them.
 var closures: StationClosures
+## The security stations a scanner fault stopped, and their repair ticks.
+var faults: StationFaults
 
 var _members: Array[StaffMember] = []
 var _by_id: Dictionary = {}
@@ -91,6 +97,7 @@ var _counters_dirty := true
 
 func _init() -> void:
 	closures = StationClosures.new(self)
+	faults = StationFaults.new(self)
 
 
 ## Called by PassengerSim.bind() once its layout is built.
@@ -200,8 +207,15 @@ func is_staffed(station: int, slot := StaffMember.Slot.PRIMARY) -> bool:
 ## Whether passengers are served at a desk, scanner or counter: it is usable
 ## (TerminalLayout.is_usable(), or one of the usable counters) and a member is
 ## on duty there who is not leaving, and the player has not closed it
-## (closures). Closed stations are what a closed sign marks.
+## (closures), and no scanner fault stops it (faults). Closed stations are
+## what a closed sign marks.
 func is_open(station: int) -> bool:
+	return not faults.is_faulted(station) and _serves(station)
+
+
+## Whether `station` would be open (is_open()) if it had no scanner fault
+## (StationFaults.open_but_for_fault()).
+func _serves(station: int) -> bool:
 	if closures.is_closed(station) or not _usable(station) or not is_staffed(station):
 		return false
 	return not (_by_id[_claims[station]] as StaffMember).leaving
@@ -238,10 +252,11 @@ func world_position(m: StaffMember) -> Vector3:
 	return sim.grid.origin + Vector3(at.x, 0.0, at.y)
 
 
-## Lets go of posts that went, plays the station-wide pass (StaffPosts.run()),
-## works the cleaners' jobs (_work_jobs()) and walks every walking member, in
-## id order.
+## Clears the scanner faults repaired by this tick, lets go of posts that
+## went, plays the station-wide pass (StaffPosts.run()), works the cleaners'
+## jobs (_work_jobs()) and walks every walking member, in id order.
 func step() -> void:
+	faults.clear_due(sim.tick)
 	_reconcile()
 	StaffPosts.run(self, _post, _repost)
 	if not forecast:
@@ -257,7 +272,7 @@ func step() -> void:
 ## during the tick. It is saved still leaving and on duty, and the loaded
 ## game's next step() lets it go on the same tick as one never saved.
 func to_snapshot() -> Dictionary:
-	return StaffSnapshot.save(_members, _next_id, closures.live_ids())
+	return StaffSnapshot.save(_members, _next_id, closures.live_ids(), faults.live())
 
 
 ## Restores a to_snapshot() dictionary, including one that went through JSON.
@@ -272,6 +287,7 @@ func from_snapshot(data: Dictionary) -> bool:
 	_next_id = loaded["next_id"]
 	_members.assign(loaded["members"])
 	closures.assign(loaded["closed"])
+	faults.assign(loaded["faults"])
 	_counters_dirty = true
 	rederive()
 	staff_changed.emit()

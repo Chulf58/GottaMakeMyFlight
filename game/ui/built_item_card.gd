@@ -368,6 +368,8 @@ func _station_status(station: int) -> String:
 	if sim.staff == null or sim.staff.is_open(station):
 		return "Status: Open"
 	var reason := MissSignals.closed_reason(sim, station)
+	if reason == MissSignals.FAULT_REASON:
+		return "Status: %s" % StationClosures.fault_text(sim.staff.faults.repair_tick(station))
 	if reason == "" and ShopCounters.closed(sim).has(station):
 		reason = MissSignals.NO_STAFF_REASON
 	if reason == "":

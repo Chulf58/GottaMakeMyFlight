@@ -354,6 +354,13 @@ static func choose(sim: PassengerSim, p: Passenger, claimed := false) -> void:
 ## have waited longer: it waits where it is, finishing the step it is on.
 static func _wait_full(p: Passenger) -> void:
 	p.stuck = Passenger.Stuck.QUEUE_FULL
+	stop_after_step(p)
+
+
+## Cuts `p`'s path after the step it is on, so it stops where that step ends
+## (_wait_full(); SecurityForecast does the same to a walker of a station that
+## stopped admitting while it waits for a place).
+static func stop_after_step(p: Passenger) -> void:
 	if p.is_moving():
 		var stop: Array[Vector2i] = []
 		stop.assign(p.path.slice(0, p.path_index + 2))

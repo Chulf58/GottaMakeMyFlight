@@ -23,7 +23,14 @@ extends RefCounted
 ## is NEVER. Read between
 ## ticks it is exact while no one turns late or stops being late (lateness is
 ## taken as it is now). Whether the station is open is taken as it
-## is now: a closed station admits nobody new. Staff are not stepped: a lane's
+## is now: a closed station admits nobody new. A station that admits nobody
+## sends its queue and the walkers committed to it to choose again on the
+## next tick, as PassengerSim does (PassengerStations.reconcile() and seek()):
+## the replay starts them as waiting passengers (_add_waiting()). One stopped
+## only by a scanner fault (StationFaults) admits again from its repair tick,
+## which the replay plays first on that tick, as StaffSim.step() clears the
+## fault before the station steps (_reopen()); that tick is an event the
+## replay does not skip past. Staff are not stepped: a lane's
 ## helper speeds the replayed repacks from the tick StaffPosts.helper_from()
 ## gives (now when on duty, its arrival when walking there, read after the
 ## next staff step when that step will plan its path again or move it to
@@ -88,6 +95,8 @@ var _stations: Array[int] = []
 ## (-1: never), its lane cells, its line (TerminalLayout.line_of()) and its
 ## {"lane", "holding"} queue.
 var _opens := {}
+## By station closed now only by a scanner fault: its repair tick.
+var _repairs := {}
 var _helper_from := {}
 var _cells := {}
 var _lines := {}
@@ -227,6 +236,10 @@ static func _waiting_clearance(sim: PassengerSim, station: int, p: Passenger) ->
 	for at: int in sim.layout.scanners:
 		if sim._queues.has(at):
 			key.append(StationQueue.members(sim._queues[at]))
+		# A fault or a closure on the same tick changes where places are.
+		key.append(
+			[sim._is_open(at), sim.staff.faults.repair_tick(at) if sim.staff != null else -1]
+		)
 	if not _waiting_memo.is_empty() and _waiting_memo[0] == key:
 		return _waiting_memo[1]
 	var replay := SecurityForecast.new()
@@ -302,13 +315,18 @@ func _setup(sim: PassengerSim, station: int, scarce: bool, candidate := 0) -> vo
 	layout = sim.layout
 	_candidate = candidate
 	var waiting: Array[Passenger] = []
+	var dispersed: Array[Passenger] = []
 	for p in sim._passengers:
-		if p.id != candidate and PassengerStations.is_seeking(sim, p, false):
+		if p.id == candidate:
+			continue
+		if PassengerStations.is_seeking(sim, p, false):
 			waiting.append(p)
+		elif _leaves_station(sim, p):
+			dispersed.append(p)
 	_stations = [station]
 	if scarce:
 		_places = sim.gates.copy(sim)
-	if scarce or not waiting.is_empty():
+	if scarce or not waiting.is_empty() or not dispersed.is_empty():
 		_stations.clear()
 		for other: int in sim.layout.passages:
 			if sim.layout.is_usable(other):
@@ -318,13 +336,19 @@ func _setup(sim: PassengerSim, station: int, scarce: bool, candidate := 0) -> vo
 	var records := {}
 	for at in _stations:
 		_opens[at] = sim.staff != null and sim.staff.is_open(at)
+		if not _opens[at] and sim.staff != null and sim.staff.faults.open_but_for_fault(at):
+			_repairs[at] = sim.staff.faults.repair_tick(at)
 		_helper_from[at] = StaffPosts.helper_from(sim.staff, at) if sim.staff != null else -1
 		_cells[at] = sim.layout.lanes[at]
 		_lines[at] = sim.layout.line_of(at)
 		var record := sim.security.record_of(at)
 		if not record.is_empty():
 			records[at] = record
-		_queues[at] = {"lane": sim.queue_of(at), "holding": sim.holding_of(at)}
+		if _opens[at]:
+			_queues[at] = {"lane": sim.queue_of(at), "holding": sim.holding_of(at)}
+		else:
+			# Its queue is sent to choose again (dispersed).
+			_queues[at] = {"lane": [] as Array[int], "holding": [] as Array[int]}
 	_runtime.helper_from = _helper_from
 	_claims = sim._claims.duplicate()
 	_runtime.restore(records)
@@ -336,16 +360,39 @@ func _setup(sim: PassengerSim, station: int, scarce: bool, candidate := 0) -> vo
 	for id in sim.passenger_ids():
 		var walker := sim.get_passenger(id)
 		var walking := walker.stage == Passenger.Stage.TO_SECURITY and id != candidate
-		if walking and _opens.has(walker.station):
+		if walking and _opens.get(walker.station, false):
 			_add(walker)
 	for p in waiting:
 		_add_waiting(p)
+	for p in dispersed:
+		var copy := _add_waiting(p)
+		# Sent back (PassengerSim._send_back()): it chooses on the next tick.
+		copy.stuck = Passenger.Stuck.NONE
+		if p.stage == Passenger.Stage.SECURITY_QUEUE:
+			# PassengerStations.close_queue() stops a queue member where it is.
+			copy.clear_path()
+			_active.erase(copy.id)
+		else:
+			# A walker given no place stops after its step (_wait_full()); one
+			# given a place sets off afresh from where it is.
+			PassengerStations.stop_after_step(copy)
+
+
+## Whether `p` is sent to choose again on the next tick because its security
+## station, usable, admits nobody: a member of its queue or holding list,
+## or a walker committed to it (PassengerStations.reconcile() and seek()).
+static func _leaves_station(sim: PassengerSim, p: Passenger) -> bool:
+	if p.station == 0 or not sim.layout.passages.has(p.station):
+		return false
+	if p.stage != Passenger.Stage.TO_SECURITY and p.stage != Passenger.Stage.SECURITY_QUEUE:
+		return false
+	return sim.layout.is_usable(p.station) and not sim._is_open(p.station)
 
 
 ## A copy of waiting passenger `p` (PassengerStations.is_seeking()): it stands
 ## where it is, finishing the step it is on, with no station until a place is
 ## free for it (_place_waiting()).
-func _add_waiting(p: Passenger) -> void:
+func _add_waiting(p: Passenger) -> Passenger:
 	var copy := _add(p)
 	copy.stage = Passenger.Stage.TO_SECURITY
 	copy.station = 0
@@ -354,6 +401,7 @@ func _add_waiting(p: Passenger) -> void:
 	_wait(copy.id, PassengerStations.wait_key(p, false))
 	if not copy.is_moving():
 		_active.erase(copy.id)
+	return copy
 
 
 ## Steps copy `id` from now on (_active).
@@ -534,6 +582,7 @@ func _run(target: int) -> int:
 
 ## One tick as PassengerSim plays it for this station and its passengers.
 func _step() -> void:
+	_reopen()
 	GateCapacity.recover_all(self, _runtime, _stations, _places)
 	# Promotion keeps the members' order; only an admission changes them.
 	var queued := 0
@@ -606,6 +655,17 @@ func _step() -> void:
 					held[id] = _holds(u.station, from, u.path[step + 1])
 	if not _changed and not held.is_empty():
 		_changed = _free_moved(held)
+
+
+## The stations whose scanner fault is repaired on this tick admit again
+## from now on, before anything else of the tick, as StaffSim.step() clears
+## the fault first.
+func _reopen() -> void:
+	for at: int in _repairs.keys():
+		if _repairs[at] <= tick:
+			_repairs.erase(at)
+			_opens[at] = true
+			_changed = true
 
 
 ## The members of `station`'s queue and their indexes (StationQueue.members()),
@@ -750,6 +810,9 @@ func _next_event() -> int:
 		# The repack rate changes on the tick the helper arrives.
 		if _helper_from[at] > tick and (best < 0 or _helper_from[at] < best):
 			best = _helper_from[at]
+		# The station admits again on the tick its fault is repaired.
+		if _repairs.has(at) and (best < 0 or _repairs[at] < best):
+			best = _repairs[at]
 	for station: int in _claims:
 		# The claim on a tail passes to a walker PASS_TICKS sooner there
 		# (StationQueue._pass_claim()). While both walk, each one's ticks to

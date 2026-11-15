@@ -12,6 +12,8 @@ extends RefCounted
 ##   vip:       flight, departs, bonus, good_mood, miss_half_stars, target (the
 ##              marked passenger id, 0 until one is marked)
 ##   favour:    flight, departs, extra, bonus
+##   fault:     station, repair_tick (the scanner fault, a minor, once it
+##              happened; IncidentFault)
 ## Every number that decides an outcome or a card is here, copied from
 ## IncidentTuning when the plan is made, so a later retune changes no incident
 ## that already rolled. A rating penalty is 1 to RatingAdjustments.
@@ -40,12 +42,14 @@ const INT_KEYS := {
 	IncidentCatalogue.RUSH: ["total", "until"],
 	IncidentCatalogue.VIP: ["departs", "bonus", "target", "good_mood", "miss_half_stars"],
 	IncidentCatalogue.FAVOUR: ["departs", "extra", "bonus"],
+	IncidentCatalogue.FAULT: ["station", "repair_tick"],
 }
 const STRING_KEYS := {
 	IncidentCatalogue.INSPECTOR: [],
 	IncidentCatalogue.RUSH: [],
 	IncidentCatalogue.VIP: ["flight"],
 	IncidentCatalogue.FAVOUR: ["flight"],
+	IncidentCatalogue.FAULT: [],
 }
 const FLIGHT_KEYS := ["flight", "extra", "departs"]
 

@@ -55,6 +55,8 @@ const CLOSED_TEXT := "Closed · no staff on duty"
 const PLAYER_CLOSED_TEXT := "Closed by you"
 const SPOT_BLOCKED_TEXT := "Closed · staff spot blocked"
 const UNREACHABLE_TEXT := "Closed · staff can't reach the %s"
+## A scanner fault's hover text, with the clock time of its repair.
+const FAULT_TEXT := "Closed · scanner fault, fixed by %s"
 const QUEUE_TEXT := "Queue full · %d waiting"
 
 ## Caption text -> its on-screen size in pixels, measured once.
@@ -193,7 +195,11 @@ func sync() -> void:
 		if not closed.has(station):
 			_drop_sign(_closed_signs, station)
 	for station in closed:
-		var look := closed_look(_closed_reason(station, counters), station_noun(sim, station))
+		var reason := _closed_reason(station, counters)
+		var look := closed_look(reason, station_noun(sim, station))
+		if reason == MissSignals.FAULT_REASON:
+			var repair := sim.staff.faults.repair_tick(station)
+			look = [MarkerIcons.Glyph.CLOSED, FAULT_TEXT % GameCalendar.clock_text(repair)]
 		_show_sign(_closed_signs, station, "ClosedSign", look[0], look[1])
 	var incomplete := MissSignals.incomplete_arches(sim)
 	for arch: int in _hint_signs.keys():

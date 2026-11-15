@@ -23,7 +23,10 @@ extends Node
 ## the cap) does not happen: it is done with the NO_PLACE outcome, no mess and
 ## no card, and while it has no place it is no quiet-night stop either. A minor
 ## never pauses the game; the card
-## naming its cause is IncidentCards', which listens to started and ended.
+## naming its cause is IncidentCards', which listens to started and ended. A
+## scanner fault (IncidentFault) stops one security station from its fire
+## tick to its repair tick; it is active until then, then done, and with no
+## station it may stop when due it is done with NO_PLACE.
 ##
 ## Incidents are on or off per game, saved with it. A world no new-game dialog
 ## made (tests, probes, playtests) starts with them off; the dialog and the
@@ -134,9 +137,11 @@ func on_tick(tick: int) -> void:
 		if incident["state"] == IncidentCatalogue.SCHEDULED and incident["fire_tick"] <= tick:
 			if IncidentCatalogue.is_major(incident["kind"]):
 				_fire_major(incident, tick)
+			elif incident["kind"] == IncidentCatalogue.FAULT:
+				_fire_fault(incident, tick)
 			else:
 				_fire(incident)
-		elif incident["state"] == IncidentCatalogue.ACTIVE and _is_over(incident):
+		elif incident["state"] == IncidentCatalogue.ACTIVE and _is_over(incident, tick):
 			incident["state"] = IncidentCatalogue.DONE
 			ended.emit(incident.duplicate(true))
 		elif IncidentCatalogue.is_major(incident["kind"]):
@@ -144,7 +149,8 @@ func on_tick(tick: int) -> void:
 
 
 ## The next tick something of the incidents is due: the earliest scheduled
-## fire that can happen now (a spill needs a place) and the inspector's visit,
+## fire that can happen now (a spill needs a place, a fault a station it may
+## stop) and the inspector's visit,
 ## or -1 for none. The day
 ## boundary is not an event (a stop before every midnight would slow each
 ## quiet night for no reason the player can see, decision quiet-nights-fast-
@@ -153,6 +159,7 @@ func on_tick(tick: int) -> void:
 func next_event_tick(_now: int) -> int:
 	var next := -1
 	var placed := -1
+	var faultable := -1
 	for incident in _incidents:
 		var visit := _majors.due_tick(incident)
 		if visit >= 0:
@@ -161,6 +168,12 @@ func next_event_tick(_now: int) -> int:
 			continue
 		if IncidentCatalogue.is_major(incident["kind"]):
 			next = _earliest(next, incident["fire_tick"])
+			continue
+		if incident["kind"] == IncidentCatalogue.FAULT:
+			if faultable < 0:
+				faultable = 1 if not IncidentFault.stations(passengers).is_empty() else 0
+			if faultable == 1:
+				next = _earliest(next, incident["fire_tick"])
 			continue
 		if placed < 0:
 			placed = 1 if not spill_places().is_empty() else 0
@@ -368,6 +381,7 @@ func _roll(day: int, tick: int) -> void:
 	var world := {
 		"tier": _tier(),
 		"places": spill_places().size(),
+		"faults": IncidentFault.stations(passengers).size(),
 		"contracts": flights.active_contract_ids().size(),
 	}
 	var candidates := IncidentCatalogue.candidates(world)
@@ -425,6 +439,16 @@ func _fire(incident: Dictionary) -> void:
 	started.emit(incident.duplicate(true))
 
 
+## A scanner fault's tick has come: it stops a station (IncidentFault.fire()),
+## or, with none it may stop, is done without happening.
+func _fire_fault(incident: Dictionary, tick: int) -> void:
+	if not IncidentFault.fire(passengers, incident, clock.rng.seed, tick):
+		_no_place(incident)
+		return
+	incident["state"] = IncidentCatalogue.ACTIVE
+	started.emit(incident.duplicate(true))
+
+
 ## A major's day has come: it decides its plan and is announced or offered. One
 ## that cannot be held (no flight to land on, no window for a visit) is done
 ## without being shown.
@@ -470,7 +494,9 @@ func _record(id: int) -> Dictionary:
 	return {}
 
 
-func _is_over(incident: Dictionary) -> bool:
+func _is_over(incident: Dictionary, tick: int) -> bool:
+	if incident["kind"] == IncidentCatalogue.FAULT:
+		return IncidentFault.is_over(incident, tick)
 	return passengers.messes.get_mess(incident["mess_id"]).is_empty()
 
 

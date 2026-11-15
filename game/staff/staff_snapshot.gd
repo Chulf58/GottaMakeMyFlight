@@ -5,13 +5,17 @@ extends RefCounted
 ## planned differently after a load; station claims are rebuilt from the
 ## members. Cells are saved as [x, y].
 ##
-## Only the current version (StaffSim.SAVE_VERSION, 5) loads: an older save is
+## Only the current version (StaffSim.SAVE_VERSION, 6) loads: an older save is
 ## refused, never migrated (no save migrations before the first release,
 ## decision old-saves-are-not-supported-until-after-a-release-no-save-mi).
 ##
 ## "closed" lists the stations the player closed (StationClosures.live_ids()):
 ## whole numbers in rising order, each an object on the grid that is a
 ## closable station (StationClosures.closable_def()).
+##
+## "faults" lists the scanner faults (StationFaults.live()) as [station,
+## repair tick] pairs in rising station order, each station an object on the
+## grid that can fault (StationFaults.checked()).
 ##
 ## Each member saves its post ("slot", StaffMember.Slot). A helper must be a
 ## security officer at a whole security lane and never leaving; a member with
@@ -31,7 +35,7 @@ extends RefCounted
 ## cleaner, a bin job a full bin on the grid that no other cleaner holds, and
 ## every claimed mess must be the job of the cleaner it names.
 
-const KEYS := ["save_version", "next_id", "members", "closed"]
+const KEYS := ["save_version", "next_id", "members", "closed", "faults"]
 const MEMBER_KEYS := [
 	"id",
 	"role",
@@ -53,7 +57,9 @@ const INT_FIELDS := ["id", "role", "state", "station", "slot", "path_index", "se
 const BOOL_FIELDS := ["needs_replan", "search_failed", "leaving", "job_bin"]
 
 
-static func save(members: Array[StaffMember], next_id: int, closed: Array[int]) -> Dictionary:
+static func save(
+	members: Array[StaffMember], next_id: int, closed: Array[int], faults: Array
+) -> Dictionary:
 	var records := []
 	for m in members:
 		var path := []
@@ -87,10 +93,11 @@ static func save(members: Array[StaffMember], next_id: int, closed: Array[int]) 
 		"next_id": next_id,
 		"members": records,
 		"closed": closed.duplicate(),
+		"faults": faults.duplicate(true),
 	}
 
 
-## {"next_id", "members", "closed"} restored, or {"error"}. The sim's layout
+## {"next_id", "members", "closed", "faults"} restored, or {"error"}. The sim's layout
 ## and grid must already hold the saved world. `saved` itself is never changed. The
 ## cleaners' jobs are checked against `messes`, a {"messes", "bins"} state as
 ## MessSim.checked() returns it, or, when it is empty, the sim's own MessSim
@@ -140,7 +147,10 @@ static func load(saved: Dictionary, sim: PassengerSim, messes := {}) -> Dictiona
 	var closed: Variant = _closed(data["closed"], sim.grid)
 	if closed is String:
 		return {"error": closed}
-	return {"next_id": next_id, "members": members, "closed": closed}
+	var faults: Variant = StationFaults.checked(data["faults"], sim.grid)
+	if faults is String:
+		return {"error": faults}
+	return {"next_id": next_id, "members": members, "closed": closed, "faults": faults}
 
 
 ## The saved closed stations as ids, or a String naming what is wrong: a list
