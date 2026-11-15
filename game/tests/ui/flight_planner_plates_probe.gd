@@ -15,11 +15,18 @@ extends SceneTree
 ##     --path game -s res://tests/ui/flight_planner_plates_probe.gd
 ## With `-- --gate-theme` it plates the Departures list, the planner and a selected bar
 ## at UI scale 1.25, to tools/blender/out/gate_theme_20261114/.
+## With `-- --drag` it plates a drag in progress at UI scale 1.0: the 11:00 Rome bar
+## (gate B) picked up with real mouse events pushed into the window, held over gate
+## A's row (refused, the 10:00 Oslo flight clashes) and then over gate C's (fits),
+## to tools/blender/out/planner_drag_20261114/. Each plate first proves the drag is
+## in progress, the pointer is in view and A is greyed while C is not. Keep the
+## real mouse off the window while it runs, or its motion moves the drag.
 ##
 ## The plates go to tools/blender/out/flight_planner_20261114/.
 
 const OUT_REL := "res://../tools/blender/out/flight_planner_20261114"
 const GATE_THEME_REL := "res://../tools/blender/out/gate_theme_20261114"
+const DRAG_REL := "res://../tools/blender/out/planner_drag_20261114"
 const SCALES := [1.0, 1.25, 1.5]
 
 var _main: Node3D
@@ -32,7 +39,10 @@ func _initialize() -> void:
 
 func _run() -> void:
 	var gate_theme_only := "--gate-theme" in OS.get_cmdline_user_args()
+	var drag_only := "--drag" in OS.get_cmdline_user_args()
 	var out_rel := GATE_THEME_REL if gate_theme_only else OUT_REL
+	if drag_only:
+		out_rel = DRAG_REL
 	_out_dir = ProjectSettings.globalize_path(out_rel).simplify_path()
 	DirAccess.make_dir_recursive_absolute(_out_dir)
 	_main = (load("res://main/main.tscn") as PackedScene).instantiate()
@@ -68,6 +78,9 @@ func _run() -> void:
 		return
 	if gate_theme_only:
 		await _run_gate_theme(planner)
+		return
+	if drag_only:
+		await _run_drag(planner)
 		return
 	for ui_scale: float in SCALES:
 		root.content_scale_factor = ui_scale
@@ -107,6 +120,109 @@ func _run_gate_theme(planner: FlightPlanner) -> void:
 	await _frames(8)
 	if await _plate(planner, "planner_selected_s125"):
 		quit(0)
+
+
+## Picks up the Rome bar with pushed mouse events and plates it over a refused
+## row (A) and a fitting row (C), then lets go over the hour labels.
+func _run_drag(planner: FlightPlanner) -> void:
+	root.content_scale_factor = 1.0
+	planner.open()
+	await _frames(8)
+	var bar := planner.bar_button("P2", 0)
+	var track_a := planner.part("Track_A") as PlannerTrack
+	var track_c := planner.part("Track_C") as PlannerTrack
+	if bar == null or track_a == null or track_c == null:
+		print("PROBE_INVALID no Rome bar or no row for gate A or C")
+		quit(1)
+		return
+	var start := bar.get_global_rect().get_center()
+	await _mouse_motion(start, start, 0)
+	await _mouse_button(start, true)
+	await _mouse_motion(start + Vector2(40.0, 0.0), start, MOUSE_BUTTON_MASK_LEFT)
+	var spots := [
+		["planner_drag_refused_s100", track_a, _lane_point(track_a, 13.0)],
+		["planner_drag_fitting_s100", track_c, _lane_point(track_c, 12.0)],
+	]
+	var last := start + Vector2(40.0, 0.0)
+	for spot: Array in spots:
+		var at: Vector2 = spot[2]
+		await _mouse_motion(at, last, MOUSE_BUTTON_MASK_LEFT)
+		await _mouse_motion(at + Vector2(1.0, 0.0), at, MOUSE_BUTTON_MASK_LEFT)
+		last = at + Vector2(1.0, 0.0)
+		await _frames(4)
+		if not _drag_in_view(planner, spot[1], last, track_a, track_c):
+			return
+		if not _save(spot[0]):
+			return
+	var hours := planner.part("Hours").get_global_rect().get_center()
+	await _mouse_motion(hours, last, MOUSE_BUTTON_MASK_LEFT)
+	await _mouse_button(hours, false)
+	var rome: String = planner.flights.contract_of("P2")["gate"]
+	print("PROBE after release dragging=", root.gui_is_dragging(), " rome gate=", rome)
+	quit(0)
+
+
+## Proves a drag is in progress, the pointer is in view over `over`, and the
+## refused row A is greyed while the fitting row C is not.
+func _drag_in_view(
+	planner: FlightPlanner,
+	over: PlannerTrack,
+	at: Vector2,
+	track_a: PlannerTrack,
+	track_c: PlannerTrack,
+) -> bool:
+	var view := Rect2(Vector2.ZERO, root.get_visible_rect().size)
+	var row := over.get_global_rect()
+	print(
+		(
+			"PROBE drag over %s at=%s row=%s dragging=%s A greyed=%s C greyed=%s message='%s'"
+			% [
+				over.name,
+				at,
+				row,
+				root.gui_is_dragging(),
+				track_a.is_greyed(),
+				track_c.is_greyed(),
+				planner.message_text(),
+			]
+		)
+	)
+	if not root.gui_is_dragging() or not view.has_point(at) or not row.has_point(at):
+		print("PROBE_INVALID the drag is not in progress over %s in view" % over.name)
+		quit(1)
+		return false
+	if not track_a.is_greyed() or track_c.is_greyed():
+		print("PROBE_INVALID gate A should be greyed and gate C not")
+		quit(1)
+		return false
+	return true
+
+
+## A point on `track` at `hour`, half way down the row, in window coordinates.
+func _lane_point(track: Control, hour: float) -> Vector2:
+	var rect := track.get_global_rect()
+	return Vector2(rect.position.x + rect.size.x * hour / 24.0, rect.get_center().y)
+
+
+func _mouse_motion(at: Vector2, from: Vector2, mask: int) -> void:
+	var event := InputEventMouseMotion.new()
+	event.position = at
+	event.global_position = at
+	event.relative = at - from
+	event.button_mask = mask
+	root.push_input(event, true)
+	await _frames(2)
+
+
+func _mouse_button(at: Vector2, pressed: bool) -> void:
+	var event := InputEventMouseButton.new()
+	event.button_index = MOUSE_BUTTON_LEFT
+	event.pressed = pressed
+	event.button_mask = MOUSE_BUTTON_MASK_LEFT if pressed else 0
+	event.position = at
+	event.global_position = at
+	root.push_input(event, true)
+	await _frames(2)
 
 
 ## Proves the sheet, a bar centre and the toggle are in view, then saves.

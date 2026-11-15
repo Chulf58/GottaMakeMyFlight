@@ -10,6 +10,11 @@ const THEME := preload("res://ui/hud_theme.tres")
 const STATES: Array[StringName] = [&"normal", &"hover", &"pressed", &"disabled"]
 ## WCAG's floor for normal-size text.
 const MIN_CONTRAST := 4.5
+## How far outside a selected bar its outline is drawn, in px.
+const SELECTED_RING := 2.0
+## The Label variation a disabled bar's label takes, whose colour is the gate
+## buttons' disabled text.
+const DISABLED_LABEL := &"HudBarLabelDisabled"
 
 
 ## WCAG contrast ratio of two opaque colours.
@@ -84,7 +89,14 @@ func test_every_gate_variation_is_the_compact_button_in_the_gate_colour() -> voi
 			assert_int(box.corner_radius_top_left).is_equal(plain.corner_radius_top_left)
 
 
-func test_every_selected_variation_is_its_gate_with_a_thicker_outline() -> void:
+## The selected bar keeps the 2 px button border of the HUD grid (decision hud-
+## grid-and-rails-one-spacing-grid-centred-top-row-right-ra); it stands out by
+## the HUD's teal accent outline in place of the navy one (user ruling flight-
+## planner-selected-bar-2-px-teal-accent-outline, which replaced white), drawn
+## SELECTED_RING px outside the bar. The teal is HudButtonTeal's own fill.
+func test_every_selected_variation_is_its_gate_with_a_teal_outline() -> void:
+	var plain := THEME.get_stylebox("normal", "HudButtonCompact") as StyleBoxFlat
+	var teal := (THEME.get_stylebox("normal", "HudButtonTeal") as StyleBoxFlat).bg_color
 	for slot in GateColours.PALETTE.size():
 		var gate_id := char("A".unicode_at(0) + slot)
 		var variation := GateColours.variation_of(gate_id, true)
@@ -94,8 +106,12 @@ func test_every_selected_variation_is_its_gate_with_a_thicker_outline() -> void:
 		)
 		var box := THEME.get_stylebox("normal", variation) as StyleBoxFlat
 		assert_object(box.bg_color).is_equal(GateColours.of(gate_id))
-		assert_object(box.border_color).is_equal(GateColours.TEXT)
-		assert_int(box.border_width_left).is_equal(3)
+		assert_object(box.border_color).is_equal(teal)
+		assert_object(box.border_color).is_not_equal(plain.border_color)
+		for side in [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]:
+			assert_int(box.get_border_width(side)).is_equal(plain.get_border_width(side))
+			assert_float(box.get_expand_margin(side)).is_equal(SELECTED_RING)
+		assert_float(box.content_margin_left).is_equal(plain.content_margin_left)
 
 
 func test_navy_text_reads_on_every_gate_colour_in_every_state() -> void:
@@ -115,6 +131,13 @@ func test_navy_text_reads_on_every_gate_colour_in_every_state() -> void:
 			var ratio := _contrast(text, fill)
 			worst = minf(worst, ratio)
 			print("%s %s: text %s on %s = %.2f:1" % [variation, state, text, fill, ratio])
-			assert_object(text).is_equal(GateColours.TEXT)
+			# Disabled text is a softer navy, so a disabled gate button looks unlike its
+			# normal state (test_hud_disabled_buttons); it is the colour the disabled
+			# bar label takes, and it still reads on the disabled fill.
+			if state == &"disabled":
+				assert_object(text).is_not_equal(GateColours.TEXT)
+				assert_object(text).is_equal(THEME.get_color("font_color", DISABLED_LABEL))
+			else:
+				assert_object(text).is_equal(GateColours.TEXT)
 			assert_float(ratio).is_greater_equal(MIN_CONTRAST)
 	print("worst contrast %.2f:1" % worst)

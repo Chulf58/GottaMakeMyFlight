@@ -122,13 +122,48 @@ func test_the_label_gets_its_look_from_the_theme_and_the_button_keeps_its_name()
 	assert_bool(label.has_theme_color_override("font_color")).is_false()
 	assert_bool(label.has_theme_font_size_override("font_size")).is_false()
 	assert_bool(label.has_theme_font_override("font")).is_false()
-	# It resolves to what the button's own text had, enabled and disabled.
+	# An enabled bar's label resolves to the button's own text colour. The gate
+	# buttons' disabled text is a softer navy now, so it is no longer the same
+	# colour; a disabled bar's label takes that one through its own variation
+	# (test_a_disabled_bars_label_takes_the_disabled_text_from_the_theme).
+	assert_bool(x.disabled).is_false()
+	assert_str(str(label.theme_type_variation)).is_empty()
 	assert_object(label.get_theme_color("font_color")).is_equal(x.get_theme_color("font_color"))
-	assert_object(label.get_theme_color("font_color")).is_equal(
-		x.get_theme_color("font_disabled_color")
-	)
 	assert_int(label.get_theme_font_size("font_size")).is_equal(x.get_theme_font_size("font_size"))
 	assert_object(label.get_theme_font("font")).is_same(x.get_theme_font("font"))
 	assert_int(label.mouse_filter).is_equal(Control.MOUSE_FILTER_IGNORE)
 	# Clearing the button's text leaves it named for assistive tools.
 	assert_str(x.accessibility_name).is_equal(x.get_meta(FlightPlanner.FULL_TEXT))
+
+
+## A bar that cannot be acted on (X's issued flight after its contract ended) is
+## disabled, and its label shows the gate button's disabled text, softer than the
+## navy of an enabled bar, from the theme and with no per-node override.
+func test_a_disabled_bars_label_takes_the_disabled_text_from_the_theme() -> void:
+	await _boot(Vector2i(1536, 864))
+	for t in range(_sim.tick + 1, GameCalendar.tick_at(0, 7 * 60) + 1):
+		_sim.on_tick(t)
+	assert_bool(_sim.end_contract("X")).is_true()
+	_planner.refresh()
+	await await_idle_frame()
+	var x := _planner.bar_button("X", 0)
+	var z := _planner.bar_button("Z", 0)
+	assert_bool(x.disabled).is_true()
+	# Control: Z's contract still runs, so its bar and label keep the navy.
+	assert_bool(z.disabled).is_false()
+	assert_object(FlightPlanner.bar_label(z).get_theme_color("font_color")).is_equal(
+		z.get_theme_color("font_color")
+	)
+	var label := FlightPlanner.bar_label(x)
+	assert_object(label).is_not_null()
+	var off := x.get_theme_color("font_disabled_color")
+	print(
+		(
+			"disabled label %s, button disabled text %s, normal text %s"
+			% [label.get_theme_color("font_color"), off, x.get_theme_color("font_color")]
+		)
+	)
+	assert_str(str(label.theme_type_variation)).is_equal(str(FlightPlanner.DISABLED_LABEL))
+	assert_bool(label.has_theme_color_override("font_color")).is_false()
+	assert_object(label.get_theme_color("font_color")).is_equal(off)
+	assert_object(off).is_not_equal(x.get_theme_color("font_color"))
