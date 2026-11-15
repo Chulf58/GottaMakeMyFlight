@@ -35,7 +35,6 @@ const MARGIN_PX := 8.0
 const OCCLUSION_STOP_M := 0.3
 const SETTLE_FRAMES := 40
 const EAST := Vector2i(44, 0)
-const DESK_EAST := Vector2i(63, 115)
 const SECOND := "GMF202"
 ## The paused plane stands still to within this on the hold line.
 const STOPPED_M := 0.05
@@ -158,7 +157,7 @@ func _build_east() -> bool:
 	var wanted := {}
 	for edit in shell:
 		wanted[land.plot_of(edit.cell)] = true
-	wanted[land.plot_of(DESK_EAST)] = true
+	wanted[land.plot_of(_desk_east())] = true
 	for plot: Vector2i in wanted:
 		while not land.is_owned(plot):
 			var best := Vector2i(-1, -1)
@@ -175,7 +174,7 @@ func _build_east() -> bool:
 		if not result.ok:
 			_fail("the east shell was refused: %s" % result.reason_text())
 			return false
-	var desk := _grid.apply(BuildEdit.place_object(GateDesks.DESK, DESK_EAST, 0))
+	var desk := _grid.apply(BuildEdit.place_object(GateDesks.DESK, _desk_east(), 0))
 	if not desk.ok:
 		_fail("the east gate desk was refused: %s" % desk.reason_text())
 		return false
@@ -538,3 +537,9 @@ func _finish(code: int) -> void:
 ## Where the plane rests over a stand point: on the ground there.
 func _parked(stand_point: Vector3) -> Vector3:
 	return stand_point + Vector3.UP * PlaneView.ground_height_at(stand_point)
+
+
+## The east gate desk's cell: the starter desk's cell moved by the starter offset
+## and EAST (a fixed cell fell on side land once the site widened).
+func _desk_east() -> Vector2i:
+	return ReferenceTerminal.GATE_DESK_CELL + _mode.site.starter_offset + EAST

@@ -39,9 +39,9 @@ const MARGIN_PX := 8.0
 const OCCLUSION_STOP_M := 0.3
 const SETTLE_FRAMES := 40
 const EAST := Vector2i(19, 0)
-const DESK_EAST := Vector2i(38, 115)
 ## Gate B's stand point is at x -7: x 13.6 to 25.9 is its large-only space.
-const PATCH := Rect2i(58, 98, 3, 3)
+## The cells are before the site's starter offset (_patch() moves them).
+const PATCH_UNSHIFTED := Rect2i(58, 98, 3, 3)
 ## The old class captions (before the class moved under the gate caption),
 ## each 6 m over its stand point: the overlap check's control.
 const OLD_CAPTIONS := ["Gate A: up to large planes", "Gate B: up to medium planes"]
@@ -125,7 +125,7 @@ func _run() -> void:
 ## _fail) when any of it is refused.
 func _build_east() -> bool:
 	var shell := ReferenceTerminal.shell_edits(_mode.site.starter_offset + EAST)
-	var cells: Array[Vector2i] = [DESK_EAST, PATCH.position, PATCH.end - Vector2i.ONE]
+	var cells: Array[Vector2i] = [_desk_east(), _patch().position, _patch().end - Vector2i.ONE]
 	for edit in shell:
 		cells.append(edit.cell)
 	if not _own(cells):
@@ -134,13 +134,13 @@ func _build_east() -> bool:
 		if not result.ok:
 			_fail("the east shell was refused: %s" % result.reason_text())
 			return false
-	var desk := _grid.apply(BuildEdit.place_object(GateDesks.DESK, DESK_EAST, 0))
+	var desk := _grid.apply(BuildEdit.place_object(GateDesks.DESK, _desk_east(), 0))
 	if not desk.ok:
 		_fail("the east gate desk was refused: %s" % desk.reason_text())
 		return false
 	var patch: Array[BuildEdit] = []
-	for y in range(PATCH.position.y, PATCH.end.y):
-		for x in range(PATCH.position.x, PATCH.end.x):
+	for y in range(_patch().position.y, _patch().end.y):
+		for x in range(_patch().position.x, _patch().end.x):
 			patch.append(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
 	for result in _grid.apply_batch(patch):
 		if not result.ok:
@@ -178,13 +178,23 @@ func _plates() -> void:
 	for caption in captions:
 		texts.append(caption.text)
 	print("PROBE envelope outlines %d, captions %s" % [paths.size(), texts])
-	var wanted := ["Gate A\nup to large planes", "Gate B\nup to medium planes"]
-	if paths.size() != 2 or texts != wanted:
+	# Each caption is its class line exactly, then the walk line the game gives
+	# the gate (GateWalk): worked out from the same source, never a prefix match.
+	# Gate A must have a walk, so the third line is required there.
+	var walk_a := links.walk.minutes("A")
+	var wanted := [
+		"Gate A\nup to large planes\n%s" % [GateWalk.CAPTION_TEXT % walk_a],
+		"Gate B\nup to medium planes",
+	]
+	var walk_b := links.walk.minutes("B")
+	if walk_b != GateWalk.NO_ROUTE:
+		wanted[1] += "\n%s" % [GateWalk.CAPTION_TEXT % walk_b]
+	if walk_a == GateWalk.NO_ROUTE or paths.size() != 2 or texts != wanted:
 		_fail("the build-mode views do not show both envelopes with their classes")
 		return
 	var stand_a := StandPlacement.stand_point(_apron.gate_stands["A"]["live"])
 	var stand_b := StandPlacement.stand_point(_apron.gate_stands["B"]["live"])
-	var patch := _grid.cell_to_world(PATCH.position + Vector2i.ONE)
+	var patch := _grid.cell_to_world(_patch().position + Vector2i.ONE)
 	var corners: Array = []
 	for path in paths:
 		for point in path:
@@ -422,3 +432,16 @@ func _finish(code: int) -> void:
 	if _main != null:
 		_main.queue_free()
 	quit(code)
+
+
+## The east gate desk's cell: the starter desk's cell moved by the starter offset
+## and EAST (a fixed cell fell on side land once the site widened).
+func _desk_east() -> Vector2i:
+	return ReferenceTerminal.GATE_DESK_CELL + _mode.site.starter_offset + EAST
+
+
+## The floor patch in grid cells: PATCH_UNSHIFTED shifted east by the starter
+## offset, so it stays in gate B's large-only space on the wide site.
+func _patch() -> Rect2i:
+	var shift := Vector2i(_mode.site.starter_offset.x, 0)
+	return Rect2i(PATCH_UNSHIFTED.position + shift, PATCH_UNSHIFTED.size)
