@@ -56,17 +56,3 @@ func _preview() -> Control:
 	copy.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	copy.size = size
 	return copy
-
-
-## Why `contract_id` cannot be dropped on each of `gates` now, in the words a
-## Move to refusal uses (DeparturesBoard.reason_text): gate -> text, "" where it
-## fits. The contract's own gate is left out. Read-only.
-static func refusals(sim: FlightSim, contract_id: String, gates: Array[String]) -> Dictionary:
-	var current: String = sim.contract_of(contract_id).get("gate", "")
-	var out := {}
-	for gate_id in gates:
-		if gate_id == current:
-			continue
-		var problem := sim.reassign_problem(contract_id, gate_id)
-		out[gate_id] = "" if problem == "" else DeparturesBoard.reason_text(sim, problem, gate_id)
-	return out

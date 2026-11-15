@@ -90,11 +90,13 @@ func test_every_gate_variation_is_the_compact_button_in_the_gate_colour() -> voi
 
 
 ## The selected bar keeps the 2 px button border of the HUD grid (decision hud-
-## grid-and-rails-one-spacing-grid-centred-top-row-right-ra); it stands out by a
-## white outline in place of the navy one, drawn SELECTED_RING px outside the
-## bar, so it reads a little bigger than its neighbours.
-func test_every_selected_variation_is_its_gate_with_a_white_outline() -> void:
+## grid-and-rails-one-spacing-grid-centred-top-row-right-ra); it stands out by
+## the HUD's teal accent outline in place of the navy one (user ruling flight-
+## planner-selected-bar-2-px-teal-accent-outline, which replaced white), drawn
+## SELECTED_RING px outside the bar. The teal is HudButtonTeal's own fill.
+func test_every_selected_variation_is_its_gate_with_a_teal_outline() -> void:
 	var plain := THEME.get_stylebox("normal", "HudButtonCompact") as StyleBoxFlat
+	var teal := (THEME.get_stylebox("normal", "HudButtonTeal") as StyleBoxFlat).bg_color
 	for slot in GateColours.PALETTE.size():
 		var gate_id := char("A".unicode_at(0) + slot)
 		var variation := GateColours.variation_of(gate_id, true)
@@ -104,7 +106,7 @@ func test_every_selected_variation_is_its_gate_with_a_white_outline() -> void:
 		)
 		var box := THEME.get_stylebox("normal", variation) as StyleBoxFlat
 		assert_object(box.bg_color).is_equal(GateColours.of(gate_id))
-		assert_object(box.border_color).is_equal(Color.WHITE)
+		assert_object(box.border_color).is_equal(teal)
 		assert_object(box.border_color).is_not_equal(plain.border_color)
 		for side in [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]:
 			assert_int(box.get_border_width(side)).is_equal(plain.get_border_width(side))

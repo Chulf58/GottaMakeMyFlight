@@ -6,7 +6,8 @@ extends Control
 ##
 ## While a bar is dragged the planner tells each row whether it takes the flight:
 ## a row with a `refusal` is greyed, lane and bars, under a grey wash, and refuses
-## the drop; the flight's own row (`home`) is not greyed and takes no drop either.
+## the drop; a home row (the bar's own row, or its contract's gate) is not greyed
+## and takes no drop either.
 ## Every drop check over the row, its bars included, emits drag_hovered, so the
 ## planner can say why a row refuses; a drop emits dropped.
 
@@ -33,7 +34,7 @@ var refusal := "":
 	set(value):
 		refusal = value
 		_shade.visible = refusal != ""
-## True while the dragged flight's contract is at this gate.
+## True while this row is the dragged bar's own row or its contract's gate.
 var home := false
 
 var _shade := ColorRect.new()

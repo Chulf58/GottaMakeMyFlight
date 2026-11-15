@@ -162,7 +162,7 @@ func test_while_dragging_refused_rows_are_greyed_and_fitting_rows_are_not() -> v
 	assert_bool(_port.gui_is_dragging()).is_true()
 	# A clashes with X; C fits; B is Y's own row, not a refusal.
 	assert_dict(during).is_equal({"A": true, "B": false, "C": false})
-	assert_str(_planner.message_text()).is_equal(FlightPlanner.drop_text("Rome", "C"))
+	assert_str(_planner.message_text()).is_equal(PlannerDrag.drop_text("Rome", "C"))
 	assert_str(_planner.message_text()).contains("Days already issued keep their gate")
 	# Over X's bar on A the row's reason shows: the bar passes the drop check to its row.
 	await _move(_centre(_planner.bar_button("X", 0)))
@@ -179,10 +179,48 @@ func test_while_dragging_refused_rows_are_greyed_and_fitting_rows_are_not() -> v
 	assert_str(_sim.contract_of("Y")["gate"]).is_equal("B")
 
 
-func test_after_a_drop_an_issued_day_keeps_its_old_gate() -> void:
+## Runs the sim and the clock to 07:00, so today's X, Y and Z flights are issued.
+func _issue_today() -> void:
 	for t in range(_sim.tick + 1, GameCalendar.tick_at(0, 7 * 60) + 1):
 		_sim.on_tick(t)
 	_clock.tick = GameCalendar.tick_at(0, 7 * 60)
+
+
+## After X moves from A to C, today's issued X bar stays on A and can still be
+## picked up. Dropping it on A, its own row, must not move X's future days back,
+## and C, the contract's gate now, takes no drop either. Neither row is greyed.
+func test_an_issued_bar_dropped_on_its_own_old_row_leaves_the_contract() -> void:
+	_issue_today()
+	await _open()
+	assert_bool(_sim.reassign_gate("X", "C")).is_true()
+	_planner.refresh()
+	await await_idle_frame()
+	var old := _planner.bar_button("X", 0)
+	assert_object(old.get_parent()).is_equal(_track("A"))
+	assert_bool(old.disabled).is_false()
+	# Control: FlightSim would take X back on A, so only the home-row rule stops it.
+	assert_str(_sim.reassign_problem("X", "A")).is_empty()
+	await _drag_over(old, _lane_at("C", 13.0))
+	assert_bool(_port.gui_is_dragging()).is_true()
+	var over_c := _planner.message_text()
+	await _move(_lane_at("A", 13.0))
+	var over_a := _planner.message_text()
+	var greyed := _greyed()
+	print("greyed: ", greyed, " over C: '%s' over A: '%s'" % [over_c, over_a])
+	# B clashes with Y, so the drag is live and does grey a row.
+	assert_dict(greyed).is_equal({"A": false, "B": true, "C": false})
+	assert_str(over_c).is_equal(PlannerDrag.DRAG_TEXT)
+	assert_str(over_a).is_equal(PlannerDrag.DRAG_TEXT)
+	await _button(false)
+	await await_idle_frame()
+	print("after the drop on A: gate=", _sim.contract_of("X")["gate"])
+	assert_bool(_port.gui_is_dragging()).is_false()
+	assert_str(_sim.contract_of("X")["gate"]).is_equal("C")
+	assert_str(_planner.message_text()).is_empty()
+
+
+func test_after_a_drop_an_issued_day_keeps_its_old_gate() -> void:
+	_issue_today()
 	await _open()
 	assert_str(_sim.contract_of("X")["gate"]).is_equal("A")
 	await _drag_over(_planner.bar_button("X", 0), _centre(_track("C")))

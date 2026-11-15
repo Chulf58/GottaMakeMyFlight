@@ -61,9 +61,11 @@ func test_bars_and_move_choices_take_gate_variations_with_no_override() -> void:
 		assert_bool(button.has_theme_color_override("font_color")).is_false()
 	var outline := selected.get_theme_stylebox("normal") as StyleBoxFlat
 	# The selected bar keeps the 2 px button border of the HUD grid and stands out by
-	# a white outline drawn just outside it (test_gate_colours pins the variation).
+	# the HUD's teal accent outline drawn just outside it (user ruling flight-planner-
+	# selected-bar-2-px-teal-accent-outline; test_gate_colours pins every variation).
+	var teal := selected.get_theme_stylebox("normal", "HudButtonTeal") as StyleBoxFlat
 	assert_int(outline.border_width_left).is_equal(2)
-	assert_object(outline.border_color).is_equal(Color.WHITE)
+	assert_object(outline.border_color).is_equal(teal.bg_color)
 	assert_float(outline.expand_margin_left).is_greater(0.0)
 	assert_object(outline.bg_color).is_equal(GateColours.of("B"))
 
