@@ -104,6 +104,8 @@ func test_the_timeline_and_contract_fields_are_unchanged() -> void:
 				"fee_per_passenger",
 				"first_day",
 				"traits",
+				# Flight save version 9: the taxi pair of the contract's gate.
+				"taxi",
 			]
 		)
 	)

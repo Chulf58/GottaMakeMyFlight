@@ -105,8 +105,11 @@ static func build(runway_size: String) -> Node3D:
 
 
 ## Takes the new size when the works end at `tick` and drops their booking once
-## it has been held long enough (RunwayWorks). True when either happened.
-func settle(tick: int) -> bool:
+## it has been held long enough (RunwayWorks): HOLD_TICKS after the works end,
+## and not before `flown_until`, the tick the last flight that may have met the
+## works departs (FlightSim, from each flight's own starts; NO_TICK for none).
+## True when either happened.
+func settle(tick: int, flown_until := RunwayWorks.NO_TICK) -> bool:
 	var changed := false
 	if works.scheduled() and tick >= works.finish:
 		var built := works.target
@@ -115,7 +118,7 @@ func settle(tick: int) -> bool:
 		works_done.emit(built)
 		changed = true
 	var held := works.start != RunwayWorks.NO_TICK and not works.scheduled()
-	if held and tick >= works.finish + RunwayWorks.HOLD_TICKS:
+	if held and tick >= maxi(works.finish + RunwayWorks.HOLD_TICKS, flown_until):
 		works.clear()
 		changed = true
 	return changed

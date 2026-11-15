@@ -8,12 +8,16 @@ extends RefCounted
 ## - offers and flight contracts: an accepted offer has the contract of the
 ##   same id with the same terms, an offer not accepted has none, and every
 ##   other contract is the starter (FlightSim.DEFAULT_ID);
-## - flight ids in the passengers part (each passenger's flight, the pending
-##   spawns, the scheduled flights, the no-shows and flight results) and in
-##   the rating's pending list: a live flight, or an occurrence of a saved
-##   contract on a day already issued (from its start day up to, not
-##   including, its next day), which FlightSim._find() answers from the
-##   contract after the occurrence was pruned;
+## - flight ids in the passengers part and in the rating's pending list, in
+##   two groups. Ids whose holders ask FlightSim about them as the game runs
+##   (each passenger's flight, the pending spawns and the scheduled flights:
+##   doors closed, boarding window, gate) must name a flight FlightSim knows
+##   after the load, a live or landed one (_known()): FlightSim._find()
+##   answers only those, so a passenger on an older occurrence would wait for
+##   doors that never close. Ids that are only kept as records and dropped
+##   once FlightSim stops listing the flight (the no-shows and flight
+##   results, the rating's pending list) may also name any occurrence of a
+##   saved contract on a day already issued (_issued());
 ## - stations and seats in the passengers part: every queue's station and
 ##   every passenger's station is a usable station of the layout built from
 ##   the saved grid, and every gate seat a passenger holds is a seat there.
@@ -136,20 +140,38 @@ static func _flight_id_problem(
 	var live := {}
 	for flight in flights["flights"]:
 		live[flight["id"]] = true
-	var named: Array[String] = []
+	# Asked about at run time: FlightSim must still know them.
+	var asked: Array[String] = []
 	for p in passengers["passengers"]:
-		named.append((p as Passenger).flight_id)
+		asked.append((p as Passenger).flight_id)
 	for entry in passengers["schedule"]:
-		named.append(str(entry["flight"]))
-	for key in ["scheduled", "no_shows", "flight_results"]:
+		asked.append(str(entry["flight"]))
+	for id in (passengers["scheduled"] as Dictionary).keys():
+		asked.append(str(id))
+	for id in asked:
+		if not _known(id, flights):
+			return "flight %s is named but is neither live nor landed" % id
+	# Kept as records only: an issued occurrence FlightSim forgot is fine.
+	var recorded: Array[String] = []
+	for key in ["no_shows", "flight_results"]:
 		for id in (passengers[key] as Dictionary).keys():
-			named.append(str(id))
+			recorded.append(str(id))
 	for entry in rating["pending"]:
-		named.append(str(entry["flight"]))
-	for id in named:
+		recorded.append(str(entry["flight"]))
+	for id in recorded:
 		if not live.has(id) and not _issued(id, flights):
 			return "flight %s is named but is neither live nor an issued occurrence" % id
 	return ""
+
+
+## Whether FlightSim, loaded from `flights`, knows flight `id`: a live flight
+## or a landed occurrence (today's or yesterday's, FlightSim._find()).
+static func _known(id: String, flights: Dictionary) -> bool:
+	for list: String in ["flights", "landed"]:
+		for flight: Dictionary in flights[list]:
+			if flight["id"] == id:
+				return true
+	return false
 
 
 ## Every arrival booking is for a flight the passengers part has scheduled
@@ -175,9 +197,11 @@ static func _landside_problem(
 	return ""
 
 
-## Whether `id` is an occurrence FlightSim._find() answers after it was
-## pruned: a saved contract's, on a day from its start day up to, not
-## including, its first day not yet issued.
+## Whether `id` is an occurrence that was issued: a saved contract's, on a
+## day from its start day up to, not including, its first day not yet
+## issued. FlightSim no longer answers it once it is pruned and dropped from
+## landed, so only ids kept as records may rely on this (_known() is the
+## check for ids that are asked about).
 static func _issued(id: String, flights: Dictionary) -> bool:
 	var occurrence := FlightTimetable.parse_occurrence(id)
 	if occurrence.is_empty():

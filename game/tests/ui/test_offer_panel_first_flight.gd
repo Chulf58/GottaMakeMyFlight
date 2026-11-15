@@ -145,8 +145,15 @@ func test_accepting_a_slot_that_has_passed_repeats_tomorrow_in_the_message() -> 
 func test_a_slot_two_days_out_names_the_day() -> void:
 	var offer := TestOfferBoard.record("O0N9", 0, 30)
 	var now := GameCalendar.tick_at(0, 23 * 60 + 58)
-	assert_int(FlightTimetable.first_day(offer, now) - GameCalendar.day_of(now)).is_equal(2)
-	assert_str(OfferPanel.first_flight_note(offer, now)).is_equal("first flight on Day 3")
+	# The first day depends on the taxi pair of the gate the offer gets (flight
+	# save version 9), so the note and the timetable are asked with one: a
+	# first-site gate's.
+	var timed := offer.duplicate()
+	timed["taxi"] = TaxiTimes.BASE
+	assert_int(FlightTimetable.first_day(timed, now) - GameCalendar.day_of(now)).is_equal(2)
+	assert_str(OfferPanel.first_flight_note(offer, now, TaxiTimes.BASE)).is_equal(
+		"first flight on Day 3"
+	)
 
 
 func test_a_note_is_a_fifth_card_line_under_the_departure() -> void:

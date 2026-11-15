@@ -14,9 +14,12 @@ extends RefCounted
 ##
 ## One instance per Runway holds the state, which is saved with it: the size the
 ## works build ("" for none), and the tick they start and end. After the size
-## switches, the booking is held HOLD_TICKS longer: a plane that met the works
-## and was planned around them is still flying, and dropping the booking would
-## re-plan it.
+## switches, the booking is held HOLD_TICKS longer, and until every live flight
+## whose first state came before the works ended has departed (Runway.settle()):
+## a plane that met the works and was planned around them may still be flying,
+## and dropping the booking would re-plan it. A flight with a longer taxi pair
+## (TaxiTimes) holds it longer than HOLD_TICKS; it is read from the flights'
+## own starts, so ending or moving a contract never shortens it.
 ##
 ## The static functions are the player's side: problem() says why the upgrade
 ## cannot be bought, buy() takes the money and books the works.
@@ -28,8 +31,9 @@ const HELD_TEXT := "The last runway works are still held in the timetable"
 
 ## Ticks the works take, by the size they build: 1 and 2 game hours.
 const TICKS := {PlaneClasses.MEDIUM: 1200, PlaneClasses.LARGE: 2400}
-## The ticks a flight takes from its first state to DEPARTED
-## (FlightSim.PHASE_TICKS added up), a test pins it.
+## The ticks a flight at TaxiTimes.BASE takes from its first state to DEPARTED
+## (FlightSim.PHASE_TICKS added up), a test pins it: the least the booking is
+## held after the works end.
 const HOLD_TICKS := 3900
 const SAVE_KEYS := ["target", "start", "finish"]
 const NO_TICK := -1

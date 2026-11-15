@@ -31,7 +31,7 @@ func test_terms_without_traits_make_a_plain_contract() -> void:
 ## Contracts gained the traits term in flight save version 8; a version 7 save
 ## is refused, with no migration.
 func test_a_version_7_save_of_the_flights_is_refused() -> void:
-	assert_int(FlightSim.SAVE_VERSION).is_equal(8)
+	assert_int(FlightSim.SAVE_VERSION).is_equal(9)
 	assert_bool(_sim.accept_contract(_terms("OLD"))).is_true()
 	var data: Dictionary = JSON.parse_string(JSON.stringify(_sim.to_snapshot()))
 	data["save_version"] = 7
@@ -63,6 +63,9 @@ func test_a_stored_contract_must_hold_its_traits() -> void:
 	var stored := _terms("STORED")
 	stored["gate"] = FlightSim.DEFAULT_GATE
 	stored["first_day"] = 0
+	# A stored contract also holds its taxi pair (flight save version 9); this
+	# case is about the traits, so the pair is there from the start.
+	stored["taxi"] = TaxiTimes.BASE
 	assert_str(FlightContract.problem(stored, FlightContract.KEYS)).contains("traits")
 	stored["traits"] = {}
 	assert_str(FlightContract.problem(stored, FlightContract.KEYS)).is_empty()

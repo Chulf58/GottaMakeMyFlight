@@ -4,7 +4,8 @@ extends RefCounted
 ## full-screen-day-planner-with-one-row-per-ga), a pure function of the
 ## FlightSim: one row per gate (FlightSim.gate_ids()) with its colour, and in
 ## each row one bar per flight whose gate hold overlaps the day. A hold runs from
-## the flight's first state (SCHEDULED) to DEPARTED (FlightTimetable.starts_for),
+## the flight's first state (SCHEDULED) to DEPARTED (an issued flight's own
+## starts, else FlightTimetable.starts_for with its contract's taxi pair),
 ## so a late-evening flight's bar starts the evening before and an early flight
 ## can start on the day before; the bar is cut at midnight and says so. The
 ## gate is the one the occurrence holds: an issued occurrence keeps the gate it
@@ -51,9 +52,12 @@ static func bars_for_day(sim: FlightSim, day: int) -> Array[Dictionary]:
 	return bars
 
 
-## The row's occurrence's gate hold: its first state and DEPARTED, in ticks.
+## The row's occurrence's gate hold: its first state and DEPARTED, in ticks. An
+## occurrence the sim has issued keeps the starts it was issued with (its taxi
+## pair may not be its contract's now), so its hold is read from the sim; a day
+## not yet issued takes its contract's times (FlightTimetable.starts_for).
 static func _hold(sim: FlightSim, row: Dictionary, departure_day: int) -> Hold:
-	if row["contract"] != "":
+	if row["contract"] != "" and sim.state_of(row["flight"]) < 0:
 		var starts := FlightTimetable.starts_for(sim.contract_of(row["contract"]), departure_day)
 		return Hold.new(starts[0], starts[FlightSim.State.DEPARTED])
 	return Hold.new(

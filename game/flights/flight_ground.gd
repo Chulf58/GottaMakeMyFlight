@@ -70,14 +70,18 @@ static func fallback(gate: String) -> Dictionary:
 	return {"stand": stand, "max_class": PlaneClasses.LARGE}
 
 
+## The lane layout routes() builds on (TaxiRoutes): the north lane alone. With
+## the stands it is the route context of a plan and of a taxi pair, so
+## FlightSim keys its cached plans and planning_changed on it too.
+static func layout() -> Dictionary:
+	return TaxiRoutes.north_only(points())
+
+
 ## Each phase's path, by FlightSim.State, for a plane of `plane_class` at
 ## `stand`: APPROACH, LANDING, TAXI_IN, PUSHBACK, TAXI_OUT and TAKEOFF, as
-## TaxiRoutes builds them on the north lane.
+## TaxiRoutes builds them on layout().
 static func routes(stand: Dictionary, plane_class: String) -> Dictionary:
-	var p := points()
-	return TaxiRoutes.phase_paths(
-		p, TaxiRoutes.stand_ends(stand), plane_class, TaxiRoutes.north_only(p)
-	)
+	return TaxiRoutes.phase_paths(points(), TaxiRoutes.stand_ends(stand), plane_class, layout())
 
 
 ## A GroundPlanner request for flight `id`.

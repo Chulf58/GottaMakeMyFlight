@@ -103,8 +103,11 @@ func test_several_days_run_without_growing_state() -> void:
 	var snapshot := _sim.to_snapshot()
 	assert_int(snapshot["flights"].size()).is_equal(1)
 	assert_int(snapshot["next_day"].size()).is_equal(2)
-	# Only the digit counts grow: the tick and the eleven start ticks gain one digit each.
-	assert_int(JSON.stringify(snapshot).length()).is_less_equal(day_one_size + 12)
+	assert_int(snapshot["landed"].size()).is_equal(2)
+	# Only the digit counts grow: the tick and the eleven start ticks of the live
+	# flight and of each of yesterday's two landed ones (kept since flight save
+	# version 9) gain one digit each at most.
+	assert_int(JSON.stringify(snapshot).length()).is_less_equal(day_one_size + 1 + 3 * 11)
 
 
 ## flight_at_gate holds each day's occurrence from SCHEDULED until it departs
