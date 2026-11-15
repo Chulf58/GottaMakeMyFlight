@@ -2,6 +2,11 @@ class_name LandKit
 extends RefCounted
 ## Test helpers for the site's land plots (LandPlots).
 
+## The grid cells of side land west of the first site: a fixture written for
+## the first site adds it to its cells so it keeps its world place
+## (SiteDefinition.centre_rect(), x -43 to 43).
+const FIRST_SITE := Vector2i(85, 0)
+
 
 ## Makes `land` own every plot of the site, bought count unchanged, so a test
 ## about something else can build anywhere on the site's grid.

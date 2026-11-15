@@ -9,8 +9,8 @@ extends GdUnitTestSuite
 
 const SITE := preload("res://build/terminal_site.tres")
 ## A 3 x 3 room on the plot's south edge, its entrance in the south wall.
-const ROOM := Rect2i(40, 36, 3, 3)
-const ENTRANCE := Vector2i(41, 38)
+const ROOM := Rect2i(Vector2i(40, 36) + LandKit.FIRST_SITE, Vector2i(3, 3))
+const ENTRANCE := Vector2i(41, 38) + LandKit.FIRST_SITE
 
 var _mode: BuildMode
 var _roof: RoofView

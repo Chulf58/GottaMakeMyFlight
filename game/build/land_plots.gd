@@ -3,11 +3,13 @@ extends RefCounted
 ## The airport site's land plots and which of them the player owns (decision
 ## player-builds-the-terminal-floor-outer-walls-auto-roof-land-plots-starter-
 ## one-floor, answer 3, and the land-plot rulings of board ee9914e6). The site
-## grid is cut into SiteDefinition.plot_counts plots across and down from cell
-## (0, 0), as evenly as whole cells allow: a width that does not divide gives
-## its extra cells one each to the first columns (ruling land-plots-are-near-
-## even-columns-of-22-22-21-and-21-m-by-25: 22, 22, 21 and 21 on the 86 cell
-## site, six rows of 25 down its 150). A new game owns every plot the starter shell stands on
+## grid is cut into columns of SiteDefinition.plot_columns cells from cell
+## (0, 0), west to east (side land, the first 86 m site, side land: decision
+## land-west-and-east-of-the-site-becomes-buyable-that-side-s-t), and into
+## SiteDefinition.plot_rows rows as evenly as whole cells allow: a length that
+## does not divide gives its extra cells one each to the first parts (ruling
+## land-plots-are-near-even-columns-of-22-22-21-and-21-m-by-25: six rows of 25
+## down the 150 cell site). A new game owns every plot the starter shell stands on
 ## and every plot that shares an edge or a corner with one (own_start(),
 ## ruling a-new-game-owns-the-land-plots-under-the-starter-shell-plus). The
 ## player buys a plot that shares an edge with owned land at the price
@@ -43,6 +45,12 @@ var grid_size := Vector2i.ZERO
 var plots := Vector2i.ZERO
 ## How many plots the player has bought; the next one's price depends on it.
 var bought := 0
+## The plot columns the player may buy in (first column, count). On the site
+## the side land is locked while SiteDefinition.SIDE_LAND_OPEN is false, so
+## only the first site's columns are for sale (for_site()).
+var open_columns := Vector2i.ZERO
+## Why the plots could not be cut (column_problem()), or "" when they were.
+var error := ""
 
 ## 1 per owned plot, at column + row * plots.x.
 var _owned := PackedByteArray()
@@ -52,18 +60,84 @@ var _column_starts := PackedInt32Array()
 var _row_starts := PackedInt32Array()
 
 
-func _init(site_grid_size := Vector2i.ONE, counts := Vector2i.ONE) -> void:
+## Plots over a grid of `site_grid_size` cells, `counts` across and down cut
+## as evenly as whole cells allow, or across in columns of `column_widths`
+## cells, west to east, when it is given. Widths that are not all positive or
+## do not add up to the grid's width are refused: the error is pushed and kept
+## in `error`, and the land has no plots at all (no other layout stands in).
+func _init(
+	site_grid_size := Vector2i.ONE, counts := Vector2i.ONE, column_widths := PackedInt32Array()
+) -> void:
 	grid_size = site_grid_size
 	plots = counts.clamp(Vector2i.ONE, grid_size.max(Vector2i.ONE))
 	_column_starts = _starts(grid_size.x, plots.x)
+	if not column_widths.is_empty():
+		var problem := column_problem(column_widths, grid_size.x)
+		if problem != "":
+			_refuse(problem)
+			return
+		plots.x = column_widths.size()
+		_column_starts = _edges(column_widths)
 	_row_starts = _starts(grid_size.y, plots.y)
+	open_columns = Vector2i(0, plots.x)
 	_owned.resize(plots.x * plots.y)
 	_owned.fill(0)
 
 
-## Unowned plots over `site`'s grid.
+## Makes this a refused land: pushes `problem`, keeps it in `error` and leaves
+## no plots at all, so nothing is owned, for sale or buildable (edit_problem()).
+func _refuse(problem: String) -> void:
+	error = problem
+	push_error("LandPlots: %s" % problem)
+	plots = Vector2i.ZERO
+	_column_starts = PackedInt32Array()
+	_row_starts = PackedInt32Array()
+	open_columns = Vector2i.ZERO
+	_owned = PackedByteArray()
+
+
+## The land plots over `site`'s grid, none owned. When the site's
+## plot_columns do not cut its grid (site_problem(), an empty list included)
+## the land is refused (`error` set, no plots), so building fails closed.
 static func for_site(site: SiteDefinition) -> LandPlots:
-	return LandPlots.new(site.grid_size, site.plot_counts)
+	var problem := site_problem(site)
+	if problem != "":
+		var refused := LandPlots.new(site.grid_size)
+		refused._refuse(problem)
+		return refused
+	var land := LandPlots.new(site.grid_size, site.plot_counts(), site.plot_columns)
+	if not SiteDefinition.SIDE_LAND_OPEN:
+		land.open_columns = site.centre_columns
+	return land
+
+
+## Why `site`'s plot_columns do not cut its grid, or "" (column_problem(); a
+## site with no plot columns is refused too).
+static func site_problem(site: SiteDefinition) -> String:
+	if site.plot_columns.is_empty():
+		return "the site has no plot columns"
+	return column_problem(site.plot_columns, site.grid_size.x)
+
+
+## Why columns of `widths` cells cannot cut a grid `width` cells wide, or "":
+## every width must be at least one cell and together they must make `width`.
+static func column_problem(widths: PackedInt32Array, width: int) -> String:
+	var total := 0
+	for i in widths.size():
+		if widths[i] < 1:
+			return "column %d is %d cells wide; every column needs a cell" % [i, widths[i]]
+		total += widths[i]
+	if total != width:
+		return "the column widths add up to %d cells, not the grid's %d" % [total, width]
+	return ""
+
+
+## Where columns of `widths` cells start, then where the last one ends.
+static func _edges(widths: PackedInt32Array) -> PackedInt32Array:
+	var out := PackedInt32Array([0])
+	for width in widths:
+		out.append(out[out.size() - 1] + width)
+	return out
 
 
 ## Where `count` near-even parts of `length` cells start, then `length`: the
@@ -127,14 +201,19 @@ func touches_owned(plot: Vector2i) -> bool:
 	return false
 
 
-## The plots the player may buy now: on the site, not owned, touching owned
-## land. Row by row.
+## Whether `plot` lies in a column that is for sale (open_columns).
+func is_open(plot: Vector2i) -> bool:
+	return plot.x >= open_columns.x and plot.x < open_columns.x + open_columns.y
+
+
+## The plots the player may buy now: on the site, in an open column, not
+## owned, touching owned land. Row by row.
 func buyable_plots() -> Array[Vector2i]:
 	var out: Array[Vector2i] = []
 	for y in plots.y:
 		for x in plots.x:
 			var plot := Vector2i(x, y)
-			if not is_owned(plot) and touches_owned(plot):
+			if is_open(plot) and not is_owned(plot) and touches_owned(plot):
 				out.append(plot)
 	return out
 
@@ -147,18 +226,30 @@ func next_price() -> int:
 ## Why `plot` cannot be bought now from `wallet` (null: buying is free), as a
 ## BuildResult refusal, or null when it can.
 func buy_problem(plot: Vector2i, wallet: Wallet) -> BuildResult:
-	if not in_site(plot):
-		return BuildResult.refused(BuildResult.Reason.OUT_OF_BOUNDS)
-	if is_owned(plot):
-		return BuildResult.refused(BuildResult.Reason.LAND_OWNED)
-	if not touches_owned(plot):
-		return BuildResult.refused(BuildResult.Reason.LAND_NOT_TOUCHING)
+	var where := _where_problem(plot)
+	if where != null:
+		return where
 	var price := next_price()
 	if price < 0:
 		return BuildResult.refused(BuildResult.Reason.UNPRICED)
 	if wallet != null and not wallet.can_afford(price):
 		return BuildResult.refused(BuildResult.Reason.CANT_AFFORD)
 	return null
+
+
+## Why `plot` is not one the player may buy wherever the money comes from: off
+## the site, owned, in a locked column or not touching owned land; else null.
+func _where_problem(plot: Vector2i) -> BuildResult:
+	var reason := -1
+	if not in_site(plot):
+		reason = BuildResult.Reason.OUT_OF_BOUNDS
+	elif is_owned(plot):
+		reason = BuildResult.Reason.LAND_OWNED
+	elif not is_open(plot):
+		reason = BuildResult.Reason.LOCKED
+	elif not touches_owned(plot):
+		reason = BuildResult.Reason.LAND_NOT_TOUCHING
+	return BuildResult.refused(reason) if reason >= 0 else null
 
 
 ## Buys `plot`, paying next_price() from `wallet` (Wallet.Category.BUILD; null:
@@ -181,9 +272,11 @@ func buy(plot: Vector2i, wallet: Wallet) -> BuildResult:
 
 
 ## Owns every plot under one of `cells` and every plot that shares an edge or
-## a corner with such a plot, as a new game does for the starter shell. Buys
-## nothing: `bought` stays as it is.
-func own_around(cells: Array[Vector2i]) -> void:
+## a corner with such a plot, as a new game does for the starter shell, but
+## only plots inside `within` (in plots; empty: the whole site). Buys nothing:
+## `bought` stays as it is.
+func own_around(cells: Array[Vector2i], within := Rect2i()) -> void:
+	var area := within if within.has_area() else Rect2i(Vector2i.ZERO, plots)
 	var under := {}
 	for cell in cells:
 		var plot := plot_of(cell)
@@ -193,28 +286,33 @@ func own_around(cells: Array[Vector2i]) -> void:
 		for dy in range(-1, 2):
 			for dx in range(-1, 2):
 				var near := plot + Vector2i(dx, dy)
-				if in_site(near):
+				if in_site(near) and area.has_point(near):
 					_owned[near.x + near.y * plots.x] = 1
 	changed.emit()
 
 
 ## A new game's land on `site`: the starter shell's plots plus one ring
-## (own_around() of every cell the shell's edits name).
+## (own_around() of every cell the shell's edits name), the ring kept on the
+## first site's columns (SiteDefinition.centre_columns), so a new game owns the
+## same 6 plots it did before the side land and buys any side land it wants.
 func own_start(site: SiteDefinition) -> void:
 	var cells: Array[Vector2i] = []
 	for edit in ReferenceTerminal.shell_edits(site.starter_offset):
 		cells.append(edit.cell)
-	own_around(cells)
+	own_around(cells, Rect2i(site.centre_columns.x, 0, site.centre_columns.y, plots.y))
 
 
 ## The LAND_NOT_OWNED refusal for an edit that builds on land the player does
 ## not own, else null. Floor, an object's footprint and a room need every
 ## cell owned; a wall needs an owned cell on one side of its edge, so the
 ## outer wall of owned land can stand on its border. Removals pass, and cells
-## off the grid are left to the grid's own OUT_OF_BOUNDS.
+## off the grid are left to the grid's own OUT_OF_BOUNDS. A refused land
+## (`error` set) refuses every edit that builds.
 func edit_problem(edit: BuildEdit) -> BuildResult:
 	if REMOVALS.has(edit.kind):
 		return null
+	if error != "":
+		return BuildResult.refused(BuildResult.Reason.LAND_NOT_OWNED)
 	var unowned := false
 	if edit.kind == BuildEdit.Kind.PLACE_WALL:
 		var beyond := edit.cell + BuildGrid.SIDE_STEP[edit.side]
@@ -323,8 +421,12 @@ func to_snapshot() -> Dictionary:
 ## be well formed (snapshot_problem()) and a state the game can reach, which
 ## is a new game's start land plus plots bought one at a time beside owned land:
 ## no plot twice, all the start land owned, `bought` the plots beyond it, and
-## every owned plot joined to the start land by edges.
+## every owned plot joined to the start land by edges. First of all the site's
+## plot columns must cut its grid (site_problem()).
 static func problem(data: Dictionary, site: SiteDefinition) -> String:
+	var columns := site_problem(site)
+	if columns != "":
+		return columns
 	var land := LandPlots.for_site(site)
 	var why := land.snapshot_problem(data)
 	if why != "":
@@ -342,6 +444,8 @@ func _reachable_problem(data: Dictionary, start: Array[Vector2i]) -> String:
 		var plot := Vector2i(int(entry[0]), int(entry[1]))
 		if owned.has(plot):
 			return "owned plot %s is listed twice" % [entry]
+		if not is_open(plot):
+			return "owned plot %s is in a column not for sale" % [entry]
 		owned[plot] = true
 	for plot in start:
 		if not owned.has(plot):
@@ -411,6 +515,9 @@ func _owned_problem(owned: Variant) -> String:
 ## land a to_snapshot() dictionary `data` owns, or "". A wall needs an owned
 ## cell on one side, as in edit_problem().
 static func grid_problem(data: Dictionary, site: SiteDefinition, grid: BuildGrid) -> String:
+	var columns := site_problem(site)
+	if columns != "":
+		return columns
 	var land := LandPlots.for_site(site)
 	if not land.from_snapshot(data):
 		return "it was refused (see the error log)"

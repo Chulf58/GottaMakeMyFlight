@@ -7,9 +7,11 @@ extends GdUnitTestSuite
 ## cannot pay for still shows its shortfall.
 
 const SITE := preload("res://build/terminal_site.tres")
+## Side land west of the first site: grid cells shift this far east.
+const SIDE_LAND := Vector2i(85, 0)
 ## A north exit placed straight on the grid, so it was never paid for and its
 ## removal refunds nothing: the wall it leaves is the removal's whole cost.
-const EXIT_CELL := Vector2i(11, 112)
+const EXIT_CELL := Vector2i(11, 112) + SIDE_LAND
 
 var _finances: Finances
 var _mode: BuildMode

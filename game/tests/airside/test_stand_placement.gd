@@ -8,11 +8,14 @@ extends GdUnitTestSuite
 ## walk over 30 m is warned about.
 
 const SITE := preload("res://build/terminal_site.tres")
+## The side land's 85 grid columns west of the first site (SiteDefinition):
+## the cells below are written in the first site's columns and moved by it.
+const SIDE_LAND := Vector2i(85, 0)
 ## The starter shell's exit on the site grid: ReferenceTerminal.EXIT_CELL
 ## moved 110 rows.
-const STARTER_EXIT := Vector2i(20, 112)
+const STARTER_EXIT := Vector2i(20, 112) + SIDE_LAND
 ## A second exit in the shell's north wall, 9 m west of the starter's.
-const WEST_EXIT := Vector2i(11, 112)
+const WEST_EXIT := Vector2i(11, 112) + SIDE_LAND
 
 var _grid: BuildGrid
 
@@ -90,7 +93,7 @@ func test_a_building_in_the_starter_column_slides_the_line_to_the_other_exit() -
 	assert_int(_place(live)["stand"]["exit"]).is_equal(_exit_at(STARTER_EXIT))
 	# Floor at x -18, z -180: on the starter stand's way north, beside the
 	# west exit's.
-	_paint([Vector2i(25, 30)] as Array[Vector2i])
+	_paint([Vector2i(25, 30) + SIDE_LAND] as Array[Vector2i])
 	var result := _place(live)
 	assert_str(result["status"]).is_equal(StandPlacement.OK)
 	assert_int(result["stand"]["exit"]).is_equal(west)
@@ -101,7 +104,16 @@ func test_a_building_between_exit_and_door_rejects_the_candidate_on_passenger_re
 	var exit := _exit_at(STARTER_EXIT)
 	var live := StandPlacement.for_exit(_grid, exit)
 	# Floor round the exit's outward cell (20, 111), in the gap before the nose.
-	_paint([Vector2i(19, 111), Vector2i(21, 111), Vector2i(20, 110)] as Array[Vector2i])
+	_paint(
+		(
+			[
+				Vector2i(19, 111) + SIDE_LAND,
+				Vector2i(21, 111) + SIDE_LAND,
+				Vector2i(20, 110) + SIDE_LAND
+			]
+			as Array[Vector2i]
+		)
+	)
 	var clear := StandPlacement.aircraft_clear(_grid, SITE, live)
 	var walk := StandPlacement.walk_of(_grid, SITE, exit, live)
 	print("aircraft clear %s, walk points %d" % [clear, walk.size()])
@@ -114,8 +126,8 @@ func test_a_building_between_exit_and_door_rejects_the_candidate_on_passenger_re
 func test_the_deepest_legal_stand_pushes_back_short_of_the_taxi_lane() -> void:
 	_grid = BuildGrid.new(SITE.grid_size, SITE.grid_origin)
 	# The reference terminal with its exit on the grid's north row.
-	assert_bool(ReferenceTerminal.build(_grid, Vector2i(0, -2))).is_true()
-	var exit := _exit_at(Vector2i(20, 0))
+	assert_bool(ReferenceTerminal.build(_grid, Vector2i(0, -2) + SIDE_LAND)).is_true()
+	var exit := _exit_at(Vector2i(20, 0) + SIDE_LAND)
 	var result := _place({})
 	var stand: Dictionary = result["stand"]
 	var back := StandPlacement.pushback_end(stand)
@@ -139,7 +151,7 @@ func test_two_exits_the_shorter_walk_wins_and_a_tie_keeps_the_live_exit() -> voi
 	assert_int(_place(on_starter)["stand"]["exit"]).is_equal(starter)
 	assert_int(_place(on_west)["stand"]["exit"]).is_equal(west)
 	# Floor straight out of the starter exit makes its walk go round it.
-	_paint([Vector2i(20, 110)] as Array[Vector2i])
+	_paint([Vector2i(20, 110) + SIDE_LAND] as Array[Vector2i])
 	var longer := StandPlacement.walk_length(
 		StandPlacement.walk_of(_grid, SITE, starter, on_starter)
 	)
@@ -162,7 +174,7 @@ func test_a_walk_over_30_m_warns_and_refuses_nothing() -> void:
 	assert_float(control["longest_walk_m"]).is_less(StandPlacement.WALK_WARNING_M)
 	assert_bool(control["warning"]).is_false()
 	# An exit in the south wall walks round the shell to the plane door.
-	_add_exit(Vector2i(12, 127), BuildGrid.Side.SOUTH, 2)
+	_add_exit(Vector2i(12, 127) + SIDE_LAND, BuildGrid.Side.SOUTH, 2)
 	var result := _place(StandPlacement.starter_stand(_grid, SITE))
 	assert_str(result["status"]).is_equal(StandPlacement.OK)
 	assert_int(result["stand"]["exit"]).is_equal(_exit_at(STARTER_EXIT))

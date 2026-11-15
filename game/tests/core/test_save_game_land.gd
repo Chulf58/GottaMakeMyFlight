@@ -7,8 +7,10 @@ extends GdUnitTestSuite
 ## as it was. One boot of main.tscn, with the starter terminal built.
 
 const SEED := 4_401_011
-## A plot touching a new game's land (columns 0 and 1, rows 3 to 5).
-const BOUGHT := Vector2i(2, 4)
+## A plot touching a new game's land (columns 4 and 5, rows 3 to 5).
+const BOUGHT := Vector2i(6, 4)
+## Side land west of the first site: grid cells shift this far east.
+const SIDE_LAND := Vector2i(85, 0)
 
 var _main: Node
 var _save: SaveGame
@@ -55,7 +57,11 @@ func test_a_bought_plot_is_saved_and_loaded_with_the_count_bought() -> void:
 	(
 		assert_bool(
 			_land().from_snapshot(
-				{"plot_counts": [4, 6], "owned": start.map(func(p): return [p.x, p.y]), "bought": 0}
+				{
+					"plot_counts": [12, 6],
+					"owned": start.map(func(p): return [p.x, p.y]),
+					"bought": 0
+				}
 			)
 		)
 		. is_true()
@@ -66,36 +72,36 @@ func test_a_bought_plot_is_saved_and_loaded_with_the_count_bought() -> void:
 	assert_int(_land().bought).is_equal(1)
 	assert_int(_land().next_price()).is_equal(PriceTable.price_of_land_plot(1))
 	# The live grid refuses building off the loaded land and takes it on it.
-	var off := BuildEdit.paint_floor(Vector2i(80, 10), BuildGrid.FLOOR_TILE, 1)
-	var on := BuildEdit.paint_floor(Vector2i(60, 110), BuildGrid.FLOOR_TILE, 1)
+	var off := BuildEdit.paint_floor(Vector2i(80, 10) + SIDE_LAND, BuildGrid.FLOOR_TILE, 1)
+	var on := BuildEdit.paint_floor(Vector2i(60, 110) + SIDE_LAND, BuildGrid.FLOOR_TILE, 1)
 	assert_int(_mode.grid.validate(off).reason).is_equal(BuildResult.Reason.LAND_NOT_OWNED)
 	assert_bool(_mode.grid.validate(on).ok).is_true()
 
 
 func test_a_save_whose_land_misses_a_built_cell_is_refused() -> void:
 	var clean := _taken()
-	# A new game's land, then (2, 4) bought and a floor built on it.
+	# A new game's land, then (6, 4) bought and a floor built on it.
 	var start := _land().owned_plots().filter(func(p: Vector2i) -> bool: return p != BOUGHT)
 	var snapshot := {
-		"plot_counts": [4, 6],
+		"plot_counts": [12, 6],
 		"owned": start.map(func(p: Vector2i) -> Array: return [p.x, p.y]),
 		"bought": 0,
 	}
 	assert_bool(_land().from_snapshot(snapshot)).is_true()
 	assert_bool(_land().buy(BOUGHT, _mode.wallet()).ok).is_true()
-	var cell := Vector2i(60, 110)
+	var cell := Vector2i(60, 110) + SIDE_LAND
 	assert_bool(_mode.grid.apply(BuildEdit.paint_floor(cell, BuildGrid.FLOOR_TILE, 1)).ok).is_true()
 	var data := _taken()
 	# The control: the save as taken loads, with the floor on the bought plot.
 	assert_bool(_save.load_world(data)).is_true()
 	assert_bool(_mode.grid.floor_at(cell) != BuildGrid.FLOOR_NONE).is_true()
-	# (2, 3) is as reachable from the start land and keeps `bought` at 1, but
+	# (6, 3) is as reachable from the start land and keeps `bought` at 1, but
 	# the floor now stands on land the save does not own.
 	var owned: Array = (data["land"]["owned"] as Array).map(
-		func(p: Array) -> Array: return [2, 3] if int(p[0]) == 2 and int(p[1]) == 4 else p
+		func(p: Array) -> Array: return [6, 3] if int(p[0]) == 6 and int(p[1]) == 4 else p
 	)
 	assert_int(owned.size()).is_equal(7)
-	assert_array(owned).contains([[2, 3]])
+	assert_array(owned).contains([[6, 3]])
 	data["land"]["owned"] = owned
 	assert_str(LandPlots.problem(data["land"], _mode.site)).is_empty()
 	var before := SaveTestKit.checksum(_main)

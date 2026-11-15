@@ -145,7 +145,7 @@ func test_remove_takes_a_built_spot_off_the_grid_and_refunds_half() -> void:
 
 
 func test_remove_on_the_grid_still_removes_grid_things() -> void:
-	var cell := Vector2i(10, 10)
+	var cell := Vector2i(10, 10) + LandKit.FIRST_SITE
 	_mode.set_tool(BuildMode.Tool.FLOOR)
 	assert_bool(_mode.apply_at(_mode.grid.cell_to_world(cell)).ok).is_true()
 	_mode.set_tool(BuildMode.Tool.REMOVE)
@@ -187,7 +187,7 @@ func test_the_close_tool_opens_a_closed_car_park_again() -> void:
 
 func test_ctrl_z_undoes_the_newest_of_the_grid_and_landside_actions_in_order() -> void:
 	var start := _balance()
-	var cell := Vector2i(10, 10)
+	var cell := Vector2i(10, 10) + LandKit.FIRST_SITE
 	_mode.set_tool(BuildMode.Tool.FLOOR)
 	assert_bool(_mode.apply_at(_mode.grid.cell_to_world(cell)).ok).is_true()
 	_mode.set_tool(BuildMode.Tool.SURFACE_LOT)
@@ -211,7 +211,7 @@ func test_ctrl_z_undoes_the_newest_of_the_grid_and_landside_actions_in_order() -
 
 
 func test_a_landside_action_before_a_grid_action_is_undone_after_it() -> void:
-	var cell := Vector2i(10, 10)
+	var cell := Vector2i(10, 10) + LandKit.FIRST_SITE
 	_mode.set_tool(BuildMode.Tool.SURFACE_LOT)
 	assert_bool(_mode.apply_at(IN_LOT_0).ok).is_true()
 	_mode.set_tool(BuildMode.Tool.FLOOR)

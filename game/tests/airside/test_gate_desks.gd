@@ -13,15 +13,18 @@ extends GdUnitTestSuite
 ## so their stands' sweeps (41.2 m wide) do not meet.
 
 const SITE := preload("res://build/terminal_site.tres")
+## The side land's 85 grid columns west of the first site (SiteDefinition):
+## the cells below are written in the first site's columns and moved by it.
+const SIDE_LAND := Vector2i(85, 0)
 const EAST := Vector2i(44, 0)
-const EXIT_WEST := Vector2i(20, 112)
+const EXIT_WEST := Vector2i(20, 112) + SIDE_LAND
 const EXIT_EAST := EXIT_WEST + EAST
-const DESK_WEST := Vector2i(19, 115)
+const DESK_WEST := Vector2i(19, 115) + SIDE_LAND
 const DESK_EAST := DESK_WEST + EAST
 ## A second north exit in the starter shell's wall, 9 m west of its exit.
-const EXIT_NEAR := Vector2i(11, 112)
+const EXIT_NEAR := Vector2i(11, 112) + SIDE_LAND
 ## By the entrance, far from every exit.
-const DESK_NOWHERE := Vector2i(12, 125)
+const DESK_NOWHERE := Vector2i(12, 125) + SIDE_LAND
 
 var _grid: SiteGrid
 var _flights: FlightSim
@@ -98,11 +101,13 @@ func test_a_desk_whose_stand_would_overlap_another_gates_is_refused() -> void:
 
 
 func test_a_link_stays_when_a_nearer_exit_is_built() -> void:
-	var desk := _grid.apply(BuildEdit.place_object(GateDesks.DESK, Vector2i(17, 113), 0))
+	var desk := _grid.apply(
+		BuildEdit.place_object(GateDesks.DESK, Vector2i(17, 113) + SIDE_LAND, 0)
+	)
 	assert_bool(desk.ok).is_true()
 	var first := _grid.object_at(EXIT_WEST)
 	assert_int(_gates.bindings[0]["exit"]).is_equal(first)
-	var nearer := _add_exit(Vector2i(16, 112))
+	var nearer := _add_exit(Vector2i(16, 112) + SIDE_LAND)
 	print("linked exit %d, nearer exit %d" % [_gates.bindings[0]["exit"], nearer])
 	assert_int(_gates.bindings[0]["exit"]).is_equal(first)
 	# A control: with no link kept, the desk would take the nearer exit.

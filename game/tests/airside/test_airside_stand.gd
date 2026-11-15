@@ -141,8 +141,10 @@ func test_the_hold_lines_sit_on_the_stubs_clear_of_the_runway() -> void:
 
 
 ## Every taxi route runs strictly west from the runway exit to the stand and
-## from the stand to the runway entry, for stands across the whole site and
-## for two gates at once: each step along the lane goes west (x falls), and
+## from the stand to the runway entry, for stands across the whole first site
+## (SiteDefinition.centre_rect(); side land stands wait on routes that follow
+## what is built) and for two gates at once: each step along the lane goes
+## west (x falls), and
 ## every other step (the stubs and each stand's way north) runs straight
 ## north or south (x stays). Returns the metres walked along the lane.
 func _assert_westbound(path: PackedVector3Array) -> float:
@@ -160,8 +162,9 @@ func _assert_westbound(path: PackedVector3Array) -> float:
 
 
 func test_every_taxi_route_runs_strictly_west() -> void:
-	var low := SITE.grid_origin
-	var high := SITE.grid_origin + Vector3(SITE.grid_size.x, 0.0, SITE.grid_size.y)
+	var centre: Rect2 = SITE.centre_rect()
+	var low := Vector3(centre.position.x, SITE.grid_origin.y, centre.position.y)
+	var high := low + Vector3(centre.size.x, 0.0, centre.size.y)
 	var checked := 0
 	var lane_metres := 0.0
 	for door_x in [low.x + 0.5, 0.5, high.x - 0.5]:
@@ -361,8 +364,9 @@ func _peak_paused(state: int, path: PackedVector3Array, hold_s: float) -> float:
 ## per class all the same. The longest pause sits at the route's hold line:
 ## HoldIn on the way in, HoldRunway on the way out.
 func test_taxi_peak_speed_stays_under_16_m_s_on_the_longest_legal_route() -> void:
-	var low := SITE.grid_origin
-	var high := SITE.grid_origin + Vector3(SITE.grid_size.x, 0.0, SITE.grid_size.y)
+	var centre: Rect2 = SITE.centre_rect()
+	var low := Vector3(centre.position.x, SITE.grid_origin.y, centre.position.y)
+	var high := low + Vector3(centre.size.x, 0.0, centre.size.y)
 	var hold_in := _at(&"RunwayExit").distance_to(_at(&"HoldIn"))
 	var hold_out := _at(&"RunwayEntry").distance_to(_at(&"HoldRunway"))
 	var worst := 0.0

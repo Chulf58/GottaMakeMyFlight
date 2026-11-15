@@ -16,7 +16,8 @@ func before_test() -> void:
 	_mode = _main.get_node("BuildMode")
 	# The edits here paint floor off a new game's land and building on unowned
 	# land is refused (LandPlots), so plots are bought out to it; a save accepts that.
-	LandKit.buy_to(_mode.land_tool.land, Vector2i(0, 0))
+	# The first site's north-west plot (side land is locked).
+	LandKit.buy_to(_mode.land_tool.land, Vector2i(4, 0))
 
 
 func after_test() -> void:
@@ -37,7 +38,9 @@ func test_the_game_opens_framed_on_the_starter_terminal_floor() -> void:
 func test_an_ordinary_build_edit_does_not_reframe_the_camera() -> void:
 	var before_home := _camera.home_position
 	var before_position := _camera.position
-	var result := _mode.grid.apply(BuildEdit.paint_floor(Vector2i(3, 3), BuildGrid.FLOOR_TILE, 1))
+	var result := _mode.grid.apply(
+		BuildEdit.paint_floor(Vector2i(3, 3) + LandKit.FIRST_SITE, BuildGrid.FLOOR_TILE, 1)
+	)
 	assert_bool(result.ok).is_true()
 	assert_vector(_camera.home_position).is_equal(before_home)
 	assert_vector(_camera.position).is_equal(before_position)
@@ -45,7 +48,9 @@ func test_an_ordinary_build_edit_does_not_reframe_the_camera() -> void:
 
 func test_loading_a_save_reframes_the_camera_on_what_it_built() -> void:
 	var save: SaveGame = _main.get_node("SaveGame")
-	_mode.grid.apply(BuildEdit.paint_floor(Vector2i(3, 3), BuildGrid.FLOOR_TILE, 1))
+	_mode.grid.apply(
+		BuildEdit.paint_floor(Vector2i(3, 3) + LandKit.FIRST_SITE, BuildGrid.FLOOR_TILE, 1)
+	)
 	# A build edit settles on the next tick, and a save waits for it.
 	SaveTestKit.step(_main)
 	var data := save.snapshot()
@@ -56,7 +61,7 @@ func test_loading_a_save_reframes_the_camera_on_what_it_built() -> void:
 	assert_bool(save.load_world(data)).is_true()
 	# The new game's shell stands too, so the view frames the shell and the tile.
 	var area := StartView.area_for(_mode.grid)
-	var cell_centre := _mode.grid.cell_to_world(Vector2i(3, 3))
+	var cell_centre := _mode.grid.cell_to_world(Vector2i(3, 3) + LandKit.FIRST_SITE)
 	assert_bool(area.has_point(Vector2(cell_centre.x, cell_centre.z))).is_true()
 	assert_vector(_camera.home_position).is_equal_approx(_framed(area), Vector3.ONE * 0.001)
 	assert_vector(_camera.position).is_equal_approx(_camera.home_position, Vector3.ONE * 0.001)

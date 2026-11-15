@@ -11,9 +11,9 @@ extends GdUnitTestSuite
 ## north exits 44 m apart, each with a gate desk beside it.
 
 const SITE := preload("res://build/terminal_site.tres")
-const EXIT_A := Vector2i(20, 112)
-const EXIT_B := Vector2i(64, 112)
-const ENTRANCE := Vector2i(24, 125)
+const EXIT_A := Vector2i(20, 112) + LandKit.FIRST_SITE
+const EXIT_B := Vector2i(64, 112) + LandKit.FIRST_SITE
+const ENTRANCE := Vector2i(24, 125) + LandKit.FIRST_SITE
 const FLIGHT_B := "TO_B"
 
 var _world: PassengerTestWorld
@@ -35,12 +35,12 @@ func before_test() -> void:
 	var grid := BuildGrid.new(SITE.grid_size, SITE.grid_origin)
 	var floor: Array[BuildEdit] = []
 	for y in range(112, 126):
-		for x in range(18, 67):
+		for x in range(18 + LandKit.FIRST_SITE.x, 67 + LandKit.FIRST_SITE.x):
 			floor.append(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
 	grid.apply_batch(floor)
 	PassengerTestWorld.place(grid, &"entrance_door", ENTRANCE, 2)
-	PassengerTestWorld.place(grid, &"checkin_desk", Vector2i(23, 121), 0)
-	PassengerTestWorld.place(grid, &"security_scanner", Vector2i(24, 116), 0)
+	PassengerTestWorld.place(grid, &"checkin_desk", Vector2i(23, 121) + LandKit.FIRST_SITE, 0)
+	PassengerTestWorld.place(grid, &"security_scanner", Vector2i(24, 116) + LandKit.FIRST_SITE, 0)
 	_exit_a = PassengerTestWorld.place(grid, &"exit_door", EXIT_A, 0)
 	_exit_b = PassengerTestWorld.place(grid, &"exit_door", EXIT_B, 0)
 	EnclosureKit.close_floor(grid)

@@ -19,7 +19,9 @@ func before() -> void:
 	_site = SiteDefinition.new()
 	_site.grid_size = Vector2i(30, 12)
 	_site.grid_origin = Vector3.ZERO
-	_site.plot_counts = Vector2i(3, 2)
+	_site.plot_columns = PackedInt32Array([10, 10, 10])
+	_site.plot_rows = 2
+	_site.centre_columns = Vector2i(0, 3)
 	_site.obstacles = [] as Array[Vector2i]
 
 

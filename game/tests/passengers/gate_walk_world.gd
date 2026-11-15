@@ -9,11 +9,11 @@ extends RefCounted
 
 const SITE := preload("res://build/terminal_site.tres")
 const FLIGHT := "TO_A"
-const EXIT := Vector2i(40, 112)
-const DESK := Vector2i(36, 113)
-const ROW := Vector2i(30, 118)
-const NEAR_SCANNER := Vector2i(38, 121)
-const FAR_SCANNER := Vector2i(60, 121)
+const EXIT := Vector2i(40, 112) + LandKit.FIRST_SITE
+const DESK := Vector2i(36, 113) + LandKit.FIRST_SITE
+const ROW := Vector2i(30, 118) + LandKit.FIRST_SITE
+const NEAR_SCANNER := Vector2i(38, 121) + LandKit.FIRST_SITE
+const FAR_SCANNER := Vector2i(60, 121) + LandKit.FIRST_SITE
 const BOARDING := 3000
 const DOORS := 6000
 
@@ -43,10 +43,10 @@ static func make(suite: GdUnitTestSuite, seats := true) -> GateWalkWorld:
 	var grid := BuildGrid.new(SITE.grid_size, SITE.grid_origin)
 	var floor: Array[BuildEdit] = []
 	for y in range(112, 126):
-		for x in range(18, 67):
+		for x in range(18 + LandKit.FIRST_SITE.x, 67 + LandKit.FIRST_SITE.x):
 			floor.append(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
 	grid.apply_batch(floor)
-	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(24, 125), 2)
+	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(24, 125) + LandKit.FIRST_SITE, 2)
 	PassengerTestWorld.place(grid, &"exit_door", EXIT, 0)
 	if seats:
 		out.row = PassengerTestWorld.place(grid, &"seat_row", ROW, 0)

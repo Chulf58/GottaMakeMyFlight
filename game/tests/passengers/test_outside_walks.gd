@@ -214,7 +214,7 @@ func test_an_apron_walker_with_no_way_on_waits_until_it_is_cleared() -> void:
 	var row: Array[BuildEdit] = []
 	for x in SITE.grid_size.x:
 		row.append(
-			BuildEdit.paint_floor(Vector2i(x, 5) + SITE.starter_offset, BuildGrid.FLOOR_TILE, 1)
+			BuildEdit.paint_floor(Vector2i(x, 5 + SITE.starter_offset.y), BuildGrid.FLOOR_TILE, 1)
 		)
 	_world.grid.apply_batch(row)
 	var stood := p.apron_position()

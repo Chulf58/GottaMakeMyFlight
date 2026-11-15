@@ -16,13 +16,16 @@ extends GdUnitTestSuite
 ## test_stand_envelope.gd, north of the shell in row 100.
 
 const SITE := preload("res://build/terminal_site.tres")
-const EXIT := Vector2i(20, 112)
-const DESK := Vector2i(19, 115)
-const SMALL_CELL := Vector2i(17, 100)
-const MEDIUM_CELL := Vector2i(32, 100)
-const LARGE_CELL := Vector2i(45, 100)
-const WAY_CELL := Vector2i(17, 20)
-const FREE_CELL := Vector2i(60, 100)
+## The side land's 85 grid columns west of the first site (SiteDefinition):
+## the cells below are written in the first site's columns and moved by it.
+const SIDE_LAND := Vector2i(85, 0)
+const EXIT := Vector2i(20, 112) + SIDE_LAND
+const DESK := Vector2i(19, 115) + SIDE_LAND
+const SMALL_CELL := Vector2i(17, 100) + SIDE_LAND
+const MEDIUM_CELL := Vector2i(32, 100) + SIDE_LAND
+const LARGE_CELL := Vector2i(45, 100) + SIDE_LAND
+const WAY_CELL := Vector2i(17, 20) + SIDE_LAND
+const FREE_CELL := Vector2i(60, 100) + SIDE_LAND
 
 var _grid: SiteGrid
 var _flights: FlightSim
@@ -167,13 +170,13 @@ func test_an_undo_inside_the_booked_envelope_is_refused_on_the_copy() -> void:
 
 func test_a_template_paste_inside_the_booked_envelope_is_refused_whole() -> void:
 	# A cafe saved off a block far east of the stand.
-	var block := Rect2i(70, 20, 6, 5)
+	var block := Rect2i(155, 20, 6, 5)
 	var edits: Array[BuildEdit] = []
 	for y in range(block.position.y, block.end.y):
 		for x in range(block.position.x, block.end.x):
 			edits.append(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
 	_grid.apply_batch(edits)
-	var room := _grid.apply(BuildEdit.place_room(Rect2i(71, 21, 4, 3), &"cafe")).room_id
+	var room := _grid.apply(BuildEdit.place_room(Rect2i(156, 21, 4, 3), &"cafe")).room_id
 	var template := RoomTemplate.capture(_grid, room)
 	assert_object(template).is_not_null()
 	assert_bool(_desk(DESK).ok).is_true()

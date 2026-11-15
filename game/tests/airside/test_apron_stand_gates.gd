@@ -10,10 +10,13 @@ extends GdUnitTestSuite
 ## (stand x -26), gate B out of the exit 44 cells east (stand x 18).
 
 const SITE := preload("res://build/terminal_site.tres")
+## The side land's 85 grid columns west of the first site (SiteDefinition):
+## the cells below are written in the first site's columns and moved by it.
+const SIDE_LAND := Vector2i(85, 0)
 const EAST := Vector2i(44, 0)
-const DESK_WEST := Vector2i(19, 115)
+const DESK_WEST := Vector2i(19, 115) + SIDE_LAND
 ## Under the plane parked at gate A's stand (x -26, z -115), and at B's.
-const FOOTPRINT_A := Vector2i(17, 95)
+const FOOTPRINT_A := Vector2i(17, 95) + SIDE_LAND
 const FOOTPRINT_B := FOOTPRINT_A + EAST
 
 var _grid: SiteGrid
@@ -84,7 +87,7 @@ func test_a_gate_built_over_says_it_has_no_usable_stand() -> void:
 
 
 func test_gate_desk_refusals_reach_the_site_guard() -> void:
-	var far := _grid.apply(BuildEdit.place_object(GateDesks.DESK, Vector2i(12, 125), 0))
+	var far := _grid.apply(BuildEdit.place_object(GateDesks.DESK, Vector2i(12, 125) + SIDE_LAND, 0))
 	print("desk by the entrance: %s" % far.reason_text())
 	assert_int(far.reason).is_equal(BuildResult.Reason.GATE_NO_EXIT)
 

@@ -13,9 +13,12 @@ extends GdUnitTestSuite
 ## the cells are those of test_stand_envelope.gd.
 
 const SITE := preload("res://build/terminal_site.tres")
-const DESK := Vector2i(19, 115)
-const LARGE_CELL := Vector2i(45, 100)
-const FREE_CELL := Vector2i(60, 100)
+## The side land's 85 grid columns west of the first site (SiteDefinition):
+## the cells below are written in the first site's columns and moved by it.
+const SIDE_LAND := Vector2i(85, 0)
+const DESK := Vector2i(19, 115) + SIDE_LAND
+const LARGE_CELL := Vector2i(45, 100) + SIDE_LAND
+const FREE_CELL := Vector2i(60, 100) + SIDE_LAND
 
 var _grid: SiteGrid
 var _flights: FlightSim

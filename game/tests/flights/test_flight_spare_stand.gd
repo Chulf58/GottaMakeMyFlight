@@ -3,18 +3,20 @@ extends GdUnitTestSuite
 ## "No gate free at this time: build another gate" shows only where the player
 ## could build another stand (board 544f4270, SpareStand), judged with the
 ## rules a gate desk is refused by: owned land, the existing stands' swing
-## squares and a clear envelope. One gate A, whose exit is at (32, 112) in the
-## second plot of the row (cells 22 to 43), is booked at 10:00; an offer at
+## squares and a clear envelope. One gate A, whose exit is at (117, 112) in the
+## second plot of the first site's row (cells 107 to 128), is booked at 10:00; an offer at
 ## 12:00 meets A1 only at the gate (its ground route is free), so another
 ## gate would take it.
 
 const SITE := preload("res://build/terminal_site.tres")
 const SHIFT := Vector2i(12, 0)
-const EXIT_AT := Vector2i(20, 112) + SHIFT
-const DESK_AT := Vector2i(19, 115) + SHIFT
+## Side land west of the first site: grid cells shift this far east.
+const SIDE_LAND := Vector2i(85, 0)
+const EXIT_AT := Vector2i(20, 112) + SHIFT + SIDE_LAND
+const DESK_AT := Vector2i(19, 115) + SHIFT + SIDE_LAND
 ## The plot (column, row) holding the exit, and the one east of it.
-const PLOT_HOME := [1, 4]
-const PLOT_EAST := [2, 4]
+const PLOT_HOME := [5, 4]
+const PLOT_EAST := [6, 4]
 
 var _grid: SiteGrid
 var _flights: FlightSim
@@ -35,7 +37,7 @@ func before_test() -> void:
 
 func _own(plots: Array) -> void:
 	var land := LandPlots.for_site(SITE)
-	assert_bool(land.from_snapshot({"plot_counts": [4, 6], "owned": plots, "bought": 0})).is_true()
+	assert_bool(land.from_snapshot({"plot_counts": [12, 6], "owned": plots, "bought": 0})).is_true()
 	_grid.land = land
 
 

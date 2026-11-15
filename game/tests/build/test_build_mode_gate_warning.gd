@@ -12,9 +12,11 @@ extends GdUnitTestSuite
 ## exit at (20, 112); the cells are those of test_stand_envelope.gd.
 
 const SITE := preload("res://build/terminal_site.tres")
-const DESK := Vector2i(19, 115)
-const LARGE_CELL := Vector2i(45, 100)
-const FREE_CELL := Vector2i(60, 100)
+## Side land west of the first site: grid cells shift this far east.
+const SIDE_LAND := Vector2i(85, 0)
+const DESK := Vector2i(19, 115) + SIDE_LAND
+const LARGE_CELL := Vector2i(45, 100) + SIDE_LAND
+const FREE_CELL := Vector2i(60, 100) + SIDE_LAND
 const WARNING := "Gate A will then take planes up to medium"
 
 var _finances: Finances

@@ -89,7 +89,9 @@ static func attach(build_mode: BuildMode) -> LandTool:
 
 
 ## Makes `build_mode`'s land on its site, owning a new game's start, and hands
-## it to the site's grid.
+## it to the site's grid. When the site's plot columns do not cut its grid the
+## land is refused (LandPlots.error, pushed once) and still bound, so the grid
+## refuses every build (fail closed) and BuildMode places no starter.
 func bind(build_mode: BuildMode) -> void:
 	mode = build_mode
 	land = LandPlots.for_site(build_mode.site)
@@ -158,6 +160,8 @@ func buy_at(point: Variant) -> BuildResult:
 ## line).
 func preview_price() -> Vector2i:
 	if _hovered == NO_PLOT or land.is_owned(_hovered) or not land.touches_owned(_hovered):
+		return Vector2i.ZERO
+	if not land.is_open(_hovered):
 		return Vector2i.ZERO
 	var price := land.next_price()
 	return Vector2i(price, price)

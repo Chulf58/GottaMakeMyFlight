@@ -8,21 +8,21 @@ extends GdUnitTestSuite
 ## is the largest class whose envelope is clear, dropping as the player builds
 ## into the larger ones.
 ##
-## The starter shell's exit at (20, 112) on the airport site: its stand point is
+## The starter shell's exit (ReferenceTerminal.EXIT_CELL at the starter offset,
+## cell (105, 112)) on the airport site: its stand point is
 ## at x -26, z -114.9. The test cells lie north of the shell, in row 100.
 
 const SITE := preload("res://build/terminal_site.tres")
-const EXIT := Vector2i(20, 112)
 ## Inside the small swing square (x -25.5).
-const SMALL_CELL := Vector2i(17, 100)
+const SMALL_CELL := Vector2i(17, 100) + LandKit.FIRST_SITE
 ## In the medium swing square but not the small one (x -10.5).
-const MEDIUM_CELL := Vector2i(32, 100)
+const MEDIUM_CELL := Vector2i(32, 100) + LandKit.FIRST_SITE
 ## In the large swing square but not the medium one (x 2.5).
-const LARGE_CELL := Vector2i(45, 100)
+const LARGE_CELL := Vector2i(45, 100) + LandKit.FIRST_SITE
 ## Under the small way north to the lane, north of every swing square.
-const WAY_CELL := Vector2i(17, 20)
+const WAY_CELL := Vector2i(17, 20) + LandKit.FIRST_SITE
 ## East of every envelope (x 17.5).
-const FREE_CELL := Vector2i(60, 100)
+const FREE_CELL := Vector2i(60, 100) + LandKit.FIRST_SITE
 
 var _grid: SiteGrid
 var _stand: Dictionary
@@ -31,7 +31,7 @@ var _stand: Dictionary
 func before_test() -> void:
 	_grid = SiteGrid.new(SITE)
 	assert_bool(StarterShell.place(_grid, SITE.starter_offset)).is_true()
-	_stand = StandPlacement.for_cell(_grid, EXIT)
+	_stand = StandPlacement.for_cell(_grid, ReferenceTerminal.EXIT_CELL + SITE.starter_offset)
 
 
 func _floor(cell: Vector2i) -> void:

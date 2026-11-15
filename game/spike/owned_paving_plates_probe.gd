@@ -99,7 +99,7 @@ func _run() -> void:
 	await _edge_plate()
 	await _stand_plates(at)
 	await _road_plate()
-	for plot: Vector2i in [Vector2i(0, 2), Vector2i(2, 4)]:
+	for plot: Vector2i in [Vector2i(4, 2), Vector2i(6, 4)]:
 		var result := _land.buy(plot, null)
 		print("PROBE bought %s ok=%s" % [plot, result.ok])
 		if not result.ok:
@@ -315,7 +315,8 @@ func _top_plate(name: String) -> void:
 	var targets: Array[Vector3] = []
 	for plot in _land.owned_plots():
 		var cells := _land.plot_cells(plot)
-		var mid := Vector2(cells.position.x + 2, cells.end.y - 2) + Vector2(-43, -210)
+		var corner := Vector2(_mode.grid.origin.x, _mode.grid.origin.z)
+		var mid := Vector2(cells.position.x + 2, cells.end.y - 2) + corner
 		targets.append(Vector3(mid.x, 0.2, mid.y))
 	print("PLATE %s owned=%s" % [name, _land.owned_plots()])
 	if await _prove_targets(name, corners, targets):
@@ -330,23 +331,23 @@ func _prove_targets(label: String, points: Array[Vector3], targets: Array[Vector
 
 
 func _edge_plate() -> void:
-	# The east edge of the start land: plot (1, 4) owned, (2, 4) not.
+	# The east edge of the start land: plot (5, 4) owned, (6, 4) not.
 	var edge := Vector3(1.0, 0.2, -97.0)
 	_aim(edge, 120.0, 28.0, 16.0)
 	await _frames(3)
 	var points: Array[Vector3] = [Vector3(1, 0.2, -101), Vector3(1, 0.2, -93), edge]
 	var targets: Array[Vector3] = [Vector3(-0.5, 0.2, -97)]
-	if _prove("03_edge", points, _site.find_child("Lot_1_4", true, false), targets):
+	if _prove("03_edge", points, _site.find_child("Lot_5_4", true, false), targets):
 		await _save("03_paving_grass_edge.png")
 	# Control for the cause of the old line between owned plots: the kerb on the
-	# z -85 edge between owned (1, 4) and (1, 5), forced on, as before the fix.
-	var inner := _site.find_child("Lot_1_4_S", true, false) as Node3D
+	# z -85 edge between owned (5, 4) and (5, 5), forced on, as before the fix.
+	var inner := _site.find_child("Lot_5_4_S", true, false) as Node3D
 	inner.visible = true
-	print("PROBE control: inner kerb Lot_1_4_S forced visible=%s" % inner.visible)
-	if _prove("03b_control", points, _site.find_child("Lot_1_4", true, false), targets):
+	print("PROBE control: inner kerb Lot_5_4_S forced visible=%s" % inner.visible)
+	if _prove("03b_control", points, _site.find_child("Lot_5_4", true, false), targets):
 		await _save("03b_control_inner_kerb_forced_on.png")
 	_main.get_node("OwnedPaving").refresh()
-	print("PROBE control: after refresh Lot_1_4_S visible=%s" % inner.visible)
+	print("PROBE control: after refresh Lot_5_4_S visible=%s" % inner.visible)
 
 
 func _stand_plates(at: Vector3) -> void:

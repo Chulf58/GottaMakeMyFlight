@@ -10,7 +10,7 @@ extends GdUnitTestSuite
 
 const SITE := preload("res://build/terminal_site.tres")
 ## The pocket's cells: a ring one cell wide round the landside hall.
-const POCKET := Rect2i(9, 9, 14, 10)
+const POCKET := Rect2i(Vector2i(9, 9) + LandKit.FIRST_SITE, Vector2i(14, 10))
 
 var _world: PassengerTestWorld
 var _grant: RescueGrant
@@ -26,11 +26,13 @@ func after() -> void:
 
 func before_test() -> void:
 	var grid := BuildGrid.new(SITE.grid_size, SITE.grid_origin)
-	assert_bool(ReferenceTerminal.build(grid)).is_true()
+	assert_bool(ReferenceTerminal.build(grid, LandKit.FIRST_SITE)).is_true()
 	var entrance: int = ReferenceTerminal.object_ids(grid)["entrances"][0]
 	var edits: Array[BuildEdit] = [
 		BuildEdit.remove_object(entrance),
-		BuildEdit.place_wall(ReferenceTerminal.ENTRANCE_CELL, BuildGrid.Side.SOUTH),
+		BuildEdit.place_wall(
+			ReferenceTerminal.ENTRANCE_CELL + LandKit.FIRST_SITE, BuildGrid.Side.SOUTH
+		),
 	]
 	for y in range(POCKET.position.y, POCKET.end.y):
 		edits.append(BuildEdit.place_wall(Vector2i(POCKET.position.x, y), BuildGrid.Side.WEST))

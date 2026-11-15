@@ -8,10 +8,13 @@ extends GdUnitTestSuite
 ## the copy accepting what the live grid then refuses (an error).
 
 const SITE := preload("res://build/terminal_site.tres")
+## The side land's 85 grid columns west of the first site (SiteDefinition):
+## the cells below are written in the first site's columns and moved by it.
+const SIDE_LAND := Vector2i(85, 0)
 ## Under the parked plane at the starter stand (x -26, z -115).
-const FOOTPRINT_CELL := Vector2i(17, 95)
+const FOOTPRINT_CELL := Vector2i(17, 95) + SIDE_LAND
 ## Well east of everything the plane sweeps (x 17).
-const FREE_CELL := Vector2i(60, 30)
+const FREE_CELL := Vector2i(60, 30) + SIDE_LAND
 const FIRST := 1000
 
 var _grid: SiteGrid

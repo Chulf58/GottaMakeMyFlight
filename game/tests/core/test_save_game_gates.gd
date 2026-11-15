@@ -12,9 +12,11 @@ extends GdUnitTestSuite
 
 const SEED := 4_401_017
 const EAST := Vector2i(44, 0)
-const DESK_EAST := Vector2i(63, 115)
+## The grid columns of side land west of the first site.
+const SIDE_LAND := Vector2i(85, 0)
+const DESK_EAST := Vector2i(63, 115) + SIDE_LAND
 ## In gate A's medium swing square but not its small one (test_stand_envelope.gd).
-const MEDIUM_CELL := Vector2i(32, 100)
+const MEDIUM_CELL := Vector2i(32, 100) + SIDE_LAND
 const STARTER := FlightSim.DEFAULT_ID
 
 var _main: Node
@@ -77,7 +79,7 @@ func test_the_gates_and_their_stands_are_saved_and_a_lost_gate_loads_back() -> v
 		"save_version %s, gates %s, apron %s" % [data["save_version"], data["gates"], data["apron"]]
 	)
 	assert_int(int(data["save_version"])).is_equal(SaveGame.SAVE_VERSION)
-	assert_int(SaveGame.SAVE_VERSION).is_equal(23)
+	assert_int(SaveGame.SAVE_VERSION).is_equal(24)
 	assert_int((data["gates"]["gates"] as Array).size()).is_equal(2)
 	assert_array((data["apron"]["stands"] as Dictionary).keys()).is_equal(["A", "B"])
 	var saved_bindings := _gates.bindings.duplicate(true)

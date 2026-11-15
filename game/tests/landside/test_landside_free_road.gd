@@ -101,4 +101,4 @@ func test_a_party_scheduled_with_notice_gets_out_on_its_unload_tick_and_walks_in
 		ticks += 1
 	print("walked in after %d ticks to %s" % [ticks, p.at])
 	assert_int(p.stage).is_not_equal(Passenger.Stage.SPAWNED)
-	assert_vector(p.at).is_equal(ReferenceTerminal.ENTRANCE_CELL)
+	assert_vector(p.at).is_equal(ReferenceTerminal.ENTRANCE_CELL + LandKit.FIRST_SITE)

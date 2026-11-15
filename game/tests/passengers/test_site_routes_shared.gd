@@ -11,12 +11,12 @@ extends GdUnitTestSuite
 ## the passenger sim, GateDesks and ApronStand).
 
 const SITE := preload("res://build/terminal_site.tres")
-const EXIT_A := Vector2i(20, 112)
-const EXIT_B := Vector2i(64, 112)
-const ROW := Vector2i(30, 118)
+const EXIT_A := Vector2i(20, 112) + LandKit.FIRST_SITE
+const EXIT_B := Vector2i(64, 112) + LandKit.FIRST_SITE
+const ROW := Vector2i(30, 118) + LandKit.FIRST_SITE
 ## Open ground above the road edge, straight above its cell (60, 149).
-const PROBE := Vector2i(60, 140)
-const BLOCK := Vector2i(60, 145)
+const PROBE := Vector2i(60, 140) + LandKit.FIRST_SITE
+const BLOCK := Vector2i(60, 145) + LandKit.FIRST_SITE
 
 var _grid: BuildGrid
 var _road: Array[Vector2i]
@@ -140,12 +140,12 @@ func test_a_committed_edit_on_the_two_gate_terminal_searches_each_field_once() -
 	var grid := SiteGrid.new(SITE)
 	var floor: Array[BuildEdit] = []
 	for y in range(112, 126):
-		for x in range(18, 67):
+		for x in range(18 + LandKit.FIRST_SITE.x, 67 + LandKit.FIRST_SITE.x):
 			floor.append(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
 	grid.apply_batch(floor)
-	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(24, 125), 2)
-	PassengerTestWorld.place(grid, &"checkin_desk", Vector2i(23, 121), 0)
-	PassengerTestWorld.place(grid, &"security_scanner", Vector2i(24, 116), 0)
+	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(24, 125) + LandKit.FIRST_SITE, 2)
+	PassengerTestWorld.place(grid, &"checkin_desk", Vector2i(23, 121) + LandKit.FIRST_SITE, 0)
+	PassengerTestWorld.place(grid, &"security_scanner", Vector2i(24, 116) + LandKit.FIRST_SITE, 0)
 	PassengerTestWorld.place(grid, &"exit_door", EXIT_A, 0)
 	PassengerTestWorld.place(grid, &"exit_door", EXIT_B, 0)
 	EnclosureKit.close_floor(grid)

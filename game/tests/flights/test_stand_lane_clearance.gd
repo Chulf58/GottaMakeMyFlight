@@ -206,7 +206,7 @@ func test_the_legal_stand_filter_agrees_with_aircraft_clear() -> void:
 	assert_int(checked).is_greater(10)
 	# Control: a stand with an obstacle under its way north is not legal.
 	var blocked: SiteDefinition = SITE.duplicate()
-	blocked.obstacles = [Vector2i(10, 20)] as Array[Vector2i]
-	assert_bool(is_legal(_grid, blocked, Vector2i(10, 40))).is_false()
-	assert_bool(is_legal(_grid, blocked, Vector2i(10, 20))).is_true()
-	assert_bool(is_legal(_grid, blocked, Vector2i(40, 40))).is_true()
+	blocked.obstacles = [Vector2i(10, 20) + LandKit.FIRST_SITE] as Array[Vector2i]
+	assert_bool(is_legal(_grid, blocked, Vector2i(10, 40) + LandKit.FIRST_SITE)).is_false()
+	assert_bool(is_legal(_grid, blocked, Vector2i(10, 20) + LandKit.FIRST_SITE)).is_true()
+	assert_bool(is_legal(_grid, blocked, Vector2i(40, 40) + LandKit.FIRST_SITE)).is_true()

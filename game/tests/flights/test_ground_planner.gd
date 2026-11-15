@@ -8,7 +8,9 @@ extends GdUnitTestSuite
 ## them (and with them which offers are legal) shows here.
 
 ## A medium stand in the middle of the site, with gate holds both ways.
-const MID_CELL := Vector2i(43, 60)
+## The grid columns of side land west of the first site.
+const SIDE_LAND := Vector2i(85, 0)
+const MID_CELL := Vector2i(43, 60) + SIDE_LAND
 ## test_the_booking_windows_are_pinned(): a medium flight at MID_CELL departing
 ## 10:00 on day 1 (starts 30940 ... 34840), no pause. Bookings by kind, the sum
 ## of every window's length, and every booking but the slices as "kind x z
@@ -43,7 +45,9 @@ func before() -> void:
 func test_kit_routes_are_the_airside_phase_paths() -> void:
 	var airside := TestStandLaneClearance.scene_airside()
 	add_child(airside)
-	var cells: Array[Vector2i] = [MID_CELL, Vector2i(0, 0), Vector2i(85, 149), Vector2i(10, 120)]
+	var cells: Array[Vector2i] = [
+		MID_CELL, SIDE_LAND, Vector2i(85, 149) + SIDE_LAND, Vector2i(10, 120) + SIDE_LAND
+	]
 	var compared := 0
 	for cell in cells:
 		var at := _kit.stand(cell)
@@ -131,7 +135,7 @@ func test_hold_lines() -> void:
 	)
 	var expect := {0: false, 10: false, 11: true}
 	for row: int in expect:
-		var at := _kit.request("B", PlaneClasses.MEDIUM, _kit.stand(Vector2i(43, row)))
+		var at := _kit.request("B", PlaneClasses.MEDIUM, _kit.stand(Vector2i(43, row) + SIDE_LAND))
 		for state in GroundPlanner.TAXI_STATES:
 			var names := planner.holds(at, state).map(
 				func(h: Dictionary) -> String: return h["hold"]
