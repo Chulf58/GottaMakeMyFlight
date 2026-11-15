@@ -113,8 +113,9 @@ var props := AirsideProps.new()
 ## Whether the last rebuild() succeeded. set_gate_stands() skips a call with
 ## the stands already set only while it did, so a failed call fails again.
 var _built := false
-## Whether the last rebuild() found every required waypoint and every stand's
-## join on the lane; phase_path() gives no taxi route while it did not.
+## Whether the last rebuild() succeeded in full: every required waypoint, every
+## link and every stand's join on the lane; phase_path() gives no taxi route
+## while it did not.
 var _routable := false
 
 
@@ -140,7 +141,6 @@ func rebuild() -> bool:
 		if not graph.has_waypoint(waypoint):
 			push_error("Airside: missing waypoint '%s'" % waypoint)
 			ok = false
-	_routable = ok and _joins_on_lane()
 	for pair in links:
 		var ends := pair.split(">")
 		var known := (
@@ -151,10 +151,10 @@ func rebuild() -> bool:
 		if not known:
 			push_error("Airside: bad link '%s'" % pair)
 			ok = false
-	ok = ok and _routable
+	_routable = ok and _joins_on_lane()
 	_show_paving()
-	_built = ok
-	return ok
+	_built = _routable
+	return _routable
 
 
 ## Sizes each gate's stand pad for the classes up to its max_class (gate letter ->
@@ -391,10 +391,10 @@ func phase_path(state: int, gate := "", plane_class := PlaneClasses.MEDIUM) -> P
 
 
 ## Whether phase_path() gives gate `gate` its taxi routes: the last rebuild()
-## found every required waypoint and every join on the lane, and the gate has
-## a stand of its own, or no gate has one (no gate desks: the one stand serves
-## every gate). With gate stands set, a gate not among them gets none, so a
-## plane is never drawn along a stand nobody planned it for.
+## succeeded (every required waypoint, every link, every join on the lane), and
+## the gate has a stand of its own, or no gate has one (no gate desks: the one
+## stand serves every gate). With gate stands set, a gate not among them gets
+## none, so a plane is never drawn along a stand nobody planned it for.
 func routes_gate(gate: String) -> bool:
 	return _routable and (gate_stands.is_empty() or gate_stands.has(gate))
 
