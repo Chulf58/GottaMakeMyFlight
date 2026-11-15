@@ -238,7 +238,9 @@ func test_the_pad_follows_a_change_of_max_class() -> void:
 	var verts: int = _airside.paving.mesh.surface_get_array_len(0)
 	_airside.set_gate_classes({"A": ""})
 	assert_array(_airside.paving.pads).is_empty()
-	assert_int(_airside.paving.mesh.surface_get_array_len(0)).is_equal(verts - 4)
+	# Fewer vertices: the pad's four, plus its cut pieces and skirts where it lies
+	# on the site (TaxiPaving.on_site()), so the drop is no longer exactly 4.
+	assert_int(_airside.paving.mesh.surface_get_array_len(0)).is_less(verts)
 
 
 func test_every_class_rolls_on_paving_through_taxi_in_pushback_and_taxi_out() -> void:

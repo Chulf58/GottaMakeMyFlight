@@ -20,9 +20,11 @@ extends Node3D
 ## airborne.
 ##
 ## On the ground (taxi in, at the stand, pushback, taxi out) the plane rides on
-## the surface under it: the terminal site's paving (ground_height, y 0.2) on
-## the site, the grass and taxiway (y 0) off it, with a PAVING_RAMP_M ramp just
-## outside the site's edge (ground_height_at()). Only the height changes; the
+## the surface under it: the paving height (ground_height, y 0.2) on the site,
+## the taxiway (y 0) off it, with a PAVING_RAMP_M ramp just outside the site's
+## edge (ground_height_at()). On the site that is the site's own paving where
+## the player owns the land (OwnedPaving) and the taxi paving, laid just under
+## this height (TaxiPaving.on_site()), where not. Only the height changes; the
 ## Airside paths, and so the taxi lengths and timings, stay as they are.
 ##
 ## A taxi phase plays the pause the sim planned for it (FlightSim.taxi_plan(),
@@ -40,9 +42,10 @@ const PLANE_SCENES := {
 	"tp_plane_06a": preload("res://assets/planes/tp_plane_06a.glb"),
 	"tp_plane_07a": preload("res://assets/planes/tp_plane_07a.glb"),
 }
-## The terminal site, whose whole grid is paved flat at its ground_height
-## (tools/blender/terminal_site/build_terminal_site.py; user ruling plane-guard-
-## area-shows-only-in-build-mode-the-site-paving-ex, point 2).
+## The terminal site. Its owned plots are paved flat at its ground_height
+## (tools/blender/terminal_site/build_terminal_site.py, OwnedPaving; user ruling
+## site-paving-covers-only-the-owned-land-plots-and-grows-as-ea), and the taxi
+## paving under the planes lies just under it on the rest (TaxiPaving.on_site()).
 const SITE := preload("res://build/terminal_site.tres")
 ## How far outside the site's edge the ground rises from y 0 to the paving.
 const PAVING_RAMP_M := 4.0
@@ -257,6 +260,12 @@ static func ground_height_at(point: Vector3) -> float:
 	var at := Vector2(point.x, point.z)
 	var outside := at.distance_to(at.clamp(low, high))
 	return SITE.ground_height * clampf(1.0 - outside / PAVING_RAMP_M, 0.0, 1.0)
+
+
+## PAVING_RAMP_M, for a script that cannot read PlaneView's constants while
+## PlaneView is still loading the scripts it depends on (TaxiPaving.on_site()).
+static func paving_ramp_m() -> float:
+	return PAVING_RAMP_M
 
 
 ## Flat metres per tick of the lead-in: the approach's own flat speed, so the

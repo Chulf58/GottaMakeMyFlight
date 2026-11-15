@@ -66,7 +66,9 @@ func test_the_band_reaches_the_wall_line_for_a_stand_north_of_the_site_paving() 
 	var band_at_wall := 0
 	for i in verts.size():
 		var v := verts[i]
-		if absf(v.z - link.end.y) < 0.001 and is_equal_approx(v.y, TaxiPaving.HEIGHT_M):
+		# On the site the paving lies lift_at() over HEIGHT_M (TaxiPaving.on_site()).
+		var top := TaxiPaving.HEIGHT_M + TaxiPaving.lift_at(v)
+		if absf(v.z - link.end.y) < 0.001 and is_equal_approx(v.y, top):
 			if uvs[i] != Vector2(TaxiPaving.ASPHALT_U, TaxiPaving.ASPHALT_V_FROM):
 				band_at_wall += 1
 	print("band vertices on the wall line: %d" % band_at_wall)

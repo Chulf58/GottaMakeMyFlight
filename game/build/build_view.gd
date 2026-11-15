@@ -220,6 +220,11 @@ func refresh(grid: BuildGrid) -> void:
 	_grid = grid
 	(_area.mesh as PlaneMesh).size = Vector2(grid.size)
 	_area.position = grid.origin + Vector3(grid.size.x / 2.0, AREA_Y, grid.size.y / 2.0)
+	# On the terminal site the ground is the site's paving on owned plots and
+	# grass on the rest (OwnedPaving); the area plane would lie over that grass
+	# as a dark slab (decision site-paving-covers-only-the-owned-land-plots-and-
+	# grows-as-ea).
+	_area.visible = not grid is SiteGrid
 	_draw_floors()
 	_wall_edges = WallCutaway.wall_edges(grid)
 	_wall_kinds.clear()

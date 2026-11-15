@@ -7,8 +7,10 @@ extends GdUnitTestSuite
 ## span 1.65 m).
 
 const WORLD := preload("res://tests/ambient/bird_world.gd")
-## The paving the birds stand on and the road they fly over.
-const GROUND: Array[String] = ["Lot", "Road"]
+## The road they fly over. The paving the birds stand on is one mesh per land
+## plot, each named OwnedPaving.PREFIX + "<column>_<row>" (decision site-paving-
+## covers-only-the-owned-land-plots-and-grows-as-ea); it was one "Lot" mesh.
+const GROUND: Array[String] = ["Road"]
 const BODY_RADIUS := 0.85
 const BODY_UP := 0.375
 const SAMPLES := 64
@@ -20,7 +22,7 @@ var _world: Array[Dictionary] = []
 
 func before() -> void:
 	for e in WORLD.build(self):
-		if not GROUND.has(e["name"]):
+		if not GROUND.has(e["name"]) and not String(e["name"]).begins_with(OwnedPaving.PREFIX):
 			e["box"] = (e["box"] as AABB).grow(BODY_RADIUS)
 			_world.append(e)
 
