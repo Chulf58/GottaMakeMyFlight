@@ -75,7 +75,7 @@ func _run() -> void:
 	await _plate("small", PlaneClasses.SMALL)
 	_flights.open_airport()
 	(_main.get_node("BuildUnlocks") as BuildUnlocks).from_snapshot(
-		{"tier": 2, "made": 50, "shown": [], "seen": []}
+		{"tier": 2, "made": 50, "shown": [], "seen": [], "firsts": []}
 	)
 	var wallet: Wallet = (_main.get_node("Finances") as Finances).wallet
 	var refusal := RunwayWorks.buy(_flights, _main.get_node("BuildUnlocks"), wallet)

@@ -27,7 +27,11 @@ func before_test() -> void:
 func _tier(tier: int) -> void:
 	var need: int = BuildUnlocks.TIERS[tier - 1]["passengers"]
 	(
-		assert_bool(_unlocks.from_snapshot({"tier": tier, "made": need, "shown": [], "seen": []}))
+		assert_bool(
+			_unlocks.from_snapshot(
+				{"tier": tier, "made": need, "shown": [], "seen": [], "firsts": []}
+			)
+		)
 		. is_true()
 	)
 

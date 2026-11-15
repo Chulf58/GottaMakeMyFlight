@@ -19,7 +19,7 @@ func _through_json(data: Dictionary) -> Dictionary:
 
 ## A snapshot at tier 2 with the given marks.
 func _at_tier_2(shown: Array, seen: Array) -> Dictionary:
-	return {"tier": 2, "made": 60, "shown": shown, "seen": seen}
+	return {"tier": 2, "made": 60, "shown": shown, "seen": seen, "firsts": []}
 
 
 func _refused(data: Dictionary) -> bool:
@@ -34,7 +34,12 @@ func test_a_new_game_has_shown_and_seen_nothing() -> void:
 
 
 func test_shown_tiers_and_seen_tools_survive_a_snapshot_through_json() -> void:
-	assert_bool(_unlocks.from_snapshot({"tier": 3, "made": 260, "shown": [], "seen": []})).is_true()
+	(
+		assert_bool(
+			_unlocks.from_snapshot({"tier": 3, "made": 260, "shown": [], "seen": [], "firsts": []})
+		)
+		. is_true()
+	)
 	_unlocks.mark_dialog_shown(2)
 	_unlocks.mark_dialog_shown(3)
 	_unlocks.mark_tool_seen(BuildMode.Tool.CAFE_ROOM)
@@ -105,6 +110,34 @@ func test_a_good_marked_snapshot_is_accepted() -> void:
 	assert_bool(_unlocks.from_snapshot(_at_tier_2([2], ["CAFE_ROOM", "COUNTER"]))).is_true()
 	assert_bool(_unlocks.dialog_shown(2)).is_true()
 	assert_bool(_unlocks.tool_seen(BuildMode.Tool.COUNTER)).is_true()
+
+
+func test_a_first_is_unshown_until_marked_and_comes_back_through_json() -> void:
+	assert_bool(_unlocks.first_shown(BigFirsts.RUNWAY)).is_false()
+	assert_array(_unlocks.to_snapshot()["firsts"]).is_empty()
+	_unlocks.mark_first_shown(BigFirsts.INCIDENT)
+	_unlocks.mark_first_shown(BigFirsts.RUNWAY)
+	var data := _through_json(_unlocks.to_snapshot())
+	assert_array(data["firsts"]).is_equal([BigFirsts.INCIDENT, BigFirsts.RUNWAY])
+	var other: BuildUnlocks = auto_free(BuildUnlocks.new())
+	other.manual = true
+	assert_bool(other.from_snapshot(data)).is_true()
+	assert_bool(other.first_shown(BigFirsts.RUNWAY)).is_true()
+	assert_bool(other.first_shown(BigFirsts.INCIDENT)).is_true()
+
+
+func test_a_snapshot_missing_firsts_or_with_a_bad_entry_is_refused() -> void:
+	var no_firsts := _at_tier_2([], [])
+	no_firsts.erase("firsts")
+	assert_bool(_refused(no_firsts)).is_true()
+	assert_bool(_refused(_at_tier_2([], []).merged({"firsts": "runway"}, true))).is_true()
+	assert_bool(_refused(_at_tier_2([], []).merged({"firsts": ["moon"]}, true))).is_true()
+	assert_bool(_refused(_at_tier_2([], []).merged({"firsts": [3]}, true))).is_true()
+	(
+		assert_bool(_refused(_at_tier_2([], []).merged({"firsts": ["runway", "runway"]}, true)))
+		. is_true()
+	)
+	assert_bool(_refused(_at_tier_2([], []).merged({"firsts": ["runway"]}, true))).is_false()
 
 
 func test_a_refused_snapshot_changes_nothing() -> void:

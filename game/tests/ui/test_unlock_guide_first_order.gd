@@ -1,0 +1,86 @@
+class_name TestUnlockGuideFirstOrder
+extends GdUnitTestSuite
+## The first major incident shows the guide's big-firsts dialog before the
+## incident's own notice, whose line says "Its notice says what it is". Both
+## answer IncidentDirector.major_presented and take the clock's turn in the order
+## they connected, which is the order of their nodes in the main scene: the
+## HUD, which holds the guide, comes before the IncidentPanel.
+
+const MAIN := "res://main/main.tscn"
+
+var _port: SubViewport
+var _clock: SimClock
+var _director: MajorTestDirector
+var _unlocks: BuildUnlocks
+var _guide: UnlockGuide
+var _panel: IncidentPanel
+
+
+func before_test() -> void:
+	_port = SubViewport.new()
+	_port.size = Vector2i(1920, 1080)
+	add_child(_port)
+	_clock = SimClock.new()
+	_port.add_child(_clock)
+	_director = MajorTestDirector.new()
+	_port.add_child(_director)
+	_unlocks = BuildUnlocks.new()
+	_unlocks.rating = auto_free(AirportRating.new())
+	_unlocks.passengers = auto_free(PassengerSim.new())
+	_unlocks.manual = true
+	_port.add_child(_unlocks)
+	# The guide first, as the HUD's is in the main scene, then the panel.
+	_guide = UnlockGuide.new()
+	_guide.mode = UnlockGuide.Mode.PROFILE
+	_guide.unlocks = _unlocks
+	_guide.clock = _clock
+	_guide.director = _director
+	_port.add_child(_guide)
+	_panel = IncidentPanel.new()
+	_panel.director = _director
+	_panel.clock = _clock
+	_panel.copy_for = MajorTestDirector.copy
+	_port.add_child(_panel)
+
+
+func after_test() -> void:
+	_port.free()
+
+
+func test_the_big_firsts_dialog_shows_before_the_incident_notice() -> void:
+	var id := _director.add_scheduled()
+	assert_bool(_director.present(id, false)).is_true()
+	assert_bool(_guide.is_open()).is_true()
+	assert_bool(_panel.is_open()).is_false()
+	assert_str(_guide.dialog().body_text()).is_equal(BigFirsts.body_for([BigFirsts.INCIDENT]))
+	_guide.dismiss()
+	assert_bool(_guide.is_open()).is_false()
+	assert_bool(_panel.is_open()).is_true()
+	assert_str(_panel.dialog().body_text()).contains("A test crew")
+
+
+func test_a_second_major_shows_only_the_incident_notice() -> void:
+	var first := _director.add_scheduled()
+	_director.present(first, false)
+	_guide.dismiss()
+	_panel.dialog().dismiss()
+	assert_bool(_panel.is_open()).is_false()
+	var second := _director.add_scheduled()
+	_director.present(second, false)
+	assert_bool(_guide.is_open()).is_false()
+	assert_bool(_panel.is_open()).is_true()
+
+
+func test_the_main_scene_puts_the_hud_before_the_incident_panel() -> void:
+	var state := (load(MAIN) as PackedScene).get_state()
+	var hud := -1
+	var panel := -1
+	for i in state.get_node_count():
+		if state.get_node_path(i) != NodePath("."):
+			if str(state.get_node_name(i)) == "PassengerHud":
+				hud = i
+			elif str(state.get_node_name(i)) == "IncidentPanel":
+				panel = i
+	print("main.tscn node order: PassengerHud %d, IncidentPanel %d" % [hud, panel])
+	assert_int(hud).is_greater(-1)
+	assert_int(panel).is_greater(hud)
