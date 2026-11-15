@@ -12,8 +12,11 @@ extends CanvasLayer
 ## Clicking a bar of a running contract selects it and opens, under the grid,
 ## the Move to / End choices the Departures list has: the same gates, the same
 ## words, the same FlightSim calls (DeparturesBoard.move_choices, move_outcome,
-## end_outcome). Departure times never change here. A bar of a one-off flight or
-## an ended contract cannot be selected.
+## end_outcome). Slice 2: a bar can also be dragged (PlannerBar) onto another
+## gate row (PlannerTrack). A PlannerDrag child greys the rows FlightSim refuses
+## and puts the reasons in the message line while it is dragged; a drop goes
+## through move_outcome like a Move to choice. Departure times never change here. A bar
+## of a one-off flight or an ended contract cannot be selected or dragged.
 ##
 ## The sheet pauses the game while open, as the Offers sheet does (decision
 ## the-airline-offers-panel-pauses-the-game-while-it-is-open): a hold on the
@@ -32,7 +35,10 @@ const ACTION := &"toggle_flight_planner"
 const LAYER := TopRow.SHEET_LAYER + 1
 const TOGGLE_TEXT := "Planner (P)"
 const TITLE_TEXT := "Flight planner"
-const HINT_TEXT := "Click a flight to move it to another gate or end its contract."
+const HINT_TEXT := (
+	"Click a flight to move it or end its contract, or drag it to another gate."
+	+ " Days already issued keep their gate."
+)
 const EMPTY_TEXT := "No gate has a stand yet, so there is nothing to plan."
 ## The gate header's width, in layout pixels.
 const HEAD_W := 80.0
@@ -45,6 +51,8 @@ const FULL_TEXT := &"full_text"
 const SHORT_TEXT := &"short_text"
 ## The child Label that draws the text of a bar with a departure tick.
 const BAR_LABEL := "BarLabel"
+## The Label variation a disabled bar's label takes: the gate buttons' disabled text.
+const DISABLED_LABEL := &"HudBarLabelDisabled"
 const HOURS := 24
 
 @export var flights: FlightSim
@@ -73,6 +81,8 @@ var _selected_day := -1
 var _confirming := false
 var _hold := ClockHolds.NONE
 var _rebuilds := 0
+## Greys the rows while a bar is dragged and carries out the drop.
+var _drag := PlannerDrag.new()
 
 
 func _ready() -> void:
@@ -80,6 +90,13 @@ func _ready() -> void:
 	layer = LAYER
 	add_to_group(TopRow.SHEET_GROUP)
 	_build()
+	_drag.name = "PlannerDrag"
+	_drag.flights = flights
+	_drag.message = _message
+	_drag.sheet = _sheet
+	_drag.tracks = _tracks
+	_drag.on_drop = _on_move_pressed
+	add_child(_drag)
 	if flights != null:
 		flights.planning_changed.connect(_mark_dirty)
 		flights.occurrence_added.connect(_on_flight_event)
@@ -386,6 +403,7 @@ func _rebuild() -> void:
 		_rows.add_child(empty)
 	for row in _shown:
 		_add_row(row)
+	_drag.show_rows()
 	if _selected != "" and _selected_bar().is_empty():
 		_deselect()
 	_show_actions()
@@ -414,6 +432,8 @@ func _add_row(row: Dictionary) -> void:
 	line.add_child(head)
 	var lane := PlannerTrack.new()
 	lane.name = "Track_%s" % gate_id
+	lane.gate = gate_id
+	_drag.watch(lane)
 	lane.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	lane.custom_minimum_size = Vector2(0.0, ROW_H)
 	line.add_child(lane)
@@ -424,7 +444,10 @@ func _add_row(row: Dictionary) -> void:
 
 
 func _make_bar(bar: Dictionary) -> Button:
-	var button := Button.new()
+	var button := PlannerBar.new()
+	button.contract = bar["contract"]
+	button.day = bar["day"]
+	button.gate = bar["gate"]
 	var key: String = bar["contract"] if bar["contract"] != "" else bar["flight"]
 	button.name = "Bar_%s_%d" % [key, bar["day"]]
 	button.text = bar["label"]
@@ -493,6 +516,8 @@ func _add_departure_tick(button: Button, bar: Dictionary) -> void:
 	button.accessibility_name = button.text
 	button.text = ""
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if button.disabled:
+		label.theme_type_variation = DISABLED_LABEL
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	label.anchor_left = 0.0
@@ -522,7 +547,8 @@ static func bar_text(bar: Button) -> String:
 ## so no per-bar margin is written into the HudGate theme StyleBoxes that every
 ## button of that gate colour shares. The label takes its look from the theme, with
 ## no per-node override: the Label type resolves to the same font, size and navy as a
-## gate button, enabled or disabled. The text is the full "HH:MM  Destination" while
+## gate button, and on a disabled bar the DISABLED_LABEL variation gives it the gate
+## button's softer disabled text. The text is the full "HH:MM  Destination" while
 ## that fits before the tick; when it does not, the time goes (the tick already shows
 ## it) and the destination stays, trimmed with an ellipsis only if even that does
 ## not fit.
