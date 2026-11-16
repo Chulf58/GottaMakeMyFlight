@@ -424,7 +424,11 @@ static func stands_overlap(a: Dictionary, b: Dictionary) -> bool:
 
 ## The stand's small-plane envelope south of the shared lane zone, which no
 ## other gate's may share. The larger envelopes are shared between neighbours.
+## A side stand's are its north twin's turned onto it, so they stop at its own
+## side lane's band.
 static func private_rects(stand: Dictionary) -> Array[Rect2]:
+	if StandPlacement.side_of(stand) != StandPlacement.NORTH:
+		return StandPlacement.rects_to_world(stand, private_rects(StandPlacement.north_twin(stand)))
 	var lane_south := StandPlacement.lane_zone().end.y
 	var out: Array[Rect2] = []
 	for rect in StandEnvelope.rects(stand, PlaneClasses.SMALL):
@@ -502,7 +506,16 @@ func envelope_cells(on_grid: BuildGrid, exit: int, plane_class: String) -> Dicti
 	var stand := StandPlacement.for_exit(on_grid, exit)
 	if stand.is_empty():
 		return {}
-	var key := "%s|%s|%s|%s" % [stand["x"], stand["wall_z"], plane_class, on_grid.size]
+	var key := (
+		"%s|%s|%s|%s|%s"
+		% [
+			stand["x"],
+			stand["wall_z"],
+			StandPlacement.side_of(stand),
+			plane_class,
+			on_grid.size,
+		]
+	)
 	if not _envelope_cells.has(key):
 		_envelope_cells[key] = StandEnvelope.cells(on_grid, stand, plane_class)
 	return _envelope_cells[key]

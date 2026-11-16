@@ -294,6 +294,7 @@ static func same_stand(a: Dictionary, b: Dictionary) -> bool:
 		int(a["exit"]) == int(b["exit"])
 		and is_equal_approx(float(a["x"]), float(b["x"]))
 		and is_equal_approx(float(a["wall_z"]), float(b["wall_z"]))
+		and StandPlacement.side_of(a) == StandPlacement.side_of(b)
 	)
 
 
@@ -338,14 +339,23 @@ func _rects_of(id: String, stand: Dictionary, gate: String) -> Array[Rect2]:
 	)
 	if path.is_empty():
 		return StandPlacement.swept_rects(stand)
-	var t := smoothstep(0.0, 1.0, flights.phase_progress(id, flights.tick))
+	return route_rects(stand, path, smoothstep(0.0, 1.0, flights.phase_progress(id, flights.tick)))
+
+
+## What a plane `t` (0 to 1) of the way along its taxi-out route `path` from
+## `stand` still needs of it: the swept ground ahead of its tail. The point
+## that far along the planned route is taken into the stand's own frame
+## (StandPlacement.to_frame()), so the cut follows the stand's way out on every
+## side; world z only measures it at a north stand.
+static func route_rects(stand: Dictionary, path: PackedVector3Array, t: float) -> Array[Rect2]:
 	var at := FlightPose.point_at(path, FlightPose.path_length(path) * t)
-	return StandPlacement.swept_rects(stand, at.z + StandPlacement.TAIL_M)
+	var tail_z := StandPlacement.to_frame(stand, at).z + StandPlacement.TAIL_M
+	return StandPlacement.swept_rects(stand, tail_z)
 
 
 ## The grid cells guard_rects() covers, as a set, worked out once per tick.
 func guarded_cells() -> Dictionary:
-	var key := [flights.tick, busy_flight(), live.get("x"), live.get("wall_z")]
+	var key := [flights.tick, busy_flight(), live.get("x"), live.get("wall_z"), live.get("side")]
 	if gates != null:
 		key = [flights.tick, _stands_of(gate_stands)]
 		for gate: String in gate_stands:
@@ -452,7 +462,7 @@ static func checked(data: Dictionary, on_site: SiteDefinition) -> Dictionary:
 static func _checked_stand(saved: Variant, on_site: SiteDefinition) -> Dictionary:
 	if not StandPlacement.is_stand(saved) or not WholeNumber.is_whole(saved["exit"]):
 		return {"error": "'live' is not a stand"}
-	var stand := StandPlacement.make(int(saved["exit"]), float(saved["x"]), float(saved["wall_z"]))
+	var stand := StandPlacement.from_saved(saved)
 	var low := Vector2(on_site.grid_origin.x, on_site.grid_origin.z)
 	var frame := Rect2(low, Vector2(on_site.grid_size))
 	if int(stand["exit"]) < 0 or not frame.has_point(Vector2(stand["x"], stand["wall_z"])):

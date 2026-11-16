@@ -11,7 +11,10 @@ extends RefCounted
 ##
 ## The bridge's root is the gate's exit door sill on the stand's wall line,
 ## (stand x, wall_z), turned 180 degrees so its +z points out from the wall
-## (north) and its +x west, toward the parked plane's port door. A glazed
+## (north) and its +x west, toward the parked plane's port door. At a west or
+## east stand the root, the plane's door and its normal turn a further quarter
+## turn with the stand (StandPlacement.SIDE_YAW), so the bridge stands to its
+## plane as it does at a north stand. A glazed
 ## vestibule stands on the exit door; a glazed stair enclosure runs straight
 ## out from it to a short landing on a pedestal, and the cab stands at the
 ## landing's end. Docked, the stair, landing and cab share one floor height,
@@ -31,8 +34,9 @@ extends RefCounted
 ## the written jet_bridge.glb.
 ##
 ## Not guaranteed: a door whose fuselage normal is not along the wall line
-## (every stand in the game faces north) may solve to a cab the enclosure does
-## not line up with; solve() refuses a front more than 25 degrees off.
+## (every stand's plane parks square to its wall) may solve to a cab the
+## enclosure does not line up with; solve() refuses a front more than 25
+## degrees off.
 
 ## The rig, in metres, in the root's frame (+z out from the wall).
 const STAIR_Z0 := 0.80
@@ -113,6 +117,9 @@ static func ground_y(stand: Dictionary) -> float:
 ## `ground_y`.
 static func root_for(stand: Dictionary, ground_y := 0.0) -> Transform3D:
 	var at := Vector3(float(stand["x"]), ground_y, float(stand["wall_z"]))
+	var side := StandPlacement.side_of(stand)
+	if side != StandPlacement.NORTH:
+		return Transform3D(Basis(Vector3.UP, PI + float(StandPlacement.SIDE_YAW[side])), at)
 	return Transform3D(Basis(Vector3.UP, PI), at)
 
 
@@ -124,8 +131,15 @@ static func docks(model: String) -> bool:
 ## Where plane `model` parked at `stand` has its front port door (world, the
 ## sill at `ground_y` + its sill height) and the unit normal out of its
 ## fuselage there: {"door", "normal"}. The plane stands as PlaneView draws it:
-## nose to +z, moved by PlaneClasses.stand_offset().
+## nose to +z, moved by PlaneClasses.stand_offset(). At a side stand both are
+## its north twin's turned onto it.
 static func plane_door(stand: Dictionary, model: String, ground_y := 0.0) -> Dictionary:
+	if StandPlacement.side_of(stand) != StandPlacement.NORTH:
+		var twin := plane_door(StandPlacement.north_twin(stand), model, ground_y)
+		return {
+			"door": StandPlacement.to_world(stand, twin["door"]),
+			"normal": StandPlacement.turn(stand, twin["normal"]),
+		}
 	var door: Vector3 = PlaneModels.PLANES[model]["doors"][0]
 	var at := StandPlacement.stand_point(stand) + PlaneClasses.stand_offset(model) + door
 	var side := signf(door.x) if door.x != 0.0 else 1.0

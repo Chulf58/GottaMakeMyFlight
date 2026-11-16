@@ -4,11 +4,23 @@ extends RefCounted
 ## design-airside-moves-110-m-north-stand-snaps-to, point 2). Pure: nothing
 ## here changes the grid.
 ##
-## A stand is {"exit": exit door id (0 for none), "x": the door's x, "wall_z":
-## the wall line's z}. The plane parks nose-in, straight out from a north-
-## facing exit: its port door on the exit cell's centre x, its nose NOSE_GAP_M
-## north of the wall line the exit stands in. It is pushed back PUSHBACK_M,
-## turned to face north, and taxis north to the taxi lane at TAXI_LANE_Z.
+## A stand is {"exit": exit door id (0 for none), "x" and "wall_z": the world x
+## and z of its sill, where the exit door meets the wall line, and, for a stand
+## that is not on a north wall, "side"}. The plane parks nose-in, straight out
+## from a north-facing exit: its port door on the exit cell's centre x, its
+## nose NOSE_GAP_M north of the wall line the exit stands in. It is pushed back
+## PUSHBACK_M, turned to face north, and taxis north to the taxi lane at
+## TAXI_LANE_Z.
+##
+## A stand's side (decision airside-all-around-technical-design-one-route-
+## source-per-con, slice S3) is the way its exit faces out: NORTH, WEST or EAST.
+## A west or east stand is the north stand turned a quarter turn about its sill,
+## never mirrored, so the port door stays on the plane's left: every point and
+## rectangle of it is its north twin's (north_twin()) moved by to_world(). Its
+## way out ends on the side lane, SIDE_LANE_X out west or east. A north stand
+## has no "side" key, so its dictionary and every value worked out from it are
+## the ones they were before sides. Only north stands are made in play
+## (for_exit()); side exits come with later slices.
 ##
 ## A candidate exit needs a clear aircraft route (swept_rects(): the parked
 ## plane, the pushback and its swing, the way north to the taxi lane, with no
@@ -57,10 +69,31 @@ const RUNWAY_Z := -338.0
 const ZONE_HALF_LENGTH_M := 1000.0
 ## A walk from an exit to the plane door longer than this is warned about.
 const WALK_WARNING_M := 30.0
+## The sides a stand's exit can face out to.
+const NORTH := "N"
+const WEST := "W"
+const EAST := "E"
+const SIDES: Array[String] = [NORTH, WEST, EAST]
+## Side -> the grid step out of its exit door.
+const OUT_STEP := {NORTH: Vector2i(0, -1), WEST: Vector2i(-1, 0), EAST: Vector2i(1, 0)}
+## Side -> the turn about +y from a north stand to it, in radians.
+const SIDE_YAW := {NORTH: 0.0, WEST: PI / 2.0, EAST: -PI / 2.0}
+## How far west and east of x 0 the side lanes run: the TaxiWest and TaxiEast
+## waypoints' x in main.tscn, where board airside-all-around-s4 puts the spurs.
+## A west or east stand's way out ends on its side's lane.
+const SIDE_LANE_X := 124.0
 
 
-static func make(exit_id: int, door_x: float, wall_z: float) -> Dictionary:
-	return {"exit": exit_id, "x": door_x, "wall_z": wall_z}
+## A stand whose sill is at (`door_x`, `wall_z`) and whose exit faces out to
+## `side`. {} (with an error) for an unknown side.
+static func make(exit_id: int, door_x: float, wall_z: float, side := NORTH) -> Dictionary:
+	if not SIDES.has(side):
+		push_error("StandPlacement.make: '%s' is not a side" % side)
+		return {}
+	var stand := {"exit": exit_id, "x": door_x, "wall_z": wall_z}
+	if side != NORTH:
+		stand["side"] = side
+	return stand
 
 
 ## Whether `data` has a stand's shape (a loaded save's, for example).
@@ -70,11 +103,99 @@ static func is_stand(data: Variant) -> bool:
 	for key in ["exit", "x", "wall_z"]:
 		if not (data as Dictionary).has(key) or not typeof(data[key]) in [TYPE_INT, TYPE_FLOAT]:
 			return false
+	if (data as Dictionary).has("side"):
+		return typeof(data["side"]) == TYPE_STRING and SIDES.has(data["side"])
 	return true
 
 
-## Where the plane's origin stands, nose to +z.
+## The stand `data` (is_stand()) rebuilt with make(), its side kept: what a
+## loaded save's stand becomes.
+static func from_saved(data: Dictionary) -> Dictionary:
+	return make(int(data["exit"]), float(data["x"]), float(data["wall_z"]), side_of(data))
+
+
+## The side `stand`'s exit faces out to: NORTH for a stand with no "side".
+static func side_of(stand: Dictionary) -> String:
+	return String(stand.get("side", NORTH))
+
+
+## The grid step out of `stand`'s exit door.
+static func out_step(stand: Dictionary) -> Vector2i:
+	return OUT_STEP[side_of(stand)]
+
+
+## The north stand a west or east `stand` is turned from: its sill as far from
+## the taxi lane as `stand`'s is from its side lane, at x 0. A north stand is
+## its own twin.
+static func north_twin(stand: Dictionary) -> Dictionary:
+	match side_of(stand):
+		WEST:
+			return make(int(stand["exit"]), 0.0, TAXI_LANE_Z + float(stand["x"]) + SIDE_LANE_X)
+		EAST:
+			return make(int(stand["exit"]), 0.0, TAXI_LANE_Z + SIDE_LANE_X - float(stand["x"]))
+	return stand
+
+
+## The flat direction `v`, given in a north stand's frame, turned to `stand`'s
+## side. A quarter turn, never a mirror: +x (the plane's port side) turns to
+## -z on a west stand and to +z on an east one.
+static func turn(stand: Dictionary, v: Vector3) -> Vector3:
+	match side_of(stand):
+		WEST:
+			return Vector3(v.z, v.y, -v.x)
+		EAST:
+			return Vector3(-v.z, v.y, v.x)
+	return v
+
+
+## turn() undone: a direction at `stand` in its north twin's frame.
+static func turn_back(stand: Dictionary, v: Vector3) -> Vector3:
+	match side_of(stand):
+		WEST:
+			return Vector3(-v.z, v.y, v.x)
+		EAST:
+			return Vector3(v.z, v.y, -v.x)
+	return v
+
+
+## The world point at `stand` that is `point` at its north twin: turned about
+## the twin's sill onto the stand's sill. A north stand's points are its own.
+static func to_world(stand: Dictionary, point: Vector3) -> Vector3:
+	if side_of(stand) == NORTH:
+		return point
+	var twin := north_twin(stand)
+	var from := Vector3(float(twin["x"]), point.y, float(twin["wall_z"]))
+	return Vector3(float(stand["x"]), point.y, float(stand["wall_z"])) + turn(stand, point - from)
+
+
+## to_world() undone: where world `point` at `stand` lies at its north twin.
+static func to_frame(stand: Dictionary, point: Vector3) -> Vector3:
+	if side_of(stand) == NORTH:
+		return point
+	var twin := north_twin(stand)
+	var sill := Vector3(float(stand["x"]), point.y, float(stand["wall_z"]))
+	return (
+		Vector3(float(twin["x"]), point.y, float(twin["wall_z"])) + turn_back(stand, point - sill)
+	)
+
+
+## The world xz rectangles at `stand` that `rects` are at its north twin.
+static func rects_to_world(stand: Dictionary, rects: Array[Rect2]) -> Array[Rect2]:
+	if side_of(stand) == NORTH:
+		return rects
+	var out: Array[Rect2] = []
+	for rect in rects:
+		var a := to_world(stand, Vector3(rect.position.x, 0.0, rect.position.y))
+		var b := to_world(stand, Vector3(rect.end.x, 0.0, rect.end.y))
+		out.append(Rect2(Vector2(a.x, a.z), Vector2.ZERO).expand(Vector2(b.x, b.z)))
+	return out
+
+
+## Where the plane's origin stands, nose to +z (at a side stand, nose to its
+## wall).
 static func stand_point(stand: Dictionary) -> Vector3:
+	if side_of(stand) != NORTH:
+		return to_world(stand, stand_point(north_twin(stand)))
 	return Vector3(
 		float(stand["x"]) - DOOR_SIDE_M, 0.0, float(stand["wall_z"]) - NOSE_GAP_M - NOSE_M
 	)
@@ -85,16 +206,23 @@ static func stand_point(stand: Dictionary) -> Vector3:
 ## PlaneClasses.door_shift() (model 04 parks further out); with "" it is the
 ## stand's door, where model 05's stands.
 static func door_point(stand: Dictionary, model := "") -> Vector3:
+	if side_of(stand) != NORTH:
+		return to_world(stand, door_point(north_twin(stand), model))
 	var at := Vector3(float(stand["x"]), 0.0, float(stand["wall_z"]) - NOSE_GAP_M - DOOR_AFT_M)
 	return at + PlaneClasses.door_shift(model)
 
 
 static func pushback_end(stand: Dictionary) -> Vector3:
+	if side_of(stand) != NORTH:
+		return to_world(stand, pushback_end(north_twin(stand)))
 	return stand_point(stand) + Vector3(0.0, 0.0, -PUSHBACK_M)
 
 
-## Where the way north from the stand meets the taxi lane.
+## Where the way out from the stand meets the taxi lane (at a side stand, its
+## side lane).
 static func lane_join(stand: Dictionary) -> Vector3:
+	if side_of(stand) != NORTH:
+		return to_world(stand, lane_join(north_twin(stand)))
 	return Vector3(stand_point(stand).x, 0.0, TAXI_LANE_Z)
 
 
@@ -119,8 +247,11 @@ static func lane_zone() -> Rect2:
 ## Whether the plane parked at `stand` stays out of the lane zone. One whose
 ## tail reached it would hold the shared lane for its whole turnaround. Every
 ## stand on the site does, the north row with 28.05 m to spare (NOSE_GAP_M);
-## test_shared_ground_holds.gd checks it.
+## test_shared_ground_holds.gd checks it. A side stand is checked as its north
+## twin, against its own side lane.
 static func clears_lane(stand: Dictionary) -> bool:
+	if side_of(stand) != NORTH:
+		return clears_lane(north_twin(stand))
 	return stand_point(stand).z - TAIL_M >= lane_zone().end.y
 
 
@@ -132,16 +263,30 @@ static func apron_route(stand: Dictionary, model := "") -> PackedVector3Array:
 
 
 ## The grid cell a walk to the plane door ends in: the cell under the door,
-## or the north edge cell in its column when the door stands beyond the grid.
+## or, when the door stands beyond the grid, the edge cell straight back from
+## it toward the exit (the north edge cell in its column at a north stand, the
+## west or east edge cell in its row at a side one).
 static func door_seed(grid: BuildGrid, stand: Dictionary) -> Vector2i:
 	var cell := grid.world_to_cell(door_point(stand))
+	match side_of(stand):
+		WEST:
+			return Vector2i(maxi(cell.x, 0), cell.y)
+		EAST:
+			return Vector2i(mini(cell.x, grid.size.x - 1), cell.y)
 	return Vector2i(cell.x, maxi(cell.y, 0))
 
 
-## The stand straight out from the exit door at grid cell `cell` facing north.
-static func for_cell(grid: BuildGrid, cell: Vector2i, exit_id := 0) -> Dictionary:
+## The stand straight out from the exit door at grid cell `cell` facing out to
+## `side` (north unless given): its sill on the cell's outer edge.
+static func for_cell(grid: BuildGrid, cell: Vector2i, exit_id := 0, side := NORTH) -> Dictionary:
 	var centre := grid.cell_to_world(cell)
-	return make(exit_id, centre.x, centre.z - 0.5)
+	if side == NORTH:
+		return make(exit_id, centre.x, centre.z - 0.5)
+	if not OUT_STEP.has(side):
+		push_error("StandPlacement.for_cell: '%s' is not a side" % side)
+		return {}
+	var step: Vector2i = OUT_STEP[side]
+	return make(exit_id, centre.x + 0.5 * step.x, centre.z + 0.5 * step.y, side)
 
 
 ## The stand of exit door `exit_id`, or {} when it is not an exit door whose
@@ -164,8 +309,12 @@ static func starter_stand(grid: BuildGrid, site: SiteDefinition) -> Dictionary:
 ## The ground the plane sweeps from the stand through its departure, as world
 ## xz rectangles (x, z): the parked plane, pushback and swing, then the way
 ## north to the taxi lane. With `north_of`, only what lies north of that z: the
-## part still ahead of a plane already on its way out.
+## part still ahead of a plane already on its way out. A side stand's are its
+## north twin's turned onto it, and its `north_of` is a z at that twin
+## (to_frame()).
 static func swept_rects(stand: Dictionary, north_of := INF) -> Array[Rect2]:
+	if side_of(stand) != NORTH:
+		return rects_to_world(stand, swept_rects(north_twin(stand), north_of))
 	var at := stand_point(stand)
 	var back := pushback_end(stand)
 	var swing_south := at.z + NOSE_M
@@ -201,16 +350,33 @@ static func cells_under(grid: BuildGrid, rects: Array[Rect2]) -> Dictionary:
 	return out
 
 
-## Whether nothing built stands under the plane's sweep from `stand`.
+## Whether any of `rects` reaches past the grid's south edge, over the road
+## (SiteDefinition.ROAD_STEP). cells_under() keeps only the cells on the grid,
+## so a side stand's wing over the road would otherwise count as clear. Ground
+## past the other edges is open airside.
+static func reaches_road(grid: BuildGrid, rects: Array[Rect2]) -> bool:
+	var road_edge := grid.origin.z + grid.size.y
+	for rect in rects:
+		if rect.end.y - 0.01 > road_edge:
+			return true
+	return false
+
+
+## Whether nothing built stands under the plane's sweep from `stand`, and none
+## of it reaches over the road.
 static func aircraft_clear(grid: BuildGrid, site: SiteDefinition, stand: Dictionary) -> bool:
-	for cell: Vector2i in cells_under(grid, swept_rects(stand)):
+	var rects := swept_rects(stand)
+	if reaches_road(grid, rects):
+		return false
+	for cell: Vector2i in cells_under(grid, rects):
 		if not apron_clear(grid, site, cell):
 			return false
 	return true
 
 
 ## The walk out of exit door `exit_id` to the plane door at `stand`
-## (SiteRoutes.departure()), or empty when there is none.
+## (SiteRoutes.departure()), or empty when there is none. A door on the grid
+## edge walks straight out over the edge the stand's side faces.
 static func walk_of(
 	grid: BuildGrid,
 	site: SiteDefinition,
@@ -224,9 +390,7 @@ static func walk_of(
 	if dist.is_empty():
 		dist = to_door(grid, site, stand)
 	var out := DoorPlacement.back_step(record["facing"])
-	var cells := SiteRoutes.door_cells(
-		grid, site, record["anchor"], out, SiteDefinition.PLANE_STEP, dist
-	)
+	var cells := SiteRoutes.door_cells(grid, site, record["anchor"], out, out_step(stand), dist)
 	if cells.is_empty():
 		return [] as Array[Vector3]
 	return SiteRoutes.departure(grid, site, cells, stand)

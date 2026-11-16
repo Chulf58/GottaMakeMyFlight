@@ -519,8 +519,7 @@ static func _coverage_problem(
 
 
 static func _stand_of(entry: Dictionary) -> Dictionary:
-	var stand: Dictionary = entry["stand"]
-	return StandPlacement.make(int(stand["exit"]), float(stand["x"]), float(stand["wall_z"]))
+	return StandPlacement.from_saved(entry["stand"])
 
 
 static func _record(entry: Dictionary, starts: Array[int]) -> Dictionary:
