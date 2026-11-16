@@ -38,7 +38,10 @@ extends MeshInstance3D
 ## lane and the connectors as the lane is under its links (anti_pattern
 ## perpendicular-paving-strips-that-each-map-a-dark-edge-light), with x and z
 ## swapped, so its outer edge stays the band's dark edge. Without a side stand
-## nothing of this is built and the paving is as it was.
+## nothing of this is built and the paving is as it was. A north link whose
+## join lies closer to a spur than a strip is wide shares the ground with the
+## spur at their midpoint, and the lane's south half runs on over the spur to
+## that midpoint, mitred under the link (_near_links(), board 0793554d).
 ##
 ## A thin centre line runs along the lane and each link (user ruling taxiway-
 ## look-runway-asphalt-with-a-yellow-centreline), in the runway's own line
@@ -596,16 +599,20 @@ static func mesh_of(
 		if not across_x and not strip.get("row", false):
 			var cuts := junctions(rect, strip_list)
 			if not cuts.is_empty():
-				_add_mitred_lane(rect, cuts, verts, normals, uvs, index)
+				var limits := _lane_limits(strip, strip_list)
+				_add_mitred_lane(rect, cuts, verts, normals, uvs, index, false, limits)
 				continue
 		if strip.get("through", false):
 			# A spur is mitred under the lane and the connectors meeting its
 			# edges as the lane is under its links, worked out with x and z
-			# swapped.
+			# swapped; beside a north link close to it, in pieces along z.
 			var flipped := _flipped(strip_list)
 			var spur_cuts := junctions(_flip(rect), flipped)
 			if not spur_cuts.is_empty():
-				_add_mitred_lane(_flip(rect), spur_cuts, verts, normals, uvs, index, true)
+				for limits in _spur_pieces(strip, strip_list):
+					_add_mitred_lane(
+						_flip(rect), spur_cuts, verts, normals, uvs, index, true, limits
+					)
 				continue
 		var parts: Array[Rect2] = [rect]
 		if across_x:
@@ -641,12 +648,14 @@ static func mesh_of(
 
 
 ## The links in `strip_list` that meet the edges of the lane strip `lane` (a
-## north-south strip as wide as the lane, inside its x range, with an end on
-## its north or south edge), west to east: each {"x": the link's centre x,
+## north-south strip as wide as the lane, overlapping its x range, with an end
+## on its north or south edge), west to east: each {"x": the link's centre x,
 ## "north": a link meets the north edge there, "south": one meets the south
 ## edge}. A link at the same x on both edges makes one entry. Links closer
 ## than the lane is wide are all kept; _add_mitred_lane() splits the lane
-## between them.
+## between them. A link may overhang the lane's end where the lane stops at a
+## spur's inner edge (a north stand whose join is close to a spur, board
+## 0793554d); the mitre is drawn only over the lane.
 static func junctions(lane: Rect2, strip_list: Array[Dictionary]) -> Array[Dictionary]:
 	var width := lane.size.y
 	var by_x: Dictionary = {}
@@ -656,7 +665,7 @@ static func junctions(lane: Rect2, strip_list: Array[Dictionary]) -> Array[Dicti
 		var rect: Rect2 = strip["rect"]
 		if absf(rect.size.x - width) > SAME_M:
 			continue
-		if rect.position.x < lane.position.x - SAME_M or rect.end.x > lane.end.x + SAME_M:
+		if rect.end.x <= lane.position.x + SAME_M or rect.position.x >= lane.end.x - SAME_M:
 			continue
 		var north := absf(rect.end.y - lane.position.y) < SAME_M
 		var south := absf(rect.position.y - lane.end.y) < SAME_M
@@ -693,6 +702,102 @@ static func _flipped(strip_list: Array[Dictionary]) -> Array[Dictionary]:
 	return out
 
 
+## A north stand's lane join may lie closer to a spur than a strip is wide
+## (board 0793554d, the S4 residual), so its link runs south beside the spur,
+## overlapping it, and meets the lane's south edge partly where the spur is.
+## There every point takes the band of the nearest centre line, as at every
+## other junction: the spur and the link share the ground at their midpoint, as
+## two close links do (_drawn_rects()), and the lane's south half runs on west
+## (or east) over the spur to that midpoint, mitred under the link there. Not
+## handled: a side stand's connector meeting the spur within the link's span.
+##
+## The links of `strip_list` that meet the south edge of `lane` (a Rect2) on
+## the inner side of the spur strip `spur` (a Rect2) and overlap it: each
+## {"x": its centre x, "end": its south end z}.
+static func _near_links(spur: Rect2, lane: Rect2, strip_list: Array[Dictionary]) -> Array:
+	var out: Array = []
+	var spur_x := spur.get_center().x
+	var inward := 1.0 if spur_x < lane.get_center().x else -1.0
+	for strip in strip_list:
+		if not strip["across_x"] or strip.has("quad") or strip.get("through", false):
+			continue
+		var rect: Rect2 = strip["rect"]
+		var link_x := rect.get_center().x
+		if absf(rect.size.x - spur.size.x) > SAME_M or absf(rect.position.y - lane.end.y) > SAME_M:
+			continue
+		if (link_x - spur_x) * inward <= SAME_M or absf(link_x - spur_x) >= spur.size.x - SAME_M:
+			continue
+		out.append({"x": link_x, "end": rect.end.y})
+	return out
+
+
+## The lane strip of `strip_list` (east-west, not a side stand's row), or an
+## empty Rect2 when it has none.
+static func _lane_rect(strip_list: Array[Dictionary]) -> Rect2:
+	for strip in strip_list:
+		if not strip["across_x"] and not strip.get("row", false) and not strip.has("quad"):
+			return strip["rect"]
+	return Rect2()
+
+
+## _add_mitred_lane()'s limits for the lane strip `lane_strip`: its south half
+## starts (or ends) at the midpoint between a spur at its end and the nearest
+## north link beside that spur (_near_links()); {} when there is none.
+static func _lane_limits(lane_strip: Dictionary, strip_list: Array[Dictionary]) -> Dictionary:
+	var lane: Rect2 = lane_strip["rect"]
+	var limit := Vector3(lane.position.x, lane.end.x, lane.size.y / 2.0)
+	var changed := false
+	for strip in strip_list:
+		if not strip.get("through", false):
+			continue
+		var spur: Rect2 = strip["rect"]
+		var spur_x := spur.get_center().x
+		for link: Dictionary in _near_links(spur, lane, strip_list):
+			var mid := (spur_x + float(link["x"])) / 2.0
+			if absf(spur.end.x - lane.position.x) < SAME_M:
+				limit.x = minf(limit.x, mid)
+				changed = true
+			elif absf(spur.position.x - lane.end.x) < SAME_M:
+				limit.y = maxf(limit.y, mid)
+				changed = true
+	return {"south": limit} if changed else {}
+
+
+## _add_mitred_lane()'s limits (in the spur's flipped frame, _flip()) for each
+## piece along z of the spur strip `spur_strip`: [{}] when no north link runs
+## beside it (_near_links()); otherwise the spur cut at the lane's centre line
+## and at each such link's south end, its inner half reaching only to the
+## midpoint with the nearest link over the z where that link runs.
+static func _spur_pieces(spur_strip: Dictionary, strip_list: Array[Dictionary]) -> Array:
+	var spur: Rect2 = spur_strip["rect"]
+	var lane := _lane_rect(strip_list)
+	var near := _near_links(spur, lane, strip_list) if lane.has_area() else []
+	if near.is_empty():
+		return [{}]
+	var spur_x := spur.get_center().x
+	var lane_z := lane.get_center().y
+	var half := spur.size.x / 2.0
+	# The spur's flipped "south" half is its east half.
+	var inner := "south" if spur_x < lane.get_center().x else "north"
+	var outer := "north" if inner == "south" else "south"
+	var cuts: Array[float] = [spur.position.y, spur.end.y, lane_z]
+	for link: Dictionary in near:
+		cuts.append(float(link["end"]))
+	cuts.sort()
+	var out: Array = []
+	for i in range(1, cuts.size()):
+		var z0 := maxf(cuts[i - 1], spur.position.y)
+		var z1 := minf(cuts[i], spur.end.y)
+		if z1 - z0 < SAME_M:
+			continue
+		var reach := half
+		for link: Dictionary in near:
+			if z0 >= lane_z - SAME_M and z1 <= float(link["end"]) + SAME_M:
+				reach = minf(reach, absf(float(link["x"]) - spur_x) / 2.0)
+		out.append({inner: Vector3(z0, z1, reach), outer: Vector3(z0, z1, half)})
+	return out
+
+
 ## Adds the lane strip `lane` to the arrays, mitred under the links at `cuts`
 ## (junctions()). In each half of the lane the band follows the nearest centre
 ## line: the lane's, or that of a link meeting that half's edge. So a link's
@@ -700,7 +805,10 @@ static func _flipped(strip_list: Array[Dictionary]) -> Array[Dictionary]:
 ## links on one edge share the lane at their midpoint. The half is cut into x
 ## slabs at every link's centre, edges and midpoints, where each part is linear.
 ## With `flip`, `lane` and `cuts` are a spur's with x and z swapped (_flip()),
-## and each corner is swapped back as it is added.
+## and each corner is swapped back as it is added. `limits` may narrow a half
+## (side -> Vector3(from x, to x, reach)): only from x to x of it is drawn, and
+## only `reach` out from the centre line, with the band still mapped across the
+## whole of `lane`; a link part beyond the reach is left out.
 static func _add_mitred_lane(
 	lane: Rect2,
 	cuts: Array[Dictionary],
@@ -708,11 +816,14 @@ static func _add_mitred_lane(
 	normals: PackedVector3Array,
 	uvs: PackedVector2Array,
 	index: PackedInt32Array,
-	flip := false
+	flip := false,
+	limits := {}
 ) -> void:
-	var half := lane.size.y / 2.0
+	var half_width := lane.size.y / 2.0
 	var mid_z := lane.get_center().y
 	for side: String in ["north", "south"]:
+		var limit: Vector3 = limits.get(side, Vector3(lane.position.x, lane.end.x, half_width))
+		var half := limit.z
 		# Toward the half's outer edge: -z for the north half, +z for the south.
 		var out_dir := -1.0 if side == "north" else 1.0
 		var outer := mid_z + out_dir * half
@@ -720,15 +831,16 @@ static func _add_mitred_lane(
 		for cut in cuts:
 			if cut[side]:
 				xs.append(cut["x"])
-		var breaks: Array[float] = [lane.position.x, lane.end.x]
+		var breaks: Array[float] = [lane.position.x, lane.end.x, limit.x, limit.y]
 		for i in xs.size():
-			breaks.append_array([xs[i], xs[i] - half, xs[i] + half])
+			breaks.append_array([xs[i], xs[i] - half_width, xs[i] + half_width])
+			breaks.append_array([xs[i] - half, xs[i] + half])
 			if i > 0:
 				breaks.append((xs[i - 1] + xs[i]) / 2.0)
 		breaks.sort()
 		for i in range(1, breaks.size()):
-			var a := maxf(breaks[i - 1], lane.position.x)
-			var b := minf(breaks[i], lane.end.x)
+			var a := maxf(breaks[i - 1], limit.x)
+			var b := minf(breaks[i], limit.y)
 			if b - a < SAME_M:
 				continue
 			var link_x := INF
@@ -754,7 +866,8 @@ static func _add_mitred_lane(
 				flip
 			)
 			# The link's part, from the diagonal out to the lane's edge.
-			var link_t := func(p: Vector2) -> float: return (p.x - link_x + half) / (2.0 * half)
+			var link_t := func(p: Vector2) -> float:
+				return (p.x - link_x + half_width) / (2.0 * half_width)
 			_add_part(
 				[
 					Vector2(a, mid_z + out_dir * ga),
