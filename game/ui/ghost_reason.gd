@@ -68,6 +68,7 @@ const SHORT_TEXT := {
 	BuildResult.Reason.GATE_NO_ROOM: "No room for the plane",
 	BuildResult.Reason.GATE_ROUTE_BLOCKED: "Way to the lane blocked",
 	BuildResult.Reason.GATE_ROUTE: "A booked plane needs it",
+	BuildResult.Reason.SPUR_STRANDS: "Strands a booked flight",
 }
 
 var build_mode: BuildMode
