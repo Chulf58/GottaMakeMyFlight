@@ -14,6 +14,9 @@ const WEST_DESK := Vector2i(12, 5)
 ## it pushes the west spur out to the edge less the band (x -149.8), and no
 ## envelope of gate A's on either spur reaches it.
 const WING := Vector2i(0, 149)
+## WING on the east edge, for an east gate.
+const WING_EAST := Vector2i(255, 149)
+const EAST_EXIT := Vector2i(21, 4)
 ## Gate A's contracts depart at 12:00, so their first day is issued after the
 ## airport opens at tick 0 (06:00).
 const MINUTE := 12 * 60
@@ -42,6 +45,23 @@ static func west_gate(grid: SiteGrid, sim: FlightSim, gates: GateDesks) -> int:
 	if not (
 		grid.apply(BuildEdit.place_object(GateDesks.DESK, WEST_DESK + SITE.starter_offset, 0)).ok
 	):
+		return 0
+	return exit.object_id if gates.gate_ids() == ["A"] else 0
+
+
+## west_gate() on the east side: the shell's east exit two rows from its north-
+## east corner, linked by the shell's gate desk cell, which is nearer it than
+## the north exit (test_gate_desks_side.gd).
+static func east_gate(grid: SiteGrid, sim: FlightSim, gates: GateDesks) -> int:
+	sim.open_airport()
+	gates.bind(grid, sim)
+	grid.guard = gates.edit_problem
+	var at := EAST_EXIT + SITE.starter_offset
+	if not grid.apply(BuildEdit.remove_wall(at, BuildGrid.Side.EAST)).ok:
+		return 0
+	var exit := grid.apply(BuildEdit.place_object(&"exit_door", at, 1))
+	var desk := ReferenceTerminal.GATE_DESK_CELL + SITE.starter_offset
+	if not exit.ok or not grid.apply(BuildEdit.place_object(GateDesks.DESK, desk, 0)).ok:
 		return 0
 	return exit.object_id if gates.gate_ids() == ["A"] else 0
 

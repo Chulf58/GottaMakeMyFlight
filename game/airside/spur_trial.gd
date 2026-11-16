@@ -11,14 +11,15 @@ extends RefCounted
 ## The edit is never applied: a placement's cells read as built and a removal's
 ## as cleared where nothing else stands there (SideSpurs.built_edges()). A desk
 ## placed brings the stand of the exit it would link to, and an exit door the
-## stand out from it while a desk with no gate is in reach (a door the desk
-## cannot use is counted all the same, so the check may look farther out than
-## the link). A removal that ends a gate leaves its stand out. The grounds'
-## classes after a placement are the largest whose envelope the edit leaves
-## clear, as GateDesks.edit_warning() works them out.
+## stand out from it when the link selection would make it a gate: a desk with
+## no gate in reach and the exit fit for one (GateDesks.exit_unfit() on the new
+## stand). A removal that ends a gate leaves its stand out, and its moved
+## contracts are checked in the same trial. The grounds' classes after a
+## placement are the largest whose envelope the edit leaves clear, as
+## GateDesks.edit_warning() works them out.
 ##
-## Not guaranteed: a gate removal's moved contracts are checked by FlightSim.
-## move_plan() on the spurs as they are, not on the ones the removal leaves.
+## Not guaranteed: an exit door that a desk could take is counted even when
+## every gate letter is in use.
 
 const REMOVALS: Array[BuildEdit.Kind] = [
 	BuildEdit.Kind.REMOVE_FLOOR,
@@ -29,18 +30,23 @@ const REMOVALS: Array[BuildEdit.Kind] = [
 
 
 ## A SPUR_STRANDS refusal naming the flight `edit` on `on_grid` would strand
-## through `gates`' side spurs, or null. Nothing is checked while the edit
-## leaves the wanted spurs as they are and no side waits (or it is a removal).
-static func problem(gates: GateDesks, on_grid: BuildGrid, edit: BuildEdit) -> BuildResult:
+## through `gates`' side spurs, or null. A gate removal's contract `moves`
+## (GateDesks' removal plan, contract id -> gate) are carried out in the same
+## trial, on the gates and spurs the removal leaves. Nothing is checked while
+## the edit leaves the wanted spurs as they are and no side waits, nor for a
+## removal that leaves them as they are and moves nothing.
+static func problem(
+	gates: GateDesks, on_grid: BuildGrid, edit: BuildEdit, moves := {}
+) -> BuildResult:
 	if gates.flights == null:
 		return null
 	var after := wanted_after(gates, on_grid, edit)
-	var moves := false
+	var waits := false
 	var same := true
 	for side in SideSpurs.SIDES:
-		moves = moves or not is_equal_approx(after[side], gates.spur_x[side])
+		waits = waits or not is_equal_approx(after[side], gates.spur_x[side])
 		same = same and is_equal_approx(after[side], gates.spur_wanted[side])
-	if same and (not moves or REMOVALS.has(edit.kind)):
+	if same and (not waits or (REMOVALS.has(edit.kind) and moves.is_empty())):
 		return null
 	var grounds := GateDesks.grounds_on(on_grid, _staying(gates, edit), gates.spur_x, after)
 	if not REMOVALS.has(edit.kind):
@@ -49,7 +55,9 @@ static func problem(gates: GateDesks, on_grid: BuildGrid, edit: BuildEdit) -> Bu
 			_lower(on_grid, grounds[gate], built)
 			if grounds[gate].has("next"):
 				_lower(on_grid, grounds[gate]["next"], built)
-	var stranded := gates.flights.spur_refusal(grounds, SideSpurs.spurs_at(gates.spur_x, after))
+	var stranded := gates.flights.spur_refusal(
+		grounds, SideSpurs.spurs_at(gates.spur_x, after), moves
+	)
 	if stranded.is_empty():
 		return null
 	var refusal := BuildResult.refused(BuildResult.Reason.SPUR_STRANDS)
@@ -145,20 +153,27 @@ static func _new_stands(gates: GateDesks, on_grid: BuildGrid, edit: BuildEdit) -
 	var out: Array[Dictionary] = []
 	if edit.kind != BuildEdit.Kind.PLACE_OBJECT:
 		return out
+	if edit.def_id != GateDesks.DESK and edit.def_id != &"exit_door":
+		return out
+	var taken := {}
+	var stands: Array[Dictionary] = []
+	for link in GateDesks.links_on(on_grid, gates.bindings):
+		taken[link["exit"]] = true
+		stands.append(SideSpurs.link_stand(on_grid, link["exit"]))
 	if edit.def_id == GateDesks.DESK:
 		var footprint := BuildCatalog.get_def(GateDesks.DESK).footprint(edit.cell, edit.facing)
-		var taken := {}
-		var stands: Array[Dictionary] = []
-		for link in GateDesks.links_on(on_grid, gates.bindings):
-			taken[link["exit"]] = true
-			stands.append(SideSpurs.link_stand(on_grid, link["exit"]))
 		var exit := GateDesks.nearest_exit(on_grid, footprint, taken, stands)
 		if exit != 0:
 			out.append(StandPlacement.for_exit(on_grid, exit))
-	elif edit.def_id == &"exit_door":
-		var side := StandPlacement.side_of_step(DoorPlacement.back_step(edit.facing))
-		if side in SideSpurs.SIDES and _desk_in_reach(gates, on_grid, edit.cell):
-			out.append(StandPlacement.for_cell(on_grid, edit.cell, 0, side))
+		return out
+	# An exit door is a gate's only when a desk with no gate reaches it and the
+	# links would take it (fit beside the gates there are, as nearest_exit() asks).
+	var side := StandPlacement.side_of_step(DoorPlacement.back_step(edit.facing))
+	if not side in SideSpurs.SIDES or not _desk_in_reach(gates, on_grid, edit.cell):
+		return out
+	var stand := StandPlacement.for_cell(on_grid, edit.cell, 0, side)
+	if GateDesks.stand_unfit(on_grid, SideSpurs.at_link_lane(on_grid, stand), stands) < 0:
+		out.append(stand)
 	return out
 
 

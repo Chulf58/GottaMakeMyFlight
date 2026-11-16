@@ -508,17 +508,20 @@ func spur_release_tick(side: String) -> int:
 	return SpurMoves.release(_world(), side)
 
 
-## The flight a build's side spurs `with_spurs` and gate `grounds` would strand
-## ({"id", "reason"}) or {}: SpurMoves.refusal(), then every taxi plan from
-## today on against the plans now (GateDesks' trial). Read-only.
-func spur_refusal(grounds: Dictionary, with_spurs: Dictionary) -> Dictionary:
+## The flight ({"id", "reason"}) or {} a build's spurs `with_spurs`, gate
+## `grounds` and removal `moves` (SpurMoves.with_moves()) would strand: SpurMoves.
+## refusal(), then every taxi plan from today on (GateDesks' trial). Read-only.
+func spur_refusal(grounds: Dictionary, with_spurs: Dictionary, moves := {}) -> Dictionary:
 	var world := _world(grounds)
 	world["spurs"] = with_spurs
+	world["contracts"] = SpurMoves.with_moves(_contracts, moves, grounds)
 	var stranded := SpurMoves.refusal(world)
 	if not stranded.is_empty():
 		return stranded
 	var days := FlightPlans.days_from(world, GameCalendar.day_of(tick))
-	return _trial_planner().refusal(world, _trial_day_plan, days, [])
+	return SpurMoves.typed(
+		_world(), world, _trial_planner().refusal(world, _trial_day_plan, days, [])
+	)
 
 
 ## The stand live or landed flight `id` was issued at, or {}.
@@ -669,16 +672,18 @@ func end_contract(contract_id: String) -> bool:
 	if opened_tick < 0:
 		push_error("FlightSim.end_contract: the airport is closed")
 		return false
-	var trial := _world()
-	trial["ended"] = _ended.duplicate()
-	trial["ended"][contract_id] = _next_day[contract_id]
+	# The world the end leaves, reserving or not, checked whole before it commits.
+	var reserving := not end_refusal(contract_id).is_empty()
+	var trial := SpurMoves.ending(_world(), contract_id, _next_day[contract_id], reserving)
 	var moved := SpurMoves.refusal(trial)
+	if moved.is_empty() and reserving and not SpurMoves.pending_sides(trial).is_empty():
+		var days := FlightPlans.days_from(trial, _next_day[contract_id])
+		moved = SpurMoves.typed(_world(), trial, _plans.refusal(trial, _day_plan, days, []))
 	if not moved.is_empty():
 		push_error("FlightSim.end_contract: %s" % _ground_text(moved))
 		return false
-	var stranded := end_refusal(contract_id)
 	_ended[contract_id] = _next_day[contract_id]
-	if not stranded.is_empty():
+	if reserving:
 		_reserving[contract_id] = true
 	_changed()
 	contract_ended.emit(contract_id)
@@ -1023,7 +1028,9 @@ func _load_plan_problem(loaded: Dictionary) -> String:
 		if ground.is_empty() or not SpurMoves.holds_stand(flight, ground["stand"]):
 			return "flight %s is not at its gate's stand" % flight["id"]
 		var plane_class := FlightPlans.flight_class(world, flight)
-		if not FlightGround.class_fits(plane_class, ground["max_class"]):
+		# On its side's old spur (TAKEOFF on), the gate's max_class does not bind it.
+		var on_old: bool = flight["stand"] != ground["stand"]
+		if not on_old and not FlightGround.class_fits(plane_class, ground["max_class"]):
 			return (
 				"flight %s needs a %s gate, but gate %s takes %s"
 				% [flight["id"], plane_class, flight["gate"], ground["max_class"]]
@@ -1322,19 +1329,18 @@ func _contracts_refusal(
 	var subjects := [subject["id"]]
 	for contract: Dictionary in also:
 		subjects.append(contract["id"])
-	# A pending spur's release is forecast again with the change (SpurMoves).
 	var stranded := SpurMoves.refusal(world)
 	if not stranded.is_empty():
 		return stranded
 	var days := FlightPlans.days_from(world, from_day)
-	if trial:
-		return _trial_planner().refusal(world, _trial_day_plan, days, subjects)
-	return _plans.refusal(world, _day_plan, days, subjects)
+	var planner := _trial_planner() if trial else _plans
+	var base := _trial_day_plan if trial else _day_plan
+	return SpurMoves.typed(_world(), world, planner.refusal(world, base, days, subjects), subjects)
 
 
 ## The player's words for a taxi refusal ({"reason"}).
 static func _ground_text(refusal: Dictionary) -> String:
-	if refusal["reason"] in [SpurMoves.NO_STAND, SpurMoves.GATE_MEETS]:
+	if refusal["reason"] in SpurMoves.REASONS:
 		return SPUR_STRANDS_TEXT % refusal.get("id", refusal.get("flight", ""))
 	if refusal["reason"] == GroundPlanner.QUIET_NIGHT:
 		return ODD_HOURS_NIGHT_TEXT

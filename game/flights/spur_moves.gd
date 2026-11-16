@@ -30,9 +30,11 @@ extends RefCounted
 ##
 ## Not guaranteed: refusal() names the first stranded flight, not every one.
 
-## The reasons refusal() gives, beside the planner's.
+## The reasons refusal() gives, beside the planner's, and typed()'s.
 const NO_STAND := "spur_no_stand"
 const GATE_MEETS := "spur_gate"
+const LOST_PLAN := "spur_lost_plan"
+const REASONS: Array[String] = [NO_STAND, GATE_MEETS, LOST_PLAN]
 
 
 ## The spurs of `world`, or none pending when it has none.
@@ -214,6 +216,63 @@ static func _gate_refusal(
 			var b: Dictionary = resolve(world, contracts[j], last)["contract"]
 			if FlightTimetable.contracts_share_gate(a, b):
 				return {"id": FlightTimetable.occurrence_id(b["id"], last), "reason": GATE_MEETS}
+	return {}
+
+
+## `refusal` (FlightPlans.refusal() of `changed` against the plans of `base`)
+## typed as LOST_PLAN when it is an occurrence that planned before the change
+## (a TAXI_BUSY of a flight outside `subjects`), not yet issued, whose stand or
+## taxi pair the change moved across a release: the change strands it through
+## the spur, not through the ground it shares. Else `refusal` as it is.
+static func typed(
+	base: Dictionary, changed: Dictionary, refusal: Dictionary, subjects := []
+) -> Dictionary:
+	if refusal.get("reason", "") != GroundPlanner.TAXI_BUSY:
+		return refusal
+	var parts := FlightTimetable.parse_occurrence(refusal["id"])
+	if parts.is_empty() or subjects.has(parts["contract"]) or subjects.has(refusal["id"]):
+		return refusal
+	var day: int = parts["day"]
+	var was := _resolved_of(base, parts["contract"], day)
+	var now := _resolved_of(changed, parts["contract"], day)
+	if was.is_empty() or now.is_empty():
+		return refusal
+	if was["stand"] == now["stand"] and was["contract"]["taxi"] == now["contract"]["taxi"]:
+		return refusal
+	return {"id": refusal["id"], "reason": LOST_PLAN}
+
+
+## `world` with contract `id` ended from day `day`, and still reserving its
+## ground when `reserving` (FlightSim.end_contract()'s trial).
+static func ending(world: Dictionary, id: String, day: int, reserving: bool) -> Dictionary:
+	world["ended"] = world["ended"].duplicate()
+	world["ended"][id] = day
+	if reserving:
+		world["reserving"] = world["reserving"].duplicate()
+		world["reserving"][id] = true
+	return world
+
+
+## `contracts` with a gate removal's `moves` (contract id -> gate, FlightSim.
+## move_plan()) carried out, each on its new gate's stand in `grounds` now.
+static func with_moves(
+	contracts: Array[Dictionary], moves: Dictionary, grounds: Dictionary
+) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for contract in contracts:
+		var to: String = moves.get(contract["id"], "")
+		var ok := to != "" and grounds.has(to)
+		ok = ok and FlightContract.assignment_problem(to, grounds[to]["stand"]) == ""
+		out.append(FlightContract.assigned(contract, to, grounds[to]["stand"]) if ok else contract)
+	return out
+
+
+## resolve() of contract `id`'s day `day` in `world` when that day is not yet
+## issued there, else {}.
+static func _resolved_of(world: Dictionary, id: String, day: int) -> Dictionary:
+	for contract: Dictionary in world["contracts"]:
+		if contract["id"] == id and day >= int(world["next_day"].get(id, day + 1)):
+			return resolve(world, contract, day)
 	return {}
 
 

@@ -608,20 +608,30 @@ func _tick_key() -> Array:
 	if gates != null:
 		key = [flights.tick, _stands_of(gate_stands)]
 		for gate: String in gate_stands:
-			key.append(busy_flight(gate))
+			# A flight issued while the clock is paused adds a spur band
+			# (spur_rects()) at the same tick.
+			key.append_array([busy_flight(gate), _flies_before_takeoff(gate)])
 	return key
 
 
 ## The guard of the site's grid (SiteGrid): a PLANE_AREA refusal for an
 ## edit that builds on a guarded cell, then the gates' refusals
 ## (GateDesks.edit_problem: desks, removals and the booked envelopes), else
-## null. A plane standing there is named before the bookings behind it.
+## null. A plane standing there is named before the bookings behind it, and
+## land the player does not own before the plane (LandPlots.edit_problem()):
+## a side spur's band reaches over the side plots.
 func edit_problem(on_grid: BuildGrid, edit: BuildEdit) -> BuildResult:
 	if not REMOVALS.has(edit.kind):
 		var cells := guarded_cells()
 		for cell in StandEnvelope.edit_cells(edit):
 			if cells.has(cell):
-				return BuildResult.refused(BuildResult.Reason.PLANE_AREA)
+				var land: LandPlots = (on_grid as SiteGrid).land if on_grid is SiteGrid else null
+				var unowned := land.edit_problem(edit) if land != null else null
+				return (
+					unowned
+					if unowned != null
+					else BuildResult.refused(BuildResult.Reason.PLANE_AREA)
+				)
 	if gates != null:
 		return gates.edit_problem(on_grid, edit)
 	return null

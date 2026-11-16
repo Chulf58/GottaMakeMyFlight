@@ -139,6 +139,15 @@ static func link_stand(grid: BuildGrid, exit_id: int, built := {}) -> Dictionary
 	return stand_for_exit(grid, exit_id, link_lane(grid, exit_id, built))
 
 
+## link_stand() for a stand `stand` whose exit is not on `grid` yet (a trial).
+static func at_link_lane(grid: BuildGrid, stand: Dictionary) -> Dictionary:
+	var side := StandPlacement.side_of(stand)
+	if side == StandPlacement.NORTH:
+		return stand
+	var lane := outermost(side, build_lanes(grid)[side], stand_lane(side, float(stand["x"])))
+	return StandPlacement.with_lane_x(stand, lane)
+
+
 ## Each side's wanted spur x on `grid` with gates at exit doors `exits`: the
 ## build's (build_lanes()) or a side gate stand's stand_lane(), whichever is
 ## farther out. `extra_stands` are stands a trial adds (a desk about to link).

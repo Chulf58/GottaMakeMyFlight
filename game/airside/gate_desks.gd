@@ -400,11 +400,16 @@ static func _unlinked_reason(
 
 ## Why exit `exit` on `on_grid` cannot be a new gate's beside `stands`, as an
 ## Unlinked reason (STAND_OVERLAP before NO_ROOM before ROUTE_BLOCKED), or -1
-## when it can: its small swing square must meet none of theirs and its small
-## envelope must be clear.
+## when it can (stand_unfit() of its SideSpurs.link_stand()).
 static func exit_unfit(on_grid: BuildGrid, exit: int, stands: Array[Dictionary]) -> int:
-	var stand := SideSpurs.link_stand(on_grid, exit)
-	if stands.any(func(other: Dictionary) -> bool: return stands_overlap(stand, other)):
+	return stand_unfit(on_grid, SideSpurs.link_stand(on_grid, exit), stands)
+
+
+## exit_unfit() for the stand `stand` of an exit (placed or about to be): its
+## small swing square must meet none of `stands`' on the spurs they would all
+## share (overlaps_common()), and its small envelope must be clear.
+static func stand_unfit(on_grid: BuildGrid, stand: Dictionary, stands: Array[Dictionary]) -> int:
+	if overlaps_common(on_grid, stand, stands):
 		return Unlinked.STAND_OVERLAP
 	match StandEnvelope.blocked_part(on_grid, site_of(on_grid), stand, PlaneClasses.SMALL):
 		StandEnvelope.Part.CLEAR:
@@ -414,13 +419,58 @@ static func exit_unfit(on_grid: BuildGrid, exit: int, stands: Array[Dictionary])
 	return Unlinked.NO_ROOM
 
 
-## The first of `links`' gates whose stand overlaps `stand`, or "".
+## `stands` each on its side's common spur on `on_grid`: the wanted x the build
+## and every side stand among them push it to (SideSpurs.wanted()).
+static func at_common_lanes(on_grid: BuildGrid, stands: Array[Dictionary]) -> Array[Dictionary]:
+	var lanes := SideSpurs.wanted(on_grid, [], {}, stands)
+	var out: Array[Dictionary] = []
+	for stand in stands:
+		var side := StandPlacement.side_of(stand)
+		out.append(
+			(
+				stand
+				if side == StandPlacement.NORTH
+				else StandPlacement.with_lane_x(stand, lanes[side])
+			)
+		)
+	return out
+
+
+## Whether `stand` would share private ground with any of `stands` once all of
+## them are on the spurs they would share (at_common_lanes()), or two of
+## `stands` would once `stand` pushed their side's spur farther out: a later
+## gate never moves an earlier one's spur onto ground it is not checked on.
+static func overlaps_common(
+	on_grid: BuildGrid, stand: Dictionary, stands: Array[Dictionary]
+) -> bool:
+	var all: Array[Dictionary] = stands.duplicate()
+	all.append(stand)
+	var moved := at_common_lanes(on_grid, all)
+	var placed: Array[Dictionary] = moved.slice(0, stands.size())
+	if placed.any(func(other: Dictionary) -> bool: return stands_overlap(moved[-1], other)):
+		return true
+	if placed == at_common_lanes(on_grid, stands):
+		return false
+	for i in placed.size():
+		for j in range(i + 1, placed.size()):
+			if stands_overlap(placed[i], placed[j]):
+				return true
+	return false
+
+
+## The first of `links`' gates whose stand overlaps `stand`, both on the spurs
+## they would share with every link (at_common_lanes()), or "".
 static func _overlapping_gate(
 	on_grid: BuildGrid, stand: Dictionary, links: Array[Dictionary]
 ) -> String:
+	var all: Array[Dictionary] = []
 	for link in links:
-		if stands_overlap(stand, SideSpurs.link_stand(on_grid, link["exit"])):
-			return link["gate"]
+		all.append(SideSpurs.link_stand(on_grid, link["exit"]))
+	all.append(stand)
+	var moved := at_common_lanes(on_grid, all)
+	for i in links.size():
+		if stands_overlap(moved[-1], moved[i]):
+			return links[i]["gate"]
 	return ""
 
 
@@ -534,14 +584,18 @@ static func private_rects(stand: Dictionary) -> Array[Rect2]:
 ## is checked on (the live grid or a trial copy of it).
 func edit_problem(on_grid: BuildGrid, edit: BuildEdit) -> BuildResult:
 	var problem: BuildResult = null
+	var moves := {}
 	if edit.kind == BuildEdit.Kind.REMOVE_OBJECT:
 		problem = _removal_problem(on_grid, edit.object_id)
+		if problem == null and flights != null:
+			moves = _removal_plan(on_grid, edit.object_id)["moves"]
 	elif not REMOVALS.has(edit.kind):
 		problem = _route_problem(on_grid, edit)
 		if problem == null and edit.kind == BuildEdit.Kind.PLACE_OBJECT and edit.def_id == DESK:
 			problem = _placement_problem(on_grid, edit)
-	# Then the side spurs the edit would move (SpurTrial): SPUR_STRANDS.
-	return problem if problem != null else SpurTrial.problem(self, on_grid, edit)
+	# Then the side spurs the edit would move, with a removal's moves carried out
+	# in the same trial (SpurTrial): SPUR_STRANDS.
+	return problem if problem != null else SpurTrial.problem(self, on_grid, edit, moves)
 
 
 func _placement_problem(on_grid: BuildGrid, edit: BuildEdit) -> BuildResult:
@@ -562,12 +616,11 @@ func _placement_problem(on_grid: BuildGrid, edit: BuildEdit) -> BuildResult:
 	var why := exit_unfit(on_grid, reach, stands)
 	if why != Unlinked.STAND_OVERLAP:
 		return BuildResult.refused(REFUSAL_OF[why])
-	var stand := SideSpurs.link_stand(on_grid, reach)
+	var gate := _overlapping_gate(on_grid, SideSpurs.link_stand(on_grid, reach), links)
 	for link in links:
-		if stands_overlap(stand, SideSpurs.link_stand(on_grid, link["exit"])):
+		if gate != "" and link["gate"] == gate:
 			var refusal := BuildResult.refused(BuildResult.Reason.GATE_STAND_OVERLAP, link["desk"])
-			if link["gate"] != "":
-				refusal.detail = "gate %s is too close" % link["gate"]
+			refusal.detail = "gate %s is too close" % gate
 			return refusal
 	return BuildResult.refused(BuildResult.Reason.GATE_STAND_OVERLAP)
 
@@ -820,15 +873,21 @@ static func checked(data: Dictionary, on_grid: BuildGrid) -> Dictionary:
 ## overlap, or a desk with no saved gate that refresh() would link (the load
 ## would then not be the saved world).
 static func _set_problem(bindings: Array[Dictionary], on_grid: BuildGrid) -> String:
+	var stands: Array[Dictionary] = []
+	for binding in bindings:
+		stands.append(SideSpurs.link_stand(on_grid, binding["exit"]))
+	stands = at_common_lanes(on_grid, stands)
 	for i in bindings.size():
 		var binding := bindings[i]
 		var footprint := desk_footprint(on_grid, binding["desk"])
 		if reach_cells(on_grid, footprint, binding["exit"]) > LINK_CELLS:
 			return "gate %s: its desk is out of its exit's reach" % binding["gate"]
-		var stand := SideSpurs.link_stand(on_grid, binding["exit"])
-		for other in bindings.slice(i + 1):
-			if stands_overlap(stand, SideSpurs.link_stand(on_grid, other["exit"])):
-				return "gates %s and %s have overlapping stands" % [binding["gate"], other["gate"]]
+		for j in range(i + 1, bindings.size()):
+			if stands_overlap(stands[i], stands[j]):
+				return (
+					"gates %s and %s have overlapping stands"
+					% [binding["gate"], bindings[j]["gate"]]
+				)
 	for link in links_on(on_grid, bindings):
 		if link["gate"] == "":
 			return (
