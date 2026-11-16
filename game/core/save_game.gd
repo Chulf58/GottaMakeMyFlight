@@ -575,6 +575,7 @@ func _stage_gates(data: Dictionary, staged: Dictionary) -> String:
 	if loaded.has("error"):
 		return str(loaded["error"])
 	staged["gates"] = loaded["gates"]
+	staged["spurs"] = loaded["spurs"]
 	return ""
 
 
@@ -608,7 +609,9 @@ func _stage_apron(data: Dictionary, staged: Dictionary) -> String:
 	if loaded.has("stands") != staged.has("gates"):
 		return "the save's stands are not of this airport's kind"
 	if staged.has("gates"):
-		var problem := ApronStand.stands_problem(loaded["stands"], staged["gates"], staged["grid"])
+		var problem := ApronStand.stands_problem(
+			loaded["stands"], staged["gates"], staged["grid"], staged["spurs"]
+		)
 		if problem != "":
 			return problem
 	staged["apron"] = loaded
@@ -616,8 +619,9 @@ func _stage_apron(data: Dictionary, staged: Dictionary) -> String:
 
 
 ## An empty FlightSim on the staged gates: each saved gate's stand straight out
-## from its exit on the staged grid and its max_class there, as GateDesks
-## refresh() works them out. With no gate desks, the live sim's sources.
+## from its exit on the staged grid, on its side's saved spur, and its max_class
+## there, as GateDesks refresh() works them out (GateDesks.grounds_on()). With no
+## gate desks, the live sim's sources.
 func _staged_flight_sim(staged: Dictionary) -> FlightSim:
 	var sim := FlightSim.new()
 	if staged.has("runway"):
@@ -625,17 +629,18 @@ func _staged_flight_sim(staged: Dictionary) -> FlightSim:
 	if not staged.has("gates"):
 		sim.gate_source = flights.gate_source
 		sim.stand_source = flights.stand_source
+		sim.spur_source = flights.spur_source
 		return sim
 	var grid: BuildGrid = staged["grid"]
 	var bindings: Array[Dictionary] = staged["gates"]
 	var letters := _letters(bindings)
-	var grounds := {}
-	for binding in bindings:
-		var stand := StandPlacement.for_exit(grid, binding["exit"])
-		var largest := StandEnvelope.max_class(grid, GateDesks.site_of(grid), stand)
-		grounds[binding["gate"]] = {"stand": stand, "max_class": largest}
+	# The saved spurs, each side's wanted x from the staged grid (SideSpurs.wanted()).
+	var wanted := SideSpurs.wanted(grid, bindings.map(func(b: Dictionary) -> int: return b["exit"]))
+	var grounds := GateDesks.grounds_on(grid, bindings, staged["spurs"], wanted)
+	var spurs := SideSpurs.spurs_at(staged["spurs"], wanted)
 	sim.gate_source = func() -> Array[String]: return letters
 	sim.stand_source = func() -> Dictionary: return grounds
+	sim.spur_source = func() -> Dictionary: return spurs
 	return sim
 
 

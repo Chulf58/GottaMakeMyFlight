@@ -11,10 +11,12 @@ extends RefCounted
 ## "flights", "landed", "grounds"}: FlightSim's contracts and their days, its live flights,
 ## the occurrences of today and yesterday it has pruned (landed, kept so a prune
 ## never changes a plan), and each gate's ground (FlightGround: stand and
-## max_class). A day's
-## flights are its landed and live occurrences, each at the stand it was issued
-## at (one-off flights, tests and debug only, are not planned),
-## and every running contract's days not yet issued, at its gate's stand now. So
+## max_class), with the side spurs SpurMoves reads ("spurs", "tick", "open").
+## A day's flights are its landed and live occurrences, each at the stand it was
+## issued at (one-off flights, tests and debug only, are not planned), and every
+## running contract's days not yet issued, at the stand and on the taxi pair
+## SpurMoves.resolve() gives (its gate's stand now unless a pending spur moves it
+## first). So
 ## issuing or pruning an occurrence changes no plan; accepting, reassigning,
 ## moving and ending contracts do, but only for flights that start after them.
 ##
@@ -56,17 +58,20 @@ static func requests(world: Dictionary, day: int) -> Array:
 						flight["id"], flight_class(world, flight), flight["stand"], flight["starts"]
 					)
 				)
-	var grounds: Dictionary = world["grounds"]
 	for contract: Dictionary in world["contracts"]:
 		var id: String = contract["id"]
 		if not runs(world, id) or day < int(world["next_day"][id]):
 			continue
-		if not grounds.has(contract["gate"]):
+		# The stand and taxi pair it flies that day (SpurMoves.resolve()); none
+		# when its gate's new stand cannot take it, which SpurMoves.refusal() names.
+		var resolved := SpurMoves.resolve(world, contract, day)
+		if resolved.is_empty():
 			continue
-		var stand: Dictionary = grounds[contract["gate"]]["stand"]
-		var starts := FlightTimetable.starts_for(contract, day)
+		var starts := FlightTimetable.starts_for(resolved["contract"], day)
 		var occurrence := FlightTimetable.occurrence_id(id, day)
-		out.append(FlightGround.request(occurrence, contract["plane_size"], stand, starts))
+		out.append(
+			FlightGround.request(occurrence, contract["plane_size"], resolved["stand"], starts)
+		)
 	return out
 
 
@@ -138,6 +143,11 @@ static func days_from(world: Dictionary, from_day: int) -> Array[int]:
 		for sampled in range(GameCalendar.day_of(int(booking["from"])), last + 2):
 			if sampled >= from_day:
 				seen[sampled] = true
+	# A pending spur switches its side's occurrences on R's day; the day after
+	# flies the new stands throughout.
+	for sampled in SpurMoves.transition_days(world):
+		if sampled >= from_day:
+			seen[sampled] = true
 	var out: Array[int] = []
 	out.assign(seen.keys())
 	out.sort()

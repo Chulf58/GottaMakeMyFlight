@@ -46,6 +46,16 @@ extends Node
 ## `changed` fires after every refresh(), which runs on
 ## each graph change, so ApronStand works the stands out after the links.
 ##
+## Side spurs (decision side-spur-move-design-s7-stands-carry-lane-x-the-wanted-
+## spur, slice S7b): spur_x holds each side's spur x now, which every gate stand
+## there is on, and refresh() works out spur_wanted from the build and the gate
+## stands (SideSpurs.wanted()). A side whose two differ is pending: its gates'
+## grounds carry "next", the stand and max_class on the wanted spur, and
+## FlightSim calls release_spur() once the side is quiet (SpurMoves). A desk
+## links at its exit's SideSpurs.link_stand(), so a gate past the spur can
+## link and push it out; until the spur moves such a gate says WAITING_TEXT.
+## The spurs are saved with the gates.
+##
 ## Not guaranteed: when a gate ends because its exit went, its desk links again
 ## as a new gate (perhaps with the same letter) only after the moves; and the
 ## moves are greedy, oldest contract first, so a set of contracts that would fit
@@ -73,8 +83,18 @@ const DESK := &"gate_desk"
 ## be from the exit it links to.
 const LINK_CELLS := 4
 const LETTERS := "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-const SAVE_VERSION := 1
-const SAVE_KEYS := ["save_version", "gates"]
+## 2: "spurs", each side's spur x now (decision side-spur-move-design-s7-stands-
+## carry-lane-x-the-wanted-spur, slice S7b), so a save taken while a spur waits
+## to move loads waiting. A version 1 save is refused; there is no migration.
+const SAVE_VERSION := 2
+const SAVE_KEYS := ["save_version", "gates", "spurs"]
+## A gate whose stand can take no plane until its side's pending spur moves
+## (waits_on_spur()) says so on its card and sign (user ruling airside-
+## construction-works-are-a-visible-stage-props-mark-th, point 4).
+const WAITING_TEXT := "Waiting for taxiway works"
+## The rail notice when a side spur has moved.
+const SPUR_KEY := &"spur_moved"
+const SPUR_TITLE := "Taxiway moved"
 const GATE_KEYS := ["gate", "desk", "exit"]
 ## Edits that never build: only a removal that ends a gate is ever refused.
 const REMOVALS: Array[BuildEdit.Kind] = [
@@ -102,9 +122,17 @@ var bindings: Array[Dictionary] = []
 ## Gate letter -> its max_class (StandEnvelope.max_class), "" when not even a
 ## small plane fits; worked out on every refresh().
 var classes: Dictionary = {}
-## Gate letter -> its stand (SideSpurs.stand_for_exit), worked out on every
-## refresh() with classes.
+## Gate letter -> its stand (SideSpurs.stand_for_exit) on its side's spur now,
+## worked out on every refresh() with classes.
 var stands: Dictionary = {}
+## Side -> the x its spur runs at now, saved; it takes spur_wanted's only when
+## FlightSim releases the side (release_spur()).
+var spur_x: Dictionary = SideSpurs.floor_lanes()
+## Side -> the x the build wants its spur at (SideSpurs.wanted()), worked out
+## on every refresh().
+var spur_wanted: Dictionary = SideSpurs.floor_lanes()
+## gate_grounds() as the last refresh() found them, with "next" on a pending side.
+var _grounds: Dictionary = {}
 ## "x|wall_z|side|lane_x|class|grid size" -> the envelope's cells, which only
 ## the stand decides.
 var _envelope_cells: Dictionary = {}
@@ -128,6 +156,8 @@ func bind(on_grid: BuildGrid, on_flights: FlightSim) -> void:
 	flights.gate_source = gate_ids
 	flights.stand_source = gate_grounds
 	flights.spare_stand_source = spare_stand
+	flights.spur_source = spurs
+	flights.spur_release = release_spur
 	grid.graph_changed.connect(_on_graph_changed)
 	grid.edit_applied.connect(_on_edit_applied)
 	refresh()
@@ -161,22 +191,76 @@ func refresh() -> void:
 					"GateDesks: every gate letter is in use; desk %d is no gate" % link["desk"]
 				)
 	bindings.assign(links.filter(func(link: Dictionary) -> bool: return link["gate"] != ""))
+	spur_wanted = SideSpurs.wanted(grid, _exits_of(bindings))
+	_grounds = grounds_on(grid, bindings, spur_x, spur_wanted)
 	classes = {}
 	stands = {}
 	_spare_stands.clear()
-	for binding in bindings:
-		var stand := SideSpurs.stand_for_exit(grid, binding["exit"])
-		stands[binding["gate"]] = stand
-		classes[binding["gate"]] = StandEnvelope.max_class(grid, site_of(grid), stand)
+	for gate: String in _grounds:
+		stands[gate] = _grounds[gate]["stand"]
+		classes[gate] = _grounds[gate]["max_class"]
 	changed.emit()
 
 
-## Gate letter -> {"stand", "max_class"} for every gate (FlightSim.stand_source).
+## Gate letter -> {"stand", "max_class"} for every gate (FlightSim.stand_source),
+## and on a side whose spur waits to move, "next": the same on the wanted spur.
 func gate_grounds() -> Dictionary:
+	return _grounds.duplicate()
+
+
+## The side spurs FlightSim plans with (FlightSim.spur_source): side -> {"x",
+## "wanted"}.
+func spurs() -> Dictionary:
+	return SideSpurs.spurs_at(spur_x, spur_wanted)
+
+
+## Moves `side`'s spur to its wanted x and works the stands out again; FlightSim
+## calls it at the side's release tick (FlightSim.spur_release). Then one notice
+## on the right rail says the taxiway has moved.
+func release_spur(side: String) -> void:
+	spur_x[side] = spur_wanted[side]
+	refresh()
+	var named := "west" if side == StandPlacement.WEST else "east"
+	_post_notice(SPUR_KEY, SPUR_TITLE, "The %s taxiway has moved" % named)
+
+
+## Whether gate `gate` waits on its side's pending spur: its stand takes no plane
+## now but takes one on the wanted spur.
+func waits_on_spur(gate: String) -> bool:
+	var ground: Dictionary = _grounds.get(gate, {})
+	return (
+		ground.get("max_class", "") == ""
+		and ground.has("next")
+		and ground["next"]["max_class"] != ""
+	)
+
+
+## Gate letter -> its ground on `on_grid` for gate `on_bindings`, its stand on the
+## spurs `lanes` (side -> x) with its max_class, and on a side whose `wanted` x
+## differs, "next": its stand and max_class there. SaveGame stages a load with it.
+static func grounds_on(
+	on_grid: BuildGrid, on_bindings: Array[Dictionary], lanes: Dictionary, wanted: Dictionary
+) -> Dictionary:
+	var site := site_of(on_grid)
 	var out := {}
-	for gate: String in stands:
-		out[gate] = {"stand": stands[gate], "max_class": classes[gate]}
+	for binding in on_bindings:
+		var stand := SideSpurs.stand_for_exit(on_grid, binding["exit"], lanes)
+		var ground := {"stand": stand, "max_class": StandEnvelope.max_class(on_grid, site, stand)}
+		var side := StandPlacement.side_of(stand)
+		if side != StandPlacement.NORTH:
+			var to := SideSpurs.lane_x(side, wanted)
+			if not is_equal_approx(to, SideSpurs.lane_x(side, lanes)):
+				var next := StandPlacement.with_lane_x(stand, to)
+				ground["next"] = {
+					"stand": next, "max_class": StandEnvelope.max_class(on_grid, site, next)
+				}
+		out[binding["gate"]] = ground
 	return out
+
+
+## The exit doors of `on_bindings`.
+static func _exits_of(on_bindings: Array[Dictionary]) -> Array:
+	return on_bindings.map(func(binding: Dictionary) -> int: return binding["exit"])
 
 
 ## The stand of `plane_class` one more gate could have on the grid as it is, or
@@ -243,7 +327,7 @@ static func links_on(on_grid: BuildGrid, kept: Array[Dictionary]) -> Array[Dicti
 			links.append(binding.duplicate())
 			taken[binding["exit"]] = true
 			linked[binding["desk"]] = true
-			stands.append(StandPlacement.for_exit(on_grid, binding["exit"]))
+			stands.append(SideSpurs.link_stand(on_grid, binding["exit"]))
 	for desk in desk_ids(on_grid):
 		if linked.has(desk):
 			continue
@@ -251,7 +335,7 @@ static func links_on(on_grid: BuildGrid, kept: Array[Dictionary]) -> Array[Dicti
 		if exit != 0:
 			links.append({"gate": "", "desk": desk, "exit": exit})
 			taken[exit] = true
-			stands.append(StandPlacement.for_exit(on_grid, exit))
+			stands.append(SideSpurs.link_stand(on_grid, exit))
 	links.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["desk"] < b["desk"])
 	return links
 
@@ -296,7 +380,7 @@ static func _unlinked_reason(
 	# unfitness is the reason (an overlap named for the gate it meets).
 	var stands: Array[Dictionary] = []
 	for link in links:
-		stands.append(StandPlacement.for_exit(on_grid, link["exit"]))
+		stands.append(SideSpurs.link_stand(on_grid, link["exit"]))
 	var first := {}
 	for exit in reach:
 		if gate_of_exit.has(exit):
@@ -307,7 +391,7 @@ static func _unlinked_reason(
 		if first.is_empty():
 			var gate := ""
 			if why == Unlinked.STAND_OVERLAP:
-				gate = _overlapping_gate(on_grid, StandPlacement.for_exit(on_grid, exit), links)
+				gate = _overlapping_gate(on_grid, SideSpurs.link_stand(on_grid, exit), links)
 			first = {"why": why, "gate": gate}
 	if not first.is_empty():
 		return first
@@ -316,11 +400,16 @@ static func _unlinked_reason(
 
 ## Why exit `exit` on `on_grid` cannot be a new gate's beside `stands`, as an
 ## Unlinked reason (STAND_OVERLAP before NO_ROOM before ROUTE_BLOCKED), or -1
-## when it can: its small swing square must meet none of theirs and its small
-## envelope must be clear.
+## when it can (stand_unfit() of its SideSpurs.link_stand()).
 static func exit_unfit(on_grid: BuildGrid, exit: int, stands: Array[Dictionary]) -> int:
-	var stand := StandPlacement.for_exit(on_grid, exit)
-	if stands.any(func(other: Dictionary) -> bool: return stands_overlap(stand, other)):
+	return stand_unfit(on_grid, SideSpurs.link_stand(on_grid, exit), stands)
+
+
+## exit_unfit() for the stand `stand` of an exit (placed or about to be): its
+## small swing square must meet none of `stands`' on the spurs they would all
+## share (overlaps_common()), and its small envelope must be clear.
+static func stand_unfit(on_grid: BuildGrid, stand: Dictionary, stands: Array[Dictionary]) -> int:
+	if overlaps_common(on_grid, stand, stands):
 		return Unlinked.STAND_OVERLAP
 	match StandEnvelope.blocked_part(on_grid, site_of(on_grid), stand, PlaneClasses.SMALL):
 		StandEnvelope.Part.CLEAR:
@@ -330,13 +419,58 @@ static func exit_unfit(on_grid: BuildGrid, exit: int, stands: Array[Dictionary])
 	return Unlinked.NO_ROOM
 
 
-## The first of `links`' gates whose stand overlaps `stand`, or "".
+## `stands` each on its side's common spur on `on_grid`: the wanted x the build
+## and every side stand among them push it to (SideSpurs.wanted()).
+static func at_common_lanes(on_grid: BuildGrid, stands: Array[Dictionary]) -> Array[Dictionary]:
+	var lanes := SideSpurs.wanted(on_grid, [], {}, stands)
+	var out: Array[Dictionary] = []
+	for stand in stands:
+		var side := StandPlacement.side_of(stand)
+		out.append(
+			(
+				stand
+				if side == StandPlacement.NORTH
+				else StandPlacement.with_lane_x(stand, lanes[side])
+			)
+		)
+	return out
+
+
+## Whether `stand` would share private ground with any of `stands` once all of
+## them are on the spurs they would share (at_common_lanes()), or two of
+## `stands` would once `stand` pushed their side's spur farther out: a later
+## gate never moves an earlier one's spur onto ground it is not checked on.
+static func overlaps_common(
+	on_grid: BuildGrid, stand: Dictionary, stands: Array[Dictionary]
+) -> bool:
+	var all: Array[Dictionary] = stands.duplicate()
+	all.append(stand)
+	var moved := at_common_lanes(on_grid, all)
+	var placed: Array[Dictionary] = moved.slice(0, stands.size())
+	if placed.any(func(other: Dictionary) -> bool: return stands_overlap(moved[-1], other)):
+		return true
+	if placed == at_common_lanes(on_grid, stands):
+		return false
+	for i in placed.size():
+		for j in range(i + 1, placed.size()):
+			if stands_overlap(placed[i], placed[j]):
+				return true
+	return false
+
+
+## The first of `links`' gates whose stand overlaps `stand`, both on the spurs
+## they would share with every link (at_common_lanes()), or "".
 static func _overlapping_gate(
 	on_grid: BuildGrid, stand: Dictionary, links: Array[Dictionary]
 ) -> String:
+	var all: Array[Dictionary] = []
 	for link in links:
-		if stands_overlap(stand, StandPlacement.for_exit(on_grid, link["exit"])):
-			return link["gate"]
+		all.append(SideSpurs.link_stand(on_grid, link["exit"]))
+	all.append(stand)
+	var moved := at_common_lanes(on_grid, all)
+	for i in links.size():
+		if stands_overlap(moved[-1], moved[i]):
+			return links[i]["gate"]
 	return ""
 
 
@@ -444,20 +578,24 @@ static func private_rects(stand: Dictionary) -> Array[Rect2]:
 
 ## The site guard's part for gates: a refusal for a gate desk that would link
 ## to no exit or to none fit for a gate, for an edit that builds under the
-## envelope of a gate's booked class, or for a removal that would end a gate
-## whose flights cannot move; else null. `on_grid` is the grid the edit is
-## checked on (the live grid or a trial copy of it).
+## envelope of a gate's booked class, for a removal that would end a gate whose
+## flights cannot move, or for an edit whose side spur move would strand a
+## flight (SpurTrial, SPUR_STRANDS); else null. `on_grid` is the grid the edit
+## is checked on (the live grid or a trial copy of it).
 func edit_problem(on_grid: BuildGrid, edit: BuildEdit) -> BuildResult:
+	var problem: BuildResult = null
+	var moves := {}
 	if edit.kind == BuildEdit.Kind.REMOVE_OBJECT:
-		return _removal_problem(on_grid, edit.object_id)
-	if REMOVALS.has(edit.kind):
-		return null
-	var route := _route_problem(on_grid, edit)
-	if route != null:
-		return route
-	if edit.kind == BuildEdit.Kind.PLACE_OBJECT and edit.def_id == DESK:
-		return _placement_problem(on_grid, edit)
-	return null
+		problem = _removal_problem(on_grid, edit.object_id)
+		if problem == null and flights != null:
+			moves = _removal_plan(on_grid, edit.object_id)["moves"]
+	elif not REMOVALS.has(edit.kind):
+		problem = _route_problem(on_grid, edit)
+		if problem == null and edit.kind == BuildEdit.Kind.PLACE_OBJECT and edit.def_id == DESK:
+			problem = _placement_problem(on_grid, edit)
+	# Then the side spurs the edit would move, with a removal's moves carried out
+	# in the same trial (SpurTrial): SPUR_STRANDS.
+	return problem if problem != null else SpurTrial.problem(self, on_grid, edit, moves)
 
 
 func _placement_problem(on_grid: BuildGrid, edit: BuildEdit) -> BuildResult:
@@ -467,7 +605,7 @@ func _placement_problem(on_grid: BuildGrid, edit: BuildEdit) -> BuildResult:
 	var stands: Array[Dictionary] = []
 	for link in links:
 		taken[link["exit"]] = true
-		stands.append(StandPlacement.for_exit(on_grid, link["exit"]))
+		stands.append(SideSpurs.link_stand(on_grid, link["exit"]))
 	var reach := nearest_exit(on_grid, footprint, taken, stands, false)
 	if reach == 0:
 		return BuildResult.refused(BuildResult.Reason.GATE_NO_EXIT)
@@ -478,12 +616,11 @@ func _placement_problem(on_grid: BuildGrid, edit: BuildEdit) -> BuildResult:
 	var why := exit_unfit(on_grid, reach, stands)
 	if why != Unlinked.STAND_OVERLAP:
 		return BuildResult.refused(REFUSAL_OF[why])
-	var stand := StandPlacement.for_exit(on_grid, reach)
+	var gate := _overlapping_gate(on_grid, SideSpurs.link_stand(on_grid, reach), links)
 	for link in links:
-		if stands_overlap(stand, StandPlacement.for_exit(on_grid, link["exit"])):
+		if gate != "" and link["gate"] == gate:
 			var refusal := BuildResult.refused(BuildResult.Reason.GATE_STAND_OVERLAP, link["desk"])
-			if link["gate"] != "":
-				refusal.detail = "gate %s is too close" % link["gate"]
+			refusal.detail = "gate %s is too close" % gate
 			return refusal
 	return BuildResult.refused(BuildResult.Reason.GATE_STAND_OVERLAP)
 
@@ -507,7 +644,7 @@ func _route_problem(on_grid: BuildGrid, edit: BuildEdit) -> BuildResult:
 ## The cells of the `plane_class` envelope at exit `exit`'s stand on `on_grid`,
 ## kept per stand (its spur too) and class.
 func envelope_cells(on_grid: BuildGrid, exit: int, plane_class: String) -> Dictionary:
-	var stand := SideSpurs.stand_for_exit(on_grid, exit)
+	var stand := SideSpurs.stand_for_exit(on_grid, exit, spur_x)
 	if stand.is_empty():
 		return {}
 	var key := (
@@ -635,13 +772,18 @@ static func moves_text(sim: FlightSim, moves: Dictionary, past: bool) -> String:
 ## Tells the player, with one notice on the right rail, which flights a removal
 ## moved. Without a rail the words are a warning, never passed over silently.
 func _post_moved(text: String) -> void:
+	_post_notice(MOVED_KEY, MOVED_TITLE, text)
+
+
+## One notice card on the right rail, or a warning with its words without one.
+func _post_notice(key: StringName, title: String, text: String) -> void:
 	if not is_instance_valid(alerts) and is_inside_tree():
 		alerts = get_tree().get_first_node_in_group(AlertStack.GROUP) as AlertStack
 	if not is_instance_valid(alerts):
 		push_warning("GateDesks: no alert rail to tell the player: %s" % text)
 		return
-	var card := OfferPanel.coral_card(MOVED_KEY, MOVED_TITLE, text)
-	alerts.post_notice(MOVED_KEY, card, 0.0, MOVED_TITLE, text)
+	var card := OfferPanel.coral_card(key, title, text)
+	alerts.post_notice(key, card, 0.0, title, text)
 
 
 ## The live flights at any of `gates` that have not departed, each named by
@@ -680,23 +822,33 @@ func to_snapshot() -> Dictionary:
 	var gates: Array = []
 	for binding in bindings:
 		gates.append(binding.duplicate())
-	return {"save_version": SAVE_VERSION, "gates": gates}
+	return {"save_version": SAVE_VERSION, "gates": gates, "spurs": spur_x.duplicate()}
 
 
 ## The bindings a to_snapshot() dictionary holds, checked against `on_grid`:
-## {"gates": Array[Dictionary]} or {"error": why}. Each gate needs a letter
-## from LETTERS, a gate desk and an exit facing west, north or east on the
-## grid; letters, desks and exits are each used once; and the set must be one
-## the links make on the grid (_set_problem()), so a load installs exactly the
-## saved gates.
+## {"gates": Array[Dictionary], "spurs": side -> x} or {"error": why}. Each gate
+## needs a letter from LETTERS, a gate desk and an exit facing west, north or
+## east on the grid; letters, desks and exits are each used once; and the set
+## must be one the links make on the grid (_set_problem()), so a load installs
+## exactly the saved gates. "spurs" holds a spur x for the west and the east
+## side (StandPlacement.lane_x_problem()).
 static func checked(data: Dictionary, on_grid: BuildGrid) -> Dictionary:
 	if data.size() != SAVE_KEYS.size() or not data.has_all(SAVE_KEYS):
-		return {"error": "a gates part holds save_version and gates"}
+		return {"error": "a gates part holds save_version, gates and spurs"}
 	var version: Variant = data["save_version"]
 	if not WholeNumber.is_whole(version) or int(version) != SAVE_VERSION:
 		return {"error": "save_version must be %d" % SAVE_VERSION}
 	if typeof(data["gates"]) != TYPE_ARRAY:
 		return {"error": "'gates' is not a list"}
+	var spurs_saved: Variant = data["spurs"]
+	if typeof(spurs_saved) != TYPE_DICTIONARY or spurs_saved.size() != SideSpurs.SIDES.size():
+		return {"error": "'spurs' holds the west and the east spur x"}
+	var lanes := {}
+	for side in SideSpurs.SIDES:
+		var why := StandPlacement.lane_x_problem(side, spurs_saved.get(side))
+		if why != "":
+			return {"error": "spur %s: %s" % [side, why]}
+		lanes[side] = float(spurs_saved[side])
 	var out: Array[Dictionary] = []
 	var used := {}
 	for entry: Variant in data["gates"]:
@@ -713,7 +865,7 @@ static func checked(data: Dictionary, on_grid: BuildGrid) -> Dictionary:
 	var problem := _set_problem(out, on_grid)
 	if problem != "":
 		return {"error": problem}
-	return {"gates": out}
+	return {"gates": out, "spurs": lanes}
 
 
 ## Why `bindings` (each checked alone) are not a set the game could have made on
@@ -721,15 +873,21 @@ static func checked(data: Dictionary, on_grid: BuildGrid) -> Dictionary:
 ## overlap, or a desk with no saved gate that refresh() would link (the load
 ## would then not be the saved world).
 static func _set_problem(bindings: Array[Dictionary], on_grid: BuildGrid) -> String:
+	var stands: Array[Dictionary] = []
+	for binding in bindings:
+		stands.append(SideSpurs.link_stand(on_grid, binding["exit"]))
+	stands = at_common_lanes(on_grid, stands)
 	for i in bindings.size():
 		var binding := bindings[i]
 		var footprint := desk_footprint(on_grid, binding["desk"])
 		if reach_cells(on_grid, footprint, binding["exit"]) > LINK_CELLS:
 			return "gate %s: its desk is out of its exit's reach" % binding["gate"]
-		var stand := StandPlacement.for_exit(on_grid, binding["exit"])
-		for other in bindings.slice(i + 1):
-			if stands_overlap(stand, StandPlacement.for_exit(on_grid, other["exit"])):
-				return "gates %s and %s have overlapping stands" % [binding["gate"], other["gate"]]
+		for j in range(i + 1, bindings.size()):
+			if stands_overlap(stands[i], stands[j]):
+				return (
+					"gates %s and %s have overlapping stands"
+					% [binding["gate"], bindings[j]["gate"]]
+				)
 	for link in links_on(on_grid, bindings):
 		if link["gate"] == "":
 			return (
@@ -765,6 +923,7 @@ func from_snapshot(data: Dictionary) -> bool:
 		push_error("GateDesks.from_snapshot: %s" % loaded["error"])
 		return false
 	bindings.assign(loaded["gates"])
+	spur_x = loaded["spurs"]
 	refresh()
 	return true
 

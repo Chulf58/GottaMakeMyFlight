@@ -59,6 +59,7 @@ enum Reason {
 	GATE_NO_ROOM,
 	GATE_ROUTE_BLOCKED,
 	GATE_ROUTE,
+	SPUR_STRANDS,
 }
 
 const REASON_TEXT := {
@@ -124,6 +125,8 @@ const REASON_TEXT := {
 	"Something blocks the way from this exit to the taxi lane. Clear a path out from it",
 	Reason.GATE_ROUTE:
 	"A booked flight's plane needs this ground. Move its flights in Departures first",
+	Reason.SPUR_STRANDS:
+	"The side taxiway would have to move and leave a booked flight with no way to its gate",
 }
 
 var ok: bool = true
