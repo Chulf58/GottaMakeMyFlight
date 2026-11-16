@@ -17,9 +17,11 @@ extends RefCounted
 ##   box covering the whole turn, booked while the footprint touches it.
 ## - The runway is one block: the arrival holds it from APPROACH until it has
 ##   turned off, the departure from the tick it touches it to DEPARTED.
-## - A parked plane books its footprint. Pushback books the class's swing
-##   square (StandEnvelope), the parked footprint and every lane slice the
-##   swing square touches, together, for the whole phase. A plane waiting at a
+## - A parked plane books its footprint, nose to the stand's wall. Pushback
+##   books the class's swing square (StandEnvelope), the parked footprint and
+##   every slice of the stand's own lane the swing square touches (the north
+##   lane's, or a west or east stand's spur's), together, for the whole
+##   phase. A plane waiting at a
 ##   hold line books its footprint for the pause; the slices and corners it
 ##   touched before and after are booked per leg, not across the pause.
 ## - Takeoff books the corner box of its line-up turn; the runway covers the rest.
@@ -40,7 +42,12 @@ extends RefCounted
 ## first tried with no pause; a taxi phase that does not fit then takes the
 ## shortest pause (PAUSE_STEP_TICKS up to MAX_PAUSE_TICKS) at the earliest hold
 ## line where it fits. Hold lines (holds()): H_IN and H_RWY on the stubs, and
-## H_g on the gate's lead-in at gate_hold_z(). A flight's own bookings never
+## H_g on the gate's lead-in at gate_hold_z(). A west or east stand (board
+## airside-all-around-s4) taxis on a two-way spur, and its holds are the same
+## turned: H_g on the connector from its pushback's end to the spur
+## (Airside.stand_hold()), and inbound to a west stand the spur head on the lane
+## (H_SPUR, Airside.spur_head_hold()), so a plane can wait clear of a spur
+## while another uses it. Still one pause per phase. A flight's own bookings never
 ## clash with each other, so whether a phase's option fits does not depend on
 ## the other phase's, and each phase picks on its own. Nothing fits:
 ## TAXI_BUSY. A flight's plan depends only on the flights before it, so as long
@@ -83,6 +90,7 @@ const WORKS := "works"
 const HOLD_IN := "hold_in"
 const HOLD_GATE := "hold_gate"
 const HOLD_RUNWAY := "hold_runway"
+const HOLD_SPUR := "hold_spur"
 const WORKS_OWNER := "works"
 const TAXI_STATES: Array[int] = [FlightSim.State.TAXI_IN, FlightSim.State.TAXI_OUT]
 ## The phase whose path's end direction a phase enters on, as PlaneView reads it.
@@ -192,26 +200,30 @@ static func gate_hold_z() -> float:
 	return Airside.lead_in_hold_z()
 
 
-## Gate `stand`'s lead-in hold line H_g (Airside.lead_in_hold()), or
+## Gate `stand`'s lead-in hold line H_g (Airside.stand_hold()), or
 ## Vector3.INF when its pushback ends at or north of gate_hold_z() (north-row
-## stands have none).
+## stands, and the side stands turned from them, have none).
 static func gate_hold(stand: Dictionary) -> Vector3:
-	var hold := Airside.lead_in_hold(StandPlacement.pushback_end(stand))
+	var hold := Airside.stand_hold(stand)
 	return hold[0] if not hold.is_empty() else Vector3.INF
 
 
 ## The hold lines on the route of taxi phase `state`, earliest first:
 ## {"hold": name, "hold_s": metres along the route}. H_IN and H_RWY are on the
-## stubs, H_g (gate_hold()) on the gate's lead-in.
+## stubs, H_g (gate_hold()) on the gate's lead-in or connector, and for a side
+## stand's taxi in H_SPUR at its spur's head where the route passes it.
 func holds(req: Dictionary, state: int) -> Array[Dictionary]:
 	var route: PackedVector3Array = req["routes"][state]
-	var gate := gate_hold(req["stand"])
+	var stand: Dictionary = req["stand"]
+	var gate := gate_hold(stand)
 	var out: Array[Dictionary] = []
 	var points := {}
 	if gate != Vector3.INF:
 		points[HOLD_GATE] = gate
 	if state == FlightSim.State.TAXI_IN:
 		points[HOLD_IN] = _hold_in
+		if StandPlacement.side_of(stand) != StandPlacement.NORTH:
+			points[HOLD_SPUR] = Airside.spur_head_hold(StandPlacement.lane_join(stand))
 	else:
 		points[HOLD_RUNWAY] = _hold_runway
 	for hold: String in points:
@@ -296,7 +308,8 @@ static func fixed_bookings(req: Dictionary) -> Array[Dictionary]:
 	var plane_class: String = req["class"]
 	var fp := footprint(plane_class)
 	var owner: String = req["id"]
-	var parked := _footprint_rect(_flat(StandPlacement.stand_point(stand)), Vector2(0, 1), fp)
+	var nose := _flat(StandPlacement.turn(stand, Vector3(0.0, 0.0, 1.0)))
+	var parked := _footprint_rect(_flat(StandPlacement.stand_point(stand)), nose, fp)
 	var at_stand: int = starts[FlightSim.State.AT_STAND]
 	var push: int = starts[FlightSim.State.PUSHBACK]
 	var out_start: int = starts[FlightSim.State.TAXI_OUT]
@@ -304,12 +317,8 @@ static func fixed_bookings(req: Dictionary) -> Array[Dictionary]:
 	var swing: Rect2 = StandEnvelope.rects(stand, plane_class)[0]
 	out.append(_booking(swing, push, out_start, owner, PUSHBACK))
 	out.append(_booking(parked, push, out_start, owner, PUSHBACK))
-	var half: float = fp["half_width"]
-	var first := floori(swing.position.x / SLICE_M)
-	for j in range(first, ceili(swing.end.x / SLICE_M)):
-		var slice := Rect2(j * SLICE_M, StandPlacement.TAXI_LANE_Z - half, SLICE_M, 2.0 * half)
-		if slice.intersects(swing):
-			out.append(_booking(slice, push, out_start, owner, SLICE))
+	for slice in _lane_slices(stand, swing, fp["half_width"]):
+		out.append(_booking(slice, push, out_start, owner, SLICE))
 	var takeoff: PackedVector3Array = req["routes"][FlightSim.State.TAKEOFF]
 	var entry := MovementPlan.exit_dir(req["routes"][FlightSim.State.TAXI_OUT])
 	var start := float(starts[FlightSim.State.TAKEOFF])
@@ -323,6 +332,25 @@ static func fixed_bookings(req: Dictionary) -> Array[Dictionary]:
 			var from := start + ticks * sqrt(maxf(touch[0], 0.0) / length)
 			var to := start + ticks * sqrt(minf(touch[1], length) / length)
 			out.append(_booking(box, from, to, owner, CORNER))
+	return out
+
+
+## The slices of `stand`'s own lane that `swing` touches, `half` either side
+## of its centreline: the north lane's along x for a north stand, a west or
+## east stand's spur's along z (its join's x), on the same fixed SLICE_M grid
+## as the taxi slices (_cells()).
+static func _lane_slices(stand: Dictionary, swing: Rect2, half: float) -> Array[Rect2]:
+	var out: Array[Rect2] = []
+	var along_x := StandPlacement.side_of(stand) == StandPlacement.NORTH
+	var spur_x := StandPlacement.lane_join(stand).x
+	var low := swing.position.x if along_x else swing.position.y
+	var high := swing.end.x if along_x else swing.end.y
+	for j in range(floori(low / SLICE_M), ceili(high / SLICE_M)):
+		var slice := Rect2(j * SLICE_M, StandPlacement.TAXI_LANE_Z - half, SLICE_M, 2.0 * half)
+		if not along_x:
+			slice = Rect2(spur_x - half, j * SLICE_M, 2.0 * half, SLICE_M)
+		if slice.intersects(swing):
+			out.append(slice)
 	return out
 
 
