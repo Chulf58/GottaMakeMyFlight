@@ -325,8 +325,8 @@ func _joins_on_lane() -> bool:
 		if not TaxiRoutes.joins_lane(join, layout):
 			push_error(
 				(
-					"Airside: '%s' at x %.2f is not strictly inside the lane (%.2f to %.2f)"
-					% [child.name, join.x, layout["west_x"], layout["east_x"]]
+					"Airside: '%s' at x %.2f is not strictly between the stubs (%.2f to %.2f)"
+					% [child.name, join.x, layout["stub_west_x"], layout["stub_east_x"]]
 				)
 			)
 			return false

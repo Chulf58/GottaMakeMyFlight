@@ -38,20 +38,10 @@ static func outside_within(
 ) -> PackedByteArray:
 	var w := grid.size.x
 	var h := grid.size.y
-	var outside := PackedByteArray()
-	outside.resize(w * h)
-	outside.fill(1)
 	within = within.intersection(Rect2i(Vector2i.ZERO, grid.size))
+	var outside := _start(w, h, within)
 	if within.size.x <= 0 or within.size.y <= 0:
 		return outside
-	var x0 := within.position.x
-	var x1 := within.end.x
-	var y0 := within.position.y
-	var y1 := within.end.y
-	for y in range(y0, y1):
-		var row := y * w
-		for x in range(x0, x1):
-			outside[row + x] = 0
 	# A door object's back edge closes like a wall: mark it on copies.
 	var h_closed := h_walls.duplicate()
 	var v_closed := v_walls.duplicate()
@@ -76,21 +66,23 @@ static func outside_within(
 			tail += 1
 	# Cells outside `within` are already 1, so the flood never leaves it.
 	var head := 0
+	var last_row := (h - 1) * w
 	while head < tail:
 		var i := queue[head]
 		head += 1
-		var x := i % w
 		@warning_ignore("integer_division")
 		var y := i / w
-		if y > 0 and outside[i - w] == 0 and h_closed[i] == 0:
+		var x := i - y * w
+		if i >= w and outside[i - w] == 0 and h_closed[i] == 0:
 			outside[i - w] = 1
 			queue[tail] = i - w
 			tail += 1
-		if y < h - 1 and outside[i + w] == 0 and h_closed[i + w] == 0:
+		if i < last_row and outside[i + w] == 0 and h_closed[i + w] == 0:
 			outside[i + w] = 1
 			queue[tail] = i + w
 			tail += 1
-		var west := y * (w + 1) + x
+		# The west edge of (x, y) in v_walls: y * (w + 1) + x.
+		var west := i + y
 		if x > 0 and outside[i - 1] == 0 and v_closed[west] == 0:
 			outside[i - 1] = 1
 			queue[tail] = i - 1
@@ -100,6 +92,24 @@ static func outside_within(
 			queue[tail] = i + 1
 			tail += 1
 	return outside
+
+
+## The flood's starting state for a grid `w` by `h`: 1 (outside) everywhere
+## but `within`, 0 inside it. Built a row at a time from two row templates, so
+## the cost grows with the rows, not the cells (a whole-grid `within` used to
+## cost a GDScript step per cell).
+static func _start(w: int, h: int, within: Rect2i) -> PackedByteArray:
+	var open_row := PackedByteArray()
+	open_row.resize(w)
+	open_row.fill(1)
+	var cut_row := open_row.duplicate()
+	for x in range(within.position.x, within.end.x):
+		cut_row[x] = 0
+	var out := PackedByteArray()
+	for y in h:
+		var cut := y >= within.position.y and y < within.end.y and within.size.x > 0
+		out.append_array(cut_row if cut else open_row)
+	return out
 
 
 ## The floored cells whose outside state differs between `before` and
