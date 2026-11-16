@@ -45,7 +45,9 @@ static func for_lengths(in_m: float, out_m: float) -> Array[int]:
 
 
 ## The pair for a plane at StandPlacement stand `stand`, from its taxi routes
-## (FlightGround.routes(), the same for every plane class). Routes longer than
+## (FlightGround.routes(), the same for every plane class), which only the
+## stand decides: its sill, its side and a side stand's spur (lane_x, run on
+## along the lane from the stub; TaxiRoutes). Routes longer than
 ## MAX_IN or MAX_OUT allow give a pair problem() refuses: a gate with such a
 ## stand takes no contract (FlightContract.assignment_problem()), and a save
 ## whose flight or contract would need it is refused.

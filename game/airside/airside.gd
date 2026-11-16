@@ -12,7 +12,8 @@ extends Node3D
 ## gives each gate its own Stand_<gate>, PushbackEnd_<gate> and
 ## StandLane_<gate>. Every StandLane waypoint sits on the one taxi lane
 ## between TaxiWest and TaxiEast, or, for a west or east stand, on the spur
-## that runs south from TaxiWest or TaxiEast (board airside-all-around-s4).
+## that runs south from the lane at the stand's lane_x, TaxiWest's or
+## TaxiEast's x or farther out (board airside-all-around-s4, lane_layout()).
 ## Planes land and take off eastbound, leave the runway at its east end and
 ## join it again at its west end, so every taxi route runs strictly west along
 ## the lane (decision runway-and-taxi-technical-design-movement-plan-analytic-
@@ -104,6 +105,9 @@ var graph := TaxiGraph.new()
 ## How many times set_stand() moved the stand, so a view holding paths read
 ## before (PlaneView) knows to read them again.
 var stand_moves := 0
+## The stand set_stand() last put the one stand's waypoints at, {} for the
+## scene's own (a north stand): its side and spur pick its routes.
+var one_stand: Dictionary = {}
 ## Gate letter -> the stand its waypoints were last put at (set_gate_stands()).
 var gate_stands: Dictionary = {}
 ## Gate letter -> its max_class, which sizes its stand pad (set_gate_classes()).
@@ -329,10 +333,22 @@ func _joins_on_lane() -> bool:
 	return true
 
 
-## The lane layout the routes are built on (TaxiRoutes): the north lane between
-## TaxiWest and TaxiEast, with a spur south from each.
+## The lane layout the joins are checked on (TaxiRoutes): the north lane between
+## TaxiWest and TaxiEast, run on west and east to the spurs of the stands in
+## use (each west or east stand's lane_x; decision side-spur-move-design-s7-
+## stands-carry-lane-x-the-wanted-spur), with a spur south from each end. A
+## side stand on another spur than the outermost of its side is then off the
+## lane, and refused.
 func lane_layout() -> Dictionary:
-	return TaxiRoutes.north_only(graph.points())
+	var layout := TaxiRoutes.north_only(graph.points())
+	var stands: Array = gate_stands.values() if not gate_stands.is_empty() else [one_stand]
+	for stand: Dictionary in stands:
+		match StandPlacement.side_of(stand):
+			StandPlacement.WEST:
+				layout["west_x"] = minf(layout["west_x"], StandPlacement.lane_x_of(stand))
+			StandPlacement.EAST:
+				layout["east_x"] = maxf(layout["east_x"], StandPlacement.lane_x_of(stand))
+	return layout
 
 
 ## Every ground route a plane takes: taxi in, pushback and taxi out, for each
@@ -370,6 +386,7 @@ func set_stand(stand: Dictionary) -> bool:
 			push_error("Airside: missing waypoint '%s'" % waypoint)
 			return false
 		marker.position = transform.affine_inverse() * (points[waypoint] as Vector3)
+	one_stand = stand.duplicate()
 	stand_moves += 1
 	return rebuild()
 
@@ -428,6 +445,7 @@ func phase_path(state: int, gate := "", plane_class := PlaneClasses.MEDIUM) -> P
 		"back": graph.position_of(_stand_point(&"PushbackEnd", gate_name)),
 		"join": graph.position_of(_stand_point(&"StandLane", gate_name)),
 	}
+	ends.merge(TaxiRoutes.spur_ends(gate_stands.get(gate_name, one_stand)))
 	var paths := TaxiRoutes.phase_paths(graph.points(), ends, plane_class, lane_layout())
 	return paths.get(state, PackedVector3Array())
 
