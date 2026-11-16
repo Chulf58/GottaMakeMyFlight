@@ -27,6 +27,8 @@ extends SceneTree
 ##    real west gate (the near-spur link mitre).
 ##  - moved: the west gate's stand on a spur moved out to x -160, so the runway
 ##    stub at x -124 meets the lane mid-span from the north.
+##  - cross: the mixed layout's north stand beside a west stand whose connector
+##    crosses the north link's run-on to its wall line (Sol review).
 ##
 ## Every plate projects its subjects' bounds into the viewport with MARGIN_PX
 ## and casts camera rays at them (trimesh colliders on every mesh) before it is
@@ -57,6 +59,8 @@ const NEAR_SPUR_JOIN_X := -110.0
 const NEAR_SPUR_WALL_Z := -200.0
 ## The moved west spur.
 const MOVED_LANE_X := -160.0
+## Sol's review layout: a west stand whose connector crosses the near link.
+const CROSS_SILL := Vector2(-33.0, -193.5)
 
 var _out_dir := ""
 ## A prefix for every plate name (--tag=NAME), so a before and an after run
@@ -129,6 +133,7 @@ func _run() -> void:
 		_north_plates,
 		_mixed_plates.bind(real["B"]),
 		_moved_plates.bind(real["B"]),
+		_cross_plates,
 	]
 	for stage in stages:
 		if not await stage.call():
@@ -274,6 +279,23 @@ func _moved_plates(west: Dictionary) -> bool:
 	return await _paving_plates("moved", stub, _square(stub))
 
 
+## Sol's review layout: the near-spur north stand beside a west stand whose
+## connector crosses the north link's run-on to its wall line (z -200), so the
+## two strips share [-109, -95] x [-205, -200].
+func _cross_plates() -> bool:
+	var door_x := NEAR_SPUR_JOIN_X + StandPlacement.DOOR_SIDE_M
+	var near := StandPlacement.make(900, door_x, NEAR_SPUR_WALL_Z)
+	var west := StandPlacement.make(901, CROSS_SILL.x, CROSS_SILL.y, StandPlacement.WEST)
+	if not await _set_stands({"A": near, "B": west}):
+		return false
+	var shared := Rect2(-108.5, -204.5, 13.0, 4.0)
+	var points: Array[Vector3] = [Vector3(shared.get_center().x, 0.0, shared.get_center().y)]
+	for corner in [shared.position, shared.end, Vector2(shared.position.x, shared.end.y)]:
+		points.append(Vector3(corner.x, 0.0, corner.y))
+	print("PROBE cross shared ground %s" % shared)
+	return await _paving_plates("cross", points[0], points)
+
+
 ## A top-down and a play-angle plate centred on `focus`, proving the points
 ## `square` in frame and the paving the first thing camera rays meet there.
 func _paving_plates(label: String, focus: Vector3, square: Array[Vector3]) -> bool:
@@ -335,6 +357,8 @@ func _park(gate: String, model: String) -> Node3D:
 	await _frames(3)
 	var node: Node3D = _view.get_node("Pivot").get_child(0)
 	_add_colliders(node)
+	# The bridge shows or hides its walkway with the model: colliders again.
+	_add_colliders(_airside.props.bridges[gate]["node"])
 	return node
 
 
@@ -567,13 +591,15 @@ func _show_hud(on: bool) -> void:
 		(layer as CanvasLayer).visible = on
 
 
-## Gives every mesh under `node` a trimesh collider, replacing an old one.
+## Gives every shown mesh under `node` a trimesh collider, replacing an old one.
 func _add_colliders(node: Node) -> void:
 	for mi in _meshes(node):
 		for body in mi.find_children("*", "StaticBody3D", false, false):
 			mi.remove_child(body)
 			body.free()
-		if mi.mesh != null and mi.mesh.get_surface_count() > 0:
+		# A hidden mesh (an unowned plot's paving) must not stop a ray.
+		var shown := mi.is_visible_in_tree()
+		if shown and mi.mesh != null and mi.mesh.get_surface_count() > 0:
 			mi.create_trimesh_collision()
 
 

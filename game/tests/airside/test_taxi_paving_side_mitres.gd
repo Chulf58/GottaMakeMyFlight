@@ -15,6 +15,15 @@ const WEST_SILL := Vector2(-33.0, -91.5)
 const NEAR_JOIN_X := -110.0
 const NEAR_WALL_Z := -200.0
 const MOVED_LANE_X := -160.0
+## Sol's review layout: a side stand whose connector crosses the near link,
+## its sill at x -33 (33 east), as [side, sill z].
+const CROSS_SILL_X := -33.0
+const CROSS_LAYOUTS := [
+	[StandPlacement.WEST, -193.5],
+	[StandPlacement.WEST, -198.5],
+	[StandPlacement.EAST, -186.5],
+	[StandPlacement.EAST, -191.5],
+]
 const STEP_M := 0.1
 const ROW_M := 1.1
 const MAX_SHADE_STEP := 0.01
@@ -77,10 +86,12 @@ func test_a_link_beside_the_spur_has_no_step() -> void:
 	assert_bool(_airside.set_gate_stands({"A": _near(), "B": _west()})).is_true()
 	var tris := _triangles(TaxiPaving.mesh_of(_airside.paving.shown))
 	# Spur, link and lane share the ground by the nearest centre line: no step,
-	# down to the link's end on its wall line (z -200). There the spur runs on
-	# at full width beside the north stand's wall, a step this test does not
-	# cover (as test_taxi_paving_junctions.gd's unequal links).
-	_assert_no_step(tris, Rect2(-142.0, -302.0, 60.0, 100.0))
+	# on both sides of the link's end on its wall line (z -200). Across that
+	# line the spur runs on at full width beside the north stand's wall, a step
+	# this test does not cover (as test_taxi_paving_junctions.gd's unequal
+	# links): only the one sample pair crossing it within the link's span is
+	# left out. The samples start 0.05 m off a whole metre, so none lies on it.
+	_assert_no_step(tris, Rect2(-142.0, -302.05, 60.0, 112.0), _wall(NEAR_JOIN_X))
 	# South of the lane, the link's own band runs from the midpoint with the
 	# spur (x -117) east; just inside the lane's south edge it is still the
 	# link's band (the lane is mitred under it).
@@ -91,6 +102,49 @@ func test_a_link_beside_the_spur_has_no_step() -> void:
 	# West of the midpoint the spur's band runs on, south of the lane.
 	var spur_t := (-118.0 - (-StandPlacement.SIDE_LANE_X - HALF)) / TaxiPaving.WIDTH_M
 	assert_float(_t_at(tris, Vector2(-118.0, -240.0))).is_equal_approx(spur_t, 0.01)
+
+
+## Sol's review layout (board 0793554d): the near-spur north stand beside a
+## side stand whose connector crosses the link's run-on to its wall line
+## (z -200). With the west sill at z -193.5 the connector runs at z -190 and
+## the two strips share [-109, -95] x [-205, -200]; the east stand turns the
+## other way, so its sill at z -186.5 gives the same connector. A sill 5 m
+## farther north puts the connector's centre line 5 m from the wall line,
+## nearer than the link's in part of the shared ground and of the spur's.
+## The private envelopes do not meet in any of them, so GateDesks lets both
+## gates link (stands_overlap() is false).
+func test_a_connector_crossing_a_near_link_covers_once_without_a_step() -> void:
+	for layout: Array in CROSS_LAYOUTS:
+		var side: String = layout[0]
+		var out := -1.0 if side == StandPlacement.WEST else 1.0
+		var near := StandPlacement.make(
+			1, out * -NEAR_JOIN_X + StandPlacement.DOOR_SIDE_M, NEAR_WALL_Z
+		)
+		var crossing := StandPlacement.make(0, -out * CROSS_SILL_X, layout[1], side)
+		var overlap := GateDesks.stands_overlap(near, crossing)
+		print("%s sill z %.1f overlap %s" % [side, layout[1], overlap])
+		assert_bool(overlap).is_false()
+		assert_bool(_airside.set_gate_stands({"A": near, "B": crossing})).is_true()
+		var shown := _airside.paving.shown
+		var rows := shown.filter(func(s: Dictionary) -> bool: return s.get("row", false))
+		print("%s rows %s" % [side, rows.map(func(s: Dictionary) -> Rect2: return s["rect"])])
+		var tris := _triangles(TaxiPaving.mesh_of(shown))
+		var area := Rect2(-145.0, -275.05, 115.0, 105.0)
+		if side == StandPlacement.EAST:
+			area.position.x = 30.0
+		_assert_covered_once(shown, tris, area)
+		_assert_no_step(tris, area, _wall(out * -NEAR_JOIN_X))
+		# In the shared ground near the link's centre line, the link's band.
+		var at := Vector2(out * -NEAR_JOIN_X - out * 2.0, -203.0)
+		var link_t := (at.x - (out * -NEAR_JOIN_X - HALF)) / TaxiPaving.WIDTH_M
+		assert_float(_t_at(tris, at)).is_equal_approx(link_t, 0.01)
+		_airside.set_gate_stands({})
+
+
+## The wall line of the near-spur north stand whose join is at `join_x`: its
+## link's span in x and NEAR_WALL_Z, for _assert_no_step().
+func _wall(join_x: float) -> Vector3:
+	return Vector3(join_x - HALF, join_x + HALF, NEAR_WALL_Z)
 
 
 func test_a_moved_spur_meets_the_stub_mid_span_with_a_mitre() -> void:
@@ -148,7 +202,9 @@ func _assert_covered_once(strip_list: Array[Dictionary], tris: Array[Array], are
 ## As test_taxi_paving_junctions.gd: chains of samples STEP_M apart across
 ## `area`, along z and along x, ROW_M apart; neighbours on paving differ in
 ## shade by at most MAX_SHADE_STEP. Fails if under a quarter of pairs are paved.
-func _assert_no_step(all_tris: Array[Array], area: Rect2) -> void:
+## `wall` (x from, x to, z) leaves out the pairs along z that cross z between
+## those x: a strip's free end on its wall line.
+func _assert_no_step(all_tris: Array[Array], area: Rect2, wall := Vector3(NAN, NAN, NAN)) -> void:
 	var tris: Array[Array] = []
 	for tri in all_tris:
 		var box := Rect2(Vector2(tri[0].x, tri[0].z), Vector2.ZERO)
@@ -159,6 +215,7 @@ func _assert_no_step(all_tris: Array[Array], area: Rect2) -> void:
 	var pairs := 0
 	var worst := 0.0
 	var worst_at := Vector2.ZERO
+	var skipped := 0
 	for along_z in [true, false]:
 		var rows := area.size.x if along_z else area.size.y
 		var length := area.size.y if along_z else area.size.x
@@ -171,7 +228,15 @@ func _assert_no_step(all_tris: Array[Array], area: Rect2) -> void:
 					else Vector2(area.position.x + k * STEP_M, area.position.y + r * ROW_M)
 				)
 				var here := absf(_t_or_nan(tris, at) - 0.5)
-				if k > 0:
+				var at_wall: bool = (
+					along_z
+					and at.x >= wall.x
+					and at.x <= wall.y
+					and at.y - STEP_M < wall.z
+					and at.y >= wall.z
+				)
+				skipped += int(k > 0 and at_wall)
+				if k > 0 and not at_wall:
 					pairs += 1
 					if not is_nan(here) and not is_nan(last):
 						checked += 1
@@ -179,7 +244,7 @@ func _assert_no_step(all_tris: Array[Array], area: Rect2) -> void:
 							worst = absf(here - last)
 							worst_at = at
 				last = here
-	var counts := "paved pairs=%d of %d" % [checked, pairs]
+	var counts := "paved pairs=%d of %d, %d across the wall line" % [checked, pairs, skipped]
 	print("no-step area=%s %s worst=%.4f at %s" % [area, counts, worst, worst_at])
 	assert_int(checked * 4).is_greater(pairs)
 	assert_float(worst).is_less_equal(MAX_SHADE_STEP)

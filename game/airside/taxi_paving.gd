@@ -569,6 +569,9 @@ static func mesh_of(
 	var normals := PackedVector3Array()
 	var uvs := PackedVector2Array()
 	var index := PackedInt32Array()
+	var crossings := _crossings(strip_list)
+	for crossing: Dictionary in crossings:
+		_add_crossing(crossing, verts, normals, uvs, index)
 	for rect in pad_list:
 		var pad_base := verts.size()
 		for corner in _corners_of(rect):
@@ -617,6 +620,9 @@ static func mesh_of(
 		var parts: Array[Rect2] = [rect]
 		if across_x:
 			parts = _drawn_rects(strip, strip_list)
+		for crossing: Dictionary in crossings:
+			if crossing["link"] == rect or crossing["row"] == rect:
+				parts = _less(parts, crossing["hole"])
 		for drawn in parts:
 			var base := verts.size()
 			for corner in _corners_of(drawn):
@@ -798,6 +804,119 @@ static func _spur_pieces(spur_strip: Dictionary, strip_list: Array[Dictionary]) 
 	return out
 
 
+## A side stand's connector (a row) may cross a north link where the link runs
+## on over its pad to its wall line (Sol review of board 0793554d: a north
+## stand with its join at x -110 and wall at z -200 beside a west stand whose
+## connector runs at z -190). The ground both strips cover is drawn once, by
+## the nearest centre line, as at every junction: each crossing is
+## {"link": the link's rect, "row": the row's rect, "hole": one drawn part of
+## the link (_drawn_rects()) cut with the row}. Both strips leave the hole out
+## (_less()) and _add_crossing() draws it. Not handled: where the link ends on
+## its wall line inside the row, the row's band meets the link's free end with
+## a step, as any strip end does.
+static func _crossings(strip_list: Array[Dictionary]) -> Array:
+	var out: Array = []
+	for link in strip_list:
+		if not link["across_x"] or link.has("quad") or link.get("through", false):
+			continue
+		for row in strip_list:
+			if not row.get("row", false):
+				continue
+			# A row cut at a spur's edge runs its band on into the spur, up to
+			# the spur's centre line, by the spur's mitre.
+			var reach: Rect2 = row["rect"]
+			var spur_half := reach.size.y / 2.0
+			if row.get("west_cut", false):
+				reach = reach.grow_individual(spur_half, 0.0, 0.0, 0.0)
+			if row.get("east_cut", false):
+				reach = reach.grow_individual(0.0, 0.0, spur_half, 0.0)
+			for drawn in _drawn_rects(link, strip_list):
+				var hole := drawn.intersection(reach)
+				if hole.size.x > SAME_M and hole.size.y > SAME_M:
+					out.append({"link": link["rect"], "row": row["rect"], "hole": hole})
+	return out
+
+
+## Each rect of `parts` with `hole` taken out, as up to four rects each.
+static func _less(parts: Array[Rect2], hole: Rect2) -> Array[Rect2]:
+	var out: Array[Rect2] = []
+	for rect in parts:
+		var cut := rect.intersection(hole)
+		if cut.size.x < SAME_M or cut.size.y < SAME_M:
+			out.append(rect)
+			continue
+		var pieces: Array[Rect2] = [
+			Rect2(rect.position.x, rect.position.y, rect.size.x, cut.position.y - rect.position.y),
+			Rect2(rect.position.x, cut.end.y, rect.size.x, rect.end.y - cut.end.y),
+			Rect2(rect.position.x, cut.position.y, cut.position.x - rect.position.x, cut.size.y),
+			Rect2(cut.end.x, cut.position.y, rect.end.x - cut.end.x, cut.size.y),
+		]
+		for piece in pieces:
+			if piece.size.x >= SAME_M and piece.size.y >= SAME_M:
+				out.append(piece)
+	return out
+
+
+## Adds `crossing`'s hole (_crossings()) to the arrays: cut at the link's and
+## the row's centre lines, each part split along its diagonal, the side nearer
+## the link's centre line carrying the link's band and the other the row's.
+static func _add_crossing(
+	crossing: Dictionary,
+	verts: PackedVector3Array,
+	normals: PackedVector3Array,
+	uvs: PackedVector2Array,
+	index: PackedInt32Array
+) -> void:
+	var link: Rect2 = crossing["link"]
+	var row: Rect2 = crossing["row"]
+	var hole: Rect2 = crossing["hole"]
+	var link_x := link.get_center().x
+	var row_z := row.get_center().y
+	var link_t := func(p: Vector2) -> float: return (p.x - link.position.x) / link.size.x
+	var row_t := func(p: Vector2) -> float: return (p.y - row.position.y) / row.size.y
+	var xs: Array[float] = [hole.position.x, hole.end.x]
+	if link_x > hole.position.x + SAME_M and link_x < hole.end.x - SAME_M:
+		xs.insert(1, link_x)
+	var zs: Array[float] = [hole.position.y, hole.end.y]
+	if row_z > hole.position.y + SAME_M and row_z < hole.end.y - SAME_M:
+		zs.insert(1, row_z)
+	for i in range(1, xs.size()):
+		for j in range(1, zs.size()):
+			var cell: Array[Vector2] = [
+				Vector2(xs[i - 1], zs[j - 1]),
+				Vector2(xs[i], zs[j - 1]),
+				Vector2(xs[i], zs[j]),
+				Vector2(xs[i - 1], zs[j]),
+			]
+			var sx := 1.0 if (xs[i - 1] + xs[i]) / 2.0 > link_x else -1.0
+			var sz := 1.0 if (zs[j - 1] + zs[j]) / 2.0 > row_z else -1.0
+			# Negative where the link's centre line is the nearer.
+			var nearer := func(p: Vector2) -> float: return sx * (p.x - link_x) - sz * (p.y - row_z)
+			var farther := func(p: Vector2) -> float: return -nearer.call(p)
+			var link_part := _clip(cell, nearer)
+			var row_part := _clip(cell, farther)
+			if link_part.size() >= 3:
+				_add_part(link_part, link_t, verts, normals, uvs, index)
+			if row_part.size() >= 3:
+				_add_part(row_part, row_t, verts, normals, uvs, index)
+
+
+## The convex polygon `poly` cut to where `side` (linear in the point) is at
+## most 0.
+static func _clip(poly: Array[Vector2], side: Callable) -> Array[Vector2]:
+	var out: Array[Vector2] = []
+	for i in poly.size():
+		var a := poly[i]
+		var b := poly[(i + 1) % poly.size()]
+		var fa: float = side.call(a)
+		var fb: float = side.call(b)
+		if fa <= 0.0:
+			out.append(a)
+		if (fa < 0.0 and fb > 0.0) or (fa > 0.0 and fb < 0.0):
+			out.append(a.lerp(b, fa / (fa - fb)))
+	return out
+
+
 ## Adds the lane strip `lane` to the arrays, mitred under the links at `cuts`
 ## (junctions()). In each half of the lane the band follows the nearest centre
 ## line: the lane's, or that of a link meeting that half's edge. So a link's
@@ -897,10 +1016,10 @@ static func _add_part(
 	index: PackedInt32Array,
 	flip := false
 ) -> void:
-	for tri: Array[Vector2] in [
-		[corners[0], corners[1], corners[2]] as Array[Vector2],
-		[corners[0], corners[2], corners[3]] as Array[Vector2]
-	]:
+	var tris: Array = []
+	for i in range(1, corners.size() - 1):
+		tris.append([corners[0], corners[i], corners[i + 1]] as Array[Vector2])
+	for tri: Array[Vector2] in tris:
 		var world: Array[Vector2] = []
 		var ts: Array[float] = []
 		for p in tri:
