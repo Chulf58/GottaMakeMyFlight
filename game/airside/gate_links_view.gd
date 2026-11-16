@@ -217,7 +217,7 @@ static func _leave_t(box: Rect2, from: Vector2, to: Vector2) -> float:
 static func reason_text(reason: Dictionary) -> String:
 	match reason["why"]:
 		GateDesks.Unlinked.NO_EXIT:
-			return "no north exit in %d cells" % GateDesks.LINK_CELLS
+			return "no exit facing the planes in %d cells" % GateDesks.LINK_CELLS
 		GateDesks.Unlinked.EXIT_TAKEN:
 			return "Gate %s uses the exit" % reason["gate"]
 		GateDesks.Unlinked.STAND_OVERLAP:

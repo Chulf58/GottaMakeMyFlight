@@ -807,17 +807,18 @@ func _door_choices(def_id: StringName) -> Array:
 ## spots whose service cell the last search reached.
 func _door_sources(def_id: StringName, reached := false) -> Array:
 	# On a site a door needs its walk outside: an entrance to the road, an exit
-	# to the plane door at the live stand.
-	var edge := (
-		SiteDefinition.ROAD_STEP if def_id == &"entrance_door" else SiteDefinition.PLANE_STEP
-	)
+	# to the plane door at the live stand, facing out the way that stand's exit
+	# does.
+	var edge := SiteDefinition.ROAD_STEP
 	var to_edge := PackedInt32Array()
 	var spots := []
 	if _site != null:
 		if def_id == &"entrance_door":
 			to_edge = SiteRoutes.distances(_grid, _site, SiteRoutes.edge_cells(_grid, _site, edge))
 		else:
-			to_edge = StandPlacement.to_door(_grid, _site, _layout.live_stand(_grid))
+			var stand := _layout.live_stand(_grid)
+			edge = StandPlacement.out_step(stand)
+			to_edge = StandPlacement.to_door(_grid, _site, stand)
 		spots = _site_door_spots(def_id, edge, to_edge)
 	else:
 		for y in _grid.size.y:

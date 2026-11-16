@@ -39,8 +39,8 @@ static func is_open_ground(grid: BuildGrid, site: SiteDefinition, cell: Vector2i
 	)
 
 
-## The open cells on the grid edge `step` leads out over (ROAD_STEP or
-## PLANE_STEP) with no wall on that edge.
+## The open cells on the grid edge `step` leads out over (ROAD_STEP, or a
+## stand's StandPlacement.out_step()) with no wall on that edge.
 static func edge_cells(grid: BuildGrid, site: SiteDefinition, step: Vector2i) -> Array[Vector2i]:
 	var out: Array[Vector2i] = []
 	var side := BuildGrid.SIDE_STEP.find(step)
@@ -237,7 +237,8 @@ static func departure(
 ## then the apron route of `stand` to the door of a plane drawn with `model`,
 ## each point on the ground the plane is drawn on there
 ## (PlaneView.ground_height_at(), as JetBridgePose.ground_y() reads it): the
-## site's ground height on the paved site, lower off it, at a north-row stand.
+## site's ground height on the paved site, lower off it (at a north-row stand,
+## or a west or east stand past the paved site).
 ## The route's own points are at y 0, and a walk is measured in 3D, so a
 ## wrong height would cost time and float or sink the walker.
 static func to_plane(

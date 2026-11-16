@@ -21,7 +21,7 @@ const CATEGORIES := [
 	# right after Security.
 	{"name": "Lane", "tools": BuildMode.LANE_TOOLS},
 	# The screen stand (Boredom 4/5) entertains passengers waiting at the gate.
-	# The gate desk (gates 1b) makes a gate of the north exit it stands by.
+	# The gate desk (gates 1b) makes a gate of the exit facing the planes it stands by.
 	{
 		"name": "Gates",
 		"tools": [BuildMode.Tool.GATE_DESK, BuildMode.Tool.SEATS, BuildMode.Tool.SCREEN],

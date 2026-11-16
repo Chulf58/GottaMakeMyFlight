@@ -260,11 +260,9 @@ func _route_doors(grid: BuildGrid, ids: Array[int]) -> void:
 		var def := StringName(record["def"])
 		if def != &"entrance_door" and def != &"exit_door":
 			continue
-		var edge := SiteDefinition.PLANE_STEP
+		var edge := SiteDefinition.ROAD_STEP
 		var key: Variant = edge
 		if def == &"entrance_door":
-			edge = SiteDefinition.ROAD_STEP
-			key = edge
 			if not fields.has(key):
 				var road := SiteRoutes.edge_cells(grid, site, edge)
 				fields[key] = SiteRoutes.distances(grid, site, road)
@@ -273,6 +271,8 @@ func _route_doors(grid: BuildGrid, ids: Array[int]) -> void:
 			if to_stand.is_empty():
 				out_of_service.append(id)
 				continue
+			# A door on the grid's edge walks out over the edge its stand faces.
+			edge = StandPlacement.out_step(to_stand)
 			key = StandPlacement.door_point(to_stand)
 			if not fields.has(key):
 				fields[key] = StandPlacement.to_door(grid, site, to_stand)
