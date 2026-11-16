@@ -15,7 +15,7 @@ extends RefCounted
 ## it taxis out from the pushback's end north to the join, west to the lane's
 ## west end and down the west stub to RunwayEntry. Every taxi route runs west
 ## along the lane, so a north stand's join must lie strictly between the lane's
-## ends (joins_lane()); Airside refuses a stand whose join does not. The routes
+## stubs (joins_lane()); Airside refuses a stand whose join does not. The routes
 ## leave out the other stands' joins they pass, straight points on the lane
 ## that change no length, corner or slice.
 ##
@@ -55,9 +55,18 @@ const SAME_M := 0.01
 
 ## The layout of the north lane and its spurs: its ends at the TaxiWest and
 ## TaxiEast waypoints of `points` (name -> position), and its z at TaxiWest.
+## "stub_west_x" and "stub_east_x" keep the stubs' x when the ends are run on
+## to the spurs (Airside.lane_layout()): a north join must lie between them.
 static func north_only(points: Dictionary) -> Dictionary:
 	var west: Vector3 = points[&"TaxiWest"]
-	return {"west_x": west.x, "east_x": (points[&"TaxiEast"] as Vector3).x, "lane_z": west.z}
+	var east: Vector3 = points[&"TaxiEast"]
+	return {
+		"west_x": west.x,
+		"east_x": east.x,
+		"lane_z": west.z,
+		"stub_west_x": west.x,
+		"stub_east_x": east.x,
+	}
 
 
 ## The three route points of StandPlacement stand `stand`: "spot" (where the
@@ -82,16 +91,18 @@ static func spur_ends(stand: Dictionary) -> Dictionary:
 	return {"side": side, "lane_x": StandPlacement.lane_x_of(stand)}
 
 
-## Whether `join` lies on the lane strictly between the ends of `layout`, or on
-## one of its spurs (spur_of()). East of the east end or west of the west end a
-## route to it would turn back along the lane, and on an end it would add a
-## zero-length step.
+## Whether `join` lies on the lane strictly between the runway stubs of
+## `layout` ("stub_west_x" and "stub_east_x"), or on one of its spurs
+## (spur_of()). A north stand's routes run from TaxiEast west to the join and
+## on west to TaxiWest, so a join past a stub, on the lane run on to a side
+## spur that has moved out, would turn the plane back along the lane; on a stub
+## it would add a zero-length step.
 static func joins_lane(join: Vector3, layout: Dictionary) -> bool:
 	if spur_of(join, layout) != StandPlacement.NORTH:
 		return true
 	if absf(join.z - float(layout["lane_z"])) > SAME_M:
 		return false
-	return join.x > float(layout["west_x"]) and join.x < float(layout["east_x"])
+	return join.x > float(layout["stub_west_x"]) and join.x < float(layout["stub_east_x"])
 
 
 ## The spur `join` lies on: StandPlacement.WEST or EAST when it is at that end's

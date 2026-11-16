@@ -4,9 +4,8 @@ extends GdUnitTestSuite
 ## the-site-becomes-buyable-that-side-s-t): 256 cells, the first 86 m site in
 ## the middle and 85 m of side land west and east cut into plot columns. A new
 ## game keeps the starter's world place and today's 6 plots; side columns are
-## locked until the side airside slices land and are then bought by the
-## touching rule; a plane rides on the paving height over the
-## first site only.
+## for sale since the side airside slices landed (S7c) and are bought by the
+## touching rule; a plane rides on the paving height over the whole grid.
 
 const SITE := preload("res://build/terminal_site.tres")
 ## Today's new-game land, in the plot columns of the first site (4 to 7).
@@ -133,14 +132,26 @@ func test_a_new_game_owns_todays_six_plots_and_no_side_land() -> void:
 	assert_int(_land.bought).is_equal(0)
 
 
-## Opens the side land on `_land`, as SiteDefinition.SIDE_LAND_OPEN will.
-func _open_side_land() -> void:
-	_land.open_columns = Vector2i(0, _land.plots.x)
+## The side land is for sale (SiteDefinition.SIDE_LAND_OPEN, board 16f7f8c2,
+## S7c): every column is open, and (3, 4), touching owned (4, 4), is bought.
+func test_side_land_is_for_sale() -> void:
+	assert_bool(SiteDefinition.SIDE_LAND_OPEN).is_true()
+	assert_that(_land.open_columns).is_equal(Vector2i(0, _land.plots.x))
+	var wallet := Wallet.new(20000)
+	var price := _land.next_price()
+	var result := _land.buy(Vector2i(3, 4), wallet)
+	print("bought (3, 4): %s for %d" % [result.ok, 20000 - wallet.balance])
+	assert_bool(result.ok).is_true()
+	assert_bool(_land.is_owned(Vector2i(3, 4))).is_true()
+	assert_int(wallet.balance).is_equal(20000 - price)
+	var side := BuildEdit.paint_floor(Vector2i(84, 110), BuildGrid.FLOOR_TILE, 0)
+	assert_object(_land.edit_problem(side)).is_null()
 
 
-func test_side_land_is_locked_until_the_side_airside_slices_land() -> void:
-	assert_bool(SiteDefinition.SIDE_LAND_OPEN).is_false()
-	assert_that(_land.open_columns).is_equal(SITE.centre_columns)
+## The lock still works when a land's open columns are the first site's only,
+## as LandPlots.for_site() sets them with SIDE_LAND_OPEN false.
+func test_locked_side_land_is_refused() -> void:
+	_land.open_columns = SITE.centre_columns
 	var buyable := _land.buyable_plots()
 	print("buyable while locked %s" % [buyable])
 	assert_array(buyable).is_equal(
@@ -162,15 +173,14 @@ func test_side_land_is_locked_until_the_side_airside_slices_land() -> void:
 	assert_int(_land.edit_problem(side).reason).is_equal(BuildResult.Reason.LAND_NOT_OWNED)
 
 
-func test_a_save_owning_locked_side_land_is_refused() -> void:
+func test_a_save_owning_side_land_loads() -> void:
 	var saved := _land.to_snapshot()
 	(saved["owned"] as Array).append([3, 4])
 	saved["bought"] = 1
-	assert_str(LandPlots.problem(saved, SITE)).contains("not for sale")
+	assert_str(LandPlots.problem(saved, SITE)).is_equal("")
 
 
-func test_open_side_land_is_bought_by_the_touching_rule_west() -> void:
-	_open_side_land()
+func test_side_land_is_bought_by_the_touching_rule_west() -> void:
 	var buyable := _land.buyable_plots()
 	for row in [3, 4, 5]:
 		assert_array(buyable).contains([Vector2i(3, row)])
@@ -184,8 +194,7 @@ func test_open_side_land_is_bought_by_the_touching_rule_west() -> void:
 	assert_int(_land.bought).is_equal(4)
 
 
-func test_open_side_land_is_bought_by_the_touching_rule_east() -> void:
-	_open_side_land()
+func test_side_land_is_bought_by_the_touching_rule_east() -> void:
 	assert_int(_land.buy_problem(Vector2i(8, 4), null).reason).is_equal(
 		BuildResult.Reason.LAND_NOT_TOUCHING
 	)
@@ -207,18 +216,24 @@ func test_a_save_cut_into_todays_four_columns_is_refused() -> void:
 	assert_str(_land.snapshot_problem(saved)).contains("another number of plots")
 
 
-func test_a_plane_rides_on_the_paving_over_the_first_site_only() -> void:
+## With side land open the plane rides on the paving over the whole grid
+## (SiteDefinition.grid_rect()), the floor spur at x -124 included, and ramps
+## down outside its edge.
+func test_a_plane_rides_on_the_paving_over_the_whole_grid() -> void:
 	var centre := PlaneView.ground_height_at(Vector3(0, 0, -150))
-	var edge := PlaneView.ground_height_at(Vector3(43 + PlaneView.paving_ramp_m() / 2.0, 0, -150))
+	var edge := PlaneView.ground_height_at(Vector3(128 + PlaneView.paving_ramp_m() / 2.0, 0, -150))
 	var side_lane := PlaneView.ground_height_at(Vector3(-124, 0, -150))
 	var side_land := PlaneView.ground_height_at(Vector3(90, 0, -100))
+	var off := PlaneView.ground_height_at(Vector3(-140, 0, -150))
 	print(
 		(
-			"ground: centre %.3f, ramp middle %.3f, side lane %.3f, side land %.3f"
-			% [centre, edge, side_lane, side_land]
+			"ground: centre %.3f, ramp middle %.3f, side lane %.3f, side land %.3f, off %.3f"
+			% [centre, edge, side_lane, side_land, off]
 		)
 	)
+	assert_that(SITE.grid_rect()).is_equal(Rect2(-128, -210, 256, 150))
 	assert_float(centre).is_equal_approx(SITE.ground_height, 0.0001)
 	assert_float(edge).is_equal_approx(SITE.ground_height / 2.0, 0.0001)
-	assert_float(side_lane).is_equal(0.0)
-	assert_float(side_land).is_equal(0.0)
+	assert_float(side_lane).is_equal_approx(SITE.ground_height, 0.0001)
+	assert_float(side_land).is_equal_approx(SITE.ground_height, 0.0001)
+	assert_float(off).is_equal(0.0)

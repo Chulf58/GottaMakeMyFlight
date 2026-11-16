@@ -252,14 +252,14 @@ func pose_at(
 	return {"phase": state, "transform": pose}
 
 
-## The ground's height under `point`: the site's paving height on the first
-## 86 m site (SiteDefinition.centre_rect(); the side land west and east of it
-## leaves the side taxi routes on the ground), 0 from PAVING_RAMP_M outside
-## its edge, and a straight ramp between.
+## The ground's height under `point`: the site's paving height on the whole
+## site grid (SiteDefinition.grid_rect(), side land included, since side land
+## is bought and built on), 0 from PAVING_RAMP_M outside its edge, and a
+## straight ramp between.
 static func ground_height_at(point: Vector3) -> float:
-	var centre: Rect2 = SITE.centre_rect()
-	var low := centre.position
-	var high := centre.end
+	var site: Rect2 = SITE.grid_rect()
+	var low := site.position
+	var high := site.end
 	var at := Vector2(point.x, point.z)
 	var outside := at.distance_to(at.clamp(low, high))
 	return SITE.ground_height * clampf(1.0 - outside / PAVING_RAMP_M, 0.0, 1.0)

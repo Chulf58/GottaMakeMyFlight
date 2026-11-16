@@ -441,6 +441,21 @@ static func reaches_road(grid: BuildGrid, rects: Array[Rect2]) -> bool:
 	return false
 
 
+## Whether a plane at `stand` can taxi onto its lane the way TaxiRoutes routes
+## it. A north stand's join must lie strictly between the runway stubs at x
+## -SIDE_LANE_X and SIDE_LANE_X (TaxiWest and TaxiEast): every north route runs
+## west along the lane between them, and a join out past a stub, on the lane
+## run on to a side spur, would turn back along it (TaxiRoutes.joins_lane()). A
+## west or east stand's pushback must end short of its spur (south of the lane
+## in its north twin), so its way out runs on toward the spur; a stand whose
+## sill lies at or beyond its spur has no way onto it (on side land, a stand
+## built past a spur that has not moved out).
+static func reaches_lane(stand: Dictionary) -> bool:
+	if side_of(stand) != NORTH:
+		return pushback_end(north_twin(stand)).z > TAXI_LANE_Z
+	return absf(lane_join(stand).x) < SIDE_LANE_X
+
+
 ## Whether nothing built stands under the plane's sweep from `stand`, and none
 ## of it reaches over the road.
 static func aircraft_clear(grid: BuildGrid, site: SiteDefinition, stand: Dictionary) -> bool:
@@ -503,7 +518,7 @@ static func place(grid: BuildGrid, site: SiteDefinition, live: Dictionary) -> Di
 		var stand := for_exit(grid, id)
 		if stand.is_empty() or not grid.is_passenger_cell(grid.get_object(id)["anchor"]):
 			continue
-		if not aircraft_clear(grid, site, stand):
+		if not reaches_lane(stand) or not aircraft_clear(grid, site, stand):
 			continue
 		var walk := walk_of(grid, site, id, stand)
 		if walk.is_empty():
@@ -539,14 +554,14 @@ static func place(grid: BuildGrid, site: SiteDefinition, live: Dictionary) -> Di
 
 ## One gate's stand checked as place() checks a candidate (gates-technical-
 ## design-gate-desks-link-to-north-exits-one-st, point 2): {"status": OK when
-## the plane's sweep is clear and exit `exit_id` has a walk to its door, else
-## UNAVAILABLE; "walk_m": that walk (-1 when UNAVAILABLE); "warning": whether
-## it is over WALK_WARNING_M}.
+## the stand reaches its lane (reaches_lane()), the plane's sweep is clear and
+## exit `exit_id` has a walk to its door, else UNAVAILABLE; "walk_m": that walk
+## (-1 when UNAVAILABLE); "warning": whether it is over WALK_WARNING_M}.
 static func check(
 	grid: BuildGrid, site: SiteDefinition, exit_id: int, stand: Dictionary
 ) -> Dictionary:
 	var walk: Array[Vector3] = []
-	if aircraft_clear(grid, site, stand):
+	if reaches_lane(stand) and aircraft_clear(grid, site, stand):
 		walk = walk_of(grid, site, exit_id, stand)
 	if walk.is_empty():
 		return {"status": UNAVAILABLE, "walk_m": -1.0, "warning": false}

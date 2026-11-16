@@ -130,12 +130,12 @@ static func _add_surface(
 
 
 ## The x lines, then the z lines, where the plane's ground height starts or
-## stops changing: the edges of the first site (SiteDefinition.centre_rect(),
-## the area PlaneView.ground_height_at() paves) and PAVING_RAMP_M outside them.
+## stops changing: the edges of the site grid (SiteDefinition.grid_rect(), the
+## area PlaneView.ground_height_at() paves) and PAVING_RAMP_M outside them.
 static func _ramp_lines() -> Array[Array]:
-	var centre: Rect2 = SITE.centre_rect()
-	var low := centre.position
-	var high := centre.end
+	var site: Rect2 = SITE.grid_rect()
+	var low := site.position
+	var high := site.end
 	var ramp := PlaneView.paving_ramp_m()
 	return [
 		[low.x - ramp, low.x, high.x, high.x + ramp],

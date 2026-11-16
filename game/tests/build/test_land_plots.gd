@@ -72,11 +72,24 @@ func test_a_new_game_owns_the_starter_plots_and_one_ring() -> void:
 	assert_bool(_land.is_owned(Vector2i(3, 4))).is_false()
 
 
-## Side land (columns 0 to 3 and 8 to 11) is locked (SiteDefinition.SIDE_LAND_OPEN),
-## so the side plots west of the start land are not buyable yet.
+## Side land (columns 0 to 3 and 8 to 11) is for sale (SiteDefinition.
+## SIDE_LAND_OPEN), so the side plots west of the start land are buyable too.
 func test_the_buyable_plots_share_an_edge_with_owned_land() -> void:
-	assert_array(_land.buyable_plots()).is_equal(
-		[Vector2i(4, 2), Vector2i(5, 2), Vector2i(6, 3), Vector2i(6, 4), Vector2i(6, 5)]
+	print("buyable %s" % [_land.buyable_plots()])
+	(
+		assert_array(_land.buyable_plots())
+		. contains_exactly_in_any_order(
+			[
+				Vector2i(4, 2),
+				Vector2i(5, 2),
+				Vector2i(3, 3),
+				Vector2i(6, 3),
+				Vector2i(3, 4),
+				Vector2i(6, 4),
+				Vector2i(3, 5),
+				Vector2i(6, 5),
+			]
+		)
 	)
 	assert_object(_land.buy_problem(Vector2i(6, 4), null)).is_null()
 	# (6, 2) touches owned (5, 3) only at a corner.

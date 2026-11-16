@@ -127,8 +127,9 @@ static func clears_lane(stand: Dictionary, plane_class: String) -> bool:
 ## Which part of the envelope of `plane_class` at `stand` is blocked on `grid`
 ## (with `site`'s obstacles; null for none): SWING or WAY when something built
 ## stands under it or it reaches over the road (StandPlacement.reaches_road();
-## the swing first), LANE when the parked plane would reach the lane band, else
-## CLEAR.
+## the swing first), LANE when the parked plane would reach the lane band, WAY
+## when its way out cannot reach its lane (StandPlacement.reaches_lane(): a
+## north join past a runway stub), else CLEAR.
 static func blocked_part(
 	grid: BuildGrid, site: SiteDefinition, stand: Dictionary, plane_class: String
 ) -> Part:
@@ -142,6 +143,8 @@ static func blocked_part(
 				return Part.SWING if i == 0 else Part.WAY
 	if not clears_lane(stand, plane_class):
 		return Part.LANE
+	if not StandPlacement.reaches_lane(stand):
+		return Part.WAY
 	return Part.CLEAR
 
 

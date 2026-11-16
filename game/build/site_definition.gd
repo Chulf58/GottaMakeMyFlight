@@ -28,11 +28,12 @@ const PLANE_STEP := Vector2i(0, -1)
 ## round trips of floats).
 const ORIGIN_TOLERANCE_M := 0.001
 ## Whether the side land west and east of the first site is for sale
-## (LandPlots.open_columns). Locked until the side airside slices land (board
-## 16f7f8c2, S7: side routes follow what is built): built on now, it would sit
-## at ground 0 under the 0.2 m paving (PlaneView.ground_height_at() paves only
-## centre_rect()), and a stand beyond a side taxi lane has no route.
-const SIDE_LAND_OPEN := false
+## (LandPlots.open_columns). Opened with the side airside slices (board
+## 16f7f8c2, S7c): the side spurs follow what is built (SideSpurs), the whole
+## grid is paved at ground_height (grid_rect(), PlaneView.ground_height_at()),
+## and a stand with no way onto its lane is refused (StandPlacement.
+## reaches_lane()). False locks the side land again: only centre_columns sell.
+const SIDE_LAND_OPEN := true
 
 ## World position of grid cell (0, 0)'s north-west corner; y is the floor,
 ## 2 cm above the site's paving.
@@ -57,8 +58,8 @@ const SIDE_LAND_OPEN := false
 ## How many land plot rows lie down the grid, cut as evenly as the columns:
 ## six rows of 25 down its 150.
 @export var plot_rows := 6
-## The first site's plot columns (first column, count): x -43 to 43, where a
-## plane rides on the paving height (PlaneView.ground_height_at()).
+## The first site's plot columns (first column, count): x -43 to 43, the land
+## a new game starts on (LandPlots).
 @export var centre_columns := Vector2i(4, 4)
 ## Grid cells kept site art stands on, which no walk crosses: the road's sign
 ## post near (14.1, -59.9) reaches z -60.33, into cell (142, 149).
@@ -84,6 +85,13 @@ func centre_rect() -> Rect2:
 	for i in centre_columns.y:
 		wide += plot_columns[centre_columns.x + i]
 	return Rect2(Vector2(grid_origin.x + west, grid_origin.z), Vector2(wide, grid_size.y))
+
+
+## The whole site grid, x as world x and y as world z: the ground the site's
+## paving covers and the plane rides on at ground_height
+## (PlaneView.ground_height_at()).
+func grid_rect() -> Rect2:
+	return Rect2(Vector2(grid_origin.x, grid_origin.z), Vector2(grid_size))
 
 
 ## Why a BuildGrid.to_snapshot() dictionary cannot be loaded on this site, or

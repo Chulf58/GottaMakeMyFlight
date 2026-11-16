@@ -122,13 +122,12 @@ func test_time_the_largest_grid() -> void:
 ## to the built area and the points switched by index, about 6.7 ms and 3.3 ms
 ## after.
 ##
-## The buildable site is the first site (SiteDefinition.centre_rect(), 86x150):
-## the side land of the 256 cell wide grid is locked (SiteDefinition.
-## SIDE_LAND_OPEN). With the whole 256x150 grid floored the opening edit took
-## about 20 ms on 2026-11-15, so measure the wide grid again when side land
-## opens (board 16f7f8c2, S7).
+## The buildable site is the whole 256x150 grid since side land opened
+## (SiteDefinition.SIDE_LAND_OPEN, board 16f7f8c2, S7c). On the first site
+## alone (86x150) the opening edit took about 6.7 ms; with the whole grid
+## floored it took about 20 ms on 2026-11-15, before side land opened.
 func test_time_the_full_site_with_its_graphs_built() -> void:
-	var size := Vector2i(SITE.centre_rect().size)
+	var size := SITE.grid_size
 	var grid := _site(size)
 	var indoor := _indoor(grid)
 	assert_int(indoor).is_equal((size.x - 2) * (size.y - 2))
