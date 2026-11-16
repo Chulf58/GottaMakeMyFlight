@@ -23,13 +23,23 @@ extends GdUnitTestSuite
 const SITE := preload("res://build/terminal_site.tres")
 const WEST_STEP := Vector2i(80, -37)
 const EAST_STEP := Vector2i(-80, -37)
-const STEP_M := 2.0
+const STEP_M := 4.0
+## The runs on the site grid that step finely through the corner at the join and
+## on past the plane clearing the stand's ground: from FINE_FROM_M before the join
+## to FINE_TO_M after it, every FINE_STEP_M, so a window of under a metre shows.
+const FINE_STEP_M := 0.25
+const FINE_FROM_M := 10.0
+const FINE_TO_M := 45.0
 const SAMPLE_M := 0.5
 const INSET_M := 0.05
 ## The plane's box is clear of the stand's ground this far past the join.
 const CLEAR_M := 50.0
-## Model 05 and 07 with their classes.
-const PLANES := [["tp_plane_05a", "medium"], ["tp_plane_07a", "large"]]
+## Models 03, 05 and 07 with their classes.
+const PLANES := [
+	["tp_plane_03a", "small"],
+	["tp_plane_05a", "medium"],
+	["tp_plane_07a", "large"],
+]
 
 var _grids: Array[BuildGrid] = []
 ## "side model on grid n" -> the run's summary (_run()).
@@ -45,6 +55,8 @@ func before() -> void:
 		for stand in _stands():
 			for plane: Array in PLANES:
 				_runs[_key(g, stand, plane)] = _run(_grids[g], stand, plane)
+				if g == 0:
+					_runs["fine " + _key(g, stand, plane)] = _run(_grids[g], stand, plane, true)
 
 
 static func _key(grid_index: int, stand: Dictionary, plane: Array) -> String:
@@ -117,8 +129,10 @@ static func _box_cells(
 ## released at a step and guarded at the next), "covered" and "missing" (cells
 ## under the plane over all steps, and those not guarded), "early" (cells of the
 ## ground the plane covers later that a step has not guarded), "late" (held
-## cells of the steps CLEAR_M past the join).
-func _run(grid: BuildGrid, stand: Dictionary, plane: Array) -> Dictionary:
+## cells of the steps CLEAR_M past the join). With `fine`, only the stretch of
+## the route round the join and the plane's clearing of the ground, every
+## FINE_STEP_M.
+func _run(grid: BuildGrid, stand: Dictionary, plane: Array, fine := false) -> Dictionary:
 	var path := _route(stand, plane[1])
 	var entry := MovementPlan.flat_dir(
 		StandPlacement.stand_point(stand), StandPlacement.pushback_end(stand)
@@ -131,8 +145,10 @@ func _run(grid: BuildGrid, stand: Dictionary, plane: Array) -> Dictionary:
 	var under_by_step: Array = []
 	var before_released := {}
 	var total := MovementPlan.path_length(path)
-	var distance := 0.0
-	while distance <= total:
+	var distance := maxf(join_at - FINE_FROM_M, 0.0) if fine else 0.0
+	var step := FINE_STEP_M if fine else STEP_M
+	var until := minf(join_at + FINE_TO_M, total) if fine else total
+	while distance <= until:
 		var rects := ApronStand.route_rects(
 			stand, path, _progress(path, distance), plane[0], plane[1]
 		)
@@ -163,7 +179,7 @@ func _run(grid: BuildGrid, stand: Dictionary, plane: Array) -> Dictionary:
 		rects_by_step.append(rects)
 		under_by_step.append(in_ground)
 		before_released = released
-		distance += STEP_M
+		distance += step
 	var later := {}
 	for i in range(rects_by_step.size() - 1, -1, -1):
 		var guarded := StandPlacement.cells_under(grid, rects_by_step[i])
@@ -175,11 +191,15 @@ func _run(grid: BuildGrid, stand: Dictionary, plane: Array) -> Dictionary:
 	return out
 
 
-func _each_run(check: Callable) -> void:
+func _each_run(check: Callable, fine := false) -> void:
 	for g in _grids.size():
+		if fine and g > 0:
+			continue
 		for stand in _stands():
 			for plane: Array in PLANES:
 				var key := _key(g, stand, plane)
+				if fine:
+					key = "fine " + key
 				check.call(key, _runs[key])
 
 
@@ -239,4 +259,26 @@ func test_no_ground_is_held_once_the_plane_is_clear_of_the_stand() -> void:
 			)
 			assert_int(run["held"][0]).is_greater(0)
 			assert_int(run["late"]).is_equal(0)
+	)
+
+
+## The same through the corner at the join and the plane clearing the ground,
+## stepped every FINE_STEP_M, so a window of under a metre shows (a small plane
+## is past the fixed turn distance with its nose short of the class's way): no
+## ground is retaken, none is released before the plane covers it, and the plane
+## is guarded at each step.
+func test_a_sub_metre_window_at_the_corner_and_the_release_point_stays_guarded() -> void:
+	_each_run(
+		func(key: String, run: Dictionary) -> void:
+			print(
+				(
+					"%s: %d steps, %d retaken, %d released before the plane covers them, %d not guarded"
+					% [key, run["held"].size(), run["retaken"], run["early"], run["missing"]]
+				)
+			)
+			assert_int(run["held"].size()).is_greater(100)
+			assert_int(run["retaken"]).is_equal(0)
+			assert_int(run["early"]).is_equal(0)
+			assert_int(run["missing"]).is_equal(0),
+		true
 	)

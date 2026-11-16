@@ -50,8 +50,9 @@ const STATUS_HEIGHT_M := 18.0
 const AREA_LIFT_M := 0.32
 ## A pose point this close to a route's first leg is on it.
 const ON_LEG_M := 0.001
-## The steps, in metres of route, a turning plane's box is sampled at, and the
-## margin added to what they reach, for the swing between two samples.
+## The steps, in metres of route, the box of a plane still to turn or to clear the
+## class's ground is sampled at, and the margin added to what they reach, for
+## the swing between two samples.
 const TURN_STEP_M := 0.5
 const TURN_MARGIN_M := 0.3
 const AREA_TINT := Color(1.0, 0.5, 0.1, 0.3)
@@ -426,15 +427,15 @@ static func footprint(pose: Transform3D, model: String) -> PackedVector3Array:
 ## The cut follows the plane along the route's first leg, from the pushback's
 ## end to the join, which runs north in the stand's own frame
 ## (StandPlacement.to_frame()): the ground north of the pose point plus the
-## plane's rear on that heading (at least StandPlacement.TAIL_M), and, while the
-## plane has yet to take the corner at the join (MovementPlan.CORNER_BLEND
-## either side of it), no less than the furthest rear its turning box still
-## reaches. Past the corner the plane is on the lane or a spur, so all of the
-## class's ground lies behind it and only the plane's box is held. A later leg
-## is never read in the stand's frame: a spur or the lane runs along its z, or
-## back across its x, and read there it would take released ground back. So the
-## cut only moves north, what is released stays released, and a cell the plane
-## covers now or in its turn is guarded.
+## plane's rear on that heading (at least StandPlacement.TAIL_M). Near the join
+## it also holds what the plane's box will still reach: from
+## MovementPlan.CORNER_BLEND before the join, where the plane starts to turn,
+## on along the leg after it for as long as the box overlaps the class's ground.
+## Past that the plane is on the lane or a spur with the ground behind it, and
+## only its box is held. A later leg is never read in the stand's frame: a spur
+## or the lane runs along its z, or back across its x, and read there it would
+## take released ground back. So the cut only moves north, what is released
+## stays released, and a cell the plane covers now or on its way out is guarded.
 static func route_rects(
 	stand: Dictionary,
 	path: PackedVector3Array,
@@ -452,43 +453,72 @@ static func route_rects(
 	var box := Rect2(Vector2(corners[0].x, corners[0].z), Vector2.ZERO)
 	for corner in corners:
 		box = box.expand(Vector2(corner.x, corner.z))
-	var out := class_rects(stand, plane_class, _cut_z(stand, path, entry, model, pose.origin))
+	var cut := _cut_z(stand, path, entry, model, plane_class, pose.origin)
+	var out := class_rects(stand, plane_class, cut)
 	out.append(box)
 	return out
 
 
 ## The z, at `stand`'s north twin, north of which route_rects() keeps the class's
-## ground for a `model` plane at `origin` on `path` (its first leg runs from
-## the pushback's end to the join), or -INF once the plane has taken the
-## corner at the join.
+## ground for a `model` plane of `plane_class` at `origin` on `path` (its first
+## leg runs from the pushback's end to the join): the plane's rear, and the
+## furthest rear of the box at every pose still ahead of it from the start of
+## its turn at the join, up to the last one whose box overlaps the class's
+## ground (a pose past the corner is its box turned to the leg's heading). -INF
+## once no such pose is left, or when the plane is not on the first two legs.
 static func _cut_z(
-	stand: Dictionary, path: PackedVector3Array, entry: Vector3, model: String, origin: Vector3
+	stand: Dictionary,
+	path: PackedVector3Array,
+	entry: Vector3,
+	model: String,
+	plane_class: String,
+	origin: Vector3
 ) -> float:
 	if path.size() < 2:
 		return _rear_z(stand, origin, entry, model)
 	var join := path[1]
 	var run := path[0].distance_to(join)
-	var travelled := run + origin.distance_to(join)
-	var cut := -INF
+	var travelled := 0.0
+	var rear := 0.0
 	if _on_leg(origin, path[0], join):
 		travelled = path[0].distance_to(origin)
-		cut = _rear_z(stand, origin, entry, model)
-	elif travelled <= run + MovementPlan.CORNER_BLEND:
-		cut = _rear_z(stand, join, entry, model)
+		rear = _rear_z(stand, origin, entry, model)
+	elif path.size() > 2 and _on_leg(origin, join, path[2]):
+		travelled = run + origin.distance_to(join)
+		rear = _rear_z(stand, join, entry, model)
 	else:
-		return cut
-	var last := run + MovementPlan.CORNER_BLEND
-	var from := maxf(travelled, run - MovementPlan.CORNER_BLEND)
-	var samples := ceili((last - from) / TURN_STEP_M)
-	for i in samples + 1:
-		var at := minf(from + i * TURN_STEP_M, last)
+		return -INF
+	var ground := class_rects(stand, plane_class)
+	var total := MovementPlan.path_length(path)
+	var turn_end := run + MovementPlan.CORNER_BLEND
+	var at := maxf(travelled, run - MovementPlan.CORNER_BLEND)
+	var cut := -INF
+	var swept := false
+	while true:
 		var turned := Transform3D(
 			Basis(Vector3.UP, MovementPlan.yaw_of(MovementPlan.heading_at(path, at, entry))),
 			MovementPlan.point_at(path, at)
 		)
-		for corner in footprint(turned, model):
+		var corners := footprint(turned, model)
+		if at > turn_end and not _overlaps(corners, ground):
+			break
+		swept = true
+		for corner in corners:
 			cut = maxf(cut, StandPlacement.to_frame(stand, corner).z + TURN_MARGIN_M)
-	return cut
+		if at >= total:
+			break
+		at = minf(at + TURN_STEP_M, total)
+	return maxf(cut, rear) if swept else -INF
+
+
+## Whether the box with `corners` (footprint()), grown by TURN_MARGIN_M, overlaps
+## any of `rects`.
+static func _overlaps(corners: PackedVector3Array, rects: Array[Rect2]) -> bool:
+	var box := Rect2(Vector2(corners[0].x, corners[0].z), Vector2.ZERO)
+	for corner in corners:
+		box = box.expand(Vector2(corner.x, corner.z))
+	box = box.grow(TURN_MARGIN_M)
+	return rects.any(func(rect: Rect2) -> bool: return rect.intersects(box))
 
 
 ## The z, at `stand`'s north twin, of the rearmost point of a `model` plane at
