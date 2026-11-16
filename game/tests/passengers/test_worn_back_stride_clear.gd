@@ -13,7 +13,9 @@ extends GdUnitTestSuite
 ## rest on the back (its least torso gap at most WORN_GAP_M on every moment).
 ## The five bodies board 3fcd8e5a added (male 04 and 05, female 06, 09, 12)
 ## are checked the same way, as their rows were set by the same sweep, and
-## so are male 10 and female 02 (board a1c067fc).
+## so are male 10 and female 02 (board a1c067fc). Since board bcad1dd0 every body
+## of the roster is checked: the crossing probe found female 08's left buttock in
+## her one-bag pack at the walk's stride, a body the list left out.
 
 const MOMENTS := 32
 const CLIPS: Array[String] = ["walk", "idle"]
@@ -21,24 +23,14 @@ const CLIPS: Array[String] = ["walk", "idle"]
 const LEG_CLEAR_M := 0.01
 ## The resting limit of the worn-backpack float check (spike/worn_back_gap.gd).
 const WORN_GAP_M := 0.03
-const BODIES_CHECKED: Array[String] = [
-	"tcp_female_character_05",
-	"tcp_female_character_11",
-	"tcp_male_character_04",
-	"tcp_male_character_05",
-	"tcp_female_character_06",
-	"tcp_female_character_09",
-	"tcp_female_character_12",
-	"tcp_male_character_10",
-	"tcp_female_character_02",
-]
+const BODIES_CHECKED: Array[String] = PassengerLooks.BODIES
 const LEGS: Array[String] = ["Quad", "Shin", "Foot", "Toes", "Knee", "Thigh"]
 const ARMS: Array[String] = [
 	"Arm", "Forearm", "Hand", "Fingers", "Fingertips", "Thumb", "Thumb_Tip"
 ]
 
 
-## Female 05 and 11 and the added bodies with one bag and two: no leg vertex within LEG_CLEAR_M of
+## Every body with one bag and two: no leg vertex within LEG_CLEAR_M of
 ## the pack, no torso vertex in it, and the panel resting on the back.
 func test_worn_pack_clears_the_stride_of_the_checked_bodies() -> void:
 	var legs_in := 0

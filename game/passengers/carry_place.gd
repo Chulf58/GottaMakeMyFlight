@@ -160,6 +160,13 @@ static func place_bags(
 				if holder >= 0:
 					var at: Vector3 = placed.basis * (plan["anchor"] as Vector3)
 					placed = Transform3D(placed.basis, props.grip_of(body, holder) - at)
+					if plan.get("loop_yaw", 0.0) > 0.0:
+						var level: Vector3 = (
+							plan["targets"][holder] - props._shoulder_of(body, holder)
+						)
+						placed = CarryLead.loop_yaw(
+							placed, props.grip_of(body, holder), level, plan["loop_yaw"]
+						)
 				node.global_transform = placed
 		bag["held_by"] = holder
 		if holder >= 0:
