@@ -19,16 +19,17 @@ extends RefCounted
 ## rectangle of it is its north twin's (north_twin()) moved by to_world(). Its
 ## way out ends on the side lane, SIDE_LANE_X out west or east. A north stand
 ## has no "side" key, so its dictionary and every value worked out from it are
-## the ones they were before sides. Only north stands are made in play
-## (for_exit()); side exits come with later slices.
+## the ones they were before sides. for_exit() gives an exit the stand of the
+## side its outside faces (slice S5); an exit facing the road has none.
 ##
 ## A candidate exit needs a clear aircraft route (swept_rects(): the parked
-## plane, the pushback and its swing, the way north to the taxi lane, with no
-## floor, wall, object or site obstacle under any of it) and a passenger walk
-## from the exit over open ground to the plane door (walk_of()). Candidates
-## rank by that walk's length, then the live stand's exit, then the northmost
-## wall line, then the lowest door id. With none the result is UNAVAILABLE and
-## the live stand stays.
+## plane, the pushback and its swing, the way out to its lane, with no floor,
+## wall, object or site obstacle under any of it) and a passenger walk from the
+## exit over open ground to the plane door (walk_of()). Candidates rank by that
+## walk's length, then the live stand's exit, then the shortest way from the
+## sill to the stand's own lane (the northmost wall line among north stands),
+## then the lowest door id. With none the result is UNAVAILABLE and the live
+## stand stays.
 ##
 ## Not guaranteed: the swing area is a rectangle around the pushback, a little
 ## wider than the plane really sweeps, so it can refuse a building the plane
@@ -289,15 +290,24 @@ static func for_cell(grid: BuildGrid, cell: Vector2i, exit_id := 0, side := NORT
 	return make(exit_id, centre.x + 0.5 * step.x, centre.z + 0.5 * step.y, side)
 
 
-## The stand of exit door `exit_id`, or {} when it is not an exit door whose
-## outside faces north.
+## The stand of exit door `exit_id` on the side its outside faces (NORTH, WEST
+## or EAST), or {} when it is not an exit door or its outside faces the road.
 static func for_exit(grid: BuildGrid, exit_id: int) -> Dictionary:
 	var record := grid.get_object(exit_id)
 	if record.is_empty() or StringName(record["def"]) != &"exit_door":
 		return {}
-	if DoorPlacement.back_step(record["facing"]) != SiteDefinition.PLANE_STEP:
+	var side := side_of_step(DoorPlacement.back_step(record["facing"]))
+	if side == "":
 		return {}
-	return for_cell(grid, record["anchor"], exit_id)
+	return for_cell(grid, record["anchor"], exit_id, side)
+
+
+## The side whose OUT_STEP is `step`, or "" for none (the road's step).
+static func side_of_step(step: Vector2i) -> String:
+	for side: String in SIDES:
+		if OUT_STEP[side] == step:
+			return side
+	return ""
 
 
 ## The starter shell's stand: straight out from ReferenceTerminal's exit
@@ -429,10 +439,12 @@ static func place(grid: BuildGrid, site: SiteDefinition, live: Dictionary) -> Di
 		var walk := walk_of(grid, site, id, stand)
 		if walk.is_empty():
 			continue
+		# The twin's wall_z is the stand's way to its own lane, which for a north
+		# stand is its own wall_z (the northmost first).
 		var key := [
 			roundi(walk_length(walk) * 1000.0),
 			0 if id == live_exit else 1,
-			float(stand["wall_z"]),
+			float(north_twin(stand)["wall_z"]),
 			id
 		]
 		if best.is_empty() or key < best_key:

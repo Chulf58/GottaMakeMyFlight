@@ -115,7 +115,9 @@ func test_the_sign_has_the_broken_link_glyph_and_no_caption() -> void:
 	var marker: Sprite3D = _view.signs()[0]
 	assert_object(marker.texture).is_same(MarkerIcons.icon(MarkerIcons.Glyph.UNLINKED_GATE))
 	assert_int(marker.find_children("*", "Label3D", true, false).size()).is_equal(0)
-	assert_str(GateLinksView.text_of(marker)).is_equal("Unlinked: no north exit in 4 cells")
+	assert_str(GateLinksView.text_of(marker)).is_equal(
+		"Unlinked: no exit facing the planes in 4 cells"
+	)
 
 
 func test_the_hover_text_is_reported_only_in_build_mode() -> void:
@@ -129,7 +131,7 @@ func test_the_hover_text_is_reported_only_in_build_mode() -> void:
 	assert_int(signs.size()).is_equal(1)
 	assert_int(signs[0]["key"]).is_equal(_desk_id)
 	assert_int(signs[0]["select"]).is_equal(_desk_id)
-	assert_str(signs[0]["text"]).is_equal("Unlinked: no north exit in 4 cells")
+	assert_str(signs[0]["text"]).is_equal("Unlinked: no exit facing the planes in 4 cells")
 	# The rect is the drawn icon, in viewport px.
 	var rect: Rect2 = signs[0]["rect"]
 	var icon := _icon()

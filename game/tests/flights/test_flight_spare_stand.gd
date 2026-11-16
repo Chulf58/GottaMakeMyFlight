@@ -7,6 +7,15 @@ extends GdUnitTestSuite
 ## second plot of the first site's row (cells 107 to 128), is booked at 10:00; an offer at
 ## 12:00 meets A1 only at the gate (its ground route is free), so another
 ## gate would take it.
+##
+## SpareStand tries west and east stands too (slice S5 of design airside-all-
+## around-technical-design-one-route-source-per-con). A west plane parked from
+## the shell's west wall, or an east one from the open cells east of it, fits
+## in the home plot, so the no-room cases wall off the sides first
+## (_wall_off_the_sides()): two floor strips outside the home plot that every
+## west and east plane from it would park over. The control with the east plot
+## owned has the strips as well, so it differs from the no-room case only in
+## the land.
 
 const SITE := preload("res://build/terminal_site.tres")
 const SHIFT := Vector2i(12, 0)
@@ -17,6 +26,13 @@ const DESK_AT := Vector2i(19, 115) + SHIFT + SIDE_LAND
 ## The plot (column, row) holding the exit, and the one east of it.
 const PLOT_HOME := [5, 4]
 const PLOT_EAST := [6, 4]
+## The floor strips' columns: in the plot west of the home plot, clear of gate
+## A's small envelope; and in the east plot, past the nose gap of an east plane
+## from the home plot's last column. Their rows cover every side plane's swing
+## square from the home plot's rows (100 to 124).
+const STRIP_WEST := 103
+const STRIP_EAST := 131
+const STRIP_ROWS := Vector2i(85, 149)
 
 var _grid: SiteGrid
 var _flights: FlightSim
@@ -41,6 +57,24 @@ func _own(plots: Array) -> void:
 	_grid.land = land
 
 
+## Floor strips at STRIP_WEST and STRIP_EAST, so no west or east plane from
+## the home plot has room (painted before the land is set, as the shell is).
+func _wall_off_the_sides() -> void:
+	var edits: Array[BuildEdit] = []
+	for y in range(STRIP_ROWS.x, STRIP_ROWS.y + 1):
+		for x in [STRIP_WEST, STRIP_EAST]:
+			edits.append(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
+	for result in _grid.apply_batch(edits):
+		assert_bool(result.ok).override_failure_message(result.reason_text()).is_true()
+
+
+## The land plot of the exit cell `stand` is straight out from.
+func _plot_of(stand: Dictionary) -> Vector2i:
+	var step := StandPlacement.out_step(stand)
+	var sill := Vector3(stand["x"], 0.0, stand["wall_z"])
+	return _grid.land.plot_of(_grid.world_to_cell(sill - Vector3(step.x, 0.0, step.y) * 0.5))
+
+
 func _later_offer() -> Dictionary:
 	return FlightFit.assess(_flights, TestFlightFit.terms("X", 720))
 
@@ -48,21 +82,24 @@ func _later_offer() -> Dictionary:
 ## Control: with the plot east of the gate owned as well, a stand fits there,
 ## and the hint fires.
 func test_land_for_another_stand_keeps_the_hint() -> void:
+	_wall_off_the_sides()
 	_own([PLOT_HOME, PLOT_EAST])
 	var spare := _gates.spare_stand(PlaneClasses.SMALL)
 	var assessment := _later_offer()
-	print("spare %s, assessment %s" % [spare, assessment])
+	print("spare %s in plot %s, assessment %s" % [spare, _plot_of(spare), assessment])
 	assert_bool(StandPlacement.is_stand(spare)).is_true()
-	assert_float(float(spare["x"])).is_greater(float(_gates.stands["A"]["x"]) + 18.0)
+	assert_vector(_plot_of(spare)).is_equal(Vector2i(PLOT_EAST[0], PLOT_EAST[1]))
 	assert_str(assessment["blocker"]).is_equal(FlightSim.BLOCKER_GATE)
 	assert_bool(assessment["another_gate_helps"]).is_true()
 	assert_str(FlightFit.text(assessment, PlaneClasses.SMALL)).is_equal(FlightFit.ANOTHER_GATE_TEXT)
 
 
-## Only the plot the gate stands in is owned, and every exit cell in it is
-## within the gate's swing square: no stand could be built, so no hint. The
-## control above shows the same grid and flight with the east plot owned.
+## Only the plot the gate stands in is owned, every north stand from it is
+## within the gate's swing square or over the shell, and the strips leave no
+## west or east plane room: no stand could be built, so no hint. The control
+## above shows the same grid and flight with the east plot owned.
 func test_no_room_for_another_stand_drops_the_hint() -> void:
+	_wall_off_the_sides()
 	_own([PLOT_HOME])
 	var spare := _gates.spare_stand(PlaneClasses.SMALL)
 	var assessment := _later_offer()
@@ -90,6 +127,7 @@ func test_the_spare_stand_obeys_the_gate_desk_rules() -> void:
 ## The answer is kept between asks but follows the land: buying the east plot
 ## after an empty answer finds the stand.
 func test_buying_land_after_an_empty_answer_finds_a_stand() -> void:
+	_wall_off_the_sides()
 	_own([PLOT_HOME])
 	assert_dict(_gates.spare_stand(PlaneClasses.SMALL)).is_empty()
 	assert_dict(_gates.spare_stand(PlaneClasses.SMALL)).is_empty()

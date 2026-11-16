@@ -137,7 +137,7 @@ func test_an_unlinked_desk_gets_a_sign_with_why_and_no_line() -> void:
 	print("signs %d captions %s paths %d" % [signs.size(), captions, _view.paths().size()])
 	assert_int(signs.size()).is_equal(1)
 	assert_int(signs[0].get_meta("desk")).is_equal(west.object_id)
-	assert_array(captions).is_equal(["Unlinked: no north exit in 4 cells"])
+	assert_array(captions).is_equal(["Unlinked: no exit facing the planes in 4 cells"])
 	assert_int(_view.paths().size()).is_equal(1)
 	# The sign shows outside build mode too (it is not under the links node),
 	# over the desk's top.
@@ -163,7 +163,7 @@ func test_each_reason_has_its_own_hover_text() -> void:
 		assert_array(texts)
 		. is_equal(
 			[
-				"Unlinked: no north exit in 4 cells",
+				"Unlinked: no exit facing the planes in 4 cells",
 				"Unlinked: Gate B uses the exit",
 				"Unlinked: stand would overlap Gate C",
 				"Unlinked: every gate letter in use",

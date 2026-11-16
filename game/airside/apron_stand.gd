@@ -621,7 +621,7 @@ func _show_gate_labels() -> void:
 func status_text() -> String:
 	var lines: PackedStringArray = []
 	if placement.get("status", StandPlacement.OK) == StandPlacement.UNAVAILABLE:
-		lines.append("No usable stand: no exit faces north with a clear apron")
+		lines.append("No usable stand: no exit facing the planes has a clear apron")
 	elif not same_stand(wanted, live):
 		var id := busy_flight()
 		var at := flights.state_start(id, FlightSim.State.TAKEOFF) if id != "" else flights.tick

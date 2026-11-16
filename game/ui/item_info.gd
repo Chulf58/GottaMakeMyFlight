@@ -41,7 +41,7 @@ const TEXT := {
 	BuildMode.Tool.EXIT:
 	[
 		"The way out to the planes. Passengers leave the terminal here to board.",
-		"Place it on the outer edge. A gate desk links to an exit that faces north (the planes).",
+		"Place it on the outer edge. A gate desk links to an exit facing west, north or east.",
 		"The outside edge with no floor behind it. Keep the spot in front clear."
 	],
 	BuildMode.Tool.DESK:
