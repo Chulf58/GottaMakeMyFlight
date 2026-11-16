@@ -274,10 +274,16 @@ func rebuild() -> void:
 
 ## The outline of the `plane_class` envelope at `stand` (StandEnvelope.rects():
 ## the swing square and the way north to the lane, as one shape) at height `y`,
-## a closed loop.
+## a closed loop. At a west or east stand it is its north twin's outline turned
+## onto it (StandPlacement.to_world()), so the way runs out to its spur.
 static func envelope_outline(
 	stand: Dictionary, plane_class: String, y: float
 ) -> PackedVector3Array:
+	if StandPlacement.side_of(stand) != StandPlacement.NORTH:
+		var turned := PackedVector3Array()
+		for corner in envelope_outline(StandPlacement.north_twin(stand), plane_class, y):
+			turned.append(StandPlacement.to_world(stand, corner))
+		return turned
 	var parts := StandEnvelope.rects(stand, plane_class)
 	var swing: Rect2 = parts[0]
 	var way: Rect2 = parts[1]
