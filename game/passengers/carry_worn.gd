@@ -27,7 +27,10 @@ const BACK_TOP_OVER_SPINE_M := 0.06
 ## and takes her row); they are set from the stride
 ## instead, 1 cm clear of the legs with the panel resting on the back
 ## (test_worn_back_stride_clear.gd, boards 0dd2c787 and 3fcd8e5a; female_09's
-## rests at 0.0296 m, under the 0.03 m limit).
+## rests at 0.0296 m, under the 0.03 m limit). The one-bag rows of female_01,
+## _03, _04 and _08 put the left buttock in the pack too (the crossing probe
+## saw female_08's, board bcad1dd0, once the test checked every body): set
+## from the stride the same way (female_01 rests at 0.0296 m).
 const BACK_ON_SPINE_M: Array[Vector4] = [
 	Vector4(0.086, -0.09, 0.097, 0.03),
 	Vector4(0.082, -0.06, 0.100, 0.00),
@@ -38,11 +41,11 @@ const BACK_ON_SPINE_M: Array[Vector4] = [
 	Vector4(0.086, -0.09, 0.102, 0.00),
 	Vector4(0.081, -0.06, 0.100, 0.00),
 	Vector4(0.081, -0.06, 0.081, -0.06),
-	Vector4(0.081, -0.03, 0.110, 0.06),
-	Vector4(0.073, -0.03, 0.110, 0.06),
-	Vector4(0.072, -0.03, 0.110, 0.06),
+	Vector4(0.090, 0.03, 0.110, 0.06),
+	Vector4(0.085, 0.03, 0.110, 0.06),
+	Vector4(0.085, 0.03, 0.110, 0.06),
 	Vector4(0.088, 0.03, 0.110, 0.06),
-	Vector4(0.065, -0.03, 0.092, 0.03),
+	Vector4(0.085, 0.03, 0.092, 0.03),
 	Vector4(0.088, 0.03, 0.110, 0.06),
 	Vector4(0.088, 0.03, 0.110, 0.06),
 	Vector4(0.090, 0.03, 0.110, 0.06),
