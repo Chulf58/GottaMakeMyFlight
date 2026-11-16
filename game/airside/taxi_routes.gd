@@ -35,10 +35,12 @@ extends RefCounted
 ## segment runs along x or z, and inbound and outbound planes share each spur
 ## and the lane out to it, which GroundPlanner books in time.
 ##
-## The layout is {"west_x", "east_x", "lane_z"}: the x of the lane's west and
-## east ends and the lane's z. north_only() gives the lane between the stubs,
-## with the spurs there; Airside widens it to its gates' spurs to check the
-## joins (joins_lane()). The routes read only its lane_z.
+## The layout is {"west_x", "east_x", "lane_z", "stub_west_x", "stub_east_x"}:
+## the x of the lane's west and east ends, the lane's z, and the x of the west
+## and east runway stubs. north_only() gives the lane between the stubs, with
+## the spurs there; Airside widens west_x and east_x to its gates' spurs to
+## check the joins (joins_lane()), and a north join must lie between the stubs.
+## The routes read only its lane_z.
 
 ## The paths of the phases a plane moves in, by FlightSim.State.
 const MOVING_STATES: Array[int] = [

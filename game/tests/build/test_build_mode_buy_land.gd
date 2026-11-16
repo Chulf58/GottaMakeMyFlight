@@ -54,9 +54,24 @@ func test_the_tool_shows_a_dim_fill_on_each_buyable_plot_only_while_picked() -> 
 	assert_bool(tool.visible).is_false()
 	_mode.set_tool(BuildMode.Tool.BUY_LAND)
 	assert_bool(tool.visible).is_true()
-	# Two triangles per buyable plot: 5 on the first site (side land is locked).
+	# Two triangles per buyable plot: the 8 that touch a new game's land, 5 on
+	# the first site and 3 on the side land west of it (open since S7c).
+	(
+		assert_array(_land().buyable_plots())
+		. is_equal(
+			[
+				Vector2i(4, 2),
+				Vector2i(5, 2),
+				Vector2i(3, 3),
+				Vector2i(6, 3),
+				Vector2i(3, 4),
+				Vector2i(6, 4),
+				Vector2i(3, 5),
+				Vector2i(6, 5),
+			]
+		)
+	)
 	var buyable := _land().buyable_plots().size()
-	assert_int(buyable).is_equal(5)
 	assert_int(tool.fill_mesh().get_faces().size()).is_equal(buyable * 6)
 	_mode.set_tool(BuildMode.Tool.FLOOR)
 	assert_bool(tool.visible).is_false()

@@ -76,9 +76,10 @@ func test_a_new_game_owns_the_starter_plots_and_one_ring() -> void:
 ## SIDE_LAND_OPEN), so the side plots west of the start land are buyable too.
 func test_the_buyable_plots_share_an_edge_with_owned_land() -> void:
 	print("buyable %s" % [_land.buyable_plots()])
+	# Row by row, west to east, as buyable_plots() promises.
 	(
 		assert_array(_land.buyable_plots())
-		. contains_exactly_in_any_order(
+		. is_equal(
 			[
 				Vector2i(4, 2),
 				Vector2i(5, 2),
