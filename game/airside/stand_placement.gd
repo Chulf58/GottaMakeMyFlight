@@ -120,11 +120,13 @@ static func default_lane_x(side: String) -> float:
 	return -SIDE_LANE_X if side == WEST else SIDE_LANE_X
 
 
-## "" when `lane_x` is a spur x for a `side` (WEST or EAST) stand: a number at
-## or beyond SIDE_LANE_X on that side; otherwise what is wrong.
+## "" when `lane_x` is a spur x for a `side` (WEST or EAST) stand: a finite
+## number at or beyond SIDE_LANE_X on that side; otherwise what is wrong.
 static func lane_x_problem(side: String, lane_x: Variant) -> String:
 	if not typeof(lane_x) in [TYPE_INT, TYPE_FLOAT]:
 		return "lane_x must be a number"
+	if is_nan(float(lane_x)) or is_inf(float(lane_x)):
+		return "lane_x must be a finite number"
 	if side == WEST and float(lane_x) > -SIDE_LANE_X:
 		return "a west stand's lane_x must be at or west of x %.1f" % -SIDE_LANE_X
 	if side == EAST and float(lane_x) < SIDE_LANE_X:
@@ -169,8 +171,12 @@ static func is_stand(data: Variant) -> bool:
 
 
 ## The stand `data` (is_stand()) rebuilt with make(), its side and lane_x kept:
-## what a loaded save's stand becomes.
+## what a loaded save's stand becomes. {} (with an error) when `data` is not a
+## stand, so a malformed lane_x is never put on the floor spur.
 static func from_saved(data: Dictionary) -> Dictionary:
+	if not is_stand(data):
+		push_error("StandPlacement.from_saved: %s is not a stand" % data)
+		return {}
 	var side := side_of(data)
 	var lane_x := NAN if side == NORTH else float(data["lane_x"])
 	return make(int(data["exit"]), float(data["x"]), float(data["wall_z"]), side, lane_x)

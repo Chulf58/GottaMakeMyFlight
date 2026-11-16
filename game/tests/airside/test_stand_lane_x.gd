@@ -42,8 +42,34 @@ func test_make_refuses_a_lane_x_inside_the_floor_or_on_a_north_stand() -> void:
 	assert_dict(_east(100.0)).is_empty()
 	assert_dict(_east(-WIDE)).is_empty()
 	assert_dict(StandPlacement.make(2, 0.0, -98.0, StandPlacement.NORTH, -WIDE)).is_empty()
+	assert_dict(StandPlacement.make(2, 0.0, -98.0, StandPlacement.NORTH, INF)).is_empty()
+	# No infinite spur on either side, and NAN is no spur x.
+	assert_dict(_west(-INF)).is_empty()
+	assert_dict(_east(INF)).is_empty()
+	for side in [StandPlacement.WEST, StandPlacement.EAST]:
+		for bad: float in [NAN, INF, -INF]:
+			var problem := StandPlacement.lane_x_problem(side, bad)
+			print("%s lane_x %s: '%s'" % [side, bad, problem])
+			assert_str(problem).override_failure_message("%s %s" % [side, bad]).is_not_empty()
 	# Control: the floor itself is a spur.
 	assert_dict(_west(-StandPlacement.SIDE_LANE_X)).is_equal(_west())
+
+
+## A saved side stand whose lane_x is NAN or infinite is not a stand, and
+## from_saved() refuses it loudly ({}) rather than putting it on the floor
+## spur, which make() does for a NAN it is given.
+func test_a_saved_side_stand_with_a_nan_or_infinite_lane_x_is_refused() -> void:
+	for bad: float in [NAN, -INF, INF]:
+		var odd := _west(-WIDE)
+		odd["lane_x"] = bad
+		assert_bool(StandPlacement.is_stand(odd)).override_failure_message("%s" % bad).is_false()
+		var rebuilt := StandPlacement.from_saved(odd)
+		print("from_saved with lane_x %s: %s" % [bad, rebuilt])
+		assert_dict(rebuilt).override_failure_message("%s" % bad).is_empty()
+	var odd_north := StandPlacement.make(2, -22.5, -98.0)
+	odd_north["lane_x"] = NAN
+	assert_bool(StandPlacement.is_stand(odd_north)).is_false()
+	assert_dict(StandPlacement.from_saved(odd_north)).is_empty()
 
 
 ## The twin's sill is TAXI_LANE_Z + |x - lane_x|: 62 m at the floor, 112 m

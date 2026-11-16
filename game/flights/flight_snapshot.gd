@@ -47,8 +47,14 @@ extends RefCounted
 ## are issued, and a closed airport's start days, never depend on the pair
 ## (FlightTimetable.issue_tick), so they are checked exactly; first_day, set
 ## with the pair the contract had when accepted, is checked against the
-## widest the pair bounds allow. Only version 9 loads; every older save is
-## refused, with no migration.
+## widest the pair bounds allow.
+##
+## Version 10 (decision side-spur-move-design-s7-stands-carry-lane-x-the-
+## wanted-spur, slice S7a): a flight's west or east stand holds "lane_x", the x
+## of its side spur, a finite number at or beyond StandPlacement.SIDE_LANE_X
+## (StandPlacement.is_stand); its taxi pair is checked against the routes of
+## that spur. Only version 10 loads; every older save is refused, with no
+## migration.
 
 const KEYS := [
 	"save_version",

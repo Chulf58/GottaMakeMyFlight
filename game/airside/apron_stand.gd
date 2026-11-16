@@ -567,9 +567,16 @@ func _drawn_rects() -> Array[Rect2]:
 
 
 ## What the guard is worked out from: the tick, the flights at the stands and
-## the stands.
+## the stands (a side stand's spur too).
 func _tick_key() -> Array:
-	var key := [flights.tick, busy_flight(), live.get("x"), live.get("wall_z"), live.get("side")]
+	var key := [
+		flights.tick,
+		busy_flight(),
+		live.get("x"),
+		live.get("wall_z"),
+		live.get("side"),
+		live.get("lane_x"),
+	]
 	if gates != null:
 		key = [flights.tick, _stands_of(gate_stands)]
 		for gate: String in gate_stands:
