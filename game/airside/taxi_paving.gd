@@ -714,8 +714,8 @@ static func _flipped(strip_list: Array[Dictionary]) -> Array[Dictionary]:
 ## There every point takes the band of the nearest centre line, as at every
 ## other junction: the spur and the link share the ground at their midpoint, as
 ## two close links do (_drawn_rects()), and the lane's south half runs on west
-## (or east) over the spur to that midpoint, mitred under the link there. Not
-## handled: a side stand's connector meeting the spur within the link's span.
+## (or east) over the spur to that midpoint, mitred under the link there. A side
+## stand's connector that crosses the link is split from it by _crossings().
 ##
 ## The links of `strip_list` that meet the south edge of `lane` (a Rect2) on
 ## the inner side of the spur strip `spur` (a Rect2) and overlap it: each
@@ -1003,8 +1003,9 @@ static func _add_mitred_lane(
 			)
 
 
-## Adds the flat quad `corners` (world x and z, in order around it) as two
-## triangles, each turned to face up and left out when it has no area, with
+## Adds the flat convex polygon `corners` (world x and z, in order around it)
+## as a fan of triangles from its first corner (a quad gives two), each turned
+## to face up and left out when it has no area, with
 ## each corner's band position given by `t_of`. With `flip` the corners are
 ## given with x and z swapped: `t_of` reads them so, and they are swapped back.
 static func _add_part(
