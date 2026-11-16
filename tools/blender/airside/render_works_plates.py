@@ -81,6 +81,8 @@ def works_material(name):
     if n == "Road_1A_D" and INDUSTRIES_ROAD["on"]:
         return rap.toon_material("ti_road", os.path.join(cw.INDUSTRIES, "Textures", "Road_1A_D.psd"),
                                  first(TI_RAMP_PNG, TI_RAMP_PSD))
+    if n == "TI_Road_1A_D":
+        return rap.toon_material("ti_road", cw.ATLAS["TI_Road_1A_D"], first(TI_RAMP_PNG, TI_RAMP_PSD))
     if n in ("Road_1A_D", "TC_Road_1A_D"):
         return rap.toon_material("tc_road", cw.ATLAS["TC_Road_1A_D"], TC_RAMP)
     if n in ("Props_2A_D", "TC_Props_2A_D"):

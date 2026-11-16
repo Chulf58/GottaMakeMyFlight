@@ -12,6 +12,7 @@ const MATERIALS := {
 	"TC_Road_1A_D": "res://assets/materials/tc_road_1a_toon.tres",
 	"TC_Props_2A_D": "res://assets/materials/tc_props_2a_toon.tres",
 	"TI_Excavator_1A_D": "res://assets/airside/props/works/ti_excavator_1a_toon.tres",
+	"TI_Road_1A_D": "res://assets/airside/props/works/ti_road_1a_toon.tres",
 	"TFP_Atlas_1A_D": "res://assets/birds/tfp_atlas_toon.tres",
 }
 

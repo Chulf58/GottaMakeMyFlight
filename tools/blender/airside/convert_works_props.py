@@ -60,6 +60,7 @@ BIRDS = os.path.join(GAME, "assets", "birds")
 TEXTURES = {
     os.path.join(INDUSTRIES, "Textures", "Excavator_1A_D.psd"): ("ti_excavator_1a_d.png", True),
     os.path.join(INDUSTRIES, "Textures", "TI_Toon_Ramp_1A.psd"): ("ti_toon_ramp_1a.png", False),
+    os.path.join(INDUSTRIES, "Textures", "Road_1A_D.psd"): ("ti_road_1a_d.png", True),
 }
 # Game material name -> the atlas PNG its Blender material samples (the glb carries it;
 # Godot discards it and binds the shared .tres by name, see works_post_import.gd).
@@ -67,16 +68,20 @@ ATLAS = {
     "TC_Road_1A_D": os.path.join(GAME_TEXTURES, "tc_road_1a_d.png"),
     "TC_Props_2A_D": os.path.join(GAME_TEXTURES, "tc_props_2a_d.png"),
     "TI_Excavator_1A_D": os.path.join(OUT_DIR, "ti_excavator_1a_d.png"),
+    "TI_Road_1A_D": os.path.join(OUT_DIR, "ti_road_1a_d.png"),
     "TFP_Atlas_1A_D": os.path.join(BIRDS, "tfp_atlas_1a_d.png"),
 }
 # The picks for the works (one of each the layout needs; survey plates from
 # render_works_plates.py survey). Toon City Road_1A_D is the texture
 # game/assets/textures/tc_road_1a_d.png was made from; the Toon Industries Road_1A_D is
-# a different file, so the barrier and fence come from Toon City. The Toon Industries
-# Props_2A_D.psd is byte-identical to the Toon City one (md5 b4469acf...), so the cone
-# and the brick pile bind the existing TC_Props_2A_D material. Toon City's
-# Traffic_Cone_2A/2B are drums; Toon Industries Traffic_Cone_1B is the plain cone (the
-# same mesh as Toon City Traffic_Cone_1A, whose Building_1A_D atlas the game lacks).
+# a different file, so the Toon City barrier binds TC_Road_1A_D and the Toon Industries
+# fence binds its own TI_Road_1A_D. The fence is the corrugated hoarding Metal_Fence_1A
+# (conductor ruling on the plates: Toon City Metal_Fence_2A read as a road sign on one
+# post). The Toon Industries Props_2A_D.psd is byte-identical to the Toon City one (md5
+# b4469acf...), so the cone and the brick pile bind the existing TC_Props_2A_D
+# material. Toon City's Traffic_Cone_2A/2B are drums; Toon Industries Traffic_Cone_1B
+# is the plain cone (the same mesh as Toon City Traffic_Cone_1A, whose Building_1A_D
+# atlas the game lacks).
 PROPS = {
     "ti_traffic_cone_1b": {
         "fbx": os.path.join(INDUSTRIES, "Models", "Traffic_Cone_1B.fbx"),
@@ -86,9 +91,9 @@ PROPS = {
         "fbx": os.path.join(CITY, "Models", "Concrete_Barrier_1A.fbx"),
         "materials": {"Road_1A_D": "TC_Road_1A_D"},
     },
-    "tc_metal_fence_2a": {
-        "fbx": os.path.join(CITY, "Models", "Metal_Fence_2A.fbx"),
-        "materials": {"Road_1A_D": "TC_Road_1A_D"},
+    "ti_metal_fence_1a": {
+        "fbx": os.path.join(INDUSTRIES, "Models", "Metal_Fence_1A.fbx"),
+        "materials": {"Road_1A_D": "TI_Road_1A_D"},
     },
     "ti_excavator_1a": {
         "fbx": os.path.join(INDUSTRIES, "Models", "Excavator_1A.fbx"),
@@ -414,7 +419,14 @@ def convert(stem, spec, out_dir):
         if o.type not in ("MESH", "EMPTY"):
             die("%s: unexpected object type %s (%s)" % (stem, o.type, o.name))
         if any(abs(c - 1.0) > 1e-4 for c in o.scale):
-            die("%s: %s has scale %s" % (stem, o.name, tuple(o.scale)))
+            # Toon Industries Metal_Fence_1A is a unit-1 FBX with object scale 0.01;
+            # bake it into the mesh so the file holds metre vertices and unit nodes.
+            if o.type != "MESH" or o.children:
+                die("%s: %s has scale %s and cannot be baked" % (stem, o.name, tuple(o.scale)))
+            o.data.transform(Matrix.Diagonal(tuple(o.scale) + (1.0,)))
+            log("BAKE_SCALE %s %s scale %s -> 1" % (stem, o.name, tuple(round(c, 4) for c in o.scale)))
+            o.scale = (1.0, 1.0, 1.0)
+    bpy.context.view_layer.update()
     drop = spec.get("drop", [])
     for o in meshes:
         n = drop_faces(o, drop)

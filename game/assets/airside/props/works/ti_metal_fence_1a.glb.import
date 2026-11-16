@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://d126yy8vya5g5"
-path="res://.godot/imported/tc_metal_fence_2a.glb-a503278c45eb019f545e375e196abae2.scn"
+uid="uid://bsnc7bca7becy"
+path="res://.godot/imported/ti_metal_fence_1a.glb-27ed2a4442c733c9cee24f7f457129e9.scn"
 
 [deps]
 
-source_file="res://assets/airside/props/works/tc_metal_fence_2a.glb"
-dest_files=["res://.godot/imported/tc_metal_fence_2a.glb-a503278c45eb019f545e375e196abae2.scn"]
+source_file="res://assets/airside/props/works/ti_metal_fence_1a.glb"
+dest_files=["res://.godot/imported/ti_metal_fence_1a.glb-27ed2a4442c733c9cee24f7f457129e9.scn"]
 
 [params]
 

@@ -23,7 +23,7 @@ const TRUCK := "res://assets/vehicles/tp_loading_truck_01a.glb"
 const PROPS: Array[String] = [
 	"ti_traffic_cone_1b",
 	"tc_concrete_barrier_1a",
-	"tc_metal_fence_2a",
+	"ti_metal_fence_1a",
 	"ti_excavator_1a",
 	"ti_brick_pile_1c",
 	"tfp_dump_trailer_01a",
@@ -41,7 +41,7 @@ const PLATES := [
 	["works_play_38", ["truck"] + PROPS, 200.0, 38.0, 80.0],
 	[
 		"works_close_edge",
-		["ti_traffic_cone_1b", "tc_concrete_barrier_1a", "tc_metal_fence_2a"],
+		["ti_traffic_cone_1b", "tc_concrete_barrier_1a", "ti_metal_fence_1a"],
 		210.0,
 		30.0,
 		13.0

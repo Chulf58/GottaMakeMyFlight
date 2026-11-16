@@ -15,8 +15,8 @@ const PROPS := {
 	["res://assets/materials/tc_props_2a_toon.tres", Vector3(0.880, 1.079, 0.880)],
 	"tc_concrete_barrier_1a":
 	["res://assets/materials/tc_road_1a_toon.tres", Vector3(1.000, 1.200, 3.900)],
-	"tc_metal_fence_2a":
-	["res://assets/materials/tc_road_1a_toon.tres", Vector3(2.126, 3.500, 0.237)],
+	"ti_metal_fence_1a":
+	["res://assets/airside/props/works/ti_road_1a_toon.tres", Vector3(3.932, 2.452, 0.109)],
 	"ti_excavator_1a":
 	["res://assets/airside/props/works/ti_excavator_1a_toon.tres", Vector3(3.966, 3.567, 7.409)],
 	"ti_brick_pile_1c":
