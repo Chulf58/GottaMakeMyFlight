@@ -29,6 +29,15 @@ const FOREARM_M := 0.3
 const LOOP_POLE := Vector3(0.3, -1.0, 0.0)
 ## The finger bones (".R" or ".L" added) a loop_grip hand straightens.
 const LOOP_FINGERS: Array[String] = ["Fingers", "Fingertips", "Thumb", "Thumb_Tip"]
+## And the fingers (not the thumb) go this share of the way on from their rest
+## to lying in line with the bone they hang from: at rest their tips hung 4 to
+## 7 cm under the grip, past the loop into the pack's top beside it, with the
+## pack hanging plumb and the loop across the hand (crossing probe --lane, seed
+## 1106001, tray>back, board bcad1dd0); fully in line the hand lay flat over the
+## loop and read as floating (finding backpack-loop-grip-hand-cannot-hook-the-
+## loop-without-clipping-geometry-and-three-failed-tries).
+const LOOP_FINGER_STRAIGHT := 0.5
+const LOOP_STRAIGHTENED: Array[String] = ["Fingers", "Fingertips"]
 
 ## Which arm: 0 the right, 1 the left (the order of CarryOnProps' hands).
 @export var side := 0
@@ -116,9 +125,10 @@ func _process_modification_with_delta(_delta: float) -> void:
 
 
 ## A hand over a backpack's grab loop (loop_grip): its fingers and thumb turned
-## `weight` of the way from the clip's curl to their rest, straight on from the
-## hand. Curled as the clips hold them, they went up to 6 cm under the grip,
-## into the loop and the pack's top below it (backpack_pickup_probe, board
+## `weight` of the way from the clip's curl to their rest, straight on from
+## the hand (the fingers LOOP_FINGER_STRAIGHT on past it, toward in line).
+## Curled as the clips hold them, they went up to 6 cm under the grip, into
+## the loop and the pack's top below it (backpack_pickup_probe, board
 ## 41c159bc).
 func _straighten_fingers(skeleton: Skeleton3D, weight: float) -> void:
 	var suffix: String = [".R", ".L"][side]
@@ -126,7 +136,11 @@ func _straighten_fingers(skeleton: Skeleton3D, weight: float) -> void:
 		var bone := skeleton.find_bone(name + suffix)
 		if bone < 0:
 			continue
-		var rest := skeleton.get_bone_rest(bone).basis.get_rotation_quaternion()
+		var rest_basis := skeleton.get_bone_rest(bone).basis.orthonormalized()
+		var rest := rest_basis.get_rotation_quaternion()
+		if name in LOOP_STRAIGHTENED:
+			var in_line := Quaternion(rest_basis.y, Vector3.UP) * rest
+			rest = rest.slerp(in_line, LOOP_FINGER_STRAIGHT)
 		var now := skeleton.get_bone_pose_rotation(bone)
 		skeleton.set_bone_pose_rotation(bone, now.slerp(rest, weight))
 

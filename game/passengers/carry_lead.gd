@@ -96,6 +96,16 @@ const STALL_TOTE_BACK_M := 0.05
 ## Picked up there it is not pushed out ahead (path()) to this share of the
 ## move, and pushed as it is outside from this one on.
 const STALL_AHEAD_BACK := Vector2(0.35, 0.65)
+## A backpack held by its grab loop on or off the back hangs plumb from the grip
+## and is turned about it so the loop lies across the holding hand (loop_yaw()),
+## which the arm points level from the shoulder to its target
+## (CarryArm._reach_loop): left as the path turned it, the hand lay along the
+## loop out of a lane tray and its fingertips went into the pack past the loop's
+## ends, and turned only, the pack's top still sloped up into the fingers
+## (crossing probe --lane, seed 1106001, tray>back, board bcad1dd0). Eased in
+## and out over this share of the carry at each end, so the pack leaves its tray
+## and lands on the back as placed there.
+const LOOP_YAW_SHARE := 0.15
 ## A backpack set down in a stall is held this far over its grab loop (its own
 ## frame), the fingers over the top, not in it, and within the probes' GRIP_ON
 ## 3 cm of the loop (6 cm left the hand off it).
@@ -806,6 +816,9 @@ static func plan(
 		# going down with the stoop (to its top, not its handle lower down), the
 		# knee came into the case (board item c7b0e7be).
 		hips = STALL_HIPS
+	var loop_yaw := 0.0
+	if back_move and ph["holder"] == lead:
+		loop_yaw = smoothstep(0.0, LOOP_YAW_SHARE, t) * smoothstep(0.0, LOOP_YAW_SHARE, 1.0 - t)
 	return {
 		"holder": ph["holder"],
 		"xf": xf,
@@ -815,7 +828,32 @@ static func plan(
 		"keeps": keeps,
 		"drops": [hips, hips],
 		"loops": [back_move and lead == 0, back_move and lead == 1],
+		"loop_yaw": loop_yaw,
 	}
+
+
+## `placed` (a backpack held by its grab loop at `grip`, world) turned `w` (0 to
+## 1) of the way about the grip to hang plumb (its z axis up) with its loop (its
+## x axis) across `level` (the way the holding hand points, from its shoulder):
+## by the smaller of the two turns about up that do so, at most a quarter turn.
+## Not turned about up when the hand points straight down.
+static func loop_yaw(placed: Transform3D, grip: Vector3, level: Vector3, w: float) -> Transform3D:
+	if w <= 0.0:
+		return placed
+	var upright := Quaternion(placed.basis.z.normalized(), Vector3.UP)
+	var plumb := Basis(Quaternion().slerp(upright, w))
+	var hung := plumb * placed.basis
+	var across := Vector3(level.x, 0.0, level.z)
+	var loop := hung.x
+	loop.y = 0.0
+	var turn := Basis()
+	if across.length() >= 0.001 and loop.length() >= 0.001:
+		var want := Vector3.UP.cross(across).normalized()
+		if want.dot(loop) < 0.0:
+			want = -want
+		turn = Basis(Vector3.UP, loop.normalized().signed_angle_to(want, Vector3.UP) * w)
+	var both := turn * plumb
+	return Transform3D(both * placed.basis, grip + both * (placed.origin - grip))
 
 
 ## The path of a moving bag at `k` from `start` (world now) to `want` (world),
