@@ -121,14 +121,14 @@ static func schedule_text(works: RunwayWorks, now: int) -> String:
 		% [
 			works.target,
 			begins,
-			_when(works.start, now),
-			_when(works.finish, now),
+			when_text(works.start, now),
+			when_text(works.finish, now),
 		]
 	)
 
 
 ## "at 22:05", "tomorrow at 00:05" or "on Day 4 at 00:05" (the HUD's day number).
-static func _when(tick: int, now: int) -> String:
+static func when_text(tick: int, now: int) -> String:
 	var ahead := GameCalendar.day_of(tick) - GameCalendar.day_of(now)
 	var time := GameCalendar.clock_text(tick)
 	if ahead <= 0:

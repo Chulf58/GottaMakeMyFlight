@@ -99,6 +99,8 @@ var _area_material: StandardMaterial3D
 var _gate_labels: Dictionary = {}
 ## With gates: the desk-to-exit-to-stand links and the unlinked desks' signs.
 var _links_view := GateLinksView.new()
+## The construction works over a pending side spur and the runway upgrade.
+var _works := TaxiwayWorksView.new()
 
 
 func _init() -> void:
@@ -107,6 +109,8 @@ func _init() -> void:
 	add_child(_guard_view)
 	_links_view.name = "GateLinks"
 	add_child(_links_view)
+	_works.name = "TaxiwayWorks"
+	add_child(_works)
 
 
 func _ready() -> void:
@@ -130,6 +134,8 @@ func _ready() -> void:
 	if build_mode == null or flights == null or build_mode.site == null:
 		return
 	bind(build_mode.grid, build_mode.site, flights, gates)
+	if airside != null:
+		_works.bind(flights, airside)
 	if build_mode.grid is SiteGrid:
 		(build_mode.grid as SiteGrid).guard = edit_problem
 		if gates != null:

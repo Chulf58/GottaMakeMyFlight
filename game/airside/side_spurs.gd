@@ -205,7 +205,12 @@ static func _column_built(grid: BuildGrid, x: int, area: Rect2i, gone: Dictionar
 
 
 ## The words the works over `side`'s pending spur say on hover (user ruling
-## airside-construction-works-are-a-visible-stage-props-mark-th, point 4).
-static func works_text(side: String) -> String:
+## airside-construction-works-are-a-visible-stage-props-mark-th, point 4), with
+## the forecast move time `release_tick` (FlightSim.spur_release_tick()) as a
+## clock time seen at tick `now` (RunwayWorks.when_text()); no time for -1.
+static func works_text(side: String, release_tick := -1, now := 0) -> String:
 	var named := "west" if side == StandPlacement.WEST else "east"
-	return "Taxiway works: the taxiway moves when the %s side is quiet" % named
+	var text := "Taxiway works: the taxiway moves when the %s side is quiet" % named
+	if release_tick < 0:
+		return text
+	return "%s, forecast %s" % [text, RunwayWorks.when_text(release_tick, now)]
