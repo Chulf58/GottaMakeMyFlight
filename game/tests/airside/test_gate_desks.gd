@@ -245,7 +245,10 @@ func test_the_links_round_trip_a_snapshot_and_bad_ones_are_refused() -> void:
 	twice["gates"][1]["exit"] = exit_west
 	assert_str(GateDesks.checked(twice, _grid).get("error", "")).contains("used twice")
 	var version := data.duplicate(true)
-	version["save_version"] = 2
+	# The version before the saved spurs (S7b) is refused: no migration.
+	version["save_version"] = GateDesks.SAVE_VERSION - 1
+	assert_bool(GateDesks.checked(version, _grid).has("error")).is_true()
+	version["save_version"] = GateDesks.SAVE_VERSION + 1
 	assert_bool(GateDesks.checked(version, _grid).has("error")).is_true()
 
 

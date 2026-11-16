@@ -61,9 +61,13 @@ extends Node
 ## Settlement charges. The game's own end (low rating) calls end_contract and
 ## costs nothing.
 ##
+## A side spur the build pushes waits until that side is quiet (SpurMoves):
+## every change checks the forecast release on a trial copy, and refuses only a
+## flight it would strand (SPUR_STRANDS_TEXT).
+##
 ## One tick: set the tick, let the gate open the airport, issue due
-## occurrences in time order, advance every flight, prune. PassengerSim binds
-## after FlightSim, so it sees the result.
+## occurrences and move due spurs in time order, advance every flight, prune.
+## PassengerSim binds after FlightSim, so it sees the result.
 
 signal state_changed(flight_id: String, new_state: int)
 ## Fires once as a flight enters DOORS_CLOSED. The passenger slice stops
@@ -86,6 +90,9 @@ signal snapshot_loaded
 ## runway's size or its works differ from the last check, so an answer of
 ## trial_assignment() (an offer card's fit line) may have changed.
 signal planning_changed
+## Fires once when a pending side spur (StandPlacement.WEST or EAST) has moved
+## to its wanted x (SpurMoves), after its contracts took the new stands' pairs.
+signal spur_moved(side: String)
 
 enum State {
 	SCHEDULED,
@@ -164,6 +171,8 @@ const TAXI_BUSY_TEXT := GroundPlanner.TAXI_BUSY_TEXT
 const QUIET_NIGHT_TEXT := FlightContract.QUIET_NIGHT_TEXT
 ## An Odd hours contract's window, and the ground planner's guard, which is as wide.
 const ODD_HOURS_NIGHT_TEXT := FlightContract.ODD_HOURS_NIGHT_TEXT
+## Formatted with the flight a pending side spur's move would strand.
+const SPUR_STRANDS_TEXT := "the taxiway move would strand flight %s"
 ## Formatted with the plane class the runway cannot take.
 const RUNWAY_TOO_SHORT_TEXT := "the runway is too short for a %s plane"
 ## What kind of refusal trial_assignment() reports ("blocker"): bad terms or a
@@ -212,6 +221,11 @@ var stand_source := Callable()
 ## none (GateDesks sets it from the build grid and SpareStand). Unset (a sim
 ## with no grid): a stand FlightGround.FALLBACK_SPACING_M east of the eastmost.
 var spare_stand_source := Callable()
+## spurs() from GateDesks.spurs(), and GateDesks.release_spur(side), called at a
+## side's release tick in tick order with issuing (SpurMoves). Unset: both spurs
+## stay on the floor and nothing is pending.
+var spur_source := Callable()
+var spur_release := Callable()
 ## The airport's runway. Its size decides the plane classes a contract may have
 ## (accept_problem) and, through OfferDesk, the classes the offer board draws.
 ## SaveGame saves it as the "runway" part.
@@ -477,6 +491,41 @@ func gate_grounds() -> Dictionary:
 	return out
 
 
+## The side spurs (spur_source): side -> {"x", "wanted"}, both on the floor
+## while it is unset.
+func spurs() -> Dictionary:
+	return spur_source.call() if spur_source.is_valid() else SideSpurs.spurs_at({}, {})
+
+
+## Whether `side`'s spur waits to move (the hover over its works says so).
+func spur_pending(side: String) -> bool:
+	return SpurMoves.pending(_world(), side)
+
+
+## The tick `side`'s pending spur is forecast to move at (SpurMoves.release()),
+## or -1 when it is not pending.
+func spur_release_tick(side: String) -> int:
+	return SpurMoves.release(_world(), side)
+
+
+## The flight a build's side spurs `with_spurs` and gate `grounds` would strand
+## ({"id", "reason"}) or {}: SpurMoves.refusal(), then every taxi plan from
+## today on against the plans now (GateDesks' trial). Read-only.
+func spur_refusal(grounds: Dictionary, with_spurs: Dictionary) -> Dictionary:
+	var world := _world(grounds)
+	world["spurs"] = with_spurs
+	var stranded := SpurMoves.refusal(world)
+	if not stranded.is_empty():
+		return stranded
+	var days := FlightPlans.days_from(world, GameCalendar.day_of(tick))
+	return _trial_planner().refusal(world, _trial_day_plan, days, [])
+
+
+## The stand live or landed flight `id` was issued at, or {}.
+func flight_stand(id: String) -> Dictionary:
+	return _find(id).get("stand", {})
+
+
 ## The taxi pauses of live flight `id`: FlightSim.State -> MovementPlan pause
 ## ({} for none) for TAXI_IN and TAXI_OUT, as FlightPlans planned its day. {}
 ## for an unknown flight, and for one no plan fits, which is reported once.
@@ -607,7 +656,9 @@ func move_contracts(plan: Dictionary) -> bool:
 ## contract, unless taking its days away would leave another occurrence with
 ## no taxi plan (end_refusal()): then its days stay booked as reservations,
 ## never flown, and every plan stays as it was. False (with an error) for an
-## unknown or already ended contract or while the airport is closed.
+## unknown or already ended contract, while the airport is closed, or when the
+## earlier release of a pending side spur that the end brings would strand a
+## flight (SPUR_STRANDS_TEXT).
 func end_contract(contract_id: String) -> bool:
 	if contract_of(contract_id).is_empty():
 		push_error("FlightSim.end_contract: no contract '%s'" % contract_id)
@@ -617,6 +668,13 @@ func end_contract(contract_id: String) -> bool:
 		return false
 	if opened_tick < 0:
 		push_error("FlightSim.end_contract: the airport is closed")
+		return false
+	var trial := _world()
+	trial["ended"] = _ended.duplicate()
+	trial["ended"][contract_id] = _next_day[contract_id]
+	var moved := SpurMoves.refusal(trial)
+	if not moved.is_empty():
+		push_error("FlightSim.end_contract: %s" % _ground_text(moved))
 		return false
 	var stranded := end_refusal(contract_id)
 	_ended[contract_id] = _next_day[contract_id]
@@ -687,26 +745,34 @@ func contract_end_day(contract_id: String) -> int:
 
 
 func on_tick(new_tick: int) -> void:
+	var from := tick
 	tick = new_tick
 	if runway.settle(tick, _works_flown_until()):
 		_changed()
 	if opened_tick < 0 and gate != null:
 		gate.try_open()
-	_issue_due()
+	_issue_due(from)
 	for flight in _flights:
 		_advance(flight)
 	_prune()
 	check_planning_changed()
 
 
-## Emits planning_changed when the gates, their stands, the runway's size or
-## its works differ from what the last call saw; the first call only takes note.
-## Each tick calls it, and so do start_works and a view that must follow edits
-## made while the clock is paused (OfferPanel, every frame it is open).
+## Emits planning_changed when the gates, their stands, the side spurs, the
+## runway's size or its works differ from what the last call saw; the first
+## call only takes note. Each tick calls it, and so do start_works and a view
+## that must follow edits made while the clock is paused (OfferPanel, every
+## frame it is open).
 func check_planning_changed() -> void:
 	var key := (
-		"%s %s %s %s"
-		% [gate_grounds(), FlightGround.layout(), runway.size, runway.works.fixed_bookings()]
+		"%s %s %s %s %s"
+		% [
+			gate_grounds(),
+			FlightGround.layout(),
+			runway.size,
+			runway.works.fixed_bookings(),
+			spurs()
+		]
 	)
 	if key == _planning_key:
 		return
@@ -939,6 +1005,9 @@ func _load_plan_problem(loaded: Dictionary) -> String:
 			)
 	var grounds := gate_grounds()
 	var world := {
+		"spurs": spurs(),
+		"tick": loaded["tick"],
+		"open": loaded["opened_tick"] >= 0,
 		"contracts": loaded["contracts"],
 		"start_day": loaded["start_day"],
 		"next_day": loaded["next_day"],
@@ -951,7 +1020,7 @@ func _load_plan_problem(loaded: Dictionary) -> String:
 	}
 	for flight: Dictionary in loaded["flights"]:
 		var ground: Dictionary = grounds.get(flight["gate"], {})
-		if ground.is_empty() or ground["stand"] != flight["stand"]:
+		if ground.is_empty() or not SpurMoves.holds_stand(flight, ground["stand"]):
 			return "flight %s is not at its gate's stand" % flight["id"]
 		var plane_class := FlightPlans.flight_class(world, flight)
 		if not FlightGround.class_fits(plane_class, ground["max_class"]):
@@ -967,13 +1036,14 @@ func _load_plan_problem(loaded: Dictionary) -> String:
 		)
 		if problem != "":
 			return problem
-	for day in FlightPlans.horizon(world):
+	var stranded := SpurMoves.refusal(world)
+	for day in FlightPlans.horizon(world) if stranded.is_empty() else []:
 		var plans := _plans.plan_day(world, day)
 		for request: Dictionary in FlightPlans.requests(world, day):
 			var result: Dictionary = plans[request["id"]]
 			if not result["ok"]:
 				return "flight %s has no taxi plan: %s" % [request["id"], _ground_text(result)]
-	return ""
+	return _ground_text(stranded) if not stranded.is_empty() else ""
 
 
 ## Why running or reserving `contract` cannot stand at its gate of `grounds`:
@@ -1252,6 +1322,10 @@ func _contracts_refusal(
 	var subjects := [subject["id"]]
 	for contract: Dictionary in also:
 		subjects.append(contract["id"])
+	# A pending spur's release is forecast again with the change (SpurMoves).
+	var stranded := SpurMoves.refusal(world)
+	if not stranded.is_empty():
+		return stranded
 	var days := FlightPlans.days_from(world, from_day)
 	if trial:
 		return _trial_planner().refusal(world, _trial_day_plan, days, subjects)
@@ -1260,6 +1334,8 @@ func _contracts_refusal(
 
 ## The player's words for a taxi refusal ({"reason"}).
 static func _ground_text(refusal: Dictionary) -> String:
+	if refusal["reason"] in [SpurMoves.NO_STAND, SpurMoves.GATE_MEETS]:
+		return SPUR_STRANDS_TEXT % refusal.get("id", refusal.get("flight", ""))
 	if refusal["reason"] == GroundPlanner.QUIET_NIGHT:
 		return ODD_HOURS_NIGHT_TEXT
 	if refusal["reason"] == GroundPlanner.BAD_ROUTE:
@@ -1292,9 +1368,13 @@ func _gate_problem(contract: Dictionary, contracts: Array[Dictionary]) -> String
 	return ""
 
 
-## The planning world of the sim now (FlightPlans), on `grounds`.
-func _world(grounds := {}) -> Dictionary:
+## The planning world of the sim now (FlightPlans), on `grounds`, its spur
+## forecast from `from_tick` (SpurMoves).
+func _world(grounds := {}, from_tick := tick) -> Dictionary:
 	return {
+		"spurs": spurs(),
+		"tick": from_tick,
+		"open": opened_tick >= 0,
 		"contracts": _contracts,
 		"start_day": _start_day,
 		"next_day": _next_day,
@@ -1310,14 +1390,14 @@ func _world(grounds := {}) -> Dictionary:
 ## The plan of calendar day `day` for the sim now, cached until the contracts,
 ## the flights or the gates' grounds change.
 func _day_plan(day: int) -> Dictionary:
-	var grounds := gate_grounds()
-	var key := "%s %s" % [grounds, FlightGround.layout()]
+	var world := _world()
+	var key := "%s %s %s" % [world["grounds"], FlightGround.layout(), SpurMoves.key(world)]
 	if _day_plans_revision != _revision or key != _grounds_key:
 		_day_plans.clear()
 		_day_plans_revision = _revision
 		_grounds_key = key
 	if not _day_plans.has(day):
-		_day_plans[day] = _plans.plan_day(_world(grounds), day)
+		_day_plans[day] = _plans.plan_day(world, day)
 	return _day_plans[day]
 
 
@@ -1326,15 +1406,22 @@ func _day_plan(day: int) -> Dictionary:
 ## cached apart from it, so a trial never fills, reads or replans the live
 ## planner or its cache.
 func _trial_day_plan(day: int) -> Dictionary:
-	var grounds := gate_grounds()
+	var world := _world()
 	var key := (
-		"%d %s %s %s" % [_revision, grounds, FlightGround.layout(), runway.works.fixed_bookings()]
+		"%d %s %s %s %s"
+		% [
+			_revision,
+			world["grounds"],
+			FlightGround.layout(),
+			runway.works.fixed_bookings(),
+			SpurMoves.key(world)
+		]
 	)
 	if key != _trial_plans_key:
 		_trial_day_plans.clear()
 		_trial_plans_key = key
 	if not _trial_day_plans.has(day):
-		_trial_day_plans[day] = _trial_planner().plan_day(_world(grounds), day)
+		_trial_day_plans[day] = _trial_planner().plan_day(world, day)
 	return _trial_day_plans[day]
 
 
@@ -1352,15 +1439,20 @@ func _changed() -> void:
 
 
 ## Issues every occurrence whose issue tick has come, oldest first (then by
-## contract order and day), so the order never depends on dictionary order.
-## Nothing while the airport is closed.
-func _issue_due() -> void:
-	if opened_tick < 0:
-		return
+## contract order and day), so the order never depends on dictionary order, and
+## moves each pending spur whose release tick has come (forecast from
+## `from_tick`, the tick before a jump) before the first occurrence issued at or
+## after it, so a skipped-tick jump puts each occurrence on the right side of R.
+## Nothing is issued while the airport is closed.
+func _issue_due(from_tick := tick) -> void:
+	var world := _world({}, from_tick)
 	var due: Array = []
+	for side in SpurMoves.pending_sides(world):
+		if SpurMoves.release(world, side) <= tick:
+			due.append([SpurMoves.release(world, side), -1, side])
 	for index in _contracts.size():
 		var contract := _contracts[index]
-		if _ended.has(contract["id"]):
+		if opened_tick < 0 or _ended.has(contract["id"]):
 			continue
 		var day: int = _next_day[contract["id"]]
 		while FlightTimetable.issue_tick(contract, day) <= tick:
@@ -1368,7 +1460,31 @@ func _issue_due() -> void:
 			day += 1
 	due.sort_custom(_issued_before)
 	for entry in due:
-		_issue(_contracts[entry[1]], entry[2])
+		if entry[1] < 0:
+			_release_spur(entry[2])
+		else:
+			_issue(_contracts[entry[1]], entry[2])
+
+
+## Moves `side`'s spur to its wanted x (spur_release), then gives each running or
+## reserving contract at a gate on that side its gate's new stand's taxi pair,
+## as SpurMoves.resolve() planned its days from the release on.
+func _release_spur(side: String) -> void:
+	if not spur_release.is_valid():
+		push_error("FlightSim: the %s spur is pending but no spur_release is set" % side)
+		return
+	spur_release.call(side)
+	var grounds := gate_grounds()
+	var world := _world(grounds)
+	for i in _contracts.size():
+		var contract := _contracts[i]
+		var ground: Dictionary = grounds.get(contract["gate"], {})
+		if ground.is_empty() or StandPlacement.side_of(ground["stand"]) != side:
+			continue
+		if FlightPlans.runs(world, contract["id"]):
+			_contracts[i] = _at_gate(contract, contract["gate"], grounds)
+	_changed()
+	spur_moved.emit(side)
 
 
 ## Orders [issue tick, contract index, day] entries field by field.

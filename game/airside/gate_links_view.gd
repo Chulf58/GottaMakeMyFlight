@@ -180,8 +180,9 @@ func is_building() -> bool:
 ## The ground path of `binding`'s link on `grid`: where the way from the desk's
 ## footprint centre to the exit's cell centre leaves the footprint (the desk's
 ## edge), the exit's cell centre, and where the plane's door stands at its
-## stand, each LIFT_M over the grid's floor.
-static func link_points(grid: BuildGrid, binding: Dictionary) -> PackedVector3Array:
+## stand on the side spurs `lanes` (GateDesks.spur_x), each LIFT_M over the
+## grid's floor.
+static func link_points(grid: BuildGrid, binding: Dictionary, lanes := {}) -> PackedVector3Array:
 	var cells := GateDesks.desk_footprint(grid, binding["desk"])
 	var area := Rect2(Vector2(cells[0]), Vector2.ONE)
 	for cell in cells:
@@ -193,7 +194,7 @@ static func link_points(grid: BuildGrid, binding: Dictionary) -> PackedVector3Ar
 	var edge := (
 		centre + (exit - centre) * _leave_t(Rect2(area.position + origin, area.size), centre, exit)
 	)
-	var door := StandPlacement.door_point(StandPlacement.for_exit(grid, binding["exit"]))
+	var door := StandPlacement.door_point(SideSpurs.stand_for_exit(grid, binding["exit"], lanes))
 	var y := grid.origin.y + LIFT_M
 	return PackedVector3Array(
 		[Vector3(edge.x, y, edge.y), Vector3(exit.x, y, exit.y), Vector3(door.x, y, door.z)]
@@ -242,7 +243,7 @@ func rebuild() -> void:
 	var desk_tops: Array[Vector3] = []
 	if _grid != null and _gates != null:
 		for binding in _gates.bindings:
-			var path := link_points(_grid, binding)
+			var path := link_points(_grid, binding, _gates.spur_x)
 			_paths.append(path)
 			gate_texts.append(_caption_for(binding["gate"]))
 			desk_tops.append(_desk_top(binding["desk"]))
@@ -305,10 +306,14 @@ func envelope_paths() -> Array[PackedVector3Array]:
 ## The caption over gate `gate`'s desk: "Gate A", then its biggest plane
 ## (GateDesks.max_class, "" for none) on a second line, then its walk from
 ## security ("12 min walk") on a third when `walk_minutes` is one (GateWalk).
+## A gate `waiting` on its side's spur (GateDesks.waits_on_spur()) says
+## GateDesks.WAITING_TEXT on the second line.
 static func caption_text(
-	gate: String, plane_class: String, walk_minutes := GateWalk.NO_ROUTE
+	gate: String, plane_class: String, walk_minutes := GateWalk.NO_ROUTE, waiting := false
 ) -> String:
 	var second := CLASS_LINE % plane_class if plane_class != "" else NO_CLASS_LINE
+	if waiting:
+		second = GateDesks.WAITING_TEXT
 	var text := "Gate %s\n%s" % [gate, second]
 	var third := GateWalk.caption_line(walk_minutes)
 	return text if third == "" else "%s\n%s" % [text, third]
@@ -343,7 +348,9 @@ func _queue_walk() -> void:
 
 
 func _caption_for(gate: String) -> String:
-	return caption_text(gate, _gates.max_class(gate), walk.minutes(gate))
+	return caption_text(
+		gate, _gates.max_class(gate), walk.minutes(gate), _gates.waits_on_spur(gate)
+	)
 
 
 func envelope_node() -> MeshInstance3D:
@@ -358,7 +365,7 @@ func _draw_envelopes() -> void:
 		for binding in _gates.bindings:
 			var plane_class := _gates.max_class(binding["gate"])
 			if plane_class != "":
-				var stand := StandPlacement.for_exit(_grid, binding["exit"])
+				var stand: Dictionary = _gates.stands[binding["gate"]]
 				_envelope_paths.append(envelope_outline(stand, plane_class, y))
 	_envelope.mesh = segments_mesh(_envelope_paths)
 

@@ -304,13 +304,16 @@ func _gate_status(desk: int) -> String:
 	return "Status: %s" % GateLinksView.caption_for(reason).to_lower()
 
 
-## "Biggest plane: Medium" for a linked desk's gate, or "" for an unlinked desk.
+## "Biggest plane: Medium" for a linked desk's gate, GateDesks.WAITING_TEXT for
+## one that waits on its side's spur, or "" for an unlinked desk.
 func _gate_planes(desk: int) -> String:
 	if gates == null:
 		return ""
 	for binding in gates.bindings:
 		if binding["desk"] == desk:
 			var plane_class := gates.max_class(binding["gate"])
+			if gates.waits_on_spur(binding["gate"]):
+				return GateDesks.WAITING_TEXT
 			if plane_class == "":
 				return NO_PLANE_TEXT
 			return PLANES_TEXT % plane_class.capitalize()

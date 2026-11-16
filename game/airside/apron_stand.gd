@@ -226,7 +226,7 @@ func refresh() -> void:
 func _refresh_gates() -> void:
 	var next := {}
 	for binding in gates.bindings:
-		var stand := SideSpurs.stand_for_exit(grid, binding["exit"])
+		var stand := SideSpurs.stand_for_exit(grid, binding["exit"], gates.spur_x)
 		next[binding["gate"]] = {
 			"live": stand,
 			"placement": gate_check(binding["exit"], stand, gates.max_class(binding["gate"])),
@@ -320,14 +320,42 @@ static func same_stand(a: Dictionary, b: Dictionary) -> bool:
 ## what lies ahead of its rearmost point on the way to the taxi lane, and the
 ## box it covers (route_rects()). With no taxi route to follow
 ## (Airside.routes_gate() false) it keeps everything. Empty while no flight is
-## at the stand.
+## at the stand. With gates, the side spurs issued flights still need too
+## (spur_rects()).
 func guard_rects() -> Array[Rect2]:
 	if gates == null:
 		return _rects_of(busy_flight(), live, "")
 	var out: Array[Rect2] = []
 	for gate: String in gate_stands:
 		out.append_array(_rects_of(busy_flight(gate), gate_stands[gate]["live"], gate))
+	out.append_array(spur_rects())
 	return out
+
+
+## The side spurs planes still need (decision side-spur-move-design-s7-stands-
+## carry-lane-x-the-wanted-spur): for each gate on a west or east stand with a
+## flight issued and not yet at TAKEOFF, its spur from the taxi lane to the
+## stand's join, as wide as the band a plane on it sweeps (SideSpurs.
+## build_clearance()). Empty without gates.
+func spur_rects() -> Array[Rect2]:
+	var out: Array[Rect2] = []
+	var half := SideSpurs.build_clearance()
+	for gate: String in gate_stands:
+		var stand: Dictionary = gate_stands[gate]["live"]
+		if StandPlacement.side_of(stand) == StandPlacement.NORTH or not _flies_before_takeoff(gate):
+			continue
+		var top := StandPlacement.TAXI_LANE_Z
+		var south := StandPlacement.lane_join(stand).z + half
+		out.append(Rect2(StandPlacement.lane_x_of(stand) - half, top, 2.0 * half, south - top))
+	return out
+
+
+## Whether a live flight at gate `gate` has not reached TAKEOFF.
+func _flies_before_takeoff(gate: String) -> bool:
+	for id in flights.flight_ids():
+		if flights.flight_gate(id) == gate and flights.state_of(id) < FlightSim.State.TAKEOFF:
+			return true
+	return false
 
 
 ## `rects` cut to `frame`; a rectangle wholly outside it is dropped.
@@ -689,16 +717,17 @@ static func _checked_stand(saved: Variant, on_site: SiteDefinition) -> Dictionar
 
 
 ## Why saved gate stands `stands` do not belong to the gates in `bindings`
-## (GateDesks) on `on_grid`, or "": every gate needs its own stand, straight
-## out from its exit, and there is no other.
+## (GateDesks) on `on_grid` with side spurs `lanes` (side -> x, GateDesks.
+## spur_x), or "": every gate needs its own stand, straight out from its exit
+## on its side's spur, and there is no other.
 static func stands_problem(
-	stands: Dictionary, bindings: Array[Dictionary], on_grid: BuildGrid
+	stands: Dictionary, bindings: Array[Dictionary], on_grid: BuildGrid, lanes := {}
 ) -> String:
 	if stands.size() != bindings.size():
 		return "there are %d gates but %d stands" % [bindings.size(), stands.size()]
 	for binding in bindings:
 		var saved: Dictionary = stands.get(binding["gate"], {})
-		if not same_stand(saved, SideSpurs.stand_for_exit(on_grid, binding["exit"])):
+		if not same_stand(saved, SideSpurs.stand_for_exit(on_grid, binding["exit"], lanes)):
 			return "gate %s's stand is not the one out from its exit" % binding["gate"]
 	return ""
 
@@ -714,7 +743,7 @@ func from_snapshot(data: Dictionary) -> bool:
 	if not loaded.has("error") and loaded.has("stands") != (gates != null):
 		loaded = {"error": "the save's stands are not of this airport's kind"}
 	if not loaded.has("error") and gates != null:
-		var problem := stands_problem(loaded["stands"], gates.bindings, grid)
+		var problem := stands_problem(loaded["stands"], gates.bindings, grid, gates.spur_x)
 		if problem != "":
 			loaded = {"error": problem}
 	if loaded.has("error"):
