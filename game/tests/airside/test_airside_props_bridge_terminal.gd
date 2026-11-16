@@ -91,14 +91,19 @@ func test_the_bridge_meets_the_exit_door_and_clears_the_terminal() -> void:
 	# The faces toward the terminal: the collar nearest the wall, the
 	# vestibule's face beside it above the collar.
 	var wall := float(_stand["wall_z"])
-	var body := bridge.find_child("JetBridge_Body", true, false) as MeshInstance3D
+	# The full-height vestibule hangs on Vest_Full since the fold (board
+	# b564cda3), so its face is read there; the collar stays on the body. No
+	# plane reports yet, so the gate is folded and Vest_Full hidden: this reads
+	# the open vestibule's fixed geometry, as before.
 	var collar := -INF
 	var face := -INF
-	for v in body.mesh.get_faces():
-		var w := body.global_transform * v
-		collar = maxf(collar, w.z)
-		if w.y - sill.y > JetBridgePose.CAB_TOP + 0.5:
-			face = maxf(face, w.z)
+	for part: String in ["JetBridge_Body", "Vest_Full_Mesh"]:
+		var body := bridge.find_child(part, true, false) as MeshInstance3D
+		for v in body.mesh.get_faces():
+			var w := body.global_transform * v
+			collar = maxf(collar, w.z)
+			if w.y - sill.y > JetBridgePose.CAB_TOP + 0.5:
+				face = maxf(face, w.z)
 	print(
 		"collar %.4f m and vestibule face %.4f m off the wall line" % [wall - collar, wall - face]
 	)
