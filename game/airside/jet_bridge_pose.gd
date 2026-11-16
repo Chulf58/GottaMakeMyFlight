@@ -25,9 +25,18 @@ extends RefCounted
 ## exit door turns once, 90 degrees, in the cab.
 ##
 ## Models 04 to 07 dock. Model 03 does not (its door is under its high wing):
-## the bridge stays parked and its passengers leave the vestibule through the
-## apron door (Mount_ApronDoor) and walk to the plane door. Parked, the cab
-## stands at PARK_HEIGHT, over plane 03's wing and under plane 04's rotor.
+## its passengers leave the vestibule through the apron door
+## (Mount_ApronDoor) and walk to the plane door. Parked, the cab stands at
+## PARK_HEIGHT, over plane 03's wing and under plane 04's rotor.
+##
+## Folded (folds(), board b564cda3, ruling small-planes-the-jet-bridge-folds-
+## back-against-the-terminal): with plane 03 or no plane at the gate the
+## walkway is drawn retracted into the vestibule. apply() then hides
+## Walk_Slide and everything on it (the stair enclosure, stair, landing, cab,
+## bellows and pedestal) and shows Fold_Cap, a glazed end wall that closes the
+## vestibule's far end, so only the vestibule with its exit and apron doors
+## stands on the wall, reaching VEST_END out. The joints stay parked, so the
+## walk and every mount are what they were.
 ##
 ## The rig constants are the ones tools/blender/airside/build_airside_props.py
 ## builds the bridge with; test_airside_props_bridges.gd checks them against
@@ -55,6 +64,10 @@ const CURTAIN_MIN := 0.01
 const BOX_TOP := 5.20
 const SKIN_T := 0.08
 const VEST_HALF := 1.10
+## The vestibule's far end out from the wall, where Fold_Cap stands, and the
+## stair enclosure's outer half width (the opening the cap closes).
+const VEST_END := 2.30
+const BOX_HALF := 1.00
 const APRON_Z := 0.80
 ## The vestibule's terminal face and the exit door collar off the wall line:
 ## both clear the terminal wall and stay under the roof fascia 0.25 m out.
@@ -91,7 +104,8 @@ const WALK: Array[StringName] = [
 	&"Mount_ExitSill", &"Mount_StairFoot", &"Mount_StairTop", &"Mount_CabFloor", &"Mount_Door"
 ]
 const APRON: Array[StringName] = [&"Mount_ExitSill", &"Mount_ApronDoor"]
-## The rig's joint nodes, by the name each has in jet_bridge.glb.
+## The rig's joint nodes, by the name each has in jet_bridge.glb; Fold_Cap
+## is shown or hidden, never moved.
 const JOINTS: Array[StringName] = [
 	&"Walk_Slide",
 	&"Stair_Rise",
@@ -100,6 +114,7 @@ const JOINTS: Array[StringName] = [
 	&"Curtain_High",
 	&"Cab_Yaw",
 	&"Bellows_Extend",
+	&"Fold_Cap",
 ]
 
 
@@ -126,6 +141,13 @@ static func root_for(stand: Dictionary, ground_y := 0.0) -> Transform3D:
 ## Whether `model` docks the bridge.
 static func docks(model: String) -> bool:
 	return DOCKING.has(model)
+
+
+## Whether the bridge is drawn folded with plane `model` ("" for none) at the
+## gate: when no plane or one that does not dock stands there. A docking
+## model out of reach leaves it parked, unfolded.
+static func folds(model: String) -> bool:
+	return not docks(model)
 
 
 ## Where plane `model` parked at `stand` has its front port door (world, the
@@ -187,7 +209,8 @@ static func parked() -> Dictionary:
 
 ## The bridge at `stand` with plane `model` ("" for none) parked there,
 ## docked or not: {"root", "pose", "docks" (the model docks), "docked" (the
-## pose reaches its door), "door" and "normal" (the plane's door, model only),
+## pose reaches its door), "folded" (folds()), "door" and "normal" (the
+## plane's door, model only),
 ## "mounts" (every mount name -> world point), "walk" (the docked walk from
 ## the exit sill to the plane door, else empty), "apron_walk" (exit sill,
 ## apron door, then on the ground APRON_END_OUT_M out from the plane door, for
@@ -195,7 +218,7 @@ static func parked() -> Dictionary:
 ## of reach is parked.
 static func pose_for(stand: Dictionary, model: String, docked: bool, ground_y := 0.0) -> Dictionary:
 	var root := root_for(stand, ground_y)
-	var out := {"root": root, "docks": docks(model), "docked": false}
+	var out := {"root": root, "docks": docks(model), "docked": false, "folded": folds(model)}
 	var pose := parked()
 	if model != "":
 		var at := plane_door(stand, model, ground_y)
@@ -248,8 +271,11 @@ static func mounts_for(root: Transform3D, pose: Dictionary) -> Dictionary:
 
 
 ## Sets the joints of `joints` (JOINTS name -> Node3D, from joints_of()) to
-## `pose` (solve() or parked()).
-static func apply(joints: Dictionary, pose: Dictionary) -> void:
+## `pose` (solve() or parked()), drawn folded when `folded` (folds()): the
+## walkway hidden and Fold_Cap shown; otherwise the cap is hidden.
+static func apply(joints: Dictionary, pose: Dictionary, folded := false) -> void:
+	(joints[&"Walk_Slide"] as Node3D).visible = not folded
+	(joints[&"Fold_Cap"] as Node3D).visible = folded
 	var h: float = pose["height"]
 	(joints[&"Walk_Slide"] as Node3D).position.z = pose["slide"]
 	(joints[&"Stair_Rise"] as Node3D).scale = Vector3(1.0, h, 1.0)

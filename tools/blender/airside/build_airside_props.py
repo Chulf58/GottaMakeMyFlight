@@ -45,7 +45,10 @@ Rig (all empties export with zero rest rotation and unit scale):
     JetBridge_Body        the collar at the exit door and the vestibule (static)
     Mount_ExitSill        (0, 0, 0): the exit door's sill on the wall line
     Mount_ApronDoor       (VEST_HALF, 0, APRON_Z): the vestibule's apron door, outside
-    Walk_Slide            (0, 0, 0): translate along +z by D in [0, SLIDE_MAX], so the
+    Fold_Cap              (0, 0, 0): never moves; its mesh is a glazed end wall in the
+                          vestibule's far-end opening, shown only while the bridge is
+                          drawn folded (Walk_Slide hidden; board b564cda3)
+    Walk_Slide           (0, 0, 0): translate along +z by D in [0, SLIDE_MAX], so the
                           cab reaches a plane door further out (model 04); its mesh is
                           the stair enclosure, its ground floor and the pedestal base under the cab
       Mount_StairFoot     (0, 0, STAIR_Z0 - STEP_OFF): before the first step
@@ -351,6 +354,14 @@ def build_jet_bridge(root, c):
                                                       (APRON_Z + APRON_HALF, VEST_END)]
         for k, (z0, z1) in enumerate(spans):
             gbox("Vest_Band_%d_%d" % (sx, k), (x0, 0.0, z0), (x1, 0.12, z1), "blue", root, c)
+    # The fold cap (board b564cda3): a glazed end wall filling the ring's opening, shown
+    # only while the walkway is drawn retracted (JetBridgePose.apply() hides Walk_Slide
+    # then), so the folded bridge is the closed vestibule alone.
+    cap = pivot(p, "Fold_Cap", root, c, (0.0, 0.0, 0.0))
+    cap_half = BOX_HALF + 0.01
+    cap_win = panels(-cap_half + 0.1, cap_half - 0.1, 0.9, 0.15)
+    holed_wall("Fold_Cap_Wall", "z", (-cap_half, cap_half), (0.0, BOX_TOP + 0.01), (VEST_END - SKIN_T, VEST_END),
+               window_row(cap_win, *WIN_LOW) + window_row(cap_win, *WIN_HIGH), "white", cap, c)
 
     # The sliding stair enclosure, its ground floor and the pedestal base.
     slide = pivot(p, "Walk_Slide", root, c, (0.0, 0.0, 0.0))
@@ -681,7 +692,8 @@ PIECES = {
 EXTRA_NODES = {
     "jet_bridge": ["Walk_Slide", "Walk_Slide_Mesh", "Stair_Rise", "Stair_Rise_Mesh", "Curtain_Low",
                    "Curtain_Low_Mesh", "Floor_Lift", "Floor_Lift_Mesh", "Curtain_High", "Curtain_High_Mesh",
-                   "Cab_Yaw", "Cab_Yaw_Mesh", "Bellows_Extend", "Bellows_Extend_Mesh", "Mount_ApronDoor"]
+                   "Cab_Yaw", "Cab_Yaw_Mesh", "Bellows_Extend", "Bellows_Extend_Mesh", "Mount_ApronDoor",
+                   "Fold_Cap", "Fold_Cap_Mesh"]
     + WALK_MOUNTS,
     "pushback_tug": ["Cradle_Lift", "Cradle_Lift_Mesh", "Mount_NoseGear"],
     "taxi_sign": [n for ch in LETTERS for n in ("Glyph_Loc_" + ch, "Glyph_Loc_%s_Mesh" % ch,

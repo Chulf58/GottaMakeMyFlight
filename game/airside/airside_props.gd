@@ -17,10 +17,14 @@ extends Node3D
 ## same flight model (OutsideWalks.departure(), decision bridge-boarding-sim-
 ## route-chosen-at-departure-from-the-fligh), so the drawn bridge and the walk
 ## agree.
-## Model 03 does not dock: the bridge stays parked over its wing and its
-## passengers walk out of the apron door (ruling plane-03-boards-on-foot-from-
-## the-apron-plane-04-docks-the-no). Once no view reports the gate it parks
-## again. The towbarless tug is the plane's own prop (PlaneProps).
+## Model 03 does not dock: its passengers walk out of the apron door (ruling
+## plane-03-boards-on-foot-from-the-apron-plane-04-docks-the-no), and the
+## bridge is drawn folded, its walkway retracted into the vestibule (Jet-
+## BridgePose.folds(), board b564cda3, ruling small-planes-the-jet-bridge-
+## folds-back-against-the-terminal). Once no view reports the gate it folds
+## too, so a plane never has the walkway appear over it as it pushes back or
+## taxis in; a docking model whose door is out of reach leaves it parked. The
+## towbarless tug is the plane's own prop (PlaneProps).
 ##
 ## A turn-off is a taxi route leg that crosses the runway asphalt's south edge
 ## (turn_offs()). Its sign stands beside the leg, SIGN_PAST_EDGE_M south of the
@@ -55,8 +59,8 @@ const DEFAULT_SIGN_SCALE := 2.5
 			sign.scale = Vector3.ONE * value
 
 ## Gate letter -> {"node": the bridge, "joints", "root", "stand", "docked",
-## "model" (the reported plane's model, "" for none), "pose" (the
-## JetBridgePose pose applied last)}.
+## "folded" (drawn folded), "model" (the reported plane's model, "" for
+## none), "pose" (the JetBridgePose pose applied last)}.
 var bridges: Dictionary = {}
 ## The turn-off signs, in turn_offs() order.
 var signs: Array[Node3D] = []
@@ -186,7 +190,8 @@ static func _arrow(
 
 
 ## Shows gate `gate`'s bridge docked at the first model reported for it when
-## that model docks and its door is in reach, and parked otherwise.
+## that model docks and its door is in reach, parked when it docks but is out
+## of reach, and folded otherwise (JetBridgePose.folds()).
 func _pose_bridge(gate: String) -> void:
 	if not bridges.has(gate) or bridges[gate]["joints"].is_empty():
 		return
@@ -204,9 +209,11 @@ func _pose_bridge(gate: String) -> void:
 			pose = JetBridgePose.pose_for(entry["stand"], model, true, ground)["pose"]
 			docked = true
 		break
-	JetBridgePose.apply(entry["joints"], pose)
+	var folded := JetBridgePose.folds(model)
+	JetBridgePose.apply(entry["joints"], pose, folded)
 	entry["pose"] = pose
 	entry["docked"] = docked
+	entry["folded"] = folded
 	entry["model"] = model
 
 

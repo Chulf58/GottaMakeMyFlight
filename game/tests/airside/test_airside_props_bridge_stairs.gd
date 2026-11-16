@@ -133,7 +133,10 @@ func test_the_walk_runs_clear_and_turns_once_in_the_cab() -> void:
 		plane.get_parent().free()
 	# Controls: the exit sill straight to the cab floor, skipping the stair,
 	# meets the stair; the cab floor straight through the cab's far side meets
-	# its wall.
+	# its wall. The planes have left, so the empty gate's bridge is drawn
+	# folded (board b564cda3); the controls draw it open.
+	var entry: Dictionary = _airside.props.bridges["A"]
+	JetBridgePose.apply(entry["joints"], entry["pose"])
 	var tris := Kit.world_tris(bridge)
 	var lift := Vector3.UP * BODY_LIFTS[0]
 	var skip: Variant = _first_hit(
@@ -141,6 +144,7 @@ func test_the_walk_runs_clear_and_turns_once_in_the_cab() -> void:
 	)
 	var cab := _at(bridge, &"Mount_CabFloor") + Vector3.UP * BODY_LIFTS[1]
 	var through: Variant = _first_hit(tris, cab, cab + Vector3.RIGHT * 3.0)
+	JetBridgePose.apply(entry["joints"], entry["pose"], entry["folded"])
 	print("controls: sill to cab floor meets %s; cab floor 3 m east meets %s" % [skip, through])
 	assert_bool(skip != null).is_true()
 	assert_bool(through != null).is_true()
