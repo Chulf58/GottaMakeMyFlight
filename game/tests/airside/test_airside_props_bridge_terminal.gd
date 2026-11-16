@@ -92,7 +92,9 @@ func test_the_bridge_meets_the_exit_door_and_clears_the_terminal() -> void:
 	# vestibule's face beside it above the collar.
 	var wall := float(_stand["wall_z"])
 	# The full-height vestibule hangs on Vest_Full since the fold (board
-	# b564cda3), so its face is read there; the collar stays on the body.
+	# b564cda3), so its face is read there; the collar stays on the body. No
+	# plane reports yet, so the gate is folded and Vest_Full hidden: this reads
+	# the open vestibule's fixed geometry, as before.
 	var collar := -INF
 	var face := -INF
 	for part: String in ["JetBridge_Body", "Vest_Full_Mesh"]:

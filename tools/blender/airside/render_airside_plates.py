@@ -168,6 +168,10 @@ def six_axis(piece, keep=None):
     objs, _h = place(prop(piece), piece)
     if keep is not None:
         objs = show_glyphs(objs, keep)
+    if piece == "jet_bridge":
+        # Drawn open and parked, so the folded box does not show inside the full
+        # vestibule (board b564cda3).
+        park_bridge(by_name(objs))
     lo, hi = rap.bounds(objs)
     ref = rap.cube((hi.x + 0.35 + 0.5, lo.y - 0.35 - 0.5, 0.5))
     sub = rap.world_points(objs)
