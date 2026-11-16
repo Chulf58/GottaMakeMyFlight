@@ -6,10 +6,11 @@ extends GdUnitTestSuite
 ## covers each grid inside a ring of walls one cell in from the border, with
 ## interior walls every 8 cells (each with a one-cell gap). The numbers are
 ## printed for the record. The 86x40 opening edit has a budget that fails;
-## the other asserts prove each run did its work. The whole airport site, with
-## its passenger and staff graphs built as in a game, has the same budget for
-## the edit that opens its floor and the one that closes it (L4, board
-## ee9914e6).
+## the other asserts prove each run did its work. The first 86 m site, with its
+## passenger and staff graphs built as in a game, has the same budget for the
+## edit that opens its floor and the one that closes it (L4, board ee9914e6);
+## the whole 256x150 site grid has a 20 ms one (decision enclosure-timing-
+## budget-with-side-land-open-the-first-site-k).
 
 const SITE := preload("res://build/terminal_site.tres")
 const ROOM := 8
@@ -19,6 +20,9 @@ const SITE_RUNS := 5
 ## under one 60 fps frame. Measured about 3.6 ms on the old 66x30 grid on
 ## 2026-11-01.
 const SITE_EDIT_BUDGET_USEC := 15000
+## The same for a hall floored over the whole 256x150 site grid (decision
+## enclosure-timing-budget-with-side-land-open-the-first-site-k).
+const WIDE_SITE_EDIT_BUDGET_USEC := 20000
 
 
 ## A grid of `size` floored inside a walled ring one cell in from the border,
@@ -114,20 +118,36 @@ func test_time_the_largest_grid() -> void:
 	assert_int(_measure(Vector2i(BuildGrid.MAX_SIDE_CELLS, BuildGrid.MAX_SIDE_CELLS))).is_greater(0)
 
 
-## The whole buildable site floored and walled like the others, its passenger
-## and staff A* graphs built: the wall edit that lets the outside into the whole
-## floor, and the one that closes it again, each stay under
-## SITE_EDIT_BUDGET_USEC, median of SITE_RUNS. Measured 2026-11-01 on the same
-## machine: about 13.3 ms opening and 10.1 ms closing before the flood was kept
-## to the built area and the points switched by index, about 6.7 ms and 3.3 ms
-## after.
-##
-## The buildable site is the whole 256x150 grid since side land opened
-## (SiteDefinition.SIDE_LAND_OPEN, board 16f7f8c2, S7c). On the first site
-## alone (86x150) the opening edit took about 6.7 ms; with the whole grid
-## floored it took about 20 ms on 2026-11-15, before side land opened.
+## The first 86 m site (SiteDefinition.centre_rect(), 86x150) floored and
+## walled like the others as one hall, its passenger and staff A* graphs
+## built: the wall edit that lets the outside into the whole floor, and the one
+## that closes it again, each stay under SITE_EDIT_BUDGET_USEC, median of
+## SITE_RUNS. Measured 2026-11-01 on the same machine: about 13.3 ms opening
+## and 10.1 ms closing before the flood was kept to the built area and the
+## points switched by index, about 6.7 ms and 3.3 ms after. Side land is open
+## (SiteDefinition.SIDE_LAND_OPEN, S7c); the whole grid has its own test.
 func test_time_the_full_site_with_its_graphs_built() -> void:
-	var size := SITE.grid_size
+	var edits := _time_hall(Vector2i(SITE.centre_rect().size), "first site")
+	assert_int(edits.x).is_less(SITE_EDIT_BUDGET_USEC)
+	assert_int(edits.y).is_less(SITE_EDIT_BUDGET_USEC)
+
+
+## The whole 256x150 site grid floored as one hall, timed as the first site is.
+## Its budget is WIDE_SITE_EDIT_BUDGET_USEC, not SITE_EDIT_BUDGET_USEC (decision
+## enclosure-timing-budget-with-side-land-open-the-first-site-k): one edit flips
+## all 37,592 cells and the work grows with them, so the extreme, rare edit of
+## opening a hall over every plot may cost about one dropped 60 fps frame.
+## Measured 2026-11-16: about 16 ms opening, 7 ms closing.
+func test_time_the_whole_grid_with_its_graphs_built() -> void:
+	var edits := _time_hall(SITE.grid_size, "whole grid")
+	assert_int(edits.x).is_less(WIDE_SITE_EDIT_BUDGET_USEC)
+	assert_int(edits.y).is_less(WIDE_SITE_EDIT_BUDGET_USEC)
+
+
+## A grid of `size` floored as one hall (_site()) with both graphs built, its
+## outer wall opened and closed SITE_RUNS times: the median opening and closing
+## edit in usec, as x and y, printed with `label`.
+func _time_hall(size: Vector2i, label: String) -> Vector2i:
 	var grid := _site(size)
 	var indoor := _indoor(grid)
 	assert_int(indoor).is_equal((size.x - 2) * (size.y - 2))
@@ -154,11 +174,19 @@ func test_time_the_full_site_with_its_graphs_built() -> void:
 	print(
 		(
 			(
-				"full site %dx%d, graphs built: opening edit %.2f ms, closing edit %.2f ms"
+				"%s %dx%d, graphs built: opening edit %.2f ms, closing edit %.2f ms"
 				+ " (median of %d; runs %s / %s usec)"
 			)
-			% [size.x, size.y, open_usec / 1000.0, close_usec / 1000.0, SITE_RUNS, opens, closes]
+			% [
+				label,
+				size.x,
+				size.y,
+				open_usec / 1000.0,
+				close_usec / 1000.0,
+				SITE_RUNS,
+				opens,
+				closes,
+			]
 		)
 	)
-	assert_int(open_usec).is_less(SITE_EDIT_BUDGET_USEC)
-	assert_int(close_usec).is_less(SITE_EDIT_BUDGET_USEC)
+	return Vector2i(open_usec, close_usec)
