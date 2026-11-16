@@ -1220,6 +1220,10 @@ func _class_samples(label: String, airside: Airside) -> void:
 	var skip: Array[RID] = []
 	for body in _plane.find_children("*", "StaticBody3D", true, false):
 		skip.append((body as StaticBody3D).get_rid())
+	# A jet bridge docks over the parked footprint's nose; the ground under it is paving.
+	for bridge in _main.find_children("JetBridge_*", "Node3D", true, false):
+		for body in bridge.find_children("*", "StaticBody3D", true, false):
+			skip.append((body as StaticBody3D).get_rid())
 	var space := _plane.get_world_3d().direct_space_state
 	var starts: Array[int] = []
 	for state in FlightSim.State.DEPARTED + 1:

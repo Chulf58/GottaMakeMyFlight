@@ -38,6 +38,11 @@ extends RefCounted
 ## - the landside: every arrival booking's flight is one the passengers part
 ##   has scheduled, and every flight with transport misses is live or an
 ##   issued occurrence;
+## - incidents: a VIP offer or accepted VIP's flight and an announced rush's
+##   flights are asked about as the game runs (IncidentMajors._flight_lost,
+##   FlightSim.state_of), so each must be live, landed (_known()) or not yet
+##   issued (_unissued(): a day on or after its contract's next day, as a VIP
+##   or rush can name a day ahead). A forgotten occurrence would never answer;
 ## - today's money: the DayLedger's day is the clock's day
 ##   (DayLedger.day_link_problem), and unless it counts since a load its
 ##   wages paid are the settlement's wages paid today
@@ -57,6 +62,8 @@ static func problem(data: Dictionary, staged: Dictionary) -> String:
 	var found := _offer_problem(data["offers"]["offers"], staged["offers"], flights["contracts"])
 	if found == "":
 		found = _flight_id_problem(staged["passengers"], staged["rating"], flights)
+	if found == "" and staged.has("incidents"):
+		found = _incident_problem(staged["incidents"], flights)
 	if found == "":
 		found = _landside_problem(staged["landside"], staged["passengers"], flights)
 	if found == "":
@@ -174,6 +181,31 @@ static func _known(id: String, flights: Dictionary) -> bool:
 	return false
 
 
+## "" or the first incident whose plan names a flight FlightSim cannot answer
+## and that is not still to come: a VIP offered or accepted (its flight) or a
+## rush announced (its flights). Done and declined incidents are not asked
+## about any more, so their plans may name flights long gone.
+static func _incident_problem(incidents: Dictionary, flights: Dictionary) -> String:
+	for incident: Dictionary in incidents["incidents"]:
+		var plan: Dictionary = incident["plan"]
+		var asked: Array[String] = []
+		match incident["kind"]:
+			IncidentCatalogue.VIP:
+				if incident["state"] in [IncidentCatalogue.OFFERED, IncidentCatalogue.ACCEPTED]:
+					asked.append(plan["flight"])
+			IncidentCatalogue.RUSH:
+				if incident["state"] == IncidentCatalogue.ANNOUNCED:
+					for entry: Dictionary in plan["flights"]:
+						asked.append(entry["flight"])
+		for id in asked:
+			if not _known(id, flights) and not _unissued(id, flights):
+				return (
+					"incidents: incident %d names flight %s, neither live, landed nor to come"
+					% [incident["id"], id]
+				)
+	return ""
+
+
 ## Every arrival booking is for a flight the passengers part has scheduled
 ## and whose doors have not closed (doors close settles a flight's bookings
 ## and unschedules it on the same tick), and every flight with transport
@@ -213,6 +245,17 @@ static func _issued(id: String, flights: Dictionary) -> bool:
 		return false
 	var day: int = occurrence["day"]
 	return day >= int(start_day[contract]) and day < int(next_day[contract])
+
+
+## Whether `id` is an occurrence of a saved contract on a day on or after its
+## next day, one FlightSim will still issue (an incident can name a day ahead).
+static func _unissued(id: String, flights: Dictionary) -> bool:
+	var occurrence := FlightTimetable.parse_occurrence(id)
+	if occurrence.is_empty():
+		return false
+	var contract: String = occurrence["contract"]
+	var next_day: Dictionary = flights["next_day"]
+	return next_day.has(contract) and int(occurrence["day"]) >= int(next_day[contract])
 
 
 static func _station_problem(passengers: Dictionary, sim: PassengerSim) -> String:
