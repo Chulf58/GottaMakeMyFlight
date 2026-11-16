@@ -593,7 +593,9 @@ static func swap_axle(
 ## grip, its own frame), "targets", "weights", "keeps", "drops" (each hand's,
 ## right then left; keeps floor_keep(), flags "from_floor" and "to_floor";
 ## drops CarryStoop.drops), "loops" (each hand's CarryArm.loop_grip: a backpack
-## led on or off the back outside a stall, held BACK_LOOP_UP over its loop)}.
+## led on or off the back outside a stall, held BACK_LOOP_UP over its loop),
+## "loop_yaw" (loop_yaw()'s weight for CarryPlace to turn a loop-held pack
+## plumb; RollerPark plans omit it, so read it with a 0.0 default)}.
 ## A backpack goes on and off the back through a hang at the leading hand's
 ## side (back_side()); a roller to or from the floor and the pull parks on its
 ## wheels for the hand to change grip (RollerPark.plan()).
