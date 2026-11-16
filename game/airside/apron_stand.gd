@@ -226,7 +226,7 @@ func refresh() -> void:
 func _refresh_gates() -> void:
 	var next := {}
 	for binding in gates.bindings:
-		var stand := StandPlacement.for_exit(grid, binding["exit"])
+		var stand := SideSpurs.stand_for_exit(grid, binding["exit"])
 		next[binding["gate"]] = {
 			"live": stand,
 			"placement": gate_check(binding["exit"], stand, gates.max_class(binding["gate"])),
@@ -296,14 +296,21 @@ func try_release() -> bool:
 	return true
 
 
+## Whether `a` and `b` are one stand: the same exit, sill and side, and for a
+## west or east stand the same spur (lane_x).
 static func same_stand(a: Dictionary, b: Dictionary) -> bool:
 	if not (StandPlacement.is_stand(a) and StandPlacement.is_stand(b)):
 		return a.is_empty() and b.is_empty()
+	var side := StandPlacement.side_of(a)
 	return (
 		int(a["exit"]) == int(b["exit"])
 		and is_equal_approx(float(a["x"]), float(b["x"]))
 		and is_equal_approx(float(a["wall_z"]), float(b["wall_z"]))
-		and StandPlacement.side_of(a) == StandPlacement.side_of(b)
+		and side == StandPlacement.side_of(b)
+		and (
+			side == StandPlacement.NORTH
+			or is_equal_approx(StandPlacement.lane_x_of(a), StandPlacement.lane_x_of(b))
+		)
 	)
 
 
@@ -560,9 +567,16 @@ func _drawn_rects() -> Array[Rect2]:
 
 
 ## What the guard is worked out from: the tick, the flights at the stands and
-## the stands.
+## the stands (a side stand's spur too).
 func _tick_key() -> Array:
-	var key := [flights.tick, busy_flight(), live.get("x"), live.get("wall_z"), live.get("side")]
+	var key := [
+		flights.tick,
+		busy_flight(),
+		live.get("x"),
+		live.get("wall_z"),
+		live.get("side"),
+		live.get("lane_x"),
+	]
 	if gates != null:
 		key = [flights.tick, _stands_of(gate_stands)]
 		for gate: String in gate_stands:
@@ -684,7 +698,7 @@ static func stands_problem(
 		return "there are %d gates but %d stands" % [bindings.size(), stands.size()]
 	for binding in bindings:
 		var saved: Dictionary = stands.get(binding["gate"], {})
-		if not same_stand(saved, StandPlacement.for_exit(on_grid, binding["exit"])):
+		if not same_stand(saved, SideSpurs.stand_for_exit(on_grid, binding["exit"])):
 			return "gate %s's stand is not the one out from its exit" % binding["gate"]
 	return ""
 

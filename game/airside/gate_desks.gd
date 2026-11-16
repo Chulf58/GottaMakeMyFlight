@@ -102,10 +102,11 @@ var bindings: Array[Dictionary] = []
 ## Gate letter -> its max_class (StandEnvelope.max_class), "" when not even a
 ## small plane fits; worked out on every refresh().
 var classes: Dictionary = {}
-## Gate letter -> its stand (StandPlacement.for_exit), worked out on every
+## Gate letter -> its stand (SideSpurs.stand_for_exit), worked out on every
 ## refresh() with classes.
 var stands: Dictionary = {}
-## "x|wall_z|class" -> the envelope's cells, which only the stand decides.
+## "x|wall_z|side|lane_x|class|grid size" -> the envelope's cells, which only
+## the stand decides.
 var _envelope_cells: Dictionary = {}
 ## Plane class -> spare_stand()'s answer, kept until the next refresh() or a
 ## change of owned land: the offer fit asks for it dozens of times a night.
@@ -164,7 +165,7 @@ func refresh() -> void:
 	stands = {}
 	_spare_stands.clear()
 	for binding in bindings:
-		var stand := StandPlacement.for_exit(grid, binding["exit"])
+		var stand := SideSpurs.stand_for_exit(grid, binding["exit"])
 		stands[binding["gate"]] = stand
 		classes[binding["gate"]] = StandEnvelope.max_class(grid, site_of(grid), stand)
 	changed.emit()
@@ -504,17 +505,18 @@ func _route_problem(on_grid: BuildGrid, edit: BuildEdit) -> BuildResult:
 
 
 ## The cells of the `plane_class` envelope at exit `exit`'s stand on `on_grid`,
-## kept per stand and class.
+## kept per stand (its spur too) and class.
 func envelope_cells(on_grid: BuildGrid, exit: int, plane_class: String) -> Dictionary:
-	var stand := StandPlacement.for_exit(on_grid, exit)
+	var stand := SideSpurs.stand_for_exit(on_grid, exit)
 	if stand.is_empty():
 		return {}
 	var key := (
-		"%s|%s|%s|%s|%s"
+		"%s|%s|%s|%s|%s|%s"
 		% [
 			stand["x"],
 			stand["wall_z"],
 			StandPlacement.side_of(stand),
+			stand.get("lane_x", ""),
 			plane_class,
 			on_grid.size,
 		]

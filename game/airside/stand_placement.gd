@@ -6,7 +6,7 @@ extends RefCounted
 ##
 ## A stand is {"exit": exit door id (0 for none), "x" and "wall_z": the world x
 ## and z of its sill, where the exit door meets the wall line, and, for a stand
-## that is not on a north wall, "side"}. The plane parks nose-in, straight out
+## that is not on a north wall, "side" and "lane_x"}. The plane parks nose-in, straight out
 ## from a north-facing exit: its port door on the exit cell's centre x, its
 ## nose NOSE_GAP_M north of the wall line the exit stands in. It is pushed back
 ## PUSHBACK_M, turned to face north, and taxis north to the taxi lane at
@@ -17,9 +17,12 @@ extends RefCounted
 ## A west or east stand is the north stand turned a quarter turn about its sill,
 ## never mirrored, so the port door stays on the plane's left: every point and
 ## rectangle of it is its north twin's (north_twin()) moved by to_world(). Its
-## way out ends on the side lane, SIDE_LANE_X out west or east. A north stand
-## has no "side" key, so its dictionary and every value worked out from it are
-## the ones they were before sides. for_exit() gives an exit the stand of the
+## way out ends on its side's spur, at world x "lane_x" (decision side-spur-
+## move-design-s7-stands-carry-lane-x-the-wanted-spur, slice S7a): never inside
+## SIDE_LANE_X west or east, and SIDE_LANE_X out unless make() is given another
+## (SideSpurs gives a gate's). A north stand has no "side" or "lane_x" key, so
+## its dictionary and every value worked out from it are the ones they were
+## before sides. for_exit() gives an exit the stand of the
 ## side its outside faces (slice S5); an exit facing the road has none.
 ##
 ## A candidate exit needs a clear aircraft route (swept_rects(): the parked
@@ -79,40 +82,104 @@ const SIDES: Array[String] = [NORTH, WEST, EAST]
 const OUT_STEP := {NORTH: Vector2i(0, -1), WEST: Vector2i(-1, 0), EAST: Vector2i(1, 0)}
 ## Side -> the turn about +y from a north stand to it, in radians.
 const SIDE_YAW := {NORTH: 0.0, WEST: PI / 2.0, EAST: -PI / 2.0}
-## How far west and east of x 0 the side lanes run: the TaxiWest and TaxiEast
-## waypoints' x in main.tscn, where board airside-all-around-s4 puts the spurs.
-## A west or east stand's way out ends on its side's lane.
+## How far west and east of x 0 the runway stubs run: the TaxiWest and
+## TaxiEast waypoints' x in main.tscn, where board airside-all-around-s4 put
+## the spurs. A side stand's spur (its lane_x) is never nearer x 0 than this
+## floor, and is this far out unless make() is given another.
 const SIDE_LANE_X := 124.0
 
 
 ## A stand whose sill is at (`door_x`, `wall_z`) and whose exit faces out to
-## `side`. {} (with an error) for an unknown side.
-static func make(exit_id: int, door_x: float, wall_z: float, side := NORTH) -> Dictionary:
+## `side`; a west or east one's way out ends on the spur at world x `lane_x`
+## (NAN for default_lane_x()). {} (with an error) for an unknown side, a north
+## stand given a lane_x, or a lane_x inside the floor (lane_x_problem()).
+static func make(
+	exit_id: int, door_x: float, wall_z: float, side := NORTH, lane_x := NAN
+) -> Dictionary:
 	if not SIDES.has(side):
 		push_error("StandPlacement.make: '%s' is not a side" % side)
 		return {}
 	var stand := {"exit": exit_id, "x": door_x, "wall_z": wall_z}
-	if side != NORTH:
-		stand["side"] = side
+	if side == NORTH:
+		if not is_nan(lane_x):
+			push_error("StandPlacement.make: a north stand has no lane_x")
+			return {}
+		return stand
+	stand["side"] = side
+	stand["lane_x"] = default_lane_x(side) if is_nan(lane_x) else lane_x
+	var problem := lane_x_problem(side, stand["lane_x"])
+	if problem != "":
+		push_error("StandPlacement.make: %s" % problem)
+		return {}
 	return stand
 
 
-## Whether `data` has a stand's shape (a loaded save's, for example).
+## The spur x of a `side` stand made with no lane_x: SIDE_LANE_X west or east,
+## the floor.
+static func default_lane_x(side: String) -> float:
+	return -SIDE_LANE_X if side == WEST else SIDE_LANE_X
+
+
+## "" when `lane_x` is a spur x for a `side` (WEST or EAST) stand: a finite
+## number at or beyond SIDE_LANE_X on that side; otherwise what is wrong.
+static func lane_x_problem(side: String, lane_x: Variant) -> String:
+	if not typeof(lane_x) in [TYPE_INT, TYPE_FLOAT]:
+		return "lane_x must be a number"
+	if is_nan(float(lane_x)) or is_inf(float(lane_x)):
+		return "lane_x must be a finite number"
+	if side == WEST and float(lane_x) > -SIDE_LANE_X:
+		return "a west stand's lane_x must be at or west of x %.1f" % -SIDE_LANE_X
+	if side == EAST and float(lane_x) < SIDE_LANE_X:
+		return "an east stand's lane_x must be at or east of x %.1f" % SIDE_LANE_X
+	return ""
+
+
+## The world x of the spur a west or east `stand`'s way out ends on: its
+## lane_x, or default_lane_x() for a stand written without one (a test's
+## literal). A north stand has no spur: NAN.
+static func lane_x_of(stand: Dictionary) -> float:
+	var side := side_of(stand)
+	if side == NORTH:
+		return NAN
+	return float(stand.get("lane_x", default_lane_x(side)))
+
+
+## `stand` with its way out on its side's spur at world x `lane_x` (make()),
+## its sill kept. A north stand is returned as it is.
+static func with_lane_x(stand: Dictionary, lane_x: float) -> Dictionary:
+	var side := side_of(stand)
+	if side == NORTH:
+		return stand
+	return make(int(stand["exit"]), float(stand["x"]), float(stand["wall_z"]), side, lane_x)
+
+
+## Whether `data` has a stand's shape (a loaded save's, for example): a west or
+## east stand needs its lane_x (lane_x_problem()), and a north one has none.
 static func is_stand(data: Variant) -> bool:
 	if not data is Dictionary:
 		return false
+	var dict: Dictionary = data
 	for key in ["exit", "x", "wall_z"]:
-		if not (data as Dictionary).has(key) or not typeof(data[key]) in [TYPE_INT, TYPE_FLOAT]:
+		if not dict.has(key) or not typeof(dict[key]) in [TYPE_INT, TYPE_FLOAT]:
 			return false
-	if (data as Dictionary).has("side"):
-		return typeof(data["side"]) == TYPE_STRING and SIDES.has(data["side"])
-	return true
+	var side: Variant = dict.get("side", NORTH)
+	if typeof(side) != TYPE_STRING or not SIDES.has(side):
+		return false
+	if side == NORTH:
+		return not dict.has("lane_x")
+	return lane_x_problem(side, dict.get("lane_x")) == ""
 
 
-## The stand `data` (is_stand()) rebuilt with make(), its side kept: what a
-## loaded save's stand becomes.
+## The stand `data` (is_stand()) rebuilt with make(), its side and lane_x kept:
+## what a loaded save's stand becomes. {} (with an error) when `data` is not a
+## stand, so a malformed lane_x is never put on the floor spur.
 static func from_saved(data: Dictionary) -> Dictionary:
-	return make(int(data["exit"]), float(data["x"]), float(data["wall_z"]), side_of(data))
+	if not is_stand(data):
+		push_error("StandPlacement.from_saved: %s is not a stand" % data)
+		return {}
+	var side := side_of(data)
+	var lane_x := NAN if side == NORTH else float(data["lane_x"])
+	return make(int(data["exit"]), float(data["x"]), float(data["wall_z"]), side, lane_x)
 
 
 ## The side `stand`'s exit faces out to: NORTH for a stand with no "side".
@@ -126,14 +193,14 @@ static func out_step(stand: Dictionary) -> Vector2i:
 
 
 ## The north stand a west or east `stand` is turned from: its sill as far from
-## the taxi lane as `stand`'s is from its side lane, at x 0. A north stand is
-## its own twin.
+## the taxi lane as `stand`'s is from its spur (|x - lane_x|), at x 0. A north
+## stand is its own twin.
 static func north_twin(stand: Dictionary) -> Dictionary:
 	match side_of(stand):
 		WEST:
-			return make(int(stand["exit"]), 0.0, TAXI_LANE_Z + float(stand["x"]) + SIDE_LANE_X)
+			return make(int(stand["exit"]), 0.0, TAXI_LANE_Z + float(stand["x"]) - lane_x_of(stand))
 		EAST:
-			return make(int(stand["exit"]), 0.0, TAXI_LANE_Z + SIDE_LANE_X - float(stand["x"]))
+			return make(int(stand["exit"]), 0.0, TAXI_LANE_Z + lane_x_of(stand) - float(stand["x"]))
 	return stand
 
 
@@ -220,7 +287,7 @@ static func pushback_end(stand: Dictionary) -> Vector3:
 
 
 ## Where the way out from the stand meets the taxi lane (at a side stand, its
-## side lane).
+## spur, at its lane_x).
 static func lane_join(stand: Dictionary) -> Vector3:
 	if side_of(stand) != NORTH:
 		return to_world(stand, lane_join(north_twin(stand)))
@@ -292,6 +359,8 @@ static func for_cell(grid: BuildGrid, cell: Vector2i, exit_id := 0, side := NORT
 
 ## The stand of exit door `exit_id` on the side its outside faces (NORTH, WEST
 ## or EAST), or {} when it is not an exit door or its outside faces the road.
+## A side stand's spur is default_lane_x(); a gate's stand, on its side's spur,
+## is SideSpurs.stand_for_exit().
 static func for_exit(grid: BuildGrid, exit_id: int) -> Dictionary:
 	var record := grid.get_object(exit_id)
 	if record.is_empty() or StringName(record["def"]) != &"exit_door":

@@ -97,14 +97,14 @@ func test_snapshot_records_version_contracts_and_issued_days() -> void:
 ## save tick. AM (08:20) has its first state at 140 and PM (14:20) at 7340.
 ## Versions 2 to 8 are in test_flight_open_snapshot.gd.
 func test_a_version_1_save_is_refused() -> void:
-	assert_int(FlightSim.SAVE_VERSION).is_equal(9)
+	assert_int(FlightSim.SAVE_VERSION).is_equal(10)
 	var world := _world()
 	assert_bool(world[1].accept_contract(TestFlightContracts.terms("AM", 500))).is_true()
 	assert_bool(world[1].accept_contract(TestFlightContracts.terms("PM", 860))).is_true()
 	# Between PM's two-hour (4940) and one-hour (6140) issue ticks.
 	_run(world[0], 6000)
 	var data: Dictionary = _saved(world)["flights"]
-	assert_int(int(data["save_version"])).is_equal(9)
+	assert_int(int(data["save_version"])).is_equal(10)
 	assert_int(int(data["next_day"]["PM"])).is_equal(1)
 	var loaded := _world()
 	assert_bool(loaded[1].from_snapshot(data.duplicate(true))).is_true()

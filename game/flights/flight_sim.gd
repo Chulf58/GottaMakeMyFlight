@@ -154,7 +154,10 @@ const STARTER_TERMS := {
 ## a flight's TAXI_IN and TAXI_OUT may be longer than PHASE_TICKS', and
 ## "landed" keeps yesterday's pruned occurrences too. A version 8 save is
 ## refused; there is no migration.
-const SAVE_VERSION := 9
+## 10: a flight's west or east stand holds "lane_x", the x of its spur
+## (StandPlacement.is_stand; decision side-spur-move-design-s7-stands-carry-
+## lane-x-the-wanted-spur). A version 9 save is refused; there is no migration.
+const SAVE_VERSION := 10
 ## The refusal of a flight no taxi pause fits (user ruling a-gate-has-no-size-
 ## planes-use-any-stand-they-fit-neighbours-share-apron-space).
 const TAXI_BUSY_TEXT := GroundPlanner.TAXI_BUSY_TEXT
