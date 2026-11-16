@@ -417,16 +417,37 @@ static func swept_rects(stand: Dictionary, north_of := INF) -> Array[Rect2]:
 static func cells_under(grid: BuildGrid, rects: Array[Rect2]) -> Dictionary:
 	var out := {}
 	for rect in rects:
-		var low := grid.world_to_cell(
-			Vector3(rect.position.x, 0.0, rect.position.y) + Vector3(0.01, 0.0, 0.01)
-		)
-		var high := grid.world_to_cell(
-			Vector3(rect.end.x, 0.0, rect.end.y) - Vector3(0.01, 0.0, 0.01)
-		)
-		for y in range(maxi(low.y, 0), mini(high.y, grid.size.y - 1) + 1):
-			for x in range(maxi(low.x, 0), mini(high.x, grid.size.x - 1) + 1):
+		var span := _span_under(grid, rect)
+		for y in range(span.position.y, span.end.y):
+			for x in range(span.position.x, span.end.x):
 				out[Vector2i(x, y)] = true
 	return out
+
+
+## Whether any cell cells_under() gives for `rects` is not apron_clear(): the
+## same answer as testing each of them, but it stops at the first blocked cell
+## and builds no set, so a candidate on a built-over grid costs a cell or two
+## (SpareStand.find() tries every owned cell).
+static func any_blocked_under(grid: BuildGrid, site: SiteDefinition, rects: Array[Rect2]) -> bool:
+	for rect in rects:
+		var span := _span_under(grid, rect)
+		for y in range(span.position.y, span.end.y):
+			for x in range(span.position.x, span.end.x):
+				if not apron_clear(grid, site, Vector2i(x, y)):
+					return true
+	return false
+
+
+## The in-bounds cells `rect` covers by more than a sliver, as a cell rectangle
+## (empty when it covers none).
+static func _span_under(grid: BuildGrid, rect: Rect2) -> Rect2i:
+	var low := grid.world_to_cell(
+		Vector3(rect.position.x, 0.0, rect.position.y) + Vector3(0.01, 0.0, 0.01)
+	)
+	var high := grid.world_to_cell(Vector3(rect.end.x, 0.0, rect.end.y) - Vector3(0.01, 0.0, 0.01))
+	var start := Vector2i(maxi(low.x, 0), maxi(low.y, 0))
+	var stop := Vector2i(mini(high.x, grid.size.x - 1) + 1, mini(high.y, grid.size.y - 1) + 1)
+	return Rect2i(start, (stop - start).max(Vector2i.ZERO))
 
 
 ## Whether any of `rects` reaches past the grid's south edge, over the road
@@ -460,12 +481,7 @@ static func reaches_lane(stand: Dictionary) -> bool:
 ## of it reaches over the road.
 static func aircraft_clear(grid: BuildGrid, site: SiteDefinition, stand: Dictionary) -> bool:
 	var rects := swept_rects(stand)
-	if reaches_road(grid, rects):
-		return false
-	for cell: Vector2i in cells_under(grid, rects):
-		if not apron_clear(grid, site, cell):
-			return false
-	return true
+	return not reaches_road(grid, rects) and not any_blocked_under(grid, site, rects)
 
 
 ## The walk out of exit door `exit_id` to the plane door at `stand`

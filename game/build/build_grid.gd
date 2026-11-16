@@ -866,13 +866,22 @@ func _relink_paths(dirty: Array[Vector2i]) -> Array[Vector2i]:
 		return cells
 	if _pathing != null:
 		_pathing.set_outside(flipped, _outside)
-	var seen := {}
+	# A byte per cell and one resize: a whole hall flips tens of thousands of
+	# cells, where a dictionary and an append per cell cost milliseconds.
+	var seen := PackedByteArray()
+	seen.resize(size.x * size.y)
+	seen.fill(0)
 	for cell in cells:
-		seen[cell.x + cell.y * size.x] = true
+		seen[cell.x + cell.y * size.x] = 1
+	var count := cells.size()
+	cells.resize(count + flipped.size())
 	for i in flipped:
-		if not seen.has(i):
+		if seen[i] == 0:
 			@warning_ignore("integer_division")
-			cells.append(Vector2i(i % size.x, i / size.x))
+			var y := i / size.x
+			cells[count] = Vector2i(i - y * size.x, y)
+			count += 1
+	cells.resize(count)
 	return cells
 
 

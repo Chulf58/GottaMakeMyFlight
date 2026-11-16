@@ -136,11 +136,11 @@ static func blocked_part(
 	var parts := rects(stand, plane_class)
 	for i in parts.size():
 		var one: Array[Rect2] = [parts[i]]
-		if StandPlacement.reaches_road(grid, one):
+		if (
+			StandPlacement.reaches_road(grid, one)
+			or StandPlacement.any_blocked_under(grid, site, one)
+		):
 			return Part.SWING if i == 0 else Part.WAY
-		for cell: Vector2i in StandPlacement.cells_under(grid, one):
-			if not StandPlacement.apron_clear(grid, site, cell):
-				return Part.SWING if i == 0 else Part.WAY
 	if not clears_lane(stand, plane_class):
 		return Part.LANE
 	if not StandPlacement.reaches_lane(stand):
