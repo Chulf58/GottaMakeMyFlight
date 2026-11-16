@@ -299,7 +299,8 @@ static func same_stand(a: Dictionary, b: Dictionary) -> bool:
 
 
 ## The ground the flight at the stand still needs, as world xz rectangles:
-## everything its class needs (class_rects()) until it pushes back, then only
+## everything its class needs and the box it is parked on (still_rects())
+## until it pushes back, then only
 ## what lies ahead of its rearmost point on the way to the taxi lane, and the
 ## box it covers (route_rects()). With no taxi route to follow
 ## (Airside.routes_gate() false) it keeps everything. Empty while no flight is
@@ -329,10 +330,11 @@ func _rects_of(id: String, stand: Dictionary, gate: String) -> Array[Rect2]:
 		return [] as Array[Rect2]
 	var contract := flights.contract_of(flights.flight_contract_id(id))
 	var plane_class: String = contract.get("plane_size", FlightSim.STARTER_TERMS["plane_size"])
+	var model := PlaneClasses.flight_model(flights, id)
 	if flights.state_of(id) < FlightSim.State.TAXI_OUT:
-		return class_rects(stand, plane_class)
+		return still_rects(stand, plane_class, model)
 	if airside != null and not airside.routes_gate(gate):
-		return class_rects(stand, plane_class)
+		return still_rects(stand, plane_class, model)
 	var path := (
 		airside.phase_path(FlightSim.State.TAXI_OUT, gate)
 		if airside != null
@@ -341,13 +343,13 @@ func _rects_of(id: String, stand: Dictionary, gate: String) -> Array[Rect2]:
 		)
 	)
 	if path.is_empty():
-		return class_rects(stand, plane_class)
+		return still_rects(stand, plane_class, model)
 	var start := flights.state_start(id, FlightSim.State.TAXI_OUT)
 	return route_rects(
 		stand,
 		path,
 		flights.phase_progress(id, flights.tick),
-		PlaneClasses.flight_model(flights, id),
+		model,
 		plane_class,
 		flights.taxi_plan(id).get(FlightSim.State.TAXI_OUT, {}),
 		float(flights.state_start(id, FlightSim.State.TAKEOFF) - start)
@@ -362,6 +364,35 @@ static func class_rects(stand: Dictionary, plane_class: String, north_of := INF)
 	if plane_class == PlaneClasses.LARGE:
 		return StandEnvelope.rects(stand, PlaneClasses.LARGE, north_of)
 	return StandPlacement.swept_rects(stand, north_of)
+
+
+## What a `model` plane of `plane_class` that has not left its stand needs of
+## it: class_rects() and the box it is parked on (parked_rects()), the box left
+## out when one of the class's rectangles already holds it (a small plane's).
+static func still_rects(stand: Dictionary, plane_class: String, model: String) -> Array[Rect2]:
+	var out := class_rects(stand, plane_class)
+	for box in parked_rects(stand, model):
+		if not out.any(func(rect: Rect2) -> bool: return rect.encloses(box)):
+			out.append(box)
+	return out
+
+
+## The ground `model` covers parked at `stand`, as the one world xz rectangle
+## PlaneView draws it on: the model's box at the stand point moved by
+## PlaneClasses.stand_offset, nose to the wall, turned onto a side stand like
+## the rest of its frame (StandPlacement.rects_to_world()). Empty for no model.
+## A parked model 04, 06 or 07 reaches past the south edge of its class's swing
+## square, short of the wall, so class_rects() leaves that strip out.
+static func parked_rects(stand: Dictionary, model: String) -> Array[Rect2]:
+	if not PlaneModels.PLANES.has(model):
+		return [] as Array[Rect2]
+	var twin := StandPlacement.north_twin(stand)
+	var box: AABB = PlaneModels.PLANES[model]["aabb"]
+	var origin := StandPlacement.stand_point(twin) + PlaneClasses.stand_offset(model)
+	var rects: Array[Rect2] = [
+		Rect2(origin.x + box.position.x, origin.z + box.position.z, box.size.x, box.size.z)
+	]
+	return StandPlacement.rects_to_world(stand, rects)
 
 
 ## The corners of `model`'s box drawn at ground `pose` off the stand, centred
