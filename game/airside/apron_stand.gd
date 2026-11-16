@@ -88,6 +88,8 @@ var _desks_sent: Dictionary = {}
 
 var _guard_key: Array = []
 var _guard_cells: Dictionary = {}
+var _drawn_key: Array = []
+var _drawn_rects_cache: Array[Rect2] = []
 var _label: Label3D
 ## Holds the guarded-area meshes; shown only while build mode lasts.
 var _guard_view := Node3D.new()
@@ -152,7 +154,7 @@ func _process(_delta: float) -> void:
 	if grid == null:
 		return
 	var frame := Rect2(Vector2(site.grid_origin.x, site.grid_origin.z), Vector2(site.grid_size))
-	var rects := clip_rects(guard_rects(), frame)
+	var rects := clip_rects(_drawn_rects(), frame)
 	while _areas.size() < rects.size():
 		_add_area()
 	for i in _areas.size():
@@ -539,15 +541,33 @@ static func _on_leg(point: Vector3, from: Vector3, to: Vector3) -> bool:
 
 ## The grid cells guard_rects() covers, as a set, worked out once per tick.
 func guarded_cells() -> Dictionary:
+	var key := _tick_key()
+	if key != _guard_key:
+		_guard_key = key
+		_guard_cells = StandPlacement.cells_under(grid, guard_rects())
+	return _guard_cells
+
+
+## guard_rects() for the drawn area, worked out once per tick like
+## guarded_cells(): _process() asks every rendered frame, and a taxiing plane's
+## rects are worked out from many poses.
+func _drawn_rects() -> Array[Rect2]:
+	var key := _tick_key()
+	if key != _drawn_key:
+		_drawn_key = key
+		_drawn_rects_cache = guard_rects()
+	return _drawn_rects_cache
+
+
+## What the guard is worked out from: the tick, the flights at the stands and
+## the stands.
+func _tick_key() -> Array:
 	var key := [flights.tick, busy_flight(), live.get("x"), live.get("wall_z"), live.get("side")]
 	if gates != null:
 		key = [flights.tick, _stands_of(gate_stands)]
 		for gate: String in gate_stands:
 			key.append(busy_flight(gate))
-	if key != _guard_key:
-		_guard_key = key
-		_guard_cells = StandPlacement.cells_under(grid, guard_rects())
-	return _guard_cells
+	return key
 
 
 ## The guard of the site's grid (SiteGrid): a PLANE_AREA refusal for an

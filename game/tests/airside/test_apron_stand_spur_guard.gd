@@ -23,13 +23,13 @@ extends GdUnitTestSuite
 const SITE := preload("res://build/terminal_site.tres")
 const WEST_STEP := Vector2i(80, -37)
 const EAST_STEP := Vector2i(-80, -37)
-const STEP_M := 4.0
+const STEP_M := 2.0
 ## The runs on the site grid that step finely through the corner at the join and
 ## on past the plane clearing the stand's ground: from FINE_FROM_M before the join
 ## to FINE_TO_M after it, every FINE_STEP_M, so a window of under a metre shows.
 const FINE_STEP_M := 0.25
-const FINE_FROM_M := 10.0
-const FINE_TO_M := 45.0
+const FINE_FROM_M := 8.0
+const FINE_TO_M := 42.0
 const SAMPLE_M := 0.5
 const INSET_M := 0.05
 ## The plane's box is clear of the stand's ground this far past the join.
@@ -55,8 +55,7 @@ func before() -> void:
 		for stand in _stands():
 			for plane: Array in PLANES:
 				_runs[_key(g, stand, plane)] = _run(_grids[g], stand, plane)
-				if g == 0:
-					_runs["fine " + _key(g, stand, plane)] = _run(_grids[g], stand, plane, true)
+				_runs["fine " + _key(g, stand, plane)] = _run(_grids[g], stand, plane, true)
 
 
 static func _key(grid_index: int, stand: Dictionary, plane: Array) -> String:
@@ -129,7 +128,9 @@ static func _box_cells(
 ## released at a step and guarded at the next), "covered" and "missing" (cells
 ## under the plane over all steps, and those not guarded), "early" (cells of the
 ## ground the plane covers later that a step has not guarded), "late" (held
-## cells of the steps CLEAR_M past the join). With `fine`, only the stretch of
+## cells of the steps CLEAR_M past the join), and "in_ground" (cell-steps of the
+## plane over the stand's ground: the control that the other counts are not
+## zero for want of anything to test). With `fine`, only the stretch of
 ## the route round the join and the plane's clearing of the ground, every
 ## FINE_STEP_M.
 func _run(grid: BuildGrid, stand: Dictionary, plane: Array, fine := false) -> Dictionary:
@@ -139,7 +140,16 @@ func _run(grid: BuildGrid, stand: Dictionary, plane: Array, fine := false) -> Di
 	)
 	var join_at := path[0].distance_to(path[1])
 	var ground := StandPlacement.cells_under(grid, ApronStand.class_rects(stand, plane[1]))
-	var out := {"released": [], "held": [], "retaken": 0, "covered": 0, "missing": 0, "early": 0}
+	var out := {
+		"released": [],
+		"held": [],
+		"retaken": 0,
+		"covered": 0,
+		"missing": 0,
+		"early": 0,
+		"in_ground": 0,
+		"join_on_grid": grid.in_bounds(grid.world_to_cell(path[1]))
+	}
 	var late := 0
 	var rects_by_step: Array = []
 	var under_by_step: Array = []
@@ -172,6 +182,7 @@ func _run(grid: BuildGrid, stand: Dictionary, plane: Array, fine := false) -> Di
 				out["missing"] += 1
 			if ground.has(cell):
 				in_ground[cell] = true
+				out["in_ground"] += 1
 		if distance >= join_at + CLEAR_M:
 			late += held
 		out["released"].append(released.size())
@@ -193,8 +204,6 @@ func _run(grid: BuildGrid, stand: Dictionary, plane: Array, fine := false) -> Di
 
 func _each_run(check: Callable, fine := false) -> void:
 	for g in _grids.size():
-		if fine and g > 0:
-			continue
 		for stand in _stands():
 			for plane: Array in PLANES:
 				var key := _key(g, stand, plane)
@@ -227,11 +236,12 @@ func test_every_cell_under_the_drawn_plane_is_guarded_all_the_way_out() -> void:
 		func(key: String, run: Dictionary) -> void:
 			print(
 				(
-					"%s: %d cell-steps under the plane, %d not guarded"
-					% [key, run["covered"], run["missing"]]
+					"%s: %d cell-steps under the plane, %d over the ground, %d not guarded"
+					% [key, run["covered"], run["in_ground"], run["missing"]]
 				)
 			)
 			assert_int(run["covered"]).is_greater(100)
+			assert_int(run["in_ground"]).is_greater(0)
 			assert_int(run["missing"]).is_equal(0)
 	)
 
@@ -272,11 +282,21 @@ func test_a_sub_metre_window_at_the_corner_and_the_release_point_stays_guarded()
 		func(key: String, run: Dictionary) -> void:
 			print(
 				(
-					"%s: %d steps, %d retaken, %d released before the plane covers them, %d not guarded"
-					% [key, run["held"].size(), run["retaken"], run["early"], run["missing"]]
+					"%s: %d steps, %d cell-steps over the ground, %d retaken, %d early, %d unguarded"
+					% [
+						key,
+						run["held"].size(),
+						run["in_ground"],
+						run["retaken"],
+						run["early"],
+						run["missing"]
+					]
 				)
 			)
 			assert_int(run["held"].size()).is_greater(100)
+			# A north stand's join (the lane) is off the site grid, so there the plane
+			# is never over the ground: the control; the wide grid's run holds it.
+			assert_bool(run["in_ground"] > 0).is_equal(run["join_on_grid"])
 			assert_int(run["retaken"]).is_equal(0)
 			assert_int(run["early"]).is_equal(0)
 			assert_int(run["missing"]).is_equal(0),
