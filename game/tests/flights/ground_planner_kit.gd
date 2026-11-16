@@ -42,38 +42,59 @@ func planner() -> GroundPlanner:
 	return GroundPlanner.new(points[&"HoldIn"], points[&"HoldRunway"])
 
 
-## The stand straight out from grid `cell`.
-func stand(cell: Vector2i) -> Dictionary:
-	return StandPlacement.for_cell(grid, cell)
+## The stand straight out from grid `cell`, its exit facing out to `side`
+## (north unless given): a west or east one is a synthetic side stand, its way
+## out on the spur at x -124 or +124 (board airside-all-around-s4).
+func stand(cell: Vector2i, side := StandPlacement.NORTH) -> Dictionary:
+	return StandPlacement.for_cell(grid, cell, 0, side)
 
 
-## Each phase's path for a plane of `plane_class` at `at` (the only gate).
+## Each phase's path for a plane of `plane_class` at `at` (the only gate),
+## written out here as the reference for TaxiRoutes. A north stand taxis in
+## along the lane to its join and out along it to TaxiWest. A west stand taxis
+## in along the whole lane and south down the west spur, and out north up the
+## spur straight on to the west stub. An east stand taxis in straight on from
+## the east stub down the east spur, and out north up it and along the lane.
 func routes(at: Dictionary, plane_class: String) -> Dictionary:
 	var suffix: String = Airside.CLASS_SUFFIX[plane_class]
 	var spot := StandPlacement.stand_point(at)
 	var back := StandPlacement.pushback_end(at)
 	var join := StandPlacement.lane_join(at)
 	var p := points
+	var taxi_in := PackedVector3Array([p[&"RunwayExit"], p[&"TaxiEast"], join, back, spot])
+	var taxi_out := PackedVector3Array([back, join, p[&"TaxiWest"], p[&"RunwayEntry"]])
+	match StandPlacement.side_of(at):
+		StandPlacement.WEST:
+			taxi_in = PackedVector3Array(
+				[p[&"RunwayExit"], p[&"TaxiEast"], p[&"TaxiWest"], join, back, spot]
+			)
+		StandPlacement.EAST:
+			taxi_out = PackedVector3Array(
+				[back, join, p[&"TaxiEast"], p[&"TaxiWest"], p[&"RunwayEntry"]]
+			)
 	return {
 		FlightSim.State.APPROACH:
 		PackedVector3Array([p[&"ApproachStart" + suffix], p[&"Touchdown" + suffix]]),
 		FlightSim.State.LANDING: PackedVector3Array([p[&"Touchdown" + suffix], p[&"RunwayExit"]]),
-		FlightSim.State.TAXI_IN:
-		PackedVector3Array([p[&"RunwayExit"], p[&"TaxiEast"], join, back, spot]),
+		FlightSim.State.TAXI_IN: taxi_in,
 		FlightSim.State.PUSHBACK: PackedVector3Array([spot, back]),
-		FlightSim.State.TAXI_OUT:
-		PackedVector3Array([back, join, p[&"TaxiWest"], p[&"RunwayEntry"]]),
+		FlightSim.State.TAXI_OUT: taxi_out,
 		FlightSim.State.TAKEOFF:
 		PackedVector3Array([p[&"RunwayEntry"], p[&"Liftoff" + suffix], p[&"ClimbEnd"]]),
 	}
 
 
-## FlightSim's starts for a flight departing `minute` on `day`.
-static func starts_at(day: int, minute: int) -> Array[int]:
+## FlightSim's starts for a flight departing `minute` on `day` with the taxi
+## pair `taxi`.
+static func starts_at(day: int, minute: int, taxi: Array = TaxiTimes.BASE) -> Array[int]:
 	var departure := GameCalendar.tick_at(day, minute)
-	return FlightSim.schedule_starts(departure - FlightTimetable.departure_offset())
+	return FlightSim.schedule_starts(departure - FlightTimetable.departure_offset(taxi), taxi)
 
 
+## A request at `at` on the base taxi pair, as the north stands' pinned tests
+## were written; a west or east stand's runs on its own pair (TaxiTimes.
+## for_stand()), as its contract would, since its spur route is too long for
+## the base pair's TAXI_IN under the speed cap.
 func request(
 	id: String,
 	plane_class: String,
@@ -81,16 +102,23 @@ func request(
 	day := DEPARTURE_DAY,
 	minute := DEPARTURE_MINUTE
 ) -> Dictionary:
+	var taxi: Array = TaxiTimes.BASE
+	if StandPlacement.side_of(at) != StandPlacement.NORTH:
+		taxi = TaxiTimes.for_stand(at)
 	return GroundPlanner.request(
-		id, plane_class, at, starts_at(day, minute), routes(at, plane_class)
+		id, plane_class, at, starts_at(day, minute, taxi), routes(at, plane_class)
 	)
 
 
 ## Whether a plane of `plane_class` may stand at `at` on the empty site: its
 ## envelope (StandEnvelope) clears the lane band and covers no site obstacle,
-## as StandEnvelope.blocked_part() finds on an empty grid.
+## as StandEnvelope.blocked_part() finds on an empty grid, and none of it
+## reaches over the road (StandPlacement.reaches_road(), which only a side
+## stand's envelope can).
 func is_legal(at: Dictionary, plane_class: String) -> bool:
 	if not StandEnvelope.clears_lane(at, plane_class):
+		return false
+	if StandPlacement.reaches_road(grid, StandEnvelope.rects(at, plane_class)):
 		return false
 	for rect in StandEnvelope.rects(at, plane_class):
 		var inner := rect.grow(-0.01)
@@ -102,13 +130,13 @@ func is_legal(at: Dictionary, plane_class: String) -> bool:
 	return true
 
 
-## Every grid cell whose stand is legal for `plane_class`.
-func legal_cells(plane_class: String) -> Array[Vector2i]:
+## Every grid cell whose stand facing out to `side` is legal for `plane_class`.
+func legal_cells(plane_class: String, side := StandPlacement.NORTH) -> Array[Vector2i]:
 	var out: Array[Vector2i] = []
 	for row in SITE.grid_size.y:
 		for column in SITE.grid_size.x:
 			var cell := Vector2i(column, row)
-			if is_legal(stand(cell), plane_class):
+			if is_legal(stand(cell, side), plane_class):
 				out.append(cell)
 	return out
 
@@ -157,6 +185,27 @@ static func longest_pauses(planner: GroundPlanner, req: Dictionary, gate: bool) 
 		for option in planner.phase_options(req, state):
 			if not option.is_empty() and option["hold"] == hold:
 				out[state] = option
+	return out
+
+
+## For each hold of each taxi phase in turn, the longest pause there: one
+## pauses dictionary per index into the longer of the two phases' hold lists
+## (a phase with fewer holds keeps its last), so every hold is sampled.
+static func every_hold_pauses(planner: GroundPlanner, req: Dictionary) -> Array[Dictionary]:
+	var lines := {}
+	var count := 0
+	for state in GroundPlanner.TAXI_STATES:
+		lines[state] = planner.holds(req, state)
+		count = maxi(count, lines[state].size())
+	var out: Array[Dictionary] = []
+	for i in count:
+		var pauses := {}
+		for state in GroundPlanner.TAXI_STATES:
+			var hold: String = lines[state][mini(i, lines[state].size() - 1)]["hold"]
+			for option in planner.phase_options(req, state):
+				if not option.is_empty() and option["hold"] == hold:
+					pauses[state] = option
+		out.append(pauses)
 	return out
 
 

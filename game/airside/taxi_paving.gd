@@ -28,6 +28,18 @@ extends MeshInstance3D
 ## drawn only up to it where both run (_drawn_rects()). The band is symmetric about its middle,
 ## so at every diagonal and midpoint both sides give the same shade.
 ##
+## West and east stands (board airside-all-around-s4) taxi on two spurs that
+## run the stubs on south of the lane at its ends. A spur is one north-south
+## strip from under the runway past its farthest stand connector by half a
+## strip, so the L corner there is paved ("through" in strips()); the lane then
+## stops at the spur's inner edge ("west_cut", "east_cut"), and each connector
+## is an east-west strip ("row") from the spur's inner edge to its stand, run on
+## over its pad to the wall line like a north link. The spur is mitred under the
+## lane and the connectors as the lane is under its links (anti_pattern
+## perpendicular-paving-strips-that-each-map-a-dark-edge-light), with x and z
+## swapped, so its outer edge stays the band's dark edge. Without a side stand
+## nothing of this is built and the paving is as it was.
+##
 ## A thin centre line runs along the lane and each link (user ruling taxiway-
 ## look-runway-asphalt-with-a-yellow-centreline), in the runway's own line
 ## marking colour and LINE_LIFT_M above the asphalt, as the runway's markings
@@ -130,7 +142,7 @@ func show_routes(
 	lines = centrelines(route_strips, lane_z)
 	pads = pad_list.duplicate()
 	shown = run_on_to_walls(route_strips, pads)
-	bars = hold_bars(holds, WIDTH_M, runway_south_z)
+	bars = hold_bars(holds, WIDTH_M, runway_south_z, route_strips)
 	var marks := lines.duplicate()
 	marks.append_array(bars)
 	mesh = TaxiPavingSite.on_site(mesh_of(shown, marks, pads))
@@ -160,8 +172,37 @@ static func run_on_to_walls(
 						rect.position, Vector2(rect.size.x, pad.end.y - rect.position.y)
 					)
 					break
+		elif strip.get("row", false):
+			carried = _row_on_to_wall(strip, pad_list)
 		out.append(carried)
 	return out
+
+
+## A side stand's connector strip `strip` (a row) carried on over its stand's
+## own pad in `pad_list` to the wall line: past its free end, the stand point,
+## by NOSE_GAP_M plus NOSE_M toward the wall, where that pad's edge lies (east
+## at a west stand, west at an east one). As it is when no pad matches.
+static func _row_on_to_wall(strip: Dictionary, pad_list: Array[Rect2]) -> Dictionary:
+	var rect: Rect2 = strip["rect"]
+	var reach := StandPlacement.NOSE_GAP_M + StandPlacement.NOSE_M
+	for pad in pad_list:
+		if not strip.get("east_cut", false):
+			var east := Vector2(rect.end.x, rect.get_center().y)
+			if pad.grow(SAME_M).has_point(east) and absf(pad.end.x - east.x - reach) < SAME_M:
+				var carried := strip.duplicate()
+				carried["rect"] = Rect2(
+					rect.position, Vector2(pad.end.x - rect.position.x, rect.size.y)
+				)
+				return carried
+		if not strip.get("west_cut", false):
+			var west := Vector2(rect.position.x, rect.get_center().y)
+			if pad.grow(SAME_M).has_point(west) and absf(west.x - pad.position.x - reach) < SAME_M:
+				var carried := strip.duplicate()
+				carried["rect"] = Rect2(
+					pad.position.x, rect.position.y, rect.end.x - pad.position.x, rect.size.y
+				)
+				return carried
+	return strip
 
 
 ## The pad under the stand whose plane point is `stand_point`, as a world xz
@@ -180,6 +221,16 @@ static func stand_pad(stand_point: Vector3, classes := PlaneClasses.ORDER) -> Re
 	return pad
 
 
+## The pad under StandPlacement stand `stand`: stand_pad() at a north stand, and
+## at a west or east one its north twin's pad turned onto it
+## (StandPlacement.rects_to_world()), carried to the wall line it faces.
+static func pad_for(stand: Dictionary, classes := PlaneClasses.ORDER) -> Rect2:
+	if StandPlacement.side_of(stand) == StandPlacement.NORTH:
+		return stand_pad(StandPlacement.stand_point(stand), classes)
+	var twin := stand_pad(StandPlacement.stand_point(StandPlacement.north_twin(stand)), classes)
+	return StandPlacement.rects_to_world(stand, [twin] as Array[Rect2])[0]
+
+
 ## The ground under `model` parked at the stand point `stand_point`, door-aligned
 ## (PlaneClasses.stand_offset) and nose to +z, as a world xz Rect2.
 static func parked_footprint(stand_point: Vector3, model: String) -> Rect2:
@@ -195,17 +246,45 @@ static func parked_footprint(stand_point: Vector3, model: String) -> Rect2:
 ## `width` wide in x, centred on the hold point along the leg. A bar that would
 ## reach north of `clear_of_z` (the runway asphalt's south edge, which lies over
 ## the paving and would hide it) is moved south until its north line starts
-## HOLD_GAP_M clear of it.
+## HOLD_GAP_M clear of it. A hold on the centre line of an east-west strip of
+## `strip_list` (the lane at a spur head, or a side stand's connector) and on
+## no north-south strip's gets its bar turned, running north-south across that
+## leg, `width` long in z.
 static func hold_bars(
-	holds: PackedVector3Array, width := WIDTH_M, clear_of_z := -INF
+	holds: PackedVector3Array,
+	width := WIDTH_M,
+	clear_of_z := -INF,
+	strip_list: Array[Dictionary] = []
 ) -> Array[Rect2]:
 	var out: Array[Rect2] = []
 	var reach := HOLD_GAP_M / 2.0 + HOLD_LINE_M
 	for at in holds:
+		if _on_east_west_leg(strip_list, at):
+			out.append(Rect2(at.x - reach, at.z - width / 2.0, HOLD_LINE_M, width))
+			out.append(Rect2(at.x + HOLD_GAP_M / 2.0, at.z - width / 2.0, HOLD_LINE_M, width))
+			continue
 		var z := maxf(at.z, clear_of_z + HOLD_GAP_M + reach)
 		out.append(Rect2(at.x - width / 2.0, z - reach, width, HOLD_LINE_M))
 		out.append(Rect2(at.x - width / 2.0, z + HOLD_GAP_M / 2.0, width, HOLD_LINE_M))
 	return out
+
+
+## Whether `at` lies on the centre line of an east-west strip of `strip_list`
+## and on that of no north-south one.
+static func _on_east_west_leg(strip_list: Array[Dictionary], at: Vector3) -> bool:
+	var east_west := false
+	for strip in strip_list:
+		if strip.has("quad"):
+			continue
+		var rect: Rect2 = strip["rect"]
+		var centre := rect.get_center()
+		if strip["across_x"]:
+			var on_column := at.z >= rect.position.y - SAME_M and at.z <= rect.end.y + SAME_M
+			if absf(at.x - centre.x) < SAME_M and on_column:
+				return false
+		elif absf(at.z - centre.y) < SAME_M:
+			east_west = east_west or (at.x >= rect.position.x and at.x <= rect.end.x)
+	return east_west
 
 
 ## Whether (x, z) of `point` lies on one of `strip_list`'s strips or one of
@@ -230,6 +309,8 @@ static func strips(
 	var lane_x := Vector2(INF, -INF)
 	# x in SAME_M steps -> {"x": the legs' x, "spans": merged z ranges (from, to)}.
 	var columns: Dictionary = {}
+	# z in SAME_M steps -> {"z": the legs' z, "spans": merged x ranges (from, to)}.
+	var rows: Dictionary = {}
 	var oriented: Array[Dictionary] = []
 	for route in routes:
 		for i in range(1, route.size()):
@@ -239,35 +320,115 @@ static func strips(
 				lane_x = Vector2(minf(lane_x.x, minf(a.x, b.x)), maxf(lane_x.y, maxf(a.x, b.x)))
 			elif absf(a.x - b.x) < SAME_M:
 				_add_leg(columns, a.x, a.z, b.z, lane_z, half)
+			elif absf(a.z - b.z) < SAME_M:
+				_add_span(rows, a.z, a.x, b.x)
 			elif not a.is_equal_approx(b):
 				oriented.append(_oriented(Vector2(a.x, a.z), Vector2(b.x, b.z), half))
+	var spurs := _spur_columns(columns, rows, lane_x, lane_z, half)
 	var out: Array[Dictionary] = []
 	if lane_x.x <= lane_x.y:
-		(
-			out
-			. append(
-				{
-					"rect":
-					Rect2(lane_x.x - half, lane_z - half, lane_x.y - lane_x.x + width, width),
-					"across_x": false,
-				}
-			)
-		)
+		var lane := Rect2(lane_x.x - half, lane_z - half, lane_x.y - lane_x.x + width, width)
+		# A lane end with a spur stops at the spur's inner edge; the keys are
+		# only there when true, so a lane with no spur is as it was.
+		var strip := {"rect": lane, "across_x": false}
+		if spurs.has(roundi(lane_x.x / SAME_M)):
+			lane = Rect2(lane.position.x + width, lane.position.y, lane.size.x - width, width)
+			strip["west_cut"] = true
+		if spurs.has(roundi(lane_x.y / SAME_M)):
+			lane.size.x -= width
+			strip["east_cut"] = true
+		strip["rect"] = lane
+		out.append(strip)
 	var xs := columns.keys()
 	xs.sort()
 	for key: int in xs:
 		var x: float = columns[key]["x"]
 		for span: Vector2 in columns[key]["spans"]:
+			var strip := {"rect": Rect2(x - half, span.x, width, span.y - span.x), "across_x": true}
+			if spurs.has(key) and span.y > lane_z:
+				strip["through"] = true
+			out.append(strip)
+	out.append_array(_row_strips(rows, spurs, half))
+	out.append_array(oriented)
+	return out
+
+
+## Turns each column of `columns` that runs south from a lane end (at x
+## `lane_x`.x or .y) into a spur: its legs north and south of the lane at
+## `lane_z` become one span through the lane's square, carried south past the
+## farthest row of `rows` that ends on it by `half`, so the corner there is
+## paved. Returns the spurs' column keys -> their x.
+static func _spur_columns(
+	columns: Dictionary, rows: Dictionary, lane_x: Vector2, lane_z: float, half: float
+) -> Dictionary:
+	var out := {}
+	if lane_x.x > lane_x.y:
+		return out
+	for end_x in [lane_x.x, lane_x.y]:
+		var key := roundi(end_x / SAME_M)
+		if not columns.has(key):
+			continue
+		var spans: Array = columns[key]["spans"]
+		var south := -INF
+		for span: Vector2 in spans:
+			if absf(span.x - (lane_z + half)) < SAME_M:
+				south = span.y
+		if south == -INF:
+			continue
+		for row: Dictionary in rows.values():
+			for span: Vector2 in row["spans"]:
+				if absf(span.x - end_x) < SAME_M or absf(span.y - end_x) < SAME_M:
+					south = maxf(south, float(row["z"]) + half)
+		# The stub's leg ends on the lane's north edge and the spur's starts on
+		# its south edge: one span from the stub's north end to `south`.
+		var north := lane_z - half
+		var kept: Array = []
+		for span: Vector2 in spans:
+			if absf(span.y - (lane_z - half)) < SAME_M:
+				north = span.x
+			elif absf(span.x - (lane_z + half)) >= SAME_M:
+				kept.append(span)
+		kept.append(Vector2(north, south))
+		kept.sort_custom(func(p: Vector2, q: Vector2) -> bool: return p.x < q.x)
+		columns[key]["spans"] = kept
+		out[key] = end_x
+	return out
+
+
+## The east-west strips of `rows` (the stand connectors and pushbacks of side
+## stands), each cut back to the inner edge of a spur in `spurs` it ends on:
+## {"rect", "across_x": false, "row": true, "west_cut", "east_cut": whether that
+## end meets a spur}.
+static func _row_strips(rows: Dictionary, spurs: Dictionary, half: float) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	var zs := rows.keys()
+	zs.sort()
+	for key: int in zs:
+		var z: float = rows[key]["z"]
+		for span: Vector2 in rows[key]["spans"]:
+			var west_cut := false
+			var east_cut := false
+			for spur_x: float in spurs.values():
+				if absf(span.x - spur_x) < SAME_M:
+					span.x = spur_x + half
+					west_cut = true
+				if absf(span.y - spur_x) < SAME_M:
+					span.y = spur_x - half
+					east_cut = true
+			if span.y - span.x < SAME_M:
+				continue
 			(
 				out
 				. append(
 					{
-						"rect": Rect2(x - half, span.x, width, span.y - span.x),
-						"across_x": true,
+						"rect": Rect2(span.x, z - half, span.y - span.x, 2.0 * half),
+						"across_x": false,
+						"row": true,
+						"west_cut": west_cut,
+						"east_cut": east_cut,
 					}
 				)
 			)
-	out.append_array(oriented)
 	return out
 
 
@@ -333,6 +494,24 @@ static func _add_leg(
 	columns[key] = column
 
 
+## Adds the east-west leg at `z` from `x0` to `x1` to `rows`, merged with the
+## legs it meets.
+static func _add_span(rows: Dictionary, z: float, x0: float, x1: float) -> void:
+	var key := roundi(z / SAME_M)
+	var row: Dictionary = rows.get(key, {"z": z, "spans": []})
+	var merged := Vector2(minf(x0, x1), maxf(x0, x1))
+	var kept: Array = []
+	for span: Vector2 in row["spans"]:
+		if span.x <= merged.y + SAME_M and merged.x <= span.y + SAME_M:
+			merged = Vector2(minf(span.x, merged.x), maxf(span.y, merged.y))
+		else:
+			kept.append(span)
+	kept.append(merged)
+	kept.sort_custom(func(p: Vector2, q: Vector2) -> bool: return p.x < q.x)
+	row["spans"] = kept
+	rows[key] = row
+
+
 ## The centre line of each strip in `strip_list` (as strips() returns them,
 ## around the lane at `lane_z`), `line` wide. The lane's line runs from its
 ## end links' centres plus half a line; a link's end at the lane's edge is
@@ -349,8 +528,15 @@ static func centrelines(
 			continue
 		var rect: Rect2 = strip["rect"]
 		if not strip["across_x"]:
-			var from_x := rect.position.x + half - half_line
-			var to_x := rect.end.x - half + half_line
+			# A row ends at its stand point; the lane half a line past its end
+			# links. An end cut at a spur's edge runs on to the spur line's edge.
+			var row: bool = strip.get("row", false)
+			var from_x := rect.position.x if row else rect.position.x + half - half_line
+			var to_x := rect.end.x if row else rect.end.x - half + half_line
+			if strip.get("west_cut", false):
+				from_x = rect.position.x - half + half_line
+			if strip.get("east_cut", false):
+				to_x = rect.end.x + half - half_line
 			out.append(Rect2(from_x, rect.get_center().y - half_line, to_x - from_x, line))
 			continue
 		var north := rect.position.y
@@ -359,6 +545,9 @@ static func centrelines(
 			south = lane_z - half_line
 		if absf(north - (lane_z + half)) < SAME_M:
 			north = lane_z + half_line
+		if strip.get("through", false):
+			# A spur's line runs half a line past its farthest connector's.
+			south = rect.end.y - half + half_line
 		out.append(Rect2(rect.get_center().x - half_line, north, line, south - north))
 	return out
 
@@ -404,10 +593,19 @@ static func mesh_of(
 			continue
 		var rect: Rect2 = strip["rect"]
 		var across_x: bool = strip["across_x"]
-		if not across_x:
+		if not across_x and not strip.get("row", false):
 			var cuts := junctions(rect, strip_list)
 			if not cuts.is_empty():
 				_add_mitred_lane(rect, cuts, verts, normals, uvs, index)
+				continue
+		if strip.get("through", false):
+			# A spur is mitred under the lane and the connectors meeting its
+			# edges as the lane is under its links, worked out with x and z
+			# swapped.
+			var flipped := _flipped(strip_list)
+			var spur_cuts := junctions(_flip(rect), flipped)
+			if not spur_cuts.is_empty():
+				_add_mitred_lane(_flip(rect), spur_cuts, verts, normals, uvs, index, true)
 				continue
 		var parts: Array[Rect2] = [rect]
 		if across_x:
@@ -479,19 +677,38 @@ static func junctions(lane: Rect2, strip_list: Array[Dictionary]) -> Array[Dicti
 	return out
 
 
+## `rect` with x and z swapped.
+static func _flip(rect: Rect2) -> Rect2:
+	return Rect2(rect.position.y, rect.position.x, rect.size.y, rect.size.x)
+
+
+## Each of `strip_list`'s axis strips with x and z swapped, so an east-west
+## strip reads as north-south: what junctions() takes for a spur.
+static func _flipped(strip_list: Array[Dictionary]) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for strip in strip_list:
+		if strip.has("quad"):
+			continue
+		out.append({"rect": _flip(strip["rect"]), "across_x": not strip["across_x"]})
+	return out
+
+
 ## Adds the lane strip `lane` to the arrays, mitred under the links at `cuts`
 ## (junctions()). In each half of the lane the band follows the nearest centre
 ## line: the lane's, or that of a link meeting that half's edge. So a link's
 ## band reaches into the lane as far as the diagonals from its centre, and two
 ## links on one edge share the lane at their midpoint. The half is cut into x
 ## slabs at every link's centre, edges and midpoints, where each part is linear.
+## With `flip`, `lane` and `cuts` are a spur's with x and z swapped (_flip()),
+## and each corner is swapped back as it is added.
 static func _add_mitred_lane(
 	lane: Rect2,
 	cuts: Array[Dictionary],
 	verts: PackedVector3Array,
 	normals: PackedVector3Array,
 	uvs: PackedVector2Array,
-	index: PackedInt32Array
+	index: PackedInt32Array,
+	flip := false
 ) -> void:
 	var half := lane.size.y / 2.0
 	var mid_z := lane.get_center().y
@@ -533,7 +750,8 @@ static func _add_mitred_lane(
 				verts,
 				normals,
 				uvs,
-				index
+				index,
+				flip
 			)
 			# The link's part, from the diagonal out to the lane's edge.
 			var link_t := func(p: Vector2) -> float: return (p.x - link_x + half) / (2.0 * half)
@@ -548,33 +766,42 @@ static func _add_mitred_lane(
 				verts,
 				normals,
 				uvs,
-				index
+				index,
+				flip
 			)
 
 
 ## Adds the flat quad `corners` (world x and z, in order around it) as two
 ## triangles, each turned to face up and left out when it has no area, with
-## each corner's band position given by `t_of`.
+## each corner's band position given by `t_of`. With `flip` the corners are
+## given with x and z swapped: `t_of` reads them so, and they are swapped back.
 static func _add_part(
 	corners: Array[Vector2],
 	t_of: Callable,
 	verts: PackedVector3Array,
 	normals: PackedVector3Array,
 	uvs: PackedVector2Array,
-	index: PackedInt32Array
+	index: PackedInt32Array,
+	flip := false
 ) -> void:
 	for tri: Array[Vector2] in [
 		[corners[0], corners[1], corners[2]] as Array[Vector2],
 		[corners[0], corners[2], corners[3]] as Array[Vector2]
 	]:
-		var area := _signed_area(tri)
+		var world: Array[Vector2] = []
+		var ts: Array[float] = []
+		for p in tri:
+			world.append(Vector2(p.y, p.x) if flip else p)
+			ts.append(t_of.call(p))
+		var area := _signed_area(world)
 		if absf(area) < SAME_M * SAME_M:
 			continue
 		if area < 0.0:
-			tri.reverse()
+			world.reverse()
+			ts.reverse()
 		var base := verts.size()
-		for p in tri:
-			_add_asphalt(p, t_of.call(p), verts, normals, uvs)
+		for i in 3:
+			_add_asphalt(world[i], ts[i], verts, normals, uvs)
 		index.append_array(PackedInt32Array([base, base + 1, base + 2]))
 
 

@@ -11,13 +11,15 @@ extends Node3D
 ## design-gate-desks-link-to-north-exits-one-st, point 3) set_gate_stands()
 ## gives each gate its own Stand_<gate>, PushbackEnd_<gate> and
 ## StandLane_<gate>. Every StandLane waypoint sits on the one taxi lane
-## between TaxiWest and TaxiEast. Planes land and take off eastbound, leave the
-## runway at its east end and join it again at its west end, so every taxi
-## route runs strictly west along the lane (decision runway-and-taxi-technical-
-## design-movement-plan-analytic-bookings-planned-pauses, point 1). A join east
-## of TaxiEast or west of TaxiWest would break that, and rebuild() refuses it
-## (TaxiRoutes.joins_lane()). While gates have stands the one stand's own
-## StandLane is not checked.
+## between TaxiWest and TaxiEast, or, for a west or east stand, on the spur
+## that runs south from TaxiWest or TaxiEast (board airside-all-around-s4).
+## Planes land and take off eastbound, leave the runway at its east end and
+## join it again at its west end, so every taxi route runs strictly west along
+## the lane (decision runway-and-taxi-technical-design-movement-plan-analytic-
+## bookings-planned-pauses, point 1). A join east of TaxiEast or west of
+## TaxiWest would break that, and rebuild() refuses it, as it refuses a join on
+## neither the lane nor a spur (TaxiRoutes.joins_lane()). While gates have
+## stands the one stand's own StandLane is not checked.
 ##
 ## Touchdown, Liftoff and ApproachStart are per plane class, never per runway
 ## size (same decision, point 1): the medium class (the reference model 05)
@@ -178,6 +180,7 @@ func _show_paving() -> void:
 ## The pad under every stand in use (TaxiPaving.stand_pad()): a gate's for the
 ## classes up to its gate_classes entry, none for a gate with no class; every
 ## class's for a gate with no entry and for the one stand, which no gate sizes.
+## A west or east gate's is its north twin's turned (TaxiPaving.pad_for()).
 func stand_pads() -> Array[Rect2]:
 	var out: Array[Rect2] = []
 	var points := stand_points()
@@ -186,7 +189,14 @@ func stand_pads() -> Array[Rect2]:
 		var classes := PlaneClasses.ORDER
 		if i < gates.size() and gate_classes.has(gates[i]):
 			classes = classes_up_to(gate_classes[gates[i]])
-		if not classes.is_empty():
+		if classes.is_empty():
+			continue
+		var side := StandPlacement.NORTH
+		if i < gates.size():
+			side = StandPlacement.side_of(gate_stands[gates[i]])
+		if side != StandPlacement.NORTH:
+			out.append(TaxiPaving.pad_for(gate_stands[gates[i]], classes))
+		else:
 			out.append(TaxiPaving.stand_pad(points[i], classes))
 	return out
 
@@ -223,21 +233,52 @@ func stand_points() -> PackedVector3Array:
 ## The hold lines a plane may stop on (decision runway-and-taxi-technical-design-
 ## movement-plan-analytic-bookings-planned-pauses, point 4): HoldIn and
 ## HoldRunway on the stubs, then the lead-in hold of each stand in use whose
-## pushback ends far enough south to have one (lead_in_hold()).
+## pushback ends far enough from its lane or spur to have one (stand_hold();
+## the one stand is a north stand, lead_in_hold()), then the west spur head
+## (spur_head_hold()) while a west gate stand is in use. No route runs on the
+## lane past the east spur's head, so it has no hold line.
 func hold_points() -> PackedVector3Array:
 	var out := PackedVector3Array()
 	for waypoint in [&"HoldIn", &"HoldRunway"]:
 		if graph.has_waypoint(waypoint):
 			out.append(graph.position_of(waypoint))
-	var ends: Array[StringName] = [&"PushbackEnd"]
-	if not gate_stands.is_empty():
-		ends.clear()
-		for gate: String in gate_stands:
-			ends.append(_gate_point(&"PushbackEnd", gate))
-	for waypoint in ends:
-		if graph.has_waypoint(waypoint):
-			out.append_array(lead_in_hold(graph.position_of(waypoint)))
+	if gate_stands.is_empty():
+		if graph.has_waypoint(&"PushbackEnd"):
+			out.append_array(lead_in_hold(graph.position_of(&"PushbackEnd")))
+		return out
+	var head := PackedVector3Array()
+	for gate: String in gate_stands:
+		var stand: Dictionary = gate_stands[gate]
+		out.append_array(stand_hold(stand))
+		if StandPlacement.side_of(stand) == StandPlacement.WEST and head.is_empty():
+			head.append(spur_head_hold(StandPlacement.lane_join(stand)))
+	out.append_array(head)
 	return out
+
+
+## The lead-in hold line H_g of `stand` as [point] or []: lead_in_hold() at a
+## north stand; at a west or east stand its north twin's turned onto it
+## (StandPlacement.to_world()), on the connector from the pushback's end to the
+## spur, as far from the spur as the north one is from the lane.
+static func stand_hold(stand: Dictionary) -> PackedVector3Array:
+	if StandPlacement.side_of(stand) == StandPlacement.NORTH:
+		return lead_in_hold(StandPlacement.pushback_end(stand))
+	var twin := lead_in_hold(StandPlacement.pushback_end(StandPlacement.north_twin(stand)))
+	if twin.is_empty():
+		return twin
+	return PackedVector3Array([StandPlacement.to_world(stand, twin[0])])
+
+
+## The hold line on the lane at the head of the spur whose stand join is
+## `join`: a plane taxiing toward the spur stops there with every class's door-
+## aligned nose clear of the spur band, the same distance (lead_in_hold_z()
+## from the lane) that a lead-in hold keeps from the lane. An inbound plane to a
+## west stand waits on it for the spur; at the east spur it would lie on no
+## route.
+static func spur_head_hold(join: Vector3) -> Vector3:
+	var clear := lead_in_hold_z() - StandPlacement.TAXI_LANE_Z
+	var inward := 1.0 if join.x < 0.0 else -1.0
+	return Vector3(join.x + inward * clear, join.y, StandPlacement.TAXI_LANE_Z)
 
 
 ## The hold line H_g on the lead-in from the pushback's end at `pushback_end`
@@ -264,8 +305,9 @@ static func lead_in_hold_z() -> float:
 	return StandEnvelope.lane_band_south() + reach
 
 
-## Whether every join lies strictly between the lane's ends (TaxiRoutes.
-## joins_lane(), with an error naming the first that does not). With gate
+## Whether every join lies strictly between the lane's ends or on a spur
+## (TaxiRoutes.joins_lane(), with an error naming the first that does not;
+## the message names the lane's ends, where the spurs run south). With gate
 ## stands the one stand's StandLane is not checked: it sits on a gate's join
 ## (the starter exit's).
 func _joins_on_lane() -> bool:
@@ -287,8 +329,8 @@ func _joins_on_lane() -> bool:
 	return true
 
 
-## The lane layout the routes are built on (TaxiRoutes): the north lane alone,
-## between TaxiWest and TaxiEast.
+## The lane layout the routes are built on (TaxiRoutes): the north lane between
+## TaxiWest and TaxiEast, with a spur south from each.
 func lane_layout() -> Dictionary:
 	return TaxiRoutes.north_only(graph.points())
 
