@@ -13,7 +13,8 @@ extends RefCounted
 ## live rect (live_rects(): each taxi strip and stand pad drawn now, and the
 ## runway's asphalt), each grown by CLEAR_M, so the works never touch the
 ## taxiway in use (pieces()). Each remaining piece at least MIN_PIECE_M across
-## shows as unfinished ground, with a row of concrete barriers along each long
+## and MIN_LONG_M long (room for one barrier between its cone rows) shows as
+## unfinished ground, with a row of concrete barriers along each long
 ## edge at even spacing and a row of cones across each end (edge_props()), all
 ## inside the piece.
 ##
@@ -24,6 +25,9 @@ extends RefCounted
 ## piece, then south of the east piece) that is clear of every grown live rect.
 ## Its open side faces the works, with the brick pile just inside it, so the
 ## 2.45 m hoarding never stands between the works and the 1.5 m pile.
+## A side spur that moves less than about 7.5 m leaves no piece once the spur in
+## use is cut out; its yard is then placed from the whole wanted strip, so the
+## works still show (and their hover sign with the forecast) by the yard alone.
 ##
 ## Not guaranteed: the layout knows the taxiway, the pads and the runway, not
 ## the build. The yard spot outward of a side strip is beyond the outermost
@@ -46,14 +50,21 @@ const KINDS := {
 const CLEAR_M := 1.5
 ## A piece narrower than this either way is left out.
 const MIN_PIECE_M := 6.0
+## A piece shorter than this along its long side is left out: two END_GAP_M and
+## one 3.9 m barrier, so every piece shown has barriers as well as cones.
+const MIN_LONG_M := 8.9
 ## The barriers' centre spacing along an edge, at most.
 const BARRIER_STEP_M := 8.0
+## Barrier centres are at least this far apart: a barrier's length and a gap.
+const BARRIER_LEAST_M := 4.4
 ## A barrier's or cone's centre from the piece's edge it stands along.
 const EDGE_INSET_M := 0.75
 ## A barrier row stops this far from each end of its piece, clear of the cones.
 const END_GAP_M := 2.5
 ## The cones' centre spacing across an end, at most.
 const CONE_STEP_M := 3.0
+## Cone centres are at least this far apart.
+const CONE_LEAST_M := 1.2
 ## The yard: YARD_OPEN_M along its open side, YARD_DEEP_M back from it, and
 ## YARD_GAP_M off the works piece it stands beside.
 const YARD_OPEN_M := 16.0
@@ -124,9 +135,8 @@ static func side_layout(
 	var strip := Rect2(wanted_x - half, span.x, TaxiPaving.WIDTH_M, span.y - span.x)
 	var ground := pieces(strip, live)
 	var out := _with_edges(ground)
-	if ground.is_empty():
-		return out
-	var far := ground[0]
+	# The piece with the farthest south end, or the whole strip when none is left.
+	var far := strip if ground.is_empty() else ground[0]
 	for piece in ground:
 		if piece.end.y > far.end.y:
 			far = piece
@@ -175,7 +185,7 @@ static func runway_layout(size_now: String, size_next: String, live: Array[Rect2
 
 
 ## `area` less every rect of `blocked` grown by CLEAR_M, as rects at least
-## MIN_PIECE_M across. Each cut keeps the full-width parts north and south of
+## MIN_PIECE_M across and MIN_LONG_M long. Each cut keeps the full-width parts north and south of
 ## the cut and the parts west and east of it beside it, in that order.
 static func pieces(area: Rect2, blocked: Array[Rect2]) -> Array[Rect2]:
 	var out: Array[Rect2] = [area]
@@ -187,7 +197,8 @@ static func pieces(area: Rect2, blocked: Array[Rect2]) -> Array[Rect2]:
 		out = kept
 	var big: Array[Rect2] = []
 	for piece in out:
-		if piece.size.x >= MIN_PIECE_M and piece.size.y >= MIN_PIECE_M:
+		var short_side := minf(piece.size.x, piece.size.y)
+		if short_side >= MIN_PIECE_M and maxf(piece.size.x, piece.size.y) >= MIN_LONG_M:
 			big.append(piece)
 	return big
 
@@ -228,23 +239,26 @@ static func edge_props(piece: Rect2) -> Array[Dictionary]:
 	for edge: float in [lo[cross] + EDGE_INSET_M, hi[cross] - EDGE_INSET_M]:
 		var from := lo[axis] + END_GAP_M + length / 2.0
 		var to := hi[axis] - END_GAP_M - length / 2.0
-		for at in _even(from, to, BARRIER_STEP_M):
+		for at in _even(from, to, BARRIER_STEP_M, BARRIER_LEAST_M):
 			out.append(prop("barrier", _point(axis, at, edge), along_x))
 	for end: float in [lo[axis] + EDGE_INSET_M, hi[axis] - EDGE_INSET_M]:
 		var from := lo[cross] + EDGE_INSET_M
 		var to := hi[cross] - EDGE_INSET_M
-		for at in _even(from, to, CONE_STEP_M):
+		for at in _even(from, to, CONE_STEP_M, CONE_LEAST_M):
 			out.append(prop("cone", _point(cross, at, end), false))
 	return out
 
 
 ## Points from `from` to `to`, both included, evenly spaced at most `step`
-## apart; the one point when they are equal, none when `to` is before `from`.
-static func _even(from: float, to: float, step: float) -> Array[float]:
+## apart, or fewer when that would put them closer than `least`; the middle
+## alone when they are closer than `least`, none when `to` is before `from`.
+static func _even(from: float, to: float, step: float, least: float) -> Array[float]:
 	var out: Array[float] = []
 	if to < from:
 		return out
 	var count := ceili((to - from) / step) + 1
+	if count > 1 and (to - from) / (count - 1) < least:
+		count = floori((to - from) / least) + 1
 	if count < 2:
 		out.append((from + to) / 2.0)
 		return out

@@ -91,6 +91,8 @@ func _check(label: String, layout: Dictionary, live: Array[Rect2]) -> void:
 	assert_int(counts.get("trailer", 0)).is_equal(1)
 	assert_int(counts.get("fence", 0)).is_equal(10)
 	assert_bool((layout["yard"] as Rect2).has_area()).is_true()
+	# Every prop keeps the full clearance from the taxiway in use.
+	assert_float(nearest).is_greater_equal(TaxiwayWorks.CLEAR_M - 0.001)
 
 
 ## Both ends of `piece` (across its long side) have a row of cones in it.
@@ -224,3 +226,47 @@ static func _bounds(root: Node) -> AABB:
 		box = b if first else box.merge(b)
 		first = false
 	return box
+
+
+## A piece too short for a barrier between its cone rows is left out; one just
+## long enough keeps barriers as well as cones, spaced no closer than a barrier.
+func test_a_tiny_piece_is_left_out_and_a_short_one_has_barriers() -> void:
+	var none: Array[Rect2] = []
+	assert_array(TaxiwayWorks.pieces(Rect2(0.0, 0.0, 6.0, 8.8), none)).is_empty()
+	assert_array(TaxiwayWorks.pieces(Rect2(0.0, 0.0, 8.8, 7.0), none)).is_empty()
+	for area in [Rect2(0.0, 0.0, 6.0, 9.0), Rect2(0.0, 0.0, 9.5, 6.0), Rect2(0.0, 0.0, 30.0, 12.0)]:
+		var kept := TaxiwayWorks.pieces(area, none)
+		assert_array(kept).has_size(1)
+		var counts := {}
+		var barriers: Array[Vector2] = []
+		for item in TaxiwayWorks.edge_props(kept[0]):
+			counts[item["kind"]] = counts.get(item["kind"], 0) + 1
+			if item["kind"] == "barrier":
+				barriers.append(item["centre"])
+		print("piece %s: %s" % [area, counts])
+		assert_int(counts.get("barrier", 0)).is_greater(0)
+		assert_int(counts.get("cone", 0)).is_greater(3)
+		for i in barriers.size():
+			for j in range(i + 1, barriers.size()):
+				if (
+					is_equal_approx(barriers[i].x, barriers[j].x)
+					or is_equal_approx(barriers[i].y, barriers[j].y)
+				):
+					assert_float(barriers[i].distance_to(barriers[j])).is_greater_equal(
+						TaxiwayWorks.BARRIER_LEAST_M - 0.001
+					)
+
+
+## The yard takes the first clear spot: outward of an east strip, or past its
+## end when a live rect blocks the outward spot.
+func test_the_yard_falls_back_to_the_next_spot_when_the_first_is_blocked() -> void:
+	var span := Vector2(-300.0, -100.0)
+	var clear: Array[Rect2] = []
+	var first := TaxiwayWorks.side_layout(StandPlacement.EAST, 200.0, span, clear)
+	print("yard with nothing in the way %s" % first["yard"])
+	assert_that(first["yard"]).is_equal(Rect2(218.0, -116.0, 12.0, 16.0))
+	var blocked: Array[Rect2] = [Rect2(222.0, -112.0, 4.0, 4.0)]
+	var second := TaxiwayWorks.side_layout(StandPlacement.EAST, 200.0, span, blocked)
+	print("yard with the outward spot blocked %s" % second["yard"])
+	assert_that(second["yard"]).is_equal(Rect2(192.0, -97.0, 16.0, 12.0))
+	_check("east fallback", second, blocked)

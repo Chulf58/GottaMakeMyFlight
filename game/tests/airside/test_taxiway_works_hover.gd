@@ -111,3 +111,71 @@ func test_the_works_text_without_a_forecast_has_no_time() -> void:
 	assert_str(SideSpurs.works_text(StandPlacement.EAST, tomorrow, 0)).is_equal(
 		"Taxiway works: the taxiway moves when the east side is quiet, forecast tomorrow at 00:05"
 	)
+
+
+## Gate A on `side` with its spur held pending `move_m` out from where it is (a
+## FlightSim.spur_source stub over GateDesks' spurs), the airside paved for it,
+## the view refreshed and a camera looking down on the yard. Returns the yard.
+func _short_move(side: String, move_m: float) -> Rect2:
+	var spurs := _gates.spurs()
+	var now := float(spurs[side]["x"])
+	spurs[side] = {"x": now, "wanted": now + float(SideSpurs.OUT[side]) * move_m}
+	_flights.spur_source = func() -> Dictionary: return spurs
+	_airside.set_gate_classes({"A": PlaneClasses.LARGE})
+	assert_bool(_airside.set_gate_stands(_gates.stands)).is_true()
+	_view.bind(_flights, _airside)
+	_view.refresh()
+	var layout: Dictionary = _view.layouts.get(side, {})
+	assert_bool(layout.is_empty()).is_false()
+	var yard: Rect2 = layout.get("yard", Rect2())
+	var kinds := {}
+	for item: Dictionary in layout.get("props", []):
+		kinds[item["kind"]] = kinds.get(item["kind"], 0) + 1
+		if item["kind"] in ["fence", "loader", "trailer", "bricks"]:
+			assert_bool(yard.encloses((item["rect"] as Rect2).grow(-0.01))).is_true()
+	var live := TaxiwayWorks.live_rects(_airside.paving.shown, _airside.paving.pads, Runway.SMALL)
+	for live_rect in live:
+		assert_bool(yard.intersects(live_rect.grow(TaxiwayWorks.CLEAR_M))).is_false()
+	print(
+		(
+			"%s moves %.0f m: pieces %d, props %s, yard %s"
+			% [side, move_m, layout.get("ground", []).size(), kinds, yard]
+		)
+	)
+	assert_bool(yard.has_area()).is_true()
+	assert_int(kinds.get("bricks", 0)).is_equal(1)
+	assert_int(kinds.get("loader", 0)).is_equal(1)
+	assert_int(kinds.get("trailer", 0)).is_equal(1)
+	assert_int(kinds.get("fence", 0)).is_equal(10)
+	return yard
+
+
+## The view's hover provider gives a sign for `side`'s yard, with the forecast.
+func _check_sign(side: String, yard: Rect2) -> void:
+	var camera := Camera3D.new()
+	add_child(camera)
+	var middle := Vector3(yard.get_center().x, 0.0, yard.get_center().y)
+	camera.look_at_from_position(middle + Vector3(0.0, 80.0, 40.0), middle)
+	camera.make_current()
+	var signs := _view.hover_signs()
+	camera.free()
+	var found: Array[Dictionary] = []
+	for entry in signs:
+		if entry["key"] == side:
+			found.append(entry)
+	print("%s signs %s" % [side, found])
+	assert_array(found).has_size(1)
+	assert_bool((found[0]["rect"] as Rect2).has_area()).is_true()
+	assert_str(found[0]["text"]).contains("forecast at")
+
+
+func test_a_short_west_move_still_shows_a_yard_and_its_hover_sign() -> void:
+	assert_int(SpurMoveKit.west_gate(_grid, _flights, _gates)).is_not_zero()
+	for move_m in [1.0, 2.0, 7.0]:
+		_check_sign(StandPlacement.WEST, _short_move(StandPlacement.WEST, move_m))
+
+
+func test_a_short_east_move_still_shows_a_yard_and_its_hover_sign() -> void:
+	assert_int(SpurMoveKit.east_gate(_grid, _flights, _gates)).is_not_zero()
+	for move_m in [1.0, 2.0, 7.0]:
+		_check_sign(StandPlacement.EAST, _short_move(StandPlacement.EAST, move_m))
