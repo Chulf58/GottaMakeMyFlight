@@ -299,10 +299,11 @@ static func same_stand(a: Dictionary, b: Dictionary) -> bool:
 
 
 ## The ground the flight at the stand still needs, as world xz rectangles:
-## everything StandPlacement.swept_rects() covers until it pushes back, then
-## only what lies north of its tail on the way to the taxi lane. With no taxi
-## route to follow (Airside.routes_gate() false) it keeps everything. Empty
-## while no flight is at the stand.
+## everything its class needs (class_rects()) until it pushes back, then only
+## what lies ahead of its rearmost point on the way to the taxi lane, and the
+## box it covers (route_rects()). With no taxi route to follow
+## (Airside.routes_gate() false) it keeps everything. Empty while no flight is
+## at the stand.
 func guard_rects() -> Array[Rect2]:
 	if gates == null:
 		return _rects_of(busy_flight(), live, "")
@@ -326,10 +327,12 @@ static func clip_rects(rects: Array[Rect2], frame: Rect2) -> Array[Rect2]:
 func _rects_of(id: String, stand: Dictionary, gate: String) -> Array[Rect2]:
 	if id == "":
 		return [] as Array[Rect2]
+	var contract := flights.contract_of(flights.flight_contract_id(id))
+	var plane_class: String = contract.get("plane_size", FlightSim.STARTER_TERMS["plane_size"])
 	if flights.state_of(id) < FlightSim.State.TAXI_OUT:
-		return StandPlacement.swept_rects(stand)
+		return class_rects(stand, plane_class)
 	if airside != null and not airside.routes_gate(gate):
-		return StandPlacement.swept_rects(stand)
+		return class_rects(stand, plane_class)
 	var path := (
 		airside.phase_path(FlightSim.State.TAXI_OUT, gate)
 		if airside != null
@@ -338,19 +341,74 @@ func _rects_of(id: String, stand: Dictionary, gate: String) -> Array[Rect2]:
 		)
 	)
 	if path.is_empty():
-		return StandPlacement.swept_rects(stand)
-	return route_rects(stand, path, smoothstep(0.0, 1.0, flights.phase_progress(id, flights.tick)))
+		return class_rects(stand, plane_class)
+	var start := flights.state_start(id, FlightSim.State.TAXI_OUT)
+	return route_rects(
+		stand,
+		path,
+		flights.phase_progress(id, flights.tick),
+		PlaneClasses.flight_model(flights, id),
+		plane_class,
+		flights.taxi_plan(id).get(FlightSim.State.TAXI_OUT, {}),
+		float(flights.state_start(id, FlightSim.State.TAKEOFF) - start)
+	)
 
 
-## What a plane `t` (0 to 1) of the way along its taxi-out route `path` from
-## `stand` still needs of it: the swept ground ahead of its tail. The point
-## that far along the planned route is taken into the stand's own frame
-## (StandPlacement.to_frame()), so the cut follows the stand's way out on every
-## side; world z only measures it at a north stand.
-static func route_rects(stand: Dictionary, path: PackedVector3Array, t: float) -> Array[Rect2]:
-	var at := FlightPose.point_at(path, FlightPose.path_length(path) * t)
-	var tail_z := StandPlacement.to_frame(stand, at).z + StandPlacement.TAIL_M
-	return StandPlacement.swept_rects(stand, tail_z)
+## The ground a `plane_class` plane needs at `stand`, from `north_of` on (a z
+## at the stand's north twin, StandPlacement.swept_rects()): the sweep
+## StandPlacement has always guarded for small and medium planes, the large
+## envelope (StandEnvelope) for a large one, whose wings reach past it.
+static func class_rects(stand: Dictionary, plane_class: String, north_of := INF) -> Array[Rect2]:
+	if plane_class == PlaneClasses.LARGE:
+		return StandEnvelope.rects(stand, PlaneClasses.LARGE, north_of)
+	return StandPlacement.swept_rects(stand, north_of)
+
+
+## The corners of `model`'s box drawn at ground `pose` off the stand, centred
+## on the pose point (PlaneModels "model_offset", FlightPose.model_position()),
+## as world points at y 0.
+static func footprint(pose: Transform3D, model: String) -> PackedVector3Array:
+	var box: AABB = PlaneModels.PLANES[model]["aabb"]
+	var centred: Vector3 = PlaneModels.PLANES[model]["model_offset"]
+	var turn := Basis(Vector3.UP, MovementPlan.yaw_of(pose.basis.z))
+	var out := PackedVector3Array()
+	for x in [box.position.x, box.end.x]:
+		for z in [box.position.z + centred.z, box.end.z + centred.z]:
+			var at := pose.origin + turn * Vector3(x, 0.0, z)
+			out.append(Vector3(at.x, 0.0, at.z))
+	return out
+
+
+## What a `model` plane of `plane_class` `progress` (0 to 1) through TAXI_OUT
+## along its route `path` from `stand` still needs of it: the class's ground
+## (class_rects()) ahead of the plane's rearmost point, and the box the plane
+## covers there. The plane stands where it is drawn (FlightPose.pose(), with
+## its planned `pause` inside `budget` ticks), turned to its heading on the
+## route, so the cut follows the route on every side and through each corner.
+## The cut is taken in the stand's own frame (StandPlacement.to_frame()) and
+## never lies north of the old one, the pose point plus StandPlacement.TAIL_M.
+static func route_rects(
+	stand: Dictionary,
+	path: PackedVector3Array,
+	progress: float,
+	model: String,
+	plane_class: String,
+	pause := {},
+	budget := 0.0
+) -> Array[Rect2]:
+	var entry := MovementPlan.flat_dir(
+		StandPlacement.stand_point(stand), StandPlacement.pushback_end(stand)
+	)
+	var pose := FlightPose.pose(FlightSim.State.TAXI_OUT, progress, path, entry, pause, budget)
+	var tail_z := StandPlacement.to_frame(stand, pose.origin).z + StandPlacement.TAIL_M
+	var corners := footprint(pose, model)
+	var box := Rect2(Vector2(corners[0].x, corners[0].z), Vector2.ZERO)
+	for corner in corners:
+		tail_z = maxf(tail_z, StandPlacement.to_frame(stand, corner).z)
+		box = box.expand(Vector2(corner.x, corner.z))
+	var out := class_rects(stand, plane_class, tail_z)
+	out.append(box)
+	return out
 
 
 ## The grid cells guard_rects() covers, as a set, worked out once per tick.
