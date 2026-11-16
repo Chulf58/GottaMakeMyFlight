@@ -719,9 +719,12 @@ static func _checked_stand(saved: Variant, on_site: SiteDefinition) -> Dictionar
 	if not StandPlacement.is_stand(saved) or not WholeNumber.is_whole(saved["exit"]):
 		return {"error": "'live' is not a stand"}
 	var stand := StandPlacement.from_saved(saved)
-	var low := Vector2(on_site.grid_origin.x, on_site.grid_origin.z)
-	var frame := Rect2(low, Vector2(on_site.grid_size))
-	if int(stand["exit"]) < 0 or not frame.has_point(Vector2(stand["x"], stand["wall_z"])):
+	# A sill lies on a cell edge, so one on the grid's east or south edge is on
+	# the site: the frame is closed, which Rect2.has_point (end excluded) is not.
+	var frame := on_site.grid_rect()
+	var sill := Vector2(stand["x"], stand["wall_z"])
+	var inside := sill.clamp(frame.position, frame.end) == sill
+	if int(stand["exit"]) < 0 or not inside:
 		return {"error": "the live stand lies outside the site"}
 	return {"stand": stand}
 
