@@ -1,11 +1,11 @@
 extends SceneTree
 ## Windowed plate probe for the folded jet bridge (board b564cda3; ruling
-## small-planes-the-jet-bridge-folds-back-against-the-terminal): plane 03 at
-## a north gate with the bridge folded, close up and at play distance, each
-## with a before plate (the same camera, the bridge drawn open and parked as
-## it was before the fold); plane 04 docked at the neighbouring gate for
-## contrast; and an empty gate folded and open, for the empty-gate choice. It
-## rules nothing.
+## small-planes-the-jet-bridge-folds-back-against-the-terminal, v2 "Lower the
+## folded box"): plane 03 at the north gate with the bridge folded to the
+## vestibule's ground floor, close up, at play distance and at its apron door;
+## the empty gate folded; plane 04 docked at the same gate, to show the docking
+## bridge is unchanged; and plane 03 at a west gate, close up. It rules
+## nothing.
 ##
 ## Run (one windowed Godot run project-wide; hold tools/blender/out/.windowed.lock):
 ##   Godot_v4.7.2-stable_win64_console.exe --display-driver windows \
@@ -13,15 +13,17 @@ extends SceneTree
 ##     --path <worktree>/game -s res://spike/bridge_fold_plates_probe.gd
 ##
 ## Boots main.tscn with the starter shell and a gate desk (StarterFlight), so
-## the real ApronStand gives gate A its stand; the probe adds gate N one exit
-## spacing west on the same wall. No flight runs: the clock, the fleets and
-## both PlaneViews stop processing, and the probe poses each view as
-## update_pose() does, then lets it report its plane to the bridges
-## (_follow_props()). Every plate projects its subjects' bounds into the
-## viewport with MARGIN_PX and casts camera rays at them (trimesh colliders on
-## every visible mesh, rebuilt after every fold change) before it is saved; on
-## failure it prints PROBE_INVALID and exits 1. The HUD is hidden. Prints the
-## world seed.
+## the real ApronStand gives gate A its stand. For the west plate the probe
+## moves gate A to a west stand on the reference terminal's west wall (cells
+## from ReferenceTerminal.FLOOR_MIN and AIRSIDE_MAX_Y plus offset_on(), never
+## fixed cells). No flight runs: the clock, the fleets and the PlaneView stop
+## processing, and the probe poses the view as update_pose() does, then lets
+## it report its plane to the bridge (_follow_props()). Every plate projects
+## its subjects' bounds into the viewport with MARGIN_PX and casts camera rays
+## at them (trimesh colliders on every visible mesh, rebuilt after every fold
+## change) before it is saved; on failure it prints PROBE_INVALID and exits 1.
+## The HUD is hidden. Prints the world seed. The contact sheet is drawn as a
+## labelled grid on the window and captured.
 
 const StarterFlight := preload("res://spike/starter_flight.gd")
 const MAIN_SCENE := "res://main/main.tscn"
@@ -29,28 +31,27 @@ const OUT_REL := "res://../tools/blender/out/bridge-fold"
 const MARGIN_PX := 8.0
 const SMALL := "tp_plane_03a"
 const DOCKER := "tp_plane_04a"
-const NEIGHBOUR := "N"
-## Gates 19 m apart (ruling jet-bridges-are-nose-loader-pedestal-bridges-an-
-## enclosed-wal); tried west first, then east.
-const SPACING_M := 19.0
 ## The play camera (TycoonCamera): the medium angle step, its lens, its home
 ## distance.
 const PLAY_PITCH_DEG := 54.0
 const PLAY_FOV := 55.0
 const PLAY_DISTANCE := 80.0
+const PLAY_YAW := 30.0
 ## Close views: yaw, pitch, distance; from the north-west, the planes' side, so
 ## the plane stands in front of the bridge.
 const CLOSE := Vector3(210.0, 32.0, 20.0)
-const PLAY_YAW := 30.0
 ## The apron door view: yaw, pitch, distance.
 const APRON_VIEW := Vector3(235.0, 24.0, 12.0)
+## The west gate view: from the south-west, out over the west apron.
+const WEST_VIEW := Vector3(300.0, 30.0, 20.0)
 const SHEET_TILE := Vector2i(480, 270)
+const SHEET_COLS := 3
 
 var _out_dir := ""
 var _failed := false
 var _main: Node
 var _cam: Camera3D
-var _views: Array[PlaneView] = []
+var _view: PlaneView
 var _airside: Airside
 var _gate := ""
 var _plates: Array[String] = []
@@ -74,10 +75,9 @@ func _run() -> void:
 	clock.set_process(false)
 	for fleet in _main.find_children("*", "PlaneFleet", true, false):
 		fleet.set_process(false)
-	for name in ["PlaneView", "PlaneView2"]:
-		var view: PlaneView = _main.get_node(name)
-		view.set_process(false)
-		_views.append(view)
+	_view = _main.get_node("PlaneView")
+	_view.set_process(false)
+	(_main.get_node("PlaneView2") as Node).set_process(false)
 	_airside = _main.get_node("Airside")
 	await _frames(6)
 	if not StarterFlight.add_gate_desk((_main.get_node("BuildMode") as BuildMode).grid):
@@ -88,147 +88,77 @@ func _run() -> void:
 		_finish_invalid("no gate got a stand")
 		return
 	_gate = _airside.gate_stands.keys()[0]
-	if not _add_neighbour():
-		_finish_invalid("no neighbouring gate fits beside gate %s" % _gate)
-		return
-	await _frames(6)
 	_show_hud(false)
 	_cam = Camera3D.new()
 	_cam.fov = PLAY_FOV
 	_cam.far = 2000.0
 	_main.add_child(_cam)
 	_cam.make_current()
-	_views[0].gate = _gate
-	_views[1].gate = NEIGHBOUR
-	var small := _pose(_views[0], SMALL)
-	var docker := _pose(_views[1], DOCKER)
-	await _frames(3)
+	_view.gate = _gate
 	var a: Dictionary = _airside.props.bridges[_gate]
-	var n: Dictionary = _airside.props.bridges[NEIGHBOUR]
+	var small := _pose(SMALL)
+	await _frames(3)
 	print(
 		(
-			"PROBE gate %s: model %s folded %s docked %s; gate %s: model %s folded %s docked %s"
-			% [
-				_gate,
-				a["model"],
-				a["folded"],
-				a["docked"],
-				NEIGHBOUR,
-				n["model"],
-				n["folded"],
-				n["docked"]
-			]
+			"PROBE gate %s stand %s: model %s folded %s docked %s"
+			% [_gate, a["stand"], a["model"], a["folded"], a["docked"]]
 		)
 	)
-	if not a["folded"] or a["docked"] or n["folded"] or not n["docked"]:
-		_finish_invalid("the bridges are not folded at the 03 and docked at the 04")
+	if not a["folded"] or a["docked"]:
+		_finish_invalid("the bridge is not folded at the 03")
 		return
 	await _refresh_colliders()
-	await _small_plates(a, small, docker, n)
-	await _apron_door_plate(a, small)
-	await _neighbour_plate(n, docker)
-	await _empty_plates(a)
-	await _docked_here_plate(a)
-	_contact_sheet()
+	await _small_plates(a, small)
+	await _empty_plate(a)
+	await _docked_plate(a)
+	await _west_plate()
+	await _contact_sheet()
 	_finish()
 
 
-## Gate N one exit spacing along the wall from gate A, as large as the 04
-## needs; false when neither side is accepted.
-func _add_neighbour() -> bool:
-	var stand: Dictionary = _airside.gate_stands[_gate]
-	var classes: Dictionary = _airside.gate_classes.duplicate()
-	classes[NEIGHBOUR] = PlaneClasses.LARGE
-	_airside.set_gate_classes(classes)
-	for dx: float in [-SPACING_M, SPACING_M]:
-		var stands: Dictionary = _airside.gate_stands.duplicate(true)
-		stands[NEIGHBOUR] = StandPlacement.make(
-			int(stand["exit"]) + 100, float(stand["x"]) + dx, float(stand["wall_z"])
-		)
-		var ok := _airside.set_gate_stands(stands)
-		print("PROBE neighbour at dx %.1f: %s; stands %s" % [dx, ok, _airside.gate_stands])
-		if ok and _airside.props.bridges.has(NEIGHBOUR):
-			return true
-	return false
-
-
-## The 03 gate: close and play distance, folded then open as before the fold.
-func _small_plates(a: Dictionary, small: Node3D, docker: Node3D, n: Dictionary) -> void:
+## The 03 at the north gate: close, play distance and its apron door.
+func _small_plates(a: Dictionary, small: Node3D) -> void:
 	var bridge: Node3D = a["node"]
 	var focus := _focus(bridge, small, SMALL)
-	var both := (focus + _focus(n["node"], docker, DOCKER)) / 2.0
-	for state in ["after", "before"]:
-		if state == "before":
-			JetBridgePose.apply(a["joints"], JetBridgePose.parked())
-			await _refresh_colliders()
-		_aim(focus, CLOSE.x, CLOSE.y, CLOSE.z)
-		await _frames(3)
-		var name := "fold_03_%s_close.png" % state
-		if _prove(name, [bridge], true) and _prove_seen(name, small):
-			await _save(name)
-		_aim(both, PLAY_YAW, PLAY_PITCH_DEG, PLAY_DISTANCE)
-		await _frames(3)
-		name = "fold_03_%s_play.png" % state
-		if (
-			_prove(name, [bridge, n["node"]], true)
-			and _prove(name, [small, docker], false)
-			and _prove_seen(name, small)
-		):
-			await _save(name)
-	JetBridgePose.apply(a["joints"], a["pose"], a["folded"])
-	await _refresh_colliders()
-
-
-## The 04 docked at gate N, close.
-func _neighbour_plate(n: Dictionary, docker: Node3D) -> void:
-	var bridge: Node3D = n["node"]
-	_aim(_focus(bridge, docker, DOCKER), CLOSE.x, CLOSE.y, CLOSE.z + 8.0)
+	_aim(focus, CLOSE.x, CLOSE.y, CLOSE.z)
 	await _frames(3)
-	var name := "fold_04_docked_neighbour_close.png"
-	if _prove(name, [bridge], true) and _prove_seen(name, docker):
+	var name := "fold_03_after_close.png"
+	if _prove(name, [bridge], true) and _prove_seen(name, small):
+		await _save(name)
+	_aim(focus, PLAY_YAW, PLAY_PITCH_DEG, PLAY_DISTANCE)
+	await _frames(3)
+	name = "fold_03_after_play.png"
+	if _prove(name, [bridge, small], true):
+		await _save(name)
+	var door := (bridge.find_child("Mount_ApronDoor", true, false) as Node3D).global_position
+	_aim(door + Vector3.UP * 1.1, APRON_VIEW.x, APRON_VIEW.y, APRON_VIEW.z)
+	await _frames(3)
+	name = "fold_03_apron_door_close.png"
+	if _prove(name, [bridge], true) and _prove_seen(name, small):
 		await _save(name)
 
 
-## Gate A empty: the 03 withdrawn (its view hidden, so it stops reporting),
-## the bridge folded, then drawn open and parked as before the fold.
-func _empty_plates(a: Dictionary) -> void:
-	_views[0].visible = false
-	_views[0]._follow_props()
+## The gate empty: the 03 withdrawn (its view hidden, so it stops reporting).
+func _empty_plate(a: Dictionary) -> void:
+	_view.visible = false
+	_view._follow_props()
 	await _frames(3)
 	print("PROBE empty gate %s: model '%s' folded %s" % [_gate, a["model"], a["folded"]])
 	if not a["folded"] or a["model"] != "":
 		_invalid("the empty gate did not fold")
 		return
+	await _refresh_colliders()
 	var bridge: Node3D = a["node"]
-	var focus := bridge.global_position + bridge.global_basis.z * 4.0
-	for state in ["folded", "open"]:
-		if state == "open":
-			JetBridgePose.apply(a["joints"], JetBridgePose.parked())
-		await _refresh_colliders()
-		_aim(focus, CLOSE.x, CLOSE.y, CLOSE.z)
-		await _frames(3)
-		var name := "fold_empty_%s_close.png" % state
-		if _prove(name, [bridge], true):
-			await _save(name)
-	JetBridgePose.apply(a["joints"], a["pose"], a["folded"])
-
-
-## The folded vestibule's apron door, low from the plane's side, with the 03
-## parked: the door the 03's passengers walk out of is open and clear.
-func _apron_door_plate(a: Dictionary, small: Node3D) -> void:
-	var bridge: Node3D = a["node"]
-	var door := (bridge.find_child("Mount_ApronDoor", true, false) as Node3D).global_position
-	_aim(door + Vector3.UP * 1.1, APRON_VIEW.x, APRON_VIEW.y, APRON_VIEW.z)
+	_aim(bridge.global_position + bridge.global_basis.z * 4.0, CLOSE.x, CLOSE.y, CLOSE.z)
 	await _frames(3)
-	var name := "fold_03_apron_door_close.png"
-	if _prove(name, [bridge], true) and _prove_seen(name, small):
+	var name := "fold_empty_folded_close.png"
+	if _prove(name, [bridge], true):
 		await _save(name)
 
 
-## The hand-over's other side: a 04 at gate A, docked, with the camera of the
-## 03 close plates.
-func _docked_here_plate(a: Dictionary) -> void:
-	var docker := _pose(_views[0], DOCKER)
+## A 04 at the same gate, docked, with the camera of the 03 close plate.
+func _docked_plate(a: Dictionary) -> void:
+	var docker := _pose(DOCKER)
 	await _frames(3)
 	print(
 		(
@@ -245,6 +175,40 @@ func _docked_here_plate(a: Dictionary) -> void:
 	await _frames(3)
 	var name := "fold_04_docked_gate_a_close.png"
 	if _prove(name, [bridge], true) and _prove_seen(name, docker):
+		await _save(name)
+
+
+## Gate A moved to a west stand on the reference terminal's west wall, a 03
+## parked there: the bridge folded, close up.
+func _west_plate() -> void:
+	var grid := (_main.get_node("BuildMode") as BuildMode).grid
+	var cell := (
+		ReferenceTerminal.offset_on(grid)
+		+ Vector2i(
+			ReferenceTerminal.FLOOR_MIN.x,
+			roundi((ReferenceTerminal.FLOOR_MIN.y + ReferenceTerminal.AIRSIDE_MAX_Y) / 2.0)
+		)
+	)
+	var stand := StandPlacement.for_cell(grid, cell, 900, StandPlacement.WEST)
+	var ok := _airside.set_gate_stands({_gate: stand})
+	await _frames(6)
+	var a: Dictionary = _airside.props.bridges.get(_gate, {})
+	print("PROBE west cell %s stand %s ok %s" % [cell, stand, ok])
+	if not ok or a.is_empty() or StandPlacement.side_of(a["stand"]) != StandPlacement.WEST:
+		_invalid("gate %s did not take the west stand" % _gate)
+		return
+	var small := _pose(SMALL)
+	await _frames(3)
+	print("PROBE west gate: model %s folded %s docked %s" % [a["model"], a["folded"], a["docked"]])
+	if not a["folded"] or a["docked"]:
+		_invalid("the bridge is not folded at the west 03")
+		return
+	await _refresh_colliders()
+	var bridge: Node3D = a["node"]
+	_aim(_focus(bridge, small, SMALL), WEST_VIEW.x, WEST_VIEW.y, WEST_VIEW.z)
+	await _frames(3)
+	var name := "fold_03_west_gate_close.png"
+	if _prove(name, [bridge], true) and _prove_seen(name, small):
 		await _save(name)
 
 
@@ -269,22 +233,22 @@ func _frames(count: int) -> void:
 	await RenderingServer.frame_post_draw
 
 
-## Poses `view` with `model` parked at its gate's stand in BOARDING, as
+## Poses the view with `model` parked at its gate's stand in BOARDING, as
 ## update_pose() does, and lets it report to the bridge. Returns the model.
-func _pose(view: PlaneView, model: String) -> Node3D:
+func _pose(model: String) -> Node3D:
 	var cls := _class_of(model)
-	view.show_model(model)
-	var path := view._path(FlightSim.State.PUSHBACK, cls)
-	var entry := view._entry_dir(FlightSim.State.PUSHBACK, cls)
+	_view.show_model(model)
+	var path := _view._path(FlightSim.State.PUSHBACK, cls)
+	var entry := _view._entry_dir(FlightSim.State.PUSHBACK, cls)
 	var pose := FlightPose.pose(FlightSim.State.PUSHBACK, 0.0, path, entry)
 	pose.origin.y += PlaneView.ground_height_at(pose.origin)
-	view.transform = pose
-	view.phase = FlightSim.State.BOARDING
-	view.visible = true
-	view.flight_id = "probe_%s" % view.name
-	view._set_model_position(view.model_position_at(FlightSim.State.BOARDING, pose, cls))
-	view._follow_props()
-	return view.get_node("Pivot").get_child(0)
+	_view.transform = pose
+	_view.phase = FlightSim.State.BOARDING
+	_view.visible = true
+	_view.flight_id = "probe"
+	_view._set_model_position(_view.model_position_at(FlightSim.State.BOARDING, pose, cls))
+	_view._follow_props()
+	return _view.get_node("Pivot").get_child(0)
 
 
 func _class_of(model: String) -> String:
@@ -388,23 +352,44 @@ func _save(name: String) -> void:
 	print("PLATE saved %s" % path)
 
 
+## Draws every plate as a labelled tile on a CanvasLayer over the window,
+## captures it and saves contact_sheet.png.
 func _contact_sheet() -> void:
 	if _plates.is_empty():
 		return
-	var cols := 3
-	var rows := ceili(_plates.size() / float(cols))
-	var sheet := Image.create(SHEET_TILE.x * cols, SHEET_TILE.y * rows, false, Image.FORMAT_RGBA8)
-	for i in _plates.size():
-		var img := Image.load_from_file(_plates[i])
+	var layer := CanvasLayer.new()
+	layer.layer = 100
+	var back := ColorRect.new()
+	back.color = Color(0.12, 0.12, 0.12)
+	back.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(back)
+	var grid := GridContainer.new()
+	grid.columns = SHEET_COLS
+	grid.position = Vector2(8, 8)
+	layer.add_child(grid)
+	for path in _plates:
+		var tile := VBoxContainer.new()
+		var label := Label.new()
+		label.text = path.get_file()
+		label.add_theme_font_size_override("font_size", 16)
+		tile.add_child(label)
+		var img := Image.load_from_file(path)
 		img.resize(SHEET_TILE.x, SHEET_TILE.y)
-		sheet.blit_rect(
-			img,
-			Rect2i(Vector2i.ZERO, SHEET_TILE),
-			Vector2i(i % cols, floori(i / float(cols))) * SHEET_TILE
-		)
+		var rect := TextureRect.new()
+		rect.texture = ImageTexture.create_from_image(img)
+		rect.custom_minimum_size = Vector2(SHEET_TILE)
+		tile.add_child(rect)
+		grid.add_child(tile)
+	root.add_child(layer)
+	await _frames(4)
+	var img := root.get_texture().get_image()
+	img.convert(Image.FORMAT_RGBA8)
+	var used := grid.get_rect().grow(8.0)
+	var sheet := img.get_region(Rect2i(Vector2i.ZERO, Vector2i(used.end)))
 	var path := _out_dir.path_join("contact_sheet.png")
 	sheet.save_png(path)
 	print("PLATE saved %s" % path)
+	layer.queue_free()
 
 
 func _show_hud(on: bool) -> void:

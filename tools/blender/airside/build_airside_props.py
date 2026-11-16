@@ -45,9 +45,11 @@ Rig (all empties export with zero rest rotation and unit scale):
     JetBridge_Body        the collar at the exit door and the vestibule (static)
     Mount_ExitSill        (0, 0, 0): the exit door's sill on the wall line
     Mount_ApronDoor       (VEST_HALF, 0, APRON_Z): the vestibule's apron door, outside
-    Fold_Cap              (0, 0, 0): never moves; its mesh is a glazed end wall in the
-                          vestibule's far-end opening, shown only while the bridge is
-                          drawn folded (Walk_Slide hidden; board b564cda3)
+    Vest_Full             (0, 0, 0): never moves; its mesh is the full-height vestibule
+                          (walls, front, ring, roof), hidden while folded
+    Fold_Cap              (0, 0, 0): never moves; its mesh is the folded box, the
+                          vestibule's ground floor FOLD_TOP high with the exit and
+                          apron doors, shown only while folded (board b564cda3)
     Walk_Slide           (0, 0, 0): translate along +z by D in [0, SLIDE_MAX], so the
                           cab reaches a plane door further out (model 04); its mesh is
                           the stair enclosure, its ground floor and the pedestal base under the cab
@@ -112,6 +114,8 @@ BOX_GAP = 0.30          # the vestibule's terminal face off the wall line
 VEST_HALF = 1.10        # the vestibule's outer half width
 VEST_END = 2.30         # the vestibule's far end, out from the wall
 VEST_TOP = 5.30
+FOLD_TOP = 2.50          # the folded box's roof top: the vestibule's ground floor
+FOLD_WIN = (0.90, 2.00)  # its one window row
 APRON_Z = 0.80          # the apron door's middle, out from the wall: the walk to it stays
                         # short of the first riser (STAIR_Z0)
 APRON_HALF = 0.40
@@ -306,15 +310,15 @@ def window_row(spans, v0, v1):
 # ---------------------------------------------------------------- jet bridge
 
 
-def glazed_walls(name, half, z0, z1, y_top, holes_by_side, pal, parent, c):
+def glazed_walls(name, half, z0, z1, y_top, holes_by_side, pal, parent, c, rows=None):
     """The two long walls (x = +-half, thickness SKIN_T inward) from z0 to z1, ground to
-    y_top, each with WIN_LOW and WIN_HIGH window rows plus that side's extra holes
+    y_top, each with `rows` of windows (WIN_LOW and WIN_HIGH unless given) plus that side's extra holes
     (holes_by_side[+1] for +x, [-1] for -x)."""
     spans = panels(z0 + 0.15, z1 - 0.1, 0.9, 0.15)
     for sx in (-1, 1):
         holes = list(holes_by_side.get(sx, []))
         blocked = [(h[0], h[1]) for h in holes]
-        for v0, v1 in (WIN_LOW, WIN_HIGH):
+        for v0, v1 in rows or (WIN_LOW, WIN_HIGH):
             for a, b in spans:
                 # A window that would meet an extra opening stays shut.
                 if v0 < APRON_TOP and any(a < hb and b > ha for ha, hb in blocked):
@@ -334,17 +338,20 @@ def build_jet_bridge(root, c):
         gbox("Collar_%d" % sx, (x0, 0.0, COLLAR_GAP), (x1, COLLAR_TOP, BOX_GAP), "frame", root, c)
     gbox("Collar_Top", (-DOOR_HALF, COLLAR_DOOR_TOP, COLLAR_GAP), (DOOR_HALF, COLLAR_TOP, BOX_GAP), "frame", root, c)
     # The vestibule: a glazed box over the exit door, the apron door on its +x (west)
-    # side, its far end a frame round the sliding stair enclosure.
+    # side, its far end a frame round the sliding stair enclosure. Its walls and roof
+    # hang on Vest_Full, hidden while the bridge is folded; its floor and base bands
+    # stay on the root, shared with the folded box.
+    full = pivot(p, "Vest_Full", root, c, (0.0, 0.0, 0.0))
     vtop = VEST_TOP - SKIN_T
     apron = (APRON_Z - APRON_HALF, APRON_Z + APRON_HALF, 0.0, APRON_TOP, False)
-    glazed_walls("Vest_Wall", VEST_HALF, BOX_GAP, VEST_END, vtop, {1: [apron]}, "white", root, c)
+    glazed_walls("Vest_Wall", VEST_HALF, BOX_GAP, VEST_END, vtop, {1: [apron]}, "white", full, c)
     holed_wall("Vest_Front", "z", (-VEST_HALF, VEST_HALF), (0.0, vtop), (BOX_GAP, BOX_GAP + SKIN_T),
                [(-DOOR_HALF, DOOR_HALF, 0.0, DOOR_OPEN_TOP, False), (-0.5, 0.5, WIN_HIGH[0], WIN_HIGH[1], True)],
-               "white", root, c)
+               "white", full, c)
     holed_wall("Vest_Ring", "z", (-VEST_HALF, VEST_HALF), (0.0, vtop), (VEST_END - SKIN_T, VEST_END),
-               [(-BOX_HALF - 0.01, BOX_HALF + 0.01, 0.0, BOX_TOP + 0.01, False)], "white", root, c)
+               [(-BOX_HALF - 0.01, BOX_HALF + 0.01, 0.0, BOX_TOP + 0.01, False)], "white", full, c)
     gbox("Vest_Roof", (-VEST_HALF - 0.04, vtop, BOX_GAP), (VEST_HALF + 0.04, VEST_TOP, VEST_END + 0.04), "light_grey",
-         root, c)
+         full, c)
     gbox("Vest_Floor", (-VEST_HALF + SKIN_T, 0.0, BOX_GAP + SKIN_T), (VEST_HALF - SKIN_T, 0.02, VEST_END - SKIN_T),
          "floor", root, c)
     for sx in (-1, 1):
@@ -354,14 +361,21 @@ def build_jet_bridge(root, c):
                                                       (APRON_Z + APRON_HALF, VEST_END)]
         for k, (z0, z1) in enumerate(spans):
             gbox("Vest_Band_%d_%d" % (sx, k), (x0, 0.0, z0), (x1, 0.12, z1), "blue", root, c)
-    # The fold cap (board b564cda3): a glazed end wall filling the ring's opening, shown
-    # only while the walkway is drawn retracted (JetBridgePose.apply() hides Walk_Slide
-    # then), so the folded bridge is the closed vestibule alone.
+    # The folded box (board b564cda3; ruling small-planes-the-jet-bridge-folds-back-
+    # against-the-terminal, v2): the vestibule's ground floor alone, FOLD_TOP high, with
+    # the same exit and apron doors, one low window row and a closed far end. Shown only
+    # while the walkway is drawn retracted (JetBridgePose.apply() hides Walk_Slide and
+    # Vest_Full then).
     cap = pivot(p, "Fold_Cap", root, c, (0.0, 0.0, 0.0))
-    cap_half = BOX_HALF + 0.01
-    cap_win = panels(-cap_half + 0.1, cap_half - 0.1, 0.9, 0.15)
-    holed_wall("Fold_Cap_Wall", "z", (-cap_half, cap_half), (0.0, BOX_TOP + 0.01), (VEST_END - SKIN_T, VEST_END),
-               window_row(cap_win, *WIN_LOW) + window_row(cap_win, *WIN_HIGH), "white", cap, c)
+    ftop = FOLD_TOP - SKIN_T
+    glazed_walls("Fold_Wall", VEST_HALF, BOX_GAP, VEST_END, ftop, {1: [apron]}, "white", cap, c, rows=(FOLD_WIN,))
+    holed_wall("Fold_Front", "z", (-VEST_HALF, VEST_HALF), (0.0, ftop), (BOX_GAP, BOX_GAP + SKIN_T),
+               [(-DOOR_HALF, DOOR_HALF, 0.0, DOOR_OPEN_TOP, False)], "white", cap, c)
+    end_win = panels(-VEST_HALF + SKIN_T + 0.1, VEST_HALF - SKIN_T - 0.1, 0.9, 0.15)
+    holed_wall("Fold_End", "z", (-VEST_HALF, VEST_HALF), (0.0, ftop), (VEST_END - SKIN_T, VEST_END),
+               window_row(end_win, *FOLD_WIN), "white", cap, c)
+    gbox("Fold_Roof", (-VEST_HALF - 0.04, ftop, BOX_GAP), (VEST_HALF + 0.04, FOLD_TOP, VEST_END + 0.04), "light_grey",
+         cap, c)
 
     # The sliding stair enclosure, its ground floor and the pedestal base.
     slide = pivot(p, "Walk_Slide", root, c, (0.0, 0.0, 0.0))
@@ -693,7 +707,7 @@ EXTRA_NODES = {
     "jet_bridge": ["Walk_Slide", "Walk_Slide_Mesh", "Stair_Rise", "Stair_Rise_Mesh", "Curtain_Low",
                    "Curtain_Low_Mesh", "Floor_Lift", "Floor_Lift_Mesh", "Curtain_High", "Curtain_High_Mesh",
                    "Cab_Yaw", "Cab_Yaw_Mesh", "Bellows_Extend", "Bellows_Extend_Mesh", "Mount_ApronDoor",
-                   "Fold_Cap", "Fold_Cap_Mesh"]
+                   "Fold_Cap", "Fold_Cap_Mesh", "Vest_Full", "Vest_Full_Mesh"]
     + WALK_MOUNTS,
     "pushback_tug": ["Cradle_Lift", "Cradle_Lift_Mesh", "Mount_NoseGear"],
     "taxi_sign": [n for ch in LETTERS for n in ("Glyph_Loc_" + ch, "Glyph_Loc_%s_Mesh" % ch,

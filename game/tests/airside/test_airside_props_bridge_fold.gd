@@ -2,12 +2,13 @@ class_name TestAirsidePropsBridgeFold
 extends GdUnitTestSuite
 ## The folded jet bridge (board b564cda3; ruling small-planes-the-jet-bridge-
 ## folds-back-against-the-terminal): with a plane that does not dock (03) at
-## the gate, or none, the walkway, stair, landing, cab and pedestal are drawn
-## retracted (hidden) and a glazed end wall (Fold_Cap) closes the vestibule's
-## far end, so only the vestibule with its exit and apron doors stands on the
-## wall. A docking model (04 to 07) unfolds it and docks as before. The joint
-## pose stays parked() while folded, so everything that reads the pose reads
-## what it read before. Each check has a positive control on the same meshes.
+## the gate, or none, the walkway, stair, landing, cab, pedestal and the
+## full-height vestibule (Vest_Full) are drawn retracted (hidden) and the
+## folded box (Fold_Cap, ruling v2) shows: the vestibule's ground floor alone,
+## FOLD_TOP high, with its exit and apron doors. A docking model (04 to 07)
+## unfolds it and docks as before. The joint pose stays parked() while folded,
+## so everything that reads the pose reads what it read before. Each check has
+## a positive control on the same meshes.
 
 const Kit := preload("res://tests/airside/airside_props_kit.gd")
 const BRIDGE_SCENE := preload("res://assets/airside/props/jet_bridge.glb")
@@ -37,9 +38,12 @@ func after() -> void:
 	_airside.free()
 
 
-## The written glb carries Fold_Cap, a joint like the others; apply() shows it
-## only folded, and hides the walkway (Walk_Slide and all under it) then. The
-## cap fills the vestibule's far-end opening the walkway leaves.
+## The written glb carries Fold_Cap (the folded box) and Vest_Full (the
+## full-height vestibule), joints like the others. apply() shows the cap only
+## folded and hides the walkway (Walk_Slide and all under it) and Vest_Full
+## then. Folded, the whole drawn bridge is the vestibule's ground floor:
+## FOLD_TOP high and VEST_END out. Control: open, it stands BOX_TOP high and
+## reaches past the cab pivot.
 func test_the_glb_carries_a_fold_cap_shown_only_when_folded() -> void:
 	var holder: Node3D = auto_free(Node3D.new())
 	add_child(holder)
@@ -47,34 +51,49 @@ func test_the_glb_carries_a_fold_cap_shown_only_when_folded() -> void:
 	holder.add_child(bridge)
 	var joints := JetBridgePose.joints_of(bridge)
 	assert_bool(joints.has(&"Fold_Cap")).is_true()
+	assert_bool(joints.has(&"Vest_Full")).is_true()
 	var slide := joints[&"Walk_Slide"] as Node3D
+	var full := joints[&"Vest_Full"] as Node3D
 	var cap := joints[&"Fold_Cap"] as Node3D
 	JetBridgePose.apply(joints, JetBridgePose.parked())
 	var open_reach := _reach(bridge)
+	var open_box := _box_of(bridge)
 	assert_bool(slide.is_visible_in_tree()).is_true()
+	assert_bool(full.is_visible_in_tree()).is_true()
 	assert_bool(cap.is_visible_in_tree()).is_false()
 	JetBridgePose.apply(joints, JetBridgePose.parked(), true)
 	var box := _box_of(cap)
+	var folded_box := _box_of(bridge)
 	var folded_reach := _reach(bridge)
 	print(
 		(
-			"cap box %s; reach out from the wall: open %.3f m, folded %.3f m (vestibule end %.2f)"
-			% [box, open_reach, folded_reach, JetBridgePose.VEST_END]
+			(
+				"cap box %s; drawn top: open %.3f m, folded %.3f m (FOLD_TOP %.2f); reach out"
+				+ " from the wall: open %.3f m, folded %.3f m (vestibule end %.2f)"
+			)
+			% [
+				box,
+				open_box.end.y,
+				folded_box.end.y,
+				JetBridgePose.FOLD_TOP,
+				open_reach,
+				folded_reach,
+				JetBridgePose.VEST_END
+			]
 		)
 	)
 	assert_bool(slide.is_visible_in_tree()).is_false()
+	assert_bool(full.is_visible_in_tree()).is_false()
 	assert_bool(cap.is_visible_in_tree()).is_true()
-	# The cap spans the walkway's opening in the vestibule's far wall.
-	assert_float(box.position.x).is_less_equal(-JetBridgePose.BOX_HALF)
-	assert_float(box.end.x).is_greater_equal(JetBridgePose.BOX_HALF)
+	# The folded box is the vestibule's whole width, from the ground.
+	assert_float(box.position.x).is_less_equal(-JetBridgePose.VEST_HALF)
+	assert_float(box.end.x).is_greater_equal(JetBridgePose.VEST_HALF)
 	assert_float(box.position.y).is_less_equal(BOX_SLACK_M)
-	assert_float(box.end.y).is_greater_equal(JetBridgePose.BOX_TOP)
-	assert_float(box.position.z).is_greater_equal(
-		JetBridgePose.VEST_END - JetBridgePose.SKIN_T - BOX_SLACK_M
-	)
-	assert_float(box.end.z).is_less_equal(JetBridgePose.VEST_END + BOX_SLACK_M)
-	# Folded, nothing reaches past the vestibule; open, the cab and bellows do.
+	# Folded, nothing stands higher than FOLD_TOP or reaches past the
+	# vestibule; open, the full vestibule, the cab and bellows do.
+	assert_float(folded_box.end.y).is_equal_approx(JetBridgePose.FOLD_TOP, BOX_SLACK_M)
 	assert_float(folded_reach).is_less_equal(JetBridgePose.VEST_END + REACH_SLACK_M)
+	assert_float(open_box.end.y).is_greater_equal(JetBridgePose.BOX_TOP)
 	assert_float(open_reach).is_greater(JetBridgePose.CAB_Z)
 
 
@@ -98,6 +117,7 @@ func test_a_plane_that_does_not_dock_folds_the_bridge() -> void:
 			props.dock_plane(11, "A", model)
 		var want := JetBridgePose.pose_for(_stand, model, model != "", ground)
 		var walkway := (joints[&"Walk_Slide"] as Node3D).is_visible_in_tree()
+		var full := (joints[&"Vest_Full"] as Node3D).is_visible_in_tree()
 		var cap := (joints[&"Fold_Cap"] as Node3D).is_visible_in_tree()
 		print(
 			(
@@ -116,6 +136,7 @@ func test_a_plane_that_does_not_dock_folds_the_bridge() -> void:
 		assert_bool(entry["docked"]).is_equal(step[2])
 		assert_bool(want["folded"]).is_equal(step[1])
 		assert_bool(walkway).is_equal(not step[1])
+		assert_bool(full).is_equal(not step[1])
 		assert_bool(cap).is_equal(step[1])
 		if step[1]:
 			assert_dict(entry["pose"]).is_equal(JetBridgePose.parked())

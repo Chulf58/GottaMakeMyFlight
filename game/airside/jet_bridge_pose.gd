@@ -31,12 +31,12 @@ extends RefCounted
 ##
 ## Folded (folds(), board b564cda3, ruling small-planes-the-jet-bridge-folds-
 ## back-against-the-terminal): with plane 03 or no plane at the gate the
-## walkway is drawn retracted into the vestibule. apply() then hides
-## Walk_Slide and everything on it (the stair enclosure, stair, landing, cab,
-## bellows and pedestal) and shows Fold_Cap, a glazed end wall that closes the
-## vestibule's far end, so only the vestibule with its exit and apron doors
-## stands on the wall, reaching VEST_END out. The joints stay parked, so the
-## walk and every mount are what they were.
+## walkway is drawn retracted. apply() then hides Walk_Slide and everything on
+## it (the stair enclosure, stair, landing, cab, bellows and pedestal) and
+## Vest_Full (the full-height vestibule), and shows Fold_Cap, the vestibule's
+## ground floor alone (ruling v2, "Lower the folded box"): FOLD_TOP high,
+## reaching VEST_END out, with the same exit and apron doors. The joints stay
+## parked, so the walk and every mount are what they were.
 ##
 ## The rig constants are the ones tools/blender/airside/build_airside_props.py
 ## builds the bridge with; test_airside_props_bridges.gd checks them against
@@ -68,6 +68,8 @@ const VEST_HALF := 1.10
 ## stair enclosure's outer half width (the opening the cap closes).
 const VEST_END := 2.30
 const BOX_HALF := 1.00
+## The folded box's roof top.
+const FOLD_TOP := 2.50
 const APRON_Z := 0.80
 ## The vestibule's terminal face and the exit door collar off the wall line:
 ## both clear the terminal wall and stay under the roof fascia 0.25 m out.
@@ -105,7 +107,7 @@ const WALK: Array[StringName] = [
 ]
 const APRON: Array[StringName] = [&"Mount_ExitSill", &"Mount_ApronDoor"]
 ## The rig's joint nodes, by the name each has in jet_bridge.glb; Fold_Cap
-## is shown or hidden, never moved.
+## and Vest_Full are shown or hidden, never moved.
 const JOINTS: Array[StringName] = [
 	&"Walk_Slide",
 	&"Stair_Rise",
@@ -115,6 +117,7 @@ const JOINTS: Array[StringName] = [
 	&"Cab_Yaw",
 	&"Bellows_Extend",
 	&"Fold_Cap",
+	&"Vest_Full",
 ]
 
 
@@ -272,9 +275,11 @@ static func mounts_for(root: Transform3D, pose: Dictionary) -> Dictionary:
 
 ## Sets the joints of `joints` (JOINTS name -> Node3D, from joints_of()) to
 ## `pose` (solve() or parked()), drawn folded when `folded` (folds()): the
-## walkway hidden and Fold_Cap shown; otherwise the cap is hidden.
+## walkway and the full vestibule hidden and Fold_Cap shown; otherwise the
+## reverse.
 static func apply(joints: Dictionary, pose: Dictionary, folded := false) -> void:
 	(joints[&"Walk_Slide"] as Node3D).visible = not folded
+	(joints[&"Vest_Full"] as Node3D).visible = not folded
 	(joints[&"Fold_Cap"] as Node3D).visible = folded
 	var h: float = pose["height"]
 	(joints[&"Walk_Slide"] as Node3D).position.z = pose["slide"]
