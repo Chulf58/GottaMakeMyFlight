@@ -108,7 +108,11 @@ def box_obj(name, lo, hi, rgb):
 
 
 def set_bridge(o, slide, height, yaw, extend):
-    """Set the nose-loader's joints as JetBridgePose.apply() does."""
+    """Set the nose-loader's joints as JetBridgePose.apply() does, drawn open: the
+    folded box (Fold_Cap, visible in the raw glb) hidden, the full vestibule shown."""
+    for name, hide in (("Fold_Cap_Mesh", True), ("Vest_Full_Mesh", False)):
+        o[name].hide_render = hide
+        o[name].hide_viewport = hide
     for name in ("Walk_Slide", "Stair_Rise", "Curtain_Low", "Floor_Lift", "Curtain_High", "Cab_Yaw",
                  "Bellows_Extend"):
         o[name].rotation_mode = "XYZ"
@@ -164,6 +168,10 @@ def six_axis(piece, keep=None):
     objs, _h = place(prop(piece), piece)
     if keep is not None:
         objs = show_glyphs(objs, keep)
+    if piece == "jet_bridge":
+        # Drawn open and parked, so the folded box does not show inside the full
+        # vestibule (board b564cda3).
+        park_bridge(by_name(objs))
     lo, hi = rap.bounds(objs)
     ref = rap.cube((hi.x + 0.35 + 0.5, lo.y - 0.35 - 0.5, 0.5))
     sub = rap.world_points(objs)

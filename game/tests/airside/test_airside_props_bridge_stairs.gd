@@ -133,7 +133,10 @@ func test_the_walk_runs_clear_and_turns_once_in_the_cab() -> void:
 		plane.get_parent().free()
 	# Controls: the exit sill straight to the cab floor, skipping the stair,
 	# meets the stair; the cab floor straight through the cab's far side meets
-	# its wall.
+	# its wall. The planes have left, so the empty gate's bridge is drawn
+	# folded (board b564cda3); the controls draw it open.
+	var entry: Dictionary = _airside.props.bridges["A"]
+	JetBridgePose.apply(entry["joints"], entry["pose"])
 	var tris := Kit.world_tris(bridge)
 	var lift := Vector3.UP * BODY_LIFTS[0]
 	var skip: Variant = _first_hit(
@@ -141,12 +144,17 @@ func test_the_walk_runs_clear_and_turns_once_in_the_cab() -> void:
 	)
 	var cab := _at(bridge, &"Mount_CabFloor") + Vector3.UP * BODY_LIFTS[1]
 	var through: Variant = _first_hit(tris, cab, cab + Vector3.RIGHT * 3.0)
+	JetBridgePose.apply(entry["joints"], entry["pose"], entry["folded"])
 	print("controls: sill to cab floor meets %s; cab floor 3 m east meets %s" % [skip, through])
 	assert_bool(skip != null).is_true()
 	assert_bool(through != null).is_true()
 
 
-## Plane 03 reports undocked, the bridge parked over its wing and gear.
+## Plane 03 reports undocked: the bridge is drawn folded (board b564cda3;
+## test_airside_props_bridge_fold.gd checks the drawn bridge against the 03),
+## its joints still parked. The crossing checks read the drawn (folded)
+## bridge; the cab gap reads the parked cab's box, hidden while folded, so
+## parked() would still clear the 03's wing if it were drawn open.
 func test_plane_03_leaves_the_bridge_parked_clear_of_it() -> void:
 	var entry: Dictionary = _airside.props.bridges["A"]
 	var bridge: Node3D = entry["node"]
@@ -161,6 +169,7 @@ func test_plane_03_leaves_the_bridge_parked_clear_of_it() -> void:
 		)
 	)
 	assert_bool(entry["docked"]).is_false()
+	assert_bool(entry["folded"]).is_true()
 	assert_str(entry["model"]).is_equal(ON_FOOT)
 	assert_int(found["count"]).is_equal(0)
 	assert_int(inside["count"]).is_equal(0)
@@ -170,7 +179,7 @@ func test_plane_03_leaves_the_bridge_parked_clear_of_it() -> void:
 	low["height"] = 1.58
 	JetBridgePose.apply(entry["joints"], low)
 	var cut := Kit.crossings(plane, bridge)
-	JetBridgePose.apply(entry["joints"], entry["pose"])
+	JetBridgePose.apply(entry["joints"], entry["pose"], entry["folded"])
 	print("control: cab at 1.58 m over the 03, %d crossings (%s)" % [cut["count"], cut["meshes"]])
 	assert_int(cut["count"]).is_greater(0)
 	plane.get_parent().free()
@@ -197,7 +206,7 @@ func test_plane_03s_apron_walk_has_headroom_under_the_bridge() -> void:
 	for p in walk:
 		shifted.append(p + Vector3.RIGHT * 1.5)
 	var under := _lowest_over(Kit.world_tris(bridge), shifted)
-	JetBridgePose.apply(entry["joints"], entry["pose"])
+	JetBridgePose.apply(entry["joints"], entry["pose"], entry["folded"])
 	print("control: walk under the lowered cab, lowest bridge part %.3f m" % under)
 	assert_float(under).is_less(APRON_HEADROOM_M)
 	plane.get_parent().free()
@@ -225,7 +234,8 @@ func test_plane_04s_wing_clears_the_docked_cab() -> void:
 
 
 ## Through pushback, from the stand through its turn, neither the tug nor the
-## plane meets the parked bridge.
+## plane meets the bridge as drawn then (folded since board b564cda3, as no
+## plane reports the gate in PUSHBACK).
 func test_the_pushback_tug_and_plane_clear_the_parked_bridge() -> void:
 	var bridge := _bridge()
 	var path := _airside.phase_path(FlightSim.State.PUSHBACK, "A")
