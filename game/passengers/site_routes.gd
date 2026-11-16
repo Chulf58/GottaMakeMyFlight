@@ -173,7 +173,9 @@ static func door_cells(
 
 
 ## Whether a door at `anchor` leading out by `out` has a walk to the grid edge
-## `edge` leads out over (door_cells() is not empty), without walking it.
+## `edge` leads out over (door_cells() is not empty), without walking it. An
+## exit's `edge` is its stand's own out step (StandPlacement.walk_of()), so a
+## door on the west or east edge of the grid walks straight out there.
 static func reaches(
 	grid: BuildGrid,
 	site: SiteDefinition,
@@ -216,12 +218,14 @@ static func arrival(
 ## The walk out to the plane at `stand` along door_cells() `cells` of an exit
 ## (searched down the distances to the door's cell): the door cell's centre
 ## and outer edge, the outside cells' corners and the stand's apron route to
-## the door of a plane drawn with `model` ("" for the stand's door).
+## the door of a plane drawn with `model` ("" for the stand's door). A door on
+## the grid edge steps out over the edge the stand's side faces
+## (StandPlacement.out_step()).
 static func departure(
 	grid: BuildGrid, site: SiteDefinition, cells: Array[Vector2i], stand: Dictionary, model := ""
 ) -> Array[Vector3]:
 	var points: Array[Vector3] = []
-	var out := cells[1] - cells[0] if cells.size() > 1 else SiteDefinition.PLANE_STEP
+	var out := cells[1] - cells[0] if cells.size() > 1 else StandPlacement.out_step(stand)
 	var centre := grid.cell_to_world(cells[0])
 	points.append(centre)
 	points.append(centre + Vector3(out.x, 0.0, out.y) * 0.5)

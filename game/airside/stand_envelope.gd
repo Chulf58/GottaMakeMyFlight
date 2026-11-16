@@ -63,8 +63,14 @@ static func spacing_cells(plane_class: String) -> int:
 
 ## The envelope of `plane_class` at `stand` as world xz rectangles (x, z): the
 ## swing square, then the way north. With `north_of`, only what lies north of
-## that z, as StandPlacement.swept_rects() cuts it.
+## that z, as StandPlacement.swept_rects() cuts it. A side stand's are its
+## north twin's turned onto it (StandPlacement.rects_to_world()), with
+## `north_of` a z at that twin.
 static func rects(stand: Dictionary, plane_class: String, north_of := INF) -> Array[Rect2]:
+	if StandPlacement.side_of(stand) != StandPlacement.NORTH:
+		return StandPlacement.rects_to_world(
+			stand, rects(StandPlacement.north_twin(stand), plane_class, north_of)
+		)
 	var at := StandPlacement.stand_point(stand)
 	var back := StandPlacement.pushback_end(stand)
 	var swing := radius(plane_class)
@@ -103,8 +109,11 @@ static func lane_band_south() -> float:
 
 
 ## Whether every model of `plane_class` parked door-aligned at `stand`
-## (PlaneClasses.stand_offset) keeps its tail south of lane_band_south().
+## (PlaneClasses.stand_offset) keeps its tail south of lane_band_south(). A
+## side stand is checked as its north twin, against its own side lane.
 static func clears_lane(stand: Dictionary, plane_class: String) -> bool:
+	if StandPlacement.side_of(stand) != StandPlacement.NORTH:
+		return clears_lane(StandPlacement.north_twin(stand), plane_class)
 	var at := StandPlacement.stand_point(stand)
 	for model: String in PlaneClasses.CLASSES[plane_class]["models"]:
 		var tail: float = (
@@ -117,14 +126,17 @@ static func clears_lane(stand: Dictionary, plane_class: String) -> bool:
 
 ## Which part of the envelope of `plane_class` at `stand` is blocked on `grid`
 ## (with `site`'s obstacles; null for none): SWING or WAY when something built
-## stands under it (the swing first), LANE when the parked plane would reach the
-## lane band, else CLEAR.
+## stands under it or it reaches over the road (StandPlacement.reaches_road();
+## the swing first), LANE when the parked plane would reach the lane band, else
+## CLEAR.
 static func blocked_part(
 	grid: BuildGrid, site: SiteDefinition, stand: Dictionary, plane_class: String
 ) -> Part:
 	var parts := rects(stand, plane_class)
 	for i in parts.size():
 		var one: Array[Rect2] = [parts[i]]
+		if StandPlacement.reaches_road(grid, one):
+			return Part.SWING if i == 0 else Part.WAY
 		for cell: Vector2i in StandPlacement.cells_under(grid, one):
 			if not StandPlacement.apron_clear(grid, site, cell):
 				return Part.SWING if i == 0 else Part.WAY

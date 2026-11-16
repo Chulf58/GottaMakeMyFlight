@@ -294,14 +294,16 @@ static func same_stand(a: Dictionary, b: Dictionary) -> bool:
 		int(a["exit"]) == int(b["exit"])
 		and is_equal_approx(float(a["x"]), float(b["x"]))
 		and is_equal_approx(float(a["wall_z"]), float(b["wall_z"]))
+		and StandPlacement.side_of(a) == StandPlacement.side_of(b)
 	)
 
 
 ## The ground the flight at the stand still needs, as world xz rectangles:
-## everything StandPlacement.swept_rects() covers until it pushes back, then
-## only what lies north of its tail on the way to the taxi lane. With no taxi
-## route to follow (Airside.routes_gate() false) it keeps everything. Empty
-## while no flight is at the stand.
+## everything its class needs (class_rects()) until it pushes back, then only
+## what lies ahead of its rearmost point on the way to the taxi lane, and the
+## box it covers (route_rects()). With no taxi route to follow
+## (Airside.routes_gate() false) it keeps everything. Empty while no flight is
+## at the stand.
 func guard_rects() -> Array[Rect2]:
 	if gates == null:
 		return _rects_of(busy_flight(), live, "")
@@ -325,10 +327,12 @@ static func clip_rects(rects: Array[Rect2], frame: Rect2) -> Array[Rect2]:
 func _rects_of(id: String, stand: Dictionary, gate: String) -> Array[Rect2]:
 	if id == "":
 		return [] as Array[Rect2]
+	var contract := flights.contract_of(flights.flight_contract_id(id))
+	var plane_class: String = contract.get("plane_size", FlightSim.STARTER_TERMS["plane_size"])
 	if flights.state_of(id) < FlightSim.State.TAXI_OUT:
-		return StandPlacement.swept_rects(stand)
+		return class_rects(stand, plane_class)
 	if airside != null and not airside.routes_gate(gate):
-		return StandPlacement.swept_rects(stand)
+		return class_rects(stand, plane_class)
 	var path := (
 		airside.phase_path(FlightSim.State.TAXI_OUT, gate)
 		if airside != null
@@ -337,15 +341,79 @@ func _rects_of(id: String, stand: Dictionary, gate: String) -> Array[Rect2]:
 		)
 	)
 	if path.is_empty():
-		return StandPlacement.swept_rects(stand)
-	var t := smoothstep(0.0, 1.0, flights.phase_progress(id, flights.tick))
-	var at := FlightPose.point_at(path, FlightPose.path_length(path) * t)
-	return StandPlacement.swept_rects(stand, at.z + StandPlacement.TAIL_M)
+		return class_rects(stand, plane_class)
+	var start := flights.state_start(id, FlightSim.State.TAXI_OUT)
+	return route_rects(
+		stand,
+		path,
+		flights.phase_progress(id, flights.tick),
+		PlaneClasses.flight_model(flights, id),
+		plane_class,
+		flights.taxi_plan(id).get(FlightSim.State.TAXI_OUT, {}),
+		float(flights.state_start(id, FlightSim.State.TAKEOFF) - start)
+	)
+
+
+## The ground a `plane_class` plane needs at `stand`, from `north_of` on (a z
+## at the stand's north twin, StandPlacement.swept_rects()): the sweep
+## StandPlacement has always guarded for small and medium planes, the large
+## envelope (StandEnvelope) for a large one, whose wings reach past it.
+static func class_rects(stand: Dictionary, plane_class: String, north_of := INF) -> Array[Rect2]:
+	if plane_class == PlaneClasses.LARGE:
+		return StandEnvelope.rects(stand, PlaneClasses.LARGE, north_of)
+	return StandPlacement.swept_rects(stand, north_of)
+
+
+## The corners of `model`'s box drawn at ground `pose` off the stand, centred
+## on the pose point (PlaneModels "model_offset", FlightPose.model_position()),
+## as world points at y 0.
+static func footprint(pose: Transform3D, model: String) -> PackedVector3Array:
+	var box: AABB = PlaneModels.PLANES[model]["aabb"]
+	var centred: Vector3 = PlaneModels.PLANES[model]["model_offset"]
+	var turn := Basis(Vector3.UP, MovementPlan.yaw_of(pose.basis.z))
+	var out := PackedVector3Array()
+	for x in [box.position.x, box.end.x]:
+		for z in [box.position.z + centred.z, box.end.z + centred.z]:
+			var at := pose.origin + turn * Vector3(x, 0.0, z)
+			out.append(Vector3(at.x, 0.0, at.z))
+	return out
+
+
+## What a `model` plane of `plane_class` `progress` (0 to 1) through TAXI_OUT
+## along its route `path` from `stand` still needs of it: the class's ground
+## (class_rects()) ahead of the plane's rearmost point, and the box the plane
+## covers there. The plane stands where it is drawn (FlightPose.pose(), with
+## its planned `pause` inside `budget` ticks), turned to its heading on the
+## route, so the cut follows the route on every side and through each corner.
+## The cut is taken in the stand's own frame (StandPlacement.to_frame()) and
+## never lies north of the old one, the pose point plus StandPlacement.TAIL_M.
+static func route_rects(
+	stand: Dictionary,
+	path: PackedVector3Array,
+	progress: float,
+	model: String,
+	plane_class: String,
+	pause := {},
+	budget := 0.0
+) -> Array[Rect2]:
+	var entry := MovementPlan.flat_dir(
+		StandPlacement.stand_point(stand), StandPlacement.pushback_end(stand)
+	)
+	var pose := FlightPose.pose(FlightSim.State.TAXI_OUT, progress, path, entry, pause, budget)
+	var tail_z := StandPlacement.to_frame(stand, pose.origin).z + StandPlacement.TAIL_M
+	var corners := footprint(pose, model)
+	var box := Rect2(Vector2(corners[0].x, corners[0].z), Vector2.ZERO)
+	for corner in corners:
+		tail_z = maxf(tail_z, StandPlacement.to_frame(stand, corner).z)
+		box = box.expand(Vector2(corner.x, corner.z))
+	var out := class_rects(stand, plane_class, tail_z)
+	out.append(box)
+	return out
 
 
 ## The grid cells guard_rects() covers, as a set, worked out once per tick.
 func guarded_cells() -> Dictionary:
-	var key := [flights.tick, busy_flight(), live.get("x"), live.get("wall_z")]
+	var key := [flights.tick, busy_flight(), live.get("x"), live.get("wall_z"), live.get("side")]
 	if gates != null:
 		key = [flights.tick, _stands_of(gate_stands)]
 		for gate: String in gate_stands:
@@ -452,7 +520,7 @@ static func checked(data: Dictionary, on_site: SiteDefinition) -> Dictionary:
 static func _checked_stand(saved: Variant, on_site: SiteDefinition) -> Dictionary:
 	if not StandPlacement.is_stand(saved) or not WholeNumber.is_whole(saved["exit"]):
 		return {"error": "'live' is not a stand"}
-	var stand := StandPlacement.make(int(saved["exit"]), float(saved["x"]), float(saved["wall_z"]))
+	var stand := StandPlacement.from_saved(saved)
 	var low := Vector2(on_site.grid_origin.x, on_site.grid_origin.z)
 	var frame := Rect2(low, Vector2(on_site.grid_size))
 	if int(stand["exit"]) < 0 or not frame.has_point(Vector2(stand["x"], stand["wall_z"])):
