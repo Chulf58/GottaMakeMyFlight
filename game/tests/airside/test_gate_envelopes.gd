@@ -204,10 +204,10 @@ func test_the_three_refusal_texts() -> void:
 		texts[reason] = BuildResult.refused(reason).reason_text()
 	print("texts %s" % [texts])
 	assert_str(texts[BuildResult.Reason.GATE_NO_ROOM]).is_equal(
-		"No room for a plane outside this exit. Keep the ground north of it clear"
+		"No room for a plane outside this exit. Keep the ground out from it clear"
 	)
 	assert_str(texts[BuildResult.Reason.GATE_ROUTE_BLOCKED]).is_equal(
-		"Something blocks the way from this exit to the taxi lane. Clear a path north"
+		"Something blocks the way from this exit to the taxi lane. Clear a path out from it"
 	)
 	assert_str(texts[BuildResult.Reason.GATE_ROUTE]).is_equal(
 		"A booked flight's plane needs this ground. Move its flights in Departures first"

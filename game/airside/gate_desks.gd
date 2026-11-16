@@ -3,8 +3,10 @@ extends Node
 ## The gates of the player-built terminal (decision gates-technical-design-
 ## gate-desks-link-to-north-exits-one-st, points 1 and 6, building user ruling
 ## gates-are-placed-gate-desks-each-desk-links-automatically-to). A gate is a
-## gate desk (DESK) linked to an exit door whose outside faces north; the
-## gate's plane stand is straight out from that exit (StandPlacement.for_exit).
+## gate desk (DESK) linked to an exit door whose outside faces west, north or
+## east, never the road (slice S5 of design airside-all-around-technical-
+## design-one-route-source-per-con); the gate's plane stand is straight out
+## from that exit on its side (StandPlacement.for_exit).
 ##
 ## Each desk links to the nearest exit within LINK_CELLS cells of its footprint
 ## that no other desk holds, ties to the lower exit id, older desks (lower ids)
@@ -25,7 +27,7 @@ extends Node
 ## Refused before commit (edit_problem(), asked by ApronStand's site guard): a
 ## desk that would link to no exit, whose small swing square would overlap
 ## another gate's (GATE_STAND_OVERLAP), whose exit has no room for a small swing
-## (GATE_NO_ROOM) or whose small way north to the lane is built over
+## (GATE_NO_ROOM) or whose small way out to its lane is built over
 ## (GATE_ROUTE_BLOCKED); an edit that builds under the envelope of the largest
 ## class booked at a gate (GATE_ROUTE: its running contracts and the live
 ## flights at it); and a removal that would end a gate while a live
@@ -51,11 +53,12 @@ extends Node
 
 signal changed
 
-## Why a gate desk has no gate (unlinked_on()). NO_EXIT: no north exit within
-## LINK_CELLS. EXIT_TAKEN: every exit in reach is another gate's. STAND_OVERLAP:
-## a free exit is in reach, but its stand would overlap a gate's. NO_LETTER: it
-## could link, but every gate letter is in use. NO_ROOM: the free exit has no
-## room for a small swing. ROUTE_BLOCKED: its small way north is built over.
+## Why a gate desk has no gate (unlinked_on()). NO_EXIT: no exit facing west,
+## north or east within LINK_CELLS. EXIT_TAKEN: every exit in reach is another
+## gate's. STAND_OVERLAP: a free exit is in reach, but its stand would overlap a
+## gate's. NO_LETTER: it could link, but every gate letter is in use. NO_ROOM:
+## the free exit has no room for a small swing. ROUTE_BLOCKED: its small way
+## out is built over.
 enum Unlinked { NO_EXIT, EXIT_TAKEN, STAND_OVERLAP, NO_LETTER, NO_ROOM, ROUTE_BLOCKED }
 
 ## The refusal for a desk whose nearest free exit is unfit for that reason.
@@ -336,8 +339,8 @@ static func _overlapping_gate(
 	return ""
 
 
-## The north exits at most LINK_CELLS from `footprint` (diagonals counting
-## one), nearest first, ties to the lower id.
+## The exits facing west, north or east at most LINK_CELLS from `footprint`
+## (diagonals counting one), nearest first, ties to the lower id.
 static func exits_in_reach(on_grid: BuildGrid, footprint: Array[Vector2i]) -> Array[int]:
 	var found: Array[Vector2i] = []
 	for id in on_grid.object_ids():
@@ -384,9 +387,9 @@ static func desk_ids(on_grid: BuildGrid) -> Array[int]:
 
 
 ## The exit door nearest `footprint` (at most LINK_CELLS away, diagonals
-## counting one) whose outside faces north and that is not in `taken`; with
-## `fit`, also one fit for a gate beside `stands` (exit_unfit()). Ties to the
-## lower id. 0 for none.
+## counting one) whose outside faces west, north or east and that is not in
+## `taken`; with `fit`, also one fit for a gate beside `stands` (exit_unfit()).
+## Ties to the lower id. 0 for none.
 static func nearest_exit(
 	on_grid: BuildGrid,
 	footprint: Array[Vector2i],
@@ -680,9 +683,10 @@ func to_snapshot() -> Dictionary:
 
 ## The bindings a to_snapshot() dictionary holds, checked against `on_grid`:
 ## {"gates": Array[Dictionary]} or {"error": why}. Each gate needs a letter
-## from LETTERS, a gate desk and a north exit on the grid; letters, desks and
-## exits are each used once; and the set must be one the links make on the grid
-## (_set_problem()), so a load installs exactly the saved gates.
+## from LETTERS, a gate desk and an exit facing west, north or east on the
+## grid; letters, desks and exits are each used once; and the set must be one
+## the links make on the grid (_set_problem()), so a load installs exactly the
+## saved gates.
 static func checked(data: Dictionary, on_grid: BuildGrid) -> Dictionary:
 	if data.size() != SAVE_KEYS.size() or not data.has_all(SAVE_KEYS):
 		return {"error": "a gates part holds save_version and gates"}
@@ -743,7 +747,7 @@ static func _entry_problem(entry: Variant, on_grid: BuildGrid, used: Dictionary)
 	if not WholeNumber.is_whole(entry["desk"]) or not is_desk(on_grid, int(entry["desk"])):
 		return "gate %s: %s is not a gate desk" % [letter, entry["desk"]]
 	if not WholeNumber.is_whole(entry["exit"]) or not _is_gate_exit(on_grid, int(entry["exit"])):
-		return "gate %s: %s is not an exit facing north" % [letter, entry["exit"]]
+		return "gate %s: %s is not an exit facing west, north or east" % [letter, entry["exit"]]
 	for key in GATE_KEYS:
 		var value: Variant = letter if key == "gate" else int(entry[key])
 		if used.has("%s:%s" % [key, value]):

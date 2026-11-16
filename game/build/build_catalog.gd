@@ -127,7 +127,8 @@ static func _build() -> void:
 	_add_door(&"exit_door", "Exit to the plane", Color(0.3, 0.55, 0.85))
 	# The gate desk (decision gates-technical-design-gate-desks-link-to-north-
 	# exits-one-st, point 1): a 2x1 counter that makes a gate of the nearest free
-	# north exit (GateDesks). Unstaffed for now, so it has no interaction cell.
+	# exit facing the planes (GateDesks). Unstaffed for now, so it has no
+	# interaction cell.
 	# Drawn with the info desk's piece and height until its own art (gates 2/4).
 	_add(GateDesks.DESK, "Gate desk", Vector2i(2, 1), Color(0.3, 0.5, 0.75), 2.02)
 	# Cafe pieces (interior-kit Cafe 1/2). The counter's interaction cell is its

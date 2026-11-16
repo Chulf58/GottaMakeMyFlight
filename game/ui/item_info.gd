@@ -41,7 +41,7 @@ const TEXT := {
 	BuildMode.Tool.EXIT:
 	[
 		"The way out to the planes. Passengers leave the terminal here to board.",
-		"Place it on the outer edge. A gate desk links to an exit that faces north (the planes).",
+		"Place it on the outer edge. A gate desk links to an exit facing west, north or east.",
 		"The outside edge with no floor behind it. Keep the spot in front clear."
 	],
 	BuildMode.Tool.DESK:
@@ -64,9 +64,9 @@ const TEXT := {
 	],
 	BuildMode.Tool.GATE_DESK:
 	[
-		"Makes a gate. It links to the nearest free north-facing exit; the plane parks out from it.",
+		"Makes a gate. It links to the nearest free exit facing the planes; the plane parks out from it.",
 		"Each flight is given a gate. A gate takes the next free letter, starting at A.",
-		"Within 4 cells of a free north-facing exit, with room for the plane. No staff needed."
+		"Within 4 cells of a free exit facing the planes, with room for the plane. No staff needed."
 	],
 	BuildMode.Tool.SCREEN:
 	[
