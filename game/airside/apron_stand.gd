@@ -48,6 +48,13 @@ signal live_changed(stand: Dictionary)
 
 const STATUS_HEIGHT_M := 18.0
 const AREA_LIFT_M := 0.32
+## A pose point this close to a route's first leg is on it.
+const ON_LEG_M := 0.001
+## The steps, in metres of route, the box of a plane still to turn or to clear the
+## class's ground is sampled at, and the margin added to what they reach, for
+## the swing between two samples.
+const TURN_STEP_M := 0.5
+const TURN_MARGIN_M := 0.3
 const AREA_TINT := Color(1.0, 0.5, 0.1, 0.3)
 const REMOVALS: Array[BuildEdit.Kind] = [
 	BuildEdit.Kind.REMOVE_FLOOR,
@@ -81,6 +88,8 @@ var _desks_sent: Dictionary = {}
 
 var _guard_key: Array = []
 var _guard_cells: Dictionary = {}
+var _drawn_key: Array = []
+var _drawn_rects_cache: Array[Rect2] = []
 var _label: Label3D
 ## Holds the guarded-area meshes; shown only while build mode lasts.
 var _guard_view := Node3D.new()
@@ -145,7 +154,7 @@ func _process(_delta: float) -> void:
 	if grid == null:
 		return
 	var frame := Rect2(Vector2(site.grid_origin.x, site.grid_origin.z), Vector2(site.grid_size))
-	var rects := clip_rects(guard_rects(), frame)
+	var rects := clip_rects(_drawn_rects(), frame)
 	while _areas.size() < rects.size():
 		_add_area()
 	for i in _areas.size():
@@ -415,9 +424,20 @@ static func footprint(pose: Transform3D, model: String) -> PackedVector3Array:
 ## (class_rects()) ahead of the plane's rearmost point, and the box the plane
 ## covers there. The plane stands where it is drawn (FlightPose.pose(), with
 ## its planned `pause` inside `budget` ticks), turned to its heading on the
-## route, so the cut follows the route on every side and through each corner.
-## The cut is taken in the stand's own frame (StandPlacement.to_frame()) and
-## never lies north of the old one, the pose point plus StandPlacement.TAIL_M.
+## route.
+##
+## The cut follows the plane along the route's first leg, from the pushback's
+## end to the join, which runs north in the stand's own frame
+## (StandPlacement.to_frame()): the ground north of the pose point plus the
+## plane's rear on that heading (at least StandPlacement.TAIL_M). Near the join
+## it also holds what the plane's box will still reach: from
+## MovementPlan.CORNER_BLEND before the join, where the plane starts to turn,
+## on along the leg after it for as long as the box overlaps the class's ground.
+## Past that the plane is on the lane or a spur with the ground behind it, and
+## only its box is held. A later leg is never read in the stand's frame: a spur
+## or the lane runs along its z, or back across its x, and read there it would
+## take released ground back. So the cut only moves north, what is released
+## stays released, and a cell the plane covers now or on its way out is guarded.
 static func route_rects(
 	stand: Dictionary,
 	path: PackedVector3Array,
@@ -431,28 +451,123 @@ static func route_rects(
 		StandPlacement.stand_point(stand), StandPlacement.pushback_end(stand)
 	)
 	var pose := FlightPose.pose(FlightSim.State.TAXI_OUT, progress, path, entry, pause, budget)
-	var tail_z := StandPlacement.to_frame(stand, pose.origin).z + StandPlacement.TAIL_M
 	var corners := footprint(pose, model)
 	var box := Rect2(Vector2(corners[0].x, corners[0].z), Vector2.ZERO)
 	for corner in corners:
-		tail_z = maxf(tail_z, StandPlacement.to_frame(stand, corner).z)
 		box = box.expand(Vector2(corner.x, corner.z))
-	var out := class_rects(stand, plane_class, tail_z)
+	var cut := _cut_z(stand, path, entry, model, plane_class, pose.origin)
+	var out := class_rects(stand, plane_class, cut)
 	out.append(box)
 	return out
 
 
+## The z, at `stand`'s north twin, north of which route_rects() keeps the class's
+## ground for a `model` plane of `plane_class` at `origin` on `path` (its first
+## leg runs from the pushback's end to the join): the plane's rear, and the
+## furthest rear of the box at every pose still ahead of it from the start of
+## its turn at the join, up to the last one whose box overlaps the class's
+## ground (a pose past the corner is its box turned to the leg's heading). -INF
+## once no such pose is left, or when the plane is not on the first two legs.
+static func _cut_z(
+	stand: Dictionary,
+	path: PackedVector3Array,
+	entry: Vector3,
+	model: String,
+	plane_class: String,
+	origin: Vector3
+) -> float:
+	if path.size() < 2:
+		return _rear_z(stand, origin, entry, model)
+	var join := path[1]
+	var run := path[0].distance_to(join)
+	var travelled := 0.0
+	var rear := 0.0
+	if _on_leg(origin, path[0], join):
+		travelled = path[0].distance_to(origin)
+		rear = _rear_z(stand, origin, entry, model)
+	elif path.size() > 2 and _on_leg(origin, join, path[2]):
+		travelled = run + origin.distance_to(join)
+		rear = _rear_z(stand, join, entry, model)
+	else:
+		return -INF
+	var ground := class_rects(stand, plane_class)
+	var total := MovementPlan.path_length(path)
+	var turn_end := run + MovementPlan.CORNER_BLEND
+	var at := maxf(travelled, run - MovementPlan.CORNER_BLEND)
+	var cut := -INF
+	var swept := false
+	while true:
+		var turned := Transform3D(
+			Basis(Vector3.UP, MovementPlan.yaw_of(MovementPlan.heading_at(path, at, entry))),
+			MovementPlan.point_at(path, at)
+		)
+		var corners := footprint(turned, model)
+		if at > turn_end and not _overlaps(corners, ground):
+			break
+		swept = true
+		for corner in corners:
+			cut = maxf(cut, StandPlacement.to_frame(stand, corner).z + TURN_MARGIN_M)
+		if at >= total:
+			break
+		at = minf(at + TURN_STEP_M, total)
+	return maxf(cut, rear) if swept else -INF
+
+
+## Whether the box with `corners` (footprint()), grown by TURN_MARGIN_M, overlaps
+## any of `rects`.
+static func _overlaps(corners: PackedVector3Array, rects: Array[Rect2]) -> bool:
+	var box := Rect2(Vector2(corners[0].x, corners[0].z), Vector2.ZERO)
+	for corner in corners:
+		box = box.expand(Vector2(corner.x, corner.z))
+	box = box.grow(TURN_MARGIN_M)
+	return rects.any(func(rect: Rect2) -> bool: return rect.intersects(box))
+
+
+## The z, at `stand`'s north twin, of the rearmost point of a `model` plane at
+## `origin` heading `entry`: StandPlacement.TAIL_M behind it, or further when
+## the model's box reaches further.
+static func _rear_z(stand: Dictionary, origin: Vector3, entry: Vector3, model: String) -> float:
+	var rear := StandPlacement.to_frame(stand, origin).z + StandPlacement.TAIL_M
+	var straight := Transform3D(Basis(Vector3.UP, MovementPlan.yaw_of(entry)), origin)
+	for corner in footprint(straight, model):
+		rear = maxf(rear, StandPlacement.to_frame(stand, corner).z)
+	return rear
+
+
+## Whether `point` lies on the segment from `from` to `to`.
+static func _on_leg(point: Vector3, from: Vector3, to: Vector3) -> bool:
+	return Geometry3D.get_closest_point_to_segment(point, from, to).distance_to(point) < ON_LEG_M
+
+
 ## The grid cells guard_rects() covers, as a set, worked out once per tick.
 func guarded_cells() -> Dictionary:
+	var key := _tick_key()
+	if key != _guard_key:
+		_guard_key = key
+		_guard_cells = StandPlacement.cells_under(grid, guard_rects())
+	return _guard_cells
+
+
+## guard_rects() for the drawn area, worked out once per tick like
+## guarded_cells(): _process() asks every rendered frame, and a taxiing plane's
+## rects are worked out from many poses.
+func _drawn_rects() -> Array[Rect2]:
+	var key := _tick_key()
+	if key != _drawn_key:
+		_drawn_key = key
+		_drawn_rects_cache = guard_rects()
+	return _drawn_rects_cache
+
+
+## What the guard is worked out from: the tick, the flights at the stands and
+## the stands.
+func _tick_key() -> Array:
 	var key := [flights.tick, busy_flight(), live.get("x"), live.get("wall_z"), live.get("side")]
 	if gates != null:
 		key = [flights.tick, _stands_of(gate_stands)]
 		for gate: String in gate_stands:
 			key.append(busy_flight(gate))
-	if key != _guard_key:
-		_guard_key = key
-		_guard_cells = StandPlacement.cells_under(grid, guard_rects())
-	return _guard_cells
+	return key
 
 
 ## The guard of the site's grid (SiteGrid): a PLANE_AREA refusal for an
