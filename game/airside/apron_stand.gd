@@ -48,6 +48,12 @@ signal live_changed(stand: Dictionary)
 
 const STATUS_HEIGHT_M := 18.0
 const AREA_LIFT_M := 0.32
+## A pose point this close to a route's first leg is on it.
+const ON_LEG_M := 0.001
+## The steps, in metres of route, a turning plane's box is sampled at, and the
+## margin added to what they reach, for the swing between two samples.
+const TURN_STEP_M := 0.5
+const TURN_MARGIN_M := 0.3
 const AREA_TINT := Color(1.0, 0.5, 0.1, 0.3)
 const REMOVALS: Array[BuildEdit.Kind] = [
 	BuildEdit.Kind.REMOVE_FLOOR,
@@ -415,9 +421,20 @@ static func footprint(pose: Transform3D, model: String) -> PackedVector3Array:
 ## (class_rects()) ahead of the plane's rearmost point, and the box the plane
 ## covers there. The plane stands where it is drawn (FlightPose.pose(), with
 ## its planned `pause` inside `budget` ticks), turned to its heading on the
-## route, so the cut follows the route on every side and through each corner.
-## The cut is taken in the stand's own frame (StandPlacement.to_frame()) and
-## never lies north of the old one, the pose point plus StandPlacement.TAIL_M.
+## route.
+##
+## The cut follows the plane along the route's first leg, from the pushback's
+## end to the join, which runs north in the stand's own frame
+## (StandPlacement.to_frame()): the ground north of the pose point plus the
+## plane's rear on that heading (at least StandPlacement.TAIL_M), and, while the
+## plane has yet to take the corner at the join (MovementPlan.CORNER_BLEND
+## either side of it), no less than the furthest rear its turning box still
+## reaches. Past the corner the plane is on the lane or a spur, so all of the
+## class's ground lies behind it and only the plane's box is held. A later leg
+## is never read in the stand's frame: a spur or the lane runs along its z, or
+## back across its x, and read there it would take released ground back. So the
+## cut only moves north, what is released stays released, and a cell the plane
+## covers now or in its turn is guarded.
 static func route_rects(
 	stand: Dictionary,
 	path: PackedVector3Array,
@@ -431,15 +448,63 @@ static func route_rects(
 		StandPlacement.stand_point(stand), StandPlacement.pushback_end(stand)
 	)
 	var pose := FlightPose.pose(FlightSim.State.TAXI_OUT, progress, path, entry, pause, budget)
-	var tail_z := StandPlacement.to_frame(stand, pose.origin).z + StandPlacement.TAIL_M
 	var corners := footprint(pose, model)
 	var box := Rect2(Vector2(corners[0].x, corners[0].z), Vector2.ZERO)
 	for corner in corners:
-		tail_z = maxf(tail_z, StandPlacement.to_frame(stand, corner).z)
 		box = box.expand(Vector2(corner.x, corner.z))
-	var out := class_rects(stand, plane_class, tail_z)
+	var out := class_rects(stand, plane_class, _cut_z(stand, path, entry, model, pose.origin))
 	out.append(box)
 	return out
+
+
+## The z, at `stand`'s north twin, north of which route_rects() keeps the class's
+## ground for a `model` plane at `origin` on `path` (its first leg runs from
+## the pushback's end to the join), or -INF once the plane has taken the
+## corner at the join.
+static func _cut_z(
+	stand: Dictionary, path: PackedVector3Array, entry: Vector3, model: String, origin: Vector3
+) -> float:
+	if path.size() < 2:
+		return _rear_z(stand, origin, entry, model)
+	var join := path[1]
+	var run := path[0].distance_to(join)
+	var travelled := run + origin.distance_to(join)
+	var cut := -INF
+	if _on_leg(origin, path[0], join):
+		travelled = path[0].distance_to(origin)
+		cut = _rear_z(stand, origin, entry, model)
+	elif travelled <= run + MovementPlan.CORNER_BLEND:
+		cut = _rear_z(stand, join, entry, model)
+	else:
+		return cut
+	var last := run + MovementPlan.CORNER_BLEND
+	var from := maxf(travelled, run - MovementPlan.CORNER_BLEND)
+	var samples := ceili((last - from) / TURN_STEP_M)
+	for i in samples + 1:
+		var at := minf(from + i * TURN_STEP_M, last)
+		var turned := Transform3D(
+			Basis(Vector3.UP, MovementPlan.yaw_of(MovementPlan.heading_at(path, at, entry))),
+			MovementPlan.point_at(path, at)
+		)
+		for corner in footprint(turned, model):
+			cut = maxf(cut, StandPlacement.to_frame(stand, corner).z + TURN_MARGIN_M)
+	return cut
+
+
+## The z, at `stand`'s north twin, of the rearmost point of a `model` plane at
+## `origin` heading `entry`: StandPlacement.TAIL_M behind it, or further when
+## the model's box reaches further.
+static func _rear_z(stand: Dictionary, origin: Vector3, entry: Vector3, model: String) -> float:
+	var rear := StandPlacement.to_frame(stand, origin).z + StandPlacement.TAIL_M
+	var straight := Transform3D(Basis(Vector3.UP, MovementPlan.yaw_of(entry)), origin)
+	for corner in footprint(straight, model):
+		rear = maxf(rear, StandPlacement.to_frame(stand, corner).z)
+	return rear
+
+
+## Whether `point` lies on the segment from `from` to `to`.
+static func _on_leg(point: Vector3, from: Vector3, to: Vector3) -> bool:
+	return Geometry3D.get_closest_point_to_segment(point, from, to).distance_to(point) < ON_LEG_M
 
 
 ## The grid cells guard_rects() covers, as a set, worked out once per tick.
