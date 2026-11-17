@@ -28,8 +28,10 @@ const FOREARM_M := 0.3
 ## loop_grip: down and a little out, not out and back.
 const LOOP_POLE := Vector3(0.3, -1.0, 0.0)
 ## The finger bones (".R" or ".L" added) a loop_grip hand turns to their rest,
-## and the one of them it then bends on by loop_hook_degrees.
+## and the ones of them it then bends on: the Fingers by loop_curl_degrees, the
+## Fingertips by loop_hook_degrees, the Thumb_Tip by loop_thumb_degrees.
 const LOOP_FINGERS: Array[String] = ["Fingers", "Fingertips", "Thumb", "Thumb_Tip"]
+const LOOP_CURL_BONE := "Fingers"
 const LOOP_HOOK_BONE := "Fingertips"
 const LOOP_THUMB_BONE := "Thumb_Tip"
 
@@ -72,13 +74,15 @@ var reach_target := Vector3.ZERO
 ## _reach_loop()): the hand level and the elbow down (LOOP_POLE), so the fingers
 ## stay over the loop, out of the pack. Set by CarryOnProps with the reach.
 var loop_grip := false
-## How far a loop_grip hand bends its Fingertips and its Thumb_Tip on from
-## their rest, toward the palm, so the tips hook round the loop instead of
-## lying straight on past it into the pack. NAN (unset) takes the skeleton's
-## own values from the body this arm poses (CarryArmPose.loop_hook_degrees(),
+## How far a loop_grip hand bends its Fingers, its Fingertips and its
+## Thumb_Tip on from their rest, toward the palm, so the whole finger closes
+## round the loop like a grip instead of lying open over it (board 4e5a26f0).
+## NAN (unset) takes the skeleton's own values from the body this arm poses
+## (CarryArmPose.loop_curl_degrees(), loop_hook_degrees(),
 ## loop_thumb_degrees()), so every move that holds a pack by its loop bends
 ## them, whichever code posed the arm. With no body above the skeleton they
-## are not guessed (_loop_fingers()).
+## are not guessed (_loop_degrees()).
+var loop_curl_degrees := NAN
 var loop_hook_degrees := NAN
 var loop_thumb_degrees := NAN
 ## Whether this arm has already warned that it found no body.
@@ -130,43 +134,62 @@ func _process_modification_with_delta(_delta: float) -> void:
 
 
 ## A hand over a backpack's grab loop (loop_grip): its fingers and thumb turned
-## `weight` of the way from the clip's curl to their rest, and the Fingertips
-## and Thumb_Tip to their rest bent on by loop_hook_degrees and
-## loop_thumb_degrees (about the bone's own z axis, mirrored on the left hand,
-## the way the walk and idle clips curl the fingers). Curled as the clips hold
-## them, the fingers went up to 6 cm under the grip, into the loop and the
-## pack's top below it (backpack_pickup_probe, board 41c159bc); at their rest
-## the tips lay straight on past the loop (board 4e5a26f0). The Fingers bone
-## stays at its rest, so the grip does not move.
-## A skeleton with no body above it and no values set has no known hook: its
-## fingers stay as the clip has them, and it says so once per arm.
+## `weight` of the way from the clip's curl to their rest bent on by
+## _loop_degrees() (about the bone's own z axis, mirrored on the left hand,
+## the way the walk and idle clips curl the fingers): the Fingers and their
+## Fingertips closed toward the palm, the thumb's tip tucked. Curled as the
+## clips hold them, the fingers went up to 6 cm under the grip, into the loop
+## and the pack's top below it (backpack_pickup_probe, board 41c159bc); with
+## only the Fingertips bent the hand still read as flat and open (board
+## 4e5a26f0). The grip moves with the Fingers bone (CarryOnProps.grip_of()), so
+## the reach aims the curled grip (_grip()) and the pack hangs from it.
+## A skeleton with no body above it and no values set has no known curl: its
+## fingers stay as the clip has them.
 func _loop_fingers(skeleton: Skeleton3D, weight: float) -> void:
 	var suffix: String = [".R", ".L"][side]
-	var hook := loop_hook_degrees
-	var thumb := loop_thumb_degrees
-	if is_nan(hook) or is_nan(thumb):
-		var body := _body_of(skeleton)
-		if body == null:
-			if not _no_body_warned:
-				_no_body_warned = true
-				var why := 'no passenger body ("body" meta) above the skeleton'
-				push_warning("CarryArm %s: %s, so the loop hand is not hooked" % [get_path(), why])
-			return
-		if is_nan(hook):
-			hook = CarryArmPose.loop_hook_degrees(body)
-		if is_nan(thumb):
-			thumb = CarryArmPose.loop_thumb_degrees(body)
-	var bends := {LOOP_HOOK_BONE: hook, LOOP_THUMB_BONE: thumb}
+	var bends := _loop_degrees(skeleton)
+	if bends.is_empty():
+		return
 	for name in LOOP_FINGERS:
 		var bone := skeleton.find_bone(name + suffix)
 		if bone < 0:
 			continue
 		var rest := skeleton.get_bone_rest(bone).basis.get_rotation_quaternion()
 		if bends.has(name):
-			var bend := deg_to_rad(bends[name]) * (1.0 if side == 0 else -1.0)
-			rest = rest * Quaternion(Vector3.BACK, bend)
+			rest = rest * _bend(bends[name])
 		var now := skeleton.get_bone_pose_rotation(bone)
 		skeleton.set_bone_pose_rotation(bone, now.slerp(rest, weight))
+
+
+## The loop hand's bends from rest (degrees) by bone name: LOOP_CURL_BONE,
+## LOOP_HOOK_BONE and LOOP_THUMB_BONE, each this arm's own value or, unset,
+## its body's skeleton's (CarryArmPose). Empty, and a warning once per arm,
+## when one is unset and there is no passenger body above the skeleton.
+func _loop_degrees(skeleton: Skeleton3D) -> Dictionary:
+	var curl := loop_curl_degrees
+	var hook := loop_hook_degrees
+	var thumb := loop_thumb_degrees
+	if is_nan(curl) or is_nan(hook) or is_nan(thumb):
+		var body := _body_of(skeleton)
+		if body == null:
+			if not _no_body_warned:
+				_no_body_warned = true
+				var why := 'no passenger body ("body" meta) above the skeleton'
+				push_warning("CarryArm %s: %s, so the loop hand is not curled" % [get_path(), why])
+			return {}
+		if is_nan(curl):
+			curl = CarryArmPose.loop_curl_degrees(body)
+		if is_nan(hook):
+			hook = CarryArmPose.loop_hook_degrees(body)
+		if is_nan(thumb):
+			thumb = CarryArmPose.loop_thumb_degrees(body)
+	return {LOOP_CURL_BONE: curl, LOOP_HOOK_BONE: hook, LOOP_THUMB_BONE: thumb}
+
+
+## A finger bend of `degrees` toward the palm about the bone's z axis, mirrored
+## on the left hand.
+func _bend(degrees: float) -> Quaternion:
+	return Quaternion(Vector3.BACK, deg_to_rad(degrees) * (1.0 if side == 0 else -1.0))
 
 
 ## The passenger body node `skeleton` belongs to (the nearest node above it
@@ -220,16 +243,33 @@ func _reach_loop(
 ) -> Array[Transform3D]:
 	var target := skeleton.global_transform.affine_inverse() * reach_target
 	var shoulder := chain[0].origin
-	var elbow := chain[1].origin
-	var wrist := chain[2].origin
-	var hand_len := wrist.distance_to(_grip(skeleton, chain[2]))
 	var level := Vector3(target.x - shoulder.x, 0.0, target.z - shoulder.z)
 	level = level.normalized() if level.length() > 0.001 else Vector3(outward, 0.0, 0.0)
+	# The curled grip lies under and behind the knuckles, off the hand's axis:
+	# the wrist goes where the level hand's own grip lands on the target,
+	# measured on the hand as the clip turns it, then again as the reach turned
+	# it (the hand's roll follows the forearm's).
+	var hand := Transform3D(_pointed(chain[2].basis, level, 1.0), chain[2].origin)
+	var reached := chain
+	for i in 3:
+		var wrist_to_grip := _grip(skeleton, hand) - hand.origin
+		reached = _reach_wrist(chain, target - wrist_to_grip, outward, level)
+		hand = reached[2]
+	return reached
+
+
+## The arm `chain` turned so its wrist reaches `wrist` (skeleton space), the
+## elbow down (LOOP_POLE) and the hand pointed along `level` (_reach_loop()).
+func _reach_wrist(
+	chain: Array[Transform3D], wrist: Vector3, outward: float, level: Vector3
+) -> Array[Transform3D]:
+	var shoulder := chain[0].origin
+	var elbow := chain[1].origin
 	var joints := CarryStoop.two_bone(
 		shoulder,
 		elbow.distance_to(shoulder),
-		wrist.distance_to(elbow),
-		target - level * hand_len,
+		chain[2].origin.distance_to(elbow),
+		wrist,
 		LOOP_POLE * Vector3(outward, 1.0, 1.0)
 	)
 	var arm := chain[0]
@@ -244,10 +284,14 @@ func _reach_loop(
 
 
 ## Where the grip is (skeleton space) for the hand bone at `hand`: the Fingers
-## bone as at rest on it, GRIP_ALONG_M along its own axis.
+## bone as at rest on it (with loop_grip, curled as _loop_fingers() curls it),
+## GRIP_ALONG_M along its own axis, as CarryOnProps.grip_of() reads it drawn.
 func _grip(skeleton: Skeleton3D, hand: Transform3D) -> Vector3:
 	var fingers := skeleton.find_bone(CarryOnProps.GRIP_BONES[side])
 	var at := hand * skeleton.get_bone_rest(fingers)
+	if loop_grip:
+		var curl: float = _loop_degrees(skeleton).get(LOOP_CURL_BONE, 0.0)
+		at.basis = at.basis * Basis(_bend(curl))
 	var along := CarryOnProps.GRIP_ALONG_M / skeleton.global_transform.basis.get_scale().x
 	return at.origin + at.basis.y.normalized() * along
 

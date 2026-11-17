@@ -31,17 +31,26 @@ const PULL_LEAN_DEGREES := 12.0
 ## Walking only (walk_share()): standing idle the clip's own twist is already
 ## near a mirror (0.0 and 0.8 cm), and running is left as it was.
 const PULL_TWIST_DEGREES: Array[float] = [40.0, 20.0]
-## How far a hand holding a backpack by its grab loop bends its Fingertips on
-## from their rest (CarryArm.loop_hook_degrees), per skeleton: the male
-## bodies, then the female. Each turns the tips back under the hand toward the
-## palm, a hook round the loop, instead of straight on past it into the pack
-## below (board 4e5a26f0). Crossing probe --lane, seed 1106001, passenger 2:
-## at 60 and 75 degrees the tips pointed down, 5 mm under the part of the pack
-## the clip check leaves to the holding hand (15 frames); at 135 they curled
-## back past that part's far side (5 and 14 frames). Swept over a real pack
-## (tools/blender/out/loop_hook/sweep.gd), the female hand clears from 110 and
-## the male left from 120.
-const LOOP_HOOK_DEGREES: Array[float] = [120.0, 110.0]
+## How far a hand holding a backpack by its grab loop bends its Fingers on
+## from their rest toward the palm (CarryArm.loop_curl_degrees), per skeleton:
+## the male bodies, then the female. With only the Fingertips bent the hand
+## read as flat and open with kinked tips (booth passenger 11, female_12, seed
+## 1106001); bent at the knuckles too it closes round the loop like a grip
+## (user-ruled 2026-11-17, "Curl the whole finger", board 4e5a26f0).
+const LOOP_CURL_DEGREES: Array[float] = [80.0, 80.0]
+## How far the same hand bends its Fingertips on from their rest
+## (CarryArm.loop_hook_degrees), per skeleton, on top of the Fingers bend: the
+## tips turned back toward the palm. Swept over a real pack hung from the
+## curled grip (windowed, skinned; curl 0 to 80, hook 60 to 120): at curl 80
+## and hook 80 no point of either hand of either skeleton is in the pack
+## outside the region the clip check leaves to the holding hand, except the
+## same 2 points of the male left knuckles that every curl, 0 included, has;
+## the fingers' lowest point is 0.205 to 0.249 in the pack's frame (the loop
+## block's floor is 0.205), and the tips' ends come back nearer the wrist than
+## the knuckles are (7.6 to 7.8 cm against 10.4 and 12.0). With the Fingers
+## at rest (the hook 120 and 110 before), the male right tips had 5 points in
+## the pack and the hand read as open.
+const LOOP_HOOK_DEGREES: Array[float] = [80.0, 80.0]
 ## The same hand's Thumb_Tip bend (CarryArm.loop_thumb_degrees), per skeleton:
 ## at its rest the male right thumb's tip reached into the pack (the same
 ## sweep); bent this far it stays out.
@@ -172,6 +181,12 @@ static func walk_share(held: Dictionary, body: Node3D) -> float:
 ## body takes the male's).
 static func pull_twist_degrees(body: Node3D) -> float:
 	return PULL_TWIST_DEGREES[_skeleton_of(body)]
+
+
+## The loop hand's Fingers bend for passenger body `body`
+## (LOOP_CURL_DEGREES by its skeleton).
+static func loop_curl_degrees(body: Node3D) -> float:
+	return LOOP_CURL_DEGREES[_skeleton_of(body)]
 
 
 ## The loop hand's Fingertips bend for passenger body `body`
