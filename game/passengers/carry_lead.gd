@@ -190,6 +190,22 @@ const SWAP_SPOT_T := Vector2(0.3, 0.7)
 ## and the bar, still at k 0.55 (board 2237fa05).
 const SWAP_RELEASE_M := 0.08
 const SWAP_RELEASE_T := Vector2(0.5, 0.65)
+## A roller taken from one hand's carry into the other hand's pull
+## (hand.R>pull.L, hand.L>pull.R; hand_pull_path()) has its bar brought round
+## in front of the body, SWAP_FRONT_M ahead of its centre and
+## SWAP_HIP_BELOW_M under its shoulder joints (about hip height), where the
+## other hand takes it half way, the roller leaning SWAP_LEAN (radians from
+## plumb) out ahead, away from the legs, before it trails behind on the new
+## side (user ruling 2026-11-17, "In front, at hip height", board 295026a6).
+## On path() its rods ran out with the bag still upright and the bar went up
+## to 1.24 m behind the neck at half way (k 0.5, test_carry_hand_pull_swap).
+const SWAP_FRONT_M := 0.3
+const SWAP_HIP_BELOW_M := 0.45
+const SWAP_LEAN := deg_to_rad(40.0)
+## Coming round, the roller turns its front face from the leg (as it hangs in
+## the hand) to the outside, through ahead, by this share of the carry, so it is
+## never between the bar and the leg (swap_lean()).
+const SWAP_SPIN_T := 0.25
 
 
 ## Where a bag of `kind` standing in a stall is held (its own frame, the bag
@@ -527,6 +543,107 @@ static func pull_swap_goal(
 	return goal.interpolate_with(want, smoothstep(PULL_SWAP_END.x, PULL_SWAP_END.y, t))
 
 
+## Whether the move of `bag` (CarryOnProps' record) takes a roller from one
+## hand's carry into the other hand's pull (hand.R>pull.L or hand.L>pull.R),
+## outside a toilet stall (`in_stall`).
+static func is_hand_pull_swap(bag: Dictionary, in_stall: bool) -> bool:
+	var started := start_of(bag)
+	return (
+		bag["kind"] == SecurityLooks.Kind.ROLLER
+		and not in_stall
+		and started[0] == End.HELD
+		and end_of(bag["home"], bag["carry"]) == End.HELD
+		and started[1] != hand_of(bag["home"])
+		and bag["carry_from"] == SecurityLooks.Carry.HAND
+		and bag["carry"] == SecurityLooks.Carry.PULL
+	)
+
+
+## A roller's turn (the body's frame) at the handover of a hand to pull swap:
+## its rods across the body, leaning SWAP_LEAN out ahead from the bar, its
+## front face ahead and up (its back panel, with the rods, toward the legs).
+static func front_lean() -> Basis:
+	var along := Vector3(0.0, cos(SWAP_LEAN), -sin(SWAP_LEAN))
+	var face := Vector3(0.0, sin(SWAP_LEAN), cos(SWAP_LEAN))
+	return Basis(face.cross(along), face, along)
+
+
+## A roller's turn (the body's frame) at `t` (0 to 0.5) of a hand to pull swap
+## from hand `gave` (0 right), its bar at `bar` (the body's frame) on its way
+## round the front: by SWAP_SPIN_T of the carry it leans SWAP_LEAN out from the
+## bar, away from the body's centre line, and has turned its front face from
+## the body to the outside through ahead, its back panel, with the rods, to the
+## legs. From then to half way it keeps that turn as the bar comes round, and at
+## half way it is front_lean().
+static func swap_lean(bar: Vector3, gave: int, t: float) -> Basis:
+	var out := Vector3(bar.x, 0.0, bar.z).normalized()
+	var ahead := Vector3(out.z, 0.0, -out.x) * (1.0 if gave == 0 else -1.0)
+	var spin := PI * smoothstep(0.0, SWAP_SPIN_T, t)
+	var lean := SWAP_LEAN * smoothstep(0.0, SWAP_SPIN_T, t)
+	var along := Vector3.UP * cos(lean) - out * sin(lean)
+	var face := -out * cos(spin) + ahead * sin(spin)
+	face = (face - along * face.dot(along)).normalized()
+	return Basis(face.cross(along), face, along)
+
+
+## Where a roller is at `t` of the carry of a hand to pull swap
+## (is_hand_pull_swap()), held at `held_at` (its own frame), the body drawn at
+## `frame`, `shoulder_y` its lower shoulder joint's height (world): its bar
+## goes round the front of the body (round_front()) from where it was as the
+## move started (`bar_from`, `start` the bag there, world now) to SWAP_FRONT_M
+## ahead at hip height (SWAP_HIP_BELOW_M under `shoulder_y`) at half way, and on
+## to the other hand's side, mirrored across the body from where the giving
+## hand held the bag by its handle as the move started (`from`, the body's
+## frame then); eased onto the pull's bar (`want` at `bar_to`) over
+## PULL_SWAP_END, as pull_swap_goal() does. The bag turns from its start as
+## swap_lean() says, on the hand `gave` gave it from, to front_lean() by half
+## way and on to `want`. From the move's stamp and the
+## carry's progress only, never from where a hand is drawn (anti-pattern
+## d655fcc9).
+static func hand_pull_path(
+	from: Transform3D,
+	start: Transform3D,
+	want: Transform3D,
+	frame: Transform3D,
+	t: float,
+	bar_from: Vector3,
+	bar_to: Vector3,
+	held_at: Vector3,
+	shoulder_y: float,
+	gave: int
+) -> Transform3D:
+	var local := frame.affine_inverse()
+	var front := Vector3(0.0, shoulder_y - frame.origin.y - SWAP_HIP_BELOW_M, SWAP_FRONT_M)
+	var handle := from * CarryOnProps.ROLLER_HANDLE
+	var first := t < 0.5
+	var u := smoothstep(0.0, 1.0, t * 2.0 if first else t * 2.0 - 1.0)
+	var bar := round_front(local * (start * bar_from), front, u)
+	if not first:
+		bar = round_front(front, Vector3(-handle.x, handle.y, handle.z), u)
+	var turned := Quaternion(front_lean())
+	var was := (local.basis * start.basis).get_rotation_quaternion()
+	var to := (local.basis * want.basis).get_rotation_quaternion()
+	var turn := turned.slerp(to, u)
+	if first:
+		# Out of the turn it hung in, over the first tenth of the carry.
+		var leaning := Quaternion(swap_lean(bar, gave, t))
+		turn = was.slerp(leaning, smoothstep(0.0, SWAP_SPIN_T * 0.4, t))
+	var size := start.basis.get_scale().lerp(want.basis.get_scale(), t)
+	var basis := frame.basis * Basis(turn).scaled(size)
+	var at := (frame * bar).lerp(want * bar_to, smoothstep(PULL_SWAP_END.x, PULL_SWAP_END.y, t))
+	return Transform3D(basis, at - basis * held_at)
+
+
+## A point `u` (0 to 1) of the way from `from` to `to` (the body's frame) round
+## the body's centre line: its angle about it, its distance from it and its
+## height each go straight from the one to the other, so a point going between
+## a side and the front does not cut across the body.
+static func round_front(from: Vector3, to: Vector3, u: float) -> Vector3:
+	var angle := lerpf(atan2(from.x, from.z), atan2(to.x, to.z), u)
+	var r := lerpf(Vector2(from.x, from.z).length(), Vector2(to.x, to.z).length(), u)
+	return Vector3(r * sin(angle), lerpf(from.y, to.y, u), r * cos(angle))
+
+
 ## A backpack hanging from the leading hand (`hand` 0 right, 1 left) by its
 ## grab loop at the side, at `height` (world), of a body drawn at `frame`.
 static func back_side(
@@ -729,6 +846,9 @@ static func plan(
 	# Between two pulling hands a roller is held by its bar's middle in both
 	# (anchor_from above), and goes over to the other side (pull_swap_goal()).
 	var pull_swap := is_pull_swap(bag, stall)
+	# From one hand's carry into the other's pull the bar comes round the front
+	# (hand_pull_path()).
+	var hand_swap := is_hand_pull_swap(bag, stall)
 	if to_end == End.HELD and not pull_swap:
 		anchor_to = want.affine_inverse() * (body["grips"][to_hand] as Vector3)
 		if roller:
@@ -827,6 +947,11 @@ static func plan(
 		elif case_up_out:
 			goal = floor_end(frame, want, want * anchor_to)
 		on_path = path(start, goal, t, frame, bag["from"], lift)
+		if hand_swap:
+			var low: float = minf(body["shoulders_y"][0], body["shoulders_y"][1])
+			on_path = hand_pull_path(
+				bag["from"], start, want, frame, t, anchor_from, anchor_to, held_at, low, from_hand
+			)
 		# (In a stall path() turns it: upright, tipped late into the carry.)
 		if (from_end == End.REST or to_end == End.REST) and not stall:
 			# Off the floor or a tray it turns to hang from the hand soon after it
@@ -862,7 +987,9 @@ static func plan(
 	var swap := from_end == End.HELD and from_hand == gave
 	var spots := [Vector3.ZERO, Vector3.ZERO]
 	if swap and roller:
-		spots = swap_spots(bag["from"], gave, t)
+		# Its bar lies across the body at the handover (front_lean()).
+		var spot_from: Transform3D = Transform3D(front_lean()) if hand_swap else bag["from"]
+		spots = swap_spots(spot_from, gave, t)
 	var targets := [Vector3.ZERO, Vector3.ZERO]
 	for hand in 2:
 		match float(ph["targets_at"][hand]):
