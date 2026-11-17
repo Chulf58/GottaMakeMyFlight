@@ -19,6 +19,7 @@ func after() -> void:
 
 
 func after_test() -> void:
+	PseudoLocale.disable()
 	if _root_scale > 0.0:
 		get_tree().root.content_scale_factor = _root_scale
 		_root_scale = -1.0
@@ -77,6 +78,27 @@ func _desk_centre(desk: int) -> Vector3:
 	var def := BuildCatalog.get_def(StringName(record["def"]))
 	var cells := def.footprint(record["anchor"], record["facing"])
 	return BuildView.object_transform(_world.grid, cells, record["facing"]).origin
+
+
+## tr_n() lines are never pseudolocalized (PseudoLocale), so the proof is a
+## plural translation that is only found when the sign asks with its context.
+func test_the_queue_full_sign_says_its_words_in_the_players_language() -> void:
+	var translation := Translation.new()
+	translation.locale = TranslationServer.get_locale()
+	translation.add_plural_message(
+		"Queue full · {count} waiting",
+		PackedStringArray(["QF1 {count}", "QFN {count}"]),
+		"sign text"
+	)
+	TranslationServer.add_translation(translation)
+	_attach(_short_lane_world())
+	var desk: int = _world.sim.get_meta(&"desk")
+	_spawn_spaced(3)
+	_world.run_to(_world.clock.tick + 25)
+	var text := _markers.sign_text(desk)
+	TranslationServer.remove_translation(translation)
+	print("queue full sign with a plural translation: %s" % text)
+	assert_str(text).is_equal("QFN 3")
 
 
 func test_a_full_desk_gets_a_sign_above_it() -> void:

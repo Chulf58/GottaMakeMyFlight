@@ -50,17 +50,17 @@ const FALLBACK_FOV := 55.0
 const FALLBACK_HEIGHT := 1080.0
 ## The closed sign's disc, for the families that match it (GateLinksView).
 const CLOSED_FILL := MarkerIcons.PROBLEM_FILL
+## The English msgids of the closed signs' words. The screens show them through
+## closed_caption() and closed_look(), which translate them at display time;
+## tests compare with these.
 const CLOSED_CAPTION := "Closed"
 const CLOSED_TEXT := "Closed · no staff on duty"
 const PLAYER_CLOSED_TEXT := "Closed by you"
 const SPOT_BLOCKED_TEXT := "Closed · staff spot blocked"
-const UNREACHABLE_TEXT := "Closed · staff can't reach the %s"
-## A scanner fault's hover text, with the clock time of its repair.
-const FAULT_TEXT := "Closed · scanner fault, fixed by %s"
-const QUEUE_TEXT := "Queue full · %d waiting"
 
 ## Caption text -> its on-screen size in pixels, measured once.
 static var _caption_sizes: Dictionary = {}
+static var _words := Words.new()
 
 var sim: PassengerSim
 ## Unset, the first BuildSession in the tree is taken, looked for until found: the
@@ -123,17 +123,23 @@ static func glyph_of(sign: Node3D) -> int:
 	return sign.get_meta(&"glyph", -1) if sign != null else -1
 
 
+## The word on a Closed sign's caption, in the player's words.
+static func closed_caption() -> String:
+	return _words.closed_caption()
+
+
 ## The closed station `station`'s glyph and words for the closed `reason`
-## (a MissSignals reason); `noun` names the station ("desk").
+## (a MissSignals reason); `noun` names the station ("desk"). The words are in
+## the player's language.
 static func closed_look(reason: String, noun: String) -> Array:
 	match reason:
 		MissSignals.PLAYER_CLOSED_REASON:
-			return [MarkerIcons.Glyph.CLOSED, PLAYER_CLOSED_TEXT]
+			return [MarkerIcons.Glyph.CLOSED, _words.player_closed()]
 		MissSignals.SPOT_BLOCKED_REASON:
-			return [MarkerIcons.Glyph.STAFF_BLOCKED, SPOT_BLOCKED_TEXT]
+			return [MarkerIcons.Glyph.STAFF_BLOCKED, _words.spot_blocked()]
 		MissSignals.UNREACHABLE_REASON:
-			return [MarkerIcons.Glyph.STAFF_BLOCKED, UNREACHABLE_TEXT % noun]
-	return [MarkerIcons.Glyph.CLOSED, CLOSED_TEXT]
+			return [MarkerIcons.Glyph.STAFF_BLOCKED, _words.unreachable(noun)]
+	return [MarkerIcons.Glyph.CLOSED, _words.no_staff()]
 
 
 ## The closed sign's icon, for the families that match it (LandsidePlaces).
@@ -189,7 +195,11 @@ func sync() -> void:
 	for station: int in full:
 		var waiting := waiting_at(sim, station, int(full[station]))
 		_show_sign(
-			_signs, station, "QueueFullSign", MarkerIcons.Glyph.QUEUE_FULL, QUEUE_TEXT % waiting
+			_signs,
+			station,
+			"QueueFullSign",
+			MarkerIcons.Glyph.QUEUE_FULL,
+			_words.queue_full(waiting)
 		)
 	for station: int in _closed_signs.keys():
 		if not closed.has(station):
@@ -199,7 +209,7 @@ func sync() -> void:
 		var look := closed_look(reason, station_noun(sim, station))
 		if reason == MissSignals.FAULT_REASON:
 			var repair := sim.staff.faults.repair_tick(station)
-			look = [MarkerIcons.Glyph.CLOSED, FAULT_TEXT % GameCalendar.clock_text(repair)]
+			look = [MarkerIcons.Glyph.CLOSED, _words.scanner_fault(repair)]
 		_show_sign(_closed_signs, station, "ClosedSign", look[0], look[1])
 	var incomplete := MissSignals.incomplete_arches(sim)
 	for arch: int in _hint_signs.keys():
@@ -427,3 +437,42 @@ func _drop_sign(signs: Dictionary, station: int) -> void:
 	_free_signs.append(sign)
 	signs.erase(station)
 	_dirty = true
+
+
+## tr() is an instance method, so the static helpers ask a Words. Each sentence
+## is whole; the station noun picks one of three sentences, never a fragment.
+class Words:
+	extends RefCounted
+
+	func closed_caption() -> String:
+		return tr("Closed", "sign caption")
+
+	func no_staff() -> String:
+		return tr("Closed · no staff on duty", "sign text")
+
+	func player_closed() -> String:
+		return tr("Closed by you", "sign text")
+
+	func spot_blocked() -> String:
+		return tr("Closed · staff spot blocked", "sign text")
+
+	func unreachable(noun: String) -> String:
+		match noun:
+			"desk":
+				return tr("Closed · staff can't reach the desk", "sign text")
+			"scanner":
+				return tr("Closed · staff can't reach the scanner", "sign text")
+		return tr("Closed · staff can't reach the counter", "sign text")
+
+	func scanner_fault(repair: int) -> String:
+		return tr("Closed · scanner fault, fixed by {time}", "sign text").format(
+			{"time": GameCalendar.clock_text(repair)}
+		)
+
+	func queue_full(waiting: int) -> String:
+		return (
+			tr_n(
+				"Queue full · {count} waiting", "Queue full · {count} waiting", waiting, "sign text"
+			)
+			. format({"count": waiting})
+		)

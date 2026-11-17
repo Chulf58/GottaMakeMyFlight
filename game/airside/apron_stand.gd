@@ -650,9 +650,17 @@ func gate_status_text(gate: String) -> String:
 		return ""
 	var checked_stand: Dictionary = entry["placement"]
 	if checked_stand["status"] == StandPlacement.UNAVAILABLE:
-		return "Gate %s: no usable stand. Keep its apron and the walk to it clear" % gate
+		return (
+			tr(
+				"Gate {gate}: no usable stand. Keep its apron and the walk to it clear",
+				"apron caption"
+			)
+			. format({"gate": gate})
+		)
 	if checked_stand["warning"]:
-		return "Gate %s: long walk to the plane: %d m" % [gate, roundi(checked_stand["walk_m"])]
+		return tr("Gate {gate}: long walk to the plane: {meters} m", "apron caption").format(
+			{"gate": gate, "meters": roundi(checked_stand["walk_m"])}
+		)
 	return ""
 
 
@@ -679,15 +687,23 @@ func _show_gate_labels() -> void:
 func status_text() -> String:
 	var lines: PackedStringArray = []
 	if placement.get("status", StandPlacement.OK) == StandPlacement.UNAVAILABLE:
-		lines.append("No usable stand: no exit facing the planes has a clear apron")
+		lines.append(
+			tr("No usable stand: no exit facing the planes has a clear apron", "apron caption")
+		)
 	elif not same_stand(wanted, live):
 		var id := busy_flight()
 		var at := flights.state_start(id, FlightSim.State.TAKEOFF) if id != "" else flights.tick
 		lines.append(
-			"Stand moves to the new exit after takeoff at %s" % GameCalendar.clock_text(at)
+			tr("Stand moves to the new exit after takeoff at {time}", "apron caption").format(
+				{"time": GameCalendar.clock_text(at)}
+			)
 		)
 	if placement.get("warning", false):
-		lines.append("Long walk to the plane: %d m" % roundi(placement["longest_walk_m"]))
+		lines.append(
+			tr("Long walk to the plane: {meters} m", "apron caption").format(
+				{"meters": roundi(placement["longest_walk_m"])}
+			)
+		)
 	return "\n".join(lines)
 
 

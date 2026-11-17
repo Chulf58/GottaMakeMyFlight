@@ -39,6 +39,10 @@ func before_test() -> void:
 	add_child(_outline)
 
 
+func after_test() -> void:
+	PseudoLocale.disable()
+
+
 ## The middle of a plot on the ground.
 func _middle(plot: Vector2i) -> Vector3:
 	var cells := _mode.land_tool.land.plot_cells(plot)
@@ -88,6 +92,20 @@ func test_hovering_a_buyable_plot_shows_its_price() -> void:
 	assert_vector(_mode.land_tool.preview_price()).is_equal(Vector2i(price, price))
 	assert_str(_menu.preview_text()).is_equal("Cost %d" % price)
 	assert_int(_menu.call("_card_price", BuildMode.Tool.BUY_LAND)).is_equal(price)
+
+
+func test_the_price_and_the_status_line_say_their_words_in_the_players_language() -> void:
+	PseudoLocale.enable(0.4)
+	_mode.set_tool(BuildMode.Tool.BUY_LAND)
+	_mode.call("_update_ghost", _middle(BUYABLE))
+	var price := PriceTable.price_of_land_plot(0)
+	var shown := _mode.land_tool.price_label().text
+	var status := _mode.status_text()
+	print("buy land in a pseudolocale: '%s' | '%s'" % [shown, status])
+	assert_str(shown).starts_with("[")
+	assert_str(shown.lstrip("[_")).starts_with("Buy  %d" % price)
+	assert_str(status).starts_with("[")
+	assert_str(status.lstrip("[_")).starts_with("Click to buy this 21x25 m plot")
 
 
 func test_one_click_buys_the_plot_and_building_there_is_then_allowed() -> void:

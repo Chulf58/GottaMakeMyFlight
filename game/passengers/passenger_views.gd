@@ -563,13 +563,14 @@ func _declutter_bubbles(camera: Camera3D, unit: float) -> void:
 		var node: Node3D = _nodes[id]
 		var bubble := node.get_node("Bubble") as Label3D
 		var focus := focused(id)
-		bubble.text = BubbleDeclutter.shown_text(
+		var english := BubbleDeclutter.shown_text(
 			node.get_meta(&"speech", ""),
 			node.get_meta(&"late", false),
 			focus,
 			_late_on,
 			all_bubbles
 		)
+		bubble.text = BubbleWords.say(english)
 		bubble.visible = true
 		if bubble.text == "" or camera == null or unit <= 0.0:
 			continue
@@ -585,7 +586,7 @@ func _declutter_bubbles(camera: Camera3D, unit: float) -> void:
 			bubble.pixel_size / (depth * unit)
 		)
 		var rank: int = node.get_meta(&"bubble_rank", BubbleDeclutter.NO_QUEUE)
-		entries.append(BubbleDeclutter.entry(id, bubble.text, rank, rect, focus))
+		entries.append(BubbleDeclutter.entry(id, english, rank, rect, focus))
 	if not declutter_bubbles:
 		return
 	for id in BubbleDeclutter.hidden(entries):

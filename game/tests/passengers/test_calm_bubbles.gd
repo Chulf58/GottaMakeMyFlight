@@ -35,6 +35,7 @@ func after() -> void:
 
 
 func after_test() -> void:
+	PseudoLocale.disable()
 	if _screen != null:
 		_screen.free()
 		_screen = null
@@ -328,3 +329,24 @@ func test_the_shown_text_rules() -> void:
 	)
 	var entry := BubbleDeclutter.entry(1, "Queue full", 3, Rect2(), true)
 	assert_int(entry["tier"]).is_less(BubbleDeclutter.tier_of(late))
+
+
+func test_bubbles_are_drawn_in_the_players_words_and_still_rank_by_the_english_text() -> void:
+	_open()
+	PseudoLocale.enable(0.4)
+	_mode(MoodTint.Mode.LATE)
+	var shown := _shown_bubbles()
+	print("late mode in a pseudolocale: %s" % [shown])
+	assert_array(shown.keys()).contains_exactly_in_any_order([_cast["late"], _cast["late_stuck"]])
+	for text: String in shown.values():
+		assert_str(text).starts_with("[")
+		assert_str(text.lstrip("[_")).starts_with(BubbleDeclutter.LATE_TEXT)
+	# The sim's text stays English: it is the key the rank and the tests use.
+	assert_str(_views.node_for(_cast["late_stuck"]).get_meta(&"speech", "")).is_equal("Queue full")
+	_mode(MoodTint.Mode.LATE, false)
+	_views.all_bubbles = true
+	_views.draw()
+	var speaker := _bubble(_cast["speaker"]).text
+	print("speaker bubble in a pseudolocale: %s" % speaker)
+	assert_str(speaker).starts_with("[")
+	assert_str(speaker.lstrip("[_")).starts_with("Queue full")

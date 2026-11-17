@@ -57,12 +57,8 @@ const LINE_FILL := Color(0.38, 0.68, 0.98)
 const THROUGH_ALPHA := 0.6
 const END_RADIUS_M := 0.7
 const ENVELOPE_PX := 3.0
-## The gate caption's second line: its max_class, or no room.
-const CLASS_LINE := "up to %s planes"
-const NO_CLASS_LINE := "no room for a plane"
 ## The "Gate A" caption stands this far over the desk's top.
 const CAPTION_LIFT_M := 0.5
-const UNLINKED_PREFIX := "Unlinked: "
 ## The steps an unlinked sign slides sideways off a wall-gap sign by.
 const SHIFT_STEP_PX := 14.0
 const MAX_SHIFT_STEPS := 16
@@ -97,6 +93,7 @@ static var _icon: ImageTexture
 static var _shaders: Dictionary = {}
 ## Text -> its caption_size(), measured once.
 static var _caption_sizes: Dictionary = {}
+static var _words := Words.new()
 
 ## The MissMarkers whose signs the gate captions keep clear of.
 ## Unset, the first MissMarkers in the tree is taken, looked for once.
@@ -214,25 +211,10 @@ static func _leave_t(box: Rect2, from: Vector2, to: Vector2) -> float:
 	return t
 
 
-## Why a desk is unlinked, short, from a GateDesks.unlinked() entry.
-static func reason_text(reason: Dictionary) -> String:
-	match reason["why"]:
-		GateDesks.Unlinked.NO_EXIT:
-			return "no exit facing the planes in %d cells" % GateDesks.LINK_CELLS
-		GateDesks.Unlinked.EXIT_TAKEN:
-			return "Gate %s uses the exit" % reason["gate"]
-		GateDesks.Unlinked.STAND_OVERLAP:
-			return "stand would overlap Gate %s" % reason["gate"]
-		GateDesks.Unlinked.NO_ROOM:
-			return "no room for a plane"
-		GateDesks.Unlinked.ROUTE_BLOCKED:
-			return "way to the lane blocked"
-	return "every gate letter in use"
-
-
-## The reason on one line ("Unlinked: ..."), as the desk card's status shows it.
+## Why a desk is unlinked on one line ("Unlinked: ..."), from a
+## GateDesks.unlinked() entry, in the player's words.
 static func caption_for(reason: Dictionary) -> String:
-	return UNLINKED_PREFIX + reason_text(reason)
+	return _words.unlinked(reason)
 
 
 ## Draws the links and the unlinked signs again from the gates.
@@ -317,10 +299,10 @@ func envelope_paths() -> Array[PackedVector3Array]:
 static func caption_text(
 	gate: String, plane_class: String, walk_minutes := GateWalk.NO_ROUTE, waiting := false
 ) -> String:
-	var second := CLASS_LINE % plane_class if plane_class != "" else NO_CLASS_LINE
+	var second := _words.class_line(plane_class)
 	if waiting:
 		second = GateDesks.waiting_text()
-	var text := "Gate %s\n%s" % [gate, second]
+	var text := "%s\n%s" % [_words.title(gate), second]
 	var third := GateWalk.caption_line(walk_minutes)
 	return text if third == "" else "%s\n%s" % [text, third]
 
@@ -846,3 +828,46 @@ func _make_sign() -> Sprite3D:
 ## The unlinked icon: MarkerIcons' build-hint disc with the broken-link glyph.
 static func unlinked_icon() -> Texture2D:
 	return MarkerIcons.icon(MarkerIcons.Glyph.UNLINKED_GATE)
+
+
+## tr() is an instance method, so the static captions ask a Words. The reasons
+## are whole sentences, never a prefix plus a translated reason.
+class Words:
+	extends RefCounted
+
+	func title(gate: String) -> String:
+		return tr("Gate {gate}", "gate caption").format({"gate": gate})
+
+	## The second line: the biggest plane, or no room for one.
+	func class_line(plane_class: String) -> String:
+		match plane_class:
+			"":
+				return tr("no room for a plane", "gate caption")
+			PlaneClasses.SMALL:
+				return tr("up to small planes", "gate caption")
+			PlaneClasses.MEDIUM:
+				return tr("up to medium planes", "gate caption")
+			PlaneClasses.LARGE:
+				return tr("up to large planes", "gate caption")
+		return tr("up to {class} planes", "gate caption").format({"class": plane_class})
+
+	func unlinked(why: Dictionary) -> String:
+		match why["why"]:
+			GateDesks.Unlinked.NO_EXIT:
+				return (
+					tr("Unlinked: no exit facing the planes in {cells} cells", "gate caption")
+					. format({"cells": GateDesks.LINK_CELLS})
+				)
+			GateDesks.Unlinked.EXIT_TAKEN:
+				return tr("Unlinked: Gate {gate} uses the exit", "gate caption").format(
+					{"gate": why["gate"]}
+				)
+			GateDesks.Unlinked.STAND_OVERLAP:
+				return tr("Unlinked: stand would overlap Gate {gate}", "gate caption").format(
+					{"gate": why["gate"]}
+				)
+			GateDesks.Unlinked.NO_ROOM:
+				return tr("Unlinked: no room for a plane", "gate caption")
+			GateDesks.Unlinked.ROUTE_BLOCKED:
+				return tr("Unlinked: way to the lane blocked", "gate caption")
+		return tr("Unlinked: every gate letter in use", "gate caption")

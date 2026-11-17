@@ -110,7 +110,7 @@ func _on_paid(passenger_id: int, room_id: int, amount: int) -> void:
 	var label := _take()
 	label.set_meta(&"room", room_id)
 	_set_slot(label, slot_at(n))
-	label.text = "+$%d" % amount
+	label.text = tr("+${amount}", "money pop").format({"amount": amount})
 	label.position = _point(passenger_id, room_id)
 	label.modulate = COLOR
 	label.set_meta(&"age", 0.0)

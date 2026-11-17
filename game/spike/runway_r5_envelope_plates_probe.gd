@@ -183,12 +183,12 @@ func _plates() -> void:
 	# Gate A must have a walk, so the third line is required there.
 	var walk_a := links.walk.minutes("A")
 	var wanted := [
-		"Gate A\nup to large planes\n%s" % [GateWalk.CAPTION_TEXT % walk_a],
+		"Gate A\nup to large planes\n%s" % [GateWalk.CAPTION_TEXT.format({"minutes": walk_a})],
 		"Gate B\nup to medium planes",
 	]
 	var walk_b := links.walk.minutes("B")
 	if walk_b != GateWalk.NO_ROUTE:
-		wanted[1] += "\n%s" % [GateWalk.CAPTION_TEXT % walk_b]
+		wanted[1] += "\n%s" % [GateWalk.CAPTION_TEXT.format({"minutes": walk_b})]
 	if walk_a == GateWalk.NO_ROUTE or paths.size() != 2 or texts != wanted:
 		_fail("the build-mode views do not show both envelopes with their classes")
 		return

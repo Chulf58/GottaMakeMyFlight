@@ -30,6 +30,7 @@ func before_test() -> void:
 
 
 func after_test() -> void:
+	PseudoLocale.disable()
 	_views.free()
 	_world.free_all()
 
@@ -118,6 +119,19 @@ func test_the_follow_panel_shows_hunger() -> void:
 	_views.selected_id = p.id
 	assert_str(hud.follow_text()).contains("hunger 47")
 	hud.free()
+
+
+func test_the_pop_is_one_translated_template() -> void:
+	PseudoLocale.enable(0.4)
+	var p := _guest()
+	_run_to_stage(p, Passenger.Stage.CAFE_STANDING_UP)
+	var amount := _world.sim.cafes.visit_of(p.id).amount
+	var pops := _views.cafe_pops()
+	assert_int(pops.live_count()).is_equal(1)
+	var text := pops.live_labels()[0].text
+	print("pop in a pseudolocale: '%s' for %d" % [text, amount])
+	assert_str(text).starts_with("[")
+	assert_str(text.lstrip("[_")).starts_with("+$%d" % amount)
 
 
 ## Was "..._over_the_counter_then_fades": the pop moved from over the counter
