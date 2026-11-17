@@ -20,6 +20,9 @@ const LOOP_BOX := AABB(Vector3(-0.045, 0.057, 0.205), Vector3(0.09, 0.05, 0.035)
 ## Walked distance per tick (PassengerSim.WALK_MM, RUN_MM) over which a
 ## passenger counts as running: half way between the two.
 const RUN_PACE_MM := (PassengerSim.WALK_MM + PassengerSim.RUN_MM) * 0.5
+## A hand that has handed a bag over still grips it while the move's plan aims
+## it at the bag by more than this (releasing_hand()).
+const RELEASE_WEIGHT := 0.5
 
 
 ## The hand (0 right, 1 left) bag `i` of `p` is drawn in: a roller's from its
@@ -34,11 +37,30 @@ static func drawn_hand(props: CarryOnProps, sim: PassengerSim, p: Passenger, i: 
 	return SecurityLooks.hand_of(sim, p, i)
 
 
+## The hand that has handed a bag (`state`, CarryOnProps.bag_state()) over to
+## the other in a HELD to HELD hand swap and is still on it: the move's plan
+## ("lead") aims it at the bag by more than RELEASE_WEIGHT, its fingers round
+## the bar it let go of (board 2237fa05). -1 when there is none: no plan, a
+## move that did not start in a hand, the starting hand still the holder, or
+## its weight down to RELEASE_WEIGHT, after which its points in the bag count.
+static func releasing_hand(state: Dictionary) -> int:
+	var plan: Dictionary = state.get("lead", {})
+	var holder := int(state.get("held_by", -1))
+	if plan.is_empty() or holder < 0 or not state.has("was"):
+		return -1
+	var started := CarryLead.start_of(state)
+	var old: int = started[1]
+	if started[0] != CarryLead.End.HELD or old == holder:
+		return -1
+	return old if float(plan["weights"][old]) > RELEASE_WEIGHT else -1
+
+
 ## The hands holding something of `p` now (".R", ".L"): a hard case's and a
 ## roller's grip, a shoulder strap's hand; a backpack holds none. A roller's
 ## hand is its drawn one with `props` (drawn_hand()), and also the hand that
 ## holds it now (its "held_by"): in a hand swap the old hand keeps the bar
-## until the move is half done, while the drawn hand is the one it ends in.
+## until the move is half done, while the drawn hand is the one it ends in;
+## after that, while it lets go (releasing_hand()).
 static func gripping(sim: PassengerSim, p: Passenger, props: CarryOnProps) -> Array:
 	var out: Array = []
 	var homes := SecurityLooks.bag_homes(sim, p)
@@ -48,9 +70,10 @@ static func gripping(sim: PassengerSim, p: Passenger, props: CarryOnProps) -> Ar
 		match SecurityLooks.carry_of(p, i):
 			SecurityLooks.Carry.HAND, SecurityLooks.Carry.PULL:
 				var hands := [drawn_hand(props, sim, p, i)]
-				var holder := int(props.bag_state(p.id, i).get("held_by", -1))
-				if holder >= 0 and not hands.has(holder):
-					hands.append(holder)
+				var state := props.bag_state(p.id, i)
+				for hand in [int(state.get("held_by", -1)), releasing_hand(state)]:
+					if hand >= 0 and not hands.has(hand):
+						hands.append(hand)
 				for hand: int in hands:
 					out.append([".R", ".L"][hand])
 			SecurityLooks.Carry.SHOULDER:
