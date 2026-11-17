@@ -16,6 +16,12 @@ extends GdUnitTestSuite
 ## so are male 10 and female 02 (board a1c067fc). Since board bcad1dd0 every body
 ## of the roster is checked: the crossing probe found female 08's left buttock in
 ## her one-bag pack at the walk's stride, a body the list left out.
+## The least gap is set by whichever part of the panel touches, so a pack
+## resting its top on the shoulder blades passed with its bottom 9-11 cm off the
+## lower back (male_06 with two bags; anti-pattern 7e41ab22, board 2e43591b):
+## the top and bottom halves of the panel are measured apart, each to the
+## nearest body point (torso or leg) behind it, and each must rest within
+## WORN_GAP_M on every moment.
 
 const MOMENTS := 32
 const CLIPS: Array[String] = ["walk", "idle"]
@@ -29,6 +35,20 @@ const ARMS: Array[String] = [
 	"Arm", "Forearm", "Hand", "Fingers", "Fingertips", "Thumb", "Thumb_Tip"
 ]
 
+## Per run (body, then one bag and two): _measure()'s result, measured once for
+## the file (the skinning by hand is the slow part).
+var _runs: Array[Dictionary] = []
+
+
+func before() -> void:
+	for run in BODIES_CHECKED.size() * 2:
+		var b := PassengerLooks.BODIES.find(BODIES_CHECKED[run / 2])
+		var scale_by := 1.0 if run % 2 == 0 else SecurityLooks.TWO_BAG_SCALE
+		var got := _measure(b, scale_by) if b >= 0 else {}
+		got["body"] = b
+		got["scale"] = scale_by
+		_runs.append(got)
+
 
 ## Every body with one bag and two: no leg vertex within LEG_CLEAR_M of
 ## the pack, no torso vertex in it, and the panel resting on the back.
@@ -36,11 +56,13 @@ func test_worn_pack_clears_the_stride_of_the_checked_bodies() -> void:
 	var legs_in := 0
 	var torso_in := 0
 	var worst_rest := 0.0
-	for run in BODIES_CHECKED.size() * 2:
-		var b := PassengerLooks.BODIES.find(BODIES_CHECKED[run / 2])
+	assert_int(_runs.size()).is_equal(BODIES_CHECKED.size() * 2)
+	for got in _runs:
+		var b: int = got["body"]
 		assert_int(b).is_greater_equal(0)
-		var scale_by := 1.0 if run % 2 == 0 else SecurityLooks.TWO_BAG_SCALE
-		var got := _measure(b, scale_by)
+		if b < 0:
+			continue
+		var scale_by: float = got["scale"]
 		print(
 			(
 				(
@@ -83,11 +105,76 @@ func test_worn_pack_clears_the_stride_of_the_checked_bodies() -> void:
 	assert_float(worst_rest).is_less_equal(WORN_GAP_M)
 
 
+## Every body with two bags (SecurityLooks.TWO_BAG_SCALE): the top half of the
+## panel and the bottom half each rest within WORN_GAP_M of the body behind it
+## on every moment, so a pack touching at its top only and standing off the
+## lower back fails (male_06 on main: bottom 0.0873-0.1078 m).
+func test_two_bag_pack_rests_top_and_bottom_on_the_checked_bodies() -> void:
+	assert_int(_halves_off(SecurityLooks.TWO_BAG_SCALE)).is_equal(0)
+
+
+## The same with one bag (scale 1.0). Open (board 2e43591b): the one-bag
+## bottom half stands 3.9-8.1 cm off on main, and the lean and row sweep found
+## no one-bag placement under WORN_GAP_M for male_06, female_01 or female_08.
+func test_one_bag_pack_rests_top_and_bottom_on_the_checked_bodies() -> void:
+	assert_int(_halves_off(1.0)).is_equal(0)
+
+
+## The halves above WORN_GAP_M over every body at `scale_by`, each body's
+## half gaps printed, with the control that each half faced body points.
+func _halves_off(scale_by: float) -> int:
+	var off := 0
+	var seen := 0
+	assert_int(_runs.size()).is_equal(BODIES_CHECKED.size() * 2)
+	for got in _runs:
+		if not is_equal_approx(got["scale"], scale_by):
+			continue
+		seen += 1
+		var b: int = got["body"]
+		assert_int(b).is_greater_equal(0)
+		if b < 0:
+			continue
+		var top: Vector2 = got["half_top"]
+		var bottom: Vector2 = got["half_bottom"]
+		print(
+			(
+				(
+					"body %d %s scale %.2f: panel half gap top %.4f-%.4f m, bottom %.4f-%.4f m"
+					+ " (least-most over moments, <= %.2f); %d moments with a half facing no point"
+				)
+				% [
+					b,
+					PassengerLooks.BODIES[b],
+					got["scale"],
+					top.x,
+					top.y,
+					bottom.x,
+					bottom.y,
+					WORN_GAP_M,
+					got["half_empty"]
+				]
+			)
+		)
+		# The control: each half faced body points on every moment, so a finite
+		# gap was read for both (an empty half would pass at 0 otherwise).
+		assert_int(got["half_empty"]).is_equal(0)
+		assert_bool(is_finite(top.y) and is_finite(bottom.y)).is_true()
+		assert_float(top.y).is_greater(0.0)
+		assert_float(bottom.y).is_greater(0.0)
+		off += int(top.y > WORN_GAP_M) + int(bottom.y > WORN_GAP_M)
+	assert_int(seen).is_equal(BODIES_CHECKED.size())
+	return off
+
+
 ## Body `b`'s pack at `scale_by` over its walk and idle moments: leg points
 ## within LEG_CLEAR_M of the pack's box ("legs_in"), the least distance of a
 ## leg point to the box ("leg_gap", negative inside) and its clip moment,
 ## torso points inside the box ("torso_in"), and the largest of each moment's
-## least torso gap behind the panel inside its outline ("rest").
+## least torso gap behind the panel inside its outline ("rest"); per half of
+## the panel along its length, the least gap to a torso or leg point behind
+## that half inside its outline, as the least and the most of it over the
+## moments ("half_top", "half_bottom"), and the moments a half faced no point
+## ("half_empty").
 func _measure(b: int, scale_by: float) -> Dictionary:
 	var out := {
 		"legs_in": 0,
@@ -99,8 +186,12 @@ func _measure(b: int, scale_by: float) -> Dictionary:
 		"empty": 0,
 		"least_legs": 1 << 30,
 		"least_torso": 1 << 30,
+		"half_top": Vector2(INF, 0.0),
+		"half_bottom": Vector2(INF, 0.0),
+		"half_empty": 0,
 	}
 	var box := CarryOnProps.bag_box(SecurityLooks.Kind.BACKPACK)
+	var mid_z := box.position.z + box.size.z * 0.5
 	var grown := box.grow(LEG_CLEAR_M / scale_by)
 	var node := PassengerLooks.SCENES[b].instantiate() as Node3D
 	add_child(node)
@@ -126,10 +217,18 @@ func _measure(b: int, scale_by: float) -> Dictionary:
 			var rest := INF
 			var legs := 0
 			var torso := 0
+			# The least gap behind the bottom half (x) and the top half (y).
+			var halves := Vector2(INF, INF)
 			for k in points.size():
 				var local := to_bag * points[k]
 				legs += int(owners[k] == 1)
 				torso += int(owners[k] == 0)
+				if owners[k] != 2 and _behind_panel(box, local):
+					var behind := (box.position.y - local.y) * scale_by
+					if local.z >= mid_z:
+						halves.y = minf(halves.y, behind)
+					else:
+						halves.x = minf(halves.x, behind)
 				match owners[k]:
 					1:
 						var gap := _box_gap(box, local) * scale_by
@@ -139,14 +238,7 @@ func _measure(b: int, scale_by: float) -> Dictionary:
 						out["legs_in"] += int(grown.has_point(local))
 					0:
 						out["torso_in"] += int(box.has_point(local))
-						var inside := (
-							local.x >= box.position.x
-							and local.x <= box.end.x
-							and local.z >= box.position.z
-							and local.z <= box.end.z
-							and local.y <= box.end.y
-						)
-						if inside:
+						if _behind_panel(box, local):
 							rest = minf(rest, (box.position.y - local.y) * scale_by)
 			# The control: every moment sampled leg and torso points, and some
 			# torso points lay behind the panel inside its outline (a finite rest
@@ -157,8 +249,26 @@ func _measure(b: int, scale_by: float) -> Dictionary:
 			out["least_torso"] = mini(out["least_torso"], torso)
 			if rest < INF:
 				out["rest"] = maxf(out["rest"], rest)
+			out["half_empty"] += int(halves.x == INF or halves.y == INF)
+			for half in ["half_bottom", "half_top"]:
+				var g := halves.x if half == "half_bottom" else halves.y
+				if g < INF:
+					var span: Vector2 = out[half]
+					out[half] = Vector2(minf(span.x, g), maxf(span.y, g))
 	node.free()
 	return out
+
+
+## Whether `at` (the bag's frame) lies behind the panel (its y 0 face) or in
+## the bag, inside the panel's outline.
+static func _behind_panel(box: AABB, at: Vector3) -> bool:
+	return (
+		at.x >= box.position.x
+		and at.x <= box.end.x
+		and at.z >= box.position.z
+		and at.z <= box.end.z
+		and at.y <= box.end.y
+	)
 
 
 ## The signed distance from `at` (the bag's frame) to `box`: positive outside,
