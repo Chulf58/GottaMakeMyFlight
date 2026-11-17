@@ -21,21 +21,31 @@ const HIP_BAND := Vector2(0.85, 1.05)
 const FRONT_MIN_M := 0.2
 const PHASES := 8
 ## Bones whose vertices are left out of the clearance count: the arms, posed
-## in the game by the reach toward the plan's targets, not by the walk clip.
+## in the game by the reach toward the plan's targets, not by the walk clip
+## ("Forearm" named on its own: the rig's Forearm.L and Forearm.R hold no
+## "Arm", and their walk swing was counted in the bar).
 const ARM_WORDS := [
-	"Arm", "Hand", "Finger", "Thumb", "Index", "Middle", "Ring", "Pinky", "Shoulder"
+	"Arm", "Forearm", "Hand", "Finger", "Thumb", "Index", "Middle", "Ring", "Pinky", "Shoulder"
 ]
 
 var _base := 0.0
 var _shell := AABB()
+## A roller kept in the tree for its rods (Pull_Reach, Pull_Top), stretched per
+## sample as CarryOnProps._set_reach() does, and their meshes.
+var _roller: Node3D
+var _rod_meshes: Array[MeshInstance3D] = []
 ## Per body (PassengerLooks.BODIES, first male and first female): walk poses,
 ## each the body's non-arm vertices in its own frame (facing +z).
 var _walks: Array = []
+## Per body: its shoulder joints' height (CarryOnProps.ARM_BONES, the walk's
+## first pose, the body's frame).
+var _shoulders: Array[float] = []
 
 
 func before() -> void:
 	var roller := InteriorKit.instantiate("carry_roller")
 	add_child(roller)
+	_roller = roller
 	var reach: Node3D = roller.find_child("Pull_Reach", true, false)
 	_base = reach.get_meta(&"base", reach.position).z
 	var rods: Array = CarryOnProps.REACH_NODES[SecurityLooks.Kind.ROLLER]
@@ -46,26 +56,38 @@ func before() -> void:
 		while at != roller:
 			in_rods = in_rods or at.name in rods
 			at = at.get_parent()
-		if in_rods or mi.mesh == null:
+		if mi.mesh == null:
+			continue
+		if in_rods:
+			_rod_meshes.append(mi)
 			continue
 		var part := (
 			roller.global_transform.affine_inverse() * mi.global_transform * mi.mesh.get_aabb()
 		)
 		_shell = part if first else _shell.merge(part)
 		first = false
-	roller.free()
 	for b: int in [0, PassengerLooks.PER_VARIANT]:
 		var node := PassengerLooks.SCENES[b].instantiate() as Node3D
 		add_child(node)
 		var player := node.find_children("*", "AnimationPlayer", true, false)[0] as AnimationPlayer
 		player.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
 		player.play("walk")
+		player.seek(0.0, true)
+		var mesh := PassengerLooks.body_mesh(node)
+		var skeleton := mesh.get_node(mesh.skeleton) as Skeleton3D
+		var arm := skeleton.find_bone(CarryOnProps.ARM_BONES[0])
+		var to_node := node.global_transform.affine_inverse() * skeleton.global_transform
+		_shoulders.append((to_node * skeleton.get_bone_global_pose(arm)).origin.y)
 		var poses: Array[PackedVector3Array] = []
 		for n in PHASES:
 			player.seek(player.current_animation_length * n / PHASES, true)
 			poses.append(_skinned_no_arms(node))
 		_walks.append(poses)
 		node.free()
+
+
+func after() -> void:
+	_roller.free()
 
 
 ## Across the whole swap, either hand to the other, at two body headings: the
@@ -183,13 +205,78 @@ func test_the_roller_keeps_off_the_walking_legs() -> void:
 	assert_int(hits * 10).is_less_equal(old_hits)
 
 
+## Design check of the rods (Pull_Reach and Pull_Top, stretched as the plan's
+## bar says): placed where the plan puts the roller, they take in no non-arm
+## vertex of a walking male or female body before PULL_SWAP_END (from there the
+## roller is eased onto the pull's own end). The bodies are scaled from these
+## grips and SHOULDER_Y to the rig's own shoulder height. In the game the bar
+## went through the receiving thigh at k 0.75 on its way from the front to the
+## side (crossing probe --lane seed 1106001, passenger 4, SELF_FAIL, Quad.L,
+## board 295026a6). Control: the bar on a straight sweep from the front to the
+## side (no SWAP_ROUND_OUT_M), the roller turned as the plan turns it, takes
+## the rods into the legs.
+func test_the_rods_keep_off_the_walking_legs() -> void:
+	var frame := Transform3D.IDENTITY
+	var hits := 0
+	var straight_hits := 0
+	var sampled := 0
+	for w in _walks.size():
+		var size := _shoulders[w] / SHOULDER_Y
+		for gave in 2:
+			for step in STEPS + 1:
+				var k := float(step) / STEPS
+				var made := _swap(frame, gave, k, 0.0, size)
+				var plan: Dictionary = made[0]
+				if CarryLead.carry_t(k, made[6]) >= CarryLead.PULL_SWAP_END.x:
+					continue
+				var xf: Transform3D = plan["xf"]
+				var length: float = made[5].z - _base - CarryOnProps.ROLLER_GRIP_PAST_TOP_M
+				var held: Vector3 = plan["anchor"]
+				var t := CarryLead.carry_t(k, made[6])
+				var u := smoothstep(0.0, 1.0, t * 2.0 - 1.0)
+				var handle: Vector3 = made[3] * CarryOnProps.ROLLER_HANDLE
+				var front := Vector3(
+					0.0, SHOULDER_Y * size - CarryLead.SWAP_HIP_BELOW_M, CarryLead.SWAP_FRONT_M
+				)
+				var bar := CarryLead.round_front(front, Vector3(-handle.x, handle.y, handle.z), u)
+				var to: Quaternion = made[2].basis.get_rotation_quaternion()
+				var slerped := Basis(Quaternion(CarryLead.front_lean()).slerp(to, u))
+				var old := Transform3D(slerped, bar - slerped * held)
+				var now_in := 0
+				var old_in := 0
+				for points: PackedVector3Array in _walks[w]:
+					now_in += _rods_inside(points, xf, length)
+					if t > 0.5:
+						old_in += _rods_inside(points, old, length)
+				sampled += 1
+				if now_in > 0 or old_in > 0:
+					print(
+						(
+							"rods: body %d hand %d k %.2f: %d in (straight sweep %d)"
+							% [w, gave, k, now_in, old_in]
+						)
+					)
+				hits += now_in
+				straight_hits += old_in
+	print(
+		(
+			"walking body vertices in the rods: %d (straight sweep %d), %d samples, shoulders %s"
+			% [hits, straight_hits, sampled, _shoulders]
+		)
+	)
+	assert_int(sampled).is_greater(100)
+	assert_int(straight_hits).is_greater(0)
+	assert_int(hits).is_equal(0)
+
+
 ## One hand to pull swap of a roller from hand `gave` (0 right) at `k`, the
-## body at `frame`, the giving hand drawn `raised` higher than its carry:
-## [the plan, start, want (world), the bag's start in the body's frame, the
-## flags, the bar as held at the start (its own frame)].
-func _swap(frame: Transform3D, gave: int, k: float, raised := 0.0) -> Array:
+## body at `frame`, the giving hand drawn `raised` higher than its carry, the
+## body `size` times the one the grips and SHOULDER_Y are of: [the plan, start,
+## want (world), the bag's start in the body's frame, the flags, the bar as held
+## at the start (its own frame), the bag's record].
+func _swap(frame: Transform3D, gave: int, k: float, raised := 0.0, size := 1.0) -> Array:
 	var side := -1.0 if gave == 0 else 1.0
-	var grips := [Vector3(-0.26, 0.80, 0.02), Vector3(0.26, 0.80, 0.02)]
+	var grips := [Vector3(-0.26, 0.80, 0.02) * size, Vector3(0.26, 0.80, 0.02) * size]
 	var from := CarryHand.carried(
 		grips[gave], Vector3(0.0, 0.8, 0.0), 0.0, 1.0, SecurityLooks.Kind.ROLLER
 	)
@@ -214,7 +301,7 @@ func _swap(frame: Transform3D, gave: int, k: float, raised := 0.0) -> Array:
 	var body := {
 		"hand": gave,
 		"grips": drawn,
-		"shoulders_y": [SHOULDER_Y, SHOULDER_Y],
+		"shoulders_y": [SHOULDER_Y * size, SHOULDER_Y * size],
 		"bar_z": bar_z,
 		"scale": 1.0,
 		"strap_top": Vector3.ZERO,
@@ -230,7 +317,28 @@ func _swap(frame: Transform3D, gave: int, k: float, raised := 0.0) -> Array:
 	var start := frame * from
 	var plan := CarryLead.plan(bag, k, start, frame * want, frame, flags, body)
 	var bar := Vector3(0.0, CarryOnProps.ROLLER_AXLE.y, bar_z)
-	return [plan, start, frame * want, from, flags, bar]
+	return [plan, start, frame * want, from, flags, bar, bag]
+
+
+## The vertices of `points` inside the rods' meshes (each its own box), the
+## roller placed at `placed`, its rods stretched to `length` as
+## CarryOnProps._set_reach() stretches them.
+func _rods_inside(points: PackedVector3Array, placed: Transform3D, length: float) -> int:
+	var names: Array = CarryOnProps.REACH_NODES[SecurityLooks.Kind.ROLLER]
+	var reach: Node3D = _roller.find_child(names[0], true, false)
+	var top: Node3D = _roller.find_child(names[1], true, false)
+	if not top.has_meta(&"base"):
+		top.set_meta(&"base", top.position)
+	reach.scale = Vector3(1.0, 1.0, length / CarryOnProps.REACH_BUILT_M)
+	top.position = top.get_meta(&"base") + Vector3(0.0, 0.0, length - CarryOnProps.REACH_BUILT_M)
+	var count := 0
+	var to_roller := _roller.global_transform.affine_inverse()
+	for mi in _rod_meshes:
+		var to_mesh := (placed * to_roller * mi.global_transform).affine_inverse()
+		var box := mi.mesh.get_aabb()
+		for v in points:
+			count += int(box.has_point(to_mesh * v))
+	return count
 
 
 func _inside(points: PackedVector3Array, placed: Transform3D) -> int:

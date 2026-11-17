@@ -58,9 +58,9 @@ extends SceneTree
 ##   Godot_v4.7.2-stable_win64_console.exe --display-driver windows \
 ##     --rendering-driver vulkan --audio-driver Dummy \
 ##     --path C:/Users/chulf/Gotta-make-my-flight/game \
-##     -s res://spike/basic_scanner_crossing_probe.gd [-- --seed=N] [--lane]
+##     -s res://spike/basic_scanner_crossing_probe.gd [-- --seed=N] [--lane] [--swap-plate=ID]
 ## Crossing plates go to tools/blender/out/security-booth/, close plates to
-## tools/blender/out/carry-selfclip/.
+## tools/blender/out/carry-selfclip/, swap plates (--swap-plate=) to tools/blender/out/carry_swap/.
 
 const PlateSight := preload("res://spike/plate_sight.gd")
 const CarryContact := preload("res://spike/carry_contact.gd")
@@ -144,6 +144,15 @@ const LEAD_PLATES: Array[String] = [
 const LEAD_MOMENTS := [[0.4, 0.6], [0.8, 0.97]]
 ## Failed tries of a hand-led move's plates before it is given up (_lead_tries).
 const LEAD_TRIES := 2
+## With --swap-plate=<id>, that passenger's roller hand to pull swap (hand.R>pull.L
+## or hand.L>pull.R, CarryLead.is_hand_pull_swap(), board 295026a6) is plated close
+## under SWAP_KEY at SWAP_MOMENTS into SWAP_OUT_REL, as a hand-led move plate is,
+## and no other hand-led move is plated (their stepped clock ran passenger 4's
+## swap through while passenger 3's hand>pull was plated). Every passenger's swap
+## is printed as it is first seen (SWAP_SEEN).
+const SWAP_KEY := "ROLLER hand>pull swap"
+const SWAP_MOMENTS := [[0.28, 0.32], [0.48, 0.52], [0.68, 0.72]]
+const SWAP_OUT_REL := "res://../tools/blender/out/carry_swap"
 ## Tries of a returner's entry plate (_plate_tries; a try with no framed heading frees
 ## its key so a later frame plates the passenger again) and of its put-in plate
 ## (_plate_putin(), each try further into PUTIN_K) before it is given up (board 58f5ab49).
@@ -229,6 +238,12 @@ var _lead_plated := {}
 ## tried again (a roller walk with no clear sight line on any heading was
 ## retried every frame and the run spent its time limit on it, board 40d26b16).
 var _lead_tries := {}
+## The passenger whose hand to pull swap is plated (--swap-plate=), or -1, and the
+## folder of its plates.
+var _swap_id := -1
+var _swap_dir := ""
+## "<id>/<bag>" -> true once that bag's hand to pull swap is printed (SWAP_SEEN).
+var _swaps_seen := {}
 ## Key -> failed tries of a returner's entry plate (PLATE_TRIES).
 var _plate_tries := {}
 ## The process frame a wanted plate move paused the clock on (_on_tick), or -1.
@@ -278,6 +293,11 @@ func _initialize() -> void:
 	_reach_dir = ProjectSettings.globalize_path(REACH_OUT_REL + run).simplify_path()
 	DirAccess.make_dir_recursive_absolute(_reach_dir)
 	_lane_mode = OS.get_cmdline_user_args().has("--lane")
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--swap-plate="):
+			_swap_id = int(arg.get_slice("=", 1))
+			_swap_dir = ProjectSettings.globalize_path(SWAP_OUT_REL + run).simplify_path()
+			DirAccess.make_dir_recursive_absolute(_swap_dir)
 	# Board 521e46a5 re-check: --no-b1-plate leaves out the second bag's put-in
 	# plate (its clock pause shifts the frames sampled after it), --b1-views
 	# adds a side and a high plate of it, --trace=5,15 prints those
@@ -571,6 +591,7 @@ func _cross() -> void:
 			_hold_frame = -1
 			_clock.set_paused(false)
 		_watch_float()
+		_swap_watch()
 		_lead_plate_scan()
 		if not _roles.is_empty() and _clock.tick >= next_send and spawns < MAX_SPAWNS:
 			_send()
@@ -643,15 +664,21 @@ func _lead_plate_scan() -> void:
 		var kinds: Array = props.props_of(id)["kinds"]
 		for i in kinds.size():
 			var kind_name: String = SecurityLooks.Kind.keys()[kinds[i]]
-			var move := FloatCheck.move_of(props, id, i).replace(".R", "").replace(".L", "")
+			var named := FloatCheck.move_of(props, id, i)
+			var move := named.replace(".R", "").replace(".L", "")
 			var key := kind_name + " " + (move if move != "" else "walk")
+			var swap := _swap_plate_due(id, kinds[i], named)
+			if swap:
+				key = SWAP_KEY
+			elif _swap_id >= 0:
+				continue
 			if _lead_plated.has(key) or _lead_tries.get(key, 0) >= LEAD_TRIES:
 				continue
-			if not (key in LEAD_PLATES or key.ends_with(" walk")):
+			if not (key in LEAD_PLATES or key.ends_with(" walk") or swap):
 				continue
 			if move == "" and (not p.is_moving() or kinds.size() > 1):
 				continue
-			if move != "" and props.transfer_progress(id, i) > 0.3:
+			if move != "" and props.transfer_progress(id, i) > (0.2 if swap else 0.3):
 				continue
 			_plate_task = true
 			_plate_lead.call_deferred(id, i, key)
@@ -723,11 +750,55 @@ func _on_tick(_tick: int) -> void:
 			var plated: Array[Dictionary] = [_move_plated, _lead_plated.merged(_lead_given_up())]
 			var repacked := p != null and p.incident_resolved
 			var near := move != "" and _near_booth(id)
-			if PlateSteps.wanted(kinds[i], move, repacked, near, plated, lead_open, LEAD_PLATES):
+			var lead := lead_open and _swap_id < 0
+			var swap := lead_open and _swap_plate_due(id, kinds[i], move)
+			if PlateSteps.wanted(kinds[i], move, repacked, near, plated, lead, LEAD_PLATES) or swap:
 				_clock.set_paused(true)
 				_clock._accumulator = 0.0
 				_hold_frame = Engine.get_process_frames()
 				return
+
+
+## With --swap-plate=, each roller hand to pull swap of any passenger printed
+## once, as it is first seen drawn.
+func _swap_watch() -> void:
+	if _swap_id < 0:
+		return
+	var props := _views.carry_on_props()
+	for id in _sim.passenger_ids():
+		var kinds: Array = props.props_of(id)["kinds"]
+		for i in kinds.size():
+			var move := FloatCheck.move_of(props, id, i)
+			var ends := move.split(">")
+			if kinds[i] != SecurityLooks.Kind.ROLLER or ends.size() != 2:
+				continue
+			if not (ends[0].begins_with("hand.") and ends[1].begins_with("pull.")):
+				continue
+			if ends[0].right(2) == ends[1].right(2) or _swaps_seen.has("%d/%d" % [id, i]):
+				continue
+			_swaps_seen["%d/%d" % [id, i]] = true
+			print(
+				(
+					"SWAP_SEEN passenger=%d bag=%d move=%s k=%.2f plate_task=%s"
+					% [id, i, move, props.transfer_progress(id, i), _plate_task]
+				)
+			)
+
+
+## Whether the move named `move` (FloatCheck.move_of(), hands named) of a bag of
+## `kind` of passenger `id` is the hand to pull swap asked for by --swap-plate=,
+## its plates not saved and not given up.
+func _swap_plate_due(id: int, kind: SecurityLooks.Kind, move: String) -> bool:
+	var ends := move.split(">")
+	if id != _swap_id or kind != SecurityLooks.Kind.ROLLER or ends.size() != 2:
+		return false
+	if _lead_plated.has(SWAP_KEY) or _lead_tries.get(SWAP_KEY, 0) >= LEAD_TRIES:
+		return false
+	return (
+		ends[0].begins_with("hand.")
+		and ends[1].begins_with("pull.")
+		and ends[0].right(2) != ends[1].right(2)
+	)
 
 
 ## The close plates of one hand-led move (or walk) of bag `i` of passenger
@@ -737,6 +808,8 @@ func _plate_lead(id: int, i: int, key: String) -> void:
 	var props := _views.carry_on_props()
 	var walk := key.ends_with(" walk")
 	var moments: Array = [[1.0, 1.0]] if walk else PlateSteps.LEAD_MOMENTS_OF.get(key, LEAD_MOMENTS)
+	if key == SWAP_KEY:
+		moments = SWAP_MOMENTS
 	var move := FloatCheck.move_of(props, id, i)
 	var saved := 0
 	for m in moments.size():
@@ -789,7 +862,7 @@ func _plate_lead(id: int, i: int, key: String) -> void:
 		# was given up on). The close plate is of this passenger alone, as the reach and
 		# detail plates are; the arch and the belt still block a sight line.
 		var others := _hide_others(id)
-		var ok := await _plate_close(id, bags[i], name)
+		var ok := await _plate_close(id, bags[i], name, _swap_dir if key == SWAP_KEY else "")
 		for node in others:
 			node.visible = true
 		_clock.set_paused(false)
@@ -2721,6 +2794,10 @@ func _report() -> void:
 	if not _pins.is_empty():
 		_invalid("pinned draws never reached: %s" % [_pins])
 	PlateSteps.lead_sheet(_close_dir)
+	if _swap_id >= 0:
+		PlateSteps.lead_sheet(_swap_dir)
+		if not _lead_plated.has(SWAP_KEY):
+			_invalid("passenger %d's hand to pull swap was never plated" % _swap_id)
 	if _floats["float"] > 0 or _floats["grip_off"] > 0:
 		_invalid("bags float or are held off their grip (GRIP_ON): %s" % [_floats])
 	if _float_control != ["float", "held"] and _float_control != ["float", "resting"]:

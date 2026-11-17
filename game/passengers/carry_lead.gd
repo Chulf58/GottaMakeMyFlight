@@ -206,6 +206,11 @@ const SWAP_LEAN := deg_to_rad(40.0)
 ## the hand) to the outside, through ahead, by this share of the carry, so it is
 ## never between the bar and the leg (swap_lean()).
 const SWAP_SPIN_T := 0.25
+## On the second half the bar goes this much wider round the receiving hip than
+## a straight sweep from the front to the side (round_front()): the hand held
+## the bar in the receiving thigh at k 0.75 (crossing probe --lane seed 1106001,
+## passenger 4; test_carry_hand_pull_swap's rods check).
+const SWAP_ROUND_OUT_M := 0.1
 
 
 ## Where a bag of `kind` standing in a stall is held (its own frame, the bag
@@ -619,7 +624,7 @@ static func hand_pull_path(
 	var u := smoothstep(0.0, 1.0, t * 2.0 if first else t * 2.0 - 1.0)
 	var bar := round_front(local * (start * bar_from), front, u)
 	if not first:
-		bar = round_front(front, Vector3(-handle.x, handle.y, handle.z), u)
+		bar = round_front(front, Vector3(-handle.x, handle.y, handle.z), u, SWAP_ROUND_OUT_M)
 	var turned := Quaternion(front_lean())
 	var was := (local.basis * start.basis).get_rotation_quaternion()
 	var to := (local.basis * want.basis).get_rotation_quaternion()
@@ -637,10 +642,12 @@ static func hand_pull_path(
 ## A point `u` (0 to 1) of the way from `from` to `to` (the body's frame) round
 ## the body's centre line: its angle about it, its distance from it and its
 ## height each go straight from the one to the other, so a point going between
-## a side and the front does not cut across the body.
-static func round_front(from: Vector3, to: Vector3, u: float) -> Vector3:
+## a side and the front does not cut across the body; its distance is `out`
+## more half way, none at either end.
+static func round_front(from: Vector3, to: Vector3, u: float, out := 0.0) -> Vector3:
 	var angle := lerpf(atan2(from.x, from.z), atan2(to.x, to.z), u)
 	var r := lerpf(Vector2(from.x, from.z).length(), Vector2(to.x, to.z).length(), u)
+	r += out * sin(PI * u)
 	return Vector3(r * sin(angle), lerpf(from.y, to.y, u), r * cos(angle))
 
 
