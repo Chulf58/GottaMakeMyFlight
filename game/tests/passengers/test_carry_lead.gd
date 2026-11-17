@@ -694,6 +694,7 @@ func test_a_hand_handing_a_bag_over_lets_go_of_it() -> void:
 			"carry_from": c[1],
 			"from": c[3],
 			"anchor_from": Vector3(0.0, 0.3, 0.0),
+			"start_shoulder_y": 1.4,
 		}
 		var start: Transform3D = frame * (c[3] as Transform3D)
 		var want: Transform3D = frame * (c[4] as Transform3D)

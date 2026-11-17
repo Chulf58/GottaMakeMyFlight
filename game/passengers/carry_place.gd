@@ -239,8 +239,21 @@ static func _stamp(
 	# its reach and length, CarryLead.stamp_move).
 	bag["led"] = leads(held, bag)
 	var in_stall: bool = held.get("in_stall", false)
+	# The lower shoulder joint as the move starts, for a hand to pull swap's
+	# handover height (CarryLead.hand_pull_path()), not the pose drawn later. A
+	# body with no carry rig yet has held no bag, so it starts no such swap.
+	var shoulder_y := NAN
+	if body.has_meta(&"carry_rig"):
+		shoulder_y = minf(props._shoulder_of(body, 0).y, props._shoulder_of(body, 1).y)
+		shoulder_y -= body.global_position.y
 	CarryLead.stamp_move(
-		bag, in_stall, homes[i], body.global_transform, held.get("sit_face", NAN), unmoved
+		bag,
+		in_stall,
+		homes[i],
+		body.global_transform,
+		held.get("sit_face", NAN),
+		unmoved,
+		shoulder_y
 	)
 	BoothRoller.fix_start(bag, held.get("booth", false), props.sim, body.global_transform)
 	# A queue stand keeps the walls round where it is drawn (RollerPark.queue_frame_of())
