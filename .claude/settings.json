@@ -1,4 +1,10 @@
 {
   "agent": "conductor",
-  "autoMemoryEnabled": false
+  "autoMemoryEnabled": false,
+  "permissions": {
+    "allow": [
+      "Bash(git worktree remove:*)",
+      "Bash(git -C /mnt/c/Users/chulf/Gotta-make-my-flight worktree remove:*)"
+    ]
+  }
 }
