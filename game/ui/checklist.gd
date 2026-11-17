@@ -15,6 +15,10 @@ extends RefCounted
 ## that is not done says what to do next: place the station, open one the
 ## player closed, hire on Staff, or wait for the member on the way.
 
+## The English msgids of the card's lines. Tests compare against them; the
+## lines themselves go through TranslationServer.translate() with the same
+## literal, because this class is static and has no tr(), and the POT extractor
+## reads only literals. Change a text here and in its translate() call together.
 const BLOCKER := AirportGate.Blocker
 const TITLE_CLOSED := "To open the airport"
 const TITLE_OPEN := "Your airport needs"
@@ -71,12 +75,25 @@ static func line(text: String, done: bool) -> Dictionary:
 ## "checkin_staying", "security_staying" (hired members not leaving).
 static func opening_lines(unmet: Array, counts: Dictionary) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
-	out.append(line(ENTRANCE, not unmet.has(BLOCKER.NO_PATH)))
+	out.append(
+		line(
+			TranslationServer.translate(
+				"Entrance with a way through check-in and security to an exit"
+			),
+			not unmet.has(BLOCKER.NO_PATH)
+		)
+	)
 	if unmet.has(BLOCKER.STAFF_SPOT):
-		out.append(line(STAFF_SPOT, false))
+		out.append(
+			line(
+				TranslationServer.translate(
+					"Staff can't reach a desk or scanner passengers need: clear its staff spot"
+				),
+				false
+			)
+		)
 	out.append(
 		_station_line(
-			CHECKIN,
 			"checkin",
 			_station_state(
 				unmet,
@@ -90,7 +107,6 @@ static func opening_lines(unmet: Array, counts: Dictionary) -> Array[Dictionary]
 	)
 	out.append(
 		_station_line(
-			SECURITY,
 			"security",
 			_station_state(
 				unmet,
@@ -102,8 +118,13 @@ static func opening_lines(unmet: Array, counts: Dictionary) -> Array[Dictionary]
 			)
 		)
 	)
-	out.append(line(GATE, not unmet.has(BLOCKER.NO_GATE)))
-	out.append(line(SEATS, int(counts["seats"]) > 0))
+	out.append(
+		line(
+			TranslationServer.translate("Gate desk by an exit that faces the planes"),
+			not unmet.has(BLOCKER.NO_GATE)
+		)
+	)
+	out.append(line(TranslationServer.translate("Seats near the gate"), int(counts["seats"]) > 0))
 	return out
 
 
@@ -114,13 +135,21 @@ static func opening_lines(unmet: Array, counts: Dictionary) -> Array[Dictionary]
 static func gap_lines(world: Dictionary, seats: int, lock_texts: Dictionary) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for cause in HintRules.causes(world):
-		var text: String = GAPS[cause]
 		var locked: String = lock_texts.get(GAP_TOOLS.get(cause, BuildMode.Tool.NONE), "")
 		if locked != "":
-			text = "%s (%s)" % [text.get_slice(":", 0), locked]
-		out.append(line(text, false))
+			var need := TranslationServer.translate("{need} ({unlock})")
+			out.append(line(need.format({"need": _gap_need(cause), "unlock": locked}), false))
+		else:
+			out.append(line(_gap_text(cause), false))
 	if seats == 0:
-		out.append(line(NO_SEATS, false))
+		out.append(
+			line(
+				TranslationServer.translate(
+					"Passengers have nowhere to sit: place seats near the gate"
+				),
+				false
+			)
+		)
 	return out
 
 
@@ -137,7 +166,74 @@ static func _station_state(
 	return "hire" if int(counts[staying]) == 0 else "walking"
 
 
-static func _station_line(text: String, key: String, state: String) -> Dictionary:
-	if state == "":
-		return line(text, true)
-	return line("%s: %s" % [text, NEXT[key][state]], false)
+static func _station_line(key: String, state: String) -> Dictionary:
+	return line(_station_text(key, state), state == "")
+
+
+## The full line of a station: "" is its done form, else a NEXT key. One msgid
+## per line, so a translation can order the words as its language needs.
+static func _station_text(key: String, state: String) -> String:
+	if key == "checkin":
+		match state:
+			"place":
+				return TranslationServer.translate("Check-in desk and an agent: place a desk")
+			"closed":
+				return TranslationServer.translate(
+					"Check-in desk and an agent: you closed every desk, open one again"
+				)
+			"hire":
+				return TranslationServer.translate(
+					"Check-in desk and an agent: hire an agent on Staff"
+				)
+			"walking":
+				return TranslationServer.translate(
+					"Check-in desk and an agent: the agent is on the way"
+				)
+		return TranslationServer.translate("Check-in desk and an agent")
+	match state:
+		"place":
+			return TranslationServer.translate("Security scanner and an officer: place a scanner")
+		"closed":
+			return TranslationServer.translate(
+				"Security scanner and an officer: you closed every scanner and lane, open one again"
+			)
+		"hire":
+			return TranslationServer.translate(
+				"Security scanner and an officer: hire an officer on Staff"
+			)
+		"walking":
+			return TranslationServer.translate(
+				"Security scanner and an officer: the officer is on the way"
+			)
+	return TranslationServer.translate("Security scanner and an officer")
+
+
+## The gap line for a HintRules cause (see GAPS).
+static func _gap_text(cause: StringName) -> String:
+	match cause:
+		HintRules.PLACE_CHECKIN:
+			return TranslationServer.translate("Passengers need a check-in desk: place one")
+		HintRules.PLACE_SECURITY:
+			return TranslationServer.translate("Passengers need security: place a scanner")
+		HintRules.SECOND_HIRE:
+			return TranslationServer.translate(
+				"A desk or scanner has nobody at it: hire another on Staff"
+			)
+		HintRules.TOILET:
+			return TranslationServer.translate(
+				"Passengers need a toilet: build a toilet room with a stall"
+			)
+	return TranslationServer.translate("Passengers are hungry: build a cafe")
+
+
+## What a gap line says before its ask, for the causes whose build tool can be
+## locked (GAP_TOOLS).
+static func _gap_need(cause: StringName) -> String:
+	match cause:
+		HintRules.PLACE_CHECKIN:
+			return TranslationServer.translate("Passengers need a check-in desk")
+		HintRules.PLACE_SECURITY:
+			return TranslationServer.translate("Passengers need security")
+		HintRules.TOILET:
+			return TranslationServer.translate("Passengers need a toilet")
+	return TranslationServer.translate("Passengers are hungry")

@@ -67,14 +67,14 @@ func _init() -> void:
 	_name.focus_mode = Control.FOCUS_NONE
 	_name.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	_name.theme_type_variation = &"HudButtonTeal"
-	_name.tooltip_text = "Follow this passenger"
+	_name.tooltip_text = tr("Follow this passenger")
 	_name.pressed.connect(press_name)
 	column.add_child(_name)
 	for label in [_vip, _stage, _flight, _status, _now]:
 		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		column.add_child(label)
 	_now.theme_type_variation = &"HudProblemText"
-	_heading.text = "Thoughts"
+	_heading.text = tr("Thoughts")
 	_heading.theme_type_variation = &"HudSmall"
 	column.add_child(_heading)
 	for i in PassengerThoughts.CAP:
@@ -82,7 +82,7 @@ func _init() -> void:
 		row.name = "Thought%d" % i
 		row.focus_mode = Control.FOCUS_NONE
 		row.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		row.tooltip_text = "Show where this happened"
+		row.tooltip_text = tr("Show where this happened")
 		row.pressed.connect(press_thought.bind(i))
 		column.add_child(row)
 		_rows.append(row)
@@ -125,26 +125,27 @@ func refresh() -> void:
 	visible = p != null or built_card.visible
 	if p == null:
 		return
-	_name.text = "Passenger %d" % p.id
+	_name.text = tr("Passenger {id}").format({"id": p.id})
 	_vip.text = _vip_line(p)
 	_vip.visible = _vip.text != ""
 	_stage.text = PassengerHud.stage_text(sim, p)
 	_flight.text = _flight_line(p)
-	_status.text = (
-		"Mood %d   Hunger %d   Toilet %d   Boredom %d"
-		% [p.mood, p.hunger, p.toilet_need, p.boredom]
+	_status.text = tr("Mood {mood}   Hunger {hunger}   Toilet {toilet}   Boredom {boredom}").format(
+		{"mood": p.mood, "hunger": p.hunger, "toilet": p.toilet_need, "boredom": p.boredom}
 	)
 	_now.text = now_line(sim, p)
 	_now.visible = _now.text != ""
 	var entries := PassengerThoughts.entries(p)
-	_heading.text = "Thoughts" if not entries.is_empty() else "Thoughts: none yet"
+	_heading.text = tr("Thoughts") if not entries.is_empty() else tr("Thoughts: none yet")
 	for i in _rows.size():
 		var row := _rows[i]
 		row.visible = i < entries.size()
 		if not row.visible:
 			continue
 		var entry := entries[i]
-		row.text = "%s · %s" % [entry["text"], _age(entry["tick"])]
+		row.text = tr("{thought} · {age}").format(
+			{"thought": entry["text"], "age": _age(entry["tick"])}
+		)
 		row.theme_type_variation = &"HudButtonGreen" if entry["positive"] else &"HudButtonCoral"
 	_marked.text = _marked_text
 	_marked.visible = _marked_text != ""
@@ -167,7 +168,9 @@ func press_thought(index: int) -> bool:
 	var point := sim.grid.cell_to_world(cell)
 	marker.show_at(point, entry["positive"])
 	_marked_id = p.id
-	_marked_text = "The pin shows where they were at %s" % GameCalendar.clock_text(entry["tick"])
+	_marked_text = tr("The pin shows where they were at {time}").format(
+		{"time": GameCalendar.clock_text(entry["tick"])}
+	)
 	if camera != null:
 		camera.glide_to(point, minf(camera.distance, AlertStack.JUMP_DISTANCE))
 	refresh()
@@ -201,9 +204,10 @@ static func now_line(passenger_sim: PassengerSim, p: Passenger) -> String:
 		return ""
 	var parts := PackedStringArray()
 	if p.late:
-		parts.append("Running late")
+		parts.append(TranslationServer.translate("Running late"))
 	if p.stuck != Passenger.Stuck.NONE:
-		parts.append('Stuck: "%s"' % passenger_sim.bubble_text(p))
+		var stuck := TranslationServer.translate('Stuck: "{reason}"')
+		parts.append(stuck.format({"reason": passenger_sim.bubble_text(p)}))
 	return "   ".join(parts)
 
 
@@ -269,8 +273,10 @@ func _flight_line(p: Passenger) -> String:
 	var title := FlightResultPanel.title_for(flights, p.flight_id)
 	var doors := flights.doors_close_tick(p.flight_id) if flights != null else -1
 	if doors < 0:
-		return "Flight %s" % title
-	return "Flight %s, doors close %s" % [title, GameCalendar.clock_text(doors)]
+		return tr("Flight {title}").format({"title": title})
+	return tr("Flight {title}, doors close {time}").format(
+		{"title": title, "time": GameCalendar.clock_text(doors)}
+	)
 
 
 func _age(tick: int) -> String:
@@ -278,4 +284,6 @@ func _age(tick: int) -> String:
 		return ""
 	@warning_ignore("integer_division")
 	var minutes := maxi(clock.tick - tick, 0) / GameCalendar.TICKS_PER_MINUTE
-	return "just now" if minutes == 0 else "%d min ago" % minutes
+	if minutes == 0:
+		return tr("just now")
+	return tr_n("{minutes} min ago", "{minutes} min ago", minutes).format({"minutes": minutes})

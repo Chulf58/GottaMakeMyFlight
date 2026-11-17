@@ -18,11 +18,9 @@ const BELT_END := &"baggage_belt_end"
 const TOILET := &"toilet"
 const STALL := &"toilet_stall"
 const SINK := &"toilet_sink"
-## A toilet's upkeep is one room total (decision toilet-design-queue-free-
+## A toilet's upkeep line is one room total (decision toilet-design-queue-free-
 ## reservable-stalls-per-stall-daily-u, point 2): what RoomRules.daily_upkeep
 ## charges at midnight while it is ready, and what it will once it is.
-const UPKEEP_READY := "Upkeep $%d per day"
-const UPKEEP_ONCE_READY := "Upkeep $%d per day once ready"
 
 var _build_mode: BuildMode
 var _room_id := 0
@@ -72,21 +70,29 @@ func show_room(id: int) -> void:
 	for note in status.notes:
 		_line(note, &"HudAttentionText")
 	if status.type_id == BAG_ROOM:
-		_line("Belt ends %d" % status.pieces.get(BELT_END, 0))
+		_line(tr("Belt ends {count}").format({"count": status.pieces.get(BELT_END, 0)}))
 	elif status.type_id == TOILET:
-		_line("Stalls %d" % status.pieces.get(STALL, 0))
-		_line("Sinks %d" % status.pieces.get(SINK, 0))
-		_line((UPKEEP_READY if status.ok else UPKEEP_ONCE_READY) % status.upkeep)
+		_line(tr("Stalls {count}").format({"count": status.pieces.get(STALL, 0)}))
+		_line(tr("Sinks {count}").format({"count": status.pieces.get(SINK, 0)}))
+		var upkeep := (
+			tr("Upkeep ${amount} per day")
+			if status.ok
+			else tr("Upkeep ${amount} per day once ready")
+		)
+		_line(upkeep.format({"amount": status.upkeep}))
 	elif RoomTypes.get_type(status.type_id).activity:
-		_line("Spots %d" % status.seats)
-		_line("Fee $%d per visit" % status.base_spend if status.base_spend > 0 else "Free to use")
+		_line(tr("Spots {count}").format({"count": status.seats}))
+		if status.base_spend > 0:
+			_line(tr("Fee ${amount} per visit").format({"amount": status.base_spend}))
+		else:
+			_line(tr("Free to use"))
 	elif RoomTypes.get_type(status.type_id).shop:
-		_line("Browse spots %d" % status.seats)
-		_line("Base spend $%d per visit" % status.base_spend)
+		_line(tr("Browse spots {count}").format({"count": status.seats}))
+		_line(tr("Base spend ${amount} per visit").format({"amount": status.base_spend}))
 	else:
 		if not RoomTypes.get_type(status.type_id).walk_on:
-			_line("Seats %d" % status.seats)
-		_line("Base spend $%d per visit" % status.base_spend)
+			_line(tr("Seats {count}").format({"count": status.seats}))
+		_line(tr("Base spend ${amount} per visit").format({"amount": status.base_spend}))
 	reset_size()
 
 

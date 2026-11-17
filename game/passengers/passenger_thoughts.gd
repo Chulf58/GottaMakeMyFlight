@@ -26,13 +26,6 @@ const NO_MARK := -1
 const LONG_QUEUE_TICKS := 10 * GameCalendar.TICKS_PER_MINUTE
 ## Nice decor is thought again only this long after the last time.
 const DECOR_REPEAT_TICKS := 120 * GameCalendar.TICKS_PER_MINUTE
-const TEXT := {
-	Kind.MEAL: "That hit the spot",
-	Kind.FOOD_GIVEN_UP: "Gave up on getting food",
-	Kind.TOILET_RELIEF: "What a relief",
-	Kind.LONG_QUEUE: "Waited %d min in the queue",
-	Kind.NICE_DECOR: "Nice decor here",
-}
 const POSITIVE := [Kind.MEAL, Kind.TOILET_RELIEF, Kind.NICE_DECOR]
 ## Kinds recorded at a facility: a cafe or toilet room, a desk or scanner. Nice
 ## decor has none (facility 0).
@@ -127,7 +120,19 @@ static func entries(p: Passenger) -> Array[Dictionary]:
 
 
 static func text_of(kind: Kind, value: int) -> String:
-	return TEXT[kind] % value if kind == Kind.LONG_QUEUE else TEXT[kind]
+	match kind:
+		Kind.MEAL:
+			return TranslationServer.translate("That hit the spot")
+		Kind.FOOD_GIVEN_UP:
+			return TranslationServer.translate("Gave up on getting food")
+		Kind.TOILET_RELIEF:
+			return TranslationServer.translate("What a relief")
+		Kind.LONG_QUEUE:
+			var waited := TranslationServer.translate_plural(
+				"Waited {minutes} min in the queue", "Waited {minutes} min in the queue", value
+			)
+			return waited.format({"minutes": value})
+	return TranslationServer.translate("Nice decor here")
 
 
 ## The tick `kind` was last thought (a queue: the tick that queue began), or

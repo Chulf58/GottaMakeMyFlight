@@ -14,7 +14,6 @@ const BOX_COLOUR := Color(0.6, 0.38, 0.0)
 ## The row text's width before the card has been laid out: the card's LIST_W less its
 ## padding and the tick column.
 const FALLBACK_TEXT_W := 250.0
-const MORE_TEXT := "+%d more"
 
 var _title := Label.new()
 var _rows := VBoxContainer.new()
@@ -105,7 +104,7 @@ func fit(room: float) -> void:
 		shown += 1
 	for i in rows.size():
 		(rows[i] as Control).visible = i < shown
-	_more.text = MORE_TEXT % (rows.size() - shown)
+	_more.text = tr("+{count} more").format({"count": rows.size() - shown})
 	_more.visible = shown < rows.size()
 
 

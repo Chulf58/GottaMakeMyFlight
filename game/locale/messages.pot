@@ -38,3 +38,389 @@ msgstr ""
 #: ui/rating_badge.gd
 msgid "Days counted: {days} of {window}"
 msgstr ""
+
+#: ui/staff_panel.gd
+msgid "{hired} hired, {duty} cleaning, {leaving} leaving"
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "{hired} hired, {duty} cleaning"
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "{hired} hired, {duty} on duty, {leaving} leaving"
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "{hired} hired, {duty} on duty"
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "Wall gap: close the open edge of the outer wall, marked in red"
+msgid_plural "{count} wall gaps: close the open edges of the outer wall, marked in red"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/staff_panel.gd
+msgid "To open the airport"
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "Your airport needs"
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "Open! Starter contract: {airline} to {destination}, daily"
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "Hire a check-in agent"
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "Hire a security officer"
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "Hire shop staff"
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "Check-in agents"
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "Security officers"
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "Shop staff"
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "Cleaners"
+msgstr ""
+
+#: ui/staff_panel.gd
+msgctxt "staff button"
+msgid "Hire"
+msgstr ""
+
+#: ui/staff_panel.gd
+msgctxt "staff button"
+msgid "Fire"
+msgstr ""
+
+#: ui/room_panel.gd
+msgid "Belt ends {count}"
+msgstr ""
+
+#: ui/room_panel.gd
+msgid "Stalls {count}"
+msgstr ""
+
+#: ui/room_panel.gd
+msgid "Sinks {count}"
+msgstr ""
+
+#: ui/room_panel.gd
+msgid "Upkeep ${amount} per day"
+msgstr ""
+
+#: ui/room_panel.gd
+msgid "Upkeep ${amount} per day once ready"
+msgstr ""
+
+#: ui/room_panel.gd
+msgid "Spots {count}"
+msgstr ""
+
+#: ui/room_panel.gd
+msgid "Fee ${amount} per visit"
+msgstr ""
+
+#: ui/room_panel.gd
+msgid "Free to use"
+msgstr ""
+
+#: ui/room_panel.gd
+msgid "Browse spots {count}"
+msgstr ""
+
+#: ui/room_panel.gd
+msgid "Base spend ${amount} per visit"
+msgstr ""
+
+#: ui/room_panel.gd
+msgid "Seats {count}"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Entrance with a way through check-in and security to an exit"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Staff can't reach a desk or scanner passengers need: clear its staff spot"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Gate desk by an exit that faces the planes"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Seats near the gate"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "{need} ({unlock})"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Passengers have nowhere to sit: place seats near the gate"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Check-in desk and an agent: place a desk"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Check-in desk and an agent: you closed every desk, open one again"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Check-in desk and an agent: hire an agent on Staff"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Check-in desk and an agent: the agent is on the way"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Check-in desk and an agent"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Security scanner and an officer: place a scanner"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Security scanner and an officer: you closed every scanner and lane, open one again"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Security scanner and an officer: hire an officer on Staff"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Security scanner and an officer: the officer is on the way"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Security scanner and an officer"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Passengers need a check-in desk: place one"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Passengers need security: place a scanner"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "A desk or scanner has nobody at it: hire another on Staff"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Passengers need a toilet: build a toilet room with a stall"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Passengers are hungry: build a cafe"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Passengers need a check-in desk"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Passengers need security"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Passengers need a toilet"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Passengers are hungry"
+msgstr ""
+
+#: ui/checklist_card.gd
+msgid "+{count} more"
+msgstr ""
+
+#: ui/passenger_inspect.gd
+msgid "Follow this passenger"
+msgstr ""
+
+#: ui/passenger_inspect.gd
+msgid "Thoughts"
+msgstr ""
+
+#: ui/passenger_inspect.gd
+msgid "Show where this happened"
+msgstr ""
+
+#: ui/passenger_inspect.gd
+msgid "Passenger {id}"
+msgstr ""
+
+#: ui/passenger_inspect.gd
+msgid "Mood {mood}   Hunger {hunger}   Toilet {toilet}   Boredom {boredom}"
+msgstr ""
+
+#: ui/passenger_inspect.gd
+msgid "Thoughts: none yet"
+msgstr ""
+
+#: ui/passenger_inspect.gd
+msgid "{thought} · {age}"
+msgstr ""
+
+#: ui/passenger_inspect.gd
+msgid "The pin shows where they were at {time}"
+msgstr ""
+
+#: ui/passenger_inspect.gd
+msgid "Running late"
+msgstr ""
+
+#: ui/passenger_inspect.gd
+msgid "Stuck: \"{reason}\""
+msgstr ""
+
+#: ui/passenger_inspect.gd
+msgid "Flight {title}"
+msgstr ""
+
+#: ui/passenger_inspect.gd
+msgid "Flight {title}, doors close {time}"
+msgstr ""
+
+#: ui/passenger_inspect.gd
+msgid "just now"
+msgstr ""
+
+#: ui/passenger_inspect.gd
+msgid "{minutes} min ago"
+msgid_plural "{minutes} min ago"
+msgstr[0] ""
+msgstr[1] ""
+
+#: landside/view/vehicle_inspect.gd
+msgid "{count} passenger"
+msgid_plural "{count} passengers"
+msgstr[0] ""
+msgstr[1] ""
+
+#: landside/view/vehicle_inspect.gd
+msgid "Flight {flights}"
+msgstr ""
+
+#: landside/view/vehicle_inspect.gd
+msgid "Empty, at the curb"
+msgstr ""
+
+#: landside/view/vehicle_inspect.gd
+msgid "At the curb"
+msgstr ""
+
+#: landside/view/vehicle_inspect.gd
+msgid "Parked, driver away"
+msgstr ""
+
+#: landside/view/vehicle_inspect.gd
+msgid "Parked"
+msgstr ""
+
+#: landside/view/vehicle_inspect.gd
+msgid "Empty, leaving"
+msgstr ""
+
+#: landside/view/vehicle_inspect.gd
+msgid "Leaving"
+msgstr ""
+
+#: landside/view/vehicle_inspect.gd
+msgid "Empty, driving on"
+msgstr ""
+
+#: landside/view/vehicle_inspect.gd
+msgid "Driving into the car park"
+msgstr ""
+
+#: landside/view/vehicle_inspect.gd
+msgid "Waiting to turn into the car park"
+msgstr ""
+
+#: landside/view/vehicle_inspect.gd
+msgid "Driving to the car park"
+msgstr ""
+
+#: landside/view/vehicle_inspect.gd
+msgid "Queuing for the curb"
+msgstr ""
+
+#: landside/view/vehicle_inspect.gd
+msgid "Driving to the curb"
+msgstr ""
+
+#: landside/view/vehicle_inspect.gd
+msgid "On time"
+msgstr ""
+
+#: landside/view/vehicle_inspect.gd
+msgid "Drop-off delay: under 1 min"
+msgstr ""
+
+#: landside/view/vehicle_inspect.gd
+msgid "Drop-off delay: {minutes} min"
+msgid_plural "Drop-off delay: {minutes} min"
+msgstr[0] ""
+msgstr[1] ""
+
+#: landside/view/vehicle_inspect.gd
+msgctxt "vehicle"
+msgid "Taxi"
+msgstr ""
+
+#: landside/view/vehicle_inspect.gd
+msgctxt "vehicle"
+msgid "Car"
+msgstr ""
+
+#: landside/view/vehicle_inspect.gd
+msgid "{vehicle} {id}"
+msgstr ""
+
+#: passengers/passenger_thoughts.gd
+msgid "That hit the spot"
+msgstr ""
+
+#: passengers/passenger_thoughts.gd
+msgid "Gave up on getting food"
+msgstr ""
+
+#: passengers/passenger_thoughts.gd
+msgid "What a relief"
+msgstr ""
+
+#: passengers/passenger_thoughts.gd
+msgid "Waited {minutes} min in the queue"
+msgid_plural "Waited {minutes} min in the queue"
+msgstr[0] ""
+msgstr[1] ""
+
+#: passengers/passenger_thoughts.gd
+msgid "Nice decor here"
+msgstr ""
