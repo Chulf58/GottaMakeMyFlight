@@ -1,12 +1,12 @@
 {
   "generator": "tools/blender/thumbnails/render_kit_thumbnails.py",
-  "style": 3,
+  "style": 4,
   "size": 256,
   "items": {
     "floor": {
       "png": "floor.png",
       "class": "tile",
-      "style": 3,
+      "style": 4,
       "sources": {
         "floor_tile.glb": "94da5a74fc4366b4e9c11ec362ecfa7072933193d55bf1c04aebc057ebe3f14c"
       }
@@ -14,7 +14,7 @@
     "wall": {
       "png": "wall.png",
       "class": "edge",
-      "style": 3,
+      "style": 4,
       "sources": {
         "wall.glb": "22bcaf0d0e5cd04a2ae1c82352237898ef9033bcd2bb4b41f8daa4d570842da9"
       }
@@ -22,7 +22,7 @@
     "glass": {
       "png": "glass.png",
       "class": "edge",
-      "style": 3,
+      "style": 4,
       "sources": {
         "wall_glass.glb": "b1da75a19bbcab7ca33b942c531469833b8bdcfc5f2db1d33dce9c0a43be7e06"
       }
@@ -30,7 +30,7 @@
     "door": {
       "png": "door.png",
       "class": "edge",
-      "style": 3,
+      "style": 4,
       "sources": {
         "wall_door.glb": "159ff32f268d372c7c3e985eb29d25b7c21a249da6236c42771f742e96dea807"
       }
@@ -38,7 +38,7 @@
     "desk": {
       "png": "desk.png",
       "class": "2x1",
-      "style": 3,
+      "style": 4,
       "sources": {
         "checkin_desk.glb": "f7a39f201e9f91aba7769a9fdff900bdd90e7ecc387da79a3b44dc3d4881056b"
       }
@@ -46,7 +46,7 @@
     "scanner": {
       "png": "scanner.png",
       "class": "1x2",
-      "style": 3,
+      "style": 4,
       "sources": {
         "security_scanner.glb": "782cb64fdfd28b4b84015655893005adb2257dc0889d89fcb5d4eb1fa9362d4a"
       }
@@ -54,7 +54,7 @@
     "seats": {
       "png": "seats.png",
       "class": "3x1",
-      "style": 3,
+      "style": 4,
       "sources": {
         "seat_row.glb": "edec9bdcca0f8e17355ebf4750e6a2fc6c57824b7cf484b720d4ac13a92a8752"
       }
@@ -62,7 +62,7 @@
     "entrance": {
       "png": "entrance.png",
       "class": "door_1x1",
-      "style": 3,
+      "style": 4,
       "sources": {
         "floor_tile.glb": "94da5a74fc4366b4e9c11ec362ecfa7072933193d55bf1c04aebc057ebe3f14c",
         "wall_door.glb": "159ff32f268d372c7c3e985eb29d25b7c21a249da6236c42771f742e96dea807"
@@ -71,7 +71,7 @@
     "exit": {
       "png": "exit.png",
       "class": "door_1x1",
-      "style": 3,
+      "style": 4,
       "sources": {
         "floor_tile.glb": "94da5a74fc4366b4e9c11ec362ecfa7072933193d55bf1c04aebc057ebe3f14c",
         "wall_door.glb": "159ff32f268d372c7c3e985eb29d25b7c21a249da6236c42771f742e96dea807"
@@ -80,7 +80,7 @@
     "remove": {
       "png": "remove.png",
       "class": "tile",
-      "style": 3,
+      "style": 4,
       "sources": {
         "floor_tile.glb": "94da5a74fc4366b4e9c11ec362ecfa7072933193d55bf1c04aebc057ebe3f14c"
       }
@@ -88,7 +88,7 @@
     "belt": {
       "png": "belt.png",
       "class": "3x2",
-      "style": 3,
+      "style": 4,
       "sources": {
         "baggage_belt.glb": "3719f03ac021591d63403f7e95767b533cc16f92fdea1ca5922009d2827e3324",
         "baggage_belt_corner.glb": "bdbd92af151c7d496c4ede290596eec04f08d0f0e73b362450e72998af2b4249"
@@ -97,7 +97,7 @@
     "cart": {
       "png": "cart.png",
       "class": "1x2",
-      "style": 3,
+      "style": 4,
       "sources": {
         "baggage_cart.glb": "0299ce3f891fa3295fdff4627e5de0f7ca2b54285e4eab795e0607633f09101c"
       }
@@ -105,7 +105,7 @@
     "bag_room": {
       "png": "bag_room.png",
       "class": "2x2",
-      "style": 3,
+      "style": 4,
       "sources": {
         "baggage_belt_end.glb": "253f226b2f64ca6561b595ca6f8aa57293558db905ec4b4d63ec20183dbe9ab5",
         "baggage_cart.glb": "0299ce3f891fa3295fdff4627e5de0f7ca2b54285e4eab795e0607633f09101c",
@@ -115,7 +115,7 @@
     "tray_table": {
       "png": "tray_table.png",
       "class": "1x1",
-      "style": 3,
+      "style": 4,
       "sources": {
         "tray_table.glb": "17f1da69c6c36f2bae46fc5be0097ced3aac91a196b3d66a414e64296433eee1"
       }
@@ -123,7 +123,7 @@
     "xray_belt": {
       "png": "xray_belt.png",
       "class": "1x1",
-      "style": 3,
+      "style": 4,
       "sources": {
         "xray_belt.glb": "94af78f318877ca8164bd2359a37a6540bd1b52fee719855d32eda6086e2c356"
       }
@@ -131,15 +131,15 @@
     "arch": {
       "png": "arch.png",
       "class": "door_1x1",
-      "style": 3,
+      "style": 4,
       "sources": {
-        "security_arch.glb": "b779139de83054f0a0fe4e2baac53382d48bfa904ef19b465a6e619003a328d3"
+        "security_arch.glb": "3a6c0f4481e11ee5aeaaf845ba1ee55752eebd127857991355fee316c7a70e11"
       }
     },
     "pickup_table": {
       "png": "pickup_table.png",
       "class": "1x1",
-      "style": 3,
+      "style": 4,
       "sources": {
         "pickup_table.glb": "677d5b7855fedcca4a18ba99fc72d9301994e3d5ef29731964a438d8980cf006"
       }
@@ -147,7 +147,7 @@
     "toilet_stall": {
       "png": "toilet_stall.png",
       "class": "1x2",
-      "style": 3,
+      "style": 4,
       "sources": {
         "toilet_stall.glb": "51386502977a3797a8ef95e3c738dd6268f07e8099a4324358752e35aaa1681d"
       }
@@ -155,7 +155,7 @@
     "toilet_sink": {
       "png": "toilet_sink.png",
       "class": "1x1_tall",
-      "style": 3,
+      "style": 4,
       "sources": {
         "toilet_sink.glb": "741c305abb3e739e9a285032e53907c67097d64bcf8f645e40f2182368b051c7"
       }
@@ -163,7 +163,7 @@
     "counter": {
       "png": "counter.png",
       "class": "2x1_tall",
-      "style": 3,
+      "style": 4,
       "sources": {
         "cafe_counter.glb": "e3ec5f508bd4eba5c6987e21562def33f7d5c121ec6f2e72d1653baa89747e3b"
       }
@@ -171,7 +171,7 @@
     "table": {
       "png": "table.png",
       "class": "3x1",
-      "style": 3,
+      "style": 4,
       "sources": {
         "cafe_table.glb": "1f471112d56e95be9e860b2115d28d7efd322fb80ebd66255b36f5d5e999c8e0"
       }
@@ -179,7 +179,7 @@
     "cafe_room": {
       "png": "cafe_room.png",
       "class": "3x3",
-      "style": 3,
+      "style": 4,
       "sources": {
         "cafe_counter.glb": "e3ec5f508bd4eba5c6987e21562def33f7d5c121ec6f2e72d1653baa89747e3b",
         "cafe_table.glb": "1f471112d56e95be9e860b2115d28d7efd322fb80ebd66255b36f5d5e999c8e0",
@@ -189,7 +189,7 @@
     "toilet_room": {
       "png": "toilet_room.png",
       "class": "2x3",
-      "style": 3,
+      "style": 4,
       "sources": {
         "floor_tile.glb": "94da5a74fc4366b4e9c11ec362ecfa7072933193d55bf1c04aebc057ebe3f14c",
         "toilet_sink.glb": "741c305abb3e739e9a285032e53907c67097d64bcf8f645e40f2182368b051c7",
@@ -199,7 +199,7 @@
     "kiosk_counter": {
       "png": "kiosk_counter.png",
       "class": "2x1_tall",
-      "style": 3,
+      "style": 4,
       "sources": {
         "kiosk_counter.glb": "ca71154d187b5202ed8afc7e248f909caf784713347778969a3750149846e753"
       }
@@ -207,7 +207,7 @@
     "kiosk_display": {
       "png": "kiosk_display.png",
       "class": "2x1_tall",
-      "style": 3,
+      "style": 4,
       "sources": {
         "kiosk_display.glb": "dc171b8849eaff08a1af24f4940e90f2948f8cc895ed22728b55f9f47658d0a6"
       }
@@ -215,7 +215,7 @@
     "kiosk_room": {
       "png": "kiosk_room.png",
       "class": "3x3",
-      "style": 3,
+      "style": 4,
       "sources": {
         "floor_tile.glb": "94da5a74fc4366b4e9c11ec362ecfa7072933193d55bf1c04aebc057ebe3f14c",
         "kiosk_counter.glb": "ca71154d187b5202ed8afc7e248f909caf784713347778969a3750149846e753",
@@ -225,7 +225,7 @@
     "screen_stand": {
       "png": "screen_stand.png",
       "class": "1x1_tall",
-      "style": 3,
+      "style": 4,
       "sources": {
         "screen_stand.glb": "ce1af0312ab25c7ab335d1cc06d3fd293dfb7c40128eb7487b39d477080f82ac"
       }
@@ -233,7 +233,7 @@
     "gate_desk": {
       "png": "gate_desk.png",
       "class": "2x1_tall",
-      "style": 3,
+      "style": 4,
       "sources": {
         "gate_desk.glb": "3b7ba60b3d656d65848a7354bff6f03c7b17512bff3b1aaaf1a5b0a36d28939c"
       }
@@ -241,7 +241,7 @@
     "curb_bay": {
       "png": "curb_bay.png",
       "class": "bay",
-      "style": 3,
+      "style": 4,
       "sources": {
         "landside/tp_curb_bay_01a.glb": "4be2f752f2aafcf65eed2a146d865d6e26a8eea574a83155261be1ee20851e43",
         "vehicles/tp_taxi_01a.glb": "d3afec88320661ecb2eb8217b02caff3d58917ae7d4807f011850c38f77d9771"
@@ -250,9 +250,9 @@
     "surface_lot": {
       "png": "surface_lot.png",
       "class": "lot",
-      "style": 3,
+      "style": 4,
       "sources": {
-        "landside/tp_parking_01a.glb": "0ec9fa32f7a8e7a373d44f417d40ef70436300a10d5ffe2f5b143562b734e3d0",
+        "landside/tp_parking_01a.glb": "77ba680ea7c42f6eee02acacf1935d214e39350c83de2b40eae316ddf49b0344",
         "vehicles/tp_suv_01b.glb": "459c721d5b872bf4501463d125883087ae3eccef5b6f2bb70837dce99a31f90f",
         "vehicles/tp_taxi_01b.glb": "5b15aab2864748865c8017e1064246a1e85bbdf7c70427e2c48c912e35ec44bf"
       }
@@ -260,23 +260,23 @@
     "multi_storey": {
       "png": "multi_storey.png",
       "class": "multi",
-      "style": 3,
+      "style": 4,
       "sources": {
-        "landside/tc_parking_2a.glb": "e4265fc66cd57e6915c025eb9d707a6a737e13cb4c8a7b43c7c2e85d283c34c2"
+        "landside/tc_parking_2a.glb": "dc4a4f570730e27c4e2d806f880b5c2a907e2f104f385a888de64c549e5d6280"
       }
     },
     "lot_gate": {
       "png": "lot_gate.png",
       "class": "gate",
-      "style": 3,
+      "style": 4,
       "sources": {
-        "landside/tp_parking_01a.glb": "0ec9fa32f7a8e7a373d44f417d40ef70436300a10d5ffe2f5b143562b734e3d0"
+        "landside/tp_parking_01a.glb": "77ba680ea7c42f6eee02acacf1935d214e39350c83de2b40eae316ddf49b0344"
       }
     },
     "bench_1a": {
       "png": "bench_1a.png",
       "class": "1x3",
-      "style": 3,
+      "style": 4,
       "sources": {
         "decor/tc_bench_1a.glb": "423ec5699d7db2dd58bd93d1c1fa00d14eea64d596078df2cebd920b83d57c4f"
       }
@@ -284,7 +284,7 @@
     "bench_2a_indoor": {
       "png": "bench_2a_indoor.png",
       "class": "4x4",
-      "style": 3,
+      "style": 4,
       "sources": {
         "decor/tc_bench_2a_indoor.glb": "f71334119d31f62399f062247aaa6d1abb7de02d17319532f99697d9518acb22"
       }
@@ -292,7 +292,7 @@
     "bush": {
       "png": "bush.png",
       "class": "2x2",
-      "style": 3,
+      "style": 4,
       "sources": {
         "decor/tc_bush_1a.glb": "1fb2b57584989231927d2f0e0f3507395f302ec1de40f671a477f7196c525936"
       }
@@ -300,7 +300,7 @@
     "fountain_indoor": {
       "png": "fountain_indoor.png",
       "class": "2x2_tall",
-      "style": 3,
+      "style": 4,
       "sources": {
         "decor/tc_fountain_1a_indoor.glb": "7d11a3d08236f6f4b6a0aebadefb5ffdc05fcacf5dc8bcdd455b2a62b26a3074"
       }
@@ -308,7 +308,7 @@
     "metal_pole": {
       "png": "metal_pole.png",
       "class": "1x1_tall",
-      "style": 3,
+      "style": 4,
       "sources": {
         "decor/tc_metal_pole_1a.glb": "789bb4453a7a32b03b51bdabb2ff643da15d1892b536a2b144faf2cc3830b1c4"
       }
@@ -316,7 +316,7 @@
     "metal_pole_chain": {
       "png": "metal_pole_chain.png",
       "class": "1x3",
-      "style": 3,
+      "style": 4,
       "sources": {
         "decor/tc_metal_pole_1a.glb": "789bb4453a7a32b03b51bdabb2ff643da15d1892b536a2b144faf2cc3830b1c4",
         "decor/tc_metal_pole_chain_1a.glb": "160b3acbeafeb3b3721bb47875992cc6446e8ba05de027dd93e57b263c2fba3f"
@@ -325,7 +325,7 @@
     "plant_pot_1a": {
       "png": "plant_pot_1a.png",
       "class": "1x2_plant",
-      "style": 3,
+      "style": 4,
       "sources": {
         "decor/tc_plant_pot_1a.glb": "e39e1e53b02f9d6f6d3be959411f5a83bb586feeada3ab227dd2a622a2abd2cb"
       }
@@ -333,7 +333,7 @@
     "plant_pot_2a": {
       "png": "plant_pot_2a.png",
       "class": "2x2",
-      "style": 3,
+      "style": 4,
       "sources": {
         "decor/tc_plant_pot_2a.glb": "284b714b63d28dac9bf7c8452f0d78a01faaa2303ddad975f87c2eacd9d22d66"
       }
@@ -341,7 +341,7 @@
     "statue_indoor": {
       "png": "statue_indoor.png",
       "class": "1x1_xtall",
-      "style": 3,
+      "style": 4,
       "sources": {
         "decor/tc_statue_1b_indoor.glb": "017596e789692ac37630222ead634823ca301b63badbde8ca5e8a32f819490fa"
       }
@@ -349,7 +349,7 @@
     "trash_can": {
       "png": "trash_can.png",
       "class": "1x1",
-      "style": 3,
+      "style": 4,
       "sources": {
         "decor/tc_trash_can_1a.glb": "bee215b4a11b03af33807a044c7eb12823ae73ee91d7dd12f9b27729d879a87d"
       }
@@ -357,7 +357,7 @@
     "tree_indoor": {
       "png": "tree_indoor.png",
       "class": "2x2_tall",
-      "style": 3,
+      "style": 4,
       "sources": {
         "decor/tc_tree_3a_indoor.glb": "12e41ecab51a761aa6ed22c4371e24779c15a1abe5b8af8033eb92b6e38f2b47"
       }
@@ -365,15 +365,15 @@
     "bar_counter": {
       "png": "bar_counter.png",
       "class": "2x2",
-      "style": 3,
+      "style": 4,
       "sources": {
-        "bar_counter.glb": "f0ec7a33fc17b9d072e2b43293c41d00e2c23416364225dd3064103b87d8a111"
+        "bar_counter.glb": "b931764e4f795c58ced6df3312e318bdd4cff8501d37acd2f3ef405610c23e88"
       }
     },
     "grab_and_go_stall": {
       "png": "grab_and_go_stall.png",
       "class": "2x1_xtall",
-      "style": 3,
+      "style": 4,
       "sources": {
         "grab_and_go_stall.glb": "0434df3c58f6602a0611f5219742bcbdb5a4371bf5dff4c653ee2e9049f05016"
       }
@@ -381,23 +381,23 @@
     "restaurant_table": {
       "png": "restaurant_table.png",
       "class": "2x3",
-      "style": 3,
+      "style": 4,
       "sources": {
-        "restaurant_table.glb": "aff122a76c3704a3188b67e41f1fce044af3ac7b730c5cb2880721431d6380ae"
+        "restaurant_table.glb": "60e1dbb329d1025ee40407cbe25a4f88502339ad2f1109584473ab139077b273"
       }
     },
     "restaurant_booth": {
       "png": "restaurant_booth.png",
       "class": "2x3",
-      "style": 3,
+      "style": 4,
       "sources": {
-        "restaurant_booth.glb": "6f2ad3ee8d826e3e9f74ff0ed58dce4460db453b6e74b87714ba87546b51deb7"
+        "restaurant_booth.glb": "4142a8137cba807fc65a84c5fa150faf4aeea9f735242ba937d25a12e86cf847"
       }
     },
     "info_desk": {
       "png": "info_desk.png",
       "class": "2x1_tall",
-      "style": 3,
+      "style": 4,
       "sources": {
         "info_desk.glb": "13692bf78808bea6981c27dd30bda60d4ab45e5a14e4a2566c80adf2fe8d407f"
       }
@@ -405,7 +405,7 @@
     "info_screen": {
       "png": "info_screen.png",
       "class": "1x1_xtall",
-      "style": 3,
+      "style": 4,
       "sources": {
         "info_screen.glb": "c5ee4b34c3162a8843f384ac574dd12d7278c74e8ed377cf65861fb11148c26b"
       }
@@ -413,7 +413,7 @@
     "currency_exchange": {
       "png": "currency_exchange.png",
       "class": "2x1_xtall",
-      "style": 3,
+      "style": 4,
       "sources": {
         "currency_exchange.glb": "88434d9f443119b45a52d5dd670cbdc17968b39e46e07b0aae9b917e27b38151"
       }
@@ -421,7 +421,7 @@
     "atm": {
       "png": "atm.png",
       "class": "1x1_tall",
-      "style": 3,
+      "style": 4,
       "sources": {
         "atm.glb": "cfe08ff7264e3e17d62062f671f11b4947a80fa47cd4e58c1ba8b6cb3c0c97f7"
       }
@@ -429,7 +429,7 @@
     "pharmacy_counter": {
       "png": "pharmacy_counter.png",
       "class": "2x1_tall",
-      "style": 3,
+      "style": 4,
       "sources": {
         "pharmacy_counter.glb": "92c08510d1085a56cb85836474b284dddfa8f07f67bc97d8bcccb2bc87ec7351"
       }
@@ -437,7 +437,7 @@
     "pharmacy_shelf": {
       "png": "pharmacy_shelf.png",
       "class": "2x1_tall",
-      "style": 3,
+      "style": 4,
       "sources": {
         "pharmacy_shelf.glb": "02f7993cc5cd1b0ac45af72e26980f2199aabbea715a6fedafe452fac22b083d"
       }
@@ -445,7 +445,7 @@
     "shower_cubicle": {
       "png": "shower_cubicle.png",
       "class": "1x1_xtall",
-      "style": 3,
+      "style": 4,
       "sources": {
         "shower_cubicle.glb": "8da257c6da4f5e59ed305468b040aff18538c2c78a08719cdddc21c16eef94d1"
       }
@@ -453,7 +453,7 @@
     "nap_pod": {
       "png": "nap_pod.png",
       "class": "1x1_tall",
-      "style": 3,
+      "style": 4,
       "sources": {
         "nap_pod.glb": "ebfa53c68ba968af0e630ba1bb447957a9ccfd98d63b2419f64a4634425b5741"
       }
@@ -461,23 +461,23 @@
     "play_blocks": {
       "png": "play_blocks.png",
       "class": "2x2",
-      "style": 3,
+      "style": 4,
       "sources": {
-        "play_blocks.glb": "f6ad660e2b8eaaed8d65adbc9057112385e9e0660e375b9a4a94985016baf0e5"
+        "play_blocks.glb": "2592abb7ca1213f0a6b675813592bc645e804bf2a9f965e3b4636acd8c43479e"
       }
     },
     "play_slide": {
       "png": "play_slide.png",
       "class": "2x1",
-      "style": 3,
+      "style": 4,
       "sources": {
-        "play_slide.glb": "a028c1cdb6b83286340174af9551908da4559038036dada3e98a37689edb5821"
+        "play_slide.glb": "23bab90d7fa5a0da287678f75173a74cb2703a2cf5ddb6e5fcd3a8a93395aaef"
       }
     },
     "lounge_sofa": {
       "png": "lounge_sofa.png",
       "class": "2x1",
-      "style": 3,
+      "style": 4,
       "sources": {
         "lounge_sofa.glb": "6db52e8430467d6f327fc1ce65048c04da759993f75b47f22015df4d1c7edd83"
       }
@@ -485,7 +485,7 @@
     "lounge_armchair": {
       "png": "lounge_armchair.png",
       "class": "1x1",
-      "style": 3,
+      "style": 4,
       "sources": {
         "lounge_armchair.glb": "7c6d50d4a1f4bc575440b94df6825f3cca3623931ee540394c9aaa63e01c90e3"
       }
@@ -493,7 +493,7 @@
     "work_desk": {
       "png": "work_desk.png",
       "class": "2x2",
-      "style": 3,
+      "style": 4,
       "sources": {
         "work_desk.glb": "a2de99b55d8a0b32c5f0e2562ac57be7bbe0fb8bfb4d2496ff11e3bee5af2842"
       }
@@ -501,7 +501,7 @@
     "prize_podium": {
       "png": "prize_podium.png",
       "class": "6x3",
-      "style": 3,
+      "style": 4,
       "sources": {
         "prize_podium.glb": "38e0d869747c64a14935aee1b8158fb1f952064bcc5b5577b9565b923f67b705",
         "vehicles/tp_suv_01a.glb": "6e1c4dd47752891765dd98a52a23f4d5f3c03e04e77d99b2893d615027329873"
@@ -510,7 +510,7 @@
     "pharmacy_room": {
       "png": "pharmacy_room.png",
       "class": "3x3",
-      "style": 3,
+      "style": 4,
       "sources": {
         "floor_tile.glb": "94da5a74fc4366b4e9c11ec362ecfa7072933193d55bf1c04aebc057ebe3f14c",
         "pharmacy_counter.glb": "92c08510d1085a56cb85836474b284dddfa8f07f67bc97d8bcccb2bc87ec7351",
@@ -520,7 +520,7 @@
     "duty_free_till": {
       "png": "duty_free_till.png",
       "class": "2x1_tall",
-      "style": 3,
+      "style": 4,
       "sources": {
         "duty_free_till.glb": "e184b0817507c74a2c1165ea6697a0d889398e695e5456ac5204c235e2b59e3e"
       }
@@ -528,7 +528,7 @@
     "duty_free_shelf": {
       "png": "duty_free_shelf.png",
       "class": "2x1_tall",
-      "style": 3,
+      "style": 4,
       "sources": {
         "duty_free_shelf.glb": "74904dc009d04b1f16e59d601454cec3c064621aecda1132425bccc718481b75"
       }
@@ -536,7 +536,7 @@
     "duty_free_room": {
       "png": "duty_free_room.png",
       "class": "3x4",
-      "style": 3,
+      "style": 4,
       "sources": {
         "duty_free_shelf.glb": "74904dc009d04b1f16e59d601454cec3c064621aecda1132425bccc718481b75",
         "duty_free_till.glb": "e184b0817507c74a2c1165ea6697a0d889398e695e5456ac5204c235e2b59e3e",
@@ -546,7 +546,7 @@
     "fashion_till": {
       "png": "fashion_till.png",
       "class": "2x1_tall",
-      "style": 3,
+      "style": 4,
       "sources": {
         "fashion_till.glb": "d6a2f3490f7aaa9e51a94757738070aa63ce06947b1361cc0f57be520e04dee2"
       }
@@ -554,7 +554,7 @@
     "fashion_rail": {
       "png": "fashion_rail.png",
       "class": "2x1_tall",
-      "style": 3,
+      "style": 4,
       "sources": {
         "fashion_rail.glb": "9c937b6028b5ccbc1f126d7d5566f13c628c4d37943a059a72603b4722daf077"
       }
@@ -562,7 +562,7 @@
     "fashion_room": {
       "png": "fashion_room.png",
       "class": "3x4",
-      "style": 3,
+      "style": 4,
       "sources": {
         "fashion_rail.glb": "9c937b6028b5ccbc1f126d7d5566f13c628c4d37943a059a72603b4722daf077",
         "fashion_till.glb": "d6a2f3490f7aaa9e51a94757738070aa63ce06947b1361cc0f57be520e04dee2",
@@ -572,7 +572,7 @@
     "exchange_room": {
       "png": "exchange_room.png",
       "class": "2x3",
-      "style": 3,
+      "style": 4,
       "sources": {
         "currency_exchange.glb": "88434d9f443119b45a52d5dd670cbdc17968b39e46e07b0aae9b917e27b38151",
         "floor_tile.glb": "94da5a74fc4366b4e9c11ec362ecfa7072933193d55bf1c04aebc057ebe3f14c"
@@ -581,7 +581,7 @@
     "atm_room": {
       "png": "atm_room.png",
       "class": "1x2",
-      "style": 3,
+      "style": 4,
       "sources": {
         "atm.glb": "cfe08ff7264e3e17d62062f671f11b4947a80fa47cd4e58c1ba8b6cb3c0c97f7",
         "floor_tile.glb": "94da5a74fc4366b4e9c11ec362ecfa7072933193d55bf1c04aebc057ebe3f14c"

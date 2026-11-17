@@ -65,6 +65,22 @@ ACTIVITIES_PALETTE = {
     "orange": ("TP_Atlas_1A_D", 29, 0, 0.30, 0.0),
     "purple": ("TP_Atlas_1A_D", 24, 0, 0.30, 0.0),
     "teal": ("TP_Atlas_1A_D", 29, 6, 0.30, 0.0),
+    # The play area's own tones (board item L3, user-ruled 2026-11-17 "Tone to the
+    # palette": colourful but less saturated, so the catalog reads as one world).
+    # Shapes take the atlas's softer hue row (row 8, saturation about 0.7) and the
+    # gold row; pink and purple, which still read loudest in game after the Filmic
+    # lift, and the mats take its pastel rows (rows 5 to 7, saturation about 0.37).
+    # The loud row-0 entries above stay as they are: other kits import them.
+    "play_red": ("TP_Atlas_1A_D", 5, 8, 0.30, 0.0),
+    "play_pink": ("TP_Atlas_1A_D", 9, 7, 0.30, 0.0),
+    "play_purple": ("TP_Atlas_1A_D", 10, 6, 0.30, 0.0),
+    "play_blue": ("TP_Atlas_1A_D", 0, 8, 0.30, 0.0),
+    "play_green": ("TP_Atlas_1A_D", 9, 8, 0.30, 0.0),
+    "play_orange": ("TP_Atlas_1A_D", 7, 8, 0.30, 0.0),
+    "play_sun": ("TP_Atlas_1A_D", 4, 13, 0.30, 0.0),
+    "mat_mint": ("TP_Atlas_1A_D", 12, 5, 0.30, 0.0),
+    "mat_butter": ("TP_Atlas_1A_D", 13, 5, 0.30, 0.0),
+    "mat_sky": ("TP_Atlas_1A_D", 11, 5, 0.30, 0.0),
 }
 
 # Seated roots: the seat cell's centre plus SIT_FORWARD toward the faced cell.
@@ -150,49 +166,49 @@ def build_play_blocks(root, c):
     for i, (sx, sy) in enumerate(((-1, -1), (1, -1), (-1, 1), (1, 1))):
         x0, x1 = sorted((sx * 0.01, sx * 0.92))
         y0, y1 = sorted((sy * 0.01, sy * 0.92))
-        pal = "kid_green" if sx == sy else "sun"
+        pal = "mat_mint" if sx == sy else "mat_butter"
         tbox("Mat_Tile_%d" % i, (x0, y0, 0.0), (x1, y1, MAT_TOP), pal, root, c, bevel=0.015)
     t = MAT_TOP
     # Back left: a big cube with a small one turned on top.
-    tbox("Block_Cube_Big", (-0.78, 0.30, t), (-0.36, 0.72, t + 0.42), "red", root, c, bevel=0.035)
-    tbox("Block_Cube_Small", (-0.70, 0.38, t + 0.42), (-0.44, 0.64, t + 0.68), "kid_blue", root, c,
+    tbox("Block_Cube_Big", (-0.78, 0.30, t), (-0.36, 0.72, t + 0.42), "play_red", root, c, bevel=0.035)
+    tbox("Block_Cube_Small", (-0.70, 0.38, t + 0.42), (-0.44, 0.64, t + 0.68), "play_blue", root, c,
          axis="Z", deg=22.0, bevel=0.03)
     # Back right: a drum.
-    kit.cyl("Block_Drum", 0.48, 0.50, t, t + 0.32, 0.17, "orange", root, c, segs=12)
-    kit.cyl("Block_Drum_Top", 0.48, 0.50, t + 0.32, t + 0.34, 0.14, "sun", root, c, segs=12)
+    kit.cyl("Block_Drum", 0.48, 0.50, t, t + 0.32, 0.17, "play_orange", root, c, segs=12)
+    kit.cyl("Block_Drum_Top", 0.48, 0.50, t + 0.32, t + 0.34, 0.14, "play_sun", root, c, segs=12)
     # Front right: a ramp rising toward +x.
-    prism_xz("Block_Ramp", ((0.12, t), (0.78, t), (0.78, t + 0.30)), -0.78, -0.30, "purple", root, c)
+    prism_xz("Block_Ramp", ((0.12, t), (0.78, t), (0.78, t + 0.30)), -0.78, -0.30, "play_purple", root, c)
     # Front left: two soft steps.
-    tbox("Block_Step_Low", (-0.78, -0.76, t), (-0.22, -0.30, t + 0.15), "pink", root, c, bevel=0.03)
-    tbox("Block_Step_High", (-0.78, -0.53, t + 0.15), (-0.22, -0.30, t + 0.30), "kid_blue", root, c, bevel=0.03)
+    tbox("Block_Step_Low", (-0.78, -0.76, t), (-0.22, -0.30, t + 0.15), "play_pink", root, c, bevel=0.03)
+    tbox("Block_Step_High", (-0.78, -0.53, t + 0.15), (-0.22, -0.30, t + 0.30), "play_blue", root, c, bevel=0.03)
     # Two balls in the middle.
-    cafe.ball("Ball_0", 0.02, 0.06, t + 0.11, 0.11, "red", root, c)
-    cafe.ball("Ball_1", 0.22, -0.16, t + 0.09, 0.09, "kid_green", root, c)
+    cafe.ball("Ball_0", 0.02, 0.06, t + 0.11, 0.11, "play_red", root, c)
+    cafe.ball("Ball_1", 0.22, -0.16, t + 0.09, 0.09, "play_green", root, c)
 
 
 def build_play_slide(root, c):
     m = SLIDE_MAT
-    tbox("Slide_Mat", (-0.92, -0.42, 0.0), (0.92, 0.42, m), "kid_blue", root, c, bevel=0.012)
+    tbox("Slide_Mat", (-0.92, -0.42, 0.0), (0.92, 0.42, m), "mat_sky", root, c, bevel=0.012)
     # Three solid steps up the -x end, the third tread level with the platform.
     rise = (SLIDE_TOP - m) / 3.0
     for k in range(3):
         top = SLIDE_TOP if k == 2 else m + rise * (k + 1)
-        tbox("Slide_Step_%d" % k, (-0.92 + 0.12 * k, -0.25, m), (-0.56, 0.25, top), "kid_green", root, c, bevel=0.012)
-    tbox("Slide_Platform", (-0.56, -0.30, m), (-0.10, 0.30, SLIDE_TOP), "red", root, c, bevel=0.015)
+        tbox("Slide_Step_%d" % k, (-0.92 + 0.12 * k, -0.25, m), (-0.56, 0.25, top), "play_green", root, c, bevel=0.012)
+    tbox("Slide_Platform", (-0.56, -0.30, m), (-0.10, 0.30, SLIDE_TOP), "play_red", root, c, bevel=0.015)
     for side, y0, y1 in (("L", 0.25, 0.30), ("R", -0.30, -0.25)):
-        tbox("Slide_Wall_" + side, (-0.56, y0, SLIDE_TOP), (-0.10, y1, SLIDE_TOP + 0.35), "purple", root, c, bevel=0.012)
+        tbox("Slide_Wall_" + side, (-0.56, y0, SLIDE_TOP), (-0.10, y1, SLIDE_TOP + 0.35), "play_purple", root, c, bevel=0.012)
     # The chute: 29.5 degrees from the platform edge down to a runout that tapers from
     # 0.12 m to a 0.015 m lip on the mat, so the exit has no step down.
     xa, xb, za, zb = -0.10, 0.66, SLIDE_TOP, 0.12
-    prism_xz("Slide_Chute", ((xa, za), (xa, za - 0.04), (xb, zb - 0.04), (xb, zb)), -0.22, 0.22, "sun", root, c)
+    prism_xz("Slide_Chute", ((xa, za), (xa, za - 0.04), (xb, zb - 0.04), (xb, zb)), -0.22, 0.22, "play_sun", root, c)
     for side, y0, y1 in (("L", 0.22, 0.26), ("R", -0.26, -0.22)):
         prism_xz("Slide_Lip_" + side, ((xa, za + 0.08), (xa, za - 0.04), (xb, zb - 0.04), (xb, zb + 0.08)),
-                 y0, y1, "orange", root, c)
-    prism_xz("Slide_Runout", ((xb, m), (0.92, m), (0.92, m + 0.015), (xb, zb)), -0.22, 0.22, "sun", root, c)
+                 y0, y1, "play_orange", root, c)
+    prism_xz("Slide_Runout", ((xb, m), (0.92, m), (0.92, m + 0.015), (xb, zb)), -0.22, 0.22, "play_sun", root, c)
     # One support panel under the chute.
     xs = 0.30
     under = za - (xs + 0.02 - xa) / (xb - xa) * (za - zb) - 0.04
-    tbox("Slide_Support", (xs - 0.02, -0.18, m), (xs + 0.02, 0.18, under), "purple", root, c)
+    tbox("Slide_Support", (xs - 0.02, -0.18, m), (xs + 0.02, 0.18, under), "play_purple", root, c)
 
 
 def sofa_section(root, c, half_w, body, cushion, prefix):

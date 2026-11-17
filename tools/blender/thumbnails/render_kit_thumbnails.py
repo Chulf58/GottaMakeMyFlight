@@ -29,6 +29,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import sys
 
 import bpy
@@ -46,21 +47,40 @@ SHEET_DIR = os.path.join(REPO, "tools", "blender", "out", "thumbnails")
 SHEET = os.path.join(SHEET_DIR, "contact_sheet.png")
 
 # Bump when the look or framing changes, so every thumbnail re-renders.
-STYLE = 3
+STYLE = 4
 SIZE = 256
 SUPERSAMPLE = 2  # render at SIZE * SUPERSAMPLE, scale down: smoother outline
 MARGIN = 0.05  # every vertex lands this far inside the frame (fraction)
 MIN_SHARE = 0.45  # the subject spans at least this much of the frame's width or height
 
-# Camera: front-left 3/4, looking down 30 degrees. Godot +Z (the front) is Blender -Y.
-CAM_AZIMUTH = math.radians(-35.0)  # from the front (-Y), towards -X
+# Camera: front-right 3/4, looking down 30 degrees. The sun (SUN) is front-right, so
+# the card shows the lit sides the game shows; the front-left view showed the shaded
+# side and read darker than the game (board item L1). Godot +Z (the front) is Blender -Y.
+CAM_AZIMUTH = math.radians(35.0)  # from the front (-Y), towards +X: the sunlit side, as in game
 CAM_ELEVATION = math.radians(30.0)
 # Toward the light, from the game's Sun (main.tscn) converted to Blender axes.
 SUN = Vector((0.354, -0.612, 0.707)).normalized()
-AMBIENT = 0.24  # flat stand-in for the game sky ambient
-LIGHT_GAIN = 0.76  # sun share; lit faces land at albedo x 1.0 with no tonemapper
-OUTLINE_RGB = (0.1, 0.1, 0.12)  # toon_outline outline_color
-OUTLINE_PX = 1.5  # toon_outline outline_px, at the final size
+# The game's light, copied so a thumbnail matches its piece in game (board item L1).
+# Direct: the sun (energy 1, white) through the ramp, times light_gain 1.0.
+LIGHT_GAIN = 1.0
+# Ambient: main.tscn's default ProceduralSkyMaterial as an ambient cube (linear,
+# Blender axes), the cosine-weighted sky irradiance that measure_game_light.py
+# integrates, times AMBIENT_SCALE. The scale and FILMIC_WHITE are fitted by that
+# script on a look-pass game tile (ground and reference cube faces; rms 0.049).
+SKY_UP = (0.1446, 0.1929, 0.2770)
+SKY_SIDE = (0.1175, 0.1342, 0.1666)
+SKY_DOWN = (0.0337, 0.0249, 0.0166)
+AMBIENT_SCALE = 2.7
+# Godot's Filmic tonemap (main.tscn tonemap_mode 2), applied in the material so the
+# Standard view transform only adds the sRGB curve. It lifts the mid tones: the
+# old thumbnails had none and were darker and harder than the game.
+FILMIC_WHITE = 1.2
+OUTLINE_RGB = (0.1, 0.1, 0.12)  # toon_outline outline_color (sRGB), the TP default
+MATERIALS_DIR = os.path.join(REPO, "game", "assets", "materials")
+# At the final size. The game's 1.5 px hull is drawn on a piece some hundreds of px
+# tall; at 1.5 px in the game's near-black colour a 256 px card reads heavier than
+# the piece does in game, so the card line is 1 px.
+OUTLINE_PX = 1.0
 
 ATLAS_PNG = {
     "TP_Atlas_1A_D": "tp_atlas_1a_d.png",
@@ -137,6 +157,9 @@ CLASSES = {
 # classes draw silhouette lines only, like the game's outline hull.
 # The foliage classes (the tree bench, the planter, the trees) are the same: their
 # leaves are many small faces and the crease lines turn them into a grey blob.
+# Foliage materials draw silhouette lines only in any class: the game's hull shows
+# no line between leaves, and crease lines turn a bush into a net.
+SILHOUETTE_MATERIALS = {"TC_Tree_1A_D", "TC_Tree_3A_D"}
 NO_CREASE_CLASSES = {"bay", "lot", "multi", "gate", "4x4", "1x2_plant", "2x2_tall"}
 
 # Catalog colours (build_catalog.gd), sRGB.
@@ -471,10 +494,79 @@ def image(png, non_color=False):
     return _images[png]
 
 
+def filmic_curve(v):
+    """Godot's Filmic curve (exposure bias 2) before the white division."""
+    a, b, c, d, e, f = 0.88, 0.60, 0.10, 0.20, 0.01, 0.30
+    return (v * (a * v + c * b) + d * e) / (v * (a * v + b) + d * f) - e / f
+
+
+def filmic(nt, socket):
+    """Node chain: Godot's tonemap_filmic(color, FILMIC_WHITE) per channel."""
+    a, b, c, d, e, f = 0.88, 0.60, 0.10, 0.20, 0.01, 0.30
+    inv_white = 1.0 / filmic_curve(FILMIC_WHITE)
+
+    def vmath(op, *inputs):
+        node = nt.nodes.new("ShaderNodeVectorMath")
+        node.operation = op
+        for i, value in enumerate(inputs):
+            if isinstance(value, (int, float)):
+                node.inputs[i].default_value = (value, value, value)
+            else:
+                nt.links.new(value, node.inputs[i])
+        return node.outputs["Vector"]
+
+    num = vmath("MULTIPLY_ADD", socket, vmath("MULTIPLY_ADD", socket, a, c * b), d * e)
+    den = vmath("MULTIPLY_ADD", socket, vmath("MULTIPLY_ADD", socket, a, b), d * f)
+    return vmath("MULTIPLY_ADD", vmath("DIVIDE", num, den), inv_white, -e / f * inv_white)
+
+
+def filmic_rgb(rgb):
+    """An sRGB colour as the game shows it unlit: linear, then Filmic (linear out)."""
+    w = filmic_curve(FILMIC_WHITE)
+    return tuple(max(0.0, filmic_curve(srgb_to_linear(c)) / w) for c in rgb)
+
+
+def ambient_cube(nt, normal):
+    """The sky ambient for a normal: SKY_SIDE blended toward SKY_UP or SKY_DOWN by
+    the squared vertical component, times AMBIENT_SCALE."""
+    sep = nt.nodes.new("ShaderNodeSeparateXYZ")
+    nt.links.new(normal, sep.inputs[0])
+    up = nt.nodes.new("ShaderNodeMath")
+    up.operation = "GREATER_THAN"
+    up.inputs[1].default_value = 0.0
+    nt.links.new(sep.outputs["Z"], up.inputs[0])
+    # vertical = SKY_DOWN + up * (SKY_UP - SKY_DOWN)
+    vert = nt.nodes.new("ShaderNodeVectorMath")
+    vert.operation = "MULTIPLY_ADD"
+    nt.links.new(up.outputs[0], vert.inputs[0])
+    vert.inputs[1].default_value = tuple(u - d for u, d in zip(SKY_UP, SKY_DOWN))
+    vert.inputs[2].default_value = SKY_DOWN
+    nz2 = nt.nodes.new("ShaderNodeMath")
+    nz2.operation = "MULTIPLY"
+    nt.links.new(sep.outputs["Z"], nz2.inputs[0])
+    nt.links.new(sep.outputs["Z"], nz2.inputs[1])
+    diff = nt.nodes.new("ShaderNodeVectorMath")
+    diff.operation = "SUBTRACT"
+    nt.links.new(vert.outputs["Vector"], diff.inputs[0])
+    diff.inputs[1].default_value = SKY_SIDE
+    mix = nt.nodes.new("ShaderNodeVectorMath")
+    mix.operation = "MULTIPLY_ADD"
+    nt.links.new(nz2.outputs[0], mix.inputs[0])
+    nt.links.new(diff.outputs["Vector"], mix.inputs[1])
+    mix.inputs[2].default_value = SKY_SIDE
+    scale = nt.nodes.new("ShaderNodeVectorMath")
+    scale.operation = "SCALE"
+    nt.links.new(mix.outputs["Vector"], scale.inputs[0])
+    scale.inputs["Scale"].default_value = AMBIENT_SCALE
+    return scale.outputs["Vector"]
+
+
 def toon_material(name, rgb=None):
-    """Emission-only copy of toon.gdshader: albedo * (ramp(half_lambert) + ambient)."""
+    """Emission-only copy of toon.gdshader in the game's light: albedo * (ramp(half
+    Lambert) * LIGHT_GAIN + sky ambient), then the Filmic tonemap."""
     m = bpy.data.materials.new("THUMB_" + name)
     m.use_nodes = True
+    m.line_color = (*filmic_rgb(outline_rgb(name)), 1.0)
     nt = m.node_tree
     nt.nodes.clear()
     out = nt.nodes.new("ShaderNodeOutputMaterial")
@@ -487,7 +579,8 @@ def toon_material(name, rgb=None):
     else:
         tex = nt.nodes.new("ShaderNodeTexImage")
         tex.image = image(ATLAS_PNG[name])
-        tex.interpolation = "Closest"
+        # The game samples the atlas with filter_linear_mipmap.
+        tex.interpolation = "Linear"
         albedo_out = tex.outputs["Color"]
     ramp_png = RAMP_FOR.get(name, RAMP_PNG)
     geo = nt.nodes.new("ShaderNodeNewGeometry")
@@ -510,30 +603,31 @@ def toon_material(name, rgb=None):
     ramp.extension = "EXTEND"
     nt.links.new(uv.outputs["Vector"], ramp.inputs["Vector"])
     # Colour maths as vector maths: the Mix node shares socket names across types.
-    amb = nt.nodes.new("ShaderNodeVectorMath")
-    amb.operation = "MULTIPLY_ADD"
-    nt.links.new(ramp.outputs["Color"], amb.inputs[0])
-    amb.inputs[1].default_value = (LIGHT_GAIN, LIGHT_GAIN, LIGHT_GAIN)
-    amb.inputs[2].default_value = (AMBIENT, AMBIENT, AMBIENT)
+    light = nt.nodes.new("ShaderNodeVectorMath")
+    light.operation = "MULTIPLY_ADD"
+    nt.links.new(ramp.outputs["Color"], light.inputs[0])
+    light.inputs[1].default_value = (LIGHT_GAIN, LIGHT_GAIN, LIGHT_GAIN)
+    nt.links.new(ambient_cube(nt, geo.outputs["Normal"]), light.inputs[2])
     mul = nt.nodes.new("ShaderNodeVectorMath")
     mul.operation = "MULTIPLY"
     nt.links.new(albedo_out, mul.inputs[0])
-    nt.links.new(amb.outputs["Vector"], mul.inputs[1])
-    nt.links.new(mul.outputs["Vector"], emit.inputs["Color"])
+    nt.links.new(light.outputs["Vector"], mul.inputs[1])
+    nt.links.new(filmic(nt, mul.outputs["Vector"]), emit.inputs["Color"])
     return m
 
 
 def unshaded_material(name):
     m = bpy.data.materials.new("THUMB_" + name)
     m.use_nodes = True
+    m.line_color = (*filmic_rgb(OUTLINE_RGB), 1.0)
     nt = m.node_tree
     nt.nodes.clear()
     out = nt.nodes.new("ShaderNodeOutputMaterial")
     emit = nt.nodes.new("ShaderNodeEmission")
     tex = nt.nodes.new("ShaderNodeTexImage")
     tex.image = image(ATLAS_PNG[name])
-    tex.interpolation = "Closest"
-    nt.links.new(tex.outputs["Color"], emit.inputs["Color"])
+    tex.interpolation = "Linear"
+    nt.links.new(filmic(nt, tex.outputs["Color"]), emit.inputs["Color"])
     nt.links.new(emit.outputs["Emission"], out.inputs["Surface"])
     return m
 
@@ -541,6 +635,7 @@ def unshaded_material(name):
 def glass_material(name):
     m = bpy.data.materials.new("THUMB_" + name)
     m.use_nodes = True
+    m.line_color = (*filmic_rgb(OUTLINE_RGB), 1.0)
     nt = m.node_tree
     nt.nodes.clear()
     out = nt.nodes.new("ShaderNodeOutputMaterial")
@@ -548,7 +643,7 @@ def glass_material(name):
     emit.inputs["Strength"].default_value = GLASS_TINT
     tex = nt.nodes.new("ShaderNodeTexImage")
     tex.image = image(ATLAS_PNG[name])
-    nt.links.new(tex.outputs["Color"], emit.inputs["Color"])
+    nt.links.new(filmic(nt, tex.outputs["Color"]), emit.inputs["Color"])
     clear = nt.nodes.new("ShaderNodeBsdfTransparent")
     mix = nt.nodes.new("ShaderNodeMixShader")
     mix.inputs["Fac"].default_value = GLASS_ALPHA
@@ -556,6 +651,26 @@ def glass_material(name):
     nt.links.new(emit.outputs["Emission"], mix.inputs[2])
     nt.links.new(mix.outputs["Shader"], out.inputs["Surface"])
     return m
+
+
+_outlines = {}
+
+
+def outline_rgb(name):
+    """The material's outline_color from its game .tres (sRGB), so the thumbnail
+    outline takes the game's colour (the trees and bushes have a green one)."""
+    if not _outlines:
+        for fn in sorted(os.listdir(MATERIALS_DIR)):
+            if not fn.endswith(".tres"):
+                continue
+            with open(os.path.join(MATERIALS_DIR, fn), encoding="utf-8") as f:
+                text = f.read()
+            res = re.search(r'resource_name = "([^"]+)"', text)
+            col = re.search(r"outline_color = Color\(([^)]*)\)", text)
+            if res and col:
+                _outlines[res.group(1)] = tuple(float(v) for v in col.group(1).split(",")[:3])
+        log("outline colours from %s: %s" % (MATERIALS_DIR, _outlines))
+    return _outlines.get(name, OUTLINE_RGB)
 
 
 _materials = {}
@@ -614,6 +729,11 @@ def reset_scene():
     if lineset.linestyle is None:
         lineset.linestyle = bpy.data.linestyles.new("THUMB_Outline")
     lineset.linestyle.color = OUTLINE_RGB
+    if not lineset.linestyle.color_modifiers:
+        by_material = lineset.linestyle.color_modifiers.new("THUMB_ByMaterial", type="MATERIAL")
+        by_material.material_attribute = "LINE"
+        by_material.blend = "MIX"
+        by_material.influence = 1.0
     lineset.linestyle.thickness = OUTLINE_PX * SUPERSAMPLE
     return scene
 
@@ -837,6 +957,10 @@ def render_item(item, path):
         objs += meshes
         mats |= names
     objs += add_glyphs(extras)
+    if mats & SILHOUETTE_MATERIALS:
+        for lineset in scene.view_layers[0].freestyle_settings.linesets:
+            lineset.select_crease = False
+            lineset.select_border = False
     images = sorted(i.name for i in bpy.data.images if i.users)
     log(
         "%s class=%s pieces=%s meshes=%d kit_materials=%s images=%s"
