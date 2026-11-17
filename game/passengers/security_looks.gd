@@ -278,6 +278,18 @@ static func put_in_share(
 	return clampf((past - window.x) / (window.y - window.x), 0.0, 1.0)
 
 
+## Whether returner `p` is on the stretch of its arch walk where its bags go
+## into the tray, PUT_IN_BEFORE_MM before the unpack cell's centre to
+## PUT_IN_PAST_MM past it (return_walk_mm()): a runner is drawn walking there
+## and running on after it (PassengerViews._pose(), board b1754061). By the
+## distance walked, so a view drawn late or after a load draws the same gait.
+static func putting_in(sim: PassengerSim, p: Passenger) -> bool:
+	if p.carry_on <= 0:
+		return false
+	var past := return_walk_mm(sim, p)
+	return not is_nan(past) and past >= -PUT_IN_BEFORE_MM and past <= PUT_IN_PAST_MM
+
+
 ## The stretch of a returner's arch walk (mm from the unpack cell's centre, as
 ## return_walk_mm()) over which its bag `i` goes into the tray: the whole of
 ## PUT_IN_BEFORE_MM before to PUT_IN_PAST_MM past for one bag; for two, the bag

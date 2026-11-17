@@ -85,6 +85,7 @@ const StarterFlight := preload("res://spike/starter_flight.gd")
 const FloatCheck := preload("res://spike/carry_float_check.gd")
 const CarryChecks := preload("res://spike/carry_probe_checks.gd")
 const PullSwapStrip := preload("res://spike/pull_swap_strip.gd")
+const RollerSpawn := preload("res://spike/roller_spawn.gd")
 const OUT_REL := "res://../tools/blender/out/roller-trail"
 const WORLDS: Array[String] = ["cafe", "lounge"]
 const SPAWNS := 18
@@ -371,14 +372,10 @@ func _collect_meshes(world: String) -> void:
 
 ## One passenger with one roller, kept on time, in `role`.
 func _spawn(world: String, role: String, k: int) -> void:
-	var p: Passenger = null
-	for attempt in 200:
-		p = _sim.get_passenger(
-			_sim.spawn_now(FlightTimetable.occurrence_id(FlightSim.DEFAULT_ID, 0))
-		)
-		if SecurityLooks.bag_kind(p, 0) == SecurityLooks.Kind.ROLLER:
-			break
-		p.carry_on = 0
+	var p := RollerSpawn.draw(_sim)
+	if p == null:
+		print("SPAWN_SKIPPED %s %s tick=%d: the entrance has no room" % [world, role, _clock.tick])
+		return
 	ToiletTestLayout.calm(p)
 	p.carry_on = 1
 	p.liquids = false
