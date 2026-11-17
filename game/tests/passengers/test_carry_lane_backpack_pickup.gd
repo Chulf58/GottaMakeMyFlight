@@ -152,7 +152,7 @@ func _tray_to_back() -> Dictionary:
 		var to_body := body.global_transform.affine_inverse()
 		if out["frames"] == 0:
 			out["tray_x"] = (to_body * bag.global_position).x
-		var gripping := CarryChecks.gripping(sim, _subject)
+		var gripping := CarryChecks.gripping(sim, _subject, props)
 		var hits := CarryContact.inside_meshes(CarryContact.body_points(body, gripping), bag)
 		out["frames"] += 1
 		out["inside"] += hits

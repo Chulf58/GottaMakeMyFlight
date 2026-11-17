@@ -867,7 +867,9 @@ func _check(id: int) -> void:
 		var bags: Array[Node3D] = props["bags"]
 		var homes := SecurityLooks.bag_homes(_sim, p)
 		var hand_kinds := []
-		var own := CarryContact.body_points(body, CarryChecks.gripping(_sim, p))
+		var own := CarryContact.body_points(
+			body, CarryChecks.gripping(_sim, p, _views.carry_on_props())
+		)
 		var self_hits := 0
 		var reported := {"case_turn": 0}
 		var props_now := _views.carry_on_props()
@@ -898,7 +900,10 @@ func _check(id: int) -> void:
 					if props["kinds"][i] == SecurityLooks.Kind.BACKPACK:
 						var held: int = props_now.bag_state(id, i).get("held_by", -1)
 						var loop := CarryChecks.loop_hits(
-							body, bags[i], held, CarryChecks.gripping(_sim, p)
+							body,
+							bags[i],
+							held,
+							CarryChecks.gripping(_sim, p, _views.carry_on_props())
 						)
 						var key := "%d:%d" % [id, i]
 						_loop_ignored[key] = _loop_ignored.get(key, 0) + loop
@@ -920,7 +925,7 @@ func _check(id: int) -> void:
 							)
 						)
 					if hits > 0 and not _self_bones.has(id):
-						var grip := CarryChecks.gripping(_sim, p)
+						var grip := CarryChecks.gripping(_sim, p, _views.carry_on_props())
 						_self_bones[id] = CarryChecks.contact_bones(body, grip, bags[i])
 						print(
 							(
@@ -1872,7 +1877,7 @@ func _print_self_detail(
 	var props := props_now.props_of(id)
 	var bag: Node3D = props["bags"][i]
 	var to_body := body.global_transform.affine_inverse()
-	var grip := to_body * props_now.grip_of(body, SecurityLooks.hand_of(_sim, p, i))
+	var grip := to_body * props_now.grip_of(body, CarryChecks.drawn_hand(props_now, _sim, p, i))
 	# Why a worn pack meets its body when the headless sweep reads it clear:
 	# the spine the pack is placed on (the rig's attachment) against the
 	# skeleton's own bone pose now, both in the body's frame, the pack's frame,
@@ -1922,7 +1927,9 @@ func _print_self_detail(
 				p.is_moving(),
 				along,
 				p.stage,
-				CarryChecks.contact_bones(body, CarryChecks.gripping(_sim, p), bag),
+				CarryChecks.contact_bones(
+					body, CarryChecks.gripping(_sim, p, _views.carry_on_props()), bag
+				),
 				_where_inside(to_body, own, bag),
 				FloatCheck.move_of(props_now, id, i),
 				["held_by", "led", "swap"].map(

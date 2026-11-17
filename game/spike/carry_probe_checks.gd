@@ -36,8 +36,10 @@ static func drawn_hand(props: CarryOnProps, sim: PassengerSim, p: Passenger, i: 
 
 ## The hands holding something of `p` now (".R", ".L"): a hard case's and a
 ## roller's grip, a shoulder strap's hand; a backpack holds none. A roller's
-## hand is its drawn one with `props` (drawn_hand()).
-static func gripping(sim: PassengerSim, p: Passenger, props: CarryOnProps = null) -> Array:
+## hand is its drawn one with `props` (drawn_hand()), and also the hand that
+## holds it now (its "held_by"): in a hand swap the old hand keeps the bar
+## until the move is half done, while the drawn hand is the one it ends in.
+static func gripping(sim: PassengerSim, p: Passenger, props: CarryOnProps) -> Array:
 	var out: Array = []
 	var homes := SecurityLooks.bag_homes(sim, p)
 	for i in homes.size():
@@ -45,7 +47,12 @@ static func gripping(sim: PassengerSim, p: Passenger, props: CarryOnProps = null
 			continue
 		match SecurityLooks.carry_of(p, i):
 			SecurityLooks.Carry.HAND, SecurityLooks.Carry.PULL:
-				out.append([".R", ".L"][drawn_hand(props, sim, p, i)])
+				var hands := [drawn_hand(props, sim, p, i)]
+				var holder := int(props.bag_state(p.id, i).get("held_by", -1))
+				if holder >= 0 and not hands.has(holder):
+					hands.append(holder)
+				for hand: int in hands:
+					out.append([".R", ".L"][hand])
 			SecurityLooks.Carry.SHOULDER:
 				out.append([".R", ".L"][SecurityLooks.worn_side(i)])
 	return out
