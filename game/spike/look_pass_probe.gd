@@ -16,8 +16,10 @@ extends SceneTree
 ## project inside the viewport and that at least half of the camera rays to its
 ## camera-facing triangles hit it first (colliders on the subject, the cube and
 ## the ground), or the probe prints PROBE_INVALID. A control first proves the
-## ray test fails behind a wall. The pass ends with a caption font plate: a
-## Label3D in the engine default font beside one in Nunito and a HUD Label.
+## ray test fails behind a wall. A perched crow group as the flock draws it is
+## plated at two play distances. The pass ends with a caption font plate (a
+## Label3D in the engine default font beside one in Nunito and a HUD Label) and
+## the need icons and count badge at their play size on screen.
 ##
 ## Pass B, the real game: main.tscn with a new random seed (printed; replay
 ## with -- --seed=N), clock paused, isolated settings files. Plates the intro,
@@ -26,9 +28,10 @@ extends SceneTree
 ## and its settings, the checklist, the staff card, the departures list, the
 ## inspect card and the debug panel, each panel's rect asserted inside the
 ## view. In-world captions (Label3D and Sprite3D markers) are plated with the
-## HUD layers hidden, at a mid zoom, once with the starter terminal unstaffed
-## (closed-desk signs, room labels) and once with flights running and the mood
-## overlay on hunger (need icons and clusters).
+## HUD hidden (every CanvasLayer and loose canvas item, proved before each
+## plate), at a mid zoom, once with the starter terminal unstaffed (closed-desk
+## signs, room labels) and once with flights running and the mood overlay on
+## hunger (need icons and clusters).
 ##
 ## Pass C: the bar SVG icons, the MarkerIcons glyphs and the build-menu
 ## thumbnails on HUD cards.
@@ -59,6 +62,9 @@ const FOV := 55.0
 ## camera-distance-and-fades-out-at-ful).
 const CAPTION_DISTANCE := 30.0
 const CAPTION_LIMIT := 14
+## The crow group plate's camera distances: the caption mid zoom and
+## TycoonCamera's default home_distance (80 m).
+const CROW_DISTANCES := [CAPTION_DISTANCE, 80.0]
 const SIM_LIMIT_MS := 90000
 const SETTINGS := "user://look_pass_probe_settings.cfg"
 const HINTS_MEMORY := "user://look_pass_probe_hints.cfg"
@@ -124,6 +130,8 @@ var _sheets := {
 	"icons": [],
 }
 var _caption_kinds := {}
+## The CanvasLayers and canvas items _show_hud(false) hid, for _show_hud(true).
+var _hud_hidden: Array[Node] = []
 var _skipped: Array[String] = []
 
 
@@ -257,6 +265,7 @@ func _pass_a() -> void:
 		await _plate_subject("people", "%s %s" % [staff_names[i], _base(path)], _scene_maker(path))
 	for spec in _world_specs():
 		await _plate_subject("world", spec[0], spec[1])
+	await _crow_plates()
 	await _font_plate()
 	await _need_icon_plate()
 	_studio.queue_free()
@@ -477,6 +486,55 @@ func _occlusion_control() -> void:
 	await _frames(2)
 
 
+## A perched group of three crows as BirdFlock draws them (its bird_scale, one
+## variant shown per bird, the first perched clip held), plated from the MEDIUM
+## pitch at the play distances in CROW_DISTANCES, beside a 1 m cube. The
+## projected height of the group is printed, since the plate is meant to show
+## how small the crow reads in play.
+func _crow_plates() -> void:
+	_beat("a_crow")
+	var probe_flock := BirdFlock.new()
+	var bird_scale := probe_flock.bird_scale
+	probe_flock.free()
+	var group := Node3D.new()
+	group.name = "CrowGroup"
+	_holder.add_child(group)
+	for i in BirdFlock.VARIANTS.size():
+		var bird: Node3D = BirdFlock.CROW.instantiate()
+		for v in BirdFlock.VARIANTS:
+			(bird.find_child(v, true, false) as Node3D).visible = v == BirdFlock.VARIANTS[i]
+		group.add_child(bird)
+		var at := Vector3((i - 1) * 0.7, BirdFlock.FOOT_LIFT * bird_scale, (i % 2) * 0.4)
+		var basis := Basis(Vector3.UP, deg_to_rad(30.0 + i * 70.0)).scaled(Vector3.ONE * bird_scale)
+		bird.transform = Transform3D(basis, at)
+		var player := bird.find_child("AnimationPlayer", true, false) as AnimationPlayer
+		player.play(BirdFlock.PERCHED_CLIPS[0])
+		player.seek(0.0, true)
+		player.pause()
+	await _frames(2)
+	var box := _aabb_of(group)
+	_cube(_holder, Vector3(box.position.x - 1.2, 0.5, box.get_center().z))
+	print("MEASURE world/crow group scale=%.2f size_m=%s" % [bird_scale, box.size])
+	_add_colliders(_holder)
+	await physics_frame
+	await physics_frame
+	var pitch := deg_to_rad(TycoonCamera.STEP_PITCH_DEGREES[TycoonCamera.AngleStep.MEDIUM])
+	var yaw := deg_to_rad(YAW_DEG)
+	var dir := Vector3(sin(yaw) * cos(pitch), sin(pitch), cos(yaw) * cos(pitch))
+	for dist: float in CROW_DISTANCES:
+		_cam.near = 0.5
+		_cam.look_at_from_position(box.get_center() + dir * dist, box.get_center(), Vector3.UP)
+		await _frames(3)
+		var tag := "world/crow group %d m" % dist
+		var top := _cam.unproject_position(box.get_center() + Vector3(0, box.size.y / 2.0, 0))
+		var bottom := _cam.unproject_position(box.get_center() - Vector3(0, box.size.y / 2.0, 0))
+		print("CROW %s screen_height_px=%.1f" % [tag, bottom.y - top.y])
+		if _prove_in_frame(tag, _corners(box)) and _prove_visible(tag, group, true):
+			_keep("world", "crow group at %d m (play distance)" % dist, await _grab())
+	_clear_holder()
+	await _frames(1)
+
+
 ## A caption in the engine default font (the game's Label3D captions set no
 ## font) beside the same caption in the HUD theme's Nunito, and a HUD Label.
 func _font_plate() -> void:
@@ -516,8 +574,21 @@ func _font_plate() -> void:
 ## NeedCluster.make_badge), over a passenger body at a mid zoom. In the real game
 ## they show only for needs a built facility answers (NeedIcons.provided), and
 ## the starter terminal answers none, so the studio is where they are plated.
+## Sized as the game sizes them each frame (NeedIcons.layout, NeedCluster.
+## show_badge): fixed-size sprites whose pixel_size comes from NeedIcons.unit_of,
+## so they show at their play size on screen, not at the default pixel_size.
 func _need_icon_plate() -> void:
 	_beat("a_need_icons")
+	var box := AABB(Vector3(-1.5, 0, -1.5), Vector3(4.5, NeedIcons.LIFT_M + 1.0, 3))
+	var pitch := deg_to_rad(TycoonCamera.STEP_PITCH_DEGREES[TycoonCamera.AngleStep.MEDIUM])
+	var yaw := deg_to_rad(YAW_DEG)
+	var dir := Vector3(sin(yaw) * cos(pitch), sin(pitch), cos(yaw) * cos(pitch))
+	_cam.look_at_from_position(box.get_center() + dir * 18.0, box.get_center(), Vector3.UP)
+	var unit := NeedIcons.unit_of(root, _cam)
+	print("PROBE need_icons unit=%.6f" % unit)
+	if unit <= 0.0:
+		_invalid("need_icons: no screen unit")
+		return
 	var body := (PassengerLooks.SCENES[0] as PackedScene).instantiate() as Node3D
 	_holder.add_child(body)
 	_pose(body)
@@ -525,29 +596,26 @@ func _need_icon_plate() -> void:
 	for i in needs.size():
 		var sprite := NeedIcons.make_sprite("Need%d" % i)
 		sprite.texture = NeedIcons.texture(needs[i])
-		sprite.offset = NeedIcons.offset_of(i, needs.size())
+		sprite.offset = NeedIcons.offset_of(i, needs.size(), NeedIcons.HEAD_GAP_PX)
+		sprite.pixel_size = NeedIcons.ICON_PX * unit / NeedIcons.SIZE
 		sprite.visible = true
 		body.add_child(sprite)
 	var badge := NeedCluster.make_badge()
-	badge.texture = NeedIcons.texture(NeedIcons.Need.HUNGER)
-	badge.visible = true
-	badge.position = Vector3(1.6, NeedIcons.LIFT_M, 0.0)
-	for part in badge.find_children("*", "", true, false):
-		if part is Label3D:
-			(part as Label3D).text = "6"
-		if part is Node3D:
-			(part as Node3D).visible = true
 	_holder.add_child(badge)
-	var box := AABB(Vector3(-1.5, 0, -1.5), Vector3(4.5, NeedIcons.LIFT_M + 1.0, 3))
-	var pitch := deg_to_rad(TycoonCamera.STEP_PITCH_DEGREES[TycoonCamera.AngleStep.MEDIUM])
-	var yaw := deg_to_rad(YAW_DEG)
-	var dir := Vector3(sin(yaw) * cos(pitch), sin(pitch), cos(yaw) * cos(pitch))
-	_cam.look_at_from_position(box.get_center() + dir * 18.0, box.get_center(), Vector3.UP)
+	NeedCluster.show_badge(
+		badge,
+		NeedIcons.Need.HUNGER,
+		6,
+		Vector3(1.6, NeedIcons.LIFT_M, 0.0),
+		Vector2.ZERO,
+		unit,
+		1.0
+	)
 	await _frames(4)
 	var points: Array[Vector3] = [body.global_position, badge.global_position]
 	points.append(body.global_position + Vector3(0, NeedIcons.LIFT_M, 0))
 	if _prove_in_frame("need_icons", points):
-		_keep("hud", "need icons and count badge (studio)", await _grab())
+		_keep("hud", "need icons and count badge (studio, play size)", await _grab())
 	_clear_holder()
 	await _frames(1)
 
@@ -688,13 +756,14 @@ func _prove_in_frame(label: String, points: Array[Vector3]) -> bool:
 	return ok
 
 
-## Rays from the camera to points on the subject's opaque camera-facing
+## Rays from the camera to the centroids of the subject's opaque camera-facing
 ## triangles; at least half must hit the subject first. Godot front faces wind
 ## clockwise, so a triangle faces the camera when its (b - a) x (c - a) normal
 ## points away from it. `strict` false reports without failing (the control).
+## The ray aims at the centroid itself: a target pulled toward the subject's box
+## centre left the thin stripes of a flat parking piece and fell through its gaps.
 func _prove_visible(label: String, subject: Node3D, strict: bool) -> bool:
 	var targets: Array[Vector3] = []
-	var centre := _aabb_of(subject).get_center()
 	for mi in _meshes(subject):
 		if not mi.is_visible_in_tree():
 			continue
@@ -709,7 +778,7 @@ func _prove_visible(label: String, subject: Node3D, strict: bool) -> bool:
 				facing.append(mid)
 		var step := maxi(1, floori(facing.size() / 12.0))
 		for i in range(0, facing.size(), step):
-			targets.append(facing[i].lerp(centre, 0.03))
+			targets.append(facing[i])
 	var space := _cam.get_world_3d().direct_space_state
 	var hits := 0
 	var blockers := {}
@@ -1085,7 +1154,9 @@ func _plate_caption(moment: String, kind: String, node: Node3D) -> void:
 	if not clear:
 		_invalid("%s: blocked from every yaw" % label)
 	elif _prove_in_frame(label, [at]):
-		_keep("hud", label, await _grab())
+		var img := await _grab()
+		if _hud_clear(label):
+			_keep("hud", label, img)
 	_drop_colliders()
 
 
@@ -1141,9 +1212,40 @@ func _drop_colliders() -> void:
 			mi.remove_meta("look_body")
 
 
+## Hides every CanvasLayer and every canvas item that no CanvasLayer or parent
+## item hides (a Control under a plain Node, as the Hints row is), then proves
+## no Control still shows; `on` restores what it hid.
 func _show_hud(on: bool) -> void:
-	for layer in _main.find_children("*", "CanvasLayer", true, false):
-		(layer as CanvasLayer).visible = on
+	if on:
+		for node in _hud_hidden:
+			if is_instance_valid(node):
+				node.set("visible", true)
+		_hud_hidden.clear()
+		return
+	for layer in root.find_children("*", "CanvasLayer", true, false):
+		if (layer as CanvasLayer).visible:
+			(layer as CanvasLayer).visible = false
+			_hud_hidden.append(layer)
+	for item in root.find_children("*", "CanvasItem", true, false):
+		var c := item as CanvasItem
+		if c.visible and not c.get_parent() is CanvasItem:
+			c.visible = false
+			_hud_hidden.append(c)
+	_hud_clear("hide")
+
+
+## True when the HUD hide took (something was hidden) and no Control shows.
+func _hud_clear(label: String) -> bool:
+	var showing: Array[String] = []
+	for item in root.find_children("*", "Control", true, false):
+		var c := item as Control
+		if c.is_visible_in_tree() and c.get_global_rect().has_area():
+			showing.append(String(c.name))
+	print("HUDCLEAR %s hidden=%d still_showing=%s" % [label, _hud_hidden.size(), showing])
+	if _hud_hidden.is_empty() or not showing.is_empty():
+		_invalid("%s: the HUD is not hidden (%s)" % [label, showing])
+		return false
+	return true
 
 
 ## Flights running with the mood overlay on hunger until need icons or clusters
