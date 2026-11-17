@@ -650,3 +650,84 @@ func test_a_backpack_off_the_back_is_on_the_hands_path_while_it_turns() -> void:
 		)
 	)
 	assert_float(highest).is_less_equal(maxf(hang_y, pose.y) + 0.02)
+
+
+## Handed over between two hands (hand.R>pull.L, pull.R>pull.L, a case
+## hand.R>hand.L), the right hand lets go of the bar: from half way, where the
+## left hand holds it, the right hand's target leaves the point the bag is held
+## by, up and out to the right of the body, at least 3 cm by t 0.55 and 6 cm
+## by t 0.6, while the left hand's target stays on it. It is worked out from
+## the plan, not the drawn hand: two heights of the right hand as first drawn
+## give the same targets (anti-pattern d655fcc9). Control: before half way
+## the right hand, still the holder, is on that point (board 2237fa05).
+func test_a_hand_handing_a_bag_over_lets_go_of_it() -> void:
+	var frame := Transform3D(Basis(Vector3.UP, 0.8), Vector3(3.0, 0.0, -2.0))
+	var side := -frame.basis.x
+	var grips := [Vector3(-0.25, 0.75, 0.05), Vector3(0.25, 0.75, 0.05)]
+	var pull := RollerPull.pulled(grips[1], Vector3(0.3, 0.03, -0.6), 1.0)
+	var pull_r := RollerPull.pulled(grips[0], Vector3(-0.3, 0.03, -0.6), 1.0)
+	var in_hand := Transform3D(Basis(), Vector3(-0.25, 0.35, 0.05))
+	var to_left := in_hand.translated(Vector3.RIGHT * 0.5)
+	var roller := SecurityLooks.Kind.ROLLER
+	var cases := {
+		"hand.R>pull.L":
+		[roller, SecurityLooks.Carry.HAND, SecurityLooks.Carry.PULL, in_hand, pull],
+		"pull.R>pull.L": [roller, SecurityLooks.Carry.PULL, SecurityLooks.Carry.PULL, pull_r, pull],
+		"case hand.R>hand.L":
+		[
+			SecurityLooks.Kind.CASE,
+			SecurityLooks.Carry.HAND,
+			SecurityLooks.Carry.HAND,
+			in_hand,
+			to_left
+		],
+	}
+	var flags := {"in_stall": false, "hand": 0, "yaw": 0.8, "clear": 0.0}
+	for name: String in cases:
+		var c: Array = cases[name]
+		var bag := {
+			"kind": c[0],
+			"home": 6,
+			"carry": c[2],
+			"was": 4,
+			"carry_from": c[1],
+			"from": c[3],
+			"anchor_from": Vector3(0.0, 0.3, 0.0),
+		}
+		var start: Transform3D = frame * (c[3] as Transform3D)
+		var want: Transform3D = frame * (c[4] as Transform3D)
+		for k: float in [0.45, 0.55, 0.6]:
+			var seen := []
+			for lift: float in [0.0, 0.2]:
+				var body := {
+					"hand": 0,
+					"grips": [frame * (grips[0] + Vector3.UP * lift), frame * grips[1]],
+					"shoulders_y": [1.4, 1.4],
+					"bar_z": 0.7,
+					"scale": 1.0,
+					"strap_top": Vector3.ZERO,
+				}
+				seen.append(CarryLead.plan(bag, k, start, want, frame, flags, body))
+			var plan: Dictionary = seen[0]
+			var held: Vector3 = (plan["xf"] as Transform3D) * (plan["anchor"] as Vector3)
+			var off: Vector3 = plan["targets"][0] - held
+			var left: float = (plan["targets"][1] as Vector3).distance_to(held)
+			print(
+				(
+					"%s at %.2f: holder %d, right hand %.4f m off (up %.4f, out %.4f), left %.4f"
+					% [name, k, plan["holder"], off.length(), off.y, off.dot(side), left]
+				)
+			)
+			for hand in 2:
+				var other: Vector3 = seen[1]["targets"][hand]
+				assert_float(other.distance_to(plan["targets"][hand])).is_less_equal(0.0001)
+			if k < 0.5:
+				assert_int(plan["holder"]).is_equal(0)
+				assert_float(off.length()).is_less_equal(0.0001)
+				continue
+			assert_int(plan["holder"]).is_equal(1)
+			assert_float(left).is_less_equal(0.0001)
+			var least := 0.03 if k < 0.6 else 0.06
+			assert_float(off.length()).is_greater_equal(least)
+			assert_float(off.y).is_greater(least * 0.5)
+			assert_float(off.dot(side)).is_greater(least * 0.5)

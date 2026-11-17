@@ -160,6 +160,15 @@ const STALL_BAR_OUT := Vector2(0.55, 0.7)
 ## once that hand is mostly back in its carry pose (phase(): its reach eases
 ## out from 0.6).
 const PULL_SWAP_END := Vector2(0.85, 1.0)
+## Handed over to the other hand (phase(): half way), the hand that gave a bag
+## lets go of it: its target goes this far (m, world) out to its own side of
+## the body (x) and up (y) from the point the bag is held by, over
+## SWAP_RELEASE_T of the carry. Left on that point while its reach faded, the
+## right hand was still in a roller's handle at k 0.51-0.55 of hand.R>pull.L
+## (crossing probe --lane, seed 1106001, board 2237fa05); slid along the bar,
+## a curled grip still wraps it.
+const SWAP_RELEASE_M := Vector2(0.05, 0.05)
+const SWAP_RELEASE_T := Vector2(0.5, 0.6)
 
 
 ## Where a bag of `kind` standing in a stall is held (its own frame, the bag
@@ -583,6 +592,19 @@ static func swap_axle(
 	return frame * Vector3(out * r * sin(angle), lerpf(a.y, b.y, t), -r * cos(angle))
 
 
+## How far (world) the hand `hand` (0 right, 1 left) that has handed a bag
+## over to the other hand is aimed off the point the bag is held by at `t` of
+## the carry, its body drawn at `frame`: SWAP_RELEASE_M out to its own side
+## and up, eased in over SWAP_RELEASE_T. From the body's frame and the move's
+## progress only, never from where the hand is drawn (anti-pattern d655fcc9).
+static func swap_release(frame: Transform3D, hand: int, t: float) -> Vector3:
+	var out := frame.basis.x * (-1.0 if hand == 0 else 1.0)
+	out.y = 0.0
+	out = out.normalized() if out.length() > 0.001 else Vector3.ZERO
+	var w := smoothstep(SWAP_RELEASE_T.x, SWAP_RELEASE_T.y, t)
+	return (out * SWAP_RELEASE_M.x + Vector3.UP * SWAP_RELEASE_M.y) * w
+
+
 ## How a hand-led move of `bag` (CarryOnProps' record) goes at `k`, from
 ## `start` (world now) to `want`, its body drawn at `frame`; `flags` as for
 ## path(), `body` the body as drawn now: {"hand": the bag's own hand or side,
@@ -798,6 +820,9 @@ static func plan(
 				targets[hand] = want * anchor_to
 			_:
 				targets[hand] = on_path * held_at
+	var gave := 1 - lead
+	if from_end == End.HELD and from_hand == gave and ph["holder"] == lead:
+		targets[gave] += swap_release(frame, gave, t)
 	if off_back or on_back:
 		targets[lead] = by_side(
 			targets[lead], k, from_end, to_end, frame, flags["yaw"], lead, body, below
