@@ -1043,10 +1043,14 @@ func _pose(node: Node3D, p: Passenger, built: Dictionary) -> float:
 	if moving:
 		var body: int = node.get_meta(&"body")
 		var sim_mps := mm * SimClock.TICK_RATE / 1000.0
-		clip = "run" if p.late else "walk"
+		# A runner puts its bags into the tray at a walk and runs on after
+		# (board b1754061): the walk clip at the pace it moves, so its feet do
+		# not slide, and the clip change blends as any other (ClipCrossfade).
+		var running := p.late and not SecurityLooks.putting_in(sim, p)
+		clip = "run" if running else "walk"
 		base = (
 			sim_mps
-			/ (PassengerLooks.CLIP_RUN_MPS[body] if p.late else PassengerLooks.CLIP_WALK_MPS[body])
+			/ (PassengerLooks.CLIP_RUN_MPS[body] if running else PassengerLooks.CLIP_WALK_MPS[body])
 		)
 	# In the shower, between the step in and the step out: washing.
 	var washing := showering and not moving and ActivityPoses.washing(sim, p)
