@@ -172,6 +172,13 @@ func _print_classes() -> void:
 			% [_park_frames, trail, _park_moves]
 		)
 	)
+	if not _headless:
+		print(
+			(
+				"PULL_STRIP done=%s problems=%s plates=%d"
+				% [_strip.done, _strip.problems, _strip.saved.size()]
+			)
+		)
 	if _park_frames != trail:
 		_invalid("the PARK frames counted here differ from the trail probe's PARK class")
 	if _park_moves <= 0:
