@@ -52,6 +52,16 @@ const AIM_UP_M := 0.9
 ## folded). It stands outside the terminal wall and is hidden for a plate, as
 ## the plate's camera can sit on its side of the wall.
 const FOLD_CAP := "Fold_Cap"
+## Meshes that stand between every camera and a guest in the doorway (the open
+## door leaves, the door's wall body, the wall and posts beside it, the bridge's
+## tunnel) are hidden while a plate is built and taken, then shown again (board
+## e4be6104). The leg check measures the leaves' geometry, not their drawing.
+## A mesh named like one of these is hidden when its bounds, grown by
+## BLOCKER_NEAR_M, hold the door's middle (a wall is one long mesh);
+## JetBridge_Body, like Fold_Cap, anywhere.
+const BLOCKER_PREFIXES: Array[String] = ["WallDoor_Body", "Door_Leaf_", "wall_"]
+const BLOCKER_ANYWHERE := "JetBridge_Body"
+const BLOCKER_NEAR_M := 2.5
 
 var _doors: Array[Vector3] = []
 var _door := Vector3.INF
@@ -190,8 +200,9 @@ func _aim(cam: Camera3D, shell: MeshInstance3D, body: Node3D, place: int, framin
 ## that lands on the torso first has the hand behind the body). The plate that
 ## passed with the hand behind a door lintel (board e4be6104) failed neither
 ## the bag's nor the guest's lines. Control, once per run, on the first view
-## that passes the rest: the same check on a point 0.4 m behind the guest's
-## chest (the torso is in front of it) must fail, or the check is not engaged;
+## that passes the rest and has the torso, not a mesh, in front of the point: the
+## same check on a point 0.4 m behind the guest's chest must fail, or the check
+## is not engaged (a view with a mesh in front is printed as skipped);
 ## the plates' own hand_gap (within HAND_NEAR_M) is the positive.
 func _judge(
 	cam: Camera3D,
@@ -214,7 +225,6 @@ func _judge(
 			% [hand["gap"], hand["blockers"]]
 		)
 	if (verdict["bad"] as String) == "" and not _control_done:
-		_control_done = true
 		var away := (body.global_position - cam.global_position) * Vector3(1.0, 0.0, 1.0)
 		var hidden := body.global_position + Vector3.UP * 1.3 + away.normalized() * 0.4
 		var control := _hand_seen(space, cam.global_position, hidden)
@@ -224,6 +234,10 @@ func _judge(
 				% [control["ok"], control["gap"], control["blockers"]]
 			)
 		)
+		if not (control["blockers"] as Array).is_empty():
+			print("DOOR_STRIP hand control skipped: a mesh is in front of the point, not the torso")
+			return verdict
+		_control_done = true
 		if control["ok"]:
 			_control_bad = "hand control: the check passed a point 0.4 m behind the guest's chest"
 			verdict["bad"] = _control_bad
@@ -257,6 +271,29 @@ func _hand_seen(space: PhysicsDirectSpaceState3D, from: Vector3, grip: Vector3) 
 	return {"ok": blockers.is_empty() and gap <= HAND_NEAR_M, "gap": gap, "blockers": blockers}
 
 
+## Hides the visible meshes that block the door (see BLOCKER_PREFIXES), prints
+## their names and returns them for the caller to show again.
+func _hide_blockers(main: Node3D) -> Array[MeshInstance3D]:
+	var hidden: Array[MeshInstance3D] = []
+	var names := {}
+	for node in main.find_children("*", "MeshInstance3D", true, false):
+		var mi := node as MeshInstance3D
+		if mi.mesh == null or not mi.is_visible_in_tree():
+			continue
+		var label := String(mi.name)
+		var named := BLOCKER_PREFIXES.any(
+			func(prefix: String) -> bool: return label.begins_with(prefix)
+		)
+		var box := (mi.global_transform * mi.get_aabb()).grow(BLOCKER_NEAR_M)
+		var near := box.has_point(_door)
+		if (named and near) or label == BLOCKER_ANYWHERE:
+			mi.visible = false
+			hidden.append(mi)
+			names[label] = int(names.get(label, 0)) + 1
+	print("DOOR_STRIP hid %d meshes %s" % [hidden.size(), names])
+	return hidden
+
+
 ## One plate of the strip: "" when saved, else what failed.
 func _door_plate(
 	tree: SceneTree,
@@ -282,6 +319,7 @@ func _door_plate(
 		if (cap as Node3D).visible:
 			(cap as Node3D).visible = false
 			caps.append(cap as Node3D)
+	var hidden := _hide_blockers(main)
 	var holder := PlateSight.colliders(main, [main] as Array[Node], {shell: TAG, body: GUEST_TAG})
 	await tree.physics_frame
 	var picked := -1
@@ -326,6 +364,8 @@ func _door_plate(
 	)
 	for cap in caps:
 		cap.visible = true
+	for mesh in hidden:
+		mesh.visible = true
 	holder.queue_free()
 	cam.queue_free()
 	if was_cam != null:
@@ -333,7 +373,7 @@ func _door_plate(
 	if picked < 0:
 		return "%s%s: %s" % [STRIP_UNFRAMED, name, " | ".join(why)]
 	if (verdict["bad"] as String) != "":
-		return "%s: %s" % [name, verdict["bad"]]
+		return "%sthe view changed while %s was taken: %s" % [STRIP_UNFRAMED, name, verdict["bad"]]
 	saved.append(img)
 	var dir := ProjectSettings.globalize_path(_out_rel()).simplify_path()
 	DirAccess.make_dir_recursive_absolute(dir)
