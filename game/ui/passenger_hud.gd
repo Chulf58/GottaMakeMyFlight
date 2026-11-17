@@ -169,6 +169,10 @@ const ACTIVITY_BROWSE_TEXT := {
 var departures_settings_path := DeparturesBoard.SETTINGS_PATH
 ## Where the alert cards keep their on/off choice; tests use their own.
 var alert_settings_path := HudFlagSetting.PATH
+## Whether the Debug toggle and its panel are built: dev builds only (decision
+## debug-panel-is-for-dev-builds-only-the-hud-s-debug-toggle-an). A test sets it
+## before add_child to build or leave out the debug tools.
+var debug_tools := OS.is_debug_build()
 
 var _departures_board := DeparturesBoard.new()
 ## The full-screen flight planner and its toggle on the Departures row; built
@@ -279,7 +283,10 @@ func _ready() -> void:
 	add_child(_alerts)
 	if flights != null:
 		flights.doors_closed.connect(_on_doors_closed)
-	_build_debug()
+	if debug_tools:
+		_build_debug()
+	else:
+		_drop_debug_nodes()
 	_follow_label.name = "FollowText"
 	_follow_label.theme = BuildMenu.HUD_THEME
 	_follow_label.theme_type_variation = &"HudFloatText"
@@ -512,10 +519,11 @@ func refresh() -> void:
 	# Before the rail, so it hangs under the chip on the frame the chip shows.
 	_refresh_quiet_chip()
 	_alerts.refresh()
-	_seed_label.text = seed_text()
-	_seed_label.visible = _seed_label.text != ""
-	_status_label.text = _status
-	_status_label.visible = _status != ""
+	if _seed_label != null:
+		_seed_label.text = seed_text()
+		_seed_label.visible = _seed_label.text != ""
+		_status_label.text = _status
+		_status_label.visible = _status != ""
 	_follow_label.text = follow_text()
 	_inspect.refresh()
 	_follow_label.visible = not _inspect.visible
@@ -753,11 +761,12 @@ func intro() -> IntroDialogue:
 
 
 func is_debug_open() -> bool:
-	return _debug_panel.visible
+	return _debug_panel != null and _debug_panel.visible
 
 
 func set_debug_open(value: bool) -> void:
-	_debug_panel.visible = value
+	if _debug_panel != null:
+		_debug_panel.visible = value
 
 
 ## The debug starter button, a shortcut for what BuildMode's tools can also
@@ -837,6 +846,17 @@ func _build_debug() -> void:
 	toggle.focus_mode = Control.FOCUS_NONE
 	toggle.toggled.connect(set_debug_open)
 	corner.add_child(toggle)
+
+
+## A build without the debug tools never parents the panel or its two labels, so
+## they are freed now and the debug accessors and the refresh skip them.
+func _drop_debug_nodes() -> void:
+	_debug_panel.free()
+	_seed_label.free()
+	_status_label.free()
+	_debug_panel = null
+	_seed_label = null
+	_status_label = null
 
 
 ## The Debug toggle beside the bar's right end, or lifted a bar height when the
