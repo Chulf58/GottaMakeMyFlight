@@ -31,6 +31,7 @@ const LOOP_POLE := Vector3(0.3, -1.0, 0.0)
 ## and the one of them it then bends on by loop_hook_degrees.
 const LOOP_FINGERS: Array[String] = ["Fingers", "Fingertips", "Thumb", "Thumb_Tip"]
 const LOOP_HOOK_BONE := "Fingertips"
+const LOOP_THUMB_BONE := "Thumb_Tip"
 
 ## Which arm: 0 the right, 1 the left (the order of CarryOnProps' hands).
 @export var side := 0
@@ -71,10 +72,14 @@ var reach_target := Vector3.ZERO
 ## _reach_loop()): the hand level and the elbow down (LOOP_POLE), so the fingers
 ## stay over the loop, out of the pack. Set by CarryOnProps with the reach.
 var loop_grip := false
-## How far a loop_grip hand bends its Fingertips on from their rest, toward
-## the palm, so the tips hook under the loop instead of lying straight on past
-## it (CarryArmPose.LOOP_HOOK_DEGREES, per skeleton; set by pose_arms()).
-var loop_hook_degrees := 0.0
+## How far a loop_grip hand bends its Fingertips and its Thumb_Tip on from
+## their rest, toward the palm, so the tips hook round the loop instead of
+## lying straight on past it into the pack. NAN (unset) takes the skeleton's
+## own values from the body this arm poses (CarryArmPose.loop_hook_degrees(),
+## loop_thumb_degrees()), so every move that holds a pack by its loop bends
+## them, whichever code posed the arm.
+var loop_hook_degrees := NAN
+var loop_thumb_degrees := NAN
 
 
 func _process_modification_with_delta(_delta: float) -> void:
@@ -123,24 +128,44 @@ func _process_modification_with_delta(_delta: float) -> void:
 
 ## A hand over a backpack's grab loop (loop_grip): its fingers and thumb turned
 ## `weight` of the way from the clip's curl to their rest, and the Fingertips
-## to their rest bent on by loop_hook_degrees (about the bone's own z axis,
-## mirrored on the left hand, the way the walk and idle clips curl them).
-## Curled as the clips hold them, the fingers went up to 6 cm under the grip,
-## into the loop and the pack's top below it (backpack_pickup_probe, board
-## 41c159bc); at their rest the tips lay straight on past the loop (board
-## 4e5a26f0). The Fingers bone stays at its rest, so the grip does not move.
+## and Thumb_Tip to their rest bent on by loop_hook_degrees and
+## loop_thumb_degrees (about the bone's own z axis, mirrored on the left hand,
+## the way the walk and idle clips curl the fingers). Curled as the clips hold
+## them, the fingers went up to 6 cm under the grip, into the loop and the
+## pack's top below it (backpack_pickup_probe, board 41c159bc); at their rest
+## the tips lay straight on past the loop (board 4e5a26f0). The Fingers bone
+## stays at its rest, so the grip does not move.
 func _loop_fingers(skeleton: Skeleton3D, weight: float) -> void:
 	var suffix: String = [".R", ".L"][side]
+	var body := _body_of(skeleton)
+	var hook := loop_hook_degrees
+	if is_nan(hook):
+		hook = CarryArmPose.loop_hook_degrees(body)
+	var thumb := loop_thumb_degrees
+	if is_nan(thumb):
+		thumb = CarryArmPose.loop_thumb_degrees(body)
+	var bends := {LOOP_HOOK_BONE: hook, LOOP_THUMB_BONE: thumb}
 	for name in LOOP_FINGERS:
 		var bone := skeleton.find_bone(name + suffix)
 		if bone < 0:
 			continue
 		var rest := skeleton.get_bone_rest(bone).basis.get_rotation_quaternion()
-		if name == LOOP_HOOK_BONE:
-			var bend := deg_to_rad(loop_hook_degrees) * (1.0 if side == 0 else -1.0)
+		if bends.has(name):
+			var bend := deg_to_rad(bends[name]) * (1.0 if side == 0 else -1.0)
 			rest = rest * Quaternion(Vector3.BACK, bend)
 		var now := skeleton.get_bone_pose_rotation(bone)
 		skeleton.set_bone_pose_rotation(bone, now.slerp(rest, weight))
+
+
+## The passenger body node `skeleton` belongs to (the nearest node above it
+## with a "body" meta, PassengerViews), or the skeleton itself when it has none.
+static func _body_of(skeleton: Skeleton3D) -> Node3D:
+	var at: Node = skeleton
+	while at != null:
+		if at.has_meta(&"body") and at is Node3D:
+			return at
+		at = at.get_parent()
+	return skeleton
 
 
 ## The arm `chain` (arm, forearm, hand; skeleton space) turned so the grip
