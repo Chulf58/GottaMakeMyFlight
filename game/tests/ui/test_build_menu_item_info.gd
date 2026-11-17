@@ -74,9 +74,9 @@ func test_every_tray_item_has_a_three_part_description() -> void:
 
 func test_every_description_belongs_to_a_tray_item() -> void:
 	var tools := _tray_tools()
-	for tool in ItemInfo.TEXT:
+	for tool in ItemInfo.tools():
 		assert_bool(tools.has(tool)).is_true()
-	assert_int(ItemInfo.TEXT.size()).is_equal(tools.size())
+	assert_int(ItemInfo.tools().size()).is_equal(tools.size())
 
 
 func test_every_card_holds_a_hover_card_with_the_three_parts() -> void:

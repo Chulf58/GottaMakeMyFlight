@@ -177,10 +177,10 @@ func test_the_podium_and_the_info_screen_show_their_upkeep() -> void:
 	var podium := _menu.card(_tool_for(&"prize_podium"))
 	var info := _menu.card(_tool_for(&"info_screen"))
 	assert_array(_texts(podium)).contains(
-		[BuildMenu.RUNNING_COST_TEXT % PriceTable.PRIZE_CAR_UPKEEP]
+		[BuildMenuCatalog.upkeep_text(PriceTable.PRIZE_CAR_UPKEEP)]
 	)
 	assert_array(_texts(info)).contains(
-		[BuildMenu.RUNNING_COST_TEXT % PriceTable.INFO_SCREEN_UPKEEP]
+		[BuildMenuCatalog.upkeep_text(PriceTable.INFO_SCREEN_UPKEEP)]
 	)
 	# A plain piece says "Click".
 	assert_array(_texts(_menu.card(_tool_for(&"bush")))).contains(["Click"])

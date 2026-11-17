@@ -41,6 +41,7 @@ const UNLISTED_TIER := 99
 ## Most made-flight passengers counted (a save above it is refused).
 const MAX_MADE := 1000000000
 const NO_DAY := -1
+## The English msgid: tests compare against it; lock_text() says tr() of the literal.
 const NOT_WIRED_TEXT := "Build unlocks are not wired"
 ## Each tier in order: the stars and made-flight passengers that open it, what
 ## to call its facilities in the unlock message, and its tools. Tier 1 is the
@@ -226,7 +227,7 @@ static func lock_text(gate: BuildUnlocks, required: bool, tool: BuildMode.Tool) 
 	if tier_of(tool) == 0:
 		return ""
 	if gate == null:
-		return NOT_WIRED_TEXT if required else ""
+		return Words.new().not_wired() if required else ""
 	return "" if gate.allows(tool) else gate.unlock_text(tool)
 
 
@@ -273,15 +274,11 @@ static func runway_tier(size: String) -> int:
 ## What tier `tier` asks for: "Unlocks at 3 stars and 200 passengers".
 static func requirement_text(tier: int) -> String:
 	if tier < 2 or tier > TIERS.size():
-		return "Not available yet"
+		return Words.new().not_available()
 	var need: Dictionary = TIERS[tier - 1]
 	var stars: float = need["stars"]
-	return (
-		"Unlocks at %s stars and %d passengers"
-		% [
-			str(int(stars)) if is_equal_approx(stars, floorf(stars)) else str(stars),
-			need["passengers"]
-		]
+	return Words.new().requirement(
+		str(int(stars)) if is_equal_approx(stars, floorf(stars)) else str(stars), need["passengers"]
 	)
 
 
@@ -314,7 +311,14 @@ func tier_text(needed: int) -> String:
 	var text := requirement_text(needed)
 	if needed < 2 or needed > TIERS.size() or rating == null:
 		return text
-	return "%s (now %s stars, %d passengers)" % [text, str(rating.stars()), _made]
+	return (
+		tr_n(
+			"{requirement} (now {stars} stars, {passengers} passenger)",
+			"{requirement} (now {stars} stars, {passengers} passengers)",
+			_made
+		)
+		. format({"requirement": text, "stars": str(rating.stars()), "passengers": _made})
+	)
 
 
 ## The first tick of a new game day runs the check.
@@ -497,12 +501,12 @@ static func _index_tools() -> void:
 func _open_to(reached: int) -> void:
 	var opened := []
 	for i in range(_tier, reached):
-		opened.append(TIERS[i]["facilities"])
+		opened.append(tr(TIERS[i]["facilities"]))
 	var first := _tier + 1
 	_tier = reached
 	tier_changed.emit(_tier)
 	tiers_opened.emit(first, reached)
-	unlocked.emit(_tier, "Unlocked: %s" % "; ".join(opened))
+	unlocked.emit(_tier, tr("Unlocked: {facilities}").format({"facilities": "; ".join(opened)}))
 
 
 func _on_outcome(_id: int, made: bool) -> void:
@@ -513,3 +517,42 @@ func _on_outcome(_id: int, made: bool) -> void:
 func _apply_hunger(_new_tier: int) -> void:
 	if passengers != null:
 		passengers.cafes.hunger_enabled = cafe_open()
+
+
+## tr() is an instance method, so the static functions of this file ask a Words.
+class Words:
+	extends RefCounted
+
+	func not_wired() -> String:
+		return tr("Build unlocks are not wired")
+
+	func not_available() -> String:
+		return tr("Not available yet")
+
+	func requirement(stars: String, passengers: int) -> String:
+		return (
+			tr_n(
+				"Unlocks at {stars} stars and {passengers} passenger",
+				"Unlocks at {stars} stars and {passengers} passengers",
+				passengers
+			)
+			. format({"stars": stars, "passengers": passengers})
+		)
+
+	## Never called: each tier's facilities text inside tr(), so POT generation
+	## finds it (TIERS holds the English; _open_to() translates it). A test checks
+	## that each tier's text is here.
+	func facilities() -> Array[String]:
+		return [
+			tr(
+				"cafe and bins, security lane, baggage, kiosk, screen, plants, benches, curb bay, medium runway"
+			),
+			tr(
+				# gdlint:ignore = max-line-length
+				"food and services: bar, restaurant, grab-and-go, info desk, pharmacy, exchange, ATM, lounge, car park, large runway"
+			),
+			tr(
+				# gdlint:ignore = max-line-length
+				"premium shops and amenities: duty free, fashion, shower, nap pod, play area, fountain, statue, multi-storey"
+			),
+		]

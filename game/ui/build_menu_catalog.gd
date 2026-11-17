@@ -5,6 +5,9 @@ extends RefCounted
 ## keeps aliases of these constants and one-line delegates of these functions).
 ## Static only; it must not reference BuildMenu.
 
+## The context of every table name below: the same short word is a build menu card
+## here and something else elsewhere.
+const NAME_CONTEXT := "build menu"
 const THUMBNAIL_DIR := "res://assets/ui/thumbnails/%s.png"
 const CATEGORIES := [
 	{
@@ -231,7 +234,6 @@ const CARD_RUNNING_COSTS := {
 	BuildMode.Tool.TOILET_STALL: PriceTable.TOILET_STALL_UPKEEP,
 	BuildMode.Tool.SCREEN: PriceTable.SCREEN_UPKEEP,
 }
-const RUNNING_COST_TEXT := "Upkeep %d/day"
 
 
 ## "3" for the key bound to a tool's action, or "" when the tool has none.
@@ -328,4 +330,122 @@ static func category_of(tool: BuildMode.Tool) -> int:
 ## What a card with no key says: a rectangle tool is drawn by dragging, any
 ## other is a click.
 static func no_key_hint(tool: BuildMode.Tool) -> String:
-	return "Drag" if BuildMode.AREA_TOOLS.has(tool) else "Click"
+	return Words.new().drag_or_click(BuildMode.AREA_TOOLS.has(tool))
+
+
+## "Upkeep 20/day": what a card or a built item's card says it costs to run.
+static func upkeep_text(amount: int) -> String:
+	return Words.new().upkeep(amount)
+
+
+## A table name of this file or FurnitureTools (a category, a card, a size text,
+## a need) in the player's language. The names stay English in the tables, which
+## key icons and tests; Words.msgids() lists them for POT generation.
+static func shown(msgid: String) -> String:
+	return TranslationServer.translate(msgid, NAME_CONTEXT)
+
+
+## tr() is an instance method, so the static code of this file asks a Words.
+class Words:
+	extends RefCounted
+
+	func drag_or_click(drag: bool) -> String:
+		return tr("Drag", "card hint") if drag else tr("Click", "card hint")
+
+	func upkeep(amount: int) -> String:
+		return tr("Upkeep {amount}/day").format({"amount": amount})
+
+	## Never called: every table name inside tr(), so POT generation finds it.
+	## A test checks that each name in the tables is here.
+	func msgids() -> Array[String]:
+		return [
+			tr("Structure", "build menu"),
+			tr("Doors", "build menu"),
+			tr("Check-in", "build menu"),
+			tr("Security", "build menu"),
+			tr("Lane", "build menu"),
+			tr("Gates", "build menu"),
+			tr("Cafe", "build menu"),
+			tr("Toilets", "build menu"),
+			tr("Kiosk", "build menu"),
+			tr("Landside", "build menu"),
+			tr("Land", "build menu"),
+			tr("Baggage", "build menu"),
+			tr("Furniture", "build menu"),
+			tr("Decor", "build menu"),
+			tr("Features", "build menu"),
+			tr("Fittings", "build menu"),
+			tr("Food", "build menu"),
+			tr("Dining", "build menu"),
+			tr("Desks", "build menu"),
+			tr("Services", "build menu"),
+			tr("Care", "build menu"),
+			tr("Money", "build menu"),
+			tr("Lounge", "build menu"),
+			tr("Leisure", "build menu"),
+			tr("Fun", "build menu"),
+			tr("Activities", "build menu"),
+			tr("Pharmacy", "build menu"),
+			tr("Shops", "build menu"),
+			tr("Duty free", "build menu"),
+			tr("Fashion", "build menu"),
+			tr("Remove", "build menu"),
+			tr("Floor", "build menu"),
+			tr("1x1 tile", "build menu"),
+			tr("Wall", "build menu"),
+			tr("1 m edge", "build menu"),
+			tr("Glass", "build menu"),
+			tr("Door", "build menu"),
+			tr("Entrance", "build menu"),
+			tr("Exit", "build menu"),
+			tr("Check-in desk", "build menu"),
+			tr("Scanner", "build menu"),
+			tr("Seats", "build menu"),
+			tr("Gate desk", "build menu"),
+			tr("Screen", "build menu"),
+			tr("3x3 min", "build menu"),
+			tr("Counter", "build menu"),
+			tr("Table", "build menu"),
+			tr("Toilet", "build menu"),
+			tr("2x3 min", "build menu"),
+			tr("Toilet stall", "build menu"),
+			tr("Sink", "build menu"),
+			tr("Kiosk counter", "build menu"),
+			tr("3x4 min", "build menu"),
+			tr("Till", "build menu"),
+			tr("Shelf", "build menu"),
+			tr("Fashion store", "build menu"),
+			tr("Clothes rail", "build menu"),
+			tr("Exchange", "build menu"),
+			tr("ATM", "build menu"),
+			tr("1x2 min", "build menu"),
+			tr("Bar", "build menu"),
+			tr("Restaurant", "build menu"),
+			tr("4x4 min", "build menu"),
+			tr("Grab-and-go", "build menu"),
+			tr("Play area", "build menu"),
+			tr("Shower", "build menu"),
+			tr("2x2 min", "build menu"),
+			tr("Nap pod", "build menu"),
+			tr("Display stand", "build menu"),
+			tr("Belt", "build menu"),
+			tr("Drag a line", "build menu"),
+			tr("Bag room", "build menu"),
+			tr("Bag cart", "build menu"),
+			tr("Curb bay", "build menu"),
+			tr("16x3 m", "build menu"),
+			tr("Surface lot", "build menu"),
+			tr("32x24 m", "build menu"),
+			tr("Multi-storey", "build menu"),
+			tr("24x52 m", "build menu"),
+			tr("Open / close", "build menu"),
+			tr("A car park", "build menu"),
+			tr("Buy land", "build menu"),
+			tr("about 21x25 m plot", "build menu"),
+			tr("Tray table", "build menu"),
+			tr("X-ray belt", "build menu"),
+			tr("Arch", "build menu"),
+			tr("Pickup table", "build menu"),
+			tr("Needs belt end", "build menu"),
+			tr("Staff", "build menu"),
+		]
