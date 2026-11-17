@@ -492,12 +492,10 @@ static func carry_transform(
 	var node: Node3D = held["bags"][i]["node"]
 	match held["bags"][i]["carry"] if carry < 0 else carry:
 		SecurityLooks.Carry.BACK:
+			# Only one bag rests on the hips (two bags ignore them).
+			var hips := CarryWorn.hip_joints(body) if scale_by >= 1.0 else PackedVector3Array()
 			return CarryWorn.worn_back(
-				props._spine_of(body),
-				body.rotation.y,
-				scale_by,
-				body.get_meta(&"body", -1),
-				CarryWorn.hip_joints(body)
+				props._spine_of(body), body.rotation.y, scale_by, body.get_meta(&"body", -1), hips
 			)
 		SecurityLooks.Carry.SHOULDER:
 			var side := SecurityLooks.worn_side(i)
