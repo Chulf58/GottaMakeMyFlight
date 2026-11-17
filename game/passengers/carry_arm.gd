@@ -77,9 +77,12 @@ var loop_grip := false
 ## lying straight on past it into the pack. NAN (unset) takes the skeleton's
 ## own values from the body this arm poses (CarryArmPose.loop_hook_degrees(),
 ## loop_thumb_degrees()), so every move that holds a pack by its loop bends
-## them, whichever code posed the arm.
+## them, whichever code posed the arm. With no body above the skeleton they
+## are not guessed (_loop_fingers()).
 var loop_hook_degrees := NAN
 var loop_thumb_degrees := NAN
+## Whether this arm has already warned that it found no body.
+var _no_body_warned := false
 
 
 func _process_modification_with_delta(_delta: float) -> void:
@@ -135,15 +138,24 @@ func _process_modification_with_delta(_delta: float) -> void:
 ## pack's top below it (backpack_pickup_probe, board 41c159bc); at their rest
 ## the tips lay straight on past the loop (board 4e5a26f0). The Fingers bone
 ## stays at its rest, so the grip does not move.
+## A skeleton with no body above it and no values set has no known hook: its
+## fingers stay as the clip has them, and it says so once per arm.
 func _loop_fingers(skeleton: Skeleton3D, weight: float) -> void:
 	var suffix: String = [".R", ".L"][side]
-	var body := _body_of(skeleton)
 	var hook := loop_hook_degrees
-	if is_nan(hook):
-		hook = CarryArmPose.loop_hook_degrees(body)
 	var thumb := loop_thumb_degrees
-	if is_nan(thumb):
-		thumb = CarryArmPose.loop_thumb_degrees(body)
+	if is_nan(hook) or is_nan(thumb):
+		var body := _body_of(skeleton)
+		if body == null:
+			if not _no_body_warned:
+				_no_body_warned = true
+				var why := 'no passenger body ("body" meta) above the skeleton'
+				push_warning("CarryArm %s: %s, so the loop hand is not hooked" % [get_path(), why])
+			return
+		if is_nan(hook):
+			hook = CarryArmPose.loop_hook_degrees(body)
+		if is_nan(thumb):
+			thumb = CarryArmPose.loop_thumb_degrees(body)
 	var bends := {LOOP_HOOK_BONE: hook, LOOP_THUMB_BONE: thumb}
 	for name in LOOP_FINGERS:
 		var bone := skeleton.find_bone(name + suffix)
@@ -158,14 +170,14 @@ func _loop_fingers(skeleton: Skeleton3D, weight: float) -> void:
 
 
 ## The passenger body node `skeleton` belongs to (the nearest node above it
-## with a "body" meta, PassengerViews), or the skeleton itself when it has none.
+## with a "body" meta, PassengerViews), or null when there is none.
 static func _body_of(skeleton: Skeleton3D) -> Node3D:
 	var at: Node = skeleton
 	while at != null:
 		if at.has_meta(&"body") and at is Node3D:
 			return at
 		at = at.get_parent()
-	return skeleton
+	return null
 
 
 ## The arm `chain` (arm, forearm, hand; skeleton space) turned so the grip

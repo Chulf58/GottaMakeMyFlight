@@ -17,10 +17,12 @@ const BODIES: Array[int] = [0, 17]
 
 
 ## The loop hand of `side` of a new body `body`, reaching for a point beside
-## and below its shoulder as a tray-to-back move's side hang does.
-func _rig(body: int, side: int) -> Dictionary:
+## and below its shoulder as a tray-to-back move's side hang does; with
+## `tagged` false the node has no "body" meta (not a passenger's).
+func _rig(body: int, side: int, tagged := true) -> Dictionary:
 	var node := PassengerLooks.SCENES[body].instantiate() as Node3D
-	node.set_meta(&"body", body)
+	if tagged:
+		node.set_meta(&"body", body)
 	add_child(node)
 	auto_free(node)
 	(node.get_node("AnimationPlayer") as AnimationPlayer).play("idle")
@@ -125,3 +127,43 @@ func test_each_skeleton_takes_its_own_hook() -> void:
 	assert_float(CarryArmPose.loop_thumb_degrees(female)).is_equal(
 		CarryArmPose.LOOP_THUMB_DEGREES[1]
 	)
+
+
+## A skeleton with no passenger body above it gets no hook and no thumb bend
+## unless they are set: its loop hand's Fingertips and Thumb_Tip stay as the
+## clip has them (it warns once), never a guessed skeleton's values. Control:
+## with both set on the same arm, the loop hand is bent (the path ran).
+func test_a_skeleton_with_no_body_is_not_hooked() -> void:
+	var rig := _rig(0, 0, false)
+	var arm: CarryArm = rig["arm"]
+	var skeleton: Skeleton3D = rig["skeleton"]
+	var tips := skeleton.find_bone("Fingertips.R")
+	var thumb := skeleton.find_bone("Thumb_Tip.R")
+	arm.loop_grip = false
+	await _drawn(skeleton)
+	var clip_tips := skeleton.get_bone_pose_rotation(tips)
+	var clip_thumb := skeleton.get_bone_pose_rotation(thumb)
+	arm.loop_grip = true
+	await _drawn(skeleton)
+	var tips_off := rad_to_deg(clip_tips.angle_to(skeleton.get_bone_pose_rotation(tips)))
+	var thumb_off := rad_to_deg(clip_thumb.angle_to(skeleton.get_bone_pose_rotation(thumb)))
+	arm.loop_hook_degrees = 90.0
+	arm.loop_thumb_degrees = -90.0
+	await _drawn(skeleton)
+	var set_off := rad_to_deg(clip_tips.angle_to(skeleton.get_bone_pose_rotation(tips)))
+	print(
+		(
+			"LOOP_HOOK no body tips_off=%.2f thumb_off=%.2f set_off=%.1f"
+			% [tips_off, thumb_off, set_off]
+		)
+	)
+	assert_float(tips_off).is_less(0.5)
+	assert_float(thumb_off).is_less(0.5)
+	assert_float(set_off).is_greater(45.0)
+
+
+## Waits until `skeleton` has been drawn again after its modifiers.
+func _drawn(skeleton: Skeleton3D) -> void:
+	await get_tree().process_frame
+	await get_tree().process_frame
+	await skeleton.skeleton_updated
