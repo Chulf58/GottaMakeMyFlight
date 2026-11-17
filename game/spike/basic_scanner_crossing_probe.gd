@@ -144,6 +144,13 @@ const LEAD_PLATES: Array[String] = [
 const LEAD_MOMENTS := [[0.4, 0.6], [0.8, 0.97]]
 ## Failed tries of a hand-led move's plates before it is given up (_lead_tries).
 const LEAD_TRIES := 2
+## Tries of a returner's put-in or entry plate (_plate_tries) before it is given up: a
+## try with no framed heading frees its key so a later frame plates the passenger again
+## (board 58f5ab49).
+const PLATE_TRIES := 3
+## A returner is held clear of other plates from this far before the arch's centre
+## (m, along its axis, the put-in is at about 1.0) until its entry plate is saved.
+const RETURNER_ZONE_M := 2.0
 ## Lane mode: the lane on the divider as the security visuals probe builds it.
 const ARCH_AT := Vector2i(20, ReferenceTerminal.DIVIDER_Y)
 const OLD_SCANNERS: Array[Vector2i] = [Vector2i(17, 8), Vector2i(19, 8)]
@@ -215,6 +222,8 @@ var _lead_plated := {}
 ## tried again (a roller walk with no clear sight line on any heading was
 ## retried every frame and the run spent its time limit on it, board 40d26b16).
 var _lead_tries := {}
+## Key -> failed tries of a returner's put-in or entry plate (PLATE_TRIES).
+var _plate_tries := {}
 ## The process frame a wanted plate move paused the clock on (_on_tick), or -1.
 var _hold_frame := -1
 ## Passenger id -> its drawn pose last checked; body-in-own-bag points over
@@ -616,6 +625,8 @@ func _lead_plate_scan() -> void:
 	# The booth's own move plates (MOVE_PLATES) go first.
 	if _plate_task or (not _lane_mode and _move_plated.size() < MOVE_PLATES.size()):
 		return
+	if _returner_due():
+		return
 	var props := _views.carry_on_props()
 	for id in _sim.passenger_ids():
 		var body := _views.node_for(id)
@@ -640,6 +651,45 @@ func _lead_plate_scan() -> void:
 			return
 
 
+## Lane mode: a returner on its second pass is on the entry side of the arch's
+## centre, within RETURNER_ZONE_M of it, and its entry plate is not saved yet
+## (and not given up). A plate that steps the clock for its own moments (a
+## hand-led move) is not started then: a runner crossed its put-in and entry
+## window while another passenger's plate stepped the clock, and the plates
+## were never wanted (board 58f5ab49).
+func _returner_due() -> bool:
+	if not _lane_mode or _booths.is_empty():
+		return false
+	var booth: Array = _booths[0]
+	for id in _sim.passenger_ids():
+		var p := _sim.get_passenger(id)
+		var body := _views.node_for(id)
+		if p == null or body == null or not p.incident_resolved:
+			continue
+		if _reach_plated.get("entry_returner_p%d" % id, false):
+			continue
+		if _plate_tries.get("entry_returner_p%d" % id, 0) >= PLATE_TRIES:
+			continue
+		var local: Vector3 = (booth[1] as Transform3D) * body.global_position
+		var entry_half := local.z * float(booth[4])
+		if entry_half >= 0.0 and entry_half <= RETURNER_ZONE_M and absf(local.x) < 0.6:
+			return true
+	return false
+
+
+## A returner's put-in or entry plate of `key` found no framed heading: its key is
+## freed for another try on a later frame, up to PLATE_TRIES. False at the last
+## try, the plate is given up on.
+func _plate_retry(key: String) -> bool:
+	_plate_tries[key] = _plate_tries.get(key, 0) + 1
+	if _plate_tries[key] >= PLATE_TRIES:
+		print("PLATE_GAVE_UP %s tries=%d" % [key, _plate_tries[key]])
+		return false
+	print("PLATE_RETRY %s tries=%d" % [key, _plate_tries[key]])
+	_reach_plated.erase(key)
+	return true
+
+
 ## On each sim tick, after the views' sync: a bag about to start a move still
 ## to be plated (PlateSteps.wanted) pauses the clock with no time left over, so
 ## the move is first drawn at k 0 and its plate steps the clock to each moment.
@@ -652,7 +702,7 @@ func _on_tick(_tick: int) -> void:
 		_clock._accumulator = 0.0
 		_pin_measure.call_deferred(due)
 		return
-	if CaseTurnPlates.scan(self) or _plate_task or _hold_frame >= 0:
+	if CaseTurnPlates.scan(self) or _plate_task or _hold_frame >= 0 or _returner_due():
 		return
 	var props := _views.carry_on_props()
 	var lead_open := _lane_mode or _move_plated.size() >= MOVE_PLATES.size()
@@ -877,7 +927,12 @@ func _check(id: int) -> void:
 		var outside := absf(local.z) > 0.95
 		var moves := _track_moves(id, p, homes, props, props_now)
 		for i: int in moves:
-			if moves[i] in MOVE_PLATES and not _move_plated.has(moves[i]) and not _plate_task:
+			if (
+				moves[i] in MOVE_PLATES
+				and not _move_plated.has(moves[i])
+				and not _plate_task
+				and not _returner_due()
+			):
 				_plate_task = true
 				_plate_move.call_deferred(id, i, moves[i])
 		if _lane_mode and p.incident_resolved:
@@ -1269,6 +1324,21 @@ func _returner_entry(id: int, booth: Array, local: Vector3, arm: Array, context:
 ## before the arch and the other bag beside it can be read.
 func _putin_scan(id: int, p: Passenger, bags: Array[Node3D], props: CarryOnProps) -> void:
 	if _plate_task or p.security_phase != SecurityRuntime.Phase.ARCH:
+		for i in bags.size():
+			var skipped := "putin_p%d" % id + ("_b%d" % i if i > 0 else "")
+			var k := props.transfer_progress(id, i)
+			if (
+				not _reach_plated.has(skipped)
+				and FloatCheck.move_of(props, id, i).ends_with(">tray")
+				and k >= 0.4
+				and k <= 0.7
+			):
+				print(
+					(
+						"PUTIN_SKIPPED passenger=%d bag=%d k=%.2f plate_task=%s phase=%s"
+						% [id, i, k, _plate_task, SecurityRuntime.Phase.find_key(p.security_phase)]
+					)
+				)
 		return
 	for i in bags.size():
 		# Each bag of two plated half way in (board 521e46a5), the first as before.
@@ -1316,6 +1386,7 @@ func _plate_putin(id: int, i: int, key: String) -> void:
 		else:
 			# Not failed here: at least one put-in plate is required at the end.
 			print("PUTIN_PLATE_MISSED passenger=%d no heading framed it" % id)
+			_plate_retry(key)
 		if _b1_views and i > 0:
 			# The same moment from the side (a quarter turn on) and from high up.
 			var yaw := body.global_rotation.y
@@ -1779,7 +1850,7 @@ func _plate_reach(id: int, state: String, booth: Array) -> void:
 		var others := _hide_others(id)
 		if await _plate_close(id, null, name, _reach_dir, atan2(axis.x, axis.z)):
 			_reach_plated[state] = true
-		else:
+		elif not (state.begins_with("entry_returner_p") and _plate_retry(state)):
 			_invalid("no heading framed passenger %d for the %s reach plate" % [id, state])
 		for node in others:
 			node.visible = true
