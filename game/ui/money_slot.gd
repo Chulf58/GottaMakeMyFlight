@@ -26,6 +26,8 @@ const GRID := &"HudMoneyGrid"
 ## Space between the slot and the card opened under it.
 const CARD_GAP := 6.0
 
+static var _words := Words.new()
+
 var ledger: DayLedger
 ## Optional: without it no owed wages or upkeep are shown.
 var settlement: Settlement
@@ -71,43 +73,43 @@ func card_text() -> String:
 
 ## "Today", or "Since load" while the ledger counts from a load.
 static func heading(day_ledger: DayLedger) -> String:
-	return "Since load" if day_ledger.is_since_load() else "Today"
+	return _words.label(&"since_load" if day_ledger.is_since_load() else &"today")
 
 
 ## The card's rows as [label, value, theme type variation]. `owed` is the owed
 ## wages, `owed_upkeep` the owed room upkeep.
 static func rows(day_ledger: DayLedger, owed: int, owed_upkeep := 0) -> Array:
-	var cash_label := (
-		"Cash change since load" if day_ledger.is_since_load() else "Cash change today"
+	var cash_label := _words.label(
+		&"cash_since_load" if day_ledger.is_since_load() else &"cash_today"
 	)
 	var out: Array = [
-		["Airline fees", signed(day_ledger.amount(Wallet.Category.FEES)), &""],
-		["Shops", signed(day_ledger.amount(Wallet.Category.SHOP)), &""],
-		["Parking", signed(day_ledger.amount(Wallet.Category.PARKING)), &""],
-		["Wages paid", signed(-day_ledger.wages_paid()), &""],
-		["Upkeep paid", signed(-day_ledger.upkeep_paid()), &""],
-		["Airline fines", signed(day_ledger.amount(Wallet.Category.FINES)), &""],
-		["Operating result", signed(day_ledger.operating_result()), &""],
-		["Building", signed(day_ledger.amount(Wallet.Category.BUILD)), &""],
-		["Rescue grant", signed(day_ledger.amount(Wallet.Category.GRANT)), &""],
+		[_words.label(&"fees"), signed(day_ledger.amount(Wallet.Category.FEES)), &""],
+		[_words.label(&"shops"), signed(day_ledger.amount(Wallet.Category.SHOP)), &""],
+		[_words.label(&"parking"), signed(day_ledger.amount(Wallet.Category.PARKING)), &""],
+		[_words.label(&"wages"), signed(-day_ledger.wages_paid()), &""],
+		[_words.label(&"upkeep"), signed(-day_ledger.upkeep_paid()), &""],
+		[_words.label(&"fines"), signed(day_ledger.amount(Wallet.Category.FINES)), &""],
+		[_words.label(&"operating"), signed(day_ledger.operating_result()), &""],
+		[_words.label(&"building"), signed(day_ledger.amount(Wallet.Category.BUILD)), &""],
+		[_words.label(&"grant"), signed(day_ledger.amount(Wallet.Category.GRANT)), &""],
 	]
 	# Most days have no incident money, so the row shows only on a day that has.
 	var incident := day_ledger.amount(Wallet.Category.INCIDENT)
 	if incident != 0:
-		out.append(["Incidents", signed(incident), &""])
+		out.append([_words.label(&"incidents"), signed(incident), &""])
 	# A signing bonus is paid once per contract, so its row shows only on that day.
 	var bonus := day_ledger.amount(Wallet.Category.SIGNING_BONUS)
 	if bonus != 0:
-		out.append(["Signing bonus", signed(bonus), &""])
+		out.append([_words.label(&"bonus"), signed(bonus), &""])
 	out.append([cash_label, signed(day_ledger.cash_change()), &""])
 	# Fines the wallet could not pay moved no money, so they sit below the cash
 	# change, in the attention style, and only on a day that has some.
 	if day_ledger.fines_unpaid() > 0:
-		out.append(["Unpaid fines", str(day_ledger.fines_unpaid()), ATTENTION])
+		out.append([_words.label(&"unpaid_fines"), str(day_ledger.fines_unpaid()), ATTENTION])
 	if owed > 0:
-		out.append(["Owed wages", str(owed), ATTENTION])
+		out.append([_words.label(&"owed_wages"), str(owed), ATTENTION])
 	if owed_upkeep > 0:
-		out.append(["Owed upkeep", str(owed_upkeep), ATTENTION])
+		out.append([_words.label(&"owed_upkeep"), str(owed_upkeep), ATTENTION])
 	return out
 
 
@@ -206,3 +208,51 @@ func _owed_upkeep() -> int:
 ## Owed wages or owed upkeep changed.
 func _on_wages_owed(_owed_now: int) -> void:
 	refresh()
+
+
+## The card's labels, each in the "money card" context (static code cannot call tr()).
+class Words:
+	extends RefCounted
+
+	func label(id: StringName) -> String:
+		var text := ""
+		match id:
+			&"today":
+				text = tr("Today", "money card")
+			&"since_load":
+				text = tr("Since load", "money card")
+			&"cash_today":
+				text = tr("Cash change today", "money card")
+			&"cash_since_load":
+				text = tr("Cash change since load", "money card")
+			&"fees":
+				text = tr("Airline fees", "money card")
+			&"shops":
+				text = tr("Shops", "money card")
+			&"parking":
+				text = tr("Parking", "money card")
+			&"wages":
+				text = tr("Wages paid", "money card")
+			&"upkeep":
+				text = tr("Upkeep paid", "money card")
+			&"fines":
+				text = tr("Airline fines", "money card")
+			&"operating":
+				text = tr("Operating result", "money card")
+			&"building":
+				text = tr("Building", "money card")
+			&"grant":
+				text = tr("Rescue grant", "money card")
+			&"incidents":
+				text = tr("Incidents", "money card")
+			&"bonus":
+				text = tr("Signing bonus", "money card")
+			&"unpaid_fines":
+				text = tr("Unpaid fines", "money card")
+			&"owed_wages":
+				text = tr("Owed wages", "money card")
+			&"owed_upkeep":
+				text = tr("Owed upkeep", "money card")
+		if text == "":
+			push_error("MoneySlot: no label for %s" % id)
+		return text

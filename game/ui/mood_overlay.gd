@@ -40,15 +40,10 @@ const WHO := "MoodOverlay"
 const SETTING_MODE_KEY := "mood_overlay_mode"
 ## shown_need() when no need's icons show.
 const NO_NEED := -1
-## The legend line per mode, indexed by MoodTint.Mode.
-const LEGEND_TEXTS: Array[String] = [
-	"green fine, red waiting long or unhappy",
-	"green fed, orange hungry, red starving",
-	"green fine, orange needs the toilet, red desperate",
-	"green content, orange bored, red very bored",
-	"amber where passengers are running late",
-]
-## The mode buttons' captions, indexed by MoodTint.Mode; the node is "Mode" + it.
+## The toggle key, a placeholder in the toggle's caption.
+const HOTKEY := "M"
+## The mode buttons' node names, indexed by MoodTint.Mode; the node is "Mode" + it.
+## The captions the player reads come from _mode_caption().
 const MODE_NAMES: Array[String] = ["Mood", "Hunger", "Toilet", "Boredom", "Late"]
 ## The tint lies this far over the grid's floor height, above the floor tiles.
 const LIFT_M := 0.06
@@ -221,14 +216,14 @@ func _build_controls() -> Control:
 	row.position = Vector2(HudLayout.MARGIN, LeftColumn.slot_top(LeftColumn.SLOT_MOOD))
 	row.add_theme_constant_override("separation", 8)
 	_toggle.name = "MoodToggle"
-	_toggle.text = "Mood (M)"
+	_toggle.text = tr("Mood ({key})").format({"key": HOTKEY})
 	LeftColumn.size_toggle(_toggle)
 	_toggle.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	_toggle.toggle_mode = true
 	_toggle.focus_mode = Control.FOCUS_NONE
 	row.add_child(_toggle)
 	_legend.name = "MoodLegend"
-	_legend.text = LEGEND_TEXTS[_mode]
+	_legend.text = _legend_text(_mode)
 	_legend.theme_type_variation = &"HudHint"
 	_legend.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var card_body := VBoxContainer.new()
@@ -252,7 +247,7 @@ func _build_mode_buttons() -> Control:
 	for mode in MODE_NAMES.size():
 		var button := Button.new()
 		button.name = "Mode" + MODE_NAMES[mode]
-		button.text = MODE_NAMES[mode]
+		button.text = _mode_caption(mode)
 		button.toggle_mode = true
 		button.button_group = group
 		button.focus_mode = Control.FOCUS_NONE
@@ -301,8 +296,36 @@ func _on_mode_toggled(on: bool, mode: MoodTint.Mode) -> void:
 		set_mode(mode)
 
 
+## The legend line for `mode` (MoodTint.Mode), one whole sentence each.
+func _legend_text(mode: int) -> String:
+	match mode:
+		MoodTint.Mode.HUNGER:
+			return tr("green fed, orange hungry, red starving")
+		MoodTint.Mode.TOILET:
+			return tr("green fine, orange needs the toilet, red desperate")
+		MoodTint.Mode.BOREDOM:
+			return tr("green content, orange bored, red very bored")
+		MoodTint.Mode.LATE:
+			return tr("amber where passengers are running late")
+	return tr("green fine, red waiting long or unhappy")
+
+
+## The caption of the button for `mode` (MoodTint.Mode).
+func _mode_caption(mode: int) -> String:
+	match mode:
+		MoodTint.Mode.HUNGER:
+			return tr("Hunger", "mood overlay mode")
+		MoodTint.Mode.TOILET:
+			return tr("Toilet", "mood overlay mode")
+		MoodTint.Mode.BOREDOM:
+			return tr("Boredom", "mood overlay mode")
+		MoodTint.Mode.LATE:
+			return tr("Late", "mood overlay mode")
+	return tr("Mood", "mood overlay mode")
+
+
 func _apply_mode() -> void:
-	_legend.text = LEGEND_TEXTS[_mode]
+	_legend.text = _legend_text(_mode)
 	for i in _mode_buttons.size():
 		_mode_buttons[i].set_pressed_no_signal(i == _mode)
 

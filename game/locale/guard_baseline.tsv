@@ -1,11 +1,5 @@
 # Text literals in game/ui/*.gd with no tr() today: file, count, line text.
 # Delete a line when its statement is wrapped in tr(); never add one.
-hints.gd	1	_caption.text = "Hint (H turns hints off)"
-hints.gd	1	_reset.text = "Reset hints"
-hints.gd	1	_toggle.text = "Hints (H)"
-mood_overlay.gd	1	_toggle.text = "Mood (M)"
 passenger_hud.gd	1	batch.text = "Spawn %d passengers" % DEBUG_BATCH
-passenger_hud.gd	1	button.text = "Pause" if value == 0 else "%dx" % value
-passenger_hud.gd	1	button.tooltip_text = "Space" if value == 0 else "Shift+%d" % value
 passenger_hud.gd	1	starter.text = "Starter terminal"
 passenger_hud.gd	1	toggle.text = "Debug"

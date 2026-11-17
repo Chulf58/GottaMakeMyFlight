@@ -31,16 +31,9 @@ signal dialog_changed(open: bool)
 ## With the intro and the other dialogs, over the HUD.
 const LAYER := 10
 const MENU_SIZE := Vector2(520.0, 0.0)
-const QUESTION_TITLE := "Daily incidents"
-const QUESTION_BODY := (
-	"One more thing before the doors open. Some days bring trouble: a spill on "
-	+ "the floor, an inspector, a holiday rush. Shall I send those your way?\n"
-	+ "Accept turns daily incidents on, Decline leaves them off. You can change "
-	+ "this any time: press Esc, then Settings.\n"
-	+ "The clock stays paused until you choose."
-)
 const QUESTION_HEIGHT := 360.0
-const INCIDENTS_TEXT := "Incidents"
+## The menu key's name, a placeholder in the Resume button and the question.
+const ESC_KEY := "Esc"
 
 @export var director: IncidentDirector
 @export var clock: SimClock
@@ -223,21 +216,21 @@ func _show() -> void:
 	root.add_child(panel)
 	var pages := VBoxContainer.new()
 	panel.add_child(pages)
-	_main_page = _page("MainPage", "Game menu")
+	_main_page = _page("MainPage", tr("Game menu"))
 	pages.add_child(_main_page)
-	_button(_main_page, "Resume", "Resume (Esc)", press_resume)
-	_button(_main_page, "Settings", "Settings", press_settings)
-	_settings_page = _page("SettingsPage", "Settings")
+	_button(_main_page, "Resume", tr("Resume ({key})").format({"key": ESC_KEY}), press_resume)
+	_button(_main_page, "Settings", tr("Settings"), press_settings)
+	_settings_page = _page("SettingsPage", tr("Settings"))
 	_settings_page.visible = false
 	pages.add_child(_settings_page)
 	_incidents_switch = CheckButton.new()
 	_incidents_switch.name = "Incidents"
-	_incidents_switch.text = INCIDENTS_TEXT
+	_incidents_switch.text = tr("Incidents")
 	_incidents_switch.focus_mode = Control.FOCUS_NONE
 	_incidents_switch.button_pressed = director != null and director.is_enabled()
 	_incidents_switch.toggled.connect(_on_incidents_toggled)
 	_settings_page.add_child(_incidents_switch)
-	_button(_settings_page, "Back", "Back", press_back)
+	_button(_settings_page, "Back", tr("Back"), press_back)
 	add_child(_layer)
 	dialog_changed.emit(true)
 
@@ -282,7 +275,7 @@ func _show_question() -> void:
 	_question_layer = CanvasLayer.new()
 	_question_layer.name = "IncidentQuestionLayer"
 	_question_layer.layer = LAYER
-	_question = IntroDialogue.new(QUESTION_TITLE, QUESTION_BODY, QUESTION_HEIGHT, true)
+	_question = IntroDialogue.new(tr("Daily incidents"), _question_body(), QUESTION_HEIGHT, true)
 	_question_layer.add_child(_question)
 	add_child(_question_layer)
 	_question.chosen.connect(_on_chosen)
@@ -291,6 +284,20 @@ func _show_question() -> void:
 	_question.tree_exiting.connect(close_question)
 	_question_layer.tree_exiting.connect(close_question)
 	dialog_changed.emit(true)
+
+
+## The question's four paragraphs, each one msgid, joined by line breaks.
+func _question_body() -> String:
+	var ask := tr(
+		# gdlint:ignore = max-line-length
+		"One more thing before the doors open. Some days bring trouble: a spill on the floor, an inspector, a holiday rush. Shall I send those your way?"
+	)
+	var choice := tr(
+		# gdlint:ignore = max-line-length
+		"Accept turns daily incidents on, Decline leaves them off. You can change this any time: press {key}, then Settings."
+	)
+	var hold := tr("The clock stays paused until you choose.")
+	return "\n".join(PackedStringArray([ask, choice.format({"key": ESC_KEY}), hold]))
 
 
 func _on_chosen(accepted: bool) -> void:
