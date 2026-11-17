@@ -3440,6 +3440,86 @@ msgid "Toilet"
 msgstr ""
 
 #: ui/display_words.gd
+msgctxt "room name, mid-sentence"
+msgid "atm"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room name, mid-sentence"
+msgid "bag room"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room name, mid-sentence"
+msgid "bar"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room name, mid-sentence"
+msgid "cafe"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room name, mid-sentence"
+msgid "duty free"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room name, mid-sentence"
+msgid "exchange"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room name, mid-sentence"
+msgid "fashion store"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room name, mid-sentence"
+msgid "grab-and-go stall"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room name, mid-sentence"
+msgid "kiosk"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room name, mid-sentence"
+msgid "lounge"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room name, mid-sentence"
+msgid "nap pod"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room name, mid-sentence"
+msgid "pharmacy"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room name, mid-sentence"
+msgid "play area"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room name, mid-sentence"
+msgid "restaurant"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room name, mid-sentence"
+msgid "shower"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room name, mid-sentence"
+msgid "toilet"
+msgstr ""
+
+#: ui/display_words.gd
 msgctxt "landside place"
 msgid "Curb bay"
 msgstr ""

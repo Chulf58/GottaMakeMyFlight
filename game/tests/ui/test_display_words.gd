@@ -83,6 +83,7 @@ func test_the_msgids_hold_every_name_note_and_reason_of_the_data() -> void:
 	for id in RoomTypes.ids():
 		var type := RoomTypes.get_type(id)
 		wanted.append(type.display_name)
+		wanted.append(type.display_name.to_lower())
 		for need in type.required:
 			wanted.append(need[1])
 			wanted.append(need[1].to_lower())
@@ -248,3 +249,24 @@ func test_the_incident_offers_hold_each_whole_reward_and_failure_line() -> void:
 		var plain := IncidentPanel.body_for(IncidentCopy.template(kind), true)
 		assert_int(_count(plain, "Reward: ")).is_equal(1)
 		assert_int(_count(plain, "If it fails: ")).is_equal(1)
+
+
+## A German-style locale whose room names are capitalised nouns: the too-small note
+## must keep the capital, so no translated text is case-transformed.
+func test_the_too_small_note_never_changes_the_case_of_a_translated_room_name() -> void:
+	var german := Translation.new()
+	german.locale = "de"
+	german.add_message("Cafe", "Kaffeehaus", "room type")
+	german.add_message("cafe", "Kaffeehaus", "room name, mid-sentence")
+	var old_locale := TranslationServer.get_locale()
+	TranslationServer.add_translation(german)
+	TranslationServer.set_locale("de")
+	var room := _room(Vector2i(2, 2))
+	var status := RoomRules.status(_grid, room)
+	var note := DisplayWords.notes(status)[0]
+	var reason := DisplayWords.room_reason(status)
+	TranslationServer.set_locale(old_locale)
+	TranslationServer.remove_translation(german)
+	print("too small note: '%s' | reason: '%s'" % [note, reason])
+	assert_str(note).is_equal("Too small: a Kaffeehaus needs at least 3x3")
+	assert_str(reason).is_equal("too small: a Kaffeehaus needs at least 3x3")

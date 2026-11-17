@@ -12,13 +12,16 @@ extends RefCounted
 ## msgid inside tr(), which POT generation reads. test_display_words.gd checks the
 ## list holds every name and note the data can produce. A reason that follows a
 ## comma ("Status: Not ready, needs a tray table") is its own lower-case msgid in
-## the "status reason" context, so no translated text is ever lower-cased.
+## the "status reason" context, and a room name inside a sentence is its own
+## lower-case msgid in the "room name, mid-sentence" context, so no translated
+## text is ever case-transformed.
 
 const ITEM_CONTEXT := "item name"
 const ROOM_TYPE_CONTEXT := "room type"
 const PLACE_CONTEXT := "landside place"
 const NEED_CONTEXT := "room need"
 const REASON_CONTEXT := "status reason"
+const ROOM_MID_CONTEXT := "room name, mid-sentence"
 
 static var _words := Words.new()
 
@@ -87,7 +90,7 @@ static func biggest_plane(plane_class: String) -> String:
 
 static func _too_small(status: RoomRules.RoomStatus, lower: bool) -> String:
 	var type := RoomTypes.get_type(status.type_id)
-	var room := room_type(type.display_name).to_lower()
+	var room := TranslationServer.translate(type.display_name.to_lower(), ROOM_MID_CONTEXT)
 	return _words.too_small(room, type.min_size, lower)
 
 
@@ -219,6 +222,23 @@ class Words:
 			tr("Restaurant", "room type"),
 			tr("Shower", "room type"),
 			tr("Toilet", "room type"),
+			# The same room names in lower case, inside a sentence ("a cafe needs...")
+			tr("atm", "room name, mid-sentence"),
+			tr("bag room", "room name, mid-sentence"),
+			tr("bar", "room name, mid-sentence"),
+			tr("cafe", "room name, mid-sentence"),
+			tr("duty free", "room name, mid-sentence"),
+			tr("exchange", "room name, mid-sentence"),
+			tr("fashion store", "room name, mid-sentence"),
+			tr("grab-and-go stall", "room name, mid-sentence"),
+			tr("kiosk", "room name, mid-sentence"),
+			tr("lounge", "room name, mid-sentence"),
+			tr("nap pod", "room name, mid-sentence"),
+			tr("pharmacy", "room name, mid-sentence"),
+			tr("play area", "room name, mid-sentence"),
+			tr("restaurant", "room name, mid-sentence"),
+			tr("shower", "room name, mid-sentence"),
+			tr("toilet", "room name, mid-sentence"),
 			# Landside place names (LandsidePlacement.NAMES)
 			tr("Curb bay", "landside place"),
 			tr("Multi-storey car park", "landside place"),
