@@ -112,3 +112,42 @@ const PAGES := [
 	[BuildMode.Tool.SOFA, BuildMode.Tool.ARMCHAIR, BuildMode.Tool.WORK_DESK],
 	[BuildMode.Tool.PLAY_BLOCKS, BuildMode.Tool.PLAY_SLIDE, BuildMode.Tool.PRIZE_PODIUM],
 ]
+
+
+## Never called: every card name inside tr(), so POT generation finds it. The
+## names stay English in ITEMS, and the menu shows them through
+## BuildMenuCatalog.shown(). A test checks that each name in ITEMS is here.
+class Words:
+	extends RefCounted
+
+	func msgids() -> Array[String]:
+		return [
+			tr("Bush", "build menu"),
+			tr("Planter", "build menu"),
+			tr("Plant pot", "build menu"),
+			tr("Tree", "build menu"),
+			tr("Bench", "build menu"),
+			tr("Tree bench", "build menu"),
+			tr("Fountain", "build menu"),
+			tr("Statue", "build menu"),
+			tr("Post", "build menu"),
+			tr("Chain", "build menu"),
+			tr("Bin", "build menu"),
+			tr("Bar counter", "build menu"),
+			tr("Grab stall", "build menu"),
+			tr("Dining table", "build menu"),
+			tr("Booth", "build menu"),
+			tr("Info desk", "build menu"),
+			tr("Info screen", "build menu"),
+			tr("Counter", "build menu"),
+			tr("Cash machine", "build menu"),
+			tr("Shelf", "build menu"),
+			tr("Shower", "build menu"),
+			tr("Nap pod", "build menu"),
+			tr("Sofa", "build menu"),
+			tr("Armchair", "build menu"),
+			tr("Work desk", "build menu"),
+			tr("Play blocks", "build menu"),
+			tr("Play slide", "build menu"),
+			tr("Prize podium", "build menu"),
+		]

@@ -44,8 +44,8 @@ func attach(menu: BuildMenu) -> void:
 	add_child(_row)
 	menu.tray().add_child(self)
 	button.name = BUTTON_NAME
-	button.text = "Templates"
-	button.tooltip_text = "Templates"
+	button.text = tr("Templates")
+	button.tooltip_text = tr("Templates")
 	button.toggle_mode = true
 	button.custom_minimum_size = Vector2(0.0, BuildMenu.CATEGORY_SIZE.y)
 	button.focus_mode = Control.FOCUS_NONE
@@ -104,7 +104,9 @@ func _rebuild() -> void:
 		_row.remove_child(child)
 		child.queue_free()
 	_cards.clear()
-	_save_card = _make_card(SAVE_CARD, "Save room", ["Pick a room", "", "Click"])
+	_save_card = _make_card(
+		SAVE_CARD, tr("Save room"), [tr("Pick a room"), "", tr("Click", "card hint")]
+	)
 	if _paste != null:
 		_save_card.pressed.connect(_paste.arm_capture)
 	_row.add_child(_save_card)
@@ -114,8 +116,8 @@ func _rebuild() -> void:
 		var price := template.price()
 		var lines := [
 			"%dx%d" % [template.size.x, template.size.y],
-			"Free" if price == 0 else str(price),
-			"Click",
+			tr("Free", "price") if price == 0 else str(price),
+			tr("Click", "card hint"),
 		]
 		var room := RoomTypes.get_type(template.room_type).display_name
 		var each := _make_card("CardTemplate%d" % i, template.name, lines, room)

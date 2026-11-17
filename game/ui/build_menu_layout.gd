@@ -6,6 +6,8 @@ extends RefCounted
 ## the menu and fills its node and lookup members in the order the menu always
 ## did, so node names, paths and draw order stay as they were.
 
+static var _words := Words.new()
+
 
 ## Anchors a control to the bottom centre with its bottom edge `bottom` px up;
 ## it grows up and out to both sides from there.
@@ -36,7 +38,7 @@ static func build_bar(menu: BuildMenu) -> void:
 		var button := Button.new()
 		# A later page's button stays hidden: it is there to keep the indices.
 		if not BuildMenuCatalog.categories()[i].get("page", false):
-			BarIcons.dress(button, BuildMenuCatalog.bar_name(i))
+			dress_bar(button, BuildMenuCatalog.bar_name(i))
 			# A name to find it by, now that it shows no text (BarDecor, BarCheckin).
 			button.name = "Bar" + BuildMenuCatalog.bar_name(i).replace("-", "").replace(" ", "")
 		button.toggle_mode = true
@@ -47,7 +49,7 @@ static func build_bar(menu: BuildMenu) -> void:
 		row.add_child(button)
 		menu._category_buttons.append(button)
 	menu.staff_button.name = "StaffButton"
-	BarIcons.dress(menu.staff_button, "Staff")
+	dress_bar(menu.staff_button, "Staff")
 	menu.staff_button.toggle_mode = true
 	menu.staff_button.custom_minimum_size = BuildMenu.CATEGORY_SIZE
 	menu.staff_button.focus_mode = Control.FOCUS_NONE
@@ -80,7 +82,7 @@ static func build_tray(menu: BuildMenu) -> void:
 static func make_card(menu: BuildMenu, tool: BuildMode.Tool) -> Button:
 	var card_item := BuildMenuCatalog.item(tool)
 	var button := ItemCardButton.new()
-	button.set_info(card_item[0], ItemInfo.of(tool))
+	button.set_info(BuildMenuCatalog.shown(card_item[0]), ItemInfo.of(tool))
 	button.name = "Card%s" % card_item[1].capitalize()
 	button.toggle_mode = true
 	button.custom_minimum_size = BuildMenu.CARD_SIZE
@@ -105,22 +107,24 @@ static func make_card(menu: BuildMenu, tool: BuildMode.Tool) -> Button:
 	picture.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	column.add_child(picture)
 	var key := BuildMenuCatalog.key_hint(tool)
-	card_label(column, card_item[0], &"HudCardName")
+	card_label(column, BuildMenuCatalog.shown(card_item[0]), &"HudCardName")
 	card_label(column, size_text(tool), &"HudHint")
-	menu._price_labels[tool] = card_label(column, BuildMenu.PRICE_TEXT, &"HudPrice")
+	menu._price_labels[tool] = card_label(column, _words.free_price(), &"HudPrice")
 	if BuildMenuCatalog.CARD_NEEDS.has(tool):
-		var need := card_label(column, BuildMenuCatalog.CARD_NEEDS[tool], &"HudAttentionText")
+		var need := card_label(
+			column, BuildMenuCatalog.shown(BuildMenuCatalog.CARD_NEEDS[tool]), &"HudAttentionText"
+		)
 		need.add_theme_font_size_override("font_size", BuildMenu.CARD_HINT_FONT_SIZE)
 		menu._hint_labels[tool] = need
 	elif BuildMenuCatalog.running_cost(tool) > 0:
 		menu._hint_labels[tool] = card_label(
-			column,
-			BuildMenuCatalog.RUNNING_COST_TEXT % BuildMenuCatalog.running_cost(tool),
-			&"HudHint"
+			column, BuildMenuCatalog.upkeep_text(BuildMenuCatalog.running_cost(tool)), &"HudHint"
 		)
 	else:
 		menu._hint_labels[tool] = card_label(
-			column, "Key %s" % key if key != "" else BuildMenuCatalog.no_key_hint(tool), &"HudHint"
+			column,
+			_words.key_hint(key) if key != "" else BuildMenuCatalog.no_key_hint(tool),
+			&"HudHint"
 		)
 	menu._hint_texts[tool] = menu._hint_labels[tool].text
 	return button
@@ -135,8 +139,10 @@ static func make_next_card(menu: BuildMenu, next: int) -> Button:
 	button.pressed.connect(menu.press_category.bind(next))
 	var column := card_column(button)
 	column.alignment = BoxContainer.ALIGNMENT_CENTER
-	card_label(column, "Next", &"HudCardName")
-	card_label(column, BuildMenuCatalog.categories()[next]["name"], &"HudHint")
+	card_label(column, _words.next_page(), &"HudCardName")
+	card_label(
+		column, BuildMenuCatalog.shown(BuildMenuCatalog.categories()[next]["name"]), &"HudHint"
+	)
 	return button
 
 
@@ -168,7 +174,7 @@ static func size_text(tool: BuildMode.Tool) -> String:
 	if BuildMode.tool_object(tool) != &"":
 		var def := BuildCatalog.get_def(BuildMode.tool_object(tool))
 		return "%dx%d" % [def.size.x, def.size.y]
-	return BuildMenuCatalog.item(tool)[2]
+	return BuildMenuCatalog.shown(BuildMenuCatalog.item(tool)[2])
 
 
 ## The status card (HUD 5/7): the status line, the "R rotate" hint and the cost
@@ -214,7 +220,7 @@ static func build_status_card(menu: BuildMenu) -> void:
 	row.add_child(status)
 	var hint := menu._rotate_hint
 	hint.name = "RotateHint"
-	hint.text = RotateHint.TEXT
+	hint.text = RotateHint.text()
 	hint.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	hint.theme_type_variation = &"HudHint"
 	hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -237,7 +243,33 @@ static func build_money(menu: BuildMenu) -> void:
 	panel.position = Vector2(HudLayout.MARGIN, HudLayout.MARGIN)
 	panel.custom_minimum_size = Vector2(HudLayout.MONEY_W, HudLayout.BUTTON_H)
 	menu.add_child(panel)
-	menu._money.text = BuildMenu.MONEY_TEXT
+	menu._money.text = _words.money_none()
 	menu._money.theme_type_variation = &"HudMoney"
 	menu._money.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	panel.add_child(menu._money)
+
+
+## A bar button's icon and its name in the tooltip (BarIcons.dress, which keys
+## the icon by the English name), the name then shown in the player's language.
+static func dress_bar(button: Button, bar_name: String) -> void:
+	BarIcons.dress(button, bar_name)
+	button.tooltip_text = BuildMenuCatalog.shown(bar_name)
+	if button.text != "":
+		button.text = button.tooltip_text
+
+
+## tr() is an instance method, so the static code of this file asks a Words.
+class Words:
+	extends RefCounted
+
+	func free_price() -> String:
+		return tr("Free", "price")
+
+	func key_hint(key: String) -> String:
+		return tr("Key {key}").format({"key": key})
+
+	func next_page() -> String:
+		return tr("Next", "build menu page")
+
+	func money_none() -> String:
+		return tr("Money  --")

@@ -8,8 +8,6 @@ alert_stack.gd	1	_tray_button.text = "Alerts" if count == 0 else "Alerts (%d)" %
 alert_stack.gd	1	_tray_button.tooltip_text = "Alert history and the on/off switch for alert cards"
 alert_stack.gd	1	card.tooltip_text = "Click to look at it"
 alert_stack.gd	1	title.text = "Alert history"
-build_menu.gd	1	_money.text = MONEY_TEXT if _wallet == null else "Money  %d" % _wallet.balance
-built_item_actions.gd	1	_move_button.tooltip_text = "Pick it up and set it down elsewhere" if _move["ok"] else ""
 departures_board.gd	1	_toggle.text = "Departures (B)"
 departures_board.gd	1	button.text = "Gate %s" % entry["gate"]
 departures_board.gd	1	button.tooltip_text = "Move this flight to another gate"
@@ -48,5 +46,3 @@ passenger_inspect.gd	1	row.tooltip_text = "Show where this happened"
 runway_card.gd	1	_button.text = "Runway"
 runway_card.gd	1	_upgrade.text = "Upgrade runway"
 runway_card.gd	1	title.text = "Runway"
-templates_page.gd	1	button.text = "Templates"
-templates_page.gd	1	button.tooltip_text = "Templates"

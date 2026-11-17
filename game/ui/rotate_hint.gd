@@ -6,7 +6,19 @@ extends RefCounted
 ## the card shows TEXT in its own label beside the status text (BuildMenu, HUD
 ## 5/7), which keeps it from wrapping.
 
+## The English msgid: a test compares against it; the label is text(), which says
+## tr() of the literal.
 const TEXT := "R rotate"
+
+
+## The hint in the player's language. tr() is an instance method, so a static
+## function asks a RotateHint.
+static func text() -> String:
+	return RotateHint.new().label()
+
+
+func label() -> String:
+	return tr("R rotate")
 
 
 ## True while the tool places a catalog piece, a template paste is armed or a

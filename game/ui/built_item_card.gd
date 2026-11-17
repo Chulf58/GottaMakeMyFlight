@@ -38,15 +38,6 @@ const KIND_OF_DEF := {
 const FIELDS: Array[String] = [
 	"where", "seats", "status", "planes", "walk", "staff", "queue", "upkeep"
 ]
-## A linked gate desk's biggest plane: its gate's max_class (GateDesks; decision
-## runway-and-taxi-technical-design-movement-plan-analytic-bookings-planned-
-## pauses, section 3).
-const PLANES_TEXT := "Biggest plane: %s"
-const NO_PLANE_TEXT := "Biggest plane: none, no room outside the exit"
-## A seat piece some of whose seats a guest cannot reach (a booth with an end
-## against a wall; decision restaurant-booth-against-a-wall-counts-only-
-## reachable-seats) says how many of its seats count.
-const SEATS_REACHABLE_TEXT := "%d of %d seats reachable"
 
 var sim: PassengerSim
 var selection: BuiltSelection
@@ -195,13 +186,20 @@ func _object_static(object_id: int) -> Dictionary:
 	out["name"] = def.display_name
 	var reachable := RoomRules.reachable_seats(grid, object_id).size()
 	if reachable < def.seats.size():
-		out["seats"] = SEATS_REACHABLE_TEXT % [reachable, def.seats.size()]
+		# A seat piece some of whose seats a guest cannot reach (a booth with an end
+		# against a wall; decision restaurant-booth-against-a-wall-counts-only-
+		# reachable-seats) says how many of its seats count.
+		out["seats"] = tr("{reachable} of {total} seats reachable").format(
+			{"reachable": reachable, "total": def.seats.size()}
+		)
 	var room_id := grid.room_at(record["anchor"])
 	if room_id != 0:
-		out["where"] = "In %s" % RoomTypes.get_type(grid.get_room(room_id)["type"]).display_name
+		out["where"] = tr("In {room}").format(
+			{"room": RoomTypes.get_type(grid.get_room(room_id)["type"]).display_name}
+		)
 	var upkeep: int = PIECE_UPKEEP.get(def_id, 0)
 	if upkeep > 0:
-		out["upkeep"] = BuildMenu.RUNNING_COST_TEXT % upkeep
+		out["upkeep"] = BuildMenuCatalog.upkeep_text(upkeep)
 	return out
 
 
@@ -227,7 +225,7 @@ func _room_static(room_id: int) -> Dictionary:
 			counters.append(id)
 	out["counters"] = counters
 	if ready.ok and ready.upkeep > 0:
-		out["upkeep"] = BuildMenu.RUNNING_COST_TEXT % ready.upkeep
+		out["upkeep"] = BuildMenuCatalog.upkeep_text(ready.upkeep)
 	return out
 
 
@@ -241,7 +239,7 @@ func _landside_static() -> Dictionary:
 		"spot": plan.spot,
 		"is_lot": LandsidePlacement.is_lot(plan.kind),
 		"capacity": plan.capacity,
-		"unit": "berths" if plan.kind == LandsidePlacement.Kind.CURB else "spaces",
+		"is_curb": plan.kind == LandsidePlacement.Kind.CURB,
 	}
 
 
@@ -263,8 +261,12 @@ func _build_live() -> Dictionary:
 			}
 		Kind.LANE_PART:
 			var in_lane := sim.layout.security_lanes.lane_of_piece(_static["id"]) != 0
-			var text := "Part of a ready security lane" if in_lane else "Not in a whole lane"
-			out = {"status": "Status: %s" % text}
+			var text := (
+				tr("Status: Part of a ready security lane")
+				if in_lane
+				else tr("Status: Not in a whole lane")
+			)
+			out = {"status": text}
 		Kind.ROOM:
 			out = _room_live()
 		Kind.LANDSIDE:
@@ -280,14 +282,20 @@ func _station_live(stations: Array) -> Dictionary:
 	return {
 		"status": _station_status(stations[0]),
 		"staff": _staff_text(stations),
-		"queue": "Queue: %d waiting" % waiting,
+		"queue":
+		tr_n("Queue: {count} waiting", "Queue: {count} waiting", waiting).format(
+			{"count": waiting}
+		),
 	}
 
 
 func _arch_live(arch: int) -> Dictionary:
 	var lanes := sim.layout.security_lanes
 	if not lanes.is_complete(arch):
-		return {"status": "Status: Not ready, %s" % lanes.status_text(arch).to_lower()}
+		return {
+			"status":
+			tr("Status: Not ready, {reason}").format({"reason": lanes.status_text(arch).to_lower()})
+		}
 	return _station_live([arch])
 
 
@@ -297,11 +305,11 @@ func _gate_status(desk: int) -> String:
 		return ""
 	for binding in gates.bindings:
 		if binding["desk"] == desk:
-			return "Status: Linked to Gate %s" % binding["gate"]
+			return tr("Status: Linked to Gate {gate}").format({"gate": binding["gate"]})
 	var reason: Dictionary = gates.unlinked().get(desk, {})
 	if reason.is_empty():
-		return "Status: Not linked yet"
-	return "Status: %s" % GateLinksView.caption_for(reason).to_lower()
+		return tr("Status: Not linked yet")
+	return tr("Status: {state}").format({"state": GateLinksView.caption_for(reason).to_lower()})
 
 
 ## "Biggest plane: Medium" for a linked desk's gate, GateDesks.WAITING_TEXT for
@@ -315,8 +323,8 @@ func _gate_planes(desk: int) -> String:
 			if gates.waits_on_spur(binding["gate"]):
 				return GateDesks.WAITING_TEXT
 			if plane_class == "":
-				return NO_PLANE_TEXT
-			return PLANES_TEXT % plane_class.capitalize()
+				return tr("Biggest plane: none, no room outside the exit")
+			return tr("Biggest plane: {class}").format({"class": plane_class.capitalize()})
 	return ""
 
 
@@ -338,11 +346,15 @@ func _room_live() -> Dictionary:
 	var counters: Array[int] = _static["counters"]
 	var out := {}
 	if not ready.ok:
-		out["status"] = "Status: Not ready, %s" % ready.notes[0].to_lower()
+		out["status"] = tr("Status: Not ready, {reason}").format(
+			{"reason": ready.notes[0].to_lower()}
+		)
 	elif not counters.is_empty() and not ShopCounters.room_open(sim, _static["id"]):
-		out["status"] = "Status: Closed, %s" % MissSignals.NO_STAFF_REASON.to_lower()
+		out["status"] = tr("Status: Closed, {reason}").format(
+			{"reason": MissSignals.NO_STAFF_REASON.to_lower()}
+		)
 	else:
-		out["status"] = "Status: Open"
+		out["status"] = tr("Status: Open")
 	if not counters.is_empty():
 		var staff_and_queue := _station_live(counters)
 		out["staff"] = staff_and_queue["staff"]
@@ -362,22 +374,35 @@ func _landside_live() -> Dictionary:
 	_live_closed = closed
 	var cars := land.lot_cars(spot) if _static["is_lot"] else land.curb_cars(spot)
 	return {
-		"status": "Status: Closed" if closed else "Status: Open",
-		"queue": "Cars: %d of %d %s" % [cars, _static["capacity"], _static["unit"]],
+		"status": tr("Status: Closed") if closed else tr("Status: Open"),
+		"queue": _cars_text(cars),
 	}
+
+
+## "Cars: 3 of 12 spaces" for a car park, "... berths" for a curb bay.
+func _cars_text(cars: int) -> String:
+	var capacity: int = _static["capacity"]
+	var text := (
+		tr_n("Cars: {cars} of {capacity} berth", "Cars: {cars} of {capacity} berths", capacity)
+		if _static["is_curb"]
+		else tr_n("Cars: {cars} of {capacity} space", "Cars: {cars} of {capacity} spaces", capacity)
+	)
+	return text.format({"cars": cars, "capacity": capacity})
 
 
 func _station_status(station: int) -> String:
 	if sim.staff == null or sim.staff.is_open(station):
-		return "Status: Open"
+		return tr("Status: Open")
 	var reason := MissSignals.closed_reason(sim, station)
 	if reason == MissSignals.FAULT_REASON:
-		return "Status: %s" % StationClosures.fault_text(sim.staff.faults.repair_tick(station))
+		return tr("Status: {state}").format(
+			{"state": StationClosures.fault_text(sim.staff.faults.repair_tick(station))}
+		)
 	if reason == "" and ShopCounters.closed(sim).has(station):
 		reason = MissSignals.NO_STAFF_REASON
 	if reason == "":
-		return "Status: Not in use"
-	return "Status: Closed, %s" % reason.to_lower()
+		return tr("Status: Not in use")
+	return tr("Status: Closed, {reason}").format({"reason": reason.to_lower()})
 
 
 ## "Staff: 1 on duty", "Staff: 1 on the way" or "Staff: none", over `stations`.
@@ -396,10 +421,12 @@ func _staff_text(stations: Array) -> String:
 					coming += 1
 	var parts := PackedStringArray()
 	if on_duty > 0:
-		parts.append("%d on duty" % on_duty)
+		parts.append(tr("{count} on duty").format({"count": on_duty}))
 	if coming > 0:
-		parts.append("%d on the way" % coming)
-	return "Staff: %s" % (", ".join(parts) if not parts.is_empty() else "none")
+		parts.append(tr("{count} on the way").format({"count": coming}))
+	if parts.is_empty():
+		return tr("Staff: none")
+	return tr("Staff: {parts}").format({"parts": ", ".join(parts)})
 
 
 ## Passengers in a station's lane and holding area; a counter's cafe lane too.
