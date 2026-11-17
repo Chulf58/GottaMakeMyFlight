@@ -9,16 +9,18 @@ extends RefCounted
 ## and runs to the end of its brackets, over as many lines as that takes. Every
 ## string literal in it with a letter in it must sit inside a real tr(), tr_n(),
 ## atr() or atr_n() call (the identifier is read whole, so `str(` and `x.tr(` do
-## not count). Not counted as text: a comment, a literal inside `.format(`,
-## `.get(` or `.has(` (keys and values), a literal in an index like NAMES["a"], a
-## &"StringName" or ^"NodePath", and text that is only format specifiers and
-## escapes such as "%.1f" or "\n". Text held
+## not count). Not counted as text: a comment, a dictionary key inside
+## `.format(` (a literal followed by `:`), the first argument of `.get(` or
+## `.has(`, a literal in an index like NAMES["a"], a &"StringName" or
+## ^"NodePath", and text that is only format specifiers and escapes such as
+## "%.1f" or "\n". The values in `.format({...})` and the default in `.get(k, d)`
+## are scanned like any other literal. Text held
 ## in a const or built in a helper is not seen; those stay for review.
 
 const ASSIGN := "(?:\\.text|\\.tooltip_text)\\s*\\+?=(?!=)\\s*|set_text\\("
 const FORMAT_SPEC := "%[-+0-9.]*[sdfxXcoi]|%%|\\\\."
-## Methods whose string arguments are keys or patterns, not shown text.
-const KEY_METHODS := ["format", "get", "has"]
+## Methods whose FIRST argument is a key, not shown text: `.get("key", default)`.
+const KEY_METHODS := ["get", "has"]
 const TR_CALLS := ["tr", "tr_n", "atr", "atr_n"]
 const MAX_STATEMENT_LINES := 30
 
@@ -112,7 +114,12 @@ static func _scan(expr: String, open: Array[String]) -> Dictionary:
 				end += 1 if expr[end] != "\\" else 2
 			var prefix := expr[i - 1] if i > 0 else ""
 			var literal := expr.substr(i + 1, end - i - 1)
-			if prefix != "&" and prefix != "^" and _is_text(literal) and not _is_exempt(stack):
+			if (
+				prefix != "&"
+				and prefix != "^"
+				and _is_text(literal)
+				and not _is_exempt(stack, _is_dict_key(expr, end + 1))
+			):
 				found = true
 			i = end + 1
 			continue
@@ -122,6 +129,8 @@ static func _scan(expr: String, open: Array[String]) -> Dictionary:
 			stack.append("idx" if _follows_value(expr, i) else "other")
 		elif c == "{":
 			stack.append("other")
+		elif c == "," and not stack.is_empty() and stack.back() == "key0":
+			stack[stack.size() - 1] = "key1"
 		elif c == ")" or c == "]" or c == "}":
 			if stack.is_empty():
 				break
@@ -139,18 +148,34 @@ static func _is_text(literal: String) -> bool:
 	return false
 
 
-static func _is_exempt(stack: Array[String]) -> bool:
-	return stack.has("tr") or stack.has("fmt") or stack.has("idx")
+## True for a literal that is not shown text: inside tr(), in an index, the
+## first argument of `.get(`/`.has(`, or a dictionary key inside `.format(`.
+static func _is_exempt(stack: Array[String], is_key: bool) -> bool:
+	if stack.has("tr") or stack.has("idx"):
+		return true
+	if not stack.is_empty() and stack.back() == "key0":
+		return true
+	return is_key and stack.has("fmt")
 
 
-## "tr" for a real translation call, "fmt" for `.format(`, else "other".
+## True when the next character after `at` (spaces skipped) is the `:` of a dictionary entry.
+static func _is_dict_key(expr: String, at: int) -> bool:
+	while at < expr.length() and expr[at] == " ":
+		at += 1
+	return at < expr.length() and expr[at] == ":"
+
+
+## "tr" for a real translation call, "fmt" for `.format(`, "key0" for the first
+## argument of `.get(`/`.has(`, else "other".
 static func _call_kind(expr: String, paren: int) -> String:
 	var start := paren
 	while start > 0 and _is_word(expr[start - 1]):
 		start -= 1
 	var ident := expr.substr(start, paren - start)
 	if start > 0 and expr[start - 1] == ".":
-		return "fmt" if KEY_METHODS.has(ident) else "other"
+		if ident == "format":
+			return "fmt"
+		return "key0" if KEY_METHODS.has(ident) else "other"
 	return "tr" if TR_CALLS.has(ident) else "other"
 
 

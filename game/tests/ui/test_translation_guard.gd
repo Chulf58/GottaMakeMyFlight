@@ -135,3 +135,20 @@ func test_control_a_statement_over_several_lines_is_one_statement() -> void:
 	assert_array(TranslationScan.offending_lines(planted)).is_equal([2])
 	var routed := 'func f(l: Label) -> void:\n\tl.text = (\n\t\ttr("Hello")\n\t)\n'
 	assert_array(TranslationScan.offending_lines(routed)).is_empty()
+
+
+func test_control_a_format_value_and_a_get_default_are_text() -> void:
+	var delayed := '\t_label.text = tr("Status: {state}").format({"state": "Delayed"})'
+	assert_bool(TranslationScan.offends(delayed)).is_true()
+	assert_bool(TranslationScan.offends('\t_label.text = data.get("label", "Unknown")')).is_true()
+
+
+func test_control_a_translated_value_and_an_empty_default_pass() -> void:
+	var routed := '\t_label.text = tr("Status: {state}").format({"state": tr("Delayed")})'
+	assert_bool(TranslationScan.offends(routed)).is_false()
+	assert_bool(TranslationScan.offends('\t_label.text = data.get("label", "")')).is_false()
+	(
+		assert_bool(TranslationScan.offends('\t_label.text = data.get("label", tr("Unknown"))'))
+		. is_false()
+	)
+	assert_bool(TranslationScan.offends('\t_label.text = data.get("label")')).is_false()
