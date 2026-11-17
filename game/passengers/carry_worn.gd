@@ -87,6 +87,45 @@ const TWO_BAG_LEAN_DEGREES: Array[float] = [
 	-12.5,
 	-15.0,
 ]
+## The bones a one-bag pack's bottom rests on (hip_joints(), in this order):
+## the two hip joints (the Quad bones' heads) and the pelvis.
+const HIP_BONES: Array[String] = ["Quad.L", "Quad.R", "Hips"]
+## The least drop of the rest point under the top of the panel the lean is
+## taken over (a stoop deep enough to lift the hips to the pack's top).
+const HIP_DROP_LEAST_M := 0.05
+## Per body (PassengerLooks.BODIES): one bag worn on its hips
+## (worn_back_on_hips(); board e22e90c2). x and y put the top of the panel
+## behind and above the Spine_03 bone, as BACK_ON_SPINE_M's x and y do; the
+## panel runs from there through a point z behind the rest point, which is
+## the hip joint furthest back moved toward the Hips bone by w (0 the joint, 1
+## the pelvis). Hung on the spine alone the pack's bottom half stood 3.9-8.1
+## cm off the lower back, as the hips swing under it through the stride, and
+## no rigid placement got it under 3 cm with the legs 1 cm clear. Set from
+## test_worn_back_stride_clear.gd's halves over the walk and idle clips: the
+## least of the larger half gap with the legs LEG_CLEAR_M out of the pack
+## and the torso out of it (x in 2.5 mm steps, y in 1.5-3 cm steps no higher
+## than BACK_ON_SPINE_M's, z in 1-2.5 mm steps, w in quarters).
+const ON_HIPS_M: Array[Vector4] = [
+	Vector4(0.081, -0.06, 0.143, 0.0),
+	Vector4(0.092, -0.06, 0.145, 0.5),
+	Vector4(0.081, -0.06, 0.143, 0.0),
+	Vector4(0.081, -0.06, 0.143, 0.0),
+	Vector4(0.081, -0.06, 0.143, 0.0),
+	Vector4(0.081, -0.06, 0.143, 0.0),
+	Vector4(0.081, -0.06, 0.143, 0.0),
+	Vector4(0.086, -0.09, 0.143, 0.0),
+	Vector4(0.081, -0.06, 0.143, 0.0),
+	Vector4(0.085, -0.03, 0.174, 0.5),
+	Vector4(0.085, 0.03, 0.174, 1.0),
+	Vector4(0.085, 0.03, 0.173, 1.0),
+	Vector4(0.085, 0.03, 0.174, 1.0),
+	Vector4(0.095, 0.03, 0.173, 1.0),
+	Vector4(0.078, 0.00, 0.173, 1.0),
+	Vector4(0.085, -0.03, 0.174, 0.5),
+	Vector4(0.085, 0.03, 0.184, 1.0),
+	Vector4(0.083, -0.03, 0.173, 1.0),
+	Vector4(0.085, 0.03, 0.174, 1.0),
+]
 
 
 ## A shoulder bag hung on the shoulder of `side` (0 right, 1 left) of a body
@@ -172,12 +211,19 @@ static func loop_in_front(grip: Vector3, yaw: float, scale_by: float) -> Transfo
 ## turned to `yaw` whose Spine_03 bone is at `spine` (world): the top of its
 ## back panel where BACK_ON_SPINE_M puts it for its size (BACK_FROM_SPINE_M
 ## behind and BACK_TOP_OVER_SPINE_M above the bone for -1; worn_back_at()).
-static func worn_back(spine: Transform3D, yaw: float, scale_by: float, body := -1) -> Transform3D:
+## One bag on a known body given its `hips` (hip_joints(), world, as drawn)
+## rests on them instead (worn_back_on_hips(), ON_HIPS_M); without them it
+## keeps the spine-only placement (BACK_ON_SPINE_M, follow_tilt).
+static func worn_back(
+	spine: Transform3D, yaw: float, scale_by: float, body := -1, hips := PackedVector3Array()
+) -> Transform3D:
 	if body < 0 or body >= BACK_ON_SPINE_M.size():
 		# Not measured: main's placement, the plain lean.
 		var legacy := Vector2(BACK_FROM_SPINE_M, BACK_TOP_OVER_SPINE_M)
 		return worn_back_at(spine, yaw, scale_by, legacy, false)
 	var per := BACK_ON_SPINE_M[body]
+	if scale_by >= 1.0 and hips.size() == HIP_BONES.size():
+		return worn_back_on_hips(spine, yaw, scale_by, ON_HIPS_M[body], hips)
 	if scale_by >= 1.0:
 		return worn_back_at(spine, yaw, scale_by, Vector2(per.x, per.y), true)
 	var top := Vector2(per.z, per.w)
@@ -212,3 +258,45 @@ static func worn_back_at(
 	var basis := Basis(back.cross(along), back, along).scaled(Vector3.ONE * scale_by)
 	var length := CarryOnProps.bag_box(SecurityLooks.Kind.BACKPACK).end.z * scale_by
 	return Transform3D(basis, anchor - along * length)
+
+
+## worn_back() of one bag on its hips (board e22e90c2), as a strapped pack
+## hangs from the shoulders and rests its bottom on the buttocks: the top of
+## the panel `on.x` behind the Spine_03 bone and `on.y` above it, as
+## worn_back_at() puts it, the panel running from there through a point
+## `on.z` behind the rest point (the hip joint furthest back, moved toward the
+## pelvis by `on.w`), in the plane of the bone and the walker's facing, so the
+## pack swings with the hips under it through the stride and the idle. `hips`
+## is hip_joints() (the frame of `spine`).
+static func worn_back_on_hips(
+	spine: Transform3D, yaw: float, scale_by: float, on: Vector4, hips: PackedVector3Array
+) -> Transform3D:
+	var up := spine.basis.y.normalized()
+	var behind := Basis(Vector3.UP, yaw) * Vector3.FORWARD
+	var out := (behind - up * behind.dot(up)).normalized()
+	var anchor := spine.origin + out * on.x + up * on.y
+	var joint := hips[0] if (hips[0] - hips[1]).dot(out) > 0.0 else hips[1]
+	var rel := joint.lerp(hips[2], on.w) - anchor
+	var lean := atan2(rel.dot(out) + on.z, maxf(-rel.dot(up), HIP_DROP_LEAST_M))
+	return worn_back_at(spine, yaw, scale_by, Vector2(on.x, on.y), false, rad_to_deg(lean))
+
+
+## The heads of `body`'s HIP_BONES now (world), read from its skeleton (found
+## once and kept on the body), for worn_back(); empty when a bone is missing.
+static func hip_joints(body: Node3D) -> PackedVector3Array:
+	if not body.has_meta(&"carry_worn_hips"):
+		var found := body.find_children("*", "Skeleton3D", true, false)
+		var skeleton := found[0] as Skeleton3D if not found.is_empty() else null
+		var bones := PackedInt32Array()
+		for name in HIP_BONES:
+			if skeleton != null and skeleton.find_bone(name) >= 0:
+				bones.append(skeleton.find_bone(name))
+		body.set_meta(&"carry_worn_hips", [skeleton, bones])
+	var cached: Array = body.get_meta(&"carry_worn_hips")
+	var joints := PackedVector3Array()
+	if (cached[1] as PackedInt32Array).size() < HIP_BONES.size():
+		return joints
+	var skeleton: Skeleton3D = cached[0]
+	for bone: int in cached[1]:
+		joints.append(skeleton.global_transform * skeleton.get_bone_global_pose(bone).origin)
+	return joints

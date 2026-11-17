@@ -144,6 +144,20 @@ const LEAD_PLATES: Array[String] = [
 const LEAD_MOMENTS := [[0.4, 0.6], [0.8, 0.97]]
 ## Failed tries of a hand-led move's plates before it is given up (_lead_tries).
 const LEAD_TRIES := 2
+## Tries of a returner's entry plate (_plate_tries; a try with no framed heading frees
+## its key so a later frame plates the passenger again) and of its put-in plate
+## (_plate_putin(), each try further into PUTIN_K) before it is given up (board 58f5ab49).
+const PLATE_TRIES := 3
+## A returner is held clear of other plates from this far before the arch's centre
+## (m, along its axis, the put-in is at about 1.0) until its entry plate is saved.
+const RETURNER_ZONE_M := 2.0
+## A returner's put-in plate is taken while its bag's move into the tray is in
+## this progress window; a missed try steps the paused clock on by PUTIN_STEP_K.
+const PUTIN_K := [0.4, 0.7]
+const PUTIN_STEP_K := 0.1
+## Each further try of a put-in plate sets its camera this share of the close
+## plate's distance further back (_plate_close()'s `far`).
+const PUTIN_FAR := 0.2
 ## Lane mode: the lane on the divider as the security visuals probe builds it.
 const ARCH_AT := Vector2i(20, ReferenceTerminal.DIVIDER_Y)
 const OLD_SCANNERS: Array[Vector2i] = [Vector2i(17, 8), Vector2i(19, 8)]
@@ -215,6 +229,8 @@ var _lead_plated := {}
 ## tried again (a roller walk with no clear sight line on any heading was
 ## retried every frame and the run spent its time limit on it, board 40d26b16).
 var _lead_tries := {}
+## Key -> failed tries of a returner's entry plate (PLATE_TRIES).
+var _plate_tries := {}
 ## The process frame a wanted plate move paused the clock on (_on_tick), or -1.
 var _hold_frame := -1
 ## Passenger id -> its drawn pose last checked; body-in-own-bag points over
@@ -616,6 +632,8 @@ func _lead_plate_scan() -> void:
 	# The booth's own move plates (MOVE_PLATES) go first.
 	if _plate_task or (not _lane_mode and _move_plated.size() < MOVE_PLATES.size()):
 		return
+	if _returner_due():
+		return
 	var props := _views.carry_on_props()
 	for id in _sim.passenger_ids():
 		var body := _views.node_for(id)
@@ -640,6 +658,45 @@ func _lead_plate_scan() -> void:
 			return
 
 
+## Lane mode: a returner on its second pass is on the entry side of the arch's
+## centre, within RETURNER_ZONE_M of it, and its entry plate is not saved yet
+## (and not given up). A plate that steps the clock for its own moments (a
+## hand-led move) is not started then: a runner crossed its put-in and entry
+## window while another passenger's plate stepped the clock, and the plates
+## were never wanted (board 58f5ab49).
+func _returner_due() -> bool:
+	if not _lane_mode or _booths.is_empty():
+		return false
+	var booth: Array = _booths[0]
+	for id in _sim.passenger_ids():
+		var p := _sim.get_passenger(id)
+		var body := _views.node_for(id)
+		if p == null or body == null or not p.incident_resolved:
+			continue
+		if _reach_plated.get("entry_returner_p%d" % id, false):
+			continue
+		if _plate_tries.get("entry_returner_p%d" % id, 0) >= PLATE_TRIES:
+			continue
+		var local: Vector3 = (booth[1] as Transform3D) * body.global_position
+		var entry_half := local.z * float(booth[4])
+		if entry_half >= 0.0 and entry_half <= RETURNER_ZONE_M and absf(local.x) < 0.6:
+			return true
+	return false
+
+
+## A returner's entry plate of `key` found no framed heading: its key is
+## freed for another try on a later frame, up to PLATE_TRIES. False at the last
+## try, the plate is given up on.
+func _plate_retry(key: String) -> bool:
+	_plate_tries[key] = _plate_tries.get(key, 0) + 1
+	if _plate_tries[key] >= PLATE_TRIES:
+		print("PLATE_GAVE_UP %s tries=%d" % [key, _plate_tries[key]])
+		return false
+	print("PLATE_RETRY %s tries=%d" % [key, _plate_tries[key]])
+	_reach_plated.erase(key)
+	return true
+
+
 ## On each sim tick, after the views' sync: a bag about to start a move still
 ## to be plated (PlateSteps.wanted) pauses the clock with no time left over, so
 ## the move is first drawn at k 0 and its plate steps the clock to each moment.
@@ -652,7 +709,9 @@ func _on_tick(_tick: int) -> void:
 		_clock._accumulator = 0.0
 		_pin_measure.call_deferred(due)
 		return
-	if CaseTurnPlates.scan(self) or _plate_task or _hold_frame >= 0:
+	if not _plate_task and _hold_frame < 0 and _putin_due():
+		return
+	if CaseTurnPlates.scan(self) or _plate_task or _hold_frame >= 0 or _returner_due():
 		return
 	var props := _views.carry_on_props()
 	var lead_open := _lane_mode or _move_plated.size() >= MOVE_PLATES.size()
@@ -877,7 +936,12 @@ func _check(id: int) -> void:
 		var outside := absf(local.z) > 0.95
 		var moves := _track_moves(id, p, homes, props, props_now)
 		for i: int in moves:
-			if moves[i] in MOVE_PLATES and not _move_plated.has(moves[i]) and not _plate_task:
+			if (
+				moves[i] in MOVE_PLATES
+				and not _move_plated.has(moves[i])
+				and not _plate_task
+				and not _returner_due()
+			):
 				_plate_task = true
 				_plate_move.call_deferred(id, i, moves[i])
 		if _lane_mode and p.incident_resolved:
@@ -1269,6 +1333,21 @@ func _returner_entry(id: int, booth: Array, local: Vector3, arm: Array, context:
 ## before the arch and the other bag beside it can be read.
 func _putin_scan(id: int, p: Passenger, bags: Array[Node3D], props: CarryOnProps) -> void:
 	if _plate_task or p.security_phase != SecurityRuntime.Phase.ARCH:
+		for i in bags.size():
+			var skipped := "putin_p%d" % id + ("_b%d" % i if i > 0 else "")
+			var k := props.transfer_progress(id, i)
+			if (
+				not _reach_plated.has(skipped)
+				and FloatCheck.move_of(props, id, i).ends_with(">tray")
+				and k >= PUTIN_K[0]
+				and k <= PUTIN_K[1]
+			):
+				print(
+					(
+						"PUTIN_SKIPPED passenger=%d bag=%d k=%.2f plate_task=%s phase=%s"
+						% [id, i, k, _plate_task, SecurityRuntime.Phase.find_key(p.security_phase)]
+					)
+				)
 		return
 	for i in bags.size():
 		# Each bag of two plated half way in (board 521e46a5), the first as before.
@@ -1276,15 +1355,52 @@ func _putin_scan(id: int, p: Passenger, bags: Array[Node3D], props: CarryOnProps
 		if _reach_plated.has(key) or (i > 0 and _no_b1_plate):
 			continue
 		var k := props.transfer_progress(id, i)
-		if FloatCheck.move_of(props, id, i).ends_with(">tray") and k >= 0.4 and k <= 0.7:
+		var into := FloatCheck.move_of(props, id, i).ends_with(">tray")
+		if into and k >= PUTIN_K[0] and k <= PUTIN_K[1]:
 			_reach_plated[key] = false
 			_plate_task = true
 			_plate_putin.call_deferred(id, i, key)
 			return
 
 
-## The put-in plate of _putin_scan(), the sim clock paused for it: the move,
-## its progress, the bag's FLOAT state and where the body is in the arch's frame.
+## Lane mode, on a sim tick: a returner in ARCH (second pass) whose bag starts a
+## move into its tray on its next draw, its put-in plate not taken yet. The clock
+## is held on this tick and _plate_putin() steps it into PUTIN_K. Sampled once a
+## frame instead (_putin_scan()), a runner's 6-tick put-in went from k 0.36 to
+## k 0.81 in one frame that ran three ticks, and its plate was never wanted
+## (board 58f5ab49).
+func _putin_due() -> bool:
+	if not _lane_mode:
+		return false
+	var props := _views.carry_on_props()
+	for id in _sim.passenger_ids():
+		var p := _sim.get_passenger(id)
+		if p == null or not p.incident_resolved or p.security_phase != SecurityRuntime.Phase.ARCH:
+			continue
+		var bags: Array = props.props_of(id)["bags"]
+		for i in bags.size():
+			var key := "putin_p%d" % id + ("_b%d" % i if i > 0 else "")
+			var move := PlateSteps.pending_move(props, id, i)
+			if _reach_plated.has(key) or (i > 0 and _no_b1_plate) or not move.ends_with(">tray"):
+				continue
+			print("PUTIN_HELD passenger=%d bag=%d move=%s tick=%d" % [id, i, move, _clock.tick])
+			_clock.set_paused(true)
+			_clock._accumulator = 0.0
+			_reach_plated[key] = false
+			_plate_task = true
+			_plate_putin.call_deferred(id, i, key)
+			return true
+	return false
+
+
+## The put-in plate of _putin_due() or _putin_scan(), the sim clock paused for
+## it and stepped (_step_putin()) to PUTIN_K's start plus half of PUTIN_STEP_K
+## when the move is not that far yet. Each try prints the move, its progress,
+## the bag's FLOAT state and where the body is in the arch's frame; a try with
+## no framed heading steps on by PUTIN_STEP_K and tries again from PUTIN_FAR
+## further back (a stooping body's box reached past the frame's bottom), up to
+## PLATE_TRIES while the move stays inside PUTIN_K (a later frame would be past
+## the window, board 58f5ab49).
 func _plate_putin(id: int, i: int, key: String) -> void:
 	_clock.set_paused(true)
 	await _frames(1)
@@ -1292,31 +1408,52 @@ func _plate_putin(id: int, i: int, key: String) -> void:
 	var body := _views.node_for(id)
 	var bags: Array = props.props_of(id)["bags"] if body != null else []
 	if body != null and i < bags.size():
-		var state := FloatCheck.float_state(_sim, _views, id, i)
+		await _step_putin(props, id, i, PUTIN_K[0] + PUTIN_STEP_K * 0.5)
 		var booth: Array = _booths[0]
-		var local: Vector3 = (booth[1] as Transform3D) * body.global_position
-		print(
-			(
-				"PUTIN_PLATE passenger=%d bag=%d move=%s k=%.2f state=%s hand_gap_m=%.3f x=%+.3f z=%+.3f"
-				% [
-					id,
-					i,
-					FloatCheck.move_of(props, id, i),
-					props.transfer_progress(id, i),
-					state[0],
-					state[1],
-					local.x,
-					local.z
-				]
+		for attempt in PLATE_TRIES:
+			var k := props.transfer_progress(id, i)
+			var state := FloatCheck.float_state(_sim, _views, id, i)
+			var local: Vector3 = (booth[1] as Transform3D) * body.global_position
+			print(
+				(
+					(
+						"PUTIN_PLATE passenger=%d bag=%d move=%s k=%.2f try=%d state=%s"
+						+ " hand_gap_m=%.3f x=%+.3f z=%+.3f"
+					)
+					% [
+						id,
+						i,
+						FloatCheck.move_of(props, id, i),
+						k,
+						attempt + 1,
+						state[0],
+						state[1],
+						local.x,
+						local.z
+					]
+				)
 			)
-		)
-		var others := _hide_others(id)
-		if await _plate_close(id, bags[i], "reach_" + key, _reach_dir):
-			_reach_plated[key] = true
-		else:
+			var hidden := _hide_others(id)
+			var far := 1.0 + PUTIN_FAR * attempt
+			var saved := await _plate_close(id, bags[i], "reach_" + key, _reach_dir, NAN, 0.0, far)
+			for node in hidden:
+				node.visible = true
+			if saved:
+				_reach_plated[key] = true
+				break
 			# Not failed here: at least one put-in plate is required at the end.
-			print("PUTIN_PLATE_MISSED passenger=%d no heading framed it" % id)
+			print(
+				(
+					"PUTIN_PLATE_MISSED passenger=%d bag=%d k=%.2f far=%.2f no heading framed it"
+					% [id, i, k, far]
+				)
+			)
+			if k + PUTIN_STEP_K > PUTIN_K[1]:
+				break
+			await _step_putin(props, id, i, k + PUTIN_STEP_K)
+		var others: Array[Node3D] = []
 		if _b1_views and i > 0:
+			others = _hide_others(id)
 			# The same moment from the side (a quarter turn on) and from high up.
 			var yaw := body.global_rotation.y
 			for view in [["_side", PI / 2.0, 0.0], ["_high", 0.0, 1.6]]:
@@ -1329,6 +1466,19 @@ func _plate_putin(id: int, i: int, key: String) -> void:
 			node.visible = true
 	_clock.set_paused(false)
 	_plate_task = false
+
+
+## Steps the paused clock a quarter tick at a time, a frame drawn after each,
+## until bag `i` of passenger `id` is `to_k` through its move (at most 12
+## ticks). A returner's put-in follows its walk (CarryPlace.progress_of()'s
+## put_in), not the move's ticks, so the steps are counted by the progress
+## read back, not by CarryLead.ticks_of().
+func _step_putin(props: CarryOnProps, id: int, i: int, to_k: float) -> void:
+	for _step in 48:
+		if props.transfer_progress(id, i) >= to_k:
+			return
+		PlateSteps.step_clock(_clock, 0.25)
+		await _frames(1)
 
 
 ## The returners' entry reach (_returner_entry()), one line per passenger and
@@ -1779,7 +1929,7 @@ func _plate_reach(id: int, state: String, booth: Array) -> void:
 		var others := _hide_others(id)
 		if await _plate_close(id, null, name, _reach_dir, atan2(axis.x, axis.z)):
 			_reach_plated[state] = true
-		else:
+		elif not (state.begins_with("entry_returner_p") and _plate_retry(state)):
 			_invalid("no heading framed passenger %d for the %s reach plate" % [id, state])
 		for node in others:
 			node.visible = true
@@ -2252,9 +2402,10 @@ func _plate_arch(id: int) -> void:
 ## sight lines to the bag land on it, blocked by nothing but the passenger. Each
 ## heading prints its numbers. The camera, the HUD and the game camera are put back.
 ## `lift` (m) raises the camera and brings it in to 0.4 of the way, looking
-## steeply down (a high plate).
+## steeply down (a high plate). `far` scales the camera's distance (a put-in
+## plate's later tries, _plate_putin()).
 func _plate_close(
-	id: int, bag: Node3D, name: String, dir := "", base_yaw := NAN, lift := 0.0
+	id: int, bag: Node3D, name: String, dir := "", base_yaw := NAN, lift := 0.0, far := 1.0
 ) -> bool:
 	var out_dir := _close_dir if dir == "" else dir
 	var body := _views.node_for(id)
@@ -2287,7 +2438,7 @@ func _plate_close(
 			top = maxf(top, (mi.global_transform * mi.get_aabb()).end.y)
 	var low := PlateSteps.crouch_of(body)
 	var aim := maxf(AIM_M, top * 0.5) * low
-	var back := CLOSE_M * maxf(1.0, (top + 0.3) / 2.3) * low
+	var back := CLOSE_M * maxf(1.0, (top + 0.3) / 2.3) * low * far
 	for h in 8:
 		var look := body.global_position + Vector3(0.0, aim, 0.0)
 		var yaw := (body.global_rotation.y if is_nan(base_yaw) else base_yaw) + h * PI / 4.0
@@ -2355,15 +2506,20 @@ func _plate_close(
 func _box_in_frame(cam: Camera3D, box: AABB, frame: Rect2, tag: String) -> bool:
 	var lo := Vector2(INF, INF)
 	var hi := Vector2(-INF, -INF)
-	var ok := true
+	var behind := 0
 	for c in 8:
 		var corner := box.get_endpoint(c)
-		ok = ok and not cam.is_position_behind(corner)
+		behind += int(cam.is_position_behind(corner))
 		var px := cam.unproject_position(corner)
 		lo = lo.min(px)
 		hi = hi.max(px)
-	ok = ok and frame.has_point(lo) and frame.has_point(hi)
-	print("INFRAME %s screen=(%.0f,%.0f)-(%.0f,%.0f) ok=%s" % [tag, lo.x, lo.y, hi.x, hi.y, ok])
+	var ok := behind == 0 and frame.has_point(lo) and frame.has_point(hi)
+	print(
+		(
+			"INFRAME %s screen=(%.0f,%.0f)-(%.0f,%.0f) behind=%d box_size=%s ok=%s"
+			% [tag, lo.x, lo.y, hi.x, hi.y, behind, box.size, ok]
+		)
+	)
 	return ok
 
 
