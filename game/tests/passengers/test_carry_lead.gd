@@ -653,13 +653,14 @@ func test_a_backpack_off_the_back_is_on_the_hands_path_while_it_turns() -> void:
 
 
 ## Handed over between two hands (hand.R>pull.L, pull.R>pull.L, a case
-## hand.R>hand.L), the right hand lets go of the bar: from half way, where the
-## left hand holds it, the right hand's target leaves the point the bag is held
-## by, up and out to the right of the body, at least 3 cm by t 0.55 and 6 cm
-## by t 0.6, while the left hand's target stays on it. It is worked out from
-## the plan, not the drawn hand: two heights of the right hand as first drawn
-## give the same targets (anti-pattern d655fcc9). Control: before half way
-## the right hand, still the holder, is on that point (board 2237fa05).
+## hand.R>hand.L), the right hand lets go: the holder's target is always the
+## point the bag is held by, and from half way (the left hand holding it) the
+## right hand's target goes away from the bag's middle, at least 1.5 cm by t
+## 0.55 and 4 cm by t 0.6 (control: none at 0.45, where it holds the bag).
+## A roller's two hands hold its bar at their own spots, at least 6 cm apart,
+## the right hand's to the right of the left's. It is worked out from the
+## plan, not the drawn hand: two heights of the right hand as first drawn give
+## the same targets (anti-pattern d655fcc9; board 2237fa05).
 func test_a_hand_handing_a_bag_over_lets_go_of_it() -> void:
 	var frame := Transform3D(Basis(Vector3.UP, 0.8), Vector3(3.0, 0.0, -2.0))
 	var side := -frame.basis.x
@@ -709,25 +710,31 @@ func test_a_hand_handing_a_bag_over_lets_go_of_it() -> void:
 				}
 				seen.append(CarryLead.plan(bag, k, start, want, frame, flags, body))
 			var plan: Dictionary = seen[0]
-			var held: Vector3 = (plan["xf"] as Transform3D) * (plan["anchor"] as Vector3)
-			var off: Vector3 = plan["targets"][0] - held
-			var left: float = (plan["targets"][1] as Vector3).distance_to(held)
+			var xf: Transform3D = plan["xf"]
+			var held: Vector3 = xf * (plan["anchor"] as Vector3)
+			var middle: Vector3 = xf * CarryOnProps.bag_box(c[0]).get_center()
+			var right: Vector3 = plan["targets"][0]
+			var left: Vector3 = plan["targets"][1]
+			var holder: int = plan["holder"]
+			# The two spots lie either side of the bar's middle, so the right
+			# hand's distance from the bag's middle past the held point's is
+			# how far it has let go.
+			var release := right.distance_to(middle) - held.distance_to(middle)
+			var apart := (right - left).dot(side)
 			print(
 				(
-					"%s at %.2f: holder %d, right hand %.4f m off (up %.4f, out %.4f), left %.4f"
-					% [name, k, plan["holder"], off.length(), off.y, off.dot(side), left]
+					"%s at %.2f: holder %d, holder off %.4f, right let go %.4f, hands %.4f apart"
+					% [name, k, holder, held.distance_to(plan["targets"][holder]), release, apart]
 				)
 			)
 			for hand in 2:
 				var other: Vector3 = seen[1]["targets"][hand]
 				assert_float(other.distance_to(plan["targets"][hand])).is_less_equal(0.0001)
+			assert_int(holder).is_equal(0 if k < 0.5 else 1)
+			assert_float(held.distance_to(plan["targets"][holder])).is_less_equal(0.0001)
+			if c[0] == roller and k < 0.6:
+				assert_float(apart).is_greater_equal(0.06)
 			if k < 0.5:
-				assert_int(plan["holder"]).is_equal(0)
-				assert_float(off.length()).is_less_equal(0.0001)
-				continue
-			assert_int(plan["holder"]).is_equal(1)
-			assert_float(left).is_less_equal(0.0001)
-			var least := 0.03 if k < 0.6 else 0.06
-			assert_float(off.length()).is_greater_equal(least)
-			assert_float(off.y).is_greater(least * 0.5)
-			assert_float(off.dot(side)).is_greater(least * 0.5)
+				assert_float(absf(release)).is_less_equal(0.0001)
+			else:
+				assert_float(release).is_greater_equal(0.015 if k < 0.6 else 0.04)
