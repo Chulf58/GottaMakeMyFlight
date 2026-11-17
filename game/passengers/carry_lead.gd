@@ -725,8 +725,17 @@ static func plan(
 			by_middle["lift"] = 0.0
 			on_path = path(side, want, u, frame, frame.affine_inverse() * side, by_middle)
 		elif t > 1.0 - BACK_SHARE:
+			# From the side hang onto the back the pack's middle is kept clear too,
+			# not lifted and not rising (it goes round the hip, then in onto the
+			# back as the push fades): blended straight, it cut the corner behind
+			# the hip, the hips, the lower back and the thighs in the pack from k
+			# 0.62 to 0.70 (test_carry_back_hip_clear; crossing probe --lane, seed
+			# 1106001, Hips and Quad.L at k 0.67, board 606ae8a2).
 			var u := (t - 1.0 + BACK_SHARE) / BACK_SHARE
-			on_path = side.interpolate_with(want, smoothstep(0.0, 1.0, u))
+			by_middle["lift"] = 0.0
+			by_middle["rising"] = false
+			var side_local := frame.affine_inverse() * side
+			on_path = path(side, want, smoothstep(0.0, 1.0, u), frame, side_local, by_middle)
 		else:
 			on_path = path(start, side, t / (1.0 - BACK_SHARE), frame, bag["from"], by_middle)
 	else:
