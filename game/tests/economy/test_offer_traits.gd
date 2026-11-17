@@ -16,8 +16,10 @@ static func paired(up: String, down: String, level: int) -> Dictionary:
 func test_every_trait_has_a_label_a_tip_and_a_value_per_level() -> void:
 	for id in OfferTraits.UPS + OfferTraits.DOWNS:
 		var row: Dictionary = OfferTraits.TABLE[id]
-		for field in ["labels", "tips", "values"]:
-			assert_array(row[field]).override_failure_message(id).has_size(2)
+		assert_array(row["values"]).override_failure_message(id).has_size(2)
+		for index in 2:
+			assert_str(OfferTraits.label_of(id, index)).override_failure_message(id).is_not_empty()
+			assert_str(OfferTraits.tip_of(id, index)).override_failure_message(id).is_not_empty()
 		(
 			assert_bool(["", OfferTraits.NEEDS_BAGS, OfferTraits.NEEDS_SHOPS].has(row["needs"]))
 			. is_true()

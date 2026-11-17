@@ -69,11 +69,14 @@ const NOTE_LINE := 2
 ## Rail keys, and the history titles, of the two coral notices.
 const WARNING_KEY := &"offer_warning"
 const ENDED_KEY := &"offer_ended"
+## The English msgids of the rail card titles, the empty message and the fit line
+## when the offer fits the gates now, and when another gate would take it (any
+## other blocker keeps FlightFit's own words). Tests compare with these; each is
+## shown through tr() of the same literal, because the POT extractor reads only
+## literals.
 const WARNING_TITLE := "Low airport rating"
 const ENDED_TITLE := "Contract ended"
 const EMPTY_TEXT := "No offers right now. New offers arrive at midnight."
-## The card's fit line when the offer fits the gates now, and when another gate
-## would take it. Any other blocker keeps FlightFit's own words.
 const FITS_TEXT := "Fits your gates now"
 const NEEDS_GATE_TEXT := "Needs another gate"
 
@@ -123,21 +126,41 @@ var _hold := ClockHolds.NONE
 ## already been low, and contracts end at RatingFormula.LOW_DAYS_TO_END.
 static func warning_message(low_days: int) -> String:
 	var text := (
-		"Airlines are warning you: the airport rating is below %d stars."
-		% int(RatingFormula.WARN_BELOW)
+		TranslationServer
+		. translate("Airlines are warning you: the airport rating is below {stars} stars.")
+		. format({"stars": int(RatingFormula.WARN_BELOW)})
 	)
 	var left := RatingFormula.LOW_DAYS_TO_END - low_days
 	if left > 0:
-		text += " Contracts end after %d more low %s." % [left, "day" if left == 1 else "days"]
+		text += (
+			" "
+			+ (
+				TranslationServer
+				. translate_plural(
+					"Contracts end after {days} more low day.",
+					"Contracts end after {days} more low days.",
+					left
+				)
+				. format({"days": left})
+			)
+		)
 	return text
 
 
 ## What the player is told when an airline leaves because the rating stayed low.
 static func ended_message(airline: String, destination: String) -> String:
 	var text := (
-		"%s to %s has ended its contract: the airport rating stayed low." % [airline, destination]
+		TranslationServer
+		. translate(
+			"{airline} to {destination} has ended its contract: the airport rating stayed low."
+		)
+		. format({"airline": airline, "destination": destination})
 	)
-	return text + " Flights already issued still fly; no new days will."
+	return (
+		text
+		+ " "
+		+ TranslationServer.translate("Flights already issued still fly; no new days will.")
+	)
 
 
 ## Says when the first flight is if it is not today: "" when the sim would fly
@@ -151,7 +174,9 @@ static func first_flight_note(offer: Dictionary, now: int, taxi: Array) -> Strin
 	var ahead := first_day - GameCalendar.day_of(now)
 	if ahead <= 0:
 		return ""
-	return "first flight tomorrow" if ahead == 1 else "first flight on Day %d" % (first_day + 1)
+	if ahead == 1:
+		return TranslationServer.translate("first flight tomorrow")
+	return TranslationServer.translate("first flight on Day {day}").format({"day": first_day + 1})
 
 
 ## Ticks a contract accepted while the airport is closed needs between the
@@ -167,9 +192,9 @@ static func lead_text(ticks: int) -> String:
 	var minutes := -GameCalendar.floor_div(-ticks, GameCalendar.TICKS_PER_MINUTE)
 	var parts: PackedStringArray = []
 	if minutes >= 60:
-		parts.append("%d h" % (minutes / 60))
+		parts.append(TranslationServer.translate("{hours} h").format({"hours": minutes / 60}))
 	if minutes % 60 != 0:
-		parts.append("%d min" % (minutes % 60))
+		parts.append(TranslationServer.translate("{minutes} min").format({"minutes": minutes % 60}))
 	return " ".join(parts)
 
 
@@ -179,21 +204,40 @@ static func lead_text(ticks: int) -> String:
 static func card_lines(offer: Dictionary, note := "") -> PackedStringArray:
 	var minute: int = offer["departure_minute"]
 	var time := GameCalendar.clock_text(GameCalendar.tick_at(0, minute))
-	var size: String = offer["plane_size"]
 	var lines := PackedStringArray(
 		[
-			"%s to %s" % [offer["airline"], offer["destination"]],
-			"Departs %s daily" % time,
-			"%s plane" % size.capitalize(),
+			TranslationServer.translate("{airline} to {destination}").format(
+				{"airline": offer["airline"], "destination": offer["destination"]}
+			),
+			TranslationServer.translate("Departs {time} daily").format({"time": time}),
+			_plane_line(offer["plane_size"]),
 			(
-				"%d passengers booked   $%d per passenger"
-				% [offer["booked_passengers"], offer["fee_per_passenger"]]
+				TranslationServer
+				. translate_plural(
+					"{count} passenger booked   ${fee} per passenger",
+					"{count} passengers booked   ${fee} per passenger",
+					offer["booked_passengers"]
+				)
+				. format({"count": offer["booked_passengers"], "fee": offer["fee_per_passenger"]})
 			),
 		]
 	)
 	if note != "":
 		lines.insert(NOTE_LINE, note_line(note))
 	return lines
+
+
+## "Small plane", "Medium plane" or "Large plane" for a plane size.
+static func _plane_line(size: String) -> String:
+	match size:
+		PlaneClasses.SMALL:
+			return TranslationServer.translate("Small plane")
+		PlaneClasses.MEDIUM:
+			return TranslationServer.translate("Medium plane")
+		PlaneClasses.LARGE:
+			return TranslationServer.translate("Large plane")
+	push_error("OfferPanel._plane_line: unknown plane size '%s'" % size)
+	return ""
 
 
 ## What an offer pays each day it flies: booked passengers times the fee.
@@ -203,16 +247,16 @@ static func daily_earnings(offer: Dictionary) -> int:
 
 ## The earnings line on a card, the figure the three offers are compared by.
 static func earnings_text(offer: Dictionary) -> String:
-	return "$%d a day" % daily_earnings(offer)
+	return TranslationServer.translate("${amount} a day").format({"amount": daily_earnings(offer)})
 
 
 ## The card's fit line for `assessment` of an offer with `plane_size`: the short
 ## fits / needs-another-gate words, else FlightFit's reason.
 static func fit_line(assessment: Dictionary, plane_size: String) -> String:
 	if assessment["fits"]:
-		return FITS_TEXT
+		return TranslationServer.translate("Fits your gates now")
 	if assessment["blocker"] == FlightSim.BLOCKER_GATE and assessment["another_gate_helps"]:
-		return NEEDS_GATE_TEXT
+		return TranslationServer.translate("Needs another gate")
 	return FlightFit.text(assessment, plane_size)
 
 
@@ -430,7 +474,7 @@ func _build() -> void:
 	_sheet.add_child(sheet_column)
 	var title := Label.new()
 	title.name = "OfferTitle"
-	title.text = "Today's offers"
+	title.text = tr("Today's offers")
 	_style_label(title, &"HudTitle")
 	sheet_column.add_child(title)
 	_cards.name = "OfferCards"
@@ -487,7 +531,7 @@ func _refresh() -> void:
 	var offers := desk.board.open_offers()
 	for offer in offers:
 		_add_card(offer)
-	_button.text = "Offers (%d)" % offers.size()
+	_button.text = tr("Offers ({count})").format({"count": offers.size()})
 	_offers_waiting = offers.size() > 0
 	_style_button()
 	_say_idle()
@@ -499,7 +543,9 @@ func _refresh() -> void:
 ## the note names the lead its slot needs after the opening.
 func _note_for(offer: Dictionary) -> String:
 	if flights.opened_tick < 0:
-		return "first flight %s after opening" % lead_text(opening_lead_ticks())
+		return tr("first flight {lead} after opening").format(
+			{"lead": lead_text(opening_lead_ticks())}
+		)
 	return first_flight_note(offer, flights.tick, _fit_taxis.get(offer["id"], TaxiTimes.BASE))
 
 
@@ -558,7 +604,7 @@ func _refresh_warning() -> void:
 		)
 		if rail != null and _warning_text != _warning_posted:
 			_warning_posted = _warning_text
-			_post(rail, WARNING_KEY, WARNING_TITLE, _warning_text)
+			_post(rail, WARNING_KEY, tr("Low airport rating"), _warning_text)
 	_style_button()
 
 
@@ -568,7 +614,7 @@ func _on_contract_ended(contract: Dictionary) -> void:
 	if rail == null:
 		push_warning("OfferPanel: no alert rail to tell the player: %s" % _ended_text)
 	else:
-		_post(rail, ENDED_KEY, ENDED_TITLE, _ended_text)
+		_post(rail, ENDED_KEY, tr("Contract ended"), _ended_text)
 	_refresh_warning()
 	_refresh_fits()
 
@@ -713,11 +759,11 @@ func _add_card(offer: Dictionary) -> void:
 	_refusal_labels[id] = refusal
 	var buttons := VBoxContainer.new()
 	row.add_child(buttons)
-	var accept := _card_button("Accept", &"HudButtonGreen", id)
+	var accept := _card_button(tr("Accept", "button: accept an offer"), &"HudButtonGreen", id)
 	accept.pressed.connect(_on_accept.bind(id))
 	buttons.add_child(accept)
 	_accept_buttons[id] = accept
-	var decline := _card_button("Decline", &"HudButtonCoral", id)
+	var decline := _card_button(tr("Decline", "button: decline an offer"), &"HudButtonCoral", id)
 	decline.pressed.connect(_on_decline.bind(id))
 	buttons.add_child(decline)
 	_decline_buttons[id] = decline
@@ -731,8 +777,8 @@ func _add_card(offer: Dictionary) -> void:
 static func _trait_row(offer: Dictionary) -> HBoxContainer:
 	var traits: Dictionary = offer[FlightContract.TRAITS_KEY]
 	var plain := OfferTraits.is_plain(traits)
-	var labels := Array(OfferTraits.card_labels(traits)) + [OfferTraits.LOYAL_LABEL]
-	var tips := Array(OfferTraits.card_tips(traits)) + [OfferTraits.LOYAL_TIP]
+	var labels := Array(OfferTraits.card_labels(traits)) + [OfferTraits.loyal_label()]
+	var tips := Array(OfferTraits.card_tips(traits)) + [OfferTraits.loyal_tip()]
 	var shown: Array[bool] = [true, labels[1] != "", offer[OfferBoard.LOYAL_KEY]]
 	var row := HBoxContainer.new()
 	row.name = "Traits_%s" % offer["id"]
@@ -780,16 +826,23 @@ func _on_accept(id: String) -> void:
 	if problem != "":
 		_refuse(
 			id,
-			(
-				"Can't accept %s to %s: %s"
-				% [offer["airline"], offer["destination"], _in_words(problem)]
+			tr("Can't accept {airline} to {destination}: {reason}").format(
+				{
+					"airline": offer["airline"],
+					"destination": offer["destination"],
+					"reason": _in_words(problem)
+				}
 			)
 		)
 		return
 	var note := _note_for(offer)
 	if desk.board.accept(id, flights):
-		var then := ", %s" % note if note != "" else ""
-		_say("Accepted %s to %s%s" % [offer["airline"], offer["destination"], then])
+		var named := {"airline": offer["airline"], "destination": offer["destination"]}
+		if note == "":
+			_say(tr("Accepted {airline} to {destination}").format(named))
+		else:
+			named["note"] = note
+			_say(tr("Accepted {airline} to {destination}, {note}").format(named))
 
 
 ## FlightSim's refusal `problem` for the player: a clash names what it ran
@@ -799,17 +852,23 @@ func _on_accept(id: String) -> void:
 func _in_words(problem: String) -> String:
 	var ran_into := FlightLabel.clash_with(flights, problem)
 	if ran_into != "":
-		return "it clashes with %s" % ran_into
+		return tr("it clashes with {flight}").format({"flight": ran_into})
 	if problem.begins_with("contract ") and problem.contains(" clashes with "):
 		push_warning("OfferPanel: unreadable clash refusal from FlightSim: %s" % problem)
-		return "it clashes with another flight"
+		return tr("it clashes with another flight")
 	return problem
 
 
 ## What the sheet says when nothing was just done: EMPTY_TEXT with no open
 ## offer, else nothing. A closed sheet drops its last accept's confirmation.
 func _say_idle() -> void:
-	_say(EMPTY_TEXT if desk.board.open_offers().is_empty() else "")
+	_say(
+		(
+			tr("No offers right now. New offers arrive at midnight.")
+			if desk.board.open_offers().is_empty()
+			else ""
+		)
+	)
 
 
 ## Shows `text` under the cards, hiding the line when it is empty.

@@ -163,7 +163,7 @@ build_undo={
 
 locale/fallback="en"
 locale/translations=PackedStringArray("res://locale/en.po")
-locale/translations_pot_files=PackedStringArray("res://ui/rating_badge.gd")
+locale/translations_pot_files=PackedStringArray("res://ui/rating_badge.gd", "res://ui/flight_planner.gd", "res://ui/departures_board.gd", "res://ui/offer_panel.gd", "res://ui/runway_card.gd", "res://ui/planner_drag.gd", "res://economy/offer_traits.gd", "res://flights/flight_sim.gd", "res://airside/runway_works.gd", "res://airside/gate_desks.gd", "res://ui/flight_result_panel.gd", "res://passengers/flight_result.gd")
 
 [rendering]
 

@@ -123,7 +123,9 @@ func test_a_drop_on_a_fitting_row_moves_the_contract_to_that_gate() -> void:
 		"after the drop: gate=", _sim.contract_of("Y")["gate"], " message=", _planner.message_text()
 	)
 	assert_str(_sim.contract_of("Y")["gate"]).is_equal("C")
-	assert_str(_planner.message_text()).is_equal(DeparturesBoard.MOVED_TEXT % ["Rome", "C"])
+	assert_str(_planner.message_text()).is_equal(
+		DeparturesBoard.MOVED_TEXT.format({"destination": "Rome", "gate": "C"})
+	)
 	assert_object(_planner.bar_button("Y", 0).get_parent()).is_equal(_track("C"))
 	# A drag is not a click: nothing was selected on the way.
 	assert_str(_planner.selected_contract()).is_equal("")
@@ -230,7 +232,9 @@ func test_after_a_drop_an_issued_day_keeps_its_old_gate() -> void:
 		"after the drop: gate=", _sim.contract_of("X")["gate"], " message=", _planner.message_text()
 	)
 	assert_str(_sim.contract_of("X")["gate"]).is_equal("C")
-	assert_str(_planner.message_text()).is_equal(DeparturesBoard.MOVED_TEXT % ["Oslo", "C"])
+	assert_str(_planner.message_text()).is_equal(
+		DeparturesBoard.MOVED_TEXT.format({"destination": "Oslo", "gate": "C"})
+	)
 	# Today's flight was issued at A and stays there.
 	assert_object(_planner.bar_button("X", 0).get_parent()).is_equal(_track("A"))
 	# Control: the next day, not yet issued, is on C.

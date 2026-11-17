@@ -62,6 +62,8 @@ extends Control
 
 ## The input action for the toggle key, bound to B in project.godot.
 const ACTION := &"toggle_departures_board"
+## The key the toggle button names, bound in project.godot.
+const HOTKEY := "B"
 const SETTINGS_PATH := HudFlagSetting.PATH
 const SETTING_KEY := "departures_board"
 const TODAY_HEADING := "Today"
@@ -71,16 +73,14 @@ const NONE_TEXT := "None"
 const NO_OTHER_TEXT := "No other gate exists"
 const NO_FIT_TEXT := "No other gate fits this flight"
 const PICKER_LABEL := "Move to:"
-const MOVED_TEXT := "%s now uses gate %s for the days not yet issued"
-const TAKEN_TEXT := "%s is taken by the %s %s flight"
-const TAKEN_ONE_OFF_TEXT := "%s is taken by the %s flight"
-const BUSY_TEXT := "Gate %s is busy when this flight needs it"
+## The English msgids. Each is also written as a literal in its tr() call at the
+## use site, because the POT extractor reads only literals; tests compare with
+## these. The templates take String.format() with the named {placeholders}.
+const MOVED_TEXT := "{destination} now uses gate {gate} for the days not yet issued"
+const BUSY_TEXT := "Gate {gate} is busy when this flight needs it"
 const END_PROMPT := "End this contract?"
-## Formatted with the Exit fee in dollars.
-const END_FEE_PROMPT := "End this contract? Exit fee $%d"
-const ENDED_TEXT := "%s contract ended. Flights already booked still fly"
-const END_REFUSED_TEXT := "Can't end this contract: %s would have no taxi plan"
-const END_REFUSED_OTHER_TEXT := "Can't end this contract: another flight would have no taxi plan"
+const ENDED_TEXT := "{destination} contract ended. Flights already booked still fly"
+const END_REFUSED_TEXT := "Can't end this contract: {flight} would have no taxi plan"
 const MAX_ROWS_PER_DAY := 5
 
 @export var flights: FlightSim
@@ -147,18 +147,20 @@ static func entries_for(sim: FlightSim, tick: int, late := {}) -> Array[Dictiona
 	var tomorrows := _day_entries(sim, today + 1, false, tick, late)
 	var entries: Array[Dictionary] = []
 	if todays.is_empty() and tomorrows.is_empty():
-		entries.append({"kind": "text", "text": EMPTY_TEXT})
+		entries.append(
+			{"kind": "text", "text": TranslationServer.translate("No flights scheduled")}
+		)
 		return entries
-	entries.append({"kind": "heading", "text": TODAY_HEADING})
+	entries.append({"kind": "heading", "text": TranslationServer.translate("Today")})
 	_append_day(entries, todays)
-	entries.append({"kind": "heading", "text": TOMORROW_HEADING})
+	entries.append({"kind": "heading", "text": TranslationServer.translate("Tomorrow")})
 	_append_day(entries, tomorrows)
 	return entries
 
 
 static func _append_day(entries: Array[Dictionary], day_entries: Array[Dictionary]) -> void:
 	if day_entries.is_empty():
-		entries.append({"kind": "text", "text": NONE_TEXT})
+		entries.append({"kind": "text", "text": TranslationServer.translate("None")})
 	for entry in day_entries:
 		entries.append(entry)
 
@@ -202,7 +204,18 @@ static func _day_entries(
 			)
 		)
 	if kept.size() > MAX_ROWS_PER_DAY:
-		entries.append({"kind": "text", "text": "+%d more" % (kept.size() - MAX_ROWS_PER_DAY)})
+		(
+			entries
+			. append(
+				{
+					"kind": "text",
+					"text":
+					TranslationServer.translate("+{count} more").format(
+						{"count": kept.size() - MAX_ROWS_PER_DAY}
+					),
+				}
+			)
+		)
 	return entries
 
 
@@ -214,7 +227,7 @@ func _ready() -> void:
 	position = Vector2(HudLayout.MARGIN, LeftColumn.TOP)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_toggle.name = "DeparturesToggle"
-	_toggle.text = "Departures (B)"
+	_toggle.text = tr("Departures ({key})").format({"key": HOTKEY})
 	LeftColumn.size_toggle(_toggle)
 	_toggle.position.y = LeftColumn.slot_top(LeftColumn.SLOT_DEPARTURES) - LeftColumn.TOP
 	_toggle.toggle_mode = true
@@ -352,8 +365,14 @@ func counts_text() -> String:
 	if passengers == null:
 		return ""
 	return (
-		"Made %d  Missed %d  In terminal %d"
-		% [passengers.made_count(), passengers.missed_count(), passengers.active_count()]
+		tr("Made {made}  Missed {missed}  In terminal {active}")
+		. format(
+			{
+				"made": passengers.made_count(),
+				"missed": passengers.missed_count(),
+				"active": passengers.active_count(),
+			}
+		)
 	)
 
 
@@ -432,20 +451,20 @@ func _add_row(entry: Dictionary) -> void:
 	row.add_child(label)
 	var key: String = entry["key"]
 	var button := Button.new()
-	button.text = "Gate %s" % entry["gate"]
+	button.text = tr("Gate {gate}", "gate name").format({"gate": entry["gate"]})
 	button.focus_mode = Control.FOCUS_NONE
 	button.disabled = not entry["active"]
 	if entry["active"]:
 		button.name = "Gate_%s" % key
-		button.tooltip_text = "Move this flight to another gate"
+		button.tooltip_text = tr("Move this flight to another gate")
 		button.pressed.connect(_on_gate_pressed.bind(key))
 	row.add_child(button)
 	var end_btn: Button = null
 	if entry["active"]:
 		end_btn = Button.new()
 		end_btn.name = "End_%s" % key
-		end_btn.text = "End"
-		end_btn.tooltip_text = "End this airline contract"
+		end_btn.text = tr("End", "button: end the contract")
+		end_btn.tooltip_text = tr("End this airline contract")
 		end_btn.focus_mode = Control.FOCUS_NONE
 		end_btn.pressed.connect(_on_end_pressed.bind(key, entry["contract"]))
 		row.add_child(end_btn)
@@ -498,13 +517,13 @@ func _add_end_confirm(contract_id: String) -> void:
 	box.add_child(prompt)
 	var confirm := Button.new()
 	confirm.name = "ConfirmEnd"
-	confirm.text = "End contract"
+	confirm.text = tr("End contract")
 	confirm.focus_mode = Control.FOCUS_NONE
 	confirm.pressed.connect(_on_end_confirmed.bind(contract_id))
 	box.add_child(confirm)
 	var keep := Button.new()
 	keep.name = "KeepContract"
-	keep.text = "Keep"
+	keep.text = tr("Keep", "button: keep the contract")
 	keep.focus_mode = Control.FOCUS_NONE
 	keep.pressed.connect(_on_end_kept)
 	box.add_child(keep)
@@ -524,16 +543,18 @@ func _add_picker(entry: Dictionary) -> void:
 	if others.is_empty():
 		var note := Label.new()
 		note.name = "PickerNote"
-		note.text = NO_FIT_TEXT if any_other else NO_OTHER_TEXT
+		note.text = (
+			tr("No other gate fits this flight") if any_other else tr("No other gate exists")
+		)
 		if _gates.is_empty():
-			note.text = "No gate has a stand"
+			note.text = tr("No gate has a stand")
 		note.theme_type_variation = &"HudHint"
 		note.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		picker.add_child(note)
 	else:
 		var prompt := Label.new()
 		prompt.name = "PickerNote"
-		prompt.text = PICKER_LABEL
+		prompt.text = tr("Move to:")
 		prompt.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		picker.add_child(prompt)
 		for gate_id in others:
@@ -619,7 +640,15 @@ static func move_outcome(sim: FlightSim, contract_id: String, gate_id: String) -
 		return {"moved": false, "text": reason_text(sim, problem, gate_id)}
 	sim.reassign_gate(contract_id, gate_id)
 	var destination: String = sim.contract_of(contract_id)["destination"]
-	return {"moved": true, "text": MOVED_TEXT % [destination, gate_id]}
+	return {
+		"moved": true,
+		"text":
+		(
+			TranslationServer
+			. translate("{destination} now uses gate {gate} for the days not yet issued")
+			. format({"destination": destination, "gate": gate_id})
+		),
+	}
 
 
 ## The End confirm's question for `contract_id`: END_PROMPT, or END_FEE_PROMPT
@@ -627,7 +656,11 @@ static func move_outcome(sim: FlightSim, contract_id: String, gate_id: String) -
 ## row and the flight planner both ask this.
 static func end_prompt(sim: FlightSim, contract_id: String) -> String:
 	var fee := sim.end_fee(contract_id)
-	return END_FEE_PROMPT % fee if fee > 0 else END_PROMPT
+	if fee > 0:
+		return TranslationServer.translate("End this contract? Exit fee ${fee}").format(
+			{"fee": fee}
+		)
+	return TranslationServer.translate("End this contract?")
 
 
 ## Ends the contract as the player (FlightSim.end_contract_by_player, which has
@@ -639,7 +672,11 @@ static func end_outcome(sim: FlightSim, contract_id: String) -> String:
 	if refusal != "":
 		return refusal
 	if sim.end_contract_by_player(contract_id):
-		return ENDED_TEXT % sim.contract_of(contract_id)["destination"]
+		return (
+			TranslationServer
+			. translate("{destination} contract ended. Flights already booked still fly")
+			. format({"destination": sim.contract_of(contract_id)["destination"]})
+		)
 	return ""
 
 
@@ -664,8 +701,14 @@ static func end_refusal_words(sim: FlightSim, contract_id: String) -> String:
 		sim, parts.is_empty(), id if parts.is_empty() else parts["contract"]
 	)
 	if label == "":
-		return END_REFUSED_OTHER_TEXT
-	return END_REFUSED_TEXT % label
+		return TranslationServer.translate(
+			"Can't end this contract: another flight would have no taxi plan"
+		)
+	return (
+		TranslationServer
+		. translate("Can't end this contract: {flight} would have no taxi plan")
+		. format({"flight": label})
+	)
 
 
 ## Moves the contract to `gate_id`, or says why not. FlightSim names the
@@ -699,19 +742,28 @@ func friendly_reason(reason: String, gate_id: String) -> String:
 
 static func reason_text(sim: FlightSim, reason: String, gate_id: String) -> String:
 	var found := FlightLabel.parse_clash(reason)
+	var busy := TranslationServer.translate("Gate {gate} is busy when this flight needs it")
 	if found.is_empty():
-		return BUSY_TEXT % gate_id
+		return busy.format({"gate": gate_id})
 	var label := FlightLabel.parts(sim, found["is_flight"], found["id"])
 	if label.is_empty():
-		return BUSY_TEXT % gate_id
-	var subject := "Gate %s" % found["gate"]
+		return busy.format({"gate": gate_id})
+	var subject := TranslationServer.translate("Gate {gate}", "gate name").format(
+		{"gate": found["gate"]}
+	)
 	if found["where"] == "on the runway":
-		subject = "The runway"
+		subject = TranslationServer.translate("The runway")
 	elif found["where"] == "on the taxi lane":
-		subject = "The taxi lane"
+		subject = TranslationServer.translate("The taxi lane")
 	if label[1] == "":
-		return TAKEN_ONE_OFF_TEXT % [subject, label[0]]
-	return TAKEN_TEXT % [subject, label[0], label[1]]
+		return TranslationServer.translate("{subject} is taken by the {time} flight").format(
+			{"subject": subject, "time": label[0]}
+		)
+	return (
+		TranslationServer
+		. translate("{subject} is taken by the {time} {destination} flight")
+		. format({"subject": subject, "time": label[0], "destination": label[1]})
+	)
 
 
 ## B toggles; a held key's repeats and modified presses are left alone.

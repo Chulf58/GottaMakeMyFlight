@@ -30,16 +30,10 @@ extends CanvasLayer
 
 ## The input action for the toggle key, bound to P in project.godot.
 const ACTION := &"toggle_flight_planner"
+const HOTKEY := "P"
 ## One above the Offers and Runway sheets (TopRow.SHEET_LAYER), so their buttons
 ## do not draw over the full-screen sheet; dialogs (layer 10) stay above it.
 const LAYER := TopRow.SHEET_LAYER + 1
-const TOGGLE_TEXT := "Planner (P)"
-const TITLE_TEXT := "Flight planner"
-const HINT_TEXT := (
-	"Click a flight to move it or end its contract, or drag it to another gate."
-	+ " Days already issued keep their gate."
-)
-const EMPTY_TEXT := "No gate has a stand yet, so there is nothing to plan."
 ## The gate header's width, in layout pixels.
 const HEAD_W := 80.0
 const ROW_H := 44.0
@@ -235,7 +229,7 @@ func refresh() -> void:
 
 func _build() -> void:
 	_toggle.name = "PlannerToggle"
-	_toggle.text = TOGGLE_TEXT
+	_toggle.text = tr("Planner ({key})").format({"key": HOTKEY})
 	_toggle.toggle_mode = true
 	_toggle.focus_mode = Control.FOCUS_NONE
 	_toggle.theme = BuildMenu.HUD_THEME
@@ -287,7 +281,7 @@ func _build() -> void:
 	_scroll.add_child(_rows)
 	column.add_child(_scroll)
 	_summary.name = "PlannerSummary"
-	_summary.text = HINT_TEXT
+	_summary.text = _hint_text()
 	_summary.theme_type_variation = &"HudSmall"
 	column.add_child(_summary)
 	_actions.name = "PlannerActions"
@@ -303,7 +297,7 @@ func _build_header() -> HBoxContainer:
 	var header := HBoxContainer.new()
 	var title := Label.new()
 	title.name = "PlannerTitle"
-	title.text = TITLE_TEXT
+	title.text = tr("Flight planner")
 	title.theme_type_variation = &"HudTitle"
 	header.add_child(title)
 	_day_label.name = "PlannerDay"
@@ -312,7 +306,7 @@ func _build_header() -> HBoxContainer:
 	header.add_child(_day_label)
 	var close_btn := Button.new()
 	close_btn.name = "PlannerClose"
-	close_btn.text = "Close"
+	close_btn.text = tr("Close")
 	close_btn.focus_mode = Control.FOCUS_NONE
 	close_btn.pressed.connect(close)
 	header.add_child(close_btn)
@@ -391,7 +385,7 @@ func _refresh() -> void:
 
 func _rebuild() -> void:
 	_rebuilds += 1
-	_day_label.text = "Day %d" % (_shown_day + 1)
+	_day_label.text = tr("Day {day}", "calendar day").format({"day": _shown_day + 1})
 	for child in _rows.get_children():
 		_rows.remove_child(child)
 		child.queue_free()
@@ -399,7 +393,7 @@ func _rebuild() -> void:
 	if _shown.is_empty():
 		var empty := Label.new()
 		empty.name = "PlannerEmpty"
-		empty.text = EMPTY_TEXT
+		empty.text = tr("No gate has a stand yet, so there is nothing to plan.")
 		_rows.add_child(empty)
 	for row in _shown:
 		_add_row(row)
@@ -423,7 +417,7 @@ func _add_row(row: Dictionary) -> void:
 	box.border_color = GateColours.TEXT
 	head.add_theme_stylebox_override("panel", box)
 	var label := Label.new()
-	label.text = "Gate %s" % gate_id
+	label.text = tr("Gate {gate}", "gate name").format({"gate": gate_id})
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.add_theme_color_override("font_color", GateColours.TEXT)
@@ -477,14 +471,16 @@ func _make_bar(bar: Dictionary) -> Button:
 func _bar_tooltip(bar: Dictionary) -> String:
 	var airline := "" if bar["airline"] == "" else "  %s" % bar["airline"]
 	return (
-		"%s%s\nGate %s, held %s to %s"
-		% [
-			bar["label"],
-			airline,
-			bar["gate"],
-			GameCalendar.clock_text(bar["start"]),
-			GameCalendar.clock_text(bar["end"]),
-		]
+		tr("{label}{airline}\nGate {gate}, held {from} to {to}")
+		. format(
+			{
+				"label": bar["label"],
+				"airline": airline,
+				"gate": bar["gate"],
+				"from": GameCalendar.clock_text(bar["start"]),
+				"to": GameCalendar.clock_text(bar["end"]),
+			}
+		)
 	)
 
 
@@ -601,6 +597,14 @@ func _selected_bar() -> Dictionary:
 	return {}
 
 
+## The line under the sheet while no flight is selected.
+func _hint_text() -> String:
+	return tr(
+		# gdlint:ignore = max-line-length
+		"Click a flight to move it or end its contract, or drag it to another gate. Days already issued keep their gate."
+	)
+
+
 ## The summary line and the Move to / End choices for the selected bar.
 func _show_actions() -> void:
 	for child in _actions.get_children():
@@ -608,17 +612,19 @@ func _show_actions() -> void:
 		child.queue_free()
 	var bar := _selected_bar() if _selected != "" else {}
 	if bar.is_empty():
-		_summary.text = HINT_TEXT
+		_summary.text = _hint_text()
 		return
-	_summary.text = "%s  Gate %s" % [bar["label"], bar["gate"]]
+	_summary.text = tr("{label}  Gate {gate}", "gate name").format(
+		{"label": bar["label"], "gate": bar["gate"]}
+	)
 	if _confirming:
 		_add_end_confirm()
 		return
 	_add_move_choices(bar)
 	var end := Button.new()
 	end.name = "EndContract"
-	end.text = "End"
-	end.tooltip_text = "End this airline contract"
+	end.text = tr("End", "button: end the contract")
+	end.tooltip_text = tr("End this airline contract")
 	end.focus_mode = Control.FOCUS_NONE
 	end.pressed.connect(_on_end_pressed)
 	_actions.add_child(end)
@@ -632,11 +638,13 @@ func _add_move_choices(bar: Dictionary) -> void:
 	note.name = "MoveNote"
 	if fitting.is_empty():
 		note.text = (
-			DeparturesBoard.NO_FIT_TEXT if choices["any_other"] else DeparturesBoard.NO_OTHER_TEXT
+			tr("No other gate fits this flight")
+			if choices["any_other"]
+			else tr("No other gate exists")
 		)
 		note.theme_type_variation = &"HudHint"
 	else:
-		note.text = DeparturesBoard.PICKER_LABEL
+		note.text = tr("Move to:")
 	_actions.add_child(note)
 	for gate_id in fitting:
 		var choice := Button.new()
@@ -655,13 +663,13 @@ func _add_end_confirm() -> void:
 	_actions.add_child(prompt)
 	var confirm := Button.new()
 	confirm.name = "ConfirmEnd"
-	confirm.text = "End contract"
+	confirm.text = tr("End contract")
 	confirm.focus_mode = Control.FOCUS_NONE
 	confirm.pressed.connect(_on_end_confirmed)
 	_actions.add_child(confirm)
 	var keep := Button.new()
 	keep.name = "KeepContract"
-	keep.text = "Keep"
+	keep.text = tr("Keep", "button: keep the contract")
 	keep.focus_mode = Control.FOCUS_NONE
 	keep.pressed.connect(_on_end_kept)
 	_actions.add_child(keep)

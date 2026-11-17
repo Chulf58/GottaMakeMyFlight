@@ -38,3 +38,667 @@ msgstr ""
 #: ui/rating_badge.gd
 msgid "Days counted: {days} of {window}"
 msgstr ""
+
+#: ui/flight_planner.gd
+msgid "Planner ({key})"
+msgstr ""
+
+#: ui/flight_planner.gd
+msgid "Flight planner"
+msgstr ""
+
+#: ui/flight_planner.gd
+msgid "Close"
+msgstr ""
+
+#: ui/flight_planner.gd
+msgctxt "calendar day"
+msgid "Day {day}"
+msgstr ""
+
+#: ui/flight_planner.gd
+msgid "No gate has a stand yet, so there is nothing to plan."
+msgstr ""
+
+#: ui/departures_board.gd ui/flight_planner.gd
+msgctxt "gate name"
+msgid "Gate {gate}"
+msgstr ""
+
+#: ui/flight_planner.gd
+msgid "{label}{airline}\nGate {gate}, held {from} to {to}"
+msgstr ""
+
+#: ui/flight_planner.gd
+msgid "Click a flight to move it or end its contract, or drag it to another gate. Days already issued keep their gate."
+msgstr ""
+
+#: ui/flight_planner.gd
+msgctxt "gate name"
+msgid "{label}  Gate {gate}"
+msgstr ""
+
+#: ui/departures_board.gd ui/flight_planner.gd
+msgctxt "button: end the contract"
+msgid "End"
+msgstr ""
+
+#: ui/departures_board.gd ui/flight_planner.gd
+msgid "End this airline contract"
+msgstr ""
+
+#: ui/departures_board.gd ui/flight_planner.gd
+msgid "No other gate fits this flight"
+msgstr ""
+
+#: ui/departures_board.gd ui/flight_planner.gd
+msgid "No other gate exists"
+msgstr ""
+
+#: ui/departures_board.gd ui/flight_planner.gd
+msgid "Move to:"
+msgstr ""
+
+#: ui/departures_board.gd ui/flight_planner.gd
+msgid "End contract"
+msgstr ""
+
+#: ui/departures_board.gd ui/flight_planner.gd
+msgctxt "button: keep the contract"
+msgid "Keep"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "No flights scheduled"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "Today"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "Tomorrow"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "None"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "+{count} more"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "Departures ({key})"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "Made {made}  Missed {missed}  In terminal {active}"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "Move this flight to another gate"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "No gate has a stand"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "{destination} now uses gate {gate} for the days not yet issued"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "End this contract? Exit fee ${fee}"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "End this contract?"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "{destination} contract ended. Flights already booked still fly"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "Can't end this contract: another flight would have no taxi plan"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "Can't end this contract: {flight} would have no taxi plan"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "Gate {gate} is busy when this flight needs it"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "The runway"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "The taxi lane"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "{subject} is taken by the {time} flight"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "{subject} is taken by the {time} {destination} flight"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Airlines are warning you: the airport rating is below {stars} stars."
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "{airline} to {destination} has ended its contract: the airport rating stayed low."
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Flights already issued still fly; no new days will."
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "first flight tomorrow"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "first flight on Day {day}"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "{hours} h"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "{minutes} min"
+msgstr ""
+
+#: airside/gate_desks.gd ui/offer_panel.gd
+msgid "{airline} to {destination}"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Departs {time} daily"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Small plane"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Medium plane"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Large plane"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "${amount} a day"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Fits your gates now"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Needs another gate"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Today's offers"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Offers ({count})"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "first flight {lead} after opening"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Low airport rating"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Contract ended"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgctxt "button: accept an offer"
+msgid "Accept"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgctxt "button: decline an offer"
+msgid "Decline"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Can't accept {airline} to {destination}: {reason}"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Accepted {airline} to {destination}"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Accepted {airline} to {destination}, {note}"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "it clashes with {flight}"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "it clashes with another flight"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "No offers right now. New offers arrive at midnight."
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Contracts end after {days} more low day."
+msgid_plural "Contracts end after {days} more low days."
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/offer_panel.gd
+msgid "{count} passenger booked   ${fee} per passenger"
+msgid_plural "{count} passengers booked   ${fee} per passenger"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/runway_card.gd
+msgid "Small runway, {length} m"
+msgstr ""
+
+#: ui/runway_card.gd
+msgid "Medium runway, {length} m"
+msgstr ""
+
+#: ui/runway_card.gd
+msgid "Large runway, {length} m"
+msgstr ""
+
+#: ui/runway_card.gd
+msgid "Runway"
+msgstr ""
+
+#: ui/runway_card.gd
+msgid "Upgrade runway"
+msgstr ""
+
+#: ui/runway_card.gd
+msgid "Next: {runway}, ${price}, works take {hours} hour"
+msgid_plural "Next: {runway}, ${price}, works take {hours} hours"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/planner_drag.gd
+msgid "Drop to move {destination} to gate {gate}. Days already issued keep their gate."
+msgstr ""
+
+#: ui/planner_drag.gd
+msgid "Drop the flight on another gate's row."
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Plain terms"
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "No catch, and 10% less pay."
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Loyal: +10%"
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "This airline is loyal to you: its offers pay 10% more."
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Top fare +{percent}%"
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Shoppers"
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Many shoppers"
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Bag cover"
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Full bag cover"
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Full flight"
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Packed flight"
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Rush crowd"
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Big rush crowd"
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Heavy bags"
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Very heavy bags"
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Signing bonus ${amount}"
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Loyal airline"
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Miss fine ${amount}"
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Odd hours"
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Exit fee ${amount}"
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Pays {percent}% more per passenger."
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "{percent}% of passengers come early with time to shop (usually 30%)."
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "A missed bag costs {percent}% of the fee (usually 50%)."
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "A missed bag costs nothing (usually 50% of the fee)."
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Booked from the top half of the plane's range."
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Booked from the top quarter of the plane's range."
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "{percent}% of passengers arrive late in a rush (usually 15%)."
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "A missed bag costs the whole fee (usually 50%)."
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Pays ${amount} once, when this contract's first flight leaves."
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "After {days} days this flight leaves, the airline's later offers pay {percent}% more."
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Each passenger who misses this flight costs ${amount}."
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Departs at 06:00 or 22:00, outside the usual 07:00 to 21:00."
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Ending this contract in its first {days} days costs ${amount}."
+msgstr ""
+
+#: flights/flight_sim.gd
+msgid "the taxiway move would strand flight {id}"
+msgstr ""
+
+#: airside/runway_works.gd
+msgid "Not enough money: the {size} runway works cost ${price}"
+msgstr ""
+
+#: airside/runway_works.gd
+msgid "the runway is too short for a {size} plane"
+msgstr ""
+
+#: airside/runway_works.gd
+msgctxt "runway size"
+msgid "small"
+msgstr ""
+
+#: airside/runway_works.gd
+msgctxt "runway size"
+msgid "medium"
+msgstr ""
+
+#: airside/runway_works.gd
+msgctxt "runway size"
+msgid "large"
+msgstr ""
+
+#: airside/runway_works.gd
+msgid "Runway works are already booked"
+msgstr ""
+
+#: airside/runway_works.gd
+msgid "The last runway works are still held in the timetable"
+msgstr ""
+
+#: airside/runway_works.gd
+msgid "The runway is already the largest size"
+msgstr ""
+
+#: airside/runway_works.gd
+msgid "The timetable leaves no quiet stretch for the works"
+msgstr ""
+
+#: airside/runway_works.gd
+msgid "Works on the {size} runway start {start} and end {finish}"
+msgstr ""
+
+#: airside/runway_works.gd
+msgid "Works on the {size} runway started {start} and end {finish}"
+msgstr ""
+
+#: airside/runway_works.gd
+msgid "at {time}"
+msgstr ""
+
+#: airside/runway_works.gd
+msgid "tomorrow at {time}"
+msgstr ""
+
+#: airside/runway_works.gd
+msgid "on Day {day} at {time}"
+msgstr ""
+
+#: airside/gate_desks.gd
+msgid "Waiting for taxiway works"
+msgstr ""
+
+#: airside/gate_desks.gd
+msgid "The west taxiway has moved"
+msgstr ""
+
+#: airside/gate_desks.gd
+msgid "The east taxiway has moved"
+msgstr ""
+
+#: airside/gate_desks.gd
+msgid "Taxiway moved"
+msgstr ""
+
+#: airside/gate_desks.gd
+msgid "{flight} moved to Gate {gate}"
+msgstr ""
+
+#: airside/gate_desks.gd
+msgid "{flight} moves to Gate {gate}"
+msgstr ""
+
+#: airside/gate_desks.gd
+msgid "Flights moved"
+msgstr ""
+
+#: airside/gate_desks.gd
+msgid "{count} flight moved to Gate {gate}"
+msgid_plural "{count} flights moved to Gate {gate}"
+msgstr[0] ""
+msgstr[1] ""
+
+#: airside/gate_desks.gd
+msgid "{count} flight moves to Gate {gate}"
+msgid_plural "{count} flights move to Gate {gate}"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/flight_result_panel.gd
+msgid "Dismiss"
+msgstr ""
+
+#: ui/flight_result_panel.gd
+msgid "{airline} {destination}"
+msgstr ""
+
+#: ui/flight_result_panel.gd
+msgid "{title} result"
+msgstr ""
+
+#: ui/flight_result_panel.gd
+msgid "Made {made}   Missed {missed}"
+msgstr ""
+
+#: ui/flight_result_panel.gd
+msgid "{count}  {reason}"
+msgstr ""
+
+#: ui/flight_result_panel.gd
+msgid "{count}  Other"
+msgstr ""
+
+#: passengers/flight_result.gd
+msgid "Waiting outside: check-in full"
+msgstr ""
+
+#: passengers/flight_result.gd
+msgid "Missed the flight"
+msgstr ""
+
+#: passengers/flight_result.gd
+msgid "No check-in desk to go to"
+msgstr ""
+
+#: passengers/flight_result.gd
+msgid "No security scanner or lane to go to"
+msgstr ""
+
+#: passengers/flight_result.gd
+msgid "Waiting outside a full queue"
+msgstr ""
+
+#: passengers/flight_result.gd
+msgid "No walkable route"
+msgstr ""
+
+#: passengers/flight_result.gd
+msgid "The exit to the plane was blocked"
+msgstr ""
+
+#: passengers/flight_result.gd
+msgid "Held up by crowds at the gate"
+msgstr ""
+
+#: passengers/flight_result.gd
+msgid "At the gate, but not boarded in time"
+msgstr ""
+
+#: passengers/flight_result.gd
+msgid "Left the gate too late for the plane"
+msgstr ""
+
+#: passengers/flight_result.gd
+msgid "Arrived after the doors closed"
+msgstr ""
+
+#: passengers/flight_result.gd
+msgid "Still walking to check-in"
+msgstr ""
+
+#: passengers/flight_result.gd
+msgid "Still queuing for check-in"
+msgstr ""
+
+#: passengers/flight_result.gd
+msgid "Still at the check-in desk"
+msgstr ""
+
+#: passengers/flight_result.gd
+msgid "Still walking to security"
+msgstr ""
+
+#: passengers/flight_result.gd
+msgid "Still queuing for security"
+msgstr ""
+
+#: passengers/flight_result.gd
+msgid "Still at security"
+msgstr ""
+
+#: passengers/flight_result.gd
+msgid "Still walking to the gate"
+msgstr ""
+
+#: passengers/flight_result.gd
+msgid "Still at the cafe"
+msgstr ""
+
+#: passengers/flight_result.gd
+msgid "Still at the toilet"
+msgstr ""
+
+#: passengers/flight_result.gd
+msgid "Still at a shop"
+msgstr ""
+
+#: passengers/flight_result.gd
+msgid "Waiting for drop-off"
+msgstr ""
+
+#: passengers/flight_result.gd
+msgid "Never arrived: the terminal has no entrance"
+msgstr ""
+
+#: passengers/flight_result.gd
+msgid "Did not arrive before the doors closed"
+msgstr ""
