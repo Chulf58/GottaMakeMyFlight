@@ -43,6 +43,8 @@ func test_runner_walks_over_its_put_in_and_runs_outside_it() -> void:
 	var before_it := {"walk": 0, "run": 0}
 	var after_it := {"walk": 0, "run": 0}
 	var worst_speed := 0.0
+	var was := ""
+	var changes: Array[String] = []
 	for n in 3000:
 		p.late = true
 		w.world.step()
@@ -58,6 +60,11 @@ func test_runner_walks_over_its_put_in_and_runs_outside_it() -> void:
 		var past := SecurityLooks.return_walk_mm(w.world.sim, p)
 		if is_nan(past):
 			continue
+		# Each change between the two blends from the pose drawn (no pop).
+		if clip != was and was != "":
+			var fade: ClipCrossfade = node.get_meta(&"crossfade")
+			changes.append("%s>%s blending=%s" % [was, clip, fade.blending()])
+		was = clip
 		var tally := after_it
 		if past < -SecurityLooks.PUT_IN_BEFORE_MM:
 			tally = before_it
@@ -76,8 +83,8 @@ func test_runner_walks_over_its_put_in_and_runs_outside_it() -> void:
 		print("tick %d past %.0f mm: %s" % [w.world.clock.tick, past, clip])
 	print(
 		(
-			"before %s, inside %s, after %s, worst speed off %.4f"
-			% [before_it, inside, after_it, worst_speed]
+			"before %s, inside %s, after %s, worst speed off %.4f, changes %s"
+			% [before_it, inside, after_it, worst_speed, changes]
 		)
 	)
 	assert_bool(w.cleared.has(p.id)).is_true()
@@ -87,6 +94,7 @@ func test_runner_walks_over_its_put_in_and_runs_outside_it() -> void:
 	assert_int(after_it["walk"]).is_equal(0)
 	assert_int(before_it["run"] + after_it["run"]).is_greater(1)
 	assert_float(worst_speed).is_less(SPEED_EPS)
+	assert_array(changes).contains_exactly(["run>walk blending=true", "walk>run blending=true"])
 
 
 ## Drawing the runner changes nothing in the sim: one world drawn every tick
