@@ -2,8 +2,9 @@ extends RefCounted
 ## A strip of plates of a pulled roller changing hands at the west wall
 ## (board 578435a7, PullSide), for roller_trail_probe.gd in a windowed run. The
 ## first guest seen walking along the west wall (in column WEST_X or the one
-## before it, the wall on column 10's west edge; headless, its changes of hand
-## start in column 11) with
+## before it, counted from the reference terminal's own column 0, so the site's
+## starter offset is taken off the guest's cell; the wall is on column 10's west
+## edge; headless, its changes of hand start in column 11) with
 ## its roller in a move from one pull to the other is plated every
 ## EVERY_FRAMES frames through the move and AFTER_FRAMES
 ## frames after it. Each plate is taken from the first of FRAMINGS that passes
@@ -86,7 +87,7 @@ func look(
 			await _look_second(tree, main, props, p, body, bag, state)
 		return
 	if _id < 0:
-		if not swapping or p.at.x > WEST_X:
+		if not swapping or p.at.x - _terminal_x(main) > WEST_X:
 			return
 		_id = p.id
 		print("PULL_STRIP start id=%d cell=%s place %d -> %d" % [p.id, p.at, was, place])
@@ -111,6 +112,12 @@ func look(
 		if problem.contains(BODY):
 			_first_done = true
 			done = second_saved
+
+
+## The reference terminal's column 0 on `main`'s grid: the airport site moves the
+## terminal by its starter offset, and WEST_X is a terminal column.
+static func _terminal_x(main: Node3D) -> int:
+	return ReferenceTerminal.offset_on((main.get_node("BuildMode") as BuildMode).grid).x
 
 
 ## A look at a second guest's change of hand: one plate of it, kept when the

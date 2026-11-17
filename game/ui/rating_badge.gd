@@ -16,8 +16,9 @@ const LEFT := float(HudLayout.MARGIN + HudLayout.MONEY_W + HudLayout.GAP)
 const STAR_COUNT := 5
 const STAR_SIZE := 22.0
 const STAR_GAP := 2.0
+## The English msgid of the no-data label. Tests compare against it; the label
+## itself is tr("No flights yet"), because the POT extractor reads only literals.
 const NO_DATA_TEXT := "No flights yet"
-const NO_DATA_TIP := "No flights yet: the rating starts when passengers make or miss a flight."
 @export var rating: AirportRating
 
 var _card := PanelContainer.new()
@@ -65,33 +66,51 @@ func shown_stars() -> float:
 
 ## The number beside the stars, or "No flights yet".
 func summary_text() -> String:
-	return "%.1f" % rating.stars() if rating.has_data() else NO_DATA_TEXT
+	return "%.1f" % rating.stars() if rating.has_data() else tr("No flights yet")
 
 
 ## The card's tooltip: made share, mood, the incident adjustment (only while it
 ## is not zero) and days counted over the window.
 func tooltip_text() -> String:
 	if not rating.has_data():
-		return NO_DATA_TIP
+		return tr("No flights yet: the rating starts when passengers make or miss a flight.")
 	var parts := rating.parts()
-	var adjustment := ""
-	if parts["adjustment"] != 0.0:
-		adjustment = "Incident adjustment: %+.1f stars\n" % parts["adjustment"]
-	return (
-		(
-			"Airport rating: %.1f of 5\nMade it: %d%% (%d of %d passengers)\nMood: %d of %d\n"
-			% [
-				parts["stars"],
-				roundi(parts["made_share"] * 100.0),
-				parts["made"],
-				parts["passengers"],
-				roundi(parts["mood_avg"]),
-				PassengerSim.MOOD_MAX,
-			]
-		)
-		+ adjustment
-		+ "Days counted: %d of %d" % [parts["days"], RatingFormula.WINDOW_DAYS]
+	var made_line := tr_n(
+		"Made it: {share}% ({made} of {count} passenger)",
+		"Made it: {share}% ({made} of {count} passengers)",
+		parts["passengers"]
 	)
+	made_line = (
+		made_line
+		. format(
+			{
+				"share": roundi(parts["made_share"] * 100.0),
+				"made": parts["made"],
+				"count": parts["passengers"],
+			}
+		)
+	)
+	var lines: Array[String] = [
+		tr("Airport rating: {stars} of {max}").format(
+			{"stars": "%.1f" % parts["stars"], "max": STAR_COUNT}
+		),
+		made_line,
+		tr("Mood: {mood} of {max}").format(
+			{"mood": roundi(parts["mood_avg"]), "max": PassengerSim.MOOD_MAX}
+		),
+	]
+	if parts["adjustment"] != 0.0:
+		lines.append(
+			tr("Incident adjustment: {amount} stars").format(
+				{"amount": "%+.1f" % parts["adjustment"]}
+			)
+		)
+	lines.append(
+		tr("Days counted: {days} of {window}").format(
+			{"days": parts["days"], "window": RatingFormula.WINDOW_DAYS}
+		)
+	)
+	return "\n".join(lines)
 
 
 func refresh() -> void:

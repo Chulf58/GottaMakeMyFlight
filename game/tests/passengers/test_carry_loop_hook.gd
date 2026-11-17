@@ -1,13 +1,16 @@
 class_name TestCarryLoopHook
 extends GdUnitTestSuite
-## A hand holding a backpack by its grab loop (CarryArm.loop_grip) hooks its
-## Fingertips back toward the palm and bends its Thumb_Tip by its skeleton's
-## CarryArmPose.LOOP_HOOK_DEGREES and LOOP_THUMB_DEGREES, on a male and a female
-## body and on both hands, with nothing but the body telling the arm which
-## skeleton it is (so a move that never runs CarryArmPose.pose_arms() still
-## hooks), and the grip does not move (the Fingers bone stays at its rest;
-## board 4e5a26f0). Control: with no hook the same tips point straight on
-## past the grip, so the hand was engaged. Bone poses only: a headless baked
+## A hand holding a backpack by its grab loop (CarryArm.loop_grip) closes round
+## the loop like a grip: it bends its Fingers at the knuckles, its Fingertips
+## and its Thumb_Tip by its skeleton's CarryArmPose.LOOP_CURL_DEGREES,
+## LOOP_HOOK_DEGREES and LOOP_THUMB_DEGREES, so the tips come back nearer the
+## wrist than the knuckles are, on a male and a female body and on both hands,
+## with nothing but the body telling the arm which skeleton it is (so a move
+## that never runs CarryArmPose.pose_arms() still curls). The grip moves with
+## the curled Fingers bone (user-ruled 2026-11-17, "Curl the whole finger",
+## board 4e5a26f0), and the reach puts that curled grip on its target, where
+## the pack hangs from it. Control: with no curl the same tips point straight
+## on past the grip, so the hand was engaged. Bone poses only: a headless baked
 ## mesh has no skin (anti-pattern a-headless-count-of-body-points-inside-a-
 ## carried-bag-reads-0), so how the hand looks is left to the windowed probe.
 
@@ -41,125 +44,213 @@ func _rig(body: int, side: int, tagged := true) -> Dictionary:
 	return {"node": node, "skeleton": skeleton, "arm": arm, "shoulder": shoulder.origin}
 
 
-## The grip (world), the Fingertips bone's axis and the Thumb_Tip's bend
-## from its rest about its z axis (degrees), with the hook and the thumb bend
-## at `degrees` (NAN: the arm's own, from the body), read as the skeleton is
-## drawn (after its modifiers).
+## The hand as drawn (after its modifiers), with the curl, the hook and the
+## thumb bend at `degrees` (NAN: the arm's own, from the body): the grip
+## (world, as CarryOnProps.grip_of() reads it), the Fingertips bone's axis,
+## the tips' end, the wrist and the knuckles, and the Fingers' and the
+## Thumb_Tip's bends from rest about their z axis (degrees).
 func _pose(rig: Dictionary, degrees: float) -> Dictionary:
 	var arm: CarryArm = rig["arm"]
 	var skeleton: Skeleton3D = rig["skeleton"]
+	arm.loop_curl_degrees = degrees
 	arm.loop_hook_degrees = degrees
 	arm.loop_thumb_degrees = degrees
-	await get_tree().process_frame
-	await get_tree().process_frame
-	await skeleton.skeleton_updated
+	arm.loop_fold_degrees = degrees
+	await _drawn(skeleton)
 	var suffix: String = [".R", ".L"][arm.side]
 	var xf := skeleton.global_transform
 	var fingers := xf * skeleton.get_bone_global_pose(skeleton.find_bone("Fingers" + suffix))
 	var tips := xf * skeleton.get_bone_global_pose(skeleton.find_bone("Fingertips" + suffix))
-	var thumb := skeleton.find_bone("Thumb_Tip" + suffix)
-	var thumb_rest := skeleton.get_bone_rest(thumb).basis.get_rotation_quaternion()
-	var thumb_bend := (thumb_rest.inverse() * skeleton.get_bone_pose_rotation(thumb)).get_euler()
+	var wrist := xf * skeleton.get_bone_global_pose(skeleton.find_bone("Hand" + suffix))
 	var shoulder: Vector3 = xf * (rig["shoulder"] as Vector3)
 	var level := arm.reach_target - shoulder
 	level.y = 0.0
 	return {
 		"grip": fingers.origin + fingers.basis.y.normalized() * CarryOnProps.GRIP_ALONG_M,
 		"tip": tips.basis.y.normalized(),
+		"fingers": fingers.basis.y.normalized(),
 		# The tip's end, taken a Fingers bone's length along the Fingertips.
 		"end": tips.origin + tips.basis.y.normalized() * tips.origin.distance_to(fingers.origin),
+		"wrist": wrist.origin,
+		"knuckles": fingers.origin,
 		"level": level.normalized(),
-		"thumb": rad_to_deg(thumb_bend.z),
+		"curl": _bend_of(skeleton, "Fingers" + suffix),
+		"thumb": _bend_of(skeleton, "Thumb_Tip" + suffix),
+		"fold": _bend_of(skeleton, "Thumb" + suffix),
 	}
 
 
-func test_the_loop_hand_hooks_its_fingertips_and_keeps_its_grip() -> void:
+## Bone `name`'s turn from its rest about its own z axis (degrees), as posed.
+func _bend_of(skeleton: Skeleton3D, name: String) -> float:
+	var bone := skeleton.find_bone(name)
+	var rest := skeleton.get_bone_rest(bone).basis.get_rotation_quaternion()
+	return rad_to_deg((rest.inverse() * skeleton.get_bone_pose_rotation(bone)).get_euler().z)
+
+
+func test_the_loop_hand_closes_round_the_loop_and_its_grip_reaches_the_target() -> void:
 	for body in BODIES:
 		for side in [0, 1]:
 			var rig := _rig(body, side)
-			var hook := CarryArmPose.loop_hook_degrees(rig["node"])
+			var curl := CarryArmPose.loop_curl_degrees(rig["node"])
+			var mirror := 1.0 if side == 0 else -1.0
 			var straight: Dictionary = await _pose(rig, 0.0)
-			var hooked: Dictionary = await _pose(rig, NAN)
-			var tag := "body %d side %d hook %.0f" % [body, side, hook]
-			var level: Vector3 = hooked["level"]
+			var closed: Dictionary = await _pose(rig, NAN)
+			var tag := "body %d side %d curl %.0f" % [body, side, curl]
+			var wrist: Vector3 = closed["wrist"]
+			var tip_back := (closed["end"] as Vector3).distance_to(wrist)
+			var knuckle_back := (closed["knuckles"] as Vector3).distance_to(wrist)
+			var drop: float = (closed["grip"] as Vector3).y - (closed["end"] as Vector3).y
+			# How far the curled Fingers point off the upright plane along the
+			# hand's level way, and how far down (_palm_down()).
+			var across := (closed["level"] as Vector3).cross(Vector3.UP).normalized()
+			var sideways := absf((closed["fingers"] as Vector3).dot(across))
+			var down: float = -(closed["fingers"] as Vector3).y
+			var miss := (closed["grip"] as Vector3).distance_to(
+				(rig["arm"] as CarryArm).reach_target
+			)
 			print(
 				(
-					"LOOP_HOOK %s straight up=%.2f on=%.2f hooked up=%.2f on=%.2f drop=%.3f grip_moved=%.4f"
+					(
+						"LOOP_HOOK %s straight on=%.2f closed curl=%.1f tip_to_wrist=%.3f"
+						+ " knuckle_to_wrist=%.3f drop=%.3f sideways=%.2f down=%.2f miss=%.4f"
+					)
 					% [
 						tag,
-						straight["tip"].y,
-						straight["tip"].dot(level),
-						hooked["tip"].y,
-						hooked["tip"].dot(level),
-						(hooked["grip"] as Vector3).y - (hooked["end"] as Vector3).y,
-						(hooked["grip"] as Vector3).distance_to(straight["grip"]),
+						straight["tip"].dot(straight["level"]),
+						closed["curl"] * mirror,
+						tip_back,
+						knuckle_back,
+						drop,
+						sideways,
+						down,
+						miss,
 					]
 				)
 			)
-			# Control: unhooked, the tips point on past the grip.
-			assert_float(straight["tip"].dot(level)).override_failure_message(tag).is_greater(0.5)
-			# Hooked: back toward the palm under the hand, and the tip's end well
-			# above the pack's top under the loop (5.8 cm under the grip;
-			# CarryLead.BACK_LOOP_UP over carry_probe_checks LOOP_BOX's floor).
-			# The hand's roll, and so the tips' height, follows the clip's.
-			assert_float(hooked["tip"].dot(level)).override_failure_message(tag).is_less(-0.3)
-			var drop: float = (hooked["grip"] as Vector3).y - (hooked["end"] as Vector3).y
-			assert_float(drop).override_failure_message(tag).is_less(0.035)
-			var moved := (hooked["grip"] as Vector3).distance_to(straight["grip"])
-			assert_float(moved).override_failure_message(tag).is_less(0.001)
+			# Control: uncurled, the tips point on past the grip.
+			var on: float = straight["tip"].dot(straight["level"])
+			assert_float(on).override_failure_message(tag).is_greater(0.5)
+			# Closed: the Fingers bent at the knuckles by the skeleton's curl
+			# (mirrored on the left hand), and the tips' ends back nearer the
+			# wrist than the knuckles are, a fist round the loop. With only the
+			# Fingertips bent (main before this change) the Fingers stayed at
+			# rest and the tips ended 11 to 12 cm from the wrist, past the
+			# knuckles.
+			assert_float(closed["curl"] * mirror).override_failure_message(tag).is_greater(60.0)
+			assert_float(tip_back).override_failure_message(tag).is_less(knuckle_back - 0.015)
+			# Palm down: the curled Fingers point down in the upright plane of
+			# the hand's way, round the loop. Rolled as the forearm left it, the
+			# female left fist curled sideways and floated 1.5 cm over the loop
+			# (board 4e5a26f0).
+			assert_float(sideways).override_failure_message(tag).is_less(0.1)
+			assert_float(down).override_failure_message(tag).is_greater(0.9)
+			# The curled tips stay above the floor of the region the clip check
+			# leaves to the holding hand (carry_probe_checks LOOP_BOX z 0.205)
+			# under a grip held CarryLead.BACK_LOOP_UP over the loop top (0.235).
+			var floor_under := CarryOnProps.BACKPACK_LOOP.z + CarryLead.BACK_LOOP_UP.z - 0.205
+			assert_float(drop).override_failure_message(tag).is_less(floor_under)
+			# The reach aims the curled grip, the point the pack hangs from.
+			assert_float(miss).override_failure_message(tag).is_less(0.01)
 			# The thumb bend is the skeleton's, mirrored on the left hand.
-			var thumb := CarryArmPose.loop_thumb_degrees(rig["node"]) * (1.0 if side == 0 else -1.0)
-			assert_float(hooked["thumb"]).override_failure_message(tag).is_equal_approx(thumb, 1.0)
+			var thumb := CarryArmPose.loop_thumb_degrees(rig["node"]) * mirror
+			assert_float(closed["thumb"]).override_failure_message(tag).is_equal_approx(thumb, 1.0)
+			# And the whole Thumb folds in by the skeleton's fold, mirrored.
+			var fold := CarryArmPose.loop_fold_degrees(rig["node"]) * mirror
+			assert_float(closed["fold"]).override_failure_message(tag).is_equal_approx(fold, 1.0)
 
 
-## Each skeleton takes its own value: the male bodies the first, the female
+## The fist turns palm down only as far as the pack has turned to hang plumb
+## (CarryArm.loop_roll, CarryLead plan "loop_yaw"): at 0 the hand keeps the
+## roll its forearm gives it, so on some hands the curled Fingers point off to
+## one side (the female left fist curled sideways and floated over the loop,
+## board 4e5a26f0); at 1 every hand's curled Fingers point straight down in
+## the upright plane along its way. The reach puts the grip on its target at
+## both.
+func test_the_loop_hand_rolls_palm_down_as_the_pack_turns_plumb() -> void:
+	var off_at_zero := 0.0
+	for body in BODIES:
+		for side in [0, 1]:
+			var rig := _rig(body, side)
+			var arm: CarryArm = rig["arm"]
+			var by_roll := {}
+			for roll in [0.0, 1.0]:
+				arm.loop_roll = roll
+				var hand: Dictionary = await _pose(rig, NAN)
+				var across := (hand["level"] as Vector3).cross(Vector3.UP).normalized()
+				var fingers: Vector3 = hand["fingers"]
+				var miss := (hand["grip"] as Vector3).distance_to(arm.reach_target)
+				by_roll[roll] = [absf(fingers.dot(across)), -fingers.y, miss]
+			var tag := "body %d side %d" % [body, side]
+			print("LOOP_ROLL %s roll0=%s roll1=%s" % [tag, by_roll[0.0], by_roll[1.0]])
+			off_at_zero = maxf(off_at_zero, by_roll[0.0][0])
+			assert_float(by_roll[1.0][0]).override_failure_message(tag).is_less(0.1)
+			assert_float(by_roll[1.0][1]).override_failure_message(tag).is_greater(0.9)
+			for roll in [0.0, 1.0]:
+				assert_float(by_roll[roll][2]).override_failure_message(tag).is_less(0.01)
+	# At 0 the forearm's roll is kept: some hand curls well off to one side.
+	assert_float(off_at_zero).is_greater(0.3)
+
+
+## Each skeleton takes its own values: the male bodies the first, the female
 ## the second.
 func test_each_skeleton_takes_its_own_hook() -> void:
 	var male := auto_free(Node3D.new()) as Node3D
 	male.set_meta(&"body", 0)
 	var female := auto_free(Node3D.new()) as Node3D
 	female.set_meta(&"body", PassengerLooks.PER_VARIANT)
+	assert_float(CarryArmPose.loop_curl_degrees(male)).is_equal(CarryArmPose.LOOP_CURL_DEGREES[0])
+	assert_float(CarryArmPose.loop_curl_degrees(female)).is_equal(CarryArmPose.LOOP_CURL_DEGREES[1])
 	assert_float(CarryArmPose.loop_hook_degrees(male)).is_equal(CarryArmPose.LOOP_HOOK_DEGREES[0])
 	assert_float(CarryArmPose.loop_hook_degrees(female)).is_equal(CarryArmPose.LOOP_HOOK_DEGREES[1])
-	assert_float(CarryArmPose.LOOP_HOOK_DEGREES[0]).is_greater(0.0)
-	assert_float(CarryArmPose.LOOP_HOOK_DEGREES[1]).is_greater(0.0)
+	for degrees in CarryArmPose.LOOP_CURL_DEGREES + CarryArmPose.LOOP_HOOK_DEGREES:
+		assert_float(degrees).is_greater(0.0)
 	assert_float(CarryArmPose.loop_thumb_degrees(male)).is_equal(CarryArmPose.LOOP_THUMB_DEGREES[0])
 	assert_float(CarryArmPose.loop_thumb_degrees(female)).is_equal(
 		CarryArmPose.LOOP_THUMB_DEGREES[1]
 	)
+	assert_float(CarryArmPose.loop_fold_degrees(male)).is_equal(CarryArmPose.LOOP_FOLD_DEGREES[0])
+	assert_float(CarryArmPose.loop_fold_degrees(female)).is_equal(CarryArmPose.LOOP_FOLD_DEGREES[1])
 
 
-## A skeleton with no passenger body above it gets no hook and no thumb bend
-## unless they are set: its loop hand's Fingertips and Thumb_Tip stay as the
-## clip has them (it warns once), never a guessed skeleton's values. Control:
-## with both set on the same arm, the loop hand is bent (the path ran).
+## A skeleton with no passenger body above it gets no curl, no hook and no
+## thumb bend unless they are set: its loop hand's Fingers, Fingertips and
+## Thumb_Tip stay as the clip has them (it warns once), never a guessed
+## skeleton's values. Control: with all three set on the same arm, the loop
+## hand is bent (the path ran).
 func test_a_skeleton_with_no_body_is_not_hooked() -> void:
 	var rig := _rig(0, 0, false)
 	var arm: CarryArm = rig["arm"]
 	var skeleton: Skeleton3D = rig["skeleton"]
-	var tips := skeleton.find_bone("Fingertips.R")
-	var thumb := skeleton.find_bone("Thumb_Tip.R")
+	var bones: Array[int] = []
+	for name in ["Fingers.R", "Fingertips.R", "Thumb_Tip.R", "Thumb.R"]:
+		bones.append(skeleton.find_bone(name))
 	arm.loop_grip = false
 	await _drawn(skeleton)
-	var clip_tips := skeleton.get_bone_pose_rotation(tips)
-	var clip_thumb := skeleton.get_bone_pose_rotation(thumb)
+	var clip: Array[Quaternion] = []
+	for bone in bones:
+		clip.append(skeleton.get_bone_pose_rotation(bone))
 	arm.loop_grip = true
 	await _drawn(skeleton)
-	var tips_off := rad_to_deg(clip_tips.angle_to(skeleton.get_bone_pose_rotation(tips)))
-	var thumb_off := rad_to_deg(clip_thumb.angle_to(skeleton.get_bone_pose_rotation(thumb)))
+	var off: Array[float] = []
+	for i in bones.size():
+		off.append(rad_to_deg(clip[i].angle_to(skeleton.get_bone_pose_rotation(bones[i]))))
+	arm.loop_curl_degrees = 80.0
 	arm.loop_hook_degrees = 90.0
 	arm.loop_thumb_degrees = -90.0
+	arm.loop_fold_degrees = 30.0
 	await _drawn(skeleton)
-	var set_off := rad_to_deg(clip_tips.angle_to(skeleton.get_bone_pose_rotation(tips)))
+	var set_off := rad_to_deg(clip[1].angle_to(skeleton.get_bone_pose_rotation(bones[1])))
+	var curl_off := rad_to_deg(clip[0].angle_to(skeleton.get_bone_pose_rotation(bones[0])))
 	print(
 		(
-			"LOOP_HOOK no body tips_off=%.2f thumb_off=%.2f set_off=%.1f"
-			% [tips_off, thumb_off, set_off]
+			"LOOP_HOOK no body fingers_off=%.2f tips_off=%.2f thumb_off=%.2f set_off=%.1f curl_off=%.1f"
+			% [off[0], off[1], off[2], set_off, curl_off]
 		)
 	)
-	assert_float(tips_off).is_less(0.5)
-	assert_float(thumb_off).is_less(0.5)
+	for o in off:
+		assert_float(o).is_less(0.5)
 	assert_float(set_off).is_greater(45.0)
+	assert_float(curl_off).is_greater(45.0)
 
 
 ## Waits until `skeleton` has been drawn again after its modifiers.

@@ -47,13 +47,25 @@ const BACK_LEAD_SIDE_M := 0.15
 ## (backpack_pickup_probe, seed 2811556352, board 41c159bc).
 const BACK_HANG_BELOW_M := 0.3
 const STALL_HANG_BELOW_M := 0.1
-## And the pack is held this far over its grab loop (its own frame; world:
-## divided by the bag's scale): held at the loop, the fingers went into the
-## pack's top (CarryArm.loop_grip keeps them over it). 2 mm under the probes'
-## GRIP_ON cap (spike/carry_float_check.gd GRIP_ON_M, 3 cm; game code does not
-## load the spike): held at the cap itself, float error read gaps of 0.0300001
-## m over it (test_activity_bags, sofa and shower, board 41c159bc).
-const BACK_LOOP_UP := Vector3(0.0, 0.0, 0.028)
+## And the pack is held this far over its grab loop's top (its own frame;
+## world: divided by the bag's scale), so the curled fist (CarryArm.loop_grip,
+## palm down) closes round the loop: its fingers go down into the loop block
+## and stay above the pack's top beside it. Swept over a real pack
+## (tools/blender/out/loop_hand, fit mode; male and female, both hands, both
+## pack turns): at 0.005 no hand point is in the pack outside the loop, the
+## fingers' lowest point is 0.207 (male) and 0.217 (female) in the pack's
+## frame (the loop block's floor is 0.205) and 20 to 24 finger points are in
+## the loop; at 0 the male fingers reach 0.202, at 0.028 (before, 2 mm under
+## the probes' 3 cm GRIP_ON cap) every fist floated 4 to 8 mm over the loop.
+## Not shifted along the loop: 1 to 3 cm either way only took fingers out.
+const BACK_LOOP_UP := Vector3(0.0, 0.0, 0.005)
+## While the pack is still turning to hang plumb (loop_yaw() weight under 1,
+## at a move's ends) it is held higher, up to this at weight 0 (2 mm under
+## the probes' 3 cm GRIP_ON cap, spike/carry_float_check.gd GRIP_ON_M): held at
+## BACK_LOOP_UP over a pack still tilted as it left its tray, the fist went into
+## its top beside the loop (crossing probe --lane, seed 1106001, passenger 2
+## tray>back at k 0.28, 60 to 76 points against 30 on main).
+const BACK_LOOP_UP_TURNING := Vector3(0.0, 0.0, 0.028)
 ## Off the back into the hand, the hand eases into its carry pose from this
 ## share of the carry (not 0.6): eased in while the pack still turned on its
 ## lifted, pushed-out path, the grip came between the two and the pack into the
@@ -641,9 +653,11 @@ static func swap_release(
 ## grip, its own frame), "targets", "weights", "keeps", "drops" (each hand's,
 ## right then left; keeps floor_keep(), flags "from_floor" and "to_floor";
 ## drops CarryStoop.drops), "loops" (each hand's CarryArm.loop_grip: a backpack
-## led on or off the back outside a stall, held BACK_LOOP_UP over its loop),
-## "loop_yaw" (loop_yaw()'s weight for CarryPlace to turn a loop-held pack
-## plumb; RollerPark plans omit it, so read it with a 0.0 default)}.
+## led on or off the back outside a stall, held from BACK_LOOP_UP_TURNING to
+## BACK_LOOP_UP over its loop as it turns), "loop_yaw" (loop_yaw()'s weight for
+## CarryPlace to turn a loop-held pack plumb and for CarryLeadArms to roll the
+## fist palm down, CarryArm.loop_roll; RollerPark plans omit it, so read it
+## with a 0.0 default)}.
 ## A backpack goes on and off the back through a hang at the leading hand's
 ## side (back_side()); a roller to or from the floor and the pull parks on its
 ## wheels for the hand to change grip (RollerPark.plan()).
@@ -688,8 +702,13 @@ static func plan(
 		# A shoulder bag is lifted on and off the shoulder by its strap's top.
 		loose = body["strap_top"]
 	var back_move := (off_back or on_back) and not stall
+	# The share of the way a loop-held pack has turned to hang plumb under the
+	# hand (loop_yaw()), which the arm also rolls its fist palm down by.
+	var loop_yaw := 0.0
+	if back_move and ph["holder"] == lead:
+		loop_yaw = smoothstep(0.0, LOOP_YAW_SHARE, t) * smoothstep(0.0, LOOP_YAW_SHARE, 1.0 - t)
 	if back_move:
-		loose += BACK_LOOP_UP / body["scale"]
+		loose += BACK_LOOP_UP_TURNING.lerp(BACK_LOOP_UP, loop_yaw) / body["scale"]
 	var below := BACK_HANG_BELOW_M if back_move else STALL_HANG_BELOW_M
 	# A roller is held by its bar, which moves with its rods (in a stall they
 	# stay in, so it is held where the hand had it, BAR_PALM_M off the bar).
@@ -885,9 +904,6 @@ static func plan(
 		# going down with the stoop (to its top, not its handle lower down), the
 		# knee came into the case (board item c7b0e7be).
 		hips = STALL_HIPS
-	var loop_yaw := 0.0
-	if back_move and ph["holder"] == lead:
-		loop_yaw = smoothstep(0.0, LOOP_YAW_SHARE, t) * smoothstep(0.0, LOOP_YAW_SHARE, 1.0 - t)
 	return {
 		"holder": ph["holder"],
 		"xf": xf,
