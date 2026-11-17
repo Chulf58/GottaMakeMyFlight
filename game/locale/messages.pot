@@ -38,3 +38,323 @@ msgstr ""
 #: ui/rating_badge.gd
 msgid "Days counted: {days} of {window}"
 msgstr ""
+
+#: ui/alert_stack.gd
+msgid "Day {day} {time}"
+msgstr ""
+
+#: ui/alert_stack.gd
+msgid "{when}  {title}\n{detail}"
+msgstr ""
+
+#: ui/alert_stack.gd
+msgid "still up"
+msgstr ""
+
+#: ui/alert_stack.gd
+msgid "cleared {time}"
+msgstr ""
+
+#: ui/alert_stack.gd
+msgid "{when}  {title}, {end}"
+msgstr ""
+
+#: ui/alert_stack.gd
+msgid "Alerts"
+msgstr ""
+
+#: ui/alert_stack.gd
+msgid "Alert history and the on/off switch for alert cards"
+msgstr ""
+
+#: ui/alert_stack.gd
+msgid "Open the alert history"
+msgstr ""
+
+#: ui/alert_stack.gd
+msgid "Alert history"
+msgstr ""
+
+#: ui/alert_stack.gd
+msgid "Show alert cards"
+msgstr ""
+
+#: ui/alert_stack.gd
+msgid "Alerts ({count})"
+msgstr ""
+
+#: ui/alert_stack.gd
+msgid "Click to look at it"
+msgstr ""
+
+#: ui/alert_stack.gd
+msgid "No alerts yet"
+msgstr ""
+
+#: ui/alert_stack.gd
+msgid "+{count} more"
+msgstr ""
+
+#: ui/alert_sources.gd
+msgid "{count} desk full · {waiting} waiting"
+msgid_plural "{count} desks full · {waiting} waiting"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/alert_sources.gd
+msgid "Check-in queue full"
+msgstr ""
+
+#: ui/alert_sources.gd
+msgid "{count} lane full · {waiting} waiting"
+msgid_plural "{count} lanes full · {waiting} waiting"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/alert_sources.gd
+msgid "Security queue full"
+msgstr ""
+
+#: ui/alert_sources.gd
+msgid "{count} passenger can't get where they are going"
+msgid_plural "{count} passengers can't get where they are going"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/alert_sources.gd
+msgid "No walkable route"
+msgstr ""
+
+#: ui/alert_sources.gd
+msgid "{count} passenger waits for a gate seat or a place to stand"
+msgid_plural "{count} passengers wait for a gate seat or a place to stand"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/alert_sources.gd
+msgid "Gate full"
+msgstr ""
+
+#: ui/alert_sources.gd
+msgid "{count} station is closed · hire staff on the Staff card"
+msgid_plural "{count} stations are closed · hire staff on the Staff card"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/alert_sources.gd
+msgid "Nobody on duty"
+msgstr ""
+
+#: ui/alert_sources.gd
+msgid "{count} station is closed · staff can't reach the staff spot"
+msgid_plural "{count} stations are closed · staff can't reach the staff spot"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/alert_sources.gd
+msgid "Staff can't get to work"
+msgstr ""
+
+#: ui/dirty_alert.gd
+msgid "The terminal is getting dirty. Hire a cleaner on the Staff card."
+msgstr ""
+
+#: ui/dirty_alert.gd
+msgid "The terminal is getting dirty. Place bins near the bar and toilets, or hire more cleaners."
+msgstr ""
+
+#: ui/dirty_alert.gd
+msgid "Dirty terminal"
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "Inspector visit tomorrow"
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "Holiday rush tomorrow"
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "A VIP wants to fly"
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "A VIP wants to fly on {flight}. The first passenger to arrive for it is the VIP."
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "your rating drops by {penalty} if the VIP misses the flight."
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "An airline asks a favour"
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "An airline asks you to fit {extra} more passengers onto {flight}."
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "{bonus} money now, and {extra} more passengers paying their fees."
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "The VIP made the flight"
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "The VIP boarded in a good mood. You earn {bonus} money."
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "The VIP missed the flight"
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "Your rating drops by {penalty}."
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "The inspector was happy"
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "You earn {bonus} money."
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "The inspector was not happy"
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "The inspector found {found}. Your rating drops by {penalty}."
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "{count} mess on the floor ({allowed} allowed)"
+msgid_plural "{count} messes on the floor ({allowed} allowed)"
+msgstr[0] ""
+msgstr[1] ""
+
+#: incidents/incident_copy.gd
+msgid "{count} passenger stuck in a full queue ({allowed} allowed)"
+msgid_plural "{count} passengers stuck in a full queue ({allowed} allowed)"
+msgstr[0] ""
+msgstr[1] ""
+
+#: incidents/incident_copy.gd
+msgid "{first} and {second}"
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "none"
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "today's"
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "tomorrow's"
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "day {day}'s"
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "half a star"
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "{count} star"
+msgid_plural "{count} stars"
+msgstr[0] ""
+msgstr[1] ""
+
+#: incidents/incident_copy.gd
+msgid "{count} stars"
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "VIP for {flight}"
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "{day} {time} flight"
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "The airport inspector visits tomorrow, some time between {from} and {to}."
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "The inspector looks at messes on the floor and at queues that are full."
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "Reward: {bonus} money if there are at most {max_messes} messes and at most {max_full_queue} passengers stuck in a full queue at the visit."
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "If it fails: your rating drops by {penalty}."
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "Tomorrow is a holiday. {total} extra passengers are booked, spread over {count} of tomorrow's flights: {list}."
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "Reward: every extra passenger pays the usual fee."
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "If it fails: queues grow, and passengers who miss their flight lower your rating as usual."
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "{bonus} money if the VIP makes the flight in a good mood (a mood of {good_mood} or higher when boarding)."
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "the extra passengers need check-in and security too, and any who miss the flight lower your rating as usual."
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "The VIP made the flight, but their mood was below {good_mood} when boarding, so there is no bonus."
+msgstr ""
+
+#: ui/incident_panel.gd
+msgid "Reward: {reward}"
+msgstr ""
+
+#: ui/incident_panel.gd
+msgid "If it fails: {failure}"
+msgstr ""
+
+#: ui/incident_panel.gd
+msgid "The clock stays paused until you choose."
+msgstr ""
+
+#: ui/incident_panel.gd
+#: ui/big_firsts.gd
+#: ui/unlock_guide.gd
+msgid "The clock goes on when you close this."
+msgstr ""
+
+#: ui/big_firsts.gd
+msgid "Big news at the airport"
+msgstr ""
+
+#: ui/big_firsts.gd
+msgid "The runway works are done. Bigger planes can land now, so Offers can bring them flights."
+msgstr ""
+
+#: ui/big_firsts.gd
+msgid "A big event has come up. Its notice says what it is and what you can do about it."
+msgstr ""
+
+#: ui/unlock_guide.gd
+msgid "Your airport has grown"
+msgstr ""

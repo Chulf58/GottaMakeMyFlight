@@ -31,6 +31,10 @@ const ROUTE_HOLD_TICKS := GameCalendar.TICKS_PER_MINUTE
 ## The most places one card's clicks step through.
 const MAX_TARGETS := 8
 
+## The words are built in static functions, which cannot call tr() (an Object
+## method), so they go through this instance's tr() and tr_n().
+static var _translator := RefCounted.new()
+
 
 ## The queue-full causes: none, one or both of QUEUE_CHECKIN and QUEUE_SECURITY.
 static func queue_full(sim: PassengerSim) -> Array[Dictionary]:
@@ -44,9 +48,21 @@ static func queue_full(sim: PassengerSim) -> Array[Dictionary]:
 		(desks if sim.layout.desks.has(station) else lanes).append(station)
 	var out: Array[Dictionary] = []
 	if not desks.is_empty():
-		out.append(_queue_cause(sim, full, desks, QUEUE_CHECKIN, "Check-in queue full", "desk"))
+		var detail := _translator.tr_n(
+			"{count} desk full · {waiting} waiting",
+			"{count} desks full · {waiting} waiting",
+			desks.size()
+		)
+		var title := _translator.tr("Check-in queue full")
+		out.append(_queue_cause(sim, full, desks, QUEUE_CHECKIN, title, detail))
 	if not lanes.is_empty():
-		out.append(_queue_cause(sim, full, lanes, QUEUE_SECURITY, "Security queue full", "lane"))
+		var detail := _translator.tr_n(
+			"{count} lane full · {waiting} waiting",
+			"{count} lanes full · {waiting} waiting",
+			lanes.size()
+		)
+		var title := _translator.tr("Security queue full")
+		out.append(_queue_cause(sim, full, lanes, QUEUE_SECURITY, title, detail))
 	return out
 
 
@@ -64,12 +80,16 @@ static func no_route(sim: PassengerSim) -> Array[Dictionary]:
 			targets.append(Vector3(at.x, 0.0, at.z))
 	if count == 0:
 		return []
-	var who := "1 passenger can't" if count == 1 else "%d passengers can't" % count
+	var detail := _translator.tr_n(
+		"{count} passenger can't get where they are going",
+		"{count} passengers can't get where they are going",
+		count
+	)
 	return [
 		{
 			"key": NO_ROUTE,
-			"title": "No walkable route",
-			"detail": "%s get where they are going" % who,
+			"title": _translator.tr("No walkable route"),
+			"detail": detail.format({"count": count}),
 			"targets": targets,
 			"show_after": ROUTE_HOLD_TICKS,
 			"clear_after": ROUTE_HOLD_TICKS,
@@ -92,12 +112,16 @@ static func gate_full(sim: PassengerSim) -> Array[Dictionary]:
 		if targets.size() < MAX_TARGETS:
 			var at := sim.world_position(sim.get_passenger(id))
 			targets.append(Vector3(at.x, 0.0, at.z))
-	var who := "1 passenger waits" if held.size() == 1 else "%d passengers wait" % held.size()
+	var detail := _translator.tr_n(
+		"{count} passenger waits for a gate seat or a place to stand",
+		"{count} passengers wait for a gate seat or a place to stand",
+		held.size()
+	)
 	return [
 		{
 			"key": GATE_FULL,
-			"title": "Gate full",
-			"detail": "%s for a gate seat or a place to stand" % who,
+			"title": _translator.tr("Gate full"),
+			"detail": detail.format({"count": held.size()}),
 			"targets": targets,
 			"show_after": ROUTE_HOLD_TICKS,
 			"clear_after": ROUTE_HOLD_TICKS,
@@ -129,37 +153,35 @@ static func closed_stations(sim: PassengerSim) -> Array[Dictionary]:
 			MissSignals.SPOT_BLOCKED_REASON, MissSignals.UNREACHABLE_REASON:
 				spots.append(station)
 	if not idle.is_empty():
-		var what := _stations_phrase(idle.size(), "is", "are")
+		var detail := _translator.tr_n(
+			"{count} station is closed · hire staff on the Staff card",
+			"{count} stations are closed · hire staff on the Staff card",
+			idle.size()
+		)
+		var title := _translator.tr("Nobody on duty")
 		out.append(
 			_station_cause(
-				sim,
-				idle,
-				NO_STAFF,
-				"Nobody on duty",
-				"%s closed · hire staff on the Staff card" % what,
-				QUEUE_HOLD_TICKS
+				sim, idle, NO_STAFF, title, detail.format({"count": idle.size()}), QUEUE_HOLD_TICKS
 			)
 		)
 	if not spots.is_empty():
-		var what := _stations_phrase(spots.size(), "is", "are")
+		var detail := _translator.tr_n(
+			"{count} station is closed · staff can't reach the staff spot",
+			"{count} stations are closed · staff can't reach the staff spot",
+			spots.size()
+		)
+		var title := _translator.tr("Staff can't get to work")
 		out.append(
 			_station_cause(
 				sim,
 				spots,
 				STAFF_SPOT,
-				"Staff can't get to work",
-				"%s closed · staff can't reach the staff spot" % what,
+				title,
+				detail.format({"count": spots.size()}),
 				ROUTE_HOLD_TICKS
 			)
 		)
 	return out
-
-
-## "1 station is" or "3 stations are".
-static func _stations_phrase(count: int, one: String, many: String) -> String:
-	if count == 1:
-		return "1 station %s" % one
-	return "%d stations %s" % [count, many]
 
 
 static func _station_cause(
@@ -194,13 +216,14 @@ static func object_point(grid: BuildGrid, id: int) -> Vector3:
 
 
 ## One card for `stations` (all full, ids of one kind): fullest first, then by id.
+## `detail` is the words with {count} and {waiting} still to fill.
 static func _queue_cause(
 	sim: PassengerSim,
 	full: Dictionary,
 	stations: Array[int],
 	key: StringName,
 	title: String,
-	noun: String
+	detail: String
 ) -> Dictionary:
 	stations.sort_custom(
 		func(a: int, b: int) -> bool: return full[a] > full[b] or (full[a] == full[b] and a < b)
@@ -213,12 +236,10 @@ static func _queue_cause(
 			targets.append(object_point(sim.grid, station))
 	# A full station always has someone waiting (its lane is at capacity or
 	# passengers are held), so the count is never zero.
-	var noun_s := "" if stations.size() == 1 else "s"
-	var detail := "%d %s%s full · %d waiting" % [stations.size(), noun, noun_s, waiting]
 	return {
 		"key": key,
 		"title": title,
-		"detail": detail,
+		"detail": detail.format({"count": stations.size(), "waiting": waiting}),
 		"targets": targets,
 		"show_after": QUEUE_HOLD_TICKS,
 		"clear_after": QUEUE_HOLD_TICKS,
