@@ -1,7 +1,8 @@
 extends SceneTree
 ## Windowed plates of a worn backpack before (0d3a71d: the top of its panel
 ## 0.175 m behind and 0.06 m over the Spine_03 bone, a fixed 10 degree lean)
-## and after (CarryWorn.worn_back(), its per-body BACK_ON_SPINE_M) the fix for
+## and after (CarryWorn.worn_back() given CarryWorn.hip_joints(), as CarryPlace
+## draws it: one bag rests on the hips, board e22e90c2) the fix for
 ## board 4af10dd0, on male_01 and female_05 with one bag and two
 ## (SecurityLooks.TWO_BAG_SCALE), the body in its idle clip at the origin
 ## facing +z:
@@ -9,7 +10,7 @@ extends SceneTree
 ##   cube beside the body;
 ## - a close side view of the pack against the back (CLOSE_M tall);
 ## - a walking strip from the side (STRIP frames over the walk clip);
-## - a distance shot of all 12 bodies in a row from behind, one bag on the even
+## - a distance shot of every body in a row from behind, one bag on the even
 ##   bodies, two on the odd.
 ## Before a plate is saved, the pack's bounds (the bodies' too in the distance
 ## shot) are projected through its camera and must be MARGIN_PX inside the
@@ -33,6 +34,8 @@ const MARGIN_PX := 8.0
 const ORTHO_M := 3.2
 const CLOSE_M := 0.9
 const STRIP := 6
+## The distance shot's spacing between bodies.
+const DISTANCE_GAP_M := 0.9
 const SUBJECTS: Array[int] = [0, 9]
 const SCALES: Array[float] = [1.0, 0.55]
 const STATES: Array[String] = ["before", "after"]
@@ -127,7 +130,10 @@ func _place(pack: Node3D, body: Node3D, scale_by: float, state: String) -> void:
 			spine, 0.0, scale_by, Vector2(0.175, 0.06), false
 		)
 	else:
-		pack.global_transform = CarryWorn.worn_back(spine, 0.0, scale_by, body.get_meta(&"body"))
+		# With the hips, as CarryPlace draws it (one bag rests on them).
+		pack.global_transform = CarryWorn.worn_back(
+			spine, 0.0, scale_by, body.get_meta(&"body"), CarryWorn.hip_joints(body)
+		)
 
 
 func _bounds(node: Node3D) -> AABB:
@@ -318,8 +324,10 @@ func _strip(state: String, b: int) -> void:
 func _distance(state: String) -> void:
 	var bodies: Array[Node3D] = []
 	var packs: Array[Node3D] = []
+	# Centred on the origin, however many bodies the roster has (it was 12).
+	var mid := (PassengerLooks.BODIES.size() - 1) * 0.5
 	for b in PassengerLooks.BODIES.size():
-		bodies.append(_body(b, "idle", 0.5, Vector3((b - 5.5) * 0.9, 0.0, 0.0)))
+		bodies.append(_body(b, "idle", 0.5, Vector3((b - mid) * DISTANCE_GAP_M, 0.0, 0.0)))
 		packs.append(_pack())
 	await process_frame
 	await process_frame
@@ -327,7 +335,10 @@ func _distance(state: String) -> void:
 		_place(packs[b], bodies[b], 1.0 if b % 2 == 0 else SecurityLooks.TWO_BAG_SCALE, state)
 	_cam.projection = Camera3D.PROJECTION_PERSPECTIVE
 	_cam.fov = 40.0
-	_cam.global_position = Vector3(0.0, 4.0, -24.0)
+	# Far enough back that the row fits the frame's width (40 degrees tall on
+	# a SIZE window is about 32 wide).
+	var half := mid * DISTANCE_GAP_M + 0.6
+	_cam.global_position = Vector3(0.0, 4.0, -(half / tan(deg_to_rad(15.0)) + 1.0))
 	_cam.look_at(Vector3(0.0, 1.0, 0.0), Vector3.UP)
 	var all := _bounds(bodies[0])
 	for n in bodies.size():
