@@ -25,6 +25,7 @@ static func _state(k: float, was := 4) -> Dictionary:
 		"carry_from": SecurityLooks.Carry.HAND,
 		"from": in_hand,
 		"anchor_from": Vector3.ZERO,
+		"start_shoulder_y": 1.4,
 	}
 	var body := {
 		"hand": 0,

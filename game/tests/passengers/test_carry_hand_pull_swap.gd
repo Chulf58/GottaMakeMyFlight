@@ -130,9 +130,11 @@ func test_the_bar_comes_round_the_front_at_hip_height() -> void:
 
 
 ## The same k gives the same plan: planned twice, and with the giving hand
-## drawn 0.2 m higher (the hand this move poses, anti-pattern d655fcc9), every
-## target and the bag's place are the same. Control: the targets do move
-## through the swap.
+## drawn 0.2 m higher (the hand this move poses, anti-pattern d655fcc9) and the
+## shoulder joints drawn 0.2 m higher on the right and 0.15 m lower on the left
+## (a walk or stoop pose; the handover height is stamped as the move starts,
+## Sol review of board 295026a6), every target and the bag's place are the
+## same. Control: the targets do move through the swap.
 func test_the_same_k_gives_the_same_plan() -> void:
 	var frame := Transform3D(Basis(Vector3.UP, 0.8), Vector3(3.0, 0.0, -2.0))
 	var moved := 0.0
@@ -142,7 +144,7 @@ func test_the_same_k_gives_the_same_plan() -> void:
 			var k := float(step) / STEPS
 			var a: Dictionary = _swap(frame, gave, k)[0]
 			var b: Dictionary = _swap(frame, gave, k)[0]
-			var c: Dictionary = _swap(frame, gave, k, 0.2)[0]
+			var c: Dictionary = _swap(frame, gave, k, 0.2, 1.0, Vector2(0.2, -0.15))[0]
 			for hand in 2:
 				var at: Vector3 = a["targets"][hand]
 				assert_float(at.distance_to(b["targets"][hand])).is_equal(0.0)
@@ -271,10 +273,18 @@ func test_the_rods_keep_off_the_walking_legs() -> void:
 
 ## One hand to pull swap of a roller from hand `gave` (0 right) at `k`, the
 ## body at `frame`, the giving hand drawn `raised` higher than its carry, the
-## body `size` times the one the grips and SHOULDER_Y are of: [the plan, start,
-## want (world), the bag's start in the body's frame, the flags, the bar as held
-## at the start (its own frame), the bag's record].
-func _swap(frame: Transform3D, gave: int, k: float, raised := 0.0, size := 1.0) -> Array:
+## body `size` times the one the grips and SHOULDER_Y are of, its shoulder joints
+## drawn `shoulders_off` (right, left) off the height stamped as the move
+## started: [the plan, start, want (world), the bag's start in the body's frame,
+## the flags, the bar as held at the start (its own frame), the bag's record].
+func _swap(
+	frame: Transform3D,
+	gave: int,
+	k: float,
+	raised := 0.0,
+	size := 1.0,
+	shoulders_off := Vector2.ZERO
+) -> Array:
 	var side := -1.0 if gave == 0 else 1.0
 	var grips := [Vector3(-0.26, 0.80, 0.02) * size, Vector3(0.26, 0.80, 0.02) * size]
 	var from := CarryHand.carried(
@@ -292,6 +302,8 @@ func _swap(frame: Transform3D, gave: int, k: float, raised := 0.0, size := 1.0) 
 		"from": from,
 		"anchor_from": CarryOnProps.ROLLER_HANDLE,
 	}
+	# Stamped as the move starts (CarryPlace._stamp), the body at its origin.
+	CarryLead.stamp_move(bag, false, SecurityLooks.Home.HAND, frame, NAN, false, SHOULDER_Y * size)
 	var into := CarryLead.carry_t(k, bag)
 	var bar_z := (
 		lerpf(CarryOnProps.REACH_BUILT_M, rods, into) + _base + CarryOnProps.ROLLER_GRIP_PAST_TOP_M
@@ -301,7 +313,7 @@ func _swap(frame: Transform3D, gave: int, k: float, raised := 0.0, size := 1.0) 
 	var body := {
 		"hand": gave,
 		"grips": drawn,
-		"shoulders_y": [SHOULDER_Y * size, SHOULDER_Y * size],
+		"shoulders_y": [SHOULDER_Y * size + shoulders_off.x, SHOULDER_Y * size + shoulders_off.y],
 		"bar_z": bar_z,
 		"scale": 1.0,
 		"strap_top": Vector3.ZERO,

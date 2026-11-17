@@ -342,12 +342,28 @@ static func stamp_reach(bag: Dictionary, in_stall: bool, home: int) -> void:
 ## (`unmoved`, at_start()), it is the same move and keeps the "start_body" it
 ## started with: taken from a body that had turned since, the leading hand
 ## changed while it still reached for the bag (Sol review, board 41c159bc).
+## `shoulder_y` is the body's lower shoulder joint's height over its origin
+## (world metres) as the move starts, kept as "start_shoulder_y" for a hand to
+## pull swap's handover height (hand_pull_path()), with "start_body"; NAN when
+## the body has no carry rig yet, and the key is then left off. Taken from the
+## skeleton drawn later, the same move and progress gave a handover 0.2 m
+## higher with the shoulders 0.2 m higher in a walk or stoop pose (Sol review,
+## board 295026a6; anti-pattern d655fcc9).
 static func stamp_move(
-	bag: Dictionary, in_stall: bool, home: int, body: Transform3D, face := NAN, unmoved := false
+	bag: Dictionary,
+	in_stall: bool,
+	home: int,
+	body: Transform3D,
+	face := NAN,
+	unmoved := false,
+	shoulder_y := NAN
 ) -> void:
 	stamp_reach(bag, in_stall, home)
 	if not (unmoved and bag.has("start_body")):
 		bag["start_body"] = body
+		bag.erase("start_shoulder_y")
+		if not is_nan(shoulder_y):
+			bag["start_shoulder_y"] = shoulder_y
 	bag.erase("ticks")
 	bag.erase("park")
 	if RollerPark.parks(bag, in_stall, home):
@@ -593,7 +609,8 @@ static func swap_lean(bar: Vector3, gave: int, t: float) -> Basis:
 
 ## Where a roller is at `t` of the carry of a hand to pull swap
 ## (is_hand_pull_swap()), held at `held_at` (its own frame), the body drawn at
-## `frame`, `shoulder_y` its lower shoulder joint's height (world): its bar
+## `frame`, `shoulder_y` its lower shoulder joint's height over the body's
+## origin as the move started (stamp_move(), "start_shoulder_y"): its bar
 ## goes round the front of the body (round_front()) from where it was as the
 ## move started (`bar_from`, `start` the bag there, world now) to SWAP_FRONT_M
 ## ahead at hip height (SWAP_HIP_BELOW_M under `shoulder_y`) at half way, and on
@@ -618,7 +635,7 @@ static func hand_pull_path(
 	gave: int
 ) -> Transform3D:
 	var local := frame.affine_inverse()
-	var front := Vector3(0.0, shoulder_y - frame.origin.y - SWAP_HIP_BELOW_M, SWAP_FRONT_M)
+	var front := Vector3(0.0, shoulder_y - SWAP_HIP_BELOW_M, SWAP_FRONT_M)
 	var handle := from * CarryOnProps.ROLLER_HANDLE
 	var first := t < 0.5
 	var u := smoothstep(0.0, 1.0, t * 2.0 if first else t * 2.0 - 1.0)
@@ -771,12 +788,14 @@ static func swap_release(
 ## `start` (world now) to `want`, its body drawn at `frame`; `flags` as for
 ## path(), `body` the body as drawn now: {"hand": the bag's own hand or side,
 ## "grips": [right, left] grip points (CarryOnProps.grip_of), "shoulders_y":
-## [right, left] shoulder joint heights, "bar_z": a roller's grip bar along it,
-## "scale": the bag's scale}. Returns {"holder", "xf" (the bag at a resting or
-## worn end, or on its path), "anchor" (the point of the bag in the holder's
-## grip, its own frame), "targets", "weights", "keeps", "drops" (each hand's,
-## right then left; keeps floor_keep(), flags "from_floor" and "to_floor";
-## drops CarryStoop.drops), "loops" (each hand's CarryArm.loop_grip: a backpack
+## [right, left] shoulder joint heights (a backpack's side hang only; a hand to
+## pull swap uses the height stamped as it started, "start_shoulder_y"),
+## "bar_z": a roller's grip bar along it, "scale": the bag's scale}. Returns
+## {"holder", "xf" (the bag at a resting or worn end, or on its path), "anchor"
+## (the point of the bag in the holder's grip, its own frame), "targets",
+## "weights", "keeps", "drops" (each hand's, right then left; keeps
+## floor_keep(), flags "from_floor" and "to_floor"; drops CarryStoop.drops),
+## "loops" (each hand's CarryArm.loop_grip: a backpack
 ## led on or off the back outside a stall, held from BACK_LOOP_UP_TURNING to
 ## BACK_LOOP_UP over its loop as it turns), "loop_yaw" (loop_yaw()'s weight for
 ## CarryPlace to turn a loop-held pack plumb and for CarryLeadArms to roll the
@@ -955,7 +974,9 @@ static func plan(
 			goal = floor_end(frame, want, want * anchor_to)
 		on_path = path(start, goal, t, frame, bag["from"], lift)
 		if hand_swap:
-			var low: float = minf(body["shoulders_y"][0], body["shoulders_y"][1])
+			# Its handover height is stamped as the move started, not the shoulders
+			# drawn now (a walk or stoop pose moved it, Sol review of board 295026a6).
+			var low: float = bag["start_shoulder_y"]
 			on_path = hand_pull_path(
 				bag["from"], start, want, frame, t, anchor_from, anchor_to, held_at, low, from_hand
 			)
