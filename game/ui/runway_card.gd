@@ -39,7 +39,22 @@ var _noted_tick := -REFRESH_TICKS
 
 ## The card's line for a runway of `size`: "Small runway, 384 m".
 static func size_line(size: String) -> String:
-	return "%s runway, %d m" % [size.capitalize(), int(Runway.length_m(size))]
+	var length := int(Runway.length_m(size))
+	match size:
+		PlaneClasses.SMALL:
+			return TranslationServer.translate("Small runway, {length} m").format(
+				{"length": length}
+			)
+		PlaneClasses.MEDIUM:
+			return TranslationServer.translate("Medium runway, {length} m").format(
+				{"length": length}
+			)
+		PlaneClasses.LARGE:
+			return TranslationServer.translate("Large runway, {length} m").format(
+				{"length": length}
+			)
+	push_error("RunwayCard.size_line: unknown runway size '%s'" % size)
+	return ""
 
 
 ## The card's line for the upgrade to `next`: size, length, price and the time
@@ -50,8 +65,15 @@ static func next_line(next: String) -> String:
 	@warning_ignore("integer_division")
 	var hours := RunwayWorks.ticks(next) / (GameCalendar.TICKS_PER_MINUTE * 60)
 	return (
-		"Next: %s, $%d, works take %d %s"
-		% [size_line(next), PriceTable.runway_price(next), hours, "hour" if hours == 1 else "hours"]
+		TranslationServer
+		. translate_plural(
+			"Next: {runway}, ${price}, works take {hours} hour",
+			"Next: {runway}, ${price}, works take {hours} hours",
+			hours
+		)
+		. format(
+			{"runway": size_line(next), "price": PriceTable.runway_price(next), "hours": hours}
+		)
 	)
 
 
@@ -148,7 +170,7 @@ func _build() -> void:
 	_problem = Label.new()
 	_upgrade = Button.new()
 	_button.name = "RunwayButton"
-	_button.text = "Runway"
+	_button.text = tr("Runway")
 	_button.theme = BuildMenu.HUD_THEME
 	TopRow.place_in_slot(_button, TopRow.RUNWAY_SLOT, self)
 	_button.focus_mode = Control.FOCUS_NONE
@@ -166,7 +188,7 @@ func _build() -> void:
 	_sheet.add_child(rows)
 	var title := Label.new()
 	title.name = "RunwayTitle"
-	title.text = "Runway"
+	title.text = tr("Runway")
 	_style_label(title, &"HudTitle")
 	rows.add_child(title)
 	for entry in [
@@ -182,7 +204,7 @@ func _build() -> void:
 		_style_label(label, entry[2])
 		rows.add_child(label)
 	_upgrade.name = "RunwayUpgrade"
-	_upgrade.text = "Upgrade runway"
+	_upgrade.text = tr("Upgrade runway")
 	_upgrade.focus_mode = Control.FOCUS_NONE
 	_upgrade.theme_type_variation = &"HudButtonGreen"
 	_upgrade.pressed.connect(_on_upgrade)

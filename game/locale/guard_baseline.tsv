@@ -8,29 +8,10 @@ alert_stack.gd	1	_tray_button.text = "Alerts" if count == 0 else "Alerts (%d)" %
 alert_stack.gd	1	_tray_button.tooltip_text = "Alert history and the on/off switch for alert cards"
 alert_stack.gd	1	card.tooltip_text = "Click to look at it"
 alert_stack.gd	1	title.text = "Alert history"
-departures_board.gd	1	_toggle.text = "Departures (B)"
-departures_board.gd	1	button.text = "Gate %s" % entry["gate"]
-departures_board.gd	1	button.tooltip_text = "Move this flight to another gate"
-departures_board.gd	1	confirm.text = "End contract"
-departures_board.gd	1	end_btn.text = "End"
-departures_board.gd	1	end_btn.tooltip_text = "End this airline contract"
-departures_board.gd	1	keep.text = "Keep"
-departures_board.gd	1	note.text = "No gate has a stand"
-flight_planner.gd	1	_day_label.text = "Day %d" % (_shown_day + 1)
-flight_planner.gd	1	_summary.text = "%s  Gate %s" % [bar["label"], bar["gate"]]
-flight_planner.gd	1	close_btn.text = "Close"
-flight_planner.gd	1	confirm.text = "End contract"
-flight_planner.gd	1	end.text = "End"
-flight_planner.gd	1	end.tooltip_text = "End this airline contract"
-flight_planner.gd	1	keep.text = "Keep"
-flight_planner.gd	1	label.text = "Gate %s" % gate_id
-flight_result_panel.gd	1	dismiss.text = "Dismiss"
 hints.gd	1	_caption.text = "Hint (H turns hints off)"
 hints.gd	1	_reset.text = "Reset hints"
 hints.gd	1	_toggle.text = "Hints (H)"
 mood_overlay.gd	1	_toggle.text = "Mood (M)"
-offer_panel.gd	1	_button.text = "Offers (%d)" % offers.size()
-offer_panel.gd	1	title.text = "Today's offers"
 passenger_hud.gd	1	batch.text = "Spawn %d passengers" % DEBUG_BATCH
 passenger_hud.gd	1	button.text = "Pause" if value == 0 else "%dx" % value
 passenger_hud.gd	1	button.tooltip_text = "Space" if value == 0 else "Shift+%d" % value
@@ -43,6 +24,3 @@ passenger_inspect.gd	1	_name.tooltip_text = "Follow this passenger"
 passenger_inspect.gd	1	_status.text = ( "Mood %d   Hunger %d   Toilet %d   Boredom %d" % [p.mood, p.hunger, p.toilet_need, p.boredom] )
 passenger_inspect.gd	1	row.text = "%s · %s" % [entry["text"], _age(entry["tick"])]
 passenger_inspect.gd	1	row.tooltip_text = "Show where this happened"
-runway_card.gd	1	_button.text = "Runway"
-runway_card.gd	1	_upgrade.text = "Upgrade runway"
-runway_card.gd	1	title.text = "Runway"

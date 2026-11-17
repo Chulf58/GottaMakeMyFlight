@@ -134,7 +134,9 @@ func test_confirming_ends_the_contract_and_it_leaves_the_list() -> void:
 	assert_array(_sim.active_contract_ids()).is_equal(["Y"])
 	# Accepting issued day 0 at once, so X ends from day 1 and day 0 still flies.
 	assert_int(_sim.contract_end_day("X")).is_equal(1)
-	assert_str(_board.message_text()).is_equal(DeparturesBoard.ENDED_TEXT % "Oslo")
+	assert_str(_board.message_text()).is_equal(
+		DeparturesBoard.ENDED_TEXT.format({"destination": "Oslo"})
+	)
 	assert_object(_board.confirm_end_button()).is_null()
 	assert_object(_board.end_button("X", 0)).is_null()
 	assert_object(_board.end_button("X", 1)).is_null()
@@ -168,7 +170,7 @@ func test_a_refused_end_shows_the_reason_in_the_row_and_ends_nothing() -> void:
 	var shown := _board.message_text()
 	print("refused: ", shown)
 	assert_str(shown).is_equal(
-		DeparturesBoard.END_REFUSED_TEXT % "the 15:00 Gotta Air flight to Paris"
+		DeparturesBoard.END_REFUSED_TEXT.format({"flight": "the 15:00 Gotta Air flight to Paris"})
 	)
 	assert_bool(shown.contains("C-d")).is_false()
 	assert_object(_board.confirm_end_button()).is_null()

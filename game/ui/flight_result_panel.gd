@@ -31,7 +31,7 @@ func _init() -> void:
 	column.add_child(_label)
 	var dismiss := Button.new()
 	dismiss.name = "DismissResult"
-	dismiss.text = "Dismiss"
+	dismiss.text = tr("Dismiss")
 	dismiss.size_flags_horizontal = Control.SIZE_SHRINK_END
 	dismiss.focus_mode = Control.FOCUS_NONE
 	# A normal action, so teal; yellow means needs-you (decision
@@ -63,7 +63,9 @@ static func title_for(flights: FlightSim, flight_id: String) -> String:
 	if flights != null and not parsed.is_empty():
 		var contract := flights.contract_of(parsed["contract"])
 		if not contract.is_empty():
-			return "%s %s" % [contract["airline"], contract["destination"]]
+			return TranslationServer.translate("{airline} {destination}").format(
+				{"airline": contract["airline"], "destination": contract["destination"]}
+			)
 	return flight_title(flight_id)
 
 
@@ -72,18 +74,26 @@ static func title_for(flights: FlightSim, flight_id: String) -> String:
 static func text_for(summary: Dictionary) -> String:
 	var lines := PackedStringArray(
 		[
-			"%s result" % summary.get("title", flight_title(summary["flight"])),
-			"Made %d   Missed %d" % [summary["made"], summary["missed"]],
+			TranslationServer.translate("{title} result").format(
+				{"title": summary.get("title", flight_title(summary["flight"]))}
+			),
+			TranslationServer.translate("Made {made}   Missed {missed}").format(
+				{"made": summary["made"], "missed": summary["missed"]}
+			),
 		]
 	)
 	var reasons: Array = summary["reasons"]
 	for i in mini(reasons.size(), MAX_REASONS):
-		lines.append("%d  %s" % [reasons[i]["count"], reasons[i]["text"]])
+		lines.append(
+			TranslationServer.translate("{count}  {reason}").format(
+				{"count": reasons[i]["count"], "reason": reasons[i]["text"]}
+			)
+		)
 	var other := 0
 	for i in range(MAX_REASONS, reasons.size()):
 		other += reasons[i]["count"]
 	if other > 0:
-		lines.append("%d  Other" % other)
+		lines.append(TranslationServer.translate("{count}  Other").format({"count": other}))
 	return "\n".join(lines)
 
 
