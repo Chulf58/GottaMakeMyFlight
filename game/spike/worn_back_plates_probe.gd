@@ -3,12 +3,15 @@ extends SceneTree
 ## 0.175 m behind and 0.06 m over the Spine_03 bone, a fixed 10 degree lean)
 ## and after (CarryWorn.worn_back() given CarryWorn.hip_joints(), as CarryPlace
 ## draws it: one bag rests on the hips, board e22e90c2) the fix for
-## board 4af10dd0, on male_01 and female_05 with one bag and two
+## board 4af10dd0, on male_01 and female_01 with one bag and two
 ## (SecurityLooks.TWO_BAG_SCALE), the body in its idle clip at the origin
 ## facing +z:
-## - six orthographic views at one true scale (ORTHO_M tall), a 1 m reference
-##   cube beside the body;
-## - a close side view of the pack against the back (CLOSE_M tall);
+## - six axis orthographic views and a seventh from the right, behind and above
+##   (side_hi_px), at one true scale (ORTHO_M tall), a 1 m reference cube beside
+##   the body;
+## - a close view of the pack against the back (CLOSE_M tall), from behind the
+##   shoulder and above (CLOSE_DIR), because the hanging arm hides a flush pack
+##   from a plain side camera;
 ## - a walking strip from the side (STRIP frames over the walk clip);
 ## - a distance shot of every body in a row from behind, one bag on the even
 ##   bodies, two on the odd.
@@ -33,6 +36,9 @@ const SIZE := Vector2i(720, 900)
 const MARGIN_PX := 8.0
 const ORTHO_M := 3.2
 const CLOSE_M := 0.9
+## Where the close camera sits from the pack: right of the wearer, behind and
+## above, so the hanging right arm does not stand between it and the pack.
+const CLOSE_DIR := Vector3(0.55, 0.5, -0.67)
 const STRIP := 6
 ## The distance shot's spacing between bodies.
 const DISTANCE_GAP_M := 0.9
@@ -43,6 +49,9 @@ const STATES: Array[String] = ["before", "after"]
 const VIEWS := {
 	"side_px": Vector3.RIGHT,
 	"side_nx": Vector3.LEFT,
+	# Side-on but from behind and above: the hanging right arm hides a flush pack
+	# from side_px, and this view must see it (no HIDDEN_BY_OWN_BODY allowance).
+	"side_hi_px": Vector3(0.78, 0.45, -0.43),
 	"front_pz": Vector3.BACK,
 	"back_nz": Vector3.FORWARD,
 	"top_py": Vector3.UP,
@@ -244,12 +253,9 @@ func _six_and_close(state: String, b: int) -> void:
 		for view: String in VIEWS:
 			var dir: Vector3 = VIEWS[view]
 			_floor.visible = view != "bottom_ny"
-			_aim(
-				dir,
-				Vector3(0.36, 0.95, 0.36) if dir.y == 0.0 else Vector3(0.36, 1.0, 0.36),
-				ORTHO_M
-			)
-			if dir.y != 0.0:
+			var overhead := absf(dir.y) > 0.5
+			_aim(dir, Vector3(0.36, 1.0, 0.36) if overhead else Vector3(0.36, 0.95, 0.36), ORTHO_M)
+			if overhead:
 				_cam.size = 2.4
 			var owners: Array[Node] = [body, pack, _cube]
 			if _floor.visible:
@@ -262,17 +268,17 @@ func _six_and_close(state: String, b: int) -> void:
 				# Control: the body stands between this camera and the pack.
 				if seen[1] == 0:
 					_invalid("%s front: no line to the pack was blocked" % tag)
-			elif seen[0] == 0 and seen[2]:
+			elif seen[0] == 0 and seen[2] and view != "side_hi_px":
 				# A small pack narrower than the shoulders is behind the wearer's
 				# own arm from the side: the view shows that, not a lost subject.
 				print("HIDDEN_BY_OWN_BODY %s_%s" % [tag, view])
 			elif seen[0] == 0:
 				_invalid("%s_%s: no sight line lands on the pack" % [tag, view])
 			_sheet(state, await _shoot("%s_%s" % [tag, view]))
-		# The close side view of the pack against the back.
+		# The close view of the pack against the back, past the hanging arm.
 		_floor.visible = true
 		var box := _bounds(pack)
-		_aim(Vector3.RIGHT, box.get_center() + Vector3(0.0, 0.0, 0.12), CLOSE_M)
+		_aim(CLOSE_DIR.normalized(), box.get_center(), CLOSE_M)
 		if not _in_frame(box, "%s_close" % tag):
 			_invalid("%s close out of frame" % tag)
 		var near: Array[Node] = [body, pack, _floor]
