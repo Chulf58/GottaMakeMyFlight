@@ -86,57 +86,17 @@ static func _two_bags() -> bool:
 ## (roller in the right hand, case in the left; SecurityLooks.hand_of() keeps
 ## hand = index), so LEAF_OTHER measures the case against the leaves (DoorSteer
 ## does not steer such a guest).
-## roller_trail_probe's _spawn is repeated here only to guard its draw: each
-## spawn_now() takes an entrance place, so a run of non-roller draws can fill
-## the entrance, spawn_now() then returns 0 and the parent reads a guest that
-## does not exist (Nil: 6 SCRIPT ERRORs a run, board 0d7f4d2a). A refused spawn
-## is skipped and printed, as the parent's abort skipped it unprinted.
+## A guest the parent spawned (none when the entrance had no room) gets its
+## second bag.
 func _spawn(world: String, role: String, k: int) -> void:
-	var p: Passenger = null
-	for attempt in 200:
-		var id := _sim.spawn_now(FlightTimetable.occurrence_id(FlightSim.DEFAULT_ID, 0))
-		if id == 0:
-			print(
-				"SPAWN_SKIPPED %s %s tick=%d: the entrance has no room" % [world, role, _clock.tick]
-			)
-			return
-		p = _sim.get_passenger(id)
-		if SecurityLooks.bag_kind(p, 0) == SecurityLooks.Kind.ROLLER:
-			break
-		p.carry_on = 0
-	ToiletTestLayout.calm(p)
-	p.carry_on = 1
-	p.liquids = false
-	p.alarm = false
-	p.cleared = true
-	p.stage = Passenger.Stage.TO_GATE
-	p.stage_tick = _clock.tick
-	p.at = _spawn_cell()
-	p.clear_path()
-	_ours.append(p)
-	_spawned_at[p.id] = _clock.tick
-	if role == "gate":
-		var seats := _sim.layout.seats
-		var seat: Dictionary = seats[(k * 3) % seats.size()]
-		p.stage = Passenger.Stage.SEATED
-		p.seat_object = seat["object_id"]
-		p.seat_cell = seat["cell"]
-		p.seat_front = seat["front"]
-		p.at = seat["front"]
-		p.boarding_tick = _clock.tick + 40 + 30 * k
-	elif role == "visit" and world == "cafe":
-		p.boredom = 0
-		_sim.cafes.try_visit(p)
-	elif role == "visit":
-		p.shop_cooldown = 0
-		p.hunger = 0
-		p.boredom = 80
-		NeedsPolicy.arbitrate(_sim, p)
-	print("SPAWN %s %s id=%d tick=%d stage=%s" % [world, role, p.id, _clock.tick, _stage(p)])
-	if _two_bags():
-		if SecurityLooks.bag_kind(p, 1) == SecurityLooks.Kind.CASE:
-			p.carry_on = 2
-			print("TWO_BAGS id=%d roller and case" % p.id)
+	var before := _ours.size()
+	super._spawn(world, role, k)
+	if not _two_bags() or _ours.size() == before:
+		return
+	var p := _ours[-1]
+	if SecurityLooks.bag_kind(p, 1) == SecurityLooks.Kind.CASE:
+		p.carry_on = 2
+		print("TWO_BAGS id=%d roller and case" % p.id)
 
 
 func _collect_walls(world: String) -> void:
