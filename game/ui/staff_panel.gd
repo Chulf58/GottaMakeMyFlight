@@ -36,29 +36,24 @@ const ROLES: Array[StaffMember.Role] = [
 	StaffMember.Role.SHOP,
 	StaffMember.Role.CLEANER,
 ]
-const ROLE_NAMES := {
-	StaffMember.Role.CHECKIN: "Check-in agents",
-	StaffMember.Role.SECURITY: "Security officers",
-	StaffMember.Role.SHOP: "Shop staff",
-	StaffMember.Role.CLEANER: "Cleaners",
-}
 const ROLE_KEYS := {
 	StaffMember.Role.CHECKIN: "Checkin",
 	StaffMember.Role.SECURITY: "Security",
 	StaffMember.Role.SHOP: "Shop",
 	StaffMember.Role.CLEANER: "Cleaner",
 }
+## The English msgids of the hire hints and the wall gap line. Tests compare
+## against them; the card's lines are tr() of the same literals (_hire_hint(),
+## card_lines()), because the POT extractor reads only literals.
 const HINTS := {
 	StaffMember.Role.CHECKIN: "Hire a check-in agent",
 	StaffMember.Role.SECURITY: "Hire a security officer",
 	StaffMember.Role.SHOP: "Hire shop staff",
 }
 ## The banner line for an open wall gap, one for a single run of gap edges and
-## one with the count for several. It uses the sign's words, "Wall gap".
+## (card_lines()) one with the count for several. It uses the sign's words,
+## "Wall gap".
 const GAP_HINT := "Wall gap: close the open edge of the outer wall, marked in red"
-const GAPS_HINT := "%d wall gaps: close the open edges of the outer wall, marked in red"
-## The line shown once the airport opens: the starter's airline and destination.
-const OPEN_CUE := "Open! Starter contract: %s to %s, daily"
 ## A column's least width: four roles fit centred over the bar.
 const ROLE_WIDTH := 180.0
 ## The banner's top edge with the departures list off: under the three toggles.
@@ -170,12 +165,19 @@ func hint_card() -> Control:
 ## service ends, so it is counted and named as leaving. A cleaner is on duty
 ## all day once hired, so its second count is how many are cleaning now.
 func counts_text(role: StaffMember.Role) -> String:
-	var working := "cleaning" if role == StaffMember.Role.CLEANER else "on duty"
-	var text := "%d hired, %d %s" % [staff.count(role), staff.on_duty_count(role), working]
 	var leaving := staff.leaving_count(role)
+	var values := {
+		"hired": staff.count(role),
+		"duty": staff.on_duty_count(role),
+		"leaving": leaving,
+	}
+	if role == StaffMember.Role.CLEANER:
+		if leaving > 0:
+			return tr("{hired} hired, {duty} cleaning, {leaving} leaving").format(values)
+		return tr("{hired} hired, {duty} cleaning").format(values)
 	if leaving > 0:
-		text += ", %d leaving" % leaving
-	return text
+		return tr("{hired} hired, {duty} on duty, {leaving} leaving").format(values)
+	return tr("{hired} hired, {duty} on duty").format(values)
 
 
 ## What the card still asks for, one line each: the starter line while it
@@ -202,10 +204,15 @@ func card_lines() -> Array[Dictionary]:
 	if closed:
 		out.append_array(Checklist.opening_lines(gate.unmet(), _opening_counts()))
 	if _gap_runs > 0:
-		out.append(Checklist.line(GAP_HINT if _gap_runs == 1 else GAPS_HINT % _gap_runs, false))
+		var gap_hint := tr_n(
+			"Wall gap: close the open edge of the outer wall, marked in red",
+			"{count} wall gaps: close the open edges of the outer wall, marked in red",
+			_gap_runs
+		)
+		out.append(Checklist.line(gap_hint.format({"count": _gap_runs}), false))
 	for role in hiring_hint_roles():
 		if not (closed and role in [StaffMember.Role.CHECKIN, StaffMember.Role.SECURITY]):
-			out.append(Checklist.line(HINTS[role], false))
+			out.append(Checklist.line(_hire_hint(role), false))
 	if gate != null and not closed:
 		out.append_array(_gaps)
 	return out
@@ -262,12 +269,12 @@ func refresh() -> void:
 ## line while it shows, over "Your airport needs" when any line is left.
 func _card_title(lines: Array[Dictionary]) -> String:
 	if gate != null and not gate.is_open():
-		return Checklist.TITLE_CLOSED
+		return tr("To open the airport")
 	var parts := PackedStringArray()
 	if _open_cue != "":
 		parts.append(_open_cue)
 	if not lines.is_empty():
-		parts.append(Checklist.TITLE_OPEN)
+		parts.append(tr("Your airport needs"))
 	return "\n".join(parts)
 
 
@@ -305,8 +312,32 @@ func _track_opening() -> void:
 	if open and not _was_open and not gate.opened_without_starter:
 		var contract := gate.flights.contract_of(FlightSim.DEFAULT_ID)
 		if not contract.is_empty():
-			_open_cue = OPEN_CUE % [contract["airline"], contract["destination"]]
+			_open_cue = tr("Open! Starter contract: {airline} to {destination}, daily").format(
+				{"airline": contract["airline"], "destination": contract["destination"]}
+			)
 	_was_open = open
+
+
+## The hire line for a role (see HINTS).
+func _hire_hint(role: StaffMember.Role) -> String:
+	match role:
+		StaffMember.Role.CHECKIN:
+			return tr("Hire a check-in agent")
+		StaffMember.Role.SECURITY:
+			return tr("Hire a security officer")
+	return tr("Hire shop staff")
+
+
+## The column title of a role.
+func _role_name(role: StaffMember.Role) -> String:
+	match role:
+		StaffMember.Role.CHECKIN:
+			return tr("Check-in agents")
+		StaffMember.Role.SECURITY:
+			return tr("Security officers")
+		StaffMember.Role.SHOP:
+			return tr("Shop staff")
+	return tr("Cleaners")
 
 
 func _staying(role: StaffMember.Role) -> int:
@@ -386,15 +417,19 @@ func _build() -> void:
 		var column := VBoxContainer.new()
 		column.custom_minimum_size = Vector2(ROLE_WIDTH, 0.0)
 		roles.add_child(column)
-		column.add_child(_label(ROLE_NAMES[role], &"HudCardName"))
+		column.add_child(_label(_role_name(role), &"HudCardName"))
 		var counts := _label("", &"HudSmall")
 		counts.name = "%sCounts" % ROLE_KEYS[role]
 		column.add_child(counts)
 		_counts[role] = counts
 		var row := HBoxContainer.new()
 		column.add_child(row)
-		_hire[role] = _button(row, "Hire%s" % ROLE_KEYS[role], "Hire", &"HudButtonTeal")
-		_fire[role] = _button(row, "Fire%s" % ROLE_KEYS[role], "Fire", &"HudButtonCoral")
+		_hire[role] = _button(
+			row, "Hire%s" % ROLE_KEYS[role], tr("Hire", "staff button"), &"HudButtonTeal"
+		)
+		_fire[role] = _button(
+			row, "Fire%s" % ROLE_KEYS[role], tr("Fire", "staff button"), &"HudButtonCoral"
+		)
 		(_hire[role] as Button).pressed.connect(func() -> void: staff.hire(role))
 		(_fire[role] as Button).pressed.connect(func() -> void: staff.fire(role))
 	_build_hint()
@@ -453,6 +488,9 @@ func _label(text: String, variation: StringName) -> Label:
 	var label := Label.new()
 	label.text = text
 	label.theme_type_variation = variation
+	# A longer translation wraps inside its column; ROLE_WIDTH keeps the four columns
+	# over the bar instead of the longest line widening them.
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	return label
 
 

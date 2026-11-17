@@ -7,18 +7,19 @@ extends RefCounted
 ## they got out (or their flight closed) the vehicle shows only what it is
 ## doing. Display only.
 
-const KIND_TEXT := {LandsideVehicle.Kind.TAXI: "Taxi", LandsideVehicle.Kind.CAR: "Car"}
-
 
 ## The follow text of vehicle `v` at tick `now`, in the PassengerHud style:
 ## parts joined by three spaces.
 static func text(
 	arrivals: ArrivalBookings, flights: FlightSim, v: LandsideVehicle, now: int
 ) -> String:
-	var parts := PackedStringArray(["%s %d" % [KIND_TEXT[v.kind], v.id], doing_text(v)])
+	var parts := PackedStringArray([_name_text(v), doing_text(v)])
 	if v.bookings.is_empty():
 		return "   ".join(parts)
-	parts.append("1 passenger" if v.bookings.size() == 1 else "%d passengers" % v.bookings.size())
+	var aboard := TranslationServer.translate_plural(
+		"{count} passenger", "{count} passengers", v.bookings.size()
+	)
+	parts.append(aboard.format({"count": v.bookings.size()}))
 	var flight_ids := PackedStringArray()
 	# The latest of the party's drop-offs, in ticks past each passenger's own unload
 	# tick, which already counts the planned stagger (a party gets out one at a time),
@@ -35,7 +36,8 @@ static func text(
 		late = now - b.unload_tick if first else maxi(late, now - b.unload_tick)
 		first = false
 	if not flight_ids.is_empty():
-		parts.append("Flight %s" % ", ".join(flight_ids))
+		var flight := TranslationServer.translate("Flight {flights}")
+		parts.append(flight.format({"flights": ", ".join(flight_ids)}))
 		parts.append(delay_text(late))
 	return "   ".join(parts)
 
@@ -46,28 +48,46 @@ static func doing_text(v: LandsideVehicle) -> String:
 	var empty := v.bookings.is_empty()
 	match v.stage:
 		LandsideVehicle.Stage.DWELL:
-			return "Empty, at the curb" if empty else "At the curb"
+			return _t("Empty, at the curb") if empty else _t("At the curb")
 		LandsideVehicle.Stage.PARKED:
-			return "Parked, driver away" if empty else "Parked"
+			return _t("Parked, driver away") if empty else _t("Parked")
 		LandsideVehicle.Stage.LEAVE:
-			return "Empty, leaving" if empty else "Leaving"
+			return _t("Empty, leaving") if empty else _t("Leaving")
 	if empty:
-		return "Empty, driving on"
+		return _t("Empty, driving on")
 	if v.lane in [LandsideVehicle.Lane.ACCESS, LandsideVehicle.Lane.SLOT]:
-		return "Driving into the car park"
+		return _t("Driving into the car park")
 	var queued := v.stage == LandsideVehicle.Stage.QUEUE
 	if v.intent == LandsideVehicle.Intent.PARK:
-		return "Waiting to turn into the car park" if queued else "Driving to the car park"
-	return "Queuing for the curb" if queued else "Driving to the curb"
+		return _t("Waiting to turn into the car park") if queued else _t("Driving to the car park")
+	return _t("Queuing for the curb") if queued else _t("Driving to the curb")
 
 
 ## The drop-off delay so far, from the ticks past the tick the party meant to
 ## get out: "On time" before it, never once it has passed.
 static func delay_text(late_ticks: int) -> String:
 	if late_ticks <= 0:
-		return "On time"
+		return TranslationServer.translate("On time")
 	@warning_ignore("integer_division")
 	var minutes := late_ticks / GameCalendar.TICKS_PER_MINUTE
 	if minutes < 1:
-		return "Drop-off delay: under 1 min"
-	return "Drop-off delay: %d min" % minutes
+		return TranslationServer.translate("Drop-off delay: under 1 min")
+	var delay := TranslationServer.translate_plural(
+		"Drop-off delay: {minutes} min", "Drop-off delay: {minutes} min", minutes
+	)
+	return delay.format({"minutes": minutes})
+
+
+## "Taxi 7" or "Car 7".
+static func _name_text(v: LandsideVehicle) -> String:
+	var kind := (
+		TranslationServer.translate("Taxi", "vehicle")
+		if v.kind == LandsideVehicle.Kind.TAXI
+		else TranslationServer.translate("Car", "vehicle")
+	)
+	return TranslationServer.translate("{vehicle} {id}").format({"vehicle": kind, "id": v.id})
+
+
+## Static code has no tr(); the literal stays at each call so the POT lists it.
+static func _t(msgid: String) -> String:
+	return TranslationServer.translate(msgid)
