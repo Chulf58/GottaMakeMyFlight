@@ -365,12 +365,22 @@ func history_lines() -> PackedStringArray:
 	for entry in _board.history():
 		var raised: int = entry["raised_tick"]
 		var cleared: int = entry["cleared_tick"]
-		var when := "Day %d %s" % [GameCalendar.day_of(raised) + 1, GameCalendar.clock_text(raised)]
+		var when := tr("Day {day} {time}").format(
+			{"day": GameCalendar.day_of(raised) + 1, "time": GameCalendar.clock_text(raised)}
+		)
 		if entry.get("notice", false):
-			lines.append("%s  %s\n%s" % [when, entry["title"], entry["detail"]])
+			lines.append(
+				tr("{when}  {title}\n{detail}").format(
+					{"when": when, "title": entry["title"], "detail": entry["detail"]}
+				)
+			)
 			continue
-		var end := "still up" if cleared < 0 else "cleared %s" % GameCalendar.clock_text(cleared)
-		lines.append("%s  %s, %s" % [when, entry["title"], end])
+		var end := tr("still up")
+		if cleared >= 0:
+			end = tr("cleared {time}").format({"time": GameCalendar.clock_text(cleared)})
+		lines.append(
+			tr("{when}  {title}, {end}").format({"when": when, "title": entry["title"], "end": end})
+		)
 	return lines
 
 
@@ -382,10 +392,10 @@ func _build() -> void:
 	header.custom_minimum_size = Vector2(0.0, HudLayout.BUTTON_H)
 	add_child(header)
 	_tray_button.name = "AlertHistoryButton"
-	_tray_button.text = "Alerts"
+	_tray_button.text = tr("Alerts")
 	_tray_button.toggle_mode = true
 	_tray_button.focus_mode = Control.FOCUS_NONE
-	_tray_button.tooltip_text = "Alert history and the on/off switch for alert cards"
+	_tray_button.tooltip_text = tr("Alert history and the on/off switch for alert cards")
 	_tray_button.toggled.connect(set_tray_open)
 	header.add_child(_tray_button)
 	_cards.name = "AlertCards"
@@ -396,7 +406,7 @@ func _build() -> void:
 	_more.focus_mode = Control.FOCUS_NONE
 	_more.size_flags_horizontal = Control.SIZE_SHRINK_END
 	_more.custom_minimum_size = Vector2(0.0, HudLayout.BUTTON_H)
-	_more.tooltip_text = "Open the alert history"
+	_more.tooltip_text = tr("Open the alert history")
 	_more.pressed.connect(set_tray_open.bind(true))
 	add_child(_more)
 	_tray.name = "AlertHistory"
@@ -405,11 +415,11 @@ func _build() -> void:
 	var column := VBoxContainer.new()
 	_tray.add_child(column)
 	var title := Label.new()
-	title.text = "Alert history"
+	title.text = tr("Alert history")
 	title.theme_type_variation = &"HudCardName"
 	column.add_child(title)
 	_toggle.name = "AlertCardsToggle"
-	_toggle.text = "Show alert cards"
+	_toggle.text = tr("Show alert cards")
 	_toggle.focus_mode = Control.FOCUS_NONE
 	_toggle.set_pressed_no_signal(_cards_on)
 	_toggle.toggled.connect(set_cards_on)
@@ -449,7 +459,9 @@ func _sync_cards() -> void:
 		if _board.alert(key).is_empty():
 			_clicks.erase(key)
 	var count := _board.active().size()
-	_tray_button.text = "Alerts" if count == 0 else "Alerts (%d)" % count
+	_tray_button.text = (
+		tr("Alerts") if count == 0 else tr("Alerts ({count})").format({"count": count})
+	)
 	_layout_dirty = true
 	_layout_cards()
 
@@ -462,7 +474,7 @@ func _new_card(key: StringName) -> PanelContainer:
 	card.set_meta(META_SEQ, _take_seq())
 	card.mouse_filter = Control.MOUSE_FILTER_STOP
 	card.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	card.tooltip_text = "Click to look at it"
+	card.tooltip_text = tr("Click to look at it")
 	card.gui_input.connect(_on_card_input.bind(key))
 	card.minimum_size_changed.connect(_on_card_resized.bind(card.get_instance_id()))
 	var column := VBoxContainer.new()
@@ -487,7 +499,7 @@ func _sync_tray() -> void:
 		child.queue_free()
 	var lines := history_lines()
 	if lines.is_empty():
-		lines.append("No alerts yet")
+		lines.append(tr("No alerts yet"))
 	for line in lines.slice(0, TRAY_LINES):
 		var label := Label.new()
 		label.text = line
@@ -654,7 +666,7 @@ func _layout_cards() -> void:
 	for i in drawable.size():
 		drawable[i].visible = i < heights.size()
 	_hidden = 0 if tray_open else drawable.size() - heights.size()
-	_more.text = "+%d more" % _hidden
+	_more.text = tr("+{count} more").format({"count": _hidden})
 	_more.visible = _hidden > 0
 	if tray_open:
 		var content := _tray_lines.get_combined_minimum_size().y

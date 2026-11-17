@@ -46,6 +46,8 @@ const NO_TIER := 0
 
 ## The dialog's canvas layer: with the intro, over the HUD and the build menu.
 const LAYER := 10
+## The English msgids of the dialog's title and footer. The dialog itself says tr()
+## of the same literals, because the POT extractor reads only literals.
 const TITLE_TEXT := "Your airport has grown"
 const FOOTER_TEXT := "The clock goes on when you close this."
 ## The dialog box's height: taller than the intro's, for a line per family.
@@ -128,8 +130,10 @@ func dismiss() -> void:
 
 ## The dialog's text for the listed tiers: one line per family, then the note
 ## about the clock.
-static func body_for(tiers: Array) -> String:
-	return "\n".join(UnlockFamilies.lines(tiers)) + "\n" + FOOTER_TEXT
+func body_for(tiers: Array) -> String:
+	return (
+		"\n".join(UnlockFamilies.lines(tiers)) + "\n" + tr("The clock goes on when you close this.")
+	)
 
 
 func _on_tier_changed(_tier: int) -> void:
@@ -198,12 +202,13 @@ func _open_first(kind: String) -> void:
 ## The dialog's title and text for the tiers and big firsts it holds: a dialog
 ## with a tier is a tier dialog, with the firsts' lines after the families.
 func _words(tiers: Array, firsts: Array) -> Dictionary:
+	var title := tr("Your airport has grown")
 	if firsts.is_empty():
-		return {"title": TITLE_TEXT, "body": body_for(tiers)}
+		return {"title": title, "body": body_for(tiers)}
 	if tiers.is_empty():
-		return {"title": BigFirsts.TITLE_TEXT, "body": BigFirsts.body_for(firsts)}
-	var lines := body_for(tiers).trim_suffix("\n" + FOOTER_TEXT)
-	return {"title": TITLE_TEXT, "body": lines + "\n" + BigFirsts.body_for(firsts)}
+		return {"title": BigFirsts.title_text(), "body": BigFirsts.body_for(firsts)}
+	var lines := "\n".join(UnlockFamilies.lines(tiers))
+	return {"title": title, "body": lines + "\n" + BigFirsts.body_for(firsts)}
 
 
 func _show_dialog(tiers: Array, firsts: Array = []) -> void:

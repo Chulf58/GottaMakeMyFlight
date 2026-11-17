@@ -36,8 +36,13 @@ signal dialog_changed(open: bool)
 ## The panel's canvas layer: with the intro and the unlock dialog, over the HUD.
 const LAYER := 10
 const BOX_HEIGHT := 400.0
+## The English msgids of the two footers. Tests compare against them; the dialog
+## itself says tr() of the same literals, because the POT extractor reads only literals.
 const ANNOUNCE_FOOTER := "The clock goes on when you close this."
 const OFFER_FOOTER := "The clock stays paused until you choose."
+
+## body_for is static and tr() is not, so its words go through this instance.
+static var _translator := RefCounted.new()
 
 @export var director: IncidentDirector
 @export var clock: SimClock
@@ -88,11 +93,11 @@ func dialog() -> IntroDialogue:
 static func body_for(copy: Dictionary, offer: bool) -> String:
 	var lines: Array[String] = [copy["body"]]
 	if offer:
-		lines.append("Reward: %s" % copy["reward"])
-		lines.append("If it fails: %s" % copy["failure"])
-		lines.append(OFFER_FOOTER)
+		lines.append(_translator.tr("Reward: {reward}").format({"reward": copy["reward"]}))
+		lines.append(_translator.tr("If it fails: {failure}").format({"failure": copy["failure"]}))
+		lines.append(_translator.tr("The clock stays paused until you choose."))
 	else:
-		lines.append(ANNOUNCE_FOOTER)
+		lines.append(_translator.tr("The clock goes on when you close this."))
 	return "\n".join(lines)
 
 
