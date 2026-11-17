@@ -22,15 +22,22 @@ extends RefCounted
 const EXPANSION := 0.4
 const BASE := "internationalization/pseudolocalization/"
 
+## What the live settings and the server's flag were before enable(); empty
+## while the profile is off.
 static var _saved := {}
 
 
-## Turns the profile on; keeps the settings it changes so disable() restores them.
+## Turns the profile on and snapshots what it changes for disable(). A second
+## call while the profile is already on does nothing, so the first snapshot
+## (the real state) is never overwritten by the profile's own values.
 static func enable(ratio := EXPANSION) -> void:
+	if not _saved.is_empty():
+		return
 	_saved = {
 		"use_pseudolocalization": ProjectSettings.get_setting(BASE + "use_pseudolocalization"),
 		"expansion_ratio": ProjectSettings.get_setting(BASE + "expansion_ratio"),
 		"replace_with_accents": ProjectSettings.get_setting(BASE + "replace_with_accents"),
+		"server_enabled": TranslationServer.pseudolocalization_enabled,
 	}
 	ProjectSettings.set_setting(BASE + "use_pseudolocalization", true)
 	ProjectSettings.set_setting(BASE + "expansion_ratio", ratio)
@@ -39,10 +46,13 @@ static func enable(ratio := EXPANSION) -> void:
 	TranslationServer.reload_pseudolocalization()
 
 
-## Puts every setting enable() changed back and turns the server's flag off.
+## Puts the settings and the server's flag back exactly as enable() found them.
+## Does nothing when the profile is not on.
 static func disable() -> void:
-	for key in _saved:
+	if _saved.is_empty():
+		return
+	for key in ["use_pseudolocalization", "expansion_ratio", "replace_with_accents"]:
 		ProjectSettings.set_setting(BASE + key, _saved[key])
+	TranslationServer.pseudolocalization_enabled = _saved["server_enabled"]
 	_saved = {}
-	TranslationServer.pseudolocalization_enabled = false
 	TranslationServer.reload_pseudolocalization()

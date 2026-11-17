@@ -10,6 +10,8 @@ const SAMPLE := "Mood: {mood} of {max}"
 
 func after_test() -> void:
 	PseudoLocale.disable()
+	TranslationServer.pseudolocalization_enabled = false
+	TranslationServer.reload_pseudolocalization()
 
 
 func test_it_is_off_in_the_shipped_settings() -> void:
@@ -56,4 +58,49 @@ func test_off_again_it_restores_the_string_and_the_settings() -> void:
 			)
 		)
 		. is_true()
+	)
+
+
+func test_enabling_while_the_server_flag_was_already_on_leaves_it_on() -> void:
+	TranslationServer.pseudolocalization_enabled = true
+	PseudoLocale.enable()
+	PseudoLocale.disable()
+	assert_bool(TranslationServer.pseudolocalization_enabled).is_true()
+
+
+func test_enabling_twice_keeps_the_first_snapshot() -> void:
+	PseudoLocale.enable(0.4)
+	PseudoLocale.enable(0.9)
+	(
+		assert_float(
+			ProjectSettings.get_setting("internationalization/pseudolocalization/expansion_ratio")
+		)
+		. is_equal(0.4)
+	)
+	PseudoLocale.disable()
+	(
+		assert_float(
+			ProjectSettings.get_setting("internationalization/pseudolocalization/expansion_ratio")
+		)
+		. is_equal(0.0)
+	)
+	(
+		assert_bool(
+			ProjectSettings.get_setting(
+				"internationalization/pseudolocalization/replace_with_accents"
+			)
+		)
+		. is_true()
+	)
+	assert_bool(TranslationServer.pseudolocalization_enabled).is_false()
+
+
+func test_disabling_without_enabling_changes_nothing() -> void:
+	PseudoLocale.disable()
+	assert_bool(TranslationServer.pseudolocalization_enabled).is_false()
+	(
+		assert_float(
+			ProjectSettings.get_setting("internationalization/pseudolocalization/expansion_ratio")
+		)
+		. is_equal(0.0)
 	)
