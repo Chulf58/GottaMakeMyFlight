@@ -1,0 +1,40 @@
+# Translation template for Gotta Make My Flight.
+# Written in the format of Godot's POT generation (Project Settings > Localization > POT
+# Generation) from the files in internationalization/locale/translations_pot_files.
+# Regenerate it in the editor after wrapping more strings.
+msgid ""
+msgstr ""
+"Project-Id-Version: Gotta Make My Flight\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: ui/rating_badge.gd
+msgid "No flights yet"
+msgstr ""
+
+#: ui/rating_badge.gd
+msgid "No flights yet: the rating starts when passengers make or miss a flight."
+msgstr ""
+
+#: ui/rating_badge.gd
+msgid "Airport rating: {stars} of {max}"
+msgstr ""
+
+#: ui/rating_badge.gd
+msgid "Made it: {share}% ({made} of {count} passenger)"
+msgid_plural "Made it: {share}% ({made} of {count} passengers)"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/rating_badge.gd
+msgid "Mood: {mood} of {max}"
+msgstr ""
+
+#: ui/rating_badge.gd
+msgid "Incident adjustment: {amount} stars"
+msgstr ""
+
+#: ui/rating_badge.gd
+msgid "Days counted: {days} of {window}"
+msgstr ""
