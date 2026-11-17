@@ -20,8 +20,10 @@ extends GdUnitTestSuite
 ## resting its top on the shoulder blades passed with its bottom 9-11 cm off the
 ## lower back (male_06 with two bags; anti-pattern 7e41ab22, board 2e43591b):
 ## the top and bottom halves of the panel are measured apart, each to the
-## nearest body point (torso or leg) behind it, and each must rest within
-## WORN_GAP_M on every moment.
+## nearest body point (torso or leg) behind it, and with two bags each must
+## rest within WORN_GAP_M on every moment. One bag's bottom half stands 3.9-8.1
+## cm off and is not asserted here: user-ruled 2026-11-17 a separate board item
+## (J), its placement unchanged.
 
 const MOMENTS := 32
 const CLIPS: Array[String] = ["walk", "idle"]
@@ -111,13 +113,6 @@ func test_worn_pack_clears_the_stride_of_the_checked_bodies() -> void:
 ## lower back fails (male_06 on main: bottom 0.0873-0.1078 m).
 func test_two_bag_pack_rests_top_and_bottom_on_the_checked_bodies() -> void:
 	assert_int(_halves_off(SecurityLooks.TWO_BAG_SCALE)).is_equal(0)
-
-
-## The same with one bag (scale 1.0). Open (board 2e43591b): the one-bag
-## bottom half stands 3.9-8.1 cm off on main, and the lean and row sweep found
-## no one-bag placement under WORN_GAP_M for male_06, female_01 or female_08.
-func test_one_bag_pack_rests_top_and_bottom_on_the_checked_bodies() -> void:
-	assert_int(_halves_off(1.0)).is_equal(0)
 
 
 ## The halves above WORN_GAP_M over every body at `scale_by`, each body's
