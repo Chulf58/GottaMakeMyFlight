@@ -37,7 +37,7 @@ static func drawn_hand(props: CarryOnProps, sim: PassengerSim, p: Passenger, i: 
 ## The hands holding something of `p` now (".R", ".L"): a hard case's and a
 ## roller's grip, a shoulder strap's hand; a backpack holds none. A roller's
 ## hand is its drawn one with `props` (drawn_hand()).
-static func gripping(sim: PassengerSim, p: Passenger, props: CarryOnProps = null) -> Array:
+static func gripping(sim: PassengerSim, p: Passenger, props: CarryOnProps) -> Array:
 	var out: Array = []
 	var homes := SecurityLooks.bag_homes(sim, p)
 	for i in homes.size():

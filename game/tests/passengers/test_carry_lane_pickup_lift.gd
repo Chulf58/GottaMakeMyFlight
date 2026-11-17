@@ -109,7 +109,7 @@ func _tray_to_hand() -> Dictionary:
 		var bag: Node3D = props.props_of(_subject.id)["bags"][0]
 		var hand := SecurityLooks.hand_of(sim, _subject, 0)
 		var grip := body.global_transform.affine_inverse() * props.grip_of(body, hand)
-		var own := CarryContact.body_points(body, CarryChecks.gripping(sim, _subject))
+		var own := CarryContact.body_points(body, CarryChecks.gripping(sim, _subject, props))
 		var hits := CarryContact.inside_meshes(own, bag)
 		out["frames"] += 1
 		out["inside"] += hits
