@@ -21,9 +21,9 @@ extends GdUnitTestSuite
 ## lower back (male_06 with two bags; anti-pattern 7e41ab22, board 2e43591b):
 ## the top and bottom halves of the panel are measured apart, each to the
 ## nearest body point (torso or leg) behind it, and with two bags each must
-## rest within WORN_GAP_M on every moment. One bag's bottom half stands 3.9-8.1
-## cm off and is not asserted here: user-ruled 2026-11-17 a separate board item
-## (J), its placement unchanged.
+## rest within WORN_GAP_M on every moment. So must one bag's (scale 1.0), which
+## rests its bottom on the hips (CarryWorn.hip_joints(), board e22e90c2): hung
+## on Spine_03 alone its bottom half stood 3.9-8.1 cm off on every body.
 
 const MOMENTS := 32
 const CLIPS: Array[String] = ["walk", "idle"]
@@ -113,6 +113,14 @@ func test_worn_pack_clears_the_stride_of_the_checked_bodies() -> void:
 ## lower back fails (male_06 on main: bottom 0.0873-0.1078 m).
 func test_two_bag_pack_rests_top_and_bottom_on_the_checked_bodies() -> void:
 	assert_int(_halves_off(SecurityLooks.TWO_BAG_SCALE)).is_equal(0)
+
+
+## Every body with one bag (scale 1.0), placed as drawn, on its hips
+## (CarryWorn.hip_joints(), board e22e90c2): the top half of the panel and the
+## bottom half each rest within WORN_GAP_M of the body behind it on every
+## moment. Hung on Spine_03 alone, the bottom half stood 3.9-8.1 cm off.
+func test_one_bag_pack_rests_top_and_bottom_on_the_checked_bodies() -> void:
+	assert_int(_halves_off(1.0)).is_equal(0)
 
 
 ## The halves above WORN_GAP_M over every body at `scale_by`, each body's
@@ -207,7 +215,9 @@ func _measure(b: int, scale_by: float) -> Dictionary:
 				* skeleton.global_transform
 				* skeleton.get_bone_global_pose(bone)
 			)
-			var xf := CarryWorn.worn_back(spine, 0.0, scale_by, b)
+			# The hips as CarryPlace passes them (one bag rests on them).
+			var hips := node.global_transform.affine_inverse() * CarryWorn.hip_joints(node)
+			var xf := CarryWorn.worn_back(spine, 0.0, scale_by, b, hips)
 			var to_bag := xf.affine_inverse()
 			var rest := INF
 			var legs := 0
