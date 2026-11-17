@@ -28,6 +28,9 @@ class RoomStatus:
 	var ok := false
 	## What the room still needs, most basic first. Empty when it is ready.
 	var notes := PackedStringArray()
+	## Whether the first note is the too-small one, which carries a size the
+	## screens put in the player's words (DisplayWords.notes()).
+	var too_small := false
 	var seats := 0
 	var base_spend := 0
 	## What the room costs to run per game day once it is ready: its type's
@@ -55,6 +58,7 @@ static func status(grid: BuildGrid, room_id: int) -> RoomStatus:
 	result.base_spend = type.base_spend
 	result.pieces = pieces_in(grid, area)
 	if not type.fits(area.size):
+		result.too_small = true
 		result.notes.append(
 			TOO_SMALL % [type.display_name.to_lower(), type.min_size.x, type.min_size.y]
 		)

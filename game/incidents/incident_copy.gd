@@ -16,7 +16,9 @@ static var _long := LongWords.new()
 
 
 ## The unfilled words of a major's panel: {"title", "body"} and, for an offer,
-## {"reward", "failure"}. {} for any other kind.
+## {"reward", "failure"}, each a whole line including its "Reward:" or "If it
+## fails:" lead, so a translation never splices one sentence into another. {} for
+## any other kind.
 static func template(kind: String) -> Dictionary:
 	match kind:
 		IncidentCatalogue.INSPECTOR:
@@ -37,16 +39,14 @@ static func template(kind: String) -> Dictionary:
 					)
 				),
 				"reward": _long.vip_reward(),
-				"failure":
-				_translator.tr("your rating drops by {penalty} if the VIP misses the flight."),
+				"failure": _long.vip_failure(),
 			}
 		IncidentCatalogue.FAVOUR:
 			return {
 				"title": _translator.tr("An airline asks a favour"),
 				"body":
 				_translator.tr("An airline asks you to fit {extra} more passengers onto {flight}."),
-				"reward":
-				_translator.tr("{bonus} money now, and {extra} more passengers paying their fees."),
+				"reward": _long.favour_reward(),
 				"failure": _long.favour_failure(),
 			}
 	return {}
@@ -266,13 +266,19 @@ class LongWords:
 	func vip_reward() -> String:
 		return tr(
 			# gdlint:ignore = max-line-length
-			"{bonus} money if the VIP makes the flight in a good mood (a mood of {good_mood} or higher when boarding)."
+			"Reward: {bonus} money if the VIP makes the flight in a good mood (a mood of {good_mood} or higher when boarding)."
 		)
+
+	func vip_failure() -> String:
+		return tr("If it fails: your rating drops by {penalty} if the VIP misses the flight.")
+
+	func favour_reward() -> String:
+		return tr("Reward: {bonus} money now, and {extra} more passengers paying their fees.")
 
 	func favour_failure() -> String:
 		return tr(
 			# gdlint:ignore = max-line-length
-			"the extra passengers need check-in and security too, and any who miss the flight lower your rating as usual."
+			"If it fails: the extra passengers need check-in and security too, and any who miss the flight lower your rating as usual."
 		)
 
 	func vip_neutral_result() -> String:

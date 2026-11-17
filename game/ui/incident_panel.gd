@@ -93,8 +93,8 @@ func dialog() -> IntroDialogue:
 static func body_for(copy: Dictionary, offer: bool) -> String:
 	var lines: Array[String] = [copy["body"]]
 	if offer:
-		lines.append(_translator.tr("Reward: {reward}").format({"reward": copy["reward"]}))
-		lines.append(_translator.tr("If it fails: {failure}").format({"failure": copy["failure"]}))
+		lines.append(copy["reward"])
+		lines.append(copy["failure"])
 		lines.append(_translator.tr("The clock stays paused until you choose."))
 	else:
 		lines.append(_translator.tr("The clock goes on when you close this."))

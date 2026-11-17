@@ -51,6 +51,6 @@ static func copy(kind: String) -> Dictionary:
 	return {
 		"title": "Test visit",
 		"body": "A test crew wants to use your airport.",
-		"reward": "Two stars of goodwill.",
-		"failure": "They leave and tell their friends.",
+		"reward": "Reward: Two stars of goodwill.",
+		"failure": "If it fails: They leave and tell their friends.",
 	}

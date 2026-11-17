@@ -183,7 +183,7 @@ func _object_static(object_id: int) -> Dictionary:
 	var def_id := StringName(record["def"])
 	var out := {"kind": _kind_of(def_id, object_id), "id": object_id}
 	var def := BuildCatalog.get_def(def_id)
-	out["name"] = def.display_name
+	out["name"] = DisplayWords.item(def.display_name)
 	var reachable := RoomRules.reachable_seats(grid, object_id).size()
 	if reachable < def.seats.size():
 		# A seat piece some of whose seats a guest cannot reach (a booth with an end
@@ -195,7 +195,12 @@ func _object_static(object_id: int) -> Dictionary:
 	var room_id := grid.room_at(record["anchor"])
 	if room_id != 0:
 		out["where"] = tr("In {room}").format(
-			{"room": RoomTypes.get_type(grid.get_room(room_id)["type"]).display_name}
+			{
+				"room":
+				DisplayWords.room_type(
+					RoomTypes.get_type(grid.get_room(room_id)["type"]).display_name
+				)
+			}
 		)
 	var upkeep: int = PIECE_UPKEEP.get(def_id, 0)
 	if upkeep > 0:
@@ -216,7 +221,12 @@ func _room_static(room_id: int) -> Dictionary:
 	var ready := RoomRules.status(sim.grid, room_id)
 	if ready == null:
 		return {}
-	var out := {"kind": Kind.ROOM, "id": room_id, "name": ready.type_name, "ready": ready}
+	var out := {
+		"kind": Kind.ROOM,
+		"id": room_id,
+		"name": DisplayWords.room_type(ready.type_name),
+		"ready": ready
+	}
 	var counters: Array[int] = []
 	var ids := sim.grid.object_ids()
 	ids.sort()
@@ -235,7 +245,7 @@ func _landside_static() -> Dictionary:
 		return {}
 	return {
 		"kind": Kind.LANDSIDE,
-		"name": LandsidePlacement.NAMES[plan.kind],
+		"name": DisplayWords.landside(LandsidePlacement.NAMES[plan.kind]),
 		"spot": plan.spot,
 		"is_lot": LandsidePlacement.is_lot(plan.kind),
 		"capacity": plan.capacity,
@@ -294,12 +304,14 @@ func _arch_live(arch: int) -> Dictionary:
 	if not lanes.is_complete(arch):
 		return {
 			"status":
-			tr("Status: Not ready, {reason}").format({"reason": lanes.status_text(arch).to_lower()})
+			tr("Status: Not ready, {reason}").format(
+				{"reason": DisplayWords.reason(lanes.status_text(arch))}
+			)
 		}
 	return _station_live([arch])
 
 
-## "Linked to Gate B", or why the desk is unlinked (GateLinksView.caption_for).
+## "Linked to Gate B", or why the desk is unlinked (DisplayWords.gate_unlinked).
 func _gate_status(desk: int) -> String:
 	if gates == null:
 		return ""
@@ -309,10 +321,10 @@ func _gate_status(desk: int) -> String:
 	var reason: Dictionary = gates.unlinked().get(desk, {})
 	if reason.is_empty():
 		return tr("Status: Not linked yet")
-	return tr("Status: {state}").format({"state": GateLinksView.caption_for(reason).to_lower()})
+	return DisplayWords.gate_unlinked(reason)
 
 
-## "Biggest plane: Medium" for a linked desk's gate, GateDesks.WAITING_TEXT for
+## "Biggest plane: Medium" for a linked desk's gate, GateDesks.waiting_text() for
 ## one that waits on its side's spur, or "" for an unlinked desk.
 func _gate_planes(desk: int) -> String:
 	if gates == null:
@@ -321,10 +333,10 @@ func _gate_planes(desk: int) -> String:
 		if binding["desk"] == desk:
 			var plane_class := gates.max_class(binding["gate"])
 			if gates.waits_on_spur(binding["gate"]):
-				return GateDesks.WAITING_TEXT
+				return GateDesks.waiting_text()
 			if plane_class == "":
 				return tr("Biggest plane: none, no room outside the exit")
-			return tr("Biggest plane: {class}").format({"class": plane_class.capitalize()})
+			return DisplayWords.biggest_plane(plane_class)
 	return ""
 
 
@@ -347,11 +359,11 @@ func _room_live() -> Dictionary:
 	var out := {}
 	if not ready.ok:
 		out["status"] = tr("Status: Not ready, {reason}").format(
-			{"reason": ready.notes[0].to_lower()}
+			{"reason": DisplayWords.room_reason(ready)}
 		)
 	elif not counters.is_empty() and not ShopCounters.room_open(sim, _static["id"]):
 		out["status"] = tr("Status: Closed, {reason}").format(
-			{"reason": MissSignals.NO_STAFF_REASON.to_lower()}
+			{"reason": DisplayWords.reason(MissSignals.NO_STAFF_REASON)}
 		)
 	else:
 		out["status"] = tr("Status: Open")
@@ -395,14 +407,12 @@ func _station_status(station: int) -> String:
 		return tr("Status: Open")
 	var reason := MissSignals.closed_reason(sim, station)
 	if reason == MissSignals.FAULT_REASON:
-		return tr("Status: {state}").format(
-			{"state": StationClosures.fault_text(sim.staff.faults.repair_tick(station))}
-		)
+		return DisplayWords.fault_status(sim.staff.faults.repair_tick(station))
 	if reason == "" and ShopCounters.closed(sim).has(station):
 		reason = MissSignals.NO_STAFF_REASON
 	if reason == "":
 		return tr("Status: Not in use")
-	return tr("Status: Closed, {reason}").format({"reason": reason.to_lower()})
+	return tr("Status: Closed, {reason}").format({"reason": DisplayWords.reason(reason)})
 
 
 ## "Staff: 1 on duty", "Staff: 1 on the way" or "Staff: none", over `stations`.

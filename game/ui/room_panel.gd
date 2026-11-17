@@ -64,10 +64,10 @@ func show_room(id: int) -> void:
 	visible = status != null
 	if status == null:
 		return
-	_line(status.type_name, &"HudTitle")
+	_line(DisplayWords.room_type(status.type_name), &"HudTitle")
 	if status.ok:
-		_line(RoomRules.READY, &"HudGoodText")
-	for note in status.notes:
+		_line(DisplayWords.ready(), &"HudGoodText")
+	for note in DisplayWords.notes(status):
 		_line(note, &"HudAttentionText")
 	if status.type_id == BAG_ROOM:
 		_line(tr("Belt ends {count}").format({"count": status.pieces.get(BELT_END, 0)}))
