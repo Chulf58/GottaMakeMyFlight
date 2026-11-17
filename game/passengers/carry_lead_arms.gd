@@ -10,8 +10,9 @@ extends RefCounted
 ## in `plans` (the "lead" plans of the bags in a hand-led move now) by the
 ## plan's weight (CarryArm.reach_weight) and bends it down as far as a low one
 ## needs (CarryStoop), with a backpack held by its loop as the plan says
-## (CarryArm.loop_grip). A hand in no move reaches for nothing. Writes which
-## hands reach to `held` ("reach_on").
+## (CarryArm.loop_grip), its fist turned palm down as far as the pack has
+## turned to hang plumb (plan "loop_yaw", CarryArm.loop_roll). A hand in no
+## move reaches for nothing. Writes which hands reach to `held` ("reach_on").
 static func apply(held: Dictionary, plans: Array, rig: Dictionary) -> void:
 	var weights := [0.0, 0.0]
 	var targets := [Vector3.ZERO, Vector3.ZERO]
@@ -19,6 +20,7 @@ static func apply(held: Dictionary, plans: Array, rig: Dictionary) -> void:
 	var drops := [CarryStoop.HIPS_ALL, CarryStoop.HIPS_ALL]
 	var bends := [1.0, 1.0]
 	var loops := [false, false]
+	var rolls := [1.0, 1.0]
 	for plan: Dictionary in plans:
 		for hand in 2:
 			if plan["weights"][hand] > weights[hand]:
@@ -28,6 +30,7 @@ static func apply(held: Dictionary, plans: Array, rig: Dictionary) -> void:
 				drops[hand] = plan["drops"][hand]
 				bends[hand] = plan.get("bends", bends)[hand]
 				loops[hand] = plan.get("loops", loops)[hand]
+				rolls[hand] = plan.get("loop_yaw", 0.0)
 	held["reach_on"] = [weights[0] > 0.0, weights[1] > 0.0]
 	var stoop: CarryStoop = rig["stoop"]
 	for list: Array in [stoop.targets, stoop.sides, stoop.weights, stoop.keeps, stoop.drops]:
@@ -38,6 +41,7 @@ static func apply(held: Dictionary, plans: Array, rig: Dictionary) -> void:
 		arm.reach_weight = weights[hand]
 		arm.reach_target = targets[hand]
 		arm.loop_grip = loops[hand]
+		arm.loop_roll = rolls[hand]
 		if weights[hand] > 0.0:
 			stoop.targets.append(targets[hand])
 			stoop.sides.append(hand)

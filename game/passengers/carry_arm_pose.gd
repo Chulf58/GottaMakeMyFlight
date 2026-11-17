@@ -55,6 +55,12 @@ const LOOP_HOOK_DEGREES: Array[float] = [80.0, 80.0]
 ## at its rest the male right thumb's tip reached into the pack (the same
 ## sweep); bent this far it stays out.
 const LOOP_THUMB_DEGREES: Array[float] = [-90.0, -90.0]
+## The same hand's Thumb bend (CarryArm.loop_fold_degrees), per skeleton: the
+## whole thumb folded in toward the curled fingers, so it lies against the fist
+## instead of standing out from it (board 4e5a26f0). Swept -60 to 60 on the
+## loop_hand spike, the thumb tip's distance to the nearest finger point falls
+## from 3.3 to 3.4 cm unbent to 1.6 cm (male, -60) and 1.1 cm (female, -40).
+const LOOP_FOLD_DEGREES: Array[float] = [-60.0, -40.0]
 
 
 ## Aims each hand of `body` at its target for the hand-led moves of its bags
@@ -199,6 +205,12 @@ static func loop_hook_degrees(body: Node3D) -> float:
 ## (LOOP_THUMB_DEGREES by its skeleton).
 static func loop_thumb_degrees(body: Node3D) -> float:
 	return LOOP_THUMB_DEGREES[_skeleton_of(body)]
+
+
+## The loop hand's Thumb bend for passenger body `body`
+## (LOOP_FOLD_DEGREES by its skeleton).
+static func loop_fold_degrees(body: Node3D) -> float:
+	return LOOP_FOLD_DEGREES[_skeleton_of(body)]
 
 
 ## Which skeleton `body` uses: 0 the male, 1 the female.
