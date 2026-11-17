@@ -21,6 +21,23 @@ const START_M := 0.35
 const DOOR_EVERY_FRAMES := 9
 const PLATES := 6
 const LEFT := 1
+## PullSwapStrip's framings, then two farther and higher ones for a guest in a
+## doorway, whose roller is pulled behind it so the aim point sits low and the
+## head can leave the top of the frame from the near ones.
+const DOOR_FRAMINGS: Array[Vector3] = [
+	Vector3(1.0, 3.4, 0.8),
+	Vector3(0.3, 4.0, 0.4),
+	Vector3(1.6, 2.8, -1.4),
+	Vector3(2.2, 1.9, 1.2),
+	Vector3(1.4, 4.8, 1.2),
+	Vector3(0.6, 5.6, 0.6),
+]
+const AIM_BODY := 0.7
+const AIM_UP_M := 0.9
+## The jet bridge's folded box (jet_bridge_pose.gd shows it when the bridge is
+## folded). It stands outside the terminal wall and is hidden for a plate, as
+## the plate's camera can sit on its side of the wall.
+const FOLD_CAP := "Fold_Cap"
 
 var _doors: Array[Vector3] = []
 var _door := Vector3.INF
@@ -123,6 +140,23 @@ static func _solid(kind: int) -> bool:
 	return kind == BuildGrid.WallKind.PLAIN or kind == BuildGrid.WallKind.GLASS
 
 
+## PullSwapStrip's _aim() with the aim point nearer the guest's chest than the
+## bag (AIM_BODY of the way, not 0.4): the roller is pulled behind a guest in a
+## doorway, and the lower aim let the head leave the top of the frame.
+func _aim(cam: Camera3D, shell: MeshInstance3D, body: Node3D, place: int, framing: Vector3) -> void:
+	var centre := shell.global_transform * shell.get_aabb().get_center()
+	var turn := Basis(Vector3.UP, body.rotation.y)
+	var side := turn * (Vector3.LEFT if CarryLead.hand_of(place) == 0 else Vector3.RIGHT)
+	var behind := turn * Vector3.FORWARD
+	var look_at := centre.lerp(body.global_position + Vector3.UP * AIM_UP_M, AIM_BODY)
+	cam.look_at_from_position(
+		look_at + side * framing.x + Vector3.UP * framing.y + behind * framing.z,
+		look_at,
+		Vector3.UP
+	)
+	cam.current = true
+
+
 ## One plate of the strip: "" when saved, else what failed.
 func _door_plate(
 	tree: SceneTree,
@@ -142,12 +176,17 @@ func _door_plate(
 	var cam := Camera3D.new()
 	cam.fov = 45.0
 	main.add_child(cam)
+	var caps: Array[Node3D] = []
+	for cap in main.find_children(FOLD_CAP, "Node3D", true, false):
+		if (cap as Node3D).visible:
+			(cap as Node3D).visible = false
+			caps.append(cap as Node3D)
 	var holder := PlateSight.colliders(main, [main] as Array[Node], {shell: TAG, body: GUEST_TAG})
 	await tree.physics_frame
 	var picked := -1
 	var verdict := {}
-	for f in FRAMINGS.size():
-		_aim(cam, shell, body, place, FRAMINGS[f])
+	for f in DOOR_FRAMINGS.size():
+		_aim(cam, shell, body, place, DOOR_FRAMINGS[f])
 		verdict = _judge(cam, main, props, shell, body, state)
 		if (verdict["bad"] as String) == "":
 			picked = f
@@ -182,6 +221,8 @@ func _door_plate(
 			]
 		)
 	)
+	for cap in caps:
+		cap.visible = true
 	holder.queue_free()
 	cam.queue_free()
 	if was_cam != null:
