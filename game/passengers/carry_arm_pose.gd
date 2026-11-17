@@ -31,6 +31,15 @@ const PULL_LEAN_DEGREES := 12.0
 ## Walking only (walk_share()): standing idle the clip's own twist is already
 ## near a mirror (0.0 and 0.8 cm), and running is left as it was.
 const PULL_TWIST_DEGREES: Array[float] = [40.0, 20.0]
+## How far a hand holding a backpack by its grab loop bends its Fingertips on
+## from their rest (CarryArm.loop_hook_degrees), per skeleton: the male
+## bodies, then the female. Each turns the tips back under the hand toward the
+## palm, a hook round the loop, instead of straight on past it into the pack
+## below. At 60 and 75 degrees the tips pointed down and still reached 5 mm
+## under the part of the pack the clip check leaves to the holding hand
+## (crossing probe --lane, seed 1106001, passenger 2: 15 frames; board
+## 4e5a26f0).
+const LOOP_HOOK_DEGREES: Array[float] = [135.0, 135.0]
 
 
 ## Aims each hand of `body` at its target for the hand-led moves of its bags
@@ -127,6 +136,7 @@ static func pose_arms(props: CarryOnProps, held: Dictionary, body: Node3D, now: 
 		var share: float = swaps[side]
 		arm.rest_twist_weight = walk * (share if share >= 0.0 else (1.0 if pulling else 0.0))
 		arm.twist_degrees = pull_twist_degrees(body)
+		arm.loop_hook_degrees = loop_hook_degrees(body)
 
 
 ## How much of `body`'s drawn pose is the walk clip, 0 to 1: 1 walking, 0 in
@@ -156,8 +166,18 @@ static func walk_share(held: Dictionary, body: Node3D) -> float:
 ## by the skeleton its body uses, PassengerLooks.PER_VARIANT; a node with no
 ## body takes the male's).
 static func pull_twist_degrees(body: Node3D) -> float:
-	var female := int(body.get_meta(&"body", 0)) >= PassengerLooks.PER_VARIANT
-	return PULL_TWIST_DEGREES[1 if female else 0]
+	return PULL_TWIST_DEGREES[_skeleton_of(body)]
+
+
+## The loop hand's Fingertips bend for passenger body `body`
+## (LOOP_HOOK_DEGREES by its skeleton, as pull_twist_degrees()).
+static func loop_hook_degrees(body: Node3D) -> float:
+	return LOOP_HOOK_DEGREES[_skeleton_of(body)]
+
+
+## Which skeleton `body` uses: 0 the male, 1 the female.
+static func _skeleton_of(body: Node3D) -> int:
+	return 1 if int(body.get_meta(&"body", 0)) >= PassengerLooks.PER_VARIANT else 0
 
 
 ## Turns off both CarryArms of a character with no bags (or released), with

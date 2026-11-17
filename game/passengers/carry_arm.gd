@@ -27,8 +27,10 @@ const FOREARM_M := 0.3
 ## The way the elbow bends (skeleton space, x outward) on a reach with
 ## loop_grip: down and a little out, not out and back.
 const LOOP_POLE := Vector3(0.3, -1.0, 0.0)
-## The finger bones (".R" or ".L" added) a loop_grip hand straightens.
+## The finger bones (".R" or ".L" added) a loop_grip hand turns to their rest,
+## and the one of them it then bends on by loop_hook_degrees.
 const LOOP_FINGERS: Array[String] = ["Fingers", "Fingertips", "Thumb", "Thumb_Tip"]
+const LOOP_HOOK_BONE := "Fingertips"
 
 ## Which arm: 0 the right, 1 the left (the order of CarryOnProps' hands).
 @export var side := 0
@@ -69,6 +71,10 @@ var reach_target := Vector3.ZERO
 ## _reach_loop()): the hand level and the elbow down (LOOP_POLE), so the fingers
 ## stay over the loop, out of the pack. Set by CarryOnProps with the reach.
 var loop_grip := false
+## How far a loop_grip hand bends its Fingertips on from their rest, toward
+## the palm, so the tips hook under the loop instead of lying straight on past
+## it (CarryArmPose.LOOP_HOOK_DEGREES, per skeleton; set by pose_arms()).
+var loop_hook_degrees := 0.0
 
 
 func _process_modification_with_delta(_delta: float) -> void:
@@ -112,21 +118,27 @@ func _process_modification_with_delta(_delta: float) -> void:
 	for i in bones.size():
 		skeleton.set_bone_global_pose(bones[i], chain[i])
 	if loop_grip and reach > 0.0:
-		_straighten_fingers(skeleton, reach)
+		_loop_fingers(skeleton, reach)
 
 
 ## A hand over a backpack's grab loop (loop_grip): its fingers and thumb turned
-## `weight` of the way from the clip's curl to their rest, straight on from the
-## hand. Curled as the clips hold them, they went up to 6 cm under the grip,
+## `weight` of the way from the clip's curl to their rest, and the Fingertips
+## to their rest bent on by loop_hook_degrees (about the bone's own z axis,
+## mirrored on the left hand, the way the walk and idle clips curl them).
+## Curled as the clips hold them, the fingers went up to 6 cm under the grip,
 ## into the loop and the pack's top below it (backpack_pickup_probe, board
-## 41c159bc).
-func _straighten_fingers(skeleton: Skeleton3D, weight: float) -> void:
+## 41c159bc); at their rest the tips lay straight on past the loop (board
+## 4e5a26f0). The Fingers bone stays at its rest, so the grip does not move.
+func _loop_fingers(skeleton: Skeleton3D, weight: float) -> void:
 	var suffix: String = [".R", ".L"][side]
 	for name in LOOP_FINGERS:
 		var bone := skeleton.find_bone(name + suffix)
 		if bone < 0:
 			continue
 		var rest := skeleton.get_bone_rest(bone).basis.get_rotation_quaternion()
+		if name == LOOP_HOOK_BONE:
+			var bend := deg_to_rad(loop_hook_degrees) * (1.0 if side == 0 else -1.0)
+			rest = rest * Quaternion(Vector3.BACK, bend)
 		var now := skeleton.get_bone_pose_rotation(bone)
 		skeleton.set_bone_pose_rotation(bone, now.slerp(rest, weight))
 
