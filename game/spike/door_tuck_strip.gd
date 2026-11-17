@@ -20,10 +20,17 @@ const DOOR_OUT_REL := "res://../tools/blender/out/door-tuck"
 const START_M := 0.35
 const DOOR_EVERY_FRAMES := 9
 const PLATES := 6
+## A plate no framing can show (a door leaf, the wall or the bridge stands in
+## every line to the guest or its hand) is printed as skipped, not saved, and is
+## not a problem by itself; the strip is, when fewer than STRIP_MIN_SAVED are saved.
+const STRIP_MIN_SAVED := 3
+const STRIP_UNFRAMED := "unframed: "
 const LEFT := 1
 ## PullSwapStrip's framings, then two farther and higher ones for a guest in a
 ## doorway, whose roller is pulled behind it so the aim point sits low and the
-## head can leave the top of the frame from the near ones.
+## head can leave the top of the frame from the near ones, then two along the
+## door's axis (behind and ahead of the guest, through the opening, for a guest
+## whose sides are walled off) and one from the side away from the hand.
 const DOOR_FRAMINGS: Array[Vector3] = [
 	Vector3(1.0, 3.4, 0.8),
 	Vector3(0.3, 4.0, 0.4),
@@ -31,7 +38,14 @@ const DOOR_FRAMINGS: Array[Vector3] = [
 	Vector3(2.2, 1.9, 1.2),
 	Vector3(1.4, 4.8, 1.2),
 	Vector3(0.6, 5.6, 0.6),
+	Vector3(0.0, 3.0, 2.6),
+	Vector3(0.5, 3.0, -2.6),
+	Vector3(-1.0, 3.4, 0.8),
 ]
+## The most a sight line to the grip may land from it on the guest: the hand's
+## own surface, not the torso or an arm in front of it.
+const HAND_NEAR_M := 0.2
+const HAND_SPREAD_M := 0.06
 const AIM_BODY := 0.7
 const AIM_UP_M := 0.9
 ## The jet bridge's folded box (jet_bridge_pose.gd shows it when the bridge is
@@ -42,6 +56,9 @@ const FOLD_CAP := "Fold_Cap"
 var _doors: Array[Vector3] = []
 var _door := Vector3.INF
 var _taken := 0
+var _bag: Node3D = null
+var _control_done := false
+var _control_bad := ""
 
 
 func look(
@@ -76,10 +93,20 @@ func look(
 		return
 	var problem: String = await _door_plate(tree, main, props, p, body, bag, state)
 	_taken += 1
+	if problem.begins_with(STRIP_UNFRAMED):
+		print("DOOR_STRIP skipped %s" % problem.trim_prefix(STRIP_UNFRAMED))
+		problem = ""
 	if problem != "":
 		problems.append(problem)
 	if _taken >= PLATES or problem.contains(BODY):
 		done = true
+		if saved.size() < STRIP_MIN_SAVED:
+			problems.append(
+				(
+					"%d of %d plates saved, at least %d wanted"
+					% [saved.size(), _taken, STRIP_MIN_SAVED]
+				)
+			)
 		_sheet()
 
 
@@ -157,6 +184,79 @@ func _aim(cam: Camera3D, shell: MeshInstance3D, body: Node3D, place: int, framin
 	cam.current = true
 
 
+## PullSwapStrip's checks, then the pulling hand's: a sight line from the camera
+## to the grip must meet no mesh but the roller's own (the bar the hand holds)
+## and, when it lands on the guest, land within HAND_NEAR_M of the grip (a line
+## that lands on the torso first has the hand behind the body). The plate that
+## passed with the hand behind a door lintel (board e4be6104) failed neither
+## the bag's nor the guest's lines. Control, once per run, on the first view
+## that passes the rest: the same check on a point 0.4 m behind the guest's
+## chest (the torso is in front of it) must fail, or the check is not engaged;
+## the plates' own hand_gap (within HAND_NEAR_M) is the positive.
+func _judge(
+	cam: Camera3D,
+	main: Node3D,
+	props: CarryOnProps,
+	shell: MeshInstance3D,
+	body: Node3D,
+	state: Dictionary
+) -> Dictionary:
+	var verdict := super._judge(cam, main, props, shell, body, state)
+	var grip := props.grip_of(body, maxi(int(state.get("held_by", -1)), 0))
+	var space := main.get_world_3d().direct_space_state
+	var hand := _hand_seen(space, cam.global_position, grip)
+	verdict["report"] += " hand_gap=%.2f hand_blocked=%s" % [hand["gap"], hand["blockers"]]
+	if _control_bad != "":
+		verdict["bad"] = _control_bad
+	elif (verdict["bad"] as String) == "" and not hand["ok"]:
+		verdict["bad"] = (
+			"hand not seen: first hit %.2f m from the grip, blocked %s"
+			% [hand["gap"], hand["blockers"]]
+		)
+	if (verdict["bad"] as String) == "" and not _control_done:
+		_control_done = true
+		var away := (body.global_position - cam.global_position) * Vector3(1.0, 0.0, 1.0)
+		var hidden := body.global_position + Vector3.UP * 1.3 + away.normalized() * 0.4
+		var control := _hand_seen(space, cam.global_position, hidden)
+		print(
+			(
+				"DOOR_STRIP hand control ok=%s gap=%.2f %s"
+				% [control["ok"], control["gap"], control["blockers"]]
+			)
+		)
+		if control["ok"]:
+			_control_bad = "hand control: the check passed a point 0.4 m behind the guest's chest"
+			verdict["bad"] = _control_bad
+	return verdict
+
+
+## {ok, gap, blockers} of five sight lines from `from`, to the grip and to four
+## points HAND_SPREAD_M around it across the view (the grip point can sit just
+## outside the hand's mesh, so a line to it alone passes the hand): the roller's
+## own meshes are not blockers, `gap` is how near the grip any line lands on the
+## guest (INF when none does), and a hand is seen when one lands within
+## HAND_NEAR_M with no other mesh in front of any line.
+func _hand_seen(space: PhysicsDirectSpaceState3D, from: Vector3, grip: Vector3) -> Dictionary:
+	var dir := (grip - from).normalized()
+	var right := dir.cross(Vector3.UP).normalized() * HAND_SPREAD_M
+	var up := right.cross(dir).normalized() * HAND_SPREAD_M
+	var targets: Array[Vector3] = [grip, grip + right, grip - right, grip + up, grip - up]
+	var lines := PlateSight.sight_lines(space, from, targets, GUEST_TAG)
+	var own := {}
+	if _bag != null:
+		for mi in _bag.find_children("*", "MeshInstance3D", true, false):
+			own[String(mi.name)] = true
+	var blockers: Array[String] = []
+	for name: String in lines["blockers"]:
+		if not own.has(name):
+			blockers.append(name)
+	var landed: Array[Vector3] = lines["on_subject"]
+	var gap := INF
+	for at in landed:
+		gap = minf(gap, at.distance_to(grip))
+	return {"ok": blockers.is_empty() and gap <= HAND_NEAR_M, "gap": gap, "blockers": blockers}
+
+
 ## One plate of the strip: "" when saved, else what failed.
 func _door_plate(
 	tree: SceneTree,
@@ -170,6 +270,7 @@ func _door_plate(
 	var shell := bag.find_child(BODY, true, false) as MeshInstance3D
 	if shell == null:
 		return "id %d: no %s mesh on the roller %s" % [p.id, BODY, bag.name]
+	_bag = bag
 	var place := int(state.get("place", -1))
 	var name := "door_tuck_hand%d_id%d_%02d" % [CarryLead.hand_of(place), p.id, _taken]
 	var was_cam := main.get_viewport().get_camera_3d()
@@ -185,12 +286,14 @@ func _door_plate(
 	await tree.physics_frame
 	var picked := -1
 	var verdict := {}
+	var why: Array[String] = []
 	for f in DOOR_FRAMINGS.size():
 		_aim(cam, shell, body, place, DOOR_FRAMINGS[f])
 		verdict = _judge(cam, main, props, shell, body, state)
 		if (verdict["bad"] as String) == "":
 			picked = f
 			break
+		why.append("f%d %s" % [f, verdict["bad"]])
 	var img: Image = null
 	if picked >= 0:
 		for n in 3:
@@ -227,7 +330,9 @@ func _door_plate(
 	cam.queue_free()
 	if was_cam != null:
 		was_cam.make_current()
-	if picked < 0 or (verdict["bad"] as String) != "":
+	if picked < 0:
+		return "%s%s: %s" % [STRIP_UNFRAMED, name, " | ".join(why)]
+	if (verdict["bad"] as String) != "":
 		return "%s: %s" % [name, verdict["bad"]]
 	saved.append(img)
 	var dir := ProjectSettings.globalize_path(_out_rel()).simplify_path()
