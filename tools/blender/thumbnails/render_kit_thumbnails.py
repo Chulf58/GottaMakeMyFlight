@@ -566,7 +566,9 @@ def toon_material(name, rgb=None):
     Lambert) * LIGHT_GAIN + sky ambient), then the Filmic tonemap."""
     m = bpy.data.materials.new("THUMB_" + name)
     m.use_nodes = True
-    m.line_color = (*filmic_rgb(outline_rgb(name)), 1.0)
+    # Generated glyph materials (rgb given) have no .tres: the generic outline is intended.
+    outline = OUTLINE_RGB if rgb is not None else outline_rgb(name)
+    m.line_color = (*filmic_rgb(outline), 1.0)
     nt = m.node_tree
     nt.nodes.clear()
     out = nt.nodes.new("ShaderNodeOutputMaterial")
@@ -658,7 +660,24 @@ _outlines = {}
 
 def outline_rgb(name):
     """The material's outline_color from its game .tres (sRGB), so the thumbnail
-    outline takes the game's colour (the trees and bushes have a green one)."""
+    outline takes the game's colour (the trees and bushes have a green one). A name
+    with no parsed colour is PROBE_INVALID: a renamed material or a changed .tres
+    format must not fall back to the generic outline unseen."""
+    _load_outlines()
+    if name not in _outlines:
+        invalid("no outline_color parsed for material '%s' from %s" % (name, MATERIALS_DIR))
+    return _outlines[name]
+
+
+def check_toon_outlines(names=TOON_MATERIALS):
+    """Every Toon material the kit .glbs can name must have a parsed outline_color."""
+    _load_outlines()
+    missing = [n for n in names if n not in _outlines]
+    if missing:
+        invalid("no outline_color parsed from %s for Toon materials %s" % (MATERIALS_DIR, missing))
+
+
+def _load_outlines():
     if not _outlines:
         for fn in sorted(os.listdir(MATERIALS_DIR)):
             if not fn.endswith(".tres"):
@@ -670,7 +689,6 @@ def outline_rgb(name):
             if res and col:
                 _outlines[res.group(1)] = tuple(float(v) for v in col.group(1).split(",")[:3])
         log("outline colours from %s: %s" % (MATERIALS_DIR, _outlines))
-    return _outlines.get(name, OUTLINE_RGB)
 
 
 _materials = {}
@@ -1054,6 +1072,7 @@ def main():
     unknown = [a for a in wanted if a not in ITEMS]
     if unknown:
         invalid("unknown items %s; known: %s" % (unknown, ORDER))
+    check_toon_outlines()
     ramp = bpy.data.images.load(os.path.join(TEXTURES, RAMP_PNG))
     rpx = ramp.pixels[:]
     steps = sorted({round(rpx[i], 3) for i in range(0, len(rpx), 4)})
