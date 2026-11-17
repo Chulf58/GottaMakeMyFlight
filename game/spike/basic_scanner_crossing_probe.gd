@@ -80,7 +80,13 @@ const MAIN_SCENE := "res://main/main.tscn"
 const RAY := Vector3(0.0013, 1.0, 0.0007)
 const MARGIN_PX := 8.0
 const MIN_SUBJECT_PX := 60.0
-const RUN_LIMIT_MS := 240000
+## The run ends when every passenger is done; these two only stop a run that cannot. Plate holds
+## pause the sim clock and take real time (a lane run measured about 6 sim ticks per real second),
+## so the run is bounded in sim ticks (a passenger stuck in the sim) and the real-time limit is a
+## backstop for a hung run, not the normal stop (a 240 s limit cut off a returner on its second
+## pass, board bcad1dd0).
+const SIM_LIMIT_TICKS := 6000
+const RUN_LIMIT_MS := 900000
 const SEND_GAP_TICKS := 20
 const MAX_SPAWNS := 80
 ## Near a booth: inside this half-size around its origin, in its own frame
@@ -541,7 +547,8 @@ func _cross() -> void:
 	var stop := Time.get_ticks_msec() + limit_ms
 	_hold_runners_late()
 	_clock.ticked.connect(_on_tick)
-	while Time.get_ticks_msec() < stop:
+	var sim_stop := _clock.tick + SIM_LIMIT_TICKS
+	while Time.get_ticks_msec() < stop and _clock.tick < sim_stop:
 		await RenderingServer.frame_post_draw
 		# A hold no plate took (the move was not wanted after all) lets go.
 		if _hold_frame >= 0 and not _plate_task and Engine.get_process_frames() - _hold_frame > 3:
@@ -569,7 +576,36 @@ func _cross() -> void:
 		_invalid("roles never filled after %d spawns: %s" % [spawns, _roles])
 	for id in _sent:
 		if not _done(id):
+			print(_never_cleared_line(id, Time.get_ticks_msec() - (stop - limit_ms)))
 			_invalid("passenger %d never cleared security" % id)
+
+
+## Why passenger `id` is not done when the run stops: its stage, security phase, whether the
+## checks ever saw it near a booth, whether it is drawn near one now, and the sim tick and real
+## time (ms) spent, so a run-limit stop reads differently from a passenger stuck in the sim.
+func _never_cleared_line(id: int, elapsed_ms: int) -> String:
+	var p := _sim.get_passenger(id)
+	var body := _views.node_for(id)
+	var local := Vector3.ZERO
+	if body != null and not _booths.is_empty():
+		local = (_booths[0][1] as Transform3D) * body.global_position
+	return (
+		(
+			"NEVER_CLEARED passenger=%d stage=%s phase=%s checked=%s near_booth=%s booth_local=%s"
+			+ " sim_tick=%d paused=%s elapsed_ms=%d"
+		)
+		% [
+			id,
+			Passenger.Stage.keys()[p.stage] if p != null else "gone",
+			p.security_phase if p != null else -1,
+			_stats.has(id),
+			_near_booth(id),
+			local,
+			_clock.tick,
+			_clock.paused,
+			elapsed_ms
+		]
+	)
 
 
 ## Close plates of the hand-led moves (CarryLead) as they happen anywhere: the
@@ -689,7 +725,14 @@ func _plate_lead(id: int, i: int, key: String) -> void:
 				]
 			)
 		)
+		# In the lane the queue stands round the arch: another passenger or its bag in the way
+		# failed every heading of the same moment for two different passengers (the plate
+		# was given up on). The close plate is of this passenger alone, as the reach and
+		# detail plates are; the arch and the belt still block a sight line.
+		var others := _hide_others(id)
 		var ok := await _plate_close(id, bags[i], name)
+		for node in others:
+			node.visible = true
 		_clock.set_paused(false)
 		if not ok:
 			continue
@@ -730,6 +773,11 @@ func _done(id: int) -> bool:
 	if not _stats.has(id):
 		return false
 	if p == null:
+		return true
+	# Past the walk to the gate a passenger stands or sits where it is: a standing spot can lie
+	# inside NEAR (measured: 2.2 m past the arch), so it would never "leave" and the run would
+	# wait for it until the limit. Nothing is left to check of a passenger that stands there.
+	if p.stage > Passenger.Stage.TO_GATE:
 		return true
 	return p.stage > Passenger.Stage.SECURITY and not _near_booth(id)
 
