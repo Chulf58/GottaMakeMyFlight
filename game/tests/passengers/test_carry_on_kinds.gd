@@ -175,20 +175,29 @@ func test_a_backpack_is_worn_behind_the_spine() -> void:
 
 ## A body with an index (PassengerLooks.BODIES) wears the pack where
 ## CarryWorn.BACK_ON_SPINE_M puts it for its size; one bag on a bone tilted
-## back (by 0.1 rad here) leans in by that much more (board 4af10dd0), two
-## bags' pack and a bone tilted forward by BACK_LEAN_DEGREES alone.
+## back (by 0.1 rad here) leans in by that much more (board 4af10dd0), a bone
+## tilted forward by BACK_LEAN_DEGREES alone. Two bags' pack leans by the
+## body's own CarryWorn.TWO_BAG_LEAN_DEGREES, without the tilt (board
+## 2e43591b); the lean is read signed (in at the top positive), as that lean
+## is negative.
 func test_an_indexed_body_wears_the_pack_from_its_table_entry() -> void:
 	var body := 9
 	var per := CarryWorn.BACK_ON_SPINE_M[body]
 	var spine := Transform3D(Basis(Vector3.RIGHT, -0.1), Vector3(0.0, 1.455, -0.044))
 	var up := spine.basis.y.normalized()
+	var out := (Vector3.FORWARD - up * Vector3.FORWARD.dot(up)).normalized()
 	var length := CarryOnProps.bag_box(SecurityLooks.Kind.BACKPACK).end.z
 	for size in 2:
 		var scale_by := 1.0 if size == 0 else SecurityLooks.TWO_BAG_SCALE
 		var xf := CarryWorn.worn_back(spine, 0.0, scale_by, body)
-		var lean := rad_to_deg(xf.basis.z.normalized().angle_to(up))
-		var tilt := rad_to_deg(0.1) if size == 0 else 0.0
-		assert_float(lean).is_equal_approx(CarryWorn.BACK_LEAN_DEGREES + tilt, 0.01)
+		var along := xf.basis.z.normalized()
+		var lean := rad_to_deg(atan2(-along.dot(out), along.dot(up)))
+		var want_lean := (
+			CarryWorn.BACK_LEAN_DEGREES + rad_to_deg(0.1)
+			if size == 0
+			else CarryWorn.TWO_BAG_LEAN_DEGREES[body]
+		)
+		assert_float(lean).is_equal_approx(want_lean, 0.01)
 		var top_inner := (xf * Vector3(0.0, 0.0, length)) - spine.origin
 		var want := Vector2(per.x, per.y) if size == 0 else Vector2(per.z, per.w)
 		assert_float((top_inner - up * top_inner.dot(up)).length()).is_equal_approx(want.x, 0.0001)

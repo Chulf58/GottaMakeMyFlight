@@ -187,7 +187,10 @@ func _case(name: String, bags: int, moments: Array) -> void:
 			slab = true
 			_slab(bag)
 		var hits := CarryContact.inside_meshes(
-			CarryContact.body_points(body, CarryChecks.gripping(_world.world.sim, _subject)), bag
+			CarryContact.body_points(
+				body, CarryChecks.gripping(_world.world.sim, _subject, _views.carry_on_props())
+			),
+			bag
 		)
 		frames += 1
 		inside += hits
@@ -227,7 +230,9 @@ func _print_frame(
 		bag.global_transform * CarryOnProps.bag_box(SecurityLooks.Kind.BACKPACK).get_center()
 	)
 	var bones := (
-		CarryChecks.contact_bones(body, CarryChecks.gripping(_world.world.sim, _subject), bag)
+		CarryChecks.contact_bones(
+			body, CarryChecks.gripping(_world.world.sim, _subject, _views.carry_on_props()), bag
+		)
 		if hits > 0
 		else {}
 	)
@@ -252,7 +257,9 @@ func _print_frame(
 ## The lowest, highest and middle of the body points inside `bag`, in the
 ## pack's own frame (its grab loop is CarryOnProps.BACKPACK_LOOP).
 func _inside_at(body: Node3D, bag: Node3D) -> Array:
-	var own := CarryContact.body_points(body, CarryChecks.gripping(_world.world.sim, _subject))
+	var own := CarryContact.body_points(
+		body, CarryChecks.gripping(_world.world.sim, _subject, _views.carry_on_props())
+	)
 	var to_bag := bag.global_transform.affine_inverse()
 	var found: Array[Vector3] = []
 	for mi: MeshInstance3D in bag.find_children("*", "MeshInstance3D", true, false):
@@ -340,7 +347,9 @@ func _plate(name: String, view: String, k: float, body: Node3D, bag: Node3D) -> 
 	print("INFRAME %s sight on_pack=%d/5 blockers=%s" % [tag, on, lines["blockers"]])
 	ok = ok and on >= 2 and hi.y - lo.y >= MIN_PACK_PX
 	var loop := bag.global_transform * CarryOnProps.BACKPACK_LOOP
-	var own := CarryContact.body_points(body, CarryChecks.gripping(_world.world.sim, _subject))
+	var own := CarryContact.body_points(
+		body, CarryChecks.gripping(_world.world.sim, _subject, _views.carry_on_props())
+	)
 	print(
 		(
 			"PLATE_AT %s k=%.2f held_by=%d grip_body=%s shoulder_y=%.3f grip_to_loop_m=%.3f inside=%d"

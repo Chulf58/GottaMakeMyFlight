@@ -30,32 +30,63 @@ const BACK_TOP_OVER_SPINE_M := 0.06
 ## rests at 0.0296 m, under the 0.03 m limit). The one-bag rows of female_01,
 ## _03, _04 and _08 put the left buttock in the pack too (the crossing probe
 ## saw female_08's, board bcad1dd0, once the test checked every body): set
-## from the stride the same way (female_01 rests at 0.0296 m).
+## from the stride the same way (female_01 rests at 0.0296 m). The two-bag
+## rows (z, w) go with TWO_BAG_LEAN_DEGREES (board 2e43591b).
 const BACK_ON_SPINE_M: Array[Vector4] = [
-	Vector4(0.086, -0.09, 0.097, 0.03),
-	Vector4(0.082, -0.06, 0.100, 0.00),
-	Vector4(0.081, -0.06, 0.100, 0.00),
-	Vector4(0.081, -0.06, 0.100, 0.00),
-	Vector4(0.081, -0.06, 0.081, -0.06),
-	Vector4(0.086, -0.09, 0.102, 0.00),
-	Vector4(0.086, -0.09, 0.102, 0.00),
-	Vector4(0.081, -0.06, 0.100, 0.00),
-	Vector4(0.081, -0.06, 0.081, -0.06),
-	Vector4(0.090, 0.03, 0.110, 0.06),
-	Vector4(0.085, 0.03, 0.110, 0.06),
-	Vector4(0.085, 0.03, 0.110, 0.06),
-	Vector4(0.088, 0.03, 0.110, 0.06),
-	Vector4(0.085, 0.03, 0.092, 0.03),
-	Vector4(0.088, 0.03, 0.110, 0.06),
-	Vector4(0.088, 0.03, 0.110, 0.06),
-	Vector4(0.090, 0.03, 0.110, 0.06),
-	Vector4(0.088, 0.03, 0.110, 0.06),
-	Vector4(0.088, 0.03, 0.110, 0.06),
+	Vector4(0.086, -0.09, 0.112, 0.00),
+	Vector4(0.082, -0.06, 0.127, 0.06),
+	Vector4(0.081, -0.06, 0.127, 0.06),
+	Vector4(0.081, -0.06, 0.121, 0.03),
+	Vector4(0.081, -0.06, 0.127, 0.06),
+	Vector4(0.086, -0.09, 0.112, 0.00),
+	Vector4(0.086, -0.09, 0.112, 0.00),
+	Vector4(0.081, -0.06, 0.127, 0.06),
+	Vector4(0.081, -0.06, 0.127, 0.06),
+	Vector4(0.090, 0.03, 0.108, 0.09),
+	Vector4(0.085, 0.03, 0.121, 0.12),
+	Vector4(0.085, 0.03, 0.121, 0.12),
+	Vector4(0.088, 0.03, 0.121, 0.12),
+	Vector4(0.085, 0.03, 0.119, 0.15),
+	Vector4(0.088, 0.03, 0.116, 0.12),
+	Vector4(0.088, 0.03, 0.116, 0.12),
+	Vector4(0.090, 0.03, 0.123, 0.12),
+	Vector4(0.088, 0.03, 0.116, 0.12),
+	Vector4(0.088, 0.03, 0.121, 0.12),
 ]
 ## The least panel gap BACK_ON_SPINE_M is measured for.
 const BACK_CLEAR_M := 0.004
 ## It leans in at the top by this much, its bottom out clear of the hips.
 const BACK_LEAN_DEGREES := 10.0
+## Per body (PassengerLooks.BODIES): two bags' lean in place of
+## BACK_LEAN_DEGREES (negative: the bottom in, toward the lower back). At 10
+## degrees the two-bag pack rested its top on the back and stood its bottom
+## half 5-11 cm off the lower back on every body (male_06 10.8 cm; board
+## 2e43591b, anti-pattern 7e41ab22). Set with the row's z and w from the
+## least of the larger of the top and bottom half gaps over the walk and idle
+## clips (test_worn_back_stride_clear.gd's halves; lean in 2.5 degree steps,
+## height in 3 cm steps, the distance behind the closest that keeps the torso
+## out of the pack by about BACK_CLEAR_M and the legs LEG_CLEAR_M out).
+const TWO_BAG_LEAN_DEGREES: Array[float] = [
+	-17.5,
+	-15.0,
+	-15.0,
+	-17.5,
+	-15.0,
+	-17.5,
+	-17.5,
+	-15.0,
+	-15.0,
+	-7.5,
+	-15.0,
+	-15.0,
+	-15.0,
+	-10.0,
+	-12.5,
+	-12.5,
+	-15.0,
+	-12.5,
+	-15.0,
+]
 
 
 ## A shoulder bag hung on the shoulder of `side` (0 right, 1 left) of a body
@@ -147,25 +178,33 @@ static func worn_back(spine: Transform3D, yaw: float, scale_by: float, body := -
 		var legacy := Vector2(BACK_FROM_SPINE_M, BACK_TOP_OVER_SPINE_M)
 		return worn_back_at(spine, yaw, scale_by, legacy, false)
 	var per := BACK_ON_SPINE_M[body]
-	var top := Vector2(per.x, per.y) if scale_by >= 1.0 else Vector2(per.z, per.w)
-	return worn_back_at(spine, yaw, scale_by, top, scale_by >= 1.0)
+	if scale_by >= 1.0:
+		return worn_back_at(spine, yaw, scale_by, Vector2(per.x, per.y), true)
+	var top := Vector2(per.z, per.w)
+	return worn_back_at(spine, yaw, scale_by, top, false, TWO_BAG_LEAN_DEGREES[body])
 
 
 ## worn_back() with the top of the panel `top.x` behind the bone and `top.y`
-## above it: its length along the bone leaning in at the top by
-## BACK_LEAN_DEGREES about that top. With `follow_tilt` (one bag) the lean
-## grows by as far as the bone tilts back past upright, so a back leaning back
-## in an idle does not swing the pack's bottom into the hips (stooping and
-## leaning forward unchanged); two bags' smaller pack keeps the plain lean,
+## above it: its length along the bone leaning in at the top by `lean_degrees`
+## (BACK_LEAN_DEGREES; two bags' per body, TWO_BAG_LEAN_DEGREES) about that
+## top. With `follow_tilt` (one bag) the lean grows by as far as the bone tilts
+## back past upright, so a back leaning back in an idle does not swing the
+## pack's bottom into the hips (stooping and leaning forward unchanged); two
+## bags' smaller pack keeps its plain lean, without the tilt,
 ## which rests it better (conductor ruling 2026-11-06, board 4af10dd0).
 static func worn_back_at(
-	spine: Transform3D, yaw: float, scale_by: float, top: Vector2, follow_tilt: bool
+	spine: Transform3D,
+	yaw: float,
+	scale_by: float,
+	top: Vector2,
+	follow_tilt: bool,
+	lean_degrees := BACK_LEAN_DEGREES
 ) -> Transform3D:
 	var up := spine.basis.y.normalized()
 	var behind := Basis(Vector3.UP, yaw) * Vector3.FORWARD
 	var out := (behind - up * behind.dot(up)).normalized()
 	var anchor := spine.origin + out * top.x + up * top.y
-	var lean := deg_to_rad(BACK_LEAN_DEGREES)
+	var lean := deg_to_rad(lean_degrees)
 	if follow_tilt:
 		lean += maxf(0.0, asin(clampf(up.dot(behind), -1.0, 1.0)))
 	var along := up * cos(lean) - out * sin(lean)

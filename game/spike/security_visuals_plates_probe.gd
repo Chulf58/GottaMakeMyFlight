@@ -856,10 +856,11 @@ func _facing_points(prop: Node3D) -> Array[Vector3]:
 func _check_clearance(name: String, id: int) -> void:
 	var body := _views.node_for(id)
 	var p := _sim.get_passenger(id)
+	var props := _views.carry_on_props()
 	var homes := SecurityLooks.bag_homes(_sim, p)
 	var points := CarryContact.body_points(body, [])
 	var part_hits := _box_hits(points)
-	var own := CarryContact.body_points(body, CarryChecks.gripping(_sim, p))
+	var own := CarryContact.body_points(body, CarryChecks.gripping(_sim, p, props))
 	if not _body_control_done:
 		# Control: a bag at the hips must hold body points.
 		var at_hips := Transform3D(Basis.IDENTITY, body.global_position + Vector3.UP * 0.85)
@@ -897,7 +898,7 @@ func _check_clearance(name: String, id: int) -> void:
 					"CONTACT %s bones=%s bag_bag=%d"
 					% [
 						name,
-						CarryChecks.contact_bones(body, CarryChecks.gripping(_sim, p), bag),
+						CarryChecks.contact_bones(body, CarryChecks.gripping(_sim, p, props), bag),
 						CarryChecks.bag_bag(bags)
 					]
 				)
@@ -1181,7 +1182,7 @@ func _plate_live_walk_back(id: int, name: String) -> bool:
 		frames += 1
 		var body := _views.node_for(id)
 		var homes := SecurityLooks.bag_homes(_sim, p)
-		var gripping := CarryChecks.gripping(_sim, p)
+		var gripping := CarryChecks.gripping(_sim, p, props)
 		var drawn: Array[Node3D] = props.props_of(id)["bags"]
 		var weight := props.front_weight_of(id)
 		var carrying := homes.has(SecurityLooks.Home.HAND) and drawn.size() == p.carry_on
@@ -1412,7 +1413,7 @@ func _sweep() -> void:
 				continue
 			carriers.append(id)
 			var clip := (body.get_node("AnimationPlayer") as AnimationPlayer).current_animation
-			var own := CarryContact.body_points(body, CarryChecks.gripping(_sim, p))
+			var own := CarryContact.body_points(body, CarryChecks.gripping(_sim, p, props))
 			var pair := CarryChecks.bag_bag(drawn)
 			if pair > 0:
 				contacts["bag_bag"] = contacts.get("bag_bag", 0) + pair
@@ -1447,7 +1448,7 @@ func _sweep() -> void:
 								% [
 									key,
 									CarryChecks.contact_bones(
-										body, CarryChecks.gripping(_sim, p), drawn[i]
+										body, CarryChecks.gripping(_sim, p, props), drawn[i]
 									)
 								]
 							)
