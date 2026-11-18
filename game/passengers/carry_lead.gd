@@ -874,7 +874,7 @@ static func plan(
 	if from_end == End.HELD and (not roller or flags.get("in_stall", false)):
 		anchor_from = bag["anchor_from"]
 	elif from_end == End.HELD and lifted_down:
-		anchor_from = bag.get("hung_at", CarryOnProps.ROLLER_HANDLE)
+		anchor_from = bag["hung_at"]
 	# Lying in a tray or on the floor a roller is taken (and left) by its carry
 	# handle on top, not by its bar down at the rod line (the forearm went
 	# through it, board item 5ed915b0); the hand slides to the bar as it lifts.

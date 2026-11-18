@@ -91,6 +91,7 @@ func test_the_put_in_plan_starts_at_the_hung_handle_with_the_carry_pose_on() -> 
 		"was": SecurityLooks.Home.HAND * 4,
 		"from": start,
 		"anchor_from": CarryOnProps.ROLLER_HANDLE,
+		"hung_at": CarryOnProps.ROLLER_HANDLE,
 		"start_body": Transform3D(),
 	}
 	var body := {
