@@ -187,15 +187,15 @@ class Words:
 		return text.format({"gate": gate})
 
 	## The refusal for `reason` naming `flights`, a list of `count` flights, or "".
-	## English reads the same for one flight and several; a language whose
-	## sentence changes with the count fills both forms.
+	## Each form is one whole sentence: one flight, or several. The gate-flights-
+	## stuck sentence already speaks of "these flights", so its English is one text.
 	func flight_refusal(reason: BuildResult.Reason, flights: String, count: int) -> String:
 		var text := ""
 		match reason:
 			BuildResult.Reason.GATE_IN_USE:
 				text = tr_n(
 					"A flight is still due at this gate. Remove it after the flight leaves: {flights}",
-					"A flight is still due at this gate. Remove it after the flight leaves: {flights}",
+					"Flights are still due at this gate. Remove it after they leave: {flights}",
 					count,
 					"build refusal"
 				)
@@ -211,7 +211,7 @@ class Words:
 					# gdlint:ignore = max-line-length
 					"The side taxiway would have to move and leave a booked flight with no way to its gate: {flights}",
 					# gdlint:ignore = max-line-length
-					"The side taxiway would have to move and leave a booked flight with no way to its gate: {flights}",
+					"The side taxiway would have to move and leave booked flights with no way to their gates: {flights}",
 					count,
 					"build refusal"
 				)

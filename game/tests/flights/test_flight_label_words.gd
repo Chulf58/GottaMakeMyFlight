@@ -1,7 +1,8 @@
 class_name TestFlightLabelWords
 extends GdUnitTestSuite
 ## A flight's name reaches the player as one whole msgid per shape, with
-## {time}, {airline}, {city} and {gate} placeholders, and a build refusal that
+## {time}, {airline}, {city} and {gate} placeholders; an offer clash is one whole
+## "it clashes with ..." sentence per shape; and a build refusal that
 ## names flights is one whole sentence whose form follows the flight count
 ## (board T13). The English stays the stored detail; a run-time Translation
 ## proves the shapes, the plural forms (tr_n is never pseudolocalized) and the
@@ -11,22 +12,26 @@ const OSLO := {"time": "10:20", "airline": "Gotta Air", "city": "Oslo"}
 const ONE_OFF := {"time": "08:13", "airline": "", "city": ""}
 const IN_USE := "A flight is still due at this gate. Remove it after the flight leaves: {flights}"
 const STUCK := "No other gate is free for these flights. Move them in Departures first: {flights}"
+const IN_USE_MANY := "Flights are still due at this gate. Remove it after they leave: {flights}"
 const STRANDS := (
 	"The side taxiway would have to move and leave a booked flight with no way to its gate:"
 	+ " {flights}"
 )
-const SHAPES := [
-	"the {time} flight",
-	"the {time} {airline} flight to {city}",
-	"the {time} {airline} flight to {city} on the runway",
-	"the {time} {airline} flight to {city} on the taxi lane",
-	"the {time} {airline} flight to {city} at gate {gate}",
-	"the {time} flight on the runway",
-	"the {time} flight on the taxi lane",
-	"the {time} flight at gate {gate}",
-	"another flight on the runway",
-	"another flight on the taxi lane",
-	"another flight at gate {gate}",
+const STRANDS_MANY := (
+	"The side taxiway would have to move and leave booked flights with no way to their gates:"
+	+ " {flights}"
+)
+const LABELS := ["the {time} flight", "the {time} {airline} flight to {city}"]
+const CLASHES := [
+	"it clashes with the {time} {airline} flight to {city} on the runway",
+	"it clashes with the {time} {airline} flight to {city} on the taxi lane",
+	"it clashes with the {time} {airline} flight to {city} at gate {gate}",
+	"it clashes with the {time} flight on the runway",
+	"it clashes with the {time} flight on the taxi lane",
+	"it clashes with the {time} flight at gate {gate}",
+	"it clashes with another flight on the runway",
+	"it clashes with another flight on the taxi lane",
+	"it clashes with another flight at gate {gate}",
 ]
 
 var _translation: Translation
@@ -105,35 +110,35 @@ func test_every_clash_shape_reads_as_before_in_english() -> void:
 		assert_array(shown)
 		. is_equal(
 			[
-				"the 10:20 Gotta Air flight to Oslo at gate A",
-				"the 10:20 Gotta Air flight to Oslo on the runway",
-				"the 10:20 Gotta Air flight to Oslo on the taxi lane",
-				"the 08:13 flight at gate A",
-				"the 08:13 flight on the runway",
-				"the 08:13 flight on the taxi lane",
-				"another flight at gate A",
-				"another flight on the runway",
-				"another flight on the taxi lane",
+				"it clashes with the 10:20 Gotta Air flight to Oslo at gate A",
+				"it clashes with the 10:20 Gotta Air flight to Oslo on the runway",
+				"it clashes with the 10:20 Gotta Air flight to Oslo on the taxi lane",
+				"it clashes with the 08:13 flight at gate A",
+				"it clashes with the 08:13 flight on the runway",
+				"it clashes with the 08:13 flight on the taxi lane",
+				"it clashes with another flight at gate A",
+				"it clashes with another flight on the runway",
+				"it clashes with another flight on the taxi lane",
 			]
 		)
 	)
 
 
-func test_a_clash_shape_is_one_translated_msgid_with_its_gate() -> void:
+func test_a_clash_shape_is_one_translated_sentence_with_its_gate() -> void:
 	var german := _new_translation()
 	german.add_message(
-		"the {time} {airline} flight to {city} at gate {gate}",
-		"der {airline}-Flug um {time} nach {city} an Gate {gate}",
-		"flight label"
+		CLASHES[2],
+		"es kollidiert mit dem {airline}-Flug um {time} nach {city} an Gate {gate}",
+		"offer clash"
 	)
-	german.add_message(
-		"another flight on the runway", "ein anderer Flug auf der Piste", "flight label"
-	)
+	german.add_message(CLASHES[6], "es kollidiert mit einem Flug auf der Piste", "offer clash")
 	var at_gate := _clash(OSLO, "contract Y clashes with X at gate B")
 	var other := _clash({}, "contract Y clashes with flight X-d0 on the runway")
 	print("at gate: %s | unknown: %s" % [at_gate, other])
-	assert_str(at_gate).is_equal("der Gotta Air-Flug um 10:20 nach Oslo an Gate B")
-	assert_str(other).is_equal("ein anderer Flug auf der Piste")
+	assert_str(at_gate).is_equal(
+		"es kollidiert mit dem Gotta Air-Flug um 10:20 nach Oslo an Gate B"
+	)
+	assert_str(other).is_equal("es kollidiert mit einem Flug auf der Piste")
 
 
 func test_a_refusal_naming_one_or_several_flights_reads_as_before_in_english() -> void:
@@ -153,6 +158,16 @@ func test_a_refusal_naming_one_or_several_flights_reads_as_before_in_english() -
 	assert_str(spur.reason_text()).is_equal(STRANDS.format({"flights": FlightLabel.english(OSLO)}))
 	# The stored detail keeps today's English list.
 	assert_str(three.detail).is_equal("the 10:00 flight, the 11:00 flight, the 12:00 flight")
+
+
+func test_several_flights_read_in_the_english_plural() -> void:
+	var two := [_hour(10), _hour(11)] as Array[Dictionary]
+	var busy := _refusal(BuildResult.Reason.GATE_IN_USE, two).reason_text()
+	var spur := _refusal(BuildResult.Reason.SPUR_STRANDS, two).reason_text()
+	print("busy: %s\nspur: %s" % [busy, spur])
+	var listed := "the 10:00 flight and the 11:00 flight"
+	assert_str(busy).is_equal(IN_USE_MANY.format({"flights": listed}))
+	assert_str(spur).is_equal(STRANDS_MANY.format({"flights": listed}))
 
 
 func test_one_flight_and_several_take_their_own_plural_form_and_list_grammar() -> void:
@@ -195,12 +210,20 @@ func test_an_unknown_flight_shows_the_detail_as_it_came() -> void:
 func test_every_flight_msgid_is_in_the_template_once() -> void:
 	var entries := PotEntries.parse(FileAccess.get_file_as_string("res://locale/messages.pot"))
 	var missing: Array[String] = []
-	for shape: String in SHAPES:
+	for shape: String in LABELS:
 		if PotEntries.complete(entries, "flight label", shape) != 1:
 			missing.append(shape)
-	for sentence: String in [IN_USE, STUCK, STRANDS]:
-		if PotEntries.complete(entries, "build refusal", sentence, sentence) != 1:
-			missing.append(sentence)
-	print("flight msgids checked: %d, missing: %s" % [SHAPES.size() + 3, missing])
+	for shape: String in CLASHES:
+		if PotEntries.complete(entries, "offer clash", shape) != 1:
+			missing.append(shape)
+	for pair: Array in [[IN_USE, IN_USE_MANY], [STUCK, STUCK], [STRANDS, STRANDS_MANY]]:
+		if PotEntries.complete(entries, "build refusal", pair[0], pair[1]) != 1:
+			missing.append(pair[0])
+	var checked := LABELS.size() + CLASHES.size() + 3
+	print("flight msgids checked: %d, missing: %s" % [checked, missing])
+	assert_int(checked).is_equal(14)
 	assert_array(missing).is_empty()
-	assert_int(PotEntries.count(entries, "build refusal", IN_USE, IN_USE)).is_equal(1)
+	# The old fragment msgids are gone.
+	assert_int(PotEntries.count(entries, "", "it clashes with {flight}")).is_equal(0)
+	var old_end := "Can't end this contract: {flight} would have no taxi plan"
+	assert_int(PotEntries.count(entries, "", old_end)).is_equal(0)

@@ -1785,7 +1785,11 @@ msgid "Can't end this contract: another flight would have no taxi plan"
 msgstr ""
 
 #: ui/departures_board.gd
-msgid "Can't end this contract: {flight} would have no taxi plan"
+msgid "Can't end this contract: the {time} flight would have no taxi plan"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "Can't end this contract: the {time} {airline} flight to {city} would have no taxi plan"
 msgstr ""
 
 #: ui/departures_board.gd
@@ -1908,10 +1912,6 @@ msgstr ""
 
 #: ui/offer_panel.gd
 msgid "Accepted {airline} to {destination}, {note}"
-msgstr ""
-
-#: ui/offer_panel.gd
-msgid "it clashes with {flight}"
 msgstr ""
 
 #: ui/offer_panel.gd
@@ -5747,7 +5747,7 @@ msgstr ""
 #: build/build_words.gd
 msgctxt "build refusal"
 msgid "A flight is still due at this gate. Remove it after the flight leaves: {flights}"
-msgid_plural "A flight is still due at this gate. Remove it after the flight leaves: {flights}"
+msgid_plural "Flights are still due at this gate. Remove it after they leave: {flights}"
 msgstr[0] ""
 msgstr[1] ""
 
@@ -5761,7 +5761,7 @@ msgstr[1] ""
 #: build/build_words.gd
 msgctxt "build refusal"
 msgid "The side taxiway would have to move and leave a booked flight with no way to its gate: {flights}"
-msgid_plural "The side taxiway would have to move and leave a booked flight with no way to its gate: {flights}"
+msgid_plural "The side taxiway would have to move and leave booked flights with no way to their gates: {flights}"
 msgstr[0] ""
 msgstr[1] ""
 
@@ -5776,48 +5776,48 @@ msgid "the {time} {airline} flight to {city}"
 msgstr ""
 
 #: flights/flight_label.gd
-msgctxt "flight label"
-msgid "the {time} {airline} flight to {city} on the runway"
+msgctxt "offer clash"
+msgid "it clashes with the {time} {airline} flight to {city} on the runway"
 msgstr ""
 
 #: flights/flight_label.gd
-msgctxt "flight label"
-msgid "the {time} {airline} flight to {city} on the taxi lane"
+msgctxt "offer clash"
+msgid "it clashes with the {time} {airline} flight to {city} on the taxi lane"
 msgstr ""
 
 #: flights/flight_label.gd
-msgctxt "flight label"
-msgid "the {time} {airline} flight to {city} at gate {gate}"
+msgctxt "offer clash"
+msgid "it clashes with the {time} {airline} flight to {city} at gate {gate}"
 msgstr ""
 
 #: flights/flight_label.gd
-msgctxt "flight label"
-msgid "the {time} flight on the runway"
+msgctxt "offer clash"
+msgid "it clashes with the {time} flight on the runway"
 msgstr ""
 
 #: flights/flight_label.gd
-msgctxt "flight label"
-msgid "the {time} flight on the taxi lane"
+msgctxt "offer clash"
+msgid "it clashes with the {time} flight on the taxi lane"
 msgstr ""
 
 #: flights/flight_label.gd
-msgctxt "flight label"
-msgid "the {time} flight at gate {gate}"
+msgctxt "offer clash"
+msgid "it clashes with the {time} flight at gate {gate}"
 msgstr ""
 
 #: flights/flight_label.gd
-msgctxt "flight label"
-msgid "another flight on the runway"
+msgctxt "offer clash"
+msgid "it clashes with another flight on the runway"
 msgstr ""
 
 #: flights/flight_label.gd
-msgctxt "flight label"
-msgid "another flight on the taxi lane"
+msgctxt "offer clash"
+msgid "it clashes with another flight on the taxi lane"
 msgstr ""
 
 #: flights/flight_label.gd
-msgctxt "flight label"
-msgid "another flight at gate {gate}"
+msgctxt "offer clash"
+msgid "it clashes with another flight at gate {gate}"
 msgstr ""
 
 #: ui/list_words.gd

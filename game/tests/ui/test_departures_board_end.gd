@@ -170,7 +170,9 @@ func test_a_refused_end_shows_the_reason_in_the_row_and_ends_nothing() -> void:
 	var shown := _board.message_text()
 	print("refused: ", shown)
 	assert_str(shown).is_equal(
-		DeparturesBoard.END_REFUSED_TEXT.format({"flight": "the 15:00 Gotta Air flight to Paris"})
+		DeparturesBoard.END_REFUSED_TEXT.format(
+			{"time": "15:00", "airline": "Gotta Air", "city": "Paris"}
+		)
 	)
 	assert_bool(shown.contains("C-d")).is_false()
 	assert_object(_board.confirm_end_button()).is_null()
@@ -180,6 +182,25 @@ func test_a_refused_end_shows_the_reason_in_the_row_and_ends_nothing() -> void:
 	_press(_board.end_button("B", 0))
 	assert_object(_board.confirm_end_button()).is_not_null()
 	assert_str(_board.message_text()).is_empty()
+
+
+## The refusal names the flight inside one whole sentence per name shape, so a
+## translation of that sentence reaches the row with no English fragment in it.
+func test_a_refused_end_is_one_translated_sentence() -> void:
+	_strand_world()
+	var german := Translation.new()
+	german.locale = TranslationServer.get_locale()
+	german.add_message(
+		DeparturesBoard.END_REFUSED_TEXT,
+		"Vertrag nicht beendet: der {airline}-Flug um {time} nach {city} hätte keinen Rollplan"
+	)
+	TranslationServer.add_translation(german)
+	var shown := DeparturesBoard.end_refusal_words(_sim, "A")
+	TranslationServer.remove_translation(german)
+	print("refused (run-time translation): ", shown)
+	assert_str(shown).is_equal(
+		"Vertrag nicht beendet: der Gotta Air-Flug um 15:00 nach Paris hätte keinen Rollplan"
+	)
 
 
 func test_a_world_that_changed_while_asking_is_refused_at_the_confirm() -> void:

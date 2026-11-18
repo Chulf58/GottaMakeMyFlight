@@ -80,7 +80,9 @@ const MOVED_TEXT := "{destination} now uses gate {gate} for the days not yet iss
 const BUSY_TEXT := "Gate {gate} is busy when this flight needs it"
 const END_PROMPT := "End this contract?"
 const ENDED_TEXT := "{destination} contract ended. Flights already booked still fly"
-const END_REFUSED_TEXT := "Can't end this contract: {flight} would have no taxi plan"
+const END_REFUSED_TEXT := (
+	"Can't end this contract: the {time} {airline} flight to {city}" + " would have no taxi plan"
+)
 const MAX_ROWS_PER_DAY := 5
 
 @export var flights: FlightSim
@@ -698,17 +700,26 @@ static func end_refusal_words(sim: FlightSim, contract_id: String) -> String:
 		return ""
 	var id: String = refusal["id"]
 	var parts := FlightTimetable.parse_occurrence(id)
-	var label := FlightLabel.of(
+	var label := FlightLabel.label_args(
 		sim, parts.is_empty(), id if parts.is_empty() else parts["contract"]
 	)
-	if label == "":
+	if label.is_empty():
 		return TranslationServer.translate(
 			"Can't end this contract: another flight would have no taxi plan"
 		)
+	# One whole sentence per flight-name shape (FlightLabel.label_args()).
+	if label["airline"] == "" or label["city"] == "":
+		return (
+			TranslationServer
+			. translate("Can't end this contract: the {time} flight would have no taxi plan")
+			. format(label)
+		)
 	return (
 		TranslationServer
-		. translate("Can't end this contract: {flight} would have no taxi plan")
-		. format({"flight": label})
+		. translate(
+			"Can't end this contract: the {time} {airline} flight to {city} would have no taxi plan"
+		)
+		. format(label)
 	)
 
 

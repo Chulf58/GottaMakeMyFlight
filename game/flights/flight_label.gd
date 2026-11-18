@@ -92,10 +92,10 @@ static func words(label: Dictionary) -> String:
 	return Words.new().label(label)
 
 
-## What a FlightSim clash `reason` ran into, in the player's words: "the 20:30
-## Blue Fjord flight to Oslo on the runway", one whole msgid per shape. An
-## unknown flight reads "another flight". "" when `reason` is not a clash.
-static func clash_with(sim: FlightSim, reason: String) -> String:
+## The clash in a FlightSim `reason`, in the player's words: "it clashes with
+## the 20:30 Blue Fjord flight to Oslo on the runway", one whole msgid per
+## shape. An unknown flight reads "another flight". "" when `reason` is not a clash.
+static func clash_sentence(sim: FlightSim, reason: String) -> String:
 	var found := parse_clash(reason)
 	if found.is_empty():
 		return ""
@@ -122,23 +122,32 @@ class Words:
 		var text := ""
 		match [shape, found["where"]]:
 			["full", "on the runway"]:
-				text = tr("the {time} {airline} flight to {city} on the runway", "flight label")
+				text = tr(
+					"it clashes with the {time} {airline} flight to {city} on the runway",
+					"offer clash"
+				)
 			["full", "on the taxi lane"]:
-				text = tr("the {time} {airline} flight to {city} on the taxi lane", "flight label")
+				text = tr(
+					"it clashes with the {time} {airline} flight to {city} on the taxi lane",
+					"offer clash"
+				)
 			["full", _]:
-				text = tr("the {time} {airline} flight to {city} at gate {gate}", "flight label")
+				text = tr(
+					"it clashes with the {time} {airline} flight to {city} at gate {gate}",
+					"offer clash"
+				)
 			["one-off", "on the runway"]:
-				text = tr("the {time} flight on the runway", "flight label")
+				text = tr("it clashes with the {time} flight on the runway", "offer clash")
 			["one-off", "on the taxi lane"]:
-				text = tr("the {time} flight on the taxi lane", "flight label")
+				text = tr("it clashes with the {time} flight on the taxi lane", "offer clash")
 			["one-off", _]:
-				text = tr("the {time} flight at gate {gate}", "flight label")
+				text = tr("it clashes with the {time} flight at gate {gate}", "offer clash")
 			[_, "on the runway"]:
-				text = tr("another flight on the runway", "flight label")
+				text = tr("it clashes with another flight on the runway", "offer clash")
 			[_, "on the taxi lane"]:
-				text = tr("another flight on the taxi lane", "flight label")
+				text = tr("it clashes with another flight on the taxi lane", "offer clash")
 			_:
-				text = tr("another flight at gate {gate}", "flight label")
+				text = tr("it clashes with another flight at gate {gate}", "offer clash")
 		var values := named.duplicate()
 		values["gate"] = found["gate"]
 		return text.format(values)
