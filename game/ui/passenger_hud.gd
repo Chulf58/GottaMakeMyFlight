@@ -210,6 +210,7 @@ func _ready() -> void:
 	_inspect.camera = camera
 	_inspect.flights = flights
 	_inspect.clock = clock
+	_inspect.baggage = get_node_or_null("../BaggageSim") as BaggageSim
 	_inspect.built_card.sim = sim
 	_inspect.built_card.selection = _built
 	_inspect.built_card.build_mode = build_mode

@@ -93,6 +93,11 @@ var _body := Label.new()
 var _row := VBoxContainer.new()
 var _toggle := Button.new()
 var _reset := Button.new()
+## The follow hint's Show me button, visible only while that hint shows.
+var _show_me := Button.new()
+## Whether the follow hint's seen mark is in the file. It is written when the
+## player selects a passenger; showing it marks it seen for this launch only.
+var _follow_saved := false
 
 
 ## How a launch runs hints: ISOLATED with the explicit switch (in any context),
@@ -196,6 +201,24 @@ func reset_button() -> Button:
 	return _reset
 
 
+func show_me_button() -> Button:
+	return _show_me
+
+
+## The Show me button: selects a passenger as a click does (FollowInvite), which
+## counts the follow hint as seen. Returns the passenger's id, 0 for none.
+func press_show_me() -> int:
+	var id := FollowInvite.show_me(
+		hud.sim if hud != null else null,
+		hud.views if hud != null else null,
+		hud.camera if hud != null else null,
+		hud.landside_views if hud != null else null
+	)
+	if id != 0:
+		_note_followed()
+	return id
+
+
 ## Turns hints on or off and keeps the choice. Off hides the hint on screen.
 func set_enabled(value: bool) -> void:
 	_toggle.set_pressed_no_signal(value)
@@ -213,6 +236,7 @@ func reset_seen() -> void:
 	for id in HintRules.IDS:
 		_seen[id] = false
 		HudFlagSetting.save_flag(memory_path(), SEEN_PREFIX + id, false, WHO)
+	_follow_saved = false
 	_end_hint()
 	_since_end = INF
 
@@ -246,6 +270,8 @@ func advance(delta: float, world: Dictionary, open_names: Array) -> void:
 		if not open_names.is_empty():
 			note_activity()
 		_last_open = open_names.duplicate()
+	if bool(world.get("followed", false)):
+		_note_followed()
 	_clock += delta
 	if _grace > 0.0:
 		_grace -= delta
@@ -302,7 +328,9 @@ func _process(delta: float) -> void:
 	var hiring: Array = []
 	if panel != null and panel.staff != null:
 		hiring = panel.hiring_hint_roles()
-	advance(step, HintRules.read_world(sim, hiring), _open_names())
+	var world := HintRules.read_world(sim, hiring)
+	world.merge(FollowInvite.read(sim, hud.views, hud.landside_views))
+	advance(step, world, _open_names())
 
 
 ## Fades the card to the banner's faded opacity while `ghost` (the build ghost
@@ -360,7 +388,11 @@ func _show(id: StringName) -> void:
 	_card.visible = true
 	_card.modulate.a = 1.0
 	_yield_banner(true)
-	_mark_seen(id)
+	_show_me.visible = id == HintRules.FOLLOW_PASSENGER
+	if id == HintRules.FOLLOW_PASSENGER:
+		_seen[id] = true
+	else:
+		_mark_seen(id)
 	shown.emit(id)
 
 
@@ -369,8 +401,19 @@ func _end_hint() -> void:
 		return
 	_shown_id = &""
 	_card.visible = false
+	_show_me.visible = false
 	_since_end = 0.0
 	_yield_banner(false)
+
+
+## The player has selected a passenger: the follow hint is seen for good, and
+## goes if it is on screen.
+func _note_followed() -> void:
+	if not _follow_saved:
+		_follow_saved = true
+		_mark_seen(HintRules.FOLLOW_PASSENGER)
+	if _shown_id == HintRules.FOLLOW_PASSENGER:
+		_end_hint()
 
 
 func _mark_seen(id: StringName) -> void:
@@ -384,6 +427,7 @@ func _load_memory() -> void:
 	_toggle.set_pressed_no_signal(_enabled)
 	for id in HintRules.IDS:
 		_seen[id] = HudFlagSetting.load_flag(path, SEEN_PREFIX + id, false, WHO)
+	_follow_saved = _seen[HintRules.FOLLOW_PASSENGER]
 
 
 func _yield_banner(yielded: bool) -> void:
@@ -485,6 +529,12 @@ func _build() -> void:
 	_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_body.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	column.add_child(_body)
+	_show_me.name = "HintShowMe"
+	_show_me.text = tr("Show me")
+	_show_me.focus_mode = Control.FOCUS_NONE
+	_show_me.visible = false
+	_show_me.pressed.connect(press_show_me)
+	column.add_child(_show_me)
 	LeftColumn.dock_card(_card)
 	_card.add_to_group(LeftColumn.HINT_GROUP)
 	_row.name = "HintsControls"

@@ -7,7 +7,10 @@ extends RefCounted
 ##   closed stations, exactly the stations with a queue-full sign. One
 ##   card for all full desks and one for all full security lanes, pointing at
 ##   the fullest first; a queue that is full only for a moment does not raise
-##   it (QUEUE_HOLD_TICKS each way).
+##   it (QUEUE_HOLD_TICKS each way). When a full station's lane is shorter than
+##   TerminalLayout.LANE_SLOTS, the detail says the queue is short and to move
+##   the station away from the wall (decision first-time-hints-gain-place-
+##   gate-desk-and-place-seats-the-hi): such a lane fills at one or two waiting.
 ## - passengers with no walkable route are the ones whose bubble says "I can't
 ##   get there" (Passenger.Stuck.NO_ROUTE): one card, pointing at them.
 ## - passengers waiting for a gate place (GateCapacity.shortage()): one card,
@@ -48,22 +51,53 @@ static func queue_full(sim: PassengerSim) -> Array[Dictionary]:
 		(desks if sim.layout.desks.has(station) else lanes).append(station)
 	var out: Array[Dictionary] = []
 	if not desks.is_empty():
-		var detail := _translator.tr_n(
-			"{count} desk full · {waiting} waiting",
-			"{count} desks full · {waiting} waiting",
-			desks.size()
+		var detail := (
+			(
+				_translator
+				. tr_n(
+					"{count} desk full · {waiting} waiting · short queue: move the desk away from the wall",
+					"{count} desks full · {waiting} waiting · short queue: move a desk away from the wall",
+					desks.size()
+				)
+			)
+			if _any_short(sim, desks)
+			else _translator.tr_n(
+				"{count} desk full · {waiting} waiting",
+				"{count} desks full · {waiting} waiting",
+				desks.size()
+			)
 		)
 		var title := _translator.tr("Check-in queue full")
 		out.append(_queue_cause(sim, full, desks, QUEUE_CHECKIN, title, detail))
 	if not lanes.is_empty():
-		var detail := _translator.tr_n(
-			"{count} lane full · {waiting} waiting",
-			"{count} lanes full · {waiting} waiting",
-			lanes.size()
+		var detail := (
+			(
+				_translator
+				. tr_n(
+					"{count} lane full · {waiting} waiting · short queue: move the scanner away from the wall",
+					"{count} lanes full · {waiting} waiting · short queue: move a scanner away from the wall",
+					lanes.size()
+				)
+			)
+			if _any_short(sim, lanes)
+			else _translator.tr_n(
+				"{count} lane full · {waiting} waiting",
+				"{count} lanes full · {waiting} waiting",
+				lanes.size()
+			)
 		)
 		var title := _translator.tr("Security queue full")
 		out.append(_queue_cause(sim, full, lanes, QUEUE_SECURITY, title, detail))
 	return out
+
+
+## Whether any of `stations` has a lane shorter than a full one
+## (TerminalLayout.LANE_SLOTS): a wall, a door or another lane cut it short.
+static func _any_short(sim: PassengerSim, stations: Array[int]) -> bool:
+	for station in stations:
+		if (sim.layout.lanes[station] as Array).size() < TerminalLayout.LANE_SLOTS:
+			return true
+	return false
 
 
 ## The no-route cause, or none.
