@@ -199,7 +199,9 @@ func sync() -> void:
 			station,
 			"QueueFullSign",
 			MarkerIcons.Glyph.QUEUE_FULL,
-			_words.queue_full(waiting)
+			_words.queue_full(
+				waiting, station_noun(sim, station) if MissSignals.is_short(sim, station) else ""
+			)
 		)
 	for station: int in _closed_signs.keys():
 		if not closed.has(station):
@@ -474,10 +476,46 @@ class Words:
 			{"time": GameCalendar.clock_text(repair)}
 		)
 
-	func queue_full(waiting: int) -> String:
+	## `short_noun` is the station noun ("desk", "scanner", "counter") when its lane
+	## is shorter than a full one, "" otherwise: the sign then says so.
+	func queue_full(waiting: int, short_noun := "") -> String:
+		match short_noun:
+			"":
+				return (
+					tr_n(
+						"Queue full · {count} waiting",
+						"Queue full · {count} waiting",
+						waiting,
+						"sign text"
+					)
+					. format({"count": waiting})
+				)
+			"desk":
+				return (
+					tr_n(
+						"Queue full · {count} waiting · short queue: move the desk away from the wall",
+						"Queue full · {count} waiting · short queue: move the desk away from the wall",
+						waiting,
+						"sign text"
+					)
+					. format({"count": waiting})
+				)
+			"scanner":
+				return (
+					tr_n(
+						"Queue full · {count} waiting · short queue: move the scanner away from the wall",
+						"Queue full · {count} waiting · short queue: move the scanner away from the wall",
+						waiting,
+						"sign text"
+					)
+					. format({"count": waiting})
+				)
 		return (
 			tr_n(
-				"Queue full · {count} waiting", "Queue full · {count} waiting", waiting, "sign text"
+				"Queue full · {count} waiting · short queue: move the counter away from the wall",
+				"Queue full · {count} waiting · short queue: move the counter away from the wall",
+				waiting,
+				"sign text"
 			)
 			. format({"count": waiting})
 		)

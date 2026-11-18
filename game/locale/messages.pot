@@ -5863,3 +5863,158 @@ msgstr ""
 #: ui/game_menu.gd
 msgid "Could not start the quit log in {path}"
 msgstr ""
+
+#: ui/hint_rules.gd
+msgid "Passengers board at a gate. Place a gate desk by an exit that faces the planes."
+msgstr ""
+
+#: ui/hint_rules.gd
+msgid "Passengers wait at the gate. Place seats near it; the airport opens without them."
+msgstr ""
+
+#: ui/hint_rules.gd
+msgid "Click a passenger to follow them to their flight"
+msgstr ""
+
+#: ui/hints.gd
+msgid "Show me"
+msgstr ""
+
+#: passengers/passenger_bags.gd
+msgid "No carry-on bags"
+msgstr ""
+
+#: passengers/passenger_bags.gd
+msgid "{count} carry-on bag"
+msgid_plural "{count} carry-on bags"
+msgstr[0] ""
+msgstr[1] ""
+
+#: passengers/passenger_bags.gd
+msgid "carrying liquids"
+msgstr ""
+
+#: passengers/passenger_bags.gd
+msgid "a checked bag that missed the plane"
+msgstr ""
+
+#: passengers/passenger_bags.gd
+msgid "a checked bag still to drop off"
+msgstr ""
+
+#: passengers/passenger_bags.gd
+msgid "no checked bag"
+msgstr ""
+
+#: passengers/passenger_bags.gd
+msgid "a checked bag at the desk"
+msgstr ""
+
+#: passengers/passenger_bags.gd
+msgid "a checked bag on the belt"
+msgstr ""
+
+#: passengers/passenger_bags.gd
+msgid "a checked bag stuck on the belt"
+msgstr ""
+
+#: passengers/passenger_bags.gd
+msgid "a checked bag in the bag room"
+msgstr ""
+
+#: passengers/passenger_bags.gd
+msgid "a checked bag loaded on the plane"
+msgstr ""
+
+#: passengers/passenger_trip.gd
+msgid "Cutting it fine, no shopping planned"
+msgstr ""
+
+#: passengers/passenger_trip.gd
+msgid "Cutting it fine, hoping for a quick stop at the kiosk"
+msgstr ""
+
+#: passengers/passenger_trip.gd
+msgid "Cutting it fine, needs the pharmacy"
+msgstr ""
+
+#: passengers/passenger_trip.gd
+msgid "Cutting it fine, hoping for duty free"
+msgstr ""
+
+#: passengers/passenger_trip.gd
+msgid "Cutting it fine, hoping to browse the fashion shop"
+msgstr ""
+
+#: passengers/passenger_trip.gd
+msgid "Right on time, no shopping planned"
+msgstr ""
+
+#: passengers/passenger_trip.gd
+msgid "Right on time, hoping for a quick stop at the kiosk"
+msgstr ""
+
+#: passengers/passenger_trip.gd
+msgid "Right on time, needs the pharmacy"
+msgstr ""
+
+#: passengers/passenger_trip.gd
+msgid "Right on time, hoping for duty free"
+msgstr ""
+
+#: passengers/passenger_trip.gd
+msgid "Right on time, hoping to browse the fashion shop"
+msgstr ""
+
+#: passengers/passenger_trip.gd
+msgid "Early bird, no shopping planned"
+msgstr ""
+
+#: passengers/passenger_trip.gd
+msgid "Early bird, hoping for a quick stop at the kiosk"
+msgstr ""
+
+#: passengers/passenger_trip.gd
+msgid "Early bird, needs the pharmacy"
+msgstr ""
+
+#: passengers/passenger_trip.gd
+msgid "Early bird, hoping for duty free"
+msgstr ""
+
+#: passengers/passenger_trip.gd
+msgid "Early bird, hoping to browse the fashion shop"
+msgstr ""
+
+#: ui/alert_sources.gd
+msgid "{count} desk full · {waiting} waiting · short queue: move the desk away from the wall"
+msgid_plural "{count} desks full · {waiting} waiting · short queue: move a desk away from the wall"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/alert_sources.gd
+msgid "{count} lane full · {waiting} waiting · short queue: move the scanner away from the wall"
+msgid_plural "{count} lanes full · {waiting} waiting · short queue: move a scanner away from the wall"
+msgstr[0] ""
+msgstr[1] ""
+
+#: passengers/miss_markers.gd
+msgctxt "sign text"
+msgid "Queue full · {count} waiting · short queue: move the desk away from the wall"
+msgid_plural "Queue full · {count} waiting · short queue: move the desk away from the wall"
+msgstr[0] ""
+msgstr[1] ""
+
+#: passengers/miss_markers.gd
+msgctxt "sign text"
+msgid "Queue full · {count} waiting · short queue: move the scanner away from the wall"
+msgid_plural "Queue full · {count} waiting · short queue: move the scanner away from the wall"
+msgstr[0] ""
+msgstr[1] ""
+
+#: passengers/miss_markers.gd
+msgctxt "sign text"
+msgid "Queue full · {count} waiting · short queue: move the counter away from the wall"
+msgid_plural "Queue full · {count} waiting · short queue: move the counter away from the wall"
+msgstr[0] ""
+msgstr[1] ""

@@ -135,6 +135,10 @@ static func opening_lines(unmet: Array, counts: Dictionary) -> Array[Dictionary]
 static func gap_lines(world: Dictionary, seats: int, lock_texts: Dictionary) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for cause in HintRules.causes(world):
+		# The gate desk and seats hints have no gap line: the opening lines and
+		# the seats gap below cover them.
+		if not GAPS.has(cause):
+			continue
 		var locked: String = lock_texts.get(GAP_TOOLS.get(cause, BuildMode.Tool.NONE), "")
 		if locked != "":
 			var need := TranslationServer.translate("{need} ({unlock})")

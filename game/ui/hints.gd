@@ -380,7 +380,13 @@ func _triggers(open_names: Array) -> Dictionary:
 	return out
 
 
+## Shows `id`, unless the banner whose slot it takes is expected but not there
+## (not built yet, or freed): the yield would silently fail, the checklist would
+## keep the slot and the hint would count as seen unseen. Nothing changes then,
+## so the next read tries again.
 func _show(id: StringName) -> void:
+	if _banner() == null and (staff_panel != null or scene_root != null):
+		return
 	_shown_id = id
 	_latched.erase(id)
 	_dwell = 0.0

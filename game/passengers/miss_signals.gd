@@ -24,6 +24,13 @@ static func is_full(capacity: int, lane: int, holding: int) -> bool:
 	return holding > 0 or lane >= capacity
 
 
+## Whether `station`'s lane is shorter than a full one (TerminalLayout.LANE_SLOTS):
+## a wall, a door or another lane cut it short, so it fills at one or two waiting.
+## The queue-full alert and the sign text both name this cause.
+static func is_short(sim: PassengerSim, station: int) -> bool:
+	return (sim.layout.lanes[station] as Array).size() < TerminalLayout.LANE_SLOTS
+
+
 ## Station id -> passengers held outside its lane, for every full desk or
 ## scanner.
 static func full_stations(sim: PassengerSim) -> Dictionary:
