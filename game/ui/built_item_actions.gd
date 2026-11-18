@@ -16,6 +16,8 @@ extends VBoxContainer
 ## removes the item or room through BuildMode.apply_edit(): paid back and one
 ## undo step. A refused delete leaves build mode alone and says why.
 
+## The English msgids of these texts: tests compare against them, and the card says
+## tr() of the literal, because the POT extractor reads only literals.
 const MOVE := "Move"
 const MOVE_ROOM := "Move room"
 const DELETE := "Delete"
@@ -25,7 +27,7 @@ const GONE := "It is no longer there"
 const NO_ROOM_TOOL := "This kind of room can't be moved yet"
 const NO_LANDSIDE_MOVE := "Car parks and curbs can't be moved yet"
 const NO_LANDSIDE_DELETE := "Take car parks and curbs back with the Remove tool"
-const DELETE_REFUSED := "Can't delete: %s"
+const DELETE_REFUSED := "Can't delete: {reason}"
 
 ## The window's item card, which holds the selection, the build mode and the sim.
 var card: BuiltItemCard
@@ -84,7 +86,7 @@ func refresh() -> void:
 	visible = true
 	_move_button.text = _move["label"]
 	_move_button.disabled = not _move["ok"]
-	_move_button.tooltip_text = "Pick it up and set it down elsewhere" if _move["ok"] else ""
+	_move_button.tooltip_text = (tr("Pick it up and set it down elsewhere") if _move["ok"] else "")
 	_delete_button.text = _delete["label"]
 	_delete_button.disabled = not _delete["ok"]
 	var lines := PackedStringArray()
@@ -125,7 +127,7 @@ func press_delete() -> BuildResult:
 		session.set_building(true)
 	var result := mode.apply_edit(edit)
 	if not result.ok:
-		_note = DELETE_REFUSED % result.reason_text()
+		_note = tr("Can't delete: {reason}").format({"reason": result.reason_text()})
 		refresh()
 	return result
 
@@ -182,16 +184,18 @@ func _move_state() -> Dictionary:
 	var grid := card.sim.grid
 	var found := _room_to_move()
 	if found["reason"] != "":
-		return _off(MOVE, found["reason"])
+		return _off(tr("Move"), found["reason"])
 	var room: int = found["room"]
 	var type := StringName(grid.get_room(room)["type"])
 	var tool := tool_for_room(type)
 	if tool == BuildMode.Tool.NONE:
-		return _off(MOVE_ROOM, NO_ROOM_TOOL)
+		return _off(tr("Move room"), tr("This kind of room can't be moved yet"))
 	var refusal := RoomMoveTool.never_moves_refusal(grid, room)
 	if refusal != null:
-		return _off(MOVE_ROOM, refusal.reason_text())
-	return {"ok": true, "label": MOVE_ROOM, "reason": "", "room": room, "type": type, "tool": tool}
+		return _off(tr("Move room"), refusal.reason_text())
+	return {
+		"ok": true, "label": tr("Move room"), "reason": "", "room": room, "type": type, "tool": tool
+	}
 
 
 ## The room the selection moves with: {"room": id} for a room or a piece in one,
@@ -205,23 +209,26 @@ func _room_to_move() -> Dictionary:
 		BuiltSelection.Kind.OBJECT:
 			var record := grid.get_object(selection.id)
 			if record.is_empty():
-				return {"room": 0, "reason": GONE}
+				return {"room": 0, "reason": tr("It is no longer there")}
 			var room := grid.room_at(record["anchor"])
 			if _is_lane_piece(StringName(record["def"])):
 				return {"room": 0, "reason": _lane_piece_reason(room)}
-			return {"room": room, "reason": "" if room != 0 else NO_LOOSE_PIECE}
-	return {"room": 0, "reason": NO_LANDSIDE_MOVE}
+			return {
+				"room": room,
+				"reason": "" if room != 0 else tr("Single pieces outside a room can't be moved yet")
+			}
+	return {"room": 0, "reason": tr("Car parks and curbs can't be moved yet")}
 
 
 func _delete_state() -> Dictionary:
 	match card.selection.kind:
 		BuiltSelection.Kind.OBJECT:
 			var edit := BuildEdit.remove_object(card.selection.id)
-			return {"ok": true, "label": DELETE, "reason": "", "edit": edit}
+			return {"ok": true, "label": tr("Delete"), "reason": "", "edit": edit}
 		BuiltSelection.Kind.ROOM:
 			var edit := BuildEdit.remove_room(card.selection.id)
-			return {"ok": true, "label": DELETE_ROOM, "reason": "", "edit": edit}
-	return _off(DELETE, NO_LANDSIDE_DELETE)
+			return {"ok": true, "label": tr("Delete room"), "reason": "", "edit": edit}
+	return _off(tr("Delete"), tr("Take car parks and curbs back with the Remove tool"))
 
 
 ## Why a check-in desk, scanner or lane part cannot move: what RoomMove refuses

@@ -6,6 +6,10 @@ extends RefCounted
 ## PassengerSim.flight_results after the passengers are retired. A blocking
 ## status such as "no check-in desk" wins over the stage the passenger was in.
 
+## The reason texts below are the English msgids. Tests compare with them; the
+## player's text comes from the _*_texts() functions, which hold tr()-style
+## TranslationServer.translate() of the same literals, because the POT extractor
+## reads only literals.
 const NEVER_ARRIVED := "Never arrived: the terminal has no entrance"
 const ARRIVED_LATE := "Did not arrive before the doors closed"
 ## PassengerSim.no_shows causes: scheduled passengers dropped at doors close.
@@ -63,12 +67,61 @@ const MISSED_TEXT := "Missed the flight"
 ## The reason text for a passenger who missed the plane at `stage`.
 static func reason_text(stage: Passenger.Stage, stuck: Passenger.Stuck) -> String:
 	if stage == Passenger.Stage.SPAWNED and stuck == Passenger.Stuck.QUEUE_FULL:
-		return ENTRANCE_LINE_TEXT
-	if STUCK_TEXT.has(stuck):
-		return STUCK_TEXT[stuck]
-	if STAGE_TEXT.has(stage):
-		return STAGE_TEXT[stage]
-	return FACILITY_TEXT.get(StageKinds.facility(stage), MISSED_TEXT)
+		return TranslationServer.translate("Waiting outside: check-in full")
+	var stuck_texts := _stuck_texts()
+	if stuck_texts.has(stuck):
+		return stuck_texts[stuck]
+	var stage_texts := _stage_texts()
+	if stage_texts.has(stage):
+		return stage_texts[stage]
+	return _facility_texts().get(
+		StageKinds.facility(stage), TranslationServer.translate("Missed the flight")
+	)
+
+
+## The player's text per blocking status (STUCK_TEXT).
+static func _stuck_texts() -> Dictionary:
+	return {
+		Passenger.Stuck.NO_CHECKIN: TranslationServer.translate("No check-in desk to go to"),
+		Passenger.Stuck.NO_SECURITY:
+		TranslationServer.translate("No security scanner or lane to go to"),
+		Passenger.Stuck.QUEUE_FULL: TranslationServer.translate("Waiting outside a full queue"),
+		Passenger.Stuck.NO_ROUTE: TranslationServer.translate("No walkable route"),
+		Passenger.Stuck.EXIT_BLOCKED:
+		TranslationServer.translate("The exit to the plane was blocked"),
+		Passenger.Stuck.CROWDED: TranslationServer.translate("Held up by crowds at the gate"),
+	}
+
+
+## The player's text per stage the passenger was in (STAGE_TEXT).
+static func _stage_texts() -> Dictionary:
+	var at_gate := TranslationServer.translate("At the gate, but not boarded in time")
+	var too_late := TranslationServer.translate("Left the gate too late for the plane")
+	return {
+		Passenger.Stage.SPAWNED: TranslationServer.translate("Arrived after the doors closed"),
+		Passenger.Stage.TO_CHECKIN: TranslationServer.translate("Still walking to check-in"),
+		Passenger.Stage.CHECKIN_QUEUE: TranslationServer.translate("Still queuing for check-in"),
+		Passenger.Stage.CHECKIN: TranslationServer.translate("Still at the check-in desk"),
+		Passenger.Stage.TO_SECURITY: TranslationServer.translate("Still walking to security"),
+		Passenger.Stage.SECURITY_QUEUE: TranslationServer.translate("Still queuing for security"),
+		Passenger.Stage.SECURITY: TranslationServer.translate("Still at security"),
+		Passenger.Stage.TO_GATE: TranslationServer.translate("Still walking to the gate"),
+		Passenger.Stage.SITTING_DOWN: at_gate,
+		Passenger.Stage.SEATED: at_gate,
+		Passenger.Stage.STANDING: at_gate,
+		Passenger.Stage.STANDING_UP: at_gate,
+		Passenger.Stage.TO_EXIT: too_late,
+		Passenger.Stage.APRON: too_late,
+	}
+
+
+## The player's text per facility visit (FACILITY_TEXT).
+static func _facility_texts() -> Dictionary:
+	return {
+		StageKinds.Facility.CAFE: TranslationServer.translate("Still at the cafe"),
+		StageKinds.Facility.TOILET: TranslationServer.translate("Still at the toilet"),
+		StageKinds.Facility.SHOP: TranslationServer.translate("Still at a shop"),
+	}
 
 
 ## {"flight", "made", "missed", "reasons"} for one flight. "reasons" is a list of
@@ -86,17 +139,21 @@ static func summarize(sim: PassengerSim, flight_id: String) -> Dictionary:
 	var counts := {}
 	var held: int = mini(sim.entrance.held_missed.get(flight_id, 0), on_road)
 	if on_road - held > 0:
-		counts[WAITING_FOR_DROP_OFF] = on_road - held
+		counts[TranslationServer.translate("Waiting for drop-off")] = on_road - held
 	if held > 0:
-		counts[ENTRANCE_LINE_TEXT] = held
+		counts[TranslationServer.translate("Waiting outside: check-in full")] = held
 	var causes: Dictionary = result.get("causes", {})
 	for cause: Vector2i in causes:
 		var text := reason_text(cause.x as Passenger.Stage, cause.y as Passenger.Stuck)
 		counts[text] = int(counts.get(text, 0)) + causes[cause]
 	var no_shows: Dictionary = sim.no_shows.get(flight_id, {})
-	for cause in NO_SHOW_TEXT:
+	var no_show_texts := {
+		"no_entrance": TranslationServer.translate("Never arrived: the terminal has no entrance"),
+		"late": TranslationServer.translate("Did not arrive before the doors closed"),
+	}
+	for cause in no_show_texts:
 		if no_shows.get(cause, 0) > 0:
-			counts[NO_SHOW_TEXT[cause]] = no_shows[cause]
+			counts[no_show_texts[cause]] = no_shows[cause]
 	var reasons := []
 	for text in counts:
 		reasons.append({"text": text, "count": counts[text]})

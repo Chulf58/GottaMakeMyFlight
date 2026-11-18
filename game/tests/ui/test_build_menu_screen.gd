@@ -60,7 +60,7 @@ func test_the_screen_card_shows_its_price_and_upkeep() -> void:
 	var texts := _texts(card)
 	print("screen card: %s" % [texts])
 	assert_array(texts).contains(["Screen"])
-	assert_array(texts).contains([BuildMenu.RUNNING_COST_TEXT % PriceTable.SCREEN_UPKEEP])
+	assert_array(texts).contains([BuildMenuCatalog.upkeep_text(PriceTable.SCREEN_UPKEEP)])
 	assert_int(BuildMenu.tool_price(BuildMode.Tool.SCREEN)).is_equal(
 		PriceTable.price_of_object(ScreenCoverage.SCREEN_ID)
 	)

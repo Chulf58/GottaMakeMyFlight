@@ -99,7 +99,9 @@ func test_choosing_a_free_gate_moves_the_contract_and_confirms() -> void:
 	_press(_board.picker_button("C"))
 	print("moved: gate=", _sim.contract_of("Y")["gate"], " message=", _board.message_text())
 	assert_str(_sim.contract_of("Y")["gate"]).is_equal("C")
-	assert_str(_board.message_text()).is_equal(DeparturesBoard.MOVED_TEXT % ["Rome", "C"])
+	assert_str(_board.message_text()).is_equal(
+		DeparturesBoard.MOVED_TEXT.format({"destination": "Rome", "gate": "C"})
+	)
 	assert_str(_board.gate_button("Y", 0).text).is_equal("Gate C")
 	assert_object(_board.picker_button("A")).is_null()
 

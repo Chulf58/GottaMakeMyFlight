@@ -91,6 +91,9 @@ const SAVE_KEYS := ["save_version", "gates", "spurs"]
 ## A gate whose stand can take no plane until its side's pending spur moves
 ## (waits_on_spur()) says so on its card and sign (user ruling airside-
 ## construction-works-are-a-visible-stage-props-mark-th, point 4).
+## The English msgid of that line. Tests compare with it; waiting_text() is the
+## player's text, tr() of the same literal because the POT extractor reads only
+## literals.
 const WAITING_TEXT := "Waiting for taxiway works"
 ## The rail notice when a side spur has moved.
 const SPUR_KEY := &"spur_moved"
@@ -164,6 +167,11 @@ func bind(on_grid: BuildGrid, on_flights: FlightSim) -> void:
 
 
 ## The gate letters, in desk order.
+## The second line of a gate waiting on the spur, as the player reads it.
+static func waiting_text() -> String:
+	return TranslationServer.translate("Waiting for taxiway works")
+
+
 func gate_ids() -> Array[String]:
 	var out: Array[String] = []
 	for binding in bindings:
@@ -220,8 +228,10 @@ func spurs() -> Dictionary:
 func release_spur(side: String) -> void:
 	spur_x[side] = spur_wanted[side]
 	refresh()
-	var named := "west" if side == StandPlacement.WEST else "east"
-	_post_notice(SPUR_KEY, SPUR_TITLE, "The %s taxiway has moved" % named)
+	var words := tr("The west taxiway has moved")
+	if side != StandPlacement.WEST:
+		words = tr("The east taxiway has moved")
+	_post_notice(SPUR_KEY, tr("Taxiway moved"), words)
 
 
 ## Whether gate `gate` waits on its side's pending spur: its stand takes no plane
@@ -760,19 +770,54 @@ static func moves_text(sim: FlightSim, moves: Dictionary, past: bool) -> String:
 		var ids: Array = by_gate[gate]
 		if ids.size() == 1:
 			var contract := sim.contract_of(ids[0])
-			var named := "%s to %s" % [contract["airline"], contract["destination"]]
-			lines.append("%s %s to Gate %s" % [named, "moved" if past else "moves", gate])
+			var named := {
+				"flight":
+				TranslationServer.translate("{airline} to {destination}").format(
+					{"airline": contract["airline"], "destination": contract["destination"]}
+				),
+				"gate": gate
+			}
+			if past:
+				lines.append(
+					TranslationServer.translate("{flight} moved to Gate {gate}").format(named)
+				)
+			else:
+				lines.append(
+					TranslationServer.translate("{flight} moves to Gate {gate}").format(named)
+				)
 		else:
-			lines.append(
-				"%d flights %s to Gate %s" % [ids.size(), "moved" if past else "move", gate]
-			)
+			var several := {"count": ids.size(), "gate": gate}
+			if past:
+				lines.append(
+					(
+						TranslationServer
+						. translate_plural(
+							"{count} flight moved to Gate {gate}",
+							"{count} flights moved to Gate {gate}",
+							ids.size()
+						)
+						. format(several)
+					)
+				)
+			else:
+				lines.append(
+					(
+						TranslationServer
+						. translate_plural(
+							"{count} flight moves to Gate {gate}",
+							"{count} flights move to Gate {gate}",
+							ids.size()
+						)
+						. format(several)
+					)
+				)
 	return ". ".join(lines)
 
 
 ## Tells the player, with one notice on the right rail, which flights a removal
 ## moved. Without a rail the words are a warning, never passed over silently.
 func _post_moved(text: String) -> void:
-	_post_notice(MOVED_KEY, MOVED_TITLE, text)
+	_post_notice(MOVED_KEY, tr("Flights moved"), text)
 
 
 ## One notice card on the right rail, or a warning with its words without one.

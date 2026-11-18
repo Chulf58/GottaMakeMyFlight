@@ -313,13 +313,13 @@ func envelope_paths() -> Array[PackedVector3Array]:
 ## (GateDesks.max_class, "" for none) on a second line, then its walk from
 ## security ("12 min walk") on a third when `walk_minutes` is one (GateWalk).
 ## A gate `waiting` on its side's spur (GateDesks.waits_on_spur()) says
-## GateDesks.WAITING_TEXT on the second line.
+## GateDesks.waiting_text() on the second line.
 static func caption_text(
 	gate: String, plane_class: String, walk_minutes := GateWalk.NO_ROUTE, waiting := false
 ) -> String:
 	var second := CLASS_LINE % plane_class if plane_class != "" else NO_CLASS_LINE
 	if waiting:
-		second = GateDesks.WAITING_TEXT
+		second = GateDesks.waiting_text()
 	var text := "Gate %s\n%s" % [gate, second]
 	var third := GateWalk.caption_line(walk_minutes)
 	return text if third == "" else "%s\n%s" % [text, third]

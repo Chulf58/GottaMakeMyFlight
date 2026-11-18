@@ -200,7 +200,9 @@ func test_choosing_a_gate_moves_the_contract_through_the_departures_flow() -> vo
 	_press(_planner.part("Move_" + "C") as Button)
 	print("moved: ", _sim.contract_of("Y")["gate"], " ", _planner.message_text())
 	assert_str(_sim.contract_of("Y")["gate"]).is_equal("C")
-	assert_str(_planner.message_text()).is_equal(DeparturesBoard.MOVED_TEXT % ["Rome", "C"])
+	assert_str(_planner.message_text()).is_equal(
+		DeparturesBoard.MOVED_TEXT.format({"destination": "Rome", "gate": "C"})
+	)
 	assert_object(_planner.bar_button("Y", 0).get_parent()).is_equal(_planner.part("Track_" + "C"))
 	assert_str(_planner.selected_contract()).is_equal("Y")
 
@@ -215,7 +217,7 @@ func test_a_refused_move_says_why_and_keeps_the_selection() -> void:
 	_press(stale)
 	print("refusal: ", _planner.message_text())
 	assert_str(_sim.contract_of("Y")["gate"]).is_equal("B")
-	assert_str(_planner.message_text()).is_equal(DeparturesBoard.BUSY_TEXT % "C")
+	assert_str(_planner.message_text()).is_equal(DeparturesBoard.BUSY_TEXT.format({"gate": "C"}))
 	assert_str(_planner.selected_contract()).is_equal("Y")
 
 
@@ -233,7 +235,9 @@ func test_end_asks_first_then_ends_the_contract() -> void:
 	_press(_planner.part("ConfirmEnd") as Button)
 	print("end message: ", _planner.message_text())
 	assert_bool(_sim.active_contract_ids().has("Z")).is_false()
-	assert_str(_planner.message_text()).is_equal(DeparturesBoard.ENDED_TEXT % "Paris")
+	assert_str(_planner.message_text()).is_equal(
+		DeparturesBoard.ENDED_TEXT.format({"destination": "Paris"})
+	)
 	assert_str(_planner.selected_contract()).is_equal("")
 
 

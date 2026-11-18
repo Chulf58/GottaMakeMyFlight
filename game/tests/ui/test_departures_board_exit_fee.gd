@@ -81,7 +81,9 @@ func test_after_the_term_the_confirm_asks_without_a_fee() -> void:
 	assert_str(DeparturesBoard.end_prompt(_sim, "X")).contains("$120")
 	_sim.tick = GameCalendar.tick_at(_sim.contract_of("X")["first_day"] + 7, 60)
 	assert_str(DeparturesBoard.end_prompt(_sim, "X")).is_equal(DeparturesBoard.END_PROMPT)
-	assert_str(DeparturesBoard.end_outcome(_sim, "X")).is_equal(DeparturesBoard.ENDED_TEXT % "Oslo")
+	assert_str(DeparturesBoard.end_outcome(_sim, "X")).is_equal(
+		DeparturesBoard.ENDED_TEXT.format({"destination": "Oslo"})
+	)
 	assert_array(_ended).is_equal([["X", 0]])
 
 

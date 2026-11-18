@@ -171,10 +171,9 @@ const TAXI_BUSY_TEXT := GroundPlanner.TAXI_BUSY_TEXT
 const QUIET_NIGHT_TEXT := FlightContract.QUIET_NIGHT_TEXT
 ## An Odd hours contract's window, and the ground planner's guard, which is as wide.
 const ODD_HOURS_NIGHT_TEXT := FlightContract.ODD_HOURS_NIGHT_TEXT
-## Formatted with the flight a pending side spur's move would strand.
-const SPUR_STRANDS_TEXT := "the taxiway move would strand flight %s"
-## Formatted with the plane class the runway cannot take.
-const RUNWAY_TOO_SHORT_TEXT := "the runway is too short for a %s plane"
+## English msgids ({id}: a flight a spur move would strand, {size}: a plane class).
+const SPUR_STRANDS_TEXT := "the taxiway move would strand flight {id}"
+const RUNWAY_TOO_SHORT_TEXT := "the runway is too short for a {size} plane"
 ## What kind of refusal trial_assignment() reports ("blocker"): bad terms or a
 ## used id, the runway's size, a clash at every gate that takes the plane, no
 ## taxi plan, a quiet-night departure, no gate (with a stand) for the plane, or
@@ -391,7 +390,7 @@ func accept_problem(terms: Dictionary) -> String:
 	if problem == "" and not contract_of(terms["id"]).is_empty():
 		problem = "contract id '%s' is already used" % terms["id"]
 	if problem == "" and not runway.takes(terms["plane_size"]):
-		problem = RUNWAY_TOO_SHORT_TEXT % terms["plane_size"]
+		problem = RunwayWorks.too_short_text(terms["plane_size"])
 	if problem != "":
 		return problem
 	return _assignment(terms)["problem"]
@@ -452,7 +451,7 @@ func _trial(terms: Dictionary, extra: Array[Dictionary], ignore_gate: bool) -> D
 	if problem != "":
 		return _assigned("", problem, {}, BLOCKER_TERMS)
 	if not runway.takes(terms["plane_size"]):
-		return _assigned("", RUNWAY_TOO_SHORT_TEXT % terms["plane_size"], {}, BLOCKER_RUNWAY)
+		return _assigned("", RunwayWorks.too_short_text(terms["plane_size"]), {}, BLOCKER_RUNWAY)
 	return _assignment(terms, extra, ignore_gate, true)
 
 
@@ -1341,7 +1340,9 @@ func _contracts_refusal(
 ## The player's words for a taxi refusal ({"reason"}).
 static func _ground_text(refusal: Dictionary) -> String:
 	if refusal["reason"] in SpurMoves.REASONS:
-		return SPUR_STRANDS_TEXT % refusal.get("id", refusal.get("flight", ""))
+		return TranslationServer.translate("the taxiway move would strand flight {id}").format(
+			{"id": refusal.get("id", refusal.get("flight", ""))}
+		)
 	if refusal["reason"] == GroundPlanner.QUIET_NIGHT:
 		return ODD_HOURS_NIGHT_TEXT
 	if refusal["reason"] == GroundPlanner.BAD_ROUTE:

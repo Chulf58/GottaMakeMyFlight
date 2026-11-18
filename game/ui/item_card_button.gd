@@ -14,6 +14,8 @@ extends Button
 
 const HUD_THEME := preload("res://ui/hud_theme.tres")
 ## The headings of the card's second and third parts.
+## The English msgids of the headings: tests compare against them, and the card says
+## tr() of the literal, because the POT extractor reads only literals.
 const HOW_HEADING := "How it works"
 const NEEDS_HEADING := "Needs and upkeep"
 ## Width of the info card's text, in layout units.
@@ -54,8 +56,9 @@ static func card_text(card_title: String, card_info: Array, needs := "") -> Stri
 		lines.append(needs)
 	if card_info.size() >= 3:
 		lines.append(card_info[0])
-		lines.append("%s: %s" % [HOW_HEADING, card_info[1]])
-		lines.append("%s: %s" % [NEEDS_HEADING, card_info[2]])
+		var words := Words.new()
+		lines.append(words.how_line(card_info[1]))
+		lines.append(words.needs_line(card_info[2]))
 	return "\n".join(lines) if lines.size() > 1 else ""
 
 
@@ -78,9 +81,9 @@ func make_card() -> Control:
 		box.add_child(lock)
 	if info.size() >= 3:
 		box.add_child(_text(info[0], &""))
-		box.add_child(_text(HOW_HEADING, &"HudHint"))
+		box.add_child(_text(tr("How it works"), &"HudHint"))
 		box.add_child(_text(info[1], &""))
-		box.add_child(_text(NEEDS_HEADING, &"HudHint"))
+		box.add_child(_text(tr("Needs and upkeep"), &"HudHint"))
 		box.add_child(_text(info[2], &""))
 	return box
 
@@ -124,3 +127,14 @@ func _place_card() -> void:
 		return
 	popup.reset_size()
 	popup.position = card_screen_position(Vector2(popup.size))
+
+
+## tr() is an instance method, so the static card_text() asks a Words.
+class Words:
+	extends RefCounted
+
+	func how_line(text: String) -> String:
+		return tr("How it works: {text}").format({"text": text})
+
+	func needs_line(text: String) -> String:
+		return tr("Needs and upkeep: {text}").format({"text": text})

@@ -323,7 +323,9 @@ func test_a_refused_delete_changes_nothing_and_says_why() -> void:
 	assert_bool(left).is_false()
 	assert_bool(session_on).is_false()
 	assert_int(undo_steps).is_equal(0)
-	assert_str(shown).contains(BuiltItemActions.DELETE_REFUSED % refusal.reason_text())
+	assert_str(shown).contains(
+		BuiltItemActions.DELETE_REFUSED.format({"reason": refusal.reason_text()})
+	)
 	assert_str(shown).contains("Can't delete: ")
 
 

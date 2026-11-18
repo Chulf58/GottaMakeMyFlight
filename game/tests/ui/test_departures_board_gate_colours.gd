@@ -81,4 +81,6 @@ func test_the_shared_entry_points_match_the_pickers_words() -> void:
 	)
 	outcome = DeparturesBoard.move_outcome(_sim, "Y", "C")
 	assert_bool(outcome["moved"]).is_true()
-	assert_str(outcome["text"]).is_equal(DeparturesBoard.MOVED_TEXT % ["Oslo", "C"])
+	assert_str(outcome["text"]).is_equal(
+		DeparturesBoard.MOVED_TEXT.format({"destination": "Oslo", "gate": "C"})
+	)

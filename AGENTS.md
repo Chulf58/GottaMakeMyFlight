@@ -85,7 +85,7 @@ These rules were learned on Dome Farmer, a Godot and Blender project on the same
 
 ### Probes
 
-- A probe is a script that `extends SceneTree`: `_initialize()` sets up, `_process(delta) -> bool` is a frame-driven state machine that returns `true` to quit. To drive the real game, `load("res://main.tscn").instantiate()`, set any `@export` BEFORE `add_child` (instantiating does not run `_ready()`; entering the tree does), then step frames and give each stage a settle window.
+- A probe is a script that `extends SceneTree`: `_initialize()` sets up, `_process(delta) -> bool` is a frame-driven state machine that returns `true` to quit. To drive the real game, `load("res://main/main.tscn").instantiate()`, set any `@export` BEFORE `add_child` (instantiating does not run `_ready()`; entering the tree does), then step frames and give each stage a settle window.
 - **Write probes that cannot pass by accident.** Every pass value is a positive (a count that grew, a position that moved), and each prints the values it compared, not a verdict. If the pass value is a zero, add a control proving the subject was engaged.
 - **Every plate proves its subject is in frame before it is saved.** Project the subject with `camera.unproject_position(subject.global_position)`, assert the point falls inside the viewport with a margin, and print the coordinates. Then check occlusion with a raycast, because in-frame is not visible. On failure print `PROBE_INVALID` and exit 1. A colour statistic cannot do this job.
 - A probe boots the real game with a new random world seed and prints it, so a failure can be replayed.

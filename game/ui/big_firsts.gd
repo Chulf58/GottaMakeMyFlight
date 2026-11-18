@@ -11,17 +11,35 @@ const INCIDENT := "incident"
 ## Every kind, in the order a dialog lists them.
 const KINDS: Array[String] = [RUNWAY, INCIDENT]
 
-const TITLE_TEXT := "Big news at the airport"
-const FOOTER_TEXT := "The clock goes on when you close this."
-const LINES := {
-	RUNWAY:
-	"The runway works are done. Bigger planes can land now, so Offers can bring them flights.",
-	INCIDENT: "A big event has come up. Its notice says what it is and what you can do about it.",
-}
+## The words are built in static functions, which cannot call tr() (an Object
+## method), so they go through this instance's tr().
+static var _translator := RefCounted.new()
 
 
 static func is_kind(kind: String) -> bool:
 	return KINDS.has(kind)
+
+
+## The dialog's title.
+static func title_text() -> String:
+	return _translator.tr("Big news at the airport")
+
+
+## The line of words for the big first `kind`.
+static func line_for(kind: String) -> String:
+	match kind:
+		RUNWAY:
+			return (
+				_translator
+				. tr(
+					"The runway works are done. Bigger planes can land now, so Offers can bring them flights."
+				)
+			)
+		INCIDENT:
+			return _translator.tr(
+				"A big event has come up. Its notice says what it is and what you can do about it."
+			)
+	return ""
 
 
 ## The dialog's text for the listed kinds: one line each, then the note about
@@ -30,5 +48,5 @@ static func body_for(kinds: Array) -> String:
 	var lines: Array[String] = []
 	for kind: String in KINDS:
 		if kinds.has(kind):
-			lines.append(LINES[kind])
-	return "\n".join(lines) + "\n" + FOOTER_TEXT
+			lines.append(line_for(kind))
+	return "\n".join(lines) + "\n" + _translator.tr("The clock goes on when you close this.")

@@ -13,10 +13,10 @@ extends Node
 ## drag ending (NOTIFICATION_DRAG_END) clears the rows; a drop that did not land
 ## keeps a refusal shown and clears any other message.
 
-## The message while a flight is dragged and the pointer is not over a row it fits.
+## The English msgid of the message while a flight is dragged and the pointer is
+## not over a row it fits. Tests compare with it; the message itself is tr() of
+## the same literal, because the POT extractor reads only literals.
 const DRAG_TEXT := "Drop the flight on another gate's row."
-## The message over a row the dragged flight fits: destination, gate.
-const DROP_TEXT := "Drop to move %s to gate %s. Days already issued keep their gate."
 
 var flights: FlightSim
 ## The planner's message line.
@@ -36,7 +36,14 @@ var _over := ""
 
 ## The text a drag over a row the flight fits shows: "Drop to move Rome to gate C. ...".
 static func drop_text(destination: String, gate_id: String) -> String:
-	return DROP_TEXT % [destination, gate_id]
+	# gdlint:ignore = max-line-length
+	return (
+		TranslationServer
+		. translate(
+			"Drop to move {destination} to gate {gate}. Days already issued keep their gate."
+		)
+		. format({"destination": destination, "gate": gate_id})
+	)
 
 
 ## Why `contract_id` cannot be dropped on each of `gates` now, in the words a
@@ -84,7 +91,7 @@ func _notification(what: int) -> void:
 			return
 		_drag = drag
 		_over = ""
-		message.text = DRAG_TEXT
+		message.text = tr("Drop the flight on another gate's row.")
 		show_rows()
 	elif what == NOTIFICATION_DRAG_END and is_dragging():
 		var landed := get_viewport().gui_is_drag_successful()
@@ -109,7 +116,7 @@ func _on_hovered(track: PlannerTrack) -> void:
 	_over = track.gate
 	var text := track.refusal
 	if text == "":
-		text = DRAG_TEXT
+		text = tr("Drop the flight on another gate's row.")
 		if not track.home:
 			var destination: String = flights.contract_of(_drag["contract"])["destination"]
 			text = drop_text(destination, track.gate)

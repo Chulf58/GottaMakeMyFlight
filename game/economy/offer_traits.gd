@@ -43,8 +43,8 @@ const KEYS := ["down", "level", "up"]
 const NEEDS_BAGS := "bags"
 const NEEDS_SHOPS := "shops"
 
-## Per trait: the card label and its tooltip per level, the level values and what
-## it needs ("" for nothing). The values mean:
+## Per trait: the level values and what it needs ("" for nothing). The card
+## label and tooltip per level are in label_of() and tip_of(). The values mean:
 ## TOP_FARE: percent more fee. SHOPPERS: the relaxed arrival share. BAG_COVER and
 ## HEAVY_BAGS: the percent of the fee a missed bag costs (PriceTable's default
 ## is 100 - MISSED_BAG_FEE_PERCENT). FULL_FLIGHT: bookings come from the top
@@ -62,118 +62,56 @@ const NEEDS_SHOPS := "shops"
 const TABLE := {
 	TOP_FARE:
 	{
-		"labels": ["Top fare +15%", "Top fare +30%"],
-		"tips": ["Pays 15% more per passenger.", "Pays 30% more per passenger."],
 		"values": [15, 30],
 		"needs": "",
 	},
 	SHOPPERS:
 	{
-		"labels": ["Shoppers", "Many shoppers"],
-		"tips":
-		[
-			"45% of passengers come early with time to shop (usually 30%).",
-			"55% of passengers come early with time to shop (usually 30%).",
-		],
 		"values": [45, 55],
 		"needs": NEEDS_SHOPS,
 	},
 	BAG_COVER:
 	{
-		"labels": ["Bag cover", "Full bag cover"],
-		"tips":
-		[
-			"A missed bag costs 25% of the fee (usually 50%).",
-			"A missed bag costs nothing (usually 50% of the fee).",
-		],
 		"values": [25, 0],
 		"needs": NEEDS_BAGS,
 	},
 	FULL_FLIGHT:
 	{
-		"labels": ["Full flight", "Packed flight"],
-		"tips":
-		[
-			"Booked from the top half of the plane's range.",
-			"Booked from the top quarter of the plane's range.",
-		],
 		"values": [50, 25],
 		"needs": "",
 	},
 	RUSH_CROWD:
 	{
-		"labels": ["Rush crowd", "Big rush crowd"],
-		"tips":
-		[
-			"30% of passengers arrive late in a rush (usually 15%).",
-			"45% of passengers arrive late in a rush (usually 15%).",
-		],
 		"values": [30, 45],
 		"needs": "",
 	},
 	HEAVY_BAGS:
 	{
-		"labels": ["Heavy bags", "Very heavy bags"],
-		"tips":
-		[
-			"A missed bag costs 75% of the fee (usually 50%).",
-			"A missed bag costs the whole fee (usually 50%).",
-		],
 		"values": [75, 100],
 		"needs": NEEDS_BAGS,
 	},
 	SIGNING_BONUS:
 	{
-		"labels": ["Signing bonus $150", "Signing bonus $300"],
-		"tips":
-		[
-			"Pays $150 once, when this contract's first flight leaves.",
-			"Pays $300 once, when this contract's first flight leaves.",
-		],
 		"values": [150, 300],
 		"needs": "",
 	},
 	LOYAL_AIRLINE:
 	{
-		"labels": ["Loyal airline", "Loyal airline"],
-		"tips":
-		[
-			"After 5 days this flight leaves, the airline's later offers pay 10% more.",
-			"After 5 days this flight leaves, the airline's later offers pay 10% more.",
-		],
 		"values": [10, 10],
 		"needs": "",
 	},
 	MISS_FINE:
 	{
-		"labels": ["Miss fine $10", "Miss fine $20"],
-		"tips":
-		[
-			"Each passenger who misses this flight costs $10.",
-			"Each passenger who misses this flight costs $20.",
-		],
 		"values": [10, 20],
 		"needs": "",
 	},
 	ODD_HOURS:
 	{
-		"labels": ["Odd hours", "Odd hours"],
-		"tips":
-		[
-			"Departs at 06:00 or 22:00, outside the usual 07:00 to 21:00.",
-			"Departs at 06:00 or 22:00, outside the usual 07:00 to 21:00.",
-		],
 		"values": [60, 60],
 		"needs": "",
 	},
 	EXIT_FEE:
 	{
-		"labels": ["Exit fee $60", "Exit fee $120"],
-		"tips":
-		[
-			"Ending this contract in its first 7 days costs $60.",
-			"Ending this contract in its first 7 days costs $120.",
-		],
 		"values": [60, 120],
 		"needs": "",
 	},
@@ -184,6 +122,10 @@ const TABLE := {
 const FORBIDDEN: Array = [[SHOPPERS, RUSH_CROWD], [BAG_COVER, HEAVY_BAGS]]
 ## A plain offer pays this percent of its drawn fee, rounded.
 const PLAIN_FEE_PERCENT := 90
+## The English msgids of the plain and loyal card lines. Tests compare with
+## them; card_labels(), card_tips(), loyal_label() and loyal_tip() return
+## TranslationServer.translate() of the same literals, because the POT
+## extractor reads only literals.
 const PLAIN_LABEL := "Plain terms"
 const PLAIN_TIP := "No catch, and 10% less pay."
 ## Percent chance a paired offer is level 2, by airline tier (RatingFormula.tier):
@@ -310,21 +252,143 @@ static func missed_bag_paid_percent(traits: Dictionary) -> int:
 ## The card's trait line as [upside, downside] labels, or [PLAIN_LABEL, ""].
 static func card_labels(traits: Dictionary) -> PackedStringArray:
 	if is_plain(traits):
-		return PackedStringArray([PLAIN_LABEL, ""])
+		return PackedStringArray([TranslationServer.translate("Plain terms"), ""])
 	var index := int(traits["level"]) - 1
-	return PackedStringArray(
-		[TABLE[traits["up"]]["labels"][index], TABLE[traits["down"]]["labels"][index]]
-	)
+	return PackedStringArray([label_of(traits["up"], index), label_of(traits["down"], index)])
 
 
 ## The tooltips for card_labels' two labels.
 static func card_tips(traits: Dictionary) -> PackedStringArray:
 	if is_plain(traits):
-		return PackedStringArray([PLAIN_TIP, ""])
+		return PackedStringArray([TranslationServer.translate("No catch, and 10% less pay."), ""])
 	var index := int(traits["level"]) - 1
-	return PackedStringArray(
-		[TABLE[traits["up"]]["tips"][index], TABLE[traits["down"]]["tips"][index]]
-	)
+	return PackedStringArray([tip_of(traits["up"], index), tip_of(traits["down"], index)])
+
+
+## The label of the loyal airline mark on a card.
+static func loyal_label() -> String:
+	return TranslationServer.translate("Loyal: +10%")
+
+
+## The tooltip of the loyal airline mark on a card.
+static func loyal_tip() -> String:
+	return TranslationServer.translate("This airline is loyal to you: its offers pay 10% more.")
+
+
+## The card label of trait `id` at level `index` + 1.
+static func label_of(id: String, index: int) -> String:
+	var amount: int = TABLE[id]["values"][index]
+	match id:
+		TOP_FARE:
+			return TranslationServer.translate("Top fare +{percent}%").format({"percent": amount})
+		SHOPPERS:
+			if index == 0:
+				return TranslationServer.translate("Shoppers")
+			return TranslationServer.translate("Many shoppers")
+		BAG_COVER:
+			if index == 0:
+				return TranslationServer.translate("Bag cover")
+			return TranslationServer.translate("Full bag cover")
+		FULL_FLIGHT:
+			if index == 0:
+				return TranslationServer.translate("Full flight")
+			return TranslationServer.translate("Packed flight")
+		RUSH_CROWD:
+			if index == 0:
+				return TranslationServer.translate("Rush crowd")
+			return TranslationServer.translate("Big rush crowd")
+		HEAVY_BAGS:
+			if index == 0:
+				return TranslationServer.translate("Heavy bags")
+			return TranslationServer.translate("Very heavy bags")
+		SIGNING_BONUS:
+			return TranslationServer.translate("Signing bonus ${amount}").format({"amount": amount})
+		LOYAL_AIRLINE:
+			return TranslationServer.translate("Loyal airline")
+		MISS_FINE:
+			return TranslationServer.translate("Miss fine ${amount}").format({"amount": amount})
+		ODD_HOURS:
+			return TranslationServer.translate("Odd hours")
+		EXIT_FEE:
+			return TranslationServer.translate("Exit fee ${amount}").format({"amount": amount})
+	push_error("OfferTraits.label_of: unknown trait '%s'" % id)
+	return ""
+
+
+## The tooltip of trait `id` at level `index` + 1.
+static func tip_of(id: String, index: int) -> String:
+	var amount: int = TABLE[id]["values"][index]
+	match id:
+		TOP_FARE:
+			return TranslationServer.translate("Pays {percent}% more per passenger.").format(
+				{"percent": amount}
+			)
+		SHOPPERS:
+			return (
+				TranslationServer
+				. translate("{percent}% of passengers come early with time to shop (usually 30%).")
+				. format({"percent": amount})
+			)
+		BAG_COVER:
+			if index == 0:
+				return (
+					TranslationServer
+					. translate("A missed bag costs {percent}% of the fee (usually 50%).")
+					. format({"percent": amount})
+				)
+			return TranslationServer.translate(
+				"A missed bag costs nothing (usually 50% of the fee)."
+			)
+		FULL_FLIGHT:
+			if index == 0:
+				return TranslationServer.translate("Booked from the top half of the plane's range.")
+			return TranslationServer.translate("Booked from the top quarter of the plane's range.")
+		RUSH_CROWD:
+			return (
+				TranslationServer
+				. translate("{percent}% of passengers arrive late in a rush (usually 15%).")
+				. format({"percent": amount})
+			)
+		HEAVY_BAGS:
+			if index == 0:
+				return (
+					TranslationServer
+					. translate("A missed bag costs {percent}% of the fee (usually 50%).")
+					. format({"percent": amount})
+				)
+			return TranslationServer.translate("A missed bag costs the whole fee (usually 50%).")
+		SIGNING_BONUS:
+			return (
+				TranslationServer
+				. translate("Pays ${amount} once, when this contract's first flight leaves.")
+				. format({"amount": amount})
+			)
+		LOYAL_AIRLINE:
+			return (
+				TranslationServer
+				. translate(
+					"After {days} days this flight leaves, the airline's later offers pay {percent}% more."
+				)
+				. format({"days": LOYAL_DAYS, "percent": amount})
+			)
+		MISS_FINE:
+			return (
+				TranslationServer
+				. translate("Each passenger who misses this flight costs ${amount}.")
+				. format({"amount": amount})
+			)
+		ODD_HOURS:
+			return TranslationServer.translate(
+				"Departs at 06:00 or 22:00, outside the usual 07:00 to 21:00."
+			)
+		EXIT_FEE:
+			return (
+				TranslationServer
+				. translate("Ending this contract in its first {days} days costs ${amount}.")
+				. format({"days": EXIT_FEE_DAYS, "amount": amount})
+			)
+	push_error("OfferTraits.tip_of: unknown trait '%s'" % id)
+	return ""
 
 
 ## The [up, down] pairs that may be drawn when `live` ({NEEDS_BAGS: bool,

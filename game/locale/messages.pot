@@ -18,14 +18,14 @@ msgid "No flights yet: the rating starts when passengers make or miss a flight."
 msgstr ""
 
 #: ui/rating_badge.gd
-msgid "Airport rating: {stars} of {max}"
-msgstr ""
-
-#: ui/rating_badge.gd
 msgid "Made it: {share}% ({made} of {count} passenger)"
 msgid_plural "Made it: {share}% ({made} of {count} passengers)"
 msgstr[0] ""
 msgstr[1] ""
+
+#: ui/rating_badge.gd
+msgid "Airport rating: {stars} of {max}"
+msgstr ""
 
 #: ui/rating_badge.gd
 msgid "Mood: {mood} of {max}"
@@ -37,4 +37,3789 @@ msgstr ""
 
 #: ui/rating_badge.gd
 msgid "Days counted: {days} of {window}"
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Floor tile. Passengers can only walk and stand on floor."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Drag a rectangle to lay many tiles at once. Everything else is built on floor."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Land you own. Removing a tile refunds half."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A wall along a tile edge. Passengers cannot cross it and it blocks the view."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Drag along a line to build a row. Walls close in the terminal and its rooms."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "One wall per tile edge. Removing it refunds half."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A glass wall. Passengers cannot cross it, but it lets the view through."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Drag along a line like a wall. Screens and decor can be seen through glass."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Costs more than a plain wall. One per tile edge."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A door in a wall. Passengers walk through it."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Click a wall edge to put a door in the wall."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A plain wall on each side of it."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "The way into the terminal. Passengers come in here from the road and car parks."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Place it on the outer edge of the terminal, facing in."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "The outside edge with no floor behind it. Keep the spot in front clear."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "The way out to the planes. Passengers leave the terminal here to board."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Place it on the outer edge. A gate desk links to an exit facing west, north or east."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Where passengers check in and hand over a bag."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A check-in agent works behind it. A belt from its back edge takes bags to a bag room."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "An agent hired in Staff, or it stays closed. Keep the spot behind and in front clear."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A basic security scanner. Passengers walk through it to be screened."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A security officer works beside it. A full lane is faster but costs more."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "An officer hired in Staff, or it stays closed. Keep its staff spot and way in clear."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A row of seats. Passengers wait here for their flight and their mood recovers."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Place it near the gate and turn it. Waiting passengers sit on it."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "No staff and no upkeep. Add enough seats for the passengers waiting."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Makes a gate. It links to the nearest free exit facing the planes; the plane parks out from it."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Each flight is given a gate. A gate takes the next free letter, starting at A."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Within 4 cells of a free exit facing the planes, with room for the plane. No staff needed."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A floor screen that entertains passengers waiting in front of it."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "It covers a fan of floor up to 5 rows ahead. A plain wall blocks it, glass does not."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Costs upkeep every day, inside a room or not."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Marks floor as a cafe. Hungry passengers eat and drink here and their mood rises."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Drag a rectangle, then add a counter and a table. Guests order, then sit at the table."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "At least 3x3, with a counter and a table. Needs shop staff, or the counter stays closed."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "The cafe counter, where guests order."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Place it inside a cafe, bar, restaurant or grab-and-go stall. A server stands there."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Wholly inside the room. Shop staff hired in Staff, and the spot in front clear."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A table with a seat at each end. Cafe guests sit here to eat."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "It seats two. A guest walks from the counter to a free seat."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Inside a cafe, bar or restaurant. A grab-and-go stall needs none."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Marks floor as a toilet. Passengers who need one queue and use a stall."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Drag a rectangle, then add a stall and a sink inside."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "At least 2x3, with a stall and a sink. Each stall costs upkeep every day when ready."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "One toilet stall. One passenger uses it at a time."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Place it inside a toilet room. A passenger walks in from the cell in front."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Keep the spot in front clear. Costs upkeep every day once its room is ready."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A sink. A toilet room is not ready without one."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Place it inside a toilet room."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Keep the spot in front clear. No upkeep of its own."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Marks floor as a kiosk, a small shop. Bored passengers browse here and pay."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Drag a rectangle, then add a counter and display stands. Guests browse at the stands."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "At least 3x3, with a counter and a display stand. Shop staff serve at the counter."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "The kiosk's counter, with a till."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Place it inside a kiosk. A server stands behind it."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Wholly inside the kiosk. Shop staff hired in Staff, and the spot in front clear."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Marks floor as a pharmacy. Passengers browse and buy here."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Drag a rectangle, then add a counter and a shelf. Passengers browse at the shelf."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "At least 3x3, with a counter and a shelf. Shop staff serve at the counter."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Marks floor as a duty free shop. Passengers browse and spend more than in a kiosk."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Drag a rectangle, then add a till and shelves. Passengers browse at the shelves."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "At least 3x4, with a till and a shelf. Shop staff serve at the till."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "The duty free shop's till."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Place it inside a duty free shop. A server stands behind it."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Wholly inside the shop. Shop staff hired in Staff, and the spot in front clear."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A duty free shelf. Each one gives two browse spots."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Passengers browse from the cells in front of it."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Inside a duty free shop. Keep the cells in front clear."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Marks floor as a fashion store. Passengers browse and spend more than in a kiosk."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Drag a rectangle, then add a till and clothes rails. Passengers browse at the rails."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "At least 3x4, with a till and a clothes rail. Shop staff serve at the till."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "The fashion store's till."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Place it inside a fashion store. A server stands behind it."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Wholly inside the store. Shop staff hired in Staff, and the spot in front clear."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A clothes rail. Each one gives two browse spots."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Inside a fashion store. Keep the cells in front clear."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Marks floor as a currency exchange. Passengers change money and pay a small fee."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Drag a rectangle, then add a counter. A server works it."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "At least 2x3, with a counter and shop staff. A visit does not cure boredom."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Marks floor as an ATM room. Passengers take out cash and pay a small fee."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Drag a rectangle, then add an ATM. It is self-service."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "At least 1x2, with an ATM. No staff. A visit does not cure boredom."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Marks floor as a bar. Guests stay longer than in a cafe, spend more, and gain most mood."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Guests order at a bar counter or a cafe counter and sit at a cafe table."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "At least 3x4, with a counter and a table. Shop staff serve at the counter."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Marks floor as a sit-down restaurant. Guests stay the longest and spend the most."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Guests order at a cafe counter and sit at a dining table, a booth or a cafe table."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "At least 4x4, with a counter and a table or booth. Shop staff serve at the counter."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Marks floor as a grab-and-go stall. Guests buy, pay and walk on, with no seat."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "It needs only a grab stall or a cafe counter. A server hands over the order."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "At least 3x3, with a counter. Shop staff serve. It earns the least of the food rooms."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Marks floor as a play area. Passengers stay and play for free and their mood rises."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Drag a rectangle, then add a slide and play blocks. It is self-service."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "At least 3x4, with a slide and play blocks. No staff."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Marks floor as a lounge. Passengers rest on the sofas for free and their mood rises."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Drag a rectangle, then add a sofa. It is self-service."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "At least 2x3, with a sofa. No staff."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Marks floor as a shower room. Passengers pay to wash during a long wait and gain mood."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Drag a rectangle, then add a shower cubicle. It is self-service."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "At least 2x2, with a shower cubicle. No staff. Each stay pays you a fee."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Marks floor as a nap pod room. Passengers pay to rest during a long wait and gain mood."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Drag a rectangle, then add a nap pod. It is self-service."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "At least 2x2, with a nap pod. No staff. Each stay pays you a fee."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A shelf unit. Each stand gives the kiosk two browse spots."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Inside a kiosk. Keep the cells in front clear."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A baggage belt. It carries checked bags from a check-in desk to a bag room."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Drag a line. The belt shapes itself at turns and joins. Belts cannot cross."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Start at a check-in desk's back and end in a bag room. A wall in the way blocks it."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Where checked bags end up. They are loaded onto the plane from here."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Drag a rectangle, then run a belt into it. The belt's end piece goes inside."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "At least 2x2, with a belt end. A bag that arrives after the cutoff misses the plane."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A baggage cart on wheels."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "It is scenery. Bags move the same without it."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Takes 1x2 tiles. No upkeep."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A curb bay on the road outside. Cars and taxis stop here and drop passengers off."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Click one of the marked spots by the road. Each bay has two berths."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Marked spots only. The nearer an entrance, the shorter the walk."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A car park with 12 spaces. A car pays a fee when it parks."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Click a marked spot. Passengers walk from the car park to an entrance."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Marked spots only. Close it to let it drain before you remove it."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A big car park with 31 spaces. A car pays a fee when it parks."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Opens or closes a car park."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Click a built car park. A closed one takes no new cars and empties out."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A car park can only be removed once no cars are in it."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Buys a plot of land. You can only build on land you own."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Click a highlighted plot. Its price shows on it and rises with each plot you buy."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A plot next to land you already own."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "The tray table of a security lane, where passengers unpack their bags."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "It stands beside the arch, on the side the lane's parts go."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Part of a whole lane: arch, tray table, X-ray belt and pickup table."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "The X-ray belt of a security lane. Bags ride through it."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "It stands beside the arch. A lane officer works at it."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Part of a whole lane. Needs a security officer hired in Staff."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "The arch of a security lane. Passengers walk through it."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Place the arch first and the other parts around it. Its front faces the queue."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Part of a whole lane. Keep the spot in front and the walls around the lane clear."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "The pickup table of a security lane, where passengers collect their bags."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "It stands past the arch, where cleared passengers leave the lane."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A bush. It calms passengers close to it, a little."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Passengers within a cell or so get calm, which becomes mood. Walls block it."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "No upkeep. It earns nothing."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A planter. It calms passengers near it, a little."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Passengers within a couple of cells get calm, which becomes mood. Walls block it."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A large plant pot. It calms passengers near it, a little."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "An indoor tree. It calms the passengers around it."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Passengers within a few cells get calm, which becomes mood. Walls block it."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A bench. It calms passengers right next to it, a little."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Passengers do not sit on it. Calm becomes mood, and a wall between them blocks it."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A bench built around a tree. It calms the passengers near it."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A fountain. It calms the passengers around it the most, with a long reach."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A statue. It calms the passengers around it, with a long reach."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A metal post. Passengers cannot walk through it."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Use posts and chains to steer a queue. They give no calm."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A chain between two posts, three cells long. Passengers cannot walk through it."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A bin. Passengers drop litter in it instead of leaving it on the floor."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A bin takes litter from visits near it, and a cleaner empties it when it is full."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A cleaner hired in Staff. It gives no calm, and a bin in view takes a little back."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A bar counter, where guests order drinks."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Place it inside a bar. A server stands behind it and guests order from the cell in front."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Wholly inside the bar. Shop staff hired in Staff, and the spot in front clear."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A grab-and-go stall, where guests buy and walk on."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Place it inside a grab-and-go room. A server hands over the order."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A restaurant table with four seats."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Place it inside a restaurant. A guest walks from the counter to a free seat."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Wholly inside the restaurant, with the cell behind each chair clear."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A restaurant booth with four seats."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Wholly inside the restaurant, with the cell behind each seat clear."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A staffed desk that helps lost passengers."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A stuck passenger nearby walks over, is helped, gains mood and plans its route again."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Shop staff hired in Staff, or it does nothing. Works on open floor or in a room."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "An information display."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Scenery for now: nothing in the game reacts to it."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Costs upkeep every day."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "The currency exchange counter."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Place it inside an exchange room. A server stands behind it and changes money."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A cash machine. One passenger uses it at a time and pays a small fee."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Place it inside an ATM room. The passenger uses it from the cell in front."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Keep the spot in front clear. No staff and no upkeep."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "The pharmacy counter, with a till."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Place it inside a pharmacy. A server stands behind it."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Wholly inside the pharmacy. Shop staff hired in Staff, and the spot in front clear."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A pharmacy shelf. Each one gives one browse spot."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Passengers browse from the cell in front of it."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Inside a pharmacy. Keep the cells in front clear."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A shower cubicle. One passenger uses it at a time and pays a fee."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Place it inside a shower room. The passenger steps in from the cell in front."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Keep the spot in front clear. No upkeep."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A nap pod. One passenger uses it at a time and pays a fee."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Place it inside a nap pod room. The passenger sits and leans back."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A two-seat sofa. Lounge guests rest on it."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Place it inside a lounge. Each sofa gives two seats."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "No upkeep. The lounge is free to use."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A single armchair."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A passenger can sit on it, but a lounge needs a sofa. The armchair does not count."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A work desk."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Play blocks for children."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Place them inside a play area. A play area needs them and a slide."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "No upkeep. The play area is free to use."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A play slide. Children use it from the front."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Place it inside a play area. Each slide gives two play spots."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A prize car on a podium. Passengers near it spend a bit more in shops and food rooms."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Waiting passengers who see it lose boredom. A second podium does not stack."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Costs upkeep every day. A plain wall blocks the view."
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "card hint"
+msgid "Drag"
+msgstr ""
+
+#: ui/build_menu_catalog.gd ui/templates_page.gd
+msgctxt "card hint"
+msgid "Click"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgid "Upkeep {amount}/day"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Structure"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Doors"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Check-in"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Security"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Lane"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Gates"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Cafe"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Toilets"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Kiosk"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Landside"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Land"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Baggage"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Furniture"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Decor"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Features"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Fittings"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Food"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Dining"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Desks"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Services"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Care"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Money"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Lounge"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Leisure"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Fun"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Activities"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Pharmacy"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Shops"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Duty free"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Fashion"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Remove"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Floor"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "1x1 tile"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Wall"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "1 m edge"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Glass"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Door"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Entrance"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Exit"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Check-in desk"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Scanner"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Seats"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Gate desk"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Screen"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "3x3 min"
+msgstr ""
+
+#: ui/build_menu_catalog.gd build/furniture_tools.gd
+msgctxt "build menu"
+msgid "Counter"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Table"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Toilet"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "2x3 min"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Toilet stall"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Sink"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Kiosk counter"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "3x4 min"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Till"
+msgstr ""
+
+#: ui/build_menu_catalog.gd build/furniture_tools.gd
+msgctxt "build menu"
+msgid "Shelf"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Fashion store"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Clothes rail"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Exchange"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "ATM"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "1x2 min"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Bar"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Restaurant"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "4x4 min"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Grab-and-go"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Play area"
+msgstr ""
+
+#: ui/build_menu_catalog.gd build/furniture_tools.gd
+msgctxt "build menu"
+msgid "Shower"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "2x2 min"
+msgstr ""
+
+#: ui/build_menu_catalog.gd build/furniture_tools.gd
+msgctxt "build menu"
+msgid "Nap pod"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Display stand"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Belt"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Drag a line"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Bag room"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Bag cart"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Curb bay"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "16x3 m"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Surface lot"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "32x24 m"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Multi-storey"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "24x52 m"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Open / close"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "A car park"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Buy land"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "about 21x25 m plot"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Tray table"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "X-ray belt"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Arch"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Pickup table"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Needs belt end"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Staff"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "{reachable} of {total} seats reachable"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "In {room}"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Status: Part of a ready security lane"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Status: Not in a whole lane"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Queue: {count} waiting"
+msgid_plural "Queue: {count} waiting"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/built_item_card.gd
+msgid "Status: Not ready, {reason}"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Status: Linked to Gate {gate}"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Status: Not linked yet"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Biggest plane: none, no room outside the exit"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Status: Closed, {reason}"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Status: Open"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Status: Closed"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Cars: {cars} of {capacity} berth"
+msgid_plural "Cars: {cars} of {capacity} berths"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/built_item_card.gd
+msgid "Cars: {cars} of {capacity} space"
+msgid_plural "Cars: {cars} of {capacity} spaces"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/built_item_card.gd
+msgid "Status: Not in use"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "{count} on duty"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "{count} on the way"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Staff: none"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Staff: {parts}"
+msgstr ""
+
+#: ui/built_item_actions.gd
+msgid "Pick it up and set it down elsewhere"
+msgstr ""
+
+#: ui/built_item_actions.gd
+msgid "Can't delete: {reason}"
+msgstr ""
+
+#: ui/built_item_actions.gd
+msgid "Move"
+msgstr ""
+
+#: ui/built_item_actions.gd
+msgid "Move room"
+msgstr ""
+
+#: ui/built_item_actions.gd
+msgid "This kind of room can't be moved yet"
+msgstr ""
+
+#: ui/built_item_actions.gd
+msgid "It is no longer there"
+msgstr ""
+
+#: ui/built_item_actions.gd
+msgid "Single pieces outside a room can't be moved yet"
+msgstr ""
+
+#: ui/built_item_actions.gd
+msgid "Car parks and curbs can't be moved yet"
+msgstr ""
+
+#: ui/built_item_actions.gd
+msgid "Delete"
+msgstr ""
+
+#: ui/built_item_actions.gd
+msgid "Delete room"
+msgstr ""
+
+#: ui/built_item_actions.gd
+msgid "Take car parks and curbs back with the Remove tool"
+msgstr ""
+
+#: ui/build_menu.gd ui/build_menu_layout.gd
+msgid "Money  --"
+msgstr ""
+
+#: ui/build_menu.gd
+msgid "Money  {amount}"
+msgstr ""
+
+#: ui/build_menu.gd ui/build_menu_layout.gd ui/templates_page.gd
+msgctxt "price"
+msgid "Free"
+msgstr ""
+
+#: ui/build_menu.gd
+msgid "Locked"
+msgstr ""
+
+#: ui/build_menu.gd
+msgid "Wages paid: {amount}"
+msgstr ""
+
+#: ui/build_menu.gd
+msgid "Wages paid: {amount} ({owed} owed)"
+msgstr ""
+
+#: ui/build_menu_layout.gd
+msgid "Key {key}"
+msgstr ""
+
+#: ui/build_menu_layout.gd
+msgctxt "build menu page"
+msgid "Next"
+msgstr ""
+
+#: ui/item_card_button.gd
+msgid "How it works"
+msgstr ""
+
+#: ui/item_card_button.gd
+msgid "Needs and upkeep"
+msgstr ""
+
+#: ui/item_card_button.gd
+msgid "How it works: {text}"
+msgstr ""
+
+#: ui/item_card_button.gd
+msgid "Needs and upkeep: {text}"
+msgstr ""
+
+#: ui/templates_page.gd
+msgid "Templates"
+msgstr ""
+
+#: ui/templates_page.gd
+msgid "Save room"
+msgstr ""
+
+#: ui/templates_page.gd
+msgid "Pick a room"
+msgstr ""
+
+#: build/furniture_tools.gd
+msgctxt "build menu"
+msgid "Bush"
+msgstr ""
+
+#: build/furniture_tools.gd
+msgctxt "build menu"
+msgid "Planter"
+msgstr ""
+
+#: build/furniture_tools.gd
+msgctxt "build menu"
+msgid "Plant pot"
+msgstr ""
+
+#: build/furniture_tools.gd
+msgctxt "build menu"
+msgid "Tree"
+msgstr ""
+
+#: build/furniture_tools.gd
+msgctxt "build menu"
+msgid "Bench"
+msgstr ""
+
+#: build/furniture_tools.gd
+msgctxt "build menu"
+msgid "Tree bench"
+msgstr ""
+
+#: build/furniture_tools.gd
+msgctxt "build menu"
+msgid "Fountain"
+msgstr ""
+
+#: build/furniture_tools.gd
+msgctxt "build menu"
+msgid "Statue"
+msgstr ""
+
+#: build/furniture_tools.gd
+msgctxt "build menu"
+msgid "Post"
+msgstr ""
+
+#: build/furniture_tools.gd
+msgctxt "build menu"
+msgid "Chain"
+msgstr ""
+
+#: build/furniture_tools.gd
+msgctxt "build menu"
+msgid "Bin"
+msgstr ""
+
+#: build/furniture_tools.gd
+msgctxt "build menu"
+msgid "Bar counter"
+msgstr ""
+
+#: build/furniture_tools.gd
+msgctxt "build menu"
+msgid "Grab stall"
+msgstr ""
+
+#: build/furniture_tools.gd
+msgctxt "build menu"
+msgid "Dining table"
+msgstr ""
+
+#: build/furniture_tools.gd
+msgctxt "build menu"
+msgid "Booth"
+msgstr ""
+
+#: build/furniture_tools.gd
+msgctxt "build menu"
+msgid "Info desk"
+msgstr ""
+
+#: build/furniture_tools.gd
+msgctxt "build menu"
+msgid "Info screen"
+msgstr ""
+
+#: build/furniture_tools.gd
+msgctxt "build menu"
+msgid "Cash machine"
+msgstr ""
+
+#: build/furniture_tools.gd
+msgctxt "build menu"
+msgid "Sofa"
+msgstr ""
+
+#: build/furniture_tools.gd
+msgctxt "build menu"
+msgid "Armchair"
+msgstr ""
+
+#: build/furniture_tools.gd
+msgctxt "build menu"
+msgid "Work desk"
+msgstr ""
+
+#: build/furniture_tools.gd
+msgctxt "build menu"
+msgid "Play blocks"
+msgstr ""
+
+#: build/furniture_tools.gd
+msgctxt "build menu"
+msgid "Play slide"
+msgstr ""
+
+#: build/furniture_tools.gd
+msgctxt "build menu"
+msgid "Prize podium"
+msgstr ""
+
+#: build/build_unlocks.gd
+msgid "{requirement} (now {stars} stars, {passengers} passenger)"
+msgid_plural "{requirement} (now {stars} stars, {passengers} passengers)"
+msgstr[0] ""
+msgstr[1] ""
+
+#: build/build_unlocks.gd
+msgid "Unlocked: {facilities}"
+msgstr ""
+
+#: build/build_unlocks.gd
+msgid "Build unlocks are not wired"
+msgstr ""
+
+#: build/build_unlocks.gd
+msgid "Not available yet"
+msgstr ""
+
+#: build/build_unlocks.gd
+msgid "Unlocks at {stars} stars and {passengers} passenger"
+msgid_plural "Unlocks at {stars} stars and {passengers} passengers"
+msgstr[0] ""
+msgstr[1] ""
+
+#: build/build_unlocks.gd
+msgid "cafe and bins, security lane, baggage, kiosk, screen, plants, benches, curb bay, medium runway"
+msgstr ""
+
+#: build/build_unlocks.gd
+msgid "food and services: bar, restaurant, grab-and-go, info desk, pharmacy, exchange, ATM, lounge, car park, large runway"
+msgstr ""
+
+#: build/build_unlocks.gd
+msgid "premium shops and amenities: duty free, fashion, shower, nap pod, play area, fountain, statue, multi-storey"
+msgstr ""
+
+#: ui/rotate_hint.gd
+msgid "R rotate"
+msgstr ""
+
+#: ui/build_mode_frame.gd
+msgctxt "narrow build mode sign"
+msgid "Build"
+msgstr ""
+
+#: ui/build_mode_frame.gd
+msgid "Build mode"
+msgstr ""
+
+#: ui/flight_planner.gd
+msgid "Planner ({key})"
+msgstr ""
+
+#: ui/flight_planner.gd
+msgid "Flight planner"
+msgstr ""
+
+#: ui/flight_planner.gd
+msgid "Close"
+msgstr ""
+
+#: ui/flight_planner.gd
+msgctxt "calendar day"
+msgid "Day {day}"
+msgstr ""
+
+#: ui/flight_planner.gd
+msgid "No gate has a stand yet, so there is nothing to plan."
+msgstr ""
+
+#: ui/departures_board.gd ui/flight_planner.gd
+msgctxt "gate name"
+msgid "Gate {gate}"
+msgstr ""
+
+#: ui/flight_planner.gd
+msgid "{label}{airline}\nGate {gate}, held {from} to {to}"
+msgstr ""
+
+#: ui/flight_planner.gd
+msgid "Click a flight to move it or end its contract, or drag it to another gate. Days already issued keep their gate."
+msgstr ""
+
+#: ui/flight_planner.gd
+msgctxt "gate name"
+msgid "{label}  Gate {gate}"
+msgstr ""
+
+#: ui/departures_board.gd ui/flight_planner.gd
+msgctxt "button: end the contract"
+msgid "End"
+msgstr ""
+
+#: ui/departures_board.gd ui/flight_planner.gd
+msgid "End this airline contract"
+msgstr ""
+
+#: ui/departures_board.gd ui/flight_planner.gd
+msgid "No other gate fits this flight"
+msgstr ""
+
+#: ui/departures_board.gd ui/flight_planner.gd
+msgid "No other gate exists"
+msgstr ""
+
+#: ui/departures_board.gd ui/flight_planner.gd
+msgid "Move to:"
+msgstr ""
+
+#: ui/departures_board.gd ui/flight_planner.gd
+msgid "End contract"
+msgstr ""
+
+#: ui/departures_board.gd ui/flight_planner.gd
+msgctxt "button: keep the contract"
+msgid "Keep"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "No flights scheduled"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "Today"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "Tomorrow"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "None"
+msgstr ""
+
+#: ui/departures_board.gd ui/alert_stack.gd ui/checklist_card.gd
+msgid "+{count} more"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "Departures ({key})"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "Made {made}  Missed {missed}  In terminal {active}"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "Move this flight to another gate"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "No gate has a stand"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "{destination} now uses gate {gate} for the days not yet issued"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "End this contract? Exit fee ${fee}"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "End this contract?"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "{destination} contract ended. Flights already booked still fly"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "Can't end this contract: another flight would have no taxi plan"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "Can't end this contract: {flight} would have no taxi plan"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "Gate {gate} is busy when this flight needs it"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "The runway"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "The taxi lane"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "{subject} is taken by the {time} flight"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "{subject} is taken by the {time} {destination} flight"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Airlines are warning you: the airport rating is below {stars} stars."
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "{airline} to {destination} has ended its contract: the airport rating stayed low."
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Flights already issued still fly; no new days will."
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "first flight tomorrow"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "first flight on Day {day}"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "{hours} h"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "{minutes} min"
+msgstr ""
+
+#: airside/gate_desks.gd ui/offer_panel.gd
+msgid "{airline} to {destination}"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Departs {time} daily"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Small plane"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Medium plane"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Large plane"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "${amount} a day"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Fits your gates now"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Needs another gate"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Today's offers"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Offers ({count})"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "first flight {lead} after opening"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Low airport rating"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Contract ended"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgctxt "button: accept an offer"
+msgid "Accept"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgctxt "button: decline an offer"
+msgid "Decline"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Can't accept {airline} to {destination}: {reason}"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Accepted {airline} to {destination}"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Accepted {airline} to {destination}, {note}"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "it clashes with {flight}"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "it clashes with another flight"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "No offers right now. New offers arrive at midnight."
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Contracts end after {days} more low day."
+msgid_plural "Contracts end after {days} more low days."
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/offer_panel.gd
+msgid "{count} passenger booked   ${fee} per passenger"
+msgid_plural "{count} passengers booked   ${fee} per passenger"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/runway_card.gd
+msgid "Small runway, {length} m"
+msgstr ""
+
+#: ui/runway_card.gd
+msgid "Medium runway, {length} m"
+msgstr ""
+
+#: ui/runway_card.gd
+msgid "Large runway, {length} m"
+msgstr ""
+
+#: ui/runway_card.gd
+msgid "Runway"
+msgstr ""
+
+#: ui/runway_card.gd
+msgid "Upgrade runway"
+msgstr ""
+
+#: ui/runway_card.gd
+msgid "Next: {runway}, ${price}, works take {hours} hour"
+msgid_plural "Next: {runway}, ${price}, works take {hours} hours"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/planner_drag.gd
+msgid "Drop to move {destination} to gate {gate}. Days already issued keep their gate."
+msgstr ""
+
+#: ui/planner_drag.gd
+msgid "Drop the flight on another gate's row."
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Plain terms"
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "No catch, and 10% less pay."
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Loyal: +10%"
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "This airline is loyal to you: its offers pay 10% more."
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Top fare +{percent}%"
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Shoppers"
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Many shoppers"
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Bag cover"
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Full bag cover"
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Full flight"
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Packed flight"
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Rush crowd"
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Big rush crowd"
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Heavy bags"
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Very heavy bags"
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Signing bonus ${amount}"
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Loyal airline"
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Miss fine ${amount}"
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Odd hours"
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Exit fee ${amount}"
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Pays {percent}% more per passenger."
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "{percent}% of passengers come early with time to shop (usually 30%)."
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "A missed bag costs {percent}% of the fee (usually 50%)."
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "A missed bag costs nothing (usually 50% of the fee)."
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Booked from the top half of the plane's range."
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Booked from the top quarter of the plane's range."
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "{percent}% of passengers arrive late in a rush (usually 15%)."
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "A missed bag costs the whole fee (usually 50%)."
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Pays ${amount} once, when this contract's first flight leaves."
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "After {days} days this flight leaves, the airline's later offers pay {percent}% more."
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Each passenger who misses this flight costs ${amount}."
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Departs at 06:00 or 22:00, outside the usual 07:00 to 21:00."
+msgstr ""
+
+#: economy/offer_traits.gd
+msgid "Ending this contract in its first {days} days costs ${amount}."
+msgstr ""
+
+#: flights/flight_sim.gd
+msgid "the taxiway move would strand flight {id}"
+msgstr ""
+
+#: airside/runway_works.gd
+msgid "Not enough money: the {size} runway works cost ${price}"
+msgstr ""
+
+#: airside/runway_works.gd
+msgid "the runway is too short for a {size} plane"
+msgstr ""
+
+#: airside/runway_works.gd
+msgctxt "runway size"
+msgid "small"
+msgstr ""
+
+#: airside/runway_works.gd
+msgctxt "runway size"
+msgid "medium"
+msgstr ""
+
+#: airside/runway_works.gd
+msgctxt "runway size"
+msgid "large"
+msgstr ""
+
+#: airside/runway_works.gd
+msgid "Runway works are already booked"
+msgstr ""
+
+#: airside/runway_works.gd
+msgid "The last runway works are still held in the timetable"
+msgstr ""
+
+#: airside/runway_works.gd
+msgid "The runway is already the largest size"
+msgstr ""
+
+#: airside/runway_works.gd
+msgid "The timetable leaves no quiet stretch for the works"
+msgstr ""
+
+#: airside/runway_works.gd
+msgid "Works on the {size} runway start {start} and end {finish}"
+msgstr ""
+
+#: airside/runway_works.gd
+msgid "Works on the {size} runway started {start} and end {finish}"
+msgstr ""
+
+#: airside/runway_works.gd
+msgid "at {time}"
+msgstr ""
+
+#: airside/runway_works.gd
+msgid "tomorrow at {time}"
+msgstr ""
+
+#: airside/runway_works.gd
+msgid "on Day {day} at {time}"
+msgstr ""
+
+#: airside/gate_desks.gd
+msgid "Waiting for taxiway works"
+msgstr ""
+
+#: airside/gate_desks.gd
+msgid "The west taxiway has moved"
+msgstr ""
+
+#: airside/gate_desks.gd
+msgid "The east taxiway has moved"
+msgstr ""
+
+#: airside/gate_desks.gd
+msgid "Taxiway moved"
+msgstr ""
+
+#: airside/gate_desks.gd
+msgid "{flight} moved to Gate {gate}"
+msgstr ""
+
+#: airside/gate_desks.gd
+msgid "{flight} moves to Gate {gate}"
+msgstr ""
+
+#: airside/gate_desks.gd
+msgid "Flights moved"
+msgstr ""
+
+#: airside/gate_desks.gd
+msgid "{count} flight moved to Gate {gate}"
+msgid_plural "{count} flights moved to Gate {gate}"
+msgstr[0] ""
+msgstr[1] ""
+
+#: airside/gate_desks.gd
+msgid "{count} flight moves to Gate {gate}"
+msgid_plural "{count} flights move to Gate {gate}"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/flight_result_panel.gd
+msgid "Dismiss"
+msgstr ""
+
+#: ui/flight_result_panel.gd
+msgid "{airline} {destination}"
+msgstr ""
+
+#: ui/flight_result_panel.gd
+msgid "{title} result"
+msgstr ""
+
+#: ui/flight_result_panel.gd
+msgid "Made {made}   Missed {missed}"
+msgstr ""
+
+#: ui/flight_result_panel.gd
+msgid "{count}  {reason}"
+msgstr ""
+
+#: ui/flight_result_panel.gd
+msgid "{count}  Other"
+msgstr ""
+
+#: passengers/flight_result.gd
+msgid "Waiting outside: check-in full"
+msgstr ""
+
+#: passengers/flight_result.gd
+msgid "Missed the flight"
+msgstr ""
+
+#: passengers/flight_result.gd
+msgid "No check-in desk to go to"
+msgstr ""
+
+#: passengers/flight_result.gd
+msgid "No security scanner or lane to go to"
+msgstr ""
+
+#: passengers/flight_result.gd
+msgid "Waiting outside a full queue"
+msgstr ""
+
+#: passengers/flight_result.gd ui/alert_sources.gd
+msgid "No walkable route"
+msgstr ""
+
+#: passengers/flight_result.gd
+msgid "The exit to the plane was blocked"
+msgstr ""
+
+#: passengers/flight_result.gd
+msgid "Held up by crowds at the gate"
+msgstr ""
+
+#: passengers/flight_result.gd
+msgid "At the gate, but not boarded in time"
+msgstr ""
+
+#: passengers/flight_result.gd
+msgid "Left the gate too late for the plane"
+msgstr ""
+
+#: passengers/flight_result.gd
+msgid "Arrived after the doors closed"
+msgstr ""
+
+#: passengers/flight_result.gd
+msgid "Still walking to check-in"
+msgstr ""
+
+#: passengers/flight_result.gd
+msgid "Still queuing for check-in"
+msgstr ""
+
+#: passengers/flight_result.gd
+msgid "Still at the check-in desk"
+msgstr ""
+
+#: passengers/flight_result.gd
+msgid "Still walking to security"
+msgstr ""
+
+#: passengers/flight_result.gd
+msgid "Still queuing for security"
+msgstr ""
+
+#: passengers/flight_result.gd
+msgid "Still at security"
+msgstr ""
+
+#: passengers/flight_result.gd
+msgid "Still walking to the gate"
+msgstr ""
+
+#: passengers/flight_result.gd
+msgid "Still at the cafe"
+msgstr ""
+
+#: passengers/flight_result.gd
+msgid "Still at the toilet"
+msgstr ""
+
+#: passengers/flight_result.gd
+msgid "Still at a shop"
+msgstr ""
+
+#: passengers/flight_result.gd
+msgid "Waiting for drop-off"
+msgstr ""
+
+#: passengers/flight_result.gd
+msgid "Never arrived: the terminal has no entrance"
+msgstr ""
+
+#: passengers/flight_result.gd
+msgid "Did not arrive before the doors closed"
+msgstr ""
+
+#: ui/alert_stack.gd
+msgid "Day {day} {time}"
+msgstr ""
+
+#: ui/alert_stack.gd
+msgid "{when}  {title}\n{detail}"
+msgstr ""
+
+#: ui/alert_stack.gd
+msgid "still up"
+msgstr ""
+
+#: ui/alert_stack.gd
+msgid "cleared {time}"
+msgstr ""
+
+#: ui/alert_stack.gd
+msgid "{when}  {title}, {end}"
+msgstr ""
+
+#: ui/alert_stack.gd
+msgid "Alerts"
+msgstr ""
+
+#: ui/alert_stack.gd
+msgid "Alert history and the on/off switch for alert cards"
+msgstr ""
+
+#: ui/alert_stack.gd
+msgid "Open the alert history"
+msgstr ""
+
+#: ui/alert_stack.gd
+msgid "Alert history"
+msgstr ""
+
+#: ui/alert_stack.gd
+msgid "Show alert cards"
+msgstr ""
+
+#: ui/alert_stack.gd
+msgid "Alerts ({count})"
+msgstr ""
+
+#: ui/alert_stack.gd
+msgid "Click to look at it"
+msgstr ""
+
+#: ui/alert_stack.gd
+msgid "No alerts yet"
+msgstr ""
+
+#: ui/alert_sources.gd
+msgid "{count} desk full · {waiting} waiting"
+msgid_plural "{count} desks full · {waiting} waiting"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/alert_sources.gd
+msgid "Check-in queue full"
+msgstr ""
+
+#: ui/alert_sources.gd
+msgid "{count} lane full · {waiting} waiting"
+msgid_plural "{count} lanes full · {waiting} waiting"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/alert_sources.gd
+msgid "Security queue full"
+msgstr ""
+
+#: ui/alert_sources.gd
+msgid "{count} passenger can't get where they are going"
+msgid_plural "{count} passengers can't get where they are going"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/alert_sources.gd
+msgid "{count} passenger waits for a gate seat or a place to stand"
+msgid_plural "{count} passengers wait for a gate seat or a place to stand"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/alert_sources.gd
+msgid "Gate full"
+msgstr ""
+
+#: ui/alert_sources.gd
+msgid "{count} station is closed · hire staff on the Staff card"
+msgid_plural "{count} stations are closed · hire staff on the Staff card"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/alert_sources.gd
+msgid "Nobody on duty"
+msgstr ""
+
+#: ui/alert_sources.gd
+msgid "{count} station is closed · staff can't reach the staff spot"
+msgid_plural "{count} stations are closed · staff can't reach the staff spot"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/alert_sources.gd
+msgid "Staff can't get to work"
+msgstr ""
+
+#: ui/dirty_alert.gd
+msgid "The terminal is getting dirty. Hire a cleaner on the Staff card."
+msgstr ""
+
+#: ui/dirty_alert.gd
+msgid "The terminal is getting dirty. Place bins near the bar and toilets, or hire more cleaners."
+msgstr ""
+
+#: ui/dirty_alert.gd
+msgid "Dirty terminal"
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "Inspector visit tomorrow"
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "Holiday rush tomorrow"
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "A VIP wants to fly"
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "A VIP wants to fly on {flight}. The first passenger to arrive for it is the VIP."
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "If it fails: your rating drops by {penalty} if the VIP misses the flight."
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "An airline asks a favour"
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "An airline asks you to fit {extra} more passengers onto {flight}."
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "Reward: {bonus} money now, and {extra} more passengers paying their fees."
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "The VIP made the flight"
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "The VIP boarded in a good mood. You earn {bonus} money."
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "The VIP missed the flight"
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "Your rating drops by {penalty}."
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "The inspector was happy"
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "You earn {bonus} money."
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "The inspector was not happy"
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "The inspector found {found}. Your rating drops by {penalty}."
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "{count} mess on the floor ({allowed} allowed)"
+msgid_plural "{count} messes on the floor ({allowed} allowed)"
+msgstr[0] ""
+msgstr[1] ""
+
+#: incidents/incident_copy.gd
+msgid "{count} passenger stuck in a full queue ({allowed} allowed)"
+msgid_plural "{count} passengers stuck in a full queue ({allowed} allowed)"
+msgstr[0] ""
+msgstr[1] ""
+
+#: incidents/incident_copy.gd
+msgid "{first} and {second}"
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "none"
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "today's"
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "tomorrow's"
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "day {day}'s"
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "half a star"
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "{count} star"
+msgid_plural "{count} stars"
+msgstr[0] ""
+msgstr[1] ""
+
+#: incidents/incident_copy.gd
+msgid "{count} stars"
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "VIP for {flight}"
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "{day} {time} flight"
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "The airport inspector visits tomorrow, some time between {from} and {to}."
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "The inspector looks at messes on the floor and at queues that are full."
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "Reward: {bonus} money if there are at most {max_messes} messes and at most {max_full_queue} passengers stuck in a full queue at the visit."
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "If it fails: your rating drops by {penalty}."
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "Tomorrow is a holiday. {total} extra passengers are booked, spread over {count} of tomorrow's flights: {list}."
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "Reward: every extra passenger pays the usual fee."
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "If it fails: queues grow, and passengers who miss their flight lower your rating as usual."
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "Reward: {bonus} money if the VIP makes the flight in a good mood (a mood of {good_mood} or higher when boarding)."
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "If it fails: the extra passengers need check-in and security too, and any who miss the flight lower your rating as usual."
+msgstr ""
+
+#: incidents/incident_copy.gd
+msgid "The VIP made the flight, but their mood was below {good_mood} when boarding, so there is no bonus."
+msgstr ""
+
+#: ui/incident_panel.gd
+msgid "The clock stays paused until you choose."
+msgstr ""
+
+#: ui/incident_panel.gd ui/big_firsts.gd ui/unlock_guide.gd
+msgid "The clock goes on when you close this."
+msgstr ""
+
+#: ui/big_firsts.gd
+msgid "Big news at the airport"
+msgstr ""
+
+#: ui/big_firsts.gd
+msgid "The runway works are done. Bigger planes can land now, so Offers can bring them flights."
+msgstr ""
+
+#: ui/big_firsts.gd
+msgid "A big event has come up. Its notice says what it is and what you can do about it."
+msgstr ""
+
+#: ui/unlock_guide.gd
+msgid "Your airport has grown"
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "{hired} hired, {duty} cleaning, {leaving} leaving"
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "{hired} hired, {duty} cleaning"
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "{hired} hired, {duty} on duty, {leaving} leaving"
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "{hired} hired, {duty} on duty"
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "Wall gap: close the open edge of the outer wall, marked in red"
+msgid_plural "{count} wall gaps: close the open edges of the outer wall, marked in red"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/staff_panel.gd
+msgid "To open the airport"
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "Your airport needs"
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "Open! Starter contract: {airline} to {destination}, daily"
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "Hire a check-in agent"
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "Hire a security officer"
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "Hire shop staff"
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "Check-in agents"
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "Security officers"
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "Shop staff"
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "Cleaners"
+msgstr ""
+
+#: ui/staff_panel.gd
+msgctxt "staff button"
+msgid "Hire"
+msgstr ""
+
+#: ui/staff_panel.gd
+msgctxt "staff button"
+msgid "Fire"
+msgstr ""
+
+#: ui/room_panel.gd
+msgid "Belt ends {count}"
+msgstr ""
+
+#: ui/room_panel.gd
+msgid "Stalls {count}"
+msgstr ""
+
+#: ui/room_panel.gd
+msgid "Sinks {count}"
+msgstr ""
+
+#: ui/room_panel.gd
+msgid "Upkeep ${amount} per day"
+msgstr ""
+
+#: ui/room_panel.gd
+msgid "Upkeep ${amount} per day once ready"
+msgstr ""
+
+#: ui/room_panel.gd
+msgid "Spots {count}"
+msgstr ""
+
+#: ui/room_panel.gd
+msgid "Fee ${amount} per visit"
+msgstr ""
+
+#: ui/room_panel.gd
+msgid "Free to use"
+msgstr ""
+
+#: ui/room_panel.gd
+msgid "Browse spots {count}"
+msgstr ""
+
+#: ui/room_panel.gd
+msgid "Base spend ${amount} per visit"
+msgstr ""
+
+#: ui/room_panel.gd
+msgid "Seats {count}"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Entrance with a way through check-in and security to an exit"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Staff can't reach a desk or scanner passengers need: clear its staff spot"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Gate desk by an exit that faces the planes"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Seats near the gate"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "{need} ({unlock})"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Passengers have nowhere to sit: place seats near the gate"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Check-in desk and an agent: place a desk"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Check-in desk and an agent: you closed every desk, open one again"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Check-in desk and an agent: hire an agent on Staff"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Check-in desk and an agent: the agent is on the way"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Check-in desk and an agent"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Security scanner and an officer: place a scanner"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Security scanner and an officer: you closed every scanner and lane, open one again"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Security scanner and an officer: hire an officer on Staff"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Security scanner and an officer: the officer is on the way"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Security scanner and an officer"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Passengers need a check-in desk: place one"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Passengers need security: place a scanner"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "A desk or scanner has nobody at it: hire another on Staff"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Passengers need a toilet: build a toilet room with a stall"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Passengers are hungry: build a cafe"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Passengers need a check-in desk"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Passengers need security"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Passengers need a toilet"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Passengers are hungry"
+msgstr ""
+
+#: ui/passenger_inspect.gd
+msgid "Follow this passenger"
+msgstr ""
+
+#: ui/passenger_inspect.gd
+msgid "Thoughts"
+msgstr ""
+
+#: ui/passenger_inspect.gd
+msgid "Show where this happened"
+msgstr ""
+
+#: ui/passenger_inspect.gd
+msgid "Passenger {id}"
+msgstr ""
+
+#: ui/passenger_inspect.gd
+msgid "Mood {mood}   Hunger {hunger}   Toilet {toilet}   Boredom {boredom}"
+msgstr ""
+
+#: ui/passenger_inspect.gd
+msgid "Thoughts: none yet"
+msgstr ""
+
+#: ui/passenger_inspect.gd
+msgid "{thought} · {age}"
+msgstr ""
+
+#: ui/passenger_inspect.gd
+msgid "The pin shows where they were at {time}"
+msgstr ""
+
+#: ui/passenger_inspect.gd
+msgid "Running late"
+msgstr ""
+
+#: ui/passenger_inspect.gd
+msgid "Stuck: \"{reason}\""
+msgstr ""
+
+#: ui/passenger_inspect.gd
+msgid "Flight {title}"
+msgstr ""
+
+#: ui/passenger_inspect.gd
+msgid "Flight {title}, doors close {time}"
+msgstr ""
+
+#: ui/passenger_inspect.gd
+msgid "just now"
+msgstr ""
+
+#: ui/passenger_inspect.gd
+msgid "{minutes} min ago"
+msgid_plural "{minutes} min ago"
+msgstr[0] ""
+msgstr[1] ""
+
+#: landside/view/vehicle_inspect.gd
+msgid "{count} passenger"
+msgid_plural "{count} passengers"
+msgstr[0] ""
+msgstr[1] ""
+
+#: landside/view/vehicle_inspect.gd
+msgid "Flight {flights}"
+msgstr ""
+
+#: landside/view/vehicle_inspect.gd
+msgid "Empty, at the curb"
+msgstr ""
+
+#: landside/view/vehicle_inspect.gd
+msgid "At the curb"
+msgstr ""
+
+#: landside/view/vehicle_inspect.gd
+msgid "Parked, driver away"
+msgstr ""
+
+#: landside/view/vehicle_inspect.gd
+msgid "Parked"
+msgstr ""
+
+#: landside/view/vehicle_inspect.gd
+msgid "Empty, leaving"
+msgstr ""
+
+#: landside/view/vehicle_inspect.gd
+msgid "Leaving"
+msgstr ""
+
+#: landside/view/vehicle_inspect.gd
+msgid "Empty, driving on"
+msgstr ""
+
+#: landside/view/vehicle_inspect.gd
+msgid "Driving into the car park"
+msgstr ""
+
+#: landside/view/vehicle_inspect.gd
+msgid "Waiting to turn into the car park"
+msgstr ""
+
+#: landside/view/vehicle_inspect.gd
+msgid "Driving to the car park"
+msgstr ""
+
+#: landside/view/vehicle_inspect.gd
+msgid "Queuing for the curb"
+msgstr ""
+
+#: landside/view/vehicle_inspect.gd
+msgid "Driving to the curb"
+msgstr ""
+
+#: landside/view/vehicle_inspect.gd
+msgid "On time"
+msgstr ""
+
+#: landside/view/vehicle_inspect.gd
+msgid "Drop-off delay: under 1 min"
+msgstr ""
+
+#: landside/view/vehicle_inspect.gd
+msgid "Drop-off delay: {minutes} min"
+msgid_plural "Drop-off delay: {minutes} min"
+msgstr[0] ""
+msgstr[1] ""
+
+#: landside/view/vehicle_inspect.gd
+msgctxt "vehicle"
+msgid "Taxi"
+msgstr ""
+
+#: landside/view/vehicle_inspect.gd
+msgctxt "vehicle"
+msgid "Car"
+msgstr ""
+
+#: landside/view/vehicle_inspect.gd
+msgid "{vehicle} {id}"
+msgstr ""
+
+#: passengers/passenger_thoughts.gd
+msgid "That hit the spot"
+msgstr ""
+
+#: passengers/passenger_thoughts.gd
+msgid "Gave up on getting food"
+msgstr ""
+
+#: passengers/passenger_thoughts.gd
+msgid "What a relief"
+msgstr ""
+
+#: passengers/passenger_thoughts.gd
+msgid "Waited {minutes} min in the queue"
+msgid_plural "Waited {minutes} min in the queue"
+msgstr[0] ""
+msgstr[1] ""
+
+#: passengers/passenger_thoughts.gd
+msgid "Nice decor here"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room status"
+msgid "Ready"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "status reason"
+msgid "too small: a {room} needs at least {width}x{height}"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room need"
+msgid "Too small: a {room} needs at least {width}x{height}"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "gate card"
+msgid "Status: unlinked: no exit facing the planes in {cells} cells"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "gate card"
+msgid "Status: unlinked: gate {gate} uses the exit"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "gate card"
+msgid "Status: unlinked: stand would overlap gate {gate}"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "gate card"
+msgid "Status: unlinked: no room for a plane"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "gate card"
+msgid "Status: unlinked: way to the lane blocked"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "gate card"
+msgid "Status: unlinked: every gate letter in use"
+msgstr ""
+
+#: ui/display_words.gd
+msgid "Status: Scanner fault, fixed by {time}"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "gate card"
+msgid "Biggest plane: Small"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "gate card"
+msgid "Biggest plane: Medium"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "gate card"
+msgid "Biggest plane: Large"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "gate card"
+msgid "Biggest plane: {class}"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "ATM"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Baggage belt"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Baggage cart"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Bar counter"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Belt corner"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Belt end"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Belt merge"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Bench"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Bin"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Bush"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Cafe counter"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Cafe table"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Chain"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Check-in desk"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Clothes rail"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Currency exchange"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Display stand"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Duty free shelf"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Duty free till"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Entrance"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Exit to the plane"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Fashion till"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Fountain"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Gate desk"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Gate seats"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Grab-and-go stall"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Info desk"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Info screen"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Kiosk counter"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Lounge armchair"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Lounge sofa"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Nap pod"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Pharmacy counter"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Pharmacy shelf"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Pickup table"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Plant pot"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Planter"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Play blocks"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Play slide"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Post"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Prize podium"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Restaurant booth"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Restaurant table"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Screen"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Security arch"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Security scanner"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Shower"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Sink"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Statue"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Toilet stall"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Tray table"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Tree"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Tree bench"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Work desk"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "X-ray belt"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room type"
+msgid "ATM"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room type"
+msgid "Bag room"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room type"
+msgid "Bar"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room type"
+msgid "Cafe"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room type"
+msgid "Duty free"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room type"
+msgid "Exchange"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room type"
+msgid "Fashion store"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room type"
+msgid "Grab-and-go stall"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room type"
+msgid "Kiosk"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room type"
+msgid "Lounge"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room type"
+msgid "Nap pod"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room type"
+msgid "Pharmacy"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room type"
+msgid "Play area"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room type"
+msgid "Restaurant"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room type"
+msgid "Shower"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room type"
+msgid "Toilet"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room name, mid-sentence"
+msgid "atm"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room name, mid-sentence"
+msgid "bag room"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room name, mid-sentence"
+msgid "bar"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room name, mid-sentence"
+msgid "cafe"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room name, mid-sentence"
+msgid "duty free"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room name, mid-sentence"
+msgid "exchange"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room name, mid-sentence"
+msgid "fashion store"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room name, mid-sentence"
+msgid "grab-and-go stall"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room name, mid-sentence"
+msgid "kiosk"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room name, mid-sentence"
+msgid "lounge"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room name, mid-sentence"
+msgid "nap pod"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room name, mid-sentence"
+msgid "pharmacy"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room name, mid-sentence"
+msgid "play area"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room name, mid-sentence"
+msgid "restaurant"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room name, mid-sentence"
+msgid "shower"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room name, mid-sentence"
+msgid "toilet"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "landside place"
+msgid "Curb bay"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "landside place"
+msgid "Multi-storey car park"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "landside place"
+msgid "Surface lot"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room need"
+msgid "Needs a belt end"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room need"
+msgid "Needs a clothes rail"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room need"
+msgid "Needs a counter"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room need"
+msgid "Needs a display stand"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room need"
+msgid "Needs a kiosk counter"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room need"
+msgid "Needs a nap pod"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room need"
+msgid "Needs a pharmacy counter"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room need"
+msgid "Needs a shelf"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room need"
+msgid "Needs a shower"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room need"
+msgid "Needs a sink"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room need"
+msgid "Needs a slide"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room need"
+msgid "Needs a sofa"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room need"
+msgid "Needs a table"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room need"
+msgid "Needs a till"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room need"
+msgid "Needs a toilet stall"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room need"
+msgid "Needs an ATM"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room need"
+msgid "Needs an exchange counter"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room need"
+msgid "Needs play blocks"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room need"
+msgid "Needs a door or open side to the walkway"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "status reason"
+msgid "needs a belt end"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "status reason"
+msgid "needs a clothes rail"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "status reason"
+msgid "needs a counter"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "status reason"
+msgid "needs a display stand"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "status reason"
+msgid "needs a kiosk counter"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "status reason"
+msgid "needs a nap pod"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "status reason"
+msgid "needs a pharmacy counter"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "status reason"
+msgid "needs a shelf"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "status reason"
+msgid "needs a shower"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "status reason"
+msgid "needs a sink"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "status reason"
+msgid "needs a slide"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "status reason"
+msgid "needs a sofa"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "status reason"
+msgid "needs a table"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "status reason"
+msgid "needs a till"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "status reason"
+msgid "needs a toilet stall"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "status reason"
+msgid "needs an atm"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "status reason"
+msgid "needs an exchange counter"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "status reason"
+msgid "needs play blocks"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "status reason"
+msgid "needs a door or open side to the walkway"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "status reason"
+msgid "a wall cuts through the lane"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "status reason"
+msgid "clear the floor for the queue"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "status reason"
+msgid "clear the floor for the repack spot"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "status reason"
+msgid "clear the helper's spot by the repack spot"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "status reason"
+msgid "clear the officer's spot by the x-ray belt"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "status reason"
+msgid "clear the way back from the repack spot"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "status reason"
+msgid "clear the way out past the pickup table"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "status reason"
+msgid "clear the way through the arch"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "status reason"
+msgid "needs a pickup table"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "status reason"
+msgid "needs a tray table"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "status reason"
+msgid "needs an x-ray belt"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "status reason"
+msgid "no arch"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "status reason"
+msgid "parts face different ways"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "status reason"
+msgid "closed by you"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "status reason"
+msgid "staff spot blocked"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "status reason"
+msgid "staff can't reach the staff spot"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "status reason"
+msgid "no staff on duty"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "status reason"
+msgid "scanner fault"
+msgstr ""
+
+#: airside/gate_walk.gd
+msgctxt "gate card"
+msgid "Walk from security: no route"
+msgstr ""
+
+#: airside/gate_walk.gd
+msgctxt "gate card"
+msgid "Walk from security: {minutes} min"
 msgstr ""

@@ -24,6 +24,9 @@ extends RefCounted
 ## The static functions are the player's side: problem() says why the upgrade
 ## cannot be bought, buy() takes the money and books the works.
 
+## The English msgids of the card's refusals. Tests and FlightSim's push_error
+## compare with these; problem() and buy() return TranslationServer.translate()
+## of the same literals, because the POT extractor reads only literals.
 const LARGEST_TEXT := "The runway is already the largest size"
 const BOOKED_TEXT := "Runway works are already booked"
 const NO_GAP_TEXT := "The timetable leaves no quiet stretch for the works"
@@ -63,7 +66,31 @@ static func next_size(size: String) -> String:
 
 ## What the card says when the wallet is short of the works.
 static func short_text(size: String) -> String:
-	return "Not enough money: the %s runway works cost $%d" % [size, PriceTable.runway_price(size)]
+	return (
+		TranslationServer
+		. translate("Not enough money: the {size} runway works cost ${price}")
+		. format({"size": size_word(size), "price": PriceTable.runway_price(size)})
+	)
+
+
+## The refusal for a plane class the runway cannot take (FlightSim's
+## RUNWAY_TOO_SHORT_TEXT).
+static func too_short_text(plane_size: String) -> String:
+	return TranslationServer.translate("the runway is too short for a {size} plane").format(
+		{"size": size_word(plane_size)}
+	)
+
+
+## The lowercase name of a runway size, for the middle of a sentence.
+static func size_word(size: String) -> String:
+	match size:
+		PlaneClasses.SMALL:
+			return TranslationServer.translate("small", "runway size")
+		PlaneClasses.MEDIUM:
+			return TranslationServer.translate("medium", "runway size")
+		PlaneClasses.LARGE:
+			return TranslationServer.translate("large", "runway size")
+	return size
 
 
 ## Why the runway of `flights` cannot be upgraded now, or "": the largest runway
@@ -72,15 +99,17 @@ static func short_text(size: String) -> String:
 ## with no stretch for the works.
 static func problem(flights: FlightSim, unlocks: BuildUnlocks, wallet: Wallet) -> String:
 	var next := next_size(flights.runway.size)
-	var text := BOOKED_TEXT if flights.runway.works.scheduled() else ""
+	var text := ""
+	if flights.runway.works.scheduled():
+		text = TranslationServer.translate("Runway works are already booked")
 	if text == "" and flights.runway.works.start != NO_TICK:
-		text = HELD_TEXT
+		text = TranslationServer.translate("The last runway works are still held in the timetable")
 	if text == "" and next == "":
-		text = LARGEST_TEXT
+		text = TranslationServer.translate("The runway is already the largest size")
 	if text == "":
 		text = _means_problem(next, unlocks, wallet)
 	if text == "" and flights.works_start(next) < 0:
-		text = NO_GAP_TEXT
+		text = TranslationServer.translate("The timetable leaves no quiet stretch for the works")
 	return text
 
 
@@ -104,7 +133,7 @@ static func buy(flights: FlightSim, unlocks: BuildUnlocks, wallet: Wallet) -> St
 		return refusal
 	var next := next_size(flights.runway.size)
 	if not flights.start_works(next):
-		return NO_GAP_TEXT
+		return TranslationServer.translate("The timetable leaves no quiet stretch for the works")
 	if not wallet.spend(PriceTable.runway_price(next), Wallet.Category.BUILD):
 		push_error("RunwayWorks.buy: the wallet refused the price it had just afforded")
 	return ""
@@ -115,15 +144,21 @@ static func buy(flights: FlightSim, unlocks: BuildUnlocks, wallet: Wallet) -> St
 static func schedule_text(works: RunwayWorks, now: int) -> String:
 	if not works.scheduled():
 		return ""
-	var begins := "start" if works.start >= now else "started"
+	var words := {
+		"size": size_word(works.target),
+		"start": when_text(works.start, now),
+		"finish": when_text(works.finish, now),
+	}
+	if works.start >= now:
+		return (
+			TranslationServer
+			. translate("Works on the {size} runway start {start} and end {finish}")
+			. format(words)
+		)
 	return (
-		"Works on the %s runway %s %s and end %s"
-		% [
-			works.target,
-			begins,
-			when_text(works.start, now),
-			when_text(works.finish, now),
-		]
+		TranslationServer
+		. translate("Works on the {size} runway started {start} and end {finish}")
+		. format(words)
 	)
 
 
@@ -132,10 +167,12 @@ static func when_text(tick: int, now: int) -> String:
 	var ahead := GameCalendar.day_of(tick) - GameCalendar.day_of(now)
 	var time := GameCalendar.clock_text(tick)
 	if ahead <= 0:
-		return "at %s" % time
+		return TranslationServer.translate("at {time}").format({"time": time})
 	if ahead == 1:
-		return "tomorrow at %s" % time
-	return "on Day %d at %s" % [GameCalendar.day_of(tick) + 1, time]
+		return TranslationServer.translate("tomorrow at {time}").format({"time": time})
+	return TranslationServer.translate("on Day {day} at {time}").format(
+		{"day": GameCalendar.day_of(tick) + 1, "time": time}
+	)
 
 
 ## Books works that build `size` from tick `from`.

@@ -54,7 +54,6 @@ const ITEMS := BuildMenuCatalog.ITEMS
 const LANE_ITEMS := BuildMenuCatalog.LANE_ITEMS
 const CARD_NEEDS := BuildMenuCatalog.CARD_NEEDS
 const CARD_RUNNING_COSTS := BuildMenuCatalog.CARD_RUNNING_COSTS
-const RUNNING_COST_TEXT := BuildMenuCatalog.RUNNING_COST_TEXT
 ## Cards whose thumbnail is not rendered yet
 ## (tools/blender/thumbnails/render_kit_thumbnails.py renders the others). They
 ## show a plain tile until the PNG exists; any other missing PNG is an error.
@@ -62,6 +61,8 @@ const PLACEHOLDER_THUMBNAILS := []
 const PLACEHOLDER_COLOR := Color(0.3, 0.26, 0.2)
 ## The price slot of a card with no price (a room), or of any card when
 ## BuildMode has no wallet.
+## The English msgids of the next three texts: tests compare against them, and the
+## labels themselves are tr() of the literal, because the POT extractor reads only literals.
 const PRICE_TEXT := "Free"
 ## A locked card's last line, and its tint (the hover text says what unlocks it).
 const LOCKED_TEXT := "Locked"
@@ -504,11 +505,14 @@ func _on_balance_changed(_balance: int) -> void:
 ## Writes the wallet into the money slot and each card's price slot, and greys
 ## out the cards it cannot pay.
 func _refresh_money() -> void:
-	_money.text = MONEY_TEXT if _wallet == null else "Money  %d" % _wallet.balance
+	if _wallet == null:
+		_money.text = tr("Money  --")
+	else:
+		_money.text = tr("Money  {amount}").format({"amount": _wallet.balance})
 	for tool in _price_labels:
 		var price := _card_price(tool)
 		var label: Label = _price_labels[tool]
-		label.text = PRICE_TEXT if _wallet == null or price == 0 else str(price)
+		label.text = tr("Free", "price") if _wallet == null or price == 0 else str(price)
 		_cards[tool].modulate = _card_tint(tool)
 	refresh_preview()
 
@@ -541,9 +545,9 @@ func _refresh_locks() -> void:
 	for tool in _cards:
 		var text := _lock_text(tool)
 		var card_item := item(tool)
-		_hint_labels[tool].text = LOCKED_TEXT if text != "" else _hint_texts[tool]
+		_hint_labels[tool].text = tr("Locked") if text != "" else _hint_texts[tool]
 		_cards[tool].requirement = _lock_text.bind(tool) if text != "" else Callable()
-		_cards[tool].set_info(card_item[0], ItemInfo.of(tool))
+		_cards[tool].set_info(BuildMenuCatalog.shown(card_item[0]), ItemInfo.of(tool))
 		_cards[tool].modulate = _card_tint(tool)
 
 
@@ -630,9 +634,9 @@ func _start_hold(message: String, is_grant: bool) -> void:
 func _on_wages_paid(amount: int, owed: int) -> void:
 	if amount <= 0:
 		return
-	var message := "Wages paid: %d" % amount
+	var message := tr("Wages paid: {amount}").format({"amount": amount})
 	if owed > 0:
-		message += " (%d owed)" % owed
+		message = tr("Wages paid: {amount} ({owed} owed)").format({"amount": amount, "owed": owed})
 	if _holding and _hold_is_grant:
 		_pending_wages = message
 		return

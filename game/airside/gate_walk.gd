@@ -33,11 +33,10 @@ signal changed
 
 ## What minutes() answers for a gate no security exit reaches.
 const NO_ROUTE := -1
-## The desk card line, and the line when no walk exists.
-const CARD_TEXT := "Walk from security: %d min"
-const NO_ROUTE_TEXT := "Walk from security: no route"
 ## The build-mode caption's third line.
 const CAPTION_TEXT := "%d min walk"
+
+static var _words := Words.new()
 
 ## How many times the figures were worked out (for the tests).
 var computed := 0
@@ -63,9 +62,9 @@ func bind(sim: PassengerSim, gates: GateDesks = null) -> void:
 	_stale()
 
 
-## The desk card's line for `minutes`.
+## The desk card's line for `minutes`, in the player's words.
 static func card_line(minutes: int) -> String:
-	return CARD_TEXT % minutes if minutes >= 0 else NO_ROUTE_TEXT
+	return _words.card_line(minutes)
 
 
 ## The caption's third line for `minutes`, "" when there is no walk to show.
@@ -177,3 +176,13 @@ func _to_minutes(mm: int) -> int:
 	var per_minute := GameCalendar.TICKS_PER_MINUTE
 	@warning_ignore("integer_division")
 	return (JourneyForecast.walk_ticks(mm) + per_minute - 1) / per_minute
+
+
+## tr() is an instance method, so the static card_line() asks a Words.
+class Words:
+	extends RefCounted
+
+	func card_line(minutes: int) -> String:
+		if minutes < 0:
+			return tr("Walk from security: no route", "gate card")
+		return tr("Walk from security: {minutes} min", "gate card").format({"minutes": minutes})

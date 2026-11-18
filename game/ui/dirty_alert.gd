@@ -16,6 +16,8 @@ extends RefCounted
 ## grown ones, and the card clears when about three fresh ones are left.
 
 const KEY := &"dirty_terminal"
+## The English msgids of the card's words. Tests compare against them; the card
+## itself says tr() of the same literals, because the POT extractor reads only literals.
 const TITLE := "Dirty terminal"
 const SHOW_AT := 8
 const CLEAR_BELOW := 4
@@ -45,8 +47,12 @@ static func shown_next(was_shown: bool, dirt: int) -> bool:
 
 
 ## What the alert says for `cleaners` hired.
-static func text_for(cleaners: int) -> String:
-	return HIRE_TEXT if cleaners <= 0 else BINS_TEXT
+func text_for(cleaners: int) -> String:
+	if cleaners <= 0:
+		return tr("The terminal is getting dirty. Hire a cleaner on the Staff card.")
+	return tr(
+		"The terminal is getting dirty. Place bins near the bar and toilets, or hire more cleaners."
+	)
 
 
 ## Puts the alert back as at the start: down, with its dirt read afresh at the
@@ -107,7 +113,7 @@ func cause() -> Array[Dictionary]:
 	return [
 		{
 			"key": KEY,
-			"title": TITLE,
+			"title": tr("Dirty terminal"),
 			"detail": _text,
 			"targets": targets,
 			"show_after": 0,
