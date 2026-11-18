@@ -13,7 +13,7 @@ extends SceneTree
 ## Run (windowed takes the one project-wide slot):
 ##   Godot_v4.7.2-stable_win64_console.exe --display-driver windows \
 ##     --rendering-driver vulkan --audio-driver Dummy --path <worktree>/game \
-##     -s res://tests/ui/hud_pseudolocale_probe.gd [-- --single | --english]
+##     -s res://tests/ui/hud_pseudolocale_probe.gd [-- --single | --english] [--out=<dir>]
 
 const OUT_DIR := "C:/Users/chulf/Gotta-make-my-flight/tools/blender/out/locale/t3"
 const WINDOW := Vector2i(1920, 1080)
@@ -21,6 +21,7 @@ const MARGIN := 4.0
 
 var _failed := false
 var _clipped: Array[String] = []
+var _out_dir := OUT_DIR
 
 
 func _initialize() -> void:
@@ -30,7 +31,8 @@ func _initialize() -> void:
 func _run() -> void:
 	var world_seed := randi()
 	print("PROBE world_seed=%d display=%s" % [world_seed, DisplayServer.get_name()])
-	DirAccess.make_dir_recursive_absolute(OUT_DIR)
+	_out_dir = _arg("--out=", OUT_DIR)
+	DirAccess.make_dir_recursive_absolute(_out_dir)
 	DisplayServer.window_set_size(WINDOW)
 	root.content_scale_factor = 1.0
 	await _frames(5)
@@ -113,11 +115,30 @@ func _left_column(main: Node, tag: String) -> void:
 	var legend := main.find_child("MoodLegendCard", true, false) as Control
 	_expect(legend != null and legend.is_visible_in_tree(), "the legend card is not shown")
 	var view := Rect2(Vector2.ZERO, root.get_visible_rect().size)
-	for node_name in ["MoodToggle", "HintsToggle", "HintsReset", "MoodLegendCard"]:
+	for node_name in [
+		"MoodToggle",
+		"DeparturesToggle",
+		"PlannerToggle",
+		"HintsToggle",
+		"HintsReset",
+		"MoodLegendCard"
+	]:
 		var node := main.find_child(node_name, true, false) as Control
 		_expect(node != null and view.encloses(node.get_global_rect()), node_name + " not in frame")
 		print("PROBE left column %s=%s" % [node_name, node.get_global_rect() if node else "none"])
-	await _plate(tag + "left_column", Rect2i(0, 0, 760, 420))
+	var legend_rect := (main.find_child("MoodLegendCard", true, false) as Control).get_global_rect()
+	for node_name in ["DeparturesToggle", "PlannerToggle"]:
+		var node := main.find_child(node_name, true, false) as Control
+		_expect(
+			not legend_rect.intersects(node.get_global_rect()), "the legend covers " + node_name
+		)
+	var departures := main.find_child("DeparturesToggle", true, false) as Control
+	var planner := main.find_child("PlannerToggle", true, false) as Control
+	_expect(
+		not departures.get_global_rect().intersects(planner.get_global_rect()),
+		"the Planner toggle covers the Departures toggle"
+	)
+	await _plate(tag + "left_column", Rect2i(0, 0, 960, 420))
 	mood.button_pressed = false
 
 
@@ -161,7 +182,7 @@ func _plate(plate: String, crop: Rect2i, scope: Node = null) -> void:
 		_measure(plate, control)
 	await RenderingServer.frame_post_draw
 	var image := root.get_texture().get_image()
-	var path := OUT_DIR.path_join(plate + ".png")
+	var path := _out_dir.path_join(plate + ".png")
 	var err := (
 		image.get_region(Rect2i(crop).intersection(Rect2i(Vector2i.ZERO, root.size))).save_png(path)
 	)
@@ -206,3 +227,11 @@ func _expect(condition: bool, why: String) -> void:
 func _frames(count: int) -> void:
 	for i in count:
 		await process_frame
+
+
+## The value of the user argument that starts with `prefix`, or `fallback`.
+func _arg(prefix: String, fallback: String) -> String:
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with(prefix):
+			return arg.trim_prefix(prefix)
+	return fallback

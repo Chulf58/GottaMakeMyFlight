@@ -273,3 +273,22 @@ func test_an_unchanged_world_does_not_rebuild_the_grid_every_frame() -> void:
 	for i in 4:
 		await await_idle_frame()
 	assert_int(_planner.rebuild_count()).is_equal(builds)
+
+
+## Board T10: the hint line under the rows wraps, so a longer translation keeps
+## the sheet inside the window instead of widening it past the right edge.
+func test_a_long_summary_wraps_and_the_sheet_stays_inside_the_window() -> void:
+	_planner.open()
+	var summary := _planner.find_child("PlannerSummary", true, false) as Label
+	var sheet := _planner.find_child("PlannerSheet", true, false) as Control
+	summary.text = " ".join(
+		PackedStringArray(range(80).map(func(_i: int) -> String: return "Gate"))
+	)
+	for i in 3:
+		await get_tree().process_frame
+	var view := Rect2(Vector2.ZERO, _planner.get_viewport().get_visible_rect().size)
+	var lines := summary.get_line_count()
+	print("summary lines=%d sheet=%s view=%s" % [lines, sheet.get_global_rect(), view])
+	assert_int(summary.autowrap_mode).is_equal(TextServer.AUTOWRAP_WORD_SMART)
+	assert_int(summary.get_line_count()).is_greater(1)
+	assert_bool(view.encloses(sheet.get_global_rect())).is_true()

@@ -48,6 +48,9 @@ const BAR_LABEL := "BarLabel"
 ## The Label variation a disabled bar's label takes: the gate buttons' disabled text.
 const DISABLED_LABEL := &"HudBarLabelDisabled"
 const HOURS := 24
+## The toggle's x while the Departures toggle fits its grid slot; a wider one
+## pushes it right (LeftColumn.right_of).
+const TOGGLE_LEFT := float(HudLayout.MARGIN + HudLayout.TOGGLE_W + HudLayout.GAP)
 
 @export var flights: FlightSim
 ## Paused while the sheet is open; null leaves the clock alone.
@@ -101,6 +104,9 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
+	_toggle.position.x = LeftColumn.right_of(
+		get_tree(), LeftColumn.DEPARTURES_TOGGLE_GROUP, TOGGLE_LEFT
+	)
 	if not _sheet.visible or flights == null:
 		return
 	flights.check_planning_changed()
@@ -233,10 +239,8 @@ func _build() -> void:
 	_toggle.toggle_mode = true
 	_toggle.focus_mode = Control.FOCUS_NONE
 	_toggle.theme = BuildMenu.HUD_THEME
-	_toggle.position = Vector2(
-		HudLayout.MARGIN + HudLayout.TOGGLE_W + HudLayout.GAP,
-		LeftColumn.slot_top(LeftColumn.SLOT_DEPARTURES)
-	)
+	_toggle.position = Vector2(TOGGLE_LEFT, LeftColumn.slot_top(LeftColumn.SLOT_DEPARTURES))
+	_toggle.add_to_group(LeftColumn.PLANNER_TOGGLE_GROUP)
 	_toggle.custom_minimum_size = Vector2(
 		HudLayout.LIST_W - HudLayout.TOGGLE_W - HudLayout.GAP, HudLayout.BUTTON_H
 	)
@@ -283,6 +287,8 @@ func _build() -> void:
 	_summary.name = "PlannerSummary"
 	_summary.text = _hint_text()
 	_summary.theme_type_variation = &"HudSmall"
+	# A longer translation wraps instead of widening the sheet past the window.
+	_summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(_summary)
 	_actions.name = "PlannerActions"
 	_actions.add_theme_constant_override("separation", 6)

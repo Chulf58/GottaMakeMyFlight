@@ -276,10 +276,12 @@ func test_the_templates_panel_sits_on_the_margin() -> void:
 
 
 ## The legend is on a card of its own (plate d_mood_1920: bare 14 px text over
-## the dark ground was unreadable), level with the toggle and one gap right of it,
-## and it shows only while the overlay is on. It holds the legend line and the
-## four mode buttons, so it is taller than the toggle but stays inside the Mood
-## and Departures slots' height.
+## the dark ground was unreadable), level with the toggle, and it shows only while
+## the overlay is on. It holds the legend line and the four mode buttons, so it is
+## taller than the toggle but stays inside the Mood and Departures slots' height.
+## Because it reaches down to the Departures row, it starts one gap right of the
+## Planner toggle on that row, not one gap right of the Mood toggle, where it
+## covered the Planner toggle (board T10, plate t3/english_left_column.png).
 func test_the_mood_legend_sits_on_a_card_beside_the_toggle() -> void:
 	var mood := _main.get_node("MoodOverlay") as MoodOverlay
 	var legend := _control("MoodLegend") as Label
@@ -294,7 +296,9 @@ func test_the_mood_legend_sits_on_a_card_beside_the_toggle() -> void:
 	var rect := card.get_global_rect()
 	print("LEGEND toggle=%s card=%s" % [toggle, rect])
 	assert_bool(card.is_visible_in_tree()).is_true()
-	assert_float(rect.position.x - toggle.end.x).is_equal_approx(HudLayout.GAP, 0.5)
+	var planner := _rect("PlannerToggle")
+	assert_float(rect.position.x - planner.end.x).is_equal_approx(HudLayout.GAP, 0.5)
+	assert_bool(rect.intersects(planner)).is_false()
 	assert_float(rect.position.y).is_equal_approx(toggle.position.y, 0.5)
 	assert_float(rect.size.y).is_greater(HudLayout.BUTTON_H)
 	assert_float(rect.size.y).is_less(float(LeftColumn.LIST_TOP - LeftColumn.TOP))

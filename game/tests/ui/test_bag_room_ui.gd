@@ -86,6 +86,9 @@ func test_the_cafe_panel_keeps_its_seats_and_base_spend() -> void:
 
 
 func test_the_bag_room_card_says_it_needs_a_belt_end_inside_the_card() -> void:
+	# The card lines wrap now (board T10), and a wrapping Label in a hidden tray has
+	# no width yet, so its height reads far too tall: open the tray before measuring.
+	_menu.press_category(BuildMenuCatalog.category_of(BuildMode.Tool.BAG_ROOM))
 	await get_tree().process_frame
 	await get_tree().process_frame
 	var card := _menu.card(BuildMode.Tool.BAG_ROOM)

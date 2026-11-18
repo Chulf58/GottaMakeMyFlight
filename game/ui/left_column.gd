@@ -15,6 +15,13 @@ const CARD_GROUP := &"left_column_card"
 ## The group a card of its own size (the first-time hint card) joins: the list
 ## leaves it the height it has now, not CARD_RESERVE.
 const HINT_GROUP := &"left_column_hint"
+## The Departures toggle, and the Planner toggle that sits a GAP right of it
+## however wide a translation makes it (board T10).
+const DEPARTURES_TOGGLE_GROUP := &"left_column_departures_toggle"
+const PLANNER_TOGGLE_GROUP := &"left_column_planner_toggle"
+## A card that grows up from the bottom-left (the inspect card): while one shows
+## over the column, the column's cards stop a GAP above it (board T10).
+const FLOOR_GROUP := &"left_column_floor"
 ## What the list leaves the card under it when the card shows: the card's padding,
 ## its title, one line and a "+N more" line.
 const CARD_RESERVE := 136.0
@@ -32,6 +39,15 @@ const SLOTS := 4
 const TOP := HudLayout.MARGIN + HudLayout.BUTTON_H + HudLayout.GROUP_GAP
 ## Where the departures list starts, under the last column button.
 const LIST_TOP := TOP + SLOTS * (HudLayout.BUTTON_H + HudLayout.GAP)
+
+
+## The x a GAP right of the first visible control in `group`, and never left of
+## `least` (where it sits while that control fits its grid slot or is missing).
+static func right_of(tree: SceneTree, group: StringName, least: float) -> float:
+	var control := tree.get_first_node_in_group(group) as Control if tree != null else null
+	if control == null or not control.is_visible_in_tree():
+		return least
+	return maxf(least, control.get_global_rect().end.x + HudLayout.GAP)
 
 
 ## The y of toggle slot `slot`, in layout pixels.
@@ -81,9 +97,20 @@ static func follow(card: Control) -> void:
 ## The height a card at `top` may take in a layer `layer` big: down to a GAP above
 ## the Templates dock (BottomDocks), which the column's x-range always reaches
 ## (the dock sits on the same margin), so the cards never cover the bar's left
-## end or the dock.
+## end or the dock; and down to a GAP above any FLOOR_GROUP card showing under
+## the column (the inspect card), so they never cover it either.
 static func room_below(top: float, layer: Vector2, bar_width: float) -> float:
-	return maxf(0.0, BottomDocks.top(layer, bar_width) - HudLayout.GAP - top)
+	var bottom := BottomDocks.top(layer, bar_width) - HudLayout.GAP
+	var tree := Engine.get_main_loop() as SceneTree
+	var column := Rect2(HudLayout.MARGIN, top, HudLayout.LIST_W, layer.y)
+	for node in tree.get_nodes_in_group(FLOOR_GROUP) if tree != null else []:
+		var card := node as Control
+		if card == null or not card.is_visible_in_tree():
+			continue
+		var rect := card.get_global_rect()
+		if rect.intersects(column):
+			bottom = minf(bottom, rect.position.y - HudLayout.GAP)
+	return maxf(0.0, bottom - top)
 
 
 ## The height the departures list may take: the room under the toggles, less what

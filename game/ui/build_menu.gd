@@ -78,8 +78,12 @@ const MARGIN := float(HudLayout.MARGIN)
 const BAR_H := float(HudLayout.BAR_H)
 const GAP := float(HudLayout.GAP)
 const TRAY_H := 196.0
-## The status card's height; it grows upward only while a long hold message wraps.
+## The status card's height; it grows upward while a long status wraps.
 const STATUS_H := float(HudLayout.BUTTON_H)
+## A status wraps onto at most this many lines and then ends in an ellipsis
+## (board T12 part 4); a held message (a rescue grant) takes HELD_LINES whole.
+const STATUS_LINES := 2
+const HELD_LINES := 3
 ## Width of the centre column the tray and status line live in; PassengerHud
 ## keeps the follow text left of it.
 const COLUMN_W := float(HudLayout.TRAY_W)
@@ -595,14 +599,16 @@ func _show_status() -> void:
 		_rotate_hint.visible = _status.visible and RotateHint.applies(build_mode)
 
 
-## Wraps the status text onto up to three lines (a held message), or keeps it on
-## one line and cuts it short with an ellipsis (every other status). A clipped
-## label reports no height of its own, so the card could not grow for the wrap.
-func _wrap_status(wrap: bool) -> void:
-	_status.autowrap_mode = (TextServer.AUTOWRAP_WORD_SMART if wrap else TextServer.AUTOWRAP_OFF)
-	_status.clip_text = not wrap
+## Wraps the status text onto up to HELD_LINES lines, whole (a held message), or
+## up to STATUS_LINES lines that end in an ellipsis when the text is longer
+## (every other status). The label never clips: a clipped label reports no
+## height of its own, so the card could not grow for the wrap.
+func _wrap_status(held: bool) -> void:
+	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_status.clip_text = false
+	_status.max_lines_visible = HELD_LINES if held else STATUS_LINES
 	_status.text_overrun_behavior = (
-		TextServer.OVERRUN_NO_TRIMMING if wrap else TextServer.OVERRUN_TRIM_ELLIPSIS
+		TextServer.OVERRUN_NO_TRIMMING if held else TextServer.OVERRUN_TRIM_ELLIPSIS
 	)
 
 

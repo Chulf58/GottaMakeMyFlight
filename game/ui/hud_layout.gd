@@ -4,7 +4,8 @@ extends RefCounted
 ## (1536x864: a 1920x1080 window at the canvas_items stretch of 1.25). Every
 ## HUD window places itself from these numbers (decision
 ## hud-grid-and-rails-one-spacing-grid-centred-top-row-right-ra, part 1); the
-## corner radius and border widths live in ui/hud_theme.tres. Constants only.
+## corner radius and border widths live in ui/hud_theme.tres. Constants, and the
+## one rule that fits a text to a fixed slot (wrap, then one size step down).
 
 ## The grid step: every margin, gap, height and width is a multiple of it.
 const UNIT := 8
@@ -39,3 +40,46 @@ const TITLE := 18
 const PANEL_TITLE := 22
 const FIGURE := 24
 const TYPE_SCALE: Array[int] = [CAPTION, BODY, TITLE, PANEL_TITLE, FIGURE]
+
+## One step under CAPTION. Never a theme size: only the fit rule below gives it,
+## to text already at CAPTION that must fit a fixed slot (decision
+## build-menu-card-names-wrap-to-two-lines-then-shrink-a-font-s).
+const FIT_STEP := 12
+
+
+## The size one step under `size`: the type scale's next size down, or FIT_STEP
+## under CAPTION.
+static func step_down(size: int) -> int:
+	for i in range(TYPE_SCALE.size() - 1, -1, -1):
+		if TYPE_SCALE[i] < size:
+			return TYPE_SCALE[i]
+	return FIT_STEP
+
+
+## How many lines `text` takes in `font` at `size` when it wraps at word bounds
+## within `width`, as a Label with AUTOWRAP_WORD_SMART breaks it.
+static func line_count(text: String, font: Font, size: int, width: float) -> int:
+	var paragraph := TextParagraph.new()
+	paragraph.break_flags = (
+		TextServer.BREAK_MANDATORY | TextServer.BREAK_WORD_BOUND | TextServer.BREAK_ADAPTIVE
+	)
+	paragraph.width = width
+	paragraph.add_string(text, font, size)
+	return paragraph.get_line_count()
+
+
+## The size for `text` in a slot `width` wide that holds `lines` lines: `base`
+## when it fits there with no word broken in two, otherwise one step down (the
+## wrap-then-shrink rule).
+static func fit_size(text: String, font: Font, base: int, width: float, lines: int) -> int:
+	if line_count(text, font, base, width) <= lines and widest_word(text, font, base) <= width:
+		return base
+	return step_down(base)
+
+
+## The width of the widest word of `text` in `font` at `size`.
+static func widest_word(text: String, font: Font, size: int) -> float:
+	var widest := 0.0
+	for word in text.split(" ", false):
+		widest = maxf(widest, font.get_string_size(word, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x)
+	return widest
