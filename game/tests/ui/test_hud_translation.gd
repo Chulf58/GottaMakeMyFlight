@@ -62,23 +62,22 @@ func _plain(text: String) -> String:
 func _speed_buttons() -> Array[Button]:
 	var found: Array[Button] = []
 	for button in _hud.find_children("*", "Button", true, false):
-		var tip := (button as Button).tooltip_text
-		if (button as Button).toggle_mode and (tip.contains("Space") or tip.contains("Shift+")):
+		if (button as Button).toggle_mode and button.name.begins_with("Speed"):
 			found.append(button)
 	return found
 
 
-func test_the_speed_buttons_and_their_keys_are_routed() -> void:
+func test_the_speed_buttons_are_icons_with_translated_tooltips() -> void:
 	var buttons := _speed_buttons()
-	print("speed buttons: %s" % [buttons.map(func(b: Button) -> String: return b.text)])
+	print("speed tooltips: %s" % [buttons.map(func(b: Button) -> String: return b.tooltip_text)])
 	assert_int(buttons.size()).is_equal(4)
 	for button in buttons:
-		assert_str(button.text).starts_with("[")
+		assert_str(button.text).is_empty()
+		assert_object(button.icon).is_not_null()
 		assert_str(button.tooltip_text).starts_with("[")
-	assert_str(_plain(buttons[0].text)).starts_with("Pause")
-	assert_str(_plain(buttons[2].text)).starts_with("2x")
-	assert_str(_plain(buttons[0].tooltip_text)).starts_with("Space")
-	assert_str(_plain(buttons[3].tooltip_text)).starts_with("Shift+3")
+	assert_str(_plain(buttons[0].tooltip_text)).starts_with("Pause (Space)")
+	assert_str(_plain(buttons[2].tooltip_text)).starts_with("Speed 2x (Shift+2)")
+	assert_str(_plain(buttons[3].tooltip_text)).starts_with("Speed 3x (Shift+3)")
 
 
 func test_the_clock_text_is_routed_and_keeps_its_values() -> void:

@@ -108,7 +108,7 @@ func test_the_wallet_holds_the_starting_budget() -> void:
 	var finances: Finances = _main.get_node("Finances")
 	var menu: BuildMenu = _main.get_node("BuildMenu")
 	assert_int(finances.wallet.balance).is_equal(PriceTable.STARTING_BUDGET)
-	assert_str(menu.money_label().text).is_equal("Money  %d" % PriceTable.STARTING_BUDGET)
+	assert_str(menu.money_label().text).is_equal(str(PriceTable.STARTING_BUDGET))
 
 
 func test_a_new_game_is_closed_with_no_contract_and_no_flight() -> void:

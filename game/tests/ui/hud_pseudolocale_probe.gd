@@ -62,6 +62,8 @@ func _run() -> void:
 	await _game_menu(main, tag)
 	await _intro(tag)
 	PseudoLocale.disable()
+	for line in _clipped:
+		_expect(not line.contains(" Clock "), "the clock text is clipped: " + line)
 	print("PROBE clipped labels: %d" % _clipped.size())
 	for line in _clipped:
 		print("  CLIPPED ", line)
@@ -75,12 +77,12 @@ func _prove_subjects(main: Node, hud: PassengerHud) -> void:
 	var time := hud.find_child("Clock", true, false) as Label
 	var speeds: Array[Button] = []
 	for button in hud.find_children("*", "Button", true, false):
-		var tip := (button as Button).tooltip_text
-		if (button as Button).toggle_mode and (tip.contains("Space") or tip.contains("Shift+")):
+		if (button as Button).toggle_mode and button.name.begins_with("Speed"):
 			speeds.append(button)
 	_expect(money != null and view.encloses(money.get_global_rect()), "money slot is not in frame")
 	_expect(time != null and view.encloses(time.get_global_rect()), "the clock is not in frame")
 	_expect(speeds.size() == 4, "speed buttons found: %d" % speeds.size())
+	_expect(money.find_child("MoneyIcon", true, false) != null, "no coin icon in the money slot")
 	for button in speeds:
 		_expect(view.encloses(button.get_global_rect()), "a speed button is outside the window")
 	print(
@@ -90,6 +92,7 @@ func _prove_subjects(main: Node, hud: PassengerHud) -> void:
 		)
 	)
 	print("PROBE first labels time='%s' money='%s'" % [time.text, _label_in(money).text])
+	print("PROBE widths clock=%.0f money_slot=%.0f" % [time.size.x, money.size.x])
 	if not OS.get_cmdline_user_args().has("--english"):
 		_expect(time.text.begins_with("["), "the clock is not bracketed: '%s'" % time.text)
 

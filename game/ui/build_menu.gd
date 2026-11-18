@@ -70,8 +70,8 @@ const LOCKED_TINT := Color(0.5, 0.5, 0.55)
 ## The tint of a card of the newest opened tier until the player hovers or picks
 ## it (UnlockGuide.is_new); it multiplies the affordability tint.
 const NEW_TINT := Color(1.0, 0.88, 0.45)
-## The money slot when BuildMode has no wallet.
-const MONEY_TEXT := "Money  --"
+## The money slot's amount when BuildMode has no wallet; a coin icon stands before it.
+const MONEY_TEXT := "--"
 
 ## Geometry in pixels, measured up from the bottom edge.
 const MARGIN := float(HudLayout.MARGIN)
@@ -506,9 +506,9 @@ func _on_balance_changed(_balance: int) -> void:
 ## out the cards it cannot pay.
 func _refresh_money() -> void:
 	if _wallet == null:
-		_money.text = tr("Money  --")
+		_money.text = MONEY_TEXT
 	else:
-		_money.text = tr("Money  {amount}").format({"amount": _wallet.balance})
+		_money.text = str(_wallet.balance)
 	for tool in _price_labels:
 		var price := _card_price(tool)
 		var label: Label = _price_labels[tool]

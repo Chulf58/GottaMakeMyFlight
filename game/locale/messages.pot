@@ -1436,14 +1436,6 @@ msgstr ""
 msgid "Take car parks and curbs back with the Remove tool"
 msgstr ""
 
-#: ui/build_menu.gd ui/build_menu_layout.gd
-msgid "Money  --"
-msgstr ""
-
-#: ui/build_menu.gd
-msgid "Money  {amount}"
-msgstr ""
-
 #: ui/build_menu.gd ui/build_menu_layout.gd ui/templates_page.gd
 msgctxt "price"
 msgid "Free"
@@ -3825,26 +3817,6 @@ msgid "Walk from security: {minutes} min"
 msgstr ""
 
 #: ui/passenger_hud.gd
-msgctxt "speed button"
-msgid "Pause"
-msgstr ""
-
-#: ui/passenger_hud.gd
-msgctxt "speed button"
-msgid "{speed}x"
-msgstr ""
-
-#: ui/passenger_hud.gd
-msgctxt "key name"
-msgid "Space"
-msgstr ""
-
-#: ui/passenger_hud.gd
-msgctxt "key chord"
-msgid "Shift+{speed}"
-msgstr ""
-
-#: ui/passenger_hud.gd
 msgid "Quiet night: fast-forwarding"
 msgstr ""
 
@@ -4376,4 +4348,14 @@ msgstr ""
 #: ui/stage_words.gd
 msgctxt "passenger activity"
 msgid "Browsing at a shop"
+msgstr ""
+
+#: ui/passenger_hud.gd
+msgctxt "speed button"
+msgid "Pause ({key})"
+msgstr ""
+
+#: ui/passenger_hud.gd
+msgctxt "speed button"
+msgid "Speed {speed}x ({key})"
 msgstr ""

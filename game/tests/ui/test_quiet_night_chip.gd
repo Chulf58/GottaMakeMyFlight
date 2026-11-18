@@ -65,8 +65,7 @@ func test_the_chip_shows_only_while_the_clock_fast_forwards() -> void:
 	assert_bool(_chip().visible).is_true()
 	var labels := _chip().find_children("*", "Label", true, false)
 	assert_int(labels.size()).is_equal(1)
-	assert_str((labels[0] as Label).text).is_equal(PassengerHud.QUIET_NIGHT_TEXT)
-	assert_str(PassengerHud.QUIET_NIGHT_TEXT).is_equal("Quiet night: fast-forwarding")
+	assert_str((labels[0] as Label).text).is_equal("Quiet night: fast-forwarding")
 	_stop = -1
 	_world.clock.advance(FRAME)
 	await _settle()
@@ -94,8 +93,8 @@ func test_the_clock_panel_keeps_one_label_and_the_speed_buttons_show_the_player_
 	var pressed: Array[String] = []
 	for button in panel.find_children("*", "Button", true, false):
 		if (button as Button).button_pressed:
-			pressed.append((button as Button).text)
-	assert_array(pressed).is_equal(["2x"])
+			pressed.append((button as Button).name)
+	assert_array(pressed).is_equal(["Speed2"])
 
 
 ## The rail moves in the same refresh that shows or hides the chip, never a

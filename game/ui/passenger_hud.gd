@@ -48,6 +48,13 @@ const DEBUG_POLICY_TEXT := "Debug only: the terminal is free with no refunds; pa
 const FOLLOW_BOTTOM := BuildMenu.MARGIN + BuildMenu.BAR_H + BuildMenu.GAP
 const FOLLOW_TOP := FOLLOW_BOTTOM + HudLayout.CHIP_H
 const SPEED_KEYS := {KEY_1: 1, KEY_2: 2, KEY_3: 3}
+## The speed buttons' icon files and node names by speed (0 is Pause), and the key names
+## their tooltips show.
+const SPEED_ICON := "res://assets/ui/icons/speed_%s.svg"
+const SPEED_NAMES: Array[String] = ["pause", "1", "2", "3"]
+const SPEED_BUTTON_W := 44.0
+const PAUSE_KEY := "Space"
+const SPEED_KEY_PREFIX := "Shift+"
 ## The Debug panel's fixed width; its labels wrap inside it.
 const DEBUG_W := 260.0
 ## Frames from a click that selected a built item to the camera deciding on a pan.
@@ -162,18 +169,9 @@ func _ready() -> void:
 	row.add_child(_time_label)
 	for value in [0, 1, 2, 3]:
 		var button := Button.new()
-		button.text = (
-			tr("Pause", "speed button")
-			if value == 0
-			else tr("{speed}x", "speed button").format({"speed": value})
-		)
+		_dress_speed_button(button, value)
 		button.toggle_mode = true
-		button.custom_minimum_size = Vector2(HudLayout.UNIT * 8, HudLayout.BUTTON_H)
-		button.tooltip_text = (
-			tr("Space", "key name")
-			if value == 0
-			else tr("Shift+{speed}", "key chord").format({"speed": value})
-		)
+		button.custom_minimum_size = Vector2(SPEED_BUTTON_W, HudLayout.BUTTON_H)
 		button.focus_mode = Control.FOCUS_NONE
 		if value == 0:
 			button.pressed.connect(press_pause_toggle)
@@ -531,6 +529,24 @@ func follow_text() -> String:
 	if bubble != "":
 		parts.append(tr('"{text}"', "passenger speech").format({"text": bubble}))
 	return "   ".join(parts)
+
+
+## A speed button is an icon (pause bars, one, two or three play arrows) with the
+## action and its key in the tooltip, so the clock keeps the width the buttons
+## would have taken for translated words. `value` 0 is Pause.
+func _dress_speed_button(button: Button, value: int) -> void:
+	button.name = "Speed" + SPEED_NAMES[value].capitalize()
+	button.text = ""
+	button.icon = load(SPEED_ICON % SPEED_NAMES[value])
+	button.expand_icon = true
+	button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	button.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
+	if value == 0:
+		button.tooltip_text = tr("Pause ({key})", "speed button").format({"key": PAUSE_KEY})
+	else:
+		button.tooltip_text = tr("Speed {speed}x ({key})", "speed button").format(
+			{"speed": value, "key": SPEED_KEY_PREFIX + str(value)}
+		)
 
 
 ## Spawns the debug batch through normal spawning. The seed comes from the
