@@ -3898,7 +3898,7 @@ msgstr ""
 msgid "Incidents"
 msgstr ""
 
-#: ui/game_menu.gd
+#: ui/game_menu.gd ui/title_screen.gd
 msgid "Back"
 msgstr ""
 
@@ -5251,3 +5251,41 @@ msgid "{count} space"
 msgid_plural "{count} spaces"
 msgstr[0] ""
 msgstr[1] ""
+
+#: ui/game_menu.gd
+msgctxt "menu"
+msgid "Save"
+msgstr ""
+
+#: ui/game_menu.gd ui/title_screen.gd
+msgctxt "menu"
+msgid "Load"
+msgstr ""
+
+#: ui/title_screen.gd
+msgid "Continue"
+msgstr ""
+
+#: ui/title_screen.gd
+msgid "New Airport"
+msgstr ""
+
+#: ui/title_screen.gd
+msgid "Wishlist"
+msgstr ""
+
+#: ui/title_screen.gd
+msgid "Quit"
+msgstr ""
+
+#: ui/save_list.gd
+msgid "{slot}, {time}"
+msgstr ""
+
+#: ui/save_list.gd
+msgid "Manual save"
+msgstr ""
+
+#: ui/save_list.gd
+msgid "Autosave {number}"
+msgstr ""
