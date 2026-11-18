@@ -198,6 +198,16 @@ func incidents_switch() -> CheckButton:
 	return _incidents_switch
 
 
+## The version in Project Settings (application/config/version), "" when unset.
+static func version_text() -> String:
+	return str(ProjectSettings.get_setting("application/config/version", ""))
+
+
+## The corner version label, or null while the menu is closed.
+func version_label() -> Label:
+	return _layer.get_node_or_null("Root/Version") if _layer != null else null
+
+
 func resume_button() -> Button:
 	return _main_page.get_node("Resume") if _main_page != null else null
 
@@ -270,6 +280,7 @@ func _show() -> void:
 	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
 	root.add_child(panel)
+	root.add_child(_version_label())
 	var pages := VBoxContainer.new()
 	panel.add_child(pages)
 	_main_page = _page("MainPage", tr("Game menu"))
@@ -352,6 +363,22 @@ func _on_open_log_folder() -> void:
 	var err: Variant = open_folder.call(folder)
 	if err is int and err != OK:
 		_set_status(tr("Could not open the log folder: {path}").format({"path": folder}))
+
+
+## The game's version in the bottom-right corner, small, read from the project
+## setting the exported .exe and the quit log use too.
+func _version_label() -> Label:
+	var label := Label.new()
+	label.name = "Version"
+	label.text = tr("v{version}").format({"version": version_text()})
+	label.theme_type_variation = &"HudHint"
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.set_anchors_and_offsets_preset(
+		Control.PRESET_BOTTOM_RIGHT, Control.PRESET_MODE_MINSIZE, 12
+	)
+	label.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	label.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	return label
 
 
 func _page(page_name: String, title: String) -> VBoxContainer:
