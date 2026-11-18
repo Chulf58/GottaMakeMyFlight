@@ -1,11 +1,21 @@
 extends SceneTree
-## Headless soak probe for runaway memory or a frame that never ends (board
-## "The game now froze", playtest 2026-11-03). It boots main.tscn with the real
-## HUD and a new random world seed (printed), builds the starter terminal with
-## the HUD button, hires one member per station, and accepts every open offer
-## the flight sim takes each game day. Then it runs DAYS game days, stepping
-## TICKS_PER_FRAME ticks per real frame (3 ticks is about 3x at 20 frames a
-## second), so the views and the HUD run their _process every frame as in play.
+## Headless soak probe for runaway memory, a stuck passenger or a frame that
+## never ends (board "The game now froze", playtest 2026-11-03; the demo soak,
+## decision demo-slice-is-3-5-game-days). It boots main.tscn with the real HUD
+## and a world seed (random, or --seed=<n>; always printed), builds the starter
+## terminal with the HUD button, hires one member per station, and accepts every
+## open offer the flight sim takes each game day. Then it runs DAYS game days
+## (default 5) at top speed: set_speed(3), then SimClock.advance(1/20) once per
+## frame with that fixed delta, the same accumulator real play uses, so the
+## views and the HUD run their _process every frame and a run is deterministic.
+##
+## A passenger is stuck by the PlaytestHook's rule (playtest_hook.gd
+## _poll_stuck and _check_passengers, STUCK_LIMIT_S): Passenger.stuck is not NONE
+## continuously for STUCK_LIMIT_S sim seconds (200 ticks). The probe mirrors it
+## per tick instead of attaching the hook, whose checks run on real time and
+## write user:// logs. A passenger alive at the end with no movement for
+## HUNG_TICKS while stuck is NONE is counted as hung (the hook misses it).
+## Headless counts no GPU memory, so peak_mem_mb under-counts a windowed run.
 ##
 ## Every game hour it prints the static memory, the object, node and orphan
 ## counts, the passenger count, the frame time and the largest script
@@ -13,23 +23,35 @@ extends SceneTree
 ## on the RefCounted objects those nodes hold. At the end it prints each
 ## container that grew the most since the first open hour.
 ##
-## Run (user args after `--`: days, ticks per frame):
-##   timeout 1800 Godot_v4.7.2-stable_win64_console.exe --headless \
+## Run (user args after `--`: days, seed, control):
+##   timeout 3000 Godot_v4.7.2-stable_win64_console.exe --headless \
 ##     --audio-driver Dummy --path C:/Users/chulf/Gotta-make-my-flight/game \
-##     -s res://spike/memory_soak_probe.gd -- --days=3 --tpf=3
+##     -s res://spike/memory_soak_probe.gd -- --days=5
+## --control forces one passenger stuck and passes only when the detector fires;
+## otherwise it prints PROBE_INVALID detector dead and exits 1.
 ##
-## The pass values are positives: the ticks run, the hours sampled and the
-## passengers seen. A guard thread prints PROBE_INVALID and calls OS.crash on a
+## Per seed it prints one PROBE_SEED_DONE line and exits 0 only when ticks >=
+## days * TICKS_PER_DAY, max_passengers >= 1, flights_made >= 1, stuck_events == 0
+## and hung == 0. A guard thread prints PROBE_INVALID and calls OS.crash on a
 ## hang (anti-pattern a-frame-counting-watchdog-cannot-catch-a-stuck-main-thread).
 
 const MAIN := "res://main/main.tscn"
 const StarterFlight := preload("res://spike/starter_flight.gd")
+const IntroClose := preload("res://spike/intro_close.gd")
 const HOUR := GameCalendar.TICKS_PER_MINUTE * 60
 const HANG_LIMIT_MS := 60000
 const TOP := 12
+## The hook's STUCK_LIMIT_S (10 s) in ticks.
+const STUCK_TICKS := int(10.0 * SimClock.TICK_RATE)
+## A live passenger with stuck NONE and no movement for this long is hung.
+const HUNG_TICKS := 600
+const SPEED := 3
+## Frames the clock may stay still before the probe calls it stalled.
+const STALL_FRAMES := 200
 
-var _days := 3
-var _ticks_per_frame := 3
+var _days := 5
+var _seed := 0
+var _control := false
 var _guard := Thread.new()
 var _mutex := Mutex.new()
 var _beat_ms := 0
@@ -53,18 +75,38 @@ var _frame_ms_sum := 0.0
 var _frames := 0
 var _frame_start := 0
 var _offer_day := -1
+var _start_tick := 0
+var _next_day_end := 0
+var _day_ends := 0
+var _peak_static := 0
+var _flights_made := 0
+var _stuck_events := 0
+var _first_stuck := ""
+## Passenger id -> {"reason": Passenger.Stuck, "since": tick, "flagged": bool}.
+var _stuck: Dictionary = {}
+## Passenger id -> {"sig": Array, "since": tick}, the last movement seen.
+var _moved: Dictionary = {}
+var _forced_id := -1
+var _last_tick := -1
+var _still_frames := 0
 
 
 func _initialize() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--days="):
 			_days = int(arg.trim_prefix("--days="))
-		elif arg.begins_with("--tpf="):
-			_ticks_per_frame = int(arg.trim_prefix("--tpf="))
+		elif arg == "--control":
+			_control = true
 	_beat("boot")
 	_guard.start(_watch)
-	var world_seed := randi()
-	print("PROBE world_seed=%d days=%d tpf=%d" % [world_seed, _days, _ticks_per_frame])
+	var world_seed := IntroClose.seed_or_random()
+	_seed = world_seed
+	print(
+		(
+			"PROBE world_seed=%d days=%d speed=%d delta=%.4f control=%s"
+			% [world_seed, _days, SPEED, SimClock.STEP, _control]
+		)
+	)
 	_main = load(MAIN).instantiate()
 	_clock = _main.get_node("SimClock")
 	_clock.seed_rng(world_seed)
@@ -74,6 +116,9 @@ func _initialize() -> void:
 	_desk = _main.get_node("OfferDesk")
 	root.add_child(_main)
 	current_scene = _main
+	# SimClock's own _process would add the real frame time on top of the probe's
+	# fixed delta; the probe is the only caller of advance().
+	_clock.set_process(false)
 	_clock.set_paused(true)
 
 
@@ -90,16 +135,25 @@ func _process(_delta: float) -> bool:
 
 
 func _start() -> void:
+	var intro_problem := IntroClose.close(_main)
+	if intro_problem != "":
+		_fail(intro_problem)
+		return
 	(_main.get_node("PassengerHud") as PassengerHud).press_starter_terminal()
-	StarterFlight.add_gate_desk(_main.get_node("BuildMode").grid)
 	var hired := StarterFlight.hire_per_station(_sim, _staff)
 	var open_tick := StarterFlight.advance_until_open(_clock, _flights, _staff)
 	print("PROBE started hired=%d open_tick=%d tick=%d" % [hired, open_tick, _clock.tick])
 	if hired < 2 or open_tick < 0:
 		_fail("the airport did not open")
 		return
-	_end_tick = _clock.tick + _days * GameCalendar.TICKS_PER_DAY
+	_start_tick = _clock.tick
+	_end_tick = _start_tick + _days * GameCalendar.TICKS_PER_DAY
 	_next_sample = _clock.tick
+	_next_day_end = _start_tick + GameCalendar.TICKS_PER_DAY
+	_flights.state_changed.connect(_on_flight_state)
+	_clock.ticked.connect(_on_tick)
+	_clock.set_speed(SPEED)
+	_clock.set_paused(false)
 	_frame_start = Time.get_ticks_usec()
 	_phase = 1
 
@@ -110,16 +164,136 @@ func _run() -> void:
 	_frames += 1
 	_frame_start = now
 	_accept_offers()
-	for i in _ticks_per_frame:
-		_clock.set_paused(false)
-		_clock.advance(SimClock.STEP)
-		_clock.set_paused(true)
+	_clock.advance(SimClock.STEP)
+	if _clock.tick == _last_tick:
+		_still_frames += 1
+		if _still_frames >= STALL_FRAMES:
+			_fail(
+				(
+					"the clock stalled at tick %d for %d frames (paused=%s player_paused=%s)"
+					% [_clock.tick, _still_frames, _clock.paused, _clock.player_paused]
+				)
+			)
+			return
+	else:
+		_still_frames = 0
+		_last_tick = _clock.tick
+	_peak_static = maxi(_peak_static, OS.get_static_memory_usage())
 	_max_passengers = maxi(_max_passengers, _sim.active_count())
+	while _clock.tick >= _next_day_end:
+		_day_end()
+		_next_day_end += GameCalendar.TICKS_PER_DAY
 	if _clock.tick >= _next_sample:
 		_sample()
 		_next_sample += HOUR
 	if _clock.tick >= _end_tick:
 		_report()
+
+
+func _on_flight_state(_flight_id: String, new_state: int) -> void:
+	if new_state == FlightSim.State.DEPARTED:
+		_flights_made += 1
+
+
+## Runs after PassengerSim on every tick (it connects later), so the stuck
+## status it reads is this tick's. The rule is the hook's: a reason change
+## restarts the count, NONE clears it, and STUCK_TICKS of one unbroken reason
+## is a stuck_too_long event (counted once per episode).
+func _on_tick(tick: int) -> void:
+	var alive := {}
+	for id in _sim.passenger_ids():
+		var p := _sim.get_passenger(id)
+		if p.is_done():
+			continue
+		alive[id] = true
+		if _control:
+			_force_stuck(p)
+		_track_stuck(p, tick)
+		if tick % SimClock.TICK_RATE == 0:
+			_track_motion(p, tick)
+	for id in _stuck.keys():
+		if not alive.has(id):
+			_stuck.erase(id)
+	if tick % SimClock.TICK_RATE == 0:
+		for id in _moved.keys():
+			if not alive.has(id):
+				_moved.erase(id)
+
+
+func _track_stuck(p: Passenger, tick: int) -> void:
+	var before: int = _stuck[p.id]["reason"] if _stuck.has(p.id) else Passenger.Stuck.NONE
+	if p.stuck != before:
+		if p.stuck == Passenger.Stuck.NONE:
+			_stuck.erase(p.id)
+		else:
+			_stuck[p.id] = {"reason": p.stuck, "since": tick, "flagged": false}
+	if not _stuck.has(p.id) or _stuck[p.id]["flagged"]:
+		return
+	if tick - int(_stuck[p.id]["since"]) >= STUCK_TICKS:
+		_stuck[p.id]["flagged"] = true
+		_stuck_events += 1
+		var line := (
+			"seed=%d tick=%d id=%d stage=%s reason=%s cell=%s"
+			% [
+				_seed,
+				tick,
+				p.id,
+				Passenger.Stage.keys()[p.stage],
+				Passenger.Stuck.keys()[p.stuck],
+				p.at,
+			]
+		)
+		print("PROBE stuck_too_long %s" % line)
+		if _first_stuck == "":
+			_first_stuck = line
+
+
+func _track_motion(p: Passenger, tick: int) -> void:
+	var sig := [p.stage, p.at, p.seg_mm, p.odometer_mm]
+	if not _moved.has(p.id) or _moved[p.id]["sig"] != sig:
+		_moved[p.id] = {"sig": sig, "since": tick}
+
+
+## Control: one passenger held at NO_ROUTE every tick, so the detector must fire.
+func _force_stuck(p: Passenger) -> void:
+	if _forced_id < 0 or _sim.get_passenger(_forced_id) == null:
+		_forced_id = p.id
+	if p.id == _forced_id:
+		p.stuck = Passenger.Stuck.NO_ROUTE
+
+
+func _hung_passengers() -> Array[String]:
+	var found: Array[String] = []
+	for id in _sim.passenger_ids():
+		var p := _sim.get_passenger(id)
+		if p.is_done() or p.stuck != Passenger.Stuck.NONE or not _moved.has(id):
+			continue
+		var idle: int = _clock.tick - int(_moved[id]["since"])
+		if idle >= HUNG_TICKS:
+			found.append(
+				(
+					"id=%d stage=%s cell=%s idle_ticks=%d"
+					% [id, Passenger.Stage.keys()[p.stage], p.at, idle]
+				)
+			)
+	return found
+
+
+func _day_end() -> void:
+	_day_ends += 1
+	print(
+		(
+			"PROBE day_end=%d tick=%d mem_mb=%.1f objects=%d nodes=%d orphans=%d"
+			% [
+				_day_ends,
+				_clock.tick,
+				OS.get_static_memory_usage() / 1048576.0,
+				Performance.get_monitor(Performance.OBJECT_COUNT),
+				Performance.get_monitor(Performance.OBJECT_NODE_COUNT),
+				Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT),
+			]
+		)
+	)
 
 
 func _accept_offers() -> void:
@@ -194,7 +368,7 @@ func _container_sizes() -> Dictionary:
 ## Adds the sizes of `object`'s script containers under `label`. With depth
 ## left it also measures the RefCounted objects it holds, and sums the
 ## containers of the RefCounted objects inside its Arrays and Dictionaries
-## under "label.prop[*]".
+## under "label.prop[*]". A freed object held in a container is skipped.
 func _measure(object: Object, label: String, sizes: Dictionary, depth: int) -> void:
 	if object.get_script() == null:
 		return
@@ -209,9 +383,9 @@ func _measure(object: Object, label: String, sizes: Dictionary, depth: int) -> v
 			if depth > 0 and (value is Array or value is Dictionary):
 				var items: Array = value.values() if value is Dictionary else value
 				for item in items:
-					if item is RefCounted:
+					if is_instance_valid(item) and item is RefCounted:
 						_measure(item, key + "[*]", sizes, depth - 1)
-		elif depth > 0 and value is RefCounted:
+		elif depth > 0 and is_instance_valid(value) and value is RefCounted:
 			_measure(value, key, sizes, depth - 1)
 
 
@@ -238,11 +412,51 @@ func _report() -> void:
 	for i in mini(TOP, growth.size()):
 		line += " %s+%d" % [growth[i][1], growth[i][0]]
 	print(line)
-	print("PROBE ran ticks=%d hours=%d max_passengers=%d" % [_clock.tick, _hours, _max_passengers])
-	if _hours < 2 or _max_passengers < 1:
-		_fail("the soak did not run with passengers")
+	var ticks := _clock.tick - _start_tick
+	var hung := _hung_passengers()
+	for entry in hung:
+		print("PROBE hung %s" % entry)
+	var peak := maxi(_peak_static, int(Performance.get_monitor(Performance.MEMORY_STATIC_MAX)))
+	print("PROBE headless counts no GPU memory; peak_mem_mb is static (CPU heap) memory only")
+	var done_format := "PROBE_SEED_DONE seed=%d days=%d ticks=%d stuck_events=%d hung=%d "
+	done_format += "peak_mem_mb=%.1f max_passengers=%d flights_made=%d"
+	print(
+		(
+			done_format
+			% [
+				_seed,
+				_days,
+				ticks,
+				_stuck_events,
+				hung.size(),
+				peak / 1048576.0,
+				_max_passengers,
+				_flights_made,
+			]
+		)
+	)
+	if _control:
+		_report_control()
+		return
+	if ticks < _days * GameCalendar.TICKS_PER_DAY or _max_passengers < 1 or _flights_made < 1:
+		_fail("the soak did not run with passengers and flights")
+		return
+	if _stuck_events > 0 or hung.size() > 0:
+		print("PROBE_FAIL first stuck: %s" % _first_stuck)
+		_finish(1)
 		return
 	print("PROBE_DONE")
+	_finish(0)
+
+
+## The control passes only when the detector saw the forced passenger.
+func _report_control() -> void:
+	if _stuck_events < 1:
+		_fail("detector dead: a forced stuck passenger raised no stuck_too_long")
+		return
+	print(
+		"PROBE_CONTROL_OK the detector fired %d time(s); first: %s" % [_stuck_events, _first_stuck]
+	)
 	_finish(0)
 
 
