@@ -28,9 +28,21 @@ extends SceneTree
 ## Run (one windowed Godot run project-wide; hold tools/blender/out/.windowed.lock):
 ##   timeout 600 Godot_v4.7.2-stable_win64_console.exe --display-driver windows \
 ##     --rendering-driver vulkan --audio-driver Dummy \
-##     --path game -s res://spike/build_menu_framing_probe.gd
+##     --path game -s res://spike/build_menu_framing_probe.gd [-- --plates]
+##
+## With `-- --plates` it runs only the two plates of the fix's limitation
+## instead: the Check-in tray opened (a) with the "Nobody on duty" card already
+## up and (b) with no card. For each it projects the corners of the start
+## area (StartView.area_for, the terminal the camera frames) at the floor and
+## at the wall tops, prints their screen points against the tray stack, the
+## card, the category bar and the banner, and saves a clean plate and a marked
+## copy (corners red, tray stack top yellow, card cyan) under
+## tools/blender/out/d3c/. A corner outside the window is PROBE_INVALID; a
+## corner behind a panel is reported, not failed.
 
 const MAIN_SCENE := "res://main/main.tscn"
+const OUT_REL := "res://../tools/blender/out/d3c"
+const PLATE_SETTLE := 120
 const WINDOW := Vector2i(1920, 1080)
 const SETTLE := 30
 const OPEN_WAIT := 20
@@ -126,13 +138,16 @@ func _run() -> void:
 	_stack = _hud.find_child("AlertStack", false, false) as AlertStack
 	await _frames(CALM)
 	print("PROBE viewport=%s at_home=%s" % [root.get_visible_rect().size, _cam._at_home])
-	await _switch_run("plain", false, false)
-	await _switch_run("alert_before", true, false)
-	await _switch_run("alert_mid", true, false, true)
-	await _cards_run()
-	await _switch_run("staff", true, true)
-	await _still_after("follow")
-	await _still_after("glide")
+	if OS.get_cmdline_user_args().has("--plates"):
+		await _plates()
+	else:
+		await _switch_run("plain", false, false)
+		await _switch_run("alert_before", true, false)
+		await _switch_run("alert_mid", true, false, true)
+		await _cards_run()
+		await _switch_run("staff", true, true)
+		await _still_after("follow")
+		await _still_after("glide")
 	_set_stage("done")
 	_main.queue_free()
 	await process_frame
@@ -389,3 +404,123 @@ func _still_after(kind: String) -> void:
 	print("STILL %s worst=%.4f distance_moved=%.4f" % [kind, worst, distance_moved])
 	if worst >= MAX_POSITION_DELTA or distance_moved >= MAX_DISTANCE_DELTA:
 		_invalid("%s: the camera moved with no input" % kind)
+
+
+## The two plates of the fix's limitation: is the terminal's south edge behind
+## the tray stack when a card was up as the tray opened?
+func _plates() -> void:
+	var out_dir := ProjectSettings.globalize_path(OUT_REL).simplify_path()
+	DirAccess.make_dir_recursive_absolute(out_dir)
+	print("PROBE out_dir=", out_dir)
+	await _plate(out_dir, "a_tray_with_card", true)
+	await _plate(out_dir, "b_tray_no_card", false)
+
+
+func _plate(out_dir: String, label: String, alert: bool) -> void:
+	_set_stage("plate_" + label)
+	await _reset()
+	if alert:
+		_raise_alert()
+		await _frames(SETTLE)
+	_menu.press_category(_category("Check-in"))
+	await _frames(PLATE_SETTLE)
+	await RenderingServer.frame_post_draw
+	var view := root.get_visible_rect().size
+	var panels := {
+		"tray": _room._tray_stack(_menu),
+		"bar": _room._bar_strip(),
+		"card": _stack.room_rect(),
+		"banner": _room._banner(),
+	}
+	print(
+		(
+			"PLATE %s view=%s distance=%.3f room=%s cards=%s tray_top=%.1f panels=%s"
+			% [
+				label,
+				view,
+				_cam.distance,
+				_cam.room,
+				_stack.shown_keys(),
+				(panels["tray"] as Rect2).position.y,
+				panels,
+			]
+		)
+	)
+	if alert != _stack.room_rect().has_area():
+		_invalid("%s: the alert card is %s" % [label, "missing" if alert else "showing"])
+	var img := root.get_texture().get_image()
+	img.convert(Image.FORMAT_RGBA8)
+	_save(img, out_dir.path_join(label + ".png"))
+	var marked := img.duplicate() as Image
+	var scale := Vector2(img.get_size()) / view
+	var points := _corner_points(label, view, panels)
+	for at in points:
+		_mark(marked, Rect2(at * scale - Vector2(5, 5), Vector2(11, 11)), Color.RED, true)
+	var tray: Rect2 = panels["tray"]
+	_mark(
+		marked, Rect2(tray.position * scale, Vector2(tray.size.x * scale.x, 2)), Color.YELLOW, true
+	)
+	var card: Rect2 = panels["card"]
+	if card.has_area():
+		_mark(marked, Rect2(card.position * scale, card.size * scale), Color.CYAN, false)
+	_save(marked, out_dir.path_join(label + "_marked.png"))
+
+
+## Projects the start area's four corners at the floor and the wall tops,
+## prints each against the panels, and returns their screen points.
+func _corner_points(label: String, view: Vector2, panels: Dictionary) -> Array[Vector2]:
+	var grid := (_main.get_node("BuildMode") as BuildMode).grid
+	var area := StartView.area_for(grid)
+	var eye := _cam.get_node("Camera3D") as Camera3D
+	var tray_top: float = (panels["tray"] as Rect2).position.y
+	var corners := {
+		"NW": area.position,
+		"NE": Vector2(area.end.x, area.position.y),
+		"SW": Vector2(area.position.x, area.end.y),
+		"SE": area.end,
+	}
+	var points: Array[Vector2] = []
+	var hidden := 0
+	for corner_name in corners:
+		var c: Vector2 = corners[corner_name]
+		for height in [0.0, _cam.frame_height]:
+			var world := Vector3(c.x, grid.origin.y + height, c.y)
+			var at := eye.unproject_position(world)
+			points.append(at)
+			var behind: Array[String] = []
+			for panel_name in panels:
+				var r: Rect2 = panels[panel_name]
+				if r.has_area() and r.has_point(at):
+					behind.append(panel_name)
+			hidden += int(not behind.is_empty())
+			print(
+				(
+					"CORNER %s %s h=%.1f world=%s screen=%s above_tray_top=%.1f behind=%s"
+					% [label, corner_name, height, world, at, tray_top - at.y, behind]
+				)
+			)
+			if eye.is_position_behind(world) or not Rect2(Vector2.ZERO, view).has_point(at):
+				_invalid(
+					"%s %s h=%.1f is out of the window at %s" % [label, corner_name, height, at]
+				)
+	print("PLATE %s area=%s corners_behind_a_panel=%d of %d" % [label, area, hidden, points.size()])
+	return points
+
+
+func _save(img: Image, path: String) -> void:
+	var err := img.save_png(path)
+	print("PLATE saved=%s err=%d size=%s" % [path, err, img.get_size()])
+	if err != OK:
+		_invalid("could not save %s" % path)
+
+
+## Draws `rect` (image pixels) on `img`, filled or as a 2 px outline.
+func _mark(img: Image, rect: Rect2, color: Color, filled: bool) -> void:
+	var r := Rect2i(rect).intersection(Rect2i(Vector2i.ZERO, img.get_size()))
+	if filled:
+		img.fill_rect(r, color)
+		return
+	img.fill_rect(Rect2i(r.position, Vector2i(r.size.x, 2)), color)
+	img.fill_rect(Rect2i(r.position.x, r.end.y - 2, r.size.x, 2), color)
+	img.fill_rect(Rect2i(r.position, Vector2i(2, r.size.y)), color)
+	img.fill_rect(Rect2i(r.end.x - 2, r.position.y, 2, r.size.y), color)
