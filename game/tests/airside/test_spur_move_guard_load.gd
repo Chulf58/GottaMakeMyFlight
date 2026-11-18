@@ -41,7 +41,7 @@ func test_a_flight_on_the_old_spur_loads_after_its_gate_shrinks() -> void:
 	assert_str(_gates.max_class("A")).is_equal(PlaneClasses.MEDIUM)
 	assert_bool(_flights.accept_contract(terms)).is_true()
 	var contract := _flights.contract_of("L1")
-	_flights.on_tick(FlightTimetable.issue_tick(contract, contract["first_day"]))
+	_flights.on_tick(FlightTimetable.issue_tick(contract, contract["first_day"], 0))
 	var flight := FlightTimetable.occurrence_id("L1", contract["first_day"])
 	assert_bool(_flights.end_contract("L1")).is_true()
 	var row := _grid.world_to_cell(StandPlacement.stand_point(_gates.stands["A"])).y + 11
@@ -82,7 +82,7 @@ func test_a_flight_issued_on_a_still_tick_guards_its_spur_at_once() -> void:
 	var apron := _apron()
 	var terms := SpurMoveKit.terms("C1")
 	# Issuing is anchored to the departure, whatever the pair.
-	var due := GameCalendar.tick_at(0, SpurMoveKit.MINUTE) - FlightTimetable.issue_lead()
+	var due := GameCalendar.tick_at(0, SpurMoveKit.MINUTE, 0) - FlightTimetable.issue_lead()
 	_flights.on_tick(due + 1)
 	var on_spur := _grid.world_to_cell(Vector3(-StandPlacement.SIDE_LANE_X, 0.0, -150.0))
 	var before := apron.guarded_cells().has(on_spur)
@@ -113,7 +113,7 @@ func test_the_spur_band_over_unowned_land_reads_as_unowned_land() -> void:
 	var apron := _apron()
 	assert_bool(_flights.accept_contract(SpurMoveKit.terms("C1"))).is_true()
 	var contract := _flights.contract_of("C1")
-	_flights.on_tick(FlightTimetable.issue_tick(contract, contract["first_day"]))
+	_flights.on_tick(FlightTimetable.issue_tick(contract, contract["first_day"], 0))
 	var on_spur := _grid.world_to_cell(Vector3(-StandPlacement.SIDE_LANE_X, 0.0, -150.0))
 	assert_bool(apron.guarded_cells().has(on_spur)).is_true()
 	var refused := _grid.validate(SpurMoveKit.floor_at(on_spur))

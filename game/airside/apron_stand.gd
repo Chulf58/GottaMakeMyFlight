@@ -695,7 +695,7 @@ func status_text() -> String:
 		var at := flights.state_start(id, FlightSim.State.TAKEOFF) if id != "" else flights.tick
 		lines.append(
 			tr("Stand moves to the new exit after takeoff at {time}", "apron caption").format(
-				{"time": GameCalendar.clock_text(at)}
+				{"time": GameCalendar.clock_text(at, flights.epoch)}
 			)
 		)
 	if placement.get("warning", false):

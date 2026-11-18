@@ -171,7 +171,9 @@ func _build_east() -> bool:
 func _accept_second(starter: String) -> bool:
 	var minute: int = _flights.contract_of(starter)["departure_minute"]
 	for later in range(40, 90):
-		var terms := FlightSim.starter_terms(0)
+		var terms := StarterSlot.departing(
+			StarterSlot.whole_minute(0 + FlightTimetable.issue_lead(), 0), 0
+		)
 		terms["id"] = SECOND
 		terms["departure_minute"] = (minute + later) % GameCalendar.MINUTES_PER_DAY
 		if _flights.accept_gate(terms) == "B":

@@ -98,7 +98,7 @@ func test_issued_occurrences_keep_their_gate_as_fixed_holds() -> void:
 	assert_str(_sim.reassign_problem("Y", "A")).is_equal(
 		"contract Y clashes with flight X-d0 at gate A"
 	)
-	var day_one := FlightTimetable.issue_tick(_sim.contract_of("X"), 1)
+	var day_one := FlightTimetable.issue_tick(_sim.contract_of("X"), 1, 0)
 	_sim.on_tick(day_one)
 	assert_str(_sim.flight_gate("X-d1")).is_equal("B")
 
@@ -117,7 +117,7 @@ func test_a_moved_occurrence_round_trips_and_bad_gates_are_refused() -> void:
 	assert_str(loaded.flight_gate("X-d0")).is_equal("A")
 	# Gate A is gone: X-d0's gate has no stand.
 	var two: Array[String] = ["B", "C"]
-	assert_str(FlightSnapshot.load(data.duplicate(true), two).get("error", "")).contains(
+	assert_str(FlightSnapshot.load(data.duplicate(true), two, 0).get("error", "")).contains(
 		"X-d0 is at a gate with no stand"
 	)
 
@@ -127,10 +127,10 @@ func test_a_save_holding_a_gate_twice_is_refused() -> void:
 	_accept("Y", 660)
 	_sim.on_tick(200)
 	var data: Dictionary = _sim.to_snapshot()
-	assert_bool(FlightSnapshot.load(data.duplicate(true), GATES).has("error")).is_false()
+	assert_bool(FlightSnapshot.load(data.duplicate(true), GATES, 0).has("error")).is_false()
 	# X-d0 moved onto gate B would overlap Y's days there.
 	var gate := data.duplicate(true)
 	gate["flights"][0]["gate"] = "B"
-	var problem: String = FlightSnapshot.load(gate, GATES).get("error", "")
+	var problem: String = FlightSnapshot.load(gate, GATES, 0).get("error", "")
 	print("occurrence moved onto a busy gate: %s" % problem)
 	assert_str(problem).is_equal("contract Y clashes with flight X-d0")

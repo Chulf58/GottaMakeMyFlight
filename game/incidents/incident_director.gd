@@ -107,7 +107,7 @@ func bind(with_clock: SimClock, with_flights: FlightSim, with_passengers: Passen
 	flights = with_flights
 	passengers = with_passengers
 	_bound = clock
-	_day = GameCalendar.day_of(clock.tick)
+	_day = GameCalendar.day_of(clock.tick, clock.epoch)
 	clock.ticked.connect(on_tick)
 	_follow_passengers(with_passengers)
 
@@ -128,7 +128,7 @@ func set_enabled(value: bool) -> void:
 
 ## A new day rolls, then what is due fires and what is over ends.
 func on_tick(tick: int) -> void:
-	var day := GameCalendar.day_of(tick)
+	var day := GameCalendar.day_of(tick, clock.epoch)
 	if day != _day:
 		_day = day
 		if _roll_due(day):
@@ -358,7 +358,7 @@ func from_snapshot(data: Dictionary) -> bool:
 	_next_id = loaded["next_id"]
 	_incidents = loaded["incidents"]
 	if clock != null:
-		_day = GameCalendar.day_of(clock.tick)
+		_day = GameCalendar.day_of(clock.tick, clock.epoch)
 	restored.emit()
 	return true
 
@@ -366,7 +366,7 @@ func from_snapshot(data: Dictionary) -> bool:
 func _roll_due(day: int) -> bool:
 	if not _enabled or flights.opened_tick < 0 or day <= _last_rolled_day:
 		return false
-	return day > GameCalendar.day_of(flights.opened_tick)
+	return day > GameCalendar.day_of(flights.opened_tick, clock.epoch)
 
 
 func _roll(day: int, tick: int) -> void:
@@ -507,10 +507,10 @@ func _departures(day: int) -> Array[int]:
 	for id in flights.active_contract_ids():
 		var contract := flights.contract_of(id)
 		if int(contract["first_day"]) <= day:
-			out.append(GameCalendar.tick_at(day, int(contract["departure_minute"])))
+			out.append(GameCalendar.tick_at(day, int(contract["departure_minute"]), clock.epoch))
 	for id in flights.flight_ids():
 		var departs := flights.state_start(id, FlightSim.State.PUSHBACK)
-		if departs >= 0 and GameCalendar.day_of(departs) == day:
+		if departs >= 0 and GameCalendar.day_of(departs, clock.epoch) == day:
 			out.append(departs)
 	return out
 

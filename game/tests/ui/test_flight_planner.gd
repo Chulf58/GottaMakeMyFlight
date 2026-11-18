@@ -119,8 +119,8 @@ func test_each_contract_is_one_bar_on_its_gate_in_the_gate_colour() -> void:
 		GateColours.of("B")
 	)
 	# The bar's anchors are the hold's place in the day.
-	var starts := FlightTimetable.starts_for(_sim.contract_of("X"), 0)
-	var day_start := GameCalendar.day_start(0)
+	var starts := FlightTimetable.starts_for(_sim.contract_of("X"), 0, 0)
+	var day_start := GameCalendar.day_start(0, 0)
 	assert_float(x.anchor_left).is_equal_approx(
 		float(starts[0] - day_start) / GameCalendar.TICKS_PER_DAY, 0.0001
 	)
@@ -169,12 +169,12 @@ func test_a_load_closes_the_sheet_and_the_next_open_shows_the_loaded_world() -> 
 
 func test_the_day_follows_the_clock() -> void:
 	_three_contracts()
-	_clock.tick = GameCalendar.tick_at(2, 9 * 60)
+	_clock.tick = GameCalendar.tick_at(2, 9 * 60, 0)
 	_planner.open()
 	assert_int(_planner.shown_day()).is_equal(2)
 	assert_object(_planner.bar_button("X", 2)).is_not_null()
 	assert_object(_planner.bar_button("X", 0)).is_null()
-	_clock.tick = GameCalendar.tick_at(3, 9 * 60)
+	_clock.tick = GameCalendar.tick_at(3, 9 * 60, 0)
 	await await_idle_frame()
 	assert_int(_planner.shown_day()).is_equal(3)
 

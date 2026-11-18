@@ -93,7 +93,7 @@ func test_the_list_shrinks_and_the_card_rises_when_rows_drop_out() -> void:
 	await _settle()
 	var full := _panel().size.y
 	# By 12:00 the 10:00 flight has left, so its row drops out.
-	for t in range(_sim.tick + 1, GameCalendar.tick_at(0, 12 * 60) + 1):
+	for t in range(_sim.tick + 1, GameCalendar.tick_at(0, 12 * 60, 0) + 1):
 		_sim.on_tick(t)
 	_clock.tick = _sim.tick
 	_board.refresh()

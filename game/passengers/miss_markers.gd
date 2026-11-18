@@ -199,7 +199,9 @@ func sync() -> void:
 			station,
 			"QueueFullSign",
 			MarkerIcons.Glyph.QUEUE_FULL,
-			_words.queue_full(waiting)
+			_words.queue_full(
+				waiting, station_noun(sim, station) if MissSignals.is_short(sim, station) else ""
+			)
 		)
 	for station: int in _closed_signs.keys():
 		if not closed.has(station):
@@ -209,7 +211,7 @@ func sync() -> void:
 		var look := closed_look(reason, station_noun(sim, station))
 		if reason == MissSignals.FAULT_REASON:
 			var repair := sim.staff.faults.repair_tick(station)
-			look = [MarkerIcons.Glyph.CLOSED, _words.scanner_fault(repair)]
+			look = [MarkerIcons.Glyph.CLOSED, _words.scanner_fault(repair, sim.clock.epoch)]
 		_show_sign(_closed_signs, station, "ClosedSign", look[0], look[1])
 	var incomplete := MissSignals.incomplete_arches(sim)
 	for arch: int in _hint_signs.keys():
@@ -469,15 +471,51 @@ class Words:
 				return tr("Closed · staff can't reach the scanner", "sign text")
 		return tr("Closed · staff can't reach the counter", "sign text")
 
-	func scanner_fault(repair: int) -> String:
+	func scanner_fault(repair: int, epoch: int) -> String:
 		return tr("Closed · scanner fault, fixed by {time}", "sign text").format(
-			{"time": GameCalendar.clock_text(repair)}
+			{"time": GameCalendar.clock_text(repair, epoch)}
 		)
 
-	func queue_full(waiting: int) -> String:
+	## `short_noun` is the station noun ("desk", "scanner", "counter") when its lane
+	## is shorter than a full one, "" otherwise: the sign then says so.
+	func queue_full(waiting: int, short_noun := "") -> String:
+		match short_noun:
+			"":
+				return (
+					tr_n(
+						"Queue full · {count} waiting",
+						"Queue full · {count} waiting",
+						waiting,
+						"sign text"
+					)
+					. format({"count": waiting})
+				)
+			"desk":
+				return (
+					tr_n(
+						"Queue full · {count} waiting · short queue: move the desk away from the wall",
+						"Queue full · {count} waiting · short queue: move the desk away from the wall",
+						waiting,
+						"sign text"
+					)
+					. format({"count": waiting})
+				)
+			"scanner":
+				return (
+					tr_n(
+						"Queue full · {count} waiting · short queue: move the scanner away from the wall",
+						"Queue full · {count} waiting · short queue: move the scanner away from the wall",
+						waiting,
+						"sign text"
+					)
+					. format({"count": waiting})
+				)
 		return (
 			tr_n(
-				"Queue full · {count} waiting", "Queue full · {count} waiting", waiting, "sign text"
+				"Queue full · {count} waiting · short queue: move the counter away from the wall",
+				"Queue full · {count} waiting · short queue: move the counter away from the wall",
+				waiting,
+				"sign text"
 			)
 			. format({"count": waiting})
 		)

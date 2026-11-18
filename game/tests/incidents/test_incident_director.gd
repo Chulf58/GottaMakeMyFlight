@@ -54,21 +54,21 @@ func _forced_spill(director: IncidentDirector) -> void:
 func test_a_new_director_is_off_and_never_rolls() -> void:
 	assert_bool(_director.is_enabled()).is_false()
 	for day in range(1, 6):
-		_director.on_tick(GameCalendar.day_start(day))
+		_director.on_tick(GameCalendar.day_start(day, 0))
 	assert_int(_director.last_rolled_day()).is_equal(-1)
 	assert_array(_director.incidents()).is_empty()
-	assert_int(_director.next_event_tick(GameCalendar.day_start(5))).is_equal(-1)
+	assert_int(_director.next_event_tick(GameCalendar.day_start(5, 0))).is_equal(-1)
 	# The control: turned on, the same boundaries roll.
 	_director.set_enabled(true)
 	for day in range(6, 9):
-		_director.on_tick(GameCalendar.day_start(day))
+		_director.on_tick(GameCalendar.day_start(day, 0))
 	print("rolled through day %d" % _director.last_rolled_day())
 	assert_int(_director.last_rolled_day()).is_equal(8)
 
 
 func test_presenting_a_scheduled_spill_is_refused_and_it_still_fires() -> void:
 	_forced_spill(_director)
-	_director.on_tick(GameCalendar.day_start(1))
+	_director.on_tick(GameCalendar.day_start(1, 0))
 	var scheduled := _director.incidents()
 	assert_int(scheduled.size()).is_equal(1)
 	var presented: Array[Dictionary] = []
@@ -90,20 +90,20 @@ func test_no_roll_while_closed_or_on_the_opening_day() -> void:
 	var director := auto_free(IncidentDirector.new()) as IncidentDirector
 	director.bind(_world.clock, flights, _world.sim)
 	_forced_spill(director)
-	director.on_tick(GameCalendar.day_start(1))
+	director.on_tick(GameCalendar.day_start(1, 0))
 	assert_int(director.last_rolled_day()).is_equal(-1)
 	# Opened on day 1: its own boundary is behind it, day 2's rolls.
-	flights.tick = GameCalendar.day_start(1) + 100
+	flights.tick = GameCalendar.day_start(1, 0) + 100
 	assert_bool(flights.open_airport()).is_true()
-	director.on_tick(GameCalendar.day_start(1) + 101)
+	director.on_tick(GameCalendar.day_start(1, 0) + 101)
 	assert_int(director.last_rolled_day()).is_equal(-1)
-	director.on_tick(GameCalendar.day_start(2))
+	director.on_tick(GameCalendar.day_start(2, 0))
 	assert_int(director.last_rolled_day()).is_equal(2)
 
 
 func test_at_most_one_roll_per_day_boundary() -> void:
 	_forced_spill(_director)
-	var boundary := GameCalendar.day_start(1)
+	var boundary := GameCalendar.day_start(1, 0)
 	_director.on_tick(boundary)
 	_director.on_tick(boundary)
 	_director.on_tick(boundary + 1)
@@ -121,7 +121,7 @@ func test_at_most_one_roll_per_day_boundary() -> void:
 func test_a_roll_draws_nothing_from_the_clock_rng() -> void:
 	_forced_spill(_director)
 	var state := _world.clock.rng.state
-	_director.on_tick(GameCalendar.day_start(1))
+	_director.on_tick(GameCalendar.day_start(1, 0))
 	var scheduled := _director.incidents()
 	assert_int(scheduled.size()).is_equal(1)
 	assert_int(_world.clock.rng.state).is_equal(state)
@@ -135,16 +135,16 @@ func test_the_same_seed_and_day_roll_the_same_incident() -> void:
 	_forced_spill(_director)
 	_forced_spill(other)
 	for day in range(1, 4):
-		_director.on_tick(GameCalendar.day_start(day))
-		other.on_tick(GameCalendar.day_start(day))
+		_director.on_tick(GameCalendar.day_start(day, 0))
+		other.on_tick(GameCalendar.day_start(day, 0))
 	print("rolled: %s" % [_director.incidents()])
 	assert_int(_director.incidents().size()).is_equal(3)
 	assert_array(other.incidents()).is_equal(_director.incidents())
 
 
 func test_the_busy_window_runs_from_two_hours_before_the_first_departure_to_the_last() -> void:
-	var departs := GameCalendar.tick_at(1, DEPARTS)
-	var window := _director.busy_window(1, GameCalendar.day_start(1))
+	var departs := GameCalendar.tick_at(1, DEPARTS, 0)
+	var window := _director.busy_window(1, GameCalendar.day_start(1, 0))
 	print("window %s departs %d" % [window, departs])
 	assert_int(window.x).is_equal(departs - IncidentDirector.BUSY_LEAD_TICKS)
 	assert_int(window.y).is_equal(departs)
@@ -154,7 +154,7 @@ func test_the_busy_window_runs_from_two_hours_before_the_first_departure_to_the_
 ## quiet-night lead), so the quiet-night stop always lies ahead of the clock.
 func test_the_busy_window_starts_no_sooner_than_the_fire_floor_after_now() -> void:
 	assert_int(IncidentDirector.FIRE_FLOOR_TICKS).is_greater(QuietNight.LEAD_TICKS)
-	var departs := GameCalendar.tick_at(1, DEPARTS)
+	var departs := GameCalendar.tick_at(1, DEPARTS, 0)
 	var now := departs - IncidentDirector.BUSY_LEAD_TICKS - 100
 	var early := _director.busy_window(1, now)
 	print("early window %s now %d" % [early, now])
@@ -167,10 +167,10 @@ func test_the_busy_window_starts_no_sooner_than_the_fire_floor_after_now() -> vo
 
 func test_a_spill_fires_at_its_saved_tick_at_a_valid_cell() -> void:
 	_forced_spill(_director)
-	_director.on_tick(GameCalendar.day_start(1))
+	_director.on_tick(GameCalendar.day_start(1, 0))
 	var incident: Dictionary = _director.incidents()[0]
 	var fire: int = incident["fire_tick"]
-	var window := _director.busy_window(1, GameCalendar.day_start(1))
+	var window := _director.busy_window(1, GameCalendar.day_start(1, 0))
 	assert_int(fire).is_between(window.x, window.y)
 	var messes := _world.sim.messes
 	var before_count := messes.mess_count()
@@ -219,7 +219,7 @@ func _near_floor(cell: Vector2i, avoid: Array) -> Vector2i:
 ## done with the no_place outcome, no mess added or recorded, no card.
 func test_a_spill_merged_into_another_cell_at_the_cap_does_not_happen() -> void:
 	_forced_spill(_director)
-	_director.on_tick(GameCalendar.day_start(1))
+	_director.on_tick(GameCalendar.day_start(1, 0))
 	var fire: int = _director.incidents()[0]["fire_tick"]
 	var messes := _world.sim.messes
 	var places: Array = _director.spill_places().map(
@@ -255,7 +255,7 @@ func test_a_spill_merged_into_another_cell_at_the_cap_does_not_happen() -> void:
 ## night is not slowed before midnight (decision quiet-nights-fast-forward-
 ## automatically-when-nothing-is-due).
 func test_next_event_tick_is_the_next_fire_and_never_the_boundary() -> void:
-	var boundary := GameCalendar.day_start(1)
+	var boundary := GameCalendar.day_start(1, 0)
 	assert_int(_director.next_event_tick(boundary - 50)).is_equal(-1)
 	_director.set_enabled(true)
 	assert_int(_director.next_event_tick(boundary - 50)).is_equal(-1)
@@ -275,9 +275,9 @@ func test_next_event_tick_is_the_next_fire_and_never_the_boundary() -> void:
 func test_the_card_words_name_the_cause_and_ask_for_a_cleaner_when_none_is_hired() -> void:
 	var incident := {"id": 1, "kind": IncidentCatalogue.SPILL, "place": "Check-in"}
 	assert_str(IncidentCatalogue.card_title(incident)).is_equal("Spill near Check-in")
-	assert_str(IncidentCatalogue.card_detail(incident, true)).is_equal(
+	assert_str(IncidentCatalogue.card_detail(incident, true, 0)).is_equal(
 		"A passenger dropped a coffee. A cleaner will mop it up."
 	)
-	assert_str(IncidentCatalogue.card_detail(incident, false)).is_equal(
+	assert_str(IncidentCatalogue.card_detail(incident, false, 0)).is_equal(
 		"A passenger dropped a coffee. Hire a cleaner to clean it."
 	)

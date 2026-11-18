@@ -18,6 +18,7 @@ func before_test() -> void:
 	SaveSlots.dir = _dir
 	DirAccess.make_dir_recursive_absolute(_dir)
 	GameBoot.load_path = ""
+	GameBoot.new_airport = false
 	GameBoot.refusal = ""
 	_scenes.clear()
 	_quits = 0
@@ -33,6 +34,7 @@ func after_test() -> void:
 	DirAccess.remove_absolute(_dir)
 	SaveSlots.dir = _dir_before
 	GameBoot.load_path = ""
+	GameBoot.new_airport = false
 	GameBoot.refusal = ""
 
 

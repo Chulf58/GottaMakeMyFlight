@@ -144,7 +144,7 @@ static func lines_for(sim: FlightSim, tick: int) -> PackedStringArray:
 ## {flight id: passengers running late} (LateCount.by_flight()); a row's "late"
 ## is its "N running late" text, "" for none.
 static func entries_for(sim: FlightSim, tick: int, late := {}) -> Array[Dictionary]:
-	var today := GameCalendar.day_of(tick)
+	var today := GameCalendar.day_of(tick, sim.epoch)
 	var todays := _day_entries(sim, today, true, tick, late)
 	var tomorrows := _day_entries(sim, today + 1, false, tick, late)
 	var entries: Array[Dictionary] = []
@@ -187,14 +187,14 @@ static func _day_entries(
 			. append(
 				{
 					"kind": "row",
-					"text": DepartureList.doors_line(row) if is_next else row["line"],
+					"text": DepartureList.doors_line(row, sim.epoch) if is_next else row["line"],
 					# Line 1 is the time and destination; line 2 the airline and the
 					# status word. The doors time of the next flight replaces the
 					# status word and is drawn under line 2.
 					"head": row["head"],
 					"airline": row["airline"],
 					"status": "" if is_next else row["status"],
-					"doors": DepartureList.doors_text(row) if is_next else "",
+					"doors": DepartureList.doors_text(row, sim.epoch) if is_next else "",
 					"late": LateCount.text_for(int(late.get(row["flight"], 0))),
 					"contract": row["contract"],
 					"day": day,
@@ -802,7 +802,7 @@ func _apply_shown() -> void:
 ## The saved choice, on when nothing is saved yet. A settings file that exists
 ## but cannot be read is reported and the board stays on.
 func _load_setting() -> bool:
-	return HudFlagSetting.load_flag(settings_path, SETTING_KEY, true, "DeparturesBoard")
+	return HudFlagSetting.load_boot_flag(settings_path, SETTING_KEY, true, "DeparturesBoard")
 
 
 ## Writes the choice next to any other settings already in the file.

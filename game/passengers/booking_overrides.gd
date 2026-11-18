@@ -51,7 +51,8 @@ static func set_extra(sim: PassengerSim, flight_id: String, extra: int) -> Dicti
 	elif sim.flights.is_doors_closed(flight_id):
 		reason = DEPARTED
 	else:
-		reason = _open_problem(sim.flights, contract, flight_id, GameCalendar.day_of(sim.tick))
+		var today := GameCalendar.day_of(sim.tick, sim.clock.epoch)
+		reason = _open_problem(sim.flights, contract, flight_id, today)
 	if reason == "" and extra < 1:
 		reason = TOO_FEW
 	elif reason == "" and extra > room:
@@ -108,7 +109,7 @@ static func to_list(sim: PassengerSim) -> Array:
 ## within the contract's class maximum. A save of the current version must
 ## carry the list; an older migrated one has none. Changes no sim state:
 ## from_snapshot() installs the result.
-static func checked(data: Dictionary, flights: FlightSim) -> Dictionary:
+static func checked(data: Dictionary, flights: FlightSim, epoch: int) -> Dictionary:
 	var overrides := {}
 	if not data.has("booking_overrides"):
 		if int(data["save_version"]) >= PassengerSim.SAVE_VERSION:
@@ -118,7 +119,7 @@ static func checked(data: Dictionary, flights: FlightSim) -> Dictionary:
 	if typeof(list) != TYPE_ARRAY:
 		return {"error": "booking_overrides must be a list"}
 	var scheduled: Array = data.get("scheduled", [])
-	var today := GameCalendar.day_of(str(data.get("tick", "0")).to_int())
+	var today := GameCalendar.day_of(str(data.get("tick", "0")).to_int(), epoch)
 	for entry: Variant in list:
 		var problem := _entry_problem(entry, overrides, scheduled, flights, today)
 		if problem != "":

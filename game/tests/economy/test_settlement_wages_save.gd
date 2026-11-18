@@ -60,7 +60,7 @@ func test_a_save_taken_one_tick_before_the_charge_tick_charges_it_once() -> void
 	_kit.hire(CHECKIN)
 	_kit.near_midnight(1, 3)
 	_kit.world.step()
-	assert_bool(GameCalendar.is_last_tick_of_day(_kit.world.clock.tick)).is_false()
+	assert_bool(GameCalendar.is_last_tick_of_day(_kit.world.clock.tick, 0)).is_false()
 	_load_into_new_session(_kit.save())
 	for i in 20:
 		_kit.world.step()
@@ -183,8 +183,8 @@ func test_the_wage_keys_come_as_a_group_and_a_partial_set_is_refused() -> void:
 
 func test_a_day_other_than_the_clock_day_is_a_broken_link() -> void:
 	var timed := {"wages_day": "3", Settlement.WAGE_TIMING_KEY: Settlement.WAGE_TIMING_LAST_TICK}
-	var mid_day := {"tick": str(GameCalendar.day_start(4) + 100)}
-	var last_tick := {"tick": str(GameCalendar.day_start(5) - 1)}
+	var mid_day := {"tick": str(GameCalendar.day_start(4, 0) + 100), "epoch": "0"}
+	var last_tick := {"tick": str(GameCalendar.day_start(5, 0) - 1), "epoch": "0"}
 	assert_str(Settlement.wages_day_problem(timed, mid_day)).is_empty()
 	# The clock's own day is charged only on its last tick, so it is not a mid-day state.
 	timed["wages_day"] = "4"

@@ -136,7 +136,7 @@ func _ready() -> void:
 	offset_left = -HudLayout.MARGIN - HudLayout.RAIL_W
 	offset_top = HudLayout.MARGIN
 	grow_vertical = Control.GROW_DIRECTION_END
-	_cards_on = HudFlagSetting.load_flag(settings_path, SETTING_KEY, true, "AlertStack")
+	_cards_on = HudFlagSetting.load_boot_flag(settings_path, SETTING_KEY, true, "AlertStack")
 	_build()
 
 
@@ -359,14 +359,21 @@ func set_tray_open(value: bool) -> void:
 
 ## The history as the tray words it, newest first: when the card came up, its
 ## title and when it cleared ("still up" while it is); a notice's title and
-## its words.
+## its words. Ticks from before the airport opened (`t < sim.clock.epoch`) use
+## their own tick as the epoch, so they keep the `Day 1 06:00` clock they had
+## while the calendar was held.
 func history_lines() -> PackedStringArray:
 	var lines := PackedStringArray()
+	var clock_epoch: int = sim.clock.epoch if sim != null and sim.clock != null else 0
 	for entry in _board.history():
 		var raised: int = entry["raised_tick"]
 		var cleared: int = entry["cleared_tick"]
+		var raised_epoch := mini(raised, clock_epoch)
 		var when := tr("Day {day} {time}").format(
-			{"day": GameCalendar.day_of(raised) + 1, "time": GameCalendar.clock_text(raised)}
+			{
+				"day": GameCalendar.day_of(raised, raised_epoch) + 1,
+				"time": GameCalendar.clock_text(raised, raised_epoch)
+			}
 		)
 		if entry.get("notice", false):
 			lines.append(
@@ -377,7 +384,10 @@ func history_lines() -> PackedStringArray:
 			continue
 		var end := tr("still up")
 		if cleared >= 0:
-			end = tr("cleared {time}").format({"time": GameCalendar.clock_text(cleared)})
+			var cleared_epoch := mini(cleared, clock_epoch)
+			end = tr("cleared {time}").format(
+				{"time": GameCalendar.clock_text(cleared, cleared_epoch)}
+			)
 		lines.append(
 			tr("{when}  {title}, {end}").format({"when": when, "title": entry["title"], "end": end})
 		)

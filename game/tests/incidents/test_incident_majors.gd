@@ -14,7 +14,7 @@ func test_an_inspector_is_announced_a_day_ahead_with_a_visit_inside_the_window()
 	print("inspector plan: %s" % [plan])
 	assert_str(incident["state"]).is_equal(IncidentCatalogue.ANNOUNCED)
 	assert_int(_presented.size()).is_equal(1)
-	assert_int(GameCalendar.day_of(plan["visit_tick"])).is_equal(2)
+	assert_int(GameCalendar.day_of(plan["visit_tick"], 0)).is_equal(2)
 	assert_int(plan["visit_tick"]).is_between(plan["window_from"], plan["window_to"])
 	assert_int(_director.next_event_tick(0)).is_equal(plan["visit_tick"])
 
@@ -82,7 +82,7 @@ func test_a_rush_books_capped_extra_passengers_and_the_card_says_the_same_counts
 	assert_str(incident["state"]).is_equal(IncidentCatalogue.ANNOUNCED)
 	var booked := 0
 	for flight: Dictionary in plan["flights"]:
-		assert_int(GameCalendar.day_of(flight["departs"])).is_equal(2)
+		assert_int(GameCalendar.day_of(flight["departs"], 0)).is_equal(2)
 		assert_int(flight["extra"]).is_equal(_world.sim.booking_override_of(flight["flight"]))
 		assert_int(flight["extra"]).is_between(1, mini(IncidentTuning.RUSH_EXTRA, HEADROOM))
 		booked += flight["extra"]
@@ -90,7 +90,7 @@ func test_a_rush_books_capped_extra_passengers_and_the_card_says_the_same_counts
 	assert_int(booked).is_equal(HEADROOM)
 	assert_int(plan["total"]).is_equal(booked)
 	var words := IncidentCopy.fill(
-		IncidentCatalogue.panel_copy("rush"), incident, _world.clock.tick
+		IncidentCatalogue.panel_copy("rush"), incident, _world.clock.tick, 0
 	)
 	var text: String = words["body"]
 	assert_str(text).contains("%d extra passengers" % plan["total"])
@@ -119,7 +119,7 @@ func test_a_favour_offer_names_extra_passengers_within_the_headroom() -> void:
 	assert_bool(IncidentTuning.FAVOUR_EXTRA > HEADROOM).is_true()
 	assert_int(_world.sim.booking_override_of(plan["flight"])).is_equal(0)
 	var copy := IncidentCopy.fill(
-		IncidentCatalogue.panel_copy("favour"), incident, _world.clock.tick
+		IncidentCatalogue.panel_copy("favour"), incident, _world.clock.tick, 0
 	)
 	assert_str(copy["body"]).contains("%d more passengers" % HEADROOM)
 	assert_str(copy["reward"]).contains("%d money" % IncidentTuning.FAVOUR_BONUS_MONEY)

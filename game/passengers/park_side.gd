@@ -130,9 +130,10 @@ static func _open(sim: PassengerSim, seat: Dictionary) -> int:
 ## guest's roller keeps its bag's hand (SecurityLooks.hand_of()), so a
 ## one-bag neighbour steers round it here, and it lies closer in
 ## (GateRoller.TWO_BAG_SIDE_M): two two-bag rollers whose hands face one gap
-## fit in it. The seat row's middle chair lies 0.36 m to its guest's left
-## (GateRoller.slide()), so the right gap this rule gives first is the side
-## the guest does not shuffle toward to sit down (decision
+## fit in it. A chair that lies to its guest's left (GateRoller.slide(); none
+## of the seat row's chairs does since each is centred on its cell) gets the
+## right gap this rule gives first, the side the guest does not shuffle toward
+## to sit down (decision
 ## gate-chair-roller-lies-opposite-the-sit-down-shuffle-on-a-ch); with that gap
 ## taken the rule lays it left as for any chair, and GateRoller.shuffle_side()
 ## lays it out past the feet shuffling toward it. Only sim state: the seats,

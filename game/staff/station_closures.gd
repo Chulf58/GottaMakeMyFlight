@@ -170,26 +170,26 @@ func status(station: int) -> Status:
 func status_text(station: int) -> String:
 	var shown := status(station)
 	if shown == Status.FAULT:
-		return fault_text(staff.faults.repair_tick(station))
+		return fault_text(staff.faults.repair_tick(station), staff.sim.clock.epoch)
 	return STATUS_TEXT[shown]
 
 
 ## The words for a scanner fault repaired on tick `repair`, in English.
-static func fault_text(repair: int) -> String:
-	return "%s, fixed by %s" % [STATUS_TEXT[Status.FAULT], GameCalendar.clock_text(repair)]
+static func fault_text(repair: int, epoch: int) -> String:
+	return "%s, fixed by %s" % [STATUS_TEXT[Status.FAULT], GameCalendar.clock_text(repair, epoch)]
 
 
 ## status_text() in the player's words: the screens call this, never status_text().
 func status_words(station: int) -> String:
 	var shown := status(station)
 	if shown == Status.FAULT:
-		return fault_words(staff.faults.repair_tick(station))
+		return fault_words(staff.faults.repair_tick(station), staff.sim.clock.epoch)
 	return TranslationServer.translate(STATUS_TEXT[shown], STATUS_CONTEXT)
 
 
 ## fault_text() in the player's words, one whole sentence with the time in a placeholder.
-static func fault_words(repair: int) -> String:
-	return _words.fault(repair)
+static func fault_words(repair: int, epoch: int) -> String:
+	return _words.fault(repair, epoch)
 
 
 ## Every English msgid, for the test that checks the list against STATUS_TEXT.
@@ -224,9 +224,9 @@ func _finishing(station: int) -> bool:
 class Words:
 	extends RefCounted
 
-	func fault(repair: int) -> String:
+	func fault(repair: int, epoch: int) -> String:
 		return tr("Scanner fault, fixed by {time}", "station status").format(
-			{"time": GameCalendar.clock_text(repair)}
+			{"time": GameCalendar.clock_text(repair, epoch)}
 		)
 
 	## Never called: every STATUS_TEXT line inside tr(), so POT generation finds it.

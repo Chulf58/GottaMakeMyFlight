@@ -72,7 +72,7 @@ func test_save_and_load_while_boarding_gives_the_same_future_across_midnight() -
 	_log.clear()
 	_run(source[0], end)
 	assert_array(after_load).is_equal(_log)
-	var am_first := GameCalendar.tick_at(0, 500) - FlightTimetable.departure_offset()
+	var am_first := GameCalendar.tick_at(0, 500, 0) - FlightTimetable.departure_offset()
 	var am_issued := GameCalendar.TICKS_PER_DAY + am_first - FlightTimetable.ISSUE_LEAD_TICKS
 	assert_bool(_log.has("%d add AM-d1" % am_issued)).is_true()
 	assert_bool(_log.has("18000 NIGHT-d0 %d" % FlightSim.State.PUSHBACK)).is_true()

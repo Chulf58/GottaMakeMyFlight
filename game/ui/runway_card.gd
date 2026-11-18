@@ -219,7 +219,7 @@ func _refresh() -> void:
 	_current.text = size_line(runway.size)
 	_next.text = next_line(next)
 	_next.visible = next != "" and not runway.works.scheduled()
-	_schedule.text = RunwayWorks.schedule_text(runway.works, flights.tick)
+	_schedule.text = RunwayWorks.schedule_text(runway.works, flights.tick, flights.epoch)
 	_schedule.visible = _schedule.text != ""
 	_problem.text = refusal
 	_problem.visible = refusal != "" and not runway.works.scheduled()

@@ -55,41 +55,41 @@ static func template(kind: String) -> Dictionary:
 ## `copy` with its {name} slots filled from `incident`'s plan. A copy without
 ## slots, or an incident without a plan, comes back as it was. `now_tick` is the
 ## clock when the words are shown: a flight is "today's" or "tomorrow's" by it.
-static func fill(copy: Dictionary, incident: Dictionary, now_tick: int) -> Dictionary:
-	var vars := vars_of(incident, now_tick)
+static func fill(copy: Dictionary, incident: Dictionary, now_tick: int, epoch: int) -> Dictionary:
+	var vars := vars_of(incident, now_tick, epoch)
 	var out := {}
 	for key: String in copy:
 		out[key] = str(copy[key]).format(vars)
 	return out
 
 
-## The slot values of an incident's plan.
-static func vars_of(incident: Dictionary, now_tick: int) -> Dictionary:
+## The slot values of an incident's plan, its times at calendar epoch `epoch`.
+static func vars_of(incident: Dictionary, now_tick: int, epoch: int) -> Dictionary:
 	var plan: Dictionary = incident.get("plan", {})
 	if plan.is_empty():
 		return {}
 	match incident["kind"]:
 		IncidentCatalogue.INSPECTOR:
 			return {
-				"from": GameCalendar.clock_text(plan["window_from"]),
-				"to": GameCalendar.clock_text(plan["window_to"]),
+				"from": GameCalendar.clock_text(plan["window_from"], epoch),
+				"to": GameCalendar.clock_text(plan["window_to"], epoch),
 				"bonus": plan["pass_money"],
 				"max_messes": plan["max_messes"],
 				"max_full_queue": plan["max_full_queue"],
 				"penalty": stars_text(plan["fail_half_stars"]),
 			}
 		IncidentCatalogue.RUSH:
-			return _rush_vars(plan)
+			return _rush_vars(plan, epoch)
 		IncidentCatalogue.VIP:
 			return {
-				"flight": _flight_text(plan, now_tick),
+				"flight": _flight_text(plan, now_tick, epoch),
 				"bonus": plan["bonus"],
 				"good_mood": plan["good_mood"],
 				"penalty": stars_text(plan["miss_half_stars"]),
 			}
 		IncidentCatalogue.FAVOUR:
 			return {
-				"flight": _flight_text(plan, now_tick),
+				"flight": _flight_text(plan, now_tick, epoch),
 				"extra": plan["extra"],
 				"bonus": plan["bonus"],
 			}
@@ -99,7 +99,7 @@ static func vars_of(incident: Dictionary, now_tick: int) -> Dictionary:
 ## The result card of a finished VIP, {"title", "detail"}, filled from its plan;
 ## {} for an incident that is not a VIP or ended without a result to tell
 ## (IncidentMajors.NOT_HELD).
-static func vip_result(incident: Dictionary) -> Dictionary:
+static func vip_result(incident: Dictionary, epoch: int) -> Dictionary:
 	if incident.get("kind", "") != IncidentCatalogue.VIP:
 		return {}
 	var words := {}
@@ -121,12 +121,12 @@ static func vip_result(incident: Dictionary) -> Dictionary:
 			}
 		_:
 			return {}
-	return fill(words, incident, incident["fire_tick"])
+	return fill(words, incident, incident["fire_tick"], epoch)
 
 
 ## The result card of a finished inspector visit, {"title", "detail"}, filled
 ## from its plan; {} for an incident that is not an inspector or has no result.
-static func inspector_result(incident: Dictionary) -> Dictionary:
+static func inspector_result(incident: Dictionary, epoch: int) -> Dictionary:
 	if incident.get("kind", "") != IncidentCatalogue.INSPECTOR:
 		return {}
 	var words := {}
@@ -144,7 +144,7 @@ static func inspector_result(incident: Dictionary) -> Dictionary:
 			}
 		_:
 			return {}
-	var out := fill(words, incident, incident["fire_tick"])
+	var out := fill(words, incident, incident["fire_tick"], epoch)
 	if incident["outcome"] == IncidentMajors.FAILED:
 		out["detail"] = out["detail"].format({"found": _inspector_found(incident["plan"])})
 	return out
@@ -189,13 +189,13 @@ static func _limit(plan: Dictionary, key: String) -> String:
 
 ## "today's", "tomorrow's" or "day N's" for a flight leaving at `departs`, seen
 ## from `now`: the days the departures board heads its list with.
-static func day_word(departs: int, now: int) -> String:
-	var ahead := GameCalendar.day_of(departs) - GameCalendar.day_of(now)
+static func day_word(departs: int, now: int, epoch: int) -> String:
+	var ahead := GameCalendar.day_of(departs, epoch) - GameCalendar.day_of(now, epoch)
 	if ahead == 0:
 		return _translator.tr("today's")
 	if ahead == 1:
 		return _translator.tr("tomorrow's")
-	return _translator.tr("day {day}'s").format({"day": GameCalendar.day_of(departs) + 1})
+	return _translator.tr("day {day}'s").format({"day": GameCalendar.day_of(departs, epoch) + 1})
 
 
 ## Half stars as words: "1 star", "half a star", "1.5 stars".
@@ -211,22 +211,25 @@ static func stars_text(half_stars: int) -> String:
 
 ## The passenger inspect card's line for the VIP, "VIP for today's 15:15
 ## flight", from the VIP plan.
-static func vip_line(plan: Dictionary, now_tick: int) -> String:
-	return _translator.tr("VIP for {flight}").format({"flight": _flight_text(plan, now_tick)})
+static func vip_line(plan: Dictionary, now_tick: int, epoch: int) -> String:
+	var flight := _flight_text(plan, now_tick, epoch)
+	return _translator.tr("VIP for {flight}").format({"flight": flight})
 
 
 ## "today's 10:29 flight": the plan's flight, seen from the day of `now_tick`.
-static func _flight_text(plan: Dictionary, now_tick: int) -> String:
-	var when := GameCalendar.clock_text(plan["departs"])
+static func _flight_text(plan: Dictionary, now_tick: int, epoch: int) -> String:
+	var when := GameCalendar.clock_text(plan["departs"], epoch)
 	return _translator.tr("{day} {time} flight").format(
-		{"day": day_word(plan["departs"], now_tick), "time": when}
+		{"day": day_word(plan["departs"], now_tick, epoch), "time": when}
 	)
 
 
-static func _rush_vars(plan: Dictionary) -> Dictionary:
+static func _rush_vars(plan: Dictionary, epoch: int) -> Dictionary:
 	var parts := PackedStringArray()
 	for flight: Dictionary in plan["flights"]:
-		parts.append("%s +%d" % [GameCalendar.clock_text(flight["departs"]), flight["extra"]])
+		parts.append(
+			"%s +%d" % [GameCalendar.clock_text(flight["departs"], epoch), flight["extra"]]
+		)
 	return {
 		"total": plan["total"],
 		"count": (plan["flights"] as Array).size(),

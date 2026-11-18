@@ -39,6 +39,23 @@ static func load_int(path: String, key: String, default: int, who: String) -> in
 	return int(_load(path, key, default, who))
 
 
+## The saved choice for `key` as a game boots: `default` for a New Airport (the
+## title's New Airport leaves the remembered choice unread, though a toggle made
+## in that game is still saved), the saved choice for a continued game or a run
+## that did not come through the title.
+static func load_boot_flag(path: String, key: String, default: bool, who: String) -> bool:
+	if GameBoot.new_airport:
+		return default
+	return load_flag(path, key, default, who)
+
+
+## load_boot_flag for a step number.
+static func load_boot_int(path: String, key: String, default: int, who: String) -> int:
+	if GameBoot.new_airport:
+		return default
+	return load_int(path, key, default, who)
+
+
 ## Writes the choice next to any other settings already in the file.
 static func save_flag(path: String, key: String, value: bool, who: String) -> void:
 	_save(path, key, value, who)

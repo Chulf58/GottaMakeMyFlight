@@ -122,24 +122,26 @@ static func _entries(flights: Array[Dictionary]) -> Array:
 ## {"tick", "opened_tick", "contracts", "start_day", "next_day", "ended",
 ## "flights", "landed"} ready to install, or {"error"}. `gates` are the gates
 ## with a stand. The taxi plans are FlightSim's to check.
-static func load(data: Dictionary, gates: Array[String]) -> Dictionary:
+static func load(data: Dictionary, gates: Array[String], epoch: int) -> Dictionary:
 	var problem := _top_problem(data)
 	if problem != "":
 		return {"error": problem}
 	var tick := int(data["tick"])
 	var opened := int(data.get("opened_tick", 0))
 	var contracts: Array[Dictionary] = []
-	problem = _read_contracts(data["contracts"], tick, gates, contracts)
+	problem = _read_contracts(data["contracts"], tick, epoch, gates, contracts)
 	var start_day := {}
 	var ended := {}
 	if problem == "":
-		problem = _read_start_days(data, contracts, opened, start_day)
+		problem = _read_start_days(data, contracts, opened, epoch, start_day)
 	if problem == "":
-		problem = _read_ended(data, contracts, start_day, opened, tick, ended)
+		problem = _read_ended(data, contracts, start_day, opened, tick, epoch, ended)
 	if problem == "":
 		problem = _clash_problem(contracts, ended)
 	if problem == "":
-		problem = _next_day_problem(data["next_day"], contracts, start_day, ended, opened, tick)
+		problem = _next_day_problem(
+			data["next_day"], contracts, start_day, ended, opened, tick, epoch
+		)
 	if problem != "":
 		return {"error": problem}
 	var next_day := {}
@@ -147,7 +149,7 @@ static func load(data: Dictionary, gates: Array[String]) -> Dictionary:
 		next_day[contract["id"]] = int(data["next_day"][contract["id"]])
 	var flights: Array[Dictionary] = []
 	problem = _read_flights(
-		data["flights"], contracts, start_day, next_day, ended, tick, gates, flights
+		data["flights"], contracts, start_day, next_day, ended, tick, epoch, gates, flights
 	)
 	var reserving := {}
 	if problem == "":
@@ -155,10 +157,10 @@ static func load(data: Dictionary, gates: Array[String]) -> Dictionary:
 	var landed: Array[Dictionary] = []
 	if problem == "":
 		problem = _read_landed(
-			data["landed"], contracts, start_day, next_day, tick, flights, landed
+			data["landed"], contracts, start_day, next_day, tick, epoch, flights, landed
 		)
 	if problem == "":
-		problem = _coverage_problem(contracts, start_day, next_day, tick, flights, landed)
+		problem = _coverage_problem(contracts, start_day, next_day, tick, epoch, flights, landed)
 	if problem != "":
 		return {"error": problem}
 	return {
@@ -201,13 +203,14 @@ static func _top_problem(data: Dictionary) -> String:
 	return ""
 
 
-## first_day must be one that accepting between tick 0 and `tick` gives with a
+## first_day must be one that accepting between the calendar's start (`epoch`)
+## and `tick` gives with a
 ## pair inside the bounds (the contract may have moved since, so its pair now
 ## need not be the one it was accepted with; a TAXI_IN of TaxiTimes.MAX_IN
 ## gives the latest day), and the departure one its traits allow
 ## (FlightContract.window_problem).
 static func _read_contracts(
-	entries: Array, tick: int, gates: Array[String], out: Array[Dictionary]
+	entries: Array, tick: int, epoch: int, gates: Array[String], out: Array[Dictionary]
 ) -> String:
 	for entry in entries:
 		var problem := FlightContract.problem(entry, FlightContract.KEYS)
@@ -218,9 +221,10 @@ static func _read_contracts(
 		if not gates.has(entry["gate"]):
 			return "contract gate '%s' has no stand" % entry["gate"]
 		var contract := FlightContract.make(entry)
-		var earliest := FlightTimetable.first_day(_with_taxi(contract, TaxiTimes.BASE), 0)
+		var base := _with_taxi(contract, TaxiTimes.BASE)
+		var earliest := FlightTimetable.first_day(base, epoch, epoch)
 		var latest_taxi := [TaxiTimes.MAX_IN, TaxiTimes.BASE[1]]
-		var latest := FlightTimetable.first_day(_with_taxi(contract, latest_taxi), tick)
+		var latest := FlightTimetable.first_day(_with_taxi(contract, latest_taxi), tick, epoch)
 		if contract["first_day"] < earliest or contract["first_day"] > latest:
 			return "contract %s first_day is not one an acceptance could give" % contract["id"]
 		for other in out:
@@ -259,6 +263,7 @@ static func _read_ended(
 	start_day: Dictionary,
 	opened: int,
 	tick: int,
+	epoch: int,
 	out: Dictionary
 ) -> String:
 	if not data.has("ended"):
@@ -271,7 +276,7 @@ static func _read_ended(
 		if not WholeNumber.is_whole(value) or opened < 0:
 			return "ended for %s must be a whole day of an open airport" % contract["id"]
 		var first: int = start_day[contract["id"]]
-		var last := maxi(first, FlightTimetable.next_day(contract, tick))
+		var last := maxi(first, FlightTimetable.next_day(contract, tick, epoch))
 		if int(value) < first or int(value) > last:
 			return "ended for %s is not a day it could have ended on" % contract["id"]
 		out[contract["id"]] = int(value)
@@ -286,7 +291,7 @@ static func _read_ended(
 ## has a first_day no earlier than an acceptance at the opening gives with the
 ## shortest pair, TaxiTimes.BASE (it may have been accepted at another gate).
 static func _read_start_days(
-	data: Dictionary, contracts: Array[Dictionary], opened: int, out: Dictionary
+	data: Dictionary, contracts: Array[Dictionary], opened: int, epoch: int, out: Dictionary
 ) -> String:
 	if not data.has("start_day"):
 		for contract in contracts:
@@ -303,9 +308,10 @@ static func _read_start_days(
 		var first: int = contract["first_day"]
 		var ok := day == first
 		if opened >= 0:
-			var after_opening := FlightTimetable.opening_day(contract, opened)
+			var after_opening := FlightTimetable.opening_day(contract, opened, epoch)
 			var base := _with_taxi(contract, TaxiTimes.BASE)
-			ok = day == after_opening or (ok and first >= FlightTimetable.first_day(base, opened))
+			var earliest := FlightTimetable.first_day(base, opened, epoch)
+			ok = day == after_opening or (ok and first >= earliest)
 		if not ok:
 			return "start_day for %s is not one the opening could give" % contract["id"]
 		out[contract["id"]] = day
@@ -320,7 +326,8 @@ static func _next_day_problem(
 	start_day: Dictionary,
 	ended: Dictionary,
 	opened: int,
-	tick: int
+	tick: int,
+	epoch: int
 ) -> String:
 	if next_day.size() != contracts.size():
 		return "next_day must have one entry per contract"
@@ -330,7 +337,7 @@ static func _next_day_problem(
 			return "next_day for %s must be a whole number" % contract["id"]
 		var expected: int = start_day[contract["id"]]
 		if opened >= 0:
-			expected = maxi(expected, FlightTimetable.next_day(contract, tick))
+			expected = maxi(expected, FlightTimetable.next_day(contract, tick, epoch))
 		if ended.has(contract["id"]):
 			expected = ended[contract["id"]]
 		if int(value) != expected:
@@ -345,6 +352,7 @@ static func _read_flights(
 	next_day: Dictionary,
 	ended: Dictionary,
 	tick: int,
+	epoch: int,
 	gates: Array[String],
 	out: Array[Dictionary]
 ) -> String:
@@ -354,9 +362,11 @@ static func _read_flights(
 		if problem == "":
 			var starts := _ints(entry["starts"])
 			if entry["contract"] == "":
-				problem = _one_off_problem(entry, starts, contracts, ended)
+				problem = _one_off_problem(entry, starts, contracts, ended, epoch)
 			else:
-				problem = _occurrence_problem(entry, starts, contracts, start_day, next_day, tick)
+				problem = _occurrence_problem(
+					entry, starts, contracts, start_day, next_day, tick, epoch
+				)
 			if problem == "" and int(entry["state"]) != FlightTimetable.state_at(starts, tick):
 				problem = "flight %s state does not match the tick" % entry["id"]
 			if problem == "" and not out.is_empty():
@@ -366,7 +376,7 @@ static func _read_flights(
 				out.append(_record(entry, starts))
 		if problem != "":
 			return problem
-	return _fixed_clash_problem(out, contracts, ended)
+	return _fixed_clash_problem(out, contracts, ended, epoch)
 
 
 ## A live occurrence keeps the gate and time it was issued with, whether its
@@ -374,7 +384,7 @@ static func _read_flights(
 ## one-offs excepted), and no running contract may meet another's live
 ## occurrence there.
 static func _fixed_clash_problem(
-	flights: Array[Dictionary], contracts: Array[Dictionary], ended: Dictionary
+	flights: Array[Dictionary], contracts: Array[Dictionary], ended: Dictionary, epoch: int
 ) -> String:
 	for i in flights.size():
 		var a := flights[i]
@@ -395,7 +405,7 @@ static func _fixed_clash_problem(
 		for flight in flights:
 			if flight["contract"] == "" or flight["contract"] == contract["id"]:
 				continue
-			if FlightTimetable.contract_meets(contract, flight["gate"], flight["starts"]):
+			if FlightTimetable.contract_meets(contract, flight["gate"], flight["starts"], epoch):
 				return "contract %s clashes with flight %s" % [contract["id"], flight["id"]]
 	return ""
 
@@ -432,7 +442,11 @@ static func _flight_problem(entry: Variant, seen: Dictionary, gates: Array[Strin
 
 
 static func _one_off_problem(
-	entry: Dictionary, starts: Array[int], contracts: Array[Dictionary], ended: Dictionary
+	entry: Dictionary,
+	starts: Array[int],
+	contracts: Array[Dictionary],
+	ended: Dictionary,
+	epoch: int
 ) -> String:
 	if int(entry["day"]) != -1:
 		return "one-off flight %s must have day -1" % entry["id"]
@@ -441,7 +455,7 @@ static func _one_off_problem(
 	for contract in contracts:
 		if ended.has(contract["id"]):
 			continue
-		if FlightTimetable.contract_meets(contract, entry["gate"], starts):
+		if FlightTimetable.contract_meets(contract, entry["gate"], starts, epoch):
 			return "flight %s clashes with contract %s" % [entry["id"], contract["id"]]
 	return ""
 
@@ -457,7 +471,8 @@ static func _occurrence_problem(
 	contracts: Array[Dictionary],
 	start_day: Dictionary,
 	next_day: Dictionary,
-	tick: int
+	tick: int,
+	epoch: int
 ) -> String:
 	var contract := {}
 	for candidate in contracts:
@@ -470,7 +485,7 @@ static func _occurrence_problem(
 		return "flight %s was not issued" % entry["id"]
 	if entry["id"] != FlightTimetable.occurrence_id(contract["id"], day):
 		return "flight %s does not match its contract and day" % entry["id"]
-	var problem := _starts_problem(entry, starts, contract, day)
+	var problem := _starts_problem(entry, starts, contract, day, epoch)
 	if problem != "":
 		return problem
 	if tick >= 0 and tick >= FlightTimetable.prune_tick(starts):
@@ -483,12 +498,12 @@ static func _occurrence_problem(
 ## valid pair (TaxiTimes.problem) no shorter than its saved stand's routes need
 ## (TaxiTimes.for_stand); the pair need not be the contract's now.
 static func _starts_problem(
-	entry: Dictionary, starts: Array[int], contract: Dictionary, day: int
+	entry: Dictionary, starts: Array[int], contract: Dictionary, day: int, epoch: int
 ) -> String:
 	var pair := TaxiTimes.of_starts(starts)
 	if TaxiTimes.problem(pair) != "":
 		return "flight %s taxi times %s are not a pair a gate gives" % [entry["id"], pair]
-	var departs := FlightTimetable.starts_for(contract, day)[FlightSim.State.PUSHBACK]
+	var departs := FlightTimetable.starts_for(contract, day, epoch)[FlightSim.State.PUSHBACK]
 	var built := FlightSim.schedule_starts(starts[0], pair)
 	if starts != built or starts[FlightSim.State.PUSHBACK] != departs:
 		return "flight %s does not match its contract's timetable" % entry["id"]
@@ -508,6 +523,7 @@ static func _coverage_problem(
 	start_day: Dictionary,
 	next_day: Dictionary,
 	tick: int,
+	epoch: int,
 	flights: Array[Dictionary],
 	landed: Array[Dictionary]
 ) -> String:
@@ -515,7 +531,7 @@ static func _coverage_problem(
 	for list in [flights, landed]:
 		for flight: Dictionary in list:
 			listed[flight["id"]] = true
-	var yesterday := GameCalendar.day_of(tick) - 1
+	var yesterday := GameCalendar.day_of(tick, epoch) - 1
 	for contract in contracts:
 		var id: String = contract["id"]
 		for day in range(maxi(start_day[id], yesterday), next_day[id]):
@@ -562,13 +578,14 @@ static func _read_landed(
 	start_day: Dictionary,
 	next_day: Dictionary,
 	tick: int,
+	epoch: int,
 	flights: Array[Dictionary],
 	out: Array[Dictionary]
 ) -> String:
 	var seen := {}
 	for flight in flights:
 		seen[flight["id"]] = true
-	var today := GameCalendar.day_of(tick)
+	var today := GameCalendar.day_of(tick, epoch)
 	var all_gates: Array[String] = []
 	for entry: Variant in entries:
 		if typeof(entry) == TYPE_DICTIONARY and typeof(entry.get("gate")) == TYPE_STRING:
@@ -578,7 +595,7 @@ static func _read_landed(
 		if problem != "":
 			return problem
 		var starts := _ints(entry["starts"])
-		problem = _occurrence_problem(entry, starts, contracts, start_day, next_day, -1)
+		problem = _occurrence_problem(entry, starts, contracts, start_day, next_day, -1, epoch)
 		if problem != "":
 			return problem
 		var day := int(entry["day"])

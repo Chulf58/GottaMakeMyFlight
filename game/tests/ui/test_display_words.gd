@@ -140,7 +140,7 @@ func test_pseudolocalization_reaches_each_display_helper() -> void:
 		"ready": DisplayWords.ready(),
 		"reason": DisplayWords.reason("No staff on duty"),
 		"plane": DisplayWords.biggest_plane("medium"),
-		"fault": DisplayWords.fault_status(120),
+		"fault": DisplayWords.fault_status(120, 0),
 		"gate": DisplayWords.gate_unlinked({"why": GateDesks.Unlinked.NO_ROOM, "gate": ""}),
 	}
 	print("pseudolocalized: %s" % [shown])

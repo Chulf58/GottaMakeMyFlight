@@ -6,7 +6,7 @@ extends GdUnitTestSuite
 ## played until passengers are in the terminal.
 
 const SEED := 8_812_026
-const PLAY_TICKS := 2700
+const PLAY_TICKS := 400
 
 var _main: Node
 var _save: SaveGame

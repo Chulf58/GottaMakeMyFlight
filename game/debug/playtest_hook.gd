@@ -667,7 +667,7 @@ func _check_passengers(found: Dictionary) -> void:
 		var node: Node3D = views.node_for(id) if views != null else null
 		if node != null and node.is_inside_tree():
 			# Against where the views mean to draw it (a gate sitter sits on its
-			# chair, up to 0.36 m beside the sim's cell-based spot).
+			# chair, a seat shift of a few cm off the sim's cell-based spot).
 			var sim_at := passengers.world_position(p)
 			var target := views.to_global(views.draw_position(p))
 			var drift := node.global_position.distance_to(target)

@@ -85,7 +85,7 @@ func test_the_clock_text_is_routed_and_keeps_its_values() -> void:
 	print("time text: %s" % text)
 	assert_str(text).starts_with("[")
 	assert_str(text).contains("Day 1")
-	assert_str(text).contains(GameCalendar.clock_text(_world.clock.tick))
+	assert_str(text).contains(GameCalendar.clock_text(_world.clock.tick, 0))
 
 
 func test_the_quiet_night_chip_is_routed() -> void:

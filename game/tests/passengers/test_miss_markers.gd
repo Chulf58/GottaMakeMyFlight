@@ -3,6 +3,9 @@ extends GdUnitTestSuite
 ## The queue-full sign over a full station, drawn by the MissMarkers child
 ## of PassengerViews.
 
+## What the sign adds on the short lane of _short_lane_world() (MissSignals.is_short).
+const SHORT_DESK := " · short queue: move the desk away from the wall"
+
 var _world: PassengerTestWorld
 var _views: PassengerViews
 var _markers: MissMarkers
@@ -86,7 +89,7 @@ func test_the_queue_full_sign_says_its_words_in_the_players_language() -> void:
 	var translation := Translation.new()
 	translation.locale = TranslationServer.get_locale()
 	translation.add_plural_message(
-		"Queue full · {count} waiting",
+		"Queue full · {count} waiting" + SHORT_DESK,
 		PackedStringArray(["QF1 {count}", "QFN {count}"]),
 		"sign text"
 	)
@@ -110,7 +113,7 @@ func test_a_full_desk_gets_a_sign_above_it() -> void:
 	var sign := _markers.sign_for(desk)
 	assert_object(sign).is_not_null()
 	assert_bool(sign.visible).is_true()
-	assert_str(_markers.sign_text(desk)).is_equal("Queue full · 3 waiting")
+	assert_str(_markers.sign_text(desk)).is_equal("Queue full · 3 waiting" + SHORT_DESK)
 	var centre := _desk_centre(desk)
 	var flat := Vector2(sign.position.x, sign.position.z)
 	assert_float(flat.distance_to(Vector2(centre.x, centre.z))).is_less(0.001)
@@ -133,7 +136,9 @@ func test_the_sign_caption_counts_the_passengers_held_outside_the_lane() -> void
 	var waiting := _world.sim.queue_of(desk).size() + 2
 	print("queue %d held 2 text %s" % [_world.sim.queue_of(desk).size(), _markers.sign_text(desk)])
 	assert_int(waiting).is_greater(2)
-	assert_str(_markers.sign_text(desk)).is_equal("Queue full · %d waiting" % waiting)
+	assert_str(_markers.sign_text(desk)).is_equal(
+		"Queue full · %d waiting%s" % [waiting, SHORT_DESK]
+	)
 
 
 func test_the_sign_goes_when_the_queue_drains() -> void:
@@ -153,7 +158,7 @@ func test_the_sign_goes_when_the_queue_drains() -> void:
 	assert_int(_world.sim.queue_of(desk).size()).is_equal(3)
 	assert_object(_markers.sign_for(desk)).is_same(sign)
 	assert_bool(sign.visible).is_true()
-	assert_str(_markers.sign_text(desk)).is_equal("Queue full · 3 waiting")
+	assert_str(_markers.sign_text(desk)).is_equal("Queue full · 3 waiting" + SHORT_DESK)
 
 
 func test_a_desk_removed_while_paused_loses_its_sign_at_once() -> void:
@@ -217,7 +222,7 @@ func test_a_lane_shortened_while_paused_shows_its_sign_at_once() -> void:
 	var sign := _markers.sign_for(desk)
 	assert_object(sign).is_not_null()
 	assert_bool(sign.visible).is_true()
-	assert_str(_markers.sign_text(desk)).is_equal("Queue full · 3 waiting")
+	assert_str(_markers.sign_text(desk)).is_equal("Queue full · 3 waiting" + SHORT_DESK)
 
 
 ## The sign is SIGN_PX on screen whatever the UI scale (content_scale_factor):
@@ -273,7 +278,7 @@ func test_the_full_sign_is_the_queue_glyph_and_reports_its_hover_rect() -> void:
 	print("hover signs %s, foot %s" % [entries, foot])
 	assert_int(entries.size()).is_equal(1)
 	assert_str(entries[0]["key"]).is_equal("queue:%d" % desk)
-	assert_str(entries[0]["text"]).is_equal("Queue full · 3 waiting")
+	assert_str(entries[0]["text"]).is_equal("Queue full · 3 waiting" + SHORT_DESK)
 	assert_int(entries[0]["select"]).is_equal(desk)
 	var rect: Rect2 = entries[0]["rect"]
 	var side := MissMarkers.SIGN_PX / get_tree().root.get_stretch_transform().get_scale().y

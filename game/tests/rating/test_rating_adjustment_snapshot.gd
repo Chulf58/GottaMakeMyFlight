@@ -15,7 +15,7 @@ func before_test() -> void:
 
 
 func _noon(day: int) -> int:
-	return GameCalendar.tick_at(day, 12 * 60)
+	return GameCalendar.tick_at(day, 12 * 60, 0)
 
 
 ## A day of passengers at 3.5 stars and two adjustments held at noon of day 1.

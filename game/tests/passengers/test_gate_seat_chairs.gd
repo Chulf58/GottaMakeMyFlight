@@ -1,8 +1,9 @@
 class_name TestGateSeatChairs
 extends GdUnitTestSuite
-## A gate seat_row has three cells and four chairs. A seated passenger is drawn
-## on a chair pan of the drawn seat_row.glb by the view (GateChairs), while
-## the sim keeps seating by cell, at every facing and grid origin.
+## A gate seat_row has three cells and three chairs, one centred on each cell.
+## A seated passenger is drawn on a chair pan of the drawn seat_row.glb by the
+## view (GateChairs), while the sim keeps seating by cell, at every facing and
+## grid origin.
 
 const SEAT_ROW := "res://assets/interior/seat_row.glb"
 ## The pans' top faces: tools/blender/interior/build_interior_kit.py puts the
@@ -61,10 +62,10 @@ func _pan_centres() -> Array[float]:
 	return centres
 
 
-func test_the_seat_row_mesh_has_four_pans_and_each_cell_maps_to_its_own() -> void:
+func test_the_seat_row_mesh_has_three_pans_one_on_each_cell() -> void:
 	var pans := _pan_centres()
 	print("pan centres %s" % [pans])
-	assert_int(pans.size()).is_equal(4)
+	assert_int(pans.size()).is_equal(3)
 	var used := {}
 	for i in GateChairs.CHAIR_OFFSET_M.size():
 		var chair: float = (i - 1) + GateChairs.CHAIR_OFFSET_M[i]
@@ -73,6 +74,8 @@ func test_the_seat_row_mesh_has_four_pans_and_each_cell_maps_to_its_own() -> voi
 			if absf(pans[j] - chair) < MATCH_M:
 				nearest = j
 		assert_int(nearest).is_not_equal(-1)
+		# Cell i's chair is the i-th pan from the left: none is skipped.
+		assert_int(nearest).is_equal(i)
 		used[nearest] = true
 	assert_int(used.size()).is_equal(3)
 

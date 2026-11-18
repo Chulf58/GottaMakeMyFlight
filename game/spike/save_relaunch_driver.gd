@@ -213,7 +213,7 @@ func _save_process() -> void:
 			var wallet := (_main.get_node("Finances") as Finances).wallet.balance
 			if wallet != _start_wallet and _sim(_main).active_count() > 0:
 				_step = 3
-			elif GameCalendar.day_of(_clock(_main).tick) > 0:
+			elif GameCalendar.day_of(_clock(_main).tick, _clock(_main).epoch) > 0:
 				_fail("day 0 ended before a paid flight with passengers still in the terminal")
 		3:
 			_save()
@@ -230,7 +230,7 @@ func _save() -> void:
 		_fail("save_to_file(%s) failed: %s" % [path, save_game.message_text()])
 		return
 	values["seed"] = str(_seed)
-	values["day"] = str(GameCalendar.day_of(int(values["tick"])))
+	values["day"] = str(GameCalendar.day_of(int(values["tick"]), _clock(_main).epoch))
 	var file := FileAccess.open(_dir.path_join(EXPECTED_FILE), FileAccess.WRITE)
 	if file == null:
 		_fail("cannot write %s" % _dir.path_join(EXPECTED_FILE))

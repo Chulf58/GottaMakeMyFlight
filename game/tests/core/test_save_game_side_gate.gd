@@ -5,8 +5,8 @@ extends GdUnitTestSuite
 ## holds its binding, the apron part its west stand, and a load installs both,
 ## with the stand rebuilt as for_exit() gives it (ApronStand.stands_problem()).
 ## One boot of main.tscn: the starter terminal with its gate desk (gate A, the
-## north exit), plus an exit low in the west wall with a gate desk beside it
-## (gate B), run until the airport opens.
+## north exit), run until the airport opens so the starter flight takes gate A,
+## then an exit low in the west wall with a gate desk beside it (gate B).
 
 const SEED := 5_501_023
 ## ReferenceTerminal cells, moved onto the grid by the site's starter offset:
@@ -31,6 +31,11 @@ func before() -> void:
 	_gates = _main.get_node("GateDesks")
 	_apron = _main.get_node("ApronStand")
 	SaveTestKit.start_airport(_main)
+	for i in 6000:
+		if _flights.opened_tick >= 0:
+			break
+		SaveTestKit.step(_main)
+	assert_int(_flights.opened_tick).is_greater_equal(0)
 	var offset := ReferenceTerminal.offset_on(_mode.grid)
 	var exit_at := WEST_EXIT + offset
 	var edits: Array[BuildEdit] = [
@@ -42,11 +47,6 @@ func before() -> void:
 	_west = _mode.grid.object_at(exit_at)
 	var desk := _mode.grid.apply(BuildEdit.place_object(GateDesks.DESK, WEST_DESK + offset, 0))
 	assert_bool(desk.ok).override_failure_message(desk.reason_text()).is_true()
-	for i in 6000:
-		if _flights.opened_tick >= 0:
-			break
-		SaveTestKit.step(_main)
-	assert_int(_flights.opened_tick).is_greater_equal(0)
 
 
 func after() -> void:

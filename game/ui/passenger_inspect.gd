@@ -9,6 +9,12 @@ extends PanelContainer
 ## (PassengerThoughts), newest first, one button each, coral for a bad thought
 ## and green for a good one.
 ##
+## Under the name come the trip line (how they arrived and what they hope to
+## buy, PassengerTrip) and the bag line (carry-on, liquids and the checked bag,
+## PassengerBags). The name is PassengerNames.name_of(), made from the id and
+## never saved (decision follow-invitation-and-passenger-card-a-click-a-
+## passenger-fir).
+##
 ## Clicking a thought glides the camera to the cell where the passenger was,
 ## which stops the follow, and pins it (ThoughtMarker) until another thought
 ## is clicked, the passenger is deselected or a game is loaded; a line under
@@ -28,6 +34,8 @@ var views: PassengerViews
 var camera: TycoonCamera
 var flights: FlightSim
 var clock: SimClock
+## Where the checked bag is; null leaves the checked bag out of the bag line.
+var baggage: BaggageSim
 ## The pin; PassengerHud puts it in the world.
 var marker := ThoughtMarker.new()
 ## The selected built item's rows, shown in place of the passenger's while an
@@ -39,6 +47,8 @@ var actions := BuiltItemActions.new()
 var _passenger_rows := VBoxContainer.new()
 var _name := Button.new()
 var _vip := Label.new()
+var _trip := Label.new()
+var _bags := Label.new()
 var _stage := Label.new()
 var _flight := Label.new()
 var _status := Label.new()
@@ -72,7 +82,9 @@ func _init() -> void:
 	_name.tooltip_text = tr("Follow this passenger")
 	_name.pressed.connect(press_name)
 	column.add_child(_name)
-	for label in [_vip, _stage, _flight, _status, _now]:
+	_trip.name = "PassengerTrip"
+	_bags.name = "PassengerBags"
+	for label in [_vip, _trip, _bags, _stage, _flight, _status, _now]:
 		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		column.add_child(label)
 	_now.theme_type_variation = &"HudProblemText"
@@ -127,9 +139,11 @@ func refresh() -> void:
 	visible = p != null or built_card.visible
 	if p == null:
 		return
-	_name.text = tr("Passenger {id}").format({"id": p.id})
+	_name.text = PassengerNames.name_of(p.id)
 	_vip.text = _vip_line(p)
 	_vip.visible = _vip.text != ""
+	_trip.text = PassengerTrip.line(p)
+	_bags.text = PassengerBags.line(p, baggage)
 	_stage.text = PassengerHud.stage_text(sim, p)
 	_flight.text = _flight_line(p)
 	_status.text = tr("Mood {mood}   Hunger {hunger}   Toilet {toilet}   Boredom {boredom}").format(
@@ -171,7 +185,7 @@ func press_thought(index: int) -> bool:
 	marker.show_at(point, entry["positive"])
 	_marked_id = p.id
 	_marked_text = tr("The pin shows where they were at {time}").format(
-		{"time": GameCalendar.clock_text(entry["tick"])}
+		{"time": GameCalendar.clock_text(entry["tick"], clock.epoch)}
 	)
 	if camera != null:
 		camera.glide_to(point, minf(camera.distance, AlertStack.JUMP_DISTANCE))
@@ -227,6 +241,16 @@ func vip_text() -> String:
 	return _vip.text if _vip.visible else ""
 
 
+## The trip line: how the passenger arrived and what they hope to buy.
+func trip_text() -> String:
+	return _trip.text
+
+
+## The bag line: carry-on, liquids and the checked bag.
+func bags_text() -> String:
+	return _bags.text
+
+
 func status_text() -> String:
 	return _status.text
 
@@ -265,7 +289,7 @@ func _vip_line(p: Passenger) -> String:
 	if views == null or views.incidents == null or clock == null:
 		return ""
 	var plan := views.incidents.vip_plan_of(p.id)
-	return IncidentCopy.vip_line(plan, clock.tick) if not plan.is_empty() else ""
+	return IncidentCopy.vip_line(plan, clock.tick, clock.epoch) if not plan.is_empty() else ""
 
 
 ## "Flight Sunhop Lisbon, doors close 10:40": the time the Departures list shows
@@ -277,7 +301,7 @@ func _flight_line(p: Passenger) -> String:
 	if doors < 0:
 		return tr("Flight {title}").format({"title": title})
 	return tr("Flight {title}, doors close {time}").format(
-		{"title": title, "time": GameCalendar.clock_text(doors)}
+		{"title": title, "time": GameCalendar.clock_text(doors, clock.epoch)}
 	)
 
 

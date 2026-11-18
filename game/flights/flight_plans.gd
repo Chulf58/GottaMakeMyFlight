@@ -42,9 +42,9 @@ static func flight_class(world: Dictionary, flight: Dictionary) -> String:
 	return FlightSim.STARTER_TERMS["plane_size"]
 
 
-## The calendar day a flight with `starts` departs on.
-static func day_of(starts: Array) -> int:
-	return GameCalendar.day_of(starts[FlightSim.State.PUSHBACK])
+## The calendar day a flight with `starts` departs on, at calendar epoch `epoch`.
+static func day_of(starts: Array, epoch: int) -> int:
+	return GameCalendar.day_of(starts[FlightSim.State.PUSHBACK], epoch)
 
 
 ## Every flight of calendar day `day` as a GroundPlanner request.
@@ -52,10 +52,14 @@ static func requests(world: Dictionary, day: int) -> Array:
 	var out := []
 	for list: String in ["landed", "flights"]:
 		for flight: Dictionary in world[list]:
-			if flight["contract"] != "" and day_of(flight["starts"]) == day:
+			if flight["contract"] != "" and day_of(flight["starts"], world["epoch"]) == day:
 				out.append(
 					FlightGround.request(
-						flight["id"], flight_class(world, flight), flight["stand"], flight["starts"]
+						flight["id"],
+						flight_class(world, flight),
+						flight["stand"],
+						flight["starts"],
+						world["epoch"]
 					)
 				)
 	for contract: Dictionary in world["contracts"]:
@@ -67,10 +71,12 @@ static func requests(world: Dictionary, day: int) -> Array:
 		var resolved := SpurMoves.resolve(world, contract, day)
 		if resolved.is_empty():
 			continue
-		var starts := FlightTimetable.starts_for(resolved["contract"], day)
+		var starts := FlightTimetable.starts_for(resolved["contract"], day, world["epoch"])
 		var occurrence := FlightTimetable.occurrence_id(id, day)
 		out.append(
-			FlightGround.request(occurrence, contract["plane_size"], resolved["stand"], starts)
+			FlightGround.request(
+				occurrence, contract["plane_size"], resolved["stand"], starts, world["epoch"]
+			)
 		)
 	return out
 
@@ -94,12 +100,13 @@ func plan_day(world: Dictionary, day: int) -> Dictionary:
 ## plan, not assumed from the quiet night (ruling runway-upgrade-works-wait-for-
 ## a-timetable-gap-passengers-per-plane-class).
 func works_start(world: Dictionary, after: int, ticks: int) -> int:
-	var first := GameCalendar.day_of(after)
+	var epoch: int = world["epoch"]
+	var first := GameCalendar.day_of(after, epoch)
 	for day in range(first, first + WORKS_SEARCH_DAYS):
 		plan_day(world, day)
-		var from := maxi(after, GameCalendar.day_start(day))
+		var from := maxi(after, GameCalendar.day_start(day, epoch))
 		var at := _whole_gap(from, ticks)
-		if at + ticks <= GameCalendar.day_start(day + 1):
+		if at + ticks <= GameCalendar.day_start(day + 1, epoch):
 			return at
 	return -1
 
@@ -139,8 +146,8 @@ static func days_from(world: Dictionary, from_day: int) -> Array[int]:
 				seen[sampled] = true
 	# Runway works change the plan of the days they touch and of the day after.
 	for booking: Dictionary in world.get("works", []):
-		var last := GameCalendar.day_of(int(booking["to"]))
-		for sampled in range(GameCalendar.day_of(int(booking["from"])), last + 2):
+		var last := GameCalendar.day_of(int(booking["to"]), world["epoch"])
+		for sampled in range(GameCalendar.day_of(int(booking["from"]), world["epoch"]), last + 2):
 			if sampled >= from_day:
 				seen[sampled] = true
 	# A pending spur switches its side's occurrences on R's day; the day after
@@ -177,7 +184,7 @@ static func live_days(world: Dictionary) -> Array[int]:
 	var seen := {}
 	for list: String in ["landed", "flights"]:
 		for flight: Dictionary in world[list]:
-			seen[day_of(flight["starts"])] = true
+			seen[day_of(flight["starts"], world["epoch"])] = true
 	var out: Array[int] = []
 	out.assign(seen.keys())
 	out.sort()

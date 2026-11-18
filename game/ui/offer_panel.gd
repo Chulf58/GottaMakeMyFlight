@@ -167,11 +167,11 @@ static func ended_message(airline: String, destination: String) -> String:
 ## today's slot at a gate with taxi pair `taxi` (FlightTimetable.first_day is
 ## today), else "first flight tomorrow" or, past that, "first flight on Day N"
 ## (the HUD's day number).
-static func first_flight_note(offer: Dictionary, now: int, taxi: Array) -> String:
+static func first_flight_note(offer: Dictionary, now: int, taxi: Array, epoch: int) -> String:
 	var timed := offer.duplicate()
 	timed[FlightContract.TAXI_KEY] = taxi
-	var first_day := FlightTimetable.first_day(timed, now)
-	var ahead := first_day - GameCalendar.day_of(now)
+	var first_day := FlightTimetable.first_day(timed, now, epoch)
+	var ahead := first_day - GameCalendar.day_of(now, epoch)
 	if ahead <= 0:
 		return ""
 	if ahead == 1:
@@ -203,7 +203,8 @@ static func lead_text(ticks: int) -> String:
 ## not empty, so no line wraps. A card without a note has 4 lines, with one 5.
 static func card_lines(offer: Dictionary, note := "") -> PackedStringArray:
 	var minute: int = offer["departure_minute"]
-	var time := GameCalendar.clock_text(GameCalendar.tick_at(0, minute))
+	# A daily minute as a time: the same at every epoch, so read at 0.
+	var time := GameCalendar.clock_text(GameCalendar.tick_at(0, minute, 0), 0)
 	var lines := PackedStringArray(
 		[
 			TranslationServer.translate("{airline} to {destination}").format(
@@ -546,7 +547,8 @@ func _note_for(offer: Dictionary) -> String:
 		return tr("first flight {lead} after opening").format(
 			{"lead": lead_text(opening_lead_ticks())}
 		)
-	return first_flight_note(offer, flights.tick, _fit_taxis.get(offer["id"], TaxiTimes.BASE))
+	var taxi: Array = _fit_taxis.get(offer["id"], TaxiTimes.BASE)
+	return first_flight_note(offer, flights.tick, taxi, flights.epoch)
 
 
 ## Rewrites each card's note line for the sim's current tick, hiding it while

@@ -79,8 +79,8 @@ static func gate_unlinked(why: Dictionary) -> String:
 
 
 ## The whole status line of a faulted scanner, repaired on tick `repair`.
-static func fault_status(repair: int) -> String:
-	return _words.fault_status(repair)
+static func fault_status(repair: int, epoch: int) -> String:
+	return _words.fault_status(repair, epoch)
 
 
 ## "Biggest plane: Medium" for a plane class (PlaneClasses), one whole line each.
@@ -129,9 +129,9 @@ class Words:
 				return tr("Status: unlinked: way to the lane blocked", "gate card")
 		return tr("Status: unlinked: every gate letter in use", "gate card")
 
-	func fault_status(repair: int) -> String:
+	func fault_status(repair: int, epoch: int) -> String:
 		return tr("Status: Scanner fault, fixed by {time}").format(
-			{"time": GameCalendar.clock_text(repair)}
+			{"time": GameCalendar.clock_text(repair, epoch)}
 		)
 
 	func biggest_plane(plane_class: String) -> String:

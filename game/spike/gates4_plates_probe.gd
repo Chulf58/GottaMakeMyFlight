@@ -269,7 +269,9 @@ func _terminal_edits() -> Array[BuildEdit]:
 func _accept_second() -> bool:
 	var minute: int = _flights.contract_of(FlightSim.DEFAULT_ID)["departure_minute"]
 	for later in range(40, 90):
-		var terms := FlightSim.starter_terms(0)
+		var terms := StarterSlot.departing(
+			StarterSlot.whole_minute(0 + FlightTimetable.issue_lead(), 0), 0
+		)
 		terms["id"] = SECOND
 		terms["departure_minute"] = (minute + later) % GameCalendar.MINUTES_PER_DAY
 		if _flights.accept_gate(terms) == "B":

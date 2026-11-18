@@ -29,16 +29,19 @@ func test_a_world_with_every_need_met_has_no_cause() -> void:
 	assert_array(HintRules.causes(_world())).is_empty()
 
 
-func test_the_five_hints_are_the_ruled_ones_and_first_miss_is_cut() -> void:
+func test_the_eight_hints_are_the_ruled_ones_and_first_miss_is_cut() -> void:
 	(
 		assert_array(HintRules.IDS)
 		. is_equal(
 			[
 				HintRules.PLACE_CHECKIN,
 				HintRules.PLACE_SECURITY,
+				HintRules.PLACE_GATE_DESK,
+				HintRules.PLACE_SEATS,
 				HintRules.SECOND_HIRE,
 				HintRules.TOILET,
 				HintRules.FOOD,
+				HintRules.FOLLOW_PASSENGER,
 			]
 		)
 	)
@@ -67,6 +70,48 @@ func test_security_is_the_cause_only_with_a_desk_and_no_scanner_or_lane_part() -
 	)
 	# A lane begun with one part is on its way: the hint has done its job.
 	assert_array(HintRules.causes(_world({"scanners": 0, "arches": 1}))).is_empty()
+
+
+func test_the_gate_desk_is_the_cause_once_check_in_and_security_stand() -> void:
+	var none := {"gate_desks": 0}
+	assert_array(HintRules.causes(_world(none))).is_equal([HintRules.PLACE_GATE_DESK])
+	# A lane part counts as security placed, as it does for the security hint.
+	assert_array(HintRules.causes(_world({"gate_desks": 0, "scanners": 0, "arches": 1}))).is_equal(
+		[HintRules.PLACE_GATE_DESK]
+	)
+	# No desk or no security yet: those hints come first, the gate desk is not due.
+	assert_array(HintRules.causes(_world({"gate_desks": 0, "desks": 0}))).not_contains(
+		[HintRules.PLACE_GATE_DESK]
+	)
+	assert_array(HintRules.causes(_world({"gate_desks": 0, "scanners": 0}))).not_contains(
+		[HintRules.PLACE_GATE_DESK]
+	)
+	assert_array(HintRules.causes(_world({"gate_desks": 1}))).is_empty()
+
+
+func test_seats_are_the_cause_once_a_gate_has_a_desk_and_no_seat_stands() -> void:
+	assert_array(HintRules.causes(_world({"gate_desks": 1, "seats": 0}))).is_equal(
+		[HintRules.PLACE_SEATS]
+	)
+	assert_array(HintRules.causes(_world({"gate_desks": 1, "seats": 3}))).is_empty()
+	# Without a gate desk the desk hint comes first and the seats hint waits.
+	assert_array(HintRules.causes(_world({"gate_desks": 0, "seats": 0}))).is_equal(
+		[HintRules.PLACE_GATE_DESK]
+	)
+
+
+func test_a_world_without_gate_facts_has_neither_gate_cause() -> void:
+	var world := _world()
+	world.erase("gate_desks")
+	world.erase("seats")
+	assert_array(HintRules.causes(world)).is_empty()
+
+
+func test_the_seats_hint_is_advice_and_both_open_on_the_gates_category() -> void:
+	assert_str(HintRules.text(HintRules.PLACE_SEATS)).contains("opens without them")
+	assert_str(HintRules.text(HintRules.PLACE_GATE_DESK)).contains("gate desk")
+	assert_array(HintRules.categories_for(HintRules.PLACE_GATE_DESK)).is_equal(["Gates"])
+	assert_array(HintRules.categories_for(HintRules.PLACE_SEATS)).is_equal(["Gates"])
 
 
 func test_a_shortage_is_the_second_hire_cause() -> void:

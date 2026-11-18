@@ -49,6 +49,7 @@ func after() -> void:
 func before_test() -> void:
 	_shown_before = IntroDialogue.shown_this_session
 	GameBoot.load_path = ""
+	GameBoot.new_airport = false
 	GameBoot.refusal = ""
 
 
@@ -56,6 +57,7 @@ func after_test() -> void:
 	if is_instance_valid(_main):
 		_main.free()
 	GameBoot.load_path = ""
+	GameBoot.new_airport = false
 	GameBoot.refusal = ""
 	IntroDialogue.shown_this_session = _shown_before
 
@@ -106,3 +108,14 @@ func test_a_refused_boot_load_leaves_its_message_for_the_title() -> void:
 	assert_array(seen).is_equal([false])
 	assert_str(GameBoot.refusal).contains("Load failed")
 	assert_str(GameBoot.refusal).is_equal(SaveTestKit.save_game(_main).message_text())
+
+
+func test_new_airport_clears_after_boot_and_on_load_world() -> void:
+	GameBoot.start_new(func(_scene: String) -> Error: return OK)
+	assert_bool(GameBoot.new_airport).is_true()
+	var seen := await _boot()
+	assert_array(seen).is_empty()
+	assert_bool(GameBoot.new_airport).is_false()
+	GameBoot.new_airport = true
+	assert_bool(SaveTestKit.save_game(_main).load_from_file(_path)).is_true()
+	assert_bool(GameBoot.new_airport).is_false()

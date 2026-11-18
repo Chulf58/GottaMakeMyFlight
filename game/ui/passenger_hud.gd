@@ -210,6 +210,7 @@ func _ready() -> void:
 	_inspect.camera = camera
 	_inspect.flights = flights
 	_inspect.clock = clock
+	_inspect.baggage = get_node_or_null("../BaggageSim") as BaggageSim
 	_inspect.built_card.sim = sim
 	_inspect.built_card.selection = _built
 	_inspect.built_card.build_mode = build_mode
@@ -476,7 +477,10 @@ func _refresh_quiet_chip() -> void:
 ## The in-game day and 24-hour clock, "Day 1  06:00" (GameCalendar).
 func time_text() -> String:
 	return tr("Day {day}  {time}", "clock").format(
-		{"day": GameCalendar.day_of(clock.tick) + 1, "time": GameCalendar.clock_text(clock.tick)}
+		{
+			"day": GameCalendar.day_of(clock.tick, clock.epoch) + 1,
+			"time": GameCalendar.clock_text(clock.tick, clock.epoch)
+		}
 	)
 
 
@@ -620,9 +624,14 @@ func press_pause_toggle() -> void:
 ## Gives the unlock guide the tiers and the clock, holds the camera still while
 ## its dialog is open, and hands it to the build menu for the "New" marks.
 func _wire_unlock_guide() -> void:
-	if _in_current_scene() and not _playtest_switch_on():
-		if not Hints.launched_by_script(OS.get_cmdline_args()):
-			_unlock_guide.mode = UnlockGuide.Mode.PROFILE
+	var user_args := OS.get_cmdline_user_args()
+	var env_hints := OS.get_environment(Hints.SWITCH_ENV)
+	if (
+		user_args.has(Hints.SWITCH_ARG)
+		or env_hints == "1"
+		or (_in_current_scene() and not Hints.launched_by_script(OS.get_cmdline_args()))
+	):
+		_unlock_guide.mode = UnlockGuide.mode_for(user_args, env_hints, _playtest_switch_on())
 	if build_mode != null:
 		_unlock_guide.unlocks = build_mode.unlocks
 	_unlock_guide.clock = clock

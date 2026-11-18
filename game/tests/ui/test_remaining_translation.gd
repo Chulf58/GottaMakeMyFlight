@@ -103,17 +103,17 @@ func test_the_status_words_are_looked_up_in_the_departure_status_context() -> vo
 func test_a_row_carries_the_translated_status_and_doors_text() -> void:
 	PseudoLocale.enable(0.4)
 	var row := DepartureList._row(
-		600, 590, ["Oslo", "Gotta Air"], FlightSim.State.BOARDING, "C1", "A", "C1#0"
+		600, 590, ["Oslo", "Gotta Air"], FlightSim.State.BOARDING, "C1", "A", "C1#0", 0
 	)
 	print("row status '%s' line '%s'" % [row["status"], row["line"]])
 	assert_str(_bare(row["status"])).starts_with("Boarding")
 	assert_str(row["line"]).contains(row["status"])
-	assert_str(_bare(DepartureList.doors_text(row))).starts_with(
-		"doors close %s" % GameCalendar.clock_text(590)
+	assert_str(_bare(DepartureList.doors_text(row, 0))).starts_with(
+		"doors close %s" % GameCalendar.clock_text(590, 0)
 	)
 	# The control: a state with no word leaves the line as the head and airline.
 	var quiet := DepartureList._row(
-		600, 590, ["Oslo", "Gotta Air"], FlightSim.State.SCHEDULED, "C1", "A", "C1#0"
+		600, 590, ["Oslo", "Gotta Air"], FlightSim.State.SCHEDULED, "C1", "A", "C1#0", 0
 	)
 	assert_str(quiet["status"]).is_equal("")
 	assert_str(quiet["line"]).is_equal(quiet["base"])
@@ -122,14 +122,14 @@ func test_a_row_carries_the_translated_status_and_doors_text() -> void:
 func test_the_works_hover_words_are_whole_translated_sentences() -> void:
 	var west := "Taxiway works: the taxiway moves when the west side is quiet"
 	var east := "Taxiway works: the taxiway moves when the east side is quiet"
-	assert_str(SideSpurs.works_text(StandPlacement.WEST)).is_equal(west)
-	assert_str(SideSpurs.works_text(StandPlacement.EAST)).is_equal(east)
-	assert_str(SideSpurs.works_text(StandPlacement.WEST, 600, 0)).is_equal(
-		"%s, forecast %s" % [west, RunwayWorks.when_text(600, 0)]
+	assert_str(SideSpurs.works_text(StandPlacement.WEST, -1, 0, 0)).is_equal(west)
+	assert_str(SideSpurs.works_text(StandPlacement.EAST, -1, 0, 0)).is_equal(east)
+	assert_str(SideSpurs.works_text(StandPlacement.WEST, 600, 0, 0)).is_equal(
+		"%s, forecast %s" % [west, RunwayWorks.when_text(600, 0, 0)]
 	)
 	PseudoLocale.enable(0.4)
-	var plain := SideSpurs.works_text(StandPlacement.EAST)
-	var forecast := SideSpurs.works_text(StandPlacement.WEST, 600, 0)
+	var plain := SideSpurs.works_text(StandPlacement.EAST, -1, 0, 0)
+	var forecast := SideSpurs.works_text(StandPlacement.WEST, 600, 0, 0)
 	print("works: '%s' | '%s'" % [plain, forecast])
 	assert_str(_bare(plain)).starts_with(east)
 	assert_str(_bare(forecast)).contains(west)
@@ -152,11 +152,11 @@ func test_each_works_sentence_is_one_whole_msgid_with_and_without_a_forecast() -
 			[east + ", forecast {when}", "E laeter {when}", ""],
 		]
 	)
-	var when := RunwayWorks.when_text(600, 0)
-	assert_str(SideSpurs.works_text(StandPlacement.WEST)).is_equal("W")
-	assert_str(SideSpurs.works_text(StandPlacement.EAST)).is_equal("E")
-	assert_str(SideSpurs.works_text(StandPlacement.WEST, 600, 0)).is_equal("W laeter " + when)
-	assert_str(SideSpurs.works_text(StandPlacement.EAST, 600, 0)).is_equal("E laeter " + when)
+	var when := RunwayWorks.when_text(600, 0, 0)
+	assert_str(SideSpurs.works_text(StandPlacement.WEST, -1, 0, 0)).is_equal("W")
+	assert_str(SideSpurs.works_text(StandPlacement.EAST, -1, 0, 0)).is_equal("E")
+	assert_str(SideSpurs.works_text(StandPlacement.WEST, 600, 0, 0)).is_equal("W laeter " + when)
+	assert_str(SideSpurs.works_text(StandPlacement.EAST, 600, 0, 0)).is_equal("E laeter " + when)
 
 
 func test_the_inspect_card_says_the_stuck_words_in_the_players_language() -> void:

@@ -320,19 +320,26 @@ def build_security_scanner(root, c):
 SEAT_LIFT = 0.07
 
 
+# One chair per footprint cell, centred on the cell (x -1, 0 and 1), because the sim
+# seats one passenger per cell (terminal_layout._add_seats) and GateChairs draws each
+# at its own cell's chair. An arm stands at each end and halfway between two chairs.
+SEAT_CHAIRS_X = (-1.0, 0.0, 1.0)
+SEAT_ARMS_X = (-1.395, -0.5, 0.5, 1.395)
+
+
 def build_seat_row(root, c):
     box("Seat_Beam", (-1.42, 0.0, SEAT_LIFT + 0.30), (1.42, 0.08, SEAT_LIFT + 0.36), "frame", root, c)
     for i, x in enumerate((-1.2, 0.0, 1.2)):
         box("Seat_Leg_%d" % i, (x - 0.03, 0.01, 0.02), (x + 0.03, 0.07, SEAT_LIFT + 0.30), "frame", root, c)
         box("Seat_Foot_%d" % i, (x - 0.035, -0.25, 0), (x + 0.035, 0.30, 0.03), "dark", root, c)
-    for i, x in enumerate((-1.08, -0.36, 0.36, 1.08)):
+    for i, x in enumerate(SEAT_CHAIRS_X):
         box("Seat_Bracket_%d" % i, (x - 0.05, -0.05, SEAT_LIFT + 0.36), (x + 0.05, 0.10, SEAT_LIFT + 0.38), "frame", root, c)
         box("Seat_Pan_%d" % i, (x - 0.285, -0.32, SEAT_LIFT + 0.38), (x + 0.285, 0.18, SEAT_LIFT + 0.46), "blue", root, c, bevel=0.02)
         box(
             "Seat_Back_%d" % i, (x - 0.285, 0.16, SEAT_LIFT + 0.46), (x + 0.285, 0.24, 0.88), "blue", root, c,
             bevel=0.02, rot_x=-8.0, pivot=(x, 0.20, SEAT_LIFT + 0.46),
         )
-    for i, x in enumerate((-1.395, -0.72, 0.0, 0.72, 1.395)):
+    for i, x in enumerate(SEAT_ARMS_X):
         box("Arm_Post_%d" % i, (x - 0.02, 0.02, SEAT_LIFT + 0.36), (x + 0.02, 0.06, SEAT_LIFT + 0.62), "frame", root, c)
         box("Arm_%d" % i, (x - 0.025, -0.30, SEAT_LIFT + 0.62), (x + 0.025, 0.16, SEAT_LIFT + 0.66), "dark", root, c)
 

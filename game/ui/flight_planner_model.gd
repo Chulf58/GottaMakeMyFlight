@@ -41,7 +41,7 @@ static func rows_for_day(sim: FlightSim, day: int) -> Array[Dictionary]:
 ## day and the day after.
 static func bars_for_day(sim: FlightSim, day: int) -> Array[Dictionary]:
 	var bars: Array[Dictionary] = []
-	var day_start := GameCalendar.day_start(day)
+	var day_start := GameCalendar.day_start(day, sim.epoch)
 	var active := sim.active_contract_ids()
 	for departure_day in [day - 1, day, day + 1]:
 		for row in DepartureList.rows_for_day(sim, departure_day):
@@ -58,7 +58,8 @@ static func bars_for_day(sim: FlightSim, day: int) -> Array[Dictionary]:
 ## not yet issued takes its contract's times (FlightTimetable.starts_for).
 static func _hold(sim: FlightSim, row: Dictionary, departure_day: int) -> Hold:
 	if row["contract"] != "" and sim.state_of(row["flight"]) < 0:
-		var starts := FlightTimetable.starts_for(sim.contract_of(row["contract"]), departure_day)
+		var contract := sim.contract_of(row["contract"])
+		var starts := FlightTimetable.starts_for(contract, departure_day, sim.epoch)
 		return Hold.new(starts[0], starts[FlightSim.State.DEPARTED])
 	return Hold.new(
 		sim.state_start(row["flight"], FlightSim.State.SCHEDULED),

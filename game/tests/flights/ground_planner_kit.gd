@@ -87,7 +87,7 @@ func routes(at: Dictionary, plane_class: String) -> Dictionary:
 ## FlightSim's starts for a flight departing `minute` on `day` with the taxi
 ## pair `taxi`.
 static func starts_at(day: int, minute: int, taxi: Array = TaxiTimes.BASE) -> Array[int]:
-	var departure := GameCalendar.tick_at(day, minute)
+	var departure := GameCalendar.tick_at(day, minute, 0)
 	return FlightSim.schedule_starts(departure - FlightTimetable.departure_offset(taxi), taxi)
 
 
@@ -106,7 +106,7 @@ func request(
 	if StandPlacement.side_of(at) != StandPlacement.NORTH:
 		taxi = TaxiTimes.for_stand(at)
 	return GroundPlanner.request(
-		id, plane_class, at, starts_at(day, minute, taxi), routes(at, plane_class)
+		id, plane_class, at, starts_at(day, minute, taxi), routes(at, plane_class), 0
 	)
 
 

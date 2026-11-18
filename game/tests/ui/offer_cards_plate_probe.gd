@@ -55,7 +55,7 @@ func _run() -> void:
 	# Day PLATE_DAY at 06:00, so Gotta Air's five Loyal days (up to the day
 	# before) can have made its offers loyal (OfferBoard refuses a loyal mark its
 	# count cannot explain).
-	clock.tick = GameCalendar.day_start(PLATE_DAY) + 6 * 60 * GameCalendar.TICKS_PER_MINUTE
+	clock.tick = GameCalendar.day_start(PLATE_DAY, 0) + 6 * 60 * GameCalendar.TICKS_PER_MINUTE
 	root.add_child(main)
 	clock.set_paused(true)
 	await _frames(5)
@@ -72,7 +72,7 @@ func _run() -> void:
 		flights.open_airport()
 	var taken := TestFlightFit.terms("K10", 600)
 	print("PROBE contract K10 at 10:00 accepted=", flights.accept_contract(taken))
-	var day := GameCalendar.day_of(clock.tick)
+	var day := GameCalendar.day_of(clock.tick, 0)
 	var needs_gate := -1
 	var fits: Array[int] = []
 	for minute in range(0, 1440, 30):

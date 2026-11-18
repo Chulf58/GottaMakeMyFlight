@@ -7,9 +7,6 @@ extends GdUnitTestSuite
 
 const SEED := 4_242
 const LIMIT := 8000
-## Ticks before 21:00 (17 minutes) the starter departs, counting from the opening
-## a hundred ticks or so after the clock is set.
-const DEPARTURE_BEFORE_LAST_TICKS := 340
 
 var _path := SaveTestKit.run_path("test_baggage_save_game")
 var _main: Node
@@ -22,17 +19,6 @@ var _data := {}
 func before() -> void:
 	_main = SaveTestKit.boot(self, SEED)
 	var clock: SimClock = _main.get_node("SimClock")
-	# The starter departs 17 minutes before 21:00, the last departure the quiet night
-	# allows (Runway R7); a later one is refused and the starter leaves next morning.
-	var start := (
-		GameCalendar.tick_at(0, FlightContract.LAST_DEPARTURE_MINUTE)
-		- FlightTimetable.ISSUE_LEAD_TICKS
-		- FlightTimetable.departure_offset()
-		- DEPARTURE_BEFORE_LAST_TICKS
-	)
-	var data := clock.to_snapshot()
-	data["tick"] = str(start)
-	assert_bool(clock.from_snapshot(data)).is_true()
 	SaveTestKit.start_airport(_main)
 	# The test bag room lies off a new game's land and building on unowned land
 	# is refused (LandPlots), so plots are bought out to it; a save accepts that.
@@ -43,7 +29,7 @@ func before() -> void:
 	BagRoomKit.add((_main.get_node("BuildMode") as BuildMode).grid, room)
 	_save = SaveTestKit.save_game(_main)
 	_bags = _main.get_node("BaggageSim")
-	while _unsettled() == null and clock.tick < start + LIMIT:
+	while _unsettled() == null and clock.tick < LIMIT:
 		SaveTestKit.step(_main)
 	SaveTestKit.step(_main)
 	_data = JSON.parse_string(JSON.stringify(_save.snapshot()))

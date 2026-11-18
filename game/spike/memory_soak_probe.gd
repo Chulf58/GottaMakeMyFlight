@@ -412,7 +412,7 @@ func _print_rows(rows: Array, steady: bool) -> void:
 
 
 func _accept_offers() -> void:
-	var day := GameCalendar.day_of(_clock.tick)
+	var day := GameCalendar.day_of(_clock.tick, _clock.epoch)
 	if day == _offer_day:
 		return
 	_offer_day = day

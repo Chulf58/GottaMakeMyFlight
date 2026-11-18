@@ -15,17 +15,26 @@ const TITLE_SCENE := "res://main/title.tscn"
 static var load_path := ""
 ## Why the last boot load was refused, or "" when nothing is waiting to be shown.
 static var refusal := ""
+## True when the title's New Airport started this game. The HUD pieces that keep a
+## saved on/off choice (HudFlagSetting.load_boot_flag) then open on their defaults;
+## Continue and Load keep the remembered choice (decision a-new-airport-starts-
+## with-the-hud-overlays-closed-overlay-an). Cleared by SaveGame once main.tscn
+## finishes booting and on SaveGame.load_world(). A main.tscn run that did not
+## come through the title leaves it false, as it always was.
+static var new_airport := false
 
 
 ## Starts a new airport. `change` is SceneTree.change_scene_to_file or a stand-in.
 static func start_new(change: Callable) -> Error:
 	load_path = ""
+	new_airport = true
 	return change.call(MAIN_SCENE)
 
 
 ## Starts main.tscn on the save at `path`.
 static func start_load(path: String, change: Callable) -> Error:
 	load_path = path
+	new_airport = false
 	return change.call(MAIN_SCENE)
 
 
@@ -41,3 +50,8 @@ static func take_refusal() -> String:
 	var text := refusal
 	refusal = ""
 	return text
+
+
+## Ends the New Airport boot flag once the HUD has read it or a save loads.
+static func clear_new_airport() -> void:
+	new_airport = false

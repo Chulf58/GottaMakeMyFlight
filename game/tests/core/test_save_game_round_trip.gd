@@ -7,16 +7,15 @@ extends GdUnitTestSuite
 ## none made yet), the source is saved to a file and plays on,
 ## and a third main scene, booted from another seed, loads that file. All
 ## three then play through the fee payout and past the first day rollover,
-## and their checksums (SaveTestKit.checksum, which only reads) must match on
-## every tick.
+## matching on every tick: full SaveTestKit.checksum before the save, right
+## after the load and at the end, and _tick_checksum on every tick in between
+## (every dynamic save part serialized per tick plus the unchanging BuildGrid
+## digest, verified unchanged on all three worlds after the loop).
 ##
-## Both worlds start a little before 17:00 on day 0 (the clock is set before
-## the first tick, when nothing has happened yet), at the moment that puts the
-## starter's departure 17 minutes before 21:00, the last departure the quiet
-## night allows (Runway R7; it was 17 minutes before midnight), so the rollover
-## comes a few thousand ticks after the opening instead of eighteen game hours. The full-day
-## run from 06:00 is spike/save_game_probe.gd. before() plays it all once and
-## records what each case reads.
+## Both worlds open on the held calendar (06:00 on day 0 becomes the opening
+## tick), save just before the starter's first boarding, and play past the
+## first midnight rollover into day 1. before() plays it all once and records
+## what each case reads.
 
 const SEED := 6_102_026
 const OTHER_SEED := 99
@@ -25,11 +24,6 @@ const SAVE_LEAD := 100
 ## Ticks played past the start of day 1.
 const AFTER_ROLLOVER := 200
 const OPEN_LIMIT := 2000
-## Ticks before 21:00 (17 minutes) the starter departs, counting from the
-## opening a hundred ticks or so after the clock is set. It has to depart on
-## day 0, whose occurrence the test follows, whatever the phase lengths are,
-## and by 21:00, or the quiet night refuses it.
-const DEPARTURE_BEFORE_LAST_TICKS := 340
 
 var _path := SaveTestKit.run_path("test_save_game_round_trip")
 var _control: Node
@@ -41,24 +35,14 @@ var _run := {}
 func before() -> void:
 	_control = SaveTestKit.boot(self, SEED)
 	_source = SaveTestKit.boot(self, SEED)
-	var start := (
-		GameCalendar.tick_at(0, FlightContract.LAST_DEPARTURE_MINUTE)
-		- FlightTimetable.ISSUE_LEAD_TICKS
-		- FlightTimetable.departure_offset()
-		- DEPARTURE_BEFORE_LAST_TICKS
-	)
 	for main in [_control, _source]:
-		var clock: SimClock = main.get_node("SimClock")
-		var data := clock.to_snapshot()
-		data["tick"] = str(start)
-		assert_bool(clock.from_snapshot(data)).is_true()
 		SaveTestKit.start_airport(main)
 	var flights: FlightSim = _source.get_node("FlightSim")
-	while flights.opened_tick < 0 and _clock(_source).tick < start + OPEN_LIMIT:
+	while flights.opened_tick < 0 and _clock(_source).tick < OPEN_LIMIT:
 		_step([_control, _source])
 	_run["opened_tick"] = flights.opened_tick
 	var first := FlightTimetable.occurrence_id(FlightSim.DEFAULT_ID, 0)
-	while not flights.flight_ids().has(first) and _clock(_source).tick < start + 2 * OPEN_LIMIT:
+	while not flights.flight_ids().has(first) and _clock(_source).tick < 2 * OPEN_LIMIT:
 		_step([_control, _source])
 	var save_at := flights.state_start(first, FlightSim.State.BOARDING) - SAVE_LEAD
 	while _clock(_source).tick < save_at:
@@ -83,10 +67,14 @@ func after() -> void:
 
 func _play_on() -> void:
 	var all := [_control, _source, _loaded]
-	var end := GameCalendar.day_start(1) + AFTER_ROLLOVER
+	var end := GameCalendar.day_start(1, _clock(_control).epoch) + AFTER_ROLLOVER
 	var first_bad := {_source: -1, _loaded: -1}
 	var payouts := {_control: 0, _loaded: 0}
 	var ticks := 0
+	var grid_digests := {}
+	for main in all:
+		var grid := (main.get_node("BuildMode") as BuildMode).grid
+		grid_digests[main.get_instance_id()] = _grid_digest(grid)
 	_run["same_after_load"] = SaveTestKit.checksum(_loaded) == SaveTestKit.checksum(_control)
 	while _clock(_control).tick < end:
 		var made := {}
@@ -100,19 +88,43 @@ func _play_on() -> void:
 			var fees: int = (_sim(main).made_count() - made[main]) * _starter_fee()
 			if fees > 0 and _wallet(main).balance - balance[main] >= fees:
 				payouts[main] += 1
-		var expected := SaveTestKit.checksum(_control)
+		var expected := _tick_checksum(_control, grid_digests[_control.get_instance_id()])
 		for main in first_bad:
-			if first_bad[main] < 0 and SaveTestKit.checksum(main) != expected:
+			var digest: String = grid_digests[main.get_instance_id()]
+			if first_bad[main] < 0 and _tick_checksum(main, digest) != expected:
 				first_bad[main] = _clock(main).tick
+	var grids_unchanged := true
+	for main in all:
+		var grid := (main.get_node("BuildMode") as BuildMode).grid
+		if _grid_digest(grid) != grid_digests[main.get_instance_id()]:
+			grids_unchanged = false
+	var end_expected := SaveTestKit.checksum(_control)
+	for main in first_bad:
+		if first_bad[main] < 0 and SaveTestKit.checksum(main) != end_expected:
+			first_bad[main] = _clock(main).tick
+	var epoch := _clock(_control).epoch
+	_run["grids_unchanged"] = grids_unchanged
 	_run["ticks_compared"] = ticks
 	_run["first_bad_source"] = first_bad[_source]
 	_run["first_bad_loaded"] = first_bad[_loaded]
 	_run["payouts_control"] = payouts[_control]
 	_run["payouts_loaded"] = payouts[_loaded]
 	_run["made_after"] = _sim(_control).made_count()
-	_run["day"] = GameCalendar.day_of(_clock(_control).tick)
+	_run["epoch"] = epoch
+	_run["day"] = GameCalendar.day_of(_clock(_control).tick, epoch)
 	_run["day1_offers_control"] = _day_offers(_control, 1)
 	_run["day1_offers_loaded"] = _day_offers(_loaded, 1)
+
+
+static func _grid_digest(grid: BuildGrid) -> String:
+	return JSON.stringify(grid.to_snapshot(), "", true, true).sha256_text()
+
+
+static func _tick_checksum(main: Node, grid_digest: String) -> String:
+	var data := {}
+	for part in SaveTestKit.save_game(main).parts():
+		data[part.key] = grid_digest if part.key == "grid" else part.save.call()
+	return JSON.stringify(data, "", true, true).sha256_text()
 
 
 static func _step(worlds: Array) -> void:
@@ -153,6 +165,7 @@ func test_the_source_was_saved_to_a_file_and_loaded_into_a_fresh_scene() -> void
 
 
 func test_save_and_continue_matches_the_unsaved_control_on_every_tick() -> void:
+	assert_bool(_run["grids_unchanged"]).is_true()
 	assert_int(_run["ticks_compared"]).is_greater(SAVE_LEAD + AFTER_ROLLOVER)
 	(
 		assert_int(_run["first_bad_source"])
@@ -177,7 +190,7 @@ func test_the_compared_ticks_hold_a_fee_payout() -> void:
 
 
 func test_the_compared_ticks_hold_the_day_rollover_and_its_offer_draw() -> void:
-	assert_int(GameCalendar.day_of(_run["saved_tick"])).is_equal(0)
+	assert_int(GameCalendar.day_of(_run["saved_tick"], _run["epoch"])).is_equal(0)
 	assert_int(_run["day"]).is_equal(1)
 	assert_int((_run["day1_offers_control"] as Array).size()).is_equal(OfferBoard.OFFERS_PER_DAY)
 	assert_array(_run["day1_offers_loaded"]).is_equal(_run["day1_offers_control"])

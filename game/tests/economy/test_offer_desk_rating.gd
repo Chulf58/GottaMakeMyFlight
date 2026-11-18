@@ -77,7 +77,7 @@ func test_the_next_day_is_drawn_at_the_tier_the_rating_has_reached() -> void:
 	_desk.bind_clock(_clock)
 	assert_array(_tiers_of_open_offers()).is_equal([0, 0, 0])
 	_rate_for_tier(1)
-	_tick_to(GameCalendar.day_start(1))
+	_tick_to(GameCalendar.day_start(1, 0))
 	var drawn := _desk.board.open_offers()
 	assert_int(drawn.size()).is_equal(OfferBoard.OFFERS_PER_DAY)
 	for offer in drawn:
@@ -89,7 +89,7 @@ func test_a_rating_that_rises_mid_day_changes_nothing_until_the_next_day() -> vo
 	_desk.bind_clock(_clock)
 	var before := _desk.board.open_offers()
 	_rate_for_tier(2)
-	_tick_to(GameCalendar.day_start(1) - 1)
+	_tick_to(GameCalendar.day_start(1, 0) - 1)
 	assert_array(_desk.board.open_offers()).is_equal(before)
 
 
@@ -97,7 +97,7 @@ func test_a_low_rating_keeps_the_board_at_the_starter_tier() -> void:
 	_rate_for_tier(0)
 	assert_bool(_rating.warning()).is_true()
 	_desk.bind_clock(_clock)
-	_tick_to(GameCalendar.day_start(1))
+	_tick_to(GameCalendar.day_start(1, 0))
 	for offer in _desk.board.open_offers():
 		assert_int(OfferBoard.tier_of(offer["airline"])).is_equal(0)
 
@@ -114,7 +114,7 @@ func test_higher_tiers_show_up_across_days_once_the_rating_is_high() -> void:
 	var seen := {}
 	for day in range(1, 30):
 		_rate(10, 0, PassengerSim.MOOD_MAX)
-		_tick_to(GameCalendar.day_start(day))
+		_tick_to(GameCalendar.day_start(day, 0))
 		for offer in _desk.board.open_offers():
 			seen[OfferBoard.tier_of(offer["airline"])] = true
 	assert_array(seen.keys()).contains([0, 1, 2])

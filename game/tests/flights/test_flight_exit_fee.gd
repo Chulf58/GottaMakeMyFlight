@@ -50,7 +50,7 @@ func test_the_fee_is_60_small_and_120_big_through_day_7_and_gone_on_day_8() -> v
 		assert_int(sim.contract_of(id)["first_day"]).is_equal(0)
 	var fees := []
 	for day in range(0, 9):
-		sim.tick = GameCalendar.tick_at(day, 1380)
+		sim.tick = GameCalendar.tick_at(day, 1380, 0)
 		fees.append([sim.end_fee("S"), sim.end_fee("B"), sim.end_fee("N")])
 	print("fees by day: %s" % [fees])
 	for day in OfferTraits.EXIT_FEE_DAYS:
@@ -64,12 +64,12 @@ func test_the_fee_is_60_small_and_120_big_through_day_7_and_gone_on_day_8() -> v
 ## departure today first flies tomorrow, so its seventh day is a day later.
 func test_the_term_counts_from_the_first_day() -> void:
 	var sim := _sim()
-	sim.tick = GameCalendar.tick_at(0, 900)
+	sim.tick = GameCalendar.tick_at(0, 900, 0)
 	_accept(sim, "S", 600, SMALL)
 	assert_int(sim.contract_of("S")["first_day"]).is_equal(1)
-	sim.tick = GameCalendar.tick_at(7, 300)
+	sim.tick = GameCalendar.tick_at(7, 300, 0)
 	assert_int(sim.end_fee("S")).is_equal(60)
-	sim.tick = GameCalendar.tick_at(8, 300)
+	sim.tick = GameCalendar.tick_at(8, 300, 0)
 	assert_int(sim.end_fee("S")).is_equal(0)
 
 

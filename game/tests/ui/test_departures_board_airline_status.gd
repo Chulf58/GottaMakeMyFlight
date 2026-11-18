@@ -23,7 +23,7 @@ func before() -> void:
 	_sim.open_airport()
 	_accept("X", 600, "Oslo", LONGEST)
 	_accept("Y", 660, "Rome", "Gotta Air")
-	var doors: int = FlightTimetable.starts_for(_sim.contract_of("X"), 0)[
+	var doors: int = FlightTimetable.starts_for(_sim.contract_of("X"), 0, 0)[
 		FlightSim.State.DOORS_CLOSED
 	]
 	for t in range(_sim.tick + 1, doors + 1):

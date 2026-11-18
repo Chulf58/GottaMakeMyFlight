@@ -59,7 +59,7 @@ func _saved(n_minute: int, until: int, closed := false) -> Dictionary:
 ## two occurrences (yesterday's are kept since flight save version 9), each on
 ## the stand it flew from, so only the contracts' days to come can collide.
 func _quiet_night(n_minute: int) -> Dictionary:
-	var data := _saved(n_minute, GameCalendar.tick_at(1, 0))
+	var data := _saved(n_minute, GameCalendar.tick_at(1, 0, 0))
 	assert_array(data["flights"]).is_empty()
 	assert_int((data["landed"] as Array).size()).is_equal(2)
 	for entry: Dictionary in data["landed"]:
@@ -117,7 +117,7 @@ func test_a_reserving_contract_is_planned_and_refused_when_it_collides() -> void
 ## overlaps N's, so only the landed request can fail. (X's pair, [1020, 920]
 ## from A's longer route, covers N's stand; N's would not cover A's.)
 func test_a_landed_occurrence_that_no_longer_plans_is_refused() -> void:
-	var data := _saved(N_MINUTE, GameCalendar.tick_at(0, 20 * 60))
+	var data := _saved(N_MINUTE, GameCalendar.tick_at(0, 20 * 60, 0))
 	assert_array(data["flights"]).is_empty()
 	assert_int((data["landed"] as Array).size()).is_equal(2)
 	assert_str(_sim().load_problem(data)).is_empty()
@@ -145,7 +145,7 @@ func test_a_gate_too_small_for_a_contract_or_a_live_flight_refuses_the_save() ->
 	var problem := _sim(small_a).load_problem(night)
 	print("small gate, contract: '%s'" % problem)
 	assert_str(problem).is_equal("contract X needs a medium gate, but gate A takes small")
-	var live := _saved(FAR_MINUTE, GameCalendar.tick_at(0, 10 * 60 + 5))
+	var live := _saved(FAR_MINUTE, GameCalendar.tick_at(0, 10 * 60 + 5, 0))
 	assert_array(live["flights"]).is_not_empty()
 	problem = _sim(small_a).load_problem(live)
 	print("small gate, live flight: '%s'" % problem)
@@ -159,12 +159,13 @@ func test_a_gate_too_small_for_a_contract_or_a_live_flight_refuses_the_save() ->
 ## runs from day 5000, and on a shared stand their day-5000 flights collide.
 func test_a_gap_of_years_between_next_days_plans_only_the_days_that_differ() -> void:
 	var data := _quiet_night(N_MINUTE)
-	var loaded := FlightSnapshot.load(data, GATES)
+	var loaded := FlightSnapshot.load(data, GATES, 0)
 	loaded["ended"] = {"X": 1}
 	loaded["reserving"] = {"X": true}
 	loaded["next_day"] = {"X": 1, "N": 5000}
 	loaded["start_day"]["N"] = 5000
 	var world := {
+		"epoch": 0,
 		"contracts": loaded["contracts"],
 		"start_day": loaded["start_day"],
 		"next_day": loaded["next_day"],

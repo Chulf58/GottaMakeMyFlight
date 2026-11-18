@@ -57,14 +57,14 @@ static func save(
 
 ## {"tick", "days", "low_days", "pending", "adjustments"} ready to install, or
 ## {"error"}.
-static func load(data: Dictionary) -> Dictionary:
+static func load(data: Dictionary, epoch: int) -> Dictionary:
 	var problem := _top_problem(data)
 	if problem != "":
 		return {"error": problem}
 	var tick := int(data["tick"])
 	var days := {}
-	problem = _read_days(data["days"], GameCalendar.day_of(tick), days)
-	if problem == "" and not _is_count(data["low_days"], GameCalendar.day_of(tick)):
+	problem = _read_days(data["days"], GameCalendar.day_of(tick, epoch), days)
+	if problem == "" and not _is_count(data["low_days"], GameCalendar.day_of(tick, epoch)):
 		problem = "low_days must be a whole number from 0 to the days played"
 	var pending: Array[Dictionary] = []
 	if problem == "":

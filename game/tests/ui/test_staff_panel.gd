@@ -115,3 +115,13 @@ func test_an_agent_fired_mid_service_shows_as_leaving_until_it_goes() -> void:
 	assert_str(_panel.counts_text(CHECKIN)).is_equal("0 hired, 0 on duty")
 	assert_bool(_panel.fire_button(CHECKIN).disabled).is_true()
 	assert_str(_panel.hint_text()).is_equal("Hire a check-in agent")
+
+
+func test_each_hire_button_shows_the_roles_daily_wage() -> void:
+	_make()
+	for role in [CHECKIN, SECURITY, StaffMember.Role.SHOP, StaffMember.Role.CLEANER]:
+		var wage := PriceTable.wage_of(role)
+		var text := _panel.hire_button(role).text
+		print("role %d: wage=%d button='%s'" % [role, wage, text])
+		assert_int(wage).is_greater(0)
+		assert_str(text).is_equal("Hire · %d/day" % wage)

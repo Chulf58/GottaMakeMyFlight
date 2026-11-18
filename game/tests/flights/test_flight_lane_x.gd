@@ -64,7 +64,7 @@ func _save(stand: Dictionary) -> Dictionary:
 		return {"D": {"stand": stand, "max_class": PlaneClasses.LARGE}}
 	assert_bool(sim.open_airport()).is_true()
 	assert_bool(sim.accept_contract(TestFlightContracts.terms("T", TEN))).is_true()
-	for t in range(1, FlightTimetable.issue_tick(sim.contract_of("T"), 0) + 1):
+	for t in range(1, FlightTimetable.issue_tick(sim.contract_of("T"), 0, 0) + 1):
 		sim.on_tick(t)
 	assert_array(sim.flight_ids()).is_equal(["T-d0"])
 	return JSON.parse_string(JSON.stringify(sim.to_snapshot()))
@@ -81,12 +81,12 @@ func test_the_flight_save_keeps_lane_x_and_refuses_older_saves() -> void:
 	var saved: Dictionary = data["flights"][0]["stand"]
 	print("saved stand %s" % saved)
 	assert_float(float(saved["lane_x"])).is_equal(-StandPlacement.SIDE_LANE_X)
-	var loaded := FlightSnapshot.load(data, ["D"] as Array[String])
+	var loaded := FlightSnapshot.load(data, ["D"] as Array[String], 0)
 	assert_dict(loaded).not_contains_keys(["error"])
 	assert_dict(loaded["flights"][0]["stand"]).is_equal(stand)
 	var bare: Dictionary = data.duplicate(true)
 	bare["flights"][0]["stand"].erase("lane_x")
-	var refused := FlightSnapshot.load(bare, ["D"] as Array[String])
+	var refused := FlightSnapshot.load(bare, ["D"] as Array[String], 0)
 	print("no lane_x: %s" % refused.get("error", "no error"))
 	assert_str(refused.get("error", "")).contains("stand must be a stand")
 	var old: Dictionary = data.duplicate(true)

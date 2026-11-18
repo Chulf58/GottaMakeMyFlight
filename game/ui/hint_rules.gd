@@ -9,11 +9,25 @@ extends RefCounted
 
 const PLACE_CHECKIN := &"place_checkin"
 const PLACE_SECURITY := &"place_security"
+const PLACE_GATE_DESK := &"place_gate_desk"
+const PLACE_SEATS := &"place_seats"
 const SECOND_HIRE := &"second_hire"
 const TOILET := &"toilet"
 const FOOD := &"food"
+## The invitation to click a passenger (FollowInvite). It is remembered in the
+## file once the player has selected a passenger, not once it has shown.
+const FOLLOW_PASSENGER := &"follow_passenger"
 ## In priority order: the first one that is ready is shown.
-const IDS: Array[StringName] = [PLACE_CHECKIN, PLACE_SECURITY, SECOND_HIRE, TOILET, FOOD]
+const IDS: Array[StringName] = [
+	PLACE_CHECKIN,
+	PLACE_SECURITY,
+	PLACE_GATE_DESK,
+	PLACE_SEATS,
+	SECOND_HIRE,
+	TOILET,
+	FOOD,
+	FOLLOW_PASSENGER,
+]
 
 ## A pseudo category: the Staff card being open is the second hire's opportunity.
 const STAFF_CARD := "@staff"
@@ -29,9 +43,14 @@ const TEXT := {
 	),
 	PLACE_SECURITY:
 	"Passengers need security after check-in. Place a scanner or build a lane, and hire an officer.",
+	PLACE_GATE_DESK:
+	"Passengers board at a gate. Place a gate desk by an exit that faces the planes.",
+	PLACE_SEATS:
+	"Passengers wait at the gate. Place seats near it; the airport opens without them.",
 	SECOND_HIRE: "One agent works one desk or scanner. Hire another on the Staff card.",
 	TOILET: "Passengers need a toilet. Build a toilet room and put a stall in it.",
 	FOOD: "Hungry passengers need food. Build a cafe with a counter and a table.",
+	FOLLOW_PASSENGER: "Click a passenger to follow them to their flight",
 }
 
 ## The build categories (BuildMenu.CATEGORIES names) that are each hint's
@@ -39,9 +58,12 @@ const TEXT := {
 const CATEGORIES := {
 	PLACE_CHECKIN: ["Check-in"],
 	PLACE_SECURITY: ["Security", "Lane"],
+	PLACE_GATE_DESK: ["Gates"],
+	PLACE_SEATS: ["Gates"],
 	SECOND_HIRE: [STAFF_CARD],
 	TOILET: ["Toilets"],
 	FOOD: ["Cafe", "Food", "Dining"],
+	FOLLOW_PASSENGER: [],
 }
 
 
@@ -59,16 +81,29 @@ static func categories_for(id: StringName) -> Array:
 ## the world that is true now, never a past event:
 ## - place_checkin: no desk stands.
 ## - place_security: a desk stands and there is no scanner and no lane part.
+## - place_gate_desk: a desk and a scanner or lane part stand and no gate has a desk.
+## - place_seats: a gate has a desk and no seat stands (advice, like the checklist
+##   seats line). "gate_desks" and "seats" default to met where a world lacks them.
 ## - second_hire: a role has a verified shortage (read_world()) that the banner
 ##   does not already name. The banner's hire line for the same role means the
 ##   same thing, so its role is left out (meaning, not text).
 ## - toilet / food: a passenger needs one and no usable stall / cafe exists.
+## - follow_passenger: a passenger is in the terminal and none is selected
+##   ("follow_ready" and "followed", FollowInvite.read(); both default to false
+##   where a world does not carry them).
 static func causes(world: Dictionary) -> Array[StringName]:
 	var out: Array[StringName] = []
 	if int(world["desks"]) == 0:
 		out.append(PLACE_CHECKIN)
 	elif int(world["scanners"]) == 0 and int(world["arches"]) == 0:
 		out.append(PLACE_SECURITY)
+	var gate_desks := int(world.get("gate_desks", 1))
+	var checked_in := int(world["desks"]) > 0
+	var secured := int(world["scanners"]) > 0 or int(world["arches"]) > 0
+	if checked_in and secured and gate_desks == 0:
+		out.append(PLACE_GATE_DESK)
+	elif gate_desks > 0 and int(world.get("seats", 1)) == 0:
+		out.append(PLACE_SEATS)
 	for role in world["shortage_roles"]:
 		if not (world["hiring_roles"] as Array).has(role):
 			out.append(SECOND_HIRE)
@@ -77,6 +112,8 @@ static func causes(world: Dictionary) -> Array[StringName]:
 		out.append(TOILET)
 	if int(world["cafes"]) == 0 and int(world["max_hunger"]) >= CafeSim.HUNGRY_AT:
 		out.append(FOOD)
+	if bool(world.get("follow_ready", false)) and not bool(world.get("followed", false)):
+		out.append(FOLLOW_PASSENGER)
 	var ordered: Array[StringName] = []
 	for id in IDS:
 		if out.has(id):
@@ -116,6 +153,8 @@ static func read_world(sim: PassengerSim, hiring_roles: Array) -> Dictionary:
 		"desks": sim.layout.desks.size(),
 		"scanners": sim.layout.scanners.size(),
 		"arches": sim.layout.security_lanes.arches.size(),
+		"gate_desks": sim.layout.gate_desks.size(),
+		"seats": sim.layout.seats.size(),
 		"shortage_roles": _shortage_roles(sim),
 		"hiring_roles": hiring_roles,
 		"max_toilet_need": toilet,
@@ -175,8 +214,15 @@ class Words:
 					# gdlint:ignore = max-line-length
 					"Passengers need security after check-in. Place a scanner or build a lane, and hire an officer."
 				),
+				tr(
+					"Passengers board at a gate. Place a gate desk by an exit that faces the planes."
+				),
+				tr(
+					"Passengers wait at the gate. Place seats near it; the airport opens without them."
+				),
 				tr("One agent works one desk or scanner. Hire another on the Staff card."),
 				tr("Passengers need a toilet. Build a toilet room and put a stall in it."),
 				tr("Hungry passengers need food. Build a cafe with a counter and a table."),
+				tr("Click a passenger to follow them to their flight"),
 			]
 		)

@@ -23,9 +23,10 @@ export GODOT_PATH="${GODOT_PATH:-C:/Users/chulf/AppData/Local/Programs/Godot/God
 # for Codex"), the Claude Code entry in .mcp.json does not.
 # GMMF_PLAYTEST opts every MCP-launched game into the dev-only playtest hook
 # (game/debug/playtest_hook.gd; decision ai-playtester-a-dev-only-debug-hook-
-# event-log-state-queries-a). The user's own editor runs do not set it.
+# event-log-state-queries-a); GMMF_HINTS forwards the onboarding hints/dialog
+# switch when set (decision 3097bfab). The user's own editor runs set neither.
 export GMMF_PLAYTEST="${GMMF_PLAYTEST:-1}"
-export WSLENV="${WSLENV:+$WSLENV:}GODOT_PATH:GMMF_PLAYTEST${DEBUG:+:DEBUG}${GODOT_MCP_DISABLE_ELICITATION:+:GODOT_MCP_DISABLE_ELICITATION}"
+export WSLENV="${WSLENV:+$WSLENV:}GODOT_PATH:GMMF_PLAYTEST:GMMF_HINTS${DEBUG:+:DEBUG}${GODOT_MCP_DISABLE_ELICITATION:+:GODOT_MCP_DISABLE_ELICITATION}"
 
 # A Windows process needs a Windows-visible cwd; the repo root is one.
 cd "/mnt/c/Users/chulf/Gotta-make-my-flight"

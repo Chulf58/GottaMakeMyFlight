@@ -5,8 +5,9 @@ extends GdUnitTestSuite
 ## wallet holds the starting budget, and the airport starts closed with no
 ## contract and no flight, the HUD saying so. Once it has the starter terminal
 ## and staff on duty it opens on the next tick and accepts the starter
-## contract, whose first flight starts ISSUE_LEAD_TICKS after the opening and
-## books the starter's passengers. One boot of main.tscn for the file;
+## contract, whose first flight is issued on the opening tick, starts once the
+## plane's lead allows (StarterSlot) and books the starter's passengers. The
+## calendar starts at the opening: it is 06:00 then. One boot of main.tscn for the file;
 ## before() records what each case reads.
 
 const MAIN := "res://main/main.tscn"
@@ -85,6 +86,7 @@ func _open(clock: SimClock, flights: FlightSim, hud: PassengerHud, panel: StaffP
 	clock.set_paused(false)
 	clock.advance(SimClock.STEP)
 	_opened["opened_tick"] = flights.opened_tick
+	_opened["epoch"] = clock.epoch
 	_opened["contracts"] = flights.contract_ids()
 	_opened["hint_open"] = panel.hint_label().text
 	var first := FlightTimetable.occurrence_id(FlightSim.DEFAULT_ID, 0)
@@ -136,22 +138,25 @@ func test_the_staff_hint_names_what_keeps_the_airport_closed() -> void:
 	assert_str(_opened["hint_open"]).is_equal("Open! Starter contract: Gotta Air to Oslo, daily")
 
 
-## Opened at tick 1, the starter's first state is at 2420 (the lead, rounded
-## up to a whole minute), issued at 20, departing 10:14 on day one (the
-## pushback, FlightTimetable.departure_offset() after the first state).
+## Opened at tick 1, which is 06:00 (the calendar starts at the opening). The
+## starter is issued on the opening tick and departs StarterSlot.lead() later.
+## Old expected: issued at 20, first state 2420 (20 + ISSUE_LEAD_TICKS),
+## departing 10:14. New: issued at 1, first state 1, departing 08:13.
 func test_staffed_it_opens_on_the_next_tick_with_the_starter_contract() -> void:
 	assert_int(_opened["opened_tick"]).is_equal(1)
+	assert_int(_opened["epoch"]).is_equal(1)
 	assert_array(_opened["contracts"]).is_equal([FlightSim.DEFAULT_ID])
-	assert_array(_opened["flights_before_issue"]).is_empty()
-	assert_int(_opened["issued_at"]).is_equal(20)
-	assert_array(_opened["flights"]).is_equal(
-		[FlightTimetable.occurrence_id(FlightSim.DEFAULT_ID, 0)]
-	)
-	assert_int(_opened["first_start"]).is_equal(20 + FlightTimetable.ISSUE_LEAD_TICKS)
-	assert_int(GameCalendar.day_of(_opened["pushback"])).is_equal(0)
-	var doors_text := GameCalendar.clock_text(_opened["doors_close"])
-	var departure_text := GameCalendar.clock_text(_opened["pushback"])
-	assert_str(departure_text).is_equal("10:14")
+	var first := FlightTimetable.occurrence_id(FlightSim.DEFAULT_ID, 0)
+	assert_array(_opened["flights_before_issue"]).is_equal([first])
+	assert_int(_opened["issued_at"]).is_equal(1)
+	assert_array(_opened["flights"]).is_equal([first])
+	var lead := StarterSlot.lead(TaxiTimes.BASE)
+	assert_int(_opened["first_start"]).is_equal(1 + lead - FlightTimetable.departure_offset())
+	assert_int(_opened["pushback"]).is_equal(1 + lead)
+	assert_int(GameCalendar.day_of(_opened["pushback"], _opened["epoch"])).is_equal(0)
+	var doors_text := GameCalendar.clock_text(_opened["doors_close"], _opened["epoch"])
+	var departure_text := GameCalendar.clock_text(_opened["pushback"], _opened["epoch"])
+	assert_str(departure_text).is_equal("08:13")
 	assert_str(_opened["departures"]).is_equal(
 		departure_text + "  Oslo  Gotta Air  doors close " + doors_text
 	)

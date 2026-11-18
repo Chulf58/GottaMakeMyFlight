@@ -289,8 +289,10 @@ func _try_activate() -> void:
 		return
 	_active = true
 	_watch(sim.grid)
-	_shown = HudFlagSetting.load_flag(settings_path, SETTING_KEY, false, WHO)
-	var saved := HudFlagSetting.load_int(settings_path, SETTING_MODE_KEY, MoodTint.Mode.MOOD, WHO)
+	_shown = HudFlagSetting.load_boot_flag(settings_path, SETTING_KEY, false, WHO)
+	var saved := HudFlagSetting.load_boot_int(
+		settings_path, SETTING_MODE_KEY, MoodTint.Mode.MOOD, WHO
+	)
 	_mode = saved if saved in MoodTint.Mode.values() else MoodTint.Mode.MOOD
 	_apply_mode()
 	_apply_shown()

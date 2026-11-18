@@ -246,7 +246,8 @@ func bind(with_clock: SimClock, with_flights: FlightSim, with_grid: BuildGrid) -
 ## parties that share a car or taxi instead (ArrivalBookings.schedule()). A
 ## flight is scheduled once: a second call, or a flight whose doors have
 ## closed, is refused with an error. The flight's extra passengers
-## (set_booking_override()) are added to `count`, once.
+## (set_booking_override()) are added to `count`, once. The starter occurrence
+## the airport opened with has its first party arrive at once (FirstParty).
 func schedule_flight(flight_id: String, count: int) -> bool:
 	if _scheduled.has(flight_id) or flights.is_doors_closed(flight_id):
 		push_error("PassengerSim.schedule_flight: '%s' is scheduled or closed" % flight_id)
@@ -256,13 +257,16 @@ func schedule_flight(flight_id: String, count: int) -> bool:
 	# The contract's arrival traits, resolved once for both ways of arriving.
 	var contract := BookingOverrides.contract_of(self, flight_id)
 	var shares := ArrivalTypes.shares_for(contract.get(FlightContract.TRAITS_KEY, {}))
+	var at_once := FirstParty.due(self, flight_id)
 	if landside != null:
-		arrivals.schedule(flight_id, count, shares)
+		arrivals.schedule(flight_id, count, shares, at_once)
 		return true
 	for i in count:
 		var arrival := ArrivalTypes.draw(clock.rng, shares)
 		var span := ArrivalTypes.window(arrival, flights, flight_id, clock.tick)
 		var at := clock.rng.randi_range(span.x, span.y)
+		if at_once and i == 0:
+			at = clock.tick + 1
 		PassengerLifecycle.add_spawn(self, at, flight_id, clock.rng.randi_range(0, 1), arrival)
 	return true
 

@@ -59,10 +59,10 @@ func _put_in_records() -> void:
 	var contracts := _flights.active_contract_ids()
 	assert_array(contracts).is_not_empty()
 	var contract := _flights.contract_of(contracts[0])
-	var today := GameCalendar.day_of(_clock.tick)
+	var today := GameCalendar.day_of(_clock.tick, _clock.epoch)
 	_flight = FlightTimetable.occurrence_id(contracts[0], today + 2)
-	var departs := GameCalendar.tick_at(today + 2, int(contract["departure_minute"]))
-	_visit = GameCalendar.day_start(today + 1) + 9000
+	var departs := GameCalendar.tick_at(today + 2, int(contract["departure_minute"]), _clock.epoch)
+	_visit = GameCalendar.day_start(today + 1, _clock.epoch) + 9000
 	var data := _director.to_snapshot()
 	_inspector = data["next_id"]
 	_favour = _inspector + 1
@@ -95,7 +95,7 @@ func _record_data(id: int, kind: String) -> Dictionary:
 	return {
 		"id": id,
 		"kind": kind,
-		"roll_day": GameCalendar.day_of(_clock.tick),
+		"roll_day": GameCalendar.day_of(_clock.tick, _clock.epoch),
 		"state": IncidentCatalogue.SCHEDULED,
 		"fire_tick": _clock.tick,
 		"cell": [-1, -1],
@@ -166,7 +166,9 @@ func test_an_offered_and_an_announced_major_round_trip_with_identical_effects() 
 	# The panel showed the unshown announcement from the reload, with its numbers.
 	var panel := _main.get_node("IncidentPanel") as IncidentPanel
 	assert_bool(panel.is_open()).is_true()
-	assert_str(panel.dialog().body_text()).contains(GameCalendar.clock_text(_visit - 500))
+	assert_str(panel.dialog().body_text()).contains(
+		GameCalendar.clock_text(_visit - 500, _clock.epoch)
+	)
 	assert_bool(announced_back["shown"]).is_true()
 	assert_dict(_without_shown(announced_back)).is_equal(_without_shown(announced))
 	# The quiet-night stop still sees the visit.
@@ -226,7 +228,7 @@ func test_a_failed_visit_keeps_its_counts_through_a_save_and_names_only_the_brea
 	# words are read from the saved incident's plan through IncidentCopy, the
 	# text the card is built from.
 	assert_object(rail.notice_card(IncidentCards.key_of({"id": _inspector}))).is_null()
-	var words := IncidentCopy.inspector_result(_record(_inspector))
+	var words := IncidentCopy.inspector_result(_record(_inspector), _clock.epoch)
 	var text := "%s\n%s" % [words["title"], words["detail"]]
 	print(text)
 	assert_str(text).contains("1 mess on the floor (none allowed)")

@@ -73,7 +73,7 @@ func test_long_names_trim_in_the_departures_list_and_the_day_stays_capped() -> v
 	var sim: FlightSim = auto_free(FlightSim.new())
 	var clock: SimClock = auto_free(SimClock.new())
 	sim.open_airport()
-	var tick := GameCalendar.tick_at(0, 22 * 60)
+	var tick := GameCalendar.tick_at(0, 22 * 60, 0)
 	for t in range(sim.tick + 1, tick + 1):
 		sim.on_tick(t)
 	clock.tick = tick

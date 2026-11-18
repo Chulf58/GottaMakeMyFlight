@@ -59,8 +59,8 @@ func test_unlocked_and_funded_the_button_buys_and_the_card_shows_the_works() -> 
 		(
 			"Works on the medium runway start %s and end %s"
 			% [
-				"at " + GameCalendar.clock_text(works.start),
-				"at " + GameCalendar.clock_text(works.finish)
+				"at " + GameCalendar.clock_text(works.start, 0),
+				"at " + GameCalendar.clock_text(works.finish, 0)
 			]
 		)
 	)

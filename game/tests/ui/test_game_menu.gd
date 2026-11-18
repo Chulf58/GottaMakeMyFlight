@@ -162,3 +162,15 @@ func test_a_load_ends_the_menu_and_the_question_without_setting_anything() -> vo
 	assert_bool(_menu.is_question_open()).is_false()
 	assert_bool(_kit.director.is_enabled()).is_false()
 	assert_bool(_kit.clock.holds.is_holding()).is_false()
+
+
+func test_the_corner_label_shows_the_project_setting_version() -> void:
+	var version := str(ProjectSettings.get_setting("application/config/version", ""))
+	assert_str(version).is_not_empty()
+	assert_object(_menu.version_label()).is_null()
+	_menu.open()
+	var label := _menu.version_label()
+	assert_object(label).is_not_null()
+	assert_str(label.text).is_equal("v" + version)
+	assert_str(label.text).is_equal("v" + GameMenu.version_text())
+	assert_int(label.mouse_filter).is_equal(Control.MOUSE_FILTER_IGNORE)

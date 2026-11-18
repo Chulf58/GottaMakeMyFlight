@@ -7,13 +7,19 @@ extends RefCounted
 ##   closed stations, exactly the stations with a queue-full sign. One
 ##   card for all full desks and one for all full security lanes, pointing at
 ##   the fullest first; a queue that is full only for a moment does not raise
-##   it (QUEUE_HOLD_TICKS each way).
+##   it (QUEUE_HOLD_TICKS each way). When a full station's lane is shorter than
+##   TerminalLayout.LANE_SLOTS, the detail says the queue is short and to move
+##   the station away from the wall (decision first-time-hints-gain-place-
+##   gate-desk-and-place-seats-the-hi): such a lane fills at one or two waiting.
 ## - passengers with no walkable route are the ones whose bubble says "I can't
 ##   get there" (Passenger.Stuck.NO_ROUTE): one card, pointing at them.
 ## - passengers waiting for a gate place (GateCapacity.shortage()): one card,
 ##   pointing at them.
 ## - stations closed with nobody on duty, and stations whose staff spot staff
-##   cannot use (closed_stations()): one card each, pointing at them.
+##   cannot use (closed_stations()): one card each, pointing at them. The
+##   nobody-on-duty card asks to hire only for stations nobody is assigned to;
+##   when every such station has a hired member walking to it, it says they
+##   are on the way.
 ## The dirty terminal card is DirtyAlert.cause(), which keeps its own band.
 ## It only reads the sim.
 
@@ -48,22 +54,53 @@ static func queue_full(sim: PassengerSim) -> Array[Dictionary]:
 		(desks if sim.layout.desks.has(station) else lanes).append(station)
 	var out: Array[Dictionary] = []
 	if not desks.is_empty():
-		var detail := _translator.tr_n(
-			"{count} desk full · {waiting} waiting",
-			"{count} desks full · {waiting} waiting",
-			desks.size()
+		var detail := (
+			(
+				_translator
+				. tr_n(
+					"{count} desk full · {waiting} waiting · short queue: move the desk away from the wall",
+					"{count} desks full · {waiting} waiting · short queue: move a desk away from the wall",
+					desks.size()
+				)
+			)
+			if _any_short(sim, desks)
+			else _translator.tr_n(
+				"{count} desk full · {waiting} waiting",
+				"{count} desks full · {waiting} waiting",
+				desks.size()
+			)
 		)
 		var title := _translator.tr("Check-in queue full")
 		out.append(_queue_cause(sim, full, desks, QUEUE_CHECKIN, title, detail))
 	if not lanes.is_empty():
-		var detail := _translator.tr_n(
-			"{count} lane full · {waiting} waiting",
-			"{count} lanes full · {waiting} waiting",
-			lanes.size()
+		var detail := (
+			(
+				_translator
+				. tr_n(
+					"{count} lane full · {waiting} waiting · short queue: move the scanner away from the wall",
+					"{count} lanes full · {waiting} waiting · short queue: move a scanner away from the wall",
+					lanes.size()
+				)
+			)
+			if _any_short(sim, lanes)
+			else _translator.tr_n(
+				"{count} lane full · {waiting} waiting",
+				"{count} lanes full · {waiting} waiting",
+				lanes.size()
+			)
 		)
 		var title := _translator.tr("Security queue full")
 		out.append(_queue_cause(sim, full, lanes, QUEUE_SECURITY, title, detail))
 	return out
+
+
+## Whether any of `stations` has a lane shorter than a full one
+## (TerminalLayout.LANE_SLOTS): a wall, a door or another lane cut it short.
+static func _any_short(sim: PassengerSim, stations: Array[int]) -> bool:
+	for station in stations:
+		if (sim.layout.lanes[station] as Array).size() < TerminalLayout.LANE_SLOTS:
+			return true
+	return false
 
 
 ## The no-route cause, or none.
@@ -145,23 +182,40 @@ static func closed_stations(sim: PassengerSim) -> Array[Dictionary]:
 	stations.append_array(ShopCounters.closed(sim))
 	stations.sort()
 	var idle: Array[int] = []
+	var coming: Array[int] = []
 	var spots: Array[int] = []
 	for station in stations:
 		match MissSignals.staff_reason(sim, station):
 			MissSignals.NO_STAFF_REASON:
-				idle.append(station)
+				(coming if _member_walking_to(sim, station) else idle).append(station)
 			MissSignals.SPOT_BLOCKED_REASON, MissSignals.UNREACHABLE_REASON:
 				spots.append(station)
-	if not idle.is_empty():
-		var detail := _translator.tr_n(
-			"{count} station is closed · hire staff on the Staff card",
-			"{count} stations are closed · hire staff on the Staff card",
-			idle.size()
+	if not idle.is_empty() or not coming.is_empty():
+		# Hiring is asked only for stations nobody is assigned to; when every
+		# closed station has a member walking to it, the card says so instead.
+		var detail := (
+			_translator.tr_n(
+				"{count} station is closed · hire staff on the Staff card",
+				"{count} stations are closed · hire staff on the Staff card",
+				idle.size()
+			)
+			if not idle.is_empty()
+			else _translator.tr_n(
+				"{count} station is closed · staff are on the way",
+				"{count} stations are closed · staff are on the way",
+				coming.size()
+			)
 		)
+		var shown := idle if not idle.is_empty() else coming
 		var title := _translator.tr("Nobody on duty")
 		out.append(
 			_station_cause(
-				sim, idle, NO_STAFF, title, detail.format({"count": idle.size()}), QUEUE_HOLD_TICKS
+				sim,
+				shown,
+				NO_STAFF,
+				title,
+				detail.format({"count": shown.size()}),
+				QUEUE_HOLD_TICKS
 			)
 		)
 	if not spots.is_empty():
@@ -182,6 +236,12 @@ static func closed_stations(sim: PassengerSim) -> Array[Dictionary]:
 			)
 		)
 	return out
+
+
+## Whether a hired member is walking to `station` to take it up, not yet on duty.
+static func _member_walking_to(sim: PassengerSim, station: int) -> bool:
+	var id := sim.staff.staff_at(station)
+	return id != 0 and sim.staff.get_member(id).state == StaffMember.State.TO_STATION
 
 
 static func _station_cause(

@@ -48,7 +48,7 @@ func _pend(wing: Vector2i) -> int:
 	assert_bool(_flights.accept_contract(SpurMoveKit.terms("C1"))).is_true()
 	var contract := _flights.contract_of("C1")
 	var day: int = contract["first_day"]
-	_flights.on_tick(FlightTimetable.issue_tick(contract, day))
+	_flights.on_tick(FlightTimetable.issue_tick(contract, day, _flights.epoch))
 	var flight := FlightTimetable.occurrence_id("C1", day)
 	var takeoff := _flights.state_start(flight, FlightSim.State.TAKEOFF)
 	var built := _grid.apply(SpurMoveKit.floor_at(wing))
@@ -74,15 +74,26 @@ func _check(side: String, other: String, named: String, takeoff: int) -> void:
 	assert_str(text).is_equal(
 		(
 			"Taxiway works: the taxiway moves when the %s side is quiet, forecast at %s"
-			% [named, GameCalendar.clock_text(release)]
+			% [named, GameCalendar.clock_text(release, _flights.epoch)]
 		)
 	)
-	assert_str(text).contains(GameCalendar.clock_text(takeoff))
+	assert_str(text).contains(GameCalendar.clock_text(takeoff, _flights.epoch))
 
 
 func test_the_west_works_hover_shows_the_forecast_move_time() -> void:
 	assert_int(SpurMoveKit.west_gate(_grid, _flights, _gates)).is_not_zero()
 	var takeoff := _pend(SpurMoveKit.WING)
+	_check(StandPlacement.WEST, StandPlacement.EAST, "west", takeoff)
+
+
+func test_the_works_hover_formats_the_forecast_against_a_nonzero_epoch() -> void:
+	_flights.tick = 937
+	_flights.epoch = 937
+	assert_int(SpurMoveKit.west_gate(_grid, _flights, _gates)).is_not_zero()
+	var takeoff := _pend(SpurMoveKit.WING)
+	assert_str(GameCalendar.clock_text(takeoff, _flights.epoch)).is_not_equal(
+		GameCalendar.clock_text(takeoff, 0)
+	)
 	_check(StandPlacement.WEST, StandPlacement.EAST, "west", takeoff)
 
 
@@ -104,11 +115,11 @@ func test_no_pending_spur_shows_no_works() -> void:
 
 
 func test_the_works_text_without_a_forecast_has_no_time() -> void:
-	assert_str(SideSpurs.works_text(StandPlacement.WEST)).is_equal(
+	assert_str(SideSpurs.works_text(StandPlacement.WEST, -1, 0, 0)).is_equal(
 		"Taxiway works: the taxiway moves when the west side is quiet"
 	)
-	var tomorrow := GameCalendar.day_start(1) + 5 * GameCalendar.TICKS_PER_MINUTE
-	assert_str(SideSpurs.works_text(StandPlacement.EAST, tomorrow, 0)).is_equal(
+	var tomorrow := GameCalendar.day_start(1, 0) + 5 * GameCalendar.TICKS_PER_MINUTE
+	assert_str(SideSpurs.works_text(StandPlacement.EAST, tomorrow, 0, 0)).is_equal(
 		"Taxiway works: the taxiway moves when the east side is quiet, forecast tomorrow at 00:05"
 	)
 

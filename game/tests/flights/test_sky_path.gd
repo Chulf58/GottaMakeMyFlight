@@ -330,7 +330,7 @@ func test_an_offer_accepted_late_enters_unseen_on_the_straight_in() -> void:
 	var scheduled := starts[FlightSim.State.SCHEDULED]
 	var approach := starts[FlightSim.State.APPROACH]
 	assert_int(scheduled).is_equal(
-		GameCalendar.tick_at(0, 500) - FlightTimetable.departure_offset()
+		GameCalendar.tick_at(0, 500, 0) - FlightTimetable.departure_offset()
 	)
 	# Control: the full lead-in is already under way at the first frame.
 	var full: Dictionary = view.pose_at(starts, 0.0, true)
@@ -471,13 +471,13 @@ func _assert_unseen(plane_class: String) -> void:
 
 
 ## Sol re-check regression: the starter's first day gets no exception. It is
-## accepted at the current tick like any contract, so a gate filled by
-## contracts accepted while closed can start it at the opening tick; it flies
-## the straight-in, and its later days the full lead-in.
+## accepted at the current tick like any contract and starts on the opening
+## tick (StarterSlot); it flies the straight-in, and its later days the full
+## lead-in.
 func test_the_starters_first_day_takes_the_straight_in() -> void:
 	var sim := _sim()
 	sim.open_airport()
-	var terms := FlightSim.starter_terms(sim.tick)
+	var terms := StarterSlot.terms(sim)
 	assert_bool(sim.accept_contract(terms)).is_true()
 	var view := _view(sim, _clock())
 	var first := FlightTimetable.occurrence_id(
@@ -490,10 +490,9 @@ func test_the_starters_first_day_takes_the_straight_in() -> void:
 	assert_bool(view.has_full_lead_in(next)).is_true()
 	var starts := view.starts_of(first)
 	var scheduled := starts[FlightSim.State.SCHEDULED]
-	for t in range(1, scheduled):
-		sim.on_tick(t)
-	view.update_pose()
-	assert_bool(view.visible).is_false()
+	# The starter's first state is the opening tick (StarterSlot), so no tick
+	# comes before it to hide the plane on (it was 2400 ticks later before).
+	assert_int(scheduled).is_equal(sim.opened_tick)
 	sim.on_tick(scheduled)
 	sim.on_tick(scheduled + 1)
 	view.update_pose()
