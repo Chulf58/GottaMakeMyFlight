@@ -154,7 +154,7 @@ func _draw_room(room_id: int) -> void:
 	tint.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	tint.position = middle + Vector3(0.0, TINT_Y, 0.0)
 	add_child(tint)
-	var label := Label3D.new()
+	var label := CaptionFont.apply(Label3D.new())
 	label.name = "RoomLabel%d" % room_id
 	var lines := [DisplayWords.room_type(status.type_name)]
 	lines.append_array(

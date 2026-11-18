@@ -37,7 +37,7 @@ var mode: BuildMode
 
 var _fills := MeshInstance3D.new()
 var _hover := MeshInstance3D.new()
-var _price := Label3D.new()
+var _price := CaptionFont.apply(Label3D.new())
 var _fill_material := StandardMaterial3D.new()
 var _valid_material := StandardMaterial3D.new()
 var _invalid_material := StandardMaterial3D.new()

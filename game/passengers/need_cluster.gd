@@ -58,15 +58,12 @@ const PILL_TEXELS := 2.0
 const COUNT_AT := Vector2(22.0, 18.0)
 ## The count label's font size; its pixel_size sets COUNT_EM_PX on screen.
 const COUNT_FONT := 56
-## The HUD theme, for its font.
-const HUD_THEME := "res://ui/hud_theme.tres"
 ## The badge pool's node name under PassengerViews and a badge's count label
 ## and pill.
 const ROOT := "NeedBadges"
 const COUNT := "Count"
 const PILL := "Pill"
 
-static var _font: Font
 ## The shifts place() tries after the kept one (see _offsets()).
 static var _shift_order: Array[Vector2] = []
 ## Pill width in screen pixels -> its texture.
@@ -415,14 +412,10 @@ static func pill_width(text: String) -> float:
 	return maxf(ceilf(_text_px[text] + 2.0 * PILL_PAD_PX), PILL_H_PX)
 
 
-## The HUD theme's font (a rounded bold Nunito), or the default font.
+## The HUD theme's font (a rounded bold Nunito), as every caption draws in
+## (CaptionFont).
 static func font() -> Font:
-	if _font == null:
-		var theme := load(HUD_THEME) as Theme
-		_font = theme.default_font if theme != null else null
-		if _font == null:
-			_font = ThemeDB.fallback_font
-	return _font
+	return CaptionFont.font()
 
 
 ## A pooled badge: a billboard need icon over the world with its count pill and
@@ -435,12 +428,11 @@ static func make_badge() -> Sprite3D:
 	var pill := _billboard(MissMarkers.CAPTION_PRIORITY)
 	pill.name = PILL
 	badge.add_child(pill)
-	var label := Label3D.new()
+	var label := CaptionFont.apply(Label3D.new())
 	label.name = COUNT
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.fixed_size = true
 	label.no_depth_test = true
-	label.font = font()
 	label.font_size = COUNT_FONT
 	label.outline_size = 0
 	label.modulate = MarkerIcons.OUTLINE

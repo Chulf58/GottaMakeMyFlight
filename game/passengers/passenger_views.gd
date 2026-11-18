@@ -942,7 +942,7 @@ func _take(p: Passenger) -> Node3D:
 	node.set_meta(&"body", body)
 	NeedIcons.find_head(node)
 	PassengerLooks.paint_body(node, body, PassengerLooks.tint_of(p.id))
-	var bubble := Label3D.new()
+	var bubble := CaptionFont.apply(Label3D.new())
 	bubble.name = "Bubble"
 	bubble.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	bubble.no_depth_test = true
