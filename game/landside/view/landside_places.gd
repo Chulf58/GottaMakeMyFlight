@@ -33,7 +33,6 @@ const LOT_YAW := -PI / 2.0
 const LOT_BARRIER_X := -7.0
 ## The Closed sign floats this high over the gate.
 const SIGN_HEIGHT := 4.0
-const CLOSED_CAPTION := MissMarkers.CLOSED_CAPTION
 
 @export var landside: LandsideSim
 ## The road and sidewalk top, one plane in the shell (tp_airport_shell.glb).
@@ -204,7 +203,7 @@ func _new_sign(definition: LandsideDefinition, spot: int) -> Node3D:
 	sign.position = Vector3(gate.x, road_top + SIGN_HEIGHT, gate.z)
 	var caption := Label3D.new()
 	caption.name = "Caption"
-	caption.text = CLOSED_CAPTION
+	caption.text = MissMarkers.closed_caption()
 	caption.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	caption.fixed_size = true
 	caption.no_depth_test = true

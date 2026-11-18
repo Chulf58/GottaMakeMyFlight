@@ -156,8 +156,10 @@ func _draw_room(room_id: int) -> void:
 	add_child(tint)
 	var label := Label3D.new()
 	label.name = "RoomLabel%d" % room_id
-	var lines := [status.type_name]
-	lines.append_array(Array(status.notes) if not status.ok else [RoomRules.READY])
+	var lines := [DisplayWords.room_type(status.type_name)]
+	lines.append_array(
+		Array(DisplayWords.notes(status)) if not status.ok else [DisplayWords.ready()]
+	)
 	label.text = "\n".join(lines)
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.no_depth_test = true

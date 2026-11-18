@@ -127,7 +127,8 @@ func test_the_pause_button_pauses_and_resumes_at_the_same_speed() -> void:
 		_hud.find_child("FlightPanel", true, false).find_children("*", "Button", true, false)[0]
 		as Button
 	)
-	assert_str(pause.text).is_equal("Pause")
+	assert_str(pause.name).is_equal("SpeedPause")
+	assert_str(pause.tooltip_text).is_equal("Pause (Space)")
 	pause.pressed.emit()
 	assert_bool(_world.clock.paused).is_true()
 	_hud.refresh()

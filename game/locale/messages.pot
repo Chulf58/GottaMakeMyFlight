@@ -1436,14 +1436,6 @@ msgstr ""
 msgid "Take car parks and curbs back with the Remove tool"
 msgstr ""
 
-#: ui/build_menu.gd ui/build_menu_layout.gd
-msgid "Money  --"
-msgstr ""
-
-#: ui/build_menu.gd
-msgid "Money  {amount}"
-msgstr ""
-
 #: ui/build_menu.gd ui/build_menu_layout.gd ui/templates_page.gd
 msgctxt "price"
 msgid "Free"
@@ -3823,3 +3815,1439 @@ msgstr ""
 msgctxt "gate card"
 msgid "Walk from security: {minutes} min"
 msgstr ""
+
+#: ui/passenger_hud.gd
+msgid "Quiet night: fast-forwarding"
+msgstr ""
+
+#: ui/passenger_hud.gd
+msgctxt "clock"
+msgid "Day {day}  {time}"
+msgstr ""
+
+#: ui/passenger_hud.gd
+msgctxt "follow line"
+msgid "Passenger {id}"
+msgstr ""
+
+#: ui/passenger_hud.gd
+msgctxt "follow line"
+msgid "mood {value}"
+msgstr ""
+
+#: ui/passenger_hud.gd
+msgctxt "follow line"
+msgid "hunger {value}"
+msgstr ""
+
+#: ui/passenger_hud.gd
+msgctxt "follow line"
+msgid "toilet {value}"
+msgstr ""
+
+#: ui/passenger_hud.gd
+msgctxt "passenger speech"
+msgid "\"{text}\""
+msgstr ""
+
+#: ui/hints.gd
+msgid "Hint ({key} turns hints off)"
+msgstr ""
+
+#: ui/hints.gd
+msgid "Hints ({key})"
+msgstr ""
+
+#: ui/hints.gd
+msgid "Reset hints"
+msgstr ""
+
+#: ui/hint_rules.gd
+msgid "Passengers need a check-in desk. Each desk also needs a hired agent: open Staff on the bar."
+msgstr ""
+
+#: ui/hint_rules.gd
+msgid "Passengers need security after check-in. Place a scanner or build a lane, and hire an officer."
+msgstr ""
+
+#: ui/hint_rules.gd
+msgid "One agent works one desk or scanner. Hire another on the Staff card."
+msgstr ""
+
+#: ui/hint_rules.gd
+msgid "Passengers need a toilet. Build a toilet room and put a stall in it."
+msgstr ""
+
+#: ui/hint_rules.gd
+msgid "Hungry passengers need food. Build a cafe with a counter and a table."
+msgstr ""
+
+#: ui/game_menu.gd
+msgid "Game menu"
+msgstr ""
+
+#: ui/game_menu.gd
+msgid "Resume ({key})"
+msgstr ""
+
+#: ui/game_menu.gd
+msgid "Settings"
+msgstr ""
+
+#: ui/game_menu.gd
+msgid "Incidents"
+msgstr ""
+
+#: ui/game_menu.gd
+msgid "Back"
+msgstr ""
+
+#: ui/game_menu.gd
+msgid "Daily incidents"
+msgstr ""
+
+#: ui/game_menu.gd
+msgid "One more thing before the doors open. Some days bring trouble: a spill on the floor, an inspector, a holiday rush. Shall I send those your way?"
+msgstr ""
+
+#: ui/game_menu.gd
+msgid "Accept turns daily incidents on, Decline leaves them off. You can change this any time: press {key}, then Settings."
+msgstr ""
+
+#: ui/intro_dialogue.gd
+msgid "Your first day at the airport"
+msgstr ""
+
+#: ui/intro_dialogue.gd
+msgid "Continue ({key})"
+msgstr ""
+
+#: ui/intro_dialogue.gd
+msgid "Accept"
+msgstr ""
+
+#: ui/intro_dialogue.gd
+msgid "Decline"
+msgstr ""
+
+#: ui/intro_dialogue.gd
+msgid "Welcome to your new airport! Passengers are on their way, and every one of them has a flight to catch."
+msgstr ""
+
+#: ui/intro_dialogue.gd
+msgid "Build them a path: entrance, then check-in, then security, then the gate exit. Number keys pick tools, {pause} pauses, {speed} sets speed."
+msgstr ""
+
+#: ui/intro_dialogue.gd
+msgid "The clock starts when you close this."
+msgstr ""
+
+#: ui/intro_dialogue.gd
+msgid "TERMINAL MANAGER"
+msgstr ""
+
+#: ui/mood_overlay.gd
+msgid "Mood ({key})"
+msgstr ""
+
+#: ui/mood_overlay.gd
+msgid "green fed, orange hungry, red starving"
+msgstr ""
+
+#: ui/mood_overlay.gd
+msgid "green fine, orange needs the toilet, red desperate"
+msgstr ""
+
+#: ui/mood_overlay.gd
+msgid "green content, orange bored, red very bored"
+msgstr ""
+
+#: ui/mood_overlay.gd
+msgid "amber where passengers are running late"
+msgstr ""
+
+#: ui/mood_overlay.gd
+msgid "green fine, red waiting long or unhappy"
+msgstr ""
+
+#: ui/mood_overlay.gd
+msgctxt "mood overlay mode"
+msgid "Hunger"
+msgstr ""
+
+#: ui/mood_overlay.gd
+msgctxt "mood overlay mode"
+msgid "Toilet"
+msgstr ""
+
+#: ui/mood_overlay.gd
+msgctxt "mood overlay mode"
+msgid "Boredom"
+msgstr ""
+
+#: ui/mood_overlay.gd
+msgctxt "mood overlay mode"
+msgid "Late"
+msgstr ""
+
+#: ui/mood_overlay.gd
+msgctxt "mood overlay mode"
+msgid "Mood"
+msgstr ""
+
+#: ui/money_slot.gd
+msgctxt "money card"
+msgid "Today"
+msgstr ""
+
+#: ui/money_slot.gd
+msgctxt "money card"
+msgid "Since load"
+msgstr ""
+
+#: ui/money_slot.gd
+msgctxt "money card"
+msgid "Cash change today"
+msgstr ""
+
+#: ui/money_slot.gd
+msgctxt "money card"
+msgid "Cash change since load"
+msgstr ""
+
+#: ui/money_slot.gd
+msgctxt "money card"
+msgid "Airline fees"
+msgstr ""
+
+#: ui/money_slot.gd
+msgctxt "money card"
+msgid "Shops"
+msgstr ""
+
+#: ui/money_slot.gd
+msgctxt "money card"
+msgid "Parking"
+msgstr ""
+
+#: ui/money_slot.gd
+msgctxt "money card"
+msgid "Wages paid"
+msgstr ""
+
+#: ui/money_slot.gd
+msgctxt "money card"
+msgid "Upkeep paid"
+msgstr ""
+
+#: ui/money_slot.gd
+msgctxt "money card"
+msgid "Airline fines"
+msgstr ""
+
+#: ui/money_slot.gd
+msgctxt "money card"
+msgid "Operating result"
+msgstr ""
+
+#: ui/money_slot.gd
+msgctxt "money card"
+msgid "Building"
+msgstr ""
+
+#: ui/money_slot.gd
+msgctxt "money card"
+msgid "Rescue grant"
+msgstr ""
+
+#: ui/money_slot.gd
+msgctxt "money card"
+msgid "Incidents"
+msgstr ""
+
+#: ui/money_slot.gd
+msgctxt "money card"
+msgid "Signing bonus"
+msgstr ""
+
+#: ui/money_slot.gd
+msgctxt "money card"
+msgid "Unpaid fines"
+msgstr ""
+
+#: ui/money_slot.gd
+msgctxt "money card"
+msgid "Owed wages"
+msgstr ""
+
+#: ui/money_slot.gd
+msgctxt "money card"
+msgid "Owed upkeep"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "room name, mid-sentence"
+msgid "ATM"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Heading to the {shop}"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Browsing at the {shop}"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Using the {shop}"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Playing in the {shop}"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Relaxing in the {shop}"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Resting in the {shop}"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Heading to the food stall"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Queuing at the food stall"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Grabbing a snack"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Heading to the bar"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Queuing at the bar"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Ordering a drink"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Taking a drink to a seat"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Sitting down at the bar"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Having a drink"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Leaving the bar"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Heading to the restaurant"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Queuing at the restaurant"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Ordering a meal"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Taking a meal to a table"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Sitting down at the restaurant"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Having a meal"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Leaving the restaurant"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Arriving"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Heading to check-in"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Queuing for check-in"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Checking in"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Heading to security"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Queuing for security"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Going through security"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Heading to the gate"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Sitting down"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Waiting at the gate"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Standing at the gate"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Getting up to board"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Heading to the exit"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Walking to the plane"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Boarded"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Missed the flight"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Heading to the cafe"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Queuing at the cafe"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Ordering a coffee"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Taking a coffee to a seat"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Sitting down at the cafe"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Having a coffee"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Leaving the cafe"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Heading to the toilet"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Going into a toilet stall"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "In a toilet stall"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Leaving the toilet"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Heading to a shop"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Browsing at a shop"
+msgstr ""
+
+#: ui/passenger_hud.gd
+msgctxt "speed button"
+msgid "Pause ({key})"
+msgstr ""
+
+#: ui/passenger_hud.gd
+msgctxt "speed button"
+msgid "Speed {speed}x ({key})"
+msgstr ""
+
+#: airside/apron_stand.gd
+msgctxt "apron caption"
+msgid "Gate {gate}: no usable stand. Keep its apron and the walk to it clear"
+msgstr ""
+
+#: airside/apron_stand.gd
+msgctxt "apron caption"
+msgid "Gate {gate}: long walk to the plane: {meters} m"
+msgstr ""
+
+#: airside/apron_stand.gd
+msgctxt "apron caption"
+msgid "No usable stand: no exit facing the planes has a clear apron"
+msgstr ""
+
+#: airside/apron_stand.gd
+msgctxt "apron caption"
+msgid "Stand moves to the new exit after takeoff at {time}"
+msgstr ""
+
+#: airside/apron_stand.gd
+msgctxt "apron caption"
+msgid "Long walk to the plane: {meters} m"
+msgstr ""
+
+#: build/land_tool.gd
+msgctxt "land tool"
+msgid "Buy  {price}"
+msgstr ""
+
+#: build/land_tool.gd
+msgctxt "land tool"
+msgid "Click to buy this {width}x{height} m plot"
+msgstr ""
+
+#: airside/gate_walk.gd
+msgctxt "gate caption"
+msgid "{minutes} min walk"
+msgstr ""
+
+#: airside/gate_links_view.gd
+msgctxt "gate caption"
+msgid "Gate {gate}"
+msgstr ""
+
+#: airside/gate_links_view.gd
+msgctxt "gate caption"
+msgid "no room for a plane"
+msgstr ""
+
+#: airside/gate_links_view.gd
+msgctxt "gate caption"
+msgid "up to small planes"
+msgstr ""
+
+#: airside/gate_links_view.gd
+msgctxt "gate caption"
+msgid "up to medium planes"
+msgstr ""
+
+#: airside/gate_links_view.gd
+msgctxt "gate caption"
+msgid "up to large planes"
+msgstr ""
+
+#: airside/gate_links_view.gd
+msgctxt "gate caption"
+msgid "up to {class} planes"
+msgstr ""
+
+#: airside/gate_links_view.gd
+msgctxt "gate caption"
+msgid "Unlinked: no exit facing the planes in {cells} cells"
+msgstr ""
+
+#: airside/gate_links_view.gd
+msgctxt "gate caption"
+msgid "Unlinked: Gate {gate} uses the exit"
+msgstr ""
+
+#: airside/gate_links_view.gd
+msgctxt "gate caption"
+msgid "Unlinked: stand would overlap Gate {gate}"
+msgstr ""
+
+#: airside/gate_links_view.gd
+msgctxt "gate caption"
+msgid "Unlinked: no room for a plane"
+msgstr ""
+
+#: airside/gate_links_view.gd
+msgctxt "gate caption"
+msgid "Unlinked: way to the lane blocked"
+msgstr ""
+
+#: airside/gate_links_view.gd
+msgctxt "gate caption"
+msgid "Unlinked: every gate letter in use"
+msgstr ""
+
+#: passengers/miss_markers.gd
+msgctxt "sign caption"
+msgid "Closed"
+msgstr ""
+
+#: passengers/miss_markers.gd
+msgctxt "sign text"
+msgid "Closed · no staff on duty"
+msgstr ""
+
+#: passengers/miss_markers.gd
+msgctxt "sign text"
+msgid "Closed by you"
+msgstr ""
+
+#: passengers/miss_markers.gd
+msgctxt "sign text"
+msgid "Closed · staff spot blocked"
+msgstr ""
+
+#: passengers/miss_markers.gd
+msgctxt "sign text"
+msgid "Closed · staff can't reach the desk"
+msgstr ""
+
+#: passengers/miss_markers.gd
+msgctxt "sign text"
+msgid "Closed · staff can't reach the scanner"
+msgstr ""
+
+#: passengers/miss_markers.gd
+msgctxt "sign text"
+msgid "Closed · staff can't reach the counter"
+msgstr ""
+
+#: passengers/miss_markers.gd
+msgctxt "sign text"
+msgid "Closed · scanner fault, fixed by {time}"
+msgstr ""
+
+#: passengers/cafe_pops.gd
+msgctxt "money pop"
+msgid "+${amount}"
+msgstr ""
+
+#: passengers/bubble_words.gd
+msgctxt "speech bubble"
+msgid "I'm late!"
+msgstr ""
+
+#: passengers/bubble_words.gd
+msgctxt "speech bubble"
+msgid "Missed my flight!"
+msgstr ""
+
+#: passengers/bubble_words.gd
+msgctxt "speech bubble"
+msgid "Where is check-in?"
+msgstr ""
+
+#: passengers/bubble_words.gd
+msgctxt "speech bubble"
+msgid "Where is security?"
+msgstr ""
+
+#: passengers/bubble_words.gd
+msgctxt "speech bubble"
+msgid "Queue full"
+msgstr ""
+
+#: passengers/bubble_words.gd
+msgctxt "speech bubble"
+msgid "I can't get there"
+msgstr ""
+
+#: passengers/bubble_words.gd
+msgctxt "speech bubble"
+msgid "The exit is blocked"
+msgstr ""
+
+#: passengers/bubble_words.gd
+msgctxt "speech bubble"
+msgid "The gate is full"
+msgstr ""
+
+#: passengers/bubble_words.gd
+msgctxt "speech bubble"
+msgid "Check-in is closed"
+msgstr ""
+
+#: passengers/bubble_words.gd
+msgctxt "speech bubble"
+msgid "Security is closed"
+msgstr ""
+
+#: passengers/miss_markers.gd
+msgctxt "sign text"
+msgid "Queue full · {count} waiting"
+msgid_plural "Queue full · {count} waiting"
+msgstr[0] ""
+msgstr[1] ""
+
+#: passengers/miss_markers.gd build/build_words.gd
+msgctxt "lane status"
+msgid "Lane ready"
+msgstr ""
+
+#: passengers/miss_markers.gd build/build_words.gd
+msgctxt "lane status"
+msgid "Needs a tray table"
+msgstr ""
+
+#: passengers/miss_markers.gd build/build_words.gd
+msgctxt "lane status"
+msgid "Needs an X-ray belt"
+msgstr ""
+
+#: passengers/miss_markers.gd build/build_words.gd
+msgctxt "lane status"
+msgid "Needs a pickup table"
+msgstr ""
+
+#: passengers/miss_markers.gd build/build_words.gd
+msgctxt "lane status"
+msgid "Parts face different ways"
+msgstr ""
+
+#: passengers/miss_markers.gd build/build_words.gd
+msgctxt "lane status"
+msgid "A wall cuts through the lane"
+msgstr ""
+
+#: passengers/miss_markers.gd build/build_words.gd
+msgctxt "lane status"
+msgid "Clear the way through the arch"
+msgstr ""
+
+#: passengers/miss_markers.gd build/build_words.gd
+msgctxt "lane status"
+msgid "Clear the floor for the queue"
+msgstr ""
+
+#: passengers/miss_markers.gd build/build_words.gd
+msgctxt "lane status"
+msgid "Clear the floor for the repack spot"
+msgstr ""
+
+#: passengers/miss_markers.gd build/build_words.gd
+msgctxt "lane status"
+msgid "Clear the way back from the repack spot"
+msgstr ""
+
+#: passengers/miss_markers.gd build/build_words.gd
+msgctxt "lane status"
+msgid "Clear the way out past the pickup table"
+msgstr ""
+
+#: passengers/miss_markers.gd build/build_words.gd
+msgctxt "lane status"
+msgid "Clear the officer's spot by the X-ray belt"
+msgstr ""
+
+#: passengers/miss_markers.gd build/build_words.gd
+msgctxt "lane status"
+msgid "Clear the helper's spot by the repack spot"
+msgstr ""
+
+#: passengers/miss_markers.gd build/build_words.gd
+msgctxt "lane status"
+msgid "No arch"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "door hint"
+msgid "Put the {door} on a floor tile at the outside edge"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "door hint"
+msgid "Put the {door} on the outside edge of the floor"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "door hint"
+msgid "Clear the floor in front of the {door}"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "door hint"
+msgid "Take down the glass or door wall behind the {door}"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "door hint"
+msgid "The wall behind the {door} holds a door; pick another spot"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "{blocker} in front"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Outside the building area"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Needs floor"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Unknown floor type"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Zone id must be 0 or more"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Facing must be 0 to 3"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Unknown object"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Overlaps another object"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "A wall runs through it"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "The spot in front is blocked"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Blocks the spot in front of another object"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "An object stands here"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "There is already a wall here"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "No wall here"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "No such object"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Unknown wall kind"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "A door needs a plain wall on each side"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "A door stands beside this wall"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Entrances and exits need the outside edge, with no floor behind them"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Keep the edge behind an entrance or exit open"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Unknown room type"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Overlaps another room"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "A room covers this floor; remove the room first"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "No such room"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Not enough money"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "This piece has no price"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "The money is at its limit; the refund would not fit"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Belts cannot cross; a belt joins at most three others"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "A wall is in the way of the belt"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Only a belt piece changes shape"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Keep the staff spot behind a desk, beside a scanner or at a lane officer's post free, with a way in"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "A wall is in the way of the lane. Remove the wall first"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Put it on one of the marked landside spots"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Every spot of this kind nearby is already built"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Cars are still in it. Close it and wait until it is empty"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "A wall is in the way of the room"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "A plane uses this apron. Build here after it takes off"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "You do not own this land. Buy the plot with Buy land first"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "You already own this plot"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Buy a plot next to land you own"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Put a gate desk within 4 cells of a free exit facing the planes"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "A flight is still due at this gate. Remove it after the flight leaves"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "No other gate is free for these flights. Move them in Departures first"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Something is in front of the door"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "A piece sits across the room's edge"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Desks, scanners and lane parts cannot move with a room"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "A piece does not fit at the new spot"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Keep the way out clear for the passengers leaving the room"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "The room changed since it was picked up. Pick it up again"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Not unlocked yet"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "No room for a plane outside this exit. Keep the ground out from it clear"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Something blocks the way from this exit to the taxi lane. Clear a path out from it"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "A booked flight's plane needs this ground. Move its flights in Departures first"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "The side taxiway would have to move and leave a booked flight with no way to its gate"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Outside the building"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Overlaps an object"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "A wall is in the way"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Front spot blocked"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Blocks a front spot"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Wall already here"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Needs wall on both sides"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "A door is beside it"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Needs the outside edge"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Keep the edge open"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Overlaps a room"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Remove the room first"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Money at its limit"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Belts cannot cross"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Keep the staff spot free"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "A wall is in the lane"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Bad zone id"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Only belts change shape"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Needs a marked spot"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Spot already built"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Cars are still in it"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "A plane is on the apron"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Buy this land first"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Plot already owned"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Not next to your land"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "No free exit nearby"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Gates are too close"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "A flight is due here"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Flights have no gate"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "A piece is on the edge"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "A piece cannot move"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "A piece does not fit"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Blocks a way out"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "The room changed"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "No room for the plane"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Way to the lane blocked"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "A booked plane needs it"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Strands a booked flight"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build status"
+msgid "Drag to lay a belt"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build status"
+msgid "Not part of a lane"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build status"
+msgid "Its front is outside the room, so it will not count"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build status"
+msgid "Drag stops over the menu. Move back onto the floor to keep sizing"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "door tool, mid-sentence"
+msgid "entrance"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "door tool, mid-sentence"
+msgid "exit"
+msgstr ""
+
+#: build/build_result.gd
+msgctxt "build refusal"
+msgid "Gates need {metres} m between exits. Widen the terminal"
+msgstr ""
+
+#: build/build_result.gd
+msgctxt "build refusal"
+msgid "{reason}: {detail}"
+msgstr ""
+
+#: build/build_mode.gd
+msgctxt "build status"
+msgid "{item} placed"
+msgstr ""
+
+#: build/room_move_tool.gd
+msgctxt "room move"
+msgid "Moved {room}"
+msgstr ""
+
+#: build/room_move_tool.gd
+msgctxt "room move"
+msgid "Moved {room} for {cost}"
+msgstr ""
+
+#: build/room_move_tool.gd
+msgctxt "room move"
+msgid "{room}: click to set down, right-click cancels"
+msgstr ""
+
+#: build/landside_placement.gd
+msgctxt "landside plan"
+msgid "Refunds {price}"
+msgstr ""
+
+#: build/landside_placement.gd
+msgctxt "landside plan"
+msgid "{place} (open, {count} car): click to close it"
+msgid_plural "{place} (open, {count} cars): click to close it"
+msgstr[0] ""
+msgstr[1] ""
+
+#: build/landside_placement.gd
+msgctxt "landside plan"
+msgid "{place} (closed, {count} car): click to open it"
+msgid_plural "{place} (closed, {count} cars): click to open it"
+msgstr[0] ""
+msgstr[1] ""
+
+#: build/landside_placement.gd
+msgctxt "landside plan"
+msgid "Remove {place}: {capacity}, {metres} m walk to the nearest landside door"
+msgstr ""
+
+#: build/landside_placement.gd
+msgctxt "landside plan"
+msgid "Remove {place}: {capacity}"
+msgstr ""
+
+#: build/landside_placement.gd
+msgctxt "landside plan"
+msgid "{place}: {capacity}, {metres} m walk to the nearest landside door"
+msgstr ""
+
+#: build/landside_placement.gd
+msgctxt "landside plan"
+msgid "{place}: {capacity}"
+msgstr ""
+
+#: build/landside_placement.gd
+msgctxt "landside place, mid-sentence"
+msgid "curb bay"
+msgstr ""
+
+#: build/landside_placement.gd
+msgctxt "landside place, mid-sentence"
+msgid "surface lot"
+msgstr ""
+
+#: build/landside_placement.gd
+msgctxt "landside place, mid-sentence"
+msgid "multi-storey car park"
+msgstr ""
+
+#: build/landside_placement.gd
+msgctxt "landside plan"
+msgid "{count} car is still in it. Close it and wait until it is empty"
+msgid_plural "{count} cars are still in it. Close it and wait until it is empty"
+msgstr[0] ""
+msgstr[1] ""
+
+#: build/landside_placement.gd
+msgctxt "landside plan"
+msgid "{count} berth"
+msgid_plural "{count} berths"
+msgstr[0] ""
+msgstr[1] ""
+
+#: build/landside_placement.gd
+msgctxt "landside plan"
+msgid "{count} space"
+msgid_plural "{count} spaces"
+msgstr[0] ""
+msgstr[1] ""

@@ -31,9 +31,6 @@ signal status_changed(text: String)
 signal active_changed
 
 const DIM_TINT := Color(0.0, 0.0, 0.0, 0.4)
-const HINT := "%s: click to set down, right-click cancels"
-const MOVED := "Moved %s"
-const MOVED_PAID := "Moved %s for %d"
 
 ## True while a room is in hand.
 var active := false
@@ -132,7 +129,7 @@ func pick_up(point: Vector3, type: StringName) -> bool:
 	_plan = null
 	_key = ""
 	_dim_original()
-	_set_status(HINT % _name_of(id))
+	_set_status(_hint(id))
 	active_changed.emit()
 	return true
 
@@ -204,7 +201,11 @@ func set_down(centre: Vector2i) -> BuildResult:
 	if not result.ok:
 		_set_status("%s  %s" % [name_of, result.reason_text()])
 		return result
-	var note := MOVED % name_of if move.cost <= 0 else MOVED_PAID % [name_of, move.cost]
+	var note := (
+		tr("Moved {room}", "room move").format({"room": name_of})
+		if move.cost <= 0
+		else tr("Moved {room} for {cost}", "room move").format({"room": name_of, "cost": move.cost})
+	)
 	active = false
 	room_id = 0
 	turns = 0
@@ -274,7 +275,7 @@ func hover_at(cell: Variant) -> void:
 	for edit in _plan.edits:
 		if edit.kind == BuildEdit.Kind.PLACE_OBJECT:
 			_ghost_piece(shaped.get(edit.cell, edit), material)
-	var text := HINT % _name_of(room_id)
+	var text := _hint(room_id)
 	if not ok:
 		text = "%s  %s" % [_name_of(room_id), _plan.result.reason_text()]
 	_set_status(text)
@@ -318,7 +319,15 @@ static func _centre_of(rect: Rect2i) -> Vector2i:
 
 func _name_of(id: int) -> String:
 	var room := _mode.grid.get_room(id)
-	return RoomTypes.get_type(room["type"]).display_name if not room.is_empty() else ""
+	if room.is_empty():
+		return ""
+	return DisplayWords.room_type(RoomTypes.get_type(room["type"]).display_name)
+
+
+func _hint(id: int) -> String:
+	return tr("{room}: click to set down, right-click cancels", "room move").format(
+		{"room": _name_of(id)}
+	)
 
 
 ## The grid cell under the pointer, or null off the grid or over the HUD.

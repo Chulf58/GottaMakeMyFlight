@@ -19,6 +19,7 @@ func after() -> void:
 
 
 func after_test() -> void:
+	PseudoLocale.disable()
 	if _root_scale > 0.0:
 		get_tree().root.content_scale_factor = _root_scale
 		_root_scale = -1.0
@@ -77,6 +78,27 @@ func _desk_centre(desk: int) -> Vector3:
 	var def := BuildCatalog.get_def(StringName(record["def"]))
 	var cells := def.footprint(record["anchor"], record["facing"])
 	return BuildView.object_transform(_world.grid, cells, record["facing"]).origin
+
+
+## tr_n() lines are never pseudolocalized (PseudoLocale), so the proof is a
+## plural translation that is only found when the sign asks with its context.
+func test_the_queue_full_sign_says_its_words_in_the_players_language() -> void:
+	var translation := Translation.new()
+	translation.locale = TranslationServer.get_locale()
+	translation.add_plural_message(
+		"Queue full · {count} waiting",
+		PackedStringArray(["QF1 {count}", "QFN {count}"]),
+		"sign text"
+	)
+	TranslationServer.add_translation(translation)
+	_attach(_short_lane_world())
+	var desk: int = _world.sim.get_meta(&"desk")
+	_spawn_spaced(3)
+	_world.run_to(_world.clock.tick + 25)
+	var text := _markers.sign_text(desk)
+	TranslationServer.remove_translation(translation)
+	print("queue full sign with a plural translation: %s" % text)
+	assert_str(text).is_equal("QFN 3")
 
 
 func test_a_full_desk_gets_a_sign_above_it() -> void:
@@ -260,3 +282,42 @@ func test_the_full_sign_is_the_queue_glyph_and_reports_its_hover_rect() -> void:
 	assert_float(rect.end.y).is_equal_approx(foot.y, 0.01)
 	assert_float(rect.get_center().x).is_equal_approx(foot.x, 0.01)
 	remove_child(camera)
+
+
+## An arch with no tray table: its lane-hint sign speaks the player's language
+## while the English text from SecurityLanes still keys the logic.
+func test_the_lane_hint_sign_says_its_words_in_the_players_language() -> void:
+	var grid := PassengerTestWorld.floored(Vector2i(14, 14))
+	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(0, 13), 3)
+	var arch: int = (
+		SecurityLaneBuilder
+		. build(grid, Vector2i(5, 6), 0, SecurityLanes.RIGHT, [SecurityLanes.TRAY_TABLE])[
+			SecurityLanes.ARCH
+		]
+	)
+	var world := PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(4000, 5000))
+	world.auto_staff = false
+	_attach(world)
+	var english := "Needs a tray table"
+	assert_str(MissSignals.lane_hint(world.sim, arch)).is_equal(english)
+	assert_str(_markers.hint_text(arch)).is_equal(english)
+	PseudoLocale.enable(0.4)
+	_markers.sync()
+	var shown := _markers.hint_text(arch)
+	print("lane hint under pseudolocale: %s" % shown)
+	assert_str(shown).starts_with("[")
+	assert_str(shown.lstrip("[_")).starts_with(english)
+	# The behaviour key is still English.
+	assert_str(MissSignals.lane_hint(world.sim, arch)).is_equal(english)
+	assert_str(world.sim.layout.security_lanes.status_text(arch)).is_equal(english)
+
+
+## Every lane-hint text has a translation entry, so none shows English to a
+## player who has the translation.
+func test_every_lane_status_text_has_a_translation_entry() -> void:
+	assert_array(BuildWords.lane_status_msgids()).contains_exactly_in_any_order(
+		SecurityLanes.STATUS_TEXT.values()
+	)
+	PseudoLocale.enable(0.4)
+	for text: String in SecurityLanes.STATUS_TEXT.values():
+		assert_str(MissMarkers.lane_status_text(text).lstrip("[_")).starts_with(text)

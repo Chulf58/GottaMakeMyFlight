@@ -18,6 +18,7 @@ func before_test() -> void:
 
 
 func after_test() -> void:
+	PseudoLocale.disable()
 	_mode.free()
 
 
@@ -44,6 +45,20 @@ func test_a_new_room_is_labelled_with_what_it_needs() -> void:
 	assert_that((tint.material_override as StandardMaterial3D).albedo_color).is_equal(
 		RoomView.NEEDS_TINT
 	)
+
+
+func test_the_label_says_its_words_in_the_players_language() -> void:
+	PseudoLocale.enable(0.4)
+	var room_id := _mode.grid.apply(BuildEdit.place_room(Rect2i(2, 2, 5, 4), &"cafe")).room_id
+	await _next_frame()
+	var lines := _view().label_of(room_id).text.split("\n")
+	print("room label in a pseudolocale: %s" % [lines])
+	assert_int(lines.size()).is_equal(3)
+	for line in lines:
+		assert_str(line).starts_with("[")
+	assert_str(lines[0].lstrip("[_")).starts_with("Cafe")
+	assert_str(lines[1].lstrip("[_")).starts_with("Needs a counter")
+	assert_str(lines[2].lstrip("[_")).starts_with("Needs a table")
 
 
 func test_furnishing_turns_the_room_ready() -> void:

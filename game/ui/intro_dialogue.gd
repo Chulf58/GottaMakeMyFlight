@@ -17,18 +17,10 @@ signal dismissed
 signal chosen(accepted: bool)
 
 const PORTRAIT := preload("res://assets/ui/intro_manager_portrait.png")
-const NAME_TEXT := "TERMINAL MANAGER"
-const TITLE_TEXT := "Your first day at the airport"
-const BODY_TEXT := (
-	"Welcome to your new airport! Passengers are on their way, and every one of "
-	+ "them has a flight to catch.\n"
-	+ "Build them a path: entrance, then check-in, then security, then the gate exit. "
-	+ "Number keys pick tools, Space pauses, Shift+1/2/3 sets speed.\n"
-	+ "The clock starts when you close this."
-)
-const CONTINUE_TEXT := "Continue (Space)"
-const ACCEPT_TEXT := "Accept"
-const DECLINE_TEXT := "Decline"
+## The Continue key's name, a placeholder in the button.
+const CONTINUE_KEY := "Space"
+## The speed keys' names, a placeholder in the intro text.
+const SPEED_KEYS_TEXT := "Shift+1/2/3"
 ## Sizes at a 1920x1080 screen.
 const BOX_SIZE := Vector2(1060.0, 300.0)
 const PORTRAIT_SIZE := 520.0
@@ -56,8 +48,8 @@ const DIM_COLOR := Color(0.03, 0.04, 0.06, 0.45)
 static var shown_this_session := false
 
 var _done := false
-var _title_text := TITLE_TEXT
-var _body_text := BODY_TEXT
+var _title_text := ""
+var _body_text := ""
 var _box_height := BOX_SIZE.y
 var _offer := false
 ## Holds the portrait, box and nameplate at their 1080p layout; _place moves it
@@ -82,12 +74,11 @@ static func should_show(already_shown: bool, in_current_scene: bool, playtest_on
 ## The first-day intro by default; UnlockGuide passes its own title, body and a
 ## taller box for a new tier's dialog, which reuses the same portrait, box and
 ## Continue. The box grows upward from its fixed bottom edge. `offer` swaps
-## Continue for Accept and Decline.
-func _init(
-	title_text := TITLE_TEXT, body_text := BODY_TEXT, box_height := BOX_SIZE.y, offer := false
-) -> void:
-	_title_text = title_text
-	_body_text = body_text
+## Continue for Accept and Decline. An empty title or body is the intro's own
+## text, in the player's words.
+func _init(title_text := "", body_text := "", box_height := BOX_SIZE.y, offer := false) -> void:
+	_title_text = title_text if title_text != "" else tr("Your first day at the airport")
+	_body_text = body_text if body_text != "" else _intro_body()
 	_box_height = box_height
 	_offer = offer
 	name = "IntroDialogue"
@@ -233,10 +224,10 @@ func _build_box() -> void:
 	_body.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_box.add_child(_body)
 	_continue.name = "Continue"
-	_continue.text = CONTINUE_TEXT
+	_continue.text = tr("Continue ({key})").format({"key": CONTINUE_KEY})
 	_continue.focus_mode = Control.FOCUS_NONE
 	_continue.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	_continue.offset_left = -220.0
+	_continue.offset_left = -260.0
 	_continue.offset_top = -62.0
 	_continue.offset_right = -24.0
 	_continue.offset_bottom = -20.0
@@ -244,10 +235,26 @@ func _build_box() -> void:
 	_box.add_child(_continue)
 	if _offer:
 		_continue.visible = false
-		_accept = _corner_button("Accept", ACCEPT_TEXT, 0.0)
+		_accept = _corner_button("Accept", tr("Accept"), 0.0)
 		_accept.pressed.connect(choose.bind(true))
-		_decline = _corner_button("Decline", DECLINE_TEXT, 210.0)
+		_decline = _corner_button("Decline", tr("Decline"), 270.0)
 		_decline.pressed.connect(choose.bind(false))
+
+
+## The first-day text, one msgid per paragraph, joined by line breaks. The
+## speed keys are placeholders so a language can keep or move them.
+func _intro_body() -> String:
+	var welcome := tr(
+		# gdlint:ignore = max-line-length
+		"Welcome to your new airport! Passengers are on their way, and every one of them has a flight to catch."
+	)
+	var path := tr(
+		# gdlint:ignore = max-line-length
+		"Build them a path: entrance, then check-in, then security, then the gate exit. Number keys pick tools, {pause} pauses, {speed} sets speed."
+	)
+	var clock := tr("The clock starts when you close this.")
+	var keys := {"pause": CONTINUE_KEY, "speed": SPEED_KEYS_TEXT}
+	return "\n".join(PackedStringArray([welcome, path.format(keys), clock]))
 
 
 ## A button in the box's bottom-right corner, `shift` pixels left of where
@@ -276,7 +283,7 @@ func _build_nameplate() -> void:
 	_nameplate.add_child(column)
 	var title := Label.new()
 	title.name = "Name"
-	title.text = NAME_TEXT
+	title.text = tr("TERMINAL MANAGER")
 	title.theme_type_variation = &"IntroName"
 	column.add_child(title)
 	var role := Label.new()

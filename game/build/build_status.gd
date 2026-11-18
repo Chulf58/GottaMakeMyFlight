@@ -38,7 +38,7 @@ static func show_status(mode: BuildMode, result: BuildResult) -> void:
 		mode._set_status(mode._status_note)
 		return
 	if mode.tool == BuildMode.Tool.BELT:
-		var text := BuildMode.BELT_HINT
+		var text := BuildWords.status(BuildMode.BELT_HINT)
 		if mode._area.active and mode._belt_plan != null:
 			text = "Belt %d cells" % mode._belt_plan.cells.size()
 		if result != null and not result.ok:
@@ -60,7 +60,7 @@ static func show_status(mode: BuildMode, result: BuildResult) -> void:
 	if refused:
 		var reason := result.reason_text()
 		if BuildMode.DOOR_NAMES.has(mode.tool) and BuildMode.DOOR_HINTS.has(result.reason):
-			reason = BuildMode.DOOR_HINTS[result.reason] % BuildMode.DOOR_NAMES[mode.tool]
+			reason = BuildWords.door_hint(result.reason, BuildMode.DOOR_NAMES[mode.tool])
 		text += ("  " if text != "" else "") + reason
 	if mode._front_warning != "" and not refused:
 		text += ("  " if text != "" else "") + mode._front_warning
@@ -86,11 +86,11 @@ static func lane_hint(on_grid: BuildGrid, cell: Vector2i) -> String:
 	if lanes.is_complete(id) or lanes.lane_of_piece(id) != 0:
 		return ""
 	if lanes.arches.has(id):
-		return lanes.status_text(id)
+		return lanes.status_words(id)
 	for arch in lanes.arches:
 		if (lanes.candidate(arch)["parts"] as Dictionary).values().has(id):
-			return lanes.status_text(arch)
-	return BuildMode.NOT_IN_LANE
+			return lanes.status_words(arch)
+	return BuildWords.status(BuildMode.NOT_IN_LANE)
 
 
 ## BuildMode.FRONT_OUTSIDE_ROOM for an object edit whose footprint lies wholly in
@@ -121,7 +121,7 @@ static func _room_front_warning(on_grid: BuildGrid, edit: BuildEdit) -> String:
 			return ""
 	if area.has_point(def.interaction_cell(edit.cell, edit.facing)):
 		return ""
-	return BuildMode.FRONT_OUTSIDE_ROOM
+	return BuildWords.status(BuildMode.FRONT_OUTSIDE_ROOM)
 
 
 ## lane_hint() for the cell under the pointer, kept until the pointer moves to

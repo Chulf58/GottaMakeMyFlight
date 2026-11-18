@@ -48,15 +48,19 @@ const DEBUG_POLICY_TEXT := "Debug only: the terminal is free with no refunds; pa
 const FOLLOW_BOTTOM := BuildMenu.MARGIN + BuildMenu.BAR_H + BuildMenu.GAP
 const FOLLOW_TOP := FOLLOW_BOTTOM + HudLayout.CHIP_H
 const SPEED_KEYS := {KEY_1: 1, KEY_2: 2, KEY_3: 3}
+## The speed buttons' icon files and node names by speed (0 is Pause), and the key names
+## their tooltips show.
+const SPEED_ICON := "res://assets/ui/icons/speed_%s.svg"
+const SPEED_NAMES: Array[String] = ["pause", "1", "2", "3"]
+const SPEED_BUTTON_W := 44.0
+const PAUSE_KEY := "Space"
+const SPEED_KEY_PREFIX := "Shift+"
 ## The Debug panel's fixed width; its labels wrap inside it.
 const DEBUG_W := 260.0
 ## Frames from a click that selected a built item to the camera deciding on a pan.
 const REVEAL_FRAMES := 2
 ## The flight result card's key on the rail.
 const RESULT_KEY := &"flight_result"
-## The chip under the clock panel while the clock fast-forwards a quiet night
-## (decision quiet-nights-fast-forward-automatically-when-nothing-is-due).
-const QUIET_NIGHT_TEXT := "Quiet night: fast-forwarding"
 ## The flight panel's word for each state from the doors closing on.
 const AFTER_DOORS_TEXT := {
 	FlightSim.State.DOORS_CLOSED: "Doors closed",
@@ -64,92 +68,6 @@ const AFTER_DOORS_TEXT := {
 	FlightSim.State.TAXI_OUT: "Taxiing",
 	FlightSim.State.TAKEOFF: "Taking off",
 	FlightSim.State.DEPARTED: "Departed",
-}
-const STAGE_TEXT := {
-	Passenger.Stage.SPAWNED: "Arriving",
-	Passenger.Stage.TO_CHECKIN: "Heading to check-in",
-	Passenger.Stage.CHECKIN_QUEUE: "Queuing for check-in",
-	Passenger.Stage.CHECKIN: "Checking in",
-	Passenger.Stage.TO_SECURITY: "Heading to security",
-	Passenger.Stage.SECURITY_QUEUE: "Queuing for security",
-	Passenger.Stage.SECURITY: "Going through security",
-	Passenger.Stage.TO_GATE: "Heading to the gate",
-	Passenger.Stage.SITTING_DOWN: "Sitting down",
-	Passenger.Stage.SEATED: "Waiting at the gate",
-	Passenger.Stage.STANDING: "Standing at the gate",
-	Passenger.Stage.STANDING_UP: "Getting up to board",
-	Passenger.Stage.TO_EXIT: "Heading to the exit",
-	Passenger.Stage.APRON: "Walking to the plane",
-	Passenger.Stage.MADE: "Boarded",
-	Passenger.Stage.MISSED: "Missed the flight",
-	Passenger.Stage.CAFE_WALK: "Heading to the cafe",
-	Passenger.Stage.CAFE_QUEUE: "Queuing at the cafe",
-	Passenger.Stage.CAFE_ORDER: "Ordering a coffee",
-	Passenger.Stage.CAFE_TO_SEAT: "Taking a coffee to a seat",
-	Passenger.Stage.CAFE_SITTING_DOWN: "Sitting down at the cafe",
-	Passenger.Stage.CAFE_SEATED: "Having a coffee",
-	Passenger.Stage.CAFE_STANDING_UP: "Leaving the cafe",
-	Passenger.Stage.TOILET_WALK: "Heading to the toilet",
-	Passenger.Stage.TOILET_ENTER: "Going into a toilet stall",
-	Passenger.Stage.TOILET_SITTING_DOWN: "In a toilet stall",
-	Passenger.Stage.TOILET_USE: "In a toilet stall",
-	Passenger.Stage.TOILET_STANDING_UP: "In a toilet stall",
-	Passenger.Stage.TOILET_EXIT: "Leaving the toilet",
-	Passenger.Stage.SHOP_WALK: "Heading to a shop",
-	Passenger.Stage.SHOP_BROWSE: "Browsing at a shop",
-}
-## A cafe stage with a visit to the stall, bar or restaurant under way says so
-## in that venue's words; the cafe keeps STAGE_TEXT. The stall's guest walks
-## on after ordering, so it has no seat stages.
-const VENUE_STAGE_TEXT := {
-	&"stall":
-	{
-		Passenger.Stage.CAFE_WALK: "Heading to the food stall",
-		Passenger.Stage.CAFE_QUEUE: "Queuing at the food stall",
-		Passenger.Stage.CAFE_ORDER: "Grabbing a snack",
-	},
-	&"bar":
-	{
-		Passenger.Stage.CAFE_WALK: "Heading to the bar",
-		Passenger.Stage.CAFE_QUEUE: "Queuing at the bar",
-		Passenger.Stage.CAFE_ORDER: "Ordering a drink",
-		Passenger.Stage.CAFE_TO_SEAT: "Taking a drink to a seat",
-		Passenger.Stage.CAFE_SITTING_DOWN: "Sitting down at the bar",
-		Passenger.Stage.CAFE_SEATED: "Having a drink",
-		Passenger.Stage.CAFE_STANDING_UP: "Leaving the bar",
-	},
-	&"restaurant":
-	{
-		Passenger.Stage.CAFE_WALK: "Heading to the restaurant",
-		Passenger.Stage.CAFE_QUEUE: "Queuing at the restaurant",
-		Passenger.Stage.CAFE_ORDER: "Ordering a meal",
-		Passenger.Stage.CAFE_TO_SEAT: "Taking a meal to a table",
-		Passenger.Stage.CAFE_SITTING_DOWN: "Sitting down at the restaurant",
-		Passenger.Stage.CAFE_SEATED: "Having a meal",
-		Passenger.Stage.CAFE_STANDING_UP: "Leaving the restaurant",
-	},
-}
-## A shop stage with a visit under way names the shop by its room type
-## (ShopSim.store_name()): "Heading to the kiosk", "Browsing at the pharmacy".
-const SHOP_STAGE_TEXT := {
-	Passenger.Stage.SHOP_WALK: "Heading to the %s",
-	Passenger.Stage.SHOP_BROWSE: "Browsing at the %s",
-}
-## A shop people visit for money, not to pass time (a room type that does not
-## relieve boredom: the exchange, the ATM), is used, not browsed: "Using the
-## ATM".
-const MONEY_STAGE_TEXT := {
-	Passenger.Stage.SHOP_WALK: "Heading to the %s",
-	Passenger.Stage.SHOP_BROWSE: "Using the %s",
-}
-
-## What a passenger at an activity or rest room does there, by room type
-## (RoomType.activity), in place of "Browsing at the %s".
-const ACTIVITY_BROWSE_TEXT := {
-	&"play_area": "Playing in the %s",
-	&"lounge": "Relaxing in the %s",
-	&"shower": "Using the %s",
-	&"nap_pod": "Resting in the %s",
 }
 
 @export var clock: SimClock
@@ -245,13 +163,15 @@ func _ready() -> void:
 	_time_label.theme_type_variation = &"HudLarge"
 	_time_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_time_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	# A longer translation shortens the clock text with an ellipsis rather than push the speed
+	# buttons off the right edge: the label gives way, the buttons keep their size.
+	_time_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	row.add_child(_time_label)
 	for value in [0, 1, 2, 3]:
 		var button := Button.new()
-		button.text = "Pause" if value == 0 else "%dx" % value
+		_dress_speed_button(button, value)
 		button.toggle_mode = true
-		button.custom_minimum_size = Vector2(HudLayout.UNIT * 8, HudLayout.BUTTON_H)
-		button.tooltip_text = "Space" if value == 0 else "Shift+%d" % value
+		button.custom_minimum_size = Vector2(SPEED_BUTTON_W, HudLayout.BUTTON_H)
 		button.focus_mode = Control.FOCUS_NONE
 		if value == 0:
 			button.pressed.connect(press_pause_toggle)
@@ -544,7 +464,7 @@ func _build_quiet_chip() -> void:
 	_quiet_chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_quiet_chip.visible = false
 	var label := Label.new()
-	label.text = QUIET_NIGHT_TEXT
+	label.text = tr("Quiet night: fast-forwarding")
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_quiet_chip.add_child(label)
 	add_child(_quiet_chip)
@@ -562,7 +482,9 @@ func _refresh_quiet_chip() -> void:
 
 ## The in-game day and 24-hour clock, "Day 1  06:00" (GameCalendar).
 func time_text() -> String:
-	return "Day %d  %s" % [GameCalendar.day_of(clock.tick) + 1, GameCalendar.clock_text(clock.tick)]
+	return tr("Day {day}  {time}", "clock").format(
+		{"day": GameCalendar.day_of(clock.tick) + 1, "time": GameCalendar.clock_text(clock.tick)}
+	)
 
 
 func seed_text() -> String:
@@ -580,19 +502,7 @@ func status_text() -> String:
 ## there is no visit or its room is gone, so the room is there below), or the
 ## venue's words for a visit to the stall, bar or restaurant.
 static func stage_text(passenger_sim: PassengerSim, p: Passenger) -> String:
-	var cafe_visit := passenger_sim.cafes.visit_of(p.id)
-	if cafe_visit != null and VENUE_STAGE_TEXT.get(cafe_visit.venue, {}).has(p.stage):
-		return VENUE_STAGE_TEXT[cafe_visit.venue][p.stage]
-	if SHOP_STAGE_TEXT.has(p.stage):
-		var store := passenger_sim.shops.store_name(p.id)
-		if store != "":
-			var room := passenger_sim.grid.get_room(passenger_sim.shops.visit_of(p.id).room)
-			var type := RoomTypes.get_type(room["type"])
-			if type.activity and p.stage == Passenger.Stage.SHOP_BROWSE:
-				return ACTIVITY_BROWSE_TEXT[type.id] % store
-			var relieves := type.relieves_boredom
-			return (SHOP_STAGE_TEXT if relieves else MONEY_STAGE_TEXT)[p.stage] % store
-	return STAGE_TEXT[p.stage]
+	return StageWords.text(passenger_sim, p)
 
 
 func follow_text() -> String:
@@ -608,17 +518,35 @@ func follow_text() -> String:
 		return ""
 	var parts := PackedStringArray(
 		[
-			"Passenger %d" % p.id,
+			tr("Passenger {id}", "follow line").format({"id": p.id}),
 			stage_text(sim, p),
-			"mood %d" % p.mood,
-			"hunger %d" % p.hunger,
-			"toilet %d" % p.toilet_need,
+			tr("mood {value}", "follow line").format({"value": p.mood}),
+			tr("hunger {value}", "follow line").format({"value": p.hunger}),
+			tr("toilet {value}", "follow line").format({"value": p.toilet_need}),
 		]
 	)
 	var bubble := sim.bubble_text(p)
 	if bubble != "":
-		parts.append('"%s"' % bubble)
+		parts.append(tr('"{text}"', "passenger speech").format({"text": bubble}))
 	return "   ".join(parts)
+
+
+## A speed button is an icon (pause bars, one, two or three play arrows) with the
+## action and its key in the tooltip, so the clock keeps the width the buttons
+## would have taken for translated words. `value` 0 is Pause.
+func _dress_speed_button(button: Button, value: int) -> void:
+	button.name = "Speed" + SPEED_NAMES[value].capitalize()
+	button.text = ""
+	button.icon = load(SPEED_ICON % SPEED_NAMES[value])
+	button.expand_icon = true
+	button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	button.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
+	if value == 0:
+		button.tooltip_text = tr("Pause ({key})", "speed button").format({"key": PAUSE_KEY})
+	else:
+		button.tooltip_text = tr("Speed {speed}x ({key})", "speed button").format(
+			{"speed": value, "key": SPEED_KEY_PREFIX + str(value)}
+		)
 
 
 ## Spawns the debug batch through normal spawning. The seed comes from the

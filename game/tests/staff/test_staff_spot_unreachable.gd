@@ -89,7 +89,7 @@ func test_a_pocketed_spot_loads_and_its_desk_says_staff_cannot_reach_it() -> voi
 	var markers := views.get_node("MissMarkers") as MissMarkers
 	markers.sync()
 	print("captions: '%s', '%s'" % [markers.closed_text(_desks[0]), markers.closed_text(scanner)])
-	assert_str(markers.closed_text(_desks[0])).is_equal(MissMarkers.UNREACHABLE_TEXT % "desk")
+	assert_str(markers.closed_text(_desks[0])).is_equal("Closed · staff can't reach the desk")
 	assert_str(markers.closed_text(_desks[0])).is_equal("Closed · staff can't reach the desk")
 	assert_int(MissMarkers.glyph_of(markers.closed_sign_for(_desks[0]))).is_equal(
 		MarkerIcons.Glyph.STAFF_BLOCKED
@@ -198,5 +198,5 @@ func test_an_on_duty_agent_at_a_pocketed_spot_loads_released() -> void:
 	add_child(views)
 	var markers := views.get_node("MissMarkers") as MissMarkers
 	markers.sync()
-	assert_str(markers.closed_text(desks[0])).is_equal(MissMarkers.UNREACHABLE_TEXT % "desk")
+	assert_str(markers.closed_text(desks[0])).is_equal("Closed · staff can't reach the desk")
 	views.free()

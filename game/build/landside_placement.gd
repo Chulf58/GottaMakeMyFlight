@@ -364,7 +364,7 @@ func _plan_built(point: Vector3, lots_only: bool) -> Plan:
 
 func _describe(plan: Plan) -> void:
 	if plan.spot < 0:
-		plan.text = _with_reason(NAMES[plan.kind], plan)
+		plan.text = _with_reason(DisplayWords.landside(NAMES[plan.kind]), plan)
 		return
 	plan.centre = _centre(plan.kind, plan.spot)
 	plan.footprint = _footprint(plan.kind, plan.spot)
@@ -374,19 +374,79 @@ func _describe(plan: Plan) -> void:
 	else:
 		plan.capacity = definition.lots[plan.spot].slots.size()
 	plan.walk_m = walk_to_door_m(definition, plan.kind, plan.spot, landside_doors(grid))
-	var text := "%s: %s" % [NAMES[plan.kind], _capacity_text(plan)]
-	if plan.walk_m >= 0.0:
-		text += ", %d m walk to the nearest landside door" % roundi(plan.walk_m)
+	var text := _line(plan, false)
 	match plan.action:
 		Action.REMOVE:
-			text = "Remove %s" % text.to_lower() if plan.result.ok else text
-			if plan.result.ok and plan.price > 0:
-				text += ". Refunds %d" % plan.price
+			if plan.result.ok:
+				text = _line(plan, true)
+				if plan.price > 0:
+					text += (
+						". " + tr("Refunds {price}", "landside plan").format({"price": plan.price})
+					)
 		Action.TOGGLE:
-			var state := "closed" if sim.lots_closed[plan.spot] else "open"
-			var verb := "close" if plan.closes else "open"
-			text = "%s (%s, %s): click to %s it" % [NAMES[plan.kind], state, _cars(plan), verb]
+			var values := {"place": DisplayWords.landside(NAMES[plan.kind]), "count": plan.cars}
+			if plan.closes:
+				text = (
+					tr_n(
+						"{place} (open, {count} car): click to close it",
+						"{place} (open, {count} cars): click to close it",
+						plan.cars,
+						"landside plan"
+					)
+					. format(values)
+				)
+			else:
+				text = (
+					tr_n(
+						"{place} (closed, {count} car): click to open it",
+						"{place} (closed, {count} cars): click to open it",
+						plan.cars,
+						"landside plan"
+					)
+					. format(values)
+				)
 	plan.text = _with_reason(text, plan)
+
+
+## The plan's first line: the place, its size and the walk to a landside door,
+## or "Remove ..." with the place name in lower case (its own msgid, never the
+## translated name lower-cased).
+func _line(plan: Plan, remove: bool) -> String:
+	var values := {
+		"place": _place_lower(plan.kind) if remove else DisplayWords.landside(NAMES[plan.kind]),
+		"capacity": _capacity_text(plan),
+		"metres": roundi(plan.walk_m),
+	}
+	var walk := plan.walk_m >= 0.0
+	if remove:
+		return (
+			(
+				tr(
+					"Remove {place}: {capacity}, {metres} m walk to the nearest landside door",
+					"landside plan"
+				)
+				if walk
+				else tr("Remove {place}: {capacity}", "landside plan")
+			)
+			. format(values)
+		)
+	return (
+		(
+			tr("{place}: {capacity}, {metres} m walk to the nearest landside door", "landside plan")
+			if walk
+			else tr("{place}: {capacity}", "landside plan")
+		)
+		. format(values)
+	)
+
+
+func _place_lower(kind: Kind) -> String:
+	match kind:
+		Kind.CURB:
+			return tr("curb bay", "landside place, mid-sentence")
+		Kind.SURFACE_LOT:
+			return tr("surface lot", "landside place, mid-sentence")
+	return tr("multi-storey car park", "landside place, mid-sentence")
 
 
 func _with_reason(text: String, plan: Plan) -> String:
@@ -394,17 +454,26 @@ func _with_reason(text: String, plan: Plan) -> String:
 		return text
 	var reason := plan.result.reason_text()
 	if plan.result.reason == BuildResult.Reason.LANDSIDE_OCCUPIED:
-		var are := "is" if plan.cars == 1 else "are"
-		reason = "%s %s still in it. Close it and wait until it is empty" % [_cars(plan), are]
+		reason = (
+			tr_n(
+				"{count} car is still in it. Close it and wait until it is empty",
+				"{count} cars are still in it. Close it and wait until it is empty",
+				plan.cars,
+				"landside plan"
+			)
+			. format({"count": plan.cars})
+		)
 	return "%s  %s" % [text, reason]
 
 
-static func _cars(plan: Plan) -> String:
-	return "1 car" if plan.cars == 1 else "%d cars" % plan.cars
-
-
 func _capacity_text(plan: Plan) -> String:
-	return "%d berths" % plan.capacity if plan.kind == Kind.CURB else "%d spaces" % plan.capacity
+	if plan.kind == Kind.CURB:
+		return tr_n("{count} berth", "{count} berths", plan.capacity, "landside plan").format(
+			{"count": plan.capacity}
+		)
+	return tr_n("{count} space", "{count} spaces", plan.capacity, "landside plan").format(
+		{"count": plan.capacity}
+	)
 
 
 func _spot_count(kind: Kind) -> int:

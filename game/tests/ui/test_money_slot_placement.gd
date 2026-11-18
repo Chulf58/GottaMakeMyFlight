@@ -36,7 +36,7 @@ func before() -> void:
 	_menu.day_ledger = ledger
 	_menu.scale = Vector2.ONE * UI_SCALE
 	_port.add_child(_menu)
-	_slot = _menu.money_label().get_parent() as MoneySlot
+	_slot = _menu.money_label().find_parent("MoneySlot") as MoneySlot
 
 
 func after() -> void:
