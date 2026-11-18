@@ -2,15 +2,20 @@ extends SceneTree
 ## Plates every build menu tray and one item hover card with pseudolocalization
 ## on (PseudoLocale, expansion 0.4), to see clipping. Windowed, on the real
 ## main.tscn with every tier unlocked. For each tray it prints each card label's
-## shown text, its pixel width and its slot width, and which labels are clipped;
-## the plate proves its subject first: every card of the tray lies inside the
+## shown text, its pixel width and its slot width, and which labels are clipped
+## (a wrapping label is clipped when it needs more lines than it shows); the
+## plate proves its subject first: every card of the tray lies inside the
 ## window and the first card's name is bracketed, otherwise PROBE_INVALID and
-## exit 1.
+## exit 1. Last it plates the build status line holding the drag-over-the-menu
+## text, which must wrap onto at most two lines inside its card (board T12
+## part 4).
 ##
 ## Run (windowed takes the one project-wide slot):
 ##   Godot_v4.7.2-stable_win64_console.exe --display-driver windows \
 ##     --rendering-driver vulkan --audio-driver Dummy --path <worktree>/game \
-##     -s res://tests/ui/build_menu_pseudolocale_probe.gd
+##     -s res://tests/ui/build_menu_pseudolocale_probe.gd [-- --single] [--out=<dir>]
+## --single expands each text once, as a real translation would (the stored text
+## is already through tr(), and auto-translate would bracket it again).
 
 const OUT_DIR := "C:/Users/chulf/Gotta-make-my-flight/tools/blender/out/locale/t1"
 const WINDOW := Vector2i(1920, 1080)
@@ -20,6 +25,7 @@ const MARGIN := 4.0
 
 var _failed := false
 var _clipped: Array[String] = []
+var _out_dir := OUT_DIR
 
 
 func _initialize() -> void:
@@ -29,11 +35,14 @@ func _initialize() -> void:
 func _run() -> void:
 	var world_seed := randi()
 	print("PROBE world_seed=%d display=%s" % [world_seed, DisplayServer.get_name()])
-	DirAccess.make_dir_recursive_absolute(OUT_DIR)
+	_out_dir = _arg("--out=", OUT_DIR)
+	DirAccess.make_dir_recursive_absolute(_out_dir)
 	DisplayServer.window_set_size(WINDOW)
 	root.content_scale_factor = 1.0
 	await _frames(5)
 	PseudoLocale.enable(0.4)
+	if OS.get_cmdline_user_args().has("--single"):
+		root.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
 	var main: Node3D = (load("res://main/main.tscn") as PackedScene).instantiate()
 	var clock := main.get_node("SimClock") as SimClock
 	clock.seed_rng(world_seed)
@@ -64,6 +73,7 @@ func _run() -> void:
 			continue
 		await _tray(menu, i, categories[i])
 	await _hover_card(menu)
+	await _status_line(menu)
 	PseudoLocale.disable()
 	print("PROBE clipped labels: %d" % _clipped.size())
 	for line in _clipped:
@@ -96,6 +106,10 @@ func _tray(menu: BuildMenu, index: int, category: Dictionary) -> void:
 			var size := label.get_theme_font_size("font_size")
 			var width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
 			var clipped := width > label.size.x + 0.5
+			var lines := 1
+			if label.autowrap_mode != TextServer.AUTOWRAP_OFF:
+				lines = HudLayout.line_count(text, font, size, label.size.x)
+				clipped = lines > label.max_lines_visible
 			if clipped:
 				_clipped.append(
 					(
@@ -105,8 +119,8 @@ func _tray(menu: BuildMenu, index: int, category: Dictionary) -> void:
 				)
 			print(
 				(
-					"  LABEL tray=%d tool=%s '%s' w=%.0f slot=%.0f clipped=%s"
-					% [index, tool, text, width, label.size.x, clipped]
+					"  LABEL tray=%d tool=%s '%s' w=%.0f slot=%.0f size=%d lines=%d clipped=%s"
+					% [index, tool, text, width, label.size.x, size, lines, clipped]
 				)
 			)
 	print(
@@ -167,10 +181,57 @@ func _hover_card(menu: BuildMenu) -> void:
 func _save(plate: String, crop: Rect2i) -> void:
 	await RenderingServer.frame_post_draw
 	var image := root.get_texture().get_image()
-	var path := OUT_DIR.path_join(plate + ".png")
+	var path := _out_dir.path_join(plate + ".png")
 	var err := image.get_region(crop).save_png(path)
 	print("PLATE saved %s err=%d" % [path, err])
 	_expect(err == OK, "plate %s was not saved" % plate)
+
+
+## The status line holding the drag-over-the-menu text (a rectangle drag held
+## over the HUD keeps it showing): it wraps onto at most two lines, shows every
+## line it needs, and stays inside its card.
+func _status_line(menu: BuildMenu) -> void:
+	menu.press_category(0)
+	var mode := menu.build_mode
+	mode.set_process(false)
+	mode.set_tool(BuildMode.Tool.FLOOR)
+	mode.begin_area(mode.grid.cell_to_world(Vector2i(3, 3)))
+	mode.move_area(mode.grid.cell_to_world(Vector2i(8, 8)))
+	mode._area_over_ui = true
+	menu._on_status_changed(tr(BuildMode.DRAG_OVER_UI))
+	menu.refresh_preview()
+	await _frames(6)
+	var status := menu.status_label()
+	var card := status.get_parent().get_parent() as Control
+	var font := status.get_theme_font("font")
+	var size := status.get_theme_font_size("font_size")
+	var width := font.get_string_size(status.text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
+	print(
+		(
+			"PLATE status text='%s' w=%.0f label=%s card=%s lines=%d visible=%d"
+			% [
+				status.text,
+				width,
+				status.get_global_rect(),
+				card.get_global_rect(),
+				status.get_line_count(),
+				status.get_visible_line_count()
+			]
+		)
+	)
+	var view := Rect2(Vector2.ZERO, root.get_visible_rect().size).grow(-MARGIN)
+	_expect(status.is_visible_in_tree(), "the status line is not shown")
+	_expect(view.encloses(card.get_global_rect()), "the status card is outside the window")
+	_expect(status.text.begins_with("["), "the status text is not bracketed")
+	_expect(width > status.size.x, "the status text fits one line, so the wrap is not shown")
+	_expect(status.get_line_count() == 2, "the status needs %d lines" % status.get_line_count())
+	_expect(status.get_visible_line_count() == status.get_line_count(), "a status line is cut")
+	_expect(card.get_global_rect().grow(0.5).encloses(status.get_global_rect()), "status overflows")
+	var crop := Rect2i(card.get_global_rect().grow(48.0))
+	await _save("status_line", crop.intersection(Rect2i(Vector2i.ZERO, root.size)))
+	mode._area_over_ui = false
+	mode.cancel_area()
+	mode.set_process(true)
 
 
 func _expect(condition: bool, why: String) -> void:
@@ -182,3 +243,11 @@ func _expect(condition: bool, why: String) -> void:
 func _frames(count: int) -> void:
 	for i in count:
 		await process_frame
+
+
+## The value of the user argument that starts with `prefix`, or `fallback`.
+func _arg(prefix: String, fallback: String) -> String:
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with(prefix):
+			return arg.trim_prefix(prefix)
+	return fallback

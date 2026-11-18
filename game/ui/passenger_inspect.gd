@@ -55,6 +55,8 @@ func _init() -> void:
 	name = "PassengerInspect"
 	visible = false
 	theme = BuildMenu.HUD_THEME
+	# The top-left column's cards stop a GAP above this card while it shows.
+	add_to_group(LeftColumn.FLOOR_GROUP)
 	var root := VBoxContainer.new()
 	add_child(root)
 	root.add_child(built_card)

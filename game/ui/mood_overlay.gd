@@ -50,6 +50,9 @@ const LIFT_M := 0.06
 ## The tint is redrawn when the sim has moved on this many ticks (a quarter
 ## of a second). A grid edit redraws it on the next frame regardless.
 const REFRESH_TICKS := 5
+## The legend card's x while the Departures row fits its grid: a GAP right of the
+## column's list width, where the Planner toggle ends.
+const LEGEND_LEFT := float(HudLayout.MARGIN + HudLayout.LIST_W + HudLayout.GAP)
 
 @export var sim: PassengerSim
 ## Where the on/off choice and the mode are kept; tests point it at a per-process file.
@@ -71,6 +74,8 @@ var _toggle := Button.new()
 var _legend := Label.new()
 ## The legend's card: bare text is unreadable over the dark ground at the top left.
 var _legend_card := PanelContainer.new()
+## Holds the legend card right of the Departures row (_place_legend).
+var _legend_gap := Control.new()
 var _mode_buttons: Array[Button] = []
 
 
@@ -108,6 +113,7 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
+	_place_legend()
 	if not _active:
 		_try_activate()
 		return
@@ -209,12 +215,22 @@ func _shortcut_input(event: InputEvent) -> void:
 	get_viewport().set_input_as_handled()
 
 
+## Keeps the legend card a GAP right of the Planner toggle, which sits on the
+## Departures row the taller card reaches down to, so the card never covers it
+## (board T10). The row's separation sits on both sides of the gap control.
+func _place_legend() -> void:
+	var left := LeftColumn.right_of(get_tree(), LeftColumn.PLANNER_TOGGLE_GROUP, LEGEND_LEFT)
+	var width := maxf(0.0, left - _toggle.get_global_rect().end.x - 2.0 * HudLayout.GAP)
+	if not is_equal_approx(_legend_gap.custom_minimum_size.x, width):
+		_legend_gap.custom_minimum_size.x = width
+
+
 func _build_controls() -> Control:
 	var row := HBoxContainer.new()
 	row.name = "MoodOverlayControls"
 	row.theme = BuildMenu.HUD_THEME
 	row.position = Vector2(HudLayout.MARGIN, LeftColumn.slot_top(LeftColumn.SLOT_MOOD))
-	row.add_theme_constant_override("separation", 8)
+	row.add_theme_constant_override("separation", HudLayout.GAP)
 	_toggle.name = "MoodToggle"
 	_toggle.text = tr("Mood ({key})").format({"key": HOTKEY})
 	LeftColumn.size_toggle(_toggle)
@@ -222,6 +238,12 @@ func _build_controls() -> Control:
 	_toggle.toggle_mode = true
 	_toggle.focus_mode = Control.FOCUS_NONE
 	row.add_child(_toggle)
+	_legend_gap.name = "MoodLegendGap"
+	_legend_gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_legend_gap.custom_minimum_size.x = (
+		LEGEND_LEFT - HudLayout.MARGIN - HudLayout.TOGGLE_W - 2.0 * HudLayout.GAP
+	)
+	row.add_child(_legend_gap)
 	_legend.name = "MoodLegend"
 	_legend.text = _legend_text(_mode)
 	_legend.theme_type_variation = &"HudHint"

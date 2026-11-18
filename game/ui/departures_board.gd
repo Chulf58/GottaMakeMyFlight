@@ -227,6 +227,7 @@ func _ready() -> void:
 	position = Vector2(HudLayout.MARGIN, LeftColumn.TOP)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_toggle.name = "DeparturesToggle"
+	_toggle.add_to_group(LeftColumn.DEPARTURES_TOGGLE_GROUP)
 	_toggle.text = tr("Departures ({key})").format({"key": HOTKEY})
 	LeftColumn.size_toggle(_toggle)
 	_toggle.position.y = LeftColumn.slot_top(LeftColumn.SLOT_DEPARTURES) - LeftColumn.TOP

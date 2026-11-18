@@ -11,6 +11,14 @@ const COIN_ICON := "res://assets/ui/icons/coin.svg"
 ## The coin's side and the gap between it and the amount.
 const COIN_SIDE := HudLayout.CHIP_H - 4
 const COIN_GAP := 6
+## A card's padding on each side of its column.
+const CARD_PAD := 6.0
+## A card label wraps onto at most this many lines, then drops one font step
+## (decision build-menu-card-names-wrap-to-two-lines-then-shrink-a-font-s).
+const CARD_LINES := 2
+## The thumbnail gives up height to wrapped labels down to this, so the card
+## keeps its size.
+const THUMB_MIN := 32.0
 
 static var _words := Words.new()
 
@@ -111,6 +119,7 @@ static func make_card(menu: BuildMenu, tool: BuildMode.Tool) -> Button:
 	picture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	picture.custom_minimum_size = Vector2(BuildMenu.THUMB_SIZE, BuildMenu.THUMB_SIZE)
 	picture.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	picture.name = "Thumbnail"
 	column.add_child(picture)
 	var key := BuildMenuCatalog.key_hint(tool)
 	card_label(column, BuildMenuCatalog.shown(card_item[0]), &"HudCardName")
@@ -133,6 +142,7 @@ static func make_card(menu: BuildMenu, tool: BuildMode.Tool) -> Button:
 			&"HudHint"
 		)
 	menu._hint_texts[tool] = menu._hint_labels[tool].text
+	watch_fit(button)
 	return button
 
 
@@ -149,31 +159,80 @@ static func make_next_card(menu: BuildMenu, next: int) -> Button:
 	card_label(
 		column, BuildMenuCatalog.shown(BuildMenuCatalog.categories()[next]["name"]), &"HudHint"
 	)
+	watch_fit(button)
 	return button
 
 
 static func card_column(button: Button) -> VBoxContainer:
 	var column := VBoxContainer.new()
 	column.set_anchors_preset(Control.PRESET_FULL_RECT)
-	column.offset_left = 6.0
-	column.offset_top = 6.0
-	column.offset_right = -6.0
-	column.offset_bottom = -6.0
+	column.offset_left = CARD_PAD
+	column.offset_top = CARD_PAD
+	column.offset_right = -CARD_PAD
+	column.offset_bottom = -CARD_PAD
 	column.add_theme_constant_override("separation", 1)
 	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	button.add_child(column)
 	return column
 
 
+## A card line: centred, wrapping onto CARD_LINES lines; fit_card() gives it its
+## size once the card is in the tree.
 static func card_label(column: VBoxContainer, text: String, variation: StringName) -> Label:
 	var label := Label.new()
 	label.text = text
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.clip_text = true
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.max_lines_visible = CARD_LINES
+	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	label.theme_type_variation = variation
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	column.add_child(label)
 	return label
+
+
+## Fits the card when it enters the tree and again after a line redraws, which a
+## new text (a price, "Locked") always causes; a wrapping Label's minimum size can
+## stay the same for a longer text, so that signal would miss it. A fit that
+## changes nothing causes no redraw, so this settles.
+static func watch_fit(button: Button) -> void:
+	button.tree_entered.connect(fit_card.bind(button))
+	for label in button.get_child(0).get_children():
+		if label is Label:
+			(label as Label).draw.connect(fit_card.bind(button), CONNECT_DEFERRED)
+
+
+## Wraps each line of the card onto up to CARD_LINES lines at the caption size,
+## one font step smaller only when that is still not enough, and gives the
+## thumbnail what height the lines leave (THUMB_MIN to THUMB_SIZE), so the card
+## keeps its size (decision build-menu-card-names-wrap-to-two-lines-then-shrink-
+## a-font-s). Measured from the font, not the Label, because a wrapping Label
+## reports its height only after the container has sized it.
+static func fit_card(button: Button) -> void:
+	if not button.is_inside_tree():
+		return
+	var column := button.get_child(0) as VBoxContainer
+	var width := button.custom_minimum_size.x - 2.0 * CARD_PAD
+	var used := float(column.get_theme_constant(&"separation") * (column.get_child_count() - 1))
+	var picture: TextureRect = null
+	for child in column.get_children():
+		if child is TextureRect:
+			picture = child
+			continue
+		var label := child as Label
+		var font := label.get_theme_font(&"font")
+		# atr() is the text the Label draws (it honours auto_translate_mode), so the
+		# fit measures what is shown, whether it is expanded once or twice.
+		var text := label.atr(label.text)
+		var size := HudLayout.fit_size(text, font, HudLayout.CAPTION, width, CARD_LINES)
+		if label.get_theme_font_size(&"font_size") != size:
+			label.add_theme_font_size_override(&"font_size", size)
+		var lines := mini(HudLayout.line_count(text, font, size, width), CARD_LINES)
+		used += lines * font.get_height(size)
+		used += (lines - 1) * label.get_theme_constant(&"line_spacing")
+	if picture != null:
+		var room := button.custom_minimum_size.y - 2.0 * CARD_PAD - used
+		picture.custom_minimum_size.y = clampf(floorf(room), THUMB_MIN, BuildMenu.THUMB_SIZE)
 
 
 static func size_text(tool: BuildMode.Tool) -> String:
@@ -186,8 +245,9 @@ static func size_text(tool: BuildMode.Tool) -> String:
 ## The status card (HUD 5/7): the status line, the "R rotate" hint and the cost
 ## line side by side on one HudTopCard, TRAY_W wide and BUTTON_H tall, GAP above
 ## the tray and centred. The status text takes the room the hint and the cost
-## leave and is cut short with an ellipsis when it is longer; the hint and the
-## cost keep their own width, so neither wraps. The card never takes a click.
+## leave and wraps onto a second line when it is longer (the card grows up for
+## it), then ends in an ellipsis; the hint and the cost keep their own width, so
+## neither wraps. The card never takes a click.
 static func build_status_card(menu: BuildMenu) -> void:
 	var card := menu._status_card
 	card.name = "StatusCard"
@@ -217,10 +277,9 @@ static func build_status_card(menu: BuildMenu) -> void:
 	status.name = "StatusLine"
 	status.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	status.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	status.autowrap_mode = TextServer.AUTOWRAP_OFF
+	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	status.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	status.max_lines_visible = 3
-	status.clip_text = true
+	status.max_lines_visible = BuildMenu.STATUS_LINES
 	status.theme_type_variation = &"HudCardName"
 	status.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(status)
