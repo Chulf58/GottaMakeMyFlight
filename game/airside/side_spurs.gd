@@ -209,8 +209,15 @@ static func _column_built(grid: BuildGrid, x: int, area: Rect2i, gone: Dictionar
 ## the forecast move time `release_tick` (FlightSim.spur_release_tick()) as a
 ## clock time seen at tick `now` (RunwayWorks.when_text()); no time for -1.
 static func works_text(side: String, release_tick := -1, now := 0) -> String:
-	var named := "west" if side == StandPlacement.WEST else "east"
-	var text := "Taxiway works: the taxiway moves when the %s side is quiet" % named
+	var text := (
+		TranslationServer.translate("Taxiway works: the taxiway moves when the west side is quiet")
+		if side == StandPlacement.WEST
+		else TranslationServer.translate(
+			"Taxiway works: the taxiway moves when the east side is quiet"
+		)
+	)
 	if release_tick < 0:
 		return text
-	return "%s, forecast %s" % [text, RunwayWorks.when_text(release_tick, now)]
+	return TranslationServer.translate("{works}, forecast {when}").format(
+		{"works": text, "when": RunwayWorks.when_text(release_tick, now)}
+	)

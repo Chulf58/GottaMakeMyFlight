@@ -31,7 +31,28 @@ static func doors_line(row: Dictionary) -> String:
 
 ## "doors close 10:30": the game-clock time the row's doors close.
 static func doors_text(row: Dictionary) -> String:
-	return "doors close %s" % GameCalendar.clock_text(row["doors"])
+	return TranslationServer.translate("doors close {time}").format(
+		{"time": GameCalendar.clock_text(row["doors"])}
+	)
+
+
+## The flight panel's word for a flight in `state`: "Boarding", then one for each
+## state from the doors closing on; "" before boarding.
+static func status_word(state: int) -> String:
+	match state:
+		FlightSim.State.BOARDING:
+			return TranslationServer.translate("Boarding")
+		FlightSim.State.DOORS_CLOSED:
+			return TranslationServer.translate("Doors closed")
+		FlightSim.State.PUSHBACK:
+			return TranslationServer.translate("Pushback")
+		FlightSim.State.TAXI_OUT:
+			return TranslationServer.translate("Taxiing")
+		FlightSim.State.TAKEOFF:
+			return TranslationServer.translate("Taking off")
+		FlightSim.State.DEPARTED:
+			return TranslationServer.translate("Departed")
+	return ""
 
 
 ## The rows for each flight leaving on `day`, earliest first (see _rows); the
@@ -96,11 +117,7 @@ static func _row(
 	var head := "%s  %s" % [GameCalendar.clock_text(tick), place]
 	var base := head if airline == "" else "%s  %s" % [head, airline]
 	var line := base
-	var status: String = (
-		"Boarding"
-		if state == FlightSim.State.BOARDING
-		else PassengerHud.AFTER_DOORS_TEXT.get(state, "")
-	)
+	var status := status_word(state)
 	if status != "":
 		line += "  " + status
 	return {

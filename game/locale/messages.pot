@@ -5251,3 +5251,47 @@ msgid "{count} space"
 msgid_plural "{count} spaces"
 msgstr[0] ""
 msgstr[1] ""
+
+#: build/view/gap_markers.gd
+msgid "Wall gap · close the outer wall so the roof can go on"
+msgstr ""
+
+#: airside/side_spurs.gd
+msgid "Taxiway works: the taxiway moves when the west side is quiet"
+msgstr ""
+
+#: airside/side_spurs.gd
+msgid "Taxiway works: the taxiway moves when the east side is quiet"
+msgstr ""
+
+#: airside/side_spurs.gd
+msgid "{works}, forecast {when}"
+msgstr ""
+
+#: ui/departure_list.gd
+msgid "Boarding"
+msgstr ""
+
+#: ui/departure_list.gd
+msgid "Doors closed"
+msgstr ""
+
+#: ui/departure_list.gd
+msgid "Pushback"
+msgstr ""
+
+#: ui/departure_list.gd
+msgid "Taxiing"
+msgstr ""
+
+#: ui/departure_list.gd
+msgid "Taking off"
+msgstr ""
+
+#: ui/departure_list.gd
+msgid "Departed"
+msgstr ""
+
+#: ui/departure_list.gd
+msgid "doors close {time}"
+msgstr ""
