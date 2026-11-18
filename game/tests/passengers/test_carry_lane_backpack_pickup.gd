@@ -291,6 +291,8 @@ func test_a_restamp_in_the_reach_keeps_the_lead_of_the_move_start() -> void:
 	var start := node.global_transform
 	var k := CarryLead.REACH_SHARE * 0.5
 	CarryPlace._stamp(props, held, bag, body, want, 0)
+	# The bare body has no rig to stamp a shoulder from: the shoulder dims, over its origin.
+	bag["start_shoulder_y"] = dims["shoulders_y"][0] - body.global_position.y
 	var first: Array = (
 		CarryLead.plan(bag, k, start, want, body.global_transform, flags, dims)["loops"]
 	)
@@ -301,6 +303,8 @@ func test_a_restamp_in_the_reach_keeps_the_lead_of_the_move_start() -> void:
 	flags["yaw"] = PI
 	bag["changed"] = 11.0
 	CarryPlace._stamp(props, held, bag, body, want, 0)
+	# The bare body has no rig to stamp a shoulder from: the shoulder dims, over its origin.
+	bag["start_shoulder_y"] = dims["shoulders_y"][0] - body.global_position.y
 	var again: Array = (
 		CarryLead.plan(bag, k, start, want, body.global_transform, flags, dims)["loops"]
 	)

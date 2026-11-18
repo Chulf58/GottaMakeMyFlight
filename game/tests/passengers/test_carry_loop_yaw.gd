@@ -89,6 +89,7 @@ static func _plan_yaw(k: float) -> float:
 		"was": SecurityLooks.Home.TRAY * 4,
 		"from": Transform3D(Basis(), Vector3(0.4, 0.9, 0.5)),
 		"start_body": frame,
+		"start_shoulder_y": 1.4,
 	}
 	var body := {
 		"hand": 0,

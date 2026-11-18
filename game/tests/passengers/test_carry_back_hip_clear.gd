@@ -95,6 +95,7 @@ static func _plan(k: float, start: Transform3D, want: Transform3D, shoulders: Ar
 		"was": SecurityLooks.Home.TRAY * 4,
 		"from": start,
 		"start_body": frame,
+		"start_shoulder_y": minf(shoulders[0], shoulders[1]),
 	}
 	var body := {
 		"hand": 0,
