@@ -305,3 +305,20 @@ func test_should_show_needs_a_first_showing_the_running_scene_and_no_playtest() 
 	assert_bool(IntroDialogue.should_show(true, true, false)).is_false()
 	assert_bool(IntroDialogue.should_show(false, false, false)).is_false()
 	assert_bool(IntroDialogue.should_show(false, true, true)).is_false()
+
+
+func test_gotta_air_speaker_swaps_portrait_and_nameplate_while_default_keeps_manager() -> void:
+	var airline := IntroDialogue.new(
+		"Station manager",
+		"Gotta Air here.",
+		IntroDialogue.BOX_SIZE.y,
+		false,
+		IntroDialogue.Speaker.GOTTA_AIR
+	)
+	_port.add_child(airline)
+	assert_int(airline.speaker()).is_equal(IntroDialogue.Speaker.GOTTA_AIR)
+	var portrait_node := airline.find_child("Portrait", true, false) as TextureRect
+	assert_object(portrait_node.texture).is_same(IntroDialogue.GOTTA_AIR_PORTRAIT)
+	assert_str((airline.find_child("Name", true, false) as Label).text).is_equal("GOTTA AIR")
+	assert_str((airline.find_child("Title", true, false) as Label).text).is_equal("Station manager")
+	airline.free()

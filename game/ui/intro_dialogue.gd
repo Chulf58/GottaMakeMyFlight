@@ -16,7 +16,13 @@ signal dismissed
 ## The offer form only: the player picked Accept (true) or Decline (false).
 signal chosen(accepted: bool)
 
+## Who speaks from the portrait and nameplate (decision the-airline-s-opening-
+## phone-call-shows-a-new-gotta-air-stati): the airport's terminal manager by
+## default, or Gotta Air's station manager for airline calls.
+enum Speaker { TERMINAL_MANAGER, GOTTA_AIR }
+
 const PORTRAIT := preload("res://assets/ui/intro_manager_portrait.png")
+const GOTTA_AIR_PORTRAIT := preload("res://assets/ui/station_manager_portrait.png")
 ## The Continue key's name, a placeholder in the button.
 const CONTINUE_KEY := "Space"
 ## The speed keys' names, a placeholder in the intro text.
@@ -69,6 +75,7 @@ var _body_text := ""
 ## The height the caller asked for: the box is never shorter.
 var _box_height := BOX_SIZE.y
 var _offer := false
+var _speaker := Speaker.TERMINAL_MANAGER
 ## Holds the portrait, box and nameplate at their 1080p layout; _place moves it
 ## and scales it down on a smaller screen.
 var _group := Control.new()
@@ -90,17 +97,24 @@ static func should_show(already_shown: bool, in_current_scene: bool, playtest_on
 
 
 ## The first-day intro by default; UnlockGuide passes its own title, body and a
-## taller box for a new tier's dialog, which reuses the same portrait, box and
-## Continue. The box grows upward from its fixed bottom edge: `box_height` is
-## its least height, and a longer text grows it up to MAX_BOX_H, past which the
-## text scrolls (board T9). `offer` swaps
-## Continue for Accept and Decline. An empty title or body is the intro's own
-## text, in the player's words.
-func _init(title_text := "", body_text := "", box_height := BOX_SIZE.y, offer := false) -> void:
+## taller box for a new tier's dialog, and `speaker` swaps the portrait and
+## nameplate (GOTTA_AIR for the airline's opening call). The box grows upward
+## from its fixed bottom edge: `box_height` is its least height, and a longer
+## text grows it up to MAX_BOX_H, past which the text scrolls (board T9).
+## `offer` swaps Continue for Accept and Decline. An empty title or body is the
+## intro's own text, in the player's words.
+func _init(
+	title_text := "",
+	body_text := "",
+	box_height := BOX_SIZE.y,
+	offer := false,
+	speaker := Speaker.TERMINAL_MANAGER
+) -> void:
 	_title_text = title_text if title_text != "" else tr("Your first day at the airport")
 	_body_text = body_text if body_text != "" else _intro_body()
 	_box_height = box_height
 	_offer = offer
+	_speaker = speaker
 	name = "IntroDialogue"
 	theme = BuildMenu.HUD_THEME
 	set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -120,7 +134,7 @@ func _init(title_text := "", body_text := "", box_height := BOX_SIZE.y, offer :=
 	_build_nameplate()
 	# Added last, so it draws over the box's left edge.
 	_portrait.name = "Portrait"
-	_portrait.texture = PORTRAIT
+	_portrait.texture = _speaker_portrait()
 	_portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -189,6 +203,10 @@ func choose(accepted: bool) -> void:
 
 func body_text() -> String:
 	return _body.text
+
+
+func speaker() -> Speaker:
+	return _speaker
 
 
 ## True when the body text is taller than its area in the box, so it scrolls.
@@ -349,7 +367,7 @@ func _build_nameplate() -> void:
 	_nameplate.add_child(column)
 	var title := Label.new()
 	title.name = "Name"
-	title.text = tr("TERMINAL MANAGER")
+	title.text = _speaker_name()
 	title.theme_type_variation = &"IntroName"
 	column.add_child(title)
 	var role := Label.new()
@@ -357,6 +375,14 @@ func _build_nameplate() -> void:
 	role.text = _title_text
 	role.theme_type_variation = &"IntroRole"
 	column.add_child(role)
+
+
+func _speaker_portrait() -> Texture2D:
+	return GOTTA_AIR_PORTRAIT if _speaker == Speaker.GOTTA_AIR else PORTRAIT
+
+
+func _speaker_name() -> String:
+	return tr("GOTTA AIR") if _speaker == Speaker.GOTTA_AIR else tr("TERMINAL MANAGER")
 
 
 ## Centres the portrait-plus-box group horizontally, with the box's bottom

@@ -6028,3 +6028,27 @@ msgid "{count} station is closed · staff are on the way"
 msgid_plural "{count} stations are closed · staff are on the way"
 msgstr[0] ""
 msgstr[1] ""
+
+#: ui/intro_dialogue.gd
+msgid "GOTTA AIR"
+msgstr ""
+
+#: ui/big_firsts.gd
+msgid "Station manager"
+msgstr ""
+
+#: ui/big_firsts.gd
+msgid "Gotta Air here. Welcome, your airport is open, and I hear it is the only one with a dent in the carpet."
+msgstr ""
+
+#: ui/big_firsts.gd
+msgid "Our first flight to Oslo leaves at {departure_time}. It is a small plane, so please keep the luggage small too."
+msgstr ""
+
+#: ui/big_firsts.gd
+msgid "Your first passengers are on their way in now."
+msgstr ""
+
+#: ui/big_firsts.gd
+msgid "Good luck. Gotta make that flight!"
+msgstr ""
