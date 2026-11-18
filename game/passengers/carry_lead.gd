@@ -702,7 +702,9 @@ static func back_lead(lead: int, rest: Vector3, frame: Transform3D, scale_by: fl
 
 ## The leading hand's target `at` at `k` of a move of a backpack on or off the
 ## back (`from` to `to`), body drawn at `frame` turned to `yaw`, `lead` the
-## hand, `body` as for plan(): while the hand reaches for the pack on the back
+## hand, `shoulder_y` the leading shoulder's height (world) as the move started
+## (stamp_move(), "start_shoulder_y", over the body's origin), not the skeleton
+## drawn now (board 031cee02): while the hand reaches for the pack on the back
 ## it comes by the side hang (BACK_SIDE_M out, under the shoulder) and only then
 ## to the loop, and letting go of it there it goes back out by the side, so
 ## the arm's blend to and from its own pose does not pass the hand through the
@@ -715,12 +717,12 @@ static func by_side(
 	frame: Transform3D,
 	yaw: float,
 	lead: int,
-	body: Dictionary,
+	shoulder_y: float,
 	below := STALL_HANG_BELOW_M
 ) -> Vector3:
 	var out := Vector3.LEFT if lead == 0 else Vector3.RIGHT
 	var side := frame.origin + Basis(Vector3.UP, yaw) * (out * BACK_SIDE_M)
-	side.y = body["shoulders_y"][lead] - below
+	side.y = shoulder_y - below
 	var s := span(from, to)
 	if from == End.WORN and k < s.x:
 		return side.lerp(at, smoothstep(0.3, 1.0, k / s.x))
@@ -788,8 +790,9 @@ static func swap_release(
 ## `start` (world now) to `want`, its body drawn at `frame`; `flags` as for
 ## path(), `body` the body as drawn now: {"hand": the bag's own hand or side,
 ## "grips": [right, left] grip points (CarryOnProps.grip_of), "shoulders_y":
-## [right, left] shoulder joint heights (a backpack's side hang only; a hand to
-## pull swap uses the height stamped as it started, "start_shoulder_y"),
+## [right, left] shoulder joint heights (no longer read: a backpack's side hang
+## and a hand to pull swap use the height stamped as the move started,
+## "start_shoulder_y"),
 ## "bar_z": a roller's grip bar along it, "scale": the bag's scale}. Returns
 ## {"holder", "xf" (the bag at a resting or worn end, or on its path), "anchor"
 ## (the point of the bag in the holder's grip, its own frame), "targets",
@@ -916,10 +919,12 @@ static func plan(
 	)
 	var floor_case: bool = case_up_out and from_floor and not roller
 	var on_path: Transform3D
+	var shoulder_y := NAN
 	if off_back or on_back:
-		var side := back_side(
-			frame.origin, flags["yaw"], lead, body["shoulders_y"][lead] - below, body["scale"]
-		)
+		# The shoulder as the move started, not the skeleton drawn now (a walk or
+		# stoop pose moved it; anti-pattern d655fcc9, board 031cee02).
+		shoulder_y = frame.origin.y + float(bag["start_shoulder_y"])
+		var side := back_side(frame.origin, flags["yaw"], lead, shoulder_y - below, body["scale"])
 		# Between the side hang and the hand the pack's middle is kept clear, not
 		# its origin (a bottom corner of its back panel): turning between hanging
 		# at the side and lying across the front, its body swung into the belly
@@ -1032,7 +1037,7 @@ static func plan(
 		targets[gave] += swap_release(bag["kind"], grip, on_path, t)
 	if off_back or on_back:
 		targets[lead] = by_side(
-			targets[lead], k, from_end, to_end, frame, flags["yaw"], lead, body, below
+			targets[lead], k, from_end, to_end, frame, flags["yaw"], lead, shoulder_y, below
 		)
 	var xf := on_path
 	if ph["holder"] < 0:

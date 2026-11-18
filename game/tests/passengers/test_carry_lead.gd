@@ -517,6 +517,7 @@ func test_a_backpack_between_the_front_and_the_back_keeps_its_middle_clear() -> 
 		"carry": SecurityLooks.Carry.BACK,
 		"anchor_from": CarryLead.anchor(kind, 0.0),
 		"from": front,
+		"start_shoulder_y": 1.42,
 	}
 	var off_back := {
 		"kind": kind,
@@ -525,6 +526,7 @@ func test_a_backpack_between_the_front_and_the_back_keeps_its_middle_clear() -> 
 		"home": hand_at + 1,
 		"carry": SecurityLooks.Carry.HAND,
 		"from": back,
+		"start_shoulder_y": 1.42,
 	}
 	for move: Array in [[on_back, front, back], [off_back, back, front]]:
 		var bag: Dictionary = move[0]
@@ -603,6 +605,7 @@ func test_a_backpack_off_the_back_is_on_the_hands_path_while_it_turns() -> void:
 		"home": hand_at + 1,
 		"carry": SecurityLooks.Carry.HAND,
 		"from": back,
+		"start_shoulder_y": 1.42,
 	}
 	var carried := front.basis.get_rotation_quaternion()
 	# How far the pack turns on this leg: from the side hang (its first sample).

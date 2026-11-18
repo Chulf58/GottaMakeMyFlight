@@ -200,16 +200,26 @@ func test_a_hand_comes_and_goes_by_the_side_for_a_pack_on_the_back() -> void:
 	var loop := Vector3(0.0, 1.5, -0.25)
 	var side := Vector3(-CarryLead.BACK_SIDE_M, body["shoulders_y"][0] - 0.1, 0.0)
 	var s := CarryLead.span(worn, rest)
-	var start := CarryLead.by_side(loop, 0.0, worn, rest, Transform3D(), 0.0, 0, body)
+	var start := CarryLead.by_side(
+		loop, 0.0, worn, rest, Transform3D(), 0.0, 0, body["shoulders_y"][0]
+	)
 	assert_float(start.distance_to(side)).is_less(0.0001)
-	var reached := CarryLead.by_side(loop, s.x - 0.001, worn, rest, Transform3D(), 0.0, 0, body)
+	var reached := CarryLead.by_side(
+		loop, s.x - 0.001, worn, rest, Transform3D(), 0.0, 0, body["shoulders_y"][0]
+	)
 	assert_float(reached.distance_to(loop)).is_less(0.01)
 	var s_on := CarryLead.span(rest, worn)
-	var gone := CarryLead.by_side(loop, 1.0, rest, worn, Transform3D(), 0.0, 0, body)
+	var gone := CarryLead.by_side(
+		loop, 1.0, rest, worn, Transform3D(), 0.0, 0, body["shoulders_y"][0]
+	)
 	assert_float(gone.distance_to(side)).is_less(0.0001)
-	var letting := CarryLead.by_side(loop, s_on.y + 0.001, rest, worn, Transform3D(), 0.0, 0, body)
+	var letting := CarryLead.by_side(
+		loop, s_on.y + 0.001, rest, worn, Transform3D(), 0.0, 0, body["shoulders_y"][0]
+	)
 	assert_float(letting.distance_to(loop)).is_less(0.01)
-	var carried := CarryLead.by_side(loop, 0.5, rest, worn, Transform3D(), 0.0, 0, body)
+	var carried := CarryLead.by_side(
+		loop, 0.5, rest, worn, Transform3D(), 0.0, 0, body["shoulders_y"][0]
+	)
 	assert_vector(carried).is_equal(loop)
 
 
