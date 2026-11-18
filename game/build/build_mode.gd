@@ -619,7 +619,9 @@ func _commit_edit(edit: BuildEdit, note_cell: Vector2i) -> BuildResult:
 		elif edit.kind == BuildEdit.Kind.PLACE_OBJECT:
 			# The ghost now re-checks the piece it just placed, which overlaps
 			# itself: say what was placed until the pointer leaves the cell.
-			_status_note = "%s placed" % BuildCatalog.get_def(edit.def_id).display_name
+			_status_note = tr("{item} placed", "build status").format(
+				{"item": DisplayWords.item(BuildCatalog.get_def(edit.def_id).display_name)}
+			)
 			_note_cell = note_cell
 	_show_status(result)
 	# A refusal from the grid or the transaction (inside commit_plan()) was

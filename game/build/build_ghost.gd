@@ -31,7 +31,7 @@ static func hide_area(mode: BuildMode) -> void:
 	mode._pointer_on_grid = false
 	mode._ghost.visible = false
 	mode._hover_key = ""
-	mode._set_status(BuildMode.DRAG_OVER_UI)
+	mode._set_status(BuildWords.status(BuildMode.DRAG_OVER_UI))
 
 
 ## The Belt ghost for the one cell under the pointer, or none off the grid.

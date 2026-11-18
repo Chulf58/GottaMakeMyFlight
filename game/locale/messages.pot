@@ -3823,3 +3823,696 @@ msgstr ""
 msgctxt "gate card"
 msgid "Walk from security: {minutes} min"
 msgstr ""
+
+#: build/build_words.gd
+msgctxt "door hint"
+msgid "Put the {door} on a floor tile at the outside edge"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "door hint"
+msgid "Put the {door} on the outside edge of the floor"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "door hint"
+msgid "Clear the floor in front of the {door}"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "door hint"
+msgid "Take down the glass or door wall behind the {door}"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "door hint"
+msgid "The wall behind the {door} holds a door; pick another spot"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "{blocker} in front"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Outside the building area"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Needs floor"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Unknown floor type"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Zone id must be 0 or more"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Facing must be 0 to 3"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Unknown object"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Overlaps another object"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "A wall runs through it"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "The spot in front is blocked"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Blocks the spot in front of another object"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "An object stands here"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "There is already a wall here"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "No wall here"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "No such object"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Unknown wall kind"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "A door needs a plain wall on each side"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "A door stands beside this wall"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Entrances and exits need the outside edge, with no floor behind them"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Keep the edge behind an entrance or exit open"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Unknown room type"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Overlaps another room"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "A room covers this floor; remove the room first"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "No such room"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Not enough money"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "This piece has no price"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "The money is at its limit; the refund would not fit"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Belts cannot cross; a belt joins at most three others"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "A wall is in the way of the belt"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Only a belt piece changes shape"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Keep the staff spot behind a desk, beside a scanner or at a lane officer's post free, with a way in"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "A wall is in the way of the lane. Remove the wall first"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Put it on one of the marked landside spots"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Every spot of this kind nearby is already built"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Cars are still in it. Close it and wait until it is empty"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "A wall is in the way of the room"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "A plane uses this apron. Build here after it takes off"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "You do not own this land. Buy the plot with Buy land first"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "You already own this plot"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Buy a plot next to land you own"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Put a gate desk within 4 cells of a free exit facing the planes"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "A flight is still due at this gate. Remove it after the flight leaves"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "No other gate is free for these flights. Move them in Departures first"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Something is in front of the door"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "A piece sits across the room's edge"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Desks, scanners and lane parts cannot move with a room"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "A piece does not fit at the new spot"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Keep the way out clear for the passengers leaving the room"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "The room changed since it was picked up. Pick it up again"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Not unlocked yet"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "No room for a plane outside this exit. Keep the ground out from it clear"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Something blocks the way from this exit to the taxi lane. Clear a path out from it"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "A booked flight's plane needs this ground. Move its flights in Departures first"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "The side taxiway would have to move and leave a booked flight with no way to its gate"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Outside the building"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Overlaps an object"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "A wall is in the way"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Front spot blocked"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Blocks a front spot"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Wall already here"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Needs wall on both sides"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "A door is beside it"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Needs the outside edge"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Keep the edge open"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Overlaps a room"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Remove the room first"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Money at its limit"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Belts cannot cross"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Keep the staff spot free"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "A wall is in the lane"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Bad zone id"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Only belts change shape"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Needs a marked spot"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Spot already built"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Cars are still in it"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "A plane is on the apron"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Buy this land first"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Plot already owned"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Not next to your land"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "No free exit nearby"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Gates are too close"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "A flight is due here"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Flights have no gate"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "A piece is on the edge"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "A piece cannot move"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "A piece does not fit"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Blocks a way out"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "The room changed"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "No room for the plane"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Way to the lane blocked"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "A booked plane needs it"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Strands a booked flight"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "lane status"
+msgid "Lane ready"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "lane status"
+msgid "Needs a tray table"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "lane status"
+msgid "Needs an X-ray belt"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "lane status"
+msgid "Needs a pickup table"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "lane status"
+msgid "Parts face different ways"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "lane status"
+msgid "A wall cuts through the lane"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "lane status"
+msgid "Clear the way through the arch"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "lane status"
+msgid "Clear the floor for the queue"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "lane status"
+msgid "Clear the floor for the repack spot"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "lane status"
+msgid "Clear the way back from the repack spot"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "lane status"
+msgid "Clear the way out past the pickup table"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "lane status"
+msgid "Clear the officer's spot by the X-ray belt"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "lane status"
+msgid "Clear the helper's spot by the repack spot"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "lane status"
+msgid "No arch"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build status"
+msgid "Drag to lay a belt"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build status"
+msgid "Not part of a lane"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build status"
+msgid "Its front is outside the room, so it will not count"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build status"
+msgid "Drag stops over the menu. Move back onto the floor to keep sizing"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "door tool, mid-sentence"
+msgid "entrance"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "door tool, mid-sentence"
+msgid "exit"
+msgstr ""
+
+#: build/build_result.gd
+msgctxt "build refusal"
+msgid "Gates need {metres} m between exits. Widen the terminal"
+msgstr ""
+
+#: build/build_result.gd
+msgctxt "build refusal"
+msgid "{reason}: {detail}"
+msgstr ""
+
+#: build/build_mode.gd
+msgctxt "build status"
+msgid "{item} placed"
+msgstr ""
+
+#: build/room_move_tool.gd
+msgctxt "room move"
+msgid "Moved {room}"
+msgstr ""
+
+#: build/room_move_tool.gd
+msgctxt "room move"
+msgid "Moved {room} for {cost}"
+msgstr ""
+
+#: build/room_move_tool.gd
+msgctxt "room move"
+msgid "{room}: click to set down, right-click cancels"
+msgstr ""
+
+#: build/landside_placement.gd
+msgctxt "landside plan"
+msgid "Refunds {price}"
+msgstr ""
+
+#: build/landside_placement.gd
+msgctxt "landside plan"
+msgid "{place} (open, {cars}): click to close it"
+msgstr ""
+
+#: build/landside_placement.gd
+msgctxt "landside plan"
+msgid "{place} (closed, {cars}): click to open it"
+msgstr ""
+
+#: build/landside_placement.gd
+msgctxt "landside plan"
+msgid "Remove {place}: {capacity}, {metres} m walk to the nearest landside door"
+msgstr ""
+
+#: build/landside_placement.gd
+msgctxt "landside plan"
+msgid "Remove {place}: {capacity}"
+msgstr ""
+
+#: build/landside_placement.gd
+msgctxt "landside plan"
+msgid "{place}: {capacity}, {metres} m walk to the nearest landside door"
+msgstr ""
+
+#: build/landside_placement.gd
+msgctxt "landside plan"
+msgid "{place}: {capacity}"
+msgstr ""
+
+#: build/landside_placement.gd
+msgctxt "landside place, mid-sentence"
+msgid "curb bay"
+msgstr ""
+
+#: build/landside_placement.gd
+msgctxt "landside place, mid-sentence"
+msgid "surface lot"
+msgstr ""
+
+#: build/landside_placement.gd
+msgctxt "landside place, mid-sentence"
+msgid "multi-storey car park"
+msgstr ""
+
+#: build/landside_placement.gd
+msgctxt "landside plan"
+msgid "{count} car is still in it. Close it and wait until it is empty"
+msgid_plural "{count} cars are still in it. Close it and wait until it is empty"
+msgstr[0] ""
+msgstr[1] ""
+
+#: build/landside_placement.gd
+msgctxt "landside plan"
+msgid "{count} car"
+msgid_plural "{count} cars"
+msgstr[0] ""
+msgstr[1] ""
+
+#: build/landside_placement.gd
+msgctxt "landside plan"
+msgid "{count} berth"
+msgid_plural "{count} berths"
+msgstr[0] ""
+msgstr[1] ""
+
+#: build/landside_placement.gd
+msgctxt "landside plan"
+msgid "{count} space"
+msgid_plural "{count} spaces"
+msgstr[0] ""
+msgstr[1] ""

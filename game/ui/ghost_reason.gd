@@ -81,14 +81,17 @@ var _result: BuildResult
 var _watched: BuildGrid
 
 
-## The few words the card shows for a refusal.
+## The few words the card shows for a refusal, in the player's words
+## (BuildWords). SHORT_TEXT stays English: it is the key the tests compare.
 static func short_text(result: BuildResult) -> String:
 	if result.reason == BuildResult.Reason.DOOR_FRONT_BLOCKED and result.detail != "":
 		var blocker := result.detail.left(1).to_upper() + result.detail.substr(1)
-		var named := "%s in front" % blocker
+		var named := BuildWords.in_front(blocker)
 		if named.length() <= MAX_SHORT:
 			return named
-	return SHORT_TEXT.get(result.reason, result.reason_text())
+	if SHORT_TEXT.has(result.reason):
+		return BuildWords.short_refusal(SHORT_TEXT[result.reason])
+	return result.reason_text()
 
 
 func _ready() -> void:
