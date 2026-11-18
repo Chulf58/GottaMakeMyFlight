@@ -42,6 +42,12 @@ func after() -> void:
 	_sun.free()
 
 
+func after_test() -> void:
+	var settings := SaveTestKit.run_path("sky_unseen")
+	if FileAccess.file_exists(settings):
+		DirAccess.remove_absolute(settings)
+
+
 func _view(sim: FlightSim, clock: SimClock, slot := 0) -> PlaneView:
 	var view := PlaneView.new()
 	view.sim = sim
