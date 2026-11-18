@@ -5184,13 +5184,17 @@ msgstr ""
 
 #: build/landside_placement.gd
 msgctxt "landside plan"
-msgid "{place} (open, {cars}): click to close it"
-msgstr ""
+msgid "{place} (open, {count} car): click to close it"
+msgid_plural "{place} (open, {count} cars): click to close it"
+msgstr[0] ""
+msgstr[1] ""
 
 #: build/landside_placement.gd
 msgctxt "landside plan"
-msgid "{place} (closed, {cars}): click to open it"
-msgstr ""
+msgid "{place} (closed, {count} car): click to open it"
+msgid_plural "{place} (closed, {count} cars): click to open it"
+msgstr[0] ""
+msgstr[1] ""
 
 #: build/landside_placement.gd
 msgctxt "landside plan"
@@ -5231,13 +5235,6 @@ msgstr ""
 msgctxt "landside plan"
 msgid "{count} car is still in it. Close it and wait until it is empty"
 msgid_plural "{count} cars are still in it. Close it and wait until it is empty"
-msgstr[0] ""
-msgstr[1] ""
-
-#: build/landside_placement.gd
-msgctxt "landside plan"
-msgid "{count} car"
-msgid_plural "{count} cars"
 msgstr[0] ""
 msgstr[1] ""
 

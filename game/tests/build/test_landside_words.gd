@@ -118,7 +118,13 @@ func test_the_capacity_and_the_toggle_cars_follow_the_plural_rule() -> void:
 		{
 			"{count} space": ["SP1 {count}", "SPN {count}"],
 			"{count} berth": ["BE1 {count}", "BEN {count}"],
+			# A fragment translation that a nested sentence would pick up. The whole-sentence
+			# entries below must win, so "CA" never shows.
 			"{count} car": ["CA1 {count}", "CAN {count}"],
+			"{place} (open, {count} car): click to close it":
+			["OP1 {place} {count}", "OPN {place} {count}"],
+			"{place} (closed, {count} car): click to open it":
+			["CL1 {place} {count}", "CLN {place} {count}"],
 		}
 	)
 	_build(LandsidePlacement.Kind.SURFACE_LOT, IN_LOT_0)
@@ -126,10 +132,14 @@ func test_the_capacity_and_the_toggle_cars_follow_the_plural_rule() -> void:
 	var bay := _placement.plan_build(LandsidePlacement.Kind.CURB, IN_BAY_0).text
 	_park_a_car()
 	var one_car := _placement.plan_toggle(IN_LOT_0).text
-	print("lot: %s | bay: %s | one car: %s" % [lot, bay, one_car])
-	assert_str(lot).contains("CAN 0")
+	var closed_plan := _placement.plan_toggle(IN_LOT_0)
+	assert_bool(_placement.apply(closed_plan, null).ok).is_true()
+	var closed := _placement.plan_toggle(IN_LOT_0).text
+	print("lot: %s | bay: %s | one car: %s | closed: %s" % [lot, bay, one_car, closed])
+	assert_str(lot).is_equal("OPN Surface lot 0")
+	assert_str(one_car).is_equal("OP1 Surface lot 1")
+	assert_str(closed).is_equal("CL1 Surface lot 1")
 	assert_str(bay).contains("BEN 2")
-	assert_str(one_car).contains("CA1 1")
 	assert_str(_placement.plan_build(LandsidePlacement.Kind.SURFACE_LOT, IN_LOT_0).text).contains(
 		"SPN"
 	)

@@ -384,15 +384,27 @@ func _describe(plan: Plan) -> void:
 						". " + tr("Refunds {price}", "landside plan").format({"price": plan.price})
 					)
 		Action.TOGGLE:
-			var values := {"place": DisplayWords.landside(NAMES[plan.kind]), "cars": _cars(plan)}
-			text = (
-				(
-					tr("{place} (open, {cars}): click to close it", "landside plan")
-					if plan.closes
-					else tr("{place} (closed, {cars}): click to open it", "landside plan")
+			var values := {"place": DisplayWords.landside(NAMES[plan.kind]), "count": plan.cars}
+			if plan.closes:
+				text = (
+					tr_n(
+						"{place} (open, {count} car): click to close it",
+						"{place} (open, {count} cars): click to close it",
+						plan.cars,
+						"landside plan"
+					)
+					. format(values)
 				)
-				. format(values)
-			)
+			else:
+				text = (
+					tr_n(
+						"{place} (closed, {count} car): click to open it",
+						"{place} (closed, {count} cars): click to open it",
+						plan.cars,
+						"landside plan"
+					)
+					. format(values)
+				)
 	plan.text = _with_reason(text, plan)
 
 
@@ -452,12 +464,6 @@ func _with_reason(text: String, plan: Plan) -> String:
 			. format({"count": plan.cars})
 		)
 	return "%s  %s" % [text, reason]
-
-
-func _cars(plan: Plan) -> String:
-	return tr_n("{count} car", "{count} cars", plan.cars, "landside plan").format(
-		{"count": plan.cars}
-	)
 
 
 func _capacity_text(plan: Plan) -> String:
