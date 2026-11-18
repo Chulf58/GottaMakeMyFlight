@@ -27,6 +27,7 @@ const OTHERS := [
 	["", "Show me"],
 	["", "v{version}"],
 	["staff button", "Hire · {wage}/day"],
+	["", "{count} station is closed · staff are on the way"],
 ]
 
 

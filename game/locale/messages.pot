@@ -6018,3 +6018,9 @@ msgid "Queue full · {count} waiting · short queue: move the counter away from 
 msgid_plural "Queue full · {count} waiting · short queue: move the counter away from the wall"
 msgstr[0] ""
 msgstr[1] ""
+
+#: ui/alert_sources.gd
+msgid "{count} station is closed · staff are on the way"
+msgid_plural "{count} stations are closed · staff are on the way"
+msgstr[0] ""
+msgstr[1] ""

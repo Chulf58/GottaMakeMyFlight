@@ -16,7 +16,10 @@ extends RefCounted
 ## - passengers waiting for a gate place (GateCapacity.shortage()): one card,
 ##   pointing at them.
 ## - stations closed with nobody on duty, and stations whose staff spot staff
-##   cannot use (closed_stations()): one card each, pointing at them.
+##   cannot use (closed_stations()): one card each, pointing at them. The
+##   nobody-on-duty card asks to hire only for stations nobody is assigned to;
+##   when every such station has a hired member walking to it, it says they
+##   are on the way.
 ## The dirty terminal card is DirtyAlert.cause(), which keeps its own band.
 ## It only reads the sim.
 
@@ -179,23 +182,40 @@ static func closed_stations(sim: PassengerSim) -> Array[Dictionary]:
 	stations.append_array(ShopCounters.closed(sim))
 	stations.sort()
 	var idle: Array[int] = []
+	var coming: Array[int] = []
 	var spots: Array[int] = []
 	for station in stations:
 		match MissSignals.staff_reason(sim, station):
 			MissSignals.NO_STAFF_REASON:
-				idle.append(station)
+				(coming if _member_walking_to(sim, station) else idle).append(station)
 			MissSignals.SPOT_BLOCKED_REASON, MissSignals.UNREACHABLE_REASON:
 				spots.append(station)
-	if not idle.is_empty():
-		var detail := _translator.tr_n(
-			"{count} station is closed · hire staff on the Staff card",
-			"{count} stations are closed · hire staff on the Staff card",
-			idle.size()
+	if not idle.is_empty() or not coming.is_empty():
+		# Hiring is asked only for stations nobody is assigned to; when every
+		# closed station has a member walking to it, the card says so instead.
+		var detail := (
+			_translator.tr_n(
+				"{count} station is closed · hire staff on the Staff card",
+				"{count} stations are closed · hire staff on the Staff card",
+				idle.size()
+			)
+			if not idle.is_empty()
+			else _translator.tr_n(
+				"{count} station is closed · staff are on the way",
+				"{count} stations are closed · staff are on the way",
+				coming.size()
+			)
 		)
+		var shown := idle if not idle.is_empty() else coming
 		var title := _translator.tr("Nobody on duty")
 		out.append(
 			_station_cause(
-				sim, idle, NO_STAFF, title, detail.format({"count": idle.size()}), QUEUE_HOLD_TICKS
+				sim,
+				shown,
+				NO_STAFF,
+				title,
+				detail.format({"count": shown.size()}),
+				QUEUE_HOLD_TICKS
 			)
 		)
 	if not spots.is_empty():
@@ -216,6 +236,12 @@ static func closed_stations(sim: PassengerSim) -> Array[Dictionary]:
 			)
 		)
 	return out
+
+
+## Whether a hired member is walking to `station` to take it up, not yet on duty.
+static func _member_walking_to(sim: PassengerSim, station: int) -> bool:
+	var id := sim.staff.staff_at(station)
+	return id != 0 and sim.staff.get_member(id).state == StaffMember.State.TO_STATION
 
 
 static func _station_cause(
