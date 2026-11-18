@@ -624,9 +624,14 @@ func press_pause_toggle() -> void:
 ## Gives the unlock guide the tiers and the clock, holds the camera still while
 ## its dialog is open, and hands it to the build menu for the "New" marks.
 func _wire_unlock_guide() -> void:
-	if _in_current_scene() and not _playtest_switch_on():
-		if not Hints.launched_by_script(OS.get_cmdline_args()):
-			_unlock_guide.mode = UnlockGuide.Mode.PROFILE
+	var user_args := OS.get_cmdline_user_args()
+	var env_hints := OS.get_environment(Hints.SWITCH_ENV)
+	if (
+		user_args.has(Hints.SWITCH_ARG)
+		or env_hints == "1"
+		or (_in_current_scene() and not Hints.launched_by_script(OS.get_cmdline_args()))
+	):
+		_unlock_guide.mode = UnlockGuide.mode_for(user_args, env_hints, _playtest_switch_on())
 	if build_mode != null:
 		_unlock_guide.unlocks = build_mode.unlocks
 	_unlock_guide.clock = clock
