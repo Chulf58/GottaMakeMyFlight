@@ -17,9 +17,6 @@ enum Bags { ONE, TWO_RIGHT, TWO_LEFT }
 
 ## The roller shell's width across (test_gate_chair_roller_spot's shell box).
 const SHELL_WIDTH_M := 0.328
-## A chair whose seat lies this far or further across from its front (the seat
-## row's middle chair, GateChairs.CHAIR_OFFSET_M 0.36).
-const FAR_SLIDE_M := 0.2
 ## The least side (m) at which every body of a variant clears its roller's
 ## shell box grown by 1 cm, measured with test_gate_chair_roller_spot's sweep
 ## (sit_down at the front, seated along the shuffle): [one bag, two bags] x
@@ -169,8 +166,10 @@ func _seat_guests(guests: Array, seats: Array, order: Array, fallbacks := []) ->
 		p.at = seat["front"]
 		var slide := GateRoller.slide(p.seat_piece, p.seat_cell, p.seat_front)
 		assert_float(GateRoller.slide_of(p)).is_equal_approx(slide, 0.0001)
+		# Every seat row chair is centred on its cell (GateChairs.CHAIR_OFFSET_M
+		# all 0), so no guest shuffles sideways onto it.
 		if seats == _seats:
-			assert_float(absf(slide)).is_greater(0.05)
+			assert_float(slide).is_equal_approx(0.0, 0.0001)
 		if p.carry_on > 1:
 			var roller := 0 if SecurityLooks.bag_kind(p, 0) == SecurityLooks.Kind.ROLLER else 1
 			hands[i] = SecurityLooks.hand_of(_world.sim, p, roller)
@@ -199,48 +198,34 @@ func test_the_seats_line_up() -> void:
 	assert_int(_seats.size()).is_equal(3)
 
 
-## GateRoller.slide() of each of the row's seats is its chair's sideways step
-## (GateChairs.CHAIR_OFFSET_M turned with the row) measured along the gap
-## rule's left (a step of `_left`, the left hand's side of a guest facing out),
-## so a positive slide is a shuffle into the left gap. One of the three is the
-## row's middle chair (|slide| FAR_SLIDE_M or more). Seated in every order with
-## every fallback, its guest lays on the side it does not shuffle toward
-## (decision gate-chair-roller-lies-opposite-the-sit-down-shuffle-on-a-ch), and
-## no gap holds two rollers.
-func test_the_middle_chair_lays_opposite_its_shuffle() -> void:
-	var far := -1
+## Every chair of the seat row is centred on its own cell, so GateRoller.slide()
+## of each of the row's three seats is 0: no guest shuffles sideways onto its
+## chair, and the chair-slide tables (GateRoller.SHUFFLE_SIDE_M) never apply
+## at a seat row. The three seats are the row's three chairs, one each.
+## Seated in every order with every fallback, no gap holds two rollers.
+func test_no_seat_row_chair_slides_and_no_gap_holds_two_rollers() -> void:
+	var chairs := {}
 	for i in _seats.size():
 		var seat: Dictionary = _seats[i]
 		var piece := Relocation.placement(_world.sim.grid, seat["object_id"])
 		var slide := GateRoller.slide(piece, seat["cell"], seat["front"])
 		var def := BuildCatalog.get_def(piece["def"])
 		var index := def.footprint(piece["anchor"], piece["facing"]).find(seat["cell"])
-		var step := BuildObjectDef.rotate_point(
-			Vector2(GateChairs.CHAIR_OFFSET_M[index], 0.0), piece["facing"]
-		)
-		var along := step.dot(Vector2(_left))
-		print("seat %d chair %d slide %+.3f along the left step %+.3f" % [i, index, slide, along])
-		assert_float(slide).is_equal_approx(along, 0.0001)
-		if absf(slide) >= FAR_SLIDE_M:
-			far = i
-	assert_int(far).is_greater_equal(0)
-	var piece := Relocation.placement(_world.sim.grid, _seats[far]["object_id"])
-	var slide := GateRoller.slide(piece, _seats[far]["cell"], _seats[far]["front"])
-	var away := 0 if slide > 0.0 else 1
-	var wrong := 0
+		print("seat %d object %d chair %d slide %+.3f" % [i, seat["object_id"], index, slide])
+		assert_int(index).is_between(0, 2)
+		assert_float(slide).is_equal_approx(0.0, 0.0001)
+		chairs[[seat["object_id"], index]] = true
+	assert_int(chairs.size()).is_equal(3)
+	var fills := 0
 	var shared := 0
 	for order: Array in ORDERS_3:
 		for fallbacks: Array in [[0, 0, 0], [1, 1, 1], [1, 0, 1], [0, 1, 0]]:
 			var hands := _fill([0, 1, 2], order, fallbacks)
-			wrong += int(hands[far] != away)
+			assert_int(hands.size()).is_equal(3)
+			fills += 1
 			shared += _shared(hands)
-	print(
-		(
-			"middle chair seat %d: on its shuffle side %d (0), shared gaps %d (0)"
-			% [far, wrong, shared]
-		)
-	)
-	assert_int(wrong).is_equal(0)
+	print("fills %d (24), shared gaps %d (0)" % [fills, shared])
+	assert_int(fills).is_equal(24)
 	assert_int(shared).is_equal(0)
 
 
