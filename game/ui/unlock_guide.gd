@@ -92,6 +92,18 @@ var _queued_firsts: Array = []
 var _opening_departure := ""
 
 
+## How a launch runs the guide: PROFILE when the onboarding hints switch
+## (--hints or GMMF_HINTS=1, decision first-10-minutes-playtest-d3-an-ai-
+## playtest-with-first-time) is on even under PlaytestHook, OFF in a plain
+## PlaytestHook run, and PROFILE in a normal launch.
+static func mode_for(args: PackedStringArray, env_hints: String, playtest_on: bool) -> Mode:
+	if args.has(Hints.SWITCH_ARG) or env_hints == "1":
+		return Mode.PROFILE
+	if playtest_on:
+		return Mode.OFF
+	return Mode.PROFILE
+
+
 func _ready() -> void:
 	name = "UnlockGuide"
 	if unlocks == null or mode == Mode.OFF:
@@ -176,16 +188,20 @@ func _on_tiers_opened(first: int, last: int) -> void:
 		open_dialog(due)
 
 
-## Pauses the clock and shows the dialog for `tiers` and `firsts`: at once, or,
-## while another exclusive dialog has the turn (the Offers sheet, the intro),
-## when that one closes. Tiers that open while it waits join the waiting list.
+## Pauses the clock and shows the dialog for `tiers` and `firsts`: at once, or
+## queued behind this guide's open dialog, or waiting while another exclusive
+## dialog has the turn (the Offers sheet, the intro).
 func open_dialog(tiers: Array, firsts: Array = []) -> void:
-	if clock == null or _dialog != null:
+	if _dialog != null:
+		_append_unique(_queued_tiers, tiers)
+		_append_unique(_queued_firsts, firsts)
+		return
+	if clock == null:
 		_present_batch(tiers, firsts)
 		return
 	if clock.holds.has(_hold):
-		_waiting_tiers.append_array(tiers)
-		_waiting_firsts.append_array(firsts)
+		_append_unique(_waiting_tiers, tiers)
+		_append_unique(_waiting_firsts, firsts)
 		return
 	_waiting_tiers = tiers.duplicate()
 	_waiting_firsts = firsts.duplicate()
@@ -224,9 +240,6 @@ func _open_first(kind: String) -> void:
 	if unlocks.first_shown(kind):
 		return
 	unlocks.mark_first_shown(kind)
-	if _dialog != null:
-		_queued_firsts.append(kind)
-		return
 	open_dialog([], [kind])
 
 
@@ -235,11 +248,23 @@ func _open_first(kind: String) -> void:
 func _present_batch(tiers: Array, firsts: Array) -> void:
 	if firsts.has(BigFirsts.OPENING) and (not tiers.is_empty() or firsts.size() > 1):
 		var rest := firsts.filter(func(k: Variant) -> bool: return k != BigFirsts.OPENING)
-		_queued_tiers = tiers + _queued_tiers
-		_queued_firsts = rest + _queued_firsts
+		var next_tiers: Array = []
+		_append_unique(next_tiers, tiers)
+		_append_unique(next_tiers, _queued_tiers)
+		var next_firsts: Array = []
+		_append_unique(next_firsts, rest)
+		_append_unique(next_firsts, _queued_firsts)
+		_queued_tiers = next_tiers
+		_queued_firsts = next_firsts
 		_show_dialog([], [BigFirsts.OPENING])
 		return
 	_show_dialog(tiers, firsts)
+
+
+func _append_unique(into: Array, items: Array) -> void:
+	for item: Variant in items:
+		if not into.has(item):
+			into.append(item)
 
 
 func _starter_departure_text() -> String:

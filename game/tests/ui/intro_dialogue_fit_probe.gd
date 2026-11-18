@@ -83,10 +83,10 @@ func _words(kind: String) -> Dictionary:
 				"fail_half_stars": 1,
 			}
 			return _incident(IncidentCatalogue.INSPECTOR, plan, false)
-	# A tier with both big firsts is the longest unlock text; at +40% it scrolls.
+	# A tier with both airport-side big firsts is the longest unlock text; at +40% it scrolls.
 	var firsts := [BigFirsts.RUNWAY]
 	if kind == "unlock_guide_two_firsts":
-		firsts = BigFirsts.KINDS
+		firsts = [BigFirsts.RUNWAY, BigFirsts.INCIDENT]
 	var body := "\n".join(UnlockFamilies.lines([2])) + "\n" + BigFirsts.body_for(firsts)
 	return {
 		"title": TranslationServer.translate("Your airport has grown"),

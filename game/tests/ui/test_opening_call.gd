@@ -52,7 +52,6 @@ func before_test() -> void:
 	_port = SubViewport.new()
 	_port.size = Vector2i(1280, 720)
 	add_child(_port)
-	_build_unit_world()
 
 
 func after_test() -> void:
@@ -61,6 +60,8 @@ func after_test() -> void:
 
 
 func _build_unit_world(mode := UnlockGuide.Mode.PROFILE) -> void:
+	_rings.clear()
+	_changes.clear()
 	for child in _port.get_children():
 		child.free()
 	_clock = SimClock.new()
@@ -120,6 +121,7 @@ func _starter_departure_text(flights: FlightSim, clock: SimClock) -> String:
 
 
 func test_opening_pauses_synchronously_on_the_opening_tick_and_shows_gotta_air() -> void:
+	_build_unit_world()
 	_clock.set_speed(2)
 	_clock.set_paused(false)
 	_staff_and_step_until_open()
@@ -154,6 +156,7 @@ func test_opening_pauses_synchronously_on_the_opening_tick_and_shows_gotta_air()
 
 
 func test_other_unlock_guide_dialogs_keep_the_terminal_manager_speaker() -> void:
+	_build_unit_world()
 	_director.major_presented.emit({"id": 1, "kind": IncidentCatalogue.INSPECTOR})
 	assert_int(_guide.dialog().speaker()).is_equal(IntroDialogue.Speaker.TERMINAL_MANAGER)
 	(
@@ -176,6 +179,7 @@ func test_other_unlock_guide_dialogs_keep_the_terminal_manager_speaker() -> void
 
 
 func test_opening_call_never_shares_one_box_with_terminal_manager_firsts() -> void:
+	_build_unit_world()
 	var blocker_owner := Node.new()
 	_port.add_child(blocker_owner)
 	var other_hold := _clock.holds.take_turn(blocker_owner, func() -> void: pass)
@@ -197,14 +201,34 @@ func test_opening_call_never_shares_one_box_with_terminal_manager_firsts() -> vo
 	assert_array(_changes).is_equal([true, false])
 
 
+func test_open_dialog_while_gotta_air_is_open_queues_tiers_until_dismissed() -> void:
+	_build_unit_world()
+	assert_bool(_gate.open()).is_true()
+	assert_bool(_guide.is_open()).is_true()
+	assert_int(_guide.dialog().speaker()).is_equal(IntroDialogue.Speaker.GOTTA_AIR)
+	_guide.open_dialog([2])
+	# Gotta Air stays on screen until dismissed; tier 2 waits behind it under one hold.
+	assert_int(_guide.dialog().speaker()).is_equal(IntroDialogue.Speaker.GOTTA_AIR)
+	assert_str(_guide.dialog().body_text()).contains("Gotta Air here.")
+	assert_array(_rings).is_equal([UnlockGuide.NO_TIER])
+	_guide.dismiss()
+	assert_bool(_guide.is_open()).is_true()
+	assert_int(_guide.dialog().speaker()).is_equal(IntroDialogue.Speaker.TERMINAL_MANAGER)
+	assert_str(_guide.dialog().body_text()).contains("Food:")
+	assert_array(_rings).is_equal([UnlockGuide.NO_TIER, 2])
+	_guide.dismiss()
+	assert_bool(_guide.is_open()).is_false()
+	assert_array(_changes).is_equal([true, false])
+
+
 func test_opening_shows_once_per_game_and_round_trips_in_the_save_snapshot() -> void:
+	_build_unit_world()
 	_staff_and_step_until_open()
 	assert_bool(_unlocks.first_shown(BigFirsts.OPENING)).is_true()
 	_guide.dismiss()
 	var snap := JSON.parse_string(JSON.stringify(_unlocks.to_snapshot())) as Dictionary
 	assert_array(snap["firsts"]).is_equal([BigFirsts.OPENING])
 	_build_unit_world()
-	_rings.clear()
 	assert_bool(_unlocks.from_snapshot(snap)).is_true()
 	assert_bool(_unlocks.first_shown(BigFirsts.OPENING)).is_true()
 	_staff_and_step_until_open()
@@ -224,6 +248,20 @@ func test_guide_off_leaves_opening_unblocked_and_unmarked() -> void:
 	assert_bool(_guide.is_open()).is_false()
 	assert_bool(_clock.paused).is_false()
 	assert_bool(_unlocks.first_shown(BigFirsts.OPENING)).is_false()
+
+
+func test_mode_for_returns_off_in_plain_playtest_and_profile_with_hints_switch() -> void:
+	assert_int(UnlockGuide.mode_for(PackedStringArray(), "", true)).is_equal(UnlockGuide.Mode.OFF)
+	assert_int(UnlockGuide.mode_for(PackedStringArray(), "0", true)).is_equal(UnlockGuide.Mode.OFF)
+	assert_int(UnlockGuide.mode_for(PackedStringArray(["--hints"]), "", true)).is_equal(
+		UnlockGuide.Mode.PROFILE
+	)
+	assert_int(UnlockGuide.mode_for(PackedStringArray(), "1", true)).is_equal(
+		UnlockGuide.Mode.PROFILE
+	)
+	assert_int(UnlockGuide.mode_for(PackedStringArray(), "", false)).is_equal(
+		UnlockGuide.Mode.PROFILE
+	)
 
 
 func test_opening_strings_are_routed_through_tr_and_present_in_messages_pot() -> void:
