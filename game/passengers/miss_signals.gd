@@ -90,6 +90,7 @@ static func incomplete_arches(sim: PassengerSim) -> Array[int]:
 	return out
 
 
-## What an incomplete arch lacks first, in the player's words (SecurityLanes.status_words).
+## What an incomplete arch lacks first, as the English key (SecurityLanes.status_text).
+## MissMarkers translates it at the moment it sets the sign text.
 static func lane_hint(sim: PassengerSim, arch: int) -> String:
-	return sim.layout.security_lanes.status_words(arch)
+	return sim.layout.security_lanes.status_text(arch)

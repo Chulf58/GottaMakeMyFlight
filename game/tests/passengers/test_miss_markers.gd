@@ -315,7 +315,7 @@ func test_the_lane_hint_sign_says_its_words_in_the_players_language() -> void:
 ## Every lane-hint text has a translation entry, so none shows English to a
 ## player who has the translation.
 func test_every_lane_status_text_has_a_translation_entry() -> void:
-	assert_array(MissMarkers.lane_status_msgids()).contains_exactly_in_any_order(
+	assert_array(BuildWords.lane_status_msgids()).contains_exactly_in_any_order(
 		SecurityLanes.STATUS_TEXT.values()
 	)
 	PseudoLocale.enable(0.4)

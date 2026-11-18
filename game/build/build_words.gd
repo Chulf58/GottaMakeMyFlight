@@ -60,6 +60,11 @@ static func msgids() -> Array[String]:
 	return _words.msgids()
 
 
+## Every SecurityLanes.STATUS_TEXT line, the one inventory of the lane texts.
+static func lane_status_msgids() -> Array[String]:
+	return _words.lane_status_msgids()
+
+
 class Words:
 	extends RefCounted
 
@@ -84,7 +89,7 @@ class Words:
 	## Never called: every English line the data can produce inside tr(), so POT
 	## generation finds it. test_build_words.gd checks the list against the data.
 	func msgids() -> Array[String]:
-		return [
+		var out: Array[String] = [
 			# BuildResult.REASON_TEXT
 			tr("Outside the building area", "build refusal"),
 			tr("Needs floor", "build refusal"),
@@ -203,7 +208,22 @@ class Words:
 			tr("Way to the lane blocked", "ghost reason"),
 			tr("A booked plane needs it", "ghost reason"),
 			tr("Strands a booked flight", "ghost reason"),
-			# SecurityLanes.STATUS_TEXT
+			# BuildMode status constants
+			tr("Drag to lay a belt", "build status"),
+			tr("Not part of a lane", "build status"),
+			tr("Its front is outside the room, so it will not count", "build status"),
+			tr("Drag stops over the menu. Move back onto the floor to keep sizing", "build status"),
+			# Door tool names, inside a sentence
+			tr("entrance", "door tool, mid-sentence"),
+			tr("exit", "door tool, mid-sentence"),
+		]
+		out.append_array(lane_status_msgids())
+		return out
+
+	## Never called: every SecurityLanes.STATUS_TEXT line inside tr(), so POT generation
+	## finds it. The one inventory of the lane texts, shared with the lane-hint sign.
+	func lane_status_msgids() -> Array[String]:
+		return [
 			tr("Lane ready", "lane status"),
 			tr("Needs a tray table", "lane status"),
 			tr("Needs an X-ray belt", "lane status"),
@@ -218,12 +238,4 @@ class Words:
 			tr("Clear the officer's spot by the X-ray belt", "lane status"),
 			tr("Clear the helper's spot by the repack spot", "lane status"),
 			tr("No arch", "lane status"),
-			# BuildMode status constants
-			tr("Drag to lay a belt", "build status"),
-			tr("Not part of a lane", "build status"),
-			tr("Its front is outside the room, so it will not count", "build status"),
-			tr("Drag stops over the menu. Move back onto the floor to keep sizing", "build status"),
-			# Door tool names, inside a sentence
-			tr("entrance", "door tool, mid-sentence"),
-			tr("exit", "door tool, mid-sentence"),
 		]

@@ -141,7 +141,8 @@ func test_a_lane_status_is_translated_and_its_english_key_is_unchanged() -> void
 	assert_str(shown).starts_with("[").contains(english)
 	assert_str(lanes.status_text(arch)).is_equal(english)
 	assert_str(lanes.status_words(arch)).starts_with("[")
-	assert_str(MissSignals.lane_hint(_sim_with(lanes), arch)).starts_with("[")
+	# The sim-facing hint stays the English key; MissMarkers translates it at display.
+	assert_str(MissSignals.lane_hint(_sim_with(lanes), arch)).is_equal(english)
 
 
 func test_every_lane_status_is_translated() -> void:
