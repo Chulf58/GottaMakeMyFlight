@@ -37,10 +37,11 @@ func _bag(was: int, carry_from: int, home: int, carry: int, from: Transform3D) -
 	}
 
 
-func _body(lift := 0.0) -> Dictionary:
+func _body(lift := 0.0, hand := R) -> Dictionary:
 	return {
-		"hand": R,
-		"grips": [_frame * (_grips[0] + Vector3.UP * lift), _frame * _grips[1]],
+		"hand": hand,
+		"grips":
+		[_frame * (_grips[0] + Vector3.UP * lift), _frame * (_grips[1] + Vector3.UP * lift)],
 		"shoulders_y": [1.4, 1.4],
 		"bar_z": 0.5,
 		"scale": 1.0,
@@ -241,23 +242,100 @@ func test_the_handover_waits_for_a_free_hand() -> void:
 	assert_bool(case_bag.has("handover")).is_false()
 
 
-## Handed over, the roller is moved so the middle of its two grips is
-## SWAP_FRONT_M ahead of the body at hip height at half way (no hand reaches
-## across the body for it), and not moved at the carry's ends. Control: with no
-## stamped shoulder height it is not moved.
+## Handed over, the roller is moved so the middle of its two grips is ahead of
+## the body at hip height at half way (SWAP_FRONT_M for hand moves,
+## PULL_FRONT_M upright for pull moves), and at its ends at t 0 and 1. Control:
+## with no stamped shoulder height it is not moved.
 func test_the_roller_is_handed_over_in_front_of_the_body() -> void:
 	var a := Vector3(0.0, 0.03, 0.5)
 	var b := CarryOnProps.ROLLER_HANDLE
 	var on_path := Transform3D(Basis(Vector3.UP, 1.1), _frame * Vector3(-0.3, 0.4, -0.5))
+	var start := _frame * Transform3D(Basis(), Vector3(-0.25, 0.35, 0.05))
+	var goal := _frame * Transform3D(Basis(Vector3.RIGHT, -PI / 2.0), Vector3(-0.1, 0.9, 0.6))
+	var bag := {"start_shoulder_y": 1.4}
 	var front := _frame * Vector3(0.0, 1.4 - CarryLead.SWAP_HIP_BELOW_M, CarryLead.SWAP_FRONT_M)
-	var half := RollerHandover.to_front(on_path, _frame, 0.5, 1.4, a, b)
-	var middle := on_path.translated(half) * ((a + b) * 0.5)
+	var half := RollerHandover.to_front(on_path, start, goal, _frame, 0.5, bag, a, b)
+	var middle := half * ((a + b) * 0.5)
 	print("to_front at half way: %.4f m off the front point" % middle.distance_to(front))
 	assert_float(middle.distance_to(front)).is_less_equal(0.0001)
 	for t: float in [0.0, 1.0]:
-		var moved := RollerHandover.to_front(on_path, _frame, t, 1.4, a, b)
-		assert_float(moved.length()).is_less_equal(0.0001)
-	assert_float(RollerHandover.to_front(on_path, _frame, 0.5, NAN, a, b).length()).is_equal(0.0)
+		var end_xf := RollerHandover.to_front(on_path, start, goal, _frame, t, bag, a, b)
+		assert_float(end_xf.origin.distance_to(on_path.origin)).is_less_equal(0.0001)
+	var unmoved := RollerHandover.to_front(on_path, start, goal, _frame, 0.5, {}, a, b)
+	assert_float(unmoved.origin.distance_to(on_path.origin)).is_equal(0.0)
+
+
+## To or from the pull (`pull.R>tray`, `pull.L>tray`, `tray>pull.R`,
+## `tray>pull.L`), the roller swings round the pulled side (-X right, +X left)
+## clear of the pelvis and legs and stands upright in front of the body at the
+## handover. Control: shifting the pulled start to the front without turning it
+## upright thrusts the shell within 3 cm of the pelvis centre.
+func test_pull_handover_swings_round_the_pulled_side_clear_of_the_body() -> void:
+	var pull_r := RollerPull.pulled(_grips[R], Vector3(-0.3, 0.03, -0.6), 1.0)
+	var pull_l := RollerPull.pulled(_grips[L], Vector3(0.3, 0.03, -0.6), 1.0)
+	var tray := Transform3D(Basis(Vector3.RIGHT, -PI / 2.0), Vector3(-0.1, 0.9, 0.6))
+	var pull := SecurityLooks.Carry.PULL
+	var hand_r := _place(SecurityLooks.Home.HAND, R)
+	var hand_l := _place(SecurityLooks.Home.HAND, L)
+	var in_tray := _place(SecurityLooks.Home.TRAY)
+	var cases := [
+		["pull.R>tray", _bag(hand_r, pull, in_tray, pull, pull_r), pull_r, tray, R, R, 0.375],
+		["pull.L>tray", _bag(hand_l, pull, in_tray, pull, pull_l), pull_l, tray, L, L, 0.375],
+		["tray>pull.R", _bag(in_tray, pull, hand_r, pull, tray), tray, pull_r, L, R, 0.625],
+		["tray>pull.L", _bag(in_tray, pull, hand_l, pull, tray), tray, pull_l, R, L, 0.625],
+	]
+	for item: Array in cases:
+		var label: String = item[0]
+		var bag: Dictionary = item[1]
+		bag["handover"] = item[4]
+		var bar_hand: int = item[5]
+		var out_sign := -1.0 if bar_hand == R else 1.0
+		var flags := {"in_stall": false, "hand": bar_hand, "yaw": 0.6, "clear": 0.0}
+		var start: Transform3D = _frame * (item[2] as Transform3D)
+		var want: Transform3D = _frame * (item[3] as Transform3D)
+		var ks := [0.15, 0.25, 0.33, 0.375, 0.5, 0.625, 0.67, 0.75, 0.85]
+		for step in STEPS + 1:
+			ks.append(step / float(STEPS))
+		var min_clear := INF
+		var saw_side := false
+		for k: float in ks:
+			var plan := CarryLead.plan(bag, k, start, want, _frame, flags, _body(0.0, bar_hand))
+			var local_xf: Transform3D = _frame.affine_inverse() * (plan["xf"] as Transform3D)
+			min_clear = minf(min_clear, _pelvis_clearance(local_xf))
+			var box_mid := local_xf * Vector3(0.0, 0.1, 0.0)
+			if absf(box_mid.z) < 0.12:
+				saw_side = true
+				assert_float(box_mid.x * out_sign).is_greater(0.25)
+		var mid_k: float = item[6]
+		var at_mid := CarryLead.plan(bag, mid_k, start, want, _frame, flags, _body(0.0, bar_hand))
+		var mid_local: Transform3D = _frame.affine_inverse() * (at_mid["xf"] as Transform3D)
+		assert_float(mid_local.basis.z.normalized().dot(Vector3.UP)).is_greater(0.999)
+		assert_float((mid_local * Vector3(0.0, 0.1, 0.0)).z).is_greater(0.3)
+		print("%s: min pelvis clearance %.3f m, side=%s" % [label, min_clear, saw_side])
+		assert_bool(saw_side).is_true()
+		assert_float(min_clear).is_greater(0.13)
+	# Control: pull_r shifted to the front without turning upright clips the pelvis.
+	var mid_grip := (Vector3(0.0, 0.03, 0.5) + CarryOnProps.ROLLER_HANDLE) * 0.5
+	var front_local := Vector3(0.0, 1.4 - CarryLead.SWAP_HIP_BELOW_M, CarryLead.SWAP_FRONT_M)
+	var unrotated := pull_r.translated(front_local - pull_r * mid_grip)
+	var clip_clear := _pelvis_clearance(unrotated)
+	print("unrotated pull-at-front pelvis clearance: %.3f m" % clip_clear)
+	assert_float(clip_clear).is_less(0.05)
+
+
+## Least horizontal distance from the roller shell and rods (in body-local
+## frame `local_xf`) to the passenger's hip segment (|x| <= 0.10 m, z = 0).
+static func _pelvis_clearance(local_xf: Transform3D) -> float:
+	var best := INF
+	for x: float in [-0.16, 0.0, 0.16]:
+		for y: float in [0.0, 0.11, 0.225]:
+			for z: float in [-0.22, -0.11, 0.0, 0.11, 0.22]:
+				var p := local_xf * Vector3(x, y, z)
+				best = minf(best, Vector2(maxf(absf(p.x) - 0.10, 0.0), p.z).length())
+	for z: float in [0.3, 0.4, 0.5]:
+		var rod := local_xf * Vector3(0.0, 0.03, z)
+		best = minf(best, Vector2(maxf(absf(rod.x) - 0.10, 0.0), rod.z).length())
+	return best
 
 
 ## A roller carried beside a hard case goes into a lane tray after the case and

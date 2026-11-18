@@ -15,9 +15,9 @@ extends RefCounted
 ##
 ## Fallback, when the free hand is busy (it holds another bag, or another bag
 ## goes into it or is set down from it as the move starts; free_hand_busy()):
-## no handover is stamped and the move goes as it did before, one hand sliding
-## from the one grip to the other. Pickup and repack order bags 0 then 1, so
-## this is a two-bag passenger whose other bag is in the free hand.
+## no handover is stamped and the move goes as it did before. At a lane tray a
+## roller carried beside a hard case goes in last and comes out first
+## (SecurityLooks.tray_turn()), freeing that hand for the handover.
 ##
 ## A roller parked on its wheels (RollerPark), passed between the pulling
 ## hands (CarryLead.is_pull_swap(), is_hand_pull_swap()) or picked up off the
@@ -39,6 +39,19 @@ const TRAY_KEEP := Vector2(0.6, 0.95)
 ## roller's top as it reached (crossing probe --lane, seed 1106001, passenger 4
 ## tray>hand.R, Fingertips.L 88 to 174 points in the roller at k 0.18 to 0.22).
 const TRAY_PALM_M := 0.04
+
+## Handed over to or from the pull, the middle of the roller's two grips comes
+## this far ahead of the body's centre at hip height, upright (its 0.32 m width
+## along +Z keeps 0.19 m ahead of the pelvis), its bar swung PULL_BAR_OUT_M
+## wider and its axle at least PULL_AXLE_CLEAR_M out round the pulling side so
+## the shell passes outside the leg instead of pitching back into the pelvis
+## (g3_verify plates, passenger 4 pull.R>tray at k 0.33 and 0.50).
+const PULL_FRONT_M := 0.35
+const PULL_BAR_OUT_M := 0.14
+const PULL_AXLE_CLEAR_M := 0.62
+const TRAY_LIFT_M := 0.12
+const PULL_HAND_IN := Vector2(0.22, 0.45)
+const PULL_HAND_OUT := Vector2(0.5, 0.72)
 
 
 ## Stamps on `bag` (bag `i` of `held`, CarryPlace's record of a move just
@@ -115,27 +128,154 @@ static func free_hand_busy(held: Dictionary, i: int, free: int, now: float) -> b
 	return false
 
 
-## How far (world) to move a handed-over roller, on its path at `on_path` at
-## `t` of the carry, the body drawn at `frame`, `shoulder_y` its lower shoulder
-## joint's height over its origin as the move started (CarryLead.stamp_move(),
-## NAN for none: not moved), so the middle of its two grips (`grip_a`, `grip_b`,
-## its own frame) comes to CarryLead.SWAP_FRONT_M ahead of the body's centre
-## at hip height (CarryLead.SWAP_HIP_BELOW_M under the shoulder) at half way,
-## where the hands change, easing in from the start and out to the end. The
-## hand-to-pull swap is handed over at the same point (user ruling 2026-11-17,
-## "In front, at hip height", board 295026a6). From the move's stamp and
-## progress, never from a drawn hand (anti-pattern d655fcc9).
+## Places a handed-over roller on its path (`on_path`, between `start` and
+## `goal`, world) at `t` of the carry, the body drawn at `frame`, `bag` its
+## CarryPlace record: the middle of its two grips (`grip_a`, `grip_b`, its own
+## frame) comes ahead of the body's centre at hip height (CarryLead.
+## SWAP_HIP_BELOW_M under "start_shoulder_y", NAN: not moved) at half way, where
+## the hands change. To or from the pull (`pull>tray`, `tray>pull`) it swings
+## round the pulling hand's side (-X right, +X left) and stands upright at half
+## way, wheels down and carry handle toward the other hand, before tipping into
+## or out of the tray: shifted without turning upright, `start`'s 45-degree pull
+## tilt thrust the suitcase back through the pelvis at k 0.33 to 0.50. Pure,
+## never from a drawn hand (anti-pattern d655fcc9).
 static func to_front(
 	on_path: Transform3D,
+	start: Transform3D,
+	goal: Transform3D,
 	frame: Transform3D,
 	t: float,
-	shoulder_y: float,
+	bag: Dictionary,
 	grip_a: Vector3,
 	grip_b: Vector3
-) -> Vector3:
+) -> Transform3D:
+	var shoulder_y := float(bag.get("start_shoulder_y", NAN))
 	if is_nan(shoulder_y):
-		return Vector3.ZERO
-	var w := smoothstep(0.0, 0.5, t) if t < 0.5 else 1.0 - smoothstep(0.5, 1.0, t)
-	var front := Vector3(0.0, shoulder_y - CarryLead.SWAP_HIP_BELOW_M, CarryLead.SWAP_FRONT_M)
-	var middle := on_path * ((grip_a + grip_b) * 0.5)
-	return (frame * front - middle) * w
+		return on_path
+	var from_pull := _is_from_pull(bag)
+	var to_pull := _is_to_pull(bag)
+	if not from_pull and not to_pull:
+		var w := smoothstep(0.0, 0.5, t) if t < 0.5 else 1.0 - smoothstep(0.5, 1.0, t)
+		var front := Vector3(0.0, shoulder_y - CarryLead.SWAP_HIP_BELOW_M, CarryLead.SWAP_FRONT_M)
+		var middle := on_path * ((grip_a + grip_b) * 0.5)
+		return on_path.translated((frame * front - middle) * w)
+	var first := int(bag.get("handover", 0))
+	var bar_hand := first if from_pull else 1 - first
+	var local := frame.affine_inverse()
+	var start_l := local * start
+	var goal_l := local * goal
+	var scale_at := start_l.basis.get_scale().lerp(goal_l.basis.get_scale(), t)
+	var up_b := _upright(bar_hand).scaled(scale_at)
+	var front_p := Vector3(0.0, shoulder_y - CarryLead.SWAP_HIP_BELOW_M, PULL_FRONT_M)
+	var mid_xf := Transform3D(up_b, front_p - up_b * ((grip_a + grip_b) * 0.5))
+	if from_pull and t <= 0.5:
+		return frame * _pull_half(start_l, mid_xf, grip_a, smoothstep(0.0, 0.5, t), bar_hand)
+	if from_pull:
+		var u := smoothstep(0.5, 1.0, t)
+		return frame * _tray_half(goal_l, mid_xf, grip_b, u, smoothstep(0.65, 1.0, t), false)
+	if t <= 0.5:
+		var u := smoothstep(0.0, 0.5, t)
+		return frame * _tray_half(start_l, mid_xf, grip_a, u, smoothstep(0.0, 0.35, t), true)
+	return frame * _pull_half(goal_l, mid_xf, grip_b, 1.0 - smoothstep(0.5, 1.0, t), bar_hand)
+
+
+## Keeps the carry-handle hand at its side while a pulled roller is still behind
+## the hip (`pull>tray` before PULL_HAND_IN, `tray>pull` after PULL_HAND_OUT),
+## so that arm does not reach across the body before the roller comes round.
+static func adjust_weights(
+	weights: Array, bag: Dictionary, t: float, first: int, lead: int
+) -> void:
+	if _is_from_pull(bag) and t < 0.5:
+		weights[lead] = smoothstep(PULL_HAND_IN.x, PULL_HAND_IN.y, t)
+	elif _is_to_pull(bag) and t > 0.5:
+		weights[first] = 1.0 - smoothstep(PULL_HAND_OUT.x, PULL_HAND_OUT.y, t)
+
+
+static func _is_from_pull(bag: Dictionary) -> bool:
+	return (
+		bag.get("carry_from", -1) == SecurityLooks.Carry.PULL
+		and bag.has("was")
+		and CarryLead.start_of(bag)[0] == CarryLead.End.HELD
+	)
+
+
+static func _is_to_pull(bag: Dictionary) -> bool:
+	var carry: int = bag.get("carry", -1)
+	return (
+		carry == SecurityLooks.Carry.PULL
+		and bag.has("home")
+		and CarryLead.end_of(bag["home"], SecurityLooks.Carry.PULL) == CarryLead.End.HELD
+	)
+
+
+## Upright basis in the body's frame (+Z ahead, -X right) for a roller whose bar
+## hand is `bar_hand` (0 right, 1 left): wheels down (+Z_bag = UP) and front
+## carry handle (+Y_bag) facing inward toward the other hand.
+static func _upright(bar_hand: int) -> Basis:
+	var inward := Vector3.RIGHT if bar_hand == 0 else Vector3.LEFT
+	return Basis(inward.cross(Vector3.UP), inward, Vector3.UP)
+
+
+## The pull half (body's frame) between `pull_xf` (`s` = 0) and upright `mid_xf`
+## (`s` = 1), anchored at `bar_anchor` on `bar_hand`'s side (0 right, -X).
+static func _pull_half(
+	pull_xf: Transform3D, mid_xf: Transform3D, bar_anchor: Vector3, s: float, bar_hand: int
+) -> Transform3D:
+	var out := -1.0 if bar_hand == 0 else 1.0
+	var scale_at := pull_xf.basis.get_scale().lerp(mid_xf.basis.get_scale(), s)
+	var bar_now := _round_side(
+		pull_xf * bar_anchor, mid_xf * bar_anchor, s, out, 0.0, PULL_BAR_OUT_M
+	)
+	var axle_aim := _round_side(
+		pull_xf * CarryOnProps.ROLLER_AXLE,
+		mid_xf * CarryOnProps.ROLLER_AXLE,
+		s,
+		out,
+		PULL_AXLE_CLEAR_M,
+		0.0
+	)
+	var outward := Vector3(out, 0.0, 0.0)
+	var ref_mid := outward.lerp(-outward, smoothstep(0.45, 0.95, s)).normalized()
+	var ref := pull_xf.basis.y.normalized().lerp(ref_mid, smoothstep(0.0, 0.35, s)).normalized()
+	var aimed := RollerPull.pulled(bar_now, axle_aim, 1.0, ref).basis.get_rotation_quaternion()
+	var pull_q := pull_xf.basis.orthonormalized().get_rotation_quaternion()
+	var up_q := mid_xf.basis.orthonormalized().get_rotation_quaternion()
+	var q := pull_q.slerp(aimed, smoothstep(0.0, 0.2, s)).slerp(up_q, smoothstep(0.65, 1.0, s))
+	var b := Basis(q).scaled(scale_at)
+	return Transform3D(b, bar_now - b * bar_anchor)
+
+
+## The tray half (body's frame) between `tray_xf` and upright `mid_xf`, held at
+## `handle` (`ROLLER_HANDLE`), `u` 0 to 1 along the move and `w_rot` the turn.
+static func _tray_half(
+	tray_xf: Transform3D,
+	mid_xf: Transform3D,
+	handle: Vector3,
+	u: float,
+	w_rot: float,
+	from_tray: bool
+) -> Transform3D:
+	var a_xf := tray_xf if from_tray else mid_xf
+	var b_xf := mid_xf if from_tray else tray_xf
+	var scale_at := a_xf.basis.get_scale().lerp(b_xf.basis.get_scale(), u)
+	var qa := a_xf.basis.orthonormalized().get_rotation_quaternion()
+	var qb := b_xf.basis.orthonormalized().get_rotation_quaternion()
+	var b := Basis(qa.slerp(qb, w_rot)).scaled(scale_at)
+	var h := (
+		(a_xf * handle).lerp(b_xf * handle, u) + Vector3.UP * (TRAY_LIFT_M * 4.0 * u * (1.0 - u))
+	)
+	return Transform3D(b, h - b * handle)
+
+
+## Swings from `from` to `to` (body's frame, +Z ahead) round `out` (-1 right,
+## +1 left), at least `min_r * sin(PI * s)` out and `out_arc` wider midway.
+static func _round_side(
+	from: Vector3, to: Vector3, s: float, out: float, min_r: float, out_arc: float
+) -> Vector3:
+	var a0 := atan2(from.x * out, from.z)
+	if a0 < -0.2:
+		a0 += TAU
+	var angle := lerpf(a0, atan2(to.x * out, to.z), s)
+	var r := lerpf(Vector2(from.x, from.z).length(), Vector2(to.x, to.z).length(), s)
+	r = maxf(r, min_r * sin(PI * s)) + out_arc * sin(PI * s)
+	return Vector3(out * r * sin(angle), lerpf(from.y, to.y, s), r * cos(angle))

@@ -960,6 +960,7 @@ static func plan(
 		and to_end == End.HELD
 	)
 	var floor_case: bool = case_up_out and from_floor and not roller
+	var goal := want
 	var on_path: Transform3D
 	var shoulder_y := NAN
 	if off_back or on_back:
@@ -1002,7 +1003,6 @@ static func plan(
 		# A bag picked up off a stall's floor rises, whatever its origin does (a case
 		# stood on its end has its origin higher than flat in the hand).
 		var lift := flags
-		var goal := want
 		if pull_swap:
 			goal = pull_swap_goal(bag["from"], want, frame, t, loose)
 		if stall and from_end == End.REST and to_end == End.HELD:
@@ -1042,10 +1042,12 @@ static func plan(
 		# Handed over in front of the body, between its two grips (RollerHandover.
 		# to_front()): taken where it hung or trailed, the free hand reached
 		# across the body and the forearms crossed, and short of the handle the
-		# roller jumped as that hand took it.
-		on_path.origin += RollerHandover.to_front(
-			on_path, frame, t, float(bag.get("start_shoulder_y", NAN)), anchor_from, anchor_to
+		# roller jumped as that hand took it; to or from the pull it swings
+		# round the pulling side and stands upright at the handover.
+		on_path = RollerHandover.to_front(
+			on_path, start, goal, frame, t, bag, anchor_from, anchor_to
 		)
+		RollerHandover.adjust_weights(ph["weights"], bag, t, first, lead)
 	if case_up and from_end == End.REST and to_end == End.HELD:
 		# The palm on its top as it tips, world up of the case as path() turns it.
 		var palm_up := Vector3.UP * CarryOnProps.FRONT_PALM_M
