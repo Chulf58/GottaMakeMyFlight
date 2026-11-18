@@ -3898,7 +3898,7 @@ msgstr ""
 msgid "Incidents"
 msgstr ""
 
-#: ui/game_menu.gd ui/title_screen.gd
+#: ui/game_menu.gd
 msgid "Back"
 msgstr ""
 
@@ -5263,19 +5263,28 @@ msgid "Load"
 msgstr ""
 
 #: ui/title_screen.gd
+msgctxt "menu"
 msgid "Continue"
 msgstr ""
 
 #: ui/title_screen.gd
+msgctxt "menu"
 msgid "New Airport"
 msgstr ""
 
 #: ui/title_screen.gd
+msgctxt "menu"
 msgid "Wishlist"
 msgstr ""
 
 #: ui/title_screen.gd
+msgctxt "menu"
 msgid "Quit"
+msgstr ""
+
+#: ui/title_screen.gd
+msgctxt "menu"
+msgid "Back"
 msgstr ""
 
 #: ui/save_list.gd

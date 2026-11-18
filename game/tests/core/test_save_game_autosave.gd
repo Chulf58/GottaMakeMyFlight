@@ -127,3 +127,38 @@ func test_a_load_drops_the_queued_autosave_and_counts_from_the_loaded_day() -> v
 	assert_str(_save.autosave_pending).is_equal("")
 	_save.on_tick(_clock_next_day_tick())
 	assert_str(_save.autosave_pending).is_equal(SaveSlots.autosave_paths()[0])
+
+
+## Loading an autosave makes it the last one written, so the next rollover
+## writes the other slot and the loaded file stays as the fallback.
+func test_loading_an_autosave_makes_the_next_rollover_write_the_other_slot() -> void:
+	var paths := SaveSlots.autosave_paths()
+	_save.on_tick(_new_day_tick())
+	assert_bool(_save.retry_autosave()).is_true()
+	_save.on_tick(_new_day_tick())
+	assert_bool(_save.retry_autosave()).is_true()
+	# paths[1] was written last. Load paths[0], the older timeline.
+	assert_bool(_save.load_from_file(paths[0])).is_true()
+	_save.on_tick(_clock_next_day_tick())
+	print("after loading %s: pending %s" % [paths[0], _save.autosave_pending])
+	assert_str(_save.autosave_pending).is_equal(paths[1])
+	# And loading the other one flips it, so the rule is not a fixed slot.
+	assert_bool(_save.load_from_file(paths[1])).is_true()
+	_save.on_tick(_clock_next_day_tick())
+	assert_str(_save.autosave_pending).is_equal(paths[0])
+
+
+## Loading the manual save names no autosave slot: rotation forgets the last
+## write and the older autosave is written (the first on a tie).
+func test_loading_a_manual_save_makes_the_next_rollover_write_the_older_autosave() -> void:
+	var paths := SaveSlots.autosave_paths()
+	_save.on_tick(_new_day_tick())
+	assert_bool(_save.retry_autosave()).is_true()
+	# paths[1] is newer or tied, and the last write is paths[0]: without the
+	# reset the next write would go to paths[1].
+	assert_bool(_save.save_to_file(paths[1])).is_true()
+	assert_bool(_save.save_to_file(SaveSlots.manual_path())).is_true()
+	assert_bool(_save.load_from_file(SaveSlots.manual_path())).is_true()
+	_save.on_tick(_clock_next_day_tick())
+	print("after loading the manual save: pending %s" % _save.autosave_pending)
+	assert_str(_save.autosave_pending).is_equal(paths[0])

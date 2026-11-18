@@ -154,7 +154,8 @@ var autosave_pending := ""
 
 ## The game day the last autosave was queued for (or the loaded or starting day).
 var _autosave_day := 0
-## The autosave this node wrote last, so the next day writes the other one.
+## The autosave the next day writes around: the one this node wrote last, or the
+## one just loaded, so the next day writes the other. Empty after a manual load.
 var _last_autosave := ""
 
 var _message := ""
@@ -452,7 +453,14 @@ func load_from_file(path: String) -> bool:
 		)
 		loaded.emit(false)
 		return false
-	return load_world(json.data)
+	if not load_world(json.data):
+		return false
+	# Rotation follows the loaded timeline: a loaded autosave is the last one
+	# written, so the next rollover keeps it as the fallback and writes the other.
+	# A manual or other save names no slot, so the older autosave is written.
+	var slot := SaveSlots.autosave_paths().find(path)
+	_last_autosave = path if slot >= 0 else ""
+	return true
 
 
 ## Saves to `path` now, or, when save_problem() refuses for now, waits and

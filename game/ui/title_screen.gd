@@ -143,12 +143,12 @@ func _build() -> void:
 	_main_page = VBoxContainer.new()
 	_main_page.name = "MainPage"
 	pages.add_child(_main_page)
-	_add_button(_main_page, "Continue", tr("Continue"), press_continue, &"HudButtonGreen")
-	_add_button(_main_page, "NewAirport", tr("New Airport"), press_new_airport)
+	_add_button(_main_page, "Continue", tr("Continue", "menu"), press_continue, &"HudButtonGreen")
+	_add_button(_main_page, "NewAirport", tr("New Airport", "menu"), press_new_airport)
 	_add_button(_main_page, "Load", tr("Load", "menu"), press_load)
-	_add_button(_main_page, "Wishlist", tr("Wishlist"), press_wishlist)
+	_add_button(_main_page, "Wishlist", tr("Wishlist", "menu"), press_wishlist)
 	button("Wishlist").visible = WISHLIST_URL != ""
-	_add_button(_main_page, "Quit", tr("Quit"), press_quit)
+	_add_button(_main_page, "Quit", tr("Quit", "menu"), press_quit)
 	_load_page = VBoxContainer.new()
 	_load_page.name = "LoadPage"
 	_load_page.visible = false
@@ -162,7 +162,7 @@ func _build() -> void:
 	_save_list.name = "SaveList"
 	_save_list.chosen.connect(_on_save_chosen)
 	_load_page.add_child(_save_list)
-	_add_button(_load_page, "Back", tr("Back"), press_back)
+	_add_button(_load_page, "Back", tr("Back", "menu"), press_back)
 
 
 func _add_button(

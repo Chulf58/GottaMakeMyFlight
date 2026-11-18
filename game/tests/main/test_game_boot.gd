@@ -6,18 +6,25 @@ extends GdUnitTestSuite
 ## tree and loads it through load_from_file once the whole scene is ready; the
 ## game comes back paused at 1x (decision loading-a-save-always-comes-back-
 ## paused-at-1x-speed-with-hin). A refused boot load leaves its message in
-## GameBoot.refusal for the title screen. Each case boots its own scene.
+## GameBoot.refusal for the title screen. Each case boots its own scene. The
+## fixtures live in a folder of this run's own, which SaveSlots.dir points at
+## before either scene is built, so nothing touches the player's saves.
 
 const SEED := 18_112_027
 
-var _path := SaveTestKit.run_path("test_game_boot")
-var _bad_path := SaveTestKit.run_path("test_game_boot_bad")
+var _dir := SaveTestKit.run_dir("test_game_boot")
+var _dir_before := ""
+var _path := _dir.path_join("good.json")
+var _bad_path := _dir.path_join("bad.json")
 var _saved_tick := 0
 var _main: Node
 var _shown_before := false
 
 
 func before() -> void:
+	_dir_before = SaveSlots.dir
+	SaveSlots.dir = _dir
+	DirAccess.make_dir_recursive_absolute(_dir)
 	var source := SaveTestKit.boot(self, SEED)
 	(source.get_node("PassengerHud") as PassengerHud).press_starter_terminal()
 	for i in 40:
@@ -35,6 +42,8 @@ func after() -> void:
 	for path in [_path, _bad_path]:
 		DirAccess.remove_absolute(path)
 		DirAccess.remove_absolute(path + ".tmp")
+	DirAccess.remove_absolute(_dir)
+	SaveSlots.dir = _dir_before
 
 
 func before_test() -> void:

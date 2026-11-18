@@ -162,3 +162,33 @@ func test_every_label_and_button_is_routed_through_tr() -> void:
 	PseudoLocale.disable()
 	for text in texts:
 		assert_str(text).starts_with("[")
+
+
+## The short labels carry the "menu" context, as the Save and Load labels of the
+## game menu do, so a translator can tell them from the same words elsewhere.
+## A translation with one entry per label under "menu" and a different one with
+## no context: only the "menu" one may reach the buttons.
+func test_the_short_labels_are_translated_with_the_menu_context() -> void:
+	var labels := {
+		"Continue": "Continue", "NewAirport": "New Airport", "Load": "Load", "Quit": "Quit"
+	}
+	labels["Wishlist"] = "Wishlist"
+	labels["Back"] = "Back"
+	var translation := Translation.new()
+	translation.locale = "en"
+	for source: String in labels.values():
+		translation.add_message(source, "menu:" + source, "menu")
+		translation.add_message(source, "plain:" + source)
+	var locale_before := TranslationServer.get_locale()
+	TranslationServer.add_translation(translation)
+	TranslationServer.set_locale("en")
+	_write(SaveSlots.manual_path())
+	_build()
+	var texts := {}
+	for name: String in labels:
+		texts[name] = _title.button(name).text
+	TranslationServer.remove_translation(translation)
+	TranslationServer.set_locale(locale_before)
+	print("title texts: %s" % [texts])
+	for name: String in labels:
+		assert_str(texts[name]).is_equal("menu:" + labels[name])
