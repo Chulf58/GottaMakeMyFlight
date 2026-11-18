@@ -275,6 +275,8 @@ var _no_b1_plate := false
 var _b1_views := false
 ## Passenger ids traced (--trace=): sampled frames near an arch, contact bones.
 var _trace := {}
+## --trace: each traced bag's smallest left-post gap so far, "id:i" -> [gap, k, frame].
+var _putin_low := {}
 ## Pinned draws (--pin=5@508.121,15@980.317): [passenger id, sim time] each,
 ## drawn at exactly that time (_pin_measure()); every one must be measured.
 var _pins: Array = []
@@ -736,6 +738,8 @@ func _on_tick(_tick: int) -> void:
 		_clock._accumulator = 0.0
 		_pin_measure.call_deferred(due)
 		return
+	if _lane_mode and PutinSweep.scan(self):
+		return
 	if not _plate_task and _hold_frame < 0 and _putin_due():
 		return
 	if CaseTurnPlates.scan(self) or _plate_task or _hold_frame >= 0 or _returner_due():
@@ -1131,6 +1135,8 @@ func _check(id: int) -> void:
 			s["through"] += _through(points, booth) + _through(carried_points, booth)
 		var bag_hits := _contacts(bag_points, booth, s["parts"])
 		s["bag_contacts"] += bag_hits
+		if _trace.has(id):
+			_putin_trace(id, body, bags, booth)
 		if bag_hits > 0:
 			print(
 				(
@@ -1828,6 +1834,55 @@ func _trace_frame(
 			]
 		)
 	)
+
+
+## --trace: each bag of passenger `id` moving into its tray, one line a frame:
+## the move, its progress, the bag's origin and the body's yaw in the arch's
+## frame, the bag's points inside the arch's meshes and the bag's smallest gap
+## to the arch's left (x < 0) and right (x > 0) side parts' bounds (negative:
+## that deep inside the bounds). The left post is the one item H's roller met
+## (board c2bb3bc0); "low" is that bag's smallest left gap so far. Sampled once
+## a frame, it can miss the closest moment: --sweep= (PutinSweep) steps it.
+func _putin_trace(id: int, body: Node3D, bags: Array[Node3D], booth: Array) -> void:
+	var props := _views.carry_on_props()
+	var to_arch: Transform3D = booth[1]
+	for i in bags.size():
+		var move := FloatCheck.move_of(props, id, i)
+		if not move.ends_with(">tray") or not bags[i].is_visible_in_tree():
+			continue
+		var surface := CarryChecks.surface(bags[i])
+		var gaps := PutinSweep.side_gaps(surface, booth)
+		var at := to_arch * bags[i].global_position
+		var yaw := (to_arch.basis * body.global_basis).get_euler().y
+		var key := "%d:%d" % [id, i]
+		var low: Array = _putin_low.get(key, [INF, -1.0, 0])
+		var k := props.transfer_progress(id, i)
+		if gaps[0] < low[0]:
+			low = [gaps[0], k, Engine.get_process_frames()]
+		_putin_low[key] = low
+		print(
+			(
+				(
+					"PUTIN_TRACE passenger=%d bag=%d move=%s k=%.3f frame=%d at=%s yaw=%+.3f"
+					+ " contacts=%d left_gap=%+.3f right_gap=%+.3f | low=%+.3f at k=%.3f frame=%d"
+				)
+				% [
+					id,
+					i,
+					move,
+					k,
+					Engine.get_process_frames(),
+					at.snapped(Vector3.ONE * 0.01),
+					yaw,
+					_contacts(surface, booth),
+					gaps[0],
+					gaps[1],
+					low[0],
+					low[1],
+					low[2]
+				]
+			)
+		)
 
 
 ## The centre of `node`'s drawn meshes' bounds, in the world.

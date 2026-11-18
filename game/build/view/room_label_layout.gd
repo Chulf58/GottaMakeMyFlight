@@ -100,12 +100,13 @@ static func capped_pixel_size(base: float, depth: float, unit: float) -> float:
 
 
 ## What a label covers on screen, outline included, in pixels: its text box in
-## the default font, centred over `point` with its bottom line on `point`.
+## the caption font (CaptionFont), the font room labels draw in, centred over
+## `point` with its bottom line on `point`.
 ## `scale` is the screen pixels one font pixel covers.
 static func label_rect(
 	point: Vector2, text: String, font_size: int, outline: int, scale: float
 ) -> Rect2:
-	var font := ThemeDB.fallback_font
+	var font := CaptionFont.font()
 	var size := font.get_multiline_string_size(text, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size)
 	size += Vector2.ONE * 2.0 * outline
 	size *= scale

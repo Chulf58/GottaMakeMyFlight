@@ -162,7 +162,11 @@ static func refused(why: Reason, blocker := 0) -> BuildResult:
 ## The refusal in the player's words (BuildWords). REASON_TEXT and detail stay
 ## English: they are the keys tests and the status line compare. The detail is
 ## put into words here, at display time, from detail_args (BuildWords.detail()).
+## A refusal that names flights is one whole sentence (BuildWords.flight_refusal()).
 func reason_text() -> String:
+	var named := BuildWords.flight_refusal(self)
+	if named != "":
+		return named
 	var text := ""
 	if reason == Reason.GATE_STAND_OVERLAP:
 		text = (

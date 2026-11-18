@@ -722,15 +722,15 @@ func _removal_problem(on_grid: BuildGrid, id: int) -> BuildResult:
 	var busy := _live_flights_at(ending)
 	if not busy.is_empty():
 		var refusal := BuildResult.refused(BuildResult.Reason.GATE_IN_USE)
-		refusal.detail = ", ".join(busy)
+		refusal.detail = FlightLabel.english_list(busy)
 		refusal.detail_args = {"flights": busy}
 		return refusal
 	if not (plan["stuck"] as Array).is_empty():
 		var refusal := BuildResult.refused(BuildResult.Reason.GATE_FLIGHTS_STUCK)
-		var stuck := PackedStringArray()
+		var stuck: Array[Dictionary] = []
 		for contract_id: String in plan["stuck"]:
-			stuck.append(FlightLabel.of(flights, false, contract_id))
-		refusal.detail = ", ".join(stuck)
+			stuck.append(FlightLabel.label_args(flights, false, contract_id))
+		refusal.detail = FlightLabel.english_list(stuck)
 		refusal.detail_args = {"flights": stuck}
 		return refusal
 	return null
@@ -836,13 +836,13 @@ func _post_notice(key: StringName, title: String, text: String) -> void:
 
 
 ## The live flights at any of `gates` that have not departed, each named by
-## its time, airline and destination.
-func _live_flights_at(gates: Array[String]) -> PackedStringArray:
-	var out: PackedStringArray = []
+## its time, airline and destination (FlightLabel.label_args()).
+func _live_flights_at(gates: Array[String]) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
 	for flight_id in flights.flight_ids():
 		var at_gate := gates.has(flights.flight_gate(flight_id))
 		if at_gate and flights.state_of(flight_id) < FlightSim.State.DEPARTED:
-			out.append(FlightLabel.of(flights, true, flight_id))
+			out.append(FlightLabel.label_args(flights, true, flight_id))
 	return out
 
 

@@ -62,16 +62,26 @@ static func problem(
 		return null
 	var refusal := BuildResult.refused(BuildResult.Reason.SPUR_STRANDS)
 	refusal.detail = flight_words(gates.flights, stranded["id"])
-	refusal.detail_args = {"flights": PackedStringArray([refusal.detail])}
+	var named: Array[Dictionary] = [flight_label(gates.flights, stranded["id"])]
+	refusal.detail_args = {"flights": named}
 	return refusal
 
 
-## The player's words for flight `id`, live or a contract's day not yet issued.
+## The English words for flight `id`, live or a contract's day not yet issued,
+## kept as the refusal's detail; the id itself when it is neither.
 static func flight_words(sim: FlightSim, id: String) -> String:
+	if sim.state_of(id) < 0 and FlightTimetable.parse_occurrence(id).is_empty():
+		return id
+	return FlightLabel.english(flight_label(sim, id))
+
+
+## FlightLabel.label_args() of flight `id`, live or a contract's day not yet
+## issued, or {} when it is not known.
+static func flight_label(sim: FlightSim, id: String) -> Dictionary:
 	if sim.state_of(id) >= 0:
-		return FlightLabel.of(sim, true, id)
+		return FlightLabel.label_args(sim, true, id)
 	var parts := FlightTimetable.parse_occurrence(id)
-	return FlightLabel.of(sim, false, parts["contract"]) if not parts.is_empty() else id
+	return FlightLabel.label_args(sim, false, parts["contract"]) if not parts.is_empty() else {}
 
 
 ## Each side's wanted spur x once `edit` is applied to `on_grid` (see the class

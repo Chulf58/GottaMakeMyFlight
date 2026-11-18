@@ -78,15 +78,15 @@ static func shown_text(
 	return speech if focused or every else ""
 
 
-## What a bubble covers on screen: its text in the default font plus the
-## outline on every side, centred on `point`, with `scale` screen pixels per
+## What a bubble covers on screen: its text in the caption font (CaptionFont)
+## plus the outline on every side, centred on `point`, with `scale` screen pixels per
 ## font pixel (the label's pixel_size over its distance times the pixel unit).
 static func rect_of(
 	point: Vector2, text: String, font_size: int, outline: int, scale: float
 ) -> Rect2:
 	var key := [text, font_size]
 	if not _text_sizes.has(key):
-		var font := ThemeDB.fallback_font
+		var font := CaptionFont.font()
 		var measured := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size)
 		measured.y = font.get_height(font_size)
 		_text_sizes[key] = measured

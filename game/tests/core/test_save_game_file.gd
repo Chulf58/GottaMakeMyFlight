@@ -8,7 +8,6 @@ extends GdUnitTestSuite
 ## for the file; every file a case writes is removed.
 
 const SEED := 27_102_026
-const DIR := "user://saves"
 var _path := SaveTestKit.run_path("test_save_game_file")
 var _blocked := SaveTestKit.run_path("test_save_game_blocked")
 var _bad := SaveTestKit.run_path("test_save_game_bad")
@@ -158,4 +157,4 @@ func test_f5_quick_saves_and_f8_quick_loads() -> void:
 	_press(SaveGame.QUICK_LOAD_KEY)
 	assert_str(_save.message_text()).is_equal("Loaded")
 	assert_str(SaveTestKit.checksum(_main)).is_equal(saved_sum)
-	assert_bool(DirAccess.dir_exists_absolute(DIR)).is_true()
+	assert_bool(DirAccess.dir_exists_absolute(_path.get_base_dir())).is_true()

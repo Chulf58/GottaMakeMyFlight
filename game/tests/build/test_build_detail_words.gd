@@ -27,6 +27,10 @@ func _refusal(why: BuildResult.Reason, detail: String, args := {}) -> BuildResul
 	return result
 
 
+func _one_off(time: String) -> Dictionary:
+	return {"time": time, "airline": "", "city": ""}
+
+
 func _translate(lines: Dictionary, context: String) -> void:
 	_translation = Translation.new()
 	_translation.locale = TranslationServer.get_locale()
@@ -59,7 +63,6 @@ func test_the_msgids_hold_the_detail_and_status_sentences() -> void:
 		"gate {gate}, a small plane",
 		"gate {gate}, a medium plane",
 		"gate {gate}, a large plane",
-		", ",
 		"Belt {count} cell",
 		"Facing auto",
 		"Facing {facing}",
@@ -80,9 +83,13 @@ func test_each_detail_reads_as_before_in_english() -> void:
 		BuildResult.Reason.GATE_ROUTE, "gate B, a large plane", {"gate": "B", "plane": "large"}
 	)
 	assert_str(route.reason_text()).ends_with(": gate B, a large plane")
-	var flights := PackedStringArray(["the 10:00 flight", "the 11:00 flight"])
-	var busy := _refusal(BuildResult.Reason.GATE_IN_USE, ", ".join(flights), {"flights": flights})
-	assert_str(busy.reason_text()).ends_with(": the 10:00 flight, the 11:00 flight")
+	var flights: Array[Dictionary] = [_one_off("10:00"), _one_off("11:00")]
+	var busy := _refusal(
+		BuildResult.Reason.GATE_IN_USE, FlightLabel.english_list(flights), {"flights": flights}
+	)
+	# The list grammar (ListWords) joins the last two flights with "and" (board T13).
+	assert_str(busy.reason_text()).ends_with(": the 10:00 flight and the 11:00 flight")
+	assert_str(busy.detail).is_equal("the 10:00 flight, the 11:00 flight")
 	var door := _refusal(BuildResult.Reason.DOOR_FRONT_BLOCKED, "gate seats")
 	assert_str(door.reason_text()).is_equal("Something is in front of the door: gate seats")
 	var inner := _refusal(BuildResult.Reason.OVERLAP, "")
@@ -112,9 +119,11 @@ func test_every_detail_is_translated_when_shown() -> void:
 		)
 		. reason_text()
 	)
-	var flights := PackedStringArray(["the 10:00 flight", "the 11:00 flight"])
+	var flights: Array[Dictionary] = [_one_off("10:00"), _one_off("11:00")]
 	var busy := (
-		_refusal(BuildResult.Reason.GATE_IN_USE, ", ".join(flights), {"flights": flights})
+		_refusal(
+			BuildResult.Reason.GATE_IN_USE, FlightLabel.english_list(flights), {"flights": flights}
+		)
 		. reason_text()
 	)
 	var door := _refusal(BuildResult.Reason.DOOR_FRONT_BLOCKED, "gate seats").reason_text()
@@ -142,8 +151,10 @@ func test_every_detail_is_translated_when_shown() -> void:
 	assert_str(overlap.get_slice(": ", 1)).starts_with("[")
 	assert_str(route.get_slice(": ", 1)).starts_with("[")
 	assert_str(door.get_slice(": ", 1)).starts_with("[")
-	# The list separator is its own translated string between the flight words.
-	assert_str(busy).contains("flight[, ]the 11:00")
+	# The refusal sentence is a tr_n (never pseudolocalized); the list join and
+	# each flight label inside it are their own translated strings.
+	assert_int(busy.count("[")).is_equal(3)
+	assert_str(busy).contains("10:00").contains("11:00")
 	# The move's detail is the inner reason translated once, not a stored translation.
 	assert_str(moved).contains(
 		BuildWords.refusal(BuildResult.REASON_TEXT[BuildResult.Reason.OVERLAP])

@@ -256,6 +256,8 @@ func sync() -> void:
 		# At its booth seat (BoothRoller.fix_start()), not queuing for it.
 		held["booth"] = sim.cafes.booth_roller(p) and not is_nan(held["sit_face"])
 		held["security"] = p.stage in [Passenger.Stage.SECURITY_QUEUE, Passenger.Stage.SECURITY]
+		# Ticks of lane UNPACK work done, or -1 off it (CarryArmPose.unpack_still()).
+		held["unpack_done"] = CarryArmPose.unpack_done(p)
 		held["stall"] = StallCarry.stall_of(sim, p)
 		# At a booth a roller's lift into the hand ends before the front turn.
 		if booth_bags and BoothCarry.roller_rising(held, kinds, lifts, _tick()):

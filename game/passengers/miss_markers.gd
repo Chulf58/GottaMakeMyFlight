@@ -308,11 +308,11 @@ static func find_session(tree: SceneTree) -> BuildSession:
 
 
 ## What a caption covers on screen, in pixels, outline included: the text in
-## the default font plus the outline on every side. Measured once per text.
+## the caption font (CaptionFont) plus the outline on every side. Measured once per text.
 ## For the sign families that still draw a caption of their own.
 static func caption_size(text: String) -> Vector2:
 	if not _caption_sizes.has(text):
-		var font := ThemeDB.fallback_font
+		var font := CaptionFont.font()
 		var size := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, CAPTION_FONT)
 		size.y = font.get_height(CAPTION_FONT)
 		_caption_sizes[text] = size + Vector2.ONE * 2.0 * CAPTION_OUTLINE

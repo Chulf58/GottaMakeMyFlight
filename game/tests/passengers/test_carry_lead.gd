@@ -432,6 +432,7 @@ func test_a_stall_set_down_is_held_from_its_start_and_a_roller_left_by_its_bar()
 		. is_equal(0)
 	)
 	var roller := _to_floor(SecurityLooks.Kind.ROLLER)
+	roller[0]["hung_at"] = CarryOnProps.ROLLER_HANDLE
 	var bar := CarryLead.anchor(SecurityLooks.Kind.ROLLER, 0.3)
 	var left := CarryLead.plan(roller[0], 1.0, start, want, frame, stall, roller[1])
 	var left_open := CarryLead.plan(roller[0], 1.0, start, want, frame, open, roller[1])

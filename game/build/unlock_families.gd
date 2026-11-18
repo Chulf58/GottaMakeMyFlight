@@ -17,8 +17,6 @@ const OTHER := &"other"
 const ORDER := [FOOD, SECURITY, BAGGAGE, COMFORT, RUNWAY, OTHER]
 ## How many pieces the "other" line names.
 const OTHER_NAMES := 5
-## The context of the list separator, shared with every other list of names.
-const LIST_SEPARATOR := "list separator"
 const FAMILY_OF := {
 	BuildMode.Tool.CAFE_ROOM: FOOD,
 	BuildMode.Tool.COUNTER: FOOD,
@@ -96,7 +94,7 @@ static func lines(tiers: Array) -> Array[String]:
 	for family: StringName in groups:
 		var pieces := ""
 		if family == OTHER:
-			pieces = TranslationServer.translate(", ", LIST_SEPARATOR).join(_names(groups[family]))
+			pieces = ListWords.join(PackedStringArray(_names(groups[family])))
 		out.append(words.line(family, pieces))
 	return out
 
@@ -122,7 +120,7 @@ class Words:
 	extends RefCounted
 
 	## What each family is for and why to build it now; "other" names its
-	## `pieces`, a list of card names.
+	## `pieces`, a list of card names joined by ListWords.
 	func line(family: StringName, pieces: String) -> String:
 		var texts := {
 			FOOD: tr("Food: hungry passengers lose mood. A cafe feeds them."),

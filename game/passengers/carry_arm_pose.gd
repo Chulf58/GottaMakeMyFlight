@@ -23,6 +23,14 @@ const STRAP_HAND_UP_DEGREES := 45.0
 const PULL_OUT_DEGREES := 12.0
 const PULL_SWING_KEPT := 0.2
 const PULL_LEAN_DEGREES := 12.0
+## Standing at a lane's unpack cell (UNPACK), an arm's kept swing eases to none
+## over this many ticks of the phase, so a bag in the hand hangs at the side.
+## A runner stands there in a frozen run stride (decision 78bb710d keeps first-
+## pass late passengers running), and half its forward swing held a lifted
+## roller 0.55 m ahead, into the arch's right post 0.7 m on, and started its
+## put-in there, through the left post (crossing probe --lane --sweep=29, seed
+## 1106001, board c2bb3bc0).
+const UNPACK_HANG_TICKS := 1.5
 ## The pulling upper arm's twist (CarryArm.twist_degrees, from its rest, the
 ## same on both arms, mirrored), per skeleton: the male bodies, then the
 ## female. Each keeps the right hand's mean grip where the clip's own twist
@@ -89,6 +97,8 @@ static func pose_arms(props: CarryOnProps, held: Dictionary, body: Node3D, now: 
 		var bag: Dictionary = held["bags"][i]
 		var k := CarryPlace.progress_of(bag, now)
 		var hand: int = held["hands"][i]
+		if leaving_hand(bag, homes[i], hand, k):
+			modes[hand] = Arm.HAND
 		match bag["carry"]:
 			SecurityLooks.Carry.HAND:
 				if homes[i] == SecurityLooks.Home.HAND:
@@ -117,7 +127,10 @@ static func pose_arms(props: CarryOnProps, held: Dictionary, body: Node3D, now: 
 	var swaps := CarrySwap.arm_shares(held, now)
 	var outs := StallCarry.hand_out_degrees(held, now)
 	var walk := walk_share(held, body)
-	var key := [modes, strap, cases, beside, held["weight"], tuck, reach_on, swaps, outs, walk]
+	var still := unpack_still(held, now)
+	var key := [
+		modes, strap, cases, beside, held["weight"], tuck, reach_on, swaps, outs, walk, still
+	]
 	if held.get("arm_key", []) == key and held.get("arm_body") == body:
 		return
 	held["arm_key"] = key
@@ -129,7 +142,7 @@ static func pose_arms(props: CarryOnProps, held: Dictionary, body: Node3D, now: 
 		arm.active = modes[side] != Arm.FREE or cases > 0 or tuck > 0.0 or reach_on[side]
 		var pulling: bool = modes[side] == Arm.PULL
 		arm.angle_degrees = PULL_OUT_DEGREES if pulling else outs[side]
-		arm.swing_kept = PULL_SWING_KEPT if pulling else 0.5
+		arm.swing_kept = PULL_SWING_KEPT if pulling else 0.5 * (1.0 - still)
 		arm.lean_back_degrees = PULL_LEAN_DEGREES if pulling else 0.0
 		arm.front_upper_degrees = 0.0 if modes[side] == Arm.STRAP else 20.0
 		arm.front_up_degrees = STRAP_HAND_UP_DEGREES if modes[side] == Arm.STRAP else -10.0
@@ -157,6 +170,43 @@ static func pose_arms(props: CarryOnProps, held: Dictionary, body: Node3D, now: 
 		var share: float = swaps[side]
 		arm.rest_twist_weight = walk * (share if share >= 0.0 else (1.0 if pulling else 0.0))
 		arm.twist_degrees = pull_twist_degrees(body)
+
+
+## The ticks of lane UNPACK work `p` has done (SecurityRuntime.work_for() less
+## its work left), or -1 when it is not at UNPACK. Set on each sync from the sim.
+static func unpack_done(p: Passenger) -> int:
+	if p.stage != Passenger.Stage.SECURITY or p.security_phase != SecurityRuntime.Phase.UNPACK:
+		return -1
+	return SecurityRuntime.work_for(SecurityRuntime.Phase.UNPACK, p) - p.security_work
+
+
+## Whether bag record `bag` (home now `home`, in hand `hand`, `k` through its
+## move) is set down from a hand carry and that hand keeps its HAND carry pose:
+## until the move's plan (CarryLead.plan(), "lead") weighs the hand fully on
+## its target, as CarryLead.phase() eases it in "from the carry pose". With no
+## pose the arm took the walk or run clip's, and a runner's roller put into a
+## lane tray jumped to its chest at the arch's left post (crossing probe --lane
+## --sweep=29, seed 1106001, board c2bb3bc0). From the plan, never the hand drawn.
+static func leaving_hand(bag: Dictionary, home: int, hand: int, k: float) -> bool:
+	if home == SecurityLooks.Home.HAND or k >= 1.0 or not bag.has("lead"):
+		return false
+	if int(bag.get("was", -1)) / 4 != SecurityLooks.Home.HAND:
+		return false
+	if bag.get("carry_from", -1) != SecurityLooks.Carry.HAND:
+		return false
+	var plan: Dictionary = bag["lead"]
+	return plan["holder"] == hand and float(plan["weights"][hand]) < 1.0
+
+
+## How far (0 to 1) the arms' kept swing has gone at sim time `now` for a
+## passenger standing at UNPACK (held "unpack_done", the share of the tick since
+## added): none at its start, all UNPACK_HANG_TICKS on; 0 off UNPACK. From the
+## sim alone, never from the pose drawn.
+static func unpack_still(held: Dictionary, now: float) -> float:
+	var done: int = held.get("unpack_done", -1)
+	if done < 0:
+		return 0.0
+	return smoothstep(0.0, 1.0, (done + now - floorf(now)) / UNPACK_HANG_TICKS)
 
 
 ## How much of `body`'s drawn pose is the walk clip, 0 to 1: 1 walking, 0 in

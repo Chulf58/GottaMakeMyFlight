@@ -140,7 +140,10 @@ func test_removing_the_only_gate_with_a_contract_is_refused_naming_it() -> void:
 	assert_int(removed.reason).is_equal(BuildResult.Reason.GATE_FLIGHTS_STUCK)
 	var text := removed.reason_text()
 	assert_str(text).ends_with("the 10:20 Gotta Air flight to Oslo")
-	assert_array(removed.detail_args["flights"]).is_equal(["the 10:20 Gotta Air flight to Oslo"])
+	assert_str(removed.detail).is_equal("the 10:20 Gotta Air flight to Oslo")
+	assert_array(removed.detail_args["flights"]).is_equal(
+		[{"time": "10:20", "airline": "Gotta Air", "city": "Oslo"}]
+	)
 	assert_object(RegEx.create_from_string("O\\d+N\\d+|-d\\d+").search(text)).is_null()
 	assert_int(exit.reason).is_equal(BuildResult.Reason.GATE_FLIGHTS_STUCK)
 	assert_bool(GateDesks.is_desk(_grid, west.object_id)).is_true()
@@ -158,7 +161,10 @@ func test_removing_a_gate_with_a_flight_due_is_refused_until_it_has_left() -> vo
 	var when := GameCalendar.clock_text(starts[FlightSim.State.PUSHBACK])
 	assert_str(removed.reason_text()).ends_with(": the %s flight" % when)
 	assert_str(removed.reason_text()).not_contains("ONE")
-	assert_array(removed.detail_args["flights"]).is_equal(["the %s flight" % when])
+	assert_str(removed.detail).is_equal("the %s flight" % when)
+	assert_array(removed.detail_args["flights"]).is_equal(
+		[{"time": when, "airline": "", "city": ""}]
+	)
 	_flights.on_tick(starts[FlightSim.State.DEPARTED])
 	assert_bool(_grid.apply(BuildEdit.remove_object(west.object_id)).ok).is_true()
 
