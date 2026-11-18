@@ -2652,6 +2652,10 @@ msgid "To open the airport"
 msgstr ""
 
 #: ui/staff_panel.gd
+msgid "Ready: the airport opens on the next tick"
+msgstr ""
+
+#: ui/staff_panel.gd
 msgid "Your airport needs"
 msgstr ""
 
