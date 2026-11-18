@@ -136,7 +136,7 @@ func test_built_edges_read_a_trial_edit() -> void:
 
 ## The works hover names the side.
 func test_the_works_text_names_the_side() -> void:
-	assert_str(SideSpurs.works_text(StandPlacement.WEST)).is_equal(
+	assert_str(SideSpurs.works_text(StandPlacement.WEST, -1, 0, 0)).is_equal(
 		"Taxiway works: the taxiway moves when the west side is quiet"
 	)
-	assert_str(SideSpurs.works_text(StandPlacement.EAST)).contains("east side")
+	assert_str(SideSpurs.works_text(StandPlacement.EAST, -1, 0, 0)).contains("east side")

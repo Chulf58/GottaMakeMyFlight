@@ -228,7 +228,7 @@ func test_a_failed_visit_keeps_its_counts_through_a_save_and_names_only_the_brea
 	# words are read from the saved incident's plan through IncidentCopy, the
 	# text the card is built from.
 	assert_object(rail.notice_card(IncidentCards.key_of({"id": _inspector}))).is_null()
-	var words := IncidentCopy.inspector_result(_record(_inspector), 0)
+	var words := IncidentCopy.inspector_result(_record(_inspector), _clock.epoch)
 	var text := "%s\n%s" % [words["title"], words["detail"]]
 	print(text)
 	assert_str(text).contains("1 mess on the floor (none allowed)")

@@ -119,7 +119,7 @@ func _read_texts() -> void:
 			)
 		else:
 			texts[works] = SideSpurs.works_text(
-				works, flights.spur_release_tick(works), flights.tick
+				works, flights.spur_release_tick(works), flights.tick, flights.epoch
 			)
 
 

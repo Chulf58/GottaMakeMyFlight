@@ -189,6 +189,7 @@ func _ready() -> void:
 		if clock != null:
 			clock.set_paused(true)
 		_boot_load.call_deferred(boot_path)
+	GameBoot.clear_new_airport.call_deferred()
 
 
 ## SimClock.ticked: the first tick of a new game day queues the autosave that
@@ -409,6 +410,7 @@ func load_world(data: Variant) -> bool:
 	# A queued autosave was for the old world; days count from the loaded one.
 	autosave_pending = ""
 	_autosave_day = GameCalendar.day_of(clock.tick, clock.epoch)
+	GameBoot.clear_new_airport()
 	_say("Loaded", false)
 	loaded.emit(true)
 	return true

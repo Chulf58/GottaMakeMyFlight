@@ -225,6 +225,31 @@ func test_the_history_tray_lists_each_card_with_when_it_cleared() -> void:
 	assert_bool(shown.any(func(l: Label) -> bool: return l.text == lines[0])).is_true()
 
 
+func test_pre_opening_history_ticks_stay_at_day_1_06_00_after_the_epoch_advances() -> void:
+	var saved := _world.clock.to_snapshot()
+	var snap := saved.duplicate()
+	snap["tick"] = "9600"
+	snap["epoch"] = "9000"
+	snap["calendar_held"] = false
+	assert_bool(_world.clock.from_snapshot(snap)).is_true()
+	var cause := {
+		"key": &"closed_staff",
+		"title": "Nobody on duty",
+		"detail": "",
+		"targets": [],
+		"show_after": 0,
+		"clear_after": 0,
+	}
+	_stack.board().update([cause], 100)
+	_stack.board().update([], 500)
+	_stack.board().note(&"post_open", "Opened notice", "Welcome", 9600)
+	var lines := _stack.history_lines()
+	assert_bool(_world.clock.from_snapshot(saved)).is_true()
+	assert_int(lines.size()).is_equal(2)
+	assert_str(lines[0]).is_equal("Day 1 06:30  Opened notice\nWelcome")
+	assert_str(lines[1]).is_equal("Day 1 06:00  Nobody on duty, cleared 06:00")
+
+
 func test_the_off_setting_hides_the_cards_but_keeps_the_history() -> void:
 	assert_bool(_stack.cards_on()).is_true()
 	_stack.set_cards_on(false)
