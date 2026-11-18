@@ -57,6 +57,9 @@ const CLOSED_CAPTION := "Closed"
 const CLOSED_TEXT := "Closed · no staff on duty"
 const PLAYER_CLOSED_TEXT := "Closed by you"
 const SPOT_BLOCKED_TEXT := "Closed · staff spot blocked"
+## The msgctxt of every lane-hint text (SecurityLanes.STATUS_TEXT). The English
+## text stays the msgid and the key.
+const LANE_STATUS_CONTEXT := "lane status"
 
 ## Caption text -> its on-screen size in pixels, measured once.
 static var _caption_sizes: Dictionary = {}
@@ -221,8 +224,19 @@ func sync() -> void:
 			arch,
 			"LaneHintSign",
 			MarkerIcons.Glyph.TRAY_TABLE,
-			MissSignals.lane_hint(sim, arch)
+			lane_status_text(MissSignals.lane_hint(sim, arch))
 		)
+
+
+## `english`, a lane-hint text SecurityLanes gave, in the player's words.
+static func lane_status_text(english: String) -> String:
+	return TranslationServer.translate(english, LANE_STATUS_CONTEXT)
+
+
+## Every English lane-hint text, inside tr() so POT generation finds it; the
+## completeness test checks the list against SecurityLanes.STATUS_TEXT.
+static func lane_status_msgids() -> Array[String]:
+	return _words.lane_status_msgids()
 
 
 ## Keeps every sign SIGN_PX tall on screen; does nothing while the camera's
@@ -468,6 +482,25 @@ class Words:
 		return tr("Closed · scanner fault, fixed by {time}", "sign text").format(
 			{"time": GameCalendar.clock_text(repair)}
 		)
+
+	## Never called: every lane-hint text inside tr(), so POT generation finds it.
+	func lane_status_msgids() -> Array[String]:
+		return [
+			tr("Lane ready", "lane status"),
+			tr("Needs a tray table", "lane status"),
+			tr("Needs an X-ray belt", "lane status"),
+			tr("Needs a pickup table", "lane status"),
+			tr("Parts face different ways", "lane status"),
+			tr("A wall cuts through the lane", "lane status"),
+			tr("Clear the way through the arch", "lane status"),
+			tr("Clear the floor for the queue", "lane status"),
+			tr("Clear the floor for the repack spot", "lane status"),
+			tr("Clear the way back from the repack spot", "lane status"),
+			tr("Clear the way out past the pickup table", "lane status"),
+			tr("Clear the officer's spot by the X-ray belt", "lane status"),
+			tr("Clear the helper's spot by the repack spot", "lane status"),
+			tr("No arch", "lane status"),
+		]
 
 	func queue_full(waiting: int) -> String:
 		return (

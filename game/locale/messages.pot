@@ -4025,3 +4025,73 @@ msgid "Queue full · {count} waiting"
 msgid_plural "Queue full · {count} waiting"
 msgstr[0] ""
 msgstr[1] ""
+
+#: passengers/miss_markers.gd
+msgctxt "lane status"
+msgid "Lane ready"
+msgstr ""
+
+#: passengers/miss_markers.gd
+msgctxt "lane status"
+msgid "Needs a tray table"
+msgstr ""
+
+#: passengers/miss_markers.gd
+msgctxt "lane status"
+msgid "Needs an X-ray belt"
+msgstr ""
+
+#: passengers/miss_markers.gd
+msgctxt "lane status"
+msgid "Needs a pickup table"
+msgstr ""
+
+#: passengers/miss_markers.gd
+msgctxt "lane status"
+msgid "Parts face different ways"
+msgstr ""
+
+#: passengers/miss_markers.gd
+msgctxt "lane status"
+msgid "A wall cuts through the lane"
+msgstr ""
+
+#: passengers/miss_markers.gd
+msgctxt "lane status"
+msgid "Clear the way through the arch"
+msgstr ""
+
+#: passengers/miss_markers.gd
+msgctxt "lane status"
+msgid "Clear the floor for the queue"
+msgstr ""
+
+#: passengers/miss_markers.gd
+msgctxt "lane status"
+msgid "Clear the floor for the repack spot"
+msgstr ""
+
+#: passengers/miss_markers.gd
+msgctxt "lane status"
+msgid "Clear the way back from the repack spot"
+msgstr ""
+
+#: passengers/miss_markers.gd
+msgctxt "lane status"
+msgid "Clear the way out past the pickup table"
+msgstr ""
+
+#: passengers/miss_markers.gd
+msgctxt "lane status"
+msgid "Clear the officer's spot by the X-ray belt"
+msgstr ""
+
+#: passengers/miss_markers.gd
+msgctxt "lane status"
+msgid "Clear the helper's spot by the repack spot"
+msgstr ""
+
+#: passengers/miss_markers.gd
+msgctxt "lane status"
+msgid "No arch"
+msgstr ""
