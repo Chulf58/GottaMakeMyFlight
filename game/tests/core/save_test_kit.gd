@@ -11,12 +11,24 @@ extends RefCounted
 const MAIN := "res://main/main.tscn"
 
 
+## The folder every run_path file goes in: one folder per Godot process,
+## outside user://saves, which is the player's real save folder (the title
+## menu's Continue and Load read it). Nothing removes the folder itself, so a
+## suite cleaning up its own files never pulls it from under another suite in
+## the same process.
+static func run_root() -> String:
+	return "user://test_runs/%d" % OS.get_process_id()
+
+
 ## A save file path for one test run, unique to this Godot process. Every
 ## Godot process on the machine shares the same user:// folder, so two suites
 ## running at once (two worktrees, a lane and the conductor) would otherwise
 ## see each other's files at a fixed path and fail a "file not there yet" check.
+## The folder is made here, so a test can write the file directly.
 static func run_path(file_name: String) -> String:
-	return "user://saves/%s_%d.json" % [file_name, OS.get_process_id()]
+	var root := run_root()
+	DirAccess.make_dir_recursive_absolute(root)
+	return "%s/%s_%d.json" % [root, file_name, OS.get_process_id()]
 
 
 ## A directory path for one test run, unique to this Godot process, for tests
