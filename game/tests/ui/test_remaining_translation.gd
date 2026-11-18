@@ -213,6 +213,28 @@ func test_the_template_parser_catches_a_missing_msgstr_a_repeat_and_a_wrong_cont
 	assert_int(PotEntries.count(entries, "", "one")).is_equal(1)
 
 
+## Control: a plural entry needs msgstr[0] and msgstr[1] and no plain msgstr, and a
+## singular entry needs one plain msgstr, whatever the lines are split into.
+func test_the_template_parser_tells_plural_and_singular_msgstr_shapes_apart() -> void:
+	var whole := 'msgid "a"\nmsgid_plural "as"\nmsgstr[0] ""\n"x"\nmsgstr[1] ""\n"y"\n\n'
+	assert_array(PotEntries.malformed(PotEntries.parse(whole))).is_empty()
+	assert_int(PotEntries.complete(PotEntries.parse(whole), "", "a", "as")).is_equal(1)
+	var cases := {
+		"plural without msgstr[1]": 'msgid "a"\nmsgid_plural "as"\nmsgstr[0] ""\n',
+		"plural with a plain msgstr": 'msgid "a"\nmsgid_plural "as"\nmsgstr ""\n',
+		"plural with a plain msgstr and both forms":
+		'msgid "a"\nmsgid_plural "as"\nmsgstr ""\nmsgstr[0] ""\nmsgstr[1] ""\n',
+		"singular with msgstr[0]": 'msgid "a"\nmsgstr[0] ""\n',
+	}
+	for label: String in cases:
+		var entries := PotEntries.parse(cases[label])
+		var broken := PotEntries.malformed(entries)
+		print("%s: %s" % [label, broken])
+		assert_array(broken).override_failure_message(label).has_size(1)
+		assert_str(broken[0]).override_failure_message(label).starts_with("line 1: a")
+		assert_int(PotEntries.complete(entries, "", "a", entries[0].get("plural", ""))).is_equal(0)
+
+
 func test_the_debug_panel_buttons_are_dev_only_and_stay_english() -> void:
 	PseudoLocale.enable(0.4)
 	var pressed := []

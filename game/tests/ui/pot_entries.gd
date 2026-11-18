@@ -7,8 +7,8 @@ extends RefCounted
 ## msgid line that follows a msgid, or the end of the file, closes the one before.
 
 
-## Each entry as {"ctx", "id", "plural", "msgstr_lines", "line"}: the texts, how many
-## msgstr / msgstr[n] lines it has, and the line its first field is on.
+## Each entry as {"ctx", "id", "plural", "msgstr_keys", "line"}: the texts, the name of
+## each msgstr / msgstr[n] field it has (in file order), and the line its first field is on.
 static func parse(text: String) -> Array[Dictionary]:
 	var entries: Array[Dictionary] = []
 	var cur := {}
@@ -40,7 +40,7 @@ static func parse(text: String) -> Array[Dictionary]:
 		elif key.begins_with("msgstr"):
 			field = "msgstr"
 			_begin(cur, number)
-			cur["msgstr_lines"] += 1
+			cur["msgstr_keys"].append(key)
 		elif row.begins_with('"') and field != "" and field != "msgstr":
 			cur[field] += _quoted(row)
 	_close(entries, cur)
@@ -52,20 +52,33 @@ static func count(entries: Array[Dictionary], ctx: String, id: String, plural :=
 	return _matching(entries, ctx, id, plural).size()
 
 
-## How many entries with this context, msgid and plural also have a msgstr line.
+## How many entries with this context, msgid and plural also have the msgstr shape
+## their kind needs (see well_formed).
 static func complete(entries: Array[Dictionary], ctx: String, id: String, plural := "") -> int:
 	return (
 		_matching(entries, ctx, id, plural)
-		. filter(func(entry: Dictionary) -> bool: return entry["msgstr_lines"] > 0)
+		. filter(func(entry: Dictionary) -> bool: return well_formed(entry))
 		. size()
 	)
 
 
-## Entries that have no msgid or no msgstr line, as "line N: msgid".
+## Whether an entry has a msgid and the msgstr fields its kind needs: one plain
+## msgstr and no indexed form when there is no msgid_plural; msgstr[0] and msgstr[1]
+## and no plain msgstr when there is.
+static func well_formed(entry: Dictionary) -> bool:
+	if not entry.has("id"):
+		return false
+	var keys: Array = entry["msgstr_keys"]
+	if entry.has("plural"):
+		return keys.has("msgstr[0]") and keys.has("msgstr[1]") and not keys.has("msgstr")
+	return keys == ["msgstr"]
+
+
+## Entries that fail well_formed, as "line N: msgid".
 static func malformed(entries: Array[Dictionary]) -> Array[String]:
 	var out: Array[String] = []
 	for entry in entries:
-		if not entry.has("id") or entry["msgstr_lines"] == 0:
+		if not well_formed(entry):
 			out.append("line %d: %s" % [entry["line"], entry.get("id", "(no msgid)")])
 	return out
 
@@ -88,7 +101,7 @@ static func duplicates(entries: Array[Dictionary]) -> Array[String]:
 static func _begin(cur: Dictionary, number: int) -> void:
 	if cur.is_empty():
 		cur["line"] = number
-		cur["msgstr_lines"] = 0
+		cur["msgstr_keys"] = []
 
 
 static func _close(entries: Array[Dictionary], cur: Dictionary) -> void:

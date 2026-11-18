@@ -248,3 +248,25 @@ func test_the_template_check_catches_a_missing_plural_context_or_msgstr() -> voi
 	assert_array(_missing_entries(source, context + singular + plural)).has_size(1)
 	# The same entry twice.
 	assert_array(_missing_entries(source, whole + "\n" + whole)).has_size(1)
+
+
+## Control: a plural needs msgstr[0] and msgstr[1] and no plain msgstr, a singular
+## needs one plain msgstr, and a plural msgid split over lines still counts.
+func test_the_template_check_tells_plural_and_singular_msgstr_shapes_apart() -> void:
+	var text := "Queue full · {count} waiting"
+	var plural_source := 'tr_n("%s", "%s", n, "sign text")' % [text, text]
+	var singular_source := 'tr("%s", "sign text")' % text
+	var head := 'msgctxt "sign text"\nmsgid "%s"\n' % text
+	var plural_head := head + 'msgid_plural "%s"\n' % text
+	# A plural with only msgstr[0].
+	assert_array(_missing_entries(plural_source, plural_head + 'msgstr[0] ""\n')).has_size(1)
+	# A plural with a plain msgstr.
+	assert_array(_missing_entries(plural_source, plural_head + 'msgstr ""\n')).has_size(1)
+	# A singular with msgstr[0].
+	assert_array(_missing_entries(singular_source, head + 'msgstr[0] ""\n')).has_size(1)
+	# Controls: a whole singular, and a whole plural with multi-line texts.
+	assert_array(_missing_entries(singular_source, head + 'msgstr ""\n')).is_empty()
+	var split := 'msgctxt "sign text"\nmsgid ""\n"Queue full · {count} "\n"waiting"\n'
+	split += 'msgid_plural ""\n"Queue full · {count} "\n"waiting"\n'
+	split += 'msgstr[0] ""\n"line"\nmsgstr[1] ""\n"line"\n'
+	assert_array(_missing_entries(plural_source, split)).is_empty()
