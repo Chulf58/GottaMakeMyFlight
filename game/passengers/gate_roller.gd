@@ -33,8 +33,10 @@ const TWO_BAG_SIDE_M: Array = [[0.325, 0.37], [0.345, 0.28]]
 ## (test_gate_chair_roller_spot measures the shell box: 0.328 m wide).
 const SHELL_HALF_M := 0.164
 ## How far out the roller's middle lies on the side the guest shuffles toward
-## to sit down (shuffle_side()), by the chair's slide (short: the seat row's
-## end chairs, 0.08 m; far: its middle chair, 0.36 m; GateChairs.CHAIR_OFFSET_M),
+## to sit down (shuffle_side()), by the chair's slide (short: under
+## FAR_SLIDE_M; far: FAR_SLIDE_M or more; GateChairs.CHAIR_OFFSET_M; measured
+## when the seat row's chairs slid 0.08 and 0.36 m, and since the row has one
+## chair centred on each cell no seat row chair slides, so neither row applies),
 ## body variant and hand, laid out as LIE_SIDE_M: the least side at which every
 ## body of the variant, through the sit_down clip at the front and seated along
 ## the whole shuffle onto the chair, leaves the shell's box (grown by 1 cm)
@@ -73,10 +75,12 @@ static func side(look: int, hand: int, scale_by := 1.0) -> float:
 ## negative to the right): on the side the guest shuffles toward to sit down,
 ## out to SHUFFLE_SIDE_M for the chair's slide (short or far) if that is
 ## further, as the seated feet move across the roller's line on the way to
-## the chair; on the other side, or with no slide, side() itself. The seat
-## row's middle chair (0.36 m to the left) has its roller laid on its right
-## first (ParkSide.gap_hand()), the side away from the shuffle (decision
-## gate-chair-roller-lies-opposite-the-sit-down-shuffle-on-a-ch): at side() on
+## the chair; on the other side, or with no slide, side() itself. Every seat
+## row chair is centred on its cell now, so its slide is 0 and side() applies.
+## A chair that slid left had its roller laid on its right first
+## (ParkSide.gap_hand()), the side away from the shuffle (decision
+## gate-chair-roller-lies-opposite-the-sit-down-shuffle-on-a-ch): when the
+## seat row's middle chair slid 0.36 m left, at side() on
 ## its left, the seated feet of a guest shuffling onto it were 264 body points
 ## deep in the roller (board 4da2e8ff).
 static func shuffle_side(look: int, hand: int, scale_by: float, slide_m: float) -> float:
@@ -146,8 +150,9 @@ static func _lying(p: Passenger, hand: int, slide_m: float, share := 1.0) -> Tra
 ## that chair) and size, reaches into a wall (ParkWalls.inside(),
 ## PullSide.walls_near(), the sim's own walls) or lies past one, on each side
 ## it could lie on. The way out is tried at LIE_SAMPLES shares of its side, each
-## step under a two-bag roller's width: the middle chair's far side (0.76 m)
-## laid it wholly past a wall on the 1 m front's edge, in no wall at its spot.
+## step under a two-bag roller's width: a far-sliding chair's shuffle side
+## (0.76 m, the seat row's old middle chair) laid it wholly past a wall on the
+## 1 m front's edge, in no wall at its spot.
 ## A one-bag guest's roller can lie on either side (ParkSide); a two-bag
 ## guest's only on its own bag's hand. Such a chair is never given to a
 ## guest with a roller (user ruling a-roller-guest-is-never-given-a-gate-
