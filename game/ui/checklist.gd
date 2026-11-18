@@ -22,6 +22,9 @@ extends RefCounted
 const BLOCKER := AirportGate.Blocker
 const TITLE_CLOSED := "To open the airport"
 const TITLE_OPEN := "Your airport needs"
+## The title while every opening line is done but the airport has not opened yet: it
+## opens on the next tick, so a paused clock holds this state.
+const TITLE_READY := "Ready: the airport opens on the next tick"
 
 const ENTRANCE := "Entrance with a way through check-in and security to an exit"
 const STAFF_SPOT := "Staff can't reach a desk or scanner passengers need: clear its staff spot"
