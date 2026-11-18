@@ -55,8 +55,11 @@ func test_the_panel_has_the_clock_and_the_speed_buttons_and_nothing_else() -> vo
 	assert_str((labels[0] as Label).name).is_equal("Clock")
 	var buttons: Array[String] = []
 	for button in _panel().find_children("*", "Button", true, false):
-		buttons.append((button as Button).text)
-	assert_array(buttons).is_equal(["Pause", "1x", "2x", "3x"])
+		buttons.append((button as Button).name)
+		# Each speed button is an icon with no text; its words are in the tooltip.
+		assert_str((button as Button).text).is_empty()
+		assert_object((button as Button).icon).is_not_null()
+	assert_array(buttons).is_equal(["SpeedPause", "Speed1", "Speed2", "Speed3"])
 
 
 func test_no_flight_rows_and_no_counts_are_in_the_panel() -> void:

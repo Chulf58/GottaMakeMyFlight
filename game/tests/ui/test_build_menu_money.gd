@@ -47,14 +47,20 @@ func _drag(area: Rect2i) -> void:
 
 
 func test_the_money_slot_shows_the_starting_budget() -> void:
-	assert_str(_menu.money_label().text).is_equal("Money  %d" % PriceTable.STARTING_BUDGET)
+	assert_str(_menu.money_label().text).is_equal(str(PriceTable.STARTING_BUDGET))
+	# The word "Money" is gone: a coin icon stands before the amount.
+	var coin := (
+		_menu.money_label().get_parent().find_child("MoneyIcon", false, false) as TextureRect
+	)
+	assert_object(coin).is_not_null()
+	assert_object(coin.texture).is_not_null()
 
 
 func test_the_money_slot_follows_the_wallet() -> void:
 	_finances.wallet.spend(300, Wallet.Category.BUILD)
-	assert_str(_menu.money_label().text).is_equal("Money  %d" % (PriceTable.STARTING_BUDGET - 300))
+	assert_str(_menu.money_label().text).is_equal(str(PriceTable.STARTING_BUDGET - 300))
 	_finances.wallet.credit(1000, Wallet.Category.FEES)
-	assert_str(_menu.money_label().text).is_equal("Money  %d" % (PriceTable.STARTING_BUDGET + 700))
+	assert_str(_menu.money_label().text).is_equal(str(PriceTable.STARTING_BUDGET + 700))
 
 
 func test_a_menu_with_no_finances_shows_no_money_and_free_cards() -> void:

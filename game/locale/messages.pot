@@ -1436,14 +1436,6 @@ msgstr ""
 msgid "Take car parks and curbs back with the Remove tool"
 msgstr ""
 
-#: ui/build_menu.gd ui/build_menu_layout.gd
-msgid "Money  --"
-msgstr ""
-
-#: ui/build_menu.gd
-msgid "Money  {amount}"
-msgstr ""
-
 #: ui/build_menu.gd ui/build_menu_layout.gd ui/templates_page.gd
 msgctxt "price"
 msgid "Free"
@@ -3822,4 +3814,548 @@ msgstr ""
 #: airside/gate_walk.gd
 msgctxt "gate card"
 msgid "Walk from security: {minutes} min"
+msgstr ""
+
+#: ui/passenger_hud.gd
+msgid "Quiet night: fast-forwarding"
+msgstr ""
+
+#: ui/passenger_hud.gd
+msgctxt "clock"
+msgid "Day {day}  {time}"
+msgstr ""
+
+#: ui/passenger_hud.gd
+msgctxt "follow line"
+msgid "Passenger {id}"
+msgstr ""
+
+#: ui/passenger_hud.gd
+msgctxt "follow line"
+msgid "mood {value}"
+msgstr ""
+
+#: ui/passenger_hud.gd
+msgctxt "follow line"
+msgid "hunger {value}"
+msgstr ""
+
+#: ui/passenger_hud.gd
+msgctxt "follow line"
+msgid "toilet {value}"
+msgstr ""
+
+#: ui/passenger_hud.gd
+msgctxt "passenger speech"
+msgid "\"{text}\""
+msgstr ""
+
+#: ui/hints.gd
+msgid "Hint ({key} turns hints off)"
+msgstr ""
+
+#: ui/hints.gd
+msgid "Hints ({key})"
+msgstr ""
+
+#: ui/hints.gd
+msgid "Reset hints"
+msgstr ""
+
+#: ui/hint_rules.gd
+msgid "Passengers need a check-in desk. Each desk also needs a hired agent: open Staff on the bar."
+msgstr ""
+
+#: ui/hint_rules.gd
+msgid "Passengers need security after check-in. Place a scanner or build a lane, and hire an officer."
+msgstr ""
+
+#: ui/hint_rules.gd
+msgid "One agent works one desk or scanner. Hire another on the Staff card."
+msgstr ""
+
+#: ui/hint_rules.gd
+msgid "Passengers need a toilet. Build a toilet room and put a stall in it."
+msgstr ""
+
+#: ui/hint_rules.gd
+msgid "Hungry passengers need food. Build a cafe with a counter and a table."
+msgstr ""
+
+#: ui/game_menu.gd
+msgid "Game menu"
+msgstr ""
+
+#: ui/game_menu.gd
+msgid "Resume ({key})"
+msgstr ""
+
+#: ui/game_menu.gd
+msgid "Settings"
+msgstr ""
+
+#: ui/game_menu.gd
+msgid "Incidents"
+msgstr ""
+
+#: ui/game_menu.gd
+msgid "Back"
+msgstr ""
+
+#: ui/game_menu.gd
+msgid "Daily incidents"
+msgstr ""
+
+#: ui/game_menu.gd
+msgid "One more thing before the doors open. Some days bring trouble: a spill on the floor, an inspector, a holiday rush. Shall I send those your way?"
+msgstr ""
+
+#: ui/game_menu.gd
+msgid "Accept turns daily incidents on, Decline leaves them off. You can change this any time: press {key}, then Settings."
+msgstr ""
+
+#: ui/intro_dialogue.gd
+msgid "Your first day at the airport"
+msgstr ""
+
+#: ui/intro_dialogue.gd
+msgid "Continue ({key})"
+msgstr ""
+
+#: ui/intro_dialogue.gd
+msgid "Accept"
+msgstr ""
+
+#: ui/intro_dialogue.gd
+msgid "Decline"
+msgstr ""
+
+#: ui/intro_dialogue.gd
+msgid "Welcome to your new airport! Passengers are on their way, and every one of them has a flight to catch."
+msgstr ""
+
+#: ui/intro_dialogue.gd
+msgid "Build them a path: entrance, then check-in, then security, then the gate exit. Number keys pick tools, {pause} pauses, {speed} sets speed."
+msgstr ""
+
+#: ui/intro_dialogue.gd
+msgid "The clock starts when you close this."
+msgstr ""
+
+#: ui/intro_dialogue.gd
+msgid "TERMINAL MANAGER"
+msgstr ""
+
+#: ui/mood_overlay.gd
+msgid "Mood ({key})"
+msgstr ""
+
+#: ui/mood_overlay.gd
+msgid "green fed, orange hungry, red starving"
+msgstr ""
+
+#: ui/mood_overlay.gd
+msgid "green fine, orange needs the toilet, red desperate"
+msgstr ""
+
+#: ui/mood_overlay.gd
+msgid "green content, orange bored, red very bored"
+msgstr ""
+
+#: ui/mood_overlay.gd
+msgid "amber where passengers are running late"
+msgstr ""
+
+#: ui/mood_overlay.gd
+msgid "green fine, red waiting long or unhappy"
+msgstr ""
+
+#: ui/mood_overlay.gd
+msgctxt "mood overlay mode"
+msgid "Hunger"
+msgstr ""
+
+#: ui/mood_overlay.gd
+msgctxt "mood overlay mode"
+msgid "Toilet"
+msgstr ""
+
+#: ui/mood_overlay.gd
+msgctxt "mood overlay mode"
+msgid "Boredom"
+msgstr ""
+
+#: ui/mood_overlay.gd
+msgctxt "mood overlay mode"
+msgid "Late"
+msgstr ""
+
+#: ui/mood_overlay.gd
+msgctxt "mood overlay mode"
+msgid "Mood"
+msgstr ""
+
+#: ui/money_slot.gd
+msgctxt "money card"
+msgid "Today"
+msgstr ""
+
+#: ui/money_slot.gd
+msgctxt "money card"
+msgid "Since load"
+msgstr ""
+
+#: ui/money_slot.gd
+msgctxt "money card"
+msgid "Cash change today"
+msgstr ""
+
+#: ui/money_slot.gd
+msgctxt "money card"
+msgid "Cash change since load"
+msgstr ""
+
+#: ui/money_slot.gd
+msgctxt "money card"
+msgid "Airline fees"
+msgstr ""
+
+#: ui/money_slot.gd
+msgctxt "money card"
+msgid "Shops"
+msgstr ""
+
+#: ui/money_slot.gd
+msgctxt "money card"
+msgid "Parking"
+msgstr ""
+
+#: ui/money_slot.gd
+msgctxt "money card"
+msgid "Wages paid"
+msgstr ""
+
+#: ui/money_slot.gd
+msgctxt "money card"
+msgid "Upkeep paid"
+msgstr ""
+
+#: ui/money_slot.gd
+msgctxt "money card"
+msgid "Airline fines"
+msgstr ""
+
+#: ui/money_slot.gd
+msgctxt "money card"
+msgid "Operating result"
+msgstr ""
+
+#: ui/money_slot.gd
+msgctxt "money card"
+msgid "Building"
+msgstr ""
+
+#: ui/money_slot.gd
+msgctxt "money card"
+msgid "Rescue grant"
+msgstr ""
+
+#: ui/money_slot.gd
+msgctxt "money card"
+msgid "Incidents"
+msgstr ""
+
+#: ui/money_slot.gd
+msgctxt "money card"
+msgid "Signing bonus"
+msgstr ""
+
+#: ui/money_slot.gd
+msgctxt "money card"
+msgid "Unpaid fines"
+msgstr ""
+
+#: ui/money_slot.gd
+msgctxt "money card"
+msgid "Owed wages"
+msgstr ""
+
+#: ui/money_slot.gd
+msgctxt "money card"
+msgid "Owed upkeep"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "room name, mid-sentence"
+msgid "ATM"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Heading to the {shop}"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Browsing at the {shop}"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Using the {shop}"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Playing in the {shop}"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Relaxing in the {shop}"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Resting in the {shop}"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Heading to the food stall"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Queuing at the food stall"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Grabbing a snack"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Heading to the bar"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Queuing at the bar"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Ordering a drink"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Taking a drink to a seat"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Sitting down at the bar"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Having a drink"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Leaving the bar"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Heading to the restaurant"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Queuing at the restaurant"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Ordering a meal"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Taking a meal to a table"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Sitting down at the restaurant"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Having a meal"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Leaving the restaurant"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Arriving"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Heading to check-in"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Queuing for check-in"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Checking in"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Heading to security"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Queuing for security"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Going through security"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Heading to the gate"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Sitting down"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Waiting at the gate"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Standing at the gate"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Getting up to board"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Heading to the exit"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Walking to the plane"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Boarded"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Missed the flight"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Heading to the cafe"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Queuing at the cafe"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Ordering a coffee"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Taking a coffee to a seat"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Sitting down at the cafe"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Having a coffee"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Leaving the cafe"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Heading to the toilet"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Going into a toilet stall"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "In a toilet stall"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Leaving the toilet"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Heading to a shop"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Browsing at a shop"
+msgstr ""
+
+#: ui/passenger_hud.gd
+msgctxt "speed button"
+msgid "Pause ({key})"
+msgstr ""
+
+#: ui/passenger_hud.gd
+msgctxt "speed button"
+msgid "Speed {speed}x ({key})"
 msgstr ""

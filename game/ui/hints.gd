@@ -34,6 +34,8 @@ const ACTION := &"toggle_hints"
 const SETTING_KEY := "hints"
 const SEEN_PREFIX := "hint_seen_"
 const WHO := "Hints"
+## The toggle key, a placeholder in the caption and the button so a language can move it.
+const HOTKEY := "H"
 const ISOLATED_PATH := "user://hud_settings_hints_isolated.cfg"
 const SWITCH_ARG := "--hints"
 const SWITCH_ENV := "GMMF_HINTS"
@@ -470,7 +472,7 @@ func _build() -> void:
 	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_card.add_child(column)
 	_caption.name = "HintCaption"
-	_caption.text = "Hint (H turns hints off)"
+	_caption.text = tr("Hint ({key} turns hints off)").format({"key": HOTKEY})
 	_caption.theme_type_variation = &"HudHint"
 	_caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -491,7 +493,7 @@ func _build() -> void:
 	_row.add_theme_constant_override("separation", HudLayout.GAP)
 	add_child(_row)
 	_toggle.name = "HintsToggle"
-	_toggle.text = "Hints (H)"
+	_toggle.text = tr("Hints ({key})").format({"key": HOTKEY})
 	LeftColumn.size_toggle(_toggle)
 	_toggle.toggle_mode = true
 	_toggle.button_pressed = true
@@ -499,7 +501,7 @@ func _build() -> void:
 	_toggle.toggled.connect(set_enabled)
 	_row.add_child(_toggle)
 	_reset.name = "HintsReset"
-	_reset.text = "Reset hints"
+	_reset.text = tr("Reset hints")
 	LeftColumn.size_toggle(_reset)
 	_reset.focus_mode = Control.FOCUS_NONE
 	_reset.pressed.connect(reset_seen)

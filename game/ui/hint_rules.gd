@@ -45,8 +45,10 @@ const CATEGORIES := {
 }
 
 
+## The hint's sentence in the player's words. TEXT holds the English msgids
+## (Words.msgids() has the same ones inside tr() for POT generation).
 static func text(id: StringName) -> String:
-	return TEXT[id]
+	return TranslationServer.translate(TEXT[id])
 
 
 static func categories_for(id: StringName) -> Array:
@@ -157,3 +159,24 @@ static func _spare(staff: StaffSim, role: StaffMember.Role) -> int:
 		if m.role == role and not m.leaving and m.state == StaffMember.State.IDLE:
 			spare += 1
 	return spare
+
+
+## The hint sentences inside tr(), for POT generation; a test checks they match TEXT.
+class Words:
+	extends RefCounted
+
+	func msgids() -> PackedStringArray:
+		return PackedStringArray(
+			[
+				tr(
+					"Passengers need a check-in desk. Each desk also needs a hired agent: open Staff on the bar."
+				),
+				tr(
+					# gdlint:ignore = max-line-length
+					"Passengers need security after check-in. Place a scanner or build a lane, and hire an officer."
+				),
+				tr("One agent works one desk or scanner. Hire another on the Staff card."),
+				tr("Passengers need a toilet. Build a toilet room and put a stall in it."),
+				tr("Hungry passengers need food. Build a cafe with a counter and a table."),
+			]
+		)

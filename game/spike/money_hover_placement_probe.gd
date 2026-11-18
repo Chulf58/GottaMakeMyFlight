@@ -62,7 +62,7 @@ func _run() -> void:
 	(_main.get_node("TycoonCamera/Camera3D") as Camera3D).make_current()
 	_menu = _main.get_node("BuildMenu")
 	_badge = _main.get_node("RatingBadge")
-	_slot = _menu.money_label().get_parent() as MoneySlot
+	_slot = _menu.money_label().find_parent("MoneySlot") as MoneySlot
 	if _slot == null or _slot.ledger == null:
 		_fail("the money slot has no ledger, so it has no card")
 		return

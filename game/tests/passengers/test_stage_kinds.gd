@@ -50,9 +50,9 @@ func test_every_stage_is_presented_in_the_follow_panel_and_the_flight_result() -
 	for stage: int in Passenger.Stage.values():
 		var stage_name: String = Passenger.Stage.keys()[stage]
 		(
-			assert_bool(PassengerHud.STAGE_TEXT.has(stage))
+			assert_str(StageWords.Words.new().stage(stage))
 			. override_failure_message("stage %s has no follow panel text" % stage_name)
-			. is_true()
+			. is_not_empty()
 		)
 		if StageKinds.location(stage) == StageKinds.Location.SETTLED:
 			continue
