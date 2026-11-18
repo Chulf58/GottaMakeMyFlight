@@ -48,6 +48,12 @@ const ESC_KEY := "Esc"
 ## Optional: a load ends an open menu or question. Without one the menu has no
 ## Save or Load.
 @export var save_game: SaveGame
+## Optional: the quit log (decision quit-point-log-d7-opt-in-local-event-log-
+## file-only-off-by-de). With one, the Settings page holds its switch and the
+## Open log folder button; without one it holds neither.
+@export var quit_log: QuitLogRecorder
+## Opens a folder in the system's file browser; tests swap in a recorder.
+var open_folder := Callable()
 ## Optional: called by an Esc the menu would open on; true means it closed a card
 ## (a selected built item or a followed passenger or vehicle) and took the key.
 ## PassengerHud sets it, so the first Esc closes the card and the next opens the menu.
@@ -70,6 +76,8 @@ var _incidents_switch: CheckButton
 
 func _ready() -> void:
 	name = "GameMenu"
+	if not open_folder.is_valid():
+		open_folder = OS.shell_open
 	if save_game != null:
 		save_game.loaded.connect(_on_loaded)
 
@@ -282,6 +290,8 @@ func _show() -> void:
 	_incidents_switch.button_pressed = director != null and director.is_enabled()
 	_incidents_switch.toggled.connect(_on_incidents_toggled)
 	_settings_page.add_child(_incidents_switch)
+	if quit_log != null:
+		_add_quit_log_controls()
 	_button(_settings_page, "Back", tr("Back"), press_back)
 	_load_page = _page("LoadPage", tr("Load", "menu"))
 	_load_page.visible = false
@@ -297,7 +307,51 @@ func _show() -> void:
 	_status.visible = false
 	pages.add_child(_status)
 	add_child(_layer)
+	QuitLog.note("game_menu_open")
 	dialog_changed.emit(true)
+
+
+## The quit log's switch, the one line saying what it records, and the button
+## that opens its folder.
+func _add_quit_log_controls() -> void:
+	var switch := CheckButton.new()
+	switch.name = "QuitLog"
+	switch.text = tr("Quit log")
+	switch.focus_mode = Control.FOCUS_NONE
+	switch.button_pressed = quit_log.is_enabled()
+	switch.toggled.connect(_on_quit_log_toggled)
+	_settings_page.add_child(switch)
+	var note := Label.new()
+	note.name = "QuitLogNote"
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	note.custom_minimum_size = Vector2(MENU_SIZE.x - 40.0, 0.0)
+	note.text = tr(
+		# gdlint:ignore = max-line-length
+		"Records where you stop playing: the day, money, stars, builds, flights and alerts, never what you click or type. The file stays on this computer and nothing is sent."
+	)
+	_settings_page.add_child(note)
+	_button(_settings_page, "OpenLogFolder", tr("Open log folder"), _on_open_log_folder)
+
+
+func _on_quit_log_toggled(on: bool) -> void:
+	if quit_log == null or quit_log.set_enabled(on):
+		return
+	# The file would not open: the switch goes back off and the line says why.
+	var switch: CheckButton = _settings_page.get_node("QuitLog")
+	switch.set_pressed_no_signal(false)
+	_set_status(tr("Could not start the quit log in {path}").format({"path": quit_log.log_dir}))
+
+
+## Opens the quit log folder in the system's file browser, making it first so a
+## player who has never switched the log on still gets a folder.
+func _on_open_log_folder() -> void:
+	if quit_log == null:
+		return
+	var folder := QuitLog.folder(quit_log.log_dir)
+	DirAccess.make_dir_recursive_absolute(folder)
+	var err: Variant = open_folder.call(folder)
+	if err is int and err != OK:
+		_set_status(tr("Could not open the log folder: {path}").format({"path": folder}))
 
 
 func _page(page_name: String, title: String) -> VBoxContainer:
