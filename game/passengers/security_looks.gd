@@ -823,6 +823,8 @@ static func _security_home(sim: PassengerSim, p: Passenger, i: int) -> Home:
 
 
 ## Whether `p` carries a roller in one hand and a hard case in the other.
+## bag_kind() never gives two rollers, and backpacks and totes are worn, so CASE
+## is the only other hand-held bag kind.
 static func roller_beside_case(p: Passenger) -> bool:
 	if p.carry_on != 2:
 		return false

@@ -311,6 +311,21 @@ func test_pull_handover_swings_round_the_pulled_side_clear_of_the_body() -> void
 		var mid_local: Transform3D = _frame.affine_inverse() * (at_mid["xf"] as Transform3D)
 		assert_float(mid_local.basis.z.normalized().dot(Vector3.UP)).is_greater(0.999)
 		assert_float((mid_local * Vector3(0.0, 0.1, 0.0)).z).is_greater(0.3)
+		# Endpoint C0 continuity with start (k = 0 -> 0.01) and want (k = 0.99 -> 1.0).
+		var p0 := CarryLead.plan(bag, 0.0, start, want, _frame, flags, _body(0.0, bar_hand))
+		var p01 := CarryLead.plan(bag, 0.01, start, want, _frame, flags, _body(0.0, bar_hand))
+		var p99 := CarryLead.plan(bag, 0.99, start, want, _frame, flags, _body(0.0, bar_hand))
+		var p1 := CarryLead.plan(bag, 1.0, start, want, _frame, flags, _body(0.0, bar_hand))
+		var xf0: Transform3D = p0["xf"]
+		var xf01: Transform3D = p01["xf"]
+		var xf99: Transform3D = p99["xf"]
+		var xf1: Transform3D = p1["xf"]
+		assert_float(xf0.origin.distance_to(start.origin)).is_less_equal(0.0001)
+		assert_float(xf0.basis.z.distance_to(start.basis.z)).is_less_equal(0.0001)
+		assert_float(xf0.origin.distance_to(xf01.origin)).is_less(0.01)
+		assert_float(xf1.origin.distance_to(want.origin)).is_less_equal(0.0001)
+		assert_float(xf1.basis.z.distance_to(want.basis.z)).is_less_equal(0.0001)
+		assert_float(xf99.origin.distance_to(want.origin)).is_less(0.01)
 		print("%s: min pelvis clearance %.3f m, side=%s" % [label, min_clear, saw_side])
 		assert_bool(saw_side).is_true()
 		assert_float(min_clear).is_greater(0.13)
@@ -321,6 +336,39 @@ func test_pull_handover_swings_round_the_pulled_side_clear_of_the_body() -> void
 	var clip_clear := _pelvis_clearance(unrotated)
 	print("unrotated pull-at-front pelvis clearance: %.3f m" % clip_clear)
 	assert_float(clip_clear).is_less(0.05)
+
+
+## On `pull>tray` and `tray>pull`, the carry-handle hand stays at 0 while the
+## roller is behind the hip and blends smoothly across t = 0.50 with no step.
+func test_pull_handover_weights_blend_smoothly_across_half_way() -> void:
+	var moves := _moves()
+	var flags := {"in_stall": false, "hand": R, "yaw": 0.6, "clear": 0.0}
+	var into_move: Array = moves["pull.R>tray"]
+	var into_bag: Dictionary = (into_move[0] as Dictionary).duplicate()
+	into_bag["handover"] = R
+	var into_s: Transform3D = _frame * (into_move[1] as Transform3D)
+	var into_w: Transform3D = _frame * (into_move[2] as Transform3D)
+	var early_in := CarryLead.plan(into_bag, 0.2, into_s, into_w, _frame, flags, _body())
+	var mid_in := CarryLead.plan(into_bag, 0.3, into_s, into_w, _frame, flags, _body())
+	var pre_in := CarryLead.plan(into_bag, 0.374, into_s, into_w, _frame, flags, _body())
+	var post_in := CarryLead.plan(into_bag, 0.376, into_s, into_w, _frame, flags, _body())
+	assert_float(early_in["weights"][L]).is_equal(0.0)
+	assert_float(mid_in["weights"][L]).is_between(0.05, 0.95)
+	assert_float(absf(float(post_in["weights"][L]) - float(pre_in["weights"][L]))).is_less(0.001)
+	assert_float(post_in["weights"][L]).is_equal_approx(1.0, 0.001)
+	var out_move: Array = moves["tray>pull.R"]
+	var out_bag: Dictionary = (out_move[0] as Dictionary).duplicate()
+	out_bag["handover"] = L
+	var out_s: Transform3D = _frame * (out_move[1] as Transform3D)
+	var out_w: Transform3D = _frame * (out_move[2] as Transform3D)
+	var pre_out := CarryLead.plan(out_bag, 0.624, out_s, out_w, _frame, flags, _body())
+	var post_out := CarryLead.plan(out_bag, 0.626, out_s, out_w, _frame, flags, _body())
+	var mid_out := CarryLead.plan(out_bag, 0.69, out_s, out_w, _frame, flags, _body())
+	var late_out := CarryLead.plan(out_bag, 0.8, out_s, out_w, _frame, flags, _body())
+	assert_float(pre_out["weights"][L]).is_equal_approx(1.0, 0.001)
+	assert_float(absf(float(post_out["weights"][L]) - float(pre_out["weights"][L]))).is_less(0.001)
+	assert_float(mid_out["weights"][L]).is_between(0.05, 0.95)
+	assert_float(late_out["weights"][L]).is_equal(0.0)
 
 
 ## Least horizontal distance from the roller shell and rods (in body-local

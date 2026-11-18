@@ -50,8 +50,8 @@ const PULL_FRONT_M := 0.35
 const PULL_BAR_OUT_M := 0.14
 const PULL_AXLE_CLEAR_M := 0.62
 const TRAY_LIFT_M := 0.12
-const PULL_HAND_IN := Vector2(0.22, 0.45)
-const PULL_HAND_OUT := Vector2(0.5, 0.72)
+const PULL_HAND_IN := Vector2(0.32, 0.5)
+const PULL_HAND_OUT := Vector2(0.5, 0.68)
 
 
 ## Stamps on `bag` (bag `i` of `held`, CarryPlace's record of a move just
@@ -164,6 +164,13 @@ static func to_front(
 	var local := frame.affine_inverse()
 	var start_l := local * start
 	var goal_l := local * goal
+	if to_pull:
+		# CarryLead.floor_end() lifts side-carried tray exits to FLOOR_CASE_END_M;
+		# a pulled roller settles with its wheels on the floor (`want`).
+		goal_l.origin.y += (
+			CarryOnProps.ROLLER_AXLE.y * goal_l.basis.get_scale().y
+			- (goal_l * CarryOnProps.ROLLER_AXLE).y
+		)
 	var scale_at := start_l.basis.get_scale().lerp(goal_l.basis.get_scale(), t)
 	var up_b := _upright(bar_hand).scaled(scale_at)
 	var front_p := Vector3(0.0, shoulder_y - CarryLead.SWAP_HIP_BELOW_M, PULL_FRONT_M)
@@ -180,15 +187,16 @@ static func to_front(
 
 
 ## Keeps the carry-handle hand at its side while a pulled roller is still behind
-## the hip (`pull>tray` before PULL_HAND_IN, `tray>pull` after PULL_HAND_OUT),
-## so that arm does not reach across the body before the roller comes round.
+## the hip (`pull>tray` over PULL_HAND_IN, `tray>pull` over PULL_HAND_OUT),
+## blending smoothly across t = 0.5 so that arm neither reaches across the body
+## early nor snaps at the handover.
 static func adjust_weights(
 	weights: Array, bag: Dictionary, t: float, first: int, lead: int
 ) -> void:
-	if _is_from_pull(bag) and t < 0.5:
-		weights[lead] = smoothstep(PULL_HAND_IN.x, PULL_HAND_IN.y, t)
-	elif _is_to_pull(bag) and t > 0.5:
-		weights[first] = 1.0 - smoothstep(PULL_HAND_OUT.x, PULL_HAND_OUT.y, t)
+	if _is_from_pull(bag):
+		weights[lead] *= smoothstep(PULL_HAND_IN.x, PULL_HAND_IN.y, t)
+	elif _is_to_pull(bag):
+		weights[first] *= 1.0 - smoothstep(PULL_HAND_OUT.x, PULL_HAND_OUT.y, t)
 
 
 static func _is_from_pull(bag: Dictionary) -> bool:
@@ -221,6 +229,10 @@ static func _upright(bar_hand: int) -> Basis:
 static func _pull_half(
 	pull_xf: Transform3D, mid_xf: Transform3D, bar_anchor: Vector3, s: float, bar_hand: int
 ) -> Transform3D:
+	if s <= 0.0:
+		return pull_xf
+	if s >= 1.0:
+		return mid_xf
 	var out := -1.0 if bar_hand == 0 else 1.0
 	var scale_at := pull_xf.basis.get_scale().lerp(mid_xf.basis.get_scale(), s)
 	var bar_now := _round_side(
