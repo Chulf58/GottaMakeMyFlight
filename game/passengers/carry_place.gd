@@ -122,6 +122,8 @@ static func place_bags(
 				"hand_carry": bag["carry"] == SecurityLooks.Carry.HAND,
 				"from_floor": int(bag.get("was", -1)) / 4 == SecurityLooks.Home.FLOOR,
 				"to_floor": homes[i] == SecurityLooks.Home.FLOOR,
+				"from_tray": int(bag.get("was", -1)) / 4 == SecurityLooks.Home.TRAY,
+				"to_tray": homes[i] == SecurityLooks.Home.TRAY,
 				"hand": SecurityLooks.worn_side(i) if kind == SecurityLooks.Kind.SHOULDER else hand,
 				"clear": StallCarry.STALL_CLEAR_M if in_stall else CarryOnProps.TRANSFER_CLEAR_M,
 				"yaw": body.rotation.y,
@@ -280,6 +282,8 @@ static func _stamp(
 		bag["queue_walls"] = PullSide.walls_near(props.sim.grid, stood)
 	bag["home"] = bag["place"]
 	bag["reach_from"] = props._reach_of(node, kind)
+	# A roller between its bar and its carry handle changes grip hand to hand.
+	RollerHandover.stamp(bag, held, i, props._now())
 
 
 ## Whether a move of `bag` stamped now is hand-led (CarryLead): every move but
