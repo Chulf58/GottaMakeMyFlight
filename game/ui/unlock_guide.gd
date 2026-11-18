@@ -189,14 +189,14 @@ func _on_tiers_opened(first: int, last: int) -> void:
 
 
 ## Pauses the clock and shows the dialog for `tiers` and `firsts`: at once, or
-## queued behind this guide's open dialog, or waiting while another exclusive
-## dialog has the turn (the Offers sheet, the intro).
+## queued behind an open Gotta Air call, or replacing an open Terminal Manager
+## dialog in place, or waiting while another exclusive dialog has the turn.
 func open_dialog(tiers: Array, firsts: Array = []) -> void:
-	if _dialog != null:
+	if _dialog != null and _dialog.speaker() == IntroDialogue.Speaker.GOTTA_AIR:
 		_append_unique(_queued_tiers, tiers)
 		_append_unique(_queued_firsts, firsts)
 		return
-	if clock == null:
+	if clock == null or _dialog != null:
 		_present_batch(tiers, firsts)
 		return
 	if clock.holds.has(_hold):
@@ -240,6 +240,9 @@ func _open_first(kind: String) -> void:
 	if unlocks.first_shown(kind):
 		return
 	unlocks.mark_first_shown(kind)
+	if _dialog != null:
+		_append_unique(_queued_firsts, [kind])
+		return
 	open_dialog([], [kind])
 
 
