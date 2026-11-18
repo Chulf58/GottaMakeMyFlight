@@ -85,6 +85,9 @@ var _glide_serial := 0
 var _glide_position := Vector3.ZERO
 var _glide_yaw := NAN
 var _room_target := WHOLE_VIEW
+## The free share the start view's distance is fitted in: the room without the
+## right rail's cards, which only shift the view and never zoom it (AlertStack).
+var _fit_target := WHOLE_VIEW
 ## The area the start view frames, kept so Home and a panel opening refit it.
 var _home_area := Rect2()
 ## True from framing the start view or Home until the player pans, zooms,
@@ -153,7 +156,7 @@ func pitch_degrees() -> float:
 func set_angle_step(step: int) -> void:
 	angle_step = _clamped_step(step)
 	HudFlagSetting.save_int(settings_path, ANGLE_KEY, angle_step, "TycoonCamera")
-	set_room(_room_target)
+	set_room(_room_target, true, _fit_target)
 	_apply()
 
 
@@ -199,7 +202,7 @@ func glide_to(world_point: Vector3, to_distance := -1.0) -> int:
 ## view is fitted again to the screen share the panels leave free right now.
 func go_home() -> void:
 	if _home_area.has_area():
-		var view := framing_for(_home_area, _room_target)
+		var view := framing_for(_home_area, _fit_target)
 		home_position = view["position"]
 		home_distance = view["distance"]
 	_begin_glide(home_position, home_distance, home_yaw)
@@ -236,6 +239,7 @@ func framing_for(area: Rect2, free := WHOLE_VIEW) -> Dictionary:
 func frame_start_view(area: Rect2, free := WHOLE_VIEW) -> void:
 	_home_area = area
 	_room_target = free
+	_fit_target = free
 	room = free
 	var view := framing_for(area, free)
 	home_position = view["position"]
@@ -252,12 +256,15 @@ func frame_start_view(area: Rect2, free := WHOLE_VIEW) -> void:
 ## Tells the camera which share of the screen the open panels leave free
 ## (fractions of the viewport). The focus eases to the middle of it. When the
 ## camera is still on the start view, the distance also eases to the one that
-## fits the start area inside `free`, unless `refit` is false (the panels only
-## changed size, which should move the view a little, not zoom it).
-func set_room(free: Rect2, refit := true) -> void:
+## fits the start area inside `fit`, unless `refit` is false (the panels only
+## changed size, which should move the view a little, not zoom it). `fit` is
+## `free` without what only shifts the view (the right rail's cards); an empty
+## `fit` means `free`.
+func set_room(free: Rect2, refit := true, fit := Rect2()) -> void:
 	_room_target = free
+	_fit_target = fit if fit.has_area() else free
 	if refit and _at_home and _home_area.has_area():
-		home_distance = framing_for(_home_area, free)["distance"]
+		home_distance = framing_for(_home_area, _fit_target)["distance"]
 		target_distance = clampf(home_distance, min_distance, max_distance)
 
 

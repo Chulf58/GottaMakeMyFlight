@@ -137,3 +137,55 @@ func test_a_jump_lands_the_problem_below_the_stack() -> void:
 	print("ALERT_JUMP target=%s screen=%s cards=%s" % [target, at, cards])
 	assert_float(at.y).is_greater(cards.end.y)
 	assert_bool(get_viewport().get_visible_rect().has_point(at)).is_true()
+
+
+## Board D3c: a card already up when a build tray opens must not zoom the view
+## out. The tray's refit fits the start area to the screen share without the
+## rail; before, the card's cut took the top strip of the screen and the camera
+## went about half as far again (32 m to 50 m in the D3c probe).
+func test_a_card_up_when_the_tray_opens_does_not_zoom() -> void:
+	var menu := _main.get_node("BuildMenu") as BuildMenu
+	var mode := _main.get_node("BuildMode") as BuildMode
+	var check_in := _category("Check-in")
+	_camera.frame_start_view(StartView.area_for(mode.grid), _room().free_fraction())
+	_room().mark_sent()
+	await _settle()
+	var closed := _camera.target_distance
+	menu.press_category(check_in)
+	await _settle()
+	var opened := _camera.target_distance
+	var opened_room := _camera.room
+	menu.press_category(check_in)
+	await _settle()
+	_spills()
+	_hud.refresh()
+	await _settle()
+	assert_array(_stack.card_keys()).is_equal([DirtyAlert.KEY])
+	menu.press_category(check_in)
+	await _settle()
+	var cards := _stack.room_rect()
+	print(
+		(
+			"ALERT_TRAY closed=%.3f opened=%.3f with_card=%.3f cards=%s room=%s/%s"
+			% [closed, opened, _camera.target_distance, cards, opened_room, _camera.room]
+		)
+	)
+	# Controls: the tray opening refits the distance, and the card is drawn
+	# and cut from the room (the view shifts), so the case below is engaged.
+	assert_bool(menu.is_tray_open()).is_true()
+	assert_float(absf(opened - closed)).is_greater(0.05)
+	assert_bool(cards.has_area()).is_true()
+	assert_bool(_room().open_rects().has(cards)).is_true()
+	assert_bool(_camera.room.is_equal_approx(opened_room)).is_false()
+	assert_float(_camera.target_distance).is_equal_approx(opened, 0.01)
+	menu.press_category(check_in)
+	await _settle()
+	assert_float(_camera.target_distance).is_equal_approx(closed, 0.01)
+
+
+func _category(category_name: String) -> int:
+	var all := BuildMenu.categories()
+	for i in all.size():
+		if all[i]["name"] == category_name:
+			return i
+	return BuildMenu.NO_CATEGORY
