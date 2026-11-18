@@ -2,9 +2,15 @@ class_name GameMenu
 extends Node
 ## The game menu (decision daily-incidents-technical-design-incidentdirector-
 ## shared-clo): Esc outside build mode opens it with the clock held. It holds
-## two things and nothing else: Resume, and Settings, whose one switch turns the
-## daily incidents on or off for this game (the flag is saved with the game, in
-## IncidentDirector). Esc again, or Resume, closes it.
+## Resume, Save, Load and Settings, whose one switch turns the daily incidents
+## on or off for this game (the flag is saved with the game, in
+## IncidentDirector). Esc again, or Resume, closes it. Save and Load came with
+## the title screen (decision title-menu-with-continue-new-airport-load-and-
+## quit-autosave): Save writes the manual save, the F5 file; Load opens a page
+## listing the saves (SaveList) and loads the one picked through
+## SaveGame.load_from_file. A load that goes through closes the menu (the load
+## drops every hold); a refused one keeps it open with the reason in the status
+## line under the pages, where Save also reports.
 ##
 ## Esc belongs to build mode first (decision build-mode-pauses-the-game-while-a-
 ## build-tray-is-open-closin): while a tray or the Staff card is open, a tool is
@@ -39,7 +45,8 @@ const ESC_KEY := "Esc"
 @export var clock: SimClock
 @export var build_menu: BuildMenu
 @export var build_mode: BuildMode
-## Optional: a load ends an open menu or question.
+## Optional: a load ends an open menu or question. Without one the menu has no
+## Save or Load.
 @export var save_game: SaveGame
 ## Optional: called by an Esc the menu would open on; true means it closed a card
 ## (a selected built item or a followed passenger or vehicle) and took the key.
@@ -55,6 +62,9 @@ var _question_hold := ClockHolds.NONE
 var _shown := false
 var _main_page: Control
 var _settings_page: Control
+var _load_page: Control
+var _save_list: SaveList
+var _status: Label
 var _incidents_switch: CheckButton
 
 
@@ -147,7 +157,32 @@ func press_back() -> void:
 	if not _shown:
 		return
 	_settings_page.visible = false
+	_load_page.visible = false
 	_main_page.visible = true
+
+
+## Save: the manual save (SaveGame.quick_save_path), now or after the next tick
+## when a save must wait; the status line says which.
+func press_save() -> void:
+	if not _shown or save_game == null:
+		return
+	save_game.request_save(save_game.quick_save_path)
+	_set_status(save_game.message_text())
+	load_button().disabled = SaveSlots.existing(_save_paths()).is_empty()
+
+
+## Load: the page listing the saves that exist.
+func press_load() -> void:
+	if not _shown or save_game == null:
+		return
+	_save_list.fill(_save_paths(), save_game.quick_save_path)
+	_main_page.visible = false
+	_load_page.visible = true
+
+
+## The status line under the pages, "" when it is empty or the menu is closed.
+func status_text() -> String:
+	return _status.text if _status != null else ""
 
 
 ## The Incidents switch, or null while the menu is closed.
@@ -161,6 +196,19 @@ func resume_button() -> Button:
 
 func settings_button() -> Button:
 	return _main_page.get_node("Settings") if _main_page != null else null
+
+
+func save_button() -> Button:
+	return _main_page.get_node_or_null("Save") if _main_page != null else null
+
+
+func load_button() -> Button:
+	return _main_page.get_node_or_null("Load") if _main_page != null else null
+
+
+## The Load page's list, or null while the menu is closed.
+func save_list() -> SaveList:
+	return _save_list
 
 
 ## The new-game question, on its own turn: when nobody has it, at once, and
@@ -219,6 +267,10 @@ func _show() -> void:
 	_main_page = _page("MainPage", tr("Game menu"))
 	pages.add_child(_main_page)
 	_button(_main_page, "Resume", tr("Resume ({key})").format({"key": ESC_KEY}), press_resume)
+	if save_game != null:
+		_button(_main_page, "Save", tr("Save", "menu"), press_save)
+		_button(_main_page, "Load", tr("Load", "menu"), press_load)
+		load_button().disabled = SaveSlots.existing(_save_paths()).is_empty()
 	_button(_main_page, "Settings", tr("Settings"), press_settings)
 	_settings_page = _page("SettingsPage", tr("Settings"))
 	_settings_page.visible = false
@@ -231,6 +283,19 @@ func _show() -> void:
 	_incidents_switch.toggled.connect(_on_incidents_toggled)
 	_settings_page.add_child(_incidents_switch)
 	_button(_settings_page, "Back", tr("Back"), press_back)
+	_load_page = _page("LoadPage", tr("Load", "menu"))
+	_load_page.visible = false
+	pages.add_child(_load_page)
+	_save_list = SaveList.new()
+	_save_list.name = "SaveList"
+	_save_list.chosen.connect(_on_save_chosen)
+	_load_page.add_child(_save_list)
+	_button(_load_page, "Back", tr("Back"), press_back)
+	_status = Label.new()
+	_status.name = "Status"
+	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_status.visible = false
+	pages.add_child(_status)
 	add_child(_layer)
 	dialog_changed.emit(true)
 
@@ -255,6 +320,27 @@ func _button(page: Control, button_name: String, text: String, handler: Callable
 	page.add_child(button)
 
 
+## The manual save first, then the autosaves.
+func _save_paths() -> Array[String]:
+	var paths: Array[String] = [save_game.quick_save_path]
+	paths.append_array(SaveSlots.autosave_paths())
+	return paths
+
+
+## A pick from the Load page. A load that goes through closes the menu through
+## _on_loaded; a refused one leaves it open and shows why.
+func _on_save_chosen(path: String) -> void:
+	if not save_game.load_from_file(path):
+		_set_status(save_game.message_text())
+
+
+func _set_status(text: String) -> void:
+	if _status == null:
+		return
+	_status.text = text
+	_status.visible = text != ""
+
+
 func _on_incidents_toggled(on: bool) -> void:
 	if director != null:
 		director.set_enabled(on)
@@ -266,6 +352,9 @@ func _free_layer() -> void:
 	_layer = null
 	_main_page = null
 	_settings_page = null
+	_load_page = null
+	_save_list = null
+	_status = null
 	_incidents_switch = null
 	if is_instance_valid(layer) and not layer.is_queued_for_deletion():
 		layer.queue_free()
