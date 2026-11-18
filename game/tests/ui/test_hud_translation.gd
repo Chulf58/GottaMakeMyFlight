@@ -112,6 +112,20 @@ func test_the_follow_line_is_routed_part_by_part() -> void:
 	assert_str(parts[4]).contains("toilet 12")
 
 
+func test_the_followed_passengers_bubble_is_in_the_players_words() -> void:
+	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	p.late = true
+	_views.selected_id = p.id
+	assert_str(_world.sim.bubble_text(p)).is_equal("I'm late!")
+	var parts := _hud.follow_text().split("   ")
+	print("follow parts: %s" % [parts])
+	var speech := parts[parts.size() - 1]
+	assert_str(speech).starts_with("[")
+	# The bubble's own words carry the profile's lead inside the quotes.
+	var inner := RegEx.create_from_string("\"\\[_*I'm late!")
+	assert_object(inner.search(speech)).is_not_null()
+
+
 func test_every_passenger_stage_has_text_in_the_players_words() -> void:
 	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
 	var seen := {}

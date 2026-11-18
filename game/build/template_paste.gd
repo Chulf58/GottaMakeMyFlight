@@ -175,10 +175,15 @@ func save_room(room_id: int) -> RoomTemplate:
 func plan_at(cell: Vector2i) -> Dictionary:
 	var grid := _mode.grid
 	var edits := library.get_template(armed).plan(cell, turns, grid)
-	var locked := BuildUnlocks.edits_lock_text(_mode.unlocks, _mode.require_unlocks, edits)
-	if locked != "":
+	var locked := BuildUnlocks.edits_lock_args(_mode.unlocks, _mode.require_unlocks, edits)
+	if not locked.is_empty():
 		var refusal := BuildResult.refused(BuildResult.Reason.LOCKED)
-		refusal.detail = locked
+		refusal.detail = (
+			BuildUnlocks.NOT_WIRED_TEXT
+			if locked.has("unwired")
+			else "Locked at tier %d" % locked["tier"]
+		)
+		refusal.detail_args = locked
 		return {"edits": edits, "result": refusal}
 	var scratch := BuildUndo.trial_copy_of(grid)
 	var result := scratch.apply_sequence(edits, BeltShaper.crossing_problem)

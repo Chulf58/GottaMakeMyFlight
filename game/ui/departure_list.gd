@@ -16,6 +16,10 @@ extends RefCounted
 ## only for the days before its end day; the flights it had issued by then
 ## still fly and show.
 
+## The msgctxt of the status words: short words get one so they stay apart from
+## the same English word elsewhere.
+const STATUS_CONTEXT := "departure status"
+
 
 ## The earliest row whose doors have not closed at `tick`, or an empty one.
 static func next_departing(rows: Array[Dictionary], tick: int) -> Dictionary:
@@ -31,7 +35,28 @@ static func doors_line(row: Dictionary) -> String:
 
 ## "doors close 10:30": the game-clock time the row's doors close.
 static func doors_text(row: Dictionary) -> String:
-	return "doors close %s" % GameCalendar.clock_text(row["doors"])
+	return TranslationServer.translate("doors close {time}").format(
+		{"time": GameCalendar.clock_text(row["doors"])}
+	)
+
+
+## The flight panel's word for a flight in `state`: "Boarding", then one for each
+## state from the doors closing on; "" before boarding.
+static func status_word(state: int) -> String:
+	match state:
+		FlightSim.State.BOARDING:
+			return TranslationServer.translate("Boarding", STATUS_CONTEXT)
+		FlightSim.State.DOORS_CLOSED:
+			return TranslationServer.translate("Doors closed", STATUS_CONTEXT)
+		FlightSim.State.PUSHBACK:
+			return TranslationServer.translate("Pushback", STATUS_CONTEXT)
+		FlightSim.State.TAXI_OUT:
+			return TranslationServer.translate("Taxiing", STATUS_CONTEXT)
+		FlightSim.State.TAKEOFF:
+			return TranslationServer.translate("Taking off", STATUS_CONTEXT)
+		FlightSim.State.DEPARTED:
+			return TranslationServer.translate("Departed", STATUS_CONTEXT)
+	return ""
 
 
 ## The rows for each flight leaving on `day`, earliest first (see _rows); the
@@ -96,11 +121,7 @@ static func _row(
 	var head := "%s  %s" % [GameCalendar.clock_text(tick), place]
 	var base := head if airline == "" else "%s  %s" % [head, airline]
 	var line := base
-	var status: String = (
-		"Boarding"
-		if state == FlightSim.State.BOARDING
-		else PassengerHud.AFTER_DOORS_TEXT.get(state, "")
-	)
+	var status := status_word(state)
 	if status != "":
 		line += "  " + status
 	return {

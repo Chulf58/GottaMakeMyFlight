@@ -140,6 +140,9 @@ var blocking_object_id: int = 0
 ## What a refusal names beyond its reason (the flights or gate it is about),
 ## or "". reason_text() adds it after the reason.
 var detail := ""
+## What detail names, as values BuildWords.detail() puts into a whole sentence at
+## display time (gate, plane, flights, inner). Empty when detail is shown as it came.
+var detail_args := {}
 ## Cells whose walkability or step links may have changed. Empty on refusal.
 var dirty_cells: Array[Vector2i] = []
 
@@ -156,12 +159,9 @@ static func refused(why: Reason, blocker := 0) -> BuildResult:
 	return result
 
 
-## The refusal in the player's words (BuildWords). REASON_TEXT stays English:
-## it is the key tests and the status line compare. detail is whatever the
-## refusing code put there, shown as it came: those producers (gate_desks,
-## spur_trial, door_placement, template_paste, room_move) still give English,
-## and translating each is board item c1b2a404 (T12). Only the reason is
-## translated until then.
+## The refusal in the player's words (BuildWords). REASON_TEXT and detail stay
+## English: they are the keys tests and the status line compare. The detail is
+## put into words here, at display time, from detail_args (BuildWords.detail()).
 func reason_text() -> String:
 	var text := ""
 	if reason == Reason.GATE_STAND_OVERLAP:
@@ -172,5 +172,7 @@ func reason_text() -> String:
 	elif REASON_TEXT[reason] != "":
 		text = BuildWords.refusal(REASON_TEXT[reason])
 	if detail != "":
-		return tr("{reason}: {detail}", "build refusal").format({"reason": text, "detail": detail})
+		return tr("{reason}: {detail}", "build refusal").format(
+			{"reason": text, "detail": BuildWords.detail(self)}
+		)
 	return text

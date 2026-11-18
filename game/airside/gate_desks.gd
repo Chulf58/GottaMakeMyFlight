@@ -631,6 +631,7 @@ func _placement_problem(on_grid: BuildGrid, edit: BuildEdit) -> BuildResult:
 		if gate != "" and link["gate"] == gate:
 			var refusal := BuildResult.refused(BuildResult.Reason.GATE_STAND_OVERLAP, link["desk"])
 			refusal.detail = "gate %s is too close" % gate
+			refusal.detail_args = {"gate": gate}
 			return refusal
 	return BuildResult.refused(BuildResult.Reason.GATE_STAND_OVERLAP)
 
@@ -647,6 +648,7 @@ func _route_problem(on_grid: BuildGrid, edit: BuildEdit) -> BuildResult:
 		if built.any(func(cell: Vector2i) -> bool: return under.has(cell)):
 			var refusal := BuildResult.refused(BuildResult.Reason.GATE_ROUTE)
 			refusal.detail = "gate %s, a %s plane" % [binding["gate"], booked]
+			refusal.detail_args = {"gate": binding["gate"], "plane": booked}
 			return refusal
 	return null
 
@@ -721,6 +723,7 @@ func _removal_problem(on_grid: BuildGrid, id: int) -> BuildResult:
 	if not busy.is_empty():
 		var refusal := BuildResult.refused(BuildResult.Reason.GATE_IN_USE)
 		refusal.detail = ", ".join(busy)
+		refusal.detail_args = {"flights": busy}
 		return refusal
 	if not (plan["stuck"] as Array).is_empty():
 		var refusal := BuildResult.refused(BuildResult.Reason.GATE_FLIGHTS_STUCK)
@@ -728,6 +731,7 @@ func _removal_problem(on_grid: BuildGrid, id: int) -> BuildResult:
 		for contract_id: String in plan["stuck"]:
 			stuck.append(FlightLabel.of(flights, false, contract_id))
 		refusal.detail = ", ".join(stuck)
+		refusal.detail_args = {"flights": stuck}
 		return refusal
 	return null
 

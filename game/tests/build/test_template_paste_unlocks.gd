@@ -14,6 +14,7 @@ var _mode: BuildMode
 var _finances: Finances
 var _paste: TemplatePaste
 var _unlocks: BuildUnlocks
+var _translation: Translation
 
 
 func before_test() -> void:
@@ -54,6 +55,9 @@ func before_test() -> void:
 
 
 func after_test() -> void:
+	if _translation != null:
+		TranslationServer.remove_translation(_translation)
+		_translation = null
 	_mode.free()
 	_finances.free()
 
@@ -86,6 +90,46 @@ func test_a_template_with_a_locked_room_and_pieces_is_refused_whole() -> void:
 	assert_dict(_mode.grid.to_snapshot()).is_equal(snapshot)
 	assert_int(_mode.wallet().balance).is_equal(balance)
 	assert_int(_mode.undo_history().size()).is_equal(0)
+
+
+## The refusal keeps English data (the tier in detail and its values in detail_args) and
+## says the whole sentence in the player's words only when it is shown.
+func test_a_locked_paste_stores_english_and_shows_the_translated_detail() -> void:
+	_translation = Translation.new()
+	_translation.locale = TranslationServer.get_locale()
+	_translation.add_plural_message(
+		"Unlocks at {stars} stars and {passengers} passenger",
+		PackedStringArray(["U1 {stars} {passengers}", "UN {stars} {passengers}"])
+	)
+	_translation.add_plural_message(
+		"{requirement} (now {stars} stars, {passengers} passenger)",
+		PackedStringArray(
+			["NOW {requirement} {stars}/{passengers}", "NOW {requirement} {stars}/{passengers}"]
+		)
+	)
+	TranslationServer.add_translation(_translation)
+	var result := _paste.check_at(BARE_CENTRE)
+	var shown := result.reason_text()
+	print("stored '%s' %s, shown '%s'" % [result.detail, result.detail_args, shown])
+	assert_int(result.reason).is_equal(BuildResult.Reason.LOCKED)
+	assert_str(result.detail).is_equal("Locked at tier 2")
+	assert_int(result.detail_args["tier"]).is_equal(2)
+	assert_str(shown).contains("NOW UN 2 50 ")
+	assert_str(shown).not_contains("Unlocks at")
+	assert_str(shown).not_contains(result.detail)
+
+
+func test_an_unwired_gate_refusal_stores_the_english_text_and_shows_the_translation() -> void:
+	_translation = Translation.new()
+	_translation.locale = TranslationServer.get_locale()
+	_translation.add_message(BuildUnlocks.NOT_WIRED_TEXT, "NW")
+	TranslationServer.add_translation(_translation)
+	_mode.unlocks = null
+	var result := _paste.check_at(BARE_CENTRE)
+	print("stored '%s' %s, shown '%s'" % [result.detail, result.detail_args, result.reason_text()])
+	assert_str(result.detail).is_equal(BuildUnlocks.NOT_WIRED_TEXT)
+	assert_bool(result.detail_args.has("unwired")).is_true()
+	assert_str(result.reason_text()).contains("NW").not_contains("not wired")
 
 
 ## The control: the same paste goes down and is charged once the tier is open.

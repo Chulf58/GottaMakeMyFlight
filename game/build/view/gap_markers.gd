@@ -10,7 +10,7 @@ extends Node3D
 ## MissMarkers.SIGN_PX on screen whatever the zoom, drawn over walls and roof
 ## (no depth test). It has no caption (decision calm-cozy-default-view-quiet-
 ## world-detail-on-ask-soft-statio, part 2): a wall gap is a build hint, so its
-## words (HOVER_TEXT) show in the HoverTarget tooltip only in build mode, through
+## words (hover_text()) show in the HoverTarget tooltip only in build mode, through
 ## hover_signs(). The sign itself stays outside build mode, small and soft.
 ## Redrawn when the grid's graph changes. View only.
 ##
@@ -22,7 +22,6 @@ const BAR_DEPTH := 0.16
 const BAR_FILL := Color(0.847, 0.263, 0.231)
 ## The sign's foot stands this high over the run's middle.
 const SIGN_LIFT_M := 1.6
-const HOVER_TEXT := "Wall gap · close the outer wall so the roof can go on"
 ## The camera's field of view and the view's height when there is no camera.
 const FALLBACK_FOV := 55.0
 const FALLBACK_HEIGHT := 1080.0
@@ -144,8 +143,13 @@ func bar_transforms() -> Array[Transform3D]:
 	return _bar_transforms.duplicate()
 
 
+## The words shown over a gap sign in build mode.
+static func hover_text() -> String:
+	return TranslationServer.translate("Wall gap · close the outer wall so the roof can go on")
+
+
 ## The HoverTarget provider contract: in build mode, every shown sign's screen
-## rect this frame (viewport px) and HOVER_TEXT; nothing outside build mode.
+## rect this frame (viewport px) and hover_text(); nothing outside build mode.
 func hover_signs() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	if not is_inside_tree() or not is_building():
@@ -164,7 +168,7 @@ func hover_signs() -> Array[Dictionary]:
 				{
 					"key": _run_keys[i],
 					"rect": Rect2(foot.x - side / 2.0, foot.y - side, side, side),
-					"text": HOVER_TEXT,
+					"text": hover_text(),
 				}
 			)
 		)

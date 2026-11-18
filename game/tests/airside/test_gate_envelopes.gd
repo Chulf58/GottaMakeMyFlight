@@ -142,6 +142,7 @@ func test_an_edit_under_the_booked_class_envelope_is_refused_naming_the_gate() -
 	)
 	assert_int(refused.reason).is_equal(BuildResult.Reason.GATE_ROUTE)
 	assert_str(refused.reason_text()).ends_with("gate A, a large plane")
+	assert_dict(refused.detail_args).is_equal({"gate": "A", "plane": "large"})
 	assert_int(wall.reason).is_equal(BuildResult.Reason.GATE_ROUTE)
 	assert_int(_grid.floor_at(LARGE_CELL)).is_equal(BuildGrid.FLOOR_NONE)
 	assert_str(_gates.max_class("A")).is_equal("large")

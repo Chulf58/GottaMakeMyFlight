@@ -26,7 +26,9 @@ static func mark(
 ## The status line while a rectangle is dragged: "Cafe 4 x 3", followed by
 ## the reason the grid would refuse it.
 static func drag_label(grid: BuildGrid, area: Rect2i, type: StringName) -> String:
-	var text := "%s %d x %d" % [RoomTypes.get_type(type).display_name, area.size.x, area.size.y]
+	var text := BuildWords.room_size(
+		DisplayWords.room_type(RoomTypes.get_type(type).display_name), area.size.x, area.size.y
+	)
 	var result := check(grid, area, type)
 	if not result.ok:
 		text += "  " + result.reason_text()
@@ -39,9 +41,12 @@ static func message(grid: BuildGrid, result: BuildResult, type: StringName) -> S
 	if not result.ok:
 		return result.reason_text()
 	var status := RoomRules.status(grid, result.room_id)
-	return "%s marked: %s" % [RoomTypes.get_type(type).display_name, status.headline()]
+	return BuildWords.room_marked(
+		DisplayWords.room_type(RoomTypes.get_type(type).display_name),
+		DisplayWords.ready() if status.ok else DisplayWords.notes(status)[0]
+	)
 
 
 ## The status line while a room tool waits for a drag.
 static func hint(type: StringName) -> String:
-	return "Drag to mark a %s" % RoomTypes.get_type(type).display_name.to_lower()
+	return BuildWords.room_hint(RoomTypes.get_type(type).display_name)
