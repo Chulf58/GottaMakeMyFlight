@@ -65,8 +65,8 @@ func test_a_need_badge_count_is_in_the_caption_font() -> void:
 	badge.free()
 
 
-## The gate caption and room label rectangles are measured in the font the
-## captions draw with.
+## The gate caption, room label, sign caption (MissMarkers) and speech bubble
+## (BubbleDeclutter) rectangles are measured in the font the captions draw with.
 func test_caption_layout_measures_in_the_caption_font() -> void:
 	var text := "Gate A\nup to large planes"
 	var font := CaptionFont.font()
@@ -86,6 +86,27 @@ func test_caption_layout_measures_in_the_caption_font() -> void:
 	print("room label rect %s, Nunito text %s" % [room, measured])
 	assert_float(room.size.x).is_equal_approx(measured.x + 8.0, 0.01)
 	assert_float(room.size.y).is_equal_approx(measured.y + 8.0, 0.01)
+	# A text whose width differs between the two fonts, so the check cannot pass
+	# on the engine fallback font.
+	var wide := "I'm hungry! Closed"
+	var nunito := font.get_string_size(
+		wide, HORIZONTAL_ALIGNMENT_LEFT, -1.0, MissMarkers.CAPTION_FONT
+	)
+	var fallback := ThemeDB.fallback_font.get_string_size(
+		wide, HORIZONTAL_ALIGNMENT_LEFT, -1.0, MissMarkers.CAPTION_FONT
+	)
+	assert_float(nunito.x).is_not_equal(fallback.x)
+	var sign := MissMarkers.caption_size(wide)
+	print("miss caption %s, Nunito %s, fallback %s" % [sign, nunito, fallback])
+	assert_float(sign.x).is_equal_approx(nunito.x + 2.0 * MissMarkers.CAPTION_OUTLINE, 0.01)
+	assert_float(sign.y).is_equal_approx(
+		font.get_height(MissMarkers.CAPTION_FONT) + 2.0 * MissMarkers.CAPTION_OUTLINE, 0.01
+	)
+	var bubble := BubbleDeclutter.rect_of(Vector2.ZERO, wide, 56, 14, 1.0)
+	var text56 := font.get_string_size(wide, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 56)
+	print("bubble rect %s, Nunito text %s" % [bubble, text56])
+	assert_float(bubble.size.x).is_equal_approx(text56.x + 28.0, 0.01)
+	assert_float(bubble.size.y).is_equal_approx(font.get_height(56) + 28.0, 0.01)
 
 
 ## The Label3D.new() sites in `source` whose label is never given a font: a
