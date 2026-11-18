@@ -2,9 +2,9 @@ class_name TestGateCardTranslation
 extends GdUnitTestSuite
 ## The gate desk card and the gate caption say the waiting line through
 ## GateDesks.waiting_text() and the walk line through GateWalk.card_line()
-## (Sol review of the merged translation lanes, finding 2). The build-mode
-## caption's own templates belong to board t7 (world captions), so only its
-## WAITING_TEXT caller is checked here. Fixture: the second shell past the west
+## (Sol review of the merged translation lanes, finding 2). The caption's own
+## lines are checked in test_world_caption_translation.gd (board t7); here only
+## its waiting line is. Fixture: the second shell past the west
 ## spur of test_spur_move_waiting_gate, where gate A waits for the taxiway works.
 
 const SITE := preload("res://build/terminal_site.tres")
@@ -69,7 +69,9 @@ func test_the_card_and_the_caption_say_the_waiting_line_in_the_players_words() -
 	print("waiting: card '%s' | caption '%s'" % [on_card, on_caption])
 	assert_str(on_card).is_equal(GateDesks.waiting_text())
 	assert_str(on_card).starts_with("[")
-	assert_str(on_caption).is_equal("Gate A\n%s" % GateDesks.waiting_text())
+	var caption_lines := on_caption.split("\n")
+	assert_str(_bare(caption_lines[0])).starts_with("Gate A")
+	assert_str(caption_lines[1]).is_equal(GateDesks.waiting_text())
 
 
 func test_the_card_walk_line_is_one_translated_template() -> void:

@@ -33,8 +33,8 @@ signal changed
 
 ## What minutes() answers for a gate no security exit reaches.
 const NO_ROUTE := -1
-## The build-mode caption's third line.
-const CAPTION_TEXT := "%d min walk"
+## The English msgid of the build-mode caption's third line.
+const CAPTION_TEXT := "{minutes} min walk"
 
 static var _words := Words.new()
 
@@ -69,7 +69,7 @@ static func card_line(minutes: int) -> String:
 
 ## The caption's third line for `minutes`, "" when there is no walk to show.
 static func caption_line(minutes: int) -> String:
-	return CAPTION_TEXT % minutes if minutes >= 0 else ""
+	return _words.caption_line(minutes) if minutes >= 0 else ""
 
 
 ## Game minutes (rounded up) of the longest walk from a security exit to gate
@@ -186,3 +186,6 @@ class Words:
 		if minutes < 0:
 			return tr("Walk from security: no route", "gate card")
 		return tr("Walk from security: {minutes} min", "gate card").format({"minutes": minutes})
+
+	func caption_line(minutes: int) -> String:
+		return tr("{minutes} min walk", "gate caption").format({"minutes": minutes})

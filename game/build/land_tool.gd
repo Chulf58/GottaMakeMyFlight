@@ -128,13 +128,15 @@ func hover(point: Variant) -> String:
 	var problem := land.buy_problem(plot, mode.wallet())
 	var cells := land.plot_cells(plot)
 	if problem == null or problem.reason == BuildResult.Reason.CANT_AFFORD:
-		_price.text = "Buy  %d" % land.next_price()
+		_price.text = tr("Buy  {price}", "land tool").format({"price": land.next_price()})
 		_price.position = _ground(
 			Vector2(cells.position) + Vector2(cells.size) / 2.0, LABEL_HEIGHT_M
 		)
 		_price.visible = true
 	if problem == null:
-		_hover_text = "Click to buy this %dx%d m plot" % [cells.size.x, cells.size.y]
+		_hover_text = tr("Click to buy this {width}x{height} m plot", "land tool").format(
+			{"width": cells.size.x, "height": cells.size.y}
+		)
 	else:
 		_hover_text = problem.reason_text()
 	if not land.is_owned(plot):
