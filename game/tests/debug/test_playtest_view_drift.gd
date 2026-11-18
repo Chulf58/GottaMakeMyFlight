@@ -2,10 +2,11 @@ class_name TestPlaytestViewDrift
 extends GdUnitTestSuite
 ## The view_drift anomaly measures a passenger's drawn node against where
 ## PassengerViews means to draw it (draw_position), not against the sim's
-## cell-based spot. A gate sitter in a middle chair is drawn 0.36 m beside
-## that spot (and its body's seat shift forward and up), so measuring from
-## the sim would raise a false alarm for a 1.2 m
-## drift away from it and miss a 1.6 m drift towards it.
+## cell-based spot. A gate sitter is drawn on its cell's own chair, so it sits
+## GateChairs.CHAIR_OFFSET_M (0 since the seat row has one chair per cell)
+## beside that spot, plus its body's seat shift forward and up: the step the
+## view adds. A 1.2 m drift away from the drawn spot raises nothing and a
+## 1.6 m drift towards it is raised (VIEW_DRIFT_M 1.5).
 
 const MAIN := "res://main/main.tscn"
 const HOOK := preload("res://debug/playtest_hook.gd")
@@ -81,10 +82,10 @@ func test_the_sitter_is_in_a_middle_chair_beside_the_sim_spot() -> void:
 	assert_int(_id).is_not_equal(0)
 	assert_int(_sim.get_passenger(_id).stage).is_equal(Passenger.Stage.SEATED)
 	print("chair step %s" % _chair_step())
-	# 0.36 m sideways to the chair, plus the body's own seat shift forward and up.
+	# The middle chair's sideways offset, plus the body's own seat shift forward and up.
 	var p := _sim.get_passenger(_id)
 	var shift := PassengerLooks.SEAT_SHIFT_M[PassengerLooks.body_of(p.id, p.variant)]
-	var step := Vector3(0.36, shift.y, shift.x).length()
+	var step := Vector3(GateChairs.CHAIR_OFFSET_M[1], shift.y, shift.x).length()
 	assert_float(_chair_step().length()).is_equal_approx(step, 0.001)
 	assert_dict(_drift_after_moving(Vector3.ZERO)).is_empty()
 
