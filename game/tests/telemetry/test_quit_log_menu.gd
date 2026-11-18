@@ -116,6 +116,19 @@ func test_a_folder_that_will_not_open_says_so_in_the_status_line() -> void:
 	assert_str(_menu.status_text()).contains("Could not open the log folder")
 
 
+func test_a_switch_that_cannot_start_the_log_goes_back_off_with_a_message() -> void:
+	var blocker := ProjectSettings.globalize_path(_dir)
+	DirAccess.make_dir_recursive_absolute(blocker.get_base_dir())
+	FileAccess.open(blocker, FileAccess.WRITE).close()
+	_menu.open()
+	_switch().button_pressed = true
+	assert_bool(_switch().button_pressed).is_false()
+	assert_bool(QuitLog.is_enabled(_settings)).is_false()
+	assert_bool(_recorder.is_recording()).is_false()
+	assert_str(_menu.status_text()).contains("Could not start the quit log")
+	DirAccess.remove_absolute(blocker)
+
+
 func test_a_menu_without_a_recorder_has_neither_control() -> void:
 	_menu.quit_log = null
 	_menu.open()

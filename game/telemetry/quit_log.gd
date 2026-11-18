@@ -42,6 +42,21 @@ static func note(type: String, data := {}) -> void:
 		current.add(type, data)
 
 
+## A passenger counted missed: the stage it was in and what held it up.
+static func note_missed(stage: int, stuck: int) -> void:
+	if current != null:
+		(
+			current
+			. add(
+				"passenger_missed",
+				{
+					"stage": Passenger.Stage.keys()[stage].to_lower(),
+					"cause": Passenger.Stuck.keys()[stuck].to_lower(),
+				}
+			)
+		)
+
+
 static func is_enabled(settings_path := SETTINGS_PATH) -> bool:
 	return HudFlagSetting.load_flag(settings_path, SETTING_KEY, false, WHO)
 
@@ -55,8 +70,8 @@ static func folder(dir := DIR) -> String:
 	return ProjectSettings.globalize_path(dir)
 
 
-## A session file stem: the local time, then the process id, so two games
-## started in the same second do not share a file.
+## A session file stem: the local time, then the process id. Two sessions that
+## share it are told apart by open().
 static func new_session_name() -> String:
 	var stamp := Time.get_datetime_string_from_system(false, true)
 	stamp = stamp.replace("-", "").replace(":", "").replace(" ", "-")
@@ -64,12 +79,15 @@ static func new_session_name() -> String:
 
 
 ## Makes the folder, keeps the newest sessions (KEEP_SESSIONS with this one),
-## opens <dir>/<session>.jsonl and makes this the current session. False, with
-## an error pushed by the writer, when the file cannot be opened.
+## opens <dir>/quitlog_<session>.jsonl and makes this the current session. A
+## session name already used in `dir` gets -2, -3 and so on, so a new session
+## never truncates an earlier file. False, with an error pushed by the writer,
+## when the file cannot be opened.
 func open(dir: String, session: String) -> bool:
 	QuitLogFile.prune_sessions(dir, KEEP_SESSIONS - 1)
 	_file.max_bytes = max_bytes
-	if not _file.open("%s/%s%s" % [dir, session, QuitLogFile.SUFFIX]):
+	var file_path := _free_path(dir, session)
+	if not _file.open(file_path):
 		return false
 	path = _file.path
 	_next = 0
@@ -99,6 +117,17 @@ func end(reason: String) -> void:
 	_file.close()
 	if current == self:
 		current = null
+
+
+func _free_path(dir: String, session: String) -> String:
+	var n := 1
+	var stem := session
+	var file_path := "%s/%s%s%s" % [dir, QuitLogFile.PREFIX, stem, QuitLogFile.SUFFIX]
+	while FileAccess.file_exists(file_path):
+		n += 1
+		stem = "%s-%d" % [session, n]
+		file_path = "%s/%s%s%s" % [dir, QuitLogFile.PREFIX, stem, QuitLogFile.SUFFIX]
+	return file_path
 
 
 func _record(type: String, data: Dictionary) -> Dictionary:

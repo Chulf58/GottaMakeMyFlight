@@ -30,6 +30,8 @@ func before_test() -> void:
 
 
 func after_test() -> void:
+	# Close the session before its file is removed: an open file cannot go.
+	_recorder.stop("test_end")
 	QuitLog.current = null
 	var absolute := ProjectSettings.globalize_path(_dir)
 	DirAccess.make_dir_recursive_absolute(absolute)
@@ -69,7 +71,7 @@ func test_with_the_switch_on_the_session_starts_with_the_seed() -> void:
 	var first: Dictionary = _records()[0]
 	assert_str(first["type"]).is_equal("session_start")
 	assert_str(first["data"]["seed"]).is_equal("777")
-	assert_bool(first["data"].has("version")).is_true()
+	assert_str(first["data"]["version"]).is_equal("0.1.0")
 
 
 func test_a_day_end_and_the_next_day_start_carry_day_and_money() -> void:
@@ -132,14 +134,15 @@ func test_switching_off_in_play_ends_the_session_and_stops_writing() -> void:
 	assert_bool(QuitLog.is_enabled(_settings)).is_false()
 
 
-func test_a_missed_passenger_logs_its_stage_and_cause_only() -> void:
-	var p := Passenger.new()
-	p.missed_stage = Passenger.Stage.CHECKIN_QUEUE
-	p.missed_stuck = Passenger.Stuck.NO_SECURITY
-	p.id = 9
-	assert_dict(QuitLogRecorder.miss_data(p)).is_equal(
-		{"stage": "checkin_queue", "cause": "no_security"}
-	)
+func test_a_log_that_cannot_open_leaves_the_switch_as_it_was() -> void:
+	var blocker := ProjectSettings.globalize_path(_dir)
+	DirAccess.make_dir_recursive_absolute(blocker.get_base_dir())
+	FileAccess.open(blocker, FileAccess.WRITE).close()
+	assert_bool(_recorder.set_enabled(true)).is_false()
+	assert_bool(_recorder.is_recording()).is_false()
+	assert_bool(QuitLog.is_enabled(_settings)).is_false()
+	assert_object(QuitLog.current).is_null()
+	DirAccess.remove_absolute(blocker)
 
 
 func test_a_build_edit_logs_its_kind_only() -> void:

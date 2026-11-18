@@ -110,7 +110,45 @@ func test_the_folder_is_an_absolute_path_for_the_open_button() -> void:
 	assert_str(QuitLog.folder()).ends_with("telemetry")
 
 
-func test_session_names_are_unique_per_process_and_safe_in_a_file_name() -> void:
+func test_session_names_are_safe_in_a_file_name_and_carry_the_process_id() -> void:
 	var name := QuitLog.new_session_name()
 	assert_str(name).contains("-%d" % OS.get_process_id())
 	assert_bool(name.contains(":") or name.contains(" ")).is_false()
+
+
+func test_two_sessions_with_one_name_both_survive_with_their_ends() -> void:
+	var first := QuitLog.new()
+	first.open(_dir, "same")
+	QuitLog.note("day_start", {"day": 1})
+	first.end("switched_off")
+	var second := QuitLog.new()
+	second.open(_dir, "same")
+	QuitLog.note("day_start", {"day": 2})
+	second.end("window_close")
+	assert_str(first.path).is_not_equal(second.path)
+	assert_str(first.path.get_file()).starts_with(QuitLogFile.PREFIX)
+	var a := _records(first.path)
+	var b := _records(second.path)
+	assert_int(int(a[0]["data"]["day"])).is_equal(1)
+	assert_str(a.back()["data"]["reason"]).is_equal("switched_off")
+	assert_int(int(b[0]["data"]["day"])).is_equal(2)
+	assert_str(b.back()["data"]["reason"]).is_equal("window_close")
+
+
+func test_opening_leaves_an_unrelated_jsonl_in_the_folder_alone() -> void:
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(_dir))
+	var own := FileAccess.open(
+		"%s/testers_notes.jsonl" % ProjectSettings.globalize_path(_dir), FileAccess.WRITE
+	)
+	own.store_line("{}")
+	own.close()
+	for i in QuitLog.KEEP_SESSIONS + 2:
+		var old := QuitLog.new()
+		old.open(_dir, "n%02d" % i)
+		old.end("window_close")
+	(
+		assert_bool(
+			FileAccess.file_exists("%s/testers_notes.jsonl" % ProjectSettings.globalize_path(_dir))
+		)
+		. is_true()
+	)

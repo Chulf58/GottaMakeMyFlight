@@ -477,10 +477,9 @@ script = ExtResource("52_ownedpaving")
 site = NodePath("../Airside/Terminal")
 build_mode = NodePath("../BuildMode")
 
-[node name="QuitLogRecorder" type="Node" parent="." node_paths=PackedStringArray("clock", "finances", "rating", "passengers", "build_mode")]
+[node name="QuitLogRecorder" type="Node" parent="." node_paths=PackedStringArray("clock", "finances", "rating", "build_mode")]
 script = ExtResource("53_quitlog")
 clock = NodePath("../SimClock")
 finances = NodePath("../Finances")
 rating = NodePath("../AirportRating")
-passengers = NodePath("../PassengerSim")
 build_mode = NodePath("../BuildMode")

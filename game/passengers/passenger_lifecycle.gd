@@ -142,6 +142,7 @@ static func finish(sim: PassengerSim, p: Passenger, made: bool) -> void:
 	else:
 		sim._missed += 1
 		result["missed"] += 1
+		QuitLog.note_missed(p.missed_stage, p.missed_stuck)
 		var cause := Vector2i(p.missed_stage, p.missed_stuck)
 		result["causes"][cause] = int(result["causes"].get(cause, 0)) + 1
 		p.mood = 0
@@ -165,6 +166,7 @@ static func _count_line_miss(sim: PassengerSim, flight_id: String) -> void:
 	)
 	sim._missed += 1
 	result["missed"] += 1
+	QuitLog.note_missed(Passenger.Stage.SPAWNED, Passenger.Stuck.QUEUE_FULL)
 	var cause := Vector2i(Passenger.Stage.SPAWNED, Passenger.Stuck.QUEUE_FULL)
 	result["causes"][cause] = int(result["causes"].get(cause, 0)) + 1
 	sim.flight_results[flight_id] = result

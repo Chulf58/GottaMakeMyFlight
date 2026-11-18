@@ -424,6 +424,7 @@ func refresh() -> void:
 	_drop_retired_selection()
 	# The card always shows the latest flight to close, replacing an open one.
 	if not _unreported.is_empty():
+		_note_results(_unreported)
 		show_result_for(_unreported.back())
 		_unreported.clear()
 	_time_label.text = time_text()
@@ -564,13 +565,21 @@ func press_debug_spawn() -> void:
 ## fates, replacing the one up; its full text goes in the alerts history.
 func show_result_for(flight_id: String) -> void:
 	var card := FlightResultPanel.new()
-	var summary := _result_summary(flight_id)
-	QuitLog.note("flight_result", {"made": summary["made"], "missed": summary["missed"]})
-	card.show_result(summary)
+	card.show_result(_result_summary(flight_id))
 	card.dismissed.connect(dismiss_result)
 	var lines := card.result_text().split("\n")
 	var detail := "\n".join(lines.slice(1))
 	_alerts.post_notice(RESULT_KEY, card, FlightResultPanel.SHOW_SECONDS, lines[0], detail)
+
+
+## Every flight that closed since the last refresh goes in the quit log, not
+## only the one whose card is shown.
+func _note_results(flight_ids: Array[String]) -> void:
+	if QuitLog.current == null:
+		return
+	for flight_id in flight_ids:
+		var summary := FlightResult.summarize(sim, flight_id)
+		QuitLog.note("flight_result", {"made": summary["made"], "missed": summary["missed"]})
 
 
 ## The flight's FlightResult summary, titled with its contract's name.

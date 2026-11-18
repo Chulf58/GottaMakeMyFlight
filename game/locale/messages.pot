@@ -5855,3 +5855,7 @@ msgstr ""
 #: ui/game_menu.gd
 msgid "Could not open the log folder: {path}"
 msgstr ""
+
+#: ui/game_menu.gd
+msgid "Could not start the quit log in {path}"
+msgstr ""

@@ -74,21 +74,47 @@ func test_nothing_is_written_while_no_file_is_open() -> void:
 
 func test_the_newest_sessions_stay_and_other_files_are_left() -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(_dir))
-	for name in ["a", "b", "c", "d"]:
-		var file := FileAccess.open(
-			"%s/%s.jsonl" % [ProjectSettings.globalize_path(_dir), name], FileAccess.WRITE
-		)
-		file.store_line("{}")
-		file.close()
-	var other := FileAccess.open(
-		"%s/notes.txt" % ProjectSettings.globalize_path(_dir), FileAccess.WRITE
-	)
-	other.store_line("keep me")
-	other.close()
+	for name in ["quitlog_a.jsonl", "quitlog_b.jsonl", "quitlog_c.jsonl", "quitlog_d.jsonl"]:
+		_touch(name)
+	_touch("testers_own.jsonl")
+	_touch("notes.txt")
 	var gone := QuitLogFile.prune_sessions(_dir, 2)
 	var left := DirAccess.get_files_at(ProjectSettings.globalize_path(_dir))
 	assert_int(gone).is_equal(2)
-	assert_array(Array(left)).contains_exactly_in_any_order(["c.jsonl", "d.jsonl", "notes.txt"])
+	assert_array(Array(left)).contains_exactly_in_any_order(
+		["quitlog_c.jsonl", "quitlog_d.jsonl", "testers_own.jsonl", "notes.txt"]
+	)
+
+
+func test_an_older_jsonl_that_is_not_ours_survives_pruning_to_zero() -> void:
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(_dir))
+	_touch("older_tester_file.jsonl")
+	_touch("quitlog_a.jsonl")
+	QuitLogFile.prune_sessions(_dir, 0)
+	var left := DirAccess.get_files_at(ProjectSettings.globalize_path(_dir))
+	assert_array(Array(left)).is_equal(["older_tester_file.jsonl"])
+
+
+func test_a_write_that_fails_is_reported_and_stops_the_file() -> void:
+	var path := ProjectSettings.globalize_path("%s/readonly.jsonl" % _dir)
+	DirAccess.make_dir_recursive_absolute(path.get_base_dir())
+	FileAccess.open(path, FileAccess.WRITE).close()
+	var file := QuitLogFile.new()
+	file.use(FileAccess.open(path, FileAccess.READ), path)
+	assert_int(file.put({"a": 1})).is_equal(QuitLogFile.Put.FAILED)
+	assert_bool(file.failed).is_true()
+	assert_int(file.put({"a": 2})).is_equal(QuitLogFile.Put.DROPPED)
+	file.put_tail({"a": 3})
+	file.close()
+	assert_int(FileAccess.get_file_as_bytes(path).size()).is_equal(0)
+
+
+func _touch(name: String) -> void:
+	var file := FileAccess.open(
+		"%s/%s" % [ProjectSettings.globalize_path(_dir), name], FileAccess.WRITE
+	)
+	file.store_line("{}")
+	file.close()
 
 
 func test_pruning_a_folder_that_is_not_there_removes_nothing() -> void:

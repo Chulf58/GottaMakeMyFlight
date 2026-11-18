@@ -334,8 +334,12 @@ func _add_quit_log_controls() -> void:
 
 
 func _on_quit_log_toggled(on: bool) -> void:
-	if quit_log != null:
-		quit_log.set_enabled(on)
+	if quit_log == null or quit_log.set_enabled(on):
+		return
+	# The file would not open: the switch goes back off and the line says why.
+	var switch: CheckButton = _settings_page.get_node("QuitLog")
+	switch.set_pressed_no_signal(false)
+	_set_status(tr("Could not start the quit log in {path}").format({"path": quit_log.log_dir}))
 
 
 ## Opens the quit log folder in the system's file browser, making it first so a
