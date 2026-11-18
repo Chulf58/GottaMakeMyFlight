@@ -625,11 +625,17 @@ func _runway_problem(data: Dictionary, staged: Dictionary) -> String:
 
 ## The rating (RatingSnapshot.load()) at the saved clock's calendar epoch.
 func _stage_rating(data: Dictionary, staged: Dictionary) -> String:
-	var loaded := RatingSnapshot.load(data, staged["clock"].epoch)
+	var loaded := RatingSnapshot.load(data, _staged_epoch(staged))
 	if loaded.has("error"):
 		return str(loaded["error"])
 	staged["rating"] = loaded
 	return ""
+
+
+## The calendar epoch of the staged clock, or 0 when a unit test stages a part
+## on its own without a clock part.
+static func _staged_epoch(staged: Dictionary) -> int:
+	return SimClock.epoch_of(staged.get("clock") as SimClock)
 
 
 ## The calendar is held exactly while the airport is closed, and once it is
@@ -694,7 +700,7 @@ func _stage_flights(data: Dictionary, staged: Dictionary) -> String:
 	var gate_set := flights.gate_ids()
 	if staged.has("gates"):
 		gate_set = _letters(staged["gates"])
-	var loaded := FlightSnapshot.load(data, gate_set, staged["clock"].epoch)
+	var loaded := FlightSnapshot.load(data, gate_set, _staged_epoch(staged))
 	if loaded.has("error"):
 		return str(loaded["error"])
 	var planner := _staged_flight_sim(staged)
@@ -731,7 +737,7 @@ func _stage_apron(data: Dictionary, staged: Dictionary) -> String:
 ## gate desks, the live sim's sources.
 func _staged_flight_sim(staged: Dictionary) -> FlightSim:
 	var sim := FlightSim.new()
-	sim.epoch = staged["clock"].epoch
+	sim.epoch = _staged_epoch(staged)
 	if staged.has("runway"):
 		sim.runway = staged["runway"]
 	if not staged.has("gates"):
@@ -819,7 +825,7 @@ func _checked_booking_overrides(data: Dictionary, staged: Dictionary) -> Diction
 	if own:
 		held = _staged_flight_sim(staged)
 		held.from_snapshot(staged["flights_data"])
-	var result := BookingOverrides.checked(data, held, staged["clock"].epoch)
+	var result := BookingOverrides.checked(data, held, _staged_epoch(staged))
 	if own:
 		held.free()
 	return result
