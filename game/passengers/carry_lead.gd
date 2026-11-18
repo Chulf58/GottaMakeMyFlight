@@ -424,7 +424,9 @@ static func carry_t(k: float, bag: Dictionary) -> float:
 ## its target (CarryArm.reach_weight), "targets_at": [right, left] the carry
 ## progress each hand aims at (-1 the start, 2 the end)}. `let_go` and
 ## `reach` as for span(); into a held end the hand eases into its carry pose
-## from `ease_in` of the carry.
+## from `ease_in` of the carry. `first` the hand that holds the bag to half way
+## of a roller handover (RollerHandover, the other hand `lead`), -1 for none:
+## off a resting end it is that hand that reaches for the bag.
 static func phase(
 	k: float,
 	from: End,
@@ -433,7 +435,8 @@ static func phase(
 	lead: int,
 	let_go := REACH_SHARE,
 	reach := REACH_SHARE,
-	ease_in := 0.6
+	ease_in := 0.6,
+	first := -1
 ) -> Dictionary:
 	var s := span(from, to, let_go, reach)
 	var t := (k - s.x) / maxf(s.y - s.x, 0.0001)
@@ -441,27 +444,42 @@ static func phase(
 	var aims := [0.0, 0.0]
 	var holder := lead
 	var lead_w := 1.0
+	var swap := from == End.HELD and from_hand != lead
+	# The hand that holds the bag to half way and gives it to `lead` then.
+	var old := first if first >= 0 else (1 - lead if swap else -1)
 	if k < s.x:
 		holder = -1
-		lead_w = smoothstep(0.0, 1.0, k / s.x)
-		aims[lead] = -1.0
+		var w := smoothstep(0.0, 1.0, k / s.x)
+		if first >= 0:
+			weights[first] = w
+			aims[first] = -1.0
+			lead_w = 0.0
+		else:
+			lead_w = w
+			aims[lead] = -1.0
 	elif k > s.y:
 		holder = -1
 		lead_w = smoothstep(0.0, 1.0, (1.0 - k) / (1.0 - s.y))
 		aims[lead] = 2.0
 	else:
 		aims[lead] = t
-		var swap := from == End.HELD and from_hand != lead
 		if from == End.HELD:
 			# From the carry pose of the hand it starts in (or the new hand
 			# coming to it, by half way).
-			lead_w = smoothstep(0.0, 0.5 if swap else 0.4, t)
+			# A roller handover's other hand is on its grip by 0.4, settled
+			# before it takes the roller at half way.
+			lead_w = smoothstep(0.0, 0.4 if first >= 0 or old < 0 else 0.5, t)
+		elif old >= 0:
+			# The hand it ends in comes to it while the other holds it.
+			lead_w = smoothstep(0.0, 0.4, t)
 		if to == End.HELD:
 			# Into the carry pose of the hand it ends in.
 			lead_w *= 1.0 - smoothstep(ease_in, 1.0, t)
-		if swap:
-			var old := 1 - lead
+		if old >= 0:
 			weights[old] = 1.0 - smoothstep(0.5, 1.0, t)
+			if first >= 0 and from == End.HELD:
+				# A handover's first hand leaves its carry pose as a lone hand does.
+				weights[old] *= smoothstep(0.0, 0.4, t)
 			aims[old] = t
 			if t < 0.5:
 				holder = old
@@ -824,6 +842,11 @@ static func plan(
 	var from_hand: int = started[1]
 	var to_hand := hand_of(bag["home"])
 	var lead := lead_hand(from_end, to_end, from_hand, to_hand, body["hand"])
+	# A roller handed between its bar and its carry handle (RollerHandover):
+	# `first` holds it to half way, the other hand after.
+	var first: int = bag.get("handover", -1)
+	if first >= 0:
+		lead = 1 - first
 	var stall: bool = flags.get("in_stall", false)
 	var set_down := from_end == End.HELD and to_end == End.REST
 	# Set down from the hand in a toilet stall it is down and let go early
@@ -836,7 +859,7 @@ static func plan(
 		var rest: Vector3 = (want if off_back else start).origin
 		lead = back_lead(lead, rest, bag.get("start_body", frame), body["scale"])
 	var ease_in := BACK_EASE_IN if off_back else 0.6
-	var ph := phase(k, from_end, to_end, from_hand, lead, let_go, reach, ease_in)
+	var ph := phase(k, from_end, to_end, from_hand, lead, let_go, reach, ease_in, first)
 	var t: float = ph["t"]
 	if stall and set_down and k <= span(from_end, to_end, let_go).y:
 		# And the hand is on the bag's path at once: the body turns round to sit
@@ -875,6 +898,12 @@ static func plan(
 		anchor_from = bag["anchor_from"]
 	elif from_end == End.HELD and lifted_down:
 		anchor_from = bag["hung_at"]
+		if first >= 0:
+			# Handed over, the first hand keeps the bar to half way, on the rods
+			# as drawn now: a set-down that cut a pull-to-hand swap short starts
+			# with the rods still out, and held at the rods-in point the hand was
+			# 0.17 m off the bar (crossing probe --lane, seed 1106001, passenger 7).
+			anchor_from.z = loose.z
 	# Lying in a tray or on the floor a roller is taken (and left) by its carry
 	# handle on top, not by its bar down at the rod line (the forearm went
 	# through it, board item 5ed915b0); the hand slides to the bar as it lifts.
@@ -931,6 +960,7 @@ static func plan(
 		and to_end == End.HELD
 	)
 	var floor_case: bool = case_up_out and from_floor and not roller
+	var goal := want
 	var on_path: Transform3D
 	var shoulder_y := NAN
 	if off_back or on_back:
@@ -973,7 +1003,6 @@ static func plan(
 		# A bag picked up off a stall's floor rises, whatever its origin does (a case
 		# stood on its end has its origin higher than flat in the hand).
 		var lift := flags
-		var goal := want
 		if pull_swap:
 			goal = pull_swap_goal(bag["from"], want, frame, t, loose)
 		if stall and from_end == End.REST and to_end == End.HELD:
@@ -1009,6 +1038,16 @@ static func plan(
 				want.basis.get_rotation_quaternion(), w
 			)
 			on_path.basis = Basis(q).scaled(start.basis.get_scale().lerp(want.basis.get_scale(), w))
+	if first >= 0:
+		# Handed over in front of the body, between its two grips (RollerHandover.
+		# to_front()): taken where it hung or trailed, the free hand reached
+		# across the body and the forearms crossed, and short of the handle the
+		# roller jumped as that hand took it; to or from the pull it swings
+		# round the pulling side and stands upright at the handover.
+		on_path = RollerHandover.to_front(
+			on_path, start, goal, frame, t, bag, anchor_from, anchor_to
+		)
+		RollerHandover.adjust_weights(ph["weights"], bag, t, first, lead)
 	if case_up and from_end == End.REST and to_end == End.HELD:
 		# The palm on its top as it tips, world up of the case as path() turns it.
 		var palm_up := Vector3.UP * CarryOnProps.FRONT_PALM_M
@@ -1036,16 +1075,28 @@ static func plan(
 		palm = maxf(palm - t * end_palm * float(body["scale"]), 0.0)
 	if stall and roller and from_end == End.REST and to_end == End.HELD:
 		palm = stall_bar_palm(t)
+	var handed_off_tray: bool = first >= 0 and from_end == End.REST
+	if handed_off_tray:
+		# The hand lifting it out of a tray by its carry handle holds the palm
+		# over the handle (RollerHandover.TRAY_PALM_M).
+		palm = RollerHandover.TRAY_PALM_M
 	held_at += on_path.basis.inverse() * (Vector3.UP * palm)
 	# Changing hands, each hand holds a roller's bar at its own spot
 	# (swap_spots()); the bag is placed from the holder's.
 	var gave := 1 - lead
 	var swap := from_end == End.HELD and from_hand == gave
 	var spots := [Vector3.ZERO, Vector3.ZERO]
-	if swap and roller:
+	if swap and roller and first < 0:
 		# Its bar lies across the body at the handover (front_lean()).
 		var spot_from: Transform3D = Transform3D(front_lean()) if hand_swap else bag["from"]
 		spots = swap_spots(spot_from, gave, t)
+	# In a roller handover each hand holds its own grip throughout: `first` the
+	# one the move starts by, the other the one it ends by.
+	if first >= 0:
+		spots[first] = anchor_from - held_at
+		if handed_off_tray:
+			spots[first] += on_path.basis.inverse() * (Vector3.UP * palm)
+		spots[lead] = anchor_to - held_at
 	var targets := [Vector3.ZERO, Vector3.ZERO]
 	for hand in 2:
 		match float(ph["targets_at"][hand]):
@@ -1055,7 +1106,7 @@ static func plan(
 				targets[hand] = want * anchor_to
 			_:
 				targets[hand] = on_path * (held_at + (spots[hand] as Vector3))
-	if swap and ph["holder"] == lead:
+	if (swap or first >= 0) and ph["holder"] == lead:
 		var grip: Vector3 = held_at + spots[gave]
 		targets[gave] += swap_release(bag["kind"], grip, on_path, t)
 	if off_back or on_back:
@@ -1081,6 +1132,22 @@ static func plan(
 	var hips := CarryStoop.HIPS_ALL
 	if stall and to_end == End.REST:
 		keeps[lead] = 1.0
+		hips = STALL_HIPS
+	elif first >= 0 and (flags.get("from_tray", false) or flags.get("to_tray", false)):
+		# A roller handed over at a tray: the hand at the tray leans in to it,
+		# the back bent first (STALL_HIPS), as far as the reach needs at table
+		# height. Upright, the hand fell 0.3 m short of a lane tray and the
+		# roller jumped into it as it was let go (crossing probe --lane, seed
+		# 1106001, passenger 4, board a365cb0b G3).
+		# Lifted out of one, both hands lean in until the roller comes in toward
+		# the body (RollerHandover.TRAY_KEEP): it rises first and comes across
+		# late (path()), and with the lean faded at KEEP_T the hand holding it
+		# fell 0.15 m short and the roller jumped with it.
+		if flags.get("from_tray", false):
+			var keep := 1.0 - smoothstep(RollerHandover.TRAY_KEEP.x, RollerHandover.TRAY_KEEP.y, t)
+			keeps = [keep, keep]
+		else:
+			keeps[lead] = floor_keep(k, from_end, to_end, false, true, reach)
 		hips = STALL_HIPS
 	elif case_up and from_end == End.REST:
 		# Reaching down to a case's top to pick it up, the same: with the hips

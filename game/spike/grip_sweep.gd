@@ -13,6 +13,10 @@ extends RefCounted
 ## hard case's floor pick-up and a roller's put-in and pick-up; one windowed run
 ## samples a move on a handful of frames, which differ run to run (finding
 ## how-much-do-the-scanner-crossing-lane-probe-s-per-passenger).
+## With `--grip-plate=<name>` too, a roller's move to or from a tray or the
+## floor is plated close (the probe's _plate_close(): in frame, sight lines,
+## a detail plate) on the first step at or past each of PLATE_KS, into
+## tools/blender/out/<name>/ (board a365cb0b G3, the two-hand handover).
 ## Load with preload(); no class_name.
 
 enum State { IDLE, HELD }
@@ -21,10 +25,15 @@ const FloatCheck := preload("res://spike/carry_float_check.gd")
 const PlateSteps := preload("res://spike/carry_plate_steps.gd")
 const STEP_TICKS := 0.1
 const MAX_STEPS := 600
+const PLATE_KS: Array[float] = [0.3, 0.5, 0.7]
+const PLATE_OUT_REL := "res://../tools/blender/out/"
 
 ## The passengers to sweep (--grip-sweep=4,5,6), null before the arguments are
 ## read.
 static var _targets = null
+## The folder roller tray and floor moves are plated to (--grip-plate=), "" for
+## none.
+static var _plate_dir := ""
 ## The one being swept now.
 static var _target := -1
 static var _state := State.IDLE
@@ -41,7 +50,11 @@ static func scan(probe) -> bool:
 			if arg.begins_with("--grip-sweep="):
 				for id in arg.get_slice("=", 1).split(","):
 					_targets.append(int(id))
-		print("GRIP_SWEEP targets=%s" % [_targets])
+			if arg.begins_with("--grip-plate="):
+				var rel := PLATE_OUT_REL + arg.get_slice("=", 1)
+				_plate_dir = ProjectSettings.globalize_path(rel).simplify_path()
+				DirAccess.make_dir_recursive_absolute(_plate_dir)
+		print("GRIP_SWEEP targets=%s plates=%s" % [_targets, _plate_dir])
 	if _targets.is_empty():
 		return false
 	if _state == State.HELD:
@@ -89,6 +102,8 @@ static func _sweep(probe) -> void:
 	var clock: SimClock = probe._clock
 	var props: CarryOnProps = probe._views.carry_on_props()
 	var worst := {}
+	# The PLATE_KS each move has been plated at.
+	var plated := {}
 	var steps := 0
 	await probe._frames(1)
 	for _step in MAX_STEPS:
@@ -111,6 +126,7 @@ static func _sweep(probe) -> void:
 			if line[0] < INF and line[0] > was[0]:
 				was = [line[0], line[1], line[2]]
 			worst[key] = was
+			await _plate(probe, i, move, line[1], plated)
 		if not any:
 			break
 		PlateSteps.step_clock(clock, STEP_TICKS)
@@ -128,6 +144,37 @@ static func _sweep(probe) -> void:
 	_state = State.IDLE
 	clock.set_paused(false)
 	probe._plate_task = false
+
+
+## Plates bag `i` of the target (a roller in `move` to or from a tray or the
+## floor, at `k`) when --grip-plate= is given and `k` is at or past one of
+## PLATE_KS it has not been plated at (`plated`, by move).
+static func _plate(probe, i: int, move: String, k: float, plated: Dictionary) -> void:
+	var props: CarryOnProps = probe._views.carry_on_props()
+	if _plate_dir == "" or props.props_of(_target)["kinds"][i] != SecurityLooks.Kind.ROLLER:
+		return
+	if not ("tray" in move or "floor" in move):
+		return
+	var key := "%d %s" % [i, move]
+	var done: Array = plated.get_or_add(key, [])
+	for at: float in PLATE_KS:
+		if k < at or done.has(at):
+			continue
+		done.append(at)
+		var slug := move.replace(">", "-to-").replace(".", "")
+		var name := "g3_p%d_m%d_%s_k%03d" % [_target, _moves, slug, roundi(k * 100.0)]
+		var bag: Node3D = props.props_of(_target)["bags"][i]
+		var others: Array = probe._hide_others(_target)
+		var ok: bool = await probe._plate_close(_target, bag, name, _plate_dir)
+		for node: Node3D in others:
+			node.visible = true
+		print(
+			(
+				"GRIP_PLATE passenger=%d move=%s k=%.3f saved=%s file=%s.png"
+				% [_target, move, k, ok, name]
+			)
+		)
+		return
 
 
 ## One step's line for bag `i` of the target: prints it and returns
@@ -153,7 +200,7 @@ static func measure(probe, body: Node3D, p: Passenger, i: int, move: String, dra
 			(
 				"GRIP_SWEEP passenger=%d bag=%d move=%s k=%.3f sim=%.2f holder=%d gap_m=%.3f"
 				+ " limit_m=%.3f state=%s hand_gap_m=%.3f grip_local=%s anchor=%s"
-				+ " hand_to_target_m=%.3f stage=%d phase=%d"
+				+ " hand_to_target_m=%.3f stage=%d phase=%d bag_at=%s"
 			)
 			% [
 				_target,
@@ -171,6 +218,7 @@ static func measure(probe, body: Node3D, p: Passenger, i: int, move: String, dra
 				target_gap,
 				p.stage,
 				p.security_phase,
+				bag.global_position.snapped(Vector3.ONE * 0.001),
 			]
 		)
 	)
