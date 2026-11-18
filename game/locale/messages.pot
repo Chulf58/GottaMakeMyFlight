@@ -5275,3 +5275,8 @@ msgstr ""
 #: build/unlock_families.gd
 msgid "Also new: {pieces}."
 msgstr ""
+
+#: build/unlock_families.gd
+msgctxt "list separator"
+msgid ", "
+msgstr ""

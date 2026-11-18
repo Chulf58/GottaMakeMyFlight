@@ -5,6 +5,15 @@ extends GdUnitTestSuite
 ## opened tiers are grouped into food, security, baggage, comfort, runway and
 ## other, and only the families a tier brings get a line.
 
+var _translation: Translation
+
+
+func after_test() -> void:
+	PseudoLocale.disable()
+	if _translation != null:
+		TranslationServer.remove_translation(_translation)
+		_translation = null
+
 
 func _families(first: int, last: int) -> Array:
 	return UnlockFamilies.grouped(range(first, last + 1)).keys()
@@ -73,13 +82,27 @@ func test_the_lines_read_as_whole_english_sentences() -> void:
 func test_every_line_and_each_piece_name_comes_through_tr() -> void:
 	PseudoLocale.enable(0.4)
 	var lines := UnlockFamilies.lines([2])
-	PseudoLocale.disable()
 	for line in lines:
 		print("line: %s" % line)
 		assert_str(line).starts_with("[")
 	# The pieces are named through the catalog: each one is bracketed on its own.
 	assert_int(lines[5].count("[")).is_greater(2)
 	assert_str(lines[5]).contains("Kiosk")
+
+
+## The names are joined with a translatable separator, so a language that
+## separates a list differently reaches the line (board T9, T13 owns list grammar).
+func test_the_piece_separator_is_translated() -> void:
+	var english := UnlockFamilies.lines([2])[5]
+	assert_str(english).contains(", ")
+	_translation = Translation.new()
+	_translation.locale = TranslationServer.get_locale()
+	_translation.add_message(", ", " SEP ", "list separator")
+	TranslationServer.add_translation(_translation)
+	var line := UnlockFamilies.lines([2])[5]
+	print("english: %s | translated: %s" % [english, line])
+	assert_str(line).contains(" SEP ")
+	assert_str(line).not_contains(", ")
 
 
 func test_the_tools_of_the_start_tier_and_an_out_of_range_tier_bring_nothing() -> void:

@@ -17,6 +17,8 @@ const OTHER := &"other"
 const ORDER := [FOOD, SECURITY, BAGGAGE, COMFORT, RUNWAY, OTHER]
 ## How many pieces the "other" line names.
 const OTHER_NAMES := 5
+## The context of the list separator, shared with every other list of names.
+const LIST_SEPARATOR := "list separator"
 const FAMILY_OF := {
 	BuildMode.Tool.CAFE_ROOM: FOOD,
 	BuildMode.Tool.COUNTER: FOOD,
@@ -94,7 +96,7 @@ static func lines(tiers: Array) -> Array[String]:
 	for family: StringName in groups:
 		var pieces := ""
 		if family == OTHER:
-			pieces = ", ".join(_names(groups[family]))
+			pieces = TranslationServer.translate(", ", LIST_SEPARATOR).join(_names(groups[family]))
 		out.append(words.line(family, pieces))
 	return out
 

@@ -27,6 +27,11 @@ const BOX_SIZE := Vector2(1060.0, 300.0)
 ## At 1080p its top then sits 120 px below the screen top, so the nameplate
 ## above it stays clear of the edge.
 const MAX_BOX_H := 640.0
+## The least the group scales to on a small screen; the box height is capped so
+## that, at this scale, the box and its nameplate still fit above the build bar.
+const MIN_SCALE := 0.4
+## Space kept above the nameplate and beside the group on a small screen.
+const EDGE_GAP := 20.0
 const PORTRAIT_SIZE := 520.0
 ## How much of the portrait's width lies over the box's left edge.
 const PORTRAIT_OVERLAP := 210.0
@@ -128,7 +133,7 @@ func _init(title_text := "", body_text := "", box_height := BOX_SIZE.y, offer :=
 
 
 func _ready() -> void:
-	get_viewport().size_changed.connect(_place)
+	get_viewport().size_changed.connect(_refit)
 	_fit_box()
 	_place()
 
@@ -286,12 +291,28 @@ func _intro_body() -> String:
 
 
 ## Sizes the box to its body text: never below the caller's height, never above
-## MAX_BOX_H. Called once the dialogue is in the tree, where the body has its
-## theme font and its text is translated.
+## the cap from _max_box_height. Called once the dialogue is in the tree, where
+## the body has its theme font and its text is translated.
 func _fit_box() -> void:
 	_body.size.x = BOX_SIZE.x - TEXT_LEFT - BODY_RIGHT
 	var wanted := _body.get_minimum_size().y + BODY_TOP + BODY_BOTTOM
-	_set_box_height(clampf(wanted, _box_height, maxf(_box_height, MAX_BOX_H)))
+	var cap := _max_box_height()
+	_set_box_height(clampf(wanted, minf(_box_height, cap), cap))
+
+
+## The tallest the box may be: MAX_BOX_H, or less where the viewport is short.
+## The room above the build bar, less EDGE_GAP, must hold the box and its
+## nameplate at MIN_SCALE, or _place would push the nameplate off the top.
+func _max_box_height() -> float:
+	var screen_h := get_viewport_rect().size.y if is_inside_tree() else 1080.0
+	var room := (screen_h - BOX_BOTTOM - EDGE_GAP) / MIN_SCALE - NAMEPLATE_RISE
+	return clampf(room, BODY_TOP + BODY_BOTTOM + 60.0, MAX_BOX_H)
+
+
+## A resized viewport changes the cap, so the box is fitted again, then placed.
+func _refit() -> void:
+	_fit_box()
+	_place()
 
 
 ## The box grows upward from its fixed bottom edge; the nameplate rides on its
@@ -346,8 +367,8 @@ func _build_nameplate() -> void:
 func _place() -> void:
 	var screen := get_viewport_rect().size if is_inside_tree() else Vector2(1920.0, 1080.0)
 	var tall := maxf(PORTRAIT_SIZE, _box.size.y + NAMEPLATE_RISE)
-	var fit := minf((screen.x - 32.0) / GROUP_W, (screen.y - BOX_BOTTOM - 20.0) / tall)
-	var group_scale := clampf(fit, 0.4, 1.0)
+	var fit := minf((screen.x - 32.0) / GROUP_W, (screen.y - BOX_BOTTOM - EDGE_GAP) / tall)
+	var group_scale := clampf(fit, MIN_SCALE, 1.0)
 	_group.scale = Vector2.ONE * group_scale
 	_group.position = Vector2(
 		roundf((screen.x - GROUP_W * group_scale) / 2.0),

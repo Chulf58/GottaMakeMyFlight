@@ -105,3 +105,28 @@ func test_the_tallest_box_and_its_nameplate_stay_on_the_screen() -> void:
 		var bottom := float(screen_size.y) - IntroDialogue.BOX_BOTTOM
 		assert_float(_rect(dialog, "box").end.y).is_less_equal(bottom + 0.5)
 		dialog.free()
+
+
+## The project stretches at content scale 1.25, so a 1280x720 window is a
+## 1024x576 viewport to the dialog (project.godot). The box is capped by the room
+## above the build bar so the group scale stays at its floor and the nameplate
+## stays on the screen.
+func test_a_small_logical_viewport_caps_the_box_and_scrolls_the_body() -> void:
+	_port.size = Vector2i(1024, 576)
+	var dialog := await _open(40)
+	var screen := Rect2(Vector2.ZERO, Vector2(1024.0, 576.0))
+	var box := _rect(dialog, "box")
+	var body := _rect(dialog, "body")
+	for part in ["box", "nameplate", "body", "continue"]:
+		var rect := _rect(dialog, part)
+		var where := "%s %s on %s" % [part, rect, screen]
+		print(where)
+		assert_bool(screen.encloses(rect)).override_failure_message(where).is_true()
+	assert_bool(dialog.scrolls()).is_true()
+	assert_float(_rect(dialog, "text").size.y).is_greater(body.size.y)
+	assert_float(_rect(dialog, "nameplate").position.y).is_greater_equal(0.0)
+	assert_float(box.end.y).is_less_equal(576.0 - IntroDialogue.BOX_BOTTOM + 0.5)
+	var button := dialog.continue_button().get_global_rect()
+	assert_float(button.position.y).is_greater_equal(body.end.y)
+	assert_bool(box.encloses(button)).is_true()
+	dialog.free()
