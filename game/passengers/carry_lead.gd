@@ -860,15 +860,21 @@ static func plan(
 	# stay in, so it is held where the hand had it, BAR_PALM_M off the bar).
 	var roller: bool = bag["kind"] == SecurityLooks.Kind.ROLLER
 	var anchor_from: Vector3 = loose
-	# A roller lifted by its carry handle (carried as the hard case) is held
-	# there as it goes down into a tray or onto the floor, not by its bar: from
-	# the bar the hand went 25 cm up the rods as the move began, and the bag was
-	# placed by its bar at the hand still at the handle (board c2bb3bc0).
+	# A lifted roller set down into a tray or onto the floor is held where it
+	# hangs from the hand (by its grip bar, rods in), not by the bar as the rods
+	# run out: from there the hand went 25 cm up the rods as the move began
+	# (board c2bb3bc0). That point is stamped from the bag's geometry as the move
+	# starts ("hung_at", CarryPlace.hung_grip(); a returner's put-in keeps its
+	# kind's grip), not taken from the hand drawn last: a set-down that cut a
+	# pull-to-hand swap short took it from the hand mid-swap, so the plan followed
+	# the frames drawn (anti-patterns d655fcc9, 90062867).
 	var lifted_down: bool = (
 		roller and bag["carry_from"] == SecurityLooks.Carry.HAND and to_end == End.REST
 	)
-	if from_end == End.HELD and (not roller or flags.get("in_stall", false) or lifted_down):
+	if from_end == End.HELD and (not roller or flags.get("in_stall", false)):
 		anchor_from = bag["anchor_from"]
+	elif from_end == End.HELD and lifted_down:
+		anchor_from = bag.get("hung_at", CarryOnProps.ROLLER_HANDLE)
 	# Lying in a tray or on the floor a roller is taken (and left) by its carry
 	# handle on top, not by its bar down at the rod line (the forearm went
 	# through it, board item 5ed915b0); the hand slides to the bar as it lifts.

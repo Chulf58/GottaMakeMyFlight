@@ -173,6 +173,17 @@ static func place_bags(
 			bag["held_at"] = node.global_transform.affine_inverse() * props.grip_of(body, holder)
 
 
+## The point of a roller (`node`, at `scale_by`) in the hand as it hangs from it
+## by its grip bar, rods in (CarryHand.barred(), whose palm is BAR_PALM_M off the
+## bar), in the bag's own frame: from its geometry, never from a drawn hand.
+static func hung_grip(props: CarryOnProps, node: Node3D, scale_by: float) -> Vector3:
+	return Vector3(
+		0.0,
+		CarryOnProps.ROLLER_AXLE.y - CarryHand.BAR_PALM_M / scale_by,
+		CarryHand.bar_z(props, node, CarryOnProps.REACH_BUILT_M)
+	)
+
+
 ## A new move of `bag` (bag `i`) to `want`: it starts where the bag is, held in
 ## the passenger's frame (so a bag picked up while walking stays ahead of the
 ## legs), or fixed in the world when it starts on the floor or in a tray (the
@@ -184,7 +195,8 @@ static func _stamp(
 ) -> void:
 	var node: Node3D = bag["node"]
 	var kind: SecurityLooks.Kind = bag["kind"]
-	if bag.has("put_in") and progress_of(bag, props._now()) < 1.0:
+	var put_in: bool = bag.has("put_in") and progress_of(bag, props._now()) < 1.0
+	if put_in:
 		# A returner's put-in starts where the bag is carried (carry_transform(),
 		# in the same hand or on the same side), worked out now and not taken
 		# from the frame drawn last, so a new record (a view first drawn, or
@@ -213,6 +225,11 @@ static func _stamp(
 		# Where the hand held it at the start, in its own frame, and the hand
 		# still holding it when its last move had not ended (CarryLead.start_of).
 		bag["anchor_from"] = bag.get("held_at", CarryOnProps.grip_anchor(kind))
+		# A lifted roller set down (CarryLead.plan) is held where it hangs from the
+		# hand, worked out from its geometry and not taken from the hand drawn last
+		# (anti-pattern d655fcc9); a returner's put-in keeps its kind's grip.
+		var hangs := kind == SecurityLooks.Kind.ROLLER and not put_in
+		bag["hung_at"] = hung_grip(props, node, held["scale"]) if hangs else bag["anchor_from"]
 		bag["from_holder"] = -1 if bag.get("settled", true) else int(bag.get("held_by", -1))
 		bag["was"] = bag["home"]
 	var at: int = bag["was"]

@@ -120,3 +120,79 @@ func test_the_put_in_plan_starts_at_the_hung_handle_with_the_carry_pose_on() -> 
 	assert_vector(plan["anchor"]).is_equal_approx(CarryOnProps.ROLLER_HANDLE, Vector3.ONE * 1e-4)
 	assert_float(plan["weights"][0]).is_less(1.0)
 	assert_bool(CarryArmPose.leaving_hand(bag, SecurityLooks.Home.TRAY, 0, 0.01)).is_true()
+
+
+## An ordinary roller lifted from the pull into the hand at UNPACK, its set-down
+## into the tray stamped before that six-tick swap ends (Sol review of
+## b30e1fcc): the set-down is held by the point stamped from the bag's geometry
+## ("hung_at"), not the hand drawn last ("anchor_from"), so a view drawn on every
+## tick (the swap last drawn three ticks in) and one drawn late (last drawn on
+## the swap's first tick) stamp different held points, and the set-down plans
+## the same targets, place and anchor at every k. Control: the two stamped held
+## points are more than 1 cm apart (the swap's own plan, at those ticks).
+func test_a_set_down_cutting_a_pull_to_hand_swap_plans_the_same_whenever_drawn() -> void:
+	var frame := Transform3D(Basis(Vector3.UP, 0.4), Vector3(2.0, 0.0, -1.0))
+	var body := {
+		"hand": 0,
+		"grips": [frame * Vector3(-0.25, 0.8, 0.1), frame * Vector3(0.25, 0.8, 0.1)],
+		"shoulders_y": [1.4, 1.4],
+		"bar_z": 0.6,
+		"scale": 1.0,
+		"strap_top": Vector3.ZERO,
+	}
+	var flags := {"in_stall": false, "hand": 0, "yaw": 0.4, "clear": 0.0}
+	var pulled := (
+		frame * RollerPull.pulled(Vector3(-0.25, 0.8, 0.1), Vector3(-0.3, 0.03, -0.6), 1.0)
+	)
+	var lifted := frame * Transform3D(Basis(), Vector3(-0.25, 0.35, 0.1))
+	var swap := {
+		"kind": SecurityLooks.Kind.ROLLER,
+		"home": SecurityLooks.Home.HAND * 4,
+		"carry": SecurityLooks.Carry.HAND,
+		"was": SecurityLooks.Home.HAND * 4,
+		"carry_from": SecurityLooks.Carry.PULL,
+		"from": frame.affine_inverse() * pulled,
+		"anchor_from": CarryOnProps.ROLLER_HANDLE,
+		"start_shoulder_y": 1.4,
+	}
+	var drawn := []
+	for ticks: float in [3.0, 1.0]:
+		var k := ticks / CarryOnProps.TRANSFER_TICKS
+		drawn.append(CarryLead.plan(swap, k, pulled, lifted, frame, flags, body)["anchor"])
+	var tray := frame * Transform3D(Basis(Vector3.RIGHT, -PI / 2.0), Vector3(-0.8, 0.75, 0.4))
+	# Stamped from the bag's geometry (CarryPlace.hung_grip()), the same for both.
+	var hung := Vector3(0.0, CarryOnProps.ROLLER_AXLE.y - CarryHand.BAR_PALM_M, 0.6)
+	var seen := []
+	for held: Vector3 in drawn:
+		var down := {
+			"kind": SecurityLooks.Kind.ROLLER,
+			"home": SecurityLooks.Home.TRAY * 4,
+			"carry": SecurityLooks.Carry.PULL,
+			"was": SecurityLooks.Home.HAND * 4,
+			"carry_from": SecurityLooks.Carry.HAND,
+			"anchor_from": held,
+			"hung_at": hung,
+			"from": frame.affine_inverse() * lifted,
+			"start_shoulder_y": 1.4,
+		}
+		var plans := []
+		for step in 21:
+			plans.append(CarryLead.plan(down, step / 20.0, lifted, tray, frame, flags, body))
+		seen.append(plans)
+	var apart := 0.0
+	for step in 21:
+		var every: Dictionary = seen[0][step]
+		var late: Dictionary = seen[1][step]
+		for hand in 2:
+			var at: Vector3 = every["targets"][hand]
+			apart = maxf(apart, at.distance_to(late["targets"][hand]))
+		apart = maxf(apart, (every["anchor"] as Vector3).distance_to(late["anchor"]))
+		apart = maxf(apart, every["xf"].origin.distance_to(late["xf"].origin))
+	print(
+		(
+			"held drawn every tick %s, drawn late %s; set-down plans apart by %.5f m"
+			% [drawn[0], drawn[1], apart]
+		)
+	)
+	assert_float((drawn[0] as Vector3).distance_to(drawn[1])).is_greater(0.01)
+	assert_float(apart).is_less(0.0001)
