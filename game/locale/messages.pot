@@ -5327,11 +5327,6 @@ msgid "gate {gate}, a large plane"
 msgstr ""
 
 #: build/build_words.gd
-msgctxt "list separator"
-msgid ", "
-msgstr ""
-
-#: build/build_words.gd
 msgctxt "build status"
 msgid "Belt {count} cell"
 msgid_plural "Belt {count} cells"
@@ -5747,4 +5742,100 @@ msgstr ""
 
 #: build/unlock_families.gd
 msgid "Also new: {pieces}."
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "A flight is still due at this gate. Remove it after the flight leaves: {flights}"
+msgid_plural "A flight is still due at this gate. Remove it after the flight leaves: {flights}"
+msgstr[0] ""
+msgstr[1] ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "No other gate is free for these flights. Move them in Departures first: {flights}"
+msgid_plural "No other gate is free for these flights. Move them in Departures first: {flights}"
+msgstr[0] ""
+msgstr[1] ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "The side taxiway would have to move and leave a booked flight with no way to its gate: {flights}"
+msgid_plural "The side taxiway would have to move and leave a booked flight with no way to its gate: {flights}"
+msgstr[0] ""
+msgstr[1] ""
+
+#: flights/flight_label.gd
+msgctxt "flight label"
+msgid "the {time} flight"
+msgstr ""
+
+#: flights/flight_label.gd
+msgctxt "flight label"
+msgid "the {time} {airline} flight to {city}"
+msgstr ""
+
+#: flights/flight_label.gd
+msgctxt "flight label"
+msgid "the {time} {airline} flight to {city} on the runway"
+msgstr ""
+
+#: flights/flight_label.gd
+msgctxt "flight label"
+msgid "the {time} {airline} flight to {city} on the taxi lane"
+msgstr ""
+
+#: flights/flight_label.gd
+msgctxt "flight label"
+msgid "the {time} {airline} flight to {city} at gate {gate}"
+msgstr ""
+
+#: flights/flight_label.gd
+msgctxt "flight label"
+msgid "the {time} flight on the runway"
+msgstr ""
+
+#: flights/flight_label.gd
+msgctxt "flight label"
+msgid "the {time} flight on the taxi lane"
+msgstr ""
+
+#: flights/flight_label.gd
+msgctxt "flight label"
+msgid "the {time} flight at gate {gate}"
+msgstr ""
+
+#: flights/flight_label.gd
+msgctxt "flight label"
+msgid "another flight on the runway"
+msgstr ""
+
+#: flights/flight_label.gd
+msgctxt "flight label"
+msgid "another flight on the taxi lane"
+msgstr ""
+
+#: flights/flight_label.gd
+msgctxt "flight label"
+msgid "another flight at gate {gate}"
+msgstr ""
+
+#: ui/list_words.gd
+msgctxt "list of two"
+msgid "{first} and {second}"
+msgstr ""
+
+#: ui/list_words.gd
+msgctxt "list start"
+msgid "{first}, {rest}"
+msgstr ""
+
+#: ui/list_words.gd
+msgctxt "list middle"
+msgid "{item}, {rest}"
+msgstr ""
+
+#: ui/list_words.gd
+msgctxt "list end"
+msgid "{item} and {last}"
 msgstr ""

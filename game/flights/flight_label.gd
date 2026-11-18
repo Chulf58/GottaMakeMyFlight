@@ -48,23 +48,97 @@ static func parts(sim: FlightSim, is_flight: bool, id: String) -> PackedStringAr
 	return PackedStringArray([when, contract["destination"], contract["airline"]])
 
 
-## "the 20:30 Blue Fjord flight to Oslo", or "" when the flight or contract is
-## not known. A one-off flight has no airline or destination and reads "the 10:00 flight".
-static func of(sim: FlightSim, is_flight: bool, id: String) -> String:
+## {"time", "airline", "city"} naming the contract (or, when `is_flight`, the
+## live flight) `id`, the values FlightLabel.words() puts into one whole
+## sentence, or {} when it is not known. A one-off flight has "" airline and city.
+static func label_args(sim: FlightSim, is_flight: bool, id: String) -> Dictionary:
 	var label := parts(sim, is_flight, id)
 	if label.is_empty():
+		return {}
+	return {"time": label[0], "airline": label[2], "city": label[1]}
+
+
+## The English of a label_args() label, kept as data: "the 20:30 Blue Fjord
+## flight to Oslo", "the 10:00 flight" for a one-off flight, "" for {}.
+static func english(label: Dictionary) -> String:
+	if label.is_empty():
 		return ""
-	if label[2] == "" or label[1] == "":
-		return "the %s flight" % label[0]
-	return "the %s %s flight to %s" % [label[0], label[2], label[1]]
+	if label["airline"] == "" or label["city"] == "":
+		return "the %s flight" % label["time"]
+	return "the %s %s flight to %s" % [label["time"], label["airline"], label["city"]]
 
 
-## What a FlightSim clash `reason` ran into, in words: "the 20:30 Blue Fjord
-## flight to Oslo on the runway". An unknown flight reads "another flight".
-## "" when `reason` is not a clash.
+## The English of each label_args() label in `labels`, comma separated: the
+## stored detail of a refusal that names flights.
+static func english_list(labels: Array[Dictionary]) -> String:
+	var out := PackedStringArray()
+	for label in labels:
+		out.append(english(label))
+	return ", ".join(out)
+
+
+## "the 20:30 Blue Fjord flight to Oslo" in English, or "" when the flight or
+## contract is not known. A one-off flight reads "the 10:00 flight". English
+## is data; the player sees words().
+static func of(sim: FlightSim, is_flight: bool, id: String) -> String:
+	return english(label_args(sim, is_flight, id))
+
+
+## A label_args() label in the player's words, one whole msgid per shape, or ""
+## for {}.
+static func words(label: Dictionary) -> String:
+	if label.is_empty():
+		return ""
+	return Words.new().label(label)
+
+
+## What a FlightSim clash `reason` ran into, in the player's words: "the 20:30
+## Blue Fjord flight to Oslo on the runway", one whole msgid per shape. An
+## unknown flight reads "another flight". "" when `reason` is not a clash.
 static func clash_with(sim: FlightSim, reason: String) -> String:
 	var found := parse_clash(reason)
 	if found.is_empty():
 		return ""
-	var label := of(sim, found["is_flight"], found["id"])
-	return "%s %s" % [label if label != "" else "another flight", found["where"]]
+	return Words.new().clash(label_args(sim, found["is_flight"], found["id"]), found)
+
+
+## tr() is an instance method, so the static functions of this file ask a Words.
+class Words:
+	extends RefCounted
+
+	func label(named: Dictionary) -> String:
+		if named["airline"] == "" or named["city"] == "":
+			return tr("the {time} flight", "flight label").format(named)
+		return tr("the {time} {airline} flight to {city}", "flight label").format(named)
+
+	## `named` is a label_args() label, or {} for an unknown flight; `found` is
+	## parse_clash(), whose "where" picks the sentence.
+	func clash(named: Dictionary, found: Dictionary) -> String:
+		var shape := "full"
+		if named.is_empty():
+			shape = "unknown"
+		elif named["airline"] == "" or named["city"] == "":
+			shape = "one-off"
+		var text := ""
+		match [shape, found["where"]]:
+			["full", "on the runway"]:
+				text = tr("the {time} {airline} flight to {city} on the runway", "flight label")
+			["full", "on the taxi lane"]:
+				text = tr("the {time} {airline} flight to {city} on the taxi lane", "flight label")
+			["full", _]:
+				text = tr("the {time} {airline} flight to {city} at gate {gate}", "flight label")
+			["one-off", "on the runway"]:
+				text = tr("the {time} flight on the runway", "flight label")
+			["one-off", "on the taxi lane"]:
+				text = tr("the {time} flight on the taxi lane", "flight label")
+			["one-off", _]:
+				text = tr("the {time} flight at gate {gate}", "flight label")
+			[_, "on the runway"]:
+				text = tr("another flight on the runway", "flight label")
+			[_, "on the taxi lane"]:
+				text = tr("another flight on the taxi lane", "flight label")
+			_:
+				text = tr("another flight at gate {gate}", "flight label")
+		var values := named.duplicate()
+		values["gate"] = found["gate"]
+		return text.format(values)

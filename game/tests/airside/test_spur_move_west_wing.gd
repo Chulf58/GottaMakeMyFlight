@@ -169,7 +169,10 @@ func test_a_build_that_would_strand_a_flight_is_refused_naming_it() -> void:
 	assert_int(refused.reason).is_equal(BuildResult.Reason.SPUR_STRANDS)
 	assert_str(refused.detail).is_equal(words)
 	assert_str(refused.detail).contains("Gotta Air").contains("Oslo")
-	assert_array(refused.detail_args["flights"]).is_equal([words])
+	assert_array(refused.detail_args["flights"]).is_equal(
+		[FlightLabel.label_args(_flights, false, "C1")]
+	)
+	assert_str(refused.reason_text()).ends_with(": %s" % words)
 	assert_bool(_flights.spur_pending("W")).is_false()
 	# Control: with C1 ended and none of its days issued, the cell is built.
 	assert_bool(_flights.end_contract("C1")).is_true()
