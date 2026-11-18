@@ -183,6 +183,55 @@ func test_a_card_up_when_the_tray_opens_does_not_zoom() -> void:
 	assert_float(_camera.target_distance).is_equal_approx(closed, 0.01)
 
 
+## Board D3c: on the start view a card's shift stops where the start area's
+## south corners reach the tray stack's top, and the area stays inside the free
+## share's left and right edges. With no card the room is the free share as is.
+func test_a_card_never_pushes_the_start_area_under_the_tray() -> void:
+	var menu := _main.get_node("BuildMenu") as BuildMenu
+	var mode := _main.get_node("BuildMode") as BuildMode
+	var check_in := _category("Check-in")
+	_camera.frame_start_view(StartView.area_for(mode.grid), _room().free_fraction())
+	_room().mark_sent()
+	menu.press_category(check_in)
+	await _settle()
+	assert_bool(_camera.room.is_equal_approx(_room().free_fraction())).is_true()
+	var bare := _corners(mode.grid)
+	_spills()
+	_hud.refresh()
+	await _settle()
+	assert_array(_stack.card_keys()).is_equal([DirtyAlert.KEY])
+	var size := get_viewport().get_visible_rect().size
+	var tray_top := size.y - menu.stack_top()
+	var fit := _room().fit_fraction()
+	var with_card := _corners(mode.grid)
+	print(
+		(
+			"ALERT_CLAMP tray_top=%.1f fit=%s room=%s free=%s bare=%s card=%s"
+			% [tray_top, fit, _camera.room, _room().free_fraction(), bare, with_card]
+		)
+	)
+	# Control: the card still shifts the view, down from where it was.
+	assert_float(with_card[0].y).is_greater(bare[0].y + 1.0)
+	for at in with_card:
+		assert_float(at.y).is_less_equal(tray_top + 0.5)
+		assert_float(at.x).is_between(fit.position.x * size.x - 0.5, fit.end.x * size.x + 0.5)
+	menu.press_category(check_in)
+	await _settle()
+
+
+## The start area's corners on the screen, floor and wall tops, south first:
+## SW, SE (floor), SW, SE (wall tops), then the north ones.
+func _corners(grid: BuildGrid) -> Array[Vector2]:
+	var area := StartView.area_for(grid)
+	var eye := _camera.get_node("Camera3D") as Camera3D
+	var out: Array[Vector2] = []
+	for z in [area.end.y, area.position.y]:
+		for height in [0.0, _camera.frame_height]:
+			for x in [area.position.x, area.end.x]:
+				out.append(eye.unproject_position(Vector3(x, grid.origin.y + height, z)))
+	return out
+
+
 func _category(category_name: String) -> int:
 	var all := BuildMenu.categories()
 	for i in all.size():

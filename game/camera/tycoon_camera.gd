@@ -64,8 +64,9 @@ var angle_step := AngleStep.TOP_DOWN
 var settings_path := HudFlagSetting.PATH
 ## The share of the screen the open HUD panels leave free, as fractions of the
 ## viewport. The focus point sits at its middle, not the screen's, and easing
-## toward `set_room`'s target moves it there. The whole viewport when no panel
-## is open.
+## toward `set_room`'s target moves it there; on the start view a right-rail
+## card moves it only as far as keeps the start area clear of the tray stack
+## (_room_goal()). The whole viewport when no panel is open.
 var room := WHOLE_VIEW
 ## The distance the wheel is zooming toward; `distance` catches up to it.
 var target_distance := 80.0
@@ -351,12 +352,58 @@ func _step_distance(delta: float) -> void:
 
 
 func _step_room(delta: float) -> void:
-	if room.is_equal_approx(_room_target):
-		room = _room_target
+	var goal := _room_goal()
+	if room.is_equal_approx(goal):
+		room = goal
 		return
 	var blend := 1.0 - exp(-glide_rate * delta)
-	room = Rect2(
-		room.position.lerp(_room_target.position, blend), room.size.lerp(_room_target.size, blend)
+	room = Rect2(room.position.lerp(goal.position, blend), room.size.lerp(goal.size, blend))
+
+
+## Where the room eases to: `_room_target`, except on the start view. There a
+## right-rail card's shift (from `_fit_target` toward `_room_target`) goes only
+## as far as keeps the start area's floor above the bottom of `_fit_target`
+## (the tray stack's top while a tray is open) and the area inside its left and
+## right edges. The tray wins over the card: the card may overlap the far top
+## corner, since the player builds near the tray (conductor ruling, board D3c).
+func _room_goal() -> Rect2:
+	if not _at_home or not _home_area.has_area() or _room_target.is_equal_approx(_fit_target):
+		return _room_target
+	var half := _home_area.size * 0.5
+	if _clear_of_tray(half, _room_target):
+		return _room_target
+	var low := 0.0
+	var high := 1.0
+	for _i in 20:
+		var mid := (low + high) / 2.0
+		if _clear_of_tray(half, _shifted_room(mid)):
+			low = mid
+		else:
+			high = mid
+	return _shifted_room(low)
+
+
+## The room `share` of the way from `_fit_target` to `_room_target`.
+func _shifted_room(share: float) -> Rect2:
+	return Rect2(
+		_fit_target.position.lerp(_room_target.position, share),
+		_fit_target.size.lerp(_room_target.size, share)
+	)
+
+
+## True when the start area, `half` from its middle to its edges, seen at the
+## target distance with the focus at the middle of `aim`, has its floor and wall
+## tops at or above the bottom of `_fit_target` and inside its left and right
+## edges. Its top is not checked.
+func _clear_of_tray(half: Vector2, aim: Rect2) -> bool:
+	var extent: Variant = _extent(half, target_distance, aim)
+	if extent == null:
+		return false
+	var seen: Rect2 = extent
+	return (
+		seen.position.x >= _fit_target.position.x * 2.0 - 1.0
+		and seen.end.x <= _fit_target.end.x * 2.0 - 1.0
+		and seen.position.y >= 1.0 - _fit_target.end.y * 2.0
 	)
 
 
@@ -395,25 +442,47 @@ func _eye_offset(aim: Vector2, from_distance: float) -> Vector3:
 ## `free` (fractions of the viewport) from `from_distance` at the chosen angle,
 ## with the focus at the middle of `free`.
 func _fits(half: Vector2, from_distance: float, free: Rect2) -> bool:
+	var extent: Variant = _extent(half, from_distance, free)
+	if extent == null:
+		return false
+	var seen: Rect2 = extent
+	var low := Vector2(free.position.x * 2.0 - 1.0, 1.0 - free.end.y * 2.0)
+	var high := Vector2(free.end.x * 2.0 - 1.0, 1.0 - free.position.y * 2.0)
+	return (
+		seen.position.x >= low.x
+		and seen.end.x <= high.x
+		and seen.position.y >= low.y
+		and seen.end.y <= high.y
+	)
+
+
+## Where on the screen, in view units (see _aim_of), the ground rectangle
+## centred on the focus, `half` wide and deep from its middle to its edges, and
+## the wall tops above it, are seen from `from_distance` at the chosen angle
+## with the focus at the middle of `aim` (fractions of the viewport). Null when
+## a corner is behind the eye.
+func _extent(half: Vector2, from_distance: float, aim: Rect2) -> Variant:
 	var pitch := deg_to_rad(pitch_degrees())
 	var half_tan := tan(deg_to_rad(_camera.fov) / 2.0)
 	var forward := Vector3(0.0, -sin(pitch), -cos(pitch))
 	var up := Vector3(0.0, cos(pitch), -sin(pitch))
-	var eye := _eye_offset(_aim_of(free), from_distance)
-	var low := Vector2(free.position.x * 2.0 - 1.0, 1.0 - free.end.y * 2.0)
-	var high := Vector2(free.end.x * 2.0 - 1.0, 1.0 - free.position.y * 2.0)
+	var eye := _eye_offset(_aim_of(aim), from_distance)
+	var low := Vector2(INF, INF)
+	var high := Vector2(-INF, -INF)
 	for sign_x in [-1.0, 1.0]:
 		for sign_z in [-1.0, 1.0]:
 			for height in [0.0, frame_height]:
 				var to_corner := Vector3(sign_x * half.x, height, sign_z * half.y) - eye
 				var depth := to_corner.dot(forward)
 				if depth <= 0.0:
-					return false
-				var across := to_corner.x / (depth * half_tan * _aspect())
-				var vertical := to_corner.dot(up) / (depth * half_tan)
-				if across < low.x or across > high.x or vertical < low.y or vertical > high.y:
-					return false
-	return true
+					return null
+				var at := Vector2(
+					to_corner.x / (depth * half_tan * _aspect()),
+					to_corner.dot(up) / (depth * half_tan)
+				)
+				low = low.min(at)
+				high = high.max(at)
+	return Rect2(low, high - low)
 
 
 ## Width over height of the view: the viewport's, or 16:9 outside the tree.

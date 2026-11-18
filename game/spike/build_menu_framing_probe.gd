@@ -30,9 +30,10 @@ extends SceneTree
 ##     --rendering-driver vulkan --audio-driver Dummy \
 ##     --path game -s res://spike/build_menu_framing_probe.gd [-- --plates]
 ##
-## With `-- --plates` it runs only the two plates of the fix's limitation
-## instead: the Check-in tray opened (a) with the "Nobody on duty" card already
-## up and (b) with no card. For each it projects the corners of the start
+## With `-- --plates` it runs only the plates of the rail-shift clamp instead:
+## the Check-in tray opened (a) with the "Nobody on duty" card already up and
+## (b) with no card, and (c) the Gates tray (three cards) with the card up.
+## For each it projects the corners of the start
 ## area (StartView.area_for, the terminal the camera frames) at the floor and
 ## at the wall tops, prints their screen points against the tray stack, the
 ## card, the category bar and the banner, and saves a clean plate and a marked
@@ -406,23 +407,24 @@ func _still_after(kind: String) -> void:
 		_invalid("%s: the camera moved with no input" % kind)
 
 
-## The two plates of the fix's limitation: is the terminal's south edge behind
-## the tray stack when a card was up as the tray opened?
+## The plates of the rail-shift clamp: is the terminal's south edge behind the
+## tray stack when a card was up as the tray opened?
 func _plates() -> void:
 	var out_dir := ProjectSettings.globalize_path(OUT_REL).simplify_path()
 	DirAccess.make_dir_recursive_absolute(out_dir)
 	print("PROBE out_dir=", out_dir)
-	await _plate(out_dir, "a_tray_with_card", true)
-	await _plate(out_dir, "b_tray_no_card", false)
+	await _plate(out_dir, "a_tray_with_card", true, "Check-in")
+	await _plate(out_dir, "b_tray_no_card", false, "Check-in")
+	await _plate(out_dir, "c_gates_tray_with_card", true, "Gates")
 
 
-func _plate(out_dir: String, label: String, alert: bool) -> void:
+func _plate(out_dir: String, label: String, alert: bool, category_name: String) -> void:
 	_set_stage("plate_" + label)
 	await _reset()
 	if alert:
 		_raise_alert()
 		await _frames(SETTLE)
-	_menu.press_category(_category("Check-in"))
+	_menu.press_category(_category(category_name))
 	await _frames(PLATE_SETTLE)
 	await RenderingServer.frame_post_draw
 	var view := root.get_visible_rect().size
