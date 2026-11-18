@@ -82,10 +82,10 @@ func before() -> void:
 	_mode.apply_at(grid.cell_to_world(OFF_FLOOR_CELL))
 	_mode.set_tool(BuildMode.Tool.NONE)
 	# Staffed, the airport opens on the first tick and the starter's first
-	# flight starts ISSUE_LEAD_TICKS later; the session's ticks count from it.
+	# flight is issued at once (StarterSlot); the session's ticks count from it.
 	_run_to(1)
 	var starter := (_main.get_node("FlightSim") as FlightSim).contract_of(FlightSim.DEFAULT_ID)
-	var starts := FlightTimetable.starts_for(starter, 0)
+	var starts := FlightTimetable.starts_for(starter, 0, _clock.epoch)
 	_start = starts[FlightSim.State.SCHEDULED]
 	_late_tick = starts[FlightSim.State.DOORS_CLOSED] - LATE_SPAWN_BEFORE_DOORS_TICKS
 	_end_tick = starts[FlightSim.State.DEPARTED] + END_AFTER_DEPARTURE_TICKS
@@ -191,7 +191,10 @@ func test_the_late_passenger_is_logged_as_missed() -> void:
 func test_the_snapshot_reports_flight_passengers_grid_and_events() -> void:
 	assert_bool(_snapshot["attached"]).is_true()
 	assert_int(_snapshot["tick"]).is_equal(_end_tick)
-	assert_int(_start).is_equal(1 + 19 + FlightTimetable.ISSUE_LEAD_TICKS)
+	# Old expected: 2420 (1 + 19 + ISSUE_LEAD_TICKS). New: the opening tick plus
+	# StarterSlot.lead() less the plane's lead, 1 while the plane's is longer.
+	var lead := StarterSlot.lead(TaxiTimes.BASE) - FlightTimetable.departure_offset()
+	assert_int(_start).is_equal(1 + lead)
 	assert_str(_snapshot["flight_state"]).is_equal("DEPARTED")
 	# Settled passengers are retired 200 ticks after their outcome; the durable
 	# totals still count all of them and nobody is left in the list.

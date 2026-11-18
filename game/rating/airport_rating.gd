@@ -211,7 +211,7 @@ func note_contract_ended() -> bool:
 
 
 func current_day() -> int:
-	return GameCalendar.day_of(_tick)
+	return GameCalendar.day_of(_tick, SimClock.epoch_of(clock))
 
 
 ## What `day` holds: {"made", "missed", "mood_sum", "bags", "bags_missed"},
@@ -263,7 +263,7 @@ func to_snapshot() -> Dictionary:
 ## Pushes an error and returns false, leaving the rating unchanged, when
 ## anything is missing, mistyped or inconsistent.
 func from_snapshot(data: Dictionary) -> bool:
-	var loaded := RatingSnapshot.load(data)
+	var loaded := RatingSnapshot.load(data, SimClock.epoch_of(clock))
 	if loaded.has("error"):
 		push_error("AirportRating.from_snapshot: %s" % loaded["error"])
 		return false
@@ -321,7 +321,7 @@ func _record_finished_no_shows(tick: int) -> void:
 func _add_no_shows(close_tick: int, count: int) -> void:
 	if count <= 0:
 		return
-	var day := GameCalendar.day_of(close_tick)
+	var day := GameCalendar.day_of(close_tick, SimClock.epoch_of(clock))
 	if day <= current_day() - RatingFormula.WINDOW_DAYS:
 		push_error("AirportRating: no-shows of day %d are older than the window" % day)
 		return
@@ -412,7 +412,7 @@ func _roll_to(tick: int) -> void:
 
 
 func _close_day(day: int) -> void:
-	var last_tick := GameCalendar.day_start(day + 1) - 1
+	var last_tick := GameCalendar.day_start(day + 1, SimClock.epoch_of(clock)) - 1
 	_low_days = _low_days + 1 if _is_low(_window(day), last_tick) else 0
 
 

@@ -149,11 +149,11 @@ func _run() -> void:
 	await _frames(6)
 	await _plate("c_refusal_1920", _card_buttons())
 
-	var day1_tick := GameCalendar.day_start(1)
+	var day1_tick := GameCalendar.day_start(1, 0)
 	_clock.tick = day1_tick
 	_clock.ticked.emit(day1_tick)
 	await _frames(6)
-	print("PROBE day=%d open=%s" % [GameCalendar.day_of(_clock.tick), _panel.card_ids()])
+	print("PROBE day=%d open=%s" % [GameCalendar.day_of(_clock.tick, 0), _panel.card_ids()])
 	for offer in _desk.board.open_offers():
 		_expect(offer["day"] == 1, "d: an open offer from day %d survived midnight" % offer["day"])
 	_expect(_panel.card_ids().size() == OfferBoard.OFFERS_PER_DAY, "d: day 1 has its cards")

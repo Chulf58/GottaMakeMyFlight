@@ -110,8 +110,8 @@ func test_only_the_next_departing_row_shows_its_doors_close_time() -> void:
 func test_the_doors_time_moves_to_the_following_flight_once_the_doors_close() -> void:
 	_world.flights.accept_contract(_terms("GA100", 11 * 60, "Oslo", "Gotta Air"))
 	_world.run_to(21)
-	var starts := FlightTimetable.starts_for(_world.flights.contract_of("GA100"), 0)
-	var doors := GameCalendar.clock_text(starts[FlightSim.State.DOORS_CLOSED])
+	var starts := FlightTimetable.starts_for(_world.flights.contract_of("GA100"), 0, 0)
+	var doors := GameCalendar.clock_text(starts[FlightSim.State.DOORS_CLOSED], 0)
 	assert_array(_rows()).is_equal(
 		["06:04  GMF101  Doors closed", "11:00  Oslo  Gotta Air  doors close %s" % doors]
 	)

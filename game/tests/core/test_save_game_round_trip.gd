@@ -42,7 +42,7 @@ func before() -> void:
 	_control = SaveTestKit.boot(self, SEED)
 	_source = SaveTestKit.boot(self, SEED)
 	var start := (
-		GameCalendar.tick_at(0, FlightContract.LAST_DEPARTURE_MINUTE)
+		GameCalendar.tick_at(0, FlightContract.LAST_DEPARTURE_MINUTE, 0)
 		- FlightTimetable.ISSUE_LEAD_TICKS
 		- FlightTimetable.departure_offset()
 		- DEPARTURE_BEFORE_LAST_TICKS
@@ -51,6 +51,8 @@ func before() -> void:
 		var clock: SimClock = main.get_node("SimClock")
 		var data := clock.to_snapshot()
 		data["tick"] = str(start)
+		# A held calendar's epoch is the tick (SimClock.epoch_problem).
+		data["epoch"] = str(start)
 		assert_bool(clock.from_snapshot(data)).is_true()
 		SaveTestKit.start_airport(main)
 	var flights: FlightSim = _source.get_node("FlightSim")
@@ -83,7 +85,7 @@ func after() -> void:
 
 func _play_on() -> void:
 	var all := [_control, _source, _loaded]
-	var end := GameCalendar.day_start(1) + AFTER_ROLLOVER
+	var end := GameCalendar.day_start(1, 0) + AFTER_ROLLOVER
 	var first_bad := {_source: -1, _loaded: -1}
 	var payouts := {_control: 0, _loaded: 0}
 	var ticks := 0
@@ -110,7 +112,7 @@ func _play_on() -> void:
 	_run["payouts_control"] = payouts[_control]
 	_run["payouts_loaded"] = payouts[_loaded]
 	_run["made_after"] = _sim(_control).made_count()
-	_run["day"] = GameCalendar.day_of(_clock(_control).tick)
+	_run["day"] = GameCalendar.day_of(_clock(_control).tick, 0)
 	_run["day1_offers_control"] = _day_offers(_control, 1)
 	_run["day1_offers_loaded"] = _day_offers(_loaded, 1)
 
@@ -177,7 +179,7 @@ func test_the_compared_ticks_hold_a_fee_payout() -> void:
 
 
 func test_the_compared_ticks_hold_the_day_rollover_and_its_offer_draw() -> void:
-	assert_int(GameCalendar.day_of(_run["saved_tick"])).is_equal(0)
+	assert_int(GameCalendar.day_of(_run["saved_tick"], 0)).is_equal(0)
 	assert_int(_run["day"]).is_equal(1)
 	assert_int((_run["day1_offers_control"] as Array).size()).is_equal(OfferBoard.OFFERS_PER_DAY)
 	assert_array(_run["day1_offers_loaded"]).is_equal(_run["day1_offers_control"])

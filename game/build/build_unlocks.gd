@@ -351,7 +351,7 @@ func tier_args(needed: int) -> Dictionary:
 
 ## The first tick of a new game day runs the check.
 func on_tick(tick: int) -> void:
-	var day := GameCalendar.day_of(tick)
+	var day := GameCalendar.day_of(tick, SimClock.epoch_of(clock))
 	if day == _checked_day:
 		return
 	_checked_day = day

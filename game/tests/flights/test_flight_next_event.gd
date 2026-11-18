@@ -66,7 +66,7 @@ func test_an_open_airport_is_due_at_a_contracts_next_issue() -> void:
 	# 20:00 departs well after tick 0 (06:00), so day 0 is not issued yet.
 	assert_bool(_sim.accept_contract(_terms("GA2", 20 * 60))).is_true()
 	var contract := _sim.contract_of("GA2")
-	var issue := FlightTimetable.issue_tick(contract, 0)
+	var issue := FlightTimetable.issue_tick(contract, 0, 0)
 	print("issue=%d next=%d" % [issue, _sim.next_event_tick()])
 	assert_int(issue).is_greater(0)
 	assert_array(_sim.flight_ids()).is_empty()
@@ -77,13 +77,13 @@ func test_after_an_issue_the_occurrence_and_the_next_day_are_both_counted() -> v
 	_sim.open_airport()
 	assert_bool(_sim.accept_contract(_terms("GA2", 20 * 60))).is_true()
 	var contract := _sim.contract_of("GA2")
-	_run_to(FlightTimetable.issue_tick(contract, 0))
+	_run_to(FlightTimetable.issue_tick(contract, 0, 0))
 	assert_array(_sim.flight_ids()).is_equal(["GA2-d0"])
 	var first_state := _sim.state_start("GA2-d0", FlightSim.State.SCHEDULED)
 	var approach := _sim.state_start("GA2-d0", FlightSim.State.APPROACH)
 	print("first=%d approach=%d next=%d" % [first_state, approach, _sim.next_event_tick()])
 	assert_int(_sim.next_event_tick()).is_equal(approach)
-	assert_int(_sim.next_event_tick()).is_less(FlightTimetable.issue_tick(contract, 1))
+	assert_int(_sim.next_event_tick()).is_less(FlightTimetable.issue_tick(contract, 1, 0))
 
 
 func test_a_closed_airport_issues_nothing_so_its_contracts_are_not_due() -> void:

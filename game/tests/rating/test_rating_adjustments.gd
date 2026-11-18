@@ -23,7 +23,7 @@ func _record(tick: int, made: int, mood: int, missed: int) -> void:
 
 
 func _noon(day: int) -> int:
-	return GameCalendar.tick_at(day, 12 * 60)
+	return GameCalendar.tick_at(day, 12 * 60, 0)
 
 
 func test_an_adjustment_shifts_the_stars_by_half_steps() -> void:
@@ -72,9 +72,9 @@ func test_an_adjustment_ends_at_its_expiry_tick() -> void:
 
 func test_the_window_expiry_is_the_start_of_the_day_its_passengers_leave_the_window() -> void:
 	var outcome := _noon(4)
-	var expiry := RatingAdjustments.expiry_for(outcome)
-	assert_int(expiry).is_equal(GameCalendar.day_start(4 + RatingFormula.WINDOW_DAYS))
-	assert_int(GameCalendar.day_of(expiry - 1)).is_equal(4 + RatingFormula.WINDOW_DAYS - 1)
+	var expiry := RatingAdjustments.expiry_for(outcome, 0)
+	assert_int(expiry).is_equal(GameCalendar.day_start(4 + RatingFormula.WINDOW_DAYS, 0))
+	assert_int(GameCalendar.day_of(expiry - 1, 0)).is_equal(4 + RatingFormula.WINDOW_DAYS - 1)
 
 
 ## Base 2.5 is clear of WARN_BELOW; a one-star adjustment alone makes it low,
@@ -89,7 +89,7 @@ func test_an_adjustment_alone_makes_the_rating_low_and_the_badge_agrees() -> voi
 	(
 		assert_bool(
 			_rating.add_adjustment(
-				"inspector", _noon(0), RatingAdjustments.expiry_for(_noon(0)), -2
+				"inspector", _noon(0), RatingAdjustments.expiry_for(_noon(0), 0), -2
 			)
 		)
 		. is_true()
@@ -110,15 +110,15 @@ func test_the_day_end_low_count_uses_the_adjusted_stars() -> void:
 		for i in 5:
 			rating.record_passenger(_noon(0), true, 0)
 			rating.record_passenger(_noon(0), false, 0)
-	var expiry := RatingAdjustments.expiry_for(_noon(0))
+	var expiry := RatingAdjustments.expiry_for(_noon(0), 0)
 	assert_bool(_rating.add_adjustment("inspector", _noon(0), expiry, -2)).is_true()
 	for day in range(1, RatingFormula.WINDOW_DAYS + 1):
 		for rating: AirportRating in [_rating, control]:
-			rating.on_tick(GameCalendar.day_start(day))
+			rating.on_tick(GameCalendar.day_start(day, 0))
 		print("day %d: low %d, control %d" % [day, _rating.low_days(), control.low_days()])
 		assert_int(_rating.low_days()).is_equal(day)
 		assert_int(control.low_days()).is_equal(0)
-	_rating.on_tick(GameCalendar.day_start(RatingFormula.WINDOW_DAYS + 1))
+	_rating.on_tick(GameCalendar.day_start(RatingFormula.WINDOW_DAYS + 1, 0))
 	assert_int(_rating.low_days()).is_equal(0)
 
 

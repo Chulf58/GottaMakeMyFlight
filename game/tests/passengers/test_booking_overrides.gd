@@ -157,7 +157,7 @@ func test_an_override_is_capped_at_the_class_maximum_and_reports_the_headroom() 
 func test_an_override_for_a_past_day_is_refused() -> void:
 	_a = _world([MINUTE])
 	# Day 2 has begun; day 1 was never issued here, and neither will it be.
-	_a.sim.tick = GameCalendar.day_start(2)
+	_a.sim.tick = GameCalendar.day_start(2, 0)
 	var past := _a.sim.set_booking_override("OVR-d1", 3)
 	print("past day: %s" % [past])
 	assert_bool(past["ok"]).is_false()
@@ -275,7 +275,7 @@ func test_a_saved_override_no_live_world_could_hold_is_refused() -> void:
 	issued["scheduled"] = []
 	issued["booking_overrides"] = [{"flight": OCCURRENCE, "extra": 2}]
 	var past := good.duplicate(true)
-	past["tick"] = str(GameCalendar.day_start(3))
+	past["tick"] = str(GameCalendar.day_start(3, 0))
 	past["booking_overrides"] = [{"flight": "OVR-d1", "extra": 2}]
 	var cases := {"unknown contract": unknown, "issued": issued, "past day": past}
 	for label: String in cases:

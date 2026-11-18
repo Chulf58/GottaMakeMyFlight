@@ -51,7 +51,7 @@ func _make(traits: Dictionary, balance: int) -> void:
 ## Puts the flights on `day` of the contract's term (1 is its first day).
 func _on_term_day(day: int) -> void:
 	var first: int = _world.flights.contract_of(CONTRACT)["first_day"]
-	_world.flights.tick = GameCalendar.tick_at(first + day - 1, 1380)
+	_world.flights.tick = GameCalendar.tick_at(first + day - 1, 1380, 0)
 
 
 func test_the_player_ending_within_the_term_pays_60_small_or_120_big() -> void:

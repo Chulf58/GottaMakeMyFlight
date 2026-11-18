@@ -145,7 +145,7 @@ func _fast_through(from: int, until: int) -> int:
 ## fast straight through 23:50 and on to the flight's stop.
 func test_on_incidents_fast_forward_straight_through_midnight() -> void:
 	_director.set_enabled(true)
-	var boundary := GameCalendar.day_start(1)
+	var boundary := GameCalendar.day_start(1, 0)
 	assert_int(boundary).is_less(_flight_stop())
 	assert_int(_quiet.stop_tick()).is_equal(_flight_stop())
 	var frames := _fast_through(boundary - 2 * QuietNight.LEAD_TICKS, boundary + 400)
@@ -165,7 +165,7 @@ func test_a_spill_rolled_at_midnight_still_stops_lead_before_its_fire() -> void:
 	director.set_enabled(true)
 	director.forced_kind = IncidentCatalogue.SPILL
 	_quiet.bind(_world.clock, _world.flights, _world.sim, director)
-	var boundary := GameCalendar.day_start(1)
+	var boundary := GameCalendar.day_start(1, 0)
 	_fast_through(boundary - 2 * QuietNight.LEAD_TICKS, boundary)
 	var rolled := director.incidents()
 	assert_int(rolled.size()).is_equal(1)

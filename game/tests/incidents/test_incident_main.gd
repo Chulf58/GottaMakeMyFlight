@@ -47,7 +47,7 @@ func _schedule_spill(ahead: int) -> StringName:
 			{
 				"id": id,
 				"kind": IncidentCatalogue.SPILL,
-				"roll_day": GameCalendar.day_of(_clock.tick),
+				"roll_day": GameCalendar.day_of(_clock.tick, _clock.epoch),
 				"state": IncidentCatalogue.SCHEDULED,
 				"fire_tick": _clock.tick + ahead,
 				"cell": [-1, -1],

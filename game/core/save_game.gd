@@ -111,7 +111,11 @@ signal loaded(ok: bool)
 ## 24: the site grid is 256 cells wide with side land west and east (the grid
 ## part's frame and cells, the land part's 12 plot columns); version 23 saves
 ## are refused (no migration before a release).
-const SAVE_VERSION := 24
+## 25: the clock part holds the calendar epoch and whether the calendar is held
+## (SimClock save version 2; decision closed-airport-calendar-design-an-
+## explicit-calendar-epoch-pa), and every saved day and time reads at that
+## epoch; version 24 saves are refused (no migration before a release).
+const SAVE_VERSION := 25
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"
@@ -178,7 +182,7 @@ func _ready() -> void:
 	if quick_save_path == QUICK_SAVE_PATH:
 		quick_save_path = SaveSlots.manual_path()
 	if clock != null:
-		_autosave_day = GameCalendar.day_of(clock.tick)
+		_autosave_day = GameCalendar.day_of(clock.tick, clock.epoch)
 		clock.ticked.connect(on_tick)
 	var boot_path := GameBoot.take_load_path()
 	if boot_path != "":
@@ -190,7 +194,7 @@ func _ready() -> void:
 ## SimClock.ticked: the first tick of a new game day queues the autosave that
 ## is due. A script run on the player's save folder queues none (SaveSlots).
 func on_tick(tick: int) -> void:
-	var day := GameCalendar.day_of(tick)
+	var day := GameCalendar.day_of(tick, clock.epoch)
 	if day <= _autosave_day:
 		return
 	_autosave_day = day
@@ -216,7 +220,13 @@ func retry_autosave() -> bool:
 func parts() -> Array[SavePart]:
 	var list: Array[SavePart] = [
 		SavePart.new("grid", build_mode.grid.to_snapshot, _stage_grid, build_mode.load_snapshot),
-		SavePart.new("clock", clock.to_snapshot, SavePart.scratch(SimClock), clock.from_snapshot),
+		# Kept staged: the flights, the rating and the bookings read its calendar epoch.
+		SavePart.new(
+			"clock",
+			clock.to_snapshot,
+			SavePart.scratch(SimClock, &"from_snapshot", "clock"),
+			clock.from_snapshot
+		),
 		SavePart.new(
 			"runway",
 			flights.runway.to_snapshot,
@@ -280,14 +290,7 @@ func parts() -> Array[SavePart]:
 			SavePart.scratch(OfferBoard, &"from_snapshot", "offers"),
 			offer_desk.board.from_snapshot
 		),
-		SavePart.new(
-			"rating",
-			rating.to_snapshot,
-			SavePart.checked(
-				"rating", func(data: Dictionary) -> Dictionary: return RatingSnapshot.load(data)
-			),
-			_install_rating
-		),
+		SavePart.new("rating", rating.to_snapshot, _stage_rating, _install_rating),
 		SavePart.new(
 			"templates",
 			build_mode.templates.library.to_snapshot,
@@ -405,7 +408,7 @@ func load_world(data: Variant) -> bool:
 	clock.set_speed(1)
 	# A queued autosave was for the old world; days count from the loaded one.
 	autosave_pending = ""
-	_autosave_day = GameCalendar.day_of(clock.tick)
+	_autosave_day = GameCalendar.day_of(clock.tick, clock.epoch)
 	_say("Loaded", false)
 	loaded.emit(true)
 	return true
@@ -576,6 +579,8 @@ func _stage_all(data: Dictionary, staged: Dictionary) -> String:
 			return "%s: %s" % [part.key, problem]
 	var across := _ticks_problem(data)
 	if across == "":
+		across = _epoch_problem(data)
+	if across == "":
 		across = SaveLinks.problem(data, staged)
 	if across == "":
 		across = _entrance_links_problem(staged)
@@ -613,6 +618,34 @@ func _runway_problem(data: Dictionary, staged: Dictionary) -> String:
 				"offers: offer %s is a %s plane but the runway is %s"
 				% [offer["id"], offer["plane_size"], runway.size]
 			)
+	return ""
+
+
+## The rating (RatingSnapshot.load()) at the saved clock's calendar epoch.
+func _stage_rating(data: Dictionary, staged: Dictionary) -> String:
+	var loaded := RatingSnapshot.load(data, staged["clock"].epoch)
+	if loaded.has("error"):
+		return str(loaded["error"])
+	staged["rating"] = loaded
+	return ""
+
+
+## The calendar is held exactly while the airport is closed, and once it is
+## open its epoch is the opening tick (decision closed-airport-calendar-design-
+## an-explicit-calendar-epoch-pa, point 3). A world with no AirportGate (a
+## test's) never holds its calendar, so only the first holds there.
+func _epoch_problem(data: Dictionary) -> String:
+	var held: bool = data["clock"]["calendar_held"]
+	var epoch := SimClock.saved_epoch(data["clock"])
+	var opened := int(data["flights"]["opened_tick"])
+	if held and opened >= 0:
+		return "clock: the calendar is held, but the airport opened on tick %d" % opened
+	if flights.gate == null:
+		return ""
+	if opened < 0 and not held:
+		return "clock: the airport is closed, but its calendar is not held"
+	if opened >= 0 and epoch != opened:
+		return "clock: the calendar epoch %d is not the opening tick %d" % [epoch, opened]
 	return ""
 
 
@@ -659,7 +692,7 @@ func _stage_flights(data: Dictionary, staged: Dictionary) -> String:
 	var gate_set := flights.gate_ids()
 	if staged.has("gates"):
 		gate_set = _letters(staged["gates"])
-	var loaded := FlightSnapshot.load(data, gate_set)
+	var loaded := FlightSnapshot.load(data, gate_set, staged["clock"].epoch)
 	if loaded.has("error"):
 		return str(loaded["error"])
 	var planner := _staged_flight_sim(staged)
@@ -696,6 +729,7 @@ func _stage_apron(data: Dictionary, staged: Dictionary) -> String:
 ## gate desks, the live sim's sources.
 func _staged_flight_sim(staged: Dictionary) -> FlightSim:
 	var sim := FlightSim.new()
+	sim.epoch = staged["clock"].epoch
 	if staged.has("runway"):
 		sim.runway = staged["runway"]
 	if not staged.has("gates"):
@@ -783,7 +817,7 @@ func _checked_booking_overrides(data: Dictionary, staged: Dictionary) -> Diction
 	if own:
 		held = _staged_flight_sim(staged)
 		held.from_snapshot(staged["flights_data"])
-	var result := BookingOverrides.checked(data, held)
+	var result := BookingOverrides.checked(data, held, staged["clock"].epoch)
 	if own:
 		held.free()
 	return result

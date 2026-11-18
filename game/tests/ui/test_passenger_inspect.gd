@@ -323,7 +323,7 @@ func test_the_flight_line_gives_the_doors_close_time() -> void:
 	_select()
 	var doors := _world.flights.doors_close_tick(PassengerTestWorld.FLIGHT)
 	var boards := _world.passenger(_id).boarding_tick
-	var want := "doors close %s" % GameCalendar.clock_text(doors)
+	var want := "doors close %s" % GameCalendar.clock_text(doors, 0)
 	print("flight line '%s' (doors %d, boards %d)" % [_inspect.flight_text(), doors, boards])
 	assert_int(doors).is_equal(20)
 	assert_str(_inspect.flight_text()).contains(want)

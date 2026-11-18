@@ -265,10 +265,15 @@ func refresh() -> void:
 	_hint_box.visible = _hint.visible and not _hint_yielded
 
 
-## "To open the airport" while closed; once open (or with no gate) the starter
-## line while it shows, over "Your airport needs" when any line is left.
+## "To open the airport" while closed, or "Ready: the airport opens on the next
+## tick" once every opening line is done (the airport opens on the tick after the
+## last member goes on duty, and a paused clock holds the card there with every
+## line folded away); once open (or with no gate) the starter line while it shows,
+## over "Your airport needs" when any line is left.
 func _card_title(lines: Array[Dictionary]) -> String:
 	if gate != null and not gate.is_open():
+		if gate.ready_to_open():
+			return tr("Ready: the airport opens on the next tick")
 		return tr("To open the airport")
 	var parts := PackedStringArray()
 	if _open_cue != "":

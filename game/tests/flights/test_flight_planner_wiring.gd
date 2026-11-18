@@ -67,7 +67,7 @@ func test_more_than_three_gates_are_busy_at_once() -> void:
 			assert_bool(_sim.accept_contract(terms)).is_true()
 			accepted += 1
 	var accept_ms := Time.get_ticks_msec() - began
-	var day_one := GameCalendar.day_start(1)
+	var day_one := GameCalendar.day_start(1, 0)
 	_run_to(day_one)
 	var most := 0
 	var paused := {}
@@ -183,7 +183,7 @@ func test_reassign_and_moves_go_through_the_planner_and_keep_issued_plans() -> v
 	assert_bool(_sim.move_contracts(plan)).is_true()
 	assert_dict(_live_plans(_sim)).is_equal(before)
 	assert_str(_sim.flight_gate("Y-d0")).is_equal("C")
-	_run_to(FlightTimetable.issue_tick(_sim.contract_of("Y"), 1))
+	_run_to(FlightTimetable.issue_tick(_sim.contract_of("Y"), 1, 0))
 	assert_str(_sim.flight_gate("Y-d1")).is_equal("C")
 
 
@@ -196,7 +196,7 @@ func test_a_save_re_plans_identically_and_a_failing_plan_is_refused() -> void:
 		var terms := _small("S%d" % minute, minute)
 		if _sim.accept_problem(terms) == "":
 			_sim.accept_contract(terms)
-	var noon := GameCalendar.tick_at(1, 12 * 60)
+	var noon := GameCalendar.tick_at(1, 12 * 60, 0)
 	_run_to(noon)
 	var plans := _live_plans(_sim)
 	var paused := plans.values().filter(func(p: Array) -> bool: return _paused(p[1]))
@@ -264,8 +264,9 @@ func test_a_save_re_plans_identically_and_a_failing_plan_is_refused() -> void:
 ## The first live flight of `data` that FlightPlans gives no plan on
 ## `grounds`, as from_snapshot() looks for one.
 static func _first_unplanned(data: Dictionary, grounds: Dictionary) -> String:
-	var loaded := FlightSnapshot.load(data, GATES)
+	var loaded := FlightSnapshot.load(data, GATES, 0)
 	var world := {
+		"epoch": 0,
 		"contracts": loaded["contracts"],
 		"start_day": loaded["start_day"],
 		"next_day": loaded["next_day"],
@@ -279,7 +280,7 @@ static func _first_unplanned(data: Dictionary, grounds: Dictionary) -> String:
 	for day in FlightPlans.live_days(world):
 		var result := plans.plan_day(world, day)
 		for flight: Dictionary in loaded["flights"]:
-			if FlightPlans.day_of(flight["starts"]) == day and not result[flight["id"]]["ok"]:
+			if FlightPlans.day_of(flight["starts"], 0) == day and not result[flight["id"]]["ok"]:
 				return flight["id"]
 	return ""
 
@@ -292,7 +293,7 @@ func test_plane_view_stands_at_the_hold_line_for_the_pause() -> void:
 	var view := auto_free(PlaneView.new()) as PlaneView
 	view.airside = airside
 	var starts := GroundPlannerKit.starts_at(1, 600)
-	var req := FlightGround.request("P", PlaneClasses.MEDIUM, FlightGround.scene_stand(), starts)
+	var req := FlightGround.request("P", PlaneClasses.MEDIUM, FlightGround.scene_stand(), starts, 0)
 	var options := FlightGround.planner().phase_options(req, FlightSim.State.TAXI_IN)
 	var pause: Dictionary = options[options.size() - 1]
 	assert_dict(pause).is_not_empty()
@@ -378,7 +379,7 @@ func test_ending_a_contract_never_leaves_another_occurrence_unplanned() -> void:
 	assert_int(_sim.contract_end_day("A")).is_equal(1)
 	assert_array(_sim.active_contract_ids()).is_equal(["B", "C"])
 	# A's later days are never issued, and C's are issued with a plan.
-	_run_to(FlightTimetable.issue_tick(_sim.contract_of("C"), 1))
+	_run_to(FlightTimetable.issue_tick(_sim.contract_of("C"), 1, 0))
 	assert_bool(_sim.flight_ids().has("A-d1")).is_false()
 	assert_bool(_sim.flight_ids().has("C-d1")).is_true()
 	await assert_error(func() -> void: _sim.taxi_plan("C-d1")).is_success()

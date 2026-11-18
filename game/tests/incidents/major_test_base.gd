@@ -54,7 +54,7 @@ func after_test() -> void:
 func _presented_major(kind: String) -> Dictionary:
 	_director.set_enabled(true)
 	_director.forced_kind = kind
-	_director.on_tick(GameCalendar.day_start(1))
+	_director.on_tick(GameCalendar.day_start(1, 0))
 	var rolled := _director.incidents()
 	assert_int(rolled.size()).is_equal(1)
 	assert_str(rolled[0]["state"]).is_equal(IncidentCatalogue.SCHEDULED)

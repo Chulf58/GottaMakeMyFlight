@@ -114,7 +114,9 @@ func _read_texts() -> void:
 	texts = {}
 	for works: String in layouts:
 		if works == RUNWAY:
-			texts[works] = RunwayWorks.schedule_text(flights.runway.works, flights.tick)
+			texts[works] = RunwayWorks.schedule_text(
+				flights.runway.works, flights.tick, flights.epoch
+			)
 		else:
 			texts[works] = SideSpurs.works_text(
 				works, flights.spur_release_tick(works), flights.tick

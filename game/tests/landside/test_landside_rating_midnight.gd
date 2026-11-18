@@ -20,8 +20,8 @@ func test_a_miss_on_a_days_first_tick_follows_the_last_days_no_shows() -> void:
 	var clock: SimClock = auto_free(SimClock.new())
 	var flights: FlightSim = auto_free(FlightSim.new())
 	var sim: PassengerSim = auto_free(PassengerSim.new())
-	var last_tick := GameCalendar.day_start(1) - 1
-	var midnight := GameCalendar.day_start(1)
+	var last_tick := GameCalendar.day_start(1, 0) - 1
+	var midnight := GameCalendar.day_start(1, 0)
 	var by_signal := _rating(clock, flights, sim)
 	var by_tick := _rating(clock, flights, sim)
 	for rating in [by_signal, by_tick]:

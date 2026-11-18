@@ -46,7 +46,7 @@ func _run() -> void:
 		flights.open_airport()
 	var taken := TestFlightFit.terms("K10", 600)
 	print("PROBE contract K10 at 10:00 accepted=", flights.accept_contract(taken))
-	var offers := TestOfferBoard.day_records(GameCalendar.day_of(clock.tick), [600, 720, 1200])
+	var offers := TestOfferBoard.day_records(GameCalendar.day_of(clock.tick, 0), [600, 720, 1200])
 	print("PROBE board loaded=", desk.board.from_snapshot(TestOfferBoard.save_of(offers)))
 	var panel := panels[0] as OfferPanel
 	panel.open()

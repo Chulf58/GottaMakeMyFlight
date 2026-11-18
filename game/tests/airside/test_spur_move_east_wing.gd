@@ -28,7 +28,7 @@ func test_the_east_spur_moves_at_the_first_quiet_tick() -> void:
 	assert_bool(_flights.accept_contract(SpurMoveKit.terms("C1"))).is_true()
 	var contract := _flights.contract_of("C1")
 	var day: int = contract["first_day"]
-	_flights.on_tick(FlightTimetable.issue_tick(contract, day))
+	_flights.on_tick(FlightTimetable.issue_tick(contract, day, 0))
 	var flight := FlightTimetable.occurrence_id("C1", day)
 	var starts := SpurMoveKit.starts(_flights, flight)
 	var stand := _flights.flight_stand(flight)
@@ -64,11 +64,11 @@ func test_the_east_spur_moves_at_the_first_quiet_tick() -> void:
 	var moved := _flights.contract_of("C1")
 	print("pair %s -> %s" % [contract["taxi"], moved["taxi"]])
 	assert_array(moved["taxi"]).is_not_equal(contract["taxi"])
-	_flights.on_tick(FlightTimetable.issue_tick(moved, day + 1))
+	_flights.on_tick(FlightTimetable.issue_tick(moved, day + 1, 0))
 	var next := FlightTimetable.occurrence_id("C1", day + 1)
 	assert_float(StandPlacement.lane_x_of(_flights.flight_stand(next))).is_equal_approx(
 		wanted, 0.0001
 	)
 	assert_array(SpurMoveKit.starts(_flights, next)).is_equal(
-		FlightTimetable.starts_for(moved, day + 1)
+		FlightTimetable.starts_for(moved, day + 1, 0)
 	)

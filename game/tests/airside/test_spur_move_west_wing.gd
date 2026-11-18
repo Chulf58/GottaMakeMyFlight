@@ -41,7 +41,7 @@ func _accept(id: String, minute := SpurMoveKit.MINUTE) -> void:
 ## Issues contract `id`'s first day and returns its occurrence id.
 func _issue_first(id: String) -> String:
 	var contract := _flights.contract_of(id)
-	_flights.on_tick(FlightTimetable.issue_tick(contract, contract["first_day"]))
+	_flights.on_tick(FlightTimetable.issue_tick(contract, contract["first_day"], 0))
 	var flight := FlightTimetable.occurrence_id(id, contract["first_day"])
 	assert_int(_flights.state_of(flight)).is_equal(FlightSim.State.SCHEDULED)
 	return flight
@@ -102,16 +102,16 @@ func test_the_spur_moves_at_the_first_quiet_tick_and_later_days_are_re_timed() -
 	# The next day flies the new stand on the new pair: re-timed.
 	var contract := _flights.contract_of("C1")
 	var day := int(contract["first_day"]) + 1
-	_flights.on_tick(FlightTimetable.issue_tick(contract, day))
+	_flights.on_tick(FlightTimetable.issue_tick(contract, day, 0))
 	var next := FlightTimetable.occurrence_id("C1", day)
 	var on_old := FlightTimetable.starts_for(
-		FlightContract.make(_with_taxi(contract, old_pair)), day
+		FlightContract.make(_with_taxi(contract, old_pair)), day, 0
 	)
 	print(
 		"%s first state %d (on the old pair: %d)" % [next, _flights.state_start(next, 0), on_old[0]]
 	)
 	assert_array(SpurMoveKit.starts(_flights, next)).is_equal(
-		FlightTimetable.starts_for(contract, day)
+		FlightTimetable.starts_for(contract, day, 0)
 	)
 	assert_int(_flights.state_start(next, 0)).is_less(on_old[0])
 	assert_float(StandPlacement.lane_x_of(_flights.flight_stand(next))).is_equal_approx(
@@ -138,8 +138,8 @@ func test_a_straddling_accept_moves_the_release_and_ending_it_moves_it_back() ->
 	_accept("C2", SpurMoveKit.straddle_minute(_gates))
 	var second := _flights.contract_of("C2")
 	var day: int = second["first_day"]
-	var issue := FlightTimetable.issue_tick(second, day)
-	var later := FlightTimetable.starts_for(second, day)[FlightSim.State.TAKEOFF]
+	var issue := FlightTimetable.issue_tick(second, day, 0)
+	var later := FlightTimetable.starts_for(second, day, 0)[FlightSim.State.TAKEOFF]
 	print(
 		(
 			"C2 issues %d (before %d), takes off %d: R %d"

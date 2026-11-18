@@ -59,7 +59,7 @@ func test_sim_time_and_a_day_change_do_not_hide_the_result() -> void:
 	_close_doors_with_misses(1)
 	assert_bool(_hud.is_result_open()).is_true()
 	_world.clock.tick = GameCalendar.TICKS_PER_DAY * 2
-	assert_int(GameCalendar.day_of(_world.clock.tick)).is_greater(0)
+	assert_int(GameCalendar.day_of(_world.clock.tick, 0)).is_greater(0)
 	_hud.refresh()
 	assert_bool(_hud.is_result_open()).is_true()
 

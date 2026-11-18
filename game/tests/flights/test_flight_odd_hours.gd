@@ -97,15 +97,15 @@ func test_odd_hours_flights_fly_at_06_00_and_22_00() -> void:
 	assert_bool(sim.accept_contract(_terms("LATE", 1320, ODD))).is_true()
 	assert_bool(sim.accept_contract(_terms("AM", 420))).is_true()
 	assert_bool(sim.accept_contract(_terms("PM", 1260))).is_true()
-	_run(world[0], GameCalendar.tick_at(3, 0))
+	_run(world[0], GameCalendar.tick_at(3, 0, 0))
 	var departed := 0
 	for flight: String in [
 		"EARLY-d1", "EARLY-d2", "LATE-d0", "LATE-d1", "LATE-d2", "AM-d1", "PM-d1"
 	]:
 		var pushback := _tick_of(flight, FlightSim.State.PUSHBACK)
-		print("%s pushes back at %s" % [flight, GameCalendar.clock_text(pushback)])
+		print("%s pushes back at %s" % [flight, GameCalendar.clock_text(pushback, 0)])
 		var expected: int = sim.contract_of(flight.get_slice("-", 0))["departure_minute"]
-		assert_int(GameCalendar.minute_of_day(pushback)).is_equal(expected)
+		assert_int(GameCalendar.minute_of_day(pushback, 0)).is_equal(expected)
 		if _tick_of(flight, FlightSim.State.DEPARTED) > pushback:
 			departed += 1
 	assert_int(departed).is_equal(7)
@@ -130,18 +130,18 @@ func test_a_save_either_side_of_midnight_loads_and_runs_on_like_the_original() -
 		var sim: FlightSim = world[1]
 		assert_bool(sim.accept_contract(_terms("EARLY", 360, ODD))).is_true()
 		assert_bool(sim.accept_contract(_terms("LATE", 1320, ODD))).is_true()
-		_run(world[0], GameCalendar.tick_at(day, minute))
+		_run(world[0], GameCalendar.tick_at(day, minute, 0))
 		var data: Dictionary = JSON.parse_string(JSON.stringify(sim.to_snapshot()))
 		assert_int(int(data["save_version"])).is_equal(FlightSim.SAVE_VERSION)
 		var clone := _world()
 		clone[0].from_snapshot(world[0].to_snapshot())
 		assert_bool(clone[1].from_snapshot(data)).is_true()
 		_log.clear()
-		_run(world[0], GameCalendar.tick_at(2, 600))
+		_run(world[0], GameCalendar.tick_at(2, 600, 0))
 		var original := _log.duplicate()
 		_log.clear()
-		_run(clone[0], GameCalendar.tick_at(2, 600))
-		var saved_at := GameCalendar.clock_text(GameCalendar.tick_at(day, minute))
+		_run(clone[0], GameCalendar.tick_at(2, 600, 0))
+		var saved_at := GameCalendar.clock_text(GameCalendar.tick_at(day, minute, 0), 0)
 		print("saved at %s, %d state changes after" % [saved_at, original.size()])
 		assert_int(original.size()).is_greater(0)
 		assert_array(_log).is_equal(original)

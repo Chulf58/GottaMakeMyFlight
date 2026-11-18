@@ -55,7 +55,7 @@ func _select_new() -> int:
 
 
 func test_the_marked_passengers_card_says_they_are_the_vip() -> void:
-	var departs := GameCalendar.tick_at(0, 15 * 60 + 15)
+	var departs := GameCalendar.tick_at(0, 15 * 60 + 15, 0)
 	var vip := _world.sim.spawn_now(VIP_FLIGHT)
 	_accepted_vip(VIP_FLIGHT, {"target": vip, "departs": departs})
 	_world.step()

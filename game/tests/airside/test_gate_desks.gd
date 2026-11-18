@@ -158,7 +158,7 @@ func test_removing_a_gate_with_a_flight_due_is_refused_until_it_has_left() -> vo
 	var removed := _grid.apply(BuildEdit.remove_object(west.object_id))
 	print("with ONE due: %s" % removed.reason_text())
 	assert_int(removed.reason).is_equal(BuildResult.Reason.GATE_IN_USE)
-	var when := GameCalendar.clock_text(starts[FlightSim.State.PUSHBACK])
+	var when := GameCalendar.clock_text(starts[FlightSim.State.PUSHBACK], 0)
 	assert_str(removed.reason_text()).ends_with(": the %s flight" % when)
 	assert_str(removed.reason_text()).not_contains("ONE")
 	assert_str(removed.detail).is_equal("the %s flight" % when)

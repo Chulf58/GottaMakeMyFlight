@@ -21,6 +21,9 @@ extends RefCounted
 ## day a closed airport's contract starts on, never depend on the pair, and a
 ## contract that moves to a gate with other taxi times issues its next day at
 ## the same tick (TaxiTimes.MAX_IN keeps that at or before its first state).
+##
+## Days and departure minutes are calendar ones, so every function that turns
+## them into ticks takes the calendar epoch E (GameCalendar, SimClock.epoch).
 
 ## Issue an occurrence two game hours before the first state of a flight at
 ## TaxiTimes.BASE, so listeners can plan it before anything is due. Passenger
@@ -70,26 +73,27 @@ static func parse_occurrence(id: String) -> Dictionary:
 	return {"contract": found.get_string(1), "day": found.get_string(2).to_int()}
 
 
-static func starts_for(contract: Dictionary, day: int) -> Array[int]:
-	return FlightSim.schedule_starts(_first_start(contract, day), taxi_of(contract))
+static func starts_for(contract: Dictionary, day: int, epoch: int) -> Array[int]:
+	return FlightSim.schedule_starts(_first_start(contract, day, epoch), taxi_of(contract))
 
 
 ## The first day >= 0 whose occurrence's first state is at or after `now`.
 ## Nothing of that occurrence is due before `now + 1`: its first transition
 ## comes PHASE_TICKS[0] later, and arrivals are planned after its first state.
-static func first_day(contract: Dictionary, now: int) -> int:
-	return _day_at_or_after(_first_start(contract, 0), now)
+static func first_day(contract: Dictionary, now: int, epoch: int) -> int:
+	return _day_at_or_after(_first_start(contract, 0, epoch), now)
 
 
 ## The first day, from the contract's first_day on, that is issued at or after
 ## `opened` (the tick the airport opened): the start of a contract accepted
 ## while the airport was closed. The days before it are never flown.
-static func opening_day(contract: Dictionary, opened: int) -> int:
-	return maxi(int(contract["first_day"]), _day_at_or_after(issue_tick(contract, 0), opened))
+static func opening_day(contract: Dictionary, opened: int, epoch: int) -> int:
+	var issued := _day_at_or_after(issue_tick(contract, 0, epoch), opened)
+	return maxi(int(contract["first_day"]), issued)
 
 
-static func issue_tick(contract: Dictionary, day: int) -> int:
-	return GameCalendar.tick_at(day, int(contract["departure_minute"])) - issue_lead()
+static func issue_tick(contract: Dictionary, day: int, epoch: int) -> int:
+	return GameCalendar.tick_at(day, int(contract["departure_minute"]), epoch) - issue_lead()
 
 
 ## The tick a flight with `starts` is pruned: PRUNE_AFTER_TICKS after it departs.
@@ -98,8 +102,8 @@ static func prune_tick(starts: Array) -> int:
 
 
 ## The first day not yet issued at `now`.
-static func next_day(contract: Dictionary, now: int) -> int:
-	var since_first := now - issue_tick(contract, 0)
+static func next_day(contract: Dictionary, now: int, epoch: int) -> int:
+	var since_first := now - issue_tick(contract, 0, epoch)
 	var day := GameCalendar.floor_div(since_first, GameCalendar.TICKS_PER_DAY) + 1
 	return maxi(int(contract["first_day"]), day)
 
@@ -111,12 +115,14 @@ static func next_day(contract: Dictionary, now: int) -> int:
 ## |k| >= 2 only when A of one plus C of the other is more than a day. Their
 ## pairs' bounds (TaxiTimes.MAX_IN, MAX_OUT) keep that sum at 7460 ticks or
 ## less, so comparing day 0 of one with day -1, 0 and 1 of the other covers all.
+## Both sides shift by the same epoch, so the answer is the same for any E and
+## is worked out at E = 0.
 static func contracts_share_gate(a: Dictionary, b: Dictionary) -> bool:
 	if a["gate"] != b["gate"]:
 		return false
-	var a_starts := starts_for(a, 0)
+	var a_starts := starts_for(a, 0, 0)
 	for shift in [-1, 0, 1]:
-		if shares_gate(a["gate"], a_starts, b["gate"], starts_for(b, shift)):
+		if shares_gate(a["gate"], a_starts, b["gate"], starts_for(b, shift, 0)):
 			return true
 	return false
 
@@ -125,18 +131,18 @@ static func contracts_share_gate(a: Dictionary, b: Dictionary) -> bool:
 ## as an occurrence of `contract` on a day from its first_day. Only the days
 ## whose gate hold overlaps the flight's are compared; they form one contiguous
 ## range, found in closed form from the contract's own gate hold.
-static func contract_meets(contract: Dictionary, gate: String, starts: Array) -> bool:
+static func contract_meets(contract: Dictionary, gate: String, starts: Array, epoch: int) -> bool:
 	var start: int = starts[0]
 	var end: int = starts[FlightSim.State.DEPARTED]
 	if start >= end or contract["gate"] != gate:
 		return false
-	var first := _first_start(contract, 0)
+	var first := _first_start(contract, 0, epoch)
 	var day_size := GameCalendar.TICKS_PER_DAY
 	var held := reserved_ticks(taxi_of(contract))
 	var lowest := GameCalendar.floor_div(start - first - held, day_size) + 1
 	var highest := -GameCalendar.floor_div(first - end, day_size) - 1
 	for day in range(maxi(lowest, int(contract["first_day"])), highest + 1):
-		if shares_gate(gate, starts, contract["gate"], starts_for(contract, day)):
+		if shares_gate(gate, starts, contract["gate"], starts_for(contract, day, epoch)):
 			return true
 	return false
 
@@ -179,8 +185,8 @@ static func starts_valid(starts: Array[int]) -> bool:
 	return true
 
 
-static func _first_start(contract: Dictionary, day: int) -> int:
-	var departure := GameCalendar.tick_at(day, int(contract["departure_minute"]))
+static func _first_start(contract: Dictionary, day: int, epoch: int) -> int:
+	var departure := GameCalendar.tick_at(day, int(contract["departure_minute"]), epoch)
 	return departure - departure_offset(taxi_of(contract))
 
 

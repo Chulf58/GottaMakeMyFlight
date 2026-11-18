@@ -64,7 +64,7 @@ func _put_in_fault(repair: int) -> int:
 			{
 				"id": id,
 				"kind": IncidentCatalogue.FAULT,
-				"roll_day": GameCalendar.day_of(_clock.tick),
+				"roll_day": GameCalendar.day_of(_clock.tick, _clock.epoch),
 				"state": IncidentCatalogue.ACTIVE,
 				"fire_tick": _clock.tick,
 				"cell": [-1, -1],

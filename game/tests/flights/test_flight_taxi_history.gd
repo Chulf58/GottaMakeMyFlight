@@ -41,8 +41,8 @@ func _reload_problem(sim: FlightSim, gates: Array[String]) -> String:
 func test_a_move_across_an_issue_boundary_issues_nothing_early() -> void:
 	var sim := _open(BOTH)
 	assert_bool(sim.accept_contract(TestFlightContracts.terms("X", DEPARTS))).is_true()
-	var issue := FlightTimetable.issue_tick(sim.contract_of("X"), 0)
-	var long := FlightTimetable.starts_for(_with(sim.contract_of("X"), _long()), 0)
+	var issue := FlightTimetable.issue_tick(sim.contract_of("X"), 0, 0)
+	var long := FlightTimetable.starts_for(_with(sim.contract_of("X"), _long()), 0, 0)
 	# Were issuing anchored to the first state, day 0 would be overdue at the move.
 	assert_int(long[0] - FlightTimetable.ISSUE_LEAD_TICKS).is_less(issue - 100)
 	TestFlightTaxiPairs.run_to(sim, issue - 100)
@@ -72,10 +72,10 @@ func test_an_occurrence_prunes_by_its_own_starts_after_its_taxi_out_shortened() 
 	var sim := _open(BOTH)
 	assert_bool(sim.accept_contract(TestFlightContracts.terms("X", DEPARTS))).is_true()
 	assert_bool(sim.reassign_gate("X", "D")).is_true()
-	TestFlightTaxiPairs.run_to(sim, FlightTimetable.issue_tick(sim.contract_of("X"), 0))
+	TestFlightTaxiPairs.run_to(sim, FlightTimetable.issue_tick(sim.contract_of("X"), 0, 0))
 	assert_bool(sim.reassign_gate("X", "C")).is_true()
 	var own := sim.state_start("X-d0", FlightSim.State.DEPARTED)
-	var by_contract := FlightTimetable.starts_for(sim.contract_of("X"), 0)
+	var by_contract := FlightTimetable.starts_for(sim.contract_of("X"), 0, 0)
 	var own_prune := own + FlightTimetable.PRUNE_AFTER_TICKS
 	var contract_prune := FlightTimetable.prune_tick(by_contract)
 	print("prunes at %d by its own starts, %d by the contract's now" % [own_prune, contract_prune])
@@ -95,7 +95,7 @@ func test_an_occurrence_prunes_by_its_own_starts_after_its_taxi_out_shortened() 
 	assert_int(sim.state_start("X-d0", FlightSim.State.DEPARTED)).is_equal(own)
 	assert_str(_reload_problem(sim, BOTH)).is_empty()
 	# Still landed the next day, so a save after midnight knows it was pruned.
-	TestFlightTaxiPairs.run_to(sim, GameCalendar.tick_at(1, 30))
+	TestFlightTaxiPairs.run_to(sim, GameCalendar.tick_at(1, 30, 0))
 	assert_str((sim.to_snapshot()["landed"] as Array)[0]["id"]).is_equal("X-d0")
 	assert_str(_reload_problem(sim, BOTH)).is_empty()
 
@@ -108,18 +108,18 @@ func test_an_occurrence_dropped_from_landed_is_unknown_not_rebuilt_from_its_cont
 	var sim := _open(BOTH)
 	assert_bool(sim.accept_contract(TestFlightContracts.terms("X", DEPARTS))).is_true()
 	assert_bool(sim.reassign_gate("X", "D")).is_true()
-	TestFlightTaxiPairs.run_to(sim, FlightTimetable.issue_tick(sim.contract_of("X"), 0))
+	TestFlightTaxiPairs.run_to(sim, FlightTimetable.issue_tick(sim.contract_of("X"), 0, 0))
 	var flown: Array[int] = []
 	for state in FlightSim.STATE_COUNT:
 		flown.append(sim.state_start("X-d0", state))
 	assert_bool(sim.reassign_gate("X", "C")).is_true()
-	var by_contract := FlightTimetable.starts_for(sim.contract_of("X"), 0)
+	var by_contract := FlightTimetable.starts_for(sim.contract_of("X"), 0, 0)
 	assert_int(by_contract[0]).is_not_equal(flown[0])
-	TestFlightTaxiPairs.run_to(sim, GameCalendar.tick_at(1, 23 * 60))
+	TestFlightTaxiPairs.run_to(sim, GameCalendar.tick_at(1, 23 * 60, 0))
 	assert_str(sim.flight_gate("X-d0")).is_equal("D")
 	assert_int(sim.state_start("X-d0", FlightSim.State.SCHEDULED)).is_equal(flown[0])
 	assert_int(sim.state_of("X-d0")).is_equal(FlightSim.State.DEPARTED)
-	TestFlightTaxiPairs.run_to(sim, GameCalendar.tick_at(2, 0))
+	TestFlightTaxiPairs.run_to(sim, GameCalendar.tick_at(2, 0, 0))
 	var ids := []
 	for entry: Dictionary in sim.to_snapshot()["landed"]:
 		ids.append(entry["id"])
@@ -143,8 +143,8 @@ func test_landed_keeps_timetable_order_when_prunes_come_in_another() -> void:
 	assert_bool(sim.accept_contract(TestFlightContracts.terms("X", DEPARTS - 8))).is_true()
 	assert_str(sim.contract_of("Y")["gate"]).is_equal("C")
 	assert_str(sim.contract_of("X")["gate"]).is_equal("D")
-	var x := FlightTimetable.starts_for(sim.contract_of("X"), 0)
-	var y := FlightTimetable.starts_for(sim.contract_of("Y"), 0)
+	var x := FlightTimetable.starts_for(sim.contract_of("X"), 0, 0)
+	var y := FlightTimetable.starts_for(sim.contract_of("Y"), 0, 0)
 	assert_int(x[0]).is_less(y[0])
 	assert_int(FlightTimetable.prune_tick(x)).is_greater(FlightTimetable.prune_tick(y))
 	TestFlightTaxiPairs.run_to(sim, FlightTimetable.prune_tick(y))
@@ -168,7 +168,7 @@ func test_works_stay_held_for_a_long_flight_after_its_contract_ends() -> void:
 		var sim := _open(gates)
 		sim.runway.size = PlaneClasses.MEDIUM
 		assert_bool(sim.accept_contract(TestFlightContracts.terms("L", DEPARTS))).is_true()
-		TestFlightTaxiPairs.run_to(sim, FlightTimetable.issue_tick(sim.contract_of("L"), 0))
+		TestFlightTaxiPairs.run_to(sim, FlightTimetable.issue_tick(sim.contract_of("L"), 0, 0))
 		var first := sim.state_start("L-d0", FlightSim.State.SCHEDULED)
 		var departs := sim.state_start("L-d0", FlightSim.State.DEPARTED)
 		# Works that end 50 ticks into the flight's first state, before its approach.
@@ -195,7 +195,7 @@ func test_a_save_with_mixed_pairs_loads_and_a_tampered_pair_is_refused() -> void
 	assert_str(sim.accept_problem(TestFlightContracts.terms("X", DEPARTS - 8))).is_empty()
 	assert_bool(sim.accept_contract(TestFlightContracts.terms("X", DEPARTS - 8))).is_true()
 	assert_str(sim.contract_of("X")["gate"]).is_equal("D")
-	TestFlightTaxiPairs.run_to(sim, GameCalendar.tick_at(0, 13 * 60))
+	TestFlightTaxiPairs.run_to(sim, GameCalendar.tick_at(0, 13 * 60, 0))
 	assert_int(sim.flight_ids().size()).is_equal(2)
 	assert_str(_reload_problem(sim, BOTH)).is_empty()
 	var good: Dictionary = JSON.parse_string(JSON.stringify(sim.to_snapshot()))
@@ -204,7 +204,7 @@ func test_a_save_with_mixed_pairs_loads_and_a_tampered_pair_is_refused() -> void
 	var short_contract := good.duplicate(true)
 	short_contract["contracts"][x_at]["taxi"] = [1000, 920]
 	var short_flight := good.duplicate(true)
-	var base := FlightTimetable.starts_for(_with(sim.contract_of("X"), TaxiTimes.BASE), 0)
+	var base := FlightTimetable.starts_for(_with(sim.contract_of("X"), TaxiTimes.BASE), 0, 0)
 	short_flight["flights"][x_flight]["starts"] = base
 	var odd_pair := good.duplicate(true)
 	odd_pair["contracts"][x_at]["taxi"] = [1250, 1100]

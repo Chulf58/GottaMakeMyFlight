@@ -29,14 +29,14 @@ static func next_departing(rows: Array[Dictionary], tick: int) -> Dictionary:
 	return {}
 
 
-static func doors_line(row: Dictionary) -> String:
-	return "%s  %s" % [row["base"], doors_text(row)]
+static func doors_line(row: Dictionary, epoch: int) -> String:
+	return "%s  %s" % [row["base"], doors_text(row, epoch)]
 
 
 ## "doors close 10:30": the game-clock time the row's doors close.
-static func doors_text(row: Dictionary) -> String:
+static func doors_text(row: Dictionary, epoch: int) -> String:
 	return TranslationServer.translate("doors close {time}").format(
-		{"time": GameCalendar.clock_text(row["doors"])}
+		{"time": GameCalendar.clock_text(row["doors"], epoch)}
 	)
 
 
@@ -81,29 +81,35 @@ static func _rows(flights: FlightSim, today: int) -> Array[Dictionary]:
 		var end_day := flights.contract_end_day(contract_id)
 		if end_day >= 0 and today >= end_day:
 			continue
-		var tick := GameCalendar.tick_at(today, int(contract["departure_minute"]))
+		var tick := GameCalendar.tick_at(today, int(contract["departure_minute"]), flights.epoch)
 		var state := flights.state_of(FlightTimetable.occurrence_id(contract_id, today))
-		var doors := FlightTimetable.starts_for(contract, today)[FlightSim.State.DOORS_CLOSED]
+		var doors := FlightTimetable.starts_for(contract, today, flights.epoch)[
+			FlightSim.State.DOORS_CLOSED
+		]
 		# An occurrence already issued keeps the gate it was issued at.
 		var gate := flights.flight_gate(FlightTimetable.occurrence_id(contract_id, today))
 		if gate == "":
 			gate = contract["gate"]
 		var place_airline := [contract["destination"], contract["airline"]]
 		var occurrence := FlightTimetable.occurrence_id(contract_id, today)
-		rows.append(_row(tick, doors, place_airline, state, contract_id, gate, occurrence))
+		rows.append(
+			_row(tick, doors, place_airline, state, contract_id, gate, occurrence, flights.epoch)
+		)
 	for id in flights.flight_ids():
 		if flights.flight_contract_id(id) != "":
 			continue
 		var tick := flights.state_start(id, FlightSim.State.PUSHBACK)
-		if GameCalendar.day_of(tick) == today:
+		if GameCalendar.day_of(tick, flights.epoch) == today:
 			var doors := flights.doors_close_tick(id)
 			var state := flights.state_of(id)
-			rows.append(_row(tick, doors, [id, ""], state, "", flights.flight_gate(id), id))
+			var gate := flights.flight_gate(id)
+			rows.append(_row(tick, doors, [id, ""], state, "", gate, id, flights.epoch))
 	rows.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["tick"] < b["tick"])
 	return rows
 
 
-## `place_airline` is [destination or flight id, airline or ""]. `head` is the
+## `place_airline` is [destination or flight id, airline or ""], and `epoch` the
+## calendar epoch the times are read at. `head` is the
 ## time and destination (line 1 of the board row), `airline` the full airline
 ## name (line 2), `status` the status word; `base` and `line` stay the one-line
 ## text.
@@ -114,11 +120,12 @@ static func _row(
 	state: int,
 	contract_id: String,
 	gate: String,
-	flight_id: String
+	flight_id: String,
+	epoch: int
 ) -> Dictionary:
 	var place: String = place_airline[0]
 	var airline: String = place_airline[1]
-	var head := "%s  %s" % [GameCalendar.clock_text(tick), place]
+	var head := "%s  %s" % [GameCalendar.clock_text(tick, epoch), place]
 	var base := head if airline == "" else "%s  %s" % [head, airline]
 	var line := base
 	var status := status_word(state)

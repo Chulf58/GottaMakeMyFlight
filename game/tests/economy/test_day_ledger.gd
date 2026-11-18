@@ -37,7 +37,7 @@ func _step() -> void:
 
 ## Moves the clock so the next _step() is the first tick of `day`.
 func _to_midnight(day: int) -> void:
-	_clock.tick = GameCalendar.day_start(day) - 1
+	_clock.tick = GameCalendar.day_start(day, 0) - 1
 
 
 func test_a_new_ledger_is_on_the_clocks_day_with_nothing_recorded() -> void:
@@ -161,7 +161,7 @@ func test_the_first_tick_of_a_day_starts_a_new_day_with_none_recorded() -> void:
 func test_a_movement_stamped_with_a_new_days_tick_lands_on_that_day() -> void:
 	assert_bool(_wallet.credit(300, C.FEES)).is_true()
 	# The clock has moved to the next day but no tick reached the ledger yet.
-	_clock.tick = GameCalendar.day_start(1)
+	_clock.tick = GameCalendar.day_start(1, 0)
 	assert_bool(_wallet.spend(60, C.WAGES)).is_true()
 	assert_int(_ledger.day()).is_equal(1)
 	assert_int(_ledger.amount(C.FEES)).is_equal(0)
@@ -248,7 +248,7 @@ func test_a_bad_snapshot_is_refused_and_changes_nothing() -> void:
 
 func test_a_load_with_no_saved_ledger_counts_since_the_load() -> void:
 	assert_bool(_wallet.credit(300, C.FEES)).is_true()
-	_clock.tick = GameCalendar.tick_at(3, 14 * 60)
+	_clock.tick = GameCalendar.tick_at(3, 14 * 60, 0)
 	_ledger.start_since_load()
 	assert_bool(_ledger.is_since_load()).is_true()
 	assert_int(_ledger.day()).is_equal(3)
@@ -263,7 +263,7 @@ func test_a_load_with_no_saved_ledger_counts_since_the_load() -> void:
 
 
 func test_the_saved_day_must_be_the_clocks_day() -> void:
-	var clock := {"tick": str(GameCalendar.tick_at(2, 600))}
+	var clock := {"tick": str(GameCalendar.tick_at(2, 600, 0)), "epoch": "0"}
 	var ledger := _ledger.to_snapshot()
 	ledger["day"] = "2"
 	assert_str(DayLedger.day_link_problem(ledger, clock)).is_empty()

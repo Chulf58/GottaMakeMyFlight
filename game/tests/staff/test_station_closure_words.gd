@@ -60,7 +60,7 @@ func test_the_words_read_as_the_english_key_in_english() -> void:
 	assert_str(_w.staff.closures.status_words(_a)).is_equal(_w.staff.closures.status_text(_a))
 	_w.staff.closures.set_closed(_a, true)
 	assert_str(_w.staff.closures.status_words(_a)).is_equal("Closed by you")
-	assert_str(StationClosures.fault_words(900)).is_equal(StationClosures.fault_text(900))
+	assert_str(StationClosures.fault_words(900, 0)).is_equal(StationClosures.fault_text(900, 0))
 
 
 func test_the_words_are_translated_and_the_key_stays_english() -> void:
@@ -70,7 +70,7 @@ func test_the_words_are_translated_and_the_key_stays_english() -> void:
 	print("closed (pseudo): %s; key: %s" % [shown, _w.staff.closures.status_text(_a)])
 	assert_str(shown).starts_with("[").contains("Closed by you")
 	assert_str(_w.staff.closures.status_text(_a)).is_equal("Closed by you")
-	assert_str(StationClosures.fault_words(900)).starts_with("[").contains("fixed by")
+	assert_str(StationClosures.fault_words(900, 0)).starts_with("[").contains("fixed by")
 
 
 func test_a_scanner_fault_is_one_sentence_with_its_time_in_a_placeholder() -> void:
@@ -82,5 +82,5 @@ func test_a_scanner_fault_is_one_sentence_with_its_time_in_a_placeholder() -> vo
 	TranslationServer.add_translation(_translation)
 	var shown := _w.staff.closures.status_words(_a)
 	print("fault (German): %s" % shown)
-	assert_str(shown).is_equal("Defekt, behoben um %s" % GameCalendar.clock_text(repair))
+	assert_str(shown).is_equal("Defekt, behoben um %s" % GameCalendar.clock_text(repair, 0))
 	assert_str(_w.staff.closures.status_text(_a)).starts_with("Scanner fault, fixed by")

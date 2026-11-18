@@ -159,7 +159,9 @@ func _show(incident: Dictionary) -> bool:
 	var offer: bool = incident["state"] == IncidentCatalogue.OFFERED
 	# Worded by the clock as the dialog opens: a queued offer may open after midnight.
 	var now: int = clock.tick if clock != null else incident["fire_tick"]
-	var copy := IncidentCopy.fill(copy_for.call(incident["kind"]), incident, now)
+	var copy := IncidentCopy.fill(
+		copy_for.call(incident["kind"]), incident, now, SimClock.epoch_of(clock)
+	)
 	if not _copy_ok(copy, offer):
 		push_warning(
 			"IncidentPanel: no words for %s incident %d" % [incident["kind"], incident["id"]]

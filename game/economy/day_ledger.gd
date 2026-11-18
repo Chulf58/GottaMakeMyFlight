@@ -99,7 +99,7 @@ func bind(wallet: Wallet, with_clock: SimClock) -> void:
 	_wallet.unpaid.connect(record_unpaid)
 	_clock.ticked.connect(on_tick)
 	if _day == NO_DAY:
-		_day = GameCalendar.day_of(_clock.tick)
+		_day = GameCalendar.day_of(_clock.tick, _clock.epoch)
 
 
 ## The game day the totals are for.
@@ -164,7 +164,7 @@ func record(gross: int, category: int, claimed: Dictionary, tick: int) -> void:
 			"DayLedger: a %d transaction has no tick; it is counted on day %d" % [gross, _day]
 		)
 	else:
-		_roll_to(GameCalendar.day_of(tick))
+		_roll_to(GameCalendar.day_of(tick, _clock.epoch))
 	_totals[category] += gross
 	for debt in claimed:
 		_totals[debt] -= claimed[debt]
@@ -179,14 +179,14 @@ func record_unpaid(unpaid: int, category: int, tick: int) -> void:
 		push_error("DayLedger: an unpaid %d in category %d is not a fine" % [unpaid, category])
 		return
 	if tick != Wallet.NO_TICK:
-		_roll_to(GameCalendar.day_of(tick))
+		_roll_to(GameCalendar.day_of(tick, _clock.epoch))
 	_fines_unpaid += unpaid
 	changed.emit()
 
 
 ## SimClock.ticked: starts a new day at its first tick.
 func on_tick(tick: int) -> void:
-	_roll_to(GameCalendar.day_of(tick))
+	_roll_to(GameCalendar.day_of(tick, _clock.epoch))
 
 
 ## A load of a save with no ledger: nothing counted yet today, on the clock's
@@ -194,7 +194,7 @@ func on_tick(tick: int) -> void:
 func start_since_load() -> void:
 	_clear()
 	if _clock != null:
-		_day = GameCalendar.day_of(_clock.tick)
+		_day = GameCalendar.day_of(_clock.tick, _clock.epoch)
 	_since_load = true
 	changed.emit()
 
@@ -235,7 +235,11 @@ static func day_link_problem(ledger: Dictionary, clock_data: Dictionary) -> Stri
 	if not SimClock.is_int64_string(clock_data.get("tick")):
 		return ""
 	var saved_day := str(ledger["day"]).to_int()
-	var clock_day := GameCalendar.day_of(str(clock_data["tick"]).to_int())
+	if not SimClock.is_int64_string(clock_data.get("epoch")):
+		return ""
+	var clock_day := GameCalendar.day_of(
+		str(clock_data["tick"]).to_int(), SimClock.saved_epoch(clock_data)
+	)
 	if saved_day != clock_day:
 		return (
 			"day_ledger: today's money was counted for day %d, but the clock is on day %d"

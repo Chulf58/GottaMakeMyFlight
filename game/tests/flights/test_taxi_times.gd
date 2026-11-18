@@ -111,8 +111,8 @@ func test_the_longest_north_lane_route_keeps_the_quiet_night_empty() -> void:
 				longest[0],
 				longest[1],
 				worst,
-				GameCalendar.clock_text(first_state),
-				GameCalendar.clock_text(departed)
+				GameCalendar.clock_text(first_state, 0),
+				GameCalendar.clock_text(departed, 0)
 			]
 		)
 	)
@@ -122,16 +122,16 @@ func test_the_longest_north_lane_route_keeps_the_quiet_night_empty() -> void:
 	assert_str(TaxiTimes.problem(worst)).is_empty()
 	assert_int(worst[0]).is_less_equal(5540)
 	assert_int(worst[1]).is_less_equal(2080)
-	assert_int(first_state).is_greater_equal(GameCalendar.day_start(0))
-	assert_int(departed).is_less_equal(GameCalendar.day_start(1))
+	assert_int(first_state).is_greater_equal(GameCalendar.day_start(0, 0))
+	assert_int(departed).is_less_equal(GameCalendar.day_start(1, 0))
 	# The issue comes at or before the first state at every gate.
 	var contract := _contract(6 * 60, worst)
-	assert_int(FlightTimetable.issue_tick(contract, 0)).is_less_equal(first_state)
+	assert_int(FlightTimetable.issue_tick(contract, 0, 0)).is_less_equal(first_state)
 
 
 ## The starts of day 0 for a contract departing at `minute` with `pair`.
 static func _starts(minute: int, pair: Array) -> Array[int]:
-	return FlightTimetable.starts_for(_contract(minute, pair), 0)
+	return FlightTimetable.starts_for(_contract(minute, pair), 0, 0)
 
 
 static func _contract(minute: int, pair: Array) -> Dictionary:

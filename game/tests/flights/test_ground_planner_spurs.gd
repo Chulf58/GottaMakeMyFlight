@@ -57,7 +57,7 @@ func test_side_routes_run_on_the_axes_and_plan() -> void:
 		print("%s taxi pair %s: %s" % [side, pair, TaxiTimes.problem(pair)])
 		assert_str(TaxiTimes.problem(pair)).is_equal("")
 		var req := GroundPlanner.request(
-			"S", PlaneClasses.MEDIUM, stand, GroundPlannerKit.starts_at(1, 600, pair), planned
+			"S", PlaneClasses.MEDIUM, stand, GroundPlannerKit.starts_at(1, 600, pair), planned, 0
 		)
 		var result: Dictionary = _kit.planner().plan_all([req])["S"]
 		print(

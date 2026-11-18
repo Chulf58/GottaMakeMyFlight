@@ -61,9 +61,9 @@ func post_active() -> void:
 ## for a VIP without the bonus, coral for a miss or a fail). Nothing for any
 ## other incident or a VIP dropped without a result.
 func _post_result(incident: Dictionary) -> void:
-	var words := IncidentCopy.vip_result(incident)
+	var words := IncidentCopy.vip_result(incident, director.clock.epoch)
 	if words.is_empty():
-		words = IncidentCopy.inspector_result(incident)
+		words = IncidentCopy.inspector_result(incident, director.clock.epoch)
 	if words.is_empty():
 		return
 	var on := _rail()
@@ -105,7 +105,9 @@ func _post(incident: Dictionary) -> void:
 		return
 	var key := key_of(incident)
 	var title := IncidentCatalogue.card_title(incident)
-	var detail := IncidentCatalogue.card_detail(incident, director.cleaner_hired())
+	var detail := IncidentCatalogue.card_detail(
+		incident, director.cleaner_hired(), director.clock.epoch
+	)
 	var card := OfferPanel.coral_card(key, title, detail)
 	card.name = "IncidentNotice_%s" % key
 	on.post_notice(key, card, 0.0, title, detail)

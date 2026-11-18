@@ -98,7 +98,7 @@ func _words(kind: String) -> Dictionary:
 
 func _incident(kind: String, plan: Dictionary, offer: bool) -> Dictionary:
 	var incident := {"id": 1, "kind": kind, "plan": plan, "fire_tick": 0}
-	var copy := IncidentCopy.fill(IncidentCatalogue.panel_copy(kind), incident, 0)
+	var copy := IncidentCopy.fill(IncidentCatalogue.panel_copy(kind), incident, 0, 0)
 	return {
 		"title": copy["title"],
 		"body": IncidentPanel.body_for(copy, offer),

@@ -58,7 +58,7 @@ func test_the_trial_day_plan_cache_drops_past_days() -> void:
 	var largest := 0
 	for day in range(1, 11):
 		for hour in 24:
-			sim.on_tick(GameCalendar.day_start(day) + hour * 60 * GameCalendar.TICKS_PER_MINUTE)
+			sim.on_tick(GameCalendar.day_start(day, 0) + hour * 60 * GameCalendar.TICKS_PER_MINUTE)
 		FlightFit.assess(sim, TestFlightFit.terms("X", 900))
 		largest = maxi(largest, sim._trial_day_plans.size())
 		for cached: int in sim._trial_day_plans:

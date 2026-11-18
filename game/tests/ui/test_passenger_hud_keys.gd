@@ -117,7 +117,7 @@ func test_the_clock_shows_the_in_game_day_and_time() -> void:
 	assert_str(_hud.time_text()).is_equal("Day 1  06:00")
 	_world.clock.tick = 125 * SimClock.TICK_RATE
 	assert_str(_hud.time_text()).is_equal("Day 1  08:05")
-	_world.clock.tick = GameCalendar.day_start(1) + 20 * GameCalendar.TICKS_PER_MINUTE
+	_world.clock.tick = GameCalendar.day_start(1, 0) + 20 * GameCalendar.TICKS_PER_MINUTE
 	assert_str(_hud.time_text()).is_equal("Day 2  00:20")
 
 

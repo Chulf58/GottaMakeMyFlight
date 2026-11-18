@@ -88,7 +88,7 @@ func test_a_runway_size_change_rewrites_the_cards_while_the_sheet_is_open() -> v
 ## lands, so its card stops saying it fits.
 func test_runway_works_rewrite_the_cards_while_the_sheet_is_open() -> void:
 	_sim.runway.size = PlaneClasses.MEDIUM
-	_sim.tick = GameCalendar.tick_at(1, 3 * 60)
+	_sim.tick = GameCalendar.tick_at(1, 3 * 60, 0)
 	_open([420, 720, 1200])
 	assert_str(_panel.fit_text("O0N1")).is_equal(OfferPanel.FITS_TEXT)
 	var changes_before := _planning_changes

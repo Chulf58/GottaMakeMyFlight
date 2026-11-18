@@ -45,7 +45,7 @@ func test_a_new_game_draws_day_zeros_offers_from_the_clock_rng() -> void:
 func test_ticks_inside_the_day_draw_nothing_more() -> void:
 	_desk.bind_clock(_clock)
 	var state := _clock.rng.state
-	for tick in [1, 1000, GameCalendar.day_start(1) - 1]:
+	for tick in [1, 1000, GameCalendar.day_start(1, 0) - 1]:
 		_tick_to(tick)
 	assert_int(_changes).is_equal(1)
 	assert_int(_clock.rng.state).is_equal(state)
@@ -54,9 +54,9 @@ func test_ticks_inside_the_day_draw_nothing_more() -> void:
 func test_midnight_draws_the_new_days_offers_and_expires_the_old() -> void:
 	_desk.bind_clock(_clock)
 	var day0 := _desk.board.open_offers()
-	_tick_to(GameCalendar.day_start(1) - 1)
-	_tick_to(GameCalendar.day_start(1))
-	assert_int(GameCalendar.day_of(_clock.tick)).is_equal(1)
+	_tick_to(GameCalendar.day_start(1, 0) - 1)
+	_tick_to(GameCalendar.day_start(1, 0))
+	assert_int(GameCalendar.day_of(_clock.tick, 0)).is_equal(1)
 	for offer in day0:
 		assert_str(_desk.board.offer_of(offer["id"])["status"]).is_equal(OfferBoard.EXPIRED)
 	assert_array(_desk.board.open_offers()).has_size(OfferBoard.OFFERS_PER_DAY)
@@ -68,16 +68,16 @@ func test_midnight_draws_the_new_days_offers_and_expires_the_old() -> void:
 func test_each_day_draws_exactly_once() -> void:
 	_desk.bind_clock(_clock)
 	for day in [1, 2]:
-		_tick_to(GameCalendar.day_start(day))
-		_tick_to(GameCalendar.day_start(day) + 1)
-		_tick_to(GameCalendar.day_start(day) + 5000)
+		_tick_to(GameCalendar.day_start(day, 0))
+		_tick_to(GameCalendar.day_start(day, 0) + 1)
+		_tick_to(GameCalendar.day_start(day, 0) + 5000)
 	assert_int(_changes).is_equal(3)
 	assert_array(_desk.board.open_offers()).is_equal(_replay([0, 1, 2]).open_offers())
 	assert_int(_desk.board.to_snapshot()["offers"].size()).is_equal(3 * OfferBoard.OFFERS_PER_DAY)
 
 
 func test_a_clock_already_past_day_zero_draws_its_own_day() -> void:
-	_clock.tick = GameCalendar.day_start(3) + 100
+	_clock.tick = GameCalendar.day_start(3, 0) + 100
 	_desk.bind_clock(_clock)
 	for offer in _desk.board.open_offers():
 		assert_int(offer["day"]).is_equal(3)
@@ -104,7 +104,7 @@ func test_binding_the_same_clock_again_changes_nothing() -> void:
 	_desk.bind_clock(_clock)
 	assert_int(_changes).is_equal(1)
 	assert_int(_clock.rng.state).is_equal(state)
-	_tick_to(GameCalendar.day_start(1))
+	_tick_to(GameCalendar.day_start(1, 0))
 	assert_int(_changes).is_equal(2)
 
 
@@ -116,11 +116,11 @@ func test_binding_another_clock_lets_go_of_the_first() -> void:
 	assert_int(_desk.clock.get_instance_id()).is_equal(other.get_instance_id())
 	var changes := _changes
 	var state := _clock.rng.state
-	_tick_to(GameCalendar.day_start(1))
+	_tick_to(GameCalendar.day_start(1, 0))
 	assert_int(_changes).is_equal(changes)
 	assert_int(_clock.rng.state).is_equal(state)
 	assert_int(_clock.ticked.get_connections().size()).is_equal(0)
-	other.tick = GameCalendar.day_start(1)
+	other.tick = GameCalendar.day_start(1, 0)
 	other.ticked.emit(other.tick)
 	assert_int(_changes).is_equal(changes + 1)
 

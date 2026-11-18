@@ -143,7 +143,7 @@ func test_the_picker_lists_only_fitting_gates_and_says_so_when_none_fits() -> vo
 func test_an_occurrence_already_issued_keeps_its_gate_after_a_move() -> void:
 	_three_gates()
 	_accept_x_and_y()
-	_run_to(FlightTimetable.issue_tick(_sim.contract_of("Y"), 0))
+	_run_to(FlightTimetable.issue_tick(_sim.contract_of("Y"), 0, 0))
 	assert_str(_sim.flight_gate("Y-d0")).is_equal("B")
 	_press(_board.gate_button("Y", 0))
 	_press(_board.picker_button("C"))
@@ -189,7 +189,7 @@ func test_the_refusal_shows_no_contract_id() -> void:
 func test_a_clash_with_an_issued_flight_names_it_by_time_and_destination() -> void:
 	_three_gates()
 	_accept_x_and_y()
-	_run_to(FlightTimetable.issue_tick(_sim.contract_of("Y"), 0))
+	_run_to(FlightTimetable.issue_tick(_sim.contract_of("Y"), 0, 0))
 	assert_bool(_sim.end_contract("X")).is_true()
 	var reason := _sim.reassign_problem("Y", "A")
 	assert_str(reason).contains("with flight X-d0 at gate A")
@@ -229,7 +229,7 @@ func test_a_load_closes_an_open_picker_and_drops_its_message() -> void:
 func test_a_contract_that_ends_closes_its_open_picker() -> void:
 	_three_gates()
 	_accept_x_and_y()
-	_run_to(FlightTimetable.issue_tick(_sim.contract_of("Y"), 0))
+	_run_to(FlightTimetable.issue_tick(_sim.contract_of("Y"), 0, 0))
 	_press_c_once_taken()
 	assert_str(_board.message_text()).is_not_empty()
 	assert_str(_board.picker_note()).is_equal(DeparturesBoard.NO_FIT_TEXT)

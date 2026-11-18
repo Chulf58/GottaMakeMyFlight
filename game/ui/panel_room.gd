@@ -13,9 +13,11 @@ extends Node
 ##
 ## Only a panel opening or closing refits the distance; a panel that merely
 ## changes size moves the view a little and never zooms it (the banner is the
-## exception while the tray is open: see the build stack below). The rail is
-## counted the same way: a card coming or going only shifts the view. The
-## camera does nothing on a build edit.
+## exception while the tray is open: see the build stack below). The rail only
+## ever shifts the view: a card coming or going is no panel opening or closing,
+## and the distance is fitted to the free rectangle without the rail
+## (fit_fraction()), so a card that is up when a tray opens does not zoom the
+## camera out either. The camera does nothing on a build edit.
 ##
 ## The build stack (the tray, and the banner at the top centre) makes room once,
 ## when the tray opens (decision camera-makes-room-once-per-build-mode-open-not-on-
@@ -50,6 +52,7 @@ var alert_stack: AlertStack
 var _last_key := 0
 var _refit_frames := 0
 var _last_free := Rect2(0.0, 0.0, 1.0, 1.0)
+var _last_fit := Rect2(0.0, 0.0, 1.0, 1.0)
 ## Frames the tray has been open, counted up to the frame its stack is kept.
 var _tray_frames := 0
 ## The tray and banner rectangles kept at that frame, and the viewport size
@@ -99,21 +102,28 @@ func _process(_delta: float) -> void:
 	_track_build_stack()
 	var key := open_key()
 	var free := free_fraction()
-	var moved := (
-		absf(free.position.x - _last_free.position.x) > MIN_CHANGE
-		or absf(free.position.y - _last_free.position.y) > MIN_CHANGE
-		or absf(free.end.x - _last_free.end.x) > MIN_CHANGE
-		or absf(free.end.y - _last_free.end.y) > MIN_CHANGE
-	)
+	var fit := fit_fraction()
+	var moved := _changed(free, _last_free) or _changed(fit, _last_fit)
 	if key != _last_key:
 		_refit_frames = REFIT_FRAMES
 	var refit := _refit_frames > 0
 	_refit_frames = maxi(_refit_frames - 1, 0)
 	if key == _last_key and not moved:
 		return
-	camera.set_room(free, refit)
+	camera.set_room(free, refit, fit)
 	_last_key = key
 	_last_free = free
+	_last_fit = fit
+
+
+## True when an edge of `now` is more than MIN_CHANGE from the same edge of `was`.
+static func _changed(now: Rect2, was: Rect2) -> bool:
+	return (
+		absf(now.position.x - was.position.x) > MIN_CHANGE
+		or absf(now.position.y - was.position.y) > MIN_CHANGE
+		or absf(now.end.x - was.end.x) > MIN_CHANGE
+		or absf(now.end.y - was.end.y) > MIN_CHANGE
+	)
 
 
 ## Counts the frames the tray has been open and, REFIT_FRAMES after it opened,
@@ -140,8 +150,18 @@ func _track_build_stack() -> void:
 
 ## The free screen rectangle as fractions of the viewport.
 func free_fraction() -> Rect2:
+	return _fraction(open_rects())
+
+
+## free_fraction() without the right rail: the share the start view's distance
+## is fitted in, since a rail card only shifts the view.
+func fit_fraction() -> Rect2:
+	return _fraction(_panel_rects())
+
+
+func _fraction(rects: Array[Rect2]) -> Rect2:
 	var size := get_viewport().get_visible_rect().size
-	var free := free_rect(Rect2(Vector2.ZERO, size), open_rects())
+	var free := free_rect(Rect2(Vector2.ZERO, size), rects)
 	return Rect2(free.position / size, free.size / size)
 
 
@@ -150,6 +170,7 @@ func free_fraction() -> Rect2:
 func mark_sent() -> void:
 	_last_key = open_key()
 	_last_free = free_fraction()
+	_last_fit = fit_fraction()
 
 
 ## Which panels are open, one bit each, so the camera can tell a panel opening
@@ -176,6 +197,16 @@ func open_key() -> int:
 
 ## The screen rectangle of every open panel, then the right rail.
 func open_rects() -> Array[Rect2]:
+	var rects := _panel_rects()
+	if alert_stack != null:
+		var alerts := alert_stack.room_rect()
+		if alerts.has_area():
+			rects.append(alerts)
+	return rects
+
+
+## The screen rectangle of every open panel, without the right rail.
+func _panel_rects() -> Array[Rect2]:
 	var rects: Array[Rect2] = []
 	var menu := _menu()
 	var tray_open := menu != null and menu.is_tray_open()
@@ -188,10 +219,6 @@ func open_rects() -> Array[Rect2]:
 			rects.append(panel.get_global_rect())
 	if not tray_open and _banner().has_area():
 		rects.append(_banner())
-	if alert_stack != null:
-		var alerts := alert_stack.room_rect()
-		if alerts.has_area():
-			rects.append(alerts)
 	return rects
 
 

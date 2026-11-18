@@ -81,22 +81,22 @@ func test_a_long_route_moves_the_first_state_earlier_and_keeps_the_departure() -
 	var far := open_sim(["D"] as Array[String])
 	for sim: FlightSim in [north, far]:
 		assert_bool(sim.accept_contract(TestFlightContracts.terms("T", TEN))).is_true()
-	var base := FlightTimetable.starts_for(north.contract_of("T"), 0)
-	var long := FlightTimetable.starts_for(far.contract_of("T"), 0)
+	var base := FlightTimetable.starts_for(north.contract_of("T"), 0, 0)
+	var long := FlightTimetable.starts_for(far.contract_of("T"), 0, 0)
 	var extra_in := long_pair()[0] - TaxiTimes.BASE[0]
 	var extra_out := long_pair()[1] - TaxiTimes.BASE[1]
 	print("base %s\nlong %s" % [base, long])
 	assert_int(long[0]).is_equal(base[0] - extra_in)
 	for state in [FlightSim.State.BOARDING, FlightSim.State.DOORS_CLOSED]:
 		assert_int(long[state]).is_equal(base[state])
-	assert_int(long[FlightSim.State.PUSHBACK]).is_equal(GameCalendar.tick_at(0, TEN))
-	assert_int(base[FlightSim.State.PUSHBACK]).is_equal(GameCalendar.tick_at(0, TEN))
+	assert_int(long[FlightSim.State.PUSHBACK]).is_equal(GameCalendar.tick_at(0, TEN, 0))
+	assert_int(base[FlightSim.State.PUSHBACK]).is_equal(GameCalendar.tick_at(0, TEN, 0))
 	assert_int(long[FlightSim.State.DEPARTED]).is_equal(base[FlightSim.State.DEPARTED] + extra_out)
 	var held := long[FlightSim.State.DEPARTED] - long[0]
 	assert_int(held).is_equal(FlightTimetable.reserved_ticks(long_pair()))
 	assert_int(held).is_equal(FlightTimetable.reserved_ticks() + extra_in + extra_out)
-	var issue := FlightTimetable.issue_tick(far.contract_of("T"), 0)
-	assert_int(issue).is_equal(FlightTimetable.issue_tick(north.contract_of("T"), 0))
+	var issue := FlightTimetable.issue_tick(far.contract_of("T"), 0, 0)
+	assert_int(issue).is_equal(FlightTimetable.issue_tick(north.contract_of("T"), 0, 0))
 	assert_int(issue).is_less_equal(long[0])
 	# The sim issues it then, and holds gate D from the earlier first state.
 	run_to(far, issue)
@@ -119,9 +119,15 @@ func test_a_clash_at_a_gate_counts_each_contract_s_own_gate_hold() -> void:
 	b["taxi"] = [1240, 920]
 	assert_bool(FlightTimetable.contracts_share_gate(a, b)).is_true()
 	assert_bool(FlightTimetable.contracts_share_gate(b, a)).is_true()
-	assert_bool(FlightTimetable.contract_meets(b, "D", FlightTimetable.starts_for(a, 3))).is_true()
+	(
+		assert_bool(FlightTimetable.contract_meets(b, "D", FlightTimetable.starts_for(a, 3, 0), 0))
+		. is_true()
+	)
 	b["taxi"] = [1000, 920]
-	assert_bool(FlightTimetable.contract_meets(b, "D", FlightTimetable.starts_for(a, 3))).is_false()
+	(
+		assert_bool(FlightTimetable.contract_meets(b, "D", FlightTimetable.starts_for(a, 3, 0), 0))
+		. is_false()
+	)
 	# A longer TAXI_OUT on A reaches B's base hold the same way.
 	a["taxi"] = [1000, 1060]
 	assert_bool(FlightTimetable.contracts_share_gate(a, b)).is_true()
@@ -148,32 +154,32 @@ func test_the_sim_refuses_a_clash_that_only_the_long_pair_makes() -> void:
 ## offer has to wait for tomorrow, and accepting agrees.
 func test_the_first_flight_note_uses_the_pair_of_the_gate() -> void:
 	var offer := TestFlightContracts.terms("O", TEN)
-	var base_first := FlightTimetable.starts_for(_timed(offer, TaxiTimes.BASE), 0)[0]
-	var long_first := FlightTimetable.starts_for(_timed(offer, long_pair()), 0)[0]
+	var base_first := FlightTimetable.starts_for(_timed(offer, TaxiTimes.BASE), 0, 0)[0]
+	var long_first := FlightTimetable.starts_for(_timed(offer, long_pair()), 0, 0)[0]
 	var now := long_first + 1
 	assert_int(now).is_less(base_first)
-	assert_str(OfferPanel.first_flight_note(offer, now, TaxiTimes.BASE)).is_empty()
-	assert_str(OfferPanel.first_flight_note(offer, now, long_pair())).is_equal(
+	assert_str(OfferPanel.first_flight_note(offer, now, TaxiTimes.BASE, 0)).is_empty()
+	assert_str(OfferPanel.first_flight_note(offer, now, long_pair(), 0)).is_equal(
 		"first flight tomorrow"
 	)
 	for gates: Array[String] in [["C"] as Array[String], ["D"] as Array[String]]:
 		var sim := open_sim(gates)
 		sim.tick = now
 		var taxi := sim.gate_taxi(gates[0])
-		var noted := OfferPanel.first_flight_note(offer, now, taxi) != ""
+		var noted := OfferPanel.first_flight_note(offer, now, taxi, 0) != ""
 		assert_bool(sim.accept_contract(offer)).is_true()
 		assert_bool(noted).is_equal(int(sim.contract_of("O")["first_day"]) == 1)
 	# Accepted while closed, the lead to the first flight is the same at both.
 	assert_int(OfferPanel.opening_lead_ticks()).is_equal(FlightTimetable.issue_lead())
 
 
-## The starter departs issue_lead() after now at any gate: at the long gate it
-## is issued at once, today, with its first state still ahead.
+## The starter departs StarterSlot.lead() of its gate's pair after now: at the long
+## gate it is issued at once, today, with its first state still ahead.
 func test_the_starter_is_issued_at_once_at_the_long_gate() -> void:
 	var sim := open_sim(["D"] as Array[String])
-	var now := GameCalendar.tick_at(0, 9 * 60)
+	var now := GameCalendar.tick_at(0, 9 * 60, 0)
 	run_to(sim, now)
-	var terms := FlightSim.starter_terms(now)
+	var terms := StarterSlot.terms(sim)
 	assert_bool(sim.accept_contract(terms)).is_true()
 	assert_array(sim.contract_of(terms["id"])["taxi"]).is_equal(long_pair())
 	var id := FlightTimetable.occurrence_id(terms["id"], 0)
@@ -189,7 +195,7 @@ func test_the_planner_bar_of_an_issued_flight_keeps_its_own_starts() -> void:
 	var sim := open_sim(["C", "D"] as Array[String])
 	assert_bool(sim.accept_contract(TestFlightContracts.terms("A", 840))).is_true()
 	assert_bool(sim.reassign_gate("A", "D")).is_true()
-	run_to(sim, FlightTimetable.issue_tick(sim.contract_of("A"), 0))
+	run_to(sim, FlightTimetable.issue_tick(sim.contract_of("A"), 0, 0))
 	var long := sim.state_start("A-d0", FlightSim.State.SCHEDULED)
 	assert_bool(sim.reassign_gate("A", "C")).is_true()
 	var bars := {}
@@ -199,7 +205,7 @@ func test_the_planner_bar_of_an_issued_flight_keeps_its_own_starts() -> void:
 		bars[bar["flight"]] = bar
 	assert_int(bars["A-d0"]["start"]).is_equal(long)
 	assert_str(bars["A-d0"]["gate"]).is_equal("D")
-	var next := FlightTimetable.starts_for(sim.contract_of("A"), 1)
+	var next := FlightTimetable.starts_for(sim.contract_of("A"), 1, 0)
 	assert_int(bars["A-d1"]["start"]).is_equal(next[0])
 	assert_int(next[0]).is_equal(long + GameCalendar.TICKS_PER_DAY + long_pair()[0] - 1000)
 
