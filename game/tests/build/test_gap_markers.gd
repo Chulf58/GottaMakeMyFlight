@@ -144,12 +144,26 @@ func test_the_hover_text_is_reported_only_in_build_mode() -> void:
 	var signs := markers.hover_signs()
 	print("in build mode: %s" % [signs])
 	assert_int(signs.size()).is_equal(1)
-	assert_str(signs[0]["text"]).is_equal(GapMarkers.HOVER_TEXT)
+	assert_str(signs[0]["text"]).is_equal(GapMarkers.hover_text())
+	assert_str(GapMarkers.hover_text()).is_equal(
+		"Wall gap · close the outer wall so the roof can go on"
+	)
 	assert_bool(signs[0].has("select")).is_false()
 	var foot := camera.unproject_position(markers.signs()[0].global_position)
 	var rect: Rect2 = signs[0]["rect"]
 	assert_bool(rect.has_point(foot + Vector2(0.0, -rect.size.y / 2.0))).is_true()
 	assert_float(rect.size.y).is_greater(0.0)
+
+
+## The hover words reach the tooltip through tr(): under the pseudolocale they
+## come back with the "[" lead and the English text inside.
+func test_the_hover_text_is_translated() -> void:
+	PseudoLocale.enable(0.4)
+	var shown := GapMarkers.hover_text()
+	PseudoLocale.disable()
+	print("gap hover: '%s'" % shown)
+	assert_str(shown).starts_with("[")
+	assert_str(shown).contains("Wall gap · close the outer wall so the roof can go on")
 
 
 ## A pinned gap tooltip belongs to its gap: when that gap closes, the pin ends

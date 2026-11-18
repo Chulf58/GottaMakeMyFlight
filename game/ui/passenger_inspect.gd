@@ -207,7 +207,7 @@ static func now_line(passenger_sim: PassengerSim, p: Passenger) -> String:
 		parts.append(TranslationServer.translate("Running late"))
 	if p.stuck != Passenger.Stuck.NONE:
 		var stuck := TranslationServer.translate('Stuck: "{reason}"')
-		parts.append(stuck.format({"reason": passenger_sim.bubble_text(p)}))
+		parts.append(stuck.format({"reason": BubbleWords.say(passenger_sim.bubble_text(p))}))
 	return "   ".join(parts)
 
 

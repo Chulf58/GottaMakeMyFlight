@@ -61,14 +61,6 @@ const DEBUG_W := 260.0
 const REVEAL_FRAMES := 2
 ## The flight result card's key on the rail.
 const RESULT_KEY := &"flight_result"
-## The flight panel's word for each state from the doors closing on.
-const AFTER_DOORS_TEXT := {
-	FlightSim.State.DOORS_CLOSED: "Doors closed",
-	FlightSim.State.PUSHBACK: "Pushback",
-	FlightSim.State.TAXI_OUT: "Taxiing",
-	FlightSim.State.TAKEOFF: "Taking off",
-	FlightSim.State.DEPARTED: "Departed",
-}
 
 @export var clock: SimClock
 @export var flights: FlightSim
@@ -525,7 +517,7 @@ func follow_text() -> String:
 			tr("toilet {value}", "follow line").format({"value": p.toilet_need}),
 		]
 	)
-	var bubble := sim.bubble_text(p)
+	var bubble := BubbleWords.say(sim.bubble_text(p))
 	if bubble != "":
 		parts.append(tr('"{text}"', "passenger speech").format({"text": bubble}))
 	return "   ".join(parts)
@@ -751,29 +743,15 @@ func _build_debug() -> void:
 	dock.add_child(_debug_panel)
 	var column := VBoxContainer.new()
 	_debug_panel.add_child(column)
-	var batch := Button.new()
-	batch.text = "Spawn %d passengers" % DEBUG_BATCH
-	batch.pressed.connect(press_debug_spawn)
-	var starter := Button.new()
-	starter.text = "Starter terminal"
-	starter.pressed.connect(press_starter_terminal)
-	for button in [batch, starter]:
-		button.focus_mode = Control.FOCUS_NONE
-		column.add_child(button)
+	column.add_child(DebugPanelParts.spawn_button(DEBUG_BATCH, press_debug_spawn))
+	column.add_child(DebugPanelParts.starter_button(press_starter_terminal))
 	var policy := Label.new()
 	policy.text = DEBUG_POLICY_TEXT
 	for label in [policy, _seed_label, _status_label]:
 		label.theme_type_variation = &"HudHint"
 		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		column.add_child(label)
-	var toggle := Button.new()
-	toggle.name = "DebugToggle"
-	toggle.text = "Debug"
-	toggle.toggle_mode = true
-	toggle.size_flags_horizontal = Control.SIZE_SHRINK_END
-	toggle.focus_mode = Control.FOCUS_NONE
-	toggle.toggled.connect(set_debug_open)
-	corner.add_child(toggle)
+	corner.add_child(DebugPanelParts.toggle(set_debug_open))
 
 
 ## A build without the debug tools never parents the panel or its two labels, so
