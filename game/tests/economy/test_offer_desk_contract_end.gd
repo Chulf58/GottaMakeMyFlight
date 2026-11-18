@@ -36,8 +36,8 @@ func _accept(id: String, minute: int, airline := "Gotta Air") -> void:
 ## Moves to the start of `day` as the scene does (rating first, then the desk)
 ## after the rating has seen only misses on the day before.
 func _low_day_end(day: int) -> void:
-	_rating.record_passenger(GameCalendar.day_start(day - 1), false, 0)
-	var tick := GameCalendar.day_start(day)
+	_rating.record_passenger(GameCalendar.day_start(day - 1, 0), false, 0)
+	var tick := GameCalendar.day_start(day, 0)
 	_clock.tick = tick
 	_rating.on_tick(tick)
 	_clock.ticked.emit(tick)
@@ -77,7 +77,7 @@ func test_a_day_without_a_due_end_ends_nothing() -> void:
 	_accept("AM", 480)
 	_rating.record_passenger(0, true, PassengerSim.MOOD_MAX)
 	for day in range(1, 6):
-		var tick := GameCalendar.day_start(day)
+		var tick := GameCalendar.day_start(day, 0)
 		_clock.tick = tick
 		_rating.on_tick(tick)
 		_clock.ticked.emit(tick)
@@ -90,7 +90,7 @@ func test_ticks_inside_a_day_end_nothing_more() -> void:
 	_accept("PM", 840)
 	for day in range(1, RatingFormula.LOW_DAYS_TO_END + 1):
 		_low_day_end(day)
-	var end_tick := GameCalendar.day_start(RatingFormula.LOW_DAYS_TO_END)
+	var end_tick := GameCalendar.day_start(RatingFormula.LOW_DAYS_TO_END, 0)
 	for tick in [end_tick + 1, end_tick + 500]:
 		_clock.tick = tick
 		_rating.on_tick(tick)
@@ -128,8 +128,8 @@ func test_the_end_survives_a_save_and_load_of_the_flights() -> void:
 ## outweigh the misses still in the window.
 func _recovery_day_end(day: int) -> void:
 	for i in 200:
-		_rating.record_passenger(GameCalendar.day_start(day - 1), true, PassengerSim.MOOD_MAX)
-	var tick := GameCalendar.day_start(day)
+		_rating.record_passenger(GameCalendar.day_start(day - 1, 0), true, PassengerSim.MOOD_MAX)
+	var tick := GameCalendar.day_start(day, 0)
 	_clock.tick = tick
 	_rating.on_tick(tick)
 	_clock.ticked.emit(tick)

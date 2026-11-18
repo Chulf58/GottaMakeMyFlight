@@ -65,7 +65,7 @@ func hire(role: StaffMember.Role, count := 1) -> void:
 ## Sets the clock so that `ticks` more ticks reach the first tick of `day`.
 func near_midnight(day: int, ticks: int) -> void:
 	var data := world.clock.to_snapshot()
-	data["tick"] = str(GameCalendar.day_start(day) - ticks)
+	data["tick"] = str(GameCalendar.day_start(day, 0) - ticks)
 	_suite.assert_bool(world.clock.from_snapshot(data)).is_true()
 
 
@@ -81,7 +81,7 @@ func cross(day: int) -> void:
 func charge(day: int) -> void:
 	near_midnight(day, 2)
 	world.step()
-	_suite.assert_bool(GameCalendar.is_last_tick_of_day(world.clock.tick)).is_true()
+	_suite.assert_bool(GameCalendar.is_last_tick_of_day(world.clock.tick, 0)).is_true()
 
 
 ## Everything a save holds of the wages: the settlement, wallet and clock, as

@@ -128,9 +128,8 @@ const DEFAULT_ID := "GMF101"
 const DEFAULT_GATE := "C"
 ## The gates with a stand while gate_source is unset: the one stand so far.
 const DEFAULT_GATES: Array[String] = [DEFAULT_GATE]
-## The contract the airport opens with (Economy 7/8), without its departure
-## minute: starter_terms() sets that from the opening tick. Fee and size sit
-## inside the offer board's ranges.
+## The contract the airport opens with (Economy 7/8), without its departure minute, which
+## StarterSlot sets at the opening. Fee and size sit inside the offer board's ranges.
 const STARTER_TERMS := {
 	"id": DEFAULT_ID,
 	"airline": "Gotta Air",
@@ -200,6 +199,12 @@ const BLOCKER_ROUTE := "route"
 
 ## The tick the sim has been told about; set by the clock or a snapshot.
 var tick: int = 0
+## The calendar epoch E (SimClock.epoch): the clock's, else (no clock: a staged copy) this.
+var epoch: int:
+	get:
+		return clock.epoch if clock != null else _epoch
+	set(value):
+		_epoch = value
 ## The tick the airport opened, or -1 while it is closed. Set only by
 ## open_airport() and from_snapshot(); read it, never write it.
 var opened_tick: int = -1
@@ -266,6 +271,7 @@ var _reserving: Dictionary = {}
 ## day.
 var _landed: Array[Dictionary] = []
 var _plans := FlightPlans.new()
+var _epoch := 0
 ## Bumped on every change to the contracts or the flights that can change a
 ## plan; the day plans in _day_plans are of this revision and of _grounds_key.
 var _revision := 0
@@ -300,35 +306,24 @@ static func schedule_starts(first_tick: int, taxi: Array = TaxiTimes.BASE) -> Ar
 	return starts
 
 
-func bind_clock(clock: SimClock) -> void:
+func bind_clock(with_clock: SimClock) -> void:
+	clock = with_clock
 	clock.ticked.connect(on_tick)
 
 
-## STARTER_TERMS departing FlightTimetable.issue_lead() after `now`, rounded up
-## to a whole minute: its first occurrence is issued at `now` or within the
-## minute after, never with less than the normal lead, at any gate. Issuing is
-## anchored to the departure, so its first state is ISSUE_LEAD_TICKS after the
-## issue at a TaxiTimes.BASE gate and earlier, but not before the issue, at a
-## gate with a longer TAXI_IN.
-static func starter_terms(now: int) -> Dictionary:
-	var departure := now + FlightTimetable.issue_lead()
-	var minutes := -GameCalendar.floor_div(-departure, GameCalendar.TICKS_PER_MINUTE)
-	var terms := STARTER_TERMS.duplicate()
-	terms["departure_minute"] = GameCalendar.minute_of_day(minutes * GameCalendar.TICKS_PER_MINUTE)
-	return terms
-
-
-## Opens the airport at the current tick; it never closes again. Each contract
-## accepted while closed starts on its first day issued at or after now, and
-## what is due is issued at once. False (with an error) when already open.
+## Opens the airport at the current tick, starting the calendar (E freezes on it); it never
+## closes again. Each contract accepted while closed starts on its first day issued at or after
+## now, and what is due is issued at once. False (with an error) when already open.
 ## The starter contract is AirportGate.open()'s, not this.
 func open_airport() -> bool:
 	if opened_tick >= 0:
 		push_error("FlightSim.open_airport: the airport opened at tick %d" % opened_tick)
 		return false
 	opened_tick = tick
+	if clock != null:
+		clock.start_calendar()
 	for contract in _contracts:
-		var day := FlightTimetable.opening_day(contract, tick)
+		var day := FlightTimetable.opening_day(contract, tick, epoch)
 		_start_day[contract["id"]] = day
 		_next_day[contract["id"]] = day
 	# The contracts' days moved, so every cached day plan is of the closed world.
@@ -517,7 +512,7 @@ func spur_refusal(grounds: Dictionary, with_spurs: Dictionary, moves := {}) -> D
 	var stranded := SpurMoves.refusal(world)
 	if not stranded.is_empty():
 		return stranded
-	var days := FlightPlans.days_from(world, GameCalendar.day_of(tick))
+	var days := FlightPlans.days_from(world, GameCalendar.day_of(tick, epoch))
 	return SpurMoves.typed(
 		_world(), world, _trial_planner().refusal(world, _trial_day_plan, days, [])
 	)
@@ -535,7 +530,7 @@ func taxi_plan(id: String) -> Dictionary:
 	var index := _index_of(id)
 	if index < 0:
 		return {}
-	var plans := _day_plan(FlightPlans.day_of(_flights[index]["starts"]))
+	var plans := _day_plan(FlightPlans.day_of(_flights[index]["starts"], epoch))
 	if _flights[index]["contract"] == "":
 		return {}
 	var result: Dictionary = plans.get(id, {})
@@ -709,7 +704,7 @@ func end_fee(contract_id: String) -> int:
 	if contract.is_empty() or _ended.has(contract_id):
 		return 0
 	var term_end: int = contract["first_day"] + OfferTraits.EXIT_FEE_DAYS
-	if GameCalendar.day_of(tick) >= term_end:
+	if GameCalendar.day_of(tick, epoch) >= term_end:
 		return 0
 	return OfferTraits.exit_fee(contract[FlightContract.TRAITS_KEY])
 
@@ -924,7 +919,7 @@ func next_event_tick() -> int:
 	for contract in _contracts:
 		if not _ended.has(contract["id"]):
 			var day: int = _next_day[contract["id"]]
-			next = _earliest(next, FlightTimetable.issue_tick(contract, day))
+			next = _earliest(next, FlightTimetable.issue_tick(contract, day, epoch))
 	return next
 
 
@@ -962,7 +957,7 @@ func to_snapshot() -> Dictionary:
 ## a live flight's stand is not its gate's, or when a live flight's re-plan
 ## fails. Emits only snapshot_loaded: what the save had issued stays issued.
 func from_snapshot(data: Dictionary) -> bool:
-	var loaded := FlightSnapshot.load(data, gate_ids())
+	var loaded := FlightSnapshot.load(data, gate_ids(), epoch)
 	var problem: String = loaded.get("error", "")
 	if problem == "":
 		problem = _load_plan_problem(loaded)
@@ -987,7 +982,7 @@ func from_snapshot(data: Dictionary) -> bool:
 ## "": what it checks, without installing anything or pushing an error. SaveGame
 ## stages a load with it.
 func load_problem(data: Dictionary) -> String:
-	var loaded := FlightSnapshot.load(data, gate_ids())
+	var loaded := FlightSnapshot.load(data, gate_ids(), epoch)
 	if loaded.has("error"):
 		return loaded["error"]
 	return _load_plan_problem(loaded)
@@ -1011,6 +1006,7 @@ func _load_plan_problem(loaded: Dictionary) -> String:
 	var world := {
 		"spurs": spurs(),
 		"tick": loaded["tick"],
+		"epoch": epoch,
 		"open": loaded["opened_tick"] >= 0,
 		"contracts": loaded["contracts"],
 		"start_day": loaded["start_day"],
@@ -1110,7 +1106,7 @@ func _one_off_problem(id: String, starts: Array[int], gate: String) -> String:
 func _one_off_clash(starts: Array[int], gate: String) -> String:
 	for contract in _contracts:
 		if not _ended.has(contract["id"]):
-			if FlightTimetable.contract_meets(contract, gate, starts):
+			if FlightTimetable.contract_meets(contract, gate, starts, epoch):
 				return "would hold gate %s during contract %s" % [gate, contract["id"]]
 	# Issued occurrences hold the gate they were issued at: an ended contract's,
 	# or one issued before its contract moved.
@@ -1129,7 +1125,7 @@ func _candidate(terms: Dictionary, gate_id: String, grounds: Dictionary) -> Dict
 	var fields := terms.duplicate()
 	fields["first_day"] = 0
 	fields = FlightContract.assigned(fields, gate_id, grounds[gate_id]["stand"]).duplicate()
-	fields["first_day"] = FlightTimetable.first_day(fields, tick)
+	fields["first_day"] = FlightTimetable.first_day(fields, tick, epoch)
 	return FlightContract.make(fields)
 
 
@@ -1367,7 +1363,7 @@ func _gate_problem(contract: Dictionary, contracts: Array[Dictionary]) -> String
 	for flight in _flights:
 		if flight["contract"] == contract["id"]:
 			continue
-		if FlightTimetable.contract_meets(contract, flight["gate"], flight["starts"]):
+		if FlightTimetable.contract_meets(contract, flight["gate"], flight["starts"], epoch):
 			return (
 				"contract %s clashes with flight %s at gate %s"
 				% [contract["id"], flight["id"], flight["gate"]]
@@ -1381,6 +1377,7 @@ func _world(grounds := {}, from_tick := tick) -> Dictionary:
 	return {
 		"spurs": spurs(),
 		"tick": from_tick,
+		"epoch": epoch,
 		"open": opened_tick >= 0,
 		"contracts": _contracts,
 		"start_day": _start_day,
@@ -1395,10 +1392,12 @@ func _world(grounds := {}, from_tick := tick) -> Dictionary:
 
 
 ## The plan of calendar day `day` for the sim now, cached until the contracts,
-## the flights or the gates' grounds change.
+## the flights, the gates' grounds or the calendar epoch change.
 func _day_plan(day: int) -> Dictionary:
 	var world := _world()
-	var key := "%s %s %s" % [world["grounds"], FlightGround.layout(), SpurMoves.key(world)]
+	var key := (
+		"%d %s %s %s" % [epoch, world["grounds"], FlightGround.layout(), SpurMoves.key(world)]
+	)
 	if _day_plans_revision != _revision or key != _grounds_key:
 		_day_plans.clear()
 		_day_plans_revision = _revision
@@ -1415,9 +1414,10 @@ func _day_plan(day: int) -> Dictionary:
 func _trial_day_plan(day: int) -> Dictionary:
 	var world := _world()
 	var key := (
-		"%d %s %s %s %s"
+		"%d %d %s %s %s %s"
 		% [
 			_revision,
+			epoch,
 			world["grounds"],
 			FlightGround.layout(),
 			runway.works.fixed_bookings(),
@@ -1462,8 +1462,8 @@ func _issue_due(from_tick := tick) -> void:
 		if opened_tick < 0 or _ended.has(contract["id"]):
 			continue
 		var day: int = _next_day[contract["id"]]
-		while FlightTimetable.issue_tick(contract, day) <= tick:
-			due.append([FlightTimetable.issue_tick(contract, day), index, day])
+		while FlightTimetable.issue_tick(contract, day, epoch) <= tick:
+			due.append([FlightTimetable.issue_tick(contract, day, epoch), index, day])
 			day += 1
 	due.sort_custom(_issued_before)
 	for entry in due:
@@ -1504,7 +1504,7 @@ static func _issued_before(a: Array, b: Array) -> bool:
 
 func _issue(contract: Dictionary, day: int) -> void:
 	var id := FlightTimetable.occurrence_id(contract["id"], day)
-	var starts := FlightTimetable.starts_for(contract, day)
+	var starts := FlightTimetable.starts_for(contract, day, epoch)
 	_insert(_record(id, starts, contract["gate"], contract["id"], day))
 	_next_day[contract["id"]] = day + 1
 	occurrence_added.emit(id)
@@ -1530,9 +1530,9 @@ func _prune() -> void:
 		if tick >= FlightTimetable.prune_tick(flight["starts"]):
 			_insert_landed(flight)
 			_flights.remove_at(i)
-	var today := GameCalendar.day_of(tick)
+	var today := GameCalendar.day_of(tick, epoch)
 	for i in range(_landed.size() - 1, -1, -1):
-		if FlightPlans.day_of(_landed[i]["starts"]) < today - 1:
+		if FlightPlans.day_of(_landed[i]["starts"], epoch) < today - 1:
 			_landed.remove_at(i)
 			for day: int in _day_plans.keys():
 				if day < today - 1:

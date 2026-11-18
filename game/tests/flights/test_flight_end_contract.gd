@@ -65,7 +65,7 @@ func test_an_ended_contract_issues_no_later_day_but_issued_flights_still_fly() -
 	var added := _log.filter(func(line: String) -> bool: return " add " in line)
 	assert_array(added.filter(func(line: String) -> bool: return "AM-d2" in line)).is_empty()
 	assert_array(added.filter(func(line: String) -> bool: return "PM-d2" in line)).is_not_empty()
-	var am_first := GameCalendar.tick_at(0, 480) - FlightTimetable.departure_offset()
+	var am_first := GameCalendar.tick_at(0, 480, 0) - FlightTimetable.departure_offset()
 	assert_array(_log).contains(["%d AM-d1 %d" % [DAY + am_first + 100, FlightSim.State.APPROACH]])
 	var departed := DAY + am_first + FlightTimetable.reserved_ticks()
 	assert_array(_log).contains(["%d AM-d1 %d" % [departed, FlightSim.State.DEPARTED]])
@@ -197,7 +197,7 @@ func test_a_one_off_cannot_take_the_gate_time_of_a_live_ended_occurrence() -> vo
 	var world := _ended_world()
 	var sim: FlightSim = world[1]
 	assert_array(sim.flight_ids()).contains(["AM-d1"])
-	var starts := FlightTimetable.starts_for(sim.contract_of("AM"), 1)
+	var starts := FlightTimetable.starts_for(sim.contract_of("AM"), 1, 0)
 	await (
 		assert_error(func() -> void: sim.add_flight("RAW", starts, "C"))
 		. is_push_error("FlightSim: flight 'RAW' would hold gate C during AM-d1")
@@ -210,7 +210,7 @@ func test_a_one_off_may_take_a_day_the_ended_contract_never_issues() -> void:
 	var sim: FlightSim = world[1]
 	_run(world[0], 40000)
 	assert_array(sim.flight_ids()).not_contains(["AM-d1"])
-	var starts := FlightTimetable.starts_for(sim.contract_of("AM"), 2)
+	var starts := FlightTimetable.starts_for(sim.contract_of("AM"), 2, 0)
 	assert_bool(sim.add_flight("RAW", starts, "C")).is_true()
 
 
@@ -223,7 +223,7 @@ func test_a_save_with_a_one_off_over_a_live_ended_occurrence_is_refused() -> voi
 		if entry["id"] == "AM-d1":
 			occurrence = entry
 	assert_dict(occurrence).is_not_empty()
-	var loaded_whole := FlightSnapshot.load(data.duplicate(true), FlightSim.DEFAULT_GATES)
+	var loaded_whole := FlightSnapshot.load(data.duplicate(true), FlightSim.DEFAULT_GATES, 0)
 	assert_bool(loaded_whole.has("error")).is_false()
 	var bad := data.duplicate(true)
 	var one_off := occurrence.duplicate(true)
@@ -231,7 +231,7 @@ func test_a_save_with_a_one_off_over_a_live_ended_occurrence_is_refused() -> voi
 	one_off["contract"] = ""
 	one_off["day"] = -1
 	bad["flights"].append(one_off)
-	var loaded := FlightSnapshot.load(bad, FlightSim.DEFAULT_GATES)
+	var loaded := FlightSnapshot.load(bad, FlightSim.DEFAULT_GATES, 0)
 	assert_str(loaded.get("error", "")).contains("flight RAW clashes with AM-d1 of an ended")
 	var target := auto_free(FlightSim.new()) as FlightSim
 	await (
@@ -259,7 +259,7 @@ func test_a_save_with_a_running_contract_over_a_live_ended_occurrence_is_refused
 	flight["id"] = "NEW-d1"
 	flight["contract"] = "NEW"
 	data["flights"].insert(at + 1, flight)
-	var loaded := FlightSnapshot.load(data, FlightSim.DEFAULT_GATES)
+	var loaded := FlightSnapshot.load(data, FlightSim.DEFAULT_GATES, 0)
 	assert_str(loaded.get("error", "")).contains("flight NEW-d1 clashes with AM-d1 of an ended")
 
 
@@ -273,4 +273,4 @@ func test_a_running_contract_at_an_ended_contracts_time_loads_once_its_flights_a
 		assert_array(data["flights"].filter(func(f: Dictionary) -> bool: return f["id"] == "AM-d1"))
 		. is_empty()
 	)
-	assert_bool(FlightSnapshot.load(data, FlightSim.DEFAULT_GATES).has("error")).is_false()
+	assert_bool(FlightSnapshot.load(data, FlightSim.DEFAULT_GATES, 0).has("error")).is_false()

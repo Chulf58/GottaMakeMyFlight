@@ -61,7 +61,7 @@ func test_accepting_a_contract_outside_the_class_range_is_refused() -> void:
 
 
 func test_a_saved_starter_with_20_small_passengers_is_refused_on_load() -> void:
-	assert_bool(_sim.accept_contract(FlightSim.starter_terms(0))).is_true()
+	assert_bool(_sim.accept_contract(StarterSlot.terms(_sim))).is_true()
 	var data := _sim.to_snapshot()
 	# The control: the snapshot as saved loads.
 	assert_bool((auto_free(FlightSim.new()) as FlightSim).from_snapshot(data)).is_true()
@@ -71,7 +71,7 @@ func test_a_saved_starter_with_20_small_passengers_is_refused_on_load() -> void:
 	var loaded := auto_free(FlightSim.new()) as FlightSim
 	assert_bool(loaded.from_snapshot(bad)).is_false()
 	assert_array(loaded.contract_ids()).is_empty()
-	assert_str(FlightSnapshot.load(bad, loaded.gate_ids()).get("error", "")).contains(
+	assert_str(FlightSnapshot.load(bad, loaded.gate_ids(), 0).get("error", "")).contains(
 		"booked_passengers"
 	)
 

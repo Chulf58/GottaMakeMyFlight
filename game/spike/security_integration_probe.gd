@@ -299,7 +299,10 @@ func _staffed() -> bool:
 ## Accepts the N-passenger contract and opens the airport at once, so the flight
 ## departs ISSUE_LEAD_TICKS plus the pre-departure states from now.
 func _open_flight() -> void:
-	var terms := FlightSim.starter_terms(_flights.tick)
+	var terms := StarterSlot.departing(
+		StarterSlot.whole_minute(_flights.tick + FlightTimetable.issue_lead(), _flights.epoch),
+		_flights.epoch
+	)
 	terms["id"] = CONTRACT_ID
 	# Medium planes carry 24 to 48; a --pax outside that is refused by the check below.
 	terms["plane_size"] = "medium"

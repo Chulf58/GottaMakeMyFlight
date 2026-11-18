@@ -50,7 +50,7 @@ func _run() -> void:
 	board.visible = true
 	board.refresh()
 	await _frames(3)
-	var day := GameCalendar.day_of(clock.tick)
+	var day := GameCalendar.day_of(clock.tick, 0)
 	var end := board.end_button("XF", day)
 	if end == null:
 		end = board.end_button("XF", day + 1)

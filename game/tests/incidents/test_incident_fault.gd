@@ -59,7 +59,7 @@ func _new_director() -> IncidentDirector:
 
 ## Rolls day 1's fault and returns its scheduled record.
 func _scheduled(director: IncidentDirector) -> Dictionary:
-	director.on_tick(GameCalendar.day_start(1))
+	director.on_tick(GameCalendar.day_start(1, 0))
 	var all := director.incidents()
 	assert_int(all.size()).is_equal(1)
 	assert_str(all[0]["kind"]).is_equal(IncidentCatalogue.FAULT)
@@ -181,8 +181,8 @@ func test_the_card_names_the_cause_and_the_fix_time() -> void:
 	_director.on_tick(incident["fire_tick"])
 	var active: Dictionary = _director.active_incidents()[0]
 	var title := IncidentCatalogue.card_title(active)
-	var detail := IncidentCatalogue.card_detail(active, false)
-	var fixed := GameCalendar.clock_text(active["plan"]["repair_tick"])
+	var detail := IncidentCatalogue.card_detail(active, false, 0)
+	var fixed := GameCalendar.clock_text(active["plan"]["repair_tick"], 0)
 	print("%s: %s" % [title, detail])
 	assert_str(title).is_equal("Scanner fault")
 	assert_str(detail).contains("fixed by %s" % fixed)

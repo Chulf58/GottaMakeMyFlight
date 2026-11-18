@@ -13,14 +13,14 @@ func before_test() -> void:
 
 ## Two days of data, a low streak and one flight waiting for its no-shows.
 func _filled() -> void:
-	var day0 := GameCalendar.tick_at(0, 12 * 60)
+	var day0 := GameCalendar.tick_at(0, 12 * 60, 0)
 	for i in 6:
 		_rating.record_passenger(day0, false, 0)
-	_rating.on_tick(GameCalendar.day_start(1))
+	_rating.on_tick(GameCalendar.day_start(1, 0))
 	for i in 4:
-		_rating.record_passenger(GameCalendar.tick_at(1, 9 * 60), true, 70)
-	_rating.note_doors_closed("GMF101", GameCalendar.tick_at(1, 10 * 60))
-	_rating.on_tick(GameCalendar.tick_at(1, 10 * 60))
+		_rating.record_passenger(GameCalendar.tick_at(1, 9 * 60, 0), true, 70)
+	_rating.note_doors_closed("GMF101", GameCalendar.tick_at(1, 10 * 60, 0))
+	_rating.on_tick(GameCalendar.tick_at(1, 10 * 60, 0))
 
 
 func _json() -> Dictionary:
@@ -45,8 +45,8 @@ func test_a_restored_rating_goes_on_exactly_like_the_original() -> void:
 	_filled()
 	assert_bool(_other.from_snapshot(_json())).is_true()
 	for rating in [_rating, _other]:
-		rating.on_tick(GameCalendar.day_start(2))
-		rating.on_tick(GameCalendar.day_start(3))
+		rating.on_tick(GameCalendar.day_start(2, 0))
+		rating.on_tick(GameCalendar.day_start(3, 0))
 	assert_str(_text(_other)).is_equal(_text(_rating))
 	assert_int(_other.low_days()).is_equal(_rating.low_days())
 

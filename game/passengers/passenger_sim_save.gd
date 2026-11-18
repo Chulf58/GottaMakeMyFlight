@@ -159,7 +159,7 @@ static func from_snapshot(sim: PassengerSim, data: Dictionary) -> bool:
 	if sides.has("error"):
 		push_error("PassengerSim.from_snapshot: %s" % sides["error"])
 		return false
-	var booking := BookingOverrides.checked(data, sim.flights)
+	var booking := BookingOverrides.checked(data, sim.flights, sim.flights.epoch)
 	if booking.has("error"):
 		push_error("PassengerSim.from_snapshot: %s" % booking["error"])
 		return false

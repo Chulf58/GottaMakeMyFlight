@@ -46,9 +46,9 @@ func test_a_bar_spans_the_gate_hold_and_marks_the_departure() -> void:
 	_accept("X", 600, "Oslo")
 	var rows := FlightPlannerModel.rows_for_day(_sim, 0)
 	var bars: Array = _row(rows, "A")["bars"]
-	var starts := FlightTimetable.starts_for(_sim.contract_of("X"), 0)
+	var starts := FlightTimetable.starts_for(_sim.contract_of("X"), 0, 0)
 	var bar: Dictionary = bars[0]
-	var day_start := GameCalendar.day_start(0)
+	var day_start := GameCalendar.day_start(0, 0)
 	print("bar: ", bar)
 	assert_int(bars.size()).is_equal(1)
 	assert_int(bar["start"]).is_equal(starts[FlightSim.State.SCHEDULED])
@@ -58,7 +58,7 @@ func test_a_bar_spans_the_gate_hold_and_marks_the_departure() -> void:
 	var taxi := FlightTimetable.taxi_of(_sim.contract_of("X"))
 	assert_array(taxi).is_equal([1020, 920])
 	assert_int(bar["end"] - bar["start"]).is_equal(FlightTimetable.reserved_ticks(taxi))
-	assert_int(bar["departure"]).is_equal(GameCalendar.tick_at(0, 600))
+	assert_int(bar["departure"]).is_equal(GameCalendar.tick_at(0, 600, 0))
 	assert_str(bar["label"]).is_equal("10:00  Oslo")
 	assert_bool(bar["active"]).is_true()
 	assert_float(bar["from"]).is_equal_approx(
@@ -79,12 +79,12 @@ func test_a_flight_clashing_on_the_first_gate_gets_a_bar_on_the_next() -> void:
 ## Contracts depart between 07:00 and 21:00, so only a one-off flight can hold a
 ## gate across midnight; the cut is the model's own arithmetic.
 func test_a_hold_across_midnight_is_cut_at_each_midnight() -> void:
-	var day_start := GameCalendar.day_start(1)
+	var day_start := GameCalendar.day_start(1, 0)
 	var hold := FlightPlannerModel.Hold.new(day_start - 3000, day_start + 900)
 	var row := {
 		"contract": "", "flight": "F1", "gate": "A", "tick": day_start, "head": "x", "airline": ""
 	}
-	var before := FlightPlannerModel._bar(row, 0, hold, GameCalendar.day_start(0), [])
+	var before := FlightPlannerModel._bar(row, 0, hold, GameCalendar.day_start(0, 0), [])
 	var after := FlightPlannerModel._bar(row, 0, hold, day_start, [])
 	print(
 		"cut: before ",
@@ -116,7 +116,7 @@ func test_the_same_contract_has_a_bar_on_every_day() -> void:
 
 func test_an_issued_day_keeps_its_gate_after_a_move() -> void:
 	_accept("X", 600, "Oslo")
-	_run_to(GameCalendar.tick_at(0, 7 * 60))
+	_run_to(GameCalendar.tick_at(0, 7 * 60, 0))
 	assert_bool(_sim.reassign_gate("X", "C")).is_true()
 	var day0: Array = _row(FlightPlannerModel.rows_for_day(_sim, 0), "A")["bars"]
 	var day1: Array = _row(FlightPlannerModel.rows_for_day(_sim, 1), "C")["bars"]
@@ -128,7 +128,7 @@ func test_an_issued_day_keeps_its_gate_after_a_move() -> void:
 
 func test_an_ended_contract_keeps_its_issued_bar_but_cannot_be_acted_on() -> void:
 	_accept("X", 600, "Oslo")
-	_run_to(GameCalendar.tick_at(0, 7 * 60))
+	_run_to(GameCalendar.tick_at(0, 7 * 60, 0))
 	assert_bool(_sim.end_contract("X")).is_true()
 	var today: Array = _row(FlightPlannerModel.rows_for_day(_sim, 0), "A")["bars"]
 	var later: Array = _row(FlightPlannerModel.rows_for_day(_sim, 2), "A")["bars"]

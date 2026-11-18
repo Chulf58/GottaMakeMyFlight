@@ -65,8 +65,12 @@ func bind(sim: PassengerSim, spawn: Callable) -> void:
 
 ## Forms `count` passengers of `flight_id` into parties and books them, from
 ## the sim RNG, each party's arrival type drawn with `shares`
-## (ArrivalTypes.shares_for the flight's contract).
-func schedule(flight_id: String, count: int, shares: Array[int] = ArrivalTypes.SHARES) -> void:
+## (ArrivalTypes.shares_for the flight's contract). With `first_at_once`
+## (FirstParty) the first party's vehicle enters the road now and gets out on
+## time on a free road, whatever time it drew.
+func schedule(
+	flight_id: String, count: int, shares: Array[int] = ArrivalTypes.SHARES, first_at_once := false
+) -> void:
 	var rng := _sim.clock.rng
 	var left := count
 	while left > 0:
@@ -84,6 +88,8 @@ func schedule(flight_id: String, count: int, shares: Array[int] = ArrivalTypes.S
 		# the sim RNG draws stay as they were).
 		var stagger := (size - 1) * LandsideSim.RELEASE_GAP_TICKS
 		var at := mini(rng.randi_range(span.x, span.y), maxi(span.x, span.y - stagger))
+		if first_at_once and left == count:
+			at = _sim.clock.tick + _sim.landside.lead_ticks(intent)
 		var party := _next_id
 		for i in size:
 			var b := ArrivalBooking.new()

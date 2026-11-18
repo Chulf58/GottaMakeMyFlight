@@ -47,7 +47,7 @@ func test_bookings_still_on_the_road_at_doors_close_are_missed_once_with_the_new
 	assert_int(_land.sim.missed_count()).is_equal(0)
 	_land.step()
 	var summary := FlightResult.summarize(_land.sim, PassengerTestWorld.FLIGHT)
-	var day := GameCalendar.day_of(DOORS)
+	var day := GameCalendar.day_of(DOORS, 0)
 	print("at doors close: %s rating day %s" % [summary, _rating.day_totals(day)])
 	assert_int(_land.sim.arrivals.missed_total).is_equal(BOOKED)
 	assert_int(_land.sim.missed_count()).is_equal(BOOKED)

@@ -29,7 +29,7 @@ func before_test() -> void:
 	]:
 		assert_bool(_flights.accept_contract(terms)).is_true()
 	var first := _flights.contract_of("C1")
-	_flights.on_tick(FlightTimetable.issue_tick(first, first["first_day"]))
+	_flights.on_tick(FlightTimetable.issue_tick(first, first["first_day"], 0))
 	var built := _grid.apply(SpurMoveKit.floor_at(SpurMoveKit.WING))
 	assert_bool(built.ok).override_failure_message(built.reason_text()).is_true()
 	assert_bool(_flights.spur_pending("W")).is_true()
@@ -38,7 +38,7 @@ func before_test() -> void:
 ## C2's first day: [its contract before the move, the day, its issue tick].
 func _second_day() -> Array:
 	var second := _flights.contract_of("C2")
-	return [second, second["first_day"], FlightTimetable.issue_tick(second, second["first_day"])]
+	return [second, second["first_day"], FlightTimetable.issue_tick(second, second["first_day"], 0)]
 
 
 func test_a_skipped_tick_jump_puts_each_occurrence_on_its_side_of_the_release() -> void:
@@ -47,9 +47,9 @@ func test_a_skipped_tick_jump_puts_each_occurrence_on_its_side_of_the_release() 
 	var second_day := _second_day()
 	var second: Dictionary = second_day[0]
 	var released := _flights.spur_release_tick("W")
-	var c2_starts := FlightTimetable.starts_for(second, second_day[1])
+	var c2_starts := FlightTimetable.starts_for(second, second_day[1], 0)
 	var next_day: int = int(first["first_day"]) + 1
-	var to := FlightTimetable.issue_tick(first, next_day) + 10
+	var to := FlightTimetable.issue_tick(first, next_day, 0) + 10
 	print(
 		(
 			"C2 issues %d, C1 takes off %d, R %d (C2's TAKEOFF %d); jump to %d"
@@ -86,7 +86,7 @@ func test_a_skipped_tick_jump_puts_each_occurrence_on_its_side_of_the_release() 
 	var moved := _flights.contract_of("C1")
 	assert_array(moved["taxi"]).is_not_equal(first["taxi"])
 	assert_array(SpurMoveKit.starts(_flights, c1)).is_equal(
-		FlightTimetable.starts_for(moved, next_day)
+		FlightTimetable.starts_for(moved, next_day, 0)
 	)
 
 
@@ -116,7 +116,7 @@ func test_a_save_taken_while_pending_loads_into_the_same_run() -> void:
 	var first := _flights.contract_of("C1")
 	var steps: Array[int] = [released - 1, released, released + 1]
 	for day in range(int(first["first_day"]) + 1, int(first["first_day"]) + 3):
-		steps.append(FlightTimetable.issue_tick(first, day) + 5)
+		steps.append(FlightTimetable.issue_tick(first, day, 0) + 5)
 	for at in steps:
 		_flights.on_tick(at)
 		sim.on_tick(at)

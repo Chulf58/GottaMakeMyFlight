@@ -18,7 +18,7 @@ var _sim: FlightSim
 func before_test() -> void:
 	_sim = auto_free(FlightSim.new())
 	_sim.open_airport()
-	for t in range(1, GameCalendar.tick_at(0, ACCEPTED_AT) + 1):
+	for t in range(1, GameCalendar.tick_at(0, ACCEPTED_AT, 0) + 1):
 		_sim.on_tick(t)
 
 

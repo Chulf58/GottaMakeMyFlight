@@ -15,11 +15,11 @@ func _rating() -> AirportRating:
 
 
 func _noon(day: int) -> int:
-	return GameCalendar.tick_at(day, 12 * 60)
+	return GameCalendar.tick_at(day, 12 * 60, 0)
 
 
 func _midnight(day: int) -> int:
-	return GameCalendar.day_start(day)
+	return GameCalendar.day_start(day, 0)
 
 
 ## Records `made` passengers at `mood` and `missed` misses on `tick`.

@@ -41,7 +41,7 @@ func _accept(id: String, minute: int, airline: String, traits: Dictionary) -> vo
 func _fly(id: String, nth: int) -> void:
 	var contract := _flights.contract_of(id)
 	var day: int = contract["first_day"] + nth
-	var departs: int = FlightTimetable.starts_for(contract, day)[FlightSim.State.DEPARTED]
+	var departs: int = FlightTimetable.starts_for(contract, day, 0)[FlightSim.State.DEPARTED]
 	# Half-hour steps: each tick issues, advances and prunes as the clock would.
 	var at := _flights.tick
 	while at < departs:

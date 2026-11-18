@@ -330,7 +330,9 @@ func _book() -> String:
 	var accepted := false
 	for step in 2 * SEARCH_MINUTES + 1:
 		var later := (step + 1) / 2 * (1 if step % 2 == 1 else -1)
-		var terms := FlightSim.starter_terms(0)
+		var terms := StarterSlot.departing(
+			StarterSlot.whole_minute(0 + FlightTimetable.issue_lead(), 0), 0
+		)
 		terms["id"] = SECOND
 		terms["departure_minute"] = minute + later
 		_beat("search %d" % later)

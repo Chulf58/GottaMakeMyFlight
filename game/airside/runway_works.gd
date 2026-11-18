@@ -141,13 +141,13 @@ static func buy(flights: FlightSim, unlocks: BuildUnlocks, wallet: Wallet) -> St
 
 ## What the card says about the works: "" when none are booked, else when they
 ## start and end, as a clock time (with the day when it is not today).
-static func schedule_text(works: RunwayWorks, now: int) -> String:
+static func schedule_text(works: RunwayWorks, now: int, epoch: int) -> String:
 	if not works.scheduled():
 		return ""
 	var words := {
 		"size": size_word(works.target),
-		"start": when_text(works.start, now),
-		"finish": when_text(works.finish, now),
+		"start": when_text(works.start, now, epoch),
+		"finish": when_text(works.finish, now, epoch),
 	}
 	if works.start >= now:
 		return (
@@ -163,15 +163,15 @@ static func schedule_text(works: RunwayWorks, now: int) -> String:
 
 
 ## "at 22:05", "tomorrow at 00:05" or "on Day 4 at 00:05" (the HUD's day number).
-static func when_text(tick: int, now: int) -> String:
-	var ahead := GameCalendar.day_of(tick) - GameCalendar.day_of(now)
-	var time := GameCalendar.clock_text(tick)
+static func when_text(tick: int, now: int, epoch: int) -> String:
+	var ahead := GameCalendar.day_of(tick, epoch) - GameCalendar.day_of(now, epoch)
+	var time := GameCalendar.clock_text(tick, epoch)
 	if ahead <= 0:
 		return TranslationServer.translate("at {time}").format({"time": time})
 	if ahead == 1:
 		return TranslationServer.translate("tomorrow at {time}").format({"time": time})
 	return TranslationServer.translate("on Day {day} at {time}").format(
-		{"day": GameCalendar.day_of(tick) + 1, "time": time}
+		{"day": GameCalendar.day_of(tick, epoch) + 1, "time": time}
 	)
 
 

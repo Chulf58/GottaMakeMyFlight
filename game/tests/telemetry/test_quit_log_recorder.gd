@@ -57,7 +57,7 @@ func _types() -> Array:
 
 func test_with_the_switch_off_no_folder_and_no_file_are_made() -> void:
 	add_child(_recorder)
-	_clock.ticked.emit(GameCalendar.tick_at(1, 0))
+	_clock.ticked.emit(GameCalendar.tick_at(1, 0, 0))
 	_recorder.stop(QuitLogRecorder.REASON_WINDOW_CLOSE)
 	assert_bool(_recorder.is_recording()).is_false()
 	assert_bool(DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(_dir))).is_false()
@@ -78,8 +78,8 @@ func test_a_day_end_and_the_next_day_start_carry_day_and_money() -> void:
 	_recorder.set_enabled(true)
 	add_child(_recorder)
 	_finances.wallet.balance = 12345
-	_clock.ticked.emit(GameCalendar.day_start(3) - 1)
-	_clock.ticked.emit(GameCalendar.day_start(3))
+	_clock.ticked.emit(GameCalendar.day_start(3, 0) - 1)
+	_clock.ticked.emit(GameCalendar.day_start(3, 0))
 	var edges: Array = _records().filter(
 		func(r: Dictionary) -> bool: return r["type"] in ["day_end", "day_start"]
 	)
@@ -128,7 +128,7 @@ func test_switching_off_in_play_ends_the_session_and_stops_writing() -> void:
 	add_child(_recorder)
 	_recorder.set_enabled(false)
 	var count := _records().size()
-	_clock.ticked.emit(GameCalendar.day_start(5))
+	_clock.ticked.emit(GameCalendar.day_start(5, 0))
 	assert_int(_records().size()).is_equal(count)
 	assert_str(_records().back()["data"]["reason"]).is_equal(QuitLogRecorder.REASON_SWITCHED_OFF)
 	assert_bool(QuitLog.is_enabled(_settings)).is_false()

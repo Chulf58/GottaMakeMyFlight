@@ -187,7 +187,9 @@ func _accept_second(starter: String) -> bool:
 	var minute: int = _flights.contract_of(starter)["departure_minute"]
 	var save := _flights.to_snapshot()
 	for later in range(20, 240, 2):
-		var terms := FlightSim.starter_terms(0)
+		var terms := StarterSlot.departing(
+			StarterSlot.whole_minute(0 + FlightTimetable.issue_lead(), 0), 0
+		)
 		terms["id"] = SECOND
 		terms["departure_minute"] = minute + later
 		if _flights.accept_gate(terms) != "B" or not _pauses_with(save, terms, starter):
@@ -211,7 +213,7 @@ func _pauses_with(save: Dictionary, terms: Dictionary, starter: String) -> bool:
 		var ids := [
 			FlightTimetable.occurrence_id(starter, day), FlightTimetable.occurrence_id(SECOND, day)
 		]
-		var issue := FlightTimetable.issue_tick(scratch.contract_of(SECOND), day)
+		var issue := FlightTimetable.issue_tick(scratch.contract_of(SECOND), day, scratch.epoch)
 		for t in range(scratch.tick + 1, issue + 1):
 			scratch.on_tick(t)
 		for id: String in ids:

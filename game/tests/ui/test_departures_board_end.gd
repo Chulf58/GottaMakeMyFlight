@@ -149,7 +149,7 @@ func test_confirming_ends_the_contract_and_it_leaves_the_list() -> void:
 
 func test_a_flight_already_booked_for_today_still_flies() -> void:
 	_x_and_y()
-	for t in range(1, FlightTimetable.issue_tick(_sim.contract_of("X"), 0) + 1):
+	for t in range(1, FlightTimetable.issue_tick(_sim.contract_of("X"), 0, 0) + 1):
 		_sim.on_tick(t)
 	_clock.tick = _sim.tick
 	_board.refresh()

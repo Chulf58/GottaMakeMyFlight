@@ -91,11 +91,12 @@ static func release(world: Dictionary, side: String) -> int:
 				at = takeoff
 				moved = true
 		for contract: Dictionary in contracts:
-			var since := at - FlightTimetable.issue_tick(contract, 0)
+			var since := at - FlightTimetable.issue_tick(contract, 0, world["epoch"])
 			var day := GameCalendar.floor_div(since, GameCalendar.TICKS_PER_DAY)
 			if day < int(world["next_day"][contract["id"]]):
 				continue
-			var takeoff := FlightTimetable.starts_for(contract, day)[FlightSim.State.TAKEOFF]
+			var starts := FlightTimetable.starts_for(contract, day, world["epoch"])
+			var takeoff := starts[FlightSim.State.TAKEOFF]
 			if at < takeoff:
 				at = takeoff
 				moved = true
@@ -128,7 +129,7 @@ static func resolve(world: Dictionary, contract: Dictionary, day: int) -> Dictio
 	var side := StandPlacement.side_of(ground["stand"])
 	if side == StandPlacement.NORTH or not pending(world, side):
 		return {"contract": contract, "stand": ground["stand"]}
-	if FlightTimetable.issue_tick(contract, day) < release(world, side):
+	if FlightTimetable.issue_tick(contract, day, world["epoch"]) < release(world, side):
 		return {"contract": contract, "stand": ground["stand"]}
 	var cache: Dictionary = world.get_or_add("_resolved", {})
 	if not cache.has(contract["id"]):
@@ -152,7 +153,7 @@ static func _moved(contract: Dictionary, gate: String, next: Dictionary) -> Dict
 static func transition_days(world: Dictionary) -> Array[int]:
 	var out: Array[int] = []
 	for side in pending_sides(world):
-		var day := GameCalendar.day_of(release(world, side))
+		var day := GameCalendar.day_of(release(world, side), world["epoch"])
 		out.append_array([day, day + 1])
 	return out
 
@@ -160,7 +161,7 @@ static func transition_days(world: Dictionary) -> Array[int]:
 ## The first day from contract `contract`'s next day issued at or after `at`.
 static func first_day_from(world: Dictionary, contract: Dictionary, at: int) -> int:
 	var day := int(world["next_day"][contract["id"]])
-	while FlightTimetable.issue_tick(contract, day) < at:
+	while FlightTimetable.issue_tick(contract, day, world["epoch"]) < at:
 		day += 1
 	return day
 
@@ -183,7 +184,7 @@ static func refusal(world: Dictionary) -> Dictionary:
 					"id": FlightTimetable.occurrence_id(contract["id"], day), "reason": NO_STAND
 				}
 			by_gate.get_or_add(contract["gate"], []).append(contract)
-		var last := GameCalendar.day_of(at) + 2
+		var last := GameCalendar.day_of(at, world["epoch"]) + 2
 		for gate: String in by_gate:
 			var meets := _gate_refusal(world, gate, by_gate[gate], last)
 			if not meets.is_empty():
@@ -205,7 +206,7 @@ static func _gate_refusal(
 		for day in range(int(world["next_day"][contract["id"]]), last + 1):
 			var resolved := resolve(world, contract, day)
 			var id := FlightTimetable.occurrence_id(contract["id"], day)
-			held.append([id, FlightTimetable.starts_for(resolved["contract"], day)])
+			held.append([id, FlightTimetable.starts_for(resolved["contract"], day, world["epoch"])])
 	for i in held.size():
 		for j in range(i + 1, held.size()):
 			if FlightTimetable.shares_gate(gate, held[i][1], gate, held[j][1]):

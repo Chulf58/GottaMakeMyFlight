@@ -291,7 +291,7 @@ func from_snapshot(data: Dictionary) -> bool:
 	_set_upkeep_owed(str(data.get(UPKEEP_SNAPSHOT_KEY, "0")).to_int())
 	_wages_day = _earned_day(data)
 	_wages_paid_today = str(data.get("wages_paid_today", "0")).to_int()
-	_paid_day = GameCalendar.day_of(_sim.clock.tick) if _sim != null else NO_DAY
+	_paid_day = GameCalendar.day_of(_sim.clock.tick, _sim.clock.epoch) if _sim != null else NO_DAY
 	_bag_missed.clear()
 	for text in data.get("bag_missed", []):
 		_bag_missed[str(text).to_int()] = true
@@ -441,13 +441,16 @@ static func wages_day_problem(settlement: Dictionary, clock: Dictionary) -> Stri
 		return ""
 	if not SimClock.is_int64_string(clock["tick"]):
 		return ""
+	if not SimClock.is_int64_string(clock.get("epoch")):
+		return ""
 	var saved_day := str(settlement["wages_day"]).to_int()
 	var clock_tick := str(clock["tick"]).to_int()
-	var clock_day := GameCalendar.day_of(clock_tick)
+	var epoch := SimClock.saved_epoch(clock)
+	var clock_day := GameCalendar.day_of(clock_tick, epoch)
 	var allowed := [clock_day]
 	if settlement.has(WAGE_TIMING_KEY):
 		allowed = [clock_day - 1]
-		if GameCalendar.is_last_tick_of_day(clock_tick):
+		if GameCalendar.is_last_tick_of_day(clock_tick, epoch):
 			allowed.append(clock_day)
 	if saved_day != NO_DAY and not allowed.has(saved_day):
 		return (
@@ -457,7 +460,7 @@ static func wages_day_problem(settlement: Dictionary, clock: Dictionary) -> Stri
 	if (
 		not settlement.has(WAGE_TIMING_KEY)
 		and saved_day == clock_day
-		and GameCalendar.is_last_tick_of_day(clock_tick)
+		and GameCalendar.is_last_tick_of_day(clock_tick, epoch)
 	):
 		return (
 			"settlement: an old-format save taken on day %d's last tick would never charge that day"
@@ -596,8 +599,8 @@ func _on_bag_settled(_bag_id: int, passenger_id: int, _flight_id: String, loaded
 
 func _on_tick(tick: int) -> void:
 	_roll_paid_day(tick)
-	if GameCalendar.is_last_tick_of_day(tick):
-		_charge_day(GameCalendar.day_of(tick))
+	if GameCalendar.is_last_tick_of_day(tick, _sim.clock.epoch):
+		_charge_day(GameCalendar.day_of(tick, _sim.clock.epoch))
 	_pay_owed()
 
 
@@ -605,7 +608,7 @@ func _on_tick(tick: int) -> void:
 ## they count. Called before every payment, so the count is right whichever
 ## listener hears the first tick of a day first.
 func _roll_paid_day(tick: int) -> void:
-	var day := GameCalendar.day_of(tick)
+	var day := GameCalendar.day_of(tick, _sim.clock.epoch)
 	if _paid_day != NO_DAY and day != _paid_day:
 		_wages_paid_today = 0
 	_paid_day = day

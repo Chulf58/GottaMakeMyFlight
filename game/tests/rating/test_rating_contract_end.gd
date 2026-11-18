@@ -17,8 +17,8 @@ func before_test() -> void:
 ## Misses on each of the first `days` days, then rolls to the day after.
 func _low_days(days: int) -> void:
 	for day in days:
-		_rating.record_passenger(GameCalendar.day_start(day), false, 0)
-	_rating.on_tick(GameCalendar.day_start(days))
+		_rating.record_passenger(GameCalendar.day_start(day, 0), false, 0)
+	_rating.on_tick(GameCalendar.day_start(days, 0))
 
 
 func test_the_count_starts_again_after_an_end() -> void:
@@ -59,7 +59,7 @@ func test_the_next_low_days_count_up_to_the_next_end() -> void:
 	var day := RatingFormula.LOW_DAYS_TO_END
 	for i in needed:
 		assert_bool(_rating.contract_ends()).is_false()
-		_rating.record_passenger(GameCalendar.day_start(day), false, 0)
+		_rating.record_passenger(GameCalendar.day_start(day, 0), false, 0)
 		day += 1
-		_rating.on_tick(GameCalendar.day_start(day))
+		_rating.on_tick(GameCalendar.day_start(day, 0))
 	assert_bool(_rating.contract_ends()).is_true()

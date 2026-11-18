@@ -28,6 +28,14 @@ extends Node
 ## A ticked listener that pauses the clock (UnlockGuide opening at midnight)
 ## ends the frame on that tick, at any speed; the steps the frame still owed
 ## are dropped, as the step cap drops a backlog.
+##
+## The calendar epoch E (decision closed-airport-calendar-design-an-explicit-
+## calendar-epoch-pa): GameCalendar maps tick - E. While the calendar is held
+## (hold_calendar(): a gate-bound airport not yet open) E is the tick itself,
+## so no game minute or day passes, while staff still walk. start_calendar()
+## freezes E on the current tick: the opening. E is read from the tick on
+## demand, so it is up to date before ticked is emitted and every listener
+## sees the same E on a tick. A clock never held keeps E at 0. Both are saved.
 
 signal ticked(tick: int)
 
@@ -42,13 +50,32 @@ const MAX_STEPS_PER_FRAME := 10
 ## only feed the backlog the cap drops. A 13.5-hour night (16,200 ticks, about
 ## 270 s at 3x) then passes in about 27 s.
 const FAST_FORWARD_SPEED := 30
-const SAVE_VERSION := 1
+## 2: the calendar epoch ("epoch") and whether the calendar is held
+## ("calendar_held"). A version 1 save is refused; there is no migration.
+const SAVE_VERSION := 2
 const SNAPSHOT_KEYS := [
-	"save_version", "tick", "speed", "paused", "accumulator", "rng_seed", "rng_state"
+	"save_version",
+	"tick",
+	"speed",
+	"paused",
+	"accumulator",
+	"rng_seed",
+	"rng_state",
+	"epoch",
+	"calendar_held",
 ]
 
 var tick: int = 0
 var speed: int = 1
+## The calendar epoch E: the tick while the calendar is held, else the tick
+## start_calendar() froze it on (0 for a clock never held).
+var epoch: int:
+	get:
+		return tick if _calendar_held else _epoch
+## True while the calendar stands still (hold_calendar()). Read it only.
+var calendar_held: bool:
+	get:
+		return _calendar_held
 ## True while the player paused the clock or any hold is held. Setting it is
 ## set_paused(): it sets the player's pause only.
 var paused: bool:
@@ -77,6 +104,8 @@ var alpha: float:
 		return _accumulator / STEP
 
 var _accumulator: float = 0.0
+var _epoch := 0
+var _calendar_held := false
 var _player_paused := false
 ## True while `ticked` is being emitted, so SaveGame can refuse to save or
 ## load from inside a tick.
@@ -117,6 +146,20 @@ func advance(real_delta: float) -> void:
 			break
 	if _accumulator >= STEP:
 		_accumulator = fposmod(_accumulator, STEP)
+
+
+## Holds the calendar: E follows the tick until start_calendar(). AirportGate
+## holds it while a gate-bound airport is closed.
+func hold_calendar() -> void:
+	_calendar_held = true
+
+
+## Starts the calendar: E freezes on the current tick, which becomes 06:00 on
+## day 0. Does nothing when the calendar is not held.
+func start_calendar() -> void:
+	if _calendar_held:
+		_epoch = tick
+		_calendar_held = false
 
 
 ## True from the moment a tick is emitted until every listener has returned.
@@ -172,6 +215,8 @@ func to_snapshot() -> Dictionary:
 		"accumulator": _accumulator,
 		"rng_seed": str(rng.seed),
 		"rng_state": str(rng.state),
+		"epoch": str(epoch),
+		"calendar_held": _calendar_held,
 	}
 
 
@@ -191,6 +236,8 @@ func from_snapshot(data: Dictionary) -> bool:
 	_player_paused = data["paused"]
 	_accumulator = float(data["accumulator"])
 	fast_forward_until = -1
+	_epoch = saved_epoch(data)
+	_calendar_held = data["calendar_held"]
 	restore_rng(str(data["rng_seed"]).to_int(), str(data["rng_state"]).to_int())
 	return true
 
@@ -205,6 +252,8 @@ func _snapshot_problem(data: Dictionary) -> String:
 	if not _is_whole_number(data["save_version"]) or int(data["save_version"]) != SAVE_VERSION:
 		return "save_version must be %d" % SAVE_VERSION
 	var problem := _clock_field_problem(data)
+	if problem == "":
+		problem = epoch_problem(data)
 	if problem != "":
 		return problem
 	for key in ["rng_seed", "rng_state"]:
@@ -224,6 +273,35 @@ func _clock_field_problem(data: Dictionary) -> String:
 	if typeof(acc) not in [TYPE_INT, TYPE_FLOAT] or acc < 0.0 or acc >= STEP:
 		return "accumulator must be a number in [0, STEP)"
 	return ""
+
+
+## Why a clock snapshot's epoch is refused, or "": E is a decimal string from 0
+## to the tick, and equals the tick while the calendar is held. The tick must
+## already have passed its own check.
+static func epoch_problem(data: Dictionary) -> String:
+	if typeof(data["calendar_held"]) != TYPE_BOOL:
+		return "calendar_held must be a bool"
+	var value: Variant = data["epoch"]
+	if not is_int64_string(value) or str(value).begins_with("-"):
+		return "epoch must be a decimal string, 0 or more"
+	var tick_value := str(data["tick"]).to_int()
+	var epoch_value := saved_epoch(data)
+	if epoch_value > tick_value:
+		return "epoch %d is after the tick %d" % [epoch_value, tick_value]
+	if data["calendar_held"] and epoch_value != tick_value:
+		return "the calendar is held, so the epoch must be the tick %d" % tick_value
+	return ""
+
+
+## The calendar epoch of `of_clock`, or 0 for none: a part that is not bound
+## to a clock (a test's bare rating or unlocks) runs on a calendar never held.
+static func epoch_of(of_clock: SimClock) -> int:
+	return of_clock.epoch if of_clock != null else 0
+
+
+## E of a clock snapshot, read as from_snapshot() reads it.
+static func saved_epoch(data: Dictionary) -> int:
+	return str(data["epoch"]).to_int()
 
 
 ## Exact: a float must hold a whole number with no tolerance.

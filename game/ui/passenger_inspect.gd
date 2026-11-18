@@ -185,7 +185,7 @@ func press_thought(index: int) -> bool:
 	marker.show_at(point, entry["positive"])
 	_marked_id = p.id
 	_marked_text = tr("The pin shows where they were at {time}").format(
-		{"time": GameCalendar.clock_text(entry["tick"])}
+		{"time": GameCalendar.clock_text(entry["tick"], clock.epoch)}
 	)
 	if camera != null:
 		camera.glide_to(point, minf(camera.distance, AlertStack.JUMP_DISTANCE))
@@ -289,7 +289,7 @@ func _vip_line(p: Passenger) -> String:
 	if views == null or views.incidents == null or clock == null:
 		return ""
 	var plan := views.incidents.vip_plan_of(p.id)
-	return IncidentCopy.vip_line(plan, clock.tick) if not plan.is_empty() else ""
+	return IncidentCopy.vip_line(plan, clock.tick, clock.epoch) if not plan.is_empty() else ""
 
 
 ## "Flight Sunhop Lisbon, doors close 10:40": the time the Departures list shows
@@ -301,7 +301,7 @@ func _flight_line(p: Passenger) -> String:
 	if doors < 0:
 		return tr("Flight {title}").format({"title": title})
 	return tr("Flight {title}, doors close {time}").format(
-		{"title": title, "time": GameCalendar.clock_text(doors)}
+		{"title": title, "time": GameCalendar.clock_text(doors, clock.epoch)}
 	)
 
 

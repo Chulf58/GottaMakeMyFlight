@@ -62,7 +62,7 @@ func bind_clock(sim_clock: SimClock) -> void:
 		_bound.ticked.disconnect(on_tick)
 	_bound = sim_clock
 	clock = sim_clock
-	_day = GameCalendar.day_of(clock.tick)
+	_day = GameCalendar.day_of(clock.tick, clock.epoch)
 	if flights != null and not flights.state_changed.is_connected(on_flight_state):
 		flights.state_changed.connect(on_flight_state)
 	_draw(_day)
@@ -88,7 +88,7 @@ func on_flight_state(flight_id: String, state: int) -> void:
 ## point 4). Ending a contract draws nothing from the RNG, so the order does
 ## not change the draws.
 func on_tick(tick: int) -> void:
-	var day := GameCalendar.day_of(tick)
+	var day := GameCalendar.day_of(tick, clock.epoch)
 	if day == _day:
 		return
 	_day = day

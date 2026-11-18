@@ -45,7 +45,7 @@ func test_today_and_tomorrow_list_their_flights_in_time_order() -> void:
 	# window has passed, so it starts tomorrow (day 1). Each holds the gate for
 	# 195 minutes (FlightTimetable.reserved_ticks()), so 08:00 and 11:20 do not
 	# clash (the 11:20 flight was 11:00 when a flight held it for 165).
-	_run_to(GameCalendar.tick_at(0, 9 * 60))
+	_run_to(GameCalendar.tick_at(0, 9 * 60, 0))
 	assert_bool(_sim.accept_contract(_terms("LATE", 20 * 60, "Rome", "Sunhop"))).is_true()
 	assert_bool(_sim.accept_contract(_terms("EARLY", 11 * 60 + 20, "Oslo", "Gotta Air"))).is_true()
 	assert_bool(_sim.accept_contract(_terms("NEXT", 8 * 60, "Lisbon", "Sunhop"))).is_true()
@@ -69,12 +69,12 @@ func test_today_and_tomorrow_list_their_flights_in_time_order() -> void:
 
 
 func test_a_departed_flight_drops_off_and_tomorrow_keeps_its_row() -> void:
-	_run_to(GameCalendar.tick_at(0, 9 * 60))
+	_run_to(GameCalendar.tick_at(0, 9 * 60, 0))
 	assert_bool(_sim.accept_contract(_terms("EARLY", 11 * 60 + 20, "Oslo", "Gotta Air"))).is_true()
 	assert_bool(_sim.accept_contract(_terms("LATE", 20 * 60, "Rome", "Sunhop"))).is_true()
 	var before := DeparturesBoard.lines_for(_sim, _clock.tick)
 	assert_array(before).contains(["11:20  Oslo  Gotta Air", "20:00  Rome  Sunhop"])
-	_run_to(GameCalendar.tick_at(0, 14 * 60))
+	_run_to(GameCalendar.tick_at(0, 14 * 60, 0))
 	assert_int(_sim.state_of("EARLY-d0")).is_equal(FlightSim.State.DEPARTED)
 	var after := DeparturesBoard.lines_for(_sim, _clock.tick)
 	var today := after.slice(1, after.find(DeparturesBoard.TOMORROW_HEADING))
@@ -95,7 +95,7 @@ func test_a_closed_airport_lists_nothing() -> void:
 
 
 func test_a_day_with_no_flights_says_none_while_the_other_lists_its_own() -> void:
-	_run_to(GameCalendar.tick_at(0, 7 * 60 + 4))
+	_run_to(GameCalendar.tick_at(0, 7 * 60 + 4, 0))
 	assert_bool(_sim.accept_contract(_terms("NEXT", 8 * 60, "Lisbon", "Sunhop"))).is_true()
 	(
 		assert_array(DeparturesBoard.lines_for(_sim, _clock.tick))
@@ -111,7 +111,7 @@ func test_a_day_with_no_flights_says_none_while_the_other_lists_its_own() -> voi
 
 
 func test_more_flights_than_the_cap_collapse_into_a_count() -> void:
-	_run_to(GameCalendar.tick_at(0, 22 * 60))
+	_run_to(GameCalendar.tick_at(0, 22 * 60, 0))
 	# One flight more than the cap, all tomorrow (accepted at 22:00). A gate
 	# holds each flight for FlightTimetable.reserved_ticks() (195 minutes) and
 	# departures keep to 07:00-21:00 (the quiet night, Runway R7), so one gate
@@ -131,10 +131,10 @@ func test_more_flights_than_the_cap_collapse_into_a_count() -> void:
 
 
 func test_the_node_shows_the_same_lines_after_a_refresh() -> void:
-	_run_to(GameCalendar.tick_at(0, 9 * 60))
+	_run_to(GameCalendar.tick_at(0, 9 * 60, 0))
 	assert_bool(_sim.accept_contract(_terms("EARLY", 11 * 60 + 20, "Oslo", "Gotta Air"))).is_true()
 	_board.refresh()
 	assert_array(_board.shown_lines()).is_equal(DeparturesBoard.lines_for(_sim, _clock.tick))
-	_run_to(GameCalendar.tick_at(0, 14 * 60))
+	_run_to(GameCalendar.tick_at(0, 14 * 60, 0))
 	_board.refresh()
 	assert_array(_board.shown_lines()).is_equal(DeparturesBoard.lines_for(_sim, _clock.tick))

@@ -29,7 +29,7 @@ func before() -> void:
 	(_main.get_node("PassengerHud") as PassengerHud).press_starter_terminal()
 	# The cafe settles on the next tick; a save waits for it.
 	SaveTestKit.step(_main)
-	_last_day = GameCalendar.day_of(_clock.tick)
+	_last_day = GameCalendar.day_of(_clock.tick, _clock.epoch)
 
 
 func after() -> void:
@@ -53,12 +53,12 @@ func _remove_files() -> void:
 ## The first tick of a day later than any fed so far.
 func _new_day_tick() -> int:
 	_last_day += 1
-	return GameCalendar.day_start(_last_day)
+	return GameCalendar.day_start(_last_day, _clock.epoch)
 
 
 ## The first tick of the day after the clock's.
 func _clock_next_day_tick() -> int:
-	return GameCalendar.day_start(GameCalendar.day_of(_clock.tick) + 1)
+	return GameCalendar.day_start(GameCalendar.day_of(_clock.tick, _clock.epoch) + 1, _clock.epoch)
 
 
 func test_the_scene_feeds_the_clock_ticks_to_the_autosave() -> void:

@@ -366,7 +366,10 @@ func history_lines() -> PackedStringArray:
 		var raised: int = entry["raised_tick"]
 		var cleared: int = entry["cleared_tick"]
 		var when := tr("Day {day} {time}").format(
-			{"day": GameCalendar.day_of(raised) + 1, "time": GameCalendar.clock_text(raised)}
+			{
+				"day": GameCalendar.day_of(raised, sim.clock.epoch) + 1,
+				"time": GameCalendar.clock_text(raised, sim.clock.epoch)
+			}
 		)
 		if entry.get("notice", false):
 			lines.append(
@@ -377,7 +380,9 @@ func history_lines() -> PackedStringArray:
 			continue
 		var end := tr("still up")
 		if cleared >= 0:
-			end = tr("cleared {time}").format({"time": GameCalendar.clock_text(cleared)})
+			end = tr("cleared {time}").format(
+				{"time": GameCalendar.clock_text(cleared, sim.clock.epoch)}
+			)
 		lines.append(
 			tr("{when}  {title}, {end}").format({"when": when, "title": entry["title"], "end": end})
 		)

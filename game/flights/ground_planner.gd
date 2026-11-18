@@ -129,12 +129,25 @@ func _init(hold_in: Vector3, hold_runway: Vector3) -> void:
 
 
 ## A flight to plan: its id, plane class, StandPlacement stand, FlightSim
-## schedule starts, and its paths by FlightSim.State for LANDING, TAXI_IN,
-## PUSHBACK, TAXI_OUT and TAKEOFF (Airside.phase_path).
+## schedule starts, its paths by FlightSim.State for LANDING, TAXI_IN,
+## PUSHBACK, TAXI_OUT and TAKEOFF (Airside.phase_path), and the calendar epoch
+## its departure minute is read at (keeps_quiet_night()).
 static func request(
-	id: String, plane_class: String, stand: Dictionary, starts: Array, routes: Dictionary
+	id: String,
+	plane_class: String,
+	stand: Dictionary,
+	starts: Array,
+	routes: Dictionary,
+	epoch: int
 ) -> Dictionary:
-	return {"id": id, "class": plane_class, "stand": stand, "starts": starts, "routes": routes}
+	return {
+		"id": id,
+		"class": plane_class,
+		"stand": stand,
+		"starts": starts,
+		"routes": routes,
+		"epoch": epoch,
+	}
 
 
 ## The class's footprint about the pose point: "ahead" (nose), "behind"
@@ -163,8 +176,8 @@ static func runway_rect(plane_class: String) -> Rect2:
 
 
 ## Whether the flight departs inside the day, so the quiet night stays.
-static func keeps_quiet_night(starts: Array) -> bool:
-	var minute := GameCalendar.minute_of_day(starts[FlightSim.State.PUSHBACK])
+static func keeps_quiet_night(starts: Array, epoch: int) -> bool:
+	var minute := GameCalendar.minute_of_day(starts[FlightSim.State.PUSHBACK], epoch)
 	return minute >= EARLIEST_DEPARTURE_MINUTE and minute <= LATEST_DEPARTURE_MINUTE
 
 
@@ -673,7 +686,7 @@ static func _before(a: Dictionary, b: Dictionary) -> bool:
 
 ## Plans one flight against what is held now and books it.
 func _plan(req: Dictionary) -> Dictionary:
-	if not keeps_quiet_night(req["starts"]):
+	if not keeps_quiet_night(req["starts"], req["epoch"]):
 		return {"ok": false, "reason": QUIET_NIGHT, "pauses": {}, "bookings": []}
 	for state in TAXI_STATES:
 		if not axis_aligned(req["routes"][state]):

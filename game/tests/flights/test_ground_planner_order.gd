@@ -324,8 +324,8 @@ func _check_quiet_night(first: int, last: int, quiet_minutes: int) -> void:
 				low = minf(low, booking["from"])
 				high = maxf(high, booking["to"])
 		spans[day] = Vector2(low, high)
-		var first_allowed := GameCalendar.tick_at(day, first) - 2560
-		var last_allowed := GameCalendar.tick_at(day, last) + 1240
+		var first_allowed := GameCalendar.tick_at(day, first, 0) - 2560
+		var last_allowed := GameCalendar.tick_at(day, last, 0) + 1240
 		assert_float(low).is_greater_equal(first_allowed)
 		assert_float(high).is_less_equal(last_allowed)
 	var quiet: float = spans[2].x - spans[1].y

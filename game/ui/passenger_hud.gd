@@ -477,7 +477,10 @@ func _refresh_quiet_chip() -> void:
 ## The in-game day and 24-hour clock, "Day 1  06:00" (GameCalendar).
 func time_text() -> String:
 	return tr("Day {day}  {time}", "clock").format(
-		{"day": GameCalendar.day_of(clock.tick) + 1, "time": GameCalendar.clock_text(clock.tick)}
+		{
+			"day": GameCalendar.day_of(clock.tick, clock.epoch) + 1,
+			"time": GameCalendar.clock_text(clock.tick, clock.epoch)
+		}
 	)
 
 

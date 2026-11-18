@@ -40,7 +40,7 @@ func after_test() -> void:
 
 
 func _at(minute: int) -> void:
-	_sim.tick = GameCalendar.tick_at(0, minute)
+	_sim.tick = GameCalendar.tick_at(0, minute, 0)
 	_sim.open_airport()
 	_panel.open()
 
@@ -74,11 +74,11 @@ func test_the_note_agrees_with_the_day_the_sim_flies_the_accepted_offer() -> voi
 func test_a_slot_whose_preparation_has_started_counts_as_passed() -> void:
 	# Departure 20:00; the flight's first state comes departure_offset earlier.
 	var offset := FlightTimetable.departure_offset()
-	_sim.tick = GameCalendar.tick_at(0, 1200) - offset + 1
+	_sim.tick = GameCalendar.tick_at(0, 1200, 0) - offset + 1
 	_sim.open_airport()
 	_panel.open()
 	assert_str(_panel.card_text("O0N2")).contains("First flight tomorrow")
-	_sim.tick = GameCalendar.tick_at(0, 1200) - offset
+	_sim.tick = GameCalendar.tick_at(0, 1200, 0) - offset
 	_panel.close()
 	_panel.open()
 	assert_str(_panel.card_text("O0N2")).not_contains("First flight")
@@ -89,7 +89,7 @@ func test_the_note_appears_when_the_clock_passes_the_slot_while_open() -> void:
 	_at(NOON)
 	assert_str(_panel.card_text("O0N2")).not_contains("First flight")
 	assert_str(_panel.card_text("O0N2")).not_contains("Gate")
-	_sim.tick = GameCalendar.tick_at(0, 21 * 60)
+	_sim.tick = GameCalendar.tick_at(0, 21 * 60, 0)
 	await get_tree().process_frame
 	assert_str(_panel.card_text("O0N2")).contains(
 		"Departs 20:00 daily\nSmall plane\nFirst flight tomorrow"
@@ -97,7 +97,7 @@ func test_the_note_appears_when_the_clock_passes_the_slot_while_open() -> void:
 
 
 func test_a_closed_airport_names_the_lead_the_first_flight_needs_after_opening() -> void:
-	_sim.tick = GameCalendar.tick_at(0, NOON)
+	_sim.tick = GameCalendar.tick_at(0, NOON, 0)
 	_panel.open()
 	for id in ["O0N1", "O0N2"]:
 		assert_str(_panel.card_text(id)).contains("First flight 4 h 13 min after opening")
@@ -109,7 +109,7 @@ func test_a_closed_airport_names_the_lead_the_first_flight_needs_after_opening()
 func test_the_closed_lead_is_the_lead_the_sim_uses_at_opening() -> void:
 	var lead := OfferPanel.opening_lead_ticks()
 	assert_int(lead).is_equal(FlightTimetable.ISSUE_LEAD_TICKS + FlightTimetable.departure_offset())
-	var slot := GameCalendar.tick_at(0, 1200)
+	var slot := GameCalendar.tick_at(0, 1200, 0)
 	for case in [[slot - lead, 0], [slot - lead + 1, 1]]:
 		var sim := auto_free(FlightSim.new()) as FlightSim
 		sim.tick = case[0]
@@ -126,7 +126,7 @@ func test_the_lead_text_reads_hours_and_minutes() -> void:
 
 
 func test_accepting_while_closed_repeats_the_lead_in_the_message() -> void:
-	_sim.tick = GameCalendar.tick_at(0, NOON)
+	_sim.tick = GameCalendar.tick_at(0, NOON, 0)
 	_panel.open()
 	_panel.accept_button("O0N2").pressed.emit()
 	assert_str(_panel.message()).is_equal(
@@ -144,14 +144,14 @@ func test_accepting_a_slot_that_has_passed_repeats_tomorrow_in_the_message() -> 
 
 func test_a_slot_two_days_out_names_the_day() -> void:
 	var offer := TestOfferBoard.record("O0N9", 0, 30)
-	var now := GameCalendar.tick_at(0, 23 * 60 + 58)
+	var now := GameCalendar.tick_at(0, 23 * 60 + 58, 0)
 	# The first day depends on the taxi pair of the gate the offer gets (flight
 	# save version 9), so the note and the timetable are asked with one: a
 	# first-site gate's.
 	var timed := offer.duplicate()
 	timed["taxi"] = TaxiTimes.BASE
-	assert_int(FlightTimetable.first_day(timed, now) - GameCalendar.day_of(now)).is_equal(2)
-	assert_str(OfferPanel.first_flight_note(offer, now, TaxiTimes.BASE)).is_equal(
+	assert_int(FlightTimetable.first_day(timed, now, 0) - GameCalendar.day_of(now, 0)).is_equal(2)
+	assert_str(OfferPanel.first_flight_note(offer, now, TaxiTimes.BASE, 0)).is_equal(
 		"first flight on Day 3"
 	)
 
@@ -176,13 +176,13 @@ func test_the_note_line_follows_the_clock_and_is_gone_with_no_note() -> void:
 	var lines := _panel.card_text("O0N2").split("\n")
 	assert_int(lines.size()).is_equal(8)
 	assert_str(lines[1]).is_equal(_panel.fit_text("O0N2"))
-	_sim.tick = GameCalendar.tick_at(0, 21 * 60)
+	_sim.tick = GameCalendar.tick_at(0, 21 * 60, 0)
 	await get_tree().process_frame
 	lines = _panel.card_text("O0N2").split("\n")
 	assert_int(lines.size()).is_equal(9)
 	assert_str(lines[5]).is_equal("Departs 20:00 daily")
 	assert_str(lines[7]).is_equal("First flight tomorrow")
-	_sim.tick = GameCalendar.tick_at(0, 8 * 60)
+	_sim.tick = GameCalendar.tick_at(0, 8 * 60, 0)
 	await get_tree().process_frame
 	assert_int(_panel.card_text("O0N2").split("\n").size()).is_equal(8)
 
