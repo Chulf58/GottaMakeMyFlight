@@ -7,8 +7,10 @@ extends GdUnitTestSuite
 ## none made yet), the source is saved to a file and plays on,
 ## and a third main scene, booted from another seed, loads that file. All
 ## three then play through the fee payout and past the first day rollover,
-## and their checksums (SaveTestKit.checksum, which only reads) must match on
-## every tick.
+## matching on every tick: full SaveTestKit.checksum before the save, right
+## after the load and at the end, and _tick_checksum on every tick in between
+## (every dynamic save part serialized per tick plus the unchanging BuildGrid
+## digest, verified unchanged on all three worlds after the loop).
 ##
 ## Both worlds open on the held calendar (06:00 on day 0 becomes the opening
 ## tick), save just before the starter's first boarding, and play past the
@@ -91,11 +93,17 @@ func _play_on() -> void:
 			var digest: String = grid_digests[main.get_instance_id()]
 			if first_bad[main] < 0 and _tick_checksum(main, digest) != expected:
 				first_bad[main] = _clock(main).tick
+	var grids_unchanged := true
+	for main in all:
+		var grid := (main.get_node("BuildMode") as BuildMode).grid
+		if _grid_digest(grid) != grid_digests[main.get_instance_id()]:
+			grids_unchanged = false
 	var end_expected := SaveTestKit.checksum(_control)
 	for main in first_bad:
 		if first_bad[main] < 0 and SaveTestKit.checksum(main) != end_expected:
 			first_bad[main] = _clock(main).tick
 	var epoch := _clock(_control).epoch
+	_run["grids_unchanged"] = grids_unchanged
 	_run["ticks_compared"] = ticks
 	_run["first_bad_source"] = first_bad[_source]
 	_run["first_bad_loaded"] = first_bad[_loaded]
@@ -157,6 +165,7 @@ func test_the_source_was_saved_to_a_file_and_loaded_into_a_fresh_scene() -> void
 
 
 func test_save_and_continue_matches_the_unsaved_control_on_every_tick() -> void:
+	assert_bool(_run["grids_unchanged"]).is_true()
 	assert_int(_run["ticks_compared"]).is_greater(SAVE_LEAD + AFTER_ROLLOVER)
 	(
 		assert_int(_run["first_bad_source"])

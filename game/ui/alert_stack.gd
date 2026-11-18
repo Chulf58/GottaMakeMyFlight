@@ -364,7 +364,7 @@ func set_tray_open(value: bool) -> void:
 ## while the calendar was held.
 func history_lines() -> PackedStringArray:
 	var lines := PackedStringArray()
-	var clock_epoch := sim.clock.epoch
+	var clock_epoch: int = sim.clock.epoch if sim != null and sim.clock != null else 0
 	for entry in _board.history():
 		var raised: int = entry["raised_tick"]
 		var cleared: int = entry["cleared_tick"]

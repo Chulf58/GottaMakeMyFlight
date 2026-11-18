@@ -41,15 +41,20 @@ func after_test() -> void:
 	_save.pending_path = ""
 
 
-## The first bare cell on land the player owns (building elsewhere is refused,
-## LandPlots).
+## A bare cell on owned land where a floor tile may be painted (from the south
+## edge of the owned plot first, clear of the north gate stand).
 func _floor_cell() -> Vector2i:
 	var mode: BuildMode = _main.get_node("BuildMode")
 	var grid := mode.grid
-	for y in grid.size.y:
+	var land := mode.land_tool.land
+	for y in range(grid.size.y - 1, -1, -1):
 		for x in grid.size.x:
 			var cell := Vector2i(x, y)
-			if grid.floor_at(cell) == BuildGrid.FLOOR_NONE and mode.land_tool.land.owns_cell(cell):
+			if (
+				grid.floor_at(cell) == BuildGrid.FLOOR_NONE
+				and land.owns_cell(cell)
+				and grid.validate(BuildEdit.paint_floor(cell, BuildGrid.FLOOR_TILE, 1)).ok
+			):
 				return cell
 	return Vector2i(-1, -1)
 

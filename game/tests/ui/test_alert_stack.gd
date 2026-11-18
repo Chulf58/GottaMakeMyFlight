@@ -248,6 +248,13 @@ func test_pre_opening_history_ticks_stay_at_day_1_06_00_after_the_epoch_advances
 	assert_int(lines.size()).is_equal(2)
 	assert_str(lines[0]).is_equal("Day 1 06:30  Opened notice\nWelcome")
 	assert_str(lines[1]).is_equal("Day 1 06:00  Nobody on duty, cleared 06:00")
+	# A standalone AlertStack with sim == null formats notices against epoch 0.
+	var bare := AlertStack.new()
+	bare.settings_path = _path
+	add_child(bare)
+	bare.post_notice(&"gate_moves", Control.new(), 0.0, "Flights moved", "Gate A -> B")
+	assert_array(Array(bare.history_lines())).is_equal(["Day 1 06:00  Flights moved\nGate A -> B"])
+	bare.free()
 
 
 func test_the_off_setting_hides_the_cards_but_keeps_the_history() -> void:
