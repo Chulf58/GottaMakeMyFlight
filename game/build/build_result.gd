@@ -156,7 +156,18 @@ static func refused(why: Reason, blocker := 0) -> BuildResult:
 	return result
 
 
+## The refusal in the player's words (BuildWords). REASON_TEXT stays English:
+## it is the key tests and the status line compare. detail is whatever the
+## refusing code put there, shown as it came.
 func reason_text() -> String:
+	var text := ""
+	if reason == Reason.GATE_STAND_OVERLAP:
+		text = (
+			tr("Gates need {metres} m between exits. Widen the terminal", "build refusal")
+			. format({"metres": StandPlacement.EXIT_SPACING_CELLS})
+		)
+	elif REASON_TEXT[reason] != "":
+		text = BuildWords.refusal(REASON_TEXT[reason])
 	if detail != "":
-		return "%s: %s" % [REASON_TEXT[reason], detail]
-	return REASON_TEXT[reason]
+		return tr("{reason}: {detail}", "build refusal").format({"reason": text, "detail": detail})
+	return text

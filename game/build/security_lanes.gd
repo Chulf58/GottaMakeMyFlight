@@ -320,6 +320,13 @@ func status_text(arch: int) -> String:
 	return STATUS_TEXT[status(arch)]
 
 
+## status_text() in the player's words (BuildWords), for a line the player
+## reads. The English status_text() stays the key the built item card hands
+## DisplayWords.reason().
+func status_words(arch: int) -> String:
+	return BuildWords.lane_status(status_text(arch))
+
+
 ## The arch whose whole lane owns the part `object_id`, or 0.
 func lane_of_piece(object_id: int) -> int:
 	return _piece_owner.get(object_id, 0)
