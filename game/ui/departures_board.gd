@@ -802,7 +802,7 @@ func _apply_shown() -> void:
 ## The saved choice, on when nothing is saved yet. A settings file that exists
 ## but cannot be read is reported and the board stays on.
 func _load_setting() -> bool:
-	return HudFlagSetting.load_flag(settings_path, SETTING_KEY, true, "DeparturesBoard")
+	return HudFlagSetting.load_boot_flag(settings_path, SETTING_KEY, true, "DeparturesBoard")
 
 
 ## Writes the choice next to any other settings already in the file.

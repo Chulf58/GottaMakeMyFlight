@@ -49,6 +49,7 @@ func after() -> void:
 func before_test() -> void:
 	_shown_before = IntroDialogue.shown_this_session
 	GameBoot.load_path = ""
+	GameBoot.new_airport = false
 	GameBoot.refusal = ""
 
 
@@ -56,6 +57,7 @@ func after_test() -> void:
 	if is_instance_valid(_main):
 		_main.free()
 	GameBoot.load_path = ""
+	GameBoot.new_airport = false
 	GameBoot.refusal = ""
 	IntroDialogue.shown_this_session = _shown_before
 

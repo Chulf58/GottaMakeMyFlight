@@ -2689,7 +2689,7 @@ msgstr ""
 
 #: ui/staff_panel.gd
 msgctxt "staff button"
-msgid "Hire"
+msgid "Hire · {wage}/day"
 msgstr ""
 
 #: ui/staff_panel.gd

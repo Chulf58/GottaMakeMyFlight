@@ -136,7 +136,7 @@ func _ready() -> void:
 	offset_left = -HudLayout.MARGIN - HudLayout.RAIL_W
 	offset_top = HudLayout.MARGIN
 	grow_vertical = Control.GROW_DIRECTION_END
-	_cards_on = HudFlagSetting.load_flag(settings_path, SETTING_KEY, true, "AlertStack")
+	_cards_on = HudFlagSetting.load_boot_flag(settings_path, SETTING_KEY, true, "AlertStack")
 	_build()
 
 

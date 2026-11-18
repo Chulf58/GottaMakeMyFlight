@@ -328,6 +328,12 @@ func _hire_hint(role: StaffMember.Role) -> String:
 	return tr("Hire shop staff")
 
 
+## The Hire button's text: "Hire" with the role's daily wage (decision first-time-
+## hints-gain-place-gate-desk-and-place-seats-the-hi), e.g. "Hire · 60/day".
+func hire_text(role: StaffMember.Role) -> String:
+	return tr("Hire · {wage}/day", "staff button").format({"wage": PriceTable.wage_of(role)})
+
+
 ## The column title of a role.
 func _role_name(role: StaffMember.Role) -> String:
 	match role:
@@ -424,9 +430,7 @@ func _build() -> void:
 		_counts[role] = counts
 		var row := HBoxContainer.new()
 		column.add_child(row)
-		_hire[role] = _button(
-			row, "Hire%s" % ROLE_KEYS[role], tr("Hire", "staff button"), &"HudButtonTeal"
-		)
+		_hire[role] = _button(row, "Hire%s" % ROLE_KEYS[role], hire_text(role), &"HudButtonTeal")
 		_fire[role] = _button(
 			row, "Fire%s" % ROLE_KEYS[role], tr("Fire", "staff button"), &"HudButtonCoral"
 		)
