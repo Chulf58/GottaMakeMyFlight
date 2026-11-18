@@ -90,9 +90,8 @@ func test_every_refusal_is_translated_when_shown() -> void:
 	var detailed := _refusal(BuildResult.Reason.GATE_IN_USE, "gate A").reason_text()
 	print("refusal with a detail (pseudo): %s" % detailed)
 	assert_int(plain).is_equal(0)
-	# Only the reason is translated here. The detail (gate_desks, spur_trial, door_placement,
-	# template_paste, room_move) stays English until board item c1b2a404 (T12) translates
-	# each producer, so nothing asserts that part of the line.
+	# A detail with no arguments is shown as it came; test_build_detail_words.gd covers the
+	# details the producers give arguments (board item c1b2a404, T12).
 	assert_str(detailed).starts_with("[").contains(
 		BuildWords.refusal(BuildResult.REASON_TEXT[BuildResult.Reason.GATE_IN_USE])
 	)
@@ -229,3 +228,37 @@ func _sim_with(lanes: SecurityLanes) -> PassengerSim:
 	var sim: PassengerSim = auto_free(PassengerSim.new())
 	sim.layout.security_lanes = lanes
 	return sim
+
+
+func test_the_facing_and_room_hint_status_lines_are_translated_when_shown() -> void:
+	_mode.set_tool(BuildMode.Tool.ENTRANCE)
+	var point := _mode.grid.cell_to_world(Vector2i(0, 5))
+	_mode._update_ghost(point)
+	assert_str(_mode.status_text()).starts_with("Facing")
+	PseudoLocale.enable(0.4)
+	_mode._hover_key = ""
+	_mode._update_ghost(point)
+	var facing := _mode.status_text()
+	_mode.set_tool(BuildMode.Tool.CAFE_ROOM)
+	var hint := _mode.status_text()
+	print("facing (pseudo): %s; room hint (pseudo): %s" % [facing, hint])
+	assert_str(facing).starts_with("[").contains("Facing")
+	assert_str(hint).starts_with("[").contains("Drag to mark a")
+
+
+func test_the_area_drag_size_and_belt_cells_are_translated_when_shown() -> void:
+	_mode.set_tool(BuildMode.Tool.BELT)
+	PseudoLocale.enable(0.4)
+	_mode.begin_area(_mode.grid.cell_to_world(Vector2i(3, 3)))
+	_mode.move_area(_mode.grid.cell_to_world(Vector2i(6, 3)))
+	_mode._update_ghost(_mode.grid.cell_to_world(Vector2i(6, 3)))
+	var belt := _mode.status_text()
+	_mode.finish_area()
+	_mode.set_tool(BuildMode.Tool.CAFE_ROOM)
+	_mode.begin_area(_mode.grid.cell_to_world(Vector2i(2, 8)))
+	_mode.move_area(_mode.grid.cell_to_world(Vector2i(6, 10)))
+	_mode._update_ghost(_mode.grid.cell_to_world(Vector2i(6, 10)))
+	var drag := _mode.status_text()
+	print("belt drag (pseudo): %s; room drag (pseudo): %s" % [belt, drag])
+	assert_str(belt).contains("Belt 4 cells")
+	assert_str(drag).starts_with("[").contains("5 x 3")

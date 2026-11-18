@@ -38,8 +38,13 @@ const STATUS_TEXT := {
 	Status.FAULT: "Scanner fault",
 }
 
+## The msgctxt of the station status lines in the player's words (status_words()).
+const STATUS_CONTEXT := "station status"
+
 ## The pieces besides the counters that are closable stations.
 const CLOSABLE_DEFS: Array[StringName] = [&"checkin_desk", &"security_scanner", SecurityLanes.ARCH]
+
+static var _words := Words.new()
 
 var staff: StaffSim
 
@@ -160,8 +165,8 @@ func status(station: int) -> Status:
 	return Status.WAITING_FOR_STAFF
 
 
-## status() in the window's words (STATUS_TEXT); a fault names the clock time
-## of its repair: "Scanner fault, fixed by 14:30" (fault_text()).
+## status() in English (STATUS_TEXT), the key tests compare; a fault names the
+## clock time of its repair: "Scanner fault, fixed by 14:30" (fault_text()).
 func status_text(station: int) -> String:
 	var shown := status(station)
 	if shown == Status.FAULT:
@@ -169,9 +174,27 @@ func status_text(station: int) -> String:
 	return STATUS_TEXT[shown]
 
 
-## The words for a scanner fault repaired on tick `repair`.
+## The words for a scanner fault repaired on tick `repair`, in English.
 static func fault_text(repair: int) -> String:
 	return "%s, fixed by %s" % [STATUS_TEXT[Status.FAULT], GameCalendar.clock_text(repair)]
+
+
+## status_text() in the player's words: the screens call this, never status_text().
+func status_words(station: int) -> String:
+	var shown := status(station)
+	if shown == Status.FAULT:
+		return fault_words(staff.faults.repair_tick(station))
+	return TranslationServer.translate(STATUS_TEXT[shown], STATUS_CONTEXT)
+
+
+## fault_text() in the player's words, one whole sentence with the time in a placeholder.
+static func fault_words(repair: int) -> String:
+	return _words.fault(repair)
+
+
+## Every English msgid, for the test that checks the list against STATUS_TEXT.
+static func msgids() -> Array[String]:
+	return _words.msgids()
 
 
 ## Whether closing `station` would leave passengers no check-in desk (role
@@ -196,3 +219,25 @@ func _finishing(station: int) -> bool:
 	if not (staff.is_staffed(station) or staff.is_staffed(station, StaffMember.Slot.HELPER)):
 		return false
 	return StaffPosts.in_service(staff.sim, station)
+
+
+class Words:
+	extends RefCounted
+
+	func fault(repair: int) -> String:
+		return tr("Scanner fault, fixed by {time}", "station status").format(
+			{"time": GameCalendar.clock_text(repair)}
+		)
+
+	## Never called: every STATUS_TEXT line inside tr(), so POT generation finds it.
+	## The scanner fault is the sentence above, with its time.
+	func msgids() -> Array[String]:
+		return [
+			tr("Closed by you", "station status"),
+			tr("Finishing current service", "station status"),
+			tr("Waiting for staff", "station status"),
+			tr("Staff on the way", "station status"),
+			tr("Serving", "station status"),
+			tr("Scanner fault", "station status"),
+			tr("Scanner fault, fixed by {time}", "station status"),
+		]
