@@ -13,8 +13,9 @@ extends SceneTree
 ## Run (windowed takes the one project-wide slot):
 ##   Godot_v4.7.2-stable_win64_console.exe --display-driver windows \
 ##     --rendering-driver vulkan --audio-driver Dummy --path <worktree>/game \
-##     -s res://locale/t4_pseudolocale_probe.gd
-## The plates go to tools/blender/out/locale/t4/.
+##     -s res://locale/t4_pseudolocale_probe.gd [-- --single] [--out=<dir>]
+## The plates go to tools/blender/out/locale/t4/, or to --out. --single expands
+## each text once, as a real translation would.
 
 const OUT_REL := "res://../tools/blender/out/locale/t4"
 const LIMIT_MS := 180000
@@ -64,6 +65,8 @@ func _run() -> void:
 		quit(1)
 		return
 	PseudoLocale.enable()
+	if OS.get_cmdline_user_args().has("--single"):
+		root.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
 	await _plates(world_seed)
 	PseudoLocale.disable()
 	print("PROBE done failed=%s" % _failed)
@@ -72,7 +75,7 @@ func _run() -> void:
 
 
 func _plates(world_seed: int) -> void:
-	_out_dir = ProjectSettings.globalize_path(OUT_REL).simplify_path()
+	_out_dir = _arg("--out=", ProjectSettings.globalize_path(OUT_REL).simplify_path())
 	DirAccess.make_dir_recursive_absolute(_out_dir)
 	DisplayServer.window_set_size(WINDOW)
 	await _frames(5)
@@ -287,3 +290,11 @@ func _expect(condition: bool, why: String) -> void:
 func _frames(count: int) -> void:
 	for i in count:
 		await process_frame
+
+
+## The value of the user argument that starts with `prefix`, or `fallback`.
+func _arg(prefix: String, fallback: String) -> String:
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with(prefix):
+			return arg.trim_prefix(prefix)
+	return fallback

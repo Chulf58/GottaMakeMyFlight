@@ -39,6 +39,13 @@ extends Node
 ## the old save. F5 quick-saves and F8 quick-loads (F9 is left unbound; the
 ## playtest hook tests press it as a key bound to nothing). Every failure is
 ## pushed as an error and shown on screen.
+##
+## The first tick of each new game day queues an autosave into the SaveSlots
+## autosave that is due (the two files take turns), written from _process once
+## save_problem() allows it (decision title-menu-with-continue-new-airport-load-
+## and-quit-autosave). The title screen boots main.tscn in Load mode through
+## GameBoot.load_path: _ready takes the path and loads it once the whole scene
+## is ready.
 
 ## A save or load finished; `ok` false when it was refused or failed.
 signal saved(path: String, ok: bool)
@@ -136,11 +143,20 @@ const MESSAGE_SECONDS := 4.0
 ## The incidents; none (a test world) saves no "incidents" part. With one, a
 ## save without the part is refused.
 @export var incidents: IncidentDirector
-## Where F5 and F8 save and load. Tests point it at their own file.
+## Where F5 and F8 save and load. Tests point it at their own file. Left at
+## QUICK_SAVE_PATH, _ready makes it SaveSlots.manual_path().
 @export var quick_save_path := QUICK_SAVE_PATH
 
 ## The file a refused request_save() is waiting to write, or "".
 var pending_path := ""
+## The autosave a day rollover queued, written once a save is allowed, or "".
+var autosave_pending := ""
+
+## The game day the last autosave was queued for (or the loaded or starting day).
+var _autosave_day := 0
+## The autosave the next day writes around: the one this node wrote last, or the
+## one just loaded, so the next day writes the other. Empty after a manual load.
+var _last_autosave := ""
 
 var _message := ""
 var _message_left := 0.0
@@ -159,6 +175,39 @@ func _ready() -> void:
 	_label.visible = false
 	layer.add_child(_label)
 	add_child(layer)
+	if quick_save_path == QUICK_SAVE_PATH:
+		quick_save_path = SaveSlots.manual_path()
+	if clock != null:
+		_autosave_day = GameCalendar.day_of(clock.tick)
+		clock.ticked.connect(on_tick)
+	var boot_path := GameBoot.take_load_path()
+	if boot_path != "":
+		if clock != null:
+			clock.set_paused(true)
+		_boot_load.call_deferred(boot_path)
+
+
+## SimClock.ticked: the first tick of a new game day queues the autosave that
+## is due. A script run on the player's save folder queues none (SaveSlots).
+func on_tick(tick: int) -> void:
+	var day := GameCalendar.day_of(tick)
+	if day <= _autosave_day:
+		return
+	_autosave_day = day
+	if not SaveSlots.is_shielded():
+		autosave_pending = SaveSlots.next_autosave(_last_autosave)
+
+
+## Writes the queued autosave if save_problem() now allows it. True when it did.
+func retry_autosave() -> bool:
+	if autosave_pending == "" or save_problem() != "":
+		return false
+	var path := autosave_pending
+	autosave_pending = ""
+	if not save_to_file(path):
+		return false
+	_last_autosave = path
+	return true
 
 
 ## The save's parts in install order. The grid comes first (the passengers
@@ -354,6 +403,9 @@ func load_world(data: Variant) -> bool:
 	# listeners see the final clock.
 	clock.set_paused(true)
 	clock.set_speed(1)
+	# A queued autosave was for the old world; days count from the loaded one.
+	autosave_pending = ""
+	_autosave_day = GameCalendar.day_of(clock.tick)
 	_say("Loaded", false)
 	loaded.emit(true)
 	return true
@@ -401,7 +453,14 @@ func load_from_file(path: String) -> bool:
 		)
 		loaded.emit(false)
 		return false
-	return load_world(json.data)
+	if not load_world(json.data):
+		return false
+	# Rotation follows the loaded timeline: a loaded autosave is the last one
+	# written, so the next rollover keeps it as the fallback and writes the other.
+	# A manual or other save names no slot, so the older autosave is written.
+	var slot := SaveSlots.autosave_paths().find(path)
+	_last_autosave = path if slot >= 0 else ""
+	return true
 
 
 ## Saves to `path` now, or, when save_problem() refuses for now, waits and
@@ -443,6 +502,7 @@ func message_text() -> String:
 
 func _process(delta: float) -> void:
 	retry_pending()
+	retry_autosave()
 	if pending_path != "":
 		_message_left = MESSAGE_SECONDS
 	elif _message_left > 0.0:
@@ -463,6 +523,18 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	elif key.keycode == QUICK_LOAD_KEY:
 		get_viewport().set_input_as_handled()
 		quick_load()
+
+
+## The title screen's Continue or Load. A refused load leaves its message in
+## GameBoot.refusal and, in the running game, goes back to the title to show
+## it; a test or probe that added the scene by hand keeps the scene.
+func _boot_load(path: String) -> void:
+	if load_from_file(path):
+		return
+	GameBoot.refusal = _message
+	var current := get_tree().current_scene
+	if current != null and (current == self or current.is_ancestor_of(self)):
+		get_tree().change_scene_to_file(GameBoot.TITLE_SCENE)
 
 
 ## Installs one part, or its "none saved" step when an older save lacks it.

@@ -5251,3 +5251,500 @@ msgid "{count} space"
 msgid_plural "{count} spaces"
 msgstr[0] ""
 msgstr[1] ""
+
+#: build/view/gap_markers.gd
+msgid "Wall gap · close the outer wall so the roof can go on"
+msgstr ""
+
+#: airside/side_spurs.gd
+msgid "Taxiway works: the taxiway moves when the west side is quiet"
+msgstr ""
+
+#: airside/side_spurs.gd
+msgid "Taxiway works: the taxiway moves when the east side is quiet"
+msgstr ""
+
+#: airside/side_spurs.gd
+msgid "Taxiway works: the taxiway moves when the west side is quiet, forecast {when}"
+msgstr ""
+
+#: airside/side_spurs.gd
+msgid "Taxiway works: the taxiway moves when the east side is quiet, forecast {when}"
+msgstr ""
+
+#: ui/departure_list.gd
+msgctxt "departure status"
+msgid "Boarding"
+msgstr ""
+
+#: ui/departure_list.gd
+msgctxt "departure status"
+msgid "Doors closed"
+msgstr ""
+
+#: ui/departure_list.gd
+msgctxt "departure status"
+msgid "Pushback"
+msgstr ""
+
+#: ui/departure_list.gd
+msgctxt "departure status"
+msgid "Taxiing"
+msgstr ""
+
+#: ui/departure_list.gd
+msgctxt "departure status"
+msgid "Taking off"
+msgstr ""
+
+#: ui/departure_list.gd
+msgctxt "departure status"
+msgid "Departed"
+msgstr ""
+
+#: ui/departure_list.gd
+msgid "doors close {time}"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "refusal detail"
+msgid "gate {gate} is too close"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "refusal detail"
+msgid "gate {gate}, a small plane"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "refusal detail"
+msgid "gate {gate}, a medium plane"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "refusal detail"
+msgid "gate {gate}, a large plane"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "list separator"
+msgid ", "
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build status"
+msgid "Belt {count} cell"
+msgid_plural "Belt {count} cells"
+msgstr[0] ""
+msgstr[1] ""
+
+#: build/build_words.gd
+msgctxt "build status"
+msgid "Facing auto"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build status"
+msgid "Facing {facing}"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build status"
+msgid "{width} x {height}"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build status"
+msgid "{room} {width} x {height}"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build status"
+msgid "{room} marked: {status}"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build status"
+msgid "Drag to mark a {room}"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "atm"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "baggage belt"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "baggage cart"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "bar counter"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "belt corner"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "belt end"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "belt merge"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "bench"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "bin"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "bush"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "cafe counter"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "cafe table"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "chain"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "check-in desk"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "clothes rail"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "currency exchange"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "display stand"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "duty free shelf"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "duty free till"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "entrance"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "exit to the plane"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "fashion till"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "fountain"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "gate desk"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "gate seats"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "grab-and-go stall"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "info desk"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "info screen"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "kiosk counter"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "lounge armchair"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "lounge sofa"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "nap pod"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "pharmacy counter"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "pharmacy shelf"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "pickup table"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "plant pot"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "planter"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "play blocks"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "play slide"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "post"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "prize podium"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "restaurant booth"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "restaurant table"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "screen"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "security arch"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "security scanner"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "shower"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "sink"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "statue"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "toilet stall"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "tray table"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "tree"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "tree bench"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "work desk"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "x-ray belt"
+msgstr ""
+
+#: staff/station_closures.gd
+msgctxt "station status"
+msgid "Closed by you"
+msgstr ""
+
+#: staff/station_closures.gd
+msgctxt "station status"
+msgid "Finishing current service"
+msgstr ""
+
+#: staff/station_closures.gd
+msgctxt "station status"
+msgid "Waiting for staff"
+msgstr ""
+
+#: staff/station_closures.gd
+msgctxt "station status"
+msgid "Staff on the way"
+msgstr ""
+
+#: staff/station_closures.gd
+msgctxt "station status"
+msgid "Serving"
+msgstr ""
+
+#: staff/station_closures.gd
+msgctxt "station status"
+msgid "Scanner fault"
+msgstr ""
+
+#: staff/station_closures.gd
+msgctxt "station status"
+msgid "Scanner fault, fixed by {time}"
+msgstr ""
+
+#: ui/game_menu.gd
+msgctxt "menu"
+msgid "Save"
+msgstr ""
+
+#: ui/game_menu.gd ui/title_screen.gd
+msgctxt "menu"
+msgid "Load"
+msgstr ""
+
+#: ui/title_screen.gd
+msgctxt "menu"
+msgid "Continue"
+msgstr ""
+
+#: ui/title_screen.gd
+msgctxt "menu"
+msgid "New Airport"
+msgstr ""
+
+#: ui/title_screen.gd
+msgctxt "menu"
+msgid "Wishlist"
+msgstr ""
+
+#: ui/title_screen.gd
+msgctxt "menu"
+msgid "Quit"
+msgstr ""
+
+#: ui/title_screen.gd
+msgctxt "menu"
+msgid "Back"
+msgstr ""
+
+#: ui/save_list.gd
+msgid "{slot}, {time}"
+msgstr ""
+
+#: ui/save_list.gd
+msgid "Manual save"
+msgstr ""
+
+#: ui/save_list.gd
+msgid "Autosave {number}"
+msgstr ""
+
+#: build/unlock_families.gd
+msgid "Food: hungry passengers lose mood. A cafe feeds them."
+msgstr ""
+
+#: build/unlock_families.gd
+msgid "Security: more lanes mean shorter queues at the checkpoint."
+msgstr ""
+
+#: build/unlock_families.gd
+msgid "Baggage: belts carry checked bags. A late bag misses its flight."
+msgstr ""
+
+#: build/unlock_families.gd
+msgid "Comfort: seats and lounges calm passengers who wait."
+msgstr ""
+
+#: build/unlock_families.gd
+msgid "Runway: a longer runway takes bigger planes."
+msgstr ""
+
+#: build/unlock_families.gd
+msgid "Also new: {pieces}."
+msgstr ""

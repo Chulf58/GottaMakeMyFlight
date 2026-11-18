@@ -168,7 +168,9 @@ func test_the_card_fades_under_the_ghost_and_comes_back() -> void:
 
 ## Smoke playtest 11 friction (e): under a long refusal "R rotate" wrapped onto
 ## a second status line. The hint has its own slot in the card now; the refusal
-## is the part that is cut short.
+## is the part that wraps onto a second line (board T12 part 4: it used to be cut
+## short on one line, which clipped longer translations), and the card grows up
+## for it while the hint stays whole on one line.
 func test_a_long_refusal_never_pushes_the_rotate_hint_onto_a_second_line() -> void:
 	_open_tray()
 	await _open_tray_with_status(LONG_REFUSAL)
@@ -184,8 +186,8 @@ func test_a_long_refusal_never_pushes_the_rotate_hint_onto_a_second_line() -> vo
 	assert_bool(hint.visible).is_true()
 	assert_str(hint.text).is_equal(RotateHint.TEXT)
 	assert_int(hint.get_line_count()).is_equal(1)
-	assert_int(_menu.status_label().get_line_count()).is_equal(1)
-	assert_float(rect.size.y).is_equal(float(HudLayout.BUTTON_H))
+	assert_int(_menu.status_label().get_line_count()).is_equal(2)
+	assert_float(rect.size.y).is_greater(float(HudLayout.BUTTON_H))
 	assert_bool(card.get_global_rect().encloses(hint.get_global_rect())).is_true()
 	assert_bool(card.get_global_rect().encloses(_menu.status_label().get_global_rect())).is_true()
 	assert_str(_menu.status_label().text).is_equal(LONG_REFUSAL)
@@ -206,7 +208,10 @@ func test_a_long_refusal_with_a_cost_keeps_hint_and_cost_whole() -> void:
 	assert_float(hint.get_global_rect().end.x).is_less_equal(cost.get_global_rect().position.x)
 	assert_int(hint.get_line_count()).is_equal(1)
 	assert_int(cost.get_line_count()).is_equal(1)
-	assert_float(card.size.y).is_equal(float(HudLayout.BUTTON_H))
+	# The refusal wraps and the card grows up for it (board T12 part 4); the hint
+	# and the cost stay whole beside it.
+	assert_float(card.size.y).is_greater(float(HudLayout.BUTTON_H))
+	assert_bool(card.encloses(_menu.status_label().get_global_rect())).is_true()
 
 
 func test_no_hint_when_the_tool_places_nothing() -> void:

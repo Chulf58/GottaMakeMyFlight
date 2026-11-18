@@ -55,6 +55,8 @@ func _init() -> void:
 	name = "PassengerInspect"
 	visible = false
 	theme = BuildMenu.HUD_THEME
+	# The top-left column's cards stop a GAP above this card while it shows.
+	add_to_group(LeftColumn.FLOOR_GROUP)
 	var root := VBoxContainer.new()
 	add_child(root)
 	root.add_child(built_card)
@@ -207,7 +209,7 @@ static func now_line(passenger_sim: PassengerSim, p: Passenger) -> String:
 		parts.append(TranslationServer.translate("Running late"))
 	if p.stuck != Passenger.Stuck.NONE:
 		var stuck := TranslationServer.translate('Stuck: "{reason}"')
-		parts.append(stuck.format({"reason": passenger_sim.bubble_text(p)}))
+		parts.append(stuck.format({"reason": BubbleWords.say(passenger_sim.bubble_text(p))}))
 	return "   ".join(parts)
 
 

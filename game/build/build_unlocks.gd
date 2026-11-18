@@ -224,11 +224,31 @@ static func tier_of(tool: BuildMode.Tool) -> int:
 ## test world or probe that builds without a game), and otherwise refuses every
 ## gated tool, never unlocks them.
 static func lock_text(gate: BuildUnlocks, required: bool, tool: BuildMode.Tool) -> String:
+	return lock_words(lock_args(gate, required, tool))
+
+
+## What lock_text() says as values, none of it translated: {} when `tool` can be
+## picked, {"unwired": true} for a required gate that is missing, else {"tier"}
+## and, once the game is rated, {"stars", "passengers"} as they stand now.
+## lock_words() puts the values into the player's words at display time.
+static func lock_args(gate: BuildUnlocks, required: bool, tool: BuildMode.Tool) -> Dictionary:
 	if tier_of(tool) == 0:
-		return ""
+		return {}
 	if gate == null:
-		return Words.new().not_wired() if required else ""
-	return "" if gate.allows(tool) else gate.unlock_text(tool)
+		return {"unwired": true} if required else {}
+	return {} if gate.allows(tool) else gate.tier_args(tier_of(tool))
+
+
+## The player's words for lock_args() values; "" for none.
+static func lock_words(args: Dictionary) -> String:
+	if args.is_empty():
+		return ""
+	if args.has("unwired"):
+		return Words.new().not_wired()
+	var text := requirement_text(args["tier"])
+	if not args.has("stars"):
+		return text
+	return Words.new().requirement_now(text, args["stars"], args["passengers"])
 
 
 ## The tool `wanted` as a mode's starting tool: itself when it may be picked, else
@@ -245,6 +265,14 @@ static func start_tool(
 ## room or catalog object in `edits` whose tool is not open. A room type or
 ## object no tool places is not gated.
 static func edits_lock_text(gate: BuildUnlocks, required: bool, edits: Array[BuildEdit]) -> String:
+	return lock_words(edits_lock_args(gate, required, edits))
+
+
+## The lock_args() of the first room or catalog object in `edits` whose tool is not
+## open, {} when the plan can be built.
+static func edits_lock_args(
+	gate: BuildUnlocks, required: bool, edits: Array[BuildEdit]
+) -> Dictionary:
 	_index_tools()
 	for edit in edits:
 		var tool: BuildMode.Tool = BuildMode.Tool.NONE
@@ -252,10 +280,10 @@ static func edits_lock_text(gate: BuildUnlocks, required: bool, edits: Array[Bui
 			tool = _tool_by_room.get(edit.room_type, BuildMode.Tool.NONE)
 		elif edit.kind == BuildEdit.Kind.PLACE_OBJECT:
 			tool = _tool_by_def.get(edit.def_id, BuildMode.Tool.NONE)
-		var text := lock_text(gate, required, tool)
-		if text != "":
-			return text
-	return ""
+		var args := lock_args(gate, required, tool)
+		if not args.is_empty():
+			return args
+	return {}
 
 
 ## The tool that places catalog object `def_id`, or NONE for a piece no tool places.
@@ -308,17 +336,17 @@ func unlock_text(tool: BuildMode.Tool) -> String:
 
 ## The requirement of tier `needed`, and how far the game is from it.
 func tier_text(needed: int) -> String:
-	var text := requirement_text(needed)
-	if needed < 2 or needed > TIERS.size() or rating == null:
-		return text
-	return (
-		tr_n(
-			"{requirement} (now {stars} stars, {passengers} passenger)",
-			"{requirement} (now {stars} stars, {passengers} passengers)",
-			_made
-		)
-		. format({"requirement": text, "stars": str(rating.stars()), "passengers": _made})
-	)
+	return lock_words(tier_args(needed))
+
+
+## The values tier_text() puts into words: the tier, and the stars and made-flight
+## passengers as they stand now when the tier is one the game rates.
+func tier_args(needed: int) -> Dictionary:
+	var args := {"tier": needed}
+	if needed >= 2 and needed <= TIERS.size() and rating != null:
+		args["stars"] = str(rating.stars())
+		args["passengers"] = _made
+	return args
 
 
 ## The first tick of a new game day runs the check.
@@ -537,6 +565,16 @@ class Words:
 				passengers
 			)
 			. format({"stars": stars, "passengers": passengers})
+		)
+
+	func requirement_now(requirement: String, stars: String, passengers: int) -> String:
+		return (
+			tr_n(
+				"{requirement} (now {stars} stars, {passengers} passenger)",
+				"{requirement} (now {stars} stars, {passengers} passengers)",
+				passengers
+			)
+			. format({"requirement": requirement, "stars": stars, "passengers": passengers})
 		)
 
 	## Never called: each tier's facilities text inside tr(), so POT generation

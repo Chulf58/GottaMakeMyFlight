@@ -176,11 +176,11 @@ func test_every_speech_bubble_text_has_a_translation() -> void:
 	assert_int(BubbleDeclutter.tier_of(BubbleWords.say(BubbleDeclutter.LATE_TEXT))).is_equal(1)
 
 
-## What the POT must hold for each tr() and tr_n() call in `source`: the full
-## `msgctxt`/`msgid` (and `msgid_plural` for tr_n) text, one entry per call.
+## What the POT must hold for each tr() and tr_n() call in `source`: one entry with
+## the full msgctxt, msgid (and msgid_plural for tr_n) text, as {"ctx", "id", "plural"}.
 ## tr(msgid, context) has its context as argument 2; tr_n(singular, plural, n,
 ## context) has it as argument 4.
-func _wanted_entries(source: String) -> Array[String]:
+func _wanted_entries(source: String) -> Array[Dictionary]:
 	var string_arg := '"((?:[^"\\\\]|\\\\.)*)"'
 	var tr_pattern := RegEx.create_from_string(
 		"\\btr\\(\\s*" + string_arg + "\\s*(?:,\\s*" + string_arg + ")?"
@@ -188,27 +188,26 @@ func _wanted_entries(source: String) -> Array[String]:
 	var tr_n_pattern := RegEx.create_from_string(
 		"\\btr_n\\(\\s*" + string_arg + "\\s*,\\s*" + string_arg + "\\s*,[^,]*,\\s*" + string_arg
 	)
-	var wanted: Array[String] = []
+	var wanted: Array[Dictionary] = []
 	for found in tr_pattern.search_all(source):
-		var entry := 'msgid "%s"' % found.get_string(1)
-		if found.get_string(2) != "":
-			entry = 'msgctxt "%s"\n%s' % [found.get_string(2), entry]
-		wanted.append(entry)
+		wanted.append({"ctx": found.get_string(2), "id": found.get_string(1), "plural": ""})
 	for found in tr_n_pattern.search_all(source):
 		wanted.append(
-			(
-				'msgctxt "%s"\nmsgid "%s"\nmsgid_plural "%s"'
-				% [found.get_string(3), found.get_string(1), found.get_string(2)]
-			)
+			{"ctx": found.get_string(3), "id": found.get_string(1), "plural": found.get_string(2)}
 		)
 	return wanted
 
 
+## The wanted entries the template does not hold exactly once with a msgstr line.
 func _missing_entries(source: String, template: String) -> Array[String]:
+	var entries := PotEntries.parse(template)
 	var missing: Array[String] = []
-	for entry in _wanted_entries(source):
-		if not template.contains(entry):
-			missing.append(entry)
+	for want in _wanted_entries(source):
+		if (
+			PotEntries.count(entries, want["ctx"], want["id"], want["plural"]) != 1
+			or (PotEntries.complete(entries, want["ctx"], want["id"], want["plural"]) != 1)
+		):
+			missing.append(str(want))
 	return missing
 
 
@@ -229,19 +228,45 @@ func test_every_routed_msgid_is_in_the_template() -> void:
 
 
 ## Control: the check fails when the template has only the singular entry of a
-## tr_n() call, or the wrong context, so it cannot pass by accident.
-func test_the_template_check_catches_a_missing_plural_or_context() -> void:
+## tr_n() call, the wrong context, a repeat or no msgstr, so it cannot pass by accident.
+func test_the_template_check_catches_a_missing_plural_context_or_msgstr() -> void:
 	var text := "Queue full · {count} waiting"
 	var source := 'tr_n("%s", "%s", n, "sign text")' % [text, text]
 	var context := 'msgctxt "sign text"\n'
 	var singular := 'msgid "%s"\n' % text
 	var plural := 'msgid_plural "%s"\n' % text
-	assert_array(_missing_entries(source, context + singular + plural)).is_empty()
+	var whole := context + singular + plural + 'msgstr[0] ""\nmsgstr[1] ""\n'
+	assert_array(_missing_entries(source, whole)).is_empty()
 	# Only the singular entry: the plural is missing.
 	assert_array(_missing_entries(source, context + singular + 'msgstr ""\n')).has_size(1)
 	# No context.
-	assert_array(_missing_entries(source, singular + plural)).has_size(1)
+	assert_array(_missing_entries(source, singular + plural + 'msgstr[0] ""\n')).has_size(1)
 	# A different plural.
-	assert_array(_missing_entries(source, context + singular + 'msgid_plural "other"\n')).has_size(
-		1
-	)
+	var other := context + singular + 'msgid_plural "other"\nmsgstr[0] ""\n'
+	assert_array(_missing_entries(source, other)).has_size(1)
+	# No msgstr line.
+	assert_array(_missing_entries(source, context + singular + plural)).has_size(1)
+	# The same entry twice.
+	assert_array(_missing_entries(source, whole + "\n" + whole)).has_size(1)
+
+
+## Control: a plural needs msgstr[0] and msgstr[1] and no plain msgstr, a singular
+## needs one plain msgstr, and a plural msgid split over lines still counts.
+func test_the_template_check_tells_plural_and_singular_msgstr_shapes_apart() -> void:
+	var text := "Queue full · {count} waiting"
+	var plural_source := 'tr_n("%s", "%s", n, "sign text")' % [text, text]
+	var singular_source := 'tr("%s", "sign text")' % text
+	var head := 'msgctxt "sign text"\nmsgid "%s"\n' % text
+	var plural_head := head + 'msgid_plural "%s"\n' % text
+	# A plural with only msgstr[0].
+	assert_array(_missing_entries(plural_source, plural_head + 'msgstr[0] ""\n')).has_size(1)
+	# A plural with a plain msgstr.
+	assert_array(_missing_entries(plural_source, plural_head + 'msgstr ""\n')).has_size(1)
+	# A singular with msgstr[0].
+	assert_array(_missing_entries(singular_source, head + 'msgstr[0] ""\n')).has_size(1)
+	# Controls: a whole singular, and a whole plural with multi-line texts.
+	assert_array(_missing_entries(singular_source, head + 'msgstr ""\n')).is_empty()
+	var split := 'msgctxt "sign text"\nmsgid ""\n"Queue full · {count} "\n"waiting"\n'
+	split += 'msgid_plural ""\n"Queue full · {count} "\n"waiting"\n'
+	split += 'msgstr[0] ""\n"line"\nmsgstr[1] ""\n"line"\n'
+	assert_array(_missing_entries(plural_source, split)).is_empty()

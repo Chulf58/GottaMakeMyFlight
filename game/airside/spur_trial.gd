@@ -62,6 +62,7 @@ static func problem(
 		return null
 	var refusal := BuildResult.refused(BuildResult.Reason.SPUR_STRANDS)
 	refusal.detail = flight_words(gates.flights, stranded["id"])
+	refusal.detail_args = {"flights": PackedStringArray([refusal.detail])}
 	return refusal
 
 

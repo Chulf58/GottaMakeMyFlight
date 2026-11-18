@@ -39,8 +39,8 @@ func test_a_wrapped_line_comes_off_the_baseline() -> void:
 	)
 
 
-func test_the_baseline_is_not_empty_and_the_migrated_example_is_scanned_and_clean() -> void:
-	assert_int(_baseline().size()).is_greater(0)
+func test_the_baseline_is_empty_and_the_migrated_example_is_scanned_and_clean() -> void:
+	assert_int(_baseline().size()).is_equal(0)
 	assert_array(DirAccess.get_files_at(UI_DIR)).contains(["rating_badge.gd"])
 	for key: String in TranslationScan.count_dir(UI_DIR):
 		assert_bool(key.begins_with("rating_badge.gd\t")).is_false()
