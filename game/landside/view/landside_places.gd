@@ -201,7 +201,7 @@ func _new_sign(definition: LandsideDefinition, spot: int) -> Node3D:
 	sign.offset = Vector2(0.0, MarkerIcons.SIZE / 2.0)
 	sign.pixel_size = MissMarkers.SIGN_PX / MissMarkers.FALLBACK_HEIGHT / MarkerIcons.SIZE
 	sign.position = Vector3(gate.x, road_top + SIGN_HEIGHT, gate.z)
-	var caption := Label3D.new()
+	var caption := CaptionFont.apply(Label3D.new())
 	caption.name = "Caption"
 	caption.text = MissMarkers.closed_caption()
 	caption.billboard = BaseMaterial3D.BILLBOARD_ENABLED

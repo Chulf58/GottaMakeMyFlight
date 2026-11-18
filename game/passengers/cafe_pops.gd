@@ -305,7 +305,7 @@ func _take() -> Label3D:
 		var reused: Label3D = _free.pop_back()
 		reused.visible = true
 		return reused
-	var label := Label3D.new()
+	var label := CaptionFont.apply(Label3D.new())
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.no_depth_test = true
 	# The text hangs down from the label's position.

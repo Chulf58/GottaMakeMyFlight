@@ -114,7 +114,7 @@ func _init() -> void:
 
 
 func _ready() -> void:
-	_label = Label3D.new()
+	_label = CaptionFont.apply(Label3D.new())
 	_label.name = "Status"
 	_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	_label.no_depth_test = true

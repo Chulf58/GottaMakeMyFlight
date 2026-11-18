@@ -450,7 +450,7 @@ func _process(_delta: float) -> void:
 ## MissMarkers.caption_size() measures its own one-line captions.
 static func caption_size(text: String) -> Vector2:
 	if not _caption_sizes.has(text):
-		var font := ThemeDB.fallback_font
+		var font := CaptionFont.font()
 		var lines := text.split("\n")
 		var width := 0.0
 		for line in lines:
@@ -795,7 +795,7 @@ static func _line_material(
 
 
 func _make_caption(node_name: String, align: VerticalAlignment, gap_px: float) -> Label3D:
-	var caption := Label3D.new()
+	var caption := CaptionFont.apply(Label3D.new())
 	caption.name = node_name
 	caption.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	caption.fixed_size = true

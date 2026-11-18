@@ -279,7 +279,9 @@ func test_a_room_label_draws_dark_text_on_a_cream_card() -> void:
 	_view.layout_labels()
 	var label := _view.label_of(_room)
 	var card := label.get_node(RoomLabelLayout.CARD) as Sprite3D
-	var font := ThemeDB.fallback_font
+	# The card fits the text in the font the label draws with (CaptionFont, board L2).
+	assert_object(label.font).is_same(CaptionFont.font())
+	var font := label.font
 	var text := font.get_multiline_string_size(
 		label.text, HORIZONTAL_ALIGNMENT_CENTER, -1, label.font_size
 	)
