@@ -84,7 +84,9 @@ func test_a_full_check_in_queue_is_a_cause_pointing_at_its_desk() -> void:
 	# as-the-de), not the overflow alone. The wording changed by that ruling.
 	var in_lane := _world.sim.queue_of(desk).size()
 	assert_int(in_lane).is_greater(0)
-	assert_str(cause["detail"]).is_equal("1 desk full · %d waiting" % (in_lane + 2))
+	assert_str(cause["detail"]).is_equal(
+		"1 desk full · %d waiting · short queue: move the desk away from the wall" % (in_lane + 2)
+	)
 	assert_int(MissMarkers.waiting_at(_world.sim, desk, 2)).is_equal(in_lane + 2)
 	assert_int(cause["show_after"]).is_equal(AlertSources.QUEUE_HOLD_TICKS)
 	assert_int(cause["clear_after"]).is_equal(AlertSources.QUEUE_HOLD_TICKS)
@@ -119,7 +121,14 @@ func test_the_check_in_card_sums_what_each_full_desks_sign_counts() -> void:
 		total += waiting
 	var causes := AlertSources.queue_full(_world.sim)
 	assert_array(_keys(causes)).is_equal([AlertSources.QUEUE_CHECKIN])
-	assert_str(causes[0]["detail"]).is_equal("2 desks full · %d waiting" % total)
+	# Both desks stand in a 5-row room, so their lanes are short (TestAlertShortLane).
+	for desk: int in [first, second]:
+		assert_int((_world.sim.layout.lanes[desk] as Array).size()).is_less(
+			TerminalLayout.LANE_SLOTS
+		)
+	assert_str(causes[0]["detail"]).is_equal(
+		"2 desks full · %d waiting · short queue: move a desk away from the wall" % total
+	)
 
 
 func test_passengers_with_no_route_are_one_cause_until_the_wall_opens() -> void:

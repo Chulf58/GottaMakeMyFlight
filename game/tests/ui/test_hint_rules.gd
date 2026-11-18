@@ -29,7 +29,7 @@ func test_a_world_with_every_need_met_has_no_cause() -> void:
 	assert_array(HintRules.causes(_world())).is_empty()
 
 
-func test_the_five_hints_are_the_ruled_ones_and_first_miss_is_cut() -> void:
+func test_the_six_hints_are_the_ruled_ones_and_first_miss_is_cut() -> void:
 	(
 		assert_array(HintRules.IDS)
 		. is_equal(
@@ -39,6 +39,7 @@ func test_the_five_hints_are_the_ruled_ones_and_first_miss_is_cut() -> void:
 				HintRules.SECOND_HIRE,
 				HintRules.TOILET,
 				HintRules.FOOD,
+				HintRules.FOLLOW_PASSENGER,
 			]
 		)
 	)

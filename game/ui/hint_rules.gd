@@ -12,8 +12,13 @@ const PLACE_SECURITY := &"place_security"
 const SECOND_HIRE := &"second_hire"
 const TOILET := &"toilet"
 const FOOD := &"food"
+## The invitation to click a passenger (FollowInvite). It is remembered in the
+## file once the player has selected a passenger, not once it has shown.
+const FOLLOW_PASSENGER := &"follow_passenger"
 ## In priority order: the first one that is ready is shown.
-const IDS: Array[StringName] = [PLACE_CHECKIN, PLACE_SECURITY, SECOND_HIRE, TOILET, FOOD]
+const IDS: Array[StringName] = [
+	PLACE_CHECKIN, PLACE_SECURITY, SECOND_HIRE, TOILET, FOOD, FOLLOW_PASSENGER
+]
 
 ## A pseudo category: the Staff card being open is the second hire's opportunity.
 const STAFF_CARD := "@staff"
@@ -32,6 +37,7 @@ const TEXT := {
 	SECOND_HIRE: "One agent works one desk or scanner. Hire another on the Staff card.",
 	TOILET: "Passengers need a toilet. Build a toilet room and put a stall in it.",
 	FOOD: "Hungry passengers need food. Build a cafe with a counter and a table.",
+	FOLLOW_PASSENGER: "Click a passenger to follow them to their flight",
 }
 
 ## The build categories (BuildMenu.CATEGORIES names) that are each hint's
@@ -42,6 +48,7 @@ const CATEGORIES := {
 	SECOND_HIRE: [STAFF_CARD],
 	TOILET: ["Toilets"],
 	FOOD: ["Cafe", "Food", "Dining"],
+	FOLLOW_PASSENGER: [],
 }
 
 
@@ -63,6 +70,9 @@ static func categories_for(id: StringName) -> Array:
 ##   does not already name. The banner's hire line for the same role means the
 ##   same thing, so its role is left out (meaning, not text).
 ## - toilet / food: a passenger needs one and no usable stall / cafe exists.
+## - follow_passenger: a passenger is in the terminal and none is selected
+##   ("follow_ready" and "followed", FollowInvite.read(); both default to false
+##   where a world does not carry them).
 static func causes(world: Dictionary) -> Array[StringName]:
 	var out: Array[StringName] = []
 	if int(world["desks"]) == 0:
@@ -77,6 +87,8 @@ static func causes(world: Dictionary) -> Array[StringName]:
 		out.append(TOILET)
 	if int(world["cafes"]) == 0 and int(world["max_hunger"]) >= CafeSim.HUNGRY_AT:
 		out.append(FOOD)
+	if bool(world.get("follow_ready", false)) and not bool(world.get("followed", false)):
+		out.append(FOLLOW_PASSENGER)
 	var ordered: Array[StringName] = []
 	for id in IDS:
 		if out.has(id):
@@ -178,5 +190,6 @@ class Words:
 				tr("One agent works one desk or scanner. Hire another on the Staff card."),
 				tr("Passengers need a toilet. Build a toilet room and put a stall in it."),
 				tr("Hungry passengers need food. Build a cafe with a counter and a table."),
+				tr("Click a passenger to follow them to their flight"),
 			]
 		)

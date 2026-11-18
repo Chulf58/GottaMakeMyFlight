@@ -174,7 +174,7 @@ func test_a_passenger_standing_at_the_desk_is_picked_before_the_desk() -> void:
 	print("hit passenger %d, item kind %d" % [_views.selected_id, _selection().kind])
 	assert_int(_views.selected_id).is_equal(passenger)
 	assert_int(_selection().kind).is_equal(BuiltSelection.Kind.NONE)
-	assert_str(_inspect.name_text()).is_equal("Passenger %d" % passenger)
+	assert_str(_inspect.name_text()).is_equal(PassengerNames.name_of(passenger))
 	assert_bool(_inspect.built_card.visible).is_false()
 	# And the reverse: clicking the desk clears the passenger.
 	_views.node_for(passenger).position += Vector3(30.0, 0.0, 0.0)
