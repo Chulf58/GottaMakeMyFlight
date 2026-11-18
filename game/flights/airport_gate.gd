@@ -13,7 +13,14 @@ extends Node
 ## issues anything, so a flight due on the opening tick is issued on it.
 ## PassengerSim steps the staff later in the tick, so a member who goes on
 ## duty opens the airport on the next tick. Opening accepts the starter
-## contract, whose first flight starts ISSUE_LEAD_TICKS after the opening.
+## contract, timed by StarterSlot, whose first flight is issued on the opening
+## tick, and then emits `opened`.
+##
+## While a bound airport is closed its clock's calendar is held (decision
+## closed-airport-calendar-design-an-explicit-calendar-epoch-pa, ruling day-
+## clock-stops-until-the-airport-opens-the-opening-call-pau): no game minute or
+## day passes, while staff still walk to their stations. Opening starts it
+## (FlightSim.open_airport).
 ##
 ## When the only path runs through a desk or scanner staff can never work (its
 ## staff spot blocked, or no way to it from an entrance), the blocker is
@@ -23,6 +30,11 @@ extends Node
 ## and run on each call. `changed` tells the HUD the blocker may have changed.
 
 signal changed
+## The airport just opened, on tick `tick`, with its starter accepted and its
+## first occurrence issued. Emitted inside that tick when try_open() opens it,
+## so a listener that holds the clock (the opening call) stops the frame on the
+## opening tick (SimClock.advance) and the first passengers move only after.
+signal opened(tick: int)
 
 ## What keeps the airport closed, checked in the order NO_GATE, NO_PATH,
 ## STAFF_SPOT, NO_CHECKIN, NO_SECURITY. NO_GATE: FlightSim has no gate, so no
@@ -48,14 +60,16 @@ enum Blocker {
 @export var flights: FlightSim
 @export var staff: StaffSim
 
-## True when open() found gate C full all day and opened with no starter.
-## Set only by open(); not saved, so it reads false after a load.
+## Always false: open() no longer opens without a starter (StarterSlot).
+## ui/staff_panel.gd still reads it; it goes once that file stops.
 var opened_without_starter := false
 
 var _path_ok := false
 ## Whether passengers would have a working path if every station were staffed.
 var _route_ok := false
 var _path_dirty := true
+## Whether open() has said that no starter slot is free, so it says it once.
+var _no_slot_said := false
 
 
 func _ready() -> void:
@@ -66,11 +80,14 @@ func _ready() -> void:
 
 
 ## Watches `with_staff` (already bound to its PassengerSim) and its grid, and
-## becomes `with_flights`' gate.
+## becomes `with_flights`' gate. While the airport is closed, the calendar of
+## `with_flights`' clock is held.
 func bind(with_flights: FlightSim, with_staff: StaffSim) -> void:
 	flights = with_flights
 	staff = with_staff
 	flights.gate = self
+	if not is_open() and flights.clock != null:
+		flights.clock.hold_calendar()
 	flights.snapshot_loaded.connect(changed.emit)
 	staff.staff_changed.connect(changed.emit)
 	staff.member_state_changed.connect(_on_member_state)
@@ -133,33 +150,29 @@ func try_open() -> bool:
 	return ready_to_open() and open()
 
 
-## Opens the airport now, ready or not, and accepts the starter contract at
-## the first departure minute that leaves ISSUE_LEAD_TICKS after the opening
-## and holds gate C free (a later minute only when an offer accepted while
-## closed already holds that slot). The slot is found before the airport
-## opens, and opening does not change which slots are free, so the opening
-## and the starter are one step. When offers accepted while closed fill gate C
-## all day, the airport opens with no starter: those offers are its flights,
-## and opened_without_starter says so. False (with an error) when already open.
+## Opens the airport now, ready or not, and accepts the starter contract in
+## the slot StarterSlot finds, then emits `opened`. The slot is found before
+## the opening commits, at the epoch the opening freezes (the calendar is held,
+## so E is already this tick), and opening does not change which slots are
+## free, so the opening and the starter are one step. When offers accepted
+## while closed leave no slot all day, the airport stays closed and a warning
+## says why, once: it never opens without a starter. False (with an error)
+## when already open.
 func open() -> bool:
-	var terms := {} if is_open() else _starter_terms()
+	var terms := {} if is_open() else StarterSlot.terms(flights)
+	if not is_open() and terms.is_empty():
+		if not _no_slot_said:
+			_no_slot_said = true
+			push_warning(
+				"AirportGate: no starter slot is free all day, so the airport stays closed"
+			)
+		return false
 	if not flights.open_airport():
 		return false
-	opened_without_starter = terms.is_empty()
-	if not opened_without_starter:
-		flights.accept_contract(terms)
+	flights.accept_contract(terms)
 	changed.emit()
+	opened.emit(flights.opened_tick)
 	return true
-
-
-## The starter at the first minute from the lead on that accept_contract
-## takes, or {} when every minute of the day clashes.
-func _starter_terms() -> Dictionary:
-	for minute in GameCalendar.MINUTES_PER_DAY:
-		var terms := FlightSim.starter_terms(flights.tick + minute * GameCalendar.TICKS_PER_MINUTE)
-		if flights.accept_problem(terms) == "":
-			return terms
-	return {}
 
 
 func _any_open(stations: Array[int]) -> bool:

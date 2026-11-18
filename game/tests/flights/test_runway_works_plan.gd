@@ -87,7 +87,7 @@ func test_clashing_offers_are_refused_during_the_works() -> void:
 	assert_bool(_sim.start_works(PlaneClasses.MEDIUM)).is_true()
 	var works := _sim.runway.works
 	var middle := (works.start + works.finish) / 2
-	var minute := GameCalendar.minute_of_day(middle + FlightTimetable.departure_offset())
+	var minute := GameCalendar.minute_of_day(middle + FlightTimetable.departure_offset(), 0)
 	var clash := _terms("B", minute)
 	var problem := _sim.accept_problem(clash)
 	print("offer arriving mid-works (%d): '%s'" % [middle, problem])
@@ -154,6 +154,7 @@ func test_works_that_do_not_grow_the_runway_are_refused() -> void:
 func test_a_fractional_gap_too_short_once_rounded_up_is_not_used() -> void:
 	var plans := FlightPlans.new()
 	var world := {
+		"epoch": 0,
 		"contracts": [],
 		"start_day": 0,
 		"next_day": {},

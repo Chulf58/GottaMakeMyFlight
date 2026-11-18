@@ -10,8 +10,8 @@ extends GdUnitTestSuite
 ## (14:20) has its first state at 7340 and is issued at 4940.
 
 ## The first states of AM and PM on day 0 and the tick PM is issued.
-var _am_first := GameCalendar.tick_at(0, 500) - FlightTimetable.departure_offset()
-var _pm_first := GameCalendar.tick_at(0, 860) - FlightTimetable.departure_offset()
+var _am_first := GameCalendar.tick_at(0, 500, 0) - FlightTimetable.departure_offset()
+var _pm_first := GameCalendar.tick_at(0, 860, 0) - FlightTimetable.departure_offset()
 var _pm_issue := _pm_first - FlightTimetable.ISSUE_LEAD_TICKS
 
 var _sim: FlightSim
@@ -158,9 +158,13 @@ func test_the_gate_opens_the_airport_before_the_tick_s_issue() -> void:
 
 ## Five offers accepted while closed, at 07:00, 10:15, ... 20:00, each hold
 ## gate C for 195 minutes back to back, and the next would depart after 21:00
-## (the quiet night), so the starter has no slot: the airport still opens, with no starter and no
-## error, and each offer starts at its first slot after the lead.
-func test_a_gate_full_all_day_opens_with_no_starter_and_no_error() -> void:
+## (the quiet night), so the starter has no slot. The opening never happens
+## without a starter (decision closed-airport-calendar-design-an-explicit-
+## calendar-epoch-pa, point 5): open() refuses with a warning and the airport
+## stays closed. (It used to open with no starter: opened_without_starter.)
+## The control: with four of the offers the same opening succeeds and accepts
+## the starter.
+func test_a_gate_full_all_day_never_opens_without_a_starter() -> void:
 	@warning_ignore("integer_division")
 	var held := FlightTimetable.reserved_ticks() / GameCalendar.TICKS_PER_MINUTE
 	assert_int(held).is_equal(195)
@@ -169,32 +173,34 @@ func test_a_gate_full_all_day_opens_with_no_starter_and_no_error() -> void:
 	@warning_ignore("integer_division")
 	var count := (last - first) / held + 1
 	assert_int(count).is_equal(5)
-	var ids: Array[String] = []
-	for i in count:
-		ids.append("S%d" % i)
-		var minute := first + held * i
-		assert_bool(_sim.accept_contract(TestFlightContracts.terms(ids[i], minute))).is_true()
 	# The next slot would depart after 21:00, in the quiet night.
 	assert_int(first + count * held).is_greater(last)
-	var gate: AirportGate = auto_free(AirportGate.new())
-	gate.flights = _sim
-	_run_to(1000)
-	await assert_error(func() -> void: gate.open()).is_success()
-	assert_int(_sim.opened_tick).is_equal(1000)
-	assert_bool(gate.is_open()).is_true()
-	assert_bool(gate.opened_without_starter).is_true()
-	assert_array(_sim.contract_ids()).is_equal(ids)
-	var start_days := _sim.start_days
-	for id in ids:
-		var contract := _sim.contract_of(id)
-		var day: int = start_days[id]
-		var issue := FlightTimetable.issue_tick(contract, day)
-		var day_before := FlightTimetable.issue_tick(contract, day - 1)
-		assert_int(day).override_failure_message(id).is_equal(
-			FlightTimetable.opening_day(contract, 1000)
-		)
-		assert_int(issue).override_failure_message(id).is_greater_equal(1000)
-		assert_int(day_before).override_failure_message(id).is_less(1000)
+	for offers: int in [count, count - 1]:
+		var sim: FlightSim = auto_free(FlightSim.new())
+		var ids: Array[String] = []
+		for i in offers:
+			ids.append("S%d" % i)
+			var minute := first + held * i
+			assert_bool(sim.accept_contract(TestFlightContracts.terms(ids[i], minute))).is_true()
+		var gate: AirportGate = auto_free(AirportGate.new())
+		gate.flights = sim
+		for t in range(1, 1001):
+			sim.on_tick(t)
+		if offers == count:
+			await (
+				assert_error(func() -> void: assert_bool(gate.open()).is_false())
+				. is_push_warning(
+					"AirportGate: no starter slot is free all day, so the airport stays closed"
+				)
+			)
+			assert_int(sim.opened_tick).is_equal(-1)
+			assert_bool(gate.is_open()).is_false()
+			assert_array(sim.contract_ids()).is_equal(ids)
+			assert_array(sim.flight_ids()).is_empty()
+		else:
+			assert_bool(gate.open()).is_true()
+			assert_int(sim.opened_tick).is_equal(1000)
+			assert_array(sim.contract_ids()).is_equal(ids + [FlightSim.DEFAULT_ID])
 
 
 ## start_days reads the recorded start as a copy, and refuses a write.

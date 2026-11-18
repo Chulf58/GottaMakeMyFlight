@@ -377,14 +377,14 @@ func _on_tool_changed(_tool: BuildMode.Tool) -> void:
 func _refresh() -> void:
 	if flights == null or clock == null:
 		return
-	var day := GameCalendar.day_of(clock.tick)
+	var day := GameCalendar.day_of(clock.tick, clock.epoch)
 	var rows := FlightPlannerModel.rows_for_day(flights, day)
 	if _dirty or day != _shown_day or rows != _shown:
 		_dirty = false
 		_shown = rows
 		_shown_day = day
 		_rebuild()
-	var now := float(GameCalendar.tick_of_day(clock.tick)) / GameCalendar.TICKS_PER_DAY
+	var now := float(GameCalendar.tick_of_day(clock.tick, clock.epoch)) / GameCalendar.TICKS_PER_DAY
 	for each in _tracks:
 		each.now = now
 
@@ -483,8 +483,8 @@ func _bar_tooltip(bar: Dictionary) -> String:
 				"label": bar["label"],
 				"airline": airline,
 				"gate": bar["gate"],
-				"from": GameCalendar.clock_text(bar["start"]),
-				"to": GameCalendar.clock_text(bar["end"]),
+				"from": GameCalendar.clock_text(bar["start"], clock.epoch),
+				"to": GameCalendar.clock_text(bar["end"], clock.epoch),
 			}
 		)
 	)
@@ -574,7 +574,7 @@ static func _keep_label_clear(button: Button, label: Label) -> void:
 
 
 func _day_start() -> int:
-	return GameCalendar.day_start(_shown_day)
+	return GameCalendar.day_start(_shown_day, clock.epoch)
 
 
 func _on_bar_pressed(contract_id: String, day: int) -> void:

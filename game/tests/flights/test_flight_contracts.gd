@@ -75,7 +75,7 @@ func test_the_contract_is_a_read_only_copy_of_the_terms() -> void:
 
 ## 08:20 starts its occurrence at tick 140 (08:20 minus 133 minutes is 06:07).
 func test_acceptance_after_todays_preparation_start_goes_to_tomorrow() -> void:
-	var start := GameCalendar.tick_at(0, 500) - FlightTimetable.departure_offset()
+	var start := GameCalendar.tick_at(0, 500, 0) - FlightTimetable.departure_offset()
 	assert_int(start).is_equal(140)
 	for case in [[start - 1, 0], [start, 0], [start + 1, 1]]:
 		var sim := auto_free(FlightSim.new()) as FlightSim

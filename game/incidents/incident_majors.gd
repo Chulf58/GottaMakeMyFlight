@@ -150,7 +150,7 @@ func _waiting_vip(incident: Dictionary) -> bool:
 
 
 func _inspector_plan(incident: Dictionary, tick: int) -> Dictionary:
-	var window := _director.busy_window(GameCalendar.day_of(tick) + 1, tick)
+	var window := _director.busy_window(GameCalendar.day_of(tick, _director.clock.epoch) + 1, tick)
 	if window.x > window.y:
 		return {}
 	var draws := IncidentRoll.stream(
@@ -175,7 +175,7 @@ func _inspector_plan(incident: Dictionary, tick: int) -> Dictionary:
 func _rush_plan(tick: int) -> Dictionary:
 	var flights: Array[Dictionary] = []
 	var total := 0
-	var tomorrow := GameCalendar.day_of(tick) + 1
+	var tomorrow := GameCalendar.day_of(tick, _director.clock.epoch) + 1
 	for open in _open_flights(tick):
 		if flights.size() >= IncidentTuning.RUSH_MAX_FLIGHTS:
 			break
@@ -187,7 +187,11 @@ func _rush_plan(tick: int) -> Dictionary:
 			total += added
 	if flights.is_empty():
 		return {}
-	return {"flights": flights, "total": total, "until": GameCalendar.day_start(tomorrow + 1)}
+	return {
+		"flights": flights,
+		"total": total,
+		"until": GameCalendar.day_start(tomorrow + 1, _director.clock.epoch)
+	}
 
 
 func _vip_plan(tick: int) -> Dictionary:
@@ -222,12 +226,14 @@ func _favour_plan(tick: int) -> Dictionary:
 ## [{"id", "day", "departs"}].
 func _open_flights(tick: int) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
-	var today := GameCalendar.day_of(tick)
+	var today := GameCalendar.day_of(tick, _director.clock.epoch)
 	for contract_id in _director.flights.active_contract_ids():
 		var contract := _director.flights.contract_of(contract_id)
 		for day in range(maxi(today, int(contract["first_day"])), today + LOOK_DAYS + 1):
 			var id := FlightTimetable.occurrence_id(contract_id, day)
-			var departs := GameCalendar.tick_at(day, int(contract["departure_minute"]))
+			var departs := GameCalendar.tick_at(
+				day, int(contract["departure_minute"]), _director.clock.epoch
+			)
 			if departs > tick and _director.flights.state_of(id) < 0:
 				out.append({"id": id, "day": day, "departs": departs})
 	out.sort_custom(
@@ -301,5 +307,8 @@ func _penalize(incident: Dictionary, tick: int, half_stars: int) -> void:
 		push_warning("IncidentMajors: no rating, so incident %d costs none" % incident["id"])
 		return
 	rating.add_adjustment(
-		"incident_%d" % incident["id"], tick, RatingAdjustments.expiry_for(tick), -half_stars
+		"incident_%d" % incident["id"],
+		tick,
+		RatingAdjustments.expiry_for(tick, _director.clock.epoch),
+		-half_stars
 	)

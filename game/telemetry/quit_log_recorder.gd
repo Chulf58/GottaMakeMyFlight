@@ -151,10 +151,10 @@ func _disconnect_parts() -> void:
 
 func _on_ticked(tick: int) -> void:
 	_log.tick = tick
-	if GameCalendar.is_last_tick_of_day(tick):
-		QuitLog.note("day_end", _day_data(GameCalendar.day_of(tick)))
-	elif GameCalendar.tick_of_day(tick) == 0:
-		QuitLog.note("day_start", _day_data(GameCalendar.day_of(tick)))
+	if GameCalendar.is_last_tick_of_day(tick, clock.epoch):
+		QuitLog.note("day_end", _day_data(GameCalendar.day_of(tick, clock.epoch)))
+	elif GameCalendar.tick_of_day(tick, clock.epoch) == 0:
+		QuitLog.note("day_start", _day_data(GameCalendar.day_of(tick, clock.epoch)))
 
 
 func _day_data(day: int) -> Dictionary:

@@ -36,8 +36,9 @@ var _list: Array[Dictionary] = []
 
 
 ## The first tick of the day the rolling window drops `outcome_tick`'s day.
-static func expiry_for(outcome_tick: int) -> int:
-	return GameCalendar.day_start(GameCalendar.day_of(outcome_tick) + RatingFormula.WINDOW_DAYS)
+static func expiry_for(outcome_tick: int, epoch: int) -> int:
+	var day := GameCalendar.day_of(outcome_tick, epoch)
+	return GameCalendar.day_start(day + RatingFormula.WINDOW_DAYS, epoch)
 
 
 ## `stars` moved by `half_stars` half stars, clamped to MIN_STARS..MAX_STARS.

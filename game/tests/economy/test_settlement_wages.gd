@@ -126,7 +126,7 @@ func test_wages_paid_today_starts_over_at_each_midnight() -> void:
 	_kit.charge(1)
 	assert_int(_kit.settlement.wages_paid_today()).is_equal(60)
 	_kit.world.step()
-	assert_int(GameCalendar.day_of(_kit.world.clock.tick)).is_equal(1)
+	assert_int(GameCalendar.day_of(_kit.world.clock.tick, 0)).is_equal(1)
 	assert_int(_kit.settlement.wages_paid_today()).is_equal(0)
 	assert_bool(_kit.world.staff.fire(CHECKIN)).is_true()
 	_kit.cross(2)

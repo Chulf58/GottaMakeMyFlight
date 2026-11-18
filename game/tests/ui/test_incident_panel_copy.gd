@@ -42,7 +42,10 @@ func test_a_rush_card_names_the_counts_the_reward_and_the_failure() -> void:
 	assert_str(text).contains("10 extra passengers")
 	assert_str(text).contains("2 of tomorrow's flights")
 	assert_str(text).contains(
-		"%s +4, %s +6" % [GameCalendar.clock_text(DEPARTS), GameCalendar.clock_text(DEPARTS + 6000)]
+		(
+			"%s +4, %s +6"
+			% [GameCalendar.clock_text(DEPARTS, 0), GameCalendar.clock_text(DEPARTS + 6000, 0)]
+		)
 	)
 	assert_str(text).contains("Reward:")
 	assert_str(text).contains("If it fails:")
@@ -63,8 +66,8 @@ func test_an_inspector_card_names_the_window_the_reward_and_the_failure() -> voi
 	}
 	var text := _words(IncidentCatalogue.INSPECTOR, plan)
 	print(text)
-	assert_str(text).contains(GameCalendar.clock_text(50_000))
-	assert_str(text).contains(GameCalendar.clock_text(58_000))
+	assert_str(text).contains(GameCalendar.clock_text(50_000, 0))
+	assert_str(text).contains(GameCalendar.clock_text(58_000, 0))
 	assert_str(text).contains("%d money" % IncidentTuning.INSPECTOR_PASS_MONEY)
 	assert_str(text).contains("at most %d messes" % IncidentTuning.INSPECTOR_MAX_MESSES)
 	assert_str(text).contains("your rating drops by 1 star")
@@ -82,7 +85,7 @@ func test_a_vip_offer_names_the_flight_the_bonus_and_the_penalty() -> void:
 	}
 	var text := _words(IncidentCatalogue.VIP, plan)
 	print(text)
-	assert_str(text).contains("fly on day 3's %s flight" % GameCalendar.clock_text(DEPARTS))
+	assert_str(text).contains("fly on day 3's %s flight" % GameCalendar.clock_text(DEPARTS, 0))
 	assert_str(text).contains("Reward: 500 money if the VIP makes the flight in a good mood")
 	assert_str(text).contains("a mood of 75 or higher when boarding")
 	assert_str(text).contains("If it fails: your rating drops by 1 star")
@@ -111,7 +114,7 @@ func test_the_penalty_words_follow_the_half_stars() -> void:
 func _vip_plan() -> Dictionary:
 	return {
 		"flight": "AM-d3",
-		"departs": GameCalendar.tick_at(3, 10 * 60 + 29),
+		"departs": GameCalendar.tick_at(3, 10 * 60 + 29, 0),
 		"bonus": 500,
 		"target": 0,
 		"good_mood": 75,
@@ -122,14 +125,14 @@ func _vip_plan() -> Dictionary:
 ## A VIP offer that fired on day 2 at 23:50, presented with the clock at `now`.
 func _late_offer(now: int) -> int:
 	_k.clock.tick = now
-	var fired := GameCalendar.tick_at(2, 23 * 60 + 50)
+	var fired := GameCalendar.tick_at(2, 23 * 60 + 50, 0)
 	var id := _k.director.add_scheduled(IncidentCatalogue.VIP, _vip_plan(), fired)
 	assert_bool(_k.director.present(id, true)).is_true()
 	return id
 
 
 func test_an_offer_shown_after_midnight_says_today() -> void:
-	_late_offer(GameCalendar.tick_at(3, 10))
+	_late_offer(GameCalendar.tick_at(3, 10, 0))
 	assert_bool(_k.panel.is_open()).is_true()
 	var text := _k.panel.dialog().body_text()
 	print(text)
@@ -138,16 +141,16 @@ func test_an_offer_shown_after_midnight_says_today() -> void:
 
 
 func test_an_offer_shown_before_midnight_says_tomorrow() -> void:
-	_late_offer(GameCalendar.tick_at(2, 23 * 60 + 55))
+	_late_offer(GameCalendar.tick_at(2, 23 * 60 + 55, 0))
 	assert_str(_k.panel.dialog().body_text()).contains("tomorrow's 10:29 flight")
 
 
 func test_an_offer_queued_behind_a_dialog_is_worded_when_it_opens() -> void:
 	var token := _k.sheet_takes_the_turn()
-	_late_offer(GameCalendar.tick_at(2, 23 * 60 + 55))
+	_late_offer(GameCalendar.tick_at(2, 23 * 60 + 55, 0))
 	assert_bool(_k.panel.is_open()).is_false()
 	# Midnight passes while the other dialog is up, then it gives the turn back.
-	_k.clock.tick = GameCalendar.tick_at(3, 10)
+	_k.clock.tick = GameCalendar.tick_at(3, 10, 0)
 	_k.clock.holds.release(token)
 	assert_bool(_k.panel.is_open()).is_true()
 	assert_str(_k.panel.dialog().body_text()).contains("today's 10:29 flight")

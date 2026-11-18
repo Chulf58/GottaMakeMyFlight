@@ -183,9 +183,9 @@ func test_while_dragging_refused_rows_are_greyed_and_fitting_rows_are_not() -> v
 
 ## Runs the sim and the clock to 07:00, so today's X, Y and Z flights are issued.
 func _issue_today() -> void:
-	for t in range(_sim.tick + 1, GameCalendar.tick_at(0, 7 * 60) + 1):
+	for t in range(_sim.tick + 1, GameCalendar.tick_at(0, 7 * 60, 0) + 1):
 		_sim.on_tick(t)
-	_clock.tick = GameCalendar.tick_at(0, 7 * 60)
+	_clock.tick = GameCalendar.tick_at(0, 7 * 60, 0)
 
 
 ## After X moves from A to C, today's issued X bar stays on A and can still be
@@ -238,7 +238,7 @@ func test_after_a_drop_an_issued_day_keeps_its_old_gate() -> void:
 	# Today's flight was issued at A and stays there.
 	assert_object(_planner.bar_button("X", 0).get_parent()).is_equal(_track("A"))
 	# Control: the next day, not yet issued, is on C.
-	_clock.tick = GameCalendar.tick_at(1, 7 * 60)
+	_clock.tick = GameCalendar.tick_at(1, 7 * 60, 0)
 	await await_idle_frame()
 	await await_idle_frame()
 	print("day %d: X on %s" % [_planner.shown_day(), _planner.bar_button("X", 1).get_parent().name])

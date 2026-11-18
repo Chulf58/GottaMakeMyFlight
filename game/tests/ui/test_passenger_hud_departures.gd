@@ -86,7 +86,7 @@ func _line_starting(prefix: String) -> String:
 ## The day's row lines with each flight's status word, departed ones included.
 func _day_rows() -> PackedStringArray:
 	var lines := PackedStringArray()
-	var day := GameCalendar.day_of(_world.clock.tick)
+	var day := GameCalendar.day_of(_world.clock.tick, 0)
 	for row in DepartureList.rows_for_day(_hud.flights, day):
 		lines.append(row["line"])
 	return lines
@@ -126,7 +126,7 @@ func test_a_one_off_flight_shows_how_far_along_it_is() -> void:
 func test_a_contract_flight_boards_then_departs() -> void:
 	_world.flights.accept_contract(_terms("GA100", 11 * 60, "Oslo", "Gotta Air"))
 	assert_str(_line_starting("11:00")).is_equal("11:00  Oslo  Gotta Air")
-	var starts := FlightTimetable.starts_for(_world.flights.contract_of("GA100"), 0)
+	var starts := FlightTimetable.starts_for(_world.flights.contract_of("GA100"), 0, 0)
 	_world.run_to(starts[FlightSim.State.BOARDING] + 1)
 	assert_str(_line_starting("11:00")).is_equal(
 		"11:00  Oslo  Gotta Air  %s" % _doors_text("GA100")
@@ -145,7 +145,7 @@ func test_a_contract_that_starts_tomorrow_is_not_listed_today() -> void:
 
 func test_the_list_names_the_day_s_flights_again_after_midnight() -> void:
 	_world.flights.accept_contract(_terms("GA100", 11 * 60, "Oslo", "Gotta Air"))
-	_world.run_to(GameCalendar.day_start(1) + 1)
+	_world.run_to(GameCalendar.day_start(1, 0) + 1)
 	assert_int(_lines().size()).is_equal(1)
 	assert_str(_lines()[0]).is_equal("11:00  Oslo  Gotta Air  %s" % _doors_text("GA100"))
 
@@ -184,8 +184,8 @@ func test_the_departures_list_shows_the_flights() -> void:
 
 
 func _doors_text(contract_id: String) -> String:
-	var starts := FlightTimetable.starts_for(_world.flights.contract_of(contract_id), 0)
-	return "doors close %s" % GameCalendar.clock_text(starts[FlightSim.State.DOORS_CLOSED])
+	var starts := FlightTimetable.starts_for(_world.flights.contract_of(contract_id), 0, 0)
+	return "doors close %s" % GameCalendar.clock_text(starts[FlightSim.State.DOORS_CLOSED], 0)
 
 
 func test_only_the_next_departing_flight_shows_when_its_doors_close() -> void:
@@ -211,7 +211,7 @@ func test_the_doors_time_moves_to_the_following_flight_once_the_doors_close() ->
 func test_the_doors_time_replaces_the_boarding_word() -> void:
 	_world.flights.accept_contract(_terms("GA100", 11 * 60, "Oslo", "Gotta Air"))
 	_world.run_to(21)
-	var starts := FlightTimetable.starts_for(_world.flights.contract_of("GA100"), 0)
+	var starts := FlightTimetable.starts_for(_world.flights.contract_of("GA100"), 0, 0)
 	_world.run_to(starts[FlightSim.State.BOARDING] + 1)
 	assert_str(_line_starting("11:00")).is_equal(
 		"11:00  Oslo  Gotta Air  %s" % _doors_text("GA100")

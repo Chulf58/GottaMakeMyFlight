@@ -231,7 +231,9 @@ func _accept(id: String, gate: String, contracts: Array[String], need_pause: boo
 	var gates := {}
 	for step in 2 * SEARCH_MINUTES + 1:
 		var later := (step + 1) / 2 * (1 if step % 2 == 1 else -1)
-		var terms := FlightSim.starter_terms(0)
+		var terms := StarterSlot.departing(
+			StarterSlot.whole_minute(0 + FlightTimetable.issue_lead(), 0), 0
+		)
 		terms["id"] = id
 		terms["departure_minute"] = minute + later
 		_beat("search %s %d" % [id, later])
@@ -277,7 +279,10 @@ func _pauses_with(save: Dictionary, terms: Dictionary, contracts: Array[String])
 		var day := _day_of(scratch, all)
 		var issue := 0
 		for contract_id: String in all:
-			issue = maxi(issue, FlightTimetable.issue_tick(scratch.contract_of(contract_id), day))
+			issue = maxi(
+				issue,
+				FlightTimetable.issue_tick(scratch.contract_of(contract_id), day, scratch.epoch)
+			)
 		for t in range(scratch.tick + 1, issue + 1):
 			scratch.on_tick(t)
 		for contract_id: String in all:

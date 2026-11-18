@@ -39,12 +39,12 @@ static func parts(sim: FlightSim, is_flight: bool, id: String) -> PackedStringAr
 		var source := sim.contract_of(sim.flight_contract_id(id))
 		var named: String = source["destination"] if not source.is_empty() else ""
 		var airline: String = source["airline"] if not source.is_empty() else ""
-		return PackedStringArray([GameCalendar.clock_text(tick), named, airline])
+		return PackedStringArray([GameCalendar.clock_text(tick, sim.epoch), named, airline])
 	var contract := sim.contract_of(id)
 	if contract.is_empty():
 		return PackedStringArray()
-	var at := GameCalendar.tick_at(0, int(contract["departure_minute"]))
-	var when := GameCalendar.clock_text(at)
+	var at := GameCalendar.tick_at(0, int(contract["departure_minute"]), sim.epoch)
+	var when := GameCalendar.clock_text(at, sim.epoch)
 	return PackedStringArray([when, contract["destination"], contract["airline"]])
 
 

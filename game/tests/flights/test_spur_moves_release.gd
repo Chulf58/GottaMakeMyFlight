@@ -61,6 +61,7 @@ func _world(at: int, contracts: Array, flights: Array = [], next: Dictionary = {
 		},
 		"tick": at,
 		"open": true,
+		"epoch": 0,
 		"contracts": contracts,
 		"start_day": next_day.duplicate(),
 		"next_day": next_day,
@@ -101,11 +102,11 @@ func test_live_flights_and_unissued_days_chain_the_release() -> void:
 	assert_int(alone).is_equal(takeoff)
 	# A contract issued 30 to 49 ticks before that TAKEOFF (whole minutes).
 	var departure := takeoff - 30 + FlightTimetable.issue_lead()
-	var later := _contract("C2", GameCalendar.minute_of_day(departure))
-	var day := GameCalendar.day_of(departure)
-	var issue := FlightTimetable.issue_tick(later, day)
+	var later := _contract("C2", GameCalendar.minute_of_day(departure, 0))
+	var day := GameCalendar.day_of(departure, 0)
+	var issue := FlightTimetable.issue_tick(later, day, 0)
 	var chained := SpurMoves.release(_world(1500, [later], [west]), StandPlacement.WEST)
-	var later_takeoff := FlightTimetable.starts_for(later, day)[FlightSim.State.TAKEOFF]
+	var later_takeoff := FlightTimetable.starts_for(later, day, 0)[FlightSim.State.TAKEOFF]
 	print(
 		(
 			"C2 day %d issue %d (before %d): R %d, its takeoff %d"
@@ -119,7 +120,7 @@ func test_live_flights_and_unissued_days_chain_the_release() -> void:
 ## An ended contract that still reserves its ground plans, but never delays R.
 func test_a_reserving_contract_never_delays_the_release() -> void:
 	var contract := _contract("C1", 600)
-	var issue := FlightTimetable.issue_tick(contract, 0)
+	var issue := FlightTimetable.issue_tick(contract, 0, 0)
 	var running := _world(issue, [contract])
 	var ran := SpurMoves.release(running, StandPlacement.WEST)
 	var ended := _world(issue, [contract])
@@ -127,7 +128,7 @@ func test_a_reserving_contract_never_delays_the_release() -> void:
 	ended["reserving"] = {"C1": true}
 	var reserved := SpurMoves.release(ended, StandPlacement.WEST)
 	print("running R %d, reserving R %d" % [ran, reserved])
-	assert_int(ran).is_equal(FlightTimetable.starts_for(contract, 0)[FlightSim.State.TAKEOFF])
+	assert_int(ran).is_equal(FlightTimetable.starts_for(contract, 0, 0)[FlightSim.State.TAKEOFF])
 	assert_int(reserved).is_equal(issue)
 
 
@@ -139,31 +140,36 @@ func test_the_nightly_gap_bounds_the_release() -> void:
 	var late := _contract("LATE", 22 * 60, MAX_PAIR)
 	var early := _contract("EARLY", 6 * 60, MAX_PAIR)
 	var day := 1
-	var late_takeoff := FlightTimetable.starts_for(late, day)[FlightSim.State.TAKEOFF]
-	var early_issue := FlightTimetable.issue_tick(early, day + 1)
+	var late_takeoff := FlightTimetable.starts_for(late, day, 0)[FlightSim.State.TAKEOFF]
+	var early_issue := FlightTimetable.issue_tick(early, day + 1, 0)
 	print(
 		(
 			"late takeoff %s day %d, next early issue %s"
 			% [
-				GameCalendar.clock_text(late_takeoff),
-				GameCalendar.day_of(late_takeoff),
-				GameCalendar.clock_text(early_issue)
+				GameCalendar.clock_text(late_takeoff, 0),
+				GameCalendar.day_of(late_takeoff, 0),
+				GameCalendar.clock_text(early_issue, 0)
 			]
 		)
 	)
-	assert_int(late_takeoff).is_equal(GameCalendar.tick_at(day, 23 * 60 + 50))
-	assert_int(early_issue).is_equal(GameCalendar.tick_at(day + 1, 60 + 47))
-	var evening := FlightTimetable.issue_tick(late, day)
+	assert_int(late_takeoff).is_equal(GameCalendar.tick_at(day, 23 * 60 + 50, 0))
+	assert_int(early_issue).is_equal(GameCalendar.tick_at(day + 1, 60 + 47, 0))
+	var evening := FlightTimetable.issue_tick(late, day, 0)
 	var world := _world(evening, [late, early])
 	var released := SpurMoves.release(world, StandPlacement.WEST)
-	print("from %s: R %s" % [GameCalendar.clock_text(evening), GameCalendar.clock_text(released)])
+	print(
+		(
+			"from %s: R %s"
+			% [GameCalendar.clock_text(evening, 0), GameCalendar.clock_text(released, 0)]
+		)
+	)
 	assert_int(released).is_equal(late_takeoff)
-	assert_int(GameCalendar.day_of(released)).is_equal(day)
+	assert_int(GameCalendar.day_of(released, 0)).is_equal(day)
 	(
 		assert_int(SpurMoves.release(_world(early_issue - 1, [late, early]), StandPlacement.WEST))
 		. is_equal(early_issue - 1)
 	)
-	var early_takeoff := FlightTimetable.starts_for(early, day + 1)[FlightSim.State.TAKEOFF]
+	var early_takeoff := FlightTimetable.starts_for(early, day + 1, 0)[FlightSim.State.TAKEOFF]
 	assert_int(SpurMoves.release(_world(early_issue, [late, early]), StandPlacement.WEST)).is_equal(
 		early_takeoff
 	)
@@ -173,7 +179,7 @@ func test_the_nightly_gap_bounds_the_release() -> void:
 ## after R gets the stand on the wanted spur and that stand's own pair.
 func test_the_resolver_splits_the_days_at_the_release() -> void:
 	var contract := _contract("C1", 600)
-	var issue := FlightTimetable.issue_tick(contract, 0)
+	var issue := FlightTimetable.issue_tick(contract, 0, 0)
 	var world := _world(
 		issue - 1, [contract], [], {"stand": _next, "max_class": PlaneClasses.LARGE}
 	)
@@ -209,7 +215,7 @@ func test_the_resolver_splits_the_days_at_the_release() -> void:
 func test_a_contract_the_new_stand_cannot_take_is_named() -> void:
 	var contract := _contract("C1", 600)
 	var next := {"stand": _next, "max_class": ""}
-	var issue := FlightTimetable.issue_tick(contract, 0)
+	var issue := FlightTimetable.issue_tick(contract, 0, 0)
 	var refusal := SpurMoves.refusal(_world(issue - 1, [contract], [], next))
 	var later := SpurMoves.refusal(_world(issue, [contract], [], next))
 	print("refusal from %d: %s; from %d: %s" % [issue - 1, refusal, issue, later])

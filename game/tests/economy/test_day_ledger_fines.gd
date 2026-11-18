@@ -13,7 +13,7 @@ var _unpaid: Array = []
 func before_test() -> void:
 	_unpaid.clear()
 	_clock = auto_free(SimClock.new()) as SimClock
-	_clock.tick = GameCalendar.day_start(2) + 100
+	_clock.tick = GameCalendar.day_start(2, 0) + 100
 	_wallet = Wallet.new(50)
 	_wallet.clock = _clock
 	_wallet.unpaid.connect(
@@ -59,7 +59,7 @@ func test_fines_are_a_running_cost_and_the_bonus_is_one_off_cash() -> void:
 
 func test_a_new_day_starts_with_no_fines_and_nothing_unpaid() -> void:
 	_wallet.charge(80, Wallet.Category.FINES)
-	var tick := GameCalendar.day_start(3)
+	var tick := GameCalendar.day_start(3, 0)
 	_clock.tick = tick
 	_ledger.on_tick(tick)
 	assert_int(_ledger.amount(Wallet.Category.FINES)).is_equal(0)

@@ -90,12 +90,14 @@ func test_an_older_save_without_the_ledger_loads_since_the_load() -> void:
 	var old := _taken()
 	old.erase("day_ledger")
 	var clock: SimClock = _main.get_node("SimClock")
-	var saved_day := GameCalendar.day_of(str(old["clock"]["tick"]).to_int())
+	var saved_day := GameCalendar.day_of(
+		str(old["clock"]["tick"]).to_int(), SimClock.saved_epoch(old["clock"])
+	)
 	assert_int(_ledger.amount(C.SHOP)).is_greater(0)
 	assert_bool(_save.load_world(old)).is_true()
 	assert_bool(_ledger.is_since_load()).is_true()
 	assert_int(_ledger.day()).is_equal(saved_day)
-	assert_int(_ledger.day()).is_equal(GameCalendar.day_of(clock.tick))
+	assert_int(_ledger.day()).is_equal(GameCalendar.day_of(clock.tick, clock.epoch))
 	assert_int(_ledger.amount(C.SHOP)).is_equal(0)
 	assert_str(_slot().tooltip_text.get_slice("\n", 0)).is_equal("Since load")
 	# The next save holds the ledger again, still marked since the load.

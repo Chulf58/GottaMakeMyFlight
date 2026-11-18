@@ -26,10 +26,10 @@ func before() -> void:
 	assert_bool(sim.open_airport()).is_true()
 	assert_bool(sim.accept_contract(TestFlightContracts.terms("X", 600))).is_true()
 	assert_bool(sim.accept_contract(TestFlightContracts.terms("Y", 17 * 60))).is_true()
-	for t in range(1, GameCalendar.tick_at(3, AT_MINUTE) + 1):
+	for t in range(1, GameCalendar.tick_at(3, AT_MINUTE, 0) + 1):
 		sim.on_tick(t)
 	var data: Dictionary = JSON.parse_string(JSON.stringify(sim.to_snapshot()))
-	_flights = FlightSnapshot.load(data, sim.gate_ids())
+	_flights = FlightSnapshot.load(data, sim.gate_ids(), 0)
 	sim.free()
 
 

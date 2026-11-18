@@ -81,9 +81,9 @@ func test_the_drawn_stars_label_and_tooltip_follow_changed_without_a_refresh() -
 
 
 func test_the_drawn_state_goes_back_to_no_flights_yet_when_the_days_leave_the_window() -> void:
-	_record(GameCalendar.tick_at(0, 600), 2, 60)
+	_record(GameCalendar.tick_at(0, 600, 0), 2, 60)
 	assert_str(_badge.label().text).is_not_equal("No flights yet")
-	_rating.on_tick(GameCalendar.tick_at(3, 0))
+	_rating.on_tick(GameCalendar.tick_at(3, 0, 0))
 	assert_bool(_rating.has_data()).is_false()
 	assert_str(_badge.label().text).is_equal("No flights yet")
 	_assert_empty_stars()

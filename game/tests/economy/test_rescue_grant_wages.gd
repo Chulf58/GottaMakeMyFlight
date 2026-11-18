@@ -47,7 +47,7 @@ func _owe_wages(count: int) -> void:
 		_world.staff.hire(StaffMember.Role.CHECKIN)
 	_world.step()
 	var data := _world.clock.to_snapshot()
-	data["tick"] = str(GameCalendar.day_start(1) - 2)
+	data["tick"] = str(GameCalendar.day_start(1, 0) - 2)
 	assert_bool(_world.clock.from_snapshot(data)).is_true()
 	_world.step()
 	_world.step()

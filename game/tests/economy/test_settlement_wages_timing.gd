@@ -35,7 +35,7 @@ func _load_into_new_session(data: Dictionary) -> void:
 
 ## An old save holds the day charged at its start, which is the clock's own day.
 func test_an_old_format_day_is_the_clock_day_and_nothing_else() -> void:
-	var clock := {"tick": str(GameCalendar.day_start(4) + 100)}
+	var clock := {"tick": str(GameCalendar.day_start(4, 0) + 100), "epoch": "0"}
 	var old := {"wages_day": "4"}
 	assert_str(Settlement.wages_day_problem(old, clock)).is_empty()
 	for day in ["5", "3", "0"]:

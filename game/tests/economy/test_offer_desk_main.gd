@@ -56,8 +56,8 @@ func test_three_low_day_ends_end_the_oldest_contract_of_the_scene() -> void:
 	var ended: Array[String] = []
 	_desk.contract_ended.connect(func(contract: Dictionary) -> void: ended.append(contract["id"]))
 	for day in range(1, RatingFormula.LOW_DAYS_TO_END + 1):
-		_rating.record_passenger(GameCalendar.day_start(day - 1), false, 0)
-		_rating.on_tick(GameCalendar.day_start(day))
-		_desk.on_tick(GameCalendar.day_start(day))
+		_rating.record_passenger(GameCalendar.day_start(day - 1, 0), false, 0)
+		_rating.on_tick(GameCalendar.day_start(day, 0))
+		_desk.on_tick(GameCalendar.day_start(day, 0))
 	assert_array(ended).is_equal(["AM"])
 	assert_array(_flights.active_contract_ids()).is_equal(["PM"])

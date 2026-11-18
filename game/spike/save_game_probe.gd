@@ -83,7 +83,7 @@ func _play() -> void:
 		if _flights(_source).opened_tick >= 0 and _flights(_source).opened_tick == tick:
 			for main in [_control, _source]:
 				_accept_open_offers(main)
-		if _rolled_at < 0 and GameCalendar.day_of(tick) >= 1:
+		if _rolled_at < 0 and GameCalendar.day_of(tick, _clock(_source).epoch) >= 1:
 			_rolled_at = tick
 		if not _same([_control, _source], "before the save"):
 			return
@@ -109,7 +109,7 @@ func _save_and_load() -> void:
 			)
 			% [
 				tick,
-				GameCalendar.day_of(tick),
+				GameCalendar.day_of(tick, _clock(_source).epoch),
 				_flights(_source).opened_tick,
 				_payouts[_source],
 				_rolled_at,
@@ -192,7 +192,7 @@ func _finish_pass() -> void:
 			% [
 				_compared,
 				_future,
-				GameCalendar.day_of(tick),
+				GameCalendar.day_of(tick, _clock(_control).epoch),
 				_payouts[_control],
 				_payouts[_source],
 				_payouts[_loaded],

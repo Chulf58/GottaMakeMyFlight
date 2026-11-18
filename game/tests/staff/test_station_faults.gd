@@ -48,7 +48,7 @@ func test_a_faulted_scanner_is_closed_but_never_by_you() -> void:
 	assert_bool(_w.staff.faults.open_but_for_fault(_a)).is_true()
 	assert_bool(_w.staff.closures.is_closed(_a)).is_false()
 	assert_int(_w.staff.closures.status(_a)).is_equal(StationClosures.Status.FAULT)
-	assert_str(words).is_equal("Scanner fault, fixed by %s" % GameCalendar.clock_text(repair))
+	assert_str(words).is_equal("Scanner fault, fixed by %s" % GameCalendar.clock_text(repair, 0))
 	assert_str(words).not_contains("Closed by you")
 	assert_str(MissSignals.closed_reason(_w.sim, _a)).is_equal(MissSignals.FAULT_REASON)
 	# The other scanner is untouched.

@@ -30,7 +30,7 @@ func _run_to(target: int) -> void:
 ## The row lines for `day`, or for the day holding the sim's tick.
 func _lines(day: int = -1) -> PackedStringArray:
 	var lines := PackedStringArray()
-	var on := GameCalendar.day_of(_sim.tick) if day < 0 else day
+	var on := GameCalendar.day_of(_sim.tick, 0) if day < 0 else day
 	for row in DepartureList.rows_for_day(_sim, on):
 		lines.append(row["line"])
 	return lines
@@ -56,5 +56,5 @@ func test_a_contract_accepted_while_closed_never_shows_a_skipped_day() -> void:
 	_run_to(3 * GameCalendar.TICKS_PER_DAY - 7200 + 60)
 	var day_three := _lines()
 	print("day 3 after midnight: %s" % " | ".join(day_three))
-	assert_int(GameCalendar.day_of(_sim.tick)).is_equal(3)
+	assert_int(GameCalendar.day_of(_sim.tick, 0)).is_equal(3)
 	assert_str(day_three[0]).starts_with("08:00  Oslo  Gotta Air")

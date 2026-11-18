@@ -27,8 +27,8 @@ func before_test() -> void:
 ## As TestOfferDeskContractEnd does it: the rating saw only misses the day
 ## before, then the rating ticks, then the desk.
 func _low_day_end(day: int) -> void:
-	_rating.record_passenger(GameCalendar.day_start(day - 1), false, 0)
-	var tick := GameCalendar.day_start(day)
+	_rating.record_passenger(GameCalendar.day_start(day - 1, 0), false, 0)
+	var tick := GameCalendar.day_start(day, 0)
 	_clock.tick = tick
 	_rating.on_tick(tick)
 	_clock.ticked.emit(tick)

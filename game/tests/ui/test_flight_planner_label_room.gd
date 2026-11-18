@@ -141,7 +141,7 @@ func test_the_label_gets_its_look_from_the_theme_and_the_button_keeps_its_name()
 ## navy of an enabled bar, from the theme and with no per-node override.
 func test_a_disabled_bars_label_takes_the_disabled_text_from_the_theme() -> void:
 	await _boot(Vector2i(1536, 864))
-	for t in range(_sim.tick + 1, GameCalendar.tick_at(0, 7 * 60) + 1):
+	for t in range(_sim.tick + 1, GameCalendar.tick_at(0, 7 * 60, 0) + 1):
 		_sim.on_tick(t)
 	assert_bool(_sim.end_contract("X")).is_true()
 	_planner.refresh()

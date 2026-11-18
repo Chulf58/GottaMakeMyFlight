@@ -120,11 +120,11 @@ func test_the_sheet_has_no_warning_line_and_shows_only_offers() -> void:
 func test_the_count_follows_the_low_day_ends_and_reposts_under_the_same_key() -> void:
 	_miss(10)
 	var first := _stack.notice_card(OfferPanel.WARNING_KEY)
-	_rating.on_tick(GameCalendar.day_start(1))
+	_rating.on_tick(GameCalendar.day_start(1, 0))
 	assert_int(_rating.low_days()).is_equal(1)
 	assert_str(_words(OfferPanel.WARNING_KEY)).contains("2 more low days")
 	assert_object(_stack.notice_card(OfferPanel.WARNING_KEY)).is_not_same(first)
-	_rating.on_tick(GameCalendar.day_start(2))
+	_rating.on_tick(GameCalendar.day_start(2, 0))
 	assert_str(_words(OfferPanel.WARNING_KEY)).contains("1 more low day.")
 	var warnings := 0
 	for line in _stack.history_lines():
@@ -144,7 +144,7 @@ func test_an_unchanged_warning_is_not_posted_again() -> void:
 
 func test_no_count_is_shown_once_the_low_days_are_used_up() -> void:
 	for day in 4:
-		_miss(5, GameCalendar.day_start(day))
+		_miss(5, GameCalendar.day_start(day, 0))
 	assert_int(_rating.low_days()).is_greater_equal(RatingFormula.LOW_DAYS_TO_END)
 	assert_bool(_rating.warning()).is_true()
 	assert_str(_words(OfferPanel.WARNING_KEY)).contains("below 2 stars")

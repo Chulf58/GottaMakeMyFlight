@@ -170,7 +170,7 @@ func _scene_a() -> void:
 	var departures := _board_lines()
 	var starter := FlightTimetable.occurrence_id(FlightSim.DEFAULT_ID, 0)
 	var doors := GameCalendar.clock_text(
-		_flights.state_start(starter, FlightSim.State.DOORS_CLOSED)
+		_flights.state_start(starter, FlightSim.State.DOORS_CLOSED), _flights.epoch
 	)
 	var minute: int = _flights.contract_of(FlightSim.DEFAULT_ID)["departure_minute"]
 	var departs := "%02d:%02d" % [minute / 60, minute % 60]

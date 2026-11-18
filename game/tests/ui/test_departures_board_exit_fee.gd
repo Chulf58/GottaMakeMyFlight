@@ -77,9 +77,9 @@ func test_the_end_confirm_shows_the_exit_fee_and_ending_charges_it() -> void:
 
 func test_after_the_term_the_confirm_asks_without_a_fee() -> void:
 	_accept("X", 600, BIG)
-	_sim.tick = GameCalendar.tick_at(_sim.contract_of("X")["first_day"] + 6, 1380)
+	_sim.tick = GameCalendar.tick_at(_sim.contract_of("X")["first_day"] + 6, 1380, 0)
 	assert_str(DeparturesBoard.end_prompt(_sim, "X")).contains("$120")
-	_sim.tick = GameCalendar.tick_at(_sim.contract_of("X")["first_day"] + 7, 60)
+	_sim.tick = GameCalendar.tick_at(_sim.contract_of("X")["first_day"] + 7, 60, 0)
 	assert_str(DeparturesBoard.end_prompt(_sim, "X")).is_equal(DeparturesBoard.END_PROMPT)
 	assert_str(DeparturesBoard.end_outcome(_sim, "X")).is_equal(
 		DeparturesBoard.ENDED_TEXT.format({"destination": "Oslo"})

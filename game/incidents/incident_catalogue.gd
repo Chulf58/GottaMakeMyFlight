@@ -149,9 +149,9 @@ static func card_title(incident: Dictionary) -> String:
 
 
 ## The card's words for an active incident: the cause, then what happens next.
-static func card_detail(incident: Dictionary, cleaner_hired: bool) -> String:
+static func card_detail(incident: Dictionary, cleaner_hired: bool, epoch: int) -> String:
 	if incident.get("kind", "") == FAULT:
-		var fixed := GameCalendar.clock_text(int(incident["plan"]["repair_tick"]))
+		var fixed := GameCalendar.clock_text(int(incident["plan"]["repair_tick"]), epoch)
 		return (
 			"A scanner stopped working. It is fixed by %s; until then passengers use another scanner."
 			% fixed

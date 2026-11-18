@@ -39,7 +39,7 @@ func _just_after_doors_close() -> int:
 
 
 func _noon(day: int) -> int:
-	return GameCalendar.tick_at(day, 12 * 60)
+	return GameCalendar.tick_at(day, 12 * 60, 0)
 
 
 ## The reference terminal with a ready bag room but no belts, so every bag

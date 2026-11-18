@@ -96,7 +96,7 @@ func test_an_open_save_with_skipped_days_round_trips_and_plays_out_the_same() ->
 	_log.clear()
 	_run(source[0], end)
 	assert_array(after_load).is_equal(_log)
-	var am_first := GameCalendar.tick_at(0, 500) - FlightTimetable.departure_offset()
+	var am_first := GameCalendar.tick_at(0, 500, 0) - FlightTimetable.departure_offset()
 	var issued := 4 * 28800 + am_first - FlightTimetable.ISSUE_LEAD_TICKS
 	assert_bool(_log.has("%d add AM-d4" % issued)).is_true()
 	assert_str(JSON.stringify(loaded[1].to_snapshot())).is_equal(
