@@ -109,14 +109,16 @@ func test_caption_layout_measures_in_the_caption_font() -> void:
 	assert_float(bubble.size.y).is_equal_approx(font.get_height(56) + 28.0, 0.01)
 
 
-## The Label3D.new() sites in `source` whose label is never given a font: a
-## site is fonted when it is wrapped in CaptionFont.apply(), or when the name it
-## is assigned to reaches CaptionFont.apply(name) or `name.font =`. An unnamed,
-## unwrapped site is listed as "?".
+## The Label3D.new() sites in `source` whose label is not given the caption
+## font. A site passes when it is wrapped in CaptionFont.apply(), or when its
+## name reaches CaptionFont.apply(name) or `name.font = CaptionFont.font()`
+## later in its own function and before the name is assigned again. An
+## unnamed, unwrapped site is listed as "?".
 static func unfonted_labels(source: String) -> Array[String]:
 	var made := RegEx.create_from_string(
 		"(?:(\\w+)\\s*:?=\\s*)?(CaptionFont\\.apply\\(\\s*)?Label3D\\.new\\(\\)"
 	)
+	var func_start := RegEx.create_from_string("(?m)^(?:static )?func ")
 	var missing: Array[String] = []
 	for found in made.search_all(source):
 		if found.get_string(2) != "":
@@ -125,10 +127,20 @@ static func unfonted_labels(source: String) -> Array[String]:
 		if name == "":
 			missing.append("?")
 			continue
-		var applied := RegEx.create_from_string(
-			"CaptionFont\\.apply\\(\\s*" + name + "\\s*\\)|\\b" + name + "\\.font\\s*="
+		var rest := source.substr(found.get_end())
+		var next_func := func_start.search(rest)
+		if next_func != null:
+			rest = rest.substr(0, next_func.get_start())
+		var again := RegEx.create_from_string("\\b" + name + "\\s*:?=[^=]").search(rest)
+		if again != null:
+			rest = rest.substr(0, again.get_start())
+		var fonted := RegEx.create_from_string(
+			(
+				"CaptionFont\\.apply\\(\\s*%s\\s*\\)|\\b%s\\.font\\s*=\\s*CaptionFont\\.font\\(\\)"
+				% [name, name]
+			)
 		)
-		if applied.search(source) == null:
+		if fonted.search(rest) == null:
 			missing.append(name)
 	return missing
 
@@ -168,13 +180,46 @@ func test_every_label3d_the_game_makes_gets_a_font() -> void:
 	assert_array(missing).is_empty()
 
 
-## Control: the scan flags a label that is made and never given a font, so it
-## cannot pass by accident.
+## Control: the scan flags a label that is made and never given the caption
+## font, so it cannot pass by accident.
 func test_the_scan_flags_a_label_with_no_font() -> void:
 	var bare := 'var caption := Label3D.new()\ncaption.text = tr("Gate")\n'
-	assert_array(unfonted_labels(bare)).is_equal(["caption"] as Array[String])
+	var one: Array[String] = ["caption"]
+	assert_array(unfonted_labels(bare)).is_equal(one)
 	assert_array(unfonted_labels(bare + "CaptionFont.apply(caption)\n")).is_empty()
-	assert_array(unfonted_labels(bare + "caption.font = f\n")).is_empty()
+	assert_array(unfonted_labels(bare + "caption.font = CaptionFont.font()\n")).is_empty()
 	assert_array(unfonted_labels("var _price := Label3D.new()\n_price.font_size = 3\n")).has_size(1)
 	assert_array(unfonted_labels("var _price := CaptionFont.apply(Label3D.new())\n")).is_empty()
 	assert_array(unfonted_labels("add_child(Label3D.new())\n")).is_equal(["?"] as Array[String])
+
+
+## Control: a font other than CaptionFont.font() does not count.
+func test_the_scan_flags_a_label_given_another_font() -> void:
+	var bare := 'var caption := Label3D.new()\ncaption.text = tr("Gate")\n'
+	var one: Array[String] = ["caption"]
+	assert_array(unfonted_labels(bare + "caption.font = ThemeDB.fallback_font\n")).is_equal(one)
+	assert_array(unfonted_labels(bare + "caption.font = f\n")).is_equal(one)
+
+
+## Control: each Label3D.new() is checked on its own, in its own function: a
+## same-named label fonted elsewhere does not count.
+func test_the_scan_checks_each_same_named_label_on_its_own() -> void:
+	var one: Array[String] = ["caption"]
+	var two_funcs := (
+		"func a() -> void:\n\tvar caption := Label3D.new()\n"
+		+ "\tcaption.font = CaptionFont.font()\n\n\n"
+		+ 'func b() -> void:\n\tvar caption := Label3D.new()\n\tcaption.text = "x"\n'
+	)
+	assert_array(unfonted_labels(two_funcs)).is_equal(one)
+	var refont_before := (
+		"func a() -> void:\n\tvar caption := Label3D.new()\n"
+		+ "\tcaption.font = CaptionFont.font()\n\tcaption = Label3D.new()\n"
+	)
+	assert_array(unfonted_labels(refont_before)).is_equal(one)
+	var applied_elsewhere := (
+		"func a() -> void:\n\tvar caption := Label3D.new()\n\n\n"
+		+ "func b(caption: Label3D) -> void:\n\tCaptionFont.apply(caption)\n"
+	)
+	assert_array(unfonted_labels(applied_elsewhere)).is_equal(one)
+	var both_fonted := two_funcs.replace('caption.text = "x"', "CaptionFont.apply(caption)")
+	assert_array(unfonted_labels(both_fonted)).is_empty()
