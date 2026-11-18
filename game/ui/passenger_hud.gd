@@ -564,7 +564,9 @@ func press_debug_spawn() -> void:
 ## fates, replacing the one up; its full text goes in the alerts history.
 func show_result_for(flight_id: String) -> void:
 	var card := FlightResultPanel.new()
-	card.show_result(_result_summary(flight_id))
+	var summary := _result_summary(flight_id)
+	QuitLog.note("flight_result", {"made": summary["made"], "missed": summary["missed"]})
+	card.show_result(summary)
 	card.dismissed.connect(dismiss_result)
 	var lines := card.result_text().split("\n")
 	var detail := "\n".join(lines.slice(1))

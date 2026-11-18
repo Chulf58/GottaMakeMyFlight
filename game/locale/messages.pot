@@ -5839,3 +5839,19 @@ msgstr ""
 msgctxt "list end"
 msgid "{item} and {last}"
 msgstr ""
+
+#: ui/game_menu.gd
+msgid "Quit log"
+msgstr ""
+
+#: ui/game_menu.gd
+msgid "Records where you stop playing: the day, money, stars, builds, flights and alerts, never what you click or type. The file stays on this computer and nothing is sent."
+msgstr ""
+
+#: ui/game_menu.gd
+msgid "Open log folder"
+msgstr ""
+
+#: ui/game_menu.gd
+msgid "Could not open the log folder: {path}"
+msgstr ""

@@ -1,4 +1,4 @@
-[gd_scene load_steps=52 format=3]
+[gd_scene load_steps=53 format=3]
 
 [ext_resource type="PackedScene" path="res://camera/tycoon_camera.tscn" id="1_cam"]
 [ext_resource type="Script" path="res://core/sim_clock.gd" id="2_clock"]
@@ -49,6 +49,7 @@
 [ext_resource type="Script" path="res://ui/game_menu.gd" id="50_gamemenu"]
 [ext_resource type="Script" path="res://ui/hover_target.gd" id="51_hovertarget"]
 [ext_resource type="Script" path="res://build/owned_paving.gd" id="52_ownedpaving"]
+[ext_resource type="Script" path="res://telemetry/quit_log_recorder.gd" id="53_quitlog"]
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_ground"]
 size = Vector2(2400, 2400)
@@ -390,13 +391,14 @@ director = NodePath("../IncidentDirector")
 clock = NodePath("../SimClock")
 save_game = NodePath("../SaveGame")
 
-[node name="GameMenu" type="Node" parent="." node_paths=PackedStringArray("director", "clock", "build_menu", "build_mode", "save_game")]
+[node name="GameMenu" type="Node" parent="." node_paths=PackedStringArray("director", "clock", "build_menu", "build_mode", "save_game", "quit_log")]
 script = ExtResource("50_gamemenu")
 director = NodePath("../IncidentDirector")
 clock = NodePath("../SimClock")
 build_menu = NodePath("../BuildMenu")
 build_mode = NodePath("../BuildMode")
 save_game = NodePath("../SaveGame")
+quit_log = NodePath("../QuitLogRecorder")
 
 [node name="OfferPanel" type="CanvasLayer" parent="." node_paths=PackedStringArray("desk", "flights", "clock", "build_mode", "save_game")]
 layer = 2
@@ -473,4 +475,12 @@ hud = NodePath("../PassengerHud")
 [node name="OwnedPaving" type="Node" parent="." node_paths=PackedStringArray("site", "build_mode")]
 script = ExtResource("52_ownedpaving")
 site = NodePath("../Airside/Terminal")
+build_mode = NodePath("../BuildMode")
+
+[node name="QuitLogRecorder" type="Node" parent="." node_paths=PackedStringArray("clock", "finances", "rating", "passengers", "build_mode")]
+script = ExtResource("53_quitlog")
+clock = NodePath("../SimClock")
+finances = NodePath("../Finances")
+rating = NodePath("../AirportRating")
+passengers = NodePath("../PassengerSim")
 build_mode = NodePath("../BuildMode")

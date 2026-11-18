@@ -129,6 +129,7 @@ func _raise(cause: Dictionary, tick: int) -> void:
 		"cleared_tick": -1,
 	}
 	_add_history(entry)
+	QuitLog.note("alert_shown", {"kind": String(key)})
 	var alert := cause.duplicate()
 	alert["raised_tick"] = tick
 	alert["entry"] = entry
