@@ -20,7 +20,6 @@ const STATUS_CONTEXT := "build status"
 const DOOR_CONTEXT := "door tool, mid-sentence"
 const DETAIL_CONTEXT := "refusal detail"
 const ITEM_MID_CONTEXT := "item name, mid-sentence"
-const LIST_CONTEXT := "list separator"
 
 static var _words := Words.new()
 
@@ -60,12 +59,14 @@ static func in_front(blocker: String) -> String:
 
 ## What a refusal names beyond its reason (BuildResult.detail), in the player's words.
 ## The English detail stays the key; detail_args carry the values, so each sentence is
-## one msgid. A detail with no arguments, or an unknown reason, is shown as it came.
+## one msgid. A detail with no arguments, an unknown reason or an unknown flight is
+## shown as it came.
 static func detail(result: BuildResult) -> String:
 	var args := result.detail_args
 	# The flights of a gate in use, flights stuck or a spur that strands one.
 	if args.has("flights"):
-		return TranslationServer.translate(", ", LIST_CONTEXT).join(args["flights"])
+		var listed := flight_list(args["flights"])
+		return listed if listed != "" else result.detail
 	match result.reason:
 		BuildResult.Reason.GATE_STAND_OVERLAP:
 			if args.has("gate"):
@@ -82,6 +83,30 @@ static func detail(result: BuildResult) -> String:
 			if args.has("inner"):
 				return (args["inner"] as BuildResult).reason_text()
 	return result.detail
+
+
+## The flights `labels` (FlightLabel.label_args() values) as one list in the
+## player's words (ListWords), or "" when there are none or one is not known.
+static func flight_list(labels: Array) -> String:
+	var named := PackedStringArray()
+	for label: Dictionary in labels:
+		if label.is_empty():
+			return ""
+		named.append(FlightLabel.words(label))
+	return ListWords.join(named)
+
+
+## A refusal that names flights in detail_args (GATE_IN_USE, GATE_FLIGHTS_STUCK,
+## SPUR_STRANDS) as one whole sentence, with the plural rule of the flight count,
+## or "" for any other refusal or when a flight is not known.
+static func flight_refusal(result: BuildResult) -> String:
+	if not result.detail_args.has("flights"):
+		return ""
+	var labels: Array = result.detail_args["flights"]
+	var listed := flight_list(labels)
+	if listed == "":
+		return ""
+	return _words.flight_refusal(result.reason, listed, labels.size())
 
 
 ## "Belt 7 cells" for the belt being dragged, one whole line with the plural rule.
@@ -160,6 +185,39 @@ class Words:
 			_:
 				return english
 		return text.format({"gate": gate})
+
+	## The refusal for `reason` naming `flights`, a list of `count` flights, or "".
+	## Each form is one whole sentence: one flight, or several. The gate-flights-
+	## stuck sentence already speaks of "these flights", so its English is one text.
+	func flight_refusal(reason: BuildResult.Reason, flights: String, count: int) -> String:
+		var text := ""
+		match reason:
+			BuildResult.Reason.GATE_IN_USE:
+				text = tr_n(
+					"A flight is still due at this gate. Remove it after the flight leaves: {flights}",
+					"Flights are still due at this gate. Remove it after they leave: {flights}",
+					count,
+					"build refusal"
+				)
+			BuildResult.Reason.GATE_FLIGHTS_STUCK:
+				text = tr_n(
+					"No other gate is free for these flights. Move them in Departures first: {flights}",
+					"No other gate is free for these flights. Move them in Departures first: {flights}",
+					count,
+					"build refusal"
+				)
+			BuildResult.Reason.SPUR_STRANDS:
+				text = tr_n(
+					# gdlint:ignore = max-line-length
+					"The side taxiway would have to move and leave a booked flight with no way to its gate: {flights}",
+					# gdlint:ignore = max-line-length
+					"The side taxiway would have to move and leave booked flights with no way to their gates: {flights}",
+					count,
+					"build refusal"
+				)
+			_:
+				return ""
+		return text.format({"flights": flights})
 
 	func belt_cells(count: int) -> String:
 		return tr_n("Belt {count} cell", "Belt {count} cells", count, "build status").format(
@@ -325,7 +383,6 @@ class Words:
 			tr("gate {gate}, a small plane", "refusal detail"),
 			tr("gate {gate}, a medium plane", "refusal detail"),
 			tr("gate {gate}, a large plane", "refusal detail"),
-			tr(", ", "list separator"),
 			# Status lines of the belt, facing, area drag and room tools
 			tr_n("Belt {count} cell", "Belt {count} cells", 1, "build status"),
 			tr("Facing auto", "build status"),

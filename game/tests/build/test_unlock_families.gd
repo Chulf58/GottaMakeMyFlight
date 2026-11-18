@@ -90,19 +90,21 @@ func test_every_line_and_each_piece_name_comes_through_tr() -> void:
 	assert_str(lines[5]).contains("Kiosk")
 
 
-## The names are joined with a translatable separator, so a language that
-## separates a list differently reaches the line (board T9, T13 owns list grammar).
-func test_the_piece_separator_is_translated() -> void:
+## The names are joined by ListWords, so a language that lists names
+## differently reaches the line through its own joins (board T9, T13).
+func test_the_piece_list_follows_the_translated_list_grammar() -> void:
 	var english := UnlockFamilies.lines([2])[5]
-	assert_str(english).contains(", ")
+	assert_str(english).contains(", ").contains(" and ")
 	_translation = Translation.new()
 	_translation.locale = TranslationServer.get_locale()
-	_translation.add_message(", ", " SEP ", "list separator")
+	_translation.add_message("{first}, {rest}", "{first} SEP {rest}", "list start")
+	_translation.add_message("{item}, {rest}", "{item} SEP {rest}", "list middle")
+	_translation.add_message("{item} and {last}", "{item} END {last}", "list end")
 	TranslationServer.add_translation(_translation)
 	var line := UnlockFamilies.lines([2])[5]
 	print("english: %s | translated: %s" % [english, line])
-	assert_str(line).contains(" SEP ")
-	assert_str(line).not_contains(", ")
+	assert_str(line).contains(" SEP ").contains(" END ")
+	assert_str(line).not_contains(", ").not_contains(" and ")
 
 
 func test_the_tools_of_the_start_tier_and_an_out_of_range_tier_bring_nothing() -> void:
