@@ -308,8 +308,11 @@ static func put_in_window(sim: PassengerSim, p: Passenger, i: int) -> Vector2:
 ## Which of a two-bag returner's bags goes into the tray first: the one on the
 ## tray table's side (lane "side") of the body facing the arch (bag i is in
 ## hand i, or worn on side i, 0 the right). Read from the lane alone, so it is
-## the same on every draw, after a load too.
+## the same on every draw, after a load too. A roller beside a hard case goes in
+## after the case (tray_turn()).
 static func put_in_first(sim: PassengerSim, p: Passenger) -> int:
+	if roller_beside_case(p):
+		return 0 if tray_turn(p, 0, true) == 0 else 1
 	var lane := lane_of(sim, p)
 	if lane.is_empty():
 		return 0
@@ -800,7 +803,8 @@ static func _security_home(sim: PassengerSim, p: Passenger, i: int) -> Home:
 			home = Home.FLOOR
 		SecurityRuntime.Phase.UNPACK:
 			var in_tray := (
-				SecurityRuntime.LANE_UNPACK_TICKS + i * SecurityRuntime.LANE_UNPACK_BAG_TICKS
+				SecurityRuntime.LANE_UNPACK_TICKS
+				+ tray_turn(p, i, true) * SecurityRuntime.LANE_UNPACK_BAG_TICKS
 			)
 			home = Home.TRAY if done >= in_tray else Home.HAND
 		SecurityRuntime.Phase.ARCH:
@@ -809,12 +813,34 @@ static func _security_home(sim: PassengerSim, p: Passenger, i: int) -> Home:
 			home = Home.TRAY if begun else Home.HAND
 		SecurityRuntime.Phase.PICKUP:
 			var out_of_tray := (
-				SecurityRuntime.LANE_PICKUP_TICKS + i * SecurityRuntime.LANE_PICKUP_BAG_TICKS
+				SecurityRuntime.LANE_PICKUP_TICKS
+				+ tray_turn(p, i, false) * SecurityRuntime.LANE_PICKUP_BAG_TICKS
 			)
 			home = Home.TRAY if done < out_of_tray else Home.HAND
 	if not on_lane and home == Home.TRAY:
 		home = Home.HAND
 	return home
+
+
+## Whether `p` carries a roller in one hand and a hard case in the other.
+static func roller_beside_case(p: Passenger) -> bool:
+	if p.carry_on != 2:
+		return false
+	var kinds := [bag_kind(p, 0), bag_kind(p, 1)]
+	return Kind.ROLLER in kinds and Kind.CASE in kinds
+
+
+## Bag `i` of `p`'s turn (0 first) to go into a lane tray (`into` true) or come
+## out of it: bag order, except that a roller carried beside a hard case goes in
+## after the case and comes out before it, so the hand that held the case is
+## free to take the roller's carry handle (decision roller-handover-when-the-
+## other-hand-holds-a-bag-the-other-ba, RollerHandover). Read from the bags'
+## kinds alone, so it is the same on every draw and after a load.
+static func tray_turn(p: Passenger, i: int, into: bool) -> int:
+	if not roller_beside_case(p):
+		return i
+	var roller := bag_kind(p, i) == Kind.ROLLER
+	return int(roller) if into else int(not roller)
 
 
 ## Whether a lane passenger in ARCH has reached the passage: always on the

@@ -1038,6 +1038,14 @@ static func plan(
 				want.basis.get_rotation_quaternion(), w
 			)
 			on_path.basis = Basis(q).scaled(start.basis.get_scale().lerp(want.basis.get_scale(), w))
+	if first >= 0:
+		# Handed over in front of the body, between its two grips (RollerHandover.
+		# to_front()): taken where it hung or trailed, the free hand reached
+		# across the body and the forearms crossed, and short of the handle the
+		# roller jumped as that hand took it.
+		on_path.origin += RollerHandover.to_front(
+			on_path, frame, t, float(bag.get("start_shoulder_y", NAN)), anchor_from, anchor_to
+		)
 	if case_up and from_end == End.REST and to_end == End.HELD:
 		# The palm on its top as it tips, world up of the case as path() turns it.
 		var palm_up := Vector3.UP * CarryOnProps.FRONT_PALM_M
@@ -1065,6 +1073,11 @@ static func plan(
 		palm = maxf(palm - t * end_palm * float(body["scale"]), 0.0)
 	if stall and roller and from_end == End.REST and to_end == End.HELD:
 		palm = stall_bar_palm(t)
+	var handed_off_tray: bool = first >= 0 and from_end == End.REST
+	if handed_off_tray:
+		# The hand lifting it out of a tray by its carry handle holds the palm
+		# over the handle (RollerHandover.TRAY_PALM_M).
+		palm = RollerHandover.TRAY_PALM_M
 	held_at += on_path.basis.inverse() * (Vector3.UP * palm)
 	# Changing hands, each hand holds a roller's bar at its own spot
 	# (swap_spots()); the bag is placed from the holder's.
@@ -1079,6 +1092,8 @@ static func plan(
 	# one the move starts by, the other the one it ends by.
 	if first >= 0:
 		spots[first] = anchor_from - held_at
+		if handed_off_tray:
+			spots[first] += on_path.basis.inverse() * (Vector3.UP * palm)
 		spots[lead] = anchor_to - held_at
 	var targets := [Vector3.ZERO, Vector3.ZERO]
 	for hand in 2:

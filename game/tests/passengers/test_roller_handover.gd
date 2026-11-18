@@ -88,6 +88,10 @@ func _anchors(move: Array, first: int, lift := 0.0) -> Dictionary:
 		var anchor: Vector3 = plan["anchor"]
 		# The holder is aimed at the point it holds, on the bag's path.
 		assert_float((xf * anchor).distance_to(plan["targets"][holder])).is_less_equal(0.0001)
+		if holder == first and int(bag["was"]) / 4 == SecurityLooks.Home.TRAY:
+			# Lifted out of a tray, the palm is TRAY_PALM_M (world up) over the
+			# handle.
+			anchor -= xf.basis.inverse() * (Vector3.UP * RollerHandover.TRAY_PALM_M)
 		out.get_or_add(holder, []).append(anchor)
 	return out
 
@@ -235,3 +239,47 @@ func test_the_handover_waits_for_a_free_hand() -> void:
 	case_bag["kind"] = SecurityLooks.Kind.CASE
 	RollerHandover.stamp(case_bag, held, 0, 10.0)
 	assert_bool(case_bag.has("handover")).is_false()
+
+
+## Handed over, the roller is moved so the middle of its two grips is
+## SWAP_FRONT_M ahead of the body at hip height at half way (no hand reaches
+## across the body for it), and not moved at the carry's ends. Control: with no
+## stamped shoulder height it is not moved.
+func test_the_roller_is_handed_over_in_front_of_the_body() -> void:
+	var a := Vector3(0.0, 0.03, 0.5)
+	var b := CarryOnProps.ROLLER_HANDLE
+	var on_path := Transform3D(Basis(Vector3.UP, 1.1), _frame * Vector3(-0.3, 0.4, -0.5))
+	var front := _frame * Vector3(0.0, 1.4 - CarryLead.SWAP_HIP_BELOW_M, CarryLead.SWAP_FRONT_M)
+	var half := RollerHandover.to_front(on_path, _frame, 0.5, 1.4, a, b)
+	var middle := on_path.translated(half) * ((a + b) * 0.5)
+	print("to_front at half way: %.4f m off the front point" % middle.distance_to(front))
+	assert_float(middle.distance_to(front)).is_less_equal(0.0001)
+	for t: float in [0.0, 1.0]:
+		var moved := RollerHandover.to_front(on_path, _frame, t, 1.4, a, b)
+		assert_float(moved.length()).is_less_equal(0.0001)
+	assert_float(RollerHandover.to_front(on_path, _frame, 0.5, NAN, a, b).length()).is_equal(0.0)
+
+
+## A roller carried beside a hard case goes into a lane tray after the case and
+## comes out before it; any other pair keeps the bags' order. Control: the
+## passengers sampled include both orders of roller and case and another pair.
+func test_a_roller_beside_a_case_goes_in_last_and_comes_out_first() -> void:
+	var seen := {}
+	for id in range(1, 400):
+		var p := Passenger.new()
+		p.id = id
+		p.carry_on = 2
+		var kinds := [SecurityLooks.bag_kind(p, 0), SecurityLooks.bag_kind(p, 1)]
+		var roller := kinds.find(SecurityLooks.Kind.ROLLER)
+		if SecurityLooks.roller_beside_case(p):
+			seen["roller %d" % roller] = true
+			assert_int(SecurityLooks.tray_turn(p, roller, true)).is_equal(1)
+			assert_int(SecurityLooks.tray_turn(p, 1 - roller, true)).is_equal(0)
+			assert_int(SecurityLooks.tray_turn(p, roller, false)).is_equal(0)
+			assert_int(SecurityLooks.tray_turn(p, 1 - roller, false)).is_equal(1)
+		else:
+			seen["other"] = true
+			for i in 2:
+				assert_int(SecurityLooks.tray_turn(p, i, true)).is_equal(i)
+				assert_int(SecurityLooks.tray_turn(p, i, false)).is_equal(i)
+	assert_bool(seen.has("roller 0") and seen.has("roller 1") and seen.has("other")).is_true()

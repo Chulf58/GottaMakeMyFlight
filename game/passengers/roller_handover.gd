@@ -33,6 +33,13 @@ extends RefCounted
 ## --lane, seed 1106001, passenger 4 tray>hand.R).
 const TRAY_KEEP := Vector2(0.6, 0.95)
 
+## Lifting a roller out of a tray by its carry handle, the first hand holds
+## this far (world up) over the handle, within the probes' GRIP_ON limit for a
+## roller (9 cm): on the handle itself, the left hand's fingers went into the
+## roller's top as it reached (crossing probe --lane, seed 1106001, passenger 4
+## tray>hand.R, Fingertips.L 88 to 174 points in the roller at k 0.18 to 0.22).
+const TRAY_PALM_M := 0.04
+
 
 ## Stamps on `bag` (bag `i` of `held`, CarryPlace's record of a move just
 ## stamped: "was", "home", "carry" and "led" set) "handover", the hand that
@@ -106,3 +113,29 @@ static func free_hand_busy(held: Dictionary, i: int, free: int, now: float) -> b
 		if started[0] == CarryLead.End.HELD and started[1] == free and early:
 			return true
 	return false
+
+
+## How far (world) to move a handed-over roller, on its path at `on_path` at
+## `t` of the carry, the body drawn at `frame`, `shoulder_y` its lower shoulder
+## joint's height over its origin as the move started (CarryLead.stamp_move(),
+## NAN for none: not moved), so the middle of its two grips (`grip_a`, `grip_b`,
+## its own frame) comes to CarryLead.SWAP_FRONT_M ahead of the body's centre
+## at hip height (CarryLead.SWAP_HIP_BELOW_M under the shoulder) at half way,
+## where the hands change, easing in from the start and out to the end. The
+## hand-to-pull swap is handed over at the same point (user ruling 2026-11-17,
+## "In front, at hip height", board 295026a6). From the move's stamp and
+## progress, never from a drawn hand (anti-pattern d655fcc9).
+static func to_front(
+	on_path: Transform3D,
+	frame: Transform3D,
+	t: float,
+	shoulder_y: float,
+	grip_a: Vector3,
+	grip_b: Vector3
+) -> Vector3:
+	if is_nan(shoulder_y):
+		return Vector3.ZERO
+	var w := smoothstep(0.0, 0.5, t) if t < 0.5 else 1.0 - smoothstep(0.5, 1.0, t)
+	var front := Vector3(0.0, shoulder_y - CarryLead.SWAP_HIP_BELOW_M, CarryLead.SWAP_FRONT_M)
+	var middle := on_path * ((grip_a + grip_b) * 0.5)
+	return (frame * front - middle) * w
