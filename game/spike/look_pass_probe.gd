@@ -29,9 +29,11 @@ extends SceneTree
 ## inspect card and the debug panel, each panel's rect asserted inside the
 ## view. In-world captions (Label3D and Sprite3D markers) are plated with the
 ## HUD hidden (every CanvasLayer and loose canvas item, proved before each
-## plate), at a mid zoom, once with the starter terminal unstaffed (closed-desk
-## signs, room labels) and once with flights running and the mood overlay on
-## hunger (need icons and clusters).
+## plate), at a mid zoom, with the starter terminal unstaffed and a gate desk tool
+## held (closed-desk signs, gate captions). The build ghost is frozen first
+## (BuildMode redraws it every frame) and proved gone. Need icons are not plated:
+## the starter terminal has no cafe, toilet or boredom source, and NeedIcons.
+## provided() gates every icon on one.
 ##
 ## Pass C: the bar SVG icons, the MarkerIcons glyphs and the build-menu
 ## thumbnails on HUD cards.
@@ -65,7 +67,6 @@ const CAPTION_LIMIT := 14
 ## The crow group plate's camera distances: the caption mid zoom and
 ## TycoonCamera's default home_distance (80 m).
 const CROW_DISTANCES := [CAPTION_DISTANCE, 80.0]
-const SIM_LIMIT_MS := 90000
 const SETTINGS := "user://look_pass_probe_settings.cfg"
 const HINTS_MEMORY := "user://look_pass_probe_hints.cfg"
 const SHEET_TILE := Vector2i(400, 225)
@@ -821,12 +822,12 @@ func _pass_b() -> void:
 	await _frames(20)
 	# Gate captions show only while a build tool is held (GateLinksView.set_building).
 	var build := _main.get_node("BuildMode") as BuildMode
-	(build.get_node("Ghost") as Node3D).visible = false
 	build.set_tool(BuildMode.Tool.GATE_DESK)
+	_freeze_ghost(build)
 	await _frames(10)
 	await _caption_plates("unstaffed terminal, gate desk tool")
 	build.set_tool(BuildMode.Tool.NONE)
-	(build.get_node("Ghost") as Node3D).visible = true
+	build.set_process(true)
 	await _frames(6)
 	await _hud_plate("checklist", {"checklist card": _staff.hint_card()})
 	_menu.press_staff()
@@ -844,7 +845,6 @@ func _pass_b() -> void:
 	await _frames(10)
 	await _hud_plate("debug panel", {"debug panel": _hud.find_child("DebugPanel", true, false)})
 	_hud.set_debug_open(false)
-	await _need_captions()
 	_main.queue_free()
 	_main = null
 	_hud = null
@@ -1129,6 +1129,32 @@ func _caption_plates(moment: String) -> void:
 	await _frames(4)
 
 
+## Stops BuildMode redrawing its ghost under the pointer (BuildMode._process
+## shows Ghost again on every redraw, so hiding the node once does not hold) and
+## empties and hides it.
+func _freeze_ghost(build: BuildMode) -> void:
+	build.set_process(false)
+	var ghost := build.get_node("Ghost") as Node3D
+	for child in ghost.get_children():
+		ghost.remove_child(child)
+		child.queue_free()
+	ghost.visible = false
+
+
+## True when no ghost piece shows in the tree under BuildMode (the red tint and
+## its arrow are children of Ghost).
+func _ghost_clear(label: String) -> bool:
+	var shown := 0
+	var build := _main.get_node("BuildMode")
+	for n in build.get_node("Ghost").find_children("*", "VisualInstance3D", true, false):
+		if (n as VisualInstance3D).is_visible_in_tree():
+			shown += 1
+	print("GHOSTCLEAR %s ghost_pieces_showing=%d" % [label, shown])
+	if shown > 0:
+		_invalid("%s: %d build ghost pieces still show" % [label, shown])
+	return shown == 0
+
+
 func _plate_caption(moment: String, kind: String, node: Node3D) -> void:
 	var at := node.global_position
 	var pitch := deg_to_rad(TycoonCamera.STEP_PITCH_DEGREES[TycoonCamera.AngleStep.MEDIUM])
@@ -1155,7 +1181,7 @@ func _plate_caption(moment: String, kind: String, node: Node3D) -> void:
 		_invalid("%s: blocked from every yaw" % label)
 	elif _prove_in_frame(label, [at]):
 		var img := await _grab()
-		if _hud_clear(label):
+		if _hud_clear(label) and _ghost_clear(label):
 			_keep("hud", label, img)
 	_drop_colliders()
 
@@ -1246,39 +1272,6 @@ func _hud_clear(label: String) -> bool:
 		_invalid("%s: the HUD is not hidden (%s)" % [label, showing])
 		return false
 	return true
-
-
-## Flights running with the mood overlay on hunger until need icons or clusters
-## show, capped by SIM_LIMIT_MS of wall time.
-func _need_captions() -> void:
-	_beat("b_needs")
-	var clock: SimClock = _main.get_node("SimClock")
-	var overlay := _main.get_node("MoodOverlay") as MoodOverlay
-	overlay.set_shown(true)
-	overlay.set_mode(MoodTint.Mode.HUNGER)
-	# Need icons show only inside the home zoom (NeedIcons.shown_at).
-	var rig := _main.get_node("TycoonCamera") as TycoonCamera
-	rig.distance = minf(25.0, rig.home_distance * 0.5)
-	var started := Time.get_ticks_msec()
-	var views := _main.get_node("PassengerViews")
-	clock.set_paused(false)
-	var steps := 0
-	while Time.get_ticks_msec() - started < SIM_LIMIT_MS:
-		for i in 10:
-			clock.advance(SimClock.STEP)
-		steps += 10
-		await _frames(1)
-		_beat("b_needs_%d" % steps)
-		var shown := 0
-		for n in views.find_children("*", "Sprite3D", true, false):
-			if (n as Sprite3D).is_visible_in_tree():
-				shown += 1
-		if (shown >= 1 and steps >= 100) or steps >= 2000:
-			break
-	clock.set_paused(true)
-	await _frames(10)
-	print("PROBE needs steps=%d tick=%d" % [steps, clock.tick])
-	await _caption_plates("flights running, hunger overlay")
 
 
 # ------------------------------------------------------------ pass C: icons
