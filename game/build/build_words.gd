@@ -75,6 +75,9 @@ static func detail(result: BuildResult) -> String:
 				return _words.gate_plane(args["gate"], args["plane"], result.detail)
 		BuildResult.Reason.DOOR_FRONT_BLOCKED:
 			return TranslationServer.translate(result.detail, ITEM_MID_CONTEXT)
+		BuildResult.Reason.LOCKED:
+			if args.has("tier") or args.has("unwired"):
+				return BuildUnlocks.lock_words(args)
 		BuildResult.Reason.MOVE_NO_FIT:
 			if args.has("inner"):
 				return (args["inner"] as BuildResult).reason_text()

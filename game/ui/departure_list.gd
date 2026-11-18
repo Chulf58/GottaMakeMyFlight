@@ -16,6 +16,10 @@ extends RefCounted
 ## only for the days before its end day; the flights it had issued by then
 ## still fly and show.
 
+## The msgctxt of the status words: short words get one so they stay apart from
+## the same English word elsewhere.
+const STATUS_CONTEXT := "departure status"
+
 
 ## The earliest row whose doors have not closed at `tick`, or an empty one.
 static func next_departing(rows: Array[Dictionary], tick: int) -> Dictionary:
@@ -41,17 +45,17 @@ static func doors_text(row: Dictionary) -> String:
 static func status_word(state: int) -> String:
 	match state:
 		FlightSim.State.BOARDING:
-			return TranslationServer.translate("Boarding")
+			return TranslationServer.translate("Boarding", STATUS_CONTEXT)
 		FlightSim.State.DOORS_CLOSED:
-			return TranslationServer.translate("Doors closed")
+			return TranslationServer.translate("Doors closed", STATUS_CONTEXT)
 		FlightSim.State.PUSHBACK:
-			return TranslationServer.translate("Pushback")
+			return TranslationServer.translate("Pushback", STATUS_CONTEXT)
 		FlightSim.State.TAXI_OUT:
-			return TranslationServer.translate("Taxiing")
+			return TranslationServer.translate("Taxiing", STATUS_CONTEXT)
 		FlightSim.State.TAKEOFF:
-			return TranslationServer.translate("Taking off")
+			return TranslationServer.translate("Taking off", STATUS_CONTEXT)
 		FlightSim.State.DEPARTED:
-			return TranslationServer.translate("Departed")
+			return TranslationServer.translate("Departed", STATUS_CONTEXT)
 	return ""
 
 

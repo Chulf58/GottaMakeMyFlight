@@ -5265,35 +5265,46 @@ msgid "Taxiway works: the taxiway moves when the east side is quiet"
 msgstr ""
 
 #: airside/side_spurs.gd
-msgid "{works}, forecast {when}"
+msgid "Taxiway works: the taxiway moves when the west side is quiet, forecast {when}"
+msgstr ""
+
+#: airside/side_spurs.gd
+msgid "Taxiway works: the taxiway moves when the east side is quiet, forecast {when}"
 msgstr ""
 
 #: ui/departure_list.gd
+msgctxt "departure status"
 msgid "Boarding"
 msgstr ""
 
 #: ui/departure_list.gd
+msgctxt "departure status"
 msgid "Doors closed"
 msgstr ""
 
 #: ui/departure_list.gd
+msgctxt "departure status"
 msgid "Pushback"
 msgstr ""
 
 #: ui/departure_list.gd
+msgctxt "departure status"
 msgid "Taxiing"
 msgstr ""
 
 #: ui/departure_list.gd
+msgctxt "departure status"
 msgid "Taking off"
 msgstr ""
 
 #: ui/departure_list.gd
+msgctxt "departure status"
 msgid "Departed"
 msgstr ""
 
 #: ui/departure_list.gd
 msgid "doors close {time}"
+msgstr ""
 
 #: build/build_words.gd
 msgctxt "refusal detail"

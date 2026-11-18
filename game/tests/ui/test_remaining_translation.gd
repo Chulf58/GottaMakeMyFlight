@@ -9,19 +9,23 @@ extends GdUnitTestSuite
 ## The follow line's bubble is checked in test_hud_translation, the gap-marker
 ## hover in test_gap_markers.
 
-## Every msgid T11 added to messages.pot; each must appear there exactly once.
-const NEW_MSGIDS := [
-	"Wall gap · close the outer wall so the roof can go on",
-	"Taxiway works: the taxiway moves when the west side is quiet",
-	"Taxiway works: the taxiway moves when the east side is quiet",
-	"{works}, forecast {when}",
-	"Boarding",
-	"Doors closed",
-	"Pushback",
-	"Taxiing",
-	"Taking off",
-	"Departed",
-	"doors close {time}",
+## The context the departure status words carry (short words, so they have one).
+const STATUS_CONTEXT := "departure status"
+
+## Every [context, msgid] T11 added to messages.pot; each must be there once, with a msgstr.
+const NEW_ENTRIES := [
+	["", "Wall gap · close the outer wall so the roof can go on"],
+	["", "Taxiway works: the taxiway moves when the west side is quiet"],
+	["", "Taxiway works: the taxiway moves when the east side is quiet"],
+	["", "Taxiway works: the taxiway moves when the west side is quiet, forecast {when}"],
+	["", "Taxiway works: the taxiway moves when the east side is quiet, forecast {when}"],
+	["departure status", "Boarding"],
+	["departure status", "Doors closed"],
+	["departure status", "Pushback"],
+	["departure status", "Taxiing"],
+	["departure status", "Taking off"],
+	["departure status", "Departed"],
+	["", "doors close {time}"],
 ]
 
 const AFTER_DOORS := {
@@ -31,6 +35,8 @@ const AFTER_DOORS := {
 	FlightSim.State.TAKEOFF: "Taking off",
 	FlightSim.State.DEPARTED: "Departed",
 }
+
+var _translation: Translation
 
 
 func before() -> void:
@@ -43,6 +49,9 @@ func after() -> void:
 
 func after_test() -> void:
 	PseudoLocale.disable()
+	if _translation != null:
+		TranslationServer.remove_translation(_translation)
+		_translation = null
 
 
 ## "[___Boarding___]" becomes "Boarding___]": the lead is checked here, the text by
@@ -64,6 +73,30 @@ func test_the_departure_status_words_are_translated() -> void:
 		var shown := DepartureList.status_word(state)
 		print("status %d: '%s'" % [state, shown])
 		assert_str(_bare(shown)).starts_with(AFTER_DOORS[state])
+	assert_str(DepartureList.status_word(FlightSim.State.SCHEDULED)).is_equal("")
+
+
+## A run-time Translation for the current locale, one [msgid, msgstr, context] per line:
+## it proves the context and the sentence shape, which pseudolocalization cannot.
+func _translate(lines: Array) -> void:
+	_translation = Translation.new()
+	_translation.locale = TranslationServer.get_locale()
+	for line: Array in lines:
+		_translation.add_message(line[0], line[1], line[2])
+	TranslationServer.add_translation(_translation)
+
+
+func test_the_status_words_are_looked_up_in_the_departure_status_context() -> void:
+	var lines := []
+	for state: int in AFTER_DOORS:
+		lines.append([AFTER_DOORS[state], "ctx:" + AFTER_DOORS[state], STATUS_CONTEXT])
+	lines.append(["Boarding", "ctx:Boarding", STATUS_CONTEXT])
+	# A context-less entry for the same word must not be the one used.
+	lines.append(["Boarding", "plain:Boarding", ""])
+	_translate(lines)
+	assert_str(DepartureList.status_word(FlightSim.State.BOARDING)).is_equal("ctx:Boarding")
+	for state: int in AFTER_DOORS:
+		assert_str(DepartureList.status_word(state)).is_equal("ctx:" + AFTER_DOORS[state])
 	assert_str(DepartureList.status_word(FlightSim.State.SCHEDULED)).is_equal("")
 
 
@@ -106,6 +139,26 @@ func test_the_works_hover_words_are_whole_translated_sentences() -> void:
 	assert_str(forecast.substr(forecast.find("forecast"))).contains("[")
 
 
+## Each works sentence, with and without a forecast, is one whole msgid: the run-time
+## Translation holds all four and the forecast time is the only thing put into them.
+func test_each_works_sentence_is_one_whole_msgid_with_and_without_a_forecast() -> void:
+	var west := "Taxiway works: the taxiway moves when the west side is quiet"
+	var east := "Taxiway works: the taxiway moves when the east side is quiet"
+	_translate(
+		[
+			[west, "W", ""],
+			[east, "E", ""],
+			[west + ", forecast {when}", "W laeter {when}", ""],
+			[east + ", forecast {when}", "E laeter {when}", ""],
+		]
+	)
+	var when := RunwayWorks.when_text(600, 0)
+	assert_str(SideSpurs.works_text(StandPlacement.WEST)).is_equal("W")
+	assert_str(SideSpurs.works_text(StandPlacement.EAST)).is_equal("E")
+	assert_str(SideSpurs.works_text(StandPlacement.WEST, 600, 0)).is_equal("W laeter " + when)
+	assert_str(SideSpurs.works_text(StandPlacement.EAST, 600, 0)).is_equal("E laeter " + when)
+
+
 func test_the_inspect_card_says_the_stuck_words_in_the_players_language() -> void:
 	var grid := PassengerTestWorld.floored(Vector2i(8, 6))
 	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(0, 5), 3)
@@ -121,14 +174,43 @@ func test_the_inspect_card_says_the_stuck_words_in_the_players_language() -> voi
 	world.free_all()
 
 
-func test_every_new_msgid_is_in_the_template_once() -> void:
-	var template := FileAccess.get_file_as_string("res://locale/messages.pot").replace("\r\n", "\n")
+func test_every_new_msgid_is_in_the_template_once_with_a_msgstr() -> void:
+	var entries := PotEntries.parse(FileAccess.get_file_as_string("res://locale/messages.pot"))
 	var counts := {}
-	for msgid: String in NEW_MSGIDS:
-		counts[msgid] = template.split('\nmsgid "%s"\n' % msgid).size() - 1
-	print("msgid counts: %s" % [counts])
-	for msgid: String in NEW_MSGIDS:
-		assert_int(counts[msgid]).override_failure_message(msgid).is_equal(1)
+	var finished := {}
+	for pair: Array in NEW_ENTRIES:
+		counts[pair[1]] = PotEntries.count(entries, pair[0], pair[1])
+		finished[pair[1]] = PotEntries.complete(entries, pair[0], pair[1])
+	print("entries: %d, counts: %s, with msgstr: %s" % [entries.size(), counts, finished])
+	for pair: Array in NEW_ENTRIES:
+		assert_int(counts[pair[1]]).override_failure_message(pair[1]).is_equal(1)
+		assert_int(finished[pair[1]]).override_failure_message(pair[1]).is_equal(1)
+
+
+## Every entry in the template is whole (a msgid and a msgstr) and none repeats.
+func test_the_template_has_no_malformed_or_duplicate_entry() -> void:
+	var entries := PotEntries.parse(FileAccess.get_file_as_string("res://locale/messages.pot"))
+	var broken := PotEntries.malformed(entries)
+	var repeated := PotEntries.duplicates(entries)
+	print("entries: %d, malformed: %s, duplicates: %s" % [entries.size(), broken, repeated])
+	assert_int(entries.size()).is_greater(1000)
+	assert_array(broken).is_empty()
+	assert_array(repeated).is_empty()
+
+
+## Control: the parser flags a msgid with no msgstr, a repeat and a wrong context.
+func test_the_template_parser_catches_a_missing_msgstr_a_repeat_and_a_wrong_context() -> void:
+	var text := 'msgid ""\nmsgstr ""\n\n#: a.gd\nmsgid "one"\n\n'
+	text += '#: a.gd\nmsgctxt "ctx"\nmsgid "two"\nmsgstr ""\n\n'
+	text += '#: a.gd\nmsgctxt "ctx"\nmsgid "two"\nmsgstr ""\n'
+	var entries := PotEntries.parse(text)
+	assert_int(entries.size()).is_equal(4)
+	assert_array(PotEntries.malformed(entries)).has_size(1)
+	assert_array(PotEntries.duplicates(entries)).has_size(1)
+	assert_int(PotEntries.count(entries, "ctx", "two")).is_equal(2)
+	assert_int(PotEntries.count(entries, "", "two")).is_equal(0)
+	assert_int(PotEntries.complete(entries, "", "one")).is_equal(0)
+	assert_int(PotEntries.count(entries, "", "one")).is_equal(1)
 
 
 func test_the_debug_panel_buttons_are_dev_only_and_stay_english() -> void:
