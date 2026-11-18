@@ -387,7 +387,7 @@ func is_single_cell() -> bool:
 	return _start == _end
 
 
-## The rectangle's size in cells, as "12 x 8".
+## The rectangle's size in cells, as "12 x 8" (BuildWords).
 func size_label() -> String:
 	var size := rect().size
-	return "%d x %d" % [size.x, size.y]
+	return BuildWords.size_text(size.x, size.y)

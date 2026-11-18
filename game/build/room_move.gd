@@ -388,13 +388,15 @@ static func _place_problem(
 
 
 ## `result` as the move reports it: a refused piece placement becomes
-## MOVE_NO_FIT with the grid's reason as detail, unless it was kept clear.
+## MOVE_NO_FIT with the grid's reason as detail (the English key; the line shows
+## it in the player's words from detail_args), unless it was kept clear.
 static func _named(result: BuildResult, edit: BuildEdit) -> BuildResult:
 	var placing := edit != null and edit.kind == BuildEdit.Kind.PLACE_OBJECT
 	if not placing or result.reason == BuildResult.Reason.MOVE_EXIT_BLOCKED:
 		return result
 	var named := BuildResult.refused(BuildResult.Reason.MOVE_NO_FIT, edit.object_id)
-	named.detail = result.reason_text()
+	named.detail = BuildResult.REASON_TEXT[result.reason]
+	named.detail_args = {"inner": result}
 	return named
 
 

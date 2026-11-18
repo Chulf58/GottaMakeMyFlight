@@ -107,6 +107,9 @@ func test_a_piece_that_does_not_fit_refuses_with_the_grids_reason() -> void:
 	assert_int(result.blocking_object_id).is_equal(_kit.bin)
 	print("detail: %s" % result.detail)
 	assert_str(result.detail).is_equal(BuildResult.REASON_TEXT[BuildResult.Reason.OVERLAP])
+	assert_int((result.detail_args["inner"] as BuildResult).reason).is_equal(
+		BuildResult.Reason.OVERLAP
+	)
 	_assert_refused_unchanged(result, BuildResult.Reason.MOVE_NO_FIT)
 
 

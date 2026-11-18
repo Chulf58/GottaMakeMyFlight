@@ -99,6 +99,7 @@ func test_a_second_gate_round_the_corner_from_another_is_refused() -> void:
 	print("corner desk: %s (%s)" % [refused.reason_text(), refused.detail])
 	assert_int(refused.reason).is_equal(BuildResult.Reason.GATE_STAND_OVERLAP)
 	assert_str(refused.detail).is_equal("gate A is too close")
+	assert_dict(refused.detail_args).is_equal({"gate": "A"})
 	assert_array(_gates.gate_ids()).is_equal(["A"])
 	# Control: a west gate low in the shell is clear of gate A.
 	var west := _add_exit(WEST_EXIT, BuildGrid.Side.WEST, 3)

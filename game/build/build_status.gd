@@ -40,7 +40,7 @@ static func show_status(mode: BuildMode, result: BuildResult) -> void:
 	if mode.tool == BuildMode.Tool.BELT:
 		var text := BuildWords.status(BuildMode.BELT_HINT)
 		if mode._area.active and mode._belt_plan != null:
-			text = "Belt %d cells" % mode._belt_plan.cells.size()
+			text = BuildWords.belt_cells(mode._belt_plan.cells.size())
 		if result != null and not result.ok:
 			text += "  " + result.reason_text()
 		mode._set_status(text)
@@ -56,7 +56,7 @@ static func show_status(mode: BuildMode, result: BuildResult) -> void:
 	var refused := result != null and not result.ok
 	# The facing is for an item that can be placed; a refusal shows its reason alone.
 	if BuildMode.tool_object(mode.tool) != &"" and not refused:
-		text = "Facing auto" if mode._facing_is_auto() else "Facing %d" % mode.facing
+		text = BuildWords.facing_text(mode._facing_is_auto(), mode.facing)
 	if refused:
 		var reason := result.reason_text()
 		if BuildMode.DOOR_NAMES.has(mode.tool) and BuildMode.DOOR_HINTS.has(result.reason):
