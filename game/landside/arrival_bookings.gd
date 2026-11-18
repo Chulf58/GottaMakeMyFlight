@@ -67,7 +67,8 @@ func bind(sim: PassengerSim, spawn: Callable) -> void:
 ## the sim RNG, each party's arrival type drawn with `shares`
 ## (ArrivalTypes.shares_for the flight's contract). With `first_at_once`
 ## (FirstParty) the first party's vehicle enters the road now and gets out on
-## time on a free road, whatever time it drew.
+## time on a free road, whatever time it drew, and the rest draw after its
+## drive so none boards on the opening tick.
 func schedule(
 	flight_id: String, count: int, shares: Array[int] = ArrivalTypes.SHARES, first_at_once := false
 ) -> void:
@@ -82,14 +83,16 @@ func schedule(
 		if kind == LandsideVehicle.Kind.CAR and rng.randi_range(0, 99) < PARK_SHARE:
 			intent = LandsideVehicle.Intent.PARK
 		var arrival := ArrivalTypes.draw(rng, shares)
-		var span := ArrivalTypes.window(arrival, _sim.flights, flight_id, _sim.clock.tick)
+		var lead := _sim.landside.lead_ticks(intent)
+		var earliest := _sim.clock.tick + lead if first_at_once else _sim.clock.tick
+		var span := ArrivalTypes.window(arrival, _sim.flights, flight_id, earliest)
 		# The party gets out one at a time (LandsideSim.RELEASE_GAP_TICKS apart), so
 		# its last member is out by the window's end (the drawn time is clamped, so
 		# the sim RNG draws stay as they were).
 		var stagger := (size - 1) * LandsideSim.RELEASE_GAP_TICKS
 		var at := mini(rng.randi_range(span.x, span.y), maxi(span.x, span.y - stagger))
 		if first_at_once and left == count:
-			at = _sim.clock.tick + _sim.landside.lead_ticks(intent)
+			at = _sim.clock.tick + lead
 		var party := _next_id
 		for i in size:
 			var b := ArrivalBooking.new()

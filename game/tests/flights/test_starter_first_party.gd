@@ -99,3 +99,27 @@ func test_the_first_party_makes_the_starter_flight() -> void:
 		assert_str(_outcomes.get(row[0], "none")).override_failure_message(str(row)).is_equal(
 			"made"
 		)
+
+
+func test_all_relaxed_with_first_at_once_keeps_later_parties_off_the_opening_tick() -> void:
+	var w := LandsideTestWorld.make(null, FlightSim.schedule_starts(0), 1)
+	var shares: Array[int] = [0, 0, 100]
+	w.sim.arrivals.schedule(PassengerTestWorld.FLIGHT, 24, shares, true)
+	w.sim.arrivals.step()
+	var first_party := w.sim.arrivals.get_booking(1).party
+	var first_aboard := 0
+	var others_aboard := 0
+	var earliest_other_start := 1 << 30
+	for id in w.sim.arrivals.booking_ids():
+		var b := w.sim.arrivals.get_booking(id)
+		if b.party == first_party:
+			first_aboard += int(b.vehicle != 0)
+		else:
+			earliest_other_start = mini(
+				earliest_other_start, b.unload_tick - w.landside.lead_ticks(b.intent)
+			)
+			others_aboard += int(b.vehicle != 0)
+	w.free_all()
+	assert_int(first_aboard).is_greater(0)
+	assert_int(earliest_other_start).is_greater(0)
+	assert_int(others_aboard).is_equal(0)
