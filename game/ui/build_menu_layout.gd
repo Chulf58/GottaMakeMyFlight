@@ -8,6 +8,9 @@ extends RefCounted
 
 ## The coin before the money amount.
 const COIN_ICON := "res://assets/ui/icons/coin.svg"
+## The coin's side and the gap between it and the amount.
+const COIN_SIDE := HudLayout.CHIP_H - 4
+const COIN_GAP := 6
 
 static var _words := Words.new()
 
@@ -249,21 +252,24 @@ static func build_money(menu: BuildMenu) -> void:
 	menu._money.text = BuildMenu.MONEY_TEXT
 	menu._money.theme_type_variation = &"HudMoney"
 	menu._money.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	# A coin stands where the word "Money" was, so the slot has nothing to translate.
-	var row := HBoxContainer.new()
-	row.name = "MoneyRow"
-	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# A coin stands where the word "Money" was, so the slot has nothing to translate. The
+	# coin and the amount are both direct children of the card (the card is the amount's
+	# parent, and it keeps its own height and margin); the amount's left padding clears
+	# the coin.
+	var pad := StyleBoxEmpty.new()
+	pad.content_margin_left = COIN_SIDE + COIN_GAP
+	menu._money.add_theme_stylebox_override("normal", pad)
 	var coin := TextureRect.new()
 	coin.name = "MoneyIcon"
 	coin.texture = load(COIN_ICON)
-	coin.custom_minimum_size = Vector2(HudLayout.CHIP_H - 4, HudLayout.CHIP_H - 4)
+	coin.custom_minimum_size = Vector2(COIN_SIDE, COIN_SIDE)
 	coin.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	coin.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	coin.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	coin.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	coin.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_child(coin)
-	row.add_child(menu._money)
-	panel.add_child(row)
+	panel.add_child(menu._money)
+	panel.add_child(coin)
 
 
 ## A bar button's icon and its name in the tooltip (BarIcons.dress, which keys
