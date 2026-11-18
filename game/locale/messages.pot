@@ -5724,3 +5724,27 @@ msgstr ""
 #: ui/save_list.gd
 msgid "Autosave {number}"
 msgstr ""
+
+#: build/unlock_families.gd
+msgid "Food: hungry passengers lose mood. A cafe feeds them."
+msgstr ""
+
+#: build/unlock_families.gd
+msgid "Security: more lanes mean shorter queues at the checkpoint."
+msgstr ""
+
+#: build/unlock_families.gd
+msgid "Baggage: belts carry checked bags. A late bag misses its flight."
+msgstr ""
+
+#: build/unlock_families.gd
+msgid "Comfort: seats and lounges calm passengers who wait."
+msgstr ""
+
+#: build/unlock_families.gd
+msgid "Runway: a longer runway takes bigger planes."
+msgstr ""
+
+#: build/unlock_families.gd
+msgid "Also new: {pieces}."
+msgstr ""

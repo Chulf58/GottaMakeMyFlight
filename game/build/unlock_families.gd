@@ -15,17 +15,10 @@ const RUNWAY := &"runway"
 const OTHER := &"other"
 ## The order the lines are shown in.
 const ORDER := [FOOD, SECURITY, BAGGAGE, COMFORT, RUNWAY, OTHER]
-## What each family is for and why to build it now; "other" lists its pieces.
-const LINES := {
-	FOOD: "Food: hungry passengers lose mood. A cafe feeds them.",
-	SECURITY: "Security: more lanes mean shorter queues at the checkpoint.",
-	BAGGAGE: "Baggage: belts carry checked bags. A late bag misses its flight.",
-	COMFORT: "Comfort: seats and lounges calm passengers who wait.",
-	RUNWAY: "Runway: a longer runway takes bigger planes.",
-	OTHER: "Also new: %s.",
-}
 ## How many pieces the "other" line names.
 const OTHER_NAMES := 5
+## The context of the list separator, shared with every other list of names.
+const LIST_SEPARATOR := "list separator"
 const FAMILY_OF := {
 	BuildMode.Tool.CAFE_ROOM: FOOD,
 	BuildMode.Tool.COUNTER: FOOD,
@@ -95,24 +88,49 @@ static func grouped(tiers: Array) -> Dictionary:
 	return ordered
 
 
-## One line per family the listed `tiers` bring.
+## One line per family the listed `tiers` bring, in the player's language.
 static func lines(tiers: Array) -> Array[String]:
 	var out: Array[String] = []
+	var words := Words.new()
 	var groups := grouped(tiers)
 	for family: StringName in groups:
+		var pieces := ""
 		if family == OTHER:
-			out.append(LINES[OTHER] % ", ".join(_names(groups[family])))
-		else:
-			out.append(LINES[family])
+			pieces = TranslationServer.translate(", ", LIST_SEPARATOR).join(_names(groups[family]))
+		out.append(words.line(family, pieces))
 	return out
 
 
+## The first OTHER_NAMES card names of `tools`, as the build menu shows them
+## (translated, and never case-changed, so a language keeps its own casing).
 static func _names(tools: Array) -> Array[String]:
 	var names: Array[String] = []
 	for tool: BuildMode.Tool in tools:
 		var card := BuildMenuCatalog.item(tool)
-		if not card.is_empty() and not names.has(String(card[0]).to_lower()):
-			names.append(String(card[0]).to_lower())
+		if card.is_empty():
+			continue
+		var shown := BuildMenuCatalog.shown(String(card[0]))
+		if not names.has(shown):
+			names.append(shown)
 		if names.size() >= OTHER_NAMES:
 			break
 	return names
+
+
+## tr() is an instance method, so the static functions of this file ask a Words.
+class Words:
+	extends RefCounted
+
+	## What each family is for and why to build it now; "other" names its
+	## `pieces`, a list of card names.
+	func line(family: StringName, pieces: String) -> String:
+		var texts := {
+			FOOD: tr("Food: hungry passengers lose mood. A cafe feeds them."),
+			SECURITY: tr("Security: more lanes mean shorter queues at the checkpoint."),
+			BAGGAGE: tr("Baggage: belts carry checked bags. A late bag misses its flight."),
+			COMFORT: tr("Comfort: seats and lounges calm passengers who wait."),
+			RUNWAY: tr("Runway: a longer runway takes bigger planes."),
+		}
+		if family == OTHER:
+			return tr("Also new: {pieces}.").format({"pieces": pieces})
+		return texts[family]
