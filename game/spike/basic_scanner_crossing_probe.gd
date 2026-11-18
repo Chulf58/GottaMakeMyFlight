@@ -70,6 +70,7 @@ const FloatCheck := preload("res://spike/carry_float_check.gd")
 const PlateSteps := preload("res://spike/carry_plate_steps.gd")
 const StarterFlight := preload("res://spike/starter_flight.gd")
 const CrossingBodies := preload("res://spike/crossing_bodies.gd")
+const GripSweep := preload("res://spike/grip_sweep.gd")
 const OUT_REL := "res://../tools/blender/out/security-booth"
 const CLOSE_OUT_REL := "res://../tools/blender/out/carry-selfclip"
 const REACH_OUT_REL := "res://../tools/blender/out/scanner_reach"
@@ -661,7 +662,7 @@ func _lead_plate_scan() -> void:
 	for id in _sim.passenger_ids():
 		var body := _views.node_for(id)
 		var p := _sim.get_passenger(id)
-		if body == null or p == null or not body.is_visible_in_tree():
+		if body == null or p == null or not body.is_visible_in_tree() or GripSweep.sweeps(id):
 			continue
 		var kinds: Array = props.props_of(id)["kinds"]
 		for i in kinds.size():
@@ -740,6 +741,8 @@ func _on_tick(_tick: int) -> void:
 		return
 	if _lane_mode and PutinSweep.scan(self):
 		return
+	if GripSweep.scan(self):
+		return
 	if not _plate_task and _hold_frame < 0 and _putin_due():
 		return
 	if CaseTurnPlates.scan(self) or _plate_task or _hold_frame >= 0 or _returner_due():
@@ -747,6 +750,9 @@ func _on_tick(_tick: int) -> void:
 	var props := _views.carry_on_props()
 	var lead_open := _lane_mode or _move_plated.size() >= MOVE_PLATES.size()
 	for id in _sim.passenger_ids():
+		# A passenger swept (--grip-sweep=) has its moves stepped there instead.
+		if GripSweep.sweeps(id):
+			continue
 		var kinds: Array = props.props_of(id)["kinds"]
 		var p := _sim.get_passenger(id)
 		for i in kinds.size():

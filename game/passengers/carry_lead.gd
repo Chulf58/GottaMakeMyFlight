@@ -1024,6 +1024,16 @@ static func plan(
 	# (FLOOR_PALM_FADE): the hand and the point the case is placed by both go up.
 	# So is a roller off a stall's floor over its bar (stall_bar_palm()).
 	var palm := floor_palm(t) if floor_case else 0.0
+	if floor_case:
+		# Only the part of the palm the end's own held point does not give yet: a
+		# front carry holds the case FRONT_PALM_M over its handle, which the grip
+		# takes on over the carry (held_at above), and on top of the whole palm
+		# it went 0.071 to 0.086 m off the handle face (GRIP_ON 0.07; crossing
+		# probe --lane, seed 1106001, passengers 5 and 6 at the repack berth,
+		# board a365cb0b). A side carry's point (the edge) is under the handle's
+		# top, so it gives none and the palm is whole.
+		var end_palm := maxf(anchor_to.y - CarryOnProps.bag_box(bag["kind"]).end.y, 0.0)
+		palm = maxf(palm - t * end_palm * float(body["scale"]), 0.0)
 	if stall and roller and from_end == End.REST and to_end == End.HELD:
 		palm = stall_bar_palm(t)
 	held_at += on_path.basis.inverse() * (Vector3.UP * palm)

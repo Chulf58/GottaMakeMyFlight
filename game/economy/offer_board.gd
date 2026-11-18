@@ -253,6 +253,7 @@ func accept(id: String, sim: FlightSim) -> bool:
 	if not sim.accept_contract(terms_of(_offers[index])):
 		return false
 	_offers[index]["status"] = ACCEPTED
+	QuitLog.note("offer_accepted")
 	changed.emit()
 	return true
 

@@ -46,6 +46,18 @@ const STUCK_TICKS := int(10.0 * SimClock.TICK_RATE)
 ## A live passenger with stuck NONE and no movement for this long is hung.
 const HUNG_TICKS := 600
 const SPEED := 3
+## Keys of _breakdown() always printed, grower or not.
+const WATCH: Array[String] = [
+	"pool:PassengerViews free nodes",
+	"pool:PassengerViews nodes in use",
+	"pool:PassengerViews direct children",
+	"cont:PassengerSim._passengers",
+	"cont:PassengerSim._by_id",
+	"cont:FlightSim._plans.planner._bookings",
+	"cont:FlightSim._trial_plans.planner._bookings",
+	"cont:OfferDesk.board._offers",
+	"cont:AlertStack._board._history",
+]
 ## Frames the clock may stay still before the probe calls it stalled.
 const STALL_FRAMES := 200
 
@@ -69,6 +81,8 @@ var _end_tick := 0
 var _next_sample := 0
 var _first_sizes: Dictionary = {}
 var _last_sizes: Dictionary = {}
+## One _breakdown() per game day end.
+var _day_snaps: Array[Dictionary] = []
 var _hours := 0
 var _max_passengers := 0
 var _frame_ms_sum := 0.0
@@ -281,9 +295,11 @@ func _hung_passengers() -> Array[String]:
 
 func _day_end() -> void:
 	_day_ends += 1
+	var day_format := "PROBE day_end=%d tick=%d mem_mb=%.1f objects=%d nodes=%d orphans=%d "
+	day_format += "resources=%d passengers=%d flights_made=%d"
 	print(
 		(
-			"PROBE day_end=%d tick=%d mem_mb=%.1f objects=%d nodes=%d orphans=%d"
+			day_format
 			% [
 				_day_ends,
 				_clock.tick,
@@ -291,9 +307,108 @@ func _day_end() -> void:
 				Performance.get_monitor(Performance.OBJECT_COUNT),
 				Performance.get_monitor(Performance.OBJECT_NODE_COUNT),
 				Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT),
+				Performance.get_monitor(Performance.OBJECT_RESOURCE_COUNT),
+				_sim.active_count(),
+				_flights_made,
 			]
 		)
 	)
+	_day_snaps.append(_breakdown())
+
+
+## One snapshot of what holds the tree's nodes and the sim's history, keyed by
+## kind: "cls:<script or engine class>" is a node count by class, "sub:<path>"
+## is the descendant count under each direct child of the world root (and of
+## the children of the HUD/view containers one level down), "cont:<Node.prop>"
+## is a script container's size.
+func _breakdown() -> Dictionary:
+	var snap := {}
+	var stack: Array[Node] = [root]
+	while not stack.is_empty():
+		var node: Node = stack.pop_back()
+		var script: Script = node.get_script()
+		var cls := String(script.get_global_name()) if script != null else ""
+		if cls == "":
+			cls = node.get_class()
+		snap["cls:" + cls] = int(snap.get("cls:" + cls, 0)) + 1
+		for child in node.get_children(true):
+			stack.append(child)
+	for child in _main.get_children(true):
+		snap["sub:" + String(child.name)] = _descendants(child)
+		for grand in child.get_children(true):
+			if grand.get_child_count(true) > 0:
+				snap["sub:%s/%s" % [child.name, grand.name]] = _descendants(grand)
+	var views: Node = _main.get_node("PassengerViews")
+	var pooled := 0
+	for free: Array in views.get("_pool"):
+		pooled += free.size()
+	snap["pool:PassengerViews free nodes"] = pooled
+	snap["pool:PassengerViews nodes in use"] = (views.get("_nodes") as Dictionary).size()
+	snap["pool:PassengerViews direct children"] = views.get_child_count(true)
+	var sizes := _container_sizes()
+	for key in sizes:
+		snap["cont:" + String(key)] = sizes[key]
+	return snap
+
+
+func _descendants(node: Node) -> int:
+	var total := 0
+	for child in node.get_children(true):
+		total += 1 + _descendants(child)
+	return total
+
+
+## Prints the TOP kinds that grew most from the first day end to the last, with
+## the value at day 1, the middle day and the last day (all days after).
+func _print_breakdown() -> void:
+	if _day_snaps.size() < 2:
+		return
+	var first: Dictionary = _day_snaps[0]
+	var last: Dictionary = _day_snaps[_day_snaps.size() - 1]
+	var rows: Array = []
+	var keys := {}
+	for key in first:
+		keys[key] = true
+	for key in last:
+		keys[key] = true
+	for key in keys:
+		rows.append([int(last.get(key, 0)) - int(first.get(key, 0)), key])
+	rows.sort_custom(func(a: Array, b: Array) -> bool: return a[0] > b[0])
+	var days := ""
+	for i in _day_snaps.size():
+		days += " d%d" % (i + 1)
+	print("PROBE breakdown top %d net growers (values per day:%s)" % [TOP, days])
+	_print_rows(rows, false)
+	print("PROBE breakdown top %d never-shrinking growers (leak candidates if flat load)" % TOP)
+	_print_rows(rows, true)
+	print("PROBE breakdown watch list (the sim-side history holders and the view pool)")
+	for key in WATCH:
+		var series := ""
+		for snap in _day_snaps:
+			series += " %d" % int(snap.get(key, 0))
+		print("PROBE   watch %s :%s" % [key, series])
+
+
+## Prints up to TOP rows; with `steady` only those whose per-day series never
+## drops, since a container that shrinks again is churn, not accumulation.
+func _print_rows(rows: Array, steady: bool) -> void:
+	var shown := 0
+	for row in rows:
+		var key: String = row[1]
+		var series := ""
+		var shrank := false
+		var before := -1
+		for snap in _day_snaps:
+			var value := int(snap.get(key, 0))
+			shrank = shrank or value < before
+			before = value
+			series += " %d" % value
+		if steady and (shrank or row[0] <= 0):
+			continue
+		print("PROBE   grow %+d %s :%s" % [row[0], key, series])
+		shown += 1
+		if shown >= TOP:
+			return
 
 
 func _accept_offers() -> void:
@@ -412,6 +527,7 @@ func _report() -> void:
 	for i in mini(TOP, growth.size()):
 		line += " %s+%d" % [growth[i][1], growth[i][0]]
 	print(line)
+	_print_breakdown()
 	var ticks := _clock.tick - _start_tick
 	var hung := _hung_passengers()
 	for entry in hung:
