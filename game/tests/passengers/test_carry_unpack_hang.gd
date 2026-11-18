@@ -44,3 +44,79 @@ func test_the_swing_eases_out_over_the_hang_ticks() -> void:
 	assert_float(more).is_less(1.0)
 	var hang := ceili(CarryArmPose.UNPACK_HANG_TICKS)
 	assert_float(CarryArmPose.unpack_still({"unpack_done": hang}, 501.0)).is_equal(1.0)
+
+
+## A lifted roller's put-in record: from the right hand (carried by hand) into
+## the tray, its plan holding it in hand 0 with lead weight `weight`.
+static func _put_in(weight: float, carry_from := SecurityLooks.Carry.HAND) -> Dictionary:
+	return {
+		"was": SecurityLooks.Home.HAND * 4,
+		"carry_from": carry_from,
+		"lead": {"holder": 0, "weights": [weight, 0.0]},
+	}
+
+
+## Set down from a hand carry, the hand keeps its HAND carry pose (so its target
+## at the move's start is the carry pose's grip, not the clip's hand) until the
+## plan weighs it fully on its target; then the plan's target alone. Controls:
+## none once the bag is home in the tray, none from a pull or a worn carry, none
+## for the other hand, none before any plan.
+func test_a_hand_set_down_keeps_the_carry_pose_until_the_lead_takes_over() -> void:
+	var tray := SecurityLooks.Home.TRAY
+	assert_bool(CarryArmPose.leaving_hand(_put_in(0.0), tray, 0, 0.01)).is_true()
+	assert_bool(CarryArmPose.leaving_hand(_put_in(0.6), tray, 0, 0.2)).is_true()
+	assert_bool(CarryArmPose.leaving_hand(_put_in(1.0), tray, 0, 0.3)).is_false()
+	assert_bool(CarryArmPose.leaving_hand(_put_in(0.0), tray, 0, 1.0)).is_false()
+	assert_bool(CarryArmPose.leaving_hand(_put_in(0.0), tray, 1, 0.01)).is_false()
+	var pulled := _put_in(0.0, SecurityLooks.Carry.PULL)
+	assert_bool(CarryArmPose.leaving_hand(pulled, tray, 0, 0.01)).is_false()
+	var no_plan := _put_in(0.0)
+	no_plan.erase("lead")
+	assert_bool(CarryArmPose.leaving_hand(no_plan, tray, 0, 0.01)).is_false()
+	var from_tray := _put_in(0.0)
+	from_tray["was"] = tray * 4
+	assert_bool(CarryArmPose.leaving_hand(from_tray, SecurityLooks.Home.HAND, 0, 0.01)).is_false()
+
+
+## The carry pose's hand at the start is where the plan aims it: a lifted
+## roller's put-in plan at k just above 0 aims the hand at the handle where the
+## bag hung (plan data), weight still under 1, so the carry pose holds it.
+func test_the_put_in_plan_starts_at_the_hung_handle_with_the_carry_pose_on() -> void:
+	var start := Transform3D(Basis(Vector3.RIGHT, -PI / 2.0), Vector3(-0.3, 0.65, 0.1))
+	var bag := {
+		"kind": SecurityLooks.Kind.ROLLER,
+		"home": SecurityLooks.Home.TRAY * 4,
+		"carry": SecurityLooks.Carry.PULL,
+		"carry_from": SecurityLooks.Carry.HAND,
+		"was": SecurityLooks.Home.HAND * 4,
+		"from": start,
+		"anchor_from": CarryOnProps.ROLLER_HANDLE,
+		"start_body": Transform3D(),
+	}
+	var body := {
+		"hand": 0,
+		"grips": [Vector3(-0.25, 1.2, 0.3), Vector3(0.25, 1.2, 0.3)],
+		"shoulders_y": [1.4, 1.4],
+		"bar_z": 0.32,
+		"scale": 1.0,
+		"strap_top": Vector3.ZERO,
+	}
+	var flags := {"hand": 0, "clear": CarryOnProps.TRANSFER_CLEAR_M, "yaw": 0.0}
+	var want := Transform3D(Basis(), Vector3(-0.9, 0.75, 0.4))
+	var plan := CarryLead.plan(bag, 0.01, start, want, Transform3D(), flags, body)
+	bag["lead"] = plan
+	print(
+		(
+			"k 0.01 holder %d weights %s target %s"
+			% [plan["holder"], plan["weights"], plan["targets"][0]]
+		)
+	)
+	assert_int(plan["holder"]).is_equal(0)
+	var handle := start * CarryOnProps.ROLLER_HANDLE
+	# Within the 3 cm the path has moved by k 0.01; the bar is 25 cm off.
+	var bar := start * Vector3(0.0, CarryOnProps.ROLLER_AXLE.y, 0.32)
+	assert_float((plan["targets"][0] as Vector3).distance_to(handle)).is_less(0.05)
+	assert_float((plan["targets"][0] as Vector3).distance_to(bar)).is_greater(0.15)
+	assert_vector(plan["anchor"]).is_equal_approx(CarryOnProps.ROLLER_HANDLE, Vector3.ONE * 1e-4)
+	assert_float(plan["weights"][0]).is_less(1.0)
+	assert_bool(CarryArmPose.leaving_hand(bag, SecurityLooks.Home.TRAY, 0, 0.01)).is_true()

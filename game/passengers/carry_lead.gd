@@ -860,7 +860,14 @@ static func plan(
 	# stay in, so it is held where the hand had it, BAR_PALM_M off the bar).
 	var roller: bool = bag["kind"] == SecurityLooks.Kind.ROLLER
 	var anchor_from: Vector3 = loose
-	if from_end == End.HELD and (not roller or flags.get("in_stall", false)):
+	# A roller lifted by its carry handle (carried as the hard case) is held
+	# there as it goes down into a tray or onto the floor, not by its bar: from
+	# the bar the hand went 25 cm up the rods as the move began, and the bag was
+	# placed by its bar at the hand still at the handle (board c2bb3bc0).
+	var lifted_down: bool = (
+		roller and bag["carry_from"] == SecurityLooks.Carry.HAND and to_end == End.REST
+	)
+	if from_end == End.HELD and (not roller or flags.get("in_stall", false) or lifted_down):
 		anchor_from = bag["anchor_from"]
 	# Lying in a tray or on the floor a roller is taken (and left) by its carry
 	# handle on top, not by its bar down at the rod line (the forearm went

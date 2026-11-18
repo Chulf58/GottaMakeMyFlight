@@ -97,6 +97,8 @@ static func pose_arms(props: CarryOnProps, held: Dictionary, body: Node3D, now: 
 		var bag: Dictionary = held["bags"][i]
 		var k := CarryPlace.progress_of(bag, now)
 		var hand: int = held["hands"][i]
+		if leaving_hand(bag, homes[i], hand, k):
+			modes[hand] = Arm.HAND
 		match bag["carry"]:
 			SecurityLooks.Carry.HAND:
 				if homes[i] == SecurityLooks.Home.HAND:
@@ -176,6 +178,24 @@ static func unpack_done(p: Passenger) -> int:
 	if p.stage != Passenger.Stage.SECURITY or p.security_phase != SecurityRuntime.Phase.UNPACK:
 		return -1
 	return SecurityRuntime.work_for(SecurityRuntime.Phase.UNPACK, p) - p.security_work
+
+
+## Whether bag record `bag` (home now `home`, in hand `hand`, `k` through its
+## move) is set down from a hand carry and that hand keeps its HAND carry pose:
+## until the move's plan (CarryLead.plan(), "lead") weighs the hand fully on
+## its target, as CarryLead.phase() eases it in "from the carry pose". With no
+## pose the arm took the walk or run clip's, and a runner's roller put into a
+## lane tray jumped to its chest at the arch's left post (crossing probe --lane
+## --sweep=29, seed 1106001, board c2bb3bc0). From the plan, never the hand drawn.
+static func leaving_hand(bag: Dictionary, home: int, hand: int, k: float) -> bool:
+	if home == SecurityLooks.Home.HAND or k >= 1.0 or not bag.has("lead"):
+		return false
+	if int(bag.get("was", -1)) / 4 != SecurityLooks.Home.HAND:
+		return false
+	if bag.get("carry_from", -1) != SecurityLooks.Carry.HAND:
+		return false
+	var plan: Dictionary = bag["lead"]
+	return plan["holder"] == hand and float(plan["weights"][hand]) < 1.0
 
 
 ## How far (0 to 1) the arms' kept swing has gone at sim time `now` for a
