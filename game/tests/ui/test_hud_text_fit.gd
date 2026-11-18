@@ -174,11 +174,68 @@ func test_every_card_fits_at_plus_forty_percent() -> void:
 				var where := "tool %d '%s'" % [tool, label.text]
 				assert_int(label.get_line_count()).override_failure_message(where).is_less_equal(2)
 				wrapped += 1 if label.get_line_count() == 2 else 0
-				shrunk += 1 if label.get_theme_font_size(&"font_size") < 14 else 0
+				var small := label.get_theme_font_size(&"font_size") < 14
+				shrunk += 1 if small else 0
+				_assert_shrink_matches_need(label, small, where)
 			_assert_inside(card)
 	print("cards=%d wrapped=%d shrunk=%d" % [cards, wrapped, shrunk])
 	assert_int(cards).is_greater(60)
 	assert_int(wrapped).is_greater(0)
+
+
+## What the label draws: its text through its own auto-translate switch. The
+## character count of the shaped line proves this is the text the Label shows.
+func _shown(label: Label) -> String:
+	var shown := label.atr(label.text)
+	assert_int(label.get_total_character_count()).override_failure_message(shown).is_equal(
+		shown.length()
+	)
+	return shown
+
+
+## One 12 px label is there only because its shown text needs more than two lines
+## at 14 px or holds a word wider than the slot; a 14 px label fits two lines with
+## no over-wide word. Measured on the text the label shows, in the label's own width.
+func _assert_shrink_matches_need(label: Label, small: bool, where: String) -> void:
+	var shown := _shown(label)
+	var font := label.get_theme_font(&"font")
+	var width := label.size.x
+	var lines := HudLayout.line_count(shown, font, HudLayout.CAPTION, width)
+	var widest := HudLayout.widest_word(shown, font, HudLayout.CAPTION)
+	var needed := lines > 2 or widest > width
+	var detail := "%s shown '%s' at 14: lines=%d widest=%.1f slot=%.1f"
+	detail = detail % [where, shown, lines, widest, width]
+	assert_bool(small).override_failure_message(detail).is_equal(needed)
+
+
+## A line that is already through tr() (one expansion, auto-translate off) and fits
+## two lines at 14 px stays at 14 px, though a second expansion would not fit. The
+## count is chosen so the second expansion needs a third line: the case a fit that
+## translates the stored text again would shrink.
+func test_an_already_translated_line_that_fits_stays_at_the_caption_size() -> void:
+	await _build_menu(true)
+	_menu.press_category(BuildMenuCatalog.category_of(BuildMode.Tool.DESK))
+	await _frames(3)
+	var card := _menu.card(BuildMode.Tool.DESK)
+	var label := _labels(card)[0]
+	var font := label.get_theme_font(&"font")
+	var width := label.size.x
+	var shown := ""
+	for count in range(2, 9):
+		var once := tr(_words(count))
+		var twice := tr(once)
+		if (
+			HudLayout.line_count(once, font, 14, width) == 2
+			and HudLayout.line_count(twice, font, 14, width) > 2
+		):
+			shown = once
+	print("shown=[%s] width=%.0f" % [shown, width])
+	assert_str(shown).is_not_empty()
+	label.text = shown
+	await _frames(3)
+	assert_int(label.get_line_count()).is_equal(2)
+	assert_int(label.get_theme_font_size(&"font_size")).is_equal(14)
+	_assert_shrink_matches_need(label, false, "regression")
 
 
 ## The card keeps its width and the tray keeps its height (the row stretches the

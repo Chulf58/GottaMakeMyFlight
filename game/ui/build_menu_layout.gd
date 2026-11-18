@@ -221,6 +221,8 @@ static func fit_card(button: Button) -> void:
 			continue
 		var label := child as Label
 		var font := label.get_theme_font(&"font")
+		# atr() is the text the Label draws (it honours auto_translate_mode), so the
+		# fit measures what is shown, whether it is expanded once or twice.
 		var text := label.atr(label.text)
 		var size := HudLayout.fit_size(text, font, HudLayout.CAPTION, width, CARD_LINES)
 		if label.get_theme_font_size(&"font_size") != size:
