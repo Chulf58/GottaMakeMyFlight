@@ -23,6 +23,10 @@ const CONTINUE_KEY := "Space"
 const SPEED_KEYS_TEXT := "Shift+1/2/3"
 ## Sizes at a 1920x1080 screen.
 const BOX_SIZE := Vector2(1060.0, 300.0)
+## The tallest the box grows to fit its text; a longer body scrolls inside it.
+## At 1080p its top then sits 120 px below the screen top, so the nameplate
+## above it stays clear of the edge.
+const MAX_BOX_H := 640.0
 const PORTRAIT_SIZE := 520.0
 ## How much of the portrait's width lies over the box's left edge.
 const PORTRAIT_OVERLAP := 210.0
@@ -40,6 +44,13 @@ const BOX_BOTTOM := (
 ## right of the portrait figure (the PNG's right part is transparent).
 const TEXT_LEFT := 128.0
 const NAMEPLATE_SIZE := Vector2(380.0, 74.0)
+## How far the nameplate stands up out of the box's top edge.
+const NAMEPLATE_RISE := NAMEPLATE_SIZE.y - 22.0
+## The body's margins inside the box. Its bottom margin holds the button row
+## with a gap, so the buttons always sit below the last line.
+const BODY_TOP := 48.0
+const BODY_RIGHT := 30.0
+const BODY_BOTTOM := 72.0
 const GROUP_W := PORTRAIT_SIZE - PORTRAIT_OVERLAP + BOX_SIZE.x
 const DIM_COLOR := Color(0.03, 0.04, 0.06, 0.45)
 
@@ -50,6 +61,7 @@ static var shown_this_session := false
 var _done := false
 var _title_text := ""
 var _body_text := ""
+## The height the caller asked for: the box is never shorter.
 var _box_height := BOX_SIZE.y
 var _offer := false
 ## Holds the portrait, box and nameplate at their 1080p layout; _place moves it
@@ -58,6 +70,7 @@ var _group := Control.new()
 var _box := Panel.new()
 var _nameplate := PanelContainer.new()
 var _portrait := TextureRect.new()
+var _body_scroll := ScrollContainer.new()
 var _body := Label.new()
 var _continue := Button.new()
 var _accept: Button
@@ -73,7 +86,9 @@ static func should_show(already_shown: bool, in_current_scene: bool, playtest_on
 
 ## The first-day intro by default; UnlockGuide passes its own title, body and a
 ## taller box for a new tier's dialog, which reuses the same portrait, box and
-## Continue. The box grows upward from its fixed bottom edge. `offer` swaps
+## Continue. The box grows upward from its fixed bottom edge: `box_height` is
+## its least height, and a longer text grows it up to MAX_BOX_H, past which the
+## text scrolls (board T9). `offer` swaps
 ## Continue for Accept and Decline. An empty title or body is the intro's own
 ## text, in the player's words.
 func _init(title_text := "", body_text := "", box_height := BOX_SIZE.y, offer := false) -> void:
@@ -107,15 +122,14 @@ func _init(title_text := "", body_text := "", box_height := BOX_SIZE.y, offer :=
 	_portrait.position = Vector2.ZERO
 	_portrait.size = Vector2.ONE * PORTRAIT_SIZE
 	_group.add_child(_portrait)
-	_box.position = Vector2(PORTRAIT_SIZE - PORTRAIT_OVERLAP, PORTRAIT_SIZE - _box_height)
-	_box.size = Vector2(BOX_SIZE.x, _box_height)
-	_nameplate.position = _box.position + Vector2(TEXT_LEFT - 20.0, 22.0 - NAMEPLATE_SIZE.y)
 	_nameplate.size = NAMEPLATE_SIZE
+	_set_box_height(_box_height)
 	_place()
 
 
 func _ready() -> void:
 	get_viewport().size_changed.connect(_place)
+	_fit_box()
 	_place()
 
 
@@ -172,11 +186,19 @@ func body_text() -> String:
 	return _body.text
 
 
+## True when the body text is taller than its area in the box, so it scrolls.
+func scrolls() -> bool:
+	return _body.size.y > _body_scroll.size.y + 0.5
+
+
 ## The on-screen rectangles of the box, nameplate, portrait and Continue button,
-## for probes that check the layout.
+## for probes that check the layout. "body" is the visible body area and "text"
+## the whole body text, which is taller than "body" when it scrolls.
 func part_rects() -> Dictionary:
 	return {
 		"box": _box.get_global_rect(),
+		"body": _body_scroll.get_global_rect(),
+		"text": _body.get_global_rect(),
 		"nameplate": _nameplate.get_global_rect(),
 		"portrait": _portrait.get_global_rect(),
 		"continue": _continue.get_global_rect(),
@@ -211,18 +233,24 @@ func _build_box() -> void:
 	inner.offset_bottom = -10.0
 	inner.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_box.add_child(inner)
+	# A long body scrolls inside the box once the box is at MAX_BOX_H.
+	_body_scroll.name = "BodyScroll"
+	_body_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_body_scroll.focus_mode = Control.FOCUS_NONE
+	_body_scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
+	# The portrait covers the box's left edge, so the text starts past it.
+	_body_scroll.offset_left = TEXT_LEFT
+	_body_scroll.offset_top = BODY_TOP
+	_body_scroll.offset_right = -BODY_RIGHT
+	_body_scroll.offset_bottom = -BODY_BOTTOM
+	_box.add_child(_body_scroll)
 	_body.name = "Body"
 	_body.text = _body_text
 	_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_body.theme_type_variation = &"IntroBody"
-	_body.set_anchors_preset(Control.PRESET_FULL_RECT)
-	# The portrait covers the box's left edge, so the text starts past it.
-	_body.offset_left = TEXT_LEFT
-	_body.offset_top = 48.0
-	_body.offset_right = -30.0
-	_body.offset_bottom = -58.0
+	_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_body.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_box.add_child(_body)
+	_body_scroll.add_child(_body)
 	_continue.name = "Continue"
 	_continue.text = tr("Continue ({key})").format({"key": CONTINUE_KEY})
 	_continue.focus_mode = Control.FOCUS_NONE
@@ -255,6 +283,23 @@ func _intro_body() -> String:
 	var clock := tr("The clock starts when you close this.")
 	var keys := {"pause": CONTINUE_KEY, "speed": SPEED_KEYS_TEXT}
 	return "\n".join(PackedStringArray([welcome, path.format(keys), clock]))
+
+
+## Sizes the box to its body text: never below the caller's height, never above
+## MAX_BOX_H. Called once the dialogue is in the tree, where the body has its
+## theme font and its text is translated.
+func _fit_box() -> void:
+	_body.size.x = BOX_SIZE.x - TEXT_LEFT - BODY_RIGHT
+	var wanted := _body.get_minimum_size().y + BODY_TOP + BODY_BOTTOM
+	_set_box_height(clampf(wanted, _box_height, maxf(_box_height, MAX_BOX_H)))
+
+
+## The box grows upward from its fixed bottom edge; the nameplate rides on its
+## top edge.
+func _set_box_height(height: float) -> void:
+	_box.position = Vector2(PORTRAIT_SIZE - PORTRAIT_OVERLAP, PORTRAIT_SIZE - height)
+	_box.size = Vector2(BOX_SIZE.x, height)
+	_nameplate.position = _box.position + Vector2(TEXT_LEFT - 20.0, -NAMEPLATE_RISE)
 
 
 ## A button in the box's bottom-right corner, `shift` pixels left of where
@@ -296,10 +341,12 @@ func _build_nameplate() -> void:
 ## Centres the portrait-plus-box group horizontally, with the box's bottom
 ## BOX_BOTTOM above the screen bottom (the portrait stands on the same line).
 ## On a screen narrower or shorter than the 1080p layout the group scales down;
-## BOX_BOTTOM stays in screen pixels, because BuildMenu does not scale.
+## BOX_BOTTOM stays in screen pixels, because BuildMenu does not scale. A box
+## grown above the portrait counts with the nameplate on its top edge.
 func _place() -> void:
 	var screen := get_viewport_rect().size if is_inside_tree() else Vector2(1920.0, 1080.0)
-	var fit := minf((screen.x - 32.0) / GROUP_W, (screen.y - BOX_BOTTOM - 20.0) / PORTRAIT_SIZE)
+	var tall := maxf(PORTRAIT_SIZE, _box.size.y + NAMEPLATE_RISE)
+	var fit := minf((screen.x - 32.0) / GROUP_W, (screen.y - BOX_BOTTOM - 20.0) / tall)
 	var group_scale := clampf(fit, 0.4, 1.0)
 	_group.scale = Vector2.ONE * group_scale
 	_group.position = Vector2(
