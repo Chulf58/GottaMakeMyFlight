@@ -85,13 +85,26 @@ var _watched: BuildGrid
 ## (BuildWords). SHORT_TEXT stays English: it is the key the tests compare.
 static func short_text(result: BuildResult) -> String:
 	if result.reason == BuildResult.Reason.DOOR_FRONT_BLOCKED and result.detail != "":
-		var blocker := result.detail.left(1).to_upper() + result.detail.substr(1)
-		var named := BuildWords.in_front(blocker)
-		if named.length() <= MAX_SHORT:
-			return named
+		var blocker := _blocker_name(result.detail)
+		if blocker != "":
+			var named := BuildWords.in_front(blocker)
+			if named.length() <= MAX_SHORT:
+				return named
 	if SHORT_TEXT.has(result.reason):
 		return BuildWords.short_refusal(SHORT_TEXT[result.reason])
 	return result.reason_text()
+
+
+## The blocker's catalog name in the player's words (DisplayWords.item), found by the
+## lower-case English name DoorPlacement puts in the detail, or "" for a name no piece
+## has. The catalog's own spelling gives the capital, so no translated text is
+## case-transformed and a raw English detail never reaches the card.
+static func _blocker_name(detail: String) -> String:
+	for id in BuildCatalog.ids():
+		var english := BuildCatalog.get_def(id).display_name
+		if english.to_lower() == detail:
+			return DisplayWords.item(english)
+	return ""
 
 
 func _ready() -> void:

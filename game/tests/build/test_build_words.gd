@@ -90,7 +90,12 @@ func test_every_refusal_is_translated_when_shown() -> void:
 	var detailed := _refusal(BuildResult.Reason.GATE_IN_USE, "gate A").reason_text()
 	print("refusal with a detail (pseudo): %s" % detailed)
 	assert_int(plain).is_equal(0)
-	assert_str(detailed).starts_with("[").contains("gate A")
+	# Only the reason is translated here. The detail (gate_desks, spur_trial, door_placement,
+	# template_paste, room_move) stays English until board item c1b2a404 (T12) translates
+	# each producer, so nothing asserts that part of the line.
+	assert_str(detailed).starts_with("[").contains(
+		BuildWords.refusal(BuildResult.REASON_TEXT[BuildResult.Reason.GATE_IN_USE])
+	)
 
 
 func test_the_gate_spacing_refusal_names_its_metres_in_one_sentence() -> void:
@@ -115,10 +120,19 @@ func test_every_ghost_reason_is_translated_and_english_keeps_its_key() -> void:
 			print("ghost not translated: %s -> %s" % [reason, shown])
 	var fallback := GhostReason.short_text(_refusal(BuildResult.Reason.NO_FLOOR))
 	var blocked := GhostReason.short_text(_refusal(BuildResult.Reason.DOOR_FRONT_BLOCKED, "bin"))
-	print("ghost fallback (pseudo): %s; blocked door: %s" % [fallback, blocked])
+	var unknown := GhostReason.short_text(_refusal(BuildResult.Reason.DOOR_FRONT_BLOCKED, "zzz"))
+	print(
+		"ghost fallback (pseudo): %s; blocked door: %s; unknown: %s" % [fallback, blocked, unknown]
+	)
 	assert_int(plain).is_equal(0)
 	assert_str(fallback).starts_with("[")
-	assert_str(blocked).starts_with("[").contains("Bin")
+	# The blocker's catalog name is translated (DisplayWords.item), never the raw English.
+	assert_str(blocked).starts_with("[").contains(DisplayWords.item("Bin"))
+	# A name no piece has is not shown raw: the card falls back to the translated generic line.
+	assert_str(unknown).is_equal(
+		BuildWords.short_refusal(GhostReason.SHORT_TEXT[BuildResult.Reason.DOOR_FRONT_BLOCKED])
+	)
+	assert_str(unknown).starts_with("[").not_contains("zzz")
 
 
 func test_a_blocked_door_names_its_blocker_in_english() -> void:

@@ -158,7 +158,10 @@ static func refused(why: Reason, blocker := 0) -> BuildResult:
 
 ## The refusal in the player's words (BuildWords). REASON_TEXT stays English:
 ## it is the key tests and the status line compare. detail is whatever the
-## refusing code put there, shown as it came.
+## refusing code put there, shown as it came: those producers (gate_desks,
+## spur_trial, door_placement, template_paste, room_move) still give English,
+## and translating each is board item c1b2a404 (T12). Only the reason is
+## translated until then.
 func reason_text() -> String:
 	var text := ""
 	if reason == Reason.GATE_STAND_OVERLAP:
