@@ -124,9 +124,11 @@ func test_full_game_default_leaves_tiers_land_incidents_and_day6_untouched() -> 
 	var end_card: DemoEndCard = auto_free(DemoEndCard.new())
 	end_card.clock = clock
 	port.add_child(end_card)
-	clock.tick = GameCalendar.day_start(DemoMode.MAX_DEMO_DAY, 0) - 1
+	var rollover := GameCalendar.day_start(DemoMode.MAX_DEMO_DAY, 0)
+	clock.tick = rollover - 1
 	clock.set_speed(3)
 	clock.advance(SimClock.STEP * 2.0)
+	assert_int(clock.tick).is_greater(rollover)
 	assert_bool(end_card.is_open()).is_false()
 	assert_bool(clock.paused).is_false()
 
@@ -166,6 +168,22 @@ func test_demo_caps_build_unlocks_at_tier_2_and_refuses_tier3_tier4_and_large_ru
 	assert_bool(ok).is_true()
 	assert_int(loaded.tier()).is_equal(DemoMode.MAX_PLAYABLE_TIER)
 	assert_bool(loaded.from_snapshot(loaded.to_snapshot())).is_true()
+
+	# BuildUnlocks.on_tick skips day checks once day >= DemoMode.MAX_DEMO_DAY.
+	var late_rating: AirportRating = auto_free(AirportRating.new())
+	var late_pax: PassengerSim = auto_free(PassengerSim.new())
+	var late_unlocks: BuildUnlocks = auto_free(BuildUnlocks.new())
+	late_unlocks.rating = late_rating
+	late_unlocks.passengers = late_pax
+	late_unlocks.manual = true
+	add_child(late_unlocks)
+	for i in 100:
+		late_rating.record_passenger(0, true, PassengerSim.MOOD_MAX)
+		late_pax.outcome.emit(i, true)
+	late_unlocks.on_tick(GameCalendar.day_start(DemoMode.MAX_DEMO_DAY, 0))
+	assert_int(late_unlocks.tier()).is_equal(BuildUnlocks.START_TIER)
+	late_unlocks.on_tick(GameCalendar.day_start(DemoMode.MAX_DEMO_DAY - 1, 0))
+	assert_int(late_unlocks.tier()).is_equal(DemoMode.MAX_PLAYABLE_TIER)
 
 
 func test_demo_build_menu_greys_tier3_teasers_hides_tier4_and_prunes_empty_pages() -> void:
@@ -334,6 +352,32 @@ func test_demo_incident_catalogue_permits_spill_fault_and_rush_only() -> void:
 	assert_int(int(counts.get(IncidentCatalogue.VIP, 0))).is_equal(0)
 	assert_int(int(counts.get(IncidentCatalogue.FAVOUR, 0))).is_equal(0)
 
+	# IncidentDirector ignores non-demo forced_kind and stops rolling on Day 6+.
+	var ref_world := PassengerTestWorld.reference_world(7311042)
+	ref_world.flights.open_airport()
+	assert_bool(ref_world.flights.accept_contract(TestFlightContracts.terms("AM", 480))).is_true()
+	var director: IncidentDirector = auto_free(IncidentDirector.new())
+	director.bind(ref_world.clock, ref_world.flights, ref_world.sim)
+	director.set_enabled(true)
+	var forbidden := [
+		IncidentCatalogue.VIP,
+		IncidentCatalogue.INSPECTOR,
+		IncidentCatalogue.FAVOUR,
+	]
+	for i in forbidden.size():
+		director.forced_kind = forbidden[i]
+		director.on_tick(GameCalendar.day_start(i + 1, 0))
+	for incident in director.incidents():
+		assert_bool(forbidden.has(incident["kind"])).is_false()
+	director.forced_kind = IncidentCatalogue.SPILL
+	director.on_tick(GameCalendar.day_start(4, 0))
+	assert_int(director.last_rolled_day()).is_equal(4)
+	assert_str(director.incidents().back()["kind"]).is_equal(IncidentCatalogue.SPILL)
+	for day in range(DemoMode.MAX_DEMO_DAY, DemoMode.MAX_DEMO_DAY + 3):
+		director.on_tick(GameCalendar.day_start(day, 0))
+	assert_int(director.last_rolled_day()).is_equal(4)
+	ref_world.free_all()
+
 
 func test_demo_end_card_pauses_synchronously_on_day5_rollover_and_handles_buttons() -> void:
 	DemoMode.set_override_for_test(true)
@@ -434,16 +478,37 @@ func test_main_scene_day6_autosave_and_reload_re_shows_demo_end_card_paused() ->
 	var flights := main.get_node("FlightSim") as FlightSim
 	var hud := main.get_node("PassengerHud") as PassengerHud
 	var unlocks := main.get_node("BuildUnlocks") as BuildUnlocks
+	var finances := main.get_node("Finances") as Finances
 	var save_game := SaveTestKit.save_game(main)
 
 	hud.press_starter_terminal()
 	flights.opened_tick = clock.tick
 	clock.start_calendar()
 	SaveTestKit.step(main)
-	for _i in 40:
+	for _i in 20:
 		unlocks.note_made()
-	var day1_path := _temp_save("day1_save")
-	assert_bool(save_game.save_to_file(day1_path)).is_true()
+	# Days 1-3 revenue ($1,250 across FEES + SHOP), plus a non-revenue spend.
+	assert_bool(finances.wallet.credit(900, Wallet.Category.FEES)).is_true()
+	clock.tick = GameCalendar.day_start(2, clock.epoch) + 100
+	SaveTestKit.step(main)
+	assert_bool(finances.wallet.credit(350, Wallet.Category.SHOP)).is_true()
+	assert_bool(finances.wallet.spend(200, Wallet.Category.BUILD)).is_true()
+	var mid_run_path := _temp_save("day3_save")
+	assert_bool(save_game.save_to_file(mid_run_path)).is_true()
+
+	# Reload mid-run on Day 3, then earn $1,950 more on Days 4-5 ($3,200 total).
+	assert_bool(save_game.load_from_file(mid_run_path)).is_true()
+	assert_bool(hud.demo_end_card.is_open()).is_false()
+	for _i in 20:
+		unlocks.note_made()
+	clock.tick = GameCalendar.day_start(3, clock.epoch) + 100
+	SaveTestKit.step(main)
+	assert_bool(finances.wallet.credit(600, Wallet.Category.PARKING)).is_true()
+	assert_bool(finances.wallet.credit(850, Wallet.Category.SIGNING_BONUS)).is_true()
+	clock.tick = GameCalendar.day_start(4, clock.epoch) + 100
+	SaveTestKit.step(main)
+	assert_bool(finances.wallet.credit(500, Wallet.Category.INCIDENT)).is_true()
+	assert_bool(finances.wallet.spend(100, Wallet.Category.WAGES)).is_true()
 
 	var rollover := GameCalendar.day_start(DemoMode.MAX_DEMO_DAY, clock.epoch)
 	clock.tick = rollover - 2
@@ -454,19 +519,33 @@ func test_main_scene_day6_autosave_and_reload_re_shows_demo_end_card_paused() ->
 	assert_bool(hud.demo_end_card.is_open()).is_true()
 	assert_int(clock.tick).is_equal(rollover)
 	assert_bool(clock.paused).is_true()
+	assert_int(hud.demo_end_card.summary_stats()["cash_earned"]).is_equal(3200)
+	assert_bool(hud.demo_end_card.summary_stats()["since_load"]).is_false()
+	var cash_row := hud.demo_end_card.panel().find_child("CashEarnedRowValue", true, false) as Label
+	assert_object(cash_row).is_not_null()
+	assert_str(cash_row.text).is_equal("$3200")
 	assert_str(save_game.autosave_pending).is_not_empty()
 	var autosave_path := save_game.autosave_pending
 	assert_bool(save_game.retry_autosave()).is_true()
 	assert_bool(FileAccess.file_exists(autosave_path)).is_true()
 
-	# Loading Day 1 closes DemoEndCard; loading the Day-6 autosave re-shows it paused.
-	assert_bool(save_game.load_from_file(day1_path)).is_true()
+	# Loading Day 3 closes DemoEndCard; loading the Day-6 autosave re-shows it
+	# paused with the full 5-day cumulative $3,200 cash_earned intact.
+	assert_bool(save_game.load_from_file(mid_run_path)).is_true()
 	assert_bool(hud.demo_end_card.is_open()).is_false()
 
 	assert_bool(save_game.load_from_file(autosave_path)).is_true()
 	assert_bool(hud.demo_end_card.is_open()).is_true()
 	assert_bool(clock.paused).is_true()
-	assert_int(hud.demo_end_card.summary_stats()["passengers_made"]).is_greater_equal(40)
+	var reloaded_stats := hud.demo_end_card.summary_stats()
+	assert_int(reloaded_stats["passengers_made"]).is_greater_equal(40)
+	assert_int(reloaded_stats["cash_earned"]).is_equal(3200)
+	assert_bool(reloaded_stats["since_load"]).is_false()
+	var reloaded_cash_row := (
+		hud.demo_end_card.panel().find_child("CashEarnedRowValue", true, false) as Label
+	)
+	assert_object(reloaded_cash_row).is_not_null()
+	assert_str(reloaded_cash_row.text).is_equal("$3200")
 	clock.set_paused(false)
 	clock.advance(SimClock.STEP * 4.0)
 	assert_int(clock.tick).is_equal(rollover)
@@ -517,7 +596,11 @@ func test_demo_end_card_preempts_open_take_turn_dialogs_and_build_tray_on_rollov
 	await await_idle_frame()
 
 	# Part 2: UnlockGuide holds the active exclusive take_turn dialog, GameMenu is
-	# queued behind it, and a BuildMenu tray is open when Day 6 rollover fires.
+	# queued behind it, a held "Unlocked: ..." banner is up, and a BuildMenu tray
+	# is open when Day 6 rollover fires.
+	(main.get_node("BuildUnlocks") as BuildUnlocks).unlocked.emit(2, "Unlocked: cafe")
+	menu.refresh_preview()
+	assert_bool(menu.status_card().visible).is_true()
 	guide.open_dialog([2])
 	assert_bool(guide.is_open()).is_true()
 	assert_bool(game_menu.open()).is_true()
@@ -536,6 +619,7 @@ func test_demo_end_card_preempts_open_take_turn_dialogs_and_build_tray_on_rollov
 	assert_bool(game_menu.is_open()).is_false()
 	assert_bool(game_menu.has_hold()).is_false()
 	assert_bool(menu.is_tray_open()).is_false()
+	assert_bool(menu.status_card().visible).is_false()
 	assert_int(hud._camera_gates).is_equal(1)
 
 	var title_returns := [0]

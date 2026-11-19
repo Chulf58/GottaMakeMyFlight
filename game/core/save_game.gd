@@ -115,7 +115,9 @@ signal loaded(ok: bool)
 ## (SimClock save version 2; decision closed-airport-calendar-design-an-
 ## explicit-calendar-epoch-pa), and every saved day and time reads at that
 ## epoch; version 24 saves are refused (no migration before a release).
-const SAVE_VERSION := 25
+## 26: the day ledger part holds cumulative positive revenue ("total_earned");
+## version 25 saves are refused (no migration before a release).
+const SAVE_VERSION := 26
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"

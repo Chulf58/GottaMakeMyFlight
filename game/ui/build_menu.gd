@@ -530,8 +530,6 @@ func _refresh_money() -> void:
 ## What a card says is locking it (BuildUnlocks.lock_text), "" when it is open
 ## or the menu has no build mode.
 func _lock_text(tool: BuildMode.Tool) -> String:
-	if DemoMode.is_demo() and BuildUnlocks.tier_of(tool) > DemoMode.MAX_PLAYABLE_TIER:
-		return tr("In the full game")
 	if build_mode == null:
 		return ""
 	return BuildUnlocks.lock_text(build_mode.unlocks, build_mode.require_unlocks, tool)
@@ -557,7 +555,12 @@ func _refresh_locks() -> void:
 	for tool in _cards:
 		var text := _lock_text(tool)
 		var card_item := item(tool)
-		var demo_teaser := DemoMode.is_demo() and BuildUnlocks.tier_of(tool) == DemoMode.TEASER_TIER
+		var demo_teaser := (
+			DemoMode.is_demo()
+			and build_mode != null
+			and build_mode.require_unlocks
+			and BuildUnlocks.tier_of(tool) == DemoMode.TEASER_TIER
+		)
 		if demo_teaser:
 			_hint_labels[tool].text = tr("In the full game")
 		else:
@@ -604,8 +607,9 @@ func _apply_demo_cut() -> void:
 			for conn: Dictionary in next_btn.pressed.get_connections():
 				next_btn.pressed.disconnect(conn["callable"])
 			next_btn.pressed.connect(press_category.bind(target))
-			var sub := next_btn.get_child(0).get_child(1) as Label
-			sub.text = BuildMenuCatalog.shown(all[target]["name"])
+			var sub := next_btn.find_child("NextPageName", true, false) as Label
+			if sub != null:
+				sub.text = BuildMenuCatalog.shown(all[target]["name"])
 
 
 func _row_has_visible_card(index: int) -> bool:
@@ -734,8 +738,9 @@ func _on_loaded(ok: bool) -> void:
 	_show_status()
 
 
-## Closes any open tray, Staff card, template paste or room move and drops the
-## build session's hold on the clock (used when a full-screen modal takes over).
+## Closes any open tray, Staff card, held status banner, template paste or room
+## move and drops the build session's hold on the clock (used when a full-screen
+## modal takes over).
 func close_for_modal() -> void:
 	_open = NO_CATEGORY
 	_set_staff_open(false)
@@ -745,6 +750,13 @@ func close_for_modal() -> void:
 			build_mode.room_mover.cancel()
 		build_mode.set_tool(BuildMode.Tool.NONE)
 	build_session.set_building(false)
+	_pending_wages = ""
+	_holding = false
+	_hold_generation += 1
+	_held_status = build_mode.status_text() if build_mode != null else ""
+	_raw_status = _held_status
+	_show_status()
+	refresh_preview()
 	_sync()
 
 

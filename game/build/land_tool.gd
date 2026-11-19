@@ -198,11 +198,12 @@ func price_label() -> Label3D:
 
 
 func _on_tool_changed(tool: BuildMode.Tool) -> void:
+	var was_gated := land.gated if land != null else false
 	_sync_gate()
 	visible = tool == BuildMode.Tool.BUY_LAND
 	_hovered = NO_PLOT
 	_hover_text = ""
-	if visible:
+	if visible and land != null and (DemoMode.is_demo() or land.gated != was_gated):
 		_draw_fills()
 
 

@@ -21,13 +21,6 @@ const BODY_TEXT := (
 )
 const WISHLIST_TEXT := "Wishlist on Steam"
 const BACK_TEXT := "Back to Title"
-const REVENUE_CATEGORIES := [
-	Wallet.Category.FEES,
-	Wallet.Category.SHOP,
-	Wallet.Category.PARKING,
-	Wallet.Category.SIGNING_BONUS,
-	Wallet.Category.INCIDENT,
-]
 
 var clock: SimClock
 var rating: AirportRating
@@ -47,7 +40,6 @@ var _hold := ClockHolds.NONE
 var _shown := false
 var _triggered := false
 var _cash_earned := 0
-var _since_load := false
 var _bound_wallet: Wallet
 
 
@@ -146,12 +138,14 @@ func summary_stats() -> Dictionary:
 			made += int(rating.day_totals(day)["made"])
 	var stars := rating.stars() if rating != null else RatingFormula.STARTING_STARS
 	var balance := finances.wallet.balance if finances != null else 0
+	var earned := day_ledger.total_earned() if day_ledger != null else _cash_earned
+	var since_load := day_ledger.is_since_load() if day_ledger != null else false
 	return {
 		"passengers_made": made,
 		"stars": stars,
-		"cash_earned": _cash_earned,
+		"cash_earned": earned,
 		"balance": balance,
-		"since_load": _since_load,
+		"since_load": since_load,
 	}
 
 
@@ -201,7 +195,7 @@ func _unbind_wallet() -> void:
 
 
 func _on_wallet_transaction(amount: int, category: int, _claimed: Dictionary, _tick: int) -> void:
-	if amount > 0 and REVENUE_CATEGORIES.has(category):
+	if amount > 0 and DayLedger.EARNED_CATEGORIES.has(category):
 		_cash_earned += amount
 
 
@@ -219,24 +213,15 @@ func _on_save_loaded(ok: bool) -> void:
 	_hold = ClockHolds.NONE
 	if was_open:
 		dialog_changed.emit(false)
-	_cash_earned = 0
-	_since_load = true
-	if day_ledger != null:
-		for category in REVENUE_CATEGORIES:
-			var amount := day_ledger.amount(category)
-			if amount > 0:
-				_cash_earned += amount
+	_cash_earned = day_ledger.total_earned() if day_ledger != null else 0
 	check_now()
 
 
 func _close_active_ui() -> void:
-	if is_instance_valid(clock):
-		clock.holds.clear()
-		_hold = ClockHolds.NONE
-	if hud != null:
-		hud.dismiss_intro()
-		if hud.unlock_guide() != null:
-			hud.unlock_guide()._on_loaded(true)
+	if _shown and is_instance_valid(clock) and is_inside_tree() and not clock.holds.has(_hold):
+		_hold = clock.holds.acquire(self, false)
+	var root := hud.get_parent() if hud != null else get_parent()
+	_close_waiting_turns(root)
 	if build_menu != null:
 		build_menu.close_for_modal()
 	elif build_mode != null:
@@ -244,28 +229,53 @@ func _close_active_ui() -> void:
 		if build_mode.room_mover.active:
 			build_mode.room_mover.cancel()
 		build_mode.set_tool(BuildMode.Tool.NONE)
+	_close_open_turns(root)
+
+
+func _close_waiting_turns(root: Node) -> void:
+	if hud != null:
+		if hud.intro() == null:
+			hud.dismiss_intro()
+		var guide := hud.unlock_guide()
+		if guide != null and not guide.is_open():
+			guide.close_for_modal()
+	if is_inside_tree():
+		for sheet in get_tree().get_nodes_in_group(TopRow.SHEET_GROUP):
+			if (
+				sheet.has_method("is_open")
+				and not sheet.call("is_open")
+				and sheet.has_method("close")
+			):
+				sheet.call("close")
+	if root == null:
+		return
+	var game_menu := root.get_node_or_null("GameMenu") as GameMenu
+	if game_menu != null and not game_menu.is_open():
+		game_menu.close()
+	var incident_panel := root.get_node_or_null("IncidentPanel") as IncidentPanel
+	if incident_panel != null and not incident_panel.is_open():
+		incident_panel.close_for_modal()
+
+
+func _close_open_turns(root: Node) -> void:
+	if hud != null:
+		hud.dismiss_intro()
+		if hud.unlock_guide() != null:
+			hud.unlock_guide().close_for_modal()
 	if is_inside_tree():
 		for sheet in get_tree().get_nodes_in_group(TopRow.SHEET_GROUP):
 			if sheet.has_method("close"):
 				sheet.call("close")
-	var root := hud.get_parent() if hud != null else get_parent()
-	if root != null:
-		_close_scene_dialogs(root)
-	if _shown and is_instance_valid(clock) and is_inside_tree():
-		_hold = clock.holds.acquire(self, false)
-
-
-func _close_scene_dialogs(root: Node) -> void:
+	if root == null:
+		return
 	var game_menu := root.get_node_or_null("GameMenu") as GameMenu
 	if game_menu != null:
-		game_menu._on_loaded(true)
+		game_menu.close()
+		if game_menu.question() != null:
+			game_menu.question().dismiss()
 	var incident_panel := root.get_node_or_null("IncidentPanel") as IncidentPanel
 	if incident_panel != null:
-		var was_open := incident_panel.is_open()
-		incident_panel._free_dialog()
-		incident_panel._release_clock()
-		if was_open:
-			incident_panel.dialog_changed.emit(false)
+		incident_panel.close_for_modal()
 
 
 func _build_layer() -> void:

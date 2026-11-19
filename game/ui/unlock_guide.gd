@@ -163,6 +163,15 @@ func dismiss() -> void:
 		_dialog.dismiss()
 
 
+## Closes any open or waiting unlock dialog and releases its clock hold.
+func close_for_modal() -> void:
+	var was_open := _dialog != null
+	_free_dialog()
+	_release_clock()
+	if was_open:
+		dialog_changed.emit(false)
+
+
 ## The dialog's text for the listed tiers: one line per family, then the note
 ## about the clock.
 func body_for(tiers: Array) -> String:
