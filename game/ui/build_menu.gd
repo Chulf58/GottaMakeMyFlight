@@ -246,6 +246,8 @@ func _ready() -> void:
 	add_child(build_frame)
 	BuildMenuLayout.build_bar(self)
 	BuildMenuLayout.build_tray(self)
+	if DemoMode.is_demo():
+		_apply_demo_cut()
 	BuildMenuLayout.build_status_card(self)
 	BuildMenuLayout.build_money(self)
 	templates_page.attach(self)
@@ -336,6 +338,10 @@ func press_category(index: int) -> void:
 	if index == remove_category():
 		build_mode.set_tool(BuildMode.Tool.REMOVE)
 		return
+	if DemoMode.is_demo() and index >= 0 and not _row_has_visible_card(index):
+		index = _first_open_page_in_group(group_start(index))
+		if index == NO_CATEGORY:
+			return
 	if index == _open:
 		build_mode.set_tool(BuildMode.Tool.NONE)
 		return
@@ -541,18 +547,88 @@ func _on_card_hovered(tool: BuildMode.Tool) -> void:
 		guide.mark_seen(tool)
 
 
-## Greys the locked cards, with "Locked" on the last line. Every card keeps its
-## description in the hover card; a locked one adds what unlocks it, worked out
-## each time the hover card is built so the "now" numbers are current. Also
-## repaints the "New" tints.
+## Greys the locked cards, with "Locked" (or "In the full game" on Tier 3 demo
+## teasers) on the last line. Every card keeps its description in the hover
+## card; a locked one adds what unlocks it, worked out each time the hover card
+## is built so the "now" numbers are current. Also repaints the "New" tints.
 func _refresh_locks() -> void:
 	for tool in _cards:
 		var text := _lock_text(tool)
 		var card_item := item(tool)
-		_hint_labels[tool].text = tr("Locked") if text != "" else _hint_texts[tool]
+		var demo_teaser := (
+			DemoMode.is_demo()
+			and build_mode != null
+			and build_mode.require_unlocks
+			and BuildUnlocks.tier_of(tool) == DemoMode.TEASER_TIER
+		)
+		if demo_teaser:
+			_hint_labels[tool].text = tr("In the full game")
+		else:
+			_hint_labels[tool].text = tr("Locked") if text != "" else _hint_texts[tool]
 		_cards[tool].requirement = _lock_text.bind(tool) if text != "" else Callable()
 		_cards[tool].set_info(BuildMenuCatalog.shown(card_item[0]), ItemInfo.of(tool))
 		_cards[tool].modulate = _card_tint(tool)
+
+
+## Hides Tier 4+ cards in demo mode and prunes empty furniture pages or groups
+## so no category button or Next card ever opens an empty tray.
+func _apply_demo_cut() -> void:
+	for tool in _cards:
+		if BuildUnlocks.tier_of(tool) >= DemoMode.HIDDEN_MIN_TIER:
+			_cards[tool].visible = false
+	var all := categories()
+	var seen_starts := {}
+	for i in all.size():
+		if i == remove_category():
+			continue
+		var start := group_start(i)
+		if seen_starts.has(start):
+			continue
+		seen_starts[start] = true
+		var group_pages: Array[int] = []
+		var open_pages: Array[int] = []
+		for p in range(start, all.size()):
+			if p != start and group_start(p) != start:
+				break
+			group_pages.append(p)
+			if _row_has_visible_card(p):
+				open_pages.append(p)
+		if open_pages.is_empty():
+			_category_buttons[start].visible = false
+			continue
+		for p in group_pages:
+			var next_btn := _rows[p].get_node_or_null("CardNext") as Button
+			if next_btn == null:
+				continue
+			if open_pages.size() <= 1 or not open_pages.has(p):
+				next_btn.visible = false
+				continue
+			var target: int = open_pages[(open_pages.find(p) + 1) % open_pages.size()]
+			for conn: Dictionary in next_btn.pressed.get_connections():
+				next_btn.pressed.disconnect(conn["callable"])
+			next_btn.pressed.connect(press_category.bind(target))
+			var sub := next_btn.find_child("NextPageName", true, false) as Label
+			if sub != null:
+				sub.text = BuildMenuCatalog.shown(all[target]["name"])
+
+
+func _row_has_visible_card(index: int) -> bool:
+	if index < 0 or index >= _rows.size():
+		return false
+	for tool in categories()[index]["tools"]:
+		if _cards.has(tool) and (_cards[tool] as Control).visible:
+			return true
+	return false
+
+
+func _first_open_page_in_group(start: int) -> int:
+	var all := categories()
+	for p in range(start, all.size()):
+		if p != start and group_start(p) != start:
+			break
+		if _row_has_visible_card(p):
+			return p
+	return NO_CATEGORY
 
 
 func _on_tier_changed(_tier: int) -> void:
@@ -660,6 +736,28 @@ func _on_loaded(ok: bool) -> void:
 	_held_status = build_mode.status_text() if build_mode != null else ""
 	_raw_status = _held_status
 	_show_status()
+
+
+## Closes any open tray, Staff card, held status banner, template paste or room
+## move and drops the build session's hold on the clock (used when a full-screen
+## modal takes over).
+func close_for_modal() -> void:
+	_open = NO_CATEGORY
+	_set_staff_open(false)
+	if build_mode != null:
+		build_mode.templates.disarm()
+		if build_mode.room_mover.active:
+			build_mode.room_mover.cancel()
+		build_mode.set_tool(BuildMode.Tool.NONE)
+	build_session.set_building(false)
+	_pending_wages = ""
+	_holding = false
+	_hold_generation += 1
+	_held_status = build_mode.status_text() if build_mode != null else ""
+	_raw_status = _held_status
+	_show_status()
+	refresh_preview()
+	_sync()
 
 
 ## The loaded world is a new one: build mode ends with the clock as loaded, the

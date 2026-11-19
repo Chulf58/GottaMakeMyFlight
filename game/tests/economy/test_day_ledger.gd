@@ -178,17 +178,26 @@ func test_ticks_within_the_day_keep_the_totals() -> void:
 
 
 func test_a_snapshot_round_trips_through_json() -> void:
+	assert_bool(_wallet.credit(500, C.OPENING)).is_true()
+	assert_bool(_wallet.credit(200, C.GRANT)).is_true()
+	assert_int(_ledger.total_earned()).is_equal(0)
 	assert_bool(_wallet.credit(300, C.FEES)).is_true()
-	assert_bool(_wallet.spend(400, C.BUILD)).is_false()
+	assert_bool(_wallet.spend(1200, C.BUILD)).is_false()
 	assert_bool(_wallet.spend(120, C.BUILD)).is_true()
 	assert_bool(_wallet.spend(60, C.WAGES)).is_true()
+	assert_int(_ledger.total_earned()).is_equal(300)
 	var saved: Dictionary = JSON.parse_string(JSON.stringify(_ledger.to_snapshot()))
 	var other: DayLedger = auto_free(DayLedger.new())
 	assert_bool(other.from_snapshot(saved)).is_true()
 	assert_dict(other.to_snapshot()).is_equal(_ledger.to_snapshot())
 	assert_int(other.amount(C.BUILD)).is_equal(-120)
 	assert_int(other.wages_paid()).is_equal(60)
+	assert_int(other.total_earned()).is_equal(300)
 	assert_bool(other.is_since_load()).is_false()
+	_to_midnight(1)
+	_step()
+	assert_int(_ledger.amount(C.FEES)).is_equal(0)
+	assert_int(_ledger.total_earned()).is_equal(300)
 
 
 ## The Wallet takes any category in either direction, so a total of either
@@ -235,6 +244,8 @@ func test_a_bad_snapshot_is_refused_and_changes_nothing() -> void:
 		["build", "1.5"],
 		["shop", "x"],
 		["opening", str(DayLedger.MAX_TOTAL + 1)],
+		["total_earned", "-1"],
+		["total_earned", str(DayLedger.MAX_TOTAL + 1)],
 		["upkeep", "x"],
 		["upkeep", 4],
 	]:

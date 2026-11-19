@@ -95,6 +95,7 @@ static func attach(build_mode: BuildMode) -> LandTool:
 func bind(build_mode: BuildMode) -> void:
 	mode = build_mode
 	land = LandPlots.for_site(build_mode.site)
+	land.gated = build_mode.require_unlocks
 	land.own_start(build_mode.site)
 	(build_mode.grid as SiteGrid).land = land
 	land.changed.connect(_on_land_changed)
@@ -116,6 +117,7 @@ func plot_at(point: Variant) -> Vector2i:
 ## line's text: the price and the plot's size for a plot one click buys, the
 ## reason for one it would not, "" off the site.
 func hover(point: Variant) -> String:
+	_sync_gate()
 	var plot := plot_at(point)
 	if plot == _hovered and _hover_text != "":
 		return _hover_text
@@ -127,8 +129,20 @@ func hover(point: Variant) -> String:
 		return ""
 	var problem := land.buy_problem(plot, mode.wallet())
 	var cells := land.plot_cells(plot)
+	var demo_capped := (
+		problem != null
+		and problem.reason == BuildResult.Reason.LOCKED
+		and land.is_open(plot)
+		and LandPlots.is_demo_capped(land)
+	)
 	if problem == null or problem.reason == BuildResult.Reason.CANT_AFFORD:
 		_price.text = tr("Buy  {price}", "land tool").format({"price": land.next_price()})
+		_price.position = _ground(
+			Vector2(cells.position) + Vector2(cells.size) / 2.0, LABEL_HEIGHT_M
+		)
+		_price.visible = true
+	elif demo_capped:
+		_price.text = tr("In the full game")
 		_price.position = _ground(
 			Vector2(cells.position) + Vector2(cells.size) / 2.0, LABEL_HEIGHT_M
 		)
@@ -137,6 +151,8 @@ func hover(point: Variant) -> String:
 		_hover_text = tr("Click to buy this {width}x{height} m plot", "land tool").format(
 			{"width": cells.size.x, "height": cells.size.y}
 		)
+	elif demo_capped:
+		_hover_text = tr("Demo limit: 1 extra plot (more in the full game)")
 	else:
 		_hover_text = problem.reason_text()
 	if not land.is_owned(plot):
@@ -149,6 +165,7 @@ func hover(point: Variant) -> String:
 ## Buys the plot under `point` (LandPlots.buy(), from BuildMode's wallet) and
 ## returns the result; a refusal changes nothing.
 func buy_at(point: Variant) -> BuildResult:
+	_sync_gate()
 	var plot := plot_at(point)
 	if plot == NO_PLOT:
 		return BuildResult.refused(BuildResult.Reason.OUT_OF_BOUNDS)
@@ -161,9 +178,10 @@ func buy_at(point: Variant) -> BuildResult:
 ## can be bought or only the money is short, zero otherwise (BuildMenu's cost
 ## line).
 func preview_price() -> Vector2i:
+	_sync_gate()
 	if _hovered == NO_PLOT or land.is_owned(_hovered) or not land.touches_owned(_hovered):
 		return Vector2i.ZERO
-	if not land.is_open(_hovered):
+	if not land.is_open(_hovered) or LandPlots.is_demo_capped(land):
 		return Vector2i.ZERO
 	var price := land.next_price()
 	return Vector2i(price, price)
@@ -180,9 +198,18 @@ func price_label() -> Label3D:
 
 
 func _on_tool_changed(tool: BuildMode.Tool) -> void:
+	var was_gated := land.gated if land != null else false
+	_sync_gate()
 	visible = tool == BuildMode.Tool.BUY_LAND
 	_hovered = NO_PLOT
 	_hover_text = ""
+	if visible and land != null and (DemoMode.is_demo() or land.gated != was_gated):
+		_draw_fills()
+
+
+func _sync_gate() -> void:
+	if land != null and mode != null:
+		land.gated = mode.require_unlocks
 
 
 ## The money decides whether the hovered plot can be bought: look again.

@@ -141,13 +141,13 @@ func test_parts_saved_on_different_ticks_are_refused() -> void:
 ## refused whole, with no migration, and change nothing, as is a version 24
 ## one (no calendar epoch in its clock).
 func test_a_version_6_save_from_the_toon_shell_is_refused() -> void:
-	assert_int(SaveGame.SAVE_VERSION).is_equal(25)
-	for version in [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 20, 21, 22, 23, 24]:
+	assert_int(SaveGame.SAVE_VERSION).is_equal(26)
+	for version in [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 20, 21, 22, 23, 24, 25]:
 		var old := _older()
 		old["save_version"] = version
 		_assert_refused(old, "version %d" % version)
 		print("version %d: '%s'" % [version, _save.message_text()])
-		assert_str(_save.message_text()).contains("save_version must be 25")
+		assert_str(_save.message_text()).contains("save_version must be 26")
 
 
 ## A grid saved in another frame than the site's (the Toon shell's 66 x 30

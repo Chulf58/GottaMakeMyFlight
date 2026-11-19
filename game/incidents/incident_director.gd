@@ -364,6 +364,8 @@ func from_snapshot(data: Dictionary) -> bool:
 
 
 func _roll_due(day: int) -> bool:
+	if DemoMode.is_demo() and day >= DemoMode.MAX_DEMO_DAY:
+		return false
 	if not _enabled or flights.opened_tick < 0 or day <= _last_rolled_day:
 		return false
 	return day > GameCalendar.day_of(flights.opened_tick, clock.epoch)
@@ -385,7 +387,7 @@ func _roll(day: int, tick: int) -> void:
 		"contracts": flights.active_contract_ids().size(),
 	}
 	var candidates := IncidentCatalogue.candidates(world)
-	if forced_kind != "":
+	if forced_kind != "" and (not DemoMode.is_demo() or IncidentCatalogue.demo_allows(forced_kind)):
 		candidates = [
 			{"kind": forced_kind, "weight": 1, "major": IncidentCatalogue.is_major(forced_kind)}
 		]

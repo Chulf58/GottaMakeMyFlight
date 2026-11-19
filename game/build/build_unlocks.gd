@@ -41,8 +41,9 @@ const UNLISTED_TIER := 99
 ## Most made-flight passengers counted (a save above it is refused).
 const MAX_MADE := 1000000000
 const NO_DAY := -1
-## The English msgid: tests compare against it; lock_text() says tr() of the literal.
+## The English msgids: tests compare against them; lock_text() says tr() of the literals.
 const NOT_WIRED_TEXT := "Build unlocks are not wired"
+const IN_FULL_GAME_TEXT := "In the full game"
 ## Each tier in order: the stars and made-flight passengers that open it, what
 ## to call its facilities in the unlock message, and its tools. Tier 1 is the
 ## start set. NONE and REMOVE belong to no tier and are always open.
@@ -232,11 +233,14 @@ static func lock_text(gate: BuildUnlocks, required: bool, tool: BuildMode.Tool) 
 ## and, once the game is rated, {"stars", "passengers"} as they stand now.
 ## lock_words() puts the values into the player's words at display time.
 static func lock_args(gate: BuildUnlocks, required: bool, tool: BuildMode.Tool) -> Dictionary:
-	if tier_of(tool) == 0:
+	var needed := tier_of(tool)
+	if needed == 0:
 		return {}
+	if DemoMode.is_demo() and required and needed > DemoMode.MAX_PLAYABLE_TIER:
+		return {"tier": needed}
 	if gate == null:
 		return {"unwired": true} if required else {}
-	return {} if gate.allows(tool) else gate.tier_args(tier_of(tool))
+	return {} if gate.allows(tool) else gate.tier_args(needed)
 
 
 ## The player's words for lock_args() values; "" for none.
@@ -299,8 +303,11 @@ static func runway_tier(size: String) -> int:
 	return RUNWAY_TIERS.get(size, UNLISTED_TIER)
 
 
-## What tier `tier` asks for: "Unlocks at 3 stars and 200 passengers".
+## What tier `tier` asks for: "Unlocks at 3 stars and 200 passengers", or
+## "In the full game" above MAX_PLAYABLE_TIER in demo builds.
 static func requirement_text(tier: int) -> String:
+	if DemoMode.is_demo() and tier > DemoMode.MAX_PLAYABLE_TIER and tier <= TIERS.size():
+		return Words.new().in_full_game()
 	if tier < 2 or tier > TIERS.size():
 		return Words.new().not_available()
 	var need: Dictionary = TIERS[tier - 1]
@@ -320,7 +327,8 @@ func made_total() -> int:
 
 
 func allows(tool: BuildMode.Tool) -> bool:
-	return tier_of(tool) <= _tier
+	var cap := mini(_tier, DemoMode.MAX_PLAYABLE_TIER) if DemoMode.is_demo() else _tier
+	return tier_of(tool) <= cap
 
 
 ## True from the cafe tier on: hunger, the food mood penalty and the cafe hint
@@ -343,6 +351,8 @@ func tier_text(needed: int) -> String:
 ## passengers as they stand now when the tier is one the game rates.
 func tier_args(needed: int) -> Dictionary:
 	var args := {"tier": needed}
+	if DemoMode.is_demo() and needed > DemoMode.MAX_PLAYABLE_TIER:
+		return args
 	if needed >= 2 and needed <= TIERS.size() and rating != null:
 		args["stars"] = str(rating.stars())
 		args["passengers"] = _made
@@ -355,17 +365,20 @@ func on_tick(tick: int) -> void:
 	if day == _checked_day:
 		return
 	_checked_day = day
+	if DemoMode.is_demo() and day >= DemoMode.MAX_DEMO_DAY:
+		return
 	check()
 
 
 ## Opens every tier whose stars and passengers are both met; one that is open
-## stays open.
+## stays open. Demo builds cap playable unlocks at MAX_PLAYABLE_TIER.
 func check() -> void:
 	if rating == null:
 		return
 	var stars := rating.stars()
+	var max_tier := DemoMode.MAX_PLAYABLE_TIER if DemoMode.is_demo() else TIERS.size()
 	var reached := _tier
-	for i in range(_tier, TIERS.size()):
+	for i in range(_tier, max_tier):
 		var need: Dictionary = TIERS[i]
 		if stars < need["stars"] or _made < need["passengers"]:
 			break
@@ -429,15 +442,18 @@ func from_snapshot(data: Dictionary) -> bool:
 	if problem != "":
 		push_error("BuildUnlocks.from_snapshot: %s" % problem)
 		return false
-	_tier = int(data["tier"])
+	var max_tier := DemoMode.MAX_PLAYABLE_TIER if DemoMode.is_demo() else TIERS.size()
+	_tier = mini(int(data["tier"]), max_tier)
 	_made = int(data["made"])
 	_checked_day = NO_DAY
 	_shown.clear()
 	for tier in data["shown"]:
-		_shown[int(tier)] = true
+		if int(tier) <= _tier:
+			_shown[int(tier)] = true
 	_seen.clear()
 	for tool_name in data["seen"]:
-		_seen[BuildMode.Tool[tool_name]] = true
+		if tier_of(BuildMode.Tool[tool_name]) <= _tier:
+			_seen[BuildMode.Tool[tool_name]] = true
 	_firsts.clear()
 	for kind in data["firsts"]:
 		_firsts[kind] = true
@@ -556,6 +572,9 @@ class Words:
 
 	func not_available() -> String:
 		return tr("Not available yet")
+
+	func in_full_game() -> String:
+		return tr("In the full game")
 
 	func requirement(stars: String, passengers: int) -> String:
 		return (

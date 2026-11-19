@@ -156,9 +156,10 @@ static func make_next_card(menu: BuildMenu, next: int) -> Button:
 	var column := card_column(button)
 	column.alignment = BoxContainer.ALIGNMENT_CENTER
 	card_label(column, _words.next_page(), &"HudCardName")
-	card_label(
+	var sub := card_label(
 		column, BuildMenuCatalog.shown(BuildMenuCatalog.categories()[next]["name"]), &"HudHint"
 	)
+	sub.name = "NextPageName"
 	watch_fit(button)
 	return button
 

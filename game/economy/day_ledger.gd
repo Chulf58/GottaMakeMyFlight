@@ -51,10 +51,19 @@ const CATEGORY_KEYS := {
 }
 ## The day's unpaid fines, a decimal string from 0.
 const FINES_UNPAID_KEY := "fines_unpaid"
+## Cumulative positive revenue across all days, a decimal string from 0.
+const TOTAL_EARNED_KEY := "total_earned"
+const EARNED_CATEGORIES := [
+	Wallet.Category.FEES,
+	Wallet.Category.SHOP,
+	Wallet.Category.PARKING,
+	Wallet.Category.SIGNING_BONUS,
+	Wallet.Category.INCIDENT,
+]
 ## Totals added after the ledger was first saved: a saved ledger without one
 ## loads it as 0.
 const OPTIONAL_CATEGORY_KEYS := ["upkeep"]
-const SNAPSHOT_KEYS := ["day", "since_load", FINES_UNPAID_KEY]
+const SNAPSHOT_KEYS := ["day", "since_load", FINES_UNPAID_KEY, TOTAL_EARNED_KEY]
 ## Far beyond a day's money; a saved total past it is refused. Any total may
 ## be either sign, since the Wallet takes any category in either direction.
 const MAX_TOTAL := 1_000_000_000_000_000_000
@@ -72,6 +81,8 @@ var _since_load := false
 var _totals: Dictionary = {}
 ## Fines charged today that the wallet could not pay, as a positive amount.
 var _fines_unpaid := 0
+## Cumulative positive revenue across all days of the run (survives day rollover).
+var _total_earned := 0
 
 
 func _init() -> void:
@@ -133,6 +144,11 @@ func fines_unpaid() -> int:
 	return _fines_unpaid
 
 
+## Cumulative positive revenue across all days of the run (EARNED_CATEGORIES).
+func total_earned() -> int:
+	return _total_earned
+
+
 ## Airline fees, shop sales and parking fees less wages, upkeep and airline
 ## fines paid.
 func operating_result() -> int:
@@ -168,6 +184,8 @@ func record(gross: int, category: int, claimed: Dictionary, tick: int) -> void:
 	_totals[category] += gross
 	for debt in claimed:
 		_totals[debt] -= claimed[debt]
+	if gross > 0 and EARNED_CATEGORIES.has(category):
+		_total_earned = mini(_total_earned + gross, MAX_TOTAL)
 	changed.emit()
 
 
@@ -193,6 +211,7 @@ func on_tick(tick: int) -> void:
 ## day, marked as counting since the load.
 func start_since_load() -> void:
 	_clear()
+	_total_earned = 0
 	if _clock != null:
 		_day = GameCalendar.day_of(_clock.tick, _clock.epoch)
 	_since_load = true
@@ -202,7 +221,12 @@ func start_since_load() -> void:
 ## JSON-safe state for a save: the day, the since-load mark and each
 ## category's total as decimal strings.
 func to_snapshot() -> Dictionary:
-	var data := {"day": str(_day), "since_load": _since_load, FINES_UNPAID_KEY: str(_fines_unpaid)}
+	var data := {
+		"day": str(_day),
+		"since_load": _since_load,
+		FINES_UNPAID_KEY: str(_fines_unpaid),
+		TOTAL_EARNED_KEY: str(_total_earned),
+	}
 	for category in CATEGORY_KEYS:
 		data[CATEGORY_KEYS[category]] = str(_totals[category])
 	return data
@@ -220,6 +244,7 @@ func from_snapshot(data: Dictionary) -> bool:
 	_day = str(data["day"]).to_int()
 	_since_load = data["since_load"]
 	_fines_unpaid = str(data[FINES_UNPAID_KEY]).to_int()
+	_total_earned = str(data[TOTAL_EARNED_KEY]).to_int()
 	for category in CATEGORY_KEYS:
 		_totals[category] = str(data.get(CATEGORY_KEYS[category], "0")).to_int()
 	changed.emit()
@@ -307,10 +332,12 @@ func _snapshot_problem(data: Dictionary) -> String:
 	return _totals_problem(data)
 
 
-## Why the saved unpaid fines or a saved category total is refused, or "".
+## Why the saved unpaid fines, total earned or a saved category total is refused, or "".
 func _totals_problem(data: Dictionary) -> String:
 	if not _whole_in(data[FINES_UNPAID_KEY], 0, MAX_TOTAL):
 		return "'%s' is not a decimal string from 0 to %d" % [FINES_UNPAID_KEY, MAX_TOTAL]
+	if not _whole_in(data[TOTAL_EARNED_KEY], 0, MAX_TOTAL):
+		return "'%s' is not a decimal string from 0 to %d" % [TOTAL_EARNED_KEY, MAX_TOTAL]
 	for key in CATEGORY_KEYS.values():
 		if data.has(key) and not _whole_in(data[key], -MAX_TOTAL, MAX_TOTAL):
 			return "'%s' is not a decimal string from %d to %d" % [key, -MAX_TOTAL, MAX_TOTAL]
