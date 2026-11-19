@@ -334,6 +334,9 @@ def main():
     strip_rows = []
 
     if not args.encode_only:
+        from bpy_extras.object_utils import world_to_camera_view
+        grip_strip_globals = [110, 205, 337, 565, 650, 843]
+        grip_crop_centers = {}
         g_cursor = 0
         for s_idx, (spec, builder) in enumerate(zip(shots.SHOT_SPECS, shots.SHOT_BUILDERS)):
             shot_id = spec["id"]
@@ -352,11 +355,25 @@ def main():
                 seated_exempt=motion_spec.get("seated_exempt"),
                 exempt_ranges=motion_spec.get("exempt_ranges"),
                 pulled_rollers=motion_spec.get("pulled_rollers"),
+                roller_grip_checks=motion_spec.get("roller_grip_checks"),
                 forbid_char_boxes=motion_spec.get("forbid_char_boxes"),
                 stair_foot_checks=motion_spec.get("stair_foot_checks"),
                 min_clearance=0.45,
             )
             human_motion_proofs.append(hm_summary)
+
+            # Record exact projected pixel centers of Hero's right hand + handle for zoomed `roller_grip_strip.png`!
+            if hero_arm is not None:
+                for ggf in grip_strip_globals:
+                    if g_cursor < ggf <= g_cursor + n_f:
+                        scene.frame_set(ggf - g_cursor)
+                        bpy.context.view_layer.update()
+                        pb_kn = hero_arm.pose.bones.get("Fingers.R") or hero_arm.pose.bones.get("Hand.R")
+                        ndc_g = world_to_camera_view(scene, cam, hero_arm.matrix_world @ pb_kn.head)
+                        grip_crop_centers[ggf] = (
+                            int(round(float(ndc_g.x) * tk.RES_W)),
+                            int(round((1.0 - float(ndc_g.y)) * tk.RES_H)),
+                        )
 
             # 1. Automated prove_in_frame + raycast occlusion check on every shot target!
             for tag, fl, subj_objs in prove_targets:
@@ -375,7 +392,7 @@ def main():
                 continue
 
             # 2. Render frames: fast GPU batch `animation=True` for full build, or stills for --strips-only
-            default_extra_beats = [18, 19, 20, 24, 28, 243, 337, 441, 532, 829, 830, 836, 843, 850, 858, 866, 885, 892]
+            default_extra_beats = [18, 19, 20, 24, 28, 110, 205, 243, 337, 441, 532, 565, 650, 700, 829, 830, 836, 843, 850, 858, 866, 885, 892]
             all_extra_globals = set(default_extra_beats) | set(args.extra_frames)
             five_picks = pick_five_frames(n_f)
             extra_locals = {gf - g_cursor for gf in all_extra_globals if g_cursor < gf <= g_cursor + n_f}
@@ -482,6 +499,22 @@ def main():
         stair_strip_path = os.path.join(strips_dir, "stair_climb_strip.png")
         tk.write_png_float(stair_strip_path, stair_strip)
         tk.log("PROBE stair_climb_strip wrote %s (%dx%d)" % (stair_strip_path, stair_strip.shape[1], stair_strip.shape[0]))
+
+        # Write dedicated 6-tile zoomed `roller_grip_strip.png` (`3840x640`) tightly cropped on Hero's right hand + handle
+        # across Shot 1 f=110, Shot 2 f=40 (0205), Shot 2 f=172 (0337), Shot 3 f=175 (0565), Shot 4 (0650), Shot 5 f=33 (0843)!
+        grip_tiles = []
+        half_c = 160
+        for ggf in grip_strip_globals:
+            g_arr = tk.read_png_float(os.path.join(frames_dir, "frame_%04d.png" % ggf))
+            cx_p, cy_p = grip_crop_centers.get(ggf, (tk.RES_W // 2, tk.RES_H // 2))
+            x0_c = max(0, min(tk.RES_W - 2 * half_c, cx_p - half_c))
+            y0_c = max(0, min(tk.RES_H - 2 * half_c, cy_p - half_c))
+            g_crop = g_arr[y0_c : y0_c + 2 * half_c, x0_c : x0_c + 2 * half_c, :]
+            grip_tiles.append(_resize_rgba(g_crop, 640, 640))
+        grip_strip = np.concatenate(grip_tiles, axis=1)
+        grip_strip_path = os.path.join(strips_dir, "roller_grip_strip.png")
+        tk.write_png_float(grip_strip_path, grip_strip)
+        tk.log("PROBE roller_grip_strip wrote %s (%dx%d)" % (grip_strip_path, grip_strip.shape[1], grip_strip.shape[0]))
 
         with open(os.path.join(tk.OUT_DIR, "shot_events.json"), "w", encoding="utf-8") as fh:
             json.dump(

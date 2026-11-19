@@ -13,7 +13,7 @@ import bpy
 import numpy as np
 import OpenImageIO as oiio
 from bpy_extras.object_utils import world_to_camera_view
-from mathutils import Matrix, Vector
+from mathutils import Matrix, Quaternion, Vector
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
@@ -1405,15 +1405,13 @@ def bind_hand_ik_target(
     return ik, target_obj
 
 
-def bind_hand_ik_to_roller(arm, pull_top_obj, active_ranges, hand="R", char_root=None):
-    """Attach a 2-bone IK constraint on `Forearm.<hand>` targeting `pull_top_obj` with a low/back
-    pole target so the elbow stays relaxed BELOW the shoulder (`shoulder_z - elbow_z >= 0.15 m`)."""
+def _build_active_inf_keys(active_ranges, frame_end):
     inf_keys = []
     if len(active_ranges) == 1 and active_ranges[0][0] <= 1:
         f1 = active_ranges[0][1]
         inf_keys = [(1, 1.0), (f1, 1.0)]
-        if f1 < bpy.context.scene.frame_end:
-            inf_keys.append((min(bpy.context.scene.frame_end, f1 + 4), 0.0))
+        if f1 < frame_end:
+            inf_keys.append((min(frame_end, f1 + 4), 0.0))
     else:
         inf_keys.append((1, 0.0))
         for f0, f1 in active_ranges:
@@ -1421,22 +1419,317 @@ def bind_hand_ik_to_roller(arm, pull_top_obj, active_ranges, hand="R", char_root
                 inf_keys.append((max(1, f0 - 4), 0.0))
             inf_keys.append((f0, 1.0))
             inf_keys.append((f1, 1.0))
-            if f1 < bpy.context.scene.frame_end:
-                inf_keys.append((min(bpy.context.scene.frame_end, f1 + 4), 0.0))
-    p_parent = char_root if char_root is not None else arm.parent
-    p_loc = (-0.42, 0.65, 1.02) if hand == "R" else (0.42, 0.65, 1.02)
-    ik, _ = bind_hand_ik_target(
-        bpy.context.scene,
-        arm,
-        "GripRoller",
-        hand=hand,
-        target_obj=pull_top_obj,
-        influence_keys=inf_keys,
-        pole_parent=p_parent,
-        pole_loc=p_loc,
-        pole_angle_deg=-90.0,
+            if f1 < frame_end:
+                inf_keys.append((min(frame_end, f1 + 4), 0.0))
+    return inf_keys
+
+
+def bind_hand_fist_curl(scene, arm, name, hand="R", influence_keys=None):
+    """Pose `Fingers.<hand>`, `Fingertips.<hand>`, `Thumb.<hand>`, and `Thumb_Tip.<hand>` into a clean
+    anatomical closed fist curled around a grip bar via `COPY_ROTATION` (`WORLD -> LOCAL`, `REPLACE`),
+    evaluating cleanly AFTER all NLA locomotion tracks while keeping `rotation_mode == 'QUATERNION'`."""
+    sgn_f = 1.0 if hand == "R" else -1.0
+    sgn_t = -1.0 if hand == "R" else 1.0
+    curl_specs = [
+        ("Fingers." + hand, Quaternion((0.0, 0.0, sgn_f), math.radians(78.0))),
+        ("Fingertips." + hand, Quaternion((0.0, 0.0, sgn_f), math.radians(82.0))),
+        ("Thumb." + hand, Quaternion((0.0, 0.0, sgn_t), math.radians(38.0)) @ Quaternion((1.0, 0.0, 0.0), math.radians(-18.0))),
+        ("Thumb_Tip." + hand, Quaternion((0.0, 0.0, sgn_t), math.radians(48.0))),
+    ]
+    for bname, q_loc in curl_specs:
+        pb = arm.pose.bones.get(bname)
+        if pb is None:
+            continue
+        pb.rotation_mode = "QUATERNION"
+        emp = bpy.data.objects.new("FistCurl_%s_%s" % (name, bname), None)
+        emp.rotation_mode = "QUATERNION"
+        emp.rotation_quaternion = q_loc
+        scene.collection.objects.link(emp)
+        cns = pb.constraints.new("COPY_ROTATION")
+        cns.name = "Fist_%s_%s" % (name, bname)
+        cns.target = emp
+        cns.target_space = "WORLD"
+        cns.owner_space = "LOCAL"
+        cns.mix_mode = "REPLACE"
+        if influence_keys:
+            for f, v in influence_keys:
+                cns.influence = float(v)
+                cns.keyframe_insert(data_path="influence", frame=int(f))
+            _set_fcurves_linear(arm)
+        else:
+            cns.influence = 1.0
+
+
+def solve_roller_bar_grip_targets(
+    scene,
+    char_root,
+    arm,
+    bag_root,
+    pull_top,
+    label,
+    active_ranges,
+    hand="R",
+    bind_ik=True,
+):
+    """Solve converged per-frame palm-hollow wrist IK goal (`~0.084 m` proximal from horizontal bar center)
+    + locked overhand `Hand.<hand>` `COPY_ROTATION` (`<= 8 deg` wrist kink, `~3 deg` forearm twist) + closed fist."""
+    N = int(scene.frame_end)
+    inf_keys = _build_active_inf_keys(active_ranges, N)
+    bind_hand_fist_curl(scene, arm, label, hand=hand, influence_keys=inf_keys)
+
+    wrist_goal = bpy.data.objects.new("RollerWristGoal_" + label, None)
+    scene.collection.objects.link(wrist_goal)
+    hand_rot = bpy.data.objects.new("RollerHandRot_" + label, None)
+    hand_rot.rotation_mode = "QUATERNION"
+    scene.collection.objects.link(hand_rot)
+
+    init_keys = []
+    for f in range(1, N + 1):
+        scene.frame_set(f)
+        bpy.context.view_layer.update()
+        p_bar = pull_top.matrix_world @ Vector((0.0, -0.018, 0.0))
+        init_keys.append((f, (float(p_bar.x), float(p_bar.y), float(p_bar.z) + 0.084)))
+    key_pos(wrist_goal, init_keys)
+    _set_fcurves_linear(wrist_goal)
+
+    ik = None
+    if bind_ik:
+        p_loc = (-0.42, 0.65, 0.95) if hand == "R" else (0.42, 0.65, 0.95)
+        p_ang = 125.0 if hand == "R" else -125.0
+        ik, _ = bind_hand_ik_target(
+            scene,
+            arm,
+            "GripRoller_" + label,
+            hand=hand,
+            target_obj=wrist_goal,
+            influence_keys=inf_keys,
+            pole_parent=char_root,
+            pole_loc=p_loc,
+            pole_angle_deg=p_ang,
+        )
+
+    for _it in range(2):
+        wg_keys = []
+        hr_quats = []
+        prev_q = None
+        for f in range(1, N + 1):
+            scene.frame_set(f)
+            bpy.context.view_layer.update()
+            pt_mw = pull_top.matrix_world
+            bm3 = bag_root.matrix_world.to_3x3()
+            bag_x = (bm3 @ Vector((1.0, 0.0, 0.0))).normalized()
+            p_bar = pt_mw @ Vector((0.0, -0.027, 0.0))
+
+            fa = arm.pose.bones["Forearm." + hand]
+            fa_dir = (arm.matrix_world.to_3x3() @ fa.y_axis).normalized()
+            rod_down = (bm3 @ Vector((0.0, 1.0, 0.0))).normalized()
+            rod_front = (bm3 @ Vector((0.0, 0.0, -1.0))).normalized()
+            z_raw = -bag_x if hand == "R" else bag_x
+            y_cand = fa_dir
+            if y_cand.dot(rod_down) > 0.68:
+                # When suitcase stands upright (`rx = -88 deg`), extend wrist ~20 deg across top of bar
+                # instead of stabbing vertically down between the two telescopic rods!
+                ang_rf = y_cand.angle(rod_front)
+                w_rf = min(1.0, math.radians(22.0) / max(1e-4, ang_rf))
+                y_cand = y_cand.lerp(rod_front, w_rf).normalized()
+            y_hand = y_cand
+            z_proj = z_raw - y_hand * z_raw.dot(y_hand)
+            z_hand = z_proj.normalized() if z_proj.length > 1e-4 else Vector((-1.0, 0.0, 0.0))
+            x_hand = y_hand.cross(z_hand).normalized()
+            rot_m = Matrix((
+                (x_hand.x, y_hand.x, z_hand.x),
+                (x_hand.y, y_hand.y, z_hand.y),
+                (x_hand.z, y_hand.z, z_hand.z),
+            ))
+            q_hand = rot_m.to_quaternion()
+            if prev_q is not None and prev_q.dot(q_hand) < 0.0:
+                q_hand = Quaternion((-q_hand.w, -q_hand.x, -q_hand.y, -q_hand.z))
+            prev_q = q_hand
+            p_wrist = p_bar - y_hand * 0.100 + x_hand * 0.036
+            wg_keys.append((f, (float(p_wrist.x), float(p_wrist.y), float(p_wrist.z))))
+            hr_quats.append((f, q_hand))
+
+        key_pos(wrist_goal, wg_keys)
+        _set_fcurves_linear(wrist_goal)
+
+    for f, qh in hr_quats:
+        hand_rot.rotation_quaternion = qh
+        hand_rot.keyframe_insert(data_path="rotation_quaternion", frame=f)
+    _set_fcurves_linear(hand_rot)
+
+    pb_hand = arm.pose.bones["Hand." + hand]
+    pb_hand.rotation_mode = "QUATERNION"
+    cr_cns = pb_hand.constraints.new("COPY_ROTATION")
+    cr_cns.name = "LockWrist_" + label
+    cr_cns.target = hand_rot
+    cr_cns.target_space = "WORLD"
+    cr_cns.owner_space = "WORLD"
+    for f, v in inf_keys:
+        cr_cns.influence = float(v)
+        cr_cns.keyframe_insert(data_path="influence", frame=int(f))
+    scene.frame_set(1)
+    return ik, wrist_goal, hand_rot
+
+
+def setup_world_roller_and_grip(
+    scene,
+    hero_root,
+    hero_arm,
+    label,
+    f_ik_ranges,
+    pose_ranges=None,
+    ground_z=0.0,
+):
+    """Spawn `CarryRoller` in WORLD SPACE (`parent=None`) with damped rear-wheel trailer pursuit,
+    shoulder-bob handle pitch compliance (`~2-4 deg` around grounded rear wheels), palm-hollow wrist IK,
+    locked overhand `Hand.R` orientation, and closed fist."""
+    N = int(scene.frame_end)
+    if not pose_ranges:
+        pose_ranges = [(1, N, "tow")]
+
+    bag_root, _, bag_by_n = load_roller_bag(
+        label,
+        extended="tow",
+        loc=(0.0, 0.0, float(ground_z) + 0.198),
+        yaw_deg=0.0,
+        bag_tint=YELLOW,
+        parent=None,
+        bag_scale=1.12,
     )
-    return ik
+    bag_root.rotation_mode = "XYZ"
+
+    for f0, f1, mode in pose_ranges:
+        ext_m = False if mode == "carry" else mode
+        set_roller_handle(bag_by_n, extended=ext_m, frame=f0)
+        set_roller_handle(bag_by_n, extended=ext_m, frame=f1)
+    if bag_by_n.get("Pull_Reach"):
+        _set_fcurves_linear(bag_by_n["Pull_Reach"])
+    if bag_by_n.get("Pull_Top"):
+        _set_fcurves_linear(bag_by_n["Pull_Top"])
+
+    # Map each frame to its explicit mode or None (transition gap)
+    f_mode = {}
+    for f0, f1, mode in pose_ranges:
+        for f in range(int(f0), int(f1) + 1):
+            f_mode[f] = mode
+
+    # Evaluate Hero transform & shoulder height per frame
+    hero_samples = {}
+    for f in range(1, N + 1):
+        scene.frame_set(f)
+        bpy.context.view_layer.update()
+        hmw = hero_root.matrix_world.copy()
+        hfwd = (hmw.to_3x3() @ Vector((0.0, -1.0, 0.0))).normalized()
+        hyaw = math.degrees(math.atan2(hfwd.x, -hfwd.y))
+        sh_z = float((hero_arm.matrix_world @ hero_arm.pose.bones["Arm.R"].head).z)
+        hero_samples[f] = (hmw, hfwd, hyaw, sh_z)
+
+    def _unwrap_deg(prev_d, target_d):
+        return prev_d + (((target_d - prev_d + 180.0) % 360.0) - 180.0)
+
+    bag_pos = {}
+    bag_rot = {}
+    bag_xy = None
+    bag_yaw = None
+    theta_deg = 52.0
+
+    # Pass A: compute target pose for all explicit mode frames
+    for f0, f1, mode in pose_ranges:
+        for f in range(int(f0), int(f1) + 1):
+            hmw, hfwd, hyaw, sh_z = hero_samples[f]
+            h_loc = hmw.translation
+            if bag_yaw is None:
+                bag_yaw = hyaw
+            if mode in ("tow", "walk_tow"):
+                coeff = 1.218 if mode == "walk_tow" else 1.184
+                rel_sh = sh_z - float(ground_z)
+                sin_t = max(0.68, min(0.84, (rel_sh - 0.495) / coeff))
+                th_want = math.degrees(math.asin(sin_t))
+                theta_deg = th_want if f == int(f0) else (0.58 * theta_deg + 0.42 * th_want)
+                hitch_3d = hmw @ Vector((-0.31, -0.02, 0.0))
+                hitch_xy = Vector((float(hitch_3d.x), float(hitch_3d.y)))
+                d_pull = 0.50 if mode == "walk_tow" else 0.52
+                if bag_xy is None or f == int(f0):
+                    bag_xy = hitch_xy - Vector((float(hfwd.x), float(hfwd.y))) * d_pull
+                    bag_yaw = _unwrap_deg(bag_yaw, hyaw)
+                else:
+                    to_h = hitch_xy - bag_xy
+                    if to_h.length > 0.04:
+                        pull_yaw = math.degrees(math.atan2(to_h.x, -to_h.y))
+                        bag_yaw = bag_yaw + 0.34 * (((pull_yaw - bag_yaw + 180.0) % 360.0) - 180.0)
+                    else:
+                        bag_yaw = bag_yaw + 0.25 * (((hyaw - bag_yaw + 180.0) % 360.0) - 180.0)
+                    bfwd = Vector((math.sin(math.radians(bag_yaw)), -math.cos(math.radians(bag_yaw))))
+                    want_xy = hitch_xy - bfwd * d_pull
+                    bag_xy = bag_xy.lerp(want_xy, 0.65)
+                # Enforce >= 0.60m center XY clearance from Hero pelvis (`min_leg_xy >= 0.40m > 0.38m`!)
+                h_xy = Vector((float(h_loc.x), float(h_loc.y)))
+                dv = bag_xy - h_xy
+                if dv.length < 0.60:
+                    if dv.length < 1e-4:
+                        dv = Vector((-float(hfwd.x), -float(hfwd.y)))
+                    bag_xy = h_xy + dv.normalized() * 0.60
+                bz = float(ground_z) + 0.2464 * math.sin(math.radians(theta_deg)) + 0.006
+                bag_pos[f] = Vector((float(bag_xy.x), float(bag_xy.y), bz))
+                bag_rot[f] = (-theta_deg, 0.0, bag_yaw)
+            elif mode == "stand":
+                sp = hmw @ Vector((-0.39, -0.03, 0.0))
+                bag_xy = Vector((float(sp.x), float(sp.y)))
+                bag_yaw = _unwrap_deg(bag_yaw, hyaw)
+                theta_deg = 88.0
+                bag_pos[f] = Vector((float(sp.x), float(sp.y), float(ground_z) + 0.249))
+                bag_rot[f] = (-88.0, 0.0, bag_yaw)
+            elif mode == "carry":
+                cp = hmw @ Vector((-0.30, -0.04, 0.75))
+                bag_xy = Vector((float(cp.x), float(cp.y)))
+                bag_yaw = _unwrap_deg(bag_yaw, hyaw)
+                theta_deg = 86.0
+                bag_pos[f] = Vector((float(cp.x), float(cp.y), float(cp.z)))
+                bag_rot[f] = (-86.0, 0.0, bag_yaw)
+
+    # Fill transition gaps smoothly via cubic smoothstep
+    for i in range(len(pose_ranges) - 1):
+        fa_end = int(pose_ranges[i][1])
+        fb_beg = int(pose_ranges[i + 1][0])
+        if fb_beg > fa_end + 1:
+            p0, p1 = bag_pos[fa_end], bag_pos[fb_beg]
+            r0, r1 = bag_rot[fa_end], bag_rot[fb_beg]
+            y1_u = _unwrap_deg(r0[2], r1[2])
+            # Also shift subsequent segment yaws by any 360-multiples so whole shot stays unwrapped
+            dy_shift = y1_u - r1[2]
+            if abs(dy_shift) > 1e-3:
+                for fk in range(fb_beg, N + 1):
+                    if fk in bag_rot:
+                        bag_rot[fk] = (bag_rot[fk][0], bag_rot[fk][1], bag_rot[fk][2] + dy_shift)
+            span = float(fb_beg - fa_end)
+            for fm in range(fa_end + 1, fb_beg):
+                u = (fm - fa_end) / span
+                s = u * u * (3.0 - 2.0 * u)
+                bag_pos[fm] = p0.lerp(p1, s)
+                bag_rot[fm] = (
+                    r0[0] + (r1[0] - r0[0]) * s,
+                    0.0,
+                    r0[2] + (y1_u - r0[2]) * s,
+                )
+
+    key_pos(bag_root, [(f, (float(bag_pos[f].x), float(bag_pos[f].y), float(bag_pos[f].z))) for f in sorted(bag_pos)])
+    key_rot_deg(bag_root, [(f, bag_rot[f]) for f in sorted(bag_rot)])
+    _set_fcurves_linear(bag_root)
+
+    if f_ik_ranges and "Pull_Top" in bag_by_n:
+        solve_roller_bar_grip_targets(
+            scene,
+            hero_root,
+            hero_arm,
+            bag_root,
+            bag_by_n["Pull_Top"],
+            label,
+            f_ik_ranges,
+            hand="R",
+            bind_ik=True,
+        )
+    scene.frame_set(1)
+    return bag_root, bag_by_n
 
 
 def bind_head_look_at(
@@ -1511,6 +1804,24 @@ def load_roller_bag(label, extended="tow", loc=(0.0, 0.0, 0.0), yaw_deg=0.0, bag
         mat = toon_rgb_mat("bag_" + label, bag_tint)
         by_n["CarryRoller_Body"].data.materials[0] = mat
         attach_outline(by_n["CarryRoller_Body"], 0.005)
+    # Proportion adult T-handle crossbar & telescopic rods on the 36.7cm suitcase (`±0.095` outer span, matte charcoal grip)
+    # so an adult Toon People closed fist (`13.4cm` wide) wraps cleanly inside the crossbar with zero rod/cap clipping!
+    if "Pull_Top_Mesh" in by_n:
+        ptm = by_n["Pull_Top_Mesh"]
+        ptm.data = ptm.data.copy()
+        ptm.data.materials[0] = toon_rgb_mat("roller_grip_" + label, (0.15, 0.17, 0.22))
+        for v in ptm.data.vertices:
+            ax = abs(v.co.x)
+            sgn = 1.0 if v.co.x >= 0.0 else -1.0
+            v.co.x = sgn * (0.075 if ax < 0.05 else 0.095)
+            v.co.z *= 0.75
+    if "Pull_Reach_Mesh" in by_n:
+        prm = by_n["Pull_Reach_Mesh"]
+        prm.data = prm.data.copy()
+        for v in prm.data.vertices:
+            sgn = 1.0 if v.co.x >= 0.0 else -1.0
+            v.co.x = sgn * (0.080 if abs(v.co.x) < 0.062 else 0.093)
+            v.co.z = 0.03 + (v.co.z - 0.03) * 0.75
     set_roller_handle(by_n, extended=extended)
     if parent is not None:
         root.parent = parent
@@ -1523,16 +1834,14 @@ def set_roller_handle(by_n, extended="tow", frame=None):
     if reach is None or top is None:
         return
     if extended == "stand":
-        reach.scale = (1.0, 32.5, 1.0)
-        top.location = (0.0, -0.22 - 0.72, 0.03)
+        reach.scale = (1.0, 29.8, 1.0)
+        top.location = (0.0, -0.82, 0.03)
     elif extended == "walk_tow":
-        reach.scale = (1.0, 33.8, 1.0)
-        top.location = (0.0, -0.22 - 0.70, 0.03)
+        reach.scale = (1.0, 30.8, 1.0)
+        top.location = (0.0, -0.84, 0.03)
     elif extended:
-        # Grounded 2-wheel sprint tow extension: places Pull_Top at ~1.03m (`dz = 0.37m < 0.438m` arm length
-        # during `run`, so Forearm.R hits target with 0.00m gap AND elbow stays >=0.14m below shoulder!)
-        reach.scale = (1.0, 31.8, 1.0)
-        top.location = (0.0, -0.22 - 0.65, 0.03)
+        reach.scale = (1.0, 29.5, 1.0)
+        top.location = (0.0, -0.81, 0.03)
     else:
         reach.scale = (1.0, 1.0, 1.0)
         top.location = (0.0, -0.24, 0.03)
@@ -1550,6 +1859,7 @@ def verify_human_motion(
     seated_exempt=None,
     exempt_ranges=None,
     pulled_rollers=None,
+    roller_grip_checks=None,
     forbid_char_boxes=None,
     stair_foot_checks=None,
     min_clearance=0.45,
@@ -1631,10 +1941,33 @@ def verify_human_motion(
     min_char_d = 999.0
     max_yaw_step = 0.0
     max_ik_err = 0.0
+    max_roller_hollow_err = 0.0
+    min_roller_wrist_clear = 999.0
+    max_roller_kink_deg = 0.0
+    roller_rod_slot_hits = 0
     min_stair_margin = 999.0
     stair_gaps = []
     prev_xy = {}
     prev_yaw = {}
+
+    # Pre-index right-hand vertex indices per roller-holding character mesh for fast per-frame rod-slot checks
+    hand_r_vmap = {}
+    if roller_grip_checks:
+        r_vgs = {"Hand.R", "Fingers.R", "Fingertips.R", "Thumb.R", "Thumb_Tip.R"}
+        for cr_g, _, _, _, _ in roller_grip_checks:
+            if cr_g.name not in hand_r_vmap:
+                entries = []
+                for mo in cr_g.children_recursive:
+                    if mo.type == "MESH" and ("body" in mo.name.lower() or "char" in mo.name.lower()):
+                        vg_names = {vg.index: vg.name for vg in mo.vertex_groups}
+                        v_idxs = [
+                            v.index
+                            for v in mo.data.vertices
+                            if any(vg_names.get(g.group) in r_vgs and g.weight > 0.25 for g in v.groups)
+                        ]
+                        if v_idxs:
+                            entries.append((mo, v_idxs))
+                hand_r_vmap[cr_g.name] = entries
 
     for f in range(1, n_frames + 1):
         scene.frame_set(f)
@@ -1760,6 +2093,60 @@ def verify_human_motion(
                     if (sh_z - el_z) < 0.12:
                         fail("%s f=%d: Hero chicken-wing high elbow (sh_z=%.3f, el_z=%.3f, diff=%.3fm < 0.12m!)" % (shot_id, f, sh_z, el_z, sh_z - el_z))
 
+        # 6b. Roller-bar palm-hollow grip, wrist-not-impaled, <=28deg wrist kink & 0 rod-slot intrusion check!
+        if roller_grip_checks:
+            dg_rg = bpy.context.evaluated_depsgraph_get()
+            for cr_g, arm_g, bag_r_g, pull_top_g, grip_ranges in roller_grip_checks:
+                if any(r0 <= f <= r1 for r0, r1 in grip_ranges):
+                    if any(mo.hide_render for mo in cr_g.children_recursive if mo.type == "MESH"):
+                        continue
+                    p_bar = pull_top_g.matrix_world @ Vector((0.0, -0.027, 0.0))
+                    m3_g = arm_g.matrix_world.to_3x3()
+                    hd_g = arm_g.pose.bones["Hand.R"]
+                    fa_g = arm_g.pose.bones["Forearm.R"]
+                    p_wrist = arm_g.matrix_world @ hd_g.head
+                    yw_g = (m3_g @ hd_g.y_axis).normalized()
+                    xw_g = (m3_g @ hd_g.x_axis).normalized()
+                    fa_yw = (m3_g @ fa_g.y_axis).normalized()
+                    p_hollow = p_wrist + yw_g * 0.100 - xw_g * 0.036
+                    hol_err = float((p_hollow - p_bar).length)
+                    wr_clear = float((p_wrist - p_bar).length)
+                    kink_d = math.degrees(fa_yw.angle(yw_g))
+                    max_roller_hollow_err = max(max_roller_hollow_err, hol_err)
+                    min_roller_wrist_clear = min(min_roller_wrist_clear, wr_clear)
+                    max_roller_kink_deg = max(max_roller_kink_deg, kink_d)
+                    if hol_err > 0.022:
+                        fail(
+                            "%s f=%d: %s palm hollow missed roller bar (err=%.4fm > 0.022m!)"
+                            % (shot_id, f, cr_g.name, hol_err)
+                        )
+                    if wr_clear < 0.055:
+                        fail(
+                            "%s f=%d: %s wrist joint impaled on roller bar (dist=%.4fm < 0.055m!)"
+                            % (shot_id, f, cr_g.name, wr_clear)
+                        )
+                    if kink_d > 28.0:
+                        fail(
+                            "%s f=%d: %s wrist kink %.1fdeg > 28.0deg on roller bar!"
+                            % (shot_id, f, cr_g.name, kink_d)
+                        )
+                    top_y_loc = float(pull_top_g.location.y)
+                    if top_y_loc < -0.35:
+                        bag_inv_g = bag_r_g.matrix_world.inverted()
+                        for mo_g, v_idxs in hand_r_vmap.get(cr_g.name, ()):
+                            ev_g = mo_g.evaluated_get(dg_rg).to_mesh()
+                            mw_g = mo_g.matrix_world
+                            for vi in v_idxs:
+                                bp = bag_inv_g @ (mw_g @ ev_g.vertices[vi].co)
+                                if (top_y_loc + 0.032) <= bp.y <= -0.220 and abs(bp.x) <= 0.072 and 0.010 <= bp.z <= 0.050:
+                                    roller_rod_slot_hits += 1
+                                    mo_g.evaluated_get(dg_rg).to_mesh_clear()
+                                    fail(
+                                        "%s f=%d: %s Hand.R/finger vertex intruded into telescopic rod slot (bag_xyz=(%.3f,%.3f,%.3f), top_y=%.3f)!"
+                                        % (shot_id, f, cr_g.name, bp.x, bp.y, bp.z, top_y_loc)
+                                    )
+                            mo_g.evaluated_get(dg_rg).to_mesh_clear()
+
         # 8. Stair-tread & upper-deck per-vertex foot-elevation check (neither sinking < -0.015m NOR floating > 0.04m!)
         if stair_foot_checks:
             dg_s = bpy.context.evaluated_depsgraph_get()
@@ -1810,6 +2197,10 @@ def verify_human_motion(
         "min_character_sep_m": round(min_char_d, 3) if min_char_d < 900 else None,
         "max_yaw_step_deg": round(max_yaw_step, 2),
         "max_ik_grip_err_m": round(max_ik_err, 4),
+        "max_roller_hollow_err_m": round(max_roller_hollow_err, 4) if roller_grip_checks else None,
+        "min_roller_wrist_clear_m": round(min_roller_wrist_clear, 4) if min_roller_wrist_clear < 900 else None,
+        "max_roller_wrist_kink_deg": round(max_roller_kink_deg, 2) if roller_grip_checks else None,
+        "roller_rod_slot_hits": roller_rod_slot_hits if roller_grip_checks else None,
         "min_stair_foot_margin_m": round(min_stair_margin, 3) if min_stair_margin < 900 else None,
         "median_stair_foot_gap_m": round(float(np.median(stair_gaps)), 3) if stair_gaps else None,
         "max_stair_foot_gap_m": round(float(max(stair_gaps)), 3) if stair_gaps else None,

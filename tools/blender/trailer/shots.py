@@ -148,57 +148,19 @@ def _setup_jet_landing_gear(scene, plane_root, plane_by_n, mode="parked", f_roll
         tk.key_rot_deg(hr_piv, [(1, (0, 0, 0)), (f_retract_end - 8, (0, 0, 0)), (f_retract_end + 8, (0, -82.0, 0)), (f_end, (0, -82.0, 0))])
 
 
-def _attach_towed_roller(hero_root, hero_arm, label, f_ik_ranges, pose_ranges=None):
-    """Parent yellow CarryRoller (`bag_scale=1.12`) to `hero_root` with physically grounded rear-wheel contact:
-    - `tow`: tilted `rx = -55 deg`, `loc = (-0.27, +0.58, +0.193)` -> rear wheels sit ON the floor (`+0.005 m`),
-      trailing `0.49 m` behind/right of Hero's leg centerline (zero shin clip!) with `Pull_Top` at low hip height
-      so `Forearm.R` extends relaxed down-and-back (`shoulder_z - elbow_z >= 0.17 m`, zero chicken-wing!).
-    - `stand`: upright `rx = -88 deg`, `loc = (-0.42, -0.02, +0.249)` -> standing visibly BESIDE Hero on its wheels!
-    - `carry`: `Pull_Top` retracted flush, `rx = -86 deg`, `loc = (-0.28, -0.04, +0.86)` -> lifted `0.61 m` clear above airstairs!
-    """
-    bag_root, _, bag_by_n = tk.load_roller_bag(
+def _attach_towed_roller(hero_root, hero_arm, label, f_ik_ranges, pose_ranges=None, ground_z=0.0):
+    """Spawn yellow CarryRoller (`bag_scale=1.12`) in WORLD SPACE (`parent=None`) with damped rear-wheel
+    pursuit, shoulder-bob handle pitch compliance, converged palm-hollow wrist IK (`~0.084 m` proximal from
+    the crossbar center), locked overhand `Hand.R` orientation, and closed anatomical fist."""
+    return tk.setup_world_roller_and_grip(
+        bpy.context.scene,
+        hero_root,
+        hero_arm,
         label,
-        extended="tow",
-        loc=(-0.27, 0.58, 0.193),
-        yaw_deg=0.0,
-        bag_tint=tk.YELLOW,
-        parent=hero_root,
-        bag_scale=1.12,
+        f_ik_ranges=f_ik_ranges,
+        pose_ranges=pose_ranges,
+        ground_z=ground_z,
     )
-    bag_root.rotation_mode = "XYZ"
-    bag_root.rotation_euler = (math.radians(-55.0), 0.0, 0.0)
-
-    if pose_ranges:
-        pos_keys = []
-        rot_keys = []
-        for f0, f1, mode in pose_ranges:
-            if mode == "stand":
-                pos_keys.extend([(f0, (-0.42, -0.02, 0.249)), (f1, (-0.42, -0.02, 0.249))])
-                rot_keys.extend([(f0, (-88.0, 0.0, 0.0)), (f1, (-88.0, 0.0, 0.0))])
-                tk.set_roller_handle(bag_by_n, extended="stand", frame=f0)
-                tk.set_roller_handle(bag_by_n, extended="stand", frame=f1)
-            elif mode == "carry":
-                pos_keys.extend([(f0, (-0.26, -0.06, 0.84)), (f1, (-0.26, -0.06, 0.84))])
-                rot_keys.extend([(f0, (-88.0, 0.0, 0.0)), (f1, (-88.0, 0.0, 0.0))])
-                tk.set_roller_handle(bag_by_n, extended=False, frame=f0)
-                tk.set_roller_handle(bag_by_n, extended=False, frame=f1)
-            elif mode == "walk_tow":
-                pos_keys.extend([(f0, (-0.25, 0.54, 0.193)), (f1, (-0.25, 0.54, 0.193))])
-                rot_keys.extend([(f0, (-55.0, 0.0, 0.0)), (f1, (-55.0, 0.0, 0.0))])
-                tk.set_roller_handle(bag_by_n, extended="walk_tow", frame=f0)
-                tk.set_roller_handle(bag_by_n, extended="walk_tow", frame=f1)
-            else:
-                pos_keys.extend([(f0, (-0.26, 0.56, 0.193)), (f1, (-0.26, 0.56, 0.193))])
-                rot_keys.extend([(f0, (-55.0, 0.0, 0.0)), (f1, (-55.0, 0.0, 0.0))])
-                tk.set_roller_handle(bag_by_n, extended="tow", frame=f0)
-                tk.set_roller_handle(bag_by_n, extended="tow", frame=f1)
-        tk.key_pos(bag_root, pos_keys)
-        tk.key_rot_deg(bag_root, rot_keys)
-        tk._set_fcurves_linear(bag_root)
-
-    if f_ik_ranges and "Pull_Top" in bag_by_n:
-        tk.bind_hand_ik_to_roller(hero_arm, bag_by_n["Pull_Top"], f_ik_ranges, hand="R", char_root=hero_root)
-    return bag_root, bag_by_n
 
 
 def _make_boarding_pass_card(scene, name="BoardingPass", parent=None):
@@ -540,6 +502,7 @@ def build_shot_01(g0):
         "HeroRoller01",
         f_ik_ranges=[(27, N)],
         pose_ranges=[(1, 45, "tow"), (51, 92, "stand"), (98, N, "tow")],
+        ground_z=CURB_Z,
     )
     for ho in hero_objs:
         if ho.type == "MESH":
@@ -611,6 +574,9 @@ def build_shot_01(g0):
         ],
         "pulled_rollers": [
             (hero_root, hero_arm, bag01_by_n["CarryRoller_Body"], CURB_Z, [(27, 44), (98, N)]),
+        ],
+        "roller_grip_checks": [
+            (hero_root, hero_arm, bag01_root, bag01_by_n["Pull_Top"], [(27, N)]),
         ],
     }
     return scene, cam, prove_targets, hero_arm, events, motion_spec
@@ -849,7 +815,7 @@ def build_shot_02(g0):
     hand_pass.keyframe_insert(data_path="scale", frame=132)
     hand_pass.keyframe_insert(data_path="scale", frame=N)
 
-    _, bag02_by_n = _attach_towed_roller(
+    bag02_root, bag02_by_n = _attach_towed_roller(
         hero_root,
         hero_arm,
         "HeroRoller02",
@@ -914,6 +880,9 @@ def build_shot_02(g0):
         "seated_exempt": set(),
         "pulled_rollers": [
             (hero_root, hero_arm, bag02_by_n["CarryRoller_Body"], 0.0, [(1, 98), (150, N)]),
+        ],
+        "roller_grip_checks": [
+            (hero_root, hero_arm, bag02_root, bag02_by_n["Pull_Top"], [(1, N)]),
         ],
     }
     return scene, cam, prove_targets, hero_arm, events, motion_spec
@@ -1134,21 +1103,50 @@ def build_shot_03(g0):
 
     grip_side_l = bpy.data.objects.new("BagSideGrip_L", None)
     grip_side_l.parent = bag_root
-    grip_side_l.location = (0.19, -0.08, 0.13)
+    grip_side_l.location = (0.20, -0.07, 0.13)
     scene.collection.objects.link(grip_side_l)
 
     grip_side_r = bpy.data.objects.new("BagSideGrip_R", None)
     grip_side_r.parent = bag_root
-    grip_side_r.location = (-0.19, -0.08, 0.13)
+    grip_side_r.location = (-0.20, -0.07, 0.13)
     scene.collection.objects.link(grip_side_r)
 
     bag_pos_keys = []
+    bag_rot_keys = []
+    s3_xy = None
+    s3_yaw = 180.0
+    s3_theta = 52.0
     for f_tow in range(1, 31):
         scene.frame_set(f_tow)
-        hx, hy, _ = hero_root.location
-        bag_pos_keys.append((f_tow, (float(hx) + 0.25, float(hy) - 0.54, 0.193)))
+        bpy.context.view_layer.update()
+        hmw = hero_root.matrix_world
+        hfwd = (hmw.to_3x3() @ Vector((0.0, -1.0, 0.0))).normalized()
+        hyaw = math.degrees(math.atan2(hfwd.x, -hfwd.y))
+        sh_z = float((hero_arm.matrix_world @ hero_arm.pose.bones["Arm.R"].head).z)
+        sin_t = max(0.68, min(0.84, (sh_z - 0.495) / 1.184))
+        th_w = math.degrees(math.asin(sin_t))
+        s3_theta = th_w if f_tow == 1 else (0.58 * s3_theta + 0.42 * th_w)
+        hitch_3d = hmw @ Vector((-0.31, -0.02, 0.0))
+        hitch_xy = Vector((float(hitch_3d.x), float(hitch_3d.y)))
+        if s3_xy is None:
+            s3_xy = hitch_xy - Vector((float(hfwd.x), float(hfwd.y))) * 0.52
+            s3_yaw = 180.0 + (((hyaw - 180.0 + 180.0) % 360.0) - 180.0)
+        else:
+            to_h = hitch_xy - s3_xy
+            if to_h.length > 0.04:
+                py = math.degrees(math.atan2(to_h.x, -to_h.y))
+                s3_yaw += 0.34 * (((py - s3_yaw + 180.0) % 360.0) - 180.0)
+            bfwd = Vector((math.sin(math.radians(s3_yaw)), -math.cos(math.radians(s3_yaw))))
+            s3_xy = s3_xy.lerp(hitch_xy - bfwd * 0.52, 0.65)
+        h_xy = Vector((float(hmw.translation.x), float(hmw.translation.y)))
+        if (s3_xy - h_xy).length < 0.60:
+            s3_xy = h_xy + (s3_xy - h_xy).normalized() * 0.60
+        bz = 0.2464 * math.sin(math.radians(s3_theta)) + 0.006
+        bag_pos_keys.append((f_tow, (float(s3_xy.x), float(s3_xy.y), bz)))
+        bag_rot_keys.append((f_tow, (-s3_theta, 0.0, s3_yaw)))
+
     bag_pos_keys.extend([
-        (34, (0.18, -1.10, 0.84)),     # Held in Hand.R pivoting smoothly +90 deg (180 -> 270 deg, zero wrap!)
+        (34, (0.20, -1.10, 0.84)),     # Held in Hand.R pivoting smoothly +90 deg (180 -> 270 deg, zero wrap!)
         (37, (-0.23, -1.15, 0.98)),    # Brought up in front of Hero as BOTH hands clasp horizontal side grips!
         (44, (-0.29, -1.15, 1.05)),    # Lifted WITH BOTH HANDS (influence=1.0, err<=0.02m!) over tray rim!
         (52, (-0.33, -1.15, 0.92)),    # Set squarely into HeroTray while BOTH hands remain clasped!
@@ -1157,17 +1155,9 @@ def build_shot_03(g0):
         (135, (-0.33, 1.15, 0.92)),    # Stationary until BOTH Hero hands clasp horizontal side grips at f=135!
         (142, (-0.29, 1.15, 1.05)),    # Lifted off PickupTable WITH BOTH HANDS (influence=1.0, err<=0.02m!)
         (149, (-0.23, 1.15, 0.98)),    # Held by both hands right in front of Hero before Hand.R swings handle back!
-        (154, (0.18, 1.06, 0.84)),     # Held in Hand.R pivoting smoothly -90 deg (270 -> 180 deg) onto rear wheels!
+        (154, (0.20, 1.06, 0.84)),     # Held in Hand.R pivoting smoothly -90 deg (270 -> 180 deg) onto rear wheels!
     ])
-    for f_tow in range(158, N + 1):
-        scene.frame_set(f_tow)
-        hx, hy, _ = hero_root.location
-        bag_pos_keys.append((f_tow, (float(hx) + 0.26, float(hy) - 0.56, 0.193)))
-    scene.frame_set(1)
-    tk.key_pos(bag_root, bag_pos_keys)
-    tk.key_rot_deg(bag_root, [
-        (1, (-55.0, 0.0, 180.0)),
-        (30, (-55.0, 0.0, 180.0)),
+    bag_rot_keys.extend([
         (34, (-36.0, 0.0, 225.0)),
         (37, (-14.0, 0.0, 270.0)),
         (44, (-6.0, 0.0, 270.0)),
@@ -1176,9 +1166,43 @@ def build_shot_03(g0):
         (142, (-8.0, 0.0, 270.0)),
         (149, (-14.0, 0.0, 270.0)),
         (154, (-36.0, 0.0, 225.0)),
-        (158, (-55.0, 0.0, 180.0)),
-        (N, (-55.0, 0.0, 180.0)),
     ])
+
+    s3_xy2 = None
+    s3_yaw2 = 195.0
+    s3_theta2 = 52.0
+    for f_tow in range(158, N + 1):
+        scene.frame_set(f_tow)
+        bpy.context.view_layer.update()
+        hmw = hero_root.matrix_world
+        hfwd = (hmw.to_3x3() @ Vector((0.0, -1.0, 0.0))).normalized()
+        hyaw = math.degrees(math.atan2(hfwd.x, -hfwd.y))
+        sh_z = float((hero_arm.matrix_world @ hero_arm.pose.bones["Arm.R"].head).z)
+        sin_t = max(0.68, min(0.84, (sh_z - 0.495) / 1.184))
+        th_w = math.degrees(math.asin(sin_t))
+        s3_theta2 = th_w if f_tow == 158 else (0.58 * s3_theta2 + 0.42 * th_w)
+        hitch_3d = hmw @ Vector((-0.31, -0.02, 0.0))
+        hitch_xy = Vector((float(hitch_3d.x), float(hitch_3d.y)))
+        if s3_xy2 is None:
+            bfwd0 = Vector((math.sin(math.radians(s3_yaw2)), -math.cos(math.radians(s3_yaw2))))
+            s3_xy2 = hitch_xy - bfwd0 * 0.52
+        else:
+            to_h = hitch_xy - s3_xy2
+            if to_h.length > 0.04:
+                py = math.degrees(math.atan2(to_h.x, -to_h.y))
+                s3_yaw2 += 0.34 * (((py - s3_yaw2 + 180.0) % 360.0) - 180.0)
+            bfwd = Vector((math.sin(math.radians(s3_yaw2)), -math.cos(math.radians(s3_yaw2))))
+            s3_xy2 = s3_xy2.lerp(hitch_xy - bfwd * 0.52, 0.65)
+        h_xy = Vector((float(hmw.translation.x), float(hmw.translation.y)))
+        if (s3_xy2 - h_xy).length < 0.60:
+            s3_xy2 = h_xy + (s3_xy2 - h_xy).normalized() * 0.60
+        bz = 0.2464 * math.sin(math.radians(s3_theta2)) + 0.006
+        bag_pos_keys.append((f_tow, (float(s3_xy2.x), float(s3_xy2.y), bz)))
+        bag_rot_keys.append((f_tow, (-s3_theta2, 0.0, s3_yaw2)))
+
+    scene.frame_set(1)
+    tk.key_pos(bag_root, bag_pos_keys)
+    tk.key_rot_deg(bag_root, bag_rot_keys)
     tk._set_fcurves_linear(bag_root)
 
     # Deep Spine_01 + Spine_02 + Head forward pitch so Hero's shoulders lean ~24 deg over TrayTable & PickupTable!
@@ -1199,20 +1223,6 @@ def build_shot_03(g0):
         ],
         include_spine="deep",
     )
-    # Single unified IK target for Forearm.R (Blender's IK solver only evaluates one active IK tree per tip bone!):
-    # seamlessly tracks `Pull_Top` on f=1..34 & f=153..N and `BagSideGrip_R` on f=37..52 & f=135..149!
-    r_goal = bpy.data.objects.new("HeroSecRightGoal", None)
-    scene.collection.objects.link(r_goal)
-    r_goal_keys = []
-    for f_rg in list(range(1, 35)) + list(range(37, 56)) + list(range(132, 150)) + list(range(153, N + 1)):
-        scene.frame_set(f_rg)
-        bpy.context.view_layer.update()
-        src_ob = grip_side_r if (37 <= f_rg <= 55 or 132 <= f_rg <= 149) else bag_by_n["Pull_Top"]
-        wp_rg = src_ob.matrix_world.translation
-        r_goal_keys.append((f_rg, (float(wp_rg.x), float(wp_rg.y), float(wp_rg.z))))
-    scene.frame_set(1)
-    tk.key_pos(r_goal, r_goal_keys)
-    tk._set_fcurves_linear(r_goal)
 
     r_hand_inf = [
         (1, 1.0), (52, 1.0), (56, 0.0),
@@ -1223,14 +1233,97 @@ def build_shot_03(g0):
         (34, 0.0), (37, 1.0), (52, 1.0), (56, 0.0),
         (132, 0.0), (135, 1.0), (149, 1.0), (153, 0.0),
     ]
+    tk.bind_hand_fist_curl(scene, hero_arm, "SecFistL", hand="L", influence_keys=two_hand_inf_l)
+    tk.bind_hand_fist_curl(scene, hero_arm, "SecFistR", hand="R", influence_keys=r_hand_inf)
+
+    # Single unified IK target for Forearm.R: converged palm-hollow offset on `Pull_Top` (f=1..34 & f=154..N)
+    # and side clasp on `BagSideGrip_R` (f=37..55 & f=132..150), plus `LockWrist_HeroRoller03` on bar-holding frames!
+    r_goal = bpy.data.objects.new("HeroSecRightGoal", None)
+    scene.collection.objects.link(r_goal)
+    s3_hand_rot = bpy.data.objects.new("RollerHandRot_HeroRoller03", None)
+    s3_hand_rot.rotation_mode = "QUATERNION"
+    scene.collection.objects.link(s3_hand_rot)
+
+    init_rg = []
+    for f_rg in range(1, N + 1):
+        scene.frame_set(f_rg)
+        bpy.context.view_layer.update()
+        if 37 <= f_rg <= 150:
+            wp_rg = grip_side_r.matrix_world.translation
+            init_rg.append((f_rg, (float(wp_rg.x), float(wp_rg.y), float(wp_rg.z))))
+        else:
+            p_bar = bag_by_n["Pull_Top"].matrix_world @ Vector((0.0, -0.018, 0.0))
+            init_rg.append((f_rg, (float(p_bar.x), float(p_bar.y), float(p_bar.z) + 0.084)))
+    tk.key_pos(r_goal, init_rg)
+    tk._set_fcurves_linear(r_goal)
+
     tk.bind_hand_ik_target(
         scene, hero_arm, "HeaveBagL", hand="L", target_obj=grip_side_l, influence_keys=two_hand_inf_l,
         pole_parent=hero_root, pole_loc=(0.45, 0.45, 0.95), pole_angle_deg=90.0,
     )
     tk.bind_hand_ik_target(
         scene, hero_arm, "HeroRightUnified", hand="R", target_obj=r_goal, influence_keys=r_hand_inf,
-        pole_parent=hero_root, pole_loc=(-0.42, 0.65, 1.02), pole_angle_deg=-90.0,
+        pole_parent=hero_root, pole_loc=(-0.42, 0.65, 0.95), pole_angle_deg=125.0,
     )
+
+    from mathutils import Matrix, Quaternion
+    pull_top_03 = bag_by_n["Pull_Top"]
+    for _it in range(2):
+        rg_keys2 = []
+        hr_q03 = []
+        prev_q03 = None
+        for f_rg in range(1, N + 1):
+            scene.frame_set(f_rg)
+            bpy.context.view_layer.update()
+            pt_mw = pull_top_03.matrix_world
+            bm3 = bag_root.matrix_world.to_3x3()
+            bag_x = (bm3 @ Vector((1.0, 0.0, 0.0))).normalized()
+            p_bar = pt_mw @ Vector((0.0, -0.027, 0.0))
+            fa = hero_arm.pose.bones["Forearm.R"]
+            fa_dir = (hero_arm.matrix_world.to_3x3() @ fa.y_axis).normalized()
+            y_hand = fa_dir
+            z_raw = -bag_x
+            z_proj = z_raw - y_hand * z_raw.dot(y_hand)
+            z_hand = z_proj.normalized() if z_proj.length > 1e-4 else Vector((-1.0, 0.0, 0.0))
+            x_hand = y_hand.cross(z_hand).normalized()
+            rot_m = Matrix((
+                (x_hand.x, y_hand.x, z_hand.x),
+                (x_hand.y, y_hand.y, z_hand.y),
+                (x_hand.z, y_hand.z, z_hand.z),
+            ))
+            qh = rot_m.to_quaternion()
+            if prev_q03 is not None and prev_q03.dot(qh) < 0.0:
+                qh = Quaternion((-qh.w, -qh.x, -qh.y, -qh.z))
+            prev_q03 = qh
+            hr_q03.append((f_rg, qh))
+            if 37 <= f_rg <= 150:
+                wp_rg = grip_side_r.matrix_world.translation
+                rg_keys2.append((f_rg, (float(wp_rg.x), float(wp_rg.y), float(wp_rg.z))))
+            elif f_rg in (35, 36, 151, 152, 153):
+                # Smooth bridge frames unlocked between bar grip and side grip
+                pass
+            else:
+                pw = p_bar - y_hand * 0.100 + x_hand * 0.036
+                rg_keys2.append((f_rg, (float(pw.x), float(pw.y), float(pw.z))))
+        tk.key_pos(r_goal, rg_keys2)
+        tk._set_fcurves_linear(r_goal)
+
+    for f_rg, qh in hr_q03:
+        s3_hand_rot.rotation_quaternion = qh
+        s3_hand_rot.keyframe_insert(data_path="rotation_quaternion", frame=f_rg)
+    tk._set_fcurves_linear(s3_hand_rot)
+
+    pb_hr03 = hero_arm.pose.bones["Hand.R"]
+    pb_hr03.rotation_mode = "QUATERNION"
+    cns_hr03 = pb_hr03.constraints.new("COPY_ROTATION")
+    cns_hr03.name = "LockWrist_HeroRoller03"
+    cns_hr03.target = s3_hand_rot
+    cns_hr03.target_space = "WORLD"
+    cns_hr03.owner_space = "WORLD"
+    for f_k, v_k in [(1, 1.0), (34, 1.0), (37, 0.0), (150, 0.0), (154, 1.0), (N, 1.0)]:
+        cns_hr03.influence = v_k
+        cns_hr03.keyframe_insert(data_path="influence", frame=f_k)
+    scene.frame_set(1)
 
     # Comedic double-take on SecOfficer looking at the X-ray screen when the Rubber Duck rolls through (f=72..90),
     # then looking back at Hero to wave him through!
@@ -1295,6 +1388,9 @@ def build_shot_03(g0):
         "seated_exempt": set(),
         "pulled_rollers": [
             (hero_root, hero_arm, bag_by_n["CarryRoller_Body"], 0.0, [(1, 30), (159, N)]),
+        ],
+        "roller_grip_checks": [
+            (hero_root, hero_arm, bag_root, bag_by_n["Pull_Top"], [(1, 34), (154, N)]),
         ],
     }
     return scene, cam, prove_targets, hero_arm, events, motion_spec
@@ -1423,7 +1519,7 @@ def build_shot_04(g0):
         waypoints=[(1, (0.15, -11.2, 0.0)), (N, (0.12, 10.4, 0.0))],
         frame_end=N,
     )
-    _, bag04_by_n = _attach_towed_roller(hero_root, hero_arm, "HeroRoller04", f_ik_ranges=[(1, N)])
+    bag04_root, bag04_by_n = _attach_towed_roller(hero_root, hero_arm, "HeroRoller04", f_ik_ranges=[(1, N)])
     pass04 = _make_boarding_pass_card(scene, "HeroHeldPass04")
     tk.parent_prop_to_bone(pass04, hero_arm, "Hand.L", local_loc=(0.02, 0.06, 0.0), local_rot_deg=(0.0, 90.0, 0.0))
     tk.bind_hand_ik_target(
@@ -1482,6 +1578,9 @@ def build_shot_04(g0):
         "seated_exempt": {"CHAR_CafeSitPax", "CHAR_SitPax1", "CHAR_SitPax2", "CHAR_SitPax3"},
         "pulled_rollers": [
             (hero_root, hero_arm, bag04_by_n["CarryRoller_Body"], 0.0, [(1, N)]),
+        ],
+        "roller_grip_checks": [
+            (hero_root, hero_arm, bag04_root, bag04_by_n["Pull_Top"], [(1, N)]),
         ],
     }
     return scene, cam, prove_targets, hero_arm, events, motion_spec
@@ -1832,6 +1931,9 @@ def build_shot_05(g0):
         "exempt_ranges": {"CHAR_Hero": [(65, N)], "CHAR_RampMarshaller": [(CUT_F, N)]},
         "pulled_rollers": [
             (hero_root, hero_arm, bag05_by_n["CarryRoller_Body"], 0.0, [(1, 13)]),
+        ],
+        "roller_grip_checks": [
+            (hero_root, hero_arm, bag05_root, bag05_by_n["Pull_Top"], [(1, 71)]),
         ],
         "stair_foot_checks": [
             (hero_root, 19, 64, _stair_surf_z),
