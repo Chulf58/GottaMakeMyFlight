@@ -160,12 +160,12 @@ func test_a_plane_03_passenger_leaves_by_the_apron_door() -> void:
 		)
 	)
 	assert_bool(OutsideWalks.docks_at(_world.sim, exit, MODEL_03)).is_false()
-	assert_int(p.apron.size()).is_equal(4)
+	assert_int(p.apron.size()).is_equal(6)
 	assert_vector(p.apron[1]).is_equal(pose["mounts"][&"Mount_ExitSill"])
 	assert_vector(p.apron[2]).is_equal(apron_door)
 	# It ends on the ground, out from the door along the fuselage normal.
 	var out: Vector3 = pose["door"] + (pose["normal"] as Vector3) * JetBridgePose.APRON_END_OUT_M
-	assert_vector(p.apron[3]).is_equal(Vector3(out.x, JetBridgePose.ground_y(stand), out.z))
+	assert_vector(p.apron[5]).is_equal(Vector3(out.x, JetBridgePose.ground_y(stand), out.z))
 	# The control: a docking walk does not pass the apron door.
 	assert_float(_nearest(docking, _pose_of(MODEL_05)["mounts"][&"Mount_ApronDoor"])).is_greater(
 		0.5
@@ -444,6 +444,67 @@ func test_plane_03s_walk_ends_with_the_passenger_clear_of_the_plane() -> void:
 	assert_int(hits).is_equal(0)
 	# The control: the old end on the door's face puts the body in the plane.
 	assert_int(old_hits).is_greater(0)
+
+
+## Along the apron segments (Mount_ApronDoor -> waypoint -> door end), a
+## passenger keeps clear of plane 03's triangles (fuselage, main wheel) and its
+## swept propeller disc. Control: the straight line without the waypoint enters
+## the propeller disc's body margin.
+func test_plane_03s_apron_walk_clears_propeller_disc_and_body_along_the_way() -> void:
+	var exit := _exit_of(MODEL_03)
+	var stand := _world.sim.layout.stand_of(_world.grid, exit)
+	var walk := OutsideWalks.departure(_world.sim, exit, MODEL_03)
+	var ground := JetBridgePose.ground_y(stand)
+	var origin := StandPlacement.stand_point(stand) + PlaneClasses.stand_offset(MODEL_03)
+	origin.y = ground
+	var plane: Node3D = PlaneView.PLANE_SCENES[MODEL_03].instantiate()
+	var prop := plane.find_child("TP_Plane_03A_Propeller", true, false) as MeshInstance3D
+	var prop_xform := Transform3D(Basis.IDENTITY, origin) * _local_to(plane, prop)
+	var prop_hub := prop_xform.origin
+	var prop_r := 0.0
+	for v in prop.mesh.get_faces():
+		var w := prop_xform * v
+		prop_r = maxf(prop_r, Vector2(w.x - prop_hub.x, w.y - prop_hub.y).length())
+	var faces := _mesh_points(plane, Transform3D(Basis.IDENTITY, origin))
+	plane.free()
+	var side := FileWaiters.BODY_M
+	var body := AABB(Vector3(-side, 0.0, -side), Vector3(2.0 * side, HEAD_M, 2.0 * side))
+	var hits := 0
+	var min_prop_clear := INF
+	for i in [2, 3]:
+		var seg_dir := walk[i + 1] - walk[i]
+		var steps := maxi(1, ceili(seg_dir.length() / SAMPLE_M))
+		for k in steps + 1:
+			var pt := walk[i].lerp(walk[i + 1], float(k) / steps)
+			hits += _edges_in_body(faces, body, pt, seg_dir)
+			if absf(pt.z - prop_hub.z) <= side:
+				var clamped_y := clampf(prop_hub.y, ground, ground + HEAD_M)
+				var d := Vector2(pt.x - prop_hub.x, clamped_y - prop_hub.y).length() - prop_r
+				min_prop_clear = minf(min_prop_clear, d)
+	# Control: direct straight segment from Mount_ApronDoor to walk.back() at prop z.
+	var last_pt: Vector3 = walk[walk.size() - 1]
+	var t_prop := (prop_hub.z - walk[2].z) / (last_pt.z - walk[2].z)
+	var direct_at_prop := walk[2].lerp(last_pt, t_prop)
+	var direct_clear := (
+		(
+			Vector2(
+				direct_at_prop.x - prop_hub.x,
+				clampf(prop_hub.y, ground, ground + HEAD_M) - prop_hub.y
+			)
+			. length()
+		)
+		- prop_r
+	)
+	print(
+		(
+			"03 apron walk: body hits %d, prop disc radius %.3f m, min clear %.3f m (direct line %.3f m)"
+			% [hits, prop_r, min_prop_clear, direct_clear]
+		)
+	)
+	assert_int(hits).is_equal(0)
+	assert_float(prop_r).is_greater(1.0)
+	assert_float(min_prop_clear).is_greater_equal(side)
+	assert_float(direct_clear).is_less(side)
 
 
 ## A plane 03 walker rerouted round floor laid across its walk out of the

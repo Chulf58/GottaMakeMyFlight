@@ -68,12 +68,12 @@ func test_kit_routes_are_the_airside_phase_paths() -> void:
 
 ## Each class's footprint covers its members drawn door-aligned (PlaneClasses.
 ## stand_offset) and centred (half the length either way), and its reach is
-## the farthest corner. Pinned: small reaches 15.46 m and large 39.13 m, the
-## figures board 13e98b04 measured for the door-aligned turn; medium 20.78 m
-## since model 04 parks 1.5 m further out (board f8c8987c).
+## the farthest corner. Pinned: small is box-centred (5.345 / 5.345 / 7.06 /
+## 8.855), medium 20.78 m since model 04 parks 1.5 m further out (board
+## f8c8987c), large 39.13 m (board 13e98b04).
 func test_the_footprint_covers_both_drawn_forms_of_every_member() -> void:
 	var expected := {
-		PlaneClasses.SMALL: [13.42, 5.345, 7.67, 15.455],
+		PlaneClasses.SMALL: [5.345, 5.345, 7.06, 8.855],
 		PlaneClasses.MEDIUM: [15.20, 14.62, 14.17, 20.780],
 		PlaneClasses.LARGE: [24.35, 32.15, 22.31, 39.129],
 	}

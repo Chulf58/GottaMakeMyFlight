@@ -195,9 +195,9 @@ func test_a_one_off_flight_is_drawn_as_the_starters_small_plane() -> void:
 	assert_str(view.model_name).is_equal("tp_plane_03a")
 
 
-## Every model's door is placed where model 05's is, moved only by its
-## door_shift(): model 04 parks STOP_BACK_M further out, away from the terminal
-## (decision plane-04-stops-further-out-with-the-passenger-walk-ending-at).
+## Docking models place their door where model 05's is, moved only by
+## door_shift() (model 04 parks STOP_BACK_M further out); self-taxiing models
+## park box-centred on stand_point and set door_shift() to match.
 func test_every_model_puts_its_passenger_door_where_model_05s_stand_door_is() -> void:
 	var reference: Vector3 = (
 		PlaneModels.PLANES["tp_plane_05a"]["doors"][0] + PlaneClasses.REFERENCE_OFFSET
@@ -207,11 +207,16 @@ func test_every_model_puts_its_passenger_door_where_model_05s_stand_door_is() ->
 		var placed := PlaneClasses.stand_offset(model) + door
 		var shift := PlaneClasses.door_shift(model)
 		print("%s door placed at %s (reference %s, shift %s)" % [model, placed, reference, shift])
-		assert_float(placed.x).is_equal_approx(reference.x, 0.001)
+		assert_float(placed.x).is_equal_approx(reference.x + shift.x, 0.001)
 		assert_float(placed.z).is_equal_approx(reference.z + shift.z, 0.001)
-		assert_float(shift.x).is_equal(0.0)
-		var expected := -1.5 if model == "tp_plane_04a" else 0.0
-		assert_float(shift.z).is_equal_approx(expected, 0.001)
+		if PlaneClasses.self_taxis(model):
+			var centred_door: Vector3 = PlaneModels.PLANES[model]["model_offset"] + door
+			assert_float(shift.x).is_equal_approx(centred_door.x - reference.x, 0.001)
+			assert_float(shift.z).is_equal_approx(centred_door.z - reference.z, 0.001)
+		else:
+			assert_float(shift.x).is_equal(0.0)
+			var expected := -1.5 if model == "tp_plane_04a" else 0.0
+			assert_float(shift.z).is_equal_approx(expected, 0.001)
 	# Model 05 keeps the placement the stand was built around.
 	var own := PlaneClasses.stand_offset("tp_plane_05a")
 	assert_float(own.z).is_equal_approx(PlaneClasses.REFERENCE_OFFSET.z, 0.001)
@@ -220,8 +225,9 @@ func test_every_model_puts_its_passenger_door_where_model_05s_stand_door_is() ->
 
 ## StandPlacement parks model 05 so its door is at door_point (to 0.2 m along
 ## the plane), and every model's door is placed at its own door_point too. A
-## model's nose lands near model 05's, always on the plane side of the wall
-## line.
+## docking model's nose lands near model 05's, always on the plane side of the
+## wall line; a self-taxiing model parks centred on stand_point well clear of
+## the wall.
 func test_every_model_on_a_stand_has_its_door_at_the_stand_door_and_its_nose_off_the_wall() -> void:
 	var stand := StandPlacement.make(1, 100.0, 40.0)
 	var base := StandPlacement.stand_point(stand)
@@ -230,26 +236,34 @@ func test_every_model_on_a_stand_has_its_door_at_the_stand_door_and_its_nose_off
 	for model: String in PlaneModels.PLANES:
 		var row: Dictionary = PlaneModels.PLANES[model]
 		var offset := PlaneClasses.stand_offset(model)
-		var door_z := StandPlacement.door_point(stand, model).z
+		var door_point := StandPlacement.door_point(stand, model)
 		var door_at: Vector3 = base + offset + row["doors"][0]
 		var nose_at: float = base.z + offset.z + row["nose"]
 		print(
 			(
-				"%s on the stand: door z %.2f (stand door %.2f), nose %.2f (05 nose %.2f), wall %.2f"
-				% [model, door_at.z, door_z, nose_at, nose_05, wall_z]
+				"%s on the stand: door %s (stand door %s), nose %.2f (05 nose %.2f), wall %.2f"
+				% [model, door_at, door_point, nose_at, nose_05, wall_z]
 			)
 		)
-		assert_float(door_at.z).is_equal_approx(door_z, 0.2)
+		assert_float(door_at.z).is_equal_approx(door_point.z, 0.2)
+		assert_float(door_at.x).is_equal_approx(door_point.x - 2.13, 0.02)
 		assert_float(nose_at).is_less(wall_z)
-		assert_float(absf(nose_at - nose_05)).is_less(2.1)
+		if PlaneClasses.self_taxis(model):
+			assert_float(wall_z - nose_at).is_greater(11.0)
+		else:
+			assert_float(absf(nose_at - nose_05)).is_less(2.1)
 
 
-func test_the_starters_small_plane_is_moved_up_to_the_stand_not_centred() -> void:
-	# The case the review found: model 03 centred on the pose point left its nose
-	# about 11.6 m short of the wall and its door 9 m from where passengers walk.
-	var centred: float = PlaneModels.PLANES["tp_plane_03a"]["model_offset"].z
-	var placed := PlaneClasses.stand_offset("tp_plane_03a").z
-	assert_float(placed - centred).is_greater(7.0)
+func test_self_taxis_agrees_with_not_jet_bridge_docks_and_parks_centred() -> void:
+	for model: String in PlaneModels.PLANES:
+		assert_bool(PlaneClasses.self_taxis(model)).is_equal(not JetBridgePose.docks(model))
+	assert_bool(PlaneClasses.self_taxis("tp_plane_03a")).is_true()
+	assert_bool(PlaneClasses.self_taxis("")).is_false()
+	assert_bool(PlaneClasses.self_taxis("tp_plane_99z")).is_false()
+	var centred: Vector3 = PlaneModels.PLANES["tp_plane_03a"]["model_offset"]
+	assert_vector(PlaneClasses.stand_offset("tp_plane_03a")).is_equal_approx(
+		centred, Vector3.ONE * 1e-4
+	)
 
 
 ## A view of `sim` in the tree, not drawing (it has no airside to read paths from).

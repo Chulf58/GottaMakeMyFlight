@@ -86,6 +86,58 @@ func test_a_view_freed_while_docked_parks_its_bridge() -> void:
 	assert_bool(entry["docked"]).is_false()
 
 
+func test_small_flight_folds_bridge_hides_tug_and_self_taxis_forward() -> void:
+	var sim := auto_free(FlightSim.new()) as FlightSim
+	sim.open_airport()
+	var terms := {
+		"id": "C2",
+		"airline": "Gotta Air",
+		"destination": "Bergen",
+		"departure_minute": TestFlightContracts.bootstrap_minute(),
+		"plane_size": PlaneClasses.SMALL,
+		"booked_passengers": 12,
+		"fee_per_passenger": 20,
+	}
+	assert_bool(sim.accept_contract(terms)).is_true()
+	var id := ""
+	for flight in sim.flight_ids():
+		if sim.flight_contract_id(flight) == "C2":
+			id = flight
+	assert_str(id).is_not_empty()
+	var view := PlaneView.new()
+	view.sim = sim
+	view.clock = auto_free(SimClock.new()) as SimClock
+	view.airside = _airside
+	view.gate = sim.flight_gate(id)
+	add_child(view)
+	view.set_process(false)
+	var entry: Dictionary = _airside.props.bridges[view.gate]
+	var tug := (view.get_node("Props") as PlaneProps).tug
+	var push_start := sim.state_start(id, FlightSim.State.PUSHBACK)
+	var push_end := sim.state_start(id, FlightSim.State.TAXI_OUT)
+	_step(view, sim.state_start(id, FlightSim.State.BOARDING) + 10)
+	assert_str(view.model_name).is_equal("tp_plane_03a")
+	assert_bool(entry["folded"]).is_true()
+	assert_bool(entry["docked"]).is_false()
+	assert_bool(tug.is_visible_in_tree()).is_false()
+	# Mid-turn in PUSHBACK: stays on stand_point, turns west away from bridge, zero tug.
+	var turn_mid := push_start + int((push_end - push_start) * FlightPose.SELF_TAXI_TURN_END * 0.5)
+	_step(view, turn_mid)
+	var stand_pos := StandPlacement.stand_point(STAND)
+	assert_int(view.phase).is_equal(FlightSim.State.PUSHBACK)
+	assert_bool(tug.is_visible_in_tree()).is_false()
+	var flat_dist := Vector2(view.position.x - stand_pos.x, view.position.z - stand_pos.z).length()
+	assert_float(flat_dist).is_less(0.01)
+	assert_float(view.transform.basis.z.dot(Vector3.LEFT)).is_greater(0.99)
+	# Roll-out in PUSHBACK: faces north (forward) and moves north toward pushback_end.
+	var roll_mid := push_start + int((push_end - push_start) * 0.75)
+	_step(view, roll_mid)
+	assert_bool(tug.is_visible_in_tree()).is_false()
+	assert_float(view.transform.basis.z.dot(Vector3.FORWARD)).is_greater(0.999)
+	assert_float(view.position.z).is_less(stand_pos.z - 5.0)
+	view.free()
+
+
 ## A PlaneView in the tree on the gate of a large Polar Jet contract (model 06
 ## or 07, both in the bridge's reach) in a sim of its own.
 func _view_with_large_flight() -> PlaneView:

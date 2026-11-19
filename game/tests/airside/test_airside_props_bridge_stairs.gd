@@ -174,11 +174,14 @@ func test_plane_03_leaves_the_bridge_parked_clear_of_it() -> void:
 	assert_int(found["count"]).is_equal(0)
 	assert_int(inside["count"]).is_equal(0)
 	assert_float(gap).is_greater_equal(PARK_CLEAR_M)
-	# Control: the parked bridge with its cab at 05's sill cuts the 03's wing.
+	# Control: the parked bridge with its cab at 05's sill cuts a door-aligned 03's wing.
+	var centred_pos := plane.position
+	plane.position += Vector3(0.61, 0.0, 8.08)
 	var low := JetBridgePose.parked()
 	low["height"] = 1.58
 	JetBridgePose.apply(entry["joints"], low)
 	var cut := Kit.crossings(plane, bridge)
+	plane.position = centred_pos
 	JetBridgePose.apply(entry["joints"], entry["pose"], entry["folded"])
 	print("control: cab at 1.58 m over the 03, %d crossings (%s)" % [cut["count"], cut["meshes"]])
 	assert_int(cut["count"]).is_greater(0)
@@ -195,7 +198,7 @@ func test_plane_03s_apron_walk_has_headroom_under_the_bridge() -> void:
 	var tris := Kit.world_tris(bridge)
 	var low := _lowest_over(tris, walk)
 	print("03 apron walk %s: lowest bridge part over it %.3f m" % [walk, low])
-	assert_int(walk.size()).is_equal(3)
+	assert_int(walk.size()).is_equal(5)
 	assert_float(low).is_greater_equal(APRON_HEADROOM_M)
 	# Control: the walk moved 1.5 m east, under the cab at 1.58 m, meets it.
 	var entry: Dictionary = _airside.props.bridges["A"]
@@ -243,7 +246,15 @@ func test_the_pushback_tug_and_plane_clear_the_parked_bridge() -> void:
 	for model: String in DOCKING + [ON_FOOT]:
 		var worst := 0
 		for t in PUSHBACK:
-			var pose := FlightPose.pose(FlightSim.State.PUSHBACK, t, path, entry_dir)
+			var pose := FlightPose.pose(
+				FlightSim.State.PUSHBACK,
+				t,
+				path,
+				entry_dir,
+				{},
+				0.0,
+				PlaneClasses.self_taxis(model)
+			)
 			var plane := Kit.posed_model(self, model, pose, path[0], entry_dir)
 			var props := PlaneProps.new()
 			plane.get_parent().add_child(props)
@@ -258,7 +269,7 @@ func test_the_pushback_tug_and_plane_clear_the_parked_bridge() -> void:
 						% [model, t, tug["count"], body["count"]]
 					)
 				)
-			if model == ON_FOOT and t == 0.0:
+			if model == "tp_plane_04a" and t == 0.0:
 				# Control: the tug moved onto the vestibule meets it.
 				var start := props.tug.global_position
 				props.tug.global_position = _at(bridge, &"Mount_StairFoot")

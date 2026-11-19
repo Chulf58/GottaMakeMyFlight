@@ -59,6 +59,8 @@ func test_the_tug_holds_the_nose_wheel_through_the_pushback() -> void:
 	var path := _airside.phase_path(FlightSim.State.PUSHBACK, "A")
 	var entry := FlightPose.exit_dir(_airside.phase_path(FlightSim.State.TAXI_IN, "A"))
 	for model: String in PlaneModels.PLANES:
+		if PlaneClasses.self_taxis(model):
+			continue
 		var travelled := 0.0
 		var start := Vector3.ZERO
 		for t in PROGRESS:
@@ -102,6 +104,8 @@ func test_the_tug_starts_its_pushback_clear_of_the_wall_line() -> void:
 	var wall_z := float(_airside.gate_stands["A"]["wall_z"])
 	var pose := FlightPose.pose(FlightSim.State.PUSHBACK, 0.0, path, entry)
 	for model: String in PlaneModels.PLANES:
+		if PlaneClasses.self_taxis(model):
+			continue
 		var plane := Kit.posed_model(self, model, pose, path[0], entry)
 		var props := PlaneProps.new()
 		plane.get_parent().add_child(props)
@@ -136,6 +140,19 @@ func test_the_tug_shows_only_during_pushback() -> void:
 	props.follow(false, plane, "tp_plane_05a", FlightSim.State.PUSHBACK, "A", null, 0)
 	assert_bool(props.tug.visible).is_false()
 	assert_int(shown).is_equal(1)
+	holder.free()
+
+
+func test_a_self_taxiing_plane_never_shows_the_tug() -> void:
+	var holder := Node3D.new()
+	add_child(holder)
+	var plane: Node3D = (PlaneView.PLANE_SCENES["tp_plane_03a"] as PackedScene).instantiate()
+	holder.add_child(plane)
+	var props := PlaneProps.new()
+	holder.add_child(props)
+	for state in FlightSim.STATE_COUNT:
+		props.follow(true, plane, "tp_plane_03a", state, "A", null, 0)
+		assert_bool(props.tug.visible).is_false()
 	holder.free()
 
 

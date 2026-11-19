@@ -159,7 +159,7 @@ func test_pose_for_names_the_drawn_pose_and_mounts() -> void:
 		assert_dict(want["pose"]).is_equal(entry["pose"])
 		assert_bool(want["docked"]).is_equal(entry["docked"])
 		assert_int(want["walk"].size()).is_equal(5 if DOCKING.has(model) else 0)
-		assert_int(want["apron_walk"].size()).is_equal(3 if ON_FOOT.has(model) else 0)
+		assert_int(want["apron_walk"].size()).is_equal(5 if ON_FOOT.has(model) else 0)
 		if plane != null:
 			plane.get_parent().free()
 

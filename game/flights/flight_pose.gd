@@ -11,6 +11,9 @@ const APPROACH_PITCH := deg_to_rad(-4.0)
 const FLARE_PITCH := deg_to_rad(2.0)
 const CLIMB_PITCH := deg_to_rad(12.0)
 const PUSHBACK_SWING_START := 0.3
+## Share of PUSHBACK over which a self-taxiing plane pivots 180 degrees in
+## place before rolling forward to the pushback end.
+const SELF_TAXI_TURN_END := 0.4
 ## Share of the stand leg (StandPlacement.PUSHBACK_M from the stand point) over
 ## which model_position() drops the sideways part of a model's door shift:
 ## MovementPlan.fraction(PUSHBACK_SWING_START), so it is gone before the
@@ -56,16 +59,35 @@ static func exit_dir(points: PackedVector3Array) -> Vector3:
 ## entering with its nose along `entry_dir`. A ground state (GROUND_STATES)
 ## may take a MovementPlan `pause` ({"hold_s", "ticks"}) inside a state that
 ## lasts `budget` ticks: 0, the default, is the state's FlightSim.PHASE_TICKS.
-## With no pause the budget does not matter.
+## With no pause the budget does not matter. With `self_taxi` true, PUSHBACK
+## pivots 180 degrees in place toward the pilot's right (away from the bridge
+## and apron walk) then rolls forward to `points` end without reversing.
 static func pose(
 	state: int,
 	progress: float,
 	points: PackedVector3Array,
 	entry_dir: Vector3,
 	pause := {},
-	budget := 0.0
+	budget := 0.0,
+	self_taxi := false
 ) -> Transform3D:
 	var t := clampf(progress, 0.0, 1.0)
+	if state == FlightSim.State.PUSHBACK and self_taxi:
+		var roll_t := clampf((t - SELF_TAXI_TURN_END) / (1.0 - SELF_TAXI_TURN_END), 0.0, 1.0)
+		var roll_distance := _ground_distance(state, roll_t, points, pause, budget)
+		var exit_heading := exit_dir(points)
+		var heading := exit_heading
+		if t < SELF_TAXI_TURN_END:
+			var entry_yaw := _yaw_of(entry_dir)
+			var delta := angle_difference(entry_yaw, _yaw_of(exit_heading))
+			if absf(absf(delta) - PI) < 1e-3:
+				delta = -PI
+			var yaw := entry_yaw + delta * smoothstep(0.0, SELF_TAXI_TURN_END, t)
+			heading = Vector3(sin(yaw), 0.0, cos(yaw))
+		var self_basis := (
+			Basis(Vector3.UP, _yaw_of(heading)) * Basis(Vector3.RIGHT, -_pitch(state, t))
+		)
+		return Transform3D(self_basis, point_at(points, roll_distance))
 	var distance := 0.0
 	if GROUND_STATES.has(state):
 		distance = _ground_distance(state, t, points, pause, budget)

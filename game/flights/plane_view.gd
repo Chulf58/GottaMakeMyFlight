@@ -172,7 +172,12 @@ func sightings(time: float) -> Array[Dictionary]:
 		if sim.flight_gate(id) != gate:
 			continue
 		var at := pose_at(
-			starts_of(id), time, has_full_lead_in(id), class_of(id), sim.taxi_plan(id)
+			starts_of(id),
+			time,
+			has_full_lead_in(id),
+			class_of(id),
+			sim.taxi_plan(id),
+			PlaneClasses.self_taxis(model_of(id))
 		)
 		if not at.is_empty():
 			at["id"] = id
@@ -215,7 +220,8 @@ func pose_at(
 	time: float,
 	full_lead_in := true,
 	plane_class := PlaneClasses.MEDIUM,
-	pauses := {}
+	pauses := {},
+	self_taxi := false
 ) -> Dictionary:
 	var approach := starts[FlightSim.State.APPROACH]
 	var departed := starts[FlightSim.State.DEPARTED]
@@ -245,7 +251,13 @@ func pose_at(
 	var pause: Dictionary = pauses.get(moving, {})
 	var budget := float(starts[moving + 1] - starts[moving])
 	var pose := FlightPose.pose(
-		moving, progress, _path(moving, plane_class), _entry_dir(moving, plane_class), pause, budget
+		moving,
+		progress,
+		_path(moving, plane_class),
+		_entry_dir(moving, plane_class),
+		pause,
+		budget,
+		self_taxi
 	)
 	if ON_GROUND.has(moving):
 		pose.origin.y += ground_height_at(pose.origin)

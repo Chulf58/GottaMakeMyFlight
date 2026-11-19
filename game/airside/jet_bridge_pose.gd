@@ -95,6 +95,13 @@ const FRONT_MAX_DEG := 25.0
 ## out beside the door, so the body keeps clear of both
 ## (test_bridge_boarding_walk.gd).
 const APRON_END_OUT_M := 0.30
+## Step straight out from Mount_ApronDoor so walkers clear the vestibule wall
+## before angling past plane 03's propeller disc and wing strut.
+const APRON_DOOR_OUT_M := 0.60
+## Intermediate apron-walk waypoint for plane 03: out along the door normal so
+## walkers pass clear of the spinning propeller disc and under the high wing
+## strut before stepping in to the door.
+const APRON_CLEAR_OUT_M := 2.00
 ## Slack on the joint ranges, so a pose exactly on a limit counts.
 const LIMIT_SLACK := 1e-4
 ## The models that dock (ruling plane-03-boards-on-foot-from-the-apron-plane-
@@ -143,7 +150,7 @@ static func root_for(stand: Dictionary, ground_y := 0.0) -> Transform3D:
 
 ## Whether `model` docks the bridge.
 static func docks(model: String) -> bool:
-	return DOCKING.has(model)
+	return PlaneModels.PLANES.has(model) and not PlaneClasses.self_taxis(model)
 
 
 ## Whether the bridge is drawn folded with plane `model` ("" for none) at the
@@ -245,9 +252,14 @@ static func pose_for(stand: Dictionary, model: String, docked: bool, ground_y :=
 	elif model != "" and not docks(model):
 		for name in APRON:
 			apron.append(mounts[name])
-		# The walk ends out on the ground beside the door, the passenger's body
-		# clear of the fuselage skin.
-		var end: Vector3 = out["door"] + (out["normal"] as Vector3) * APRON_END_OUT_M
+		# Step clear of the folded vestibule wall, pass clear of the propeller
+		# disc and wing strut, then step in beside the door.
+		var normal: Vector3 = out["normal"]
+		var door_exit: Vector3 = mounts[&"Mount_ApronDoor"] - normal * APRON_DOOR_OUT_M
+		apron.append(Vector3(door_exit.x, ground_y, door_exit.z))
+		var approach: Vector3 = out["door"] + normal * APRON_CLEAR_OUT_M
+		apron.append(Vector3(approach.x, ground_y, approach.z))
+		var end: Vector3 = out["door"] + normal * APRON_END_OUT_M
 		apron.append(Vector3(end.x, ground_y, end.z))
 	out["walk"] = walk
 	out["apron_walk"] = apron

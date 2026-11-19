@@ -77,4 +77,4 @@ func test_the_door_normal_points_out_of_the_port_side() -> void:
 		assert_float(normal.dot(Vector3(from_plane.x, 0.0, from_plane.z))).is_greater(0.0)
 		assert_float(absf(normal.dot(OUT[side]))).is_equal_approx(0.0, EPS)
 		var walk: PackedVector3Array = JetBridgePose.pose_for(stand, ON_FOOT, false)["apron_walk"]
-		assert_int(walk.size()).is_equal(3)
+		assert_int(walk.size()).is_equal(5)
