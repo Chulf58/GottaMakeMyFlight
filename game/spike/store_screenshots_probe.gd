@@ -194,6 +194,8 @@ func _build_terminal() -> bool:
 		return false
 	(_mode.get_node("BuildView") as BuildView).refresh(_grid)
 	(_main.get_node("RoofView") as RoofView).rebuild()
+	for b: Dictionary in (_main.get_node("Airside") as Airside).props.bridges.values():
+		(b["node"] as Node3D).visible = false
 	var staff := _main.get_node("Staff") as StaffSim
 	var hired := StaffTestKit.staff_all(staff)
 	StaffTestKit.seat(staff, _grid.object_at(arch_at), StaffMember.Slot.HELPER)
@@ -226,10 +228,12 @@ func _shot_02_queues_and_belts() -> bool:
 	)
 	for spec in ex_specs.split(","):
 		var p := spec.split(":")
-		var t := TestFlightContracts.terms(p[0], int(p[1]))
-		t.merge({"destination": p[2], "airline": p[3], "plane_size": "small"}, true)
-		t["booked_passengers"] = 14
-		_flights.accept_contract(t)
+		for m_off in [0, 30, 60, 90]:
+			var t := TestFlightContracts.terms(p[0], int(p[1]) + m_off)
+			t.merge({"destination": p[2], "airline": p[3], "plane_size": "small"}, true)
+			t["booked_passengers"] = 14
+			if _flights.accept_problem(t) == "" and _flights.accept_contract(t):
+				break
 	var first := FlightTimetable.occurrence_id(FlightSim.DEFAULT_ID, 0)
 	var has_f := func() -> bool: return _flights.flight_ids().has(first)
 	if (
@@ -304,6 +308,7 @@ func _shot_03_follow_passenger() -> void:
 
 func _shot_04_cafes_and_shops() -> void:
 	_beat("shot_04")
+	await _step_ticks(180)
 	var occ_b := FlightTimetable.occurrence_id("GMF202", int(_flights.start_days["GMF202"]))
 	var has_b := func() -> bool: return _flights.flight_ids().has(occ_b)
 	if not await _advance_until("issue_b_04", 2400, has_b):
@@ -368,16 +373,18 @@ func _shot_05_apron_boarding() -> void:
 		view_b = v if v.gate == "B" and v.visible else view_b
 	var tug_pt := (view_a.get_node("Props") as PlaneProps).tug.global_position + Vector3(0, 1.2, 0)
 	var b_pt := view_b.global_position + Vector3(3.5, 2.2, 0.0)
-	var focus := Vector3((tug_pt.x + b_pt.x) * 0.5, 0.0, -103.5)
-	for dist: float in [32.5, 35.0]:
+	var focus := Vector3((tug_pt.x + b_pt.x) * 0.5, 0.0, -104.0)
+	for dist: float in [34.0, 36.5]:
 		_aim(focus, dist, 0.04)
 		await _frames(4)
 		var mid_px := (_cam.unproject_position(tug_pt).x + _cam.unproject_position(b_pt).x) * 0.5
-		focus.x += (mid_px - 900.0) / 27.0
+		focus.x += (mid_px - 860.0) / 26.0
 		_aim(focus, dist, 0.04)
 		await _frames(4)
-		if _cam.unproject_position(tug_pt).x >= 350.0 and _cam.unproject_position(b_pt).x <= 1470.0:
+		if _cam.unproject_position(tug_pt).x >= 350.0 and _cam.unproject_position(b_pt).x <= 1430.0:
 			break
+	if _hud.is_result_open():
+		_hud.dismiss_result()
 	await _frames(8)
 	var dep := _main.find_child("DeparturesPanel", true, false) as Control
 	_verify(_cam.unproject_position(tug_pt).x >= 340.0, "shot_05: tug behind DeparturesBoard")
@@ -397,7 +404,7 @@ func _shot_01_build_terminal() -> void:
 	for cid: String in ["GMF303", "GMF404", "GMF202"]:
 		var cand_occ := FlightTimetable.occurrence_id(cid, int(_flights.start_days.get(cid, 0)))
 		var open_st := _flights.flight_ids().has(cand_occ)
-		if open_st and _flights.flight_state(cand_occ) <= FlightSim.State.BOARDING:
+		if open_st and _flights.state_of(cand_occ) <= FlightSim.State.BOARDING:
 			occ = cand_occ
 			break
 	for i in 10 if occ != "" else 0:
@@ -432,6 +439,9 @@ func _shot_01_build_terminal() -> void:
 
 func _shot_06_airline_offers() -> void:
 	_beat("shot_06")
+	await _step_ticks(120)
+	if _hud.is_result_open():
+		_hud.dismiss_result()
 	_verify((_main.get_node("AirportRating") as AirportRating).has_data(), "shot_06: rating empty")
 	var desk := _main.get_node("OfferDesk") as OfferDesk
 	desk.board = OfferBoard.new()
