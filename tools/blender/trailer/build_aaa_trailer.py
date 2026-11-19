@@ -49,6 +49,7 @@ def parse_args():
     argv = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
     p = argparse.ArgumentParser()
     p.add_argument("--strips-only", action="store_true", help="Render only the 5 strip keyframes per shot for fast visual QA")
+    p.add_argument("--verify-only", action="store_true", help="Run verify_human_motion + 23 prove_subject_in_frame checks without rendering")
     p.add_argument("--extra-frames", nargs="*", type=int, default=[], help="Extra global 1-indexed frames to render in --strips-only mode")
     p.add_argument("--encode-only", action="store_true", help="Re-mix audio & VSE encode from already-rendered frames")
     return p.parse_args(argv)
@@ -329,6 +330,7 @@ def main():
     total_frames = sum(s["frames"] for s in shots.SHOT_SPECS)
     all_events = []
     in_frame_proofs = []
+    human_motion_proofs = []
     strip_rows = []
 
     if not args.encode_only:
@@ -337,8 +339,21 @@ def main():
             shot_id = spec["id"]
             n_f = spec["frames"]
             tk.log("=== BUILDING %s (%s, %d frames, global %d..%d) ===" % (shot_id, spec["title"], n_f, g_cursor + 1, g_cursor + n_f))
-            scene, cam, prove_targets, hero_arm, evs = builder(g_cursor)
+            scene, cam, prove_targets, hero_arm, evs, motion_spec = builder(g_cursor)
             all_events.extend(evs)
+
+            # 0. Automated per-frame human motion, quaternion bone, stride-lock & >=0.45m obstacle clearance verification!
+            hm_summary = tk.verify_human_motion(
+                scene,
+                shot_id,
+                n_f,
+                obstacle_roots=motion_spec.get("obstacle_roots"),
+                extra_boxes_xy=motion_spec.get("extra_boxes_xy"),
+                seated_exempt=motion_spec.get("seated_exempt"),
+                exempt_ranges=motion_spec.get("exempt_ranges"),
+                min_clearance=0.45,
+            )
+            human_motion_proofs.append(hm_summary)
 
             # 1. Automated prove_in_frame + raycast occlusion check on every shot target!
             for tag, fl, subj_objs in prove_targets:
@@ -351,6 +366,10 @@ def main():
                     check_occlusion=True,
                 )
                 in_frame_proofs.append(proof)
+
+            if args.verify_only:
+                g_cursor += n_f
+                continue
 
             # 2. Render frames: fast GPU batch `animation=True` for full build, or stills for --strips-only
             five_picks = pick_five_frames(n_f)
@@ -405,6 +424,10 @@ def main():
 
             g_cursor += n_f
 
+        if args.verify_only:
+            tk.log("VERIFY_ONLY_PASS shots=%d in_frame=%d/%d" % (len(shots.SHOT_SPECS), len(in_frame_proofs), len(in_frame_proofs)))
+            return
+
         # Stitch full 6x5 storyboard contact_sheet.png with clean dark gutters!
         gut = 8
         H = len(strip_rows) * TILE_H + (len(strip_rows) + 1) * gut
@@ -421,7 +444,17 @@ def main():
         tk.log("PROBE contact_sheet wrote %s (%dx%d)" % (contact_path, W, H))
 
         with open(os.path.join(tk.OUT_DIR, "shot_events.json"), "w", encoding="utf-8") as fh:
-            json.dump({"total_frames": total_frames, "fps": tk.FPS, "events": all_events, "in_frame": in_frame_proofs}, fh, indent=2)
+            json.dump(
+                {
+                    "total_frames": total_frames,
+                    "fps": tk.FPS,
+                    "events": all_events,
+                    "in_frame": in_frame_proofs,
+                    "human_motion": human_motion_proofs,
+                },
+                fh,
+                indent=2,
+            )
 
     if args.strips_only:
         tk.log("STRIPS_ONLY_DONE elapsed=%.1fs shots=%d" % (time.time() - t_start, len(shots.SHOT_SPECS)))
@@ -431,6 +464,7 @@ def main():
     saved = json.load(open(ev_json, "r", encoding="utf-8"))
     all_events = saved["events"]
     in_frame_proofs = saved["in_frame"]
+    human_motion_proofs = saved.get("human_motion", [])
 
     wav_path = os.path.join(audio_dir, "trailer_mix.wav")
     audio_stats = build_audio.build_trailer_audio(wav_path, all_events, total_frames=total_frames)
@@ -443,6 +477,7 @@ def main():
         "elapsed_s": round(time.time() - t_start, 1),
         "mp4": mp4_stats,
         "wav": audio_stats,
+        "human_motion_proofs": human_motion_proofs,
         "in_frame_proofs": in_frame_proofs,
     }
     report_path = os.path.join(tk.OUT_DIR, "verification_report.json")

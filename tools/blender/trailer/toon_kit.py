@@ -651,15 +651,15 @@ def rebind_materials(objs, label, outline_thickness=0.005):
 
 
 def build_enclosed_terminal_hall(scene, x_min=-5.5, x_max=8.5, y_min=-16.0, y_max=12.0, ceil_z=3.85,
-                                 glass_side="left", open_north_wall=False):
+                                 glass_side="left", open_north_wall=False, east_archway=None, north_openings=None):
     """Build a 100% enclosed, warm architectural airport concourse shell (expansive tiled floor,
-    back/side/front walls, structural columns, upper soffits, shadow-transparent ceiling slab with
-    glowing recessed LED panels, and lush sunlit tarmac/trees outside the glass windows!)."""
+    back/side/front walls, optional open concourse archways/doorways with lit continuation corridors,
+    shadow-transparent ceiling slab with glowing recessed LED panels, and sunlit tarmac/trees outside!)."""
     shell = bpy.data.objects.new("TerminalShell_ROOT", None)
     scene.collection.objects.link(shell)
 
-    # 1. Expansive concourse tile floor extending well past any camera frustum
-    fl = make_box(scene, "HallTiledFloor", (38.0, 52.0, 0.12), (0.0, 0.0, -0.065), concourse_tile_floor_mat(), bevel=0.0, parent=shell)
+    # 1. Expansive concourse tile floor extending well past any camera frustum & continuation halls
+    fl = make_box(scene, "HallTiledFloor", (48.0, 62.0, 0.12), (0.0, 0.0, -0.065), concourse_tile_floor_mat(), bevel=0.0, parent=shell)
     fl.visible_shadow = True
 
     wall_m = toon_rgb_mat("hall_wall", WALL_CREAM)
@@ -669,35 +669,49 @@ def build_enclosed_terminal_hall(scene, x_min=-5.5, x_max=8.5, y_min=-16.0, y_ma
     led_m = emissive_mat("ceil_led", (1.0, 0.96, 0.86), strength=1.55)
 
     # 2. Ceiling slab (shadow_transparent=True so warm KeySun still casts crisp shadows inside!)
-    w_span = (x_max - x_min) + 6.0
-    l_span = (y_max - y_min) + 8.0
+    w_span = (x_max - x_min) + 14.0
+    l_span = (y_max - y_min) + 14.0
     cx = 0.5 * (x_min + x_max)
     cy = 0.5 * (y_min + y_max)
     ceil = make_box(scene, "HallCeiling", (w_span, l_span, 0.22), (cx, cy, ceil_z + 0.11), ceil_m, bevel=0.0, parent=shell)
     ceil.visible_shadow = False
 
     # Warm recessed ceiling LED light panels & structural ceiling beams every 4m!
-    for by in range(int(y_min) + 2, int(y_max) - 1, 4):
+    for by in range(int(y_min) + 2, int(y_max) + 3, 4):
         beam = make_box(scene, "CeilBeam_%d" % by, (w_span - 1.0, 0.28, 0.18), (cx, float(by), ceil_z - 0.08), col_m, bevel=0.02, parent=shell)
         beam.visible_shadow = False
-        for lx in (x_min + 2.2, 0.0, x_max - 2.2):
+        for lx in (x_min + 2.2, 0.0, x_max - 2.2, x_max + 2.2):
             led = make_box(scene, "CeilLED_%d_%d" % (by, int(lx)), (1.35, 1.65, 0.05), (lx, float(by) + 2.0, ceil_z - 0.02), led_m, bevel=0.01, parent=shell)
             led.visible_shadow = False
 
-    # 3. Back Wall at y_min (with entrance doors & flight screens so looking back never shows void!)
+    # 3. Back Wall at y_min
     make_box(scene, "BackWallSolid", (w_span, 0.25, ceil_z), (cx, y_min, ceil_z * 0.5), wall_m, bevel=0.0, parent=shell)
     make_box(scene, "BackBaseboard", (w_span, 0.30, 0.16), (cx, y_min + 0.04, 0.08), trim_m, bevel=0.0, parent=shell)
 
-    # 4. Far camera-behind side wall (at x_max or x_min opposite the glass wall)
+    # 4. Far side wall (with optional open east_archway=(ay, aw, ah) leading into a real lit corridor!)
     if glass_side == "left":
-        # Glass curtain wall on x_min, solid wall far behind camera at x_max
-        make_box(scene, "FarSideWall", (0.25, l_span, ceil_z), (x_max, cy, ceil_z * 0.5), wall_m, bevel=0.0, parent=shell)
-        # Upper soffit frieze above the 2.5m wall_glass pieces (z = 2.48 .. ceil_z)
+        if east_archway is not None:
+            ay, aw, ah = east_archway
+            y_lo_seg = (ay - aw * 0.5) - (y_min - 4.0)
+            if y_lo_seg > 0.2:
+                make_box(scene, "FarSideWall_S", (0.25, y_lo_seg, ceil_z), (x_max, (y_min - 4.0) + y_lo_seg * 0.5, ceil_z * 0.5), wall_m, bevel=0.0, parent=shell)
+            y_hi_seg = (y_max + 4.0) - (ay + aw * 0.5)
+            if y_hi_seg > 0.2:
+                make_box(scene, "FarSideWall_N", (0.25, y_hi_seg, ceil_z), (x_max, (ay + aw * 0.5) + y_hi_seg * 0.5, ceil_z * 0.5), wall_m, bevel=0.0, parent=shell)
+            make_box(scene, "FarSideArchHeader", (0.30, aw + 0.4, ceil_z - ah), (x_max, ay, ah + (ceil_z - ah) * 0.5), wall_m, bevel=0.02, parent=shell)
+            make_box(scene, "FarArchJamb_S", (0.36, 0.24, ah), (x_max, ay - aw * 0.5, ah * 0.5), trim_m, bevel=0.02, parent=shell)
+            make_box(scene, "FarArchJamb_N", (0.36, 0.24, ah), (x_max, ay + aw * 0.5, ah * 0.5), trim_m, bevel=0.02, parent=shell)
+            # Lit continuation corridor walls & end wall beyond x_max so camera sees real concourse depth!
+            corr_len = 8.0
+            make_box(scene, "EastCorrWall_S", (corr_len, 0.22, ceil_z), (x_max + corr_len * 0.5, ay - aw * 0.5 - 0.1, ceil_z * 0.5), wall_m, bevel=0.0, parent=shell)
+            make_box(scene, "EastCorrWall_N", (corr_len, 0.22, ceil_z), (x_max + corr_len * 0.5, ay + aw * 0.5 + 0.1, ceil_z * 0.5), wall_m, bevel=0.0, parent=shell)
+            make_box(scene, "EastCorrEndWall", (0.25, aw + 1.0, ceil_z), (x_max + corr_len, ay, ceil_z * 0.5), wall_m, bevel=0.0, parent=shell)
+        else:
+            make_box(scene, "FarSideWall", (0.25, l_span, ceil_z), (x_max, cy, ceil_z * 0.5), wall_m, bevel=0.0, parent=shell)
         soffit = make_box(scene, "GlassSoffitL", (0.32, l_span, ceil_z - 2.45), (x_min, cy, 2.45 + (ceil_z - 2.45) * 0.5), wall_m, bevel=0.02, parent=shell)
         soffit.visible_shadow = False
         for py in range(int(y_min), int(y_max) + 1, 4):
             make_box(scene, "MullionColL_%d" % py, (0.34, 0.34, ceil_z), (x_min, float(py), ceil_z * 0.5), trim_m, bevel=0.02, parent=shell)
-        # Exterior world outside x_min glass wall (paved apron + green lawn + trees!)
         make_box(scene, "ExtApronL", (45.0, 90.0, 0.10), (x_min - 23.0, cy, -0.06), toon_rgb_mat("ext_apron", (0.34, 0.37, 0.42)), bevel=0.0, parent=shell)
         make_box(scene, "ExtGrassL", (90.0, 140.0, 0.08), (x_min - 68.0, cy, -0.07), horizon_grass_mat(), bevel=0.0, parent=shell)
         for ty in range(int(y_min) + 3, int(y_max), 7):
@@ -705,7 +719,6 @@ def build_enclosed_terminal_hall(scene, x_min=-5.5, x_max=8.5, y_min=-16.0, y_ma
             tr.scale = (1.8, 1.8, 1.8)
             tr.parent = shell
     else:
-        # Glass curtain wall on x_max (e.g., Shot 3), solid wall far behind camera at x_min
         make_box(scene, "FarSideWall", (0.25, l_span, ceil_z), (x_min, cy, ceil_z * 0.5), wall_m, bevel=0.0, parent=shell)
         soffit = make_box(scene, "GlassSoffitR", (0.32, l_span, ceil_z - 2.45), (x_max, cy, 2.45 + (ceil_z - 2.45) * 0.5), wall_m, bevel=0.02, parent=shell)
         soffit.visible_shadow = False
@@ -718,11 +731,26 @@ def build_enclosed_terminal_hall(scene, x_min=-5.5, x_max=8.5, y_min=-16.0, y_ma
             tr.scale = (1.8, 1.8, 1.8)
             tr.parent = shell
 
-    # 5. North / Front Wall soffit above y_max
+    # 5. North / Front Wall at y_max (open glass, open doorways with continuation hall, or solid)
     if open_north_wall:
-        # Upper soffit frieze above the 2.5m airside glass wall at y_max
         n_soffit = make_box(scene, "NorthGlassSoffit", (w_span, 0.32, ceil_z - 2.45), (cx, y_max, 2.45 + (ceil_z - 2.45) * 0.5), wall_m, bevel=0.02, parent=shell)
         n_soffit.visible_shadow = False
+    elif north_openings:
+        gaps = sorted(north_openings, key=lambda g: g[0])
+        cur_x = x_min - 4.0
+        for idx_g, (gx, gw) in enumerate(gaps):
+            seg_w = (gx - gw * 0.5) - cur_x
+            if seg_w > 0.15:
+                make_box(scene, "NorthWallSeg_%d" % idx_g, (seg_w, 0.25, ceil_z), (cur_x + seg_w * 0.5, y_max, ceil_z * 0.5), wall_m, bevel=0.0, parent=shell)
+                make_box(scene, "NorthBaseSeg_%d" % idx_g, (seg_w, 0.30, 0.16), (cur_x + seg_w * 0.5, y_max - 0.04, 0.08), trim_m, bevel=0.0, parent=shell)
+            make_box(scene, "NorthDoorHeader_%d" % idx_g, (gw + 0.2, 0.26, ceil_z - 2.45), (gx, y_max, 2.45 + (ceil_z - 2.45) * 0.5), wall_m, bevel=0.02, parent=shell)
+            cur_x = gx + gw * 0.5
+        rem_w = (x_max + 4.0) - cur_x
+        if rem_w > 0.15:
+            make_box(scene, "NorthWallSeg_end", (rem_w, 0.25, ceil_z), (cur_x + rem_w * 0.5, y_max, ceil_z * 0.5), wall_m, bevel=0.0, parent=shell)
+            make_box(scene, "NorthBaseSeg_end", (rem_w, 0.30, 0.16), (cur_x + rem_w * 0.5, y_max - 0.04, 0.08), trim_m, bevel=0.0, parent=shell)
+        # Warm lit north concourse backdrop 5.5m beyond y_max so open doorways show real terminal depth!
+        make_box(scene, "NorthBeyondWall", (w_span, 0.25, ceil_z), (cx, y_max + 5.5, ceil_z * 0.5), wall_m, bevel=0.0, parent=shell)
     else:
         make_box(scene, "NorthSolidWall", (w_span, 0.25, ceil_z), (cx, y_max, ceil_z * 0.5), wall_m, bevel=0.0, parent=shell)
         make_box(scene, "NorthBaseboard", (w_span, 0.30, 0.16), (cx, y_max - 0.04, 0.08), trim_m, bevel=0.0, parent=shell)
@@ -827,99 +855,464 @@ def load_character(stem, label, cloth_tint=None, loc=(0.0, 0.0, 0.0), yaw_deg=0.
     return root, arm, keep, acts
 
 
-def set_nla_clips(arm, acts, segments):
+_STRIDE_CACHE = {}
+
+
+def _find_action(acts, clip_name):
+    act = acts.get(clip_name)
+    if act is not None:
+        return act
+    matches = [v for k, v in acts.items() if k.startswith(clip_name)]
+    if not matches:
+        fail("missing clip %r in %s" % (clip_name, sorted(acts.keys())))
+    return matches[0]
+
+
+def measure_clip_stride_rate(arm, act):
+    """Measure stance-foot ground speed (meters per action frame) directly from `Foot.L`
+    during floor contact so `strip_time = s(f) / rate` locks feet to the floor with zero slip."""
+    key = (arm.data.name.split(".")[0], base_name(act.name))
+    if key in _STRIDE_CACHE:
+        return _STRIDE_CACHE[key]
+
+    scene = bpy.context.scene
+    prev_frame = scene.frame_current
+    ad = arm.animation_data or arm.animation_data_create()
+    prev_act = ad.action
+    ad.action = act
+    if hasattr(ad, "action_slot") and len(act.slots):
+        ad.action_slot = act.slots[0]
+
+    f0 = int(round(act.frame_range[0]))
+    f1 = int(round(act.frame_range[1]))
+    samples = []
+    for f in range(f0, f1 + 1):
+        scene.frame_set(f)
+        bpy.context.view_layer.update()
+        pb = arm.pose.bones.get("Foot.L")
+        if pb is not None:
+            samples.append((f, float(pb.head.y), float(pb.head.z)))
+
+    ad.action = prev_act
+    scene.frame_set(prev_frame)
+    bpy.context.view_layer.update()
+
+    if len(samples) < 4:
+        _STRIDE_CACHE[key] = 0.08
+        return 0.08
+
+    z_min = min(s[2] for s in samples)
+    stance_dys = []
+    for i in range(1, len(samples)):
+        if samples[i - 1][2] <= z_min + 0.028 and samples[i][2] <= z_min + 0.028:
+            dy = samples[i][1] - samples[i - 1][1]
+            if dy > 0.01:
+                stance_dys.append(dy)
+    rate = float(np.median(stance_dys)) if stance_dys else 0.08
+    _STRIDE_CACHE[key] = rate
+    return rate
+
+
+def _make_animated_nla_strip(ad, name, act, frame_end, blend_type="REPLACE"):
+    trk = ad.nla_tracks.new()
+    trk.name = "loco_" + name
+    strip = trk.strips.new(name, 1, act)
+    if hasattr(strip, "action_slot") and len(act.slots):
+        strip.action_slot = act.slots[0]
+    strip.frame_start = 1.0
+    strip.frame_end = float(frame_end)
+    strip.extrapolation = "HOLD"
+    strip.blend_type = blend_type
+    strip.use_animated_time = True
+    strip.use_animated_time_cyclic = True
+    strip.use_animated_influence = True
+    return strip
+
+
+def _set_fcurves_linear(anim_owner):
+    """Force LINEAR keyframe interpolation on an Object or NlaStrip so motion never eases to 0."""
+    fcurves = getattr(anim_owner, "fcurves", None)
+    if fcurves is None:
+        ad = getattr(anim_owner, "animation_data", None)
+        act = getattr(ad, "action", None) if ad else None
+        if act is not None:
+            if hasattr(act, "layers") and len(act.layers):
+                for layer in act.layers:
+                    for strip in layer.strips:
+                        if hasattr(strip, "channelbags"):
+                            for bag in strip.channelbags:
+                                for fc in bag.fcurves:
+                                    for kp in fc.keyframe_points:
+                                        kp.interpolation = "LINEAR"
+            elif hasattr(act, "fcurves"):
+                fcurves = act.fcurves
+    if fcurves is not None:
+        for fc in fcurves:
+            for kp in fc.keyframe_points:
+                kp.interpolation = "LINEAR"
+
+
+def set_stationary_clip(arm, acts, clip_name, frame_end, speed=1.0, phase_offset=0.0):
+    """Play a single looping quaternion NLA clip (`idle`, `sit_idle`, `clean`) with phase offset."""
+    for pb in arm.pose.bones:
+        pb.rotation_mode = "QUATERNION"
     ad = arm.animation_data or arm.animation_data_create()
     ad.action = None
     for t in list(ad.nla_tracks):
         ad.nla_tracks.remove(t)
-    for idx, (clip_name, f0, f1, speed) in enumerate(segments):
-        act = acts.get(clip_name)
-        if act is None:
-            matches = [v for k, v in acts.items() if k.startswith(clip_name)]
-            if not matches:
-                fail("missing clip %r in %s" % (clip_name, sorted(acts.keys())))
-            act = matches[0]
-        trk = ad.nla_tracks.new()
-        trk.name = "trk_%d_%s" % (idx, clip_name)
-        strip = trk.strips.new(clip_name, int(f0), act)
-        if hasattr(strip, "action_slot") and len(act.slots):
-            strip.action_slot = act.slots[0]
-        strip.scale = (25.0 / FPS) / max(0.15, float(speed))
-        act_len = max(1.0, (act.frame_range[1] - act.frame_range[0]) * strip.scale)
-        needed = max(1.0, float(f1 - f0 + 1))
-        strip.repeat = max(1.0, math.ceil(needed / act_len) + 1.0)
-        strip.frame_end = float(f1)
-        strip.extrapolation = "NOTHING" if len(segments) > 1 else "HOLD"
-        if idx > 0:
-            strip.blend_in = 4.0
-            strip.blend_type = "REPLACE"
+    act = _find_action(acts, clip_name)
+    st = _make_animated_nla_strip(ad, clip_name, act, frame_end)
+    rate = (25.0 / FPS) * float(speed)
+    for f in range(1, frame_end + 1):
+        st.strip_time = float(phase_offset) + (f - 1) * rate
+        st.keyframe_insert(data_path="strip_time", frame=f)
+        st.influence = 1.0
+        st.keyframe_insert(data_path="influence", frame=f)
+    _set_fcurves_linear(st)
 
 
-def add_pose_override_track(arm, name, bone_keyframes, blend_type="ADD"):
-    act = bpy.data.actions.new("ACT_" + name)
+def _trapezoid_alpha(t, total_t, r_in, r_out):
+    """Exact integral of trapezoidal speed profile with linear accel `r_in`, constant cruise,
+    and linear decel `r_out` so travel segments are strictly LINEAR in cruise with smooth 6f starts/stops."""
+    if total_t <= 1e-6:
+        return 1.0
+    r_in = float(min(r_in, total_t * 0.45))
+    r_out = float(min(r_out, total_t * 0.45))
+    area_total = total_t - 0.5 * r_in - 0.5 * r_out
+    if area_total <= 1e-6:
+        return t / total_t
+
+    def area_at(x):
+        x = max(0.0, min(total_t, float(x)))
+        if x <= r_in and r_in > 0.0:
+            return 0.5 * (x * x) / r_in
+        a = 0.5 * r_in
+        t_cruise_end = total_t - r_out
+        if x <= t_cruise_end:
+            return a + (x - r_in)
+        a += max(0.0, t_cruise_end - r_in)
+        rem = x - t_cruise_end
+        if r_out > 0.0:
+            a += rem - 0.5 * (rem * rem) / r_out
+        return a
+
+    return area_at(t) / area_total
+
+
+def animate_character_locomotion(
+    char_root,
+    arm,
+    acts,
+    waypoints,
+    frame_end,
+    phase_offset=0.0,
+    idle_speed=1.0,
+    max_turn_deg_per_frame=13.5,
+    corner_smooth_frames=2,
+    seated_ranges=None,
+):
+    """Deterministic human locomotion controller:
+    - Keeps 100% of armature PoseBones in `QUATERNION` mode (zero Euler T-pose overrides).
+    - Evaluates piecewise linear travel waypoints with short 6-frame accel/decel ramps at rest boundaries.
+    - Drives `walk` and `run` NLA `strip_time` strictly from cumulative ground distance `s(f) / stride_rate`
+      so feet NEVER slide on the floor at any speed, and crossfades to `idle` (`v == 0`) with zero skating.
+    - Computes unwrapped shortest-angle facing yaw from forward velocity tangent `atan2(dx, -dy)`
+      (or explicit stop yaw `(frame, (x,y,z), yaw_deg)`), eliminating moonwalking and wrap-around spins.
+    """
+    for pb in arm.pose.bones:
+        pb.rotation_mode = "QUATERNION"
+
+    # Normalize waypoints to [(frame, Vector, explicit_yaw_or_None)]
+    wps = []
+    for item in waypoints:
+        if len(item) == 2:
+            f_w, p_w = item
+            y_w = None
+        else:
+            f_w, p_w, y_w = item
+        wps.append((int(f_w), Vector((float(p_w[0]), float(p_w[1]), float(p_w[2]))), y_w))
+    wps.sort(key=lambda x: x[0])
+    if wps[0][0] > 1:
+        wps.insert(0, (1, wps[0][1].copy(), wps[0][2]))
+    if wps[-1][0] < frame_end:
+        wps.append((frame_end, wps[-1][1].copy(), wps[-1][2]))
+
+    n_seg = len(wps) - 1
+    seg_moving = [(wps[i + 1][1] - wps[i][1]).xy.length > 0.015 for i in range(n_seg)]
+
+    raw_pos = [wps[0][1].copy() for _ in range(frame_end + 1)]
+    hold_yaw = [None] * (frame_end + 1)
+
+    for i in range(n_seg):
+        f0, p0, y0 = wps[i]
+        f1, p1, y1 = wps[i + 1]
+        dur = max(1, f1 - f0)
+        if not seg_moving[i]:
+            for f in range(f0, f1 + 1):
+                raw_pos[f] = p0.copy()
+                hold_yaw[f] = y1 if y1 is not None else y0
+        else:
+            prev_stopped = (i > 0) and (not seg_moving[i - 1])
+            next_stopped = (i + 1 < n_seg) and (not seg_moving[i + 1])
+            r_in = 6.0 if prev_stopped else 0.0
+            r_out = 6.0 if next_stopped else 0.0
+            for f in range(f0, f1 + 1):
+                a = _trapezoid_alpha(f - f0, float(dur), r_in, r_out)
+                raw_pos[f] = p0.lerp(p1, a)
+                if y1 is not None and f == f1 and next_stopped:
+                    hold_yaw[f] = y1
+
+    # Gentle corner rounding across moving-to-moving waypoints (preserves exact stopped frames!)
+    pos = [p.copy() for p in raw_pos]
+    if corner_smooth_frames > 0:
+        rad = int(corner_smooth_frames)
+        for f in range(2, frame_end):
+            if hold_yaw[f] is not None:
+                continue
+            d_prev = (raw_pos[f] - raw_pos[f - 1]).xy.length
+            d_next = (raw_pos[f + 1] - raw_pos[f]).xy.length
+            if d_prev > 0.005 and d_next > 0.005:
+                lo_f = max(1, f - rad)
+                hi_f = min(frame_end, f + rad)
+                acc = Vector((0.0, 0.0, 0.0))
+                for k in range(lo_f, hi_f + 1):
+                    acc += raw_pos[k]
+                pos[f] = acc / float(hi_f - lo_f + 1)
+
+    def _is_seated(fr):
+        if not seated_ranges:
+            return False
+        return any(s0 <= fr <= s1 for s0, s1 in seated_ranges)
+
+    # Compute per-frame horizontal step, 3D stride step (including stair climbs), and unwrapped yaw!
+    ds_xy = [0.0] * (frame_end + 1)
+    ds_stride = [0.0] * (frame_end + 1)
+    for f in range(2, frame_end + 1):
+        d = pos[f] - pos[f - 1]
+        ds_xy[f] = d.xy.length
+        ds_stride[f] = math.hypot(d.xy.length, max(0.0, d.z) * 0.65)
+    ds_xy[1] = ds_xy[2] if frame_end >= 2 else 0.0
+    ds_stride[1] = ds_stride[2] if frame_end >= 2 else 0.0
+
+    # Determine initial yaw at frame 1
+    init_yaw = wps[0][2]
+    if init_yaw is None:
+        for f in range(2, frame_end + 1):
+            v = (pos[f] - pos[1]).xy
+            if v.length > 0.02:
+                init_yaw = math.degrees(math.atan2(v.x, -v.y))
+                break
+    if init_yaw is None:
+        init_yaw = math.degrees(char_root.rotation_euler.z)
+
+    yaws = [float(init_yaw)] * (frame_end + 1)
+    for f in range(2, frame_end + 1):
+        # Centered tangent when moving on foot
+        f_a = max(1, f - 2)
+        f_b = min(frame_end, f + 2)
+        tang = (pos[f_b] - pos[f_a]).xy
+        if (not _is_seated(f)) and ds_xy[f] > 0.004 and tang.length > 0.012:
+            target_yaw = math.degrees(math.atan2(tang.x, -tang.y))
+        elif hold_yaw[f] is not None:
+            target_yaw = float(hold_yaw[f])
+        else:
+            target_yaw = yaws[f - 1]
+        delta = ((target_yaw - yaws[f - 1] + 180.0) % 360.0) - 180.0
+        step_deg = max(-max_turn_deg_per_frame, min(max_turn_deg_per_frame, delta))
+        yaws[f] = yaws[f - 1] + step_deg
+
+    # Measure true stance foot rates BEFORE creating NLA tracks
+    act_idle = _find_action(acts, "idle")
+    act_walk = _find_action(acts, "walk")
+    act_run = acts.get("run") or next((v for k, v in acts.items() if k.startswith("run")), None)
+    act_sit = acts.get("sit_idle") or next((v for k, v in acts.items() if k.startswith("sit_idle")), None)
+    walk_rate = measure_clip_stride_rate(arm, act_walk)
+    run_rate = measure_clip_stride_rate(arm, act_run) if act_run is not None else walk_rate * 2.2
+
     ad = arm.animation_data or arm.animation_data_create()
-    prev_action = ad.action
-    ad.action = act
-    for bname, keys in bone_keyframes.items():
-        pb = arm.pose.bones.get(bname)
-        if pb is None:
-            continue
-        pb.rotation_mode = "XYZ"
-        for frame, (rx, ry, rz) in keys:
-            pb.rotation_euler = (math.radians(rx), math.radians(ry), math.radians(rz))
-            pb.keyframe_insert(data_path="rotation_euler", frame=frame)
-    slot = ad.action_slot if hasattr(ad, "action_slot") else None
-    ad.action = prev_action
-    trk = ad.nla_tracks.new()
-    trk.name = "pose_" + name
-    all_f = [f for keys in bone_keyframes.values() for f, _ in keys]
-    strip = trk.strips.new(name, min(all_f), act)
-    if slot is not None and hasattr(strip, "action_slot"):
-        strip.action_slot = slot
-    elif hasattr(strip, "action_slot") and len(act.slots):
-        strip.action_slot = act.slots[0]
-    strip.blend_type = blend_type
-    strip.extrapolation = "NOTHING"
-    return strip
+    ad.action = None
+    for t in list(ad.nla_tracks):
+        ad.nla_tracks.remove(t)
+
+    st_idle = _make_animated_nla_strip(ad, "idle", act_idle, frame_end)
+    st_sit = _make_animated_nla_strip(ad, "sit_idle", act_sit, frame_end) if (seated_ranges and act_sit) else None
+    st_walk = _make_animated_nla_strip(ad, "walk", act_walk, frame_end)
+    Peak_v = max(ds_stride[f] * FPS for f in range(1, frame_end + 1) if not _is_seated(f)) if frame_end >= 1 else 0.0
+    st_run = _make_animated_nla_strip(ad, "run", act_run, frame_end) if (act_run is not None and Peak_v > 1.95) else None
+
+    char_root.rotation_mode = "XYZ"
+    s_walk = 0.0
+    s_run = 0.0
+    w_inf_smooth = 0.0
+    r_inf_smooth = 0.0
+
+    for f in range(1, frame_end + 1):
+        char_root.location = pos[f]
+        char_root.keyframe_insert(data_path="location", frame=f)
+        char_root.rotation_euler = (0.0, 0.0, math.radians(yaws[f]))
+        char_root.keyframe_insert(data_path="rotation_euler", frame=f)
+
+        seated = _is_seated(f)
+        v_mps = 0.0 if seated else (ds_stride[f] * FPS)
+        if f > 1 and not seated:
+            s_walk += ds_stride[f]
+            s_run += ds_stride[f]
+
+        # Smooth NLA crossfade weights (zero skating in idle, seamless walk <-> run transition)
+        target_w = 0.0 if v_mps < 0.08 else min(1.0, (v_mps - 0.08) / 0.42)
+        target_r = 0.0 if v_mps < 1.95 else min(1.0, (v_mps - 1.95) / 0.60)
+        w_inf_smooth = target_w if f == 1 else (0.65 * w_inf_smooth + 0.35 * target_w)
+        r_inf_smooth = target_r if f == 1 else (0.65 * r_inf_smooth + 0.35 * target_r)
+        if v_mps < 0.04:
+            w_inf_smooth = 0.0
+            r_inf_smooth = 0.0
+
+        st_idle.strip_time = float(phase_offset) + (f - 1) * (25.0 / FPS) * float(idle_speed)
+        st_idle.keyframe_insert(data_path="strip_time", frame=f)
+        st_idle.influence = 1.0
+        st_idle.keyframe_insert(data_path="influence", frame=f)
+
+        if st_sit is not None:
+            st_sit.strip_time = float(phase_offset) + (f - 1) * (25.0 / FPS)
+            st_sit.keyframe_insert(data_path="strip_time", frame=f)
+            st_sit.influence = 1.0 if seated else 0.0
+            st_sit.keyframe_insert(data_path="influence", frame=f)
+
+        st_walk.strip_time = float(phase_offset) + (s_walk / walk_rate)
+        st_walk.keyframe_insert(data_path="strip_time", frame=f)
+        st_walk.influence = float(round(w_inf_smooth, 4))
+        st_walk.keyframe_insert(data_path="influence", frame=f)
+
+        if st_run is not None:
+            st_run.strip_time = float(phase_offset) + (s_run / run_rate)
+            st_run.keyframe_insert(data_path="strip_time", frame=f)
+            st_run.influence = float(round(r_inf_smooth, 4))
+            st_run.keyframe_insert(data_path="influence", frame=f)
+
+    _set_fcurves_linear(char_root)
+    for st in (st_idle, st_sit, st_walk, st_run):
+        if st is not None:
+            _set_fcurves_linear(st)
+
+
+def bind_hand_ik_target(
+    scene,
+    arm,
+    name,
+    hand="R",
+    target_obj=None,
+    parent=None,
+    pos_keys=None,
+    influence_keys=None,
+):
+    """Drive `Forearm.<hand>` with a 2-bone IK constraint while keeping `rotation_mode == 'QUATERNION'`."""
+    pb = arm.pose.bones.get("Forearm." + hand)
+    if pb is None:
+        fail("bind_hand_ik_target: Forearm.%s missing on %s" % (hand, arm.name))
+    pb.rotation_mode = "QUATERNION"
+    if target_obj is None:
+        target_obj = bpy.data.objects.new("IKGoal_%s_%s" % (name, hand), None)
+        scene.collection.objects.link(target_obj)
+        if parent is not None:
+            target_obj.parent = parent
+    if pos_keys:
+        key_pos(target_obj, pos_keys)
+        _set_fcurves_linear(target_obj)
+
+    ik = pb.constraints.new("IK")
+    ik.name = "IK_%s_%s" % (name, hand)
+    ik.target = target_obj
+    ik.chain_count = 2
+    if influence_keys:
+        for f, val in influence_keys:
+            ik.influence = float(val)
+            ik.keyframe_insert(data_path="influence", frame=int(f))
+    else:
+        ik.influence = 1.0
+    return ik, target_obj
 
 
 def bind_hand_ik_to_roller(arm, pull_top_obj, active_ranges, hand="R"):
-    """Attach a 2-bone IK constraint on `Forearm.<hand>` targeting `pull_top_obj` so the
-    character's wrist/palm locks directly onto the roller suitcase grip bar (0.00 m gap!).
-    `active_ranges`: list of (f_start, f_end) where IK influence = 1.0 (0.0 outside)."""
-    pb = arm.pose.bones.get("Forearm." + hand)
-    if pb is None:
-        fail("bind_hand_ik_to_roller: bone Forearm.%s not found on %s" % (hand, arm.name))
-    ik = pb.constraints.new("IK")
-    ik.name = "GripRollerIK_" + hand
-    ik.target = pull_top_obj
-    ik.chain_count = 2
+    """Attach a 2-bone IK constraint on `Forearm.<hand>` targeting `pull_top_obj` with smooth
+    influence ramps while preserving `QUATERNION` rotation mode on all bones."""
+    inf_keys = []
     if len(active_ranges) == 1 and active_ranges[0][0] <= 1:
-        ik.influence = 1.0
-        ik.keyframe_insert(data_path="influence", frame=1)
-        ik.keyframe_insert(data_path="influence", frame=active_ranges[0][1])
-        if active_ranges[0][1] < bpy.context.scene.frame_end:
-            ik.influence = 0.0
-            ik.keyframe_insert(data_path="influence", frame=active_ranges[0][1] + 4)
-        return ik
-
-    ik.influence = 0.0
-    ik.keyframe_insert(data_path="influence", frame=1)
-    for f0, f1 in active_ranges:
-        if f0 > 2:
-            ik.influence = 0.0
-            ik.keyframe_insert(data_path="influence", frame=max(1, f0 - 3))
-        ik.influence = 1.0
-        ik.keyframe_insert(data_path="influence", frame=f0)
-        ik.keyframe_insert(data_path="influence", frame=f1)
+        f1 = active_ranges[0][1]
+        inf_keys = [(1, 1.0), (f1, 1.0)]
         if f1 < bpy.context.scene.frame_end:
-            ik.influence = 0.0
-            ik.keyframe_insert(data_path="influence", frame=f1 + 3)
+            inf_keys.append((min(bpy.context.scene.frame_end, f1 + 4), 0.0))
+    else:
+        inf_keys.append((1, 0.0))
+        for f0, f1 in active_ranges:
+            if f0 > 2:
+                inf_keys.append((max(1, f0 - 4), 0.0))
+            inf_keys.append((f0, 1.0))
+            inf_keys.append((f1, 1.0))
+            if f1 < bpy.context.scene.frame_end:
+                inf_keys.append((min(bpy.context.scene.frame_end, f1 + 4), 0.0))
+    ik, _ = bind_hand_ik_target(
+        bpy.context.scene, arm, "GripRoller", hand=hand, target_obj=pull_top_obj, influence_keys=inf_keys
+    )
     return ik
 
 
-def load_roller_bag(label, extended=True, loc=(0.0, 0.0, 0.0), yaw_deg=0.0, bag_tint=None, parent=None):
+def bind_head_look_at(
+    scene,
+    arm,
+    name,
+    target_obj=None,
+    target_pos=None,
+    influence_keys=None,
+    max_inf=0.62,
+    include_spine=False,
+):
+    """Turn `Head` (and optionally `Spine_02`) naturally toward a target via `TRACK_TO` (`TRACK_Z`, `UP_Y`),
+    preserving `QUATERNION` rotation mode on every bone."""
+    if target_obj is None:
+        target_obj = bpy.data.objects.new("LookGoal_" + name, None)
+        scene.collection.objects.link(target_obj)
+        if target_pos is not None:
+            if isinstance(target_pos, list):
+                key_pos(target_obj, target_pos)
+            else:
+                target_obj.location = target_pos
+
+    bones = [("Head", 1.0)] + ([("Spine_02", 0.34)] if include_spine else [])
+    for bname, mult in bones:
+        pb = arm.pose.bones.get(bname)
+        if pb is None:
+            continue
+        pb.rotation_mode = "QUATERNION"
+        cns = pb.constraints.new("TRACK_TO")
+        cns.name = "Look_%s_%s" % (name, bname)
+        cns.target = target_obj
+        cns.track_axis = "TRACK_Z"
+        cns.up_axis = "UP_Y"
+        if influence_keys:
+            for f, v in influence_keys:
+                cns.influence = float(v) * mult
+                cns.keyframe_insert(data_path="influence", frame=int(f))
+        else:
+            cns.influence = float(max_inf) * mult
+    return target_obj
+
+
+def parent_prop_to_bone(prop_obj, arm, bone_name, local_loc=(0.0, 0.0, 0.0), local_rot_deg=(0.0, 0.0, 0.0)):
+    """Parent a 3D prop (backpack, boarding pass, mop, wand, scanner) directly to an armature bone
+    so it moves organically with the character's body and never floats in world space."""
+    if bone_name not in arm.data.bones:
+        fail("parent_prop_to_bone: bone %r missing on %s" % (bone_name, arm.name))
+    prop_obj.parent = arm
+    prop_obj.parent_type = "BONE"
+    prop_obj.parent_bone = bone_name
+    prop_obj.rotation_mode = "XYZ"
+    prop_obj.location = local_loc
+    prop_obj.rotation_euler = tuple(math.radians(v) for v in local_rot_deg)
+
+
+def load_roller_bag(label, extended=True, loc=(0.0, 0.0, 0.0), yaw_deg=0.0, bag_tint=None, parent=None, bag_scale=1.42):
     root, objs, by_n, _ = load_glb("game/assets/interior/carry_roller.glb", label, loc=loc, yaw_deg=yaw_deg)
+    root.scale = (bag_scale, bag_scale, bag_scale)
     if bag_tint is not None and "CarryRoller_Body" in by_n:
         mat = toon_rgb_mat("bag_" + label, bag_tint)
         by_n["CarryRoller_Body"].data.materials[0] = mat
@@ -936,21 +1329,192 @@ def set_roller_handle(by_n, extended=True, frame=None):
     if reach is None or top is None:
         return
     if extended:
-        # Stretch rod 37x (0.74 m -> 0.96 m from case centre) so Pull_Top sits at natural hand height!
-        reach.scale = (1.0, 37.0, 1.0)
-        top.location = (0.0, -0.22 - 0.74, 0.03)
+        # Realistic carry-on telescoping handle (~0.41 m local extension = ~0.9x case height, NEVER 37x fishing rod!)
+        reach.scale = (1.0, 20.5, 1.0)
+        top.location = (0.0, -0.22 - 0.41, 0.03)
     else:
         reach.scale = (1.0, 1.0, 1.0)
         top.location = (0.0, -0.24, 0.03)
     if frame is not None:
-        reach.keyframe_insert(data_path="scale", frame=frame)
-        top.keyframe_insert(data_path="location", frame=frame)
+        reach.keyframe_insert(data_path="scale", frame=int(frame))
+        top.keyframe_insert(data_path="location", frame=int(frame))
+
+
+def verify_human_motion(
+    scene,
+    shot_id,
+    n_frames,
+    obstacle_roots=None,
+    extra_boxes_xy=None,
+    seated_exempt=None,
+    exempt_ranges=None,
+    min_clearance=0.45,
+):
+    """Automated per-frame physical & animation audit across frames 1..n_frames:
+    1. Every PoseBone on every character armature MUST keep `rotation_mode == 'QUATERNION'`.
+    2. Every character root (`CHAR_*`) MUST stay at `scale == (1, 1, 1)` (never squashed/dropped/ballooned).
+    3. Every walking/running character MUST use `use_animated_time` (`strip_time` driven by distance `s(f)`),
+       have 0 skating in `idle`, 0 moonwalking (`forward . velocity > 0`), and 0 Euler wrap spins (`|dyaw| <= 24 deg`).
+    4. Every human MUST maintain `>= min_clearance` (0.45 m) XY clearance from every solid wall, screen,
+       bench, planter, tree, desk, stanchion, and other human on every frame `1..n_frames`.
+    """
+    seated_exempt = set(seated_exempt or [])
+    exempt_ranges = dict(exempt_ranges or {})
+    char_roots = sorted([o for o in scene.objects if o.name.startswith("CHAR_")], key=lambda o: o.name)
+    if not char_roots:
+        return {"shot": shot_id, "characters": 0}
+
+    char_arms = {}
+    for cr in char_roots:
+        arm = next((c for c in cr.children if c.type == "ARMATURE"), None)
+        if arm is None:
+            fail("%s: character %s missing armature" % (shot_id, cr.name))
+        char_arms[cr.name] = arm
+        for pb in arm.pose.bones:
+            if pb.rotation_mode != "QUATERNION":
+                fail("%s: %s bone %s rotation_mode=%s (MUST be QUATERNION!)" % (shot_id, cr.name, pb.name, pb.rotation_mode))
+
+    # Collect 2D XY obstacle AABBs at settled frame `n_frames`
+    scene.frame_set(n_frames)
+    bpy.context.view_layer.update()
+    dg = bpy.context.evaluated_depsgraph_get()
+    obs_boxes = list(extra_boxes_xy or [])
+
+    if obstacle_roots:
+        for item in obstacle_roots:
+            if isinstance(item, tuple):
+                tag, root_ob = item
+            else:
+                tag, root_ob = item.name, item
+            if root_ob is None:
+                continue
+            meshes = [root_ob] if root_ob.type == "MESH" else []
+            for o in scene.objects:
+                if o.type == "MESH" and not o.hide_render:
+                    p = o.parent
+                    while p is not None:
+                        if p == root_ob:
+                            meshes.append(o)
+                            break
+                        p = p.parent
+            xs, ys = [], []
+            for mo in meshes:
+                ev = mo.evaluated_get(dg)
+                me = ev.to_mesh()
+                mw = ev.matrix_world
+                for v in me.vertices:
+                    wp = mw @ v.co
+                    if 0.16 <= wp.z <= 1.85:
+                        xs.append(float(wp.x))
+                        ys.append(float(wp.y))
+                ev.to_mesh_clear()
+            if xs and ys:
+                obs_boxes.append((tag, min(xs), max(xs), min(ys), max(ys)))
+
+    min_obs_d = 999.0
+    min_char_d = 999.0
+    max_yaw_step = 0.0
+    prev_xy = {}
+    prev_yaw = {}
+
+    for f in range(1, n_frames + 1):
+        scene.frame_set(f)
+        bpy.context.view_layer.update()
+        cur_positions = []
+
+        for cr in char_roots:
+            cname = cr.name
+            sc = cr.matrix_world.to_scale()
+            if max(abs(sc.x - 1.0), abs(sc.y - 1.0), abs(sc.z - 1.0)) > 0.01:
+                fail("%s f=%d: %s scale=(%.4f,%.4f,%.4f) != 1.0 (humans must NEVER pop/balloon!)" % (shot_id, f, cname, sc.x, sc.y, sc.z))
+
+            mw = cr.matrix_world
+            cx, cy, cz = float(mw.translation.x), float(mw.translation.y), float(mw.translation.z)
+            fwd_3d = (mw.to_3x3() @ Vector((0.0, -1.0, 0.0))).normalized()
+            yaw_deg = math.degrees(math.atan2(fwd_3d.x, -fwd_3d.y))
+            in_ex_range = any(r0 <= f <= r1 for r0, r1 in exempt_ranges.get(cname, ()))
+            is_exempt = cname in seated_exempt or (cr.parent is not None) or in_ex_range
+
+            if cname in prev_xy and not is_exempt:
+                dx = cx - prev_xy[cname][0]
+                dy = cy - prev_xy[cname][1]
+                ds = math.hypot(dx, dy)
+                v_mps = ds * FPS
+                dyaw = abs(((yaw_deg - prev_yaw[cname] + 180.0) % 360.0) - 180.0)
+                max_yaw_step = max(max_yaw_step, dyaw)
+                if dyaw > 25.0:
+                    fail("%s f=%d: %s spun %.1f deg in 1 frame (pirouette defect!)" % (shot_id, f, cname, dyaw))
+                if v_mps > 0.40:
+                    dot_fwd = (dx * fwd_3d.x + dy * fwd_3d.y) / ds
+                    if dot_fwd < 0.35:
+                        fail("%s f=%d: %s moving at %.2fm/s while facing away (dot=%.2f, moonwalk!)" % (shot_id, f, cname, v_mps, dot_fwd))
+
+                # Check NLA strip_time / no idle skating
+                arm = char_arms[cname]
+                ad = arm.animation_data
+                strips = [s for trk in (ad.nla_tracks if ad else []) for s in trk.strips]
+                if v_mps > 0.25:
+                    active_loco = [s for s in strips if ("walk" in s.name or "run" in s.name) and s.influence > 0.08]
+                    if not active_loco:
+                        fail("%s f=%d: %s skating at %.2fm/s with 0 walk/run influence!" % (shot_id, f, cname, v_mps))
+                    if not all(s.use_animated_time for s in active_loco):
+                        fail("%s f=%d: %s walk/run strip not using distance-driven strip_time!" % (shot_id, f, cname))
+
+            prev_xy[cname] = (cx, cy)
+            prev_yaw[cname] = yaw_deg
+
+            if not is_exempt and cz < 0.45:
+                cur_positions.append((cname, cx, cy))
+                for otag, x0, x1, y0, y1 in obs_boxes:
+                    qx = max(x0, min(cx, x1))
+                    qy = max(y0, min(cy, y1))
+                    dist = math.hypot(cx - qx, cy - qy)
+                    min_obs_d = min(min_obs_d, dist)
+                    if dist < min_clearance:
+                        fail(
+                            "%s f=%d: %s at (%.2f,%.2f) collided with %s [%.2f..%.2f, %.2f..%.2f] (clearance=%.3fm < %.2fm)"
+                            % (shot_id, f, cname, cx, cy, otag, x0, x1, y0, y1, dist, min_clearance)
+                        )
+
+        for i in range(len(cur_positions)):
+            for j in range(i + 1, len(cur_positions)):
+                n1, x1, y1 = cur_positions[i]
+                n2, x2, y2 = cur_positions[j]
+                cd = math.hypot(x1 - x2, y1 - y2)
+                min_char_d = min(min_char_d, cd)
+                if cd < 0.60:
+                    fail("%s f=%d: %s and %s collided (dist=%.3fm < 0.60m)" % (shot_id, f, n1, n2, cd))
+
+    summary = {
+        "shot": shot_id,
+        "characters": len(char_roots),
+        "obstacles": len(obs_boxes),
+        "min_obstacle_clearance_m": round(min_obs_d, 3) if min_obs_d < 900 else None,
+        "min_character_sep_m": round(min_char_d, 3) if min_char_d < 900 else None,
+        "max_yaw_step_deg": round(max_yaw_step, 2),
+        "quaternion_only": True,
+        "unit_human_scale": True,
+    }
+    log(
+        "PROBE human_motion %s chars=%d obs=%d min_obs_clear=%.3fm min_char_sep=%.3fm max_yaw_step=%.1fdeg quat=OK scale1=OK"
+        % (
+            shot_id,
+            len(char_roots),
+            len(obs_boxes),
+            min_obs_d if min_obs_d < 900 else 9.99,
+            min_char_d if min_char_d < 900 else 9.99,
+            max_yaw_step,
+        )
+    )
+    return summary
 
 
 # ---------------------------------------------------------------- Elastic Snap-In Animation
 
 
 def animate_snap_pop(obj, trigger_frame, drop_height=1.35, settle_frames=13):
+    if obj.name.startswith("CHAR_") or obj.type == "ARMATURE" or any(c.type == "ARMATURE" for c in obj.children):
+        fail("animate_snap_pop forbidden on human character %r (humans must NEVER drop/squash from ceiling!)" % obj.name)
     base_loc = Vector(obj.location)
     base_scale = Vector(obj.scale)
     t0 = int(trigger_frame)
