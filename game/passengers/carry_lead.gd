@@ -32,6 +32,15 @@ const REACH_SHARE := 0.25
 ## bag left on the floor for REACH_SHARE was stepped through (stall_bags_probe,
 ## board item c7b0e7be).
 const STALL_PICK_REACH := 0.06
+## Share of a tray-to-shoulder carry over which the bag turns upright from flat,
+## its forward body-frame clearance (metres), and the waist-only CarryStoop lean
+## (no hip drop, keeping shoulders above the 0.84 m tabletop) off the tray
+## (board 74e713be).
+const SHOULDER_TRAY_UP_T := 0.46
+const SHOULDER_PICK_FRONT_M := 0.28
+const SHOULDER_WRAP_FRONT_M := 0.435
+const SHOULDER_TRAY_KEEP_END := 0.78
+const SHOULDER_TRAY_HIPS := Vector3(0.0, -0.45, 1.0)
 ## A backpack goes on and off the back through a hang at the leading hand's
 ## side, at shoulder height, this far out from the centre line, over this
 ## share of the carry.
@@ -804,6 +813,63 @@ static func swap_release(
 	return away.normalized() * SWAP_RELEASE_M * smoothstep(SWAP_RELEASE_T.x, SWAP_RELEASE_T.y, t)
 
 
+## Where a shoulder bag picked up out of a security lane tray is at `t` (0 to 1)
+## of its carry, its Strap_Top at `loose` in its own frame, the body drawn at
+## `frame`, `w` (0 to 1) how far it has turned upright from `start.basis`, led
+## by `lead` (0 right, 1 left): starts at `start` (`t = 0`, `w = 0`) and sweeps
+## smoothly across the worn side ahead of the chest onto `want` with continuous
+## cross-body/trailing bow, so it never teleports off the tray, clears the
+## opposite arm, and never trails behind a walker stepping off to a lane repack
+## berth (board 74e713be).
+static func _shoulder_tray_path(
+	start: Transform3D,
+	want: Transform3D,
+	frame: Transform3D,
+	t: float,
+	loose: Vector3,
+	w: float,
+	lead: int
+) -> Transform3D:
+	var local := frame.affine_inverse()
+	var start_bar := local * (start * loose)
+	var want_bar := local * (want * loose)
+	var out_x := -1.0 if lead == 0 else 1.0
+	var cross := clampf((-start_bar.x * out_x + 0.15) / 0.55, 0.0, 1.0)
+	var behind := clampf((0.12 - start_bar.z) / 0.16, 0.0, 1.0)
+	var wrap := maxf(cross, behind)
+	var side_x := out_x * maxf(want_bar.x * out_x, lerpf(0.24, 0.27, behind))
+	var ux := smoothstep(lerpf(0.08, 0.38, behind) * wrap, lerpf(0.78, 0.86, behind), t)
+	var vx := smoothstep(lerpf(0.74, 0.84, behind), lerpf(0.96, 1.0, behind), t)
+	var mid_y := want_bar.y - 0.05
+	var uy := 1.0 - pow(1.0 - clampf(t / 0.62, 0.0, 1.0), 1.40)
+	var vy := smoothstep(0.76, 1.0, t)
+	var s_arch := sin(PI * clampf(t / 0.80, 0.0, 1.0))
+	var arch_y := 0.12 * wrap * s_arch * s_arch
+	var front_z := lerpf(SHOULDER_PICK_FRONT_M, lerpf(SHOULDER_WRAP_FRONT_M, 0.56, behind), wrap)
+	var uz := 1.0 - pow(1.0 - clampf(t / 0.62, 0.0, 1.0), lerpf(1.12, 1.35, behind))
+	var vz := smoothstep(0.72, 1.0, t)
+	var bar := Vector3(
+		lerpf(lerpf(start_bar.x, side_x, ux), want_bar.x, vx),
+		lerpf(lerpf(start_bar.y, mid_y, uy), want_bar.y, vy) + arch_y,
+		lerpf(lerpf(start_bar.z, front_z, uz), want_bar.z, vz)
+	)
+	var yaw_in := Basis(
+		Vector3.UP,
+		(
+			-out_x
+			* lerpf(0.28, 0.48, behind)
+			* wrap
+			* smoothstep(0.36, 0.54, t)
+			* (1.0 - smoothstep(0.78, 0.94, t))
+		)
+	)
+	var upright_q := (yaw_in * local.basis * want.basis).get_rotation_quaternion()
+	var q := (local.basis * start.basis).get_rotation_quaternion().slerp(upright_q, w)
+	var size := start.basis.get_scale().lerp(want.basis.get_scale(), w)
+	var basis := frame.basis * Basis(q).scaled(size)
+	return Transform3D(basis, frame * bar - basis * loose)
+
+
 ## How a hand-led move of `bag` (CarryOnProps' record) goes at `k`, from
 ## `start` (world now) to `want`, its body drawn at `frame`; `flags` as for
 ## path(), `body` the body as drawn now: {"hand": the bag's own hand or side,
@@ -960,6 +1026,16 @@ static func plan(
 		and to_end == End.HELD
 	)
 	var floor_case: bool = case_up_out and from_floor and not roller
+	var shoulder_up: bool = (
+		bag["kind"] == SecurityLooks.Kind.SHOULDER
+		and not stall
+		and from_end == End.REST
+		and to_end == End.WORN
+	)
+	var shoulder_tray_up: bool = shoulder_up and flags.get("from_tray", false)
+	var shoulder_floor_up: bool = shoulder_up and from_floor
+	var u_up := clampf(t / SHOULDER_TRAY_UP_T, 0.0, 1.0)
+	var shoulder_w := 1.0 - pow(1.0 - u_up, 1.55)
 	var goal := want
 	var on_path: Transform3D
 	var shoulder_y := NAN
@@ -999,6 +1075,8 @@ static func plan(
 			on_path = path(side, want, smoothstep(0.0, 1.0, u), frame, side_local, by_middle)
 		else:
 			on_path = path(start, side, t / (1.0 - BACK_SHARE), frame, bag["from"], by_middle)
+	elif shoulder_tray_up:
+		on_path = _shoulder_tray_path(start, want, frame, t, loose, shoulder_w, lead)
 	else:
 		# A bag picked up off a stall's floor rises, whatever its origin does (a case
 		# stood on its end has its origin higher than flat in the hand).
@@ -1020,6 +1098,20 @@ static func plan(
 		elif case_up_out:
 			goal = floor_end(frame, want, want * anchor_to)
 		on_path = path(start, goal, t, frame, bag["from"], lift)
+		if shoulder_floor_up and CarryMoves.picks_up_ahead(bag["from"]):
+			# A single floor tote starts centred ahead of the feet; swing it out
+			# to its shoulder's side as fast as it turns upright (UPRIGHT_FROM_FLOOR)
+			# so its back edge clears the stepping thigh (booth p8, board 74e713be).
+			var inv := frame.affine_inverse()
+			var local_now := inv * on_path.origin
+			var out_x := -1.0 if lead == 0 else 1.0
+			var side_x := lerpf(
+				(inv * start.origin).x,
+				(inv * goal.origin).x,
+				smoothstep(0.0, UPRIGHT_FROM_FLOOR, t)
+			)
+			local_now.x = out_x * maxf(local_now.x * out_x, side_x * out_x)
+			on_path.origin = frame * local_now
 		if hand_swap:
 			# Its handover height is stamped as the move started, not the shoulders
 			# drawn now (a walk or stoop pose moved it, Sol review of board 295026a6).
@@ -1080,7 +1172,29 @@ static func plan(
 		# The hand lifting it out of a tray by its carry handle holds the palm
 		# over the handle (RollerHandover.TRAY_PALM_M).
 		palm = RollerHandover.TRAY_PALM_M
-	held_at += on_path.basis.inverse() * (Vector3.UP * palm)
+	var strap_clear := Vector3.ZERO
+	var grab_aim := Vector3.ZERO
+	if shoulder_tray_up:
+		var s_local := frame.affine_inverse() * (start * loose)
+		var out_s := -1.0 if lead == 0 else 1.0
+		var cross_s := clampf((-s_local.x * out_s + 0.05) / 0.45, 0.0, 1.0)
+		var trail_s := clampf((0.12 - s_local.z) / 0.16, 0.0, 1.0)
+		var flat_w := cross_s * trail_s * (1.0 - shoulder_w)
+		var mid_w := cross_s * smoothstep(0.46, 0.62, t) * (1.0 - smoothstep(0.78, 0.96, t))
+		if flat_w > 0.0 or mid_w > 0.0:
+			# Within the 3 cm GRIP_ON cap (like BACK_LOOP_UP_TURNING), hold +2.92 cm
+			# off the flat bag's +Y face at grab and -2.7 cm off the strap arch at
+			# mid-lift while aiming the initial grab along the strap (74e713be).
+			var lift_y := lerpf(0.0292, 0.026, smoothstep(0.0, 0.03, t))
+			strap_clear = (
+				(Vector3(0.0, lift_y, 0.0) * flat_w + Vector3(-out_s * 0.027, 0.0, 0.0) * mid_w)
+				/ float(body["scale"])
+			)
+			grab_aim = (
+				Vector3(out_s * 0.028, -lift_y, 0.0)
+				* (flat_w * (1.0 - smoothstep(0.0, 0.03, t)) / float(body["scale"]))
+			)
+	held_at += on_path.basis.inverse() * (Vector3.UP * palm) + strap_clear
 	# Changing hands, each hand holds a roller's bar at its own spot
 	# (swap_spots()); the bag is placed from the holder's.
 	var gave := 1 - lead
@@ -1101,18 +1215,42 @@ static func plan(
 	for hand in 2:
 		match float(ph["targets_at"][hand]):
 			-1.0:
-				targets[hand] = start * anchor_from + Vector3.UP * palm
+				targets[hand] = start * (anchor_from + strap_clear + grab_aim) + Vector3.UP * palm
 			2.0:
 				targets[hand] = want * anchor_to
 			_:
-				targets[hand] = on_path * (held_at + (spots[hand] as Vector3))
+				targets[hand] = on_path * (held_at + grab_aim + (spots[hand] as Vector3))
 	if (swap or first >= 0) and ph["holder"] == lead:
 		var grip: Vector3 = held_at + spots[gave]
 		targets[gave] += swap_release(bag["kind"], grip, on_path, t)
+	var trailing_tray := (
+		clampf((0.12 - (frame.affine_inverse() * (start * loose)).z) / 0.20, 0.0, 1.0)
+		if shoulder_tray_up
+		else 0.0
+	)
 	if off_back or on_back:
 		targets[lead] = by_side(
 			targets[lead], k, from_end, to_end, frame, flags["yaw"], lead, shoulder_y, below
 		)
+	elif shoulder_up:
+		var s_up := span(from_end, to_end, let_go, reach)
+		if shoulder_tray_up and k <= s_up.y:
+			# Dip only reach height (never x/z) when a runner has already passed
+			# the tray so the outstretched forearm angles down onto Strap_Top
+			# instead of skimming flat across CarryShoulderBag_Body (74e713be).
+			targets[lead] = (
+				(targets[lead] as Vector3)
+				- Vector3.UP * (0.23 * trailing_tray * (1.0 - smoothstep(0.0, 0.30, t)))
+			)
+		elif k > s_up.y:
+			# Nudge the releasing hand 6.5 cm outside and 2 cm under
+			# Strap_Reach_Mesh so the forearm clears the strap as Arm.STRAP eases in.
+			var out_x := -1.0 if lead == 0 else 1.0
+			var u_let := smoothstep(0.0, 0.12, (k - s_up.y) / (1.0 - s_up.y))
+			targets[lead] = (
+				(targets[lead] as Vector3)
+				+ (frame.basis.x * (out_x * 0.065) - Vector3.UP * 0.02) * u_let
+			)
 	var xf := on_path
 	if ph["holder"] < 0:
 		xf = start if k < span(from_end, to_end, let_go, reach).x else want
@@ -1133,6 +1271,12 @@ static func plan(
 	if stall and to_end == End.REST:
 		keeps[lead] = 1.0
 		hips = STALL_HIPS
+	elif shoulder_tray_up:
+		# Waist-only lean toward the tray brings the reaching shoulder across
+		# clear of the opposite arm while keeping shoulders above the 0.84 m
+		# tabletop and hips upright while walking (board 74e713be).
+		keeps[lead] = 1.0 - smoothstep(0.42, SHOULDER_TRAY_KEEP_END, t)
+		hips = SHOULDER_TRAY_HIPS
 	elif first >= 0 and (flags.get("from_tray", false) or flags.get("to_tray", false)):
 		# A roller handed over at a tray: the hand at the tray leans in to it,
 		# the back bent first (STALL_HIPS), as far as the reach needs at table

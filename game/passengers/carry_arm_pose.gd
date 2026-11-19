@@ -88,6 +88,8 @@ static func lead_arms(props: CarryOnProps, held: Dictionary, body: Node3D, now: 
 static func pose_arms(props: CarryOnProps, held: Dictionary, body: Node3D, now: float) -> void:
 	var modes := [Arm.FREE, Arm.FREE]
 	var strap := [0.0, 0.0]
+	var shoulder_holds := [false, false]
+	var shoulder_opp_clear := [0.0, 0.0]
 	var cases := 0
 	# Hard cases the free hand comes to the front beside (a roller held by its
 	# bar lies across the front to the free side, so that hand stays down).
@@ -110,26 +112,40 @@ static func pose_arms(props: CarryOnProps, held: Dictionary, body: Node3D, now: 
 					modes[hand] = Arm.PULL
 			SecurityLooks.Carry.SHOULDER:
 				var side := SecurityLooks.worn_side(i)
-				var was_hand: bool = int(bag.get("was", -1)) / 4 == SecurityLooks.Home.HAND
-				# The hand is on the strap before it stretches (CarryPlace.reach_blend) and
-				# lets go after it is slack.
-				var on := 0.0
-				if homes[i] == SecurityLooks.Home.HAND:
-					on = clampf(k / 0.6, 0.0, 1.0)
-				elif was_hand:
-					on = 1.0 - clampf((k - 0.4) / 0.6, 0.0, 1.0)
+				var on := strap_weight(bag, homes[i], k, now)
+				if homes[i] == SecurityLooks.Home.HAND and CarryPlace.leading(bag, now):
+					shoulder_holds[side] = k >= 0.38 and on <= 0.0
+					if int(bag.get("was", -1)) / 4 == SecurityLooks.Home.TRAY:
+						var s_opp := sin(PI * clampf((k - 0.35) / 0.33, 0.0, 1.0))
+						shoulder_opp_clear[1 - side] = maxf(
+							shoulder_opp_clear[1 - side], 0.88 * s_opp * s_opp
+						)
 				if on > 0.0:
 					modes[side] = Arm.STRAP
 					strap[side] = on
 	# The arms keep what was set until it changes (most frames nothing does).
 	var tuck: float = held.get("tuck_weight", 0.0)
+	var tucked: bool = held.get("tuck", false)
 	var reach_on: Array = held.get("reach_on", [false, false])
 	var swaps := CarrySwap.arm_shares(held, now)
 	var outs := StallCarry.hand_out_degrees(held, now)
 	var walk := walk_share(held, body)
 	var still := unpack_still(held, now)
 	var key := [
-		modes, strap, cases, beside, held["weight"], tuck, reach_on, swaps, outs, walk, still
+		modes,
+		strap,
+		shoulder_holds,
+		shoulder_opp_clear,
+		cases,
+		beside,
+		held["weight"],
+		tuck,
+		tucked,
+		reach_on,
+		swaps,
+		outs,
+		walk,
+		still,
 	]
 	if held.get("arm_key", []) == key and held.get("arm_body") == body:
 		return
@@ -138,8 +154,14 @@ static func pose_arms(props: CarryOnProps, held: Dictionary, body: Node3D, now: 
 	var arms: Array = props._rig(body)["arms"]
 	for side in arms.size():
 		var arm := arms[side] as CarryArm
-		arm.holds = modes[side] == Arm.HAND or modes[side] == Arm.PULL
-		arm.active = modes[side] != Arm.FREE or cases > 0 or tuck > 0.0 or reach_on[side]
+		arm.holds = modes[side] == Arm.HAND or modes[side] == Arm.PULL or shoulder_holds[side]
+		arm.active = (
+			modes[side] != Arm.FREE
+			or cases > 0
+			or tuck > 0.0
+			or reach_on[side]
+			or shoulder_opp_clear[side] > 0.0
+		)
 		var pulling: bool = modes[side] == Arm.PULL
 		arm.angle_degrees = PULL_OUT_DEGREES if pulling else outs[side]
 		arm.swing_kept = PULL_SWING_KEPT if pulling else 0.5 * (1.0 - still)
@@ -161,9 +183,22 @@ static func pose_arms(props: CarryOnProps, held: Dictionary, body: Node3D, now: 
 				var w: float = held["weight"]
 				arm.front_upper_degrees = 20.0 + TURN_REACH_DEGREES * 4.0 * w * (1.0 - w)
 			_:
-				# Beside a front-carried case, or tucked in through a booth.
-				arm.front_half_width = BoothCarry.free_hand_width(beside > 0, tuck)
-				arm.front_weight = maxf(held["weight"] if beside > 0 else 0.0, tuck)
+				# Beside a front-carried case, tucked in through a booth, or held
+				# clear at the hip while a tray shoulder bag sweeps across the front.
+				var opp_w: float = shoulder_opp_clear[side]
+				if beside == 0 and not tucked and opp_w > 0.0:
+					var base_w := tuck * (1.0 - opp_w)
+					var total_w := base_w + opp_w
+					var share := opp_w / total_w
+					arm.front_upper_degrees = lerpf(20.0, -28.0, share)
+					arm.front_up_degrees = lerpf(-10.0, -122.0, share)
+					arm.front_half_width = lerpf(
+						BoothCarry.free_hand_width(false, tuck), 0.25, share
+					)
+					arm.front_weight = total_w
+				else:
+					arm.front_half_width = BoothCarry.free_hand_width(beside > 0, tuck)
+					arm.front_weight = maxf(held["weight"] if beside > 0 else 0.0, tuck)
 		CarrySwap.pose_arm(arm, swaps[side], held["weight"], outs[side])
 		# The set twist with the pull while walking, eased in and out with a
 		# swap's share and with the walk clip's crossfade.
@@ -178,6 +213,32 @@ static func unpack_done(p: Passenger) -> int:
 	if p.stage != Passenger.Stage.SECURITY or p.security_phase != SecurityRuntime.Phase.UNPACK:
 		return -1
 	return SecurityRuntime.work_for(SecurityRuntime.Phase.UNPACK, p) - p.security_work
+
+
+## How far (0 to 1) the worn shoulder-strap chest pose (Arm.STRAP) is on for
+## shoulder bag `bag` (home now `home`, `k` through its move, at sim time
+## `now`): in a hand-led pickup (CarryPlace.leading()) the reaching arm stays
+## free while CarryLead reaches and carries the bag onto the shoulder
+## (span().y), then eases onto the strap as the reach lets go; in a hand-led
+## put-down it eases off over the reach (span().x) before the bag leaves the
+## shoulder.
+static func strap_weight(bag: Dictionary, home: int, k: float, now: float) -> float:
+	var was_hand: bool = int(bag.get("was", -1)) / 4 == SecurityLooks.Home.HAND
+	if CarryPlace.leading(bag, now):
+		var to_end := CarryLead.End.WORN if home == SecurityLooks.Home.HAND else CarryLead.End.REST
+		var s := CarryLead.span(
+			CarryLead.start_of(bag)[0], to_end, CarryLead.REACH_SHARE, CarryLead.reach_of(bag)
+		)
+		if home == SecurityLooks.Home.HAND:
+			return smoothstep(s.y, 1.0, k)
+		if was_hand:
+			return 0.0 if s.x <= 0.0 else 1.0 - smoothstep(0.0, s.x, k)
+		return 0.0
+	if home == SecurityLooks.Home.HAND:
+		return clampf(k / 0.6, 0.0, 1.0)
+	if was_hand:
+		return 1.0 - clampf((k - 0.4) / 0.6, 0.0, 1.0)
+	return 0.0
 
 
 ## Whether bag record `bag` (home now `home`, in hand `hand`, `k` through its
