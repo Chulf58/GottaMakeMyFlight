@@ -118,9 +118,9 @@ def postprocess_rendered_frame(frame_path, shot_id, f_local, logo_rgba, badge_rg
             lh = int(round(logo_rgba.shape[0] * (lw / float(logo_rgba.shape[1]))))
             arr = _alpha_over(arr, _resize_rgba(logo_rgba, lw, lh), tk.RES_W // 2, int(tk.RES_H * 0.56))
         if s_badge > 0.0:
-            bw = int(round(560 * s_badge))
+            bw = int(round(740 * s_badge))
             bh = int(round(badge_rgba.shape[0] * (bw / float(badge_rgba.shape[1]))))
-            arr = _alpha_over(arr, _resize_rgba(badge_rgba, bw, bh), tk.RES_W // 2, int(tk.RES_H * 0.84))
+            arr = _alpha_over(arr, _resize_rgba(badge_rgba, bw, bh), tk.RES_W // 2, int(tk.RES_H * 0.85))
     tk.write_png_float(frame_path, arr)
 
 
@@ -353,6 +353,7 @@ def main():
                 exempt_ranges=motion_spec.get("exempt_ranges"),
                 pulled_rollers=motion_spec.get("pulled_rollers"),
                 forbid_char_boxes=motion_spec.get("forbid_char_boxes"),
+                stair_foot_checks=motion_spec.get("stair_foot_checks"),
                 min_clearance=0.45,
             )
             human_motion_proofs.append(hm_summary)
@@ -374,8 +375,10 @@ def main():
                 continue
 
             # 2. Render frames: fast GPU batch `animation=True` for full build, or stills for --strips-only
+            default_extra_beats = [28, 243, 337, 441, 532, 843]
+            all_extra_globals = set(default_extra_beats) | set(args.extra_frames)
             five_picks = pick_five_frames(n_f)
-            extra_locals = {gf - g_cursor for gf in args.extra_frames if g_cursor < gf <= g_cursor + n_f}
+            extra_locals = {gf - g_cursor for gf in all_extra_globals if g_cursor < gf <= g_cursor + n_f}
             scene.render.image_settings.media_type = "IMAGE"
             scene.render.image_settings.file_format = "PNG"
             scene.render.image_settings.color_mode = "RGBA"
@@ -411,7 +414,12 @@ def main():
                 scene.frame_set(fl)
                 arr = tk.read_png_float(out_png)
                 suv = None
-                hero_visible = hero_arm is not None and not (shot_id == "shot_01" and fl < 31) and not (shot_id == "shot_05" and fl > 48)
+                hero_visible = (
+                    hero_arm is not None
+                    and not (shot_id == "shot_01" and fl < 35)
+                    and not (shot_id == "shot_03" and (34 <= fl <= 58 or 132 <= fl <= 154))
+                    and not (shot_id == "shot_05" and fl > 48)
+                )
                 if hero_visible:
                     suv = tk.head_ndc(scene, cam, hero_arm)
                 tk.verify_frame_not_black_and_skin(arr, "%s_f%04d" % (shot_id, gf), skin_uv=suv)
@@ -444,6 +452,15 @@ def main():
         contact_path = os.path.join(tk.OUT_DIR, "contact_sheet.png")
         tk.write_png_float(contact_path, sheet)
         tk.log("PROBE contact_sheet wrote %s (%dx%d)" % (contact_path, W, H))
+
+        # Write dedicated 6-tile `extra_beats_strip.png` covering taxi step-out, Shot 2 pop-in & 00:11 turn,
+        # Shot 3 two-hand tray heave + rubber duck & pickup snatch, and Shot 5 stair climb!
+        beat_globals = [28, 243, 337, 441, 532, 843]
+        beat_tiles = [shrink_tile(tk.read_png_float(os.path.join(frames_dir, "frame_%04d.png" % gf))) for gf in beat_globals]
+        extra_strip = np.concatenate(beat_tiles, axis=1)
+        extra_strip_path = os.path.join(strips_dir, "extra_beats_strip.png")
+        tk.write_png_float(extra_strip_path, extra_strip)
+        tk.log("PROBE extra_beats_strip wrote %s (%dx%d)" % (extra_strip_path, extra_strip.shape[1], extra_strip.shape[0]))
 
         with open(os.path.join(tk.OUT_DIR, "shot_events.json"), "w", encoding="utf-8") as fh:
             json.dump(

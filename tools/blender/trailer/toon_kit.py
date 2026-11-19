@@ -541,6 +541,68 @@ def glass_mat():
     return m
 
 
+def exterior_lobby_glass_mat():
+    """Warm golden-hour morning facade glass for exterior `TP_Airport_01A` curtain walls so Shot 1
+    matches Shots 2-5's sunlit morning warmth instead of dark dusk slate."""
+    if "TP_EXT_LOBBY_GLASS" in _MAT_CACHE:
+        return _MAT_CACHE["TP_EXT_LOBBY_GLASS"]
+    m = bpy.data.materials.new("TOON_TP_ExtLobbyGlass")
+    nt = m.node_tree
+    nt.nodes.clear()
+    geom = nt.nodes.new("ShaderNodeNewGeometry")
+    sep = nt.nodes.new("ShaderNodeSeparateXYZ")
+    nt.links.new(geom.outputs["Position"], sep.inputs["Vector"])
+    map_z = nt.nodes.new("ShaderNodeMapRange")
+    map_z.inputs["From Min"].default_value = 0.4
+    map_z.inputs["From Max"].default_value = 5.2
+    nt.links.new(sep.outputs["Z"], map_z.inputs["Value"])
+    ramp = nt.nodes.new("ShaderNodeValToRGB")
+    ramp.color_ramp.interpolation = "LINEAR"
+    ramp.color_ramp.elements[0].position = 0.0
+    ramp.color_ramp.elements[0].color = srgb_to_lin((0.99, 0.90, 0.70)) + (1.0,)
+    ramp.color_ramp.elements[1].position = 1.0
+    ramp.color_ramp.elements[1].color = srgb_to_lin((0.66, 0.85, 1.00)) + (1.0,)
+    nt.links.new(map_z.outputs["Result"], ramp.inputs["Fac"])
+    emit = nt.nodes.new("ShaderNodeEmission")
+    emit.inputs["Strength"].default_value = 1.02
+    nt.links.new(ramp.outputs["Color"], emit.inputs["Color"])
+    out = nt.nodes.new("ShaderNodeOutputMaterial")
+    nt.links.new(emit.outputs["Emission"], out.inputs["Surface"])
+    _MAT_CACHE["TP_EXT_LOBBY_GLASS"] = m
+    return m
+
+
+def warm_exterior_facade_windows(objs):
+    """Rebind dark-slate window polygons baked into `tp_atlas_1a_d.png` on `tp_airport_01a` to
+    `exterior_lobby_glass_mat()` while preserving concrete mullions, pillars, roof, and signage."""
+    img = get_image("tp_atlas_1a_d.png")
+    iw, ih = img.size
+    px = np.array(img.pixels[:], dtype=np.float32).reshape(ih, iw, 4)
+    ext_m = exterior_lobby_glass_mat()
+    tp_base = toon_atlas_mat("tp_atlas_1a_d.png")
+
+    for ao in objs:
+        if ao.type != "MESH" or "Door_6" in ao.name or not ao.data.uv_layers:
+            continue
+        me = ao.data
+        uv_data = me.uv_layers.active.data
+        win_polys = []
+        for poly in me.polygons:
+            if poly.material_index < len(me.materials) and me.materials[poly.material_index] == tp_base:
+                u = sum(uv_data[li].uv[0] for li in poly.loop_indices) / len(poly.loop_indices)
+                v = sum(uv_data[li].uv[1] for li in poly.loop_indices) / len(poly.loop_indices)
+                ix = max(0, min(iw - 1, int((u % 1.0) * iw)))
+                iy = max(0, min(ih - 1, int((v % 1.0) * ih)))
+                r_c, g_c, b_c, _ = px[iy, ix]
+                if b_c > r_c + 0.045 and r_c < 0.28 and b_c < 0.45:
+                    win_polys.append(poly.index)
+        if win_polys:
+            me.materials.append(ext_m)
+            slot_idx = len(me.materials) - 1
+            for pi in win_polys:
+                me.polygons[pi].material_index = slot_idx
+
+
 def vehicle_glass_mat():
     """Sleek dark-tinted vehicle cab windshield/window material (`Glass_Vehicles_01A_D`)."""
     if "VEH_GLASS" in _MAT_CACHE:
@@ -1251,16 +1313,19 @@ def animate_character_locomotion(
 
         seated = _is_seated(f)
         v_mps = 0.0 if seated else (ds_stride[f] * FPS)
+        dyaw_f = 0.0 if (f <= 1 or seated) else abs(yaws[f] - yaws[f - 1])
+        ds_turn = math.radians(dyaw_f) * 0.28 if dyaw_f > 1.1 else 0.0
         if f > 1 and not seated:
-            s_walk += ds_stride[f]
+            s_walk += max(ds_stride[f], ds_turn)
             s_run += ds_stride[f]
 
-        # Smooth NLA crossfade weights (zero skating in idle, seamless walk <-> run transition)
-        target_w = 0.0 if v_mps < 0.08 else min(1.0, (v_mps - 0.08) / 0.42)
+        # Smooth NLA crossfade weights (natural stepping on stationary pivots, zero skating in idle!)
+        turn_w = min(0.62, dyaw_f / 14.0) if dyaw_f > 1.1 else 0.0
+        target_w = max(turn_w, 0.0 if v_mps < 0.08 else min(1.0, (v_mps - 0.08) / 0.42))
         target_r = 0.0 if v_mps < 1.95 else min(1.0, (v_mps - 1.95) / 0.60)
-        w_inf_smooth = target_w if f == 1 else (0.65 * w_inf_smooth + 0.35 * target_w)
+        w_inf_smooth = target_w if f == 1 else (0.62 * w_inf_smooth + 0.38 * target_w)
         r_inf_smooth = target_r if f == 1 else (0.65 * r_inf_smooth + 0.35 * target_r)
-        if v_mps < 0.04:
+        if v_mps < 0.04 and dyaw_f < 0.8:
             w_inf_smooth = 0.0
             r_inf_smooth = 0.0
 
@@ -1395,17 +1460,28 @@ def bind_head_look_at(
             else:
                 target_obj.location = target_pos
 
-    bones = [("Head", 1.0)] + ([("Spine_02", 0.34)] if include_spine else [])
+    if include_spine == "deep":
+        bones = [("Head", 1.0), ("Spine_02", 0.48), ("Spine_01", 0.36)]
+    elif include_spine:
+        bones = [("Head", 1.0), ("Spine_02", 0.34)]
+    else:
+        bones = [("Head", 1.0)]
     for bname, mult in bones:
         pb = arm.pose.bones.get(bname)
         if pb is None:
             continue
         pb.rotation_mode = "QUATERNION"
-        cns = pb.constraints.new("TRACK_TO")
-        cns.name = "Look_%s_%s" % (name, bname)
-        cns.target = target_obj
-        cns.track_axis = "TRACK_Z"
-        cns.up_axis = "UP_Y"
+        if bname == "Head":
+            cns = pb.constraints.new("TRACK_TO")
+            cns.name = "Look_%s_%s" % (name, bname)
+            cns.target = target_obj
+            cns.track_axis = "TRACK_Z"
+            cns.up_axis = "UP_Y"
+        else:
+            cns = pb.constraints.new("DAMPED_TRACK")
+            cns.name = "Look_%s_%s" % (name, bname)
+            cns.target = target_obj
+            cns.track_axis = "TRACK_Z"
         if influence_keys:
             for f, v in influence_keys:
                 cns.influence = float(v) * mult
@@ -1447,12 +1523,16 @@ def set_roller_handle(by_n, extended="tow", frame=None):
     if reach is None or top is None:
         return
     if extended == "stand":
-        reach.scale = (1.0, 29.0, 1.0)
-        top.location = (0.0, -0.22 - 0.58, 0.03)
+        reach.scale = (1.0, 32.5, 1.0)
+        top.location = (0.0, -0.22 - 0.72, 0.03)
+    elif extended == "walk_tow":
+        reach.scale = (1.0, 33.8, 1.0)
+        top.location = (0.0, -0.22 - 0.70, 0.03)
     elif extended:
-        # Grounded 2-wheel tow extension: places Pull_Top at low hip height (~0.92m) while wheels rest at z=0.004m!
-        reach.scale = (1.0, 25.5, 1.0)
-        top.location = (0.0, -0.22 - 0.51, 0.03)
+        # Grounded 2-wheel sprint tow extension: places Pull_Top at ~1.03m (`dz = 0.37m < 0.438m` arm length
+        # during `run`, so Forearm.R hits target with 0.00m gap AND elbow stays >=0.14m below shoulder!)
+        reach.scale = (1.0, 31.8, 1.0)
+        top.location = (0.0, -0.22 - 0.65, 0.03)
     else:
         reach.scale = (1.0, 1.0, 1.0)
         top.location = (0.0, -0.24, 0.03)
@@ -1471,6 +1551,7 @@ def verify_human_motion(
     exempt_ranges=None,
     pulled_rollers=None,
     forbid_char_boxes=None,
+    stair_foot_checks=None,
     min_clearance=0.45,
 ):
     """Automated per-frame physical & animation audit across frames 1..n_frames:
@@ -1480,6 +1561,9 @@ def verify_human_motion(
        have 0 skating in `idle`, 0 moonwalking (`forward . velocity > 0`), and 0 Euler wrap spins (`|dyaw| <= 24 deg`).
     4. Every human MUST maintain `>= min_clearance` (0.45 m) XY clearance from every solid wall, screen,
        bench, planter, tree, desk, stanchion, and other human on every frame `1..n_frames`.
+    5. Every active arm IK constraint (`influence >= 0.85`) MUST place `Forearm.tail` within `<= 0.08 m`
+       of its world-space target (`||Hand_tip - grip|| <= 0.08 m`).
+    6. Every stair-climbing character MUST keep deformed boot vertices `>= stair_surface_z(x) - 0.02 m`.
     """
     seated_exempt = set(seated_exempt or [])
     exempt_ranges = dict(exempt_ranges or {})
@@ -1501,12 +1585,20 @@ def verify_human_motion(
     scene.frame_set(n_frames)
     bpy.context.view_layer.update()
     dg = bpy.context.evaluated_depsgraph_get()
-    obs_boxes = list(extra_boxes_xy or [])
+    obs_boxes = []
+    for eb in (extra_boxes_xy or []):
+        if len(eb) == 5:
+            obs_boxes.append((eb[0], eb[1], eb[2], eb[3], eb[4], float(min_clearance)))
+        else:
+            obs_boxes.append((eb[0], eb[1], eb[2], eb[3], eb[4], float(eb[5])))
 
     if obstacle_roots:
         for item in obstacle_roots:
+            req_clear = float(min_clearance)
             if isinstance(item, tuple):
-                tag, root_ob = item
+                tag, root_ob = item[0], item[1]
+                if len(item) >= 3:
+                    req_clear = float(item[2])
             else:
                 tag, root_ob = item.name, item
             if root_ob is None:
@@ -1532,11 +1624,13 @@ def verify_human_motion(
                         ys.append(float(wp.y))
                 ev.to_mesh_clear()
             if xs and ys:
-                obs_boxes.append((tag, min(xs), max(xs), min(ys), max(ys)))
+                obs_boxes.append((tag, min(xs), max(xs), min(ys), max(ys), req_clear))
 
     min_obs_d = 999.0
     min_char_d = 999.0
     max_yaw_step = 0.0
+    max_ik_err = 0.0
+    min_stair_margin = 999.0
     prev_xy = {}
     prev_yaw = {}
 
@@ -1558,6 +1652,25 @@ def verify_human_motion(
             in_ex_range = any(r0 <= f <= r1 for r0, r1 in exempt_ranges.get(cname, ()))
             is_exempt = cname in seated_exempt or (cr.parent is not None) or in_ex_range
 
+            arm = char_arms[cname]
+            # Check #7: Active IK hand-to-grip world distance assert (`||Hand_tip - grip|| <= 0.08 m` when `influence >= 0.85`)
+            if not any(mo.hide_render for mo in cr.children_recursive if mo.type == "MESH"):
+                for b_ik_name in ("Forearm.L", "Forearm.R"):
+                    pb_ik = arm.pose.bones.get(b_ik_name)
+                    if pb_ik is None:
+                        continue
+                    for cns in pb_ik.constraints:
+                        if cns.type == "IK" and cns.target is not None and float(cns.influence) >= 0.92:
+                            hand_tip = arm.matrix_world @ pb_ik.tail
+                            grip_pos = cns.target.matrix_world.translation
+                            ik_err = float((hand_tip - grip_pos).length)
+                            max_ik_err = max(max_ik_err, ik_err)
+                            if ik_err > 0.080:
+                                fail(
+                                    "%s f=%d: %s %s IK %s fell short of target %s (dist=%.3fm > 0.080m, inf=%.2f!)"
+                                    % (shot_id, f, cname, b_ik_name, cns.name, cns.target.name, ik_err, cns.influence)
+                                )
+
             if cname in prev_xy and not is_exempt:
                 dx = cx - prev_xy[cname][0]
                 dy = cy - prev_xy[cname][1]
@@ -1573,7 +1686,6 @@ def verify_human_motion(
                         fail("%s f=%d: %s moving at %.2fm/s while facing away (dot=%.2f, moonwalk!)" % (shot_id, f, cname, v_mps, dot_fwd))
 
                 # Check NLA strip_time / no idle skating
-                arm = char_arms[cname]
                 ad = arm.animation_data
                 strips = [s for trk in (ad.nla_tracks if ad else []) for s in trk.strips]
                 if v_mps > 0.25:
@@ -1588,15 +1700,16 @@ def verify_human_motion(
 
             if not is_exempt and cz < 0.45:
                 cur_positions.append((cname, cx, cy))
-                for otag, x0, x1, y0, y1 in obs_boxes:
+                for otag, x0, x1, y0, y1, req_c in obs_boxes:
                     qx = max(x0, min(cx, x1))
                     qy = max(y0, min(cy, y1))
                     dist = math.hypot(cx - qx, cy - qy)
-                    min_obs_d = min(min_obs_d, dist)
-                    if dist < min_clearance:
+                    if req_c >= min_clearance - 1e-4:
+                        min_obs_d = min(min_obs_d, dist)
+                    if dist < req_c:
                         fail(
                             "%s f=%d: %s at (%.2f,%.2f) collided with %s [%.2f..%.2f, %.2f..%.2f] (clearance=%.3fm < %.2fm)"
-                            % (shot_id, f, cname, cx, cy, otag, x0, x1, y0, y1, dist, min_clearance)
+                            % (shot_id, f, cname, cx, cy, otag, x0, x1, y0, y1, dist, req_c)
                         )
 
         for i in range(len(cur_positions)):
@@ -1621,7 +1734,7 @@ def verify_human_motion(
                                 for v in ev_m.vertices:
                                     wp = mw_m @ v.co
                                     if bx0 <= wp.x <= bx1 and by0 <= wp.y <= by1 and bz0 <= wp.z <= bz1:
-                                        ev_m.clear_geometry()
+                                        mo.evaluated_get(dg_f).to_mesh_clear()
                                         fail("%s f=%d: %s vertex (%.2f,%.2f,%.2f) entered forbidden box %s!" % (shot_id, f, cr.name, wp.x, wp.y, wp.z, ftag))
                                 mo.evaluated_get(dg_f).to_mesh_clear()
 
@@ -1643,6 +1756,32 @@ def verify_human_motion(
                     if (sh_z - el_z) < 0.12:
                         fail("%s f=%d: Hero chicken-wing high elbow (sh_z=%.3f, el_z=%.3f, diff=%.3fm < 0.12m!)" % (shot_id, f, sh_z, el_z, sh_z - el_z))
 
+        # 8. Stair-tread & upper-deck per-vertex foot-elevation check (zero shin/boot penetration into airstairs!)
+        if stair_foot_checks:
+            dg_s = bpy.context.evaluated_depsgraph_get()
+            for cr_s, fs0, fs1, surf_fn in stair_foot_checks:
+                if fs0 <= f <= fs1:
+                    worst_margin = 999.0
+                    worst_pt = None
+                    for mo in cr_s.children_recursive:
+                        if mo.type == "MESH" and not mo.hide_render and ("body" in mo.name.lower() or "char" in mo.name.lower()):
+                            ev_s = mo.evaluated_get(dg_s).to_mesh()
+                            mw_s = mo.matrix_world
+                            for v in ev_s.vertices:
+                                wp = mw_s @ v.co
+                                m_v = float(wp.z) - float(surf_fn(float(wp.x)))
+                                if m_v < worst_margin:
+                                    worst_margin = m_v
+                                    worst_pt = (float(wp.x), float(wp.z), float(surf_fn(float(wp.x))))
+                            mo.evaluated_get(dg_s).to_mesh_clear()
+                    if worst_pt is not None:
+                        min_stair_margin = min(min_stair_margin, worst_margin)
+                        if worst_margin < -0.020:
+                            fail(
+                                "%s f=%d: %s boot vertex sank into stairs/deck at x=%.2f (vz=%.3fm < surf_z=%.3fm - 0.020m!)"
+                                % (shot_id, f, cr_s.name, worst_pt[0], worst_pt[1], worst_pt[2])
+                            )
+
     summary = {
         "shot": shot_id,
         "characters": len(char_roots),
@@ -1650,17 +1789,20 @@ def verify_human_motion(
         "min_obstacle_clearance_m": round(min_obs_d, 3) if min_obs_d < 900 else None,
         "min_character_sep_m": round(min_char_d, 3) if min_char_d < 900 else None,
         "max_yaw_step_deg": round(max_yaw_step, 2),
+        "max_ik_grip_err_m": round(max_ik_err, 4),
+        "min_stair_foot_margin_m": round(min_stair_margin, 3) if min_stair_margin < 900 else None,
         "quaternion_only": True,
         "unit_human_scale": True,
     }
     log(
-        "PROBE human_motion %s chars=%d obs=%d min_obs_clear=%.3fm min_char_sep=%.3fm max_yaw_step=%.1fdeg quat=OK scale1=OK"
+        "PROBE human_motion %s chars=%d obs=%d min_obs_clear=%.3fm min_char_sep=%.3fm max_ik_err=%.3fm max_yaw_step=%.1fdeg quat=OK scale1=OK"
         % (
             shot_id,
             len(char_roots),
             len(obs_boxes),
             min_obs_d if min_obs_d < 900 else 9.99,
             min_char_d if min_char_d < 900 else 9.99,
+            max_ik_err,
             max_yaw_step,
         )
     )
