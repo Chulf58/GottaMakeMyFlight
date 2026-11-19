@@ -89,11 +89,10 @@ func test_picking_a_tool_card_closes_the_sheet() -> void:
 	assert_int(_mode.tool).is_equal(BuildMode.Tool.WALL)
 
 
-func test_a_tool_key_closes_the_sheet() -> void:
+func test_plain_number_key_leaves_the_sheet_open() -> void:
 	_panel.open()
 	_port.push_input(_key(KEY_3))
-	assert_int(_mode.tool).is_equal(BuildMode.Tool.DESK)
-	assert_bool(_panel.is_open()).is_false()
+	assert_bool(_panel.is_open()).is_true()
 
 
 func test_opening_a_category_closes_the_sheet() -> void:

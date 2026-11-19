@@ -162,7 +162,7 @@ func _assert_geometry(rects: Dictionary, layout: Vector2) -> void:
 	assert_float(dock.position.x).is_equal_approx(float(HudLayout.MARGIN), 0.5)
 	assert_float(dock.size.y).is_equal_approx(float(HudLayout.BAR_H), 0.5)
 	assert_float(layout.x - debug.end.x).is_equal_approx(float(HudLayout.MARGIN), 0.5)
-	if layout.x >= WIDE_FROM:
+	if BottomDocks.beside_bar(layout.x, bar.size.x):
 		assert_float(dock.end.y).is_equal_approx(bar.end.y, 0.5)
 		assert_float(layout.y - debug.end.y).is_equal_approx(float(HudLayout.MARGIN), 0.5)
 	else:

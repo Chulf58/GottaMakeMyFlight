@@ -13,7 +13,7 @@ const SEED := 4_402_028
 ## size cannot move the room; this case is a guard. The Templates page is wider
 ## (664 px), and the kept build stack is what holds the room there too. The case
 ## that fails without the fix is the banner yield below.
-const CATEGORIES := [0, 2, 4, 6, 7]
+const CATEGORIES := [0, 1, 2]
 
 var _main: Node
 var _camera: TycoonCamera

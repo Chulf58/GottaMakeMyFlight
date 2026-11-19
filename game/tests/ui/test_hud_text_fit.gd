@@ -137,11 +137,12 @@ func test_a_card_name_wraps_then_shrinks_and_the_card_keeps_its_size() -> void:
 	)
 	assert_int(name_label.get_theme_font_size(&"font_size")).is_equal(14)
 	assert_int(name_label.get_line_count()).is_equal(2)
-	assert_float(picture.size.y).is_less(resting)
+	assert_vector(picture.size).is_equal(Vector2(BuildMenu.THUMB_SIZE, BuildMenu.THUMB_SIZE))
 	name_label.text = _words(5)
 	await _frames(3)
 	assert_int(name_label.get_theme_font_size(&"font_size")).is_equal(12)
 	assert_int(name_label.get_line_count()).is_equal(2)
+	assert_vector(picture.size).is_equal(Vector2(BuildMenu.THUMB_SIZE, BuildMenu.THUMB_SIZE))
 	name_label.text = WORD
 	await _frames(3)
 	assert_int(name_label.get_theme_font_size(&"font_size")).is_equal(14)

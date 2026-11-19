@@ -24,8 +24,6 @@ extends SceneTree
 ## in one image. The window is 1920x1080 at the project's 1.25 UI scale.
 
 const OUT_REL := "res://../tools/blender/out/hud-6-7/groups"
-const PAGE_COUNT := 14
-const GROUP_COUNT := 5
 const STAGE_LIMIT_MS := 60000
 ## The share of the window's height, from the bottom, a sheet tile keeps.
 const BAND_SHARE := 0.34
@@ -92,52 +90,36 @@ func _run() -> void:
 	mode.set_tool(BuildMode.Tool.NONE)
 	await _frames(4)
 	var leaders := _leaders()
-	if leaders.size() != GROUP_COUNT:
-		_invalid("%d group buttons, want %d" % [leaders.size(), GROUP_COUNT])
+	if leaders.size() != 4:
+		_invalid("%d furniture tabs, want 4" % leaders.size())
 		quit(1)
 		return
 	var sheet: Image
 	var seen := {}
 	var n := 0
-	for first in leaders:
-		menu.category_button(first).pressed.emit()
-		var page: int = first
-		while true:
-			_stage = "page %d" % n
-			_stage_started_ms = Time.get_ticks_msec()
-			await _frames(4)
-			if menu.open_category() != page:
-				_invalid("page %d: open category is %d, want %d" % [n, menu.open_category(), page])
-			var img := await _grab()
-			print(
-				(
-					"GROUP %s page %s"
-					% [BuildMenu.bar_name(first), BuildMenu.categories()[page]["name"]]
-				)
-			)
-			_check_page(menu, page, seen)
-			_save(img, "menu_page_%d.png" % (n + 1))
-			var band := int(img.get_height() * BAND_SHARE)
-			var half := Vector2i(int(img.get_width() * 0.5), int(band * 0.5))
-			if sheet == null:
-				sheet = Image.create(half.x, half.y * PAGE_COUNT, false, Image.FORMAT_RGBA8)
-			var tile := img.get_region(Rect2i(0, img.get_height() - band, img.get_width(), band))
-			tile.resize(half.x, half.y, Image.INTERPOLATE_LANCZOS)
-			if n < PAGE_COUNT:
-				sheet.blit_rect(tile, Rect2i(Vector2i.ZERO, half), Vector2i(0, n * half.y))
-			n += 1
-			_next_page(menu, page)
-			page = menu.open_category()
-			if page == first or n > PAGE_COUNT:
-				break
-		if menu.open_category() != first:
-			_invalid("%s: the last Next card did not return to the first page" % first)
-	if n != PAGE_COUNT:
-		_invalid("the groups showed %d pages, want %d" % [n, PAGE_COUNT])
+	for page in leaders:
+		menu.category_button(page).pressed.emit()
+		_stage = "page %d" % n
+		_stage_started_ms = Time.get_ticks_msec()
+		await _frames(4)
+		if menu.open_category() != page:
+			_invalid("page %d: open category is %d, want %d" % [n, menu.open_category(), page])
+		var img := await _grab()
+		print("TAB %s" % [BuildMenu.categories()[page]["name"]])
+		_check_page(menu, page, seen)
+		_save(img, "menu_page_%d.png" % (n + 1))
+		var band := int(img.get_height() * BAND_SHARE)
+		var half := Vector2i(int(img.get_width() * 0.5), int(band * 0.5))
+		if sheet == null:
+			sheet = Image.create(half.x, half.y * leaders.size(), false, Image.FORMAT_RGBA8)
+		var tile := img.get_region(Rect2i(0, img.get_height() - band, img.get_width(), band))
+		tile.resize(half.x, half.y, Image.INTERPOLATE_LANCZOS)
+		sheet.blit_rect(tile, Rect2i(Vector2i.ZERO, half), Vector2i(0, n * half.y))
+		n += 1
 	if seen.size() < FurnitureTools.OBJECTS.size():
 		_invalid(
 			(
-				"pages showed %d cards, fewer than %d furniture"
+				"tabs showed %d cards, fewer than %d furniture"
 				% [seen.size(), FurnitureTools.OBJECTS.size()]
 			)
 		)
@@ -147,24 +129,12 @@ func _run() -> void:
 	quit(1 if _failed else 0)
 
 
-## The first page of each group, in bar order.
+## The four furniture-bearing domain tabs, in bar order.
 func _leaders() -> Array[int]:
 	var out: Array[int] = []
-	var all := BuildMenu.categories()
-	for i in all.size():
-		if all[i].has("group"):
-			out.append(i)
+	for cat_id in ["facilities", "food", "shops", "decor"]:
+		out.append(BuildMenu.category_index(cat_id))
 	return out
-
-
-## Presses the Next card of the open page, as a click would.
-func _next_page(menu: BuildMenu, page: int) -> void:
-	var tool: BuildMode.Tool = BuildMenu.categories()[page]["tools"][0]
-	var next := menu.card(tool).get_parent().find_child("CardNext", true, false) as Button
-	if next == null:
-		_invalid("page %d has no Next card" % page)
-		return
-	next.pressed.emit()
 
 
 func _check_page(menu: BuildMenu, page: int, seen: Dictionary) -> void:

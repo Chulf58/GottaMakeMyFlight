@@ -9,17 +9,14 @@ extends ScrollContainer
 ##
 ## A template card shows its name, its size and what its pieces cost; its
 ## picture is a plain tile with the room type's name until template thumbnails
-## exist.
-##
-## The button sits on its own small panel on the 16 px grid margin (decision
-## hud-grid-and-rails-one-spacing-grid-centred-top-row-right-ra, part 1; the
-## panel stays beside the bar, decision ad966308), just above the
-## height of the category bar, not in the bar: every bar button carries a drawn icon and
-## the bar keeps 200 px clear of each edge at 1536 px wide (HUD 6/7), and
-## there is no Templates icon yet. Where it finally goes is open.
+## exist. Uses its own compact card and header tile constants so saved room
+## cards fit inside BuildMenu.TRAY_H with zero vertical overflow.
 
 const SAVE_CARD := "CardSaveRoom"
 const BUTTON_NAME := "TemplatesButton"
+const TEMPLATE_CARD_SIZE := Vector2(112.0, 126.0)
+const TEMPLATE_THUMB_SIZE := 30.0
+const TRAY_PAD_X := 24.0
 
 ## The button that opens the page, on `dock`.
 var button := Button.new()
@@ -37,10 +34,12 @@ func attach(menu: BuildMenu) -> void:
 	_menu = menu
 	name = "TemplatesPage"
 	visible = false
-	horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	mouse_filter = Control.MOUSE_FILTER_PASS
+	horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_RESERVE
 	vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	custom_minimum_size = Vector2(BuildMenu.COLUMN_W, BuildMenu.CARD_SIZE.y + 12.0)
+	custom_minimum_size = Vector2(BuildMenu.COLUMN_W - TRAY_PAD_X, 0.0)
 	_row.add_theme_constant_override("separation", 6)
+	_row.mouse_filter = Control.MOUSE_FILTER_PASS
 	add_child(_row)
 	menu.tray().add_child(self)
 	button.name = BUTTON_NAME
@@ -133,21 +132,22 @@ func _make_card(card_name: String, title: String, lines: Array, picture := "") -
 	var card_button := Button.new()
 	card_button.name = card_name
 	card_button.toggle_mode = true
-	card_button.custom_minimum_size = BuildMenu.CARD_SIZE
+	card_button.custom_minimum_size = TEMPLATE_CARD_SIZE
 	card_button.focus_mode = Control.FOCUS_NONE
+	card_button.mouse_filter = Control.MOUSE_FILTER_PASS
 	var column := VBoxContainer.new()
 	column.set_anchors_preset(Control.PRESET_FULL_RECT)
-	column.offset_left = 6.0
-	column.offset_top = 6.0
-	column.offset_right = -6.0
-	column.offset_bottom = -6.0
+	column.offset_left = 4.0
+	column.offset_top = 4.0
+	column.offset_right = -4.0
+	column.offset_bottom = -4.0
 	column.add_theme_constant_override("separation", 1)
 	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	card_button.add_child(column)
 	if picture != "":
 		var tile := ColorRect.new()
 		tile.color = BuildMenu.PLACEHOLDER_COLOR
-		tile.custom_minimum_size = Vector2(BuildMenu.THUMB_SIZE, BuildMenu.THUMB_SIZE)
+		tile.custom_minimum_size = Vector2(TEMPLATE_CARD_SIZE.x - 8.0, TEMPLATE_THUMB_SIZE)
 		tile.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var label := _label(picture, &"HudCardName")
 		label.set_anchors_preset(Control.PRESET_FULL_RECT)

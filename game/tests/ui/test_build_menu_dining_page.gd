@@ -1,19 +1,13 @@
 class_name TestBuildMenuDiningPage
 extends GdUnitTestSuite
-## The food rooms in the build menu (F4-6; decision food-and-drink-cafe-bar-
-## sit-down-restaurant-and-grab-and-go-st): one Dining page, since HUD 6/7 the
-## second page of the Food group after the Food page (it followed the Money
-## page behind the Furniture button before), with the bar, restaurant and
-## grab-and-go stall room cards. They are furnished with the Cafe tray's
-## counter and table, so the page holds only the rooms. Their cards borrow the
-## cafe thumbnail (no new art).
+## The food rooms in the Food & Drink domain tab: bar, restaurant and
+## grab-and-go stall rooms sit alongside Cafe and food counters/tables.
 
 const TOOLS := [
 	BuildMode.Tool.BAR_ROOM,
 	BuildMode.Tool.RESTAURANT_ROOM,
 	BuildMode.Tool.STALL_ROOM,
 ]
-## Room tool -> its RoomTypes id.
 const ROOMS := {
 	BuildMode.Tool.BAR_ROOM: &"bar",
 	BuildMode.Tool.RESTAURANT_ROOM: &"restaurant",
@@ -46,14 +40,6 @@ func after() -> void:
 	_port.free()
 
 
-func _index(category_name: String) -> int:
-	var all := BuildMenu.categories()
-	for i in all.size():
-		if all[i]["name"] == category_name:
-			return i
-	return BuildMenu.NO_CATEGORY
-
-
 func _texts(control: Control) -> Array:
 	var out := []
 	for label in control.find_children("*", "Label", true, false):
@@ -61,32 +47,28 @@ func _texts(control: Control) -> Array:
 	return out
 
 
-# Was "follows Money in the Furniture group"; since HUD 6/7 the Dining page
-# ends the Food group, after the Food page, and Services' first page follows.
-func test_the_dining_page_follows_food_in_the_food_group() -> void:
-	var all := BuildMenu.categories()
-	var page := _index("Dining")
-	assert_int(page).is_equal(_index("Food") + 1)
-	assert_bool(all[page].get("page", false)).is_true()
-	assert_bool(_menu.category_button(page).visible).is_false()
-	assert_int(BuildMenu.group_start(page)).is_equal(BuildMenu.group_index("Food"))
-	assert_int(BuildMenu.group_index("Services")).is_equal(page + 1)
-	assert_int(page).is_less(BuildMenu.REMOVE_CATEGORY)
-	assert_array(all[page]["tools"]).is_equal(TOOLS)
+func _hover_texts(tool: BuildMode.Tool) -> Array:
+	var card := _menu.card(tool) as ItemCardButton
+	var popup: Control = auto_free(card._make_custom_tooltip(card.tooltip_text))
+	return _texts(popup)
+
+
+func test_food_rooms_live_in_the_food_and_drink_tab() -> void:
+	var food := BuildMenu.category_index("food")
+	assert_int(food).is_equal(3)
 	for tool in TOOLS:
-		assert_int(BuildMenu.category_of(tool)).is_equal(page)
+		assert_int(BuildMenu.category_of(tool)).is_equal(food)
 
 
-func test_the_cards_carry_the_room_names_and_minimum_sizes() -> void:
-	_menu.press_category(_index("Dining"))
+func test_the_cards_carry_the_room_names_and_hover_minimum_sizes() -> void:
+	_menu.press_category(BuildMenu.category_index("food"))
 	for tool in TOOLS:
 		var room := RoomTypes.get_type(ROOMS[tool])
 		var texts := _texts(_menu.card(tool))
-		print("dining card %d: %s" % [tool, texts])
+		var hover := _hover_texts(tool)
 		assert_str(str(BuildMode.TOOL_ROOMS[tool])).is_equal(str(room.id))
-		assert_array(texts).contains(["%dx%d min" % [room.min_size.x, room.min_size.y]])
-		assert_array(texts).contains([BuildMenu.PRICE_TEXT, "Drag"])
-		# The card name is the room's own, or a short form of it.
+		assert_array(texts).contains([BuildMenu.PRICE_TEXT])
+		assert_array(hover).contains(["%dx%d min" % [room.min_size.x, room.min_size.y], "Drag"])
 		assert_bool(room.display_name.contains(BuildMenu.item(tool)[0].split("-")[0])).is_true()
 
 
@@ -101,23 +83,17 @@ func test_every_dining_card_shows_a_real_thumbnail() -> void:
 		assert_object(picture.texture).override_failure_message(path).is_not_null()
 
 
-# Next opened the Activities page before HUD 6/7; Dining is now the Food
-# group's last page, so Next goes back to the Food page.
-func test_the_dining_tray_fits_the_column_and_next_opens_the_food_page() -> void:
-	var page := _index("Dining")
-	_menu.press_category(page)
+func test_the_food_tray_fits_the_column_and_reserved_height() -> void:
+	var food := BuildMenu.category_index("food")
+	_menu.press_category(food)
 	var need := _menu.tray().get_combined_minimum_size()
-	print("dining tray needs %s of %s x %s" % [need, BuildMenu.COLUMN_W, BuildMenu.TRAY_H])
 	assert_float(need.x).is_less_equal(BuildMenu.COLUMN_W)
 	assert_float(need.y).is_less_equal(BuildMenu.TRAY_H)
-	var next := _menu.card(TOOLS[0]).get_parent().find_child("CardNext", true, false) as Button
-	assert_object(next).is_not_null()
-	next.pressed.emit()
-	assert_int(_menu.open_category()).is_equal(_index("Food"))
 
 
-func test_picking_a_dining_tool_opens_its_page_and_presses_its_card() -> void:
+func test_picking_a_dining_tool_opens_food_and_presses_its_card() -> void:
+	var food := BuildMenu.category_index("food")
 	for tool in TOOLS:
 		_mode.set_tool(tool)
-		assert_int(_menu.open_category()).is_equal(_index("Dining"))
+		assert_int(_menu.open_category()).is_equal(food)
 		assert_bool(_menu.card(tool).button_pressed).is_true()

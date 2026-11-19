@@ -1,9 +1,9 @@
 class_name TestBuildMenuCardHint
 extends GdUnitTestSuite
-## The last line of a keyless item card says how the tool is used (smoke 9 note
-## 1, board item 73e15dd7): a rectangle or line tool is drawn by dragging, any
-## other is a click. A drag held by the pointer being over the HUD keeps the
-## status line visible, because the line says why the rectangle stopped (note 2).
+## Placement mode ("Drag" / "Click"), footprint size, upkeep and needs moved off
+## the compact card face into ItemCardButton's 280 px hover popup (decision
+## build-menu-rework-six-domain-tabs-progressive-tab-and-card-u). A drag held by
+## the pointer being over the HUD still keeps the status line visible.
 
 var _port: SubViewport
 var _mode: BuildMode
@@ -27,33 +27,36 @@ func after_test() -> void:
 	_port.free()
 
 
-func _last_line(tool: BuildMode.Tool) -> String:
-	var labels := _menu.card(tool).find_children("*", "Label", true, false)
-	return (labels[labels.size() - 1] as Label).text
+func _hover_texts(tool: BuildMode.Tool) -> Array[String]:
+	var card := _menu.card(tool) as ItemCardButton
+	var popup: Control = auto_free(card._make_custom_tooltip(card.tooltip_text))
+	var out: Array[String] = []
+	for label in popup.find_children("*", "Label", true, false):
+		out.append((label as Label).text)
+	return out
 
 
-func test_every_keyless_area_tool_card_says_drag() -> void:
+func test_every_area_tool_hover_popup_says_drag() -> void:
 	var checked := 0
 	for tool in BuildMode.AREA_TOOLS:
-		if BuildMenu.key_hint(tool) != "" or _menu.card(tool) == null:
+		if _menu.card(tool) == null:
 			continue
-		if BuildMenu.CARD_NEEDS.has(tool) or BuildMenu.CARD_RUNNING_COSTS.has(tool):
-			continue
-		assert_str(_last_line(tool)).override_failure_message("tool %d" % tool).is_equal("Drag")
+		assert_array(_hover_texts(tool)).contains(["Drag"])
 		checked += 1
-	print("keyless area tools with a hint line: %d" % checked)
-	# Belt and Toilet room are two of them.
-	assert_int(checked).is_greater_equal(2)
-	assert_str(_last_line(BuildMode.Tool.TOILET_ROOM)).is_equal("Drag")
-	assert_str(_last_line(BuildMode.Tool.BELT)).is_equal("Drag")
+	assert_int(checked).is_greater_equal(15)
+	assert_array(_hover_texts(BuildMode.Tool.TOILET_ROOM)).contains(["2x3 min", "Drag"])
+	assert_array(_hover_texts(BuildMode.Tool.BELT)).contains(["Drag a line", "Drag"])
 
 
-func test_a_keyless_placed_item_card_still_says_click() -> void:
-	assert_str(_last_line(BuildMode.Tool.TOILET_SINK)).is_equal("Click")
-
-
-func test_a_card_with_a_key_shows_the_key() -> void:
-	assert_str(_last_line(BuildMode.Tool.DESK)).is_equal("Key 3")
+func test_a_placed_item_hover_popup_says_click_size_and_upkeep_or_needs() -> void:
+	assert_array(_hover_texts(BuildMode.Tool.TOILET_SINK)).contains(["1x1", "Click"])
+	assert_array(_hover_texts(BuildMode.Tool.DESK)).contains(["2x1", "Click"])
+	assert_array(_hover_texts(BuildMode.Tool.BAG_ROOM)).contains(
+		["2x2 min", "Drag", "Needs belt end"]
+	)
+	assert_array(_hover_texts(BuildMode.Tool.TOILET_STALL)).contains(
+		["1x2", "Click", BuildMenuCatalog.upkeep_text(PriceTable.TOILET_STALL_UPKEEP)]
+	)
 
 
 func test_the_status_line_stays_visible_while_the_hud_holds_a_drag() -> void:

@@ -56,9 +56,9 @@ func _run(hints: Hints, seconds: float, world: Dictionary, open: Array = []) -> 
 
 func test_opening_the_gates_category_shows_the_gate_desk_hint() -> void:
 	var hints := _settled(_world())
-	_run(hints, 1.0, _world(), ["Gates"])
+	_run(hints, 1.0, _world(), [BuildMenu.category_of(BuildMode.Tool.GATE_DESK)])
 	assert_bool(hints.is_showing()).is_false()
-	_run(hints, HintRules.HOLD_S, _world(), ["Gates"])
+	_run(hints, HintRules.HOLD_S, _world(), [BuildMenu.category_of(BuildMode.Tool.GATE_DESK)])
 	print("GATES OPEN shown=%s text=%s" % [hints.shown_id(), hints.body_label().text])
 	assert_str(hints.shown_id()).is_equal(HintRules.PLACE_GATE_DESK)
 	assert_str(hints.body_label().text).is_equal(HintRules.text(HintRules.PLACE_GATE_DESK))
@@ -77,7 +77,7 @@ func test_placing_check_in_and_security_shows_the_gate_desk_hint_with_no_categor
 func test_the_gate_desk_hint_is_not_due_before_security_stands() -> void:
 	var world := _world({"scanners": 0})
 	var hints := _settled(world)
-	_run(hints, HintRules.HOLD_S + 1.0, world, ["Gates"])
+	_run(hints, HintRules.HOLD_S + 1.0, world, [BuildMenu.category_of(BuildMode.Tool.GATE_DESK)])
 	assert_str(hints.shown_id()).is_not_equal(HintRules.PLACE_GATE_DESK)
 	assert_bool(hints.is_seen(HintRules.PLACE_GATE_DESK)).is_false()
 
@@ -85,7 +85,7 @@ func test_the_gate_desk_hint_is_not_due_before_security_stands() -> void:
 func test_the_seats_hint_shows_on_the_gates_category_once_a_gate_has_its_desk() -> void:
 	var world := _world({"gate_desks": 1})
 	var hints := _settled(world)
-	_run(hints, HintRules.HOLD_S + 1.0, world, ["Gates"])
+	_run(hints, HintRules.HOLD_S + 1.0, world, [BuildMenu.category_of(BuildMode.Tool.GATE_DESK)])
 	print("SEATS shown=%s text=%s" % [hints.shown_id(), hints.body_label().text])
 	assert_str(hints.shown_id()).is_equal(HintRules.PLACE_SEATS)
 	assert_bool(hints.is_seen(HintRules.PLACE_GATE_DESK)).is_false()
@@ -94,5 +94,5 @@ func test_the_seats_hint_shows_on_the_gates_category_once_a_gate_has_its_desk() 
 func test_a_seated_gate_needs_no_seats_hint() -> void:
 	var world := _world({"gate_desks": 1, "seats": 2})
 	var hints := _settled(world)
-	_run(hints, Hints.IDLE_S + 5.0, world, ["Gates"])
+	_run(hints, Hints.IDLE_S + 5.0, world, [BuildMenu.category_of(BuildMode.Tool.GATE_DESK)])
 	assert_bool(hints.is_showing()).is_false()

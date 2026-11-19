@@ -70,10 +70,10 @@ func test_the_button_sits_outside_the_bar_and_opens_the_page() -> void:
 	assert_bool(_page.visible).is_false()
 
 
-## A 1280 px layout (UI scale 1.5): the centred bar leaves no room beside it, so
-## the dock lifts onto the row above the bar, still on the left margin and still
-## the bar's height, a GAP above the bar (board 8d9a8f13).
-func test_the_dock_lifts_above_the_bar_at_a_1280_layout() -> void:
+## At a 1280 px layout (UI scale 1.5), the consolidated 6-tab bar is narrow enough
+## that the dock stands beside it on the baseline; on a narrow 700 px layout where
+## the bar leaves no room beside it, BottomDocks lifts the dock a GAP above the bar.
+func test_the_dock_stands_beside_the_bar_at_1280_and_lifts_when_narrow() -> void:
 	var port := SubViewport.new()
 	port.size = Vector2i(1280, 720)
 	add_child(port)
@@ -90,6 +90,13 @@ func test_the_dock_lifts_above_the_bar_at_a_1280_layout() -> void:
 	var bar := menu.bar().get_global_rect()
 	assert_float(dock.position.x).is_equal(float(HudLayout.MARGIN))
 	assert_float(dock.size.y).is_equal_approx(float(HudLayout.BAR_H), 0.5)
+	assert_float(dock.end.y).is_equal_approx(bar.end.y, 0.5)
+	assert_bool(dock.intersects(bar)).is_false()
+	port.size = Vector2i(700, 720)
+	await await_idle_frame()
+	await await_idle_frame()
+	dock = menu.templates_page.dock.get_global_rect()
+	bar = menu.bar().get_global_rect()
 	assert_float(dock.end.y).is_equal_approx(bar.position.y - HudLayout.GAP, 0.5)
 	assert_bool(dock.intersects(bar)).is_false()
 	port.free()

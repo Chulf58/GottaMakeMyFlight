@@ -82,11 +82,11 @@ func test_shift_numbers_set_the_speed_and_leave_the_build_tool() -> void:
 	assert_int(_mode.tool).is_equal(BuildMode.Tool.WALL)
 
 
-func test_plain_numbers_still_pick_build_tools() -> void:
+func test_plain_numbers_leave_speed_and_build_tool_unchanged() -> void:
 	_mode.set_tool(BuildMode.Tool.WALL)
 	_world.clock.set_speed(2)
 	_push(_key(KEY_1))
-	assert_int(_mode.tool).is_equal(BuildMode.Tool.FLOOR)
+	assert_int(_mode.tool).is_equal(BuildMode.Tool.WALL)
 	assert_int(_world.clock.speed).is_equal(2)
 
 

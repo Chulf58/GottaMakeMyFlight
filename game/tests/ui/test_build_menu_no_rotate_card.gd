@@ -1,7 +1,8 @@
 class_name TestBuildMenuNoRotateCard
 extends GdUnitTestSuite
-## The build trays carry no Rotate card (board 6bd94761, user: "There is a
-## \"rotate R\" card in the build menus. Lets get rid of that"). R still turns
+## The build trays carry neither a Rotate card nor a Next paging card (decisions
+## no-rotate-card-in-build-trays-the-r-rotate-key-is-shown-as-a and
+## build-menu-rework-six-domain-tabs-progressive-tab-and-card-u). R still turns
 ## the ghost through the build_rotate action, which BuildMode handles.
 
 var _port: SubViewport
@@ -25,32 +26,19 @@ func after() -> void:
 	_port.free()
 
 
-func test_no_tray_holds_a_rotate_card() -> void:
+func test_no_tray_holds_a_rotate_or_next_card() -> void:
 	var rows := 0
 	for i in BuildMenu.categories().size():
 		_menu.press_category(i)
 		var tray := _menu.tray()
 		rows += 1
 		assert_array(tray.find_children("CardRotate", "", true, false)).is_empty()
+		assert_array(tray.find_children("CardNext", "", true, false)).is_empty()
 		for label in tray.find_children("*", "Label", true, false):
 			var text := (label as Label).text
 			assert_str(text).is_not_equal("Rotate")
 			assert_str(text).is_not_equal("Key R")
 	assert_int(rows).is_equal(BuildMenu.categories().size())
-
-
-func test_a_paging_tray_still_has_its_next_card() -> void:
-	var paging := 0
-	for i in BuildMenu.categories().size():
-		if BuildMenu.next_page(i) == BuildMenu.NO_CATEGORY:
-			continue
-		paging += 1
-		var tool: BuildMode.Tool = BuildMenu.categories()[i]["tools"][0]
-		var next := _menu.card(tool).get_parent().find_child("CardNext", true, false) as Control
-		assert_object(next).is_not_null()
-		# Full height: a half-height Next card (the old Rotate and Next stack) fails.
-		assert_float(next.custom_minimum_size.y).is_equal(BuildMenu.CARD_SIZE.y)
-	assert_int(paging).is_greater(0)
 
 
 func test_the_r_key_still_turns_the_ghost() -> void:

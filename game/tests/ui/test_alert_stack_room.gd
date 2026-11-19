@@ -232,9 +232,5 @@ func _corners(grid: BuildGrid) -> Array[Vector2]:
 	return out
 
 
-func _category(category_name: String) -> int:
-	var all := BuildMenu.categories()
-	for i in all.size():
-		if all[i]["name"] == category_name:
-			return i
-	return BuildMenu.NO_CATEGORY
+func _category(_category_name: String) -> int:
+	return BuildMenu.category_of(BuildMode.Tool.DESK)

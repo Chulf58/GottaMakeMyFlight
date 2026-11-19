@@ -6,43 +6,32 @@ extends RefCounted
 ## 3D models. A bar button shows its icon alone; its name goes in the tooltip.
 
 const ICON_DIR := "res://assets/ui/icons/%s.svg"
-## Bar button name (BuildMenu.bar_name(), or Staff) -> icon file name.
+## Stable bar button id (BuildMenuCatalog.category_id(), or "staff") -> icon file name.
 const ICONS := {
-	"Structure": "structure",
-	"Doors": "doors",
-	"Check-in": "check_in",
-	"Security": "security",
-	"Lane": "lane",
-	"Gates": "gates",
-	"Cafe": "cafe",
-	"Toilets": "toilets",
-	"Kiosk": "kiosk",
-	"Landside": "landside",
-	"Baggage": "baggage",
-	"Decor": "decor",
-	"Food": "food",
-	"Services": "services",
-	"Leisure": "leisure",
-	"Shops": "shops",
-	"Land": "land",
-	"Remove": "remove",
-	"Staff": "staff",
+	"building": "structure",
+	"operations": "check_in",
+	"facilities": "toilets",
+	"food": "food",
+	"shops": "shops",
+	"decor": "decor",
+	"remove": "remove",
+	"staff": "staff",
 }
 
 
-## The icon file of a bar button, or "" for a name with no icon.
-static func icon_path(button_name: String) -> String:
-	return ICON_DIR % ICONS[button_name] if ICONS.has(button_name) else ""
+## The icon file of a bar button id, or "" for an id with no icon.
+static func icon_path(button_id: String) -> String:
+	return ICON_DIR % ICONS[button_id] if ICONS.has(button_id) else ""
 
 
-## Puts a bar button's icon on it and its name in the tooltip. A name with no
-## icon file is an error, and the button then shows the name as text.
-static func dress(button: Button, button_name: String) -> void:
-	button.tooltip_text = button_name
-	var path := icon_path(button_name)
+## Puts a bar button's icon on it from `button_id`. An id with no icon file is
+## an error, and the button then shows `button_id` as text.
+static func dress(button: Button, button_id: String) -> void:
+	button.tooltip_text = button_id
+	var path := icon_path(button_id)
 	if path == "" or not ResourceLoader.exists(path):
-		push_error("BarIcons: no icon for %s at %s" % [button_name, path])
-		button.text = button_name
+		push_error("BarIcons: no icon for %s at %s" % [button_id, path])
+		button.text = button_id
 		return
 	button.text = ""
 	button.icon = load(path)

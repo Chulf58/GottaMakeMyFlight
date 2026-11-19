@@ -46,8 +46,9 @@ func _hints(root: Node) -> Hints:
 
 func _run(hints: Hints, seconds: float) -> void:
 	var left := seconds
+	var checkin_cat := BuildMenu.category_of(BuildMode.Tool.DESK)
 	while left > 0.0:
-		hints.advance(0.25, _world(), ["Check-in"])
+		hints.advance(0.25, _world(), [checkin_cat])
 		left -= 0.25
 
 

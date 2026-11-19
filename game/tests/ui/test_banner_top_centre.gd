@@ -127,8 +127,9 @@ func _showing_hint() -> Hints:
 	auto_free(hints)
 	hints._process(0.0)
 	hints.advance(Hints.GRACE_S + 0.1, HintRules.read_world(_sim, []), [])
+	var checkin_cat := BuildMenu.category_of(BuildMode.Tool.DESK)
 	for i in 8:
-		hints.advance(0.25, HintRules.read_world(_sim, []), ["Check-in"])
+		hints.advance(0.25, HintRules.read_world(_sim, []), [checkin_cat])
 	assert_bool(hints.is_showing()).is_true()
 	return hints
 

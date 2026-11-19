@@ -867,32 +867,27 @@ msgstr ""
 
 #: ui/build_menu_catalog.gd
 msgctxt "build menu"
-msgid "Structure"
+msgid "Building"
 msgstr ""
 
 #: ui/build_menu_catalog.gd
 msgctxt "build menu"
-msgid "Doors"
+msgid "Operations"
 msgstr ""
 
 #: ui/build_menu_catalog.gd
 msgctxt "build menu"
-msgid "Check-in"
+msgid "Facilities"
 msgstr ""
 
 #: ui/build_menu_catalog.gd
 msgctxt "build menu"
-msgid "Security"
+msgid "Food & Drink"
 msgstr ""
 
 #: ui/build_menu_catalog.gd
 msgctxt "build menu"
-msgid "Lane"
-msgstr ""
-
-#: ui/build_menu_catalog.gd
-msgctxt "build menu"
-msgid "Gates"
+msgid "Decor & Parking"
 msgstr ""
 
 #: ui/build_menu_catalog.gd
@@ -902,97 +897,12 @@ msgstr ""
 
 #: ui/build_menu_catalog.gd
 msgctxt "build menu"
-msgid "Toilets"
-msgstr ""
-
-#: ui/build_menu_catalog.gd
-msgctxt "build menu"
 msgid "Kiosk"
 msgstr ""
 
 #: ui/build_menu_catalog.gd
 msgctxt "build menu"
-msgid "Landside"
-msgstr ""
-
-#: ui/build_menu_catalog.gd
-msgctxt "build menu"
-msgid "Land"
-msgstr ""
-
-#: ui/build_menu_catalog.gd
-msgctxt "build menu"
-msgid "Baggage"
-msgstr ""
-
-#: ui/build_menu_catalog.gd
-msgctxt "build menu"
-msgid "Furniture"
-msgstr ""
-
-#: ui/build_menu_catalog.gd
-msgctxt "build menu"
-msgid "Decor"
-msgstr ""
-
-#: ui/build_menu_catalog.gd
-msgctxt "build menu"
-msgid "Features"
-msgstr ""
-
-#: ui/build_menu_catalog.gd
-msgctxt "build menu"
-msgid "Fittings"
-msgstr ""
-
-#: ui/build_menu_catalog.gd
-msgctxt "build menu"
-msgid "Food"
-msgstr ""
-
-#: ui/build_menu_catalog.gd
-msgctxt "build menu"
-msgid "Dining"
-msgstr ""
-
-#: ui/build_menu_catalog.gd
-msgctxt "build menu"
-msgid "Desks"
-msgstr ""
-
-#: ui/build_menu_catalog.gd
-msgctxt "build menu"
-msgid "Services"
-msgstr ""
-
-#: ui/build_menu_catalog.gd
-msgctxt "build menu"
-msgid "Care"
-msgstr ""
-
-#: ui/build_menu_catalog.gd
-msgctxt "build menu"
-msgid "Money"
-msgstr ""
-
-#: ui/build_menu_catalog.gd
-msgctxt "build menu"
 msgid "Lounge"
-msgstr ""
-
-#: ui/build_menu_catalog.gd
-msgctxt "build menu"
-msgid "Leisure"
-msgstr ""
-
-#: ui/build_menu_catalog.gd
-msgctxt "build menu"
-msgid "Fun"
-msgstr ""
-
-#: ui/build_menu_catalog.gd
-msgctxt "build menu"
-msgid "Activities"
 msgstr ""
 
 #: ui/build_menu_catalog.gd
@@ -1008,11 +918,6 @@ msgstr ""
 #: ui/build_menu_catalog.gd
 msgctxt "build menu"
 msgid "Duty free"
-msgstr ""
-
-#: ui/build_menu_catalog.gd
-msgctxt "build menu"
-msgid "Fashion"
 msgstr ""
 
 #: ui/build_menu_catalog.gd
@@ -1451,15 +1356,6 @@ msgstr ""
 
 #: ui/build_menu.gd
 msgid "Wages paid: {amount} ({owed} owed)"
-msgstr ""
-
-#: ui/build_menu_layout.gd
-msgid "Key {key}"
-msgstr ""
-
-#: ui/build_menu_layout.gd
-msgctxt "build menu page"
-msgid "Next"
 msgstr ""
 
 #: ui/item_card_button.gd
@@ -6051,4 +5947,12 @@ msgstr ""
 
 #: ui/big_firsts.gd
 msgid "Good luck. Gotta make that flight!"
+msgstr ""
+
+#: ui/build_menu.gd build/build_unlocks.gd build/land_tool.gd
+msgid "In the full game"
+msgstr ""
+
+#: build/land_tool.gd
+msgid "Demo limit: 1 extra plot (more in the full game)"
 msgstr ""

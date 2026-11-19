@@ -55,36 +55,34 @@ func _texts(control: Control) -> Array:
 	return out
 
 
-func test_the_kiosk_tray_follows_toilets_and_holds_the_room_counter_and_display() -> void:
+func test_the_kiosk_cards_lead_the_shops_tab_with_thumbnails_and_prices() -> void:
 	var all := BuildMenu.categories()
-	var toilets := _category_named("Toilets")
-	var kiosk := _category_named("Kiosk")
-	assert_int(kiosk).is_equal(toilets + 1)
-	assert_array(all[kiosk]["tools"]).is_equal(KIOSK_TOOLS)
-	assert_str(_menu.category_button(kiosk + 1).tooltip_text).is_equal("Landside")
-	# Land (the Buy land tool, board ee9914e6) came later, between Landside and Baggage.
-	assert_str(_menu.category_button(kiosk + 2).tooltip_text).is_equal("Land")
-	assert_str(_menu.category_button(kiosk + 3).tooltip_text).is_equal("Baggage")
+	var shops := BuildMenu.category_index("shops")
+	assert_array((all[shops]["tools"] as Array).slice(0, 3)).is_equal(KIOSK_TOOLS)
 	assert_str(all[BuildMenu.REMOVE_CATEGORY]["name"]).is_equal("Remove")
-	_menu.category_button(kiosk).pressed.emit()
+	_menu.category_button(shops).pressed.emit()
 	for tool in KIOSK_TOOLS:
 		assert_bool(_menu.card(tool).is_visible_in_tree()).is_true()
-		print("tool %d card: %s" % [tool, _texts(_menu.card(tool))])
 		var picture := (
 			_menu.card(tool).find_children("*", "TextureRect", true, false)[0] as TextureRect
 		)
-		# Rendered thumbnails since Boredom 5/5, no longer placeholder tiles.
-		var name: String = BuildMenu.item(tool)[1]
-		assert_bool(BuildMenu.PLACEHOLDER_THUMBNAILS.has(name)).is_false()
-		assert_object(picture.texture).override_failure_message(name).is_not_null()
-		assert_str(picture.texture.resource_path).is_equal(BuildMenu.THUMBNAIL_DIR % name)
+		var thumb_name: String = BuildMenu.item(tool)[1]
+		assert_bool(BuildMenu.PLACEHOLDER_THUMBNAILS.has(thumb_name)).is_false()
+		assert_object(picture.texture).override_failure_message(thumb_name).is_not_null()
+		assert_str(picture.texture.resource_path).is_equal(BuildMenu.THUMBNAIL_DIR % thumb_name)
 		assert_int(picture.find_children("*", "ColorRect", true, false).size()).is_equal(0)
 	for def_id: StringName in [&"kiosk_counter", &"kiosk_display"]:
 		assert_int(PriceTable.price_of_object(def_id)).is_greater(0)
 	var counter := BuildMenu.tool_price(BuildMode.Tool.KIOSK_COUNTER)
 	assert_int(counter).is_equal(PriceTable.price_of_object(&"kiosk_counter"))
 	assert_int(BuildMenu.tool_price(BuildMode.Tool.KIOSK_ROOM)).is_equal(0)
-	assert_array(_texts(_menu.card(BuildMode.Tool.KIOSK_ROOM))).contains(["Kiosk", "3x3 min"])
+	var kiosk_card := _menu.card(BuildMode.Tool.KIOSK_ROOM) as ItemCardButton
+	assert_array(_texts(kiosk_card)).contains(["Kiosk"])
+	var hover: Control = auto_free(kiosk_card._make_custom_tooltip(kiosk_card.tooltip_text))
+	var hover_labels: Array[String] = []
+	for lbl in hover.find_children("*", "Label", true, false):
+		hover_labels.append((lbl as Label).text)
+	assert_array(hover_labels).contains(["3x3 min", "Drag"])
 
 
 func test_the_room_panel_over_a_kiosk_lists_needs_then_spots_and_spend() -> void:

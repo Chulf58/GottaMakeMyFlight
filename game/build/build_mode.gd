@@ -3,9 +3,8 @@
 # past the 20-method cap.
 class_name BuildMode
 extends Node3D
-## The player's build tools over a BuildGrid. Keys 1 to 9 and 0 (or
-## BuildMenu's cards) pick floor, wall, desk, scanner, seats, remove, glass,
-## door, entrance and exit; Esc picks none; R turns the object;
+## The player's build tools over a BuildGrid. BuildMenu's cards and the Remove
+## button pick the active tool; Esc picks none; R turns the object;
 ## left-click applies, a drag with Wall or Glass shows a straight row and
 ## lays it on release (WallRowDrag), and a drag with Floor or Remove fills or
 ## clears a rectangle (AreaDrag). Esc or right-click cancels either drag, and
@@ -127,16 +126,6 @@ const LANDSIDE_BUILD_TOOLS := {
 }
 
 const TOOL_ACTIONS := {
-	&"build_tool_floor": Tool.FLOOR,
-	&"build_tool_wall": Tool.WALL,
-	&"build_tool_desk": Tool.DESK,
-	&"build_tool_scanner": Tool.SCANNER,
-	&"build_tool_seats": Tool.SEATS,
-	&"build_tool_remove": Tool.REMOVE,
-	&"build_tool_glass": Tool.GLASS,
-	&"build_tool_door": Tool.DOOR,
-	&"build_tool_entrance": Tool.ENTRANCE,
-	&"build_tool_exit": Tool.EXIT,
 	&"build_tool_none": Tool.NONE,
 }
 ## The catalog id each object tool places (ToolObjects).

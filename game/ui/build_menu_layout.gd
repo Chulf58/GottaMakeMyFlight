@@ -1,10 +1,8 @@
 class_name BuildMenuLayout
 extends RefCounted
-## The build menu's UI built in code: the category bar, the item tray and its
-## cards, the status card (status line, rotate hint and cost line) and the money
-## slot (split out of BuildMenu, which calls these from _ready). Static only: each function takes
-## the menu and fills its node and lookup members in the order the menu always
-## did, so node names, paths and draw order stay as they were.
+## The build menu's UI built in code: the category bar, the horizontal-scroll
+## item tray and its compact cards (Thumbnail + Name + Price), the status card
+## (status line, rotate hint and cost line) and the money slot.
 
 ## The coin before the money amount.
 const COIN_ICON := "res://assets/ui/icons/coin.svg"
@@ -12,13 +10,11 @@ const COIN_ICON := "res://assets/ui/icons/coin.svg"
 const COIN_SIDE := HudLayout.CHIP_H - 4
 const COIN_GAP := 6
 ## A card's padding on each side of its column.
-const CARD_PAD := 6.0
-## A card label wraps onto at most this many lines, then drops one font step
+const CARD_PAD := 4.0
+## A card name wraps onto at most two lines, then drops one font step
 ## (decision build-menu-card-names-wrap-to-two-lines-then-shrink-a-font-s).
 const CARD_LINES := 2
-## The thumbnail gives up height to wrapped labels down to this, so the card
-## keeps its size.
-const THUMB_MIN := 32.0
+const PRICE_LINES := 1
 
 static var _words := Words.new()
 
@@ -48,22 +44,22 @@ static func build_bar(menu: BuildMenu) -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 6)
 	menu._bar.add_child(row)
-	for i in BuildMenuCatalog.categories().size():
+	var cats := BuildMenuCatalog.categories()
+	for i in cats.size():
 		var button := Button.new()
-		# A later page's button stays hidden: it is there to keep the indices.
-		if not BuildMenuCatalog.categories()[i].get("page", false):
-			dress_bar(button, BuildMenuCatalog.bar_name(i))
-			# A name to find it by, now that it shows no text (BarDecor, BarCheckin).
-			button.name = "Bar" + BuildMenuCatalog.bar_name(i).replace("-", "").replace(" ", "")
+		var cat: Dictionary = cats[i]
+		var cat_id: String = cat["id"]
+		var cat_name: String = cat["name"]
+		dress_bar(button, cat_id, cat_name)
+		button.name = "Bar" + cat_id.capitalize().replace(" ", "")
 		button.toggle_mode = true
 		button.custom_minimum_size = BuildMenu.CATEGORY_SIZE
 		button.focus_mode = Control.FOCUS_NONE
 		button.pressed.connect(menu.press_category.bind(i))
-		button.visible = not BuildMenuCatalog.categories()[i].get("page", false)
 		row.add_child(button)
 		menu._category_buttons.append(button)
 	menu.staff_button.name = "StaffButton"
-	dress_bar(menu.staff_button, "Staff")
+	dress_bar(menu.staff_button, "staff", "Staff")
 	menu.staff_button.toggle_mode = true
 	menu.staff_button.custom_minimum_size = BuildMenu.CATEGORY_SIZE
 	menu.staff_button.focus_mode = Control.FOCUS_NONE
@@ -74,33 +70,49 @@ static func build_bar(menu: BuildMenu) -> void:
 static func build_tray(menu: BuildMenu) -> void:
 	menu._tray.name = "ItemTray"
 	menu._tray.theme = BuildMenu.HUD_THEME
+	menu._tray.mouse_filter = Control.MOUSE_FILTER_STOP
 	menu._tray.custom_minimum_size = Vector2(0.0, BuildMenu.TRAY_H)
+	menu._tray.gui_input.connect(menu._on_tray_gui_input)
 	anchor_bottom_centre(menu._tray, BuildMenu.MARGIN + BuildMenu.BAR_H + BuildMenu.GAP)
 	menu.add_child(menu._tray)
-	for i in BuildMenuCatalog.categories().size():
+	menu._scroll.name = "TrayScroll"
+	menu._scroll.mouse_filter = Control.MOUSE_FILTER_PASS
+	menu._scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	menu._scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_RESERVE
+	menu._scroll_content.name = "TrayRows"
+	menu._scroll_content.mouse_filter = Control.MOUSE_FILTER_PASS
+	menu._scroll_content.add_theme_constant_override("separation", 0)
+	menu._scroll_content.minimum_size_changed.connect(menu._sync_scroll_width)
+	menu._scroll.add_child(menu._scroll_content)
+	menu._tray.add_child(menu._scroll)
+	var cats := BuildMenuCatalog.categories()
+	for i in cats.size():
 		var row := HBoxContainer.new()
+		row.name = "Row_" + str(cats[i]["id"])
+		row.mouse_filter = Control.MOUSE_FILTER_PASS
 		row.add_theme_constant_override("separation", 6)
 		row.alignment = BoxContainer.ALIGNMENT_CENTER
-		menu._tray.add_child(row)
+		menu._scroll_content.add_child(row)
 		menu._rows.append(row)
-		for tool in BuildMenuCatalog.categories()[i]["tools"]:
+		for tool in cats[i]["tools"]:
 			if BuildMenuCatalog.item(tool).is_empty():
 				continue
 			var button := make_card(menu, tool)
 			row.add_child(button)
 			menu._cards[tool] = button
-		if BuildMenuCatalog.next_page(i) != BuildMenuCatalog.NO_CATEGORY:
-			row.add_child(make_next_card(menu, BuildMenuCatalog.next_page(i)))
 
 
 static func make_card(menu: BuildMenu, tool: BuildMode.Tool) -> Button:
 	var card_item := BuildMenuCatalog.item(tool)
 	var button := ItemCardButton.new()
-	button.set_info(BuildMenuCatalog.shown(card_item[0]), ItemInfo.of(tool))
+	button.set_info(
+		BuildMenuCatalog.shown(card_item[0]), ItemInfo.of(tool), BuildMenuCatalog.card_details(tool)
+	)
 	button.name = "Card%s" % card_item[1].capitalize()
 	button.toggle_mode = true
 	button.custom_minimum_size = BuildMenu.CARD_SIZE
 	button.focus_mode = Control.FOCUS_NONE
+	button.mouse_filter = Control.MOUSE_FILTER_PASS
 	button.pressed.connect(menu.press_card.bind(tool))
 	var column := card_column(button)
 	var picture := TextureRect.new()
@@ -118,48 +130,19 @@ static func make_card(menu: BuildMenu, tool: BuildMode.Tool) -> Button:
 	picture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	picture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	picture.custom_minimum_size = Vector2(BuildMenu.THUMB_SIZE, BuildMenu.THUMB_SIZE)
+	picture.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	picture.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	picture.name = "Thumbnail"
 	column.add_child(picture)
-	var key := BuildMenuCatalog.key_hint(tool)
-	card_label(column, BuildMenuCatalog.shown(card_item[0]), &"HudCardName")
-	card_label(column, size_text(tool), &"HudHint")
-	menu._price_labels[tool] = card_label(column, _words.free_price(), &"HudPrice")
-	if BuildMenuCatalog.CARD_NEEDS.has(tool):
-		var need := card_label(
-			column, BuildMenuCatalog.shown(BuildMenuCatalog.CARD_NEEDS[tool]), &"HudAttentionText"
-		)
-		need.add_theme_font_size_override("font_size", BuildMenu.CARD_HINT_FONT_SIZE)
-		menu._hint_labels[tool] = need
-	elif BuildMenuCatalog.running_cost(tool) > 0:
-		menu._hint_labels[tool] = card_label(
-			column, BuildMenuCatalog.upkeep_text(BuildMenuCatalog.running_cost(tool)), &"HudHint"
-		)
-	else:
-		menu._hint_labels[tool] = card_label(
-			column,
-			_words.key_hint(key) if key != "" else BuildMenuCatalog.no_key_hint(tool),
-			&"HudHint"
-		)
-	menu._hint_texts[tool] = menu._hint_labels[tool].text
-	watch_fit(button)
-	return button
-
-
-## The Next card, which opens the page after this one.
-static func make_next_card(menu: BuildMenu, next: int) -> Button:
-	var button := Button.new()
-	button.name = "CardNext"
-	button.custom_minimum_size = BuildMenu.NEXT_SIZE
-	button.focus_mode = Control.FOCUS_NONE
-	button.pressed.connect(menu.press_category.bind(next))
-	var column := card_column(button)
-	column.alignment = BoxContainer.ALIGNMENT_CENTER
-	card_label(column, _words.next_page(), &"HudCardName")
-	var sub := card_label(
-		column, BuildMenuCatalog.shown(BuildMenuCatalog.categories()[next]["name"]), &"HudHint"
+	var name_label := card_label(
+		column, BuildMenuCatalog.shown(card_item[0]), &"HudCardName", CARD_LINES
 	)
-	sub.name = "NextPageName"
+	name_label.name = "Name"
+	name_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	var price_label := card_label(column, _words.free_price(), &"HudPrice", PRICE_LINES)
+	price_label.name = "Price"
+	menu._price_labels[tool] = price_label
 	watch_fit(button)
 	return button
 
@@ -177,14 +160,16 @@ static func card_column(button: Button) -> VBoxContainer:
 	return column
 
 
-## A card line: centred, wrapping onto CARD_LINES lines; fit_card() gives it its
-## size once the card is in the tree.
-static func card_label(column: VBoxContainer, text: String, variation: StringName) -> Label:
+## A card line: centred, wrapping onto `lines` lines; fit_card() gives it its
+## font size once the card is in the tree.
+static func card_label(
+	column: VBoxContainer, text: String, variation: StringName, lines: int
+) -> Label:
 	var label := Label.new()
 	label.text = text
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	label.max_lines_visible = CARD_LINES
+	label.max_lines_visible = lines
 	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	label.theme_type_variation = variation
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -192,10 +177,7 @@ static func card_label(column: VBoxContainer, text: String, variation: StringNam
 	return label
 
 
-## Fits the card when it enters the tree and again after a line redraws, which a
-## new text (a price, "Locked") always causes; a wrapping Label's minimum size can
-## stay the same for a longer text, so that signal would miss it. A fit that
-## changes nothing causes no redraw, so this settles.
+## Fits the card's labels when it enters the tree and after a label redraws.
 static func watch_fit(button: Button) -> void:
 	button.tree_entered.connect(fit_card.bind(button))
 	for label in button.get_child(0).get_children():
@@ -203,52 +185,39 @@ static func watch_fit(button: Button) -> void:
 			(label as Label).draw.connect(fit_card.bind(button), CONNECT_DEFERRED)
 
 
-## Wraps each line of the card onto up to CARD_LINES lines at the caption size,
-## one font step smaller only when that is still not enough, and gives the
-## thumbnail what height the lines leave (THUMB_MIN to THUMB_SIZE), so the card
-## keeps its size (decision build-menu-card-names-wrap-to-two-lines-then-shrink-
-## a-font-s). Measured from the font, not the Label, because a wrapping Label
-## reports its height only after the container has sized it.
+## Fits each label onto its allowed line budget (2 lines for Name, 1 line for
+## Price, stepping down to FIT_STEP only when needed) while keeping Thumbnail
+## fixed at BuildMenu.THUMB_SIZE across both 1-line and 2-line card names.
 static func fit_card(button: Button) -> void:
 	if not button.is_inside_tree():
 		return
 	var column := button.get_child(0) as VBoxContainer
 	var width := button.custom_minimum_size.x - 2.0 * CARD_PAD
-	var used := float(column.get_theme_constant(&"separation") * (column.get_child_count() - 1))
-	var picture: TextureRect = null
 	for child in column.get_children():
-		if child is TextureRect:
-			picture = child
+		if not child is Label:
 			continue
 		var label := child as Label
 		var font := label.get_theme_font(&"font")
-		# atr() is the text the Label draws (it honours auto_translate_mode), so the
-		# fit measures what is shown, whether it is expanded once or twice.
 		var text := label.atr(label.text)
-		var size := HudLayout.fit_size(text, font, HudLayout.CAPTION, width, CARD_LINES)
+		var max_lines := label.max_lines_visible if label.max_lines_visible > 0 else CARD_LINES
+		var size := HudLayout.fit_size(text, font, HudLayout.CAPTION, width, max_lines)
+		if max_lines == 1:
+			while (
+				size > 9
+				and font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x > width
+			):
+				size -= 1
 		if label.get_theme_font_size(&"font_size") != size:
 			label.add_theme_font_size_override(&"font_size", size)
-		var lines := mini(HudLayout.line_count(text, font, size, width), CARD_LINES)
-		used += lines * font.get_height(size)
-		used += (lines - 1) * label.get_theme_constant(&"line_spacing")
-	if picture != null:
-		var room := button.custom_minimum_size.y - 2.0 * CARD_PAD - used
-		picture.custom_minimum_size.y = clampf(floorf(room), THUMB_MIN, BuildMenu.THUMB_SIZE)
 
 
 static func size_text(tool: BuildMode.Tool) -> String:
-	if BuildMode.tool_object(tool) != &"":
-		var def := BuildCatalog.get_def(BuildMode.tool_object(tool))
-		return "%dx%d" % [def.size.x, def.size.y]
-	return BuildMenuCatalog.shown(BuildMenuCatalog.item(tool)[2])
+	return BuildMenuCatalog.size_text(tool)
 
 
 ## The status card (HUD 5/7): the status line, the "R rotate" hint and the cost
 ## line side by side on one HudTopCard, TRAY_W wide and BUTTON_H tall, GAP above
-## the tray and centred. The status text takes the room the hint and the cost
-## leave and wraps onto a second line when it is longer (the card grows up for
-## it), then ends in an ellipsis; the hint and the cost keep their own width, so
-## neither wraps. The card never takes a click.
+## the tray and centred.
 static func build_status_card(menu: BuildMenu) -> void:
 	var card := menu._status_card
 	card.name = "StatusCard"
@@ -312,10 +281,6 @@ static func build_money(menu: BuildMenu) -> void:
 	menu._money.text = BuildMenu.MONEY_TEXT
 	menu._money.theme_type_variation = &"HudMoney"
 	menu._money.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	# A coin stands where the word "Money" was, so the slot has nothing to translate. The
-	# coin and the amount are both direct children of the card (the card is the amount's
-	# parent, and it keeps its own height and margin); the amount's left padding clears
-	# the coin.
 	var pad := StyleBoxEmpty.new()
 	pad.content_margin_left = COIN_SIDE + COIN_GAP
 	menu._money.add_theme_stylebox_override("normal", pad)
@@ -332,11 +297,10 @@ static func build_money(menu: BuildMenu) -> void:
 	panel.add_child(coin)
 
 
-## A bar button's icon and its name in the tooltip (BarIcons.dress, which keys
-## the icon by the English name), the name then shown in the player's language.
-static func dress_bar(button: Button, bar_name: String) -> void:
-	BarIcons.dress(button, bar_name)
-	button.tooltip_text = BuildMenuCatalog.shown(bar_name)
+## A bar button's icon (keyed by stable `bar_id`) and its translated name in the tooltip.
+static func dress_bar(button: Button, bar_id: String, label_msgid: String) -> void:
+	BarIcons.dress(button, bar_id)
+	button.tooltip_text = BuildMenuCatalog.shown(label_msgid)
 	if button.text != "":
 		button.text = button.tooltip_text
 
@@ -347,9 +311,3 @@ class Words:
 
 	func free_price() -> String:
 		return tr("Free", "price")
-
-	func key_hint(key: String) -> String:
-		return tr("Key {key}").format({"key": key})
-
-	func next_page() -> String:
-		return tr("Next", "build menu page")

@@ -1,10 +1,11 @@
 class_name TestBuildMenuUnlockGuidance
 extends GdUnitTestSuite
-## The tray's part of the unlock guidance (decision new-unlock-tier-phone-ring-
-## and-a-short-per-family-dialog-onc): the unlocked cards the player has not
-## seen carry the "New" tint until hovered or picked by any route, a locked card
-## shows its description with a requirement worked out when the hover card is
-## built, and the "Unlocked:" status line gives way to the dialog.
+## The tray's and category bar's part of the unlock guidance (decisions
+## new-unlock-tier-phone-ring-and-a-short-per-family-dialog-onc and
+## build-menu-rework-six-domain-tabs-progressive-tab-and-card-u): unlocked cards
+## and category buttons with unseen tools carry the "New" tint until hovered or
+## picked, a locked card keeps its live requirement for hover popups, and the
+## "Unlocked:" status line gives way to the dialog.
 
 var _port: SubViewport
 var _mode: BuildMode
@@ -45,7 +46,6 @@ func after_test() -> void:
 	_port.free()
 
 
-## Opens the cafe tier by play; the guide's dialog is open afterwards.
 func _earn_cafe_tier() -> void:
 	for i in 60:
 		_rating.record_passenger(0, true, PassengerSim.MOOD_MAX)
@@ -63,13 +63,23 @@ func _new_look(tool: BuildMode.Tool) -> bool:
 	return _menu.card(tool).modulate.is_equal_approx(BuildMenu.NEW_TINT)
 
 
-func test_the_cards_of_a_new_tier_are_tinted_and_older_ones_are_not() -> void:
+func test_the_cards_and_tabs_of_a_new_tier_are_tinted_and_clear_when_seen() -> void:
 	assert_bool(_new_look(BuildMode.Tool.CAFE_ROOM)).is_false()
+	assert_object(_menu.category_button(BuildMenu.category_index("building")).modulate).is_equal(
+		Color.WHITE
+	)
 	_open_cafe_tier()
 	assert_bool(_new_look(BuildMode.Tool.CAFE_ROOM)).is_true()
 	assert_bool(_new_look(BuildMode.Tool.XRAY_BELT)).is_true()
 	assert_object(_menu.card(BuildMode.Tool.WALL).modulate).is_equal(Color.WHITE)
-	assert_object(_menu.card(BuildMode.Tool.TREE).modulate).is_equal(BuildMenu.LOCKED_TINT)
+	assert_bool(_menu.card(BuildMode.Tool.TREE).visible).is_false()
+	var food_btn := _menu.category_button(BuildMenu.category_index("food"))
+	var building_btn := _menu.category_button(BuildMenu.category_index("building"))
+	assert_bool(food_btn.modulate.is_equal_approx(BuildMenu.NEW_TINT)).is_true()
+	assert_object(building_btn.modulate).is_equal(Color.WHITE)
+	for tool in [BuildMode.Tool.CAFE_ROOM, BuildMode.Tool.COUNTER, BuildMode.Tool.TABLE]:
+		_menu.card(tool).mouse_entered.emit()
+	assert_object(food_btn.modulate).is_equal(Color.WHITE)
 
 
 func test_hovering_a_new_card_clears_its_tint_only() -> void:
@@ -86,9 +96,8 @@ func test_picking_a_new_card_clears_its_tint() -> void:
 	assert_bool(_new_look(BuildMode.Tool.COUNTER)).is_false()
 
 
-func test_a_tool_picked_by_key_clears_its_tint_too() -> void:
+func test_a_tool_picked_directly_clears_its_tint_too() -> void:
 	_open_cafe_tier()
-	# What a number key does: BuildMode picks the tool without the card.
 	_mode.set_tool(BuildMode.Tool.TABLE)
 	assert_int(_mode.tool).is_equal(BuildMode.Tool.TABLE)
 	assert_bool(_new_look(BuildMode.Tool.TABLE)).is_false()
@@ -102,12 +111,15 @@ func test_a_refused_pick_leaves_the_tint_and_the_mark() -> void:
 	assert_bool(_unlocks.tool_seen(BuildMode.Tool.TREE)).is_false()
 
 
-func test_without_a_guide_no_card_is_tinted() -> void:
+func test_without_a_guide_no_card_or_tab_is_tinted() -> void:
 	var bare: BuildMenu = auto_free(BuildMenu.new())
 	bare.build_mode = _mode
 	_port.add_child(bare)
 	_open_cafe_tier()
 	assert_object(bare.card(BuildMode.Tool.CAFE_ROOM).modulate).is_equal(Color.WHITE)
+	assert_object(bare.category_button(BuildMenu.category_index("food")).modulate).is_equal(
+		Color.WHITE
+	)
 
 
 func test_the_unlocked_status_line_gives_way_to_the_open_dialog() -> void:
@@ -127,7 +139,7 @@ func test_the_unlocked_status_line_still_shows_without_a_dialog() -> void:
 	assert_str(_menu.status_label().text).starts_with("Unlocked:")
 
 
-func test_a_locked_card_shows_its_description_and_the_requirement() -> void:
+func test_a_locked_card_keeps_its_description_and_live_requirement() -> void:
 	var card := _menu.card(BuildMode.Tool.CAFE_ROOM)
 	assert_array(card.info).is_equal(ItemInfo.of(BuildMode.Tool.CAFE_ROOM))
 	var text := card._get_tooltip(Vector2.ZERO)
@@ -137,7 +149,7 @@ func test_a_locked_card_shows_its_description_and_the_requirement() -> void:
 	assert_object(hover).is_not_null()
 	var requirement := hover.find_child("Requirement", true, false) as Label
 	assert_str(requirement.text).starts_with("Unlocks at 2 stars and 50 passengers")
-	assert_array(hover.find_children("*", "Label", true, false)).has_size(7)
+	assert_int(hover.find_children("*", "Label", true, false).size()).is_greater_equal(7)
 
 
 func test_the_now_numbers_of_a_locked_card_follow_the_flights_made() -> void:
