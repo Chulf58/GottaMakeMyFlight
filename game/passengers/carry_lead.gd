@@ -32,6 +32,15 @@ const REACH_SHARE := 0.25
 ## bag left on the floor for REACH_SHARE was stepped through (stall_bags_probe,
 ## board item c7b0e7be).
 const STALL_PICK_REACH := 0.06
+## Minimum upright-droop weight as a shoulder bag leaves a flat surface by its
+## strap, and the share of a tray-to-shoulder carry over which it settles plumb,
+## plus the side-front waypoint share and forward offsets (metres, body frame)
+## on its way onto the shoulder (board 74e713be).
+const SHOULDER_DROOP_MIN := 0.45
+const SHOULDER_TRAY_UP_T := 0.15
+const SHOULDER_SIDE_T := 0.4
+const SHOULDER_PICK_FRONT_M := 0.28
+const SHOULDER_CROSS_FRONT_M := 0.58
 ## A backpack goes on and off the back through a hang at the leading hand's
 ## side, at shoulder height, this far out from the centre line, over this
 ## share of the carry.
@@ -804,6 +813,56 @@ static func swap_release(
 	return away.normalized() * SWAP_RELEASE_M * smoothstep(SWAP_RELEASE_T.x, SWAP_RELEASE_T.y, t)
 
 
+## Where a shoulder bag picked up out of a security lane tray is at `t` (0 to 1)
+## of its carry, its Strap_Top at `loose` in its own frame, the body drawn at
+## `frame`, `w` (0 to 1) how far it has turned upright: its Strap_Top moves to
+## the worn side and ahead of the chest by SHOULDER_SIDE_T, facing tangentially
+## round the body before settling onto the shoulder, so it clears the opposite
+## swinging arm on a cross-body pickup and never trails behind a walker stepping
+## off to a lane repack berth (board 74e713be).
+static func _shoulder_tray_path(
+	start: Transform3D,
+	want: Transform3D,
+	frame: Transform3D,
+	t: float,
+	loose: Vector3,
+	w: float,
+	flags: Dictionary
+) -> Transform3D:
+	var local := frame.affine_inverse()
+	var start_bar := local * (start * loose)
+	var want_bar := local * (want * loose)
+	var out_x := -1.0 if int(flags.get("hand", 0)) == 0 else 1.0
+	if start_bar.x * out_x < -0.35 or start_bar.z < 0.1:
+		start_bar.x = out_x * maxf(start_bar.x * out_x, -0.1)
+		start_bar.z = maxf(start_bar.z, SHOULDER_CROSS_FRONT_M)
+		start_bar.y = maxf(start_bar.y, want_bar.y + 0.02)
+	var mid_bar := Vector3(want_bar.x, want_bar.y - 0.02, SHOULDER_PICK_FRONT_M)
+	var bar: Vector3
+	if t <= SHOULDER_SIDE_T:
+		var u := clampf(t / SHOULDER_SIDE_T, 0.0, 1.0)
+		var ease := smoothstep(0.0, 1.0, u)
+		var fast := 1.0 - pow(1.0 - u, 3.0)
+		var rise := 1.0 - pow(1.0 - u, 2.0)
+		bar = Vector3(
+			lerpf(start_bar.x, mid_bar.x, fast),
+			lerpf(start_bar.y, mid_bar.y, rise),
+			lerpf(start_bar.z, mid_bar.z, ease * ease) + 0.12 * sin(PI * u)
+		)
+	else:
+		var v := smoothstep(0.0, 1.0, (t - SHOULDER_SIDE_T) / (1.0 - SHOULDER_SIDE_T))
+		bar = mid_bar.lerp(want_bar, v)
+	var radial := Vector3(bar.x, 0.0, bar.z)
+	var out_dir := radial.normalized() if radial.length() > 0.05 else Vector3(out_x, 0.0, 0.0)
+	var tangent := Basis(out_dir.cross(Vector3.UP), out_dir, Vector3.UP).get_rotation_quaternion()
+	var settle := smoothstep(0.55, 1.0, t)
+	var upright_q := tangent.slerp((local.basis * want.basis).get_rotation_quaternion(), settle)
+	var q := (local.basis * start.basis).get_rotation_quaternion().slerp(upright_q, w)
+	var size := start.basis.get_scale().lerp(want.basis.get_scale(), w)
+	var basis := frame.basis * Basis(q).scaled(size)
+	return Transform3D(basis, frame * bar - basis * loose)
+
+
 ## How a hand-led move of `bag` (CarryOnProps' record) goes at `k`, from
 ## `start` (world now) to `want`, its body drawn at `frame`; `flags` as for
 ## path(), `body` the body as drawn now: {"hand": the bag's own hand or side,
@@ -960,6 +1019,15 @@ static func plan(
 		and to_end == End.HELD
 	)
 	var floor_case: bool = case_up_out and from_floor and not roller
+	var shoulder_up: bool = (
+		bag["kind"] == SecurityLooks.Kind.SHOULDER
+		and not stall
+		and from_end == End.REST
+		and to_end == End.WORN
+	)
+	var shoulder_tray_up: bool = shoulder_up and flags.get("from_tray", false)
+	var shoulder_floor_up: bool = shoulder_up and from_floor
+	var shoulder_w := lerpf(SHOULDER_DROOP_MIN, 1.0, smoothstep(0.0, SHOULDER_TRAY_UP_T, t))
 	var goal := want
 	var on_path: Transform3D
 	var shoulder_y := NAN
@@ -999,6 +1067,8 @@ static func plan(
 			on_path = path(side, want, smoothstep(0.0, 1.0, u), frame, side_local, by_middle)
 		else:
 			on_path = path(start, side, t / (1.0 - BACK_SHARE), frame, bag["from"], by_middle)
+	elif shoulder_tray_up:
+		on_path = _shoulder_tray_path(start, want, frame, t, loose, shoulder_w, flags)
 	else:
 		# A bag picked up off a stall's floor rises, whatever its origin does (a case
 		# stood on its end has its origin higher than flat in the hand).
@@ -1020,6 +1090,20 @@ static func plan(
 		elif case_up_out:
 			goal = floor_end(frame, want, want * anchor_to)
 		on_path = path(start, goal, t, frame, bag["from"], lift)
+		if shoulder_floor_up and CarryMoves.picks_up_ahead(bag["from"]):
+			# A single floor tote starts centred ahead of the feet; swing it out
+			# to its shoulder's side as fast as it turns upright (UPRIGHT_FROM_FLOOR)
+			# so its back edge clears the stepping thigh (booth p8, board 74e713be).
+			var inv := frame.affine_inverse()
+			var local_now := inv * on_path.origin
+			var out_x := -1.0 if int(flags.get("hand", 0)) == 0 else 1.0
+			var side_x := lerpf(
+				(inv * start.origin).x,
+				(inv * goal.origin).x,
+				smoothstep(0.0, UPRIGHT_FROM_FLOOR, t)
+			)
+			local_now.x = out_x * maxf(local_now.x * out_x, side_x * out_x)
+			on_path.origin = frame * local_now
 		if hand_swap:
 			# Its handover height is stamped as the move started, not the shoulders
 			# drawn now (a walk or stoop pose moved it, Sol review of board 295026a6).
@@ -1098,10 +1182,19 @@ static func plan(
 			spots[first] += on_path.basis.inverse() * (Vector3.UP * palm)
 		spots[lead] = anchor_to - held_at
 	var targets := [Vector3.ZERO, Vector3.ZERO]
+	var shoulder_reach_at := Vector3.ZERO
+	if shoulder_tray_up:
+		shoulder_reach_at = (
+			_shoulder_tray_path(start, want, frame, 0.0, loose, SHOULDER_DROOP_MIN, flags) * loose
+		)
 	for hand in 2:
 		match float(ph["targets_at"][hand]):
 			-1.0:
-				targets[hand] = start * anchor_from + Vector3.UP * palm
+				targets[hand] = (
+					shoulder_reach_at
+					if shoulder_tray_up
+					else start * anchor_from + Vector3.UP * palm
+				)
 			2.0:
 				targets[hand] = want * anchor_to
 			_:
@@ -1113,6 +1206,17 @@ static func plan(
 		targets[lead] = by_side(
 			targets[lead], k, from_end, to_end, frame, flags["yaw"], lead, shoulder_y, below
 		)
+	elif shoulder_up:
+		var s_up := span(from_end, to_end, let_go, reach)
+		if k > s_up.y:
+			# Nudge the releasing hand 5 cm outside Strap_Reach_Mesh so the
+			# forearm clears a scaled two-bag strap as Arm.STRAP eases in.
+			var out_x := -1.0 if lead == 0 else 1.0
+			var u_let := (k - s_up.y) / (1.0 - s_up.y)
+			targets[lead] = (
+				(targets[lead] as Vector3)
+				+ frame.basis.x * (out_x * 0.05 * smoothstep(0.0, 0.15, u_let))
+			)
 	var xf := on_path
 	if ph["holder"] < 0:
 		xf = start if k < span(from_end, to_end, let_go, reach).x else want

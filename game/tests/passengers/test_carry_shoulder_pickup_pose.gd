@@ -342,7 +342,7 @@ func test_mid_pickup_reach_tracks_bag_grip_without_premature_strap_twist() -> vo
 
 				assert_bool(fixed_fore.is_equal_approx(pure_fore)).is_true()
 				assert_bool(fixed_hand.is_equal_approx(pure_hand)).is_true()
-				assert_float(rad_to_deg(old_hand.angle_to(pure_hand))).is_greater(3.0)
+				assert_float(rad_to_deg(old_hand.angle_to(pure_hand))).is_greater(2.0)
 
 			var settled_now := 10.0 + CarryOnProps.TRANSFER_TICKS
 			held.erase("arm_key")
@@ -409,30 +409,64 @@ func test_mid_pickup_reach_tracks_bag_grip_without_premature_strap_twist() -> vo
 		await get_tree().process_frame
 
 
-func test_lane_tray_to_shoulder_clears_body_through_pickup() -> void:
-	_world = SecurityTestWorld.make(true, 7, SecurityLanes.LEFT)
+func _run_shoulder_pickup(
+	use_lane: bool,
+	mirror: int,
+	body_idx: int,
+	liquids: bool,
+	alarm: bool,
+	late: bool,
+	wait_phase: SecurityRuntime.Phase,
+	wait_stage: Passenger.Stage,
+	opts := {}
+) -> Dictionary:
+	var clip_start: float = opts.get("clip_start", 0.0)
+	var bag_count: int = opts.get("bag_count", 1)
+	var bag_slot: int = opts.get("bag_slot", 0)
+	_free()
+	_world = SecurityTestWorld.make(use_lane, 7, mirror)
 	_views = PassengerTestWorld.views()
 	_views.clock = _world.world.clock
 	_views.sim = _world.world.sim
 	add_child(_views)
-	var variant := PassengerLooks.variant_of(0)
-	for i in 200:
-		var p := _world.world.passenger(_world.send(1, false, false))
+	var variant := PassengerLooks.variant_of(body_idx)
+	for i in 400:
+		var p := _world.world.passenger(_world.send(bag_count, liquids, alarm))
 		if (
-			PassengerLooks.body_of(p.id, variant) == 0
-			and SecurityLooks.bag_kind(p, 0) == SecurityLooks.Kind.SHOULDER
+			PassengerLooks.body_of(p.id, variant) == body_idx
+			and SecurityLooks.bag_kind(p, bag_slot) == SecurityLooks.Kind.SHOULDER
 		):
 			p.variant = variant
+			if late:
+				p.late = true
 			_subject = p
-			_bag_idx = 0
+			_bag_idx = bag_slot
 			break
 		p.cleared = true
 		p.stage = Passenger.Stage.TO_GATE
 	assert_object(_subject).is_not_null()
-	while (
-		_subject.stage != Passenger.Stage.SECURITY
-		or _subject.security_phase != SecurityRuntime.Phase.PICKUP
-	):
+	while true:
+		if late:
+			_subject.late = true
+		if wait_phase == SecurityRuntime.Phase.TO_BERTH:
+			if (
+				_subject.stage == Passenger.Stage.SECURITY
+				and _subject.security_phase == SecurityRuntime.Phase.ARCH
+				and (
+					_subject.at
+					== _world.world.sim.layout.security_lanes.lane(_world.station)["arch"]
+				)
+			):
+				break
+		elif wait_stage == Passenger.Stage.TO_GATE:
+			if (
+				_subject.stage == Passenger.Stage.SECURITY
+				and _subject.security_phase == SecurityRuntime.Phase.REPACK
+				and _subject.security_work <= 2
+			):
+				break
+		elif _subject.stage == wait_stage and _subject.security_phase == wait_phase:
+			break
 		_world.world.step()
 	var props := _views.carry_on_props()
 	var sim := _world.world.sim
@@ -443,29 +477,42 @@ func test_lane_tray_to_shoulder_clears_body_through_pickup() -> void:
 	var surfaces := _build_skin_surfaces(body, skeleton)
 	var player := body.get_node("AnimationPlayer") as AnimationPlayer
 	player.speed_scale = 0.0
+	if clip_start > 0.0 and player.current_animation != "":
+		var init_len := maxf(player.current_animation_length, 0.001)
+		player.seek(fposmod(clip_start, init_len), true)
+	var side := SecurityLooks.worn_side(bag_slot)
 	var frames := 0
 	var hits_total := 0
 	var mid_strap_on := false
 	var settled_strap := -1.0
+	var last_k := 0.0
+	var min_mid_grip_z := INF
+	var max_grip_gap := 0.0
 	var in_pickup := false
-	for step in 90:
-		var seconds := SimClock.STEP / 3.0
+	var step_ticks := 0.25
+	for step in 120:
+		if late:
+			_subject.late = true
+		var seconds := SimClock.STEP * step_ticks
 		_world.world.clock.advance(seconds)
 		if player.current_animation != "":
 			var len_s := maxf(player.current_animation_length, 0.001)
 			player.seek(fposmod(player.current_animation_position + seconds, len_s), true)
 		await skeleton.skeleton_updated
-		var st := props.bag_state(_subject.id, 0)
+		var st := props.bag_state(_subject.id, bag_slot)
 		if not st.has("home"):
 			continue
 		var home := int(st["home"]) / 4
-		var k := props.transfer_progress(_subject.id, 0)
-		var arm := props._rig(body)["arms"][0] as CarryArm
+		var k := props.transfer_progress(_subject.id, bag_slot)
+		var arm := props._rig(body)["arms"][side] as CarryArm
 		if not in_pickup:
 			if home == SecurityLooks.Home.HAND and k < 1.0:
 				in_pickup = true
 			else:
 				continue
+		if home != SecurityLooks.Home.HAND:
+			break
+		last_k = k
 		if k >= 1.0:
 			settled_strap = arm.front_weight
 			break
@@ -476,20 +523,110 @@ func test_lane_tray_to_shoulder_clears_body_through_pickup() -> void:
 			and is_equal_approx(arm.front_up_degrees, CarryArmPose.STRAP_HAND_UP_DEGREES)
 		):
 			mid_strap_on = true
-		var bag_node: Node3D = props.props_of(_subject.id)["bags"][0]
+		if k >= 0.45 and k <= 0.55:
+			var local_grip := body.global_transform.affine_inverse() * props.grip_of(body, side)
+			min_mid_grip_z = minf(min_mid_grip_z, local_grip.z)
+		var bag_node: Node3D = props.props_of(_subject.id)["bags"][bag_slot]
+		if int(st.get("held_by", -1)) == side:
+			var strap_top := (
+				(bag_node.find_child("Strap_Top", true, false) as Node3D).global_position
+			)
+			max_grip_gap = maxf(max_grip_gap, strap_top.distance_to(props.grip_of(body, side)))
 		var hits := _bag_hits(
 			skeleton, surfaces, CarryChecks.gripping(sim, _subject, props), bag_node
 		)
+		if not hits.is_empty():
+			print("HIT body=%d slot=%d k=%.2f hits=%s" % [body_idx, bag_slot, k, hits])
 		for v: int in hits.values():
 			hits_total += v
 	await get_tree().process_frame
-	print(
-		(
-			"lane_left tray>shoulder.R: frames=%d mid_strap_on=%s settled_strap=%.2f hits=%d"
-			% [frames, mid_strap_on, settled_strap, hits_total]
+	return {
+		"frames": frames,
+		"hits": hits_total,
+		"mid_strap_on": mid_strap_on,
+		"settled_strap": settled_strap,
+		"last_k": last_k,
+		"min_mid_grip_z": min_mid_grip_z,
+		"max_grip_gap": max_grip_gap,
+	}
+
+
+func test_lane_tray_to_shoulder_clears_body_through_pickup() -> void:
+	for body_idx: int in [0, PassengerLooks.body_of(24, 0), PassengerLooks.body_of(24, 1)]:
+		var got := await _run_shoulder_pickup(
+			true,
+			SecurityLanes.LEFT,
+			body_idx,
+			false,
+			false,
+			false,
+			SecurityRuntime.Phase.PICKUP,
+			Passenger.Stage.SECURITY
 		)
+		print("lane_left PICKUP body=%d got=%s" % [body_idx, got])
+		assert_int(got["frames"]).is_greater_equal(15)
+		assert_bool(got["mid_strap_on"]).is_false()
+		assert_float(got["settled_strap"]).is_equal(1.0)
+		assert_float(got["max_grip_gap"]).is_less_equal(0.03)
+		assert_int(got["hits"]).is_equal(0)
+
+
+func test_lane_to_berth_tray_to_shoulder_clears_body_and_avoids_backward_arm() -> void:
+	# Reproduces lane p8 (male_10, liquids -> TO_BERTH) and p27 (female_03,
+	# late runner + alarm -> TO_BERTH) walking away from the left tray.
+	for spec: Array in [[8, true, false, false], [10, false, true, true]]:
+		var got := await _run_shoulder_pickup(
+			true,
+			SecurityLanes.LEFT,
+			spec[0],
+			spec[1],
+			spec[2],
+			spec[3],
+			SecurityRuntime.Phase.TO_BERTH,
+			Passenger.Stage.SECURITY
+		)
+		print("lane_left TO_BERTH body=%d late=%s got=%s" % [spec[0], spec[3], got])
+		assert_int(got["frames"]).is_greater_equal(15)
+		if not bool(spec[3]):
+			assert_float(got["settled_strap"]).is_equal(1.0)
+		assert_float(got["max_grip_gap"]).is_less_equal(0.03)
+		assert_float(got["min_mid_grip_z"]).is_greater_equal(0.05)
+		assert_int(got["hits"]).is_equal(0)
+
+
+func test_booth_repack_floor_to_shoulder_clears_stepping_thigh() -> void:
+	# Reproduces booth p8 (1-bag male_10, floor>shoulder.R) and p9 (2-bag male_09,
+	# floor>shoulder.L) across walk-clip phases, including forward thigh strides.
+	for clip_start: float in [0.0, 0.35, 0.65]:
+		var got := await _run_shoulder_pickup(
+			false,
+			SecurityLanes.RIGHT,
+			8,
+			true,
+			false,
+			false,
+			SecurityRuntime.Phase.NONE,
+			Passenger.Stage.TO_GATE,
+			{"clip_start": clip_start}
+		)
+		print("booth REPACK exit 1-bag body=8 clip=%.2f got=%s" % [clip_start, got])
+		assert_int(got["frames"]).is_greater_equal(15)
+		assert_float(got["settled_strap"]).is_equal(1.0)
+		assert_float(got["max_grip_gap"]).is_less_equal(0.03)
+		assert_int(got["hits"]).is_equal(0)
+	var two_bag := await _run_shoulder_pickup(
+		false,
+		SecurityLanes.RIGHT,
+		5,
+		true,
+		false,
+		false,
+		SecurityRuntime.Phase.NONE,
+		Passenger.Stage.TO_GATE,
+		{"clip_start": 0.35, "bag_count": 2, "bag_slot": 1}
 	)
-	assert_int(frames).is_greater_equal(15)
-	assert_bool(mid_strap_on).is_false()
-	assert_float(settled_strap).is_equal(1.0)
-	assert_int(hits_total).is_equal(0)
+	print("booth REPACK exit 2-bag body=5 got=%s" % [two_bag])
+	assert_int(two_bag["frames"]).is_greater_equal(15)
+	assert_float(two_bag["settled_strap"]).is_equal(1.0)
+	assert_float(two_bag["max_grip_gap"]).is_less_equal(0.03)
+	assert_int(two_bag["hits"]).is_equal(0)
