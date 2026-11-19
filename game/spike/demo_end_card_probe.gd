@@ -215,15 +215,15 @@ func _capture_day5_end_card(
 	var rollover := GameCalendar.day_start(DemoMode.MAX_DEMO_DAY, clock.epoch)
 	for _i in 40:
 		rating.record_passenger(rollover - 20, true, 94)
-	# Open OfferPanel (takes exclusive ClockHolds turn) and a BuildMenu tray, let
-	# BuildSession acquire its hold on a frame, then yield to 3x play as Space does.
-	offer_panel.open()
+	# Exercise BuildSession yielding hold + OfferPanel yielding take_turn via
+	# HUD 3x, leaving OfferPanel open while 3x runs into Day-6 rollover.
 	menu.press_category(BuildMenu.category_of(BuildMode.Tool.SURFACE_LOT))
-	await process_frame
-	clock.tick = rollover - 2
-	clock.set_paused(false)
-	clock.set_speed(3)
 	menu.build_session.sync()
+	hud.press_speed(3)
+	menu.build_session.sync()
+	offer_panel.open()
+	hud.press_speed(3)
+	clock.tick = rollover - 2
 	print(
 		"PROBE before_rollover paused=%s speed=%d tick=%d" % [clock.paused, clock.speed, clock.tick]
 	)
