@@ -26,9 +26,12 @@ const WISHLIST_URL := ""
 var change_scene: Callable
 ## Quits the game; tests swap in a recorder.
 var quit_game: Callable
+## Collapsible audio settings card below the main menu panel.
+var audio_card: AudioSettingsCard
 
 var _main_page: VBoxContainer
 var _load_page: VBoxContainer
+var _audio_bar: HBoxContainer
 var _save_list: SaveList
 var _message: Label
 var _buttons := {}
@@ -66,12 +69,19 @@ func press_new_airport() -> void:
 func press_load() -> void:
 	refresh()
 	_main_page.visible = false
+	_audio_bar.visible = false
+	audio_card.visible = false
 	_load_page.visible = true
 
 
 func press_back() -> void:
 	_load_page.visible = false
 	_main_page.visible = true
+	_audio_bar.visible = true
+
+
+func press_audio() -> void:
+	audio_card.visible = not audio_card.visible
 
 
 func press_quit() -> void:
@@ -163,6 +173,17 @@ func _build() -> void:
 	_save_list.chosen.connect(_on_save_chosen)
 	_load_page.add_child(_save_list)
 	_add_button(_load_page, "Back", tr("Back", "menu"), press_back)
+	_audio_bar = HBoxContainer.new()
+	_audio_bar.name = "AudioBar"
+	_audio_bar.alignment = BoxContainer.ALIGNMENT_CENTER
+	column.add_child(_audio_bar)
+	_add_button(_audio_bar, "Audio", tr("Audio", "menu"), press_audio)
+	audio_card = AudioSettingsCard.new()
+	audio_card.name = "AudioSettings"
+	audio_card.custom_minimum_size = Vector2(PANEL_WIDTH, 0.0)
+	audio_card.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	audio_card.visible = false
+	column.add_child(audio_card)
 
 
 func _add_button(
