@@ -1,8 +1,5 @@
 extends SceneTree
-## Windowed staged key-art probe for Steam capsules and library hero (D6b,
-## 3c5a08a9; decisions a7f1b1e4, 56cccfaf; finding bb598d8c). Furnishes an
-## active terminal with staff, passengers + bags, and Gotta Air's plane at Gate
-## A, hides all UI, verifies framing/sightlines, and writes raw hero PNGs.
+## Windowed staged key-art probe for Steam capsules and library hero (D6b).
 
 const IntroClose := preload("res://spike/intro_close.gd")
 const PlateSight := preload("res://spike/plate_sight.gd")
@@ -11,8 +8,9 @@ const MAIN_SCENE := "res://main/main.tscn"
 const OUT_REL := "res://../tools/blender/out/store/raw"
 const HANG_LIMIT_MS := 120000
 const TICKS_PER_FRAME := 8
-const MARGIN_PX := 20.0
-const MIN_PAX_IN_FRAME := 10
+const MARGIN_PX := 16.0
+const MIN_PAX_IN_FRAME := 12
+const HERO_SAFE := Vector2(860, 380)
 const OCCLUDERS := (
 	"Ground,BuildMode,Airside,PlaneView,PlaneFleet,"
 	+ "ApronStand,PassengerViews,StaffCharacters,RoofView"
@@ -41,7 +39,7 @@ func _initialize() -> void:
 	_out_dir = ProjectSettings.globalize_path(OUT_REL).simplify_path()
 	DirAccess.make_dir_recursive_absolute(_out_dir)
 	DisplayServer.window_set_size(Vector2i(1600, 900))
-	_beat("boot")
+	_beat()
 	_guard.start(_watch)
 	_run.call_deferred()
 
@@ -59,14 +57,14 @@ func _run() -> void:
 	_clock.set_paused(false)
 	await _frames(4)
 	if _setup_terminal() and await _stage_activity():
-		_freeze_and_hide_ui()
+		_freeze_and_stage_apron()
 		await _frames(6)
 		await _render_all_shots()
 	_finish()
 
 
 func _setup_terminal() -> bool:
-	_beat("setup_terminal")
+	_beat()
 	var intro_err := IntroClose.close(_main)
 	if intro_err != "":
 		_invalid(intro_err)
@@ -90,26 +88,18 @@ func _setup_terminal() -> bool:
 func _decorate_terminal() -> void:
 	var at := ReferenceTerminal.offset_on(_grid)
 	for x in range(10, 28):
-		if x == ReferenceTerminal.EXIT_CELL.x:
-			continue
-		var row := 2 if x < 22 else 3
+		if x != ReferenceTerminal.EXIT_CELL.x:
+			var cell := Vector2i(x, 2 if x < 22 else 3) + at
+			_grid.apply(BuildEdit.place_wall(cell, BuildGrid.Side.NORTH, BuildGrid.WallKind.GLASS))
+	var spec := (
+		"tree_indoor:10:15,plant_pot_2a:13:15,screen_stand:16:15,"
+		+ "plant_pot_1a:10:4,plant_pot_1a:26:14,plant_pot_1a:26:7"
+	)
+	for p: String in spec.split(","):
+		var kv := p.split(":")
 		_grid.apply(
-			BuildEdit.place_wall(
-				Vector2i(x, row) + at, BuildGrid.Side.NORTH, BuildGrid.WallKind.GLASS
-			)
+			BuildEdit.place_object(StringName(kv[0]), Vector2i(int(kv[1]), int(kv[2])) + at, 0)
 		)
-	var placed := 0
-	for item in [
-		[&"tree_indoor", Vector2i(10, 15)],
-		[&"plant_pot_2a", Vector2i(13, 15)],
-		[&"screen_stand", Vector2i(16, 15)],
-		[&"plant_pot_1a", Vector2i(10, 4)],
-		[&"plant_pot_1a", Vector2i(26, 14)],
-		[&"plant_pot_1a", Vector2i(26, 7)],
-	]:
-		if _grid.apply(BuildEdit.place_object(item[0], item[1] + at, 0)).ok:
-			placed += 1
-	print("PROBE decor_placed=%d" % placed)
 
 
 func _stage_activity() -> bool:
@@ -119,29 +109,34 @@ func _stage_activity() -> bool:
 	var hired := StarterFlight.hire_per_station(_sim, staff)
 	var doors := StarterFlight.advance_until_open(_clock, flights, staff)
 	var flight := StarterFlight.first_flight()
-	print("PROBE hired=%d opened_tick=%d doors_close=%d" % [hired, _clock.tick, doors])
 	if hired < 4 or doors < 0 or not flights.flight_ids().has(flight):
 		_invalid("airport failed to open with staffed stations")
 		return false
 	var stand_tick := flights.state_start(flight, FlightSim.State.AT_STAND)
+	var board_tick := flights.state_start(flight, FlightSim.State.BOARDING)
 	var push_tick := flights.state_start(flight, FlightSim.State.PUSHBACK)
-	var target_tick := stand_tick + mini(70, maxi(20, (push_tick - stand_tick) / 6))
-	var spawn_start := maxi(_clock.tick + 10, target_tick - 660)
+	var target_tick := mini(maxi(stand_tick, board_tick) + 95, push_tick - 120)
+	var spawn_start := maxi(_clock.tick + 10, target_tick - 760)
 	var spawned := 0
 	while _clock.tick < target_tick:
 		_beat()
 		for _i in TICKS_PER_FRAME:
 			if _clock.tick >= target_tick:
 				break
-			var due := _clock.tick >= spawn_start and (_clock.tick - spawn_start) % 24 == 0
-			if due and spawned < 22 and _spawn_staged_passenger(flight, spawned):
-				spawned += 1
+			var in_win := _clock.tick >= spawn_start and _clock.tick <= target_tick - 340
+			if in_win and (_clock.tick - spawn_start) % 16 == 0 and spawned < 24:
+				spawned += int(_spawn_staged_passenger(flight, spawned))
 			_clock.advance(SimClock.STEP)
 		await process_frame
 	for _i in 6:
 		_clock.advance(SimClock.STEP)
 		await process_frame
-	print("PROBE stand_tick=%d target_tick=%d spawned=%d" % [stand_tick, target_tick, spawned])
+	print(
+		(
+			"PROBE stand=%d board=%d target=%d spawned=%d"
+			% [stand_tick, board_tick, target_tick, spawned]
+		)
+	)
 	return _plane_at_gate("A") != null
 
 
@@ -158,7 +153,7 @@ func _spawn_staged_passenger(flight: String, idx: int) -> bool:
 	return true
 
 
-func _freeze_and_hide_ui() -> void:
+func _freeze_and_stage_apron() -> void:
 	_beat()
 	var fleet := _main.get_node("PlaneFleet") as PlaneFleet
 	if fleet.has_method("update_views"):
@@ -166,6 +161,22 @@ func _freeze_and_hide_ui() -> void:
 	for view in fleet.views:
 		view.update_pose()
 		view.set_process(false)
+	var airside := _main.get_node("Airside") as Airside
+	for gate_key: String in airside.props.bridges:
+		(airside.props.bridges[gate_key]["node"] as Node3D).visible = false
+	var plane := _plane_at_gate("A")
+	if plane != null:
+		var tug := PlaneProps.TUG_SCENE.instantiate() as Node3D
+		_main.add_child(tug)
+		tug.global_position = plane.global_position + Vector3(13.2, 0.0, 7.5)
+		tug.rotation = Vector3(0.0, deg_to_rad(-145.0), 0.0)
+	var south_z := (
+		_grid.cell_to_world(Vector2i(18, 17) + ReferenceTerminal.offset_on(_grid)).z + 2.4
+	)
+	for child in _main.get_node("PassengerViews").get_children():
+		var n := child as Node3D
+		if n != null and n.visible and n.global_position.z > south_z:
+			n.visible = false
 	for node_name in FREEZE.split(","):
 		var n := _main.get_node_or_null(node_name)
 		if n != null:
@@ -201,31 +212,31 @@ func _render_all_shots() -> void:
 	if plane == null:
 		_invalid("no plane parked at Gate A")
 		return
-	var mid := _terminal_center().lerp(plane.global_position + Vector3(0.0, 1.1, 0.0), 0.36)
+	var mid := _terminal_center().lerp(plane.global_position + Vector3(0.0, 1.1, 0.0), 0.38)
 	await _capture(
 		"raw_hero_3840x1240",
 		Vector2i(3840, 1240),
-		mid + Vector3(-0.5, 0.4, 5.5),
-		Vector3(-20, 35, 55),
-		26.0,
+		mid + Vector3(-0.6, 0.4, 6.2),
+		Vector3(-20, 33, 53),
+		22.2,
 		plane,
 		true
 	)
 	await _capture(
 		"raw_landscape_2464x1412",
 		Vector2i(2464, 1412),
-		mid + Vector3(-4.2, 0.4, 2.6),
-		Vector3(-22, 38, 56),
-		32.0,
+		mid + Vector3(-1.2, 0.4, 4.6),
+		Vector3(-22, 35, 54),
+		25.5,
 		plane,
 		false
 	)
 	await _capture(
 		"raw_portrait_1496x1792",
 		Vector2i(1496, 1792),
-		mid + Vector3(3.3, 0.4, -2.5),
-		Vector3(-16, 38, 62),
-		40.0,
+		mid + Vector3(2.8, 0.4, 2.0),
+		Vector3(-16, 36, 59),
+		33.5,
 		plane,
 		false
 	)
@@ -235,15 +246,15 @@ func _capture(
 	shot: String,
 	res: Vector2i,
 	focus: Vector3,
-	orbit: Vector3,
+	orb: Vector3,
 	fov: float,
 	plane: PlaneView,
 	hero: bool
 ) -> void:
-	_beat(shot)
+	_beat()
 	_vp.size = res
-	var basis := Basis.from_euler(Vector3(-deg_to_rad(orbit.y), deg_to_rad(orbit.x), 0.0))
-	_cam.global_transform = Transform3D(basis, focus + basis.z * orbit.z)
+	var basis := Basis.from_euler(Vector3(-deg_to_rad(orb.y), deg_to_rad(orb.x), 0.0))
+	_cam.global_transform = Transform3D(basis, focus + basis.z * orb.z)
 	_cam.fov = fov
 	var bv := _mode.get_node("BuildView") as BuildView
 	bv.set_process(false)
@@ -267,8 +278,9 @@ func _verify_shot(shot: String, res: Vector2i, plane: PlaneView, is_hero: bool) 
 	var term_px := _cam.unproject_position(term_pt)
 	var plane_px := _cam.unproject_position(plane_pt)
 	for corner in _terminal_corners():
-		if _cam.is_position_behind(corner) or not frame.has_point(_cam.unproject_position(corner)):
-			_invalid("%s: terminal corner outside frame %s" % [shot, frame])
+		var c_px := _cam.unproject_position(corner)
+		if _cam.is_position_behind(corner) or not frame.has_point(c_px):
+			_invalid("%s: corner %s outside %s" % [shot, c_px.round(), frame])
 	var pax_pts := _active_passenger_points()
 	var pax_in := 0
 	for pt in pax_pts:
@@ -302,21 +314,13 @@ func _verify_shot(shot: String, res: Vector2i, plane: PlaneView, is_hero: bool) 
 			]
 		)
 	)
-	if _cam.is_position_behind(term_pt) or not frame.has_point(term_px):
-		_invalid("%s: terminal center outside frame" % shot)
-	if _cam.is_position_behind(plane_pt) or not frame.has_point(plane_px):
-		_invalid("%s: plane outside frame" % shot)
-	if pax_in < MIN_PAX_IN_FRAME:
-		_invalid("%s: too few passengers in frame (%d)" % [shot, pax_in])
+	if not frame.has_point(term_px) or not frame.has_point(plane_px) or pax_in < MIN_PAX_IN_FRAME:
+		_invalid("%s: key subjects outside frame or pax=%d" % [shot, pax_in])
 	if not (p_sight["blockers"] as Array).is_empty() or (c_sight["blockers"] as Array).is_empty():
 		_invalid("%s: raycast check failed" % shot)
-	if (
-		is_hero
-		and not Rect2((Vector2(res) - Vector2(1400, 680)) * 0.5, Vector2(1400, 680)).has_point(
-			term_px
-		)
-	):
-		_invalid("%s: terminal focal point %s outside center safe zone" % [shot, term_px])
+	var safe := Rect2((Vector2(res) - HERO_SAFE) * 0.5, HERO_SAFE)
+	if is_hero and not safe.has_point(term_px):
+		_invalid("%s: terminal focal point %s outside 860x380 safe zone %s" % [shot, term_px, safe])
 
 
 func _terminal_center() -> Vector3:
@@ -328,13 +332,11 @@ func _terminal_center() -> Vector3:
 
 
 func _terminal_corners() -> Array[Vector3]:
-	var at := ReferenceTerminal.offset_on(_grid)
-	return [
-		_grid.cell_to_world(Vector2i(10, 2) + at),
-		_grid.cell_to_world(Vector2i(27, 3) + at),
-		_grid.cell_to_world(Vector2i(10, 17) + at),
-		_grid.cell_to_world(Vector2i(27, 16) + at),
-	]
+	var a := ReferenceTerminal.offset_on(_grid)
+	var out: Array[Vector3] = []
+	for v in [Vector2i(10, 2), Vector2i(27, 3), Vector2i(10, 17), Vector2i(27, 16)]:
+		out.append(_grid.cell_to_world(v + a))
+	return out
 
 
 func _plane_at_gate(gate: String) -> PlaneView:
@@ -364,7 +366,7 @@ func _invalid(msg: String) -> void:
 	_failed = true
 
 
-func _beat(_tag := "") -> void:
+func _beat() -> void:
 	_mutex.lock()
 	_beat_ms = Time.get_ticks_msec()
 	_mutex.unlock()

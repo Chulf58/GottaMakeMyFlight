@@ -192,25 +192,33 @@ def blur_alpha(mask_2d, sigma):
 
 
 def apply_logo_on_capsule(bg_lin, tight, trail_tight, ox, oy, lw, lh, mist_strength, name):
-    """Composite Option A over staged key art with a soft sunlit mist halo so the
-    navy dotted flight trail stays crisp over any background tone."""
+    """Composite Option A over staged key art with a smooth, unclipped, dark-only
+    Gaussian cushion around the navy dotted flight trail so dark pixels lift gently
+    with zero rectangular halo box while light apron pixels remain untouched."""
     h, w = bg_lin.shape[:2]
     logo = bl.resize(tight, lw, lh)
     trail = bl.resize(np.repeat(trail_tight, 4, axis=2), lw, lh)[:, :, 0]
-    pad = max(16, int(round(max(lw, lh) * 0.16)))
+    sigma = max(5.0, lh * 0.055)
+    pad = int(math.ceil(sigma * 4.2))
     y0, y1 = max(0, oy - pad), min(h, oy + lh + pad)
     x0, x1 = max(0, ox - pad), min(w, ox + lw + pad)
     patch_mask = np.zeros((y1 - y0, x1 - x0), np.float32)
     ly0, lx0 = oy - y0, ox - x0
-    # Weight the mist toward the trail + logo coverage so dark pixels lift smoothly.
-    patch_mask[ly0:ly0 + lh, lx0:lx0 + lw] = np.clip(logo[:, :, 3] * 0.75 + trail * 1.35, 0.0, 1.0)
-    sigma = max(6.0, min(lw, lh) * 0.14)
+    # Dilate the trail dots slightly before Gaussian blur so each dot gets a smooth local cushion
+    # without any percentile clipping plateau or rectangular box boundary.
+    trail_dil = bl.dilate(trail > 0.25, max(3.0, lh * 0.035)).astype(np.float32)
+    patch_mask[ly0:ly0 + lh, lx0:lx0 + lw] = trail_dil
     halo = blur_alpha(patch_mask, sigma)
-    if halo.max() > 1e-4:
-        halo = np.clip(halo / max(0.38, float(np.percentile(halo[halo > 0.01], 92))), 0.0, 1.0)
-    mist_alpha = (halo * mist_strength)[:, :, None]
-    mist_lin = np.array(bl.to_lin(SUN_MIST_SRGB), dtype=np.float32)[None, None, :]
+    peak = float(halo.max())
+    if peak > 1e-5:
+        halo = halo / peak
     out = bg_lin.copy()
+    sub_srgb = bl.to_srgb(out[y0:y1, x0:x1, :3])
+    sub_luma = 0.2126 * sub_srgb[:, :, 0] + 0.7152 * sub_srgb[:, :, 1] + 0.0722 * sub_srgb[:, :, 2]
+    # Lift ONLY dark pixels (< 0.56 sRGB luma); bright concrete apron (luma ~0.74) gets 0.0 mist.
+    dark_weight = np.clip((0.56 - sub_luma) / 0.36, 0.0, 1.0)
+    mist_alpha = (halo * dark_weight * mist_strength)[:, :, None]
+    mist_lin = np.array(bl.to_lin(SUN_MIST_SRGB), dtype=np.float32)[None, None, :]
     sub = out[y0:y1, x0:x1, :3]
     out[y0:y1, x0:x1, :3] = sub * (1.0 - mist_alpha) + mist_lin * mist_alpha
     # Measure background sRGB luma directly under the navy trail dots BEFORE laying logo.
@@ -312,9 +320,12 @@ def build_contact_sheet(assets):
     draw_text_5x7(sheet, 1000, sy, "SMALL_CAPSULE.PNG (462X174 1:1)", scale=2)
     sheet[sy + 22:sy + 22 + s_thumb.shape[0], 1000:1000 + s_thumb.shape[1]] = s_thumb
 
-    logo_chk = render_checker_rgba(assets["library_logo.png"])
+    logo_rgba = assets["library_logo.png"]
+    logo_chk = render_checker_rgba(logo_rgba)
     l_thumb = fit_thumb(logo_chk, 780, 365)
-    draw_text_5x7(sheet, 1800, y_row2, "LIBRARY_LOGO.PNG (1280X606 RGBA)", scale=2)
+    draw_text_5x7(
+        sheet, 1800, y_row2, "LIBRARY_LOGO.PNG (%dX%d RGBA)" % (logo_rgba.shape[1], logo_rgba.shape[0]), scale=2
+    )
     sheet[y_row2 + 24:y_row2 + 24 + l_thumb.shape[0], 1800:1800 + l_thumb.shape[1]] = l_thumb
 
     # Row 3: library_header, vertical_capsule, library_capsule
@@ -367,39 +378,42 @@ def main():
 
     # 3. main_capsule.png (1232 x 706, staged landscape + Option A top-left)
     bg_main = crop_and_resize(raw_land, 1232, 706)
-    lw, lh = fit_logo_size(tight_a, 1232 * 0.42, 706 * 0.38)
-    comp_main = apply_logo_on_capsule(bg_main, tight_a, trail_a, 28, 22, lw, lh, 0.58, "main_capsule.png")
+    lw, lh = fit_logo_size(tight_a, 1232 * 0.40, 706 * 0.36)
+    comp_main = apply_logo_on_capsule(bg_main, tight_a, trail_a, 24, 18, lw, lh, 0.52, "main_capsule.png")
     assets["main_capsule.png"] = save_and_verify_rgb("main_capsule.png", comp_main, 1232, 706)
 
     # 4 & 5. header_capsule.png and library_header.png (920 x 430)
-    bg_head = crop_and_resize(raw_land, 920, 430, align_y=0.50)
-    lw_h, lh_h = fit_logo_size(tight_a, 920 * 0.42, 430 * 0.44)
-    comp_head = apply_logo_on_capsule(bg_head, tight_a, trail_a, 18, 16, lw_h, lh_h, 0.60, "header_capsule.png")
+    bg_head = crop_and_resize(raw_land, 920, 430, align_y=0.56)
+    lw_h, lh_h = fit_logo_size(tight_a, 920 * 0.40, 430 * 0.42)
+    comp_head = apply_logo_on_capsule(bg_head, tight_a, trail_a, 16, 14, lw_h, lh_h, 0.52, "header_capsule.png")
     assets["header_capsule.png"] = save_and_verify_rgb("header_capsule.png", comp_head, 920, 430)
     assets["library_header.png"] = save_and_verify_rgb("library_header.png", comp_head, 920, 430)
 
-    # 6. small_capsule.png (462 x 174, Option A nearly filling frame)
-    bg_small = crop_and_resize(raw_land, 462, 174, align_y=0.52)
-    # Gently lift background so the small capsule reads clean at 1:1 list scale.
-    mist_full = np.array(bl.to_lin(SUN_MIST_SRGB), dtype=np.float32)[None, None, :]
-    bg_small[:, :, :3] = bg_small[:, :, :3] * 0.65 + mist_full * 0.35
-    lw_s, lh_s = fit_logo_size(tight_sm, 462 * 0.90, 174 * 0.88)
+    # 6. small_capsule.png (462 x 174, Option A nearly filling frame over clean sunlit apron + terminal)
+    # Crop below the green plane's wing line so clean pale sunlit apron sits behind the 14 navy trail dots
+    # (zero green fragments poking between dots, zero full-frame milky wash) while colorful terminal shows around edges.
+    sh_h, sw_h = raw_hero.shape[:2]
+    crop_w, crop_h = 2050, int(round(2050 * 174 / 462.0))
+    sx0 = max(0, min(sw_h - crop_w, 860))
+    sy0 = max(0, min(sh_h - crop_h, 425))
+    bg_small = bl.resize(np.ascontiguousarray(raw_hero[sy0:sy0 + crop_h, sx0:sx0 + crop_w]), 462, 174)
+    lw_s, lh_s = fit_logo_size(tight_sm, 462 * 0.88, 174 * 0.90)
     ox_s, oy_s = (462 - lw_s) // 2, (174 - lh_s) // 2
-    comp_small = apply_logo_on_capsule(bg_small, tight_sm, trail_sm, ox_s, oy_s, lw_s, lh_s, 0.45, "small_capsule.png")
+    comp_small = apply_logo_on_capsule(bg_small, tight_sm, trail_sm, ox_s, oy_s, lw_s, lh_s, 0.48, "small_capsule.png")
     assets["small_capsule.png"] = save_and_verify_rgb("small_capsule.png", comp_small, 462, 174)
 
     # 7. vertical_capsule.png (748 x 896, Option A top-center over portrait key art)
     bg_vert = crop_and_resize(raw_port, 748, 896)
-    lw_v, lh_v = fit_logo_size(tight_a, 748 * 0.84, 896 * 0.28)
+    lw_v, lh_v = fit_logo_size(tight_a, 748 * 0.82, 896 * 0.26)
     ox_v = (748 - lw_v) // 2
-    comp_vert = apply_logo_on_capsule(bg_vert, tight_a, trail_a, ox_v, 28, lw_v, lh_v, 0.60, "vertical_capsule.png")
+    comp_vert = apply_logo_on_capsule(bg_vert, tight_a, trail_a, ox_v, 22, lw_v, lh_v, 0.55, "vertical_capsule.png")
     assets["vertical_capsule.png"] = save_and_verify_rgb("vertical_capsule.png", comp_vert, 748, 896)
 
     # 8. library_capsule.png (600 x 900, Option A top-center over portrait key art)
-    bg_lib = crop_and_resize(raw_port, 600, 900, align_x=0.50)
-    lw_l, lh_l = fit_logo_size(tight_a, 600 * 0.86, 900 * 0.27)
+    bg_lib = crop_and_resize(raw_port, 600, 900, align_x=0.46)
+    lw_l, lh_l = fit_logo_size(tight_a, 600 * 0.84, 900 * 0.25)
     ox_l = (600 - lw_l) // 2
-    comp_lib = apply_logo_on_capsule(bg_lib, tight_a, trail_a, ox_l, 32, lw_l, lh_l, 0.60, "library_capsule.png")
+    comp_lib = apply_logo_on_capsule(bg_lib, tight_a, trail_a, ox_l, 24, lw_l, lh_l, 0.55, "library_capsule.png")
     assets["library_capsule.png"] = save_and_verify_rgb("library_capsule.png", comp_lib, 600, 900)
 
     build_contact_sheet(assets)
