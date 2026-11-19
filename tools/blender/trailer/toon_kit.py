@@ -1627,10 +1627,12 @@ def verify_human_motion(
                 obs_boxes.append((tag, min(xs), max(xs), min(ys), max(ys), req_clear))
 
     min_obs_d = 999.0
+    min_table_d = 999.0
     min_char_d = 999.0
     max_yaw_step = 0.0
     max_ik_err = 0.0
     min_stair_margin = 999.0
+    stair_gaps = []
     prev_xy = {}
     prev_yaw = {}
 
@@ -1660,7 +1662,7 @@ def verify_human_motion(
                     if pb_ik is None:
                         continue
                     for cns in pb_ik.constraints:
-                        if cns.type == "IK" and cns.target is not None and float(cns.influence) >= 0.92:
+                        if cns.type == "IK" and cns.target is not None and float(cns.influence) >= 0.85:
                             hand_tip = arm.matrix_world @ pb_ik.tail
                             grip_pos = cns.target.matrix_world.translation
                             ik_err = float((hand_tip - grip_pos).length)
@@ -1706,6 +1708,8 @@ def verify_human_motion(
                     dist = math.hypot(cx - qx, cy - qy)
                     if req_c >= min_clearance - 1e-4:
                         min_obs_d = min(min_obs_d, dist)
+                    else:
+                        min_table_d = min(min_table_d, dist)
                     if dist < req_c:
                         fail(
                             "%s f=%d: %s at (%.2f,%.2f) collided with %s [%.2f..%.2f, %.2f..%.2f] (clearance=%.3fm < %.2fm)"
@@ -1756,7 +1760,7 @@ def verify_human_motion(
                     if (sh_z - el_z) < 0.12:
                         fail("%s f=%d: Hero chicken-wing high elbow (sh_z=%.3f, el_z=%.3f, diff=%.3fm < 0.12m!)" % (shot_id, f, sh_z, el_z, sh_z - el_z))
 
-        # 8. Stair-tread & upper-deck per-vertex foot-elevation check (zero shin/boot penetration into airstairs!)
+        # 8. Stair-tread & upper-deck per-vertex foot-elevation check (neither sinking < -0.015m NOR floating > 0.04m!)
         if stair_foot_checks:
             dg_s = bpy.context.evaluated_depsgraph_get()
             for cr_s, fs0, fs1, surf_fn in stair_foot_checks:
@@ -1776,21 +1780,39 @@ def verify_human_motion(
                             mo.evaluated_get(dg_s).to_mesh_clear()
                     if worst_pt is not None:
                         min_stair_margin = min(min_stair_margin, worst_margin)
-                        if worst_margin < -0.020:
+                        stair_gaps.append(worst_margin)
+                        if worst_margin < -0.018:
                             fail(
-                                "%s f=%d: %s boot vertex sank into stairs/deck at x=%.2f (vz=%.3fm < surf_z=%.3fm - 0.020m!)"
+                                "%s f=%d: %s boot vertex sank into stairs/deck at x=%.2f (vz=%.3fm < surf_z=%.3fm - 0.018m!)"
                                 % (shot_id, f, cr_s.name, worst_pt[0], worst_pt[1], worst_pt[2])
                             )
+                        if worst_margin > 0.095:
+                            fail(
+                                "%s f=%d: %s boots floating %.3fm in mid-air above stairs/deck at x=%.2f (vz=%.3fm vs surf_z=%.3fm!)"
+                                % (shot_id, f, cr_s.name, worst_margin, worst_pt[0], worst_pt[1], worst_pt[2])
+                            )
+
+    if stair_gaps:
+        stance_grounded = sum(1 for g in stair_gaps if g <= 0.040) / float(len(stair_gaps))
+        med_gap = float(np.median(stair_gaps))
+        if stance_grounded < 0.65 or med_gap > 0.035:
+            fail(
+                "%s: stair climb boots floating above treads (median_gap=%.3fm, grounded_ratio=%.2f < 0.65!)"
+                % (shot_id, med_gap, stance_grounded)
+            )
 
     summary = {
         "shot": shot_id,
         "characters": len(char_roots),
         "obstacles": len(obs_boxes),
         "min_obstacle_clearance_m": round(min_obs_d, 3) if min_obs_d < 900 else None,
+        "min_table_clearance_m": round(min_table_d, 3) if min_table_d < 900 else None,
         "min_character_sep_m": round(min_char_d, 3) if min_char_d < 900 else None,
         "max_yaw_step_deg": round(max_yaw_step, 2),
         "max_ik_grip_err_m": round(max_ik_err, 4),
         "min_stair_foot_margin_m": round(min_stair_margin, 3) if min_stair_margin < 900 else None,
+        "median_stair_foot_gap_m": round(float(np.median(stair_gaps)), 3) if stair_gaps else None,
+        "max_stair_foot_gap_m": round(float(max(stair_gaps)), 3) if stair_gaps else None,
         "quaternion_only": True,
         "unit_human_scale": True,
     }

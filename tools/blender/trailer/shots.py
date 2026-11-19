@@ -301,13 +301,17 @@ def _build_wheeled_airstairs(scene, name="MobileAirstairs_ROOT", loc=(0.0, 0.0, 
         tk.make_box(scene, "Stair_DiagBrace_%.2f" % sy, (0.10, 0.08, 1.38), (1.28, sy, 0.72), steel_m, bevel=0.01, parent=root)
         bpy.data.objects["Stair_DiagBrace_%.2f" % sy].rotation_euler = (0.0, math.radians(-42.0), 0.0)
 
-    # 4 rubber wheels with hubs (wheel pivots around local Y so rolling along +X spins them!)
-    wheel_pivots = []
+    # 4 swivel caster rubber wheels with hubs (`wcaster` swivels around Z into travel direction; `wpiv` spins around cylinder axle Y!)
+    caster_wheels = []
     for wx_tag, wx in (("Front", 0.45), ("Rear", 2.42)):
         for wy_tag, wy in (("L", -0.62), ("R", 0.62)):
+            wcaster = bpy.data.objects.new("StairCaster_%s_%s" % (wx_tag, wy_tag), None)
+            wcaster.location = (wx, wy, 0.24)
+            wcaster.parent = root
+            scene.collection.objects.link(wcaster)
             wpiv = bpy.data.objects.new("StairWheelPiv_%s_%s" % (wx_tag, wy_tag), None)
-            wpiv.location = (wx, wy, 0.24)
-            wpiv.parent = root
+            wpiv.location = (0.0, 0.0, 0.0)
+            wpiv.parent = wcaster
             scene.collection.objects.link(wpiv)
             bpy.ops.mesh.primitive_cylinder_add(vertices=18, radius=0.24, depth=0.14, location=(0.0, 0.0, 0.0))
             tire = bpy.context.active_object
@@ -317,7 +321,7 @@ def _build_wheeled_airstairs(scene, name="MobileAirstairs_ROOT", loc=(0.0, 0.0, 
             tk.attach_outline(tire, 0.004)
             tire.parent = wpiv
             tk.make_box(scene, "StairHub_%s_%s" % (wx_tag, wy_tag), (0.16, 0.16, 0.06), (0.0, 0.0, 0.0), hub_m, bevel=0.01, parent=wpiv)
-            wheel_pivots.append(wpiv)
+            caster_wheels.append((wcaster, wpiv))
 
     # Sloped yellow side stringer cheeks + Gotta Air lime stripe
     for sy_tag, sy in (("L", -0.56), ("R", 0.56)):
@@ -348,7 +352,7 @@ def _build_wheeled_airstairs(scene, name="MobileAirstairs_ROOT", loc=(0.0, 0.0, 
 
     # Side-mounted steel towbar coupling on forward -Y chassis (`y = -0.55..-1.75`) so the +X bottom step is 100% clear!
     towbar = tk.make_box(scene, "StairTowbar", (0.09, 1.25, 0.07), (0.55, -1.14, 0.26), yellow_m, bevel=0.01, parent=root, outline=0.003)
-    return root, wheel_pivots, towbar
+    return root, caster_wheels, towbar
 
 
 # ==============================================================================
@@ -468,20 +472,20 @@ def build_shot_01(g0):
             (105, (90.0, 0.0, 0.0)),
         ])
 
-    # Hero passenger: hidden inside closed dark-windowed taxi (f=1..18), emerges smoothly through open rear doorway
-    # at natural ~1.7 m/s step-out walk (f=19..48) to curb spot clear of (P) sign, reacts to FINAL CALL! (f=52..88),
+    # Hero passenger: occluded behind solid yellow HeroTaxi cabin/B-pillar at f=1..19 (zero pop-in at f=18->19!),
+    # rises smoothly out of the open rear doorway onto the curb (f=19..50), reacts to FINAL CALL! (f=52..88),
     # then genuinely SPRINTS (~2.85 m/s `run` clip!) straight into the warm lit Door_6 vestibule!
     hero_root, hero_arm, hero_objs, hero_acts = tk.load_character(
-        "tcp_male_character_01", "Hero", cloth_tint=tk.HERO_CORAL, loc=(10.95, -20.80, CURB_Z), yaw_deg=68.0
+        "tcp_male_character_01", "Hero", cloth_tint=tk.HERO_CORAL, loc=(10.05, -21.35, CURB_Z), yaw_deg=68.0
     )
     tk.animate_character_locomotion(
         hero_root,
         hero_arm,
         hero_acts,
         waypoints=[
-            (1, (10.95, -20.80, CURB_Z), 68.0),
-            (19, (10.95, -20.80, CURB_Z), 68.0),
-            (48, (12.60, -20.15, CURB_Z), 165.0),
+            (1, (10.05, -21.35, CURB_Z), 68.0),
+            (19, (10.05, -21.35, CURB_Z), 68.0),
+            (50, (12.60, -20.15, CURB_Z), 165.0),
             (88, (12.60, -20.15, CURB_Z), 165.0),
             (93, (12.60, -20.15, CURB_Z), 112.0),
             (134, (15.90, -19.05, CURB_Z)),
@@ -489,6 +493,22 @@ def build_shot_01(g0):
         ],
         frame_end=N,
     )
+    # Keep Hero crouched behind the opaque yellow B-pillar/cabin doors (`z = -0.72`, crown `0.96 m` < `1.05 m` door sill)
+    # through f=19 so `hide_render` toggling at f=19 causes zero visible pop-in, then rise smoothly out of the open doorway!
+    s1_z_keys = []
+    for f_s1 in range(1, N + 1):
+        scene.frame_set(f_s1)
+        hx1, hy1, _ = hero_root.location
+        if f_s1 <= 19:
+            hz1 = -0.72
+        elif f_s1 < 27:
+            hz1 = -0.72 + (CURB_Z - (-0.72)) * ((f_s1 - 19) / 8.0)
+        else:
+            hz1 = CURB_Z
+        s1_z_keys.append((f_s1, (float(hx1), float(hy1), float(hz1))))
+    scene.frame_set(1)
+    tk.key_pos(hero_root, s1_z_keys)
+    tk._set_fcurves_linear(hero_root)
 
     # Head + Spine_02 look up at Departure Board via quaternion-safe TRACK_TO!
     tk.bind_head_look_at(
@@ -496,7 +516,7 @@ def build_shot_01(g0):
         hero_arm,
         "HeroBoardLook",
         target_pos=(15.85, -19.80, 3.22),
-        influence_keys=[(1, 0.0), (46, 0.0), (56, 0.72), (86, 0.72), (95, 0.0)],
+        influence_keys=[(1, 0.0), (48, 0.0), (56, 0.72), (86, 0.72), (95, 0.0)],
         include_spine=True,
     )
     # Urgent left-hand "oh no, my flight!" reaction to temple via 2-bone IK on Forearm.L!
@@ -518,16 +538,23 @@ def build_shot_01(g0):
         hero_root,
         hero_arm,
         "HeroRoller01",
-        f_ik_ranges=[(20, N)],
-        pose_ranges=[(1, 44, "walk_tow"), (49, 92, "stand"), (98, N, "tow")],
+        f_ik_ranges=[(27, N)],
+        pose_ranges=[(1, 45, "tow"), (51, 92, "stand"), (98, N, "tow")],
     )
-    for ho in list(hero_objs) + list(bag01_root.children_recursive):
+    for ho in hero_objs:
         if ho.type == "MESH":
             ho.hide_render = True
             ho.keyframe_insert(data_path="hide_render", frame=1)
             ho.keyframe_insert(data_path="hide_render", frame=18)
             ho.hide_render = False
             ho.keyframe_insert(data_path="hide_render", frame=19)
+    for bo in bag01_root.children_recursive:
+        if bo.type == "MESH":
+            bo.hide_render = True
+            bo.keyframe_insert(data_path="hide_render", frame=1)
+            bo.keyframe_insert(data_path="hide_render", frame=25)
+            bo.hide_render = False
+            bo.keyframe_insert(data_path="hide_render", frame=26)
 
     cam, target = tk.make_camera(scene, "Shot01Cam", lens=33.0, fstop=2.8)
     tk.key_pos(cam, [
@@ -577,13 +604,13 @@ def build_shot_01(g0):
             ("TerminalFacade_E", 16.98, 40.0, -18.25, -16.50),
         ],
         "seated_exempt": set(),
-        "exempt_ranges": {"CHAR_Hero": [(1, 19)]},
+        "exempt_ranges": {"CHAR_Hero": [(1, 26)]},
         "forbid_char_boxes": [
             ("TaxiClosedZone", 1, 18, 3.0, 15.0, -24.5, -19.0, 0.10, 3.50),
-            ("TaxiRoofZone", 1, 25, 3.0, 12.5, -23.2, -21.2, 1.55, 3.50),
+            ("TaxiRoofZone", 1, 20, 3.0, 12.5, -23.2, -21.2, 1.46, 3.50),
         ],
         "pulled_rollers": [
-            (hero_root, hero_arm, bag01_by_n["CarryRoller_Body"], CURB_Z, [(20, 43), (98, N)]),
+            (hero_root, hero_arm, bag01_by_n["CarryRoller_Body"], CURB_Z, [(27, 44), (98, N)]),
         ],
     }
     return scene, cam, prove_targets, hero_arm, events, motion_spec
@@ -679,7 +706,7 @@ def build_shot_02(g0):
         pop_posts.append(("CheckinPole_%d" % pi_s, sp_c))
 
     ci_banner = bpy.data.objects.new("CheckinBanner_ROOT", None)
-    ci_banner.location = (0.0, 4.35, 2.76)
+    ci_banner.location = (0.0, 4.35, 2.44)
     scene.collection.objects.link(ci_banner)
     tk.make_box(scene, "CheckinBannerBox", (2.85, 0.18, 0.48), (0.0, 0.0, 0.0), runner_navy, bevel=0.03, parent=ci_banner, outline=0.005)
     cb_txt = tk.make_nunito_text_3d(scene, "CHECK-IN", 0.27, 0.012, tk.emissive_mat("cb_lime", tk.GOTTA_LIME, 1.45), extrude=0.02, parent=ci_banner)
@@ -1558,8 +1585,9 @@ def build_shot_05(g0):
         (CUT_F - 1, (-20.60, 6.45, 0.0)),
         (N, (-20.60, 6.45, 0.0)),
     ])
-    for wpiv in stair_wheels:
-        tk.key_rot_deg(wpiv, [(1, (0, 0, 0)), (70, (0, 0, 0)), (CUT_F - 1, (320.0, 0, 0)), (N, (320.0, 0, 0))])
+    for wcaster, wpiv in stair_wheels:
+        tk.key_rot_deg(wcaster, [(1, (0, 0, 0)), (66, (0, 0, 0)), (71, (0, 0, 90.0)), (N, (0, 0, 90.0))])
+        tk.key_rot_deg(wpiv, [(1, (0, 0, 0)), (70, (0, 0, 0)), (CUT_F - 1, (0, -340.0, 0)), (N, (0, -340.0, 0))])
 
     # Ramp Marshaller in hi-vis lime waving dual orange marshalling wands via 2-bone IK!
     marsh_r, marsh_a, marsh_objs, marsh_acts = tk.load_character(
@@ -1610,25 +1638,83 @@ def build_shot_05(g0):
         waypoints=[
             (1, (-15.45, 10.35, 0.0)),
             (18, (-17.56, 9.38, 0.0)),
-            (45, (-19.76, 9.38, 1.58)),
-            (63, (-21.12, 9.38, 1.58)),
-            (72, (-21.92, 10.35, 1.58), 180.0),
-            (N, (-21.92, 10.35, 1.58), 180.0),
+            (45, (-19.76, 9.38, 1.55)),
+            (63, (-21.12, 9.38, 1.55)),
+            (72, (-21.92, 10.35, 1.55), 180.0),
+            (N, (-21.92, 10.35, 1.55), 180.0),
         ],
         frame_end=N,
     )
-    # Key exact per-frame z(f) ON TOP of `_stair_surf_z(hx - 0.28)` (accounting for leading-foot stride reach on the 32-deg
-    # stair slope!) so NEITHER the leading boot NOR the trailing boot ever penetrates any stair tread or upper deck!
+    # Key Hero's root z(f) directly from `_stair_surf_z(hx)` (`0.0` on apron, `1.550` on upper deck, slight natural `-0.065m`
+    # knee-flex crouch on the 32-deg slope so BOTH legs reach their treads cleanly) + 2-bone quaternion leg IK (`Shin.L/R`)
+    # and sole level tracking (`Foot.L/R`) so boots touch the black treads (`<= 0.04m` stance gap, zero sinking/floating!).
     z_keys_s5 = []
+    slope_weights = {}
     for f_s5 in range(1, N + 1):
         scene.frame_set(f_s5)
         hx_s5, hy_s5, _ = hero_root.location
-        sz_lead = max(_stair_surf_z(hx_s5), _stair_surf_z(float(hx_s5) - 0.40))
-        lift_pad = 0.095 if hx_s5 < -17.30 else 0.0
-        z_keys_s5.append((f_s5, (float(hx_s5), float(hy_s5), sz_lead + lift_pad)))
+        hx_f = float(hx_s5)
+        w_up = max(0.0, min(1.0, (-17.25 - hx_f) / 0.35))
+        w_dn = max(0.0, min(1.0, (hx_f - (-19.76)) / 0.30))
+        sw = min(w_up, w_dn)
+        slope_weights[f_s5] = sw
+        sz_root = _stair_surf_z(hx_f) - 0.055 * sw
+        z_keys_s5.append((f_s5, (hx_f, float(hy_s5), sz_root)))
     scene.frame_set(1)
     tk.key_pos(hero_root, z_keys_s5)
     tk._set_fcurves_linear(hero_root)
+
+    # Sample FK locomotion ankle positions per frame, then bind 2-bone `Shin.L/R` IK + `Foot.L/R` level tracking!
+    ankle_keys = {"L": [], "R": []}
+    toe_keys = {"L": [], "R": []}
+    for f_s5 in range(1, N + 1):
+        scene.frame_set(f_s5)
+        bpy.context.view_layer.update()
+        hx_f = float(hero_root.location.x)
+        hz_f = float(hero_root.location.z)
+        sw = slope_weights[f_s5]
+        stride_scale = 1.0 - 0.42 * sw
+        for side in ("L", "R"):
+            pb_f = hero_arm.pose.bones["Foot." + side]
+            aw = hero_arm.matrix_world @ pb_f.head
+            ax = hx_f + stride_scale * (float(aw.x) - hx_f)
+            ay = float(aw.y)
+            fk_h = float(aw.z) - (hz_f + 0.055 * sw)
+            h_sw = max(0.0, fk_h - 0.095) * 0.42
+            surf_f = max(_stair_surf_z(ax), _stair_surf_z(ax - 0.29))
+            ankle_keys[side].append((f_s5, (ax, ay, surf_f + 0.100 + h_sw)))
+            toe_x = ax - 0.28
+            toe_keys[side].append((f_s5, (toe_x, ay, max(surf_f, _stair_surf_z(toe_x)) + 0.026 + 0.5 * h_sw)))
+    scene.frame_set(1)
+    for side in ("L", "R"):
+        ag = bpy.data.objects.new("StairAnkleGoal_" + side, None)
+        scene.collection.objects.link(ag)
+        tk.key_pos(ag, ankle_keys[side])
+        tk._set_fcurves_linear(ag)
+        tg = bpy.data.objects.new("StairToeGoal_" + side, None)
+        scene.collection.objects.link(tg)
+        tk.key_pos(tg, toe_keys[side])
+        tk._set_fcurves_linear(tg)
+
+        pb_shin = hero_arm.pose.bones["Shin." + side]
+        pb_shin.rotation_mode = "QUATERNION"
+        ik_leg = pb_shin.constraints.new("IK")
+        ik_leg.name = "IK_Stair_" + side
+        ik_leg.target = ag
+        ik_leg.chain_count = 2
+        for fk_i, iv in ((1, 0.0), (14, 0.0), (17, 1.0), (65, 1.0), (69, 0.0)):
+            ik_leg.influence = iv
+            ik_leg.keyframe_insert(data_path="influence", frame=fk_i)
+
+        pb_foot = hero_arm.pose.bones["Foot." + side]
+        pb_foot.rotation_mode = "QUATERNION"
+        dt_foot = pb_foot.constraints.new("DAMPED_TRACK")
+        dt_foot.name = "LevelFoot_Stair_" + side
+        dt_foot.target = tg
+        dt_foot.track_axis = "TRACK_Y"
+        for fk_i, iv in ((1, 0.0), (14, 0.0), (17, 0.95), (65, 0.95), (69, 0.0)):
+            dt_foot.influence = iv
+            dt_foot.keyframe_insert(data_path="influence", frame=fk_i)
 
     bag05_root, bag05_by_n = _attach_towed_roller(
         hero_root,

@@ -375,7 +375,7 @@ def main():
                 continue
 
             # 2. Render frames: fast GPU batch `animation=True` for full build, or stills for --strips-only
-            default_extra_beats = [28, 243, 337, 441, 532, 843]
+            default_extra_beats = [18, 19, 20, 24, 28, 243, 337, 441, 532, 829, 830, 836, 843, 850, 858, 866, 885, 892]
             all_extra_globals = set(default_extra_beats) | set(args.extra_frames)
             five_picks = pick_five_frames(n_f)
             extra_locals = {gf - g_cursor for gf in all_extra_globals if g_cursor < gf <= g_cursor + n_f}
@@ -414,14 +414,22 @@ def main():
                 scene.frame_set(fl)
                 arr = tk.read_png_float(out_png)
                 suv = None
-                hero_visible = (
-                    hero_arm is not None
-                    and not (shot_id == "shot_01" and fl < 35)
-                    and not (shot_id == "shot_03" and (34 <= fl <= 58 or 132 <= fl <= 154))
-                    and not (shot_id == "shot_05" and fl > 48)
-                )
-                if hero_visible:
-                    suv = tk.head_ndc(scene, cam, hero_arm)
+                if shot_id == "shot_03" and (34 <= fl <= 58 or 132 <= fl <= 154):
+                    alt_name = "CHAR_QueuePax1" if fl <= 58 else "CHAR_SecOfficer"
+                    alt_arm = next(
+                        (c for o in scene.objects if o.name == alt_name for c in o.children if c.type == "ARMATURE"),
+                        None,
+                    )
+                    if alt_arm is not None:
+                        suv = tk.head_ndc(scene, cam, alt_arm)
+                else:
+                    hero_visible = (
+                        hero_arm is not None
+                        and not (shot_id == "shot_01" and fl < 35)
+                        and not (shot_id == "shot_05" and fl > 48)
+                    )
+                    if hero_visible:
+                        suv = tk.head_ndc(scene, cam, hero_arm)
                 tk.verify_frame_not_black_and_skin(arr, "%s_f%04d" % (shot_id, gf), skin_uv=suv)
 
             # 3. Build 5-frame horizontal filmstrip for this shot!
@@ -461,6 +469,19 @@ def main():
         extra_strip_path = os.path.join(strips_dir, "extra_beats_strip.png")
         tk.write_png_float(extra_strip_path, extra_strip)
         tk.log("PROBE extra_beats_strip wrote %s (%dx%d)" % (extra_strip_path, extra_strip.shape[1], extra_strip.shape[0]))
+
+        # Write dedicated 6-tile zoomed `stair_climb_strip.png` across Shot 5 f=19,26,33,40,48,56 (global 829..866)
+        # centered on the airstairs so boot-to-tread contact is large and crystal-clear!
+        stair_globals = [829, 836, 843, 850, 858, 866]
+        stair_tiles = []
+        for sgf in stair_globals:
+            s_arr = tk.read_png_float(os.path.join(frames_dir, "frame_%04d.png" % sgf))
+            crop = s_arr[240:780, 360:1320, :]
+            stair_tiles.append(_resize_rgba(crop, TILE_W, TILE_H))
+        stair_strip = np.concatenate(stair_tiles, axis=1)
+        stair_strip_path = os.path.join(strips_dir, "stair_climb_strip.png")
+        tk.write_png_float(stair_strip_path, stair_strip)
+        tk.log("PROBE stair_climb_strip wrote %s (%dx%d)" % (stair_strip_path, stair_strip.shape[1], stair_strip.shape[0]))
 
         with open(os.path.join(tk.OUT_DIR, "shot_events.json"), "w", encoding="utf-8") as fh:
             json.dump(
