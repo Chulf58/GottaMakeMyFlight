@@ -223,4 +223,5 @@ func test_a_passenger_walks_road_to_plane_and_makes_the_flight() -> void:
 	assert_float(on_apron_at.distance_to(_xz(_world.grid.cell_to_world(_exit)))).is_less(0.5)
 	var end := _world.sim.world_position(p)
 	var stand := _world.sim.layout.live_stand(_world.grid)
-	assert_float(_xz(end).distance_to(_xz(StandPlacement.door_point(stand)))).is_less(0.01)
+	var model := PlaneClasses.flight_model(_world.flights, PassengerTestWorld.FLIGHT)
+	assert_float(_xz(end).distance_to(_xz(StandPlacement.door_point(stand, model)))).is_less(0.01)
