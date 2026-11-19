@@ -83,6 +83,8 @@ var alert_settings_path := HudFlagSetting.PATH
 ## debug-panel-is-for-dev-builds-only-the-hud-s-debug-toggle-an). A test sets it
 ## before add_child to build or leave out the debug tools.
 var debug_tools := OS.is_debug_build()
+## End-of-demo Day 5 summary card (DemoEndCard); active only in demo builds.
+var demo_end_card := DemoEndCard.new()
 
 var _departures_board := DeparturesBoard.new()
 ## The full-screen flight planner and its toggle on the Departures row; built
@@ -246,6 +248,7 @@ func _ready() -> void:
 	add_child(_hints)
 	_wire_unlock_guide()
 	_wire_dialog_gates()
+	_wire_demo_end_card()
 	_frame_start_view()
 	refresh()
 
@@ -656,6 +659,15 @@ func _wire_dialog_gates() -> void:
 	var incident_panel := get_node_or_null("../IncidentPanel") as IncidentPanel
 	if incident_panel != null:
 		incident_panel.dialog_changed.connect(_gate_camera)
+
+
+func _wire_demo_end_card() -> void:
+	demo_end_card.hud = self
+	demo_end_card.clock = clock
+	demo_end_card.build_mode = build_mode
+	demo_end_card.save_game = save_game
+	demo_end_card.dialog_changed.connect(_gate_camera)
+	add_child(demo_end_card)
 
 
 ## The unlock guide: its dialog and marks, or null before the HUD is ready.

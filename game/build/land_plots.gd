@@ -34,6 +34,7 @@ const REMOVALS: Array[BuildEdit.Kind] = [
 	BuildEdit.Kind.REMOVE_ROOM,
 ]
 const SNAPSHOT_KEYS := ["plot_counts", "owned", "bought"]
+const DEMO_LIMIT_TEXT := "Demo limit: 1 extra plot (more in the full game)"
 ## The four plots that share an edge with a plot.
 const EDGE_STEPS: Array[Vector2i] = [
 	Vector2i(0, -1), Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0)
@@ -45,6 +46,9 @@ var grid_size := Vector2i.ZERO
 var plots := Vector2i.ZERO
 ## How many plots the player has bought; the next one's price depends on it.
 var bought := 0
+## True when progression caps apply (BuildMode.require_unlocks); bare test
+## worlds leave it false unless testing progression.
+var gated := false
 ## The plot columns the player may buy in (first column, count). On the site
 ## the side land is locked while SiteDefinition.SIDE_LAND_OPEN is false, so
 ## only the first site's columns are for sale (for_site()).
@@ -206,10 +210,22 @@ func is_open(plot: Vector2i) -> bool:
 	return plot.x >= open_columns.x and plot.x < open_columns.x + open_columns.y
 
 
+## True when demo mode caps `land` from buying any further extra plots.
+static func is_demo_capped(land: LandPlots) -> bool:
+	return (
+		land != null
+		and DemoMode.is_demo()
+		and land.gated
+		and land.bought >= DemoMode.MAX_EXTRA_LAND_PLOTS
+	)
+
+
 ## The plots the player may buy now: on the site, in an open column, not
-## owned, touching owned land. Row by row.
+## owned, touching owned land. Row by row. Empty once the demo cap is reached.
 func buyable_plots() -> Array[Vector2i]:
 	var out: Array[Vector2i] = []
+	if is_demo_capped(self):
+		return out
 	for y in plots.y:
 		for x in plots.x:
 			var plot := Vector2i(x, y)
@@ -241,6 +257,7 @@ func buy_problem(plot: Vector2i, wallet: Wallet) -> BuildResult:
 ## the site, owned, in a locked column or not touching owned land; else null.
 func _where_problem(plot: Vector2i) -> BuildResult:
 	var reason := -1
+	var demo_capped := false
 	if not in_site(plot):
 		reason = BuildResult.Reason.OUT_OF_BOUNDS
 	elif is_owned(plot):
@@ -249,7 +266,15 @@ func _where_problem(plot: Vector2i) -> BuildResult:
 		reason = BuildResult.Reason.LOCKED
 	elif not touches_owned(plot):
 		reason = BuildResult.Reason.LAND_NOT_TOUCHING
-	return BuildResult.refused(reason) if reason >= 0 else null
+	elif is_demo_capped(self):
+		reason = BuildResult.Reason.LOCKED
+		demo_capped = true
+	if reason < 0:
+		return null
+	var refused := BuildResult.refused(reason)
+	if demo_capped:
+		refused.detail = tr("Demo limit: 1 extra plot (more in the full game)")
+	return refused
 
 
 ## Buys `plot`, paying next_price() from `wallet` (Wallet.Category.BUILD; null:

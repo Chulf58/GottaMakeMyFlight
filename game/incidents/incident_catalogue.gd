@@ -39,6 +39,8 @@ const SECURITY_PLACE := "Security"
 const SPILL_PLACES: Array[String] = [CHECKIN_PLACE, SECURITY_PLACE]
 ## Catalogue order, which is the weighted draw's order.
 const ORDER: Array[String] = [NONE, SPILL, INSPECTOR, RUSH, VIP, FAVOUR, FAULT]
+## Kinds open to roll in demo builds: quiet days, the two minors, and holiday rush.
+const DEMO_KINDS: Array[String] = [NONE, SPILL, RUSH, FAULT]
 ## "offer" is true for an opt-in major the player accepts or declines; the
 ## others are announced.
 const KINDS := {
@@ -104,11 +106,19 @@ static func weight(kind: String, world: Dictionary) -> int:
 	return 0
 
 
+## True when `kind` may be rolled in demo builds.
+static func demo_allows(kind: String) -> bool:
+	return DEMO_KINDS.has(kind)
+
+
 ## The roll's candidates for `world`, in catalogue order: each kind the tier
-## allows, with its weight (IncidentRoll.roll).
+## allows, with its weight (IncidentRoll.roll). Demo builds filter to DEMO_KINDS.
 static func candidates(world: Dictionary) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
+	var demo := DemoMode.is_demo()
 	for kind in ORDER:
+		if demo and not demo_allows(kind):
+			continue
 		if tier(kind) <= int(world.get("tier", 0)):
 			out.append({"kind": kind, "weight": weight(kind, world), "major": is_major(kind)})
 	return out
