@@ -49,6 +49,7 @@ def parse_args():
     argv = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
     p = argparse.ArgumentParser()
     p.add_argument("--strips-only", action="store_true", help="Render only the 5 strip keyframes per shot for fast visual QA")
+    p.add_argument("--extra-frames", nargs="*", type=int, default=[], help="Extra global 1-indexed frames to render in --strips-only mode")
     p.add_argument("--encode-only", action="store_true", help="Re-mix audio & VSE encode from already-rendered frames")
     return p.parse_args(argv)
 
@@ -188,15 +189,52 @@ def encode_vse_mp4(frames_dir, wav_path, mp4_path, total_frames):
     bpy.ops.render.render(animation=True)
 
 
+def _iter_mp4_boxes(buf, start, end):
+    pos = start
+    while pos + 8 <= end:
+        sz, btype = struct.unpack(">I4s", buf[pos : pos + 8])
+        hdr = 8
+        if sz == 1:
+            if pos + 16 > end:
+                break
+            sz = struct.unpack(">Q", buf[pos + 8 : pos + 16])[0]
+            hdr = 16
+        elif sz == 0:
+            sz = end - pos
+        if sz < hdr or pos + sz > end:
+            break
+        yield btype, pos + hdr, pos + sz
+        pos += sz
+
+
+def _find_moov_stsd_codecs(data):
+    """Walk ISO BMFF `moov -> trak -> mdia -> minf -> stbl -> stsd` boxes and return
+    dict mapping sample-entry fourcc (e.g. b'avc1', b'mp4a') -> entry payload bytes."""
+    found = {}
+    containers = {b"moov", b"trak", b"mdia", b"minf", b"stbl"}
+
+    def walk(start, end, in_moov):
+        for btype, body_start, body_end in _iter_mp4_boxes(data, start, end):
+            if btype in containers:
+                walk(body_start, body_end, in_moov or (btype == b"moov"))
+            elif in_moov and btype == b"stsd" and body_start + 8 <= body_end:
+                for etype, estart, eend in _iter_mp4_boxes(data, body_start + 8, body_end):
+                    found[etype] = data[estart:eend]
+
+    walk(0, len(data), False)
+    return found
+
+
 def verify_mp4(mp4_path, expected_frames):
     """Verify written MP4 resolution, fps, duration in [34..45]s, bitrate >= 5000 kbps,
-    avc1 + mp4a sample entries, AND decoded audio via Blender VSE mixdown readback!"""
+    ISO BMFF moov/stsd avc1 + mp4a sample entries, AND decoded audio via Audaspace!"""
     if not os.path.isfile(mp4_path):
         tk.fail("aaa_teaser.mp4 was not written: %s" % mp4_path)
     with open(mp4_path, "rb") as fh:
         data = fh.read()
-    avc1 = data.find(b"avc1")
-    mp4a = data.find(b"mp4a")
+    stsd_entries = _find_moov_stsd_codecs(data)
+    has_avc1 = b"avc1" in stsd_entries
+    has_mp4a = b"mp4a" in stsd_entries
     clip = bpy.data.movieclips.load(mp4_path)
     w, h = clip.size
     fps = float(clip.fps)
@@ -205,9 +243,10 @@ def verify_mp4(mp4_path, expected_frames):
     avg_kbps = (len(data) * 8.0) / 1000.0 / max(1e-6, dur_s)
 
     channels = rate = 0
-    if mp4a >= 0:
-        channels = struct.unpack(">H", data[mp4a + 20 : mp4a + 22])[0]
-        rate = struct.unpack(">I", data[mp4a + 28 : mp4a + 32])[0] >> 16
+    if has_mp4a and len(stsd_entries[b"mp4a"]) >= 28:
+        mp4a_body = stsd_entries[b"mp4a"]
+        channels = struct.unpack(">H", mp4a_body[16:18])[0]
+        rate = struct.unpack(">I", mp4a_body[24:28])[0] >> 16
 
     tk.log(
         "PROBE mp4_readback path=%s res=%dx%d fps=%.3f frames=%d duration=%.2fs size_mb=%.2f avg_kbps=%.0f avc1=%s mp4a=%s rate=%d ch=%d"
@@ -220,8 +259,8 @@ def verify_mp4(mp4_path, expected_frames):
             dur_s,
             len(data) / (1024.0 * 1024.0),
             avg_kbps,
-            avc1 >= 0,
-            mp4a >= 0,
+            has_avc1,
+            has_mp4a,
             rate,
             channels,
         )
@@ -234,10 +273,10 @@ def verify_mp4(mp4_path, expected_frames):
         tk.fail("MP4 duration %.2fs outside [34.0, 45.0]s" % dur_s)
     if abs(n_frames - expected_frames) > 2:
         tk.fail("MP4 frames %d != expected %d" % (n_frames, expected_frames))
-    if avg_kbps < 5000.0 and len(data) < 20 * 1024 * 1024:
-        tk.fail("MP4 video bitrate %.0f kbps < 5000 kbps (size %.2f MB)" % (avg_kbps, len(data) / 1048576.0))
-    if avc1 < 0 or mp4a < 0 or rate != 48000:
-        tk.fail("MP4 missing H.264 avc1 or 48kHz AAC mp4a stream")
+    if avg_kbps < 5000.0:
+        tk.fail("MP4 total bitrate %.0f kbps < 5000 kbps (size %.2f MB)" % (avg_kbps, len(data) / 1048576.0))
+    if not has_avc1 or not has_mp4a or rate != 48000 or channels != 2:
+        tk.fail("MP4 moov/stsd missing H.264 avc1 or 48kHz stereo AAC mp4a stream (rate=%d ch=%d)" % (rate, channels))
 
     # Decode the actual muxed AAC audio stream from aaa_teaser.mp4 via Blender's bundled
     # Audaspace (`aud`) C++ decoder to prove non-zero peak & RMS across early/mid/end!
@@ -264,8 +303,8 @@ def verify_mp4(mp4_path, expected_frames):
         "bytes": len(data),
         "size_mb": round(len(data) / (1024.0 * 1024.0), 2),
         "avg_kbps": round(avg_kbps, 1),
-        "avc1": avc1 >= 0,
-        "mp4a": mp4a >= 0,
+        "avc1": has_avc1,
+        "mp4a": has_mp4a,
         "audio_rate": rate,
         "audio_channels": channels,
         "decoded_mp4_audio": mp4_audio_stats,
@@ -298,24 +337,31 @@ def main():
             shot_id = spec["id"]
             n_f = spec["frames"]
             tk.log("=== BUILDING %s (%s, %d frames, global %d..%d) ===" % (shot_id, spec["title"], n_f, g_cursor + 1, g_cursor + n_f))
-            scene, cam, hero_objs, hero_arm, evs = builder(g_cursor)
+            scene, cam, prove_targets, hero_arm, evs = builder(g_cursor)
             all_events.extend(evs)
 
-            # 1. Automated prove_in_frame check at start, mid, and end of EVERY shot!
-            for tag, fl in (("start", 1), ("mid", 1 + (n_f - 1) // 2), ("end", n_f)):
+            # 1. Automated prove_in_frame + raycast occlusion check on every shot target!
+            for tag, fl, subj_objs in prove_targets:
                 scene.frame_set(fl)
-                proof = tk.prove_subject_in_frame(scene, cam, hero_objs, "%s_%s(f=%d)" % (shot_id, tag, g_cursor + fl))
+                proof = tk.prove_subject_in_frame(
+                    scene,
+                    cam,
+                    subj_objs,
+                    "%s_%s(f=%d)" % (shot_id, tag, g_cursor + fl),
+                    check_occlusion=True,
+                )
                 in_frame_proofs.append(proof)
 
-            # 2. Render frames: fast GPU batch `animation=True` for full build, or 5 stills for --strips-only
+            # 2. Render frames: fast GPU batch `animation=True` for full build, or stills for --strips-only
             five_picks = pick_five_frames(n_f)
+            extra_locals = {gf - g_cursor for gf in args.extra_frames if g_cursor < gf <= g_cursor + n_f}
             scene.render.image_settings.media_type = "IMAGE"
             scene.render.image_settings.file_format = "PNG"
             scene.render.image_settings.color_mode = "RGBA"
             scene.render.use_file_extension = True
 
             if args.strips_only:
-                for fl in five_picks:
+                for fl in sorted(set(five_picks) | extra_locals):
                     gf = g_cursor + fl
                     out_png = os.path.join(frames_dir, "frame_%04d.png" % gf)
                     scene.frame_set(fl)
@@ -337,14 +383,15 @@ def main():
                     os.replace(src_png, out_png)
                     postprocess_rendered_frame(out_png, shot_id, fl, logo_rgba, badge_rgba)
 
-            # Verify rendered pixel quality & character skin on all 5 strip keyframes!
-            for fl in five_picks:
+            # Verify rendered pixel quality & character skin on all 5 strip keyframes (+ extra frames)!
+            for fl in sorted(set(five_picks) | extra_locals):
                 gf = g_cursor + fl
                 out_png = os.path.join(frames_dir, "frame_%04d.png" % gf)
                 scene.frame_set(fl)
                 arr = tk.read_png_float(out_png)
                 suv = None
-                if hero_arm is not None and (shot_id != "shot_05" or fl == 1):
+                hero_visible = hero_arm is not None and not (shot_id == "shot_01" and fl < 31) and not (shot_id == "shot_05" and fl > 48)
+                if hero_visible:
                     suv = tk.head_ndc(scene, cam, hero_arm)
                 tk.verify_frame_not_black_and_skin(arr, "%s_f%04d" % (shot_id, gf), skin_uv=suv)
 

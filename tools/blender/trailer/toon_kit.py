@@ -756,6 +756,19 @@ def load_glb(rel_path, label, loc=(0.0, 0.0, 0.0), yaw_deg=0.0, outline_thicknes
             if bn.startswith("Glyph_") and bn.endswith("_Mesh") and bn[:-5] not in keep:
                 o.hide_render = True
                 o.hide_viewport = True
+    elif stem.startswith("tp_runway_"):
+        # Strip baked tiny colored approach-light confetti polygons (< 0.85 m^2) while keeping
+        # 100% of the asphalt slabs and large white runway threshold/centerline markings!
+        for o in new_objs:
+            if o.type == "MESH":
+                bm = bmesh.new()
+                bm.from_mesh(o.data)
+                tiny = [f for f in bm.faces if f.calc_area() < 0.85]
+                if tiny:
+                    bmesh.ops.delete(bm, geom=tiny, context="FACES")
+                    bm.to_mesh(o.data)
+                    o.data.update()
+                bm.free()
 
     root = bpy.data.objects.new("ROOT_" + label, None)
     bpy.context.scene.collection.objects.link(root)
@@ -870,20 +883,39 @@ def add_pose_override_track(arm, name, bone_keyframes, blend_type="ADD"):
     return strip
 
 
-def pose_arm_towing_roller(arm, f_start, f_end, hand="R"):
-    """Pose the Hero's pulling arm (`Arm.R` / `ForeArm.R`) reaching naturally back and down
-    so his hand visibly grips the yellow roller suitcase handle instead of pumping empty air!"""
-    b_arm = "Arm." + hand
-    b_fore = "ForeArm." + hand
-    add_pose_override_track(
-        arm,
-        "TowGrip_" + hand + "_%d" % f_start,
-        {
-            b_arm: [(f_start, (-36.0, 8.0, -14.0)), (f_end, (-36.0, 8.0, -14.0))],
-            b_fore: [(f_start, (18.0, 0.0, 0.0)), (f_end, (18.0, 0.0, 0.0))],
-        },
-        blend_type="REPLACE",
-    )
+def bind_hand_ik_to_roller(arm, pull_top_obj, active_ranges, hand="R"):
+    """Attach a 2-bone IK constraint on `Forearm.<hand>` targeting `pull_top_obj` so the
+    character's wrist/palm locks directly onto the roller suitcase grip bar (0.00 m gap!).
+    `active_ranges`: list of (f_start, f_end) where IK influence = 1.0 (0.0 outside)."""
+    pb = arm.pose.bones.get("Forearm." + hand)
+    if pb is None:
+        fail("bind_hand_ik_to_roller: bone Forearm.%s not found on %s" % (hand, arm.name))
+    ik = pb.constraints.new("IK")
+    ik.name = "GripRollerIK_" + hand
+    ik.target = pull_top_obj
+    ik.chain_count = 2
+    if len(active_ranges) == 1 and active_ranges[0][0] <= 1:
+        ik.influence = 1.0
+        ik.keyframe_insert(data_path="influence", frame=1)
+        ik.keyframe_insert(data_path="influence", frame=active_ranges[0][1])
+        if active_ranges[0][1] < bpy.context.scene.frame_end:
+            ik.influence = 0.0
+            ik.keyframe_insert(data_path="influence", frame=active_ranges[0][1] + 4)
+        return ik
+
+    ik.influence = 0.0
+    ik.keyframe_insert(data_path="influence", frame=1)
+    for f0, f1 in active_ranges:
+        if f0 > 2:
+            ik.influence = 0.0
+            ik.keyframe_insert(data_path="influence", frame=max(1, f0 - 3))
+        ik.influence = 1.0
+        ik.keyframe_insert(data_path="influence", frame=f0)
+        ik.keyframe_insert(data_path="influence", frame=f1)
+        if f1 < bpy.context.scene.frame_end:
+            ik.influence = 0.0
+            ik.keyframe_insert(data_path="influence", frame=f1 + 3)
+    return ik
 
 
 def load_roller_bag(label, extended=True, loc=(0.0, 0.0, 0.0), yaw_deg=0.0, bag_tint=None, parent=None):
@@ -904,9 +936,9 @@ def set_roller_handle(by_n, extended=True, frame=None):
     if reach is None or top is None:
         return
     if extended:
-        # Stretch rod 24x (0.48 m) so Pull_Top meets the Hero's lowered hand (~0.76m height)!
-        reach.scale = (1.0, 24.0, 1.0)
-        top.location = (0.0, -0.22 - 0.48, 0.03)
+        # Stretch rod 37x (0.74 m -> 0.96 m from case centre) so Pull_Top sits at natural hand height!
+        reach.scale = (1.0, 37.0, 1.0)
+        top.location = (0.0, -0.22 - 0.74, 0.03)
     else:
         reach.scale = (1.0, 1.0, 1.0)
         top.location = (0.0, -0.24, 0.03)
@@ -1205,11 +1237,17 @@ def ensure_branding_pngs(ui_dir):
     os.makedirs(ui_dir, exist_ok=True)
     logo_path = os.path.join(ui_dir, "logo_a_sticker.png")
     badge_path = os.path.join(ui_dir, "wishlist_badge.png")
-    if os.path.isfile(logo_path) and os.path.isfile(badge_path):
-        log("PROBE brand reusing existing %s and %s" % (os.path.basename(logo_path), os.path.basename(badge_path)))
+    logo_script = os.path.join(REPO, "tools", "blender", "logo", "build_logos.py")
+    src_mtime = max(os.path.getmtime(logo_script), os.path.getmtime(__file__))
+    if (
+        os.path.isfile(logo_path)
+        and os.path.isfile(badge_path)
+        and os.path.getmtime(logo_path) >= src_mtime
+        and os.path.getmtime(badge_path) >= src_mtime
+    ):
+        log("PROBE brand reusing fresh %s and %s" % (os.path.basename(logo_path), os.path.basename(badge_path)))
         return logo_path, badge_path
 
-    logo_script = os.path.join(REPO, "tools", "blender", "logo", "build_logos.py")
     with open(logo_script, "r", encoding="utf-8") as fh:
         src = fh.read()
     ns = {"__file__": logo_script, "__name__": "build_logos_lib"}
@@ -1295,7 +1333,41 @@ def subject_world_points(objs):
     return np.concatenate(pts, axis=0)
 
 
-def prove_subject_in_frame(scene, cam, objs, label, lo_bound=IN_FRAME_LO, hi_bound=IN_FRAME_HI):
+def _ray_hits_subject_unoccluded(scene, cam, target_pt, own_names):
+    """Cast a ray from `cam` toward `target_pt`, stepping past transparent glass/vapor
+    surfaces or hidden/tiny-scaled objects, and return (ok, blocker_name)."""
+    dg = bpy.context.evaluated_depsgraph_get()
+    origin = cam.matrix_world.translation.copy()
+    goal = Vector(target_pt)
+    for _ in range(8):
+        vec = goal - origin
+        dist = vec.length
+        if dist < 0.05:
+            return True, None
+        direction = vec / dist
+        hit, loc, _nrm, _idx, ob, _mw = scene.ray_cast(dg, origin, direction, distance=dist - 0.04)
+        if not hit or ob is None:
+            return True, None
+        orig_ob = ob.original if hasattr(ob, "original") and ob.original is not None else ob
+        if orig_ob.name in own_names:
+            return True, None
+        # Step past transparent glass, vapor ribbons, or scaled-zero snap-hidden meshes
+        mnames = [m.name for m in getattr(orig_ob.data, "materials", []) if m]
+        wscale = ob.matrix_world.to_scale()
+        is_transp = orig_ob.hide_render or min(abs(wscale.x), abs(wscale.y), abs(wscale.z)) < 0.02 or any(
+            ("Glass" in mn or "SOFT_VAPOR" in mn) for mn in mnames
+        )
+        if is_transp:
+            origin = loc + direction * 0.03
+            continue
+        # If hit is within 0.38m of target_pt (e.g. character's own hand/collar/prop), count as clear
+        if (loc - goal).length < 0.38:
+            return True, None
+        return False, orig_ob.name
+    return True, None
+
+
+def prove_subject_in_frame(scene, cam, objs, label, lo_bound=IN_FRAME_LO, hi_bound=IN_FRAME_HI, check_occlusion=True):
     bpy.context.view_layer.update()
     pts = subject_world_points(objs)
     lo = pts.min(axis=0)
@@ -1315,9 +1387,26 @@ def prove_subject_in_frame(scene, cam, objs, label, lo_bound=IN_FRAME_LO, hi_bou
     c_ndc = world_to_camera_view(scene, cam, Vector(tuple(float(v) for v in center)))
     u_min, u_max = min(us), max(us)
     v_min, v_max = min(vs), max(vs)
+
+    occ_ok = True
+    blocker = None
+    if check_occlusion:
+        own_names = {o.name for o in objs}
+        # Include any child props (e.g. parented roller bag) under the same root
+        roots = {o.parent for o in objs if o.parent is not None}
+        for o in scene.objects:
+            if o.parent in roots or (o.parent and o.parent.parent in roots):
+                own_names.add(o.name)
+        chest_pt = (float(center[0]), float(center[1]), float(lo[2] + 0.62 * span[2]))
+        head_pt = (float(center[0]), float(center[1]), float(lo[2] + 0.84 * span[2]))
+        ok_c, b_c = _ray_hits_subject_unoccluded(scene, cam, chest_pt, own_names)
+        ok_h, b_h = _ray_hits_subject_unoccluded(scene, cam, head_pt, own_names)
+        occ_ok = ok_c or ok_h
+        blocker = b_h or b_c
+
     log(
-        "PROBE in_frame %s center=(%.3f,%.3f) depth=%.2fm core_u=[%.3f,%.3f] core_v=[%.3f,%.3f]"
-        % (label, c_ndc.x, c_ndc.y, c_ndc.z, u_min, u_max, v_min, v_max)
+        "PROBE in_frame %s center=(%.3f,%.3f) depth=%.2fm core_u=[%.3f,%.3f] core_v=[%.3f,%.3f] unoccluded=%s"
+        % (label, c_ndc.x, c_ndc.y, c_ndc.z, u_min, u_max, v_min, v_max, occ_ok)
     )
     if min(zs) <= cam.data.clip_start:
         fail("%s: hero subject behind camera (min_z=%.3f)" % (label, min(zs)))
@@ -1328,12 +1417,15 @@ def prove_subject_in_frame(scene, cam, objs, label, lo_bound=IN_FRAME_LO, hi_bou
             "%s: hero core box u=[%.3f,%.3f] v=[%.3f,%.3f] leaves [%.2f..%.2f]"
             % (label, u_min, u_max, v_min, v_max, lo_bound, hi_bound)
         )
+    if not occ_ok:
+        fail("%s: hero subject is occluded from camera by %r" % (label, blocker))
     return {
         "label": label,
         "center": [round(float(c_ndc.x), 4), round(float(c_ndc.y), 4)],
         "u": [round(u_min, 4), round(u_max, 4)],
         "v": [round(v_min, 4), round(v_max, 4)],
         "depth_m": round(float(c_ndc.z), 2),
+        "unoccluded": occ_ok,
     }
 
 

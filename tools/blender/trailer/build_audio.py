@@ -9,20 +9,12 @@ import json
 import math
 import os
 import sys
-import urllib.request
 import wave
 
 import numpy as np
 
 SAMPLE_RATE = 48000
 FPS = 30
-
-# Optional scriptable CC0 1.0 Public Domain audio sources tried first (cached locally if reachable);
-# when offline or unavailable, our full multi-voice physical-modeled acoustic-jazz/marimba score
-# provides 100% deterministic, beat-locked musical accompaniment with zero manual downloads.
-CC0_CANDIDATE_URLS = [
-    "https://upload.wikimedia.org/wikipedia/commons/transcoded/6/65/Acoustic_guitar_improvisation.ogg/Acoustic_guitar_improvisation.ogg.mp3",
-]
 
 
 def midi_to_hz(m):
@@ -293,30 +285,39 @@ def foley_pa_chime():
     return out
 
 
-def foley_twin_prop(dur_s, rev_up=True, rng=None):
-    """Authentic twin-turboprop blade chop + turbine harmonic whine."""
+def foley_jet_turbofan(dur_s, rev_up=True, rng=None):
+    """High-bypass commercial turbofan spool whine (N1/N2 harmonics) + broadband jet roar
+    matching the sleek fixed-wing Gotta Air tp_plane_05a jet!"""
     if rng is None:
-        rng = np.random.default_rng(104)
+        rng = np.random.default_rng(105)
     n = int(SAMPLE_RATE * dur_s)
     t = np.arange(n) / SAMPLE_RATE
     if rev_up:
-        ramp = np.clip(t / max(0.5, dur_s * 0.55), 0.0, 1.0)
-        blade_hz = 64.0 + 48.0 * (ramp ** 1.3)
-        gain_env = (0.45 + 0.55 * ramp) * np.minimum(1.0, (dur_s - t) / 0.35)
+        ramp = np.clip(t / max(0.5, dur_s * 0.58), 0.0, 1.0)
+        n1_hz = 1120.0 + 1580.0 * (ramp ** 1.15)
+        n2_hz = 2340.0 + 2650.0 * (ramp ** 1.15)
+        low_hz = 95.0 + 85.0 * ramp
+        gain_env = (0.38 + 0.62 * ramp) * np.minimum(1.0, (dur_s - t) / 0.35)
     else:
-        blade_hz = np.full(n, 58.0)
-        gain_env = np.minimum(1.0, t / 0.15) * np.minimum(1.0, (dur_s - t) / 0.15) * 0.45
+        n1_hz = np.full(n, 1080.0)
+        n2_hz = np.full(n, 2240.0)
+        low_hz = np.full(n, 92.0)
+        gain_env = np.minimum(1.0, t / 0.15) * np.minimum(1.0, (dur_s - t) / 0.15) * 0.36
 
-    ph1 = 2 * math.pi * np.cumsum(blade_hz) / SAMPLE_RATE
-    # Second engine slightly detuned for lush twin-prop beating!
-    ph2 = 2 * math.pi * np.cumsum(blade_hz * 1.012) / SAMPLE_RATE
-    prop = (
-        0.50 * np.sin(ph1) + 0.28 * np.sin(2 * ph1) + 0.14 * np.sin(3 * ph1)
-        + 0.50 * np.sin(ph2) + 0.28 * np.sin(2 * ph2) + 0.14 * np.sin(3 * ph2)
-    ) * 0.11
-    air = rng.normal(0, 1, n)
-    air = (0.6 * air + 0.4 * np.roll(air, 1)) * 0.035
-    return (prop + air) * gain_env
+    ph1 = 2 * math.pi * np.cumsum(n1_hz) / SAMPLE_RATE
+    ph2 = 2 * math.pi * np.cumsum(n2_hz) / SAMPLE_RATE
+    ph_lo = 2 * math.pi * np.cumsum(low_hz) / SAMPLE_RATE
+    spool = 0.045 * np.sin(ph1) + 0.024 * np.sin(ph2) + 0.075 * np.sin(ph_lo)
+
+    # Smooth shaped broadband jet exhaust roar
+    raw_noise = rng.normal(0.0, 1.0, n)
+    roar = (
+        0.38 * raw_noise
+        + 0.32 * np.roll(raw_noise, 1)
+        + 0.20 * np.roll(raw_noise, 2)
+        + 0.10 * np.roll(raw_noise, 3)
+    ) * (0.11 if rev_up else 0.05)
+    return (spool + roar) * gain_env
 
 
 def foley_logo_slam(rng):
@@ -354,27 +355,6 @@ def _add_stereo_reverb(mix, wet=0.14):
             src = mix[:-d, ::-1] if swap else mix[:-d]
             rev[d:] += src * g
     return out + rev * wet
-
-
-def try_fetch_cc0_bed(audio_dir):
-    """Attempt a quick scripted download of a CC0 1.0 acoustic file if reachable (cached)."""
-    os.makedirs(audio_dir, exist_ok=True)
-    cached = os.path.join(audio_dir, "cc0_acoustic.mp3")
-    if os.path.isfile(cached) and os.path.getsize(cached) > 4096:
-        return cached
-    for url in CC0_CANDIDATE_URLS:
-        try:
-            req = urllib.request.Request(url, headers={"User-Agent": "GottaMakeMyFlight-TrailerBuilder/1.0"})
-            with urllib.request.urlopen(req, timeout=3.5) as resp:
-                data = resp.read()
-                if len(data) > 4096:
-                    with open(cached, "wb") as fh:
-                        fh.write(data)
-                    print("PROBE audio fetched CC0 reference: %s (%d bytes)" % (url, len(data)), flush=True)
-                    return cached
-        except Exception as exc:
-            print("PROBE audio CC0 URL unavailable (%s), using self-contained Python acoustic-jazz score" % type(exc).__name__, flush=True)
-    return None
 
 
 def build_score(mix, total_s, rng):
@@ -452,8 +432,8 @@ def build_score(mix, total_s, rng):
     soar = synth_warm_brass_chord([55, 62, 66, 69, 74], dur=2.9, vel=1.05, swell=True)
     _add_clip(mix, _pan(soar, 0.0), 31.55)
 
-    # Shot 6 (34.00 .. 39.50s): Heroic Gmaj9(#11) Big-Band Button on Logo Slam (f=1038 -> 34.60s) + Cozy Tail!
-    slam_t = 1038.0 / FPS
+    # Shot 6 (34.00 .. 39.50s): Heroic Gmaj9(#11) Big-Band Button on Logo Slam (f=1038) + Cozy Tail!
+    slam_t = (1038 - 1) / float(FPS)
     btn = synth_warm_brass_chord([43, 55, 59, 62, 66, 69, 73, 74], dur=3.8, vel=1.18, swell=False)
     _add_clip(mix, _pan(btn, 0.0), slam_t)
     # Sparkling marimba flourish up Gmaj9 arpeggio right on logo reveal!
@@ -470,10 +450,9 @@ def build_trailer_audio(out_wav_path, events, total_frames=1185):
     mix = np.zeros((n_samples, 2), dtype=np.float64)
     rng = np.random.default_rng(20261118)
 
-    try_fetch_cc0_bed(os.path.dirname(out_wav_path))
     build_score(mix, total_s, rng)
 
-    # Layer every frame-locked stereo foley event!
+    # Layer every frame-locked stereo foley event (fail loud on any unhandled event type per P5!)
     step_count = 0
     for ev in events:
         kind = ev["type"]
@@ -487,7 +466,6 @@ def build_trailer_audio(out_wav_path, events, total_frames=1185):
         elif kind == "board_flip":
             _add_clip(mix, _pan(foley_board_flips(ev.get("count", 9)), 0.05), t0, gain=1.15)
         elif kind == "startle_sting":
-            # Comedic Bdim7 marimba/brass gasp sting!
             st = synth_warm_brass_chord([59, 62, 65, 68], dur=0.45, vel=0.95, swell=False)
             _add_clip(mix, _pan(st, 0.0), t0, gain=0.90)
         elif kind == "pop":
@@ -526,30 +504,41 @@ def build_trailer_audio(out_wav_path, events, total_frames=1185):
             wt = np.arange(n) / SAMPLE_RATE
             wh = rng.normal(0, 1, n) * np.exp(-((wt - 0.16) ** 2) / (2 * 0.07 ** 2)) * 0.09
             _add_clip(mix, _pan(wh, 0.0), t0)
-        elif kind == "prop_idle":
+        elif kind in ("jet_idle", "prop_idle"):
             dur_s = ev.get("dur", 60) / float(FPS)
-            _add_clip(mix, _pan(foley_twin_prop(dur_s, rev_up=False, rng=rng), -0.12), t0, gain=1.0)
+            _add_clip(mix, _pan(foley_jet_turbofan(dur_s, rev_up=False, rng=rng), -0.12), t0, gain=1.0)
         elif kind == "step_leap":
             _add_clip(mix, _pan(foley_pop(5), 0.18), t0, gain=0.85)
         elif kind == "door_seal":
             _add_clip(mix, _pan(foley_car_door(rng), -0.05), t0, gain=1.25)
-        elif kind == "prop_rev":
+        elif kind in ("jet_spool", "prop_rev"):
             dur_s = ev.get("dur", 120) / float(FPS)
-            raw = foley_twin_prop(dur_s, rev_up=True, rng=rng)
-            # Dynamic stereo flyby pan across the runway!
+            raw = foley_jet_turbofan(dur_s, rev_up=True, rng=rng)
             p_curve = np.linspace(0.28, -0.32, len(raw))
             ang = (p_curve + 1.0) * (math.pi / 4.0)
-            st_prop = np.column_stack((raw * np.cos(ang), raw * np.sin(ang)))
-            _add_clip(mix, st_prop, t0, gain=1.22)
+            st_jet = np.column_stack((raw * np.cos(ang), raw * np.sin(ang)))
+            _add_clip(mix, st_jet, t0, gain=1.25)
         elif kind == "takeoff_whoosh":
             n = int(SAMPLE_RATE * 1.4)
             wt = np.arange(n) / SAMPLE_RATE
             wh = (0.6 * rng.normal(0, 1, n) + 0.4 * np.roll(rng.normal(0, 1, n), 2)) * np.exp(-((wt - 0.55) ** 2) / (2 * 0.28 ** 2)) * 0.14
             _add_clip(mix, _pan(wh, -0.10), t0)
+        elif kind == "sky_wind":
+            dur_s = ev.get("dur", 165) / float(FPS)
+            n = int(SAMPLE_RATE * dur_s)
+            wt = np.arange(n) / SAMPLE_RATE
+            air = rng.normal(0.0, 1.0, n)
+            # Soft lowpass high-altitude sky breeze + distant cruising jet hum
+            breeze = (0.45 * air + 0.35 * np.roll(air, 1) + 0.20 * np.roll(air, 2)) * 0.024
+            hum = np.sin(2 * math.pi * 135.0 * wt) * 0.018
+            env = np.minimum(1.0, wt / 0.25) * np.minimum(1.0, (dur_s - wt) / 0.8)
+            _add_clip(mix, _pan((breeze + hum) * env, 0.0), t0, gain=1.0)
         elif kind == "logo_slam":
             _add_clip(mix, _pan(foley_logo_slam(rng), 0.0), t0, gain=1.20)
         elif kind == "badge_pop":
             _add_clip(mix, _pan(foley_pop(8), 0.0), t0, gain=1.05)
+        else:
+            raise ValueError(f"Unhandled audio event: {kind}")
 
     # Cozy stereo room glue + soft-knee master limiter + clean 1.2s tail fadeout
     mix = _add_stereo_reverb(mix, wet=0.14)

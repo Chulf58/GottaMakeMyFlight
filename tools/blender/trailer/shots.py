@@ -60,36 +60,35 @@ def _spin_jet_fans(scene, plane_root, plane_by_name, f_end, deg_per_frame=48.0):
         piv.keyframe_insert(data_path="rotation_euler", frame=f_end)
 
 
-def _attach_towed_roller(hero_root, hero_arm, label, f_tow_ranges, stand_ranges=None):
-    """Parent yellow CarryRoller directly to `hero_root` so Hero's posed right hand (`Arm.R`)
-    visibly grips `Pull_Top` while running, and stands it neatly beside him when paused!"""
-    for f0, f1 in f_tow_ranges:
-        tk.pose_arm_towing_roller(hero_arm, f0, f1, hand="R")
-
-    # In hero_root local space: -Y is forward, -X is Right hand (`x=-0.24`), +Y is behind heels
+def _attach_towed_roller(hero_root, hero_arm, label, f_ik_ranges, stand_ranges=None):
+    """Parent yellow CarryRoller directly to `hero_root` and lock `Forearm.R` onto `Pull_Top`
+    via 2-bone IK so Hero's right palm grips the handle bar in both upright and towed poses."""
     bag_root, _, bag_by_n = tk.load_roller_bag(
         label,
         extended=True,
-        loc=(-0.24, 0.44, 0.18),
+        loc=(-0.27, 0.50, 0.20),
         yaw_deg=0.0,
         bag_tint=tk.YELLOW,
         parent=hero_root,
     )
     bag_root.rotation_mode = "XYZ"
-    bag_root.rotation_euler = (math.radians(-42.0), 0.0, 0.0)
+    bag_root.rotation_euler = (math.radians(-54.0), 0.0, 0.0)
 
     if stand_ranges:
         pos_keys = []
         rot_keys = []
         for f0, f1, mode in stand_ranges:
             if mode == "stand":
-                pos_keys.extend([(f0, (-0.34, 0.08, 0.22)), (f1, (-0.34, 0.08, 0.22))])
+                pos_keys.extend([(f0, (-0.27, -0.04, 0.20)), (f1, (-0.27, -0.04, 0.20))])
                 rot_keys.extend([(f0, (-86.0, 0.0, 0.0)), (f1, (-86.0, 0.0, 0.0))])
             else:
-                pos_keys.extend([(f0, (-0.24, 0.44, 0.18)), (f1, (-0.24, 0.44, 0.18))])
-                rot_keys.extend([(f0, (-42.0, 0.0, 0.0)), (f1, (-42.0, 0.0, 0.0))])
+                pos_keys.extend([(f0, (-0.27, 0.50, 0.20)), (f1, (-0.27, 0.50, 0.20))])
+                rot_keys.extend([(f0, (-54.0, 0.0, 0.0)), (f1, (-54.0, 0.0, 0.0))])
         tk.key_pos(bag_root, pos_keys)
         tk.key_rot_deg(bag_root, rot_keys)
+
+    if f_ik_ranges and "Pull_Top" in bag_by_n:
+        tk.bind_hand_ik_to_roller(hero_arm, bag_by_n["Pull_Top"], f_ik_ranges, hand="R")
     return bag_root, bag_by_n
 
 
@@ -102,24 +101,34 @@ def _build_departure_board(scene, loc, flip_frame):
     deep_m = tk.emissive_mat("board_screen", (0.05, 0.07, 0.14), strength=1.0)
     lime_m = tk.emissive_mat("board_lime", tk.GOTTA_LIME, strength=1.25)
     cream_m = tk.emissive_mat("board_cream", tk.CREAM, strength=1.20)
-    amber_m = tk.emissive_mat("board_amber", tk.AMBER, strength=1.35)
-    coral_m = tk.emissive_mat("board_coral", tk.ALERT_CORAL, strength=1.65)
+    amber_m = tk.emissive_mat("board_amber", tk.AMBER, strength=1.30)
+    coral_m = tk.emissive_mat("board_coral", tk.ALERT_CORAL, strength=1.35)
 
     tk.make_box(scene, "Board_Case", (4.60, 0.28, 1.48), (0.0, 0.0, 0.0), navy_m, bevel=0.05, parent=root, outline=0.006)
     tk.make_box(scene, "Board_HeaderBar", (4.42, 0.06, 0.22), (0.0, -0.13, 0.52), lime_m, bevel=0.02, parent=root)
     tk.make_box(scene, "Board_Screen", (4.42, 0.04, 1.08), (0.0, -0.13, -0.10), deep_m, bevel=0.02, parent=root)
 
-    t_top = tk.make_nunito_text_3d(scene, "GOTTA AIR 101 · OSLO", 0.31, 0.014, cream_m, extrude=0.02, parent=root)
+    t_top = tk.make_nunito_text_3d(scene, "GOTTA AIR 101 · OSLO", 0.30, 0.009, cream_m, extrude=0.02, parent=root)
     t_top.rotation_euler = (math.radians(90), 0.0, 0.0)
     t_top.location = (0.0, -0.165, 0.16)
 
-    flap_boarding = tk.make_nunito_text_3d(scene, "GATE C · BOARDING", 0.34, 0.016, amber_m, extrude=0.02, parent=root)
+    flap_boarding = tk.make_nunito_text_3d(scene, "GATE C · BOARDING", 0.33, 0.010, amber_m, extrude=0.02, parent=root)
     flap_boarding.rotation_euler = (math.radians(90), 0.0, 0.0)
     flap_boarding.location = (0.0, -0.165, -0.34)
 
-    flap_final = tk.make_nunito_text_3d(scene, "FINAL CALL!", 0.42, 0.020, coral_m, extrude=0.025, parent=root)
-    flap_final.rotation_euler = (math.radians(90), 0.0, 0.0)
+    # Build 'FINAL CALL!' with light 0.009 SDF weight + explicit separated '!' stem & dot (>= 0.08m gap!)
+    flap_final = bpy.data.objects.new("FlapFinal_Holder", None)
     flap_final.location = (0.0, -0.175, -0.35)
+    flap_final.parent = root
+    scene.collection.objects.link(flap_final)
+
+    fc_words = tk.make_nunito_text_3d(scene, "FINAL CALL", 0.40, 0.009, coral_m, extrude=0.025, parent=flap_final)
+    fc_words.rotation_euler = (math.radians(90), 0.0, 0.0)
+    fc_words.location = (-0.11, 0.0, 0.0)
+    half_w = max(v.co.x for v in fc_words.data.vertices)
+    bang_x = -0.11 + half_w + 0.13
+    tk.make_box(scene, "FinalBang_Stem", (0.056, 0.028, 0.185), (bang_x, 0.0, 0.074), coral_m, bevel=0.012, parent=flap_final)
+    tk.make_box(scene, "FinalBang_Dot", (0.058, 0.028, 0.056), (bang_x, 0.0, -0.126), coral_m, bevel=0.012, parent=flap_final)
 
     flap_boarding.scale = (1.0, 1.0, 1.0)
     flap_boarding.keyframe_insert(data_path="scale", frame=1)
@@ -188,9 +197,9 @@ def build_shot_01(g0):
     tk.set_nla_clips(bg1_a, bg1_acts, [("walk", 1, N, 1.0)])
     tk.key_pos(bg1_r, [(1, (22.4, -20.1, CURB_Z)), (N, (18.2, -20.1, CURB_Z))])
 
-    bg2_r, bg2_a, _, bg2_acts = tk.load_character("tcp_male_character_08", "CurbPax2", cloth_tint=(0.45, 0.58, 0.32), loc=(9.2, -19.8, CURB_Z), yaw_deg=90.0)
+    bg2_r, bg2_a, _, bg2_acts = tk.load_character("tcp_male_character_08", "CurbPax2", cloth_tint=(0.45, 0.58, 0.32), loc=(4.2, -19.1, CURB_Z), yaw_deg=90.0)
     tk.set_nla_clips(bg2_a, bg2_acts, [("walk", 1, N, 0.95)])
-    tk.key_pos(bg2_r, [(1, (8.2, -19.8, CURB_Z)), (N, (11.6, -19.8, CURB_Z))])
+    tk.key_pos(bg2_r, [(1, (4.2, -19.1, CURB_Z)), (N, (8.8, -19.1, CURB_Z))])
 
     flip_f = 58
     board_root = _build_departure_board(scene, (16.15, -19.95, 3.22), flip_frame=flip_f)
@@ -202,30 +211,51 @@ def build_shot_01(g0):
         tk.key_pos(door6, [(1, dloc), (92, dloc), (118, dloc + Vector((1.55, 0.0, 0.0))), (N, dloc + Vector((1.55, 0.0, 0.0)))])
 
     # Yellow Hero Taxi riding flush ON the z=0.105 asphalt road!
-    taxi_root, _, taxi_by_n, _ = tk.load_glb("game/assets/vehicles/tp_taxi_01a.glb", "HeroTaxi", loc=(7.2, -22.1, ROAD_Z), yaw_deg=90.0, outline_thickness=0.003)
-    tk.key_pos(taxi_root, [
-        (1, (7.2, -22.1, ROAD_Z)),
-        (26, (12.4, -22.1, ROAD_Z)),
-        (32, (12.75, -22.1, ROAD_Z)),
-        (N, (12.75, -22.1, ROAD_Z)),
-    ])
-    tk.key_rot_deg(taxi_root, [
-        (1, (0.0, 0.0, 90.0)),
-        (22, (0.0, 0.0, 90.0)),
-        (28, (2.6, 0.0, 90.0)),
-        (36, (0.0, 0.0, 90.0)),
-    ])
+    taxi_root, taxi_objs, taxi_by_n, _ = tk.load_glb("game/assets/vehicles/tp_taxi_01a.glb", "HeroTaxi", loc=(6.8, -22.1, ROAD_Z), yaw_deg=90.0, outline_thickness=0.003)
+    bpy.context.view_layer.update()
+    taxi_inv = taxi_root.matrix_world.inverted()
     for wname in ("TP_Taxi_01A_Wheel_F.L", "TP_Taxi_01A_Wheel_F.R", "TP_Taxi_01A_Wheel_R.L", "TP_Taxi_01A_Wheel_R.R"):
         w = taxi_by_n.get(wname)
         if w is not None:
-            tk.key_rot_deg(w, [(1, (0.0, 0.0, 0.0)), (30, (-540.0, 0.0, 0.0)), (N, (-540.0, 0.0, 0.0))])
+            wmw = w.matrix_world.copy()
+            wpiv = bpy.data.objects.new("TaxiWheelPiv_" + wname, None)
+            scene.collection.objects.link(wpiv)
+            wpiv.parent = taxi_root
+            wpiv.location = taxi_inv @ wmw.translation
+            wpiv.rotation_mode = "XYZ"
+            wpiv.rotation_euler = (0.0, 0.0, 0.0)
+            bpy.context.view_layer.update()
+            w.parent = wpiv
+            w.matrix_world = wmw
+            # In taxi_root local space (yaw=90), local +X is world +Y (axle); +540 deg rolls forward along +X!
+            tk.key_rot_deg(wpiv, [(1, (0.0, 0.0, 0.0)), (29, (540.0, 0.0, 0.0)), (N, (540.0, 0.0, 0.0))])
+    tk.key_pos(taxi_root, [
+        (1, (6.8, -22.1, ROAD_Z)),
+        (24, (11.25, -22.1, ROAD_Z)),
+        (29, (11.55, -22.1, ROAD_Z)),
+        (N, (11.55, -22.1, ROAD_Z)),
+    ])
+    tk.key_rot_deg(taxi_root, [
+        (1, (0.0, 0.0, 90.0)),
+        (21, (0.0, 0.0, 90.0)),
+        (26, (2.4, 0.0, 90.0)),
+        (33, (0.0, 0.0, 90.0)),
+    ])
     rdoor = taxi_by_n.get("TP_Taxi_01A_Door_R.L")
     if rdoor is not None:
-        tk.key_rot_deg(rdoor, [(1, (0.0, 0.0, 0.0)), (27, (0.0, 0.0, 0.0)), (37, (0.0, 0.0, -62.0)), (98, (0.0, 0.0, -62.0)), (112, (0.0, 0.0, 0.0))])
+        # Preserve glTF upright rx=90.0 deg while swinging rz=-62.0 deg outward toward the curb!
+        tk.key_rot_deg(rdoor, [
+            (1, (90.0, 0.0, 0.0)),
+            (25, (90.0, 0.0, 0.0)),
+            (33, (90.0, 0.0, -62.0)),
+            (96, (90.0, 0.0, -62.0)),
+            (110, (90.0, 0.0, 0.0)),
+        ])
 
-    # Hero passenger + attached gripped yellow roller suitcase!
+    # Hero passenger stays hidden INSIDE the cab until the taxi brakes and opens its curb door (~f=27),
+    # then steps directly up onto the curb (y=-20.0, well clear of the front bumper!) with bag gripped!
     hero_root, hero_arm, hero_objs, hero_acts = tk.load_character(
-        "tcp_male_character_01", "Hero", cloth_tint=tk.HERO_CORAL, loc=(8.8, -21.4, ROAD_Z), yaw_deg=90.0
+        "tcp_male_character_01", "Hero", cloth_tint=tk.HERO_CORAL, loc=(11.15, -21.15, ROAD_Z), yaw_deg=70.0
     )
     tk.set_nla_clips(hero_arm, hero_acts, [
         ("run", 1, 46, 1.15),
@@ -240,20 +270,28 @@ def build_shot_01(g0):
         hero_root,
         hero_arm,
         "HeroRoller01",
-        f_tow_ranges=[(98, N)],
-        stand_ranges=[(1, 42, "tow"), (46, 96, "stand"), (102, N, "tow")],
+        f_ik_ranges=[(28, N)],
+        stand_ranges=[(1, 43, "tow"), (47, 94, "stand"), (99, N, "tow")],
     )
+    hero_root.scale = (0.0001, 0.0001, 0.0001)
+    hero_root.keyframe_insert(data_path="scale", frame=1)
+    hero_root.keyframe_insert(data_path="scale", frame=26)
+    hero_root.scale = (1.0, 1.0, 1.0)
+    hero_root.keyframe_insert(data_path="scale", frame=31)
+    hero_root.keyframe_insert(data_path="scale", frame=N)
+
     tk.key_pos(hero_root, [
-        (1, (8.8, -21.4, ROAD_Z)),
-        (26, (13.4, -21.3, ROAD_Z)),
-        (36, (15.35, -20.45, CURB_Z)),
-        (46, (15.65, -20.15, CURB_Z)),
-        (96, (15.65, -20.15, CURB_Z)),
+        (1, (11.05, -21.55, ROAD_Z)),
+        (26, (11.15, -21.05, ROAD_Z)),
+        (33, (12.85, -20.02, CURB_Z)),
+        (46, (15.65, -20.05, CURB_Z)),
+        (96, (15.65, -20.05, CURB_Z)),
         (N, (16.00, -17.35, CURB_Z)),
     ])
     tk.key_rot_deg(hero_root, [
-        (1, (0.0, 0.0, 90.0)),
-        (34, (0.0, 0.0, 45.0)),
+        (1, (0.0, 0.0, 75.0)),
+        (27, (0.0, 0.0, 62.0)),
+        (38, (0.0, 0.0, 88.0)),
         (48, (0.0, 0.0, 175.0)),
         (96, (0.0, 0.0, 178.0)),
         (N, (0.0, 0.0, 180.0)),
@@ -261,31 +299,39 @@ def build_shot_01(g0):
 
     cam, target = tk.make_camera(scene, "Shot01Cam", lens=34.0, fstop=2.8)
     tk.key_pos(cam, [
-        (1, (11.2, -28.8, 1.72)),
-        (44, (16.8, -28.0, 1.75)),
-        (100, (16.7, -27.4, 1.75)),
+        (1, (12.8, -26.8, 1.70)),
+        (34, (16.4, -27.4, 1.75)),
+        (100, (16.7, -27.2, 1.75)),
         (N, (16.5, -26.4, 1.78)),
     ])
     tk.key_pos(target, [
-        (1, (9.2, -21.4, 1.22)),
-        (44, (15.75, -19.8, 1.62)),
+        (1, (7.4, -21.8, 1.05)),
+        (36, (14.4, -20.1, 1.48)),
+        (48, (15.75, -19.8, 1.62)),
         (96, (15.80, -19.6, 1.66)),
         (N, (16.00, -18.2, 1.62)),
     ])
 
     events = [
         {"type": "car_arrive", "frame": g0 + 1, "dur": 28},
-        {"type": "car_brake", "frame": g0 + 24},
-        {"type": "car_door", "frame": g0 + 30},
+        {"type": "car_brake", "frame": g0 + 23},
+        {"type": "car_door", "frame": g0 + 27},
         {"type": "board_flip", "frame": g0 + flip_f - 3, "count": 9},
         {"type": "startle_sting", "frame": g0 + flip_f + 2},
         {"type": "door_whoosh", "frame": g0 + 98},
-        {"type": "roller", "frame": g0 + 100, "dur": 64},
+        {"type": "roller", "frame": g0 + 99, "dur": 65},
     ]
-    for f in range(100, N, 8):
+    for f in list(range(30, 45, 7)) + list(range(99, N, 8)):
         events.append({"type": "footstep", "frame": g0 + f})
 
-    return scene, cam, hero_objs, hero_arm, events
+    taxi_body = [taxi_by_n["TP_Taxi_01A_Body"]] if "TP_Taxi_01A_Body" in taxi_by_n else taxi_objs
+    prove_targets = [
+        ("start_taxi", 1, taxi_body),
+        ("mid", 83, hero_objs),
+        ("f100", 100, hero_objs),
+        ("end", N, hero_objs),
+    ]
+    return scene, cam, prove_targets, hero_arm, events
 
 
 # ==============================================================================
@@ -344,21 +390,23 @@ def build_shot_02(g0):
     snap(p1, 24, drop=1.5)
     p2, _, _, _ = tk.load_glb("game/assets/decor/tc_plant_pot_2a.glb", "SnapPlant2", loc=(-2.3, 1.2, 0.0))
     snap(p2, 44, drop=1.5)
-    st1, _, _, _ = tk.load_glb("game/assets/interior/screen_stand.glb", "SnapStand1", loc=(-1.75, 2.8, 0.0), yaw_deg=25.0)
+    st1, _, _, _ = tk.load_glb("game/assets/interior/screen_stand.glb", "SnapStand1", loc=(-1.95, 2.8, 0.0), yaw_deg=25.0)
     snap(st1, 58, drop=1.4)
     st2, _, _, _ = tk.load_glb("game/assets/decor/tc_bench_2a_indoor.glb", "SnapBench", loc=(-2.55, -4.6, 0.0), yaw_deg=90.0)
     snap(st2, 16, drop=1.3)
 
     # Staffed Check-In Desk + Second Adjacent Desk + Info Screen + Gotta Air Clerk snapping in!
+    # CheckinDesk_Body's yellow sign post sits at x = [0.56, 0.92]; placing CheckinClerk at (-0.38, 5.08)
+    # with Shot02Cam at (2.25, 1.75) routes the sightline through x = -0.10 (0.66m clear of the sign post!).
     desk_root, _, _, _ = tk.load_glb("game/assets/interior/checkin_desk.glb", "CheckinDesk", loc=(0.0, 4.4, 0.0), yaw_deg=0.0)
     snap(desk_root, 76, drop=1.7)
     desk2_root, _, _, _ = tk.load_glb("game/assets/interior/checkin_desk.glb", "CheckinDesk2", loc=(2.6, 5.4, 0.0), yaw_deg=0.0)
     snap(desk2_root, 88, drop=1.7)
-    scr_root, _, _, _ = tk.load_glb("game/assets/interior/info_screen.glb", "CheckinInfo", loc=(-2.1, 4.8, 0.0), yaw_deg=20.0)
+    scr_root, _, _, _ = tk.load_glb("game/assets/interior/info_screen.glb", "CheckinInfo", loc=(-2.2, 4.8, 0.0), yaw_deg=20.0)
     snap(scr_root, 84, drop=1.6)
 
-    clerk_root, clerk_arm, _, clerk_acts = tk.load_character(
-        "tcp_female_character_07", "CheckinClerk", cloth_tint=tk.GOTTA_LIME, loc=(0.0, 5.15, 0.0), yaw_deg=0.0
+    clerk_root, clerk_arm, clerk_objs, clerk_acts = tk.load_character(
+        "tcp_female_character_07", "CheckinClerk", cloth_tint=tk.GOTTA_LIME, loc=(-0.38, 5.08, 0.0), yaw_deg=8.0
     )
     tk.set_nla_clips(clerk_arm, clerk_acts, [("idle", 1, N, 1.15)])
     tk.add_pose_override_track(clerk_arm, "ClerkStamp", {
@@ -367,7 +415,7 @@ def build_shot_02(g0):
     snap(clerk_root, 82, drop=1.5)
 
     clerk2_root, clerk2_arm, _, clerk2_acts = tk.load_character(
-        "tcp_female_character_07", "CheckinClerk2", cloth_tint=tk.CLERK_NAVY, loc=(2.6, 6.15, 0.0), yaw_deg=0.0
+        "tcp_female_character_07", "CheckinClerk2", cloth_tint=tk.CLERK_NAVY, loc=(2.25, 6.08, 0.0), yaw_deg=0.0
     )
     tk.set_nla_clips(clerk2_arm, clerk2_acts, [("idle", 1, N, 1.05)])
     snap(clerk2_root, 92, drop=1.5)
@@ -387,15 +435,15 @@ def build_shot_02(g0):
     pass_holder.scale = (0.0001, 0.0001, 0.0001)
     pass_holder.keyframe_insert(data_path="scale", frame=175)
     tk.key_pos(pass_holder, [
-        (140, (0.0, 4.35, 1.16)),
-        (152, (0.0, 3.85, 1.24)),
-        (170, (0.15, 3.45, 1.18)),
+        (140, (-0.32, 4.25, 1.18)),
+        (152, (-0.30, 3.80, 1.24)),
+        (170, (-0.12, 3.40, 1.18)),
     ])
     events.append({"type": "stamp_ding", "frame": g0 + 146})
 
     # Hero passenger with gripped towed roller suitcase!
     hero_root, hero_arm, hero_objs, hero_acts = tk.load_character(
-        "tcp_male_character_01", "Hero", cloth_tint=tk.HERO_CORAL, loc=(0.0, -7.2, 0.0), yaw_deg=180.0
+        "tcp_male_character_01", "Hero", cloth_tint=tk.HERO_CORAL, loc=(-0.15, -7.2, 0.0), yaw_deg=180.0
     )
     tk.set_nla_clips(hero_arm, hero_acts, [
         ("run", 1, 126, 1.32),
@@ -406,13 +454,13 @@ def build_shot_02(g0):
         hero_root,
         hero_arm,
         "HeroRoller02",
-        f_tow_ranges=[(1, 125), (171, N)],
+        f_ik_ranges=[(1, N)],
         stand_ranges=[(1, 122, "tow"), (127, 169, "stand"), (174, N, "tow")],
     )
     tk.key_pos(hero_root, [
-        (1, (0.0, -7.2, 0.0)),
-        (124, (0.0, 3.15, 0.0)),
-        (170, (0.0, 3.15, 0.0)),
+        (1, (-0.15, -7.2, 0.0)),
+        (124, (-0.28, 3.18, 0.0)),
+        (170, (-0.28, 3.18, 0.0)),
         (N, (3.25, 3.35, 0.0)),
     ])
     tk.key_rot_deg(hero_root, [
@@ -424,17 +472,17 @@ def build_shot_02(g0):
 
     cam, target = tk.make_camera(scene, "Shot02Cam", lens=34.0, fstop=2.8)
     tk.key_pos(cam, [
-        (1, (3.65, -2.4, 1.78)),
-        (110, (4.35, 1.4, 1.74)),
-        (145, (4.45, 2.0, 1.66)),
-        (175, (4.45, 2.0, 1.66)),
+        (1, (3.55, -2.4, 1.78)),
+        (110, (3.35, 0.90, 1.72)),
+        (144, (2.85, 0.95, 1.66)),
+        (172, (3.05, 1.05, 1.66)),
         (N, (6.45, -0.4, 1.72)),
     ])
     tk.key_pos(target, [
-        (1, (-0.1, -6.6, 1.05)),
-        (110, (0.0, 2.5, 1.08)),
-        (145, (0.0, 3.65, 1.12)),
-        (175, (0.15, 3.55, 1.12)),
+        (1, (-0.15, -6.6, 1.05)),
+        (110, (-0.20, 2.5, 1.04)),
+        (144, (-0.24, 3.75, 1.02)),
+        (172, (-0.15, 3.65, 1.02)),
         (N, (2.85, 3.35, 1.08)),
     ])
 
@@ -443,7 +491,14 @@ def build_shot_02(g0):
     for f in list(range(4, 122, 8)) + list(range(174, N, 8)):
         events.append({"type": "footstep", "frame": g0 + f})
 
-    return scene, cam, hero_objs, hero_arm, events
+    prove_targets = [
+        ("start", 1, hero_objs),
+        ("mid", 113, hero_objs),
+        ("clerk_f311", 146, clerk_objs),
+        ("hero_f311", 146, hero_objs),
+        ("end", N, hero_objs),
+    ]
+    return scene, cam, prove_targets, hero_arm, events
 
 
 # ==============================================================================
@@ -461,17 +516,16 @@ def build_shot_03(g0):
         wg.scale = (2.0, 1.0, 1.0)
     tk.load_glb("game/assets/interior/wall_door.glb", "SWExitDoor", loc=(-0.6, 9.4, 0.0), yaw_deg=0.0)
     tk.load_glb("game/assets/interior/info_screen.glb", "SWScreen", loc=(1.6, 9.2, 0.0), yaw_deg=0.0)
-    tk.load_glb("game/assets/decor/tc_plant_pot_1a.glb", "SWPlant", loc=(2.6, 5.2, 0.0))
+    tk.load_glb("game/assets/decor/tc_plant_pot_1a.glb", "SWPlant", loc=(2.95, 5.2, 0.0))
 
     events = []
-    # Security lane snapping in: Belt at x = -0.45, Arch at x = +0.75, Primary & Helper Officers at x = +1.85!
+    # Security lane snapping in: Belt at x = -0.45, Arch at x = +0.75, Officer clearly visible at (1.65, 1.48)!
     tt_root, _, _, _ = tk.load_glb("game/assets/interior/tray_table.glb", "TrayTable", loc=(-0.45, -1.05, 0.0))
     xb_root, _, _, _ = tk.load_glb("game/assets/interior/xray_belt.glb", "XrayBelt", loc=(-0.45, 0.0, 0.0))
     pt_root, _, _, _ = tk.load_glb("game/assets/interior/pickup_table.glb", "PickupTable", loc=(-0.45, 1.05, 0.0))
     arch_root, _, _, _ = tk.load_glb("game/assets/interior/security_arch.glb", "SecArch", loc=(0.75, 0.0, 0.0))
 
     # Emerald-green arch beacon PARENTED to arch_root AND hidden (scale 0.0001) until f=96!
-    # Zero floating green rectangle before arch drops in!
     beacon = tk.make_box(
         scene,
         "ArchGreenBeacon",
@@ -501,8 +555,9 @@ def build_shot_03(g0):
         g_light_d.energy = en
         g_light_d.keyframe_insert(data_path="energy", frame=f)
 
-    off_root, off_arm, _, off_acts = tk.load_character(
-        "tcp_male_character_07", "SecOfficer", cloth_tint=tk.OFFICER_BLUE, loc=(1.95, 0.15, 0.0), yaw_deg=-95.0
+    # Security Officer stepped forward-sideways to (1.55, 2.35) so his full body & face are clear of SecArch and Hero!
+    off_root, off_arm, off_objs, off_acts = tk.load_character(
+        "tcp_male_character_07", "SecOfficer", cloth_tint=tk.OFFICER_BLUE, loc=(1.55, 2.35, 0.0), yaw_deg=-135.0
     )
     tk.set_nla_clips(off_arm, off_acts, [("idle", 1, N, 1.15)])
     tk.add_pose_override_track(off_arm, "OfficerWave", {
@@ -513,29 +568,30 @@ def build_shot_03(g0):
         tk.animate_snap_pop(ob, tf, drop_height=1.45)
         events.append({"type": "pop", "frame": g0 + tf + 3, "pitch": idx + 4})
 
-    # Bustling security queue & background travelers!
+    # Waiting passenger queue moved >= 1.2m clear to x = 1.85..2.05 so Hero & HeroRoller03 never touch them!
     q1_root, q1_arm, _, q1_acts = tk.load_character(
-        "tcp_female_character_04", "QueuePax1", cloth_tint=(0.24, 0.68, 0.66), loc=(0.85, -2.95, 0.0), yaw_deg=175.0
+        "tcp_female_character_04", "QueuePax1", cloth_tint=(0.24, 0.68, 0.66), loc=(1.90, -2.85, 0.0), yaw_deg=175.0
     )
     tk.set_nla_clips(q1_arm, q1_acts, [("idle", 1, N, 1.2)])
-    qpack, _, _, _ = tk.load_glb("game/assets/interior/carry_backpack.glb", "Q1Pack", loc=(0.85, -3.12, 1.28), yaw_deg=0.0)
+    qpack, _, _, _ = tk.load_glb("game/assets/interior/carry_backpack.glb", "Q1Pack", loc=(1.90, -3.03, 1.28), yaw_deg=0.0)
     qpack.rotation_euler = (math.radians(-90.0), 0.0, math.radians(180.0))
 
     q2_root, q2_arm, _, q2_acts = tk.load_character(
-        "tcp_male_character_06", "QueuePax2", cloth_tint=(0.76, 0.52, 0.22), loc=(0.05, -3.75, 0.0), yaw_deg=185.0
+        "tcp_male_character_06", "QueuePax2", cloth_tint=(0.76, 0.52, 0.22), loc=(2.05, -3.85, 0.0), yaw_deg=182.0
     )
     tk.set_nla_clips(q2_arm, q2_acts, [("idle", 1, N, 1.1)])
 
     q3_root, q3_arm, _, q3_acts = tk.load_character(
-        "tcp_female_character_11", "QueuePax3", cloth_tint=(0.68, 0.34, 0.64), loc=(0.65, -4.65, 0.0), yaw_deg=178.0
+        "tcp_female_character_11", "QueuePax3", cloth_tint=(0.68, 0.34, 0.64), loc=(1.85, -4.80, 0.0), yaw_deg=178.0
     )
     tk.set_nla_clips(q3_arm, q3_acts, [("idle", 1, N, 1.05)])
 
+    # Background walker strolling along x = 1.45 (1.50m clear of SWPlant at x = 2.95 and clear of SecOfficer!)
     bg_w, bg_wa, _, bg_wacts = tk.load_character(
-        "tcp_male_character_09", "SecPasserby", cloth_tint=(0.35, 0.55, 0.82), loc=(2.4, 3.0, 0.0), yaw_deg=180.0
+        "tcp_male_character_09", "SecPasserby", cloth_tint=(0.35, 0.55, 0.82), loc=(1.45, 4.0, 0.0), yaw_deg=180.0
     )
     tk.set_nla_clips(bg_wa, bg_wacts, [("walk", 1, N, 1.0)])
-    tk.key_pos(bg_w, [(1, (2.4, 2.2, 0.0)), (N, (2.2, 7.6, 0.0))])
+    tk.key_pos(bg_w, [(1, (1.45, 4.0, 0.0)), (N, (1.45, 8.2, 0.0))])
 
     # Tray + Hero Roller zipping through the X-ray tunnel!
     tray_root, _, _, _ = tk.load_glb("game/assets/interior/security_tray.glb", "HeroTray", loc=(-0.45, -1.05, 0.74))
@@ -547,35 +603,35 @@ def build_shot_03(g0):
         (N, (-0.45, 1.05, 0.74)),
     ])
 
-    bag_root, _, bag_by_n = tk.load_roller_bag("HeroRoller03", extended=True, loc=(0.85, -3.15, 0.18), bag_tint=tk.YELLOW)
+    bag_root, _, bag_by_n = tk.load_roller_bag("HeroRoller03", extended=True, loc=(0.69, -3.15, 0.20), bag_tint=tk.YELLOW)
     tk.set_roller_handle(bag_by_n, extended=True, frame=1)
-    tk.set_roller_handle(bag_by_n, extended=True, frame=42)
+    tk.set_roller_handle(bag_by_n, extended=True, frame=41)
     tk.set_roller_handle(bag_by_n, extended=False, frame=48)
-    tk.set_roller_handle(bag_by_n, extended=False, frame=144)
-    tk.set_roller_handle(bag_by_n, extended=True, frame=152)
+    tk.set_roller_handle(bag_by_n, extended=False, frame=146)
+    tk.set_roller_handle(bag_by_n, extended=True, frame=154)
     tk.key_pos(bag_root, [
-        (1, (0.82, -3.10, 0.18)),
-        (38, (0.05, -1.45, 0.18)),
+        (1, (0.69, -3.15, 0.20)),     # 0.50m behind Hero (0.42, -2.65), Pull_Top right in Hand.R!
+        (38, (0.50, -1.72, 0.20)),    # Towed cleanly up to TrayTable
         (48, (-0.45, -1.05, 0.78)),   # Laid flat into security_tray
         (56, (-0.45, -1.05, 0.78)),
         (132, (-0.45, 1.05, 0.78)),   # Exits X-ray onto pickup_table
-        (145, (-0.45, 1.05, 0.78)),
-        (156, (-0.98, 2.05, 0.18)),   # Snatched onto open floor ~0.70m in front of table!
-        (N, (-0.82, 5.10, 0.18)),
+        (146, (-0.45, 1.05, 0.78)),
+        (156, (-0.85, 1.60, 0.20)),   # Snatched onto open floor right into Hero's Hand.R!
+        (N, (-0.71, 5.00, 0.20)),
     ])
     tk.key_rot_deg(bag_root, [
-        (1, (-42.0, 0.0, 180.0)),
-        (42, (-42.0, 0.0, 180.0)),
+        (1, (-54.0, 0.0, 180.0)),
+        (40, (-54.0, 0.0, 180.0)),
         (48, (0.0, 0.0, 180.0)),
-        (145, (0.0, 0.0, 180.0)),
-        (156, (-42.0, 0.0, 180.0)),
-        (N, (-42.0, 0.0, 180.0)),
+        (146, (0.0, 0.0, 180.0)),
+        (156, (-54.0, 0.0, 180.0)),
+        (N, (-54.0, 0.0, 180.0)),
     ])
 
-    # Hero passenger: walks through arch at x=+0.75, then curves WIDE around pickup_table
-    # (y=1.85, x=-1.18 — 0.73m closer to camera & 0.40m past table end!) so shins NEVER clip!
+    # Hero passenger: grips roller f1..40, walks through arch at x=+0.75, curves wide around pickup_table,
+    # and re-locks right-hand IK onto Pull_Top at f=156..N!
     hero_root, hero_arm, hero_objs, hero_acts = tk.load_character(
-        "tcp_male_character_01", "Hero", cloth_tint=tk.HERO_CORAL, loc=(0.60, -2.65, 0.0), yaw_deg=180.0
+        "tcp_male_character_01", "Hero", cloth_tint=tk.HERO_CORAL, loc=(0.42, -2.65, 0.0), yaw_deg=180.0
     )
     tk.set_nla_clips(hero_arm, hero_acts, [
         ("run", 1, 38, 1.30),
@@ -584,20 +640,21 @@ def build_shot_03(g0):
         ("idle", 139, 154, 1.40),
         ("run", 155, N, 1.42),
     ])
-    tk.pose_arm_towing_roller(hero_arm, 156, N, hand="R")
+    tk.bind_hand_ik_to_roller(hero_arm, bag_by_n["Pull_Top"], [(1, 40), (156, N)], hand="R")
     tk.key_pos(hero_root, [
-        (1, (0.58, -2.65, 0.0)),
+        (1, (0.42, -2.65, 0.0)),
         (38, (0.25, -1.25, 0.0)),
         (64, (0.75, -1.00, 0.0)),
         (100, (0.75, 0.0, 0.0)),      # Through Security Arch
         (124, (0.55, 1.72, 0.0)),     # Clears +Y end of pickup_table (y=1.47) BEFORE crossing -X!
-        (140, (-1.15, 1.95, 0.0)),    # Steps 0.70m toward camera in front of table, zero shin overlap!
-        (154, (-1.15, 2.05, 0.0)),
+        (140, (-1.12, 1.95, 0.0)),    # Steps 0.67m toward camera in front of table, zero shin overlap!
+        (156, (-1.12, 2.10, 0.0)),
         (N, (-0.98, 5.50, 0.0)),
     ])
     tk.key_rot_deg(hero_root, [
         (1, (0.0, 0.0, 180.0)),
-        (42, (0.0, 0.0, -105.0)),
+        (38, (0.0, 0.0, 180.0)),
+        (46, (0.0, 0.0, -105.0)),
         (66, (0.0, 0.0, 180.0)),
         (126, (0.0, 0.0, -65.0)),     # Curves around table toward camera
         (142, (0.0, 0.0, 65.0)),      # Reaches back to snatch bag off pickup_table
@@ -614,13 +671,14 @@ def build_shot_03(g0):
     ])
     tk.key_pos(target, [
         (1, (0.35, -2.25, 1.04)),
-        (95, (0.20, -0.05, 1.08)),
+        (95, (0.35, 0.25, 1.08)),
         (150, (-0.55, 1.65, 1.06)),
         (N, (-0.65, 4.75, 1.08)),
     ])
 
     events.extend([
-        {"type": "skid", "frame": g0 + 34},
+        {"type": "roller", "frame": g0 + 1, "dur": 38},
+        {"type": "skid", "frame": g0 + 36},
         {"type": "conveyor", "frame": g0 + 56, "dur": 76},
         {"type": "scanner_beep", "frame": g0 + 98},
         {"type": "bag_snatch", "frame": g0 + 148},
@@ -629,7 +687,13 @@ def build_shot_03(g0):
     for f in list(range(2, 36, 8)) + list(range(68, 136, 10)) + list(range(156, N, 7)):
         events.append({"type": "footstep", "frame": g0 + f})
 
-    return scene, cam, hero_objs, hero_arm, events
+    prove_targets = [
+        ("start", 1, hero_objs),
+        ("mid", 113, hero_objs),
+        ("officer_f503", 113, off_objs),
+        ("end", N, hero_objs),
+    ]
+    return scene, cam, prove_targets, hero_arm, events
 
 
 # ==============================================================================
@@ -733,7 +797,7 @@ def build_shot_04(g0):
         "tcp_male_character_01", "Hero", cloth_tint=tk.HERO_CORAL, loc=(0.15, -7.8, 0.0), yaw_deg=180.0
     )
     tk.set_nla_clips(hero_arm, hero_acts, [("run", 1, N, 1.44)])
-    _attach_towed_roller(hero_root, hero_arm, "HeroRoller04", f_tow_ranges=[(1, N)])
+    _attach_towed_roller(hero_root, hero_arm, "HeroRoller04", f_ik_ranges=[(1, N)])
     tk.key_pos(hero_root, [
         (1, (0.15, -7.8, 0.0)),
         (N, (0.05, 4.35, 0.0)),
@@ -755,7 +819,12 @@ def build_shot_04(g0):
     for f in range(3, N, 7):
         events.append({"type": "footstep", "frame": g0 + f})
 
-    return scene, cam, hero_objs, hero_arm, events
+    prove_targets = [
+        ("start", 1, hero_objs),
+        ("mid", 98, hero_objs),
+        ("end", N, hero_objs),
+    ]
+    return scene, cam, prove_targets, hero_arm, events
 
 
 # ==============================================================================
@@ -798,7 +867,23 @@ def build_shot_05(g0):
     _apply_gotta_air_livery(plane_objs)
     _spin_jet_fans(scene, plane_root, plane_by_n, N, deg_per_frame=52.0)
 
-    # Port passenger door `TP_Plane_05A_Door` at (1.37, -8.62, 1.58): open during boarding, closes at f=58..74!
+    # Dark interior cabin backing recessed inside the fuselage doorway whileTP_Plane_05A_Door is open (f=1..66)
+    doorway_dark = tk.make_box(
+        scene,
+        "CabinDoorwayDark",
+        (0.05, 0.72, 1.82),
+        (1.16, -8.62, 2.48),
+        tk.toon_rgb_mat("cabin_dark", (0.06, 0.09, 0.16)),
+        bevel=0.015,
+        parent=plane_root,
+    )
+    doorway_dark.scale = (1.0, 1.0, 1.0)
+    doorway_dark.keyframe_insert(data_path="scale", frame=1)
+    doorway_dark.keyframe_insert(data_path="scale", frame=68)
+    doorway_dark.scale = (0.0001, 0.0001, 0.0001)
+    doorway_dark.keyframe_insert(data_path="scale", frame=75)
+
+    # Real factory fuselage door `TP_Plane_05A_Door`: open inward during boarding (f=1..64), seals flush at f=76!
     door = plane_by_n.get("TP_Plane_05A_Door")
     if door is not None:
         dmw = door.matrix_world.copy()
@@ -810,48 +895,49 @@ def build_shot_05(g0):
         door.parent = dpiv
         door.matrix_world = dmw
         tk.key_rot_deg(dpiv, [
-            (1, (0.0, 0.0, -72.0)),
-            (56, (0.0, 0.0, -72.0)),
-            (74, (0.0, 0.0, 0.0)),
+            (1, (0.0, 0.0, -78.0)),
+            (64, (0.0, 0.0, -78.0)),
+            (76, (0.0, 0.0, 0.0)),
             (N, (0.0, 0.0, 0.0)),
         ])
 
-    # Mobile Gotta Air yellow/lime 6-step airstair unit docked at port door (x=1.45..3.85, y=-8.62, z=0..1.55)
+    # Mobile Gotta Air yellow/lime 6-step airstair unit docked at port door (x=1.55..3.95, y=-8.62, z=0..1.53)
     steps_root = bpy.data.objects.new("MobileAirstairs", None)
     scene.collection.objects.link(steps_root)
     for si in range(6):
         h = 0.255 * (si + 1)
-        sx = 3.65 - si * 0.42
+        sx = 3.85 - si * 0.42
         tk.make_box(
             scene,
             "AirStep_%d" % si,
-            (0.44, 1.05, h),
+            (0.44, 1.08, h),
             (sx, -8.62, h * 0.5),
             tk.toon_rgb_mat("astep_%d" % si, tk.YELLOW if si < 4 else tk.GOTTA_LIME),
             bevel=0.02,
             parent=steps_root,
             outline=0.004,
         )
-    tk.key_pos(steps_root, [(1, (0.0, 0.0, 0.0)), (55, (0.0, 0.0, 0.0)), (82, (8.5, 4.0, 0.0)), (N, (8.5, 4.0, 0.0))])
+    tk.key_pos(steps_root, [(1, (0.0, 0.0, 0.0)), (64, (0.0, 0.0, 0.0)), (86, (8.5, 4.0, 0.0)), (N, (8.5, 4.0, 0.0))])
 
-    # Hero passenger sprints across apron towing his yellow roller, bounds up airstairs & boards at f=54!
+    # Hero passenger sprints across apron towing his yellow roller, bounds up airstairs & boards at f=60..64!
     hero_root, hero_arm, hero_objs, hero_acts = tk.load_character(
-        "tcp_male_character_01", "Hero", cloth_tint=tk.HERO_CORAL, loc=(6.8, -6.2, 0.0), yaw_deg=-65.0
+        "tcp_male_character_01", "Hero", cloth_tint=tk.HERO_CORAL, loc=(6.2, -6.8, 0.0), yaw_deg=-70.0
     )
-    tk.set_nla_clips(hero_arm, hero_acts, [("run", 1, 58, 1.48)])
-    _attach_towed_roller(hero_root, hero_arm, "HeroRoller05", f_tow_ranges=[(1, 56)])
+    tk.set_nla_clips(hero_arm, hero_acts, [("run", 1, 66, 1.44)])
+    _attach_towed_roller(hero_root, hero_arm, "HeroRoller05", f_ik_ranges=[(1, 62)])
     tk.key_pos(hero_root, [
-        (1, (6.8, -6.2, 0.0)),
-        (28, (3.85, -8.62, 0.0)),
-        (46, (1.75, -8.62, 1.48)),
-        (54, (0.85, -8.62, 1.62)),
+        (1, (6.2, -6.8, 0.0)),
+        (26, (3.95, -8.62, 0.0)),
+        (46, (2.15, -8.62, 1.48)),    # Frame 0856: bounding onto top platform!
+        (54, (1.85, -8.62, 1.54)),    # Frame 0863 (strip tile 2): stepping right into cabin doorway!
+        (63, (1.02, -8.62, 1.62)),
     ])
-    tk.key_rot_deg(hero_root, [(1, (0.0, 0.0, -65.0)), (26, (0.0, 0.0, -90.0)), (56, (0.0, 0.0, -90.0))])
+    tk.key_rot_deg(hero_root, [(1, (0.0, 0.0, -70.0)), (26, (0.0, 0.0, -90.0)), (64, (0.0, 0.0, -90.0))])
     hero_root.scale = (1.0, 1.0, 1.0)
     hero_root.keyframe_insert(data_path="scale", frame=1)
-    hero_root.keyframe_insert(data_path="scale", frame=52)
+    hero_root.keyframe_insert(data_path="scale", frame=60)
     hero_root.scale = (0.0001, 0.0001, 0.0001)
-    hero_root.keyframe_insert(data_path="scale", frame=55)
+    hero_root.keyframe_insert(data_path="scale", frame=64)
 
     # Takeoff roll down -Y (f=76..138) & nose-up rotation (rx = -13.5 deg lifts -Y nose UP!) into golden sky!
     tk.key_pos(plane_root, [
@@ -881,35 +967,42 @@ def build_shot_05(g0):
             w.matrix_world = wmw
             tk.key_rot_deg(wpiv, [(76, (0.0, 0.0, 0.0)), (160, (-1440.0, 0.0, 0.0)), (N, (-1620.0, 0.0, 0.0))])
 
-    # Sweeping chase camera: frames Hero bounding up airstairs into Gotta Air Jet, paces takeoff roll & climb!
+    # Close cinematic boarding camera (f=1..56) that sweeps out smoothly into the heroic runway climb!
     cam, target = tk.make_camera(scene, "Shot05Cam", lens=32.0, fstop=3.2)
     tk.key_pos(cam, [
-        (1, (26.5, -21.5, 3.8)),
-        (58, (27.5, -22.5, 4.0)),
-        (106, (30.5, -36.0, 4.5)),
+        (1, (12.2, -15.2, 2.25)),
+        (56, (11.4, -14.6, 2.45)),
+        (105, (30.5, -36.0, 4.5)),
         (160, (32.0, -104.0, 8.2)),
         (N, (33.5, -166.0, 17.5)),
     ])
     tk.key_pos(target, [
-        (1, (0.8, -1.5, 3.2)),
-        (58, (0.2, -1.0, 3.4)),
-        (106, (0.0, -13.0, 3.6)),
+        (1, (3.6, -7.8, 1.35)),
+        (56, (2.1, -8.5, 2.05)),
+        (105, (0.0, -13.0, 3.6)),
         (160, (0.0, -82.0, 8.5)),
         (N, (0.0, -138.0, 21.5)),
     ])
 
     events = [
-        {"type": "prop_idle", "frame": g0 + 1, "dur": 74},
-        {"type": "step_leap", "frame": g0 + 30},
+        {"type": "jet_idle", "frame": g0 + 1, "dur": 74},
+        {"type": "roller", "frame": g0 + 1, "dur": 46},
+        {"type": "step_leap", "frame": g0 + 26},
         {"type": "door_seal", "frame": g0 + 72},
-        {"type": "prop_rev", "frame": g0 + 76, "dur": 134},
+        {"type": "jet_spool", "frame": g0 + 76, "dur": 134},
         {"type": "takeoff_whoosh", "frame": g0 + 142},
     ]
     for f in range(4, 48, 7):
         events.append({"type": "footstep", "frame": g0 + f})
 
     plane_core = [plane_by_n["TP_Plane_05A_Fuselage"]]
-    return scene, cam, plane_core, hero_arm, events
+    prove_targets = [
+        ("start_hero", 1, hero_objs),
+        ("board_f856", 46, hero_objs),
+        ("mid_jet", 105, plane_core),
+        ("end_jet", N, plane_core),
+    ]
+    return scene, cam, prove_targets, hero_arm, events
 
 
 # ==============================================================================
@@ -967,7 +1060,12 @@ def build_shot_06(g0):
     ]
 
     plane_core = [fus]
-    return scene, cam, plane_core, None, events
+    prove_targets = [
+        ("start", 1, plane_core),
+        ("mid", 83, plane_core),
+        ("end", N, plane_core),
+    ]
+    return scene, cam, prove_targets, None, events
 
 
 SHOT_BUILDERS = [
