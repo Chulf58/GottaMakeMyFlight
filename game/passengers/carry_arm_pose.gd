@@ -88,6 +88,7 @@ static func lead_arms(props: CarryOnProps, held: Dictionary, body: Node3D, now: 
 static func pose_arms(props: CarryOnProps, held: Dictionary, body: Node3D, now: float) -> void:
 	var modes := [Arm.FREE, Arm.FREE]
 	var strap := [0.0, 0.0]
+	var shoulder_holds := [false, false]
 	var cases := 0
 	# Hard cases the free hand comes to the front beside (a roller held by its
 	# bar lies across the front to the free side, so that hand stays down).
@@ -111,6 +112,8 @@ static func pose_arms(props: CarryOnProps, held: Dictionary, body: Node3D, now: 
 			SecurityLooks.Carry.SHOULDER:
 				var side := SecurityLooks.worn_side(i)
 				var on := strap_weight(bag, homes[i], k, now)
+				if homes[i] == SecurityLooks.Home.HAND and CarryPlace.leading(bag, now):
+					shoulder_holds[side] = k >= 0.45 and on <= 0.0
 				if on > 0.0:
 					modes[side] = Arm.STRAP
 					strap[side] = on
@@ -122,7 +125,18 @@ static func pose_arms(props: CarryOnProps, held: Dictionary, body: Node3D, now: 
 	var walk := walk_share(held, body)
 	var still := unpack_still(held, now)
 	var key := [
-		modes, strap, cases, beside, held["weight"], tuck, reach_on, swaps, outs, walk, still
+		modes,
+		strap,
+		shoulder_holds,
+		cases,
+		beside,
+		held["weight"],
+		tuck,
+		reach_on,
+		swaps,
+		outs,
+		walk,
+		still,
 	]
 	if held.get("arm_key", []) == key and held.get("arm_body") == body:
 		return
@@ -131,7 +145,7 @@ static func pose_arms(props: CarryOnProps, held: Dictionary, body: Node3D, now: 
 	var arms: Array = props._rig(body)["arms"]
 	for side in arms.size():
 		var arm := arms[side] as CarryArm
-		arm.holds = modes[side] == Arm.HAND or modes[side] == Arm.PULL
+		arm.holds = modes[side] == Arm.HAND or modes[side] == Arm.PULL or shoulder_holds[side]
 		arm.active = modes[side] != Arm.FREE or cases > 0 or tuck > 0.0 or reach_on[side]
 		var pulling: bool = modes[side] == Arm.PULL
 		arm.angle_degrees = PULL_OUT_DEGREES if pulling else outs[side]

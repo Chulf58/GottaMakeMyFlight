@@ -13,6 +13,8 @@ const CHECKED_BONES: Array[String] = [
 	"Arm", "Forearm", "Quad", "Shin", "Hips", "Spine_01", "Spine_02", "Spine_03"
 ]
 
+const MAX_SIM_STEPS := 2000
+
 var _world: SecurityTestWorld
 var _views: PassengerViews
 var _subject: Passenger
@@ -24,6 +26,7 @@ func before() -> void:
 
 
 func after() -> void:
+	_free()
 	PassengerTestWorld.tracker = null
 
 
@@ -409,14 +412,84 @@ func test_mid_pickup_reach_tracks_bag_grip_without_premature_strap_twist() -> vo
 		await get_tree().process_frame
 
 
+func test_shoulder_tray_path_is_continuous_across_start_and_moving_frame() -> void:
+	var strap_top := Vector3(0.0, 0.05, 0.22)
+	var tray_starts := [
+		Transform3D(Basis(Vector3.UP, PI * 0.5), Vector3(0.55, 0.80, 0.25)),
+		Transform3D(Basis(Vector3.UP, 0.0), Vector3(0.65, 0.80, -0.35)),
+	]
+	for start_xf: Transform3D in tray_starts:
+		var bag := {
+			"kind": SecurityLooks.Kind.SHOULDER,
+			"carry": SecurityLooks.Carry.SHOULDER,
+			"carry_from": SecurityLooks.Carry.SHOULDER,
+			"was": SecurityLooks.Home.TRAY * 4,
+			"home": SecurityLooks.Home.HAND * 4,
+			"from": start_xf,
+			"led": true,
+		}
+		var has_prev := false
+		var prev_origin := Vector3.ZERO
+		var prev_strap := Vector3.ZERO
+		var prev_quat := Quaternion.IDENTITY
+		var max_origin_step := 0.0
+		var max_strap_step := 0.0
+		var max_rot_step := 0.0
+		for i in 101:
+			var k := float(i) * 0.01
+			# Walk forward past start_xf so start_bar.z crosses +0.2 -> -0.5 mid-carry.
+			var frame := Transform3D(Basis.IDENTITY, Vector3(0.0, 0.0, k * 0.8))
+			var want := Transform3D(
+				Basis(Vector3.RIGHT, Vector3.FORWARD, Vector3.UP),
+				frame.origin + Vector3(-0.22, 1.10, 0.0)
+			)
+			var flags := {"from_tray": true, "hand": 0, "yaw": 0.0}
+			var body_info := {
+				"hand": 0,
+				"grips":
+				[frame.origin + Vector3(-0.2, 1.0, 0.1), frame.origin + Vector3(0.2, 1.0, 0.1)],
+				"shoulders_y": [1.4, 1.4],
+				"bar_z": 0.0,
+				"scale": 1.0,
+				"strap_top": strap_top,
+			}
+			var planned := CarryLead.plan(bag, k, start_xf, want, frame, flags, body_info)
+			var xf: Transform3D = planned["xf"]
+			var strap_now := xf * strap_top
+			var quat_now := xf.basis.orthonormalized().get_rotation_quaternion()
+			if i == 25:
+				assert_float(xf.origin.distance_to(start_xf.origin)).is_less(0.0001)
+				(
+					assert_float(
+						rad_to_deg(quat_now.angle_to(start_xf.basis.get_rotation_quaternion()))
+					)
+					. is_less(0.2)
+				)
+			if has_prev:
+				max_origin_step = maxf(max_origin_step, xf.origin.distance_to(prev_origin))
+				max_strap_step = maxf(max_strap_step, strap_now.distance_to(prev_strap))
+				max_rot_step = maxf(max_rot_step, rad_to_deg(quat_now.angle_to(prev_quat)))
+			prev_origin = xf.origin
+			prev_strap = strap_now
+			prev_quat = quat_now
+			has_prev = true
+		print(
+			(
+				"synthetic tray path steps: origin=%.4f strap=%.4f rot=%.2f"
+				% [max_origin_step, max_strap_step, max_rot_step]
+			)
+		)
+		assert_float(max_origin_step).is_less_equal(0.12)
+		assert_float(max_strap_step).is_less_equal(0.12)
+		assert_float(max_rot_step).is_less_equal(20.0)
+
+
 func _run_shoulder_pickup(
 	use_lane: bool,
-	mirror: int,
 	body_idx: int,
 	liquids: bool,
 	alarm: bool,
 	late: bool,
-	wait_phase: SecurityRuntime.Phase,
 	wait_stage: Passenger.Stage,
 	opts := {}
 ) -> Dictionary:
@@ -424,14 +497,17 @@ func _run_shoulder_pickup(
 	var bag_count: int = opts.get("bag_count", 1)
 	var bag_slot: int = opts.get("bag_slot", 0)
 	_free()
+	var mirror: int = opts.get("mirror", SecurityLanes.LEFT if use_lane else SecurityLanes.RIGHT)
 	_world = SecurityTestWorld.make(use_lane, 7, mirror)
+	var w := _world
 	_views = PassengerTestWorld.views()
-	_views.clock = _world.world.clock
-	_views.sim = _world.world.sim
+	_views.clock = w.world.clock
+	_views.sim = w.world.sim
 	add_child(_views)
+	var views := _views
 	var variant := PassengerLooks.variant_of(body_idx)
 	for i in 400:
-		var p := _world.world.passenger(_world.send(bag_count, liquids, alarm))
+		var p := w.world.passenger(w.send(bag_count, liquids, alarm))
 		if (
 			PassengerLooks.body_of(p.id, variant) == body_idx
 			and SecurityLooks.bag_kind(p, bag_slot) == SecurityLooks.Kind.SHOULDER
@@ -445,33 +521,35 @@ func _run_shoulder_pickup(
 		p.cleared = true
 		p.stage = Passenger.Stage.TO_GATE
 	assert_object(_subject).is_not_null()
-	while true:
+	var sim_steps := 0
+	while sim_steps < MAX_SIM_STEPS:
 		if late:
 			_subject.late = true
-		if wait_phase == SecurityRuntime.Phase.TO_BERTH:
+		if use_lane:
 			if (
 				_subject.stage == Passenger.Stage.SECURITY
 				and _subject.security_phase == SecurityRuntime.Phase.ARCH
-				and (
-					_subject.at
-					== _world.world.sim.layout.security_lanes.lane(_world.station)["arch"]
-				)
+				and (_subject.at == w.world.sim.layout.security_lanes.lane(w.station)["arch"])
 			):
 				break
-		elif wait_stage == Passenger.Stage.TO_GATE:
+		else:
 			if (
 				_subject.stage == Passenger.Stage.SECURITY
 				and _subject.security_phase == SecurityRuntime.Phase.REPACK
 				and _subject.security_work <= 2
 			):
 				break
-		elif _subject.stage == wait_stage and _subject.security_phase == wait_phase:
-			break
-		_world.world.step()
-	var props := _views.carry_on_props()
-	var sim := _world.world.sim
+		w.world.step()
+		sim_steps += 1
+	assert_int(sim_steps).is_less(MAX_SIM_STEPS)
+	(
+		assert_bool(wait_stage == Passenger.Stage.SECURITY or wait_stage == Passenger.Stage.TO_GATE)
+		. is_true()
+	)
+	var props := views.carry_on_props()
+	var sim := w.world.sim
 	await get_tree().process_frame
-	var body := _views.node_for(_subject.id)
+	var body := views.node_for(_subject.id)
 	assert_object(body).is_not_null()
 	var skeleton := body.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
 	var surfaces := _build_skin_surfaces(body, skeleton)
@@ -480,38 +558,115 @@ func _run_shoulder_pickup(
 	if clip_start > 0.0 and player.current_animation != "":
 		var init_len := maxf(player.current_animation_length, 0.001)
 		player.seek(fposmod(clip_start, init_len), true)
+	# Step whole sim ticks until pickup begins, saving the resting frame just before.
+	while sim_steps < MAX_SIM_STEPS:
+		if late:
+			_subject.late = true
+		var bag_pre: Node3D = props.props_of(_subject.id)["bags"][bag_slot]
+		var pre_origin := bag_pre.global_position
+		var pre_strap := (bag_pre.find_child("Strap_Top", true, false) as Node3D).global_position
+		var pre_quat := bag_pre.global_transform.basis.orthonormalized().get_rotation_quaternion()
+		w.world.clock.advance(SimClock.STEP)
+		await skeleton.skeleton_updated
+		sim_steps += 1
+		if (
+			int(props.bag_state(_subject.id, bag_slot).get("home", -1)) / 4
+			== SecurityLooks.Home.HAND
+		):
+			_subject.set_meta(&"pre_bag", [pre_origin, pre_strap, pre_quat])
+			break
 	var side := SecurityLooks.worn_side(bag_slot)
 	var frames := 0
 	var hits_total := 0
 	var mid_strap_on := false
 	var settled_strap := -1.0
+	var first_k := INF
 	var last_k := 0.0
 	var min_mid_grip_z := INF
+	var mid_samples := 0
 	var max_grip_gap := 0.0
+	var held_samples := 0
+	var max_origin_step := 0.0
+	var max_strap_step := 0.0
+	var max_carry_step := 0.0
+	var max_rot_step_deg := 0.0
+	var max_plan_step := 0.0
+	var max_body_plan_step := 0.0
+	var max_plan_rot_deg := 0.0
+	var has_prev := false
+	var prev_origin := Vector3.ZERO
+	var prev_strap := Vector3.ZERO
+	var prev_quat := Quaternion.IDENTITY
+	var has_prev_plan := false
+	var prev_plan_origin := Vector3.ZERO
+	var prev_body_plan := Vector3.ZERO
+	var prev_plan_quat := Quaternion.IDENTITY
+	if _subject.has_meta(&"pre_bag"):
+		var pre: Array = _subject.get_meta(&"pre_bag")
+		prev_origin = pre[0]
+		prev_strap = pre[1]
+		prev_quat = pre[2]
+		has_prev = true
 	var in_pickup := false
-	var step_ticks := 0.25
-	for step in 120:
+	var step_ticks := 0.1
+	for step in 80:
 		if late:
 			_subject.late = true
-		var seconds := SimClock.STEP * step_ticks
-		_world.world.clock.advance(seconds)
-		if player.current_animation != "":
-			var len_s := maxf(player.current_animation_length, 0.001)
-			player.seek(fposmod(player.current_animation_position + seconds, len_s), true)
-		await skeleton.skeleton_updated
+		if step > 0 or not _subject.has_meta(&"pre_bag"):
+			var seconds := SimClock.STEP * step_ticks
+			w.world.clock.advance(seconds)
+			if player.current_animation != "":
+				var len_s := maxf(player.current_animation_length, 0.001)
+				player.seek(fposmod(player.current_animation_position + seconds, len_s), true)
+			await skeleton.skeleton_updated
 		var st := props.bag_state(_subject.id, bag_slot)
 		if not st.has("home"):
 			continue
+		var bag_node: Node3D = props.props_of(_subject.id)["bags"][bag_slot]
+		var strap_now := (bag_node.find_child("Strap_Top", true, false) as Node3D).global_position
+		var quat_now := bag_node.global_transform.basis.orthonormalized().get_rotation_quaternion()
 		var home := int(st["home"]) / 4
 		var k := props.transfer_progress(_subject.id, bag_slot)
 		var arm := props._rig(body)["arms"][side] as CarryArm
 		if not in_pickup:
 			if home == SecurityLooks.Home.HAND and k < 1.0:
 				in_pickup = true
+				first_k = k
 			else:
+				prev_origin = bag_node.global_position
+				prev_strap = strap_now
+				prev_quat = quat_now
+				has_prev = true
 				continue
 		if home != SecurityLooks.Home.HAND:
 			break
+		var lead_plan: Dictionary = st.get("lead", {})
+		if lead_plan.has("xf"):
+			var p_xf: Transform3D = lead_plan["xf"]
+			var body_plan := body.global_transform.affine_inverse() * p_xf.origin
+			var p_quat := p_xf.basis.orthonormalized().get_rotation_quaternion()
+			if has_prev_plan:
+				max_plan_step = maxf(max_plan_step, p_xf.origin.distance_to(prev_plan_origin))
+				max_body_plan_step = maxf(max_body_plan_step, body_plan.distance_to(prev_body_plan))
+				max_plan_rot_deg = maxf(
+					max_plan_rot_deg, rad_to_deg(p_quat.angle_to(prev_plan_quat))
+				)
+			prev_plan_origin = p_xf.origin
+			prev_body_plan = body_plan
+			prev_plan_quat = p_quat
+			has_prev_plan = true
+		if has_prev:
+			var o_step := bag_node.global_position.distance_to(prev_origin)
+			var s_step := strap_now.distance_to(prev_strap)
+			max_origin_step = maxf(max_origin_step, o_step)
+			max_strap_step = maxf(max_strap_step, s_step)
+			if k < 0.24 or k > 0.26:
+				max_carry_step = maxf(max_carry_step, maxf(o_step, s_step))
+			max_rot_step_deg = maxf(max_rot_step_deg, rad_to_deg(quat_now.angle_to(prev_quat)))
+		prev_origin = bag_node.global_position
+		prev_strap = strap_now
+		prev_quat = quat_now
+		has_prev = true
 		last_k = k
 		if k >= 1.0:
 			settled_strap = arm.front_weight
@@ -526,17 +681,15 @@ func _run_shoulder_pickup(
 		if k >= 0.45 and k <= 0.55:
 			var local_grip := body.global_transform.affine_inverse() * props.grip_of(body, side)
 			min_mid_grip_z = minf(min_mid_grip_z, local_grip.z)
-		var bag_node: Node3D = props.props_of(_subject.id)["bags"][bag_slot]
+			mid_samples += 1
 		if int(st.get("held_by", -1)) == side:
-			var strap_top := (
-				(bag_node.find_child("Strap_Top", true, false) as Node3D).global_position
-			)
-			max_grip_gap = maxf(max_grip_gap, strap_top.distance_to(props.grip_of(body, side)))
+			max_grip_gap = maxf(max_grip_gap, strap_now.distance_to(props.grip_of(body, side)))
+			held_samples += 1
 		var hits := _bag_hits(
 			skeleton, surfaces, CarryChecks.gripping(sim, _subject, props), bag_node
 		)
 		if not hits.is_empty():
-			print("HIT body=%d slot=%d k=%.2f hits=%s" % [body_idx, bag_slot, k, hits])
+			print("HIT body=%d slot=%d k=%.3f hits=%s" % [body_idx, bag_slot, k, hits])
 		for v: int in hits.values():
 			hits_total += v
 	await get_tree().process_frame
@@ -545,30 +698,52 @@ func _run_shoulder_pickup(
 		"hits": hits_total,
 		"mid_strap_on": mid_strap_on,
 		"settled_strap": settled_strap,
+		"first_k": first_k,
 		"last_k": last_k,
 		"min_mid_grip_z": min_mid_grip_z,
+		"mid_samples": mid_samples,
 		"max_grip_gap": max_grip_gap,
+		"held_samples": held_samples,
+		"max_origin_step": max_origin_step,
+		"max_strap_step": max_strap_step,
+		"max_carry_step": max_carry_step,
+		"max_rot_step_deg": max_rot_step_deg,
+		"max_plan_step": max_plan_step,
+		"max_body_plan_step": max_body_plan_step,
+		"max_plan_rot_deg": max_plan_rot_deg,
 	}
 
 
 func test_lane_tray_to_shoulder_clears_body_through_pickup() -> void:
 	for body_idx: int in [0, PassengerLooks.body_of(24, 0), PassengerLooks.body_of(24, 1)]:
 		var got := await _run_shoulder_pickup(
-			true,
-			SecurityLanes.LEFT,
-			body_idx,
-			false,
-			false,
-			false,
-			SecurityRuntime.Phase.PICKUP,
-			Passenger.Stage.SECURITY
+			true, body_idx, false, false, false, Passenger.Stage.SECURITY
 		)
 		print("lane_left PICKUP body=%d got=%s" % [body_idx, got])
-		assert_int(got["frames"]).is_greater_equal(15)
+		assert_float(got["first_k"]).is_less_equal(0.05)
+		assert_int(got["frames"]).is_greater_equal(50)
+		assert_int(got["held_samples"]).is_greater(0)
+		assert_int(got["mid_samples"]).is_greater(0)
 		assert_bool(got["mid_strap_on"]).is_false()
 		assert_float(got["settled_strap"]).is_equal(1.0)
 		assert_float(got["max_grip_gap"]).is_less_equal(0.03)
+		assert_float(got["max_plan_step"]).is_less_equal(0.12)
+		assert_float(got["max_plan_rot_deg"]).is_less_equal(20.0)
+		assert_float(got["max_carry_step"]).is_less_equal(0.12)
+		# On cross-body LEFT lanes CarryPlace clamps k = 0.25 to the 0.78 m arm+spine
+		# reach (~0.10-0.18 m vs ~1.0 m pre-fix); reachable female/same-side is <= 0.12 m.
+		var grab_cap := 0.12 if body_idx >= PassengerLooks.PER_VARIANT else 0.19
+		assert_float(got["max_origin_step"]).is_less_equal(grab_cap)
+		assert_float(got["max_rot_step_deg"]).is_less_equal(20.0)
 		assert_int(got["hits"]).is_equal(0)
+	var same_side := await _run_shoulder_pickup(
+		true, 0, false, false, false, Passenger.Stage.SECURITY, {"mirror": SecurityLanes.RIGHT}
+	)
+	print("lane_right PICKUP body=0 got=%s" % [same_side])
+	assert_float(same_side["max_origin_step"]).is_less_equal(0.12)
+	assert_float(same_side["max_strap_step"]).is_less_equal(0.12)
+	assert_float(same_side["max_rot_step_deg"]).is_less_equal(20.0)
+	assert_int(same_side["hits"]).is_equal(0)
 
 
 func test_lane_to_berth_tray_to_shoulder_clears_body_and_avoids_backward_arm() -> void:
@@ -576,21 +751,24 @@ func test_lane_to_berth_tray_to_shoulder_clears_body_and_avoids_backward_arm() -
 	# late runner + alarm -> TO_BERTH) walking away from the left tray.
 	for spec: Array in [[8, true, false, false], [10, false, true, true]]:
 		var got := await _run_shoulder_pickup(
-			true,
-			SecurityLanes.LEFT,
-			spec[0],
-			spec[1],
-			spec[2],
-			spec[3],
-			SecurityRuntime.Phase.TO_BERTH,
-			Passenger.Stage.SECURITY
+			true, spec[0], spec[1], spec[2], spec[3], Passenger.Stage.SECURITY
 		)
 		print("lane_left TO_BERTH body=%d late=%s got=%s" % [spec[0], spec[3], got])
-		assert_int(got["frames"]).is_greater_equal(15)
+		assert_float(got["first_k"]).is_less_equal(0.05)
+		assert_int(got["frames"]).is_greater_equal(50)
+		assert_int(got["held_samples"]).is_greater(0)
+		assert_int(got["mid_samples"]).is_greater(0)
 		if not bool(spec[3]):
 			assert_float(got["settled_strap"]).is_equal(1.0)
 		assert_float(got["max_grip_gap"]).is_less_equal(0.03)
 		assert_float(got["min_mid_grip_z"]).is_greater_equal(0.05)
+		# Body-frame plan step <= 0.12 m; world step adds up to ~0.07 m sprint stride.
+		assert_float(got["max_body_plan_step"]).is_less_equal(0.16)
+		assert_float(got["max_plan_step"]).is_less_equal(0.20)
+		assert_float(got["max_plan_rot_deg"]).is_less_equal(20.0)
+		assert_float(got["max_carry_step"]).is_less_equal(0.20)
+		assert_float(got["max_origin_step"]).is_less_equal(0.45)
+		assert_float(got["max_rot_step_deg"]).is_less_equal(20.0)
 		assert_int(got["hits"]).is_equal(0)
 
 
@@ -599,34 +777,30 @@ func test_booth_repack_floor_to_shoulder_clears_stepping_thigh() -> void:
 	# floor>shoulder.L) across walk-clip phases, including forward thigh strides.
 	for clip_start: float in [0.0, 0.35, 0.65]:
 		var got := await _run_shoulder_pickup(
-			false,
-			SecurityLanes.RIGHT,
-			8,
-			true,
-			false,
-			false,
-			SecurityRuntime.Phase.NONE,
-			Passenger.Stage.TO_GATE,
-			{"clip_start": clip_start}
+			false, 8, true, false, false, Passenger.Stage.TO_GATE, {"clip_start": clip_start}
 		)
 		print("booth REPACK exit 1-bag body=8 clip=%.2f got=%s" % [clip_start, got])
-		assert_int(got["frames"]).is_greater_equal(15)
+		assert_float(got["first_k"]).is_less_equal(0.05)
+		assert_int(got["frames"]).is_greater_equal(50)
+		assert_int(got["held_samples"]).is_greater(0)
+		assert_int(got["mid_samples"]).is_greater(0)
 		assert_float(got["settled_strap"]).is_equal(1.0)
 		assert_float(got["max_grip_gap"]).is_less_equal(0.03)
 		assert_int(got["hits"]).is_equal(0)
 	var two_bag := await _run_shoulder_pickup(
 		false,
-		SecurityLanes.RIGHT,
 		5,
 		true,
 		false,
 		false,
-		SecurityRuntime.Phase.NONE,
 		Passenger.Stage.TO_GATE,
 		{"clip_start": 0.35, "bag_count": 2, "bag_slot": 1}
 	)
 	print("booth REPACK exit 2-bag body=5 got=%s" % [two_bag])
-	assert_int(two_bag["frames"]).is_greater_equal(15)
+	assert_float(two_bag["first_k"]).is_less_equal(0.05)
+	assert_int(two_bag["frames"]).is_greater_equal(50)
+	assert_int(two_bag["held_samples"]).is_greater(0)
+	assert_int(two_bag["mid_samples"]).is_greater(0)
 	assert_float(two_bag["settled_strap"]).is_equal(1.0)
 	assert_float(two_bag["max_grip_gap"]).is_less_equal(0.03)
 	assert_int(two_bag["hits"]).is_equal(0)
