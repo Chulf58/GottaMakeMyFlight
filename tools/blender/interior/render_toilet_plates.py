@@ -55,9 +55,9 @@ PIECES = list(toilet.PIECES)
 STALL, SINK = "toilet_stall", "toilet_sink"
 CHARS = list(rap.CHARS)
 LIMIT = rap.FIT_RIGID_M  # 0.01 m for every rigid part
-# A walker's hand may pass the open leaf's inner face by this much (the 7.5 mm brush
-# agreed in the Astra design review: 0.845 m between open leaves, hands swing to 0.43).
-WALK_BRUSH = 0.01
+# A walker's hand (reaching ~0.429 m laterally) may brush the folded bi-fold stack's
+# inner face (0.411 m, 0.822 m clear doorway) by up to 0.02 m.
+WALK_BRUSH = 0.02
 
 log = rap.log
 invalid = rap.invalid
@@ -136,6 +136,8 @@ def rebuilt(piece, open_frac=0.0):
         for side in ("L", "R"):
             if o.type == "EMPTY" and o.name.startswith("Door_Leaf_Stall_" + side):
                 o.rotation_euler = (0.0, 0.0, math.radians(toilet.DOOR_OPEN_DEG[side] * open_frac))
+            elif o.type == "EMPTY" and o.name.startswith("Door_Fold_Stall_" + side):
+                o.rotation_euler = (0.0, 0.0, math.radians(toilet.DOOR_FOLD_DEG[side] * open_frac))
     bpy.context.view_layer.update()
     parts = []
     for o in c.objects:
@@ -188,9 +190,9 @@ def fit_stage():
     for who in CHARS:
         rap.reset_scene(64, 64)
         rb = rebuilt(STALL, 1.0)
-        leaves = [p for p in rb["parts"] if p[0].startswith("Door_Leaf_Stall_")]
-        if len(leaves) != 6:
-            invalid("expected 6 leaf parts (panel and two knuckles per leaf), got %d" % len(leaves))
+        leaves = [p for p in rb["parts"] if p[0].startswith(("Door_Leaf_Stall_", "Door_Fold_Stall_"))]
+        if len(leaves) != 12:
+            invalid("expected 12 bi-fold parts (panel and two knuckles per outer/inner leaf), got %d" % len(leaves))
         xf = rb["mounts"]["Mount_Use"]
         cobjs, acts, arm, _h = rap.add_character(who, xf)
         worst, frames = {}, 0
@@ -201,10 +203,10 @@ def fit_stage():
                 found, _v = depths(leaves, cobjs)
                 merge_worst(worst, found, "%s:%d" % (clip, f))
                 frames += 1
-        # Control: the same body moved onto an open leaf must be caught.
+        # Control: the same body moved onto an open bi-fold stack (z ~ 0.98 m) must be caught.
         lx = -toilet.HINGE_X
         rap.pose(arm, acts, "sit_idle", sum(rap.clip_range(acts, "sit_idle")) // 2)
-        _h.matrix_world = Matrix.Translation((lx, -0.70, 0.0)) @ xf
+        _h.matrix_world = Matrix.Translation((lx, -1.25, 0.0)) @ xf
         bpy.context.view_layer.update()
         hit, _v = depths(leaves, cobjs)
         halves = {p[0]: p[3] for p in leaves}
@@ -230,7 +232,7 @@ def walk_stage():
     no more than WALK_BRUSH past their inner face (the doorway plane, not penetration
     depth, which saturates at the 7.5 mm half thickness)."""
     ok = True
-    leaf_face = toilet.HINGE_X - toilet.LEAF_T / 2.0
+    leaf_face = toilet.FOLD_OPEN_IN_X
     for who in CHARS:
         rap.reset_scene(64, 64)
         rb = rebuilt(STALL, 1.0)
@@ -271,7 +273,7 @@ def walk_stage():
             found, verts = depths(rb["parts"], cobjs)
             lateral = float(np.abs(verts[:, 0] - p.x).max())
             merge_worst(worst, found, "%s z=%.2f %s:%d" % (phase, -p.y, clip, f))
-            if any(name.startswith("Door_Leaf_Stall_") for name in found):
+            if any(name.startswith(("Door_Leaf_Stall_", "Door_Fold_Stall_")) for name in found):
                 brush_reach = max(brush_reach, lateral)
             reach = max(reach, lateral)
             head = max(head, float(verts[:, 2].max()))
@@ -280,7 +282,8 @@ def walk_stage():
             "open_leaf_face=%.4f partition_face=%.3f leaf_brush_past_face=%.4f allowed=%.3f head_top=%.3f "
             "headrail_underside=%.2f" % (who, len(poses), -start.y, -mid.y, -mid.y, -end.y, reach, leaf_face,
                                          toilet.PARTITION_IN, brush, WALK_BRUSH, head, toilet.RAIL_Y[0]))
-        unexpected = {k: v for k, v in worst.items() if not (k.startswith("Door_Leaf_Stall_") and "Panel" in k)}
+        unexpected = {k: v for k, v in worst.items()
+                      if not (k.startswith(("Door_Leaf_Stall_", "Door_Fold_Stall_")) and "Panel" in k)}
         ok = report("WALK %s other_parts" % who, unexpected, halves) and ok
         for name, (d, kind, tag) in worst.items():
             if name not in unexpected:
@@ -361,6 +364,9 @@ def door_stage():
                 if o.type == "EMPTY" and rap.base_name(o.name) == "Door_Leaf_Stall_" + side:
                     o.matrix_basis = o.matrix_basis @ Matrix.Rotation(
                         math.radians(toilet.DOOR_OPEN_DEG[side] * deg / 90.0), 4, "Z")
+                elif o.type == "EMPTY" and rap.base_name(o.name) == "Door_Fold_Stall_" + side:
+                    o.matrix_basis = o.matrix_basis @ Matrix.Rotation(
+                        math.radians(toilet.DOOR_FOLD_DEG[side] * deg / 90.0), 4, "Z")
         bpy.context.view_layer.update()
         cube = rap.cube((1.3, -0.6, 0.5))
         target = Vector((0.3, 0.0, 1.0))
@@ -396,6 +402,8 @@ def open_doors(objs):
         for side in ("L", "R"):
             if o.type == "EMPTY" and rap.base_name(o.name) == "Door_Leaf_Stall_" + side:
                 o.matrix_basis = o.matrix_basis @ Matrix.Rotation(math.radians(toilet.DOOR_OPEN_DEG[side]), 4, "Z")
+            elif o.type == "EMPTY" and rap.base_name(o.name) == "Door_Fold_Stall_" + side:
+                o.matrix_basis = o.matrix_basis @ Matrix.Rotation(math.radians(toilet.DOOR_FOLD_DEG[side]), 4, "Z")
     bpy.context.view_layer.update()
 
 

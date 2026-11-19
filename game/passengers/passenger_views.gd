@@ -165,6 +165,8 @@ var _setoffs: Dictionary = {}
 var _vips: Dictionary = {}
 ## True while snap() syncs: the step from the pre-load position is no heading.
 var _snapping := false
+## True while _process() runs draw(), when RelocationGhosts._process already synced.
+var _in_process := false
 ## Working array of _declutter_bubbles, reused each frame.
 var _bubble_entries: Array[Dictionary] = []
 ## The count badges, pooled (NeedCluster.make_badge()), under _badge_root.
@@ -232,7 +234,9 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
+	_in_process = true
 	draw()
+	_in_process = false
 
 
 func node_for(id: int) -> Node3D:
@@ -506,14 +510,7 @@ func _sync_stall_doors(alpha: float) -> void:
 		build_view = build_mode.get_node_or_null("BuildView") as BuildView
 	if build_view != null:
 		build_view.sync_stall_doors(sim, alpha)
-	ghosts.sync()
-	if sim == null or sim.grid == null:
-		return
-	for ghost in Relocation.ghosts(sim):
-		if ghost["def"] == &"toilet_stall":
-			var node := ghosts.node_of(ghost)
-			if node != null:
-				StallDoors.apply(node, StallDoors.ghost_open_weight(sim, ghost, alpha))
+	StallDoors.sync_ghosts(sim, ghosts, alpha, _in_process)
 
 
 ## The Late mode's disc mesh, one instance per late passenger, none drawn yet.
