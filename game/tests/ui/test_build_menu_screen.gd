@@ -1,8 +1,8 @@
 class_name TestBuildMenuScreen
 extends GdUnitTestSuite
-## The screen stand in the build menu (Boredom 4/5): a Screen card in the Gates
-## tray after Seats, with its price, its daily upkeep as its hint and its
-## rendered thumbnail (Boredom 5/5).
+## The screen stand in the Operations domain tab: Gate desk, Seats and Screen
+## sit in order in Operations, with Screen's daily upkeep in its hover popup and
+## its rendered thumbnail on the card.
 
 var _port: SubViewport
 var _mode: BuildMode
@@ -26,14 +26,6 @@ func after_test() -> void:
 	_port.free()
 
 
-func _gates() -> int:
-	var all := BuildMenu.categories()
-	for i in all.size():
-		if all[i]["name"] == "Gates":
-			return i
-	return BuildMenu.NO_CATEGORY
-
-
 func _texts(control: Control) -> Array:
 	var out := []
 	for label in control.find_children("*", "Label", true, false):
@@ -41,30 +33,38 @@ func _texts(control: Control) -> Array:
 	return out
 
 
-func test_the_gates_tray_holds_the_gate_desk_seats_then_the_screen() -> void:
-	var gates := _gates()
-	assert_int(gates).is_not_equal(BuildMenu.NO_CATEGORY)
-	assert_array(BuildMenu.categories()[gates]["tools"]).is_equal(
-		[BuildMode.Tool.GATE_DESK, BuildMode.Tool.SEATS, BuildMode.Tool.SCREEN]
-	)
-	assert_int(BuildMenu.category_of(BuildMode.Tool.SCREEN)).is_equal(gates)
+func _hover_texts(tool: BuildMode.Tool) -> Array:
+	var card := _menu.card(tool) as ItemCardButton
+	var popup: Control = auto_free(card._make_custom_tooltip(card.tooltip_text))
+	return _texts(popup)
+
+
+func test_operations_holds_gate_desk_seats_then_screen_in_order() -> void:
+	var ops := BuildMenu.category_index("operations")
+	var tools: Array = BuildMenu.categories()[ops]["tools"]
+	var i_gate := tools.find(BuildMode.Tool.GATE_DESK)
+	var i_seats := tools.find(BuildMode.Tool.SEATS)
+	var i_screen := tools.find(BuildMode.Tool.SCREEN)
+	assert_int(i_gate).is_greater_equal(0)
+	assert_int(i_seats).is_equal(i_gate + 1)
+	assert_int(i_screen).is_equal(i_seats + 1)
+	assert_int(BuildMenu.category_of(BuildMode.Tool.SCREEN)).is_equal(ops)
 	assert_str(str(BuildMode.TOOL_OBJECTS[BuildMode.Tool.SCREEN])).is_equal(
 		str(ScreenCoverage.SCREEN_ID)
 	)
 
 
-func test_the_screen_card_shows_its_price_and_upkeep() -> void:
-	_menu.category_button(_gates()).pressed.emit()
+func test_the_screen_card_shows_its_price_thumbnail_and_hover_upkeep() -> void:
+	_menu.category_button(BuildMenu.category_index("operations")).pressed.emit()
 	var card := _menu.card(BuildMode.Tool.SCREEN)
 	assert_object(card).is_not_null()
-	var texts := _texts(card)
-	print("screen card: %s" % [texts])
-	assert_array(texts).contains(["Screen"])
-	assert_array(texts).contains([BuildMenuCatalog.upkeep_text(PriceTable.SCREEN_UPKEEP)])
+	assert_array(_texts(card)).contains(["Screen"])
+	assert_array(_hover_texts(BuildMode.Tool.SCREEN)).contains(
+		[BuildMenuCatalog.upkeep_text(PriceTable.SCREEN_UPKEEP)]
+	)
 	assert_int(BuildMenu.tool_price(BuildMode.Tool.SCREEN)).is_equal(
 		PriceTable.price_of_object(ScreenCoverage.SCREEN_ID)
 	)
-	# Its rendered thumbnail since Boredom 5/5, no longer a plain tile.
 	assert_bool(BuildMenu.PLACEHOLDER_THUMBNAILS.has("screen_stand")).is_false()
 	var picture := card.find_children("*", "TextureRect", true, false)[0] as TextureRect
 	assert_object(picture.texture).is_not_null()

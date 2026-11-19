@@ -1,10 +1,11 @@
 class_name ItemCardButton
 extends Button
-## A build tray's item card with its hover card (decision build-menu-items-show-
-## a-hover-card-with-a-description). Hovering the card pops a small info card
-## above it: the item's name, what it is, how it works and what it needs or
-## costs to run. Nothing extra shows until the pointer rests on the card. The
-## info is [about, how it works, needs] from ItemInfo.
+## A build tray's item card with its hover card (decisions build-menu-items-show-
+## a-hover-card-with-a-description and build-menu-rework-six-domain-tabs-
+## progressive-tab-and-card-u). Hovering the card pops a 280 px info card above
+## it: the item's name, live lock/demo requirement, footprint size, placement
+## mode (Click/Drag), upkeep/needs chips, and [about, how it works, needs] from
+## ItemInfo.
 ##
 ## The card is a tooltip popup, as MoneySlot's is. It is placed above the item
 ## card at its left edge from get_screen_transform() of the card's local origin
@@ -23,9 +24,10 @@ const CARD_TEXT_W := 280.0
 ## Space between the item card and the info card above it.
 const CARD_GAP := 6.0
 
-## The item's name and its [about, how, needs] text.
+## The item's name, its [about, how, needs] text, and optional [text, variation] chips.
 var title := ""
 var info: Array = []
+var details: Array = []
 ## Returns why the item is locked, asked each time the hover card is built so
 ## the numbers in it are current (BuildMenu sets it on a locked card; an empty
 ## Callable or an empty text leaves the card as it was).
@@ -35,11 +37,13 @@ var requirement := Callable()
 var _card: Control
 
 
-## Gives the card its hover card. An empty `with_info` leaves it with none.
-func set_info(with_title: String, with_info: Array) -> void:
+## Gives the card its hover card. Empty `with_info` and `with_details` with no
+## lock requirement leaves it with none.
+func set_info(with_title: String, with_info: Array, with_details: Array = []) -> void:
 	title = with_title
 	info = with_info
-	tooltip_text = card_text(title, info, requirement_now())
+	details = with_details
+	tooltip_text = card_text(title, info, requirement_now(), _detail_texts())
 
 
 ## Why the item is locked right now, "" when it is not.
@@ -48,27 +52,36 @@ func requirement_now() -> String:
 
 
 ## The info as plain text, one part per line under the name, and under the name
-## the `needs` line of a locked item; "" with no info and no requirement. It is
-## also what makes Godot ask for the hover card at all.
-static func card_text(card_title: String, card_info: Array, needs := "") -> String:
+## the `needs` line of a locked item plus any `extra` detail lines; "" when
+## nothing beyond the title exists. It is also what makes Godot ask for the hover card.
+static func card_text(
+	card_title: String, card_info: Array, needs := "", extra: Array = []
+) -> String:
 	var lines: Array[String] = [card_title]
 	if needs != "":
 		lines.append(needs)
-	if card_info.size() >= 3:
-		lines.append(card_info[0])
-		var words := Words.new()
-		lines.append(words.how_line(card_info[1]))
-		lines.append(words.needs_line(card_info[2]))
+	for entry: Variant in extra:
+		var detail := str(entry)
+		if detail != "":
+			lines.append(detail)
+	if card_info.size() >= 1 and str(card_info[0]) != "":
+		lines.append(str(card_info[0]))
+	var words := Words.new()
+	if card_info.size() >= 2 and str(card_info[1]) != "":
+		lines.append(words.how_line(str(card_info[1])))
+	if card_info.size() >= 3 and str(card_info[2]) != "":
+		lines.append(words.needs_line(str(card_info[2])))
 	return "\n".join(lines) if lines.size() > 1 else ""
 
 
 ## The hover text, asked afresh each time the pointer rests on the card, so a
 ## locked card's "now" numbers are current and not those of the menu's setup.
 func _get_tooltip(_at_position: Vector2) -> String:
-	return card_text(title, info, requirement_now())
+	return card_text(title, info, requirement_now(), _detail_texts())
 
 
-## The info card: the name, what the item is, then the two headed parts.
+## The info card: the name, live lock requirement, detail chips, what the item is,
+## then the headed parts.
 func make_card() -> Control:
 	var box := VBoxContainer.new()
 	box.theme = HUD_THEME
@@ -79,13 +92,59 @@ func make_card() -> Control:
 		var lock := _text(needs, &"HudAttentionText")
 		lock.name = "Requirement"
 		box.add_child(lock)
-	if info.size() >= 3:
-		box.add_child(_text(info[0], &""))
+	if not details.is_empty():
+		box.add_child(_make_details_row())
+	if info.size() >= 1 and str(info[0]) != "":
+		box.add_child(_text(str(info[0]), &""))
+	if info.size() >= 2 and str(info[1]) != "":
 		box.add_child(_text(tr("How it works"), &"HudHint"))
-		box.add_child(_text(info[1], &""))
+		box.add_child(_text(str(info[1]), &""))
+	if info.size() >= 3 and str(info[2]) != "":
 		box.add_child(_text(tr("Needs and upkeep"), &"HudHint"))
-		box.add_child(_text(info[2], &""))
+		box.add_child(_text(str(info[2]), &""))
 	return box
+
+
+func _make_details_row() -> Control:
+	var row := HFlowContainer.new()
+	row.name = "DetailsRow"
+	row.custom_minimum_size.x = CARD_TEXT_W
+	row.add_theme_constant_override("h_separation", 12)
+	row.add_theme_constant_override("v_separation", 2)
+	for entry: Variant in details:
+		var line := ""
+		var variation := &"HudHint"
+		if entry is Array and entry.size() >= 2:
+			line = str(entry[0])
+			variation = entry[1]
+		else:
+			line = str(entry)
+		if line == "":
+			continue
+		var chip := Label.new()
+		chip.text = line
+		chip.theme_type_variation = variation
+		var font := HUD_THEME.get_font(&"font", variation)
+		var fsize := HUD_THEME.get_font_size(&"font_size", variation)
+		var wide := (
+			font != null
+			and font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, fsize).x > CARD_TEXT_W
+		)
+		if wide:
+			chip.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			chip.custom_minimum_size.x = CARD_TEXT_W
+		row.add_child(chip)
+	return row
+
+
+func _detail_texts() -> Array[String]:
+	var out: Array[String] = []
+	for entry: Variant in details:
+		if entry is Array and not entry.is_empty():
+			out.append(str(entry[0]))
+		else:
+			out.append(str(entry))
+	return out
 
 
 func _text(text: String, variation: StringName) -> Label:
@@ -97,11 +156,24 @@ func _text(text: String, variation: StringName) -> Label:
 	return label
 
 
+func _has_popup_content() -> bool:
+	if requirement_now() != "":
+		return true
+	for item_line in _detail_texts():
+		if item_line != "":
+			return true
+	for part: Variant in info:
+		if str(part) != "":
+			return true
+	return false
+
+
 func _make_custom_tooltip(_for_text: String) -> Object:
-	if info.size() < 3 and requirement_now() == "":
+	if not _has_popup_content():
 		return null
 	_card = make_card()
 	_card.tree_entered.connect(_place_card, CONNECT_ONE_SHOT | CONNECT_DEFERRED)
+	_card.minimum_size_changed.connect(_place_card, CONNECT_DEFERRED)
 	return _card
 
 

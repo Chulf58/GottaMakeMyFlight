@@ -74,9 +74,7 @@ func _run() -> void:
 	_mode = _main.get_node("BuildMode")
 	_room = _hud.get_node("PanelRoom")
 	(_main.get_node("SimClock") as SimClock).set_paused(true)
-	for i in BuildMenu.categories().size():
-		if BuildMenu.bar_name(i) == "Baggage":
-			_baggage = i
+	_baggage = BuildMenu.category_of(BuildMode.Tool.BAG_ROOM)
 	if _baggage < 0:
 		_invalid("no Baggage category found")
 	await _frames(10)

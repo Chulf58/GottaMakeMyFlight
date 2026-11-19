@@ -107,11 +107,16 @@ func test_a_world_without_gate_facts_has_neither_gate_cause() -> void:
 	assert_array(HintRules.causes(world)).is_empty()
 
 
-func test_the_seats_hint_is_advice_and_both_open_on_the_gates_category() -> void:
+func test_the_seats_hint_is_advice_and_both_open_on_the_operations_category() -> void:
 	assert_str(HintRules.text(HintRules.PLACE_SEATS)).contains("opens without them")
 	assert_str(HintRules.text(HintRules.PLACE_GATE_DESK)).contains("gate desk")
-	assert_array(HintRules.categories_for(HintRules.PLACE_GATE_DESK)).is_equal(["Gates"])
-	assert_array(HintRules.categories_for(HintRules.PLACE_SEATS)).is_equal(["Gates"])
+	assert_array(HintRules.categories_for(HintRules.PLACE_GATE_DESK)).is_equal(
+		[BuildMode.Tool.GATE_DESK]
+	)
+	assert_array(HintRules.categories_for(HintRules.PLACE_SEATS)).is_equal([BuildMode.Tool.SEATS])
+	var ops := BuildMenu.category_index("operations")
+	assert_int(BuildMenu.category_of(BuildMode.Tool.GATE_DESK)).is_equal(ops)
+	assert_int(BuildMenu.category_of(BuildMode.Tool.SEATS)).is_equal(ops)
 
 
 func test_a_shortage_is_the_second_hire_cause() -> void:
@@ -172,14 +177,15 @@ func test_pick_waits_for_the_cause_to_hold_and_for_a_trigger() -> void:
 	assert_str(HintRules.pick(causes, {}, held, triggers)).is_equal(HintRules.FOOD)
 
 
-func test_each_hint_names_the_build_categories_that_are_its_opportunity() -> void:
-	var names := {}
-	for category in BuildMenu.CATEGORIES:
-		names[category["name"]] = true
+func test_each_hint_names_valid_build_tool_categories_for_its_opportunity() -> void:
 	for id in HintRules.IDS:
-		for category: String in HintRules.categories_for(id):
-			if category != HintRules.STAFF_CARD:
-				assert_bool(names.has(category)).is_true()
-	assert_array(HintRules.categories_for(HintRules.PLACE_CHECKIN)).contains(["Check-in"])
-	assert_array(HintRules.categories_for(HintRules.TOILET)).contains(["Toilets"])
+		for entry: Variant in HintRules.categories_for(id):
+			if entry is String:
+				assert_str(entry).is_equal(HintRules.STAFF_CARD)
+			else:
+				var cat := BuildMenu.category_of(entry)
+				assert_int(cat).is_greater_equal(0)
+				assert_int(cat).is_less(BuildMenu.REMOVE_CATEGORY)
+	assert_array(HintRules.categories_for(HintRules.PLACE_CHECKIN)).contains([BuildMode.Tool.DESK])
+	assert_array(HintRules.categories_for(HintRules.TOILET)).contains([BuildMode.Tool.TOILET_ROOM])
 	assert_array(HintRules.categories_for(HintRules.SECOND_HIRE)).contains([HintRules.STAFF_CARD])

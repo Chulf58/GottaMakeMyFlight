@@ -261,15 +261,15 @@ func reset_session() -> void:
 
 
 ## Moves the hints on by `delta` seconds of real time for `world` (HintRules.
-## read_world()) with the build categories open now by name (HintRules.
+## read_world()) with the build category indices open now (plus HintRules.
 ## STAFF_CARD for the Staff card). The tests drive this directly.
-func advance(delta: float, world: Dictionary, open_names: Array) -> void:
+func advance(delta: float, world: Dictionary, open_categories: Array) -> void:
 	if _mode == Mode.OFF or not _enabled or _modal():
 		return
-	if open_names != _last_open:
-		if not open_names.is_empty():
+	if open_categories != _last_open:
+		if not open_categories.is_empty():
 			note_activity()
-		_last_open = open_names.duplicate()
+		_last_open = open_categories.duplicate()
 	if bool(world.get("followed", false)):
 		_note_followed()
 	_clock += delta
@@ -294,7 +294,7 @@ func advance(delta: float, world: Dictionary, open_names: Array) -> void:
 	_idle += delta
 	if _since_end < MIN_GAP_S:
 		return
-	var due := HintRules.pick(causes, _seen, _held, _triggers(open_names))
+	var due := HintRules.pick(causes, _seen, _held, _triggers(open_categories))
 	if due != &"":
 		_show(due)
 
@@ -330,7 +330,7 @@ func _process(delta: float) -> void:
 		hiring = panel.hiring_hint_roles()
 	var world := HintRules.read_world(sim, hiring)
 	world.merge(FollowInvite.read(sim, hud.views, hud.landside_views))
-	advance(step, world, _open_names())
+	advance(step, world, _open_categories())
 
 
 ## Fades the card to the banner's faded opacity while `ghost` (the build ghost
@@ -370,12 +370,19 @@ func _track(causes: Array[StringName], delta: float) -> void:
 ## Which hints have an opportunity now: their category is open, their cause has
 ## become true and not been shown yet (latched, so it survives another hint on
 ## screen and the gap after it), or the player has been idle for IDLE_S.
-func _triggers(open_names: Array) -> Dictionary:
+func _triggers(open_categories: Array) -> Dictionary:
+	var menu := _find("BuildMenu") as BuildMenu
 	var out := {}
 	for id in HintRules.IDS:
 		var category_open := false
-		for category in HintRules.categories_for(id):
-			category_open = category_open or open_names.has(category)
+		for entry: Variant in HintRules.categories_for(id):
+			if entry is String:
+				category_open = category_open or open_categories.has(entry)
+			else:
+				var cat := (
+					menu.category_of(entry) if menu != null else BuildMenuCatalog.category_of(entry)
+				)
+				category_open = category_open or (cat >= 0 and open_categories.has(cat))
 		out[id] = category_open or _latched.has(id) or _idle >= IDLE_S
 	return out
 
@@ -458,17 +465,17 @@ func _modal() -> bool:
 	return offers != null and offers.is_open()
 
 
-func _open_names() -> Array:
-	var names := []
+func _open_categories() -> Array:
+	var open_list := []
 	var menu := _find("BuildMenu") as BuildMenu
 	if menu == null:
-		return names
+		return open_list
 	var open := menu.open_category()
-	if open != BuildMenu.NO_CATEGORY:
-		names.append(BuildMenu.CATEGORIES[open]["name"])
+	if open >= 0 and open < BuildMenu.CATEGORIES.size() and open != menu.remove_category():
+		open_list.append(open)
 	if menu.staff_open:
-		names.append(HintRules.STAFF_CARD)
-	return names
+		open_list.append(HintRules.STAFF_CARD)
+	return open_list
 
 
 func _find(node_name: String) -> Node:

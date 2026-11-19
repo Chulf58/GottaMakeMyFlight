@@ -1,12 +1,13 @@
 class_name TestHudTextFit
 extends GdUnitTestSuite
-## Build-menu card names and hint lines wrap onto a second line and drop one font
-## step only when two lines are still not enough; the card keeps its size and the
-## thumbnail gives up the height (decision build-menu-card-names-wrap-to-two-
-## lines-then-shrink-a-font-s, board T10). The build status line wraps to two
-## lines instead of clipping (board T12 part 4).
+## Build-menu card names wrap onto a second line and drop one font step only
+## when two lines are still not enough; the 96x126 compact card keeps its size
+## and fixed 52x52 thumbnail (decisions build-menu-card-names-wrap-to-two-lines-
+## then-shrink-a-font-s and build-menu-rework-six-domain-tabs-progressive-tab-
+## and-card-u, board T10 / d6f56ecf). The build status line wraps to two lines
+## instead of clipping (board T12 part 4).
 
-## The room a card label has: the card less its 6 px padding on each side.
+## Sample slot width for the pure HudLayout.fit_size / line_count unit cases.
 const SLOT_W := 100.0
 const WORD := "Gate"
 
@@ -137,11 +138,12 @@ func test_a_card_name_wraps_then_shrinks_and_the_card_keeps_its_size() -> void:
 	)
 	assert_int(name_label.get_theme_font_size(&"font_size")).is_equal(14)
 	assert_int(name_label.get_line_count()).is_equal(2)
-	assert_float(picture.size.y).is_less(resting)
+	assert_vector(picture.size).is_equal(Vector2(BuildMenu.THUMB_SIZE, BuildMenu.THUMB_SIZE))
 	name_label.text = _words(5)
 	await _frames(3)
 	assert_int(name_label.get_theme_font_size(&"font_size")).is_equal(12)
 	assert_int(name_label.get_line_count()).is_equal(2)
+	assert_vector(picture.size).is_equal(Vector2(BuildMenu.THUMB_SIZE, BuildMenu.THUMB_SIZE))
 	name_label.text = WORD
 	await _frames(3)
 	assert_int(name_label.get_theme_font_size(&"font_size")).is_equal(14)

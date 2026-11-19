@@ -44,33 +44,28 @@ func _cafe(rect := Rect2i(3, 3, 5, 4)) -> int:
 	return _mode.grid.apply(BuildEdit.place_room(rect, &"cafe")).room_id
 
 
-func _shops() -> int:
-	for i in BuildMenu.CATEGORIES.size():
-		if BuildMenu.CATEGORIES[i]["name"] == "Cafe":
-			return i
-	return BuildMenu.NO_CATEGORY
+func _food() -> int:
+	return BuildMenu.category_index("food")
 
 
-func test_the_shops_category_holds_the_cafe_room_counter_and_table() -> void:
-	var shops := _shops()
-	assert_int(shops).is_not_equal(BuildMenu.NO_CATEGORY)
-	assert_int(shops).is_less(BuildMenu.REMOVE_CATEGORY)
+func test_the_food_category_holds_the_cafe_room_counter_and_table() -> void:
+	var food := _food()
+	assert_int(food).is_not_equal(BuildMenu.NO_CATEGORY)
+	assert_int(food).is_less(BuildMenu.REMOVE_CATEGORY)
 	assert_str(BuildMenu.CATEGORIES[BuildMenu.REMOVE_CATEGORY]["name"]).is_equal("Remove")
-	_menu.category_button(shops).pressed.emit()
+	_menu.category_button(food).pressed.emit()
 	for tool in [BuildMode.Tool.CAFE_ROOM, BuildMode.Tool.COUNTER, BuildMode.Tool.TABLE]:
 		assert_bool(_menu.card(tool).is_visible_in_tree()).is_true()
-	assert_array(Array(_texts(_menu.card(BuildMode.Tool.CAFE_ROOM)))).contains(
-		["Cafe", "3x3 min", "Drag"]
-	)
-	assert_array(Array(_texts(_menu.card(BuildMode.Tool.COUNTER)))).contains(["Counter", "2x1"])
-	assert_array(Array(_texts(_menu.card(BuildMode.Tool.TABLE)))).contains(["Table", "3x1"])
+	assert_array(Array(_texts(_menu.card(BuildMode.Tool.CAFE_ROOM)))).contains(["Cafe"])
+	assert_array(Array(_texts(_menu.card(BuildMode.Tool.COUNTER)))).contains(["Counter"])
+	assert_array(Array(_texts(_menu.card(BuildMode.Tool.TABLE)))).contains(["Table"])
 
 
 func test_the_cafe_card_picks_the_room_tool() -> void:
-	_menu.category_button(_shops()).pressed.emit()
+	_menu.category_button(_food()).pressed.emit()
 	_menu.card(BuildMode.Tool.CAFE_ROOM).pressed.emit()
 	assert_int(_mode.tool).is_equal(BuildMode.Tool.CAFE_ROOM)
-	assert_int(_menu.open_category()).is_equal(_shops())
+	assert_int(_menu.open_category()).is_equal(_food())
 
 
 func test_the_panel_is_hidden_with_no_room_under_the_pointer() -> void:

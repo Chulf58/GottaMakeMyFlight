@@ -5,6 +5,7 @@ extends GdUnitTestSuite
 ## after it; a hint already seen is never latched, so Reset hints is no trigger.
 
 const NO_DESK := {"desks": 0, "scanners": 0}
+const CHECKIN_CAT := 1
 
 var _path: String
 
@@ -60,7 +61,7 @@ func _run(hints: Hints, seconds: float, world: Dictionary, open: Array = []) -> 
 
 func test_a_cause_that_arrives_while_another_hint_shows_is_kept_for_after_the_gap() -> void:
 	var hints := _settled(_world(NO_DESK))
-	_run(hints, HintRules.HOLD_S + 0.5, _world(NO_DESK), ["Check-in"])
+	_run(hints, HintRules.HOLD_S + 0.5, _world(NO_DESK), [CHECKIN_CAT])
 	assert_str(hints.shown_id()).is_equal(HintRules.PLACE_CHECKIN)
 	# A toilet need first appears while the check-in hint holds the slot.
 	var both := _world({"desks": 0, "scanners": 0, "stalls": 0, "max_toilet_need": 99})
@@ -74,7 +75,7 @@ func test_a_cause_that_arrives_while_another_hint_shows_is_kept_for_after_the_ga
 
 func test_a_kept_opportunity_is_dropped_when_its_cause_clears() -> void:
 	var hints := _settled(_world(NO_DESK))
-	_run(hints, HintRules.HOLD_S + 0.5, _world(NO_DESK), ["Check-in"])
+	_run(hints, HintRules.HOLD_S + 0.5, _world(NO_DESK), [CHECKIN_CAT])
 	var both := _world({"desks": 0, "scanners": 0, "stalls": 0, "max_toilet_need": 99})
 	_run(hints, 2.0, both)
 	# The need goes away (a stall was built), so the toilet hint is moot.
@@ -88,7 +89,7 @@ func test_a_kept_opportunity_is_dropped_when_its_cause_clears() -> void:
 
 func test_a_seen_hints_returning_cause_is_not_latched_so_reset_needs_a_new_trigger() -> void:
 	var hints := _settled(_world(NO_DESK))
-	_run(hints, HintRules.HOLD_S + 0.5, _world(NO_DESK), ["Check-in"])
+	_run(hints, HintRules.HOLD_S + 0.5, _world(NO_DESK), [CHECKIN_CAT])
 	assert_str(hints.shown_id()).is_equal(HintRules.PLACE_CHECKIN)
 	# The cause clears (a desk is built) and returns (it is removed), and stays.
 	_run(hints, 1.0, _world())
@@ -101,5 +102,5 @@ func test_a_seen_hints_returning_cause_is_not_latched_so_reset_needs_a_new_trigg
 	_run(hints, 5.0, _world(NO_DESK))
 	assert_bool(hints.is_showing()).is_false()
 	# A new trigger, the category opened, shows it again.
-	_run(hints, 1.0, _world(NO_DESK), ["Check-in"])
+	_run(hints, 1.0, _world(NO_DESK), [CHECKIN_CAT])
 	assert_str(hints.shown_id()).is_equal(HintRules.PLACE_CHECKIN)

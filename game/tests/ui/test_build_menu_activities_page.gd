@@ -1,13 +1,8 @@
 class_name TestBuildMenuActivitiesPage
 extends GdUnitTestSuite
-## The activity and rest rooms in the build menu (F4-7; decisions furniture-
-## set-modelled-on-copenhagen-airport-decor-calms-pas and food-and-drink-cafe-
-## bar-sit-down-restaurant-and-grab-and-go-st): one Activities page, since HUD
-## 6/7 the last page of the Leisure group after Lounge and Fun (it followed the
-## Dining page behind the Furniture button before), with the play area, lounge,
-## shower and nap pod room cards. Each room takes its piece from the Lounge,
-## Fun, Care or Fittings furniture page, so the page holds only the rooms. The
-## cards borrow their main piece's thumbnail (no new art).
+## The activity and rest rooms in the domain build tabs: shower and nap pod
+## rooms sit in Facilities beside their pieces, and lounge and play area rooms
+## sit in Decor & Parking beside theirs.
 
 const TOOLS := [
 	BuildMode.Tool.PLAY_AREA_ROOM,
@@ -15,12 +10,17 @@ const TOOLS := [
 	BuildMode.Tool.SHOWER_ROOM,
 	BuildMode.Tool.NAP_POD_ROOM,
 ]
-## Room tool -> its RoomTypes id.
 const ROOMS := {
 	BuildMode.Tool.PLAY_AREA_ROOM: &"play_area",
 	BuildMode.Tool.LOUNGE_ROOM: &"lounge",
 	BuildMode.Tool.SHOWER_ROOM: &"shower",
 	BuildMode.Tool.NAP_POD_ROOM: &"nap_pod",
+}
+const EXPECTED_TABS := {
+	BuildMode.Tool.PLAY_AREA_ROOM: "decor",
+	BuildMode.Tool.LOUNGE_ROOM: "decor",
+	BuildMode.Tool.SHOWER_ROOM: "facilities",
+	BuildMode.Tool.NAP_POD_ROOM: "facilities",
 }
 
 var _port: SubViewport
@@ -49,14 +49,6 @@ func after() -> void:
 	_port.free()
 
 
-func _index(category_name: String) -> int:
-	var all := BuildMenu.categories()
-	for i in all.size():
-		if all[i]["name"] == category_name:
-			return i
-	return BuildMenu.NO_CATEGORY
-
-
 func _texts(control: Control) -> Array:
 	var out := []
 	for label in control.find_children("*", "Label", true, false):
@@ -64,32 +56,27 @@ func _texts(control: Control) -> Array:
 	return out
 
 
-# Was "follows Dining in the Furniture group, last before Remove"; since HUD 6/7
-# the Activities page ends the Leisure group, after Fun, and Shops follows.
-func test_the_activities_page_follows_fun_in_the_leisure_group() -> void:
-	var all := BuildMenu.categories()
-	var page := _index("Activities")
-	assert_int(page).is_equal(_index("Fun") + 1)
-	assert_bool(all[page].get("page", false)).is_true()
-	assert_bool(_menu.category_button(page).visible).is_false()
-	assert_int(BuildMenu.group_start(page)).is_equal(BuildMenu.group_index("Leisure"))
-	assert_int(BuildMenu.group_index("Shops")).is_equal(page + 1)
-	assert_int(page).is_less(BuildMenu.REMOVE_CATEGORY)
-	assert_array(all[page]["tools"]).is_equal(TOOLS)
-	for tool in TOOLS:
-		assert_int(BuildMenu.category_of(tool)).is_equal(page)
+func _hover_texts(tool: BuildMode.Tool) -> Array:
+	var card := _menu.card(tool) as ItemCardButton
+	var popup: Control = auto_free(card._make_custom_tooltip(card.tooltip_text))
+	return _texts(popup)
 
 
-func test_the_cards_carry_the_room_names_and_minimum_sizes() -> void:
-	_menu.press_category(_index("Activities"))
+func test_activity_and_rest_rooms_live_in_their_domain_tabs() -> void:
 	for tool in TOOLS:
+		var want_idx := BuildMenu.category_index(EXPECTED_TABS[tool])
+		assert_int(BuildMenu.category_of(tool)).is_equal(want_idx)
+
+
+func test_the_cards_carry_the_room_names_and_hover_minimum_sizes() -> void:
+	for tool in TOOLS:
+		_menu.press_category(BuildMenu.category_of(tool))
 		var room := RoomTypes.get_type(ROOMS[tool])
 		var texts := _texts(_menu.card(tool))
-		print("activities card %d: %s" % [tool, texts])
+		var hover := _hover_texts(tool)
 		assert_str(str(BuildMode.TOOL_ROOMS[tool])).is_equal(str(room.id))
-		assert_array(texts).contains(["%dx%d min" % [room.min_size.x, room.min_size.y]])
-		assert_array(texts).contains([BuildMenu.PRICE_TEXT, "Drag"])
-		# The card name is the room's own, or a short form of it.
+		assert_array(texts).contains([BuildMenu.PRICE_TEXT])
+		assert_array(hover).contains(["%dx%d min" % [room.min_size.x, room.min_size.y], "Drag"])
 		assert_bool(room.display_name.contains(BuildMenu.item(tool)[0].split("-")[0])).is_true()
 
 
@@ -104,23 +91,8 @@ func test_every_activities_card_shows_a_real_thumbnail() -> void:
 		assert_object(picture.texture).override_failure_message(path).is_not_null()
 
 
-# Next went round to the Furniture page before HUD 6/7; it now goes round to
-# the Leisure group's first page, Lounge.
-func test_the_activities_tray_fits_the_column_and_next_goes_round_to_lounge() -> void:
-	var page := _index("Activities")
-	_menu.press_category(page)
-	var need := _menu.tray().get_combined_minimum_size()
-	print("activities tray needs %s of %s x %s" % [need, BuildMenu.COLUMN_W, BuildMenu.TRAY_H])
-	assert_float(need.x).is_less_equal(BuildMenu.COLUMN_W)
-	assert_float(need.y).is_less_equal(BuildMenu.TRAY_H)
-	var next := _menu.card(TOOLS[0]).get_parent().find_child("CardNext", true, false) as Button
-	assert_object(next).is_not_null()
-	next.pressed.emit()
-	assert_int(_menu.open_category()).is_equal(_index("Lounge"))
-
-
-func test_picking_an_activities_tool_opens_its_page_and_presses_its_card() -> void:
+func test_picking_an_activities_tool_opens_its_tab_and_presses_its_card() -> void:
 	for tool in TOOLS:
 		_mode.set_tool(tool)
-		assert_int(_menu.open_category()).is_equal(_index("Activities"))
+		assert_int(_menu.open_category()).is_equal(BuildMenu.category_of(tool))
 		assert_bool(_menu.card(tool).button_pressed).is_true()

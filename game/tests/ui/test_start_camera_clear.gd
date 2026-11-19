@@ -127,15 +127,12 @@ func test_at_the_start_the_area_fills_the_room_the_hud_leaves() -> void:
 	_assert_fills_free(_area_bounds())
 
 
-func test_with_the_baggage_tray_open_the_area_is_clear_of_the_tray_and_the_card() -> void:
-	var baggage := -1
-	for i in BuildMenu.categories().size():
-		if BuildMenu.bar_name(i) == "Baggage":
-			baggage = i
-	assert_int(baggage).is_greater_equal(0)
-	_menu.press_category(baggage)
+func test_with_the_operations_tray_open_the_area_is_clear_of_the_tray_and_the_card() -> void:
+	var operations := BuildMenu.category_index("operations")
+	assert_int(operations).is_greater_equal(0)
+	_menu.press_category(operations)
 	await _settle()
 	assert_bool(_menu.is_tray_open()).is_true()
 	_assert_clear(_area_bounds(), _hud_rects())
 	_assert_fills_free(_area_bounds())
-	_menu.press_category(baggage)
+	_menu.press_category(operations)

@@ -31,7 +31,7 @@ func test_the_catalog_msgids_hold_every_name_of_its_tables() -> void:
 			missing.append(name)
 	print("catalog names checked: %d, msgids: %d" % [wanted.size(), ids.size()])
 	assert_array(missing).is_empty()
-	assert_int(wanted.size()).is_greater(100)
+	assert_int(wanted.size()).is_greater(75)
 
 
 func test_the_furniture_msgids_hold_every_card_name() -> void:
