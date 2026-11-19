@@ -10,7 +10,19 @@ extends GdUnitTestSuite
 const CarryContact := preload("res://spike/carry_contact.gd")
 const CarryChecks := preload("res://spike/carry_probe_checks.gd")
 const CHECKED_BONES: Array[String] = [
-	"Arm", "Forearm", "Quad", "Shin", "Hips", "Spine_01", "Spine_02", "Spine_03"
+	"Arm",
+	"Forearm",
+	"Hand",
+	"Fingers",
+	"Fingertips",
+	"Thumb",
+	"Thumb_Tip",
+	"Quad",
+	"Shin",
+	"Hips",
+	"Spine_01",
+	"Spine_02",
+	"Spine_03",
 ]
 
 const MAX_SIM_STEPS := 2000
@@ -609,6 +621,7 @@ func _run_shoulder_pickup(
 		has_prev = true
 	var in_pickup := false
 	var step_ticks := 0.1
+	var last_anim := player.current_animation
 	for step in 80:
 		if late:
 			_subject.late = true
@@ -617,7 +630,15 @@ func _run_shoulder_pickup(
 			w.world.clock.advance(seconds)
 			if player.current_animation != "":
 				var len_s := maxf(player.current_animation_length, 0.001)
-				player.seek(fposmod(player.current_animation_position + seconds, len_s), true)
+				var base_pos := (
+					clip_start
+					if (
+						not in_pickup and clip_start > 0.0 and player.current_animation != last_anim
+					)
+					else player.current_animation_position
+				)
+				last_anim = player.current_animation
+				player.seek(fposmod(base_pos + seconds, len_s), true)
 			await skeleton.skeleton_updated
 		var st := props.bag_state(_subject.id, bag_slot)
 		if not st.has("home"):
@@ -715,11 +736,19 @@ func _run_shoulder_pickup(
 
 
 func test_lane_tray_to_shoulder_clears_body_through_pickup() -> void:
-	for body_idx: int in [0, PassengerLooks.body_of(24, 0), PassengerLooks.body_of(24, 1)]:
+	for case_spec: Array in [
+		[0, 0.0],
+		[PassengerLooks.body_of(24, 0), 0.0],
+		[PassengerLooks.body_of(24, 0), 0.40],
+		[PassengerLooks.body_of(24, 1), 0.0],
+		[10, 0.0],
+	]:
+		var body_idx: int = case_spec[0]
+		var clip_at: float = case_spec[1]
 		var got := await _run_shoulder_pickup(
-			true, body_idx, false, false, false, Passenger.Stage.SECURITY
+			true, body_idx, false, false, false, Passenger.Stage.SECURITY, {"clip_start": clip_at}
 		)
-		print("lane_left PICKUP body=%d got=%s" % [body_idx, got])
+		print("lane_left PICKUP body=%d clip=%.2f got=%s" % [body_idx, clip_at, got])
 		assert_float(got["first_k"]).is_less_equal(0.05)
 		assert_int(got["frames"]).is_greater_equal(50)
 		assert_int(got["held_samples"]).is_greater(0)
@@ -747,13 +776,26 @@ func test_lane_tray_to_shoulder_clears_body_through_pickup() -> void:
 
 
 func test_lane_to_berth_tray_to_shoulder_clears_body_and_avoids_backward_arm() -> void:
-	# Reproduces lane p8 (male_10, liquids -> TO_BERTH) and p27 (female_03,
-	# late runner + alarm -> TO_BERTH) walking away from the left tray.
-	for spec: Array in [[8, true, false, false], [10, false, true, true]]:
+	# Reproduces lane p8 (male_10, liquids -> TO_BERTH across walk phases) and
+	# p27 (female_03, walking + late runner alarm -> TO_BERTH) off the left tray.
+	for spec: Array in [
+		[8, true, false, false, 0.0],
+		[8, true, false, false, 0.40],
+		[10, false, true, false, 0.0],
+		[10, false, true, true, 0.0],
+	]:
 		var got := await _run_shoulder_pickup(
-			true, spec[0], spec[1], spec[2], spec[3], Passenger.Stage.SECURITY
+			true,
+			spec[0],
+			spec[1],
+			spec[2],
+			spec[3],
+			Passenger.Stage.SECURITY,
+			{"clip_start": spec[4]}
 		)
-		print("lane_left TO_BERTH body=%d late=%s got=%s" % [spec[0], spec[3], got])
+		print(
+			"lane_left TO_BERTH body=%d late=%s clip=%.2f got=%s" % [spec[0], spec[3], spec[4], got]
+		)
 		assert_float(got["first_k"]).is_less_equal(0.05)
 		assert_int(got["frames"]).is_greater_equal(50)
 		assert_int(got["held_samples"]).is_greater(0)

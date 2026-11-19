@@ -36,10 +36,10 @@ const STALL_PICK_REACH := 0.06
 ## its forward body-frame clearance (metres), and the waist-only CarryStoop lean
 ## (no hip drop, keeping shoulders above the 0.84 m tabletop) off the tray
 ## (board 74e713be).
-const SHOULDER_TRAY_UP_T := 0.50
+const SHOULDER_TRAY_UP_T := 0.46
 const SHOULDER_PICK_FRONT_M := 0.28
-const SHOULDER_WRAP_FRONT_M := 0.42
-const SHOULDER_TRAY_KEEP_END := 0.45
+const SHOULDER_WRAP_FRONT_M := 0.435
+const SHOULDER_TRAY_KEEP_END := 0.78
 const SHOULDER_TRAY_HIPS := Vector3(0.0, -0.45, 1.0)
 ## A backpack goes on and off the back through a hang at the leading hand's
 ## side, at shoulder height, this far out from the centre line, over this
@@ -838,15 +838,16 @@ static func _shoulder_tray_path(
 	var behind := clampf((0.12 - start_bar.z) / 0.16, 0.0, 1.0)
 	var wrap := maxf(cross, behind)
 	var side_x := out_x * maxf(want_bar.x * out_x, lerpf(0.24, 0.27, behind))
-	var ux := smoothstep(0.40 * wrap, 0.86, t)
-	var vx := smoothstep(lerpf(0.68, 0.84, behind), lerpf(0.96, 1.0, behind), t)
-	var mid_y := want_bar.y - 0.06
-	var uy := 1.0 - pow(1.0 - clampf(t / 0.58, 0.0, 1.0), 1.55)
+	var ux := smoothstep(lerpf(0.08, 0.38, behind) * wrap, lerpf(0.78, 0.86, behind), t)
+	var vx := smoothstep(lerpf(0.74, 0.84, behind), lerpf(0.96, 1.0, behind), t)
+	var mid_y := want_bar.y - 0.05
+	var uy := 1.0 - pow(1.0 - clampf(t / 0.62, 0.0, 1.0), 1.40)
 	var vy := smoothstep(0.76, 1.0, t)
-	var arch_y := 0.10 * wrap * sin(PI * clampf(t / 0.76, 0.0, 1.0))
-	var front_z := lerpf(SHOULDER_PICK_FRONT_M, lerpf(SHOULDER_WRAP_FRONT_M, 0.54, behind), wrap)
-	var uz := 1.0 - pow(1.0 - clampf(t / 0.62, 0.0, 1.0), lerpf(1.15, 1.35, behind))
-	var vz := smoothstep(0.70, 1.0, t)
+	var s_arch := sin(PI * clampf(t / 0.80, 0.0, 1.0))
+	var arch_y := 0.12 * wrap * s_arch * s_arch
+	var front_z := lerpf(SHOULDER_PICK_FRONT_M, lerpf(SHOULDER_WRAP_FRONT_M, 0.56, behind), wrap)
+	var uz := 1.0 - pow(1.0 - clampf(t / 0.62, 0.0, 1.0), lerpf(1.12, 1.35, behind))
+	var vz := smoothstep(0.72, 1.0, t)
 	var bar := Vector3(
 		lerpf(lerpf(start_bar.x, side_x, ux), want_bar.x, vx),
 		lerpf(lerpf(start_bar.y, mid_y, uy), want_bar.y, vy) + arch_y,
@@ -855,8 +856,11 @@ static func _shoulder_tray_path(
 	var yaw_in := Basis(
 		Vector3.UP,
 		(
-			out_x * 0.22 * (1.0 - behind) * sin(PI * clampf((t - 0.55) / 0.45, 0.0, 1.0))
-			- out_x * 0.48 * behind * smoothstep(0.42, 0.56, t) * (1.0 - smoothstep(0.68, 0.92, t))
+			-out_x
+			* lerpf(0.28, 0.48, behind)
+			* wrap
+			* smoothstep(0.36, 0.54, t)
+			* (1.0 - smoothstep(0.78, 0.94, t))
 		)
 	)
 	var upright_q := (yaw_in * local.basis * want.basis).get_rotation_quaternion()
@@ -1176,14 +1180,14 @@ static func plan(
 		var cross_s := clampf((-s_local.x * out_s + 0.05) / 0.45, 0.0, 1.0)
 		var trail_s := clampf((0.12 - s_local.z) / 0.16, 0.0, 1.0)
 		var flat_w := cross_s * trail_s * (1.0 - shoulder_w)
-		var mid_w := cross_s * trail_s * sin(PI * clampf((t - 0.44) / 0.18, 0.0, 1.0))
+		var mid_w := cross_s * smoothstep(0.46, 0.62, t) * (1.0 - smoothstep(0.78, 0.96, t))
 		if flat_w > 0.0 or mid_w > 0.0:
 			# Within the 3 cm GRIP_ON cap (like BACK_LOOP_UP_TURNING), hold +2.92 cm
-			# off the flat bag's +Y face at grab and -2.4 cm off the strap arch at
+			# off the flat bag's +Y face at grab and -2.7 cm off the strap arch at
 			# mid-lift while aiming the initial grab along the strap (74e713be).
 			var lift_y := lerpf(0.0292, 0.026, smoothstep(0.0, 0.03, t))
 			strap_clear = (
-				(Vector3(0.0, lift_y, 0.0) * flat_w + Vector3(-out_s * 0.024, 0.0, 0.0) * mid_w)
+				(Vector3(0.0, lift_y, 0.0) * flat_w + Vector3(-out_s * 0.027, 0.0, 0.0) * mid_w)
 				/ float(body["scale"])
 			)
 			grab_aim = (
@@ -1271,7 +1275,7 @@ static func plan(
 		# Waist-only lean toward the tray brings the reaching shoulder across
 		# clear of the opposite arm while keeping shoulders above the 0.84 m
 		# tabletop and hips upright while walking (board 74e713be).
-		keeps[lead] = 1.0 - smoothstep(0.0, SHOULDER_TRAY_KEEP_END, t)
+		keeps[lead] = 1.0 - smoothstep(0.42, SHOULDER_TRAY_KEEP_END, t)
 		hips = SHOULDER_TRAY_HIPS
 	elif first >= 0 and (flags.get("from_tray", false) or flags.get("to_tray", false)):
 		# A roller handed over at a tray: the hand at the tray leans in to it,
