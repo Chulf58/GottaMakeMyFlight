@@ -137,21 +137,16 @@ def init_shot_scene(frame_end, golden_strength=1.0, indoor=False):
     ramp.color_ramp.interpolation = "EASE"
     e0 = ramp.color_ramp.elements[0]
     e1 = ramp.color_ramp.elements[1]
-    if indoor:
-        e0.position = -0.02
-        e1.position = 0.28
-        e0.color = srgb_to_lin((0.99, 0.88, 0.70)) + (1.0,)
-        e1.color = srgb_to_lin((0.36, 0.68, 0.98)) + (1.0,)
-    else:
-        e0.position = -0.005
-        e0.color = srgb_to_lin((1.00, 0.83, 0.55)) + (1.0,)
-        em = ramp.color_ramp.elements.new(0.085)
-        em.color = srgb_to_lin((0.76, 0.89, 0.99)) + (1.0,)
-        e1.position = 0.24
-        e1.color = srgb_to_lin((0.24, 0.58, 0.96)) + (1.0,)
+    # Cohesive warm golden-hour morning sky dome across BOTH exterior and terminal window views!
+    e0.position = -0.005
+    e0.color = srgb_to_lin((1.00, 0.85, 0.58)) + (1.0,)
+    em = ramp.color_ramp.elements.new(0.09)
+    em.color = srgb_to_lin((0.78, 0.90, 0.99)) + (1.0,)
+    e1.position = 0.25
+    e1.color = srgb_to_lin((0.26, 0.60, 0.97)) + (1.0,)
     nt.links.new(elev.outputs["Value"], ramp.inputs["Fac"])
     bg = nt.nodes.new("ShaderNodeBackground")
-    bg.inputs["Strength"].default_value = 0.88 if indoor else 0.96
+    bg.inputs["Strength"].default_value = 0.96
     nt.links.new(ramp.outputs["Color"], bg.inputs["Color"])
     wout = nt.nodes.new("ShaderNodeOutputWorld")
     nt.links.new(bg.outputs["Background"], wout.inputs["Surface"])
@@ -516,6 +511,8 @@ def lights_atlas_mat():
 
 
 def glass_mat():
+    """Crystal-clear warm sunlit architectural window glass (86% transparent + 14% sky tint)
+    so terminal windows clearly show the sunny golden-hour apron, grass, trees, and aircraft outside!"""
     if "TP_GLASS" in _MAT_CACHE:
         return _MAT_CACHE["TP_GLASS"]
     m = bpy.data.materials.new("TOON_TP_Glass")
@@ -526,14 +523,12 @@ def glass_mat():
     nt = m.node_tree
     nt.nodes.clear()
     lp = nt.nodes.new("ShaderNodeLightPath")
-    tex = nt.nodes.new("ShaderNodeTexImage")
-    tex.image = get_image("tp_glass_gradient_1a_d.png")
     emit = nt.nodes.new("ShaderNodeEmission")
-    emit.inputs["Strength"].default_value = 0.90
-    nt.links.new(tex.outputs["Color"], emit.inputs["Color"])
+    emit.inputs["Color"].default_value = srgb_to_lin((0.82, 0.92, 1.00)) + (1.0,)
+    emit.inputs["Strength"].default_value = 0.95
     transp = nt.nodes.new("ShaderNodeBsdfTransparent")
     glass_mix = nt.nodes.new("ShaderNodeMixShader")
-    glass_mix.inputs["Fac"].default_value = 0.24  # Clearer windows so exterior tarmac & planes shine through!
+    glass_mix.inputs["Fac"].default_value = 0.14
     nt.links.new(transp.outputs["BSDF"], glass_mix.inputs[1])
     nt.links.new(emit.outputs["Emission"], glass_mix.inputs[2])
     shad_mix = nt.nodes.new("ShaderNodeMixShader")
@@ -543,6 +538,24 @@ def glass_mat():
     out = nt.nodes.new("ShaderNodeOutputMaterial")
     nt.links.new(shad_mix.outputs["Shader"], out.inputs["Surface"])
     _MAT_CACHE["TP_GLASS"] = m
+    return m
+
+
+def vehicle_glass_mat():
+    """Sleek dark-tinted vehicle cab windshield/window material (`Glass_Vehicles_01A_D`)."""
+    if "VEH_GLASS" in _MAT_CACHE:
+        return _MAT_CACHE["VEH_GLASS"]
+    m = bpy.data.materials.new("TOON_Vehicle_Glass")
+    nt = m.node_tree
+    nt.nodes.clear()
+    tex = nt.nodes.new("ShaderNodeTexImage")
+    tex.image = get_image("tp_glass_gradient_1a_d.png")
+    emit = nt.nodes.new("ShaderNodeEmission")
+    emit.inputs["Strength"].default_value = 0.95
+    nt.links.new(tex.outputs["Color"], emit.inputs["Color"])
+    out = nt.nodes.new("ShaderNodeOutputMaterial")
+    nt.links.new(emit.outputs["Emission"], out.inputs["Surface"])
+    _MAT_CACHE["VEH_GLASS"] = m
     return m
 
 
@@ -603,9 +616,13 @@ def character_mat(tag, cloth_tint_srgb=None, attr_name="Color"):
 def attach_outline(obj, thickness=0.006):
     if obj.type != "MESH" or thickness <= 0.0:
         return
-    mat_names = [m.name for m in obj.data.materials if m]
-    if mat_names and all(("Glass" in n or "Lights" in n or "EMIT_" in n or "SOFT_" in n) for n in mat_names):
+    mat_names = [m.name if m else "" for m in obj.data.materials]
+    is_skip_slot = [any(k in n for k in ("TP_Glass", "Lights", "EMIT_", "SOFT_")) for n in mat_names]
+    if mat_names and all(is_skip_slot):
         return
+    if any("TP_Glass" in n for n in mat_names):
+        return
+
     omat = outline_material()
     existing = [i for i, m in enumerate(obj.data.materials) if m == omat]
     if existing:
@@ -638,8 +655,10 @@ def rebind_materials(objs, label, outline_thickness=0.005):
                 slot.material = toon_atlas_mat(ATLAS_MAP[raw])
             elif raw in ("TP_Atlas_Lights_1A_D", "Atlas_Lights_1A_D"):
                 slot.material = lights_atlas_mat()
-            elif raw in ("TP_Glass_1A_D", "Glass_Vehicles_01A_D"):
+            elif raw == "TP_Glass_1A_D":
                 slot.material = glass_mat()
+            elif raw == "Glass_Vehicles_01A_D":
+                slot.material = vehicle_glass_mat()
             else:
                 fail("%s: unmapped material %r on %s" % (label, raw, o.name))
         if outline_thickness > 0.0:
@@ -688,7 +707,9 @@ def build_enclosed_terminal_hall(scene, x_min=-5.5, x_max=8.5, y_min=-16.0, y_ma
     make_box(scene, "BackWallSolid", (w_span, 0.25, ceil_z), (cx, y_min, ceil_z * 0.5), wall_m, bevel=0.0, parent=shell)
     make_box(scene, "BackBaseboard", (w_span, 0.30, 0.16), (cx, y_min + 0.04, 0.08), trim_m, bevel=0.0, parent=shell)
 
-    # 4. Far side wall (with optional open east_archway=(ay, aw, ah) leading into a real lit corridor!)
+    # 4. Far side wall (with optional open east_archway=(ay, aw, ah) leading into a rich windowed concourse!)
+    apron_sun_m = toon_rgb_mat("ext_apron_sun", (0.56, 0.58, 0.62))
+    hill_m = toon_rgb_mat("ext_hill_warm", (0.58, 0.72, 0.46))
     if glass_side == "left":
         if east_archway is not None:
             ay, aw, ah = east_archway
@@ -701,10 +722,51 @@ def build_enclosed_terminal_hall(scene, x_min=-5.5, x_max=8.5, y_min=-16.0, y_ma
             make_box(scene, "FarSideArchHeader", (0.30, aw + 0.4, ceil_z - ah), (x_max, ay, ah + (ceil_z - ah) * 0.5), wall_m, bevel=0.02, parent=shell)
             make_box(scene, "FarArchJamb_S", (0.36, 0.24, ah), (x_max, ay - aw * 0.5, ah * 0.5), trim_m, bevel=0.02, parent=shell)
             make_box(scene, "FarArchJamb_N", (0.36, 0.24, ah), (x_max, ay + aw * 0.5, ah * 0.5), trim_m, bevel=0.02, parent=shell)
-            # Lit continuation corridor walls & end wall beyond x_max so camera sees real concourse depth!
-            corr_len = 8.0
-            make_box(scene, "EastCorrWall_S", (corr_len, 0.22, ceil_z), (x_max + corr_len * 0.5, ay - aw * 0.5 - 0.1, ceil_z * 0.5), wall_m, bevel=0.0, parent=shell)
-            make_box(scene, "EastCorrWall_N", (corr_len, 0.22, ceil_z), (x_max + corr_len * 0.5, ay + aw * 0.5 + 0.1, ceil_z * 0.5), wall_m, bevel=0.0, parent=shell)
+
+            # Detailed windowed east concourse (x = x_max .. x_max + 10.5) with glass curtain wall, baseboards,
+            # ceiling beams, planters, open double concourse doors, and security checkpoint vista beyond!
+            corr_len = 10.5
+            y_s = ay - aw * 0.5 - 0.1
+            y_n = ay + aw * 0.5 + 0.1
+            make_box(scene, "EastCorrWall_S", (corr_len, 0.22, ceil_z), (x_max + corr_len * 0.5, y_s, ceil_z * 0.5), wall_m, bevel=0.0, parent=shell)
+            make_box(scene, "EastCorrBase_S", (corr_len, 0.28, 0.16), (x_max + corr_len * 0.5, y_s + 0.04, 0.08), trim_m, bevel=0.0, parent=shell)
+            # North side of East Corridor: sunlit transparent glass curtain wall + upper soffit + mullions!
+            make_box(scene, "EastCorrSoffit_N", (corr_len, 0.28, ceil_z - 2.45), (x_max + corr_len * 0.5, y_n, 2.45 + (ceil_z - 2.45) * 0.5), wall_m, bevel=0.02, parent=shell)
+            for cwx in range(int(x_max) + 1, int(x_max + corr_len), 2):
+                cwg, _, _, _ = load_glb("game/assets/interior/wall_glass.glb", "EastCorrWG_%d" % cwx, loc=(float(cwx), y_n - 0.05, 0.0), yaw_deg=0.0)
+                cwg.scale = (2.0, 1.0, 1.0)
+                cwg.parent = shell
+            for cbx in range(int(x_max) + 3, int(x_max + corr_len), 3):
+                cbeam = make_box(scene, "EastCorrBeam_%d" % cbx, (0.26, aw + 0.4, 0.18), (float(cbx), ay, ceil_z - 0.08), col_m, bevel=0.02, parent=shell)
+                cbeam.visible_shadow = False
+                cled = make_box(scene, "EastCorrLED_%d" % cbx, (1.4, 1.2, 0.05), (float(cbx) - 1.2, ay, ceil_z - 0.02), led_m, bevel=0.01, parent=shell)
+                cled.visible_shadow = False
+                make_box(scene, "EastCorrMullion_%d" % cbx, (0.28, 0.28, ceil_z), (float(cbx), y_n, ceil_z * 0.5), trim_m, bevel=0.02, parent=shell)
+            # Exterior lawn & trees outside East Corridor glass!
+            make_box(scene, "ExtApronNE", (22.0, 28.0, 0.10), (x_max + 11.2, y_n + 15.0, -0.05), apron_sun_m, bevel=0.0, parent=shell)
+            make_box(scene, "ExtLawnNE", (22.0, 8.0, 0.09), (x_max + 11.2, y_n + 4.2, -0.04), horizon_grass_mat(), bevel=0.0, parent=shell)
+            for etx in (x_max + 2.5, x_max + 6.5, x_max + 10.5):
+                etr, _, _, _ = load_glb("game/assets/decor/tc_tree_3a_indoor.glb", "EastExtTree_%d" % int(etx), loc=(etx, y_n + 3.2, 0.0), outline_thickness=0.004)
+                etr.scale = (1.7, 1.7, 1.7)
+                etr.parent = shell
+            # End of corridor at x_max + 7.4: open double doors + flanking glass + Security Arch visible beyond!
+            door_x = x_max + 7.4
+            ed_r, _, ed_bn, _ = load_glb("game/assets/interior/wall_door.glb", "EastCorrEndDoor", loc=(door_x, ay, 0.0), yaw_deg=90.0)
+            ed_r.scale = (1.35, 1.0, 1.05)
+            ed_r.parent = shell
+            if "Door_Leaf_L" in ed_bn:
+                ed_bn["Door_Leaf_L"].location.x -= 0.58
+            if "Door_Leaf_R" in ed_bn:
+                ed_bn["Door_Leaf_R"].location.x += 0.58
+            for side_dy in (-1.65, 1.65):
+                ewg, _, _, _ = load_glb("game/assets/interior/wall_glass.glb", "EastEndWG_%.1f" % side_dy, loc=(door_x, ay + side_dy, 0.0), yaw_deg=90.0)
+                ewg.parent = shell
+            make_box(scene, "EastDoorSoffit", (0.28, aw + 0.4, ceil_z - 2.45), (door_x, ay, 2.45 + (ceil_z - 2.45) * 0.5), wall_m, bevel=0.02, parent=shell)
+            # Visible Security Arch & Stanchions right beyond the open doorway + warm back wall at x_max + corr_len!
+            sa_vis, _, _, _ = load_glb("game/assets/interior/security_arch.glb", "EastVistaSecArch", loc=(door_x + 1.85, ay + 0.35, 0.0), yaw_deg=90.0)
+            sa_vis.parent = shell
+            xb_vis, _, _, _ = load_glb("game/assets/interior/xray_belt.glb", "EastVistaXray", loc=(door_x + 1.85, ay - 0.75, 0.0), yaw_deg=90.0)
+            xb_vis.parent = shell
             make_box(scene, "EastCorrEndWall", (0.25, aw + 1.0, ceil_z), (x_max + corr_len, ay, ceil_z * 0.5), wall_m, bevel=0.0, parent=shell)
         else:
             make_box(scene, "FarSideWall", (0.25, l_span, ceil_z), (x_max, cy, ceil_z * 0.5), wall_m, bevel=0.0, parent=shell)
@@ -712,11 +774,29 @@ def build_enclosed_terminal_hall(scene, x_min=-5.5, x_max=8.5, y_min=-16.0, y_ma
         soffit.visible_shadow = False
         for py in range(int(y_min), int(y_max) + 1, 4):
             make_box(scene, "MullionColL_%d" % py, (0.34, 0.34, ceil_z), (x_min, float(py), ceil_z * 0.5), trim_m, bevel=0.02, parent=shell)
-        make_box(scene, "ExtApronL", (45.0, 90.0, 0.10), (x_min - 23.0, cy, -0.06), toon_rgb_mat("ext_apron", (0.34, 0.37, 0.42)), bevel=0.0, parent=shell)
-        make_box(scene, "ExtGrassL", (90.0, 140.0, 0.08), (x_min - 68.0, cy, -0.07), horizon_grass_mat(), bevel=0.0, parent=shell)
-        for ty in range(int(y_min) + 3, int(y_max), 7):
-            tr, _, _, _ = load_glb("game/assets/decor/tc_tree_3a_indoor.glb", "ExtTreeL_%d" % ty, loc=(x_min - 4.2, float(ty), 0.0), outline_thickness=0.004)
-            tr.scale = (1.8, 1.8, 1.8)
+        # Cohesive sunlit exterior outside x_min glass wall (warm concrete apron + lawn + trees + Gotta Air plane + hills!)
+        make_box(scene, "ExtLawnStripL", (5.5, 90.0, 0.09), (x_min - 3.2, cy, -0.04), horizon_grass_mat(), bevel=0.0, parent=shell)
+        make_box(scene, "ExtApronL", (42.0, 90.0, 0.10), (x_min - 26.5, cy, -0.05), apron_sun_m, bevel=0.0, parent=shell)
+        make_box(scene, "ExtGrassL", (90.0, 160.0, 0.08), (x_min - 85.0, cy, -0.06), horizon_grass_mat(), bevel=0.0, parent=shell)
+        bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=3, radius=1.0, location=(x_min - 95.0, cy, -2.0))
+        ehl = bpy.context.active_object
+        ehl.name = "ExtHillL"
+        ehl.scale = (28.0, 95.0, 12.0)
+        ehl.data.materials.append(hill_m)
+        ehl.visible_shadow = False
+        ehl.parent = shell
+        ext_pl, ext_pl_objs, _, _ = load_glb("game/assets/planes/tp_plane_03a.glb", "ExtWindowPlaneL", loc=(x_min - 18.5, cy + 1.5, 0.0), yaw_deg=20.0, outline_thickness=0.004)
+        gmat = gotta_air_plane_mat()
+        tp_b = toon_atlas_mat("tp_atlas_1a_d.png")
+        for po in ext_pl_objs:
+            if po.type == "MESH":
+                for sl in po.material_slots:
+                    if sl.material == tp_b:
+                        sl.material = gmat
+        ext_pl.parent = shell
+        for ty in range(int(y_min) + 3, int(y_max), 6):
+            tr, _, _, _ = load_glb("game/assets/decor/tc_tree_3a_indoor.glb", "ExtTreeL_%d" % ty, loc=(x_min - 3.6, float(ty), 0.0), outline_thickness=0.004)
+            tr.scale = (1.65, 1.65, 1.65)
             tr.parent = shell
     else:
         make_box(scene, "FarSideWall", (0.25, l_span, ceil_z), (x_min, cy, ceil_z * 0.5), wall_m, bevel=0.0, parent=shell)
@@ -724,11 +804,28 @@ def build_enclosed_terminal_hall(scene, x_min=-5.5, x_max=8.5, y_min=-16.0, y_ma
         soffit.visible_shadow = False
         for py in range(int(y_min), int(y_max) + 1, 4):
             make_box(scene, "MullionColR_%d" % py, (0.34, 0.34, ceil_z), (x_max, float(py), ceil_z * 0.5), trim_m, bevel=0.02, parent=shell)
-        make_box(scene, "ExtApronR", (45.0, 90.0, 0.10), (x_max + 23.0, cy, -0.06), toon_rgb_mat("ext_apron", (0.34, 0.37, 0.42)), bevel=0.0, parent=shell)
-        make_box(scene, "ExtGrassR", (90.0, 140.0, 0.08), (x_max + 68.0, cy, -0.07), horizon_grass_mat(), bevel=0.0, parent=shell)
-        for ty in range(int(y_min) + 3, int(y_max), 7):
-            tr, _, _, _ = load_glb("game/assets/decor/tc_tree_3a_indoor.glb", "ExtTreeR_%d" % ty, loc=(x_max + 4.2, float(ty), 0.0), outline_thickness=0.004)
-            tr.scale = (1.8, 1.8, 1.8)
+        make_box(scene, "ExtLawnStripR", (5.5, 90.0, 0.09), (x_max + 3.2, cy, -0.04), horizon_grass_mat(), bevel=0.0, parent=shell)
+        make_box(scene, "ExtApronR", (42.0, 90.0, 0.10), (x_max + 26.5, cy, -0.05), apron_sun_m, bevel=0.0, parent=shell)
+        make_box(scene, "ExtGrassR", (90.0, 160.0, 0.08), (x_max + 85.0, cy, -0.06), horizon_grass_mat(), bevel=0.0, parent=shell)
+        bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=3, radius=1.0, location=(x_max + 95.0, cy, -2.0))
+        ehr = bpy.context.active_object
+        ehr.name = "ExtHillR"
+        ehr.scale = (28.0, 95.0, 12.0)
+        ehr.data.materials.append(hill_m)
+        ehr.visible_shadow = False
+        ehr.parent = shell
+        ext_pr, ext_pr_objs, _, _ = load_glb("game/assets/planes/tp_plane_03a.glb", "ExtWindowPlaneR", loc=(x_max + 18.5, cy + 1.0, 0.0), yaw_deg=-160.0, outline_thickness=0.004)
+        gmat = gotta_air_plane_mat()
+        tp_b = toon_atlas_mat("tp_atlas_1a_d.png")
+        for po in ext_pr_objs:
+            if po.type == "MESH":
+                for sl in po.material_slots:
+                    if sl.material == tp_b:
+                        sl.material = gmat
+        ext_pr.parent = shell
+        for ty in range(int(y_min) + 3, int(y_max), 6):
+            tr, _, _, _ = load_glb("game/assets/decor/tc_tree_3a_indoor.glb", "ExtTreeR_%d" % ty, loc=(x_max + 3.6, float(ty), 0.0), outline_thickness=0.004)
+            tr.scale = (1.65, 1.65, 1.65)
             tr.parent = shell
 
     # 5. North / Front Wall at y_max (open glass, open doorways with continuation hall, or solid)
@@ -1204,6 +1301,9 @@ def bind_hand_ik_target(
     parent=None,
     pos_keys=None,
     influence_keys=None,
+    pole_parent=None,
+    pole_loc=None,
+    pole_angle_deg=-90.0,
 ):
     """Drive `Forearm.<hand>` with a 2-bone IK constraint while keeping `rotation_mode == 'QUATERNION'`."""
     pb = arm.pose.bones.get("Forearm." + hand)
@@ -1223,6 +1323,14 @@ def bind_hand_ik_target(
     ik.name = "IK_%s_%s" % (name, hand)
     ik.target = target_obj
     ik.chain_count = 2
+    if pole_loc is not None:
+        pole_ob = bpy.data.objects.new("IKPole_%s_%s" % (name, hand), None)
+        scene.collection.objects.link(pole_ob)
+        if pole_parent is not None:
+            pole_ob.parent = pole_parent
+        pole_ob.location = pole_loc
+        ik.pole_target = pole_ob
+        ik.pole_angle = math.radians(pole_angle_deg)
     if influence_keys:
         for f, val in influence_keys:
             ik.influence = float(val)
@@ -1232,9 +1340,9 @@ def bind_hand_ik_target(
     return ik, target_obj
 
 
-def bind_hand_ik_to_roller(arm, pull_top_obj, active_ranges, hand="R"):
-    """Attach a 2-bone IK constraint on `Forearm.<hand>` targeting `pull_top_obj` with smooth
-    influence ramps while preserving `QUATERNION` rotation mode on all bones."""
+def bind_hand_ik_to_roller(arm, pull_top_obj, active_ranges, hand="R", char_root=None):
+    """Attach a 2-bone IK constraint on `Forearm.<hand>` targeting `pull_top_obj` with a low/back
+    pole target so the elbow stays relaxed BELOW the shoulder (`shoulder_z - elbow_z >= 0.15 m`)."""
     inf_keys = []
     if len(active_ranges) == 1 and active_ranges[0][0] <= 1:
         f1 = active_ranges[0][1]
@@ -1250,8 +1358,18 @@ def bind_hand_ik_to_roller(arm, pull_top_obj, active_ranges, hand="R"):
             inf_keys.append((f1, 1.0))
             if f1 < bpy.context.scene.frame_end:
                 inf_keys.append((min(bpy.context.scene.frame_end, f1 + 4), 0.0))
+    p_parent = char_root if char_root is not None else arm.parent
+    p_loc = (-0.42, 0.65, 1.02) if hand == "R" else (0.42, 0.65, 1.02)
     ik, _ = bind_hand_ik_target(
-        bpy.context.scene, arm, "GripRoller", hand=hand, target_obj=pull_top_obj, influence_keys=inf_keys
+        bpy.context.scene,
+        arm,
+        "GripRoller",
+        hand=hand,
+        target_obj=pull_top_obj,
+        influence_keys=inf_keys,
+        pole_parent=p_parent,
+        pole_loc=p_loc,
+        pole_angle_deg=-90.0,
     )
     return ik
 
@@ -1310,7 +1428,7 @@ def parent_prop_to_bone(prop_obj, arm, bone_name, local_loc=(0.0, 0.0, 0.0), loc
     prop_obj.rotation_euler = tuple(math.radians(v) for v in local_rot_deg)
 
 
-def load_roller_bag(label, extended=True, loc=(0.0, 0.0, 0.0), yaw_deg=0.0, bag_tint=None, parent=None, bag_scale=1.42):
+def load_roller_bag(label, extended="tow", loc=(0.0, 0.0, 0.0), yaw_deg=0.0, bag_tint=None, parent=None, bag_scale=1.12):
     root, objs, by_n, _ = load_glb("game/assets/interior/carry_roller.glb", label, loc=loc, yaw_deg=yaw_deg)
     root.scale = (bag_scale, bag_scale, bag_scale)
     if bag_tint is not None and "CarryRoller_Body" in by_n:
@@ -1323,15 +1441,18 @@ def load_roller_bag(label, extended=True, loc=(0.0, 0.0, 0.0), yaw_deg=0.0, bag_
     return root, objs, by_n
 
 
-def set_roller_handle(by_n, extended=True, frame=None):
+def set_roller_handle(by_n, extended="tow", frame=None):
     reach = by_n.get("Pull_Reach")
     top = by_n.get("Pull_Top")
     if reach is None or top is None:
         return
-    if extended:
-        # Realistic carry-on telescoping handle (~0.41 m local extension = ~0.9x case height, NEVER 37x fishing rod!)
-        reach.scale = (1.0, 20.5, 1.0)
-        top.location = (0.0, -0.22 - 0.41, 0.03)
+    if extended == "stand":
+        reach.scale = (1.0, 29.0, 1.0)
+        top.location = (0.0, -0.22 - 0.58, 0.03)
+    elif extended:
+        # Grounded 2-wheel tow extension: places Pull_Top at low hip height (~0.92m) while wheels rest at z=0.004m!
+        reach.scale = (1.0, 25.5, 1.0)
+        top.location = (0.0, -0.22 - 0.51, 0.03)
     else:
         reach.scale = (1.0, 1.0, 1.0)
         top.location = (0.0, -0.24, 0.03)
@@ -1348,6 +1469,8 @@ def verify_human_motion(
     extra_boxes_xy=None,
     seated_exempt=None,
     exempt_ranges=None,
+    pulled_rollers=None,
+    forbid_char_boxes=None,
     min_clearance=0.45,
 ):
     """Automated per-frame physical & animation audit across frames 1..n_frames:
@@ -1484,6 +1607,41 @@ def verify_human_motion(
                 min_char_d = min(min_char_d, cd)
                 if cd < 0.60:
                     fail("%s f=%d: %s and %s collided (dist=%.3fm < 0.60m)" % (shot_id, f, n1, n2, cd))
+
+        # 5. Forbidden character vertex zones (e.g. Shot 1 f<=20 no human vertex above closed taxi roof!)
+        if forbid_char_boxes:
+            dg_f = bpy.context.evaluated_depsgraph_get()
+            for ftag, f0_b, f1_b, bx0, bx1, by0, by1, bz0, bz1 in forbid_char_boxes:
+                if f0_b <= f <= f1_b:
+                    for cr in char_roots:
+                        for mo in cr.children_recursive:
+                            if mo.type == "MESH" and not mo.hide_render:
+                                ev_m = mo.evaluated_get(dg_f).to_mesh()
+                                mw_m = mo.matrix_world
+                                for v in ev_m.vertices:
+                                    wp = mw_m @ v.co
+                                    if bx0 <= wp.x <= bx1 and by0 <= wp.y <= by1 and bz0 <= wp.z <= bz1:
+                                        ev_m.clear_geometry()
+                                        fail("%s f=%d: %s vertex (%.2f,%.2f,%.2f) entered forbidden box %s!" % (shot_id, f, cr.name, wp.x, wp.y, wp.z, ftag))
+                                mo.evaluated_get(dg_f).to_mesh_clear()
+
+        # 6. Grounded pulled-roller suitcase & relaxed-elbow kinematics check!
+        if pulled_rollers:
+            for hero_r, hero_a, bag_body_ob, ground_z, tow_ranges in pulled_rollers:
+                if any(r0 <= f <= r1 for r0, r1 in tow_ranges):
+                    mw_b = bag_body_ob.matrix_world
+                    pts_b = [mw_b @ v.co for v in bag_body_ob.data.vertices]
+                    wheel_h = min(p.z for p in pts_b) - float(ground_z)
+                    if not (-0.012 <= wheel_h <= 0.030):
+                        fail("%s f=%d: pulled roller %s floating/sinking (wheel_h=%.3fm outside [-0.012..0.030]m!)" % (shot_id, f, bag_body_ob.name, wheel_h))
+                    hx, hy = float(hero_r.matrix_world.translation.x), float(hero_r.matrix_world.translation.y)
+                    min_leg_xy = min(math.hypot(p.x - hx, p.y - hy) for p in pts_b)
+                    if min_leg_xy < 0.38:
+                        fail("%s f=%d: pulled roller %s too close to Hero legs (xy=%.3fm < 0.38m, shin clip!)" % (shot_id, f, bag_body_ob.name, min_leg_xy))
+                    sh_z = float((hero_a.matrix_world @ hero_a.pose.bones["Arm.R"].head).z)
+                    el_z = float((hero_a.matrix_world @ hero_a.pose.bones["Forearm.R"].head).z)
+                    if (sh_z - el_z) < 0.12:
+                        fail("%s f=%d: Hero chicken-wing high elbow (sh_z=%.3f, el_z=%.3f, diff=%.3fm < 0.12m!)" % (shot_id, f, sh_z, el_z, sh_z - el_z))
 
     summary = {
         "shot": shot_id,

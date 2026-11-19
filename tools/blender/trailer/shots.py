@@ -149,48 +149,50 @@ def _setup_jet_landing_gear(scene, plane_root, plane_by_n, mode="parked", f_roll
 
 
 def _attach_towed_roller(hero_root, hero_arm, label, f_ik_ranges, pose_ranges=None):
-    """Parent yellow CarryRoller (`bag_scale=1.42`, realistic `0.9x` handle extension) to `hero_root`:
-    - `tow`: tilted `rx = -72 deg`, `z = +0.295 m` -> rear wheels sit flush (`+0.001 m`) on `hero_root`'s floor!
-    - `stand`: upright `rx = -88 deg`, `z = +0.312 m` -> rear wheels sit flush on floor beside right hip!
-    - `carry`: `Pull_Top` retracted flush, `rx = -86 deg`, `z = +0.82 m` -> lifted in right hand `0.51 m` clear above stair steps!
+    """Parent yellow CarryRoller (`bag_scale=1.12`) to `hero_root` with physically grounded rear-wheel contact:
+    - `tow`: tilted `rx = -55 deg`, `loc = (-0.27, +0.58, +0.193)` -> rear wheels sit ON the floor (`+0.005 m`),
+      trailing `0.49 m` behind/right of Hero's leg centerline (zero shin clip!) with `Pull_Top` at low hip height
+      so `Forearm.R` extends relaxed down-and-back (`shoulder_z - elbow_z >= 0.17 m`, zero chicken-wing!).
+    - `stand`: upright `rx = -88 deg`, `loc = (-0.42, -0.02, +0.249)` -> standing visibly BESIDE Hero on its wheels!
+    - `carry`: `Pull_Top` retracted flush, `rx = -86 deg`, `loc = (-0.28, -0.04, +0.86)` -> lifted `0.61 m` clear above airstairs!
     """
     bag_root, _, bag_by_n = tk.load_roller_bag(
         label,
-        extended=True,
-        loc=(-0.25, 0.24, 0.295),
+        extended="tow",
+        loc=(-0.27, 0.58, 0.193),
         yaw_deg=0.0,
         bag_tint=tk.YELLOW,
         parent=hero_root,
-        bag_scale=1.42,
+        bag_scale=1.12,
     )
     bag_root.rotation_mode = "XYZ"
-    bag_root.rotation_euler = (math.radians(-72.0), 0.0, 0.0)
+    bag_root.rotation_euler = (math.radians(-55.0), 0.0, 0.0)
 
     if pose_ranges:
         pos_keys = []
         rot_keys = []
         for f0, f1, mode in pose_ranges:
             if mode == "stand":
-                pos_keys.extend([(f0, (-0.27, -0.04, 0.312)), (f1, (-0.27, -0.04, 0.312))])
+                pos_keys.extend([(f0, (-0.42, -0.02, 0.249)), (f1, (-0.42, -0.02, 0.249))])
                 rot_keys.extend([(f0, (-88.0, 0.0, 0.0)), (f1, (-88.0, 0.0, 0.0))])
-                tk.set_roller_handle(bag_by_n, extended=True, frame=f0)
-                tk.set_roller_handle(bag_by_n, extended=True, frame=f1)
+                tk.set_roller_handle(bag_by_n, extended="stand", frame=f0)
+                tk.set_roller_handle(bag_by_n, extended="stand", frame=f1)
             elif mode == "carry":
-                pos_keys.extend([(f0, (-0.28, -0.04, 0.82)), (f1, (-0.28, -0.04, 0.82))])
+                pos_keys.extend([(f0, (-0.28, -0.04, 0.86)), (f1, (-0.28, -0.04, 0.86))])
                 rot_keys.extend([(f0, (-86.0, 0.0, 0.0)), (f1, (-86.0, 0.0, 0.0))])
                 tk.set_roller_handle(bag_by_n, extended=False, frame=f0)
                 tk.set_roller_handle(bag_by_n, extended=False, frame=f1)
             else:
-                pos_keys.extend([(f0, (-0.25, 0.24, 0.295)), (f1, (-0.25, 0.24, 0.295))])
-                rot_keys.extend([(f0, (-72.0, 0.0, 0.0)), (f1, (-72.0, 0.0, 0.0))])
-                tk.set_roller_handle(bag_by_n, extended=True, frame=f0)
-                tk.set_roller_handle(bag_by_n, extended=True, frame=f1)
+                pos_keys.extend([(f0, (-0.27, 0.58, 0.193)), (f1, (-0.27, 0.58, 0.193))])
+                rot_keys.extend([(f0, (-55.0, 0.0, 0.0)), (f1, (-55.0, 0.0, 0.0))])
+                tk.set_roller_handle(bag_by_n, extended="tow", frame=f0)
+                tk.set_roller_handle(bag_by_n, extended="tow", frame=f1)
         tk.key_pos(bag_root, pos_keys)
         tk.key_rot_deg(bag_root, rot_keys)
         tk._set_fcurves_linear(bag_root)
 
     if f_ik_ranges and "Pull_Top" in bag_by_n:
-        tk.bind_hand_ik_to_roller(hero_arm, bag_by_n["Pull_Top"], f_ik_ranges, hand="R")
+        tk.bind_hand_ik_to_roller(hero_arm, bag_by_n["Pull_Top"], f_ik_ranges, hand="R", char_root=hero_root)
     return bag_root, bag_by_n
 
 
@@ -357,15 +359,15 @@ def build_shot_01(g0):
     _, _, ap_by_n, _ = tk.load_glb("game/assets/buildings/tp_airport_01a.glb", "AirportExt", loc=(0.0, 0.0, 0.0), outline_thickness=0.003)
     tk.load_glb("game/assets/landside/tp_curb_bay_01a.glb", "CurbBay", loc=(15.5, -19.6, 0.11), outline_thickness=0.003)
 
-    # Curbside props tucked neatly along y = -18.35 with planters rotated yaw=90 so the y=-20.0 walkway is 100% obstacle-free!
-    pl_l, _, _, _ = tk.load_glb("game/assets/decor/tc_plant_pot_1a.glb", "CurbPlantL", loc=(11.8, -18.35, CURB_Z), yaw_deg=90.0, outline_thickness=0.004)
-    pl_r, _, _, _ = tk.load_glb("game/assets/decor/tc_plant_pot_1a.glb", "CurbPlantR", loc=(20.2, -18.35, CURB_Z), yaw_deg=90.0, outline_thickness=0.004)
-    tr1, _, _, _ = tk.load_glb("game/assets/decor/tc_tree_3a_indoor.glb", "CurbTreeL", loc=(5.4, -18.25, CURB_Z), outline_thickness=0.004)
+    # Curbside props tucked neatly along y = -18.15 with planters rotated yaw=90 so the y=-19.25 walkway is 100% obstacle-free!
+    pl_l, _, _, _ = tk.load_glb("game/assets/decor/tc_plant_pot_1a.glb", "CurbPlantL", loc=(11.8, -18.15, CURB_Z), yaw_deg=90.0, outline_thickness=0.004)
+    pl_r, _, _, _ = tk.load_glb("game/assets/decor/tc_plant_pot_1a.glb", "CurbPlantR", loc=(20.2, -18.15, CURB_Z), yaw_deg=90.0, outline_thickness=0.004)
+    tr1, _, _, _ = tk.load_glb("game/assets/decor/tc_tree_3a_indoor.glb", "CurbTreeL", loc=(5.4, -18.15, CURB_Z), outline_thickness=0.004)
     tr1.scale = (1.50, 1.50, 1.50)
-    tr2, _, _, _ = tk.load_glb("game/assets/decor/tc_tree_3a_indoor.glb", "CurbTreeR", loc=(25.8, -18.25, CURB_Z), outline_thickness=0.004)
+    tr2, _, _, _ = tk.load_glb("game/assets/decor/tc_tree_3a_indoor.glb", "CurbTreeR", loc=(29.8, -18.15, CURB_Z), outline_thickness=0.004)
     tr2.scale = (1.55, 1.55, 1.55)
-    bench_c, _, _, _ = tk.load_glb("game/assets/decor/tc_bench_1a.glb", "CurbBench", loc=(23.0, -18.35, CURB_Z), yaw_deg=90.0, outline_thickness=0.004)
-    bin_c, _, _, _ = tk.load_glb("game/assets/decor/tc_trash_can_1a.glb", "CurbBin", loc=(18.6, -18.35, CURB_Z), outline_thickness=0.004)
+    bench_c, _, _, _ = tk.load_glb("game/assets/decor/tc_bench_1a.glb", "CurbBench", loc=(23.0, -18.15, CURB_Z), yaw_deg=90.0, outline_thickness=0.004)
+    bin_c, _, _, _ = tk.load_glb("game/assets/decor/tc_trash_can_1a.glb", "CurbBin", loc=(18.6, -18.15, CURB_Z), outline_thickness=0.004)
 
     pole_m = tk.toon_rgb_mat("lamp_pole", (0.22, 0.25, 0.32))
     bulb_m = tk.emissive_mat("lamp_bulb", (1.0, 0.92, 0.72), strength=1.8)
@@ -380,14 +382,18 @@ def build_shot_01(g0):
     tk.key_pos(cruiser, [(1, (20.8, -23.9, ROAD_Z)), (N, (31.5, -23.9, ROAD_Z))])
     tk._set_fcurves_linear(cruiser)
 
-    # Background travelers strolling on unobstructed front sidewalk with stride-locked feet!
-    bg1_r, bg1_a, _, bg1_acts = tk.load_character("tcp_female_character_03", "CurbPax1", cloth_tint=(0.28, 0.65, 0.78), loc=(25.0, -19.95, CURB_Z), yaw_deg=-90.0)
-    tk.animate_character_locomotion(bg1_r, bg1_a, bg1_acts, [(1, (25.0, -19.95, CURB_Z)), (N, (17.8, -19.95, CURB_Z))], N, phase_offset=7.0)
+    # Warm glowing terminal lobby interior right inside Door_6 vestibule & behind TP_Airport_01A's windows!
+    tk.make_box(scene, "ExtLobbyBackdrop", (68.0, 0.4, 8.5), (4.0, -14.5, 4.25), tk.emissive_mat("lobby_warm_wall", (0.98, 0.92, 0.78), 1.05), bevel=0.0)
+    tk.make_box(scene, "Door6WarmVestibule", (4.8, 0.16, 3.6), (16.0, -16.65, 2.0), tk.emissive_mat("foyer_warm_glow", (0.96, 0.91, 0.80), 0.95), bevel=0.0)
+
+    # Background travelers strolling on east sidewalk (`y = -19.25`, clear of CurbBay bollards & east of HeroTaxi!)
+    bg1_r, bg1_a, _, bg1_acts = tk.load_character("tcp_female_character_03", "CurbPax1", cloth_tint=(0.28, 0.65, 0.78), loc=(24.8, -19.25, CURB_Z), yaw_deg=-90.0)
+    tk.animate_character_locomotion(bg1_r, bg1_a, bg1_acts, [(1, (24.8, -19.25, CURB_Z)), (N, (20.2, -19.25, CURB_Z))], N, phase_offset=7.0)
     sh_bag, _, _, _ = tk.load_glb("game/assets/interior/carry_shoulder_bag.glb", "CurbPax1Bag", outline_thickness=0.004)
     tk.parent_prop_to_bone(sh_bag, bg1_a, "Spine_02", local_loc=(-0.22, -0.10, 0.0), local_rot_deg=(-90.0, 0.0, 0.0))
 
-    bg2_r, bg2_a, _, bg2_acts = tk.load_character("tcp_male_character_08", "CurbPax2", cloth_tint=(0.45, 0.58, 0.32), loc=(8.6, -19.95, CURB_Z), yaw_deg=-90.0)
-    tk.animate_character_locomotion(bg2_r, bg2_a, bg2_acts, [(1, (8.6, -19.95, CURB_Z)), (N, (1.4, -19.95, CURB_Z))], N, phase_offset=14.0)
+    bg2_r, bg2_a, _, bg2_acts = tk.load_character("tcp_male_character_08", "CurbPax2", cloth_tint=(0.45, 0.58, 0.32), loc=(27.6, -19.25, CURB_Z), yaw_deg=-90.0)
+    tk.animate_character_locomotion(bg2_r, bg2_a, bg2_acts, [(1, (27.6, -19.25, CURB_Z)), (N, (23.0, -19.25, CURB_Z))], N, phase_offset=14.0)
 
     flip_f = 52
     board_root = _build_departure_board(scene, (15.85, -19.95, 3.22), flip_frame=flip_f)
@@ -456,23 +462,38 @@ def build_shot_01(g0):
     # steps out onto CURB_Z (f=19..40), looks up at FINAL CALL! board (f=42..84) with head TrackTo + surprised left-hand IK,
     # then sprints at realistic ~3.35 m/s straight into the open Door_6 vestibule!
     hero_root, hero_arm, hero_objs, hero_acts = tk.load_character(
-        "tcp_male_character_01", "Hero", cloth_tint=tk.HERO_CORAL, loc=(11.35, -21.05, CURB_Z), yaw_deg=72.0
+        "tcp_male_character_01", "Hero", cloth_tint=tk.HERO_CORAL, loc=(11.85, -20.65, -4.5), yaw_deg=72.0
     )
     tk.animate_character_locomotion(
         hero_root,
         hero_arm,
         hero_acts,
         waypoints=[
-            (1, (11.35, -21.05, CURB_Z), 72.0),
-            (19, (11.35, -21.05, CURB_Z), 72.0),
-            (28, (12.05, -20.20, CURB_Z), 75.0),
-            (40, (13.35, -20.20, CURB_Z), 158.0),
-            (102, (13.35, -20.20, CURB_Z), 118.0),
-            (138, (15.90, -19.10, CURB_Z)),
+            (1, (11.85, -20.65, CURB_Z), 72.0),
+            (20, (11.85, -20.65, CURB_Z), 72.0),
+            (38, (14.45, -20.05, CURB_Z), 172.0),
+            (102, (14.45, -20.05, CURB_Z), 135.0),
+            (132, (15.92, -19.15, CURB_Z)),
             (N, (16.00, -17.32, CURB_Z)),
         ],
         frame_end=N,
     )
+    # Keep Hero safely below the opaque roadbed (`z = -4.5`) while the taxi door is closed (f=1..19),
+    # stepping cleanly via CONSTANT keyframe to `CURB_Z` inside the open rear doorway at f=20!
+    ad_h = hero_root.animation_data
+    if ad_h and ad_h.action and hasattr(ad_h.action, "layers"):
+        for layer in ad_h.action.layers:
+            for strip in layer.strips:
+                if hasattr(strip, "channelbags"):
+                    for bag_c in strip.channelbags:
+                        for fc in bag_c.fcurves:
+                            if fc.data_path == "location" and fc.array_index == 2:
+                                for kp in fc.keyframe_points:
+                                    fr = int(round(kp.co.x))
+                                    if fr <= 19:
+                                        kp.co.y = -4.5
+                                        kp.interpolation = "CONSTANT"
+
     # Head + Spine_02 look up at Departure Board via quaternion-safe TRACK_TO!
     tk.bind_head_look_at(
         scene,
@@ -497,35 +518,26 @@ def build_shot_01(g0):
         ],
         influence_keys=[(1, 0.0), (50, 0.0), (57, 0.92), (90, 0.92), (102, 0.0)],
     )
-    bag01_root, _ = _attach_towed_roller(
+    bag01_root, bag01_by_n = _attach_towed_roller(
         hero_root,
         hero_arm,
         "HeroRoller01",
-        f_ik_ranges=[(20, N)],
-        pose_ranges=[(1, 38, "tow"), (42, 100, "stand"), (106, N, "tow")],
+        f_ik_ranges=[(21, N)],
+        pose_ranges=[(1, 36, "tow"), (40, 100, "stand"), (107, N, "tow")],
     )
-    # Keep Hero + suitcase concealed inside opaque closed taxi until rear door swings open at f=19 (at full 1.0 scale!)
-    for vis_ob in list(hero_objs) + [o for o in scene.objects if o.parent == bag01_root or (o.parent and o.parent.parent == bag01_root)]:
-        if vis_ob.type == "MESH":
-            vis_ob.hide_render = True
-            vis_ob.keyframe_insert(data_path="hide_render", frame=1)
-            vis_ob.keyframe_insert(data_path="hide_render", frame=18)
-            vis_ob.hide_render = False
-            vis_ob.keyframe_insert(data_path="hide_render", frame=19)
-            vis_ob.keyframe_insert(data_path="hide_render", frame=N)
 
     cam, target = tk.make_camera(scene, "Shot01Cam", lens=34.0, fstop=2.8)
     tk.key_pos(cam, [
         (1, (12.6, -26.8, 1.72)),
-        (36, (15.4, -27.2, 1.76)),
-        (102, (15.8, -27.0, 1.76)),
+        (36, (15.6, -27.2, 1.76)),
+        (102, (16.0, -27.0, 1.76)),
         (N, (16.1, -24.8, 1.78)),
     ])
     tk.key_pos(target, [
         (1, (7.4, -21.8, 1.05)),
-        (36, (13.8, -20.1, 1.48)),
-        (54, (14.85, -19.8, 1.66)),
-        (100, (14.95, -19.6, 1.66)),
+        (36, (14.4, -20.1, 1.48)),
+        (54, (15.15, -19.8, 1.66)),
+        (100, (15.20, -19.6, 1.66)),
         (N, (15.95, -17.8, 1.52)),
     ])
 
@@ -538,7 +550,7 @@ def build_shot_01(g0):
         {"type": "door_whoosh", "frame": g0 + 92},
         {"type": "roller", "frame": g0 + 104, "dur": 60},
     ]
-    for f in list(range(26, 40, 8)) + list(range(105, N, 7)):
+    for f in list(range(26, 38, 8)) + list(range(105, N, 7)):
         events.append({"type": "footstep", "frame": g0 + f})
 
     taxi_body = [taxi_by_n["TP_Taxi_01A_Body"]] if "TP_Taxi_01A_Body" in taxi_by_n else taxi_objs
@@ -557,13 +569,19 @@ def build_shot_01(g0):
             ("CurbBench", bench_c),
             ("CurbBin", bin_c),
         ] + [("LampPole_%d" % i, lp) for i, lp in enumerate(lamp_poles)],
-        # Building front wall segments flanking the open Door_6 aperture (x = 15.05..16.95)
         "extra_boxes_xy": [
             ("TerminalFacade_W", -40.0, 15.02, -18.25, -16.50),
             ("TerminalFacade_E", 16.98, 40.0, -18.25, -16.50),
         ],
         "seated_exempt": set(),
-        "exempt_ranges": {"CHAR_Hero": [(1, 20)]},
+        "exempt_ranges": {"CHAR_Hero": [(1, 21)]},
+        "forbid_char_boxes": [
+            ("TaxiClosedZone", 1, 19, 3.0, 15.0, -24.5, -19.0, 0.10, 3.50),
+            ("TaxiRoofZone", 1, 25, 3.0, 13.0, -23.2, -21.2, 1.55, 3.50),
+        ],
+        "pulled_rollers": [
+            (hero_root, hero_arm, bag01_by_n["CarryRoller_Body"], CURB_Z, [(108, N)]),
+        ],
     }
     return scene, cam, prove_targets, hero_arm, events, motion_spec
 
@@ -589,15 +607,19 @@ def build_shot_02(g0):
         east_archway=(3.35, 4.20, 3.10),
     )
 
-    # Illuminated overhead 'SECURITY ->' concourse archway sign above x = 6.6!
+    # Illuminated overhead 'SECURITY  >' concourse banner lowered to z=2.52m right inside Shot02Cam's frame,
+    # plus corridor planter & flight info screen along the south wall!
     sec_sign = bpy.data.objects.new("SecCorridorSign_ROOT", None)
-    sec_sign.location = (6.52, 3.35, 3.22)
+    sec_sign.location = (6.65, 3.35, 2.52)
     sec_sign.rotation_euler = (0.0, 0.0, math.radians(-90.0))
     scene.collection.objects.link(sec_sign)
-    tk.make_box(scene, "SecSignBox", (2.55, 0.16, 0.46), (0.0, 0.0, 0.0), tk.toon_rgb_mat("ss_navy", tk.NAVY), bevel=0.025, parent=sec_sign, outline=0.004)
+    tk.make_box(scene, "SecSignBox", (2.55, 0.16, 0.44), (0.0, 0.0, 0.0), tk.toon_rgb_mat("ss_navy", tk.NAVY), bevel=0.025, parent=sec_sign, outline=0.004)
     stxt = tk.make_nunito_text_3d(scene, "SECURITY  >", 0.25, 0.011, tk.emissive_mat("ss_lime", tk.GOTTA_LIME, 1.4), extrude=0.018, parent=sec_sign)
     stxt.rotation_euler = (math.radians(90.0), 0.0, 0.0)
     stxt.location = (0.0, -0.10, 0.0)
+
+    ec_plant, _, _, _ = tk.load_glb("game/assets/decor/tc_plant_pot_1a.glb", "EastCorrPlant", loc=(9.6, 1.72, 0.0), yaw_deg=90.0)
+    ec_scr, _, _, _ = tk.load_glb("game/assets/interior/info_screen.glb", "EastCorrScreen", loc=(11.9, 1.68, 0.0), yaw_deg=180.0)
 
     # Background terminal props tucked cleanly out of all concourse walking lanes!
     tk.load_glb("game/assets/interior/wall_door.glb", "EntryDoorBack", loc=(0.0, -13.4, 0.0), yaw_deg=0.0)
@@ -771,7 +793,7 @@ def build_shot_02(g0):
     hand_pass.keyframe_insert(data_path="scale", frame=132)
     hand_pass.keyframe_insert(data_path="scale", frame=N)
 
-    _attach_towed_roller(
+    _, bag02_by_n = _attach_towed_roller(
         hero_root,
         hero_arm,
         "HeroRoller02",
@@ -793,7 +815,7 @@ def build_shot_02(g0):
         (96, (-0.35, 3.35, 1.02)),
         (130, (-0.34, 4.25, 1.08)),
         (152, (0.45, 3.55, 1.06)),
-        (N, (9.45, 3.35, 1.12)),
+        (N, (9.45, 3.35, 1.18)),
     ])
 
     events.append({"type": "roller", "frame": g0 + 1, "dur": 102})
@@ -821,6 +843,8 @@ def build_shot_02(g0):
             ("SnapBagBelt", belt_root),
             ("CheckinDesk2", desk2_root),
             ("CheckinInfo", scr_root),
+            ("EastCorrPlant", ec_plant),
+            ("EastCorrScreen", ec_scr),
         ],
         "extra_boxes_xy": [
             ("WestGlassWall", -4.1, -3.65, -14.0, 8.0),
@@ -829,6 +853,9 @@ def build_shot_02(g0):
             ("EastWall_NorthSeg", 6.68, 7.0, 5.48, 8.0),
         ],
         "seated_exempt": set(),
+        "pulled_rollers": [
+            (hero_root, hero_arm, bag02_by_n["CarryRoller_Body"], 0.0, [(1, 98), (150, N)]),
+        ],
     }
     return scene, cam, prove_targets, hero_arm, events, motion_spec
 
@@ -909,23 +936,24 @@ def build_shot_03(g0):
         tk.animate_snap_pop(ob, tf, drop_height=1.40)
         events.append({"type": "pop", "frame": g0 + tf + 3, "pitch": idx + 4})
 
-    # Security Officer standing on duty (100% QUATERNION idle + smooth Forearm.L IK wave-through!)
+    # Security Officer stationed beside SecArch at (1.88, -0.35), > 2.1m clear of PickupTable so Hero NEVER
+    # overlaps or walks chest-to-chest into SecOfficer during bag pickup!
     off_root, off_arm, off_objs, off_acts = tk.load_character(
-        "tcp_male_character_07", "SecOfficer", cloth_tint=tk.OFFICER_BLUE, loc=(1.75, 1.85, 0.0), yaw_deg=-132.0
+        "tcp_male_character_07", "SecOfficer", cloth_tint=tk.OFFICER_BLUE, loc=(1.88, -0.35, 0.0), yaw_deg=-108.0
     )
     tk.set_stationary_clip(off_arm, off_acts, "idle", N, speed=1.08, phase_offset=22.0)
     tk.bind_hand_ik_target(
         scene,
         off_arm,
         "OfficerWaveThrough",
-        hand="L",
+        hand="R",
         parent=off_root,
         pos_keys=[
-            (86, (0.28, -0.10, 1.18)),
-            (96, (0.34, -0.32, 1.56)),
-            (108, (0.16, -0.40, 1.62)),
-            (118, (0.32, -0.30, 1.54)),
-            (130, (0.28, -0.10, 1.18)),
+            (86, (-0.28, -0.10, 1.18)),
+            (96, (-0.34, -0.34, 1.56)),
+            (108, (-0.16, -0.42, 1.62)),
+            (118, (-0.32, -0.32, 1.54)),
+            (130, (-0.28, -0.10, 1.18)),
         ],
         influence_keys=[(1, 0.0), (86, 0.0), (95, 0.92), (118, 0.92), (130, 0.0)],
     )
@@ -975,53 +1003,8 @@ def build_shot_03(g0):
     ])
     tk._set_fcurves_linear(tray_root)
 
-    # World-space HeroRoller03 so it rides smoothly from Hero's tow -> two-hand heave -> conveyor -> two-hand snatch -> tow!
-    bag_root, _, bag_by_n = tk.load_roller_bag("HeroRoller03", extended=True, loc=(0.55, -4.90, 0.295), bag_tint=tk.YELLOW, bag_scale=1.35)
-    tk.set_roller_handle(bag_by_n, extended=True, frame=1)
-    tk.set_roller_handle(bag_by_n, extended=True, frame=35)
-    tk.set_roller_handle(bag_by_n, extended=False, frame=42)
-    tk.set_roller_handle(bag_by_n, extended=False, frame=148)
-    tk.set_roller_handle(bag_by_n, extended=True, frame=155)
-
-    # Uncrossed two-hand grip empties on `bag_root` (bag rz=180 -> +Y local is -Y world = Hero's LEFT when facing -X!)
-    grip_side_l = bpy.data.objects.new("BagSideGrip_L", None)
-    grip_side_l.parent = bag_root
-    grip_side_l.location = (0.0, 0.21, 0.14)
-    scene.collection.objects.link(grip_side_l)
-
-    grip_side_r = bpy.data.objects.new("BagSideGrip_R", None)
-    grip_side_r.parent = bag_root
-    grip_side_r.location = (0.0, -0.21, 0.14)
-    scene.collection.objects.link(grip_side_r)
-
-    tk.key_pos(bag_root, [
-        (1, (0.55, -4.94, 0.285)),
-        (34, (0.54, -1.48, 0.285)),
-        (40, (0.05, -1.15, 0.42)),
-        (46, (-0.22, -1.15, 0.96)),    # Two-hand lift arc up & over tray rim!
-        (53, (-0.52, -1.15, 0.80)),    # Settles squarely into HeroTray
-        (56, (-0.55, -1.15, 0.80)),
-        (132, (-0.55, 1.15, 0.80)),    # Emerges from X-ray onto PickupTable
-        (138, (-0.52, 1.15, 0.80)),
-        (145, (-0.18, 1.18, 0.94)),    # Lifted off PickupTable with both hands!
-        (154, (0.55, 0.84, 0.285)),    # Placed onto floor 0.34m behind Hero's right heel!
-        (N, (0.55, 8.56, 0.285)),
-    ])
-    tk.key_rot_deg(bag_root, [
-        (1, (-72.0, 0.0, 180.0)),
-        (35, (-72.0, 0.0, 180.0)),
-        (46, (-15.0, 0.0, 180.0)),
-        (53, (0.0, 0.0, 180.0)),
-        (138, (0.0, 0.0, 180.0)),
-        (146, (-22.0, 0.0, 180.0)),
-        (154, (-72.0, 0.0, 180.0)),
-        (N, (-72.0, 0.0, 180.0)),
-    ])
-    tk._set_fcurves_linear(bag_root)
-
-    # Hero passenger: zero pirouettes, zero moonwalking!
-    # f=1..34 sprint to TrayTable -> turn left (-90/270 deg) & two-hand heave -> brisk forward walk (+Y) through SecArch ->
-    # stop at PickupTable (0.30, 1.18), turn left & two-hand grab -> sprint forward (+Y) out open SWExitDoor1!
+    # Hero passenger: steps close (`x = 0.28`), stoops torso forward (`Spine_02` + `Head` TrackTo `bag_root`),
+    # and locks BOTH hands (`influence = 1.0`) throughout the ENTIRE heave (f=37..52) and grab (f=135..150)!
     hero_root, hero_arm, hero_objs, hero_acts = tk.load_character(
         "tcp_male_character_01", "Hero", cloth_tint=tk.HERO_CORAL, loc=(0.30, -4.60, 0.0), yaw_deg=180.0
     )
@@ -1031,28 +1014,104 @@ def build_shot_03(g0):
         hero_acts,
         waypoints=[
             (1, (0.30, -4.60, 0.0), 180.0),
-            (34, (0.30, -1.15, 0.0), -90.0),
-            (53, (0.30, -1.15, 0.0), -90.0),
-            (63, (0.30, -1.15, 0.0), 140.0),
+            (31, (0.28, -1.15, 0.0), 180.0),
+            (36, (0.28, -1.15, 0.0), -90.0),
+            (54, (0.28, -1.15, 0.0), -90.0),
+            (63, (0.28, -1.15, 0.0), 140.0),
             (76, (0.82, -0.62, 0.0)),
             (114, (0.82, 0.85, 0.0)),
-            (132, (0.30, 1.18, 0.0), -90.0),
-            (148, (0.30, 1.18, 0.0), -90.0),
-            (156, (0.30, 1.18, 0.0), 180.0),
+            (131, (0.28, 1.18, 0.0), -90.0),
+            (149, (0.28, 1.18, 0.0), -90.0),
+            (157, (0.28, 1.18, 0.0), 180.0),
             (N, (0.30, 8.90, 0.0)),
         ],
         frame_end=N,
     )
-    # Towed Pull_Top grip during approach (f=1..35) and exit sprint (f=154..N)
-    tk.bind_hand_ik_to_roller(hero_arm, bag_by_n["Pull_Top"], [(1, 35), (154, N)], hand="R")
-    # Two-hand heave onto tray (f=39..53) AND two-hand snatch off pickup table (f=137..150)!
+
+    # Grounded HeroRoller03 (`bag_scale=1.12`): wheels ON floor (`z=0.193`, trailing 0.58m behind & 0.27m right of Hero!)
+    # Sample baked `hero_root` positions on towed intervals (f=1..31 & f=157..N) so ramp accel/decel never clips shins!
+    bag_root, _, bag_by_n = tk.load_roller_bag("HeroRoller03", extended="tow", loc=(0.57, -5.18, 0.193), bag_tint=tk.YELLOW, bag_scale=1.12)
+    tk.set_roller_handle(bag_by_n, extended="tow", frame=1)
+    tk.set_roller_handle(bag_by_n, extended="tow", frame=32)
+    tk.set_roller_handle(bag_by_n, extended=False, frame=38)
+    tk.set_roller_handle(bag_by_n, extended=False, frame=150)
+    tk.set_roller_handle(bag_by_n, extended="tow", frame=157)
+
+    # Uncrossed two-hand grip empties on `bag_root` (bag rz=180 -> +Y local is -Y world = Hero's LEFT when facing -X!)
+    grip_side_l = bpy.data.objects.new("BagSideGrip_L", None)
+    grip_side_l.parent = bag_root
+    grip_side_l.location = (-0.04, 0.20, -0.02)
+    scene.collection.objects.link(grip_side_l)
+
+    grip_side_r = bpy.data.objects.new("BagSideGrip_R", None)
+    grip_side_r.parent = bag_root
+    grip_side_r.location = (-0.04, -0.20, -0.02)
+    scene.collection.objects.link(grip_side_r)
+
+    bag_pos_keys = []
+    for f_tow in range(1, 32):
+        scene.frame_set(f_tow)
+        hx, hy, _ = hero_root.location
+        bag_pos_keys.append((f_tow, (float(hx) + 0.27, float(hy) - 0.58, 0.193)))
+    bag_pos_keys.extend([
+        (38, (-0.06, -1.15, 0.25)),    # Positioned right in front of Hero's two gripping hands on floor!
+        (45, (-0.24, -1.15, 0.96)),    # Lifted WITH BOTH HANDS (influence=1.0!) up over tray rim!
+        (52, (-0.48, -1.15, 0.80)),    # Set squarely into HeroTray while hands are still gripping!
+        (56, (-0.55, -1.15, 0.80)),
+        (132, (-0.55, 1.15, 0.80)),    # Emerges from X-ray onto PickupTable
+        (136, (-0.46, 1.15, 0.80)),    # Stationary until BOTH Hero hands lock on at f=136!
+        (143, (-0.18, 1.12, 0.95)),    # Lifted off PickupTable WITH BOTH HANDS (influence=1.0!)
+        (150, (-0.04, 0.98, 0.25)),    # Set down beside Hero with both hands still gripping!
+    ])
+    for f_tow in range(157, N + 1):
+        scene.frame_set(f_tow)
+        hx, hy, _ = hero_root.location
+        bag_pos_keys.append((f_tow, (float(hx) + 0.27, float(hy) - 0.58, 0.193)))
+    scene.frame_set(1)
+    tk.key_pos(bag_root, bag_pos_keys)
+    tk.key_rot_deg(bag_root, [
+        (1, (-55.0, 0.0, 180.0)),
+        (32, (-55.0, 0.0, 180.0)),
+        (38, (-75.0, 0.0, 180.0)),
+        (45, (-18.0, 0.0, 180.0)),
+        (52, (0.0, 0.0, 180.0)),
+        (136, (0.0, 0.0, 180.0)),
+        (144, (-22.0, 0.0, 180.0)),
+        (150, (-70.0, 0.0, 180.0)),
+        (157, (-55.0, 0.0, 180.0)),
+        (N, (-55.0, 0.0, 180.0)),
+    ])
+    tk._set_fcurves_linear(bag_root)
+
+    # Forward Spine_02 + Head stoop looking right at the suitcase during both lift onto tray & grab off pickup table!
+    tk.bind_head_look_at(
+        scene,
+        hero_arm,
+        "HeroStoopBag",
+        target_obj=bag_root,
+        influence_keys=[
+            (1, 0.0),
+            (33, 0.0), (37, 0.85), (53, 0.85), (60, 0.0),
+            (131, 0.0), (135, 0.85), (150, 0.85), (156, 0.0),
+        ],
+        include_spine=True,
+    )
+    # Towed Pull_Top grip during approach (f=1..31) and exit sprint (f=157..N)
+    tk.bind_hand_ik_to_roller(hero_arm, bag_by_n["Pull_Top"], [(1, 31), (157, N)], hand="R", char_root=hero_root)
+    # Two-hand heave onto tray (f=37..53) AND two-hand snatch off pickup table (f=135..150) at full influence=1.0!
     two_hand_inf = [
         (1, 0.0),
-        (36, 0.0), (40, 0.96), (52, 0.96), (57, 0.0),
-        (134, 0.0), (139, 0.96), (149, 0.96), (153, 0.0),
+        (34, 0.0), (37, 1.0), (53, 1.0), (57, 0.0),
+        (132, 0.0), (135, 1.0), (150, 1.0), (154, 0.0),
     ]
-    tk.bind_hand_ik_target(scene, hero_arm, "HeaveBagL", hand="L", target_obj=grip_side_l, influence_keys=two_hand_inf)
-    tk.bind_hand_ik_target(scene, hero_arm, "HeaveBagR", hand="R", target_obj=grip_side_r, influence_keys=two_hand_inf)
+    tk.bind_hand_ik_target(
+        scene, hero_arm, "HeaveBagL", hand="L", target_obj=grip_side_l, influence_keys=two_hand_inf,
+        pole_parent=hero_root, pole_loc=(0.45, 0.45, 0.95), pole_angle_deg=90.0,
+    )
+    tk.bind_hand_ik_target(
+        scene, hero_arm, "HeaveBagR", hand="R", target_obj=grip_side_r, influence_keys=two_hand_inf,
+        pole_parent=hero_root, pole_loc=(-0.45, 0.45, 0.95), pole_angle_deg=-90.0,
+    )
 
     # Subtle head-turns on Officer & Queue passengers watching the frantic Hero!
     for idx_q, q_arm in enumerate((off_arm, q1_arm, q2_arm, q3_arm)):
@@ -1106,6 +1165,9 @@ def build_shot_03(g0):
             ("NorthWall_Right", 3.63, 4.3, 9.35, 9.65),
         ],
         "seated_exempt": set(),
+        "pulled_rollers": [
+            (hero_root, hero_arm, bag_by_n["CarryRoller_Body"], 0.0, [(1, 31), (158, N)]),
+        ],
     }
     return scene, cam, prove_targets, hero_arm, events, motion_spec
 
@@ -1233,7 +1295,7 @@ def build_shot_04(g0):
         waypoints=[(1, (0.15, -11.2, 0.0)), (N, (0.12, 10.4, 0.0))],
         frame_end=N,
     )
-    _attach_towed_roller(hero_root, hero_arm, "HeroRoller04", f_ik_ranges=[(1, N)])
+    _, bag04_by_n = _attach_towed_roller(hero_root, hero_arm, "HeroRoller04", f_ik_ranges=[(1, N)])
     pass04 = _make_boarding_pass_card(scene, "HeroHeldPass04")
     tk.parent_prop_to_bone(pass04, hero_arm, "Hand.L", local_loc=(0.02, 0.06, 0.0), local_rot_deg=(0.0, 90.0, 0.0))
     tk.bind_hand_ik_target(
@@ -1290,6 +1352,9 @@ def build_shot_04(g0):
             ("NorthGlassRight", 1.50, 8.8, 5.38, 5.65),
         ],
         "seated_exempt": {"CHAR_CafeSitPax", "CHAR_SitPax1", "CHAR_SitPax2", "CHAR_SitPax3"},
+        "pulled_rollers": [
+            (hero_root, hero_arm, bag04_by_n["CarryRoller_Body"], 0.0, [(1, N)]),
+        ],
     }
     return scene, cam, prove_targets, hero_arm, events, motion_spec
 

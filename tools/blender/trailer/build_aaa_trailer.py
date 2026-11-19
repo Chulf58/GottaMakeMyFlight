@@ -351,6 +351,8 @@ def main():
                 extra_boxes_xy=motion_spec.get("extra_boxes_xy"),
                 seated_exempt=motion_spec.get("seated_exempt"),
                 exempt_ranges=motion_spec.get("exempt_ranges"),
+                pulled_rollers=motion_spec.get("pulled_rollers"),
+                forbid_char_boxes=motion_spec.get("forbid_char_boxes"),
                 min_clearance=0.45,
             )
             human_motion_proofs.append(hm_summary)
