@@ -110,14 +110,7 @@ static func pose_arms(props: CarryOnProps, held: Dictionary, body: Node3D, now: 
 					modes[hand] = Arm.PULL
 			SecurityLooks.Carry.SHOULDER:
 				var side := SecurityLooks.worn_side(i)
-				var was_hand: bool = int(bag.get("was", -1)) / 4 == SecurityLooks.Home.HAND
-				# The hand is on the strap before it stretches (CarryPlace.reach_blend) and
-				# lets go after it is slack.
-				var on := 0.0
-				if homes[i] == SecurityLooks.Home.HAND:
-					on = clampf(k / 0.6, 0.0, 1.0)
-				elif was_hand:
-					on = 1.0 - clampf((k - 0.4) / 0.6, 0.0, 1.0)
+				var on := strap_weight(bag, homes[i], k, now)
 				if on > 0.0:
 					modes[side] = Arm.STRAP
 					strap[side] = on
@@ -178,6 +171,32 @@ static func unpack_done(p: Passenger) -> int:
 	if p.stage != Passenger.Stage.SECURITY or p.security_phase != SecurityRuntime.Phase.UNPACK:
 		return -1
 	return SecurityRuntime.work_for(SecurityRuntime.Phase.UNPACK, p) - p.security_work
+
+
+## How far (0 to 1) the worn shoulder-strap chest pose (Arm.STRAP) is on for
+## shoulder bag `bag` (home now `home`, `k` through its move, at sim time
+## `now`): in a hand-led pickup (CarryPlace.leading()) the reaching arm stays
+## free while CarryLead reaches and carries the bag onto the shoulder
+## (span().y), then eases onto the strap as the reach lets go; in a hand-led
+## put-down it eases off over the reach (span().x) before the bag leaves the
+## shoulder.
+static func strap_weight(bag: Dictionary, home: int, k: float, now: float) -> float:
+	var was_hand: bool = int(bag.get("was", -1)) / 4 == SecurityLooks.Home.HAND
+	if CarryPlace.leading(bag, now):
+		var to_end := CarryLead.End.WORN if home == SecurityLooks.Home.HAND else CarryLead.End.REST
+		var s := CarryLead.span(
+			CarryLead.start_of(bag)[0], to_end, CarryLead.REACH_SHARE, CarryLead.reach_of(bag)
+		)
+		if home == SecurityLooks.Home.HAND:
+			return smoothstep(s.y, 1.0, k)
+		if was_hand:
+			return 0.0 if s.x <= 0.0 else 1.0 - smoothstep(0.0, s.x, k)
+		return 0.0
+	if home == SecurityLooks.Home.HAND:
+		return clampf(k / 0.6, 0.0, 1.0)
+	if was_hand:
+		return 1.0 - clampf((k - 0.4) / 0.6, 0.0, 1.0)
+	return 0.0
 
 
 ## Whether bag record `bag` (home now `home`, in hand `hand`, `k` through its
