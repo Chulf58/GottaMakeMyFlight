@@ -232,6 +232,27 @@ func test_demo_build_menu_greys_tier3_teasers_hides_tier4_and_prunes_empty_pages
 			if menu.open_category() == start:
 				break
 
+	# Every visible category button on the bottom bar opens a non-empty tray.
+	var checked_buttons := 0
+	for i in BuildMenu.categories().size():
+		if i == BuildMenu.remove_category():
+			continue
+		var bar_btn := menu.category_button(i)
+		if not bar_btn.visible:
+			continue
+		bar_btn.pressed.emit()
+		assert_bool(menu.is_tray_open()).is_true()
+		var open_cat := menu.open_category()
+		var cards_shown := 0
+		for tool in BuildMenu.categories()[open_cat]["tools"]:
+			if menu.card(tool).is_visible_in_tree():
+				assert_int(BuildUnlocks.tier_of(tool)).is_less(DemoMode.HIDDEN_MIN_TIER)
+				cards_shown += 1
+		assert_int(cards_shown).is_greater(0)
+		checked_buttons += 1
+		menu.close_for_modal()
+	assert_int(checked_buttons).is_greater_equal(17)
+
 
 func test_demo_allows_one_extra_land_plot_and_refuses_second_extra_plot() -> void:
 	DemoMode.set_override_for_test(true)
@@ -449,3 +470,75 @@ func test_main_scene_day6_autosave_and_reload_re_shows_demo_end_card_paused() ->
 	clock.set_paused(false)
 	clock.advance(SimClock.STEP * 4.0)
 	assert_int(clock.tick).is_equal(rollover)
+
+
+func test_demo_end_card_preempts_open_take_turn_dialogs_and_build_tray_on_rollover() -> void:
+	DemoMode.set_override_for_test(true)
+	SaveSlots.dir = _slots_dir
+	var main: Node = auto_free(SaveTestKit.boot(self, 777777))
+	var clock := main.get_node("SimClock") as SimClock
+	var flights := main.get_node("FlightSim") as FlightSim
+	var hud := main.get_node("PassengerHud") as PassengerHud
+	var menu := main.get_node("BuildMenu") as BuildMenu
+	var offer_panel := main.get_node("OfferPanel") as OfferPanel
+	var game_menu := main.get_node("GameMenu") as GameMenu
+	var guide := hud.unlock_guide()
+	guide.mode = UnlockGuide.Mode.PROFILE
+
+	hud.press_starter_terminal()
+	flights.opened_tick = clock.tick
+	clock.start_calendar()
+	var rollover := GameCalendar.day_start(DemoMode.MAX_DEMO_DAY, clock.epoch)
+
+	# Part 1: OfferPanel holds exclusive take_turn (yielded so 3x runs under it)
+	# and a BuildMenu tray is open when SimClock.advance crosses into Day 6.
+	offer_panel.open()
+	assert_bool(offer_panel.is_open()).is_true()
+	clock.set_paused(false)
+	clock.set_speed(3)
+	assert_bool(offer_panel.is_open()).is_true()
+	assert_bool(clock.paused).is_false()
+	menu.press_category(0)
+	assert_bool(menu.is_tray_open()).is_true()
+	clock.tick = rollover - 2
+	# Owes 3 steps at 3x (rollover - 1, rollover, rollover + 1); stops on rollover!
+	clock.advance(SimClock.STEP)
+	assert_bool(hud.demo_end_card.is_open()).is_true()
+	assert_int(clock.tick).is_equal(rollover)
+	assert_bool(clock.paused).is_true()
+	assert_bool(offer_panel.is_open()).is_false()
+	assert_bool(menu.is_tray_open()).is_false()
+	hud.demo_end_card.close()
+	hud.demo_end_card._triggered = false
+	clock.set_paused(true)
+	await await_idle_frame()
+
+	# Part 2: UnlockGuide holds the active exclusive take_turn dialog, GameMenu is
+	# queued behind it, and a BuildMenu tray is open when Day 6 rollover fires.
+	guide.open_dialog([2])
+	assert_bool(guide.is_open()).is_true()
+	assert_bool(game_menu.open()).is_true()
+	assert_bool(game_menu.has_hold()).is_true()
+	menu.press_category(0)
+	menu.build_session.sync()
+	assert_bool(menu.is_tray_open()).is_true()
+	assert_int(hud._camera_gates).is_equal(1)
+
+	hud.demo_end_card.on_tick(rollover)
+	await await_idle_frame()
+
+	assert_bool(hud.demo_end_card.is_open()).is_true()
+	assert_bool(clock.paused).is_true()
+	assert_bool(guide.is_open()).is_false()
+	assert_bool(game_menu.is_open()).is_false()
+	assert_bool(game_menu.has_hold()).is_false()
+	assert_bool(menu.is_tray_open()).is_false()
+	assert_int(hud._camera_gates).is_equal(1)
+
+	var title_returns := [0]
+	hud.demo_end_card.back_to_title = func() -> void: title_returns[0] += 1
+	hud.demo_end_card.back_button().pressed.emit()
+	await await_idle_frame()
+	assert_int(title_returns[0]).is_equal(1)
+	assert_int(hud._camera_gates).is_equal(0)
+	assert_bool(clock.holds.is_holding()).is_false()

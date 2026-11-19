@@ -45,6 +45,7 @@ var _layer: CanvasLayer
 var _panel: PanelContainer
 var _hold := ClockHolds.NONE
 var _shown := false
+var _triggered := false
 var _cash_earned := 0
 var _since_load := false
 var _bound_wallet: Wallet
@@ -86,12 +87,12 @@ func is_due() -> bool:
 
 
 func on_tick(_tick: int) -> void:
-	if not _shown and is_due():
+	if not _shown and not _triggered and is_due():
 		open()
 
 
 func check_now() -> void:
-	if not _shown and is_due():
+	if not _shown and not _triggered and is_due():
 		open()
 
 
@@ -100,12 +101,21 @@ func open() -> bool:
 	if _shown or not DemoMode.is_demo():
 		return false
 	_shown = true
-	if is_instance_valid(clock) and is_inside_tree():
-		_hold = clock.holds.acquire(self, false)
+	_triggered = true
 	_close_active_ui()
+	_sweep_late_ui.call_deferred()
 	_build_layer()
 	dialog_changed.emit(true)
 	return true
+
+
+func _sweep_late_ui() -> void:
+	if not _shown:
+		return
+	var other_holds := is_instance_valid(clock) and clock.holds.count() > 1
+	var tray_open := build_menu != null and build_menu.is_tray_open()
+	if other_holds or tray_open:
+		_close_active_ui()
 
 
 func close() -> void:
@@ -200,6 +210,7 @@ func _on_save_loaded(ok: bool) -> void:
 		return
 	var was_open := _shown
 	_shown = false
+	_triggered = false
 	var old_layer := _layer
 	_layer = null
 	_panel = null
@@ -219,28 +230,42 @@ func _on_save_loaded(ok: bool) -> void:
 
 
 func _close_active_ui() -> void:
+	if is_instance_valid(clock):
+		clock.holds.clear()
+		_hold = ClockHolds.NONE
 	if hud != null:
 		hud.dismiss_intro()
 		if hud.unlock_guide() != null:
-			hud.unlock_guide().dismiss()
-	if build_mode != null:
-		build_mode.templates.disarm()
-		build_mode.set_tool(BuildMode.Tool.NONE)
+			hud.unlock_guide()._on_loaded(true)
 	if build_menu != null:
-		if build_menu.staff_open:
-			build_menu.press_staff()
-		if build_menu.open_category() != BuildMenu.NO_CATEGORY:
-			build_menu.press_category(build_menu.open_category())
+		build_menu.close_for_modal()
+	elif build_mode != null:
+		build_mode.templates.disarm()
+		if build_mode.room_mover.active:
+			build_mode.room_mover.cancel()
+		build_mode.set_tool(BuildMode.Tool.NONE)
+	if is_inside_tree():
+		for sheet in get_tree().get_nodes_in_group(TopRow.SHEET_GROUP):
+			if sheet.has_method("close"):
+				sheet.call("close")
 	var root := hud.get_parent() if hud != null else get_parent()
-	if root == null:
-		return
+	if root != null:
+		_close_scene_dialogs(root)
+	if _shown and is_instance_valid(clock) and is_inside_tree():
+		_hold = clock.holds.acquire(self, false)
+
+
+func _close_scene_dialogs(root: Node) -> void:
 	var game_menu := root.get_node_or_null("GameMenu") as GameMenu
-	if game_menu != null and game_menu.is_open():
-		game_menu.close()
-	var offers := root.get_node_or_null("OfferPanel")
-	if offers != null and offers.has_method("is_open") and offers.call("is_open"):
-		if offers.has_method("close"):
-			offers.call("close")
+	if game_menu != null:
+		game_menu._on_loaded(true)
+	var incident_panel := root.get_node_or_null("IncidentPanel") as IncidentPanel
+	if incident_panel != null:
+		var was_open := incident_panel.is_open()
+		incident_panel._free_dialog()
+		incident_panel._release_clock()
+		if was_open:
+			incident_panel.dialog_changed.emit(false)
 
 
 func _build_layer() -> void:

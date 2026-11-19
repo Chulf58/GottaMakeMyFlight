@@ -734,6 +734,20 @@ func _on_loaded(ok: bool) -> void:
 	_show_status()
 
 
+## Closes any open tray, Staff card, template paste or room move and drops the
+## build session's hold on the clock (used when a full-screen modal takes over).
+func close_for_modal() -> void:
+	_open = NO_CATEGORY
+	_set_staff_open(false)
+	if build_mode != null:
+		build_mode.templates.disarm()
+		if build_mode.room_mover.active:
+			build_mode.room_mover.cancel()
+		build_mode.set_tool(BuildMode.Tool.NONE)
+	build_session.set_building(false)
+	_sync()
+
+
 ## The loaded world is a new one: build mode ends with the clock as loaded, the
 ## tray and tool close, and the undo history goes (as OfferPanel._on_loaded does
 ## for its sheet).

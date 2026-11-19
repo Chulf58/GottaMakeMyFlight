@@ -701,10 +701,15 @@ func _show_intro() -> void:
 	_gate_camera(true)
 
 
-## Closes the intro as Continue would; does nothing when it is not open.
+## Closes the intro as Continue would, or drops its queued hold; does nothing
+## when neither is active.
 func dismiss_intro() -> void:
 	if _intro != null:
 		_intro.dismiss()
+	elif _intro_hold != ClockHolds.NONE:
+		if is_instance_valid(clock):
+			clock.holds.release(_intro_hold)
+		_intro_hold = ClockHolds.NONE
 
 
 ## The open intro dialogue, or null when it is closed.
