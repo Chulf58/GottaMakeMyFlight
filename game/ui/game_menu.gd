@@ -58,6 +58,8 @@ var open_folder := Callable()
 ## (a selected built item or a followed passenger or vehicle) and took the key.
 ## PassengerHud sets it, so the first Esc closes the card and the next opens the menu.
 var esc_closes: Callable
+## The Audio controls card on the Settings view, or null while the menu is closed.
+var audio_card: AudioSettingsCard
 
 var _layer: CanvasLayer
 var _question_layer: CanvasLayer
@@ -158,12 +160,14 @@ func press_settings() -> void:
 	if not _shown:
 		return
 	_main_page.visible = false
+	audio_card.visible = true
 	_settings_page.visible = true
 
 
 func press_back() -> void:
 	if not _shown:
 		return
+	audio_card.visible = false
 	_settings_page.visible = false
 	_load_page.visible = false
 	_main_page.visible = true
@@ -291,6 +295,10 @@ func _show() -> void:
 		_button(_main_page, "Load", tr("Load", "menu"), press_load)
 		load_button().disabled = SaveSlots.existing(_save_paths()).is_empty()
 	_button(_main_page, "Settings", tr("Settings"), press_settings)
+	audio_card = AudioSettingsCard.new()
+	audio_card.name = "AudioSettings"
+	audio_card.visible = false
+	pages.add_child(audio_card)
 	_settings_page = _page("SettingsPage", tr("Settings"))
 	_settings_page.visible = false
 	pages.add_child(_settings_page)
@@ -432,6 +440,7 @@ func _free_layer() -> void:
 	var layer := _layer
 	_layer = null
 	_main_page = null
+	audio_card = null
 	_settings_page = null
 	_load_page = null
 	_save_list = null
