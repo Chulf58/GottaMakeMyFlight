@@ -53,16 +53,22 @@ const TEXT := {
 	FOLLOW_PASSENGER: "Click a passenger to follow them to their flight",
 }
 
-## The build categories (BuildMenu.CATEGORIES names) that are each hint's
-## opportunity: the player opening one while the cause is true.
+## The build tools (BuildMode.Tool) or STAFF_CARD whose open category is each
+## hint's opportunity: the player opening that tab while the cause is true.
 const CATEGORIES := {
-	PLACE_CHECKIN: ["Check-in"],
-	PLACE_SECURITY: ["Security", "Lane"],
-	PLACE_GATE_DESK: ["Gates"],
-	PLACE_SEATS: ["Gates"],
+	PLACE_CHECKIN: [BuildMode.Tool.DESK],
+	PLACE_SECURITY: [BuildMode.Tool.SCANNER, BuildMode.Tool.ARCH],
+	PLACE_GATE_DESK: [BuildMode.Tool.GATE_DESK],
+	PLACE_SEATS: [BuildMode.Tool.SEATS],
 	SECOND_HIRE: [STAFF_CARD],
-	TOILET: ["Toilets"],
-	FOOD: ["Cafe", "Food", "Dining"],
+	TOILET: [BuildMode.Tool.TOILET_ROOM],
+	FOOD:
+	[
+		BuildMode.Tool.CAFE_ROOM,
+		BuildMode.Tool.BAR_ROOM,
+		BuildMode.Tool.RESTAURANT_ROOM,
+		BuildMode.Tool.STALL_ROOM,
+	],
 	FOLLOW_PASSENGER: [],
 }
 

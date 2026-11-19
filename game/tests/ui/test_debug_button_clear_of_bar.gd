@@ -55,7 +55,7 @@ func test_the_debug_button_is_clear_of_the_bar() -> void:
 		print(
 			"window %s bar %s debug %s gap %.1f" % [size, bar, debug, debug.position.x - bar.end.x]
 		)
-		assert_float(bar.size.x).is_greater(500.0)
+		assert_float(bar.size.x).is_greater(400.0)
 		assert_float(debug.size.x).is_greater(20.0)
 		assert_bool(bar.intersects(debug)).is_false()
 		assert_float(debug.position.x - bar.end.x).is_greater_equal(MIN_GAP)

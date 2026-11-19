@@ -1,12 +1,7 @@
 class_name TestBuildMenuMoneyPage
 extends GdUnitTestSuite
-## The currency exchange and ATM in the build menu (F4-5b; decision store-
-## rooms-and-retail-pieces-go-on-stores-pages-behind-the-furniture-button): one
-## Money page, since HUD 6/7 the last page of the Services group after Desks
-## and Care (it followed Fashion behind the Furniture button before), holding
-## the exchange room, its counter, the ATM room and the ATM, four cards and the Next
-## column. The exchange counter and the ATM left the Desks page
-## for it. Every card shows a rendered thumbnail, never a placeholder tile.
+## The currency exchange and ATM in the Facilities domain tab: exchange room,
+## counter, ATM room and cash machine sit in Facilities with rendered thumbnails.
 
 const TOOLS := [
 	BuildMode.Tool.EXCHANGE_ROOM,
@@ -15,7 +10,6 @@ const TOOLS := [
 	BuildMode.Tool.ATM,
 ]
 const NAMES := ["Exchange", "Counter", "ATM", "Cash machine"]
-## Room tool -> its RoomTypes id.
 const ROOMS := {BuildMode.Tool.EXCHANGE_ROOM: &"exchange", BuildMode.Tool.ATM_ROOM: &"atm"}
 
 var _port: SubViewport
@@ -44,14 +38,6 @@ func after() -> void:
 	_port.free()
 
 
-func _index(category_name: String) -> int:
-	var all := BuildMenu.categories()
-	for i in all.size():
-		if all[i]["name"] == category_name:
-			return i
-	return BuildMenu.NO_CATEGORY
-
-
 func _texts(control: Control) -> Array:
 	var out := []
 	for label in control.find_children("*", "Label", true, false):
@@ -59,47 +45,38 @@ func _texts(control: Control) -> Array:
 	return out
 
 
-# Was "follows Fashion in the Furniture group"; since HUD 6/7 the Money page
-# ends the Services group, after Care, and Leisure's first page follows it.
-func test_the_money_page_follows_care_in_the_services_group() -> void:
-	var all := BuildMenu.categories()
-	var page := _index("Money")
-	print("money page at %d, remove at %d" % [page, BuildMenu.REMOVE_CATEGORY])
-	assert_int(page).is_equal(_index("Care") + 1)
-	assert_bool(all[page].get("page", false)).is_true()
-	assert_bool(_menu.category_button(page).visible).is_false()
-	assert_int(BuildMenu.group_start(page)).is_equal(BuildMenu.group_index("Services"))
-	assert_int(BuildMenu.group_index("Leisure")).is_equal(page + 1)
-	assert_int(page).is_less(BuildMenu.REMOVE_CATEGORY)
-	assert_array(all[page]["tools"]).is_equal(TOOLS)
+func _hover_texts(tool: BuildMode.Tool) -> Array:
+	var card := _menu.card(tool) as ItemCardButton
+	var popup: Control = auto_free(card._make_custom_tooltip(card.tooltip_text))
+	return _texts(popup)
+
+
+func test_exchange_and_atm_tools_live_in_facilities_in_order() -> void:
+	var facilities := BuildMenu.category_index("facilities")
+	var tab_tools: Array = BuildMenu.categories()[facilities]["tools"]
 	for tool in TOOLS:
-		assert_int(BuildMenu.category_of(tool)).is_equal(page)
-	# The exchange counter and the ATM left the Desks page.
-	var desks: Array = all[_index("Desks")]["tools"]
-	assert_bool(desks.has(BuildMode.Tool.EXCHANGE)).is_false()
-	assert_bool(desks.has(BuildMode.Tool.ATM)).is_false()
-	assert_int(desks.size()).is_greater(0)
+		assert_int(BuildMenu.category_of(tool)).is_equal(facilities)
+		assert_bool(tab_tools.has(tool)).is_true()
 
 
-func test_the_cards_carry_their_names_sizes_and_prices() -> void:
-	_menu.press_category(_index("Money"))
+func test_the_cards_carry_their_names_prices_and_hover_sizes() -> void:
+	var facilities := BuildMenu.category_index("facilities")
+	_menu.press_category(facilities)
 	for n in TOOLS.size():
 		var tool: BuildMode.Tool = TOOLS[n]
 		var texts := _texts(_menu.card(tool))
-		print("money card %d: %s" % [tool, texts])
+		var hover := _hover_texts(tool)
 		assert_str(BuildMenu.item(tool)[0]).is_equal(NAMES[n])
 		assert_array(texts).contains([NAMES[n]])
 		if ROOMS.has(tool):
 			var room := RoomTypes.get_type(ROOMS[tool])
 			assert_str(str(BuildMode.TOOL_ROOMS[tool])).is_equal(str(room.id))
 			assert_str(room.display_name).is_equal(NAMES[n])
-			assert_array(texts).contains(["%dx%d min" % [room.min_size.x, room.min_size.y]])
-			# A room is dragged out, as the other room cards say.
-			assert_array(texts).contains([BuildMenu.PRICE_TEXT, "Drag"])
-			assert_array(texts).not_contains(["Click"])
+			assert_array(texts).contains([BuildMenu.PRICE_TEXT])
+			assert_array(hover).contains(["%dx%d min" % [room.min_size.x, room.min_size.y], "Drag"])
 		else:
 			var def := BuildCatalog.get_def(BuildMode.tool_object(tool))
-			assert_array(texts).contains(["%dx%d" % [def.size.x, def.size.y]])
+			assert_array(hover).contains(["%dx%d" % [def.size.x, def.size.y], "Click"])
 			assert_int(BuildMenu.tool_price(tool)).is_equal(PriceTable.price_of_object(def.id))
 			assert_int(BuildMenu.tool_price(tool)).is_greater(0)
 
@@ -119,26 +96,10 @@ func test_every_money_card_shows_its_rendered_thumbnail() -> void:
 		assert_int(picture.find_children("*", "ColorRect", true, false).size()).is_equal(0)
 
 
-func test_the_money_tray_fits_the_column_with_next() -> void:
-	var page := _index("Money")
-	_menu.press_category(page)
-	var need := _menu.tray().get_combined_minimum_size()
-	print("money tray needs %s of %s x %s" % [need, BuildMenu.COLUMN_W, BuildMenu.TRAY_H])
-	assert_float(need.x).is_less_equal(BuildMenu.COLUMN_W)
-	assert_float(need.y).is_less_equal(BuildMenu.TRAY_H)
-	var next := _menu.card(TOOLS[0]).get_parent().find_child("CardNext", true, false) as Button
-	assert_object(next).is_not_null()
-	# Since HUD 6/7 Money is the last page of Services, so Next goes back to its
-	# first page, Desks (it opened the Dining page before).
-	next.pressed.emit()
-	assert_int(_menu.open_category()).is_equal(_index("Desks"))
-
-
-func test_picking_a_money_tool_opens_its_page_and_presses_its_card() -> void:
+func test_picking_a_money_tool_opens_facilities_and_presses_its_card() -> void:
+	var facilities := BuildMenu.category_index("facilities")
 	for tool in TOOLS:
 		_mode.set_tool(tool)
-		assert_int(_menu.open_category()).is_equal(_index("Money"))
+		assert_int(_menu.open_category()).is_equal(facilities)
 		assert_bool(_menu.card(tool).button_pressed).is_true()
-		# The Services group button since HUD 6/7 (was Furniture).
-		var services := BuildMenu.group_index("Services")
-		assert_bool(_menu.category_button(services).button_pressed).is_true()
+		assert_bool(_menu.category_button(facilities).button_pressed).is_true()

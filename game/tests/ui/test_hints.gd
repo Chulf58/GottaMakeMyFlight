@@ -61,15 +61,17 @@ func _run(hints: Hints, seconds: float, world: Dictionary, open: Array = []) -> 
 
 func test_nothing_shows_during_the_grace_after_the_world_starts() -> void:
 	var hints := _hints()
-	hints.advance(Hints.GRACE_S - 1.0, _world(NO_DESK), ["Check-in"])
+	hints.advance(
+		Hints.GRACE_S - 1.0, _world(NO_DESK), [BuildMenu.category_of(BuildMode.Tool.DESK)]
+	)
 	assert_bool(hints.is_showing()).is_false()
 
 
 func test_opening_the_category_shows_its_hint_once_the_cause_has_held() -> void:
 	var hints := _settled(_world(NO_DESK))
-	_run(hints, 1.0, _world(NO_DESK), ["Check-in"])
+	_run(hints, 1.0, _world(NO_DESK), [BuildMenu.category_of(BuildMode.Tool.DESK)])
 	assert_bool(hints.is_showing()).is_false()
-	_run(hints, HintRules.HOLD_S, _world(NO_DESK), ["Check-in"])
+	_run(hints, HintRules.HOLD_S, _world(NO_DESK), [BuildMenu.category_of(BuildMode.Tool.DESK)])
 	assert_str(hints.shown_id()).is_equal(HintRules.PLACE_CHECKIN)
 	assert_str(hints.body_label().text).is_equal(HintRules.text(HintRules.PLACE_CHECKIN))
 	assert_bool(hints.card().visible).is_true()
@@ -110,31 +112,34 @@ func test_a_cause_that_flickers_off_before_it_holds_shows_nothing() -> void:
 
 
 func test_a_hint_counts_as_seen_once_shown_and_a_new_profile_session_keeps_it() -> void:
+	var checkin_cat := BuildMenu.category_of(BuildMode.Tool.DESK)
 	var hints := _settled(_world(NO_DESK))
-	_run(hints, HintRules.HOLD_S + 0.5, _world(NO_DESK), ["Check-in"])
+	_run(hints, HintRules.HOLD_S + 0.5, _world(NO_DESK), [checkin_cat])
 	assert_bool(hints.is_seen(HintRules.PLACE_CHECKIN)).is_true()
 	var next := _settled(_world(NO_DESK))
 	assert_bool(next.is_seen(HintRules.PLACE_CHECKIN)).is_true()
-	_run(next, Hints.IDLE_S + 2.0, _world(NO_DESK), ["Check-in"])
+	_run(next, Hints.IDLE_S + 2.0, _world(NO_DESK), [checkin_cat])
 	assert_bool(next.is_showing()).is_false()
 
 
 func test_a_hint_hides_after_its_dwell_and_the_next_waits_out_the_gap() -> void:
 	var both := _world({"desks": 0, "scanners": 0, "stalls": 0, "max_toilet_need": 99})
 	var hints := _settled(both)
-	_run(hints, HintRules.HOLD_S + 0.5, both, ["Check-in"])
+	_run(hints, HintRules.HOLD_S + 0.5, both, [BuildMenu.category_of(BuildMode.Tool.DESK)])
 	assert_str(hints.shown_id()).is_equal(HintRules.PLACE_CHECKIN)
 	_run(hints, Hints.DWELL_S, both)
 	assert_bool(hints.is_showing()).is_false()
 	_run(hints, Hints.MIN_GAP_S - 2.0, both)
 	assert_bool(hints.is_showing()).is_false()
-	_run(hints, 3.0, both, ["Toilets"])
+	_run(hints, 3.0, both, [BuildMenu.category_of(BuildMode.Tool.TOILET_ROOM)])
 	assert_str(hints.shown_id()).is_equal(HintRules.TOILET)
 
 
 func test_dwell_does_not_count_while_a_modal_is_open() -> void:
 	var hints := _settled(_world(NO_DESK))
-	_run(hints, HintRules.HOLD_S + 0.5, _world(NO_DESK), ["Check-in"])
+	_run(
+		hints, HintRules.HOLD_S + 0.5, _world(NO_DESK), [BuildMenu.category_of(BuildMode.Tool.DESK)]
+	)
 	var modal_open := [true]
 	hints.modal = func() -> bool: return modal_open[0]
 	_run(hints, Hints.DWELL_S * 2.0, _world(NO_DESK))
@@ -147,14 +152,16 @@ func test_dwell_does_not_count_while_a_modal_is_open() -> void:
 func test_no_hint_is_picked_while_a_modal_is_open() -> void:
 	var hints := _settled(_world(NO_DESK))
 	hints.modal = func() -> bool: return true
-	_run(hints, Hints.IDLE_S + 5.0, _world(NO_DESK), ["Check-in"])
+	_run(hints, Hints.IDLE_S + 5.0, _world(NO_DESK), [BuildMenu.category_of(BuildMode.Tool.DESK)])
 	assert_bool(hints.is_showing()).is_false()
 	assert_bool(hints.is_seen(HintRules.PLACE_CHECKIN)).is_false()
 
 
 func test_a_solved_cause_ends_the_hint_after_its_least_showing_time() -> void:
 	var hints := _settled(_world(NO_DESK))
-	_run(hints, HintRules.HOLD_S + 0.5, _world(NO_DESK), ["Check-in"])
+	_run(
+		hints, HintRules.HOLD_S + 0.5, _world(NO_DESK), [BuildMenu.category_of(BuildMode.Tool.DESK)]
+	)
 	_run(hints, 1.0, _world())
 	assert_bool(hints.is_showing()).is_true()
 	_run(hints, Hints.MIN_SHOW_S, _world())
@@ -162,19 +169,22 @@ func test_a_solved_cause_ends_the_hint_after_its_least_showing_time() -> void:
 
 
 func test_off_shows_nothing_and_marks_nothing_seen() -> void:
+	var checkin_cat := BuildMenu.category_of(BuildMode.Tool.DESK)
 	var hints := _settled(_world(NO_DESK))
 	hints.set_enabled(false)
-	_run(hints, Hints.IDLE_S + 5.0, _world(NO_DESK), ["Check-in"])
+	_run(hints, Hints.IDLE_S + 5.0, _world(NO_DESK), [checkin_cat])
 	assert_bool(hints.is_showing()).is_false()
 	assert_bool(hints.is_seen(HintRules.PLACE_CHECKIN)).is_false()
 	hints.set_enabled(true)
-	_run(hints, HintRules.HOLD_S + 0.5, _world(NO_DESK), ["Check-in"])
+	_run(hints, HintRules.HOLD_S + 0.5, _world(NO_DESK), [checkin_cat])
 	assert_str(hints.shown_id()).is_equal(HintRules.PLACE_CHECKIN)
 
 
 func test_turning_hints_off_hides_the_one_on_screen() -> void:
 	var hints := _settled(_world(NO_DESK))
-	_run(hints, HintRules.HOLD_S + 0.5, _world(NO_DESK), ["Check-in"])
+	_run(
+		hints, HintRules.HOLD_S + 0.5, _world(NO_DESK), [BuildMenu.category_of(BuildMode.Tool.DESK)]
+	)
 	assert_bool(hints.is_showing()).is_true()
 	hints.set_enabled(false)
 	assert_bool(hints.is_showing()).is_false()
@@ -183,23 +193,26 @@ func test_turning_hints_off_hides_the_one_on_screen() -> void:
 
 func test_a_new_world_starts_the_grace_again_and_keeps_what_was_seen() -> void:
 	var hints := _settled(_world(NO_DESK))
-	_run(hints, HintRules.HOLD_S + 0.5, _world(NO_DESK), ["Check-in"])
+	_run(
+		hints, HintRules.HOLD_S + 0.5, _world(NO_DESK), [BuildMenu.category_of(BuildMode.Tool.DESK)]
+	)
 	hints.reset_session()
 	assert_bool(hints.is_showing()).is_false()
 	assert_bool(hints.is_seen(HintRules.PLACE_CHECKIN)).is_true()
 	var toilet := _world({"stalls": 0, "max_toilet_need": 99})
 	hints.advance(Hints.GRACE_S - 1.0, toilet, [])
-	_run(hints, HintRules.HOLD_S + 0.5, toilet, ["Toilets"])
+	_run(hints, HintRules.HOLD_S + 0.5, toilet, [BuildMenu.category_of(BuildMode.Tool.TOILET_ROOM)])
 	assert_bool(hints.is_showing()).is_false()
 
 
 func test_reset_hints_makes_every_hint_new_again() -> void:
+	var checkin_cat := BuildMenu.category_of(BuildMode.Tool.DESK)
 	var hints := _settled(_world(NO_DESK))
-	_run(hints, HintRules.HOLD_S + 0.5, _world(NO_DESK), ["Check-in"])
+	_run(hints, HintRules.HOLD_S + 0.5, _world(NO_DESK), [checkin_cat])
 	hints.reset_seen()
 	assert_bool(hints.is_seen(HintRules.PLACE_CHECKIN)).is_false()
 	assert_bool(_settled(_world(NO_DESK)).is_seen(HintRules.PLACE_CHECKIN)).is_false()
-	_run(hints, 1.0, _world(NO_DESK), ["Check-in"])
+	_run(hints, 1.0, _world(NO_DESK), [checkin_cat])
 	assert_str(hints.shown_id()).is_equal(HintRules.PLACE_CHECKIN)
 
 
@@ -210,7 +223,7 @@ func test_the_off_mode_runs_nothing_and_hides_the_settings_row() -> void:
 	add_child(hints)
 	auto_free(hints)
 	hints.advance(Hints.GRACE_S + 0.1, _world(NO_DESK), [])
-	_run(hints, Hints.IDLE_S + 5.0, _world(NO_DESK), ["Check-in"])
+	_run(hints, Hints.IDLE_S + 5.0, _world(NO_DESK), [BuildMenu.category_of(BuildMode.Tool.DESK)])
 	assert_bool(hints.is_showing()).is_false()
 	assert_bool(hints.settings_row().visible).is_false()
 	assert_bool(FileAccess.file_exists(_path)).is_false()

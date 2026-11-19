@@ -2,7 +2,7 @@ class_name PassengerHud
 extends CanvasLayer
 ## The passenger HUD. Top-right: one row with the in-game day and clock and the
 ## speed buttons (Space toggles the pause, Shift+1/2/3 set the speed, shown as
-## the buttons' tooltips; plain number keys stay the build tool keys). The
+## the buttons' tooltips). The
 ## flight rows and the made, missed and in-terminal counts live in the
 ## Departures list instead (decision top-right-clock-panel-slims-to-day-time-
 ## and-speed-flight-row). While the clock fast-forwards a quiet night, a
@@ -400,9 +400,8 @@ func _close_selection() -> bool:
 	return true
 
 
-## Space toggles the pause; Shift+1/2/3 set the speed. These run before
-## BuildMode's unhandled input, so Shift+1 never also picks the Floor tool.
-## A held key's repeats are swallowed without acting again.
+## Space toggles the pause; Shift+1/2/3 set the speed. A held key's repeats
+## are swallowed without acting again.
 func _shortcut_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
 	if key == null or not key.pressed or clock == null:

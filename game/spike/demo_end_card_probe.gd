@@ -124,24 +124,15 @@ func _all_bar_buttons_problem(menu: BuildMenu) -> String:
 		var start := menu.open_category()
 		if not menu.is_tray_open() or start == BuildMenu.NO_CATEGORY:
 			return "bar button %s did not open a tray" % btn.name
-		for _step in 6:
-			var page := menu.open_category()
-			var visible_cards := 0
-			for tool in BuildMenu.categories()[page]["tools"]:
-				if menu.card(tool).is_visible_in_tree():
-					visible_cards += 1
-			if visible_cards == 0:
-				return (
-					"category page %d (%s) opened an empty tray"
-					% [page, BuildMenu.categories()[page]["name"]]
-				)
-			var row := menu.card(BuildMenu.categories()[page]["tools"][0]).get_parent()
-			var next_btn := row.find_child("CardNext", true, false) as Button
-			if next_btn == null or not next_btn.visible:
-				break
-			next_btn.pressed.emit()
-			if menu.open_category() == start:
-				break
+		var visible_cards := 0
+		for tool in BuildMenu.categories()[start]["tools"]:
+			if menu.card(tool).is_visible_in_tree():
+				visible_cards += 1
+		if visible_cards == 0:
+			return (
+				"category %d (%s) opened an empty tray"
+				% [start, BuildMenu.categories()[start]["name"]]
+			)
 		checked += 1
 	menu.close_for_modal()
 	print("PROBE bar_categories_verified=%d" % checked)

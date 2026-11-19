@@ -72,9 +72,9 @@ func test_opening_a_tray_by_click_pauses_the_sim() -> void:
 	assert_bool(_clock.paused).is_true()
 
 
-func test_a_tool_key_pauses_the_sim() -> void:
+func test_picking_a_tool_card_pauses_the_sim() -> void:
 	_press_speed(1)
-	_port.push_input(_key(KEY_1))
+	_menu.press_card(BuildMode.Tool.FLOOR)
 	_sync()
 	assert_int(_mode.tool).is_equal(BuildMode.Tool.FLOOR)
 	assert_bool(_clock.paused).is_true()

@@ -1,27 +1,30 @@
 # gdlint:disable = max-public-methods
 class_name BuildMenu
 extends CanvasLayer
-## The build menu (decision hud-layout-bottom-category-bar-with-an-item-tray-time-and-fl):
-## a bar of categories along the bottom edge; clicking one opens a tray of
-## item cards above it (thumbnail, name, size, price, key hint); the status
-## and refusal text and the cost line share one card at a fixed place above the
-## tray's reserved space (HUD 5/7);
-## a money slot sits top-left. BuildMode keeps the tool logic: the menu calls
-## set_tool() and rotate_facing() and follows tool_changed and status_changed.
-## Opening a category picks no tool; picking a card does, and a tool picked by
-## key opens its own category. Esc (tool NONE) closes the tray. The menu also
-## owns the room info panel (RoomPanel), top-left under the money slot. The
-## status line also shows the rescue grant's message when one is paid (ruling
+## The build menu (decisions hud-layout-bottom-category-bar-with-an-item-tray-time-and-fl
+## and build-menu-rework-six-domain-tabs-progressive-tab-and-card-u):
+## six domain tabs along the bottom edge plus Remove and Staff; clicking a
+## domain tab opens a horizontal-scrolling tray of compact item cards above it
+## (Thumbnail + 2-line Name + Price, with details in the 280 px hover popup);
+## locked tabs and locked cards stay hidden until their tier opens, with warm
+## "New" highlights on newly unlocked tabs and cards (and Tier 3 "In the full
+## game" teasers at the right end of trays once Tier 2 unlocks in DemoMode).
+## The status and refusal text and the cost line share one card at a fixed place
+## above the tray's reserved space (HUD 5/7); a money slot sits top-left.
+## BuildMode keeps the tool logic: the menu calls set_tool() and rotate_facing()
+## and follows tool_changed and status_changed. Opening a category picks no
+## tool; picking a card does, and arming a visible tool opens its own category.
+## Esc (tool NONE) closes the tray. The menu also owns the room info panel
+## (RoomPanel), top-left under the money slot. The status line also shows the
+## rescue grant's message when one is paid (ruling
 ## going-broke-a-one-off-rescue-grant-when-the-airport-is-stuck) for
 ## grant_hold_s seconds (a later grant restarts the hold); status text that
 ## arrives meanwhile (the pointer moving over the grid changes it) waits and
 ## shows when the hold ends.
 ##
 ## The bar buttons are icons with their names in tooltips (BarIcons, HUD 6/7).
-## The furniture and its rooms sit in five groups (Decor, Food, Services,
-## Leisure, Shops), each one bar button over a tray that pages when its group
-## holds more than one tray of cards. While the edit under the pointer is
-## refused, GhostReason shows a short reason beside the ghost.
+## While the edit under the pointer is refused, GhostReason shows a short reason
+## beside the ghost.
 ##
 ## The Staff button ends the bar, after the categories. It has no tray of
 ## cards: it opens the StaffPanel's hiring card in the tray's place (the panel
@@ -43,7 +46,7 @@ extends CanvasLayer
 ## The hiring card opened or closed (the StaffPanel shows it with this).
 signal staff_toggled(open: bool)
 
-## The card, category and page data lives in BuildMenuCatalog; these are its
+## The card and category data lives in BuildMenuCatalog; these are its
 ## aliases, kept so every BuildMenu.X reference still resolves.
 const THUMBNAIL_DIR := BuildMenuCatalog.THUMBNAIL_DIR
 const CATEGORIES := BuildMenuCatalog.CATEGORIES
@@ -61,14 +64,16 @@ const PLACEHOLDER_THUMBNAILS := []
 const PLACEHOLDER_COLOR := Color(0.3, 0.26, 0.2)
 ## The price slot of a card with no price (a room), or of any card when
 ## BuildMode has no wallet.
-## The English msgids of the next three texts: tests compare against them, and the
+## The English msgids of card bottom labels: tests compare against them, and the
 ## labels themselves are tr() of the literal, because the POT extractor reads only literals.
 const PRICE_TEXT := "Free"
-## A locked card's last line, and its tint (the hover text says what unlocks it).
+## A locked card's bottom line when unlocks are unwired, and its tint (the hover
+## card says what unlocks a locked item).
 const LOCKED_TEXT := "Locked"
 const LOCKED_TINT := Color(0.5, 0.5, 0.55)
-## The tint of a card of the newest opened tier until the player hovers or picks
-## it (UnlockGuide.is_new); it multiplies the affordability tint.
+## The tint of a card or unpressed domain tab of the newest opened tier until
+## the player hovers or picks its unseen tools (UnlockGuide.is_new); on cards it
+## multiplies the affordability tint.
 const NEW_TINT := Color(1.0, 0.88, 0.45)
 ## The money slot's amount when BuildMode has no wallet; a coin icon stands before it.
 const MONEY_TEXT := "--"
@@ -77,23 +82,22 @@ const MONEY_TEXT := "--"
 const MARGIN := float(HudLayout.MARGIN)
 const BAR_H := float(HudLayout.BAR_H)
 const GAP := float(HudLayout.GAP)
-const TRAY_H := 196.0
+const TRAY_H := float(HudLayout.TRAY_H)
 ## The status card's height; it grows upward while a long status wraps.
 const STATUS_H := float(HudLayout.BUTTON_H)
 ## A status wraps onto at most this many lines and then ends in an ellipsis
 ## (board T12 part 4); a held message (a rescue grant) takes HELD_LINES whole.
 const STATUS_LINES := 2
 const HELD_LINES := 3
-## Width of the centre column the tray and status line live in; PassengerHud
-## keeps the follow text left of it.
+## Maximum width of the centre column the tray and status line live in;
+## PassengerHud and PassengerInspect keep left of it.
 const COLUMN_W := float(HudLayout.TRAY_W)
-const CARD_SIZE := Vector2(112.0, 176.0)
-const THUMB_SIZE := 72.0
-## The card hint labels' font size, as HudHint sets it.
-const CARD_HINT_FONT_SIZE := 14
+const CARD_SIZE := Vector2(96.0, 126.0)
+const THUMB_SIZE := 52.0
 ## A bar button: an icon (BarIcons) with its name in the tooltip.
 const CATEGORY_SIZE := Vector2(52.0, 44.0)
-const NEXT_SIZE := Vector2(72.0, 176.0)
+const WHEEL_STEP := 64.0
+const SCROLL_RETRY_CAP := 6
 
 ## The one HUD theme (decision hud-look-warm-cozy-cream-cards-with-a-dark-outline-toon-pale).
 ## A CanvasLayer does not pass a theme down, so every top-level HUD Control
@@ -118,8 +122,8 @@ const GRANT_HOLD_S := 8.0
 @export var save_game: SaveGame
 ## Optional: paused while build mode lasts (BuildSession).
 @export var clock: SimClock
-## Optional: marks the cards of a newly opened tier "New" (PassengerHud wires
-## it with watch_guide()); without it no card carries the mark.
+## Optional: marks the cards and tabs of a newly opened tier "New" (PassengerHud
+## wires it with watch_guide()); without it no card or tab carries the mark.
 var guide: UnlockGuide
 
 ## True while the hiring card is open; press_staff() changes it.
@@ -139,9 +143,17 @@ var _open := NO_CATEGORY
 var _browsing := false
 var _bar := PanelContainer.new()
 var _tray := PanelContainer.new()
+var _scroll := ScrollContainer.new()
+var _scroll_content := HBoxContainer.new()
 var _rows: Array[HBoxContainer] = []
 var _category_buttons: Array[Button] = []
 var _cards: Dictionary = {}
+## Cached CardState per tool from the last _refresh_cards(), used by the cheap
+## _refresh_money() path on wallet ticks so teaser/locked labels stay intact.
+var _card_states: Dictionary = {}
+var _pending_scroll_tool := BuildMode.Tool.NONE
+var _pending_scroll_tries := 0
+var _scroll_frame_queued := false
 ## The status line and the cost line on one card (HUD 5/7): the status text,
 ## the "R rotate" hint (RotateHint) in a slot of its own so a long refusal never
 ## pushes it onto a second line, and the cost.
@@ -155,9 +167,6 @@ var _cost := Label.new()
 var _wallet: Wallet
 ## Card tool -> its price Label.
 var _price_labels: Dictionary = {}
-## Tool -> the card's last line and what it said unlocked (a locked card swaps it).
-var _hint_labels: Dictionary = {}
-var _hint_texts: Dictionary = {}
 ## The last dragged rectangle priced (rectangle and balance) and its cost.
 var _rect_cost_key := ""
 var _rect_cost := 0
@@ -177,11 +186,6 @@ var _hold_is_grant := false
 var _pending_wages := ""
 
 
-## "3" for the key bound to a tool's action, or "" when the tool has none.
-static func key_hint(tool: BuildMode.Tool) -> String:
-	return BuildMenuCatalog.key_hint(tool)
-
-
 ## What a tool's card costs: the floor tile, one wall piece or the object.
 ## 0 for a tool with no price (Remove, a room, no tool).
 static func tool_price(tool: BuildMode.Tool) -> int:
@@ -191,6 +195,14 @@ static func tool_price(tool: BuildMode.Tool) -> int:
 ## The categories in bar order (CATEGORIES).
 static func categories() -> Array:
 	return BuildMenuCatalog.categories()
+
+
+static func category_id(index: int) -> String:
+	return BuildMenuCatalog.category_id(index)
+
+
+static func category_index(id: String) -> int:
+	return BuildMenuCatalog.category_index(id)
 
 
 ## The index of the Remove button, last in categories().
@@ -209,29 +221,6 @@ static func running_cost(tool: BuildMode.Tool) -> int:
 	return BuildMenuCatalog.running_cost(tool)
 
 
-## The name a category's bar button carries in its tooltip: its group's name
-## on a group's first page, else its own.
-static func bar_name(index: int) -> String:
-	return BuildMenuCatalog.bar_name(index)
-
-
-## The first page of the named group (its bar button), or NO_CATEGORY.
-static func group_index(group_name: String) -> int:
-	return BuildMenuCatalog.group_index(group_name)
-
-
-## The first page of the group a category belongs to (CATEGORIES), or the
-## category itself when it is not a later page.
-static func group_start(index: int) -> int:
-	return BuildMenuCatalog.group_start(index)
-
-
-## The page the Next card of a category opens: the following page, the group's
-## first page after its last, or NO_CATEGORY for a category with no pages.
-static func next_page(index: int) -> int:
-	return BuildMenuCatalog.next_page(index)
-
-
 ## The category a tool belongs to, or NO_CATEGORY.
 static func category_of(tool: BuildMode.Tool) -> int:
 	return BuildMenuCatalog.category_of(tool)
@@ -246,8 +235,6 @@ func _ready() -> void:
 	add_child(build_frame)
 	BuildMenuLayout.build_bar(self)
 	BuildMenuLayout.build_tray(self)
-	if DemoMode.is_demo():
-		_apply_demo_cut()
 	BuildMenuLayout.build_status_card(self)
 	BuildMenuLayout.build_money(self)
 	templates_page.attach(self)
@@ -269,23 +256,23 @@ func _ready() -> void:
 		build_mode.templates.armed_changed.connect(_show_status)
 		build_mode.room_mover.status_changed.connect(_on_status_changed)
 		build_mode.room_mover.active_changed.connect(_show_status)
-		_on_status_changed(build_mode.status_text())
-		_on_tool_changed(build_mode.tool)
-	else:
-		_sync()
 	if _wallet != null:
 		_wallet.changed.connect(_on_balance_changed)
 	if build_mode != null and build_mode.land_tool != null and build_mode.land_tool.land != null:
 		# A load changes the land and the next plot's price with the wallet
 		# unchanged; the Buy land card must follow.
 		build_mode.land_tool.land.changed.connect(_refresh_money)
-	_refresh_money()
 	for tool in _cards:
 		_cards[tool].mouse_entered.connect(_on_card_hovered.bind(tool))
 	if build_mode != null and build_mode.unlocks != null:
 		build_mode.unlocks.tier_changed.connect(_on_tier_changed)
 		build_mode.unlocks.unlocked.connect(_on_unlocked)
-	_refresh_locks()
+	_refresh_cards()
+	if build_mode != null:
+		_on_status_changed(build_mode.status_text())
+		_on_tool_changed(build_mode.tool)
+	else:
+		_sync()
 	if rescue_grant != null:
 		rescue_grant.granted.connect(_on_granted)
 	if settlement != null:
@@ -338,14 +325,15 @@ func press_category(index: int) -> void:
 	if index == remove_category():
 		build_mode.set_tool(BuildMode.Tool.REMOVE)
 		return
-	if DemoMode.is_demo() and index >= 0 and not _row_has_visible_card(index):
-		index = _first_open_page_in_group(group_start(index))
-		if index == NO_CATEGORY:
-			return
+	if index >= 0 and index < remove_category() and not _category_buttons[index].visible:
+		return
 	if index == _open:
 		build_mode.set_tool(BuildMode.Tool.NONE)
 		return
 	_open = index
+	_pending_scroll_tool = BuildMode.Tool.NONE
+	_scroll.scroll_horizontal = 0
+	templates_page.scroll_horizontal = 0
 	_browsing = true
 	build_mode.set_tool(BuildMode.Tool.NONE)
 	_browsing = false
@@ -359,6 +347,7 @@ func press_staff() -> void:
 		_set_staff_open(false)
 		return
 	_open = NO_CATEGORY
+	_pending_scroll_tool = BuildMode.Tool.NONE
 	_browsing = true
 	build_mode.set_tool(BuildMode.Tool.NONE)
 	_browsing = false
@@ -371,14 +360,17 @@ func press_card(tool: BuildMode.Tool) -> void:
 	build_mode.set_tool(tool)
 
 
-## Follows `new_guide`: its "New" marks tint the cards, and the pointer resting on
-## a marked card or any tool picked (card or number key) clears it. Called once,
-## by whoever builds the HUD.
+## Follows `new_guide`: its "New" marks tint the cards and unpressed domain tabs,
+## and hovering a marked card or picking a tool clears it. Called once, by
+## whoever builds the HUD.
 func watch_guide(new_guide: UnlockGuide) -> void:
+	if guide != null and guide.changed.is_connected(_refresh_cards):
+		guide.changed.disconnect(_refresh_cards)
 	guide = new_guide
-	guide.changed.connect(_refresh_locks)
+	if guide != null:
+		guide.changed.connect(_refresh_cards)
 	if is_node_ready():
-		_refresh_locks()
+		_refresh_cards()
 
 
 func category_button(index: int) -> Button:
@@ -391,6 +383,19 @@ func card(tool: BuildMode.Tool) -> Button:
 
 func tray() -> Control:
 	return _tray
+
+
+func tray_scroll() -> ScrollContainer:
+	return _scroll
+
+
+## Maximum inner width inside `_tray` after subtracting its panel stylebox margins.
+func tray_max_inner_width() -> float:
+	var pad_x := 0.0
+	var style := _tray.get_theme_stylebox(&"panel")
+	if style != null:
+		pad_x = style.get_margin(SIDE_LEFT) + style.get_margin(SIDE_RIGHT)
+	return COLUMN_W - pad_x
 
 
 func bar() -> Control:
@@ -419,7 +424,7 @@ func preview_label() -> Label:
 	return _cost
 
 
-## The text on a card's price slot: its price, or Free.
+## The text on a card's price slot: its price, Free, Locked or In the full game.
 func card_price_text(tool: BuildMode.Tool) -> String:
 	return (_price_labels[tool] as Label).text
 
@@ -496,34 +501,124 @@ func _set_staff_open(open: bool) -> void:
 func _on_tool_changed(tool: BuildMode.Tool) -> void:
 	if guide != null and tool != BuildMode.Tool.NONE:
 		guide.mark_seen(tool)
+	var prev_open := _open
+	var scroll_to := BuildMode.Tool.NONE
 	if tool == BuildMode.Tool.NONE:
+		_pending_scroll_tool = BuildMode.Tool.NONE
 		if not _browsing:
 			_open = NO_CATEGORY
 			_set_staff_open(false)
 	else:
 		_set_staff_open(false)
 		var index := category_of(tool)
-		_open = NO_CATEGORY if index == remove_category() else index
+		var card_hidden := _cards.has(tool) and not (_cards[tool] as Control).visible
+		var tab_hidden := (
+			index >= 0 and index < _category_buttons.size() and not _category_buttons[index].visible
+		)
+		if index == remove_category() or index < 0 or tab_hidden or card_hidden:
+			_open = NO_CATEGORY
+			_pending_scroll_tool = BuildMode.Tool.NONE
+		else:
+			_open = index
+			if _open != prev_open:
+				_scroll.scroll_horizontal = 0
+			scroll_to = tool
 	_sync()
+	if scroll_to != BuildMode.Tool.NONE:
+		_queue_scroll_to_card(scroll_to)
 	_show_status()
+
+
+## Queues scrolling `tool`'s card into view after `_sync()` makes its row visible
+## and after the ScrollContainer and HBoxContainer finish their layout sort.
+func _queue_scroll_to_card(tool: BuildMode.Tool) -> void:
+	_pending_scroll_tool = tool
+	_pending_scroll_tries = 0
+	if not is_inside_tree() or _scroll_frame_queued:
+		return
+	_scroll_frame_queued = true
+	get_tree().process_frame.connect(_step_pending_scroll, CONNECT_ONE_SHOT)
+
+
+func _step_pending_scroll() -> void:
+	_scroll_frame_queued = false
+	if not is_inside_tree() or _pending_scroll_tool == BuildMode.Tool.NONE:
+		return
+	if not _scroll.visible or not _cards.has(_pending_scroll_tool):
+		_pending_scroll_tool = BuildMode.Tool.NONE
+		return
+	var target := _cards[_pending_scroll_tool] as Control
+	if not target.is_visible_in_tree():
+		_pending_scroll_tool = BuildMode.Tool.NONE
+		return
+	var ready := _is_card_sorted(target) and _scroll.size.x > 0.0
+	if not ready and _pending_scroll_tries < SCROLL_RETRY_CAP:
+		_pending_scroll_tries += 1
+		_scroll_frame_queued = true
+		get_tree().process_frame.connect(_step_pending_scroll, CONNECT_ONE_SHOT)
+		return
+	_scroll.ensure_control_visible(target)
+	_pending_scroll_tool = BuildMode.Tool.NONE
+
+
+func _is_card_sorted(target: Control) -> bool:
+	if target.size.x <= 0.0:
+		return false
+	var parent := target.get_parent()
+	if parent == null:
+		return true
+	for child in parent.get_children():
+		if child is Control and (child as Control).visible:
+			return child == target or target.position.x > 0.0
+	return true
+
+
+func _on_tray_gui_input(event: InputEvent) -> void:
+	var mb := event as InputEventMouseButton
+	if mb == null:
+		return
+	var idx := mb.button_index
+	if (
+		idx != MOUSE_BUTTON_WHEEL_UP
+		and idx != MOUSE_BUTTON_WHEEL_DOWN
+		and idx != MOUSE_BUTTON_WHEEL_LEFT
+		and idx != MOUSE_BUTTON_WHEEL_RIGHT
+	):
+		return
+	if mb.pressed:
+		var dir := -1.0 if idx == MOUSE_BUTTON_WHEEL_UP or idx == MOUSE_BUTTON_WHEEL_LEFT else 1.0
+		var factor := mb.factor if mb.factor > 0.0 else 1.0
+		var delta := roundi(dir * WHEEL_STEP * factor)
+		if _scroll.visible:
+			_scroll.scroll_horizontal = maxi(0, _scroll.scroll_horizontal + delta)
+		elif templates_page.visible:
+			templates_page.scroll_horizontal = maxi(0, templates_page.scroll_horizontal + delta)
+	_tray.accept_event()
+
+
+func _sync_scroll_width() -> void:
+	if _scroll == null:
+		return
+	var row_w := _scroll_content.get_combined_minimum_size().x
+	_scroll.custom_minimum_size.x = minf(row_w, tray_max_inner_width())
 
 
 func _on_balance_changed(_balance: int) -> void:
 	_refresh_money()
 
 
-## Writes the wallet into the money slot and each card's price slot, and greys
-## out the cards it cannot pay.
+## Cheap wallet-change writer: updates the money slot, each OPEN card's price
+## label and every card's affordability/New/locked tint without rebuilding
+## hover details or touching TEASER ("In the full game") / LOCKED labels.
 func _refresh_money() -> void:
-	if _wallet == null:
-		_money.text = MONEY_TEXT
-	else:
-		_money.text = str(_wallet.balance)
-	for tool in _price_labels:
-		var price := _card_price(tool)
-		var label: Label = _price_labels[tool]
-		label.text = tr("Free", "price") if _wallet == null or price == 0 else str(price)
-		_cards[tool].modulate = _card_tint(tool)
+	_money.text = MONEY_TEXT if _wallet == null else str(_wallet.balance)
+	for tool: BuildMode.Tool in _price_labels:
+		var state: int = _card_states.get(tool, BuildMenuCatalog.CardState.OPEN)
+		if state == BuildMenuCatalog.CardState.OPEN:
+			var price := _card_price(tool)
+			var label := _price_labels[tool] as Label
+			label.text = tr("Free", "price") if _wallet == null or price == 0 else str(price)
+		_cards[tool].modulate = _card_tint_for(tool, state)
 	refresh_preview()
 
 
@@ -535,8 +630,8 @@ func _lock_text(tool: BuildMode.Tool) -> String:
 	return BuildUnlocks.lock_text(build_mode.unlocks, build_mode.require_unlocks, tool)
 
 
-func _card_tint(tool: BuildMode.Tool) -> Color:
-	if _lock_text(tool) != "":
+func _card_tint_for(tool: BuildMode.Tool, state: int) -> Color:
+	if state == BuildMenuCatalog.CardState.TEASER or state == BuildMenuCatalog.CardState.LOCKED:
 		return LOCKED_TINT
 	var tint := Color.WHITE if is_card_affordable(tool) else unaffordable_tint()
 	return tint * NEW_TINT if guide != null and guide.is_new(tool) else tint
@@ -547,69 +642,83 @@ func _on_card_hovered(tool: BuildMode.Tool) -> void:
 		guide.mark_seen(tool)
 
 
-## Greys the locked cards, with "Locked" (or "In the full game" on Tier 3 demo
-## teasers) on the last line. Every card keeps its description in the hover
-## card; a locked one adds what unlocks it, worked out each time the hover card
-## is built so the "now" numbers are current. Also repaints the "New" tints.
-func _refresh_locks() -> void:
-	for tool in _cards:
-		var text := _lock_text(tool)
-		var card_item := item(tool)
-		var demo_teaser := (
-			DemoMode.is_demo()
-			and build_mode != null
-			and build_mode.require_unlocks
-			and BuildUnlocks.tier_of(tool) == DemoMode.TEASER_TIER
-		)
-		if demo_teaser:
-			_hint_labels[tool].text = tr("In the full game")
-		else:
-			_hint_labels[tool].text = tr("Locked") if text != "" else _hint_texts[tool]
-		_cards[tool].requirement = _lock_text.bind(tool) if text != "" else Callable()
-		_cards[tool].set_info(BuildMenuCatalog.shown(card_item[0]), ItemInfo.of(tool))
-		_cards[tool].modulate = _card_tint(tool)
-
-
-## Hides Tier 4+ cards in demo mode and prunes empty furniture pages or groups
-## so no category button or Next card ever opens an empty tray.
-func _apply_demo_cut() -> void:
-	for tool in _cards:
-		if BuildUnlocks.tier_of(tool) >= DemoMode.HIDDEN_MIN_TIER:
-			_cards[tool].visible = false
-	var all := categories()
-	var seen_starts := {}
-	for i in all.size():
+## Structural card and category-tab state writer: updates money slot, card
+## visibility, bottom price/teaser/locked label, hover popup details + live lock
+## requirement, teaser right-end ordering, tab visibility and unpressed tab "New"
+## highlight.
+func _refresh_cards() -> void:
+	_money.text = MONEY_TEXT if _wallet == null else str(_wallet.balance)
+	var unlocks: BuildUnlocks = build_mode.unlocks if build_mode != null else null
+	var required := build_mode.require_unlocks if build_mode != null else false
+	var demo := DemoMode.is_demo()
+	var cats := categories()
+	for i in cats.size():
 		if i == remove_category():
+			_category_buttons[i].visible = true
 			continue
-		var start := group_start(i)
-		if seen_starts.has(start):
-			continue
-		seen_starts[start] = true
-		var group_pages: Array[int] = []
-		var open_pages: Array[int] = []
-		for p in range(start, all.size()):
-			if p != start and group_start(p) != start:
-				break
-			group_pages.append(p)
-			if _row_has_visible_card(p):
-				open_pages.append(p)
-		if open_pages.is_empty():
-			_category_buttons[start].visible = false
-			continue
-		for p in group_pages:
-			var next_btn := _rows[p].get_node_or_null("CardNext") as Button
-			if next_btn == null:
+		var front_cards: Array[Control] = []
+		var teaser_cards: Array[Control] = []
+		for tool: BuildMode.Tool in cats[i]["tools"]:
+			if not _cards.has(tool):
 				continue
-			if open_pages.size() <= 1 or not open_pages.has(p):
-				next_btn.visible = false
-				continue
-			var target: int = open_pages[(open_pages.find(p) + 1) % open_pages.size()]
-			for conn: Dictionary in next_btn.pressed.get_connections():
-				next_btn.pressed.disconnect(conn["callable"])
-			next_btn.pressed.connect(press_category.bind(target))
-			var sub := next_btn.find_child("NextPageName", true, false) as Label
-			if sub != null:
-				sub.text = BuildMenuCatalog.shown(all[target]["name"])
+			var state := BuildMenuCatalog.card_state(tool, unlocks, required, demo)
+			_card_states[tool] = state
+			var lock := _lock_text(tool)
+			var card_btn := _cards[tool] as ItemCardButton
+			var price_label := _price_labels[tool] as Label
+			var card_item := item(tool)
+			card_btn.visible = state != BuildMenuCatalog.CardState.HIDDEN
+			card_btn.requirement = _lock_text.bind(tool) if lock != "" else Callable()
+			card_btn.set_info(
+				BuildMenuCatalog.shown(card_item[0]),
+				ItemInfo.of(tool),
+				BuildMenuCatalog.card_details(tool)
+			)
+			if state == BuildMenuCatalog.CardState.TEASER:
+				price_label.text = tr("In the full game")
+				teaser_cards.append(card_btn)
+			elif state == BuildMenuCatalog.CardState.LOCKED:
+				price_label.text = tr("Locked")
+				front_cards.append(card_btn)
+			else:
+				var price := _card_price(tool)
+				price_label.text = (
+					tr("Free", "price") if _wallet == null or price == 0 else str(price)
+				)
+				front_cards.append(card_btn)
+			card_btn.modulate = _card_tint_for(tool, state)
+		var ordered := front_cards + teaser_cards
+		for pos in ordered.size():
+			_rows[i].move_child(ordered[pos], pos)
+		_category_buttons[i].visible = _row_has_visible_card(i)
+	var closed_hidden := false
+	if _open >= 0 and _open < remove_category() and not _category_buttons[_open].visible:
+		_open = NO_CATEGORY
+		closed_hidden = true
+	_sync_tab_tints()
+	refresh_preview()
+	if closed_hidden:
+		_sync()
+	else:
+		_sync_scroll_width()
+
+
+func _sync_tab_tints() -> void:
+	for i in _category_buttons.size():
+		if i == remove_category():
+			_category_buttons[i].modulate = Color.WHITE
+			continue
+		var show_new := i != _open and _category_has_new(i)
+		_category_buttons[i].modulate = NEW_TINT if show_new else Color.WHITE
+
+
+func _category_has_new(index: int) -> bool:
+	if guide == null or index < 0 or index >= remove_category():
+		return false
+	for tool: BuildMode.Tool in categories()[index]["tools"]:
+		if guide.is_new(tool):
+			return true
+	return false
 
 
 func _row_has_visible_card(index: int) -> bool:
@@ -621,18 +730,8 @@ func _row_has_visible_card(index: int) -> bool:
 	return false
 
 
-func _first_open_page_in_group(start: int) -> int:
-	var all := categories()
-	for p in range(start, all.size()):
-		if p != start and group_start(p) != start:
-			break
-		if _row_has_visible_card(p):
-			return p
-	return NO_CATEGORY
-
-
 func _on_tier_changed(_tier: int) -> void:
-	_refresh_locks()
+	_refresh_cards()
 
 
 ## The "Unlocked: ..." line holds the status unless the unlock dialog is open,
@@ -736,6 +835,7 @@ func _on_loaded(ok: bool) -> void:
 	_held_status = build_mode.status_text() if build_mode != null else ""
 	_raw_status = _held_status
 	_show_status()
+	_refresh_cards()
 
 
 ## Closes any open tray, Staff card, held status banner, template paste or room
@@ -743,6 +843,7 @@ func _on_loaded(ok: bool) -> void:
 ## modal takes over).
 func close_for_modal() -> void:
 	_open = NO_CATEGORY
+	_pending_scroll_tool = BuildMode.Tool.NONE
 	_set_staff_open(false)
 	if build_mode != null:
 		build_mode.templates.disarm()
@@ -766,6 +867,7 @@ func close_for_modal() -> void:
 func _end_build_mode_after_load() -> void:
 	build_session.abandon()
 	_open = NO_CATEGORY
+	_pending_scroll_tool = BuildMode.Tool.NONE
 	_set_staff_open(false)
 	if build_mode != null:
 		build_mode.set_tool(BuildMode.Tool.NONE)
@@ -796,17 +898,17 @@ func end_grant_hold() -> void:
 func _sync() -> void:
 	var tool := BuildMode.Tool.NONE if build_mode == null else build_mode.tool
 	_tray.visible = _open != NO_CATEGORY
+	_scroll.visible = _open >= 0
 	for i in _rows.size():
 		_rows[i].visible = i == _open
 	for i in _category_buttons.size():
-		var on := (
-			(_open != NO_CATEGORY and i == group_start(_open))
-			or (i == remove_category() and tool == BuildMode.Tool.REMOVE)
-		)
+		var on := _open == i or (i == remove_category() and tool == BuildMode.Tool.REMOVE)
 		_category_buttons[i].set_pressed_no_signal(on)
+	_sync_tab_tints()
 	for key in _cards:
 		_cards[key].set_pressed_no_signal(key == tool)
 	templates_page.sync(_open == TEMPLATES_PAGE)
+	_sync_scroll_width()
 	build_session.set_building(_open != NO_CATEGORY or tool != BuildMode.Tool.NONE)
 
 

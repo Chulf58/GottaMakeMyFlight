@@ -1,9 +1,13 @@
 class_name BuildMenuCatalog
 extends RefCounted
-## What the build menu shows and where: its categories, the card per tool, key
-## hints and prices, and the page arithmetic (split out of BuildMenu; BuildMenu
-## keeps aliases of these constants and one-line delegates of these functions).
+## What the build menu shows and where: its six domain categories plus Remove,
+## the card per tool, prices, hover details, and progressive card visibility
+## (decision build-menu-rework-six-domain-tabs-progressive-tab-and-card-u; split
+## out of BuildMenu, which keeps aliases of these constants and one-line
+## delegates of these functions).
 ## Static only; it must not reference BuildMenu.
+
+enum CardState { OPEN, TEASER, HIDDEN, LOCKED }
 
 ## The context of every table name below: the same short word is a build menu card
 ## here and something else elsewhere.
@@ -11,159 +15,134 @@ const NAME_CONTEXT := "build menu"
 const THUMBNAIL_DIR := "res://assets/ui/thumbnails/%s.png"
 const CATEGORIES := [
 	{
-		"name": "Structure",
-		"tools":
-		[BuildMode.Tool.FLOOR, BuildMode.Tool.WALL, BuildMode.Tool.GLASS, BuildMode.Tool.DOOR],
-	},
-	{"name": "Doors", "tools": [BuildMode.Tool.ENTRANCE, BuildMode.Tool.EXIT]},
-	{"name": "Check-in", "tools": [BuildMode.Tool.DESK]},
-	{"name": "Security", "tools": [BuildMode.Tool.SCANNER]},
-	# The security lane's four parts in flow order (decisions security-lane-
-	# parts-are-placed-separately-tray-table-x-ray-b and security-lane-parts-
-	# get-their-own-lane-build-category): four parts get a tray of their own,
-	# right after Security.
-	{"name": "Lane", "tools": BuildMode.LANE_TOOLS},
-	# The screen stand (Boredom 4/5) entertains passengers waiting at the gate.
-	# The gate desk (gates 1b) makes a gate of the exit facing the planes it stands by.
-	{
-		"name": "Gates",
-		"tools": [BuildMode.Tool.GATE_DESK, BuildMode.Tool.SEATS, BuildMode.Tool.SCREEN],
-	},
-	# The cafe, its counter and its table. Named Shops until HUD 6/7 gave that
-	# name to the store group's button below.
-	{
-		"name": "Cafe",
-		"tools": [BuildMode.Tool.CAFE_ROOM, BuildMode.Tool.COUNTER, BuildMode.Tool.TABLE],
-	},
-	# The toilet room and its two pieces (Toilets 5/5). Cafe holds three cards
-	# already; six cards are wider than COLUMN_W, so the toilet gets a tray of
-	# its own, as the Lane did.
-	{
-		"name": "Toilets",
-		"tools":
-		[BuildMode.Tool.TOILET_ROOM, BuildMode.Tool.TOILET_STALL, BuildMode.Tool.TOILET_SINK],
-	},
-	# The kiosk room and its two pieces (Boredom 2/5), a tray of their own for
-	# the same reason as the toilet's.
-	{
-		"name": "Kiosk",
-		"tools":
-		[BuildMode.Tool.KIOSK_ROOM, BuildMode.Tool.KIOSK_COUNTER, BuildMode.Tool.KIOSK_DISPLAY],
-	},
-	# The landside tools (Landside 3/4): a curb bay and the two car park kinds
-	# snap to the authored spots outside the terminal; Close opens or closes a
-	# car park so it can drain before Remove takes it back.
-	{
-		"name": "Landside",
+		"id": "building",
+		"name": "Building",
 		"tools":
 		[
+			BuildMode.Tool.FLOOR,
+			BuildMode.Tool.WALL,
+			BuildMode.Tool.GLASS,
+			BuildMode.Tool.DOOR,
+			BuildMode.Tool.ENTRANCE,
+			BuildMode.Tool.EXIT,
+			BuildMode.Tool.BUY_LAND,
+		],
+	},
+	{
+		"id": "operations",
+		"name": "Operations",
+		"tools":
+		[
+			BuildMode.Tool.DESK,
+			BuildMode.Tool.SCANNER,
+			BuildMode.Tool.TRAY_TABLE,
+			BuildMode.Tool.XRAY_BELT,
+			BuildMode.Tool.ARCH,
+			BuildMode.Tool.PICKUP_TABLE,
+			BuildMode.Tool.GATE_DESK,
+			BuildMode.Tool.SEATS,
+			BuildMode.Tool.SCREEN,
+			BuildMode.Tool.BELT,
+			BuildMode.Tool.BAG_ROOM,
+			BuildMode.Tool.CART,
+		],
+	},
+	{
+		"id": "facilities",
+		"name": "Facilities",
+		"tools":
+		[
+			BuildMode.Tool.TOILET_ROOM,
+			BuildMode.Tool.TOILET_STALL,
+			BuildMode.Tool.TOILET_SINK,
+			BuildMode.Tool.INFO_DESK,
+			BuildMode.Tool.INFO_SCREEN,
+			BuildMode.Tool.EXCHANGE_ROOM,
+			BuildMode.Tool.EXCHANGE,
+			BuildMode.Tool.ATM_ROOM,
+			BuildMode.Tool.ATM,
+			BuildMode.Tool.SHOWER_ROOM,
+			BuildMode.Tool.SHOWER,
+			BuildMode.Tool.NAP_POD_ROOM,
+			BuildMode.Tool.NAP_POD,
+		],
+	},
+	{
+		"id": "food",
+		"name": "Food & Drink",
+		"tools":
+		[
+			BuildMode.Tool.CAFE_ROOM,
+			BuildMode.Tool.COUNTER,
+			BuildMode.Tool.TABLE,
+			BuildMode.Tool.BAR_ROOM,
+			BuildMode.Tool.BAR_COUNTER,
+			BuildMode.Tool.RESTAURANT_ROOM,
+			BuildMode.Tool.DINING_TABLE,
+			BuildMode.Tool.BOOTH,
+			BuildMode.Tool.STALL_ROOM,
+			BuildMode.Tool.GRAB_STALL,
+		],
+	},
+	{
+		"id": "shops",
+		"name": "Shops",
+		"tools":
+		[
+			BuildMode.Tool.KIOSK_ROOM,
+			BuildMode.Tool.KIOSK_COUNTER,
+			BuildMode.Tool.KIOSK_DISPLAY,
+			BuildMode.Tool.PHARMACY_ROOM,
+			BuildMode.Tool.PHARMACY_COUNTER,
+			BuildMode.Tool.PHARMACY_SHELF,
+			BuildMode.Tool.DUTY_FREE_ROOM,
+			BuildMode.Tool.DUTY_FREE_TILL,
+			BuildMode.Tool.DUTY_FREE_SHELF,
+			BuildMode.Tool.FASHION_ROOM,
+			BuildMode.Tool.FASHION_TILL,
+			BuildMode.Tool.FASHION_RAIL,
+		],
+	},
+	{
+		"id": "decor",
+		"name": "Decor & Parking",
+		"tools":
+		[
+			BuildMode.Tool.BUSH,
+			BuildMode.Tool.PLANTER,
+			BuildMode.Tool.PLANT_POT,
+			BuildMode.Tool.TREE,
+			BuildMode.Tool.BENCH,
+			BuildMode.Tool.TREE_BENCH,
+			BuildMode.Tool.FOUNTAIN,
+			BuildMode.Tool.STATUE,
+			BuildMode.Tool.POST,
+			BuildMode.Tool.CHAIN,
+			BuildMode.Tool.BIN,
+			BuildMode.Tool.LOUNGE_ROOM,
+			BuildMode.Tool.SOFA,
+			BuildMode.Tool.ARMCHAIR,
+			BuildMode.Tool.WORK_DESK,
+			BuildMode.Tool.PLAY_AREA_ROOM,
+			BuildMode.Tool.PLAY_BLOCKS,
+			BuildMode.Tool.PLAY_SLIDE,
+			BuildMode.Tool.PRIZE_PODIUM,
 			BuildMode.Tool.CURB,
 			BuildMode.Tool.SURFACE_LOT,
 			BuildMode.Tool.MULTI_STOREY,
 			BuildMode.Tool.LOT_GATE,
 		],
 	},
-	# The Buy land tool (user ruling land-plots-are-bought-with-a-buy-land-
-	# tool-in-build-mode-buy), a tray of its own beside the landside tools, so
-	# the furniture groups still run on to Remove.
-	{"name": "Land", "tools": [BuildMode.Tool.BUY_LAND]},
-	# One Belt tool shapes itself (decision baggage-belts-are-one-auto-shaping-
-	# belt-tool-one-baggage-tray), so baggage fits one tray.
-	{
-		"name": "Baggage",
-		"tools": [BuildMode.Tool.BELT, BuildMode.Tool.BAG_ROOM, BuildMode.Tool.CART],
-	},
-	# The furniture and the rooms that go with it, in five groups (decision
-	# hud-6-7-furniture-groups-five-icon-buttons-decor-food-servic): Decor, Food,
-	# Services, Leisure and Shops. A group's first page has the bar button and
-	# carries the group's name ("group"); a later page ("page": true) has none
-	# and is reached by the Next card on the page before it, and the group's
-	# last page leads back to its first. A tray holds four cards and the Next
-	# column in COLUMN_W, so a group with more pieces pages inside its
-	# tray. The Dining, Money and Activities pages joined Food, Services and
-	# Leisure: the ruling named the eleven pages there were before them.
-	{"name": "Furniture", "group": "Decor", "tools": FurnitureTools.PAGES[0]},
-	{"name": "Features", "tools": FurnitureTools.PAGES[1], "page": true},
-	{"name": "Fittings", "tools": FurnitureTools.PAGES[2], "page": true},
-	{"name": "Food", "group": "Food", "tools": FurnitureTools.PAGES[3]},
-	# The food variants (F4-6): three rooms that take the Cafe tray's counter and
-	# table, so a page of their own holds just the room cards.
-	{
-		"name": "Dining",
-		"tools":
-		[BuildMode.Tool.BAR_ROOM, BuildMode.Tool.RESTAURANT_ROOM, BuildMode.Tool.STALL_ROOM],
-		"page": true,
-	},
-	{"name": "Desks", "group": "Services", "tools": FurnitureTools.PAGES[4]},
-	{"name": "Care", "tools": FurnitureTools.PAGES[5], "page": true},
-	# The exchange and the ATM (F4-5b) share one Money page: each room with its
-	# one piece, four cards that fit beside the Next column.
-	{
-		"name": "Money",
-		"tools":
-		[
-			BuildMode.Tool.EXCHANGE_ROOM,
-			BuildMode.Tool.EXCHANGE,
-			BuildMode.Tool.ATM_ROOM,
-			BuildMode.Tool.ATM,
-		],
-		"page": true,
-	},
-	{"name": "Lounge", "group": "Leisure", "tools": FurnitureTools.PAGES[6]},
-	{"name": "Fun", "tools": FurnitureTools.PAGES[7], "page": true},
-	# The activity and rest rooms (F4-7): each takes its own piece from the
-	# Lounge and Fun pages, so a page of their own holds just the room cards.
-	{
-		"name": "Activities",
-		"tools":
-		[
-			BuildMode.Tool.PLAY_AREA_ROOM,
-			BuildMode.Tool.LOUNGE_ROOM,
-			BuildMode.Tool.SHOWER_ROOM,
-			BuildMode.Tool.NAP_POD_ROOM,
-		],
-		"page": true,
-	},
-	# The store pages (decision store-rooms-and-retail-pieces-go-on-stores-
-	# pages-behind-the-furniture-button): one per store, its room, then its
-	# counter or till and its shelf or rail, as the Toilets and Kiosk trays hold
-	# theirs.
-	{
-		"name": "Pharmacy",
-		"group": "Shops",
-		"tools":
-		[
-			BuildMode.Tool.PHARMACY_ROOM,
-			BuildMode.Tool.PHARMACY_COUNTER,
-			BuildMode.Tool.PHARMACY_SHELF,
-		],
-	},
-	{
-		"name": "Duty free",
-		"tools":
-		[
-			BuildMode.Tool.DUTY_FREE_ROOM,
-			BuildMode.Tool.DUTY_FREE_TILL,
-			BuildMode.Tool.DUTY_FREE_SHELF,
-		],
-		"page": true,
-	},
-	{
-		"name": "Fashion",
-		"tools":
-		[BuildMode.Tool.FASHION_ROOM, BuildMode.Tool.FASHION_TILL, BuildMode.Tool.FASHION_RAIL],
-		"page": true,
-	},
-	{"name": "Remove", "tools": [BuildMode.Tool.REMOVE]},
+	{"id": "remove", "name": "Remove", "tools": [BuildMode.Tool.REMOVE]},
 ]
 ## The category that is a single button with no tray, last in CATEGORIES (GDScript
 ## cannot take it from CATEGORIES.size(): tests check the two agree).
-const REMOVE_CATEGORY := 26
+const REMOVE_CATEGORY := 6
 const NO_CATEGORY := -1
 ## The open category while the Templates page (TemplatesPage) is open; its
 ## bar button presses it like a category (press_category()).
 const TEMPLATES_PAGE := -2
-## Card name and thumbnail per tool. Object sizes come from BuildCatalog.
+## Card name, thumbnail and non-catalog size text per tool. Object sizes come from BuildCatalog.
 const ITEMS := {
 	BuildMode.Tool.FLOOR: ["Floor", "floor", "1x1 tile"],
 	BuildMode.Tool.WALL: ["Wall", "wall", "1 m edge"],
@@ -185,7 +164,7 @@ const ITEMS := {
 	BuildMode.Tool.KIOSK_ROOM: ["Kiosk", "kiosk_room", "3x3 min"],
 	BuildMode.Tool.KIOSK_COUNTER: ["Kiosk counter", "kiosk_counter", ""],
 	# The store rooms carry their RoomTypes names and minimum sizes; the pieces'
-	# short names suit their store's page (FurnitureTools.ITEMS has the
+	# short names suit their store's cards (FurnitureTools.ITEMS has the
 	# pharmacy's).
 	BuildMode.Tool.PHARMACY_ROOM: ["Pharmacy", "pharmacy_room", "3x3 min"],
 	BuildMode.Tool.DUTY_FREE_ROOM: ["Duty free", "duty_free_room", "3x4 min"],
@@ -215,37 +194,41 @@ const ITEMS := {
 	BuildMode.Tool.LOT_GATE: ["Open / close", "lot_gate", "A car park"],
 	BuildMode.Tool.BUY_LAND: ["Buy land", "buy_land", "about 21x25 m plot"],
 }
-## The Lane tray's cards, as ITEMS (item() looks in both).
+## The security lane part cards, as ITEMS (item() looks in both).
 const LANE_ITEMS := {
 	BuildMode.Tool.TRAY_TABLE: ["Tray table", "tray_table", ""],
 	BuildMode.Tool.XRAY_BELT: ["X-ray belt", "xray_belt", ""],
 	BuildMode.Tool.ARCH: ["Arch", "arch", ""],
 	BuildMode.Tool.PICKUP_TABLE: ["Pickup table", "pickup_table", ""],
 }
-## Cards that say what the placed thing needs to work, in the warning colour,
-## in place of the "Click" hint (the card has no height to spare). A bag room
-## does nothing without a belt end.
+## Hover details that say what the placed thing needs to work, in the warning
+## colour: a bag room does nothing without a belt end.
 const CARD_NEEDS := {BuildMode.Tool.BAG_ROOM: "Needs belt end"}
-## Cards that say what the placed thing costs to run, in the plain hint style
-## (costs are never red), in place of the "Click" hint: a toilet stall is
-## charged its upkeep every game day once its room is ready, a screen stand
-## wherever it stands.
+## Hover details that say what the placed thing costs to run, in the plain hint
+## style (costs are never red), alongside FurnitureTools.RUNNING_COSTS: a toilet
+## stall is charged its upkeep every game day once its room is ready, a screen
+## stand wherever it stands.
 const CARD_RUNNING_COSTS := {
 	BuildMode.Tool.TOILET_STALL: PriceTable.TOILET_STALL_UPKEEP,
 	BuildMode.Tool.SCREEN: PriceTable.SCREEN_UPKEEP,
 }
 
 
-## "3" for the key bound to a tool's action, or "" when the tool has none.
-static func key_hint(tool: BuildMode.Tool) -> String:
-	for action in BuildMode.TOOL_ACTIONS:
-		if BuildMode.TOOL_ACTIONS[action] != tool or not InputMap.has_action(action):
-			continue
-		for event in InputMap.action_get_events(action):
-			var key := event as InputEventKey
-			if key != null:
-				return OS.get_keycode_string(key.physical_keycode)
-	return ""
+## Progressive card visibility state (OPEN, TEASER, HIDDEN or unwired LOCKED).
+static func card_state(tool: int, unlocks: BuildUnlocks, require_unlocks: bool, demo: bool) -> int:
+	if not require_unlocks:
+		return CardState.OPEN
+	var needed := BuildUnlocks.tier_of(tool as BuildMode.Tool)
+	if needed == 0:
+		return CardState.OPEN
+	if unlocks == null:
+		return CardState.LOCKED
+	var cap := mini(unlocks.tier(), DemoMode.MAX_PLAYABLE_TIER) if demo else unlocks.tier()
+	if needed <= cap:
+		return CardState.OPEN
+	if demo and unlocks.tier() >= DemoMode.MAX_PLAYABLE_TIER and needed == DemoMode.TEASER_TIER:
+		return CardState.TEASER
+	return CardState.HIDDEN
 
 
 ## What a tool's card costs: the floor tile, one wall piece or the object.
@@ -271,6 +254,19 @@ static func categories() -> Array:
 	return CATEGORIES.duplicate()
 
 
+## Stable identifier of category `index` ("building", "operations", ...).
+static func category_id(index: int) -> String:
+	return CATEGORIES[index]["id"]
+
+
+## Index of the category with stable `id`, or NO_CATEGORY.
+static func category_index(id: String) -> int:
+	for i in CATEGORIES.size():
+		if CATEGORIES[i]["id"] == id:
+			return i
+	return NO_CATEGORY
+
+
 ## The index of the Remove button, last in categories().
 static func remove_category() -> int:
 	return categories().size() - 1
@@ -287,37 +283,6 @@ static func running_cost(tool: BuildMode.Tool) -> int:
 	return CARD_RUNNING_COSTS.get(tool, FurnitureTools.RUNNING_COSTS.get(tool, 0))
 
 
-## The name a category's bar button carries in its tooltip: its group's name
-## on a group's first page, else its own.
-static func bar_name(index: int) -> String:
-	return CATEGORIES[index].get("group", CATEGORIES[index]["name"])
-
-
-## The first page of the named group (its bar button), or NO_CATEGORY.
-static func group_index(group_name: String) -> int:
-	for i in CATEGORIES.size():
-		if CATEGORIES[i].get("group", "") == group_name:
-			return i
-	return NO_CATEGORY
-
-
-## The first page of the group a category belongs to (CATEGORIES), or the
-## category itself when it is not a later page.
-static func group_start(index: int) -> int:
-	while index > 0 and CATEGORIES[index].get("page", false):
-		index -= 1
-	return index
-
-
-## The page the Next card of a category opens: the following page, the group's
-## first page after its last, or NO_CATEGORY for a category with no pages.
-static func next_page(index: int) -> int:
-	if index + 1 < CATEGORIES.size() and CATEGORIES[index + 1].get("page", false):
-		return index + 1
-	var start := group_start(index)
-	return start if start != index else NO_CATEGORY
-
-
 ## The category a tool belongs to, or NO_CATEGORY.
 static func category_of(tool: BuildMode.Tool) -> int:
 	var all := categories()
@@ -327,20 +292,44 @@ static func category_of(tool: BuildMode.Tool) -> int:
 	return NO_CATEGORY
 
 
-## What a card with no key says: a rectangle tool is drawn by dragging, any
-## other is a click.
+## Footprint size string for `tool` (from BuildCatalog or ITEMS[tool][2]).
+static func size_text(tool: BuildMode.Tool) -> String:
+	if BuildMode.tool_object(tool) != &"":
+		var def := BuildCatalog.get_def(BuildMode.tool_object(tool))
+		return "%dx%d" % [def.size.x, def.size.y]
+	var entry := item(tool)
+	return shown(entry[2]) if entry.size() >= 3 and entry[2] != "" else ""
+
+
+## Placement mode text: a rectangle or belt tool is drawn by dragging, any other is a click.
 static func no_key_hint(tool: BuildMode.Tool) -> String:
 	return Words.new().drag_or_click(BuildMode.AREA_TOOLS.has(tool))
 
 
-## "Upkeep 20/day": what a card or a built item's card says it costs to run.
+## "Upkeep 20/day": what a hover card or a built item's card says it costs to run.
 static func upkeep_text(amount: int) -> String:
 	return Words.new().upkeep(amount)
 
 
+## Structured [text, variation] chips for `tool`'s hover popup: footprint size,
+## placement mode (Click/Drag), upkeep, and special requirements (Needs belt end).
+static func card_details(tool: BuildMode.Tool) -> Array:
+	var out := []
+	var footprint := size_text(tool)
+	if footprint != "":
+		out.append([footprint, &"HudHint"])
+	out.append([no_key_hint(tool), &"HudHint"])
+	var upkeep := running_cost(tool)
+	if upkeep > 0:
+		out.append([upkeep_text(upkeep), &"HudHint"])
+	if CARD_NEEDS.has(tool):
+		out.append([shown(CARD_NEEDS[tool]), &"HudAttentionText"])
+	return out
+
+
 ## A table name of this file or FurnitureTools (a category, a card, a size text,
-## a need) in the player's language. The names stay English in the tables, which
-## key icons and tests; Words.msgids() lists them for POT generation.
+## a need) in the player's language. The names stay English in the tables;
+## Words.msgids() lists them for POT generation.
 static func shown(msgid: String) -> String:
 	return TranslationServer.translate(msgid, NAME_CONTEXT)
 
@@ -359,36 +348,12 @@ class Words:
 	## A test checks that each name in the tables is here.
 	func msgids() -> Array[String]:
 		return [
-			tr("Structure", "build menu"),
-			tr("Doors", "build menu"),
-			tr("Check-in", "build menu"),
-			tr("Security", "build menu"),
-			tr("Lane", "build menu"),
-			tr("Gates", "build menu"),
-			tr("Cafe", "build menu"),
-			tr("Toilets", "build menu"),
-			tr("Kiosk", "build menu"),
-			tr("Landside", "build menu"),
-			tr("Land", "build menu"),
-			tr("Baggage", "build menu"),
-			tr("Furniture", "build menu"),
-			tr("Decor", "build menu"),
-			tr("Features", "build menu"),
-			tr("Fittings", "build menu"),
-			tr("Food", "build menu"),
-			tr("Dining", "build menu"),
-			tr("Desks", "build menu"),
-			tr("Services", "build menu"),
-			tr("Care", "build menu"),
-			tr("Money", "build menu"),
-			tr("Lounge", "build menu"),
-			tr("Leisure", "build menu"),
-			tr("Fun", "build menu"),
-			tr("Activities", "build menu"),
-			tr("Pharmacy", "build menu"),
+			tr("Building", "build menu"),
+			tr("Operations", "build menu"),
+			tr("Facilities", "build menu"),
+			tr("Food & Drink", "build menu"),
 			tr("Shops", "build menu"),
-			tr("Duty free", "build menu"),
-			tr("Fashion", "build menu"),
+			tr("Decor & Parking", "build menu"),
 			tr("Remove", "build menu"),
 			tr("Floor", "build menu"),
 			tr("1x1 tile", "build menu"),
@@ -403,6 +368,7 @@ class Words:
 			tr("Seats", "build menu"),
 			tr("Gate desk", "build menu"),
 			tr("Screen", "build menu"),
+			tr("Cafe", "build menu"),
 			tr("3x3 min", "build menu"),
 			tr("Counter", "build menu"),
 			tr("Table", "build menu"),
@@ -410,7 +376,10 @@ class Words:
 			tr("2x3 min", "build menu"),
 			tr("Toilet stall", "build menu"),
 			tr("Sink", "build menu"),
+			tr("Kiosk", "build menu"),
 			tr("Kiosk counter", "build menu"),
+			tr("Pharmacy", "build menu"),
+			tr("Duty free", "build menu"),
 			tr("3x4 min", "build menu"),
 			tr("Till", "build menu"),
 			tr("Shelf", "build menu"),
@@ -424,6 +393,7 @@ class Words:
 			tr("4x4 min", "build menu"),
 			tr("Grab-and-go", "build menu"),
 			tr("Play area", "build menu"),
+			tr("Lounge", "build menu"),
 			tr("Shower", "build menu"),
 			tr("2x2 min", "build menu"),
 			tr("Nap pod", "build menu"),

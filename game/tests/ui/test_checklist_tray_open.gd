@@ -82,9 +82,7 @@ func test_with_the_gates_tray_open_a_tight_room_keeps_the_title_and_a_more_line(
 	var panel := _main.find_child("StaffPanel", true, false) as StaffPanel
 	var card := panel.checklist()
 	var box := panel.hint_card()
-	for i in BuildMenu.CATEGORIES.size():
-		if BuildMenu.CATEGORIES[i]["name"] == "Gates":
-			menu.press_category(i)
+	menu.press_category(BuildMenu.category_of(BuildMode.Tool.GATE_DESK))
 	await _settle()
 	assert_bool(menu.is_tray_open()).is_true()
 	var rows := card.rows().size()

@@ -75,7 +75,7 @@ func test_a_shown_hint_takes_the_banner_slot_and_gives_it_back() -> void:
 	var hints := _live()
 	assert_bool(_panel().hint_card().visible).is_true()
 	for i in 8:
-		hints.advance(0.25, _world(), ["Check-in"])
+		hints.advance(0.25, _world(), [BuildMenu.category_of(BuildMode.Tool.DESK)])
 	assert_str(hints.shown_id()).is_equal(HintRules.PLACE_CHECKIN)
 	assert_bool(_panel().hint_card().visible).is_false()
 	assert_bool(hints.card().visible).is_true()
@@ -87,7 +87,7 @@ func test_a_shown_hint_takes_the_banner_slot_and_gives_it_back() -> void:
 func test_the_hint_card_sits_where_the_banner_sits() -> void:
 	var hints := _live()
 	for i in 8:
-		hints.advance(0.25, _world(), ["Check-in"])
+		hints.advance(0.25, _world(), [BuildMenu.category_of(BuildMode.Tool.DESK)])
 	await await_idle_frame()
 	await await_idle_frame()
 	var card := hints.card().get_global_rect()
@@ -110,7 +110,7 @@ func test_a_new_game_has_no_staffing_shortage_to_teach() -> void:
 func test_the_card_fades_under_the_build_ghost_and_returns() -> void:
 	var hints := _live()
 	for i in 8:
-		hints.advance(0.25, _world(), ["Check-in"])
+		hints.advance(0.25, _world(), [BuildMenu.category_of(BuildMode.Tool.DESK)])
 	await await_idle_frame()
 	await await_idle_frame()
 	var card := hints.card().get_global_rect()
@@ -155,7 +155,7 @@ func test_no_hint_is_picked_while_the_unlock_dialog_is_open() -> void:
 	assert_bool(guide.is_open()).is_true()
 	var left := Hints.IDLE_S + 5.0
 	while left > 0.0:
-		hints.advance(0.25, _world(), ["Check-in"])
+		hints.advance(0.25, _world(), [BuildMenu.category_of(BuildMode.Tool.DESK)])
 		left -= 0.25
 	assert_bool(hints.is_showing()).is_false()
 	assert_bool(hints.is_seen(HintRules.PLACE_CHECKIN)).is_false()
@@ -163,6 +163,15 @@ func test_no_hint_is_picked_while_the_unlock_dialog_is_open() -> void:
 	assert_bool(guide.is_open()).is_false()
 	left = HintRules.HOLD_S + 0.5
 	while left > 0.0:
-		hints.advance(0.25, _world(), ["Check-in"])
+		hints.advance(0.25, _world(), [BuildMenu.category_of(BuildMode.Tool.DESK)])
 		left -= 0.25
 	assert_str(hints.shown_id()).is_equal(HintRules.PLACE_CHECKIN)
+
+
+func test_templates_page_open_never_wraps_negative_category_index() -> void:
+	var hints := _live()
+	var menu := _main.get_node("BuildMenu") as BuildMenu
+	menu.press_category(BuildMenu.TEMPLATES_PAGE)
+	assert_int(menu.open_category()).is_equal(BuildMenu.TEMPLATES_PAGE)
+	assert_array(hints._open_categories()).is_empty()
+	menu.press_category(BuildMenu.TEMPLATES_PAGE)

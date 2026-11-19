@@ -301,7 +301,7 @@ func _intro_body() -> String:
 	)
 	var path := tr(
 		# gdlint:ignore = max-line-length
-		"Build them a path: entrance, then check-in, then security, then the gate exit. Number keys pick tools, {pause} pauses, {speed} sets speed."
+		"Build them a path: entrance, then check-in, then security, then the gate exit. {pause} pauses, {speed} sets speed."
 	)
 	var clock := tr("The clock starts when you close this.")
 	var keys := {"pause": CONTINUE_KEY, "speed": SPEED_KEYS_TEXT}

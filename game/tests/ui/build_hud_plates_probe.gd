@@ -2,14 +2,14 @@ extends SceneTree
 ## Windowed plate probe for the build HUD (BuildMenu and PassengerHud) on the
 ## real main.tscn with the starter terminal built:
 ##   a_no_tray_1920   no tool, tray closed
-##   b_floor_drag_1920  Structure tray, Floor picked, a rectangle mid-drag
-##   c_checkin_refusal_1920  Check-in tray, a desk hovered off the floor, with
+##   b_floor_drag_1920  Building tray, Floor picked, a rectangle mid-drag
+##   c_checkin_refusal_1920  Operations tray, a desk hovered off the floor, with
 ##                    the short reason beside the ghost (GhostReason)
 ##   e_ghost_over_bar_1920  the ghost hidden while the pointer is on the bar
-##   f_group_tray_1920  the Leisure group's tray on its second page (Fun)
-##   g_tooltip_1920   the pointer resting on the Decor icon, its tooltip open
-##   h_bar_3440       3440x1440, the Shops group's tray open
-##   d_layout_1280    1280x720, Structure tray, Debug open, a long follow text
+##   f_group_tray_1920  the Decor & Parking tray scrolled horizontally
+##   g_tooltip_1920   the pointer resting on the Decor & Parking icon, tooltip open
+##   h_bar_3440       3440x1440, the Shops tray open
+##   d_layout_1280    1280x720, Building tray, Debug open, a long follow text
 ## Before each save it proves every HUD panel lies inside the window, that no
 ## two panels overlap, and that the 3D subject projects inside the frame clear
 ## of every panel; otherwise it prints PROBE_INVALID and exits 1. At 1920 and
@@ -120,7 +120,15 @@ func _run() -> void:
 	_hud = _main.get_node("PassengerHud") as PassengerHud
 	await _frames(3)
 	_hud.press_starter_terminal()
-	print("PROBE starter: %s" % _hud.status_text())
+	var unlocks := _main.get_node("BuildUnlocks") as BuildUnlocks
+	var rating := _main.get_node("AirportRating") as AirportRating
+	for _i in 80:
+		rating.record_passenger(0, true, PassengerSim.MOOD_MAX)
+	for _i in 850:
+		unlocks.note_made()
+	unlocks.check()
+	_menu.end_grant_hold()
+	print("PROBE starter: %s tier=%d" % [_hud.status_text(), unlocks.tier()])
 	var rig := _main.get_node("TycoonCamera") as TycoonCamera
 	_cam = rig.get_node("Camera3D") as Camera3D
 	rig.position = _mode.grid.cell_to_world(FOCUS_CELL)
@@ -186,30 +194,34 @@ func _run() -> void:
 	await _ghost_over_hud()
 
 	_mode.set_tool(BuildMode.Tool.NONE)
-	var leisure := BuildMenu.group_index("Leisure")
-	_menu.category_button(leisure).pressed.emit()
-	var next := _menu.tray().find_children("CardNext", "Button", true, false)
-	for button in next:
-		if (button as Button).is_visible_in_tree():
-			(button as Button).pressed.emit()
-			break
+	var decor := BuildMenu.category_index("decor")
+	_menu.category_button(decor).pressed.emit()
+	_menu.tray_scroll().scroll_horizontal = 600
 	_warp(_mode.grid.cell_to_world(FOCUS_CELL))
 	await _frames(6)
-	print("PROBE f: open page %s" % BuildMenu.categories()[_menu.open_category()]["name"])
-	if BuildMenu.group_start(_menu.open_category()) != leisure or _menu.open_category() == leisure:
-		_invalid("f: the Leisure tray is not on a later page")
+	print(
+		(
+			"PROBE f: open tab %s scroll=%d"
+			% [
+				BuildMenu.categories()[_menu.open_category()]["name"],
+				_menu.tray_scroll().scroll_horizontal
+			]
+		)
+	)
+	if _menu.open_category() != decor or _menu.tray_scroll().scroll_horizontal <= 0:
+		_invalid("f: the Decor & Parking tray did not scroll horizontally")
 	await _plate("f_group_tray_1920", [])
 
-	_menu.category_button(leisure).pressed.emit()
+	_menu.category_button(decor).pressed.emit()
 	_mode.set_tool(BuildMode.Tool.NONE)
-	await _tooltip_plate("Decor", "g_tooltip_1920")
+	await _tooltip_plate("decor", "Decor & Parking", "g_tooltip_1920")
 
 	DisplayServer.window_set_size(Vector2i(3440, 1440))
 	await _frames(10)
 	print("PROBE window=%s layout=%s" % [root.size, root.get_visible_rect().size])
 	if root.size != Vector2i(3440, 1440):
 		_invalid("h: the window is %s, not 3440x1440" % root.size)
-	_menu.category_button(BuildMenu.group_index("Shops")).pressed.emit()
+	_menu.category_button(BuildMenu.category_index("shops")).pressed.emit()
 	_warp(_mode.grid.cell_to_world(FOCUS_CELL))
 	await _frames(6)
 	_check_debug_clear("h")
@@ -313,11 +325,12 @@ func _check_debug_clear(label: String) -> void:
 
 ## Rests the pointer on a bar icon until its tooltip opens, proves the tooltip
 ## window is open inside the window and names the button, then plates it.
-func _tooltip_plate(button_name: String, label: String) -> void:
-	var button := _menu.category_button(BuildMenu.group_index(button_name))
-	if button_name != BuildMenu.bar_name(BuildMenu.group_index(button_name)):
-		_invalid("%s: no %s button" % [label, button_name])
+func _tooltip_plate(cat_id: String, button_name: String, label: String) -> void:
+	var idx := BuildMenu.category_index(cat_id)
+	if idx < 0:
+		_invalid("%s: no %s button" % [label, cat_id])
 		return
+	var button := _menu.category_button(idx)
 	_warp_screen(button.get_global_rect().get_center())
 	var until := Time.get_ticks_msec() + TOOLTIP_WAIT_MS
 	while Time.get_ticks_msec() < until:

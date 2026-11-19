@@ -6,14 +6,12 @@ extends GdUnitTestSuite
 ## mode-open-not-on-every-menu-switch).
 
 const SEED := 4_402_028
-## Trays with different card counts: Structure (four cards), Check-in (one),
-## Lane (four), Cafe (three) and Toilets (a tray of its own). These category
-## trays are narrower than BuildMenu.COLUMN_W (568 px at most, against 640), and
-## PanelRoom cuts a stack of at least that width, so among them the tray's own
-## size cannot move the room; this case is a guard. The Templates page is wider
-## (664 px), and the kept build stack is what holds the room there too. The case
-## that fails without the fix is the banner yield below.
-const CATEGORIES := [0, 2, 4, 6, 7]
+## Domain tabs with different Tier-1 card counts: Building (seven cards, capped
+## to BuildMenu.COLUMN_W = 640 px), Operations (four cards) and Facilities
+## (three cards). PanelRoom cuts a stack of at least COLUMN_W, so switching
+## between wider and narrower trays or TemplatesPage cannot move the room; this
+## case is a guard. The case that fails without the fix is the banner yield below.
+const CATEGORIES := [0, 1, 2]
 
 var _main: Node
 var _camera: TycoonCamera

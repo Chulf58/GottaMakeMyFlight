@@ -85,34 +85,30 @@ func test_the_cafe_panel_keeps_its_seats_and_base_spend() -> void:
 	assert_array(_texts(_menu.room_panel())).contains(["Seats 0", spend])
 
 
-func test_the_bag_room_card_says_it_needs_a_belt_end_inside_the_card() -> void:
-	# The card lines wrap now (board T10), and a wrapping Label in a hidden tray has
-	# no width yet, so its height reads far too tall: open the tray before measuring.
-	_menu.press_category(BuildMenuCatalog.category_of(BuildMode.Tool.BAG_ROOM))
-	await get_tree().process_frame
-	await get_tree().process_frame
-	var card := _menu.card(BuildMode.Tool.BAG_ROOM)
+func test_the_bag_room_hover_card_says_it_needs_a_belt_end_in_attention_style() -> void:
+	_menu.press_category(BuildMenu.category_index("operations"))
+	var card := _menu.card(BuildMode.Tool.BAG_ROOM) as ItemCardButton
+	var popup: Control = auto_free(card._make_custom_tooltip(card.tooltip_text))
 	var need: Label = null
-	for label in card.find_children("*", "Label", true, false):
-		if (label as Label).text.to_lower().contains("belt end"):
+	for label in popup.find_children("*", "Label", true, false):
+		if (label as Label).text == "Needs belt end":
 			need = label
-	assert_object(need).override_failure_message("no belt end line on the card").is_not_null()
+	assert_object(need).override_failure_message("no belt end chip in hover popup").is_not_null()
 	if need == null:
 		return
-	assert_str(need.theme_type_variation).is_equal("HudAttentionText")
-	var column := need.get_parent() as Control
-	var inner := card.size - Vector2(12.0, 12.0)
-	assert_float(column.get_combined_minimum_size().y).is_less_equal(inner.y)
-	var font := need.get_theme_font("font")
-	var width := font.get_string_size(
-		need.text, HORIZONTAL_ALIGNMENT_LEFT, -1, need.get_theme_font_size("font_size")
-	)
-	assert_float(width.x).is_less_equal(inner.x)
+	assert_str(String(need.theme_type_variation)).is_equal("HudAttentionText")
+	var face := _texts(card)
+	assert_bool(face.is_empty()).is_false()
+	for text in face:
+		assert_bool(text.to_lower().contains("belt end")).is_false()
 
 
 func test_the_cafe_card_has_no_belt_end_line() -> void:
+	_menu.press_category(BuildMenu.category_index("food"))
 	var card := _menu.card(BuildMode.Tool.CAFE_ROOM)
-	for text in _texts(card):
+	var face := _texts(card)
+	assert_bool(face.is_empty()).is_false()
+	for text in face:
 		assert_bool(text.to_lower().contains("belt end")).is_false()
 
 

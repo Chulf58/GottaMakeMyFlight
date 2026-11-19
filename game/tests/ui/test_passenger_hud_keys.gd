@@ -1,7 +1,7 @@
 class_name TestPassengerHudKeys
 extends GdUnitTestSuite
-## PassengerHud's speed keys (Space, Shift+1/2/3) next to BuildMode's tool
-## keys, the collapsed Debug panel and the follow text's place.
+## PassengerHud's speed keys (Space, Shift+1/2/3) with plain 1-9/0 unbound from
+## BuildMode, the collapsed Debug panel and the follow text's place.
 
 ## The HUD and mode live in a 1280x720 SubViewport so layout and pushed
 ## input see a real screen size, not the headless window.
@@ -82,11 +82,11 @@ func test_shift_numbers_set_the_speed_and_leave_the_build_tool() -> void:
 	assert_int(_mode.tool).is_equal(BuildMode.Tool.WALL)
 
 
-func test_plain_numbers_still_pick_build_tools() -> void:
+func test_plain_numbers_leave_speed_and_build_tool_unchanged() -> void:
 	_mode.set_tool(BuildMode.Tool.WALL)
 	_world.clock.set_speed(2)
 	_push(_key(KEY_1))
-	assert_int(_mode.tool).is_equal(BuildMode.Tool.FLOOR)
+	assert_int(_mode.tool).is_equal(BuildMode.Tool.WALL)
 	assert_int(_world.clock.speed).is_equal(2)
 
 

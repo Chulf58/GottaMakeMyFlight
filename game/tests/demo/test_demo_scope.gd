@@ -5,8 +5,8 @@ extends GdUnitTestSuite
 ##   1. Full-game default (DemoMode.is_demo() == false) leaves Tiers 1-4, all
 ##      land plots, all 6 incidents, and Day 6+ freeplay untouched.
 ##   2. Demo mode caps BuildUnlocks at Tier 2, labels Tier 3 tools + large
-##      runway "In the full game", and hides Tier 4 cards and empty pages in
-##      BuildMenu.
+##      runway "In the full game" (hidden at Tier 1, appended at the right end
+##      of trays at Tier 2), and hides Tier 4 cards and empty tabs in BuildMenu.
 ##   3. Demo mode allows 1 extra land plot and refuses the 2nd extra plot.
 ##   4. Demo mode filters IncidentCatalogue rolls to SPILL, FAULT, and RUSH,
 ##      excluding INSPECTOR, VIP, and FAVOUR.
@@ -186,16 +186,22 @@ func test_demo_caps_build_unlocks_at_tier_2_and_refuses_tier3_tier4_and_large_ru
 	assert_int(late_unlocks.tier()).is_equal(DemoMode.MAX_PLAYABLE_TIER)
 
 
-func test_demo_build_menu_greys_tier3_teasers_hides_tier4_and_prunes_empty_pages() -> void:
+func test_demo_build_menu_hides_teasers_at_tier1_and_shows_reordered_teasers_at_tier2() -> void:
 	DemoMode.set_override_for_test(true)
-	var pair := _make_unlocks_pair(100, 100)
-	var unlocks: BuildUnlocks = pair["unlocks"]
 	var port: SubViewport = auto_free(SubViewport.new())
 	port.size = Vector2i(1536, 864)
 	add_child(port)
+	var finances: Finances = auto_free(Finances.new())
+	finances.wallet.credit(5000, Wallet.Category.FEES)
+	port.add_child(finances)
+	var tier1_pair := _make_unlocks_pair(0, 0)
+	var unlocks: BuildUnlocks = tier1_pair["unlocks"]
+	var rating: AirportRating = tier1_pair["rating"]
+	var pax: PassengerSim = tier1_pair["pax"]
 	var mode: BuildMode = auto_free(BuildMode.new())
 	mode.grid_size = Vector2i(20, 20)
 	mode.initial_tool = BuildMode.Tool.NONE
+	mode.finances = finances
 	mode.unlocks = unlocks
 	mode.require_unlocks = true
 	port.add_child(mode)
@@ -204,14 +210,36 @@ func test_demo_build_menu_greys_tier3_teasers_hides_tier4_and_prunes_empty_pages
 	menu.build_mode = mode
 	port.add_child(menu)
 
-	# Tier 2 unlocked, Tier 3 greyed with "In the full game", Tier 4 hidden.
+	# Day 1 (Tier 1) in DemoMode: only the 3 Tier-1 build tabs + Remove appear,
+	# and Tier 3 teaser cards stay hidden.
+	var tier1_tabs: Array[String] = []
+	for i in BuildMenu.categories().size():
+		if menu.category_button(i).visible:
+			tier1_tabs.append(BuildMenu.category_id(i))
+	assert_array(tier1_tabs).is_equal(["building", "operations", "facilities", "remove"])
+	assert_bool(menu.card(BuildMode.Tool.TREE).visible).is_false()
+	assert_bool(menu.card(BuildMode.Tool.CAFE_ROOM).visible).is_false()
+
+	# Unlock Tier 2: all 6 build tabs + Remove appear, Tier 2 playable cards come
+	# first, Tier 3 teaser cards sit at the right end with "In the full game"
+	# preserved across wallet changes, and Tier 4 cards stay hidden.
+	for i in 100:
+		rating.record_passenger(0, true, PassengerSim.MOOD_MAX)
+		pax.outcome.emit(i, true)
+	unlocks.check()
+	assert_int(unlocks.tier()).is_equal(DemoMode.MAX_PLAYABLE_TIER)
+
 	assert_object(menu.card(BuildMode.Tool.CAFE_ROOM).modulate).is_equal(Color.WHITE)
 	var tree_card := menu.card(BuildMode.Tool.TREE)
 	assert_bool(tree_card.visible).is_true()
 	assert_object(tree_card.modulate).is_equal(BuildMenu.LOCKED_TINT)
 	assert_str(_card_last_line(tree_card)).is_equal("In the full game")
+	# Wallet balance change must NOT overwrite "In the full game" with an integer price!
+	finances.wallet.credit(250, Wallet.Category.FEES)
+	assert_str(_card_last_line(tree_card)).is_equal("In the full game")
 	assert_str(tree_card._get_tooltip(Vector2.ZERO)).contains("In the full game")
 	assert_str(tree_card._get_tooltip(Vector2.ZERO)).not_contains("Unlocks at")
+	menu.end_grant_hold()
 	menu.press_card(BuildMode.Tool.TREE)
 	assert_int(mode.tool).is_not_equal(BuildMode.Tool.TREE)
 	assert_str(menu.status_label().text).is_equal("In the full game")
@@ -222,42 +250,27 @@ func test_demo_build_menu_greys_tier3_teasers_hides_tier4_and_prunes_empty_pages
 			if hidden != null:
 				assert_bool(hidden.visible).is_false()
 
-	# Shops has only Pharmacy (Tier 3) left after Duty free and Fashion (Tier 4) hide:
-	# its Next card hides, and Services / Leisure skip Care / Fun so no empty tray opens.
-	var shops := BuildMenu.group_index("Shops")
-	menu.press_category(shops)
-	var shops_next := (
-		menu.card(BuildMode.Tool.PHARMACY_ROOM).get_parent().find_child("CardNext", true, false)
-		as Button
-	)
-	assert_bool(shops_next.visible).is_false()
+	# In Decor & Parking, playable Tier-2 cards (including CURB) precede all Tier-3 teasers.
+	var decor_row := tree_card.get_parent()
+	var seen_teaser := false
+	for child in decor_row.get_children():
+		var c := child as Control
+		if not c.visible:
+			continue
+		var is_teaser := _card_last_line(c as Button) == "In the full game"
+		if is_teaser:
+			seen_teaser = true
+		else:
+			assert_bool(seen_teaser).is_false()
+	assert_bool(seen_teaser).is_true()
 
-	for group_name in ["Decor", "Food", "Services", "Leisure", "Shops"]:
-		var start := BuildMenu.group_index(group_name)
-		menu.press_category(start)
-		for _step in 6:
-			var open_page := menu.open_category()
-			var visible_count := 0
-			for tool in BuildMenu.categories()[open_page]["tools"]:
-				if menu.card(tool).is_visible_in_tree():
-					visible_count += 1
-			assert_int(visible_count).is_greater(0)
-			var row := menu.card(BuildMenu.categories()[open_page]["tools"][0]).get_parent()
-			var next_btn := row.find_child("CardNext", true, false) as Button
-			if next_btn == null or not next_btn.visible:
-				break
-			next_btn.pressed.emit()
-			if menu.open_category() == start:
-				break
-
-	# Every visible category button on the bottom bar opens a non-empty tray.
+	# Every visible domain tab button on the bottom bar opens a non-empty tray.
 	var checked_buttons := 0
 	for i in BuildMenu.categories().size():
 		if i == BuildMenu.remove_category():
 			continue
 		var bar_btn := menu.category_button(i)
-		if not bar_btn.visible:
-			continue
+		assert_bool(bar_btn.visible).is_true()
 		bar_btn.pressed.emit()
 		assert_bool(menu.is_tray_open()).is_true()
 		var open_cat := menu.open_category()
@@ -269,7 +282,7 @@ func test_demo_build_menu_greys_tier3_teasers_hides_tier4_and_prunes_empty_pages
 		assert_int(cards_shown).is_greater(0)
 		checked_buttons += 1
 		menu.close_for_modal()
-	assert_int(checked_buttons).is_greater_equal(17)
+	assert_int(checked_buttons).is_equal(6)
 
 
 func test_demo_allows_one_extra_land_plot_and_refuses_second_extra_plot() -> void:
@@ -571,7 +584,7 @@ func test_demo_end_card_preempts_open_take_turn_dialogs_and_build_tray_on_rollov
 
 	# Part 1: BuildSession + OfferPanel yielding tokens yield to HUD 3x (leaving
 	# OfferPanel's exclusive turn open) and SimClock.advance preempts it on rollover.
-	menu.press_category(BuildMenu.category_of(BuildMode.Tool.SURFACE_LOT))
+	menu.press_category(BuildMenu.category_of(BuildMode.Tool.FLOOR))
 	menu.build_session.sync()
 	assert_bool(clock.paused).is_true()
 	hud.press_speed(3)

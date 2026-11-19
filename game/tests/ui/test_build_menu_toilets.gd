@@ -1,9 +1,8 @@
 class_name TestBuildMenuToilets
 extends GdUnitTestSuite
-## The toilet in the build menu (Toilets 5/5): a Toilets tray right after
-## Cafe (Shops before HUD 6/7) holding the Toilet room tool, the toilet stall
-## and the sink, with their prices, the stall's daily upkeep as its hint, and
-## the rendered room, stall and sink thumbnails.
+## The toilet tools in the Facilities domain tab: Toilet room, Toilet stall and
+## Sink lead Facilities with their prices, rendered thumbnails, and hover popup
+## sizes and daily upkeep.
 
 const TOILET_TOOLS := [
 	BuildMode.Tool.TOILET_ROOM,
@@ -33,14 +32,6 @@ func after_test() -> void:
 	_port.free()
 
 
-func _category_named(category_name: String) -> int:
-	var all := BuildMenu.categories()
-	for i in all.size():
-		if all[i]["name"] == category_name:
-			return i
-	return BuildMenu.NO_CATEGORY
-
-
 func _texts(control: Control) -> Array:
 	var out := []
 	for label in control.find_children("*", "Label", true, false):
@@ -48,28 +39,28 @@ func _texts(control: Control) -> Array:
 	return out
 
 
+func _hover(tool: BuildMode.Tool) -> Control:
+	var card := _menu.card(tool) as ItemCardButton
+	return auto_free(card._make_custom_tooltip(card.tooltip_text))
+
+
 func _picture(tool: BuildMode.Tool) -> TextureRect:
 	return _menu.card(tool).find_children("*", "TextureRect", true, false)[0] as TextureRect
 
 
-func test_the_toilets_tray_follows_cafe_and_holds_the_room_stall_and_sink() -> void:
-	var all := BuildMenu.categories()
-	var shops := _category_named("Cafe")
-	var toilets := _category_named("Toilets")
-	print("shops %d toilets %d remove %d" % [shops, toilets, BuildMenu.remove_category()])
-	assert_int(toilets).is_equal(shops + 1)
-	assert_array(all[toilets]["tools"]).is_equal(TOILET_TOOLS)
-	assert_str(_menu.category_button(toilets).tooltip_text).is_equal("Toilets")
-	assert_str(_menu.category_button(toilets + 1).tooltip_text).is_equal("Kiosk")
+func test_toilet_tools_lead_the_facilities_tab() -> void:
+	var facilities := BuildMenu.category_index("facilities")
+	assert_int(facilities).is_equal(2)
+	var tools: Array = BuildMenu.categories()[facilities]["tools"]
+	assert_array(tools.slice(0, 3)).is_equal(TOILET_TOOLS)
+	assert_str(_menu.category_button(facilities).tooltip_text).is_equal("Facilities")
 	assert_int(BuildMenu.remove_category()).is_equal(BuildMenu.REMOVE_CATEGORY)
-	assert_str(all[BuildMenu.REMOVE_CATEGORY]["name"]).is_equal("Remove")
 
 
-func test_the_toilet_cards_show_name_size_price_and_hint() -> void:
-	_menu.category_button(_category_named("Toilets")).pressed.emit()
+func test_the_toilet_cards_show_name_and_price_with_size_and_upkeep_in_hover() -> void:
+	_menu.category_button(BuildMenu.category_index("facilities")).pressed.emit()
 	for tool in TOILET_TOOLS:
 		assert_bool(_menu.card(tool).is_visible_in_tree()).is_true()
-		print("tool %d card: %s" % [tool, _texts(_menu.card(tool))])
 	var stall_price := PriceTable.price_of_object(&"toilet_stall")
 	var sink_price := PriceTable.price_of_object(&"toilet_sink")
 	assert_int(stall_price).is_greater(0)
@@ -79,20 +70,24 @@ func test_the_toilet_cards_show_name_size_price_and_hint() -> void:
 	assert_int(BuildMenu.tool_price(BuildMode.Tool.TOILET_ROOM)).is_equal(0)
 	var upkeep := "Upkeep %d/day" % PriceTable.TOILET_STALL_UPKEEP
 	assert_array(_texts(_menu.card(BuildMode.Tool.TOILET_ROOM))).is_equal(
-		["Toilet", "2x3 min", BuildMenu.PRICE_TEXT, "Drag"]
+		["Toilet", BuildMenu.PRICE_TEXT]
 	)
 	assert_array(_texts(_menu.card(BuildMode.Tool.TOILET_STALL))).is_equal(
-		["Toilet stall", "1x2", BuildMenu.PRICE_TEXT, upkeep]
+		["Toilet stall", BuildMenu.PRICE_TEXT]
 	)
 	assert_array(_texts(_menu.card(BuildMode.Tool.TOILET_SINK))).is_equal(
-		["Sink", "1x1", BuildMenu.PRICE_TEXT, "Click"]
+		["Sink", BuildMenu.PRICE_TEXT]
 	)
+	assert_array(_texts(_hover(BuildMode.Tool.TOILET_ROOM))).contains(["2x3 min", "Drag"])
+	assert_array(_texts(_hover(BuildMode.Tool.TOILET_STALL))).contains(["1x2", "Click", upkeep])
+	assert_array(_texts(_hover(BuildMode.Tool.TOILET_SINK))).contains(["1x1", "Click"])
 
 
-func test_the_upkeep_hint_is_in_the_plain_hint_style() -> void:
+func test_the_upkeep_chip_in_hover_is_in_the_plain_hint_style() -> void:
 	var upkeep := "Upkeep %d/day" % PriceTable.TOILET_STALL_UPKEEP
+	var popup := _hover(BuildMode.Tool.TOILET_STALL)
 	var found: Label = null
-	for label in _menu.card(BuildMode.Tool.TOILET_STALL).find_children("*", "Label", true, false):
+	for label in popup.find_children("*", "Label", true, false):
 		if (label as Label).text == upkeep:
 			found = label
 	assert_object(found).is_not_null()
@@ -115,16 +110,6 @@ func test_with_a_wallet_the_stall_and_sink_cards_show_their_prices() -> void:
 	port.add_child(menu)
 	var stall := str(PriceTable.price_of_object(&"toilet_stall"))
 	var sink := str(PriceTable.price_of_object(&"toilet_sink"))
-	print(
-		(
-			"stall %s sink %s room %s"
-			% [
-				menu.card_price_text(BuildMode.Tool.TOILET_STALL),
-				menu.card_price_text(BuildMode.Tool.TOILET_SINK),
-				menu.card_price_text(BuildMode.Tool.TOILET_ROOM),
-			]
-		)
-	)
 	assert_str(menu.card_price_text(BuildMode.Tool.TOILET_STALL)).is_equal(stall)
 	assert_str(menu.card_price_text(BuildMode.Tool.TOILET_SINK)).is_equal(sink)
 	assert_str(menu.card_price_text(BuildMode.Tool.TOILET_ROOM)).is_equal(BuildMenu.PRICE_TEXT)
@@ -133,29 +118,28 @@ func test_with_a_wallet_the_stall_and_sink_cards_show_their_prices() -> void:
 
 func test_the_room_stall_and_sink_cards_use_their_rendered_thumbnails() -> void:
 	for tool in TOILET_TOOLS:
-		var name: String = BuildMenu.item(tool)[1]
-		assert_bool(BuildMenu.PLACEHOLDER_THUMBNAILS.has(name)).is_false()
+		var thumb_name: String = BuildMenu.item(tool)[1]
+		assert_bool(BuildMenu.PLACEHOLDER_THUMBNAILS.has(thumb_name)).is_false()
 		var picture := _picture(tool)
-		assert_object(picture.texture).override_failure_message(name).is_not_null()
-		assert_str(picture.texture.resource_path).is_equal(BuildMenu.THUMBNAIL_DIR % name)
+		assert_object(picture.texture).override_failure_message(thumb_name).is_not_null()
+		assert_str(picture.texture.resource_path).is_equal(BuildMenu.THUMBNAIL_DIR % thumb_name)
 		assert_int(picture.find_children("*", "ColorRect", true, false).size()).is_equal(0)
 
 
-func test_picking_a_toilet_card_picks_its_tool_and_opens_the_toilets_tray() -> void:
+func test_picking_a_toilet_card_picks_its_tool_and_opens_facilities() -> void:
+	var facilities := BuildMenu.category_index("facilities")
 	for tool in TOILET_TOOLS:
 		_menu.card(tool).pressed.emit()
 		assert_int(_mode.tool).is_equal(tool)
-		assert_int(_menu.open_category()).is_equal(_category_named("Toilets"))
+		assert_int(_menu.open_category()).is_equal(facilities)
 		assert_bool(_menu.card(tool).button_pressed).is_true()
 
 
-func test_the_toilets_tray_fits_its_reserved_space_and_the_bar_fits_the_screen() -> void:
-	_menu.category_button(_category_named("Toilets")).pressed.emit()
+func test_the_facilities_tray_fits_its_reserved_space_and_the_bar_fits_the_screen() -> void:
+	_menu.category_button(BuildMenu.category_index("facilities")).pressed.emit()
 	var need := _menu.tray().get_combined_minimum_size()
 	var bar := _menu.bar().get_combined_minimum_size()
-	# The game's layout width: 1920 px at the 1.25 UI scale (project.godot).
 	var layout_w := 1920.0 / 1.25
-	print("toilets tray needs %s, bar needs %s of %.0f" % [need, bar, layout_w])
 	assert_float(need.x).is_less_equal(BuildMenu.COLUMN_W)
 	assert_float(need.y).is_less_equal(BuildMenu.TRAY_H)
 	assert_float(bar.x).is_less_equal(layout_w - 2.0 * BuildMenu.MARGIN)

@@ -20,6 +20,7 @@ const GROUP_GAP := 16
 const CHIP_H := 32
 const BUTTON_H := 40
 const BAR_H := 52
+const TRAY_H := 150
 
 ## Widths, by role.
 ## A toggle button: the top row's Build mode sign, Runway and Offers, and the

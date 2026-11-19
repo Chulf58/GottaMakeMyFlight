@@ -1,44 +1,9 @@
 class_name TestBuildMenuFurniture
 extends GdUnitTestSuite
-## The 29 furniture pieces in the build menu (Furniture 4/4 F4-2). A tray holds
-## at most four cards beside its Next card inside COLUMN_W, so the pieces sit
-## on pages. Every card shows its name, size, price, a rendered thumbnail and,
-## where the piece has a running cost, its upkeep.
-##
-## Since HUD 6/7 (decision hud-6-7-furniture-groups-five-icon-buttons-decor-
-## food-servic) the pages sit behind five group buttons, Decor, Food, Services,
-## Leisure and Shops, in place of the one Furniture button (TestBuildMenuGroups
-## checks which page is in which group). A group's button opens its first page,
-## and a Next card on each page opens the group's following page (the last goes
-## back to the group's first). The pharmacy counter and shelf sit on the
-## pharmacy's page, not Care, and the exchange counter and the ATM on the Money
-## page, not Desks.
-
-## The furniture, store, food and activity pages, one after another from the
-## Furniture page and before Remove: eight furniture pages, three store pages
-## and the Money, Dining and Activities pages.
-const PAGE_COUNT := 14
-const MAX_CARDS_PER_PAGE := 4
-## The store, food and activity room tools on the Stores, Money, Dining and
-## Activities pages that are not furniture pieces.
-const STORE_TOOLS := [
-	BuildMode.Tool.PHARMACY_ROOM,
-	BuildMode.Tool.DUTY_FREE_ROOM,
-	BuildMode.Tool.DUTY_FREE_TILL,
-	BuildMode.Tool.DUTY_FREE_SHELF,
-	BuildMode.Tool.FASHION_ROOM,
-	BuildMode.Tool.FASHION_TILL,
-	BuildMode.Tool.FASHION_RAIL,
-	BuildMode.Tool.EXCHANGE_ROOM,
-	BuildMode.Tool.ATM_ROOM,
-	BuildMode.Tool.BAR_ROOM,
-	BuildMode.Tool.RESTAURANT_ROOM,
-	BuildMode.Tool.STALL_ROOM,
-	BuildMode.Tool.PLAY_AREA_ROOM,
-	BuildMode.Tool.LOUNGE_ROOM,
-	BuildMode.Tool.SHOWER_ROOM,
-	BuildMode.Tool.NAP_POD_ROOM,
-]
+## The 29 furniture pieces across the domain tabs (Facilities, Food & Drink,
+## Shops, Decor & Parking): every card shows its name, price and rendered
+## thumbnail on the face, with footprint size and daily upkeep in its hover
+## popup, and no CardNext paging buttons remain.
 
 var _port: SubViewport
 var _mode: BuildMode
@@ -47,7 +12,7 @@ var _menu: BuildMenu
 
 func before_test() -> void:
 	_port = SubViewport.new()
-	_port.size = Vector2i(1280, 720)
+	_port.size = Vector2i(1536, 864)
 	add_child(_port)
 	_mode = BuildMode.new()
 	_mode.grid_size = Vector2i(20, 20)
@@ -70,73 +35,29 @@ func _texts(control: Control) -> Array:
 	return out
 
 
-func _leader() -> int:
-	var all := BuildMenu.categories()
-	for i in all.size():
-		if all[i]["name"] == "Furniture":
-			return i
-	return BuildMenu.NO_CATEGORY
+func _hover_texts(tool: BuildMode.Tool) -> Array:
+	var card := _menu.card(tool) as ItemCardButton
+	var popup: Control = auto_free(card._make_custom_tooltip(card.tooltip_text))
+	return _texts(popup)
 
 
-func _pages() -> Array[int]:
-	var out: Array[int] = []
-	var first := _leader()
-	for i in range(first, first + PAGE_COUNT):
-		out.append(i)
-	return out
-
-
-func _next_button(page: int) -> Button:
-	var tool: BuildMode.Tool = BuildMenu.categories()[page]["tools"][0]
-	return _menu.card(tool).get_parent().find_child("CardNext", true, false) as Button
-
-
-# Was one Furniture button over every page; HUD 6/7 put five group buttons in
-# its place, so a page that starts a group is not a later page.
-func test_five_group_buttons_lead_the_furniture_pages_before_remove() -> void:
-	var first := _leader()
-	assert_int(first).is_not_equal(BuildMenu.NO_CATEGORY)
-	var all := BuildMenu.categories()
-	assert_str(all[first - 1]["name"]).is_equal("Baggage")
-	assert_int(all.size()).is_equal(first + PAGE_COUNT + 1)
-	assert_int(BuildMenu.REMOVE_CATEGORY).is_equal(all.size() - 1)
-	assert_int(BuildMenu.remove_category()).is_equal(all.size() - 1)
-	assert_str(all[BuildMenu.REMOVE_CATEGORY]["name"]).is_equal("Remove")
-	var leaders := 0
-	for i in all.size():
-		var leads: bool = all[i].has("group")
-		var is_page := first < i and i < first + PAGE_COUNT and not leads
-		leaders += 1 if leads else 0
-		assert_bool(all[i].get("page", false)).override_failure_message("cat %d" % i).is_equal(
-			is_page
-		)
-		assert_bool(_menu.category_button(i).visible).is_equal(not is_page)
-	assert_int(leaders).is_equal(5)
-	assert_str(all[first]["group"]).is_equal("Decor")
-
-
-func test_the_pages_hold_every_furniture_tool_once_and_at_most_four_cards() -> void:
-	var seen := {}
-	for page in _pages():
-		var tools: Array = BuildMenu.categories()[page]["tools"]
-		assert_int(tools.size()).is_between(1, MAX_CARDS_PER_PAGE)
-		for tool in tools:
-			# A furniture piece, or (on a Stores page) a store room or retail piece.
-			var known: bool = FurnitureTools.OBJECTS.has(tool) or STORE_TOOLS.has(tool)
-			assert_bool(known).override_failure_message("tool %d" % tool).is_true()
-			assert_bool(seen.has(tool)).override_failure_message("tool %d twice" % tool).is_false()
-			seen[tool] = true
-			assert_int(BuildMenu.category_of(tool)).is_equal(page)
+func _tool_for(id: StringName) -> BuildMode.Tool:
 	for tool in FurnitureTools.OBJECTS:
-		assert_bool(seen.has(tool)).override_failure_message("tool %d missing" % tool).is_true()
-	for tool in STORE_TOOLS:
-		assert_bool(seen.has(tool)).override_failure_message("tool %d missing" % tool).is_true()
-	assert_int(seen.size()).is_equal(FurnitureTools.OBJECTS.size() + STORE_TOOLS.size())
+		if FurnitureTools.OBJECTS[tool] == id:
+			return tool
+	return BuildMode.Tool.NONE
 
 
-func test_every_furniture_card_shows_name_size_price_and_a_rendered_thumbnail() -> void:
+func test_every_furniture_tool_sits_in_a_domain_tab_with_no_paging_cards() -> void:
+	assert_array(_menu.tray().find_children("CardNext", "Button", true, false)).is_empty()
+	for tool in FurnitureTools.OBJECTS:
+		var cat := BuildMenu.category_of(tool)
+		assert_int(cat).is_between(2, 5)
+		assert_bool(_menu.category_button(cat).visible).is_true()
+
+
+func test_every_furniture_card_shows_name_price_thumbnail_and_hover_size() -> void:
 	assert_array(BuildMenu.PLACEHOLDER_THUMBNAILS).is_empty()
-	# Every furniture piece, wherever its page (the store tools: TestBuildMenuStores).
 	for tool in FurnitureTools.OBJECTS:
 		_menu.press_category(BuildMenu.category_of(tool))
 		var card := _menu.card(tool)
@@ -144,10 +65,9 @@ func test_every_furniture_card_shows_name_size_price_and_a_rendered_thumbnail() 
 		var id: StringName = FurnitureTools.OBJECTS[tool]
 		var def := BuildCatalog.get_def(id)
 		var texts := _texts(card)
-		print("%s card: %s" % [id, texts])
 		assert_str(BuildMenu.item(tool)[0]).is_not_empty()
 		assert_array(texts).contains([BuildMenu.item(tool)[0]])
-		assert_array(texts).contains(["%dx%d" % [def.size.x, def.size.y]])
+		assert_array(_hover_texts(tool)).contains(["%dx%d" % [def.size.x, def.size.y]])
 		assert_int(BuildMenu.tool_price(tool)).is_equal(PriceTable.price_of_object(id))
 		var path := BuildMenu.THUMBNAIL_DIR % BuildMenu.item(tool)[1]
 		assert_bool(ResourceLoader.exists(path)).override_failure_message(path).is_true()
@@ -173,84 +93,29 @@ func test_the_price_slot_of_each_card_reads_its_price_with_a_wallet() -> void:
 	finances.free()
 
 
-func test_the_podium_and_the_info_screen_show_their_upkeep() -> void:
-	var podium := _menu.card(_tool_for(&"prize_podium"))
-	var info := _menu.card(_tool_for(&"info_screen"))
-	assert_array(_texts(podium)).contains(
+func test_the_podium_and_the_info_screen_show_their_upkeep_in_hover_popup() -> void:
+	var podium_tool := _tool_for(&"prize_podium")
+	var info_tool := _tool_for(&"info_screen")
+	assert_array(_hover_texts(podium_tool)).contains(
 		[BuildMenuCatalog.upkeep_text(PriceTable.PRIZE_CAR_UPKEEP)]
 	)
-	assert_array(_texts(info)).contains(
+	assert_array(_hover_texts(info_tool)).contains(
 		[BuildMenuCatalog.upkeep_text(PriceTable.INFO_SCREEN_UPKEEP)]
 	)
-	# A plain piece says "Click".
-	assert_array(_texts(_menu.card(_tool_for(&"bush")))).contains(["Click"])
+	assert_array(_hover_texts(_tool_for(&"bush"))).contains(["Click"])
 
 
-func _tool_for(id: StringName) -> BuildMode.Tool:
-	for tool in FurnitureTools.OBJECTS:
-		if FurnitureTools.OBJECTS[tool] == id:
-			return tool
-	return BuildMode.Tool.NONE
-
-
-func test_every_page_tray_fits_the_column_and_the_reserved_height() -> void:
-	for page in _pages():
-		_menu.press_category(page)
-		var need := _menu.tray().get_combined_minimum_size()
-		print("furniture page %d tray needs %s" % [page, need])
-		assert_float(need.x).is_less_equal(BuildMenu.COLUMN_W)
-		assert_float(need.y).is_less_equal(BuildMenu.TRAY_H)
-		assert_object(_next_button(page)).is_not_null()
-
-
-# Was one cycle through all 14 pages; since HUD 6/7 each group cycles alone.
-func test_the_next_card_opens_the_following_page_and_the_last_goes_back_to_the_first() -> void:
-	var pages := _pages()
-	for page in pages:
-		var following := page + 1
-		if following > pages[-1] or BuildMenu.categories()[following].has("group"):
-			following = BuildMenu.group_start(page)
-		# Close the tray first: pressing the open page's button would close it.
-		_mode.set_tool(BuildMode.Tool.NONE)
-		_menu.press_category(page)
-		assert_int(_menu.open_category()).is_equal(page)
-		_next_button(page).pressed.emit()
-		assert_int(_menu.open_category()).override_failure_message("page %d" % page).is_equal(
-			following
-		)
-		assert_int(_mode.tool).is_equal(BuildMode.Tool.NONE)
-
-
-# Was the one Furniture button on every page; since HUD 6/7 it is the page's
-# own group button.
-func test_the_group_button_stays_pressed_on_its_pages_and_reopens_the_first() -> void:
-	for page in _pages():
-		var first := BuildMenu.group_start(page)
-		_menu.press_category(page)
-		for i in BuildMenu.categories().size():
-			assert_bool(_menu.category_button(i).button_pressed).is_equal(i == first)
-	# From the group's last page its button leads back to the group's first page.
-	var shops := BuildMenu.group_start(_pages()[-1])
-	assert_int(shops).is_less(_pages()[-1])
-	_menu.press_category(shops)
-	assert_int(_menu.open_category()).is_equal(shops)
-	_menu.press_category(shops)
-	assert_bool(_menu.is_tray_open()).is_false()
-
-
-func test_picking_a_piece_by_tool_opens_its_page() -> void:
+func test_picking_a_piece_by_tool_opens_its_domain_tab() -> void:
 	var tool := _tool_for(&"prize_podium")
+	var cat := BuildMenu.category_index("decor")
 	_mode.set_tool(tool)
-	assert_int(_menu.open_category()).is_equal(BuildMenu.category_of(tool))
+	assert_int(_menu.open_category()).is_equal(cat)
 	assert_bool(_menu.card(tool).button_pressed).is_true()
-	# Since HUD 6/7 the podium's group button, not the Furniture one.
-	var group := BuildMenu.group_start(BuildMenu.category_of(tool))
-	assert_str(BuildMenu.bar_name(group)).is_equal("Leisure")
-	assert_bool(_menu.category_button(group).button_pressed).is_true()
+	assert_bool(_menu.category_button(cat).button_pressed).is_true()
 
 
 func test_remove_still_picks_the_remove_tool_and_has_no_tray() -> void:
-	_menu.press_category(_leader() + 3)
+	_menu.press_category(BuildMenu.category_index("decor"))
 	_menu.press_category(BuildMenu.remove_category())
 	assert_int(_mode.tool).is_equal(BuildMode.Tool.REMOVE)
 	assert_bool(_menu.is_tray_open()).is_false()
