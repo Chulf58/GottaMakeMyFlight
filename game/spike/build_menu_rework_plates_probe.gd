@@ -192,7 +192,12 @@ func _run_plate_02(world_seed: int) -> void:
 	)
 	_expect(vis_tabs == [0, 1, 2, 3, 4, 5], "plate_02: expected all 6 build tabs")
 	_expect(
-		new_tabs == [1, 3, 4, 5], "plate_02: expected [1, 3, 4, 5] new tabs, got %s" % [new_tabs]
+		new_tabs == [1, 4, 5],
+		"plate_02: expected [1, 4, 5] unpressed new tabs, got %s" % [new_tabs]
+	)
+	_expect(
+		menu.category_button(food_idx).modulate.is_equal_approx(Color.WHITE),
+		"plate_02: pressed Food & Drink tab must stay untinted teal"
 	)
 	_expect(ordered.size() == 10, "plate_02: expected 10 cards in Food & Drink")
 	_expect(

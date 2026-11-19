@@ -2,14 +2,14 @@ extends SceneTree
 ## Windowed plate probe for the build HUD (BuildMenu and PassengerHud) on the
 ## real main.tscn with the starter terminal built:
 ##   a_no_tray_1920   no tool, tray closed
-##   b_floor_drag_1920  Structure tray, Floor picked, a rectangle mid-drag
-##   c_checkin_refusal_1920  Check-in tray, a desk hovered off the floor, with
+##   b_floor_drag_1920  Building tray, Floor picked, a rectangle mid-drag
+##   c_checkin_refusal_1920  Operations tray, a desk hovered off the floor, with
 ##                    the short reason beside the ghost (GhostReason)
 ##   e_ghost_over_bar_1920  the ghost hidden while the pointer is on the bar
-##   f_group_tray_1920  the Leisure group's tray on its second page (Fun)
-##   g_tooltip_1920   the pointer resting on the Decor icon, its tooltip open
-##   h_bar_3440       3440x1440, the Shops group's tray open
-##   d_layout_1280    1280x720, Structure tray, Debug open, a long follow text
+##   f_group_tray_1920  the Decor & Parking tray scrolled horizontally
+##   g_tooltip_1920   the pointer resting on the Decor & Parking icon, tooltip open
+##   h_bar_3440       3440x1440, the Shops tray open
+##   d_layout_1280    1280x720, Building tray, Debug open, a long follow text
 ## Before each save it proves every HUD panel lies inside the window, that no
 ## two panels overlap, and that the 3D subject projects inside the frame clear
 ## of every panel; otherwise it prints PROBE_INVALID and exits 1. At 1920 and
@@ -120,7 +120,15 @@ func _run() -> void:
 	_hud = _main.get_node("PassengerHud") as PassengerHud
 	await _frames(3)
 	_hud.press_starter_terminal()
-	print("PROBE starter: %s" % _hud.status_text())
+	var unlocks := _main.get_node("BuildUnlocks") as BuildUnlocks
+	var rating := _main.get_node("AirportRating") as AirportRating
+	for _i in 80:
+		rating.record_passenger(0, true, PassengerSim.MOOD_MAX)
+	for _i in 850:
+		unlocks.note_made()
+	unlocks.check()
+	_menu.end_grant_hold()
+	print("PROBE starter: %s tier=%d" % [_hud.status_text(), unlocks.tier()])
 	var rig := _main.get_node("TycoonCamera") as TycoonCamera
 	_cam = rig.get_node("Camera3D") as Camera3D
 	rig.position = _mode.grid.cell_to_world(FOCUS_CELL)

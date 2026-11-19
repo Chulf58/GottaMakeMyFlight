@@ -1,10 +1,10 @@
 class_name TestKioskUi
 extends GdUnitTestSuite
 ## The kiosk in the build menu and the room panel (Boredom 2/5; decision
-## store-mechanics-draw-a-room-then-furnish-it-required-pieces): a Kiosk tray
-## right after Toilets with the Kiosk room tool, the counter and the display
-## stand, their prices and rendered thumbnails; over a kiosk room the panel
-## lists what it still needs, its browse spots and its one spend number.
+## store-mechanics-draw-a-room-then-furnish-it-required-pieces): the Kiosk room
+## tool, counter and display stand lead the Shops domain tab with their prices
+## and rendered thumbnails; over a kiosk room the panel lists what it still
+## needs, its browse spots and its one spend number.
 
 const KIOSK_TOOLS := [
 	BuildMode.Tool.KIOSK_ROOM,
@@ -37,14 +37,6 @@ func before_test() -> void:
 
 func after_test() -> void:
 	_port.free()
-
-
-func _category_named(category_name: String) -> int:
-	var all := BuildMenu.categories()
-	for i in all.size():
-		if all[i]["name"] == category_name:
-			return i
-	return BuildMenu.NO_CATEGORY
 
 
 func _texts(control: Control) -> Array:

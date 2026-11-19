@@ -73,8 +73,13 @@ func test_the_cards_and_tabs_of_a_new_tier_are_tinted_and_clear_when_seen() -> v
 	assert_bool(_new_look(BuildMode.Tool.XRAY_BELT)).is_true()
 	assert_object(_menu.card(BuildMode.Tool.WALL).modulate).is_equal(Color.WHITE)
 	assert_bool(_menu.card(BuildMode.Tool.TREE).visible).is_false()
-	var food_btn := _menu.category_button(BuildMenu.category_index("food"))
+	var food_idx := BuildMenu.category_index("food")
+	var food_btn := _menu.category_button(food_idx)
 	var building_btn := _menu.category_button(BuildMenu.category_index("building"))
+	assert_bool(food_btn.modulate.is_equal_approx(BuildMenu.NEW_TINT)).is_true()
+	_menu.press_category(food_idx)
+	assert_object(food_btn.modulate).is_equal(Color.WHITE)
+	_menu.press_category(food_idx)
 	assert_bool(food_btn.modulate.is_equal_approx(BuildMenu.NEW_TINT)).is_true()
 	assert_object(building_btn.modulate).is_equal(Color.WHITE)
 	for tool in [BuildMode.Tool.CAFE_ROOM, BuildMode.Tool.COUNTER, BuildMode.Tool.TABLE]:
@@ -149,7 +154,8 @@ func test_a_locked_card_keeps_its_description_and_live_requirement() -> void:
 	assert_object(hover).is_not_null()
 	var requirement := hover.find_child("Requirement", true, false) as Label
 	assert_str(requirement.text).starts_with("Unlocks at 2 stars and 50 passengers")
-	assert_int(hover.find_children("*", "Label", true, false).size()).is_greater_equal(7)
+	assert_int(card.details.size()).is_equal(2)
+	assert_array(hover.find_children("*", "Label", true, false)).has_size(7 + card.details.size())
 
 
 func test_the_now_numbers_of_a_locked_card_follow_the_flights_made() -> void:

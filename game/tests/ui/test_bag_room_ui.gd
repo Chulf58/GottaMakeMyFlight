@@ -86,6 +86,7 @@ func test_the_cafe_panel_keeps_its_seats_and_base_spend() -> void:
 
 
 func test_the_bag_room_hover_card_says_it_needs_a_belt_end_in_attention_style() -> void:
+	_menu.press_category(BuildMenu.category_index("operations"))
 	var card := _menu.card(BuildMode.Tool.BAG_ROOM) as ItemCardButton
 	var popup: Control = auto_free(card._make_custom_tooltip(card.tooltip_text))
 	var need: Label = null
@@ -96,13 +97,18 @@ func test_the_bag_room_hover_card_says_it_needs_a_belt_end_in_attention_style() 
 	if need == null:
 		return
 	assert_str(String(need.theme_type_variation)).is_equal("HudAttentionText")
-	for text in _texts(card):
+	var face := _texts(card)
+	assert_bool(face.is_empty()).is_false()
+	for text in face:
 		assert_bool(text.to_lower().contains("belt end")).is_false()
 
 
 func test_the_cafe_card_has_no_belt_end_line() -> void:
+	_menu.press_category(BuildMenu.category_index("food"))
 	var card := _menu.card(BuildMode.Tool.CAFE_ROOM)
-	for text in _texts(card):
+	var face := _texts(card)
+	assert_bool(face.is_empty()).is_false()
+	for text in face:
 		assert_bool(text.to_lower().contains("belt end")).is_false()
 
 

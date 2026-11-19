@@ -1,8 +1,7 @@
 extends SceneTree
-## Windowed plate probe for the furniture pages of the build menu (Furniture
-## 4/4 F4-2), regrouped by HUD 6/7 into five group buttons, Decor, Food,
-## Services, Leisure and Shops (decision hud-6-7-furniture-groups-five-icon-
-## buttons-decor-food-servic), with 14 pages among them.
+## Windowed plate probe for the four furniture-bearing domain tabs of the build
+## menu (Facilities, Food & Drink, Shops and Decor & Parking; decision
+## build-menu-rework-six-domain-tabs-progressive-tab-and-card-u).
 ##
 ## Run (one windowed Godot run project-wide; take the slot first):
 ##   Godot_v4.7.2-stable_win64_console.exe --display-driver windows \
@@ -10,24 +9,23 @@ extends SceneTree
 ##     --path C:/Users/chulf/Gotta-make-my-flight/game \
 ##     -s res://spike/build_menu_furniture_probe.gd
 ##
-## For each group: opens its first page through its bar button and each later
-## page through the Next cards, then proves for every page that the tray's
-## drawn rectangle is no wider than BuildMenu.COLUMN_W and lies inside the
-## window, that every card is visible, holds its rendered thumbnail (the
-## texture of THUMBNAIL_DIR for its card, no placeholder tile, some opaque
-## pixels) and has a name that fits the card's width, and that the last Next
-## card leads back to the group's first page. It then picks Remove and checks
-## the tray closes and the Remove button is pressed. Every pass value is
-## printed, and a failure prints PROBE_INVALID and exits 1. Plates go to
-## tools/blender/out/hud-6-7/groups/: one full-window plate per page
-## (menu_page_<n>.png) and menu_pages_sheet.png, the lower part of every page
+## For each tab: opens its tray through its bar button, proves the tray's drawn
+## rectangle is no wider than BuildMenu.COLUMN_W and lies inside the window, and
+## scrolls each card into view to prove every card is visible inside the tray,
+## holds its rendered thumbnail (the texture of THUMBNAIL_DIR for its card, no
+## placeholder tile, some opaque pixels) and has a name that fits up to two
+## lines inside the card's width without breaking words. It then picks Remove
+## and checks the tray closes and the Remove button is pressed. Every pass value
+## is printed, and a failure prints PROBE_INVALID and exits 1. Plates go to
+## tools/blender/out/hud-6-7/groups/: one full-window plate per tab
+## (menu_page_<n>.png) and menu_pages_sheet.png, the lower part of every tab
 ## in one image. The window is 1920x1080 at the project's 1.25 UI scale.
 
 const OUT_REL := "res://../tools/blender/out/hud-6-7/groups"
 const STAGE_LIMIT_MS := 60000
 ## The share of the window's height, from the bottom, a sheet tile keeps.
 const BAND_SHARE := 0.34
-const CARD_LINE := "CARD %s thumbnail=%s want=%s tiles=%d opaque_px=%d name_w=%.1f"
+const CARD_LINE := "CARD %s thumbnail=%s want=%s tiles=%d opaque_px=%d lines=%d"
 const CARD_LINE_FIT := " label_w=%.1f in_tray=%s visible=%s"
 
 var _out_dir := ""
@@ -104,9 +102,9 @@ func _run() -> void:
 		await _frames(4)
 		if menu.open_category() != page:
 			_invalid("page %d: open category is %d, want %d" % [n, menu.open_category(), page])
-		var img := await _grab()
 		print("TAB %s" % [BuildMenu.categories()[page]["name"]])
-		_check_page(menu, page, seen)
+		var img := await _grab()
+		await _check_page(menu, page, seen)
 		_save(img, "menu_page_%d.png" % (n + 1))
 		var band := int(img.get_height() * BAND_SHARE)
 		var half := Vector2i(int(img.get_width() * 0.5), int(band * 0.5))
@@ -156,11 +154,13 @@ func _check_page(menu: BuildMenu, page: int, seen: Dictionary) -> void:
 		_invalid("page %d: the tray is wider than the column or off screen" % page)
 	for tool in BuildMenu.categories()[page]["tools"]:
 		seen[tool] = true
-		_check_card(menu, tool, tray)
+		await _check_card(menu, tool, tray)
 
 
 func _check_card(menu: BuildMenu, tool: BuildMode.Tool, tray: Rect2) -> void:
 	var card := menu.card(tool)
+	menu.tray_scroll().ensure_control_visible(card)
+	await _frames(1)
 	var picture := card.find_children("*", "TextureRect", true, false)[0] as TextureRect
 	var want := BuildMenu.THUMBNAIL_DIR % BuildMenu.item(tool)[1]
 	var path: String = picture.texture.resource_path if picture.texture != null else "none"
@@ -175,10 +175,12 @@ func _check_card(menu: BuildMenu, tool: BuildMode.Tool, tray: Rect2) -> void:
 	var name_label := card.find_children("*", "Label", true, false)[0] as Label
 	var font := name_label.get_theme_font("font")
 	var font_size := name_label.get_theme_font_size("font_size")
-	var text_w := font.get_string_size(name_label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
-	var fits_name := text_w <= name_label.size.x
-	var on_tray := tray.encloses(card.get_global_rect())
-	var line := CARD_LINE % [name_label.text, path, want, tiles, opaque, text_w]
+	var shown := name_label.atr(name_label.text)
+	var lines := HudLayout.line_count(shown, font, font_size, name_label.size.x)
+	var widest := HudLayout.widest_word(shown, font, font_size)
+	var fits_name := lines <= 2 and widest <= name_label.size.x + 0.5
+	var on_tray := tray.grow(1.0).encloses(card.get_global_rect())
+	var line := CARD_LINE % [name_label.text, path, want, tiles, opaque, lines]
 	line += CARD_LINE_FIT % [name_label.size.x, on_tray, card.is_visible_in_tree()]
 	print(line)
 	if path != want or tiles != 0 or opaque == 0:

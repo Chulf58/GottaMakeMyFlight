@@ -30,9 +30,9 @@ const RESTING := [
 const IN_BUILD_MODE := ["BuildModeSign", "DebugPanel"]
 ## Where the rating card ends at most (16 + 224 + 8 + 240).
 const RATING_END := 488.0
-## The bar leaves room for the docks beside it from this layout width up
-## (the 1104 px bar, its 4 px margins included, plus 144 px each side).
-const WIDE_FROM := 1392.0
+## Room each side of the centred bar needs for the 112 px Templates dock between
+## the 16 px screen margin and the 16 px group gap (16 + 112 + 16 = 144).
+const DOCK_SIDE_ROOM := 144.0
 
 ## The lines of the first checklist a new game shows (plate offer_cards_s150.png).
 ## Ticks the starter airport gets to open (staff walk to their stations).
@@ -162,7 +162,7 @@ func _assert_geometry(rects: Dictionary, layout: Vector2) -> void:
 	assert_float(dock.position.x).is_equal_approx(float(HudLayout.MARGIN), 0.5)
 	assert_float(dock.size.y).is_equal_approx(float(HudLayout.BAR_H), 0.5)
 	assert_float(layout.x - debug.end.x).is_equal_approx(float(HudLayout.MARGIN), 0.5)
-	if BottomDocks.beside_bar(layout.x, bar.size.x):
+	if bar.size.x + 2.0 * DOCK_SIDE_ROOM <= layout.x:
 		assert_float(dock.end.y).is_equal_approx(bar.end.y, 0.5)
 		assert_float(layout.y - debug.end.y).is_equal_approx(float(HudLayout.MARGIN), 0.5)
 	else:

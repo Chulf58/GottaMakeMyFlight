@@ -11,12 +11,17 @@ extends ScrollContainer
 ## picture is a plain tile with the room type's name until template thumbnails
 ## exist. Uses its own compact card and header tile constants so saved room
 ## cards fit inside BuildMenu.TRAY_H with zero vertical overflow.
+##
+## The button sits on its own small panel on the 16 px grid margin (decision
+## hud-grid-and-rails-one-spacing-grid-centred-top-row-right-ra, part 1; the
+## panel stays beside the bar, decision ad966308), just above the
+## height of the category bar, not in the bar: every bar button carries a drawn icon and
+## there is no Templates icon yet. Where it finally goes is open.
 
 const SAVE_CARD := "CardSaveRoom"
 const BUTTON_NAME := "TemplatesButton"
 const TEMPLATE_CARD_SIZE := Vector2(112.0, 126.0)
 const TEMPLATE_THUMB_SIZE := 30.0
-const TRAY_PAD_X := 24.0
 
 ## The button that opens the page, on `dock`.
 var button := Button.new()
@@ -34,10 +39,10 @@ func attach(menu: BuildMenu) -> void:
 	_menu = menu
 	name = "TemplatesPage"
 	visible = false
-	mouse_filter = Control.MOUSE_FILTER_PASS
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_RESERVE
 	vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	custom_minimum_size = Vector2(BuildMenu.COLUMN_W - TRAY_PAD_X, 0.0)
+	custom_minimum_size = Vector2(menu.tray_max_inner_width(), 0.0)
 	_row.add_theme_constant_override("separation", 6)
 	_row.mouse_filter = Control.MOUSE_FILTER_PASS
 	add_child(_row)

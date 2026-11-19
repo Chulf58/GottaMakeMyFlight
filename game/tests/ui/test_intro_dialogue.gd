@@ -206,24 +206,27 @@ func test_keys_and_held_camera_keys_behind_the_open_intro_do_nothing() -> void:
 	await _frames(2)
 	var start := rig.position
 	var start_yaw := rig.yaw
-	# BuildMode starts on the Floor tool; key 2 would pick Wall.
-	assert_int(_mode.tool).is_equal(BuildMode.Tool.FLOOR)
+	_mode.set_tool(BuildMode.Tool.DESK)
+	var start_facing := _mode.facing
 	_hud.open_intro()
-	_tap(KEY_2)
+	_tap(KEY_R)
 	_tap(KEY_3, true)
 	_port.push_input(_key(KEY_SPACE, false, true))
 	for action in CAMERA_ACTIONS:
 		Input.action_press(action)
 	await _frames(5)
-	assert_int(_mode.tool).is_equal(BuildMode.Tool.FLOOR)
+	assert_int(_mode.tool).is_equal(BuildMode.Tool.DESK)
+	assert_int(_mode.facing).is_equal(start_facing)
 	assert_int(_world.clock.speed).is_equal(1)
 	assert_bool(_world.clock.paused).is_true()
 	assert_bool(_hud.intro() != null).is_true()
 	assert_vector(rig.position).is_equal(start)
 	assert_float(rig.yaw).is_equal(start_yaw)
-	# Control: the same held keys move the camera once the intro is closed.
+	# Control: the same held keys and R rotate act once the intro is closed.
 	_hud.dismiss_intro()
+	_tap(KEY_R)
 	await _frames(5)
+	assert_int(_mode.facing).is_not_equal(start_facing)
 	assert_vector(rig.position).is_not_equal(start)
 	assert_float(rig.yaw).is_not_equal(start_yaw)
 

@@ -2,7 +2,9 @@ class_name BuildMenuCatalog
 extends RefCounted
 ## What the build menu shows and where: its six domain categories plus Remove,
 ## the card per tool, prices, hover details, and progressive card visibility
-## (decision build-menu-rework-six-domain-tabs-progressive-tab-and-card-u).
+## (decision build-menu-rework-six-domain-tabs-progressive-tab-and-card-u; split
+## out of BuildMenu, which keeps aliases of these constants and one-line
+## delegates of these functions).
 ## Static only; it must not reference BuildMenu.
 
 enum CardState { OPEN, TEASER, HIDDEN, LOCKED }
@@ -161,6 +163,9 @@ const ITEMS := {
 	BuildMode.Tool.TOILET_SINK: ["Sink", "toilet_sink", ""],
 	BuildMode.Tool.KIOSK_ROOM: ["Kiosk", "kiosk_room", "3x3 min"],
 	BuildMode.Tool.KIOSK_COUNTER: ["Kiosk counter", "kiosk_counter", ""],
+	# The store rooms carry their RoomTypes names and minimum sizes; the pieces'
+	# short names suit their store's cards (FurnitureTools.ITEMS has the
+	# pharmacy's).
 	BuildMode.Tool.PHARMACY_ROOM: ["Pharmacy", "pharmacy_room", "3x3 min"],
 	BuildMode.Tool.DUTY_FREE_ROOM: ["Duty free", "duty_free_room", "3x4 min"],
 	BuildMode.Tool.DUTY_FREE_TILL: ["Till", "duty_free_till", ""],
@@ -170,9 +175,11 @@ const ITEMS := {
 	BuildMode.Tool.FASHION_RAIL: ["Clothes rail", "fashion_rail", ""],
 	BuildMode.Tool.EXCHANGE_ROOM: ["Exchange", "exchange_room", "2x3 min"],
 	BuildMode.Tool.ATM_ROOM: ["ATM", "atm_room", "1x2 min"],
+	# The food rooms borrow the cafe's thumbnail: no new art (F4-6).
 	BuildMode.Tool.BAR_ROOM: ["Bar", "cafe_room", "3x4 min"],
 	BuildMode.Tool.RESTAURANT_ROOM: ["Restaurant", "cafe_room", "4x4 min"],
 	BuildMode.Tool.STALL_ROOM: ["Grab-and-go", "cafe_room", "3x3 min"],
+	# The activity rooms borrow their main piece's thumbnail: no new art (F4-7).
 	BuildMode.Tool.PLAY_AREA_ROOM: ["Play area", "play_slide", "3x4 min"],
 	BuildMode.Tool.LOUNGE_ROOM: ["Lounge", "lounge_sofa", "2x3 min"],
 	BuildMode.Tool.SHOWER_ROOM: ["Shower", "shower_cubicle", "2x2 min"],
@@ -194,9 +201,13 @@ const LANE_ITEMS := {
 	BuildMode.Tool.ARCH: ["Arch", "arch", ""],
 	BuildMode.Tool.PICKUP_TABLE: ["Pickup table", "pickup_table", ""],
 }
-## Hover details that highlight what the placed thing needs to work.
+## Hover details that say what the placed thing needs to work, in the warning
+## colour: a bag room does nothing without a belt end.
 const CARD_NEEDS := {BuildMode.Tool.BAG_ROOM: "Needs belt end"}
-## Daily running costs shown in hover details alongside FurnitureTools.RUNNING_COSTS.
+## Hover details that say what the placed thing costs to run, in the plain hint
+## style (costs are never red), alongside FurnitureTools.RUNNING_COSTS: a toilet
+## stall is charged its upkeep every game day once its room is ready, a screen
+## stand wherever it stands.
 const CARD_RUNNING_COSTS := {
 	BuildMode.Tool.TOILET_STALL: PriceTable.TOILET_STALL_UPKEEP,
 	BuildMode.Tool.SCREEN: PriceTable.SCREEN_UPKEEP,

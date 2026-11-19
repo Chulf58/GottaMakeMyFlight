@@ -1,12 +1,13 @@
 class_name TestHudTextFit
 extends GdUnitTestSuite
-## Build-menu card names and hint lines wrap onto a second line and drop one font
-## step only when two lines are still not enough; the card keeps its size and the
-## thumbnail gives up the height (decision build-menu-card-names-wrap-to-two-
-## lines-then-shrink-a-font-s, board T10). The build status line wraps to two
-## lines instead of clipping (board T12 part 4).
+## Build-menu card names wrap onto a second line and drop one font step only
+## when two lines are still not enough; the 96x126 compact card keeps its size
+## and fixed 52x52 thumbnail (decisions build-menu-card-names-wrap-to-two-lines-
+## then-shrink-a-font-s and build-menu-rework-six-domain-tabs-progressive-tab-
+## and-card-u, board T10 / d6f56ecf). The build status line wraps to two lines
+## instead of clipping (board T12 part 4).
 
-## The room a card label has: the card less its 6 px padding on each side.
+## Sample slot width for the pure HudLayout.fit_size / line_count unit cases.
 const SLOT_W := 100.0
 const WORD := "Gate"
 

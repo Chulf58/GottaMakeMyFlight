@@ -63,6 +63,8 @@ func test_the_toilet_cards_show_name_and_price_with_size_and_upkeep_in_hover() -
 		assert_bool(_menu.card(tool).is_visible_in_tree()).is_true()
 	var stall_price := PriceTable.price_of_object(&"toilet_stall")
 	var sink_price := PriceTable.price_of_object(&"toilet_sink")
+	assert_int(stall_price).is_greater(0)
+	assert_int(sink_price).is_greater(0)
 	assert_int(BuildMenu.tool_price(BuildMode.Tool.TOILET_STALL)).is_equal(stall_price)
 	assert_int(BuildMenu.tool_price(BuildMode.Tool.TOILET_SINK)).is_equal(sink_price)
 	assert_int(BuildMenu.tool_price(BuildMode.Tool.TOILET_ROOM)).is_equal(0)

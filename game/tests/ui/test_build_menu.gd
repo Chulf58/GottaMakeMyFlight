@@ -229,20 +229,31 @@ func test_mouse_wheel_over_tray_scrolls_horizontally_and_never_zooms_camera() ->
 	_menu.press_category(decor)
 	await get_tree().process_frame
 	await get_tree().process_frame
+	# Positive control: a wheel event over open world outside the tray zooms the camera.
+	var initial_dist := camera.target_distance
+	var world_pt := Vector2(200.0, 200.0)
+	assert_bool(_menu.tray().get_global_rect().has_point(world_pt)).is_false()
+	_wheel(MOUSE_BUTTON_WHEEL_UP, world_pt)
+	assert_float(camera.target_distance).is_not_equal(initial_dist)
 	var start_dist := camera.target_distance
-	var center := _menu.tray().get_global_rect().get_center()
+	var tray_rect := _menu.tray().get_global_rect()
+	var card_pt := _menu.card(BuildMode.Tool.BUSH).get_global_rect().get_center()
+	var pad_pt := tray_rect.position + Vector2(6.0, 6.0)
 	assert_int(_menu.tray_scroll().scroll_horizontal).is_equal(0)
 	# At left scroll end: wheel up does not zoom camera.
-	_wheel(MOUSE_BUTTON_WHEEL_UP, center)
+	_wheel(MOUSE_BUTTON_WHEEL_UP, card_pt)
 	assert_float(camera.target_distance).is_equal(start_dist)
-	# Wheel down scrolls right without zooming camera.
-	for _i in 4:
-		_wheel(MOUSE_BUTTON_WHEEL_DOWN, center)
-	assert_int(_menu.tray_scroll().scroll_horizontal).is_greater(0)
+	# Unified step: wheel down over a card and over tray padding move by the same WHEEL_STEP.
+	_wheel(MOUSE_BUTTON_WHEEL_DOWN, card_pt)
+	var card_step := _menu.tray_scroll().scroll_horizontal
+	_wheel(MOUSE_BUTTON_WHEEL_DOWN, pad_pt)
+	var pad_step := _menu.tray_scroll().scroll_horizontal - card_step
+	assert_int(card_step).is_equal(roundi(BuildMenu.WHEEL_STEP))
+	assert_int(pad_step).is_equal(card_step)
 	assert_float(camera.target_distance).is_equal(start_dist)
 	# Scroll all the way past right end: still never zooms camera.
 	for _i in 40:
-		_wheel(MOUSE_BUTTON_WHEEL_DOWN, center)
+		_wheel(MOUSE_BUTTON_WHEEL_DOWN, card_pt)
 	assert_float(camera.target_distance).is_equal(start_dist)
 	# Switching tabs resets scroll_horizontal to 0; short non-overflowing tab never zooms either.
 	var unlocks := BuildUnlocks.new()
@@ -265,6 +276,20 @@ func test_mouse_wheel_over_tray_scrolls_horizontally_and_never_zooms_camera() ->
 	_wheel(MOUSE_BUTTON_WHEEL_RIGHT, short_center)
 	assert_float(camera.target_distance).is_equal(start_dist)
 	DirAccess.remove_absolute(camera.settings_path)
+
+
+func test_arming_offscreen_tool_on_closed_menu_scrolls_card_into_tray_view() -> void:
+	_mode.set_tool(BuildMode.Tool.NONE)
+	assert_bool(_menu.is_tray_open()).is_false()
+	_mode.set_tool(BuildMode.Tool.LOT_GATE)
+	for _i in 4:
+		await get_tree().process_frame
+	var lot_card := _menu.card(BuildMode.Tool.LOT_GATE)
+	var tray_rect := _menu.tray().get_global_rect()
+	var card_rect := lot_card.get_global_rect()
+	assert_int(_menu.open_category()).is_equal(BuildMenu.category_index("decor"))
+	assert_int(_menu.tray_scroll().scroll_horizontal).is_greater(1000)
+	assert_bool(tray_rect.encloses(card_rect)).is_true()
 
 
 func test_a_rectangle_released_over_the_tray_is_still_applied() -> void:

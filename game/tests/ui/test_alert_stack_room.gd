@@ -146,7 +146,7 @@ func test_a_jump_lands_the_problem_below_the_stack() -> void:
 func test_a_card_up_when_the_tray_opens_does_not_zoom() -> void:
 	var menu := _main.get_node("BuildMenu") as BuildMenu
 	var mode := _main.get_node("BuildMode") as BuildMode
-	var check_in := _category("Check-in")
+	var check_in := _operations_category()
 	_camera.frame_start_view(StartView.area_for(mode.grid), _room().free_fraction())
 	_room().mark_sent()
 	await _settle()
@@ -189,7 +189,7 @@ func test_a_card_up_when_the_tray_opens_does_not_zoom() -> void:
 func test_a_card_never_pushes_the_start_area_under_the_tray() -> void:
 	var menu := _main.get_node("BuildMenu") as BuildMenu
 	var mode := _main.get_node("BuildMode") as BuildMode
-	var check_in := _category("Check-in")
+	var check_in := _operations_category()
 	_camera.frame_start_view(StartView.area_for(mode.grid), _room().free_fraction())
 	_room().mark_sent()
 	menu.press_category(check_in)
@@ -232,5 +232,5 @@ func _corners(grid: BuildGrid) -> Array[Vector2]:
 	return out
 
 
-func _category(_category_name: String) -> int:
+func _operations_category() -> int:
 	return BuildMenu.category_of(BuildMode.Tool.DESK)

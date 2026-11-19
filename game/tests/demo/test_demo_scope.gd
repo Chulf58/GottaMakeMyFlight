@@ -5,8 +5,8 @@ extends GdUnitTestSuite
 ##   1. Full-game default (DemoMode.is_demo() == false) leaves Tiers 1-4, all
 ##      land plots, all 6 incidents, and Day 6+ freeplay untouched.
 ##   2. Demo mode caps BuildUnlocks at Tier 2, labels Tier 3 tools + large
-##      runway "In the full game", and hides Tier 4 cards and empty pages in
-##      BuildMenu.
+##      runway "In the full game" (hidden at Tier 1, appended at the right end
+##      of trays at Tier 2), and hides Tier 4 cards and empty tabs in BuildMenu.
 ##   3. Demo mode allows 1 extra land plot and refuses the 2nd extra plot.
 ##   4. Demo mode filters IncidentCatalogue rolls to SPILL, FAULT, and RUSH,
 ##      excluding INSPECTOR, VIP, and FAVOUR.

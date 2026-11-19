@@ -2,7 +2,10 @@ class_name BuildMenuLayout
 extends RefCounted
 ## The build menu's UI built in code: the category bar, the horizontal-scroll
 ## item tray and its compact cards (Thumbnail + Name + Price), the status card
-## (status line, rotate hint and cost line) and the money slot.
+## (status line, rotate hint and cost line) and the money slot (split out of
+## BuildMenu, which calls these from _ready). Static only: each function takes
+## the menu and fills its node and lookup members in the order the menu always
+## did, so node names, paths and draw order stay as they were.
 
 ## The coin before the money amount.
 const COIN_ICON := "res://assets/ui/icons/coin.svg"
@@ -76,7 +79,10 @@ static func build_tray(menu: BuildMenu) -> void:
 	anchor_bottom_centre(menu._tray, BuildMenu.MARGIN + BuildMenu.BAR_H + BuildMenu.GAP)
 	menu.add_child(menu._tray)
 	menu._scroll.name = "TrayScroll"
-	menu._scroll.mouse_filter = Control.MOUSE_FILTER_PASS
+	# Ignore on the ScrollContainer itself so wheel events over cards and over tray
+	# padding both reach _tray._on_tray_gui_input with one unified WHEEL_STEP while
+	# child cards and the internal HScrollBar keep their own mouse input.
+	menu._scroll.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	menu._scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	menu._scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_RESERVE
 	menu._scroll_content.name = "TrayRows"
@@ -177,7 +183,10 @@ static func card_label(
 	return label
 
 
-## Fits the card's labels when it enters the tree and after a label redraws.
+## Fits the card when it enters the tree and again after a line redraws, which a
+## new text (a price, "Locked", "In the full game") always causes; a wrapping
+## Label's minimum size can stay the same for a longer text, so that signal would
+## miss it. A fit that changes nothing causes no redraw, so this settles.
 static func watch_fit(button: Button) -> void:
 	button.tree_entered.connect(fit_card.bind(button))
 	for label in button.get_child(0).get_children():
@@ -185,9 +194,13 @@ static func watch_fit(button: Button) -> void:
 			(label as Label).draw.connect(fit_card.bind(button), CONNECT_DEFERRED)
 
 
-## Fits each label onto its allowed line budget (2 lines for Name, 1 line for
-## Price, stepping down to FIT_STEP only when needed) while keeping Thumbnail
-## fixed at BuildMenu.THUMB_SIZE across both 1-line and 2-line card names.
+## Wraps Name onto up to CARD_LINES lines at the caption size, one font step
+## smaller only when that is still not enough (decision
+## build-menu-card-names-wrap-to-two-lines-then-shrink-a-font-s), fits single-line
+## Price onto PRICE_LINES, and keeps Thumbnail fixed at BuildMenu.THUMB_SIZE
+## across both 1-line and 2-line card names. Measured from the font, not the
+## Label, because a wrapping Label reports its height only after the container
+## has sized it.
 static func fit_card(button: Button) -> void:
 	if not button.is_inside_tree():
 		return
@@ -198,6 +211,8 @@ static func fit_card(button: Button) -> void:
 			continue
 		var label := child as Label
 		var font := label.get_theme_font(&"font")
+		# atr() is the text the Label draws (it honours auto_translate_mode), so the
+		# fit measures what is shown, whether it is expanded once or twice.
 		var text := label.atr(label.text)
 		var max_lines := label.max_lines_visible if label.max_lines_visible > 0 else CARD_LINES
 		var size := HudLayout.fit_size(text, font, HudLayout.CAPTION, width, max_lines)
@@ -217,7 +232,10 @@ static func size_text(tool: BuildMode.Tool) -> String:
 
 ## The status card (HUD 5/7): the status line, the "R rotate" hint and the cost
 ## line side by side on one HudTopCard, TRAY_W wide and BUTTON_H tall, GAP above
-## the tray and centred.
+## the tray and centred. The status text takes the room the hint and the cost
+## leave and wraps onto a second line when it is longer (the card grows up for
+## it), then ends in an ellipsis; the hint and the cost keep their own width, so
+## neither wraps. The card never takes a click.
 static func build_status_card(menu: BuildMenu) -> void:
 	var card := menu._status_card
 	card.name = "StatusCard"
@@ -281,6 +299,10 @@ static func build_money(menu: BuildMenu) -> void:
 	menu._money.text = BuildMenu.MONEY_TEXT
 	menu._money.theme_type_variation = &"HudMoney"
 	menu._money.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	# A coin stands where the word "Money" was, so the slot has nothing to translate. The
+	# coin and the amount are both direct children of the card (the card is the amount's
+	# parent, and it keeps its own height and margin); the amount's left padding clears
+	# the coin.
 	var pad := StyleBoxEmpty.new()
 	pad.content_margin_left = COIN_SIDE + COIN_GAP
 	menu._money.add_theme_stylebox_override("normal", pad)

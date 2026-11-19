@@ -1,7 +1,7 @@
 class_name TestPassengerHudKeys
 extends GdUnitTestSuite
-## PassengerHud's speed keys (Space, Shift+1/2/3) next to BuildMode's tool
-## keys, the collapsed Debug panel and the follow text's place.
+## PassengerHud's speed keys (Space, Shift+1/2/3) with plain 1-9/0 unbound from
+## BuildMode, the collapsed Debug panel and the follow text's place.
 
 ## The HUD and mode live in a 1280x720 SubViewport so layout and pushed
 ## input see a real screen size, not the headless window.
