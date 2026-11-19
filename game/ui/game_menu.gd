@@ -286,6 +286,7 @@ func _show() -> void:
 	root.add_child(panel)
 	root.add_child(_version_label())
 	var pages := VBoxContainer.new()
+	pages.add_theme_constant_override("separation", 12)
 	panel.add_child(pages)
 	_main_page = _page("MainPage", tr("Game menu"))
 	pages.add_child(_main_page)

@@ -3,7 +3,8 @@ extends PanelContainer
 ## Shared cozy cream/navy audio controls card for both GameMenu (Esc -> Settings)
 ## and TitleScreen (decision demo-audio-floor-d5-cozy-terminal-ambience-loop-
 ## light-tactil): Master, Ambience and SFX 0..100% HSliders plus a Mute audio
-## CheckButton, live-synced with /root/GameAudio and persisted on change.
+## CheckButton, live-synced with /root/GameAudio. Dragging a slider previews dB
+## live on AudioServer and writes ConfigFile once on drag_ended.
 
 const GAME_AUDIO := preload("res://audio/game_audio.gd")
 const AUDIO_NODE_PATH := ^"/root/GameAudio"
@@ -16,6 +17,8 @@ const FILL_TEAL := Color(0.25, 0.68, 0.68, 1.0)
 const FILL_TEAL_HOVER := Color(0.4, 0.744, 0.744, 1.0)
 
 var _audio: GAME_AUDIO
+var _dragging := false
+var _dirty_while_dragging := false
 var _mute_switch: CheckButton
 var _master_slider: HSlider
 var _ambience_slider: HSlider
@@ -61,6 +64,10 @@ func _ready() -> void:
 
 
 func _exit_tree() -> void:
+	if _dragging and _dirty_while_dragging and is_instance_valid(_audio):
+		_audio.save_settings()
+	_dragging = false
+	_dirty_while_dragging = false
 	if is_instance_valid(_audio) and _audio.changed.is_connected(sync_from_audio):
 		_audio.changed.disconnect(sync_from_audio)
 
@@ -117,6 +124,8 @@ func _add_slider_row(parent: Control, row_id: String, caption: String, handler: 
 	slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	slider.custom_minimum_size = SLIDER_MIN_SIZE
 	_style_slider(slider)
+	slider.drag_started.connect(_on_drag_started)
+	slider.drag_ended.connect(_on_drag_ended)
 	slider.value_changed.connect(handler)
 	row.add_child(slider)
 	var value_label := Label.new()
@@ -147,21 +156,43 @@ func _style_slider(slider: HSlider) -> void:
 	slider.add_theme_stylebox_override("grabber_area_highlight", fill_hover)
 
 
+func _on_drag_started() -> void:
+	_dragging = true
+	_dirty_while_dragging = false
+
+
+func _on_drag_ended(changed_on_drag: bool) -> void:
+	var should_save := changed_on_drag or _dirty_while_dragging
+	_dragging = false
+	_dirty_while_dragging = false
+	if should_save and _audio != null:
+		_audio.save_settings()
+
+
 func _on_mute_toggled(on: bool) -> void:
 	if _audio != null:
 		_audio.set_muted(on)
 
 
 func _on_master_changed(value: float) -> void:
-	if _audio != null:
-		_audio.set_master_volume(value / 100.0)
+	if _audio == null:
+		return
+	if _dragging:
+		_dirty_while_dragging = true
+	_audio.set_master_volume(value / 100.0, not _dragging)
 
 
 func _on_ambience_changed(value: float) -> void:
-	if _audio != null:
-		_audio.set_ambience_volume(value / 100.0)
+	if _audio == null:
+		return
+	if _dragging:
+		_dirty_while_dragging = true
+	_audio.set_ambience_volume(value / 100.0, not _dragging)
 
 
 func _on_sfx_changed(value: float) -> void:
-	if _audio != null:
-		_audio.set_sfx_volume(value / 100.0)
+	if _audio == null:
+		return
+	if _dragging:
+		_dirty_while_dragging = true
+	_audio.set_sfx_volume(value / 100.0, not _dragging)

@@ -3,7 +3,8 @@ extends GdUnitTestSuite
 ## The D5 demo audio floor: Master/Ambience/SFX bus creation and routing,
 ## linear-to-dB volume and mute state on AudioServer, isolated ConfigFile
 ## persistence and script-run shielding, gameplay ambience loop start/stop,
-## UI/build/cash SFX triggers without leaks, and live slider/mute sync in both
+## UI/build/cash SFX triggers without per-passenger spam or leaks, and live
+## slider/mute two-way sync (including drag_ended single-write) in both
 ## GameMenu and TitleScreen.
 
 const GAME_AUDIO := preload("res://audio/game_audio.gd")
@@ -107,7 +108,7 @@ func test_ambience_loops_only_while_gameplay_is_in_tree() -> void:
 	assert_bool(_audio.is_ambience_playing()).is_false()
 
 
-func test_ui_button_build_and_cash_events_trigger_sfx() -> void:
+func test_ui_button_build_flight_departure_and_lump_cash_events_trigger_sfx() -> void:
 	var btn := Button.new()
 	add_child(btn)
 	btn.pressed.emit()
@@ -129,18 +130,35 @@ func test_ui_button_build_and_cash_events_trigger_sfx() -> void:
 
 	var finances := Finances.new()
 	add_child(finances)
-	# Opening budget credit must not ring cash_chime.
+	# Opening budget, per-passenger boarding FEES and cafe SHOP ticks must not chime.
+	finances.wallet.credit(25, Wallet.Category.FEES)
+	finances.wallet.credit(8, Wallet.Category.SHOP)
 	assert_int(_audio.sfx_count(&"cash_chime")).is_equal(0)
+	# Lump-sum signing bonus rings cash_chime once.
 	finances.wallet.credit(250, Wallet.Category.SIGNING_BONUS)
 	assert_str(String(_audio.last_sfx())).is_equal("cash_chime")
 	assert_int(_audio.sfx_count(&"cash_chime")).is_equal(1)
-	# Immediate second fee credit is rate-limited so passenger bursts do not spam.
-	finances.wallet.credit(25, Wallet.Category.FEES)
-	assert_int(_audio.sfx_count(&"cash_chime")).is_equal(1)
 	finances.free()
 
+	# Flight departure completion also rings cash_chime (when off cooldown).
+	_audio.reset_for_test()
+	_audio.set_settings_path(_cfg_path)
+	var flights := FlightSim.new()
+	add_child(flights)
+	flights.state_changed.emit("GMF101", FlightSim.State.BOARDING)
+	assert_int(_audio.sfx_count(&"cash_chime")).is_equal(0)
+	flights.state_changed.emit("GMF101", FlightSim.State.DEPARTED)
+	assert_int(_audio.sfx_count(&"cash_chime")).is_equal(1)
+	flights.free()
 
-func test_game_menu_settings_sliders_and_mute_sync_and_persist() -> void:
+
+func test_game_menu_settings_sliders_init_from_saved_state_and_save_once_on_drag_end() -> void:
+	_audio.set_master_volume(0.30)
+	_audio.set_ambience_volume(0.45)
+	_audio.set_sfx_volume(0.65)
+	_audio.set_muted(true)
+	var saves_before := _audio.save_count
+
 	var kit := IncidentPanelKit.new()
 	kit.build(self)
 	var menu := GameMenu.new()
@@ -153,28 +171,47 @@ func test_game_menu_settings_sliders_and_mute_sync_and_persist() -> void:
 	menu.press_settings()
 	assert_bool(menu.audio_card.visible).is_true()
 
-	menu.audio_card.master_slider().value = 35.0
+	# Reverse sync: controls initialize to the pre-existing non-default values.
+	assert_float(menu.audio_card.master_slider().value).is_equal_approx(30.0, 0.01)
+	assert_float(menu.audio_card.ambience_slider().value).is_equal_approx(45.0, 0.01)
+	assert_float(menu.audio_card.sfx_slider().value).is_equal_approx(65.0, 0.01)
+	assert_bool(menu.audio_card.mute_switch().button_pressed).is_true()
+	assert_int(_audio.save_count).is_equal(saves_before)
+
+	# Dragging updates AudioServer live without writing disk until drag_ended.
+	var master_idx := AudioServer.get_bus_index(&"Master")
+	var slider := menu.audio_card.master_slider()
+	slider.drag_started.emit()
+	slider.value = 40.0
+	slider.value = 55.0
+	slider.value = 70.0
+	assert_float(AudioServer.get_bus_volume_db(master_idx)).is_equal_approx(
+		linear_to_db(0.70), 0.05
+	)
+	assert_int(_audio.save_count).is_equal(saves_before)
+	slider.drag_ended.emit(true)
+	assert_int(_audio.save_count).is_equal(saves_before + 1)
+
 	menu.audio_card.ambience_slider().value = 50.0
 	menu.audio_card.sfx_slider().value = 90.0
-	menu.audio_card.mute_switch().button_pressed = true
-	assert_float(_audio.master_volume).is_equal_approx(0.35, 0.001)
-	assert_float(_audio.ambience_volume).is_equal_approx(0.50, 0.001)
-	assert_float(_audio.sfx_volume).is_equal_approx(0.90, 0.001)
-	assert_bool(_audio.muted).is_true()
-
+	menu.audio_card.mute_switch().button_pressed = false
 	menu.press_back()
 	assert_bool(menu.audio_card.visible).is_false()
 	kit.port.free()
 
-	# Verify persisted values reload cleanly.
 	_audio.load_settings(_cfg_path)
-	assert_float(_audio.master_volume).is_equal_approx(0.35, 0.001)
+	assert_float(_audio.master_volume).is_equal_approx(0.70, 0.001)
 	assert_float(_audio.ambience_volume).is_equal_approx(0.50, 0.001)
 	assert_float(_audio.sfx_volume).is_equal_approx(0.90, 0.001)
-	assert_bool(_audio.muted).is_true()
+	assert_bool(_audio.muted).is_false()
 
 
-func test_title_screen_audio_card_toggles_and_syncs_with_game_audio() -> void:
+func test_title_screen_audio_card_inits_from_saved_state_toggles_and_syncs() -> void:
+	_audio.set_master_volume(0.25)
+	_audio.set_ambience_volume(0.55)
+	_audio.set_sfx_volume(0.85)
+	_audio.set_muted(true)
+
 	SaveSlots.dir = _title_dir
 	DirAccess.make_dir_recursive_absolute(_title_dir)
 	var port := SubViewport.new()
@@ -190,14 +227,20 @@ func test_title_screen_audio_card_toggles_and_syncs_with_game_audio() -> void:
 	title.button("Audio").pressed.emit()
 	assert_bool(title.audio_card.visible).is_true()
 
+	# Reverse sync: sliders and mute reflect pre-existing GameAudio state on open.
+	assert_float(title.audio_card.master_slider().value).is_equal_approx(25.0, 0.01)
+	assert_float(title.audio_card.ambience_slider().value).is_equal_approx(55.0, 0.01)
+	assert_float(title.audio_card.sfx_slider().value).is_equal_approx(85.0, 0.01)
+	assert_bool(title.audio_card.mute_switch().button_pressed).is_true()
+
 	title.audio_card.master_slider().value = 60.0
 	title.audio_card.ambience_slider().value = 20.0
 	title.audio_card.sfx_slider().value = 75.0
-	title.audio_card.mute_switch().button_pressed = true
+	title.audio_card.mute_switch().button_pressed = false
 	assert_float(_audio.master_volume).is_equal_approx(0.60, 0.001)
 	assert_float(_audio.ambience_volume).is_equal_approx(0.20, 0.001)
 	assert_float(_audio.sfx_volume).is_equal_approx(0.75, 0.001)
-	assert_bool(_audio.muted).is_true()
+	assert_bool(_audio.muted).is_false()
 
 	title.press_load()
 	assert_bool(title.audio_card.visible).is_false()

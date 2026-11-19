@@ -45,6 +45,7 @@ var master_volume := DEFAULT_MASTER
 var ambience_volume := DEFAULT_AMBIENCE
 var sfx_volume := DEFAULT_SFX
 var muted := DEFAULT_MUTED
+var save_count := 0
 
 var _ambience_player: AudioStreamPlayer
 var _ambience_playing := false
@@ -126,12 +127,15 @@ func save_settings() -> void:
 	err = cfg.save(settings_path)
 	if err != OK:
 		push_error("GameAudio: cannot write %s (error %d)" % [settings_path, err])
+		return
+	save_count += 1
 
 
 ## Restores default buses, paths, counters and playback state for test teardown.
 func reset_for_test() -> void:
 	protected_path = DEFAULT_SETTINGS_PATH
 	settings_path = DEFAULT_SETTINGS_PATH
+	save_count = 0
 	_last_sfx = &""
 	_sfx_counts.clear()
 	_last_played_ms.clear()
@@ -141,24 +145,27 @@ func reset_for_test() -> void:
 	_sync_ambience()
 
 
-func set_master_volume(value: float) -> void:
+func set_master_volume(value: float, persist := true) -> void:
 	master_volume = clampf(value, 0.0, 1.0)
 	_apply_buses()
-	save_settings()
+	if persist:
+		save_settings()
 	changed.emit()
 
 
-func set_ambience_volume(value: float) -> void:
+func set_ambience_volume(value: float, persist := true) -> void:
 	ambience_volume = clampf(value, 0.0, 1.0)
 	_apply_buses()
-	save_settings()
+	if persist:
+		save_settings()
 	changed.emit()
 
 
-func set_sfx_volume(value: float) -> void:
+func set_sfx_volume(value: float, persist := true) -> void:
 	sfx_volume = clampf(value, 0.0, 1.0)
 	_apply_buses()
-	save_settings()
+	if persist:
+		save_settings()
 	changed.emit()
 
 
@@ -271,6 +278,8 @@ func _on_node_added(node: Node) -> void:
 		_when_ready(node, _bind_build_mode.bind(node))
 	elif node is Finances:
 		_when_ready(node, _bind_finances.bind(node))
+	elif node is FlightSim:
+		_when_ready(node, _bind_flight_sim.bind(node))
 	elif node is OfferDesk:
 		_when_ready(node, _bind_offer_desk.bind(node))
 
@@ -327,6 +336,13 @@ func _bind_finances(finances: Finances) -> void:
 		return
 	if not finances.wallet.transaction.is_connected(_on_wallet_transaction):
 		finances.wallet.transaction.connect(_on_wallet_transaction)
+
+
+func _bind_flight_sim(flights: FlightSim) -> void:
+	if not is_instance_valid(flights):
+		return
+	if not flights.state_changed.is_connected(_on_flight_state):
+		flights.state_changed.connect(_on_flight_state)
 
 
 func _bind_offer_desk(desk: OfferDesk) -> void:
@@ -391,14 +407,19 @@ func _on_edit_refused(_edit: BuildEdit, _result: BuildResult) -> void:
 	play_sfx(&"build_refuse")
 
 
+func _on_flight_state(_flight_id: String, new_state: int) -> void:
+	if new_state == FlightSim.State.DEPARTED:
+		play_sfx(&"cash_chime")
+
+
+## Lump-sum rewards only (never per-passenger FEES, SHOP or PARKING ticks).
 func _on_wallet_transaction(amount: int, category: int, _claimed: Dictionary, _tick: int) -> void:
 	if amount <= 0:
 		return
-	var reward_categories := [
-		Wallet.Category.FEES,
+	var lump_rewards := [
 		Wallet.Category.GRANT,
 		Wallet.Category.SIGNING_BONUS,
 		Wallet.Category.INCIDENT,
 	]
-	if reward_categories.has(category):
+	if lump_rewards.has(category):
 		play_sfx(&"cash_chime")
