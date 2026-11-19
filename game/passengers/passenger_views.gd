@@ -69,6 +69,12 @@ const HEAD_RECT_MAX_PX := 96.0
 ## When set, draw() resolves this frame's hover and pin target first, so the
 ## layout below reads it the same frame (HoverTarget, Frame order).
 @export var hover_target: HoverTarget
+## Placed object view whose toilet_stall doors swing open and shut with visits
+## (StallDoors); resolved from build_mode when not wired directly.
+@export var build_view: BuildView
+## Scene BuildMode owning the runtime BuildView child (main.tscn, as RoofView
+## and HoverTarget resolve it, since BuildMode creates BuildView in _ready()).
+@export var build_mode: BuildMode
 
 ## Moves with the selected passenger, for a camera to follow.
 var follow_anchor := Node3D.new()
@@ -221,6 +227,8 @@ func _ready() -> void:
 		clock.ticked.connect(_on_ticked)
 	if save_game != null:
 		save_game.loaded.connect(_on_loaded)
+	if build_view == null and build_mode != null:
+		build_view = build_mode.get_node_or_null("BuildView") as BuildView
 
 
 func _process(_delta: float) -> void:
@@ -490,6 +498,22 @@ func draw() -> void:
 		VipMarker.layout(node, bubble, camera, unit, _badge_lifts.get(id, 0.0))
 	_props.draw()
 	_markers.draw()
+	_sync_stall_doors(alpha)
+
+
+func _sync_stall_doors(alpha: float) -> void:
+	if build_view == null and build_mode != null:
+		build_view = build_mode.get_node_or_null("BuildView") as BuildView
+	if build_view != null:
+		build_view.sync_stall_doors(sim, alpha)
+	ghosts.sync()
+	if sim == null or sim.grid == null:
+		return
+	for ghost in Relocation.ghosts(sim):
+		if ghost["def"] == &"toilet_stall":
+			var node := ghosts.node_of(ghost)
+			if node != null:
+				StallDoors.apply(node, StallDoors.ghost_open_weight(sim, ghost, alpha))
 
 
 ## The Late mode's disc mesh, one instance per late passenger, none drawn yet.

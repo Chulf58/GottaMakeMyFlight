@@ -49,6 +49,7 @@ var _wall_kinds: Dictionary = {}
 var _cut_edges: Dictionary = {}
 var _area := MeshInstance3D.new()
 var _object_nodes: Dictionary = {}
+var _stall_nodes: Dictionary = {}
 
 
 ## How tall an object type stands as drawn: the top of its kit piece's meshes,
@@ -192,6 +193,19 @@ func object_node(object_id: int) -> Node3D:
 	return _object_nodes.get(object_id)
 
 
+## Object ids of the placed toilet_stall nodes currently drawn.
+func stall_ids() -> Array[int]:
+	var ids: Array[int] = []
+	ids.assign(_stall_nodes.keys())
+	return ids
+
+
+## Updates every placed toilet_stall node's inward doors from `sim` and `alpha`.
+func sync_stall_doors(sim: PassengerSim, alpha: float) -> void:
+	for stall_id: int in _stall_nodes:
+		StallDoors.apply(_stall_nodes[stall_id], StallDoors.open_weight(sim, stall_id, alpha))
+
+
 ## Edges (WallCutaway.wall_edges form) drawn as stubs right now.
 func cut_edges() -> Array[Vector3i]:
 	var result: Array[Vector3i] = []
@@ -322,6 +336,7 @@ func _sync_objects() -> void:
 		if not live.has(object_id) or node.get_meta("record") != _grid.get_object(object_id):
 			node.queue_free()
 			_object_nodes.erase(object_id)
+			_stall_nodes.erase(object_id)
 	for object_id in live:
 		if _object_nodes.has(object_id):
 			continue
@@ -332,6 +347,9 @@ func _sync_objects() -> void:
 		created.transform = object_transform(
 			_grid, def.footprint(record["anchor"], record["facing"]), record["facing"]
 		)
+		if record["def"] == &"toilet_stall":
+			StallDoors.apply(created, 0.0)
+			_stall_nodes[object_id] = created
 		add_child(created)
 		_object_nodes[object_id] = created
 
