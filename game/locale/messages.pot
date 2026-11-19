@@ -3839,7 +3839,7 @@ msgid "Welcome to your new airport! Passengers are on their way, and every one o
 msgstr ""
 
 #: ui/intro_dialogue.gd
-msgid "Build them a path: entrance, then check-in, then security, then the gate exit. Number keys pick tools, {pause} pauses, {speed} sets speed."
+msgid "Build them a path: entrance, then check-in, then security, then the gate exit. {pause} pauses, {speed} sets speed."
 msgstr ""
 
 #: ui/intro_dialogue.gd

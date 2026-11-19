@@ -113,6 +113,7 @@ func test_the_intro_shows_the_portrait_nameplate_and_instructions() -> void:
 	assert_str(text).contains("gate")
 	assert_str(text).contains("Space")
 	assert_str(text).contains("Shift+1/2/3")
+	assert_str(text).not_contains("Number keys")
 	assert_str(text).contains("clock starts when you close this")
 	var screen := Rect2(Vector2.ZERO, Vector2(_port.size))
 	var rects := intro.part_rects()
