@@ -308,7 +308,7 @@ flights = NodePath("../FlightSim")
 passengers = NodePath("../PassengerSim")
 build_mode = NodePath("../BuildMode")
 
-[node name="PassengerViews" type="Node3D" parent="." node_paths=PackedStringArray("clock", "sim", "save_game", "incidents", "mood_overlay", "hover_target")]
+[node name="PassengerViews" type="Node3D" parent="." node_paths=PackedStringArray("clock", "sim", "save_game", "incidents", "mood_overlay", "hover_target", "build_mode")]
 script = ExtResource("11_paxview")
 clock = NodePath("../SimClock")
 sim = NodePath("../PassengerSim")
@@ -316,6 +316,7 @@ save_game = NodePath("../SaveGame")
 incidents = NodePath("../IncidentDirector")
 mood_overlay = NodePath("../MoodOverlay")
 hover_target = NodePath("../HoverTarget")
+build_mode = NodePath("../BuildMode")
 
 [node name="BaggageViews" type="Node3D" parent="." node_paths=PackedStringArray("clock", "sim", "save_game")]
 script = ExtResource("27_bagview")

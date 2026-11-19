@@ -14,12 +14,11 @@ passenger walks into, uses for a dwell, and leaves):
   hands swing out to 0.43 m from the centre line when they walk, clear them. Two
   stalls side by side leave 1 cm between their partitions; against a side wall the
   partition sits inside the wall panel. Front and back keep the inset.
-  The door is two half-leaves (Door_Leaf_Stall_L and _R, hinge empties at the front
-  pilasters), closed at rest, each opening 90 degrees INWARD to lie along its side.
-  A full-width leaf would sweep through a seated or standing occupant, and an outward
-  one through the approach cell and the aisle. The hinges sit at |x| 0.43 so an open
-  leaf stays out of a side wall (its in-cell face is at 0.44); between open leaves
-  there is 0.845 m, so a walker's hand brushes them by about 7.5 mm.
+  The door is two outward bi-fold half-leaves (Door_Leaf_Stall_L/_R at the front
+  pilasters, with child Door_Fold_Stall_L/_R at the mid-knuckles), closed at rest, each
+  folding 90 degrees outward (+Z) / 180 degrees back so z stays >= 0.878 m (never sweeping
+  through floor bags at z <= 0.861 m) and <= 1.108 m (compact outward stack, leaving >0.39 m
+  to Mount_Approach and 0.822 m clear doorway width between folded stacks).
   The headrail's underside is at 2.18 m, above the characters.
   Mount_Use is the seated root (rear cell centre plus SIT_FORWARD toward the door),
   facing out; the toilet is shaped from the sit contract (build_services_kit.py).
@@ -81,12 +80,22 @@ PARTITION_Y = (0.15, 2.00)
 RAIL_Y = (2.18, 2.22)
 HINGE_X = 0.43
 HINGE_Z = 0.89
-LEAF_W = 0.425  # each leaf; a 10 mm seam between the two
-LEAF_T = 0.015
+LEAF_W = 0.425  # each half-leaf assembly; a 10 mm seam between the two
+PANEL_W = LEAF_W / 2.0  # 0.2125 m per bi-fold panel
+PANEL_GAP = 0.0015  # half-gap at the mid-fold crease so both panels read cleanly
+LEAF_T = 0.012
+FOLD_INSET_Z = 0.0065  # mid-hinge offset inward (-Z) so 180-deg fold stacks 1 mm clear
 LEAF_Y = (0.15, 1.90)
 KNUCKLE_R = 0.009
 KNUCKLE_Y = ((0.30, 0.40), (1.60, 1.70))
-DOOR_OPEN_DEG = {"L": 90.0, "R": -90.0}  # about Godot +Y: the free edge swings to -Z
+MID_KNUCKLE_R = 0.005
+MID_KNUCKLE_Y = ((0.135, 0.15), (1.90, 1.915))
+# About Godot +Y (Blender +Z): outer panel swings 90 deg outward (+Z), inner folds 180 deg back.
+DOOR_OPEN_DEG = {"L": -90.0, "R": 90.0}
+DOOR_FOLD_DEG = {"L": 180.0, "R": -180.0}
+FOLD_OPEN_IN_X = HINGE_X - (2.0 * FOLD_INSET_Z + LEAF_T / 2.0)  # 0.411 m clear doorway half-width
+DOOR_MIN_Z = 0.875  # strictly outside STALL_BAG_M = 0.861 m across the entire swing
+DOOR_MAX_Z = 1.115  # compact outward stack limit
 SWEEP_MIN = 0.45  # the moving leaf stays this far (horizontally) from the use root
 USE_ROOT_Z = -0.5 + SIT_FORWARD  # -0.05: the rear cell's centre plus SIT_FORWARD
 # Where a walker coming in from Mount_Approach stops and turns round: walking on to
@@ -163,20 +172,32 @@ def add_mounts(piece, root, c):
 
 
 def stall_leaf(side, root, c):
-    """A hinge empty at the front pilaster; the leaf in hinge-local Godot terms runs
-    toward the seam (+x for L, -x for R), 15 mm thick, centred on the hinge line."""
+    """Bi-fold half-leaf: outer hinge empty Door_Leaf_Stall_<side> at the front pilaster
+    holding the outer 0.2125 m panel, plus child empty Door_Fold_Stall_<side> at the
+    mid-knuckle (offset -FOLD_INSET_Z inward) holding the inner 0.2125 m panel."""
     s = -1.0 if side == "L" else 1.0
     hinge = bpy.data.objects.new("Door_Leaf_Stall_" + side, None)
     c.objects.link(hinge)
     hinge.parent = root
     hinge.empty_display_size = 0.2
     hinge.location = (s * HINGE_X, -HINGE_Z, 0.0)
-    x0, x1 = sorted((0.0, -s * LEAF_W))
     t = LEAF_T / 2.0
-    gbox("Door_Leaf_Stall_%s_Panel" % side, (x0, x1), LEAF_Y, (-t, t), "blue", hinge, c)
-    # Two hinge knuckles round the axis; fixed brackets on the pilaster meet them.
+    ox0, ox1 = sorted((0.0, -s * (PANEL_W - PANEL_GAP)))
+    gbox("Door_Leaf_Stall_%s_Panel" % side, (ox0, ox1), LEAF_Y, (-t, t), "blue", hinge, c)
+    # Two outer hinge knuckles round the pilaster axis; fixed brackets meet them.
     for k, (y0, y1) in enumerate(KNUCKLE_Y):
         kit.cyl("Door_Leaf_Stall_%s_Knuckle_%d" % (side, k), 0.0, 0.0, y0, y1, KNUCKLE_R, "metal", hinge, c)
+    fold = bpy.data.objects.new("Door_Fold_Stall_" + side, None)
+    c.objects.link(fold)
+    fold.parent = hinge
+    fold.empty_display_size = 0.15
+    # Godot (-s * PANEL_W, 0, -FOLD_INSET_Z) is Blender (-s * PANEL_W, +FOLD_INSET_Z, 0).
+    fold.location = (-s * PANEL_W, FOLD_INSET_Z, 0.0)
+    ix0, ix1 = sorted((-s * PANEL_GAP, -s * PANEL_W))
+    gbox("Door_Fold_Stall_%s_Panel" % side, (ix0, ix1), LEAF_Y,
+         (FOLD_INSET_Z - t, FOLD_INSET_Z + t), "blue", fold, c)
+    for k, (y0, y1) in enumerate(MID_KNUCKLE_Y):
+        kit.cyl("Door_Fold_Stall_%s_Knuckle_%d" % (side, k), 0.0, 0.0, y0, y1, MID_KNUCKLE_R, "metal", fold, c)
 
 
 def hinge_brackets(side):
@@ -247,7 +268,15 @@ PIECES = {
 }
 EXTRA_NODES = {p: sorted(TOILET[p]["mounts"]) for p in TOILET}
 EXTRA_NODES["toilet_stall"] = sorted(EXTRA_NODES["toilet_stall"] + [
-    "Door_Leaf_Stall_L", "Door_Leaf_Stall_L_Mesh", "Door_Leaf_Stall_R", "Door_Leaf_Stall_R_Mesh"])
+    "Door_Fold_Stall_L", "Door_Fold_Stall_L_Mesh",
+    "Door_Fold_Stall_R", "Door_Fold_Stall_R_Mesh",
+    "Door_Leaf_Stall_L", "Door_Leaf_Stall_L_Mesh",
+    "Door_Leaf_Stall_R", "Door_Leaf_Stall_R_Mesh",
+])
+BASE_OWN_NODES = {
+    p: set(TOILET[p]["mounts"]) | ({"Door_Leaf_Stall_L", "Door_Leaf_Stall_R"} if p == "toilet_stall" else set())
+    for p in TOILET
+}
 
 
 def requested():
@@ -277,7 +306,7 @@ def guard(pieces):
             continue
         js, _n = kit.parse_glb(out)
         names = {n.get("name") for n in js.get("nodes", [])}
-        own = kit.piece_title(p) + "_ROOT" in names and set(EXTRA_NODES.get(p, [])) <= names
+        own = kit.piece_title(p) + "_ROOT" in names and BASE_OWN_NODES[p] <= names
         kit.log("GUARD %s existing file own=%s" % (p, own))
         if not own:
             kit.fail("%s exists and is not this builder's piece; not overwriting" % out)
@@ -391,53 +420,85 @@ def check_doors(objs):
         control = [c0 + Vector((reach, 0.0, 0.0)), c0 + Vector((-reach, reach, 0.0)), c0 + Vector((-reach, -reach, 0.0))]
         if not svc.clip_to_box(control, lo, hi, 1e-4):
             kit.fail("toilet_stall: the slicing control missed %s" % name)
+    open_inner_x = {}
     for side in ("L", "R"):
-        hinge, leaf = by.get("Door_Leaf_Stall_" + side), by.get("Door_Leaf_Stall_%s_Mesh" % side)
-        if hinge is None or leaf is None or leaf.parent is not hinge:
-            kit.fail("toilet_stall: hinge %s leaf %s parent %s" % (hinge, leaf, getattr(leaf, "parent", None)))
+        s = -1.0 if side == "L" else 1.0
+        hinge = by.get("Door_Leaf_Stall_" + side)
+        leaf = by.get("Door_Leaf_Stall_%s_Mesh" % side)
+        fold = by.get("Door_Fold_Stall_" + side)
+        fold_mesh = by.get("Door_Fold_Stall_%s_Mesh" % side)
+        if (hinge is None or leaf is None or leaf.parent is not hinge
+                or fold is None or fold_mesh is None or fold.parent is not hinge or fold_mesh.parent is not fold):
+            kit.fail("toilet_stall: bad bi-fold hierarchy on %s: hinge=%s leaf=%s fold=%s fold_mesh=%s"
+                     % (side, hinge, leaf, fold, fold_mesh))
             continue
         hp = hinge.matrix_world.translation.copy()
-        g = (hp.x, hp.z, -hp.y)
-        want = ((-1.0 if side == "L" else 1.0) * HINGE_X, 0.0, HINGE_Z)
-        if max(abs(a - b) for a, b in zip(g, want)) > 1e-4:
-            kit.fail("toilet_stall: hinge %s at %s, expected %s" % (side, g, want))
-        rest = hinge.matrix_world.copy()
-        closed = [v for p in leaf_polys(leaf) for v in p]
-        radius = max(math.hypot(v.x - hp.x, v.y - hp.y) for v in closed)
-        bound = (root_b - Vector((hp.x, hp.y))).length - radius
-        far_i = max(range(len(closed)), key=lambda i: abs(closed[i].x - hp.x))
-        worst_clash, rigid = 0, 0.0
-        opened = closed
+        fp = fold.matrix_world.translation.copy()
+        g_h = (hp.x, hp.z, -hp.y)
+        g_f = (fp.x, fp.z, -fp.y)
+        want_h = (s * HINGE_X, 0.0, HINGE_Z)
+        want_f = (s * (HINGE_X - PANEL_W), 0.0, HINGE_Z - FOLD_INSET_Z)
+        if max(abs(a - b) for a, b in zip(g_h, want_h)) > 1e-4:
+            kit.fail("toilet_stall: hinge %s at %s, expected %s" % (side, g_h, want_h))
+        if max(abs(a - b) for a, b in zip(g_f, want_f)) > 1e-4:
+            kit.fail("toilet_stall: fold %s at %s, expected %s" % (side, g_f, want_f))
+        rest_h = hinge.matrix_basis.copy()
+        rest_f = fold.matrix_basis.copy()
+        closed_outer = [v for p in leaf_polys(leaf) for v in p]
+        closed_inner = [v for p in leaf_polys(fold_mesh) for v in p]
+        worst_clash, self_clash, rigid = 0, 0, 0.0
+        min_gz, max_gz = 1e9, -1e9
+        min_root_dist = 1e9
+        opened = closed_outer + closed_inner
         for k in range(0, 19):
-            deg = DOOR_OPEN_DEG[side] * k / 18.0
-            hinge.matrix_world = turned_from(rest, hp, deg)
-            polys = leaf_polys(leaf)
-            verts = [v for p in polys for v in p]
+            frac = k / 18.0
+            hinge.matrix_basis = rest_h @ Matrix.Rotation(math.radians(DOOR_OPEN_DEG[side] * frac), 4, "Z")
+            fold.matrix_basis = rest_f @ Matrix.Rotation(math.radians(DOOR_FOLD_DEG[side] * frac), 4, "Z")
+            bpy.context.view_layer.update()
+            polys_o = leaf_polys(leaf)
+            polys_i = leaf_polys(fold_mesh)
+            verts_o = [v for p in polys_o for v in p]
+            verts_i = [v for p in polys_i for v in p]
+            verts = verts_o + verts_i
             rigid = max(rigid, max(max(abs(math.hypot(a.x - hp.x, a.y - hp.y) - math.hypot(b.x - hp.x, b.y - hp.y)),
-                                       abs(a.z - b.z)) for a, b in zip(closed, verts)))
+                                       abs(a.z - b.z)) for a, b in zip(closed_outer, verts_o)))
             for name, (lo, hi) in static.items():
-                worst_clash += sum(1 for p in polys if svc.clip_to_box(p, lo, hi, 1e-4))
+                worst_clash += sum(1 for p in (polys_o + polys_i) if svc.clip_to_box(p, lo, hi, 1e-4))
+            # Check inner panel does not clip outer panel box in hinge's local frame.
+            inv_h = hinge.matrix_world.inverted()
+            lo_o = Vector((min(x for x in (0.0, -s * (PANEL_W - PANEL_GAP))), -LEAF_T / 2.0, LEAF_Y[0]))
+            hi_o = Vector((max(x for x in (0.0, -s * (PANEL_W - PANEL_GAP))), LEAF_T / 2.0, LEAF_Y[1]))
+            local_i = [[inv_h @ v for v in p] for p in polys_i]
+            self_clash += sum(1 for p in local_i if svc.clip_to_box(p, lo_o, hi_o, 1e-4))
+            min_gz = min(min_gz, min(-v.y for v in verts))
+            max_gz = max(max_gz, max(-v.y for v in verts))
+            min_root_dist = min(min_root_dist, min((root_b - Vector((v.x, v.y))).length for v in verts))
             opened = verts
-        hinge.matrix_world = rest
+        hinge.matrix_basis = rest_h
+        fold.matrix_basis = rest_f
         bpy.context.view_layer.update()
-        f0, f1 = closed[far_i], opened[far_i]
-        swing = (-f1.y) - (-f0.y)  # Godot z change of the free edge (Blender -y)
         open_x = (min(v.x for v in opened), max(v.x for v in opened))
-        kit.log("DOOR %s hinge_godot=(%.3f, %.3f, %.3f) leaf_radius=%.4f root_distance=%.4f sweep_bound=%.4f "
-                "rigid_err=%.6f free_edge_godot_z %.3f -> %.3f (swing %.3f) open_x=[%.4f, %.4f] "
-                "faces_crossing_an_obstacle_over_19_angles=%d"
-                % (side, g[0], g[1], g[2], radius, (root_b - Vector((hp.x, hp.y))).length, bound, rigid,
-                   -f0.y, -f1.y, swing, open_x[0], open_x[1], worst_clash))
+        open_inner_x[side] = open_x[1] if side == "L" else open_x[0]
+        kit.log("DOOR %s hinge_godot=(%.3f, %.3f, %.3f) fold_godot=(%.4f, %.3f, %.4f) min_root_dist=%.4f "
+                "rigid_err=%.6f godot_z=[%.4f, %.4f] open_x=[%.4f, %.4f] static_clash=%d self_clash=%d"
+                % (side, g_h[0], g_h[1], g_h[2], g_f[0], g_f[1], g_f[2], min_root_dist,
+                   rigid, min_gz, max_gz, open_x[0], open_x[1], worst_clash, self_clash))
         if rigid > 1e-4:
             kit.fail("toilet_stall: leaf %s does not turn rigidly about its hinge (%.5f m)" % (side, rigid))
-        if swing > -(LEAF_W - 0.02) or abs(f1.x - hp.x) > 0.02:
-            kit.fail("toilet_stall: leaf %s free edge did not swing in to -Z" % side)
+        if min_gz < DOOR_MIN_Z - 1e-4 or max_gz > DOOR_MAX_Z + 1e-4:
+            kit.fail("toilet_stall: bi-fold %s godot_z [%.4f, %.4f] outside [%.3f, %.3f]"
+                     % (side, min_gz, max_gz, DOOR_MIN_Z, DOOR_MAX_Z))
         if max(abs(open_x[0]), abs(open_x[1])) > 0.44 - 1e-4:
             kit.fail("toilet_stall: open leaf %s reaches |x| %.4f, into a side wall" % (side, max(map(abs, open_x))))
-        if worst_clash:
-            kit.fail("toilet_stall: leaf %s crosses a pilaster, partition or bracket during its swing" % side)
-        if bound < SWEEP_MIN:
-            kit.fail("toilet_stall: leaf %s sweeps within %.3f m of the use root" % (side, bound))
+        if worst_clash or self_clash:
+            kit.fail("toilet_stall: bi-fold %s clashes (static=%d, self=%d)" % (side, worst_clash, self_clash))
+        if min_root_dist < SWEEP_MIN:
+            kit.fail("toilet_stall: leaf %s sweeps within %.3f m of the use root" % (side, min_root_dist))
+    if "L" in open_inner_x and "R" in open_inner_x:
+        clear_w = open_inner_x["R"] - open_inner_x["L"]
+        kit.log("DOOR clear_doorway_width=%.4f" % clear_w)
+        if clear_w < 0.81 - 1e-4:
+            kit.fail("toilet_stall: open doorway clear width %.4f < 0.81 m" % clear_w)
 
 
 def import_written(out):
