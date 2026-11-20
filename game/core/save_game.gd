@@ -579,11 +579,17 @@ func _shape_problem(data: Variant) -> String:
 func _version_problem(dict: Dictionary) -> String:
 	if not dict.has("save_version"):
 		return "missing key 'save_version'"
-	if not WholeNumber.is_whole(dict["save_version"]) or int(dict["save_version"]) != SAVE_VERSION:
+	var raw: Variant = dict["save_version"]
+	if not WholeNumber.is_whole(raw) or int(raw) < 0:
+		return tr("This save file cannot be read.")
+	var version := int(raw)
+	if version < SAVE_VERSION:
 		return tr(
 			# gdlint:ignore = max-line-length
 			"This save is from an older version and cannot be loaded after an update. Please start a New Airport."
 		)
+	if version > SAVE_VERSION:
+		return tr("This save is from a newer version and cannot be loaded. Please update the game.")
 	return ""
 
 

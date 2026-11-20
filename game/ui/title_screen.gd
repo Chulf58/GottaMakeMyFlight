@@ -96,12 +96,12 @@ func press_quit() -> void:
 
 
 func press_wishlist() -> void:
-	if WISHLIST_URL != "":
+	if WISHLIST_URL != "" and open_url.is_valid():
 		open_url.call(WISHLIST_URL)
 
 
 func press_feedback() -> void:
-	if not feedback_url.is_empty():
+	if not feedback_url.is_empty() and open_url.is_valid():
 		open_url.call(feedback_url)
 
 
@@ -215,15 +215,23 @@ func _add_button(
 
 
 func _on_save_chosen(path: String) -> void:
-	if SaveSlots.file_save_version(path) != -1 and not SaveSlots.is_compatible(path):
+	var ver := SaveSlots.file_save_version(path)
+	if ver == SaveGame.SAVE_VERSION:
+		GameBoot.start_load(path, change_scene)
+		return
+	if ver < 0:
+		_show_message(tr("This save file cannot be read."))
+	elif ver < SaveGame.SAVE_VERSION:
 		_show_message(
 			tr(
 				# gdlint:ignore = max-line-length
 				"This save is from an older version and cannot be loaded after an update. Please start a New Airport."
 			)
 		)
-		return
-	GameBoot.start_load(path, change_scene)
+	else:
+		_show_message(
+			tr("This save is from a newer version and cannot be loaded. Please update the game.")
+		)
 
 
 func _show_message(text: String) -> void:

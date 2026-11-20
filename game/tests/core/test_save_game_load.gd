@@ -174,7 +174,7 @@ func test_a_bad_top_level_shape_is_refused() -> void:
 	for case in [
 		[unknown, "unknown key"],
 		[missing, "missing key"],
-		[version, "older version"],
+		[version, "newer version"],
 		[not_a_part, "is not a dictionary"],
 	]:
 		_assert_refused(case[0], case[1])

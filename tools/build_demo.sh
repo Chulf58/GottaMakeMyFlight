@@ -192,14 +192,40 @@ else
 fi
 
 # Step 4: Clean staging export
-if [ -z "$OUT_DIR" ] || [ "$OUT_DIR" = "/" ] || [ "$OUT_DIR" = "." ]; then
-	echo "ERROR: refusing unsafe --out-dir: '$OUT_DIR'" >&2
+if [ -z "$OUT_DIR" ]; then
+	echo "ERROR: refusing empty --out-dir" >&2
 	exit 2
 fi
-echo "[step 4] Exporting 'Windows Demo' to $OUT_DIR..."
-rm -rf "$OUT_DIR"
-mkdir -p "$OUT_DIR"
-ABS_OUT_DIR="$(cd "$OUT_DIR" && pwd)"
+ABS_OUT_DIR="$(
+	python3 - "$OUT_DIR" "$ROOT" "${HOME:-}" <<'PY'
+import os
+import sys
+
+out_arg, root_arg, home_arg = sys.argv[1], sys.argv[2], sys.argv[3]
+out_real = os.path.realpath(out_arg)
+root_real = os.path.realpath(root_arg)
+game_real = os.path.realpath(os.path.join(root_real, "game"))
+forbidden = {"/", root_real, game_real}
+if home_arg:
+    forbidden.add(os.path.realpath(home_arg))
+
+if out_real in forbidden:
+    sys.stderr.write(f"ERROR: refusing unsafe --out-dir: {out_arg!r} (resolved: {out_real!r})\n")
+    sys.exit(2)
+
+rel_to_out = os.path.relpath(root_real, out_real)
+if rel_to_out == "." or not rel_to_out.startswith(".."):
+    sys.stderr.write(
+        f"ERROR: refusing --out-dir ancestor of repo root: {out_arg!r} (resolved: {out_real!r})\n"
+    )
+    sys.exit(2)
+
+print(out_real)
+PY
+)"
+echo "[step 4] Exporting 'Windows Demo' to $ABS_OUT_DIR..."
+rm -rf "$ABS_OUT_DIR"
+mkdir -p "$ABS_OUT_DIR"
 OUT_EXE="$ABS_OUT_DIR/GottaMakeMyFlight.exe"
 WIN_OUT_EXE="$(wslpath -m "$ABS_OUT_DIR")/GottaMakeMyFlight.exe"
 

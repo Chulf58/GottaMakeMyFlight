@@ -56,13 +56,14 @@ static func file_save_version(path: String) -> int:
 	var text := FileAccess.get_file_as_string(path)
 	if FileAccess.get_open_error() != OK:
 		return -1
-	var parsed: Variant = JSON.parse_string(text)
-	if typeof(parsed) != TYPE_DICTIONARY:
+	var json := JSON.new()
+	if json.parse(text) != OK or typeof(json.data) != TYPE_DICTIONARY:
 		return -1
-	var data := parsed as Dictionary
+	var data := json.data as Dictionary
 	if not data.has("save_version") or not WholeNumber.is_whole(data["save_version"]):
 		return -1
-	return int(data["save_version"])
+	var version := int(data["save_version"])
+	return version if version >= 0 else -1
 
 
 ## True when `path` exists and its `save_version` matches SaveGame.SAVE_VERSION.

@@ -28,6 +28,7 @@ func before_test() -> void:
 
 
 func after_test() -> void:
+	PseudoLocale.disable()
 	_port.free()
 	for path in SaveSlots.all_paths():
 		DirAccess.remove_absolute(path)
@@ -178,11 +179,44 @@ func test_only_incompatible_saves_disables_continue_keeps_load_and_labels_older_
 	assert_str(old_btn.text).starts_with("[")
 	assert_str(old_btn.text).contains("(Older version)")
 	old_btn.pressed.emit()
-	PseudoLocale.disable()
 	assert_array(_scenes).is_empty()
+	assert_str(_title.message_text()).starts_with("[")
 	assert_str(_title.message_text()).contains("older version")
+	PseudoLocale.disable()
 	# The older save file remains untouched.
 	assert_bool(FileAccess.file_exists(SaveSlots.manual_path())).is_true()
+
+
+func test_unreadable_and_newer_version_saves_label_and_refuse_without_scene_change() -> void:
+	var corrupt := FileAccess.open(SaveSlots.manual_path(), FileAccess.WRITE)
+	corrupt.store_string("{not json")
+	corrupt.close()
+	var newer := SaveSlots.autosave_paths()[0]
+	_write(newer, SaveGame.SAVE_VERSION + 1)
+
+	PseudoLocale.enable(0.4)
+	_build()
+	assert_bool(_title.button("Continue").disabled).is_true()
+	assert_bool(_title.button("Load").disabled).is_false()
+	_title.button("Load").pressed.emit()
+
+	var bad_btn := _title.save_list().button_for(SaveSlots.manual_path())
+	var new_btn := _title.save_list().button_for(newer)
+	assert_str(bad_btn.text).starts_with("[")
+	assert_str(bad_btn.text).contains("(Unreadable)")
+	assert_str(new_btn.text).starts_with("[")
+	assert_str(new_btn.text).contains("(Newer version)")
+
+	bad_btn.pressed.emit()
+	assert_array(_scenes).is_empty()
+	assert_str(_title.message_text()).starts_with("[")
+	assert_str(_title.message_text()).contains("cannot be read")
+
+	new_btn.pressed.emit()
+	assert_array(_scenes).is_empty()
+	assert_str(_title.message_text()).starts_with("[")
+	assert_str(_title.message_text()).contains("newer version")
+	PseudoLocale.disable()
 
 
 func test_the_send_feedback_button_hides_when_empty_and_opens_url_when_set() -> void:

@@ -8,7 +8,7 @@ set -u
 SEEDS="${1:-3}"
 DAYS="${2:-5}"
 LOG_DIR="${3:-tools/blender/out/demo_soak}"
-GODOT=/mnt/c/Users/chulf/AppData/Local/Programs/Godot/Godot_v4.7.2-stable_win64_console.exe
+GODOT="${GODOT:-/mnt/c/Users/chulf/AppData/Local/Programs/Godot/Godot_v4.7.2-stable_win64_console.exe}"
 PROJECT="$(wslpath -m "$(pwd)")/game"
 mkdir -p "$LOG_DIR"
 
