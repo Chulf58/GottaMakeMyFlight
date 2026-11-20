@@ -117,9 +117,14 @@ func test_a_gate_b_passenger_boards_through_b_onto_bs_plane() -> void:
 	# boards-on-foot-from-the-apron-plane-04-docks-the-no).
 	var model := PlaneClasses.flight_model(_world.flights, FLIGHT_B)
 	var stand: Dictionary = _apron.gate_stands["B"]["live"]
-	# It ends on the ground out from the 03's door, clear of the fuselage.
+	# It ends on the ground beside the 03's main wheel, out from the door and aft of the strut.
 	var at := JetBridgePose.plane_door(stand, model)
-	var door: Vector3 = at["door"] + (at["normal"] as Vector3) * JetBridgePose.APRON_END_OUT_M
+	var forward := StandPlacement.turn(stand, Vector3(0.0, 0.0, 1.0))
+	var door: Vector3 = (
+		at["door"]
+		+ (at["normal"] as Vector3) * JetBridgePose.APRON_END_OUT_M
+		- forward * JetBridgePose.APRON_END_AFT_M
+	)
 	print(
 		(
 			"stage %s at tick %d, exits used %s, B's plane door %s"

@@ -49,7 +49,8 @@ func before_test() -> void:
 	_row_a = PassengerTestWorld.place(grid, &"seat_row", EXIT_A + Vector2i(-1, 4), 0)
 	_row_b = PassengerTestWorld.place(grid, &"seat_row", EXIT_B + Vector2i(-1, 4), 0)
 	EnclosureKit.close_floor(grid)
-	var starts := PassengerTestWorld.starts_with(3000, 3300)
+	# 500-tick boarding window keeps seated passengers non-late over 03a's centred stand walk.
+	var starts := PassengerTestWorld.starts_with(3000, 3500)
 	_world = PassengerTestWorld.make(grid, starts)
 	_world.sim.site = SITE
 	_gates = auto_free(GateDesks.new()) as GateDesks
