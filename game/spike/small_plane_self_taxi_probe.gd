@@ -80,7 +80,15 @@ func _run() -> void:
 	)
 
 	# Tile 1: tp_plane_03a parked at gate with folded bridge and apron walkers.
-	var model := _pose("tp_plane_03a", PlaneClasses.SMALL, FlightSim.State.BOARDING, 0.5)
+	var model := _pose("tp_plane_03a", PlaneClasses.SMALL, FlightSim.State.BOARDING, 0.5, 10.0)
+	var prop := model.find_child(PlaneView.PROPELLER_NODE, true, false) as Node3D
+	if prop == null:
+		_invalid("missing propeller node on 03a")
+	else:
+		var boarding_basis := prop.basis
+		_pose("tp_plane_03a", PlaneClasses.SMALL, FlightSim.State.BOARDING, 0.5, 14.5)
+		if not prop.basis.is_equal_approx(boarding_basis):
+			_invalid("propeller moved during BOARDING")
 	_spawn_guests(apron_walk)
 	_add_colliders(_main)
 	var focus_parked := stand_pos.lerp(apron_walk[1], 0.35) + Vector3(0.0, 1.0, 0.0)
@@ -98,7 +106,19 @@ func _run() -> void:
 	_clear_guests()
 
 	# Tile 2: tp_plane_03a mid-180 turn in PUSHBACK (t = 0.20, pilot's right / west).
-	model = _pose("tp_plane_03a", PlaneClasses.SMALL, FlightSim.State.PUSHBACK, 0.20)
+	# Record propeller rotation across multiple pivot steps and verify hub stability.
+	_pose("tp_plane_03a", PlaneClasses.SMALL, FlightSim.State.PUSHBACK, 0.10, 12.0)
+	var hub_a := prop.position
+	var basis_a := prop.basis
+	_pose("tp_plane_03a", PlaneClasses.SMALL, FlightSim.State.PUSHBACK, 0.30, 36.0)
+	var delta_turn := basis_a.x.angle_to(prop.basis.x)
+	var hub_shift := prop.position.distance_to(hub_a)
+	print("PROBE pushback_pivot_prop_delta_rad=%.4f hub_shift=%.6f" % [delta_turn, hub_shift])
+	if delta_turn <= 0.1:
+		_invalid("propeller rotation delta zero during PUSHBACK pivot: %.4f" % delta_turn)
+	if prop.position.distance_to(hub_a) > 1e-5:
+		_invalid("propeller hub shifted during PUSHBACK pivot")
+	model = _pose("tp_plane_03a", PlaneClasses.SMALL, FlightSim.State.PUSHBACK, 0.20, 24.0)
 	_add_colliders(_main)
 	_aim(stand_pos + Vector3(0.0, 1.0, 2.0), 155.0, 32.0, 26.0)
 	await _frames(3)
@@ -112,7 +132,7 @@ func _run() -> void:
 	strip.blit_rect(img2, Rect2i(Vector2i.ZERO, TILE_SIZE), Vector2i(TILE_SIZE.x, 0))
 
 	# Tile 3: tp_plane_03a rolling forward out in PUSHBACK (t = 0.75, facing north).
-	model = _pose("tp_plane_03a", PlaneClasses.SMALL, FlightSim.State.PUSHBACK, 0.75)
+	model = _pose("tp_plane_03a", PlaneClasses.SMALL, FlightSim.State.PUSHBACK, 0.75, 90.0)
 	_add_colliders(_main)
 	var back_pos := StandPlacement.pushback_end(_stand)
 	_aim(stand_pos.lerp(back_pos, 0.55) + Vector3(0.0, 1.0, 0.0), 140.0, 32.0, 32.0)
@@ -153,7 +173,7 @@ func _run() -> void:
 	_finish()
 
 
-func _pose(model: String, plane_class: String, state: int, t: float) -> Node3D:
+func _pose(model: String, plane_class: String, state: int, t: float, sim_time := 0.0) -> Node3D:
 	_view.show_model(model)
 	var path := _view._path(FlightSim.State.PUSHBACK, plane_class)
 	var entry := _view._entry_dir(FlightSim.State.PUSHBACK, plane_class)
@@ -176,6 +196,7 @@ func _pose(model: String, plane_class: String, state: int, t: float) -> Node3D:
 	_view.visible = true
 	_view.flight_id = "probe"
 	_view._set_model_position(_view.model_position_at(state, pose, plane_class))
+	_view._spin_propeller(sim_time)
 	_view._follow_props()
 	return _view.get_node("Pivot").get_child(0) as Node3D
 

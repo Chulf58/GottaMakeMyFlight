@@ -138,6 +138,94 @@ func test_small_flight_folds_bridge_hides_tug_and_self_taxis_forward() -> void:
 	view.free()
 
 
+func test_small_flight_propeller_spins_on_hub_when_powered_and_stops_at_gate() -> void:
+	var sim := auto_free(FlightSim.new()) as FlightSim
+	sim.open_airport()
+	var terms := {
+		"id": "C2",
+		"airline": "Gotta Air",
+		"destination": "Bergen",
+		"departure_minute": TestFlightContracts.bootstrap_minute(),
+		"plane_size": PlaneClasses.SMALL,
+		"booked_passengers": 12,
+		"fee_per_passenger": 20,
+	}
+	assert_bool(sim.accept_contract(terms)).is_true()
+	var id := ""
+	for flight in sim.flight_ids():
+		if sim.flight_contract_id(flight) == "C2":
+			id = flight
+	assert_str(id).is_not_empty()
+	var view := PlaneView.new()
+	view.sim = sim
+	view.clock = auto_free(SimClock.new()) as SimClock
+	view.airside = _airside
+	view.gate = sim.flight_gate(id)
+	add_child(view)
+	view.set_process(false)
+	var stand_pos := StandPlacement.stand_point(STAND)
+	# Stopped at the stand (AT_STAND, BOARDING, DOORS_CLOSED): 0 delta across ticks + fraction.
+	for gate_state in [
+		FlightSim.State.AT_STAND, FlightSim.State.BOARDING, FlightSim.State.DOORS_CLOSED
+	]:
+		var gate_tick := sim.state_start(id, gate_state) + 2
+		view.clock.alpha = 0.0
+		_step(view, gate_tick)
+		var model := view.get_node("Pivot").get_child(0) as Node3D
+		var prop := model.find_child(PlaneView.PROPELLER_NODE, true, false) as Node3D
+		assert_object(prop).is_not_null()
+		var basis_a := prop.basis
+		view.clock.alpha = 0.65
+		_step(view, gate_tick + 3)
+		assert_int(view.phase).is_equal(gate_state)
+		assert_bool(prop.basis.is_equal_approx(basis_a)).is_true()
+	# Powered in PUSHBACK t in [0.0, 0.4] while staying on stand_point: pure hub spin, no wobble.
+	var push_start := sim.state_start(id, FlightSim.State.PUSHBACK)
+	var push_end := sim.state_start(id, FlightSim.State.TAXI_OUT)
+	var turn_a := push_start + int((push_end - push_start) * 0.15)
+	view.clock.alpha = 0.10
+	_step(view, turn_a)
+	var model := view.get_node("Pivot").get_child(0) as Node3D
+	var prop := model.find_child(PlaneView.PROPELLER_NODE, true, false) as Node3D
+	var sil := view.get_node("FarShadow").get_child(0) as Node3D
+	var sil_prop := sil.find_child(PlaneView.PROPELLER_NODE, true, false) as Node3D
+	var hub_local := prop.position
+	var hub_rel_a := (model.global_transform.affine_inverse() * prop.global_transform).origin
+	var basis_turn_a := prop.basis
+	var flat_a := Vector2(view.position.x - stand_pos.x, view.position.z - stand_pos.z).length()
+	assert_float(flat_a).is_less(0.01)
+	var turn_b := turn_a + 1
+	view.clock.alpha = 0.60
+	_step(view, turn_b)
+	var hub_rel_b := (model.global_transform.affine_inverse() * prop.global_transform).origin
+	var flat_b := Vector2(view.position.x - stand_pos.x, view.position.z - stand_pos.z).length()
+	var spin_angle := basis_turn_a.x.angle_to(prop.basis.x)
+	assert_int(view.phase).is_equal(FlightSim.State.PUSHBACK)
+	assert_float(flat_b).is_less(0.01)
+	assert_vector(prop.position).is_equal_approx(hub_local, Vector3.ONE * 1e-6)
+	assert_vector(hub_rel_b).is_equal_approx(hub_rel_a, Vector3.ONE * 2e-4)
+	assert_float(prop.basis.y.dot(Vector3.BACK)).is_greater(0.9999)
+	assert_float(spin_angle).is_greater(0.5)
+	assert_bool(sil_prop.basis.is_equal_approx(prop.basis)).is_true()
+	# Other engine-powered phases spin across a tick + fraction advance.
+	for powered_state in [
+		FlightSim.State.APPROACH,
+		FlightSim.State.LANDING,
+		FlightSim.State.TAXI_IN,
+		FlightSim.State.TAXI_OUT,
+		FlightSim.State.TAKEOFF,
+	]:
+		var t0 := sim.state_start(id, powered_state) + 1
+		view.clock.alpha = 0.10
+		_step(view, t0)
+		var b0 := prop.basis
+		view.clock.alpha = 0.60
+		_step(view, t0 + 1)
+		assert_int(view.phase).is_equal(powered_state)
+		assert_float(b0.x.angle_to(prop.basis.x)).is_greater(0.5)
+	view.free()
+
+
 ## A PlaneView in the tree on the gate of a large Polar Jet contract (model 06
 ## or 07, both in the bridge's reach) in a sim of its own.
 func _view_with_large_flight() -> PlaneView:
