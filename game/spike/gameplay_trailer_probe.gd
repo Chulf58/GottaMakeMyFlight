@@ -87,6 +87,7 @@ var _arch_id := 0
 var _hero := 0
 var _flight_a := ""
 var _flight_b := ""
+var _boarding_small := ""
 
 var _main: Node3D
 var _clock: SimClock
@@ -229,6 +230,9 @@ func _boot() -> bool:
 	(_main.get_node("Finances") as Finances).wallet.credit(52000, Wallet.Category.FEES)
 	_unlock_all_tiers()
 	_buy_land_silently()
+	if not _flights.start_works(Runway.MEDIUM) or _flights.runway.size != Runway.MEDIUM:
+		_invalid("boot: failed to upgrade runway to medium (size=%s)" % _flights.runway.size)
+		return false
 	_at = ReferenceTerminal.offset_on(_grid)
 	for b: Dictionary in (_main.get_node("Airside") as Airside).props.bridges.values():
 		(b["node"] as Node3D).visible = false
@@ -245,7 +249,13 @@ func _unlock_all_tiers() -> void:
 	for info: Dictionary in BuildUnlocks.TIERS.slice(1, 3):
 		for tool: BuildMode.Tool in info["tools"]:
 			seen.append(String(BuildMode.Tool.find_key(tool)))
-	var snap := {"tier": 3, "made": 200, "shown": [2, 3], "seen": seen, "firsts": []}
+	var snap := {
+		"tier": 3,
+		"made": 200,
+		"shown": [2, 3],
+		"seen": seen,
+		"firsts": [BigFirsts.OPENING, BigFirsts.RUNWAY],
+	}
 	_mode.unlocks.from_snapshot(snap)
 
 
@@ -396,6 +406,18 @@ func _shot_03_staff() -> void:
 	if hired < 6 or _flights.gate_ids() != ["A", "B"]:
 		_invalid("s03_staff: hired=%d gates=%s" % [hired, _flights.gate_ids()])
 		return
+	var grounds := _flights.gate_grounds()
+	for gid in ["A", "B"]:
+		var max_cls: String = grounds.get(gid, {}).get("max_class", "")
+		if not FlightGround.class_fits(PlaneClasses.MEDIUM, max_cls):
+			_invalid("s03_staff: gate %s max_class='%s' does not fit medium" % [gid, max_cls])
+			return
+	print(
+		(
+			"PROBE s03_staff runway=%s gate_a=%s gate_b=%s"
+			% [_flights.runway.size, grounds["A"]["max_class"], grounds["B"]["max_class"]]
+		)
+	)
 	var hall := _cell(Vector2(18.5, 12.5))
 	_aim(MEDIUM, hall, -0.22, 22.0)
 	var seen := func() -> bool: return _walking_staff().size() >= 2
@@ -505,24 +527,67 @@ func _shot_04_curb() -> void:
 
 func _schedule_extra_flights() -> void:
 	var base_min: int = _flights.contract_of(FlightSim.DEFAULT_ID)["departure_minute"]
-	for later in range(18, 75):
-		var terms := StarterSlot.departing(
-			StarterSlot.whole_minute(FlightTimetable.issue_lead(), 0), 0
-		)
-		terms.merge({"id": "GMF202", "airline": "Blue Fjord", "destination": "Bergen"}, true)
-		terms["departure_minute"] = (base_min + later) % GameCalendar.MINUTES_PER_DAY
-		if _flights.accept_gate(terms) == "B" and _flights.accept_contract(terms):
-			_flight_b = FlightTimetable.occurrence_id("GMF202", int(_flights.start_days["GMF202"]))
+	var last_problem := ""
+	for med_off in range(198, 280, 5):
+		if _flight_b != "":
 			break
-	var specs := "GMF303:720:Lisbon:Sunhop,GMF404:900:Vienna:Nordic Wing"
-	for spec in specs.split(","):
-		var p := spec.split(":")
-		for m_off in [0, 30, 60, 90]:
-			var t := TestFlightContracts.terms(p[0], int(p[1]) + m_off)
-			t.merge({"destination": p[2], "airline": p[3], "plane_size": "small"}, true)
-			t["booked_passengers"] = 14
-			if _flights.accept_problem(t) == "" and _flights.accept_contract(t):
-				break
+		var med_min := (base_min + med_off) % GameCalendar.MINUTES_PER_DAY
+		var med_terms := _extra_terms(
+			"GMF202", med_min, "Blue Fjord", "Bergen", PlaneClasses.MEDIUM, 36
+		)
+		for gap in range(10, 56, 2):
+			var small_min := (base_min + med_off + gap) % GameCalendar.MINUTES_PER_DAY
+			var small_terms := _extra_terms(
+				"GMF303", small_min, "Sunhop", "Lisbon", PlaneClasses.SMALL, 14
+			)
+			var small_trial := _flights.trial_assignment(small_terms)
+			var med_trial := _flights.trial_assignment(med_terms, [small_terms])
+			if small_trial["gate"] == "A" and med_trial["gate"] == "B":
+				if _flights.accept_contract(small_terms) and _flights.accept_contract(med_terms):
+					_boarding_small = FlightTimetable.occurrence_id(
+						"GMF303", int(_flights.start_days["GMF303"])
+					)
+					_flight_b = FlightTimetable.occurrence_id(
+						"GMF202", int(_flights.start_days["GMF202"])
+					)
+					print(
+						(
+							"PROBE s04_curb scheduled small=%s med=%s med_off=%d gap=%d"
+							% [_boarding_small, _flight_b, med_off, gap]
+						)
+					)
+					break
+			last_problem = (
+				"small=%s(%s) med=%s(%s)"
+				% [
+					small_trial["gate"],
+					small_trial["problem"],
+					med_trial["gate"],
+					med_trial["problem"]
+				]
+			)
+	if _boarding_small == "" or _flight_b == "":
+		_invalid(
+			"s04_curb: failed to schedule Gate A small + Gate B medium pair (%s)" % last_problem
+		)
+		return
+	for m_off in [0, 30, 60, 90]:
+		var t := _extra_terms(
+			"GMF404", 900 + m_off, "Nordic Wing", "Vienna", PlaneClasses.SMALL, 14
+		)
+		if _flights.accept_problem(t) == "" and _flights.accept_contract(t):
+			break
+
+
+func _extra_terms(
+	id: String, minute: int, airline: String, dest: String, size: String, pax: int
+) -> Dictionary:
+	var terms := TestFlightContracts.terms(id, minute)
+	terms.merge(
+		{"airline": airline, "destination": dest, "plane_size": size, "booked_passengers": pax},
+		true
+	)
+	return terms
 
 
 ## Shot 05 (14 beats = 8.40 s): Follow every passenger — Check-in to Security.
@@ -786,67 +851,87 @@ func _shot_08_offers() -> void:
 	_end_check("s08_offers", points)
 
 
-## Shot 09 (12 beats = 7.20 s): Two-gate apron boarding & yellow pushback tug.
+## Shot 09 (12 beats = 7.20 s): Two-gate apron (small apron walk + self-taxi, medium pushback tug).
 func _shot_09_boarding() -> void:
 	_beat("s09_boarding")
 	_dismiss_popups()
-	if _flight_b != "":
-		StarterFlight.advance_until(
-			_clock, func() -> bool: return _flights.flight_ids().has(_flight_b), 3200
-		)
-	var push_a := _flights.state_start(_flight_a, FlightSim.State.PUSHBACK)
-	var board_b := (
-		_flights.state_start(_flight_b, FlightSim.State.BOARDING) if _flight_b != "" else push_a
+	if _flight_b == "" or _boarding_small == "":
+		_invalid("s09_boarding: missing scheduled Gate A small / Gate B medium flights")
+		return
+	var issued := await _advance_until(
+		"s09_boarding_issue",
+		func() -> bool:
+			return (
+				_flights.flight_ids().has(_flight_b) and _flights.flight_ids().has(_boarding_small)
+			),
+		5000
 	)
-	var prep_tick := maxi(push_a - 40, board_b + 2)
+	if not issued:
+		_invalid("s09_boarding: flights %s / %s did not issue" % [_boarding_small, _flight_b])
+		return
+	var push_b := _flights.state_start(_flight_b, FlightSim.State.PUSHBACK)
+	var board_small := _flights.state_start(_boarding_small, FlightSim.State.BOARDING)
+	var prep_tick := maxi(push_b - 40, board_small + 2)
 	if _clock.tick < prep_tick:
-		StarterFlight.advance_until(
-			_clock, func() -> bool: return _clock.tick >= prep_tick, prep_tick - _clock.tick + 10
+		await _advance_until(
+			"s09_boarding_prep",
+			func() -> bool: return _clock.tick >= prep_tick,
+			prep_tick - _clock.tick + 10
 		)
-	var board_occ := (
-		_flight_b if _flight_b != "" and _flights.flight_ids().has(_flight_b) else _flight_a
-	)
 	for _i in 8:
-		var bp := _spawn_positioned(board_occ, Vector2i(51, 4), true)
+		var bp := _spawn_positioned(_boarding_small, Vector2i(19, 4), true)
 		bp.carry_on = 1
 		StarterFlight.advance_until(_clock, func() -> bool: return false, 5)
-	if _clock.tick < push_a + 4:
-		StarterFlight.advance_until(
-			_clock, func() -> bool: return _clock.tick >= push_a + 4, push_a + 10 - _clock.tick
+	if _clock.tick < push_b + 4:
+		await _advance_until(
+			"s09_boarding_push",
+			func() -> bool: return _clock.tick >= push_b + 4,
+			push_b + 10 - _clock.tick
 		)
-	var fleet := (_main.get_node("PlaneFleet") as PlaneFleet).views
 	var ready := func() -> bool:
-		fleet = (_main.get_node("PlaneFleet") as PlaneFleet).views
 		(_main.get_node("PlaneFleet") as PlaneFleet).update_views()
-		var walkers := _pax_in([Passenger.Stage.APRON]).size()
-		var tug_on := false
-		for v in fleet:
-			tug_on = tug_on or (v.get_node("Props") as PlaneProps).tug.is_visible_in_tree()
-		return walkers >= 2 and tug_on
-	StarterFlight.advance_until(_clock, ready, 60)
+		var med_view := _gate_plane("B")
+		var tug_on := (
+			med_view != null and (med_view.get_node("Props") as PlaneProps).tug.is_visible_in_tree()
+		)
+		return _pax_in([Passenger.Stage.APRON]).size() >= 2 and _gate_plane("A") != null and tug_on
+	(_main.get_node("PlaneFleet") as PlaneFleet).update_views()
+	var pre_med := _gate_plane("B")
+	var pre_tug := (
+		pre_med != null and (pre_med.get_node("Props") as PlaneProps).tug.is_visible_in_tree()
+	)
+	var w := _pax_in([Passenger.Stage.APRON]).size()
+	print(
+		"PROBE s09 pre t=%d b=%d sm=%d w=%d tug=%s" % [_clock.tick, push_b, board_small, w, pre_tug]
+	)
+	if not await _advance_until("s09_boarding_ready", ready, 90):
+		_invalid("s09_boarding: ready timed out at tick=%d" % _clock.tick)
+		return
 	await _skip_done()
 	_dismiss_popups()
-	var view_a: PlaneView = null
-	var view_b: PlaneView = null
-	for v in fleet:
-		view_a = v if v.gate == "A" and v.visible else view_a
-		view_b = v if v.gate == "B" and v.visible else view_b
-	var tug_pt := _cell(Vector2(18.0, 0.0)) + Vector3(0.0, 1.2, -10.0)
-	if view_a != null:
-		tug_pt = (
-			(view_a.get_node("Props") as PlaneProps).tug.global_position + Vector3(0.0, 1.2, 0.0)
-		)
-	var b_pt := _cell(Vector2(50.0, 0.0)) + Vector3(0.0, 2.2, -10.0)
-	if view_b != null:
-		b_pt = view_b.global_position + Vector3(2.5, 2.2, 0.0)
-	var focus := Vector3((tug_pt.x + b_pt.x) * 0.5 + 3.0, 0.0, -104.0)
-	var points := {"gate_a_tug": tug_pt, "gate_b_plane": b_pt}
-	var pick_view: PlaneView = view_b if view_b != null else view_a
-	var subject: Node3D = (pick_view.get("_model") as Node3D) if pick_view != null else null
+	var view_a := _gate_plane("A")
+	var view_b := _gate_plane("B")
+	if view_a == null or view_b == null:
+		_invalid("s09_boarding: missing gate plane view (a=%s b=%s)" % [view_a, view_b])
+		return
+	var small_tug := (view_a.get_node("Props") as PlaneProps).tug
+	var med_tug := (view_b.get_node("Props") as PlaneProps).tug
+	if small_tug.is_visible_in_tree():
+		_invalid("s09_boarding: small prop plane at Gate A unexpectedly showed a pushback tug")
+		return
+	if not med_tug.is_visible_in_tree():
+		_invalid("s09_boarding: medium plane at Gate B did not show its pushback tug")
+		return
+	var a_pt := view_a.global_position + Vector3(0.0, 1.5, 0.0)
+	var tug_pt := med_tug.global_position + Vector3(0.0, 1.2, 0.0)
+	var b_pt := view_b.global_position + Vector3(2.5, 2.2, 0.0)
+	var focus := Vector3((a_pt.x + tug_pt.x) * 0.5, 0.0, -106.5)
+	var points := {"gate_a_plane": a_pt, "gate_b_tug": tug_pt, "gate_b_plane": b_pt}
+	var subject: Node3D = view_b.get("_model") as Node3D
 	var top_step := int(TycoonCamera.AngleStep.TOP_DOWN)
 	var view := await _stage("s09_boarding", top_step, focus, 0.04, 34.0, points, subject, TRY_YAWS)
 	var yaw: float = view["yaw"]
-	var dist: float = view["dist"]
+	var dist: float = view["dist"] + 6.0
 	var logged := [false]
 	var drive := func(i: int, total: int) -> void:
 		if not logged[0] and i == _handle:
@@ -856,7 +941,7 @@ func _shot_09_boarding() -> void:
 		var t := float(i) / float(maxi(1, total - 1))
 		_aim(top_step, focus, yaw + 0.08 * t, lerpf(dist, dist * 0.94, t))
 	await _record("s09_boarding", 12, drive, true)
-	_end_check("s09_boarding", {"gate_b_plane": b_pt})
+	_end_check("s09_boarding", {"gate_a_plane": a_pt, "gate_b_plane": b_pt})
 
 
 ## Shot 10 (8 beats = 4.80 s): Peak-hour sweeping pull-back over the 2-gate airport.
@@ -884,22 +969,22 @@ func _shot_10_pullback() -> void:
 ## Shot 11 (10 beats = 6.00 s + handle + hold): Runway takeoff + Option A Logo & End Card.
 func _shot_11_takeoff() -> void:
 	_beat("s11_takeoff")
-	var dep_flight := _flight_a
+	var dep_flight := [_flight_a]
 	var rolling := func() -> bool:
 		for fid in _flights.flight_ids():
 			if _flights.state_of(fid) == FlightSim.State.TAKEOFF:
 				var since := _clock.tick - _flights.state_start(fid, FlightSim.State.TAKEOFF)
 				if since >= 45:
-					dep_flight = fid
+					dep_flight[0] = fid
 					return true
 		return false
-	if not StarterFlight.advance_until(_clock, rolling, 5000):
+	if not await _advance_until("s11_takeoff_roll", rolling, 5000):
 		_invalid("s11_takeoff: no flight entered takeoff roll by tick %d" % _clock.tick)
 		return
 	await _skip_done()
-	var plane := _plane_model_for(dep_flight)
+	var plane := _plane_model_for(dep_flight[0])
 	if plane == null:
-		_invalid("s11_takeoff: no plane model for %s" % dep_flight)
+		_invalid("s11_takeoff: no plane model for %s" % dep_flight[0])
 		return
 	var entry := (_main.get_node("Airside/RunwayEntry") as Node3D).global_position
 	var liftoff := (_main.get_node("Airside/Liftoff") as Node3D).global_position
@@ -910,12 +995,20 @@ func _shot_11_takeoff() -> void:
 		yaw += PI
 		forward = -forward
 	yaw += 0.28
-	var lift := 0.7 / tan(deg_to_rad(TycoonCamera.STEP_PITCH_DEGREES[LOW]))
-	var spot := func() -> Vector3:
+	var lift := 1.12 / tan(deg_to_rad(TycoonCamera.STEP_PITCH_DEGREES[LOW]))
+	var spot := func(cam_yaw: float) -> Vector3:
 		var at := plane.global_position
-		return Vector3(at.x, 0.0, at.z) + forward * at.y * lift
-	var points := {"plane": plane.global_position}
-	var view := await _stage("s11_takeoff", LOW, spot.call(), yaw, 52.0, points, plane, TRY_YAWS)
+		return Vector3(at.x, 0.0, at.z) + Vector3(-sin(cam_yaw), 0.0, -cos(cam_yaw)) * at.y * lift
+	var view := await _stage(
+		"s11_takeoff",
+		LOW,
+		spot.call(yaw),
+		yaw,
+		68.0,
+		{"plane": plane.global_position},
+		plane,
+		TRY_YAWS
+	)
 	yaw = view["yaw"]
 	var dist: float = view["dist"]
 	var hidden := _hide_hud()
@@ -926,8 +1019,9 @@ func _shot_11_takeoff() -> void:
 			_log_sfx("prop_rev", {"dur": 165})
 			_log_sfx("takeoff_whoosh")
 		var t := float(i) / float(maxi(1, total - 1))
-		var to: Vector3 = spot.call()
-		_aim(LOW, _rig.position.lerp(to, 0.32), yaw - 0.14 * t, lerpf(dist, dist * 0.86, t))
+		var cur_yaw := yaw - 0.14 * t
+		var to: Vector3 = spot.call(cur_yaw)
+		_aim(LOW, _rig.position.lerp(to, 0.75), cur_yaw, lerpf(dist, dist * 1.05, t))
 	await _record("s11_takeoff", 10, drive, true)
 	for node in hidden:
 		node.set("visible", true)
@@ -1428,6 +1522,47 @@ func _owners() -> Array[Node]:
 func _skip_done() -> void:
 	(_main.get_node("PlaneFleet") as PlaneFleet).update_views()
 	await _frames(4)
+
+
+func _gate_plane(gate_id: String) -> PlaneView:
+	for v in (_main.get_node("PlaneFleet") as PlaneFleet).views:
+		if v.gate == gate_id and v.visible:
+			return v
+	return null
+
+
+func _advance_until(stage_label: String, done: Callable, limit_ticks: int) -> bool:
+	var was_paused := _clock.paused
+	_dismiss_popups()
+	_clock.set_paused(false)
+	var limit := _clock.tick + limit_ticks
+	var next_log := _clock.tick + 1000
+	var met: bool = done.call()
+	while not met and _clock.tick < limit:
+		var chunk_end := mini(limit, _clock.tick + 100)
+		while not met and _clock.tick < chunk_end:
+			if _clock.paused:
+				_dismiss_popups()
+				_clock.set_paused(false)
+			if _clock.paused:
+				var msg := (
+					"%s: held paused t=%d h=%d" % [stage_label, _clock.tick, _clock.holds.count()]
+				)
+				_invalid(msg)
+				return false
+			_clock.advance(SimClock.STEP)
+			met = done.call()
+		if _clock.tick >= next_log:
+			next_log = _clock.tick + 1000
+			var line := (
+				"PROBE %s t=%d/%d pax=%d"
+				% [stage_label, _clock.tick, limit, _sim.passenger_ids().size()]
+			)
+			print(line)
+		_beat(stage_label)
+		await process_frame
+	_clock.set_paused(was_paused)
+	return met
 
 
 func _frames(count: int) -> void:
