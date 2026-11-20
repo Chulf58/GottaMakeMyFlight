@@ -1,14 +1,17 @@
 extends Node
-## The demo audio floor autoload (decision demo-audio-floor-d5-cozy-terminal-
-## ambience-loop-light-tactil): ensures the Master, Ambience and SFX buses exist,
+## The demo audio floor autoload (decisions demo-audio-floor-d5-cozy-terminal-
+## ambience-loop-light-tactil and demo-audio-pa-announcer-and-sound-jokes-
+## e612caf3-procedural): ensures the Master, Ambience and SFX buses exist,
 ## loads and saves per-bus linear volumes and mute state in
 ## user://audio_settings.cfg (shielded during script/test runs just like
 ## HudFlagSetting, so tests never read or overwrite the player's config), loops
-## cozy terminal ambience while a gameplay scene (BuildMode) is in the tree, and
-## plays light tactile UI, build and cash SFX on a fixed child pool with zero
-## orphan nodes.
+## cozy terminal ambience while a gameplay scene (BuildMode) is in the tree,
+## plays tactile UI/build/cash/gameplay/joke SFX on a fixed child pool, and
+## emits warm PA chimes paired with translated dry announcements via
+## pa_announced with cooldowns and load/fast-forward suppression.
 
 signal changed
+signal pa_announced(text: String)
 
 const DEFAULT_SETTINGS_PATH := "user://audio_settings.cfg"
 const SECTION := "audio"
@@ -20,7 +23,12 @@ const DEFAULT_AMBIENCE := 0.7
 const DEFAULT_SFX := 0.8
 const DEFAULT_MUTED := false
 const MIN_LINEAR := 0.0001
-const POOL_SIZE := 6
+const POOL_SIZE := 8
+const PA_COOLDOWN_MS := 7500
+const PA_PRIORITY_COOLDOWN_MS := 2500
+const FINAL_CALL_POLL_TICKS := 10
+const FINAL_CALL_LEAD_TICKS := 300
+const STAR_MILESTONES: Array[float] = [3.0, 4.0, 5.0]
 
 const AMBIENCE_PATH := "res://assets/audio/terminal_ambience.wav"
 const SFX_PATHS := {
@@ -29,6 +37,14 @@ const SFX_PATHS := {
 	&"build_remove": "res://assets/audio/build_remove.wav",
 	&"build_refuse": "res://assets/audio/build_refuse.wav",
 	&"cash_chime": "res://assets/audio/cash_chime.wav",
+	&"security_beep": "res://assets/audio/security_beep.wav",
+	&"pa_chime": "res://assets/audio/pa_chime.wav",
+	&"pa_final_call": "res://assets/audio/pa_final_call.wav",
+	&"close_call_save": "res://assets/audio/close_call_save.wav",
+	&"joke_spill": "res://assets/audio/joke_spill.wav",
+	&"joke_fault": "res://assets/audio/joke_fault.wav",
+	&"joke_queue_horn": "res://assets/audio/joke_queue_horn.wav",
+	&"star_up": "res://assets/audio/star_up.wav",
 }
 const SFX_COOLDOWN_MS := {
 	&"ui_click": 25,
@@ -36,6 +52,14 @@ const SFX_COOLDOWN_MS := {
 	&"build_remove": 45,
 	&"build_refuse": 80,
 	&"cash_chime": 450,
+	&"security_beep": 1400,
+	&"pa_chime": PA_PRIORITY_COOLDOWN_MS,
+	&"pa_final_call": PA_PRIORITY_COOLDOWN_MS,
+	&"close_call_save": 4500,
+	&"joke_spill": 4000,
+	&"joke_fault": 4000,
+	&"joke_queue_horn": 15000,
+	&"star_up": 6000,
 }
 
 ## Shielded settings path during -s / --script runs (anti-pattern 1639342a).
@@ -49,6 +73,7 @@ var save_count := 0
 
 var _ambience_player: AudioStreamPlayer
 var _ambience_playing := false
+var _pa_player: AudioStreamPlayer
 var _sfx_players: Array[AudioStreamPlayer] = []
 var _sfx_streams: Dictionary = {}
 var _sfx_cursor := 0
@@ -57,6 +82,24 @@ var _sfx_counts: Dictionary = {}
 var _last_played_ms: Dictionary = {}
 var _gameplay_nodes: Array[Node] = []
 var _desk_open_ids: Dictionary = {}
+var _desks_by_id: Dictionary = {}
+var _clock: SimClock
+var _flights: FlightSim
+var _passengers: PassengerSim
+var _incidents: IncidentDirector
+var _rating: AirportRating
+var _save_game: SaveGame
+var _suppress_events := false
+var _last_pa_ms := -1
+var _last_final_call_check_tick := -FINAL_CALL_POLL_TICKS
+var _prev_stage: Dictionary = {}
+var _announced_boarding: Dictionary = {}
+var _announced_final_call: Dictionary = {}
+var _announced_rush_ids: Dictionary = {}
+var _close_call_flights: Dictionary = {}
+var _close_call_counts: Dictionary = {}
+var _last_rating_stars := -1.0
+var _clock_ms := Callable()
 
 
 func _ready() -> void:
@@ -131,7 +174,7 @@ func save_settings() -> void:
 	save_count += 1
 
 
-## Restores default buses, paths, counters and playback state for test teardown.
+## Restores default buses, paths, counters, cooldowns and PA tracking for tests.
 func reset_for_test() -> void:
 	protected_path = DEFAULT_SETTINGS_PATH
 	settings_path = DEFAULT_SETTINGS_PATH
@@ -139,8 +182,21 @@ func reset_for_test() -> void:
 	_last_sfx = &""
 	_sfx_counts.clear()
 	_last_played_ms.clear()
+	_suppress_events = false
+	_last_pa_ms = -1
+	_last_final_call_check_tick = -FINAL_CALL_POLL_TICKS
+	_prev_stage.clear()
+	_announced_boarding.clear()
+	_announced_final_call.clear()
+	_announced_rush_ids.clear()
+	_close_call_flights.clear()
+	_close_call_counts.clear()
+	_last_rating_stars = -1.0
+	_clock_ms = Callable()
 	for player in _sfx_players:
 		player.stop()
+	if _pa_player != null:
+		_pa_player.stop()
 	load_settings(DEFAULT_SETTINGS_PATH)
 	_sync_ambience()
 
@@ -184,7 +240,7 @@ func is_ambience_playing() -> bool:
 func play_sfx(sfx_id: StringName, ignore_cooldown := false) -> bool:
 	if not _sfx_streams.has(sfx_id) or _sfx_players.is_empty():
 		return false
-	var now := Time.get_ticks_msec()
+	var now := _now_ms()
 	var cooldown := int(SFX_COOLDOWN_MS.get(sfx_id, 0))
 	if not ignore_cooldown and _last_played_ms.has(sfx_id):
 		if now - int(_last_played_ms[sfx_id]) < cooldown:
@@ -207,8 +263,60 @@ func sfx_count(sfx_id: StringName) -> int:
 	return int(_sfx_counts.get(sfx_id, 0))
 
 
+func _now_ms() -> int:
+	return int(_clock_ms.call()) if _clock_ms.is_valid() else Time.get_ticks_msec()
+
+
 func _is_shielded(path: String) -> bool:
 	return path == protected_path and Hints.launched_by_script(OS.get_cmdline_args())
+
+
+func _is_fast_forwarding() -> bool:
+	return is_instance_valid(_clock) and _clock.is_fast_forwarding()
+
+
+func _is_paused() -> bool:
+	return is_instance_valid(_clock) and _clock.paused
+
+
+func _can_announce_pa() -> bool:
+	if muted or master_volume <= MIN_LINEAR or sfx_volume <= MIN_LINEAR:
+		return false
+	return not _is_fast_forwarding() and not _is_paused()
+
+
+func _play_sim_sfx(sfx_id: StringName) -> bool:
+	if _suppress_events or _is_fast_forwarding():
+		return false
+	return play_sfx(sfx_id)
+
+
+func _announce_pa(chime_id: StringName, text: String, priority := false) -> bool:
+	if text == "" or _suppress_events or not _can_announce_pa():
+		return false
+	var now := _now_ms()
+	var cooldown := PA_PRIORITY_COOLDOWN_MS if priority else PA_COOLDOWN_MS
+	if _last_pa_ms >= 0 and now - _last_pa_ms < cooldown:
+		return false
+	if chime_id != &"" and not _play_on_pa_player(chime_id, now, cooldown):
+		return false
+	_last_pa_ms = now
+	pa_announced.emit(text)
+	return true
+
+
+func _play_on_pa_player(chime_id: StringName, now: int, min_gap_ms: int) -> bool:
+	if not _sfx_streams.has(chime_id) or _pa_player == null:
+		return false
+	var cooldown := maxi(min_gap_ms, int(SFX_COOLDOWN_MS.get(chime_id, 0)))
+	if _last_played_ms.has(chime_id) and now - int(_last_played_ms[chime_id]) < cooldown:
+		return false
+	_last_played_ms[chime_id] = now
+	_pa_player.stream = _sfx_streams[chime_id]
+	_pa_player.play()
+	_last_sfx = chime_id
+	_sfx_counts[chime_id] = int(_sfx_counts.get(chime_id, 0)) + 1
+	return true
 
 
 func _ensure_bus(bus_name: StringName) -> void:
@@ -252,6 +360,10 @@ func _setup_players() -> void:
 		var stream := load(SFX_PATHS[id]) as AudioStream
 		if stream != null:
 			_sfx_streams[id] = stream
+	_pa_player = AudioStreamPlayer.new()
+	_pa_player.name = "PAPlayer"
+	_pa_player.bus = BUS_SFX
+	add_child(_pa_player)
 	for i in POOL_SIZE:
 		var player := AudioStreamPlayer.new()
 		player.name = "SFXPlayer%d" % i
@@ -282,6 +394,18 @@ func _on_node_added(node: Node) -> void:
 		_when_ready(node, _bind_flight_sim.bind(node))
 	elif node is OfferDesk:
 		_when_ready(node, _bind_offer_desk.bind(node))
+	elif node is SimClock:
+		_when_ready(node, _bind_clock.bind(node))
+	elif node is PassengerSim:
+		_when_ready(node, _bind_passenger_sim.bind(node))
+	elif node is IncidentDirector:
+		_when_ready(node, _bind_incident_director.bind(node))
+	elif node is AirportRating:
+		_when_ready(node, _bind_airport_rating.bind(node))
+	elif node is AlertStack:
+		_when_ready(node, _bind_alert_stack.bind(node))
+	elif node is SaveGame:
+		_when_ready(node, _bind_save_game.bind(node))
 
 
 func _when_ready(node: Node, callback: Callable) -> void:
@@ -338,11 +462,172 @@ func _bind_finances(finances: Finances) -> void:
 		finances.wallet.transaction.connect(_on_wallet_transaction)
 
 
-func _bind_flight_sim(flights: FlightSim) -> void:
-	if not is_instance_valid(flights):
+func _bind_clock(clock: SimClock) -> void:
+	if not is_instance_valid(clock) or not clock.is_inside_tree():
 		return
-	if not flights.state_changed.is_connected(_on_flight_state):
-		flights.state_changed.connect(_on_flight_state)
+	if (
+		is_instance_valid(_clock)
+		and _clock != clock
+		and _clock.ticked.is_connected(_on_clock_ticked)
+	):
+		_clock.ticked.disconnect(_on_clock_ticked)
+	_clock = clock
+	_last_final_call_check_tick = -FINAL_CALL_POLL_TICKS
+	if not clock.ticked.is_connected(_on_clock_ticked):
+		clock.ticked.connect(_on_clock_ticked)
+	var on_exit := _on_clock_exited.bind(clock)
+	if not clock.tree_exiting.is_connected(on_exit):
+		clock.tree_exiting.connect(on_exit, CONNECT_ONE_SHOT)
+
+
+func _on_clock_exited(clock: SimClock) -> void:
+	if is_instance_valid(clock) and clock.ticked.is_connected(_on_clock_ticked):
+		clock.ticked.disconnect(_on_clock_ticked)
+	if _clock == clock:
+		_clock = null
+		_last_final_call_check_tick = -FINAL_CALL_POLL_TICKS
+
+
+func _bind_flight_sim(flights: FlightSim) -> void:
+	if not is_instance_valid(flights) or not flights.is_inside_tree():
+		return
+	_flights = flights
+	_seed_flights(flights)
+	var on_state := _on_flight_state.bind(flights)
+	if not flights.state_changed.is_connected(on_state):
+		flights.state_changed.connect(on_state)
+	var on_loaded := _on_snapshot_loaded.bind(flights)
+	if not flights.snapshot_loaded.is_connected(on_loaded):
+		flights.snapshot_loaded.connect(on_loaded)
+	var on_exit := _on_flight_sim_exited.bind(flights)
+	if not flights.tree_exiting.is_connected(on_exit):
+		flights.tree_exiting.connect(on_exit, CONNECT_ONE_SHOT)
+
+
+func _on_flight_sim_exited(flights: FlightSim) -> void:
+	if is_instance_valid(flights):
+		var on_state := _on_flight_state.bind(flights)
+		if flights.state_changed.is_connected(on_state):
+			flights.state_changed.disconnect(on_state)
+		var on_loaded := _on_snapshot_loaded.bind(flights)
+		if flights.snapshot_loaded.is_connected(on_loaded):
+			flights.snapshot_loaded.disconnect(on_loaded)
+	if _flights == flights:
+		_flights = null
+		_announced_boarding.clear()
+		_announced_final_call.clear()
+
+
+func _bind_passenger_sim(sim: PassengerSim) -> void:
+	if not is_instance_valid(sim) or not sim.is_inside_tree():
+		return
+	_passengers = sim
+	_seed_passengers(sim)
+	var on_stage := _on_passenger_stage_changed.bind(sim)
+	if not sim.stage_changed.is_connected(on_stage):
+		sim.stage_changed.connect(on_stage)
+	var on_outcome := _on_passenger_outcome.bind(sim)
+	if not sim.outcome.is_connected(on_outcome):
+		sim.outcome.connect(on_outcome)
+	var on_exit := _on_passenger_sim_exited.bind(sim)
+	if not sim.tree_exiting.is_connected(on_exit):
+		sim.tree_exiting.connect(on_exit, CONNECT_ONE_SHOT)
+
+
+func _on_passenger_sim_exited(sim: PassengerSim) -> void:
+	if is_instance_valid(sim):
+		var on_stage := _on_passenger_stage_changed.bind(sim)
+		if sim.stage_changed.is_connected(on_stage):
+			sim.stage_changed.disconnect(on_stage)
+		var on_outcome := _on_passenger_outcome.bind(sim)
+		if sim.outcome.is_connected(on_outcome):
+			sim.outcome.disconnect(on_outcome)
+	if _passengers == sim:
+		_passengers = null
+		_prev_stage.clear()
+		_close_call_flights.clear()
+		_close_call_counts.clear()
+
+
+func _bind_incident_director(director: IncidentDirector) -> void:
+	if not is_instance_valid(director) or not director.is_inside_tree():
+		return
+	_incidents = director
+	_seed_incidents(director)
+	if not director.started.is_connected(_on_incident_started):
+		director.started.connect(_on_incident_started)
+	if not director.restored.is_connected(_on_incidents_restored):
+		director.restored.connect(_on_incidents_restored)
+	var on_exit := _on_incident_director_exited.bind(director)
+	if not director.tree_exiting.is_connected(on_exit):
+		director.tree_exiting.connect(on_exit, CONNECT_ONE_SHOT)
+
+
+func _on_incident_director_exited(director: IncidentDirector) -> void:
+	if is_instance_valid(director):
+		if director.started.is_connected(_on_incident_started):
+			director.started.disconnect(_on_incident_started)
+		if director.restored.is_connected(_on_incidents_restored):
+			director.restored.disconnect(_on_incidents_restored)
+	if _incidents == director:
+		_incidents = null
+		_announced_rush_ids.clear()
+
+
+func _bind_airport_rating(rating: AirportRating) -> void:
+	if not is_instance_valid(rating) or not rating.is_inside_tree():
+		return
+	_rating = rating
+	_last_rating_stars = rating.stars() if rating.has_data() else -1.0
+	var on_changed := _on_rating_changed.bind(rating)
+	if not rating.changed.is_connected(on_changed):
+		rating.changed.connect(on_changed)
+	var on_exit := _on_airport_rating_exited.bind(rating)
+	if not rating.tree_exiting.is_connected(on_exit):
+		rating.tree_exiting.connect(on_exit, CONNECT_ONE_SHOT)
+
+
+func _on_airport_rating_exited(rating: AirportRating) -> void:
+	if is_instance_valid(rating):
+		var on_changed := _on_rating_changed.bind(rating)
+		if rating.changed.is_connected(on_changed):
+			rating.changed.disconnect(on_changed)
+	if _rating == rating:
+		_rating = null
+		_last_rating_stars = -1.0
+
+
+func _bind_alert_stack(stack: AlertStack) -> void:
+	if not is_instance_valid(stack) or not stack.is_inside_tree():
+		return
+	if not stack.alert_raised.is_connected(_on_alert_raised):
+		stack.alert_raised.connect(_on_alert_raised)
+	var on_exit := _on_alert_stack_exited.bind(stack)
+	if not stack.tree_exiting.is_connected(on_exit):
+		stack.tree_exiting.connect(on_exit, CONNECT_ONE_SHOT)
+
+
+func _on_alert_stack_exited(stack: AlertStack) -> void:
+	if is_instance_valid(stack) and stack.alert_raised.is_connected(_on_alert_raised):
+		stack.alert_raised.disconnect(_on_alert_raised)
+
+
+func _bind_save_game(save_game: SaveGame) -> void:
+	if not is_instance_valid(save_game) or not save_game.is_inside_tree():
+		return
+	_save_game = save_game
+	if not save_game.loaded.is_connected(_on_save_loaded):
+		save_game.loaded.connect(_on_save_loaded)
+	var on_exit := _on_save_game_exited.bind(save_game)
+	if not save_game.tree_exiting.is_connected(on_exit):
+		save_game.tree_exiting.connect(on_exit, CONNECT_ONE_SHOT)
+
+
+func _on_save_game_exited(save_game: SaveGame) -> void:
+	if is_instance_valid(save_game) and save_game.loaded.is_connected(_on_save_loaded):
+		save_game.loaded.disconnect(_on_save_loaded)
+	if _save_game == save_game:
+		_save_game = null
 
 
 func _bind_offer_desk(desk: OfferDesk) -> void:
@@ -350,6 +635,7 @@ func _bind_offer_desk(desk: OfferDesk) -> void:
 		return
 	var id := desk.get_instance_id()
 	_desk_open_ids[id] = _open_offer_ids(desk.board)
+	_desks_by_id[id] = desk
 	var on_changed := _on_board_changed.bind(desk)
 	if not desk.board.changed.is_connected(on_changed):
 		desk.board.changed.connect(on_changed)
@@ -360,6 +646,7 @@ func _bind_offer_desk(desk: OfferDesk) -> void:
 
 func _on_desk_exited(desk_id: int) -> void:
 	_desk_open_ids.erase(desk_id)
+	_desks_by_id.erase(desk_id)
 
 
 func _open_offer_ids(board: OfferBoard) -> Array[String]:
@@ -376,6 +663,8 @@ func _on_board_changed(desk: OfferDesk) -> void:
 	var before: Array = _desk_open_ids.get(id, [])
 	var now := _open_offer_ids(desk.board)
 	_desk_open_ids[id] = now
+	if _suppress_events:
+		return
 	for offer_id: String in before:
 		if not now.has(offer_id):
 			var rec := desk.board.offer_of(offer_id)
@@ -407,14 +696,228 @@ func _on_edit_refused(_edit: BuildEdit, _result: BuildResult) -> void:
 	play_sfx(&"build_refuse")
 
 
-func _on_flight_state(_flight_id: String, new_state: int) -> void:
+func _on_clock_ticked(tick: int) -> void:
+	if (
+		tick >= _last_final_call_check_tick
+		and tick - _last_final_call_check_tick < FINAL_CALL_POLL_TICKS
+	):
+		return
+	_last_final_call_check_tick = tick
+	if _suppress_events or not _can_announce_pa():
+		return
+	if is_instance_valid(_flights):
+		for flight_id in _flights.flight_ids():
+			if _flights.state_of(flight_id) != FlightSim.State.BOARDING:
+				continue
+			if _announced_final_call.has(flight_id):
+				continue
+			var window := _flights.boarding_window(flight_id)
+			if window.y >= 0 and window.y - tick <= FINAL_CALL_LEAD_TICKS:
+				if _announce_pa(&"pa_final_call", PaWords.final_call(_flights, flight_id), true):
+					_announced_final_call[flight_id] = true
+	_check_rush_announcements(tick)
+
+
+func _check_rush_announcements(tick: int) -> void:
+	if not is_instance_valid(_incidents):
+		return
+	for incident in _incidents.incidents():
+		if incident.get("kind", "") != IncidentCatalogue.RUSH:
+			continue
+		if incident.get("state", "") != IncidentCatalogue.ANNOUNCED:
+			continue
+		var inc_id := int(incident.get("id", -1))
+		if inc_id < 0 or _announced_rush_ids.has(inc_id):
+			continue
+		var until := int((incident.get("plan", {}) as Dictionary).get("until", -1))
+		if until < 0:
+			continue
+		var rush_start := until - GameCalendar.TICKS_PER_DAY
+		if tick >= rush_start and tick < until:
+			if _announce_pa(&"pa_chime", PaWords.rush(), true):
+				_announced_rush_ids[inc_id] = true
+
+
+func _on_flight_state(flight_id: String, new_state: int, flights: FlightSim) -> void:
+	if _suppress_events or _is_fast_forwarding():
+		return
 	if new_state == FlightSim.State.DEPARTED:
 		play_sfx(&"cash_chime")
+	elif new_state == FlightSim.State.BOARDING:
+		if not _announced_boarding.has(flight_id):
+			_announced_boarding[flight_id] = true
+			_announce_pa(&"pa_chime", PaWords.boarding(flights, flight_id), false)
+
+
+func _on_snapshot_loaded(flights: FlightSim) -> void:
+	_suppress_events = true
+	_seed_flights(flights)
+	_seed_state()
+	call_deferred("_end_suppress")
+
+
+func _on_incidents_restored() -> void:
+	_suppress_events = true
+	_seed_state()
+	call_deferred("_end_suppress")
+
+
+func _on_save_loaded(_ok: bool) -> void:
+	_end_suppress()
+
+
+func _end_suppress() -> void:
+	_seed_state()
+	_suppress_events = false
+
+
+func _seed_state() -> void:
+	if is_instance_valid(_flights):
+		_seed_flights(_flights)
+	if is_instance_valid(_passengers):
+		_seed_passengers(_passengers)
+	if is_instance_valid(_incidents):
+		_seed_incidents(_incidents)
+	if is_instance_valid(_rating):
+		_last_rating_stars = _rating.stars() if _rating.has_data() else -1.0
+	for desk_id: int in _desks_by_id.keys():
+		var desk := _desks_by_id[desk_id] as OfferDesk
+		if is_instance_valid(desk) and desk.board != null:
+			_desk_open_ids[desk_id] = _open_offer_ids(desk.board)
+	_last_final_call_check_tick = (
+		_clock.tick if is_instance_valid(_clock) else -FINAL_CALL_POLL_TICKS
+	)
+
+
+func _seed_flights(flights: FlightSim) -> void:
+	_announced_boarding.clear()
+	_announced_final_call.clear()
+	for flight_id in flights.flight_ids():
+		var state := flights.state_of(flight_id)
+		if state >= FlightSim.State.BOARDING:
+			_announced_boarding[flight_id] = true
+		if state > FlightSim.State.BOARDING:
+			_announced_final_call[flight_id] = true
+		elif state == FlightSim.State.BOARDING:
+			var window := flights.boarding_window(flight_id)
+			if window.y >= 0 and window.y - flights.tick <= FINAL_CALL_LEAD_TICKS:
+				_announced_final_call[flight_id] = true
+
+
+func _seed_passengers(sim: PassengerSim) -> void:
+	_prev_stage.clear()
+	_close_call_flights.clear()
+	_close_call_counts.clear()
+	for id in sim.passenger_ids():
+		var p := sim.get_passenger(id)
+		if p != null:
+			_prev_stage[id] = p.stage
+	for flight_id: String in sim.flight_results.keys():
+		var cc := int(sim.flight_results[flight_id].get("close_calls", 0))
+		_close_call_counts[flight_id] = cc
+		if cc > 0:
+			_close_call_flights[flight_id] = true
+
+
+func _seed_incidents(director: IncidentDirector) -> void:
+	_announced_rush_ids.clear()
+	var cur_tick := (
+		_clock.tick
+		if is_instance_valid(_clock)
+		else (_flights.tick if is_instance_valid(_flights) else 0)
+	)
+	for incident in director.incidents():
+		if incident.get("kind", "") != IncidentCatalogue.RUSH:
+			continue
+		if incident.get("state", "") != IncidentCatalogue.ANNOUNCED:
+			continue
+		var until := int((incident.get("plan", {}) as Dictionary).get("until", -1))
+		if until >= 0 and cur_tick >= until - GameCalendar.TICKS_PER_DAY:
+			_announced_rush_ids[int(incident.get("id", -1))] = true
+
+
+func _on_passenger_stage_changed(id: int, stage: Passenger.Stage, _sim: PassengerSim) -> void:
+	var prev: int = _prev_stage.get(id, -1)
+	_prev_stage[id] = stage
+	if prev == Passenger.Stage.SECURITY and stage == Passenger.Stage.TO_GATE:
+		_play_sim_sfx(&"security_beep")
+
+
+func _on_passenger_outcome(id: int, made: bool, sim: PassengerSim) -> void:
+	_prev_stage.erase(id)
+	if not made or _suppress_events or _is_fast_forwarding() or not is_instance_valid(sim):
+		return
+	var p := sim.get_passenger(id)
+	if p == null or p.flight_id == "":
+		return
+	var res: Dictionary = sim.flight_results.get(p.flight_id, {})
+	var cc := int(res.get("close_calls", 0))
+	var prev_cc := int(_close_call_counts.get(p.flight_id, 0))
+	_close_call_counts[p.flight_id] = cc
+	var doors_close := _flights.doors_close_tick(p.flight_id) if is_instance_valid(_flights) else -1
+	var within_ticks := (
+		p.outcome_tick >= 0
+		and doors_close >= 0
+		and doors_close - p.outcome_tick <= PassengerLifecycle.CLOSE_CALL_TICKS
+	)
+	if (cc > prev_cc or within_ticks) and not _close_call_flights.has(p.flight_id):
+		_close_call_flights[p.flight_id] = true
+		play_sfx(&"close_call_save")
+		_announce_pa(&"", PaWords.close_call_for(_flights, p.flight_id), false)
+
+
+func _on_incident_started(incident: Dictionary) -> void:
+	if _suppress_events or _is_fast_forwarding():
+		return
+	var kind := String(incident.get("kind", ""))
+	if kind == IncidentCatalogue.SPILL:
+		play_sfx(&"joke_spill")
+		_announce_pa(&"", PaWords.spill(), true)
+	elif kind == IncidentCatalogue.FAULT:
+		play_sfx(&"joke_fault")
+		_announce_pa(&"", PaWords.fault(), true)
+	elif kind == IncidentCatalogue.RUSH:
+		var inc_id := int(incident.get("id", -1))
+		if (
+			(inc_id < 0 or not _announced_rush_ids.has(inc_id))
+			and _announce_pa(&"pa_chime", PaWords.rush(), true)
+		):
+			if inc_id >= 0:
+				_announced_rush_ids[inc_id] = true
+
+
+func _on_rating_changed(rating: AirportRating) -> void:
+	if not is_instance_valid(rating) or not rating.has_data():
+		_last_rating_stars = -1.0
+		return
+	var current := rating.stars()
+	var prev := _last_rating_stars
+	_last_rating_stars = current
+	if _suppress_events or _is_fast_forwarding() or prev < 0.0:
+		return
+	var crossed := false
+	for milestone in STAR_MILESTONES:
+		if prev < milestone and current >= milestone:
+			crossed = true
+	if crossed:
+		play_sfx(&"star_up")
+		_announce_pa(&"", PaWords.star_milestone("%.1f" % current), true)
+
+
+func _on_alert_raised(key: StringName) -> void:
+	if _suppress_events or _is_fast_forwarding():
+		return
+	if key == AlertSources.QUEUE_CHECKIN:
+		play_sfx(&"joke_queue_horn")
+		_announce_pa(&"", PaWords.queue_checkin(), false)
+	elif key == AlertSources.QUEUE_SECURITY:
+		play_sfx(&"joke_queue_horn")
+		_announce_pa(&"", PaWords.queue_security(), false)
 
 
 ## Lump-sum rewards only (never per-passenger FEES, SHOP or PARKING ticks).
 func _on_wallet_transaction(amount: int, category: int, _claimed: Dictionary, _tick: int) -> void:
-	if amount <= 0:
+	if amount <= 0 or _suppress_events or _is_fast_forwarding():
 		return
 	var lump_rewards := [
 		Wallet.Category.GRANT,

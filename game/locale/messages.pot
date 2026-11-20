@@ -6004,3 +6004,93 @@ msgstr[1] ""
 #: ui/departures_board.gd
 msgid "Follow the tightest running-late passenger"
 msgstr ""
+
+#: audio/pa_words.gd
+msgctxt "pa"
+msgid "PA: Boarding now for {airline} to {city} at Gate {gate}."
+msgstr ""
+
+#: audio/pa_words.gd
+msgctxt "pa"
+msgid "PA: Boarding now for {airline} to {city}."
+msgstr ""
+
+#: audio/pa_words.gd
+msgctxt "pa"
+msgid "PA: Boarding now for {flight} at Gate {gate}."
+msgstr ""
+
+#: audio/pa_words.gd
+msgctxt "pa"
+msgid "PA: Boarding now for {flight}."
+msgstr ""
+
+#: audio/pa_words.gd
+msgctxt "pa"
+msgid "PA: Final call for {airline} to {city} at Gate {gate}. Doors close soon."
+msgstr ""
+
+#: audio/pa_words.gd
+msgctxt "pa"
+msgid "PA: Final call for {airline} to {city}. Doors close soon."
+msgstr ""
+
+#: audio/pa_words.gd
+msgctxt "pa"
+msgid "PA: Final call for {flight} at Gate {gate}. Doors close soon."
+msgstr ""
+
+#: audio/pa_words.gd
+msgctxt "pa"
+msgid "PA: Final call for {flight}. Doors close soon."
+msgstr ""
+
+#: audio/pa_words.gd
+msgctxt "pa"
+msgid "PA: A minor beverage incident in the terminal. Please step around the enthusiasm."
+msgstr ""
+
+#: audio/pa_words.gd
+msgctxt "pa"
+msgid "PA: One security scanner has paused for a brief reset. Other lanes remain open."
+msgstr ""
+
+#: audio/pa_words.gd
+msgctxt "pa"
+msgid "PA: A seasonal rush is arriving. Everyone is early except the queue."
+msgstr ""
+
+#: audio/pa_words.gd
+msgctxt "pa"
+msgid "PA: Check-in queue is full. Please admire the terminal flooring while waiting."
+msgstr ""
+
+#: audio/pa_words.gd
+msgctxt "pa"
+msgid "PA: Security queue is full. Take a moment to pre-untie your shoes."
+msgstr ""
+
+#: audio/pa_words.gd
+msgctxt "pa"
+msgid "PA: Bravo to the passenger who caught {airline} to {city} at Gate {gate} just in time."
+msgstr ""
+
+#: audio/pa_words.gd
+msgctxt "pa"
+msgid "PA: Bravo to the passenger who caught {airline} to {city} just in time."
+msgstr ""
+
+#: audio/pa_words.gd
+msgctxt "pa"
+msgid "PA: Bravo to the passenger who caught {flight} at Gate {gate} just in time."
+msgstr ""
+
+#: audio/pa_words.gd
+msgctxt "pa"
+msgid "PA: Bravo to the passenger who caught {flight} with seconds to spare."
+msgstr ""
+
+#: audio/pa_words.gd
+msgctxt "pa"
+msgid "PA: Our terminal is now rated {stars} stars. Same carpet, slightly prouder management."
+msgstr ""
