@@ -21,9 +21,16 @@ func fill(paths: Array[String], manual_path: String) -> void:
 	for path in _paths:
 		var button := Button.new()
 		button.name = "Save%d" % get_child_count()
-		button.text = tr("{slot}, {time}").format(
-			{"slot": _slot_name(path, manual_path), "time": _saved_at(path)}
-		)
+		var values := {"slot": _slot_name(path, manual_path), "time": _saved_at(path)}
+		var ver := SaveSlots.file_save_version(path)
+		if ver == SaveGame.SAVE_VERSION:
+			button.text = tr("{slot}, {time}").format(values)
+		elif ver < 0:
+			button.text = tr("{slot}, {time} (Unreadable)").format(values)
+		elif ver < SaveGame.SAVE_VERSION:
+			button.text = tr("{slot}, {time} (Older version)").format(values)
+		else:
+			button.text = tr("{slot}, {time} (Newer version)").format(values)
 		button.focus_mode = Control.FOCUS_NONE
 		button.pressed.connect(func() -> void: chosen.emit(path))
 		add_child(button)

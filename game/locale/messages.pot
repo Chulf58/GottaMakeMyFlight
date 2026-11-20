@@ -5957,6 +5957,34 @@ msgstr ""
 msgid "Demo limit: 1 extra plot (more in the full game)"
 msgstr ""
 
+#: ui/title_screen.gd ui/demo_end_card.gd
+msgid "Send Feedback"
+msgstr ""
+
+#: ui/save_list.gd
+msgid "{slot}, {time} (Older version)"
+msgstr ""
+
+#: core/save_game.gd ui/title_screen.gd
+msgid "This save is from an older version and cannot be loaded after an update. Please start a New Airport."
+msgstr ""
+
+#: core/save_game.gd ui/title_screen.gd
+msgid "This save file cannot be read."
+msgstr ""
+
+#: core/save_game.gd ui/title_screen.gd
+msgid "This save is from a newer version and cannot be loaded. Please update the game."
+msgstr ""
+
+#: ui/save_list.gd
+msgid "{slot}, {time} (Unreadable)"
+msgstr ""
+
+#: ui/save_list.gd
+msgid "{slot}, {time} (Newer version)"
+msgstr ""
+
 #: passengers/passenger_thoughts.gd
 msgid "Made my flight at the last second!"
 msgstr ""

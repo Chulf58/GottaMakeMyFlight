@@ -557,20 +557,39 @@ func _install(part: SavePart, data: Dictionary) -> bool:
 func _shape_problem(data: Variant) -> String:
 	if typeof(data) != TYPE_DICTIONARY:
 		return "the save is not a dictionary"
+	var dict := data as Dictionary
+	var version_problem := _version_problem(dict)
+	if version_problem != "":
+		return version_problem
 	var keys := ["save_version"]
 	for part in parts():
 		keys.append(part.key)
-	for key in (data as Dictionary).keys():
+	for key in dict.keys():
 		if not keys.has(key):
 			return "unknown key '%s'" % key
 	for key in keys:
-		if not (data as Dictionary).has(key) and not OPTIONAL_PARTS.has(key):
+		if not dict.has(key) and not OPTIONAL_PARTS.has(key):
 			return "missing key '%s'" % key
-	if not WholeNumber.is_whole(data["save_version"]) or int(data["save_version"]) != SAVE_VERSION:
-		return "save_version must be %d" % SAVE_VERSION
 	for key in keys.slice(1):
-		if (data as Dictionary).has(key) and typeof(data[key]) != TYPE_DICTIONARY:
+		if dict.has(key) and typeof(dict[key]) != TYPE_DICTIONARY:
 			return "part '%s' is not a dictionary" % key
+	return ""
+
+
+func _version_problem(dict: Dictionary) -> String:
+	if not dict.has("save_version"):
+		return "missing key 'save_version'"
+	var raw: Variant = dict["save_version"]
+	if not WholeNumber.is_whole(raw) or int(raw) < 0:
+		return tr("This save file cannot be read.")
+	var version := int(raw)
+	if version < SAVE_VERSION:
+		return tr(
+			# gdlint:ignore = max-line-length
+			"This save is from an older version and cannot be loaded after an update. Please start a New Airport."
+		)
+	if version > SAVE_VERSION:
+		return tr("This save is from a newer version and cannot be loaded. Please update the game.")
 	return ""
 
 

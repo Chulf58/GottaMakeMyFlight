@@ -147,7 +147,7 @@ func test_a_version_6_save_from_the_toon_shell_is_refused() -> void:
 		old["save_version"] = version
 		_assert_refused(old, "version %d" % version)
 		print("version %d: '%s'" % [version, _save.message_text()])
-		assert_str(_save.message_text()).contains("save_version must be 26")
+		assert_str(_save.message_text()).contains("older version")
 
 
 ## A grid saved in another frame than the site's (the Toon shell's 66 x 30
@@ -174,7 +174,7 @@ func test_a_bad_top_level_shape_is_refused() -> void:
 	for case in [
 		[unknown, "unknown key"],
 		[missing, "missing key"],
-		[version, "save_version"],
+		[version, "newer version"],
 		[not_a_part, "is not a dictionary"],
 	]:
 		_assert_refused(case[0], case[1])

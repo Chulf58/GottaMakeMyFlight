@@ -26,6 +26,10 @@ const WISHLIST_URL := ""
 var change_scene: Callable
 ## Quits the game; tests swap in a recorder.
 var quit_game: Callable
+## Opens an external URL; tests swap in a recorder.
+var open_url: Callable
+## Feedback URL shown by the Send Feedback button; hidden when empty.
+var feedback_url: String = DemoMode.FEEDBACK_URL
 ## Collapsible audio settings card below the main menu panel.
 var audio_card: AudioSettingsCard
 
@@ -43,16 +47,19 @@ func _ready() -> void:
 		change_scene = get_tree().change_scene_to_file
 	if not quit_game.is_valid():
 		quit_game = get_tree().quit
+	if not open_url.is_valid():
+		open_url = func(url: String) -> void: OS.shell_open(url)
 	_build()
 	_show_message(GameBoot.take_refusal())
 	refresh()
 
 
-## Greys Continue and Load when there is no save, and refills the save list.
+## Greys Continue when no compatible save exists, Load when no save exists at
+## all, refreshes the save list, and syncs optional link button visibility.
 func refresh() -> void:
-	var none := SaveSlots.latest() == ""
-	button("Continue").disabled = none
-	button("Load").disabled = none
+	button("Continue").disabled = SaveSlots.latest() == ""
+	button("Load").disabled = SaveSlots.existing().is_empty()
+	button("SendFeedback").visible = not feedback_url.is_empty()
 	_save_list.fill(SaveSlots.all_paths(), SaveSlots.manual_path())
 
 
@@ -89,11 +96,17 @@ func press_quit() -> void:
 
 
 func press_wishlist() -> void:
-	if WISHLIST_URL != "":
-		OS.shell_open(WISHLIST_URL)
+	if WISHLIST_URL != "" and open_url.is_valid():
+		open_url.call(WISHLIST_URL)
 
 
-## A button by node name: Continue, NewAirport, Load, Wishlist, Quit or Back.
+func press_feedback() -> void:
+	if not feedback_url.is_empty() and open_url.is_valid():
+		open_url.call(feedback_url)
+
+
+## A button by node name: Continue, NewAirport, Load, Wishlist, SendFeedback,
+## Quit or Back.
 func button(button_name: String) -> Button:
 	return _buttons.get(button_name) as Button
 
@@ -158,6 +171,8 @@ func _build() -> void:
 	_add_button(_main_page, "Load", tr("Load", "menu"), press_load)
 	_add_button(_main_page, "Wishlist", tr("Wishlist", "menu"), press_wishlist)
 	button("Wishlist").visible = WISHLIST_URL != ""
+	_add_button(_main_page, "SendFeedback", tr("Send Feedback"), press_feedback)
+	button("SendFeedback").visible = not feedback_url.is_empty()
 	_add_button(_main_page, "Quit", tr("Quit", "menu"), press_quit)
 	_load_page = VBoxContainer.new()
 	_load_page.name = "LoadPage"
@@ -200,7 +215,23 @@ func _add_button(
 
 
 func _on_save_chosen(path: String) -> void:
-	GameBoot.start_load(path, change_scene)
+	var ver := SaveSlots.file_save_version(path)
+	if ver == SaveGame.SAVE_VERSION:
+		GameBoot.start_load(path, change_scene)
+		return
+	if ver < 0:
+		_show_message(tr("This save file cannot be read."))
+	elif ver < SaveGame.SAVE_VERSION:
+		_show_message(
+			tr(
+				# gdlint:ignore = max-line-length
+				"This save is from an older version and cannot be loaded after an update. Please start a New Airport."
+			)
+		)
+	else:
+		_show_message(
+			tr("This save is from a newer version and cannot be loaded. Please update the game.")
+		)
 
 
 func _show_message(text: String) -> void:

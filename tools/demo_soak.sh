@@ -8,7 +8,7 @@ set -u
 SEEDS="${1:-3}"
 DAYS="${2:-5}"
 LOG_DIR="${3:-tools/blender/out/demo_soak}"
-GODOT=/mnt/c/Users/chulf/AppData/Local/Programs/Godot/Godot_v4.7.2-stable_win64_console.exe
+GODOT="${GODOT:-/mnt/c/Users/chulf/AppData/Local/Programs/Godot/Godot_v4.7.2-stable_win64_console.exe}"
 PROJECT="$(wslpath -m "$(pwd)")/game"
 mkdir -p "$LOG_DIR"
 
@@ -17,7 +17,7 @@ for i in $(seq 1 "$SEEDS"); do
 	log="$LOG_DIR/soak_$i.log"
 	(
 		timeout 3000 "$GODOT" --headless --audio-driver Dummy --path "$PROJECT" \
-			-s res://spike/memory_soak_probe.gd -- --days="$DAYS" >"$log" 2>&1
+			-s res://spike/memory_soak_probe.gd -- --days="$DAYS" < /dev/null >"$log" 2>&1
 		echo "exit $?" >>"$log"
 	) &
 	pids+=($!)
