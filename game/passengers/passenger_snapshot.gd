@@ -639,7 +639,7 @@ static func _flight_results(list: Array) -> Dictionary:
 		ok = ok and _whole(entry["made"]) and int(entry["made"]) >= 0
 		ok = ok and _whole(entry["missed"]) and int(entry["missed"]) >= 0
 		var close_calls := 0
-		if entry.has("close_calls"):
+		if ok and entry.has("close_calls"):
 			if (
 				not _whole(entry["close_calls"])
 				or int(entry["close_calls"]) < 0

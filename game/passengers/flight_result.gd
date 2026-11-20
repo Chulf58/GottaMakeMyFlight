@@ -124,7 +124,8 @@ static func _facility_texts() -> Dictionary:
 	}
 
 
-## {"flight", "made", "missed", "reasons"} for one flight. "reasons" is a list of
+## {"flight", "made", "missed", "close_calls", "reasons"} for one flight.
+## "reasons" is a list of
 ## {"text", "count"} sorted largest first (ties by text). Scheduled passengers
 ## dropped when the doors closed (PassengerSim.no_shows) never reached the
 ## terminal, so they are a reason but are not in "missed". Passengers still on

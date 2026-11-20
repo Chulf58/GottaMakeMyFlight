@@ -23,10 +23,11 @@ extends CanvasLayer
 ## and the text shows its passengers, their flight and the drop-off delay so
 ## far (VehicleInspect); a click inside a vehicle's drawn box picks the vehicle
 ## before any passenger near it. One selection at a time.
-## When a flight's doors close, a green FlightResultPanel goes on the rail:
-## made, missed and the main reasons; a later closing flight replaces it, and
-## it leaves after FlightResultPanel.SHOW_SECONDS of real time or on a click,
-## staying in the alerts history. On
+## When a flight's doors close, a FlightResultPanel (green, cream or coral)
+## goes on the rail: made, missed, close-call saves and the main reasons; a
+## later closing flight replaces it, and it leaves after
+## FlightResultPanel.SHOW_SECONDS of real time or on a click, staying in the
+## alerts history. On
 ## ready the camera frames the built area (StartView) inside the screen share
 ## the open panels leave free (PanelRoom, which keeps telling the camera as
 ## panels open and close). A new game opens paused under the

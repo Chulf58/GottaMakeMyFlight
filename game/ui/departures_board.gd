@@ -509,6 +509,8 @@ func _add_row(entry: Dictionary) -> void:
 			airline.name = airline_name
 			airline.text = "  ".join(parts)
 			airline.theme_type_variation = &"HudHint"
+			airline.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			airline.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			airline.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			line.add_child(airline)
 		var late_btn := Button.new()

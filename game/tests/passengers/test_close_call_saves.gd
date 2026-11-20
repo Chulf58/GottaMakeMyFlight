@@ -97,10 +97,32 @@ func test_close_calls_and_thought_survive_snapshot_round_trip() -> void:
 	(legacy["flight_results"][0] as Dictionary).erase("close_calls")
 	assert_bool(_other.sim.from_snapshot(legacy)).is_true()
 	assert_int(_other.sim.flight_results[PassengerTestWorld.FLIGHT]["close_calls"]).is_equal(0)
-	# Bad close_calls values are rejected.
-	var bad_neg: Dictionary = data.duplicate(true)
-	bad_neg["flight_results"][0]["close_calls"] = -1
-	assert_bool(_other.sim.from_snapshot(bad_neg)).is_false()
-	var bad_over: Dictionary = data.duplicate(true)
-	bad_over["flight_results"][0]["close_calls"] = 2
-	assert_bool(_other.sim.from_snapshot(bad_over)).is_false()
+	# Pre-diff v36 5-mark thought_marks with an existing thought loads cleanly alongside close calls.
+	var p2_id := _world.sim.spawn_now(PassengerTestWorld.FLIGHT)
+	_world.run_to(55)
+	var p2 := _world.passenger(p2_id)
+	PassengerThoughts.record(p2, PassengerThoughts.Kind.MEAL, 52, p2.at, 1)
+	var v36_data: Dictionary = JSON.parse_string(JSON.stringify(_world.sim.to_snapshot()))
+	assert_int((v36_data["passengers"][1]["thought_marks"] as Array).size()).is_equal(5)
+	assert_bool(_other.sim.from_snapshot(v36_data)).is_true()
+	assert_int(PassengerThoughts.count(_other.passenger(p2_id))).is_equal(1)
+	# Bad flight_results / close_calls values are rejected cleanly without crashing.
+	var bad_cases: Array[Callable] = [
+		func(d: Dictionary) -> void: d["flight_results"] = [123],
+		func(d: Dictionary) -> void:
+			(d["flight_results"][0] as Dictionary).erase("made")
+			d["flight_results"][0]["close_calls"] = 0,
+		func(d: Dictionary) -> void: d["flight_results"][0]["close_calls"] = 1.5,
+		func(d: Dictionary) -> void: d["flight_results"][0]["close_calls"] = "1",
+		func(d: Dictionary) -> void: d["flight_results"][0]["close_calls"] = true,
+		func(d: Dictionary) -> void: d["flight_results"][0]["close_calls"] = -1,
+		func(d: Dictionary) -> void: d["flight_results"][0]["close_calls"] = 2,
+	]
+	for i in bad_cases.size():
+		var bad: Dictionary = data.duplicate(true)
+		bad_cases[i].call(bad)
+		(
+			assert_bool(_other.sim.from_snapshot(bad))
+			. override_failure_message("case %d" % i)
+			. is_false()
+		)

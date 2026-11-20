@@ -72,11 +72,14 @@ static func title_for(flights: FlightSim, flight_id: String) -> String:
 
 
 ## The panel's theme type variation for a FlightResult.summarize() dictionary,
-## matching IncidentCards (ed443eea): green on zero misses, cream when more
-## passengers made than missed, coral when missed >= made.
+## matching IncidentCards (ed443eea): coral when zero passengers made it or
+## missed >= made, green on zero misses (with made > 0), cream when more made
+## than missed.
 static func variation_for(summary: Dictionary) -> StringName:
 	var made: int = int(summary.get("made", 0))
 	var missed: int = int(summary.get("missed", 0))
+	if made <= 0:
+		return &"HudCardCoral"
 	if missed <= 0:
 		return &"HudCardGreen"
 	if made > missed:

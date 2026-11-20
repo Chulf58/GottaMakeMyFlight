@@ -122,30 +122,60 @@ func test_a_late_passenger_shows_the_line_and_boarding_or_missing_clears_it() ->
 
 
 func test_the_worst_line_two_fits_the_list_on_one_line() -> void:
-	for i in 3:
-		await get_tree().process_frame
-	var rows := _board.find_child("Rows", true, false) as Control
-	# The longest airline name (OfferBoard), "Boarding" (the last status a late
-	# passenger can see) and the largest count a flight can reach (its plane
-	# class's top booking, three digits for a large plane), drawn as the board
-	# draws them.
+	_world.flights.gate_source = func() -> Array[String]: return ["C", "A", "B"] as Array[String]
+	_world.flights.open_airport()
+	# Longest airline name (Skyline Global), "Boarding" status (via an earlier
+	# flight still open so EARLY takes the doors-close slot), and 3-digit late count.
+	_accept("EARLY", 9 * 60 + 35, "Gotta Air")
+	var occurrence := _accept("LG200", 10 * 60, "Skyline Global")
 	var most := 0
 	for plane_class: String in PlaneClasses.ORDER:
 		most = maxi(most, int(PlaneClasses.passenger_range(plane_class)[1]))
-	var label := Label.new()
-	label.theme_type_variation = &"HudHint"
-	_board.add_child(label)
-	label.text = "Skyline Global  Boarding  %s" % LateCount.text_for(most)
-	var font := label.get_theme_font("font")
-	var size := label.get_theme_font_size("font_size")
-	var wide := font.get_string_size(label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
-	label.free()
-	print("worst line 2 width ", wide, " of rows width ", rows.size.x, " for ", most)
 	assert_int(most).is_greater(99)
-	# Control: the rows were laid out and the text has a real width.
-	assert_float(rows.size.x).is_greater(100.0)
-	assert_float(wide).is_greater(100.0)
-	assert_float(wide).is_less(rows.size.x)
+	var starts := FlightTimetable.starts_for(_world.flights.contract_of("LG200"), 0, 0)
+	_world.run_to(starts[FlightSim.State.BOARDING] + 1)
+	var existing := int(LateCount.by_flight(_world.sim).get(occurrence, 0))
+	for i in maxi(most - existing, 0):
+		var pid := _world.sim.spawn_now(occurrence)
+		assert_int(pid).is_greater(0)
+		var lp := _world.passenger(pid)
+		lp.late = true
+		lp.stage = Passenger.Stage.TO_GATE
+		_world.sim.entrance.forget(pid)
+	_board.refresh()
+	for i in 3:
+		await get_tree().process_frame
+	var panel := _board.find_child("DeparturesPanel", true, false) as Control
+	var late_row := _board.find_child("LateRow_%s" % occurrence, true, false) as Control
+	var airline := _board.find_child("Airline_LG200_0", true, false) as Label
+	var late_btn := _board.late_button(occurrence)
+	assert_object(late_row).is_not_null()
+	assert_object(airline).is_not_null()
+	assert_object(late_btn).is_not_null()
+	assert_str(airline.text).is_equal("Skyline Global  Boarding")
+	assert_str(late_btn.text).is_equal("%d running late" % most)
+	print(
+		(
+			"worst row panel=%s row=%s airline=%s late=%s"
+			% [panel.size, late_row.size, airline.size, late_btn.size]
+		)
+	)
+	assert_float(panel.size.x).is_equal_approx(float(HudLayout.LIST_W), 0.5)
+	assert_float(late_row.size.x).is_less_equal(float(HudLayout.LIST_W))
+	assert_float(late_btn.get_global_rect().end.x).is_less_equal(panel.get_global_rect().end.x)
+	# Even with an extra-long airline name (like a 40% expanded translation),
+	# the row's minimum width stays bounded so the panel stays at LIST_W.
+	var long_occ := _accept("XL200", 14 * 60, "Very Long International Horizon Airways Express")
+	var long_pid := _world.sim.spawn_now(long_occ)
+	assert_int(long_pid).is_greater(0)
+	_world.passenger(long_pid).late = true
+	_board.refresh()
+	for i in 3:
+		await get_tree().process_frame
+	var long_row := _board.find_child("LateRow_%s" % long_occ, true, false) as Control
+	assert_object(long_row).is_not_null()
+	assert_float(long_row.get_combined_minimum_size().x).is_less_equal(float(HudLayout.LIST_W))
+	assert_float(panel.size.x).is_equal_approx(float(HudLayout.LIST_W), 0.5)
 
 
 func _accept(id: String, minute: int, airline: String) -> String:

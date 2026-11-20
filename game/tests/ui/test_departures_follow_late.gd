@@ -8,6 +8,9 @@ const FLIGHT_B := "GMF102"
 
 var _world: PassengerTestWorld
 var _views: PassengerViews
+var _cars: LandsideViews
+var _car_node: Node3D
+var _mode: BuildMode
 var _camera: TycoonCamera
 var _hud: PassengerHud
 var _board: DeparturesBoard
@@ -29,6 +32,17 @@ func before_test() -> void:
 	_views.clock = _world.clock
 	_views.sim = _world.sim
 	add_child(_views)
+	_cars = LandsideViews.new()
+	_cars.clock = _world.clock
+	add_child(_cars)
+	_car_node = Node3D.new()
+	add_child(_car_node)
+	_cars._nodes[42] = _car_node
+	_mode = BuildMode.new()
+	_mode.set_process(false)
+	_mode.grid = _world.grid
+	_mode.tool = BuildMode.Tool.NONE
+	add_child(_mode)
 	_camera = TycoonCamera.new()
 	var eye := Camera3D.new()
 	eye.name = "Camera3D"
@@ -39,6 +53,8 @@ func before_test() -> void:
 	_hud.flights = _world.flights
 	_hud.sim = _world.sim
 	_hud.views = _views
+	_hud.landside_views = _cars
+	_hud.build_mode = _mode
 	_hud.camera = _camera
 	_hud.alert_settings_path = SaveTestKit.run_path("follow_late_alerts")
 	_hud.departures_settings_path = SaveTestKit.run_path("follow_late_board")
@@ -55,6 +71,10 @@ func after_test() -> void:
 	DirAccess.remove_absolute(_hud.alert_settings_path)
 	DirAccess.remove_absolute(_hud.departures_settings_path)
 	_hud.free()
+	_mode.free()
+	_cars._nodes.clear()
+	_car_node.free()
+	_cars.free()
 	_camera.free()
 	_views.free()
 	_world.free_all()
@@ -62,9 +82,12 @@ func after_test() -> void:
 
 func test_clicking_late_pill_follows_tightest_late_passenger_on_that_flight() -> void:
 	_world.flights.add_flight(FLIGHT_B, PassengerTestWorld.starts_with(1500, 1800))
-	var tight_id := _world.sim.spawn_now(PassengerTestWorld.FLIGHT)
+	# Spawn `closer_id` BEFORE `tight_id` so tight_id > closer_id, proving slack
+	# beats the lowest-id tie-breaker.
 	var closer_id := _world.sim.spawn_now(PassengerTestWorld.FLIGHT)
+	var tight_id := _world.sim.spawn_now(PassengerTestWorld.FLIGHT)
 	var other_id := _world.sim.spawn_now(FLIGHT_B)
+	assert_int(tight_id).is_greater(closer_id)
 	_world.step()
 	var tight := _world.passenger(tight_id)
 	var closer := _world.passenger(closer_id)
@@ -80,6 +103,11 @@ func test_clicking_late_pill_follows_tightest_late_passenger_on_that_flight() ->
 	closer.late = true
 	other.late = true
 	_hud.refresh()
+	# Pre-existing landside vehicle and built-item selections must be cleared.
+	_cars.select(42)
+	_hud._built.select_object(_world.sim.layout.passenger_entrances[0])
+	assert_int(_cars.selected_id).is_equal(42)
+	assert_bool(_hud._built.is_selected()).is_true()
 	var button := _board.late_button(PassengerTestWorld.FLIGHT)
 	assert_object(button).is_not_null()
 	assert_int(button.focus_mode).is_equal(Control.FOCUS_NONE)
@@ -87,6 +115,8 @@ func test_clicking_late_pill_follows_tightest_late_passenger_on_that_flight() ->
 	assert_str(button.tooltip_text).is_not_empty()
 	button.pressed.emit()
 	assert_int(_views.selected_id).is_equal(tight_id)
+	assert_int(_cars.selected_id).is_equal(0)
+	assert_bool(_hud._built.is_selected()).is_false()
 	assert_bool(_camera.is_following()).is_true()
 	assert_bool(_inspect.visible).is_true()
 	assert_bool(_board.is_aside()).is_true()

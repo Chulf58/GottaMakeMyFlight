@@ -32,10 +32,12 @@ func test_result_card_colours_match_miss_tiers() -> void:
 	# Partial misses (made > missed) -> ordinary cream card (no variation).
 	card.show_result(_summary(6, 2))
 	assert_str(String(card.theme_type_variation)).is_equal("")
-	# Heavy misses (made <= missed, including tie and zero made) -> coral.
+	# Heavy misses (made <= missed, including tie, zero made, and (0, 0)) -> coral.
 	card.show_result(_summary(3, 3))
 	assert_str(String(card.theme_type_variation)).is_equal("HudCardCoral")
 	card.show_result(_summary(0, 4))
+	assert_str(String(card.theme_type_variation)).is_equal("HudCardCoral")
+	card.show_result(_summary(0, 0))
 	assert_str(String(card.theme_type_variation)).is_equal("HudCardCoral")
 
 
