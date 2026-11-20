@@ -35,6 +35,9 @@ func test_a_new_room_is_labelled_with_what_it_needs() -> void:
 	assert_object(_view().label_of(room_id)).is_null()
 	await _next_frame()
 	var label := _view().label_of(room_id)
+	var card := label.get_node(RoomLabelLayout.CARD) as Sprite3D
+	assert_bool(label.visible).is_true()
+	assert_bool(card.visible).is_true()
 	assert_str(label.text).is_equal("Cafe\nNeeds a counter\nNeeds a table")
 	assert_that(label.modulate).is_equal(RoomView.NEEDS_TEXT)
 	var middle := _mode.grid.cell_to_world(Vector2i(2, 2)) + Vector3(2.0, 0.0, 1.5)
@@ -61,14 +64,39 @@ func test_the_label_says_its_words_in_the_players_language() -> void:
 	assert_str(lines[2].lstrip("[_")).starts_with("Needs a table")
 
 
-func test_furnishing_turns_the_room_ready() -> void:
+func test_furnishing_turns_the_room_ready_and_unready_shows_label_again() -> void:
 	var room_id := _mode.grid.apply(BuildEdit.place_room(Rect2i(2, 2, 5, 4), &"cafe")).room_id
-	_mode.grid.apply(BuildEdit.place_object(&"cafe_counter", Vector2i(3, 2), 0))
-	_mode.grid.apply(BuildEdit.place_object(&"cafe_table", Vector2i(3, 5), 0))
 	await _next_frame()
-	assert_str(_view().label_of(room_id).text).is_equal("Cafe\nReady")
+	var incomplete_label := _view().label_of(room_id)
+	var incomplete_card := incomplete_label.get_node(RoomLabelLayout.CARD) as Sprite3D
+	assert_bool(incomplete_label.visible).is_true()
+	assert_bool(incomplete_card.visible).is_true()
+	assert_str(incomplete_label.text).is_equal("Cafe\nNeeds a counter\nNeeds a table")
+
+	_mode.grid.apply(BuildEdit.place_object(&"cafe_counter", Vector2i(3, 2), 0))
+	var table_id := (
+		_mode.grid.apply(BuildEdit.place_object(&"cafe_table", Vector2i(3, 5), 0)).object_id
+	)
+	await _next_frame()
+	var ready_label := _view().label_of(room_id)
+	var ready_card := ready_label.get_node(RoomLabelLayout.CARD) as Sprite3D
+	assert_bool(ready_label.visible).is_false()
+	assert_bool(ready_card.visible).is_false()
+	assert_bool(ready_card.is_visible_in_tree()).is_false()
 	assert_that((_tint(room_id).material_override as StandardMaterial3D).albedo_color).is_equal(
 		RoomView.READY_TINT
+	)
+
+	_mode.grid.apply(BuildEdit.remove_object(table_id))
+	await _next_frame()
+	var needs_label := _view().label_of(room_id)
+	var needs_card := needs_label.get_node(RoomLabelLayout.CARD) as Sprite3D
+	assert_bool(needs_label.visible).is_true()
+	assert_bool(needs_card.visible).is_true()
+	assert_str(needs_label.text).is_equal("Cafe\nNeeds a table")
+	assert_that(needs_label.modulate).is_equal(RoomView.NEEDS_TEXT)
+	assert_that((_tint(room_id).material_override as StandardMaterial3D).albedo_color).is_equal(
+		RoomView.NEEDS_TINT
 	)
 
 

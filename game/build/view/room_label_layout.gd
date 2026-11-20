@@ -199,6 +199,10 @@ func layout(
 		unit = 2.0 * tan(deg_to_rad(camera.fov) / 2.0) / view_size.y
 	_placed.clear()
 	for label in labels:
+		if label.get_meta(&"ready", false):
+			label.visible = false
+			sync_card(label)
+			continue
 		label.pixel_size = RoomView.LABEL_PIXEL_SIZE
 		label.offset = Vector2.ZERO
 		label.modulate.a = alpha
@@ -349,6 +353,7 @@ static func sync_card(label: Label3D) -> void:
 	card.pixel_size = label.pixel_size
 	card.offset = label.offset + Vector2(0.0, text.y / 2.0)
 	card.modulate.a = label.modulate.a
+	card.visible = label.visible
 	# Culling bounds come from the label's own axes, not the camera-facing ones
 	# its text is drawn in. Measured 2026-11-05: a slid label's text is culled
 	# even with its anchor on screen, while the card still draws (an empty card

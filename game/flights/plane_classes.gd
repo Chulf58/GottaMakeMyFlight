@@ -82,23 +82,36 @@ static func airline_hash(airline: String) -> int:
 	return hashed & 0x7FFFFFFF
 
 
-## Where a model's origin sits from the stand's plane point so that its front
-## port passenger door (the first of its PlaneModels "doors") lands where model
-## 05's does with the stand's own offset (REFERENCE_OFFSET), moved by
-## door_shift(). StandPlacement fixes the stand and the footprint to model 05,
-## so each model is moved along and across the plane to that one door rather
-## than centred.
+## True for models that board on foot from the apron and self-taxi out instead
+## of using a pushback tug (matches `not JetBridgePose.docks(model)`).
+static func self_taxis(model: String) -> bool:
+	return (CLASSES[SMALL]["models"] as Array).has(model)
+
+
+## Where a model's origin sits from the stand's plane point. Self-taxiing
+## walk-boarding models (tp_plane_03a) park box-centred on the stand point
+## (PlaneModels "model_offset") so they have room to turn 180 degrees forward
+## inside their swing square; docking models align their front port passenger
+## door in x and z with model 05's (REFERENCE_OFFSET), moved by door_shift().
 static func stand_offset(model: String) -> Vector3:
+	if self_taxis(model):
+		return PlaneModels.PLANES[model]["model_offset"]
 	var reference: Vector3 = PlaneModels.PLANES[REFERENCE_MODEL]["doors"][0] + REFERENCE_OFFSET
 	var door: Vector3 = PlaneModels.PLANES[model]["doors"][0]
 	return Vector3(reference.x - door.x, 0.0, reference.z - door.z) + door_shift(model)
 
 
 ## How far `model`'s parked front port door stands from model 05's, in the
-## parked plane's frame (nose to +z): STOP_BACK_M back along the plane, or
-## zero. StandPlacement.door_point() moves the passengers' walk end by it.
-## Zero for "" or an unknown model.
+## parked plane's frame (nose to +z): for self-taxiing models, the shift from
+## model 05's door to their box-centred parked door; otherwise STOP_BACK_M back
+## along the plane, or zero. StandPlacement.door_point() moves the passengers'
+## walk end by it. Zero for "" or an unknown model.
 static func door_shift(model: String) -> Vector3:
+	if self_taxis(model):
+		var reference: Vector3 = PlaneModels.PLANES[REFERENCE_MODEL]["doors"][0] + REFERENCE_OFFSET
+		var door: Vector3 = PlaneModels.PLANES[model]["doors"][0]
+		var placed: Vector3 = PlaneModels.PLANES[model]["model_offset"] + door
+		return Vector3(placed.x - reference.x, 0.0, placed.z - reference.z)
 	return Vector3(0.0, 0.0, -float(STOP_BACK_M.get(model, 0.0)))
 
 

@@ -1,8 +1,9 @@
 extends SceneTree
 ## Windowed plates of two cafe rooms inside the Toon terminal shell, in the real
-## main scene: cafe A has a counter and a table and shows "Ready"; cafe B has
-## only a counter and shows its note, "Needs a table". Each shot centres one
-## room, points the room info panel at it and saves a plate.
+## main scene: cafe A has a counter and a table (green tint, "Ready" in RoomPanel,
+## no floating world label card); cafe B has only a counter (amber tint, amber
+## world label card "Needs a table", and "Needs a table" in RoomPanel). Each shot
+## centres one room, points the room info panel at it and saves a plate.
 ##
 ## The rooms are built in a scratch BuildGrid in the shell's frame and loaded
 ## through BuildMode.load_snapshot(), so the plate also proves a snapshot with
@@ -76,13 +77,14 @@ func _run() -> void:
 	print("PROBE rooms=%s objects=%d" % [grid.room_ids(), grid.object_ids().size()])
 	if ids.size() != 2 or grid.room_ids().size() != 2:
 		_invalid("expected two rooms, got %s" % [grid.room_ids()])
+	var views := mode.get_node("RoomView") as RoomView
 	var rig := main.get_node("TycoonCamera") as TycoonCamera
 	var cam := rig.get_node("Camera3D") as Camera3D
 	cam.make_current()
 	print("PROBE viewport=%s" % root.get_visible_rect().size)
 	var shots := [
-		["ready", ids[0] if ids.size() > 0 else 0, CAFE_A, ["Ready"]],
-		["needs_table", ids[1] if ids.size() > 1 else 0, CAFE_B, ["Needs a table"]],
+		["ready", ids[0] if ids.size() > 0 else 0, CAFE_A, ["Ready"], false],
+		["needs_table", ids[1] if ids.size() > 1 else 0, CAFE_B, ["Needs a table"], true],
 	]
 	var plates: Array[Image] = []
 	for shot in shots:
@@ -112,6 +114,7 @@ func _run() -> void:
 		mode.update_room_focus(grid.cell_to_world(area.get_center()))
 		await _frames(4)
 		ok = _check_panel(menu, shot[0], shot[1], shot[3]) and ok
+		ok = _check_world_label(views, shot[0], shot[1], shot[4]) and ok
 		var occluders := _colliders(main.get_node("Airside/Terminal") as Node3D)
 		await physics_frame
 		await physics_frame
@@ -193,6 +196,43 @@ func _check_panel(menu: BuildMenu, label: String, room_id: int, want: Array) -> 
 	)
 	if not ok:
 		_invalid("%s: the room panel does not show room %d" % [label, room_id])
+	return ok
+
+
+func _check_world_label(
+	views: RoomView, shot_name: String, room_id: int, expect_visible: bool
+) -> bool:
+	var label := views.label_of(room_id)
+	var card := label.get_node_or_null(RoomLabelLayout.CARD) as Sprite3D if label != null else null
+	var label_vis := label != null and label.visible
+	var card_vis := card != null and card.visible and card.is_visible_in_tree()
+	var ok := label != null and card != null
+	if expect_visible:
+		ok = (
+			ok
+			and label_vis
+			and card_vis
+			and label.modulate.a > 0.9
+			and Color(label.modulate, 1.0) == RoomView.NEEDS_TEXT
+		)
+	else:
+		ok = ok and not label_vis and not card_vis
+	print(
+		(
+			"WORLD_LABEL %s room=%d expect=%s label_vis=%s card_vis=%s text='%s' ok=%s"
+			% [
+				shot_name,
+				room_id,
+				expect_visible,
+				label_vis,
+				card_vis,
+				label.text.replace("\n", "|") if label != null else "",
+				ok,
+			]
+		)
+	)
+	if not ok:
+		_invalid("%s: world label state mismatch (expect_visible=%s)" % [shot_name, expect_visible])
 	return ok
 
 

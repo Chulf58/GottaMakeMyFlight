@@ -54,14 +54,14 @@ static func _paused(plan: Dictionary) -> bool:
 	return false
 
 
-## Six gates and small offers every 15 minutes from 07:00 to 21:00, each
+## Six gates and small offers every 10 minutes from 07:00 to 21:00, each
 ## accepted when FlightSim takes it: on day 1 more than three gates hold a
 ## flight at one tick, and some flight takes a planned pause.
 func test_more_than_three_gates_are_busy_at_once() -> void:
 	_gates(GATES)
 	var accepted := 0
 	var began := Time.get_ticks_msec()
-	for minute in range(420, 1261, 15):
+	for minute in range(420, 1261, 10):
 		var terms := _small("S%d" % minute, minute)
 		if _sim.accept_problem(terms) == "":
 			assert_bool(_sim.accept_contract(terms)).is_true()
@@ -82,7 +82,7 @@ func test_more_than_three_gates_are_busy_at_once() -> void:
 				paused[id] = true
 	print(
 		(
-			"%d of 57 offers accepted in %d ms; at most %d gates busy at once; %d flights paused"
+			"%d of 85 offers accepted in %d ms; at most %d gates busy at once; %d flights paused"
 			% [accepted, accept_ms, most, paused.size()]
 		)
 	)

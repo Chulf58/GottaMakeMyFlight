@@ -80,6 +80,14 @@ const FAR_SHADOW_STENCIL := 7
 const FAR_SHADOW_LIFT := 0.06
 ## Thickness the projection keeps per metre of height, so the basis inverts.
 const FAR_SHADOW_FLATTEN := 0.002
+## Node name of the nose propeller in prop models (tp_plane_03a.glb).
+const PROPELLER_NODE := "TP_Plane_03A_Propeller"
+## Propeller spin rate per sim tick (20 ticks/s; avoids 3-blade 120 deg aliasing).
+const PROPELLER_REV_PER_TICK := 0.27
+## Standing phases at the gate where passengers/crew are near and props stay off.
+const PROPELLER_STOPPED_PHASES: Array[int] = [
+	FlightSim.State.AT_STAND, FlightSim.State.BOARDING, FlightSim.State.DOORS_CLOSED
+]
 
 @export var clock: SimClock
 @export var sim: FlightSim
@@ -108,6 +116,9 @@ var _pivot: Node3D
 ## The model on show and its far silhouette, each placed by model_position_at().
 var _model: Node3D
 var _silhouette: Node3D
+var _prop: Node3D
+var _silhouette_prop: Node3D
+var _prop_rest := Basis.IDENTITY
 var _far_shadow: Node3D
 var _far_material: StandardMaterial3D
 ## The tug and the bridge reports that go with the plane (board 4c08b8e5).
@@ -158,6 +169,7 @@ func update_pose() -> void:
 	phase = shown[slot]["phase"]
 	transform = shown[slot]["transform"]
 	_set_model_position(model_position_at(phase, transform, class_of(flight_id)))
+	_spin_propeller(time)
 	_place_far_shadow()
 	_follow_props()
 
@@ -172,7 +184,12 @@ func sightings(time: float) -> Array[Dictionary]:
 		if sim.flight_gate(id) != gate:
 			continue
 		var at := pose_at(
-			starts_of(id), time, has_full_lead_in(id), class_of(id), sim.taxi_plan(id)
+			starts_of(id),
+			time,
+			has_full_lead_in(id),
+			class_of(id),
+			sim.taxi_plan(id),
+			PlaneClasses.self_taxis(model_of(id))
 		)
 		if not at.is_empty():
 			at["id"] = id
@@ -215,7 +232,8 @@ func pose_at(
 	time: float,
 	full_lead_in := true,
 	plane_class := PlaneClasses.MEDIUM,
-	pauses := {}
+	pauses := {},
+	self_taxi := false
 ) -> Dictionary:
 	var approach := starts[FlightSim.State.APPROACH]
 	var departed := starts[FlightSim.State.DEPARTED]
@@ -245,7 +263,13 @@ func pose_at(
 	var pause: Dictionary = pauses.get(moving, {})
 	var budget := float(starts[moving + 1] - starts[moving])
 	var pose := FlightPose.pose(
-		moving, progress, _path(moving, plane_class), _entry_dir(moving, plane_class), pause, budget
+		moving,
+		progress,
+		_path(moving, plane_class),
+		_entry_dir(moving, plane_class),
+		pause,
+		budget,
+		self_taxi
 	)
 	if ON_GROUND.has(moving):
 		pose.origin.y += ground_height_at(pose.origin)
@@ -381,8 +405,11 @@ func show_model(model: String) -> void:
 		child.queue_free()
 	_model = _new_model()
 	_pivot.add_child(_model)
+	_prop = _model.find_child(PROPELLER_NODE, true, false) as Node3D
+	_prop_rest = _prop.basis if _prop != null else Basis.IDENTITY
 	_silhouette = _new_model()
 	_far_shadow.add_child(_silhouette)
+	_silhouette_prop = _silhouette.find_child(PROPELLER_NODE, true, false) as Node3D
 	for mesh in _silhouette.find_children("*", "MeshInstance3D", true, false):
 		mesh.material_override = _far_material
 		mesh.material_overlay = null
@@ -410,6 +437,28 @@ func _follow_props() -> void:
 func _set_model_position(at: Vector3) -> void:
 	_model.position = at
 	_silhouette.position = at
+
+
+## Spins any nose propeller around its local hub axis (Y in prop space = +Z
+## ahead under the glb +90 deg X rest basis) from sim time during powered
+## phases, and holds it at rest while parked at the gate.
+func _spin_propeller(time: float) -> void:
+	if _prop == null:
+		return
+	var spinning := _propeller_spinning(phase, model_name)
+	var angle := TAU * PROPELLER_REV_PER_TICK * time if spinning else 0.0
+	var spun := _prop_rest * Basis(Vector3.UP, angle)
+	_prop.basis = spun
+	if _silhouette_prop != null:
+		_silhouette_prop.basis = spun
+
+
+static func _propeller_spinning(at_phase: int, model: String) -> bool:
+	if PROPELLER_STOPPED_PHASES.has(at_phase):
+		return false
+	if at_phase == FlightSim.State.PUSHBACK:
+		return PlaneClasses.self_taxis(model)
+	return true
 
 
 ## One instance of the model on show, parked: its passenger door where the

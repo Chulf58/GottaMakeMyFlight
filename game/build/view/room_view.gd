@@ -2,11 +2,13 @@ class_name RoomView
 extends Node3D
 ## Draws each room of a BuildGrid: a see-through floor tint over its cells,
 ## green when RoomRules says it is ready and amber when it is not, and a label
-## above its middle with the type and either "Ready" or the notes saying what
-## it still needs. It follows the grid's own signals, so furniture placed by any
-## path (BuildMode, a probe, later systems) shows on the next frame. Each frame
-## RoomLabelLayout slides a label clear of the HUD, caps its size on screen and
-## fades it out when the camera zooms in close.
+## above its middle when it is not ready with the type and the notes saying
+## what it still needs (ready rooms keep their floor tint and RoomPanel status
+## and hide their world label and cream card). It follows the grid's own
+## signals, so furniture placed by any path (BuildMode, a probe, later systems)
+## shows on the next frame. Each frame RoomLabelLayout slides visible labels
+## clear of the HUD, caps their size on screen and fades them out when the
+## camera zooms in close.
 
 const TINT_Y := 0.06
 ## Height of the label's bottom line; the text grows upward from it, so more
@@ -95,12 +97,16 @@ func label_of(room_id: int) -> Label3D:
 func layout_labels() -> void:
 	if _drawn.is_empty() or not is_inside_tree():
 		return
+	_labels.clear()
+	for parts in _drawn.values():
+		var label := parts[1] as Label3D
+		if not label.get_meta(&"ready", false):
+			_labels.append(label)
+	if _labels.is_empty():
+		return
 	var view := get_viewport()
 	var camera := view.get_camera_3d()
 	var scale := view.get_stretch_transform().get_scale()
-	_labels.clear()
-	for parts in _drawn.values():
-		_labels.append(parts[1])
 	var hud: Array[Rect2] = []
 	var icons: Array[Rect2] = []
 	if camera != null:
@@ -130,6 +136,7 @@ func redraw() -> void:
 	_dirty = false
 	for parts in _drawn.values():
 		for node in parts:
+			remove_child(node)
 			node.queue_free()
 	_drawn.clear()
 	if _grid == null:
@@ -172,6 +179,8 @@ func _draw_room(room_id: int) -> void:
 	label.render_priority = LABEL_PRIORITY
 	label.outline_render_priority = LABEL_PRIORITY - 1
 	label.position = middle + Vector3(0.0, LABEL_Y, 0.0)
+	label.visible = not status.ok
+	label.set_meta(&"ready", status.ok)
 	add_child(label)
 	RoomLabelLayout.make_card(label)
 	_drawn[room_id] = [tint, label]

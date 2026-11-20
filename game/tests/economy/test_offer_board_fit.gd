@@ -15,11 +15,13 @@ const FULL_DAY := [420, 615, 810, 1005, 1200]
 ## Seed -> the fitted N1, N2 and N3 departures on one gate busy at 10:00 and
 ## 16:40 (test_golden_fitted_departures_on_a_busy_gate). Seed 2024 was
 ## measured again for trait seed version 3: its day 0 N1 is now an Odd hours
-## offer, which fits only at 06:00 or 22:00.
+## offer, which fits only at 06:00 or 22:00. Seeds 1 and 2024 N3 shifted -15 min
+## after small-plane self-taxi shrank the small pushback footprint of the busy
+## K600 contract (15.455 m -> 8.855 m), opening slot 480 (33 -> 34 candidates).
 const GOLDEN_BUSY := {
-	1: [1215, 795, 510],
+	1: [1215, 795, 495],
 	42: [1215, 795, 690],
-	2024: [360, 1230, 555],
+	2024: [360, 1230, 540],
 	7_654_321: [1215, 795, 450],
 }
 

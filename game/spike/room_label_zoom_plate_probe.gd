@@ -1,15 +1,16 @@
 extends SceneTree
 ## Windowed plates of the room label's zoom fade (RoomLabelLayout.zoom_alpha),
-## board 9c2b0d32 parts 2 and 3. Boots main.tscn with the starter shell, builds a
-## furnished cafe (counter and a table) by BuildMode.load_snapshot and looks at
-## it from three camera distances measured against the rig's home_distance: the
-## home zoom (label fully visible), 0.45x (label part faded) and 0.30x (label
-## gone, the floor and the furniture bare). Each plate prints the zoom ratio,
-## the fade RoomLabelLayout expects and the alpha and visibility the label
-## really has, and proves the room's floor corners are inside the viewport by
-## MARGIN_PX and that the camera ray to the room's centre reaches the floor. An
-## alpha that differs from the expected one, or a ratio off its target, prints
-## PROBE_INVALID, exit 1. A guard thread calls OS.crash() on a stall.
+## board 9c2b0d32 parts 2 and 3. Boots main.tscn with the starter shell, builds an
+## incomplete cafe (counter only, so its world label "Needs a table" is shown) by
+## BuildMode.load_snapshot and looks at it from three camera distances measured
+## against the rig's home_distance: the home zoom (label fully visible), 0.45x
+## (label part faded) and 0.30x (label gone, the floor and counter bare). Each
+## plate prints the zoom ratio, the fade RoomLabelLayout expects and the alpha
+## and visibility the label and card really have, and proves the room's floor
+## corners are inside the viewport by MARGIN_PX and that the camera ray to the
+## room's centre reaches the floor. An alpha that differs from the expected one,
+## or a ratio off its target, prints PROBE_INVALID, exit 1. A guard thread calls
+## OS.crash() on a stall.
 ##
 ## Run (one windowed Godot run project-wide; take the slot first):
 ##   timeout 300 Godot_v4.7.2-stable_win64_console.exe --display-driver windows \
@@ -85,7 +86,7 @@ func _run() -> void:
 	_finish()
 
 
-## The cafe, floored and walled on its north side, counter and table in it.
+## The cafe, floored and walled on its north side, counter only (not ready).
 func _build(mode: BuildMode) -> bool:
 	var scratch := BuildGrid.new(mode.grid.size, mode.grid.origin)
 	var edits: Array[BuildEdit] = []
@@ -96,7 +97,6 @@ func _build(mode: BuildMode) -> bool:
 		edits.append(BuildEdit.place_wall(Vector2i(x, CAFE.position.y), BuildGrid.Side.NORTH))
 	edits.append(BuildEdit.place_room(CAFE, &"cafe"))
 	edits.append(BuildEdit.place_object(&"cafe_counter", CAFE.position + Vector2i(1, 0), 0))
-	edits.append(BuildEdit.place_object(&"cafe_table", CAFE.position + Vector2i(1, 2), 0))
 	var refused := 0
 	for result in scratch.apply_batch(edits):
 		refused += 0 if result.ok else 1
@@ -125,22 +125,35 @@ func _shoot(
 	rig.distance = rig.home_distance * ratio
 	await _frames(10)
 	var label := views.label_of(room_id)
+	var card := label.get_node_or_null(RoomLabelLayout.CARD) as Sprite3D if label != null else null
 	var expected := RoomLabelLayout.zoom_alpha(cam)
 	var got_ratio := rig.distance / rig.home_distance
 	var alpha := label.modulate.a if label != null else -1.0
+	var card_vis := card != null and card.visible
 	print(
 		(
-			"PLATE %s zoom_ratio=%.3f target=%.2f expected_fade=%.2f label_alpha=%.2f visible=%s"
-			% [file, got_ratio, ratio, expected, alpha, label.visible if label != null else false]
+			"PLATE %s zoom_ratio=%.3f target=%.2f expected_fade=%.2f label_alpha=%.2f vis=%s/%s"
+			% [
+				file,
+				got_ratio,
+				ratio,
+				expected,
+				alpha,
+				label.visible if label != null else false,
+				card_vis,
+			]
 		)
 	)
-	if label == null or absf(got_ratio - ratio) > 0.02:
-		_invalid("%s: no label or the camera is not at %.2fx" % [file, ratio])
+	if label == null or card == null or absf(got_ratio - ratio) > 0.02:
+		_invalid("%s: no label/card or the camera is not at %.2fx" % [file, ratio])
 		return
-	if ratio >= RoomLabelLayout.FADE_FAR and alpha < 0.95:
-		_invalid("%s: the label should be fully visible, alpha %.2f" % [file, alpha])
-	elif ratio <= RoomLabelLayout.FADE_NEAR and alpha > RoomLabelLayout.HIDDEN_ALPHA + ALPHA_EPS:
-		_invalid("%s: the label should be gone, alpha %.2f" % [file, alpha])
+	if ratio >= RoomLabelLayout.FADE_FAR and (alpha < 0.95 or not label.visible or not card_vis):
+		_invalid("%s: the label and card should be visible, alpha %.2f" % [file, alpha])
+	elif (
+		ratio <= RoomLabelLayout.FADE_NEAR
+		and (alpha > RoomLabelLayout.HIDDEN_ALPHA + ALPHA_EPS or label.visible or card_vis)
+	):
+		_invalid("%s: the label and card should be gone, alpha %.2f" % [file, alpha])
 	elif absf(alpha - expected) > ALPHA_EPS:
 		_invalid("%s: label alpha %.2f, expected %.2f" % [file, alpha, expected])
 	var frame := root.get_visible_rect().grow(-MARGIN_PX)

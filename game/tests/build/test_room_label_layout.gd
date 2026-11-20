@@ -463,3 +463,39 @@ func test_the_nudge_reach_is_the_card_height_capped_plus_two_icon_widths() -> vo
 	assert_float(RoomLabelLayout.nudge_reach(RoomLabelLayout.NUDGE_PX * 3.0)).is_equal(
 		RoomLabelLayout.NUDGE_PX + icons
 	)
+
+
+## A hidden ready room's label must neither reappear during layout_labels() nor
+## reserve a card rectangle that pushes a nearby not-ready room's label away.
+func test_a_hidden_ready_room_label_does_not_push_a_not_ready_room_label() -> void:
+	var grid := PassengerTestWorld.floored(Vector2i(16, 12))
+	var ready_room := grid.apply(BuildEdit.place_room(Rect2i(2, 2, 5, 4), &"cafe")).room_id
+	grid.apply(BuildEdit.place_object(&"cafe_counter", Vector2i(3, 2), 0))
+	var table_id := grid.apply(BuildEdit.place_object(&"cafe_table", Vector2i(3, 5), 0)).object_id
+	var needs_room := grid.apply(BuildEdit.place_room(Rect2i(2, 6, 5, 4), &"cafe")).room_id
+	_view.watch(grid)
+	# Aim along the z-axis so both rooms' anchors project to the same screen column
+	# and overlap unless the ready room is skipped.
+	var ready_label := _view.label_of(ready_room)
+	var needs_label := _view.label_of(needs_room)
+	_camera.global_position = needs_label.position + Vector3(0.0, 6.0, 26.0)
+	_camera.look_at(ready_label.position)
+	_view.layout_labels()
+	var ready_card := ready_label.get_node(RoomLabelLayout.CARD) as Sprite3D
+	var needs_card := needs_label.get_node(RoomLabelLayout.CARD) as Sprite3D
+	assert_bool(ready_label.visible).is_false()
+	assert_bool(ready_card.visible).is_false()
+	assert_bool(needs_label.visible).is_true()
+	assert_bool(needs_card.visible).is_true()
+	assert_vector(needs_label.offset).is_equal(Vector2.ZERO)
+
+	# Control: once the first room loses its table and becomes not ready, its card
+	# is drawn and pushes the second room's label clear of it.
+	grid.apply(BuildEdit.remove_object(table_id))
+	_view.redraw()
+	_view.layout_labels()
+	var first_label := _view.label_of(ready_room)
+	var second_label := _view.label_of(needs_room)
+	assert_bool(first_label.visible).is_true()
+	assert_bool(second_label.visible).is_true()
+	assert_vector(second_label.offset).is_not_equal(Vector2.ZERO)

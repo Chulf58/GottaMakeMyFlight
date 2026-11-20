@@ -5,9 +5,11 @@ extends GdUnitTestSuite
 ## model 04 parks further out than door alignment puts it, so a passenger of a
 ## flight drawn with it walks on past the stand's door to the 04's, and the
 ## lateness forecast prices that same walk. A flight drawn with another model
-## keeps the stand's door (StandPlacement.door_point()).
+## walks to its own StandPlacement.door_point(stand, model) (plane 03 parks
+## box-centred on stand_point; models 05-07 keep StandPlacement.door_point()).
 
 const SITE := preload("res://build/terminal_site.tres")
+const MODEL_03 := "tp_plane_03a"
 const MODEL_04 := "tp_plane_04a"
 ## An airline whose medium flights draw model 04 (test_plane_classes.gd).
 const AIRLINE_04 := "Meridian Air"
@@ -111,14 +113,15 @@ func test_a_plane_04_passenger_walks_out_to_the_04s_drawn_door() -> void:
 	assert_float(stand_end.z - end.z).is_greater(1.0)
 
 
-func test_a_one_off_flights_passenger_keeps_the_stands_door() -> void:
+func test_a_one_off_flights_passenger_walks_to_model_03s_own_door() -> void:
 	var stand := _world.sim.layout.live_stand(_world.grid)
 	var p := _stepped_out(PassengerTestWorld.FLIGHT)
 	var end: Vector3 = p.apron.back()
-	print("one-off walk end %s, stand door %s" % [end, StandPlacement.door_point(stand)])
-	assert_float(Vector2(end.x, end.z).distance_to(_xz(StandPlacement.door_point(stand)))).is_less(
-		0.01
-	)
+	var model := PlaneClasses.flight_model(_world.flights, PassengerTestWorld.FLIGHT)
+	var want := StandPlacement.door_point(stand, model)
+	print("one-off (%s) walk end %s, model door %s" % [model, end, want])
+	assert_str(model).is_equal(MODEL_03)
+	assert_float(Vector2(end.x, end.z).distance_to(_xz(want))).is_less(0.01)
 
 
 ## The forecast prices the walk the passenger will take: its plane key and its

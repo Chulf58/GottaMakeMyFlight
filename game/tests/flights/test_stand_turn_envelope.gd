@@ -86,8 +86,9 @@ func test_every_model_stays_inside_its_swing_square_through_the_stand_turn() -> 
 			assert_float(now["south"]).is_less_equal(maxf(swing.end.y, parked_nose) + 0.001)
 			assert_float(now["south"]).is_less(wall_z)
 	# Control: the measure finds the overreach the board item reported with
-	# the old pivot (the door-aligned model turned about the stand point).
-	var small_was := _reach("tp_plane_03a", true)
+	# the old pivot (the historical door-aligned offset turned about the stand
+	# point).
+	var small_was := _reach("tp_plane_03a", true, Vector3(0.61, 0.0, 9.20))
 	var large_was := _reach("tp_plane_07a", true)
 	print("before the fix: 03 reach %.2f, 07 reach %.2f" % [small_was["x"], large_was["x"]])
 	assert_float(small_was["x"]).is_greater(15.0)
@@ -190,12 +191,95 @@ func test_plane_view_parks_door_aligned_and_flies_centred() -> void:
 		assert_vector(in_sky).is_equal_approx(centred, Vector3.ONE * 1e-4)
 
 
+## Self-taxiing small planes (tp_plane_03a) pivot 180 degrees in place away
+## from the bridge and apron walk then roll forward out of the stand across
+## NORTH, WEST and EAST stands with zero backward motion and inside the 9.10 m
+## small swing square.
+func test_small_self_taxi_pivots_180_away_from_bridge_and_rolls_forward() -> void:
+	var stands := [
+		_stand,
+		StandPlacement.make(2, -100.0, -200.0, StandPlacement.WEST),
+		StandPlacement.make(3, 100.0, -200.0, StandPlacement.EAST),
+	]
+	var box: AABB = PlaneModels.PLANES["tp_plane_03a"]["aabb"]
+	var corners: Array[Vector3] = []
+	for i in 4:
+		corners.append(
+			Vector3(
+				box.end.x if i & 1 else box.position.x, 0.0, box.end.z if i & 2 else box.position.z
+			)
+		)
+	for stand: Dictionary in stands:
+		var side := StandPlacement.side_of(stand)
+		var at := StandPlacement.stand_point(stand)
+		var back := StandPlacement.pushback_end(stand)
+		var push := PackedVector3Array([at, back])
+		var out_path := PackedVector3Array([back, StandPlacement.lane_join(stand)])
+		var entry := StandPlacement.turn(stand, Vector3.BACK)
+		var expected_exit := StandPlacement.turn(stand, Vector3.FORWARD)
+		var expected_mid := StandPlacement.turn(stand, Vector3.LEFT)
+		var swing: Rect2 = StandEnvelope.rects(stand, PlaneClasses.SMALL)[0]
+		var min_forward_step := INF
+		var last_pos := at
+		for i in range(STEPS + 1):
+			var t := float(i) / STEPS
+			var pose := FlightPose.pose(FlightSim.State.PUSHBACK, t, push, entry, {}, 0.0, true)
+			var placed := FlightPose.model_position("tp_plane_03a", pose, at, entry)
+			assert_vector(placed).is_equal_approx(
+				PlaneModels.PLANES["tp_plane_03a"]["model_offset"], Vector3.ONE * 1e-4
+			)
+			if i > 0:
+				var forward := pose.basis.z.slide(Vector3.UP).normalized()
+				min_forward_step = minf(min_forward_step, (pose.origin - last_pos).dot(forward))
+			last_pos = pose.origin
+			if t <= FlightPose.SELF_TAXI_TURN_END:
+				assert_vector(pose.origin).is_equal_approx(at, Vector3.ONE * 1e-4)
+			else:
+				assert_float(pose.basis.z.dot(expected_exit)).is_greater(0.9999)
+			for corner in corners:
+				var world := pose * (placed + corner)
+				(
+					assert_bool(swing.has_point(Vector2(world.x, world.z)))
+					. override_failure_message(
+						"%s corner %s outside swing %s at t=%.3f" % [side, world, swing, t]
+					)
+					. is_true()
+				)
+		var mid_turn := FlightPose.pose(
+			FlightSim.State.PUSHBACK,
+			FlightPose.SELF_TAXI_TURN_END * 0.5,
+			push,
+			entry,
+			{},
+			0.0,
+			true
+		)
+		var end_pose := FlightPose.pose(FlightSim.State.PUSHBACK, 1.0, push, entry, {}, 0.0, true)
+		var taxi_start := FlightPose.pose(FlightSim.State.TAXI_OUT, 0.0, out_path, expected_exit)
+		print(
+			(
+				"%s self-taxi: min forward step %.6f, mid turn nose %s (want %s), end vs taxi_out %s"
+				% [
+					side,
+					min_forward_step,
+					mid_turn.basis.z,
+					expected_mid,
+					end_pose.origin - taxi_start.origin
+				]
+			)
+		)
+		assert_float(min_forward_step).is_greater_equal(-1e-5)
+		assert_float(mid_turn.basis.z.dot(expected_mid)).is_greater(0.999)
+		assert_vector(end_pose.origin).is_equal_approx(taxi_start.origin, Vector3.ONE * 1e-4)
+		assert_float(end_pose.basis.z.dot(taxi_start.basis.z)).is_greater(0.9999)
+
+
 ## Largest corner reaches of `model` through the stand turn: "x" across from
 ## the stand point while inside the swing square's length, "north" past the
 ## pushback's end, "way_x" across once north of the square, "south" the
 ## southmost z. `old` draws it the way it was before board 13e98b04: door-
 ## aligned at every pose.
-func _reach(model: String, old: bool) -> Dictionary:
+func _reach(model: String, old: bool, custom_offset := Vector3.INF) -> Dictionary:
 	var at := StandPlacement.stand_point(_stand)
 	var back := StandPlacement.pushback_end(_stand)
 	var plane_class := ""
@@ -219,8 +303,13 @@ func _reach(model: String, old: bool) -> Dictionary:
 	]
 	for leg: Array in legs:
 		for i in range(STEPS + 1):
-			var pose := FlightPose.pose(leg[0], float(i) / STEPS, leg[1], leg[2])
-			var placed := PlaneClasses.stand_offset(model)
+			var self_taxi := not old and PlaneClasses.self_taxis(model)
+			var pose := FlightPose.pose(
+				leg[0], float(i) / STEPS, leg[1], leg[2], {}, 0.0, self_taxi
+			)
+			var placed := (
+				custom_offset if custom_offset.is_finite() else PlaneClasses.stand_offset(model)
+			)
 			if not old:
 				placed = FlightPose.model_position(model, pose, at, Vector3.BACK)
 			for corner in corners:

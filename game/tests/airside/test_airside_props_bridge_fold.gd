@@ -171,11 +171,14 @@ func test_the_folded_bridge_stands_clear_of_plane_03_and_its_walk() -> void:
 	assert_int(under.x).is_equal(0)
 	assert_int(found["count"]).is_equal(0)
 	assert_int(inside["count"]).is_equal(0)
-	assert_int(walk.size()).is_equal(3)
+	assert_int(walk.size()).is_equal(5)
 	assert_int(blocked).is_equal(0)
-	# Control: open and parked, as drawn before the fold.
+	# Control: open and parked, as drawn before the fold over a door-aligned 03.
+	var centred_pos := plane.position
+	plane.position += Vector3(0.61, 0.0, 8.08)
 	JetBridgePose.apply(entry["joints"], JetBridgePose.parked())
 	var open := _plane_hits_under(bridge, plane)
+	plane.position = centred_pos
 	# Control: the walk turned 1 m further out along the vestibule's west
 	# wall, past the apron door, meets the wall.
 	var shut := PackedVector3Array(walk)

@@ -62,7 +62,12 @@ func follow(
 	airside: Airside,
 	key: int
 ) -> void:
-	var pushing := shown and model != null and phase == FlightSim.State.PUSHBACK
+	var pushing := (
+		shown
+		and model != null
+		and phase == FlightSim.State.PUSHBACK
+		and not PlaneClasses.self_taxis(model_name)
+	)
 	tug.visible = pushing
 	if pushing:
 		tug.global_transform = tug_transform(
