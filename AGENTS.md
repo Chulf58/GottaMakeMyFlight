@@ -51,7 +51,7 @@ Durable conventions and project facts, for any engineer or agent working in this
 
 - Stack tags (= domain mount manifest): godot, gdscript, python, blender, sterling
 - Toolchains: gdlint, gdformat and gdUnit4 for `game/**/*.gd` (gdtoolkit Windows exes under `/mnt/c/Users/chulf/.local/bin/`; tests in `game/tests/`)
-- Lint/format command: `/mnt/c/Users/chulf/.local/bin/gdlint.exe <explicit .gd paths under game/> && /mnt/c/Users/chulf/.local/bin/gdformat.exe --check <same paths>`, run from the repo root so `gdlintrc` applies. Pass explicit paths, never a glob that sweeps vendored addons. gdformat.exe writes CRLF when it rewrites; `--check` never writes.
+- Lint/format command: `tools/gdlint.sh <explicit .gd paths under game/> && tools/gdformat.sh --check <same paths>`, run from the repo root so `gdlintrc` applies. The wrappers enforce `< /dev/null` and a 60 s timeout around the Windows binaries. Pass explicit paths, never a glob that sweeps vendored addons. `gdformat.exe` still writes CRLF when rewriting without `--check`.
 - Domain stores (one shared store per stack tag): ~/.sterling/domains/godot/, ~/.sterling/domains/gdscript/, ~/.sterling/domains/python/, ~/.sterling/domains/blender/, ~/.sterling/domains/sterling/ — each created by init with a description of what belongs in it (§2.3)
 - Backup path: configured — see `.sterling/config.json` → `backup_path` (machine-local, deliberately not restated here)
 
@@ -123,6 +123,7 @@ These rules were learned on Dome Farmer, a Godot and Blender project on the same
 - **Blender** is at `/mnt/c/Program Files/Blender Foundation/Blender 5.2/`. The path contains spaces, so quote it.
 - **There is no `python` in WSL.** A bare `python` hits the Windows Store alias and exits 49. Blender work uses Blender's own bundled interpreter. For a one-off JSON read, use `node -e`, `grep` or `sed`.
 - **gdtoolkit** (`gdlint.exe`, `gdformat.exe`) is at `/mnt/c/Users/chulf/.local/bin/`, not in the WSL `~/.local/bin`. `gdformat.exe` writes CRLF line endings when it rewrites a file; convert back to the file's own endings.
+- **Every Windows `.exe` launched from WSL bash** (`Godot_v4.7.2-stable_win64_console.exe`, `blender.exe`, `gdlint.exe`, `gdformat.exe`) MUST pass `< /dev/null` and run under `timeout` so it never hangs on open stdin under Antigravity CLI (decision `wsl-windows-exe-wrappers-and-agents-md-stdin-timeout-rule`, anti-pattern `a69ffb51`).
 - **Subagent shells** may be unable to run `unzip`, `mkdir`, `cp` or `find`. Extracting a vendor archive is then a conductor step; hand agents the extracted path.
 
 ### The gdlint line cap
