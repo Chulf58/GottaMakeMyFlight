@@ -474,6 +474,7 @@ func test_demo_end_card_pauses_synchronously_on_day5_rollover_and_handles_button
 
 	end_card.wishlist_button().pressed.emit()
 	assert_array(opened_urls).is_equal([DemoMode.STEAM_STORE_URL])
+	assert_bool(end_card.feedback_button().visible).is_false()
 	assert_bool(end_card.is_open()).is_true()
 
 	end_card.back_button().pressed.emit()
@@ -481,6 +482,31 @@ func test_demo_end_card_pauses_synchronously_on_day5_rollover_and_handles_button
 	assert_int(title_returns[0]).is_equal(1)
 	assert_bool(end_card.is_open()).is_false()
 	assert_bool(clock.holds.is_holding()).is_false()
+
+
+func test_demo_end_card_send_feedback_button_shows_when_url_set_and_opens_it() -> void:
+	DemoMode.set_override_for_test(true)
+	var port: SubViewport = auto_free(SubViewport.new())
+	port.size = Vector2i(1920, 1080)
+	add_child(port)
+	var clock: SimClock = auto_free(SimClock.new())
+	port.add_child(clock)
+	var end_card: DemoEndCard = auto_free(DemoEndCard.new())
+	end_card.clock = clock
+	end_card.feedback_url = "https://example.com/demo-feedback"
+	var opened_urls: Array[String] = []
+	end_card.url_opener = func(url: String) -> void: opened_urls.append(url)
+	port.add_child(end_card)
+
+	assert_bool(end_card.open()).is_true()
+	var fb := end_card.feedback_button()
+	assert_object(fb).is_not_null()
+	assert_bool(fb.visible).is_true()
+	assert_str(fb.text).is_equal("Send Feedback")
+	fb.pressed.emit()
+	assert_array(opened_urls).is_equal(["https://example.com/demo-feedback"])
+	assert_bool(end_card.is_open()).is_true()
+	end_card.close()
 
 
 func test_main_scene_day6_autosave_and_reload_re_shows_demo_end_card_paused() -> void:

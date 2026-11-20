@@ -11,6 +11,8 @@ const HIDDEN_MIN_TIER := 4
 const MAX_EXTRA_LAND_PLOTS := 1
 const MAX_DEMO_DAY := 5
 const STEAM_STORE_URL := "https://store.steampowered.com/"
+## PLACEHOLDER: the feedback page for the Send Feedback button. Empty until set.
+const FEEDBACK_URL := ""
 
 static var _override: int = -1
 

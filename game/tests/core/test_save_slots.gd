@@ -23,9 +23,9 @@ func after_test() -> void:
 	SaveSlots.dir = _dir_before
 
 
-func _write(path: String) -> void:
+func _write(path: String, version := SaveGame.SAVE_VERSION) -> void:
 	var file := FileAccess.open(path, FileAccess.WRITE)
-	file.store_string("{}")
+	file.store_string('{"save_version": %d}' % version)
 	file.close()
 
 
@@ -98,3 +98,28 @@ func test_a_script_run_on_the_players_folder_is_shielded_and_on_its_own_is_not()
 	assert_bool(SaveSlots.is_shielded()).is_false()
 	SaveSlots.dir = SaveSlots.DIR
 	assert_bool(SaveSlots.is_shielded()).is_true()
+
+
+func test_latest_skips_incompatible_and_corrupt_saves_without_deleting_them() -> void:
+	var manual := SaveSlots.manual_path()
+	var auto1 := SaveSlots.autosave_paths()[0]
+	var auto2 := SaveSlots.autosave_paths()[1]
+	_write(manual, SaveGame.SAVE_VERSION - 1)
+	var corrupt := FileAccess.open(auto1, FileAccess.WRITE)
+	corrupt.store_string("{not json")
+	corrupt.close()
+
+	assert_int(SaveSlots.file_save_version(manual)).is_equal(SaveGame.SAVE_VERSION - 1)
+	assert_int(SaveSlots.file_save_version(auto1)).is_equal(-1)
+	assert_bool(SaveSlots.is_compatible(manual)).is_false()
+	assert_bool(SaveSlots.is_compatible(auto1)).is_false()
+	assert_array(SaveSlots.existing()).has_size(2)
+	assert_str(SaveSlots.latest()).is_equal("")
+	# Incompatible files are never mutated or deleted.
+	assert_bool(FileAccess.file_exists(manual)).is_true()
+	assert_bool(FileAccess.file_exists(auto1)).is_true()
+
+	# When a compatible save exists alongside incompatible ones, latest() picks it.
+	_write(auto2, SaveGame.SAVE_VERSION)
+	assert_bool(SaveSlots.is_compatible(auto2)).is_true()
+	assert_str(SaveSlots.latest()).is_equal(auto2)
