@@ -92,6 +92,7 @@ var _departures_board := DeparturesBoard.new()
 ## only when the HUD has a FlightSim and a clock.
 var _planner := FlightPlanner.new()
 var _alerts := AlertStack.new()
+var _pa_ticker := PaTicker.new()
 var _hints := Hints.new()
 ## The new-tier dialog and the "New" card marks (UnlockGuide); on in a normal
 ## launch only, like the hints.
@@ -197,6 +198,9 @@ func _ready() -> void:
 	_alerts.camera = camera
 	_alerts.settings_path = alert_settings_path
 	add_child(_alerts)
+	_pa_ticker.bottom_provider = _pa_bottom
+	_pa_ticker.modal_check = _pa_modal_open
+	add_child(_pa_ticker)
 	if flights != null:
 		flights.doors_closed.connect(_on_doors_closed)
 	if debug_tools:
@@ -437,6 +441,10 @@ func refresh() -> void:
 	# Before the rail, so it hangs under the chip on the frame the chip shows.
 	_refresh_quiet_chip()
 	_alerts.refresh()
+	if _pa_modal_open():
+		_pa_ticker.clear_now()
+	elif _pa_ticker.visible:
+		_pa_ticker.place()
 	if _seed_label != null:
 		_seed_label.text = seed_text()
 		_seed_label.visible = _seed_label.text != ""
@@ -668,6 +676,11 @@ func _wire_demo_end_card() -> void:
 	demo_end_card.build_mode = build_mode
 	demo_end_card.save_game = save_game
 	demo_end_card.dialog_changed.connect(_gate_camera)
+	demo_end_card.dialog_changed.connect(
+		func(open: bool) -> void:
+			if open:
+				_pa_ticker.clear_now()
+	)
 	add_child(demo_end_card)
 
 
@@ -898,24 +911,25 @@ func _end_intro_on_load() -> void:
 ## off, and switched back to what they were when the last one closes. Only the
 ## first gate saves the state, so overlapping gates cannot save the gated one.
 func _gate_camera(closed: bool) -> void:
-	if not is_instance_valid(camera):
-		return
 	if closed:
+		_pa_ticker.clear_now()
 		_camera_gates += 1
 		if _camera_gates > 1:
 			return
-		_camera_was_processing = camera.is_processing()
-		_camera_was_taking_input = camera.is_processing_unhandled_input()
-		camera.set_process(false)
-		camera.set_process_unhandled_input(false)
+		if is_instance_valid(camera):
+			_camera_was_processing = camera.is_processing()
+			_camera_was_taking_input = camera.is_processing_unhandled_input()
+			camera.set_process(false)
+			camera.set_process_unhandled_input(false)
 	else:
 		if _camera_gates == 0:
 			return
 		_camera_gates -= 1
 		if _camera_gates > 0:
 			return
-		camera.set_process(_camera_was_processing)
-		camera.set_process_unhandled_input(_camera_was_taking_input)
+		if is_instance_valid(camera):
+			camera.set_process(_camera_was_processing)
+			camera.set_process_unhandled_input(_camera_was_taking_input)
 
 
 ## True when this HUD belongs to the running scene: a normal launch or a
@@ -953,8 +967,34 @@ func _on_save_loaded(ok: bool) -> void:
 		# result must not reach the rail after the reset.
 		_unreported.clear()
 		_alerts.reset()
+		_pa_ticker.clear_now()
 		_inspect.on_loaded(ok)
 		_frame_start_view()
+
+
+func _pa_bottom() -> float:
+	var menu := get_node_or_null("../BuildMenu") as BuildMenu
+	if menu != null and menu.is_node_ready() and menu.is_tray_open():
+		return menu.stack_top() + HudLayout.GAP
+	var staff := get_node_or_null("../StaffPanel") as StaffPanel
+	if staff != null and staff.is_node_ready():
+		var staff_card := staff.get_node_or_null("StaffCard") as Control
+		if staff_card != null and staff_card.visible:
+			return (
+				BuildMenu.MARGIN
+				+ BuildMenu.BAR_H
+				+ BuildMenu.GAP
+				+ staff_card.size.y
+				+ HudLayout.GAP
+			)
+	return BuildMenu.MARGIN + BuildMenu.BAR_H + HudLayout.GAP
+
+
+func _pa_modal_open() -> bool:
+	if _camera_gates > 0 or demo_end_card.is_open():
+		return true
+	var offers := get_node_or_null("../OfferPanel") as OfferPanel
+	return offers != null and offers.is_node_ready() and offers.is_open()
 
 
 func _frame_start_view() -> void:

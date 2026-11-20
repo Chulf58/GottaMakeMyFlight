@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deterministic procedural WAV synthesizer for the D5 demo audio floor.
+"""Deterministic procedural WAV synthesizer for the D5 demo audio floor and PA cues.
 
 Generates compact, click-free 16-bit PCM WAV assets under game/assets/audio/:
   - terminal_ambience.wav (14.0 s seamless loop, 22050 Hz mono)
@@ -8,6 +8,14 @@ Generates compact, click-free 16-bit PCM WAV assets under game/assets/audio/:
   - build_remove.wav      (80 ms soft muted brush/pop, 44100 Hz mono)
   - build_refuse.wav      (115 ms gentle low marimba double-thud, 44100 Hz mono)
   - cash_chime.wav        (185 ms warm two-note bell chime, 44100 Hz mono)
+  - security_beep.wav     (70 ms soft dual-tone marimba/bell pip, 44100 Hz mono)
+  - pa_chime.wav          (520 ms warm 3-note airport bell chime, 44100 Hz mono)
+  - pa_final_call.wav     (600 ms warm 4-note airport bell chime, 44100 Hz mono)
+  - close_call_save.wav   (220 ms bright relief flourish glockenspiel, 44100 Hz mono)
+  - joke_spill.wav        (210 ms soft bubbly splat + woody slide, 44100 Hz mono)
+  - joke_fault.wav        (340 ms warm low marimba power-down, 44100 Hz mono)
+  - joke_queue_horn.wav   (260 ms gentle detuned two-note cozy horn, 44100 Hz mono)
+  - star_up.wav           (300 ms warm ascending chime C5-E5-G5-C6, 44100 Hz mono)
 """
 
 from __future__ import annotations
@@ -234,6 +242,192 @@ def build_cash_chime(sr: int = 44100) -> tuple[int, list[float]]:
     return sr, out
 
 
+def _render_bell_notes(
+    dur: float, notes: list[tuple[float, float, float, float]], sr: int = 44100
+) -> tuple[int, list[float]]:
+    n = int(dur * sr)
+    out = [0.0] * n
+    for start_t, freq, amp, tau in notes:
+        for i in range(n):
+            t = i / sr - start_t
+            if t < 0.0:
+                continue
+            note_dur = dur - start_t
+            env = _env_attack_exp(t, note_dur, 0.0025, tau)
+            bell = (
+                math.sin(TAU * freq * t)
+                + 0.22 * math.sin(TAU * (freq * 2.0) * t) * math.exp(-t / 0.032)
+                + 0.06 * math.sin(TAU * (freq * 3.0) * t) * math.exp(-t / 0.016)
+            )
+            out[i] += amp * bell * env
+    out[-1] = 0.0
+    return sr, out
+
+
+def build_security_beep(sr: int = 44100) -> tuple[int, list[float]]:
+    """70 ms soft dual-tone ~880 -> 1175 Hz marimba/bell pip."""
+    return _render_bell_notes(
+        0.070,
+        [
+            (0.000, 880.00, 0.20, 0.014),
+            (0.030, 1174.66, 0.22, 0.018),
+        ],
+        sr,
+    )
+
+
+def build_pa_chime(sr: int = 44100) -> tuple[int, list[float]]:
+    """520 ms warm 3-note airport bell chime (C5-E5-G5)."""
+    return _render_bell_notes(
+        0.520,
+        [
+            (0.000, 523.25, 0.24, 0.110),
+            (0.130, 659.25, 0.24, 0.110),
+            (0.260, 783.99, 0.26, 0.150),
+        ],
+        sr,
+    )
+
+
+def build_pa_final_call(sr: int = 44100) -> tuple[int, list[float]]:
+    """600 ms warm 4-note airport chime (G4-C5-E5-G5)."""
+    return _render_bell_notes(
+        0.600,
+        [
+            (0.000, 392.00, 0.22, 0.095),
+            (0.115, 523.25, 0.23, 0.095),
+            (0.230, 659.25, 0.24, 0.105),
+            (0.345, 783.99, 0.27, 0.155),
+        ],
+        sr,
+    )
+
+
+def build_close_call_save(sr: int = 44100) -> tuple[int, list[float]]:
+    """220 ms bright relief flourish glockenspiel (F5-A5-C6)."""
+    return _render_bell_notes(
+        0.220,
+        [
+            (0.000, 698.46, 0.22, 0.045),
+            (0.055, 880.00, 0.23, 0.045),
+            (0.110, 1046.50, 0.26, 0.065),
+        ],
+        sr,
+    )
+
+
+def build_joke_spill(sr: int = 44100) -> tuple[int, list[float]]:
+    """210 ms soft bubbly splat + gentle descending woody slide."""
+    dur = 0.210
+    n = int(dur * sr)
+    rng = random.Random(303)
+    splash = _one_pole_lowpass([rng.uniform(-1.0, 1.0) for _ in range(n)], 1200.0, sr)
+    splash = _one_pole_highpass(splash, 260.0, sr)
+    out = [0.0] * n
+    slide_phase = 0.0
+    b1_phase = 0.0
+    b2_phase = 0.0
+    for i in range(n):
+        t = i / sr
+        slide_freq = 175.0 + 265.0 * math.exp(-t / 0.055)
+        slide_phase += TAU * slide_freq / sr
+        slide_env = _env_attack_exp(t, dur, 0.003, 0.065)
+        splat = splash[i] * math.exp(-t / 0.022) * 0.28 * _env_attack_exp(t, dur, 0.002, 0.040)
+
+        b1 = 0.0
+        if t >= 0.020:
+            bt1 = t - 0.020
+            b1_freq = 640.0 - 260.0 * math.exp(-bt1 / 0.015)
+            b1_phase += TAU * b1_freq / sr
+            b1 = 0.20 * math.sin(b1_phase) * _env_attack_exp(bt1, dur - 0.020, 0.002, 0.018)
+
+        b2 = 0.0
+        if t >= 0.075:
+            bt2 = t - 0.075
+            b2_freq = 820.0 - 300.0 * math.exp(-bt2 / 0.014)
+            b2_phase += TAU * b2_freq / sr
+            b2 = 0.18 * math.sin(b2_phase) * _env_attack_exp(bt2, dur - 0.075, 0.002, 0.018)
+
+        wood = 0.26 * (math.sin(slide_phase) + 0.15 * math.sin(3.9 * slide_phase)) * slide_env
+        out[i] = wood + splat + b1 + b2
+    out[-1] = 0.0
+    return sr, out
+
+
+def build_joke_fault(sr: int = 44100) -> tuple[int, list[float]]:
+    """340 ms warm low marimba/brass power-down 'wah-wah-wah'."""
+    dur = 0.340
+    n = int(dur * sr)
+    out = [0.0] * n
+    steps = [
+        (0.000, 0.095, 246.94, 0.28),
+        (0.105, 0.095, 220.00, 0.28),
+        (0.210, 0.130, 185.00, 0.30),
+    ]
+    for start_t, note_dur, freq, amp in steps:
+        phase = 0.0
+        for i in range(n):
+            t = i / sr - start_t
+            if t < 0.0 or t >= note_dur:
+                continue
+            sag_freq = freq * (1.0 - 0.055 * (t / note_dur))
+            phase += TAU * sag_freq / sr
+            env = _env_attack_exp(t, note_dur, 0.004, note_dur * 0.45)
+            tone = (
+                math.sin(phase)
+                + 0.30 * math.sin(2.0 * phase) * math.exp(-t / 0.04)
+                + 0.12 * math.sin(3.0 * phase) * math.exp(-t / 0.02)
+            )
+            out[i] += amp * tone * env
+    out[-1] = 0.0
+    return sr, out
+
+
+def build_joke_queue_horn(sr: int = 44100) -> tuple[int, list[float]]:
+    """260 ms gentle slightly detuned two-note Mini-Motorways-style cozy horn."""
+    dur = 0.260
+    n = int(dur * sr)
+    out = [0.0] * n
+    honks = [
+        (0.000, 0.095, 329.63, 332.8, 0.22),
+        (0.125, 0.135, 293.66, 296.4, 0.24),
+    ]
+    for start_t, note_dur, f1, f2, amp in honks:
+        for i in range(n):
+            t = i / sr - start_t
+            if t < 0.0 or t >= note_dur:
+                continue
+            att = math.sin(0.5 * math.pi * min(1.0, t / 0.010))
+            rel = 1.0
+            rel_len = 0.024
+            if t > note_dur - rel_len:
+                rel = 0.5 + 0.5 * math.cos(math.pi * (t - (note_dur - rel_len)) / rel_len)
+            env = att * rel
+            horn = 0.55 * (
+                math.sin(TAU * f1 * t)
+                + math.sin(TAU * f2 * t)
+                + 0.22 * math.sin(TAU * (f1 * 2.0) * t)
+                + 0.12 * math.sin(TAU * (f2 * 3.0) * t)
+            )
+            out[i] += amp * horn * env
+    out[-1] = 0.0
+    return sr, out
+
+
+def build_star_up(sr: int = 44100) -> tuple[int, list[float]]:
+    """300 ms warm ascending chime (C5-E5-G5-C6)."""
+    return _render_bell_notes(
+        0.300,
+        [
+            (0.000, 523.25, 0.21, 0.050),
+            (0.058, 659.25, 0.22, 0.050),
+            (0.116, 783.99, 0.23, 0.055),
+            (0.174, 1046.50, 0.26, 0.085),
+        ],
+        sr,
+    )
+
+
 def main() -> None:
     builders = {
         "terminal_ambience.wav": build_terminal_ambience,
@@ -242,6 +436,14 @@ def main() -> None:
         "build_remove.wav": build_remove_sfx,
         "build_refuse.wav": build_refuse_sfx,
         "cash_chime.wav": build_cash_chime,
+        "security_beep.wav": build_security_beep,
+        "pa_chime.wav": build_pa_chime,
+        "pa_final_call.wav": build_pa_final_call,
+        "close_call_save.wav": build_close_call_save,
+        "joke_spill.wav": build_joke_spill,
+        "joke_fault.wav": build_joke_fault,
+        "joke_queue_horn.wav": build_joke_queue_horn,
+        "star_up.wav": build_star_up,
     }
     for filename, fn in builders.items():
         sr, samples = fn()

@@ -42,6 +42,8 @@ extends VBoxContainer
 
 ## A card was clicked and the camera sent to `target`.
 signal jumped(target: Vector3)
+## A cause transitioned from inactive to active on the board.
+signal alert_raised(key: StringName)
 ## reset() has dropped every card and notice; a poster of notices posts again.
 signal reset_done
 
@@ -185,7 +187,14 @@ func refresh() -> void:
 	causes.append_array(_gate_causes)
 	causes.append_array(_staff_causes)
 	causes.append_array(_dirty.cause())
+	var prev_active := {}
+	for alert in _board.active():
+		prev_active[alert["key"]] = true
 	_board.update(causes, sim.tick)
+	for alert in _board.active():
+		var key: StringName = alert["key"]
+		if not prev_active.has(key):
+			alert_raised.emit(key)
 	if _board.revision != _shown_revision:
 		_shown_revision = _board.revision
 		_sync_cards()
