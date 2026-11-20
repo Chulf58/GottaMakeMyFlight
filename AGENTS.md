@@ -123,7 +123,7 @@ These rules were learned on Dome Farmer, a Godot and Blender project on the same
 - **Blender** is at `/mnt/c/Program Files/Blender Foundation/Blender 5.2/`. The path contains spaces, so quote it.
 - **There is no `python` in WSL.** A bare `python` hits the Windows Store alias and exits 49. Blender work uses Blender's own bundled interpreter. For a one-off JSON read, use `node -e`, `grep` or `sed`.
 - **gdtoolkit** (`gdlint.exe`, `gdformat.exe`) is at `/mnt/c/Users/chulf/.local/bin/`, not in the WSL `~/.local/bin`. `gdformat.exe` writes CRLF line endings when it rewrites a file; convert back to the file's own endings.
-- **Every Windows `.exe` launched from WSL bash** (`Godot_v4.7.2-stable_win64_console.exe`, `blender.exe`, `gdlint.exe`, `gdformat.exe`) MUST pass `< /dev/null` and run under `timeout` so it never hangs on open stdin under Antigravity CLI (decision `wsl-windows-exe-wrappers-and-agents-md-stdin-timeout-rule`, anti-pattern `a69ffb51`).
+- **Every Windows `.exe` launched from WSL bash** (`Godot_v4.7.2-stable_win64_console.exe`, `blender.exe`, `gdlint.exe`, `gdformat.exe`) MUST pass `< /dev/null` and run under `timeout` so it never hangs on open stdin under Antigravity CLI (decision `wsl-windows-exe-wrappers-and-agents-md-stdin-timeout-rule`, anti-pattern `windows-console-executables-launched-from-wsl-under-antigrav` (`a69ffb51`)).
 - **Subagent shells** may be unable to run `unzip`, `mkdir`, `cp` or `find`. Extracting a vendor archive is then a conductor step; hand agents the extracted path.
 
 ### The gdlint line cap
