@@ -53,8 +53,8 @@ const SFX_COOLDOWN_MS := {
 	&"build_refuse": 80,
 	&"cash_chime": 450,
 	&"security_beep": 1400,
-	&"pa_chime": 7000,
-	&"pa_final_call": 7000,
+	&"pa_chime": PA_PRIORITY_COOLDOWN_MS,
+	&"pa_final_call": PA_PRIORITY_COOLDOWN_MS,
 	&"close_call_save": 4500,
 	&"joke_spill": 4000,
 	&"joke_fault": 4000,
@@ -95,9 +95,11 @@ var _last_final_call_check_tick := -FINAL_CALL_POLL_TICKS
 var _prev_stage: Dictionary = {}
 var _announced_boarding: Dictionary = {}
 var _announced_final_call: Dictionary = {}
+var _announced_rush_ids: Dictionary = {}
 var _close_call_flights: Dictionary = {}
 var _close_call_counts: Dictionary = {}
 var _last_rating_stars := -1.0
+var _clock_ms := Callable()
 
 
 func _ready() -> void:
@@ -186,9 +188,11 @@ func reset_for_test() -> void:
 	_prev_stage.clear()
 	_announced_boarding.clear()
 	_announced_final_call.clear()
+	_announced_rush_ids.clear()
 	_close_call_flights.clear()
 	_close_call_counts.clear()
 	_last_rating_stars = -1.0
+	_clock_ms = Callable()
 	for player in _sfx_players:
 		player.stop()
 	if _pa_player != null:
@@ -236,7 +240,7 @@ func is_ambience_playing() -> bool:
 func play_sfx(sfx_id: StringName, ignore_cooldown := false) -> bool:
 	if not _sfx_streams.has(sfx_id) or _sfx_players.is_empty():
 		return false
-	var now := Time.get_ticks_msec()
+	var now := _now_ms()
 	var cooldown := int(SFX_COOLDOWN_MS.get(sfx_id, 0))
 	if not ignore_cooldown and _last_played_ms.has(sfx_id):
 		if now - int(_last_played_ms[sfx_id]) < cooldown:
@@ -257,6 +261,10 @@ func last_sfx() -> StringName:
 
 func sfx_count(sfx_id: StringName) -> int:
 	return int(_sfx_counts.get(sfx_id, 0))
+
+
+func _now_ms() -> int:
+	return int(_clock_ms.call()) if _clock_ms.is_valid() else Time.get_ticks_msec()
 
 
 func _is_shielded(path: String) -> bool:
@@ -286,21 +294,21 @@ func _play_sim_sfx(sfx_id: StringName) -> bool:
 func _announce_pa(chime_id: StringName, text: String, priority := false) -> bool:
 	if text == "" or _suppress_events or not _can_announce_pa():
 		return false
-	var now := Time.get_ticks_msec()
+	var now := _now_ms()
 	var cooldown := PA_PRIORITY_COOLDOWN_MS if priority else PA_COOLDOWN_MS
 	if _last_pa_ms >= 0 and now - _last_pa_ms < cooldown:
 		return false
-	if chime_id != &"" and not _play_on_pa_player(chime_id, now):
+	if chime_id != &"" and not _play_on_pa_player(chime_id, now, cooldown):
 		return false
 	_last_pa_ms = now
 	pa_announced.emit(text)
 	return true
 
 
-func _play_on_pa_player(chime_id: StringName, now: int) -> bool:
+func _play_on_pa_player(chime_id: StringName, now: int, min_gap_ms: int) -> bool:
 	if not _sfx_streams.has(chime_id) or _pa_player == null:
 		return false
-	var cooldown := int(SFX_COOLDOWN_MS.get(chime_id, 0))
+	var cooldown := maxi(min_gap_ms, int(SFX_COOLDOWN_MS.get(chime_id, 0)))
 	if _last_played_ms.has(chime_id) and now - int(_last_played_ms[chime_id]) < cooldown:
 		return false
 	_last_played_ms[chime_id] = now
@@ -545,10 +553,9 @@ func _bind_incident_director(director: IncidentDirector) -> void:
 	if not is_instance_valid(director) or not director.is_inside_tree():
 		return
 	_incidents = director
+	_seed_incidents(director)
 	if not director.started.is_connected(_on_incident_started):
 		director.started.connect(_on_incident_started)
-	if not director.major_presented.is_connected(_on_incident_major_presented):
-		director.major_presented.connect(_on_incident_major_presented)
 	if not director.restored.is_connected(_on_incidents_restored):
 		director.restored.connect(_on_incidents_restored)
 	var on_exit := _on_incident_director_exited.bind(director)
@@ -560,12 +567,11 @@ func _on_incident_director_exited(director: IncidentDirector) -> void:
 	if is_instance_valid(director):
 		if director.started.is_connected(_on_incident_started):
 			director.started.disconnect(_on_incident_started)
-		if director.major_presented.is_connected(_on_incident_major_presented):
-			director.major_presented.disconnect(_on_incident_major_presented)
 		if director.restored.is_connected(_on_incidents_restored):
 			director.restored.disconnect(_on_incidents_restored)
 	if _incidents == director:
 		_incidents = null
+		_announced_rush_ids.clear()
 
 
 func _bind_airport_rating(rating: AirportRating) -> void:
@@ -691,8 +697,6 @@ func _on_edit_refused(_edit: BuildEdit, _result: BuildResult) -> void:
 
 
 func _on_clock_ticked(tick: int) -> void:
-	if not is_instance_valid(_flights):
-		return
 	if (
 		tick >= _last_final_call_check_tick
 		and tick - _last_final_call_check_tick < FINAL_CALL_POLL_TICKS
@@ -701,15 +705,37 @@ func _on_clock_ticked(tick: int) -> void:
 	_last_final_call_check_tick = tick
 	if _suppress_events or not _can_announce_pa():
 		return
-	for flight_id in _flights.flight_ids():
-		if _flights.state_of(flight_id) != FlightSim.State.BOARDING:
+	if is_instance_valid(_flights):
+		for flight_id in _flights.flight_ids():
+			if _flights.state_of(flight_id) != FlightSim.State.BOARDING:
+				continue
+			if _announced_final_call.has(flight_id):
+				continue
+			var window := _flights.boarding_window(flight_id)
+			if window.y >= 0 and window.y - tick <= FINAL_CALL_LEAD_TICKS:
+				if _announce_pa(&"pa_final_call", PaWords.final_call(_flights, flight_id), true):
+					_announced_final_call[flight_id] = true
+	_check_rush_announcements(tick)
+
+
+func _check_rush_announcements(tick: int) -> void:
+	if not is_instance_valid(_incidents):
+		return
+	for incident in _incidents.incidents():
+		if incident.get("kind", "") != IncidentCatalogue.RUSH:
 			continue
-		if _announced_final_call.has(flight_id):
+		if incident.get("state", "") != IncidentCatalogue.ANNOUNCED:
 			continue
-		var window := _flights.boarding_window(flight_id)
-		if window.y >= 0 and window.y - tick <= FINAL_CALL_LEAD_TICKS:
-			_announced_final_call[flight_id] = true
-			_announce_pa(&"pa_final_call", PaWords.final_call(_flights, flight_id), true)
+		var inc_id := int(incident.get("id", -1))
+		if inc_id < 0 or _announced_rush_ids.has(inc_id):
+			continue
+		var until := int((incident.get("plan", {}) as Dictionary).get("until", -1))
+		if until < 0:
+			continue
+		var rush_start := until - GameCalendar.TICKS_PER_DAY
+		if tick >= rush_start and tick < until:
+			if _announce_pa(&"pa_chime", PaWords.rush(), true):
+				_announced_rush_ids[inc_id] = true
 
 
 func _on_flight_state(flight_id: String, new_state: int, flights: FlightSim) -> void:
@@ -750,6 +776,8 @@ func _seed_state() -> void:
 		_seed_flights(_flights)
 	if is_instance_valid(_passengers):
 		_seed_passengers(_passengers)
+	if is_instance_valid(_incidents):
+		_seed_incidents(_incidents)
 	if is_instance_valid(_rating):
 		_last_rating_stars = _rating.stars() if _rating.has_data() else -1.0
 	for desk_id: int in _desks_by_id.keys():
@@ -791,6 +819,23 @@ func _seed_passengers(sim: PassengerSim) -> void:
 			_close_call_flights[flight_id] = true
 
 
+func _seed_incidents(director: IncidentDirector) -> void:
+	_announced_rush_ids.clear()
+	var cur_tick := (
+		_clock.tick
+		if is_instance_valid(_clock)
+		else (_flights.tick if is_instance_valid(_flights) else 0)
+	)
+	for incident in director.incidents():
+		if incident.get("kind", "") != IncidentCatalogue.RUSH:
+			continue
+		if incident.get("state", "") != IncidentCatalogue.ANNOUNCED:
+			continue
+		var until := int((incident.get("plan", {}) as Dictionary).get("until", -1))
+		if until >= 0 and cur_tick >= until - GameCalendar.TICKS_PER_DAY:
+			_announced_rush_ids[int(incident.get("id", -1))] = true
+
+
 func _on_passenger_stage_changed(id: int, stage: Passenger.Stage, _sim: PassengerSim) -> void:
 	var prev: int = _prev_stage.get(id, -1)
 	_prev_stage[id] = stage
@@ -818,7 +863,7 @@ func _on_passenger_outcome(id: int, made: bool, sim: PassengerSim) -> void:
 	if (cc > prev_cc or within_ticks) and not _close_call_flights.has(p.flight_id):
 		_close_call_flights[p.flight_id] = true
 		play_sfx(&"close_call_save")
-		_announce_pa(&"", PaWords.close_call(_flights, p.flight_id), false)
+		_announce_pa(&"", PaWords.close_call_for(_flights, p.flight_id), false)
 
 
 func _on_incident_started(incident: Dictionary) -> void:
@@ -831,14 +876,14 @@ func _on_incident_started(incident: Dictionary) -> void:
 	elif kind == IncidentCatalogue.FAULT:
 		play_sfx(&"joke_fault")
 		_announce_pa(&"", PaWords.fault(), true)
-
-
-func _on_incident_major_presented(incident: Dictionary) -> void:
-	if _suppress_events or _is_fast_forwarding():
-		return
-	var kind := String(incident.get("kind", ""))
-	if kind == IncidentCatalogue.RUSH:
-		_announce_pa(&"pa_chime", PaWords.rush(), true)
+	elif kind == IncidentCatalogue.RUSH:
+		var inc_id := int(incident.get("id", -1))
+		if (
+			(inc_id < 0 or not _announced_rush_ids.has(inc_id))
+			and _announce_pa(&"pa_chime", PaWords.rush(), true)
+		):
+			if inc_id >= 0:
+				_announced_rush_ids[inc_id] = true
 
 
 func _on_rating_changed(rating: AirportRating) -> void:

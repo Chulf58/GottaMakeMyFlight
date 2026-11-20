@@ -28,6 +28,7 @@ func before_test() -> void:
 func after_test() -> void:
 	PseudoLocale.disable()
 	DemoMode.clear_override()
+	IntroDialogue.shown_this_session = false
 	if _audio != null:
 		_audio.reset_for_test()
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(_cfg_path))
@@ -60,7 +61,10 @@ func test_pa_words_are_in_pot_and_pseudolocalize_cleanly() -> void:
 		PaWords.rush(),
 		PaWords.queue_checkin(),
 		PaWords.queue_security(),
-		PaWords.close_call(flights, "GMF101"),
+		PaWords.close_call("Gotta Air", "Oslo", "C", "GMF101"),
+		PaWords.close_call("Gotta Air", "Oslo", "", "GMF101"),
+		PaWords.close_call("", "", "C", "GMF101"),
+		PaWords.close_call_for(flights, "GMF101"),
 		PaWords.star_milestone("4.0"),
 	]
 	for line in lines:
@@ -69,11 +73,16 @@ func test_pa_words_are_in_pot_and_pseudolocalize_cleanly() -> void:
 
 
 func test_pa_ticker_subscribes_clamps_width_and_kills_tween_on_replace_and_exit() -> void:
+	var conns_before := _audio.pa_announced.get_connections().size()
 	var port := SubViewport.new()
 	port.size = Vector2i(420, 720)
 	add_child(port)
 	var ticker := PaTicker.new()
 	port.add_child(ticker)
+	assert_int(_audio.pa_announced.get_connections().size()).is_equal(conns_before + 1)
+	var label := ticker.find_child("PAText", false, false) as Label
+	assert_object(label).is_not_null()
+	assert_int(label.mouse_filter).is_equal(Control.MOUSE_FILTER_IGNORE)
 	assert_int(ticker.mouse_filter).is_equal(Control.MOUSE_FILTER_IGNORE)
 	assert_int(ticker.process_mode).is_equal(Node.PROCESS_MODE_ALWAYS)
 	assert_bool(ticker.visible).is_false()
@@ -82,14 +91,32 @@ func test_pa_ticker_subscribes_clamps_width_and_kills_tween_on_replace_and_exit(
 	assert_bool(ticker.visible).is_true()
 	assert_str(ticker.text_shown()).is_equal("PA: Short message.")
 	assert_float(ticker.size.x).is_less_equal(420.0 - 32.0 + 0.5)
+	var first_tween: Tween = ticker._tween
+	assert_object(first_tween).is_not_null()
+	assert_bool(first_tween.is_valid()).is_true()
 
-	# Second announcement replaces cleanly without stacking; narrow viewport clamps width.
+	# Second announcement kills prior tween and clamps width to viewport - 32.
 	_audio.pa_announced.emit(
 		"PA: A much longer announcement that must clamp to viewport width minus 32 px cleanly."
 	)
+	assert_bool(first_tween.is_valid()).is_false()
+	var second_tween: Tween = ticker._tween
+	assert_object(second_tween).is_not_null()
+	assert_bool(second_tween.is_valid()).is_true()
 	assert_str(ticker.text_shown()).contains("much longer announcement")
 	assert_float(ticker.offset_right - ticker.offset_left).is_less_equal(420.0 - 32.0 + 0.5)
+
+	# clear_now kills active tween; freeing kills any running tween and disconnects pa_announced.
+	ticker.clear_now()
+	assert_bool(second_tween.is_valid()).is_false()
+	assert_object(ticker._tween).is_null()
+	_audio.pa_announced.emit("PA: Exit cleanup.")
+	var exit_tween: Tween = ticker._tween
+	assert_bool(exit_tween.is_valid()).is_true()
+	assert_bool(_audio.pa_announced.is_connected(ticker.show_announcement)).is_true()
 	port.free()
+	assert_bool(exit_tween.is_valid()).is_false()
+	assert_int(_audio.pa_announced.get_connections().size()).is_equal(conns_before)
 
 
 func test_pa_ticker_positions_above_build_menu_and_clears_on_modals_and_load() -> void:
@@ -109,6 +136,11 @@ func test_pa_ticker_positions_above_build_menu_and_clears_on_modals_and_load() -
 	menu.name = "BuildMenu"
 	menu.build_mode = mode
 	root.add_child(menu)
+	var staff_panel := StaffPanel.new()
+	staff_panel.name = "StaffPanel"
+	staff_panel.staff = world.staff
+	staff_panel.menu = menu
+	root.add_child(staff_panel)
 	var save_game := SaveGame.new()
 	save_game.name = "SaveGame"
 	root.add_child(save_game)
@@ -156,7 +188,41 @@ func test_pa_ticker_positions_above_build_menu_and_clears_on_modals_and_load() -
 	assert_bool(menu.is_tray_open()).is_true()
 	assert_float(-ticker.offset_bottom).is_equal_approx(menu.stack_top() + HudLayout.GAP, 0.5)
 
+	# Opening StaffPanel shifts ticker above StaffCard.
+	menu.press_staff()
+	await await_idle_frame()
+	hud.refresh()
+	var staff_card := staff_panel.get_node_or_null("StaffCard") as Control
+	assert_object(staff_card).is_not_null()
+	assert_bool(staff_card.visible).is_true()
+	var expected_staff_bottom := (
+		BuildMenu.MARGIN + BuildMenu.BAR_H + BuildMenu.GAP + staff_card.size.y + HudLayout.GAP
+	)
+	assert_float(-ticker.offset_bottom).is_equal_approx(expected_staff_bottom, 0.5)
+	menu.press_staff()
+
+	# Opening FlightPlanner clears ticker immediately and suppresses new announcements while open.
+	var planner := hud.find_child("FlightPlanner", false, false) as FlightPlanner
+	assert_object(planner).is_not_null()
+	planner.open()
+	assert_bool(planner.is_open()).is_true()
+	assert_bool(ticker.visible).is_false()
+	_audio.pa_announced.emit("PA: Suppressed during planner.")
+	assert_bool(ticker.visible).is_false()
+	planner.close()
+
+	# Camera-gated modal (_camera_gates > 0 via IntroDialogue) clears & suppresses ticker.
+	_audio.pa_announced.emit("PA: Before intro modal.")
+	assert_bool(ticker.visible).is_true()
+	assert_bool(hud.open_intro()).is_true()
+	assert_bool(ticker.visible).is_false()
+	_audio.pa_announced.emit("PA: Suppressed during intro.")
+	assert_bool(ticker.visible).is_false()
+	hud.dismiss_intro()
+
 	# Opening DemoEndCard clears ticker immediately.
+	_audio.pa_announced.emit("PA: Before demo end.")
+	assert_bool(ticker.visible).is_true()
 	DemoMode.set_override_for_test(true)
 	assert_bool(hud.demo_end_card.open()).is_true()
 	assert_bool(ticker.visible).is_false()

@@ -189,6 +189,11 @@ func _ready() -> void:
 		_planner.clock = clock
 		_planner.build_mode = build_mode
 		add_child(_planner)
+		_planner.sheet().visibility_changed.connect(
+			func() -> void:
+				if _planner.is_open():
+					_pa_ticker.clear_now()
+		)
 	# The offer sheet is a sibling layer; the alert cards give way to it when open.
 	# The panel comes later in the scene, so it has no sheet until its _ready.
 	var offers := get_node_or_null("../OfferPanel") as OfferPanel
@@ -992,6 +997,8 @@ func _pa_bottom() -> float:
 
 func _pa_modal_open() -> bool:
 	if _camera_gates > 0 or demo_end_card.is_open():
+		return true
+	if _planner != null and _planner.is_node_ready() and _planner.is_open():
 		return true
 	var offers := get_node_or_null("../OfferPanel") as OfferPanel
 	return offers != null and offers.is_node_ready() and offers.is_open()

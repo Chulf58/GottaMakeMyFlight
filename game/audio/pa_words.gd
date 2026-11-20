@@ -106,19 +106,46 @@ static func queue_security() -> String:
 
 
 ## Announcement when a passenger catches a flight at the last second.
-static func close_call(flights: FlightSim, flight_id: String) -> String:
-	var label := ""
-	if flights != null:
-		label = FlightLabel.words(FlightLabel.label_args(flights, true, flight_id))
-	if label == "":
-		label = flight_id
+static func close_call(airline: String, city: String, gate: String, fallback_id: String) -> String:
+	if airline != "" and city != "":
+		if gate != "":
+			return (
+				TranslationServer
+				. translate(
+					"PA: Bravo to the passenger who caught {airline} to {city} at Gate {gate} just in time.",
+					CONTEXT
+				)
+				. format({"airline": airline, "city": city, "gate": gate})
+			)
+		return (
+			TranslationServer
+			. translate(
+				"PA: Bravo to the passenger who caught {airline} to {city} just in time.", CONTEXT
+			)
+			. format({"airline": airline, "city": city})
+		)
+	if gate != "":
+		return (
+			TranslationServer
+			. translate(
+				"PA: Bravo to the passenger who caught {flight} at Gate {gate} just in time.",
+				CONTEXT
+			)
+			. format({"flight": fallback_id, "gate": gate})
+		)
 	return (
 		TranslationServer
 		. translate(
 			"PA: Bravo to the passenger who caught {flight} with seconds to spare.", CONTEXT
 		)
-		. format({"flight": label})
+		. format({"flight": fallback_id})
 	)
+
+
+## Convenience wrapper reading airline, city and gate from `flights`.
+static func close_call_for(flights: FlightSim, flight_id: String) -> String:
+	var info := _flight_parts(flights, flight_id)
+	return close_call(info["airline"], info["city"], info["gate"], flight_id)
 
 
 ## Announcement when the terminal rating crosses a star milestone upward.
@@ -150,6 +177,9 @@ static func msgids() -> PackedStringArray:
 			"PA: A seasonal rush is arriving. Everyone is early except the queue.",
 			"PA: Check-in queue is full. Please admire the terminal flooring while waiting.",
 			"PA: Security queue is full. Take a moment to pre-untie your shoes.",
+			"PA: Bravo to the passenger who caught {airline} to {city} at Gate {gate} just in time.",
+			"PA: Bravo to the passenger who caught {airline} to {city} just in time.",
+			"PA: Bravo to the passenger who caught {flight} at Gate {gate} just in time.",
 			"PA: Bravo to the passenger who caught {flight} with seconds to spare.",
 			"PA: Our terminal is now rated {stars} stars. Same carpet, slightly prouder management.",
 		]

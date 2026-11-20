@@ -372,26 +372,50 @@ func test_boarding_final_call_dedupe_and_suppression_gates() -> void:
 
 	# A fresh flight in BOARDING with >300 ticks left triggers final call once tick crosses window.
 	_audio.reset_for_test()
+	var fake_now := [10000]
+	_audio._clock_ms = func() -> int: return fake_now[0]
 	var flights2 := FlightSim.new()
 	flights2.clock = clock
 	clock.tick = 0
 	flights2.add_flight("TEST2", PassengerTestWorld.starts_with(10, 1500), "C")
+	flights2.add_flight("TEST3", PassengerTestWorld.starts_with(10, 1500), "C")
 	add_child(flights2)
 	var win2 := flights2.boarding_window("TEST2")
 	while flights2.tick < win2.x:
 		flights2.tick += 1
 		flights2.on_tick(flights2.tick)
 	assert_int(flights2.state_of("TEST2")).is_equal(FlightSim.State.BOARDING)
-	_audio._last_pa_ms = -1
-	_audio._last_played_ms.clear()
+	assert_int(flights2.state_of("TEST3")).is_equal(FlightSim.State.BOARDING)
+	# First boarding PA fired at fake_now=10000; advance past priority cooldown (+3000 ms).
+	fake_now[0] = 13000
 	var fc_tick := win2.y - 200
 	clock.tick = fc_tick
 	flights2.tick = fc_tick
+	# TEST2 fires final call at 13000; TEST3 hits priority cooldown on the same tick (not lost).
 	clock.ticked.emit(fc_tick)
 	assert_int(_audio.sfx_count(&"pa_final_call")).is_equal(1)
 	assert_int(announced.size()).is_equal(3)
+	# +1000 ms later (14000): still within 2500 ms priority cooldown, TEST3 still deferred.
+	fake_now[0] = 14000
 	clock.ticked.emit(fc_tick + 10)
 	assert_int(_audio.sfx_count(&"pa_final_call")).is_equal(1)
+	# +3000 ms after TEST2's final call (16000) without clearing _last_played_ms: TEST3 retries.
+	fake_now[0] = 16000
+	clock.ticked.emit(fc_tick + 20)
+	assert_int(_audio.sfx_count(&"pa_final_call")).is_equal(2)
+	assert_int(announced.size()).is_equal(4)
+	# Subsequent poll ticks do not re-announce either flight.
+	fake_now[0] = 25000
+	clock.ticked.emit(fc_tick + 30)
+	assert_int(_audio.sfx_count(&"pa_final_call")).is_equal(2)
+
+	# Deferred unsuppression after snapshot_loaded lets subsequent normal events play again.
+	flights2.snapshot_loaded.emit()
+	flights2.state_changed.emit("TEST4", FlightSim.State.DEPARTED)
+	assert_int(_audio.sfx_count(&"cash_chime")).is_equal(0)
+	await await_idle_frame()
+	flights2.state_changed.emit("TEST4", FlightSim.State.DEPARTED)
+	assert_int(_audio.sfx_count(&"cash_chime")).is_equal(1)
 
 	_audio.pa_announced.disconnect(on_pa)
 	flights2.free()
@@ -399,7 +423,7 @@ func test_boarding_final_call_dedupe_and_suppression_gates() -> void:
 	clock.free()
 
 
-func test_close_call_save_fires_once_per_flight() -> void:
+func test_close_call_save_fires_once_per_flight_and_skips_ontime_or_late_check() -> void:
 	var grid := PassengerTestWorld.floored(Vector2i(8, 6))
 	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(0, 5), 3)
 	var world := PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(10, 1200))
@@ -407,20 +431,34 @@ func test_close_call_save_fires_once_per_flight() -> void:
 	add_child(world.flights)
 	add_child(world.sim)
 	var win := world.flights.boarding_window(PassengerTestWorld.FLIGHT)
-	world.run_to(win.y - 20)
-	var p1 := world.passenger(world.sim.spawn_now(PassengerTestWorld.FLIGHT))
-	var p2 := world.passenger(world.sim.spawn_now(PassengerTestWorld.FLIGHT))
-	PassengerLifecycle.finish(world.sim, p1, true)
+
+	# Negative case: normal on-time boarding far before CLOSE_CALL_TICKS does NOT play close_call_save.
+	world.run_to(win.x + 10)
+	var on_time := world.passenger(world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	on_time.late = false
+	PassengerLifecycle.finish(world.sim, on_time, true)
+	assert_int(_audio.sfx_count(&"close_call_save")).is_equal(0)
+
+	# Positive cc > prev_cc case: p.late == true even well before doors_close - CLOSE_CALL_TICKS.
+	var late_saver := world.passenger(world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	late_saver.late = true
+	PassengerLifecycle.finish(world.sim, late_saver, true)
 	assert_int(_audio.sfx_count(&"close_call_save")).is_equal(1)
-	PassengerLifecycle.finish(world.sim, p2, true)
+
+	# Second close-call on same flight (within CLOSE_CALL_TICKS) is deduped per flight.
+	world.run_to(win.y - 20)
+	var late_saver2 := world.passenger(world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	PassengerLifecycle.finish(world.sim, late_saver2, true)
 	assert_int(_audio.sfx_count(&"close_call_save")).is_equal(1)
 	world.free_all()
 
 
-func test_incident_director_sound_jokes_and_restore_suppression() -> void:
+func test_incident_director_sound_jokes_rush_and_restore_unsuppression() -> void:
 	var grid := PassengerTestWorld.floored(Vector2i(8, 6))
 	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(0, 5), 3)
 	var world := PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(10, 1200))
+	world.clock.set_paused(false)
+	add_child(world.clock)
 	var director := IncidentDirector.new()
 	director.clock = world.clock
 	director.flights = world.flights
@@ -430,23 +468,75 @@ func test_incident_director_sound_jokes_and_restore_suppression() -> void:
 	var on_pa := func(text: String) -> void: announced.append(text)
 	_audio.pa_announced.connect(on_pa)
 
+	var fake_now := [10000]
+	_audio._clock_ms = func() -> int: return fake_now[0]
+
 	director.started.emit({"kind": IncidentCatalogue.SPILL})
 	assert_int(_audio.sfx_count(&"joke_spill")).is_equal(1)
 	assert_int(announced.size()).is_equal(1)
 
-	_audio._last_pa_ms = -1
+	fake_now[0] = 13000
 	director.started.emit({"kind": IncidentCatalogue.FAULT})
 	assert_int(_audio.sfx_count(&"joke_fault")).is_equal(1)
 	assert_int(announced.size()).is_equal(2)
 
-	_audio._last_pa_ms = -1
-	director.major_presented.emit({"kind": IncidentCatalogue.RUSH})
-	assert_int(_audio.sfx_count(&"pa_chime")).is_equal(1)
+	# major_presented does NOT fire RUSH PA synchronously (avoids modal wipe).
+	fake_now[0] = 20000
+	director.major_presented.emit({"id": 7, "kind": IncidentCatalogue.RUSH})
+	assert_int(_audio.sfx_count(&"pa_chime")).is_equal(0)
+	assert_int(announced.size()).is_equal(2)
+
+	# Announced RUSH for day 1 fires once when unpaused clock enters the rush day.
+	var rush_start := GameCalendar.day_start(1, 0)
+	var rush_until := GameCalendar.day_start(2, 0)
+	var snap := {
+		"save_version": IncidentSnapshot.SAVE_VERSION,
+		"enabled": true,
+		"last_rolled_day": 0,
+		"next_major_day": 3,
+		"next_id": 2,
+		"incidents":
+		[
+			{
+				"id": 1,
+				"kind": IncidentCatalogue.RUSH,
+				"roll_day": 0,
+				"state": IncidentCatalogue.ANNOUNCED,
+				"fire_tick": 100,
+				"cell": [-1, -1],
+				"mess_id": 0,
+				"place": "",
+				"outcome": "",
+				"shown": true,
+				"plan":
+				{
+					"flights": [{"flight": "TEST-d1", "extra": 6, "departs": rush_start + 100}],
+					"total": 6,
+					"until": rush_until,
+				},
+			}
+		],
+	}
+	assert_bool(director.from_snapshot(snap)).is_true()
+	# Restored suppresses synchronous sounds, then unsuppresses after deferred idle frame.
+	director.started.emit({"kind": IncidentCatalogue.SPILL})
+	assert_int(_audio.sfx_count(&"joke_spill")).is_equal(1)
+	await await_idle_frame()
+	fake_now[0] = 25000
+	director.started.emit({"kind": IncidentCatalogue.SPILL})
+	assert_int(_audio.sfx_count(&"joke_spill")).is_equal(2)
 	assert_int(announced.size()).is_equal(3)
 
-	director.restored.emit()
-	assert_int(_audio.sfx_count(&"joke_spill")).is_equal(1)
-	assert_int(_audio.sfx_count(&"joke_fault")).is_equal(1)
+	fake_now[0] = 30000
+	world.clock.tick = rush_start
+	world.clock.ticked.emit(rush_start)
+	assert_int(_audio.sfx_count(&"pa_chime")).is_equal(1)
+	assert_int(announced.size()).is_equal(4)
+	assert_str(announced[3]).is_equal(PaWords.rush())
+	# Subsequent ticks on the rush day do not repeat the rush PA.
+	fake_now[0] = 40000
+	world.clock.tick = rush_start + 10
+	world.clock.ticked.emit(rush_start + 10)
 	assert_int(_audio.sfx_count(&"pa_chime")).is_equal(1)
 
 	_audio.pa_announced.disconnect(on_pa)
@@ -472,6 +562,9 @@ func test_alert_stack_rising_edge_and_queue_horn_cooldown() -> void:
 	var raised: Array[StringName] = []
 	stack.alert_raised.connect(func(key: StringName) -> void: raised.append(key))
 
+	var fake_now := [10000]
+	_audio._clock_ms = func() -> int: return fake_now[0]
+
 	stack.refresh()
 	assert_array(raised).is_empty()
 	world.run_to(world.clock.tick + AlertSources.QUEUE_HOLD_TICKS)
@@ -485,9 +578,18 @@ func test_alert_stack_rising_edge_and_queue_horn_cooldown() -> void:
 	assert_int(raised.size()).is_equal(1)
 	assert_int(_audio.sfx_count(&"joke_queue_horn")).is_equal(1)
 
+	# 15 s cooldown suppresses a second queue horn at +10 s, then allows it at +16 s.
+	fake_now[0] = 20000
+	stack.alert_raised.emit(AlertSources.QUEUE_SECURITY)
+	assert_int(_audio.sfx_count(&"joke_queue_horn")).is_equal(1)
+	fake_now[0] = 26000
+	stack.alert_raised.emit(AlertSources.QUEUE_SECURITY)
+	assert_int(_audio.sfx_count(&"joke_queue_horn")).is_equal(2)
+
 	# Reset must not emit alert_raised.
+	var before_reset := raised.size()
 	stack.reset()
-	assert_int(raised.size()).is_equal(1)
+	assert_int(raised.size()).is_equal(before_reset)
 
 	stack.free()
 	DirAccess.remove_absolute(path)

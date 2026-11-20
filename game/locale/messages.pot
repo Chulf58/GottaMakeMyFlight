@@ -6072,6 +6072,21 @@ msgstr ""
 
 #: audio/pa_words.gd
 msgctxt "pa"
+msgid "PA: Bravo to the passenger who caught {airline} to {city} at Gate {gate} just in time."
+msgstr ""
+
+#: audio/pa_words.gd
+msgctxt "pa"
+msgid "PA: Bravo to the passenger who caught {airline} to {city} just in time."
+msgstr ""
+
+#: audio/pa_words.gd
+msgctxt "pa"
+msgid "PA: Bravo to the passenger who caught {flight} at Gate {gate} just in time."
+msgstr ""
+
+#: audio/pa_words.gd
+msgctxt "pa"
 msgid "PA: Bravo to the passenger who caught {flight} with seconds to spare."
 msgstr ""
 
