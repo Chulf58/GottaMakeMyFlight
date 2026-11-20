@@ -127,7 +127,13 @@ func _boot_and_size() -> bool:
 	for info: Dictionary in BuildUnlocks.TIERS.slice(1, 3):
 		for tool: BuildMode.Tool in info["tools"]:
 			seen.append(String(BuildMode.Tool.find_key(tool)))
-	var snap := {"tier": 3, "made": 200, "shown": [2, 3], "seen": seen, "firsts": []}
+	var snap := {
+		"tier": 3,
+		"made": 200,
+		"shown": [2, 3],
+		"seen": seen,
+		"firsts": [BigFirsts.OPENING, BigFirsts.RUNWAY],
+	}
 	_mode.unlocks.from_snapshot(snap)
 	return not _failed
 
@@ -194,16 +200,28 @@ func _build_terminal() -> bool:
 		return false
 	(_mode.get_node("BuildView") as BuildView).refresh(_grid)
 	(_main.get_node("RoofView") as RoofView).rebuild()
-	for b: Dictionary in (_main.get_node("Airside") as Airside).props.bridges.values():
-		(b["node"] as Node3D).visible = false
+	_verify(_flights.start_works(Runway.MEDIUM), "runway upgrade")
+	_verify(_flights.runway.size == Runway.MEDIUM, "runway medium")
 	var staff := _main.get_node("Staff") as StaffSim
 	var hired := StaffTestKit.staff_all(staff)
 	StaffTestKit.seat(staff, _grid.object_at(arch_at), StaffMember.Slot.HELPER)
 	staff.hire(StaffMember.Role.CLEANER)
 	staff.hire(StaffMember.Role.CLEANER)
 	var two_gates: Array[String] = ["A", "B"]
-	print("PROBE staffed=%d stalls=%d gates=%s" % [hired, stalls, _flights.gate_ids()])
-	_verify(_flights.gate_ids() == two_gates and hired >= 6, "gates/staff")
+	var grounds := _flights.gate_grounds()
+	var gates_fit := (
+		grounds.has("A")
+		and grounds.has("B")
+		and FlightGround.class_fits(PlaneClasses.MEDIUM, grounds["A"]["max_class"])
+		and FlightGround.class_fits(PlaneClasses.MEDIUM, grounds["B"]["max_class"])
+	)
+	print(
+		(
+			"PROBE staffed=%d stalls=%d gates=%s runway=%s"
+			% [hired, stalls, _flights.gate_ids(), _flights.runway.size]
+		)
+	)
+	_verify(_flights.gate_ids() == two_gates and hired >= 6 and gates_fit, "gates/staff/fit")
 	return not _failed
 
 
@@ -213,18 +231,42 @@ func _shot_02_queues_and_belts() -> bool:
 	if _hud.unlock_guide() != null and _hud.unlock_guide().is_open():
 		_hud.unlock_guide().dialog().dismiss()
 	var base_min: int = _flights.contract_of(FlightSim.DEFAULT_ID)["departure_minute"]
-	var got_b := false
-	for later in range(38, 70):
-		var terms := StarterSlot.departing(
+	var got_a2 := false
+	for later_a in range(258, 290):
+		var terms_a := StarterSlot.departing(
 			StarterSlot.whole_minute(FlightTimetable.issue_lead(), 0), 0
 		)
-		terms.merge({"id": "GMF202", "airline": "Blue Fjord", "destination": "Bergen"}, true)
-		terms["departure_minute"] = (base_min + later) % GameCalendar.MINUTES_PER_DAY
-		if _flights.accept_gate(terms) == "B" and _flights.accept_contract(terms):
-			got_b = true
+		terms_a.merge({"id": "GMF606", "destination": "Stockholm"}, true)
+		terms_a["departure_minute"] = (base_min + later_a) % GameCalendar.MINUTES_PER_DAY
+		if _flights.accept_gate(terms_a) == "A" and _flights.accept_contract(terms_a):
+			got_a2 = true
 			break
+	var got_b := false
+	if got_a2:
+		var a2_min: int = _flights.contract_of("GMF606")["departure_minute"]
+		for gap in range(38, 70):
+			var terms := StarterSlot.departing(
+				StarterSlot.whole_minute(FlightTimetable.issue_lead(), 0), 0
+			)
+			(
+				terms
+				. merge(
+					{
+						"id": "GMF202",
+						"airline": "Blue Fjord",
+						"destination": "Bergen",
+						"plane_size": PlaneClasses.MEDIUM,
+						"booked_passengers": 30,
+					},
+					true
+				)
+			)
+			terms["departure_minute"] = (a2_min - gap) % GameCalendar.MINUTES_PER_DAY
+			if _flights.accept_gate(terms) == "B" and _flights.accept_contract(terms):
+				got_b = true
+				break
 	var ex_specs := (
-		"GMF303:720:Lisbon:Sunhop,GMF404:900:Vienna:Nordic Wing," + "GMF505:1080:Zurich:Alpen Air"
+		"GMF303:910:Lisbon:Sunhop,GMF404:1020:Vienna:Nordic Wing," + "GMF505:1140:Zurich:Alpen Air"
 	)
 	for spec in ex_specs.split(","):
 		var p := spec.split(":")
@@ -237,7 +279,7 @@ func _shot_02_queues_and_belts() -> bool:
 	var first := FlightTimetable.occurrence_id(FlightSim.DEFAULT_ID, 0)
 	var has_f := func() -> bool: return _flights.flight_ids().has(first)
 	if (
-		not _verify(_flights.opened_tick >= 0 and got_b, "open")
+		not _verify(_flights.opened_tick >= 0 and got_b and got_a2, "open")
 		or not await _advance_until("f1", 3000, has_f)
 	):
 		return false
@@ -335,35 +377,39 @@ func _shot_04_cafes_and_shops() -> void:
 
 func _shot_05_apron_boarding() -> void:
 	_beat("shot_05")
-	var occ_a := FlightTimetable.occurrence_id(FlightSim.DEFAULT_ID, 0)
+	var occ_a := FlightTimetable.occurrence_id("GMF606", int(_flights.start_days["GMF606"]))
 	var occ_b := FlightTimetable.occurrence_id("GMF202", int(_flights.start_days["GMF202"]))
 	var both := func() -> bool:
 		return _flights.flight_ids().has(occ_a) and _flights.flight_ids().has(occ_b)
 	if not await _advance_until("issue_ab", 3000, both):
 		return
-	var push_a := _flights.state_start(occ_a, FlightSim.State.PUSHBACK)
-	for _i in 240:
-		if _clock.tick >= push_a - 105:
+	var push_b := _flights.state_start(occ_b, FlightSim.State.PUSHBACK)
+	for _i in 360:
+		if _clock.tick >= push_b - 105:
 			break
-		await _step_ticks(mini(30, push_a - 105 - _clock.tick))
+		await _step_ticks(mini(30, push_b - 105 - _clock.tick))
+	var props := (_main.get_node("Airside") as Airside).props
 	for _i in 8:
-		_place_pax(occ_b, Vector2i(51, 4), true, 10, 10)
+		_place_pax(occ_a, Vector2i(19, 4), true, 10, 10)
 		await _step_ticks(8)
+	_verify(bool(props.bridges["B"].get("docked", false)), "shot_05: Gate B bridge not docked")
 	for _i in 40:
-		if _clock.tick >= push_a + 8:
+		if _clock.tick >= push_b + 8:
 			break
-		await _step_ticks(mini(6, push_a + 8 - _clock.tick))
+		await _step_ticks(mini(6, push_b + 8 - _clock.tick))
 	var fleet := (_main.get_node("PlaneFleet") as PlaneFleet).views
 	var ready := func() -> bool:
 		var w := 0
 		for pid in _pax_in([Passenger.Stage.APRON]):
 			w += int(_views.node_for(pid).global_position.z < -100.5)
-		var tug_on := false
-		var b_on := false
+		var view_a_on := false
+		var tug_b_on := false
 		for v in fleet:
-			tug_on = tug_on or (v.get_node("Props") as PlaneProps).tug.is_visible_in_tree()
-			b_on = b_on or (v.gate == "B" and v.visible)
-		return w >= 2 and tug_on and b_on
+			if v.gate == "A" and v.visible:
+				view_a_on = true
+			if v.gate == "B" and v.visible:
+				tug_b_on = (v.get_node("Props") as PlaneProps).tug.is_visible_in_tree()
+		return w >= 2 and view_a_on and tug_b_on
 	if not await _advance_until("apron_boarding", 120, ready):
 		return
 	var view_a: PlaneView = null
@@ -371,37 +417,69 @@ func _shot_05_apron_boarding() -> void:
 	for v in fleet:
 		view_a = v if v.gate == "A" and v.visible else view_a
 		view_b = v if v.gate == "B" and v.visible else view_b
-	var tug_pt := (view_a.get_node("Props") as PlaneProps).tug.global_position + Vector3(0, 1.2, 0)
-	var b_pt := view_b.global_position + Vector3(3.5, 2.2, 0.0)
-	var focus := Vector3((tug_pt.x + b_pt.x) * 0.5, 0.0, -104.0)
-	for dist: float in [34.0, 36.5]:
+	var tug_a := (view_a.get_node("Props") as PlaneProps).tug
+	var tug_b := (view_b.get_node("Props") as PlaneProps).tug
+	_verify(view_a.model_name == "tp_plane_03a", "shot_05: Gate A not tp_plane_03a")
+	_verify(not PlaneClasses.self_taxis(view_b.model_name), "shot_05: Gate B self-taxis")
+	_verify(not tug_a.is_visible_in_tree(), "shot_05: small Gate A tug visible")
+	_verify(tug_b.is_visible_in_tree(), "shot_05: medium Gate B tug hidden")
+	var half_a: float = PlaneModels.PLANES[view_a.model_name]["half_span"]
+	var half_b: float = PlaneModels.PLANES[view_b.model_name]["half_span"]
+	var left_pt := view_a.global_position + Vector3(-half_a, 1.0, 0.0)
+	var right_pt := view_b.global_position + Vector3(half_b, 1.0, 0.0)
+	var tug_pt := tug_b.global_position + Vector3(0.0, 1.2, 0.0)
+	if _hud.is_result_open():
+		_hud.dismiss_result()
+		await _frames(4)
+	var dep := _main.find_child("DeparturesPanel", true, false) as Control
+	var dep_right := maxf(340.0, dep.get_global_rect().end.x + 16.0)
+	var target_mid := (dep_right + 1500.0) * 0.5
+	var span_x := maxf(right_pt.x - left_pt.x, 1.0)
+	var focus := Vector3((left_pt.x + right_pt.x) * 0.5 + 4.5, 0.0, -106.0)
+	for dist: float in [44.0, 50.0, 56.0, 62.0]:
+		for _adj in 3:
+			_aim(focus, dist, 0.04)
+			await _frames(4)
+			var lx := _cam.unproject_position(left_pt).x
+			var rx := _cam.unproject_position(right_pt).x
+			var px_per_m := maxf((rx - lx) / span_x, 1.0)
+			var mid_px := (lx + rx) * 0.5
+			if absf(mid_px - target_mid) < 12.0:
+				break
+			focus.x += (mid_px - target_mid) / px_per_m
 		_aim(focus, dist, 0.04)
 		await _frames(4)
-		var mid_px := (_cam.unproject_position(tug_pt).x + _cam.unproject_position(b_pt).x) * 0.5
-		focus.x += (mid_px - 860.0) / 26.0
-		_aim(focus, dist, 0.04)
-		await _frames(4)
-		if _cam.unproject_position(tug_pt).x >= 350.0 and _cam.unproject_position(b_pt).x <= 1430.0:
+		if (
+			_cam.unproject_position(left_pt).x >= dep_right
+			and _cam.unproject_position(right_pt).x <= 1500.0
+		):
 			break
 	if _hud.is_result_open():
 		_hud.dismiss_result()
-	await _frames(8)
-	var dep := _main.find_child("DeparturesPanel", true, false) as Control
+	await _frames(4)
+	_verify(_cam.unproject_position(left_pt).x >= 340.0, "shot_05: Gate A behind DeparturesBoard")
+	_verify(_cam.unproject_position(right_pt).x <= 1526.0, "shot_05: Gate B wingtip clipped")
 	_verify(_cam.unproject_position(tug_pt).x >= 340.0, "shot_05: tug behind DeparturesBoard")
-	var sub: Array = [[view_b.global_position + Vector3(0.0, 2.6, 0.0), view_b], [tug_pt, view_a]]
+	var sub: Array = [
+		[view_a.global_position + Vector3(0.0, 2.0, 0.0), view_a],
+		[view_b.global_position + Vector3(0.0, 2.6, 0.0), view_b],
+		[tug_pt, view_b],
+		[left_pt, view_a],
+		[right_pt, view_b],
+	]
 	for pid in _pax_in([Passenger.Stage.APRON]):
 		var n := _views.node_for(pid)
 		var pt := n.global_position + Vector3(0.0, 1.45, 0.0)
-		if n.global_position.z < -100.5 and _occluder(pt, n) == "" and sub.size() < 4:
+		if n.global_position.z < -100.5 and _occluder(pt, n) == "" and sub.size() < 7:
 			sub.append([pt, n])
-	_verify(sub.size() >= 4, "shot_05: fewer than 2 unoccluded apron walkers")
+	_verify(sub.size() >= 7, "shot_05: fewer than 2 unoccluded apron walkers")
 	await _capture("shot_05_apron_boarding", sub, {"departures_board": dep})
 
 
 func _shot_01_build_terminal() -> void:
 	_beat("shot_01")
 	var occ := ""
-	for cid: String in ["GMF303", "GMF404", "GMF202"]:
+	for cid: String in ["GMF606", "GMF303", "GMF404", "GMF202"]:
 		var cand_occ := FlightTimetable.occurrence_id(cid, int(_flights.start_days.get(cid, 0)))
 		var open_st := _flights.flight_ids().has(cand_occ)
 		if open_st and _flights.state_of(cand_occ) <= FlightSim.State.BOARDING:
