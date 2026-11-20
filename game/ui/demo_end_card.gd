@@ -33,6 +33,7 @@ var save_game: SaveGame
 var hud: PassengerHud
 var url_opener: Callable
 var back_to_title: Callable
+var feedback_url: String = DemoMode.FEEDBACK_URL
 
 var _layer: CanvasLayer
 var _panel: PanelContainer
@@ -123,6 +124,11 @@ func press_wishlist() -> void:
 		url_opener.call(DemoMode.STEAM_STORE_URL)
 
 
+func press_feedback() -> void:
+	if not feedback_url.is_empty() and url_opener.is_valid():
+		url_opener.call(feedback_url)
+
+
 func press_back_to_title() -> void:
 	close()
 	if back_to_title.is_valid():
@@ -155,6 +161,12 @@ func panel() -> PanelContainer:
 
 func wishlist_button() -> Button:
 	return _panel.find_child("WishlistButton", true, false) as Button if _panel != null else null
+
+
+func feedback_button() -> Button:
+	return (
+		_panel.find_child("SendFeedbackButton", true, false) as Button if _panel != null else null
+	)
 
 
 func back_button() -> Button:
@@ -440,6 +452,9 @@ func _add_stars_row(grid: GridContainer, stars: float) -> void:
 
 
 func _make_buttons() -> Control:
+	var stack := VBoxContainer.new()
+	stack.name = "ButtonStack"
+	stack.add_theme_constant_override("separation", 10)
 	var buttons := HBoxContainer.new()
 	buttons.name = "Buttons"
 	buttons.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -459,7 +474,16 @@ func _make_buttons() -> Control:
 	back.focus_mode = Control.FOCUS_NONE
 	back.pressed.connect(press_back_to_title)
 	buttons.add_child(back)
-	return buttons
+	stack.add_child(buttons)
+	var feedback := Button.new()
+	feedback.name = "SendFeedbackButton"
+	feedback.text = tr("Send Feedback")
+	feedback.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	feedback.focus_mode = Control.FOCUS_NONE
+	feedback.visible = not feedback_url.is_empty()
+	feedback.pressed.connect(press_feedback)
+	stack.add_child(feedback)
+	return stack
 
 
 func _free_layer() -> void:

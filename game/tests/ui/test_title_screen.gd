@@ -38,9 +38,9 @@ func after_test() -> void:
 	GameBoot.refusal = ""
 
 
-func _write(path: String) -> void:
+func _write(path: String, version := SaveGame.SAVE_VERSION) -> void:
 	var file := FileAccess.open(path, FileAccess.WRITE)
-	file.store_string("{}")
+	file.store_string('{"save_version": %d}' % version)
 	file.close()
 
 
@@ -157,13 +157,46 @@ func test_every_label_and_button_is_routed_through_tr() -> void:
 	PseudoLocale.enable(0.4)
 	_build()
 	var texts: Array[String] = []
-	for name in ["Continue", "NewAirport", "Load", "Quit", "Back"]:
+	for name in ["Continue", "NewAirport", "Load", "SendFeedback", "Quit", "Back"]:
 		texts.append(_title.button(name).text)
 	texts.append(_title.save_list().button_for(SaveSlots.manual_path()).text)
 	print("title texts: %s" % [texts])
 	PseudoLocale.disable()
 	for text in texts:
 		assert_str(text).starts_with("[")
+
+
+func test_only_incompatible_saves_disables_continue_keeps_load_and_labels_older_version() -> void:
+	_write(SaveSlots.manual_path(), SaveGame.SAVE_VERSION - 1)
+	PseudoLocale.enable(0.4)
+	_build()
+	assert_bool(_title.button("Continue").disabled).is_true()
+	assert_bool(_title.button("Load").disabled).is_false()
+	_title.button("Load").pressed.emit()
+	var old_btn := _title.save_list().button_for(SaveSlots.manual_path())
+	assert_object(old_btn).is_not_null()
+	assert_str(old_btn.text).starts_with("[")
+	assert_str(old_btn.text).contains("(Older version)")
+	old_btn.pressed.emit()
+	PseudoLocale.disable()
+	assert_array(_scenes).is_empty()
+	assert_str(_title.message_text()).contains("older version")
+	# The older save file remains untouched.
+	assert_bool(FileAccess.file_exists(SaveSlots.manual_path())).is_true()
+
+
+func test_the_send_feedback_button_hides_when_empty_and_opens_url_when_set() -> void:
+	_build()
+	assert_str(DemoMode.FEEDBACK_URL).is_equal("")
+	assert_bool(_title.button("SendFeedback").visible).is_false()
+
+	var opened: Array[String] = []
+	_title.open_url = func(url: String) -> void: opened.append(url)
+	_title.feedback_url = "https://example.com/feedback"
+	_title.refresh()
+	assert_bool(_title.button("SendFeedback").visible).is_true()
+	_title.button("SendFeedback").pressed.emit()
+	assert_array(opened).is_equal(["https://example.com/feedback"])
 
 
 ## The short labels carry the "menu" context, as the Save and Load labels of the

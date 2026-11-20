@@ -17,7 +17,7 @@ for i in $(seq 1 "$SEEDS"); do
 	log="$LOG_DIR/soak_$i.log"
 	(
 		timeout 3000 "$GODOT" --headless --audio-driver Dummy --path "$PROJECT" \
-			-s res://spike/memory_soak_probe.gd -- --days="$DAYS" >"$log" 2>&1
+			-s res://spike/memory_soak_probe.gd -- --days="$DAYS" < /dev/null >"$log" 2>&1
 		echo "exit $?" >>"$log"
 	) &
 	pids+=($!)

@@ -5956,3 +5956,15 @@ msgstr ""
 #: build/land_tool.gd
 msgid "Demo limit: 1 extra plot (more in the full game)"
 msgstr ""
+
+#: ui/title_screen.gd ui/demo_end_card.gd
+msgid "Send Feedback"
+msgstr ""
+
+#: ui/save_list.gd
+msgid "{slot}, {time} (Older version)"
+msgstr ""
+
+#: core/save_game.gd ui/title_screen.gd
+msgid "This save is from an older version and cannot be loaded after an update. Please start a New Airport."
+msgstr ""
