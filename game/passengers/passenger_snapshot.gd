@@ -140,8 +140,17 @@ static func save(
 		keys.sort()
 		for key: Vector2i in keys:
 			causes.append({"stage": key.x, "stuck": key.y, "count": result["causes"][key]})
-		result_list.append(
-			{"flight": flight, "made": result["made"], "missed": result["missed"], "causes": causes}
+		(
+			result_list
+			. append(
+				{
+					"flight": flight,
+					"made": result["made"],
+					"missed": result["missed"],
+					"close_calls": int(result.get("close_calls", 0)),
+					"causes": causes,
+				}
+			)
 		)
 	return {
 		"save_version": PassengerSim.SAVE_VERSION,
@@ -629,6 +638,16 @@ static func _flight_results(list: Array) -> Dictionary:
 		ok = ok and typeof(entry["flight"]) == TYPE_STRING and not out.has(entry["flight"])
 		ok = ok and _whole(entry["made"]) and int(entry["made"]) >= 0
 		ok = ok and _whole(entry["missed"]) and int(entry["missed"]) >= 0
+		var close_calls := 0
+		if entry.has("close_calls"):
+			if (
+				not _whole(entry["close_calls"])
+				or int(entry["close_calls"]) < 0
+				or int(entry["close_calls"]) > int(entry["made"])
+			):
+				ok = false
+			else:
+				close_calls = int(entry["close_calls"])
 		ok = ok and typeof(entry["causes"]) == TYPE_ARRAY
 		var causes := {}
 		var total := 0
@@ -651,7 +670,10 @@ static func _flight_results(list: Array) -> Dictionary:
 		if not ok or total != int(entry["missed"]):
 			return {"error": "a flight result is malformed, repeated or does not add up"}
 		out[entry["flight"]] = {
-			"made": int(entry["made"]), "missed": int(entry["missed"]), "causes": causes
+			"made": int(entry["made"]),
+			"missed": int(entry["missed"]),
+			"close_calls": close_calls,
+			"causes": causes,
 		}
 	return out
 

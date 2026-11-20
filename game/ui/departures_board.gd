@@ -60,6 +60,9 @@ extends Control
 ## B still turns the setting on and off meanwhile, and the list comes back as
 ## that setting says when the passenger is deselected.
 
+## Emitted when the player clicks a flight row's "N running late" pill.
+signal follow_late_requested(flight_id: String)
+
 ## The input action for the toggle key, bound to B in project.godot.
 const ACTION := &"toggle_departures_board"
 ## The key the toggle button names, bound in project.godot.
@@ -196,6 +199,7 @@ static func _day_entries(
 					"status": "" if is_next else row["status"],
 					"doors": DepartureList.doors_text(row, sim.epoch) if is_next else "",
 					"late": LateCount.text_for(int(late.get(row["flight"], 0))),
+					"flight": row["flight"],
 					"contract": row["contract"],
 					"day": day,
 					"gate": row["gate"],
@@ -327,6 +331,11 @@ func gate_button(contract_id: String, day: int) -> Button:
 ## The End button on the row of `contract_id` on `day`, or null.
 func end_button(contract_id: String, day: int) -> Button:
 	return find_child("End_%s_%d" % [contract_id, day], true, false) as Button
+
+
+## The clickable "N running late" pill on `flight_id`'s row, or null.
+func late_button(flight_id: String) -> Button:
+	return find_child("Late_%s" % flight_id, true, false) as Button
 
 
 ## The confirm button of the open "End this contract?" question, or null.
@@ -476,17 +485,42 @@ func _add_row(entry: Dictionary) -> void:
 	if end_btn != null:
 		_compact(end_btn)
 	var parts := PackedStringArray()
-	for part: String in [entry["airline"], entry["status"], entry["late"]]:
+	for part: String in [entry["airline"], entry["status"]]:
 		if part != "":
 			parts.append(part)
-	if not parts.is_empty():
-		var airline := Label.new()
-		airline.name = "Airline_%s" % key if key != "" else "Airline"
-		airline.text = "  ".join(parts)
-		airline.theme_type_variation = &"HudHint"
-		airline.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		airline.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		_rows.add_child(airline)
+	var late_text: String = entry["late"]
+	var airline_name := "Airline_%s" % key if key != "" else "Airline"
+	if late_text == "":
+		if not parts.is_empty():
+			var airline := Label.new()
+			airline.name = airline_name
+			airline.text = "  ".join(parts)
+			airline.theme_type_variation = &"HudHint"
+			airline.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			airline.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			_rows.add_child(airline)
+	else:
+		var line := HFlowContainer.new()
+		line.name = "LateRow_%s" % entry["flight"]
+		line.add_theme_constant_override("h_separation", 6)
+		line.add_theme_constant_override("v_separation", 2)
+		if not parts.is_empty():
+			var airline := Label.new()
+			airline.name = airline_name
+			airline.text = "  ".join(parts)
+			airline.theme_type_variation = &"HudHint"
+			airline.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			line.add_child(airline)
+		var late_btn := Button.new()
+		late_btn.name = "Late_%s" % entry["flight"]
+		late_btn.text = late_text
+		late_btn.tooltip_text = tr("Follow the tightest running-late passenger")
+		late_btn.focus_mode = Control.FOCUS_NONE
+		var flight_id: String = entry["flight"]
+		late_btn.pressed.connect(func() -> void: follow_late_requested.emit(flight_id))
+		line.add_child(late_btn)
+		_rows.add_child(line)
+		_compact(late_btn)
 	if entry["doors"] != "":
 		var doors := Label.new()
 		doors.name = "DoorsClose"

@@ -49,9 +49,15 @@ func _row(flight_id: String) -> Dictionary:
 
 
 ## Line 2 of the flight's row, "" when the row has none.
-func _second_line() -> String:
+func _second_line(flight_id := PassengerTestWorld.FLIGHT) -> String:
+	var parts := PackedStringArray()
 	var label := _board.find_child("Airline", true, false) as Label
-	return "" if label == null else label.text
+	if label != null:
+		parts.append(label.text)
+	var late_btn := _board.late_button(flight_id)
+	if late_btn != null:
+		parts.append(late_btn.text)
+	return "  ".join(parts)
 
 
 func test_text_is_empty_at_zero_and_counts_otherwise() -> void:
@@ -159,9 +165,24 @@ func test_each_contract_flight_row_counts_its_own_late_passengers() -> void:
 	_board.refresh()
 	var first_line := _board.find_child("Airline_SH100_0", true, false) as Label
 	var second_line := _board.find_child("Airline_LG200_0", true, false) as Label
-	print("first: ", first_line.text, " second: ", second_line.text)
-	assert_str(first_line.text).is_equal("Gotta Air  1 running late")
-	assert_str(second_line.text).is_equal("Skyline Global  2 running late")
+	var first_late := _board.late_button(first)
+	var second_late := _board.late_button(second)
+	print(
+		"first: ",
+		first_line.text,
+		" / ",
+		first_late.text,
+		" second: ",
+		second_line.text,
+		" / ",
+		second_late.text
+	)
+	assert_str(first_line.text).is_equal("Gotta Air")
+	assert_object(first_late).is_not_null()
+	assert_str(first_late.text).is_equal("1 running late")
+	assert_str(second_line.text).is_equal("Skyline Global")
+	assert_object(second_late).is_not_null()
+	assert_str(second_late.text).is_equal("2 running late")
 
 
 func test_a_load_at_the_same_tick_updates_the_line() -> void:

@@ -15,7 +15,7 @@ extends RefCounted
 ## thought the cap drops does not come back early. Both are saved with the
 ## passenger (PassengerSnapshot). Thoughts never feed back into the sim.
 
-enum Kind { MEAL, FOOD_GIVEN_UP, TOILET_RELIEF, LONG_QUEUE, NICE_DECOR }
+enum Kind { MEAL, FOOD_GIVEN_UP, TOILET_RELIEF, LONG_QUEUE, NICE_DECOR, MADE_CLOSE_CALL }
 
 ## The most thoughts a passenger keeps; a new one drops the oldest.
 const CAP := 5
@@ -26,7 +26,7 @@ const NO_MARK := -1
 const LONG_QUEUE_TICKS := 10 * GameCalendar.TICKS_PER_MINUTE
 ## Nice decor is thought again only this long after the last time.
 const DECOR_REPEAT_TICKS := 120 * GameCalendar.TICKS_PER_MINUTE
-const POSITIVE := [Kind.MEAL, Kind.TOILET_RELIEF, Kind.NICE_DECOR]
+const POSITIVE := [Kind.MEAL, Kind.TOILET_RELIEF, Kind.NICE_DECOR, Kind.MADE_CLOSE_CALL]
 ## Kinds recorded at a facility: a cafe or toilet room, a desk or scanner. Nice
 ## decor has none (facility 0).
 const AT_FACILITY := [Kind.MEAL, Kind.FOOD_GIVEN_UP, Kind.TOILET_RELIEF, Kind.LONG_QUEUE]
@@ -132,6 +132,8 @@ static func text_of(kind: Kind, value: int) -> String:
 				"Waited {minutes} min in the queue", "Waited {minutes} min in the queue", value
 			)
 			return waited.format({"minutes": value})
+		Kind.MADE_CLOSE_CALL:
+			return TranslationServer.translate("Made my flight at the last second!")
 	return TranslationServer.translate("Nice decor here")
 
 

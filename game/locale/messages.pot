@@ -5956,3 +5956,23 @@ msgstr ""
 #: build/land_tool.gd
 msgid "Demo limit: 1 extra plot (more in the full game)"
 msgstr ""
+
+#: passengers/passenger_thoughts.gd
+msgid "Made my flight at the last second!"
+msgstr ""
+
+#: ui/flight_result_panel.gd
+msgid "{count} made it at the last second!"
+msgid_plural "{count} made it at the last second!"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/late_count.gd
+msgid "{count} running late"
+msgid_plural "{count} running late"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/departures_board.gd
+msgid "Follow the tightest running-late passenger"
+msgstr ""
