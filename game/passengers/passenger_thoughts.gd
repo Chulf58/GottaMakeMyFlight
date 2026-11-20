@@ -15,18 +15,21 @@ extends RefCounted
 ## thought the cap drops does not come back early. Both are saved with the
 ## passenger (PassengerSnapshot). Thoughts never feed back into the sim.
 
-enum Kind { MEAL, FOOD_GIVEN_UP, TOILET_RELIEF, LONG_QUEUE, NICE_DECOR }
+enum Kind { MEAL, FOOD_GIVEN_UP, TOILET_RELIEF, LONG_QUEUE, NICE_DECOR, MADE_CLOSE_CALL }
 
 ## The most thoughts a passenger keeps; a new one drops the oldest.
 const CAP := 5
 ## Numbers per thought in Passenger.thoughts.
 const STRIDE := 6
 const NO_MARK := -1
+## Repeatable kinds stored in Passenger.thought_marks (0..4: MEAL..NICE_DECOR);
+## MADE_CLOSE_CALL is one-shot at finish, so v36 saves keep 5 marks.
+const MARK_COUNT := 5
 ## A wait in a check-in or security queue this long is a long queue.
 const LONG_QUEUE_TICKS := 10 * GameCalendar.TICKS_PER_MINUTE
 ## Nice decor is thought again only this long after the last time.
 const DECOR_REPEAT_TICKS := 120 * GameCalendar.TICKS_PER_MINUTE
-const POSITIVE := [Kind.MEAL, Kind.TOILET_RELIEF, Kind.NICE_DECOR]
+const POSITIVE := [Kind.MEAL, Kind.TOILET_RELIEF, Kind.NICE_DECOR, Kind.MADE_CLOSE_CALL]
 ## Kinds recorded at a facility: a cafe or toilet room, a desk or scanner. Nice
 ## decor has none (facility 0).
 const AT_FACILITY := [Kind.MEAL, Kind.FOOD_GIVEN_UP, Kind.TOILET_RELIEF, Kind.LONG_QUEUE]
@@ -132,13 +135,17 @@ static func text_of(kind: Kind, value: int) -> String:
 				"Waited {minutes} min in the queue", "Waited {minutes} min in the queue", value
 			)
 			return waited.format({"minutes": value})
+		Kind.MADE_CLOSE_CALL:
+			return TranslationServer.translate("Made my flight at the last second!")
 	return TranslationServer.translate("Nice decor here")
 
 
 ## The tick `kind` was last thought (a queue: the tick that queue began), or
 ## NO_MARK.
 static func mark_of(p: Passenger, kind: Kind) -> int:
-	return p.thought_marks[kind] if p.thought_marks.size() > kind else NO_MARK
+	if kind >= MARK_COUNT or p.thought_marks.size() <= kind:
+		return NO_MARK
+	return p.thought_marks[kind]
 
 
 ## Whether a `kind` thought may carry `facility` and `value`: a facility kind
@@ -164,7 +171,7 @@ static func fill(p: Passenger, thoughts: Variant, marks: Variant, grid: BuildGri
 	var mark_list: Array = marks
 	if list.size() % STRIDE != 0 or list.size() > CAP * STRIDE:
 		return false
-	var marks_ok := mark_list.size() == Kind.size() or (list.is_empty() and mark_list.is_empty())
+	var marks_ok := mark_list.size() == MARK_COUNT or (list.is_empty() and mark_list.is_empty())
 	if not marks_ok:
 		return false
 	for value in list + mark_list:
@@ -178,7 +185,8 @@ static func fill(p: Passenger, thoughts: Variant, marks: Variant, grid: BuildGri
 			return false
 		if not grid.in_bounds(cell):
 			return false
-		newest[kind] = int(list[start + _TICK])
+		if kind < MARK_COUNT:
+			newest[kind] = int(list[start + _TICK])
 	for kind: int in newest:
 		if int(mark_list[kind]) != newest[kind]:
 			return false
@@ -200,7 +208,8 @@ static func ticks_ok(p: Passenger, now: int) -> bool:
 
 
 static func _mark(p: Passenger, kind: Kind, tick: int) -> void:
-	if p.thought_marks.size() != Kind.size():
-		p.thought_marks.resize(Kind.size())
+	if p.thought_marks.size() != MARK_COUNT:
+		p.thought_marks.resize(MARK_COUNT)
 		p.thought_marks.fill(NO_MARK)
-	p.thought_marks[kind] = tick
+	if kind < MARK_COUNT:
+		p.thought_marks[kind] = tick

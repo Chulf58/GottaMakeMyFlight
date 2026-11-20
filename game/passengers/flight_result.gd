@@ -124,7 +124,8 @@ static func _facility_texts() -> Dictionary:
 	}
 
 
-## {"flight", "made", "missed", "reasons"} for one flight. "reasons" is a list of
+## {"flight", "made", "missed", "close_calls", "reasons"} for one flight.
+## "reasons" is a list of
 ## {"text", "count"} sorted largest first (ties by text). Scheduled passengers
 ## dropped when the doors closed (PassengerSim.no_shows) never reached the
 ## terminal, so they are a reason but are not in "missed". Passengers still on
@@ -133,9 +134,10 @@ static func _facility_texts() -> Dictionary:
 ## result does not change after the doors close.
 static func summarize(sim: PassengerSim, flight_id: String) -> Dictionary:
 	var result: Dictionary = sim.flight_results.get(flight_id, {})
-	var made: int = result.get("made", 0)
+	var made: int = int(result.get("made", 0))
+	var close_calls: int = int(result.get("close_calls", 0))
 	var on_road: int = sim.arrivals.missed_by_flight.get(flight_id, 0)
-	var missed: int = result.get("missed", 0) + on_road
+	var missed: int = int(result.get("missed", 0)) + on_road
 	var counts := {}
 	var held: int = mini(sim.entrance.held_missed.get(flight_id, 0), on_road)
 	if on_road - held > 0:
@@ -158,7 +160,13 @@ static func summarize(sim: PassengerSim, flight_id: String) -> Dictionary:
 	for text in counts:
 		reasons.append({"text": text, "count": counts[text]})
 	reasons.sort_custom(_larger_first)
-	return {"flight": flight_id, "made": made, "missed": missed, "reasons": reasons}
+	return {
+		"flight": flight_id,
+		"made": made,
+		"missed": missed,
+		"close_calls": close_calls,
+		"reasons": reasons,
+	}
 
 
 static func _larger_first(a: Dictionary, b: Dictionary) -> bool:

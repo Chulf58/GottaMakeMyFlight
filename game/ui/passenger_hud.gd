@@ -23,10 +23,11 @@ extends CanvasLayer
 ## and the text shows its passengers, their flight and the drop-off delay so
 ## far (VehicleInspect); a click inside a vehicle's drawn box picks the vehicle
 ## before any passenger near it. One selection at a time.
-## When a flight's doors close, a green FlightResultPanel goes on the rail:
-## made, missed and the main reasons; a later closing flight replaces it, and
-## it leaves after FlightResultPanel.SHOW_SECONDS of real time or on a click,
-## staying in the alerts history. On
+## When a flight's doors close, a FlightResultPanel (green, cream or coral)
+## goes on the rail: made, missed, close-call saves and the main reasons; a
+## later closing flight replaces it, and it leaves after
+## FlightResultPanel.SHOW_SECONDS of real time or on a click, staying in the
+## alerts history. On
 ## ready the camera frames the built area (StartView) inside the screen share
 ## the open panels leave free (PanelRoom, which keeps telling the camera as
 ## panels open and close). A new game opens paused under the
@@ -180,6 +181,7 @@ func _ready() -> void:
 	_departures_board.passengers = sim
 	_departures_board.settings_path = departures_settings_path
 	_departures_board.menu = get_node_or_null("../BuildMenu") as BuildMenu
+	_departures_board.follow_late_requested.connect(_on_follow_late_requested)
 	add_child(_departures_board)
 	if flights != null and clock != null:
 		_planner.flights = flights
@@ -978,6 +980,25 @@ func _banner_rect() -> Rect2:
 
 func _on_doors_closed(flight_id: String) -> void:
 	_unreported.append(flight_id)
+
+
+func _on_follow_late_requested(flight_id: String) -> void:
+	if sim == null or views == null:
+		return
+	var id := LateCount.tightest_passenger(sim, flight_id)
+	if id == 0:
+		return
+	var p := sim.get_passenger(id)
+	if p == null or not views.shows(p):
+		return
+	if landside_views != null:
+		landside_views.select(0)
+	_built.clear()
+	_reveal_frames = 0
+	views.selected_id = id
+	if camera != null:
+		camera.follow(views.follow_anchor)
+	refresh()
 
 
 func _is_pristine(grid: BuildGrid) -> bool:

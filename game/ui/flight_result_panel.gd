@@ -1,11 +1,13 @@
 class_name FlightResultPanel
 extends PanelContainer
-## The result of one flight, a green card on the right rail (AlertStack,
-## decision hud-grid-and-rails-one-spacing-grid-centred-top-row-right-ra, part
-## 5): made, missed and the main reasons passengers missed. PassengerHud makes
-## one when a flight's doors close and posts it to the rail, which takes it
-## down after SHOW_SECONDS of real time or on a click and keeps its text in the
-## alerts history. Its Dismiss button takes it down too.
+## The result of one flight, a card on the right rail (AlertStack, decision
+## hud-grid-and-rails-one-spacing-grid-centred-top-row-right-ra, part 5):
+## made, missed, last-second saves and the main reasons passengers missed,
+## coloured like IncidentCards (ed443eea): green on zero misses, cream when more
+## made than missed, coral when missed >= made. PassengerHud makes one when a
+## flight's doors close and posts it to the rail, which takes it down after
+## SHOW_SECONDS of real time or on a click and keeps its text in the alerts
+## history. Its Dismiss button takes it down too.
 
 ## The Dismiss button was pressed.
 signal dismissed
@@ -69,6 +71,22 @@ static func title_for(flights: FlightSim, flight_id: String) -> String:
 	return flight_title(flight_id)
 
 
+## The panel's theme type variation for a FlightResult.summarize() dictionary,
+## matching IncidentCards (ed443eea): coral when zero passengers made it or
+## missed >= made, green on zero misses (with made > 0), cream when more made
+## than missed.
+static func variation_for(summary: Dictionary) -> StringName:
+	var made: int = int(summary.get("made", 0))
+	var missed: int = int(summary.get("missed", 0))
+	if made <= 0:
+		return &"HudCardCoral"
+	if missed <= 0:
+		return &"HudCardGreen"
+	if made > missed:
+		return &""
+	return &"HudCardCoral"
+
+
 ## The panel's text for a FlightResult.summarize() dictionary. A "title" key,
 ## when present, replaces the flight number in the heading.
 static func text_for(summary: Dictionary) -> String:
@@ -82,6 +100,19 @@ static func text_for(summary: Dictionary) -> String:
 			),
 		]
 	)
+	var close_calls: int = int(summary.get("close_calls", 0))
+	if close_calls > 0:
+		lines.append(
+			(
+				TranslationServer
+				. translate_plural(
+					"{count} made it at the last second!",
+					"{count} made it at the last second!",
+					close_calls
+				)
+				. format({"count": close_calls})
+			)
+		)
 	var reasons: Array = summary["reasons"]
 	for i in mini(reasons.size(), MAX_REASONS):
 		lines.append(
@@ -98,6 +129,7 @@ static func text_for(summary: Dictionary) -> String:
 
 
 func show_result(summary: Dictionary) -> void:
+	theme_type_variation = variation_for(summary)
 	_label.text = text_for(summary)
 	visible = true
 

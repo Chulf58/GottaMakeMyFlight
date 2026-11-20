@@ -5,6 +5,10 @@ extends RefCounted
 ## the retirement of settled passengers. Static helpers over a sim; the state
 ## stays on the sim.
 
+## Boarding within this many ticks of doors closing counts as a last-second save
+## (5 game minutes = 5 sim seconds at 1x).
+const CLOSE_CALL_TICKS := 100
+
 
 static func add_spawn(
 	sim: PassengerSim,
@@ -111,7 +115,13 @@ static func close_doors(sim: PassengerSim) -> void:
 
 
 static func finish(sim: PassengerSim, p: Passenger, made: bool) -> void:
-	if not made:
+	var close_call := false
+	if made:
+		var doors_close := sim.flights.doors_close_tick(p.flight_id) if sim.flights != null else -1
+		close_call = p.late or (doors_close >= 0 and doors_close - sim.tick <= CLOSE_CALL_TICKS)
+		if close_call and p.at != Passenger.NO_CELL:
+			PassengerThoughts.record(p, PassengerThoughts.Kind.MADE_CLOSE_CALL, sim.tick, p.at)
+	else:
 		p.missed_stage = p.stage
 		# Held up by people traffic or a full gate, the miss is the terminal's.
 		p.missed_stuck = GateCapacity.miss_cause(sim, p)
@@ -134,11 +144,15 @@ static func finish(sim: PassengerSim, p: Passenger, made: bool) -> void:
 	p.collect_tick = 0
 	p.outcome_tick = sim.tick
 	var result: Dictionary = sim.flight_results.get(
-		p.flight_id, {"made": 0, "missed": 0, "causes": {}}
+		p.flight_id, {"made": 0, "missed": 0, "close_calls": 0, "causes": {}}
 	)
+	if not result.has("close_calls"):
+		result["close_calls"] = 0
 	if made:
 		sim._made += 1
 		result["made"] += 1
+		if close_call:
+			result["close_calls"] += 1
 	else:
 		sim._missed += 1
 		result["missed"] += 1
@@ -162,7 +176,7 @@ static func _held_outside(sim: PassengerSim, entry: Dictionary) -> bool:
 ## miss at the entrance, waiting outside for check-in (FlightResult).
 static func _count_line_miss(sim: PassengerSim, flight_id: String) -> void:
 	var result: Dictionary = sim.flight_results.get(
-		flight_id, {"made": 0, "missed": 0, "causes": {}}
+		flight_id, {"made": 0, "missed": 0, "close_calls": 0, "causes": {}}
 	)
 	sim._missed += 1
 	result["missed"] += 1

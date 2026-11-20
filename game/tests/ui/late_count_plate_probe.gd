@@ -63,19 +63,19 @@ func _run() -> void:
 	var late_now: int = counts.get(flight_id, 0)
 	if late_now <= 0:
 		_invalid("no passenger is late after the tick, so the plate shows nothing")
-	var line := board.find_child("Airline*", true, false) as Label
-	if line == null:
-		_invalid("the board has no line 2 for the flight")
+	var late_btn := board.late_button(flight_id)
+	if late_btn == null:
+		_invalid("the board has no late pill for the flight")
 	else:
-		var rect := line.get_global_rect()
+		var rect := late_btn.get_global_rect()
 		var panel := board.find_child("DeparturesPanel", true, false) as Control
-		print("PROBE line2='%s' rect=%s panel=%s" % [line.text, rect, panel.get_global_rect()])
-		if not line.text.contains("%d running late" % late_now):
-			_invalid("line 2 '%s' does not say '%d running late'" % [line.text, late_now])
+		print("PROBE late='%s' rect=%s panel=%s" % [late_btn.text, rect, panel.get_global_rect()])
+		if not late_btn.text.contains("%d running late" % late_now):
+			_invalid("late pill '%s' does not say '%d running late'" % [late_btn.text, late_now])
 		if not root.get_visible_rect().grow(-MARGIN_PX).encloses(rect):
-			_invalid("line 2 is not inside the window")
+			_invalid("late pill is not inside the window")
 		if not panel.get_global_rect().encloses(rect):
-			_invalid("line 2 is not inside the board's panel")
+			_invalid("late pill is not inside the board's panel")
 	await RenderingServer.frame_post_draw
 	var image := root.get_texture().get_image()
 	var out_dir := ProjectSettings.globalize_path(OUT_REL).simplify_path()
