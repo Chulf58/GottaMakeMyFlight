@@ -90,17 +90,19 @@ const PARK_EXTEND := -0.15
 ## How far the cab's front may turn off the walkway's square, in degrees.
 const FRONT_MAX_DEG := 25.0
 ## How far out from plane 03's door, along its fuselage normal, its apron walk
-## ends: a passenger's body reach (FileWaiters.BODY_M, 0.25 m; the measured
-## characters are 0.24 m deep) plus 0.05 m. The 03's main wheel stands 0.6 m
-## out beside the door, so the body keeps clear of both
-## (test_bridge_boarding_walk.gd).
-const APRON_END_OUT_M := 0.30
+## ends: right outboard of the main wheel pant (x <= 1.75 m in plane-local,
+## leaving > 0.06 m body margin beyond BODY_M = 0.25 m) under the high wing.
+const APRON_END_OUT_M := 1.30
+## How far aft of plane 03's door (opposite the nose) the approach and end sit
+## so the passenger clears the diagonal wing strut (z >= 1.26 m in plane-local,
+## leaving > 0.09 m body margin beyond BODY_M = 0.25 m).
+const APRON_END_AFT_M := 0.20
 ## Step straight out from Mount_ApronDoor so walkers clear the vestibule wall
 ## before angling past plane 03's propeller disc and wing strut.
 const APRON_DOOR_OUT_M := 0.60
 ## Intermediate apron-walk waypoint for plane 03: out along the door normal so
-## walkers pass clear of the spinning propeller disc and under the high wing
-## strut before stepping in to the door.
+## walkers pass clear of the spinning propeller disc and outboard of the low
+## wing strut before stepping in beside the main wheel.
 const APRON_CLEAR_OUT_M := 2.00
 ## Slack on the joint ranges, so a pose exactly on a limit counts.
 const LIMIT_SLACK := 1e-4
@@ -223,9 +225,10 @@ static func parked() -> Dictionary:
 ## plane's door, model only),
 ## "mounts" (every mount name -> world point), "walk" (the docked walk from
 ## the exit sill to the plane door, else empty), "apron_walk" (exit sill,
-## apron door, then on the ground APRON_END_OUT_M out from the plane door, for
-## a model that does not dock, else empty)}. A docking model whose door is out
-## of reach is parked.
+## apron door, vestibule exit, outer approach, then on the ground beside the
+## main wheel APRON_END_OUT_M out and APRON_END_AFT_M aft of the plane door,
+## for a model that does not dock, else empty)}. A docking model whose door is
+## out of reach is parked.
 static func pose_for(stand: Dictionary, model: String, docked: bool, ground_y := 0.0) -> Dictionary:
 	var root := root_for(stand, ground_y)
 	var out := {"root": root, "docks": docks(model), "docked": false, "folded": folds(model)}
@@ -253,13 +256,15 @@ static func pose_for(stand: Dictionary, model: String, docked: bool, ground_y :=
 		for name in APRON:
 			apron.append(mounts[name])
 		# Step clear of the folded vestibule wall, pass clear of the propeller
-		# disc and wing strut, then step in beside the door.
+		# disc and wing strut, then step in aft of the strut beside the main
+		# wheel under the high wing.
 		var normal: Vector3 = out["normal"]
+		var forward := StandPlacement.turn(stand, Vector3(0.0, 0.0, 1.0))
 		var door_exit: Vector3 = mounts[&"Mount_ApronDoor"] - normal * APRON_DOOR_OUT_M
 		apron.append(Vector3(door_exit.x, ground_y, door_exit.z))
-		var approach: Vector3 = out["door"] + normal * APRON_CLEAR_OUT_M
+		var approach: Vector3 = out["door"] + normal * APRON_CLEAR_OUT_M - forward * APRON_END_AFT_M
 		apron.append(Vector3(approach.x, ground_y, approach.z))
-		var end: Vector3 = out["door"] + normal * APRON_END_OUT_M
+		var end: Vector3 = out["door"] + normal * APRON_END_OUT_M - forward * APRON_END_AFT_M
 		apron.append(Vector3(end.x, ground_y, end.z))
 	out["walk"] = walk
 	out["apron_walk"] = apron

@@ -163,8 +163,14 @@ func test_a_plane_03_passenger_leaves_by_the_apron_door() -> void:
 	assert_int(p.apron.size()).is_equal(6)
 	assert_vector(p.apron[1]).is_equal(pose["mounts"][&"Mount_ExitSill"])
 	assert_vector(p.apron[2]).is_equal(apron_door)
-	# It ends on the ground, out from the door along the fuselage normal.
-	var out: Vector3 = pose["door"] + (pose["normal"] as Vector3) * JetBridgePose.APRON_END_OUT_M
+	# It ends on the ground beside the main wheel, out from the door and aft of
+	# the diagonal wing strut.
+	var forward := StandPlacement.turn(stand, Vector3(0.0, 0.0, 1.0))
+	var out: Vector3 = (
+		pose["door"]
+		+ (pose["normal"] as Vector3) * JetBridgePose.APRON_END_OUT_M
+		- forward * JetBridgePose.APRON_END_AFT_M
+	)
 	assert_vector(p.apron[5]).is_equal(Vector3(out.x, JetBridgePose.ground_y(stand), out.z))
 	# The control: a docking walk does not pass the apron door.
 	assert_float(_nearest(docking, _pose_of(MODEL_05)["mounts"][&"Mount_ApronDoor"])).is_greater(
@@ -471,7 +477,7 @@ func test_plane_03s_apron_walk_clears_propeller_disc_and_body_along_the_way() ->
 	var body := AABB(Vector3(-side, 0.0, -side), Vector3(2.0 * side, HEAD_M, 2.0 * side))
 	var hits := 0
 	var min_prop_clear := INF
-	for i in [2, 3]:
+	for i in range(2, walk.size() - 1):
 		var seg_dir := walk[i + 1] - walk[i]
 		var steps := maxi(1, ceili(seg_dir.length() / SAMPLE_M))
 		for k in steps + 1:
@@ -481,10 +487,20 @@ func test_plane_03s_apron_walk_clears_propeller_disc_and_body_along_the_way() ->
 				var clamped_y := clampf(prop_hub.y, ground, ground + HEAD_M)
 				var d := Vector2(pt.x - prop_hub.x, clamped_y - prop_hub.y).length() - prop_r
 				min_prop_clear = minf(min_prop_clear, d)
-	# Control: direct straight segment from Mount_ApronDoor to walk.back() at prop z.
+	# Controls: (1) a direct straight segment from Mount_ApronDoor to walk.back()
+	# without the outer approach waypoint cuts the wing strut/plane; (2) a direct
+	# line from Mount_ApronDoor to the door face enters the propeller disc margin.
 	var last_pt: Vector3 = walk[walk.size() - 1]
-	var t_prop := (prop_hub.z - walk[2].z) / (last_pt.z - walk[2].z)
-	var direct_at_prop := walk[2].lerp(last_pt, t_prop)
+	var direct_dir := last_pt - walk[2]
+	var direct_steps := maxi(1, ceili(direct_dir.length() / SAMPLE_M))
+	var direct_hits := 0
+	for k in direct_steps + 1:
+		var pt := walk[2].lerp(last_pt, float(k) / direct_steps)
+		direct_hits += _edges_in_body(faces, body, pt, direct_dir)
+	var door_pt: Vector3 = JetBridgePose.plane_door(stand, MODEL_03, ground)["door"]
+	var door_ground := Vector3(door_pt.x, ground, door_pt.z)
+	var t_prop := (prop_hub.z - walk[2].z) / (door_ground.z - walk[2].z)
+	var direct_at_prop := walk[2].lerp(door_ground, t_prop)
 	var direct_clear := (
 		(
 			Vector2(
@@ -497,13 +513,17 @@ func test_plane_03s_apron_walk_clears_propeller_disc_and_body_along_the_way() ->
 	)
 	print(
 		(
-			"03 apron walk: body hits %d, prop disc radius %.3f m, min clear %.3f m (direct line %.3f m)"
-			% [hits, prop_r, min_prop_clear, direct_clear]
+			(
+				"03 apron walk: body hits %d, prop disc radius %.3f m, min clear %.3f m"
+				+ " (direct to walk end: %d hits; direct to door at prop: %.3f m)"
+			)
+			% [hits, prop_r, min_prop_clear, direct_hits, direct_clear]
 		)
 	)
 	assert_int(hits).is_equal(0)
 	assert_float(prop_r).is_greater(1.0)
 	assert_float(min_prop_clear).is_greater_equal(side)
+	assert_int(direct_hits).is_greater(0)
 	assert_float(direct_clear).is_less(side)
 
 
@@ -542,9 +562,9 @@ func test_a_rerouted_plane_03_walker_keeps_its_walks_end() -> void:
 	assert_array(_world.sim.files.plane_file_of(p.id)).is_equal(file)
 	var own := JourneyForecast.own_times(_world.sim, p, 0, true)
 	assert_that(own["plane"]).is_equal(BoardingFiles.plane_key(end))
-	# The control: the route's own end, the stand's door, is elsewhere.
+	# The control: the route's own end, the stand's door, is elsewhere (0.91 m away).
 	assert_float(Vector2(end.x, end.z).distance_to(Vector2(stand_door.x, stand_door.z))).is_greater(
-		1.0
+		0.5
 	)
 
 

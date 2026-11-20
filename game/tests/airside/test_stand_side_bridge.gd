@@ -66,8 +66,11 @@ func test_the_docked_bridge_is_the_north_one_turned_about_the_sill() -> void:
 			)
 
 
-## The door normal points out of the plane's port side, away from its origin.
+## The door normal points out of the plane's port side, away from its origin,
+## and the 03 apron walk turns rigidly with the stand about its sill.
 func test_the_door_normal_points_out_of_the_port_side() -> void:
+	var north_walk: PackedVector3Array = JetBridgePose.pose_for(NORTH, ON_FOOT, false)["apron_walk"]
+	assert_int(north_walk.size()).is_equal(5)
 	for side in SIDES:
 		var stand := _stand(side)
 		var at := JetBridgePose.plane_door(stand, ON_FOOT, 0.0)
@@ -77,4 +80,6 @@ func test_the_door_normal_points_out_of_the_port_side() -> void:
 		assert_float(normal.dot(Vector3(from_plane.x, 0.0, from_plane.z))).is_greater(0.0)
 		assert_float(absf(normal.dot(OUT[side]))).is_equal_approx(0.0, EPS)
 		var walk: PackedVector3Array = JetBridgePose.pose_for(stand, ON_FOOT, false)["apron_walk"]
-		assert_int(walk.size()).is_equal(5)
+		assert_int(walk.size()).is_equal(north_walk.size())
+		for i in north_walk.size():
+			assert_vector(walk[i]).is_equal_approx(_point(side, north_walk[i]), Vector3.ONE * EPS)
