@@ -18,10 +18,10 @@ screen-coverage-as-built-a-5-deep-fan-3-then-5-wide-in-front for the screen):
   browse slot. Mount_Browse_0 and _1 are the cells in front of the -x and +x cells
   (ShopLayout's browse slots, index in footprint order), facing the stand.
 - screen_stand (1x1): a widescreen TV on one pole over a foot plate that reaches further
-  forward than back, so the facing reads from above. The picture (sky, hills, sun, cloud
-  on the lights atlas) is the separate Screen_Face node, as on info_screen, so a later
-  viewport texture can replace it. The back is the dark housing with a metal mount plate:
-  a picture on the back would suggest coverage behind it. No mounts.
+  forward than back, so the facing reads from above. The picture (airport departures
+  status bars on the lights atlas) is the separate Screen_Face node, as on info_screen,
+  so a later viewport texture can replace it. The back is the dark housing with a metal
+  mount plate: a picture on the back would suggest coverage behind it. No mounts.
 
 The existing kit pieces were checked first: kiosk.glb is a 1x1 self-service ticket
 machine and pharmacy_shelf.glb a 2x1 shelf branded with a green cross, so neither reads
@@ -267,14 +267,18 @@ def build_screen_stand(root, c):
     face = bpy.data.objects.new("Screen_Face", None)
     c.objects.link(face)
     face.parent = root
-    clip = (-SCREEN_X, SCREEN_X, SCREEN_Y[0], SCREEN_Y[1])
-    gbox("Screen_Face_Sky", (-SCREEN_X, SCREEN_X), SCREEN_Y, (0.020, 0.024), "screen_sky", face, c)
-    disc("Screen_Face_Sun", 0.22, 1.73, 0.065, 0.024, 0.027, "lit_gold", face, c, clip=clip)
-    for i, (x, y, r) in enumerate(((-0.24, 1.75, 0.045), (-0.17, 1.775, 0.06), (-0.10, 1.75, 0.04))):
-        z0 = 0.024 + 0.0008 * i
-        disc("Screen_Face_Cloud_%d" % i, x, y, r, z0, z0 + 0.003, "text_white", face, c, clip=clip)
-    disc("Screen_Face_Hill_0", -0.16, 1.30, 0.30, 0.027, 0.030, "lamp_green", face, c, clip=clip, segs=24)
-    disc("Screen_Face_Hill_1", 0.24, 1.28, 0.26, 0.030, 0.033, "lit_lime", face, c, clip=clip, segs=24)
+    # On-theme departures/info board using the lights atlas (no zero-area clipped arcs).
+    gbox("Screen_Face_Bg", (-SCREEN_X, SCREEN_X), SCREEN_Y, (0.020, 0.024), "screen", face, c)
+    gbox("Screen_Face_Header", (-0.365, 0.365), (1.78, 1.825), (0.024, 0.027), "screen_sky", face, c)
+    gbox("Screen_Face_Title", (-0.345, -0.06), (1.792, 1.813), (0.027, 0.030), "text_yellow", face, c)
+    gbox("Screen_Face_Clock", (0.22, 0.345), (1.792, 1.813), (0.027, 0.030), "text_white", face, c)
+    row_status = ("lamp_green", "text_yellow", "lamp_green", "screen_sky")
+    for row in range(4):
+        y0 = 1.705 - row * 0.085
+        y1 = y0 + 0.045
+        gbox("Screen_Face_Code_%d" % row, (-0.355, -0.20), (y0, y1), (0.024, 0.028), "text_yellow", face, c)
+        gbox("Screen_Face_Dest_%d" % row, (-0.16, 0.14), (y0, y1), (0.024, 0.028), "text_white", face, c)
+        gbox("Screen_Face_Stat_%d" % row, (0.18, 0.355), (y0, y1), (0.024, 0.028), row_status[row], face, c)
 
 
 # ---------------------------------------------------------------- register + checks

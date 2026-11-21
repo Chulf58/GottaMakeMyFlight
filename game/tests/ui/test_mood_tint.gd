@@ -136,3 +136,33 @@ func test_cells_without_floor_are_left_out() -> void:
 	assert_bool(cells.has(Vector2i(-1, 0))).is_false()
 	assert_bool(cells.has(Vector2i(0, -1))).is_false()
 	assert_int(cells.size()).is_equal(3)
+
+
+func test_spread_stops_at_plain_glass_and_door_walls() -> void:
+	for edit: BuildEdit in [
+		BuildEdit.place_wall(Vector2i(3, 2), BuildGrid.Side.WEST, BuildGrid.WallKind.PLAIN),
+		BuildEdit.place_wall(Vector2i(3, 3), BuildGrid.Side.WEST, BuildGrid.WallKind.PLAIN),
+		BuildEdit.place_wall(Vector2i(3, 4), BuildGrid.Side.WEST, BuildGrid.WallKind.PLAIN),
+		BuildEdit.place_wall(Vector2i(3, 3), BuildGrid.Side.WEST, BuildGrid.WallKind.DOOR),
+		BuildEdit.place_wall(Vector2i(3, 3), BuildGrid.Side.EAST, BuildGrid.WallKind.PLAIN),
+		BuildEdit.place_wall(Vector2i(3, 3), BuildGrid.Side.NORTH, BuildGrid.WallKind.GLASS),
+	]:
+		assert_bool(_world.grid.apply(edit).ok).is_true()
+
+	_placed(Vector2i(3, 3), Passenger.Stage.CHECKIN_QUEUE, 20)
+	var cells := MoodTint.cells_for(_world.sim)
+	assert_float(cells[Vector2i(3, 3)]).is_equal(1.0)
+	assert_bool(cells.has(Vector2i(4, 3))).is_false()
+	assert_bool(cells.has(Vector2i(3, 2))).is_false()
+	assert_bool(cells.has(Vector2i(2, 3))).is_false()
+	assert_float(cells[Vector2i(3, 4)]).is_equal(MoodTint.SPREAD)
+	assert_int(cells.size()).is_equal(2)
+
+	# Need modes (e.g. Toilet / Nap Pod rooms) stay strictly inside all walls and doors.
+	var need_p := _placed(Vector2i(3, 3), Passenger.Stage.STANDING, 100)
+	need_p.toilet_need = 95
+	var toilet_cells := MoodTint.cells_for(_world.sim, MoodTint.Mode.TOILET)
+	assert_bool(toilet_cells.has(Vector2i(4, 3))).is_false()
+	assert_bool(toilet_cells.has(Vector2i(3, 2))).is_false()
+	assert_bool(toilet_cells.has(Vector2i(2, 3))).is_false()
+	assert_float(toilet_cells[Vector2i(3, 4)]).is_equal(MoodTint.SPREAD)

@@ -28,8 +28,9 @@ const OBJECT_POSTS := {&"metal_pole_chain": [Vector3(0.0, 0.0, 0.0), Vector3(0.0
 const STUB_HEIGHT := 0.3
 const WALL_HEIGHT := 2.5
 const POST_HEIGHT := 2.54
-## Top of the glass wall's trim kerb: a cut glass wall keeps only the kerb.
-const GLASS_KERB_TOP := 0.22
+## Top of the glass wall's trim kerb: matches STUB_HEIGHT so cut glass and
+## plain walls align cleanly with no step-down.
+const GLASS_KERB_TOP := STUB_HEIGHT
 ## Piece made at run time from wall_glass: its kerb only.
 const GLASS_KERB := "wall_glass_kerb"
 ## A cut door keeps two short jambs, each a plain wall stub this wide, centred

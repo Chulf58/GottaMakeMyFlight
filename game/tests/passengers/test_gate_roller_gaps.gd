@@ -166,10 +166,13 @@ func _seat_guests(guests: Array, seats: Array, order: Array, fallbacks := []) ->
 		p.at = seat["front"]
 		var slide := GateRoller.slide(p.seat_piece, p.seat_cell, p.seat_front)
 		assert_float(GateRoller.slide_of(p)).is_equal_approx(slide, 0.0001)
-		# Every seat row chair is centred on its cell (GateChairs.CHAIR_OFFSET_M
-		# all 0), so no guest shuffles sideways onto it.
+		# Each chair slide matches its GateChairs.CHAIR_OFFSET_M entry ([0.08, 0.0, -0.08]).
 		if seats == _seats:
-			assert_float(slide).is_equal_approx(0.0, 0.0001)
+			var def := BuildCatalog.get_def(p.seat_piece["def"])
+			var index := def.footprint(p.seat_piece["anchor"], p.seat_piece["facing"]).find(
+				p.seat_cell
+			)
+			assert_float(slide).is_equal_approx(GateChairs.CHAIR_OFFSET_M[index], 0.0001)
 		if p.carry_on > 1:
 			var roller := 0 if SecurityLooks.bag_kind(p, 0) == SecurityLooks.Kind.ROLLER else 1
 			hands[i] = SecurityLooks.hand_of(_world.sim, p, roller)
@@ -198,12 +201,10 @@ func test_the_seats_line_up() -> void:
 	assert_int(_seats.size()).is_equal(3)
 
 
-## Every chair of the seat row is centred on its own cell, so GateRoller.slide()
-## of each of the row's three seats is 0: no guest shuffles sideways onto its
-## chair, and the chair-slide tables (GateRoller.SHUFFLE_SIDE_M) never apply
-## at a seat row. The three seats are the row's three chairs, one each.
-## Seated in every order with every fallback, no gap holds two rollers.
-func test_no_seat_row_chair_slides_and_no_gap_holds_two_rollers() -> void:
+## Every chair of the seat row matches GateChairs.CHAIR_OFFSET_M ([0.08, 0.0, -0.08]),
+## so GateRoller.slide() equals that offset while keeping every gap free of
+## two rollers across every arrival order and fallback.
+func test_seat_row_chairs_match_symmetric_offsets_and_no_gap_holds_two_rollers() -> void:
 	var chairs := {}
 	for i in _seats.size():
 		var seat: Dictionary = _seats[i]
@@ -213,7 +214,7 @@ func test_no_seat_row_chair_slides_and_no_gap_holds_two_rollers() -> void:
 		var index := def.footprint(piece["anchor"], piece["facing"]).find(seat["cell"])
 		print("seat %d object %d chair %d slide %+.3f" % [i, seat["object_id"], index, slide])
 		assert_int(index).is_between(0, 2)
-		assert_float(slide).is_equal_approx(0.0, 0.0001)
+		assert_float(slide).is_equal_approx(GateChairs.CHAIR_OFFSET_M[index], 0.0001)
 		chairs[[seat["object_id"], index]] = true
 	assert_int(chairs.size()).is_equal(3)
 	var fills := 0

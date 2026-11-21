@@ -80,10 +80,11 @@ func test_wall_parts_per_kind_full_and_cut() -> void:
 
 
 func test_glass_kerb_keeps_only_the_kerb() -> void:
+	assert_float(InteriorKit.GLASS_KERB_TOP).is_equal(InteriorKit.STUB_HEIGHT)
 	var parts := InteriorKit.meshes(InteriorKit.GLASS_KERB)
 	assert_int(parts.size()).is_equal(1)
 	var box: AABB = (parts[0][0] as Mesh).get_aabb()
-	assert_float(box.end.y).is_less_equal(InteriorKit.GLASS_KERB_TOP + 0.003)
+	assert_float(box.end.y).is_equal_approx(InteriorKit.STUB_HEIGHT, 0.003)
 	assert_float(box.size.x).is_equal_approx(1.0, 0.01)
 
 
@@ -239,3 +240,25 @@ func test_a_redraw_before_refresh_uses_the_drawn_records() -> void:
 	assert_bool(view.object_node(door_id).visible).is_false()
 	view.refresh(grid)
 	assert_object(view.object_node(door_id)).is_null()
+
+
+func test_main_scene_sun_keeps_tight_shadow_bias_for_cutaway_stubs() -> void:
+	var scene := load("res://main/main.tscn") as PackedScene
+	var state := scene.get_state()
+	var props := {}
+	for i in state.get_node_count():
+		if str(state.get_node_name(i)) == "Sun":
+			for p in state.get_node_property_count(i):
+				props[str(state.get_node_property_name(i, p))] = state.get_node_property_value(i, p)
+			break
+	assert_bool(bool(props.get("shadow_enabled", false))).is_true()
+	var bias := float(props.get("shadow_bias", -1.0))
+	var normal_bias := float(props.get("shadow_normal_bias", -1.0))
+	assert_float(bias).is_greater_equal(0.02)
+	assert_float(bias).is_less_equal(0.04)
+	assert_float(normal_bias).is_greater_equal(0.3)
+	assert_float(normal_bias).is_less_equal(0.5)
+	assert_float(float(props.get("shadow_blur", 0.0))).is_equal_approx(2.0, 0.01)
+	assert_float(float(props.get("directional_shadow_max_distance", 0.0))).is_equal_approx(
+		410.0, 0.1
+	)

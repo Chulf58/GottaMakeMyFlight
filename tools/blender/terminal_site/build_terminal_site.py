@@ -43,7 +43,10 @@ What it keeps and drops (measured on the shell, see the census this script print
            buildable-land-shows-as-an-outline-only-in-build-mode-the-da).
     north skirt: the Toon paving's upright edge faces along z -100 and round the back
            dip's flared mouth (z -100..-98), which now lie inside the grown site.
-  It keeps the paving pads at y 0.2 and the outer skirts at z -60.
+    south skirt: the Toon paving's upright edge faces along z -60 behind Road's sidewalk.
+  It keeps the paving pads at y 0.2 and drops those south skirts so owned plots do not
+  collide coplanarly with Road's sidewalk at z -60; fill_plot() closes only the uncovered
+  south spans (x -128..-40, -12..12, 40..128).
   fill_plot() then paves the strips x -43..-40 and 40..43 that
   the Toon paving stops short of and the two dips (with the airside dip's flared mouth),
   each top face on the UV of the nearest existing pad corner, and closes the new edges
@@ -207,6 +210,8 @@ def classify(lo, hi):
         return "inner skirt"
     if upright and abs(lo.z - PLOT[2]) < 0.01 and hi.z <= BACK_FLARE[-1][1] + 0.01:
         return "north skirt"
+    if upright and abs(lo.z - PLOT[3]) < 0.01 and abs(hi.z - PLOT[3]) < 0.01:
+        return "south skirt"
     if not upright and lo.y > PAVE_Y + ACCENT_MIN_LIFT:
         return "tile accent"
     return "keep"
@@ -263,7 +268,7 @@ def filter_lot(lot):
             rep("    ... and %d more like these" % (len(rows) - 3))
     for kind in sorted(kinds):
         rep("  kept    %-24s islands %4d tris %5d" % (kind, kinds[kind][0], kinds[kind][1]))
-    want = ["dip", "dip kerb", "inner skirt", "north skirt", "raised block", "sign", "slab", "tile accent"]
+    want = ["dip", "dip kerb", "inner skirt", "north skirt", "raised block", "sign", "slab", "south skirt", "tile accent"]
     if sorted(dropped) != want:
         die("expected the filter to drop %s, got %s" % (want, sorted(dropped)))
     if skirt_uv is None or not pad_loops:
@@ -394,7 +399,8 @@ def fill_plot(lot, pad_loops, skirt_uv):
     quad([(gx1, 0.0, gz0), (gx1, 0.0, pz1), (gx1, y, pz1), (gx1, y, gz0)], (1, 0, 0), skirt_uv)
     quad([(gx0, 0.0, gz0), (gx1, 0.0, gz0), (gx1, y, gz0), (gx0, y, gz0)], (0, 0, -1), skirt_uv)
     for xa, xb in tops:
-        quad([(xa, 0.0, pz1), (xb, 0.0, pz1), (xb, y, pz1), (xa, y, pz1)], (0, 0, 1), skirt_uv)
+        quad([(xa, SKIRT_FOOT_Y, pz1), (xb, SKIRT_FOOT_Y, pz1), (xb, y, pz1), (xa, y, pz1)],
+             (0, 0, 1), skirt_uv)
     quad([(-DIP_HALF_X, 0.0, pz1), (DIP_HALF_X, 0.0, pz1), (DIP_HALF_X, y, pz1), (-DIP_HALF_X, y, pz1)],
          (0, 0, 1), skirt_uv)
     bm.to_mesh(lot.data)

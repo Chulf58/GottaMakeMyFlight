@@ -105,9 +105,21 @@ func test_the_kit_draws_the_screen_stand_with_its_own_glb() -> void:
 	var face := root.find_child("Screen_Face", true, false) as Node3D
 	assert_object(face).is_not_null()
 	var bounds := AABB()
+	var zero_area := 0
 	for mi in face.find_children("*", "MeshInstance3D", true, false):
+		var mesh := (mi as MeshInstance3D).mesh
 		bounds = (mi as MeshInstance3D).get_aabb()
-	print("screen face aabb %s" % bounds)
+		for s in mesh.get_surface_count():
+			var arrays := mesh.surface_get_arrays(s)
+			var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+			var idx: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+			for t in range(0, idx.size(), 3):
+				var edge_a := verts[idx[t + 1]] - verts[idx[t]]
+				var edge_b := verts[idx[t + 2]] - verts[idx[t]]
+				if edge_a.cross(edge_b).length() < 1e-6:
+					zero_area += 1
+	print("screen face aabb %s zero_area=%d" % [bounds, zero_area])
+	assert_int(zero_area).is_equal(0)
 	assert_float(bounds.position.z).is_greater(0.0)
 	assert_float(bounds.size.x).is_greater(0.7)
 	root.free()
