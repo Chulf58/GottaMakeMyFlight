@@ -66,10 +66,67 @@ AUTHORED_BUILDERS = {"curb_bay": curb_bay}
 MARKERS = {"tp_curb_bay_01a": curb_bay.MARKERS}
 MARKER_PARENT = {"tp_curb_bay_01a": curb_bay.MESH_NAME}
 # Vendor models edited after the import and atlas rebind, before the part checks and the
-# export: stem -> module with edit(objs) and Fail. tc_parking_2a gets a level way from its
-# entrance to the ground-floor stalls (tools/blender/landside/parking_2a_entrance.py);
-# tp_parking_01a gets a paved apron to the sidewalk (tools/blender/landside/parking_01a_apron.py).
-VENDOR_EDITS = {"tc_parking_2a": parking_2a_entrance, "tp_parking_01a": parking_01a_apron}
+# export: stem -> module/callable with edit(objs) and Fail. tc_parking_2a gets a level way
+# from its entrance to the ground-floor stalls (tools/blender/landside/parking_2a_entrance.py);
+# tp_parking_01a gets a paved apron and barrier coplanar cleanup (parking_01a_apron.py);
+# tp_loading_truck_01a gets duplicate headlight back-faces removed.
+
+
+def _clean_loading_truck_headlights(objs):
+    """Remove the 16 inward-facing duplicate coplanar faces from TP_Loading_Truck_01A_Headlights."""
+    import bmesh
+
+    targets = [o for o in objs if o.type == "MESH" and o.name == "TP_Loading_Truck_01A_Headlights"]
+    if len(targets) != 1:
+        die("tp_loading_truck_01a: expected 1 Headlights mesh, found %d" % len(targets))
+    o = targets[0]
+    bm = bmesh.new()
+    bm.from_mesh(o.data)
+    bm.normal_update()
+    by_verts = {}
+    for f in bm.faces:
+        key = tuple(sorted(tuple(round(c, 4) for c in v.co) for v in f.verts))
+        by_verts.setdefault(key, []).append(f)
+    # Two symmetric lamp pods (x > 0 and x < 0). Keep the face pointing away from its pod centre.
+    pod_centers = {}
+    for sign_x in (-1, 1):
+        pts = [v.co for v in bm.verts if v.co.x * sign_x > 0.0]
+        pod_centers[sign_x] = sum(pts, Vector((0.0, 0.0, 0.0))) / len(pts)
+    doomed = []
+    for fs in by_verts.values():
+        if len(fs) < 2:
+            continue
+        ctr = fs[0].calc_center_median()
+        pod = pod_centers[1 if ctr.x >= 0.0 else -1]
+        fs_sorted = sorted(fs, key=lambda f: f.normal.dot(f.calc_center_median() - pod), reverse=True)
+        doomed.extend(fs_sorted[1:])
+    if not doomed:
+        bm.free()
+        die("tp_loading_truck_01a: expected duplicate headlight faces, found 0")
+    bmesh.ops.delete(bm, geom=doomed, context="FACES")
+    loose = [v for v in bm.verts if not v.link_faces]
+    if loose:
+        bmesh.ops.delete(bm, geom=loose, context="VERTS")
+    bm.normal_update()
+    bm.to_mesh(o.data)
+    bm.free()
+    o.data.update()
+    log("TOON EDIT tp_loading_truck_01a removed_duplicate_headlight_faces=%d" % len(doomed))
+
+
+class _TruckHeadlightsEdit:
+    Fail = RuntimeError
+
+    @staticmethod
+    def edit(objs):
+        _clean_loading_truck_headlights(objs)
+
+
+VENDOR_EDITS = {
+    "tc_parking_2a": parking_2a_entrance,
+    "tp_parking_01a": parking_01a_apron,
+    "tp_loading_truck_01a": _TruckHeadlightsEdit,
+}
 
 # Vendor PSD -> PNG under game/assets/textures/. (png name, mipmaps)
 TEXTURES = {
@@ -946,9 +1003,12 @@ def part_state(objs):
 
 def bake_scale(stem, objs):
     """Bake every object's world scale into its mesh, parents first, keeping each world
-    origin and rotation (door hinges, the trunk the tail lights hang on). Objects whose
-    scale has magnitude 1 on every axis are not touched, mirrored ones included (the
-    plane's TP_Plane_05A_Tables is -1, -1, -1). Returns the baked object names."""
+    origin and rotation (door hinges, the trunk the tail lights hang on). Objects with
+    positive unit scale (1, 1, 1) are not touched; negative-scale reflected parts (such as
+    TP_Plane_05A_Tables at -1, -1, -1) are baked and have their face winding flipped so
+    their determinant becomes +1 and normals face outward in Godot."""
+    import bmesh
+
     markers = MARKERS.get(stem, {})
     for o in objs:
         if o.type == "EMPTY" and o.name in markers:
@@ -971,18 +1031,26 @@ def bake_scale(stem, objs):
     baked = []
     for o in order:
         loc, rot, scl = before[o].decompose()
-        if all(abs(abs(s) - 1.0) < 1e-6 for s in scl):
+        if all(abs(s - 1.0) < 1e-6 for s in scl):
             o.matrix_world = before[o]
         else:
             recomposed = Matrix.LocRotScale(loc, rot, scl)
             shear = max(abs(recomposed[i][j] - before[o][i][j]) for i in range(4) for j in range(4))
             if shear > 1e-6:
                 die("%s: %s has a sheared transform (%.2e off its TRS); not baked" % (stem, o.name, shear))
-            if before[o].determinant() <= 0.0:
-                die("%s: %s is mirrored; scale baking expects a positive scale" % (stem, o.name))
             if o.data.users > 1:
                 die("%s: %s shares its mesh; cannot bake its scale alone" % (stem, o.name))
             o.data.transform(Matrix.Diagonal(scl).to_4x4())
+            if before[o].determinant() < 0.0:
+                bm = bmesh.new()
+                bm.from_mesh(o.data)
+                for f in bm.faces:
+                    f.normal_flip()
+                bm.normal_update()
+                bm.to_mesh(o.data)
+                bm.free()
+                o.data.update()
+                log("BAKE_MIRROR %s %s scale=%s -> flipped winding" % (stem, o.name, tuple(round(s, 3) for s in scl)))
             o.matrix_world = Matrix.Translation(loc) @ rot.to_matrix().to_4x4()
             baked.append(o.name)
         bpy.context.view_layer.update()
@@ -1382,7 +1450,6 @@ def convert(stem, spec, out_root=None):  # out_root None: write into game/assets
         bpy.ops.import_scene.fbx(filepath=os.path.join(PACK_ROOTS[pack], "Models", fbx))
     bpy.context.view_layer.update()
     objs = list(bpy.context.scene.objects)
-    reflected = sorted(o.name for o in objs if o.matrix_world.determinant() < 0)
     if idle_fbx is None:
         for o in objs:
             if o.animation_data:
@@ -1416,6 +1483,7 @@ def convert(stem, spec, out_root=None):  # out_root None: write into game/assets
         log("SCALE %s baked=%s" % (stem, baked))
         compare_parts(stem, intent, part_state(objs), "after-bake")
         check_seat(stem, seat, objs)
+    reflected = sorted(o.name for o in objs if o.matrix_world.determinant() < 0)
     fixed_tris = fix_uvs(stem, objs)
     bpy.context.view_layer.update()
     if looks is not None:
@@ -1520,6 +1588,32 @@ def convert(stem, spec, out_root=None):  # out_root None: write into game/assets
         for k in range(3):
             if abs(f_lo[k] - s_lo[k]) > BOUNDS_TOLERANCE or abs(f_hi[k] - s_hi[k]) > BOUNDS_TOLERANCE:
                 die("%s: file bounds %s..%s differ from scene %s..%s" % (stem, f_lo, f_hi, s_lo, s_hi))
+        # Verify no reflected (negative-determinant) nodes remain in the written file.
+        neg_nodes = [
+            nd.get("name", str(idx))
+            for idx, nd in enumerate(js.get("nodes", []))
+            if node_matrix(nd).determinant() <= 0.0
+        ]
+        if neg_nodes:
+            die("%s: written file has negative-determinant nodes %s" % (stem, neg_nodes))
+        if stem in ("tp_loading_truck_01a", "tp_parking_01a"):
+            import bmesh
+
+            coplanar_dups = 0
+            for mesh in js.get("meshes", []):
+                for prim in mesh["primitives"]:
+                    pos = glb_accessor(out, js, prim["attributes"]["POSITION"])
+                    idx = glb_indices(out, js, prim["indices"])
+                    seen = set()
+                    for t in range(0, len(idx), 3):
+                        tri = tuple(sorted(tuple(round(c, 4) for c in pos[idx[t + k]]) for k in range(3)))
+                        if tri in seen:
+                            coplanar_dups += 1
+                        else:
+                            seen.add(tri)
+            log("COPLANAR_FILE %s duplicate_tris=%d" % (stem, coplanar_dups))
+            if coplanar_dups:
+                die("%s: written file still has %d duplicate coplanar tris" % (stem, coplanar_dups))
     if out_root is None:
         write_scene_import(out, animated)
 

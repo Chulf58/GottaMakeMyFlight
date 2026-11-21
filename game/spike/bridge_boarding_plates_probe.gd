@@ -170,32 +170,33 @@ func _apron_plates() -> void:
 	var want := JetBridgePose.pose_for(_stand, ON_FOOT, false, _sim.site.ground_height)
 	var apron_door: Vector3 = want["mounts"][&"Mount_ApronDoor"]
 	print("WALK 03 docked=%s %s apron door %s" % [entry["docked"], walk, apron_door])
-	if entry["docked"] or walk.size() != 4:
+	if entry["docked"] or walk.size() != 6:
 		_invalid("03: the bridge docked or the walk is not the apron door's")
 		return
 	var walker := Passenger.new()
 	walker.apron = walk
 	var to_door := walker.apron_segment_mm(1) + walker.apron_segment_mm(2)
-	# One just out of the apron door, one halfway on to the plane door. The
-	# cameras stand low, under the 03's high wing.
+	var to_exit := to_door + walker.apron_segment_mm(3)
+	# One just out of the apron door, one halfway along the apron walk, and one
+	# at the end beside the main wheel. The cameras stand low, under 03's wing.
 	var at_door := _guest(walk, to_door + 300)
-	var out := _guest(walk, to_door + walker.apron_segment_mm(3) / 2)
+	var out := _guest(walk, to_exit + walker.apron_segment_mm(4) / 2)
 	await _show_guests()
 	_aim(walk[2] + Vector3.UP * 0.9, 180.0, 4.0, 6.0)
 	await _frames(3)
 	var name := "bridge_board_03_apron_door.png"
 	if _proved(name, [at_door]):
 		await _save(name)
-	_aim((walk[2] + walk[3]) / 2.0 + Vector3.UP * 0.9, 160.0, 3.0, 9.0)
+	_aim((walk[3] + walk[4]) / 2.0 + Vector3.UP * 0.9, 160.0, 3.0, 9.0)
 	await _frames(3)
 	name = "bridge_board_03_apron_walk.png"
 	if _proved(name, [out]):
 		await _save(name)
 	_clear_guests()
-	# One at the walk's end, out from the 03's door, from the north-east.
+	# One at the walk's end, beside the main wheel under the wing, from the north-east.
 	var at_end := _guest(walk, walker.apron_total_mm() - 1)
 	await _show_guests()
-	_aim(walk[3] + Vector3.UP * 0.9, 135.0, 6.0, 5.0)
+	_aim(walk[5] + Vector3.UP * 0.9, 135.0, 6.0, 5.0)
 	await _frames(3)
 	name = "bridge_board_03_walk_end.png"
 	if _proved(name, [at_end]):

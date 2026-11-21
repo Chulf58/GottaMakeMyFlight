@@ -21,6 +21,8 @@ extends Node3D
 ## The atlas texel (tp_atlas_1a_d.png, 560, 330) the ground takes: earth brown.
 const GROUND_UV := Vector2(560.5 / 1024.0, 330.5 / 1024.0)
 const GROUND_LIFT_M := 0.02
+## Base lift of runway works so the earth pad matches the 0.20 m runway slab.
+const RUNWAY_BASE_Y := 0.18
 ## The ground mesh is cut into squares this size so it follows the site's ramp.
 const GROUND_CELL_M := 2.0
 const MATERIAL := preload("res://assets/materials/tp_atlas_simple_toon.tres")
@@ -127,9 +129,10 @@ func _build(works: String, layout: Dictionary) -> void:
 	var root := Node3D.new()
 	root.name = "Works%s" % works.capitalize()
 	add_child(root)
+	var base_lift := RUNWAY_BASE_Y if works == RUNWAY else 0.0
 	var ground := MeshInstance3D.new()
 	ground.name = "Ground"
-	ground.mesh = ground_mesh(layout["ground"])
+	ground.mesh = ground_mesh(layout["ground"], base_lift)
 	ground.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	root.add_child(ground)
 	for item: Dictionary in layout["props"]:
@@ -137,9 +140,18 @@ func _build(works: String, layout: Dictionary) -> void:
 		var origin: Vector2 = item["origin"]
 		var centre: Vector2 = item["centre"]
 		var height := PlaneView.ground_height_at(Vector3(centre.x, 0.0, centre.y))
-		node.position = Vector3(origin.x, height, origin.y)
+		var on_pad := _on_ground_piece(centre, layout["ground"])
+		var prop_y := height + ((base_lift + GROUND_LIFT_M) if on_pad else 0.0)
+		node.position = Vector3(origin.x, prop_y, origin.y)
 		node.rotation.y = item["yaw"]
 		root.add_child(node)
+
+
+static func _on_ground_piece(centre: Vector2, rects: Array) -> bool:
+	for rect: Rect2 in rects:
+		if rect.has_point(centre):
+			return true
+	return false
 
 
 func _scene(kind: String) -> PackedScene:
@@ -149,10 +161,16 @@ func _scene(kind: String) -> PackedScene:
 
 
 ## The flat earth ground over `rects`, in squares of at most GROUND_CELL_M, each
-## corner GROUND_LIFT_M over PlaneView.ground_height_at().
-static func ground_mesh(rects: Array) -> ArrayMesh:
+## corner `GROUND_LIFT_M + base_lift` over PlaneView.ground_height_at(), with
+## edge skirts down to the grass when lifted over grass.
+static func ground_mesh(rects: Array, base_lift := 0.0) -> ArrayMesh:
 	var verts := PackedVector3Array()
 	var index := PackedInt32Array()
+	var skirt_verts := PackedVector3Array()
+	var skirt_normals := PackedVector3Array()
+	var skirt_uvs := PackedVector2Array()
+	var skirt_index := PackedInt32Array()
+	var foot := TaxiPavingSite.GRASS_Y - TaxiPavingSite.SKIRT_FOOT_M
 	for rect: Rect2 in rects:
 		var steps := Vector2i(
 			maxi(1, ceili(rect.size.x / GROUND_CELL_M)), maxi(1, ceili(rect.size.y / GROUND_CELL_M))
@@ -163,7 +181,9 @@ static func ground_mesh(rects: Array) -> ArrayMesh:
 				var x := rect.position.x + rect.size.x * float(i) / float(steps.x)
 				var z := rect.position.y + rect.size.y * float(j) / float(steps.y)
 				var at := Vector3(x, 0.0, z)
-				verts.append(Vector3(x, PlaneView.ground_height_at(at) + GROUND_LIFT_M, z))
+				verts.append(
+					Vector3(x, PlaneView.ground_height_at(at) + GROUND_LIFT_M + base_lift, z)
+				)
 		for j in steps.y:
 			for i in steps.x:
 				var a := base + j * (steps.x + 1) + i
@@ -171,6 +191,40 @@ static func ground_mesh(rects: Array) -> ArrayMesh:
 				var c := a + steps.x + 1
 				var d := c + 1
 				index.append_array(PackedInt32Array([a, b, c, b, d, c]))
+		var corners: Array[Vector2] = [
+			rect.position,
+			Vector2(rect.end.x, rect.position.y),
+			rect.end,
+			Vector2(rect.position.x, rect.end.y),
+		]
+		var outs: Array[Vector3] = [Vector3.FORWARD, Vector3.RIGHT, Vector3.BACK, Vector3.LEFT]
+		for edge in 4:
+			var p0 := corners[edge]
+			var p1 := corners[(edge + 1) % 4]
+			var y0 := (
+				PlaneView.ground_height_at(Vector3(p0.x, 0.0, p0.y)) + GROUND_LIFT_M + base_lift
+			)
+			var y1 := (
+				PlaneView.ground_height_at(Vector3(p1.x, 0.0, p1.y)) + GROUND_LIFT_M + base_lift
+			)
+			var sb := skirt_verts.size()
+			(
+				skirt_verts
+				. append_array(
+					PackedVector3Array(
+						[
+							Vector3(p0.x, y0, p0.y),
+							Vector3(p1.x, y1, p1.y),
+							Vector3(p1.x, foot, p1.y),
+							Vector3(p0.x, foot, p0.y),
+						]
+					)
+				)
+			)
+			for _k in 4:
+				skirt_normals.append(outs[edge])
+				skirt_uvs.append(GROUND_UV)
+			skirt_index.append_array(PackedInt32Array([sb, sb + 1, sb + 2, sb, sb + 2, sb + 3]))
 	var mesh := ArrayMesh.new()
 	if verts.is_empty():
 		return mesh
@@ -188,6 +242,15 @@ static func ground_mesh(rects: Array) -> ArrayMesh:
 	arrays[Mesh.ARRAY_INDEX] = index
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	mesh.surface_set_material(0, MATERIAL)
+	if not skirt_index.is_empty():
+		var s_arrays := []
+		s_arrays.resize(Mesh.ARRAY_MAX)
+		s_arrays[Mesh.ARRAY_VERTEX] = skirt_verts
+		s_arrays[Mesh.ARRAY_NORMAL] = skirt_normals
+		s_arrays[Mesh.ARRAY_TEX_UV] = skirt_uvs
+		s_arrays[Mesh.ARRAY_INDEX] = skirt_index
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, s_arrays)
+		mesh.surface_set_material(1, TaxiPavingSite.skirt_material())
 	return mesh
 
 

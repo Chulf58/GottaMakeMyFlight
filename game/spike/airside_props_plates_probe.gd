@@ -150,7 +150,9 @@ func _pose(model: String, plane_class: String, state: int, t: float) -> Node3D:
 	_view.show_model(model)
 	var path := _view._path(FlightSim.State.PUSHBACK, plane_class)
 	var entry := _view._entry_dir(FlightSim.State.PUSHBACK, plane_class)
-	var pose := FlightPose.pose(FlightSim.State.PUSHBACK, t, path, entry)
+	var pose := FlightPose.pose(
+		FlightSim.State.PUSHBACK, t, path, entry, {}, 0.0, PlaneClasses.self_taxis(model)
+	)
 	pose.origin.y += PlaneView.ground_height_at(pose.origin)
 	_view.transform = pose
 	_view.phase = state
@@ -171,6 +173,11 @@ func _tug_plates() -> void:
 		var cls := _class_of(model)
 		var plane := _pose(model, cls, FlightSim.State.PUSHBACK, 0.0)
 		await _frames(2)
+		if PlaneClasses.self_taxis(model):
+			print("TUG %s self-taxis: tug.visible=%s" % [model, tug.visible])
+			if tug.visible:
+				_invalid("%s: self-taxiing plane should hide the tug" % model)
+			continue
 		var box := _aabb_of(tug)
 		var nose := _aabb_of(plane).end.z
 		var gear := plane.global_transform * PlaneProps.nose_gear_contact(plane, model)
@@ -203,9 +210,9 @@ func _tug_plates() -> void:
 			break
 	if _prove("tug_04_stand.png", [tug], true) and _prove_seen("tug_04_stand.png", p04):
 		await _save("tug_04_stand.png")
-	for model: String in ["tp_plane_03a", "tp_plane_07a"]:
+	for model: String in ["tp_plane_04a", "tp_plane_07a"]:
 		var cls := _class_of(model)
-		var near := 26.0 if model == "tp_plane_03a" else 40.0
+		var near := 28.0 if model == "tp_plane_04a" else 40.0
 		for t in PUSH_STRIP:
 			var plane := _pose(model, cls, FlightSim.State.PUSHBACK, t)
 			await _frames(2)
@@ -258,8 +265,17 @@ func _bridge_plates() -> void:
 				]
 			)
 		)
-		# Question (c): the bridge underside over the gate's walk.
-		_walk_clearance(model, bridge)
+		# Question (c): the bridge underside over the gate's walk (docked planes walk inside).
+		if JetBridgePose.docks(model):
+			var pose_dict := JetBridgePose.pose_for(
+				_stand, model, true, JetBridgePose.ground_y(_stand)
+			)
+			print(
+				(
+					"BRIDGE %s docked walk_pts=%d"
+					% [model, (pose_dict["walk"] as PackedVector3Array).size()]
+				)
+			)
 		if not JetBridgePose.docks(model):
 			await _clear_plates(model, plane, door, bridge)
 			continue
@@ -273,13 +289,13 @@ func _bridge_plates() -> void:
 			await _save(name)
 
 
-## Plane 03, which the nose-loader does not dock (board 0adca5c6), with the
-## bridge parked over its wing: plates from the terminal side and from high
-## over the apron, with the bridge wholly in frame and seen.
+## Plane 03, which boards on foot from the apron door while the bridge folds
+## against the terminal (board b564cda3, decision 68550e72): plates from the
+## terminal side and from high over the apron, with the folded bridge in frame.
 func _clear_plates(model: String, plane: Node3D, door: Vector3, bridge: Node3D) -> void:
 	var entry: Dictionary = _airside.props.bridges[_gate]
-	if entry["docked"]:
-		_invalid("%s: the bridge docked a plane that boards on foot" % model)
+	if entry["docked"] or not entry["folded"]:
+		_invalid("%s: the bridge docked or did not fold for on-foot boarding" % model)
 		return
 	var focus := door.lerp(bridge.global_position, 0.5)
 	for view: Vector3 in [Vector3(60.0, 32.0, 34.0), Vector3(150.0, 62.0, 40.0)]:
@@ -290,15 +306,18 @@ func _clear_plates(model: String, plane: Node3D, door: Vector3, bridge: Node3D) 
 			await _save(name)
 
 
+## Plane 03 apron walk from Mount_ApronDoor past the folded vestibule to the
+## main wheel step (04-07 board inside the bridge cab; only 03 walks the apron).
 func _walk_plates() -> void:
-	var plane := _pose("tp_plane_05a", PlaneClasses.MEDIUM, FlightSim.State.BOARDING, 0.0)
+	var plane := _pose("tp_plane_03a", PlaneClasses.SMALL, FlightSim.State.BOARDING, 0.0)
 	await _frames(2)
 	var bridge: Node3D = _airside.props.bridges[_gate]["node"]
 	_add_colliders(bridge)
-	var low := _walk_clearance("tp_plane_05a", bridge)
-	var walk := _walk()
+	var ground := JetBridgePose.ground_y(_stand)
+	var pose_dict := JetBridgePose.pose_for(_stand, "tp_plane_03a", false, ground)
+	var walk: PackedVector3Array = pose_dict["apron_walk"]
 	var people: Array[Node3D] = []
-	for at: Vector3 in [low["at"], walk[walk.size() - 1], walk[0].lerp(low["at"], 0.4)]:
+	for at: Vector3 in [walk[1], walk[2], walk[walk.size() - 1]]:
 		var person: Node3D = PASSENGER.instantiate()
 		_main.add_child(person)
 		person.global_position = Vector3(at.x, PlaneView.ground_height_at(at), at.z)
@@ -306,28 +325,27 @@ func _walk_plates() -> void:
 		_add_colliders(person)
 		people.append(person)
 	var height := _aabb_of(people[0]).size.y
-	print("WALK passenger height %.2f m" % height)
-	# Near level, from the first of these viewpoints that sees the passenger.
-	var target: Vector3 = low["at"] + Vector3(0.0, 1.2, 0.0)
+	print("WALK 03 apron_walk=%s passenger height %.2f m" % [walk, height])
+	var target: Vector3 = walk[2] + Vector3(0.0, 1.0, 0.0)
 	var side_ok := false
 	for eye: Vector3 in SIDE_EYES:
 		_cam.look_at_from_position(target + eye, target, Vector3.UP)
 		await _frames(3)
-		if _report_rays("WALK_EYE %s" % eye, people[2]) >= 0.25:
+		if _report_rays("WALK_EYE %s" % eye, people[1]) >= 0.25:
 			side_ok = true
 			break
 	if not side_ok:
-		_invalid("walk_side.png: no viewpoint sees the passenger")
+		_invalid("walk_side.png: no viewpoint sees the apron-walk passenger")
 	elif (
-		_prove("walk_side.png", [people[2]], true)
+		_prove("walk_side.png", [people[1]], true)
 		and _prove("walk_side.png", [people[0]], false)
 		and _prove_seen("walk_side.png", bridge)
 	):
 		await _save("walk_side.png")
-	_aim(target, 60.0, 30.0, 24.0)
+	_aim(walk[2].lerp(walk[walk.size() - 1], 0.5), 140.0, 35.0, 18.0)
 	await _frames(3)
-	_report_rays("WALK_END passenger at the walk end", people[1])
-	if _prove("walk_high.png", [people[0], bridge], true):
+	_report_rays("WALK_END passenger at the walk end", people[2])
+	if _prove("walk_high.png", [people[1], people[2], bridge], true):
 		await _save("walk_high.png")
 	for person in people:
 		person.queue_free()
