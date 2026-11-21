@@ -271,6 +271,28 @@ func test_the_pose_eases_in_and_out_at_the_edges_of_the_stay() -> void:
 	assert_float(biggest_shuffle).is_less(0.05)
 
 
+## Sofa visitors finish turning away from the seat (ticks 0..3 of SHUFFLE_TICKS)
+## before backing onto the recessed cushion so knees/feet never clip the seat front.
+func test_lounge_sofa_holds_seat_offset_during_initial_turn() -> void:
+	_open(&"lounge")
+	var p := _visitor()
+	var shares: Array[float] = []
+	for i in ActivityPoses.SHUFFLE_TICKS + 1:
+		shares.append(ActivityPoses.share(_world.sim, p))
+		_world.step()
+	print("lounge shares ticks 0..%d: %s" % [ActivityPoses.SHUFFLE_TICKS, shares])
+	for i in 4:
+		assert_float(shares[i]).override_failure_message("tick %d" % i).is_equal(0.0)
+	assert_float(shares[ActivityPoses.SHUFFLE_TICKS]).is_equal(1.0)
+	# Control: nap_pod recliner starts linear slide immediately after tick 0.
+	_free()
+	_open(&"nap_pod")
+	var pod := _visitor()
+	_world.step()
+	_world.step()
+	assert_float(ActivityPoses.share(_world.sim, pod)).is_greater(0.0)
+
+
 func test_a_shower_visitor_steps_in_under_foam_and_steps_out_again() -> void:
 	_open(&"shower")
 	var p := _visitor()

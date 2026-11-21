@@ -378,6 +378,85 @@ func test_the_podium_node_holds_the_car_at_the_car_mount() -> void:
 	node.free()
 
 
+## Bar counter stools sit at ~0.68 m with tucked footrail (z -0.37..-0.34,
+## y 0.10..0.13) and 0.30 m overhang supported by 3 brackets; prize podium carries
+## Sign_Face_Mesh proud of the podium body; all VF6-touched interior GLBs have
+## zero degenerate or duplicate coplanar triangles.
+func test_vf6_bar_stool_height_and_prize_podium_sign_face() -> void:
+	var bar := InteriorKit.instantiate("bar_counter")
+	var bar_islands := _mesh_islands(bar)
+	var cushions := []
+	var footrails := []
+	var brackets := []
+	var bar_top := AABB()
+	var bar_body := AABB()
+	for box: AABB in bar_islands:
+		var c := box.get_center()
+		if (
+			box.end.y > 0.65
+			and box.end.y < 0.72
+			and box.size.y < 0.2
+			and c.z > 0.2
+			and absf(c.x) > 0.3
+		):
+			cushions.append(box)
+		elif (
+			box.size.x > 1.5
+			and box.position.y > 0.08
+			and box.end.y < 0.16
+			and box.position.z < -0.25
+		):
+			footrails.append(box)
+		elif box.position.y > 0.80 and box.end.y < 1.02 and box.size.x < 0.1 and box.end.z > -0.20:
+			brackets.append(box)
+		elif box.size.x > 1.7 and box.position.y > 0.98 and box.end.y < 1.07:
+			bar_top = box
+		elif box.size.x > 1.7 and box.size.y > 0.8 and box.end.y < 1.02:
+			bar_body = box
+	print(
+		(
+			"bar islands: cushions=%s footrails=%s brackets=%d top=%s body=%s"
+			% [cushions, footrails, brackets.size(), bar_top, bar_body]
+		)
+	)
+	assert_int(cushions.size()).is_equal(2)
+	for c_box: AABB in cushions:
+		assert_float(c_box.end.y).is_equal_approx(0.68, 0.01)
+	assert_int(footrails.size()).is_equal(1)
+	var rail: AABB = footrails[0]
+	assert_float(rail.position.y).is_equal_approx(0.10, 0.01)
+	assert_float(rail.end.y).is_equal_approx(0.13, 0.01)
+	assert_float(rail.position.z).is_equal_approx(-0.37, 0.01)
+	assert_float(rail.end.z).is_equal_approx(-0.34, 0.01)
+	assert_int(brackets.size()).is_equal(3)
+	assert_float(bar_top.end.z - bar_body.end.z).is_equal_approx(0.30, 0.01)
+	bar.free()
+
+	var podium := InteriorKit.instantiate("prize_podium")
+	var face := podium.find_child("Sign_Face_Mesh", true, false) as MeshInstance3D
+	assert_object(face).is_not_null()
+	var face_box := _frame_in(face, podium) * face.get_aabb()
+	print("prize podium Sign_Face_Mesh box: %s" % face_box)
+	assert_float(face_box.size.x).is_greater_equal(2.0)
+	assert_float(face_box.end.y).is_greater(0.25)
+	podium.free()
+
+	for piece: String in [
+		"bar_counter",
+		"prize_podium",
+		"restaurant_booth",
+		"play_slide",
+		"lounge_sofa",
+		"lounge_armchair",
+	]:
+		var inst := InteriorKit.instantiate(piece)
+		var counts := _seam_counts(inst)
+		inst.free()
+		print("seam check %s: zero_area=%d dup_coplanar=%d" % [piece, counts[0], counts[1]])
+		assert_int(counts[0]).is_equal(0)
+		assert_int(counts[1]).is_equal(0)
+
+
 ## A ghost wears its one material on the car and on the chain's posts too.
 func test_the_ghost_tints_the_car_and_the_chain_posts() -> void:
 	var ghost := StandardMaterial3D.new()
@@ -429,6 +508,89 @@ func _car_child(node: Node3D) -> Node3D:
 		if child.scene_file_path == path:
 			return child as Node3D
 	return null
+
+
+func _mesh_islands(root: Node3D) -> Array[AABB]:
+	var out: Array[AABB] = []
+	for child in root.find_children("*", "MeshInstance3D", true, false):
+		var mi := child as MeshInstance3D
+		if mi.mesh == null:
+			continue
+		var xf := _frame_in(mi, root)
+		var faces := mi.mesh.get_faces()
+		var tris := faces.size() / 3
+		var parent := {}
+		for t in tris:
+			var a := _weld_root(parent, Vector3i((xf * faces[t * 3] * 1000.0).round()))
+			for c in [1, 2]:
+				var b := _weld_root(parent, Vector3i((xf * faces[t * 3 + c] * 1000.0).round()))
+				if a != b:
+					parent[b] = a
+		var groups := {}
+		for t in tris:
+			var r := _weld_root(parent, Vector3i((xf * faces[t * 3] * 1000.0).round()))
+			if not groups.has(r):
+				groups[r] = AABB(xf * faces[t * 3], Vector3.ZERO)
+			var box: AABB = groups[r]
+			for c in 3:
+				box = box.expand(xf * faces[t * 3 + c])
+			groups[r] = box
+		for r: Vector3i in groups:
+			out.append(groups[r])
+	return out
+
+
+func _weld_root(parent: Dictionary, k: Vector3i) -> Vector3i:
+	while parent.has(k):
+		k = parent[k]
+	return k
+
+
+func _seam_counts(root: Node3D) -> Array[int]:
+	var zero_area := 0
+	var dup_coplanar := 0
+	var tris := []
+	for child in root.find_children("*", "MeshInstance3D", true, false):
+		var mi := child as MeshInstance3D
+		if mi.mesh == null:
+			continue
+		var xf := _frame_in(mi, root)
+		var faces := mi.mesh.get_faces()
+		for i in range(0, faces.size(), 3):
+			var a := xf * faces[i]
+			var b := xf * faces[i + 1]
+			var c := xf * faces[i + 2]
+			var cross := (b - a).cross(c - a)
+			var area := cross.length() * 0.5
+			if area < 1e-8:
+				zero_area += 1
+				continue
+			tris.append([(a + b + c) / 3.0, cross.normalized(), area])
+	var buckets := {}
+	for t: Array in tris:
+		var key := Vector3i(((t[0] as Vector3) * 200.0).round())
+		if not buckets.has(key):
+			buckets[key] = []
+		(buckets[key] as Array).append(t)
+	for t: Array in tris:
+		var centre: Vector3 = t[0]
+		var n: Vector3 = t[1]
+		var area: float = t[2]
+		var base := Vector3i((centre * 200.0).round())
+		var found := 0
+		for dx in [-1, 0, 1]:
+			for dy in [-1, 0, 1]:
+				for dz in [-1, 0, 1]:
+					for other: Array in buckets.get(base + Vector3i(dx, dy, dz), []):
+						if (
+							centre.distance_to(other[0]) < 1e-3
+							and absf(n.dot(other[1])) > 0.999
+							and absf(area - float(other[2])) < 1e-4
+						):
+							found += 1
+		if found > 1:
+			dup_coplanar += 1
+	return [zero_area, dup_coplanar / 2]
 
 
 ## The bounds of every mesh under `root`, in root's own frame.

@@ -128,7 +128,7 @@ const FLOAT_M := 0.03
 const LIFT_M := 0.1
 ## A piece part whose top is in this height band and that is thinner than
 ## 0.2 m is a cushion.
-const PAN_TOP_RANGE := Vector2(0.45, 0.6)
+const PAN_TOP_RANGE := Vector2(0.45, 0.72)
 ## BODY_IN_BAG_REACH's legs: body points below this height.
 const LEG_TOP_M := 0.6
 
@@ -143,8 +143,8 @@ var _roller_strip: Array[float] = []
 var _roller_steps := false
 ## --in-bag-parts: print BODY_IN_BAG_PART per set-down frame (_print_in_bag_parts()).
 var _in_bag_parts := false
-## --cam-dist=M: the plate camera this far from its target (4.6 m by default).
-var _cam_dist := 4.6
+## --cam-dist=M: the plate camera this far from its target (5.0 m by default).
+var _cam_dist := 5.0
 ## --cam-front: the plate camera out of the seat, low (_aim()).
 var _cam_front := false
 var _failed := false
@@ -283,6 +283,8 @@ func _guest(body: int, roller: bool) -> Passenger:
 		var id := _sim.spawn_now(
 			FlightTimetable.occurrence_id(FlightSim.DEFAULT_ID, 0), PassengerLooks.variant_of(body)
 		)
+		if id == 0:
+			break
 		p = _sim.get_passenger(id)
 		ToiletTestLayout.calm(p)
 		p.carry_on = 1 if roller else 0
@@ -290,6 +292,12 @@ func _guest(body: int, roller: bool) -> Passenger:
 		if has and PassengerLooks.body_of(p.id, p.variant) == body:
 			break
 		p.carry_on = 0
+		p.stage = Passenger.Stage.MADE
+		p.clear_path()
+		p = null
+	if p == null:
+		_invalid("no guest of body %d (roller=%s) spawned" % [body, roller])
+		return null
 	_mine[p.id] = true
 	if roller and p.carry_on == 0:
 		_invalid("no roller guest of body %d turned up" % body)
@@ -1140,7 +1148,7 @@ func _aim(frame: Transform3D, seat: Dictionary) -> void:
 	var approach := _sim.grid.cell_to_world(seat["approach"]) - frame.origin
 	var lateral := approach.dot(frame.basis.x)
 	var across := frame.basis.x * (signf(lateral) if absf(lateral) > 0.1 else 1.0)
-	var dir := (across * 0.6 + frame.basis.z * 0.5 + Vector3.UP * 1.2).normalized()
+	var dir := (across * 0.6 + frame.basis.z * 0.55 + Vector3.UP * 0.8).normalized()
 	if _cam_front:
 		# --cam-front: from out of the seat, low, so the legs beside a roller set
 		# down at the approach cell are not behind the body.

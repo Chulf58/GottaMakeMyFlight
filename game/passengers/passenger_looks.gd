@@ -220,12 +220,36 @@ const BOOTH_SEAT_SHIFT_M: Array[Vector2] = [
 	Vector2(0.025, 0.0),
 	Vector2(0.025, 0.0),
 ]
+const BAR_SEAT_LIFT_M := 0.15
+## Bar stools sit BAR_SEAT_LIFT_M higher than dining chairs (0.68 m vs 0.53 m),
+## keeping the same per-body forward offset and extra hem lift as SERVICES_SEAT_SHIFT_M.
+const BAR_SEAT_SHIFT_M: Array[Vector2] = [
+	Vector2(0.0, 0.15),
+	Vector2(0.0, 0.15),
+	Vector2(0.0, 0.15),
+	Vector2(0.0, 0.15),
+	Vector2(0.0, 0.15),
+	Vector2(0.0, 0.15),
+	Vector2(0.0, 0.15),
+	Vector2(0.0, 0.15),
+	Vector2(0.0, 0.15),
+	Vector2(0.0, 0.17),
+	Vector2(0.0, 0.15),
+	Vector2(0.0, 0.15),
+	Vector2(0.0, 0.16),
+	Vector2(0.0, 0.16),
+	Vector2(0.0, 0.15),
+	Vector2(0.0, 0.17),
+	Vector2(0.0, 0.16),
+	Vector2(0.0, 0.16),
+	Vector2(0.0, 0.15),
+]
 ## Piece -> its per-body seat step, for the pieces whose seats do not take
 ## CAFE_SEAT_SHIFT_M (seat_shift()).
 const PIECE_SEAT_SHIFT_M := {
 	&"restaurant_table": SERVICES_SEAT_SHIFT_M,
 	&"restaurant_booth": BOOTH_SEAT_SHIFT_M,
-	&"bar_counter": SERVICES_SEAT_SHIFT_M,
+	&"bar_counter": BAR_SEAT_SHIFT_M,
 }
 ## Clothing tints (board 3fcd8e5a; decision passenger-looks-add-the-unused-
 ## toon-city-people-bodies-and-b): (hue, saturation) given to the light

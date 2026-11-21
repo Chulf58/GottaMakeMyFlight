@@ -225,25 +225,28 @@ def staff_monitor(prefix, x, root, c, top=1.0):
 # ---------------------------------------------------------------- seats
 
 
+BAR_SEAT_TOP = 0.68
+
+
 def stool(side, x, rz, root, c):
-    """A backless bar stool facing Godot -Z from a root at Godot z = rz. The 0.14 m
-    cushion runs 0.22-0.62 m behind the root with a 0.06 m chamfered nose (the female
-    thigh sits at 0.509-0.52 m 0.25-0.35 m behind the root); everything below the seat
-    stays 0.27 m or more behind the root, where the heels reach 0.245 m."""
+    """A round-cornered tall bar stool at Godot x, seat root rz, seat top
+    BAR_SEAT_TOP (0.68 m) with a 0.06 m chamfered cushion nose starting 0.23 m
+    behind the root (clear of all 19 dressed hems), and raised foot rest so
+    bar guests' lifted feet rest near footrail height."""
     s = 1.0
-    sbox("Stool_Seat_" + side, x - 0.20, x + 0.20, rz, s, 0.22, 0.62, SEAT_TOP - 0.14, SEAT_TOP, "red", root, c,
+    sbox("Stool_Seat_" + side, x - 0.20, x + 0.20, rz, s, 0.23, 0.62, BAR_SEAT_TOP - 0.13, BAR_SEAT_TOP, "red", root, c,
          bevel=0.06)
-    sbox("Stool_Pan_" + side, x - 0.17, x + 0.17, rz, s, 0.27, 0.57, SEAT_TOP - 0.17, SEAT_TOP - 0.14, "dark",
+    sbox("Stool_Pan_" + side, x - 0.17, x + 0.17, rz, s, 0.30, 0.57, BAR_SEAT_TOP - 0.16, BAR_SEAT_TOP - 0.13, "dark",
          root, c)
     py = seat_y(rz, s, 0.42)
-    cyl("Stool_Post_" + side, x, py, 0.03, SEAT_TOP - 0.17, 0.035, "metal", root, c)
+    cyl("Stool_Post_" + side, x, py, 0.03, BAR_SEAT_TOP - 0.16, 0.035, "metal", root, c)
     cyl("Stool_Base_" + side, x, py, 0.0, 0.03, 0.15, "metal", root, c, segs=12)
-    # A square foot rest on a crossbar through the post.
-    for k, (b0, b1) in enumerate(((0.29, 0.31), (0.53, 0.55))):
-        sbox("Stool_FootBar_%s%d" % (side, k), x - 0.15, x + 0.15, rz, s, b0, b1, 0.20, 0.23, "metal", root, c)
+    # A square foot rest on a crossbar through the post (16-19 cm height, front bar 0.27-0.30 m).
+    for k, (b0, b1) in enumerate(((0.27, 0.30), (0.53, 0.55))):
+        sbox("Stool_FootBar_%s%d" % (side, k), x - 0.15, x + 0.15, rz, s, b0, b1, 0.16, 0.19, "metal", root, c)
     for k, (x0, x1) in enumerate(((x - 0.15, x - 0.13), (x + 0.13, x + 0.15))):
-        sbox("Stool_FootSide_%s%d" % (side, k), x0, x1, rz, s, 0.29, 0.55, 0.20, 0.23, "metal", root, c)
-    sbox("Stool_FootCross_" + side, x - 0.15, x + 0.15, rz, s, 0.405, 0.435, 0.20, 0.23, "metal", root, c)
+        sbox("Stool_FootSide_%s%d" % (side, k), x0, x1, rz, s, 0.30, 0.53, 0.16, 0.19, "metal", root, c)
+    sbox("Stool_FootCross_" + side, x - 0.13, x + 0.13, rz, s, 0.405, 0.435, 0.16, 0.19, "metal", root, c)
 
 
 def chair(side, x, rz, s, seat, back, root, c):
@@ -270,14 +273,15 @@ def chair(side, x, rz, s, seat, back, root, c):
 
 def bench(row, rz, s, root, c):
     """A booth bench across x -0.92..0.92 in seat terms: lounge_sofa's section (base set
-    back to 0.27 m behind the roots, cushions 0.22-0.65 m behind with a 0.06 m nose,
-    back cushions tilted 8 degrees) with a high back panel and high end panels."""
+    back to 0.27 m behind the roots and tucked inside Booth_Back at 0.78 m so no outer
+    back coplanar seam exists, cushions 0.22-0.65 m behind, back cushions kept at
+    b0=0.63 m front clearance and extended backward to 0.78 m to meet Booth_Back)."""
     sbox("Booth_Plinth_" + row, -0.84, 0.84, rz, s, 0.29, 0.85, 0.0, 0.10, "dark", root, c)
-    sbox("Booth_Base_" + row, -0.86, 0.86, rz, s, 0.27, 0.87, 0.10, 0.38, "wood", root, c, bevel=0.02)
+    sbox("Booth_Base_" + row, -0.86, 0.86, rz, s, 0.27, 0.78, 0.10, 0.38, "wood", root, c, bevel=0.02)
     for i, (x0, x1) in enumerate(((-0.85, -0.01), (0.01, 0.85))):
         sbox("Booth_Seat_%s%d" % (row, i), x0, x1, rz, s, 0.22, 0.65, 0.38, SEAT_TOP, "teal", root, c, bevel=0.06)
-        sbox("Booth_BackCushion_%s%d" % (row, i), x0 + 0.02, x1 - 0.02, rz, s, 0.63, 0.75, SEAT_TOP, 1.05, "teal",
-             root, c, bevel=0.035, lean=8.0, pivot_b=0.69, pivot_z=SEAT_TOP)
+        sbox("Booth_BackCushion_%s%d" % (row, i), x0 + 0.02, x1 - 0.02, rz, s, 0.63, 0.78, SEAT_TOP, 1.05, "teal",
+             root, c, bevel=0.035, lean=8.0, pivot_b=0.705, pivot_z=SEAT_TOP)
     sbox("Booth_Back_" + row, -0.86, 0.86, rz, s, 0.76, 0.87, 0.10, 1.15, "wood", root, c, bevel=0.02)
     outline = [(seat_y(rz, s, b), z) for b, z in ((0.15, 0.10), (0.87, 0.10), (0.87, 1.15), (0.50, 1.15),
                                                    (0.15, 0.66))]
@@ -305,16 +309,20 @@ def table_2x3(prefix, top_pal, root, c):
 
 
 def build_bar_counter(root, c):
-    # Back row (Godot z -0.92..-0.20, Blender y 0.20..0.92): a guest ledge at 0.78 m
-    # whose edge is 0.25 m in front of the roots, the counter body 0.47 m in front, and
-    # a raised staff top at 1.05 m 0.45 m in front (the head reaches 0.24 m forward).
+    # Counter across the back row (y = 0.42..0.92), deep overhanging bar top at 1.00..1.05 m
+    # with clean dark brackets, brass upper apron trim and brass footrail, and two tall
+    # bar stools (0.68 m) in front.
     tbox("Bar_ToeKick", (-0.88, 0.46, 0.0), (0.88, 0.90, 0.08), "dark", root, c)
-    tbox("Bar_Body", (-0.90, 0.42, 0.08), (0.90, 0.92, 1.01), "coffee", root, c)
-    tbox("Bar_Band", (-0.86, 0.415, 0.48), (0.86, 0.42, 0.56), "gold", root, c)
-    tbox("Bar_Ledge", (-0.92, 0.20, 0.74), (0.92, 0.44, 0.78), "wood", root, c, bevel=0.01)
-    for side, x0, x1 in (("L", -0.88, -0.84), ("R", 0.84, 0.88)):
-        tbox("Bar_Bracket_" + side, (x0, 0.24, 0.60), (x1, 0.42, 0.74), "dark", root, c)
-    tbox("Bar_Top", (-0.92, 0.40, 1.01), (0.92, 0.92, 1.05), "wood", root, c, bevel=0.012)
+    tbox("Bar_Body", (-0.90, 0.42, 0.08), (0.90, 0.92, 1.00), "coffee", root, c)
+    # Brass trim band across the upper front apron, clear of bracket ends.
+    tbox("Bar_Band", (-0.78, 0.405, 0.89), (0.78, 0.43, 0.95), "gold", root, c, bevel=0.004)
+    # Brass front footrail and stanchions tucked cleanly under the apron above the toe kick.
+    tbox("Bar_FootRail", (-0.84, 0.34, 0.10), (0.84, 0.37, 0.13), "gold", root, c, bevel=0.005)
+    for k, sx in enumerate((-0.72, 0.0, 0.72)):
+        tbox("Bar_FootPost_%d" % k, (sx - 0.015, 0.37, 0.105), (sx + 0.015, 0.43, 0.125), "dark", root, c)
+    tbox("Bar_Top", (-0.92, 0.12, 1.00), (0.92, 0.92, 1.05), "wood", root, c, bevel=0.012)
+    for side, x0, x1 in (("L", -0.84, -0.80), ("C", -0.02, 0.02), ("R", 0.80, 0.84)):
+        tbox("Bar_Bracket_" + side, (x0, 0.16, 0.84), (x1, 0.43, 1.00), "dark", root, c, bevel=0.006)
     # Beer taps on the staff half, handles toward the server.
     cyl("Tap_Tower", 0.0, 0.62, 1.05, 1.38, 0.04, "metal", root, c, segs=12)
     tbox("Tap_Bar", (-0.17, 0.58, 1.32), (0.17, 0.66, 1.40), "metal", root, c, bevel=0.01)
@@ -322,8 +330,8 @@ def build_bar_counter(root, c):
         tbox("Tap_Spout_%d" % i, (x - 0.012, 0.66, 1.28), (x + 0.012, 0.70, 1.32), "dark", root, c)
         tbox("Tap_Handle_%d" % i, (x - 0.02, 0.64, 1.40), (x + 0.02, 0.68, 1.54), pal, root, c, bevel=0.008)
     # A stepped bottle display along the back edge, facing the guests.
-    tbox("Bottle_Step_Low", (-0.86, 0.78, 1.05), (0.86, 0.92, 1.13), "coffee", root, c)
-    tbox("Bottle_Step_High", (-0.86, 0.85, 1.13), (0.86, 0.92, 1.23), "coffee", root, c)
+    tbox("Bottle_Step_Low", (-0.86, 0.78, 1.05), (0.86, 0.85, 1.13), "coffee", root, c)
+    tbox("Bottle_Step_High", (-0.86, 0.85, 1.05), (0.86, 0.92, 1.23), "coffee", root, c)
     pals = ("kid_green", "gold", "red", "teal", "cream", "coffee", "orange")
     k = 0
     for row, (y, z0) in enumerate(((0.815, 1.13), (0.885, 1.23))):
@@ -335,9 +343,9 @@ def build_bar_counter(root, c):
             cyl("Bottle_%d" % k, x, y, z0, z0 + 0.20, 0.03, pal, root, c)
             cyl("Bottle_Neck_%d" % k, x, y, z0 + 0.20, z0 + 0.27, 0.012, pal, root, c)
             k += 1
-    for i, x in enumerate((-0.68, 0.30)):
-        cyl("Bar_Glass_%d" % i, x, 0.30, 0.78, 0.90, 0.032, "glass", root, c)
-        cyl("Bar_Beer_%d" % i, x, 0.30, 0.78, 0.87, 0.027, "gold", root, c)
+    for i, x in enumerate((-0.44, 0.44)):
+        cyl("Bar_Glass_%d" % i, x, 0.22, 1.05, 1.17, 0.032, "glass", root, c)
+        cyl("Bar_Beer_%d" % i, x, 0.22, 1.05, 1.14, 0.027, "gold", root, c)
     for side, x in (("L", -0.5), ("R", 0.5)):
         stool(side, x, BAR_ROOT_Z, root, c)
     add_mounts("bar_counter", root, c)
