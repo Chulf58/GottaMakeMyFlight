@@ -177,9 +177,12 @@ static func _build() -> void:
 		[[CAFE_COUNTER], [&"restaurant_table", &"restaurant_booth", CAFE_TABLE]]
 	)
 
-	# Bag room (decision baggage-rides-a-player-built-belt-from-check-in-to-a-
-	# bag-roo): where the check-in belt ends. It seats nobody and earns no
-	# spend; the belt's end piece is what makes it work.
+	# Bag room (decisions baggage-rides-a-player-built-belt-from-check-in-to-a-
+	# bag-roo and baggage-loop-completion-connect-gated-penalties-visible-wait):
+	# where check-in belts end. A belt end makes the room ready; placing a
+	# baggage_cart inside (or on the grid) upgrades transfer during
+	# LOAD_LEAD_TICKS to an animated cart shuttle out to the parked plane
+	# (falling back cleanly to immediate LOADED settlement when no cart exists).
 	var bag_room := RoomType.new()
 	bag_room.id = &"bag_room"
 	bag_room.display_name = "Bag room"

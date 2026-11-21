@@ -20,10 +20,16 @@ func after() -> void:
 
 func before_test() -> void:
 	_events.clear()
-	# A ready bag room (no belt to it): without one nobody checks a bag.
+	# Connect desk 2 at (14, 11) via its outlet (15, 10) into a bag room inside
+	# the reference terminal so checked bags are active (decision 17e414be).
 	var grid := BuildGrid.new()
 	ReferenceTerminal.build(grid)
-	BagRoomKit.add(grid)
+	assert_bool(grid.apply(BuildEdit.place_room(Rect2i(16, 13, 3, 3), &"bag_room")).ok).is_true()
+	for seg in [[Vector2i(15, 10), Vector2i(16, 10)], [Vector2i(16, 10), Vector2i(16, 13)]]:
+		var plan := BeltShaper.plan_line(grid, seg[0], seg[1], 0)
+		assert_bool(plan.result.ok).is_true()
+		for r in grid.apply_batch(plan.edits):
+			assert_bool(r.ok).is_true()
 	_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
 	_world.sim.checked_in.connect(
 		func(id: int, desk: int) -> void:

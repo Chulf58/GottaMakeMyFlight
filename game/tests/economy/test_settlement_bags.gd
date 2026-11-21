@@ -35,15 +35,16 @@ func after_test() -> void:
 	_bags = null
 
 
-## The reference terminal with a ready bag room but no belt to it, so a bag the
-## BaggageSim checks in itself always misses (without `with_room` there is no bag
-## room, so none is checked in). With `hooked` the BaggageSim hears the
-## passengers' check-ins; without, a test drives its bags by hand.
+## The reference terminal with a connected bag room on Desk 2 (Desk 1 left
+## without a belt so a bag checked in at desk 1 always misses, while checked
+## bags activate; without `with_room` there is no bag room, so none is checked
+## in). With `hooked` the BaggageSim hears the passengers' check-ins; without,
+## a test drives its bags by hand.
 func _make(hooked := false, with_settlement_bags := true, with_room := true) -> void:
 	var grid := BuildGrid.new()
 	ReferenceTerminal.build(grid)
 	if with_room:
-		BagRoomKit.add(grid)
+		BagRoomKit.connect_reference_desk2(grid)
 	_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(100000))
 	_world.flights.open_airport()
 	_bags = auto_free(BaggageSim.new())
@@ -189,15 +190,47 @@ func test_a_verdict_arrives_once_and_pays_once() -> void:
 
 func test_end_to_end_every_passenger_with_a_missed_bag_pays_the_cut_fee() -> void:
 	_make(true)
+	var made_pids: Array[int] = []
+	var bag_loaded := {}
+	_world.sim.outcome.connect(
+		func(pid: int, made_ok: bool) -> void:
+			if made_ok:
+				made_pids.append(pid)
+	)
+	_bags.bag_settled.connect(
+		func(_id: int, pid: int, _flight: String, loaded: bool) -> void: bag_loaded[pid] = loaded
+	)
 	_world.run_to(SETTLED)
 	var made := _world.sim.made_count()
+	var expected := 0
+	for pid in made_pids:
+		expected += FEE if bag_loaded.get(pid, true) else _cut()
 	print(
-		"made %d bags missed %d balance %d" % [made, _bags.missed_total, _world.sim.wallet.balance]
+		(
+			"made %d bags loaded %d missed %d balance %d expected %d"
+			% [made, _bags.loaded_total, _bags.missed_total, _world.sim.wallet.balance, expected]
+		)
 	)
 	assert_int(made).is_greater(0)
 	assert_int(_bags.missed_total).is_greater(0)
-	assert_int(_bags.loaded_total).is_equal(0)
-	assert_int(_world.sim.wallet.balance).is_equal(made * _cut())
+	assert_int(_bags.loaded_total).is_greater(0)
+	assert_int(_world.sim.wallet.balance).is_equal(expected)
+	assert_int(_world.sim.wallet.balance).is_less(made * FEE)
+	assert_array(_settlement.to_snapshot()["bags_awaited"]).is_empty()
+	assert_array(_settlement.to_snapshot()["bag_missed"]).is_empty()
+
+
+func test_end_to_end_bare_bag_room_without_belts_charges_whole_fees() -> void:
+	_make(true, true, false)
+	BagRoomKit.add(_world.grid)
+	assert_bool(_bags.has_ready_bag_room()).is_true()
+	assert_bool(_bags.has_connected_bag_room()).is_false()
+	_world.run_to(SETTLED)
+	var made := _world.sim.made_count()
+	assert_int(made).is_greater(0)
+	assert_array(_bags.bag_ids()).is_empty()
+	assert_int(_bags.missed_total + _bags.loaded_total).is_equal(0)
+	assert_int(_world.sim.wallet.balance).is_equal(made * FEE)
 	assert_array(_settlement.to_snapshot()["bags_awaited"]).is_empty()
 	assert_array(_settlement.to_snapshot()["bag_missed"]).is_empty()
 

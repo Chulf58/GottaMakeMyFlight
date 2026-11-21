@@ -11,8 +11,18 @@ extends RefCounted
 ## against the other parts: a settled passenger is retired and a desk can be
 ## demolished while its bags remain.
 
-const SAVE_VERSION := 1
-const KEYS := ["save_version", "tick", "next_id", "bags", "results", "loaded_total", "missed_total"]
+const SAVE_VERSION := 2
+const KEYS := [
+	"save_version",
+	"tick",
+	"next_id",
+	"next_shuttle_id",
+	"bags",
+	"shuttles",
+	"results",
+	"loaded_total",
+	"missed_total",
+]
 const BAG_KEYS := [
 	"id",
 	"passenger",
@@ -29,13 +39,31 @@ const BAG_KEYS := [
 	"cutoff_tick",
 	"rest_tick",
 	"outcome_tick",
+	"shuttle_id",
+]
+const SHUTTLE_KEYS := [
+	"id",
+	"cart_id",
+	"flight",
+	"phase",
+	"start_tick",
+	"arrive_tick",
+	"unload_tick",
+	"return_tick",
+	"origin_world",
+	"origin_yaw",
+	"target_world",
+	"target_yaw",
+	"waypoints",
+	"bag_ids",
+	"driver_staff_id",
 ]
 const RESULT_KEYS := ["loaded", "missed", "causes"]
 ## The whole-number fields of a saved bag that are ticks or ids, at least 0.
-const COUNT_FIELDS := ["id", "passenger", "desk", "wait_tick", "created_tick"]
+const COUNT_FIELDS := ["id", "passenger", "desk", "wait_tick", "created_tick", "shuttle_id"]
 
 
-static func save(sim: BaggageSim, next_id: int) -> Dictionary:
+static func save(sim: BaggageSim, next_id: int, next_shuttle_id := 1) -> Dictionary:
 	var bags := []
 	for bag in sim.bags():
 		(
@@ -57,28 +85,72 @@ static func save(sim: BaggageSim, next_id: int) -> Dictionary:
 					"cutoff_tick": bag.cutoff_tick,
 					"rest_tick": bag.rest_tick,
 					"outcome_tick": bag.outcome_tick,
+					"shuttle_id": bag.shuttle_id,
 				}
 			)
 		)
+	var shuttles := []
+	for shuttle in sim.shuttles():
+		shuttles.append(_save_shuttle(shuttle))
 	return {
 		"save_version": SAVE_VERSION,
 		"tick": sim.tick,
 		"next_id": next_id,
+		"next_shuttle_id": next_shuttle_id,
 		"bags": bags,
+		"shuttles": shuttles,
 		"results": sim.results.duplicate(true),
 		"loaded_total": sim.loaded_total,
 		"missed_total": sim.missed_total,
 	}
 
 
-## {"error": reason}, or {"tick", "next_id", "bags": Array[Bag], "results",
-## "loaded_total", "missed_total"} with every number an int.
+static func _save_shuttle(shuttle: BaggageShuttle) -> Dictionary:
+	var saved_waypoints := []
+	for pt in shuttle.waypoints:
+		saved_waypoints.append([pt.x, pt.y, pt.z])
+	return {
+		"id": shuttle.id,
+		"cart_id": shuttle.cart_id,
+		"flight": shuttle.flight,
+		"phase": shuttle.phase,
+		"start_tick": shuttle.start_tick,
+		"arrive_tick": shuttle.arrive_tick,
+		"unload_tick": shuttle.unload_tick,
+		"return_tick": shuttle.return_tick,
+		"origin_world": [shuttle.origin_world.x, shuttle.origin_world.y, shuttle.origin_world.z],
+		"origin_yaw": shuttle.origin_yaw,
+		"target_world": [shuttle.target_world.x, shuttle.target_world.y, shuttle.target_world.z],
+		"target_yaw": shuttle.target_yaw,
+		"waypoints": saved_waypoints,
+		"bag_ids": shuttle.bag_ids.duplicate(),
+		"driver_staff_id": shuttle.driver_staff_id,
+	}
+
+
+## {"error": reason}, or {"tick", "next_id", "next_shuttle_id", "bags": Array[Bag],
+## "shuttles": Array[BaggageShuttle], "results", "loaded_total", "missed_total"}
+## with every number an int.
 static func load(data: Dictionary) -> Dictionary:
 	var problem := _top_problem(data)
 	var bags: Array[Bag] = []
+	var shuttles: Array[BaggageShuttle] = []
+	var shuttle_by_id := {}
 	var results := {}
 	if problem == "":
-		problem = _read_bags(data["bags"], int(data["tick"]), int(data["next_id"]), bags)
+		problem = _read_shuttles(
+			data["shuttles"],
+			int(data["tick"]),
+			int(data["next_shuttle_id"]),
+			shuttles,
+			shuttle_by_id
+		)
+	if problem == "":
+		problem = _read_bags(
+			data["bags"], int(data["tick"]), int(data["next_id"]), shuttle_by_id, bags
+		)
+	if problem == "":
+		problem = _shuttle_links_problem(shuttles, bags)
 	if problem == "":
 		problem = _read_results(data["results"], results)
 	if problem == "":
@@ -88,20 +160,29 @@ static func load(data: Dictionary) -> Dictionary:
 	return {
 		"tick": int(data["tick"]),
 		"next_id": int(data["next_id"]),
+		"next_shuttle_id": int(data["next_shuttle_id"]),
 		"bags": bags,
+		"shuttles": shuttles,
 		"results": results,
 		"loaded_total": int(data["loaded_total"]),
 		"missed_total": int(data["missed_total"]),
 	}
 
 
-## "" or the first bag that does not fit the field `routes`: a bag on a belt
-## whose state is not the one the field gives it (BaggageSim.belt_state), a
-## bag in the room not on a root, or two bags on one cell.
-static func grid_problem(bags: Array[Bag], routes: BagRoutes) -> String:
+## "" or the first bag or shuttle that does not fit the field `routes`: a bag
+## on a belt whose state is not the one the field gives it (BaggageSim.belt_state),
+## an unassigned bag in the room not on a root, two bags on one cell, or a
+## shuttle naming a missing cart.
+static func grid_problem(
+	bags: Array[Bag], routes: BagRoutes, shuttles: Array[BaggageShuttle] = []
+) -> String:
 	var taken := {}
+	for shuttle in shuttles:
+		var record := routes.grid.get_object(shuttle.cart_id)
+		if record.is_empty() or StringName(record["def"]) != BaggageSim.CART_DEF:
+			return "shuttle %d names missing cart %d" % [shuttle.id, shuttle.cart_id]
 	for bag in bags:
-		if bag.state == Bag.State.IN_ROOM and not routes.is_root(bag.cell):
+		if bag.state == Bag.State.IN_ROOM and bag.shuttle_id == 0 and not routes.is_root(bag.cell):
 			return "bag %d is in the room at %s, which is no bag room's end" % [bag.id, bag.cell]
 		if not bag.on_belt():
 			continue
@@ -133,14 +214,163 @@ static func _top_problem(data: Dictionary) -> String:
 	for key in ["tick", "loaded_total", "missed_total"]:
 		if not _is_count(data[key]):
 			return "%s must be a whole number of at least 0" % key
-	if not WholeNumber.is_whole(data["next_id"]) or int(data["next_id"]) < 1:
-		return "next_id must be a whole number of at least 1"
-	if typeof(data["bags"]) != TYPE_ARRAY or typeof(data["results"]) != TYPE_DICTIONARY:
-		return "bags must be a list and results a dictionary"
+	for key in ["next_id", "next_shuttle_id"]:
+		if not WholeNumber.is_whole(data[key]) or int(data[key]) < 1:
+			return "%s must be a whole number of at least 1" % key
+	if (
+		typeof(data["bags"]) != TYPE_ARRAY
+		or typeof(data["shuttles"]) != TYPE_ARRAY
+		or typeof(data["results"]) != TYPE_DICTIONARY
+	):
+		return "bags and shuttles must be lists and results a dictionary"
 	return ""
 
 
-static func _read_bags(saved: Array, tick: int, next_id: int, out: Array[Bag]) -> String:
+static func _read_shuttles(
+	saved: Array,
+	tick: int,
+	next_shuttle_id: int,
+	out: Array[BaggageShuttle],
+	by_id: Dictionary,
+) -> String:
+	var last_id := 0
+	var claimed_bags := {}
+	for entry in saved:
+		if typeof(entry) != TYPE_DICTIONARY:
+			return "a shuttle is not a dictionary"
+		var shuttle := BaggageShuttle.new()
+		var problem := _read_shuttle(entry, shuttle)
+		if problem == "":
+			problem = _shuttle_rules(shuttle, tick)
+		if problem == "" and (shuttle.id <= last_id or shuttle.id >= next_shuttle_id):
+			problem = "shuttle ids must rise and stay under next_shuttle_id"
+		if problem == "":
+			for bag_id in shuttle.bag_ids:
+				if claimed_bags.has(bag_id):
+					problem = "bag %d is on two shuttles" % bag_id
+					break
+				claimed_bags[bag_id] = shuttle.id
+		if problem != "":
+			return "shuttle %s: %s" % [entry.get("id", "?"), problem]
+		last_id = shuttle.id
+		by_id[shuttle.id] = shuttle
+		out.append(shuttle)
+	return ""
+
+
+static func _read_shuttle(entry: Dictionary, shuttle: BaggageShuttle) -> String:
+	var problem := _keys_problem(entry, SHUTTLE_KEYS)
+	if problem != "":
+		return problem
+	for key in ["id", "cart_id"]:
+		if not WholeNumber.is_whole(entry[key]) or int(entry[key]) < 1:
+			return "%s must be a positive whole number" % key
+	for key in ["start_tick", "arrive_tick", "unload_tick", "return_tick", "driver_staff_id"]:
+		if not _is_count(entry[key]):
+			return "%s must be a whole number of at least 0" % key
+	if typeof(entry["flight"]) != TYPE_STRING or entry["flight"] == "":
+		return "flight must be a flight id"
+	if not _is_member(entry["phase"], BaggageShuttle.Phase.values()):
+		return "phase is not a shuttle phase"
+	if not _is_vec3(entry["origin_world"]) or not _is_vec3(entry["target_world"]):
+		return "origin_world and target_world must be [x, y, z] numbers"
+	if not _is_finite_num(entry["origin_yaw"]) or not _is_finite_num(entry["target_yaw"]):
+		return "origin_yaw and target_yaw must be finite numbers"
+	if typeof(entry["waypoints"]) != TYPE_ARRAY:
+		return "waypoints must be a list"
+	var pts: Array[Vector3] = []
+	for raw_pt in entry["waypoints"]:
+		if not _is_vec3(raw_pt):
+			return "waypoints must hold [x, y, z] numbers"
+		pts.append(Vector3(float(raw_pt[0]), float(raw_pt[1]), float(raw_pt[2])))
+	if typeof(entry["bag_ids"]) != TYPE_ARRAY:
+		return "bag_ids must be a list"
+	var ids: Array[int] = []
+	for raw in entry["bag_ids"]:
+		if not WholeNumber.is_whole(raw) or int(raw) < 1:
+			return "bag_ids must hold positive whole numbers"
+		ids.append(int(raw))
+	shuttle.id = int(entry["id"])
+	shuttle.cart_id = int(entry["cart_id"])
+	shuttle.flight = entry["flight"]
+	shuttle.phase = int(entry["phase"]) as BaggageShuttle.Phase
+	shuttle.start_tick = int(entry["start_tick"])
+	shuttle.arrive_tick = int(entry["arrive_tick"])
+	shuttle.unload_tick = int(entry["unload_tick"])
+	shuttle.return_tick = int(entry["return_tick"])
+	shuttle.origin_world = Vector3(
+		float(entry["origin_world"][0]),
+		float(entry["origin_world"][1]),
+		float(entry["origin_world"][2])
+	)
+	shuttle.origin_yaw = float(entry["origin_yaw"])
+	shuttle.target_world = Vector3(
+		float(entry["target_world"][0]),
+		float(entry["target_world"][1]),
+		float(entry["target_world"][2])
+	)
+	shuttle.target_yaw = float(entry["target_yaw"])
+	shuttle.waypoints = pts
+	shuttle.bag_ids = ids
+	shuttle.driver_staff_id = int(entry["driver_staff_id"])
+	return ""
+
+
+static func _shuttle_rules(shuttle: BaggageShuttle, tick: int) -> String:
+	if (
+		shuttle.start_tick > shuttle.arrive_tick
+		or shuttle.arrive_tick > shuttle.unload_tick
+		or shuttle.unload_tick > shuttle.return_tick
+	):
+		return "shuttle schedule ticks are out of order"
+	if shuttle.start_tick > tick or tick >= shuttle.return_tick:
+		return "shuttle is outside its active tick span"
+	if shuttle.phase == BaggageShuttle.Phase.OUTBOUND and tick >= shuttle.arrive_tick:
+		return "outbound shuttle is past arrive_tick"
+	if (
+		shuttle.phase == BaggageShuttle.Phase.UNLOADING
+		and (tick < shuttle.arrive_tick or tick >= shuttle.unload_tick)
+	):
+		return "unloading shuttle is outside [arrive_tick, unload_tick)"
+	if shuttle.phase == BaggageShuttle.Phase.RETURNING and tick < shuttle.unload_tick:
+		return "returning shuttle is before unload_tick"
+	if shuttle.waypoints.size() < 2:
+		return "shuttle waypoints must have at least 2 points"
+	if (
+		not shuttle.waypoints[0].is_equal_approx(shuttle.origin_world)
+		or not shuttle.waypoints[shuttle.waypoints.size() - 1].is_equal_approx(shuttle.target_world)
+	):
+		return "shuttle waypoints must start at origin_world and end at target_world"
+	return ""
+
+
+static func _shuttle_links_problem(shuttles: Array[BaggageShuttle], bags: Array[Bag]) -> String:
+	var by_id := {}
+	for bag in bags:
+		by_id[bag.id] = bag
+	for shuttle in shuttles:
+		if shuttle.carrying_bags():
+			if shuttle.bag_ids.is_empty():
+				return "shuttle %d: outbound or unloading shuttle must carry bags" % shuttle.id
+			for bag_id in shuttle.bag_ids:
+				var bag: Bag = by_id.get(bag_id)
+				if bag == null:
+					return "shuttle %d: names missing bag %d" % [shuttle.id, bag_id]
+				if bag.is_settled() or bag.state != Bag.State.IN_ROOM:
+					return "shuttle %d: names non-room bag %d" % [shuttle.id, bag_id]
+				if bag.shuttle_id != shuttle.id:
+					return (
+						"shuttle %d: names bag %d owned by shuttle %d"
+						% [shuttle.id, bag_id, bag.shuttle_id]
+					)
+		elif not shuttle.bag_ids.is_empty():
+			return "shuttle %d: returning shuttle must hold no bags" % shuttle.id
+	return ""
+
+
+static func _read_bags(
+	saved: Array, tick: int, next_id: int, shuttles: Dictionary, out: Array[Bag]
+) -> String:
 	var last_id := 0
 	# Passenger id -> bag id: one bag per passenger, whether or not the
 	# passenger is still in the passengers part.
@@ -151,7 +381,7 @@ static func _read_bags(saved: Array, tick: int, next_id: int, out: Array[Bag]) -
 		var bag := Bag.new()
 		var problem := _read_bag(entry, bag)
 		if problem == "":
-			problem = _bag_rules(bag, tick)
+			problem = _bag_rules(bag, tick, shuttles)
 		if problem == "" and (bag.id <= last_id or bag.id >= next_id):
 			problem = "ids must rise and stay under next_id"
 		if problem == "" and owners.has(bag.passenger):
@@ -185,6 +415,7 @@ static func _read_bag(entry: Dictionary, bag: Bag) -> String:
 	bag.cutoff_tick = int(entry["cutoff_tick"])
 	bag.rest_tick = int(entry["rest_tick"])
 	bag.outcome_tick = int(entry["outcome_tick"])
+	bag.shuttle_id = int(entry["shuttle_id"])
 	return ""
 
 
@@ -226,7 +457,7 @@ static func _field_problem(entry: Dictionary) -> String:
 	return problem
 
 
-static func _bag_rules(bag: Bag, tick: int) -> String:
+static func _bag_rules(bag: Bag, tick: int, shuttles: Dictionary) -> String:
 	var problem := ""
 	if bag.created_tick > tick or bag.wait_tick > tick or bag.wait_tick < bag.created_tick:
 		problem = "it was made or began waiting after the saved tick"
@@ -234,7 +465,17 @@ static func _bag_rules(bag: Bag, tick: int) -> String:
 		problem = "only a settled bag has an outcome tick"
 	elif bag.is_settled() and (bag.outcome_tick < bag.created_tick or bag.outcome_tick > tick):
 		problem = "its outcome tick is outside its life"
-	elif not bag.is_settled() and tick >= bag.cutoff_tick:
+	elif (
+		not bag.is_settled()
+		and bag.shuttle_id == 0
+		and (
+			(bag.state != Bag.State.IN_ROOM and tick >= bag.cutoff_tick)
+			or (
+				bag.state == Bag.State.IN_ROOM
+				and tick >= bag.cutoff_tick + BaggageSim.LOAD_LEAD_TICKS
+			)
+		)
+	):
 		problem = "it is still unsettled after its cutoff"
 	elif (bag.state == Bag.State.MISSED) != (bag.cause != Bag.Cause.NONE):
 		problem = "a missed bag, and only a missed one, has a cause"
@@ -243,7 +484,15 @@ static func _bag_rules(bag: Bag, tick: int) -> String:
 		and (bag.rest_tick < bag.created_tick or bag.rest_tick > tick)
 	):
 		problem = "a bag in the room needs a rest tick in its life"
-	else:
+	if problem == "" and bag.is_settled() and bag.shuttle_id != 0:
+		problem = "a settled bag cannot reference a shuttle"
+	if problem == "" and not bag.is_settled() and bag.shuttle_id > 0:
+		var shuttle: BaggageShuttle = shuttles.get(bag.shuttle_id)
+		if shuttle == null or not shuttle.bag_ids.has(bag.id):
+			problem = "it names no active shuttle"
+		elif bag.state != Bag.State.IN_ROOM or not shuttle.carrying_bags():
+			problem = "a bag riding a shuttle must be in the room on an active trip"
+	if problem == "":
 		problem = _edge_rules(bag)
 	return problem
 
@@ -345,3 +594,17 @@ static func _is_pair(value: Variant) -> bool:
 
 static func _is_member(value: Variant, members: Array) -> bool:
 	return WholeNumber.is_whole(value) and members.has(int(value))
+
+
+static func _is_finite_num(value: Variant) -> bool:
+	return typeof(value) in [TYPE_INT, TYPE_FLOAT] and is_finite(float(value))
+
+
+static func _is_vec3(value: Variant) -> bool:
+	return (
+		typeof(value) == TYPE_ARRAY
+		and value.size() == 3
+		and _is_finite_num(value[0])
+		and _is_finite_num(value[1])
+		and _is_finite_num(value[2])
+	)

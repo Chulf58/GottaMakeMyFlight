@@ -488,7 +488,7 @@ msgid "A baggage cart on wheels."
 msgstr ""
 
 #: ui/item_info.gd
-msgid "It is scenery. Bags move the same without it."
+msgid "Place one in a bag room to shuttle checked bags out to the parked plane before departure."
 msgstr ""
 
 #: ui/item_info.gd
