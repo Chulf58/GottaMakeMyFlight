@@ -101,9 +101,28 @@ def build_carry_backpack(root, c):
     tbox("Pack_Pocket", (-0.085, -0.04, s + t - 0.01), (0.085, hy - 0.04, s + t + 0.03), "sage", root, c,
          bevel=0.015)
     tbox("Pack_Zip", (-0.07, -0.035, s + t + 0.03), (0.07, -0.02, s + t + 0.035), "dark", root, c)
-    # Two shoulder straps on the back panel (the body side), a grab loop at the top end.
-    for side, x in (("L", -0.065), ("R", 0.065)):
-        tbox("Pack_Strap_" + side, (x - 0.022, -hy + 0.04, 0.0), (x + 0.022, hy - 0.05, s), "dark", root, c)
+    # Sculpted shoulder straps: padded upper shoulder loops curving visibly around
+    # the bevelled upper corners & outer flanks (within +-0.124 m so torso/leg AABB
+    # bounds match original carry_backpack and stride tests stay clean), plus
+    # spine harness strips under the back panel (z >= 0).
+    for side, sgn in (("L", -1.0), ("R", 1.0)):
+        bx = sgn * 0.065
+        tbox("Pack_Strap_" + side, (bx - 0.022, -hy + 0.04, 0.0), (bx + 0.022, hy - 0.05, s), "dark", root, c)
+        # Top shoulder arch curving prominently over the top bevel of Pack_Body.
+        tx0, tx1 = sorted((sgn * 0.048, sgn * 0.114))
+        tbox("Pack_Strap_Top_" + side, (tx0, -hy - 0.014, 0.0), (tx1, -hy + 0.062, s + 0.044),
+             "dark", root, c, bevel=0.008)
+        # Padded outer shoulder strap wrapping along the bevelled upper-to-mid flanks.
+        ox0, ox1 = sorted((sgn * 0.088, sgn * 0.124))
+        tbox("Pack_Strap_Pad_" + side, (ox0, -hy + 0.004, 0.002), (ox1, 0.048, s + 0.044),
+             "dark", root, c, bevel=0.007)
+        # Lower side strap & buckle anchor tucking neatly into the lower pack flanks.
+        lx0, lx1 = sorted((sgn * 0.094, sgn * 0.121))
+        tbox("Pack_Strap_Low_" + side, (lx0, 0.040, 0.004), (lx1, hy - 0.045, s + 0.036),
+             "dark", root, c, bevel=0.005)
+        ax0, ax1 = sorted((sgn * (hx - 0.008), sgn * (hx + 0.004)))
+        tbox("Pack_Strap_Anchor_" + side, (ax0, hy - 0.068, s + 0.008), (ax1, hy - 0.034, s + 0.048),
+             "coffee", root, c)
     tbox("Pack_Loop", (-0.04, -hy - 0.025, s + 0.05), (0.04, -hy, s + 0.09), "dark", root, c)
 
 

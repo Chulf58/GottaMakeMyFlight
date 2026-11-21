@@ -1081,14 +1081,17 @@ func _pose(node: Node3D, p: Passenger, built: Dictionary) -> float:
 	if washing:
 		clip = "shower"
 	var where := StageKinds.location(p.stage)
+	var stepping_off := seat_pose == StageKinds.Pose.STANDING_UP and moving
 	var at_gate := where == StageKinds.Location.GATE_SEAT and p.seat_object != 0
 	var at_cafe := (
-		where == StageKinds.Location.FACILITY_SEAT and sim.cafes.seat_facing(p) != Vector2i.ZERO
+		where == StageKinds.Location.FACILITY_SEAT
+		and not stepping_off
+		and sim.cafes.seat_facing(p) != Vector2i.ZERO
 	)
 	var at_stall := (
 		where == StageKinds.Location.FACILITY_SEAT and sim.toilets.use_facing(p) != Vector2i.ZERO
 	)
-	var staying := activity != ActivityPoses.Kind.NONE
+	var staying := activity != ActivityPoses.Kind.NONE and not stepping_off
 	node.set_meta(&"seated", at_gate or at_cafe or at_stall or staying)
 	# The icon row's seated anchor (NeedIcons.head_anchor): only a settled sit
 	# on a chair, sofa or toilet seat, not &"seated"'s wider turn lock (standing

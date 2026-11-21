@@ -672,7 +672,9 @@ static func hand_pull_path(
 	var turned := Quaternion(front_lean())
 	var was := (local.basis * start.basis).get_rotation_quaternion()
 	var to := (local.basis * want.basis).get_rotation_quaternion()
-	var turn := turned.slerp(to, u)
+	var recv_out := -1.0 if gave == 1 else 1.0
+	var side_flare := Quaternion(Vector3.BACK, recv_out * deg_to_rad(28.0) * sin(PI * u))
+	var turn := (side_flare * turned.slerp(to, u)).normalized()
 	if first:
 		# Out of the turn it hung in, over the first tenth of the carry.
 		var leaning := Quaternion(swap_lean(bar, gave, t))
@@ -745,12 +747,13 @@ static func by_side(
 	yaw: float,
 	lead: int,
 	shoulder_y: float,
-	below := STALL_HANG_BELOW_M
+	below := STALL_HANG_BELOW_M,
+	let_go := REACH_SHARE
 ) -> Vector3:
 	var out := Vector3.LEFT if lead == 0 else Vector3.RIGHT
 	var side := frame.origin + Basis(Vector3.UP, yaw) * (out * BACK_SIDE_M)
 	side.y = shoulder_y - below
-	var s := span(from, to)
+	var s := span(from, to, let_go)
 	if from == End.WORN and k < s.x:
 		return side.lerp(at, smoothstep(0.3, 1.0, k / s.x))
 	if to == End.WORN and k > s.y:
