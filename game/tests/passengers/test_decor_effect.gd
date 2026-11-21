@@ -3,8 +3,8 @@ extends GdUnitTestSuite
 ## Decor calms the passengers near it (decision furniture-set-modelled-on-
 ## copenhagen-airport-decor-calms-pas): a passenger inside a piece's radius
 ## gains mood slowly, a passenger outside gains nothing, the total is capped,
-## the bin, posts and chain give no calm, and the covered cells follow the
-## grid when decor is placed or removed.
+## the bin gives no calm while posts and chains calm modestly, and the covered
+## cells follow the grid when decor is placed or removed.
 
 const SIZE := Vector2i(30, 20)
 const GUEST_CELL := Vector2i(12, 8)
@@ -179,20 +179,21 @@ func test_decor_never_lifts_mood_above_the_ceiling() -> void:
 	assert_int(above.mood).is_equal(DecorEffect.CEILING + 5)
 
 
-func test_the_bin_the_posts_and_the_chain_give_no_calm() -> void:
+## The bin gives no calm; metal posts and chains give modest calm (1 per period).
+func test_the_bin_gives_no_calm_while_posts_and_chains_calm_modestly() -> void:
 	_decor(&"trash_can", GUEST_CELL + Vector2i(0, -1))
-	_decor(&"metal_pole", GUEST_CELL + Vector2i(1, 0))
-	# The 1x3 chain, running along y from (11, 6) to (11, 8), beside the guest.
-	_decor(&"metal_pole_chain", GUEST_CELL + Vector2i(-1, -2))
 	var p := _guest()
 	assert_int(_world.sim.decor.calm_at(p.at)).is_equal(0)
 	_run_beats(p, BEATS)
-	print("bin, post and chain beside the guest: mood %d -> %d" % [START_MOOD, p.mood])
-	# Changed with the back-of-house view penalty: the bin in view now drains
-	# 1 point per period (BackOfHouseView); the posts and the chain give and
-	# take nothing.
+	# Back-of-house view penalty: the bin in view drains 1 point per period.
 	assert_int(p.mood).is_equal(START_MOOD - BEATS / DecorEffect.PERIOD_BEATS)
 	assert_dict(_world.sim.decor.cells()).is_empty()
+	_decor(&"metal_pole", GUEST_CELL + Vector2i(1, 0))
+	assert_int(_world.sim.decor.calm_at(p.at)).is_equal(DecorEffect.calm_of(&"metal_pole"))
+	_decor(&"metal_pole_chain", GUEST_CELL + Vector2i(-1, -2))
+	assert_int(_world.sim.decor.calm_at(p.at)).is_equal(
+		DecorEffect.calm_of(&"metal_pole") + DecorEffect.calm_of(&"metal_pole_chain")
+	)
 
 
 func test_every_decor_piece_with_a_calm_value_calms_the_cell_beside_it() -> void:

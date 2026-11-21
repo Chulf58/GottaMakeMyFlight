@@ -1,10 +1,9 @@
 class_name TestFoodVenuePieces
 extends GdUnitTestSuite
-## The food rooms use their own pieces (user-ruled 2026-11-04, "Make them
-## work"; decision food-venues-as-built-stall-cafe-bar-and-restaurant-are-
-## food): the bar its bar counter, the restaurant its dining table and booth,
-## the grab-and-go stall its grab stall. Each room still accepts the cafe
-## counter and table, and a cafe takes only its own.
+## The food rooms require their own tier pieces (ruling 17fe639a): the bar
+## takes only its bar counter, the stall takes only its grab-and-go stall, the
+## restaurant keeps cafe_counter as its kitchen counter and requires a
+## dining table or booth for seating, and a cafe takes only its own pieces.
 
 var _worlds: Array[PassengerTestWorld] = []
 
@@ -76,53 +75,50 @@ func _seats_of(world: PassengerTestWorld) -> int:
 	return seats
 
 
-func test_a_bar_with_only_a_bar_counter_and_a_table_is_ready_and_usable() -> void:
+func test_a_bar_with_only_a_bar_counter_is_ready_with_two_stools_and_ignores_cafe_table() -> void:
 	var made := _world(&"bar", &"bar_counter", &"cafe_table")
 	var world: PassengerTestWorld = made[0]
 	var ids: Dictionary = made[1]
-	# The bar counter's two stools and the table's two chairs (decision
-	# bar-guests-sit-at-the-bar-counter-stools-first-then-at-table).
+	# Only the bar counter's two stools count; cafe_table is not a bar seat (ruling 17fe639a).
 	for room in [ids["air_room"], ids["land_room"]]:
 		var status := RoomRules.status(world.grid, room)
 		assert_array(Array(status.notes)).is_empty()
 		assert_bool(status.ok).is_true()
-		assert_int(status.seats).is_equal(4)
+		assert_int(status.seats).is_equal(2)
 	world.sim.cafes.refresh()
 	var cafes := world.sim.cafes.layout.cafes
 	print("bar with a bar counter: %d cafes, %d seats" % [cafes.size(), _seats_of(world)])
 	assert_int(cafes.size()).is_equal(2)
-	assert_int(_seats_of(world)).is_equal(8)
+	assert_int(_seats_of(world)).is_equal(4)
 	for cafe in cafes:
 		assert_array(cafe["counters"]).is_not_empty()
 	# The server of a bar counter has a spot, so the counter can open.
 	assert_array(ShopCounters.counters(world.grid)).contains([ids["air_counter"]])
 
 
-## A bar needs a table only when its counter has no stools: the bar counter
-## seats guests itself, the cafe counter does not.
-func test_a_bar_with_a_cafe_counter_and_no_table_still_needs_a_table() -> void:
-	var made := _world(&"bar", &"cafe_counter", &"")
-	var world: PassengerTestWorld = made[0]
-	var status := RoomRules.status(world.grid, made[1]["air_room"])
-	assert_bool(status.ok).is_false()
-	assert_array(Array(status.notes)).contains(["Needs a table"])
-	assert_array(Array(status.notes)).not_contains(["Needs a counter"])
+## A bar accepts only bar_counter (not cafe_counter or cafe_table), and a stall
+## accepts only grab_and_go_stall (not cafe_counter), per ruling 17fe639a.
+func test_bar_and_stall_refuse_cafe_counter_and_cafe_table() -> void:
+	var bar_cafe := _world(&"bar", &"cafe_counter", &"")
+	var bar_status := RoomRules.status(bar_cafe[0].grid, bar_cafe[1]["air_room"])
+	assert_bool(bar_status.ok).is_false()
+	assert_array(Array(bar_status.notes)).contains(["Needs a counter", "Needs a table"])
+	var bar_both_cafe := _world(&"bar", &"cafe_counter", &"cafe_table")
+	var bar_both_status := RoomRules.status(bar_both_cafe[0].grid, bar_both_cafe[1]["air_room"])
+	assert_bool(bar_both_status.ok).is_false()
+	assert_array(Array(bar_both_status.notes)).contains(["Needs a counter", "Needs a table"])
+	var stall_cafe := _world(&"stall", &"cafe_counter", &"")
+	var stall_status := RoomRules.status(stall_cafe[0].grid, stall_cafe[1]["air_room"])
+	assert_bool(stall_status.ok).is_false()
+	assert_array(Array(stall_status.notes)).contains(["Needs a counter"])
 	var with_stools := _world(&"bar", &"bar_counter", &"")
 	var stools_status := RoomRules.status(with_stools[0].grid, with_stools[1]["air_room"])
+	assert_bool(stools_status.ok).is_true()
 	assert_array(Array(stools_status.notes)).is_empty()
 
 
-func test_the_cafe_counter_and_table_still_make_a_bar_ready() -> void:
-	var made := _world(&"bar", &"cafe_counter", &"cafe_table")
-	var world: PassengerTestWorld = made[0]
-	var status := RoomRules.status(world.grid, made[1]["air_room"])
-	assert_bool(status.ok).is_true()
-	world.sim.cafes.refresh()
-	assert_int(world.sim.cafes.layout.cafes.size()).is_equal(2)
-
-
 func test_a_bar_guest_orders_at_the_bar_counter_and_sits_on_its_stool() -> void:
-	var made := _world(&"bar", &"bar_counter", &"cafe_table")
+	var made := _world(&"bar", &"bar_counter", &"")
 	var ride := _ride(made[0])
 	var visit: CafeVisit = ride["visit"]
 	print(
@@ -167,21 +163,18 @@ func test_a_restaurant_guest_sits_at_the_dining_table_and_at_the_booth() -> void
 		assert_int(visit.amount).is_greater(0)
 
 
-func test_the_cafe_table_and_counter_still_make_a_restaurant_and_a_cafe_work() -> void:
-	for venue in [&"restaurant", &"cafe"]:
-		var made := _world(venue, &"cafe_counter", &"cafe_table")
-		var world: PassengerTestWorld = made[0]
-		assert_bool(RoomRules.status(world.grid, made[1]["air_room"]).ok).is_true()
-		var ride := _ride(world)
-		print(
-			(
-				"%s visit on cafe pieces: counter %s, table %s"
-				% [venue, ride["counter_def"], ride["table_def"]]
-			)
-		)
-		assert_str(ride["table_def"]).is_equal("cafe_table")
-		assert_bool(ride["stages"].has(Passenger.Stage.CAFE_SEATED)).is_true()
-		assert_int(ride["visit"].outcome).is_equal(CafeVisit.Outcome.COMPLETE)
+func test_a_restaurant_refuses_cafe_table_while_a_cafe_still_works() -> void:
+	var rest_cafe_table := _world(&"restaurant", &"cafe_counter", &"cafe_table")
+	var rest_status := RoomRules.status(rest_cafe_table[0].grid, rest_cafe_table[1]["air_room"])
+	assert_bool(rest_status.ok).is_false()
+	assert_array(Array(rest_status.notes)).contains(["Needs a table"])
+	var made := _world(&"cafe", &"cafe_counter", &"cafe_table")
+	var world: PassengerTestWorld = made[0]
+	assert_bool(RoomRules.status(world.grid, made[1]["air_room"]).ok).is_true()
+	var ride := _ride(world)
+	assert_str(ride["table_def"]).is_equal("cafe_table")
+	assert_bool(ride["stages"].has(Passenger.Stage.CAFE_SEATED)).is_true()
+	assert_int(ride["visit"].outcome).is_equal(CafeVisit.Outcome.COMPLETE)
 
 
 func test_a_cafe_takes_only_its_own_pieces() -> void:
@@ -220,9 +213,9 @@ func test_a_grab_stall_alone_makes_a_stall_room_ready_and_serves_a_guest() -> vo
 func test_which_counter_works_in_which_room() -> void:
 	var works := {
 		[&"cafe_counter", &"cafe"]: true,
-		[&"cafe_counter", &"bar"]: true,
+		[&"cafe_counter", &"bar"]: false,
 		[&"cafe_counter", &"restaurant"]: true,
-		[&"cafe_counter", &"stall"]: true,
+		[&"cafe_counter", &"stall"]: false,
 		[&"bar_counter", &"bar"]: true,
 		[&"bar_counter", &"cafe"]: false,
 		[&"bar_counter", &"restaurant"]: false,

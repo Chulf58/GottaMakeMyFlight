@@ -73,7 +73,7 @@ func test_a_multi_storey_fills_its_31_slots_then_diverts() -> void:
 	assert_int(parked.count(MULTI_STOREY)).is_equal(31)
 	assert_int(diverted.size()).is_equal(9)
 	assert_int(_sim.free_slots(MULTI_STOREY)).is_equal(0)
-	assert_int(_sim.wallet.balance).is_equal(31 * LandsideSim.SURFACE_LOT_FEE)
+	assert_int(_sim.wallet.balance).is_equal(31 * LandsideSim.MULTI_STOREY_FEE)
 
 
 func test_a_surface_lot_holds_its_twelve() -> void:

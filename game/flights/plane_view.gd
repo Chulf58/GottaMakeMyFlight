@@ -107,6 +107,8 @@ var flight_id := ""
 var model_name := ""
 ## Its pose_at phase on the last update_pose().
 var phase := PHASE_LEAD_IN
+## Normalized 0..1 progress within `phase` on the last update_pose().
+var _phase_progress := 0.5
 
 ## Phase and sky paths read from the airside, kept while its stands stay
 ## where they were and the gate is the one they were read for (_paths_stand,
@@ -167,6 +169,7 @@ func update_pose() -> void:
 		return
 	show_model(model_of(flight_id))
 	phase = shown[slot]["phase"]
+	_phase_progress = float(shown[slot].get("phase_progress", 0.5))
 	transform = shown[slot]["transform"]
 	_set_model_position(model_position_at(phase, transform, class_of(flight_id)))
 	_spin_propeller(time)
@@ -273,7 +276,12 @@ func pose_at(
 	)
 	if ON_GROUND.has(moving):
 		pose.origin.y += ground_height_at(pose.origin)
-	return {"phase": state, "transform": pose}
+	var state_progress := 1.0
+	if starts[state + 1] > starts[state]:
+		state_progress = clampf(
+			(time - starts[state]) / float(starts[state + 1] - starts[state]), 0.0, 1.0
+		)
+	return {"phase": state, "transform": pose, "phase_progress": state_progress}
 
 
 ## The ground's height under `point`: the site's paving height on the whole
@@ -441,7 +449,43 @@ func model_position_at(at_phase: int, pose: Transform3D, plane_class: String) ->
 
 
 func _follow_props() -> void:
-	_props.follow(visible, _model, model_name, phase, gate, airside, get_instance_id())
+	_props.follow(
+		visible,
+		_model,
+		model_name,
+		phase,
+		gate,
+		airside,
+		get_instance_id(),
+		_phase_progress,
+		_uncouple_model_xform()
+	)
+
+
+func _uncouple_model_xform() -> Transform3D:
+	if phase != FlightSim.State.TAXI_OUT or flight_id == "" or _model == null:
+		return Transform3D.IDENTITY
+	if PlaneClasses.self_taxis(model_name):
+		return Transform3D.IDENTITY
+	var p_class := class_of(flight_id)
+	var pose := FlightPose.pose(
+		FlightSim.State.PUSHBACK,
+		1.0,
+		_path(FlightSim.State.PUSHBACK, p_class),
+		_entry_dir(FlightSim.State.PUSHBACK, p_class),
+		{},
+		0.0,
+		false
+	)
+	pose.origin.y += ground_height_at(pose.origin)
+	var model_pos := model_position_at(FlightSim.State.PUSHBACK, pose, p_class)
+	var local_model := Transform3D(Basis(Vector3.UP, deg_to_rad(model_yaw_degrees)), model_pos)
+	var parent_xform := (
+		(get_parent() as Node3D).global_transform
+		if get_parent() is Node3D
+		else Transform3D.IDENTITY
+	)
+	return parent_xform * pose * local_model
 
 
 func _set_model_position(at: Vector3) -> void:

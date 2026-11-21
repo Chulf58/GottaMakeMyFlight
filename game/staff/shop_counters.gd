@@ -66,10 +66,10 @@ static func is_counter(grid: BuildGrid, id: int) -> bool:
 
 
 ## Whether the counter piece `def_id` works in a ready room of type `type_id`:
-## its own room type, and for a food room every counter piece it accepts
-## (RoomType.counter_pieces: the cafe counter works in every food room, the bar
-## counter in a bar and the grab-and-go stall in a stall; decision food-and-
-## drink-cafe-bar-sit-down-restaurant-and-grab-and-go-st).
+## its own room type, and for a food room every counter piece its RoomType
+## accepts (RoomType.counter_pieces: the cafe counter works in a cafe and
+## restaurant, the bar counter in a bar, and the grab-and-go stall in a stall;
+## ruling 17fe639a).
 static func works_in(def_id: StringName, type_id: StringName) -> bool:
 	if type_id == COUNTER_ROOMS[def_id]:
 		return true

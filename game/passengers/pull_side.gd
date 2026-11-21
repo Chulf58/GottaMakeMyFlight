@@ -86,8 +86,10 @@ const AHEAD_CELLS := 3
 const HOLD_TICKS := 2.0 * LOOK_TICKS
 ## A heading change over this along the walk ahead is a corner (degrees).
 const CORNER_DEG := 45.0
-## The gate chair row piece: its chairs reach into the REACH footprint of a
-## guest walking along the fronts to its own chair (stamp_clear()).
+## The primary gate chair piece token (pieces_near treats every gate seat def,
+## seat_row and bench_1a, as gate seating when `but == GATE_CHAIRS`): its seats
+## reach into the REACH footprint of a guest walking along the fronts to its own
+## chair (stamp_clear()).
 const GATE_CHAIRS := &"seat_row"
 
 
@@ -543,7 +545,13 @@ static func pieces_near(grid: BuildGrid, at: Vector3, but := &"") -> Array:
 			if id == 0 or seen.has(id):
 				continue
 			var def: StringName = grid.get_object(id)["def"]
-			if BuildCatalog.is_door(def) or (but != &"" and def == but):
+			if (
+				BuildCatalog.is_door(def)
+				or (
+					but != &""
+					and (def == but or (but == GATE_CHAIRS and GateChairs.is_gate_seat_def(def)))
+				)
+			):
 				continue
 			seen[id] = true
 			out.append_array(piece_boxes(grid, id))

@@ -261,6 +261,8 @@ func _open_and_spawn_passenger(main: Node3D) -> void:
 		staff.hire(StaffMember.Role.CHECKIN)
 	if staff.count(StaffMember.Role.SECURITY) == 0:
 		staff.hire(StaffMember.Role.SECURITY)
+	if staff.count(StaffMember.Role.GATE) == 0:
+		staff.hire(StaffMember.Role.GATE)
 	clock.set_paused(false)
 	for _i in 600:
 		if flights.opened_tick >= 0:

@@ -57,9 +57,11 @@ const DWELL_TICKS := 60
 ## on one another (decision passenger-spacing-fixed-per-cause-standing-spots-
 ## staggered-unloading-ordered-files, part 2).
 const RELEASE_GAP_TICKS := 7
-## Tuning placeholder: the fee per car a surface lot earns when the car parks
-## (decision landside-parking-houses-earn-a-parking-fee-per-car-paid-when).
+## Tuning placeholder: the fee per car a surface lot or multi-storey car park
+## earns when the car parks (decision
+## landside-parking-houses-earn-a-parking-fee-per-car-paid-when, ruling 17fe639a).
 const SURFACE_LOT_FEE := 20
+const MULTI_STOREY_FEE := 35
 const STAY_MIN_TICKS := GameCalendar.TICKS_PER_DAY
 const STAY_MAX_TICKS := 3 * GameCalendar.TICKS_PER_DAY
 ## Further ahead than any car can be.
@@ -737,6 +739,18 @@ func _set_moving(v: LandsideVehicle, queued: bool) -> void:
 		_set_stage(v, stage)
 
 
+## Parking fee per car for lot spot `spot`.
+func parking_fee(spot: int) -> int:
+	if (
+		definition != null
+		and spot >= 0
+		and spot < definition.lots.size()
+		and definition.lots[spot].kind == LandsideLotSpot.Kind.MULTI_STOREY
+	):
+		return MULTI_STOREY_FEE
+	return SURFACE_LOT_FEE
+
+
 ## Parks `v` in its reserved slot. The fee is settled the way shop income is
 ## (CafeSim and ShopSim._settle()): credited first, and `parked` is emitted
 ## only once the credit landed. Without a wallet, or when the wallet refuses
@@ -748,7 +762,7 @@ func _park(v: LandsideVehicle, rng: RandomNumberGenerator) -> void:
 	if wallet == null:
 		push_error("LandsideSim: no wallet to pay vehicle %d's parking fee into" % v.id)
 		return
-	if not wallet.credit(SURFACE_LOT_FEE, Wallet.Category.PARKING):
+	if not wallet.credit(parking_fee(v.lot), Wallet.Category.PARKING):
 		push_error("LandsideSim: the wallet refused vehicle %d's parking fee" % v.id)
 		return
 	parked.emit(v.id, v.lot)

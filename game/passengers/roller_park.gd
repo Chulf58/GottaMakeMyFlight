@@ -685,8 +685,8 @@ static func sit_face(sim: PassengerSim, p: Passenger) -> float:
 	if ActivityPoses.kind(sim, p) != ActivityPoses.Kind.NONE:
 		out = ActivityPoses.facing(sim, p)
 	elif where == StageKinds.Location.GATE_SEAT and p.seat_object != 0:
-		var chair: Dictionary = sim.grid.get_object(p.seat_object)
-		out = TerminalLayout.front_of(chair.get("facing", 0)) if not chair.is_empty() else out
+		var c: Dictionary = sim.grid.get_object(p.seat_object)
+		out = TerminalLayout.seat_front_of(c["def"], c["facing"]) if not c.is_empty() else out
 	elif where == StageKinds.Location.FACILITY_SEAT:
 		out = sim.cafes.seat_facing(p)
 	return atan2(out.x, out.y) if out != Vector2i.ZERO else NAN

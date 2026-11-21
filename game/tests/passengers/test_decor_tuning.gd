@@ -20,8 +20,8 @@ const TABLE_PINS := {
 	&"bench_1a": [1, 1],
 	&"bush": [1, 1],
 	&"trash_can": [0, 0],
-	&"metal_pole": [0, 0],
-	&"metal_pole_chain": [0, 0],
+	&"metal_pole": [1, 1],
+	&"metal_pole_chain": [1, 1],
 }
 ## The decor in the reference terminal's airside gate (x 10-21, y 2-8), on free
 ## floor clear of the seat rows, the scanners' exits and the exit door.
@@ -88,9 +88,19 @@ func test_the_table_is_pinned() -> void:
 
 func test_bigger_pieces_calm_more_and_reach_further() -> void:
 	for big: StringName in [&"fountain_indoor", &"statue_indoor", &"tree_indoor"]:
-		for small: StringName in [&"plant_pot_1a", &"plant_pot_2a", &"bench_1a", &"bush"]:
+		for small: StringName in [
+			&"plant_pot_1a",
+			&"plant_pot_2a",
+			&"bench_1a",
+			&"bush",
+			&"metal_pole",
+			&"metal_pole_chain"
+		]:
 			assert_int(DecorEffect.calm_of(big)).is_greater_equal(DecorEffect.calm_of(small))
 			assert_int(DecorEffect.radius_of(big)).is_greater(DecorEffect.radius_of(small))
+	for modest: StringName in [&"metal_pole", &"metal_pole_chain"]:
+		assert_int(DecorEffect.calm_of(modest)).is_greater(0)
+		assert_int(DecorEffect.radius_of(modest)).is_less(DecorEffect.radius_of(&"plant_pot_1a"))
 	assert_int(DecorEffect.calm_of(&"bush")).is_greater(0)
 
 

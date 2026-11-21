@@ -24,11 +24,13 @@ func after_test() -> void:
 	_worlds.clear()
 
 
-## Both rooms of the reference layout as bars with a bar counter, and a cafe
-## table too with `table`.
-func _world(table: bool) -> Array:
+## Both rooms of the reference layout as bars with a bar counter, and a second
+## bar counter too with `extra_counter`.
+func _world(extra_counter: bool) -> Array:
 	var grid := BuildGrid.new()
-	var ids := CafeTestLayout.build(grid, false, &"bar", table, &"bar_counter")
+	var ids := CafeTestLayout.build(
+		grid, false, &"bar", extra_counter, &"bar_counter", &"bar_counter"
+	)
 	var world := PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
 	_worlds.append(world)
 	return [world, ids]
@@ -185,45 +187,65 @@ func test_a_bar_guest_sits_on_a_stool_at_the_bar_counter() -> void:
 	assert_int(visit.amount).is_greater(0)
 
 
-## Nearness alone would pick the table: the seat search starts on a table
-## seat's own approach cell, and a free stool still wins.
-func test_a_free_stool_wins_over_a_nearer_table_seat() -> void:
-	var made := _world(true)
-	var world: PassengerTestWorld = made[0]
+## A cafe_table placed in a bar is ignored (ruling 17fe639a): only the bar
+## counter's stools are bar seats.
+func test_a_cafe_table_in_a_bar_is_not_a_bar_seat() -> void:
+	var grid := BuildGrid.new()
+	var ids := CafeTestLayout.build(grid, false, &"bar", true, &"bar_counter", &"cafe_table")
+	var world := PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
+	_worlds.append(world)
 	world.sim.cafes.refresh()
-	var cafe := world.sim.cafes.layout.cafe(made[1]["air_room"])
-	var table_seat: Dictionary = {}
+	var cafe := world.sim.cafes.layout.cafe(ids["air_room"])
+	assert_int(cafe["seats"].size()).is_equal(2)
 	for seat in cafe["seats"]:
-		if seat["object_id"] == made[1]["air_table"]:
-			table_seat = seat
-	assert_bool(table_seat.is_empty()).is_false()
-	var picked: Dictionary = world.sim.cafes._free_seat(cafe, table_seat["approach"])
-	print(
-		(
-			"seat search from table seat %s's approach %s picked %s"
-			% [table_seat["key"], table_seat["approach"], picked.get("key", "none")]
-		)
-	)
-	assert_int(picked.get("object_id", 0)).is_equal(made[1]["air_counter"])
+		assert_int(seat["object_id"]).is_equal(ids["air_counter"])
 
 
-func test_once_both_stools_are_taken_the_next_bar_guest_takes_a_table_seat() -> void:
-	var made := _world(true)
+func test_once_both_stools_are_taken_the_next_bar_guest_takes_the_second_bar_counter() -> void:
+	var made := _world(false)
 	var world: PassengerTestWorld = made[0]
+	var ids: Dictionary = made[1]
+	var at := ReferenceTerminal.offset_on(world.grid)
 	var waiting := _guests(world, 3, false)
-	# Each guest is sent to the bar the tick it starts its gate walk, while the
-	# guests before it still hold their seats.
-	var seats: Array[String] = []
+	var counters_taken: Array[int] = []
+	var keys_taken: Array[String] = []
+	var overflow: Passenger = null
 	while not waiting.is_empty() and world.clock.tick < 900:
 		world.step()
 		for p in waiting.duplicate():
 			if p.stage != Passenger.Stage.TO_GATE:
 				continue
 			waiting.erase(p)
-			var message := "visit of guest %d refused" % p.id
-			assert_bool(world.sim.cafes.try_visit(p)).override_failure_message(message).is_true()
-			var visit := world.sim.cafes.visit_of(p.id)
-			if visit != null:
-				seats.append(_seat_def(world, visit))
-	print("bar seats taken in turn: %s (tick %d)" % [seats, world.clock.tick])
-	assert_array(seats).is_equal(["bar_counter", "bar_counter", "cafe_table"])
+			if counters_taken.size() < 2:
+				var message := "visit of guest %d refused" % p.id
+				(
+					assert_bool(world.sim.cafes.try_visit(p))
+					. override_failure_message(message)
+					. is_true()
+				)
+				var visit := world.sim.cafes.visit_of(p.id)
+				assert_object(visit).is_not_null()
+				counters_taken.append(int(visit.seat_key.split(":")[0]))
+				keys_taken.append(visit.seat_key)
+			else:
+				overflow = p
+	assert_int(counters_taken.size()).is_equal(2)
+	assert_int(counters_taken[0]).is_equal(ids["air_counter"])
+	assert_int(counters_taken[1]).is_equal(ids["air_counter"])
+	assert_object(overflow).is_not_null()
+	# With both stools of the first bar_counter taken, a third guest is refused until a second
+	# bar_counter is placed.
+	assert_bool(world.sim.cafes.try_visit(overflow)).is_false()
+	var second := world.grid.apply(BuildEdit.place_object(&"bar_counter", Vector2i(27, 6) + at, 1))
+	assert_bool(second.ok).override_failure_message(second.reason_text()).is_true()
+	world.sim.cafes.refresh()
+	assert_bool(world.sim.cafes.try_visit(overflow)).is_true()
+	var third_visit := world.sim.cafes.visit_of(overflow.id)
+	assert_object(third_visit).is_not_null()
+	counters_taken.append(int(third_visit.seat_key.split(":")[0]))
+	keys_taken.append(third_visit.seat_key)
+	assert_int(counters_taken[2]).is_equal(second.object_id)
+	var distinct := {}
+	for k in keys_taken:
+		distinct[k] = true
+	assert_int(distinct.size()).is_equal(3)
