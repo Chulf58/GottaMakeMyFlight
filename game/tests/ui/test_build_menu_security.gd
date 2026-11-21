@@ -106,4 +106,5 @@ func test_the_operations_tray_fits_its_reserved_space() -> void:
 	_menu.category_button(BuildMenu.category_index("operations")).pressed.emit()
 	var need := _menu.tray().get_combined_minimum_size()
 	assert_float(need.x).is_less_equal(BuildMenu.COLUMN_W)
-	assert_float(need.y).is_less_equal(BuildMenu.TRAY_H)
+	assert_float(need.y).is_less_equal(BuildMenu.TRAY_FILTERED_H)
+	assert_float(need.y).is_equal_approx(_menu.tray_height(), 0.5)

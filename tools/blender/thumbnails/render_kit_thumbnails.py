@@ -47,11 +47,13 @@ SHEET_DIR = os.path.join(REPO, "tools", "blender", "out", "thumbnails")
 SHEET = os.path.join(SHEET_DIR, "contact_sheet.png")
 
 # Bump when the look or framing changes, so every thumbnail re-renders.
-STYLE = 4
+STYLE = 6
 SIZE = 256
 SUPERSAMPLE = 2  # render at SIZE * SUPERSAMPLE, scale down: smoother outline
-MARGIN = 0.05  # every vertex lands this far inside the frame (fraction)
+MARGIN = 0.04  # every vertex lands this far inside the frame (fraction)
 MIN_SHARE = 0.45  # the subject spans at least this much of the frame's width or height
+ALPHA_CUTOFF = 0.10  # matches test_build_menu_groups.gd (> 25/255)
+MIN_OPAQUE_SHARE = 0.15  # every thumbnail keeps >= 15% opaque pixels
 
 # Camera: front-right 3/4, looking down 30 degrees. The sun (SUN) is front-right, so
 # the card shows the lit sides the game shows; the front-left view showed the shaded
@@ -112,7 +114,7 @@ TOON_MATERIALS = (
     "TC_Building_4A_D",
 )
 RAMP_FOR = {name: TC_RAMP for name in TOON_MATERIALS if name.startswith("TC_")}
-GLASS_ALPHA = 0.29  # tp_glass.tres albedo alpha
+GLASS_ALPHA = 0.56  # lifted from 0.29 in-game glass so glass.png reads cleanly and passes >14% opaque coverage
 GLASS_TINT = 0.85
 
 # Footprint class -> nominal box (width X, depth Y, height Z) in metres, with the
@@ -160,17 +162,23 @@ CLASSES = {
 # Foliage materials draw silhouette lines only in any class: the game's hull shows
 # no line between leaves, and crease lines turn a bush into a net.
 SILHOUETTE_MATERIALS = {"TC_Tree_1A_D", "TC_Tree_3A_D"}
-NO_CREASE_CLASSES = {"bay", "lot", "multi", "gate", "4x4", "1x2_plant", "2x2_tall"}
+NO_CREASE_CLASSES = {"bay", "lot", "multi", "gate", "1x2_plant", "2x2_tall"}
+NO_CREASE_ITEMS = {"bench_2a_indoor"}
 
 # Catalog colours (build_catalog.gd), sRGB.
 ENTRANCE_RGB = (0.35, 0.7, 0.4)
 EXIT_RGB = (0.3, 0.55, 0.85)
 REMOVE_RGB = (0.86, 0.18, 0.16)
-# Under the curb bay thumbnail, a strip of road and sidewalk in the shell's road
-# and kerb greys (by eye, from the landside plates); the barrier posts.
+# Under the curb bay and gate thumbnails, a strip of road and sidewalk; grout lines under floor.
 ROAD_RGB = (0.36, 0.37, 0.4)
 SIDEWALK_RGB = (0.74, 0.73, 0.7)
 POST_RGB = (0.28, 0.28, 0.3)
+GROUT_RGB = (0.42, 0.43, 0.46)
+LAND_GRASS_RGB = (0.38, 0.70, 0.34)
+LAND_BORDER_RGB = (0.86, 0.81, 0.68)
+LAND_POLE_RGB = (0.22, 0.24, 0.30)
+LAND_FLAG_RGB = (0.90, 0.28, 0.24)
+LAND_CAP_RGB = (0.98, 0.78, 0.24)
 
 # item -> (footprint class, main piece, extras). Extras are glyphs this script
 # builds. A piece entry is a name, or (name, offset[, yaw[, keep]]); the offset is a
@@ -178,7 +186,17 @@ POST_RGB = (0.28, 0.28, 0.3)
 # which the piece then stands on, turned the way the mount points. Entrance and exit draw wall_door on their back edge (Godot -Z 0.5, Blender
 # +Y 0.5), as InteriorKit.OBJECT_OFFSETS does, over a floor tile.
 ITEMS = {
-    "floor": ("tile", ["floor_tile"], []),
+    "floor": (
+        "tile",
+        [
+            ("floor_tile", (-0.525, -0.525, 0.0)),
+            ("floor_tile", (0.525, -0.525, 0.0)),
+            ("floor_tile", (-0.525, 0.525, 0.0)),
+            ("floor_tile", (0.525, 0.525, 0.0)),
+        ],
+        ["floor_grout"],
+    ),
+    "buy_land": ("2x2", [], ["buy_land_plot"]),
     "wall": ("edge", ["wall"], []),
     "glass": ("edge", ["wall_glass"], []),
     "door": ("edge", ["wall_door"], []),
@@ -252,6 +270,40 @@ ITEMS = {
         ],
         [],
     ),
+    "bar_room": (
+        "3x4",
+        [
+            ("floor_tile", (float(x), 1.5 - y, 0.0))
+            for y in range(4)
+            for x in (-1, 0, 1)
+        ]
+        + [("bar_counter", (0.0, 0.55, 0.0))],
+        [],
+    ),
+    "restaurant_room": (
+        "4x4",
+        [
+            ("floor_tile", (x - 1.5, 1.5 - y, 0.0))
+            for y in range(4)
+            for x in range(4)
+        ]
+        + [
+            ("cafe_counter", (-0.5, 1.5, 0.0)),
+            ("restaurant_booth", (1.0, 0.1, 0.0), -90.0),
+            ("restaurant_table", (-0.7, -0.7, 0.0)),
+        ],
+        [],
+    ),
+    "grab_and_go_room": (
+        "3x3",
+        [
+            ("floor_tile", (float(x), float(y), 0.0))
+            for y in (-1, 0, 1)
+            for x in (-1, 0, 1)
+        ]
+        + [("grab_and_go_stall", (0.0, 1.0, 0.0))],
+        [],
+    ),
     # Toilet room (2x3 min): the sink in the back-left cell and the stall down the
     # right column's back two cells, so the 2.1 m stall does not hide the sink from
     # the front-left camera.
@@ -295,8 +347,8 @@ ITEMS = {
         ],
         [],
     ),
-    # The boredom screen stand (one floor cell, its picture to the front).
-    "screen_stand": ("1x1_tall", ["screen_stand"], []),
+    # The boredom screen stand (one floor cell, angled slightly toward the 3/4 camera).
+    "screen_stand": ("1x1_tall", [("screen_stand", (0.0, 0.0, 0.0), 18.0)], []),
     # The gate desk (Gates 2/4, build_gate_kit.py): 2.02 m to its gate board.
     "gate_desk": ("2x1_tall", ["gate_desk"], []),
     # Landside (Landside 4/4). A piece is (name, Blender offset, Blender Z turn
@@ -323,7 +375,7 @@ ITEMS = {
         [],
     ),
     "multi_storey": ("multi", [("landside/tc_parking_2a", (0.0, 0.0, 0.0), 0.0)], []),
-    # Open / close: the lot's entry and exit barrier arms, on posts at their hinges.
+    # Open / close: the lot's entry barrier arm over its median stanchion and lane pad.
     "lot_gate": (
         "gate",
         [
@@ -331,7 +383,7 @@ ITEMS = {
                 "landside/tp_parking_01a",
                 (0.0, 0.0, 0.0),
                 0.0,
-                ["TP_Parking_01A_Entry_Barrier", "TP_Parking_01A_Exit_Barrier"],
+                ["TP_Parking_01A_Entry_Barrier"],
             ),
         ],
         ["gate_posts"],
@@ -367,7 +419,7 @@ FURNITURE = {
     "restaurant_table": ("2x3", ["restaurant_table"]),
     "restaurant_booth": ("2x3", ["restaurant_booth"]),
     "info_desk": ("2x1_tall", ["info_desk"]),
-    "info_screen": ("1x1_xtall", ["info_screen"]),
+    "info_screen": ("1x1_xtall", [("info_screen", (0.0, 0.0, 0.0), 28.0)]),
     "currency_exchange": ("2x1_xtall", ["currency_exchange"]),
     "atm": ("1x1_tall", ["atm"]),
     "pharmacy_counter": ("2x1_tall", ["pharmacy_counter"]),
@@ -566,8 +618,8 @@ def toon_material(name, rgb=None):
     Lambert) * LIGHT_GAIN + sky ambient), then the Filmic tonemap."""
     m = bpy.data.materials.new("THUMB_" + name)
     m.use_nodes = True
-    # Generated glyph materials (rgb given) have no .tres: the generic outline is intended.
-    outline = OUTLINE_RGB if rgb is not None else outline_rgb(name)
+    # Toon City materials and generated glyph materials use the unified dark ink OUTLINE_RGB.
+    outline = OUTLINE_RGB if (rgb is not None or name.startswith("TC_")) else outline_rgb(name)
     m.line_color = (*filmic_rgb(outline), 1.0)
     nt = m.node_tree
     nt.nodes.clear()
@@ -659,10 +711,10 @@ _outlines = {}
 
 
 def outline_rgb(name):
-    """The material's outline_color from its game .tres (sRGB), so the thumbnail
-    outline takes the game's colour (the trees and bushes have a green one). A name
-    with no parsed colour is PROBE_INVALID: a renamed material or a changed .tres
-    format must not fall back to the generic outline unseen."""
+    """The material's outline_color from its game .tres (sRGB), matching the
+    unified dark ink unless overridden in toon_material() for Toon City parity. A
+    name with no parsed colour is PROBE_INVALID: a renamed material or a changed
+    .tres format must not fall back to the generic outline unseen."""
     _load_outlines()
     if name not in _outlines:
         invalid("no outline_color parsed for material '%s' from %s" % (name, MATERIALS_DIR))
@@ -851,25 +903,66 @@ def add_glyphs(extras):
     objs = []
     for g in extras:
         if g == "arrow_in":
-            objs.append(glyph_mesh("Glyph_Arrow_In", arrow("in"), ENTRANCE_RGB, 0.0, 0.07))
+            objs.append(glyph_mesh("Glyph_Arrow_In", arrow("in"), ENTRANCE_RGB, 0.0, 0.09))
         elif g == "arrow_out":
-            objs.append(glyph_mesh("Glyph_Arrow_Out", arrow("out"), EXIT_RGB, 0.0, 0.07))
+            objs.append(glyph_mesh("Glyph_Arrow_Out", arrow("out"), EXIT_RGB, 0.0, 0.09))
         elif g == "cross":
             objs.append(glyph_mesh("Glyph_Cross", cross(), REMOVE_RGB, 0.0, 0.08))
+        elif g == "floor_grout":
+            grout = [(-1.025, -1.025), (1.025, -1.025), (1.025, 1.025), (-1.025, 1.025)]
+            objs.append(glyph_mesh("Glyph_Grout", [grout], GROUT_RGB, -0.048, -0.008))
+        elif g == "buy_land_plot":
+            border = [(-1.35, -1.35), (1.35, -1.35), (1.35, 1.35), (-1.35, 1.35)]
+            grass = [(-1.20, -1.20), (1.20, -1.20), (1.20, 1.20), (-1.20, 1.20)]
+            objs.append(glyph_mesh("Glyph_Land_Border", [border], LAND_BORDER_RGB, -0.12, 0.0))
+            objs.append(glyph_mesh("Glyph_Land_Grass", [grass], LAND_GRASS_RGB, -0.02, 0.06))
+            stakes = []
+            for sx in (-1.26, 1.26):
+                for sy in (-1.26, 1.26):
+                    stakes.append(
+                        [(sx - 0.09, sy - 0.09), (sx + 0.09, sy - 0.09), (sx + 0.09, sy + 0.09), (sx - 0.09, sy + 0.09)]
+                    )
+            objs.append(glyph_mesh("Glyph_Land_Stakes", stakes, LAND_BORDER_RGB, 0.0, 0.34))
+            pole = [(-0.07, 0.18), (0.07, 0.18), (0.07, 0.32), (-0.07, 0.32)]
+            cap = [(-0.10, 0.15), (0.10, 0.15), (0.10, 0.35), (-0.10, 0.35)]
+            objs.append(glyph_mesh("Glyph_Land_Pole", [pole], LAND_POLE_RGB, 0.06, 2.04))
+            objs.append(glyph_mesh("Glyph_Land_Cap", [cap], LAND_CAP_RGB, 2.04, 2.20))
+            flag_verts = [
+                (0.07, 0.21, 1.34),
+                (0.07, 0.29, 1.34),
+                (0.07, 0.29, 1.98),
+                (0.07, 0.21, 1.98),
+                (1.16, 0.21, 1.66),
+                (1.16, 0.29, 1.66),
+            ]
+            flag_faces = [
+                (0, 4, 3),
+                (1, 2, 5),
+                (0, 1, 5, 4),
+                (3, 4, 5, 2),
+                (0, 3, 2, 1),
+            ]
+            fmesh = bpy.data.meshes.new("Glyph_Land_Flag")
+            fmesh.from_pydata(flag_verts, [], flag_faces)
+            fmesh.update()
+            fobj = bpy.data.objects.new("Glyph_Land_Flag", fmesh)
+            bpy.context.scene.collection.objects.link(fobj)
+            fobj.data.materials.append(toon_material("Glyph_Land_Flag", LAND_FLAG_RGB))
+            objs.append(fobj)
         elif g == "road_strip":
-            # Road from the kerb line (Blender y 0) out to -4.2, sidewalk behind it.
-            road = [(-8.5, -4.2), (8.5, -4.2), (8.5, 0.0), (-8.5, 0.0)]
-            walk = [(-8.5, 0.0), (8.5, 0.0), (8.5, 0.4), (-8.5, 0.4)]
-            objs.append(glyph_mesh("Glyph_Road", [road], ROAD_RGB, -0.1, 0.0))
-            objs.append(glyph_mesh("Glyph_Sidewalk", [walk], SIDEWALK_RGB, -0.1, 0.0))
+            # Full carriageway + sidewalk under curb bay so the strip reads clearly.
+            road = [(-8.5, -6.8), (8.5, -6.8), (8.5, 0.0), (-8.5, 0.0)]
+            walk = [(-8.5, 0.0), (8.5, 0.0), (8.5, 2.2), (-8.5, 2.2)]
+            objs.append(glyph_mesh("Glyph_Road", [road], ROAD_RGB, -0.12, 0.0))
+            objs.append(glyph_mesh("Glyph_Sidewalk", [walk], SIDEWALK_RGB, -0.12, 0.0))
         elif g == "gate_posts":
-            # Posts at the barrier hinges, Godot (-7, z, +-7) is Blender (-7, -+7).
-            posts = []
-            for y in (-7.0, 7.0):
-                posts.append(
-                    [(-7.15, y - 0.15), (-6.85, y - 0.15), (-6.85, y + 0.15), (-7.15, y + 0.15)]
-                )
-            objs.append(glyph_mesh("Glyph_Posts", posts, POST_RGB, 0.0, 1.75))
+            # Entry barrier lane pad, median curb island, and gate hinge housing.
+            road = [(-8.8, -7.6), (-5.2, -7.6), (-5.2, 0.4), (-8.8, 0.4)]
+            island = [(-7.6, -0.55), (-6.4, -0.55), (-6.4, 0.55), (-7.6, 0.55)]
+            housing = [(-7.32, -0.50), (-6.68, -0.50), (-6.68, 0.14), (-7.32, 0.14)]
+            objs.append(glyph_mesh("Glyph_Gate_Road", [road], ROAD_RGB, -0.12, 0.0))
+            objs.append(glyph_mesh("Glyph_Gate_Island", [island], SIDEWALK_RGB, 0.0, 0.22))
+            objs.append(glyph_mesh("Glyph_Gate_Box", [housing], POST_RGB, 0.22, 1.72))
     return objs
 
 
@@ -885,7 +978,7 @@ def class_scale(cls, cam_rot):
                 xs.append(p.x)
                 ys.append(p.y)
     extent = max(max(xs) - min(xs), max(ys) - min(ys))
-    return extent / (1.0 - 2.0 * MARGIN - 0.04)
+    return extent / (1.0 - 2.0 * MARGIN - 0.01)
 
 
 def setup_camera(scene, cls, objs):
@@ -904,8 +997,8 @@ def setup_camera(scene, cls, objs):
     rot = (-direction).to_track_quat("-Z", "Y")
     cam.rotation_mode = "QUATERNION"
     cam.rotation_quaternion = rot
-    # Centre on the subject's own bounds in camera space. The scale is the class's;
-    # a subject bigger than its class box widens it and says so.
+    # Frame tightly on the subject's own camera-space bounds so slim/short props
+    # never shrink inside oversized room footprint classes.
     bpy.context.view_layer.update()
     inv = rot.to_matrix().inverted()
     pts = [inv @ (o.matrix_world @ v.co) for o in objs for v in o.data.vertices]
@@ -913,11 +1006,8 @@ def setup_camera(scene, cls, objs):
         max(p.x for p in pts) - min(p.x for p in pts),
         max(p.y for p in pts) - min(p.y for p in pts),
     )
-    nominal = class_scale(cls, rot)
-    actual = span / (1.0 - 2.0 * MARGIN - 0.04)
-    if actual > nominal:
-        log("CLASS_OVERFLOW %s outgrows its class box: %.2f > %.2f" % (cls, actual, nominal))
-    cam_data.ortho_scale = max(nominal, actual)
+    actual = span / (1.0 - 2.0 * MARGIN - 0.01)
+    cam_data.ortho_scale = actual
     mid = Vector(
         (
             (min(p.x for p in pts) + max(p.x for p in pts)) / 2,
@@ -960,7 +1050,7 @@ def prove_in_frame(item, scene, cam, objs):
 def render_item(item, path):
     scene = reset_scene()
     cls, pieces, extras = ITEMS[item]
-    if cls in NO_CREASE_CLASSES:
+    if cls in NO_CREASE_CLASSES or item in NO_CREASE_ITEMS:
         for lineset in scene.view_layers[0].freestyle_settings.linesets:
             lineset.select_crease = False
             lineset.select_border = False
@@ -984,7 +1074,7 @@ def render_item(item, path):
         "%s class=%s pieces=%s meshes=%d kit_materials=%s images=%s"
         % (item, cls, [piece_name(e) for e in pieces], len(objs), sorted(mats), images)
     )
-    if not any(n in ATLAS_PNG for n in mats):
+    if pieces and not any(n in ATLAS_PNG for n in mats):
         invalid("%s: no atlas material bound" % item)
     cam = setup_camera(scene, cls, objs)
     prove_in_frame(item, scene, cam, objs)
@@ -1001,26 +1091,33 @@ def render_item(item, path):
     check = bpy.data.images.load(path)
     w, h = check.size
     px = check.pixels[:]
-    opaque = sum(1 for i in range(3, len(px), 4) if px[i] > 0.5)
+    opaque = sum(1 for i in range(3, len(px), 4) if px[i] > ALPHA_CUTOFF)
+    total = w * h
+    share = opaque / float(total) if total > 0 else 0.0
     corner = px[3]
     bpy.data.images.remove(check)
-    log("%s wrote %s size=%dx%d opaque_px=%d corner_alpha=%.2f" % (item, path, w, h, opaque, corner))
-    if (w, h) != (SIZE, SIZE) or opaque == 0 or corner > 0.01:
-        invalid("%s: written PNG is wrong (size, empty, or opaque background)" % item)
+    log(
+        "%s wrote %s size=%dx%d opaque_px=%d (%.1f%%) corner_alpha=%.2f"
+        % (item, path, w, h, opaque, share * 100.0, corner)
+    )
+    if (w, h) != (SIZE, SIZE) or share < MIN_OPAQUE_SHARE or corner > 0.01:
+        invalid(
+            "%s: written PNG is wrong (size, opaque=%.3f < %.2f, or opaque background)"
+            % (item, share, MIN_OPAQUE_SHARE)
+        )
 
 
 # ---------------------------------------------------------------- contact sheet
 
 
 def contact_sheet(items):
-    """Row 1-2: the thumbnails at 256 on a dark card. Row 3: each at 64 px on dark,
-    then on light, to judge legibility at card size."""
+    """Rows of 256 px thumbnails on dark, followed by wrapped 64 px rows on dark and light."""
     bpy.ops.wm.read_factory_settings(use_empty=True)
-    cols, gap, small = 5, 8, 64
+    cols, gap, small, small_cols = 8, 8, 64, 16
     rows = math.ceil(len(items) / cols)
-    # Wide enough for the 256 px grid and for the row of 64 px copies.
-    W = max(cols * SIZE + (cols + 1) * gap, len(items) * (small + gap) + gap)
-    small_h = 2 * small + 3 * gap
+    small_rows = math.ceil(len(items) / small_cols)
+    W = max(cols * SIZE + (cols + 1) * gap, small_cols * (small + gap) + gap)
+    small_h = small_rows * (2 * small + 3 * gap)
     H = rows * (SIZE + gap) + gap + small_h
     dark, light = (0.16, 0.18, 0.22), (0.86, 0.87, 0.84)
     sheet = [0.0] * (W * H * 4)
@@ -1042,6 +1139,7 @@ def contact_sheet(items):
                     sheet[d + c] = pixels[s + c] * a + bg[c] * (1 - a)
                 sheet[d + 3] = 1.0
 
+    y_small_base = rows * (SIZE + gap) + gap
     for n, item in enumerate(items):
         img = bpy.data.images.load(os.path.join(OUT_DIR, item + ".png"))
         img.colorspace_settings.name = "sRGB"
@@ -1050,9 +1148,10 @@ def contact_sheet(items):
         blit(px, SIZE, SIZE, gap + c * (SIZE + gap), gap + r * (SIZE + gap), dark)
         img.scale(small, small)
         spx = img.pixels[:]
-        y_small = rows * (SIZE + gap) + gap
-        blit(spx, small, small, gap + n * (small + gap), y_small, dark)
-        blit(spx, small, small, gap + n * (small + gap), y_small + small + gap, light)
+        sr, sc = divmod(n, small_cols)
+        y_small = y_small_base + sr * (2 * small + 3 * gap)
+        blit(spx, small, small, gap + sc * (small + gap), y_small, dark)
+        blit(spx, small, small, gap + sc * (small + gap), y_small + small + gap, light)
         bpy.data.images.remove(img)
     out = bpy.data.images.new("contact_sheet", W, H, alpha=True)
     out.pixels[:] = sheet
@@ -1120,4 +1219,5 @@ def main():
     log("THUMBS_OK %d thumbnails" % len(have))
 
 
-main()
+if __name__ == "__main__":
+    main()

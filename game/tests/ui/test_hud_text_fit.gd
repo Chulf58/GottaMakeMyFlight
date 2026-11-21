@@ -61,8 +61,9 @@ func _words(count: int) -> String:
 
 func _labels(card: Button) -> Array[Label]:
 	var out: Array[Label] = []
-	for label in card.find_children("*", "Label", true, false):
-		out.append(label as Label)
+	for child in card.get_child(0).get_children():
+		if child is Label:
+			out.append(child as Label)
 	return out
 
 
@@ -245,7 +246,7 @@ func test_an_already_translated_line_that_fits_stays_at_the_caption_size() -> vo
 func _assert_card_size(card: Button) -> void:
 	var tray := _menu.find_child("ItemTray", true, false) as Control
 	assert_float(card.size.x).override_failure_message(card.name).is_equal(BuildMenu.CARD_SIZE.x)
-	assert_float(tray.size.y).override_failure_message(card.name).is_equal(BuildMenu.TRAY_H)
+	assert_float(tray.size.y).override_failure_message(card.name).is_equal(_menu.tray_height())
 
 
 func _assert_inside(card: Button) -> void:

@@ -256,7 +256,8 @@ func test_without_a_landside_the_tools_do_nothing() -> void:
 
 func test_the_menu_lists_the_tools_with_their_prices() -> void:
 	var category := BuildMenu.category_of(BuildMode.Tool.SURFACE_LOT)
-	assert_str(BuildMenu.CATEGORIES[category]["name"]).is_equal("Decor & Parking")
+	assert_int(category).is_equal(BuildMenu.category_index("landside"))
+	assert_str(BuildMenu.CATEGORIES[category]["name"]).is_equal("Landside & Parking")
 	for tool in BuildMode.LANDSIDE_BUILD_TOOLS:
 		assert_int(BuildMenu.category_of(tool)).is_equal(category)
 		assert_array(BuildMenu.item(tool)).is_not_empty()

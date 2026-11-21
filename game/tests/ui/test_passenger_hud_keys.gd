@@ -112,10 +112,10 @@ func test_the_follow_text_stays_bottom_left_and_left_of_the_build_column() -> vo
 	var width := float(_port.size.x)
 	assert_float(card.anchor_top).is_equal(1.0)
 	assert_float(card.offset_left).is_equal(16.0)
-	assert_float(card.offset_bottom).is_equal(-PassengerHud.FOLLOW_BOTTOM)
+	assert_float(card.offset_bottom).is_equal(-float(HudLayout.MARGIN))
 	assert_int(card.grow_vertical).is_equal(Control.GROW_DIRECTION_BEGIN)
 	assert_float(card.offset_right).is_less_equal((width - BuildMenu.COLUMN_W) / 2.0)
-	assert_float(PassengerHud.FOLLOW_BOTTOM).is_greater(BuildMenu.MARGIN + BuildMenu.BAR_H)
+	assert_float(-card.offset_bottom).is_equal(BottomDocks.left_floor_bottom(width, 0.0))
 
 
 func test_the_clock_shows_the_in_game_day_and_time() -> void:

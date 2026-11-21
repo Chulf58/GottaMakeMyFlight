@@ -6,14 +6,40 @@ extends GdUnitTestSuite
 ## show the translated tab names, all 77 build tools appear once across [0..5],
 ## prices are in the neutral text colour, and corner radii follow the HUD grid.
 
-const BAR_IDS := ["building", "operations", "facilities", "food", "shops", "decor", "remove"]
+const BAR_IDS := [
+	"building",
+	"operations",
+	"facilities",
+	"food",
+	"shops",
+	"decor",
+	"landside",
+	"remove",
+]
+const BAR_BUTTON_IDS := [
+	"building",
+	"operations",
+	"facilities",
+	"food",
+	"shops",
+	"decor",
+	"landside",
+	"templates",
+	"remove",
+	"staff",
+]
+## Matches render_kit_thumbnails.py ALPHA_CUTOFF (0.10 / > 25/255) and MIN_OPAQUE_SHARE (0.15).
+const ALPHA_CUTOFF_BYTE := 25
+const MIN_OPAQUE_SHARE := 0.15
 const BAR_TIPS := [
 	"Building",
 	"Operations",
 	"Facilities",
 	"Food & Drink",
 	"Shops",
-	"Decor & Parking",
+	"Decor",
+	"Landside & Parking",
+	"Templates",
 	"Remove",
 	"Staff",
 ]
@@ -24,6 +50,8 @@ const BAR_NODES := [
 	"BarFood",
 	"BarShops",
 	"BarDecor",
+	"BarLandside",
+	"TemplatesButton",
 	"BarRemove",
 	"StaffButton",
 ]
@@ -59,14 +87,14 @@ func _bar_buttons() -> Array[Button]:
 	return out
 
 
-func test_the_bar_has_six_domain_tabs_plus_remove_and_staff() -> void:
+func test_the_bar_has_seven_domain_tabs_plus_templates_remove_and_staff() -> void:
 	var buttons := _bar_buttons()
 	var tips := buttons.map(func(b: Button) -> String: return b.tooltip_text)
 	var node_names := buttons.map(func(b: Button) -> String: return String(b.name))
 	assert_array(tips).is_equal(BAR_TIPS)
 	assert_array(node_names).is_equal(BAR_NODES)
-	assert_int(BuildMenu.REMOVE_CATEGORY).is_equal(6)
-	assert_int(BuildMenu.remove_category()).is_equal(6)
+	assert_int(BuildMenu.REMOVE_CATEGORY).is_equal(7)
+	assert_int(BuildMenu.remove_category()).is_equal(7)
 	for i in BAR_IDS.size():
 		assert_str(BuildMenu.category_id(i)).is_equal(BAR_IDS[i])
 		assert_int(BuildMenu.category_index(BAR_IDS[i])).is_equal(i)
@@ -76,7 +104,7 @@ func test_every_bar_button_shows_its_drawn_icon_and_no_text() -> void:
 	var buttons := _bar_buttons()
 	for i in buttons.size():
 		var button := buttons[i]
-		var bar_id: String = "staff" if i == buttons.size() - 1 else str(BAR_IDS[i])
+		var bar_id: String = str(BAR_BUTTON_IDS[i])
 		var path := BarIcons.icon_path(bar_id)
 		assert_str(path).override_failure_message(bar_id).is_not_empty()
 		assert_bool(ResourceLoader.exists(path)).override_failure_message(path).is_true()
@@ -87,9 +115,9 @@ func test_every_bar_button_shows_its_drawn_icon_and_no_text() -> void:
 		assert_vector(button.custom_minimum_size).is_equal(BuildMenu.CATEGORY_SIZE)
 
 
-func test_all_77_build_tools_appear_exactly_once_across_the_six_domain_tabs() -> void:
+func test_all_77_build_tools_appear_exactly_once_across_the_seven_domain_tabs() -> void:
 	var seen := {}
-	var expected_counts := [7, 12, 13, 10, 12, 23]
+	var expected_counts := [7, 12, 20, 10, 12, 12, 4]
 	var cats := BuildMenu.categories()
 	for i in BuildMenu.REMOVE_CATEGORY:
 		var tools: Array = cats[i]["tools"]
@@ -104,6 +132,38 @@ func test_all_77_build_tools_appear_exactly_once_across_the_six_domain_tabs() ->
 			assert_bool(seen.has(tool)).is_false()
 		else:
 			assert_bool(seen.has(tool)).override_failure_message("missing %d" % tool).is_true()
+
+
+func test_room_cards_have_unique_labels_and_room_badges_and_96x118_size() -> void:
+	assert_vector(BuildMenu.CARD_SIZE).is_equal(Vector2(96.0, 118.0))
+	var names_per_tab := {}
+	for i in BuildMenu.REMOVE_CATEGORY:
+		names_per_tab[i] = {}
+		for tool: BuildMode.Tool in BuildMenu.categories()[i]["tools"]:
+			var item_name := str(BuildMenu.item(tool)[0])
+			var seen_names: Dictionary = names_per_tab[i]
+			(
+				assert_bool(seen_names.has(item_name))
+				. override_failure_message("duplicate label '%s' in tab %d" % [item_name, i])
+				. is_false()
+			)
+			seen_names[item_name] = true
+			var card := _menu.card(tool)
+			assert_vector(card.custom_minimum_size).is_equal(Vector2(96.0, 118.0))
+			var badge := card.get_node_or_null("RoomBadge")
+			if BuildMenuCatalog.is_room_tool(tool):
+				(
+					assert_object(badge)
+					. override_failure_message("missing RoomBadge %d" % tool)
+					. is_not_null()
+				)
+				assert_str((badge.get_child(0) as Label).text).is_equal("Room")
+			else:
+				(
+					assert_object(badge)
+					. override_failure_message("unexpected RoomBadge %d" % tool)
+					. is_null()
+				)
 
 
 func test_prices_are_in_the_neutral_text_colour() -> void:
@@ -157,3 +217,43 @@ func test_the_icon_bar_fits_the_window_with_room_to_spare() -> void:
 	assert_float(bar.position.x).is_greater(400.0)
 	assert_float(bar.end.x).is_less(_port.size.x - 400.0)
 	assert_float(bar.size.y).is_equal(BuildMenu.BAR_H)
+
+
+func test_every_thumbnail_meets_vf5_opacity_and_dining_rooms_are_distinct() -> void:
+	var dining := [
+		BuildMode.Tool.CAFE_ROOM,
+		BuildMode.Tool.BAR_ROOM,
+		BuildMode.Tool.RESTAURANT_ROOM,
+		BuildMode.Tool.STALL_ROOM,
+	]
+	var dining_thumbs := {}
+	for tool: BuildMode.Tool in dining:
+		var thumb_id := str(BuildMenu.item(tool)[1])
+		assert_bool(dining_thumbs.has(thumb_id)).is_false()
+		dining_thumbs[thumb_id] = true
+	var checked := {}
+	for i in BuildMenu.REMOVE_CATEGORY:
+		for tool: BuildMode.Tool in BuildMenu.categories()[i]["tools"]:
+			var thumb_id := str(BuildMenu.item(tool)[1])
+			if checked.has(thumb_id):
+				continue
+			checked[thumb_id] = true
+			var path := BuildMenu.THUMBNAIL_DIR % thumb_id
+			assert_bool(FileAccess.file_exists(path)).override_failure_message(path).is_true()
+			var img := Image.load_from_file(ProjectSettings.globalize_path(path))
+			assert_object(img).override_failure_message(path).is_not_null()
+			img.convert(Image.FORMAT_RGBA8)
+			var data := img.get_data()
+			var opaque := 0
+			for off in range(3, data.size(), 4):
+				if data[off] > ALPHA_CUTOFF_BYTE:
+					opaque += 1
+			var total := img.get_width() * img.get_height()
+			var ratio := float(opaque) / float(total)
+			(
+				assert_float(ratio)
+				. override_failure_message(
+					"%s opaque %.3f < %.2f" % [path, ratio, MIN_OPAQUE_SHARE]
+				)
+				. is_greater_equal(MIN_OPAQUE_SHARE)
+			)

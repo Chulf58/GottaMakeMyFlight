@@ -220,7 +220,7 @@ func test_demo_build_menu_hides_teasers_at_tier1_and_shows_reordered_teasers_at_
 	assert_bool(menu.card(BuildMode.Tool.TREE).visible).is_false()
 	assert_bool(menu.card(BuildMode.Tool.CAFE_ROOM).visible).is_false()
 
-	# Unlock Tier 2: all 6 build tabs + Remove appear, Tier 2 playable cards come
+	# Unlock Tier 2: all 7 domain tabs + Remove appear, Tier 2 playable cards come
 	# first, Tier 3 teaser cards sit at the right end with "In the full game"
 	# preserved across wallet changes, and Tier 4 cards stay hidden.
 	for i in 100:
@@ -250,19 +250,20 @@ func test_demo_build_menu_hides_teasers_at_tier1_and_shows_reordered_teasers_at_
 			if hidden != null:
 				assert_bool(hidden.visible).is_false()
 
-	# In Decor & Parking, playable Tier-2 cards (including CURB) precede all Tier-3 teasers.
-	var decor_row := tree_card.get_parent()
-	var seen_teaser := false
-	for child in decor_row.get_children():
-		var c := child as Control
-		if not c.visible:
-			continue
-		var is_teaser := _card_last_line(c as Button) == "In the full game"
-		if is_teaser:
-			seen_teaser = true
-		else:
-			assert_bool(seen_teaser).is_false()
-	assert_bool(seen_teaser).is_true()
+	# In Decor and in Landside & Parking, playable Tier-2 cards precede all Tier-3 teasers.
+	for row_card: Button in [tree_card, menu.card(BuildMode.Tool.CURB)]:
+		var row := row_card.get_parent()
+		var seen_teaser := false
+		for child in row.get_children():
+			var c := child as Button
+			if c == null or not c.visible:
+				continue
+			var is_teaser := _card_last_line(c) == "In the full game"
+			if is_teaser:
+				seen_teaser = true
+			else:
+				assert_bool(seen_teaser).is_false()
+		assert_bool(seen_teaser).is_true()
 
 	# Every visible domain tab button on the bottom bar opens a non-empty tray.
 	var checked_buttons := 0
@@ -282,7 +283,7 @@ func test_demo_build_menu_hides_teasers_at_tier1_and_shows_reordered_teasers_at_
 		assert_int(cards_shown).is_greater(0)
 		checked_buttons += 1
 		menu.close_for_modal()
-	assert_int(checked_buttons).is_equal(6)
+	assert_int(checked_buttons).is_equal(7)
 
 
 func test_demo_allows_one_extra_land_plot_and_refuses_second_extra_plot() -> void:

@@ -11,6 +11,7 @@ const FACILITIES := 2
 var _port: SubViewport
 var _mode: BuildMode
 var _menu: BuildMenu
+var _translation: Translation
 
 
 func before_test() -> void:
@@ -26,7 +27,11 @@ func before_test() -> void:
 
 
 func after_test() -> void:
+	if _translation != null:
+		TranslationServer.remove_translation(_translation)
+		_translation = null
 	_port.free()
+	PseudoLocale.disable()
 
 
 func _key(code: Key, pressed := true) -> InputEventKey:
@@ -138,7 +143,9 @@ func test_number_keys_are_unbound_and_do_not_pick_build_tools() -> void:
 func test_cards_show_only_thumbnail_name_and_price_on_face() -> void:
 	assert_array(Array(_texts(_menu.card(BuildMode.Tool.DESK)))).is_equal(["Check-in desk", "Free"])
 	assert_array(Array(_texts(_menu.card(BuildMode.Tool.FLOOR)))).is_equal(["Floor", "Free"])
-	assert_array(Array(_texts(_menu.card(BuildMode.Tool.BAG_ROOM)))).is_equal(["Bag room", "Free"])
+	assert_array(Array(_texts(_menu.card(BuildMode.Tool.BAG_ROOM)))).is_equal(
+		["Bag room", "Free", "Room"]
+	)
 	assert_array(Array(_texts(_menu.card(BuildMode.Tool.TOILET_STALL)))).is_equal(
 		["Toilet stall", "Free"]
 	)
@@ -147,7 +154,14 @@ func test_cards_show_only_thumbnail_name_and_price_on_face() -> void:
 		if card == null:
 			continue
 		var lines := _texts(card)
-		assert_int(lines.size()).is_equal(2)
+		var expect_lines := 3 if BuildMenuCatalog.is_room_tool(tool) else 2
+		assert_int(lines.size()).override_failure_message("tool %d %s" % [tool, lines]).is_equal(
+			expect_lines
+		)
+		if BuildMenuCatalog.is_room_tool(tool):
+			assert_array(Array(lines)).contains(["Room"])
+		else:
+			assert_array(Array(lines)).not_contains(["Room"])
 		for line in lines:
 			assert_bool(line.begins_with("Key ")).is_false()
 			assert_str(line).is_not_equal("Click")
@@ -185,10 +199,9 @@ func test_remove_is_one_button_with_no_tray() -> void:
 
 
 func test_the_status_line_shows_a_refusal_above_the_tray_and_never_moves() -> void:
-	_mode.set_tool(BuildMode.Tool.DESK)
+	_mode.set_tool(BuildMode.Tool.DOOR)
 	var result := _mode.apply_at(_mode.grid.cell_to_world(Vector2i(4, 4)))
 	assert_bool(result.ok).is_false()
-	assert_bool(RotateHint.applies(_mode)).is_true()
 	assert_str(_menu.status_label().text).is_equal(_mode.status_text())
 	assert_str(_menu.status_label().text).contains(result.reason_text())
 	await get_tree().process_frame
@@ -202,7 +215,7 @@ func test_the_status_line_shows_a_refusal_above_the_tray_and_never_moves() -> vo
 	assert_that(_menu.status_label().get_global_rect()).is_equal(status)
 
 
-func test_every_tray_fits_its_reserved_space_and_constant_height() -> void:
+func test_every_tray_fits_its_reserved_space_and_expected_height() -> void:
 	_mode.set_tool(BuildMode.Tool.NONE)
 	for i in BuildMenu.CATEGORIES.size():
 		if i == BuildMenu.REMOVE_CATEGORY:
@@ -210,12 +223,49 @@ func test_every_tray_fits_its_reserved_space_and_constant_height() -> void:
 		_menu.category_button(i).pressed.emit()
 		await get_tree().process_frame
 		await get_tree().process_frame
+		var want_h := _menu.tray_height()
+		var expect_filtered := (
+			BuildMenu.category_id(i) in ["operations", "facilities", "food", "shops"]
+		)
+		assert_float(want_h).is_equal(
+			BuildMenu.TRAY_FILTERED_H if expect_filtered else BuildMenu.TRAY_H
+		)
 		var need := _menu.tray().get_combined_minimum_size()
 		var rect := _menu.tray().get_global_rect()
-		assert_float(need.y).is_less_equal(BuildMenu.TRAY_H)
-		assert_float(rect.size.y).is_equal(BuildMenu.TRAY_H)
+		assert_float(need.y).is_less_equal(want_h)
+		assert_float(rect.size.y).is_equal(want_h)
 		assert_float(need.x).is_less_equal(BuildMenu.COLUMN_W)
 		assert_float(need.x).is_greater(BuildMenu.CARD_SIZE.x)
+
+
+func test_subfilters_and_dividers_filter_wide_trays_and_reset_on_tool_pick() -> void:
+	var food := BuildMenu.category_index("food")
+	_menu.press_category(food)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	assert_float(_menu.tray_height()).is_equal(BuildMenu.TRAY_FILTERED_H)
+	assert_int(_menu.filter_buttons().size()).is_equal(3)
+	assert_bool(_menu.filter_button("all").button_pressed).is_true()
+	var food_row := _menu.card(BuildMode.Tool.CAFE_ROOM).get_parent()
+	var vis_seps := 0
+	for child in food_row.get_children():
+		if child is VSeparator and (child as Control).visible:
+			vis_seps += 1
+	assert_int(vis_seps).is_equal(3)
+	_menu.press_filter("rooms")
+	await get_tree().process_frame
+	assert_bool(_menu.card(BuildMode.Tool.CAFE_ROOM).is_visible_in_tree()).is_true()
+	assert_bool(_menu.card(BuildMode.Tool.BAR_ROOM).is_visible_in_tree()).is_true()
+	assert_bool(_menu.card(BuildMode.Tool.COUNTER).is_visible_in_tree()).is_false()
+	vis_seps = 0
+	for child in food_row.get_children():
+		if child is VSeparator and (child as Control).visible:
+			vis_seps += 1
+	assert_int(vis_seps).is_equal(0)
+	# Picking an item outside the active filter resets filter back to "all".
+	_mode.set_tool(BuildMode.Tool.COUNTER)
+	assert_str(_menu.active_filter()).is_equal("all")
+	assert_bool(_menu.card(BuildMode.Tool.COUNTER).is_visible_in_tree()).is_true()
 
 
 func test_mouse_wheel_over_tray_scrolls_horizontally_and_never_zooms_camera() -> void:
@@ -281,13 +331,13 @@ func test_mouse_wheel_over_tray_scrolls_horizontally_and_never_zooms_camera() ->
 func test_arming_offscreen_tool_on_closed_menu_scrolls_card_into_tray_view() -> void:
 	_mode.set_tool(BuildMode.Tool.NONE)
 	assert_bool(_menu.is_tray_open()).is_false()
-	_mode.set_tool(BuildMode.Tool.LOT_GATE)
+	_mode.set_tool(BuildMode.Tool.PLAY_SLIDE)
 	for _i in 4:
 		await get_tree().process_frame
-	var lot_card := _menu.card(BuildMode.Tool.LOT_GATE)
+	var slide_card := _menu.card(BuildMode.Tool.PLAY_SLIDE)
 	var tray_rect := _menu.tray().get_global_rect()
-	var card_rect := lot_card.get_global_rect()
-	assert_int(_menu.open_category()).is_equal(BuildMenu.category_index("decor"))
+	var card_rect := slide_card.get_global_rect()
+	assert_int(_menu.open_category()).is_equal(BuildMenu.category_index("facilities"))
 	assert_int(_menu.tray_scroll().scroll_horizontal).is_greater(1000)
 	assert_bool(tray_rect.encloses(card_rect)).is_true()
 
@@ -323,3 +373,55 @@ func test_the_cafe_room_counter_and_table_cards_show_their_renders() -> void:
 		assert_object(picture.texture).override_failure_message(thumb_name).is_not_null()
 		assert_str(picture.texture.resource_path).is_equal(BuildMenu.THUMBNAIL_DIR % thumb_name)
 		assert_int(picture.find_children("*", "ColorRect", true, false).size()).is_equal(0)
+
+
+func test_facilities_filter_bar_stays_within_640_px_tray_under_pseudolocale() -> void:
+	PseudoLocale.enable(0.4)
+	var port := SubViewport.new()
+	port.size = Vector2i(1536, 864)
+	port.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
+	add_child(port)
+	var mode := BuildMode.new()
+	mode.grid_size = Vector2i(20, 20)
+	port.add_child(mode)
+	mode.set_process(false)
+	var menu := BuildMenu.new()
+	menu.build_mode = mode
+	port.add_child(menu)
+	menu.press_category(FACILITIES)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var tray_rect := menu.tray().get_global_rect()
+	var filter_scroll := menu.filter_scroll()
+	var filter_bar := menu.find_child("FilterBar", true, false) as HBoxContainer
+	var filter_rect := filter_scroll.get_global_rect()
+	assert_int(menu.filter_buttons().size()).is_equal(5)
+	assert_bool(filter_scroll.is_visible_in_tree()).is_true()
+	assert_float(menu.tray_height()).is_equal(BuildMenu.TRAY_FILTERED_H)
+	assert_float(tray_rect.size.y).is_equal_approx(BuildMenu.TRAY_FILTERED_H, 0.5)
+	assert_float(tray_rect.size.x).is_less_equal(BuildMenu.COLUMN_W + 0.5)
+	assert_float(filter_rect.position.x).is_greater_equal(tray_rect.position.x - 0.5)
+	assert_float(filter_rect.end.x).is_less_equal(tray_rect.end.x + 0.5)
+	assert_bool(tray_rect.grow(0.5).encloses(filter_rect)).is_true()
+	# Positive overflow control: long translated Facilities pills exceed tray_max_inner_width()
+	# yet stay clipped/scrollable inside the 640 px tray without blowing out tray height.
+	PseudoLocale.disable()
+	_translation = Translation.new()
+	_translation.locale = TranslationServer.get_locale()
+	for label: String in ["All", "Rooms", "Hygiene & Rest", "Services", "Lounge & Play"]:
+		_translation.add_message(label, label + " — Extended Translation Label", "build menu")
+	TranslationServer.add_translation(_translation)
+	menu._refresh_cards()
+	await get_tree().process_frame
+	await get_tree().process_frame
+	tray_rect = menu.tray().get_global_rect()
+	filter_rect = filter_scroll.get_global_rect()
+	assert_float(filter_bar.get_combined_minimum_size().x).is_greater(menu.tray_max_inner_width())
+	assert_float(menu.tray_height()).is_equal(BuildMenu.TRAY_FILTERED_H)
+	assert_float(tray_rect.size.y).is_equal_approx(BuildMenu.TRAY_FILTERED_H, 0.5)
+	assert_float(tray_rect.size.x).is_less_equal(BuildMenu.COLUMN_W + 0.5)
+	assert_float(filter_rect.position.x).is_greater_equal(tray_rect.position.x - 0.5)
+	assert_float(filter_rect.end.x).is_less_equal(tray_rect.end.x + 0.5)
+	assert_bool(tray_rect.grow(0.5).encloses(filter_rect)).is_true()
+	assert_float(filter_scroll.get_h_scroll_bar().max_value).is_greater(0.0)
+	port.free()

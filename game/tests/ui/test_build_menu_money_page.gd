@@ -9,7 +9,7 @@ const TOOLS := [
 	BuildMode.Tool.ATM_ROOM,
 	BuildMode.Tool.ATM,
 ]
-const NAMES := ["Exchange", "Counter", "ATM", "Cash machine"]
+const NAMES := ["Exchange", "Exchange counter", "ATM", "Cash machine"]
 const ROOMS := {BuildMode.Tool.EXCHANGE_ROOM: &"exchange", BuildMode.Tool.ATM_ROOM: &"atm"}
 
 var _port: SubViewport

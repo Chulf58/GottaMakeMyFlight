@@ -34,14 +34,14 @@ const CATEGORIES := [
 		"tools":
 		[
 			BuildMode.Tool.DESK,
+			BuildMode.Tool.GATE_DESK,
+			BuildMode.Tool.SEATS,
+			BuildMode.Tool.SCREEN,
 			BuildMode.Tool.SCANNER,
 			BuildMode.Tool.TRAY_TABLE,
 			BuildMode.Tool.XRAY_BELT,
 			BuildMode.Tool.ARCH,
 			BuildMode.Tool.PICKUP_TABLE,
-			BuildMode.Tool.GATE_DESK,
-			BuildMode.Tool.SEATS,
-			BuildMode.Tool.SCREEN,
 			BuildMode.Tool.BELT,
 			BuildMode.Tool.BAG_ROOM,
 			BuildMode.Tool.CART,
@@ -55,16 +55,23 @@ const CATEGORIES := [
 			BuildMode.Tool.TOILET_ROOM,
 			BuildMode.Tool.TOILET_STALL,
 			BuildMode.Tool.TOILET_SINK,
+			BuildMode.Tool.SHOWER_ROOM,
+			BuildMode.Tool.SHOWER,
+			BuildMode.Tool.NAP_POD_ROOM,
+			BuildMode.Tool.NAP_POD,
 			BuildMode.Tool.INFO_DESK,
 			BuildMode.Tool.INFO_SCREEN,
 			BuildMode.Tool.EXCHANGE_ROOM,
 			BuildMode.Tool.EXCHANGE,
 			BuildMode.Tool.ATM_ROOM,
 			BuildMode.Tool.ATM,
-			BuildMode.Tool.SHOWER_ROOM,
-			BuildMode.Tool.SHOWER,
-			BuildMode.Tool.NAP_POD_ROOM,
-			BuildMode.Tool.NAP_POD,
+			BuildMode.Tool.LOUNGE_ROOM,
+			BuildMode.Tool.SOFA,
+			BuildMode.Tool.ARMCHAIR,
+			BuildMode.Tool.WORK_DESK,
+			BuildMode.Tool.PLAY_AREA_ROOM,
+			BuildMode.Tool.PLAY_BLOCKS,
+			BuildMode.Tool.PLAY_SLIDE,
 		],
 	},
 	{
@@ -105,7 +112,7 @@ const CATEGORIES := [
 	},
 	{
 		"id": "decor",
-		"name": "Decor & Parking",
+		"name": "Decor",
 		"tools":
 		[
 			BuildMode.Tool.BUSH,
@@ -119,14 +126,14 @@ const CATEGORIES := [
 			BuildMode.Tool.POST,
 			BuildMode.Tool.CHAIN,
 			BuildMode.Tool.BIN,
-			BuildMode.Tool.LOUNGE_ROOM,
-			BuildMode.Tool.SOFA,
-			BuildMode.Tool.ARMCHAIR,
-			BuildMode.Tool.WORK_DESK,
-			BuildMode.Tool.PLAY_AREA_ROOM,
-			BuildMode.Tool.PLAY_BLOCKS,
-			BuildMode.Tool.PLAY_SLIDE,
 			BuildMode.Tool.PRIZE_PODIUM,
+		],
+	},
+	{
+		"id": "landside",
+		"name": "Landside & Parking",
+		"tools":
+		[
 			BuildMode.Tool.CURB,
 			BuildMode.Tool.SURFACE_LOT,
 			BuildMode.Tool.MULTI_STOREY,
@@ -137,11 +144,230 @@ const CATEGORIES := [
 ]
 ## The category that is a single button with no tray, last in CATEGORIES (GDScript
 ## cannot take it from CATEGORIES.size(): tests check the two agree).
-const REMOVE_CATEGORY := 6
+const REMOVE_CATEGORY := 7
 const NO_CATEGORY := -1
 ## The open category while the Templates page (TemplatesPage) is open; its
 ## bar button presses it like a category (press_category()).
 const TEMPLATES_PAGE := -2
+## Visual sub-groups for divider placement inside multi-group "All" trays.
+const VISUAL_GROUPS := {
+	"operations":
+	[
+		[
+			BuildMode.Tool.DESK,
+			BuildMode.Tool.GATE_DESK,
+			BuildMode.Tool.SEATS,
+			BuildMode.Tool.SCREEN,
+		],
+		[
+			BuildMode.Tool.SCANNER,
+			BuildMode.Tool.TRAY_TABLE,
+			BuildMode.Tool.XRAY_BELT,
+			BuildMode.Tool.ARCH,
+			BuildMode.Tool.PICKUP_TABLE,
+		],
+		[BuildMode.Tool.BELT, BuildMode.Tool.BAG_ROOM, BuildMode.Tool.CART],
+	],
+	"facilities":
+	[
+		[
+			BuildMode.Tool.TOILET_ROOM,
+			BuildMode.Tool.TOILET_STALL,
+			BuildMode.Tool.TOILET_SINK,
+			BuildMode.Tool.SHOWER_ROOM,
+			BuildMode.Tool.SHOWER,
+			BuildMode.Tool.NAP_POD_ROOM,
+			BuildMode.Tool.NAP_POD,
+		],
+		[
+			BuildMode.Tool.INFO_DESK,
+			BuildMode.Tool.INFO_SCREEN,
+			BuildMode.Tool.EXCHANGE_ROOM,
+			BuildMode.Tool.EXCHANGE,
+			BuildMode.Tool.ATM_ROOM,
+			BuildMode.Tool.ATM,
+		],
+		[
+			BuildMode.Tool.LOUNGE_ROOM,
+			BuildMode.Tool.SOFA,
+			BuildMode.Tool.ARMCHAIR,
+			BuildMode.Tool.WORK_DESK,
+			BuildMode.Tool.PLAY_AREA_ROOM,
+			BuildMode.Tool.PLAY_BLOCKS,
+			BuildMode.Tool.PLAY_SLIDE,
+		],
+	],
+	"food":
+	[
+		[BuildMode.Tool.CAFE_ROOM, BuildMode.Tool.COUNTER, BuildMode.Tool.TABLE],
+		[BuildMode.Tool.BAR_ROOM, BuildMode.Tool.BAR_COUNTER],
+		[BuildMode.Tool.RESTAURANT_ROOM, BuildMode.Tool.DINING_TABLE, BuildMode.Tool.BOOTH],
+		[BuildMode.Tool.STALL_ROOM, BuildMode.Tool.GRAB_STALL],
+	],
+	"shops":
+	[
+		[BuildMode.Tool.KIOSK_ROOM, BuildMode.Tool.KIOSK_COUNTER, BuildMode.Tool.KIOSK_DISPLAY],
+		[
+			BuildMode.Tool.PHARMACY_ROOM,
+			BuildMode.Tool.PHARMACY_COUNTER,
+			BuildMode.Tool.PHARMACY_SHELF,
+		],
+		[
+			BuildMode.Tool.DUTY_FREE_ROOM,
+			BuildMode.Tool.DUTY_FREE_TILL,
+			BuildMode.Tool.DUTY_FREE_SHELF,
+		],
+		[BuildMode.Tool.FASHION_ROOM, BuildMode.Tool.FASHION_TILL, BuildMode.Tool.FASHION_RAIL],
+	],
+}
+## Lightweight sub-filter pills for multi-group tabs ("All" precedes these).
+const SUBFILTERS := {
+	"operations":
+	[
+		{
+			"id": "checkin",
+			"name": "Check-in & Gate",
+			"tools":
+			[
+				BuildMode.Tool.DESK,
+				BuildMode.Tool.GATE_DESK,
+				BuildMode.Tool.SEATS,
+				BuildMode.Tool.SCREEN,
+			],
+		},
+		{
+			"id": "security",
+			"name": "Security",
+			"tools":
+			[
+				BuildMode.Tool.SCANNER,
+				BuildMode.Tool.TRAY_TABLE,
+				BuildMode.Tool.XRAY_BELT,
+				BuildMode.Tool.ARCH,
+				BuildMode.Tool.PICKUP_TABLE,
+			],
+		},
+		{
+			"id": "baggage",
+			"name": "Baggage",
+			"tools": [BuildMode.Tool.BELT, BuildMode.Tool.BAG_ROOM, BuildMode.Tool.CART],
+		},
+	],
+	"facilities":
+	[
+		{
+			"id": "rooms",
+			"name": "Rooms",
+			"tools":
+			[
+				BuildMode.Tool.TOILET_ROOM,
+				BuildMode.Tool.SHOWER_ROOM,
+				BuildMode.Tool.NAP_POD_ROOM,
+				BuildMode.Tool.EXCHANGE_ROOM,
+				BuildMode.Tool.ATM_ROOM,
+				BuildMode.Tool.LOUNGE_ROOM,
+				BuildMode.Tool.PLAY_AREA_ROOM,
+			],
+		},
+		{
+			"id": "hygiene",
+			"name": "Hygiene & Rest",
+			"tools":
+			[
+				BuildMode.Tool.TOILET_ROOM,
+				BuildMode.Tool.TOILET_STALL,
+				BuildMode.Tool.TOILET_SINK,
+				BuildMode.Tool.SHOWER_ROOM,
+				BuildMode.Tool.SHOWER,
+				BuildMode.Tool.NAP_POD_ROOM,
+				BuildMode.Tool.NAP_POD,
+			],
+		},
+		{
+			"id": "services",
+			"name": "Services",
+			"tools":
+			[
+				BuildMode.Tool.INFO_DESK,
+				BuildMode.Tool.INFO_SCREEN,
+				BuildMode.Tool.EXCHANGE_ROOM,
+				BuildMode.Tool.EXCHANGE,
+				BuildMode.Tool.ATM_ROOM,
+				BuildMode.Tool.ATM,
+			],
+		},
+		{
+			"id": "lounge_play",
+			"name": "Lounge & Play",
+			"tools":
+			[
+				BuildMode.Tool.LOUNGE_ROOM,
+				BuildMode.Tool.SOFA,
+				BuildMode.Tool.ARMCHAIR,
+				BuildMode.Tool.WORK_DESK,
+				BuildMode.Tool.PLAY_AREA_ROOM,
+				BuildMode.Tool.PLAY_BLOCKS,
+				BuildMode.Tool.PLAY_SLIDE,
+			],
+		},
+	],
+	"food":
+	[
+		{
+			"id": "rooms",
+			"name": "Rooms",
+			"tools":
+			[
+				BuildMode.Tool.CAFE_ROOM,
+				BuildMode.Tool.BAR_ROOM,
+				BuildMode.Tool.RESTAURANT_ROOM,
+				BuildMode.Tool.STALL_ROOM,
+			],
+		},
+		{
+			"id": "items",
+			"name": "Items",
+			"tools":
+			[
+				BuildMode.Tool.COUNTER,
+				BuildMode.Tool.TABLE,
+				BuildMode.Tool.BAR_COUNTER,
+				BuildMode.Tool.DINING_TABLE,
+				BuildMode.Tool.BOOTH,
+				BuildMode.Tool.GRAB_STALL,
+			],
+		},
+	],
+	"shops":
+	[
+		{
+			"id": "rooms",
+			"name": "Rooms",
+			"tools":
+			[
+				BuildMode.Tool.KIOSK_ROOM,
+				BuildMode.Tool.PHARMACY_ROOM,
+				BuildMode.Tool.DUTY_FREE_ROOM,
+				BuildMode.Tool.FASHION_ROOM,
+			],
+		},
+		{
+			"id": "items",
+			"name": "Items",
+			"tools":
+			[
+				BuildMode.Tool.KIOSK_COUNTER,
+				BuildMode.Tool.KIOSK_DISPLAY,
+				BuildMode.Tool.PHARMACY_COUNTER,
+				BuildMode.Tool.PHARMACY_SHELF,
+				BuildMode.Tool.DUTY_FREE_TILL,
+				BuildMode.Tool.DUTY_FREE_SHELF,
+				BuildMode.Tool.FASHION_TILL,
+				BuildMode.Tool.FASHION_RAIL,
+			],
+		},
+	],
+}
 ## Card name, thumbnail and non-catalog size text per tool. Object sizes come from BuildCatalog.
 const ITEMS := {
 	BuildMode.Tool.FLOOR: ["Floor", "floor", "1x1 tile"],
@@ -168,22 +394,24 @@ const ITEMS := {
 	# pharmacy's).
 	BuildMode.Tool.PHARMACY_ROOM: ["Pharmacy", "pharmacy_room", "3x3 min"],
 	BuildMode.Tool.DUTY_FREE_ROOM: ["Duty free", "duty_free_room", "3x4 min"],
-	BuildMode.Tool.DUTY_FREE_TILL: ["Till", "duty_free_till", ""],
-	BuildMode.Tool.DUTY_FREE_SHELF: ["Shelf", "duty_free_shelf", ""],
+	BuildMode.Tool.DUTY_FREE_TILL: ["Duty Free Till", "duty_free_till", ""],
+	BuildMode.Tool.DUTY_FREE_SHELF: ["Duty Free Shelf", "duty_free_shelf", ""],
 	BuildMode.Tool.FASHION_ROOM: ["Fashion store", "fashion_room", "3x4 min"],
-	BuildMode.Tool.FASHION_TILL: ["Till", "fashion_till", ""],
+	BuildMode.Tool.FASHION_TILL: ["Fashion Till", "fashion_till", ""],
 	BuildMode.Tool.FASHION_RAIL: ["Clothes rail", "fashion_rail", ""],
 	BuildMode.Tool.EXCHANGE_ROOM: ["Exchange", "exchange_room", "2x3 min"],
+	BuildMode.Tool.EXCHANGE: ["Exchange counter", "currency_exchange", ""],
 	BuildMode.Tool.ATM_ROOM: ["ATM", "atm_room", "1x2 min"],
-	# The food rooms borrow the cafe's thumbnail: no new art (F4-6).
-	BuildMode.Tool.BAR_ROOM: ["Bar", "cafe_room", "3x4 min"],
-	BuildMode.Tool.RESTAURANT_ROOM: ["Restaurant", "cafe_room", "4x4 min"],
-	BuildMode.Tool.STALL_ROOM: ["Grab-and-go", "cafe_room", "3x3 min"],
-	# The activity rooms borrow their main piece's thumbnail: no new art (F4-7).
+	BuildMode.Tool.BAR_ROOM: ["Bar", "bar_room", "3x4 min"],
+	BuildMode.Tool.RESTAURANT_ROOM: ["Restaurant", "restaurant_room", "4x4 min"],
+	BuildMode.Tool.STALL_ROOM: ["Grab-and-go", "grab_and_go_room", "3x3 min"],
+	# The activity rooms carry the Room badge alongside their main piece preview.
 	BuildMode.Tool.PLAY_AREA_ROOM: ["Play area", "play_slide", "3x4 min"],
 	BuildMode.Tool.LOUNGE_ROOM: ["Lounge", "lounge_sofa", "2x3 min"],
 	BuildMode.Tool.SHOWER_ROOM: ["Shower", "shower_cubicle", "2x2 min"],
+	BuildMode.Tool.SHOWER: ["Shower cubicle", "shower_cubicle", ""],
 	BuildMode.Tool.NAP_POD_ROOM: ["Nap pod", "nap_pod", "2x2 min"],
+	BuildMode.Tool.NAP_POD: ["Sleeping pod", "nap_pod", ""],
 	BuildMode.Tool.KIOSK_DISPLAY: ["Display stand", "kiosk_display", ""],
 	BuildMode.Tool.BELT: ["Belt", "belt", "Drag a line"],
 	BuildMode.Tool.BAG_ROOM: ["Bag room", "bag_room", "2x2 min"],
@@ -327,6 +555,31 @@ static func card_details(tool: BuildMode.Tool) -> Array:
 	return out
 
 
+## Whether `tool` draws a room zone (used to disambiguate room cards from objects).
+static func is_room_tool(tool: BuildMode.Tool) -> bool:
+	return BuildMode.TOOL_ROOMS.has(tool)
+
+
+## Visual group lists for `category_id`, or an empty array for single-group tabs.
+static func visual_groups(cat_id: String) -> Array:
+	return VISUAL_GROUPS.get(cat_id, [])
+
+
+## Sub-filter definitions for `category_id`, or an empty array for single-group tabs.
+static func subfilters(cat_id: String) -> Array:
+	return SUBFILTERS.get(cat_id, [])
+
+
+## Thumbnail id for a room type (`RoomTypes` id), matching its room-zone card.
+static func room_thumbnail(room_type: StringName) -> String:
+	for tool: BuildMode.Tool in BuildMode.TOOL_ROOMS:
+		if BuildMode.TOOL_ROOMS[tool] == room_type:
+			var card_item := item(tool)
+			if card_item.size() >= 2:
+				return str(card_item[1])
+	return ""
+
+
 ## A table name of this file or FurnitureTools (a category, a card, a size text,
 ## a need) in the player's language. The names stay English in the tables;
 ## Words.msgids() lists them for POT generation.
@@ -353,8 +606,20 @@ class Words:
 			tr("Facilities", "build menu"),
 			tr("Food & Drink", "build menu"),
 			tr("Shops", "build menu"),
-			tr("Decor & Parking", "build menu"),
+			tr("Decor", "build menu"),
+			tr("Landside & Parking", "build menu"),
 			tr("Remove", "build menu"),
+			tr("Templates", "build menu"),
+			tr("All", "build menu"),
+			tr("Room", "build menu"),
+			tr("Check-in & Gate", "build menu"),
+			tr("Security", "build menu"),
+			tr("Baggage", "build menu"),
+			tr("Rooms", "build menu"),
+			tr("Hygiene & Rest", "build menu"),
+			tr("Services", "build menu"),
+			tr("Lounge & Play", "build menu"),
+			tr("Items", "build menu"),
 			tr("Floor", "build menu"),
 			tr("1x1 tile", "build menu"),
 			tr("Wall", "build menu"),
@@ -381,11 +646,14 @@ class Words:
 			tr("Pharmacy", "build menu"),
 			tr("Duty free", "build menu"),
 			tr("3x4 min", "build menu"),
-			tr("Till", "build menu"),
+			tr("Duty Free Till", "build menu"),
+			tr("Duty Free Shelf", "build menu"),
 			tr("Shelf", "build menu"),
 			tr("Fashion store", "build menu"),
+			tr("Fashion Till", "build menu"),
 			tr("Clothes rail", "build menu"),
 			tr("Exchange", "build menu"),
+			tr("Exchange counter", "build menu"),
 			tr("ATM", "build menu"),
 			tr("1x2 min", "build menu"),
 			tr("Bar", "build menu"),
@@ -395,8 +663,10 @@ class Words:
 			tr("Play area", "build menu"),
 			tr("Lounge", "build menu"),
 			tr("Shower", "build menu"),
+			tr("Shower cubicle", "build menu"),
 			tr("2x2 min", "build menu"),
 			tr("Nap pod", "build menu"),
+			tr("Sleeping pod", "build menu"),
 			tr("Display stand", "build menu"),
 			tr("Belt", "build menu"),
 			tr("Drag a line", "build menu"),

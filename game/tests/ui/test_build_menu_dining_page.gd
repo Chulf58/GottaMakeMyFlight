@@ -88,7 +88,8 @@ func test_the_food_tray_fits_the_column_and_reserved_height() -> void:
 	_menu.press_category(food)
 	var need := _menu.tray().get_combined_minimum_size()
 	assert_float(need.x).is_less_equal(BuildMenu.COLUMN_W)
-	assert_float(need.y).is_less_equal(BuildMenu.TRAY_H)
+	assert_float(need.y).is_less_equal(BuildMenu.TRAY_FILTERED_H)
+	assert_float(need.y).is_equal_approx(_menu.tray_height(), 0.5)
 
 
 func test_picking_a_dining_tool_opens_food_and_presses_its_card() -> void:

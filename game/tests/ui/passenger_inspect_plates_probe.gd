@@ -253,26 +253,29 @@ func _prove_card(label: String) -> bool:
 	var card := _inspect.get_global_rect()
 	var column := Rect2((view.x - BuildMenu.COLUMN_W) / 2.0, 0.0, BuildMenu.COLUMN_W, view.y)
 	var inside := Rect2(Vector2.ZERO, view).grow(-MARGIN_PX).encloses(card)
-	var dock := _main.get_node("BuildMenu").find_child("TemplatesDock", true, false) as Control
-	var dock_rect := dock.get_global_rect() if dock != null else Rect2()
+	var bar := (_main.get_node("BuildMenu") as BuildMenu).bar()
+	var bar_rect := bar.get_global_rect() if bar != null else Rect2()
 	var mood := _main.find_child("MoodToggle", true, false) as Control
 	var mood_rect := (
 		mood.get_global_rect() if mood != null and mood.is_visible_in_tree() else Rect2()
 	)
 	var clear := (
 		not card.intersects(column)
-		and not card.intersects(dock_rect)
+		and not card.intersects(bar_rect)
 		and not card.intersects(mood_rect)
 	)
 	print(
 		(
-			"CARD %s rect=%s column=%s templates=%s mood=%s inside=%s clear=%s rows=%s"
-			% [label, card, column, dock_rect, mood_rect, inside, clear, _inspect.row_texts()]
+			"CARD %s rect=%s column=%s bar=%s mood=%s inside=%s clear=%s rows=%s"
+			% [label, card, column, bar_rect, mood_rect, inside, clear, _inspect.row_texts()]
 		)
 	)
 	if not (_inspect.visible and inside and clear and _inspect.row_texts().size() > 0):
 		_invalid(
-			"%s: card hidden, off screen, over the build column or Templates, or empty" % label
+			(
+				"%s: card hidden, off screen, over the build column, CategoryBar or MoodToggle, or empty"
+				% label
+			)
 		)
 		return false
 	return true

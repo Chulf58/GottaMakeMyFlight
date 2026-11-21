@@ -155,11 +155,11 @@ func _plate(label: String, refusal: bool, rail: bool) -> void:
 	var bar := menu.bar().get_global_rect()
 	var tray := menu.tray().get_global_rect()
 	var card := menu.status_card().get_global_rect()
-	var templates := menu.templates_page.dock.get_global_rect()
+	var tbtn := menu.templates_page.button.get_global_rect()
 	var debug := (_hud.find_child("DebugToggle", true, false) as Button).get_global_rect()
 	print(
 		(
-			"PLATE %s view=%s bar=%s tray=%s(open=%s) card=%s(visible=%s) templates=%s debug=%s"
+			"PLATE %s view=%s bar=%s tray=%s(open=%s) card=%s(visible=%s) tbtn=%s debug=%s"
 			% [
 				label,
 				view,
@@ -168,18 +168,20 @@ func _plate(label: String, refusal: bool, rail: bool) -> void:
 				menu.is_tray_open(),
 				card,
 				menu.status_card().visible,
-				templates,
+				tbtn,
 				debug
 			]
 		)
 	)
 	_check(label, "bar bottom", bar.end.y, view.y - HudLayout.MARGIN)
 	_check(label, "bar h", bar.size.y, float(HudLayout.BAR_H))
-	_check(label, "templates bottom", templates.end.y, bar.end.y)
-	_check(label, "templates left", templates.position.x, float(HudLayout.MARGIN))
+	if menu.find_child("TemplatesDock", true, false) != null:
+		_invalid("%s TemplatesDock must not exist" % label)
+	if not bar.encloses(tbtn):
+		_invalid("%s TemplatesButton not inside CategoryBar" % label)
 	_check(label, "debug right", debug.end.x, view.x - HudLayout.MARGIN)
 	_check(label, "debug bottom", debug.end.y, view.y - HudLayout.MARGIN)
-	var rects := {"bar": bar, "templates": templates, "debug": debug}
+	var rects := {"bar": bar, "debug": debug}
 	if menu.is_tray_open():
 		_check(label, "tray bottom", tray.end.y, bar.position.y - HudLayout.GAP)
 		rects["tray"] = tray
@@ -190,7 +192,7 @@ func _plate(label: String, refusal: bool, rail: bool) -> void:
 			label,
 			"card bottom",
 			card.end.y,
-			bar.position.y - HudLayout.GAP - BuildMenu.TRAY_H - HudLayout.GAP
+			bar.position.y - HudLayout.GAP - menu.tray_height() - HudLayout.GAP
 		)
 		rects["card"] = card
 	if refusal:

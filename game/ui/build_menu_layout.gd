@@ -49,6 +49,14 @@ static func build_bar(menu: BuildMenu) -> void:
 	menu._bar.add_child(row)
 	var cats := BuildMenuCatalog.categories()
 	for i in cats.size():
+		if i == BuildMenuCatalog.remove_category():
+			var tbtn := menu.templates_page.button
+			tbtn.name = TemplatesPage.BUTTON_NAME
+			dress_bar(tbtn, "templates", "Templates")
+			tbtn.toggle_mode = true
+			tbtn.custom_minimum_size = BuildMenu.CATEGORY_SIZE
+			tbtn.focus_mode = Control.FOCUS_NONE
+			row.add_child(tbtn)
 		var button := Button.new()
 		var cat: Dictionary = cats[i]
 		var cat_id: String = cat["id"]
@@ -73,16 +81,43 @@ static func build_bar(menu: BuildMenu) -> void:
 static func build_tray(menu: BuildMenu) -> void:
 	menu._tray.name = "ItemTray"
 	menu._tray.theme = BuildMenu.HUD_THEME
+	var panel_base := BuildMenu.HUD_THEME.get_stylebox(&"panel", &"PanelContainer") as StyleBoxFlat
+	if panel_base != null:
+		var tray_panel := panel_base.duplicate() as StyleBoxFlat
+		tray_panel.content_margin_top = 5.0
+		tray_panel.content_margin_bottom = 5.0
+		menu._tray.add_theme_stylebox_override(&"panel", tray_panel)
 	menu._tray.mouse_filter = Control.MOUSE_FILTER_STOP
 	menu._tray.custom_minimum_size = Vector2(0.0, BuildMenu.TRAY_H)
 	menu._tray.gui_input.connect(menu._on_tray_gui_input)
 	anchor_bottom_centre(menu._tray, BuildMenu.MARGIN + BuildMenu.BAR_H + BuildMenu.GAP)
 	menu.add_child(menu._tray)
+	menu._tray_root.name = "TrayRoot"
+	menu._tray_root.add_theme_constant_override("separation", 4)
+	menu._tray_root.mouse_filter = Control.MOUSE_FILTER_PASS
+	menu._tray.add_child(menu._tray_root)
+	menu._filter_scroll.name = "FilterScroll"
+	menu._filter_scroll.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	menu._filter_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	menu._filter_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
+	menu._filter_scroll.clip_contents = true
+	menu._filter_scroll.visible = false
+	menu._filter_scroll.mouse_filter = Control.MOUSE_FILTER_PASS
+	menu._tray_root.add_child(menu._filter_scroll)
+	menu._filter_bar.name = "FilterBar"
+	menu._filter_bar.add_theme_constant_override("separation", 6)
+	menu._filter_bar.alignment = BoxContainer.ALIGNMENT_CENTER
+	menu._filter_bar.custom_minimum_size = Vector2(0.0, float(HudLayout.TRAY_FILTER_H - 4))
+	menu._filter_bar.visible = false
+	menu._filter_bar.mouse_filter = Control.MOUSE_FILTER_PASS
+	menu._filter_bar.minimum_size_changed.connect(menu._sync_filter_width)
+	menu._filter_scroll.add_child(menu._filter_bar)
 	menu._scroll.name = "TrayScroll"
 	# Ignore on the ScrollContainer itself so wheel events over cards and over tray
 	# padding both reach _tray._on_tray_gui_input with one unified WHEEL_STEP while
 	# child cards and the internal HScrollBar keep their own mouse input.
 	menu._scroll.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	menu._scroll.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	menu._scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	menu._scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_RESERVE
 	menu._scroll_content.name = "TrayRows"
@@ -90,7 +125,7 @@ static func build_tray(menu: BuildMenu) -> void:
 	menu._scroll_content.add_theme_constant_override("separation", 0)
 	menu._scroll_content.minimum_size_changed.connect(menu._sync_scroll_width)
 	menu._scroll.add_child(menu._scroll_content)
-	menu._tray.add_child(menu._scroll)
+	menu._tray_root.add_child(menu._scroll)
 	var cats := BuildMenuCatalog.categories()
 	for i in cats.size():
 		var row := HBoxContainer.new()
@@ -150,7 +185,66 @@ static func make_card(menu: BuildMenu, tool: BuildMode.Tool) -> Button:
 	price_label.name = "Price"
 	menu._price_labels[tool] = price_label
 	watch_fit(button)
+	if BuildMenuCatalog.is_room_tool(tool):
+		add_card_badge(
+			button, BuildMenuCatalog.shown("Room"), Color(0.55, 0.80, 0.80, 0.96), &"RoomBadge"
+		)
 	return button
+
+
+## Compact corner pill over a card's top-left corner (`Room`, `Locked`, `3x4`).
+static func add_card_badge(
+	button: Control, text: String, bg: Color, badge_name: StringName = &"CardBadge"
+) -> PanelContainer:
+	var pill := PanelContainer.new()
+	pill.name = badge_name
+	pill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pill.offset_left = 4.0
+	pill.offset_top = 4.0
+	pill.grow_horizontal = Control.GROW_DIRECTION_END
+	pill.grow_vertical = Control.GROW_DIRECTION_END
+	var style := StyleBoxFlat.new()
+	style.bg_color = bg
+	style.border_width_left = 1
+	style.border_width_top = 1
+	style.border_width_right = 1
+	style.border_width_bottom = 1
+	style.border_color = Color(0.1, 0.13, 0.26, 1.0)
+	style.corner_radius_top_left = 5
+	style.corner_radius_top_right = 5
+	style.corner_radius_bottom_right = 5
+	style.corner_radius_bottom_left = 5
+	style.content_margin_left = 4.0
+	style.content_margin_right = 4.0
+	style.content_margin_top = 0.0
+	style.content_margin_bottom = 0.0
+	pill.add_theme_stylebox_override(&"panel", style)
+	var label := Label.new()
+	label.name = String(badge_name) + "Label"
+	label.text = text
+	label.add_theme_font_size_override(&"font_size", 10)
+	label.add_theme_color_override(&"font_color", Color(0.1, 0.13, 0.26, 1.0))
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pill.add_child(label)
+	button.add_child(pill)
+	return pill
+
+
+## Lightweight compact pill button for wide-tray sub-filter strips.
+static func make_filter_pill(text: String) -> Button:
+	var btn := Button.new()
+	btn.theme = BuildMenu.HUD_THEME
+	btn.theme_type_variation = &"HudButtonCompact"
+	btn.toggle_mode = true
+	btn.focus_mode = Control.FOCUS_NONE
+	btn.text = text
+	btn.add_theme_font_size_override(&"font_size", HudLayout.FIT_STEP)
+	return btn
+
+
+static func sync_status_card_bottom(card: Control, bottom: float) -> void:
+	card.offset_top = -bottom - BuildMenu.STATUS_H
+	card.offset_bottom = -bottom
 
 
 static func card_column(button: Button) -> VBoxContainer:

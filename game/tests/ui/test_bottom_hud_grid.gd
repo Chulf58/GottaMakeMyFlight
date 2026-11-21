@@ -134,7 +134,8 @@ func test_status_and_cost_are_one_card_above_the_tray() -> void:
 	assert_str(str(card.theme_type_variation)).is_equal("HudTopCard")
 	assert_int(card.mouse_filter).is_equal(Control.MOUSE_FILTER_IGNORE)
 	# The stack's height, which the rail and PanelRoom read, is the card's top.
-	assert_float(BuildMenu.tray_stack_top()).is_equal(VIEW.y - rect.position.y)
+	assert_float(_menu.stack_top()).is_equal(VIEW.y - rect.position.y)
+	assert_float(BuildMenu.tray_stack_top(_menu.tray_height())).is_equal(VIEW.y - rect.position.y)
 
 
 func test_the_card_is_hidden_while_nothing_is_said_and_costs_nothing() -> void:
@@ -260,14 +261,14 @@ func test_a_held_message_wraps_and_the_card_grows_upward() -> void:
 	assert_float(_menu.status_card().get_global_rect().size.y).is_equal(float(HudLayout.BUTTON_H))
 
 
-func test_templates_and_debug_stand_on_the_margin_with_the_bar() -> void:
+func test_templates_lives_in_bar_and_debug_stands_on_the_margin() -> void:
 	var bar := _menu.bar().get_global_rect()
-	var dock := _menu.templates_page.dock.get_global_rect()
+	var tbtn := _menu.templates_page.button.get_global_rect()
 	var debug := (_hud.find_child("DebugToggle", true, false) as Button).get_global_rect()
-	print("bar=%s templates=%s debug=%s" % [bar, dock, debug])
-	assert_float(dock.position.x).is_equal(float(HudLayout.MARGIN))
-	assert_float(dock.end.y).is_equal(bar.end.y)
-	assert_float(dock.size.y).is_equal(float(HudLayout.BAR_H))
+	print("bar=%s templates=%s debug=%s" % [bar, tbtn, debug])
+	assert_object(_menu.find_child("TemplatesDock", true, false)).is_null()
+	assert_bool(_menu.bar().is_ancestor_of(_menu.templates_page.button)).is_true()
+	assert_bool(bar.encloses(tbtn)).is_true()
 	assert_float(debug.end.x).is_equal(VIEW.x - float(HudLayout.MARGIN))
 	assert_float(debug.end.y).is_equal(VIEW.y - float(HudLayout.MARGIN))
 
@@ -302,7 +303,6 @@ func test_nothing_in_the_bottom_band_overlaps() -> void:
 		"bar": _menu.bar().get_global_rect(),
 		"tray": _menu.tray().get_global_rect(),
 		"card": _menu.status_card().get_global_rect(),
-		"templates": _menu.templates_page.dock.get_global_rect(),
 		"debug": (_hud.find_child("DebugToggle", true, false) as Button).get_global_rect(),
 		"debug_panel": (_hud.find_child("DebugPanel", true, false) as Control).get_global_rect(),
 	}

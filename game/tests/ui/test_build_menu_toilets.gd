@@ -70,7 +70,7 @@ func test_the_toilet_cards_show_name_and_price_with_size_and_upkeep_in_hover() -
 	assert_int(BuildMenu.tool_price(BuildMode.Tool.TOILET_ROOM)).is_equal(0)
 	var upkeep := "Upkeep %d/day" % PriceTable.TOILET_STALL_UPKEEP
 	assert_array(_texts(_menu.card(BuildMode.Tool.TOILET_ROOM))).is_equal(
-		["Toilet", BuildMenu.PRICE_TEXT]
+		["Toilet", BuildMenu.PRICE_TEXT, "Room"]
 	)
 	assert_array(_texts(_menu.card(BuildMode.Tool.TOILET_STALL))).is_equal(
 		["Toilet stall", BuildMenu.PRICE_TEXT]
@@ -141,5 +141,6 @@ func test_the_facilities_tray_fits_its_reserved_space_and_the_bar_fits_the_scree
 	var bar := _menu.bar().get_combined_minimum_size()
 	var layout_w := 1920.0 / 1.25
 	assert_float(need.x).is_less_equal(BuildMenu.COLUMN_W)
-	assert_float(need.y).is_less_equal(BuildMenu.TRAY_H)
+	assert_float(need.y).is_less_equal(BuildMenu.TRAY_FILTERED_H)
+	assert_float(need.y).is_equal_approx(_menu.tray_height(), 0.5)
 	assert_float(bar.x).is_less_equal(layout_w - 2.0 * BuildMenu.MARGIN)
