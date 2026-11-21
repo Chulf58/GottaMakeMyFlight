@@ -198,9 +198,8 @@ static func pick(
 	# roller set down before its route turned hand_of() left), standing still
 	# as well.
 	var held := not swapped(bag) or now - float(bag.get("changed", -INF)) >= HOLD_TICKS
-	# Not while the roller is tucked in line behind (tuck()): it goes back out
-	# to the side it is drawn on, not across at hand_of()'s word mid-doorway.
-	var told := first == 1 and hand == 0 and held and RollerPull.tuck_weight(bag, now) <= 0.0
+	var tucked_now := RollerPull.tuck_weight(bag, now) > 0.01
+	var told := first == 1 and hand == 0 and held and not tucked_now
 	if holds(bag, now):
 		return hand
 	if queued or stood(bag, now):
@@ -216,22 +215,24 @@ static func pick(
 		# settled footprint, leaves the hand to the rules below.
 		if hand == first:
 			return hand
-		if not blocked(grid, poses, crossing(), true):
+		if not tucked_now and not blocked(grid, poses, crossing(), true):
 			return _change(bag, "pull_side_park", first)
 	elif parked:
 		# Never told across onto a stamped side that is not clear.
 		told = false
 	if not told and not blocked(grid, poses, footprint(hand, true), true):
-		if hand == 1 and first == 0:
+		if hand == 1 and first == 0 and not tucked_now:
 			# Clear for a hold as well, so the right is not threatened again
-			# as soon as the roller is there.
+			# as soon as the roller is there, and never while the trailing roller
+			# itself is still inside a doorway/leaf.
 			var on := walk_poses(frame, ahead, step_m * (LOOK_TICKS + HOLD_TICKS))
 			if may_return(bag, grid, frame, on, now):
 				return _change(bag, "pull_side_returns", 0)
 		return hand
 	var other := 1 - hand
 	var shut := (
-		blocked(grid, poses, crossing(), true)
+		tucked_now
+		or blocked(grid, poses, crossing(), true)
 		or blocked(grid, poses, footprint(other, false), true)
 		or (
 			blocked(grid, poses, footprint(other, true), true)
@@ -275,7 +276,10 @@ static func tuck(
 	hand: int,
 	now: float
 ) -> void:
+	var foot := footprint(hand, false)
 	if step_m < STILL_M:
+		if blocked(grid, [frame], foot, false):
+			RollerPull.tuck(bag, true, now)
 		return
 	var look := step_m * (LOOK_TICKS + RollerPull.TUCK_TICKS)
 	# The route can end at the doorway (the gate's door out to the apron: the
@@ -288,7 +292,7 @@ static func tuck(
 		on = frame.basis.z
 	route.append(last + on.normalized() * look)
 	var poses := walk_poses(frame, route, look)
-	RollerPull.tuck(bag, blocked(grid, poses, footprint(hand, false), false), now)
+	RollerPull.tuck(bag, blocked(grid, poses, foot, false), now)
 
 
 ## Counts a change of `bag` to `hand` in its `tally` and starts its trail
@@ -540,6 +544,24 @@ static func pieces_near(grid: BuildGrid, at: Vector3, but := &"") -> Array:
 				continue
 			var def: StringName = grid.get_object(id)["def"]
 			if BuildCatalog.is_door(def) or (but != &"" and def == but):
+				continue
+			seen[id] = true
+			out.append_array(piece_boxes(grid, id))
+	return out
+
+
+## Only the gate desks near `at` (for queue_walls keeping gate standers out of
+## the gate desk without pushing cafe queuers away from the counter).
+static func desks_near(grid: BuildGrid, at: Vector3) -> Array:
+	var out := []
+	var seen := {}
+	var under := grid.world_to_cell(at)
+	for dx in range(-REACH_CELLS, REACH_CELLS + 1):
+		for dy in range(-REACH_CELLS, REACH_CELLS + 1):
+			var id := grid.object_at(under + Vector2i(dx, dy))
+			if id == 0 or seen.has(id):
+				continue
+			if grid.get_object(id)["def"] != GateDesks.DESK:
 				continue
 			seen[id] = true
 			out.append_array(piece_boxes(grid, id))

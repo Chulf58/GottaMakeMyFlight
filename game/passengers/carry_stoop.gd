@@ -18,6 +18,12 @@ const LEGS: Array[Array] = [["Quad.R", "Shin.R", "Foot.R"], ["Quad.L", "Shin.L",
 ## The back's bend at a full stoop, and how far the hips go down and back with
 ## it.
 const STOOP_DEGREES := 80.0
+## Maximum lateral deviation (degrees) of the torso stoop from straight ahead
+## (+Z), so side targets pitch forward with a modest side lean instead of rolling
+## the torso sideways.
+const MAX_SIDE_DEGREES := 25.0
+## Share of Spine_01's turn counter-rotated on Neck so the head stays level.
+const NECK_KEEP := 0.55
 const STOOP_DROP := 0.6
 const HIP_BACK_M := 0.2
 ## A stoop aims the shoulder this much of the arm's full reach from its target.
@@ -117,8 +123,15 @@ func _process_modification_with_delta(_delta: float) -> void:
 	low.origin.z -= hips_by.y
 	skeleton.set_bone_global_pose(hips, low)
 	var back := skeleton.get_bone_global_pose(spine)
-	back.basis = turn(pivot, aim_at, bent) * back.basis
+	var spin := turn(pivot, aim_at, bent)
+	back.basis = spin * back.basis
 	skeleton.set_bone_global_pose(spine, back)
+	var neck := skeleton.find_bone("Neck")
+	if neck >= 0:
+		var head := skeleton.get_bone_global_pose(neck)
+		head.basis = turn(pivot, aim_at, -bent * NECK_KEEP) * head.basis
+		skeleton.set_bone_global_pose(neck, head)
+	_hang_free_arms(skeleton, bent)
 	for i in LEGS.size():
 		_plant(skeleton, LEGS[i], feet[i])
 
@@ -158,13 +171,50 @@ static func solved(
 	return Vector2(with, with).lerp(first, clampf(back_first, 0.0, 1.0))
 
 
+## Relaxes any free inactive arm toward gravity so stooping does not fling it
+## sideways into the air along with Spine_03.
+func _hang_free_arms(skeleton: Skeleton3D, bent: float) -> void:
+	if bent <= 0.01:
+		return
+	for child in skeleton.get_children():
+		if not (child is CarryArm):
+			continue
+		var arm := child as CarryArm
+		if arm.active:
+			continue
+		if arm.side in sides:
+			continue
+		var bone := skeleton.find_bone(CarryArm.ARM_BONES[arm.side])
+		if bone < 0:
+			continue
+		var pose := skeleton.get_bone_global_pose(bone)
+		var outward := -1.0 if arm.side == 0 else 1.0
+		var down := Vector3(outward * 0.14, -1.0, 0.14).normalized()
+		pose.basis = CarryArm._pointed(pose.basis, down, bent * 0.85)
+		skeleton.set_bone_global_pose(bone, pose)
+
+
 ## The turn of the back at stoop `s` (0 to 1), toward `target` from `pivot`
-## (the Spine_01 bone), about the level axis across that direction.
+## (the Spine_01 bone), about the level axis across that direction. Deep floor
+## reaches in front/beside the body (at least 0.35 m below Spine_01 and not
+## behind it) cap lateral deviation within MAX_SIDE_DEGREES of forward (+Z) so
+## the torso pitches forward instead of rolling 45+ deg sideways; shallow
+## waist/tray reaches preserve cross-body and behind-shoulder reach.
 static func turn(pivot: Vector3, target: Vector3, s: float) -> Basis:
 	var toward := target - pivot
 	toward.y = 0.0
-	toward = toward.normalized() if toward.length() > 0.001 else Vector3.BACK
-	return Basis(Vector3.UP.cross(toward).normalized(), deg_to_rad(STOOP_DEGREES) * s)
+	if toward.length() <= 0.001:
+		return Basis(Vector3.UP.cross(Vector3.BACK).normalized(), deg_to_rad(STOOP_DEGREES) * s)
+	var deep_ahead := target.y < pivot.y * 0.55 and toward.z >= -0.05
+	if not deep_ahead:
+		var axis := Vector3.UP.cross(toward.normalized()).normalized()
+		return Basis(axis, deg_to_rad(STOOP_DEGREES) * s)
+	var raw := (
+		atan2(toward.x, maxf(toward.z, 0.0)) if toward.z > 0.001 else signf(toward.x) * PI * 0.5
+	)
+	var yaw := deg_to_rad(MAX_SIDE_DEGREES) * sin(clampf(raw, -PI * 0.5, PI * 0.5))
+	var capped := Vector3(sin(yaw), 0.0, cos(yaw))
+	return Basis(Vector3.UP.cross(capped).normalized(), deg_to_rad(STOOP_DEGREES) * s)
 
 
 ## Where `shoulder` is at stoop `s`: the back turned about `pivot` toward

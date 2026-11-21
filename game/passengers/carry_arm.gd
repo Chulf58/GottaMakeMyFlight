@@ -61,12 +61,15 @@ const LOOP_THUMB_BONE := "Thumb_Tip"
 ## How far the arm has turned from its side pose (0) to the front carry (1).
 @export var front_weight := 0.0
 ## Front carry: the upper arm's angle forward from hanging straight down.
-@export var front_upper_degrees := 20.0
+@export var front_upper_degrees := 12.0
 ## Front carry: how far from the centre line the hand ends, and the forearm's
 ## angle up from level toward the hand (below level: higher at the elbow, clear
 ## of the bag lying under the hand).
 @export var front_half_width := 0.1
-@export var front_up_degrees := -10.0
+@export var front_up_degrees := -20.0
+## How much (0 to 1) a hand holding a case or pulling a roller bar curls its
+## fingers around the grip instead of hanging straight open.
+@export var grip_curl := 0.0
 ## A hand-led bag move (CarryLead): how far (0 to 1) the arm turns from the
 ## pose above to reach reach_target (world) with its grip (CarryOnProps.
 ## grip_of: GRIP_ALONG_M past the Fingers bone), wrist straight, elbow out.
@@ -143,6 +146,8 @@ func _process_modification_with_delta(_delta: float) -> void:
 		skeleton.set_bone_global_pose(bones[i], chain[i])
 	if loop_grip and reach > 0.0:
 		_loop_fingers(skeleton, reach)
+	elif grip_curl > 0.0 and holds:
+		_grip_fingers(skeleton, grip_curl, reach)
 
 
 ## A hand over a backpack's grab loop (loop_grip): its fingers and thumb turned
@@ -171,6 +176,32 @@ func _loop_fingers(skeleton: Skeleton3D, weight: float) -> void:
 			rest = rest * _bend(bends[name])
 		var now := skeleton.get_bone_pose_rotation(bone)
 		skeleton.set_bone_pose_rotation(bone, now.slerp(rest, weight))
+
+
+## Closes Fingers/Thumb smoothly around a carried handle or pull bar when `holds`.
+## Child digits (Fingertips, Thumb) close even during IK reach without shifting grip_of().
+func _grip_fingers(skeleton: Skeleton3D, weight: float, reach := 0.0) -> void:
+	if weight <= 0.0:
+		return
+	var suffix: String = [".R", ".L"][side]
+	var bends := {
+		LOOP_CURL_BONE: 65.0,
+		LOOP_HOOK_BONE: 75.0,
+		LOOP_FOLD_BONE: -45.0,
+		LOOP_THUMB_BONE: -60.0,
+	}
+	for name in LOOP_FINGERS:
+		var w := weight * (1.0 - reach) if name == LOOP_CURL_BONE else weight
+		if w <= 0.0:
+			continue
+		var bone := skeleton.find_bone(name + suffix)
+		if bone < 0:
+			continue
+		var rest := skeleton.get_bone_rest(bone).basis.get_rotation_quaternion()
+		if bends.has(name):
+			rest = rest * _bend(bends[name])
+		var now := skeleton.get_bone_pose_rotation(bone)
+		skeleton.set_bone_pose_rotation(bone, now.slerp(rest, w))
 
 
 ## The loop hand's bends from rest (degrees) by bone name: LOOP_CURL_BONE,
@@ -236,7 +267,7 @@ func _reach(skeleton: Skeleton3D, chain: Array[Transform3D], outward: float) -> 
 		elbow.distance_to(shoulder),
 		grip.distance_to(elbow),
 		target,
-		Vector3(outward, 0.0, -0.5)
+		Vector3(outward, -0.30, -0.5)
 	)
 	var arm := chain[0]
 	var fore_in_arm := arm.affine_inverse() * chain[1]
@@ -283,12 +314,20 @@ func _reach_wrist(
 ) -> Array[Transform3D]:
 	var shoulder := chain[0].origin
 	var elbow := chain[1].origin
+	var skel_scale := skeleton.global_transform.basis.get_scale().x
+	# Keep loop-reaching wrist outside the shoulder line and clear of Spine_03 so
+	# putting a pack on the back never twists the upper arm behind the torso.
+	var min_side := absf(shoulder.x) + 0.01 / skel_scale
+	var min_z := shoulder.z - 0.05 / skel_scale
+	var clamped := wrist
+	if clamped.z < shoulder.z + 0.02 / skel_scale:
+		if clamped.x * outward < min_side:
+			clamped.x = outward * min_side
+		if clamped.z < min_z:
+			clamped.z = min_z
+	var pole := LOOP_POLE * Vector3(outward, 1.0, 1.0)
 	var joints := CarryStoop.two_bone(
-		shoulder,
-		elbow.distance_to(shoulder),
-		chain[2].origin.distance_to(elbow),
-		wrist,
-		LOOP_POLE * Vector3(outward, 1.0, 1.0)
+		shoulder, elbow.distance_to(shoulder), chain[2].origin.distance_to(elbow), clamped, pole
 	)
 	var arm := chain[0]
 	var fore_in_arm := arm.affine_inverse() * chain[1]

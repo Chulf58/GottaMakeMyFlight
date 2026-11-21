@@ -279,7 +279,9 @@ static func _stamp(
 	# for its ParkWalls backstop (RollerPark.plan()), as a seat's park does.
 	if RollerPark.queued(bag) and props.sim != null:
 		var stood := RollerPark.queue_frame_of(bag, body.global_transform).origin
-		bag["queue_walls"] = PullSide.walls_near(props.sim.grid, stood)
+		var boxes := PullSide.walls_near(props.sim.grid, stood)
+		boxes.append_array(PullSide.desks_near(props.sim.grid, stood))
+		bag["queue_walls"] = boxes
 	bag["home"] = bag["place"]
 	bag["reach_from"] = props._reach_of(node, kind)
 	# A roller between its bar and its carry handle changes grip hand to hand.

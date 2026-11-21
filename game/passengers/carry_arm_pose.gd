@@ -13,7 +13,7 @@ const FRONT_TWO_BAGS_M := 0.17
 const FRONT_FREE_HAND_M := 0.33
 ## How much further forward the holding upper arm reaches half way through a
 ## turn between the side and the front carry (pose_arms).
-const TURN_REACH_DEGREES := 45.0
+const TURN_REACH_DEGREES := 28.0
 ## The strap hand: at the chest just inside the strap (so the forearm stays
 ## clear of the strap), this far from the centre line, the forearm raised this
 ## much.
@@ -124,6 +124,14 @@ static func pose_arms(props: CarryOnProps, held: Dictionary, body: Node3D, now: 
 					modes[side] = Arm.STRAP
 					strap[side] = on
 	# The arms keep what was set until it changes (most frames nothing does).
+	var pull_tuck := [0.0, 0.0]
+	for i in homes.size():
+		if (
+			homes[i] == SecurityLooks.Home.HAND
+			and held["bags"][i].get("carry") == SecurityLooks.Carry.PULL
+		):
+			var side: int = held["hands"][i]
+			pull_tuck[side] = maxf(pull_tuck[side], RollerPull.tuck_weight(held["bags"][i], now))
 	var tuck: float = held.get("tuck_weight", 0.0)
 	var tucked: bool = held.get("tuck", false)
 	var reach_on: Array = held.get("reach_on", [false, false])
@@ -141,6 +149,7 @@ static func pose_arms(props: CarryOnProps, held: Dictionary, body: Node3D, now: 
 		held["weight"],
 		tuck,
 		tucked,
+		pull_tuck,
 		reach_on,
 		swaps,
 		outs,
@@ -154,7 +163,9 @@ static func pose_arms(props: CarryOnProps, held: Dictionary, body: Node3D, now: 
 	var arms: Array = props._rig(body)["arms"]
 	for side in arms.size():
 		var arm := arms[side] as CarryArm
-		arm.holds = modes[side] == Arm.HAND or modes[side] == Arm.PULL or shoulder_holds[side]
+		var pulling: bool = modes[side] == Arm.PULL
+		arm.holds = modes[side] == Arm.HAND or pulling or shoulder_holds[side]
+		arm.grip_curl = 1.0 if modes[side] == Arm.HAND or shoulder_holds[side] else 0.0
 		arm.active = (
 			modes[side] != Arm.FREE
 			or cases > 0
@@ -162,8 +173,8 @@ static func pose_arms(props: CarryOnProps, held: Dictionary, body: Node3D, now: 
 			or reach_on[side]
 			or shoulder_opp_clear[side] > 0.0
 		)
-		var pulling: bool = modes[side] == Arm.PULL
-		arm.angle_degrees = PULL_OUT_DEGREES if pulling else outs[side]
+		var pull_out := lerpf(PULL_OUT_DEGREES, 2.0, pull_tuck[side])
+		arm.angle_degrees = pull_out if pulling else outs[side]
 		arm.swing_kept = PULL_SWING_KEPT if pulling else 0.5 * (1.0 - still)
 		arm.lean_back_degrees = PULL_LEAN_DEGREES if pulling else 0.0
 		arm.front_upper_degrees = 0.0 if modes[side] == Arm.STRAP else 20.0
@@ -177,15 +188,19 @@ static func pose_arms(props: CarryOnProps, held: Dictionary, body: Node3D, now: 
 			Arm.HAND:
 				arm.front_half_width = FRONT_ONE_BAG_M if cases < 2 else FRONT_TWO_BAGS_M
 				arm.front_weight = held["weight"]
+				arm.front_up_degrees = -20.0
 				# Turning between the side and the front, the upper arm reaches
 				# further forward (most at half way, none at either end), so the
 				# turning bag passes ahead of the thighs.
 				var w: float = held["weight"]
-				arm.front_upper_degrees = 20.0 + TURN_REACH_DEGREES * 4.0 * w * (1.0 - w)
+				arm.front_upper_degrees = 12.0 + TURN_REACH_DEGREES * 4.0 * w * (1.0 - w)
 			_:
 				# Beside a front-carried case, tucked in through a booth, or held
 				# clear at the hip while a tray shoulder bag sweeps across the front.
 				var opp_w: float = shoulder_opp_clear[side]
+				if beside > 0:
+					arm.front_upper_degrees = -6.0
+					arm.front_up_degrees = -52.0
 				if beside == 0 and not tucked and opp_w > 0.0:
 					var base_w := tuck * (1.0 - opp_w)
 					var total_w := base_w + opp_w
@@ -281,7 +296,9 @@ static func unpack_still(held: Dictionary, now: float) -> float:
 static func walk_share(held: Dictionary, body: Node3D) -> float:
 	var clip: String = body.get_meta(&"clip", "")
 	var walking := 1.0 if clip == "walk" else 0.0
-	var fade := body.get_meta(&"crossfade", null) as ClipCrossfade
+	var fade := (
+		(body.get_meta(&"crossfade") as ClipCrossfade) if body.has_meta(&"crossfade") else null
+	)
 	var share := walking
 	if fade != null and fade.blending():
 		if held.get("walk_clip", clip) != clip:
@@ -337,6 +354,7 @@ static func arms_off(props: CarryOnProps, body: Node3D) -> void:
 	var rig := props._rig(body)
 	for arm: CarryArm in rig["arms"]:
 		arm.active = false
+		arm.holds = false
 		arm.front_weight = 0.0
 		arm.rest_twist_weight = 0.0
 		arm.reach_weight = 0.0
