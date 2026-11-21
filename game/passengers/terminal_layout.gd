@@ -112,6 +112,14 @@ static func front_of(facing: int) -> Vector2i:
 	return BuildObjectDef.rotate_offset(Vector2i(0, 1), facing)
 
 
+## Outward seat-front step for `def_id` at `facing`: `seat_row` opens toward
+## +Z at facing 0, while `bench_1a` (1x3) has its backrest on +X and opens -X.
+static func seat_front_of(def_id: StringName, facing: int) -> Vector2i:
+	if def_id == &"bench_1a":
+		return BuildObjectDef.rotate_offset(Vector2i(-1, 0), facing)
+	return front_of(facing)
+
+
 func rebuild(grid: BuildGrid) -> void:
 	desks.clear()
 	scanners.clear()
@@ -161,7 +169,7 @@ func rebuild(grid: BuildGrid) -> void:
 					passenger_entrances.append(id)
 			&"exit_door":
 				exits.append(id)
-			&"seat_row":
+			&"seat_row", &"bench_1a":
 				_add_seats(grid, id)
 	var taken := {}
 	for id in ids:
@@ -488,11 +496,15 @@ static func _eligible_passage(grid: BuildGrid, cells: Array) -> Array[Vector2i]:
 
 func _add_seats(grid: BuildGrid, id: int) -> void:
 	var record := grid.get_object(id)
-	var def := BuildCatalog.get_def(record["def"])
+	var def_id := StringName(record["def"])
+	var def := BuildCatalog.get_def(def_id)
 	var facing: int = record["facing"]
 	var cells := def.footprint(record["anchor"], facing)
+	var front_step := seat_front_of(def_id, facing)
 	for i in cells.size():
-		var front := cells[i] + front_of(facing)
+		if not GateChairs.has_chair(def_id, i):
+			continue
+		var front := cells[i] + front_step
 		if grid.is_passenger_cell(front):
 			seats.append(
 				{

@@ -11,6 +11,37 @@ extends RefCounted
 ## axis at facing 0, by footprint index.
 ## GateRoller.slide() and GateRelocation.valid() read the size and the values.
 const CHAIR_OFFSET_M: Array[float] = [0.08, 0.0, -0.08]
+## Seat indices and local 2D offsets (x across, y along +Z at facing 0) for a
+## bench_1a (1x3 footprint, mesh z in [-0.96, 0.98], backrest +X, open front -X):
+## two seats on the outer cells (0 and 2), shifted 0.50 m inward so both sit
+## symmetrically centered inside the bench slats 1.00 m apart.
+const BENCH_CHAIRS := {
+	0: Vector2(0.0, 0.50),
+	2: Vector2(0.0, -0.50),
+}
+
+
+## Whether `def_id` is a gate seating piece (`seat_row` or `bench_1a`).
+static func is_gate_seat_def(def_id: StringName) -> bool:
+	return def_id == &"seat_row" or def_id == &"bench_1a"
+
+
+## Whether footprint index `index` of `def_id` holds a gate chair.
+static func has_chair(def_id: StringName, index: int) -> bool:
+	if def_id == &"bench_1a":
+		return BENCH_CHAIRS.has(index)
+	if def_id == &"seat_row":
+		return index >= 0 and index < CHAIR_OFFSET_M.size()
+	return false
+
+
+## Local 2D offset from footprint cell `index`'s centre to its chair at facing 0.
+static func chair_offset(def_id: StringName, index: int) -> Vector2:
+	if def_id == &"bench_1a":
+		return BENCH_CHAIRS.get(index, Vector2.ZERO)
+	if def_id == &"seat_row" and index >= 0 and index < CHAIR_OFFSET_M.size():
+		return Vector2(CHAIR_OFFSET_M[index], 0.0)
+	return Vector2.ZERO
 
 
 ## The sideways step from the sim's position to the chair, turned with the
@@ -44,12 +75,12 @@ static func seated_step(sim: PassengerSim, p: Passenger) -> Vector3:
 		return Vector3.ZERO
 	var def := BuildCatalog.get_def(record["def"])
 	var index := def.footprint(record["anchor"], record["facing"]).find(p.seat_cell)
-	if index < 0 or index >= CHAIR_OFFSET_M.size():
+	if not has_chair(def.id, index):
 		push_error("passenger %d seat cell %s is not a chair cell" % [p.id, p.seat_cell])
 		return Vector3.ZERO
 	var front := sim.grid.cell_to_world(p.seat_front)
 	var seat := sim.grid.cell_to_world(p.seat_cell)
-	var side := BuildObjectDef.rotate_point(Vector2(CHAIR_OFFSET_M[index], 0.0), record["facing"])
+	var side := BuildObjectDef.rotate_point(chair_offset(def.id, index), record["facing"])
 	# The body's own step forward and up, clear of the chair (SEAT_SHIFT_M).
 	var shift := PassengerLooks.SEAT_SHIFT_M[PassengerLooks.body_of(p.id, p.variant)]
 	var ahead := (front - seat).normalized() * shift.x + Vector3.UP * shift.y

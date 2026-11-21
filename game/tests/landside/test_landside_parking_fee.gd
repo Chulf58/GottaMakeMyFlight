@@ -112,6 +112,31 @@ func test_one_parking_credit_per_parked_car_counted_in_the_day_ledger() -> void:
 	assert_int(ledger.operating_result()).is_equal(parked.size() * LandsideSim.SURFACE_LOT_FEE)
 
 
+func test_multi_storey_credits_higher_fee_than_surface_lot() -> void:
+	_a = LandsideTestWorld.make(null, [], SEED)
+	var multi_spot := -1
+	for i in _a.landside.definition.lots.size():
+		if _a.landside.definition.lots[i].kind == LandsideLotSpot.Kind.MULTI_STOREY:
+			multi_spot = i
+			break
+	assert_int(multi_spot).is_greater_equal(0)
+	assert_bool(_a.landside.build_lot(multi_spot)).is_true()
+	_watch(_a)
+	var parked := []
+	_a.landside.parked.connect(func(id: int, lot: int) -> void: parked.append([id, lot]))
+	_a.schedule(BOOKED)
+	var doors := _a.world.flights.doors_close_tick(PassengerTestWorld.FLIGHT)
+	while _a.released.size() < BOOKED and _a.sim.tick < doors:
+		_a.step()
+	var credits: Array = _credits[_a]
+	assert_int(LandsideSim.MULTI_STOREY_FEE).is_greater(LandsideSim.SURFACE_LOT_FEE)
+	assert_int(parked.size()).is_greater(0)
+	assert_int(credits.size()).is_equal(parked.size())
+	for credit in credits:
+		assert_int(credit[1]).is_equal(LandsideSim.MULTI_STOREY_FEE)
+	assert_int(_a.sim.wallet.balance).is_equal(parked.size() * LandsideSim.MULTI_STOREY_FEE)
+
+
 func test_a_load_credits_nothing_and_then_credits_what_the_unsaved_world_does() -> void:
 	_a = _world()
 	_a.schedule(BOOKED)

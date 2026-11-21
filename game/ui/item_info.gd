@@ -132,9 +132,7 @@ func texts(tool: BuildMode.Tool) -> Array:
 		BuildMode.Tool.COUNTER:
 			lines = [
 				tr("The cafe counter, where guests order."),
-				tr(
-					"Place it inside a cafe, bar, restaurant or grab-and-go stall. A server stands there."
-				),
+				tr("Place it inside a cafe or restaurant. A server stands there."),
 				tr(
 					"Wholly inside the room. Shop staff hired in Staff, and the spot in front clear."
 				),
@@ -143,7 +141,9 @@ func texts(tool: BuildMode.Tool) -> Array:
 			lines = [
 				tr("A table with a seat at each end. Cafe guests sit here to eat."),
 				tr("It seats two. A guest walks from the counter to a free seat."),
-				tr("Inside a cafe, bar or restaurant. A grab-and-go stall needs none."),
+				tr(
+					"Inside a cafe. A bar uses bar counters, and a restaurant uses dining tables or booths."
+				),
 			]
 		BuildMode.Tool.TOILET_ROOM:
 			lines = [
@@ -258,17 +258,15 @@ func texts(tool: BuildMode.Tool) -> Array:
 				tr(
 					"Marks floor as a bar. Guests stay longer than in a cafe, spend more, and gain most mood."
 				),
-				tr("Guests order at a bar counter or a cafe counter and sit at a cafe table."),
-				tr("At least 3x4, with a counter and a table. Shop staff serve at the counter."),
+				tr("Guests order at a bar counter and sit on its stools."),
+				tr("At least 3x4, with a bar counter. Shop staff serve at the counter."),
 			]
 		BuildMode.Tool.RESTAURANT_ROOM:
 			lines = [
 				tr(
 					"Marks floor as a sit-down restaurant. Guests stay the longest and spend the most."
 				),
-				tr(
-					"Guests order at a cafe counter and sit at a dining table, a booth or a cafe table."
-				),
+				tr("Guests order at a cafe counter and sit at a dining table or a booth."),
 				tr(
 					"At least 4x4, with a counter and a table or booth. Shop staff serve at the counter."
 				),
@@ -278,7 +276,7 @@ func texts(tool: BuildMode.Tool) -> Array:
 				tr(
 					"Marks floor as a grab-and-go stall. Guests buy, pay and walk on, with no seat."
 				),
-				tr("It needs only a grab stall or a cafe counter. A server hands over the order."),
+				tr("It needs only a grab-and-go stall. A server hands over the order."),
 				tr(
 					"At least 3x3, with a counter. Shop staff serve. It earns the least of the food rooms."
 				),
@@ -361,7 +359,9 @@ func texts(tool: BuildMode.Tool) -> Array:
 			]
 		BuildMode.Tool.MULTI_STOREY:
 			lines = [
-				tr("A big car park with 31 spaces. A car pays a fee when it parks."),
+				tr(
+					"A big car park with 31 spaces. A car pays a higher fee than a surface lot when it parks."
+				),
 				tr("Click a marked spot. Passengers walk from the car park to an entrance."),
 				tr("Marked spots only. Close it to let it drain before you remove it."),
 			]
@@ -437,9 +437,9 @@ func texts(tool: BuildMode.Tool) -> Array:
 			]
 		BuildMode.Tool.BENCH:
 			lines = [
-				tr("A bench. It calms passengers right next to it, a little."),
+				tr("A bench. It seats two waiting passengers and calms passengers nearby."),
 				tr(
-					"Passengers do not sit on it. Calm becomes mood, and a wall between them blocks it."
+					"Gate passengers sit on it. Calm becomes mood, and a wall between them blocks it."
 				),
 				tr("No upkeep. It earns nothing."),
 			]
@@ -466,7 +466,7 @@ func texts(tool: BuildMode.Tool) -> Array:
 		BuildMode.Tool.POST:
 			lines = [
 				tr("A metal post. Passengers cannot walk through it."),
-				tr("Use posts and chains to steer a queue. They give no calm."),
+				tr("Use posts and chains to steer a queue. They give a little calm nearby."),
 				tr("No upkeep. It earns nothing."),
 			]
 		BuildMode.Tool.CHAIN:
@@ -474,7 +474,7 @@ func texts(tool: BuildMode.Tool) -> Array:
 				tr(
 					"A chain between two posts, three cells long. Passengers cannot walk through it."
 				),
-				tr("Use posts and chains to steer a queue. They give no calm."),
+				tr("Use posts and chains to steer a queue. They give a little calm nearby."),
 				tr("No upkeep. It earns nothing."),
 			]
 		BuildMode.Tool.BIN:

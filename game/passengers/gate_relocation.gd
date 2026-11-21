@@ -102,14 +102,14 @@ static func valid(p: Passenger) -> bool:
 		return p.seat_piece.is_empty() and not p.seat_exiting
 	if p.seat_piece.is_empty() or p.seat_cell == Passenger.NO_CELL:
 		return false
-	if p.seat_piece["def"] != &"seat_row":
+	if not GateChairs.is_gate_seat_def(p.seat_piece["def"]):
 		return false
 	var def := BuildCatalog.get_def(p.seat_piece["def"])
 	var cells := def.footprint(p.seat_piece["anchor"], p.seat_piece["facing"])
 	var index := cells.find(p.seat_cell)
-	if index < 0 or index >= GateChairs.CHAIR_OFFSET_M.size():
+	if not GateChairs.has_chair(def.id, index):
 		return false
-	if p.seat_front != p.seat_cell + TerminalLayout.front_of(p.seat_piece["facing"]):
+	if p.seat_front != p.seat_cell + TerminalLayout.seat_front_of(def.id, p.seat_piece["facing"]):
 		return false
 	return p.stage == Passenger.Stage.STANDING_UP or not p.seat_exiting
 
@@ -139,10 +139,12 @@ static func piece_from_record(data: Variant) -> Variant:
 	var record: Dictionary = data
 	if record.is_empty():
 		return {}
+	var def_name: Variant = record.get("def")
 	var anchor: Variant = record.get("anchor")
 	var ok: bool = (
 		record.size() == 3
-		and record.get("def") == "seat_row"
+		and typeof(def_name) == TYPE_STRING
+		and GateChairs.is_gate_seat_def(StringName(def_name))
 		and typeof(anchor) == TYPE_ARRAY
 		and anchor.size() == 2
 		and WholeNumber.is_whole(anchor[0])
@@ -154,7 +156,7 @@ static func piece_from_record(data: Variant) -> Variant:
 	if not ok:
 		return null
 	return {
-		"def": &"seat_row",
+		"def": StringName(def_name),
 		"anchor": Vector2i(int(anchor[0]), int(anchor[1])),
 		"facing": int(record["facing"]),
 	}

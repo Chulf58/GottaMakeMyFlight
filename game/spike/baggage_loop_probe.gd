@@ -169,6 +169,8 @@ func _boot() -> void:
 				staff.hire(StaffMember.Role.CHECKIN)
 			&"security_scanner":
 				staff.hire(StaffMember.Role.SECURITY)
+			&"gate_desk":
+				staff.hire(StaffMember.Role.GATE)
 	print(
 		(
 			"PROBE connected=%s desk1=%d staff=%d"

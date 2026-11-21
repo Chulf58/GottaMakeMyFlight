@@ -102,10 +102,10 @@ static func reach(look: int, hand: int, scale_by := 1.0, slide_m := 0.0) -> floa
 
 ## How far to the left (m, + the left hand's side of a guest at the front
 ## facing out of the chair; - the right) the chair of seat cell `seat` lies
-## from its front `front` across, in the seat row placed as `piece`
-## (Relocation.placement()): GateChairs.CHAIR_OFFSET_M turned with the row,
+## from its front `front` across, in the gate seating piece placed as `piece`
+## (Relocation.placement()): GateChairs.chair_offset() turned with the piece,
 ## the step GateChairs.offset() draws the shuffle with. 0 for no piece, a cell
-## outside its footprint or no front.
+## outside its chairs or no front.
 static func slide(piece: Dictionary, seat: Vector2i, front: Vector2i) -> float:
 	if piece.is_empty() or seat == Passenger.NO_CELL or front == Passenger.NO_CELL:
 		return 0.0
@@ -113,11 +113,9 @@ static func slide(piece: Dictionary, seat: Vector2i, front: Vector2i) -> float:
 	if def == null:
 		return 0.0
 	var index := def.footprint(piece["anchor"], piece["facing"]).find(seat)
-	if index < 0 or index >= GateChairs.CHAIR_OFFSET_M.size():
+	if not GateChairs.has_chair(def.id, index):
 		return 0.0
-	var step := BuildObjectDef.rotate_point(
-		Vector2(GateChairs.CHAIR_OFFSET_M[index], 0.0), piece["facing"]
-	)
+	var step := BuildObjectDef.rotate_point(GateChairs.chair_offset(def.id, index), piece["facing"])
 	var out := front - seat
 	var left := Basis(Vector3.UP, atan2(out.x, out.y)).x
 	return Vector3(step.x, 0.0, step.y).dot(left)

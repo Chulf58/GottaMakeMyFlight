@@ -7,7 +7,7 @@ extends RefCounted
 ## queuing and sitting. Rebuilt after every grid edit, after TerminalLayout.
 ##
 ## A cafe is a ready food room (RoomRules; RoomType.food: a cafe, bar,
-## restaurant or stall; each takes its own pieces and the cafe's). Its counters
+## restaurant or stall; each takes only the pieces listed on its RoomType). Its counters
 ## are the RoomType.counter_pieces RoomRules counts for it; each has a fixed
 ## lane from its order spot (slot 0) straight out along its front, up to
 ## LANE_SLOTS cells, stopping at a closed step, a station lane, another

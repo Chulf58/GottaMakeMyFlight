@@ -4,8 +4,8 @@ extends RefCounted
 ## copenhagen-airport-decor-calms-pas and all-11-exported-decor-models-are-
 ## placeable-plants-trees-foun). Each decor piece in TABLE has a calm value and
 ## a radius in cells; the bigger pieces (fountain, statue, tree) have both
-## higher. The bin, the posts and the chain give nothing, and the bush
-## and benches give the least. A bin or a bag room in view takes calm back, and
+## higher. The bin gives nothing, and the bush, posts, chain and benches give
+## the least. A bin or a bag room in view takes calm back, and
 ## where that outweighs the decor it drains mood (BackOfHouseView).
 ##
 ## A passenger who is inside the terminal and stands within a piece's radius
@@ -35,8 +35,8 @@ const TABLE := {
 	&"bench_1a": Vector2i(1, 1),
 	&"bush": Vector2i(1, 1),
 	&"trash_can": Vector2i.ZERO,
-	&"metal_pole": Vector2i.ZERO,
-	&"metal_pole_chain": Vector2i.ZERO,
+	&"metal_pole": Vector2i(1, 1),
+	&"metal_pole_chain": Vector2i(1, 1),
 }
 ## A slow nudge: a fountain's 3 points in 10 beats is 0.3 mood a second, small
 ## beside a queue's loss of 1 a second and a gate seat's gain of 1 a second.

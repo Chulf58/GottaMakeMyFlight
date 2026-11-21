@@ -114,8 +114,9 @@ const OBJECT_PRICES := {
 ## surface-lot-and-an-expensive; Landside 3/4). Tuning values, to be checked in
 ## a playtest: a curb bay (two berths) costs about a cafe table, a surface lot
 ## (12 spaces) about three check-in desks, a multi-storey (31 spaces) about four
-## times a lot. A car pays SURFACE_LOT_FEE once when it parks, so a lot earns
-## its price back after about 60 cars.
+## times a lot. A car pays SURFACE_LOT_FEE or MULTI_STOREY_FEE once when it
+## parks, so a surface lot earns its price back after about 60 cars and a
+## multi-storey after about 143 cars.
 const LANDSIDE_PRICES := {
 	&"curb_bay": 300,
 	&"surface_lot": 1200,

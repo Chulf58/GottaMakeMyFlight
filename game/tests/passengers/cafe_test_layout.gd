@@ -34,12 +34,17 @@ static func build(
 	extra_tables := false,
 	venue: StringName = &"cafe",
 	tables := true,
-	counter_def: StringName = &"cafe_counter",
-	table_def: StringName = &"cafe_table"
+	counter_def: StringName = &"",
+	table_def: StringName = &""
 ) -> Dictionary:
 	var built := ReferenceTerminal.build(grid)
 	assert(built, "reference terminal refused")
 	var at := ReferenceTerminal.offset_on(grid)
+	var type := RoomTypes.get_type(venue)
+	var counter := counter_def if counter_def != &"" else type.counter_pieces[0]
+	var table := table_def
+	if table == &"":
+		table = type.table_pieces[0] if not type.table_pieces.is_empty() else &"cafe_table"
 	var edits: Array[BuildEdit] = []
 	for y in range(FLOOR.position.y, FLOOR.end.y):
 		for x in range(FLOOR.position.x, FLOOR.end.x):
@@ -56,17 +61,17 @@ static func build(
 	var ids := {
 		"air_room": _apply(grid, BuildEdit.place_room(_moved(AIRSIDE_ROOM, at), venue)).room_id,
 		"land_room": _apply(grid, BuildEdit.place_room(_moved(LANDSIDE_ROOM, at), venue)).room_id,
-		"air_counter": _place(grid, counter_def, AIR_COUNTER + at),
-		"land_counter": _place(grid, counter_def, LAND_COUNTER + at),
+		"air_counter": _place(grid, counter, AIR_COUNTER + at),
+		"land_counter": _place(grid, counter, LAND_COUNTER + at),
 	}
-	var dining := BuildCatalog.get_def(table_def).size.y == 3
+	var dining := BuildCatalog.get_def(table).size.y == 3
 	var shift := DINING_OFFSET if dining else Vector2i.ZERO
 	if tables:
-		ids["air_table"] = _place(grid, table_def, AIR_TABLE + shift + at)
-		ids["land_table"] = _place(grid, table_def, LAND_TABLE + shift + at)
+		ids["air_table"] = _place(grid, table, AIR_TABLE + shift + at)
+		ids["land_table"] = _place(grid, table, LAND_TABLE + shift + at)
 	if extra_tables and tables and not dining:
-		ids["air_table_2"] = _place(grid, &"cafe_table", AIR_TABLE_2 + at)
-		ids["land_table_2"] = _place(grid, &"cafe_table", LAND_TABLE_2 + at)
+		ids["air_table_2"] = _place(grid, table, AIR_TABLE_2 + at)
+		ids["land_table_2"] = _place(grid, table, LAND_TABLE_2 + at)
 	return ids
 
 

@@ -1125,8 +1125,12 @@ func _pose(node: Node3D, p: Passenger, built: Dictionary) -> float:
 	var works := SecurityLooks.face(sim, p)
 	node.set_meta(&"faces", works != Vector2.ZERO)
 	if at_gate:
-		var facing: int = sim.grid.get_object(p.seat_object).get("facing", 0)
-		var front := TerminalLayout.front_of(facing)
+		var chair := sim.grid.get_object(p.seat_object)
+		var front := (
+			TerminalLayout.seat_front_of(chair.get("def", &""), chair.get("facing", 0))
+			if not chair.is_empty()
+			else p.seat_front - p.seat_cell
+		)
 		face = atan2(front.x, front.y)
 	elif at_cafe:
 		var looks := sim.cafes.seat_facing(p)

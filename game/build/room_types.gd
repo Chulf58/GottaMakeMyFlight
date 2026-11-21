@@ -35,12 +35,12 @@ class RoomType:
 	## the sit-down restaurant and the grab-and-go stall): all four share the
 	## visit and differ in the numbers below and in the pieces they use.
 	var food := false
-	## A food room's counter and table pieces, its own piece first (it is the
-	## required one, the note names it) and then the cafe's, which a food room
-	## still accepts. The table pieces are every piece guests sit at, so the
-	## bar's include its bar counter (two stools), after the cafe table that
-	## the "Needs a table" note names. Empty for a room that is not food; a
-	## walk-on room has no table pieces.
+	## A food room's accepted counter and table pieces, its own piece first (what
+	## the missing-piece note names): stall takes grab_and_go_stall only; bar
+	## takes bar_counter only (bar_counter also holds its two stools); cafe takes
+	## cafe_counter and cafe_table; restaurant takes cafe_counter as its kitchen
+	## counter and restaurant_table or restaurant_booth for seating. Empty for a
+	## room that is not food; a walk-on room has no table pieces.
 	var counter_pieces: Array[StringName] = []
 	var table_pieces: Array[StringName] = []
 	## Whether a food room serves guests at the counter and lets them walk on
@@ -91,7 +91,8 @@ class RoomType:
 const CAFE_ORDER_TICKS := 60
 const CAFE_DWELL_TICKS := 120
 const CAFE_MOOD_BONUS := 10
-## The cafe's counter and table, accepted by every food room that has them.
+## The cafe's counter and table (restaurant also uses CAFE_COUNTER as its kitchen
+## counter; bar and stall take only their own tier pieces).
 const CAFE_COUNTER: StringName = &"cafe_counter"
 const CAFE_TABLE: StringName = &"cafe_table"
 
@@ -156,25 +157,17 @@ static func _build() -> void:
 	# causes a miss. All numbers are tuning values
 	# pinned by tests.
 	_add_food(
-		&"stall",
-		"Grab-and-go stall",
-		Vector2i(3, 3),
-		[8, 30, 0, 5],
-		[[&"grab_and_go_stall", CAFE_COUNTER], []]
+		&"stall", "Grab-and-go stall", Vector2i(3, 3), [8, 30, 0, 5], [[&"grab_and_go_stall"], []]
 	)
 	_add_food(
-		&"bar",
-		"Bar",
-		Vector2i(3, 4),
-		[24, 80, 200, 20],
-		[[&"bar_counter", CAFE_COUNTER], [CAFE_TABLE, &"bar_counter"]]
+		&"bar", "Bar", Vector2i(3, 4), [24, 80, 200, 20], [[&"bar_counter"], [&"bar_counter"]]
 	)
 	_add_food(
 		&"restaurant",
 		"Restaurant",
 		Vector2i(4, 4),
 		[40, 120, 360, 15],
-		[[CAFE_COUNTER], [&"restaurant_table", &"restaurant_booth", CAFE_TABLE]]
+		[[CAFE_COUNTER], [&"restaurant_table", &"restaurant_booth"]]
 	)
 
 	# Bag room (decisions baggage-rides-a-player-built-belt-from-check-in-to-a-
