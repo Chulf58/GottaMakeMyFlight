@@ -449,6 +449,54 @@ func test_steam_fills_the_cubicle_with_the_lather_and_clears_with_the_rinse() ->
 	assert_object(node.get_node_or_null("ShowerFoam")).is_null()
 
 
+func test_shower_lather_uses_toon_ramp_and_soft_cubicle_haze() -> void:
+	var soap := ShowerFoam.soap()
+	assert_object(soap.shader).is_same(ShowerFoam.LATHER_SHADER)
+	assert_object(soap.get_shader_parameter("ramp_texture")).is_same(ShowerFoam.TOON_RAMP)
+	assert_str(soap.shader.code).contains("outline_tint")
+	assert_str(soap.shader.code).contains("fresnel")
+	var haze_mat := ShowerFoam.haze_box().material as ShaderMaterial
+	assert_int(haze_mat.render_priority).is_less(0)
+	assert_str(haze_mat.shader.code).contains("cull_back")
+	assert_str(haze_mat.shader.code).contains("length(off)")
+	var cubicle := _piece_box("shower_cubicle")
+	assert_float(ShowerFoam.STEAM_FROM_M).is_greater_equal(1.85)
+	assert_float(ShowerFoam.STEAM_FROM_M + ShowerFoam.STEAM_RISE_M).is_less(cubicle.end.y)
+	assert_float(ShowerFoam.STEAM_ALPHA).is_less_equal(0.4)
+	var foam := ShowerFoam.new()
+	var puffs := foam.get_node("Steam").get_children()
+	assert_int(puffs.size()).is_equal(ShowerFoam.STEAM_PUFFS)
+	var first_mat := (puffs[0] as MeshInstance3D).material_override as StandardMaterial3D
+	assert_int(first_mat.render_priority).is_less(0)
+	foam.free()
+
+
+func test_hungry_showering_passenger_shows_hunger_icon_when_cafe_is_built() -> void:
+	_open(&"shower")
+	_views.all_bubbles = true
+	var p := _visitor()
+	_world.run_to(p.stage_tick + MID_WASH)
+	p.hunger = CafeSim.HUNGER_MAX
+	PassengerTestWorld.show_need(_views, NeedIcons.Need.HUNGER)
+	var node := _views.node_for(p.id)
+	# Control: without a cafe built anywhere in the terminal, hunger icon stays hidden.
+	_views.draw()
+	assert_int(node.get_meta(&"needs", -1)).is_equal(0)
+	NeedFacilityKit.add_landside_cafe(_world.grid)
+	_world.step()
+	_views.draw()
+	var sprite := node.get_node(NeedIcons.SPRITES[0]) as Sprite3D
+	print(
+		(
+			"shower hunger icon: needs=%s visible=%s no_depth=%s"
+			% [node.get_meta(&"needs", -1), sprite.visible, sprite.no_depth_test]
+		)
+	)
+	assert_int(node.get_meta(&"needs", -1)).is_equal(1)
+	assert_bool(sprite.visible).is_true()
+	assert_bool(sprite.no_depth_test).is_true()
+
+
 func test_every_body_takes_off_all_its_clothes_and_shoes_in_the_shower() -> void:
 	var report := []
 	# Control: shoe triangles whose first corner is above the line but another

@@ -234,6 +234,8 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_toggle.name = "DeparturesToggle"
 	_toggle.add_to_group(LeftColumn.DEPARTURES_TOGGLE_GROUP)
+	_toggle.add_to_group(LeftColumn.TOGGLE_ROW_GROUP)
+	_toggle.set_meta(LeftColumn.META_SLOT, LeftColumn.SLOT_DEPARTURES)
 	_toggle.text = tr("Departures ({key})").format({"key": HOTKEY})
 	LeftColumn.size_toggle(_toggle)
 	_toggle.position.y = LeftColumn.slot_top(LeftColumn.SLOT_DEPARTURES) - LeftColumn.TOP
@@ -242,7 +244,7 @@ func _ready() -> void:
 	add_child(_toggle)
 	_panel.name = "DeparturesPanel"
 	_panel.custom_minimum_size = Vector2(HudLayout.LIST_W, 0.0)
-	_panel.position.y = LeftColumn.LIST_TOP - LeftColumn.TOP
+	_panel.position.y = LeftColumn.list_top(get_tree()) - LeftColumn.TOP
 	_panel.add_to_group(LeftColumn.LIST_GROUP)
 	add_child(_panel)
 	var body := VBoxContainer.new()
@@ -269,8 +271,10 @@ func _ready() -> void:
 
 ## Lets the rows scroll in the room the column leaves the list (LeftColumn.
 ## list_room), so the checklist card under it always has its share and the
-## cards never reach the Templates dock.
+## cards never reach the Templates dock, and keeps _panel aligned under any
+## visible column buttons.
 func _process(_delta: float) -> void:
+	_sync_panel_top()
 	if not _panel.is_visible_in_tree():
 		return
 	var bar_w := 0.0 if menu == null else menu.bar().get_combined_minimum_size().x
@@ -279,7 +283,14 @@ func _process(_delta: float) -> void:
 	var height := minf(_rows.get_combined_minimum_size().y, maxf(0.0, room - chrome))
 	if not is_equal_approx(_scroll.custom_minimum_size.y, height):
 		_scroll.custom_minimum_size.y = height
+		_panel.reset_size()
 		_scroll_sets += 1
+
+
+func _sync_panel_top() -> void:
+	var top := LeftColumn.list_top(get_tree()) - LeftColumn.TOP
+	if not is_equal_approx(_panel.position.y, top):
+		_panel.position.y = top
 
 
 ## How many times the scroll area's height was set, for tests.

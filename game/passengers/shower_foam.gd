@@ -31,18 +31,19 @@ extends Node3D
 ## (a shoulder cap), so a view from above (the top, the game camera) does not
 ## look down past the collar onto the chest and back (board item bfe19c1e).
 const PARTS: Array[Array] = [
-	[0.0, 0.01, 0.84, 1.56, 0.26, 0.225],
-	[0.017, -0.012, 0.14, 0.88, 0.265, 0.285],
+	[0.0, 0.005, 0.86, 1.56, 0.264, 0.244],
+	[0.017, -0.012, 0.14, 0.88, 0.265, 0.278],
 	[0.0, -0.02, 1.54, 1.6, 0.12, 0.1],
-	[0.0, 0.0, 1.56, 1.56, 0.215, 0.185],
-	[0.0, -0.01, 1.56, 1.56, 0.17, 0.145],
+	[0.0, 0.0, 1.56, 1.56, 0.228, 0.198],
+	[0.0, -0.01, 1.56, 1.56, 0.18, 0.155],
+	[0.01, -0.005, 0.72, 1.00, 0.261, 0.256],
 ]
 ## Bubbles stand on a grid of this spacing over each envelope (jittered by
 ## JITTER of it), with radii between the two below, so neighbours overlap
 ## and no body shows through.
 const STEP_M := 0.05
-const R_MIN := 0.034
-const R_MAX := 0.056
+const R_MIN := 0.039
+const R_MAX := 0.060
 const JITTER := 0.33
 ## Bubbles sit this share of their radius outside the envelope.
 const OUT := 0.3
@@ -51,7 +52,7 @@ const OUT := 0.3
 ## to 0.7 of a radius between neighbours), it fills the gap, so the body does
 ## not show through from behind or the sides (board item bfe19c1e).
 const INNER_STEP_M := 0.06
-const INNER_R_MIN := 0.045
+const INNER_R_MIN := 0.050
 const INNER_JITTER := 0.15
 const INNER_OUT := 0.0
 const SEED := 7
@@ -60,14 +61,16 @@ const SEED := 7
 const SWELL := 0.15
 const DRIFT := 0.35
 const LATHER_SHADER := preload("res://shaders/shower_lather.gdshader")
-## The steam: soft white puffs rising from over the head, out of the
-## cubicle's open 2.16 m top, growing and fading on a loop, each a share of
-## the loop later than the last. They cast no shadow.
+const TOON_RAMP := preload("res://assets/textures/tp_toon_ramp_1d_d.png")
+## The steam: soft white wisps rising near the shower head above eye height and
+## strictly below the 2.16 m cubicle roof, orbiting clear of the passenger's face.
 const STEAM_PUFFS := 10
-const STEAM_FROM_M := 1.95
-const STEAM_RISE_M := 0.9
+const STEAM_FROM_M := 1.88
+const STEAM_RISE_M := 0.16
 const STEAM_LOOP_S := 2.2
-const STEAM_ALPHA := 0.7
+const STEAM_ALPHA := 0.20
+const STEAM_SCALE_MIN := 0.032
+const STEAM_SCALE_MAX := 0.068
 ## The steam inside the cubicle: one box, shared by every foam, standing on
 ## HAZE_FLOOR_M inside the shower_cubicle's glass (the piece is 0.84 m square
 ## outside) and under its 2.16 m top (the foam stands on the 0.10 m tray),
@@ -118,7 +121,9 @@ func _init() -> void:
 		var vapour := StandardMaterial3D.new()
 		vapour.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		vapour.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		vapour.albedo_color = Color(1.0, 1.0, 1.0, STEAM_ALPHA)
+		vapour.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
+		vapour.render_priority = -1
+		vapour.albedo_color = Color(0.95, 0.97, 1.0, STEAM_ALPHA)
 		var mi := MeshInstance3D.new()
 		mi.mesh = _puff
 		mi.material_override = vapour
@@ -198,9 +203,9 @@ func _drift() -> void:
 	for i in _puffs.size():
 		var t := fposmod(_clock / STEAM_LOOP_S + i / float(_puffs.size()), 1.0)
 		var mi := _puffs[i]
-		var x := 0.18 * sin(i * 2.4)
-		mi.position = Vector3(x, STEAM_FROM_M + STEAM_RISE_M * t, 0.13 * cos(i * 2.4))
-		mi.scale = Vector3.ONE * lerpf(0.12, 0.34, t)
+		var x := 0.19 * sin(i * 2.4)
+		mi.position = Vector3(x, STEAM_FROM_M + STEAM_RISE_M * t, 0.15 * cos(i * 2.4))
+		mi.scale = Vector3.ONE * lerpf(STEAM_SCALE_MIN, STEAM_SCALE_MAX, t)
 		(mi.material_override as StandardMaterial3D).albedo_color.a = STEAM_ALPHA * sin(PI * t)
 
 
@@ -211,6 +216,7 @@ static func _build_shared() -> void:
 		return
 	var lather := ShaderMaterial.new()
 	lather.shader = LATHER_SHADER
+	lather.set_shader_parameter("ramp_texture", TOON_RAMP)
 	lather.set_shader_parameter("swell", SWELL)
 	lather.set_shader_parameter("drift", DRIFT)
 	_bubble = SphereMesh.new()
@@ -221,6 +227,7 @@ static func _build_shared() -> void:
 	_bubble.material = lather
 	var haze := ShaderMaterial.new()
 	haze.shader = HAZE_SHADER
+	haze.render_priority = -1
 	haze.set_shader_parameter("centre_y", HAZE_FLOOR_M + HAZE_SIZE_M.y / 2.0)
 	_haze_box = BoxMesh.new()
 	_haze_box.size = HAZE_SIZE_M

@@ -189,22 +189,27 @@ def build_play_blocks(root, c):
 def build_play_slide(root, c):
     m = SLIDE_MAT
     tbox("Slide_Mat", (-0.92, -0.42, 0.0), (0.92, 0.42, m), "mat_sky", root, c, bevel=0.012)
-    # Three solid steps up the -x end, the third tread level with the platform.
+    # Three disjoint steps up the -x end (zero shared bottom/side seams), ending flush
+    # with the platform edge; third tread level with the platform.
     rise = (SLIDE_TOP - m) / 3.0
+    step_w = (-0.56 - (-0.90)) / 3.0
     for k in range(3):
+        x0 = -0.90 + step_w * k
+        x1 = -0.90 + step_w * (k + 1)
         top = SLIDE_TOP if k == 2 else m + rise * (k + 1)
-        tbox("Slide_Step_%d" % k, (-0.92 + 0.12 * k, -0.25, m), (-0.56, 0.25, top), "play_green", root, c, bevel=0.012)
+        tbox("Slide_Step_%d" % k, (x0, -0.25, m), (x1, 0.25, top), "play_green", root, c, bevel=0.008)
     tbox("Slide_Platform", (-0.56, -0.30, m), (-0.10, 0.30, SLIDE_TOP), "play_red", root, c, bevel=0.015)
     for side, y0, y1 in (("L", 0.25, 0.30), ("R", -0.30, -0.25)):
         tbox("Slide_Wall_" + side, (-0.56, y0, SLIDE_TOP), (-0.10, y1, SLIDE_TOP + 0.35), "play_purple", root, c, bevel=0.012)
     # The chute: 29.5 degrees from the platform edge down to a runout that tapers from
-    # 0.12 m to a 0.015 m lip on the mat, so the exit has no step down.
+    # 0.12 m to a 0.015 m lip on the mat (stopping inside the mat bevel), so the exit
+    # has no step down or coplanar overhang.
     xa, xb, za, zb = -0.10, 0.66, SLIDE_TOP, 0.12
     prism_xz("Slide_Chute", ((xa, za), (xa, za - 0.04), (xb, zb - 0.04), (xb, zb)), -0.22, 0.22, "play_sun", root, c)
     for side, y0, y1 in (("L", 0.22, 0.26), ("R", -0.26, -0.22)):
         prism_xz("Slide_Lip_" + side, ((xa, za + 0.08), (xa, za - 0.04), (xb, zb - 0.04), (xb, zb + 0.08)),
                  y0, y1, "play_orange", root, c)
-    prism_xz("Slide_Runout", ((xb, m), (0.92, m), (0.92, m + 0.015), (xb, zb)), -0.22, 0.22, "play_sun", root, c)
+    prism_xz("Slide_Runout", ((xb, m), (0.89, m), (0.89, m + 0.015), (xb, zb)), -0.22, 0.22, "play_sun", root, c)
     # One support panel under the chute.
     xs = 0.30
     under = za - (xs + 0.02 - xa) / (xb - xa) * (za - zb) - 0.04
@@ -214,14 +219,10 @@ def build_play_slide(root, c):
 def sofa_section(root, c, half_w, body, cushion, prefix):
     """A lounge seat section across x in [-half_w, half_w]: base, arms, back and one
     seat cushion per 1 m cell (the sofa has two, the armchair one)."""
-    # The seated root is at Godot z = SOFA_ROOT_Z. The cushion stops 0.22 m behind it
-    # (Godot z 0.23), top at SEAT_TOP, and the base is set back under it (Godot z
-    # 0.18), so the thighs clear the front edge and the calves the base: a cushion
-    # reaching z 0.37 put the calves 0.07-0.11 m into the base. The cushion's 0.06 m
-    # chamfer rounds its nose: the female thigh dips to 0.49 m about 0.04 m behind the
-    # front edge, which a 0.03 m chamfer met 0.036 m deep, and her dress hem crossed a
-    # nose at 0.20 m 0.032 m deep.
-    front = SOFA_ROOT_Z - 0.22
+    # The seated root is at Godot z = SOFA_ROOT_Z. Recess the seat cushion front 0.27 m
+    # behind it (Godot z 0.18), and the base further back (Godot z 0.13), so seated and
+    # sitting-down legs stay clear of the front cushion edge.
+    front = SOFA_ROOT_Z - 0.27
     arm = 0.12
     for i, (sx, y) in enumerate(((-1, -0.15), (1, -0.15), (-1, 0.35), (1, 0.35))):
         cafe.cone("%s_Foot_%d" % (prefix, i), sx * (half_w - 0.07), y, 0.0, 0.10, 0.022, 0.03, "wood", root, c)
@@ -298,12 +299,43 @@ def build_prize_podium(root, c):
     tbox("Podium_Body", (-X, -Y, 0.08), (X, Y, 0.26), "white", root, c, bevel=0.02)
     tbox("Podium_Trim", (-X, -Y, 0.26), (X, Y, 0.29), "gold", root, c, bevel=0.01)
     tbox("Podium_Carpet", (-X + 0.07, -Y + 0.07, 0.29), (X - 0.07, Y - 0.07, DECK), "red", root, c)
-    # The raffle banner on the front fascia: one replaceable node, placeholder bars.
+    # Four low corner uplight accents clear of the SUV footprint.
+    for cx in (-X + 0.14, X - 0.14):
+        for cy in (-Y + 0.14, Y - 0.14):
+            tbox("Podium_Corner_%d_%d" % (int(cx > 0), int(cy > 0)),
+                 (cx - 0.06, cy - 0.06, DECK), (cx + 0.06, cy + 0.06, DECK + 0.04), "gold", root, c, bevel=0.008)
+            tbox("Podium_Lamp_%d_%d" % (int(cx > 0), int(cy > 0)),
+                 (cx - 0.04, cy - 0.04, DECK + 0.04), (cx + 0.04, cy + 0.04, DECK + 0.06), "text_yellow", root, c)
+    # Angled, framed marquee plaque mounted in front of the front apron (-Y = -1.40),
+    # pitched back -20 deg from its bottom edge (-1.475) up to -1.407 under Podium_Trim
+    # so the entire dark plaque, gold frame, banner strips and emblems stay proud of
+    # Podium_Body and inside the 3 m footprint (-1.50).
     face = cafe.group("Sign_Face", root, c)
-    tbox("Sign_Face_Board", (-1.40, -Y - 0.015, 0.10), (1.40, -Y, 0.25), "dark", face, c)
-    tbox("Sign_Face_Title", (-0.90, -Y - 0.02, 0.155), (0.90, -Y - 0.015, 0.195), "text_yellow", face, c)
-    for i, x in enumerate((-1.15, 1.15)):
-        tbox("Sign_Face_Star_%d" % i, (x - 0.07, -Y - 0.02, 0.14), (x + 0.07, -Y - 0.015, 0.21), "text_white", face, c)
+    pivot = (0.0, -Y - 0.075, 0.06)
+    tilt = -20.0
+    tbox("Sign_Face_PostL", (-0.95, -Y - 0.06, 0.08), (-0.87, -Y + 0.01, 0.22), "dark", face, c)
+    tbox("Sign_Face_PostR", (0.87, -Y - 0.06, 0.08), (0.95, -Y + 0.01, 0.22), "dark", face, c)
+    tbox("Sign_Face_Board", (-1.18, -Y - 0.085, 0.06), (1.18, -Y - 0.065, 0.26), "dark", face, c,
+         bevel=0.005, axis="X", deg=tilt, pivot=pivot)
+    tbox("Sign_Face_FrameTop", (-1.20, -Y - 0.090, 0.24), (1.20, -Y - 0.060, 0.265), "gold", face, c,
+         bevel=0.003, axis="X", deg=tilt, pivot=pivot)
+    tbox("Sign_Face_FrameBot", (-1.20, -Y - 0.090, 0.06), (1.20, -Y - 0.060, 0.082), "gold", face, c,
+         bevel=0.003, axis="X", deg=tilt, pivot=pivot)
+    tbox("Sign_Face_FrameL", (-1.20, -Y - 0.090, 0.082), (-1.15, -Y - 0.060, 0.24), "gold", face, c,
+         bevel=0.003, axis="X", deg=tilt, pivot=pivot)
+    tbox("Sign_Face_FrameR", (1.15, -Y - 0.090, 0.082), (1.20, -Y - 0.060, 0.24), "gold", face, c,
+         bevel=0.003, axis="X", deg=tilt, pivot=pivot)
+    # Stylized trophy-banner layout inside the dark marquee: crisp raised yellow title
+    # header, white sub-strip and twin stepped raffle emblems (zero coplanar overlap).
+    tbox("Sign_Face_Header", (-0.72, -Y - 0.092, 0.165), (0.72, -Y - 0.085, 0.215), "text_yellow", face, c,
+         bevel=0.002, axis="X", deg=tilt, pivot=pivot)
+    tbox("Sign_Face_Sub", (-0.54, -Y - 0.092, 0.105), (0.54, -Y - 0.085, 0.145), "text_white", face, c,
+         bevel=0.002, axis="X", deg=tilt, pivot=pivot)
+    for i, x in enumerate((-0.94, 0.94)):
+        tbox("Sign_Face_StarOuter_%d" % i, (x - 0.08, -Y - 0.092, 0.11), (x + 0.08, -Y - 0.085, 0.21),
+             "text_yellow", face, c, bevel=0.003, axis="X", deg=tilt, pivot=pivot)
+        tbox("Sign_Face_StarInner_%d" % i, (x - 0.035, -Y - 0.096, 0.135), (x + 0.035, -Y - 0.092, 0.185),
+             "text_white", face, c, axis="X", deg=tilt, pivot=pivot)
     add_mounts("prize_podium", root, c)
 
 
@@ -316,7 +348,7 @@ PIECES = {
     "lounge_sofa": (build_lounge_sofa, (2, 1), (-0.92, -0.30, 0.0), (0.92, 0.42, 0.86)),
     "lounge_armchair": (build_lounge_armchair, (1, 1), (-0.42, -0.30, 0.0), (0.42, 0.42, 0.86)),
     "work_desk": (build_work_desk, (2, 2), (-0.92, -0.797, 0.0), (0.92, 0.92, 1.20)),
-    "prize_podium": (build_prize_podium, (6, 3), (-2.92, -1.42, 0.0), (2.92, 1.40, 0.30)),
+    "prize_podium": (build_prize_podium, (6, 3), (-2.92, -1.488, 0.0), (2.92, 1.40, 0.36)),
 }
 EXTRA_NODES = {
     "lounge_sofa": ["Mount_SitRoot_L", "Mount_SitRoot_R"],

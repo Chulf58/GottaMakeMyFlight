@@ -31,23 +31,25 @@ import toon_clips as tc
 
 SHOWER_FRAMES = 125
 PERIOD_S = SHOWER_FRAMES / tc.FPS
-SHOWER_PALM_CLEAR_M = 0.032  # wrist off the hair; the curled fingers reach down onto it
-TORSO_CLEAR_M = 0.055  # flat fingers on the chest and belly, the thumb below the palm
+SHOWER_PALM_CLEAR_M = 0.044  # wrist off the hair; min vertex clear guard adds extra push if needed
+TORSO_CLEAR_M = 0.056  # flat fingers on the chest and belly, the thumb below the palm
 ARM_CLEAR_M = 0.036
 SHOWER_RADIUS_MAX_M = 0.30
 SHOWER_HIPS_DROP_M = 0.012
 SHOWER_SWAY_M = 0.018
 SCRUB_HZ = 2.0  # an integer number of scrubs per loop, so the loop closes
-FINGER_CURL_DEG = 12.0
+FINGER_CURL_DEG = 6.0
 THUMB_TUCK_DEG = 35.0
 ARM_CLAMP_TOLERANCE_M = 0.02
 SHOWER_RADIUS_FAIL_M = SHOWER_RADIUS_MAX_M + 0.05
+ARM_X_MAX_M = 0.365  # cubicle corner posts sit at |x|=0.38 m, glass at 0.395 m
+MIN_HAND_CLEAR_M = 0.010  # minimum vertex-to-skin distance for hands vs head
 # A hand that still touches the skin is pushed off it (against its palm) in steps, up
 # to PUSH_MAX_M, and the pushes are smoothed over PUSH_SMOOTH_FRAMES either side.
 PUSH_STEP_M = 0.005
-PUSH_MAX_M = 0.10
+PUSH_MAX_M = 0.12
 PUSH_SMOOTH_FRAMES = 4
-NUDGE_STEPS = 8  # after smoothing, at most 8 x PUSH_STEP_M more on a frame that still touches
+NUDGE_STEPS = 16  # after smoothing, nudge off any frame still within MIN_HAND_CLEAR_M
 # Each hand's scrub phase: the two hands circle half a turn apart.
 HAND_PHASE = {".L": 0.0, ".R": math.pi}
 # The scrub angles a Touch is checked at: 16 evenly spaced ones, plus every angle a hand
@@ -132,13 +134,22 @@ class Skin:
         self.stand = stand
         self.trees = {}
         self.hand_polys = {}
+        self.hand_verts = {}
+        self.arm_verts = []
         self.obstacle_polys = {}
+        self.head_polys = {}
+        arm_groups = set()
+        head_set = set(HEAD)
         for s, o in ((".L", ".R"), (".R", ".L")):
             hand = {n + s for n in ("Hand", "Fingers", "Fingertips", "Thumb", "Thumb_Tip")}
+            arm_groups |= hand | {"Arm" + s, "Forearm" + s}
             # The head, the torso and the other arm: everything a hand may touch but not enter.
             solid = set(HEAD + TORSO) | {"Arm" + o, "Forearm" + o}
             self.hand_polys[s] = [p for p in self.polys if any(self.group[i] in hand for i in p)]
+            self.hand_verts[s] = sorted({i for p in self.hand_polys[s] for i in p})
             self.obstacle_polys[s] = [p for p in self.polys if any(self.group[i] in solid for i in p)]
+            self.head_polys[s] = [p for p in self.polys if any(self.group[i] in head_set for i in p)]
+        self.arm_verts = [i for i, g in enumerate(self.group) if g in arm_groups]
 
     def posed(self, mats):
         self.rig.key(mats, 0, {})
@@ -151,17 +162,32 @@ class Skin:
         return verts
 
     def hand_hits(self, mats):
-        """Per hand, how many hand triangles intersect the head, torso or the other arm."""
+        """Per hand, how many hand triangles intersect solid skin or breach MIN_HAND_CLEAR_M from Head."""
         verts = self.posed(mats)
         out = {}
         self.last_hit = {}
+        self.last_verts = verts
+        self.last_clear = {}
         for s in tc.SIDES:
             hand = BVHTree.FromPolygons(verts, self.hand_polys[s])
             solid = BVHTree.FromPolygons(verts, self.obstacle_polys[s])
+            head_tree = BVHTree.FromPolygons(verts, self.head_polys[s])
             pairs = hand.overlap(solid)
-            out[s] = len(pairs)
+            too_close = 0
+            min_d = 999.0
+            for vi in self.hand_verts[s]:
+                loc, _norm, _idx, d = head_tree.find_nearest(verts[vi])
+                if loc is not None:
+                    if d < min_d:
+                        min_d = d
+                    if d < MIN_HAND_CLEAR_M:
+                        too_close += 1
+            self.last_clear[s] = min_d
+            out[s] = len(pairs) + too_close
             # Which bones' skin the hand enters, for the fit log.
             self.last_hit[s] = sorted({self.group[i] for _a, b in pairs for i in self.obstacle_polys[s][b]} - {None})
+            if too_close and not self.last_hit[s]:
+                self.last_hit[s] = ["head<%.3fm" % MIN_HAND_CLEAR_M]
         return out
 
     def close(self):
@@ -312,32 +338,32 @@ def build_tracks(rig, skin, stand):
         def hair(dx, dy, dz, scrub):
             d = Vector((dx * out, dy, dz)).normalized()
             fingers = Vector((-out, 0.25, 0.6))
-            hint = Vector((out * 0.45, -0.10, 0.12))
+            hint = Vector((-out * 0.04, -0.46, 0.02))
             return Touch(skin, "Head", HEAD, centre, -d, fingers, scrub, hint, curl=FINGER_CURL_DEG, normal_weight=0.7)
 
         def chest(z_up, scrub):
             inner = stand["Spine_02"].translation + Vector((out * 0.095, 0.05, z_up))
-            return Touch(skin, "Spine_02", TORSO, inner, Vector((0.0, 1.0, 0.0)), Vector((-out * 0.15, 0.0, 1.0)), scrub, Vector((out * 0.42, -0.12, -0.30)), clear=TORSO_CLEAR_M)
+            return Touch(skin, "Spine_02", TORSO, inner, Vector((0.0, 1.0, 0.0)), Vector((-out * 0.15, 0.0, 1.0)), scrub, Vector((-out * 0.10, -0.44, -0.25)), clear=TORSO_CLEAR_M)
 
         def belly(scrub):
             inner = stand["Spine_01"].translation + Vector((out * 0.09, 0.05, 0.03))
-            return Touch(skin, "Spine_01", TORSO, inner, Vector((0.0, 1.0, 0.0)), Vector((-out * 0.6, 0.0, 0.6)), scrub, Vector((out * 0.45, -0.15, -0.28)), clear=TORSO_CLEAR_M)
+            return Touch(skin, "Spine_01", TORSO, inner, Vector((0.0, 1.0, 0.0)), Vector((-out * 0.6, 0.0, 0.6)), scrub, Vector((-out * 0.12, -0.44, -0.25)), clear=TORSO_CLEAR_M)
 
         def free(pos, fingers, palm, hint, stop=False):
             return Free(stand, pos, fingers, palm, hint, stop)
 
-        # Beside the head and beside the jaw: the hands go round the head, never through it.
+        # Beside the head and beside the jaw: elbows tucked forward inside the 0.38 m stall posts.
         by_head = free(
-            Vector((centre.x + out * 0.30, centre.y, centre.z - 0.02)),
+            Vector((centre.x + out * 0.20, centre.y - 0.06, centre.z - 0.02)),
             Vector((-out * 0.2, 0.2, 1.0)),
             Vector((-out, 0.0, 0.0)),
-            Vector((out * 0.45, 0.0, -0.05)),
+            Vector((-out * 0.04, -0.46, -0.04)),
         )
         by_jaw = free(
-            Vector((hips.x + out * 0.26, centre.y - 0.14, shoulder_z + 0.10)),
+            Vector((hips.x + out * 0.17, centre.y - 0.16, shoulder_z + 0.10)),
             Vector((-out * 0.3, 0.0, 1.0)),
             Vector((-out, 0.3, 0.0)),
-            Vector((out * 0.40, 0.0, -0.20)),
+            Vector((-out * 0.10, -0.45, -0.22)),
         )
         keys = [
             (0.00, hair(0.55, 0.0, 0.85, 0.030)),
@@ -347,21 +373,21 @@ def build_tracks(rig, skin, stand):
             (2.12, by_head),
         ]
         # Each hand on its own side only (no reach across the chest): the top of its own
-        # shoulder and the side of the neck, then the back of the neck with the elbow up.
+        # shoulder and the side of the neck, then the back of the neck with the elbow tucked forward.
         own_shoulder = Touch(
             skin, "Clavicle" + side, ("Clavicle" + side, "Arm" + side, "Spine_03", "Neck"),
             stand["Arm" + side].translation + Vector((-out * 0.03, 0.0, -0.02)), Vector((0.0, 1.0, -0.6)),
-            Vector((out, 0.0, 0.3)), 0.02, Vector((out * 0.30, -0.30, -0.15)), clear=ARM_CLEAR_M,
+            Vector((out, 0.0, 0.3)), 0.02, Vector((-out * 0.10, -0.45, -0.20)), clear=ARM_CLEAR_M,
         )
         nape = Touch(
             skin, "Head", HEAD + ("Neck",), Vector((centre.x, centre.y, centre.z)),
-            -Vector((out * 0.8, 0.6, -0.1)), Vector((-out * 0.1, 0.3, 1.0)), 0.010, Vector((out * 0.45, 0.0, 0.18)), clear=ARM_CLEAR_M,
+            -Vector((out * 0.8, 0.6, -0.1)), Vector((-out * 0.1, 0.3, 1.0)), 0.010, Vector((-out * 0.04, -0.46, 0.12)), clear=ARM_CLEAR_M,
         )
         behind_ear = free(
-            Vector((centre.x + out * 0.28, centre.y + 0.10, centre.z - 0.08)),
+            Vector((centre.x + out * 0.20, centre.y + 0.04, centre.z - 0.06)),
             Vector((-out * 0.2, 0.0, 1.0)),
             Vector((-out, -0.5, 0.0)),
-            Vector((out * 0.45, 0.0, 0.10)),
+            Vector((-out * 0.05, -0.46, 0.02)),
         )
         keys += [
             (2.38, own_shoulder),
@@ -377,7 +403,7 @@ def build_tracks(rig, skin, stand):
             (4.05, chest(-0.03, 0.025)),
             (4.25, belly(0.022)),
             (4.50, belly(0.022)),
-            (4.63, free(Vector((hips.x + out * 0.17, chest_y - 0.07, hips.z + 0.32)), Vector((-out * 0.2, 0.0, 1.0)), Vector((-out * 0.3, 1.0, 0.0)), Vector((out * 0.42, 0.0, -0.25)))),
+            (4.63, free(Vector((hips.x + out * 0.15, chest_y - 0.08, hips.z + 0.32)), Vector((-out * 0.2, 0.0, 1.0)), Vector((-out * 0.3, 1.0, 0.0)), Vector((-out * 0.12, -0.44, -0.25)))),
             (4.75, by_jaw),
             (4.86, by_head),
         ]
@@ -505,7 +531,7 @@ def shower_clip(rig, stem, stand):
     for s in tc.SIDES:
         pushes[s] = cyclic_smooth(pushes[s], PUSH_SMOOTH_FRAMES)
     poses = []
-    worst = {"leg_clamp": 0.0, "arm_clamp": 0.0, "radius": 0.0, "hits": 0, "hit_frames": 0}
+    worst = {"leg_clamp": 0.0, "arm_clamp": 0.0, "radius": 0.0, "arm_x": 0.0, "min_clear": 999.0, "hits": 0, "hit_frames": 0}
     for k in range(SHOWER_FRAMES + 1):
         f = k % SHOWER_FRAMES
         push = {s: pushes[s][f] for s in tc.SIDES}
@@ -522,12 +548,20 @@ def shower_clip(rig, stem, stand):
         worst["arm_clamp"] = max(worst["arm_clamp"], clamps["arm"])
         worst["hits"] = max(worst["hits"], max(hits.values()))
         worst["hit_frames"] += 1 if any(hits.values()) else 0
+        worst["min_clear"] = min(worst["min_clear"], min(skin.last_clear.values()))
         hips = mats["Hips"].translation
+        for vi in skin.arm_verts:
+            ax = abs(skin.last_verts[vi].x - hips.x)
+            if ax > worst["arm_x"]:
+                worst["arm_x"], worst["arm_x_at"] = ax, "%s@%d" % (skin.group[vi], k)
         for s in tc.SIDES:
-            for n in ("Hand" + s, "Fingertips" + s):
+            for n in ("Forearm" + s, "Hand" + s, "Fingertips" + s):
                 p = mats[n].translation
+                ax = abs(p.x - hips.x)
+                if ax > worst["arm_x"]:
+                    worst["arm_x"], worst["arm_x_at"] = ax, "%s_bone@%d" % (n, k)
                 r = Vector((p.x - hips.x, p.y - hips.y)).length
-                if p.z < mats["Arm" + s].translation.z and r > worst["radius"]:
+                if n != "Forearm" + s and p.z < mats["Arm" + s].translation.z and r > worst["radius"]:
                     worst["radius"], worst["radius_at"] = r, "%s@%d" % (n, k)
         poses.append(mats)
     skin.close()
@@ -535,10 +569,12 @@ def shower_clip(rig, stem, stand):
     rot, pos = tc.loop_wrap(rig, poses)
     tc.log(
         "SHOWER %s frames=%d duration_s=%.3f leg_clamp_m=%.4f arm_clamp_m=%.4f foot_slide_m=%.5f "
-        "hand_radius_below_shoulder_max_m=%.3f (%s) push_max_m L=%.3f R=%.3f hand_skin_hits_max=%d frames_with_hits=%d "
+        "hand_radius_below_shoulder_max_m=%.3f (%s) arm_x_max_m=%.3f (%s) hand_min_clear_m=%.4f "
+        "push_max_m L=%.3f R=%.3f hand_skin_hits_max=%d frames_with_hits=%d "
         "loop_rot_deg=%.4f loop_pos_m=%.5f"
         % (
             stem, SHOWER_FRAMES, PERIOD_S, worst["leg_clamp"], worst["arm_clamp"], slide, worst["radius"], worst.get("radius_at"),
+            worst["arm_x"], worst.get("arm_x_at"), worst["min_clear"],
             max(pushes[".L"]), max(pushes[".R"]), worst["hits"], worst["hit_frames"], math.degrees(rot), pos,
         )
     )
@@ -548,11 +584,13 @@ def shower_clip(rig, stem, stand):
         raise tc.Fail("%s shower: a hand target is out of reach by %.3f m" % (stem, worst["arm_clamp"]))
     if worst["radius"] > SHOWER_RADIUS_FAIL_M:
         raise tc.Fail("%s shower: a hand leaves the foam column (%.3f m)" % (stem, worst["radius"]))
+    if worst["arm_x"] > ARM_X_MAX_M:
+        raise tc.Fail("%s shower: an arm/elbow hits cubicle post clearance %.3f m > %.3f m (%s)" % (stem, worst["arm_x"], ARM_X_MAX_M, worst.get("arm_x_at")))
     if worst["hits"]:
-        raise tc.Fail("%s shower: a hand intersects the body (%d triangles)" % (stem, worst["hits"]))
+        raise tc.Fail("%s shower: a hand intersects or breaks clearance with the body (%d issues, min %.4f m)" % (stem, worst["hits"], worst["min_clear"]))
     if pos > tc.LOOP_TOLERANCE or rot > tc.LOOP_TOLERANCE:
         raise tc.Fail("%s shower does not loop" % stem)
-    return poses, {"frames": SHOWER_FRAMES, "duration_s": PERIOD_S, "hand_radius_max_m": worst["radius"]}
+    return poses, {"frames": SHOWER_FRAMES, "duration_s": PERIOD_S, "hand_radius_max_m": worst["radius"], "arm_x_max_m": worst["arm_x"], "hand_min_clear_m": worst["min_clear"]}
 
 
 

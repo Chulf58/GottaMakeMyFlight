@@ -141,6 +141,8 @@ func _boot(type: StringName) -> bool:
 	_sim = _main.get_node("PassengerSim") as PassengerSim
 	_views = _main.get_node("PassengerViews") as PassengerViews
 	_ids = ActivityTestLayout.build(_mode.grid, type)
+	if type == &"shower":
+		NeedFacilityKit.add_landside_cafe(_mode.grid)
 	if not StarterFlight.add_gate_desk(_mode.grid):
 		_invalid("the gate desk was refused")
 	(_mode.get_node("BuildView") as BuildView).refresh(_mode.grid)
@@ -254,8 +256,12 @@ func _shower() -> void:
 	if not await _until(in_foam):
 		_invalid("shower: the visitor never got under the foam")
 		return
-	# A need to show over the foam (there is no cafe for it to go to).
+	# Show Hunger need icon over the showering passenger (requires a cafe on the grid,
+	# MoodOverlay open in Hunger mode, and camera >= NeedIcons.NEAR_FULL_M).
 	p.hunger = CafeSim.HUNGER_MAX
+	var overlay := _main.get_node("MoodOverlay") as MoodOverlay
+	overlay.set_mode(MoodTint.Mode.HUNGER)
+	overlay.set_shown(true)
 	await _until(func() -> bool: return int(_views.node_for(p.id).get_meta(&"needs", 0)) > 0, 40)
 	var spot := _spot()
 	await _ortho_set("shower", spot, [p.id], ["front", "side", "top"])
@@ -272,6 +278,12 @@ func _shower() -> void:
 	await _part_twin("shower_foam", cam, func(on: bool) -> void: foam.visible = on)
 	var steam := node.get_node("ShowerFoam/Steam") as Node3D
 	await _part_twin("shower_steam", cam, func(on: bool) -> void: steam.visible = on)
+	cam.queue_free()
+	var icon_cam := Camera3D.new()
+	icon_cam.fov = 40.0
+	_main.add_child(icon_cam)
+	icon_cam.look_at_from_position(spot + Vector3(3.2, 5.8, 7.5), spot + Vector3(0.0, 1.3, 0.0))
+	await _plate("shower_icons_game", icon_cam, [p.id], true)
 	var icons: Array[Node3D] = []
 	for sprite_name in NeedIcons.SPRITES:
 		var sprite := node.get_node(sprite_name) as Node3D
@@ -282,12 +294,12 @@ func _shower() -> void:
 	else:
 		await _part_twin(
 			"shower_icons",
-			cam,
+			icon_cam,
 			func(on: bool) -> void:
 				for icon in icons:
 					icon.visible = on
 		)
-	cam.queue_free()
+	icon_cam.queue_free()
 	var far := Camera3D.new()
 	far.fov = 40.0
 	_main.add_child(far)

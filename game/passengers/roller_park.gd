@@ -180,10 +180,8 @@ const RODS_OUT_TICKS := 3.0
 ## (1.6 ticks, first drawn 12 ticks late) it moved 0.11 m.
 const TAIL_MIN_TICKS := 2.4
 const TAIL_SHARE := 0.6
-## The share of the rods run out while it rolls upright. Measured hips while
-## rolling (probe ROLL_HIPS): 0.93 to 0.96 of standing at 0.45, 0.84 to 0.89 at
-## 0.3; with them in the bar was at 0.48 m, all out at 2.1 m.
-const ROLL_RODS := 0.45
+## The share of the rods run out while rolling upright (standing height >= 0.92).
+const ROLL_RODS := 0.62
 const ROLL_TICKS := 36.0
 const TIP_UP := 1.0 - UP_PARK_END
 ## Standing in a queue (decision a-guest-standing-still-in-a-queue-stands-the-
@@ -1352,7 +1350,10 @@ static func _queued(
 	if at < tip:
 		return [true, stood, bar, bar, 1.0]
 	var u := tip_share(bag, k)
-	return [true, rolled(stood, want, u), bar, bar, 1.0 - u]
+	var xf := rolled(stood, want, u)
+	if bag.has("queue_walls"):
+		xf.origin += ParkWalls.held_out(xf, bag["queue_walls"], stood)
+	return [true, xf, bar, bar, 1.0 - u]
 
 
 ## The k a floor>pull move of `bag` took the lying bag at (TAKE_M, TAKE_BY), the

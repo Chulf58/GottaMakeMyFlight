@@ -10,7 +10,7 @@
 // "Thicker, visible wisps"). Unshaded alpha with no depth write or shadow, on
 // a mesh, never a particle billboard. All the motion is here, on the GPU.
 shader_type spatial;
-render_mode unshaded, cull_disabled, depth_draw_never, shadows_disabled;
+render_mode unshaded, cull_back, depth_draw_never, shadows_disabled;
 
 // How much steam is up (0 to 1), per foam: it comes with the lather and
 // goes with the rinse.
@@ -18,11 +18,11 @@ instance uniform float amount = 0.0;
 // The box mesh is centred on its origin; this lifts it into the foam's frame
 // (feet at 0).
 uniform float centre_y = 1.125;
-uniform vec3 colour : source_color = vec3(0.97, 0.98, 1.0);
+uniform vec3 colour : source_color = vec3(0.96, 0.98, 1.0);
 // The edge of a wisp, a touch darker so the wisps stand out on white walls.
-uniform vec3 edge_colour : source_color = vec3(0.62, 0.69, 0.79);
+uniform vec3 edge_colour : source_color = vec3(0.68, 0.75, 0.85);
 // How opaque a wisp's core gets, and how fast the wisps rise (metres a second).
-uniform float density = 0.92;
+uniform float density = 0.58;
 uniform float rise_speed = 0.16;
 // How far (in pattern units) the slow field bends the wisps.
 uniform float curl = 2.0;
@@ -30,13 +30,15 @@ uniform float curl = 2.0;
 // width across each wall, and the share of the steam left there.
 uniform float face_y = 1.72;
 uniform float face_half_y = 0.34;
-uniform float face_half_across = 0.26;
-uniform float face_veil = 0.1;
+uniform float face_half_across = 0.28;
+uniform float face_veil = 0.16;
 
 varying vec3 local;
+varying vec3 box_norm;
 
 void vertex() {
 	local = VERTEX + vec3(0.0, centre_y, 0.0);
+	box_norm = NORMAL;
 }
 
 float hash(vec2 p) {
@@ -70,12 +72,15 @@ void fragment() {
 	// High contrast with a soft edge: clear air, then a wisp.
 	float wisp = smoothstep(0.42, 0.66, n);
 	float core = smoothstep(0.6, 0.86, n);
-	// Thinner low down, fuller up where steam gathers.
-	float up = mix(0.6, 1.0, smoothstep(0.2, 1.4, local.y));
-	float alpha = density * wisp * up * amount;
-	// A light veil only over the face and the washing hands.
+	// Thinner low down and smoothly faded to zero before the top, bottom and box corners,
+	// so no flat top cap or hard rectangular glass seam ever shows.
+	float up = smoothstep(0.22, 0.65, local.y) * smoothstep(1.96, 1.56, local.y);
+	float side_fade = smoothstep(0.31, 0.18, abs(across));
+	float cap_hide = 1.0 - smoothstep(0.5, 0.9, abs(box_norm.y));
+	float alpha = density * wisp * up * side_fade * cap_hide * amount;
+	// Soft elliptical veil over the face and washing hands (no sharp rectangular box).
 	vec2 off = vec2(abs(across) / face_half_across, abs(local.y - face_y) / face_half_y);
-	float window = 1.0 - smoothstep(0.75, 1.0, max(off.x, off.y));
+	float window = 1.0 - smoothstep(0.45, 1.05, length(off));
 	alpha *= mix(1.0, face_veil, window);
 	ALBEDO = mix(edge_colour, colour, core);
 	ALPHA = clamp(alpha, 0.0, 1.0);

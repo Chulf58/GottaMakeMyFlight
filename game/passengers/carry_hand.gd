@@ -7,10 +7,12 @@ extends RefCounted
 ## carry_on_props.gd (board 79212dcd).
 
 ## A roller going between the hand and the pull by its bar (swap_transform)
-## swings out this far on the hand's side midway, clear of the trailing leg
-## (0.15 m put it into a neighbouring stall's partition end from the row); at
-## security it goes round the hand's side instead (CarryLead.swap_axle).
+## swings out SWAP_OUT_M beside stalls/walls (0.15 m put it into a
+## neighbouring stall's partition end from the row), or OPEN_SWAP_OUT_M when
+## open floor space allows, clear of the trailing leg; at security it goes
+## round the hand's side instead (CarryLead.swap_axle).
 const SWAP_OUT_M := 0.08
+const OPEN_SWAP_OUT_M := 0.22
 ## A roller held by its bar for a stall has the bar this far from the grip
 ## point, toward the bag's front (in the palm, a grip offset along the hand's
 ## axes): hung at the side the bag is that much further from the leg, across
@@ -136,7 +138,8 @@ static func swap_transform(
 		trailing = CarrySwap.hung_trail(bag, body.global_transform)
 	var t := CarrySwap.pull_share(to_pull, k)
 	var hung := hung_axle(props, bag, grip, scale_by)
-	var axle := hung.lerp(trailing, t) + outward * SWAP_OUT_M * 4.0 * t * (1.0 - t)
+	var out_m := _swap_out_m(props, held, body, grip, hung, trailing, outward, scale_by)
+	var axle := hung.lerp(trailing, t) + outward * out_m * 4.0 * t * (1.0 - t)
 	# At security (no stall partition near) round the hand's side, clear of the
 	# legs (CarryLead.swap_axle); the bar stays in the hand.
 	if held.get("security", false):
@@ -148,6 +151,42 @@ static func swap_transform(
 		outward * BAR_PALM_M * (1.0 - t)
 	)
 	return [xf, RollerPull.pull_length(grip, axle, scale_by, rods.z)]
+
+
+## Mid-swap lateral swing distance: SWAP_OUT_M inside/near toilet stalls or
+## when OPEN_SWAP_OUT_M would clip nearby walls or furniture; OPEN_SWAP_OUT_M
+## in open terminal space so the trailing wheel avoids calf/heel contact.
+static func _swap_out_m(
+	props: CarryOnProps,
+	held: Dictionary,
+	body: Node3D,
+	grip: Vector3,
+	hung: Vector3,
+	trailing: Vector3,
+	outward: Vector3,
+	scale_by: float
+) -> float:
+	if held.get("in_stall", false) or not (held.get("stall", {}) as Dictionary).is_empty():
+		return SWAP_OUT_M
+	if props == null or props.sim == null or props.sim.grid == null:
+		return SWAP_OUT_M
+	var mid_axle := hung.lerp(trailing, 0.5) + outward * OPEN_SWAP_OUT_M
+	var mid_ref := outward.lerp(Vector3.UP, 0.5).normalized()
+	var mid_xf := RollerPull.pulled(grip, mid_axle, scale_by, mid_ref).translated(
+		outward * BAR_PALM_M * 0.5
+	)
+	var roller_box := PullSide._box(
+		mid_xf, CarryOnProps.bag_box(SecurityLooks.Kind.ROLLER).grow(0.03)
+	)
+	var grid := props.sim.grid
+	var at := body.global_position
+	for wall: Array in PullSide.walls_near(grid, at):
+		if PullSide._overlap(roller_box, wall) > 0.0:
+			return SWAP_OUT_M
+	for piece: Array in PullSide.pieces_near(grid, at):
+		if PullSide._overlap(roller_box, piece) > 0.0:
+			return SWAP_OUT_M
+	return OPEN_SWAP_OUT_M
 
 
 ## A roller taken in hand for a stall, held by its grip bar with its rods in,

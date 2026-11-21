@@ -173,3 +173,45 @@ func test_a_caption_under_the_top_row_slides_clear_of_an_unlinked_sign() -> void
 		func(r: Rect2) -> bool: return placed[1].grow(margin).intersects(r)
 	)
 	assert_array(hits).is_empty()
+
+
+func test_a_caption_covered_with_no_clear_spot_hides_instead_of_overlapping() -> void:
+	_hud.position = Vector2.ZERO
+	_hud.size = Vector2(1920.0, 1080.0)
+	var placed := _view.layout_captions()
+	assert_array(placed).is_empty()
+	for caption in _view._captions:
+		assert_bool(caption.visible).is_false()
+	# Control: clearing the HUD restores visibility on the next layout.
+	_hud.visible = false
+	var restored := _view.layout_captions()
+	assert_int(restored.size()).is_equal(2)
+
+
+func test_a_covered_caption_with_only_an_occupied_spot_nearby_hides_instead_of_stacking() -> void:
+	_look_down(DESK + EAST / 2, 120.0)
+	var homes := _unplaced()
+	assert_int(homes.size()).is_equal(2)
+	# Keep only Gate A's padded rect uncovered; cover the rest of the screen so
+	# Gate B's home is under HUD and the only un-covered spot holds Gate A.
+	var hole := homes[0].grow(RoomLabelLayout.GAP_PX + 1.0)
+	_hud.position = Vector2(hole.end.x, 0.0)
+	_hud.size = Vector2(1920.0 - hole.end.x, 1080.0)
+	var extras: Array[Panel] = []
+	var rects := [
+		Rect2(0.0, 0.0, hole.position.x, 1080.0),
+		Rect2(hole.position.x, 0.0, hole.size.x, hole.position.y),
+		Rect2(hole.position.x, hole.end.y, hole.size.x, 1080.0 - hole.end.y),
+	]
+	for rect in rects:
+		var panel := Panel.new()
+		panel.position = rect.position
+		panel.size = rect.size
+		_hud.get_parent().add_child(panel)
+		extras.append(panel)
+	var placed := _view.layout_captions()
+	for panel in extras:
+		panel.free()
+	assert_int(placed.size()).is_equal(1)
+	assert_bool(_view._captions[0].visible).is_true()
+	assert_bool(_view._captions[1].visible).is_false()

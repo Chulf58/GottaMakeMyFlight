@@ -166,12 +166,33 @@ func test_the_departures_list_starts_open_on_a_fresh_profile() -> void:
 func test_the_departures_list_opens_under_the_toggles_at_list_width() -> void:
 	await _settle()
 	var panel := _rect("DeparturesPanel")
-	# HUD 7/7: the list opens under Reset hints, the column's last button.
-	var hints_bottom := LeftColumn.slot_top(LeftColumn.SLOT_RESET) + HudLayout.BUTTON_H
-	print("LIST %s" % [panel])
+	# When Hints/Reset hints are off (Mode.OFF), Departures collapses the dead
+	# slots and opens directly under DeparturesToggle.
+	var expected_top := LeftColumn.list_top(_main.get_tree())
+	print("LIST %s expected_top=%.1f" % [panel, expected_top])
 	assert_float(panel.size.x).is_equal_approx(HudLayout.LIST_W, 0.5)
 	assert_float(panel.position.x).is_equal_approx(HudLayout.MARGIN, 0.5)
-	assert_float(panel.position.y).is_equal_approx(hints_bottom + HudLayout.GAP, 0.5)
+	assert_float(panel.position.y).is_equal_approx(expected_top, 0.5)
+	assert_float(panel.position.y).is_equal_approx(
+		LeftColumn.slot_top(LeftColumn.SLOT_DEPARTURES) + HudLayout.BUTTON_H + HudLayout.GAP, 0.5
+	)
+
+
+func test_hiding_reset_hints_collapses_the_48_px_gap() -> void:
+	var hints := _showing_hint()
+	await _settle()
+	var with_reset := _rect("DeparturesPanel").position.y
+	assert_float(with_reset).is_equal_approx(float(LeftColumn.LIST_TOP), 0.5)
+	hints.reset_button().visible = false
+	await _settle()
+	var without_reset := _rect("DeparturesPanel").position.y
+	print("RESET_COLLAPSE with=%.1f without=%.1f" % [with_reset, without_reset])
+	assert_float(without_reset).is_equal_approx(
+		LeftColumn.slot_top(LeftColumn.SLOT_HINTS) + HudLayout.BUTTON_H + HudLayout.GAP, 0.5
+	)
+	assert_float(with_reset - without_reset).is_equal_approx(
+		float(HudLayout.BUTTON_H + HudLayout.GAP), 0.5
+	)
 
 
 func test_the_checklist_card_sits_under_the_list_at_list_width() -> void:
@@ -191,11 +212,10 @@ func test_the_checklist_card_rises_under_the_toggles_when_the_list_is_off() -> v
 	board.set_shown(false)
 	await _settle()
 	var card := _staff.hint_card().get_global_rect()
-	# HUD 7/7: the list opens under Reset hints, the column's last button.
-	var hints_bottom := LeftColumn.slot_top(LeftColumn.SLOT_RESET) + HudLayout.BUTTON_H
-	print("CHECKLIST_NO_LIST card=%s" % [card])
+	var expected_top := LeftColumn.list_top(_main.get_tree())
+	print("CHECKLIST_NO_LIST card=%s expected_top=%.1f" % [card, expected_top])
 	board.set_shown(true)
-	assert_float(card.position.y).is_equal_approx(hints_bottom + HudLayout.GAP, 0.5)
+	assert_float(card.position.y).is_equal_approx(expected_top, 0.5)
 
 
 func test_the_checklist_shows_only_unmet_lines() -> void:
@@ -302,7 +322,7 @@ func test_the_mood_legend_sits_on_a_card_beside_the_toggle() -> void:
 	assert_bool(rect.intersects(planner)).is_false()
 	assert_float(rect.position.y).is_equal_approx(toggle.position.y, 0.5)
 	assert_float(rect.size.y).is_greater(HudLayout.BUTTON_H)
-	assert_float(rect.size.y).is_less(float(LeftColumn.LIST_TOP - LeftColumn.TOP))
+	assert_float(rect.size.y).is_less(float(LeftColumn.list_top(_main.get_tree()) - LeftColumn.TOP))
 	assert_bool(rect.encloses(legend.get_global_rect())).is_true()
 	for mode_name in MoodOverlay.MODE_NAMES:
 		assert_bool(rect.encloses(_rect("Mode" + mode_name))).is_true()
