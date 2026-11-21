@@ -225,9 +225,80 @@ func _build_mesh() -> ArrayMesh:
 			if details:
 				_detail(st, cell, top)
 	var mesh := st.commit()
+	_bake_outline_normals(mesh)
 	if not _materials.is_empty():
 		mesh.surface_set_material(0, _materials[0])
 	return mesh
+
+
+## Bakes position-welded smooth outline normals into ARRAY_CUSTOM0 on the
+## single-surface generated roof mesh so 90-degree overhang, fascia, and
+## rooftop detail box corners close cleanly without changing face lighting.
+static func _bake_outline_normals(mesh: ArrayMesh) -> void:
+	if mesh == null or mesh.get_surface_count() == 0:
+		return
+	var arrays := mesh.surface_get_arrays(0)
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
+	if verts.is_empty() or normals.size() != verts.size():
+		return
+	var pos_keys: Array[Vector3i] = []
+	pos_keys.resize(verts.size())
+	var sum_by_pos := {}
+	var weight_by_pos := {}
+	for vi in verts.size():
+		var v := verts[vi]
+		var g := 10000.0
+		pos_keys[vi] = Vector3i(roundi(v.x * g), roundi(v.y * g), roundi(v.z * g))
+	for base in range(0, verts.size(), 3):
+		var p := [verts[base], verts[base + 1], verts[base + 2]]
+		for k in 3:
+			var ea: Vector3 = p[(k + 1) % 3] - p[k]
+			var eb: Vector3 = p[(k + 2) % 3] - p[k]
+			var la := ea.length()
+			var lb := eb.length()
+			if la < 1e-6 or lb < 1e-6:
+				continue
+			var angle := acos(clampf(ea.dot(eb) / (la * lb), -1.0, 1.0))
+			if angle <= 1e-6:
+				continue
+			var ci := base + k
+			var key := pos_keys[ci]
+			sum_by_pos[key] = sum_by_pos.get(key, Vector3.ZERO) + normals[ci].normalized() * angle
+			weight_by_pos[key] = float(weight_by_pos.get(key, 0.0)) + angle
+	var smooth_by_pos := {}
+	for key: Vector3i in sum_by_pos:
+		var total_w := float(weight_by_pos[key])
+		var sum_n: Vector3 = sum_by_pos[key]
+		if total_w > 0.0 and sum_n.length() > 0.15 * total_w:
+			smooth_by_pos[key] = sum_n.normalized()
+	var min_dot_by_pos := {}
+	for vi in verts.size():
+		var key := pos_keys[vi]
+		if smooth_by_pos.has(key):
+			var d: float = (smooth_by_pos[key] as Vector3).dot(normals[vi].normalized())
+			min_dot_by_pos[key] = minf(float(min_dot_by_pos.get(key, 1.0)), d)
+	var custom := PackedByteArray()
+	custom.resize(verts.size() * 4)
+	for vi in verts.size():
+		var key := pos_keys[vi]
+		var n := normals[vi].normalized()
+		var miter := 1.0
+		if smooth_by_pos.has(key):
+			n = smooth_by_pos[key]
+			var min_d := float(min_dot_by_pos[key])
+			if min_d > 0.2:
+				miter = clampf(1.0 / min_d, 1.0, 1.5)
+		var off := vi * 4
+		custom[off] = clampi(roundi((n.x * 0.5 + 0.5) * 255.0), 0, 255)
+		custom[off + 1] = clampi(roundi((n.y * 0.5 + 0.5) * 255.0), 0, 255)
+		custom[off + 2] = clampi(roundi((n.z * 0.5 + 0.5) * 255.0), 0, 255)
+		var a_f := 0.6 + 0.4 * clampf((miter - 1.0) / 0.5, 0.0, 1.0)
+		custom[off + 3] = clampi(roundi(a_f * 255.0), 0, 255)
+	arrays[Mesh.ARRAY_CUSTOM0] = custom
+	mesh.clear_surfaces()
+	var flags := Mesh.ARRAY_CUSTOM_RGBA8_UNORM << Mesh.ARRAY_FORMAT_CUSTOM0_SHIFT
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {}, flags)
 
 
 ## Which detail a cell's fixed hash picks, before the margin rule.

@@ -8,7 +8,7 @@
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_outline"]
 render_priority = 0
 shader = ExtResource("4_outline")
-shader_parameter/outline_color = Color(0, 0.404, 0.07, 1)
+shader_parameter/outline_color = Color(0.1, 0.1, 0.12, 1)
 shader_parameter/outline_px = 1.5
 
 [resource]
