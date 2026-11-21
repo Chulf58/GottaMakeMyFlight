@@ -222,13 +222,13 @@ def build_wall_post(root, c):
 
 
 def build_wall_glass(root, c):
-    box("Glass_Kerb", (-0.5, -TRIM_T / 2, 0), (0.5, TRIM_T / 2, 0.22), "trim", root, c)
+    box("Glass_Kerb", (-0.5, -TRIM_T / 2, 0), (0.5, TRIM_T / 2, 0.30), "trim", root, c)
     box("Glass_Header", (-0.5, -WALL_T / 2, WALL_H - 0.32), (0.5, WALL_T / 2, WALL_H - 0.06), "wall", root, c)
     box("Glass_Cap", (-0.5, -TRIM_T / 2, WALL_H - 0.06), (0.5, TRIM_T / 2, WALL_H), "trim", root, c)
     for side, x0, x1 in (("L", -0.5, -0.45), ("R", 0.45, 0.5)):
-        box("Glass_Mullion_" + side, (x0, -0.05, 0.22), (x1, 0.05, WALL_H - 0.32), "frame", root, c)
+        box("Glass_Mullion_" + side, (x0, -0.05, 0.30), (x1, 0.05, WALL_H - 0.32), "frame", root, c)
     box("Glass_Transom", (-0.45, -0.04, 1.40), (0.45, 0.04, 1.44), "frame", root, c)
-    box("Glass_Pane", (-0.45, -0.012, 0.22), (0.45, 0.012, WALL_H - 0.32), "glass", root, c)
+    box("Glass_Pane", (-0.45, -0.012, 0.30), (0.45, 0.012, WALL_H - 0.32), "glass", root, c)
 
 
 def build_wall_door(root, c):
@@ -320,16 +320,17 @@ def build_security_scanner(root, c):
 SEAT_LIFT = 0.07
 
 
-# One chair per footprint cell, centred on the cell (x -1, 0 and 1), because the sim
-# seats one passenger per cell (terminal_layout._add_seats) and GateChairs draws each
-# at its own cell's chair. An arm stands at each end and halfway between two chairs.
-SEAT_CHAIRS_X = (-1.0, 0.0, 1.0)
-SEAT_ARMS_X = (-1.395, -0.5, 0.5, 1.395)
+# One chair per footprint cell, spaced evenly between the four armrests so all four
+# gaps are symmetric (15.0 cm between pan belly and armrest inner face) and outer
+# Arm_Posts sit directly over Seat_Leg_0/_2 with no cantilever. GateChairs.CHAIR_OFFSET_M
+# ([0.08, 0.0, -0.08]) shifts seated outer passengers in lockstep.
+SEAT_CHAIRS_X = (-0.92, 0.0, 0.92)
+SEAT_ARMS_X = (-1.38, -0.46, 0.46, 1.38)
 
 
 def build_seat_row(root, c):
     box("Seat_Beam", (-1.42, 0.0, SEAT_LIFT + 0.30), (1.42, 0.08, SEAT_LIFT + 0.36), "frame", root, c)
-    for i, x in enumerate((-1.2, 0.0, 1.2)):
+    for i, x in enumerate((-1.38, 0.0, 1.38)):
         box("Seat_Leg_%d" % i, (x - 0.03, 0.01, 0.02), (x + 0.03, 0.07, SEAT_LIFT + 0.30), "frame", root, c)
         box("Seat_Foot_%d" % i, (x - 0.035, -0.25, 0), (x + 0.035, 0.30, 0.03), "dark", root, c)
     for i, x in enumerate(SEAT_CHAIRS_X):

@@ -178,3 +178,26 @@ func test_touching_owned_plots_show_no_kerb_between_them_and_the_grass_edge_does
 	assert_bool(_kerb_shown(Vector2i(6, 4), 3)).is_false()
 	assert_bool(_kerb_shown(Vector2i(6, 4), 1)).is_true()
 	assert_bool(_kerb_shown(Vector2i(6, 4), 0)).is_true()
+
+
+func test_south_border_plots_carry_no_coplanar_skirts_behind_road_sidewalk() -> void:
+	for col: int in [4, 5, 6, 7]:
+		var mi := _site.find_child("Lot_%d_5" % col, true, false) as MeshInstance3D
+		assert_object(mi).is_not_null()
+		var to_world := _site.global_transform.affine_inverse() * mi.global_transform
+		var arrays := mi.mesh.surface_get_arrays(0)
+		var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var idx: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+		var sidewalk_skirts := 0
+		for t in range(0, idx.size(), 3):
+			var a := to_world * verts[idx[t]]
+			var b := to_world * verts[idx[t + 1]]
+			var c := to_world * verts[idx[t + 2]]
+			var z_min := minf(a.z, minf(b.z, c.z))
+			var z_max := maxf(a.z, maxf(b.z, c.z))
+			var y_min := minf(a.y, minf(b.y, c.y))
+			if absf(z_min - 20.0) < 0.02 and absf(z_max - 20.0) < 0.02 and y_min < 0.19:
+				var cx := (a.x + b.x + c.x) / 3.0
+				if (cx > -40.0 and cx < -12.0) or (cx > 12.0 and cx < 40.0):
+					sidewalk_skirts += 1
+		assert_int(sidewalk_skirts).is_equal(0)

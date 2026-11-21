@@ -100,6 +100,38 @@ func test_furnishing_turns_the_room_ready_and_unready_shows_label_again() -> voi
 	)
 
 
+func test_ready_tint_sits_near_floor_and_hides_outside_build_mode() -> void:
+	assert_float(RoomView.TINT_Y).is_between(0.005, 0.01)
+	var grid := _mode.grid
+	var ready_id := grid.apply(BuildEdit.place_room(Rect2i(2, 2, 5, 4), &"cafe")).room_id
+	grid.apply(BuildEdit.place_object(&"cafe_counter", Vector2i(3, 2), 0))
+	grid.apply(BuildEdit.place_object(&"cafe_table", Vector2i(3, 5), 0))
+	var needs_id := grid.apply(BuildEdit.place_room(Rect2i(9, 2, 5, 4), &"cafe")).room_id
+	await _next_frame()
+	var ready_tint := _tint(ready_id)
+	var needs_tint := _tint(needs_id)
+	assert_float(ready_tint.position.y).is_equal_approx(RoomView.TINT_Y, 0.0001)
+	assert_bool(ready_tint.visible).is_true()
+
+	# Session joins the tree after RoomView drew (matching main.tscn node order).
+	var session := BuildSession.new()
+	_mode.add_child(session)
+	await _next_frame()
+	assert_bool(ready_tint.visible).is_false()
+	assert_bool(ready_tint.is_visible_in_tree()).is_false()
+	assert_bool(needs_tint.visible).is_true()
+
+	session.set_building(true)
+	assert_bool(ready_tint.visible).is_true()
+	assert_bool(ready_tint.is_visible_in_tree()).is_true()
+	assert_bool(needs_tint.visible).is_true()
+
+	session.set_building(false)
+	assert_bool(ready_tint.visible).is_false()
+	assert_bool(ready_tint.is_visible_in_tree()).is_false()
+	assert_bool(needs_tint.visible).is_true()
+
+
 func test_a_removed_room_loses_its_label_and_a_load_draws_the_saved_ones() -> void:
 	var grid := _mode.grid
 	var room_id := grid.apply(BuildEdit.place_room(Rect2i(2, 2, 5, 4), &"cafe")).room_id

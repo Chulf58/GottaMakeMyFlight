@@ -155,9 +155,10 @@ static func on_floor(p: Passenger) -> bool:
 
 
 ## Cell -> badness for every floor cell the overlay tints, read from `sim`:
-## the cells passengers stand on at their own badness, their neighbours at
-## SPREAD of it, only on cells that hold floor. `mode` picks the badness; Late
-## mode tints only the cells of late passengers and their neighbours.
+## the cells passengers stand on at their own badness, their reachable
+## neighbours (not across any wall or door edge) at SPREAD of it, only on cells
+## that hold floor. `mode` picks the badness; Late mode tints only the cells of
+## late passengers and their neighbours.
 static func cells_for(sim: PassengerSim, mode := Mode.MOOD) -> Dictionary:
 	var own := {}
 	for id in sim.passenger_ids():
@@ -172,6 +173,9 @@ static func cells_for(sim: PassengerSim, mode := Mode.MOOD) -> Dictionary:
 	for cell: Vector2i in own:
 		cells[cell] = maxf(cells.get(cell, 0.0), own[cell])
 		for step in NEIGHBOURS:
+			var side := BuildGrid.SIDE_STEP.find(step)
+			if sim.grid.has_wall(cell, side):
+				continue
 			var next := cell + step
 			cells[next] = maxf(cells.get(next, 0.0), own[cell] * SPREAD)
 	for cell: Vector2i in cells.keys():

@@ -1,16 +1,16 @@
 class_name GateChairs
 extends RefCounted
 ## Where a gate-seated passenger is drawn: on a chair of the seat row's mesh.
-## A seat_row has three cells and three chairs, one centred on each cell (pans
-## at x -1, 0 and 1 m in build_seat_row, tools/blender/interior/
-## build_interior_kit.py), and PassengerSim seats passengers by cell.
-## PassengerViews adds offset() to the sim's position, so the sim stays on grid
-## terms and only the drawing knows the mesh.
+## A seat_row has three cells and three chairs (pans at x -0.92, 0 and 0.92 m
+## in build_seat_row, tools/blender/interior/build_interior_kit.py, spaced
+## evenly between armrests at -1.38, -0.46, 0.46 and 1.38 m), and PassengerSim
+## seats passengers by cell. PassengerViews adds offset() to the sim's position,
+## so the sim stays on grid terms and only the drawing knows the mesh.
 
 ## Sideways from each footprint cell's centre to its chair, along the row's x
-## axis at facing 0, by footprint index. Every chair sits on its cell's centre.
+## axis at facing 0, by footprint index.
 ## GateRoller.slide() and GateRelocation.valid() read the size and the values.
-const CHAIR_OFFSET_M: Array[float] = [0.0, 0.0, 0.0]
+const CHAIR_OFFSET_M: Array[float] = [0.08, 0.0, -0.08]
 
 
 ## The sideways step from the sim's position to the chair, turned with the

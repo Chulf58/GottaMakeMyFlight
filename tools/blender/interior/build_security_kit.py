@@ -126,10 +126,11 @@ def tray(prefix, x, y, z, parent, c, pal="tray_grey", depth=TRAY[1]):
     hx, hy = w / 2.0, d / 2.0
     t = TRAY_WALL
     tbox(prefix + "_Base", (x - hx, y - hy, z), (x + hx, y + hy, z + TRAY_BASE), pal, parent, c)
-    tbox(prefix + "_Wall_F", (x - hx, y - hy, z), (x + hx, y - hy + t, z + h), pal, parent, c)
-    tbox(prefix + "_Wall_B", (x - hx, y + hy - t, z), (x + hx, y + hy, z + h), pal, parent, c)
-    tbox(prefix + "_Wall_L", (x - hx, y - hy + t, z), (x - hx + t, y + hy - t, z + h), pal, parent, c)
-    tbox(prefix + "_Wall_R", (x + hx - t, y - hy + t, z), (x + hx, y + hy - t, z + h), pal, parent, c)
+    z_wall = z + TRAY_BASE
+    tbox(prefix + "_Wall_F", (x - hx, y - hy, z_wall), (x + hx, y - hy + t, z + h), pal, parent, c)
+    tbox(prefix + "_Wall_B", (x - hx, y + hy - t, z_wall), (x + hx, y + hy, z + h), pal, parent, c)
+    tbox(prefix + "_Wall_L", (x - hx, y - hy + t, z_wall), (x - hx + t, y + hy - t, z + h), pal, parent, c)
+    tbox(prefix + "_Wall_R", (x + hx - t, y - hy + t, z_wall), (x + hx, y + hy - t, z + h), pal, parent, c)
 
 
 # ---------------------------------------------------------------- pieces
@@ -215,7 +216,14 @@ def build_tray_table(root, c):
         tray("Stack_%d" % i, 0.0, -0.385 + STACK_DEPTH / 2.0, z0, root, c, depth=STACK_DEPTH)
         for side, s in (("L", -1.0), ("R", 1.0)):
             r0, r1 = sorted((s * 0.20, s * 0.30))
-            tbox("Runner_%d%s" % (i, side), (r0, -0.415, z0 - 0.012), (r1, -0.105, z0), "metal", root, c)
+            tbox(
+                "Runner_%d%s" % (i, side),
+                (r0, -0.385, max(0.10, z0 - 0.012)),
+                (r1, -0.105, z0),
+                "metal",
+                root,
+                c,
+            )
     # Steel top at belt height; it and a transfer lip reach the back edge (+y).
     tbox("Tray_Top", (-0.38, -0.42, 0.70), (0.38, 0.42, BELT_TOP), "metal", root, c, bevel=0.008)
     tbox("Tray_Lip", (-0.30, 0.42, 0.70), (0.30, EDGE, BELT_TOP), "metal", root, c)
@@ -234,7 +242,7 @@ def build_pickup_table(root, c):
     # transfer plate on the front edge at belt height.
     for side, s in (("L", -1.0), ("R", 1.0)):
         x0, x1 = sorted((s * 0.30, s * 0.34))
-        tbox("Pickup_Rail_" + side, (x0, -EDGE, 0.62), (x1, 0.42, 0.76), "frame", root, c)
+        tbox("Pickup_Rail_" + side, (x0, -EDGE, 0.62), (x1, 0.36, 0.76), "frame", root, c)
     tbox("Pickup_Brace_F", (-0.30, -0.40, 0.62), (0.30, -0.36, 0.66), "frame", root, c)
     tbox("Pickup_Brace_B", (-0.30, 0.30, 0.62), (0.30, 0.34, 0.66), "frame", root, c)
     r = 0.025

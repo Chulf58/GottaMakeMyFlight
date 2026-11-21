@@ -80,6 +80,39 @@ func test_the_seat_row_mesh_has_three_pans_one_on_each_cell() -> void:
 	assert_int(used.size()).is_equal(3)
 
 
+func test_seat_row_armrests_and_outer_legs_are_symmetric() -> void:
+	var scene := (load(SEAT_ROW) as PackedScene).instantiate() as Node3D
+	var arm_xs: Array[float] = []
+	var leg_xs: Array[float] = []
+	for node in scene.find_children("*", "MeshInstance3D", true, false):
+		var mi := node as MeshInstance3D
+		for surface in mi.mesh.get_surface_count():
+			var verts: PackedVector3Array = mi.mesh.surface_get_arrays(surface)[Mesh.ARRAY_VERTEX]
+			for v: Vector3 in verts:
+				if absf(v.y - 0.73) < 0.005:
+					arm_xs.append(v.x)
+				if absf(v.y - 0.02) < 0.005 and v.z < -0.005 and v.z > -0.075:
+					leg_xs.append(v.x)
+	scene.free()
+	arm_xs.sort()
+	var arm_edges: Array[float] = []
+	for x in arm_xs:
+		if arm_edges.is_empty() or x - arm_edges.back() > 0.01:
+			arm_edges.append(x)
+	assert_int(arm_edges.size()).is_equal(8)
+	var arm_centres: Array[float] = []
+	for i in range(0, arm_edges.size(), 2):
+		arm_centres.append((arm_edges[i] + arm_edges[i + 1]) / 2.0)
+	var pans := _pan_centres()
+	for i in pans.size():
+		var left_gap: float = pans[i] - arm_centres[i]
+		var right_gap: float = arm_centres[i + 1] - pans[i]
+		assert_float(left_gap).is_equal_approx(0.46, 0.005)
+		assert_float(right_gap).is_equal_approx(0.46, 0.005)
+	assert_float(leg_xs.min()).is_equal_approx(-1.41, 0.005)
+	assert_float(leg_xs.max()).is_equal_approx(1.41, 0.005)
+
+
 func test_a_seated_passenger_is_drawn_on_a_chair_at_every_facing() -> void:
 	var pans := _pan_centres()
 	var grid := BuildGrid.new(Vector2i(10, 10), Vector3(3.25, 0.3, -7.5))

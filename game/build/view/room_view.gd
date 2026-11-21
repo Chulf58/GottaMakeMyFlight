@@ -1,16 +1,18 @@
 class_name RoomView
 extends Node3D
-## Draws each room of a BuildGrid: a see-through floor tint over its cells,
-## green when RoomRules says it is ready and amber when it is not, and a label
-## above its middle when it is not ready with the type and the notes saying
-## what it still needs (ready rooms keep their floor tint and RoomPanel status
-## and hide their world label and cream card). It follows the grid's own
-## signals, so furniture placed by any path (BuildMode, a probe, later systems)
-## shows on the next frame. Each frame RoomLabelLayout slides visible labels
-## clear of the HUD, caps their size on screen and fades them out when the
-## camera zooms in close.
+## Draws each room of a BuildGrid: a see-through floor tint over its cells
+## (shown in build mode, and for incomplete rooms outside it), green when
+## RoomRules says it is ready and amber when it is not, and a label above its
+## middle when it is not ready with the type and the notes saying what it still
+## needs (ready rooms keep RoomPanel status and hide their world label and
+## cream card). It follows the grid's own signals, so furniture placed by any
+## path (BuildMode, a probe, later systems) shows on the next frame. Each frame
+## RoomLabelLayout slides visible labels clear of the HUD, caps their size on
+## screen and fades them out when the camera zooms in close.
 
-const TINT_Y := 0.06
+## Kept low over the floor top (y = 0.0) so tints do not slice furniture bases
+## or passenger shoes while staying below BuiltOutline (TINT_Y + 0.02).
+const TINT_Y := 0.01
 ## Height of the label's bottom line; the text grows upward from it, so more
 ## notes never cover the furniture.
 const LABEL_Y := 2.9
@@ -38,8 +40,12 @@ const LAYOUT_PRIORITY := 2
 ## PassengerViews, whose passengers' need icons the labels slide clear of. Found
 ## as a child named PASSENGER_VIEWS of an ancestor when not set.
 var passenger_views: Node
+## BuildSession controlling whether ready rooms show their floor tint; found
+## in the scene tree when null (standalone views keep tints visible).
+var build_session: BuildSession
 
 var _grid: BuildGrid
+var _bound_session: BuildSession
 var _dirty := false
 var _warned_no_views := false
 ## Room id -> [MeshInstance3D tint, Label3D].
@@ -73,7 +79,12 @@ func _init() -> void:
 	process_priority = LAYOUT_PRIORITY
 
 
+func _ready() -> void:
+	_bind_session()
+
+
 func _process(_delta: float) -> void:
+	_bind_session()
 	if _dirty:
 		redraw()
 	layout_labels()
@@ -133,6 +144,7 @@ func _passenger_views() -> Node:
 
 ## Rebuilds every room's tint and label from the grid.
 func redraw() -> void:
+	_bind_session()
 	_dirty = false
 	for parts in _drawn.values():
 		for node in parts:
@@ -159,6 +171,7 @@ func _draw_room(room_id: int) -> void:
 	tint.mesh = mesh
 	tint.material_override = _ready_material if status.ok else _needs_material
 	tint.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	tint.visible = _tint_visible(status.ok)
 	tint.position = middle + Vector3(0.0, TINT_Y, 0.0)
 	add_child(tint)
 	var label := CaptionFont.apply(Label3D.new())
@@ -184,3 +197,36 @@ func _draw_room(room_id: int) -> void:
 	add_child(label)
 	RoomLabelLayout.make_card(label)
 	_drawn[room_id] = [tint, label]
+
+
+func _bind_session() -> void:
+	if build_session != null and not is_instance_valid(build_session):
+		build_session = null
+	if build_session == null and is_inside_tree():
+		build_session = MissMarkers.find_session(get_tree())
+	if build_session == _bound_session:
+		return
+	if _bound_session != null and is_instance_valid(_bound_session):
+		if _bound_session.changed.is_connected(_on_building_changed):
+			_bound_session.changed.disconnect(_on_building_changed)
+	_bound_session = build_session
+	if _bound_session != null and not _bound_session.changed.is_connected(_on_building_changed):
+		_bound_session.changed.connect(_on_building_changed)
+	_sync_tint_visibility()
+
+
+func _on_building_changed(_active: bool) -> void:
+	_sync_tint_visibility()
+
+
+func _tint_visible(ready: bool) -> bool:
+	if not ready:
+		return true
+	return _bound_session == null or _bound_session.active
+
+
+func _sync_tint_visibility() -> void:
+	for parts in _drawn.values():
+		var tint := parts[0] as MeshInstance3D
+		var label := parts[1] as Label3D
+		tint.visible = _tint_visible(label.get_meta(&"ready", false))
