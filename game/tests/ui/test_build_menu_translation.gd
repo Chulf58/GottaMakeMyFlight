@@ -6,6 +6,14 @@ extends GdUnitTestSuite
 ## lists are complete, that English output is unchanged, and that pseudolocalization
 ## reaches the names.
 
+## Build menu and Templates scripts whose tr() calls must exist in messages.pot.
+const ROUTED := [
+	"res://ui/build_menu_catalog.gd",
+	"res://ui/build_menu.gd",
+	"res://ui/build_menu_layout.gd",
+	"res://ui/templates_page.gd",
+]
+
 
 func after_test() -> void:
 	PseudoLocale.disable()
@@ -15,10 +23,13 @@ func after_test() -> void:
 
 func test_the_catalog_msgids_hold_every_name_of_its_tables() -> void:
 	var ids := BuildMenuCatalog.Words.new().msgids()
-	var wanted: Array[String] = ["Staff"]
+	var wanted: Array[String] = ["Staff", "Templates", "All", "Room"]
 	for category: Dictionary in BuildMenuCatalog.CATEGORIES:
 		wanted.append(category["name"])
 		wanted.append(category.get("group", category["name"]))
+	for cat_id: String in BuildMenuCatalog.SUBFILTERS:
+		for entry: Dictionary in BuildMenuCatalog.SUBFILTERS[cat_id]:
+			wanted.append(entry["name"])
 	for table: Dictionary in [BuildMenuCatalog.ITEMS, BuildMenuCatalog.LANE_ITEMS]:
 		for tool: BuildMode.Tool in table:
 			wanted.append(table[tool][0])
@@ -80,3 +91,49 @@ func test_pseudolocalization_reaches_a_table_name_and_a_hover_sentence() -> void
 	assert_int(name.length()).is_greater("Check-in desk".length())
 	assert_str(sentence).starts_with("[")
 	assert_str(BuildMenuCatalog.shown("")).is_empty()
+
+
+func _wanted_entries(source: String) -> Array[Dictionary]:
+	var string_arg := '"((?:[^"\\\\]|\\\\.)*)"'
+	var tr_pattern := RegEx.create_from_string(
+		"\\btr\\(\\s*" + string_arg + "\\s*(?:,\\s*" + string_arg + ")?"
+	)
+	var tr_n_pattern := RegEx.create_from_string(
+		"\\btr_n\\(\\s*" + string_arg + "\\s*,\\s*" + string_arg + "\\s*,[^,]*,\\s*" + string_arg
+	)
+	var wanted: Array[Dictionary] = []
+	for found in tr_pattern.search_all(source):
+		wanted.append({"ctx": found.get_string(2), "id": found.get_string(1), "plural": ""})
+	for found in tr_n_pattern.search_all(source):
+		wanted.append(
+			{"ctx": found.get_string(3), "id": found.get_string(1), "plural": found.get_string(2)}
+		)
+	return wanted
+
+
+func test_every_build_menu_and_templates_msgid_is_in_the_pot() -> void:
+	var template := FileAccess.get_file_as_string("res://locale/messages.pot").replace("\r\n", "\n")
+	var entries := PotEntries.parse(template)
+	assert_array(PotEntries.malformed(entries)).is_empty()
+	assert_array(PotEntries.duplicates(entries)).is_empty()
+	var checked := 0
+	var missing: Array[String] = []
+	for path: String in ROUTED:
+		var source := FileAccess.get_file_as_string(path)
+		for want: Dictionary in _wanted_entries(source):
+			checked += 1
+			if (
+				PotEntries.count(entries, want["ctx"], want["id"], want["plural"]) != 1
+				or PotEntries.complete(entries, want["ctx"], want["id"], want["plural"]) != 1
+			):
+				missing.append("%s: %s" % [path, str(want)])
+	for word: String in BuildMenuCatalog.Words.new().msgids():
+		checked += 1
+		if (
+			PotEntries.count(entries, BuildMenuCatalog.NAME_CONTEXT, word) != 1
+			or PotEntries.complete(entries, BuildMenuCatalog.NAME_CONTEXT, word) != 1
+		):
+			missing.append("Words.msgids: %s" % word)
+	print("build/templates POT entries checked: %d, missing: %s" % [checked, missing])
+	assert_int(checked).is_greater(90)
+	assert_array(missing).is_empty()

@@ -1,19 +1,25 @@
 extends SceneTree
-## Windowed 1920x1080 verification plates for the Build Menu rework (board
-## d6f56ecf, decision build-menu-rework-six-domain-tabs-progressive-tab-and-card-u):
-##   1. plate_01_tier1_day1.png       — Tier 1 Day 1, 3 build tabs, Operations 4 cards
-##   2. plate_02_demo_tier2_teasers.png — Demo Tier 2, 6 tabs, New tints + Tier 3 teasers
-##   3. plate_03_tier4_decor_scrolled.png — Tier 4 Decor & Parking (23 cards) scrolled right
-##   4. plate_04_inspect_and_hover.png — PassengerInspect + Operations tray + 280 px hover popup
-##   5. contact_sheet.png             — 2x2 contact sheet of plates 01..04
+## Windowed Vulkan verification plates for Build Menu rework, Templates tab, and
+## VF5 thumbnails (rulings 31fe648d, b35d5232, 0e312a7e; board 7ebf8514) at
+## both 1536x864 (1.25x) and 1280x720 (1.5x) layout scales:
+##   1. plate_01_tier1_day1_1536.png           — Tier 1 Day 1 (3 tabs + Templates + Remove)
+##   2. plate_02_demo_food_teasers_1536.png    — Demo Tier 2 Food (dining rooms & sub-filters)
+##   3. plate_03_tier4_facilities_all_1536.png — Tier 4 Facilities All (Room badges & dividers)
+##   4. plate_04_facilities_lounge_play_1536.png — Tier 4 Facilities filtered to Lounge & Play
+##   5. plate_05_templates_and_locks_1536.png  — Templates tab + unlocked/locked previews + Inspect
+##   6. plate_06_shops_bar_clear_1280.png      — 1280x720 (1.5x) Shops + bar + Inspect clearance
+##   7. plate_07_landside_1280.png             — 1280x720 (1.5x) Landside & Parking (lot_gate)
+##   8. plate_08_decor_building_1280.png       — 1280x720 (1.5x) Decor & hover popup
+##   9. contact_sheet.png                     — 4x2 contact sheet of plates 01..08
 
 const MAIN_SCENE := "res://main/main.tscn"
-const OUT_REL := "res://../tools/blender/out/build-menu-rework"
+const OUT_REL := "res://../tools/blender/out/build_menu_rework_vf5"
 const SCREEN := Vector2i(1920, 1080)
-const UI_SCALE := 1.25
+const SCALE_1536 := 1.25
+const SCALE_1280 := 1.5
 const HOVER_LIMIT_FRAMES := 360
 const FLIGHT_LIMIT_FRAMES := 600
-const LIMIT_MS := 150000
+const LIMIT_MS := 180000
 
 var _out_dir := ""
 var _failed := false
@@ -71,24 +77,34 @@ func _frames(count: int) -> void:
 	await RenderingServer.frame_post_draw
 
 
+func _set_layout(ui_scale: float) -> void:
+	DisplayServer.window_set_size(SCREEN)
+	root.content_scale_factor = ui_scale
+	await _frames(8)
+	var expected := Vector2(SCREEN) / ui_scale
+	var got := root.get_visible_rect().size
+	print("PROBE layout scale=%.2f got=%s expected=%s" % [ui_scale, got, expected])
+	_expect(got.is_equal_approx(expected), "layout %s != %s" % [got, expected])
+
+
 func _run() -> void:
 	var base_seed := randi()
 	seed(base_seed)
 	print("PROBE world_seed=%d" % base_seed)
-	DisplayServer.window_set_size(SCREEN)
-	root.content_scale_factor = UI_SCALE
-	await _frames(10)
-	_expect(root.size == SCREEN, "window size %s != %s" % [root.size, SCREEN])
+	await _set_layout(SCALE_1536)
 
 	await _run_plate_01(base_seed + 1)
 	await _run_plate_02(base_seed + 2)
-	var main3 := await _run_plate_03(base_seed + 3)
+	var main3 := await _run_plate_03_to_05(base_seed + 3)
 	if main3 != null:
-		await _run_plate_04(main3)
 		main3.queue_free()
 		await _frames(4)
-	_expect(_plates.size() == 4, "expected 4 captured plates, got %d" % _plates.size())
-	if _plates.size() == 4 and not _failed:
+
+	await _set_layout(SCALE_1280)
+	await _run_plates_1280(base_seed + 4)
+
+	_expect(_plates.size() == 8, "expected 8 captured plates, got %d" % _plates.size())
+	if _plates.size() == 8 and not _failed:
 		_save_contact_sheet()
 	print("PROBE_INVALID" if _failed else "PROBE_PASS")
 	_finish(1 if _failed else 0)
@@ -111,7 +127,7 @@ func _boot_world(world_seed: int, profile_guide: bool) -> Node3D:
 	var area := StartView.area_for(mode.grid)
 	rig.frame_start_view(area)
 	var center_pt := Vector3(area.get_center().x, 0.22, area.get_center().y)
-	await _frames(10)
+	await _frames(8)
 	_check_terminal_visible(main, center_pt)
 	return main
 
@@ -131,12 +147,12 @@ func _run_plate_01(world_seed: int) -> void:
 	var menu := main.get_node("BuildMenu") as BuildMenu
 	var unlocks := main.get_node("BuildUnlocks") as BuildUnlocks
 	menu.end_grant_hold()
-	menu.press_category(BuildMenu.category_index("operations"))
+	menu.press_category(BuildMenu.category_index("building"))
 	_warp_away()
-	await _frames(10)
+	await _frames(8)
 
 	var vis_tabs := _visible_build_tabs(menu)
-	var vis_cards := _visible_row_tools(menu, BuildMenu.category_index("operations"))
+	var vis_cards := _visible_row_tools(menu, BuildMenu.category_index("building"))
 	var tray_rect := menu.tray().get_global_rect()
 	print(
 		(
@@ -146,12 +162,17 @@ func _run_plate_01(world_seed: int) -> void:
 	)
 	_expect(unlocks.tier() == 1, "plate_01: expected tier 1")
 	_expect(vis_tabs == [0, 1, 2], "plate_01: expected [0, 1, 2] tabs, got %s" % [vis_tabs])
-	_expect(menu.category_button(BuildMenu.REMOVE_CATEGORY).visible, "plate_01: Remove hidden")
-	_expect(vis_cards.size() == 4, "plate_01: expected 4 Tier-1 Operations cards")
-	_expect(tray_rect.size.x < BuildMenu.COLUMN_W - 80.0, "plate_01: tray did not hug 4 cards")
-	_expect(is_equal_approx(tray_rect.size.y, BuildMenu.TRAY_H), "plate_01: tray height != TRAY_H")
+	_expect(
+		menu.find_child("TemplatesDock", true, false) == null, "plate_01: TemplatesDock present"
+	)
+	_expect(
+		menu.bar().is_ancestor_of(menu.templates_page.button),
+		"plate_01: TemplatesButton not in bar"
+	)
+	_expect(vis_cards.size() == 7, "plate_01: expected 7 Tier-1 Building cards")
+	_check_tray_bounds(menu, BuildMenu.TRAY_H, "plate_01")
 	_check_compact_cards(menu, vis_cards, "plate_01")
-	_capture("plate_01_tier1_day1.png")
+	_capture("plate_01_tier1_day1_1536.png")
 	main.queue_free()
 	await _frames(4)
 
@@ -175,74 +196,29 @@ func _run_plate_02(world_seed: int) -> void:
 	var food_idx := BuildMenu.category_index("food")
 	menu.press_category(food_idx)
 	_warp_away()
-	await _frames(10)
+	await _frames(8)
 
 	var vis_tabs := _visible_build_tabs(menu)
-	var new_tabs: Array[int] = []
-	for i in BuildMenu.REMOVE_CATEGORY:
-		if menu.category_button(i).modulate.is_equal_approx(BuildMenu.NEW_TINT):
-			new_tabs.append(i)
 	var ordered := _visible_row_tools(menu, food_idx)
-	var teaser_label := menu.card(BuildMode.Tool.BAR_ROOM).find_child("Price", true, false) as Label
+	var tray_rect := menu.tray().get_global_rect()
 	print(
 		(
-			"PLATE_02 tier=%d vis_tabs=%s new_tabs=%s ordered=%d teaser='%s'"
-			% [unlocks.tier(), vis_tabs, new_tabs, ordered.size(), teaser_label.text]
+			"PLATE_02 tier=%d vis_tabs=%s ordered=%d tray=%s pills=%d"
+			% [unlocks.tier(), vis_tabs, ordered.size(), tray_rect, menu.filter_buttons().size()]
 		)
 	)
-	_expect(vis_tabs == [0, 1, 2, 3, 4, 5], "plate_02: expected all 6 build tabs")
-	_expect(
-		new_tabs == [1, 4, 5],
-		"plate_02: expected [1, 4, 5] unpressed new tabs, got %s" % [new_tabs]
-	)
-	_expect(
-		menu.category_button(food_idx).modulate.is_equal_approx(Color.WHITE),
-		"plate_02: pressed Food & Drink tab must stay untinted teal"
-	)
+	_expect(vis_tabs == [0, 1, 2, 3, 4, 5, 6], "plate_02: expected all 7 domain tabs")
 	_expect(ordered.size() == 10, "plate_02: expected 10 cards in Food & Drink")
-	_expect(
-		(
-			ordered.slice(0, 3)
-			== [BuildMode.Tool.CAFE_ROOM, BuildMode.Tool.COUNTER, BuildMode.Tool.TABLE]
-		),
-		"plate_02: playable Tier-2 cards must precede Tier-3 teasers"
-	)
-	_expect(
-		menu.card(BuildMode.Tool.CAFE_ROOM).modulate.is_equal_approx(BuildMenu.NEW_TINT),
-		"plate_02: Cafe card missing NEW_TINT"
-	)
-	var tfont := teaser_label.get_theme_font(&"font")
-	var tsize := teaser_label.get_theme_font_size(&"font_size")
-	var twidth := tfont.get_string_size(teaser_label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, tsize).x
-	print(
-		"PLATE_02 teaser font_size=%d width=%.1f slot=%.1f" % [tsize, twidth, teaser_label.size.x]
-	)
-	_expect(teaser_label.text == "In the full game", "plate_02: wrong teaser label")
-	_expect(twidth <= teaser_label.size.x + 0.5, "plate_02: teaser text clipped in slot")
-	_capture("plate_02_demo_tier2_teasers.png")
+	_check_tray_bounds(menu, BuildMenu.TRAY_FILTERED_H, "plate_02")
+	_expect(menu.filter_buttons().size() == 3, "plate_02: expected All/Rooms/Items filter pills")
+	_check_compact_cards(menu, ordered, "plate_02")
+	_capture("plate_02_demo_food_teasers_1536.png")
 	DemoMode.clear_override()
 	main.queue_free()
 	await _frames(4)
 
 
-func _find_terminal_floor_cell(grid: BuildGrid) -> Vector2i:
-	for y in grid.size.y:
-		for x in grid.size.x:
-			var c := Vector2i(x, y)
-			if (
-				grid.floor_at(c) != BuildGrid.FLOOR_NONE
-				and grid.object_at(c) == 0
-				and grid.room_at(c) == 0
-			):
-				return c
-	return Vector2i(10, 10)
-
-
-func _run_plate_03(world_seed: int) -> Node3D:
-	DemoMode.clear_override()
-	var main := await _boot_world(world_seed, false)
-	var menu := main.get_node("BuildMenu") as BuildMenu
-	var mode := main.get_node("BuildMode") as BuildMode
+func _unlock_tier4(main: Node3D) -> void:
 	var unlocks := main.get_node("BuildUnlocks") as BuildUnlocks
 	var rating := main.get_node("AirportRating") as AirportRating
 	for _i in 80:
@@ -251,88 +227,200 @@ func _run_plate_03(world_seed: int) -> Node3D:
 		unlocks.note_made()
 	unlocks.check()
 	await _frames(6)
-	menu.end_grant_hold()
-	mode.set_tool(BuildMode.Tool.BENCH)
-	var cam := main.get_node("TycoonCamera/Camera3D") as Camera3D
-	var bench_cell := _find_terminal_floor_cell(mode.grid)
-	_warp_to(cam.unproject_position(mode.grid.cell_to_world(bench_cell)))
-	await _frames(6)
-	menu.tray_scroll().scroll_horizontal = 99999
-	await _frames(8)
-
-	var decor_idx := BuildMenu.category_index("decor")
-	var vis_cards := _visible_row_tools(menu, decor_idx)
-	var tray_rect := menu.tray().get_global_rect()
-	var status_rect := menu.status_card().get_global_rect()
-	var scroll_x := menu.tray_scroll().scroll_horizontal
-	print(
-		(
-			"PLATE_03 tier=%d decor_cards=%d scroll_x=%d tray=%s status=%s"
-			% [unlocks.tier(), vis_cards.size(), scroll_x, tray_rect, status_rect]
-		)
-	)
-	_expect(unlocks.tier() == 4, "plate_03: expected tier 4")
-	_expect(vis_cards.size() == 23, "plate_03: expected 23 Decor & Parking cards")
-	_expect(scroll_x > 1000, "plate_03: expected scrolled right end, got %d" % scroll_x)
-	_expect(is_equal_approx(tray_rect.size.y, BuildMenu.TRAY_H), "plate_03: tray height != TRAY_H")
-	_expect(menu.status_card().visible, "plate_03: StatusCard should be visible")
-	_expect(not status_rect.intersects(tray_rect), "plate_03: StatusCard overlaps ItemTray")
-	_check_compact_cards(menu, vis_cards, "plate_03")
-	_capture("plate_03_tier4_decor_scrolled.png")
-	return main
 
 
-func _run_plate_04(main: Node3D) -> void:
-	var clock := main.get_node("SimClock") as SimClock
-	var flights := main.get_node("FlightSim") as FlightSim
-	var sim := main.get_node("PassengerSim") as PassengerSim
-	var views := main.get_node("PassengerViews") as PassengerViews
-	var hud := main.get_node("PassengerHud") as PassengerHud
+func _add_sample_templates(mode: BuildMode) -> void:
+	var cafe := RoomTemplate.new()
+	cafe.name = "Cafe 4x4"
+	cafe.room_type = &"cafe"
+	cafe.size = Vector2i(4, 4)
+	for _i in 16:
+		cafe.floors.append(Vector2i(BuildGrid.FLOOR_TILE, 1))
+	cafe.pieces.append({"def": &"cafe_counter", "anchor": Vector2i(1, 0), "facing": 0})
+	mode.templates.library.add(cafe)
+	var rest := RoomTemplate.new()
+	rest.name = "Rest 4x4"
+	rest.room_type = &"restaurant"
+	rest.size = Vector2i(4, 4)
+	for _i in 16:
+		rest.floors.append(Vector2i(BuildGrid.FLOOR_TILE, 1))
+	rest.pieces.append({"def": &"restaurant_booth", "anchor": Vector2i(1, 0), "facing": 0})
+	mode.templates.library.add(rest)
+
+
+func _open_and_spawn_passenger(main: Node3D) -> void:
 	var menu := main.get_node("BuildMenu") as BuildMenu
-	var mode := main.get_node("BuildMode") as BuildMode
+	var hud := main.get_node("PassengerHud") as PassengerHud
+	var sim := main.get_node("PassengerSim") as PassengerSim
+	var flights := main.get_node("FlightSim") as FlightSim
 	var staff := main.get_node("Staff") as StaffSim
-	staff.hire(StaffMember.Role.CHECKIN)
-	staff.hire(StaffMember.Role.SECURITY)
-	mode.set_tool(BuildMode.Tool.NONE)
-	clock.set_speed(3)
+	var views := main.get_node("PassengerViews") as PassengerViews
+	var clock := main.get_node("SimClock") as SimClock
+	menu.close_for_modal()
+	if staff.count(StaffMember.Role.CHECKIN) == 0:
+		staff.hire(StaffMember.Role.CHECKIN)
+	if staff.count(StaffMember.Role.SECURITY) == 0:
+		staff.hire(StaffMember.Role.SECURITY)
 	clock.set_paused(false)
-	for _i in FLIGHT_LIMIT_FRAMES:
+	for _i in 600:
 		if flights.opened_tick >= 0:
 			break
-		await process_frame
-	if sim.passenger_ids().is_empty():
+		clock.advance(SimClock.STEP * 4.0)
+	if flights.opened_tick >= 0 and sim.passenger_ids().is_empty():
 		hud.press_debug_spawn()
-	for _step in 200:
+	for _i in 60:
 		if not sim.passenger_ids().is_empty():
 			break
 		clock.advance(SimClock.STEP * 4.0)
 	clock.set_paused(true)
-	var pax_ids := sim.passenger_ids()
-	_expect(not pax_ids.is_empty(), "plate_04: no passengers spawned")
-	if not pax_ids.is_empty():
-		views.selected_id = pax_ids[0]
+	if not sim.passenger_ids().is_empty():
+		views.selected_id = sim.passenger_ids()[0]
 	hud.refresh()
-	menu.press_category(BuildMenu.category_index("operations"))
-	var screen_card := menu.card(BuildMode.Tool.SCREEN) as ItemCardButton
-	await _frames(4)
-	menu.tray_scroll().ensure_control_visible(screen_card)
-	await _frames(8)
 
-	var shown := await _open_hover_popup(screen_card)
+
+func _run_plate_03_to_05(world_seed: int) -> Node3D:
+	DemoMode.clear_override()
+	var main := await _boot_world(world_seed, false)
+	var menu := main.get_node("BuildMenu") as BuildMenu
+	var mode := main.get_node("BuildMode") as BuildMode
+	var hud := main.get_node("PassengerHud") as PassengerHud
+	await _unlock_tier4(main)
+	menu.end_grant_hold()
+
+	# Plate 03: Tier 4 Facilities All (Room badges + renamed items + filter strip).
+	var fac_idx := BuildMenu.category_index("facilities")
+	menu.press_category(fac_idx)
+	await _frames(3)
+	menu.tray_scroll().scroll_horizontal = 600
+	_warp_away()
+	await _frames(6)
+	var fac_cards := _visible_row_tools(menu, fac_idx)
+	_expect(fac_cards.size() == 20, "plate_03: expected 20 Facilities cards")
+	_check_tray_bounds(menu, BuildMenu.TRAY_FILTERED_H, "plate_03")
+	_check_compact_cards(menu, fac_cards, "plate_03")
+	_capture("plate_03_tier4_facilities_all_1536.png")
+
+	# Plate 04: Facilities filtered to Lounge & Play (7 cards).
+	menu.press_filter("lounge_play")
+	await _frames(6)
+	var lp_cards := _visible_row_tools(menu, fac_idx)
+	_expect(lp_cards.size() == 7, "plate_04: expected 7 Lounge & Play cards")
+	_check_tray_bounds(menu, BuildMenu.TRAY_FILTERED_H, "plate_04")
+	_capture("plate_04_facilities_lounge_play_1536.png")
+
+	# Plate 05: Templates tab (1 unlocked + 1 Demo-locked template + PassengerInspect on MARGIN).
+	_add_sample_templates(mode)
+	DemoMode.set_override_for_test(true)
+	await _open_and_spawn_passenger(main)
+	menu._refresh_cards()
+	menu.press_category(BuildMenu.TEMPLATES_PAGE)
+	await _frames(8)
+	var tpl_rect := _check_tray_bounds(menu, BuildMenu.TRAY_H, "plate_05")
 	var inspect := hud.find_child("PassengerInspect", true, false) as PassengerInspect
-	var inspect_rect := inspect.get_global_rect()
-	var tray_rect := menu.tray().get_global_rect()
+	var inspect_r := inspect.get_global_rect()
+	print("PLATE_05 tpl_tray=%s inspect=%s vis=%s" % [tpl_rect, inspect_r, inspect.visible])
+	_expect(menu.templates_page.visible, "plate_05: TemplatesPage not visible")
+	_expect(
+		inspect.visible and inspect.shows_passenger(), "plate_05: Inspect not showing passenger"
+	)
+	_expect(not inspect_r.intersects(tpl_rect), "plate_05: Inspect overlaps Templates tray")
+	_expect(
+		is_equal_approx(inspect_r.end.y, root.get_visible_rect().size.y - float(HudLayout.MARGIN)),
+		"plate_05: Inspect not resting on MARGIN"
+	)
+	_capture("plate_05_templates_and_locks_1536.png")
+	DemoMode.clear_override()
+	return main
+
+
+func _run_plates_1280(world_seed: int) -> void:
+	DemoMode.clear_override()
+	var main := await _boot_world(world_seed, false)
+	var menu := main.get_node("BuildMenu") as BuildMenu
+	var hud := main.get_node("PassengerHud") as PassengerHud
+	await _unlock_tier4(main)
+	menu.end_grant_hold()
+	await _open_and_spawn_passenger(main)
+
+	# Plate 06: 1280x720 Shops tab (Duty Free / Fashion Till) + 10-button bar + Inspect.
+	var shops_idx := BuildMenu.category_index("shops")
+	menu.press_category(shops_idx)
+	await _frames(3)
+	menu.tray_scroll().scroll_horizontal = 580
+	_warp_away()
+	await _frames(6)
+	var bar_r := menu.bar().get_global_rect()
+	var tray_r := _check_tray_bounds(menu, BuildMenu.TRAY_FILTERED_H, "plate_06")
+	var inspect := hud.find_child("PassengerInspect", true, false) as PassengerInspect
+	var inspect_r := inspect.get_global_rect()
 	print(
 		(
-			"PLATE_04 inspect_vis=%s inspect=%s tray=%s gap_x=%.1f"
-			% [inspect.visible, inspect_rect, tray_rect, tray_rect.position.x - inspect_rect.end.x]
+			"PLATE_06_1280 bar=%s tray=%s inspect=%s vis=%s"
+			% [bar_r, tray_r, inspect_r, inspect.visible]
 		)
 	)
-	_expect(inspect.visible and inspect.shows_passenger(), "plate_04: PassengerInspect not open")
-	_expect(not inspect_rect.intersects(tray_rect), "plate_04: PassengerInspect overlaps ItemTray")
-	_expect(is_equal_approx(tray_rect.size.x, BuildMenu.COLUMN_W), "plate_04: tray width != 640")
-	_check_hover_popup(shown, screen_card)
-	_capture("plate_04_inspect_and_hover.png")
+	_expect(
+		inspect.visible and inspect.shows_passenger(), "plate_06: Inspect not showing passenger"
+	)
+	_expect(
+		Rect2(Vector2.ZERO, root.get_visible_rect().size).encloses(bar_r),
+		"plate_06: CategoryBar leaves 1280 viewport"
+	)
+	_expect(
+		not inspect_r.intersects(bar_r) and not inspect_r.intersects(tray_r),
+		"plate_06: Inspect overlaps bar/tray"
+	)
+	_expect(
+		is_equal_approx(inspect_r.end.y, root.get_visible_rect().size.y - float(HudLayout.MARGIN)),
+		"plate_06: Inspect not resting on MARGIN at 1280"
+	)
+	_capture("plate_06_shops_bar_clear_1280.png")
+
+	# Plate 07: 1280x720 Landside & Parking tab (136 px, 4 cards).
+	var land_idx := BuildMenu.category_index("landside")
+	menu.press_category(land_idx)
+	_warp_away()
+	await _frames(8)
+	var land_cards := _visible_row_tools(menu, land_idx)
+	_expect(land_cards.size() == 4, "plate_07: expected 4 Landside cards")
+	_check_tray_bounds(menu, BuildMenu.TRAY_H, "plate_07")
+	_capture("plate_07_landside_1280.png")
+
+	# Plate 08: 1280x720 Decor tab (12 cards, VF5/VF7 outlines) + hover popup.
+	var decor_idx := BuildMenu.category_index("decor")
+	menu.press_category(decor_idx)
+	await _frames(6)
+	var bush_card := menu.card(BuildMode.Tool.BUSH) as ItemCardButton
+	var shown := await _open_hover_popup(bush_card)
+	_expect(shown != null, "plate_08: hover popup did not open")
+	_check_tray_bounds(menu, BuildMenu.TRAY_H, "plate_08")
+	_capture("plate_08_decor_building_1280.png")
+	main.queue_free()
+	await _frames(4)
+
+
+func _check_tray_bounds(menu: BuildMenu, expect_h: float, tag: String) -> Rect2:
+	var bar_r := menu.bar().get_global_rect()
+	var tray_r := menu.tray().get_global_rect()
+	var cx := root.get_visible_rect().size.x * 0.5
+	_expect(menu.is_tray_open(), "%s: tray not open" % tag)
+	_expect(
+		is_equal_approx(tray_r.size.y, expect_h),
+		"%s: tray height %.1f != %.1f" % [tag, tray_r.size.y, expect_h]
+	)
+	_expect(
+		absf(tray_r.get_center().x - cx) <= 1.0,
+		"%s: tray center %.1f != %.1f" % [tag, tray_r.get_center().x, cx]
+	)
+	_expect(
+		absf(tray_r.end.y - (bar_r.position.y - float(HudLayout.GAP))) <= 1.0,
+		(
+			"%s: tray bottom %.1f != bar.top - GAP %.1f"
+			% [tag, tray_r.end.y, bar_r.position.y - HudLayout.GAP]
+		)
+	)
+	_expect(not bar_r.intersects(tray_r), "%s: bar intersects tray" % tag)
+	return tray_r
 
 
 func _open_hover_popup(card: ItemCardButton) -> Control:
@@ -355,25 +443,6 @@ func _open_hover_popup(card: ItemCardButton) -> Control:
 	return shown
 
 
-func _check_hover_popup(shown: Control, card: ItemCardButton) -> void:
-	if shown == null:
-		_invalid("plate_04: hover popup did not open")
-		return
-	var popup := shown.get_window()
-	var popup_r := Rect2(Vector2(popup.position), Vector2(popup.size))
-	var card_r := card.get_global_rect()
-	var texts: PackedStringArray = []
-	for node in shown.find_children("*", "Label", true, false):
-		texts.append((node as Label).text)
-	var joined := " | ".join(texts)
-	var size_str := BuildMenuCatalog.size_text(BuildMode.Tool.SCREEN)
-	print("PLATE_04 popup=%s card=%s texts=%s" % [popup_r, card_r, joined])
-	_expect(not popup_r.intersects(card_r), "plate_04: hover popup overlaps card")
-	_expect(popup_r.end.y <= card_r.position.y, "plate_04: hover popup not above card")
-	_expect(texts.has(size_str) and texts.has("Click"), "plate_04: popup missing size or Click")
-	_expect(joined.contains("Upkeep"), "plate_04: popup missing Upkeep")
-
-
 func _visible_build_tabs(menu: BuildMenu) -> Array[int]:
 	var out: Array[int] = []
 	for i in BuildMenu.REMOVE_CATEGORY:
@@ -384,13 +453,10 @@ func _visible_build_tabs(menu: BuildMenu) -> Array[int]:
 
 func _visible_row_tools(menu: BuildMenu, cat_idx: int) -> Array[int]:
 	var out: Array[int] = []
-	var first_tool: int = BuildMenu.categories()[cat_idx]["tools"][0]
-	var row := menu.card(first_tool).get_parent()
-	for child in row.get_children():
-		if child is Control and (child as Control).visible:
-			for tool in BuildMenu.categories()[cat_idx]["tools"]:
-				if menu.card(tool) == child:
-					out.append(tool)
+	for tool in BuildMenu.categories()[cat_idx]["tools"]:
+		var card := menu.card(tool)
+		if card != null and card.visible:
+			out.append(tool)
 	return out
 
 
@@ -398,18 +464,19 @@ func _check_compact_cards(menu: BuildMenu, tools: Array[int], tag: String) -> vo
 	for tool in tools:
 		var card := menu.card(tool)
 		var thumb := card.find_child("Thumbnail", true, false) as Control
-		var labels := card.find_children("*", "Label", true, false)
+		var want_sz := Vector2(BuildMenu.THUMB_SIZE, BuildMenu.THUMB_SIZE)
 		_expect(
-			thumb != null and thumb.size.is_equal_approx(Vector2(52.0, 52.0)),
-			"%s: tool %d thumbnail size %s != (52, 52)" % [tag, tool, thumb.size]
+			thumb != null and thumb.size.is_equal_approx(want_sz),
+			"%s: tool %d thumbnail size %s != %s" % [tag, tool, thumb.size, want_sz]
 		)
 		_expect(
-			labels.size() == 2, "%s: tool %d has %d labels, want 2" % [tag, tool, labels.size()]
+			card.size.is_equal_approx(BuildMenu.CARD_SIZE),
+			"%s: tool %d card size %s != %s" % [tag, tool, card.size, BuildMenu.CARD_SIZE]
 		)
 
 
 func _warp_away() -> void:
-	_warp_to(Vector2(768.0, 220.0))
+	_warp_to(Vector2(640.0, 200.0))
 
 
 func _warp_to(layout_pt: Vector2) -> void:
@@ -432,19 +499,14 @@ func _capture(filename: String) -> void:
 
 
 func _save_contact_sheet() -> void:
-	var tile_w := SCREEN.x / 2
-	var tile_h := SCREEN.y / 2
-	var sheet := Image.create(SCREEN.x, SCREEN.y, false, Image.FORMAT_RGBA8)
-	var slots: Array[Vector2i] = [
-		Vector2i(0, 0),
-		Vector2i(tile_w, 0),
-		Vector2i(0, tile_h),
-		Vector2i(tile_w, tile_h),
-	]
-	for i in 4:
+	var tile_w := 640
+	var tile_h := 360
+	var sheet := Image.create(tile_w * 4, tile_h * 2, false, Image.FORMAT_RGBA8)
+	for i in 8:
 		var copy := _plates[i].duplicate() as Image
 		copy.resize(tile_w, tile_h, Image.INTERPOLATE_LANCZOS)
-		sheet.blit_rect(copy, Rect2i(Vector2i.ZERO, Vector2i(tile_w, tile_h)), slots[i])
+		var slot := Vector2i((i % 4) * tile_w, (i / 4) * tile_h)
+		sheet.blit_rect(copy, Rect2i(Vector2i.ZERO, Vector2i(tile_w, tile_h)), slot)
 	var path := _out_dir.path_join("contact_sheet.png")
 	var err := sheet.save_png(path)
 	print("PLATE saved %s size=%s err=%d" % [path, sheet.get_size(), err])

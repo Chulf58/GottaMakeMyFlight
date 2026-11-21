@@ -887,7 +887,67 @@ msgstr ""
 
 #: ui/build_menu_catalog.gd
 msgctxt "build menu"
-msgid "Decor & Parking"
+msgid "Decor"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Landside & Parking"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Templates"
+msgstr ""
+
+#: ui/build_menu.gd ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "All"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Room"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Check-in & Gate"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Security"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Baggage"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Rooms"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Hygiene & Rest"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Services"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Lounge & Play"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Items"
 msgstr ""
 
 #: ui/build_menu_catalog.gd
@@ -1037,7 +1097,32 @@ msgstr ""
 
 #: ui/build_menu_catalog.gd
 msgctxt "build menu"
-msgid "Till"
+msgid "Duty Free Till"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Duty Free Shelf"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Fashion Till"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Exchange counter"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Shower cubicle"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Sleeping pod"
 msgstr ""
 
 #: ui/build_menu_catalog.gd build/furniture_tools.gd
@@ -1384,6 +1469,22 @@ msgstr ""
 
 #: ui/templates_page.gd
 msgid "Pick a room"
+msgstr ""
+
+#: ui/templates_page.gd
+msgid "{w}x{h}"
+msgstr ""
+
+#: ui/templates_page.gd
+msgid "{count} pieces"
+msgstr ""
+
+#: ui/templates_page.gd
+msgid "Click a furnished room on the grid to save it as a reusable template."
+msgstr ""
+
+#: ui/templates_page.gd
+msgid "Empty room footprint."
 msgstr ""
 
 #: build/furniture_tools.gd

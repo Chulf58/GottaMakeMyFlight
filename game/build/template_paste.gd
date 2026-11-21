@@ -99,6 +99,35 @@ func is_active() -> bool:
 	return armed >= 0 or capturing
 
 
+## Why template `index` cannot be armed or pasted right now, or "" when unlocked.
+func lock_text(index: int) -> String:
+	if _mode == null or index < 0 or index >= library.size():
+		return ""
+	var edits := library.get_template(index).plan(Vector2i.ZERO, 0)
+	return BuildUnlocks.edits_lock_text(_mode.unlocks, _mode.require_unlocks, edits)
+
+
+## Arms template `index` from UI only when all rooms/pieces in it are unlocked.
+## When locked, keeps `armed == -1` with no ghost, surfaces the unlock
+## requirement on status, and emits `armed_changed` so card toggles sync.
+func try_arm(index: int) -> bool:
+	if index < 0 or index >= library.size():
+		push_error("TemplatePaste.try_arm: no template %d" % index)
+		return false
+	var locked := lock_text(index)
+	if locked != "":
+		armed = -1
+		capturing = false
+		_clear_ghost()
+		_key = ""
+		_status = locked
+		status_changed.emit(locked)
+		armed_changed.emit()
+		return false
+	arm(index)
+	return true
+
+
 ## Arms the paste of template `index`, unturned.
 func arm(index: int) -> void:
 	if index < 0 or index >= library.size():

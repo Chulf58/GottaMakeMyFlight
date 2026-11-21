@@ -1,8 +1,7 @@
 class_name TestBuildMenuActivitiesPage
 extends GdUnitTestSuite
-## The activity and rest rooms in the domain build tabs: shower and nap pod
-## rooms sit in Facilities beside their pieces, and lounge and play area rooms
-## sit in Decor & Parking beside theirs.
+## The activity and rest rooms in the Facilities domain tab: lounge, play area,
+## shower and nap pod rooms sit in Facilities beside their pieces.
 
 const TOOLS := [
 	BuildMode.Tool.PLAY_AREA_ROOM,
@@ -17,8 +16,8 @@ const ROOMS := {
 	BuildMode.Tool.NAP_POD_ROOM: &"nap_pod",
 }
 const EXPECTED_TABS := {
-	BuildMode.Tool.PLAY_AREA_ROOM: "decor",
-	BuildMode.Tool.LOUNGE_ROOM: "decor",
+	BuildMode.Tool.PLAY_AREA_ROOM: "facilities",
+	BuildMode.Tool.LOUNGE_ROOM: "facilities",
 	BuildMode.Tool.SHOWER_ROOM: "facilities",
 	BuildMode.Tool.NAP_POD_ROOM: "facilities",
 }

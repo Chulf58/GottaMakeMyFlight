@@ -79,7 +79,7 @@ func test_an_unlock_reveals_new_tabs_and_cards_and_announces_what_opened() -> vo
 	_unlocks.check()
 	assert_int(_unlocks.tier()).is_equal(2)
 	assert_array(_visible_tab_ids(_menu)).is_equal(
-		["building", "operations", "facilities", "food", "shops", "decor", "remove"]
+		["building", "operations", "facilities", "food", "shops", "decor", "landside", "remove"]
 	)
 	assert_bool(_menu.card(BuildMode.Tool.CAFE_ROOM).visible).is_true()
 	assert_object(_menu.card(BuildMode.Tool.CAFE_ROOM).modulate).is_not_equal(BuildMenu.LOCKED_TINT)
@@ -113,7 +113,7 @@ func test_unwired_unlocks_fails_loud_showing_all_cards_greyed_and_locked() -> vo
 	var menu: BuildMenu = auto_free(BuildMenu.new())
 	menu.build_mode = unwired_mode
 	_port.add_child(menu)
-	assert_int(_visible_tab_ids(menu).size()).is_equal(7)
+	assert_int(_visible_tab_ids(menu).size()).is_equal(8)
 	var cafe := menu.card(BuildMode.Tool.CAFE_ROOM)
 	assert_bool(cafe.visible).is_true()
 	assert_object(cafe.modulate).is_equal(BuildMenu.LOCKED_TINT)
@@ -128,7 +128,7 @@ func test_a_menu_over_a_bare_mode_shows_every_card_open() -> void:
 	var menu: BuildMenu = auto_free(BuildMenu.new())
 	menu.build_mode = bare
 	_port.add_child(menu)
-	assert_int(_visible_tab_ids(menu).size()).is_equal(7)
+	assert_int(_visible_tab_ids(menu).size()).is_equal(8)
 	assert_str(menu._lock_text(BuildMode.Tool.MULTI_STOREY)).is_empty()
 	assert_bool(menu.card(BuildMode.Tool.MULTI_STOREY).visible).is_true()
 	assert_object(menu.card(BuildMode.Tool.MULTI_STOREY).modulate).is_not_equal(

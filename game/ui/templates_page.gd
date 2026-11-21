@@ -1,73 +1,44 @@
 class_name TemplatesPage
 extends ScrollContainer
-## The Templates page of the build tray (decision room-templates-store-rooms-
-## with-their-pieces-kept-in-each-sa): a Save room card that arms saving
-## (TemplatePaste.arm_capture()), one card per saved template that arms its
-## paste. Its Templates button opens and closes it
-## (BuildMenu.press_category(TEMPLATES_PAGE)); the page scrolls
-## sideways when the cards are wider than the tray's column.
-##
-## A template card shows its name, its size and what its pieces cost; its
-## picture is a plain tile with the room type's name until template thumbnails
-## exist. Uses its own compact card and header tile constants so saved room
-## cards fit inside BuildMenu.TRAY_H with zero vertical overflow.
-##
-## The button sits on its own small panel on the 16 px grid margin (decision
-## hud-grid-and-rails-one-spacing-grid-centred-top-row-right-ra, part 1; the
-## panel stays beside the bar, decision ad966308), just above the
-## height of the category bar, not in the bar: every bar button carries a drawn icon and
-## there is no Templates icon yet. Where it finally goes is open.
+## The Templates page inside the build tray (decisions room-templates-store-
+## rooms-with-their-pieces-kept-in-each-sa and hud-layout-templates-tab-
+## refinement-320-px-right-rail-compac): its button sits inside the bottom
+## category bar between the domain tabs and Remove, and opens a horizontal row
+## of Save room + rendered room template preview cards with size/lock badges.
 
 const SAVE_CARD := "CardSaveRoom"
 const BUTTON_NAME := "TemplatesButton"
-const TEMPLATE_CARD_SIZE := Vector2(112.0, 126.0)
-const TEMPLATE_THUMB_SIZE := 30.0
+const TEMPLATE_ICON := "res://assets/ui/icons/templates.svg"
+const TEMPLATE_CARD_SIZE := Vector2(96.0, 118.0)
+const TEMPLATE_THUMB_SIZE := 44.0
 
-## The button that opens the page, on `dock`.
+## The button that opens the page, placed inside CategoryBar by BuildMenuLayout.
 var button := Button.new()
-var dock := PanelContainer.new()
 
 var _menu: BuildMenu
 var _paste: TemplatePaste
 var _row := HBoxContainer.new()
 var _cards: Array[Button] = []
+var _badges: Array[PanelContainer] = []
+var _price_labels: Array[Label] = []
 var _save_card: Button
 
 
-## Puts the page in `menu`'s tray and its button on the left margin, on the bar's baseline.
+## Puts the page inside `menu`'s tray content and wires template changes.
 func attach(menu: BuildMenu) -> void:
 	_menu = menu
 	name = "TemplatesPage"
 	visible = false
+	size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_RESERVE
 	vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	custom_minimum_size = Vector2(menu.tray_max_inner_width(), 0.0)
 	_row.add_theme_constant_override("separation", 6)
 	_row.mouse_filter = Control.MOUSE_FILTER_PASS
+	_row.minimum_size_changed.connect(_sync_width)
 	add_child(_row)
-	menu.tray().add_child(self)
-	button.name = BUTTON_NAME
-	button.text = tr("Templates")
-	button.tooltip_text = tr("Templates")
-	button.toggle_mode = true
-	button.custom_minimum_size = Vector2(0.0, BuildMenu.CATEGORY_SIZE.y)
-	button.focus_mode = Control.FOCUS_NONE
+	menu.tray_content().add_child(self)
 	button.pressed.connect(menu.press_category.bind(BuildMenu.TEMPLATES_PAGE))
-	dock.name = "TemplatesDock"
-	dock.theme = BuildMenu.HUD_THEME
-	dock.theme_type_variation = &"HudBar"
-	dock.custom_minimum_size = Vector2(0.0, BuildMenu.BAR_H)
-	dock.anchor_top = 1.0
-	dock.anchor_bottom = 1.0
-	dock.offset_left = HudLayout.MARGIN
-	# On the bar's baseline: its bottom edge is the bar's, MARGIN off the screen's.
-	dock.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	dock.add_child(button)
-	menu.add_child(dock)
-	_place_dock()
-	menu.bar().minimum_size_changed.connect(_place_dock)
-	menu.get_viewport().size_changed.connect(_place_dock)
 	if menu.build_mode != null:
 		_paste = menu.build_mode.templates
 		_paste.library.changed.connect(_rebuild)
@@ -75,19 +46,12 @@ func attach(menu: BuildMenu) -> void:
 	_rebuild()
 
 
-## Beside the bar on its baseline, or lifted a bar height when the bar leaves no room.
-func _place_dock() -> void:
-	var beside := BottomDocks.beside_bar(
-		_menu.get_viewport().get_visible_rect().size.x, _menu.bar().get_combined_minimum_size().x
-	)
-	dock.offset_top = -BottomDocks.bottom(beside)
-	dock.offset_bottom = -BottomDocks.bottom(beside)
-
-
-## Shows or hides the page and marks its button.
+## Shows or hides the page and marks its bar button.
 func sync(open: bool) -> void:
 	visible = open
 	button.set_pressed_no_signal(open)
+	if open:
+		update_width()
 
 
 ## The card of template `index`.
@@ -103,78 +67,217 @@ func card_count() -> int:
 	return _cards.size()
 
 
+## Updates template lock badges, price labels, tints and tooltips when unlock state changes.
+func refresh_locks() -> void:
+	if _paste == null:
+		return
+	var unlocks := _unlocks()
+	var required := _require_unlocks()
+	for i in _cards.size():
+		var template := _paste.library.get_template(i)
+		var card_btn := _cards[i] as ItemCardButton
+		var lock_args := BuildUnlocks.edits_lock_args(
+			unlocks, required, template.plan(Vector2i.ZERO, 0)
+		)
+		var locked := not lock_args.is_empty()
+		var badge := _badges[i]
+		var badge_label := badge.get_child(0) as Label
+		var style := badge.get_theme_stylebox(&"panel") as StyleBoxFlat
+		if locked:
+			badge_label.text = tr("Locked")
+			if style != null:
+				style.bg_color = Color(0.94, 0.56, 0.52, 0.96)
+			_price_labels[i].text = (
+				tr("In the full game")
+				if DemoMode.is_demo() and int(lock_args.get("tier", 0)) > DemoMode.MAX_PLAYABLE_TIER
+				else tr("Locked")
+			)
+			card_btn.modulate = BuildMenu.LOCKED_TINT
+		else:
+			badge_label.text = tr("{w}x{h}").format({"w": template.size.x, "h": template.size.y})
+			if style != null:
+				style.bg_color = Color(0.55, 0.80, 0.80, 0.96)
+			var price := template.price()
+			_price_labels[i].text = tr("Free", "price") if price == 0 else str(price)
+			card_btn.modulate = Color.WHITE
+		card_btn.requirement = _lock_text_for.bind(i) if locked else Callable()
+		var room := RoomTypes.get_type(template.room_type)
+		var count_line := tr("{count} pieces").format({"count": template.pieces.size()})
+		(
+			card_btn
+			. set_info(
+				template.name,
+				[_summary_text(template)],
+				[
+					[room.display_name, &"HudHint"],
+					["%dx%d" % [template.size.x, template.size.y], &"HudHint"],
+					[count_line, &"HudHint"],
+				]
+			)
+		)
+
+
 func _rebuild() -> void:
 	for child in _row.get_children():
 		_row.remove_child(child)
 		child.queue_free()
 	_cards.clear()
-	_save_card = _make_card(
-		SAVE_CARD, tr("Save room"), [tr("Pick a room"), "", tr("Click", "card hint")]
-	)
+	_badges.clear()
+	_price_labels.clear()
+	_save_card = _make_save_card()
 	if _paste != null:
 		_save_card.pressed.connect(_paste.arm_capture)
 	_row.add_child(_save_card)
 	var count := _paste.library.size() if _paste != null else 0
 	for i in count:
 		var template := _paste.library.get_template(i)
-		var price := template.price()
-		var lines := [
-			"%dx%d" % [template.size.x, template.size.y],
-			tr("Free", "price") if price == 0 else str(price),
-			tr("Click", "card hint"),
-		]
-		var room := RoomTypes.get_type(template.room_type).display_name
-		var each := _make_card("CardTemplate%d" % i, template.name, lines, room)
-		each.pressed.connect(func() -> void: _paste.arm(i))
+		var each := _make_template_card(i, template)
+		each.pressed.connect(_press_template_card.bind(i))
 		_row.add_child(each)
 		_cards.append(each)
+	refresh_locks()
 	_mark_cards()
+	update_width()
+	if visible and _menu != null and _menu.is_tray_open():
+		_menu.sync_tray_bounds()
 
 
-## A card: the plain picture tile (when `picture` is given), the name, then one
-## label per line (size, price, hint).
-func _make_card(card_name: String, title: String, lines: Array, picture := "") -> Button:
-	var card_button := Button.new()
-	card_button.name = card_name
-	card_button.toggle_mode = true
-	card_button.custom_minimum_size = TEMPLATE_CARD_SIZE
-	card_button.focus_mode = Control.FOCUS_NONE
-	card_button.mouse_filter = Control.MOUSE_FILTER_PASS
-	var column := VBoxContainer.new()
-	column.set_anchors_preset(Control.PRESET_FULL_RECT)
-	column.offset_left = 4.0
-	column.offset_top = 4.0
-	column.offset_right = -4.0
-	column.offset_bottom = -4.0
-	column.add_theme_constant_override("separation", 1)
-	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	card_button.add_child(column)
-	if picture != "":
-		var tile := ColorRect.new()
-		tile.color = BuildMenu.PLACEHOLDER_COLOR
-		tile.custom_minimum_size = Vector2(TEMPLATE_CARD_SIZE.x - 8.0, TEMPLATE_THUMB_SIZE)
-		tile.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var label := _label(picture, &"HudCardName")
-		label.set_anchors_preset(Control.PRESET_FULL_RECT)
-		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		label.add_theme_color_override("font_color", Color(0.98, 0.94, 0.85))
-		tile.add_child(label)
-		column.add_child(tile)
-	column.add_child(_label(title, &"HudCardName"))
-	var variations := [&"HudHint", &"HudPrice", &"HudHint"]
-	for i in lines.size():
-		column.add_child(_label(lines[i], variations[mini(i, variations.size() - 1)]))
-	return card_button
+func _press_template_card(index: int) -> void:
+	if _paste == null:
+		return
+	if not _paste.try_arm(index):
+		_mark_cards()
 
 
-func _label(text: String, variation: StringName) -> Label:
-	var label := Label.new()
-	label.text = text
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.clip_text = true
-	label.theme_type_variation = variation
-	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	return label
+func _make_save_card() -> Button:
+	var btn := ItemCardButton.new()
+	btn.name = SAVE_CARD
+	btn.toggle_mode = true
+	btn.custom_minimum_size = TEMPLATE_CARD_SIZE
+	btn.focus_mode = Control.FOCUS_NONE
+	btn.mouse_filter = Control.MOUSE_FILTER_PASS
+	btn.set_info(
+		tr("Save room"),
+		[tr("Click a furnished room on the grid to save it as a reusable template.")],
+		[[tr("Click", "card hint"), &"HudHint"]]
+	)
+	var column := BuildMenuLayout.card_column(btn)
+	column.add_child(_make_thumbnail(load(TEMPLATE_ICON)))
+	var name_label := BuildMenuLayout.card_label(
+		column, tr("Save room"), &"HudCardName", BuildMenuLayout.CARD_LINES
+	)
+	name_label.name = "Name"
+	name_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	var hint_label := BuildMenuLayout.card_label(
+		column, tr("Pick a room"), &"HudHint", BuildMenuLayout.PRICE_LINES
+	)
+	hint_label.name = "SubLabel"
+	BuildMenuLayout.watch_fit(btn)
+	return btn
+
+
+func _make_template_card(index: int, template: RoomTemplate) -> Button:
+	var btn := ItemCardButton.new()
+	btn.name = "CardTemplate%d" % index
+	btn.toggle_mode = true
+	btn.custom_minimum_size = TEMPLATE_CARD_SIZE
+	btn.focus_mode = Control.FOCUS_NONE
+	btn.mouse_filter = Control.MOUSE_FILTER_PASS
+	var column := BuildMenuLayout.card_column(btn)
+	var tex := _preview_texture(template.room_type)
+	column.add_child(_make_thumbnail(tex))
+	var name_label := BuildMenuLayout.card_label(
+		column, template.name, &"HudCardName", BuildMenuLayout.CARD_LINES
+	)
+	name_label.name = "Name"
+	name_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	var price := template.price()
+	var price_text := tr("Free", "price") if price == 0 else str(price)
+	var price_label := BuildMenuLayout.card_label(
+		column, price_text, &"HudPrice", BuildMenuLayout.PRICE_LINES
+	)
+	price_label.name = "Price"
+	_price_labels.append(price_label)
+	BuildMenuLayout.watch_fit(btn)
+	var badge := (
+		BuildMenuLayout
+		. add_card_badge(
+			btn,
+			"%dx%d" % [template.size.x, template.size.y],
+			Color(0.55, 0.80, 0.80, 0.96),
+			&"TemplateBadge",
+		)
+	)
+	_badges.append(badge)
+	return btn
+
+
+func _make_thumbnail(tex: Texture2D) -> TextureRect:
+	var picture := TextureRect.new()
+	picture.name = "Thumbnail"
+	picture.texture = tex
+	picture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	picture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	picture.custom_minimum_size = Vector2(TEMPLATE_THUMB_SIZE, TEMPLATE_THUMB_SIZE)
+	picture.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	picture.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return picture
+
+
+func _preview_texture(room_type: StringName) -> Texture2D:
+	var thumb_id := BuildMenuCatalog.room_thumbnail(room_type)
+	if thumb_id != "":
+		var path := BuildMenuCatalog.THUMBNAIL_DIR % thumb_id
+		if ResourceLoader.exists(path):
+			return load(path)
+	return load(TEMPLATE_ICON)
+
+
+func _summary_text(template: RoomTemplate) -> String:
+	if template.pieces.is_empty():
+		return tr("Empty room footprint.")
+	var counts: Dictionary = {}
+	for piece in template.pieces:
+		var def_id: StringName = piece["def"]
+		counts[def_id] = int(counts.get(def_id, 0)) + 1
+	var parts: Array[String] = []
+	for def_id: StringName in counts:
+		var def := BuildCatalog.get_def(def_id)
+		var label := def.display_name if def != null and def.display_name != "" else String(def_id)
+		parts.append("%dx %s" % [counts[def_id], label])
+	return ", ".join(parts)
+
+
+func _lock_text_for(index: int) -> String:
+	if _paste == null or index < 0 or index >= _paste.library.size():
+		return ""
+	var template := _paste.library.get_template(index)
+	return BuildUnlocks.edits_lock_text(
+		_unlocks(), _require_unlocks(), template.plan(Vector2i.ZERO, 0)
+	)
+
+
+func _unlocks() -> BuildUnlocks:
+	return _menu.build_mode.unlocks if _menu != null and _menu.build_mode != null else null
+
+
+func _require_unlocks() -> bool:
+	return _menu.build_mode.require_unlocks if _menu != null and _menu.build_mode != null else false
+
+
+func update_width() -> void:
+	if _menu == null:
+		return
+	var row_w := _row.get_combined_minimum_size().x
+	custom_minimum_size = Vector2(minf(row_w, _menu.tray_max_inner_width()), 0.0)
+
+
+func _sync_width() -> void:
+	update_width()
+	if visible and _menu != null and _menu.is_tray_open():
+		_menu.sync_tray_bounds()
 
 
 func _mark_cards() -> void:

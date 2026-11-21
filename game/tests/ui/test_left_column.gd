@@ -289,11 +289,12 @@ func test_nothing_in_the_column_reaches_the_money_row() -> void:
 			assert_bool(rect.intersects(money.get_global_rect())).is_false()
 
 
-func test_the_templates_panel_sits_on_the_margin() -> void:
+func test_templates_lives_in_the_bar_with_no_detached_dock() -> void:
 	await _settle()
-	var dock := _rect("TemplatesDock")
-	print("TEMPLATES %s" % [dock])
-	assert_float(dock.position.x).is_equal_approx(HudLayout.MARGIN, 0.5)
+	assert_object(_control("TemplatesDock")).is_null()
+	var tbtn := _control("TemplatesButton")
+	assert_object(tbtn).is_not_null()
+	assert_bool(_control("CategoryBar").is_ancestor_of(tbtn)).is_true()
 
 
 ## The legend is on a card of its own (plate d_mood_1920: bare 14 px text over

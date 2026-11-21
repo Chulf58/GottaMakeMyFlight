@@ -867,7 +867,7 @@ func _bottom_right_dock(dock_name: String, bottom: float) -> VBoxContainer:
 
 
 ## Keeps the follow card bottom-left, left of BuildMenu's centre column and
-## clear of TemplatesDock (BottomDocks), growing upward when wrapped.
+## clear of CategoryBar (BottomDocks), growing upward when wrapped.
 func _fit_follow() -> void:
 	var layer_w := get_viewport().get_visible_rect().size.x
 	var menu := get_node_or_null("../BuildMenu") as BuildMenu

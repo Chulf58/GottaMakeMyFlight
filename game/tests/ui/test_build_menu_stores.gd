@@ -23,13 +23,13 @@ const STORES := {
 			BuildMode.Tool.DUTY_FREE_TILL,
 			BuildMode.Tool.DUTY_FREE_SHELF,
 		],
-		["Duty free", "Till", "Shelf"],
+		["Duty free", "Duty Free Till", "Duty Free Shelf"],
 	],
 	"Fashion":
 	[
 		&"fashion",
 		[BuildMode.Tool.FASHION_ROOM, BuildMode.Tool.FASHION_TILL, BuildMode.Tool.FASHION_RAIL],
-		["Fashion store", "Till", "Clothes rail"],
+		["Fashion store", "Fashion Till", "Clothes rail"],
 	],
 }
 const STORE_ORDER := ["Pharmacy", "Duty free", "Fashion"]

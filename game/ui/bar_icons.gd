@@ -14,6 +14,8 @@ const ICONS := {
 	"food": "food",
 	"shops": "shops",
 	"decor": "decor",
+	"landside": "landside",
+	"templates": "templates",
 	"remove": "remove",
 	"staff": "staff",
 }

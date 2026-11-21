@@ -24,7 +24,6 @@ const RESTING := [
 	"MoodToggle",
 	"DeparturesToggle",
 	"PlannerToggle",
-	"TemplatesButton",
 	"DebugToggle",
 ]
 const IN_BUILD_MODE := ["BuildModeSign", "DebugPanel"]
@@ -159,18 +158,17 @@ func _assert_geometry(rects: Dictionary, layout: Vector2) -> void:
 	assert_float(clock.size.x).is_equal_approx(320.0, 0.5)
 	assert_float(clock.size.x).is_equal_approx(float(HudLayout.RAIL_W), 0.5)
 	assert_float(layout.x - clock.end.x).is_equal_approx(float(HudLayout.MARGIN), 0.5)
-	# The bottom docks.
+	# The bottom docks (no TemplatesDock; Templates lives inside CategoryBar).
+	assert_object(_main.find_child("TemplatesDock", true, false)).is_null()
 	var bar := (_main.get_node("BuildMenu") as BuildMenu).bar().get_global_rect()
-	var dock := _find("TemplatesButton").get_parent_control().get_global_rect()
+	var tbtn := _find("TemplatesButton").get_global_rect()
+	assert_bool(bar.encloses(tbtn)).is_true()
 	var debug: Rect2 = rects["DebugToggle"]
-	assert_float(dock.position.x).is_equal_approx(float(HudLayout.MARGIN), 0.5)
-	assert_float(dock.size.y).is_equal_approx(float(HudLayout.BAR_H), 0.5)
 	assert_float(layout.x - debug.end.x).is_equal_approx(float(HudLayout.MARGIN), 0.5)
 	if bar.size.x + 2.0 * DOCK_SIDE_ROOM <= layout.x:
-		assert_float(dock.end.y).is_equal_approx(bar.end.y, 0.5)
+		assert_float(debug.end.y).is_equal_approx(bar.end.y, 0.5)
 		assert_float(layout.y - debug.end.y).is_equal_approx(float(HudLayout.MARGIN), 0.5)
 	else:
-		assert_float(dock.end.y).is_equal_approx(bar.position.y - HudLayout.GAP, 0.5)
 		assert_float(debug.end.y).is_equal_approx(bar.position.y - HudLayout.GAP, 0.5)
 
 
@@ -308,7 +306,10 @@ func test_the_left_column_cards_clear_the_bar_and_the_dock_with_flights_schedule
 		var names: Array = RESTING + ["DeparturesPanel", "StaffHintCard"]
 		var rects := _rects(names, layout)
 		var found := _overlaps(rects)
-		var dock := _find("TemplatesButton").get_parent_control().get_global_rect()
+		var bar := (_main.get_node("BuildMenu") as BuildMenu).bar().get_global_rect()
+		var floor_y := (
+			layout.y - BottomDocks.left_floor_bottom(layout.x, bar.size.x, HudLayout.LIST_W)
+		)
 		var panel: Rect2 = rects["DeparturesPanel"]
 		var card: Rect2 = rects["StaffHintCard"]
 		var staff := _main.get_node("StaffPanel") as StaffPanel
@@ -317,8 +318,8 @@ func test_the_left_column_cards_clear_the_bar_and_the_dock_with_flights_schedule
 			"rows ",
 			staff.checklist().rows().size(),
 			(
-				" ui scale %.2f list %s card %s dock %s more %s %s overlaps %s"
-				% [ui_scale, panel, card, dock, more.visible, (more as Label).text, found]
+				" ui scale %.2f list %s card %s floor_y %.1f more %s %s overlaps %s"
+				% [ui_scale, panel, card, floor_y, more.visible, (more as Label).text, found]
 			)
 		)
 		assert_array(found).is_empty()
@@ -327,8 +328,8 @@ func test_the_left_column_cards_clear_the_bar_and_the_dock_with_flights_schedule
 		var rows := (_find("Rows") as Control).get_combined_minimum_size().y
 		var shown := (_find("RowsScroll") as Control).size.y
 		assert_float(card.position.y - panel.end.y).is_greater_equal(float(HudLayout.GAP) - 0.5)
-		assert_float(card.end.y).is_less_equal(dock.position.y - HudLayout.GAP + 0.5)
-		assert_float(panel.end.y).is_less_equal(dock.position.y - HudLayout.GAP + 0.5)
+		assert_float(card.end.y).is_less_equal(floor_y - HudLayout.GAP + 0.5)
+		assert_float(panel.end.y).is_less_equal(floor_y - HudLayout.GAP + 0.5)
 		# The card is on show with at least one line and its title; a short layout
 		# folds the rest into "+N more", a tall one shows every line.
 		assert_bool(staff.checklist().rows().size() > 0).is_true()
@@ -378,19 +379,22 @@ func test_a_first_time_hint_card_clears_the_bar_and_the_dock_with_a_full_list() 
 		assert_bool(hints.card().is_visible_in_tree()).is_true()
 		rects["HintCard"] = _rect(hints.card())
 		var found := _overlaps(rects)
-		var dock := _find("TemplatesButton").get_parent_control().get_global_rect()
+		var bar := (_main.get_node("BuildMenu") as BuildMenu).bar().get_global_rect()
+		var floor_y := (
+			layout.y - BottomDocks.left_floor_bottom(layout.x, bar.size.x, HudLayout.LIST_W)
+		)
 		var panel: Rect2 = rects["DeparturesPanel"]
 		var card: Rect2 = rects["HintCard"]
 		print(
 			(
-				"ui scale %.2f hint: list %s card %s dock %s overlaps %s"
-				% [ui_scale, panel, card, dock, found]
+				"ui scale %.2f hint: list %s card %s floor_y %.1f overlaps %s"
+				% [ui_scale, panel, card, floor_y, found]
 			)
 		)
 		assert_array(found).is_empty()
 		assert_float(panel.size.y).is_greater(60.0)
 		assert_float(card.position.y - panel.end.y).is_greater_equal(float(HudLayout.GAP) - 0.5)
-		assert_float(card.end.y).is_less_equal(dock.position.y - HudLayout.GAP + 0.5)
+		assert_float(card.end.y).is_less_equal(floor_y - HudLayout.GAP + 0.5)
 		_port.free()
 		_port = null
 	DirAccess.remove_absolute(memory)
@@ -422,7 +426,7 @@ func test_the_column_fits_are_not_recomputed_on_an_unchanged_frame() -> void:
 
 ## At 1280x720 with DebugPanel open and FollowCard showing, AlertStack clears
 ## DebugPanel, FollowCard has its HudTopCard cream backing, and LeftColumn
-## cards clear FollowCard and TemplatesDock.
+## cards clear FollowCard and CategoryBar.
 func test_alert_stack_clears_debug_panel_and_follow_card_has_cream_backing() -> void:
 	await _boot(LAYOUTS[1.5])
 	await _enter_build_mode()
@@ -444,12 +448,18 @@ func test_alert_stack_clears_debug_panel_and_follow_card_has_cream_backing() -> 
 	var debug_r := _rect(_find("DebugPanel"))
 	var rail_r := stack.room_rect()
 	var follow_r := _rect(follow_card)
-	var dock_r := _find("TemplatesButton").get_parent_control().get_global_rect()
-	var tray_r := (_main.get_node("BuildMenu") as BuildMenu).tray().get_global_rect()
+	var menu := _main.get_node("BuildMenu") as BuildMenu
+	var bar_r := menu.bar().get_global_rect()
+	var tray_r := menu.tray().get_global_rect()
 	var style := follow_card.get_theme_stylebox("panel") as StyleBoxFlat
-	print("1280 RAIL=%s DEBUG=%s FOLLOW=%s DOCK=%s" % [rail_r, debug_r, follow_r, dock_r])
+	print("1280 RAIL=%s DEBUG=%s FOLLOW=%s BAR=%s" % [rail_r, debug_r, follow_r, bar_r])
+	assert_object(_main.find_child("TemplatesDock", true, false)).is_null()
 	assert_bool(follow_card.is_visible_in_tree()).is_true()
 	assert_float(follow_r.size.x).is_less_equal(288.0 + 0.5)
+	assert_float(follow_r.end.y).is_equal_approx(720.0 - float(HudLayout.MARGIN), 0.5)
+	assert_float(bar_r.position.x - follow_r.end.x).is_greater_equal(
+		float(HudLayout.GROUP_GAP) - 0.5
+	)
 	assert_float(tray_r.position.x - follow_r.end.x).is_greater_equal(
 		float(HudLayout.GROUP_GAP) - 0.5
 	)
@@ -457,8 +467,8 @@ func test_alert_stack_clears_debug_panel_and_follow_card_has_cream_backing() -> 
 	assert_bool(style.bg_color.is_equal_approx(Color(0.96, 0.93, 0.86, 1.0))).is_true()
 	assert_bool(rail_r.intersects(debug_r)).is_false()
 	assert_float(rail_r.end.y).is_less_equal(debug_r.position.y - float(HudLayout.GROUP_GAP) + 0.5)
-	assert_bool(follow_r.intersects(dock_r)).is_false()
-	assert_float(follow_r.end.y).is_less_equal(dock_r.position.y - float(HudLayout.GAP) + 0.5)
+	assert_bool(follow_r.intersects(bar_r)).is_false()
+	assert_bool(follow_r.intersects(tray_r)).is_false()
 	var staff_hint := _main.find_child("StaffHintCard", true, false) as Control
 	if staff_hint != null and staff_hint.is_visible_in_tree():
 		var hint_r := _rect(staff_hint)
@@ -466,14 +476,12 @@ func test_alert_stack_clears_debug_panel_and_follow_card_has_cream_backing() -> 
 		assert_float(hint_r.end.y).is_less_equal(follow_r.position.y - float(HudLayout.GAP) + 0.5)
 
 
-## When a wide bar forces TemplatesDock onto the lifted row (side room < 144 px),
-## BottomDocks lifts bottom-left floor cards above the lifted dock too.
-func test_lifted_docks_keep_left_floor_above_templates_dock() -> void:
+## Without TemplatesDock, bottom-left floor cards rest at MARGIN when CategoryBar
+## stays clear horizontally, and lift above CategoryBar when bar width intrudes.
+func test_lifted_floor_clears_bar_when_narrow_and_rests_at_margin_when_clear() -> void:
 	var bar_w := 1020.0
 	var layout_w := 1280.0
-	# Inline ruled threshold: side = (1280 - 1020) / 2 = 130 < DOCK_SIDE_ROOM (144) -> lifted.
-	var expected_bottom := float(HudLayout.MARGIN) + 2.0 * HudLayout.BAR_H + 2.0 * HudLayout.GAP
-	assert_float(BottomDocks.left_floor_bottom(layout_w, bar_w)).is_equal(expected_bottom)
-	assert_float(BottomDocks.left_floor_bottom(layout_w, 500.0)).is_equal(
-		float(HudLayout.MARGIN + HudLayout.BAR_H + HudLayout.GAP)
-	)
+	# Inline ruled threshold: side = (1280 - 1020) / 2 = 130 < MARGIN + GROUP_GAP + 288 -> lifted.
+	var expected_lifted := float(HudLayout.MARGIN + HudLayout.BAR_H + HudLayout.GAP)
+	assert_float(BottomDocks.left_floor_bottom(layout_w, bar_w)).is_equal(expected_lifted)
+	assert_float(BottomDocks.left_floor_bottom(layout_w, 500.0)).is_equal(float(HudLayout.MARGIN))
