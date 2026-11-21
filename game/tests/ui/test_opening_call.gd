@@ -307,6 +307,7 @@ func test_main_scene_wires_gate_and_flights_into_unlock_guide_on_opening() -> vo
 	hud.press_starter_terminal()
 	staff.hire(StaffMember.Role.CHECKIN)
 	staff.hire(StaffMember.Role.SECURITY)
+	staff.hire(StaffMember.Role.GATE)
 	clock.set_paused(false)
 	for _guard in 100:
 		if flights.opened_tick >= 0:

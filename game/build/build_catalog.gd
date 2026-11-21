@@ -46,6 +46,14 @@ const BELT_PATHS := {
 const BELT_IDS: Array[StringName] = [
 	&"baggage_belt", &"baggage_belt_corner", &"baggage_belt_feed", &"baggage_belt_end"
 ]
+## Which StaffMember.Role works a non-counter station piece; counters map via
+## ShopCounters.COUNTER_ROOMS to Role.SHOP.
+const STAFF_ROLES := {
+	&"checkin_desk": StaffMember.Role.CHECKIN,
+	&"security_scanner": StaffMember.Role.SECURITY,
+	&"security_arch": StaffMember.Role.SECURITY,
+	&"gate_desk": StaffMember.Role.GATE,
+}
 
 static var _defs: Dictionary = {}
 
@@ -74,6 +82,15 @@ static func is_door(id: StringName) -> bool:
 
 static func is_belt(id: StringName) -> bool:
 	return BELT_IDS.has(id)
+
+
+## Which StaffMember.Role works `id`, or -1 when `id` takes no staff.
+static func staff_role(id: StringName) -> int:
+	if STAFF_ROLES.has(id):
+		return STAFF_ROLES[id]
+	if ShopCounters.COUNTER_ROOMS.has(id):
+		return StaffMember.Role.SHOP
+	return -1
 
 
 ## The belt ports of an object placed at `anchor` and `facing`: each
@@ -126,10 +143,9 @@ static func _build() -> void:
 	_add_door(&"entrance_door", "Entrance", Color(0.35, 0.7, 0.4))
 	_add_door(&"exit_door", "Exit to the plane", Color(0.3, 0.55, 0.85))
 	# The gate desk (decision gates-technical-design-gate-desks-link-to-north-
-	# exits-one-st, point 1): a 2x1 counter that makes a gate of the nearest free
-	# exit facing the planes (GateDesks). Unstaffed for now, so it has no
-	# interaction cell.
-	# Drawn with the info desk's piece and height until its own art (gates 2/4).
+	# exits-one-st, point 1; ruling 17fe639a): a 2x1 counter that makes a gate
+	# of the nearest free exit facing the planes (GateDesks), staffed by a
+	# Gate Agent (StaffMember.Role.GATE) at its rear StaffSpots cell.
 	_add(GateDesks.DESK, "Gate desk", Vector2i(2, 1), Color(0.3, 0.5, 0.75), 2.02)
 	# Cafe pieces (interior-kit Cafe 1/2). The counter's interaction cell is its
 	# Mount_Order spot in front of the till; Mount_Staff behind it is not

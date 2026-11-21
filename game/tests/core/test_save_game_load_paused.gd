@@ -93,12 +93,13 @@ func test_a_refused_load_leaves_the_speed_and_pause_alone() -> void:
 
 
 func test_the_staff_hint_card_shows_once_after_loading_a_save_with_no_staff() -> void:
-	# This world has the terminal and both hires, so its hint holds no hire line.
+	# This world has the terminal and all three opening hires, so its hint holds no hire line.
 	(_main.get_node("PassengerHud") as PassengerHud).press_starter_terminal()
 	SaveTestKit.step(_main)
 	(_main.get_node("Staff") as StaffSim).hire(StaffMember.Role.CHECKIN)
 	(_main.get_node("Staff") as StaffSim).hire(StaffMember.Role.SECURITY)
-	assert_str(_panel.hint_text()).not_contains("hire an")
+	(_main.get_node("Staff") as StaffSim).hire(StaffMember.Role.GATE)
+	assert_str(_panel.hint_text()).not_contains("hire a")
 	assert_bool(_save.load_from_file(_path)).is_true()
 	assert_bool(_panel.hint_card().visible).is_true()
 	assert_bool(_panel.hint_label().visible).is_true()

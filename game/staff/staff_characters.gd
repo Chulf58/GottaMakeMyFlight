@@ -37,18 +37,27 @@ extends Node3D
 const AGENT_SUIT := preload("res://assets/people/tcp_female_character_07.glb")
 const OFFICER := preload("res://assets/people/tcp_male_character_07.glb")
 const CLEANER_BODY := preload("res://assets/people/tcp_female_character_10.glb")
-## By StaffMember.Role: CHECKIN, SECURITY, SHOP, CLEANER.
-const CHARACTERS: Array[PackedScene] = [AGENT_SUIT, OFFICER, AGENT_SUIT, CLEANER_BODY]
+## By StaffMember.Role: CHECKIN, SECURITY, SHOP, CLEANER, GATE.
+const CHARACTERS: Array[PackedScene] = [AGENT_SUIT, OFFICER, AGENT_SUIT, CLEANER_BODY, AGENT_SUIT]
 ## Walk clip speeds measured by the Toon pipeline (SPEED lines), by role.
-const CLIP_WALK_MPS: Array[float] = [1.922, 1.952, 1.922, 1.922]
+const CLIP_WALK_MPS: Array[float] = [1.922, 1.952, 1.922, 1.922, 1.922]
 const LOOPED := ["idle", "walk"]
 ## The cleaner's work clip, played forward and back (it does not loop closed).
 const CLEAN_CLIP := "clean"
+## Crisp airline azure-teal jacket/skirt tint for Gate Agents on AGENT_SUIT:
+## keeps the white blouse (-1) and shifts the dark suit to bright sky-teal.
+const GATE_SUIT_HUE := 0.54
+const GATE_SUIT_SAT := 0.68
+const GATE_SUIT_VALUE_MIN := 0.44
+
+## Cached Gate Agent mesh/material tinted from AGENT_SUIT without altering .glb rigs.
+static var _gate_split_mesh: Mesh
+static var _gate_cloth_mat: ShaderMaterial
 
 @export var clock: SimClock
 @export var staff: StaffSim
 
-var _pool: Array[Array] = [[], [], [], []]
+var _pool: Array[Array] = [[], [], [], [], []]
 ## Member id -> node.
 var _nodes: Dictionary = {}
 var _prev: Dictionary = {}
@@ -213,10 +222,91 @@ func _take(role: StaffMember.Role) -> Node3D:
 		node.visible = true
 	else:
 		node = CHARACTERS[role].instantiate() as Node3D
+		if role == StaffMember.Role.GATE:
+			_apply_gate_uniform(node)
 		node.set_meta(&"role", role)
 		add_child(node)
 	node.rotation.y = 0.0
 	return node
+
+
+## Splits AGENT_SUIT's clothes surface and applies the Gate Agent azure-teal
+## uniform tint to dark suit swatches while leaving skin, hair and blouse intact.
+static func _apply_gate_uniform(node: Node3D) -> void:
+	var mi := PassengerLooks.body_mesh(node)
+	if mi == null:
+		return
+	if _gate_split_mesh == null:
+		_gate_split_mesh = _build_gate_mesh(mi.mesh)
+	mi.mesh = _gate_split_mesh
+
+
+static func _build_gate_mesh(plain: Mesh) -> Mesh:
+	var arrays := plain.surface_get_arrays(0)
+	var parts := PassengerLooks.cloth_split(arrays[Mesh.ARRAY_INDEX], arrays[Mesh.ARRAY_COLOR])
+	if parts[1].is_empty():
+		return plain
+	var flags: int = (plain as ArrayMesh).surface_get_format(0) & Mesh.ARRAY_FLAG_USE_8_BONE_WEIGHTS
+	var mesh := ArrayMesh.new()
+	for i in 2:
+		arrays[Mesh.ARRAY_INDEX] = parts[i]
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {}, flags)
+	mesh.surface_set_material(0, plain.surface_get_material(0))
+	mesh.surface_set_material(1, _gate_material(plain, parts[1]))
+	return mesh
+
+
+static func _gate_material(plain: Mesh, cloth_index: PackedInt32Array) -> ShaderMaterial:
+	if _gate_cloth_mat != null:
+		return _gate_cloth_mat
+	var base := plain.surface_get_material(0) as ShaderMaterial
+	var made := base.duplicate() as ShaderMaterial
+	var atlas := (base.get_shader_parameter("albedo_texture") as Texture2D).get_image()
+	if atlas != null:
+		atlas = atlas.duplicate() as Image
+		if atlas.has_mipmaps():
+			atlas.clear_mipmaps()
+		var width := atlas.get_width()
+		var height := atlas.get_height()
+		var uvs: PackedVector2Array = plain.surface_get_arrays(0)[Mesh.ARRAY_TEX_UV]
+		var texels := _cloth_texels(uvs, cloth_index, width, height)
+		var dark := PassengerLooks.dark_cells(atlas, texels)
+		var cols := width / PassengerLooks.SWATCH_PX.x
+		for t in texels:
+			var x := t % width
+			var y := t / width
+			if dark.get(
+				(y / PassengerLooks.SWATCH_PX.y) * cols + x / PassengerLooks.SWATCH_PX.x, false
+			):
+				var c := atlas.get_pixel(x, y)
+				var v := GATE_SUIT_VALUE_MIN + (1.0 - GATE_SUIT_VALUE_MIN) * c.v
+				atlas.set_pixel(x, y, Color.from_hsv(GATE_SUIT_HUE, GATE_SUIT_SAT, v, c.a))
+		atlas.generate_mipmaps()
+		made.set_shader_parameter("albedo_texture", ImageTexture.create_from_image(atlas))
+	_gate_cloth_mat = made
+	return made
+
+
+static func _cloth_texels(
+	uvs: PackedVector2Array, index: PackedInt32Array, width: int, height: int
+) -> PackedInt32Array:
+	var mark := {}
+	var margin := PassengerLooks.TEXEL_MARGIN
+	for t in range(0, index.size(), 3):
+		var lo := Vector2(INF, INF)
+		var hi := Vector2(-INF, -INF)
+		for k in 3:
+			var at := uvs[index[t + k]] * Vector2(width, height)
+			lo = lo.min(at)
+			hi = hi.max(at)
+		var x1 := mini(int(hi.x) + margin, width - 1)
+		var y1 := mini(int(hi.y) + margin, height - 1)
+		for y in range(maxi(int(lo.y) - margin, 0), y1 + 1):
+			for x in range(maxi(int(lo.x) - margin, 0), x1 + 1):
+				mark[y * width + x] = true
+	var out := PackedInt32Array(mark.keys())
+	out.sort()
+	return out
 
 
 func _release(id: int) -> void:

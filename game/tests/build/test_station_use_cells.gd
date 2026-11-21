@@ -6,8 +6,9 @@ extends GdUnitTestSuite
 ## before placing are the cells the sim reads once the piece stands
 ## (BuildGrid.interaction_cell, StaffSpots.spot_of, the SecurityLanes
 ## candidate), the arrow points from the passenger side into the station, a
-## cell the sim counts as blocked shows blocked, and a gate desk shows only its
-## arrow (decision gate-desk-build-ghost-shows-a-front-arrow-only).
+## cell the sim counts as blocked shows blocked, and a gate desk shows its rear
+## staff spot beside its front arrow (amending gate-desk-build-ghost-shows-a-
+## front-arrow-only per user ruling 17fe639a).
 
 const AT := Vector2i(8, 8)
 const STATIONS := {
@@ -119,22 +120,23 @@ func test_desk_scanner_and_counter_tiles_match_the_sim_cells_at_every_facing() -
 	assert_int(compared).is_equal(4 * (2 + 2 + 1))
 
 
-func test_the_gate_desk_shows_only_an_arrow_in_front_pointing_in() -> void:
+func test_the_gate_desk_shows_its_staff_spot_and_front_arrow_pointing_in() -> void:
 	for facing in 4:
 		var ghost := _ghost_at(BuildMode.Tool.GATE_DESK, AT, facing)
 		var front := BuildObjectDef.rotate_offset(Vector2i(0, 1), facing)
+		var spot := StaffSpots.cell_of(GateDesks.DESK, AT, facing)
 		var row := Vector3.ZERO
 		var cells := BuildCatalog.get_def(GateDesks.DESK).footprint(AT, facing)
 		for cell in cells:
 			row += _mode.grid.cell_to_world(cell + front) / cells.size()
 		print(
 			(
-				"gate_desk facing %d: tiles %s flow %s arrow at %s, front row centre %s"
-				% [facing, ghost[StationUseCells.PASSENGER], ghost["flow"], ghost["arrow_at"], row]
+				"gate_desk facing %d: staff %s flow %s arrow at %s, front row centre %s"
+				% [facing, ghost[StationUseCells.STAFF], ghost["flow"], ghost["arrow_at"], row]
 			)
 		)
 		assert_array(ghost[StationUseCells.PASSENGER]).is_empty()
-		assert_array(ghost[StationUseCells.STAFF]).is_empty()
+		assert_array(ghost[StationUseCells.STAFF]).is_equal([spot])
 		assert_that(ghost["flow"]).is_equal(-front)
 		var at: Vector3 = ghost["arrow_at"]
 		assert_float(Vector2(at.x - row.x, at.z - row.z).length()).is_less(0.01)

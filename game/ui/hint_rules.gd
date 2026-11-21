@@ -180,11 +180,13 @@ static func _shortage_roles(sim: PassengerSim) -> Array:
 	var staff := sim.staff
 	if staff == null:
 		return roles
-	for role: StaffMember.Role in [StaffMember.Role.CHECKIN, StaffMember.Role.SECURITY]:
+	for role: StaffMember.Role in [
+		StaffMember.Role.CHECKIN, StaffMember.Role.SECURITY, StaffMember.Role.GATE
+	]:
 		var open := 0
 		for station in staff.stations_of(role):
 			if (
-				sim.layout.is_usable(station)
+				StaffPosts.usable(sim.grid, sim.layout, station)
 				and not staff.closures.is_closed(station)
 				and not staff.spot_blocked(station)
 				and not staff.spot_unreachable(station)

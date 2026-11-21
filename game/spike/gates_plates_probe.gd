@@ -99,6 +99,8 @@ func _run() -> void:
 		return
 	_staff.hire(StaffMember.Role.CHECKIN)
 	_staff.hire(StaffMember.Role.SECURITY)
+	for _i in _staff.stations_of(StaffMember.Role.GATE).size():
+		_staff.hire(StaffMember.Role.GATE)
 	var hired_at := _clock.tick
 	while _flights.opened_tick < 0:
 		await _ticks(TICKS_PER_FRAME)

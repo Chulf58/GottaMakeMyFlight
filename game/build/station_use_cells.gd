@@ -23,9 +23,9 @@ extends RefCounted
 ##   the X-ray belt also the primary officer spot. Each cell's state is
 ##   SecurityLanes.use_cell_states. A part no arch would take shows nothing.
 ##
-## A gate desk shows only a small arrow on the floor in front of it, pointing
-## in (user-ruled 2026-11-04, decision gate-desk-build-ghost-shows-a-front-
-## arrow-only): passengers wait near it and no staff work it. Not shown: a
+## A gate desk shows its staff spot behind it and a small arrow on the floor in
+## front of it, pointing in (user ruling 17fe639a adds GATE staff parity to
+## gate-desk-build-ghost-shows-a-front-arrow-only). Not shown: a
 ## shop counter's server spot (ShopCounters), chosen from its room once placed,
 ## and the tiles of a piece standing where the ghost is (a Remove ghost).
 
@@ -63,16 +63,16 @@ static func of(grid: BuildGrid, def_id: StringName, anchor: Vector2i, facing: in
 	if def == null or _stands(grid, def_id, anchor, facing):
 		return out
 	var footprint := def.footprint(anchor, facing)
+	var answers := grid.trial_answers(def_id, anchor, facing)
+	if answers.is_empty():
+		return out
 	if def_id == GateDesks.DESK:
 		var front := BuildObjectDef.rotate_offset(Vector2i(0, 1), facing)
 		for cell in footprint:
 			if not footprint.has(cell + front):
-				arrow.append(cell + front)
-		out["flow"] = -front
-		return out
-	var answers := grid.trial_answers(def_id, anchor, facing)
-	if answers.is_empty():
-		return out
+				(answers["arrow"] as Array[Vector2i]).append(cell + front)
+		answers["flow"] = -front
+		return answers
 	var spot := def.interaction_cell(anchor, facing)
 	if spot != BuildObjectDef.NO_CELL and grid.interaction_problem(spot, footprint) != null:
 		answers["blocked"][spot] = true

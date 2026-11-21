@@ -33,12 +33,14 @@ extends CanvasLayer
 const ROLES: Array[StaffMember.Role] = [
 	StaffMember.Role.CHECKIN,
 	StaffMember.Role.SECURITY,
+	StaffMember.Role.GATE,
 	StaffMember.Role.SHOP,
 	StaffMember.Role.CLEANER,
 ]
 const ROLE_KEYS := {
 	StaffMember.Role.CHECKIN: "Checkin",
 	StaffMember.Role.SECURITY: "Security",
+	StaffMember.Role.GATE: "Gate",
 	StaffMember.Role.SHOP: "Shop",
 	StaffMember.Role.CLEANER: "Cleaner",
 }
@@ -48,14 +50,15 @@ const ROLE_KEYS := {
 const HINTS := {
 	StaffMember.Role.CHECKIN: "Hire a check-in agent",
 	StaffMember.Role.SECURITY: "Hire a security officer",
+	StaffMember.Role.GATE: "Hire a gate agent",
 	StaffMember.Role.SHOP: "Hire shop staff",
 }
 ## The banner line for an open wall gap, one for a single run of gap edges and
 ## (card_lines()) one with the count for several. It uses the sign's words,
 ## "Wall gap".
 const GAP_HINT := "Wall gap: close the open edge of the outer wall, marked in red"
-## A column's least width: four roles fit centred over the bar.
-const ROLE_WIDTH := 180.0
+## A column's least width: five roles fit centred over the bar.
+const ROLE_WIDTH := 156.0
 ## The banner's top edge with the departures list off: under the three toggles.
 ## With the list open the card sits under it (LeftColumn.follow()).
 const BANNER_TOP := LeftColumn.LIST_TOP
@@ -211,7 +214,10 @@ func card_lines() -> Array[Dictionary]:
 		)
 		out.append(Checklist.line(gap_hint.format({"count": _gap_runs}), false))
 	for role in hiring_hint_roles():
-		if not (closed and role in [StaffMember.Role.CHECKIN, StaffMember.Role.SECURITY]):
+		var opening_role := (
+			role in [StaffMember.Role.CHECKIN, StaffMember.Role.SECURITY, StaffMember.Role.GATE]
+		)
+		if not (closed and opening_role):
 			out.append(Checklist.line(_hire_hint(role), false))
 	if gate != null and not closed:
 		out.append_array(_gaps)
@@ -240,6 +246,11 @@ func hiring_hint_roles() -> Array[StaffMember.Role]:
 		if _staying(role) != 0:
 			continue
 		for station in staff.stations_of(role):
+			if (
+				role == StaffMember.Role.GATE
+				and not StaffPosts.usable(staff.sim.grid, staff.sim.layout, station)
+			):
+				continue
 			if not staff.closures.is_closed(station):
 				roles.append(role)
 				break
@@ -291,6 +302,7 @@ func _opening_counts() -> Dictionary:
 		"seats": layout.seats.size(),
 		"checkin_staying": _staying(StaffMember.Role.CHECKIN),
 		"security_staying": _staying(StaffMember.Role.SECURITY),
+		"gate_staying": _staying(StaffMember.Role.GATE),
 	}
 
 
@@ -330,6 +342,8 @@ func _hire_hint(role: StaffMember.Role) -> String:
 			return tr("Hire a check-in agent")
 		StaffMember.Role.SECURITY:
 			return tr("Hire a security officer")
+		StaffMember.Role.GATE:
+			return tr("Hire a gate agent")
 	return tr("Hire shop staff")
 
 
@@ -346,6 +360,8 @@ func _role_name(role: StaffMember.Role) -> String:
 			return tr("Check-in agents")
 		StaffMember.Role.SECURITY:
 			return tr("Security officers")
+		StaffMember.Role.GATE:
+			return tr("Gate agents")
 		StaffMember.Role.SHOP:
 			return tr("Shop staff")
 	return tr("Cleaners")
@@ -422,7 +438,7 @@ func _build() -> void:
 	BuildMenu.anchor_bottom_centre(_card, BuildMenu.MARGIN + BuildMenu.BAR_H + BuildMenu.GAP)
 	add_child(_card)
 	var roles := HBoxContainer.new()
-	roles.add_theme_constant_override("separation", 14)
+	roles.add_theme_constant_override("separation", 10)
 	_card.add_child(roles)
 	for role in ROLES:
 		var column := VBoxContainer.new()

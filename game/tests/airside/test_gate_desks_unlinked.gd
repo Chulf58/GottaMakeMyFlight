@@ -124,10 +124,11 @@ func test_a_usable_farther_exit_means_no_letter_not_an_overlap() -> void:
 	var far_cell := EXIT_WEST + Vector2i(20, 0)
 	var near := _open_exit(near_cell)
 	var far := _open_exit(far_cell).object_id
-	# A desk 2 cells from the near exit and 3 from the far one, built past the
-	# guard and the links (its links come from `only_a` below).
+	# A desk 3 cells from the near exit and 4 from the far one, clear of the near
+	# exit's interaction cell, built past the guard and the links (its links come
+	# from `only_a` below).
 	_grid.guard = Callable()
-	var desk := _desk(near_cell + Vector2i(0, 2))
+	var desk := _desk(near_cell + Vector2i(-1, 3))
 	assert_bool(desk.ok).is_true()
 	var a_stand := StandPlacement.for_exit(_grid, gate_a["exit"])
 	var overlaps := [

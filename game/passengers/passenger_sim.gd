@@ -510,8 +510,23 @@ func bubble_text(p: Passenger) -> String:
 		Passenger.Stuck.EXIT_BLOCKED: "The exit is blocked",
 		Passenger.Stuck.GATE_FULL: "The gate is full",
 	}
+	const GATE_STAGES := [
+		Passenger.Stage.TO_GATE,
+		Passenger.Stage.SITTING_DOWN,
+		Passenger.Stage.SEATED,
+		Passenger.Stage.STANDING,
+		Passenger.Stage.STANDING_UP,
+		Passenger.Stage.TO_EXIT,
+	]
 	if p.stage == Passenger.Stage.MISSED:
 		return "Missed my flight!"
+	if (
+		p.stage in GATE_STAGES
+		and tick >= p.boarding_tick
+		and (p.stuck == Passenger.Stuck.NONE or p.stuck == Passenger.Stuck.EXIT_BLOCKED)
+		and not PassengerGates.gate_open(self, p)
+	):
+		return "Gate is closed"
 	# Waiting outside while every check-in desk is closed (EntranceLine).
 	var closed_outside := entrance.waiting(p.id) and not _any_open(layout.desks)
 	if p.stuck != Passenger.Stuck.NONE or closed_outside:
@@ -519,11 +534,12 @@ func bubble_text(p: Passenger) -> String:
 		var unstaffed := (
 			p.stuck == Passenger.Stuck.NO_CHECKIN and layout.desks.any(layout.is_usable)
 		)
+		var text: String = STUCK_TEXT.get(p.stuck, "")
 		if closed_outside or unstaffed:
-			return "Check-in is closed"
-		if p.stuck == Passenger.Stuck.NO_SECURITY and layout.scanners.any(layout.is_usable):
-			return "Security is closed"
-		return STUCK_TEXT[p.stuck]
+			text = "Check-in is closed"
+		elif p.stuck == Passenger.Stuck.NO_SECURITY and layout.scanners.any(layout.is_usable):
+			text = "Security is closed"
+		return text
 	if p.late and not p.is_done():
 		return "I'm late!"
 	return ""
@@ -808,6 +824,8 @@ func set_gate_stands(
 	exit_stands: Dictionary, exit_gates: Dictionary, gate_desk_ids: Dictionary
 ) -> void:
 	PassengerEdits.set_gate_stands(self, exit_stands, exit_gates, gate_desk_ids)
+	if staff != null:
+		staff._on_graph_changed([] as Array[Vector2i])
 
 
 ## Any accepted edit: the standing spots are derived again on the next tick.

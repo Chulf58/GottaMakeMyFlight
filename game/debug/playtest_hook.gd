@@ -66,6 +66,7 @@ const OPTIONAL_EVENT_TYPES: Array[String] = [
 const STAFF_ROLES := {
 	"checkin": StaffMember.Role.CHECKIN,
 	"security": StaffMember.Role.SECURITY,
+	"gate": StaffMember.Role.GATE,
 	"shop": StaffMember.Role.SHOP,
 }
 const CHECK_INTERVAL_S := 0.5

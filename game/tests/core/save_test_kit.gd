@@ -60,13 +60,14 @@ static func step(main: Node) -> void:
 
 
 ## Builds the starter terminal with the HUD button and hires one check-in
-## agent and one security officer, who walk to their stations; the airport
-## opens once they are on duty.
+## agent, one security officer and one gate agent, who walk to their stations;
+## the airport opens once they are on duty.
 static func start_airport(main: Node) -> void:
 	(main.get_node("PassengerHud") as PassengerHud).press_starter_terminal()
 	var staff: StaffSim = main.get_node("Staff")
 	staff.hire(StaffMember.Role.CHECKIN)
 	staff.hire(StaffMember.Role.SECURITY)
+	staff.hire(StaffMember.Role.GATE)
 
 
 static func save_game(main: Node) -> SaveGame:

@@ -43,10 +43,11 @@ static func full_stations(sim: PassengerSim) -> Dictionary:
 	return out
 
 
-## Every usable desk and scanner with nobody on duty (StaffSim.is_open()), in
-## id order. A station the layout cannot use (walled in, no open passage) is
-## broken rather than closed, so it is not listed. Without a StaffSim nothing is
-## staffed by design, so nothing is listed.
+## Every usable desk, scanner and linked gate desk with nobody on duty
+## (StaffSim.is_open()), in id order. A station the layout cannot use (walled
+## in, no open passage, unlinked gate desk) is broken rather than closed, so it
+## is not listed. Without a StaffSim nothing is staffed by design, so nothing
+## is listed.
 static func closed_stations(sim: PassengerSim) -> Array[int]:
 	var out: Array[int] = []
 	if sim.staff == null:
@@ -54,9 +55,10 @@ static func closed_stations(sim: PassengerSim) -> Array[int]:
 	var stations: Array[int] = []
 	stations.append_array(sim.layout.desks)
 	stations.append_array(sim.layout.scanners)
+	stations.append_array(GateDesks.desk_ids(sim.grid))
 	stations.sort()
 	for station in stations:
-		if sim.layout.is_usable(station) and not sim.staff.is_open(station):
+		if StaffPosts.usable(sim.grid, sim.layout, station) and not sim.staff.is_open(station):
 			out.append(station)
 	return out
 

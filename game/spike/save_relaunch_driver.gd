@@ -194,6 +194,7 @@ func _save_process() -> void:
 			var staff: StaffSim = _main.get_node("Staff")
 			staff.hire(StaffMember.Role.CHECKIN)
 			staff.hire(StaffMember.Role.SECURITY)
+			staff.hire(StaffMember.Role.GATE)
 			_start_wallet = (_main.get_node("Finances") as Finances).wallet.balance
 			_step = 1
 		1:

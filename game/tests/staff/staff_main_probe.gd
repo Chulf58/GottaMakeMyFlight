@@ -23,6 +23,7 @@ extends SceneTree
 ## (anti-pattern a-frame-counting-watchdog-cannot-catch-a-stuck-main-thread).
 
 const MAIN := "res://main/main.tscn"
+const IntroClose := preload("res://spike/intro_close.gd")
 const CLOSED_TICKS := 400
 const TICKS_PER_FRAME := 200
 const AFTER_DEPARTED_TICKS := 40
@@ -87,6 +88,10 @@ func _process(_delta: float) -> bool:
 
 func _build() -> void:
 	_beat("build")
+	var intro_err := IntroClose.close(_main)
+	if intro_err != "":
+		_invalid(intro_err)
+		return
 	(_main.get_node("PassengerHud") as PassengerHud).press_starter_terminal()
 	var desks := _sim.layout.desks.size()
 	var scanners := _sim.layout.scanners.size()
@@ -130,19 +135,21 @@ func _run_closed() -> void:
 	var hint_before := _panel.hint_text().replace("\n", " | ")
 	_panel.hire_button(StaffMember.Role.CHECKIN).pressed.emit()
 	_panel.hire_button(StaffMember.Role.SECURITY).pressed.emit()
+	_panel.hire_button(StaffMember.Role.GATE).pressed.emit()
 	print(
 		(
-			"PROBE pressed Hire in the panel at tick %d: hint before '%s', after '%s', %s / %s"
+			"PROBE pressed Hire in the panel at tick %d: hint before '%s', after '%s', %s / %s / %s"
 			% [
 				_clock.tick,
 				hint_before,
 				_panel.hint_text().replace("\n", " | "),
 				_panel.counts_text(StaffMember.Role.CHECKIN),
 				_panel.counts_text(StaffMember.Role.SECURITY),
+				_panel.counts_text(StaffMember.Role.GATE),
 			]
 		)
 	)
-	if _panel.hint_text().contains("on Staff") or _staff.member_ids().size() != 2:
+	if _panel.hint_text().contains("on Staff") or _staff.member_ids().size() != 3:
 		_invalid("the panel's Hire buttons did not hire or did not clear the hiring lines")
 		return
 	_phase = 2
@@ -164,6 +171,7 @@ func _run_flight() -> bool:
 	var on_duty := (
 		_staff.on_duty_count(StaffMember.Role.CHECKIN)
 		+ _staff.on_duty_count(StaffMember.Role.SECURITY)
+		+ _staff.on_duty_count(StaffMember.Role.GATE)
 	)
 	print(
 		(
@@ -189,8 +197,8 @@ func _run_flight() -> bool:
 		_panel.hint_label().text.contains(Checklist.TITLE_CLOSED)
 		or _panel.hint_text().contains("Hire a")
 	)
-	if on_duty != 2 or closed_left:
-		_invalid("the staff are not both on duty or the closed checklist stayed once open")
+	if on_duty != 3 or closed_left:
+		_invalid("the staff are not all on duty or the closed checklist stayed once open")
 		return true
 	if _count(Passenger.Stage.CHECKIN) == 0 or _sim.made_count() == 0:
 		_invalid("staffed stations did not get passengers onto the flight")

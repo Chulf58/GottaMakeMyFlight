@@ -31,6 +31,7 @@ const STAFF_SPOT := "Staff can't reach a desk or scanner passengers need: clear 
 const CHECKIN := "Check-in desk and an agent"
 const SECURITY := "Security scanner and an officer"
 const GATE := "Gate desk by an exit that faces the planes"
+const GATE_AGENT := "Gate desk and an agent"
 const SEATS := "Seats near the gate"
 ## What a not-done check-in line (key "checkin") or security line ("security")
 ## adds after a colon, by what is missing.
@@ -48,6 +49,11 @@ const NEXT := {
 		"closed": "you closed every scanner and lane, open one again",
 		"hire": "hire an officer on Staff",
 		"walking": "the officer is on the way",
+	},
+	"gate":
+	{
+		"hire": "hire a gate agent on Staff",
+		"walking": "the gate agent is on the way",
 	},
 }
 
@@ -121,12 +127,21 @@ static func opening_lines(unmet: Array, counts: Dictionary) -> Array[Dictionary]
 			)
 		)
 	)
-	out.append(
-		line(
-			TranslationServer.translate("Gate desk by an exit that faces the planes"),
-			not unmet.has(BLOCKER.NO_GATE)
+	if unmet.has(BLOCKER.NO_GATE_AGENT) and not unmet.has(BLOCKER.NO_GATE):
+		var walking := int(counts.get("gate_staying", 0)) > 0
+		var msg := (
+			TranslationServer.translate("Gate desk and an agent: the gate agent is on the way")
+			if walking
+			else TranslationServer.translate("Gate desk and an agent: hire a gate agent on Staff")
 		)
-	)
+		out.append(line(msg, false))
+	else:
+		out.append(
+			line(
+				TranslationServer.translate("Gate desk by an exit that faces the planes"),
+				not unmet.has(BLOCKER.NO_GATE)
+			)
+		)
 	out.append(line(TranslationServer.translate("Seats near the gate"), int(counts["seats"]) > 0))
 	return out
 

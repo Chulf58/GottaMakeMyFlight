@@ -177,6 +177,7 @@ const WAGES := {
 	StaffMember.Role.SECURITY: 90,
 	StaffMember.Role.SHOP: 50,
 	StaffMember.Role.CLEANER: 40,
+	StaffMember.Role.GATE: 60,
 }
 
 ## The share of its fee an airline pays for a passenger who makes the flight

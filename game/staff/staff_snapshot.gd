@@ -405,14 +405,16 @@ static func _duty_problem(m: StaffMember, sim: PassengerSim) -> String:
 	return ""
 
 
-## Whether the member's station is one of its role: a desk, a scanner, or a
-## usable counter (ShopCounters.usable()).
+## Whether the member's station is one of its role: a desk, a scanner, a
+## usable counter (ShopCounters.usable()), or a gate desk (GateDesks.is_desk()).
 static func _of_role(m: StaffMember, sim: PassengerSim) -> bool:
 	match m.role:
 		StaffMember.Role.CHECKIN:
 			return sim.layout.desks.has(m.station)
 		StaffMember.Role.SHOP:
 			return ShopCounters.usable(sim.grid, m.station)
+		StaffMember.Role.GATE:
+			return GateDesks.is_desk(sim.grid, m.station)
 	return sim.layout.scanners.has(m.station)
 
 

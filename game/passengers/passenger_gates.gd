@@ -10,12 +10,21 @@ extends RefCounted
 const BODY_M := 0.45
 
 
+## Whether `p`'s flight's gate desk is staffed and open (or no gate desk binds it).
+static func gate_open(sim: PassengerSim, p: Passenger) -> bool:
+	if not sim.layout.by_gate:
+		return true
+	var gate := sim.flights.flight_gate(p.flight_id)
+	var desk := int(sim.layout.gate_desk_ids.get(gate, 0))
+	return desk == 0 or sim._is_open(desk)
+
+
 ## Gate access needs clearance: only a cleared passenger claims a seat.
 static func to_gate(sim: PassengerSim, p: Passenger) -> void:
 	if not p.cleared:
 		push_error("PassengerSim: passenger %d reached the gate without clearance" % p.id)
 		return
-	if sim.tick >= p.boarding_tick:
+	if sim.tick >= p.boarding_tick and gate_open(sim, p):
 		# Boarding is open: the walk to a gate place is cut, at the cell it
 		# stands on (on a cell boundary) or the one it is walking to, and from
 		# rest it steps onto the route when no filed walker is within a body's
@@ -113,7 +122,7 @@ static func step_sitting(sim: PassengerSim, p: Passenger) -> void:
 ## SEATED and STANDING at the gate: boarding starts, or a standing passenger
 ## looks for a seat.
 static func step_waiting(sim: PassengerSim, p: Passenger) -> void:
-	if sim.tick >= p.boarding_tick:
+	if sim.tick >= p.boarding_tick and gate_open(sim, p):
 		var next := Passenger.Stage.STANDING_UP
 		if p.stage == Passenger.Stage.STANDING:
 			next = Passenger.Stage.TO_EXIT
@@ -127,7 +136,8 @@ static func step_stand_up(sim: PassengerSim, p: Passenger) -> void:
 		var visit := StageKinds.visit_facility(sim, p)
 		# Up for the exit: it stays on its front cell until no filed walker
 		# is within a body's width (hand_off_clear()).
-		var for_exit := visit == StageKinds.Facility.NONE and sim.tick >= p.boarding_tick
+		var open_for_exit := sim.tick >= p.boarding_tick and gate_open(sim, p)
+		var for_exit := visit == StageKinds.Facility.NONE and open_for_exit
 		if for_exit and not hand_off_clear(sim, p):
 			return
 		sim._release_seat(p)
@@ -141,7 +151,7 @@ static func step_stand_up(sim: PassengerSim, p: Passenger) -> void:
 			StageKinds.Facility.SHOP:
 				sim.shops.depart(p)
 			_:
-				if sim.tick < p.boarding_tick:
+				if not open_for_exit:
 					sim._set_stage(p, Passenger.Stage.TO_GATE)
 				else:
 					sim._set_stage(p, Passenger.Stage.TO_EXIT)
@@ -179,7 +189,8 @@ static func to_exit(sim: PassengerSim, p: Passenger) -> void:
 	if p.exit_object != 0 and not exits_for(sim, p).has(p.exit_object):
 		drop_exit(sim, p)
 	if p.exit_object == 0:
-		if p.stuck == Passenger.Stuck.NONE or sim._retry_now(p):
+		var reopen := p.stuck == Passenger.Stuck.EXIT_BLOCKED and gate_open(sim, p)
+		if p.stuck == Passenger.Stuck.NONE or sim._retry_now(p) or reopen:
 			choose_exit(sim, p)
 		return
 	# A pending walker waits for admit_pending(), at the start of a tick.
@@ -268,8 +279,11 @@ static func choose_exit(sim: PassengerSim, p: Passenger) -> void:
 
 
 ## The open exits `p` may leave by: with gates, its flight's gate's exit
-## (TerminalLayout.open_exits_for()).
+## (TerminalLayout.open_exits_for()), empty while that gate's desk is closed.
 static func exits_for(sim: PassengerSim, p: Passenger) -> Array[int]:
+	if not gate_open(sim, p):
+		var closed: Array[int] = []
+		return closed
 	var gate := sim.flights.flight_gate(p.flight_id) if sim.layout.by_gate else ""
 	return sim.layout.open_exits_for(sim.grid, gate)
 

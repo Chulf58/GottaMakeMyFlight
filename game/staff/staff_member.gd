@@ -8,8 +8,9 @@ extends RefCounted
 ## passengers (Passenger.segment_mm).
 
 ## SHOP: a server at a cafe or kiosk counter (ShopCounters). CLEANER: works no
-## station; it walks to a mess or a full bin, its job (CleanerJobs).
-enum Role { CHECKIN, SECURITY, SHOP, CLEANER }
+## station; it walks to a mess or a full bin, its job (CleanerJobs). GATE: a
+## gate agent at a gate desk (GateDesks.DESK).
+enum Role { CHECKIN, SECURITY, SHOP, CLEANER, GATE }
 ## WALKING_OUT: fired, on its way to the entrance; no longer staff. A cleaner
 ## is TO_STATION while it walks to its job and ON_DUTY while it cleans or
 ## empties it.
