@@ -39,7 +39,7 @@ const SEATS := {
 ## The bodies on the plates: a male and the female body whose dress hangs
 ## lowest (female_01, the one that needs a lift on the cafe chair).
 const MALE := 0
-const FEMALE := 6
+const FEMALE := 9
 const VIEWS := {
 	"front": Vector3(0, 0, 1),
 	"back": Vector3(0, 0, -1),
@@ -58,7 +58,7 @@ const OVERLAP_SLACK_M := 0.002
 ## A body whose lowest point is further than this over the cushion floats.
 const FLOAT_M := 0.03
 ## Body points within this height band of the cushion top are what sits on it.
-const PAN_TOP_RANGE := Vector2(0.45, 0.6)
+const PAN_TOP_RANGE := Vector2(0.45, 0.72)
 
 var _failed := false
 var _out := ""
@@ -166,6 +166,8 @@ func _guest(body: int, piece: Node3D, mount: String, shift: Vector2) -> Node3D:
 	player.play("sit_idle")
 	player.seek(0.0, true)
 	player.speed_scale = 0.0
+	var piece_id := StringName(piece.get_meta(&"piece", &""))
+	DiningPose.apply(node, DiningPose.kind_for(piece_id), 1.0, body)
 	return node
 
 
@@ -225,14 +227,16 @@ func _sweep(id: StringName) -> void:
 		cafe_hits += _sum(cafe)
 		control_hits += _sum(bare) + _sum(cafe)
 		print("SEAT_CAFE %s %s points=%d %s" % [id, _stem(k), _sum(cafe), cafe])
+		var base_lift := PassengerLooks.BAR_SEAT_LIFT_M if id == &"bar_counter" else 0.0
 		for dyi in 3:
+			var lift := base_lift + dyi * 0.01
 			var found := -1.0
 			for step in 41:
-				_place(people[k], Vector2(step * 0.005, dyi * 0.01))
+				_place(people[k], Vector2(step * 0.005, lift))
 				if _overlap(people[k], islands[k]).is_empty():
 					found = step * 0.005
 					break
-			print("SEAT_SWEEP %s %s dy=%.2f min_ahead=%.3f" % [id, _stem(k), dyi * 0.01, found])
+			print("SEAT_SWEEP %s %s dy=%.2f min_ahead=%.3f" % [id, _stem(k), lift, found])
 		_place(people[k], fit)
 	# The control: at the bare root or at the cafe chair's step some body
 	# reaches into the piece, or the check could not see an overlap.
@@ -449,26 +453,33 @@ func _plates(id: StringName, sheet: Array[Image]) -> void:
 		_cam.look_at(centre, up)
 		var subjects := guests.duplicate()
 		subjects[cube] = "cube"
-		# From some sides the booth's back panel or the bar counter hides a seated
-		# guest by design; there the piece counts as the guest's for its sight
-		# lines (the guest must still be in frame). The close-ups and the
-		# in-context view prove each guest seen on its own.
-		await _shoot("%s_six_%s" % [id, view], subjects, sheet, piece)
+		# From some sides the booth's back panel, bar counter or side-by-side bar guest
+		# hides a seated guest by design; there the piece (and companion on side bar
+		# views) counts as the guest's for sight lines. The close-ups and context view
+		# prove each guest seen on its own.
+		var side_bar := id == &"bar_counter" and absf(dir.x) > 0.5
+		await _shoot("%s_six_%s" % [id, view], subjects, sheet, piece, side_bar)
 	# Side-on close-ups: across the guest's facing, so the hips on the cushion
 	# and the back against the chair back show. At the booth the bench's end
 	# panel stands on that side, so the view looks down over it from the open
 	# end, three-quarter from the front, about 50 degrees up.
 	_cam.size = 1.8
 	cube.visible = false
+	var guest_list := guests.keys()
 	for node: Node3D in guests:
 		var facing: Vector3 = node.get_meta(&"facing")
 		var across := facing.cross(Vector3.UP).normalized()
 		var at: Vector3 = node.get_meta(&"root") + Vector3(0, 0.75, 0)
 		var dir := across
+		_cam.size = 1.8
 		if id == &"restaurant_booth":
 			at = node.get_meta(&"root") + Vector3(0, 0.7, 0)
 			_cam.size = 2.3
 			dir = (across * 0.8 + facing * 0.4 + Vector3.UP * 1.1).normalized()
+		elif id == &"bar_counter":
+			at = node.get_meta(&"root") + Vector3(0, 0.90, 0)
+			_cam.size = 2.0
+			dir = -across if node == guest_list[0] else across
 		for other: Node3D in guests:
 			other.visible = other == node
 		_cam.global_position = at + dir * 10.0
@@ -521,8 +532,14 @@ func _cube(at: Vector3) -> Node3D:
 
 ## Proves, grabs and saves one plate; a failed proof saves nothing.
 ## With `piece`, the piece's meshes count as each guest's for its sight lines.
-func _shoot(name: String, subjects: Dictionary, sheet: Array[Image], piece: Node3D = null) -> void:
-	var ok: bool = await _proven(name, subjects, piece)
+func _shoot(
+	name: String,
+	subjects: Dictionary,
+	sheet: Array[Image],
+	piece: Node3D = null,
+	shared_guests := false
+) -> void:
+	var ok: bool = await _proven(name, subjects, piece, shared_guests)
 	var img: Image = await _grab()
 	sheet.append(img)
 	if ok:
@@ -560,7 +577,7 @@ func _grab() -> Image:
 ## and seen: of nine sight lines from the camera to the middle of its bounds,
 ## at least PlateSight.MIN_ON land on it first (a seated guest is partly behind
 ## its table or chair from most sides, so a blocked line alone does not fail).
-func _proven(label: String, subjects: Dictionary, piece: Node3D) -> bool:
+func _proven(label: String, subjects: Dictionary, piece: Node3D, shared_guests := false) -> bool:
 	var size := root.get_visible_rect().size
 	var side := minf(size.x, size.y)
 	var frame := Rect2((size - Vector2(side, side)) / 2.0, Vector2(side, side)).grow(-MARGIN_PX)
@@ -572,6 +589,10 @@ func _proven(label: String, subjects: Dictionary, piece: Node3D) -> bool:
 		var tags := {node: tag}
 		if piece != null and tag != "cube":
 			tags[piece] = tag
+		if shared_guests and tag != "cube":
+			for other: Node3D in subjects:
+				if other != node and subjects[other] != "cube":
+					tags[other] = tag
 		var holder := PlateSight.colliders(root, owners, tags)
 		if not (holder.get_meta(&"unbaked", []) as Array).is_empty():
 			_invalid("%s: unbaked meshes %s" % [label, holder.get_meta(&"unbaked")])

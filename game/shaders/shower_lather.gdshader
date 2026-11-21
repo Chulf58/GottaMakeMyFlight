@@ -5,11 +5,15 @@
 // (swell + drift * sqrt(1.25)) of its own radius from where it rests
 // (ShowerFoam.motion_reach_m mirrors this bound for the tests).
 shader_type spatial;
-render_mode diffuse_toon, specular_toon;
+render_mode diffuse_lambert, specular_disabled;
 
-uniform vec3 albedo : source_color = vec3(0.97, 0.98, 1.0);
-uniform float roughness = 0.3;
-uniform float rim = 0.35;
+uniform vec3 albedo : source_color = vec3(0.96, 0.98, 1.0);
+uniform vec3 shadow_tint : source_color = vec3(0.78, 0.87, 0.97);
+uniform vec3 edge_tint : source_color = vec3(0.70, 0.82, 0.96);
+uniform vec3 outline_tint : source_color = vec3(0.46, 0.60, 0.78);
+uniform sampler2D ramp_texture : filter_nearest, repeat_disable;
+uniform float light_gain = 1.0;
+uniform float rim = 0.32;
 // How much a bubble swells and drifts, as shares of its own radius.
 uniform float swell = 0.15;
 uniform float drift = 0.35;
@@ -33,8 +37,21 @@ void vertex() {
 }
 
 void fragment() {
-	ALBEDO = albedo;
-	ROUGHNESS = roughness;
-	RIM = rim;
-	RIM_TINT = 0.5;
+	float fresnel = pow(1.0 - clamp(dot(normalize(NORMAL), normalize(VIEW)), 0.0, 1.0), 2.2);
+	float cel_rim = smoothstep(0.55, 0.72, fresnel);
+	vec3 col = mix(albedo, edge_tint, fresnel * rim);
+	ALBEDO = mix(col, outline_tint, cel_rim * 0.65);
+	METALLIC = 0.0;
+	ROUGHNESS = 1.0;
+	SPECULAR = 0.0;
+}
+
+void light() {
+	float half_lambert = dot(NORMAL, LIGHT) * 0.495 + 0.5;
+	float lit = clamp(half_lambert * ATTENUATION, 0.0, 1.0);
+	float band = texture(ramp_texture, vec2(lit, 0.5)).r;
+	// Quantized cel shading tinted toward soft cool soap blue in shadow so bubbles
+	// match the Toon Series ramp without going stark grey.
+	vec3 ramp_col = mix(shadow_tint, vec3(1.0), band);
+	DIFFUSE_LIGHT += LIGHT_COLOR / PI * ramp_col * light_gain;
 }

@@ -136,9 +136,14 @@ static func pose(sim: PassengerSim, p: Passenger) -> StageKinds.Pose:
 ## the shower: up over the first SHUFFLE_TICKS of the stay, down over the last
 ## (at the shower with bags, inside the door pauses: _in_spent, _out_left).
 static func share(sim: PassengerSim, p: Passenger) -> float:
-	if kind(sim, p) == Kind.NONE:
+	var k := kind(sim, p)
+	if k == Kind.NONE:
 		return 0.0
 	var step_in := _stepped_in(sim, p) / float(SHUFFLE_TICKS)
+	if k == Kind.SEAT:
+		# Sofa/armchair sitters finish turning out from the seat before sliding back,
+		# so knees and legs never sweep backward sideways across the cushion edge.
+		step_in = clampf((step_in - 0.25) / 0.75, 0.0, 1.0)
 	var step_out := _out_left(sim, p) / float(SHUFFLE_TICKS)
 	return clampf(minf(step_in, step_out), 0.0, 1.0)
 

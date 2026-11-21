@@ -382,6 +382,7 @@ func snap() -> void:
 			# another body, so sync() takes one of the right body.
 			var kept: Node3D = _nodes[id]
 			ActivityPoses.dress(kept, 0.0, 0.0)
+			DiningPose.apply(kept, DiningPose.Kind.NONE, 0.0, 0)
 			var p := sim.get_passenger(id)
 			if kept.get_meta(&"body") != PassengerLooks.body_of(id, p.variant):
 				_release(id)
@@ -1006,6 +1007,7 @@ func _release(id: int) -> void:
 	_seats.erase(id)
 	_sit_off.erase(id)
 	ActivityPoses.dress(node, 0.0, 0.0)
+	DiningPose.apply(node, DiningPose.Kind.NONE, 0.0, 0)
 	_props.release(id)
 	_turns.release(id)
 	_setoffs.erase(id)
@@ -1152,6 +1154,14 @@ func _pose(node: Node3D, p: Passenger, built: Dictionary) -> float:
 	ActivityPoses.dress(
 		node, ActivityPoses.recline(sim, p), ActivityPoses.foam(sim, p), ActivityPoses.bare(sim, p)
 	)
+	var dining_kind := DiningPose.Kind.NONE
+	var dining_amount := 0.0
+	if at_cafe and seat_pose == StageKinds.Pose.SEATED:
+		var visit := sim.cafes.visit_of(p.id)
+		if visit != null:
+			dining_kind = DiningPose.kind_for(StringName(visit.piece.get("def", &"")))
+			dining_amount = DiningPose.seated_weight(sim, p, visit)
+	DiningPose.apply(node, dining_kind, dining_amount, p.id)
 	node.set_meta(&"base_speed", base)
 	var player := node.get_node("AnimationPlayer") as AnimationPlayer
 	var was: String = node.get_meta(&"clip", "")
