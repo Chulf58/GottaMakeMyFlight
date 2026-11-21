@@ -9,7 +9,7 @@
 render_priority = 0
 shader = ExtResource("4_outline")
 shader_parameter/outline_color = Color(0.1, 0.1, 0.12, 1)
-shader_parameter/outline_px = 1.0
+shader_parameter/outline_px = 1.5
 
 [resource]
 resource_name = "TFP_Atlas_1A_D"

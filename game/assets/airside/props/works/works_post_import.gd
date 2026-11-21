@@ -8,6 +8,8 @@ extends EditorScenePostImport
 ## else. Same rule as toon_post_import.gd: every surface gets the shared .tres as it
 ## is, and an unmapped name or a missing resource fails the import.
 
+const TOON_IMPORTER := preload("res://assets/toon_post_import.gd")
+
 const MATERIALS := {
 	"TC_Road_1A_D": "res://assets/materials/tc_road_1a_toon.tres",
 	"TC_Props_2A_D": "res://assets/materials/tc_props_2a_toon.tres",
@@ -43,4 +45,6 @@ func _post_import(scene: Node) -> Object:
 	if failed > 0 or bound == 0:
 		# Returning null fails the import, so a half-bound prop never ships.
 		return null
+	var baked: int = TOON_IMPORTER.bake_scene_outline_normals(scene)
+	print("works import: %s smooth_surfaces=%d" % [get_source_file(), baked])
 	return scene
