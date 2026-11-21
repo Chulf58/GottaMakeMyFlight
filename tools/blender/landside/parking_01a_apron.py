@@ -211,13 +211,44 @@ def _build(bm, layers, uv):
         _add_face(bm, verts, out, uv, layers)
 
 
+def _dedup_barrier_faces(objs):
+    """Remove duplicate coplanar faces from the entry and exit barrier arms."""
+    removed = 0
+    for suffix in BARRIERS:
+        name = "%s_%s" % (MESH_NAME, suffix)
+        o = next(ob for ob in objs if ob.type == "MESH" and ob.name == name)
+        bm = bmesh.new()
+        bm.from_mesh(o.data)
+        bm.normal_update()
+        seen = set()
+        doomed = []
+        for f in bm.faces:
+            key = tuple(sorted(tuple(round(c, 4) for c in v.co) for v in f.verts))
+            if key in seen:
+                doomed.append(f)
+            else:
+                seen.add(key)
+        if doomed:
+            bmesh.ops.delete(bm, geom=doomed, context="FACES")
+            loose = [v for v in bm.verts if not v.link_faces]
+            if loose:
+                bmesh.ops.delete(bm, geom=loose, context="VERTS")
+            bm.normal_update()
+            bm.to_mesh(o.data)
+            o.data.update()
+            removed += len(doomed)
+        bm.free()
+    print("TOON EDIT %s barrier_coplanar_removed=%d" % (MESH_NAME, removed))
+
+
 def edit(objs):
-    """Add the apron beside TP_Parking_01A. Prints one TOON EDIT line with what it added."""
+    """Add the apron beside TP_Parking_01A and clean barrier coplanars. Prints TOON EDIT lines."""
     mesh_objs = [o for o in objs if o.type == "MESH" and o.name == MESH_NAME]
     if len(mesh_objs) != 1:
         raise Fail("expected one %s mesh, found %d" % (MESH_NAME, len(mesh_objs)))
     o = mesh_objs[0]
     _barriers_match(objs, o)
+    _dedup_barrier_faces(objs)
     src = bmesh.new()
     src.from_mesh(o.data)
     src.normal_update()

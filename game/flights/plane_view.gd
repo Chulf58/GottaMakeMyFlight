@@ -76,12 +76,14 @@ const REST_AFTER := {
 const FAR_SHADOW_ALPHA := 0.4
 ## Stencil value the silhouette marks its pixels with.
 const FAR_SHADOW_STENCIL := 7
-## Lift of the silhouette off the ground, against z-fighting.
-const FAR_SHADOW_LIFT := 0.06
+## Lift of the silhouette off the ground, against z-fighting with 0.20 m paving/runways.
+const FAR_SHADOW_LIFT := 0.22
 ## Thickness the projection keeps per metre of height, so the basis inverts.
 const FAR_SHADOW_FLATTEN := 0.002
 ## Node name of the nose propeller in prop models (tp_plane_03a.glb).
 const PROPELLER_NODE := "TP_Plane_03A_Propeller"
+## Pattern matching all spin-capable propeller, rotor and turbofan meshes across 03a-07a.
+const ROTOR_PATTERN := "^TP_Plane_\\d+A_(?:Propeller|Rotor|Fan)(?:[._][LRM])?$"
 ## Propeller spin rate per sim tick (20 ticks/s; avoids 3-blade 120 deg aliasing).
 const PROPELLER_REV_PER_TICK := 0.27
 ## Standing phases at the gate where passengers/crew are near and props stay off.
@@ -116,9 +118,7 @@ var _pivot: Node3D
 ## The model on show and its far silhouette, each placed by model_position_at().
 var _model: Node3D
 var _silhouette: Node3D
-var _prop: Node3D
-var _silhouette_prop: Node3D
-var _prop_rest := Basis.IDENTITY
+var _rotors: Array[Dictionary] = []
 var _far_shadow: Node3D
 var _far_material: StandardMaterial3D
 ## The tug and the bridge reports that go with the plane (board 4c08b8e5).
@@ -405,15 +405,25 @@ func show_model(model: String) -> void:
 		child.queue_free()
 	_model = _new_model()
 	_pivot.add_child(_model)
-	_prop = _model.find_child(PROPELLER_NODE, true, false) as Node3D
-	_prop_rest = _prop.basis if _prop != null else Basis.IDENTITY
 	_silhouette = _new_model()
 	_far_shadow.add_child(_silhouette)
-	_silhouette_prop = _silhouette.find_child(PROPELLER_NODE, true, false) as Node3D
+	_rotors = _collect_rotors(_model, _silhouette)
 	for mesh in _silhouette.find_children("*", "MeshInstance3D", true, false):
 		mesh.material_override = _far_material
 		mesh.material_overlay = null
 		mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+
+static func _collect_rotors(model_node: Node3D, silhouette_node: Node3D) -> Array[Dictionary]:
+	var pattern := RegEx.create_from_string(ROTOR_PATTERN)
+	var out: Array[Dictionary] = []
+	for child in model_node.find_children("*", "Node3D", true, false):
+		if pattern.search(String(child.name)) == null:
+			continue
+		var rotor := child as Node3D
+		var sil := silhouette_node.find_child(String(rotor.name), true, false) as Node3D
+		out.append({"node": rotor, "rest": rotor.basis, "silhouette": sil})
+	return out
 
 
 ## Where the model on show sits under a pose of `at_phase` (a pose_at phase)
@@ -439,18 +449,21 @@ func _set_model_position(at: Vector3) -> void:
 	_silhouette.position = at
 
 
-## Spins any nose propeller around its local hub axis (Y in prop space = +Z
-## ahead under the glb +90 deg X rest basis) from sim time during powered
-## phases, and holds it at rest while parked at the gate.
+## Spins every propeller, rotor or turbofan around its local hub axis (Y in prop
+## space = +Z ahead under the glb +90 deg X rest basis) from sim time during
+## powered phases, and holds it at rest while parked at the gate.
 func _spin_propeller(time: float) -> void:
-	if _prop == null:
+	if _rotors.is_empty():
 		return
 	var spinning := _propeller_spinning(phase, model_name)
 	var angle := TAU * PROPELLER_REV_PER_TICK * time if spinning else 0.0
-	var spun := _prop_rest * Basis(Vector3.UP, angle)
-	_prop.basis = spun
-	if _silhouette_prop != null:
-		_silhouette_prop.basis = spun
+	var spin := Basis(Vector3.UP, angle)
+	for rotor in _rotors:
+		var spun: Basis = (rotor["rest"] as Basis) * spin
+		(rotor["node"] as Node3D).basis = spun
+		var sil: Node3D = rotor["silhouette"]
+		if sil != null:
+			sil.basis = spun
 
 
 static func _propeller_spinning(at_phase: int, model: String) -> bool:
@@ -485,13 +498,13 @@ func _place_far_shadow() -> void:
 	if sun == null or camera == null or -sun.global_basis.z.y > -0.05:
 		_far_shadow.visible = false
 		return
-	_far_shadow.visible = true
 	_far_shadow.global_transform = _ground_projection() * global_transform
 	var ground := shadow_ground_point()
 	var depth := -(camera.global_transform.affine_inverse() * ground).z
 	var far := sun.directional_shadow_max_distance
 	var fade := smoothstep(far * sun.directional_shadow_fade_start, far, depth)
 	_far_material.albedo_color.a = FAR_SHADOW_ALPHA * fade
+	_far_shadow.visible = fade > 0.001
 
 
 func _path(state: int, plane_class := PlaneClasses.MEDIUM) -> PackedVector3Array:

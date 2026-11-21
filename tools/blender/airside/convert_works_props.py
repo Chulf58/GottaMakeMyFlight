@@ -98,6 +98,7 @@ PROPS = {
     "ti_excavator_1a": {
         "fbx": os.path.join(INDUSTRIES, "Models", "Excavator_1A.fbx"),
         "materials": {"Excavator_1A_D": "TI_Excavator_1A_D"},
+        "ground_min_z": True,
     },
     "ti_brick_pile_1c": {
         "fbx": os.path.join(INDUSTRIES, "Models", "Brick_Pile_1C.fbx"),
@@ -462,6 +463,14 @@ def convert(stem, spec, out_dir):
             bpy.data.images.remove(img)
     bpy.context.view_layer.update()
     lo, hi = rest_bounds()
+    if spec.get("ground_min_z") and abs(lo.z) > 1e-4:
+        lift = -lo.z
+        for o in bpy.context.scene.objects:
+            if o.parent is None:
+                o.location.z += lift
+        bpy.context.view_layer.update()
+        lo, hi = rest_bounds()
+        log("GROUND_SHIFT %s lift=%.4f new_min_z=%.4f" % (stem, lift, lo.z))
     size = hi - lo
     log(
         "REST %s size_m width_x=%.3f depth_y=%.3f height_z=%.3f min=(%.3f, %.3f, %.3f) max=(%.3f, %.3f, %.3f)"

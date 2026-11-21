@@ -377,18 +377,20 @@ def build_jet_bridge(root, c):
     gbox("Fold_Roof", (-VEST_HALF - 0.04, ftop, BOX_GAP), (VEST_HALF + 0.04, FOLD_TOP, VEST_END + 0.04), "light_grey",
          cap, c)
 
-    # The sliding stair enclosure, its ground floor and the pedestal base.
+    # The sliding stair enclosure, its ground floor and the pedestal base. Walk_Slide is
+    # hidden whenever the apron door is used (Fold_Cap shows instead), so Box_Wall has no
+    # apron cutout that would slide outside Vest_Wall on low-sill docks (04a), and Box_Band
+    # extends back by SLIDE_MAX inside Vest_Wall so no baseboard gap appears when slid out.
     slide = pivot(p, "Walk_Slide", root, c, (0.0, 0.0, 0.0))
     pivot(p, "Mount_StairFoot", slide, c, (0.0, 0.0, STAIR_Z0 - STEP_OFF))
     btop = BOX_TOP - SKIN_T
-    apron_in = (APRON_Z - APRON_HALF, APRON_Z + APRON_HALF, 0.0, APRON_TOP, False)
-    glazed_walls("Box_Wall", BOX_HALF, BOX_Z0, LANDING_END, btop, {1: [apron_in]}, "white", slide, c)
+    glazed_walls("Box_Wall", BOX_HALF, BOX_Z0, LANDING_END, btop, {}, "white", slide, c)
     gbox("Box_Roof", (-BOX_HALF, btop, BOX_Z0), (BOX_HALF, BOX_TOP, LANDING_END), "light_grey", slide, c)
     inner = BOX_HALF - SKIN_T
     gbox("Box_Floor", (-inner, 0.0, BOX_Z0), (inner, 0.03, STAIR_Z0), "floor", slide, c)
     for sx in (-1, 1):
         x0, x1 = sorted((sx * BOX_HALF, sx * (BOX_HALF + 0.02)))
-        gbox("Box_Band_%d" % sx, (x0, 0.0, VEST_END), (x1, 0.12, LANDING_END), "blue", slide, c)
+        gbox("Box_Band_%d" % sx, (x0, 0.0, VEST_END - SLIDE_MAX), (x1, 0.12, LANDING_END), "blue", slide, c)
     gbox("Pedestal_Base", (-0.35, 0.0, POST_Z - 0.35), (0.35, 0.25, POST_Z + 0.35), "concrete", slide, c)
 
     # The stair, built for a 1 m rise and scaled to H by Stair_Rise.
