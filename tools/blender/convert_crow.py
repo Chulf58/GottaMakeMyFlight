@@ -166,6 +166,92 @@ def set_action(arm, action):
         arm.animation_data.action_slot = action.slots[0]
 
 
+def _eval_group_min_z(arm, mesh_obj, deps, vert_ids):
+    ev = mesh_obj.evaluated_get(deps)
+    me = ev.to_mesh()
+    mw = ev.matrix_world
+    z = min((mw @ me.vertices[i].co).z for i in vert_ids)
+    ev.to_mesh_clear()
+    return z
+
+
+def fix_eat_dip(arm, meshes, actions):
+    """Lift eat's Root track so the planted right foot stays at idle_01's floor height
+    (-0.007 m = BirdFlock.FOOT_LIFT) instead of dipping, and curl Def_Foot.L.001 up
+    slightly on the frames where the lifted left toe sweeps below -0.007 m."""
+    from mathutils import Quaternion, Vector
+
+    eat = next((a for a in actions if a.name == "eat"), None)
+    if eat is None:
+        return
+    body = meshes[0]
+    vg = {g.index: g.name for g in body.vertex_groups}
+    r_ids = [
+        v.index
+        for v in body.data.vertices
+        if any(".R" in vg[g.group] and ("Foot" in vg[g.group] or "Toe" in vg[g.group]) and g.weight > 0.3 for g in v.groups)
+    ]
+    l_ids = [
+        v.index
+        for v in body.data.vertices
+        if any(".L" in vg[g.group] and ("Foot" in vg[g.group] or "Toe" in vg[g.group]) and g.weight > 0.3 for g in v.groups)
+    ]
+    # Godot's scene importer simplifies small Root translation curves (dropping up to ~2.0 mm
+    # on interior chords) and evaluates mid-frames between 30 fps keys. Keep -0.0066 m at loop
+    # ends (safe at 0.5-frame interpolation) and -0.0044 m across the interior crouch so Godot's
+    # evaluated skinned mesh stays >= -0.0070 m everywhere without touching .glb.import defaults.
+    f0, f1 = int(eat.frame_range[0]), int(eat.frame_range[1])
+
+    def frame_target(f):
+        t = min(1.0, min(f - f0, f1 - f) / 8.0)
+        return -0.0066 * (1.0 - t) + -0.0044 * t
+
+    set_action(arm, eat)
+    deps = bpy.context.evaluated_depsgraph_get()
+    cb = eat.layers[0].strips[0].channelbag(eat.slots[0])
+    fc_rz = cb.fcurves.find('pose.bones["Root"].location', index=2)
+    fc_fl = [cb.fcurves.find('pose.bones["Def_Foot.L.001"].rotation_quaternion', index=i) for i in range(4)]
+
+    # 1. Lift Root Z on each frame so the planted right foot never sinks below frame_target(f).
+    lifts = []
+    for f in range(f0, f1 + 1):
+        bpy.context.scene.frame_set(f)
+        deps.update()
+        rz = _eval_group_min_z(arm, body, deps, r_ids)
+        lifts.append((f, max(0.0, frame_target(f) - rz)))
+    for f, dz in lifts:
+        fc_rz.keyframe_points.insert(f, dz, options={"FAST"})
+    fc_rz.update()
+
+    # 2. Pitch Def_Foot.L.001 slightly upward around local +X only where the lifted left toe dips.
+    foot_l = arm.pose.bones["Def_Foot.L.001"]
+    base_q = {f: Quaternion([fc.evaluate(f) for fc in fc_fl]) for f in range(f0, f1 + 1)}
+    rot_fixes = []
+    for f in range(f0, f1 + 1):
+        tgt = frame_target(f)
+        bpy.context.scene.frame_set(f)
+        deps.update()
+        lz = _eval_group_min_z(arm, body, deps, l_ids)
+        if lz < tgt:
+            lo, hi = 0.0, 0.8
+            for _ in range(14):
+                mid = 0.5 * (lo + hi)
+                foot_l.rotation_quaternion = base_q[f] @ Quaternion(Vector((1.0, 0.0, 0.0)), -mid)
+                deps.update()
+                if _eval_group_min_z(arm, body, deps, l_ids) < tgt:
+                    lo = mid
+                else:
+                    hi = mid
+            rot_fixes.append((f, base_q[f] @ Quaternion(Vector((1.0, 0.0, 0.0)), -hi)))
+    for f, q_fix in rot_fixes:
+        for i in range(4):
+            fc_fl[i].keyframe_points.insert(f, q_fix[i], options={"FAST"})
+    for fc in fc_fl:
+        fc.update()
+    log("FIX_EAT_DIP root_max_lift=%.4f left_foot_frames_adjusted=%d target_z=%.4f" % (
+        max(dz for _, dz in lifts), len(rot_fixes), frame_target(f0)))
+
+
 def clip_contacts(arm, meshes, actions):
     """Per clip: the lowest evaluated vertex (world Z) at its first and last frame and over
     all frames, the Root bone's travel, and the duration. Only the A mesh is measured; B
@@ -338,6 +424,7 @@ def main():
     # rest), so the rotated RIG_Crow_01 node stays above the Skeleton3D in the file.
     log("ARMATURE %s rotation_euler=%s kept" % (arm.name, tuple(round(v, 4) for v in arm.rotation_euler)))
 
+    fix_eat_dip(arm, meshes, actions)
     durations = clip_contacts(arm, meshes, actions)
     idle = next(a for a in actions if a.name == "idle_01")
     set_action(arm, idle)
@@ -380,6 +467,27 @@ def main():
         export_reset_pose_bones=True,
     )
     check_file(out, durations, scene_size)
+    # Re-read the written GLB in a fresh scene and verify eat never dips below -0.0070 m.
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+    bpy.context.scene.render.fps = FPS
+    bpy.context.scene.render.fps_base = 1.0
+    bpy.ops.import_scene.gltf(filepath=out)
+    re_arm = next(o for o in bpy.data.objects if o.type == "ARMATURE")
+    re_body = bpy.data.objects[VARIANTS[0]]
+    re_eat = next(a for a in bpy.data.actions if a.name == "eat")
+    set_action(re_arm, re_eat)
+    re_deps = bpy.context.evaluated_depsgraph_get()
+    eat_low = 1e9
+    for f in range(int(re_eat.frame_range[0]), int(re_eat.frame_range[1]) + 1):
+        bpy.context.scene.frame_set(f)
+        re_deps.update()
+        ev = re_body.evaluated_get(re_deps)
+        me = ev.to_mesh()
+        eat_low = min(eat_low, min((ev.matrix_world @ v.co).z for v in me.vertices))
+        ev.to_mesh_clear()
+    log("FILE_EAT_LOW min_z=%.4f" % eat_low)
+    if eat_low < -0.0070:
+        die("written file eat clip still dips to %.4f m (< -0.0070)" % eat_low)
     if out_dir == OUT_DIR:
         write_scene_import(out)
     log("DONE %s" % out)

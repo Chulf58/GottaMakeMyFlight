@@ -18,9 +18,9 @@ Pieces, written to game/assets/mess/ (one .glb each, a normal and a grown size):
   wrappers, a red crushed cup, two crumpled balls, 0.25-0.35 m each) so it reads at the
   80 m home view; the grown pile is many smaller pieces in bright colours plus a fries
   carton with spilled fries.
-- mess_smear, mess_smear_grown: the toilet and shower room mess. A dull teal dirty-water
-  puddle with olive-brown smear streaks, dark flecks and a trail of muddy footprints.
-Normal props fit inside one cell (0.7-1.0 m across); grown props span 1.5-2.0 m.
+- mess_smear, mess_smear_grown: the toilet and shower room mess. A dingy grey-taupe dirty
+  water/grime puddle with muddy streaks, dark flecks and a trail of muddy footprints.
+Normal props fit inside one cell (0.7-1.0 m across); grown props span 1.10-1.38 m.
 Everything is at most MAX_H tall (thin, so a passenger's foot passes through without a
 visible block), starts at 1 mm above the floor (no z-fighting with the floor tile), and
 never needs to block a path.
@@ -76,7 +76,7 @@ BIN_PNG = "tc_building_4a_d.png"
 MAX_H = 0.05  # the tallest part of any floor prop (the crushed cup), metres
 Z0 = 0.001  # every floor part starts 1 mm above the walking surface
 # Across-size bands (the larger of the two horizontal extents), metres.
-BANDS = {"normal": (0.70, 1.00), "grown": (1.50, 2.00)}
+BANDS = {"normal": (0.70, 1.00), "grown": (1.10, 1.38)}
 
 # Swatches (TP_Atlas_1A_D column, row, fraction down the swatch), sampled by
 # tools/blender/out/mess-props/atlas_grid.py. The floor tile is c14 r14 (about d5cec3),
@@ -89,9 +89,9 @@ MESS_PALETTE = {
     "sun": ("TP_Atlas_1A_D", 28, 0, 0.30, 0.0),
     "kid_blue": ("TP_Atlas_1A_D", 25, 0, 0.30, 0.0),
     "kid_green": ("TP_Atlas_1A_D", 27, 0, 0.30, 0.0),
-    "water": ("TP_Atlas_1A_D", 4, 5, 0.30, 0.0),  # dull dirty teal, about 629ca1
-    "olive": ("TP_Atlas_1A_D", 24, 2, 0.50, 0.0),  # murky olive, about 6b7212
-    "olive_dark": ("TP_Atlas_1A_D", 24, 3, 0.75, 0.0),  # dark olive, about 454c1f
+    "grime_puddle": ("TP_Atlas_1A_D", 15, 3, 0.50, 0.0),  # muted dingy grey-taupe puddle
+    "grime_streak": ("TP_Atlas_1A_D", 13, 3, 0.50, 0.0),  # darker muddy grey-brown grime
+    "scuff": ("TP_Atlas_1A_D", 18, 3, 0.50, 0.0),  # dark brownish-charcoal scuff & shoeprints
     "sack": ("TP_Atlas_1A_D", 3, 15, 0.35, 0.0),  # bin-bag grey, about 444444
     "sack_light": ("TP_Atlas_1A_D", 2, 15, 0.30, 0.0),  # light bin-bag grey, about ababaa
 }
@@ -202,7 +202,7 @@ def footprint(name, x, y, yaw, pal, parent, c):
 
 def build_spill(root, c, grown):
     rng = random.Random(11 if grown else 7)
-    r = 0.80 if grown else 0.40
+    r = 0.55 if grown else 0.40
     rim = blob(rng, r, r * 0.82, n=28)
     prism("Spill_Rim", rim, Z0, 0.008, "coffee_dark", root, c)
     prism("Spill_Pool", [(px * 0.86, py * 0.86) for px, py in rim], Z0, 0.011, "coffee", root, c)
@@ -227,7 +227,7 @@ def build_spill(root, c, grown):
 
 def build_litter(root, c, grown):
     rng = random.Random(23 if grown else 5)
-    spread = 0.75 if grown else 0.34
+    spread = 0.56 if grown else 0.34
     colours = ["red", "sun", "kid_blue", "white", "kid_green"]
     spots = []
 
@@ -257,22 +257,10 @@ def build_litter(root, c, grown):
         lump("Litter_Ball_1", rng, x, y, Z0, 0.125, 0.045, "sun", root, c)
         return
 
-    n_ball, n_wrap = 7, 7
-    for i in range(n_ball):
-        x, y = spot(0.09)
-        lump("Litter_Ball_%d" % i, rng, x, y, Z0, rng.uniform(0.07, 0.09), 0.038, colours[i % len(colours)],
-             root, c)
-    for i in range(n_wrap):
-        x, y = spot(0.13)
-        wrapper("Litter_Wrap_%d" % i, rng, x, y, rng.uniform(0.22, 0.28), rng.uniform(0.14, 0.18),
-                colours[(i + 2) % len(colours)], root, c)
-    for i in range(2 if grown else 1):
-        x, y = spot(0.10)
-        cup_lying("Litter_Cup_%d" % i, x, y, rng.uniform(0.0, 2.0 * math.pi), 0.16, 0.030, 0.042, 0.50,
-                  "white", "kid_blue" if i else "red", root, c)
     if grown:
-        # A fries carton on its side with fries spilled out of it.
-        x, y = spot(0.16)
+        # Place the largest piece (the fries carton and spilled fries) first so smaller
+        # litter packs cleanly around it without crowding out a free spot.
+        x, y = spot(0.14)
         yaw = rng.uniform(0.0, 2.0 * math.pi)
         box = [(-0.07, -0.05), (0.07, -0.05), (0.07, 0.05), (-0.07, 0.05)]
         prism("Litter_Carton", place2d(box, x, y, yaw), Z0, 0.04, "red", root, c)
@@ -281,34 +269,47 @@ def build_litter(root, c, grown):
             stick = place2d([(-0.05, -0.011), (0.05, -0.011), (0.05, 0.011), (-0.05, 0.011)], fx, fy,
                             rng.uniform(-0.8, 0.8))
             prism("Litter_Fry_%d" % k, place2d(stick, x, y, yaw), Z0, 0.012, "sun", root, c)
+    n_ball, n_wrap = 5, 5
+    for i in range(n_ball):
+        x, y = spot(0.08)
+        lump("Litter_Ball_%d" % i, rng, x, y, Z0, rng.uniform(0.065, 0.085), 0.038, colours[i % len(colours)],
+             root, c)
+    for i in range(n_wrap):
+        x, y = spot(0.105)
+        wrapper("Litter_Wrap_%d" % i, rng, x, y, rng.uniform(0.20, 0.26), rng.uniform(0.13, 0.17),
+                colours[(i + 2) % len(colours)], root, c)
+    for i in range(2 if grown else 1):
+        x, y = spot(0.095)
+        cup_lying("Litter_Cup_%d" % i, x, y, rng.uniform(0.0, 2.0 * math.pi), 0.16, 0.030, 0.042, 0.50,
+                  "white", "kid_blue" if i else "red", root, c)
 
 
 def build_smear(root, c, grown):
     rng = random.Random(31 if grown else 3)
-    rx, ry = (0.70, 0.50) if grown else (0.36, 0.26)
-    water = blob(rng, rx, ry, n=28, amps=((2, 0.12), (3, 0.10), (4, 0.06)))
-    prism("Smear_Water", water, Z0, 0.006, "water", root, c)
-    # Smear streaks: long olive blobs across the water, as if wiped or trodden.
-    n_streak = 6 if grown else 3
+    rx, ry = (0.50, 0.35) if grown else (0.36, 0.26)
+    puddle = blob(rng, rx, ry, n=28, amps=((2, 0.12), (3, 0.10), (4, 0.06)))
+    prism("Smear_Water", puddle, Z0, 0.006, "grime_puddle", root, c)
+    # Smear streaks: darker grime streaks across the puddle, as if wiped or trodden.
+    n_streak = 5 if grown else 3
     for i in range(n_streak):
         t = (i + 0.5) / n_streak
-        x = (t - 0.5) * rx * 1.3 + rng.uniform(-0.05, 0.05)
+        x = (t - 0.5) * rx * 1.3 + rng.uniform(-0.04, 0.04)
         y = rng.uniform(-0.35, 0.35) * ry
         ln = rx * rng.uniform(0.32, 0.45)
         prism("Smear_Streak_%d" % i, place2d(blob(rng, ln, ln * 0.22, n=14, amps=((2, 0.06), (3, 0.08))), x, y,
-                                             rng.uniform(-0.5, 0.5)), Z0, 0.010, "olive", root, c)
-    for i in range(8 if grown else 4):
+                                             rng.uniform(-0.5, 0.5)), Z0, 0.010, "grime_streak", root, c)
+    for i in range(6 if grown else 4):
         t = rng.uniform(0.0, 2.0 * math.pi)
         d = rng.uniform(0.2, 0.85)
         s = rng.uniform(0.025, 0.045)
         prism("Smear_Fleck_%d" % i, place2d(blob(rng, s, s * 0.8, n=8), d * rx * math.cos(t), d * ry * math.sin(t),
-                                            t), Z0, 0.012, "olive_dark", root, c)
+                                            t), Z0, 0.012, "scuff", root, c)
     # Muddy footprints walking out of the puddle toward Godot +X.
     steps = 3 if grown else 2
     for i in range(steps):
-        x = (0.40 + i * 0.30) if grown else (0.12 + i * 0.26)
+        x = (0.24 + i * 0.21) if grown else (0.12 + i * 0.24)
         y = (0.07 if i % 2 else -0.07)
-        footprint("Smear_Print_%d" % i, x, y, 0.0, "olive_dark", root, c)
+        footprint("Smear_Print_%d" % i, x, y, 0.0, "scuff", root, c)
 
 
 PROPS = {
@@ -348,14 +349,14 @@ def check_band(piece, lo, hi):
 
 
 # ---------------------------------------------------------------- the full bin
-# The empty bin, measured by re-import (tools/blender/out/mess-props/bin_probe.py): body
-# r 0.385 at the floor to 0.465 at 0.918, a lid brim r 0.532 from 0.918 to 1.104, a dome
-# to r 0.322 at 1.265 and a cap r 0.161 to 1.392.
-BIN_BRIM_Z = (0.918, 1.104)
-BIN_TOP_Z = 1.265
-BIN_TOP_R = 0.322
-BIN_BRIM_R = 0.514
-BIN_MAX_H = 1.70
+# The empty bin, scaled 0.65x from vendor in convert_toon_batch.py (VF7): vendor body
+# 0.918..1.265..1.392 m -> 0.65x gives brim 0.597..0.718, top 0.822, full height <= 1.15 m.
+BIN_SCALE = 0.65
+BIN_BRIM_Z = (0.918 * BIN_SCALE, 1.104 * BIN_SCALE)
+BIN_TOP_Z = 1.265 * BIN_SCALE
+BIN_TOP_R = 0.322 * BIN_SCALE
+BIN_BRIM_R = 0.514 * BIN_SCALE
+BIN_MAX_H = 1.70 * BIN_SCALE
 
 
 def lid_surface(r):
@@ -433,35 +434,39 @@ def poke(deg, r, z, pitch_deg):
 
 def build_bin_rubbish(root, c):
     rng = random.Random(41)
+    s = BIN_SCALE
     colours = ["red", "sun", "kid_blue", "white", "kid_green"]
     for i, (deg, rc, rb, h, tilt, pal) in enumerate(BAGS):
         t = math.radians(deg)
         tangent = Vector((-math.sin(t), math.cos(t), 0.0))
         xf = Matrix.Rotation(math.radians(tilt), 3, tangent)
-        bag = lump("Rubbish_Bag_%d" % i, rng, rc * math.cos(t), rc * math.sin(t), lid_surface(rc + 0.7 * rb),
-                   rb, h, pal, root, c, subdiv=2, jitter=0.10, sink=0.03, xf=xf)
+        bag = lump("Rubbish_Bag_%d" % i, rng, rc * s * math.cos(t), rc * s * math.sin(t),
+                   lid_surface((rc + 0.7 * rb) * s), rb * s, h * s, pal, root, c, subdiv=2, jitter=0.10,
+                   sink=0.03 * s, xf=xf)
         top = max((bag.matrix_world @ v.co for v in bag.data.vertices), key=lambda p: p.z)
-        kit.cyl("Rubbish_Bag_%d_Tie" % i, top.x, top.y, top.z - 0.03, top.z + 0.06, 0.035, pal, root, c)
+        kit.cyl("Rubbish_Bag_%d_Tie" % i, top.x, top.y, top.z - 0.03 * s, top.z + 0.06 * s, 0.035 * s, pal, root, c)
     # Crumpled papers wedged between the bags and on the brim.
     for i, (deg, r, pal) in enumerate(((95.0, 0.36, "white"), (215.0, 0.38, "white"), (330.0, 0.40, "sun"),
                                        (0.0, 0.10, "white"), (250.0, 0.42, "coffee"))):
         t = math.radians(deg)
-        lump("Rubbish_Paper_%d" % i, rng, r * math.cos(t), r * math.sin(t), lid_surface(r) + (0.18 if r < 0.2 else 0.0),
-             rng.uniform(0.09, 0.11), 0.10, pal, root, c, sink=0.02)
+        lump("Rubbish_Paper_%d" % i, rng, r * s * math.cos(t), r * s * math.sin(t),
+             lid_surface(r * s) + (0.18 * s if r < 0.2 else 0.0), rng.uniform(0.09, 0.11) * s, 0.10 * s,
+             pal, root, c, sink=0.02 * s)
     # A paper cup and a fries carton poking out of the pile at angles.
-    m = poke(100.0, 0.16, 1.32, 50.0)
-    posed_cone("Rubbish_Cup", 0.0, 0.20, 0.040, 0.055, m, "white", root, c)
-    posed_cone("Rubbish_Cup_Band", 0.12, 0.17, 0.051, 0.056, m, "red", root, c)
-    m = poke(220.0, 0.20, 1.30, 38.0)
-    posed_box("Rubbish_Carton", (-0.07, -0.045, 0.0), (0.07, 0.045, 0.20), m, "red", root, c)
+    m = poke(100.0, 0.16 * s, 1.32 * s, 50.0)
+    posed_cone("Rubbish_Cup", 0.0, 0.20 * s, 0.040 * s, 0.055 * s, m, "white", root, c)
+    posed_cone("Rubbish_Cup_Band", 0.12 * s, 0.17 * s, 0.051 * s, 0.056 * s, m, "red", root, c)
+    m = poke(220.0, 0.20 * s, 1.30 * s, 38.0)
+    posed_box("Rubbish_Carton", (-0.07 * s, -0.045 * s, 0.0), (0.07 * s, 0.045 * s, 0.20 * s), m, "red", root, c)
     for k, (fx, fy, lean) in enumerate(((-0.035, 0.0, -10.0), (0.0, 0.012, 6.0), (0.035, -0.01, 14.0))):
-        fm = m @ Matrix.Translation((fx, fy, 0.16)) @ Matrix.Rotation(math.radians(lean), 4, "Y")
-        posed_box("Rubbish_Fry_%d" % k, (-0.012, -0.012, 0.0), (0.012, 0.012, 0.12), fm, "sun", root, c)
+        fm = m @ Matrix.Translation((fx * s, fy * s, 0.16 * s)) @ Matrix.Rotation(math.radians(lean), 4, "Y")
+        posed_box("Rubbish_Fry_%d" % k, (-0.012 * s, -0.012 * s, 0.0), (0.012 * s, 0.012 * s, 0.12 * s),
+                  fm, "sun", root, c)
     # Wrappers caught under the lid brim, hanging out and down.
     for i, deg in enumerate((25.0, 140.0, 215.0, 305.0)):
         t = math.radians(deg)
         bm = bmesh.new()
-        hl, hw = 0.10, 0.065
+        hl, hw = 0.10 * s, 0.065 * s
         pts = [(-hl, -hw), (hl, -hw * 1.1), (hl * 1.05, hw), (-hl, hw * 0.9)]
         bot = [bm.verts.new((px, py, -0.002)) for px, py in pts]
         top = [bm.verts.new((px, py, 0.002)) for px, py in pts]
@@ -472,16 +477,16 @@ def build_bin_rubbish(root, c):
             bm.faces.new((bot[k], bot[j], top[j], top[k]))
         bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
         # Long axis radial, tipped 60 degrees down, the inner end tucked under the brim.
-        m = (Matrix.Translation((0.0, 0.0, BIN_BRIM_Z[0] - 0.02)) @ Matrix.Rotation(t, 4, "Z")
-             @ Matrix.Translation((BIN_BRIM_R + 0.02, 0.0, 0.0)) @ Matrix.Rotation(math.radians(60.0), 4, "Y"))
+        m = (Matrix.Translation((0.0, 0.0, BIN_BRIM_Z[0] - 0.02 * s)) @ Matrix.Rotation(t, 4, "Z")
+             @ Matrix.Translation((BIN_BRIM_R + 0.02 * s, 0.0, 0.0)) @ Matrix.Rotation(math.radians(60.0), 4, "Y"))
         bmesh.ops.transform(bm, matrix=m, verts=bm.verts)
         kit._finish_mesh("Rubbish_Hang_%d" % i, bm, colours[(i + 1) % len(colours)], root, c)
     # A tied sack at the front-right corner (Godot +x, +z), leaning on the bin.
-    lump("Rubbish_Sack", rng, 0.36, -0.36, Z0, 0.17, 0.34, "sack", root, c, subdiv=2, jitter=0.10)
-    kit.cyl("Rubbish_Sack_Tie", 0.36, -0.36, 0.30, 0.38, 0.03, "sack", root, c)
+    lump("Rubbish_Sack", rng, 0.36 * s, -0.36 * s, Z0, 0.17 * s, 0.34 * s, "sack", root, c, subdiv=2, jitter=0.10)
+    kit.cyl("Rubbish_Sack_Tie", 0.36 * s, -0.36 * s, 0.30 * s, 0.38 * s, 0.03 * s, "sack", root, c)
     # Loose litter at the front-left corner.
-    lump("Rubbish_Floor_Ball", rng, -0.36, -0.40, Z0, 0.06, 0.038, "red", root, c)
-    wrapper("Rubbish_Floor_Wrap", rng, -0.42, -0.25, 0.17, 0.11, "sun", root, c)
+    lump("Rubbish_Floor_Ball", rng, -0.36 * s, -0.40 * s, Z0, 0.06 * s, 0.038 * s, "red", root, c)
+    wrapper("Rubbish_Floor_Wrap", rng, -0.42 * s, -0.25 * s, 0.17 * s, 0.11 * s, "sun", root, c)
 
 
 def build_full_bin():

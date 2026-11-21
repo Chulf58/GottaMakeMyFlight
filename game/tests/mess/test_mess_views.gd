@@ -120,3 +120,46 @@ func test_a_full_bin_shows_only_its_rubbish_until_it_is_emptied() -> void:
 	_views.sync()
 	assert_int(_views.rubbish_count()).is_equal(0)
 	_w.grid.apply(BuildEdit.remove_object(bin))
+
+
+func test_grown_mess_footprint_and_smear_bounds_stay_compact() -> void:
+	# VF7 regression: grown floor props stay compact (~1.1-1.38 m) instead of ~2x2 sprawl,
+	# and tc_trash_can_1a_full scales with the 0.90 m bin.
+	for kind in [MessSim.Kind.SPILL, MessSim.Kind.LITTER, MessSim.Kind.TOILET]:
+		for grown in [false, true]:
+			var packed := MessViews.prop_scene(kind, grown)
+			var node := packed.instantiate() as Node3D
+			var box := _node_aabb(node)
+			node.free()
+			var max_h: float = 1.40 if grown else 1.00
+			(
+				assert_float(box.size.x)
+				. override_failure_message("%s grown=%s" % [kind, grown])
+				. is_less_equal(max_h)
+			)
+			(
+				assert_float(box.size.z)
+				. override_failure_message("%s grown=%s" % [kind, grown])
+				. is_less_equal(max_h)
+			)
+			assert_float(box.position.y).is_greater_equal(0.0)
+	var full_bin := MessViews.FULL_BIN.instantiate() as Node3D
+	var bin_box := _node_aabb(full_bin)
+	full_bin.free()
+	assert_float(bin_box.end.y).is_less_equal(1.15)
+	assert_float(bin_box.position.y).is_greater_equal(-0.005)
+
+
+func _node_aabb(root: Node3D) -> AABB:
+	var box := AABB()
+	var first := true
+	for mi in root.find_children("*", "MeshInstance3D", true, false):
+		var xf := (mi as MeshInstance3D).transform
+		var parent := mi.get_parent()
+		while parent != root:
+			xf = (parent as Node3D).transform * xf
+			parent = parent.get_parent()
+		var part_box: AABB = xf * (mi as MeshInstance3D).get_aabb()
+		box = part_box if first else box.merge(part_box)
+		first = false
+	return box

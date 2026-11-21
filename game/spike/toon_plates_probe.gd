@@ -182,8 +182,9 @@ func _calibrate() -> void:
 	studio.add_child(cam)
 	cam.make_current()
 	var img := await _grab()
-	var white := img.get_pixelv(Vector2i(cam.unproject_position(Vector3(-1.5, 0, 0))))
-	var grey := img.get_pixelv(Vector2i(cam.unproject_position(Vector3(1.5, 0, 0))))
+	var scale := Vector2(img.get_size()) / root.get_visible_rect().size
+	var white := img.get_pixelv(Vector2i(cam.unproject_position(Vector3(-1.5, 0, 0)) * scale))
+	var grey := img.get_pixelv(Vector2i(cam.unproject_position(Vector3(1.5, 0, 0)) * scale))
 	# Expected: white >= 245, grey 178..198. Grey 255 = no multiply, ~137 = double.
 	print("CALIBRATION white=%d grey=%d" % [roundi(white.r * 255.0), roundi(grey.r * 255.0)])
 	if white.r * 255.0 < 245.0 or grey.r * 255.0 < 178.0 or grey.r * 255.0 > 198.0:
@@ -271,7 +272,7 @@ func _prove_visible(cam: Camera3D, label: String, subject: Node3D) -> bool:
 
 func _add_colliders(node: Node) -> void:
 	for mi in _meshes(node):
-		if mi.mesh != null:
+		if mi.mesh != null and mi.is_inside_tree() and mi.mesh.get_faces().size() >= 3:
 			mi.create_trimesh_collision()
 
 
@@ -464,8 +465,8 @@ func _plate_in_context() -> void:
 		# runway piece cannot fit whole beside the terminal; its centre must.
 		[
 			"in_context_distance",
-			Vector3(0, 0, -30),
-			120.0,
+			Vector3(0, 0, -40),
+			155.0,
 			[terminal, plane, truck],
 			[runway],
 			PI / 2
@@ -507,14 +508,16 @@ func _idle_strip(rig: Node3D, cam: Camera3D, subjects: Array) -> void:
 	await _frames(4)
 	if not await _prove_shot(cam, "idle_strip", subjects, []):
 		return
+	var probe_img := await _grab()
+	var scale := Vector2(probe_img.get_size()) / root.get_visible_rect().size
 	var lo := Vector2(INF, INF)
 	var hi := Vector2(-INF, -INF)
 	for s in subjects:
 		for p in _corners(_aabb_of(s)):
-			lo = lo.min(cam.unproject_position(p))
-			hi = hi.max(cam.unproject_position(p))
-	var crop := Rect2i(Rect2(lo, hi - lo).grow(24.0)).intersection(
-		Rect2i(Vector2i.ZERO, Vector2i(root.get_visible_rect().size))
+			lo = lo.min(cam.unproject_position(p) * scale)
+			hi = hi.max(cam.unproject_position(p) * scale)
+	var crop := Rect2i(Rect2(lo, hi - lo).grow(24.0 * scale.y)).intersection(
+		Rect2i(Vector2i.ZERO, probe_img.get_size())
 	)
 	var players: Array[AnimationPlayer] = []
 	for s in subjects:
