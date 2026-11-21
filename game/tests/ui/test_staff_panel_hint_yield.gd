@@ -75,7 +75,7 @@ func test_the_hiring_roles_are_the_ones_the_banner_asks_for() -> void:
 func test_the_hint_takes_the_place_of_the_banner() -> void:
 	await _make()
 	var banner := _panel.hint_card().get_global_rect()
-	# Changed from the top centre: the banner sits in the top-left column.
-	assert_float(banner.position.y).is_equal_approx(StaffPanel.BANNER_TOP, 0.5)
+	# Changed from the top centre: the banner sits in the top-left column at list_top().
+	assert_float(banner.position.y).is_equal_approx(LeftColumn.card_top(_panel.get_tree()), 0.5)
 	assert_float(banner.position.x).is_equal_approx(HudLayout.MARGIN, 0.5)
 	assert_float(banner.size.x).is_equal_approx(HudLayout.LIST_W, 0.5)

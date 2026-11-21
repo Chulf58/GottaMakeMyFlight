@@ -70,20 +70,64 @@ func refresh() -> void:
 		_size_signs()
 
 
-## Keeps the Closed signs one screen size, as MissMarkers sizes its signs:
-## world units per screen pixel at one metre from the camera.
+## Keeps the Closed signs one screen size and clear of HUD rects (sliding
+## clear or hiding if no clear spot exists, matching RoomLabelLayout / GateLinksView).
 func _size_signs() -> void:
-	var camera := get_viewport().get_camera_3d() if is_inside_tree() else null
+	var in_tree := is_inside_tree()
+	var camera := get_viewport().get_camera_3d() if in_tree else null
 	var fov := camera.fov if camera != null else MissMarkers.FALLBACK_FOV
 	var height := MissMarkers.FALLBACK_HEIGHT
-	if is_inside_tree():
+	var to_output := 1.0
+	var view_size := Vector2.ZERO
+	if in_tree:
 		var view := get_viewport()
-		height = view.get_visible_rect().size.y * view.get_stretch_transform().get_scale().y
+		to_output = view.get_stretch_transform().get_scale().y
+		view_size = view.get_visible_rect().size * to_output
+		height = view_size.y
 	var unit := 2.0 * tan(deg_to_rad(fov) / 2.0) / height
-	for spot: int in _signs:
+	var hud: Array[Rect2] = []
+	if camera != null:
+		hud = HudRects.collect(self, to_output)
+	var placed: Array[Rect2] = []
+	var spots := _signs.keys()
+	spots.sort()
+	for spot: int in spots:
 		var sign: Sprite3D = _signs[spot]
+		var caption := sign.get_node("Caption") as Label3D
 		sign.pixel_size = MissMarkers.SIGN_PX * unit / MarkerIcons.SIZE
-		(sign.get_node("Caption") as Label3D).pixel_size = unit
+		caption.pixel_size = unit
+		sign.offset = Vector2(0.0, MarkerIcons.SIZE / 2.0)
+		caption.offset = Vector2(0.0, MissMarkers.SIGN_PX + MissMarkers.CAPTION_GAP_PX)
+		sign.visible = true
+		if camera == null or camera.is_position_behind(sign.global_position):
+			continue
+		var depth := (sign.global_position - camera.global_position).dot(-camera.global_basis.z)
+		if depth <= camera.near:
+			continue
+		var point := camera.unproject_position(sign.global_position) * to_output
+		var cap_size := MissMarkers.caption_size(caption.text)
+		var total_w := maxf(MissMarkers.SIGN_PX, cap_size.x)
+		var total_h := MissMarkers.SIGN_PX + MissMarkers.CAPTION_GAP_PX + cap_size.y
+		var home := Rect2(point.x - total_w / 2.0, point.y - total_h, total_w, total_h)
+		if not Rect2(Vector2.ZERO, view_size).intersects(home):
+			continue
+		var padded := home.grow(RoomLabelLayout.GAP_PX)
+		if (placed + hud).any(func(other: Rect2) -> bool: return padded.intersects(other)):
+			var clear := RoomLabelLayout.slide_clear(home, placed + hud, view_size)
+			if clear.size == Vector2.ZERO:
+				sign.visible = false
+				continue
+			var delta_px := clear.position - home.position
+			var icon_per_px := MarkerIcons.SIZE / MissMarkers.SIGN_PX
+			sign.offset = Vector2(
+				delta_px.x * icon_per_px, MarkerIcons.SIZE / 2.0 - delta_px.y * icon_per_px
+			)
+			caption.offset = Vector2(
+				delta_px.x, MissMarkers.SIGN_PX + MissMarkers.CAPTION_GAP_PX - delta_px.y
+			)
+			placed.append(clear)
+		else:
+			placed.append(home)
 
 
 ## The number of curb bays drawn: the starter curb's and the built spots'.

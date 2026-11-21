@@ -173,10 +173,10 @@ func test_deselecting_or_a_load_clears_the_pin() -> void:
 
 func test_the_card_sits_bottom_left_above_the_templates_button() -> void:
 	_select()
-	var label := _hud.find_child("FollowText", true, false) as Label
+	var card := _hud.find_child("FollowCard", true, false) as Control
 	assert_float(_inspect.anchor_top).is_equal(1.0)
-	assert_float(_inspect.offset_left).is_equal(label.offset_left)
-	assert_float(_inspect.offset_right).is_less_equal(label.offset_right)
+	assert_float(_inspect.offset_left).is_equal(card.offset_left)
+	assert_float(_inspect.offset_right).is_less_equal(card.offset_right)
 	# Changed for HUD 5/7: the Templates dock now stands on the bar's baseline, so
 	# the card docks one GAP above the category bar, the follow text's place,
 	# and clear of the dock's top edge (MARGIN + BAR_H up from the bottom).

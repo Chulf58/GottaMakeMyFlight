@@ -614,17 +614,18 @@ func _place() -> void:
 		offset_top = top
 
 
-## The lowest screen y the rail may reach: GROUP_GAP above the category bar, or
-## above the build tray's whole stack while the tray is open, so opening it
-## sends the cards that would run into it to '+N more'.
+## The lowest screen y the rail may reach, via BottomDocks' unified clearance
+## coordinator: GROUP_GAP above the category bar (or the open build tray stack)
+## and above any visible bottom-right dock or DebugPanel.
 func _stop_y() -> float:
-	var view := get_viewport().get_visible_rect().size.y
-	var below := BuildMenu.MARGIN + BuildMenu.BAR_H
-	if build_tray_open.is_valid() and build_tray_open.call():
-		below = (
-			build_stack_top.call() if build_stack_top.is_valid() else BuildMenu.tray_stack_top()
-		)
-	return view - below - HudLayout.GROUP_GAP
+	var view := get_viewport().get_visible_rect().size
+	var tray_open: bool = build_tray_open.is_valid() and bool(build_tray_open.call())
+	var stack_top := (
+		float(build_stack_top.call())
+		if tray_open and build_stack_top.is_valid()
+		else BuildMenu.tray_stack_top()
+	)
+	return BottomDocks.right_stop_y(get_tree(), view, tray_open, stack_top)
 
 
 ## Orders the cards newest first and draws as many as fit: at most MAX_CARDS,

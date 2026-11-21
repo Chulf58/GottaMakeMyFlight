@@ -14,7 +14,7 @@ extends CanvasLayer
 ## Left edge: the money slot's margin, its width, and a gap.
 const LEFT := float(HudLayout.MARGIN + HudLayout.MONEY_W + HudLayout.GAP)
 const STAR_COUNT := 5
-const STAR_SIZE := 22.0
+const STAR_SIZE := 16.0
 const STAR_GAP := 2.0
 ## The English msgid of the no-data label. Tests compare against it; the label
 ## itself is tr("No flights yet"), because the POT extractor reads only literals.
@@ -137,8 +137,7 @@ func _build() -> void:
 	_card.mouse_filter = Control.MOUSE_FILTER_STOP
 	add_child(_card)
 	# The card is BUTTON_H tall like the rest of the top row and ends before the
-	# centred top row, which starts 496 px from the left edge: 22 px stars and a
-	# BODY label keep it inside 240 px.
+	# centred top row: 16 px stars and a CAPTION label keep it inside 200 px.
 	var row := HBoxContainer.new()
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_card.add_child(row)
@@ -151,6 +150,7 @@ func _build() -> void:
 	row.add_child(_star_row)
 	_label.name = "RatingText"
 	_label.theme_type_variation = &"HudSmall"
+	_label.add_theme_font_size_override("font_size", HudLayout.CAPTION)
 	_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(_label)

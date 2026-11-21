@@ -188,3 +188,106 @@ func test_cars_parked_on_every_level_of_the_multi_storey_are_drawn_on_its_decks(
 	# tops of the stall paint the first slot layout stood on, not of the decks.
 	for level in [0.3, 5.3, 10.3]:
 		assert_int(int(by_level.get(level, 0))).is_greater(0)
+
+
+func test_a_closed_car_park_sign_clears_a_hud_button_over_it() -> void:
+	var port := SubViewport.new()
+	port.size = Vector2i(1280, 720)
+	add_child(port)
+	var sim := LandsideSim.new()
+	port.add_child(sim)
+	sim.use_definition(STARTER)
+	assert_bool(sim.build_lot(0)).is_true()
+	assert_bool(sim.set_lot_closed(0, true)).is_true()
+	var cam := Camera3D.new()
+	port.add_child(cam)
+	cam.make_current()
+	var places := LandsidePlaces.new()
+	places.landside = sim
+	port.add_child(places)
+	var gate := STARTER.lots[0].access[STARTER.lots[0].access.size() - 1]
+	var sign_pos := Vector3(gate.x, places.road_top + LandsidePlaces.SIGN_HEIGHT, gate.z)
+	cam.look_at_from_position(sign_pos + Vector3(0.0, 20.0, 25.0), sign_pos)
+	var point := cam.unproject_position(sign_pos)
+	var layer := CanvasLayer.new()
+	port.add_child(layer)
+	var runway_btn := Button.new()
+	runway_btn.text = "Runway"
+	runway_btn.position = point - Vector2(88.0, 40.0)
+	runway_btn.size = Vector2(176.0, 40.0)
+	layer.add_child(runway_btn)
+	await get_tree().process_frame
+	places.refresh()
+	var sign := places.closed_sign(0)
+	var cap := sign.get_node("Caption") as Label3D
+	var cap_size := MissMarkers.caption_size(cap.text)
+	var total_w := maxf(MissMarkers.SIGN_PX, cap_size.x)
+	var total_h := MissMarkers.SIGN_PX + MissMarkers.CAPTION_GAP_PX + cap_size.y
+	var shifted_point := (
+		point
+		+ Vector2(cap.offset.x, MissMarkers.SIGN_PX + MissMarkers.CAPTION_GAP_PX - cap.offset.y)
+	)
+	var moved_rect := Rect2(
+		shifted_point.x - total_w / 2.0, shifted_point.y - total_h, total_w, total_h
+	)
+	print(
+		(
+			"CLOSED_HUD btn=%s home_pt=%s moved=%s vis=%s"
+			% [runway_btn.get_global_rect(), point, moved_rect, sign.visible]
+		)
+	)
+	assert_bool(sign.visible).is_true()
+	(
+		assert_bool(
+			moved_rect.grow(RoomLabelLayout.GAP_PX - 0.1).intersects(runway_btn.get_global_rect())
+		)
+		. is_false()
+	)
+	port.free()
+
+
+func test_two_closed_car_park_signs_with_only_one_clear_spot_do_not_stack() -> void:
+	var port := SubViewport.new()
+	port.size = Vector2i(1280, 720)
+	add_child(port)
+	var sim := LandsideSim.new()
+	port.add_child(sim)
+	sim.use_definition(STARTER)
+	assert_bool(sim.build_lot(0)).is_true()
+	assert_bool(sim.set_lot_closed(0, true)).is_true()
+	assert_bool(sim.build_lot(1)).is_true()
+	assert_bool(sim.set_lot_closed(1, true)).is_true()
+	var cam := Camera3D.new()
+	port.add_child(cam)
+	cam.make_current()
+	var places := LandsidePlaces.new()
+	places.landside = sim
+	port.add_child(places)
+	var g0 := STARTER.lots[0].access[STARTER.lots[0].access.size() - 1]
+	var g1 := STARTER.lots[1].access[STARTER.lots[1].access.size() - 1]
+	var p0 := Vector3(g0.x, places.road_top + LandsidePlaces.SIGN_HEIGHT, g0.z)
+	var mid := (p0 + Vector3(g1.x, places.road_top + LandsidePlaces.SIGN_HEIGHT, g1.z)) * 0.5
+	cam.look_at_from_position(mid + Vector3(0.0, 55.0, 45.0), mid)
+	var pt0 := cam.unproject_position(p0)
+	var cap_size := MissMarkers.caption_size("Closed")
+	var total_w := maxf(MissMarkers.SIGN_PX, cap_size.x)
+	var total_h := MissMarkers.SIGN_PX + MissMarkers.CAPTION_GAP_PX + cap_size.y
+	var home0 := Rect2(pt0.x - total_w / 2.0, pt0.y - total_h, total_w, total_h)
+	var hole := home0.grow(RoomLabelLayout.GAP_PX + 2.0)
+	var layer := CanvasLayer.new()
+	port.add_child(layer)
+	for rect in [
+		Rect2(0.0, 0.0, hole.position.x, 720.0),
+		Rect2(hole.end.x, 0.0, 1280.0 - hole.end.x, 720.0),
+		Rect2(hole.position.x, 0.0, hole.size.x, hole.position.y),
+		Rect2(hole.position.x, hole.end.y, hole.size.x, 720.0 - hole.end.y),
+	]:
+		var panel := Panel.new()
+		panel.position = rect.position
+		panel.size = rect.size
+		layer.add_child(panel)
+	await get_tree().process_frame
+	places.refresh()
+	assert_bool(places.closed_sign(0).visible).is_true()
+	assert_bool(places.closed_sign(1).visible).is_false()
+	port.free()
