@@ -26,13 +26,17 @@ const TRAY_H := 150
 ## A toggle button: the top row's Build mode sign, Runway and Offers, and the
 ## top-left column's Mood, Departures and Hints.
 const TOGGLE_W := 176
-const MONEY_W := 224
+const MONEY_W := 136
 ## A list that opens under the top-left column, such as Departures.
 const LIST_W := 304
 ## The right rail: the clock panel and the alert and result cards under it.
-const RAIL_W := 440
+const RAIL_W := 320
 const SHEET_W := 560
 const TRAY_W := 640
+
+## Shared ghost-fade behaviour for cards that yield visually under a build ghost.
+const GHOST_FADED_ALPHA := 0.35
+const GHOST_FADE_SPEED := 8.0
 
 ## The type scale, in px.
 const CAPTION := 14
@@ -84,3 +88,20 @@ static func widest_word(text: String, font: Font, size: int) -> float:
 	for word in text.split(" ", false):
 		widest = maxf(widest, font.get_string_size(word, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x)
 	return widest
+
+
+## Fades `control` toward `faded_alpha` while `ghost` overlaps it on screen,
+## and back to 1.0 when clear. Shared across cards that yield under the build
+## ghost (StaffPanel, Hints, BuildMenu status card).
+static func fade_under_ghost(
+	control: Control,
+	ghost: Rect2,
+	delta: float,
+	faded_alpha := GHOST_FADED_ALPHA,
+	speed := GHOST_FADE_SPEED
+) -> void:
+	var covered := (
+		ghost.has_area() and control.visible and control.get_global_rect().intersects(ghost)
+	)
+	var target := faded_alpha if covered else 1.0
+	control.modulate.a = move_toward(control.modulate.a, target, delta * speed)

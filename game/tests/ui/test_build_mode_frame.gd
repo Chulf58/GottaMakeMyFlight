@@ -123,7 +123,7 @@ func _assert_inside_and_clear(ui_scale: float, layout_w := DEFAULT_LAYOUT_W) -> 
 	assert_float(sign_rect.position.x + row_w * ui_scale / 2.0).is_equal_approx(
 		_view.get_center().x, 1.0
 	)
-	var rating_end := float(HudLayout.MARGIN + HudLayout.MONEY_W + HudLayout.GAP) + 240.0
+	var rating_end := 360.0
 	assert_float(sign_rect.position.x / ui_scale).is_greater_equal(rating_end + HudLayout.GAP)
 	var rail_left := _view.size.x / ui_scale - HudLayout.MARGIN - HudLayout.RAIL_W
 	assert_float(sign_rect.position.x / ui_scale + row_w).is_less_equal(rail_left - HudLayout.GAP)

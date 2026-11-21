@@ -336,9 +336,7 @@ func _process(delta: float) -> void:
 ## Fades the card to the banner's faded opacity while `ghost` (the build ghost
 ## on screen, empty when none) overlaps it, as the banner does in its slot.
 func fade_for(ghost: Rect2, delta: float) -> void:
-	var covered := ghost.has_area() and _card.visible and _card.get_global_rect().intersects(ghost)
-	var target := StaffPanel.FADED_ALPHA if covered else 1.0
-	_card.modulate.a = move_toward(_card.modulate.a, target, delta * StaffPanel.FADE_SPEED)
+	HudLayout.fade_under_ghost(_card, ghost, delta)
 
 
 func _ghost_rect() -> Rect2:
@@ -558,6 +556,8 @@ func _build() -> void:
 	_toggle.name = "HintsToggle"
 	_toggle.text = tr("Hints ({key})").format({"key": HOTKEY})
 	LeftColumn.size_toggle(_toggle)
+	_toggle.add_to_group(LeftColumn.TOGGLE_ROW_GROUP)
+	_toggle.set_meta(LeftColumn.META_SLOT, LeftColumn.SLOT_HINTS)
 	_toggle.toggle_mode = true
 	_toggle.button_pressed = true
 	_toggle.focus_mode = Control.FOCUS_NONE
@@ -566,6 +566,8 @@ func _build() -> void:
 	_reset.name = "HintsReset"
 	_reset.text = tr("Reset hints")
 	LeftColumn.size_toggle(_reset)
+	_reset.add_to_group(LeftColumn.TOGGLE_ROW_GROUP)
+	_reset.set_meta(LeftColumn.META_SLOT, LeftColumn.SLOT_RESET)
 	_reset.focus_mode = Control.FOCUS_NONE
 	_reset.pressed.connect(reset_seen)
 	_row.add_child(_reset)

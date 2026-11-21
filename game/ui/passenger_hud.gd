@@ -53,7 +53,7 @@ const SPEED_KEYS := {KEY_1: 1, KEY_2: 2, KEY_3: 3}
 ## their tooltips show.
 const SPEED_ICON := "res://assets/ui/icons/speed_%s.svg"
 const SPEED_NAMES: Array[String] = ["pause", "1", "2", "3"]
-const SPEED_BUTTON_W := 44.0
+const SPEED_BUTTON_W := 36.0
 const PAUSE_KEY := "Space"
 const SPEED_KEY_PREFIX := "Shift+"
 ## The Debug panel's fixed width; its labels wrap inside it.
@@ -98,6 +98,7 @@ var _hints := Hints.new()
 ## launch only, like the hints.
 var _unlock_guide := UnlockGuide.new()
 var _seed_label := Label.new()
+var _follow_card := FollowCard.new()
 var _follow_label := Label.new()
 ## The followed passenger's card; the follow text then hides.
 var _inspect := PassengerInspect.new()
@@ -149,6 +150,7 @@ func _ready() -> void:
 	var panel := PanelContainer.new()
 	panel.name = "FlightPanel"
 	panel.theme = BuildMenu.HUD_THEME
+	panel.theme_type_variation = &"HudTopCard"
 	panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	panel.position = Vector2(-HudLayout.MARGIN - HudLayout.RAIL_W, HudLayout.MARGIN)
 	panel.custom_minimum_size = Vector2(HudLayout.RAIL_W, 0.0)
@@ -194,11 +196,9 @@ func _ready() -> void:
 				if _planner.is_open():
 					_pa_ticker.clear_now()
 		)
-	# The offer sheet is a sibling layer; the alert cards give way to it when open.
-	# The panel comes later in the scene, so it has no sheet until its _ready.
-	var offers := get_node_or_null("../OfferPanel") as OfferPanel
-	if offers != null:
-		_alerts.covered = func() -> bool: return offers.is_node_ready() and offers.is_open()
+	# Only hide the rail when a top-row sheet actually overlaps it (narrow viewports).
+	_alerts.covered = func() -> bool:
+		return TopRow.sheet_overlaps(get_tree(), _alerts.get_global_rect())
 	_alerts.above = panel
 	_alerts.camera = camera
 	_alerts.settings_path = alert_settings_path
@@ -212,12 +212,19 @@ func _ready() -> void:
 		_build_debug()
 	else:
 		_drop_debug_nodes()
+	_follow_card.name = "FollowCard"
+	_follow_card.theme = BuildMenu.HUD_THEME
+	_follow_card.theme_type_variation = &"HudTopCard"
+	_follow_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_follow_card.visible = false
+	_follow_card.add_to_group(BottomDocks.LEFT_FLOOR_GROUP)
 	_follow_label.name = "FollowText"
-	_follow_label.theme = BuildMenu.HUD_THEME
-	_follow_label.theme_type_variation = &"HudFloatText"
+	_follow_label.theme_type_variation = &"HudSmall"
 	_follow_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_follow_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(_follow_label)
+	_follow_card.label = _follow_label
+	_follow_card.add_child(_follow_label)
+	add_child(_follow_card)
 	_inspect.sim = sim
 	_inspect.views = views
 	_inspect.camera = camera
@@ -235,6 +242,7 @@ func _ready() -> void:
 		_alerts.build_tray_open = func() -> bool:
 			return is_instance_valid(menu) and menu.is_node_ready() and menu.is_tray_open()
 		_alerts.build_stack_top = menu.stack_top
+		menu.bar().minimum_size_changed.connect(_fit_follow)
 	_outline.selection = _built
 	_outline.build_mode = build_mode
 	add_child(_outline)
@@ -458,6 +466,7 @@ func refresh() -> void:
 	_follow_label.text = follow_text()
 	_inspect.refresh()
 	_follow_label.visible = not _inspect.visible
+	_follow_card.sync()
 	# A passenger card takes the board's place on the left edge (decision 500fd5a0,
 	# point 6); a desk, room or car-park card leaves the list showing.
 	_departures_board.step_aside(_inspect.shows_passenger())
@@ -787,6 +796,8 @@ func _build_debug() -> void:
 	var dock := _bottom_right_dock(
 		"DebugPanelDock", BuildMenu.MARGIN + BuildMenu.BAR_H + BuildMenu.GAP
 	)
+	corner.add_to_group(BottomDocks.RIGHT_FLOOR_GROUP)
+	dock.add_to_group(BottomDocks.RIGHT_FLOOR_GROUP)
 	_debug_docks = [corner, dock]
 	_place_debug_docks()
 	get_viewport().size_changed.connect(_place_debug_docks)
@@ -855,19 +866,27 @@ func _bottom_right_dock(dock_name: String, bottom: float) -> VBoxContainer:
 	return dock
 
 
-## Keeps the follow text bottom-left, left of BuildMenu's centre column, with
-## its bottom edge fixed so wrapped lines grow upward.
+## Keeps the follow card bottom-left, left of BuildMenu's centre column and
+## clear of TemplatesDock (BottomDocks), growing upward when wrapped.
 func _fit_follow() -> void:
-	var width := (get_viewport().get_visible_rect().size.x - BuildMenu.COLUMN_W) / 2.0 - 28.0
-	_follow_label.anchor_left = 0.0
-	_follow_label.anchor_right = 0.0
-	_follow_label.anchor_top = 1.0
-	_follow_label.anchor_bottom = 1.0
-	_follow_label.offset_left = 16.0
-	_follow_label.offset_right = 16.0 + maxf(width, 160.0)
-	_follow_label.offset_top = -FOLLOW_TOP
-	_follow_label.offset_bottom = -FOLLOW_BOTTOM
-	_follow_label.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	var layer_w := get_viewport().get_visible_rect().size.x
+	var menu := get_node_or_null("../BuildMenu") as BuildMenu
+	var bar_w := (
+		0.0
+		if menu == null or not menu.is_node_ready()
+		else menu.bar().get_combined_minimum_size().x
+	)
+	var bottom := BottomDocks.left_floor_bottom(layer_w, bar_w)
+	var width := BottomDocks.left_corner_width(layer_w, 160.0, PassengerInspect.MAX_W)
+	_follow_card.anchor_left = 0.0
+	_follow_card.anchor_right = 0.0
+	_follow_card.anchor_top = 1.0
+	_follow_card.anchor_bottom = 1.0
+	_follow_card.offset_left = float(HudLayout.MARGIN)
+	_follow_card.offset_right = float(HudLayout.MARGIN) + width
+	_follow_card.offset_top = -bottom - float(HudLayout.CHIP_H)
+	_follow_card.offset_bottom = -bottom
+	_follow_card.grow_vertical = Control.GROW_DIRECTION_BEGIN
 
 
 ## Ends the intro once, however it ended: frees its layer (unless that is
@@ -1060,3 +1079,21 @@ func _is_pristine(grid: BuildGrid) -> bool:
 				if grid.has_wall(cell, side):
 					return false
 	return true
+
+
+## Cream HUD card backing for the selected-vehicle / passenger follow text;
+## keeps its visibility synced with `label` even when PassengerHud._process is paused.
+class FollowCard:
+	extends PanelContainer
+
+	var label: Label
+
+	func _process(_delta: float) -> void:
+		sync()
+
+	func sync() -> void:
+		if label == null:
+			return
+		var want := label.visible and label.text != ""
+		if visible != want:
+			visible = want

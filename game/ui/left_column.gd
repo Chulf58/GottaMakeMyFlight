@@ -19,9 +19,13 @@ const HINT_GROUP := &"left_column_hint"
 ## however wide a translation makes it (board T10).
 const DEPARTURES_TOGGLE_GROUP := &"left_column_departures_toggle"
 const PLANNER_TOGGLE_GROUP := &"left_column_planner_toggle"
-## A card that grows up from the bottom-left (the inspect card): while one shows
-## over the column, the column's cards stop a GAP above it (board T10).
-const FLOOR_GROUP := &"left_column_floor"
+## Every column toggle / Reset button joins this with META_SLOT, so list_top()
+## collapses hidden rows (such as Hints/Reset hints) dynamically.
+const TOGGLE_ROW_GROUP := &"left_column_toggles"
+const META_SLOT := &"left_column_slot"
+## A card that grows up from the bottom-left (the inspect card, follow card):
+## while one shows over the column, the column's cards stop a GAP above it.
+const FLOOR_GROUP := BottomDocks.LEFT_FLOOR_GROUP
 ## What the list leaves the card under it when the card shows: the card's padding,
 ## its title, one line and a "+N more" line.
 const CARD_RESERVE := 136.0
@@ -30,14 +34,14 @@ const CARD_RESERVE := 136.0
 const SLOT_MOOD := 0
 const SLOT_DEPARTURES := 1
 const SLOT_HINTS := 2
-## Reset hints, the row under Hints (HUD 7/7, board 3bd42402). The slot is kept
-## when a run has no hints row (a test or a probe), so the list never moves.
+## Reset hints, the row under Hints (HUD 7/7, board 3bd42402). list_top()
+## collapses it (and SLOT_HINTS) whenever those buttons are hidden.
 const SLOT_RESET := 3
 const SLOTS := 4
 
 ## Under the money row (which is BUTTON_H high on the margin), one group gap.
 const TOP := HudLayout.MARGIN + HudLayout.BUTTON_H + HudLayout.GROUP_GAP
-## Where the departures list starts, under the last column button.
+## Full 4-slot LIST_TOP constant (when Mood, Departures, Hints and Reset are all shown).
 const LIST_TOP := TOP + SLOTS * (HudLayout.BUTTON_H + HudLayout.GAP)
 
 
@@ -55,34 +59,59 @@ static func slot_top(slot: int) -> float:
 	return float(TOP + slot * (HudLayout.BUTTON_H + HudLayout.GAP))
 
 
+## Where the departures list (and collapsed card slot) starts: a GAP below the
+## lowest visible column toggle or Reset hints button, collapsing hidden rows
+## (SLOT_HINTS / SLOT_RESET) instead of leaving a dead 48 px gap.
+static func list_top(tree: SceneTree) -> float:
+	var bottom := slot_top(SLOT_DEPARTURES) + float(HudLayout.BUTTON_H + HudLayout.GAP)
+	if tree == null:
+		return bottom
+	for node in tree.get_nodes_in_group(TOGGLE_ROW_GROUP):
+		var control := node as Control
+		if control == null or not control.is_visible_in_tree():
+			continue
+		var slot := int(control.get_meta(META_SLOT, -1))
+		var end_y := (
+			slot_top(slot) + maxf(control.size.y, control.custom_minimum_size.y)
+			if slot >= 0
+			else (
+				control.global_position.y
+				+ maxf(control.size.y, control.get_combined_minimum_size().y)
+			)
+		)
+		bottom = maxf(bottom, end_y + HudLayout.GAP)
+	return bottom
+
+
 ## Gives `button` the column's toggle size.
 static func size_toggle(button: Button) -> void:
 	button.custom_minimum_size = Vector2(HudLayout.TOGGLE_W, HudLayout.BUTTON_H)
 
 
-## Anchors `card` to the column, LIST_W wide, growing down from LIST_TOP. The
+## Anchors `card` to the column, LIST_W wide, growing down from list_top(). The
 ## first-time hint card and the checklist card both sit in this slot.
 static func dock_card(card: Control) -> void:
+	var top := list_top(card.get_tree() if card.is_inside_tree() else null)
 	card.anchor_left = 0.0
 	card.anchor_right = 0.0
 	card.anchor_top = 0.0
 	card.anchor_bottom = 0.0
 	card.offset_left = HudLayout.MARGIN
 	card.offset_right = HudLayout.MARGIN + HudLayout.LIST_W
-	card.offset_top = LIST_TOP
-	card.offset_bottom = LIST_TOP
+	card.offset_top = top
+	card.offset_bottom = top
 	card.grow_horizontal = Control.GROW_DIRECTION_END
 	card.grow_vertical = Control.GROW_DIRECTION_END
 
 
 ## The y a card takes now: under the departures list while it is open, under the
-## toggles otherwise.
+## visible toggles otherwise.
 static func card_top(tree: SceneTree) -> float:
 	if tree == null:
-		return float(LIST_TOP)
+		return list_top(null)
 	var list := tree.get_first_node_in_group(LIST_GROUP) as Control
 	if list == null or not list.is_visible_in_tree():
-		return float(LIST_TOP)
+		return list_top(tree)
 	return list.global_position.y + list.get_combined_minimum_size().y + HudLayout.GAP
 
 
@@ -95,30 +124,16 @@ static func follow(card: Control) -> void:
 
 
 ## The height a card at `top` may take in a layer `layer` big: down to a GAP above
-## the Templates dock (BottomDocks), which the column's x-range always reaches
-## (the dock sits on the same margin), so the cards never cover the bar's left
-## end or the dock; and down to a GAP above any FLOOR_GROUP card showing under
-## the column (the inspect card), so they never cover it either.
+## the Templates dock (BottomDocks) and any bottom-left floor card (PassengerInspect,
+## FollowCard) under the column.
 static func room_below(top: float, layer: Vector2, bar_width: float) -> float:
-	var bottom := BottomDocks.top(layer, bar_width) - HudLayout.GAP
 	var tree := Engine.get_main_loop() as SceneTree
-	var column := Rect2(HudLayout.MARGIN, top, HudLayout.LIST_W, layer.y)
-	for node in tree.get_nodes_in_group(FLOOR_GROUP) if tree != null else []:
-		var card := node as Control
-		if card == null or not card.is_visible_in_tree():
-			continue
-		var rect := card.get_global_rect()
-		if rect.intersects(column):
-			bottom = minf(bottom, rect.position.y - HudLayout.GAP)
+	var bottom := BottomDocks.left_floor_y(tree, top, layer, bar_width)
 	return maxf(0.0, bottom - top)
 
 
 ## The height the departures list may take: the room under the toggles, less what
-## the card under it needs while one shows and the gap between. The checklist card
-## folds to fit, so it is given CARD_RESERVE; the first-time hint card is kept
-## whole, so it is given the height it has. The two share one slot and the larger
-## is kept. A scene can hold several hint cards (a test's own), so every one in
-## the group is looked at.
+## the card under it needs while one shows and the gap between.
 static func list_room(tree: SceneTree, layer: Vector2, bar_width: float) -> float:
 	var need := 0.0
 	for card in tree.get_nodes_in_group(CARD_GROUP):
@@ -127,7 +142,7 @@ static func list_room(tree: SceneTree, layer: Vector2, bar_width: float) -> floa
 	for card in tree.get_nodes_in_group(HINT_GROUP):
 		if (card as Control).is_visible_in_tree():
 			need = maxf(need, (card as Control).get_combined_minimum_size().y)
-	var room := room_below(float(LIST_TOP), layer, bar_width)
+	var room := room_below(list_top(tree), layer, bar_width)
 	if need > 0.0:
 		room -= need + HudLayout.GAP
 	return maxf(0.0, room)

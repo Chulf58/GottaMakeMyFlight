@@ -104,12 +104,17 @@ func test_the_debug_panel_starts_closed_and_its_toggle_opens_it() -> void:
 
 func test_the_follow_text_stays_bottom_left_and_left_of_the_build_column() -> void:
 	var label := _hud.find_child("FollowText", true, false) as Label
+	var card := _hud.find_child("FollowCard", true, false) as PanelContainer
+	assert_object(card).is_not_null()
+	assert_object(label.get_parent()).is_same(card)
+	assert_str(String(card.theme_type_variation)).is_equal("HudTopCard")
+	assert_str(String(label.theme_type_variation)).is_equal("HudSmall")
 	var width := float(_port.size.x)
-	assert_float(label.anchor_top).is_equal(1.0)
-	assert_float(label.offset_left).is_equal(16.0)
-	assert_float(label.offset_bottom).is_equal(-PassengerHud.FOLLOW_BOTTOM)
-	assert_int(label.grow_vertical).is_equal(Control.GROW_DIRECTION_BEGIN)
-	assert_float(label.offset_right).is_less_equal((width - BuildMenu.COLUMN_W) / 2.0)
+	assert_float(card.anchor_top).is_equal(1.0)
+	assert_float(card.offset_left).is_equal(16.0)
+	assert_float(card.offset_bottom).is_equal(-PassengerHud.FOLLOW_BOTTOM)
+	assert_int(card.grow_vertical).is_equal(Control.GROW_DIRECTION_BEGIN)
+	assert_float(card.offset_right).is_less_equal((width - BuildMenu.COLUMN_W) / 2.0)
 	assert_float(PassengerHud.FOLLOW_BOTTOM).is_greater(BuildMenu.MARGIN + BuildMenu.BAR_H)
 
 

@@ -28,8 +28,8 @@ const RESTING := [
 	"DebugToggle",
 ]
 const IN_BUILD_MODE := ["BuildModeSign", "DebugPanel"]
-## Where the rating card ends at most (16 + 224 + 8 + 240).
-const RATING_END := 488.0
+## Where the rating card ends at most (16 + 136 + 8 + 200).
+const RATING_END := 360.0
 ## Room each side of the centred bar needs for the 112 px Templates dock between
 ## the 16 px screen margin and the 16 px group gap (16 + 112 + 16 = 144).
 const DOCK_SIDE_ROOM := 144.0
@@ -152,7 +152,11 @@ func _assert_geometry(rects: Dictionary, layout: Vector2) -> void:
 	assert_float(rating.end.x).is_less_equal(RATING_END)
 	assert_float(sign_r.position.x - rating.end.x).is_greater_equal(float(HudLayout.GAP) - 0.5)
 	assert_float(clock.position.x - offers.end.x).is_greater_equal(float(HudLayout.GAP) - 0.5)
-	# The rail: RAIL_W wide on the right margin.
+	# At 1280, 1536 and 1920 the compact top corners leave the full TOGGLE_W (176 px)
+	# per slot without squeezing down to 88 px.
+	assert_float(runway.size.x).is_equal_approx(float(HudLayout.TOGGLE_W), 0.5)
+	# The rail: 320 px (RAIL_W) wide on the right margin.
+	assert_float(clock.size.x).is_equal_approx(320.0, 0.5)
 	assert_float(clock.size.x).is_equal_approx(float(HudLayout.RAIL_W), 0.5)
 	assert_float(layout.x - clock.end.x).is_equal_approx(float(HudLayout.MARGIN), 0.5)
 	# The bottom docks.
@@ -171,10 +175,14 @@ func _assert_geometry(rects: Dictionary, layout: Vector2) -> void:
 
 
 ## Each sheet, opened from the row, ends left of the clock panel and starts right
-## of the top-left toggles.
+## of the entire top-left column (toggles, Planner, DeparturesPanel, StaffHintCard).
 func _assert_sheets_clear_the_clock(layout: Vector2) -> void:
 	var clock := _rect(_find("FlightPanel"))
-	var toggles := _rect(_find("MoodToggle"))
+	var left_end := _rect(_find("MoodToggle")).end.x
+	for left_name in ["PlannerToggle", "DeparturesPanel", "StaffHintCard"]:
+		var node := _main.find_child(left_name, true, false) as Control
+		if node != null and node.is_visible_in_tree():
+			left_end = maxf(left_end, _rect(node).end.x)
 	for pair in [["RunwayCard", "RunwaySheet"], ["OfferPanel", "OfferSheet"]]:
 		var owner_node := _main.get_node(pair[0])
 		owner_node.open()
@@ -183,12 +191,12 @@ func _assert_sheets_clear_the_clock(layout: Vector2) -> void:
 		assert_bool(control.is_visible_in_tree()).is_true()
 		var sheet := _rect(control)
 		owner_node.close()
-		print("%s %s vs FlightPanel %s" % [pair[1], sheet, clock])
+		print("%s %s vs FlightPanel %s left_end=%.1f" % [pair[1], sheet, clock, left_end])
 		assert_float(sheet.size.x).is_equal_approx(560.0, 0.5)
 		assert_float(sheet.size.y).is_greater(0.0)
 		assert_bool(Rect2(Vector2.ZERO, layout).encloses(sheet)).is_true()
 		assert_float(clock.position.x - sheet.end.x).is_greater_equal(float(HudLayout.GAP) - 0.5)
-		assert_float(sheet.position.x).is_greater(toggles.end.x)
+		assert_float(sheet.position.x).is_greater_equal(left_end + float(HudLayout.GAP) - 0.5)
 
 
 func test_no_two_resting_hud_windows_overlap_at_any_ui_scale() -> void:
@@ -257,14 +265,14 @@ func test_the_sheet_extent_is_never_negative_in_a_degraded_layout() -> void:
 ## the "To open the airport" checklist down over the bar's left end and the
 ## Templates dock at UI scale 1.5. Two contracts are scheduled, so the departures
 ## list is long, and the opening checklist is still full.
-func _schedule_two_contracts() -> void:
+func _schedule_two_contracts(contract_count: int = 2) -> void:
 	var flights := _main.get_node("FlightSim") as FlightSim
 	SaveTestKit.start_airport(_main)
 	var clock := _main.get_node("SimClock") as SimClock
 	while flights.opened_tick < 0 and clock.tick < OPEN_LIMIT_TICKS:
 		SaveTestKit.step(_main)
 	assert_bool(flights.opened_tick >= 0).is_true()
-	# Two contracts the test builds, at the first quarter hours they fit, so the
+	# Contracts the test builds, at the first quarter hours they fit, so the
 	# case does not hang on which of the seed's offers happen to fit.
 	var window := FlightContract.window({})
 	for minute in range(window[0], window[1] + 1, OfferBoard.DEPARTURE_STEP):
@@ -272,9 +280,9 @@ func _schedule_two_contracts() -> void:
 		# A new game's runway takes small planes only (Runway R9).
 		terms["plane_size"] = PlaneClasses.SMALL
 		terms["booked_passengers"] = PlaneClasses.passenger_range(PlaneClasses.SMALL)[0]
-		if flights.contract_ids().size() < 2 and flights.accept_problem(terms) == "":
+		if flights.contract_ids().size() < contract_count and flights.accept_problem(terms) == "":
 			assert_bool(flights.accept_contract(terms)).is_true()
-	assert_int(flights.contract_ids().size()).is_equal(2)
+	assert_int(flights.contract_ids().size()).is_equal(contract_count)
 	(_find("DeparturesBoard") as DeparturesBoard).refresh()
 	await await_idle_frame()
 	# The checklist as a new game shows it: the contracts need an open airport, which
@@ -294,7 +302,8 @@ func _schedule_two_contracts() -> void:
 func test_the_left_column_cards_clear_the_bar_and_the_dock_with_flights_scheduled() -> void:
 	for ui_scale in LAYOUTS:
 		await _boot(LAYOUTS[ui_scale])
-		await _schedule_two_contracts()
+		# Collapsing SLOT_RESET freed 48 px, so 3 contracts test scrolling at 1.5x.
+		await _schedule_two_contracts(3)
 		var layout := Vector2(LAYOUTS[ui_scale])
 		var names: Array = RESTING + ["DeparturesPanel", "StaffHintCard"]
 		var rects := _rects(names, layout)
@@ -391,7 +400,7 @@ func test_a_first_time_hint_card_clears_the_bar_and_the_dock_with_a_full_list() 
 ## does not measure the checklist again or touch the list's scroll height.
 func test_the_column_fits_are_not_recomputed_on_an_unchanged_frame() -> void:
 	await _boot(LAYOUTS[1.5])
-	await _schedule_two_contracts()
+	await _schedule_two_contracts(3)
 	var checklist := (_main.get_node("StaffPanel") as StaffPanel).checklist()
 	var board := _find("DeparturesBoard") as DeparturesBoard
 	await await_idle_frame()
@@ -409,3 +418,62 @@ func test_the_column_fits_are_not_recomputed_on_an_unchanged_frame() -> void:
 	await await_idle_frame()
 	assert_int(checklist.fit_runs()).is_greater(runs)
 	assert_int(board.scroll_sets()).is_greater(sets)
+
+
+## At 1280x720 with DebugPanel open and FollowCard showing, AlertStack clears
+## DebugPanel, FollowCard has its HudTopCard cream backing, and LeftColumn
+## cards clear FollowCard and TemplatesDock.
+func test_alert_stack_clears_debug_panel_and_follow_card_has_cream_backing() -> void:
+	await _boot(LAYOUTS[1.5])
+	await _enter_build_mode()
+	var hud := _main.get_node("PassengerHud") as PassengerHud
+	var stack := hud.find_child("AlertStack", false, false) as AlertStack
+	for i in 4:
+		var card := OfferPanel.coral_card(
+			StringName("n%d" % i), "Alert %d" % i, "Detail line %d" % i
+		)
+		stack.post_notice(StringName("n%d" % i), card, 0.0, "Alert %d" % i, "Detail")
+	var follow_label := hud.find_child("FollowText", true, false) as Label
+	var follow_card := hud.find_child("FollowCard", true, false) as PanelContainer
+	hud.set_process(false)
+	follow_label.text = (
+		"Taxi 10   Queuing for the curb   2 passengers\n" + "Flight Gotta Air Oslo   On time"
+	)
+	await await_idle_frame()
+	await await_idle_frame()
+	var debug_r := _rect(_find("DebugPanel"))
+	var rail_r := stack.room_rect()
+	var follow_r := _rect(follow_card)
+	var dock_r := _find("TemplatesButton").get_parent_control().get_global_rect()
+	var tray_r := (_main.get_node("BuildMenu") as BuildMenu).tray().get_global_rect()
+	var style := follow_card.get_theme_stylebox("panel") as StyleBoxFlat
+	print("1280 RAIL=%s DEBUG=%s FOLLOW=%s DOCK=%s" % [rail_r, debug_r, follow_r, dock_r])
+	assert_bool(follow_card.is_visible_in_tree()).is_true()
+	assert_float(follow_r.size.x).is_less_equal(288.0 + 0.5)
+	assert_float(tray_r.position.x - follow_r.end.x).is_greater_equal(
+		float(HudLayout.GROUP_GAP) - 0.5
+	)
+	assert_object(style).is_not_null()
+	assert_bool(style.bg_color.is_equal_approx(Color(0.96, 0.93, 0.86, 1.0))).is_true()
+	assert_bool(rail_r.intersects(debug_r)).is_false()
+	assert_float(rail_r.end.y).is_less_equal(debug_r.position.y - float(HudLayout.GROUP_GAP) + 0.5)
+	assert_bool(follow_r.intersects(dock_r)).is_false()
+	assert_float(follow_r.end.y).is_less_equal(dock_r.position.y - float(HudLayout.GAP) + 0.5)
+	var staff_hint := _main.find_child("StaffHintCard", true, false) as Control
+	if staff_hint != null and staff_hint.is_visible_in_tree():
+		var hint_r := _rect(staff_hint)
+		assert_bool(hint_r.intersects(follow_r)).is_false()
+		assert_float(hint_r.end.y).is_less_equal(follow_r.position.y - float(HudLayout.GAP) + 0.5)
+
+
+## When a wide bar forces TemplatesDock onto the lifted row (side room < 144 px),
+## BottomDocks lifts bottom-left floor cards above the lifted dock too.
+func test_lifted_docks_keep_left_floor_above_templates_dock() -> void:
+	var bar_w := 1020.0
+	var layout_w := 1280.0
+	# Inline ruled threshold: side = (1280 - 1020) / 2 = 130 < DOCK_SIDE_ROOM (144) -> lifted.
+	var expected_bottom := float(HudLayout.MARGIN) + 2.0 * HudLayout.BAR_H + 2.0 * HudLayout.GAP
+	assert_float(BottomDocks.left_floor_bottom(layout_w, bar_w)).is_equal(expected_bottom)
+	assert_float(BottomDocks.left_floor_bottom(layout_w, 500.0)).is_equal(
+		float(HudLayout.MARGIN + HudLayout.BAR_H + HudLayout.GAP)
+	)

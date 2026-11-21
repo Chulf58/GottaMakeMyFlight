@@ -486,9 +486,14 @@ func layout_captions() -> Array[Rect2]:
 	var view_size := get_viewport().get_visible_rect().size * to_output
 	var hud := HudRects.collect(self, to_output)
 	var blocked := marker_rects(markers, camera, to_output) + _sign_rects + hud
-	for caption in gate_captions():
+	for i in mini(_captions.size(), _paths.size()):
+		var caption := _captions[i]
+		caption.visible = true
 		caption.offset = Vector2.ZERO
 		if camera.is_position_behind(caption.global_position):
+			continue
+		var depth := (caption.global_position - camera.global_position).dot(-camera.global_basis.z)
+		if depth <= camera.near:
 			continue
 		var point := camera.unproject_position(caption.global_position) * to_output
 		var size := caption_size(caption.text)
@@ -506,11 +511,13 @@ func layout_captions() -> Array[Rect2]:
 			):
 				chosen = rect
 				break
-		var padded_now := chosen.grow(MissMarkers.CAPTION_MARGIN_PX)
+		var padded_now := chosen.grow(RoomLabelLayout.GAP_PX)
 		if hud.any(func(other: Rect2) -> bool: return padded_now.intersects(other)):
 			var spot := RoomLabelLayout.slide_clear(chosen, placed + blocked, view_size)
-			if spot.size != Vector2.ZERO:
-				chosen = spot
+			if spot.size == Vector2.ZERO:
+				caption.visible = false
+				continue
+			chosen = spot
 		caption.offset = Vector2(
 			chosen.position.x - home.position.x, home.position.y - chosen.position.y
 		)

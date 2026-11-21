@@ -66,7 +66,7 @@ func _init() -> void:
 	visible = false
 	theme = BuildMenu.HUD_THEME
 	# The top-left column's cards stop a GAP above this card while it shows.
-	add_to_group(LeftColumn.FLOOR_GROUP)
+	add_to_group(BottomDocks.LEFT_FLOOR_GROUP)
 	var root := VBoxContainer.new()
 	add_child(root)
 	root.add_child(built_card)
@@ -108,20 +108,31 @@ func _init() -> void:
 func _ready() -> void:
 	fit()
 	get_viewport().size_changed.connect(fit)
+	var menu := get_node_or_null("../../BuildMenu") as BuildMenu
+	if menu != null and menu.is_node_ready():
+		menu.bar().minimum_size_changed.connect(fit)
 
 
 ## Bottom-left, left of BuildMenu's centre column and above its Templates
-## button, growing upward.
+## dock, growing upward via BottomDocks' clearance coordinator.
 func fit() -> void:
-	var room := (get_viewport().get_visible_rect().size.x - BuildMenu.COLUMN_W) / 2.0 - 28.0
+	var layer_w := get_viewport().get_visible_rect().size.x
+	var menu := get_node_or_null("../../BuildMenu") as BuildMenu
+	var bar_w := (
+		0.0
+		if menu == null or not menu.is_node_ready()
+		else menu.bar().get_combined_minimum_size().x
+	)
+	var bottom := BottomDocks.left_floor_bottom(layer_w, bar_w)
+	var width := BottomDocks.left_corner_width(layer_w, MIN_W, MAX_W)
 	anchor_left = 0.0
 	anchor_right = 0.0
 	anchor_top = 1.0
 	anchor_bottom = 1.0
-	offset_left = 16.0
-	offset_right = 16.0 + clampf(room, MIN_W, MAX_W)
-	offset_top = -BOTTOM
-	offset_bottom = -BOTTOM
+	offset_left = float(HudLayout.MARGIN)
+	offset_right = float(HudLayout.MARGIN) + width
+	offset_top = -bottom
+	offset_bottom = -bottom
 	grow_vertical = Control.GROW_DIRECTION_BEGIN
 
 

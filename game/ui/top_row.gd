@@ -24,13 +24,14 @@ const TOP := float(HudLayout.MARGIN)
 ## Where a sheet opens: under the row, one GAP below the buttons.
 const SHEET_TOP := float(HudLayout.MARGIN + HudLayout.BUTTON_H + HudLayout.GAP)
 
-## The widest the rating card gets (it is built to stay inside 240 px), so the
-## row can start a gap after it.
-const RATING_W := 240.0
+## The widest the rating card gets (stars + "No flights yet" stay inside 200 px),
+## so the centred top row keeps full TOGGLE_W slots at 1280 px too.
+const RATING_W := 200.0
 ## The narrowest slot, when the layout is too narrow for three TOGGLE_W slots.
 const MIN_SLOT_W := 88.0
-## The left-most a sheet starts: right of the top-left column of toggle buttons.
-const SHEET_MIN_LEFT := float(HudLayout.MARGIN + HudLayout.TOGGLE_W + HudLayout.GAP)
+## The left-most a sheet starts: right of the top-left column's LIST_W cards
+## (DeparturesPanel, PlannerToggle, StaffHintCard, HintCard) by a GAP.
+const SHEET_MIN_LEFT := float(HudLayout.MARGIN + HudLayout.LIST_W + HudLayout.GAP)
 
 
 ## The slot width in a layer `layer_width` wide: TOGGLE_W while the row, centred
@@ -101,6 +102,22 @@ static func close_others(opening: Node) -> void:
 	for other in opening.get_tree().get_nodes_in_group(SHEET_GROUP):
 		if other != opening and other.has_method("close"):
 			other.close()
+
+
+## True when any open top-row sheet overlaps `rect` (used by AlertStack when a
+## narrow viewport forces a sheet across the right rail).
+static func sheet_overlaps(tree: SceneTree, rect: Rect2) -> bool:
+	if tree == null or not rect.has_area():
+		return false
+	for node in tree.get_nodes_in_group(SHEET_GROUP):
+		if not node.has_method("is_open") or not node.is_open():
+			continue
+		if not node.has_method("sheet"):
+			continue
+		var s := node.sheet() as Control
+		if s != null and s.is_visible_in_tree() and s.get_global_rect().intersects(rect):
+			return true
+	return false
 
 
 static func _anchor_top_left(control: Control, left: float, top: float, extent: Vector2) -> void:

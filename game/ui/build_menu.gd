@@ -298,14 +298,8 @@ func _process(delta: float) -> void:
 ## takes a click, and a faded card still counts as an obstacle for the refusal
 ## card's nudge.
 func fade_for(ghost: Rect2, delta: float) -> void:
-	var covered := (
-		ghost.has_area()
-		and _status_card.visible
-		and _status_card.get_global_rect().intersects(ghost)
-	)
-	var target := StaffPanel.FADED_ALPHA if covered else 1.0
-	_status_card.modulate.a = move_toward(
-		_status_card.modulate.a, target, delta * StaffPanel.FADE_SPEED
+	HudLayout.fade_under_ghost(
+		_status_card, ghost, delta, StaffPanel.FADED_ALPHA, StaffPanel.FADE_SPEED
 	)
 
 

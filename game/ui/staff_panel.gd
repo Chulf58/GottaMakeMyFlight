@@ -486,11 +486,7 @@ func _fit_checklist() -> void:
 ## it does not, `delta` seconds of the fade. The card never takes a click, so
 ## the ghost shows through and the pointer reaches the grid under it.
 func fade_for(ghost: Rect2, delta: float) -> void:
-	var covered := (
-		ghost.has_area() and _hint_box.visible and _hint_box.get_global_rect().intersects(ghost)
-	)
-	var target := FADED_ALPHA if covered else 1.0
-	_hint_box.modulate.a = move_toward(_hint_box.modulate.a, target, delta * FADE_SPEED)
+	HudLayout.fade_under_ghost(_hint_box, ghost, delta, FADED_ALPHA, FADE_SPEED)
 
 
 func _label(text: String, variation: StringName) -> Label:

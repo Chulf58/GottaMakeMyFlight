@@ -234,6 +234,8 @@ func _build_controls() -> Control:
 	_toggle.name = "MoodToggle"
 	_toggle.text = tr("Mood ({key})").format({"key": HOTKEY})
 	LeftColumn.size_toggle(_toggle)
+	_toggle.add_to_group(LeftColumn.TOGGLE_ROW_GROUP)
+	_toggle.set_meta(LeftColumn.META_SLOT, LeftColumn.SLOT_MOOD)
 	_toggle.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	_toggle.toggle_mode = true
 	_toggle.focus_mode = Control.FOCUS_NONE
