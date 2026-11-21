@@ -18,6 +18,7 @@ Outputs under tools/blender/out/aaa-trailer/ (gitignored):
 """
 
 import argparse
+import hashlib
 import json
 import math
 import os
@@ -31,6 +32,7 @@ import aud
 import bpy
 import numpy as np
 import OpenImageIO as oiio
+from mathutils import Vector
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
@@ -43,6 +45,39 @@ import toon_kit as tk  # noqa: E402
 VIDEO_KBPS = 14000
 TILE_W = 640
 TILE_H = 360
+TRAILER_SOURCE_FILES = ("toon_kit.py", "shots.py", "build_aaa_trailer.py", "build_audio.py")
+
+
+def compute_trailer_source_sha256():
+    """Compute deterministic SHA-256 digest across all 4 trailer pipeline Python sources."""
+    h = hashlib.sha256()
+    for fname in TRAILER_SOURCE_FILES:
+        fpath = os.path.join(HERE, fname)
+        if not os.path.isfile(fpath):
+            tk.fail("missing trailer source file for manifest hash: %s" % fpath)
+        with open(fpath, "rb") as fh:
+            raw = fh.read()
+        h.update(fname.encode("utf-8") + b"\0" + raw + b"\0")
+    return h.hexdigest()
+
+
+def load_render_manifest(manifest_path):
+    if os.path.isfile(manifest_path):
+        try:
+            with open(manifest_path, "r", encoding="utf-8") as fh:
+                data = json.load(fh)
+            if isinstance(data, dict) and isinstance(data.get("shots"), dict):
+                return data
+        except (OSError, ValueError):
+            pass
+    return {"source_files": list(TRAILER_SOURCE_FILES), "shots": {}}
+
+
+def save_render_manifest(manifest_path, manifest):
+    tmp_path = manifest_path + ".tmp"
+    with open(tmp_path, "w", encoding="utf-8") as fh:
+        json.dump(manifest, fh, indent=2)
+    os.replace(tmp_path, manifest_path)
 
 
 def parse_args():
@@ -51,6 +86,8 @@ def parse_args():
     p.add_argument("--strips-only", action="store_true", help="Render only the 5 strip keyframes per shot for fast visual QA")
     p.add_argument("--verify-only", action="store_true", help="Run verify_human_motion + 23 prove_subject_in_frame checks without rendering")
     p.add_argument("--extra-frames", nargs="*", type=int, default=[], help="Extra global 1-indexed frames to render in --strips-only mode")
+    p.add_argument("--only-shots", nargs="*", default=None, help="Re-render only listed shot_ids while still verifying all 6 shots and reusing matching-hash frames for others")
+    p.add_argument("--allow-stale-shots", action="store_true", help="Allow --only-shots / --encode-only to reuse frames from a prior source hash (uncertified preview; never writes verification_report.json)")
     p.add_argument("--encode-only", action="store_true", help="Re-mix audio & VSE encode from already-rendered frames")
     return p.parse_args(argv)
 
@@ -106,9 +143,13 @@ def _alpha_over(bg_rgba, fg_rgba, cx, cy):
     return bg_rgba
 
 
+LOGO_CY_FRAC = 0.62
+BADGE_CY_FRAC = 0.88
+
+
 def postprocess_rendered_frame(frame_path, shot_id, f_local, logo_rgba, badge_rgba):
     """Apply AAA Highlight Bloom + Lens Vignette + Warm Contrast grade to the 3D render,
-    and then composite crisp Option A Logo & Wishlist Badge on Shot 6."""
+    and then composite crisp Option A Logo & Wishlist Badge on Shot 6 (`>= 70 px` below climbing jet, `F-25`)."""
     arr = tk.apply_cinematic_grade(tk.read_png_float(frame_path))
     if shot_id == "shot_06":
         s_logo = _elastic_scale(f_local, 18)
@@ -116,11 +157,11 @@ def postprocess_rendered_frame(frame_path, shot_id, f_local, logo_rgba, badge_rg
         if s_logo > 0.0:
             lw = int(round(1120 * s_logo))
             lh = int(round(logo_rgba.shape[0] * (lw / float(logo_rgba.shape[1]))))
-            arr = _alpha_over(arr, _resize_rgba(logo_rgba, lw, lh), tk.RES_W // 2, int(tk.RES_H * 0.56))
+            arr = _alpha_over(arr, _resize_rgba(logo_rgba, lw, lh), tk.RES_W // 2, int(tk.RES_H * LOGO_CY_FRAC))
         if s_badge > 0.0:
             bw = int(round(740 * s_badge))
             bh = int(round(badge_rgba.shape[0] * (bw / float(badge_rgba.shape[1]))))
-            arr = _alpha_over(arr, _resize_rgba(badge_rgba, bw, bh), tk.RES_W // 2, int(tk.RES_H * 0.85))
+            arr = _alpha_over(arr, _resize_rgba(badge_rgba, bw, bh), tk.RES_W // 2, int(tk.RES_H * BADGE_CY_FRAC))
     tk.write_png_float(frame_path, arr)
 
 
@@ -328,6 +369,13 @@ def main():
     badge_rgba = tk.read_png_float(badge_path)
 
     total_frames = sum(s["frames"] for s in shots.SHOT_SPECS)
+    source_sha256 = compute_trailer_source_sha256()
+    manifest_path = os.path.join(tk.OUT_DIR, "render_manifest.json")
+    manifest = load_render_manifest(manifest_path)
+    manifest["source_files"] = list(TRAILER_SOURCE_FILES)
+    reused_stale_shots = []
+    tk.log("PROBE trailer_source_sha256=%s" % source_sha256)
+
     all_events = []
     in_frame_proofs = []
     human_motion_proofs = []
@@ -337,6 +385,9 @@ def main():
         from bpy_extras.object_utils import world_to_camera_view
         grip_strip_globals = [110, 205, 337, 565, 650, 843]
         grip_crop_centers = {}
+        logo_alpha_ys = np.where(logo_rgba[:, :, 3] > 0.05)[0]
+        logo_rel_top = float(logo_alpha_ys.min()) / float(logo_rgba.shape[0])
+        cross_shot_state = {}
         g_cursor = 0
         for s_idx, (spec, builder) in enumerate(zip(shots.SHOT_SPECS, shots.SHOT_BUILDERS)):
             shot_id = spec["id"]
@@ -345,7 +396,7 @@ def main():
             scene, cam, prove_targets, hero_arm, evs, motion_spec = builder(g_cursor)
             all_events.extend(evs)
 
-            # 0. Automated per-frame human motion, quaternion bone, stride-lock & >=0.45m obstacle clearance verification!
+            # 0. Automated per-frame human motion, BVH zero-overlap, door/prop/gear & obstacle clearance verification!
             hm_summary = tk.verify_human_motion(
                 scene,
                 shot_id,
@@ -358,8 +409,82 @@ def main():
                 roller_grip_checks=motion_spec.get("roller_grip_checks"),
                 forbid_char_boxes=motion_spec.get("forbid_char_boxes"),
                 stair_foot_checks=motion_spec.get("stair_foot_checks"),
+                seated_mounts=motion_spec.get("seated_mounts"),
+                door_checks=motion_spec.get("door_checks"),
+                prop_checks=motion_spec.get("prop_checks"),
+                aircraft_checks=motion_spec.get("aircraft_checks"),
+                shot_continuity_checks=motion_spec.get("shot_continuity_checks"),
+                events=evs,
+                g0=g_cursor,
                 min_clearance=0.45,
             )
+
+            # Cross-shot direction, continuity & Shot 6 logo vertical gap assertions (`F-15`, `F-23`, `F-25`)!
+            if shot_id == "shot_04":
+                out_door = next((o for o in scene.objects if o.name.startswith("OutsideJet_AirstairPivot")), None)
+                if out_door is None or math.degrees(out_door.rotation_euler.y) < 120.0:
+                    tk.fail("shot_04: OutsideGottaJet missing open integrated boarding airstair matching shot_05 (F-23)!")
+            elif shot_id == "shot_05":
+                jet5 = scene.objects.get("ROOT_GottaAirJet")
+                scene.frame_set(200); bpy.context.view_layer.update()
+                u5_a = float(world_to_camera_view(scene, cam, jet5.matrix_world.translation).x)
+                scene.frame_set(210); bpy.context.view_layer.update()
+                u5_b = float(world_to_camera_view(scene, cam, jet5.matrix_world.translation).x)
+                du5 = u5_b - u5_a
+                if du5 <= 0.005:
+                    tk.fail("shot_05: runway takeoff jet not climbing left-to-right at cut (du=%.4f <= 0, F-15)!" % du5)
+                cross_shot_state["s5_du"] = du5
+                hm_summary["runway_end_du"] = round(du5, 4)
+                bg_term = scene.objects.get("ROOT_BgTerminal")
+                if bg_term is not None:
+                    bg_meshes = [o for o in bg_term.children_recursive if o.type == "MESH" and not o.hide_render]
+                    for fl_bg in (1, 35, 56, 88):
+                        scene.frame_set(fl_bg); bpy.context.view_layer.update()
+                        max_bg_v = -1.0
+                        for bmo_t in bg_meshes:
+                            mw_bt = bmo_t.matrix_world
+                            verts_bt = bmo_t.data.vertices
+                            for i_bt in range(0, len(verts_bt), 4):
+                                ndc_bt = world_to_camera_view(scene, cam, mw_bt @ verts_bt[i_bt].co)
+                                if 0.0 <= ndc_bt.x <= 1.0 and ndc_bt.z > 1.0:
+                                    max_bg_v = max(max_bg_v, float(ndc_bt.y))
+                        if max_bg_v > 0.94:
+                            tk.fail("shot_05 f=%d: BgTerminal rooftop sign clipped top frame edge (max_v_ndc=%.3f > 0.94, F-26)!" % (fl_bg, max_bg_v))
+            elif shot_id == "shot_06":
+                jet6 = scene.objects.get("ROOT_SkyGottaJet")
+                fus6 = next(o for o in jet6.children_recursive if o.type == "MESH" and "Fuselage" in o.name)
+                scene.frame_set(1); bpy.context.view_layer.update()
+                u6_a = float(world_to_camera_view(scene, cam, jet6.matrix_world.translation).x)
+                scene.frame_set(15); bpy.context.view_layer.update()
+                u6_b = float(world_to_camera_view(scene, cam, jet6.matrix_world.translation).x)
+                du6 = u6_b - u6_a
+                if du6 <= 0.005 or (cross_shot_state.get("s5_du", 1.0) * du6 <= 0.0):
+                    tk.fail("shot_06: 180-deg screen direction flip across shot_05->shot_06 cut (du5=%.4f, du6=%.4f, F-15)!" % (cross_shot_state.get("s5_du", 0.0), du6))
+                min_logo_gap_px = 9999.0
+                for fl6 in range(22, n_f + 1):
+                    scene.frame_set(fl6)
+                    bpy.context.view_layer.update()
+                    pts6 = tk.subject_world_points([fus6])
+                    # Project lowest screen-space vertex (`min ndc.y` -> `max y_px`) of the 3D climbing jet!
+                    jet_y_px_max = max(
+                        (1.0 - float(world_to_camera_view(scene, cam, Vector((float(p[0]), float(p[1]), float(p[2])))).y)) * tk.RES_H
+                        for p in pts6[::6]
+                    )
+                    s_l = _elastic_scale(fl6, 18)
+                    lw_f = int(round(1120 * s_l))
+                    lh_f = int(round(logo_rgba.shape[0] * (lw_f / float(logo_rgba.shape[1]))))
+                    logo_top_px = (int(tk.RES_H * LOGO_CY_FRAC) - lh_f // 2) + logo_rel_top * lh_f
+                    gap_px = logo_top_px - jet_y_px_max
+                    min_logo_gap_px = min(min_logo_gap_px, gap_px)
+                    if gap_px < 70.0:
+                        tk.fail(
+                            "shot_06 f=%d (global %d): 3D jet too close to 2D logo arc/icon (gap=%.1fpx < 70px, jet_ymax=%.1f, logo_ymin=%.1f, F-25)!"
+                            % (fl6, g_cursor + fl6, gap_px, jet_y_px_max, logo_top_px)
+                        )
+                hm_summary["sky_start_du"] = round(du6, 4)
+                hm_summary["min_logo_vertical_gap_px"] = round(min_logo_gap_px, 1)
+                tk.log("PROBE shot_06 direction_match=LEFT_TO_RIGHT min_logo_gap_px=%.1f" % min_logo_gap_px)
+
             human_motion_proofs.append(hm_summary)
 
             # Record exact projected pixel centers of Hero's right hand + handle for zoomed `roller_grip_strip.png`!
@@ -388,6 +513,38 @@ def main():
                 in_frame_proofs.append(proof)
 
             if args.verify_only:
+                g_cursor += n_f
+                continue
+
+            if args.only_shots is not None and shot_id not in set(args.only_shots):
+                shot_meta = manifest.get("shots", {}).get(shot_id)
+                cached_hash = shot_meta.get("source_sha256") if isinstance(shot_meta, dict) else None
+                cached_n = shot_meta.get("frames") if isinstance(shot_meta, dict) else None
+                if cached_hash != source_sha256 or cached_n != n_f:
+                    if not args.allow_stale_shots:
+                        tk.fail(
+                            "--only-shots refused to reuse stale/unverified cached frames for %s "
+                            "(manifest_hash=%s, manifest_frames=%s vs current_hash=%s, expected_frames=%d). "
+                            "Run a full clean render without --only-shots, or pass --allow-stale-shots for an uncertified preview."
+                            % (shot_id, cached_hash, cached_n, source_sha256, n_f)
+                        )
+                    reused_stale_shots.append(shot_id)
+                    tk.log(
+                        "WARNING degraded --allow-stale-shots reusing stale frames for %s (manifest_hash=%s != current_hash=%s); "
+                        "verification_report.json will NOT certify this build!"
+                        % (shot_id, cached_hash, source_sha256)
+                    )
+                five_picks = pick_five_frames(n_f)
+                for fl in range(1, n_f + 1):
+                    ex_png = os.path.join(frames_dir, "frame_%04d.png" % (g_cursor + fl))
+                    if not os.path.isfile(ex_png):
+                        tk.fail("missing cached frame for skipped shot %s: %s" % (shot_id, ex_png))
+                tiles = [shrink_tile(tk.read_png_float(os.path.join(frames_dir, "frame_%04d.png" % (g_cursor + fl)))) for fl in five_picks]
+                strip_img = np.concatenate(tiles, axis=1)
+                strip_path = os.path.join(strips_dir, "%s_strip.png" % shot_id)
+                tk.write_png_float(strip_path, strip_img)
+                strip_rows.append(strip_img)
+                tk.log("PROBE reused %d frames for %s (hash_match=%s)" % (n_f, shot_id, cached_hash == source_sha256))
                 g_cursor += n_f
                 continue
 
@@ -423,6 +580,15 @@ def main():
                         tk.fail("expected animation frame missing: %s" % src_png)
                     os.replace(src_png, out_png)
                     postprocess_rendered_frame(out_png, shot_id, fl, logo_rgba, badge_rgba)
+                manifest["shots"][shot_id] = {
+                    "source_sha256": source_sha256,
+                    "frames": n_f,
+                    "global_start": g_cursor + 1,
+                    "global_end": g_cursor + n_f,
+                    "rendered_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                }
+                manifest["current_source_sha256"] = source_sha256
+                save_render_manifest(manifest_path, manifest)
 
             # Verify rendered pixel quality & character skin on all 5 strip keyframes (+ extra frames)!
             for fl in sorted(set(five_picks) | extra_locals):
@@ -493,7 +659,7 @@ def main():
         stair_tiles = []
         for sgf in stair_globals:
             s_arr = tk.read_png_float(os.path.join(frames_dir, "frame_%04d.png" % sgf))
-            crop = s_arr[240:780, 360:1320, :]
+            crop = s_arr[200:800, 220:1220, :]
             stair_tiles.append(_resize_rgba(crop, TILE_W, TILE_H))
         stair_strip = np.concatenate(stair_tiles, axis=1)
         stair_strip_path = os.path.join(strips_dir, "stair_climb_strip.png")
@@ -519,6 +685,7 @@ def main():
         with open(os.path.join(tk.OUT_DIR, "shot_events.json"), "w", encoding="utf-8") as fh:
             json.dump(
                 {
+                    "source_sha256": source_sha256,
                     "total_frames": total_frames,
                     "fps": tk.FPS,
                     "events": all_events,
@@ -533,6 +700,18 @@ def main():
         tk.log("STRIPS_ONLY_DONE elapsed=%.1fs shots=%d" % (time.time() - t_start, len(shots.SHOT_SPECS)))
         return
 
+    for spec in shots.SHOT_SPECS:
+        sid = spec["id"]
+        smeta = manifest.get("shots", {}).get(sid)
+        if not isinstance(smeta, dict) or smeta.get("source_sha256") != source_sha256 or smeta.get("frames") != spec["frames"]:
+            if not args.allow_stale_shots:
+                tk.fail(
+                    "refusing to certify stale/missing shot %s in render_manifest.json (manifest=%s vs current_sha256=%s)!"
+                    % (sid, smeta.get("source_sha256") if isinstance(smeta, dict) else None, source_sha256)
+                )
+            if sid not in reused_stale_shots:
+                reused_stale_shots.append(sid)
+
     ev_json = os.path.join(tk.OUT_DIR, "shot_events.json")
     saved = json.load(open(ev_json, "r", encoding="utf-8"))
     all_events = saved["events"]
@@ -546,14 +725,25 @@ def main():
     encode_vse_mp4(frames_dir, wav_path, mp4_path, total_frames)
     mp4_stats = verify_mp4(mp4_path, total_frames)
 
+    report_path = os.path.join(tk.OUT_DIR, "verification_report.json")
+    if reused_stale_shots:
+        if os.path.isfile(report_path):
+            os.remove(report_path)
+        tk.log(
+            "UNCERTIFIED_STALE_BUILD skipped writing verification_report.json because --allow-stale-shots reused stale shots: %s"
+            % (reused_stale_shots,)
+        )
+        return
+
     report = {
+        "source_sha256": source_sha256,
         "elapsed_s": round(time.time() - t_start, 1),
+        "render_manifest": manifest["shots"],
         "mp4": mp4_stats,
         "wav": audio_stats,
         "human_motion_proofs": human_motion_proofs,
         "in_frame_proofs": in_frame_proofs,
     }
-    report_path = os.path.join(tk.OUT_DIR, "verification_report.json")
     with open(report_path, "w", encoding="utf-8") as fh:
         json.dump(report, fh, indent=2)
     tk.log("AAA_TRAILER_COMPLETE " + json.dumps(report["mp4"]))

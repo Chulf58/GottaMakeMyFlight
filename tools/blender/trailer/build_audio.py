@@ -514,7 +514,7 @@ def build_trailer_audio(out_wav_path, events, total_frames=1185):
         elif kind in ("jet_spool", "prop_rev"):
             dur_s = ev.get("dur", 120) / float(FPS)
             raw = foley_jet_turbofan(dur_s, rev_up=True, rng=rng)
-            p_curve = np.linspace(0.28, -0.32, len(raw))
+            p_curve = np.linspace(-0.28, 0.32, len(raw))
             ang = (p_curve + 1.0) * (math.pi / 4.0)
             st_jet = np.column_stack((raw * np.cos(ang), raw * np.sin(ang)))
             _add_clip(mix, st_jet, t0, gain=1.25)
