@@ -42,13 +42,13 @@ func _noon(day: int) -> int:
 	return GameCalendar.tick_at(day, 12 * 60, 0)
 
 
-## The reference terminal with a ready bag room but no belts, so every bag
-## misses at its cutoff.
+## The reference terminal with a connected bag room on Desk 2 (Desk 1 left
+## without a belt so Desk 1 bags miss at cutoff).
 func _bind_world(with_room := true) -> void:
 	var grid := BuildGrid.new()
 	ReferenceTerminal.build(grid)
 	if with_room:
-		BagRoomKit.add(grid)
+		BagRoomKit.connect_reference_desk2(grid)
 	_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(0), 3)
 	_bags = auto_free(BaggageSim.new())
 	_bags.bind(_world.clock, _world.flights, _world.grid, _world.sim)
@@ -144,7 +144,7 @@ func test_with_no_bag_room_no_bag_is_checked_in_and_the_rating_is_not_marked_dow
 func test_a_bag_sim_set_after_the_first_bind_is_heard_on_the_next_bind() -> void:
 	var grid := BuildGrid.new()
 	ReferenceTerminal.build(grid)
-	BagRoomKit.add(grid)
+	BagRoomKit.connect_reference_desk2(grid)
 	_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(0), 3)
 	_rating = auto_free(AirportRating.new()) as AirportRating
 	_rating.bind(_world.clock, _world.flights, _world.sim)
@@ -152,7 +152,7 @@ func test_a_bag_sim_set_after_the_first_bind_is_heard_on_the_next_bind() -> void
 	_bags.bind(_world.clock, _world.flights, _world.grid, _world.sim)
 	_rating.baggage = _bags
 	_rating.bind(_world.clock, _world.flights, _world.sim)
-	_world.sim.schedule_flight(PassengerTestWorld.FLIGHT, 4)
+	_world.sim.schedule_flight(PassengerTestWorld.FLIGHT, 8)
 	_world.run_to(_just_after_doors_close())
 	assert_int(_bags.missed_total).is_greater(0)
 	assert_int(_rating.parts()["bags_missed"]).is_equal(_bags.missed_total)

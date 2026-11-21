@@ -1,24 +1,27 @@
 class_name BaggageViews
 extends Node3D
-## Draws the bags of a BaggageSim with the kit's suitcase (baggage_bag.glb,
-## origin at its bottom centre, its length along +Z): a bag on a belt lies on
-## the belt top, turned along the edge it rides; the newest bag to reach a
-## belt end rests on that end's slide (the end piece's Mount_BagRest); a bag
-## waiting at its desk, an older bag in the room and a settled bag are not
-## drawn. Transforms are recorded each tick and drawn between the last two
-## with the clock's alpha (the turn slerped). Never writes sim state.
-##
-## A drawn bag turns at most TURN_PER_TICK a tick toward where its belt points,
-## so a bag that turns on a cell centre (at a merge, or off a desk outlet) turns
-## over the next half cell instead of in one tick. A load (SaveGame.loaded)
-## starts every bag over at its sim place; a tick that does not follow the last
-## one recorded does the same when no load was seen.
+## Draws the bags and active baggage_cart shuttles of a BaggageSim:
+## - bags riding a belt lie on the belt top, turned along the edge;
+## - waiting IN_ROOM bags at a belt end stack visibly up to MAX_ROOM_STACK;
+## - waiting AT_DESK bags at a check-in desk stack visibly up to MAX_DESK_STACK;
+## - active BaggageShuttle trips animate a baggage_cart (with Cart_Bags while
+##   outbound/unloading) from the bag room to the parked plane stand.
+## Transforms are recorded each tick and drawn between the last two with the
+## clock's alpha. Never writes sim state.
 
 const BAG_SCENE := preload("res://assets/interior/baggage_bag.glb")
 const END_SCENE := preload("res://assets/interior/baggage_belt_end.glb")
+const CART_SCENE := preload("res://assets/interior/baggage_cart.glb")
 ## Height of every belt's top above the floor (build_baggage_kit.py BELT_TOP).
 const BELT_TOP := 0.355
 const REST_MOUNT := "Mount_BagRest"
+const CART_BAGS_NODE := "Cart_Bags"
+## Visual stack caps and spacing for waiting suitcases at desks and belt ends.
+## 0.26 m clears baggage_bag.glb's 0.256 m body+strap+handle height cleanly.
+const MAX_DESK_STACK := 4
+const MAX_ROOM_STACK := 4
+const STACK_STEP_M := 0.26
+const STACK_YAW_RAD := 0.07
 ## Radius of a bag's turn on a corner piece, about the cell's inner corner.
 ## The belt lane runs from 0.15 to 0.85 m from it (build_baggage_kit.py); a
 ## 0.39 x 0.55 m bag on this turn stays between 0.30 and 0.78 m. Under 0.5 so
@@ -42,6 +45,11 @@ var _nodes := {}
 var _prev := {}
 var _cur := {}
 var _pool: Array[Node3D] = []
+## Shuttle id -> cart node.
+var _shuttle_nodes := {}
+var _shuttle_prev := {}
+var _shuttle_cur := {}
+var _shuttle_pool: Array[Node3D] = []
 ## Mount_BagRest in the end piece's own frame.
 var _rest := Transform3D.IDENTITY
 ## The tick sync() last recorded, or -1.
@@ -66,6 +74,14 @@ func node_for(id: int) -> Node3D:
 
 func active_count() -> int:
 	return _nodes.size()
+
+
+func shuttle_node_for(shuttle_id: int) -> Node3D:
+	return _shuttle_nodes.get(shuttle_id)
+
+
+func active_shuttle_count() -> int:
+	return _shuttle_nodes.size()
 
 
 ## The transform of node `mount_name` in `scene`'s root frame, or the
@@ -186,21 +202,55 @@ func rest_transform(grid: BuildGrid, cell: Vector2i) -> Variant:
 	return piece * _rest
 
 
+## Where the `stack_index`-th waiting IN_ROOM bag sits on the end piece at `cell`.
+func room_stack_transform(grid: BuildGrid, cell: Vector2i, stack_index := 0) -> Variant:
+	var base: Variant = rest_transform(grid, cell)
+	if base == null:
+		return null
+	var rest: Transform3D = base
+	if stack_index <= 0:
+		return rest
+	var basis := rest.basis * Basis(Vector3.UP, _stack_yaw(stack_index))
+	var origin := rest.origin + rest.basis.y * (stack_index * STACK_STEP_M)
+	return Transform3D(basis, origin)
+
+
+## Where the `stack_index`-th waiting AT_DESK bag sits on check-in desk `desk_id`'s
+## bag-drop belt, or null when the desk is gone.
+static func desk_transform(grid: BuildGrid, desk_id: int, stack_index := 0) -> Variant:
+	var record := grid.get_object(desk_id)
+	if record.is_empty() or StringName(record["def"]) != BeltShaper.DESK:
+		return null
+	var ports := BuildCatalog.belt_ports(record["def"], record["anchor"], record["facing"])
+	if ports.is_empty():
+		return null
+	var port: Dictionary = ports[0]
+	var heading := Vector3(port["side"].x, 0.0, port["side"].y)
+	var at := grid.cell_to_world(port["cell"])
+	at.y += BELT_TOP + stack_index * STACK_STEP_M
+	var yaw := atan2(heading.x, heading.z) + _stack_yaw(stack_index)
+	return Transform3D(Basis(Vector3.UP, yaw), at)
+
+
+static func _stack_yaw(stack_index: int) -> float:
+	if stack_index <= 0:
+		return 0.0
+	return STACK_YAW_RAD if stack_index % 2 == 1 else -STACK_YAW_RAD
+
+
 ## Records the transforms for the tick that just ran.
 func sync() -> void:
 	var drawn := {}
-	var newest := {}
-	for bag in sim.bags():
-		if bag.state == Bag.State.IN_ROOM:
-			var best: Bag = newest.get(bag.cell)
-			if best == null or bag.rest_tick > best.rest_tick:
-				newest[bag.cell] = bag
+	var desk_stacks := _desk_stack_indices()
+	var room_stacks := _room_stack_indices()
 	for bag in sim.bags():
 		var now: Variant = null
 		if bag.on_belt():
 			now = belt_transform(sim.grid, bag)
-		elif bag.state == Bag.State.IN_ROOM and newest[bag.cell] == bag:
-			now = rest_transform(sim.grid, bag.cell)
+		elif bag.state == Bag.State.AT_DESK and desk_stacks.has(bag.id):
+			now = desk_transform(sim.grid, bag.desk, desk_stacks[bag.id])
+		elif bag.state == Bag.State.IN_ROOM and room_stacks.has(bag.id):
+			now = room_stack_transform(sim.grid, bag.cell, room_stacks[bag.id])
 		if now == null:
 			continue
 		drawn[bag.id] = true
@@ -216,6 +266,65 @@ func sync() -> void:
 	for id in _nodes.keys():
 		if not drawn.has(id):
 			_release(id)
+	_sync_shuttles()
+
+
+func _desk_stack_indices() -> Dictionary:
+	var by_desk := {}
+	for bag in sim.bags():
+		if bag.state == Bag.State.AT_DESK:
+			var list: Array[Bag] = by_desk.get(bag.desk, [] as Array[Bag])
+			list.append(bag)
+			by_desk[bag.desk] = list
+	var indices := {}
+	for desk_id in by_desk:
+		var list: Array[Bag] = by_desk[desk_id]
+		list.sort_custom(
+			func(a: Bag, b: Bag) -> bool:
+				return a.wait_tick < b.wait_tick if a.wait_tick != b.wait_tick else a.id < b.id
+		)
+		for i in mini(list.size(), MAX_DESK_STACK):
+			indices[list[i].id] = i
+	return indices
+
+
+func _room_stack_indices() -> Dictionary:
+	var by_cell := {}
+	for bag in sim.bags():
+		if bag.state == Bag.State.IN_ROOM and bag.shuttle_id == 0:
+			var list: Array[Bag] = by_cell.get(bag.cell, [] as Array[Bag])
+			list.append(bag)
+			by_cell[bag.cell] = list
+	var indices := {}
+	for cell in by_cell:
+		var list: Array[Bag] = by_cell[cell]
+		list.sort_custom(
+			func(a: Bag, b: Bag) -> bool:
+				return a.rest_tick < b.rest_tick if a.rest_tick != b.rest_tick else a.id < b.id
+		)
+		for i in mini(list.size(), MAX_ROOM_STACK):
+			indices[list[i].id] = i
+	return indices
+
+
+func _sync_shuttles() -> void:
+	var active := {}
+	for shuttle in sim.shuttles():
+		active[shuttle.id] = true
+		var place := shuttle.pose_at(sim.tick, sim.grid)
+		if not _shuttle_nodes.has(shuttle.id):
+			_shuttle_nodes[shuttle.id] = _take_shuttle()
+			_shuttle_cur[shuttle.id] = place
+		_shuttle_prev[shuttle.id] = _shuttle_cur[shuttle.id]
+		_shuttle_cur[shuttle.id] = place
+		var bags_node := (
+			(_shuttle_nodes[shuttle.id] as Node3D).find_child(CART_BAGS_NODE, true, false) as Node3D
+		)
+		if bags_node != null:
+			bags_node.visible = shuttle.carrying_bags()
+	for id in _shuttle_nodes.keys():
+		if not active.has(id):
+			_release_shuttle(id)
 
 
 ## Starts every bag over at the sim's place now, with no tick to run: a load
@@ -225,12 +334,14 @@ func sync() -> void:
 func snap() -> void:
 	for id in _nodes.keys():
 		_release(id)
+	for id in _shuttle_nodes.keys():
+		_release_shuttle(id)
 	sync()
 	_last_tick = clock.tick if clock != null else -1
 	draw()
 
 
-## Places every bag between its last two tick transforms.
+## Places every bag and active shuttle between its last two tick transforms.
 func draw() -> void:
 	var alpha := clock.alpha if clock != null else 1.0
 	for id in _nodes:
@@ -240,12 +351,46 @@ func draw() -> void:
 		node.transform = Transform3D(
 			before.basis.slerp(after.basis, alpha), before.origin.lerp(after.origin, alpha)
 		)
+	for id in _shuttle_nodes:
+		var before: Transform3D = _shuttle_prev[id]
+		var after: Transform3D = _shuttle_cur[id]
+		var node: Node3D = _shuttle_nodes[id]
+		node.transform = Transform3D(
+			before.basis.slerp(after.basis, alpha), before.origin.lerp(after.origin, alpha)
+		)
+	_sync_parked_carts()
+
+
+func _sync_parked_carts() -> void:
+	if sim == null or sim.build_mode == null or sim.grid == null:
+		return
+	var build_view := sim.build_mode.get_node_or_null("BuildView") as BuildView
+	if build_view == null:
+		return
+	var busy := {}
+	for cart_id in sim.active_cart_ids():
+		busy[cart_id] = true
+	for object_id in sim.grid.object_ids():
+		var record := sim.grid.get_object(object_id)
+		if StringName(record["def"]) != BaggageSim.CART_DEF:
+			continue
+		var parked := build_view.object_node(object_id)
+		if parked == null:
+			continue
+		var out := busy.has(object_id)
+		parked.visible = not out
+		if not out:
+			var bags_node := parked.find_child(CART_BAGS_NODE, true, false) as Node3D
+			if bags_node != null:
+				bags_node.visible = false
 
 
 func _on_ticked(tick: int) -> void:
 	if tick != _last_tick + 1:
 		for id in _nodes.keys():
 			_release(id)
+		for id in _shuttle_nodes.keys():
+			_release_shuttle(id)
 	_last_tick = tick
 	sync()
 
@@ -272,3 +417,22 @@ func _release(id: int) -> void:
 	_nodes.erase(id)
 	_prev.erase(id)
 	_cur.erase(id)
+
+
+func _take_shuttle() -> Node3D:
+	if not _shuttle_pool.is_empty():
+		var reused: Node3D = _shuttle_pool.pop_back()
+		reused.visible = true
+		return reused
+	var node := CART_SCENE.instantiate() as Node3D
+	add_child(node)
+	return node
+
+
+func _release_shuttle(id: int) -> void:
+	var node: Node3D = _shuttle_nodes[id]
+	node.visible = false
+	_shuttle_pool.append(node)
+	_shuttle_nodes.erase(id)
+	_shuttle_prev.erase(id)
+	_shuttle_cur.erase(id)

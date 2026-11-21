@@ -22,3 +22,24 @@ static func add(grid: BuildGrid, area := AREA) -> int:
 	var room_id := grid.room_at(area.position)
 	assert(RoomRules.status(grid, room_id).ok, "test bag room is not ready")
 	return room_id
+
+
+## Marks a ready 4x3 bag room inside ReferenceTerminal and connects Desk 2's
+## outlet (15, 10) east around its staff spot (14, 10) to the room's end at
+## (16, 13), leaving Desk 1 unconnected (NO_BELT) while activating checked-bag
+## handling. Returns the room id.
+static func connect_reference_desk2(grid: BuildGrid) -> int:
+	var room_rect := Rect2i(13, 13, 4, 3)
+	var result := grid.apply(BuildEdit.place_room(room_rect, &"bag_room"))
+	assert(result.ok, "reference bag room refused: %s" % result.reason_text())
+	for seg in [
+		[Vector2i(15, 10), Vector2i(16, 10)],
+		[Vector2i(16, 10), Vector2i(16, 13)],
+	]:
+		var plan := BeltShaper.plan_line(grid, seg[0], seg[1], 0)
+		assert(plan.result.ok, "reference belt refused: %s" % plan.result.reason_text())
+		for applied in grid.apply_batch(plan.edits):
+			assert(applied.ok, "reference belt edit refused: %s" % applied.reason_text())
+	var room_id := grid.room_at(room_rect.position)
+	assert(RoomRules.status(grid, room_id).ok, "reference bag room is not ready")
+	return room_id

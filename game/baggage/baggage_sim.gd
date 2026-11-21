@@ -46,6 +46,10 @@ extends Node
 
 ## A bag settled as loaded (true) or missed, exactly once.
 signal bag_settled(bag_id: int, passenger_id: int, flight_id: String, loaded: bool)
+## Automated baggage_cart shuttle lifecycle (board 73fa430a; future Ramp Agent hook eddcd9cd).
+signal shuttle_dispatched(shuttle_id: int, flight_id: String, cart_id: int)
+signal shuttle_arrived(shuttle_id: int, flight_id: String)
+signal shuttle_returned(shuttle_id: int, cart_id: int)
 
 ## Belt speed in mm per tick: 1 m/s, a tuning value.
 const BELT_MM := 50
@@ -53,12 +57,17 @@ const BELT_MM := 50
 const LOAD_LEAD_TICKS := 200
 ## Settled bags are kept this long, then dropped.
 const SETTLED_KEEP_TICKS := 200
+const CART_DEF: StringName = &"baggage_cart"
 
 @export var clock: SimClock
 @export var flights: FlightSim
 @export var passengers: PassengerSim
 ## In a scene the grid comes from BuildMode; tests call bind() instead.
 @export var build_mode: BuildMode
+
+## Optional Ramp Agent hook: func(cart_id: int, flight_id: String) -> bool.
+## Unset: placed carts dispatch automatically at cutoff.
+var shuttle_can_dispatch := Callable()
 
 var grid: BuildGrid
 var routes: BagRoutes
@@ -75,6 +84,9 @@ var missed_total := 0
 var _bags: Array[Bag] = []
 var _by_id := {}
 var _next_id := 1
+var _shuttles: Array[BaggageShuttle] = []
+var _shuttle_by_id := {}
+var _next_shuttle_id := 1
 
 
 func _ready() -> void:
@@ -107,11 +119,11 @@ func bind(
 ## Checks passenger `passenger_id`'s bag in at desk `desk_id` now, and returns
 ## the bag. On or after its flight's cutoff it is missed at once. A passenger
 ## checks one bag: a second check-in while its first bag is kept pushes an
-## error and returns null. While the grid has no ready bag room the passenger
-## checks no bag and it returns null, with no error (decision bags-count-only-
-## once-a-ready-bag-room-exists-missed-bag-fee-and-rating).
+## error and returns null. While no check-in desk connects via belts to a
+## ready bag room, the passenger checks no bag and it returns null with no
+## error (decision baggage-loop-completion-connect-gated-penalties-visible-wait).
 func check_in(passenger_id: int, flight_id: String, desk_id: int) -> Bag:
-	if not has_ready_bag_room():
+	if not has_connected_bag_room():
 		return null
 	for kept in _bags:
 		if kept.passenger == passenger_id:
@@ -146,15 +158,56 @@ func has_ready_bag_room() -> bool:
 	return false
 
 
+## Whether at least one check-in desk on the grid connects via belts (BagRoutes)
+## to a ready bag room's belt end. Read from the live grid without mutating
+## `routes` or `routes_stale`, so saves and loads always agree.
+func has_connected_bag_room() -> bool:
+	var field := BagRoutes.build(grid) if routes_stale or routes == null else routes
+	for object_id in grid.object_ids():
+		var record := grid.get_object(object_id)
+		if StringName(record["def"]) != BeltShaper.DESK:
+			continue
+		var entry := field.entry_of(object_id)
+		if not entry.is_empty() and field.has_route(entry["cell"]):
+			return true
+	return false
+
+
 func on_tick(new_tick: int) -> void:
 	tick = new_tick
 	if routes_stale:
 		_reconcile()
 	_transfer()
 	_move()
+	_advance_shuttles()
 	_settle_due()
 	_retire_settled()
 	_prune_results()
+
+
+func shuttles() -> Array[BaggageShuttle]:
+	return _shuttles
+
+
+func get_shuttle(id: int) -> BaggageShuttle:
+	return _shuttle_by_id.get(id)
+
+
+func active_cart_ids() -> Array[int]:
+	var ids: Array[int] = []
+	for shuttle in _shuttles:
+		ids.append(shuttle.cart_id)
+	return ids
+
+
+## Hook for Tier-2 Ramp Agent staffing (board eddcd9cd) to bind a staff member
+## to an active shuttle trip.
+func assign_shuttle_driver(shuttle_id: int, staff_id: int) -> bool:
+	var shuttle := get_shuttle(shuttle_id)
+	if shuttle == null:
+		return false
+	shuttle.driver_staff_id = staff_id
+	return true
 
 
 func get_bag(id: int) -> Bag:
@@ -218,7 +271,7 @@ func to_snapshot() -> Dictionary:
 	if routes_stale:
 		push_error("BaggageSim.to_snapshot: a build edit settles on the next tick; save after it")
 		return {}
-	return BaggageSnapshot.save(self, _next_id)
+	return BaggageSnapshot.save(self, _next_id, _next_shuttle_id)
 
 
 ## Restores a to_snapshot() dictionary, including one that went through JSON,
@@ -229,12 +282,13 @@ func from_snapshot(data: Dictionary) -> bool:
 	var problem: String = loaded.get("error", "")
 	var built := BagRoutes.build(grid)
 	if problem == "":
-		problem = BaggageSnapshot.grid_problem(loaded["bags"], built)
+		problem = BaggageSnapshot.grid_problem(loaded["bags"], built, loaded["shuttles"])
 	if problem != "":
 		push_error("BaggageSim.from_snapshot: %s" % problem)
 		return false
 	tick = loaded["tick"]
 	_next_id = loaded["next_id"]
+	_next_shuttle_id = loaded["next_shuttle_id"]
 	results = loaded["results"]
 	loaded_total = loaded["loaded_total"]
 	missed_total = loaded["missed_total"]
@@ -242,6 +296,10 @@ func from_snapshot(data: Dictionary) -> bool:
 	_by_id.clear()
 	for bag in _bags:
 		_by_id[bag.id] = bag
+	_shuttles = loaded["shuttles"]
+	_shuttle_by_id.clear()
+	for shuttle in _shuttles:
+		_shuttle_by_id[shuttle.id] = shuttle
 	routes = built
 	routes_stale = false
 	return true
@@ -264,9 +322,21 @@ func _on_graph_changed(_cells: Array[Vector2i]) -> void:
 func _reconcile() -> void:
 	routes = BagRoutes.build(grid)
 	routes_stale = false
+	var kept_shuttles: Array[BaggageShuttle] = []
+	for shuttle in _shuttles:
+		var record := grid.get_object(shuttle.cart_id)
+		if record.is_empty() or StringName(record["def"]) != CART_DEF:
+			for bag_id in shuttle.bag_ids:
+				var bag := get_bag(bag_id)
+				if bag != null and not bag.is_settled():
+					_settle(bag, false, Bag.Cause.LOST, tick)
+			_shuttle_by_id.erase(shuttle.id)
+		else:
+			kept_shuttles.append(shuttle)
+	_shuttles = kept_shuttles
 	for bag in _bags:
 		if bag.state == Bag.State.IN_ROOM:
-			if not routes.is_root(bag.cell):
+			if bag.shuttle_id == 0 and not routes.is_root(bag.cell):
 				_settle(bag, false, Bag.Cause.LOST, tick)
 		elif bag.on_belt():
 			var state := belt_state(bag, routes)
@@ -343,19 +413,175 @@ func _rest(bag: Bag) -> void:
 	bag.rest_tick = tick
 
 
+func _advance_shuttles() -> void:
+	var kept: Array[BaggageShuttle] = []
+	for shuttle in _shuttles:
+		if shuttle.phase == BaggageShuttle.Phase.OUTBOUND and tick >= shuttle.arrive_tick:
+			shuttle.phase = BaggageShuttle.Phase.UNLOADING
+			shuttle_arrived.emit(shuttle.id, shuttle.flight)
+		if shuttle.phase == BaggageShuttle.Phase.UNLOADING and tick >= shuttle.unload_tick:
+			for bag_id in shuttle.bag_ids:
+				var bag := get_bag(bag_id)
+				if bag != null and not bag.is_settled():
+					_settle(bag, true, Bag.Cause.NONE, tick)
+			shuttle.bag_ids.clear()
+			shuttle.phase = BaggageShuttle.Phase.RETURNING
+		if shuttle.phase == BaggageShuttle.Phase.RETURNING and tick >= shuttle.return_tick:
+			_shuttle_by_id.erase(shuttle.id)
+			shuttle_returned.emit(shuttle.id, shuttle.cart_id)
+		else:
+			kept.append(shuttle)
+	_shuttles = kept
+
+
 func _settle_due() -> void:
+	var ready_by_flight := {}
 	for bag in _bags:
-		if not bag.is_settled() and tick >= bag.cutoff_tick:
-			if bag.state == Bag.State.IN_ROOM:
+		if bag.is_settled() or bag.shuttle_id != 0 or tick < bag.cutoff_tick:
+			continue
+		if bag.state == Bag.State.IN_ROOM:
+			var list: Array[Bag] = ready_by_flight.get(bag.flight, [] as Array[Bag])
+			list.append(bag)
+			ready_by_flight[bag.flight] = list
+		else:
+			_settle(bag, false, miss_cause(bag), tick)
+	var flight_keys := ready_by_flight.keys()
+	flight_keys.sort()
+	for flight_id: String in flight_keys:
+		_dispatch_or_load(flight_id, ready_by_flight[flight_id])
+
+
+func _dispatch_or_load(flight_id: String, room_bags: Array[Bag]) -> void:
+	var stand := flights.flight_stand(flight_id)
+	var doors_close := flights.doors_close_tick(flight_id)
+	var by_cart := {}
+	for bag in room_bags:
+		var cart_id := _cart_for_bag(bag)
+		var list: Array[Bag] = by_cart.get(cart_id, [] as Array[Bag])
+		list.append(bag)
+		by_cart[cart_id] = list
+	var cart_ids := by_cart.keys()
+	cart_ids.sort()
+	for cart_id: int in cart_ids:
+		var group: Array[Bag] = by_cart[cart_id]
+		if cart_id == 0:
+			for bag in group:
 				_settle(bag, true, Bag.Cause.NONE, tick)
-			else:
-				_settle(bag, false, miss_cause(bag), tick)
+			continue
+		if stand.is_empty():
+			for bag in group:
+				_settle(bag, false, Bag.Cause.LATE, tick)
+			continue
+		var plan := _shuttle_plan(cart_id, flight_id, stand)
+		var finish_tick := tick + int(plan["travel"]) + BaggageShuttle.UNLOAD_TICKS
+		if doors_close >= 0 and finish_tick >= doors_close:
+			for bag in group:
+				_settle(bag, false, Bag.Cause.LATE, tick)
+			continue
+		if _cart_busy(cart_id):
+			continue
+		if shuttle_can_dispatch.is_valid() and not shuttle_can_dispatch.call(cart_id, flight_id):
+			continue
+		_start_shuttle(cart_id, flight_id, stand, plan, group)
+
+
+func _cart_busy(cart_id: int) -> bool:
+	for shuttle in _shuttles:
+		if shuttle.cart_id == cart_id:
+			return true
+	return false
+
+
+func _cart_for_bag(bag: Bag) -> int:
+	var room_id := grid.room_at(bag.cell)
+	if room_id == 0:
+		return 0
+	var in_room: Array[int] = []
+	var ids := grid.object_ids()
+	ids.sort()
+	for object_id in ids:
+		var record := grid.get_object(object_id)
+		if StringName(record["def"]) != CART_DEF:
+			continue
+		if grid.room_at(record["anchor"]) == room_id:
+			in_room.append(object_id)
+	if in_room.is_empty():
+		return 0
+	var best_id := 0
+	var best_busy := true
+	var best_dist := INF
+	for object_id in in_room:
+		var busy := _cart_busy(object_id)
+		var dist := Vector2(grid.get_object(object_id)["anchor"] - bag.cell).length_squared()
+		if best_id == 0 or (not busy and best_busy) or (busy == best_busy and dist < best_dist):
+			best_id = object_id
+			best_busy = busy
+			best_dist = dist
+	return best_id
+
+
+func _shuttle_plan(cart_id: int, flight_id: String, stand: Dictionary) -> Dictionary:
+	var record := grid.get_object(cart_id)
+	var def := BuildCatalog.get_def(CART_DEF)
+	var origin := BuildView.object_transform(
+		grid, def.footprint(record["anchor"], record["facing"]), record["facing"]
+	)
+	origin.origin.y = BaggageShuttle.ground_y(grid, origin.origin)
+	var model := PlaneClasses.flight_model(flights, flight_id)
+	var target := BaggageShuttle.cargo_point(stand, model)
+	target.y = BaggageShuttle.ground_y(grid, target)
+	var route := BaggageShuttle.plan_route(grid, origin.origin, target)
+	var dist_m := BaggageShuttle.route_length(route)
+	var travel := clampi(
+		roundi(dist_m * BaggageShuttle.TRAVEL_TICKS_PER_M),
+		BaggageShuttle.MIN_TRAVEL_TICKS,
+		BaggageShuttle.MAX_TRAVEL_TICKS
+	)
+	return {
+		"origin": origin.origin,
+		"origin_yaw": -int(record["facing"]) * PI / 2.0,
+		"target": target,
+		"route": route,
+		"travel": travel,
+	}
+
+
+func _start_shuttle(
+	cart_id: int,
+	flight_id: String,
+	stand: Dictionary,
+	plan: Dictionary,
+	group: Array[Bag],
+) -> void:
+	var travel: int = plan["travel"]
+	var shuttle := BaggageShuttle.new()
+	shuttle.id = _next_shuttle_id
+	_next_shuttle_id += 1
+	shuttle.cart_id = cart_id
+	shuttle.flight = flight_id
+	shuttle.phase = BaggageShuttle.Phase.OUTBOUND
+	shuttle.start_tick = tick
+	shuttle.arrive_tick = tick + travel
+	shuttle.unload_tick = shuttle.arrive_tick + BaggageShuttle.UNLOAD_TICKS
+	shuttle.return_tick = shuttle.unload_tick + travel
+	shuttle.origin_world = plan["origin"]
+	shuttle.origin_yaw = float(plan["origin_yaw"])
+	shuttle.target_world = plan["target"]
+	shuttle.target_yaw = StandPlacement.SIDE_YAW[StandPlacement.side_of(stand)]
+	shuttle.waypoints = plan["route"]
+	for bag in group:
+		bag.shuttle_id = shuttle.id
+		shuttle.bag_ids.append(bag.id)
+	_shuttles.append(shuttle)
+	_shuttle_by_id[shuttle.id] = shuttle
+	shuttle_dispatched.emit(shuttle.id, flight_id, cart_id)
 
 
 func _settle(bag: Bag, loaded: bool, cause: Bag.Cause, at_tick: int) -> void:
 	if bag.is_settled():
 		push_error("BaggageSim: bag %d is already settled" % bag.id)
 		return
+	bag.shuttle_id = 0
 	bag.state = Bag.State.LOADED if loaded else Bag.State.MISSED
 	bag.cause = cause
 	bag.outcome_tick = at_tick

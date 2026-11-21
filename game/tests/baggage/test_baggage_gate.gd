@@ -64,6 +64,36 @@ func test_a_removed_bag_room_gives_later_check_ins_no_bag_and_leaves_riding_bags
 	assert_int(_world.settled.size()).is_equal(1)
 
 
+func test_bare_bag_room_with_end_but_no_connected_belt_triggers_zero_penalties() -> void:
+	_world.room(BagTestWorld.ROOM)
+	PassengerTestWorld.place(_world.grid, &"baggage_belt_end", BagTestWorld.END, 0)
+	assert_bool(_world.sim.has_ready_bag_room()).is_true()
+	assert_bool(_world.sim.has_connected_bag_room()).is_false()
+	assert_object(_world.sim.check_in(1, BagTestWorld.FLIGHT, _desk)).is_null()
+	_world.run_to(BagTestWorld.ARRIVAL)
+	assert_int(_world.sim.missed_total + _world.sim.loaded_total).is_equal(0)
+	assert_array(_world.settled).is_empty()
+	assert_dict(_world.sim.results).is_empty()
+
+
+func test_connected_desk_to_bag_room_activates_checked_bags_and_bare_desk_misses() -> void:
+	var bare := _world.desk(Vector2i(2, 2))
+	_world.room(BagTestWorld.ROOM)
+	_world.lay(BagTestWorld.ENTRY, BagTestWorld.END)
+	assert_bool(_world.sim.has_connected_bag_room()).is_true()
+	var connected_bag := _world.sim.check_in(1, BagTestWorld.FLIGHT, _desk)
+	var bare_bag := _world.sim.check_in(2, BagTestWorld.FLIGHT, bare)
+	assert_object(connected_bag).is_not_null()
+	assert_object(bare_bag).is_not_null()
+	_world.run_to(BagTestWorld.ARRIVAL)
+	assert_int(connected_bag.state).is_equal(Bag.State.IN_ROOM)
+	assert_int(bare_bag.state).is_equal(Bag.State.AT_DESK)
+	_world.run_to(connected_bag.cutoff_tick)
+	assert_int(connected_bag.state).is_equal(Bag.State.LOADED)
+	assert_int(bare_bag.state).is_equal(Bag.State.MISSED)
+	assert_int(bare_bag.cause).is_equal(Bag.Cause.NO_BELT)
+
+
 func test_the_gate_is_a_pure_function_of_the_grid() -> void:
 	var other: BaggageSim = auto_free(BaggageSim.new())
 	other.bind(_world.clock, _world.flights, _world.grid)

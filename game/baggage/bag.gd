@@ -43,6 +43,8 @@ var created_tick := 0
 var cutoff_tick := 0
 var rest_tick := -1
 var outcome_tick := -1
+## Active BaggageShuttle id carrying this bag to the plane, or 0.
+var shuttle_id := 0
 
 
 func is_settled() -> bool:

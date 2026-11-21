@@ -340,7 +340,9 @@ func texts(tool: BuildMode.Tool) -> Array:
 		BuildMode.Tool.CART:
 			lines = [
 				tr("A baggage cart on wheels."),
-				tr("It is scenery. Bags move the same without it."),
+				tr(
+					"Place one in a bag room to shuttle checked bags out to the parked plane before departure."
+				),
 				tr("Takes 1x2 tiles. No upkeep."),
 			]
 		BuildMode.Tool.CURB:

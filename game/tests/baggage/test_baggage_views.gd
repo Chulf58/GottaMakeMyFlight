@@ -2,9 +2,9 @@ class_name TestBaggageViews
 extends GdUnitTestSuite
 ## BaggageViews (headless: positions only; how a bag looks is a windowed
 ## plate): a bag on a belt lies on the belt top behind its cell's centre and
-## turned along its edge, the newest bag at an end rests on the end's
-## Mount_BagRest, and bags at a desk, older bags in the room and settled bags
-## are not drawn.
+## turned along its edge; waiting IN_ROOM bags at an end and waiting AT_DESK
+## bags at a desk render visibly stacked up to their stack caps; settled bags
+## are released.
 
 var _world: BagTestWorld
 var _views: BaggageViews
@@ -65,26 +65,82 @@ func test_a_bag_is_drawn_between_its_last_two_tick_positions() -> void:
 	assert_vector(_origin(bag.id)).is_equal_approx(before.lerp(after, 0.5), Vector3.ONE * 0.001)
 
 
-func test_only_the_newest_bag_at_an_end_rests_on_it_and_settled_bags_go() -> void:
-	var first := _world.sim.check_in(1, BagTestWorld.FLIGHT, _desk)
-	var second := _world.sim.check_in(2, BagTestWorld.FLIGHT, _desk)
-	# One tick after arriving, so the last two tick positions are both at rest.
+func test_waiting_in_room_bags_stack_visibly_at_belt_end_and_settled_bags_go() -> void:
+	var bags: Array[Bag] = []
+	for i in BaggageViews.MAX_ROOM_STACK + 2:
+		bags.append(_world.sim.check_in(i + 1, BagTestWorld.FLIGHT, _desk))
 	_world.run_to(BagTestWorld.ARRIVAL + 1)
-	assert_int(first.state).is_equal(Bag.State.IN_ROOM)
+	assert_int(bags[0].state).is_equal(Bag.State.IN_ROOM)
 	var rest: Transform3D = _views.rest_transform(_world.grid, BagTestWorld.END)
-	assert_vector(_origin(first.id)).is_equal_approx(rest.origin, Vector3.ONE * 0.0001)
-	assert_object(_views.node_for(second.id)).is_not_null()
-	_world.run_to(BagTestWorld.ARRIVAL + 31)
-	assert_int(second.state).is_equal(Bag.State.IN_ROOM)
-	assert_object(_views.node_for(first.id)).is_null()
-	assert_vector(_origin(second.id)).is_equal_approx(rest.origin, Vector3.ONE * 0.0001)
-	assert_int(_views.active_count()).is_equal(1)
-	_world.run_to(second.cutoff_tick)
-	assert_int(second.state).is_equal(Bag.State.LOADED)
+	assert_vector(_origin(bags[0].id)).is_equal_approx(rest.origin, Vector3.ONE * 0.0001)
+	# Run until all bags arrive in the room.
+	_world.run_to(BagTestWorld.ARRIVAL + 30 * (BaggageViews.MAX_ROOM_STACK + 1) + 2)
+	for bag in bags:
+		assert_int(bag.state).is_equal(Bag.State.IN_ROOM)
+	# First MAX_ROOM_STACK bags are drawn stacked along the rest normal; overflow is capped.
+	for i in BaggageViews.MAX_ROOM_STACK:
+		assert_object(_views.node_for(bags[i].id)).is_not_null()
+		var expected: Transform3D = _views.room_stack_transform(_world.grid, BagTestWorld.END, i)
+		assert_vector(_origin(bags[i].id)).is_equal_approx(expected.origin, Vector3.ONE * 0.0001)
+	assert_object(_views.node_for(bags[BaggageViews.MAX_ROOM_STACK].id)).is_null()
+	assert_int(_views.active_count()).is_equal(BaggageViews.MAX_ROOM_STACK)
+	# Strictly rising heights across stacked suitcases.
+	assert_float(_origin(bags[1].id).y).is_greater(_origin(bags[0].id).y + 0.15)
+	_world.run_to(bags[0].cutoff_tick)
+	for bag in bags:
+		assert_int(bag.state).is_equal(Bag.State.LOADED)
 	assert_int(_views.active_count()).is_equal(0)
-	# Two bags were drawn at most at once, so the pool made two nodes, both
-	# hidden now.
 	var nodes := _views.get_children().filter(func(n: Node) -> bool: return n is Node3D)
-	assert_int(nodes.size()).is_equal(2)
+	assert_int(nodes.size()).is_equal(BaggageViews.MAX_ROOM_STACK + 2)
 	assert_bool(nodes.any(func(n: Node3D) -> bool: return n.visible)).is_false()
 	assert_object(_views.rest_transform(_world.grid, Vector2i(5, 7))).is_null()
+
+
+func test_waiting_at_desk_bags_stack_visibly_and_cap_at_max_desk_stack() -> void:
+	var bare := _world.desk(Vector2i(2, 2))
+	var bags: Array[Bag] = []
+	for i in BaggageViews.MAX_DESK_STACK + 2:
+		bags.append(_world.sim.check_in(i + 1, BagTestWorld.FLIGHT, bare))
+	_world.step()
+	for bag in bags:
+		assert_int(bag.state).is_equal(Bag.State.AT_DESK)
+	assert_int(_views.active_count()).is_equal(BaggageViews.MAX_DESK_STACK)
+	for i in BaggageViews.MAX_DESK_STACK:
+		var expected: Transform3D = BaggageViews.desk_transform(_world.grid, bare, i)
+		assert_object(_views.node_for(bags[i].id)).is_not_null()
+		assert_vector(_origin(bags[i].id)).is_equal_approx(expected.origin, Vector3.ONE * 0.0001)
+	assert_float(_origin(bags[1].id).y).is_greater(_origin(bags[0].id).y + 0.15)
+	assert_object(_views.node_for(bags[BaggageViews.MAX_DESK_STACK].id)).is_null()
+
+
+func test_parked_cart_hides_while_shuttle_is_active_and_restores_on_return_and_snap() -> void:
+	var cart_id := PassengerTestWorld.place(_world.grid, &"baggage_cart", Vector2i(11, 7), 0)
+	var mode: BuildMode = auto_free(BuildMode.new())
+	mode.starter_shell = false
+	add_child(mode)
+	mode.set_process(false)
+	var build_view := mode.get_node("BuildView") as BuildView
+	build_view.refresh(_world.grid)
+	_world.sim.build_mode = mode
+	var parked := build_view.object_node(cart_id)
+	assert_object(parked).is_not_null()
+	var parked_bags := parked.find_child(BaggageViews.CART_BAGS_NODE, true, false) as Node3D
+	assert_object(parked_bags).is_not_null()
+	_views.draw()
+	assert_bool(parked.visible).is_true()
+	assert_bool(parked_bags.visible).is_false()
+	var bag := _world.sim.check_in(1, BagTestWorld.FLIGHT, _desk)
+	_world.run_to(bag.cutoff_tick)
+	assert_int(_world.sim.shuttles().size()).is_equal(1)
+	_views.draw()
+	assert_bool(parked.visible).is_false()
+	var shuttle := _world.sim.shuttles()[0]
+	var saved: Dictionary = JSON.parse_string(JSON.stringify(_world.sim.to_snapshot()))
+	assert_bool(_world.sim.from_snapshot(saved)).is_true()
+	_views.snap()
+	assert_bool(parked.visible).is_false()
+	assert_int(_views.active_shuttle_count()).is_equal(1)
+	_world.run_to(shuttle.return_tick)
+	_views.draw()
+	assert_bool(parked.visible).is_true()
+	assert_bool(parked_bags.visible).is_false()

@@ -35,7 +35,7 @@ func after_test() -> void:
 func _make(traits: Dictionary) -> void:
 	var grid := BuildGrid.new()
 	ReferenceTerminal.build(grid)
-	BagRoomKit.add(grid)
+	BagRoomKit.connect_reference_desk2(grid)
 	_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(100000))
 	_world.flights.open_airport()
 	_bags = auto_free(BaggageSim.new())
