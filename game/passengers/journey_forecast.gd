@@ -89,6 +89,8 @@ static func own_times(
 			"trail": p.apron_mm,
 		}
 	if p.stage == Passenger.Stage.TO_EXIT and p.exit_object != 0:
+		if not PassengerGates.gate_open(sim, p):
+			return {}
 		var apron := sim.files.apron_of(sim, p.exit_object, p)
 		return _times(
 			p.exit_object,

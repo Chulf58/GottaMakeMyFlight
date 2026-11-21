@@ -41,4 +41,5 @@ class Words:
 			tr("The gate is full", "speech bubble"),
 			tr("Check-in is closed", "speech bubble"),
 			tr("Security is closed", "speech bubble"),
+			tr("Gate is closed", "speech bubble"),
 		]

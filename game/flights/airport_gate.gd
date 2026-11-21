@@ -37,13 +37,14 @@ signal changed
 signal opened(tick: int)
 
 ## What keeps the airport closed, checked in the order NO_GATE, NO_PATH,
-## STAFF_SPOT, NO_CHECKIN, NO_SECURITY. NO_GATE: FlightSim has no gate, so no
-## flight could be given one (gates come from the placed gate desks, decision
-## gates-are-placed-gate-desks-each-desk-links-automatically-to).
+## STAFF_SPOT, NO_CHECKIN, NO_SECURITY, NO_GATE_AGENT. NO_GATE: FlightSim has no
+## gate, so no flight could be given one (gates come from the placed gate desks,
+## decision gates-are-placed-gate-desks-each-desk-links-automatically-to).
 ## CHECKIN_CLOSED and SECURITY_CLOSED take the place of NO_CHECKIN and
 ## NO_SECURITY when no desk (or no scanner or lane) is open because the player
 ## closed every one passengers could use (StationClosures), so the hint asks to
-## open one again instead of to hire.
+## open one again instead of to hire. NO_GATE_AGENT: a gate desk stands but has
+## no Gate Agent on duty.
 enum Blocker {
 	NONE,
 	NO_PATH,
@@ -53,6 +54,7 @@ enum Blocker {
 	NO_GATE,
 	CHECKIN_CLOSED,
 	SECURITY_CLOSED,
+	NO_GATE_AGENT,
 }
 
 ## In a scene the wired nodes; tests call bind(). Place this node after the
@@ -125,6 +127,13 @@ func unmet() -> Array[Blocker]:
 	var scanners := staff.sim.layout.scanners
 	if not _any_open(scanners):
 		out.append(Blocker.SECURITY_CLOSED if _player_closed(scanners) else Blocker.NO_SECURITY)
+	var gate_desks := _linked_gate_desks()
+	if not gate_desks.is_empty() and not _any_open(gate_desks):
+		if _all_spots_unworkable(gate_desks):
+			if not out.has(Blocker.STAFF_SPOT) and not out.has(Blocker.NO_PATH):
+				out.append(Blocker.STAFF_SPOT)
+		else:
+			out.append(Blocker.NO_GATE_AGENT)
 	return out
 
 
@@ -180,6 +189,23 @@ func _any_open(stations: Array[int]) -> bool:
 		if staff.is_open(station):
 			return true
 	return false
+
+
+func _linked_gate_desks() -> Array[int]:
+	var out: Array[int] = []
+	if not staff.sim.layout.by_gate:
+		return out
+	for id in staff.sim.layout.gate_desk_ids.values():
+		out.append(int(id))
+	out.sort()
+	return out
+
+
+func _all_spots_unworkable(stations: Array[int]) -> bool:
+	for station in stations:
+		if not staff.spot_blocked(station) and not staff.spot_unreachable(station):
+			return false
+	return true
 
 
 ## Whether the player closed at least one of `stations` and every other one

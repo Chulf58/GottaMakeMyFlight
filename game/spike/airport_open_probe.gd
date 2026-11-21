@@ -21,6 +21,7 @@ extends SceneTree
 ## thread).
 
 const MAIN := "res://main/main.tscn"
+const IntroClose := preload("res://spike/intro_close.gd")
 const CLOSED_TICKS := 1200
 const TICKS_PER_FRAME := 80
 const OPEN_LIMIT := 4000
@@ -78,6 +79,10 @@ func _process(_delta: float) -> bool:
 
 
 func _closed() -> void:
+	var intro_err := IntroClose.close(_main)
+	if intro_err != "":
+		_fail(intro_err)
+		return
 	(_main.get_node("PassengerHud") as PassengerHud).press_starter_terminal()
 	for i in CLOSED_TICKS:
 		_step()
@@ -99,6 +104,7 @@ func _closed() -> void:
 		return
 	_staff.hire(StaffMember.Role.CHECKIN)
 	_staff.hire(StaffMember.Role.SECURITY)
+	_staff.hire(StaffMember.Role.GATE)
 	_hired_at = _clock.tick
 	_phase = 1
 
@@ -114,17 +120,18 @@ func _opening() -> void:
 		return
 	var checkin := _staff.on_duty_count(StaffMember.Role.CHECKIN)
 	var security := _staff.on_duty_count(StaffMember.Role.SECURITY)
+	var gate := _staff.on_duty_count(StaffMember.Role.GATE)
 	print(
 		(
 			(
 				"PROBE opened hired_at=%d opened_tick=%d checkin_on_duty=%d"
-				+ " security_on_duty=%d contracts=%s"
+				+ " security_on_duty=%d gate_on_duty=%d contracts=%s"
 			)
-			% [_hired_at, _flights.opened_tick, checkin, security, _flights.contract_ids()]
+			% [_hired_at, _flights.opened_tick, checkin, security, gate, _flights.contract_ids()]
 		)
 	)
-	if checkin < 1 or security < 1 or _flights.opened_tick <= _hired_at:
-		_fail("the airport opened without an agent and an officer on duty")
+	if checkin < 1 or security < 1 or gate < 1 or _flights.opened_tick <= _hired_at:
+		_fail("the airport opened without an agent, an officer and a gate agent on duty")
 		return
 	if _flights.contract_ids() != [FlightSim.DEFAULT_ID]:
 		_fail("the opening did not accept the starter contract")

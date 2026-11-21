@@ -97,12 +97,26 @@ static func workable(
 
 
 ## Whether passengers can use `station` as the grid stands: a desk or scanner
-## the layout can use (TerminalLayout.is_usable()), or a counter in a ready
-## room of its type (ShopCounters.usable()).
+## the layout can use (TerminalLayout.is_usable()), a counter in a ready
+## room of its type (ShopCounters.usable()), or an indoor linked gate desk
+## (gate_desk_usable()).
 static func usable(grid: BuildGrid, layout: TerminalLayout, station: int) -> bool:
 	if ShopCounters.is_counter(grid, station):
 		return ShopCounters.usable(grid, station)
+	if GateDesks.is_desk(grid, station):
+		return gate_desk_usable(grid, layout, station)
 	return layout.is_usable(station)
+
+
+## Whether gate desk `station` can be staffed: it stands on enclosed indoor
+## floor and, when gates are bound (layout.by_gate), is linked to a gate.
+static func gate_desk_usable(grid: BuildGrid, layout: TerminalLayout, station: int) -> bool:
+	if not GateDesks.is_desk(grid, station):
+		return false
+	var record := grid.get_object(station)
+	if not grid.is_indoor(record["anchor"]):
+		return false
+	return not layout.by_gate or layout.gate_desk_ids.values().has(station)
 
 
 ## The first tick on which a helper is on duty at `station`, or -1 when none
@@ -240,6 +254,8 @@ static func _after_next_step(staff: StaffSim, station: int) -> int:
 static func in_service(sim: PassengerSim, station: int) -> bool:
 	if ShopCounters.is_counter(sim.grid, station):
 		return ShopCounters.in_service(sim, station)
+	if GateDesks.is_desk(sim.grid, station):
+		return false
 	for id in sim.passenger_ids():
 		var p := sim.get_passenger(id)
 		if p.station != station:

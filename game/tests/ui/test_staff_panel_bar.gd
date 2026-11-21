@@ -74,10 +74,37 @@ func test_the_staff_button_opens_the_card_above_the_bar_in_the_trays_place() -> 
 
 func test_the_card_is_no_longer_at_the_left_edge() -> void:
 	_menu.staff_button.pressed.emit()
+	await await_idle_frame()
 	var card := _panel.card()
 	assert_float(card.anchor_left).is_equal(0.5)
 	assert_float(card.anchor_top).is_equal(1.0)
-	assert_float(card.get_global_rect().position.x).is_greater(200.0)
+	var rect := card.get_global_rect()
+	var bar := _menu.bar().get_global_rect()
+	# Five role columns centred at 1280 px sit well clear of the 16 px left edge.
+	assert_float(rect.position.x).is_greater(144.0)
+	assert_float(rect.end.x).is_less_equal(1280.0)
+	assert_float(rect.end.y).is_less_equal(bar.position.y)
+	var cols := (card.get_child(0) as Control).get_children()
+	assert_int(cols.size()).is_equal(StaffPanel.ROLES.size())
+	var col_rects: Array[Rect2] = []
+	var btn_rects: Array[Rect2] = []
+	for i in cols.size():
+		var col_rect := (cols[i] as Control).get_global_rect()
+		assert_bool(col_rect.has_area()).is_true()
+		assert_bool(rect.encloses(col_rect)).is_true()
+		for prev in col_rects:
+			assert_bool(prev.intersects(col_rect)).is_false()
+		col_rects.append(col_rect)
+	for role in StaffPanel.ROLES:
+		var hire_rect := _panel.hire_button(role).get_global_rect()
+		var fire_rect := _panel.fire_button(role).get_global_rect()
+		assert_bool(hire_rect.has_area() and fire_rect.has_area()).is_true()
+		assert_bool(hire_rect.intersects(fire_rect)).is_false()
+		for prev in btn_rects:
+			assert_bool(prev.intersects(hire_rect)).is_false()
+			assert_bool(prev.intersects(fire_rect)).is_false()
+		btn_rects.append(hire_rect)
+		btn_rects.append(fire_rect)
 
 
 func test_the_staff_button_toggles_and_a_category_closes_the_card() -> void:

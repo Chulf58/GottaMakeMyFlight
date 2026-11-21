@@ -51,6 +51,7 @@ func before_test() -> void:
 	_gates.bind(grid, _world.flights)
 	PassengerTestWorld.place(grid, GateDesks.DESK, EXIT_A + Vector2i(-1, 2), 0)
 	PassengerTestWorld.place(grid, GateDesks.DESK, EXIT_B + Vector2i(-1, 2), 0)
+	StaffTestKit.staff_all(_world.staff, [StaffMember.Role.GATE])
 	_apron = auto_free(ApronStand.new()) as ApronStand
 	_apron.passengers = _world.sim
 	_apron.bind(grid, SITE, _world.flights, _gates)

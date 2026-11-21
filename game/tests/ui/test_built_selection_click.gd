@@ -398,7 +398,7 @@ func test_the_card_works_the_grid_half_once_and_the_sim_half_once_per_tick() -> 
 	_mode.grid.apply(BuildEdit.remove_object(placed.object_id))
 
 
-func test_a_gate_desk_shows_its_link_and_no_staff_or_queue() -> void:
+func test_a_gate_desk_shows_its_link_and_staff_status_with_no_queue() -> void:
 	var desks := GateDesks.desk_ids(_mode.grid)
 	assert_bool(desks.is_empty()).is_false()
 	_select_object(desks[0])
@@ -416,8 +416,17 @@ func test_a_gate_desk_shows_its_link_and_no_staff_or_queue() -> void:
 	)
 	assert_str(card.name_text()).is_equal("Gate desk")
 	assert_str(card.field_text("status")).starts_with("Status: Linked to Gate ")
-	assert_str(card.field_text("staff")).is_empty()
+	assert_str(card.field_text("staff")).is_equal("Staff: 1 on duty · Open")
 	assert_str(card.field_text("queue")).is_empty()
+	while _sim.staff.is_staffed(desks[0]):
+		assert_bool(_sim.staff.fire(StaffMember.Role.GATE)).is_true()
+	card.invalidate()
+	_hud.refresh()
+	assert_str(card.field_text("staff")).is_equal("Staff: none · Closed, no staff on duty")
+	StaffTestKit.staff_all(_sim.staff, [StaffMember.Role.GATE])
+	card.invalidate()
+	_hud.refresh()
+	assert_str(card.field_text("staff")).is_equal("Staff: 1 on duty · Open")
 
 
 func test_an_incomplete_security_arch_says_what_the_lane_lacks() -> void:

@@ -41,6 +41,7 @@ func before() -> void:
 	_closed["held"] = clock.calendar_held
 	_closed["epoch_is_tick"] = clock.epoch == clock.tick
 	staff.hire(StaffMember.Role.SECURITY)
+	staff.hire(StaffMember.Role.GATE)
 	var flights: FlightSim = _main.get_node("FlightSim")
 	var limit := clock.tick + OPEN_LIMIT
 	while flights.opened_tick < 0 and clock.tick < limit:

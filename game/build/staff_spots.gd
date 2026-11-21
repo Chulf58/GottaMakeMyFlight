@@ -28,6 +28,7 @@ extends RefCounted
 const LAYOUT := {
 	&"checkin_desk": {"spot": Vector2i(0, -1), "beside": Vector2i(0, 0)},
 	&"security_scanner": {"spot": Vector2i(1, 1), "beside": Vector2i(0, 1)},
+	&"gate_desk": {"spot": Vector2i(0, -1), "beside": Vector2i(0, 0)},
 }
 const ENTRANCE := &"entrance_door"
 const NEIGHBOURS: Array[Vector2i] = [

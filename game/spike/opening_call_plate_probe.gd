@@ -51,6 +51,7 @@ func _run() -> void:
 	var staff := main.get_node("Staff") as StaffSim
 	staff.hire(StaffMember.Role.CHECKIN)
 	staff.hire(StaffMember.Role.SECURITY)
+	staff.hire(StaffMember.Role.GATE)
 	var flights := main.get_node("FlightSim") as FlightSim
 	var guide := hud.unlock_guide()
 	clock.set_speed(3)

@@ -50,6 +50,7 @@ func _run() -> void:
 	staff.hire(StaffMember.Role.CHECKIN)
 	staff.hire(StaffMember.Role.SECURITY)
 	staff.hire(StaffMember.Role.SECURITY)
+	staff.hire(StaffMember.Role.GATE)
 	var flights := main.get_node("FlightSim") as FlightSim
 	clock.set_speed(3)
 	clock.set_paused(false)

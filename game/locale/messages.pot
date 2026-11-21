@@ -1297,6 +1297,14 @@ msgstr ""
 msgid "Staff: {parts}"
 msgstr ""
 
+#: ui/built_item_card.gd
+msgid "{staff} · Open"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "{staff} · Closed, {reason}"
+msgstr ""
+
 #: ui/built_item_actions.gd
 msgid "Pick it up and set it down elsewhere"
 msgstr ""
@@ -2568,6 +2576,10 @@ msgid "Hire a security officer"
 msgstr ""
 
 #: ui/staff_panel.gd
+msgid "Hire a gate agent"
+msgstr ""
+
+#: ui/staff_panel.gd
 msgid "Hire shop staff"
 msgstr ""
 
@@ -2577,6 +2589,10 @@ msgstr ""
 
 #: ui/staff_panel.gd
 msgid "Security officers"
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "Gate agents"
 msgstr ""
 
 #: ui/staff_panel.gd
@@ -2703,6 +2719,14 @@ msgstr ""
 
 #: ui/checklist.gd
 msgid "Security scanner and an officer"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Gate desk and an agent: hire a gate agent on Staff"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Gate desk and an agent: the gate agent is on the way"
 msgstr ""
 
 #: ui/checklist.gd
@@ -4457,6 +4481,11 @@ msgstr ""
 #: passengers/bubble_words.gd
 msgctxt "speech bubble"
 msgid "Security is closed"
+msgstr ""
+
+#: passengers/bubble_words.gd
+msgctxt "speech bubble"
+msgid "Gate is closed"
 msgstr ""
 
 #: passengers/miss_markers.gd

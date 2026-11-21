@@ -93,6 +93,8 @@ var _helpers: Dictionary = {}
 ## out again after an edit when _counters_dirty is set.
 var _counters: Array[int] = []
 var _counters_dirty := true
+var _gate_desks: Array[int] = []
+var _gate_desks_dirty := true
 
 
 func _init() -> void:
@@ -107,6 +109,7 @@ func bind(with_sim: PassengerSim) -> void:
 	sim.grid.edit_applied.connect(_on_edit_applied)
 	sim.messes.claim_dropped.connect(_on_claim_dropped)
 	_counters_dirty = true
+	_gate_desks_dirty = true
 	_reconcile()
 
 
@@ -289,6 +292,7 @@ func from_snapshot(data: Dictionary) -> bool:
 	closures.assign(loaded["closed"])
 	faults.assign(loaded["faults"])
 	_counters_dirty = true
+	_gate_desks_dirty = true
 	rederive()
 	staff_changed.emit()
 	return true
@@ -305,14 +309,16 @@ func rederive() -> void:
 			_claims_of(m)[m.station] = m.id
 
 
-## The desks, the scanners or the usable counters, by role. A cleaner has no
-## station: none.
+## The desks, the scanners, the usable counters or the gate desks, by role. A
+## cleaner has no station: none.
 func stations_of(role: StaffMember.Role) -> Array[int]:
 	match role:
 		StaffMember.Role.CHECKIN:
 			return sim.layout.desks
 		StaffMember.Role.SHOP:
 			return _shop_counters()
+		StaffMember.Role.GATE:
+			return _gate_desk_ids()
 		StaffMember.Role.CLEANER:
 			var none: Array[int] = []
 			return none
@@ -327,11 +333,21 @@ func _shop_counters() -> Array[int]:
 	return _counters
 
 
+## The gate desks on the grid, worked out again only after an edit.
+func _gate_desk_ids() -> Array[int]:
+	if _gate_desks_dirty:
+		_gate_desks = GateDesks.desk_ids(sim.grid)
+		_gate_desks_dirty = false
+	return _gate_desks
+
+
 ## Whether passengers can use `station`: a desk or scanner the layout can use,
-## or one of the usable counters.
+## one of the usable counters, or an indoor linked gate desk.
 func _usable(station: int) -> bool:
 	if ShopCounters.is_counter(sim.grid, station):
 		return _shop_counters().has(station)
+	if GateDesks.is_desk(sim.grid, station):
+		return StaffPosts.gate_desk_usable(sim.grid, sim.layout, station)
 	return sim.layout.is_usable(station)
 
 
@@ -683,6 +699,7 @@ func _set_state(m: StaffMember, state: StaffMember.State) -> void:
 ## Stations that went are let go at once, so a save never names one.
 func _on_graph_changed(cells: Array[Vector2i]) -> void:
 	_counters_dirty = true
+	_gate_desks_dirty = true
 	var touched := {}
 	for cell in cells:
 		touched[cell] = true
@@ -709,5 +726,6 @@ func _on_claim_dropped(id: int, cleaner: int) -> void:
 ## graph, so graph_changed never follows it: posts are reconciled here then.
 func _on_edit_applied(_edit: BuildEdit, result: BuildResult) -> void:
 	_counters_dirty = true
+	_gate_desks_dirty = true
 	if result.dirty_cells.is_empty():
 		_reconcile()

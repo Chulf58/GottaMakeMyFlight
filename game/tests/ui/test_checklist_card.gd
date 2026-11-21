@@ -139,6 +139,16 @@ func test_the_reference_card_ticks_what_stands_and_hides_once_open_with_nothing_
 	assert_bool(_panel.hint_card().visible).is_false()
 
 
+func test_gate_agent_line_shows_hire_then_walking_when_gate_desk_needs_staff() -> void:
+	var unmet := [BLOCKER.NO_GATE_AGENT]
+	var hire := _texts(Checklist.opening_lines(unmet, _counts(1, 1, 1, 1, 1)), false)
+	var counts_walking := _counts(1, 1, 1, 1, 1)
+	counts_walking["gate_staying"] = 1
+	var walking := _texts(Checklist.opening_lines(unmet, counts_walking), false)
+	assert_array(hire).contains(["Gate desk and an agent: hire a gate agent on Staff"])
+	assert_array(walking).contains(["Gate desk and an agent: the gate agent is on the way"])
+
+
 func test_an_open_airport_lists_a_toilet_gap() -> void:
 	var world := {
 		"desks": 1,

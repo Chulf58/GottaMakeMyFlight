@@ -268,6 +268,7 @@ func _build_live() -> Dictionary:
 				"status": _gate_status(_static["id"]),
 				"planes": _gate_planes(_static["id"]),
 				"walk": _gate_walk(_static["id"]),
+				"staff": _gate_staff(_static["id"]),
 			}
 		Kind.LANE_PART:
 			var in_lane := sim.layout.security_lanes.lane_of_piece(_static["id"]) != 0
@@ -338,6 +339,21 @@ func _gate_planes(desk: int) -> String:
 				return tr("Biggest plane: none, no room outside the exit")
 			return DisplayWords.biggest_plane(plane_class)
 	return ""
+
+
+## Staff and open/closed state for a gate desk; "" without a StaffSim.
+func _gate_staff(desk: int) -> String:
+	if sim.staff == null:
+		return ""
+	var text := _staff_text([desk])
+	if sim.staff.is_open(desk):
+		return tr("{staff} · Open").format({"staff": text})
+	var reason := MissSignals.closed_reason(sim, desk)
+	if reason == "":
+		return text
+	return tr("{staff} · Closed, {reason}").format(
+		{"staff": text, "reason": DisplayWords.reason(reason)}
+	)
 
 
 ## "Walk from security: 12 min" for a linked desk's gate, "...: no route" when no
