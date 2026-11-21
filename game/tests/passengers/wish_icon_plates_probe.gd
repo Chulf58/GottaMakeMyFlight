@@ -36,7 +36,7 @@ const KINDS: Array[StringName] = [&"kiosk", &"pharmacy", &"duty_free", &"fashion
 const SHOP_TYPES: Array[StringName] = [&"kiosk", &"pharmacy"]
 const CELLS: Array[Vector2i] = [
 	Vector2i(19, 4),
-	Vector2i(19, 5),
+	Vector2i(18, 6),
 	Vector2i(19, 6),
 	Vector2i(19, 7),
 	Vector2i(17, 4),
@@ -77,6 +77,9 @@ func _initialize() -> void:
 
 func _run() -> void:
 	_main = (load("res://main/main.tscn") as PackedScene).instantiate()
+	var mode_init := _main.get_node("BuildMode") as BuildMode
+	mode_init.starter_shell = false
+	mode_init.require_unlocks = false
 	_clock = _main.get_node("SimClock") as SimClock
 	var seed := randi()
 	_clock.seed_rng(seed)
@@ -100,8 +103,6 @@ func _run() -> void:
 	_sim.shops.refresh()
 	var staff := _main.get_node("Staff") as StaffSim
 	var hired := StarterFlight.hire_per_station(_sim, staff)
-	for i in SHOP_TYPES.size():
-		hired += int(staff.hire(StaffMember.Role.SHOP) != 0)
 	var doors := StarterFlight.advance_until_open(
 		_clock, _main.get_node("FlightSim") as FlightSim, staff
 	)
@@ -135,6 +136,10 @@ func _run() -> void:
 	if _failed:
 		quit(1)
 		return
+	var overlay := _main.get_node("MoodOverlay") as MoodOverlay
+	overlay.set_mode(MoodTint.Mode.BOREDOM)
+	overlay.set_shown(true)
+	await _frames(3)
 	await _overview()
 	for state in [WishTable.State.WANTED, WishTable.State.FULFILLED, WishTable.State.SUBSTITUTED]:
 		await _close(states[state][0], STATE_NAMES[state])
@@ -152,19 +157,24 @@ func _build() -> bool:
 	var grid := _mode.grid
 	if not ReferenceTerminal.build(grid):
 		return false
+	if not StarterFlight.add_gate_desk(grid):
+		return false
+	var at := ReferenceTerminal.offset_on(grid)
 	var edits: Array[BuildEdit] = []
-	var floor_rect := ShopTestLayout.FLOOR
+	var floor_rect := Rect2i(ShopTestLayout.FLOOR.position + at, ShopTestLayout.FLOOR.size)
 	for y in range(floor_rect.position.y, floor_rect.end.y):
 		for x in range(floor_rect.position.x, floor_rect.end.x):
 			edits.append(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
 	for x in range(floor_rect.position.x, floor_rect.end.x):
 		edits.append(
-			BuildEdit.place_wall(Vector2i(x, ReferenceTerminal.DIVIDER_Y), BuildGrid.Side.NORTH)
+			BuildEdit.place_wall(
+				Vector2i(x, ReferenceTerminal.DIVIDER_Y + at.y), BuildGrid.Side.NORTH
+			)
 		)
 	for y in [4, 5, 6, 7, 11, 12, 13, 14, 15]:
-		edits.append(BuildEdit.remove_wall(Vector2i(21, y), BuildGrid.Side.EAST))
+		edits.append(BuildEdit.remove_wall(Vector2i(21 + at.x, y + at.y), BuildGrid.Side.EAST))
 	var end_x := floor_rect.position.x + WishTestLayout.BLOCK * SHOP_TYPES.size()
-	var air := ShopTestLayout.AIRSIDE_ROOM
+	var air := Rect2i(ShopTestLayout.AIRSIDE_ROOM.position + at, ShopTestLayout.AIRSIDE_ROOM.size)
 	for y in range(air.position.y, air.end.y):
 		for x in range(floor_rect.end.x, end_x):
 			edits.append(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
@@ -172,6 +182,7 @@ func _build() -> bool:
 		if not result.ok:
 			print("PROBE edit refused: ", result.reason_text())
 			return false
+	EnclosureKit.close_floor(grid)
 	for i in SHOP_TYPES.size():
 		var rect := air
 		rect.position.x += WishTestLayout.BLOCK * i
@@ -203,7 +214,8 @@ func _spawn(i: int) -> int:
 	p.cleared = true
 	p.stage = Passenger.Stage.TO_GATE
 	p.stage_tick = _clock.tick
-	p.at = CELLS[i]
+	var cell := CELLS[i] + ReferenceTerminal.offset_on(_mode.grid)
+	p.at = cell
 	p.clear_path()
 	p.boredom = BoredomSim.MAX
 	p.shop_cooldown = 0 if i < 4 else _clock.tick + 100000
@@ -211,7 +223,7 @@ func _spawn(i: int) -> int:
 	print(
 		(
 			"PROBE wisher id=%d cell=%s walkable=%s wish=%s"
-			% [id, CELLS[i], _mode.grid.is_walkable(CELLS[i]), _wish[id]]
+			% [id, cell, _mode.grid.is_walkable(cell), _wish[id]]
 		)
 	)
 	return id

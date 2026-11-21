@@ -345,3 +345,81 @@ func test_a_car_crossing_the_radius_between_old_scans_scatters() -> void:
 	assert_int(inside).is_greater(0)
 	assert_int(g["target"]).is_not_equal(-1)
 	f.free()
+
+
+## VF7 regression: evaluated skinned crow mesh never dips below -0.0070 m during eat
+## (so BirdFlock.FOOT_LIFT keeps feet >= -0.0005 m at ground contact).
+func test_crow_eat_animation_keeps_feet_on_perch() -> void:
+	var crow: Node3D = auto_free(BirdFlock.CROW.instantiate() as Node3D)
+	add_child(crow)
+	var player := crow.find_child("AnimationPlayer", true, false) as AnimationPlayer
+	var skel := crow.find_child("Skeleton3D", true, false) as Skeleton3D
+	assert_object(player).is_not_null()
+	assert_object(skel).is_not_null()
+	player.callback_mode_process = AnimationPlayer.ANIMATION_CALLBACK_MODE_PROCESS_IDLE
+	player.speed_scale = 0.0
+	var surfaces: Array = []
+	for mi: MeshInstance3D in crow.find_children("*", "MeshInstance3D", true, false):
+		if mi.skin == null or mi.mesh == null or not (mi.name in BirdFlock.VARIANTS):
+			continue
+		var bind_bones := PackedInt32Array()
+		var bind_poses: Array[Transform3D] = []
+		for bind in mi.skin.get_bind_count():
+			var bname := mi.skin.get_bind_name(bind)
+			bind_bones.append(skel.find_bone(bname) if bname != "" else mi.skin.get_bind_bone(bind))
+			bind_poses.append(mi.skin.get_bind_pose(bind))
+		for s in mi.mesh.get_surface_count():
+			var arrays := mi.mesh.surface_get_arrays(s)
+			var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+			var bones: PackedInt32Array = arrays[Mesh.ARRAY_BONES]
+			var weights: PackedFloat32Array = arrays[Mesh.ARRAY_WEIGHTS]
+			var per := bones.size() / verts.size()
+			surfaces.append([bind_bones, bind_poses, verts, bones, weights, per])
+	assert_bool(surfaces.is_empty()).is_false()
+	player.play("idle_01")
+	player.seek(0.0, true)
+	await skel.skeleton_updated
+	var idle_min_y := _crow_skinned_min_y(crow, skel, surfaces)
+	var eat_len := player.get_animation("eat").length
+	var eat_min_y := INF
+	var worst_step := -1
+	player.play("eat")
+	for step in 61:
+		player.seek(eat_len * float(step) / 60.0, true)
+		await skel.skeleton_updated
+		var min_y := _crow_skinned_min_y(crow, skel, surfaces)
+		if min_y < eat_min_y:
+			eat_min_y = min_y
+			worst_step = step
+	var lifted_y := eat_min_y + BirdFlock.FOOT_LIFT
+	print(
+		(
+			"crow eat evaluated mesh: min_y=%.5f lifted_y=%.5f idle_min_y=%.5f (worst_step=%d)"
+			% [eat_min_y, lifted_y, idle_min_y, worst_step]
+		)
+	)
+	assert_float(eat_min_y).is_greater_equal(-0.0070)
+	assert_float(lifted_y).is_greater_equal(-0.0005)
+
+
+static func _crow_skinned_min_y(crow: Node3D, skel: Skeleton3D, surfaces: Array) -> float:
+	var to_crow := crow.global_transform.affine_inverse() * skel.global_transform
+	var min_y := INF
+	for surf: Array in surfaces:
+		var bind_bones: PackedInt32Array = surf[0]
+		var bind_poses: Array[Transform3D] = surf[1]
+		var verts: PackedVector3Array = surf[2]
+		var bones: PackedInt32Array = surf[3]
+		var weights: PackedFloat32Array = surf[4]
+		var per: int = surf[5]
+		var mats: Array[Transform3D] = []
+		for b in bind_bones.size():
+			mats.append(to_crow * skel.get_bone_global_pose(bind_bones[b]) * bind_poses[b])
+		for k in verts.size():
+			var v := Vector3.ZERO
+			for j in per:
+				var w := weights[k * per + j]
+				if w > 0.0:
+					v += (mats[bones[k * per + j]] * verts[k]) * w
+			min_y = minf(min_y, v.y)
+	return min_y

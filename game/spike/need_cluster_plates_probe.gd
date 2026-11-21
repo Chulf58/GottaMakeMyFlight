@@ -82,7 +82,9 @@ func _boot() -> bool:
 	print("PROBE sim_seed=", seed)
 	# The probe builds its own furnished terminal: the starter shell would
 	# refuse the reference terminal's first wall.
-	(_main.get_node("BuildMode") as BuildMode).starter_shell = false
+	var init_mode := _main.get_node("BuildMode") as BuildMode
+	init_mode.starter_shell = false
+	init_mode.require_unlocks = false
 	root.add_child(_main)
 	_clock.set_process(false)
 	_clock.set_paused(false)
@@ -95,25 +97,31 @@ func _boot() -> bool:
 	_cam = _rig.get_node("Camera3D")
 	_sim = _main.get_node("PassengerSim")
 	_views = _main.get_node("PassengerViews")
-	NeedFacilityKit.build(mode.grid)
-	if not StarterFlight.add_gate_desk(mode.grid):
-		_invalid("the gate desk was refused")
+	if not _build_layout(mode):
 		return false
-	(mode.get_node("BuildView") as BuildView).refresh(mode.grid)
 	var staff := _main.get_node("Staff") as StaffSim
 	var hired := StarterFlight.hire_per_station(_sim, staff)
-	var doors := StarterFlight.advance_until_open(_clock, _main.get_node("FlightSim"), staff)
+	var flights := _main.get_node("FlightSim") as FlightSim
+	var doors := StarterFlight.advance_until_open(_clock, flights, staff)
 	var built := NeedIcons.provided(_sim)
 	print("PROBE hired=%d opened tick=%d doors=%d built=%s" % [hired, _clock.tick, doors, built])
 	if hired == 0 or doors < 0 or built.values().has(false):
 		_invalid("no staff, no opening or a need nothing built meets")
 		return false
-	var flight := FlightTimetable.occurrence_id(FlightSim.DEFAULT_ID, 0)
-	for i in CROWD:
-		if i % SPAWN_BATCH == 0:
-			_advance(BATCH_TICKS)
-		_sim.spawn_now(flight)
-	_advance(SPREAD_TICKS)
+	# 300 passengers at 10 per 100 ticks + 300 spread ticks takes ~3600 ticks, past the
+	# starter's doors_close; add a one-off stress flight after the starter departs.
+	var gate: String = flights.gate_ids()[0]
+	var starter_end := flights.state_start(StarterFlight.first_flight(), FlightSim.State.DEPARTED)
+	var flight := "NEED_CROWD"
+	var starts := FlightSim.schedule_starts(starter_end + 200)
+	for s in range(FlightSim.State.DOORS_CLOSED, FlightSim.STATE_COUNT):
+		starts[s] += 12000
+	if not flights.add_flight(flight, starts, gate):
+		_invalid("the stress crowd flight was refused")
+		return false
+	doors = flights.doors_close_tick(flight)
+	if not _spawn_crowd(flight, doors):
+		return false
 	_spread_needs()
 	_advance(1)
 	if _main.get_node("PlaneFleet").has_method("update_views"):
@@ -130,9 +138,94 @@ func _boot() -> bool:
 	return true
 
 
+func _build_layout(mode: BuildMode) -> bool:
+	NeedFacilityKit.build(mode.grid)
+	if not _expand_west_wing(mode.grid):
+		return false
+	if not StarterFlight.add_gate_desk(mode.grid):
+		_invalid("the gate desk was refused")
+		return false
+	(mode.get_node("BuildView") as BuildView).refresh(mode.grid)
+	return true
+
+
+func _expand_west_wing(grid: BuildGrid) -> bool:
+	var at := ReferenceTerminal.offset_on(grid)
+	var shell: Array[BuildEdit] = []
+	for y in range(2, 18):
+		for x in range(0, 10):
+			shell.append(BuildEdit.paint_floor(Vector2i(x, y) + at, BuildGrid.FLOOR_TILE, 1))
+	for y in [4, 5, 6, 7, 11, 12, 13, 14, 15]:
+		shell.append(BuildEdit.remove_wall(Vector2i(10, y) + at, BuildGrid.Side.WEST))
+	for x in range(0, 10):
+		if not [2, 4, 6, 8].has(x):
+			shell.append(BuildEdit.place_wall(Vector2i(x, 9) + at, BuildGrid.Side.NORTH))
+	shell.append(BuildEdit.remove_wall(Vector2i(21, 2) + at, BuildGrid.Side.EAST))
+	for x in range(22, 28):
+		shell.append(BuildEdit.paint_floor(Vector2i(x, 2) + at, BuildGrid.FLOOR_TILE, 1))
+	for y in range(2, 33):
+		for x in range(28, 44):
+			shell.append(BuildEdit.paint_floor(Vector2i(x, y) + at, BuildGrid.FLOOR_TILE, 1))
+	for result in grid.apply_batch(shell):
+		if not result.ok:
+			_invalid("west wing shell edit refused: %s" % result.reason_text())
+			return false
+	EnclosureKit.close_floor(grid)
+	var objects: Array[BuildEdit] = []
+	for x in [2, 4, 6, 8]:
+		objects.append(BuildEdit.place_object(&"security_scanner", Vector2i(x, 8) + at, 0))
+	for cell in [Vector2i(0, 12), Vector2i(3, 12), Vector2i(6, 12), Vector2i(16, 12)]:
+		objects.append(BuildEdit.place_object(&"checkin_desk", cell + at, 0))
+	for cell in [Vector2i(1, 3), Vector2i(5, 3), Vector2i(1, 6), Vector2i(5, 6)]:
+		objects.append(BuildEdit.place_object(&"seat_row", cell + at, 0))
+	for result in grid.apply_batch(objects):
+		if not result.ok:
+			_invalid("west wing object edit refused: %s" % result.reason_text())
+			return false
+	return true
+
+
+func _spawn_crowd(flight: String, doors: int) -> bool:
+	for i in CROWD:
+		if i % SPAWN_BATCH == 0:
+			_advance(BATCH_TICKS)
+		if i % 50 == 0:
+			print(
+				(
+					"PROBE spawn %d/%d tick=%d pax=%d"
+					% [i, CROWD, _clock.tick, _sim.passenger_ids().size()]
+				)
+			)
+		while _sim.entrance.room_for_arrivals(_sim) <= 0 and _clock.tick < doors:
+			var before := _clock.tick
+			_advance(10)
+			if _clock.tick <= before:
+				_invalid("clock stalled at tick=%d holds=%d" % [_clock.tick, _clock.holds.count()])
+				return false
+		if _sim.spawn_now(flight) == 0:
+			_invalid("crowd spawn refused at %d of %d" % [i, CROWD])
+			return false
+	_advance(SPREAD_TICKS)
+	return true
+
+
 func _advance(ticks: int) -> void:
 	for i in ticks:
+		_clear_holds()
 		_clock.advance(SimClock.STEP)
+
+
+func _clear_holds() -> void:
+	var hud := _main.get_node_or_null("Hud") as PassengerHud
+	if hud != null:
+		hud.dismiss_intro()
+		if hud.unlock_guide() != null and hud.unlock_guide().is_open():
+			hud.unlock_guide().dialog().dismiss()
+		if hud.is_result_open():
+			hud.dismiss_result()
+	if _clock.paused:
+		_clock.holds.clear()
+		_clock.set_paused(false)
 
 
 ## Toilet need for every other passenger, hunger for two in five, boredom for
@@ -183,6 +276,7 @@ func _plates() -> void:
 	await _plate("b_mid_zoom_no_clusters", false)
 	_views.cluster_needs = true
 	await _aim(_longest_queue(), mid)
+	_clear_holds()
 	_clock.set_process(true)
 	for k in 3:
 		await _plate("c_moving_queue_%d" % k, true)

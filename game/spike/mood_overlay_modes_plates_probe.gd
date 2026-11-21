@@ -24,7 +24,7 @@ const MAIN_SCENE := "res://main/main.tscn"
 const OUT_REL := "res://../tools/blender/out/overlay-modes"
 const CROWD := 14
 const CROWD_LEAD_TICKS := 600
-const DISTANCE := 14.0
+const DISTANCE := 21.0
 ## Cells at or past 0.9 badness the paused queue must show, beside a green one.
 const RED_CELLS := 1
 const MARGIN_PX := 24.0

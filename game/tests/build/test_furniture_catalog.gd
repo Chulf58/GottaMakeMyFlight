@@ -47,8 +47,8 @@ const USE_MOUNTS: Array[String] = ["Mount_Order", "Mount_Use", "Mount_Browse"]
 ## this much.
 const DECOR_OVERHANG := 0.05
 const KIT_OVERHANG := 0.01
-## Decor drawn below the floor: the bush's root ball (tc_bush_1a, as built).
-const BELOW_FLOOR := {&"bush": 0.3}
+## Decor drawn below the floor (none: tc_bush_1a origin raised +0.30 m to floor).
+const BELOW_FLOOR := {}
 ## Height of the prize car on its podium (the car is drawn with the podium).
 const PRIZE_CAR_ID := &"prize_podium"
 ## A def height is the model's top rounded up to a centimetre.
@@ -142,6 +142,26 @@ func test_each_model_stays_inside_its_footprint_and_def_height_is_its_top() -> v
 		assert_float(def.height).override_failure_message(str(id)).is_between(
 			top - 0.001, top + HEIGHT_SLACK
 		)
+
+
+func test_decor_human_grid_scale_and_bush_grounding() -> void:
+	# VF7 regression: tc_bush_1a sits flush at y=0 (no sunken root ball), and the oversized
+	# Toon City street props match human and grid proportions.
+	var bush := _bounds(&"bush")
+	assert_float(bush.position.y).is_greater_equal(-0.005)
+	var trash := _bounds(&"trash_can")
+	assert_float(trash.size.x).is_less_equal(0.75)
+	assert_float(trash.size.z).is_less_equal(0.75)
+	assert_float(trash.end.y).is_less_equal(0.95)
+	var pot2 := _bounds(&"plant_pot_2a")
+	assert_float(pot2.size.x).is_less_equal(1.40)
+	assert_float(pot2.size.z).is_less_equal(1.40)
+	assert_float(pot2.end.y).is_less_equal(0.75)
+	var bench := _bounds(&"bench_1a")
+	assert_float(bench.end.y).is_less_equal(1.00)
+	assert_float(maxf(bench.size.x, bench.size.z)).is_less_equal(2.00)
+	var pole := _bounds(&"metal_pole")
+	assert_float(pole.end.y).is_less_equal(1.05)
 
 
 func test_the_chain_is_three_cells_with_a_post_in_each_outer_cell() -> void:

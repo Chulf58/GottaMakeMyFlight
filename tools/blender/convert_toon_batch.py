@@ -322,6 +322,20 @@ INDOOR = {
     # Round tree bench: the seat ledge (vendor 0.70 m) lands on the 0.53 m seat height of
     # the sit clips, so people can sit on it; the tree alone shrinks to fit under 2.5 m.
     "tc_bench_2a_indoor": {"seat": ("Bench_2A", 0.65, 0.75, 0.53), "parts": {"Bench_2A_Tree": {"top": 2.4}}},
+    # Outdoor/general Toon City decor props normalized to character/grid human scale
+    # (VF7): vendor Bench_1A seat is 0.75 m -> 0.53 m sit contract (0.7067x -> 1.95 m long);
+    # Trash_Can_1A and Plant_Pot_2A scale 0.65x (0.90 m bin, 1.31 m planter);
+    # Metal_Pole_1A scales 0.62x (1.00 m stanchion) and Metal_Pole_Chain_1A scales X/Z 0.62x
+    # while keeping its Y span (-1.875..-0.118) so ends connect to posts 2.0 m apart.
+    "tc_bench_1a": {"seat": ("Bench_1A", 0.65, 0.78, 0.53)},
+    "tc_trash_can_1a": {"scale": 0.65},
+    "tc_plant_pot_2a": {"scale": 0.65},
+    "tc_metal_pole_1a": {"scale": 0.62},
+    "tc_metal_pole_chain_1a": {"axis_scale": (0.62, 1.0, 0.62)},
+}
+# World Z lift in metres applied before scaling/baking so sunken vendor roots sit at y=0.
+GROUND_LIFT = {
+    "tc_bush_1a": 0.30,
 }
 INDOOR_CEILING = 2.5
 # Reshape before the indoor factor, in vendor metres (user ruling 2026-10-29 through the
@@ -347,10 +361,10 @@ RESHAPE = {
     },
 }
 # Lowest point of each decor prop, in metres above its origin. Everything else stands on
-# 0; Bush_1A's root ball is buried 0.30 m (vendor), the chain hangs between posts.
+# 0 (tc_bush_1a lifted +0.30 m via GROUND_LIFT); the chain hangs between scaled posts.
 GROUND = {
-    "tc_bush_1a": -0.30,
-    "tc_metal_pole_chain_1a": 0.74,
+    "tc_bush_1a": 0.0,
+    "tc_metal_pole_chain_1a": 0.46,
     # Road paint lifted off the road it lies on (curb_bay.LIFT), so it never z-fights.
     "tp_curb_bay_01a": 0.02,
     # The apron in front of the entrance goes down to the lawn (the main scene's ground
@@ -945,15 +959,50 @@ def report_tree_bench(stem, objs):
     )
 
 
+def apply_ground_lift(stem, objs):
+    """Translate mesh vertices along world +Z so sunken vendor roots rest cleanly on z=0."""
+    dz = GROUND_LIFT.get(stem, 0.0)
+    if dz == 0.0:
+        return
+    offset = Vector((0.0, 0.0, dz))
+    for o in objs:
+        if o.type != "MESH":
+            continue
+        local_off = o.matrix_world.inverted().to_3x3() @ offset
+        for v in o.data.vertices:
+            v.co += local_off
+        o.data.update()
+    bpy.context.view_layer.update()
+    log("GROUND_LIFT %s dz=%.3f" % (stem, dz))
+
+
 def make_indoor(stem, objs):
-    """Scale an INDOOR stem to its indoor size. Returns the seat check (object name, face
-    indices, target height) or None."""
+    """Scale an INDOOR/decor stem to its target size. Returns the seat check (object
+    name, face indices, target height) or None."""
     spec = INDOOR.get(stem)
     if spec is None:
         return None
     meshes = {o.name: o for o in objs if o.type == "MESH"}
     seat = None
-    if "top" in spec:
+    if "axis_scale" in spec:
+        sx, sy, sz = spec["axis_scale"]
+        diag = Matrix.Diagonal((sx, sy, sz, 1.0))
+        for o in objs:
+            if o.type != "MESH":
+                continue
+            mw = o.matrix_world
+            mw_inv = mw.inverted()
+            for v in o.data.vertices:
+                w = diag @ (mw @ v.co)
+                v.co = mw_inv @ w
+            o.data.update()
+        bpy.context.view_layer.update()
+        log("INDOOR %s axis_scale=(%.4f, %.4f, %.4f)" % (stem, sx, sy, sz))
+        return None
+    if "scale" in spec:
+        k = spec["scale"]
+        log("INDOOR %s fixed_scale=%.4f" % (stem, k))
+    elif "top" in spec:
         top = max(w.z for o in meshes.values() for w in world_verts(o))
         k = spec["top"] / top
         log("INDOOR %s vendor_top=%.3f target_top=%.3f factor=%.4f" % (stem, top, spec["top"], k))
@@ -1473,8 +1522,9 @@ def convert(stem, spec, out_root=None):  # out_root None: write into game/assets
         objs, durations, looks = build_character(stem, idle_fbx, prefab)
         objs = list(bpy.context.scene.objects)
     else:
-        # Static props: resize an indoor variant, record the intended parts, bake every
-        # non-unit scale into the meshes and check that no part moved.
+        # Static props: lift sunken roots, resize an indoor/decor variant, record the
+        # intended parts, bake every non-unit scale into the meshes and check nothing moved.
+        apply_ground_lift(stem, objs)
         reshape_tree_bench(stem, objs)
         seat = make_indoor(stem, objs)
         report_tree_bench(stem, objs)

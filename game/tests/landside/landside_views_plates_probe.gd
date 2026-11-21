@@ -288,13 +288,19 @@ func _aabb_of(node: Node) -> AABB:
 
 func _opaque_faces(mi: MeshInstance3D) -> PackedVector3Array:
 	var faces := PackedVector3Array()
+	if mi.mesh == null:
+		return faces
 	for i in mi.mesh.get_surface_count():
 		var mat := mi.get_active_material(i)
 		if mat != null and mat.resource_path == GLASS:
 			continue
 		var arrays := mi.mesh.surface_get_arrays(i)
-		var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
-		var index: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+		var verts_any: Variant = arrays[Mesh.ARRAY_VERTEX]
+		if verts_any == null:
+			continue
+		var verts: PackedVector3Array = verts_any
+		var index_any: Variant = arrays[Mesh.ARRAY_INDEX]
+		var index: PackedInt32Array = PackedInt32Array() if index_any == null else index_any
 		if index.is_empty():
 			faces.append_array(verts)
 		else:
@@ -418,7 +424,7 @@ func _check_noses(label: String) -> void:
 		# in the berth or the stall, by the way it faces there.
 		match v.lane:
 			LandsideVehicle.Lane.ROAD_IN, LandsideVehicle.Lane.ROAD_OUT:
-				want = Vector3(-1, 0, 0)
+				want = _landside.paths.facing(v.lane, v.lot, v.stop, v.pos_mm)
 			LandsideVehicle.Lane.BERTH:
 				want = Vector3(-1, 0, 0) if v.stage == LandsideVehicle.Stage.DWELL else want
 			LandsideVehicle.Lane.ACCESS:
@@ -537,9 +543,16 @@ func _remove_entrance() -> bool:
 
 
 ## Moves the camera, waits for the roof cutaway, and rebuilds colliders for it.
-func _aim(label: String, focus: Vector3, distance: float, yaw: float) -> void:
+func _aim(
+	label: String,
+	focus: Vector3,
+	distance: float,
+	yaw: float,
+	angle_step := TycoonCamera.AngleStep.TOP_DOWN,
+) -> void:
 	_beat(label)
 	_rig.stop_follow()
+	_rig.set_angle_step(angle_step)
 	_rig.position = focus
 	_rig.yaw = yaw
 	_rig.distance = distance
@@ -657,32 +670,33 @@ func _plate_distance() -> void:
 ## a deck (a ray down from inside the car hits the building within 5 cm of the car's
 ## wheels), and at least one seen through the open side.
 func _plate_multi() -> void:
-	# Low from the west, through the open side under the first deck: the ground-floor
-	# slots are 5.4 m in from the west wall. The distance plate frames the whole building.
-	await _plate_parked("multi", Vector3(-6.6, 1.0, -27.8))
+	# Low tycoon angle (38 deg) from the west looks under the first deck directly onto the
+	# ground-floor stalls at z=-20..-16 (focus shifted east by +1.0 / tan(38 deg) for height).
+	await _plate_parked("multi", Vector3(-5.32, 0.0, -18.0), 22.0)
 
 
 ## The upper decks: a forced fixture after every other plate. The two parked cars'
 ## records are moved to a slot on the second and third level (the sim reserved the
-## ground floor's lowest slots), the views snap, and the same checks run from the west
-## at those decks' height.
+## ground floor's lowest slots), their path positions snapped to those stalls, and the
+## same low-angle west view frames both decks.
 func _plate_decks() -> void:
 	var moved := []
-	var upper := [12, 25]
+	var upper := [12, 23]
 	for id in _landside.vehicle_ids():
 		var v := _landside.get_vehicle(id)
 		if v.lane == LandsideVehicle.Lane.SLOT and v.lot == 1 and moved.size() < upper.size():
 			v.stop = upper[moved.size()]
+			v.pos_mm = _landside.paths.stand_of(LandsideVehicle.Lane.SLOT, 1, v.stop)
 			moved.append([id, _landside.definition.lots[1].slots[v.stop]])
 	print("DECKS moved %s" % [moved])
 	_views.snap()
-	await _plate_parked("decks", Vector3(-6.6, 8.0, -27.8))
+	await _plate_parked("decks", Vector3(3.38, 0.0, -16.0), 28.0)
 
 
 ## The parked cars in the multi-storey seen from the west at `focus`: each in frame, on
 ## a deck, and at least one seen.
-func _plate_parked(label: String, focus: Vector3) -> void:
-	await _aim(label, focus, 20.0, -PI / 2.0)
+func _plate_parked(label: String, focus: Vector3, distance: float) -> void:
+	await _aim(label, focus, distance, -PI / 2.0, TycoonCamera.AngleStep.LOW)
 	var lot := _views.places().lot_node(1)
 	var ok := _prove_visible("%s/building" % label, lot)
 	var cars: Array[int] = []

@@ -83,28 +83,47 @@ func _run() -> void:
 	seed(world_seed)
 	print("PROBE seed=%d" % world_seed)
 	var main: Node3D = (load("res://main/main.tscn") as PackedScene).instantiate()
+	var mode := main.get_node("BuildMode") as BuildMode
+	mode.starter_shell = false
+	mode.require_unlocks = false
 	root.add_child(main)
 	(main.get_node("SimClock") as SimClock).set_paused(true)
 	(main.get_node("PassengerHud") as CanvasLayer).visible = false
 	_sun = main.get_node("Sun") as DirectionalLight3D
-	var terminal := main.get_node("Airside/Terminal") as Node3D
 	var rig := main.get_node("TycoonCamera") as TycoonCamera
 	_cam = rig.get_node("Camera3D") as Camera3D
 	_cam.make_current()
 	await _frames(3)
+	mode.set_process(false)
+	mode.set_tool(BuildMode.Tool.NONE)
+	(mode.get_node("Ghost") as Node3D).visible = false
+	var offset := ReferenceTerminal.offset_on(mode.grid)
+	var builder := HandBuiltTerminal.new(mode, offset)
+	builder.on_edit = func() -> void: _beat("roof_build")
+	builder.build()
+	print("PROBE built applied=%d refused=%d" % [builder.applied, builder.refused.size()])
+	var roof := main.get_node("RoofView") as RoofView
+	roof.set_process(false)
+	roof.draw_level(0.0)
+	await _frames(2)
+	var terminal := roof as Node3D
 	_record_defaults()
 	_collect_outlines(terminal, "terminal")
 	_beat("colliders")
 	for mi in terminal.find_children("*", "MeshInstance3D", true, false):
-		(mi as MeshInstance3D).create_trimesh_collision()
+		if (
+			(mi as MeshInstance3D).mesh != null
+			and (mi as MeshInstance3D).mesh.get_faces().size() >= 3
+		):
+			(mi as MeshInstance3D).create_trimesh_collision()
 	await physics_frame
 	await physics_frame
 	var box := _aabb_of(terminal)
 	print("PROBE terminal_aabb pos=%s size=%s" % [box.position, box.size])
-	var roof := _roof_points(terminal, box)
-	print("PROBE roof_points=%d" % roof.size())
-	if roof.size() < 4:
-		_invalid("too few roof points (%d)" % roof.size())
+	var roof_pts := _roof_points(terminal, box)
+	print("PROBE roof_points=%d" % roof_pts.size())
+	if roof_pts.size() < 4:
+		_invalid("too few roof points (%d)" % roof_pts.size())
 	print("PROBE viewport=%s" % root.get_visible_rect().size)
 	var crops := {}
 	for pose in ["close", "near", "mid", "far"]:
@@ -117,16 +136,16 @@ func _run() -> void:
 		elif pose == "close":
 			dists = [CLOSE_DISTANCE]
 		var framed := false
-		var points := roof
+		var points := roof_pts
 		for d in dists:
 			_place(rig, box, d)
 			await _frames(6)
 			if pose == "close":
-				points = _framed_subset(roof)
+				points = _framed_subset(roof_pts)
 				framed = points.size() >= CLOSE_MIN_POINTS
-				print("PROBE close framed_points=%d of %d" % [points.size(), roof.size()])
+				print("PROBE close framed_points=%d of %d" % [points.size(), roof_pts.size()])
 				break
-			if _in_frame(pose, roof, false):
+			if _in_frame(pose, roof_pts, false):
 				framed = true
 				break
 		print(
@@ -162,7 +181,11 @@ func _run() -> void:
 			_apply("reset")
 		crops[pose] = row
 	_contact_sheet(crops)
-	await _people_plates(main, rig)
+	roof.draw_level(1.0)
+	for body in terminal.find_children("*", "StaticBody3D", true, false):
+		body.free()
+	await physics_frame
+	await _people_plates(main, rig, offset)
 	print("PROBE done failed=%s" % _failed)
 	_finish()
 	quit(1 if _failed else 0)
@@ -171,16 +194,12 @@ func _run() -> void:
 ## A check-in desk and a passenger in the hand-built terminal, shot with the
 ## old (A) and the shipped (N) outline at the close and near distances, to
 ## show their silhouettes keep the outline.
-func _people_plates(main: Node3D, rig: TycoonCamera) -> void:
+func _people_plates(main: Node3D, rig: TycoonCamera, offset: Vector2i) -> void:
 	_beat("people_build")
 	var mode := main.get_node("BuildMode") as BuildMode
 	var view := mode.get_node("BuildView") as BuildView
-	var builder := HandBuiltTerminal.new(mode)
-	builder.on_edit = func() -> void: _beat("people_build")
-	builder.build()
-	print("PROBE built applied=%d refused=%d" % [builder.applied, builder.refused.size()])
 	await _frames(3)
-	var at := mode.grid.cell_to_world(DESK_CELL)
+	var at := mode.grid.cell_to_world(DESK_CELL + offset)
 	var desk: Node3D = null
 	for child in view.get_children():
 		if child.has_meta("record") and (child as Node3D).global_position.distance_to(at) < 1.5:
@@ -190,7 +209,7 @@ func _people_plates(main: Node3D, rig: TycoonCamera) -> void:
 		return
 	var passenger := (load(PASSENGER) as PackedScene).instantiate() as Node3D
 	main.add_child(passenger)
-	passenger.global_position = mode.grid.cell_to_world(PASSENGER_CELL)
+	passenger.global_position = mode.grid.cell_to_world(PASSENGER_CELL + offset)
 	var players := passenger.find_children("*", "AnimationPlayer", true, false)
 	if not players.is_empty():
 		(players[0] as AnimationPlayer).play("idle")
@@ -198,7 +217,11 @@ func _people_plates(main: Node3D, rig: TycoonCamera) -> void:
 	_collect_outlines(passenger, "passenger")
 	for subject in [desk, passenger]:
 		for mi in (subject as Node3D).find_children("*", "MeshInstance3D", true, false):
-			(mi as MeshInstance3D).create_trimesh_collision()
+			if (
+				(mi as MeshInstance3D).mesh != null
+				and (mi as MeshInstance3D).mesh.get_faces().size() >= 3
+			):
+				(mi as MeshInstance3D).create_trimesh_collision()
 	var occluders := _colliders(view, desk)
 	await physics_frame
 	await physics_frame
@@ -243,24 +266,45 @@ func _people_plates(main: Node3D, rig: TycoonCamera) -> void:
 	occluders.free()
 
 
-## Rays from the camera to the subject's centre line at three heights; at
-## least two must first hit the subject.
+## Rays from the camera to opaque camera-facing triangles on static subjects
+## (or the centre line at three heights on skinned characters); at least half
+## (or two of three) must first hit the subject.
 func _prove_hits(label: String, subject: Node3D) -> bool:
-	var box := _aabb_of(subject)
+	var targets: Array[Vector3] = []
+	for mi in subject.find_children("*", "MeshInstance3D", true, false):
+		var mesh_inst := mi as MeshInstance3D
+		if mesh_inst.skin != null or mesh_inst.mesh == null:
+			continue
+		var faces := _opaque_faces(mesh_inst.mesh)
+		var facing: Array[Vector3] = []
+		for i in range(0, faces.size() - 2, 3):
+			var a: Vector3 = mesh_inst.global_transform * faces[i]
+			var b: Vector3 = mesh_inst.global_transform * faces[i + 1]
+			var c: Vector3 = mesh_inst.global_transform * faces[i + 2]
+			var mid := (a + b + c) / 3.0
+			if (b - a).cross(c - a).dot(_cam.global_position - mid) < 0.0:
+				facing.append(mid)
+		var step := maxi(1, floori(facing.size() / 12.0))
+		for i in range(0, facing.size(), step):
+			targets.append(facing[i])
 	var space := _cam.get_world_3d().direct_space_state
+	if targets.is_empty():
+		var box := _aabb_of(subject)
+		for f in [0.3, 0.6, 0.85]:
+			var p := box.get_center()
+			p.y = box.position.y + box.size.y * f
+			targets.append(p)
 	var hits := 0
-	for f in [0.3, 0.6, 0.85]:
-		var p := box.get_center()
-		p.y = box.position.y + box.size.y * f
+	for t in targets:
 		var from := _cam.global_position
-		var q := PhysicsRayQueryParameters3D.create(from, p + (p - from).normalized() * 0.5)
+		var q := PhysicsRayQueryParameters3D.create(from, t + (t - from).normalized() * 0.5)
 		var hit := space.intersect_ray(q)
 		if hit and subject.is_ancestor_of(hit.collider):
 			hits += 1
-	var ok := hits >= 2
-	print("VISIBLE %s ray_hits=%d/3 ok=%s" % [label, hits, ok])
+	var ok := hits > 0 and hits * 2 >= targets.size()
+	print("VISIBLE %s ray_hits=%d/%d ok=%s" % [label, hits, targets.size(), ok])
 	if not ok:
-		_invalid("%s: occluded or not hit (%d of 3 rays)" % [label, hits])
+		_invalid("%s: occluded or not hit (%d of %d rays)" % [label, hits, targets.size()])
 	return ok
 
 
@@ -303,13 +347,19 @@ func _body(at: Transform3D, local_faces: PackedVector3Array) -> StaticBody3D:
 
 func _opaque_faces(mesh: Mesh) -> PackedVector3Array:
 	var faces := PackedVector3Array()
+	if mesh == null:
+		return faces
 	for i in mesh.get_surface_count():
 		var mat := mesh.surface_get_material(i)
 		if mat != null and mat.resource_path == GLASS:
 			continue
 		var arrays := mesh.surface_get_arrays(i)
-		var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
-		var index: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+		var verts_any: Variant = arrays[Mesh.ARRAY_VERTEX]
+		if verts_any == null:
+			continue
+		var verts: PackedVector3Array = verts_any
+		var index_any: Variant = arrays[Mesh.ARRAY_INDEX]
+		var index: PackedInt32Array = PackedInt32Array() if index_any == null else index_any
 		if index.is_empty():
 			faces.append_array(verts)
 		else:
@@ -442,6 +492,8 @@ func _collect_outlines(node: Node3D, label: String) -> int:
 	var found := 0
 	for mi in node.find_children("*", "MeshInstance3D", true, false):
 		var mesh := (mi as MeshInstance3D).mesh
+		if mesh == null:
+			continue
 		for i in mesh.get_surface_count():
 			var mat := (mi as MeshInstance3D).get_active_material(i)
 			if mat == null or mat.next_pass == null:
@@ -560,12 +612,13 @@ func _prove_visible(label: String, terminal: Node3D, points: Array[Vector3]) -> 
 func _crop_rect(points: Array[Vector3]) -> Rect2i:
 	var lo := Vector2(INF, INF)
 	var hi := Vector2(-INF, -INF)
+	var scale := root.get_stretch_transform().get_scale()
 	for p in points:
-		var s := _cam.unproject_position(p)
+		var s := _cam.unproject_position(p) * scale
 		lo = lo.min(s)
 		hi = hi.max(s)
-	var size := root.get_visible_rect().size
-	var r := Rect2(lo, hi - lo).grow(CROP_PAD_PX).intersection(Rect2(Vector2.ZERO, size))
+	var size := Vector2(root.get_texture().get_size())
+	var r := Rect2(lo, hi - lo).grow(CROP_PAD_PX * scale.y).intersection(Rect2(Vector2.ZERO, size))
 	var out := Rect2i(r)
 	print("CROP rect=%s" % out)
 	return out

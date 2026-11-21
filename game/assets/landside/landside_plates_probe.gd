@@ -189,13 +189,19 @@ func _corners(box: AABB) -> Array[Vector3]:
 ## Local-space triangles of a mesh's opaque surfaces (glass is left out).
 func _opaque_faces(mi: MeshInstance3D) -> PackedVector3Array:
 	var faces := PackedVector3Array()
+	if mi.mesh == null:
+		return faces
 	for i in mi.mesh.get_surface_count():
 		var mat := mi.get_active_material(i)
 		if mat != null and mat.resource_path == GLASS:
 			continue
 		var arrays := mi.mesh.surface_get_arrays(i)
-		var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
-		var index: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+		var verts_any: Variant = arrays[Mesh.ARRAY_VERTEX]
+		if verts_any == null:
+			continue
+		var verts: PackedVector3Array = verts_any
+		var index_any: Variant = arrays[Mesh.ARRAY_INDEX]
+		var index: PackedInt32Array = PackedInt32Array() if index_any == null else index_any
 		if index.is_empty():
 			faces.append_array(verts)
 		else:
