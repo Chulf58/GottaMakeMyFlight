@@ -28,6 +28,9 @@ func before_test() -> void:
 
 
 func after_test() -> void:
+	var audio := get_node_or_null("/root/GameAudio")
+	if audio != null and audio.has_method(&"reset_for_test"):
+		audio.reset_for_test()
 	_port.free()
 
 
@@ -82,8 +85,19 @@ func test_the_dialog_opens_when_play_opens_a_tier_and_names_the_families() -> vo
 
 
 func test_the_phone_ring_hook_fires_with_the_dialog() -> void:
+	var audio := get_node_or_null("/root/GameAudio")
+	if audio != null and audio.has_method(&"reset_for_test"):
+		audio.reset_for_test()
 	_earn(50)
 	assert_array(_rings).is_equal([2])
+	var cue := _guide.ring_cue()
+	assert_object(cue).is_not_null()
+	assert_bool(cue.is_ringing()).is_true()
+	assert_bool(cue.is_visible_in_tree()).is_true()
+	if audio != null and audio.has_method(&"sfx_count"):
+		assert_int(audio.sfx_count(&"phone_ring")).is_equal(1)
+	_guide.dismiss()
+	assert_bool(cue.is_ringing()).is_false()
 
 
 func test_a_load_opens_no_dialog() -> void:

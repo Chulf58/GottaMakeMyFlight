@@ -36,11 +36,21 @@ func after_test() -> void:
 	IntroDialogue.shown_this_session = _shown_before
 
 
+func _answer_intro_ring() -> void:
+	var cue := _hud.find_child("PhoneRingCue", true, false) as IntroDialogue.PhoneRingCue
+	if cue != null:
+		cue.answer()
+
+
 func test_a_speed_set_while_open_waits_for_the_close_and_then_applies() -> void:
 	_hud.open_intro()
 	_world.clock.set_speed(2)
 	_world.clock.set_paused(false)
 	var tick := _world.clock.tick
+	_world.clock.advance(0.11)
+	assert_int(_world.clock.tick).is_equal(tick)
+	_answer_intro_ring()
+	assert_bool(_hud.intro() != null).is_true()
 	_world.clock.advance(0.11)
 	assert_int(_world.clock.tick).is_equal(tick)
 	_hud.dismiss_intro()
@@ -54,6 +64,8 @@ func test_an_unlock_dialog_opened_under_the_intro_shows_after_it() -> void:
 	_hud.open_intro()
 	var guide := _hud.unlock_guide()
 	guide.open_dialog([2])
+	assert_bool(guide.is_open()).is_false()
+	_answer_intro_ring()
 	assert_bool(guide.is_open()).is_false()
 	_hud.dismiss_intro()
 	assert_bool(guide.is_open()).is_true()

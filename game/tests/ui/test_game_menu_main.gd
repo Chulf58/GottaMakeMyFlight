@@ -133,6 +133,9 @@ func test_the_incidents_flag_survives_a_save_round_trip() -> void:
 
 func test_the_intro_closing_defers_the_incidents_question_until_day_2_after_opening() -> void:
 	assert_bool(_hud.open_intro()).is_true()
+	var cue := _hud.find_child("PhoneRingCue", true, false) as IntroDialogue.PhoneRingCue
+	assert_object(cue).is_not_null()
+	cue.answer()
 	assert_object(_hud.intro()).is_not_null()
 	assert_bool(_menu.is_question_open()).is_false()
 	_hud.dismiss_intro()

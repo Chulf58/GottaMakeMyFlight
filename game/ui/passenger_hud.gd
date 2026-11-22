@@ -128,10 +128,12 @@ var _panel_room := PanelRoom.new()
 ## so a result waits for the next refresh.
 var _unreported: Array[String] = []
 var _intro_layer: CanvasLayer
+var _intro_ring: IntroDialogue.PhoneRingCue
 var _intro: IntroDialogue
 ## The intro's hold on the clock (SimClock.holds), which does not give way to
 ## the player: the clock starts when the intro closes, as its text says.
 var _intro_hold := ClockHolds.NONE
+var _intro_camera_gated := false
 ## The game menu, which asks the deferred incidents question on Day 2; null in a
 ## scene without one.
 var _game_menu: GameMenu
@@ -250,7 +252,10 @@ func _ready() -> void:
 	_fit_follow()
 	get_viewport().size_changed.connect(_fit_follow)
 	if IntroDialogue.should_show(
-		IntroDialogue.shown_this_session, _in_current_scene(), _playtest_switch_on()
+		IntroDialogue.shown_this_session,
+		_in_current_scene(),
+		_playtest_switch_on(),
+		not GameBoot.load_path.is_empty()
 	):
 		open_intro()
 	if save_game != null:
@@ -721,42 +726,80 @@ func unlock_guide() -> UnlockGuide:
 	return _unlock_guide
 
 
-## Pauses the clock and opens the intro dialogue, which stops the camera: at
-## once, or, while another exclusive dialog has the turn, when that one closes.
-## Refused (false) when it was already shown this session or is open.
+## Pauses the clock and opens the intro dialogue after a brief ringing-phone
+## icon + ring sound beat, which stops the camera: at once, or, while another
+## exclusive dialog has the turn, when that one closes. Refused (false) when it
+## was already shown this session or is open/ringing.
 func open_intro() -> bool:
-	if IntroDialogue.shown_this_session or _intro != null or clock == null:
+	if IntroDialogue.shown_this_session or _intro != null or _intro_ring != null or clock == null:
 		return false
 	IntroDialogue.shown_this_session = true
 	_incidents_prompt_pending = true
-	_intro_hold = clock.holds.take_turn(self, _show_intro)
+	_intro_hold = clock.holds.take_turn(self, _start_intro_ring)
 	return true
 
 
+func _start_intro_ring() -> void:
+	_ensure_intro_layer()
+	_intro_ring = IntroDialogue.PhoneRingCue.new()
+	_intro_layer.add_child(_intro_ring)
+	_intro_ring.answered.connect(_on_intro_ring_answered)
+	if not _intro_layer.tree_exiting.is_connected(_close_intro):
+		_intro_layer.tree_exiting.connect(_close_intro)
+	_set_intro_camera_gated(true)
+	_intro_ring.start_ring(true, true)
+
+
+func _on_intro_ring_answered() -> void:
+	_free_intro_ring()
+	_show_intro()
+
+
 func _show_intro() -> void:
-	_intro_layer = CanvasLayer.new()
-	_intro_layer.name = "IntroLayer"
-	_intro_layer.layer = INTRO_LAYER
+	_ensure_intro_layer()
 	_intro = IntroDialogue.new()
 	_intro_layer.add_child(_intro)
-	add_child(_intro_layer)
 	# Dismissal, or the dialogue or its layer leaving the tree any other way,
 	# runs the same one-time cleanup.
 	_intro.dismissed.connect(_close_intro)
 	_intro.tree_exiting.connect(_close_intro)
-	_intro_layer.tree_exiting.connect(_close_intro)
-	_gate_camera(true)
+	if not _intro_layer.tree_exiting.is_connected(_close_intro):
+		_intro_layer.tree_exiting.connect(_close_intro)
+	_set_intro_camera_gated(true)
 
 
-## Closes the intro as Continue would, or drops its queued hold; does nothing
-## when neither is active.
+func _ensure_intro_layer() -> void:
+	if _intro_layer != null:
+		return
+	_intro_layer = CanvasLayer.new()
+	_intro_layer.name = "IntroLayer"
+	_intro_layer.layer = INTRO_LAYER
+	add_child(_intro_layer)
+
+
+func _set_intro_camera_gated(closed: bool) -> void:
+	if _intro_camera_gated == closed:
+		return
+	_intro_camera_gated = closed
+	_gate_camera(closed)
+
+
+func _free_intro_ring() -> void:
+	var ring := _intro_ring
+	_intro_ring = null
+	if is_instance_valid(ring):
+		ring.stop_ring()
+		if not ring.is_queued_for_deletion():
+			ring.queue_free()
+
+
+## Closes the intro as Continue would, or drops its ringing/queued hold; does
+## nothing when neither is active.
 func dismiss_intro() -> void:
 	if _intro != null:
 		_intro.dismiss()
-	elif _intro_hold != ClockHolds.NONE:
-		if is_instance_valid(clock):
-			clock.holds.release(_intro_hold)
-		_intro_hold = ClockHolds.NONE
+	elif _intro_layer != null or _intro_ring != null or _intro_hold != ClockHolds.NONE:
+		_close_intro()
 
 
 ## The open intro dialogue, or null when it is closed.
@@ -913,15 +956,21 @@ func _fit_follow() -> void:
 ## intro's hold, so the clock runs at the player's own speed unless another
 ## hold still pauses it. Later calls find nothing open and do nothing.
 func _close_intro() -> void:
-	if _intro_layer == null:
+	if (
+		_intro_layer == null
+		and _intro_ring == null
+		and _intro == null
+		and _intro_hold == ClockHolds.NONE
+	):
 		return
 	var layer := _intro_layer
 	var continued := _intro != null and _intro.is_dismissed()
+	_free_intro_ring()
 	_intro_layer = null
 	_intro = null
 	if is_instance_valid(layer) and not layer.is_queued_for_deletion():
 		layer.queue_free()
-	_gate_camera(false)
+	_set_intro_camera_gated(false)
 	if not continued:
 		_incidents_prompt_pending = false
 	if is_instance_valid(clock):
@@ -934,14 +983,20 @@ func _close_intro() -> void:
 ## incident setting. Its hold is already gone, as incident_panel's is.
 func _end_intro_on_load() -> void:
 	_incidents_prompt_pending = false
-	if _intro_layer == null:
+	if (
+		_intro_layer == null
+		and _intro_ring == null
+		and _intro == null
+		and _intro_hold == ClockHolds.NONE
+	):
 		return
 	var layer := _intro_layer
+	_free_intro_ring()
 	_intro_layer = null
 	_intro = null
 	if is_instance_valid(layer) and not layer.is_queued_for_deletion():
 		layer.queue_free()
-	_gate_camera(false)
+	_set_intro_camera_gated(false)
 	if is_instance_valid(clock):
 		clock.holds.release(_intro_hold)
 	_intro_hold = ClockHolds.NONE

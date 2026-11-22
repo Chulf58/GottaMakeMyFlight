@@ -45,6 +45,7 @@ const SFX_PATHS := {
 	&"joke_fault": "res://assets/audio/joke_fault.wav",
 	&"joke_queue_horn": "res://assets/audio/joke_queue_horn.wav",
 	&"star_up": "res://assets/audio/star_up.wav",
+	&"phone_ring": "res://assets/audio/phone_ring.wav",
 }
 const SFX_COOLDOWN_MS := {
 	&"ui_click": 25,
@@ -60,6 +61,7 @@ const SFX_COOLDOWN_MS := {
 	&"joke_fault": 4000,
 	&"joke_queue_horn": 15000,
 	&"star_up": 6000,
+	&"phone_ring": 200,
 }
 
 ## Shielded settings path during -s / --script runs (anti-pattern 1639342a).

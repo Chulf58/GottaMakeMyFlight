@@ -48,6 +48,9 @@ func test_a_load_under_the_intro_closes_it_and_asks_nothing() -> void:
 	assert_bool(_save.quick_save()).is_true()
 	_director.set_enabled(false)
 	assert_bool(_hud.open_intro()).is_true()
+	var cue := _hud.find_child("PhoneRingCue", true, false) as IntroDialogue.PhoneRingCue
+	assert_object(cue).is_not_null()
+	cue.answer()
 	assert_bool(_hud.intro() != null).is_true()
 	assert_bool(camera.is_processing()).is_false()
 	assert_bool(_save.quick_load()).is_true()
