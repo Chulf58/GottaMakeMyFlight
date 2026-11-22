@@ -7,13 +7,31 @@ extends GdUnitTestSuite
 
 var _a: PassengerTestWorld
 var _b: PassengerTestWorld
+var _crowded_save: Dictionary
+var _ref_world: PassengerTestWorld
+var _ref_clean: Dictionary
 
 
 func before() -> void:
+	PassengerTestWorld.tracker = null
+	var crowded := _crowded_world()
+	_crowded_save = JSON.parse_string(JSON.stringify(_save(crowded)))
+	crowded.free_all()
+	_ref_world = PassengerTestWorld.reference_world()
+	_ref_clean = {
+		"clock": _ref_world.clock.to_snapshot(),
+		"flights": _ref_world.flights.to_snapshot(),
+		"sim": _ref_world.sim.to_snapshot(),
+	}
 	PassengerTestWorld.tracker = self
 
 
 func after() -> void:
+	if _ref_world != null:
+		_ref_world.free_all()
+	_ref_world = null
+	_crowded_save.clear()
+	_ref_clean.clear()
 	PassengerTestWorld.tracker = null
 
 
@@ -23,6 +41,13 @@ func after_test() -> void:
 			world.free_all()
 	_a = null
 	_b = null
+
+
+func _reset_ref_world() -> PassengerTestWorld:
+	_ref_world.clock.from_snapshot(_ref_clean["clock"])
+	_ref_world.flights.from_snapshot(_ref_clean["flights"])
+	_ref_world.sim.from_snapshot(_ref_clean["sim"])
+	return _ref_world
 
 
 func _save(world: PassengerTestWorld) -> Dictionary:
@@ -42,6 +67,10 @@ func _load(data: Dictionary) -> PassengerTestWorld:
 	assert_bool(world.flights.from_snapshot(data["flights"])).is_true()
 	assert_bool(world.sim.from_snapshot(data["passengers"])).is_true()
 	return world
+
+
+static func _state(world: PassengerTestWorld) -> Dictionary:
+	return {"passengers": world.sim.to_snapshot(), "wallet": world.sim.wallet.to_snapshot()}
 
 
 ## The world's signature plus every standing claim.
@@ -92,10 +121,11 @@ func test_a_save_while_standing_plays_out_identically_through_doors_close() -> v
 		_a.step()
 		_b.step()
 		most_claims = maxi(most_claims, _a.sim.standing.claim_count())
-		if _signature(_a) != _signature(_b):
+		if _state(_a) != _state(_b):
 			differing += 1
 			if first_bad < 0:
 				first_bad = _a.clock.tick
+	assert_str(_signature(_b)).is_equal(_signature(_a))
 	print("first differing tick %d, most claims %d" % [first_bad, most_claims])
 	assert_int(first_bad).override_failure_message("first differing tick %d" % first_bad).is_equal(
 		-1
@@ -105,8 +135,8 @@ func test_a_save_while_standing_plays_out_identically_through_doors_close() -> v
 
 
 func test_claims_load_as_saved_not_allocated_again() -> void:
-	_a = _crowded_world()
-	var data := _save(_a)
+	_a = _load(_crowded_save)
+	var data := _crowded_save.duplicate(true)
 	var list: Array = data["passengers"]["standing"]
 	var walker: Dictionary = {}
 	for entry: Dictionary in list:
@@ -121,35 +151,32 @@ func test_claims_load_as_saved_not_allocated_again() -> void:
 	print("walker %d now claims %d; claims %s" % [p.id, far, list])
 	_b = _load(JSON.parse_string(JSON.stringify(data)))
 	for e: Dictionary in list:
-		assert_int(_b.sim.standing.spot_of(e["passenger"])).is_equal(e["spot"])
+		assert_int(_b.sim.standing.spot_of(int(e["passenger"]))).is_equal(int(e["spot"]))
 	assert_int(_b.sim.standing.holder_of(far)).is_equal(p.id)
 
 
 func test_a_version_14_save_is_refused() -> void:
-	_a = _crowded_world()
-	var data := _save(_a)
+	var data := _crowded_save.duplicate(true)
 	assert_int(int(data["passengers"]["save_version"])).is_equal(PassengerSim.SAVE_VERSION)
 	data["passengers"]["save_version"] = 14
-	_b = PassengerTestWorld.reference_world()
-	var before := _b.signature()
-	assert_bool(_b.sim.from_snapshot(data["passengers"])).is_false()
-	assert_str(_b.signature()).is_equal(before)
+	var b := _reset_ref_world()
+	var before := b.signature()
+	assert_bool(b.sim.from_snapshot(data["passengers"])).is_false()
+	assert_str(b.signature()).is_equal(before)
 
 
 func test_a_version_28_save_is_refused() -> void:
-	_a = _crowded_world()
-	var data := _save(_a)
+	var data := _crowded_save.duplicate(true)
 	data["passengers"]["save_version"] = 28
-	_b = PassengerTestWorld.reference_world()
-	var before := _b.signature()
-	assert_bool(_b.sim.from_snapshot(data["passengers"])).is_false()
-	assert_str(_b.signature()).is_equal(before)
+	var b := _reset_ref_world()
+	var before := b.signature()
+	assert_bool(b.sim.from_snapshot(data["passengers"])).is_false()
+	assert_str(b.signature()).is_equal(before)
 
 
 func test_bad_standing_claims_are_refused_whole() -> void:
-	_a = _crowded_world()
-	var good := _save(_a)
-	var list: Array = good["passengers"]["standing"]
+	_a = _load(_crowded_save)
+	var list: Array = _crowded_save["passengers"]["standing"]
 	var first: Dictionary = list[0]
 	var stander := -1
 	for i in list.size():
@@ -167,15 +194,13 @@ func test_bad_standing_claims_are_refused_whole() -> void:
 		"passenger twice": func(d: Dictionary) -> void: d["standing"].append(first.duplicate()),
 		"extra key": func(d: Dictionary) -> void: d["standing"][0]["x"] = 1,
 	}
+	var b := _reset_ref_world()
+	var before := b.signature()
 	for name: String in cases:
-		var data: Dictionary = good["passengers"].duplicate(true)
+		var data: Dictionary = _crowded_save["passengers"].duplicate(true)
 		(cases[name] as Callable).call(data)
-		_b = PassengerTestWorld.reference_world()
-		var before := _b.signature()
-		assert_bool(_b.sim.from_snapshot(data)).override_failure_message(name).is_false()
-		assert_str(_b.signature()).is_equal(before)
-		_b.free_all()
-	_b = null
+		assert_bool(b.sim.from_snapshot(data)).override_failure_message(name).is_false()
+		assert_str(b.signature()).is_equal(before)
 
 
 func test_a_room_placed_over_a_claimed_spot_drops_the_claim_and_saves_cleanly() -> void:

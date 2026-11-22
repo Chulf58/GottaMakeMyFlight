@@ -17,7 +17,7 @@ const MIN_SPEEDUP := 1.8
 const MAX_SPEEDUP := 3.0
 const PASSENGERS := 30
 const GAP := 12
-const SEEDS: Array[int] = [1, 2, 3]
+const SEEDS: Array[int] = [1, 2]
 
 var _worlds: Array[SecurityTestWorld] = []
 

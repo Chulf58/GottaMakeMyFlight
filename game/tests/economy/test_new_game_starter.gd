@@ -81,7 +81,7 @@ static func _read(main: Node) -> Dictionary:
 ## Presses the Debug panel's button on the main scene, the shell standing.
 func _press_the_button() -> void:
 	var hud: PassengerHud = _main.get_node("PassengerHud")
-	_filled["before"] = _read(_main)
+	_filled["before"] = _boot["after"]
 	hud.press_starter_terminal()
 	_filled["status"] = hud.status_text()
 	_filled["after"] = _read(_main)

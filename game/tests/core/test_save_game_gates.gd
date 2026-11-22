@@ -181,7 +181,24 @@ func test_a_save_whose_gate_shrank_below_a_contract_is_refused_while_staged() ->
 	var floor_edit := BuildEdit.paint_floor(MEDIUM_CELL, BuildGrid.FLOOR_TILE, 1)
 	assert_bool(_mode.grid.apply(floor_edit).ok).is_true()
 	assert_str(_gates.max_class("A")).is_equal(PlaneClasses.SMALL)
-	var small := _taken()
+	var small: Dictionary = (
+		JSON
+		. parse_string(
+			(
+				JSON
+				. stringify(
+					{
+						"grid": _mode.grid.to_snapshot(),
+						"gates": _gates.to_snapshot(),
+						"apron": _apron.to_snapshot(),
+					},
+					"",
+					true,
+					true
+				)
+			)
+		)
+	)
 	assert_bool(_mode.grid.apply(BuildEdit.remove_floor(MEDIUM_CELL)).ok).is_true()
 	var board := (_main.get_node("OfferDesk") as OfferDesk).board
 	var taken := ""

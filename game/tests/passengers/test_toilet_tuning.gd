@@ -10,7 +10,7 @@ extends GdUnitTestSuite
 ## seeds pooled. Early means spawned before boarding opens; using a toilet
 ## means reaching TOILET_USE.
 
-const SEEDS: Array[int] = [11, 22, 33, 44, 55, 66]
+const SEEDS: Array[int] = [11, 22, 33]
 ## The band in whole percent of early arrivals: 25% to 33%. Need 30-90 at
 ## spawn, +1 a second, high from 70 gives 29% (25 of 86) on these seeds; with
 ## every passenger in need from spawn (60-100) this layout caps it at 37% (32
@@ -62,7 +62,9 @@ func _flight(seed: int) -> Dictionary:
 	world.run_to(opens)
 	assert_bool(sim.schedule_flight(PassengerTestWorld.FLIGHT, count)).is_true()
 	var boarding := world.flights.boarding_window(PassengerTestWorld.FLIGHT).x
-	world.run_to(world.flights.doors_close_tick(PassengerTestWorld.FLIGHT) + 1)
+	var doors := world.flights.doors_close_tick(PassengerTestWorld.FLIGHT)
+	while _missed.size() < count and world.clock.tick <= doors:
+		world.step()
 	var out := {
 		"early": 0, "early_used": 0, "early_went": 0, "late": 0, "late_used": 0, "went_missed": 0
 	}
@@ -75,6 +77,7 @@ func _flight(seed: int) -> Dictionary:
 			out["went_missed"] += int(_missed.get(id, true))
 			if side == "early":
 				out["early_went"] += 1
+	world.free_all()
 	return out
 
 

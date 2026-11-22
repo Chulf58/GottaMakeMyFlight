@@ -8,9 +8,10 @@ extends GdUnitTestSuite
 ## and a third main scene, booted from another seed, loads that file. All
 ## three then play through the fee payout and past the first day rollover,
 ## matching on every tick: full SaveTestKit.checksum before the save, right
-## after the load and at the end, and _tick_checksum on every tick in between
-## (every dynamic save part serialized per tick plus the unchanging BuildGrid
-## digest, verified unchanged on all three worlds after the loop).
+## after the load and at the end, and full dynamic SavePart snapshot equality
+## (_dynamic_snapshot(), covering every non-grid part) on every tick in between
+## (with the unchanging BuildGrid digest verified on all three worlds before and
+## after the loop).
 ##
 ## Both worlds open on the held calendar (06:00 on day 0 becomes the opening
 ## tick), save just before the starter's first boarding, and play past the
@@ -67,32 +68,50 @@ func after() -> void:
 
 func _play_on() -> void:
 	var all := [_control, _source, _loaded]
-	var end := GameCalendar.day_start(1, _clock(_control).epoch) + AFTER_ROLLOVER
+	var epoch := _clock(_control).epoch
+	var day1_start := GameCalendar.day_start(1, epoch)
+	var end := day1_start + AFTER_ROLLOVER
 	var first_bad := {_source: -1, _loaded: -1}
 	var payouts := {_control: 0, _loaded: 0}
 	var ticks := 0
 	var grid_digests := {}
+	var clocks := {}
+	var sims := {}
+	var wallets := {}
+	var dynamic_parts := {}
 	for main in all:
 		var grid := (main.get_node("BuildMode") as BuildMode).grid
 		grid_digests[main.get_instance_id()] = _grid_digest(grid)
+		clocks[main] = _clock(main)
+		sims[main] = _sim(main)
+		wallets[main] = _wallet(main)
+		dynamic_parts[main] = SaveTestKit.save_game(main).parts().filter(
+			func(part: SavePart) -> bool: return part.key != "grid"
+		)
 	_run["same_after_load"] = SaveTestKit.checksum(_loaded) == SaveTestKit.checksum(_control)
-	while _clock(_control).tick < end:
+	var ctrl_clock: SimClock = clocks[_control]
+	while ctrl_clock.tick < end:
 		var made := {}
 		var balance := {}
 		for main in payouts:
-			made[main] = _sim(main).made_count()
-			balance[main] = _wallet(main).balance
-		_step(all)
+			made[main] = (sims[main] as PassengerSim).made_count()
+			balance[main] = (wallets[main] as Wallet).balance
+		for main in all:
+			var c: SimClock = clocks[main]
+			c.set_paused(false)
+			c.advance(SimClock.STEP)
+			c.set_paused(true)
 		ticks += 1
 		for main in payouts:
-			var fees: int = (_sim(main).made_count() - made[main]) * _starter_fee()
-			if fees > 0 and _wallet(main).balance - balance[main] >= fees:
+			var fees: int = (
+				((sims[main] as PassengerSim).made_count() - made[main]) * _starter_fee()
+			)
+			if fees > 0 and (wallets[main] as Wallet).balance - balance[main] >= fees:
 				payouts[main] += 1
-		var expected := _tick_checksum(_control, grid_digests[_control.get_instance_id()])
+		var expected := _dynamic_snapshot(dynamic_parts[_control])
 		for main in first_bad:
-			var digest: String = grid_digests[main.get_instance_id()]
-			if first_bad[main] < 0 and _tick_checksum(main, digest) != expected:
-				first_bad[main] = _clock(main).tick
+			if first_bad[main] < 0 and _dynamic_snapshot(dynamic_parts[main]) != expected:
+				first_bad[main] = (clocks[main] as SimClock).tick
 	var grids_unchanged := true
 	for main in all:
 		var grid := (main.get_node("BuildMode") as BuildMode).grid
@@ -102,7 +121,6 @@ func _play_on() -> void:
 	for main in first_bad:
 		if first_bad[main] < 0 and SaveTestKit.checksum(main) != end_expected:
 			first_bad[main] = _clock(main).tick
-	var epoch := _clock(_control).epoch
 	_run["grids_unchanged"] = grids_unchanged
 	_run["ticks_compared"] = ticks
 	_run["first_bad_source"] = first_bad[_source]
@@ -120,11 +138,11 @@ static func _grid_digest(grid: BuildGrid) -> String:
 	return JSON.stringify(grid.to_snapshot(), "", true, true).sha256_text()
 
 
-static func _tick_checksum(main: Node, grid_digest: String) -> String:
+static func _dynamic_snapshot(parts: Array) -> Dictionary:
 	var data := {}
-	for part in SaveTestKit.save_game(main).parts():
-		data[part.key] = grid_digest if part.key == "grid" else part.save.call()
-	return JSON.stringify(data, "", true, true).sha256_text()
+	for part: SavePart in parts:
+		data[part.key] = part.save.call()
+	return data
 
 
 static func _step(worlds: Array) -> void:

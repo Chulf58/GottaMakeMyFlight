@@ -16,17 +16,13 @@ var _camera: TycoonCamera
 var _eye: Camera3D
 var _mode: BuildMode
 var _hud: PassengerHud
+var _vehicle_id := 0
+var _base_snap := {}
+var _dirty := false
 
 
 func before() -> void:
-	PassengerTestWorld.tracker = self
-
-
-func after() -> void:
 	PassengerTestWorld.tracker = null
-
-
-func before_test() -> void:
 	_land = LandsideTestWorld.make(null, [], 3)
 	_views = PassengerTestWorld.views()
 	_views.clock = _land.world.clock
@@ -56,9 +52,46 @@ func before_test() -> void:
 	add_child(_hud)
 	_camera.set_process(false)
 	_land.schedule(BOOKED)
+	_vehicle_id = _drawn_vehicle()
+	_base_snap = {
+		"clock": JSON.parse_string(JSON.stringify(_land.world.clock.to_snapshot())),
+		"flights": JSON.parse_string(JSON.stringify(_land.world.flights.to_snapshot())),
+		"sim": JSON.parse_string(JSON.stringify(_land.sim.to_snapshot())),
+		"landside":
+		JSON.parse_string(
+			JSON.stringify(_land.landside.to_snapshot(_land.sim.arrivals, _land.sim.tick))
+		),
+	}
 
 
-func after_test() -> void:
+func _restore_baseline() -> void:
+	assert_bool(_land.world.clock.from_snapshot(_base_snap["clock"].duplicate(true))).is_true()
+	assert_bool(_land.world.flights.from_snapshot(_base_snap["flights"].duplicate(true))).is_true()
+	assert_bool(_land.sim.from_snapshot(_base_snap["sim"].duplicate(true))).is_true()
+	(
+		assert_bool(
+			_land.landside.from_snapshot(_base_snap["landside"].duplicate(true), _land.sim.arrivals)
+		)
+		. is_true()
+	)
+	_views.selected_id = 0
+	_cars.selected_id = 0
+	_camera.stop_follow()
+	_views.sync()
+	_cars.snap()
+	_hud.refresh()
+	var at := _cars.node_for(_vehicle_id).global_position
+	_eye.look_at_from_position(at + Vector3(0.0, 25.0, 12.0), at)
+
+
+func before_test() -> void:
+	if not _dirty:
+		_dirty = true
+		return
+	_restore_baseline()
+
+
+func after() -> void:
 	for node in [_hud, _mode, _camera, _cars, _views]:
 		node.free()
 	_land.free_all()
@@ -92,7 +125,7 @@ func _click(at: Vector2) -> void:
 
 
 func test_clicking_a_vehicle_selects_it_and_shows_its_passengers_flight_and_delay() -> void:
-	var id := _drawn_vehicle()
+	var id := _vehicle_id
 	assert_int(id).is_greater(0)
 	# A real passenger, drawn right under the car: both pickers find something
 	# under the click, and the vehicle wins.
@@ -126,7 +159,7 @@ func test_clicking_a_vehicle_selects_it_and_shows_its_passengers_flight_and_dela
 
 
 func test_a_followed_vehicle_that_leaves_the_map_ends_the_follow() -> void:
-	var id := _drawn_vehicle()
+	var id := _vehicle_id
 	assert_int(id).is_greater(0)
 	_click(_eye.unproject_position(_cars.node_for(id).global_position + Vector3(0.0, 1.0, 0.0)))
 	assert_int(_cars.selected_id).is_equal(id)
@@ -142,3 +175,6 @@ func test_a_followed_vehicle_that_leaves_the_map_ends_the_follow() -> void:
 	assert_int(_cars.selected_id).is_equal(0)
 	assert_bool(_camera.is_following()).is_false()
 	assert_str(_hud.follow_text()).is_equal("")
+	assert_object(_cars.node_for(id)).is_null()
+	_restore_baseline()
+	assert_object(_cars.node_for(id)).is_not_null()

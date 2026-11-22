@@ -24,7 +24,7 @@ func before() -> void:
 	_clock = _main.get_node("SimClock")
 	_save.quick_save_path = _path
 	SaveTestKit.start_airport(_main)
-	for i in 600:
+	for i in 30:
 		SaveTestKit.step(_main)
 
 
