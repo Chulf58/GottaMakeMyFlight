@@ -128,8 +128,14 @@ func _process(_delta: float) -> void:
 	_refresh()
 
 
+## Esc closes an open sheet ahead of _unhandled_input (GameMenu sits after
+## PassengerHud in main.tscn, and BuildMode/selections sit behind it).
 ## P toggles; a held key's repeats and modified presses are left alone.
 func _shortcut_input(event: InputEvent) -> void:
+	if _sheet.visible and event.is_action_pressed("build_tool_none"):
+		close()
+		get_viewport().set_input_as_handled()
+		return
 	var key := event as InputEventKey
 	if key == null or not key.pressed or not event.is_action_pressed(ACTION):
 		return
@@ -138,13 +144,6 @@ func _shortcut_input(event: InputEvent) -> void:
 	if not key.echo:
 		_on_toggle()
 	get_viewport().set_input_as_handled()
-
-
-## Esc closes the sheet and is not passed on, so it does not also drop a tool.
-func _unhandled_input(event: InputEvent) -> void:
-	if _sheet.visible and event.is_action_pressed("build_tool_none"):
-		close()
-		get_viewport().set_input_as_handled()
 
 
 func is_open() -> bool:

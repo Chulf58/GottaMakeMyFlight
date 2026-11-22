@@ -266,3 +266,29 @@ func test_esc_with_remove_picked_drops_it_and_does_not_open_the_menu() -> void:
 	assert_int(mode.tool).is_equal(BuildMode.Tool.NONE)
 	assert_bool(_menu.is_open()).is_false()
 	_build_menu.build_session.sync()
+
+
+func test_esc_with_flight_planner_open_closes_it_and_does_not_open_the_menu() -> void:
+	var planner := _hud.find_child("FlightPlanner", false, false) as FlightPlanner
+	assert_object(planner).is_not_null()
+	planner.open()
+	assert_bool(planner.is_open()).is_true()
+	_esc()
+	assert_bool(planner.is_open()).is_false()
+	assert_bool(_menu.is_open()).is_false()
+	assert_bool(_menu.has_hold()).is_false()
+	assert_bool(_clock.holds.is_holding()).is_false()
+	# The control: with the planner closed, the next Esc opens the menu.
+	_esc()
+	assert_bool(_menu.is_open()).is_true()
+	_menu.close()
+	# With a build tool already picked, Esc closes the planner and leaves the tool.
+	var mode: BuildMode = _main.get_node("BuildMode")
+	mode.set_tool(BuildMode.Tool.SCANNER)
+	planner.open()
+	assert_bool(planner.is_open()).is_true()
+	_esc()
+	assert_bool(planner.is_open()).is_false()
+	assert_int(mode.tool).is_equal(BuildMode.Tool.SCANNER)
+	assert_bool(_menu.is_open()).is_false()
+	mode.set_tool(BuildMode.Tool.NONE)
