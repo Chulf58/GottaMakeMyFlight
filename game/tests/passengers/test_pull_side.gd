@@ -11,8 +11,9 @@ extends GdUnitTestSuite
 ##   RIGHT: a wall on the south edge (the pulling side);
 ##   LEFT: a wall on the north edge only;
 ##   BOTH: walls on both edges;
-##   BIN: a wall on the south edge and a bin on the north cell beside each run
-##     cell (its rim reaches over its cell's edge into the row);
+##   BIN: a wall on the south edge and planters on the north cells beside the
+##     run (extending a cell past each wall endcap, meeting the settled
+##     footprint);
 ##   FURNITURE: a bin on the south cell beside each run cell, no wall;
 ##   OPEN: nothing.
 ## And a corner: walking east the route turns north (left) at CORNER, before
@@ -45,10 +46,12 @@ func before() -> void:
 		edits.append(BuildEdit.place_wall(Vector2i(x, BOTH_ROW), BuildGrid.Side.NORTH))
 		edits.append(BuildEdit.place_wall(Vector2i(x, BOTH_ROW), BuildGrid.Side.SOUTH))
 		edits.append(BuildEdit.place_wall(Vector2i(x, BIN_ROW), BuildGrid.Side.SOUTH))
-		edits.append(BuildEdit.paint_floor(Vector2i(x, BIN_ROW - 1), BuildGrid.FLOOR_TILE, 1))
-		edits.append(BuildEdit.place_object(&"trash_can", Vector2i(x, BIN_ROW - 1), 0))
 		edits.append(BuildEdit.paint_floor(Vector2i(x, FURNITURE_ROW + 1), BuildGrid.FLOOR_TILE, 1))
 		edits.append(BuildEdit.place_object(&"trash_can", Vector2i(x, FURNITURE_ROW + 1), 0))
+	for x in range(RUN.x - 1, RUN.y + 1):
+		edits.append(BuildEdit.paint_floor(Vector2i(x, BIN_ROW - 2), BuildGrid.FLOOR_TILE, 1))
+		edits.append(BuildEdit.paint_floor(Vector2i(x, BIN_ROW - 1), BuildGrid.FLOOR_TILE, 1))
+		edits.append(BuildEdit.place_object(&"plant_pot_1a", Vector2i(x, BIN_ROW - 2), 0))
 	for y in range(CORNER.y - 3, CORNER.y + 3):
 		edits.append(BuildEdit.place_wall(Vector2i(CORNER.x, y), BuildGrid.Side.EAST))
 	for result in _grid.apply_batch(edits):
@@ -280,7 +283,7 @@ func test_a_running_guest_starts_the_change_early_enough() -> void:
 
 func test_furniture_on_the_destination_side_vetoes_the_swap() -> void:
 	var walk := _walk(BIN_ROW, WALK_M)
-	# The bins' rims are in the left roller's settled footprint, and no wall is.
+	# The planters' edges are in the left roller's settled footprint, and no wall is.
 	var frame := _pose(BIN_ROW, _grid.cell_to_world(Vector2i(RUN.x + 2, BIN_ROW)).x)
 	var left := PullSide.footprint(1, false)
 	assert_bool(PullSide.blocked(_grid, [frame], left, true)).is_true()

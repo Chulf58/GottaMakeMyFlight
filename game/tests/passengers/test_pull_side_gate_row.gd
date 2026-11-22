@@ -9,8 +9,8 @@ extends GdUnitTestSuite
 ## reference terminal's seat row at fronts (11..16, 4), seats one cell north:
 ## pair1_a of the windowed gate_chair_roller_probe (seed 4242) walks west from
 ## (17, 4) to its front (14, 4), the chairs on its right. The stamp gives way
-## where the stamped side's SETTLED footprint meets a wall or a piece: a bin
-## grid has a bin on the south cell beside each cell of BIN_ROW, the right
+## where the stamped side's SETTLED footprint meets a wall or a piece: a planter
+## grid has a planter on the south cell beside each cell of BIN_ROW, the right
 ## side walking east.
 
 const ROLLER := SecurityLooks.Kind.ROLLER
@@ -20,7 +20,7 @@ const FRONT := Vector2i(14, 4)
 const START := Vector2i(17, 4)
 const BIN_ROW := 10
 const BIN_RUN := Vector2i(8, 16)
-## A row with a bin on the north cell beside each cell: the left walking east.
+## A row with a planter on the north cell beside each cell: the left walking east.
 const LEFT_BIN_ROW := 20
 
 var _world: PassengerTestWorld
@@ -46,9 +46,11 @@ func before() -> void:
 	var edits: Array[BuildEdit] = []
 	for x in range(BIN_RUN.x, BIN_RUN.y):
 		edits.append(BuildEdit.paint_floor(Vector2i(x, BIN_ROW + 1), BuildGrid.FLOOR_TILE, 1))
-		edits.append(BuildEdit.place_object(&"trash_can", Vector2i(x, BIN_ROW + 1), 0))
+		edits.append(BuildEdit.paint_floor(Vector2i(x, BIN_ROW + 2), BuildGrid.FLOOR_TILE, 1))
+		edits.append(BuildEdit.place_object(&"plant_pot_1a", Vector2i(x, BIN_ROW + 1), 0))
+		edits.append(BuildEdit.paint_floor(Vector2i(x, LEFT_BIN_ROW - 2), BuildGrid.FLOOR_TILE, 1))
 		edits.append(BuildEdit.paint_floor(Vector2i(x, LEFT_BIN_ROW - 1), BuildGrid.FLOOR_TILE, 1))
-		edits.append(BuildEdit.place_object(&"trash_can", Vector2i(x, LEFT_BIN_ROW - 1), 0))
+		edits.append(BuildEdit.place_object(&"plant_pot_1a", Vector2i(x, LEFT_BIN_ROW - 2), 0))
 	for result in _bins.apply_batch(edits):
 		assert_bool(result.ok).override_failure_message(result.reason_text()).is_true()
 

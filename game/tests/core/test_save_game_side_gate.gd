@@ -10,9 +10,10 @@ extends GdUnitTestSuite
 
 const SEED := 5_501_023
 ## ReferenceTerminal cells, moved onto the grid by the site's starter offset:
-## the west wall's last airside row, its cell inside, and the desk two cells in.
+## the west wall's last airside row, its cell inside, and the desk two cells in
+## with its rear staff spot (12, 7) free.
 const WEST_EXIT := Vector2i(10, 8)
-const WEST_DESK := Vector2i(12, 7)
+const WEST_DESK := Vector2i(12, 8)
 
 var _main: Node
 var _save: SaveGame
