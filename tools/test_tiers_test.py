@@ -3,6 +3,9 @@
 
 from __future__ import annotations
 
+import contextlib
+import io
+import json
 import os
 import sys
 import tempfile
@@ -180,6 +183,79 @@ class TestBatchChunker(unittest.TestCase):
                 self.assertLessEqual(len(batch), test_tiers.DEFAULT_MAX_BATCH_SUITES)
                 rendered = self._render_full_cmd(batch)
                 self.assertLessEqual(len(rendered), 20_000)
+
+    def test_all_tier_live_tree_multi_batch_caps_and_complete_coverage(self) -> None:
+        all_suites = test_tiers.discover_test_suites(LIVE_TESTS_DIR)
+        overhead = max(test_tiers.DEFAULT_BASE_CMD_OVERHEAD, len(self.BASE_CMD) + 16)
+        batches = test_tiers.build_batches(
+            LIVE_TESTS_DIR,
+            "all",
+            max_chars=test_tiers.DEFAULT_MAX_BATCH_CHARS,
+            max_suites=test_tiers.DEFAULT_MAX_BATCH_SUITES,
+            base_overhead=overhead,
+        )
+        self.assertGreater(len(batches), 1)
+
+        flat = [p for b in batches for p in b]
+        self.assertEqual(len(flat), len(all_suites))
+        self.assertEqual(len(set(flat)), len(all_suites))
+        self.assertEqual(set(flat), {f"res://tests/{s}" for s in all_suites})
+
+        for batch in batches:
+            self.assertGreater(len(batch), 0)
+            self.assertLessEqual(len(batch), test_tiers.DEFAULT_MAX_BATCH_SUITES)
+            rendered = self._render_full_cmd(batch)
+            self.assertLessEqual(len(rendered), 20_000)
+
+    def test_cli_batches_all_writes_chunked_manifest_and_stdout(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            tests_dir = root / "tests"
+            suites = [f"area_{i // 3}/test_suite_{i:02d}.gd" for i in range(8)]
+            for rel in suites:
+                _write_file(tests_dir / rel, "extends GdUnitTestSuite\n")
+            _write_file(tests_dir / "helper.gd", "extends RefCounted\n")
+            manifest = root / "expected_batches.json"
+
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = test_tiers.main(
+                    [
+                        "batches",
+                        "--tests-dir",
+                        str(tests_dir),
+                        "--tier",
+                        "all",
+                        "--max-suites",
+                        "3",
+                        "--max-chars",
+                        "500",
+                        "--base-overhead",
+                        "200",
+                        "--manifest-out",
+                        str(manifest),
+                    ]
+                )
+
+            self.assertEqual(rc, 0)
+            lines = [line for line in buf.getvalue().splitlines() if line.strip()]
+            self.assertGreater(len(lines), 1)
+            self.assertNotIn("res://tests", lines)
+
+            stdout_batches = [line.split("\t") for line in lines]
+            manifest_batches = json.loads(manifest.read_text(encoding="utf-8"))
+            self.assertEqual(len(stdout_batches), len(manifest_batches))
+
+            flat_stdout = [p for b in stdout_batches for p in b]
+            flat_manifest = [p for b in manifest_batches for p in b]
+            self.assertEqual(flat_stdout, [f"res://tests/{s}" for s in suites])
+            self.assertEqual(flat_manifest, suites)
+            for batch in stdout_batches:
+                self.assertLessEqual(len(batch), 3)
+                cmd_len = 200 + sum(
+                    len(p) + test_tiers.PER_SUITE_ARG_OVERHEAD for p in batch
+                )
+                self.assertLessEqual(cmd_len, 500)
 
 
 class TestSummaryParser(unittest.TestCase):
@@ -441,6 +517,78 @@ class TestSummaryParser(unittest.TestCase):
             )
             self.assertFalse(summary.ok)
             self.assertIn("missing results.xml", " ".join(summary.failure_reasons))
+
+    def test_all_tier_multi_batch_xml_reconciliation_pass_and_timeout_fail(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            reports = root / "reports"
+            _write_results_xml(
+                reports,
+                0,
+                [
+                    ("res://tests/a/test_one.gd", 4, 0, 0, 0, 0.300),
+                    ("res://tests/a/test_two.gd", 6, 0, 0, 0, 0.500),
+                ],
+            )
+            _write_results_xml(
+                reports,
+                1,
+                [
+                    ("res://tests/b/test_three.gd", 5, 0, 0, 1, 1.100),
+                ],
+            )
+            _write_results_xml(
+                reports,
+                2,
+                [
+                    ("res://tests/c/test_four.gd", 2, 0, 0, 0, 0.200),
+                ],
+            )
+            log_file = root / "run.log"
+            _write_file(
+                log_file,
+                "Overall Summary: 10 test cases | 0 errors | 0 failures | 0 flaky | 0 skipped | 0 orphans |\n"
+                "Overall Summary: 5 test cases | 0 errors | 0 failures | 0 flaky | 1 skipped | 0 orphans |\n"
+                "Overall Summary: 2 test cases | 0 errors | 0 failures | 0 flaky | 0 skipped | 0 orphans |\n",
+            )
+            expected = [
+                ["a/test_one.gd", "a/test_two.gd"],
+                ["b/test_three.gd"],
+                ["c/test_four.gd"],
+            ]
+            summary = test_tiers.summarize_run(
+                tier="all",
+                run_id="all_ok",
+                reports_dir=reports,
+                log_file=log_file,
+                batch_codes=[0, 0, 0],
+                wall_seconds=12.4,
+                expected_batches=expected,
+            )
+            self.assertTrue(summary.ok, summary.failure_reasons)
+            self.assertEqual(summary.suites_expected, 4)
+            self.assertEqual(summary.suites_executed, 4)
+            self.assertEqual(summary.total_tests, 17)
+            self.assertEqual(summary.passed, 16)
+            self.assertEqual(summary.skipped, 1)
+
+            # Simulate batch 1 timing out without writing results.xml
+            (reports / "b1" / "report_1" / "results.xml").unlink()
+            failed = test_tiers.summarize_run(
+                tier="all",
+                run_id="all_timeout",
+                reports_dir=reports,
+                log_file=log_file,
+                batch_codes=[0, 124, 0],
+                wall_seconds=3610.0,
+                expected_batches=expected,
+            )
+            self.assertFalse(failed.ok)
+            joined = " ".join(failed.failure_reasons)
+            self.assertIn("batch 1 exited with 124", joined)
+            self.assertIn("missing results.xml for batch(es): b1", joined)
+            self.assertEqual(failed.suites_executed, 3)
+            self.assertEqual(failed.suites_expected, 4)
 
 
 if __name__ == "__main__":
