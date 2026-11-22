@@ -292,3 +292,184 @@ func test_station_queue_path_to_detours_around_occupied_cells_and_falls_back_in_
 	assert_array(fallback).is_equal(
 		[Vector2i(0, 0), Vector2i(0, 1), Vector2i(0, 2), Vector2i(0, 3), Vector2i(0, 4)]
 	)
+
+
+func test_late_draw_matches_steady_draw_and_keeps_walk_yaw_and_exclusions() -> void:
+	var path: Array[Vector2i] = []
+	for x in range(1, 13):
+		path.append(Vector2i(x, 3))
+	# Steady views drawn from the start vs a late views first synced mid-ramp
+	# must agree on both lane offset and walk yaw (anti-pattern 90062867).
+	var p := _walker(Passenger.Stage.TO_GATE, path, 0)
+	_views.snap()
+	for i in 22:
+		p.walk(PassengerSim.WALK_MM)
+		_views.sync()
+	var late_views := PassengerViews.new()
+	late_views.clock = _world.clock
+	late_views.sim = _world.sim
+	add_child(late_views)
+	late_views.sync()
+	var steady_lane := _views.corridor_offset(p.id)
+	var late_lane := late_views.corridor_offset(p.id)
+	assert_float(steady_lane.length()).is_greater(0.05)
+	assert_vector(steady_lane).is_equal_approx(late_lane, Vector3.ONE * 1e-5)
+	var steady_yaw := _views.node_for(p.id).rotation.y
+	assert_float(absf(angle_difference(steady_yaw, PI * 0.5))).is_less(0.001)
+	late_views.free()
+	# Collecting a parked roller (ParkRecovery) or facility-interior walks stay at 0.
+	p.collect_tick = _world.sim.tick + 10
+	_views.sync()
+	assert_vector(_views.corridor_offset(p.id)).is_equal(Vector3.ZERO)
+	p.collect_tick = 0
+	for stage in [
+		Passenger.Stage.CAFE_WALK,
+		Passenger.Stage.CAFE_TO_SEAT,
+		Passenger.Stage.TOILET_WALK,
+		Passenger.Stage.SHOP_WALK,
+	]:
+		p.stage = stage
+		_views.sync()
+		assert_vector(_views.corridor_offset(p.id)).is_equal(Vector3.ZERO)
+
+
+func test_activity_exit_steady_late_and_snap_parity_and_step_bound() -> void:
+	var grid := PassengerTestWorld.floored(Vector2i(16, 7))
+	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(0, 5), 3)
+	var w := PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(60000, 80000))
+	var views := PassengerTestWorld.views()
+	views.clock = w.clock
+	views.sim = w.sim
+	add_child(views)
+	var path: Array[Vector2i] = []
+	for x in range(1, 15):
+		path.append(Vector2i(x, 3))
+	w.run_to(50)
+	var p := w.passenger(w.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	p.stage = Passenger.Stage.TO_GATE
+	p.stage_tick = w.clock.tick
+	p.shop_cooldown = p.stage_tick + ShopSim.BROWSE_COOLDOWN_TICKS
+	p.at = path[0]
+	p.set_path(path)
+	views.snap()
+	var prev := views.tick_position(p.id, true)
+	var max_step := 0.0
+	var late_checked := false
+	for tick in 60:
+		p.walk(PassengerSim.WALK_MM)
+		views.sync()
+		var now := views.tick_position(p.id, true)
+		max_step = maxf(max_step, now.distance_to(prev))
+		prev = now
+		if tick < 19:
+			assert_vector(views.corridor_offset(p.id)).is_equal(Vector3.ZERO)
+		if tick == 30:
+			var steady := views.corridor_offset(p.id)
+			assert_float(steady.length()).is_greater(0.02)
+			var late := PassengerViews.new()
+			late.clock = w.clock
+			late.sim = w.sim
+			add_child(late)
+			late.sync()
+			assert_vector(late.corridor_offset(p.id)).is_equal_approx(steady, Vector3.ONE * 1e-5)
+			late.free()
+			views.snap()
+			assert_vector(views.corridor_offset(p.id)).is_equal_approx(steady, Vector3.ONE * 1e-5)
+			late_checked = true
+	# Transitioning to a later walk stage updates stage_tick, ending the browse delay.
+	p.stage = Passenger.Stage.TO_EXIT
+	p.stage_tick = w.clock.tick + 1
+	var exit_len := CorridorLane.target_offset(w.sim, p).length()
+	views.free()
+	w.free_all()
+	assert_bool(late_checked).is_true()
+	assert_float(max_step).is_less_equal(PassengerSim.WALK_MM / 1000.0 + 0.002)
+	assert_float(exit_len).is_greater(0.05)
+
+
+func test_walking_parallel_past_door_wall_stays_within_walking_step() -> void:
+	var grid := PassengerTestWorld.floored(Vector2i(18, 7))
+	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(0, 5), 3)
+	var xs := range(18)
+	xs.erase(8)
+	xs.append(8)
+	for x: int in xs:
+		var kind := BuildGrid.WallKind.DOOR if x == 8 else BuildGrid.WallKind.PLAIN
+		var res := grid.apply(BuildEdit.place_wall(Vector2i(x, 3), BuildGrid.Side.NORTH, kind))
+		assert_bool(res.ok).override_failure_message(res.reason_text()).is_true()
+	var w := PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(60000, 80000))
+	var views := PassengerTestWorld.views()
+	views.clock = w.clock
+	views.sim = w.sim
+	add_child(views)
+	var path: Array[Vector2i] = []
+	for x in range(1, 17):
+		path.append(Vector2i(x, 3))
+	var p := w.passenger(w.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	p.stage = Passenger.Stage.TO_GATE
+	p.at = path[0]
+	p.set_path(path)
+	views.snap()
+	var prev := views.tick_position(p.id, true)
+	var max_step := 0.0
+	var zeroed_at_door := false
+	var active_away := false
+	while p.is_moving():
+		p.walk(PassengerSim.WALK_MM)
+		views.sync()
+		var now := views.tick_position(p.id, true)
+		max_step = maxf(max_step, now.distance_to(prev))
+		prev = now
+		var lane := views.corridor_offset(p.id)
+		var x := p.grid_position().x
+		if absf(x - 8.5) <= 0.5:
+			assert_vector(lane).is_equal(Vector3.ZERO)
+			zeroed_at_door = true
+		elif x > 4.0 and x < 5.0 and lane.length() > 0.15:
+			active_away = true
+	views.free()
+	w.free_all()
+	assert_bool(zeroed_at_door).is_true()
+	assert_bool(active_away).is_true()
+	assert_float(max_step).is_less_equal(PassengerSim.WALK_MM / 1000.0 + 0.002)
+
+
+func test_walking_east_past_obstacle_cell_stays_within_walking_step() -> void:
+	var grid := PassengerTestWorld.floored(Vector2i(16, 7))
+	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(0, 5), 3)
+	PassengerTestWorld.place(grid, &"tray_table", Vector2i(6, 4), 0)
+	var w := PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(60000, 80000))
+	var views := PassengerTestWorld.views()
+	views.clock = w.clock
+	views.sim = w.sim
+	add_child(views)
+	var path: Array[Vector2i] = []
+	for x in range(1, 15):
+		path.append(Vector2i(x, 3))
+	var p := w.passenger(w.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	p.stage = Passenger.Stage.TO_GATE
+	p.at = path[0]
+	p.set_path(path)
+	views.snap()
+	var prev := views.tick_position(p.id, true)
+	var max_step := 0.0
+	var clamped_beside := false
+	var recovered_past := false
+	while p.is_moving():
+		p.walk(PassengerSim.WALK_MM)
+		views.sync()
+		var now := views.tick_position(p.id, true)
+		max_step = maxf(max_step, now.distance_to(prev))
+		prev = now
+		var lane := views.corridor_offset(p.id)
+		var x := p.grid_position().x
+		if x >= 6.0 and x <= 7.0:
+			assert_vector(lane).is_equal(Vector3.ZERO)
+			clamped_beside = true
+		elif x >= 9.0 and x <= 10.0 and lane.length() > 0.15:
+			recovered_past = true
+	views.free()
+	w.free_all()
+	assert_bool(clamped_beside).is_true()
+	assert_bool(recovered_past).is_true()
+	assert_float(max_step).is_less_equal(PassengerSim.WALK_MM / 1000.0 + 0.002)
