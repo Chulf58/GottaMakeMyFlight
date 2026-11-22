@@ -44,12 +44,19 @@ static func is_open_ground(grid: BuildGrid, site: SiteDefinition, cell: Vector2i
 static func edge_cells(grid: BuildGrid, site: SiteDefinition, step: Vector2i) -> Array[Vector2i]:
 	var out: Array[Vector2i] = []
 	var side := BuildGrid.SIDE_STEP.find(step)
-	for y in grid.size.y:
+	if side < 0 or grid.size.x <= 0 or grid.size.y <= 0:
+		return out
+	if step.y != 0:
+		var y := 0 if step.y < 0 else grid.size.y - 1
 		for x in grid.size.x:
 			var cell := Vector2i(x, y)
-			if grid.in_bounds(cell + step) or not is_open_ground(grid, site, cell):
-				continue
-			if not grid.has_wall(cell, side):
+			if is_open_ground(grid, site, cell) and not grid.has_wall(cell, side):
+				out.append(cell)
+	else:
+		var x := 0 if step.x < 0 else grid.size.x - 1
+		for y in grid.size.y:
+			var cell := Vector2i(x, y)
+			if is_open_ground(grid, site, cell) and not grid.has_wall(cell, side):
 				out.append(cell)
 	return out
 
