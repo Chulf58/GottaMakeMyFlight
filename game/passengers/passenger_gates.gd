@@ -44,6 +44,8 @@ static func to_gate(sim: PassengerSim, p: Passenger) -> void:
 	if p.is_moving():
 		return
 	if p.at == p.seat_front:
+		if p.carry_on == 1:
+			SecurityLooks.hand_of(sim, p, 0)
 		p.clear_path()
 		sim._set_stage(p, Passenger.Stage.SITTING_DOWN)
 	else:

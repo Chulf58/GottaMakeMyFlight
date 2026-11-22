@@ -81,3 +81,126 @@ func test_a_sofa_roller_visitor_keeps_one_hand_for_its_whole_stay() -> void:
 	assert_int(seen.size()).is_equal(1)
 	var only: int = seen.keys()[0]
 	assert_int(only / 10).is_equal(only % 10)
+
+
+func _gate_roller_setup(piece_def: StringName, anchor: Vector2i, facing: int) -> Dictionary:
+	var grid := PassengerTestWorld.floored(Vector2i(10, 10))
+	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(1, 9), 2)
+	PassengerTestWorld.place(grid, &"exit_door", Vector2i(1, 0), 0)
+	PassengerTestWorld.place(grid, piece_def, anchor, facing)
+	_world = PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(900, 1600))
+	var seat: Dictionary = _world.sim.layout.seats[0]
+	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	while SecurityLooks.bag_kind(p, 0) != SecurityLooks.Kind.ROLLER:
+		ToiletTestLayout.calm(p)
+		p.carry_on = 0
+		p = _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	ToiletTestLayout.calm(p)
+	p.carry_on = 1
+	p.cleared = true
+	var out: Vector2i = (seat["front"] as Vector2i) - (seat["cell"] as Vector2i)
+	_world.sim._seat_claims[seat["key"]] = p.id
+	p.seat_object = seat["object_id"]
+	p.seat_cell = seat["cell"]
+	p.seat_front = seat["front"]
+	p.seat_piece = Relocation.placement(grid, seat["object_id"])
+	p.stage = Passenger.Stage.TO_GATE
+	p.stage_tick = _world.clock.tick
+	p.at = (seat["front"] as Vector2i) + out
+	p.clear_path()
+	return {
+		"p": p,
+		"seat": seat,
+		"right": BuildGrid.SIDE_STEP.find(Vector2i(-out.y, out.x)),
+		"left": BuildGrid.SIDE_STEP.find(Vector2i(out.y, -out.x)),
+	}
+
+
+func test_gate_chair_stamp_revalidates_on_wall_while_carried() -> void:
+	var ctx := _gate_roller_setup(&"seat_row", Vector2i(4, 3), 0)
+	var p: Passenger = ctx["p"]
+	var seat: Dictionary = ctx["seat"]
+	assert_int(ParkSide.hand(_world.sim, p, 0)).is_equal(0)
+	assert_bool(_world.grid.apply(BuildEdit.place_wall(seat["front"], ctx["right"])).ok).is_true()
+	assert_int(ParkSide.hand(_world.sim, p, 0)).is_equal(1)
+	assert_int(SecurityLooks.hand_of(_world.sim, p, 0)).is_equal(1)
+	var stamps: Dictionary = _world.sim.get_meta(ParkSide.STAMPS, {})
+	assert_array(stamps.get(p.id, [])).is_equal(["gate %s" % p.seat_cell, 1])
+
+
+func test_gate_chair_stamp_stays_locked_after_set_down() -> void:
+	var ctx := _gate_roller_setup(&"seat_row", Vector2i(4, 3), 0)
+	var p: Passenger = ctx["p"]
+	var seat: Dictionary = ctx["seat"]
+	assert_int(ParkSide.hand(_world.sim, p, 0)).is_equal(0)
+	p.stage = Passenger.Stage.SITTING_DOWN
+	p.stage_tick = _world.clock.tick
+	assert_bool(_world.grid.apply(BuildEdit.place_wall(seat["front"], ctx["right"])).ok).is_true()
+	assert_int(ParkSide.hand(_world.sim, p, 0)).is_equal(0)
+	p.stage = Passenger.Stage.SEATED
+	assert_int(ParkSide.hand(_world.sim, p, 0)).is_equal(0)
+	p.stage = Passenger.Stage.STANDING_UP
+	assert_int(ParkSide.hand(_world.sim, p, 0)).is_equal(0)
+
+
+func test_gate_chair_stamp_keeps_right_on_unrelated_wall_while_carried() -> void:
+	var ctx := _gate_roller_setup(&"seat_row", Vector2i(4, 3), 0)
+	var p: Passenger = ctx["p"]
+	var seat: Dictionary = ctx["seat"]
+	assert_int(ParkSide.hand(_world.sim, p, 0)).is_equal(0)
+	assert_bool(_world.grid.apply(BuildEdit.place_wall(Vector2i(8, 8), 0)).ok).is_true()
+	assert_int(ParkSide.hand(_world.sim, p, 0)).is_equal(0)
+	assert_bool(_world.grid.apply(BuildEdit.place_wall(seat["front"], ctx["left"])).ok).is_true()
+	assert_int(ParkSide.hand(_world.sim, p, 0)).is_equal(0)
+	assert_bool(_world.grid.apply(BuildEdit.place_wall(seat["front"], ctx["right"])).ok).is_true()
+	assert_int(ParkSide.hand(_world.sim, p, 0)).is_equal(0)
+
+
+func test_bench_1a_stamp_revalidates_while_carried_and_locks_after_set_down() -> void:
+	var ctx := _gate_roller_setup(&"bench_1a", Vector2i(5, 3), 0)
+	var p: Passenger = ctx["p"]
+	var seat: Dictionary = ctx["seat"]
+	assert_int(ParkSide.hand(_world.sim, p, 0)).is_equal(0)
+	assert_bool(_world.grid.apply(BuildEdit.place_wall(seat["front"], ctx["right"])).ok).is_true()
+	assert_int(ParkSide.hand(_world.sim, p, 0)).is_equal(1)
+
+	_world.free_all()
+	_world = null
+	var ctx_locked := _gate_roller_setup(&"bench_1a", Vector2i(5, 3), 0)
+	var q: Passenger = ctx_locked["p"]
+	var locked_seat: Dictionary = ctx_locked["seat"]
+	assert_int(ParkSide.hand(_world.sim, q, 0)).is_equal(0)
+	q.stage = Passenger.Stage.SITTING_DOWN
+	q.stage_tick = _world.clock.tick
+	(
+		assert_bool(
+			_world.grid.apply(BuildEdit.place_wall(locked_seat["front"], ctx_locked["right"])).ok
+		)
+		. is_true()
+	)
+	assert_int(ParkSide.hand(_world.sim, q, 0)).is_equal(0)
+
+
+func test_gate_chair_stamp_revalidates_on_sim_tick_entering_sitting_down() -> void:
+	var ctx := _gate_roller_setup(&"seat_row", Vector2i(4, 3), 0)
+	var p: Passenger = ctx["p"]
+	var seat: Dictionary = ctx["seat"]
+	p.at = seat["front"]
+	assert_int(ParkSide.hand(_world.sim, p, 0)).is_equal(0)
+	assert_bool(_world.grid.apply(BuildEdit.place_wall(seat["front"], ctx["right"])).ok).is_true()
+	_world.step()
+	assert_int(p.stage).is_equal(Passenger.Stage.SITTING_DOWN)
+	assert_int(ParkSide.hand(_world.sim, p, 0)).is_equal(1)
+	assert_int(SecurityLooks.hand_of(_world.sim, p, 0)).is_equal(1)
+
+
+func test_gate_chair_stamp_revalidates_left_to_right_while_carried() -> void:
+	var ctx := _gate_roller_setup(&"seat_row", Vector2i(4, 3), 0)
+	var p: Passenger = ctx["p"]
+	var seat: Dictionary = ctx["seat"]
+	assert_bool(_world.grid.apply(BuildEdit.place_wall(seat["front"], ctx["right"])).ok).is_true()
+	assert_int(ParkSide.hand(_world.sim, p, 0)).is_equal(1)
+	assert_bool(_world.grid.apply(BuildEdit.remove_wall(seat["front"], ctx["right"])).ok).is_true()
+	assert_bool(_world.grid.apply(BuildEdit.place_wall(seat["front"], ctx["left"])).ok).is_true()
+	assert_int(ParkSide.hand(_world.sim, p, 0)).is_equal(0)
+	assert_int(SecurityLooks.hand_of(_world.sim, p, 0)).is_equal(0)
