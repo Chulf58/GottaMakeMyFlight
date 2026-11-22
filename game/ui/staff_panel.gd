@@ -122,6 +122,7 @@ func _ready() -> void:
 	_sync_ramp_column()
 	if menu != null:
 		menu.staff_toggled.connect(_on_staff_toggled)
+		menu.watch_staff_card(_card)
 		_card.visible = menu.staff_open
 	if staff == null:
 		push_error("StaffPanel: no StaffSim is set")
