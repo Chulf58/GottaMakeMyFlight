@@ -1,30 +1,11 @@
 class_name PanelRoom
 extends Node
-## Keeps the terminal out from under the HUD panels (decision camera-makes-
-## room-for-open-panels-the-build-tray-banner-and). It finds which panels are
-## open (the build tray with its status and cost lines, the Staff card, the
-## banner at the top centre and the Offers sheet), and the right rail's drawn
-## cards (alert cards and the flight result card) with its history tray
-## (AlertStack.room_rect()), and the category bar across the bottom while no
-## tray covers it, takes the
-## largest screen rectangle they leave free, and tells the TycoonCamera, which
-## puts its focus at the middle of that rectangle and, while it is still on the
-## start view, refits the start area inside it.
-##
-## Only a panel opening or closing refits the distance; a panel that merely
-## changes size moves the view a little and never zooms it (the banner is the
-## exception while the tray is open: see the build stack below). The rail only
-## ever shifts the view: a card coming or going is no panel opening or closing,
-## and the distance is fitted to the free rectangle without the rail
-## (fit_fraction()), so a card that is up when a tray opens does not zoom the
-## camera out either. The camera does nothing on a build edit.
-##
-## The build stack (the tray, and the banner at the top centre) makes room once,
-## when the tray opens (decision camera-makes-room-once-per-build-mode-open-not-on-
-## every-menu-switch). REFIT_FRAMES later its rectangles are kept, and the
-## tray changing size, or the banner coming or going, while the player
-## switches between build menus moves and zooms nothing. They are let go when
-## the tray closes. The other panels keep making room as they open and close.
+## Screen geometry helper for HUD panels (decision panel-room-camera-shifting-
+## disabled-camera-stays-steady-for-panels-and-alerts). Live camera shifting
+## is disabled so opening or closing build trays, side panels, banners, or
+## right-rail alert cards never moves or zooms TycoonCamera. `free_rect()` and
+## `open_rects()` stay intact for SelectReveal when clicking a built item
+## outside build mode.
 
 ## A cut that would leave less than this share of the viewport's width or
 ## height is not taken, so a small window never shrinks the view to nothing.
@@ -96,24 +77,14 @@ static func _kept_sides(free: Rect2, panel: Rect2) -> Array[Rect2]:
 	]
 
 
+func _ready() -> void:
+	set_process(false)
+
+
 func _process(_delta: float) -> void:
-	if camera == null:
-		return
-	_track_build_stack()
-	var key := open_key()
-	var free := free_fraction()
-	var fit := fit_fraction()
-	var moved := _changed(free, _last_free) or _changed(fit, _last_fit)
-	if key != _last_key:
-		_refit_frames = REFIT_FRAMES
-	var refit := _refit_frames > 0
-	_refit_frames = maxi(_refit_frames - 1, 0)
-	if key == _last_key and not moved:
-		return
-	camera.set_room(free, refit, fit)
-	_last_key = key
-	_last_free = free
-	_last_fit = fit
+	# Live camera shifting is disabled (decision panel-room-camera-shifting-
+	# disabled-camera-stays-steady-for-panels-and-alerts).
+	return
 
 
 ## True when an edge of `now` is more than MIN_CHANGE from the same edge of `was`.

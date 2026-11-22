@@ -3,9 +3,10 @@ extends Node
 ## Decides when the sim clock fast-forwards through a quiet night (decision
 ## quiet-nights-fast-forward-automatically-when-nothing-is-due). The airport
 ## is quiet when it is open, nobody is in the terminal, no spawn is pending,
-## no flight is moving and the clock is not paused; every panel that holds the
-## clock (OfferPanel, BuildSession, UnlockGuide, the intro) pauses it, so a hold
-## counts as paused. While quiet, SimClock asks stop_tick() once a frame and
+## no flight is moving and the clock is not paused; modal dialogs (UnlockGuide,
+## GameMenu, IncidentPanel, the intro) hold the clock, so a hold counts as
+## paused (build trays, OfferPanel, and FlightPlanner do not hold it). While
+## quiet, SimClock asks stop_tick() once a frame and
 ## fast-forwards to LEAD_TICKS before the next event: the earlier of the next
 ## flight event (FlightSim.next_event_tick) and the incidents' next one
 ## (IncidentDirector.next_event_tick: a scheduled fire; a roll at midnight

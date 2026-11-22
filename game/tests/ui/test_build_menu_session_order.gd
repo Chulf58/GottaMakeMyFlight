@@ -1,9 +1,7 @@
 class_name TestBuildMenuSessionOrder
 extends GdUnitTestSuite
-## The sim never advances a tick after a build tray opens (decision build-mode-
-## pauses-the-game-while-a-build-tray-is-open-closin). The tree is laid out as in
-## main.tscn: SimClock processes before BuildMenu, so a pause the session took
-## only in its own _process would land after the clock had already ticked.
+## The sim keeps ticking normally when a build tray opens (ruling
+## player-owns-clock-and-persistent-build-undo-no-auto-pause-on-trays-offers-planner-direct-delete).
 
 const STRUCTURE := 0
 
@@ -40,7 +38,7 @@ func _arm_the_clock() -> void:
 	_clock.set_speed(3)
 
 
-func test_no_tick_runs_after_the_tray_opens() -> void:
+func test_clock_keeps_ticking_when_the_tray_opens() -> void:
 	await get_tree().process_frame
 	_arm_the_clock()
 	var before := _clock.tick
@@ -49,8 +47,8 @@ func test_no_tick_runs_after_the_tray_opens() -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
 	print("ticks across opening the tray: %d -> %d" % [before, _clock.tick])
-	assert_bool(_clock.paused).is_true()
-	assert_int(_clock.tick).is_equal(before)
+	assert_bool(_clock.paused).is_false()
+	assert_int(_clock.tick).is_greater(before)
 
 
 func test_the_armed_clock_does_tick_when_no_tray_opens() -> void:

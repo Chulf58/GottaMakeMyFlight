@@ -81,6 +81,14 @@ func _click(at: Vector2) -> void:
 		_port.push_input(event)
 
 
+func _open_and_answer_intro() -> bool:
+	var opened := _hud.open_intro()
+	var cue := _hud.find_child("PhoneRingCue", true, false) as IntroDialogue.PhoneRingCue
+	if cue != null:
+		cue.answer()
+	return opened
+
+
 func test_a_hud_built_outside_the_running_scene_does_not_open_the_intro() -> void:
 	# The control for every test below: they open it by hand.
 	assert_bool(_hud.intro() != null).is_false()
@@ -89,7 +97,7 @@ func test_a_hud_built_outside_the_running_scene_does_not_open_the_intro() -> voi
 
 func test_opening_the_intro_pauses_the_clock() -> void:
 	assert_bool(_world.clock.paused).is_false()
-	assert_bool(_hud.open_intro()).is_true()
+	assert_bool(_open_and_answer_intro()).is_true()
 	assert_bool(_hud.intro() != null).is_true()
 	assert_bool(_world.clock.paused).is_true()
 	var tick := _world.clock.tick
@@ -98,7 +106,7 @@ func test_opening_the_intro_pauses_the_clock() -> void:
 
 
 func test_the_intro_shows_the_portrait_nameplate_and_instructions() -> void:
-	_hud.open_intro()
+	_open_and_answer_intro()
 	var intro := _hud.intro()
 	assert_bool(intro.is_visible_in_tree()).is_true()
 	var portrait_node := intro.find_child("Portrait", true, false) as TextureRect
@@ -108,6 +116,8 @@ func test_the_intro_shows_the_portrait_nameplate_and_instructions() -> void:
 	assert_str(name_label.text).is_equal("TERMINAL MANAGER")
 	assert_bool(name_label.is_visible_in_tree()).is_true()
 	var text := intro.body_text()
+	assert_str(text).contains("Operations")
+	assert_str(text).contains("Staff")
 	assert_str(text).contains("check-in")
 	assert_str(text).contains("security")
 	assert_str(text).contains("gate")
@@ -133,7 +143,7 @@ func test_the_intro_shows_the_portrait_nameplate_and_instructions() -> void:
 
 func test_on_a_smaller_screen_the_box_still_clears_the_build_tray() -> void:
 	_port.size = Vector2i(1280, 720)
-	_hud.open_intro()
+	_open_and_answer_intro()
 	var rects := _hud.intro().part_rects()
 	var screen := Rect2(Vector2.ZERO, Vector2(_port.size))
 	var box: Rect2 = rects["box"]
@@ -150,7 +160,7 @@ func test_on_a_smaller_screen_the_box_still_clears_the_build_tray() -> void:
 
 func test_continue_starts_the_clock_at_the_players_speed() -> void:
 	_world.clock.set_speed(3)
-	_hud.open_intro()
+	_open_and_answer_intro()
 	var button: Button = _hud.intro().continue_button()
 	_click(button.get_global_rect().get_center())
 	assert_bool(_hud.intro() != null).is_false()
@@ -162,7 +172,7 @@ func test_continue_starts_the_clock_at_the_players_speed() -> void:
 
 
 func test_space_closes_the_intro_without_also_toggling_the_pause() -> void:
-	_hud.open_intro()
+	_open_and_answer_intro()
 	_tap(KEY_SPACE)
 	assert_bool(_hud.intro() != null).is_false()
 	assert_bool(_world.clock.paused).is_false()
@@ -172,7 +182,7 @@ func test_space_closes_the_intro_without_also_toggling_the_pause() -> void:
 
 
 func test_enter_closes_the_intro() -> void:
-	_hud.open_intro()
+	_open_and_answer_intro()
 	_tap(KEY_ENTER)
 	assert_bool(_hud.intro() != null).is_false()
 	assert_bool(_world.clock.paused).is_false()
@@ -209,7 +219,7 @@ func test_keys_and_held_camera_keys_behind_the_open_intro_do_nothing() -> void:
 	var start_yaw := rig.yaw
 	_mode.set_tool(BuildMode.Tool.DESK)
 	var start_facing := _mode.facing
-	_hud.open_intro()
+	_open_and_answer_intro()
 	_tap(KEY_R)
 	_tap(KEY_3, true)
 	_port.push_input(_key(KEY_SPACE, false, true))
@@ -236,7 +246,7 @@ func test_the_wheel_does_not_zoom_behind_the_open_intro() -> void:
 	var rig := _add_camera()
 	await _frames(2)
 	var start := rig.target_distance
-	_hud.open_intro()
+	_open_and_answer_intro()
 	_wheel_up()
 	assert_float(rig.target_distance).is_equal(start)
 	# Control: the same notch zooms once the intro is closed.
@@ -247,7 +257,7 @@ func test_the_wheel_does_not_zoom_behind_the_open_intro() -> void:
 
 func test_freeing_the_dialogue_directly_starts_the_clock_once() -> void:
 	_world.clock.set_speed(3)
-	_hud.open_intro()
+	_open_and_answer_intro()
 	_hud.intro().free()
 	assert_bool(_hud.intro() != null).is_false()
 	assert_bool(_world.clock.paused).is_false()
@@ -263,7 +273,7 @@ func test_freeing_the_intro_layer_directly_starts_the_clock_and_frees_the_camera
 	var rig := _add_camera()
 	await _frames(2)
 	var start := rig.position
-	_hud.open_intro()
+	_open_and_answer_intro()
 	_hud.intro().get_parent().free()
 	assert_bool(_hud.intro() != null).is_false()
 	assert_bool(_world.clock.paused).is_false()
@@ -280,7 +290,7 @@ func test_a_click_on_the_build_bar_is_blocked_while_open_and_works_after() -> vo
 	# Containers lay their buttons out on the next frame.
 	await get_tree().process_frame
 	var at := _menu.category_button(1).get_global_rect().get_center()
-	_hud.open_intro()
+	_open_and_answer_intro()
 	_click(at)
 	assert_int(_menu.open_category()).is_equal(BuildMenu.NO_CATEGORY)
 	_hud.dismiss_intro()
@@ -289,7 +299,7 @@ func test_a_click_on_the_build_bar_is_blocked_while_open_and_works_after() -> vo
 
 
 func test_the_intro_opens_once_per_session() -> void:
-	assert_bool(_hud.open_intro()).is_true()
+	assert_bool(_open_and_answer_intro()).is_true()
 	_hud.dismiss_intro()
 	assert_bool(IntroDialogue.shown_this_session).is_true()
 	_world.clock.set_paused(false)

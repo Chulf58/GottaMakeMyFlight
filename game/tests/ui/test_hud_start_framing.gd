@@ -14,6 +14,7 @@ var _boot_home_pos := Vector3.ZERO
 var _boot_cam_pos := Vector3.ZERO
 var _boot_home_dist := 0.0
 var _boot_expected := Vector3.ZERO
+var _boot_room := Rect2()
 
 
 func before() -> void:
@@ -24,6 +25,7 @@ func before() -> void:
 	_boot_cam_pos = _camera.position
 	_boot_home_dist = _camera.home_distance
 	_boot_expected = _framed(StartView.area_for(_mode.grid))
+	_boot_room = _camera.room
 	# The edits here paint floor off a new game's land and building on unowned
 	# land is refused (LandPlots), so plots are bought out to it; a save accepts that.
 	# The first site's north-west plot (side land is locked).
@@ -50,6 +52,7 @@ func _framed(area: Rect2) -> Vector3:
 
 
 func test_the_game_opens_framed_on_the_starter_terminal_floor() -> void:
+	assert_bool(_boot_room.is_equal_approx(TycoonCamera.WHOLE_VIEW)).is_true()
 	assert_vector(_boot_home_pos).is_equal_approx(_boot_expected, Vector3.ONE * 0.001)
 	assert_vector(_boot_cam_pos).is_equal_approx(_boot_home_pos, Vector3.ONE * 0.001)
 	assert_float(_boot_home_dist).is_less(60.0)
@@ -95,5 +98,6 @@ func test_loading_a_save_reframes_the_camera_on_what_it_built() -> void:
 	var area := StartView.area_for(_mode.grid)
 	var cell_centre := _mode.grid.cell_to_world(target)
 	assert_bool(area.has_point(Vector2(cell_centre.x, cell_centre.z))).is_true()
+	assert_bool(_camera.room.is_equal_approx(TycoonCamera.WHOLE_VIEW)).is_true()
 	assert_vector(_camera.home_position).is_equal_approx(_framed(area), Vector3.ONE * 0.001)
 	assert_vector(_camera.position).is_equal_approx(_camera.home_position, Vector3.ONE * 0.001)

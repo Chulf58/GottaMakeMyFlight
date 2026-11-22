@@ -27,12 +27,10 @@ extends CanvasLayer
 ## goes on the rail: made, missed, close-call saves and the main reasons; a
 ## later closing flight replaces it, and it leaves after
 ## FlightResultPanel.SHOW_SECONDS of real time or on a click, staying in the
-## alerts history. On
-## ready the camera frames the built area (StartView) inside the screen share
-## the open panels leave free (PanelRoom, which keeps telling the camera as
-## panels open and close). A new game opens paused under the
-## IntroDialogue (once per session, never in a probe, a test or a playtest);
-## closing it starts the clock at 1x.
+## alerts history. On ready the camera frames the built area (StartView) in
+## WHOLE_VIEW (decision 66acd8b0 keeps it steady when panels or alerts open). A
+## new game opens paused under the IntroDialogue (once per session, never in a
+## probe, a test or a playtest); closing it starts the clock at 1x.
 ##
 ## Economy policy of the Debug panel (Economy 7/8): its actions are debug aids
 ## and are labelled so. The starter terminal is written straight to the grid,
@@ -130,13 +128,16 @@ var _panel_room := PanelRoom.new()
 ## so a result waits for the next refresh.
 var _unreported: Array[String] = []
 var _intro_layer: CanvasLayer
+var _intro_ring: IntroDialogue.PhoneRingCue
 var _intro: IntroDialogue
 ## The intro's hold on the clock (SimClock.holds), which does not give way to
 ## the player: the clock starts when the intro closes, as its text says.
 var _intro_hold := ClockHolds.NONE
-## The game menu, which also asks the new-game incidents question; null in a
+var _intro_camera_gated := false
+## The game menu, which asks the deferred incidents question on Day 2; null in a
 ## scene without one.
 var _game_menu: GameMenu
+var _incidents_prompt_pending := false
 var _debug_docks: Array[VBoxContainer] = []
 ## The camera's input state when the intro opened, restored when it closes.
 var _camera_was_processing := true
@@ -251,11 +252,16 @@ func _ready() -> void:
 	_fit_follow()
 	get_viewport().size_changed.connect(_fit_follow)
 	if IntroDialogue.should_show(
-		IntroDialogue.shown_this_session, _in_current_scene(), _playtest_switch_on()
+		IntroDialogue.shown_this_session,
+		_in_current_scene(),
+		_playtest_switch_on(),
+		not GameBoot.load_path.is_empty()
 	):
 		open_intro()
 	if save_game != null:
 		save_game.loaded.connect(_on_save_loaded)
+	if clock != null:
+		clock.ticked.connect(_on_clock_ticked)
 	_panel_room.name = "PanelRoom"
 	_panel_room.camera = camera
 	_panel_room.scene_root = get_parent()
@@ -312,7 +318,7 @@ func _drop_retired_selection() -> void:
 	var followed := sim.get_passenger(views.selected_id)
 	if followed != null and views.shows(followed):
 		return
-	views.selected_id = 0
+	views.select(0)
 	if camera != null:
 		camera.stop_follow()
 
@@ -331,11 +337,11 @@ func _unhandled_input(event: InputEvent) -> void:
 	var vehicle := landside_views.pick(eye, click.position) if landside_views != null else 0
 	if landside_views != null:
 		landside_views.select(vehicle)
-	views.selected_id = 0
+	views.select(0)
 	_built.clear()
 	if vehicle == 0:
 		_pick_built(eye, click.position)
-		views.selected_id = _passenger_at(eye, click.position)
+		views.select(_passenger_at(eye, click.position))
 		if views.selected_id != 0:
 			_built.clear()
 	_reveal_frames = REVEAL_FRAMES if _built.is_selected() else 0
@@ -354,7 +360,7 @@ func _select_built_object(object_id: int) -> void:
 	if landside_views != null:
 		landside_views.select(0)
 	if views != null:
-		views.selected_id = 0
+		views.select(0)
 	_built.select_object(object_id)
 	_reveal_frames = REVEAL_FRAMES
 	if camera != null:
@@ -425,7 +431,7 @@ func _close_selection() -> bool:
 	if landside_views != null:
 		landside_views.select(0)
 	if views != null:
-		views.selected_id = 0
+		views.select(0)
 	_built.clear()
 	_reveal_frames = 0
 	if camera != null:
@@ -720,41 +726,80 @@ func unlock_guide() -> UnlockGuide:
 	return _unlock_guide
 
 
-## Pauses the clock and opens the intro dialogue, which stops the camera: at
-## once, or, while another exclusive dialog has the turn, when that one closes.
-## Refused (false) when it was already shown this session or is open.
+## Pauses the clock and opens the intro dialogue after a brief ringing-phone
+## icon + ring sound beat, which stops the camera: at once, or, while another
+## exclusive dialog has the turn, when that one closes. Refused (false) when it
+## was already shown this session or is open/ringing.
 func open_intro() -> bool:
-	if IntroDialogue.shown_this_session or _intro != null or clock == null:
+	if IntroDialogue.shown_this_session or _intro != null or _intro_ring != null or clock == null:
 		return false
 	IntroDialogue.shown_this_session = true
-	_intro_hold = clock.holds.take_turn(self, _show_intro)
+	_incidents_prompt_pending = true
+	_intro_hold = clock.holds.take_turn(self, _start_intro_ring)
 	return true
 
 
+func _start_intro_ring() -> void:
+	_ensure_intro_layer()
+	_intro_ring = IntroDialogue.PhoneRingCue.new()
+	_intro_layer.add_child(_intro_ring)
+	_intro_ring.answered.connect(_on_intro_ring_answered)
+	if not _intro_layer.tree_exiting.is_connected(_close_intro):
+		_intro_layer.tree_exiting.connect(_close_intro)
+	_set_intro_camera_gated(true)
+	_intro_ring.start_ring(true, true)
+
+
+func _on_intro_ring_answered() -> void:
+	_free_intro_ring()
+	_show_intro()
+
+
 func _show_intro() -> void:
-	_intro_layer = CanvasLayer.new()
-	_intro_layer.name = "IntroLayer"
-	_intro_layer.layer = INTRO_LAYER
+	_ensure_intro_layer()
 	_intro = IntroDialogue.new()
 	_intro_layer.add_child(_intro)
-	add_child(_intro_layer)
 	# Dismissal, or the dialogue or its layer leaving the tree any other way,
 	# runs the same one-time cleanup.
 	_intro.dismissed.connect(_close_intro)
 	_intro.tree_exiting.connect(_close_intro)
-	_intro_layer.tree_exiting.connect(_close_intro)
-	_gate_camera(true)
+	if not _intro_layer.tree_exiting.is_connected(_close_intro):
+		_intro_layer.tree_exiting.connect(_close_intro)
+	_set_intro_camera_gated(true)
 
 
-## Closes the intro as Continue would, or drops its queued hold; does nothing
-## when neither is active.
+func _ensure_intro_layer() -> void:
+	if _intro_layer != null:
+		return
+	_intro_layer = CanvasLayer.new()
+	_intro_layer.name = "IntroLayer"
+	_intro_layer.layer = INTRO_LAYER
+	add_child(_intro_layer)
+
+
+func _set_intro_camera_gated(closed: bool) -> void:
+	if _intro_camera_gated == closed:
+		return
+	_intro_camera_gated = closed
+	_gate_camera(closed)
+
+
+func _free_intro_ring() -> void:
+	var ring := _intro_ring
+	_intro_ring = null
+	if is_instance_valid(ring):
+		ring.stop_ring()
+		if not ring.is_queued_for_deletion():
+			ring.queue_free()
+
+
+## Closes the intro as Continue would, or drops its ringing/queued hold; does
+## nothing when neither is active.
 func dismiss_intro() -> void:
 	if _intro != null:
 		_intro.dismiss()
-	elif _intro_hold != ClockHolds.NONE:
-		if is_instance_valid(clock):
-			clock.holds.release(_intro_hold)
-		_intro_hold = ClockHolds.NONE
+	elif _intro_layer != null or _intro_ring != null or _intro_hold != ClockHolds.NONE:
+		_close_intro()
 
 
 ## The open intro dialogue, or null when it is closed.
@@ -911,19 +956,23 @@ func _fit_follow() -> void:
 ## intro's hold, so the clock runs at the player's own speed unless another
 ## hold still pauses it. Later calls find nothing open and do nothing.
 func _close_intro() -> void:
-	if _intro_layer == null:
+	if (
+		_intro_layer == null
+		and _intro_ring == null
+		and _intro == null
+		and _intro_hold == ClockHolds.NONE
+	):
 		return
 	var layer := _intro_layer
 	var continued := _intro != null and _intro.is_dismissed()
+	_free_intro_ring()
 	_intro_layer = null
 	_intro = null
 	if is_instance_valid(layer) and not layer.is_queued_for_deletion():
 		layer.queue_free()
-	_gate_camera(false)
-	# The new-game question takes its place in line before the intro lets go, so
-	# the clock stays held from the welcome page to the answer.
-	if continued and is_instance_valid(_game_menu) and _game_menu.is_inside_tree():
-		_game_menu.ask_incidents()
+	_set_intro_camera_gated(false)
+	if not continued:
+		_incidents_prompt_pending = false
 	if is_instance_valid(clock):
 		clock.holds.release(_intro_hold)
 	_intro_hold = ClockHolds.NONE
@@ -933,14 +982,21 @@ func _close_intro() -> void:
 ## asking the new-game incident question, so the loaded game keeps its own
 ## incident setting. Its hold is already gone, as incident_panel's is.
 func _end_intro_on_load() -> void:
-	if _intro_layer == null:
+	_incidents_prompt_pending = false
+	if (
+		_intro_layer == null
+		and _intro_ring == null
+		and _intro == null
+		and _intro_hold == ClockHolds.NONE
+	):
 		return
 	var layer := _intro_layer
+	_free_intro_ring()
 	_intro_layer = null
 	_intro = null
 	if is_instance_valid(layer) and not layer.is_queued_for_deletion():
 		layer.queue_free()
-	_gate_camera(false)
+	_set_intro_camera_gated(false)
 	if is_instance_valid(clock):
 		clock.holds.release(_intro_hold)
 	_intro_hold = ClockHolds.NONE
@@ -1001,6 +1057,7 @@ func _has_open_flight() -> bool:
 ## A loaded world is a new start: frame the camera on what the save built.
 func _on_save_loaded(ok: bool) -> void:
 	if ok:
+		_incidents_prompt_pending = false
 		_end_intro_on_load()
 		# A loaded world may reuse the selected id for another item.
 		_built.clear()
@@ -1015,8 +1072,9 @@ func _on_save_loaded(ok: bool) -> void:
 
 func _pa_bottom() -> float:
 	var menu := get_node_or_null("../BuildMenu") as BuildMenu
-	if menu != null and menu.is_node_ready() and menu.is_tray_open():
-		return menu.stack_top() + HudLayout.GAP
+	if menu != null and menu.is_node_ready():
+		if menu.is_tray_open() or menu.status_card().visible:
+			return menu.stack_top() + HudLayout.GAP
 	var staff := get_node_or_null("../StaffPanel") as StaffPanel
 	if staff != null and staff.is_node_ready():
 		var staff_card := staff.get_node_or_null("StaffCard") as Control
@@ -1042,12 +1100,12 @@ func _pa_modal_open() -> bool:
 
 func _frame_start_view() -> void:
 	if camera != null and build_mode != null:
-		camera.frame_start_view(StartView.area_for(build_mode.grid), _panel_room.free_fraction())
+		camera.frame_start_view(StartView.area_for(build_mode.grid))
 		_panel_room.mark_sent()
 
 
 ## The banner slot's screen rectangle while the status banner or a first-time
-## hint shows there, empty otherwise; PanelRoom cuts it from the camera room.
+## hint shows there, empty otherwise; SelectReveal avoids it on built selection.
 func _banner_rect() -> Rect2:
 	var rect := Rect2()
 	var staff := get_parent().get_node_or_null("StaffPanel") as StaffPanel
@@ -1065,6 +1123,38 @@ func _on_doors_closed(flight_id: String) -> void:
 	_unreported.append(flight_id)
 
 
+func _incidents_modal_open() -> bool:
+	if _pa_modal_open():
+		return true
+	if _intro != null or _intro_hold != ClockHolds.NONE:
+		return true
+	if _unlock_guide != null and _unlock_guide.is_open():
+		return true
+	return _game_menu.is_open() or _game_menu.is_question_open()
+
+
+func _on_clock_ticked(tick: int) -> void:
+	if not _incidents_prompt_pending:
+		return
+	if clock == null or clock.paused:
+		return
+	if flights == null or flights.opened_tick < 0:
+		return
+	if not is_instance_valid(_game_menu) or not _game_menu.is_inside_tree():
+		return
+	if _game_menu.director != null and _game_menu.director.is_enabled():
+		_incidents_prompt_pending = false
+		return
+	if _incidents_modal_open():
+		return
+	if (
+		GameCalendar.day_of(tick, clock.epoch)
+		> GameCalendar.day_of(flights.opened_tick, clock.epoch)
+	):
+		_incidents_prompt_pending = false
+		_game_menu.ask_incidents()
+
+
 func _on_follow_late_requested(flight_id: String) -> void:
 	if sim == null or views == null:
 		return
@@ -1078,7 +1168,7 @@ func _on_follow_late_requested(flight_id: String) -> void:
 		landside_views.select(0)
 	_built.clear()
 	_reveal_frames = 0
-	views.selected_id = id
+	views.select(id)
 	if camera != null:
 		camera.follow(views.follow_anchor)
 	refresh()

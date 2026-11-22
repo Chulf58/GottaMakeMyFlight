@@ -9,8 +9,8 @@ extends CanvasLayer
 ## locked tabs and locked cards stay hidden until their tier opens, with warm
 ## "New" highlights on newly unlocked tabs and cards (and Tier 3 "In the full
 ## game" teasers at the right end of trays once Tier 2 unlocks in DemoMode).
-## The status and refusal text and the cost line share one card at a fixed place
-## above the tray's reserved space (HUD 5/7); a money slot sits top-left.
+## The status and refusal text and the cost line share one card above the tray
+## (or right above the category bar while the tray is closed) (HUD 5/7); a money slot sits top-left.
 ## BuildMode keeps the tool logic: the menu calls set_tool() and rotate_facing()
 ## and follows tool_changed and status_changed. Opening a category picks no
 ## tool; picking a card does, and arming a visible tool opens its own category.
@@ -121,7 +121,7 @@ const GRANT_HOLD_S := 8.0
 ## Optional: when set, a successful load ends any message hold (the notices
 ## belong to the world that was replaced).
 @export var save_game: SaveGame
-## Optional: paused while build mode lasts (BuildSession).
+## Kept for scene/test wiring compatibility; forwarded to BuildSession.
 @export var clock: SimClock
 ## Optional: marks the cards and tabs of a newly opened tier "New" (PassengerHud
 ## wires it with watch_guide()); without it no card or tab carries the mark.
@@ -131,8 +131,7 @@ var guide: UnlockGuide
 var staff_open := false
 ## The Staff button at the end of the bar.
 var staff_button := Button.new()
-## Build mode: a tray open or a tool picked (decision build-mode-pauses-the-
-## game-while-a-build-tray-is-open-closin). The frame is its on-screen sign.
+## Build mode: a tray open or a tool picked. The frame is its on-screen sign.
 var build_session := BuildSession.new()
 var build_frame := BuildModeFrame.new()
 ## The Templates page; press_category(TEMPLATES_PAGE) opens and closes it.
@@ -195,6 +194,7 @@ var _hold_is_grant := false
 var _pending_wages := ""
 var _wages_hold_amount := 0
 var _wages_hold_owed := 0
+var _staff_card: Control
 
 
 ## What a tool's card costs: the floor tile, one wall piece or the object.
@@ -292,6 +292,7 @@ func _ready() -> void:
 		save_game.loaded.connect(_on_loaded)
 	if day_ledger != null:
 		_money_slot.watch(day_ledger, settlement)
+	get_viewport().size_changed.connect(sync_tray_bounds)
 
 
 func _notification(what: int) -> void:
@@ -546,12 +547,45 @@ func ghost_reason() -> GhostReason:
 	return _ghost_reason
 
 
+## Tracks `card` (StaffPanel's hiring card) so a closed-tray status card docks
+## above it while Staff is open instead of sitting behind it.
+func watch_staff_card(card: Control) -> void:
+	if _staff_card == card:
+		return
+	if _staff_card != null and is_instance_valid(_staff_card):
+		if _staff_card.resized.is_connected(sync_tray_bounds):
+			_staff_card.resized.disconnect(sync_tray_bounds)
+		if _staff_card.visibility_changed.is_connected(sync_tray_bounds):
+			_staff_card.visibility_changed.disconnect(sync_tray_bounds)
+	_staff_card = card
+	if _staff_card != null:
+		_staff_card.resized.connect(sync_tray_bounds)
+		_staff_card.visibility_changed.connect(sync_tray_bounds)
+	if is_node_ready():
+		sync_tray_bounds()
+
+
+func _staff_card_height() -> float:
+	if not staff_open:
+		return 0.0
+	var card := _staff_card if is_instance_valid(_staff_card) else null
+	if card == null and is_inside_tree():
+		var panel := get_node_or_null("../StaffPanel") as StaffPanel
+		if panel != null and panel.is_node_ready():
+			card = panel.card()
+	if card == null or not card.visible:
+		return 0.0
+	return maxf(card.size.y, card.get_combined_minimum_size().y)
+
+
 func _set_staff_open(open: bool) -> void:
 	if open == staff_open:
 		return
 	staff_open = open
 	staff_button.set_pressed_no_signal(open)
 	staff_toggled.emit(open)
+	if is_node_ready():
+		sync_tray_bounds()
 
 
 func _on_tool_changed(tool: BuildMode.Tool) -> void:
@@ -688,6 +722,7 @@ func _sync_filter_width() -> void:
 
 func sync_tray_bounds() -> void:
 	var h := tray_height()
+	var bottom := MARGIN + BAR_H + GAP
 	if _tray.visible:
 		var max_inner := tray_max_inner_width()
 		if _scroll.visible:
@@ -708,14 +743,20 @@ func sync_tray_bounds() -> void:
 		var inner_w := minf(maxf(content_w, filter_w), max_inner)
 		var root_w := _tray_root.get_combined_minimum_size().x + pad_x
 		var w := clampf(maxf(inner_w + pad_x, root_w), 0.0, COLUMN_W)
-		var bottom := MARGIN + BAR_H + GAP
 		_tray.custom_minimum_size = Vector2(w, h)
 		_tray.offset_left = -w * 0.5
 		_tray.offset_right = w * 0.5
 		_tray.offset_top = -bottom - h
 		_tray.offset_bottom = -bottom
 		_tray.size = Vector2(w, h)
-	BuildMenuLayout.sync_status_card_bottom(_status_card, MARGIN + BAR_H + GAP + h + GAP)
+	var card_bottom := bottom
+	if _tray.visible:
+		card_bottom = bottom + h + GAP
+	else:
+		var staff_h := _staff_card_height()
+		if staff_h > 0.0:
+			card_bottom = bottom + staff_h + GAP
+	BuildMenuLayout.sync_status_card_bottom(_status_card, card_bottom)
 
 
 func _on_balance_changed(_balance: int) -> void:
@@ -1119,8 +1160,7 @@ func _on_loaded(ok: bool) -> void:
 
 
 ## Closes any open tray, Staff card, held status banner, template paste or room
-## move and drops the build session's hold on the clock (used when a full-screen
-## modal takes over).
+## move and ends build mode (used when a full-screen modal takes over).
 func close_for_modal() -> void:
 	_open = NO_CATEGORY
 	_pending_scroll_tool = BuildMode.Tool.NONE
@@ -1202,12 +1242,21 @@ static func tray_stack_top(tray_h: float = TRAY_H) -> float:
 	return MARGIN + BAR_H + GAP + tray_h + GAP + STATUS_H
 
 
-## tray_stack_top() with the live tray height (136 or 168 px) and status card's
-## height as it is now: a held rescue or wages message wraps and grows the card
-## upward, and what docks above the stack must clear that too.
+## Height, from the bottom edge, of the top of the active bottom stack: when a
+## tray is open, tray_stack_top() with the live tray height and status card's
+## height; when closed, the category bar plus any visible StaffCard and/or
+## visible status card above it.
 func stack_top() -> float:
-	var card_h := _status_card.size.y if _status_card.visible else STATUS_H
-	return MARGIN + BAR_H + GAP + tray_height() + GAP + maxf(STATUS_H, card_h)
+	var card_h := maxf(STATUS_H, _status_card.size.y) if _status_card.visible else STATUS_H
+	if _tray.visible:
+		return MARGIN + BAR_H + GAP + tray_height() + GAP + card_h
+	var top := MARGIN + BAR_H
+	var staff_h := _staff_card_height()
+	if staff_h > 0.0:
+		top += GAP + staff_h
+	if _status_card.visible:
+		top += GAP + card_h
+	return top
 
 
 ## Anchors a control to the bottom centre with its bottom edge `bottom` px up;

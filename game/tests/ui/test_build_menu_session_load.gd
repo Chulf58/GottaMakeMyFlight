@@ -46,9 +46,9 @@ func _build_from_running_2x_then_load_paused_2x() -> void:
 	_mode.set_tool(BuildMode.Tool.FLOOR)
 	assert_bool(_mode.apply_at(_mode.grid.cell_to_world(Vector2i(1, 1))).ok).is_true()
 	assert_int(_mode.undo_history().size()).is_equal(1)
-	assert_bool(_clock.paused).is_true()
+	assert_bool(_clock.paused).is_false()
 	# The loaded clock is paused by the player's own pause, as SaveGame.load_world()
-	# leaves it; build mode's hold is not the player's pause.
+	# leaves it.
 	_clock.set_paused(true)
 	_save.loaded.emit(true)
 
@@ -71,7 +71,7 @@ func test_a_load_ends_build_mode_closes_the_tray_and_clears_undo() -> void:
 	assert_bool(_menu.build_frame.is_showing()).is_false()
 
 
-func test_a_load_before_the_first_sync_drops_the_pending_hold() -> void:
+func test_a_load_before_sync_still_ends_build_mode() -> void:
 	_menu.press_category(STRUCTURE)
 	_save.loaded.emit(true)
 	_menu.build_session.sync()
@@ -79,12 +79,12 @@ func test_a_load_before_the_first_sync_drops_the_pending_hold() -> void:
 	assert_bool(_clock.paused).is_false()
 
 
-func test_build_mode_starts_again_after_a_load() -> void:
+func test_build_mode_starts_again_after_a_load_without_touching_clock() -> void:
 	_build_from_running_2x_then_load_paused_2x()
 	_clock.set_paused(false)
 	_menu.press_category(STRUCTURE)
 	_menu.build_session.sync()
-	assert_bool(_clock.paused).is_true()
+	assert_bool(_clock.paused).is_false()
 	_menu.press_category(STRUCTURE)
 	assert_bool(_clock.paused).is_false()
 	assert_int(_clock.speed).is_equal(2)
@@ -97,4 +97,4 @@ func test_a_failed_load_leaves_build_mode_alone() -> void:
 	_save.loaded.emit(false)
 	assert_bool(_menu.build_session.active).is_true()
 	assert_bool(_menu.is_tray_open()).is_true()
-	assert_bool(_clock.paused).is_true()
+	assert_bool(_clock.paused).is_false()

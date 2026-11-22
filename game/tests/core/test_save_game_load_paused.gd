@@ -72,10 +72,8 @@ func test_the_staff_hint_card_shows_once_after_loading_a_save_with_no_staff() ->
 	assert_bool(_save.load_from_file(_path)).is_true()
 	assert_bool(_panel.hint_card().visible).is_true()
 	assert_bool(_panel.hint_label().visible).is_true()
-	assert_str(_panel.hint_text()).contains("Check-in desk and an agent: hire an agent on Staff")
-	assert_str(_panel.hint_text()).contains(
-		"Security scanner and an officer: hire an officer on Staff"
-	)
+	assert_str(_panel.hint_text()).contains("Hire Check-in agent (Staff)")
+	assert_str(_panel.hint_text()).contains("Hire Security officer (Staff)")
 	assert_str(_panel.hint_label().text).is_equal(Checklist.TITLE_CLOSED)
 	assert_int(_main.find_children("StaffHintCard", "", true, false).size()).is_equal(1)
 	var lines := _panel.hint_text().split("\n")
@@ -116,17 +114,20 @@ func test_a_load_while_paused_at_2x_comes_back_paused_at_1x() -> void:
 	assert_int(_clock.speed).is_equal(1)
 
 
-## Holds taken before the load (the Offers sheet, build mode) all end with it
-## (decision daily-incidents-technical-design-incidentdirector-shared-clo): the
-## game waits paused at 1x, and the player's first resume runs it.
+## Modal holds taken before the load (GameMenu, a held ClockHolds token) and
+## open non-pausing panels (Offers, build mode) all end with it: the game waits
+## paused at 1x, and the player's first resume runs it.
 func test_a_load_drops_every_hold_and_the_first_resume_runs_the_game() -> void:
 	var hud := _main.get_node("PassengerHud") as PassengerHud
 	hud.press_speed(3)
+	(_main.get_node("FlightSim") as FlightSim).open_airport()
 	(_main.get_node("OfferPanel") as OfferPanel).open()
 	var session := (_main.get_node("BuildMenu") as BuildMenu).build_session
 	session.set_building(true)
 	session.sync()
-	assert_int(_clock.holds.count()).is_equal(2)
+	var game_menu := _main.get_node("GameMenu") as GameMenu
+	assert_bool(game_menu.open()).is_true()
+	assert_int(_clock.holds.count()).is_equal(1)
 	assert_bool(_save.load_from_file(_path)).is_true()
 	_has_terminal = true
 	assert_int(_clock.holds.count()).is_equal(0)
@@ -134,6 +135,7 @@ func test_a_load_drops_every_hold_and_the_first_resume_runs_the_game() -> void:
 	assert_int(_clock.speed).is_equal(1)
 	assert_bool((_main.get_node("OfferPanel") as OfferPanel).is_open()).is_false()
 	assert_bool(session.active).is_false()
+	assert_bool(game_menu.is_open()).is_false()
 	hud.press_speed(2)
 	assert_bool(_clock.paused).is_false()
 	var tick := _clock.tick

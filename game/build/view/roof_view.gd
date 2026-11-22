@@ -75,6 +75,8 @@ const DARK_GREY_UV := Vector2(0.109, 0.215)
 @export var roof_fade_seconds := 0.4
 
 var cutaway := RoofCutaway.new()
+var mask_scans := 0
+var mesh_rebuilds := 0
 
 var _grid: BuildGrid
 ## build_mode's wall view, or null.
@@ -84,6 +86,7 @@ var _roof := MeshInstance3D.new()
 var _materials: Array[ShaderMaterial] = []
 ## The indoor mask the roof was last built from, one byte per cell.
 var _indoor := PackedByteArray()
+var _enclosure_token: Array = []
 var _roofed := 0
 var _level := 0.0
 
@@ -123,12 +126,15 @@ func bind(grid: BuildGrid) -> void:
 	if _grid != null and _grid.graph_changed.is_connected(_on_graph_changed):
 		_grid.graph_changed.disconnect(_on_graph_changed)
 	_grid = grid
+	_enclosure_token = []
 	_grid.graph_changed.connect(_on_graph_changed)
 	rebuild()
 
 
 ## Builds the roof mesh again from the grid's indoor cells.
 func rebuild() -> void:
+	mesh_rebuilds += 1
+	_enclosure_token = [_grid.grid_id(), _grid.enclosure_version()] if _grid != null else []
 	_indoor = _indoor_mask()
 	_roofed = 0
 	for value in _indoor:
@@ -188,11 +194,19 @@ func _is_top(y: float) -> bool:
 
 
 func _on_graph_changed(_cells: Array[Vector2i]) -> void:
+	if _grid == null:
+		return
+	var token := [_grid.grid_id(), _grid.enclosure_version()]
+	if token == _enclosure_token:
+		return
 	if _indoor_mask() != _indoor:
 		rebuild()
+	else:
+		_enclosure_token = token
 
 
 func _indoor_mask() -> PackedByteArray:
+	mask_scans += 1
 	var mask := PackedByteArray()
 	if _grid == null:
 		return mask

@@ -1,9 +1,9 @@
 class_name TestBuildSessionLandsideUndo
 extends GdUnitTestSuite
 ## Closing build mode keeps what could be undone, the landside's actions as well
-## as the grid's, until the sim clock advances a tick (user-ruled 2026-11-11);
-## then BuildSession forgets them (BuildMode.clear_undo()): Ctrl+Z cannot take
-## back (and refund) a curb built before the tick.
+## as the grid's, across tray closes and sim ticks (ruling
+## player-owns-clock-and-persistent-build-undo-no-auto-pause-on-trays-offers-planner-direct-delete);
+## a rescue grant, load, or outside grid edit still invalidates them.
 
 const STARTER := preload("res://landside/starter_landside.tres")
 const SITE := preload("res://build/terminal_site.tres")
@@ -48,34 +48,22 @@ func _balance() -> int:
 	return _finances.wallet.balance
 
 
-func test_a_landside_only_action_can_be_undone_after_the_session_ends_until_a_tick() -> void:
+func test_a_landside_only_action_can_be_undone_after_the_session_ends_and_ticks_run() -> void:
 	var start := _balance()
 	_session.set_building(true)
 	_mode.set_tool(BuildMode.Tool.CURB)
 	assert_bool(_mode.apply_at(IN_BAY_0).ok).is_true()
+	assert_int(_mode.landside_placement().undo_size()).is_equal(1)
 	_session.set_building(false)
+	for i in 5:
+		_clock.advance(SimClock.STEP)
 	assert_int(_mode.landside_placement().undo_size()).is_equal(1)
 	assert_bool(_mode.undo().ok).is_true()
 	assert_bool(_sim.curbs_built[0]).is_false()
 	assert_int(_balance()).is_equal(start)
 
 
-func test_a_landside_only_action_cannot_be_undone_after_a_tick() -> void:
-	var start := _balance()
-	_session.set_building(true)
-	_mode.set_tool(BuildMode.Tool.CURB)
-	assert_bool(_mode.apply_at(IN_BAY_0).ok).is_true()
-	assert_int(_mode.landside_placement().undo_size()).is_equal(1)
-	_session.set_building(false)
-	_clock.advance(SimClock.STEP)
-	assert_int(_mode.landside_placement().undo_size()).is_equal(0)
-	_session.set_building(true)
-	assert_object(_mode.undo()).is_null()
-	assert_bool(_sim.curbs_built[0]).is_true()
-	assert_int(_balance()).is_equal(start - 300)
-
-
-func test_interleaved_grid_and_landside_actions_are_all_forgotten_by_a_tick() -> void:
+func test_interleaved_grid_and_landside_actions_persist_across_ticks_and_undo_in_order() -> void:
 	var start := _balance()
 	var cell := Vector2i(10, 10) + LandKit.FIRST_SITE
 	_session.set_building(true)
@@ -86,18 +74,23 @@ func test_interleaved_grid_and_landside_actions_are_all_forgotten_by_a_tick() ->
 	_mode.set_tool(BuildMode.Tool.FLOOR)
 	assert_bool(_mode.apply_at(_mode.grid.cell_to_world(cell + Vector2i.RIGHT)).ok).is_true()
 	assert_int(_mode.undo_history().size()).is_equal(2)
+	assert_int(_mode.landside_placement().undo_size()).is_equal(1)
 	_session.set_building(false)
-	_clock.advance(SimClock.STEP)
-	assert_int(_mode.undo_history().size()).is_equal(0)
-	assert_int(_mode.landside_placement().undo_size()).is_equal(0)
-	_session.set_building(true)
-	assert_object(_mode.undo()).is_null()
-	assert_bool(_sim.lots_built[0]).is_true()
-	assert_int(_mode.grid.floor_at(cell)).is_not_equal(BuildGrid.FLOOR_NONE)
-	assert_int(_balance()).is_equal(start - 25 - 1200 - 25)
+	for i in 5:
+		_clock.advance(SimClock.STEP)
+	assert_int(_mode.undo_history().size()).is_equal(2)
+	assert_int(_mode.landside_placement().undo_size()).is_equal(1)
+	assert_bool(_mode.undo().ok).is_true()
+	assert_int(_mode.grid.floor_at(cell + Vector2i.RIGHT)).is_equal(BuildGrid.FLOOR_NONE)
+	assert_bool(_mode.undo().ok).is_true()
+	assert_bool(_sim.lots_built[0]).is_false()
+	assert_bool(_mode.undo().ok).is_true()
+	assert_int(_mode.grid.floor_at(cell)).is_equal(BuildGrid.FLOOR_NONE)
+	assert_int(_balance()).is_equal(start)
 
 
-func test_actions_in_the_new_session_are_undone_in_order_without_the_ones_before_a_tick() -> void:
+func test_actions_across_sessions_and_ticks_undo_in_order() -> void:
+	var start := _balance()
 	_session.set_building(true)
 	_mode.set_tool(BuildMode.Tool.CURB)
 	assert_bool(_mode.apply_at(IN_BAY_0).ok).is_true()
@@ -108,9 +101,9 @@ func test_actions_in_the_new_session_are_undone_in_order_without_the_ones_before
 	assert_bool(_mode.apply_at(IN_LOT_0).ok).is_true()
 	assert_bool(_mode.undo().ok).is_true()
 	assert_bool(_sim.lots_built[0]).is_false()
-	# The curb from before the reopening stays.
-	assert_object(_mode.undo()).is_null()
-	assert_bool(_sim.curbs_built[0]).is_true()
+	assert_bool(_mode.undo().ok).is_true()
+	assert_bool(_sim.curbs_built[0]).is_false()
+	assert_int(_balance()).is_equal(start)
 
 
 ## A rescue grant or an outside grid edit invalidates the whole history

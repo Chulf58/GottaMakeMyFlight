@@ -86,7 +86,7 @@ func _control(node_name: String) -> Control:
 
 ## Asserts `banner` is in the top-left column slot and clear of every top
 ## control and alert card that shows; prints the rectangles it compared.
-func _assert_in_column(label: String, banner: Rect2) -> void:
+func _assert_in_column(label: String, banner: Rect2, expected_top: float = -1.0) -> void:
 	var view := _view()
 	print("BANNER %s view=%s rect=%s" % [label, view, banner])
 	assert_bool(banner.has_area()).is_true()
@@ -97,7 +97,8 @@ func _assert_in_column(label: String, banner: Rect2) -> void:
 	# so the card starts 48 px lower, past the old top-centre band (TOP_BAND, a
 	# 302 px line). The ruling (checklist-card-moves-to-the-top-left-column-slim-
 	# at-304-px-t) puts the card under the column, so this pins that exact slot.
-	assert_float(banner.position.y).is_equal_approx(LeftColumn.card_top(_main.get_tree()), 1.0)
+	var top := expected_top if expected_top >= 0.0 else LeftColumn.card_top(_main.get_tree())
+	assert_float(banner.position.y).is_equal_approx(top, 1.0)
 	assert_bool(Rect2(Vector2.ZERO, view).encloses(banner)).is_true()
 	var others: Array[Control] = []
 	for node_name in TOP_CONTROLS:
@@ -162,8 +163,11 @@ func test_the_hint_card_sits_in_the_left_column() -> void:
 	var hints := _showing_hint()
 	_menu.press_category(0)
 	await _settle()
-	assert_bool(_staff.hint_card().is_visible_in_tree()).is_false()
-	_assert_in_column("hint", hints.card().get_global_rect())
+	assert_bool(_staff.hint_card().is_visible_in_tree()).is_true()
+	var hint_rect := hints.card().get_global_rect()
+	var checklist_rect := _staff.hint_card().get_global_rect()
+	assert_bool(hint_rect.intersects(checklist_rect)).is_false()
+	_assert_in_column("hint", hint_rect, LeftColumn.hint_top(_main.get_tree()))
 
 
 func test_the_alert_rail_never_meets_the_banner() -> void:

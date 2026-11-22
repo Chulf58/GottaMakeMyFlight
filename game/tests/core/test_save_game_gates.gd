@@ -213,6 +213,10 @@ func test_a_save_whose_gate_shrank_below_a_contract_is_refused_while_staged() ->
 		offer["booked_passengers"] = OfferTraits.fewest_booked(
 			medium[0], medium[1], offer["traits"]
 		)
+		var fees: Array = OfferBoard.fee_range_for(
+			OfferBoard.tier_of(offer["airline"]), PlaneClasses.MEDIUM
+		)
+		offer["fee_per_passenger"] = OfferTraits.fee_of(fees[0], offer["traits"])
 		# The first offer moves to the first of its slots gate A takes it at, so
 		# the case does not hang on where the seed's draw put the departures.
 		for minute in OfferBoard.slots_of(offer["traits"]):

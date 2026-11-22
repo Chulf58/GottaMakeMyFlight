@@ -16,6 +16,7 @@ Generates compact, click-free 16-bit PCM WAV assets under game/assets/audio/:
   - joke_fault.wav        (340 ms warm low marimba power-down, 44100 Hz mono)
   - joke_queue_horn.wav   (260 ms gentle detuned two-note cozy horn, 44100 Hz mono)
   - star_up.wav           (300 ms warm ascending chime C5-E5-G5-C6, 44100 Hz mono)
+  - phone_ring.wav        (860 ms warm double-trill desk/cellphone ring, 44100 Hz mono)
 """
 
 from __future__ import annotations
@@ -428,6 +429,37 @@ def build_star_up(sr: int = 44100) -> tuple[int, list[float]]:
     )
 
 
+def build_phone_ring(sr: int = 44100) -> tuple[int, list[float]]:
+    """860 ms warm double-trill desk/cellphone ring (G5 + C6 cozy dual-tone)."""
+    dur = 0.860
+    n = int(dur * sr)
+    out = [0.0] * n
+    bursts = [
+        (0.000, 0.300, 0.018),
+        (0.410, 0.360, 0.060),
+    ]
+    f1 = 783.99
+    f2 = 1046.50
+    for start_t, burst_dur, rel_len in bursts:
+        for i in range(n):
+            t = i / sr - start_t
+            if t < 0.0 or t >= burst_dur:
+                continue
+            att = math.sin(0.5 * math.pi * min(1.0, t / 0.006))
+            rel = 1.0
+            if t > burst_dur - rel_len:
+                rel = 0.5 + 0.5 * math.cos(math.pi * (t - (burst_dur - rel_len)) / rel_len)
+            trill = 0.58 + 0.42 * math.sin(TAU * 20.0 * t)
+            tone = (
+                0.52 * math.sin(TAU * f1 * t)
+                + 0.48 * math.sin(TAU * f2 * t)
+                + 0.12 * math.sin(TAU * (f1 * 2.0) * t) * math.exp(-t / 0.07)
+            )
+            out[i] += 0.36 * tone * trill * att * rel
+    out[-1] = 0.0
+    return sr, out
+
+
 def main() -> None:
     builders = {
         "terminal_ambience.wav": build_terminal_ambience,
@@ -444,6 +476,7 @@ def main() -> None:
         "joke_fault.wav": build_joke_fault,
         "joke_queue_horn.wav": build_joke_queue_horn,
         "star_up.wav": build_star_up,
+        "phone_ring.wav": build_phone_ring,
     }
     for filename, fn in builders.items():
         sr, samples = fn()

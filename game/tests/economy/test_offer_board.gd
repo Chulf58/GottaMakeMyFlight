@@ -30,8 +30,8 @@ static func record(id: String, day: int, minute: int, status := OfferBoard.OPEN)
 		"destination": "Oslo",
 		"departure_minute": minute,
 		"plane_size": "small",
-		"booked_passengers": 12,
-		"fee_per_passenger": 25,
+		"booked_passengers": 6,
+		"fee_per_passenger": 50,
 		"traits": NEUTRAL_TRAITS.duplicate(),
 		"loyal": false,
 		"status": status,
@@ -78,9 +78,9 @@ func test_a_day_draws_the_daily_count_of_valid_starter_offers() -> void:
 			assert_int(offer["booked_passengers"]).is_between(
 				OfferTraits.fewest_booked(booked_range[0], booked_range[1], traits), booked_range[1]
 			)
+			var fees: Array = OfferBoard.fee_range_for(0, offer["plane_size"])
 			assert_int(offer["fee_per_passenger"]).is_between(
-				OfferTraits.fee_of(OfferBoard.FEE_MIN, traits),
-				OfferTraits.fee_of(OfferBoard.FEE_MAX, traits)
+				OfferTraits.fee_of(fees[0], traits), OfferTraits.fee_of(fees[1], traits)
 			)
 
 
@@ -234,8 +234,8 @@ func test_terms_no_draw_could_produce_are_refused() -> void:
 		["departure_minute", OfferBoard.DEPARTURE_FIRST_MINUTE + 1],
 		["departure_minute", OfferBoard.DEPARTURE_FIRST_MINUTE - OfferBoard.DEPARTURE_STEP],
 		["departure_minute", OfferBoard.DEPARTURE_LAST_MINUTE + OfferBoard.DEPARTURE_STEP],
-		["fee_per_passenger", OfferBoard.FEE_MIN - 1],
-		["fee_per_passenger", OfferBoard.FEE_MAX + 1],
+		["fee_per_passenger", OfferBoard.SMALL_FEE_MIN - 1],
+		["fee_per_passenger", OfferBoard.SMALL_FEE_MAX + 1],
 	]
 	var before := _board.to_snapshot()
 	for case in cases:
@@ -254,9 +254,15 @@ func test_the_extremes_of_every_draw_range_load() -> void:
 	var high := with_first("booked_passengers", small[1])
 	var early := with_first("departure_minute", OfferBoard.DEPARTURE_FIRST_MINUTE)
 	var late := with_first("departure_minute", OfferBoard.DEPARTURE_LAST_MINUTE)
-	var cheap := with_first("fee_per_passenger", OfferBoard.FEE_MIN)
-	var dear := with_first("fee_per_passenger", OfferBoard.FEE_MAX)
-	for good in [low, high, early, late, cheap, dear]:
+	var cheap := with_first("fee_per_passenger", OfferBoard.SMALL_FEE_MIN)
+	var dear := with_first("fee_per_passenger", OfferBoard.SMALL_FEE_MAX)
+	var med_low := with_first("plane_size", "medium")
+	med_low["offers"][0]["booked_passengers"] = OfferBoard.STARTER_SIZES["medium"][0]
+	med_low["offers"][0]["fee_per_passenger"] = OfferBoard.FEE_MIN
+	var med_high := with_first("plane_size", "medium")
+	med_high["offers"][0]["booked_passengers"] = OfferBoard.STARTER_SIZES["medium"][1]
+	med_high["offers"][0]["fee_per_passenger"] = OfferBoard.FEE_MAX
+	for good in [low, high, early, late, cheap, dear, med_low, med_high]:
 		var loaded := OfferBoard.new().from_snapshot(good)
 		assert_bool(loaded).override_failure_message(str(good)).is_true()
 

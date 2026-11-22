@@ -34,6 +34,8 @@ extends Node
 ## still meanwhile.
 signal dialog_changed(open: bool)
 
+enum ExitTarget { NONE, MAIN_MENU, QUIT_TO_DESKTOP }
+
 ## With the intro and the other dialogs, over the HUD.
 const LAYER := 10
 const MENU_SIZE := Vector2(520.0, 0.0)
@@ -52,8 +54,20 @@ const ESC_KEY := "Esc"
 ## file-only-off-by-de). With one, the Settings page holds its switch and the
 ## Open log folder button; without one it holds neither.
 @export var quit_log: QuitLogRecorder
+## Optional: the play camera whose angle preset the Settings selector drives.
+## Falls back to sibling `../TycoonCamera` when left unset.
+@export var camera: TycoonCamera
 ## Opens a folder in the system's file browser; tests swap in a recorder.
 var open_folder := Callable()
+## Changes to a scene file; tests swap in a recorder. Defaults to the tree's
+## change_scene_to_file.
+var change_scene := Callable()
+## Quits the game; tests swap in a recorder.
+var quit_game := Callable()
+## Opens an external URL; tests swap in a recorder.
+var open_url := Callable()
+## Feedback URL shown by the Send Feedback button; hidden when empty.
+var feedback_url: String = DemoMode.FEEDBACK_URL
 ## Optional: called by an Esc the menu would open on; true means it closed a card
 ## (a selected built item or a followed passenger or vehicle) and took the key.
 ## PassengerHud sets it, so the first Esc closes the card and the next opens the menu.
@@ -61,6 +75,9 @@ var esc_closes: Callable
 ## The Audio controls card on the Settings view, or null while the menu is closed.
 var audio_card: AudioSettingsCard
 var language_picker: LanguagePicker
+var exit_confirm_page: Control
+var camera_angle_picker: HBoxContainer
+var camera_angle_option: OptionButton
 
 var _layer: CanvasLayer
 var _question_layer: CanvasLayer
@@ -69,6 +86,7 @@ var _question: IntroDialogue
 var _hold := ClockHolds.NONE
 var _question_hold := ClockHolds.NONE
 var _shown := false
+var _exit_target := ExitTarget.NONE
 var _main_page: Control
 var _settings_page: Control
 var _load_page: Control
@@ -76,11 +94,19 @@ var _save_list: SaveList
 var _status: Label
 var _status_spec := {}
 var _incidents_switch: CheckButton
+var _camera_angle_label: Label
 var _quit_log_switch: CheckButton
 var _quit_log_note: Label
 var _open_log_btn: Button
 var _settings_back: Button
 var _load_back: Button
+var _send_feedback_btn: Button
+var _main_menu_btn: Button
+var _quit_to_desktop_btn: Button
+var _exit_confirm_body: Label
+var _save_and_exit_btn: Button
+var _exit_without_saving_btn: Button
+var _exit_cancel_btn: Button
 var _version: Label
 
 
@@ -88,6 +114,12 @@ func _ready() -> void:
 	name = "GameMenu"
 	if not open_folder.is_valid():
 		open_folder = OS.shell_open
+	if not change_scene.is_valid():
+		change_scene = get_tree().change_scene_to_file
+	if not quit_game.is_valid():
+		quit_game = get_tree().quit
+	if not open_url.is_valid():
+		open_url = func(url: String) -> void: OS.shell_open(url)
 	if save_game != null:
 		save_game.loaded.connect(_on_loaded)
 
@@ -116,7 +148,10 @@ func _input(event: InputEvent) -> void:
 		return
 	get_viewport().set_input_as_handled()
 	if event.is_action_pressed("build_tool_none"):
-		close()
+		if exit_confirm_page != null and exit_confirm_page.visible:
+			_on_exit_cancel_pressed()
+		else:
+			close()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -175,16 +210,22 @@ func press_settings() -> void:
 	_main_page.visible = false
 	audio_card.visible = true
 	language_picker.visible = true
+	camera_angle_picker.visible = true
+	_sync_camera_angle_picker()
 	_settings_page.visible = true
 
 
 func press_back() -> void:
 	if not _shown:
 		return
+	_set_status("")
+	_exit_target = ExitTarget.NONE
 	audio_card.visible = false
 	language_picker.visible = false
+	camera_angle_picker.visible = false
 	_settings_page.visible = false
 	_load_page.visible = false
+	exit_confirm_page.visible = false
 	_main_page.visible = true
 
 
@@ -312,6 +353,14 @@ func _show() -> void:
 		_button(_main_page, "Load", tr("Load", "menu"), press_load)
 		load_button().disabled = SaveSlots.existing(_save_paths()).is_empty()
 	_button(_main_page, "Settings", tr("Settings"), press_settings)
+	_send_feedback_btn = _button(
+		_main_page, "SendFeedback", tr("Send Feedback"), _on_feedback_pressed
+	)
+	_send_feedback_btn.visible = not feedback_url.is_empty()
+	_main_menu_btn = _button(_main_page, "MainMenu", tr("Main Menu", "menu"), _on_main_menu_pressed)
+	_quit_to_desktop_btn = _button(
+		_main_page, "QuitToDesktop", tr("Quit to Desktop", "menu"), _on_quit_to_desktop_pressed
+	)
 	audio_card = AudioSettingsCard.new()
 	audio_card.name = "AudioSettings"
 	audio_card.visible = false
@@ -320,6 +369,7 @@ func _show() -> void:
 	language_picker.name = "LanguagePicker"
 	language_picker.visible = false
 	pages.add_child(language_picker)
+	_build_camera_angle_picker(pages)
 	_settings_page = _page("SettingsPage", tr("Settings"))
 	_settings_page.visible = false
 	pages.add_child(_settings_page)
@@ -341,6 +391,27 @@ func _show() -> void:
 	_save_list.chosen.connect(_on_save_chosen)
 	_load_page.add_child(_save_list)
 	_load_back = _button(_load_page, "Back", tr("Back"), press_back)
+	exit_confirm_page = _page("ExitConfirmPage", "")
+	exit_confirm_page.visible = false
+	pages.add_child(exit_confirm_page)
+	_exit_confirm_body = Label.new()
+	_exit_confirm_body.name = "Body"
+	_exit_confirm_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_exit_confirm_body.custom_minimum_size = Vector2(MENU_SIZE.x - 40.0, 0.0)
+	exit_confirm_page.add_child(_exit_confirm_body)
+	_save_and_exit_btn = _button(
+		exit_confirm_page, "SaveAndExit", tr("Save & Exit", "menu"), _on_save_and_exit_pressed
+	)
+	_save_and_exit_btn.visible = save_game != null
+	_exit_without_saving_btn = _button(
+		exit_confirm_page,
+		"ExitWithoutSaving",
+		tr("Exit without Saving", "menu"),
+		_on_exit_without_saving_pressed
+	)
+	_exit_cancel_btn = _button(
+		exit_confirm_page, "Cancel", tr("Cancel", "menu"), _on_exit_cancel_pressed
+	)
 	_status = Label.new()
 	_status.name = "Status"
 	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -470,6 +541,10 @@ func _render_status() -> void:
 			text = tr("Could not start the quit log in {path}").format(_status_spec.get("args", {}))
 		&"log_folder_error":
 			text = tr("Could not open the log folder: {path}").format(_status_spec.get("args", {}))
+		&"save_refused":
+			text = tr("Cannot save right now: {reason}").format(_status_spec.get("args", {}))
+		&"save_failed":
+			text = tr("Could not save the game.")
 		_:
 			if _status_spec.has("msgid"):
 				var ctx := str(_status_spec.get("context", ""))
@@ -489,13 +564,103 @@ func _on_incidents_toggled(on: bool) -> void:
 		director.set_enabled(on)
 
 
+func _on_feedback_pressed() -> void:
+	if not feedback_url.is_empty() and open_url.is_valid():
+		open_url.call(feedback_url)
+
+
+func _on_main_menu_pressed() -> void:
+	_open_exit_confirm(ExitTarget.MAIN_MENU)
+
+
+func _on_quit_to_desktop_pressed() -> void:
+	_open_exit_confirm(ExitTarget.QUIT_TO_DESKTOP)
+
+
+func _on_exit_cancel_pressed() -> void:
+	if not _shown:
+		return
+	_set_status("")
+	_exit_target = ExitTarget.NONE
+	exit_confirm_page.visible = false
+	_main_page.visible = true
+
+
+func _on_exit_without_saving_pressed() -> void:
+	if not _shown or _exit_target == ExitTarget.NONE:
+		return
+	_perform_exit()
+
+
+func _on_save_and_exit_pressed() -> void:
+	if not _shown or _exit_target == ExitTarget.NONE or save_game == null:
+		return
+	var problem := save_game.save_problem()
+	if problem != "":
+		_set_status_spec({"kind": &"save_refused", "args": {"reason": problem}})
+		return
+	if not save_game.save_to_file(save_game.quick_save_path):
+		var msg := save_game.message_text()
+		if msg == "":
+			_set_status_spec({"kind": &"save_failed"})
+		else:
+			_set_status(msg)
+		return
+	_perform_exit()
+
+
+func _open_exit_confirm(target: ExitTarget) -> void:
+	if not _shown:
+		return
+	_set_status("")
+	_exit_target = target
+	_update_exit_confirm_copy()
+	_main_page.visible = false
+	exit_confirm_page.visible = true
+
+
+func _update_exit_confirm_copy() -> void:
+	if exit_confirm_page == null:
+		return
+	var title := exit_confirm_page.get_node("Title") as Label
+	if _exit_target == ExitTarget.MAIN_MENU:
+		title.text = tr("Return to main menu?")
+		_exit_confirm_body.text = tr("Unsaved progress will be lost.")
+	elif _exit_target == ExitTarget.QUIT_TO_DESKTOP:
+		title.text = tr("Quit to desktop?")
+		_exit_confirm_body.text = tr("Unsaved progress will be lost.")
+	else:
+		title.text = ""
+		_exit_confirm_body.text = ""
+
+
+func _perform_exit() -> void:
+	var target := _exit_target
+	if quit_log != null:
+		quit_log.stop(QuitLogRecorder.REASON_QUIT_MENU)
+	close()
+	if target == ExitTarget.MAIN_MENU:
+		if change_scene.is_valid():
+			change_scene.call(GameBoot.TITLE_SCENE)
+	elif target == ExitTarget.QUIT_TO_DESKTOP:
+		if quit_game.is_valid():
+			quit_game.call()
+
+
 func _free_layer() -> void:
 	_shown = false
+	_exit_target = ExitTarget.NONE
+	if is_instance_valid(camera) and camera.pitch_changed.is_connected(_on_camera_pitch_changed):
+		camera.pitch_changed.disconnect(_on_camera_pitch_changed)
 	var layer := _layer
 	_layer = null
 	_main_page = null
 	audio_card = null
 	language_picker = null
+	exit_confirm_page = null
+	camera_angle_picker = null
+	camera_angle_option = null
+	_camera_angle_label = null
 	_settings_page = null
 	_load_page = null
 	_save_list = null
@@ -507,9 +672,83 @@ func _free_layer() -> void:
 	_open_log_btn = null
 	_settings_back = null
 	_load_back = null
+	_send_feedback_btn = null
+	_main_menu_btn = null
+	_quit_to_desktop_btn = null
+	_exit_confirm_body = null
+	_save_and_exit_btn = null
+	_exit_without_saving_btn = null
+	_exit_cancel_btn = null
 	_version = null
 	if is_instance_valid(layer) and not layer.is_queued_for_deletion():
 		layer.queue_free()
+
+
+func _build_camera_angle_picker(pages: Control) -> void:
+	camera_angle_picker = HBoxContainer.new()
+	camera_angle_picker.name = "CameraAnglePicker"
+	camera_angle_picker.visible = false
+	camera_angle_picker.add_theme_constant_override("separation", 10)
+	_camera_angle_label = Label.new()
+	_camera_angle_label.name = "Label"
+	_camera_angle_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	camera_angle_picker.add_child(_camera_angle_label)
+	camera_angle_option = OptionButton.new()
+	camera_angle_option.name = "Option"
+	camera_angle_option.focus_mode = Control.FOCUS_NONE
+	camera_angle_option.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
+	camera_angle_option.get_popup().auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
+	camera_angle_option.custom_minimum_size = Vector2(LanguagePicker.OPTION_MIN_WIDTH, 0.0)
+	camera_angle_option.item_selected.connect(_on_camera_angle_selected)
+	camera_angle_picker.add_child(camera_angle_option)
+	pages.add_child(camera_angle_picker)
+	var cam := _resolve_camera()
+	if cam != null and not cam.pitch_changed.is_connected(_on_camera_pitch_changed):
+		cam.pitch_changed.connect(_on_camera_pitch_changed)
+	_sync_camera_angle_picker()
+
+
+func _resolve_camera() -> TycoonCamera:
+	if is_instance_valid(camera):
+		return camera
+	var sibling := get_node_or_null("../TycoonCamera") as TycoonCamera
+	if sibling != null:
+		camera = sibling
+	return camera
+
+
+func _sync_camera_angle_picker() -> void:
+	if camera_angle_option == null:
+		return
+	var cam := _resolve_camera()
+	_camera_angle_label.text = tr("Camera angle")
+	camera_angle_option.clear()
+	camera_angle_option.add_item(tr("Low (38°)"), TycoonCamera.AngleStep.LOW)
+	camera_angle_option.add_item(tr("Medium (54°)"), TycoonCamera.AngleStep.MEDIUM)
+	camera_angle_option.add_item(tr("Top-Down (70°)"), TycoonCamera.AngleStep.TOP_DOWN)
+	camera_angle_option.disabled = cam == null
+	if cam == null:
+		camera_angle_option.select(TycoonCamera.AngleStep.TOP_DOWN)
+		return
+	if cam.is_custom_pitch():
+		var rounded := int(round(cam.pitch_degrees()))
+		camera_angle_option.add_item(tr("Custom ({angle}°)").format({"angle": rounded}), 3)
+		camera_angle_option.select(3)
+	else:
+		camera_angle_option.select(cam.angle_step)
+
+
+func _on_camera_angle_selected(index: int) -> void:
+	var cam := _resolve_camera()
+	if cam == null or index < 0 or index >= TycoonCamera.STEP_PITCH_DEGREES.size():
+		return
+	cam.set_angle_step(index)
+	_sync_camera_angle_picker()
+
+
+func _on_camera_pitch_changed(_degrees: float) -> void:
+	if _shown:
+		_sync_camera_angle_picker()
 
 
 func _retranslate() -> void:
@@ -523,7 +762,22 @@ func _retranslate() -> void:
 		if _save_list != null:
 			_save_list.fill(_save_paths(), save_game.quick_save_path)
 	settings_button().text = tr("Settings")
+	if _send_feedback_btn != null:
+		_send_feedback_btn.text = tr("Send Feedback")
+	if _main_menu_btn != null:
+		_main_menu_btn.text = tr("Main Menu", "menu")
+	if _quit_to_desktop_btn != null:
+		_quit_to_desktop_btn.text = tr("Quit to Desktop", "menu")
+	if exit_confirm_page != null:
+		_update_exit_confirm_copy()
+		if _save_and_exit_btn != null:
+			_save_and_exit_btn.text = tr("Save & Exit", "menu")
+		if _exit_without_saving_btn != null:
+			_exit_without_saving_btn.text = tr("Exit without Saving", "menu")
+		if _exit_cancel_btn != null:
+			_exit_cancel_btn.text = tr("Cancel", "menu")
 	(_settings_page.get_node("Title") as Label).text = tr("Settings")
+	_sync_camera_angle_picker()
 	_incidents_switch.text = tr("Incidents")
 	if _quit_log_switch != null:
 		_quit_log_switch.text = tr("Quit log")
@@ -563,7 +817,7 @@ func _show_question() -> void:
 func _question_body() -> String:
 	var ask := tr(
 		# gdlint:ignore = max-line-length
-		"One more thing before the doors open. Some days bring trouble: a spill on the floor, an inspector, a holiday rush. Shall I send those your way?"
+		"Now that the airport is open, some days bring trouble: a spill on the floor, an inspector, a holiday rush. Shall I send those your way?"
 	)
 	var choice := tr(
 		# gdlint:ignore = max-line-length

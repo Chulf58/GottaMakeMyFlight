@@ -57,6 +57,9 @@ const STEP_M := 0.15
 ## The step to the tray table eases out over this much of the arch walk, so
 ## the body walks off it into the arch rather than sideways (setting_off()).
 const SETOFF_EASE_M := 0.3
+## Ticks over which a basic-scanner passenger walks from the booth centre to
+## the exit cell as Phase.SCAN completes (about 1.5 m at WALK_MM).
+const BASIC_EXIT_WALK_TICKS := 15
 ## A returner's arch walk (return_walk_mm()) is drawn by how far it has walked,
 ## in mm from the unpack cell's centre, never by its pace (the late flag can
 ## change on the way): its bags go into the tray from PUT_IN_BEFORE_MM before
@@ -154,7 +157,7 @@ static func world_dir(step: Vector2i) -> Vector3:
 static func target_offset(sim: PassengerSim, p: Passenger) -> Vector3:
 	var lane := lane_of(sim, p)
 	if lane.is_empty():
-		return Vector3.ZERO
+		return _basic_scan_offset(sim, p)
 	if p.stage == Passenger.Stage.SECURITY_QUEUE:
 		return _queue_hold(sim, p, lane)
 	if p.stage != Passenger.Stage.SECURITY:
@@ -356,6 +359,13 @@ static func _arch_walked_mm(p: Passenger) -> int:
 static func face(sim: PassengerSim, p: Passenger) -> Vector2:
 	var lane := lane_of(sim, p)
 	if lane.is_empty():
+		if (
+			p.stage == Passenger.Stage.SECURITY
+			and p.security_phase in [SecurityRuntime.Phase.SCAN, SecurityRuntime.Phase.REPACK]
+		):
+			var passage: Array = sim.layout.passages.get(p.station, [])
+			if passage.size() >= 2:
+				return Vector2(passage[passage.size() - 1] - passage[0])
 		return Vector2.ZERO
 	if p.stage == Passenger.Stage.SECURITY_QUEUE:
 		var held := _queue_hold(sim, p, lane) != Vector3.ZERO
@@ -546,6 +556,42 @@ static func carry_front(sim: PassengerSim, p: Passenger) -> bool:
 	return false
 
 
+## Whether `p` is in Phase.SCAN of a basic security_scanner with a valid passage.
+static func in_basic_scan(sim: PassengerSim, p: Passenger) -> bool:
+	if p.stage != Passenger.Stage.SECURITY or p.security_phase != SecurityRuntime.Phase.SCAN:
+		return false
+	if not lane_of(sim, p).is_empty():
+		return false
+	return sim.layout.passages.get(p.station, []).size() >= 3
+
+
+## Holds a basic-scanner passenger inside the booth centre while Phase.SCAN work
+## remains, then walks smoothly to the exit cell over BASIC_EXIT_WALK_TICKS.
+static func _basic_scan_offset(sim: PassengerSim, p: Passenger) -> Vector3:
+	if not in_basic_scan(sim, p):
+		return Vector3.ZERO
+	var passage: Array = sim.layout.passages.get(p.station, [])
+	var entry := sim.grid.cell_to_world(passage[0])
+	var exit_at := sim.grid.cell_to_world(passage[passage.size() - 1])
+	var scan_at := (sim.grid.cell_to_world(passage[1]) + sim.grid.cell_to_world(passage[2])) * 0.5
+	var span := exit_at - entry
+	span.y = 0.0
+	var total_m := span.length()
+	if total_m <= 0.001:
+		return Vector3.ZERO
+	var dir := span / total_m
+	var sim_along := (sim.world_position(p) - entry).dot(dir)
+	var scan_along := (scan_at - entry).dot(dir)
+	var drawn_along := minf(sim_along, scan_along)
+	if p.security_work <= BASIC_EXIT_WALK_TICKS:
+		var frac := (
+			1.0 - clampf(float(p.security_work - 1) / float(BASIC_EXIT_WALK_TICKS - 1), 0.0, 1.0)
+		)
+		var out_along := lerpf(scan_along, total_m, frac)
+		drawn_along = minf(sim_along, out_along)
+	return dir * (drawn_along - sim_along)
+
+
 ## Whether `p` stands in a basic scanner booth, walks into one now, or waits
 ## at a booth's entry cell in the security queue (or, still on its way to
 ## security, walks into or stands on its own booth's entry): there its bags are carried
@@ -553,7 +599,7 @@ static func carry_front(sim: PassengerSim, p: Passenger) -> bool:
 ## turn has ended before the bags reach the booth's rails; leaving, the cell it
 ## stands on stays a booth cell until it arrives in the cell past the booth.
 static func in_booth_passage(sim: PassengerSim, p: Passenger) -> bool:
-	if in_booth(sim.grid, p.at):
+	if in_booth(sim.grid, p.at) or (in_basic_scan(sim, p) and p.security_work > 1):
 		return true
 	var queued := p.stage == Passenger.Stage.SECURITY_QUEUE or p.stage == Passenger.Stage.SECURITY
 	if queued and _booth_entry(sim, p.at):

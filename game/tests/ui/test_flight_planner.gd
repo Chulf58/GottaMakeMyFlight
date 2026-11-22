@@ -241,15 +241,23 @@ func test_end_asks_first_then_ends_the_contract() -> void:
 	assert_str(_planner.selected_contract()).is_equal("")
 
 
-func test_the_planner_pauses_the_clock_like_the_offers_sheet() -> void:
+func test_the_planner_leaves_the_clock_untouched() -> void:
+	_clock.set_speed(2)
+	_clock.set_paused(false)
 	_planner.open()
-	assert_bool(_clock.paused).is_true()
-	_planner.close()
+	assert_bool(_planner.is_open()).is_true()
 	assert_bool(_clock.paused).is_false()
-	_planner.open()
-	_planner.toggle_button().pressed.emit()
+	assert_int(_clock.holds.count()).is_equal(0)
+	_planner.close()
 	assert_bool(_planner.is_open()).is_false()
 	assert_bool(_clock.paused).is_false()
+	_clock.set_paused(true)
+	_planner.open()
+	assert_bool(_clock.paused).is_true()
+	_planner.toggle_button().pressed.emit()
+	assert_bool(_planner.is_open()).is_false()
+	assert_bool(_clock.paused).is_true()
+	assert_int(_clock.speed).is_equal(2)
 
 
 func test_close_button_and_the_p_key_open_and_close_the_sheet() -> void:

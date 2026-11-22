@@ -52,6 +52,7 @@ Durable conventions and project facts for any engineer or agent working in this 
 
 - Stack tags (= domain mount manifest): godot, gdscript, python, blender, sterling
 - Toolchains: gdlint, gdformat, gdUnit4 for `game/**/*.gd` (gdtoolkit Windows exes in `/mnt/c/Users/chulf/.local/bin/`; tests in `game/tests/`)
+- Test runner: `tools/test.sh --fast | --medium | --slow | --all [--list] [--dry-run]` (wraps `tools/godot.sh` with per-run logs and reports under `game/reports/`)
 - Lint/format command: `tools/gdlint.sh <explicit .gd paths under game/> && tools/gdformat.sh --check <same paths>`, run from repo root so `gdlintrc` applies. Wrappers enforce `< /dev/null` and 60 s timeout. Pass explicit paths, never a glob sweeping vendored addons. `gdformat.exe` writes CRLF on rewrite without `--check`.
 - Domain stores: `~/.sterling/domains/{godot,gdscript,python,blender,sterling}/` (§2.3)
 - Backup path: configured in `.sterling/config.json` -> `backup_path`
@@ -94,14 +95,14 @@ Adapted from Dome Farmer for this Godot 4.7.2 project in `game/` using Toon Seri
 ### Godot run modes
 
 - **Four non-interchangeable modes:** `--check-only` (parse), gdUnit4 (logic), `--headless -s <script>` (spike), `--path game ... -s <script>` windowed (GPU). Probes are the floor for `main.tscn`.
-- **gdUnit4:** `--ignoreHeadlessMode` is mandatory (else exits 103) and MUST follow `-s res://addons/gdUnit4/bin/GdUnitCmdTool.gd` and `-a ...`. Pass `-c` to avoid fail-fast hiding failures. Exit 0 = pass, 100 = failures, 105 = parse error (may also hang, so run via `tools/godot.sh` or `timeout`).
+- **gdUnit4:** `--ignoreHeadlessMode` is mandatory (else exits 103) and MUST follow `-s res://addons/gdUnit4/bin/GdUnitCmdTool.gd` and `-a ...`. Pass `-c` to avoid fail-fast hiding failures. Exit 0 = pass, 100 = failures, 101 = orphans/warnings, 105 = parse error (may also hang without `--remote-debug tcp://127.0.0.1:0`, so run via `tools/test.sh` or `tools/godot.sh`).
 - Pass `--audio-driver Dummy` on every non-player Godot run.
 - Windowed runs need `--display-driver windows --rendering-driver vulkan`.
 - **One windowed Godot run at a time, project-wide** (including Godot MCP); concurrent runs corrupt the import cache. Batch subjects and hold the slot.
 - Run `--import` after adding/moving `.gd` files or re-exporting assets into `game/`, before testing or rendering.
 - Commit the `.uid` file generated next to every new `.gd` after import (ruled 2026-10-28).
 - After merging into `main` with added/moved `.gd` files, run headless `--import` on `main` before any playtest, probe, or MCP launch (ruled 2026-10-27).
-- Run the full suite once on the final tree before merge; per-commit checks run fast gates (`--check-only`, `gdlint`, `gdformat --check`) and targeted tests with case counts.
+- **Tiered test runner (`tools/test.sh`):** `--fast` (pure unit/logic), `--medium` (`SubViewport`, `await`, `add_child`, `*TestWorld`/rigs, `.tscn`/`.glb`, site grids/`FlightSim`), `--slow` (`main.tscn`, `GroundPlannerKit`, `PassengerViews`, save/load, tuning/balance/snapshot), `--all` (full suite via `-a res://tests`), and `--list` (counts and paths without running Godot). Run targeted suites and `--fast` (plus `--medium` when touching worlds, UI, or rigs) per commit; run `--all` once on the final tree before merge.
 
 ### Blender work
 

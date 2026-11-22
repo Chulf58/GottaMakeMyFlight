@@ -70,7 +70,11 @@ func test_walkers_waiting_on_one_cell_stand_apart() -> void:
 			var at := sim.world_position(p)
 			if not _one_step(sim.grid, p.at, sim.grid.world_to_cell(at)):
 				off_cell += 1
-			off_drawn = maxf(off_drawn, _views.tick_position(p.id, true).distance_to(at))
+			var is_waiter := sim.files.waiters.ids().has(p.id)
+			if is_waiter or not p.is_moving():
+				assert_vector(_views.corridor_offset(p.id)).is_equal(Vector3.ZERO)
+			var expected := at if is_waiter else at + _views.corridor_offset(p.id)
+			off_drawn = maxf(off_drawn, _views.tick_position(p.id, true).distance_to(expected))
 			at_spot += int(sim.files.waiters.at_spot(p))
 	print("%s; at spot %d, off cell %d, drawn off %.3f m" % [spacing, at_spot, off_cell, off_drawn])
 	# Controls: walkers waited apart, some on a spot, and every one boarded.

@@ -619,3 +619,25 @@ func test_airport_rating_milestone_chime_only_on_upward_crossing() -> void:
 	assert_float(rating.stars()).is_less(3.0)
 	assert_int(_audio.sfx_count(&"star_up")).is_equal(1)
 	rating.free()
+
+
+func test_phone_ring_wav_loads_plays_on_sfx_bus_and_respects_cooldown() -> void:
+	var stream := load(GAME_AUDIO.SFX_PATHS[&"phone_ring"]) as AudioStreamWAV
+	assert_object(stream).is_not_null()
+	assert_float(stream.get_length()).is_between(0.7, 1.1)
+
+	var fake_now := [10000]
+	_audio._clock_ms = func() -> int: return fake_now[0]
+	assert_bool(_audio.play_sfx(&"phone_ring")).is_true()
+	assert_str(String(_audio.last_sfx())).is_equal("phone_ring")
+	assert_int(_audio.sfx_count(&"phone_ring")).is_equal(1)
+
+	# Within cooldown (200 ms) a duplicate trigger is suppressed.
+	fake_now[0] = 10050
+	assert_bool(_audio.play_sfx(&"phone_ring")).is_false()
+	assert_int(_audio.sfx_count(&"phone_ring")).is_equal(1)
+
+	# After cooldown elapses it plays again.
+	fake_now[0] = 10300
+	assert_bool(_audio.play_sfx(&"phone_ring")).is_true()
+	assert_int(_audio.sfx_count(&"phone_ring")).is_equal(2)

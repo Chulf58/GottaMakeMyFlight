@@ -100,7 +100,8 @@ func _plates(world_seed: int) -> void:
 		terms["destination"] = spec[2]
 		terms["airline"] = spec[3]
 		terms["plane_size"] = "small"
-		terms["booked_passengers"] = 12
+		terms["booked_passengers"] = 6
+		terms["fee_per_passenger"] = 50
 		print("PROBE contract ", spec[0], " accepted=", flights.accept_contract(terms))
 	await _frames(4)
 	await _planner()

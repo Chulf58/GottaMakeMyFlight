@@ -25,17 +25,10 @@ extends CanvasLayer
 ## ending its contract posts a second coral card that stays until clicked. The
 ## sheet itself shows only offers; a clash refusal stays on its offer's sheet.
 ##
-## While the sheet is open the game clock is paused (decision the-airline-offers-
-## panel-pauses-the-game-while-it-is-open) by a hold on the clock's shared
-## ClockHolds; closing it releases the hold, and the player's own speed, paused
-## included, applies again unless another hold (build mode, a dialog) still
-## pauses the game. The hold gives way to the player: resuming or picking
-## another speed while it is open runs the game under the sheet. The sheet is
-## one of the exclusive dialogs: opened while another has the turn (the unlock
-## dialog), it shows when that one closes, and it keeps the turn until it
-## closes even while the game runs under it, so a dialog that comes up meanwhile
-## holds the clock and shows once the sheet closes. The sheet closes on Esc and
-## when a build tool is picked.
+## Opening or closing the sheet leaves the sim clock alone (ruling
+## player-owns-clock-and-persistent-build-undo-no-auto-pause-on-trays-offers-planner-direct-delete).
+## It joins TopRow.SHEET_GROUP so opening another top-row sheet closes it, and
+## it closes on Esc, when a build tool is picked, and when a save loads.
 ##
 ## A card says "first flight tomorrow" when the sim would not fly today's slot
 ## (FlightTimetable.first_day), once the airport is open. Whether it would
@@ -82,7 +75,7 @@ const NEEDS_GATE_TEXT := "Needs another gate"
 
 @export var desk: OfferDesk
 @export var flights: FlightSim
-## Paused while the sheet is open; null leaves the clock alone.
+## Kept for scene/test wiring compatibility; OfferPanel leaves the clock alone.
 @export var clock: SimClock
 ## Its tool changes close the sheet; null leaves the sheet to Esc and the button.
 @export var build_mode: BuildMode
@@ -117,9 +110,6 @@ var _fit_taxis: Dictionary = {}
 var _earnings_labels: Dictionary = {}
 var _trait_rows: Dictionary = {}
 var _noted_tick := -1
-## The sheet's hold on the clock, from open() until it closes, the player
-## resumes or picks another speed, or a load drops it.
-var _hold := ClockHolds.NONE
 
 
 ## The airlines' warning once the rating is low: `low_days` day ends have
@@ -281,12 +271,18 @@ func _ready() -> void:
 		desk.rating.changed.connect(_refresh_warning)
 	desk.contract_ended.connect(_on_contract_ended)
 	flights.planning_changed.connect(_refresh_fits)
+	flights.snapshot_loaded.connect(_sync_open_state)
+	flights.occurrence_added.connect(_on_flights_changed)
+	var gate := get_node_or_null("../AirportGate") as AirportGate
+	if gate != null:
+		gate.opened.connect(_on_airport_opened)
 	if build_mode != null:
 		build_mode.tool_changed.connect(_on_tool_changed)
 	if save_game != null:
 		save_game.loaded.connect(_on_loaded)
 	_refresh()
 	_refresh_warning()
+	_sync_open_state()
 
 
 func _notification(what: int) -> void:
@@ -298,13 +294,17 @@ func _retranslate() -> void:
 	if _sheet != null:
 		var title := _sheet.find_child("OfferTitle", true, false) as Label
 		if title != null:
-			title.text = tr("Today's offers")
+			title.text = tr("Airline Contracts — Accept to schedule flights")
 	if desk != null and flights != null:
 		_refresh()
 		_refresh_warning()
 
 
 func _process(_delta: float) -> void:
+	if flights != null and _button != null:
+		var open_now := flights.opened_tick >= 0
+		if _button.visible != open_now:
+			_sync_open_state()
 	if not _sheet.visible:
 		return
 	if flights.tick != _noted_tick:
@@ -328,22 +328,12 @@ func sheet() -> Control:
 	return _sheet
 
 
-## Pauses the clock and shows the sheet, at once or, while another exclusive
-## dialog has the turn, when that one closes.
+## Shows the sheet without touching the sim clock. Hidden/refused until the
+## airport opens.
 func open() -> void:
-	if _sheet.visible or _is_waiting():
+	_sync_open_state()
+	if flights == null or flights.opened_tick < 0 or _sheet.visible:
 		return
-	if clock == null:
-		_show()
-		return
-	# Another top-row sheet holds the exclusive turn until it closes, so it is
-	# closed first; the turn then comes at once.
-	TopRow.close_others(self)
-	_hold = clock.holds.take_turn(self, _show, true)
-
-
-## The sheet's turn: it shows.
-func _show() -> void:
 	TopRow.close_others(self)
 	_sheet.visible = true
 	_refresh_notes()
@@ -351,35 +341,13 @@ func _show() -> void:
 	_refresh_fits()
 
 
-## True while the sheet's hold waits for its turn.
-func _is_waiting() -> bool:
-	return not _sheet.visible and is_instance_valid(clock) and clock.holds.has(_hold)
-
-
-## Hides the sheet, or stops it waiting to show, and releases its hold.
+## Hides the sheet and clears transient refusals.
 func close() -> void:
-	if _is_waiting():
-		_release_clock()
-		return
 	if not _sheet.visible:
 		return
 	_sheet.visible = false
 	_clear_refusals()
 	_say_idle()
-	_release_clock()
-
-
-## A panel that leaves the tree while open must not leave the game paused (the
-## holds also end a hold whose owner leaves).
-func _exit_tree() -> void:
-	_release_clock()
-
-
-## Nothing is restored: with no hold left, the player's own pause applies.
-func _release_clock() -> void:
-	if is_instance_valid(clock):
-		clock.holds.release(_hold)
-	_hold = ClockHolds.NONE
 
 
 func toggle_button() -> Button:
@@ -490,7 +458,9 @@ func _build() -> void:
 	_sheet.add_child(sheet_column)
 	var title := Label.new()
 	title.name = "OfferTitle"
-	title.text = tr("Today's offers")
+	title.text = tr("Airline Contracts — Accept to schedule flights")
+	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	title.custom_minimum_size = Vector2(SHEET_W - 30.0, 0.0)
 	_style_label(title, &"HudTitle")
 	sheet_column.add_child(title)
 	_cards.name = "OfferCards"
@@ -504,18 +474,18 @@ func _build() -> void:
 
 
 func _on_toggle() -> void:
-	if _sheet.visible or _is_waiting():
+	if _sheet.visible:
 		close()
 	else:
 		open()
 
 
-## The loaded clock is the player's now, so the sheet closes. Installing the
-## clock dropped every hold already; the release in close() then ends nothing.
+## A load replaces the world the sheet was opened over, so it closes.
 func _on_loaded(ok: bool) -> void:
 	if not ok:
 		return
 	close()
+	_sync_open_state()
 	# The ending notice is not saved. The rail's own reset (reset_done) posts a
 	# warning still due once, whichever of the two handlers runs first, so this
 	# only drops the ending and lets the warning follow the loaded rating.
@@ -524,6 +494,24 @@ func _on_loaded(ok: bool) -> void:
 		rail.drop_notice(ENDED_KEY)
 	_ended_text = ""
 	_refresh_warning.call_deferred()
+
+
+func _sync_open_state() -> void:
+	var open_now := flights != null and flights.opened_tick >= 0
+	if _button != null:
+		_button.visible = open_now
+		_button.disabled = not open_now
+	if not open_now and _sheet != null:
+		close()
+
+
+func _on_airport_opened(_tick: int) -> void:
+	_sync_open_state()
+	_refresh()
+
+
+func _on_flights_changed(_id: String) -> void:
+	_sync_open_state()
 
 
 func _on_tool_changed(_tool: BuildMode.Tool) -> void:
@@ -581,6 +569,7 @@ func _set_note(label: Label, note: String) -> void:
 
 ## Rewrites each card's fit line for the sim as it is now.
 func _refresh_fits() -> void:
+	_sync_open_state()
 	for id: String in _fit_labels:
 		_set_fit(_fit_labels[id], desk.board.offer_of(id))
 

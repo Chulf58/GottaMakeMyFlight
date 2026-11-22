@@ -1,11 +1,11 @@
 class_name TestBuildMenuSession
 extends GdUnitTestSuite
-## Build mode (decision build-mode-pauses-the-game-while-a-build-tray-is-open-
-## closin): a tray open or a tool picked pauses the sim; closing it gives the
-## clock back as the player had it; the undo history clears on the next tick
-## (test_build_undo_after_esc.gd covers Esc then Ctrl+Z). Space or a
-## speed key while building ends it, and the Staff panel is not build mode.
-## The clock is taken on the session's next sync(), which the tests call.
+## Build mode (ruling
+## player-owns-clock-and-persistent-build-undo-no-auto-pause-on-trays-offers-planner-direct-delete):
+## a tray open or a tool picked sets build_session.active without pausing or
+## changing the clock's speed; changing speed or pausing while building leaves
+## build mode open; and closing build mode preserves the undo history across
+## sim ticks.
 
 const STRUCTURE := 0
 
@@ -64,20 +64,24 @@ func _steps() -> int:
 	return _mode.undo_history().size()
 
 
-func test_opening_a_tray_by_click_pauses_the_sim() -> void:
+func test_opening_a_tray_by_click_leaves_a_running_sim_running() -> void:
 	_press_speed(2)
 	_menu.press_category(STRUCTURE)
 	_sync()
 	assert_bool(_menu.build_session.active).is_true()
-	assert_bool(_clock.paused).is_true()
+	assert_bool(_clock.paused).is_false()
+	assert_int(_clock.speed).is_equal(2)
+	assert_int(_clock.holds.count()).is_equal(0)
 
 
-func test_picking_a_tool_card_pauses_the_sim() -> void:
+func test_picking_a_tool_card_leaves_a_running_sim_running() -> void:
 	_press_speed(1)
 	_menu.press_card(BuildMode.Tool.FLOOR)
 	_sync()
 	assert_int(_mode.tool).is_equal(BuildMode.Tool.FLOOR)
-	assert_bool(_clock.paused).is_true()
+	assert_bool(_menu.build_session.active).is_true()
+	assert_bool(_clock.paused).is_false()
+	assert_int(_clock.speed).is_equal(1)
 
 
 func test_a_closed_menu_leaves_the_sim_running() -> void:
@@ -87,7 +91,7 @@ func test_a_closed_menu_leaves_the_sim_running() -> void:
 	assert_bool(_clock.paused).is_false()
 
 
-func test_esc_ends_build_mode_and_restores_the_speed() -> void:
+func test_esc_ends_build_mode_and_leaves_speed_alone() -> void:
 	_press_speed(3)
 	_menu.press_category(STRUCTURE)
 	_sync()
@@ -98,7 +102,7 @@ func test_esc_ends_build_mode_and_restores_the_speed() -> void:
 	assert_int(_clock.speed).is_equal(3)
 
 
-func test_clicking_the_open_category_again_ends_build_mode() -> void:
+func test_clicking_the_open_category_again_ends_build_mode_without_changing_clock() -> void:
 	_press_speed(2)
 	_menu.press_category(STRUCTURE)
 	_sync()
@@ -108,38 +112,42 @@ func test_clicking_the_open_category_again_ends_build_mode() -> void:
 	assert_int(_clock.speed).is_equal(2)
 
 
-func test_a_game_paused_before_stays_paused_after() -> void:
+func test_a_game_paused_before_stays_paused_while_open_and_after_closing() -> void:
 	_press_speed(2)
 	_press_speed(0)
 	_menu.press_category(STRUCTURE)
 	_sync()
+	assert_bool(_clock.paused).is_true()
 	_menu.press_category(STRUCTURE)
 	assert_bool(_clock.paused).is_true()
 	assert_int(_clock.speed).is_equal(2)
 
 
-func test_switching_category_or_tool_stays_in_one_build_mode() -> void:
+func test_switching_category_or_tool_stays_in_one_build_mode_without_touching_clock() -> void:
 	_press_speed(2)
 	_menu.press_category(STRUCTURE)
 	_sync()
 	_menu.press_category(1)
 	_menu.press_card(BuildMode.Tool.WALL)
 	_sync()
-	assert_bool(_clock.paused).is_true()
+	assert_bool(_clock.paused).is_false()
+	assert_bool(_menu.build_session.active).is_true()
 	_port.push_input(_key(KEY_ESCAPE))
+	assert_bool(_menu.build_session.active).is_false()
 	assert_bool(_clock.paused).is_false()
 	assert_int(_clock.speed).is_equal(2)
 
 
-func test_closing_build_mode_clears_the_undo_history_on_the_next_tick() -> void:
+func test_closing_build_mode_keeps_the_undo_history_across_ticks() -> void:
 	_menu.press_category(STRUCTURE)
 	assert_bool(_paint(Vector2i(1, 1)).ok).is_true()
 	assert_bool(_paint(Vector2i(2, 1)).ok).is_true()
 	assert_int(_steps()).is_equal(2)
 	_port.push_input(_key(KEY_ESCAPE))
 	assert_int(_steps()).is_equal(2)
-	_clock.advance(SimClock.STEP)
-	assert_int(_steps()).is_equal(0)
+	for i in 5:
+		_clock.advance(SimClock.STEP)
+	assert_int(_steps()).is_equal(2)
 
 
 func test_undo_works_inside_build_mode() -> void:
@@ -151,74 +159,35 @@ func test_undo_works_inside_build_mode() -> void:
 	assert_int(_mode.grid.floor_at(Vector2i(1, 1))).is_equal(BuildGrid.FLOOR_NONE)
 
 
-func test_ctrl_z_after_esc_undoes_the_last_build_until_a_tick_runs() -> void:
+func test_ctrl_z_after_esc_and_ticks_undoes_the_last_build() -> void:
 	_menu.press_category(STRUCTURE)
 	assert_bool(_paint(Vector2i(1, 1)).ok).is_true()
 	_port.push_input(_key(KEY_ESCAPE))
+	for i in 5:
+		_clock.advance(SimClock.STEP)
 	_port.push_input(_key(KEY_Z, true))
 	assert_int(_mode.grid.floor_at(Vector2i(1, 1))).is_equal(BuildGrid.FLOOR_NONE)
 	assert_str(_mode.status_text()).contains(UndoStack.UNDONE)
 
 
-func test_ctrl_z_after_esc_and_a_tick_changes_nothing() -> void:
-	_menu.press_category(STRUCTURE)
-	assert_bool(_paint(Vector2i(1, 1)).ok).is_true()
-	_port.push_input(_key(KEY_ESCAPE))
-	_clock.advance(SimClock.STEP)
-	_port.push_input(_key(KEY_Z, true))
-	assert_int(_mode.grid.floor_at(Vector2i(1, 1))).is_not_equal(BuildGrid.FLOOR_NONE)
-	assert_str(_mode.status_text()).contains(UndoStack.NOTHING_TO_UNDO)
-	assert_object(_mode.undo()).is_null()
-
-
-func test_unpausing_while_building_ends_build_mode_and_keeps_the_clock_running() -> void:
-	_press_speed(2)
-	_menu.press_category(STRUCTURE)
-	_sync()
-	_clock.set_paused(false)
-	_sync()
-	assert_bool(_menu.build_session.active).is_false()
-	assert_bool(_menu.is_tray_open()).is_false()
-	assert_int(_mode.tool).is_equal(BuildMode.Tool.NONE)
-	assert_bool(_clock.paused).is_false()
-	assert_int(_clock.speed).is_equal(2)
-
-
-func test_a_speed_key_while_building_ends_build_mode_at_that_speed() -> void:
+func test_changing_clock_speed_or_pause_while_building_keeps_build_mode_open() -> void:
 	_press_speed(1)
 	_menu.press_category(STRUCTURE)
 	_sync()
 	_press_speed(3)
 	_sync()
-	assert_bool(_menu.build_session.active).is_false()
-	assert_bool(_menu.is_tray_open()).is_false()
+	assert_bool(_menu.build_session.active).is_true()
+	assert_bool(_menu.is_tray_open()).is_true()
 	assert_bool(_clock.paused).is_false()
 	assert_int(_clock.speed).is_equal(3)
-
-
-func test_a_speed_key_in_a_game_paused_before_ends_build_mode() -> void:
-	_press_speed(2)
 	_press_speed(0)
-	_menu.press_category(STRUCTURE)
 	_sync()
-	_press_speed(2)
-	_sync()
-	assert_bool(_menu.build_session.active).is_false()
-	assert_bool(_clock.paused).is_false()
+	assert_bool(_menu.build_session.active).is_true()
+	assert_bool(_menu.is_tray_open()).is_true()
+	assert_bool(_clock.paused).is_true()
 
 
-func test_ending_by_the_clock_clears_the_undo_history_on_the_next_tick() -> void:
-	_menu.press_category(STRUCTURE)
-	_sync()
-	assert_bool(_paint(Vector2i(1, 1)).ok).is_true()
-	_clock.set_paused(false)
-	_sync()
-	assert_int(_steps()).is_equal(1)
-	_clock.advance(SimClock.STEP)
-	assert_int(_steps()).is_equal(0)
-
-
-func test_the_staff_panel_is_not_build_mode() -> void:
+func test_the_staff_panel_is_not_build_mode_and_leaves_clock_alone() -> void:
 	_press_speed(2)
 	_menu.press_category(STRUCTURE)
 	_sync()
@@ -230,19 +199,19 @@ func test_the_staff_panel_is_not_build_mode() -> void:
 	assert_bool(_clock.paused).is_false()
 
 
-func test_remove_is_build_mode() -> void:
+func test_remove_is_build_mode_without_pausing_clock() -> void:
 	_press_speed(1)
 	_menu.press_category(_menu.remove_category())
 	_sync()
 	assert_bool(_menu.build_session.active).is_true()
-	assert_bool(_clock.paused).is_true()
+	assert_bool(_clock.paused).is_false()
 
 
-func test_a_menu_with_no_clock_still_clears_undo() -> void:
+func test_a_menu_with_no_clock_still_keeps_undo_on_close() -> void:
 	var bare := BuildMenu.new()
 	bare.build_mode = _mode
 	_port.add_child(bare)
 	bare.press_category(STRUCTURE)
 	assert_bool(_paint(Vector2i(1, 1)).ok).is_true()
 	bare.press_category(STRUCTURE)
-	assert_int(_steps()).is_equal(0)
+	assert_int(_steps()).is_equal(1)

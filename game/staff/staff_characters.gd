@@ -79,6 +79,8 @@ var _prev: Dictionary = {}
 var _cur: Dictionary = {}
 ## Member id -> its arch tuck record (StaffArchTuck).
 var _tucks: Dictionary = {}
+## Member id -> its station interaction pose record (StaffStationPose).
+var _poses: Dictionary = {}
 ## Something changed between ticks: the next sync snaps instead of interpolating.
 var _dirty := false
 
@@ -132,6 +134,16 @@ func tuck_of(id: int) -> float:
 	return StaffArchTuck.weight(_tucks.get(id, {}), _now())
 
 
+## How far member `id`'s station interaction pose is blended in now (0 idle, 1 active).
+func station_pose_weight(id: int) -> float:
+	return StaffStationPose.weight_of(_poses.get(id, {}), _now())
+
+
+## Current StaffStationPose.Mode for member `id`.
+func station_pose_mode(id: int) -> StaffStationPose.Mode:
+	return StaffStationPose.mode_of(_poses.get(id, {}))
+
+
 ## Where the member on duty at `station` is drawn, in world space: the
 ## centre of its staff spot.
 func post_position(station: int) -> Vector3:
@@ -168,6 +180,8 @@ func bin_yaw(spot: Vector2i, bin: Vector2i) -> float:
 ## `snap` both recorded positions are set to now, so nothing glides.
 func sync(snap: bool = false) -> void:
 	var seen := {}
+	var pose_ctx := StaffStationPose.build_context(staff, _flights(), plane_fleet)
+	var tick_now := _tick()
 	for id in staff.member_ids():
 		var m := staff.get_member(id)
 		if m.role == StaffMember.Role.RAMP:
@@ -195,6 +209,12 @@ func sync(snap: bool = false) -> void:
 			_play_clip(node, String(ramp_pose["clip"]), float(ramp_pose["speed"]))
 			if snap:
 				_tucks.erase(id)
+				_poses.erase(id)
+			var ramp_eval := StaffStationPose.evaluate(m, staff, ramp_now, pose_ctx)
+			var ramp_look := StaffStationPose.compute_look_deg(
+				ramp_now, node.rotation.y, ramp_eval[1], ramp_eval[2]
+			)
+			StaffStationPose.update(_poses.get_or_add(id, {}), ramp_eval[0], ramp_look, tick_now)
 			continue
 		if m.in_pool():
 			continue
@@ -215,11 +235,15 @@ func sync(snap: bool = false) -> void:
 		_cur[id] = now
 		_pose(node, m, (_cur[id] as Vector3) - (_prev[id] as Vector3))
 		# A snapped sync (a load among them: member ids survive it) starts the
-		# tuck over, settled where the member stands, with no turn from before.
+		# tuck and station pose over, settled where the member stands.
 		if snap:
 			_tucks.erase(id)
+			_poses.erase(id)
 		var inside := StaffArchTuck.in_arch_passage(staff.sim.grid, m)
-		StaffArchTuck.update(_tucks.get_or_add(id, {}), inside, _tick())
+		StaffArchTuck.update(_tucks.get_or_add(id, {}), inside, tick_now)
+		var eval := StaffStationPose.evaluate(m, staff, now, pose_ctx)
+		var look := StaffStationPose.compute_look_deg(now, node.rotation.y, eval[1], eval[2])
+		StaffStationPose.update(_poses.get_or_add(id, {}), eval[0], look, tick_now)
 	for id in _nodes.keys():
 		if not seen.has(id):
 			_release(id)
@@ -250,6 +274,15 @@ func draw() -> void:
 				node.position = (_prev[id] as Vector3).lerp(_cur[id], alpha)
 		else:
 			node.position = (_prev[id] as Vector3).lerp(_cur[id], alpha)
+		var pose_rec: Dictionary = _poses.get(id, {})
+		StaffStationPose.pose(
+			node,
+			StaffStationPose.mode_of(pose_rec),
+			StaffStationPose.weight_of(pose_rec, now),
+			now,
+			StaffStationPose.look_of(pose_rec, now),
+			id
+		)
 		StaffArchTuck.pose(node, StaffArchTuck.weight(_tucks.get(id, {}), now))
 		var player := node.get_node("AnimationPlayer") as AnimationPlayer
 		var base: float = node.get_meta(&"base_speed", 1.0)
@@ -429,12 +462,14 @@ func _release(id: int) -> void:
 	node.visible = false
 	(node.get_node("AnimationPlayer") as AnimationPlayer).stop()
 	node.set_meta(&"clip", "")
+	StaffStationPose.pose(node, StaffStationPose.Mode.NONE, 0.0, 0.0, Vector2.ZERO, 0)
 	StaffArchTuck.pose(node, 0.0)
 	_pool[node.get_meta(&"role")].append(node)
 	_nodes.erase(id)
 	_prev.erase(id)
 	_cur.erase(id)
 	_tucks.erase(id)
+	_poses.erase(id)
 
 
 ## Sim time now, between ticks: the tick and the clock's alpha.
