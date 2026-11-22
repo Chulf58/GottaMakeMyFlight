@@ -15,12 +15,15 @@ extends RefCounted
 ## across in front of the feet.
 ##
 ## The hand is chosen once per seat and kept (stamp()) until the guest is no
-## longer bound for or at that seat: chosen from the walls live on every call,
-## a wall built mid-stay, or a route in and out of NEAR_CELLS, changed the hand
-## with the roller lying on the floor. The stamp lives on the sim object as
-## metadata and is saved (PassengerSimSave "park_side"): chosen again after a
-## load, a one-bag guest's gate chair side flipped once a two-bag neighbour had
-## come after it chose (board 4da2e8ff).
+## longer bound for or at that seat, except at a gate chair while the roller
+## is still carried (TO_GATE, before set-down): there a wall edit blocking
+## the stamped side when the opposite lying side fits (GateRoller.clear_hand())
+## updates the stamp (decision 54496e74, amending 2ae1f934). Once set down
+## (SITTING_DOWN onward), and at every other seat, the stamp stays locked so
+## a wall built mid-stay never flips a lying roller. The stamp lives on the sim
+## object as metadata and is saved (PassengerSimSave "park_side"): chosen again
+## after a load, a one-bag guest's gate chair side flipped once a two-bag
+## neighbour had come after it chose (board 4da2e8ff).
 ##
 ## A side is walled when the park on it (RollerPark.park(), scale 1) reaches
 ## into a wall (ParkWalls.inside(), PullSide.walls_near()) where the guest
@@ -91,6 +94,12 @@ static func hand(sim: PassengerSim, p: Passenger, fallback: int) -> int:
 		stamp = [seat["key"], chosen if chosen >= 0 else fallback]
 		stamps[p.id] = stamp
 		sim.set_meta(STAMPS, stamps)
+	elif seat.has("out") and p.stage == Passenger.Stage.TO_GATE:
+		var clear := GateRoller.clear_hand(sim, p)
+		if clear >= 0 and clear != stamp[1]:
+			stamp = [seat["key"], clear]
+			stamps[p.id] = stamp
+			sim.set_meta(STAMPS, stamps)
 	return stamp[1]
 
 
