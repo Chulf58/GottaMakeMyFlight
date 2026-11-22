@@ -198,21 +198,38 @@ func test_remove_is_one_button_with_no_tray() -> void:
 	assert_array(_pressed_categories()).is_equal([BuildMenu.REMOVE_CATEGORY])
 
 
-func test_the_status_line_shows_a_refusal_above_the_tray_and_never_moves() -> void:
+func test_the_status_line_shows_a_refusal_above_the_tray_then_above_the_bar_when_closed() -> void:
+	_mode.set_process(false)
 	_mode.set_tool(BuildMode.Tool.DOOR)
+	_mode._update_ghost(_mode.grid.cell_to_world(Vector2i(4, 4)))
 	var result := _mode.apply_at(_mode.grid.cell_to_world(Vector2i(4, 4)))
 	assert_bool(result.ok).is_false()
 	assert_str(_menu.status_label().text).is_equal(_mode.status_text())
 	assert_str(_menu.status_label().text).contains(result.reason_text())
+	_menu.refresh_preview()
 	await get_tree().process_frame
+	assert_bool(_menu.status_card().visible).is_true()
+	assert_bool(_menu.status_label().is_visible_in_tree()).is_true()
 	var status := _menu.status_label().get_global_rect()
+	var open_card := _menu.status_card().get_global_rect()
 	var tray := _menu.tray().get_global_rect()
-	assert_float(status.end.y).is_less_equal(tray.position.y)
-	assert_float(tray.end.y).is_less_equal(_menu.bar().get_global_rect().position.y)
+	var bar := _menu.bar().get_global_rect()
+	assert_float(open_card.end.y).is_equal(tray.position.y - float(HudLayout.GAP))
+	assert_bool(open_card.encloses(status)).is_true()
+	assert_float(tray.end.y).is_less_equal(bar.position.y)
+	_menu._on_wages_paid(60, 0)
 	_push(_key(KEY_ESCAPE))
+	_menu.refresh_preview()
 	await get_tree().process_frame
 	assert_bool(_menu.is_tray_open()).is_false()
-	assert_that(_menu.status_label().get_global_rect()).is_equal(status)
+	assert_bool(_menu.status_card().visible).is_true()
+	assert_bool(_menu.status_label().is_visible_in_tree()).is_true()
+	var closed_card := _menu.status_card().get_global_rect()
+	var closed_status := _menu.status_label().get_global_rect()
+	assert_float(closed_card.end.y).is_equal(bar.position.y - float(HudLayout.GAP))
+	assert_bool(closed_card.encloses(closed_status)).is_true()
+	assert_float(closed_card.size.x).is_equal(open_card.size.x)
+	assert_float(closed_status.size.y).is_greater(0.0)
 
 
 func test_every_tray_fits_its_reserved_space_and_expected_height() -> void:

@@ -1019,8 +1019,9 @@ func _on_save_loaded(ok: bool) -> void:
 
 func _pa_bottom() -> float:
 	var menu := get_node_or_null("../BuildMenu") as BuildMenu
-	if menu != null and menu.is_node_ready() and menu.is_tray_open():
-		return menu.stack_top() + HudLayout.GAP
+	if menu != null and menu.is_node_ready():
+		if menu.is_tray_open() or menu.status_card().visible:
+			return menu.stack_top() + HudLayout.GAP
 	var staff := get_node_or_null("../StaffPanel") as StaffPanel
 	if staff != null and staff.is_node_ready():
 		var staff_card := staff.get_node_or_null("StaffCard") as Control

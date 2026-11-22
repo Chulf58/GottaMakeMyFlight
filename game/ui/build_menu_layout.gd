@@ -326,24 +326,22 @@ static func size_text(tool: BuildMode.Tool) -> String:
 
 ## The status card (HUD 5/7): the status line, the "R rotate" hint and the cost
 ## line side by side on one HudTopCard, TRAY_W wide and BUTTON_H tall, GAP above
-## the tray and centred. The status text takes the room the hint and the cost
+## the tray (or above the bar while the tray is closed) and centred. The status
+## text takes the room the hint and the cost
 ## leave and wraps onto a second line when it is longer (the card grows up for
 ## it), then ends in an ellipsis; the hint and the cost keep their own width, so
 ## neither wraps. The card never takes a click.
 static func build_status_card(menu: BuildMenu) -> void:
 	var card := menu._status_card
 	card.name = "StatusCard"
-	var bottom := (
-		BuildMenu.MARGIN + BuildMenu.BAR_H + BuildMenu.GAP + BuildMenu.TRAY_H + BuildMenu.GAP
-	)
+	var bottom := BuildMenu.MARGIN + BuildMenu.BAR_H + BuildMenu.GAP
 	card.anchor_left = 0.5
 	card.anchor_right = 0.5
 	card.anchor_top = 1.0
 	card.anchor_bottom = 1.0
 	card.offset_left = -BuildMenu.COLUMN_W / 2.0
 	card.offset_right = BuildMenu.COLUMN_W / 2.0
-	card.offset_top = -bottom - BuildMenu.STATUS_H
-	card.offset_bottom = -bottom
+	sync_status_card_bottom(card, bottom)
 	card.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	card.theme = BuildMenu.HUD_THEME
 	card.theme_type_variation = &"HudTopCard"
