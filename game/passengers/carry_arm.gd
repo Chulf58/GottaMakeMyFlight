@@ -116,7 +116,7 @@ func _process_modification_with_delta(_delta: float) -> void:
 	if bones.has(-1):
 		return
 	var pose := skeleton.get_bone_global_pose(bones[0])
-	var outward := signf(pose.origin.x)
+	var outward := -1.0 if side == 0 else 1.0
 	var weight := clampf(front_weight, 0.0, 1.0)
 	var low := _side(skeleton, bones, pose, outward) if holds else _animated(skeleton, bones)
 	var high := _front(skeleton, bones, pose, outward) if weight > 0.0 else low
@@ -267,7 +267,7 @@ func _reach(skeleton: Skeleton3D, chain: Array[Transform3D], outward: float) -> 
 		elbow.distance_to(shoulder),
 		grip.distance_to(elbow),
 		target,
-		Vector3(outward, -0.30, -0.5)
+		Vector3(outward, 0.0 if target.z < shoulder.z else -0.30, -0.5)
 	)
 	var arm := chain[0]
 	var fore_in_arm := arm.affine_inverse() * chain[1]

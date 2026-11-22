@@ -1243,7 +1243,7 @@ static func plan(
 			# instead of skimming flat across CarryShoulderBag_Body (74e713be).
 			targets[lead] = (
 				(targets[lead] as Vector3)
-				- Vector3.UP * (0.23 * trailing_tray * (1.0 - smoothstep(0.0, 0.30, t)))
+				- Vector3.UP * (0.35 * trailing_tray * (1.0 - smoothstep(0.0, 0.30, t)))
 			)
 		elif k > s_up.y:
 			# Nudge the releasing hand 6.5 cm outside and 2 cm under
