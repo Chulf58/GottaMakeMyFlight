@@ -36,7 +36,7 @@ func after_test() -> void:
 func _cafe_world() -> PassengerTestWorld:
 	var grid := BuildGrid.new()
 	_ids = CafeTestLayout.build(grid, true)
-	return PassengerTestWorld.make(grid, FlightSim.schedule_starts(0), 4242)
+	return PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(700, 1700), 4242)
 
 
 func _save(world: PassengerTestWorld) -> String:
@@ -58,12 +58,16 @@ func _load(text: String) -> PassengerTestWorld:
 	var data: Dictionary = JSON.parse_string(text)
 	var grid := BuildGrid.new()
 	assert_bool(grid.from_snapshot(data["grid"])).is_true()
-	var world := PassengerTestWorld.make(grid, FlightSim.schedule_starts(0), 99)
+	var world := PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(700, 1700), 99)
 	assert_bool(world.clock.from_snapshot(data["clock"])).is_true()
 	assert_bool(world.flights.from_snapshot(data["flights"])).is_true()
 	assert_bool(world.sim.from_snapshot(data["passengers"])).is_true()
 	assert_bool(world.sim.wallet.from_snapshot(data["wallet"])).is_true()
 	return world
+
+
+static func _state(world: PassengerTestWorld) -> Dictionary:
+	return {"passengers": world.sim.to_snapshot(), "wallet": world.sim.wallet.to_snapshot()}
 
 
 ## The passenger signature plus every cafe visit, queue and the wallet.
@@ -140,8 +144,9 @@ func test_a_save_in_the_middle_of_visits_plays_out_identically_through_doors_clo
 	while _a.clock.tick <= _a.flights.doors_close_tick(PassengerTestWorld.FLIGHT):
 		_a.step()
 		_b.step()
-		if first_bad < 0 and _signature(_a) != _signature(_b):
+		if first_bad < 0 and _state(_a) != _state(_b):
 			first_bad = _a.clock.tick
+	assert_str(_signature(_b)).is_equal(_signature(_a))
 	assert_int(first_bad).override_failure_message("first differing tick %d" % first_bad).is_equal(
 		-1
 	)
@@ -203,8 +208,9 @@ func test_a_save_between_an_edit_and_the_next_tick_loads_and_plays_on_alike() ->
 	while _a.clock.tick <= _a.flights.doors_close_tick(PassengerTestWorld.FLIGHT):
 		_a.step()
 		_b.step()
-		if first_bad < 0 and _signature(_a) != _signature(_b):
+		if first_bad < 0 and _state(_a) != _state(_b):
 			first_bad = _a.clock.tick
+	assert_str(_signature(_b)).is_equal(_signature(_a))
 	assert_int(first_bad).override_failure_message("first differing tick %d" % first_bad).is_equal(
 		-1
 	)

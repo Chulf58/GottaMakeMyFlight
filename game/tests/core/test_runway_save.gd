@@ -132,6 +132,10 @@ func test_a_small_runway_with_a_medium_offer_is_refused_unchanged() -> void:
 		offer["booked_passengers"] = OfferTraits.fewest_booked(
 			medium[0], medium[1], offer["traits"]
 		)
+		var fees: Array = OfferBoard.fee_range_for(
+			OfferBoard.tier_of(offer["airline"]), PlaneClasses.MEDIUM
+		)
+		offer["fee_per_passenger"] = OfferTraits.fee_of(fees[0], offer["traits"])
 	assert_bool(board.from_snapshot(offers)).is_true()
 	var data := _taken()
 	var before := SaveTestKit.checksum(_main)

@@ -24,6 +24,7 @@ func before_test() -> void:
 	var desk := OfferDesk.new()
 	desk.runway = Runway.new(PlaneClasses.LARGE)
 	var sim := FlightSim.new()
+	sim.open_airport()
 	_port.add_child(desk)
 	_port.add_child(sim)
 	var saved := TestOfferBoard.save_of(TestOfferBoard.day_records(0, [600, 660, 1200]))

@@ -101,8 +101,13 @@ func test_with_the_staff_card_open_the_terminal_is_above_it() -> void:
 
 
 func test_with_the_offers_sheet_open_the_terminal_is_beside_it() -> void:
+	var flights := _main.get_node("FlightSim") as FlightSim
+	if flights.opened_tick < 0:
+		flights.open_airport()
+		await await_idle_frame()
 	_offers.open()
 	await _settle()
+	assert_bool(_offers.is_open()).is_true()
 	var sheet := _offers.sheet().get_global_rect()
 	var free := _free_pixels()
 	assert_bool(free.intersects(sheet)).is_false()

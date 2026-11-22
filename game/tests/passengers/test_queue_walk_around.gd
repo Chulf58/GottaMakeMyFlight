@@ -64,8 +64,12 @@ func test_a_walker_on_the_front_side_goes_round_the_line() -> void:
 
 func test_a_walker_standing_on_the_line_ahead_leaves_it_on_its_first_step() -> void:
 	var from: Vector2i = LINE[1]
-	# Control: along the line it would walk over line[2..4].
-	assert_array(_over(StationQueue.path_to(_grid, LINE, from, 5), 5)).is_not_empty()
+	# Control: along the line it would walk over line[2..4]; path_to() now
+	# detours around them too.
+	var along: Array[Vector2i] = []
+	along.assign(LINE.slice(1, 6))
+	assert_array(_over(along, 5)).is_not_empty()
+	assert_array(_over(StationQueue.path_to(_grid, LINE, from, 5), 5)).is_empty()
 	var path := _check_round(from, 5)
 	assert_int(LINE.find(path[1])).is_equal(-1)
 

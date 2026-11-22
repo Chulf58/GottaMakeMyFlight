@@ -61,17 +61,38 @@ static func size_of(queue: Dictionary) -> int:
 
 
 ## The path from `from` to `line[index]`: along the line when `from` is on it
-## (the line's steps are routable, and a turn is walked as the line turns),
-## otherwise the grid's path.
-static func path_to(grid: BuildGrid, line: Array, from: Vector2i, index: int) -> Array[Vector2i]:
+## at or behind `index` without an occupied intermediate cell, otherwise routed
+## around `occupied` (defaulting to the line's cells ahead of `index`) when a
+## walkable detour exists, falling back cleanly to the direct route when none
+## exists.
+static func path_to(
+	grid: BuildGrid, line: Array, from: Vector2i, index: int, occupied: Array = []
+) -> Array[Vector2i]:
 	var at := line.find(from)
+	var shut: Array = occupied if not occupied.is_empty() else line.slice(0, index)
 	if at < 0:
-		return grid.find_path(from, line[index])
+		var around := grid.find_path_around(from, line[index], shut)
+		return around if not around.is_empty() else grid.find_path(from, line[index])
+	if at < index:
+		var around := grid.find_path_around(from, line[index], shut)
+		if not around.is_empty():
+			return around
+	elif not occupied.is_empty() and _line_blocked(line, index, at, occupied):
+		var around := grid.find_path_around(from, line[index], occupied)
+		if not around.is_empty():
+			return around
 	var path: Array[Vector2i] = []
 	var step := -1 if index < at else 1
 	for i in range(at, index + step, step):
 		path.append(line[i])
 	return path
+
+
+static func _line_blocked(line: Array, index: int, at: int, occupied: Array) -> bool:
+	for i in range(index + 1, at):
+		if occupied.has(line[i]):
+			return true
+	return false
 
 
 ## The index of the next free cell of `line` for a walker to join on: past

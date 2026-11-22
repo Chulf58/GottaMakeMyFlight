@@ -68,6 +68,10 @@ func _load(text: String) -> PassengerTestWorld:
 	return world
 
 
+static func _state(world: PassengerTestWorld) -> Dictionary:
+	return {"passengers": world.sim.to_snapshot(), "wallet": world.sim.wallet.to_snapshot()}
+
+
 ## The passenger signature plus boredom, the wallet and every shop visit.
 func _signature(world: PassengerTestWorld) -> String:
 	var shops := world.sim.shops
@@ -93,6 +97,7 @@ func _round_trip(type: StringName) -> void:
 	var saves := {}
 	var trace := {}
 	var paid := [0]
+	var replay_until := -1
 	_a.sim.shops.paid.connect(func(_id: int, _room: int, _amount: int) -> void: paid[0] += 1)
 	while _a.clock.tick <= doors:
 		_a.step()
@@ -101,21 +106,25 @@ func _round_trip(type: StringName) -> void:
 			var stage: String = Passenger.Stage.keys()[p.stage]
 			if not saves.has(stage) and p.stage_tick == _a.clock.tick:
 				saves[stage] = _save(_a)
-		trace[_a.clock.tick] = _signature(_a)
+				if saves.has("SHOP_WALK") and saves.has("SHOP_BROWSE") and replay_until < 0:
+					replay_until = _a.clock.tick + REPLAY_TICKS
+		trace[_a.clock.tick] = _state(_a)
+		if replay_until >= 0 and _a.clock.tick > replay_until and paid[0] > 0:
+			break
 	print("%s: saved in %s, %d paid" % [type, saves.keys(), paid[0]])
 	assert_int(paid[0]).override_failure_message(str(type)).is_greater(0)
 	for stage in ["SHOP_WALK", "SHOP_BROWSE"]:
 		assert_bool(saves.has(stage)).override_failure_message("%s %s" % [type, stage]).is_true()
 		_b = _load(saves[stage])
 		var start := _b.clock.tick
-		assert_str(_signature(_b)).is_equal(trace[start])
+		assert_that(_state(_b)).is_equal(trace[start])
 		var rooms := [ids["air_room"], ids["land_room"]]
 		for id in _b.sim.shops.visit_ids():
 			assert_bool(rooms.has(_b.sim.shops.visit_of(id).room)).is_true()
 		var first_bad := -1
 		while _b.clock.tick <= mini(doors, start + REPLAY_TICKS) and first_bad < 0:
 			_b.step()
-			if _signature(_b) != trace[_b.clock.tick]:
+			if _state(_b) != trace[_b.clock.tick]:
 				first_bad = _b.clock.tick
 		print("%s %s saved at %d: first differing tick %d" % [type, stage, start, first_bad])
 		assert_int(first_bad).override_failure_message("%s %s" % [type, stage]).is_equal(-1)

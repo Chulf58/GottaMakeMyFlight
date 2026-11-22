@@ -68,7 +68,8 @@ func _run() -> void:
 		terms["destination"] = spec[2]
 		terms["airline"] = spec[3]
 		terms["plane_size"] = "small"
-		terms["booked_passengers"] = 12
+		terms["booked_passengers"] = 6
+		terms["fee_per_passenger"] = 50
 		print("PROBE contract ", spec[0], " accepted=", flights.accept_contract(terms))
 		print("PROBE   gate=", flights.contract_of(spec[0]).get("gate", "-"))
 	var planner := _main.find_child("FlightPlanner", true, false) as FlightPlanner

@@ -54,6 +54,9 @@ const ESC_KEY := "Esc"
 ## file-only-off-by-de). With one, the Settings page holds its switch and the
 ## Open log folder button; without one it holds neither.
 @export var quit_log: QuitLogRecorder
+## Optional: the play camera whose angle preset the Settings selector drives.
+## Falls back to sibling `../TycoonCamera` when left unset.
+@export var camera: TycoonCamera
 ## Opens a folder in the system's file browser; tests swap in a recorder.
 var open_folder := Callable()
 ## Changes to a scene file; tests swap in a recorder. Defaults to the tree's
@@ -73,6 +76,8 @@ var esc_closes: Callable
 var audio_card: AudioSettingsCard
 var language_picker: LanguagePicker
 var exit_confirm_page: Control
+var camera_angle_picker: HBoxContainer
+var camera_angle_option: OptionButton
 
 var _layer: CanvasLayer
 var _question_layer: CanvasLayer
@@ -89,6 +94,7 @@ var _save_list: SaveList
 var _status: Label
 var _status_spec := {}
 var _incidents_switch: CheckButton
+var _camera_angle_label: Label
 var _quit_log_switch: CheckButton
 var _quit_log_note: Label
 var _open_log_btn: Button
@@ -204,6 +210,8 @@ func press_settings() -> void:
 	_main_page.visible = false
 	audio_card.visible = true
 	language_picker.visible = true
+	camera_angle_picker.visible = true
+	_sync_camera_angle_picker()
 	_settings_page.visible = true
 
 
@@ -214,6 +222,7 @@ func press_back() -> void:
 	_exit_target = ExitTarget.NONE
 	audio_card.visible = false
 	language_picker.visible = false
+	camera_angle_picker.visible = false
 	_settings_page.visible = false
 	_load_page.visible = false
 	exit_confirm_page.visible = false
@@ -360,6 +369,7 @@ func _show() -> void:
 	language_picker.name = "LanguagePicker"
 	language_picker.visible = false
 	pages.add_child(language_picker)
+	_build_camera_angle_picker(pages)
 	_settings_page = _page("SettingsPage", tr("Settings"))
 	_settings_page.visible = false
 	pages.add_child(_settings_page)
@@ -640,12 +650,17 @@ func _perform_exit() -> void:
 func _free_layer() -> void:
 	_shown = false
 	_exit_target = ExitTarget.NONE
+	if is_instance_valid(camera) and camera.pitch_changed.is_connected(_on_camera_pitch_changed):
+		camera.pitch_changed.disconnect(_on_camera_pitch_changed)
 	var layer := _layer
 	_layer = null
 	_main_page = null
 	audio_card = null
 	language_picker = null
 	exit_confirm_page = null
+	camera_angle_picker = null
+	camera_angle_option = null
+	_camera_angle_label = null
 	_settings_page = null
 	_load_page = null
 	_save_list = null
@@ -667,6 +682,73 @@ func _free_layer() -> void:
 	_version = null
 	if is_instance_valid(layer) and not layer.is_queued_for_deletion():
 		layer.queue_free()
+
+
+func _build_camera_angle_picker(pages: Control) -> void:
+	camera_angle_picker = HBoxContainer.new()
+	camera_angle_picker.name = "CameraAnglePicker"
+	camera_angle_picker.visible = false
+	camera_angle_picker.add_theme_constant_override("separation", 10)
+	_camera_angle_label = Label.new()
+	_camera_angle_label.name = "Label"
+	_camera_angle_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	camera_angle_picker.add_child(_camera_angle_label)
+	camera_angle_option = OptionButton.new()
+	camera_angle_option.name = "Option"
+	camera_angle_option.focus_mode = Control.FOCUS_NONE
+	camera_angle_option.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
+	camera_angle_option.get_popup().auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
+	camera_angle_option.custom_minimum_size = Vector2(LanguagePicker.OPTION_MIN_WIDTH, 0.0)
+	camera_angle_option.item_selected.connect(_on_camera_angle_selected)
+	camera_angle_picker.add_child(camera_angle_option)
+	pages.add_child(camera_angle_picker)
+	var cam := _resolve_camera()
+	if cam != null and not cam.pitch_changed.is_connected(_on_camera_pitch_changed):
+		cam.pitch_changed.connect(_on_camera_pitch_changed)
+	_sync_camera_angle_picker()
+
+
+func _resolve_camera() -> TycoonCamera:
+	if is_instance_valid(camera):
+		return camera
+	var sibling := get_node_or_null("../TycoonCamera") as TycoonCamera
+	if sibling != null:
+		camera = sibling
+	return camera
+
+
+func _sync_camera_angle_picker() -> void:
+	if camera_angle_option == null:
+		return
+	var cam := _resolve_camera()
+	_camera_angle_label.text = tr("Camera angle")
+	camera_angle_option.clear()
+	camera_angle_option.add_item(tr("Low (38°)"), TycoonCamera.AngleStep.LOW)
+	camera_angle_option.add_item(tr("Medium (54°)"), TycoonCamera.AngleStep.MEDIUM)
+	camera_angle_option.add_item(tr("Top-Down (70°)"), TycoonCamera.AngleStep.TOP_DOWN)
+	camera_angle_option.disabled = cam == null
+	if cam == null:
+		camera_angle_option.select(TycoonCamera.AngleStep.TOP_DOWN)
+		return
+	if cam.is_custom_pitch():
+		var rounded := int(round(cam.pitch_degrees()))
+		camera_angle_option.add_item(tr("Custom ({angle}°)").format({"angle": rounded}), 3)
+		camera_angle_option.select(3)
+	else:
+		camera_angle_option.select(cam.angle_step)
+
+
+func _on_camera_angle_selected(index: int) -> void:
+	var cam := _resolve_camera()
+	if cam == null or index < 0 or index >= TycoonCamera.STEP_PITCH_DEGREES.size():
+		return
+	cam.set_angle_step(index)
+	_sync_camera_angle_picker()
+
+
+func _on_camera_pitch_changed(_degrees: float) -> void:
+	if _shown:
+		_sync_camera_angle_picker()
 
 
 func _retranslate() -> void:
@@ -695,6 +777,7 @@ func _retranslate() -> void:
 		if _exit_cancel_btn != null:
 			_exit_cancel_btn.text = tr("Cancel", "menu")
 	(_settings_page.get_node("Title") as Label).text = tr("Settings")
+	_sync_camera_angle_picker()
 	_incidents_switch.text = tr("Incidents")
 	if _quit_log_switch != null:
 		_quit_log_switch.text = tr("Quit log")
@@ -734,7 +817,7 @@ func _show_question() -> void:
 func _question_body() -> String:
 	var ask := tr(
 		# gdlint:ignore = max-line-length
-		"One more thing before the doors open. Some days bring trouble: a spill on the floor, an inspector, a holiday rush. Shall I send those your way?"
+		"Now that the airport is open, some days bring trouble: a spill on the floor, an inspector, a holiday rush. Shall I send those your way?"
 	)
 	var choice := tr(
 		# gdlint:ignore = max-line-length

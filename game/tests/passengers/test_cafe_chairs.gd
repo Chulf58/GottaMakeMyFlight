@@ -8,29 +8,69 @@ extends GdUnitTestSuite
 
 var _world: PassengerTestWorld
 var _views: PassengerViews
+var _base_world: PassengerTestWorld
+var _base_views: PassengerViews
+var _base_clean: Dictionary
 
 
 func before() -> void:
+	PassengerTestWorld.tracker = null
+	var built := _build_world()
+	_base_world = built[0]
+	_base_views = built[1]
+	_base_clean = {
+		"clock": _base_world.clock.to_snapshot(),
+		"flights": _base_world.flights.to_snapshot(),
+		"sim": _base_world.sim.to_snapshot(),
+		"wallet": _base_world.sim.wallet.to_snapshot(),
+	}
 	PassengerTestWorld.tracker = self
 
 
 func after() -> void:
+	if _base_views != null:
+		_base_views.free()
+	if _base_world != null:
+		_base_world.free_all()
+	_base_views = null
+	_base_world = null
+	_base_clean.clear()
 	PassengerTestWorld.tracker = null
 
 
-func before_test() -> void:
-	var grid := BuildGrid.new()
-	CafeTestLayout.build(grid)
-	_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
-	_views = PassengerTestWorld.views()
-	_views.clock = _world.clock
-	_views.sim = _world.sim
-	add_child(_views)
-
-
 func after_test() -> void:
-	_views.free()
-	_world.free_all()
+	if _views != null and _views != _base_views:
+		_views.free()
+	if _world != null and _world != _base_world:
+		_world.free_all()
+	_views = null
+	_world = null
+
+
+func _build_world(
+	venue: StringName = &"cafe",
+	tables := true,
+	counter_def: StringName = &"",
+	table_def: StringName = &""
+) -> Array:
+	var grid := BuildGrid.new()
+	CafeTestLayout.build(grid, false, venue, tables, counter_def, table_def)
+	var world := PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
+	var views := PassengerTestWorld.views()
+	views.clock = world.clock
+	views.sim = world.sim
+	add_child(views)
+	return [world, views]
+
+
+func _use_default() -> void:
+	_world = _base_world
+	_views = _base_views
+	assert_bool(_world.clock.from_snapshot(_base_clean["clock"])).is_true()
+	assert_bool(_world.flights.from_snapshot(_base_clean["flights"])).is_true()
+	assert_bool(_world.sim.from_snapshot(_base_clean["sim"])).is_true()
+	assert_bool(_world.sim.wallet.from_snapshot(_base_clean["wallet"])).is_true()
+	_views.snap()
 
 
 func _guest() -> Passenger:
@@ -58,6 +98,7 @@ func _step(p: Passenger, seat: Dictionary) -> Vector3:
 
 
 func test_a_seated_guest_is_drawn_its_body_s_step_towards_the_table() -> void:
+	_use_default()
 	var p := _guest()
 	var seat := _world.sim.cafes.visit_of(p.id).seat
 	_run_to_stage(p, Passenger.Stage.CAFE_SEATED)
@@ -82,6 +123,7 @@ func test_a_seated_guest_is_drawn_its_body_s_step_towards_the_table() -> void:
 
 
 func test_the_step_blends_in_from_the_chair_front_and_out_again() -> void:
+	_use_default()
 	var p := _guest()
 	var seat := _world.sim.cafes.visit_of(p.id).seat
 	_run_to_stage(p, Passenger.Stage.CAFE_SITTING_DOWN)
@@ -117,15 +159,12 @@ func test_the_step_blends_in_from_the_chair_front_and_out_again() -> void:
 ## chair's: the cafe step put the forearms into the dining table top.
 func test_a_restaurant_guest_takes_the_dining_piece_s_own_step() -> void:
 	for table: StringName in [&"restaurant_table", &"restaurant_booth"]:
-		_views.free()
-		_world.free_all()
-		var grid := BuildGrid.new()
-		CafeTestLayout.build(grid, false, &"restaurant", true, &"cafe_counter", table)
-		_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
-		_views = PassengerTestWorld.views()
-		_views.clock = _world.clock
-		_views.sim = _world.sim
-		add_child(_views)
+		if _views != null and _views != _base_views:
+			_views.free()
+			_world.free_all()
+		var built := _build_world(&"restaurant", true, &"cafe_counter", table)
+		_world = built[0]
+		_views = built[1]
 		var p := _guest()
 		var visit := _world.sim.cafes.visit_of(p.id)
 		_run_to_stage(p, Passenger.Stage.CAFE_SEATED)
@@ -155,6 +194,7 @@ func test_a_restaurant_guest_takes_the_dining_piece_s_own_step() -> void:
 
 
 func test_no_step_away_from_a_cafe_seat() -> void:
+	_use_default()
 	var p := _guest()
 	_run_to_stage(p, Passenger.Stage.CAFE_ORDER)
 	assert_vector(CafeChairs.offset(_world.sim, p)).is_equal(Vector3.ZERO)
@@ -175,24 +215,50 @@ func test_dining_pose_applies_by_piece_during_seated_stage_and_clears_on_exit() 
 		[&"bar", false, &"bar_counter", &"cafe_table", DiningPose.Kind.BAR],
 	]
 	for spec: Array in cases:
-		for variant in 2:
+		if _views != null and _views != _base_views:
 			_views.free()
 			_world.free_all()
-			var grid := BuildGrid.new()
-			CafeTestLayout.build(grid, false, spec[0], spec[1], spec[2], spec[3])
-			_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
-			_views = PassengerTestWorld.views()
-			_views.clock = _world.clock
-			_views.sim = _world.sim
-			add_child(_views)
-			var p := _guest()
-			p.variant = variant
-			var expected_kind: DiningPose.Kind = spec[4]
-			_run_to_stage(p, Passenger.Stage.CAFE_SITTING_DOWN)
+		var built := _build_world(spec[0], spec[1], spec[2], spec[3])
+		_world = built[0]
+		_views = built[1]
+		var guests: Array[Passenger] = []
+		for variant in 2:
+			var g := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT, variant))
+			g.hunger = 0
+			g.cafe_cooldown = 1000000
+			guests.append(g)
+		var started := 0
+		while started < 2 and _world.clock.tick < 900:
+			_world.step()
+			for g in guests:
+				if g.stage == Passenger.Stage.TO_GATE and _world.sim.cafes.visit_of(g.id) == null:
+					assert_bool(_world.sim.cafes.try_visit(g)).is_true()
+					started += 1
+		assert_int(started).is_equal(2)
+		var expected_kind: DiningPose.Kind = spec[4]
+		var checked_sitting := [false, false]
+		while (
+			(
+				guests[0].stage != Passenger.Stage.CAFE_SEATED
+				or guests[1].stage != Passenger.Stage.CAFE_SEATED
+			)
+			and _world.clock.tick < 1400
+		):
+			_world.step()
+			for idx in 2:
+				if (
+					not checked_sitting[idx]
+					and guests[idx].stage == Passenger.Stage.CAFE_SITTING_DOWN
+				):
+					checked_sitting[idx] = true
+					assert_bool(_views.node_for(guests[idx].id).has_meta(&"dining_pose")).is_false()
+		for idx in 2:
+			assert_bool(checked_sitting[idx]).is_true()
+			assert_int(guests[idx].stage).is_equal(Passenger.Stage.CAFE_SEATED)
+		_world.run_to(_world.clock.tick + DiningPose.EASE_TICKS)
+		for variant in 2:
+			var p := guests[variant]
 			var node := _views.node_for(p.id)
-			assert_bool(node.has_meta(&"dining_pose")).is_false()
-			_run_to_stage(p, Passenger.Stage.CAFE_SEATED)
-			_world.run_to(_world.clock.tick + DiningPose.EASE_TICKS)
 			var pose: DiningPose = (
 				node.get_meta(&"dining_pose") if node.has_meta(&"dining_pose") else null
 			)
@@ -246,9 +312,16 @@ func test_dining_pose_applies_by_piece_during_seated_stage_and_clears_on_exit() 
 				assert_float(pose_fl.z).is_less(rest_fl.z - 0.05)
 			else:
 				assert_float(pose_fl.z).is_equal_approx(rest_fl.z, 0.005)
-			_run_to_stage(p, Passenger.Stage.CAFE_STANDING_UP)
-			await get_tree().process_frame
-			assert_bool(node.has_meta(&"dining_pose")).is_false()
+		var cleared := [false, false]
+		while (not cleared[0] or not cleared[1]) and _world.clock.tick < 1400:
+			_world.step()
+			for idx in 2:
+				if not cleared[idx] and guests[idx].stage == Passenger.Stage.CAFE_STANDING_UP:
+					cleared[idx] = true
+					await get_tree().process_frame
+					assert_bool(_views.node_for(guests[idx].id).has_meta(&"dining_pose")).is_false()
+		for idx in 2:
+			assert_bool(cleared[idx]).is_true()
 
 
 func _skeleton_tick(skeleton: Skeleton3D) -> void:

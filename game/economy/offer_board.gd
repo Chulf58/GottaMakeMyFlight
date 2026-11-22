@@ -57,7 +57,10 @@ const STATUSES := [OPEN, ACCEPTED, DECLINED, EXPIRED]
 ## 6: offers may carry Odd hours (departing at 06:00 or 22:00) and Exit fee, and
 ## the traits are drawn from OfferTraits seed version 3. A version 5 save is
 ## refused; there is no migration.
-const SAVE_VERSION := 6
+## 7: small offers carry 4-8 passengers and 30-70 base fees (were 8-16 and
+## 15-35, ruling small-plane-passenger-count-and-fare-balance-4-8-passengers).
+## A version 6 save is refused; there is no migration.
+const SAVE_VERSION := 7
 const SAVE_KEYS := ["save_version", "offers", "loyalty"]
 ## Sorted, so a saved count's keys can be compared with it.
 const LOYALTY_KEYS := ["days", "last_day"]
@@ -78,17 +81,20 @@ const OFFER_KEYS := [
 
 ## Tuning values. A few offers a day; the starter tier has small and medium
 ## planes only (larger ones wait for reputation). AIRLINES, STARTER_SIZES and
-## FEE_MIN..FEE_MAX are tier 0 of the tier tables below. Every size's
-## passenger range sits inside its plane class's range (PlaneClasses.CLASSES,
-## decision runway-upgrade-works-wait-for-a-timetable-gap-passengers-per-
-## plane-class); FlightContract.problem refuses a count outside the class's range.
+## FEE_MIN..FEE_MAX are tier 0 of the tier tables below (small planes draw
+## SMALL_FEE_MIN..SMALL_FEE_MAX). Every size's passenger range sits inside its
+## plane class's range (PlaneClasses.CLASSES, decision runway-upgrade-works-wait-
+## for-a-timetable-gap-passengers-per-plane-class); FlightContract.problem
+## refuses a count outside the class's range.
 const OFFERS_PER_DAY := 3
 const AIRLINES := ["Gotta Air", "Nordic Wing", "Blue Fjord", "Sunhop"]
 const DESTINATIONS := ["Oslo", "Berlin", "Lisbon", "Rome", "Dublin", "Athens"]
 ## Plane size -> [fewest, most] booked passengers.
-const STARTER_SIZES := {"small": [8, 16], "medium": [24, 48]}
+const STARTER_SIZES := {"small": [4, 8], "medium": [24, 48]}
 const FEE_MIN := 15
 const FEE_MAX := 35
+const SMALL_FEE_MIN := 30
+const SMALL_FEE_MAX := 70
 ## Airline tiers, unlocked by the airport rating (RatingFormula.tier): tier t
 ## draws from the airlines of tiers 0..t. An airline's own tier decides the
 ## plane sizes it flies (size -> [fewest, most] booked passengers) and its fee
@@ -124,6 +130,13 @@ const FIT_OFFERS := 2
 var _offers: Array[Dictionary] = []
 ## Airline -> {"days": flown days counted (1..LOYAL_DAYS), "last_day": the last}.
 var _loyalty: Dictionary = {}
+
+
+## The [lowest, highest] base fee per passenger drawn for `plane_size` at `tier`.
+static func fee_range_for(tier: int, plane_size: String) -> Array:
+	if plane_size == PlaneClasses.SMALL:
+		return [SMALL_FEE_MIN, SMALL_FEE_MAX]
+	return TIER_FEES[tier]
 
 
 ## The airline tier of `airline` (0 for a starter airline), or -1 if no tier has it.
@@ -346,7 +359,6 @@ func _draw(
 	var airline: String = airlines[rng.randi_range(0, airlines.size() - 1)]
 	var own := tier_of(airline)
 	var sizes := offered_sizes(own, runway_class)
-	var fees: Array = TIER_FEES[own]
 	var destination: String = DESTINATIONS[rng.randi_range(0, DESTINATIONS.size() - 1)]
 	var slots := slots_of(traits)
 	var minute: int = slots[rng.randi_range(0, slots.size() - 1)]
@@ -354,6 +366,7 @@ func _draw(
 	# the RNG advances the same whatever the offered sizes are.
 	var size: String = sizes.keys()[rng.randi_range(0, maxi(sizes.size(), 2) - 1) % sizes.size()]
 	var booked_range: Array = sizes[size]
+	var fees: Array = fee_range_for(own, size)
 	return {
 		"id": "O%dN%d" % [day, number],
 		"day": day,
@@ -631,7 +644,7 @@ func _range_problem(entry: Dictionary) -> String:
 	if booked < fewest or booked > booked_range[1]:
 		return "offer %s books %d passengers outside its size's range" % [entry["id"], booked]
 	var fee := int(entry["fee_per_passenger"])
-	if not _fee_drawable(fee, TIER_FEES[tier], traits, entry[LOYAL_KEY]):
+	if not _fee_drawable(fee, fee_range_for(tier, entry["plane_size"]), traits, entry[LOYAL_KEY]):
 		return "offer %s has a fee no drawn fee of its tier gives" % entry["id"]
 	if not slots_of(traits).has(int(entry["departure_minute"])):
 		return "offer %s departs off the board's departure slots" % entry["id"]

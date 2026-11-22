@@ -12,14 +12,21 @@ const PLAY_TICKS := 2700
 
 var _main: Node
 var _save: SaveGame
+var _cached_old := {}
+var _cached_sum := ""
+var _cached_tick := -1
 
 
 func before() -> void:
 	_main = SaveTestKit.boot(self, SEED)
 	_save = SaveTestKit.save_game(_main)
 	SaveTestKit.start_airport(_main)
+	var flights: FlightSim = _main.get_node("FlightSim")
+	var sim: PassengerSim = _main.get_node("PassengerSim")
 	for i in PLAY_TICKS:
 		SaveTestKit.step(_main)
+		if flights.opened_tick > 0 and not sim.passenger_ids().is_empty():
+			break
 
 
 func after() -> void:
@@ -34,23 +41,33 @@ func _taken() -> Dictionary:
 
 
 ## A save taken now and the world played on, so loading it would change the
-## world: the positive control for every refusal below.
+## world: the positive control for every refusal below. Cached across
+## read-only refusal tests when the clock tick has not moved.
 func _older() -> Dictionary:
-	var old := _taken()
-	for i in 30:
-		SaveTestKit.step(_main)
-	assert_int((_main.get_node("SimClock") as SimClock).tick).is_greater(
-		str(old["clock"]["tick"]).to_int()
-	)
-	return old
+	var clock: SimClock = _main.get_node("SimClock")
+	if _cached_tick != clock.tick or _cached_old.is_empty():
+		_cached_old = _taken()
+		for i in 30:
+			SaveTestKit.step(_main)
+		assert_int(clock.tick).is_greater(str(_cached_old["clock"]["tick"]).to_int())
+		_cached_tick = clock.tick
+		_cached_sum = SaveTestKit.checksum(_main)
+	return _cached_old.duplicate(true)
+
+
+func _world_checksum(tick: int) -> String:
+	if _cached_tick == tick and _cached_sum != "":
+		return _cached_sum
+	return SaveTestKit.checksum(_main)
 
 
 func _assert_refused(bad: Dictionary, reason: String) -> void:
-	var before := SaveTestKit.checksum(_main)
-	var tick := (_main.get_node("SimClock") as SimClock).tick
+	var clock: SimClock = _main.get_node("SimClock")
+	var tick := clock.tick
+	var before := _world_checksum(tick)
 	assert_bool(_save.load_world(bad)).override_failure_message(reason).is_false()
 	assert_str(_save.message_text()).override_failure_message(reason).starts_with("Load failed")
-	assert_int((_main.get_node("SimClock") as SimClock).tick).is_equal(tick)
+	assert_int(clock.tick).is_equal(tick)
 	assert_str(SaveTestKit.checksum(_main)).override_failure_message(reason).is_equal(before)
 
 
@@ -142,10 +159,10 @@ func test_parts_saved_on_different_ticks_are_refused() -> void:
 ## one (no calendar epoch in its clock).
 func test_a_version_6_save_from_the_toon_shell_is_refused() -> void:
 	assert_int(SaveGame.SAVE_VERSION).is_greater(6)
+	var bad := _older()
 	for version in range(6, SaveGame.SAVE_VERSION):
-		var old := _older()
-		old["save_version"] = version
-		_assert_refused(old, "version %d" % version)
+		bad["save_version"] = version
+		_assert_refused(bad, "version %d" % version)
 		print("version %d: '%s'" % [version, _save.message_text()])
 		assert_str(_save.message_text()).contains("older version")
 

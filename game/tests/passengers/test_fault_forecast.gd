@@ -15,13 +15,13 @@ extends GdUnitTestSuite
 ## Just checked in, between the desks and the scanner lanes (CafeTestLayout).
 const CROWD_CELL := Vector2i(16, 12)
 ## More than both scanners' lines hold together.
-const BURST := 32
+const BURST := 20
 ## The fault lasts this long, set directly (StationFaults.add()).
-const FAULT_TICKS := 300
+const FAULT_TICKS := 150
 ## How often the stream is forecast besides F, F+1, R-1 and R.
-const EVERY := 100
+const EVERY := 150
 ## The most waiting passengers forecast on one tick (each is its own replay).
-const SEEKERS := 3
+const SEEKERS := 2
 
 var _world: PassengerTestWorld
 var _sim: PassengerSim

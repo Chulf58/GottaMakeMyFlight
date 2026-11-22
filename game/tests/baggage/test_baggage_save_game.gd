@@ -159,36 +159,29 @@ func test_a_fee_awaiting_a_bag_that_is_settled_is_refused() -> void:
 
 
 func test_active_shuttle_round_trips_through_whole_world_save() -> void:
-	var m := SaveTestKit.boot(self, SEED)
-	SaveTestKit.start_airport(m)
-	var mode := m.get_node("BuildMode") as BuildMode
+	assert_bool(_save.load_world(_data)).is_true()
+	var mode := _main.get_node("BuildMode") as BuildMode
 	var offset := ReferenceTerminal.offset_on(mode.grid)
-	var room := Rect2i(Vector2i(16, 13) + offset, Vector2i(3, 3))
-	assert_bool(mode.grid.apply(BuildEdit.place_room(room, &"bag_room")).ok).is_true()
-	for seg in [[Vector2i(15, 10), Vector2i(16, 10)], [Vector2i(16, 10), Vector2i(16, 13)]]:
-		var plan := BeltShaper.plan_line(mode.grid, seg[0] + offset, seg[1] + offset, 0)
-		assert_bool(plan.result.ok).is_true()
-		for r in mode.grid.apply_batch(plan.edits):
-			assert_bool(r.ok).is_true()
 	var cart := mode.grid.apply(
 		BuildEdit.place_object(&"baggage_cart", Vector2i(17, 14) + offset, 0)
 	)
 	assert_bool(cart.ok).is_true()
-	var ramp_id := (m.get_node("Staff") as StaffSim).hire(StaffMember.Role.RAMP)
-	var clock := m.get_node("SimClock") as SimClock
-	var bags := m.get_node("BaggageSim") as BaggageSim
-	while bags.shuttles().is_empty() and clock.tick < LIMIT:
-		SaveTestKit.step(m)
-	assert_int(bags.shuttles().size()).is_equal(1)
-	var save := SaveTestKit.save_game(m)
-	var snap: Dictionary = JSON.parse_string(JSON.stringify(save.snapshot()))
+	var ramp_id := (_main.get_node("Staff") as StaffSim).hire(StaffMember.Role.RAMP)
+	var clock := _main.get_node("SimClock") as SimClock
+	while _bags.shuttles().is_empty() and clock.tick < LIMIT:
+		SaveTestKit.step(_main)
+	assert_int(_bags.shuttles().size()).is_equal(1)
+	var orig := _bags.shuttles()[0]
+	var orig_cart_id := orig.cart_id
+	var orig_bag_ids := orig.bag_ids.duplicate()
+	var orig_waypoints_size := orig.waypoints.size()
+	var snap: Dictionary = JSON.parse_string(JSON.stringify(_save.snapshot()))
 	assert_bool(_save.load_world(snap)).is_true()
 	assert_int(_bags.shuttles().size()).is_equal(1)
 	var s := _bags.shuttles()[0]
-	var orig := bags.shuttles()[0]
-	assert_int(s.cart_id).is_equal(orig.cart_id)
-	assert_array(s.bag_ids).is_equal(orig.bag_ids)
-	assert_int(s.waypoints.size()).is_equal(orig.waypoints.size())
+	assert_int(s.cart_id).is_equal(orig_cart_id)
+	assert_array(s.bag_ids).is_equal(orig_bag_ids)
+	assert_int(s.waypoints.size()).is_equal(orig_waypoints_size)
 	assert_int(s.driver_staff_id).is_equal(ramp_id)
 	var loaded_staff := _main.get_node("Staff") as StaffSim
 	var driver := loaded_staff.get_member(s.driver_staff_id)
@@ -196,11 +189,10 @@ func test_active_shuttle_round_trips_through_whole_world_save() -> void:
 	assert_int(driver.role).is_equal(StaffMember.Role.RAMP)
 	assert_int(driver.ramp_job).is_equal(StaffMember.RampJob.SHUTTLE)
 	assert_int(driver.ramp_shuttle_id).is_equal(s.id)
-	while not _bags.shuttles().is_empty() and (_main.get_node("SimClock") as SimClock).tick < LIMIT:
+	while not _bags.shuttles().is_empty() and clock.tick < LIMIT:
 		SaveTestKit.step(_main)
 	assert_int(_bags.loaded_total).is_greater(0)
 	assert_bool(_save.load_world(_data)).is_true()
-	m.free()
 
 
 func test_malformed_shuttle_in_world_save_is_refused() -> void:

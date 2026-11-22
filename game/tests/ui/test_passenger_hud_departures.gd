@@ -55,8 +55,8 @@ func _terms(id: String, minute: int, destination: String, airline: String) -> Di
 		"destination": destination,
 		"departure_minute": minute,
 		"plane_size": "small",
-		"booked_passengers": 12,
-		"fee_per_passenger": 20,
+		"booked_passengers": 6,
+		"fee_per_passenger": 50,
 	}
 
 

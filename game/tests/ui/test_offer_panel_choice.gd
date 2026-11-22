@@ -27,7 +27,7 @@ func before_test() -> void:
 	# 10:00, 12:00 (clashes with 10:00 at the one gate) and 20:00, each with its
 	# own passengers and fee so the earnings differ from card to card.
 	var offers := TestOfferBoard.day_records(0, [600, 720, 1200])
-	var terms := [[12, 25], [16, 32], [15, 32]]
+	var terms := [[6, 50], [8, 64], [8, 60]]
 	for i in offers.size():
 		offers[i]["booked_passengers"] = terms[i][0]
 		offers[i]["fee_per_passenger"] = terms[i][1]
@@ -45,8 +45,8 @@ func after_test() -> void:
 
 func test_daily_earnings_are_passengers_times_the_fee() -> void:
 	var offer := TestOfferBoard.record("O0N9", 0, 600)
-	offer["booked_passengers"] = 15
-	offer["fee_per_passenger"] = 32
+	offer["booked_passengers"] = 8
+	offer["fee_per_passenger"] = 60
 	assert_int(OfferPanel.daily_earnings(offer)).is_equal(480)
 	assert_str(OfferPanel.earnings_text(offer)).is_equal("$480 a day")
 

@@ -30,42 +30,42 @@ const ENTRANCE := "Entrance with a way through check-in and security to an exit"
 const STAFF_SPOT := "Staff can't reach a desk or scanner passengers need: clear its staff spot"
 const CHECKIN := "Check-in desk and an agent"
 const SECURITY := "Security scanner and an officer"
-const GATE := "Gate desk by an exit that faces the planes"
+const GATE := "Place Gate Desk (Operations)"
 const GATE_AGENT := "Gate desk and an agent"
-const SEATS := "Seats near the gate"
+const SEATS := "Place Seats near the gate (Operations)"
 ## What a not-done check-in line (key "checkin") or security line ("security")
-## adds after a colon, by what is missing.
+## says, by what is missing.
 const NEXT := {
 	"checkin":
 	{
-		"place": "place a desk",
-		"closed": "you closed every desk, open one again",
-		"hire": "hire an agent on Staff",
-		"walking": "the agent is on the way",
+		"place": "Place Check-in (Operations)",
+		"closed": "Open a closed Check-in desk",
+		"hire": "Hire Check-in agent (Staff)",
+		"walking": "Check-in agent on the way",
 	},
 	"security":
 	{
-		"place": "place a scanner",
-		"closed": "you closed every scanner and lane, open one again",
-		"hire": "hire an officer on Staff",
-		"walking": "the officer is on the way",
+		"place": "Place Security (Operations)",
+		"closed": "Open a closed Security scanner or lane",
+		"hire": "Hire Security officer (Staff)",
+		"walking": "Security officer on the way",
 	},
 	"gate":
 	{
-		"hire": "hire a gate agent on Staff",
-		"walking": "the gate agent is on the way",
+		"hire": "Hire Gate agent (Staff)",
+		"walking": "Gate agent on the way",
 	},
 }
 
 ## The gap lines after opening, by HintRules cause, and the seats gap.
 const GAPS := {
-	HintRules.PLACE_CHECKIN: "Passengers need a check-in desk: place one",
-	HintRules.PLACE_SECURITY: "Passengers need security: place a scanner",
-	HintRules.SECOND_HIRE: "A desk or scanner has nobody at it: hire another on Staff",
-	HintRules.TOILET: "Passengers need a toilet: build a toilet room with a stall",
-	HintRules.FOOD: "Passengers are hungry: build a cafe",
+	HintRules.PLACE_CHECKIN: "Place Check-in (Operations)",
+	HintRules.PLACE_SECURITY: "Place Security (Operations)",
+	HintRules.SECOND_HIRE: "Station unstaffed: hire staff (Staff)",
+	HintRules.TOILET: "Passengers need a toilet: build Toilet room (Facilities)",
+	HintRules.FOOD: "Passengers are hungry: build Cafe (Food & Drink)",
 }
-const NO_SEATS := "Passengers have nowhere to sit: place seats near the gate"
+const NO_SEATS := "Place Seats near the gate (Operations)"
 ## The build tool each gap line asks for, so a locked one says so.
 const GAP_TOOLS := {
 	HintRules.PLACE_CHECKIN: BuildMode.Tool.DESK,
@@ -130,19 +130,24 @@ static func opening_lines(unmet: Array, counts: Dictionary) -> Array[Dictionary]
 	if unmet.has(BLOCKER.NO_GATE_AGENT) and not unmet.has(BLOCKER.NO_GATE):
 		var walking := int(counts.get("gate_staying", 0)) > 0
 		var msg := (
-			TranslationServer.translate("Gate desk and an agent: the gate agent is on the way")
+			TranslationServer.translate("Gate agent on the way")
 			if walking
-			else TranslationServer.translate("Gate desk and an agent: hire a gate agent on Staff")
+			else TranslationServer.translate("Hire Gate agent (Staff)")
 		)
 		out.append(line(msg, false))
 	else:
 		out.append(
 			line(
-				TranslationServer.translate("Gate desk by an exit that faces the planes"),
+				TranslationServer.translate("Place Gate Desk (Operations)"),
 				not unmet.has(BLOCKER.NO_GATE)
 			)
 		)
-	out.append(line(TranslationServer.translate("Seats near the gate"), int(counts["seats"]) > 0))
+	out.append(
+		line(
+			TranslationServer.translate("Place Seats near the gate (Operations)"),
+			int(counts["seats"]) > 0
+		)
+	)
 	return out
 
 
@@ -165,12 +170,7 @@ static func gap_lines(world: Dictionary, seats: int, lock_texts: Dictionary) -> 
 			out.append(line(_gap_text(cause), false))
 	if seats == 0:
 		out.append(
-			line(
-				TranslationServer.translate(
-					"Passengers have nowhere to sit: place seats near the gate"
-				),
-				false
-			)
+			line(TranslationServer.translate("Place Seats near the gate (Operations)"), false)
 		)
 	return out
 
@@ -198,35 +198,23 @@ static func _station_text(key: String, state: String) -> String:
 	if key == "checkin":
 		match state:
 			"place":
-				return TranslationServer.translate("Check-in desk and an agent: place a desk")
+				return TranslationServer.translate("Place Check-in (Operations)")
 			"closed":
-				return TranslationServer.translate(
-					"Check-in desk and an agent: you closed every desk, open one again"
-				)
+				return TranslationServer.translate("Open a closed Check-in desk")
 			"hire":
-				return TranslationServer.translate(
-					"Check-in desk and an agent: hire an agent on Staff"
-				)
+				return TranslationServer.translate("Hire Check-in agent (Staff)")
 			"walking":
-				return TranslationServer.translate(
-					"Check-in desk and an agent: the agent is on the way"
-				)
+				return TranslationServer.translate("Check-in agent on the way")
 		return TranslationServer.translate("Check-in desk and an agent")
 	match state:
 		"place":
-			return TranslationServer.translate("Security scanner and an officer: place a scanner")
+			return TranslationServer.translate("Place Security (Operations)")
 		"closed":
-			return TranslationServer.translate(
-				"Security scanner and an officer: you closed every scanner and lane, open one again"
-			)
+			return TranslationServer.translate("Open a closed Security scanner or lane")
 		"hire":
-			return TranslationServer.translate(
-				"Security scanner and an officer: hire an officer on Staff"
-			)
+			return TranslationServer.translate("Hire Security officer (Staff)")
 		"walking":
-			return TranslationServer.translate(
-				"Security scanner and an officer: the officer is on the way"
-			)
+			return TranslationServer.translate("Security officer on the way")
 	return TranslationServer.translate("Security scanner and an officer")
 
 
@@ -234,18 +222,16 @@ static func _station_text(key: String, state: String) -> String:
 static func _gap_text(cause: StringName) -> String:
 	match cause:
 		HintRules.PLACE_CHECKIN:
-			return TranslationServer.translate("Passengers need a check-in desk: place one")
+			return TranslationServer.translate("Place Check-in (Operations)")
 		HintRules.PLACE_SECURITY:
-			return TranslationServer.translate("Passengers need security: place a scanner")
+			return TranslationServer.translate("Place Security (Operations)")
 		HintRules.SECOND_HIRE:
-			return TranslationServer.translate(
-				"A desk or scanner has nobody at it: hire another on Staff"
-			)
+			return TranslationServer.translate("Station unstaffed: hire staff (Staff)")
 		HintRules.TOILET:
 			return TranslationServer.translate(
-				"Passengers need a toilet: build a toilet room with a stall"
+				"Passengers need a toilet: build Toilet room (Facilities)"
 			)
-	return TranslationServer.translate("Passengers are hungry: build a cafe")
+	return TranslationServer.translate("Passengers are hungry: build Cafe (Food & Drink)")
 
 
 ## What a gap line says before its ask, for the causes whose build tool can be

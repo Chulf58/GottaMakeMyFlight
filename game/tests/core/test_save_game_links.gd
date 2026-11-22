@@ -13,6 +13,8 @@ const LIMIT_TICKS := 5000
 var _main: Node
 var _save: SaveGame
 var _accepted := ""
+var _base_snapshot := {}
+var _base_checksum := ""
 
 
 func before() -> void:
@@ -30,6 +32,8 @@ func before() -> void:
 			_accepted = offer["id"]
 	while not _busy() and clock.tick < LIMIT_TICKS:
 		SaveTestKit.step(_main)
+	_base_snapshot = _taken()
+	_base_checksum = SaveTestKit.checksum(_main)
 
 
 func after() -> void:
@@ -75,31 +79,35 @@ func _open_index(data: Dictionary) -> int:
 
 
 func _assert_refused(bad: Dictionary, reason: String) -> void:
-	var before := SaveTestKit.checksum(_main)
 	assert_bool(_save.load_world(bad)).override_failure_message(reason).is_false()
 	assert_str(_save.message_text()).override_failure_message(reason).contains(reason)
-	assert_str(SaveTestKit.checksum(_main)).override_failure_message(reason).is_equal(before)
+	assert_str(SaveTestKit.checksum(_main)).override_failure_message(reason).is_equal(
+		_base_checksum
+	)
 
 
 func test_the_world_holds_what_the_links_name() -> void:
 	assert_str(_accepted).is_not_empty()
 	assert_bool(_busy()).is_true()
-	var data := _taken()
+	var data := _base_snapshot.duplicate(true)
 	assert_int(_open_index(data)).is_greater_equal(0)
 	assert_bool(_save.load_world(data)).is_true()
+	_base_checksum = SaveTestKit.checksum(_main)
 
 
 func test_an_open_offer_marked_accepted_without_a_contract_is_refused() -> void:
-	var bad := _taken()
+	var bad := _base_snapshot.duplicate(true)
 	bad["offers"]["offers"][_open_index(bad)]["status"] = OfferBoard.ACCEPTED
 	_assert_refused(bad, "is accepted but flights hold no contract")
 
 
 func test_an_accepted_offer_whose_terms_differ_from_its_contract_is_refused() -> void:
-	var bad := _taken()
+	var bad := _base_snapshot.duplicate(true)
 	var offer: Dictionary = bad["offers"]["offers"][_offer_index(bad, _accepted)]
 	# One off the contract fee, inside what the offer's tier and traits can draw.
-	var fees: Array = OfferBoard.TIER_FEES[OfferBoard.tier_of(offer["airline"])]
+	var fees: Array = OfferBoard.fee_range_for(
+		OfferBoard.tier_of(offer["airline"]), offer["plane_size"]
+	)
 	var dearest := OfferTraits.fee_of(fees[1], offer["traits"])
 	var fee := int(offer["fee_per_passenger"])
 	offer["fee_per_passenger"] = fee + 1 if fee < dearest else fee - 1
@@ -109,7 +117,7 @@ func test_an_accepted_offer_whose_terms_differ_from_its_contract_is_refused() ->
 ## Traits are a term: an accepted offer whose traits differ from its contract's
 ## is refused, even when both are valid traits.
 func test_an_accepted_offer_whose_traits_differ_from_its_contract_is_refused() -> void:
-	var bad := _taken()
+	var bad := _base_snapshot.duplicate(true)
 	var contract: Dictionary = {}
 	for entry: Dictionary in bad["flights"]["contracts"]:
 		if entry["id"] == _accepted:
@@ -126,13 +134,13 @@ static func _same_traits(a: Dictionary, b: Dictionary) -> bool:
 
 
 func test_a_contract_whose_offer_is_not_accepted_is_refused() -> void:
-	var bad := _taken()
+	var bad := _base_snapshot.duplicate(true)
 	bad["offers"]["offers"][_offer_index(bad, _accepted)]["status"] = OfferBoard.DECLINED
 	_assert_refused(bad, "flights hold its contract")
 
 
 func test_a_passenger_on_an_unknown_flight_is_refused() -> void:
-	var bad := _taken()
+	var bad := _base_snapshot.duplicate(true)
 	bad["passengers"]["passengers"][0]["flight_id"] = "NOPE"
 	_assert_refused(bad, "flight NOPE is named")
 
@@ -140,7 +148,7 @@ func test_a_passenger_on_an_unknown_flight_is_refused() -> void:
 ## A well-formed occurrence id of a saved contract, on a day never issued:
 ## FlightSim._find() would not know it, and the passenger would wait forever.
 func test_a_passenger_on_a_never_issued_occurrence_is_refused() -> void:
-	var bad := _taken()
+	var bad := _base_snapshot.duplicate(true)
 	var id := FlightTimetable.occurrence_id(_accepted, 999_999_999)
 	assert_dict(FlightTimetable.parse_occurrence(id)).is_equal(
 		{"contract": _accepted, "day": 999_999_999}
@@ -150,20 +158,20 @@ func test_a_passenger_on_a_never_issued_occurrence_is_refused() -> void:
 
 
 func test_a_passenger_at_a_station_that_is_not_there_is_refused() -> void:
-	var bad := _taken()
+	var bad := _base_snapshot.duplicate(true)
 	var i := _record_with(bad["passengers"], "station")
 	bad["passengers"]["passengers"][i]["station"] = 99999
 	_assert_refused(bad, "which is not a usable station")
 
 
 func test_a_queue_at_a_station_that_is_not_there_is_refused() -> void:
-	var bad := _taken()
+	var bad := _base_snapshot.duplicate(true)
 	bad["passengers"]["queues"][0]["station"] = 99999
 	_assert_refused(bad, "a queue is at 99999")
 
 
 func test_a_passenger_on_a_seat_that_is_not_there_is_refused() -> void:
-	var bad := _taken()
+	var bad := _base_snapshot.duplicate(true)
 	var i := _record_with(bad["passengers"], "seat_object")
 	bad["passengers"]["passengers"][i]["seat_object"] = 99999
 	_assert_refused(bad, "holds a seat that is not there")

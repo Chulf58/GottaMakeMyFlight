@@ -14,17 +14,22 @@ const BURST := 10
 var _world: PassengerTestWorld
 var _grant: RescueGrant
 var _granted: Array = []
+var _main: Node
 
 
 func before() -> void:
 	PassengerTestWorld.tracker = self
+	_main = SaveTestKit.boot(self, 5)
 
 
 func after() -> void:
 	PassengerTestWorld.tracker = null
+	if _main != null:
+		_main.free()
+		_main = null
 
 
-func before_test() -> void:
+func _setup_unit_world() -> void:
 	var grid := BuildGrid.new(SITE.grid_size, SITE.grid_origin)
 	_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(100000))
 	_world.sim.site = SITE
@@ -37,11 +42,14 @@ func before_test() -> void:
 
 func after_test() -> void:
 	_granted.clear()
-	_world.free_all()
-	_world = null
+	_grant = null
+	if _world != null:
+		_world.free_all()
+		_world = null
 
 
 func test_preparing_a_new_game_plans_before_the_first_tick_and_no_tick_plans() -> void:
+	_setup_unit_world()
 	var at_bind := _grant.plans_made
 	(
 		assert_bool(_world.sim.wallet.credit(PriceTable.STARTING_BUDGET, Wallet.Category.OPENING))
@@ -59,18 +67,17 @@ func test_preparing_a_new_game_plans_before_the_first_tick_and_no_tick_plans() -
 ## The real scene: the empty plot's plan is made while main.tscn enters the
 ## tree, and the new game's first ticks make none.
 func test_the_main_scene_plans_before_its_first_tick() -> void:
-	var main := SaveTestKit.boot(self, 5)
-	var grant: RescueGrant = main.get_node("RescueGrant")
+	var grant: RescueGrant = _main.get_node("RescueGrant")
 	var at_boot := grant.plans_made
 	for i in 20:
-		SaveTestKit.step(main)
+		SaveTestKit.step(_main)
 	print("main scene: plans at boot %d, after 20 ticks %d" % [at_boot, grant.plans_made])
 	assert_int(at_boot).is_equal(1)
 	assert_int(grant.plans_made).is_equal(at_boot)
-	main.free()
 
 
 func test_a_burst_of_paid_edits_below_the_bound_plans_once_per_window() -> void:
+	_setup_unit_world()
 	var plan := _grant.repair_plan()
 	assert_bool(plan.ok).is_true()
 	var price := RepairPlan.least_balance(_world.grid, plan.edits)
@@ -105,6 +112,7 @@ func test_a_burst_of_paid_edits_below_the_bound_plans_once_per_window() -> void:
 ## earlier save loads: the clock goes back to the save's tick, the next build
 ## edit is planned for within REPLAN_TICKS, not once the old tick comes round.
 func test_a_load_to_an_earlier_tick_does_not_keep_the_replan_wait() -> void:
+	_setup_unit_world()
 	var early := _world.clock.to_snapshot()
 	var plan := _grant.repair_plan()
 	var wallet := _world.sim.wallet

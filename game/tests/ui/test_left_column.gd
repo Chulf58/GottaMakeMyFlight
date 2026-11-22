@@ -51,6 +51,13 @@ func after() -> void:
 
 func before_test() -> void:
 	_staff.set_hint_yielded(false)
+	(_control("DeparturesBoard") as DeparturesBoard).set_shown(true)
+
+
+func after_test() -> void:
+	var board := _control("DeparturesBoard") as DeparturesBoard
+	if board != null:
+		board.set_shown(false)
 
 
 func _settle() -> void:
@@ -156,11 +163,17 @@ func test_stepping_aside_hides_the_list_and_keeps_the_toggle_in_its_slot() -> vo
 	assert_bool(_control("DeparturesPanel").is_visible_in_tree()).is_true()
 
 
-func test_the_departures_list_starts_open_on_a_fresh_profile() -> void:
-	await _settle()
+func test_the_departures_list_auto_collapses_at_zero_flights_so_checklist_leads() -> void:
 	var board := _control("DeparturesBoard") as DeparturesBoard
-	assert_bool(board.is_shown()).is_true()
-	assert_bool(_control("DeparturesPanel").is_visible_in_tree()).is_true()
+	board.set_shown(false)
+	board._manual_open = false
+	board._setting = true
+	board.refresh()
+	await _settle()
+	assert_bool(board.is_shown()).is_false()
+	assert_bool(_control("DeparturesPanel").is_visible_in_tree()).is_false()
+	var card := _staff.hint_card().get_global_rect()
+	assert_float(card.position.y).is_equal_approx(LeftColumn.list_top(_main.get_tree()), 0.5)
 
 
 func test_the_departures_list_opens_under_the_toggles_at_list_width() -> void:

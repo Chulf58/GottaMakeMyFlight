@@ -273,7 +273,8 @@ func _shot_02_queues_and_belts() -> bool:
 		for m_off in [0, 30, 60, 90]:
 			var t := TestFlightContracts.terms(p[0], int(p[1]) + m_off)
 			t.merge({"destination": p[2], "airline": p[3], "plane_size": "small"}, true)
-			t["booked_passengers"] = 14
+			t["booked_passengers"] = 6
+			t["fee_per_passenger"] = 50
 			if _flights.accept_problem(t) == "" and _flights.accept_contract(t):
 				break
 	var first := FlightTimetable.occurrence_id(FlightSim.DEFAULT_ID, 0)

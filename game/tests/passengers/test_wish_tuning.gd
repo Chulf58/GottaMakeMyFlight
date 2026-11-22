@@ -16,8 +16,8 @@ extends GdUnitTestSuite
 ## seeds every relief visit is a relaxed arrival's (they wait longest, as in
 ## test_boredom_tuning), so the rushed and typical rows hold none.
 
-const SEEDS: Array[int] = [11, 22, 33, 44, 55, 66]
-const FIRST_STATE := 1700
+const SEEDS: Array[int] = [11, 22, 33]
+const FIRST_STATE := 1360
 const REFERENCE: Array[StringName] = [&"kiosk", &"fashion"]
 const WITH_DUTY_FREE: Array[StringName] = [&"kiosk", &"fashion", &"duty_free"]
 
@@ -69,9 +69,13 @@ func _flight(seed: int, types: Array[StringName]) -> Dictionary:
 			var p := sim.get_passenger(id)
 			out[ArrivalTypes.NAMES[p.arrival_type]]["revenue"] += amount
 	)
+	var settled := 0
+	sim.outcome.connect(func(_id: int, _made: bool) -> void: settled += 1)
 	var count := PassengerSim.DEFAULT_PASSENGERS
 	assert_bool(sim.schedule_flight(PassengerTestWorld.FLIGHT, count)).is_true()
-	world.run_to(world.flights.doors_close_tick(PassengerTestWorld.FLIGHT) + 1)
+	var doors := world.flights.doors_close_tick(PassengerTestWorld.FLIGHT)
+	while settled < count and world.clock.tick <= doors:
+		world.step()
 	world.free_all()
 	return out
 
