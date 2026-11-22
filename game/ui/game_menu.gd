@@ -646,7 +646,7 @@ func _show_question() -> void:
 func _question_body() -> String:
 	var ask := tr(
 		# gdlint:ignore = max-line-length
-		"One more thing before the doors open. Some days bring trouble: a spill on the floor, an inspector, a holiday rush. Shall I send those your way?"
+		"Now that the airport is open, some days bring trouble: a spill on the floor, an inspector, a holiday rush. Shall I send those your way?"
 	)
 	var choice := tr(
 		# gdlint:ignore = max-line-length

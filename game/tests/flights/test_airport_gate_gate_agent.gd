@@ -64,12 +64,12 @@ func test_no_gate_agent_blocks_opening_until_gate_agent_is_on_duty() -> void:
 	assert_bool(placed.ok).is_true()
 	_desk = placed.object_id
 	assert_array(_gate.unmet()).contains_exactly([AirportGate.Blocker.NO_GATE_AGENT])
-	assert_str(_panel.hint_text()).contains("Gate desk and an agent: hire a gate agent on Staff")
+	assert_str(_panel.hint_text()).contains("Hire Gate agent (Staff)")
 	assert_bool(_gate.ready_to_open()).is_false()
 
 	_panel.hire_button(GATE).pressed.emit()
 	_w.step()
-	assert_str(_panel.hint_text()).contains("Gate desk and an agent: the gate agent is on the way")
+	assert_str(_panel.hint_text()).contains("Gate agent on the way")
 	assert_bool(_gate.is_open()).is_false()
 
 	var guard := 0

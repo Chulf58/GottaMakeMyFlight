@@ -84,7 +84,6 @@ var _held := {}
 ## opportunity that stays until the cause clears or the hint shows.
 var _latched := {}
 var _clock := 0.0
-var _last_open: Array = []
 var _read_acc := 0.0
 var _sim: PassengerSim
 var _card := PanelContainer.new()
@@ -280,10 +279,6 @@ func reset_session() -> void:
 func advance(delta: float, world: Dictionary, open_categories: Array) -> void:
 	if _mode == Mode.OFF or not _enabled or _modal():
 		return
-	if open_categories != _last_open:
-		if not open_categories.is_empty():
-			note_activity()
-		_last_open = open_categories.duplicate()
 	if bool(world.get("followed", false)):
 		_note_followed()
 	_clock += delta
@@ -294,7 +289,10 @@ func advance(delta: float, world: Dictionary, open_categories: Array) -> void:
 	var causes := HintRules.causes(world)
 	if not _baselined:
 		_baselined = true
-		_prev = causes
+		_prev = []
+		for id in causes:
+			if not HintRules.is_startup(id):
+				_prev.append(id)
 		for id in HintRules.IDS:
 			_held[id] = 0.0
 		return
@@ -412,7 +410,6 @@ func _show(id: StringName) -> void:
 	_body.text = HintRules.text(id)
 	_card.visible = true
 	_card.modulate.a = 1.0
-	_yield_banner(true)
 	_show_me.visible = id == HintRules.FOLLOW_PASSENGER
 	if id == HintRules.FOLLOW_PASSENGER:
 		_seen[id] = true
@@ -467,11 +464,15 @@ func _banner() -> StaffPanel:
 	return _find("StaffPanel") as StaffPanel
 
 
-## True while the intro, the unlock dialog, the Offers sheet or an extra modal is open.
+## True while the intro, the unlock dialog, the GameMenu/question, the Offers
+## sheet or an extra modal is open.
 func _modal() -> bool:
 	if modal.is_valid() and modal.call():
 		return true
 	if hud != null and (hud.intro() != null or hud.unlock_guide().is_open()):
+		return true
+	var menu := _find("GameMenu") as GameMenu
+	if menu != null and (menu.is_open() or menu.is_question_open()):
 		return true
 	var offers := _find("OfferPanel") as OfferPanel
 	return offers != null and offers.is_open()

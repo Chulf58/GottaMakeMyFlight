@@ -21,6 +21,7 @@ func before_test() -> void:
 	_desk = OfferDesk.new()
 	_desk.runway = Runway.new(PlaneClasses.LARGE)
 	_sim = FlightSim.new()
+	_sim.open_airport()
 	_port.add_child(_clock)
 	_port.add_child(_desk)
 	_port.add_child(_sim)

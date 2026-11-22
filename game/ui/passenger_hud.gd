@@ -134,9 +134,10 @@ var _intro: IntroDialogue
 ## The intro's hold on the clock (SimClock.holds), which does not give way to
 ## the player: the clock starts when the intro closes, as its text says.
 var _intro_hold := ClockHolds.NONE
-## The game menu, which also asks the new-game incidents question; null in a
+## The game menu, which asks the deferred incidents question on Day 2; null in a
 ## scene without one.
 var _game_menu: GameMenu
+var _incidents_prompt_pending := false
 var _debug_docks: Array[VBoxContainer] = []
 ## The camera's input state when the intro opened, restored when it closes.
 var _camera_was_processing := true
@@ -256,6 +257,8 @@ func _ready() -> void:
 		open_intro()
 	if save_game != null:
 		save_game.loaded.connect(_on_save_loaded)
+	if clock != null:
+		clock.ticked.connect(_on_clock_ticked)
 	_panel_room.name = "PanelRoom"
 	_panel_room.camera = camera
 	_panel_room.scene_root = get_parent()
@@ -727,6 +730,7 @@ func open_intro() -> bool:
 	if IntroDialogue.shown_this_session or _intro != null or clock == null:
 		return false
 	IntroDialogue.shown_this_session = true
+	_incidents_prompt_pending = true
 	_intro_hold = clock.holds.take_turn(self, _show_intro)
 	return true
 
@@ -920,10 +924,8 @@ func _close_intro() -> void:
 	if is_instance_valid(layer) and not layer.is_queued_for_deletion():
 		layer.queue_free()
 	_gate_camera(false)
-	# The new-game question takes its place in line before the intro lets go, so
-	# the clock stays held from the welcome page to the answer.
-	if continued and is_instance_valid(_game_menu) and _game_menu.is_inside_tree():
-		_game_menu.ask_incidents()
+	if not continued:
+		_incidents_prompt_pending = false
 	if is_instance_valid(clock):
 		clock.holds.release(_intro_hold)
 	_intro_hold = ClockHolds.NONE
@@ -933,6 +935,7 @@ func _close_intro() -> void:
 ## asking the new-game incident question, so the loaded game keeps its own
 ## incident setting. Its hold is already gone, as incident_panel's is.
 func _end_intro_on_load() -> void:
+	_incidents_prompt_pending = false
 	if _intro_layer == null:
 		return
 	var layer := _intro_layer
@@ -1001,6 +1004,7 @@ func _has_open_flight() -> bool:
 ## A loaded world is a new start: frame the camera on what the save built.
 func _on_save_loaded(ok: bool) -> void:
 	if ok:
+		_incidents_prompt_pending = false
 		_end_intro_on_load()
 		# A loaded world may reuse the selected id for another item.
 		_built.clear()
@@ -1063,6 +1067,38 @@ func _banner_rect() -> Rect2:
 
 func _on_doors_closed(flight_id: String) -> void:
 	_unreported.append(flight_id)
+
+
+func _incidents_modal_open() -> bool:
+	if _pa_modal_open():
+		return true
+	if _intro != null or _intro_hold != ClockHolds.NONE:
+		return true
+	if _unlock_guide != null and _unlock_guide.is_open():
+		return true
+	return _game_menu.is_open() or _game_menu.is_question_open()
+
+
+func _on_clock_ticked(tick: int) -> void:
+	if not _incidents_prompt_pending:
+		return
+	if clock == null or clock.paused:
+		return
+	if flights == null or flights.opened_tick < 0:
+		return
+	if not is_instance_valid(_game_menu) or not _game_menu.is_inside_tree():
+		return
+	if _game_menu.director != null and _game_menu.director.is_enabled():
+		_incidents_prompt_pending = false
+		return
+	if _incidents_modal_open():
+		return
+	if (
+		GameCalendar.day_of(tick, clock.epoch)
+		> GameCalendar.day_of(flights.opened_tick, clock.epoch)
+	):
+		_incidents_prompt_pending = false
+		_game_menu.ask_incidents()
 
 
 func _on_follow_late_requested(flight_id: String) -> void:

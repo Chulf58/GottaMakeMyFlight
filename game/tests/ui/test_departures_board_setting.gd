@@ -22,6 +22,7 @@ func before_test() -> void:
 	_sim = auto_free(FlightSim.new())
 	_clock = auto_free(SimClock.new())
 	_sim.open_airport()
+	_sim.add_default_flight()
 
 
 func after_test() -> void:
@@ -208,3 +209,55 @@ func test_the_hud_mounts_the_board() -> void:
 	assert_object(board.flights).is_same(world.flights)
 	hud.free()
 	world.free_all()
+
+
+func test_zero_flights_auto_collapses_and_adding_a_flight_auto_expands() -> void:
+	var empty := auto_free(FlightSim.new()) as FlightSim
+	empty.open_airport()
+	var board := DeparturesBoard.new()
+	board.settings_path = _path
+	board.flights = empty
+	board.clock = _clock
+	add_child(board)
+	auto_free(board)
+	assert_bool(board.is_setting_enabled()).is_true()
+	assert_bool(board.is_shown()).is_false()
+	assert_bool(_panel(board).visible).is_false()
+	assert_bool(_toggle(board).button_pressed).is_false()
+	empty.add_default_flight()
+	board.refresh()
+	assert_bool(board.is_shown()).is_true()
+	assert_bool(_panel(board).visible).is_true()
+	assert_bool(_toggle(board).button_pressed).is_true()
+
+
+func test_manual_collapse_stays_collapsed_when_flights_arrive() -> void:
+	var empty := auto_free(FlightSim.new()) as FlightSim
+	empty.open_airport()
+	var board := DeparturesBoard.new()
+	board.settings_path = _path
+	board.flights = empty
+	board.clock = _clock
+	add_child(board)
+	auto_free(board)
+	board.set_shown(false)
+	assert_bool(board.is_setting_enabled()).is_false()
+	empty.add_default_flight()
+	board.refresh()
+	assert_bool(board.is_shown()).is_false()
+	assert_bool(_panel(board).visible).is_false()
+
+
+func test_manual_expand_while_empty_shows_the_panel_with_empty_text() -> void:
+	var empty := auto_free(FlightSim.new()) as FlightSim
+	empty.open_airport()
+	var board := DeparturesBoard.new()
+	board.settings_path = _path
+	board.flights = empty
+	board.clock = _clock
+	add_child(board)
+	auto_free(board)
+	_toggle(board).button_pressed = true
+	assert_bool(board.is_shown()).is_true()
+	assert_bool(_panel(board).visible).is_true()
+	assert_array(board.shown_lines()).contains([DeparturesBoard.EMPTY_TEXT])
