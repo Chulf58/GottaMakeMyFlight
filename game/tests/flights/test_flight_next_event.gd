@@ -23,7 +23,7 @@ func _run_to(target: int) -> void:
 func _terms(id: String, minute: int) -> Dictionary:
 	var terms := TestFlightContracts.terms(id, minute)
 	terms["plane_size"] = "small"
-	terms["booked_passengers"] = 12
+	terms["booked_passengers"] = 6
 	return terms
 
 

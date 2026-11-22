@@ -5,7 +5,7 @@ extends GdUnitTestSuite
 ## clo): set before the occurrence is scheduled, added once when it is, capped by
 ## the plane class maximum, kept by a save and never applied twice.
 
-## A small contract (8 to 16 passengers) booked for 8, so 8 extra fit. Its
+## A small contract (4 to 8 passengers) booked for 4, so 4 extra fit. Its
 ## first occurrence departs at tick 5200, is issued at tick 140 and has its
 ## passengers scheduled then.
 const CONTRACT := "OVR"
@@ -13,8 +13,8 @@ const OCCURRENCE := "OVR-d0"
 const MINUTE := 620
 const FIRST := 2540
 const ISSUED := 140
-const BOOKED := 8
-const HEADROOM := 8
+const BOOKED := 4
+const HEADROOM := 4
 ## A second contract on the same gate, late enough to clear the first one's hold.
 const OTHER_CONTRACT := "OTH"
 const OTHER_OCCURRENCE := "OTH-d0"
@@ -101,12 +101,12 @@ func _load(data: Dictionary) -> PassengerTestWorld:
 func test_an_override_adds_exactly_its_extra_passengers_to_that_occurrence_only() -> void:
 	_a = _world([MINUTE, OTHER_MINUTE])
 	_a.sim.passenger_spawned.connect(_on_spawned)
-	var result := _a.sim.set_booking_override(OCCURRENCE, 5)
+	var result := _a.sim.set_booking_override(OCCURRENCE, 3)
 	assert_bool(result["ok"]).is_true()
-	assert_int(_a.sim.booking_override_of(OCCURRENCE)).is_equal(5)
+	assert_int(_a.sim.booking_override_of(OCCURRENCE)).is_equal(3)
 	_a.run_to(OTHER_FIRST + PassengerTestWorld.doors_tick() - PassengerSim.LAST_SPAWN_LEAD_TICKS)
 	print("spawned per flight: %s" % [_spawned])
-	assert_int(int(_spawned.get(OCCURRENCE, 0))).is_equal(BOOKED + 5)
+	assert_int(int(_spawned.get(OCCURRENCE, 0))).is_equal(BOOKED + 3)
 	assert_int(int(_spawned.get(OTHER_OCCURRENCE, 0))).is_equal(BOOKED)
 	# Scheduled once: the override is gone, and a later flight starts clean.
 	assert_int(_a.sim.booking_override_of(OCCURRENCE)).is_equal(0)
@@ -185,27 +185,27 @@ func test_an_override_under_one_or_without_a_contract_is_refused() -> void:
 
 func test_an_override_survives_a_save_and_load_before_scheduling() -> void:
 	_a = _world([MINUTE])
-	assert_bool(_a.sim.set_booking_override(OCCURRENCE, 6)["ok"]).is_true()
+	assert_bool(_a.sim.set_booking_override(OCCURRENCE, 3)["ok"]).is_true()
 	_a.run_to(ISSUED - 40)
 	var data := _save(_a)
 	var saved: Array = data["passengers"]["booking_overrides"]
 	assert_int(saved.size()).is_equal(1)
 	assert_str(saved[0]["flight"]).is_equal(OCCURRENCE)
-	assert_int(int(saved[0]["extra"])).is_equal(6)
+	assert_int(int(saved[0]["extra"])).is_equal(3)
 	_b = _load(data)
-	assert_int(_b.sim.booking_override_of(OCCURRENCE)).is_equal(6)
+	assert_int(_b.sim.booking_override_of(OCCURRENCE)).is_equal(3)
 	_a.run_to(ISSUED + 200)
 	_b.run_to(ISSUED + 200)
 	print("scheduled: unbroken %d, loaded %d" % [_scheduled_total(_a), _scheduled_total(_b)])
-	assert_int(_scheduled_total(_a)).is_equal(BOOKED + 6)
-	assert_int(_scheduled_total(_b)).is_equal(BOOKED + 6)
+	assert_int(_scheduled_total(_a)).is_equal(BOOKED + 3)
+	assert_int(_scheduled_total(_b)).is_equal(BOOKED + 3)
 	assert_str(_b.signature()).is_equal(_a.signature())
 	assert_int(_b.sim.booking_override_of(OCCURRENCE)).is_equal(0)
 
 
 func test_a_load_after_scheduling_does_not_apply_the_override_again() -> void:
 	_a = _world([MINUTE])
-	assert_bool(_a.sim.set_booking_override(OCCURRENCE, 6)["ok"]).is_true()
+	assert_bool(_a.sim.set_booking_override(OCCURRENCE, 3)["ok"]).is_true()
 	_a.run_to(ISSUED + 100)
 	var data := _save(_a)
 	assert_array(data["passengers"]["booking_overrides"]).is_empty()
@@ -213,9 +213,9 @@ func test_a_load_after_scheduling_does_not_apply_the_override_again() -> void:
 	_b = _load(data)
 	assert_int(_b.sim.booking_override_of(OCCURRENCE)).is_equal(0)
 	assert_int(_scheduled_total(_b)).is_equal(_scheduled_total(_a))
-	assert_int(_scheduled_total(_b)).is_equal(BOOKED + 6)
+	assert_int(_scheduled_total(_b)).is_equal(BOOKED + 3)
 	_b.run_to(ISSUED + 400)
-	assert_int(_scheduled_total(_b)).is_equal(BOOKED + 6)
+	assert_int(_scheduled_total(_b)).is_equal(BOOKED + 3)
 
 
 func test_a_bad_saved_override_is_refused_whole() -> void:

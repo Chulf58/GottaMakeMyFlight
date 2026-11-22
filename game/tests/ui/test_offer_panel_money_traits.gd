@@ -24,10 +24,10 @@ func before_test() -> void:
 	var records := TestOfferBoard.day_records(6, [600, 720, 840])
 	records[0]["traits"] = {"up": "signing_bonus", "down": "miss_fine", "level": 2}
 	records[0]["loyal"] = true
-	records[0]["fee_per_passenger"] = 28
+	records[0]["fee_per_passenger"] = 55
 	records[1]["traits"] = {}
 	records[1]["loyal"] = true
-	records[1]["fee_per_passenger"] = 25
+	records[1]["fee_per_passenger"] = 50
 	# An airline with no Loyal count, so its offer carries no loyal mark.
 	records[2]["airline"] = "Sunhop"
 	var data := TestOfferBoard.save_of(records)

@@ -54,7 +54,7 @@ func _terms(id: String, minute: int, destination: String, airline: String) -> Di
 	terms["destination"] = destination
 	terms["airline"] = airline
 	terms["plane_size"] = "small"
-	terms["booked_passengers"] = 12
+	terms["booked_passengers"] = 6
 	return terms
 
 

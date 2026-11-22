@@ -22,10 +22,10 @@ func before_test() -> void:
 	_port.add_child(_sim)
 	var records := TestOfferBoard.day_records(0, [600, 720, 840])
 	records[0]["traits"] = {"up": "top_fare", "down": "rush_crowd", "level": 2}
-	# Top fare +30% of a drawn 25 (32 is a rounding gap no drawn fee gives).
-	records[0]["fee_per_passenger"] = 33
+	# Top fare +30% of a drawn 50.
+	records[0]["fee_per_passenger"] = 65
 	records[2]["traits"] = {}
-	records[2]["fee_per_passenger"] = 23
+	records[2]["fee_per_passenger"] = 45
 	assert_bool(_desk.board.from_snapshot(TestOfferBoard.save_of(records))).is_true()
 	_panel = OfferPanel.new()
 	_panel.desk = _desk
