@@ -37,8 +37,8 @@ func _contract(id: String, minute: int, taxi: Array = []) -> Dictionary:
 				"departure_minute": minute,
 				"gate": "A",
 				"plane_size": "small",
-				"booked_passengers": 12,
-				"fee_per_passenger": 25,
+				"booked_passengers": 6,
+				"fee_per_passenger": 50,
 				"first_day": 0,
 				"taxi": taxi if not taxi.is_empty() else TaxiTimes.for_stand(_stand),
 			}

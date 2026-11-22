@@ -1878,10 +1878,6 @@ msgid "Needs another gate"
 msgstr ""
 
 #: ui/offer_panel.gd
-msgid "Today's offers"
-msgstr ""
-
-#: ui/offer_panel.gd
 msgid "Offers ({count})"
 msgstr ""
 
@@ -2767,35 +2763,7 @@ msgid "Staff can't reach a desk or scanner passengers need: clear its staff spot
 msgstr ""
 
 #: ui/checklist.gd
-msgid "Gate desk by an exit that faces the planes"
-msgstr ""
-
-#: ui/checklist.gd
-msgid "Seats near the gate"
-msgstr ""
-
-#: ui/checklist.gd
 msgid "{need} ({unlock})"
-msgstr ""
-
-#: ui/checklist.gd
-msgid "Passengers have nowhere to sit: place seats near the gate"
-msgstr ""
-
-#: ui/checklist.gd
-msgid "Check-in desk and an agent: place a desk"
-msgstr ""
-
-#: ui/checklist.gd
-msgid "Check-in desk and an agent: you closed every desk, open one again"
-msgstr ""
-
-#: ui/checklist.gd
-msgid "Check-in desk and an agent: hire an agent on Staff"
-msgstr ""
-
-#: ui/checklist.gd
-msgid "Check-in desk and an agent: the agent is on the way"
 msgstr ""
 
 #: ui/checklist.gd
@@ -2803,51 +2771,7 @@ msgid "Check-in desk and an agent"
 msgstr ""
 
 #: ui/checklist.gd
-msgid "Security scanner and an officer: place a scanner"
-msgstr ""
-
-#: ui/checklist.gd
-msgid "Security scanner and an officer: you closed every scanner and lane, open one again"
-msgstr ""
-
-#: ui/checklist.gd
-msgid "Security scanner and an officer: hire an officer on Staff"
-msgstr ""
-
-#: ui/checklist.gd
-msgid "Security scanner and an officer: the officer is on the way"
-msgstr ""
-
-#: ui/checklist.gd
 msgid "Security scanner and an officer"
-msgstr ""
-
-#: ui/checklist.gd
-msgid "Gate desk and an agent: hire a gate agent on Staff"
-msgstr ""
-
-#: ui/checklist.gd
-msgid "Gate desk and an agent: the gate agent is on the way"
-msgstr ""
-
-#: ui/checklist.gd
-msgid "Passengers need a check-in desk: place one"
-msgstr ""
-
-#: ui/checklist.gd
-msgid "Passengers need security: place a scanner"
-msgstr ""
-
-#: ui/checklist.gd
-msgid "A desk or scanner has nobody at it: hire another on Staff"
-msgstr ""
-
-#: ui/checklist.gd
-msgid "Passengers need a toilet: build a toilet room with a stall"
-msgstr ""
-
-#: ui/checklist.gd
-msgid "Passengers are hungry: build a cafe"
 msgstr ""
 
 #: ui/checklist.gd
@@ -3936,10 +3860,6 @@ msgid "Daily incidents"
 msgstr ""
 
 #: ui/game_menu.gd
-msgid "One more thing before the doors open. Some days bring trouble: a spill on the floor, an inspector, a holiday rush. Shall I send those your way?"
-msgstr ""
-
-#: ui/game_menu.gd
 msgid "Accept turns daily incidents on, Decline leaves them off. You can change this any time: press {key}, then Settings."
 msgstr ""
 
@@ -3957,14 +3877,6 @@ msgstr ""
 
 #: ui/intro_dialogue.gd
 msgid "Decline"
-msgstr ""
-
-#: ui/intro_dialogue.gd
-msgid "Welcome to your new airport! Passengers are on their way, and every one of them has a flight to catch."
-msgstr ""
-
-#: ui/intro_dialogue.gd
-msgid "Build them a path: entrance, then check-in, then security, then the gate exit. {pause} pauses, {speed} sets speed."
 msgstr ""
 
 #: ui/intro_dialogue.gd
@@ -6280,4 +6192,101 @@ msgstr ""
 
 #: audio/audio_settings_card.gd
 msgid "{percent}%"
+msgstr ""
+
+#: ui/game_menu.gd
+msgid "Camera angle"
+msgstr ""
+
+#: ui/game_menu.gd
+msgid "Low (38°)"
+msgstr ""
+
+#: ui/game_menu.gd
+msgid "Medium (54°)"
+msgstr ""
+
+#: ui/game_menu.gd
+msgid "Top-Down (70°)"
+msgstr ""
+
+#: ui/game_menu.gd
+msgid "Custom ({angle}°)"
+msgstr ""
+
+
+#: ui/intro_dialogue.gd
+msgid "Welcome to your new airport! Open Operations on the bottom bar to place a check-in desk, security scanner, and gate desk."
+msgstr ""
+
+#: ui/intro_dialogue.gd
+msgid "Then open Staff to hire an agent, an officer, and a gate agent so the airport can open. {pause} pauses, {speed} sets speed."
+msgstr ""
+
+#: ui/game_menu.gd
+msgid "Now that the airport is open, some days bring trouble: a spill on the floor, an inspector, a holiday rush. Shall I send those your way?"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Place Check-in (Operations)"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Open a closed Check-in desk"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Hire Check-in agent (Staff)"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Check-in agent on the way"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Place Security (Operations)"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Open a closed Security scanner or lane"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Hire Security officer (Staff)"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Security officer on the way"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Place Gate Desk (Operations)"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Hire Gate agent (Staff)"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Gate agent on the way"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Place Seats near the gate (Operations)"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Station unstaffed: hire staff (Staff)"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Passengers need a toilet: build Toilet room (Facilities)"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Passengers are hungry: build Cafe (Food & Drink)"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Airline Contracts — Accept to schedule flights"
 msgstr ""

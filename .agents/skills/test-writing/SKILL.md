@@ -22,9 +22,10 @@ Tests are gdUnit4 files under `game/tests/`, named `test_<name>.gd`, mirroring t
 
 ## Running tests
 
-- The gdUnit4 suite needs `--ignoreHeadlessMode`, `-c` (so one failure does not hide the rest) and `--audio-driver Dummy`. Exit 0 is a pass, 100 is failures, 103 means gdUnit4 refused to run.
-- Run a single file alone first: `-a res://test/<area>/<name>_test.gd`. Report the test COUNT, and grep the output for "No test cases found", because a path that matches nothing still exits 0.
+- Use `tools/test.sh` for tiered runs: `--fast` (pure unit/logic), `--medium` (`SubViewport`, `await`, `add_child`, `*TestWorld`/rigs, `.tscn`/`.glb`, site grids/`FlightSim`), `--slow` (`main.tscn`, `GroundPlannerKit`, `PassengerViews`, save/load, tuning/balance/snapshot), `--all` (full suite via `-a res://tests`), and `--list` (counts and paths without running Godot). Each run writes an isolated log and XML report tree under `game/reports/` and fails on non-zero exit (including 101 for orphans), missing XML, 0 tests, failures, errors, or orphans.
+- Direct `tools/godot.sh` gdUnit4 runs need `--ignoreHeadlessMode` (after `-s res://addons/gdUnit4/bin/GdUnitCmdTool.gd`), `-c` (so one failure does not hide the rest), `--remote-debug tcp://127.0.0.1:0`, and `--audio-driver Dummy`. Exit 0 is a pass, 100 is failures, 101 is orphans/warnings, 103 means `--ignoreHeadlessMode` is missing or misplaced, and 105 is a script parse error.
+- Run a single file alone first: `-a res://tests/<area>/test_<name>.gd`. Report the test COUNT, and grep the output for "No test cases found", because a bare gdUnit4 path that matches nothing still exits 0.
 - Import is mandatory after adding or moving any `.gd`: until it runs, gdUnit4 does not see the file and its `class_name` does not resolve.
-- Run the full suite once on the final tree before a merge, not on every commit. It holds the one Godot slot.
+- Run the full suite (`tools/test.sh --all`) once on the final tree before a merge, not on every commit.
 - A case that takes more than a few seconds is a defect to explain before you report done. Open the results XML, find the case holding most of the time, and apply rules 1 to 3.
 - Never raise a time limit or skip a case to make a run pass.

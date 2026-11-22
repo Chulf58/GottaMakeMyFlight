@@ -95,8 +95,8 @@ func test_small_flight_folds_bridge_hides_tug_and_self_taxis_forward() -> void:
 		"destination": "Bergen",
 		"departure_minute": TestFlightContracts.bootstrap_minute(),
 		"plane_size": PlaneClasses.SMALL,
-		"booked_passengers": 12,
-		"fee_per_passenger": 20,
+		"booked_passengers": 6,
+		"fee_per_passenger": 50,
 	}
 	assert_bool(sim.accept_contract(terms)).is_true()
 	var id := ""
@@ -147,8 +147,8 @@ func test_small_flight_propeller_spins_on_hub_when_powered_and_stops_at_gate() -
 		"destination": "Bergen",
 		"departure_minute": TestFlightContracts.bootstrap_minute(),
 		"plane_size": PlaneClasses.SMALL,
-		"booked_passengers": 12,
-		"fee_per_passenger": 20,
+		"booked_passengers": 6,
+		"fee_per_passenger": 50,
 	}
 	assert_bool(sim.accept_contract(terms)).is_true()
 	var id := ""

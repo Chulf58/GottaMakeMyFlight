@@ -14,6 +14,8 @@ var _main: Node
 var _clock: SimClock
 var _save: SaveGame
 var _panel: StaffPanel
+var _fresh: Dictionary
+var _has_terminal := false
 
 
 func before() -> void:
@@ -25,22 +27,72 @@ func before() -> void:
 	(source.get_node("PassengerHud") as PassengerHud).press_speed(3)
 	assert_bool(SaveTestKit.save_game(source).save_to_file(_path)).is_true()
 	source.free()
+	_main = SaveTestKit.boot(self, SEED)
+	_clock = _main.get_node("SimClock")
+	_save = SaveTestKit.save_game(_main)
+	_panel = _main.get_node("StaffPanel")
+	_fresh = JSON.parse_string(JSON.stringify(_save.snapshot()))
 
 
 func after() -> void:
+	if _main != null:
+		_main.free()
+		_main = null
 	DirAccess.remove_absolute(_path)
 	DirAccess.remove_absolute(_path + ".tmp")
 
 
 func before_test() -> void:
-	_main = SaveTestKit.boot(self, SEED)
-	_clock = _main.get_node("SimClock")
-	_save = SaveTestKit.save_game(_main)
-	_panel = _main.get_node("StaffPanel")
+	(_main.get_node("OfferPanel") as OfferPanel).close()
+	var session := (_main.get_node("BuildMenu") as BuildMenu).build_session
+	session.set_building(false)
+	session.sync()
+	_clock.set_paused(true)
+	_clock.set_speed(1)
 
 
-func after_test() -> void:
-	_main.free()
+func _ensure_no_terminal() -> void:
+	if _has_terminal:
+		assert_bool(_save.load_world(_fresh)).is_true()
+		_has_terminal = false
+	_clock.set_paused(true)
+	_clock.set_speed(1)
+
+
+func test_the_staff_hint_card_shows_once_after_loading_a_save_with_no_staff() -> void:
+	_ensure_no_terminal()
+	# This world has the terminal and all three opening hires, so its hint holds no hire line.
+	(_main.get_node("PassengerHud") as PassengerHud).press_starter_terminal()
+	_has_terminal = true
+	SaveTestKit.step(_main)
+	(_main.get_node("Staff") as StaffSim).hire(StaffMember.Role.CHECKIN)
+	(_main.get_node("Staff") as StaffSim).hire(StaffMember.Role.SECURITY)
+	(_main.get_node("Staff") as StaffSim).hire(StaffMember.Role.GATE)
+	assert_str(_panel.hint_text()).not_contains("hire a")
+	assert_bool(_save.load_from_file(_path)).is_true()
+	assert_bool(_panel.hint_card().visible).is_true()
+	assert_bool(_panel.hint_label().visible).is_true()
+	assert_str(_panel.hint_text()).contains("Hire Check-in agent (Staff)")
+	assert_str(_panel.hint_text()).contains("Hire Security officer (Staff)")
+	assert_str(_panel.hint_label().text).is_equal(Checklist.TITLE_CLOSED)
+	assert_int(_main.find_children("StaffHintCard", "", true, false).size()).is_equal(1)
+	var lines := _panel.hint_text().split("\n")
+	var seen := {}
+	for line in lines:
+		assert_bool(seen.has(line)).is_false()
+		seen[line] = true
+
+
+func test_a_second_load_does_not_duplicate_the_staff_hint() -> void:
+	if not _has_terminal:
+		(_main.get_node("PassengerHud") as PassengerHud).press_starter_terminal()
+		_has_terminal = true
+		SaveTestKit.step(_main)
+	assert_bool(_save.load_from_file(_path)).is_true()
+	var first := _panel.hint_text()
+	assert_bool(_save.load_from_file(_path)).is_true()
+	assert_str(_panel.hint_text()).is_equal(first)
+	assert_int(_main.find_children("StaffHintCard", "", true, false).size()).is_equal(1)
 
 
 func test_a_load_while_running_at_3x_leaves_the_game_paused_at_1x() -> void:
@@ -48,6 +100,7 @@ func test_a_load_while_running_at_3x_leaves_the_game_paused_at_1x() -> void:
 	assert_bool(_clock.paused).is_false()
 	assert_int(_clock.speed).is_equal(3)
 	assert_bool(_save.load_from_file(_path)).is_true()
+	_has_terminal = true
 	assert_bool(_clock.paused).is_true()
 	assert_int(_clock.speed).is_equal(1)
 
@@ -56,6 +109,7 @@ func test_a_load_while_paused_at_2x_comes_back_paused_at_1x() -> void:
 	assert_bool(_clock.set_speed(2)).is_true()
 	assert_bool(_clock.paused).is_true()
 	assert_bool(_save.load_from_file(_path)).is_true()
+	_has_terminal = true
 	assert_bool(_clock.paused).is_true()
 	assert_int(_clock.speed).is_equal(1)
 
@@ -66,12 +120,14 @@ func test_a_load_while_paused_at_2x_comes_back_paused_at_1x() -> void:
 func test_a_load_drops_every_hold_and_the_first_resume_runs_the_game() -> void:
 	var hud := _main.get_node("PassengerHud") as PassengerHud
 	hud.press_speed(3)
+	(_main.get_node("FlightSim") as FlightSim).open_airport()
 	(_main.get_node("OfferPanel") as OfferPanel).open()
 	var session := (_main.get_node("BuildMenu") as BuildMenu).build_session
 	session.set_building(true)
 	session.sync()
 	assert_int(_clock.holds.count()).is_equal(2)
 	assert_bool(_save.load_from_file(_path)).is_true()
+	_has_terminal = true
 	assert_int(_clock.holds.count()).is_equal(0)
 	assert_bool(_clock.paused).is_true()
 	assert_int(_clock.speed).is_equal(1)
@@ -90,37 +146,3 @@ func test_a_refused_load_leaves_the_speed_and_pause_alone() -> void:
 	assert_bool(_save.load_from_file(_path + ".missing")).is_false()
 	assert_bool(_clock.paused).is_false()
 	assert_int(_clock.speed).is_equal(3)
-
-
-func test_the_staff_hint_card_shows_once_after_loading_a_save_with_no_staff() -> void:
-	# This world has the terminal and all three opening hires, so its hint holds no hire line.
-	(_main.get_node("PassengerHud") as PassengerHud).press_starter_terminal()
-	SaveTestKit.step(_main)
-	(_main.get_node("Staff") as StaffSim).hire(StaffMember.Role.CHECKIN)
-	(_main.get_node("Staff") as StaffSim).hire(StaffMember.Role.SECURITY)
-	(_main.get_node("Staff") as StaffSim).hire(StaffMember.Role.GATE)
-	assert_str(_panel.hint_text()).not_contains("hire a")
-	assert_bool(_save.load_from_file(_path)).is_true()
-	assert_bool(_panel.hint_card().visible).is_true()
-	assert_bool(_panel.hint_label().visible).is_true()
-	assert_str(_panel.hint_text()).contains("Check-in desk and an agent: hire an agent on Staff")
-	assert_str(_panel.hint_text()).contains(
-		"Security scanner and an officer: hire an officer on Staff"
-	)
-	assert_str(_panel.hint_label().text).is_equal(Checklist.TITLE_CLOSED)
-	assert_int(_main.find_children("StaffHintCard", "", true, false).size()).is_equal(1)
-	var lines := _panel.hint_text().split("\n")
-	var seen := {}
-	for line in lines:
-		assert_bool(seen.has(line)).is_false()
-		seen[line] = true
-
-
-func test_a_second_load_does_not_duplicate_the_staff_hint() -> void:
-	(_main.get_node("PassengerHud") as PassengerHud).press_starter_terminal()
-	SaveTestKit.step(_main)
-	assert_bool(_save.load_from_file(_path)).is_true()
-	var first := _panel.hint_text()
-	assert_bool(_save.load_from_file(_path)).is_true()
-	assert_str(_panel.hint_text()).is_equal(first)
-	assert_int(_main.find_children("StaffHintCard", "", true, false).size()).is_equal(1)

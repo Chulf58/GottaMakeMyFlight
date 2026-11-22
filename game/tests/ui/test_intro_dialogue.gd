@@ -108,6 +108,8 @@ func test_the_intro_shows_the_portrait_nameplate_and_instructions() -> void:
 	assert_str(name_label.text).is_equal("TERMINAL MANAGER")
 	assert_bool(name_label.is_visible_in_tree()).is_true()
 	var text := intro.body_text()
+	assert_str(text).contains("Operations")
+	assert_str(text).contains("Staff")
 	assert_str(text).contains("check-in")
 	assert_str(text).contains("security")
 	assert_str(text).contains("gate")

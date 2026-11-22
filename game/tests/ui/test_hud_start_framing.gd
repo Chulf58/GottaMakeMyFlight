@@ -8,20 +8,43 @@ const SEED := 4_402_026
 var _main: Node
 var _camera: TycoonCamera
 var _mode: BuildMode
+var _fresh_snap := {}
+var _dirty := false
+var _boot_home_pos := Vector3.ZERO
+var _boot_cam_pos := Vector3.ZERO
+var _boot_home_dist := 0.0
+var _boot_expected := Vector3.ZERO
+var _boot_room := Rect2()
 
 
-func before_test() -> void:
+func before() -> void:
 	_main = SaveTestKit.boot(self, SEED)
 	_camera = _main.get_node("TycoonCamera")
 	_mode = _main.get_node("BuildMode")
+	_boot_home_pos = _camera.home_position
+	_boot_cam_pos = _camera.position
+	_boot_home_dist = _camera.home_distance
+	_boot_expected = _framed(StartView.area_for(_mode.grid))
+	_boot_room = _camera.room
 	# The edits here paint floor off a new game's land and building on unowned
 	# land is refused (LandPlots), so plots are bought out to it; a save accepts that.
 	# The first site's north-west plot (side land is locked).
 	LandKit.buy_to(_mode.land_tool.land, Vector2i(4, 0))
+	var save: SaveGame = _main.get_node("SaveGame")
+	_fresh_snap = JSON.parse_string(JSON.stringify(save.snapshot(), "", true, true))
 
 
-func after_test() -> void:
-	_main.free()
+func after() -> void:
+	if _main != null:
+		_main.free()
+		_main = null
+
+
+func _ensure_clean() -> void:
+	if _dirty:
+		var save: SaveGame = _main.get_node("SaveGame")
+		assert_bool(save.load_world(_fresh_snap)).is_true()
+		_dirty = false
 
 
 func _framed(area: Rect2) -> Vector3:
@@ -29,19 +52,29 @@ func _framed(area: Rect2) -> Vector3:
 
 
 func test_the_game_opens_framed_on_the_starter_terminal_floor() -> void:
-	var area := StartView.area_for(_mode.grid)
-	assert_bool(_camera.room.is_equal_approx(TycoonCamera.WHOLE_VIEW)).is_true()
-	assert_vector(_camera.home_position).is_equal_approx(_framed(area), Vector3.ONE * 0.001)
-	assert_vector(_camera.position).is_equal_approx(_camera.home_position, Vector3.ONE * 0.001)
-	assert_float(_camera.home_distance).is_less(60.0)
+	assert_bool(_boot_room.is_equal_approx(TycoonCamera.WHOLE_VIEW)).is_true()
+	assert_vector(_boot_home_pos).is_equal_approx(_boot_expected, Vector3.ONE * 0.001)
+	assert_vector(_boot_cam_pos).is_equal_approx(_boot_home_pos, Vector3.ONE * 0.001)
+	assert_float(_boot_home_dist).is_less(60.0)
+
+
+func test_a_refused_load_leaves_the_camera_alone() -> void:
+	var save: SaveGame = _main.get_node("SaveGame")
+	var prev_home := _camera.home_position
+	_camera.home_position = Vector3(99.0, 0.0, 99.0)
+	assert_bool(save.load_world({})).is_false()
+	assert_vector(_camera.home_position).is_equal(Vector3(99.0, 0.0, 99.0))
+	_camera.home_position = prev_home
 
 
 func test_an_ordinary_build_edit_does_not_reframe_the_camera() -> void:
+	_ensure_clean()
 	var before_home := _camera.home_position
 	var before_position := _camera.position
 	var result := _mode.grid.apply(
 		BuildEdit.paint_floor(Vector2i(3, 3) + LandKit.FIRST_SITE, BuildGrid.FLOOR_TILE, 1)
 	)
+	_dirty = true
 	assert_bool(result.ok).is_true()
 	assert_vector(_camera.home_position).is_equal(before_home)
 	assert_vector(_camera.position).is_equal(before_position)
@@ -49,9 +82,10 @@ func test_an_ordinary_build_edit_does_not_reframe_the_camera() -> void:
 
 func test_loading_a_save_reframes_the_camera_on_what_it_built() -> void:
 	var save: SaveGame = _main.get_node("SaveGame")
-	_mode.grid.apply(
-		BuildEdit.paint_floor(Vector2i(3, 3) + LandKit.FIRST_SITE, BuildGrid.FLOOR_TILE, 1)
-	)
+	var target := Vector2i(3, 3) + LandKit.FIRST_SITE
+	if _mode.grid.floor_at(target) == BuildGrid.FLOOR_NONE:
+		_mode.grid.apply(BuildEdit.paint_floor(target, BuildGrid.FLOOR_TILE, 1))
+	_dirty = true
 	# A build edit settles on the next tick, and a save waits for it.
 	SaveTestKit.step(_main)
 	var data := save.snapshot()
@@ -62,15 +96,8 @@ func test_loading_a_save_reframes_the_camera_on_what_it_built() -> void:
 	assert_bool(save.load_world(data)).is_true()
 	# The new game's shell stands too, so the view frames the shell and the tile.
 	var area := StartView.area_for(_mode.grid)
-	var cell_centre := _mode.grid.cell_to_world(Vector2i(3, 3) + LandKit.FIRST_SITE)
+	var cell_centre := _mode.grid.cell_to_world(target)
 	assert_bool(area.has_point(Vector2(cell_centre.x, cell_centre.z))).is_true()
 	assert_bool(_camera.room.is_equal_approx(TycoonCamera.WHOLE_VIEW)).is_true()
 	assert_vector(_camera.home_position).is_equal_approx(_framed(area), Vector3.ONE * 0.001)
 	assert_vector(_camera.position).is_equal_approx(_camera.home_position, Vector3.ONE * 0.001)
-
-
-func test_a_refused_load_leaves_the_camera_alone() -> void:
-	var save: SaveGame = _main.get_node("SaveGame")
-	_camera.home_position = Vector3(99.0, 0.0, 99.0)
-	assert_bool(save.load_world({})).is_false()
-	assert_vector(_camera.home_position).is_equal(Vector3(99.0, 0.0, 99.0))

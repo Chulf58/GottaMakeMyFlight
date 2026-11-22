@@ -71,20 +71,20 @@ func test_a_new_game_world_has_no_desk_so_the_check_in_hint_is_due() -> void:
 	assert_array(HintRules.causes(world)).is_equal([HintRules.PLACE_CHECKIN])
 
 
-func test_a_shown_hint_takes_the_banner_slot_and_gives_it_back() -> void:
+func test_a_shown_hint_keeps_the_checklist_visible_alongside_it() -> void:
 	var hints := _live()
 	assert_bool(_panel().hint_card().visible).is_true()
 	for i in 8:
 		hints.advance(0.25, _world(), [BuildMenu.category_of(BuildMode.Tool.DESK)])
 	assert_str(hints.shown_id()).is_equal(HintRules.PLACE_CHECKIN)
-	assert_bool(_panel().hint_card().visible).is_false()
+	assert_bool(_panel().hint_card().visible).is_true()
 	assert_bool(hints.card().visible).is_true()
 	hints.set_enabled(false)
 	assert_bool(_panel().hint_card().visible).is_true()
 	assert_bool(hints.card().visible).is_false()
 
 
-func test_the_hint_card_sits_where_the_banner_sits() -> void:
+func test_the_hint_card_sits_below_the_checklist_card() -> void:
 	var hints := _live()
 	for i in 8:
 		hints.advance(0.25, _world(), [BuildMenu.category_of(BuildMode.Tool.DESK)])
@@ -93,14 +93,13 @@ func test_the_hint_card_sits_where_the_banner_sits() -> void:
 	var card := hints.card().get_global_rect()
 	assert_bool(card.has_area()).is_true()
 	var screen := get_viewport().get_visible_rect().size
-	# Changed from the top centre: the slot is the top-left column's, LIST_W wide
-	# (decision checklist-card-moves-to-the-top-left-column-slim-at-304-px-t).
-	assert_float(card.position.y).is_equal_approx(LeftColumn.card_top(get_tree()), 1.5)
+	assert_float(card.position.y).is_equal_approx(LeftColumn.hint_top(get_tree()), 1.5)
 	assert_float(card.position.x).is_equal_approx(HudLayout.MARGIN, 1.5)
 	assert_float(card.size.x).is_equal_approx(HudLayout.LIST_W, 1.5)
 	assert_bool(Rect2(Vector2.ZERO, screen).encloses(card)).is_true()
 	var banner := _panel().hint_card().get_global_rect()
-	assert_float(card.position.y).is_equal_approx(banner.position.y, 1.5)
+	assert_float(card.position.y).is_greater_equal(banner.end.y + HudLayout.GAP - 1.5)
+	assert_bool(card.intersects(banner)).is_false()
 
 
 func test_a_new_game_has_no_staffing_shortage_to_teach() -> void:
@@ -142,7 +141,7 @@ func test_a_probe_can_stop_the_world_reading_and_keep_the_card_docking() -> void
 	hints._process(1.0)
 	assert_object(hints._sim).is_null()
 	assert_float(hints.card().get_global_rect().position.y).is_equal_approx(
-		LeftColumn.card_top(get_tree()), 1.5
+		LeftColumn.hint_top(get_tree()), 1.5
 	)
 
 
@@ -175,3 +174,23 @@ func test_templates_page_open_never_wraps_negative_category_index() -> void:
 	assert_int(menu.open_category()).is_equal(BuildMenu.TEMPLATES_PAGE)
 	assert_array(hints._open_categories()).is_empty()
 	menu.press_category(BuildMenu.TEMPLATES_PAGE)
+
+
+func test_no_hint_is_picked_while_the_game_menu_question_is_open() -> void:
+	var hints := _live()
+	var menu := _main.get_node("GameMenu") as GameMenu
+	assert_bool(menu.ask_incidents()).is_true()
+	assert_bool(menu.is_question_open()).is_true()
+	var left := Hints.IDLE_S + 5.0
+	while left > 0.0:
+		hints.advance(0.25, _world(), [BuildMenu.category_of(BuildMode.Tool.DESK)])
+		left -= 0.25
+	assert_bool(hints.is_showing()).is_false()
+	assert_bool(hints.is_seen(HintRules.PLACE_CHECKIN)).is_false()
+	menu.question().decline_button().pressed.emit()
+	assert_bool(menu.is_question_open()).is_false()
+	left = HintRules.HOLD_S + 0.5
+	while left > 0.0:
+		hints.advance(0.25, _world(), [BuildMenu.category_of(BuildMode.Tool.DESK)])
+		left -= 0.25
+	assert_str(hints.shown_id()).is_equal(HintRules.PLACE_CHECKIN)

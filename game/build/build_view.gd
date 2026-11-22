@@ -38,6 +38,8 @@ var cutaway_enabled := true:
 ## with the edge in WallCutaway.wall_edges form, for edges that have a wall.
 ## By default the grid's own kinds; a caller may supply others.
 var wall_kind_source: Callable = grid_wall_kind
+var floor_rebuilds := 0
+var wall_rebuilds := 0
 
 var _grid: BuildGrid
 var _cutaway := WallCutaway.new()
@@ -50,6 +52,10 @@ var _cut_edges: Dictionary = {}
 var _area := MeshInstance3D.new()
 var _object_nodes: Dictionary = {}
 var _stall_nodes: Dictionary = {}
+var _drawn_grid_id := 0
+var _floor_version := -1
+var _wall_version := -1
+var _wall_kind_source := Callable()
 
 
 ## How tall an object type stands as drawn: the top of its kit piece's meshes,
@@ -231,24 +237,38 @@ func piece_transforms(piece: String) -> Array[Transform3D]:
 
 
 func refresh(grid: BuildGrid) -> void:
+	var new_grid := grid.grid_id() != _drawn_grid_id
+	var floor_ver := grid.floor_version()
+	var wall_ver := grid.wall_version()
+	var floor_dirty := new_grid or floor_ver != _floor_version
+	var wall_dirty := new_grid or wall_ver != _wall_version or wall_kind_source != _wall_kind_source
 	_grid = grid
-	(_area.mesh as PlaneMesh).size = Vector2(grid.size)
-	_area.position = grid.origin + Vector3(grid.size.x / 2.0, AREA_Y, grid.size.y / 2.0)
-	# On the terminal site the ground is the site's paving on owned plots and
-	# grass on the rest (OwnedPaving); the area plane would lie over that grass
-	# as a dark slab (decision site-paving-covers-only-the-owned-land-plots-and-
-	# grows-as-ea).
-	_area.visible = not grid is SiteGrid
-	_draw_floors()
-	_wall_edges = WallCutaway.wall_edges(grid)
-	_wall_kinds.clear()
-	for edge in _wall_edges:
-		_wall_kinds[edge] = wall_kind_source.call(Vector2i(edge.x, edge.y), edge.z)
-	_sync_objects()
-	_draw_walls()
+	_drawn_grid_id = grid.grid_id()
+	if new_grid or floor_dirty:
+		(_area.mesh as PlaneMesh).size = Vector2(grid.size)
+		_area.position = grid.origin + Vector3(grid.size.x / 2.0, AREA_Y, grid.size.y / 2.0)
+		# On the terminal site the ground is the site's paving on owned plots and
+		# grass on the rest (OwnedPaving); the area plane would lie over that grass
+		# as a dark slab (decision site-paving-covers-only-the-owned-land-plots-and-
+		# grows-as-ea).
+		_area.visible = not grid is SiteGrid
+	if floor_dirty:
+		_draw_floors()
+		_floor_version = floor_ver
+	if wall_dirty:
+		_wall_edges = WallCutaway.wall_edges(grid)
+		_wall_kinds.clear()
+		for edge in _wall_edges:
+			_wall_kinds[edge] = wall_kind_source.call(Vector2i(edge.x, edge.y), edge.z)
+		_wall_version = wall_ver
+		_wall_kind_source = wall_kind_source
+	var doors_changed := _sync_objects()
+	if floor_dirty or wall_dirty or doors_changed:
+		_draw_walls()
 
 
 func _draw_floors() -> void:
+	floor_rebuilds += 1
 	var transforms: Array[Transform3D] = []
 	for y in _grid.size.y:
 		for x in _grid.size.x:
@@ -261,6 +281,7 @@ func _draw_floors() -> void:
 func _draw_walls() -> void:
 	if _grid == null:
 		return
+	wall_rebuilds += 1
 	_cut_edges.clear()
 	for edge in _wall_edges:
 		if _cutaway.is_cut(_grid, Vector2i(edge.x, edge.y), edge.z):
@@ -329,11 +350,14 @@ func _place(placed: Dictionary, piece: String, at: Transform3D) -> void:
 	placed[piece].append(at)
 
 
-func _sync_objects() -> void:
+func _sync_objects() -> bool:
+	var doors_changed := false
 	var live := _grid.object_ids()
 	for object_id in _object_nodes.keys():
 		var node: Node3D = _object_nodes[object_id]
 		if not live.has(object_id) or node.get_meta("record") != _grid.get_object(object_id):
+			if BuildCatalog.is_door(node.get_meta("record")["def"]):
+				doors_changed = true
 			node.queue_free()
 			_object_nodes.erase(object_id)
 			_stall_nodes.erase(object_id)
@@ -341,6 +365,8 @@ func _sync_objects() -> void:
 		if _object_nodes.has(object_id):
 			continue
 		var record := _grid.get_object(object_id)
+		if BuildCatalog.is_door(record["def"]):
+			doors_changed = true
 		var def := BuildCatalog.get_def(record["def"])
 		var created := make_object_node(def, null)
 		created.set_meta("record", record)
@@ -352,6 +378,7 @@ func _sync_objects() -> void:
 			_stall_nodes[object_id] = created
 		add_child(created)
 		_object_nodes[object_id] = created
+	return doors_changed
 
 
 ## Sets the instances of each named piece from `placed` (piece -> transforms

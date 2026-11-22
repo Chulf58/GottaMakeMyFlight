@@ -11,17 +11,13 @@ const FLIGHT_B := "GMF102"
 
 var _world: PassengerTestWorld
 var _board: DeparturesBoard
+var _snap0 := {}
+var _snap1850 := {}
+var _snap1875 := {}
 
 
 func before() -> void:
-	PassengerTestWorld.tracker = self
-
-
-func after() -> void:
 	PassengerTestWorld.tracker = null
-
-
-func before_test() -> void:
 	_world = PassengerTestWorld.reference_world()
 	_board = DeparturesBoard.new()
 	_board.settings_path = SaveTestKit.run_path("departures_board_late")
@@ -29,14 +25,41 @@ func before_test() -> void:
 	_board.clock = _world.clock
 	_board.passengers = _world.sim
 	add_child(_board)
+	_snap0 = _take_snap(_world)
+	_world.run_to(1850)
+	_snap1850 = _take_snap(_world)
+	_world.run_to(1875)
+	_snap1875 = _take_snap(_world)
 
 
-func after_test() -> void:
+func after() -> void:
 	var path := _board.settings_path
 	_board.free()
 	DirAccess.remove_absolute(path)
 	DirAccess.remove_absolute(path + ".tmp")
 	_world.free_all()
+	_world = null
+
+
+func before_test() -> void:
+	_board.flights = _world.flights
+	_board.clock = _world.clock
+	_board.passengers = _world.sim
+
+
+static func _take_snap(w: PassengerTestWorld) -> Dictionary:
+	return {
+		"clock": JSON.parse_string(JSON.stringify(w.clock.to_snapshot())),
+		"flights": JSON.parse_string(JSON.stringify(w.flights.to_snapshot())),
+		"sim": JSON.parse_string(JSON.stringify(w.sim.to_snapshot())),
+	}
+
+
+func _restore(snap: Dictionary, w: PassengerTestWorld = _world) -> void:
+	w.flights.gate_source = Callable()
+	assert_bool(w.clock.from_snapshot(snap["clock"].duplicate(true))).is_true()
+	assert_bool(w.flights.from_snapshot(snap["flights"].duplicate(true))).is_true()
+	assert_bool(w.sim.from_snapshot(snap["sim"].duplicate(true))).is_true()
 
 
 func _row(flight_id: String) -> Dictionary:
@@ -67,6 +90,7 @@ func test_text_is_empty_at_zero_and_counts_otherwise() -> void:
 
 
 func test_count_is_per_flight_and_only_while_the_passenger_is_not_done() -> void:
+	_restore(_snap0)
 	_world.flights.add_flight(FLIGHT_B, FlightSim.schedule_starts(0))
 	var on_a := _world.sim.spawn_now(PassengerTestWorld.FLIGHT)
 	var on_a2 := _world.sim.spawn_now(PassengerTestWorld.FLIGHT)
@@ -87,6 +111,7 @@ func test_count_is_per_flight_and_only_while_the_passenger_is_not_done() -> void
 
 
 func test_a_flight_with_nobody_late_shows_no_late_line() -> void:
+	_restore(_snap0)
 	_world.sim.spawn_now(PassengerTestWorld.FLIGHT)
 	_world.run_to(40)
 	_board.refresh()
@@ -97,7 +122,7 @@ func test_a_flight_with_nobody_late_shows_no_late_line() -> void:
 
 
 func test_a_late_passenger_shows_the_line_and_boarding_or_missing_clears_it() -> void:
-	_world.run_to(1850)
+	_restore(_snap1850)
 	var late_id := _world.sim.spawn_now(PassengerTestWorld.FLIGHT)
 	_world.run_to(1875)
 	var p := _world.passenger(late_id)
@@ -122,12 +147,13 @@ func test_a_late_passenger_shows_the_line_and_boarding_or_missing_clears_it() ->
 
 
 func test_the_worst_line_two_fits_the_list_on_one_line() -> void:
+	_restore(_snap0)
 	_world.flights.gate_source = func() -> Array[String]: return ["C", "A", "B"] as Array[String]
 	_world.flights.open_airport()
 	# Longest airline name (Skyline Global), "Boarding" status (via an earlier
 	# flight still open so EARLY takes the doors-close slot), and 3-digit late count.
-	_accept("EARLY", 9 * 60 + 35, "Gotta Air")
-	var occurrence := _accept("LG200", 10 * 60, "Skyline Global")
+	_accept("EARLY", 8 * 60 + 15, "Gotta Air")
+	var occurrence := _accept("LG200", 8 * 60 + 40, "Skyline Global")
 	var most := 0
 	for plane_class: String in PlaneClasses.ORDER:
 		most = maxi(most, int(PlaneClasses.passenger_range(plane_class)[1]))
@@ -186,6 +212,7 @@ func _accept(id: String, minute: int, airline: String) -> String:
 
 
 func test_each_contract_flight_row_counts_its_own_late_passengers() -> void:
+	_restore(_snap0)
 	_world.flights.open_airport()
 	var first := _accept("SH100", 14 * 60, "Gotta Air")
 	var second := _accept("LG200", 19 * 60, "Skyline Global")
@@ -216,7 +243,7 @@ func test_each_contract_flight_row_counts_its_own_late_passengers() -> void:
 
 
 func test_a_load_at_the_same_tick_updates_the_line() -> void:
-	_world.run_to(1850)
+	_restore(_snap1850)
 	var late_id := _world.sim.spawn_now(PassengerTestWorld.FLIGHT)
 	_world.run_to(1875)
 	assert_bool(_world.passenger(late_id).late).is_true()
@@ -244,14 +271,14 @@ func test_a_load_at_the_same_tick_updates_the_line() -> void:
 
 
 func test_another_sim_at_the_same_tick_drops_the_old_counts() -> void:
-	_world.run_to(1850)
+	_restore(_snap1850)
 	var late_id := _world.sim.spawn_now(PassengerTestWorld.FLIGHT)
 	_world.run_to(1875)
 	assert_bool(_world.passenger(late_id).late).is_true()
 	_board.refresh()
 	assert_int(_board.late_count_of(PassengerTestWorld.FLIGHT)).is_equal(1)
-	var other := PassengerTestWorld.reference_world()
-	other.run_to(1875)
+	var other := PassengerTestWorld.make(_world.grid, FlightSim.schedule_starts(0))
+	_restore(_snap1875, other)
 	assert_int(other.sim.tick).is_equal(_world.sim.tick)
 	_board.passengers = other.sim
 	_board.refresh()

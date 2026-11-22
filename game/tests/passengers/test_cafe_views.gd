@@ -9,17 +9,11 @@ extends GdUnitTestSuite
 var _world: PassengerTestWorld
 var _views: PassengerViews
 var _ids: Dictionary
+var _clean: Dictionary
 
 
 func before() -> void:
-	PassengerTestWorld.tracker = self
-
-
-func after() -> void:
 	PassengerTestWorld.tracker = null
-
-
-func before_test() -> void:
 	var grid := BuildGrid.new()
 	_ids = CafeTestLayout.build(grid)
 	_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
@@ -27,12 +21,38 @@ func before_test() -> void:
 	_views.clock = _world.clock
 	_views.sim = _world.sim
 	add_child(_views)
+	_clean = {
+		"clock": _world.clock.to_snapshot(),
+		"flights": _world.flights.to_snapshot(),
+		"sim": _world.sim.to_snapshot(),
+		"wallet": _world.sim.wallet.to_snapshot(),
+	}
+	PassengerTestWorld.tracker = self
+
+
+func after() -> void:
+	if _views != null:
+		_views.free()
+	if _world != null:
+		_world.free_all()
+	_views = null
+	_world = null
+	_clean.clear()
+	PassengerTestWorld.tracker = null
+
+
+func before_test() -> void:
+	assert_bool(_world.clock.from_snapshot(_clean["clock"])).is_true()
+	assert_bool(_world.flights.from_snapshot(_clean["flights"])).is_true()
+	assert_bool(_world.sim.from_snapshot(_clean["sim"])).is_true()
+	assert_bool(_world.sim.wallet.from_snapshot(_clean["wallet"])).is_true()
+	_views.selected_id = 0
+	_views.snap()
+	_views.cafe_pops().advance(CafePops.POP_SECONDS * 2.0)
 
 
 func after_test() -> void:
 	PseudoLocale.disable()
-	_views.free()
-	_world.free_all()
 
 
 func _guest() -> Passenger:

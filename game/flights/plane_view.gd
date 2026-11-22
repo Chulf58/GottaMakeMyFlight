@@ -42,6 +42,9 @@ const PLANE_SCENES := {
 	"tp_plane_06a": preload("res://assets/planes/tp_plane_06a.glb"),
 	"tp_plane_07a": preload("res://assets/planes/tp_plane_07a.glb"),
 }
+const GLASS_MATERIAL_NAME := "TP_Glass_1A_D"
+const GLASS_MATERIAL_PATH := "res://assets/materials/tp_glass.tres"
+const TINTED_GLASS_MATERIAL: Material = preload("res://assets/materials/tp_plane_glass_tinted.tres")
 ## The terminal site. Its owned plots are paved flat at its ground_height
 ## (tools/blender/terminal_site/build_terminal_site.py, OwnedPaving; user ruling
 ## site-paving-covers-only-the-owned-land-plots-and-grows-as-ea), and the taxi
@@ -530,12 +533,28 @@ static func _propeller_spinning(at_phase: int, model: String) -> bool:
 
 ## One instance of the model on show, parked: its passenger door where the
 ## stand's is (PlaneClasses.stand_offset). update_pose() moves it from there.
+## Overrides TP_Glass_1A_D surfaces on the plane instance only so empty cockpits
+## and cabins stay hidden without touching shared tp_glass.tres (decision c46a5df8).
 func _new_model() -> Node3D:
 	var packed: PackedScene = PLANE_SCENES[model_name]
 	var model: Node3D = packed.instantiate()
 	model.position = PlaneClasses.stand_offset(model_name)
 	model.rotation_degrees.y = model_yaw_degrees
+	_apply_tinted_glass(model)
 	return model
+
+
+static func _apply_tinted_glass(model: Node3D) -> void:
+	for child in model.find_children("*", "MeshInstance3D", true, false):
+		var mi := child as MeshInstance3D
+		if mi.mesh == null:
+			continue
+		for surface in mi.mesh.get_surface_count():
+			var mat := mi.get_active_material(surface)
+			if mat == null:
+				continue
+			if mat.resource_name == GLASS_MATERIAL_NAME or mat.resource_path == GLASS_MATERIAL_PATH:
+				mi.set_surface_override_material(surface, TINTED_GLASS_MATERIAL)
 
 
 ## Projects along the sun's light onto the ground, keeping a sliver of height.

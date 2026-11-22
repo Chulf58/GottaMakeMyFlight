@@ -94,7 +94,10 @@ var need_clusters := NeedCluster.new()
 ## The count clusters of close wish bubbles (board c8b16621; WishBadges): the
 ## cluster kind is a wish icon's code, the same view state as need_clusters.
 var wish_clusters := NeedCluster.new()
-var selected_id := 0
+var selected_id := 0:
+	set(value):
+		selected_id = value
+		_sync_follow_anchor()
 ## Moved pieces still in use, drawn at their old spot (RelocationGhosts).
 ## Holds no tick: it compares with the sim every frame.
 var ghosts := RelocationGhosts.new()
@@ -140,6 +143,9 @@ var _props := CarryOnProps.new()
 ## Passenger id -> its drawn offset at security (SecurityLooks.target_offset),
 ## moved toward the target at walking speed once per tick.
 var _offsets: Dictionary = {}
+## Passenger id -> its drawn right-hand corridor lane offset (CorridorLane),
+## moved toward the target by at most CorridorLane.CHASE_STEP_M per tick.
+var _lanes: Dictionary = {}
 ## Passenger id -> its drawn step onto a seat or into a shower on an activity
 ## visit, moved toward ActivityPoses.offset() by at most a walking step a tick,
 ## so a stay cut short or a removed piece eases the body back instead of
@@ -243,6 +249,15 @@ func node_for(id: int) -> Node3D:
 	return _nodes.get(id)
 
 
+## Selects passenger `id` (0 for none) and moves follow_anchor and the ring
+## to them now, so a camera told to follow the anchor next starts from them.
+func select(id: int) -> void:
+	if id != 0 and (_nodes.has(id) or _is_shown_id(id)):
+		selected_id = id
+	else:
+		selected_id = 0
+
+
 func active_count() -> int:
 	return _nodes.size()
 
@@ -277,6 +292,7 @@ func _base_position(p: Passenger) -> Vector3:
 		+ CafeChairs.offset(sim, p)
 		+ _seats.get(p.id, Vector3.ZERO)
 		+ _offsets.get(p.id, Vector3.ZERO)
+		+ _lanes.get(p.id, Vector3.ZERO)
 	)
 
 
@@ -298,6 +314,11 @@ func security_offset(id: int) -> Vector3:
 	return _offsets.get(id, Vector3.ZERO)
 
 
+## A passenger's drawn right-hand corridor lane offset now.
+func corridor_offset(id: int) -> Vector3:
+	return _lanes.get(id, Vector3.ZERO)
+
+
 ## Records positions for the tick that just ran and updates poses and bubbles.
 func sync() -> void:
 	var seen := {}
@@ -315,6 +336,7 @@ func sync() -> void:
 		seen[id] = true
 		_chase(p)
 		_chase_seat(p)
+		_chase_lane(p)
 		var steer := DoorSteer.offset_of(self, p, _steer_time())
 		var now := _base_position(p) + steer
 		if not _nodes.has(id):
@@ -388,13 +410,18 @@ func snap() -> void:
 				_release(id)
 		_offsets.erase(id)
 		_seats.erase(id)
+		_lanes.erase(id)
 		_sit_off.erase(id)
-		var seat := ActivityPoses.offset(sim, sim.get_passenger(id))
+		var p_snap := sim.get_passenger(id)
+		var lane := CorridorLane.target_offset(sim, p_snap)
+		if lane != Vector3.ZERO:
+			_lanes[id] = lane
+		var seat := ActivityPoses.offset(sim, p_snap)
 		if seat != Vector3.ZERO:
 			_seats[id] = seat
 		# A load starts every tray and bag over, with no transfer from before.
 		_props.release(id)
-		var target := SecurityLooks.target_offset(sim, sim.get_passenger(id))
+		var target := SecurityLooks.target_offset(sim, p_snap)
 		if target != Vector3.ZERO:
 			_offsets[id] = target
 		# Every clip is played again from the loaded tick: a node kept through
@@ -477,10 +504,7 @@ func draw() -> void:
 		var fade: ClipCrossfade = node.get_meta(&"crossfade")
 		fade.ease_to(now, CROSSFADE_SECONDS)
 		fade.drawn = true
-	if _nodes.has(selected_id):
-		follow_anchor.position = (_nodes[selected_id] as Node3D).position
-		_ring.position = follow_anchor.position + Vector3(0.0, 0.05, 0.0)
-	_ring.visible = _nodes.has(selected_id)
+	_sync_follow_anchor()
 	_draw_late_marks()
 	layout_started.emit()
 	# The icons lift over a bubble only while it shows, so they are laid out
@@ -949,6 +973,36 @@ func _visible(p: Passenger) -> bool:
 	return true
 
 
+func _is_shown_id(id: int) -> bool:
+	if sim == null:
+		return false
+	var p := sim.get_passenger(id)
+	return p != null and _visible(p)
+
+
+func _sync_follow_anchor() -> void:
+	if selected_id != 0 and _nodes.has(selected_id):
+		var pos: Vector3
+		if _prev.has(selected_id) and _cur.has(selected_id):
+			var alpha := clock.alpha if clock != null else 1.0
+			pos = (_prev[selected_id] as Vector3).lerp(_cur[selected_id] as Vector3, alpha)
+		else:
+			pos = (_nodes[selected_id] as Node3D).position
+		follow_anchor.position = pos
+		_ring.position = pos + Vector3(0.0, 0.05, 0.0)
+		_ring.visible = true
+		return
+	if selected_id != 0 and sim != null:
+		var p := sim.get_passenger(selected_id)
+		if p != null and _visible(p):
+			var pos := draw_position(p)
+			follow_anchor.position = pos
+			_ring.position = pos + Vector3(0.0, 0.05, 0.0)
+			_ring.visible = false
+			return
+	_ring.visible = false
+
+
 ## A node of the passenger's body (PassengerLooks.body_of), from the pool when
 ## one is free, painted with the passenger's clothing tint.
 func _take(p: Passenger) -> Node3D:
@@ -1005,6 +1059,7 @@ func _release(id: int) -> void:
 	_nodes.erase(id)
 	_offsets.erase(id)
 	_seats.erase(id)
+	_lanes.erase(id)
 	_sit_off.erase(id)
 	ActivityPoses.dress(node, 0.0, 0.0)
 	DiningPose.apply(node, DiningPose.Kind.NONE, 0.0, 0)
@@ -1309,6 +1364,14 @@ func _chase_seat(p: Passenger) -> void:
 		_seats.erase(p.id)
 	else:
 		_seats[p.id] = now
+
+
+func _chase_lane(p: Passenger) -> void:
+	var now := CorridorLane.step_offset(sim, p, _lanes.get(p.id, Vector3.ZERO))
+	if now == Vector3.ZERO:
+		_lanes.erase(p.id)
+	else:
+		_lanes[p.id] = now
 
 
 func _at_security(p: Passenger) -> bool:

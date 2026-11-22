@@ -48,19 +48,18 @@ func test_a_bad_entrance_line_is_refused_before_anything_installs() -> void:
 	var bad_now := old.duplicate(true)
 	bad_now["passengers"]["entrance_line"]["held"] = []
 	bad_now["passengers"]["entrance_line"]["held_now"] = [987654]
+	var clock := _main.get_node("SimClock") as SimClock
+	var tick := clock.tick
+	var before := SaveTestKit.checksum(_main)
 	for bad: Dictionary in [stranger, bad_held, bad_now]:
-		var clock := _main.get_node("SimClock") as SimClock
-		var tick := clock.tick
-		var before := SaveTestKit.checksum(_main)
 		assert_bool(_save.load_world(bad)).is_false()
 		print("refused: %s" % _save.message_text())
 		assert_str(_save.message_text()).starts_with("Load failed")
 		assert_str(_save.message_text()).contains("entrance line")
 		assert_int(clock.tick).is_equal(tick)
 		assert_str(SaveTestKit.checksum(_main)).is_equal(before)
-	var sum := SaveTestKit.checksum(_main)
 	assert_bool(_save.load_world(old)).is_true()
-	assert_str(SaveTestKit.checksum(_main)).is_not_equal(sum)
+	assert_str(SaveTestKit.checksum(_main)).is_not_equal(before)
 
 
 ## The line's held bookings and held misses checked against the staged
@@ -71,13 +70,16 @@ func test_a_bad_entrance_line_is_refused_before_anything_installs() -> void:
 ## held, loads. The save is taken once a car or taxi has passengers aboard.
 func test_held_bookings_and_misses_must_match_the_staged_landside() -> void:
 	var aboard := 0
-	for i in 150:
-		for vehicle: Dictionary in _save.snapshot()["landside"]["vehicles"]:
+	for i in 300:
+		var vehicles: Array = (
+			_save.landside.to_snapshot(_save.passengers.arrivals, _save.passengers.tick)["vehicles"]
+		)
+		for vehicle: Dictionary in vehicles:
 			if not (vehicle["bookings"] as Array).is_empty():
 				aboard = int(vehicle["bookings"][0])
 		if aboard != 0:
 			break
-		for step in 20:
+		for step in 10:
 			SaveTestKit.step(_main)
 	var old := _older()
 	var awaiting := 0
@@ -100,10 +102,10 @@ func test_held_bookings_and_misses_must_match_the_staged_landside() -> void:
 	no_flight["passengers"]["entrance_line"]["held_missed"] = {"NO-SUCH-FLIGHT": 1}
 	var too_many := old.duplicate(true)
 	too_many["passengers"]["entrance_line"]["held_missed"] = {flight: road + 1}
+	var clock := _main.get_node("SimClock") as SimClock
+	var tick := clock.tick
+	var before := SaveTestKit.checksum(_main)
 	for bad: Dictionary in [stray, not_aboard, no_flight, too_many]:
-		var clock := _main.get_node("SimClock") as SimClock
-		var tick := clock.tick
-		var before := SaveTestKit.checksum(_main)
 		assert_bool(_save.load_world(bad)).is_false()
 		print("refused: %s" % _save.message_text())
 		assert_str(_save.message_text()).contains("entrance line held")
@@ -111,6 +113,5 @@ func test_held_bookings_and_misses_must_match_the_staged_landside() -> void:
 		assert_str(SaveTestKit.checksum(_main)).is_equal(before)
 	var good := old.duplicate(true)
 	good["passengers"]["entrance_line"]["held"] = [aboard]
-	var sum := SaveTestKit.checksum(_main)
 	assert_bool(_save.load_world(good)).is_true()
-	assert_str(SaveTestKit.checksum(_main)).is_not_equal(sum)
+	assert_str(SaveTestKit.checksum(_main)).is_not_equal(before)

@@ -112,10 +112,11 @@ func test_a_save_whose_land_misses_a_built_cell_is_refused() -> void:
 
 
 func test_a_save_cut_into_another_number_of_plots_is_refused() -> void:
-	var data := _taken()
+	var clean := _taken()
+	var data := clean.duplicate(true)
 	data["land"]["plot_counts"] = [5, 6]
 	var before := SaveTestKit.checksum(_main)
 	assert_bool(_save.load_world(data)).is_false()
 	assert_str(SaveTestKit.checksum(_main)).is_equal(before)
 	# The control: the same save as taken loads.
-	assert_bool(_save.load_world(_taken())).is_true()
+	assert_bool(_save.load_world(clean)).is_true()

@@ -2,27 +2,39 @@ class_name TycoonCamera
 extends Node3D
 ## Free tycoon camera. The rig sits on the ground at the focus point and yaws;
 ## the child Camera3D orbits it at a clamped distance. Zooming changes only the
-## distance; the tilt is the player's angle setting, three steps (low, medium,
-## top-down) kept in the HUD settings file, with V cycling them (decision
-## camera-angle-is-a-player-setting-fixed-while-zooming). WASD or a
-## middle-mouse drag pans, Q/E or a right-mouse drag rotates, the wheel zooms,
-## Home glides back to the start view. `glide_to` and `follow` move the focus
-## from code; any manual pan cancels both. The focus appears at the middle of
-## `room`, the screen share the open HUD panels leave free (PanelRoom sets it),
-## not of the whole screen.
+## distance; the pitch stays fixed during zoom (ruling
+## camera-free-vertical-tilt-on-right-drag-and-angle-presets-in-settings).
+## Vertical right-mouse drag tilts pitch freely in [35, 75] degrees (dragging
+## down tilts steeper toward top-down, dragging up tilts toward the horizon),
+## while horizontal right-mouse drag rotates yaw. V (InputMap action
+## `camera_angle`) cycles the three presets (LOW 38, MEDIUM 54, TOP_DOWN 70),
+## and both preset and continuous pitch persist in user://hud_settings.cfg.
+## WASD or middle-mouse drag pans, Q/E rotates, the wheel zooms, Home glides
+## back to the start view. `glide_to` and `follow` move the focus from code; any
+## manual pan cancels both. The focus appears at the middle of `room`, the screen
+## share the open HUD panels leave free (PanelRoom sets it), not of the whole
+## screen.
+
+signal pitch_changed(degrees: float)
 
 ## The angle steps, from lowest to most top-down.
 enum AngleStep { LOW, MEDIUM, TOP_DOWN }
 
 ## The whole viewport, as fractions of it (x, y, width, height from the top left).
 const WHOLE_VIEW := Rect2(0.0, 0.0, 1.0, 1.0)
+## Minimum and maximum free-tilt pitch, in degrees above the ground.
+const MIN_PITCH_DEGREES := 35.0
+const MAX_PITCH_DEGREES := 75.0
+const CUSTOM_PITCH_EPSILON := 0.05
 ## The camera pitch of each step, in degrees above the ground. Top-down stops
 ## short of straight down so walls and passengers keep some side on. Low is the
-## old close-in tilt, medium close to the old home-view tilt (57).
+## close-in tilt, medium close to the old home-view tilt (57).
 const STEP_PITCH_DEGREES: Array[float] = [38.0, 54.0, 70.0]
-## The settings-file key of the angle step, beside the other HUD settings.
+## The settings-file keys of the angle step and free pitch, beside the other HUD settings.
 const ANGLE_KEY := "camera_angle"
-## The key that cycles the angle step.
+const PITCH_KEY := "camera_pitch"
+## InputMap action and key that cycle the angle presets.
+const ANGLE_ACTION := &"camera_angle"
 const ANGLE_KEYCODE := KEY_V
 ## The steepest the view ray through the free area's middle may point away from
 ## the ground (y of its direction), so a far-off aim never misses the ground.
@@ -36,6 +48,7 @@ const MIN_RAY_DOWN := 0.05
 @export var drag_pan_speed := 0.0016
 @export var key_rotate_speed := 1.6
 @export var drag_rotate_speed := 0.005
+@export var drag_tilt_speed := 0.25
 @export var zoom_factor := 1.12
 ## Exponential catch-up rates per second for zoom, glide and follow.
 @export var zoom_rate := 10.0
@@ -57,10 +70,15 @@ const MIN_RAY_DOWN := 0.05
 @export var frame_height := 2.5
 
 var yaw := 0.0
-## The chosen angle step (see AngleStep); read from the settings file at _ready,
-## changed with set_angle_step.
-var angle_step := AngleStep.TOP_DOWN
-## The HUD settings file the angle step is kept in; tests point it elsewhere.
+## The chosen or nearest angle step (see AngleStep); assigning it directly
+## jumps the pitch to that preset without writing settings.
+var angle_step: AngleStep:
+	get:
+		return _angle_step
+	set(value):
+		_angle_step = _clamped_step(value)
+		_pitch_degrees = STEP_PITCH_DEGREES[_angle_step]
+## The HUD settings file the angle step and pitch are kept in; tests point it elsewhere.
 var settings_path := HudFlagSetting.PATH
 ## The share of the screen the open HUD panels leave free, as fractions of the
 ## viewport. The focus point sits at its middle, not the screen's, and easing
@@ -78,6 +96,9 @@ var distance: float:
 		_distance = clampf(value, min_distance, max_distance)
 		target_distance = _distance
 
+var _angle_step := AngleStep.TOP_DOWN
+var _pitch_degrees := STEP_PITCH_DEGREES[AngleStep.TOP_DOWN]
+var _tilt_dirty := false
 var _distance := 80.0
 var _follow_target: Node3D
 var _gliding := false
@@ -99,13 +120,29 @@ var _at_home := false
 
 
 func _ready() -> void:
-	angle_step = _clamped_step(
-		HudFlagSetting.load_int(settings_path, ANGLE_KEY, AngleStep.TOP_DOWN, "TycoonCamera")
-	)
+	_load_saved_angle()
 	position = home_position
 	yaw = home_yaw
 	distance = home_distance
 	_apply()
+
+
+func _exit_tree() -> void:
+	_flush_tilt()
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
+		_flush_tilt()
+
+
+func _input(event: InputEvent) -> void:
+	if (
+		event is InputEventMouseButton
+		and not event.pressed
+		and event.button_index == MOUSE_BUTTON_RIGHT
+	):
+		_flush_tilt()
 
 
 func _process(delta: float) -> void:
@@ -124,46 +161,76 @@ func _process(delta: float) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("camera_home"):
 		go_home()
-	elif (
-		event is InputEventKey
-		and event.pressed
-		and not event.echo
-		and event.physical_keycode == ANGLE_KEYCODE
-		and not event.ctrl_pressed
-		and not event.meta_pressed
-		and not event.alt_pressed
-	):
+	elif event.is_action_pressed(ANGLE_ACTION, false, true):
 		cycle_angle_step()
-	elif event is InputEventMouseButton and event.pressed:
-		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
-			zoom(1.0 / zoom_factor)
-		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			zoom(zoom_factor)
+	elif event is InputEventMouseButton:
+		if event.pressed:
+			if event.button_index == MOUSE_BUTTON_WHEEL_UP:
+				zoom(1.0 / zoom_factor)
+			elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+				zoom(zoom_factor)
+		elif event.button_index == MOUSE_BUTTON_RIGHT:
+			_flush_tilt()
 	elif event is InputEventMouseMotion:
 		if event.button_mask & MOUSE_BUTTON_MASK_MIDDLE:
 			pan(-event.relative * drag_pan_speed)
 		elif event.button_mask & MOUSE_BUTTON_MASK_RIGHT:
-			rotate_yaw(-event.relative.x * drag_rotate_speed)
+			if event.relative.x != 0.0:
+				rotate_yaw(-event.relative.x * drag_rotate_speed)
+			if event.relative.y != 0.0:
+				tilt_pitch(event.relative.y * drag_tilt_speed)
 
 
-## The camera pitch in degrees: the chosen step's, the same at every zoom.
+## The camera pitch in degrees, clamped to [35, 75] and unchanged by zoom.
 func pitch_degrees() -> float:
-	return STEP_PITCH_DEGREES[angle_step]
+	return _pitch_degrees
+
+
+## True when the current pitch does not match any of the three angle presets.
+func is_custom_pitch() -> bool:
+	for preset in STEP_PITCH_DEGREES:
+		if absf(_pitch_degrees - preset) <= CUSTOM_PITCH_EPSILON:
+			return false
+	return true
+
+
+## Sets the camera pitch directly (clamped to [35, 75]) and optionally persists
+## it in the settings file.
+func set_pitch_degrees(degrees: float, persist := true) -> void:
+	_pitch_degrees = clampf(degrees, MIN_PITCH_DEGREES, MAX_PITCH_DEGREES)
+	_angle_step = _nearest_step(_pitch_degrees)
+	if persist:
+		_tilt_dirty = false
+		_save_angle_settings()
+	else:
+		_tilt_dirty = true
+	_apply()
+	pitch_changed.emit(_pitch_degrees)
+
+
+## Tilts pitch by `delta_degrees` (+ tilts steeper toward 75 deg top-down,
+## - lowers toward 35 deg horizon view), deferring disk save until drag release.
+func tilt_pitch(delta_degrees: float) -> void:
+	_at_home = false
+	set_pitch_degrees(_pitch_degrees + delta_degrees, false)
 
 
 ## Chooses the angle step (clamped to the three) and remembers it in the
 ## settings file. The view tilts now; the start view, when still the current
 ## view, is fitted again at the new angle.
 func set_angle_step(step: int) -> void:
-	angle_step = _clamped_step(step)
-	HudFlagSetting.save_int(settings_path, ANGLE_KEY, angle_step, "TycoonCamera")
+	angle_step = step
+	_tilt_dirty = false
+	_save_angle_settings()
 	set_room(_room_target, true, _fit_target)
 	_apply()
+	pitch_changed.emit(_pitch_degrees)
 
 
 ## Moves to the next angle step, from top-down round to low.
 func cycle_angle_step() -> void:
-	set_angle_step((angle_step + 1) % STEP_PITCH_DEGREES.size())
+	var base := _nearest_step(_pitch_degrees) if is_custom_pitch() else _angle_step
+	set_angle_step((base + 1) % STEP_PITCH_DEGREES.size())
 
 
 ## Moves the focus across the ground. `amount` is in the rig's own right and
@@ -311,6 +378,67 @@ func _clamped_step(step: int) -> AngleStep:
 	if step < 0 or step >= STEP_PITCH_DEGREES.size():
 		return AngleStep.TOP_DOWN
 	return step as AngleStep
+
+
+func _nearest_step(degrees: float) -> AngleStep:
+	var best := AngleStep.TOP_DOWN
+	var best_diff := INF
+	for i in STEP_PITCH_DEGREES.size():
+		var diff := absf(degrees - STEP_PITCH_DEGREES[i])
+		if diff < best_diff:
+			best_diff = diff
+			best = i as AngleStep
+	return best
+
+
+func _load_saved_angle() -> void:
+	angle_step = _clamped_step(
+		HudFlagSetting.load_int(settings_path, ANGLE_KEY, AngleStep.TOP_DOWN, "TycoonCamera")
+	)
+	var saved_pitch := _load_saved_pitch()
+	if not is_nan(saved_pitch):
+		_pitch_degrees = clampf(saved_pitch, MIN_PITCH_DEGREES, MAX_PITCH_DEGREES)
+		_angle_step = _nearest_step(_pitch_degrees)
+
+
+func _load_saved_pitch() -> float:
+	if HudFlagSetting.is_shielded(settings_path):
+		return NAN
+	var cfg := ConfigFile.new()
+	var err := cfg.load(settings_path)
+	if err == ERR_FILE_NOT_FOUND:
+		return NAN
+	if err != OK:
+		push_error("TycoonCamera: cannot read %s (error %d)" % [settings_path, err])
+		return NAN
+	if not cfg.has_section_key(HudFlagSetting.SECTION, PITCH_KEY):
+		return NAN
+	var value: Variant = cfg.get_value(HudFlagSetting.SECTION, PITCH_KEY)
+	if value is float or value is int:
+		return float(value)
+	return NAN
+
+
+func _save_angle_settings() -> void:
+	if HudFlagSetting.is_shielded(settings_path):
+		return
+	var cfg := ConfigFile.new()
+	var err := cfg.load(settings_path)
+	if err != OK and err != ERR_FILE_NOT_FOUND:
+		push_error("TycoonCamera: cannot read %s (error %d)" % [settings_path, err])
+		return
+	cfg.set_value(HudFlagSetting.SECTION, ANGLE_KEY, int(_angle_step))
+	cfg.set_value(HudFlagSetting.SECTION, PITCH_KEY, _pitch_degrees)
+	err = cfg.save(settings_path)
+	if err != OK:
+		push_error("TycoonCamera: cannot write %s (error %d)" % [settings_path, err])
+
+
+func _flush_tilt() -> void:
+	if not _tilt_dirty:
+		return
+	_tilt_dirty = false
+	_save_angle_settings()
 
 
 func _clamp_to_bounds(point: Vector3) -> Vector3:

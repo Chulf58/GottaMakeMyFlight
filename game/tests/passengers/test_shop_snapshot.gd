@@ -9,25 +9,34 @@ const REPLAY_TICKS := 400
 
 var _a: PassengerTestWorld
 var _b: PassengerTestWorld
-## Tick -> _signature(_a) after that tick.
+## Tick -> _fast_sig(_a) after that tick.
 var _trace: Dictionary = {}
+## Tick -> _signature(_a) at save boundaries.
+var _sig_trace: Dictionary = {}
+var _saves: Dictionary = {}
+var _doors := 0
 
 
 func before() -> void:
+	PassengerTestWorld.tracker = null
+	_saves = _play_and_save()
 	PassengerTestWorld.tracker = self
 
 
 func after() -> void:
+	if _a != null:
+		_a.free_all()
+	_a = null
+	_trace.clear()
+	_sig_trace.clear()
+	_saves.clear()
 	PassengerTestWorld.tracker = null
 
 
 func after_test() -> void:
-	for world in [_a, _b]:
-		if world != null:
-			world.free_all()
-	_a = null
+	if _b != null:
+		_b.free_all()
 	_b = null
-	_trace.clear()
 
 
 ## Passengers 1 to 3 are bored from spawn; nobody needs anything else. Every
@@ -73,6 +82,18 @@ func _load(text: String) -> PassengerTestWorld:
 	return world
 
 
+static func _state(world: PassengerTestWorld) -> Dictionary:
+	var shops := world.sim.shops
+	var holders: Array[int] = []
+	for id in shops.visit_ids():
+		holders.append(shops.slot_holder(shops.visit_of(id).slot_key()))
+	return {
+		"passengers": world.sim.to_snapshot(),
+		"wallet": world.sim.wallet.to_snapshot(),
+		"holders": holders,
+	}
+
+
 ## The passenger signature plus boredom, the shop cooldown, the wallet and
 ## every shop visit.
 func _signature(world: PassengerTestWorld) -> String:
@@ -107,33 +128,37 @@ func _play_and_save() -> Dictionary:
 	var saves := {}
 	var sim := _a.sim
 	assert_bool(sim.schedule_flight(PassengerTestWorld.FLIGHT, 12)).is_true()
-	var doors := _a.flights.doors_close_tick(PassengerTestWorld.FLIGHT)
-	while _a.clock.tick <= doors:
+	_doors = _a.flights.doors_close_tick(PassengerTestWorld.FLIGHT)
+	var replay_until := -1
+	while _a.clock.tick <= _doors:
 		_a.step()
 		for id in sim.shops.visit_ids():
 			var p := _a.passenger(id)
 			var stage: String = Passenger.Stage.keys()[p.stage]
 			if not saves.has(stage) and p.stage_tick == _a.clock.tick:
 				saves[stage] = _save(_a)
-		_trace[_a.clock.tick] = _signature(_a)
+				_sig_trace[_a.clock.tick] = _signature(_a)
+				if saves.has("SHOP_WALK") and saves.has("SHOP_BROWSE") and replay_until < 0:
+					replay_until = _a.clock.tick + REPLAY_TICKS
+		_trace[_a.clock.tick] = _state(_a)
+		if replay_until >= 0 and _a.clock.tick > replay_until:
+			break
 	return saves
 
 
 func test_a_save_in_every_phase_of_a_visit_loads_and_plays_on_alike() -> void:
-	var saves := _play_and_save()
-	print("saved in %s" % [saves.keys()])
+	print("saved in %s" % [_saves.keys()])
 	for stage in ["SHOP_WALK", "SHOP_BROWSE"]:
-		assert_bool(saves.has(stage)).override_failure_message("no save in %s" % stage).is_true()
-	var doors := _a.flights.doors_close_tick(PassengerTestWorld.FLIGHT)
-	for stage: String in saves:
-		_b = _load(saves[stage])
+		assert_bool(_saves.has(stage)).override_failure_message("no save in %s" % stage).is_true()
+	for stage: String in _saves:
+		_b = _load(_saves[stage])
 		_needs_in(_b)
 		var start := _b.clock.tick
-		assert_str(_signature(_b)).is_equal(_trace[start])
+		assert_str(_signature(_b)).is_equal(_sig_trace[start])
 		var first_bad := -1
-		while _b.clock.tick <= mini(doors, start + REPLAY_TICKS) and first_bad < 0:
+		while _b.clock.tick <= mini(_doors, start + REPLAY_TICKS) and first_bad < 0:
 			_b.step()
-			if _signature(_b) != _trace[_b.clock.tick]:
+			if _state(_b) != _trace[_b.clock.tick]:
 				first_bad = _b.clock.tick
 		print("%s saved at %d: first differing tick %d" % [stage, start, first_bad])
 		assert_int(first_bad).override_failure_message("%s differs" % stage).is_equal(-1)
@@ -145,30 +170,29 @@ func test_a_save_in_every_phase_of_a_visit_loads_and_plays_on_alike() -> void:
 ## save in that STANDING_UP phase holds the visit with no walk yet. A and B
 ## then play side by side to the end of the replay.
 func test_a_save_while_standing_up_from_the_gate_seat_plays_on_alike() -> void:
-	_a = _kiosk_world(4242)
-	var p := ShopTestLayout.airside_guest(_a, 0)
+	var a := _kiosk_world(4242)
+	var p := ShopTestLayout.airside_guest(a, 0)
 	p.shop_cooldown = 1000000
-	var until := _a.clock.tick + 3000
-	while p.stage != Passenger.Stage.SEATED and _a.clock.tick < until:
-		_a.step()
+	var until := a.clock.tick + 3000
+	while p.stage != Passenger.Stage.SEATED and a.clock.tick < until:
+		a.step()
 	assert_int(p.stage).is_equal(Passenger.Stage.SEATED)
 	p.boredom = BoredomSim.MAX
 	p.shop_cooldown = 0
-	var visiting := func() -> bool: return _a.sim.shops.visit_of(p.id) != null
-	while (
-		not (p.stage == Passenger.Stage.STANDING_UP and visiting.call()) and _a.clock.tick < until
-	):
-		_a.step()
+	var visiting := func() -> bool: return a.sim.shops.visit_of(p.id) != null
+	while not (p.stage == Passenger.Stage.STANDING_UP and visiting.call()) and a.clock.tick < until:
+		a.step()
 	assert_int(p.stage).is_equal(Passenger.Stage.STANDING_UP)
-	var text := _save(_a)
-	var start := _a.clock.tick
-	var balance := _a.sim.wallet.balance
-	_trace[start] = _signature(_a)
+	var text := _save(a)
+	var start := a.clock.tick
+	var balance := a.sim.wallet.balance
+	var start_sig := _signature(a)
+	var trace := {start: _state(a)}
 	for i in REPLAY_TICKS:
-		_a.step()
-		_trace[_a.clock.tick] = _signature(_a)
+		a.step()
+		trace[a.clock.tick] = _state(a)
 	_b = _load(text)
-	assert_str(_signature(_b)).is_equal(_trace[start])
+	assert_str(_signature(_b)).is_equal(start_sig)
 	assert_int(_b.passenger(p.id).stage).is_equal(Passenger.Stage.STANDING_UP)
 	assert_object(_b.sim.shops.visit_of(p.id)).is_not_null()
 	var first_bad := -1
@@ -176,17 +200,18 @@ func test_a_save_while_standing_up_from_the_gate_seat_plays_on_alike() -> void:
 	while _b.clock.tick < start + REPLAY_TICKS and first_bad < 0:
 		_b.step()
 		browsed = browsed or _b.passenger(p.id).stage == Passenger.Stage.SHOP_BROWSE
-		if _signature(_b) != _trace[_b.clock.tick]:
+		if _state(_b) != trace[_b.clock.tick]:
 			first_bad = _b.clock.tick
+	assert_str(_signature(_b)).is_equal(_signature(a))
 	print("saved standing up at %d: first differing tick %d" % [start, first_bad])
 	assert_int(first_bad).is_equal(-1)
 	assert_bool(browsed).is_true()
 	assert_int(_b.sim.wallet.balance).is_greater(balance)
+	a.free_all()
 
 
 func test_a_shop_state_no_play_could_reach_is_refused_and_changes_nothing() -> void:
-	var saves := _play_and_save()
-	var good: Dictionary = JSON.parse_string(saves["SHOP_BROWSE"])["passengers"]
+	var good: Dictionary = JSON.parse_string(_saves["SHOP_BROWSE"])["passengers"]
 	var visit: Dictionary = good["shop"]["visits"][0]
 	var guest := int(visit["passenger"])
 	var cases: Array = []
@@ -247,7 +272,7 @@ func test_a_shop_state_no_play_could_reach_is_refused_and_changes_nothing() -> v
 	d = copy.call()
 	record_of.call(d).erase("shop_cooldown")
 	cases.append(["malformed or repeated", d])
-	_b = _load(saves["SHOP_WALK"])
+	_b = _load(_saves["SHOP_WALK"])
 	var before := _signature(_b)
 	for case: Array in cases:
 		var problem: String = PassengerSnapshot.load(case[1], _b.grid).get("error", "")
@@ -259,14 +284,15 @@ func test_a_shop_state_no_play_could_reach_is_refused_and_changes_nothing() -> v
 
 
 func test_a_save_missing_boredom_or_out_of_range_is_refused() -> void:
-	_a = _kiosk_world(4242)
-	_a.sim.schedule_flight(PassengerTestWorld.FLIGHT, 24)
-	_a.sim.spawn_now(PassengerTestWorld.FLIGHT)
-	_a.run_to(40)
-	var good: Dictionary = JSON.parse_string(JSON.stringify(_a.sim.to_snapshot()))
+	var a := _kiosk_world(4242)
+	a.sim.schedule_flight(PassengerTestWorld.FLIGHT, 24)
+	a.sim.spawn_now(PassengerTestWorld.FLIGHT)
+	a.run_to(40)
+	var good: Dictionary = JSON.parse_string(JSON.stringify(a.sim.to_snapshot()))
 	_b = _kiosk_world(1)
-	_b.clock.from_snapshot(JSON.parse_string(JSON.stringify(_a.clock.to_snapshot())))
-	_b.flights.from_snapshot(JSON.parse_string(JSON.stringify(_a.flights.to_snapshot())))
+	_b.clock.from_snapshot(JSON.parse_string(JSON.stringify(a.clock.to_snapshot())))
+	_b.flights.from_snapshot(JSON.parse_string(JSON.stringify(a.flights.to_snapshot())))
+	a.free_all()
 	var before := _signature(_b)
 	var missing := good.duplicate(true)
 	(missing["passengers"][0] as Dictionary).erase("boredom")

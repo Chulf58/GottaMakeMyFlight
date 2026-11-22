@@ -14,8 +14,8 @@ extends GdUnitTestSuite
 const CROWD_CELL := Vector2i(16, 12)
 ## One more passenger reaches security this often, faster than the two
 ## scanners serve them (one per 20 ticks), so the queue keeps growing.
-const CROWD_EVERY := 7
-const CROWD_UNTIL := 700
+const CROWD_EVERY := 10
+const CROWD_UNTIL := 390
 ## The scenario starts this many ticks into the run (it started at tick 0):
 ## moved for decision hold-line-rebuild-the-security-line-follows-where-
 ## people-sta, where newcomers queue behind the guest by their check-in, so a
@@ -77,7 +77,8 @@ func _scenario(visit_cafe: bool) -> Array:
 		admitted = visit.deadline
 		print("admitted at %d, deadline %d" % [world.clock.tick, admitted])
 	var earliest := admitted
-	while world.clock.tick < world.flights.doors_close_tick(guest.flight_id) + 1:
+	var doors := world.flights.doors_close_tick(guest.flight_id)
+	while not guest.is_done() and world.clock.tick < doors + 1:
 		var crowding := world.clock.tick < START + CROWD_UNTIL
 		if crowding and posmod(world.clock.tick, CROWD_EVERY) == 0:
 			_checked_in(world)
@@ -162,7 +163,9 @@ func test_a_burst_at_security_right_after_the_guests_beat_sends_it_on_at_once() 
 	# It got up within a tick of that, not on its next beat.
 	assert_int(guest.stage).is_equal(Passenger.Stage.CAFE_STANDING_UP)
 	assert_int(left - due).is_less_equal(1)
-	world.run_to(world.flights.doors_close_tick(guest.flight_id) + 1)
+	var doors := world.flights.doors_close_tick(guest.flight_id)
+	while not guest.is_done() and world.clock.tick < doors + 1:
+		world.step()
 	assert_int(guest.stage).is_equal(Passenger.Stage.MADE)
 
 

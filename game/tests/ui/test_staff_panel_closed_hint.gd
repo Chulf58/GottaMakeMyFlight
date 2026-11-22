@@ -9,8 +9,8 @@ extends GdUnitTestSuite
 const CHECKIN := StaffMember.Role.CHECKIN
 const SECURITY := StaffMember.Role.SECURITY
 ## The checklist card's staff lines (Checklist.NEXT).
-const CI_HIRE := "Check-in desk and an agent: hire an agent on Staff"
-const SEC_HIRE := "Security scanner and an officer: hire an officer on Staff"
+const CI_HIRE := "Hire Check-in agent (Staff)"
+const SEC_HIRE := "Hire Security officer (Staff)"
 
 var _w: PassengerTestWorld
 var _gate: AirportGate
@@ -59,9 +59,9 @@ func test_with_no_working_path_the_hint_names_the_path() -> void:
 	assert_str(_panel.hint_text()).is_equal(
 		(
 			"Entrance with a way through check-in and security to an exit\n"
-			+ "Check-in desk and an agent: place a desk\n"
-			+ "Security scanner and an officer: place a scanner\n"
-			+ "Seats near the gate"
+			+ "Place Check-in (Operations)\n"
+			+ "Place Security (Operations)\n"
+			+ "Place Seats near the gate (Operations)"
 		)
 	)
 	assert_str(_panel.hint_label().text).is_equal(Checklist.TITLE_CLOSED)
@@ -72,17 +72,11 @@ func test_the_hint_follows_the_blocker_until_the_airport_opens() -> void:
 	_make()
 	assert_str(_panel.hint_text()).is_equal(CI_HIRE + "\n" + SEC_HIRE)
 	_panel.hire_button(CHECKIN).pressed.emit()
-	assert_str(_panel.hint_text()).is_equal(
-		"Check-in desk and an agent: the agent is on the way\n" + SEC_HIRE
-	)
+	assert_str(_panel.hint_text()).is_equal("Check-in agent on the way\n" + SEC_HIRE)
 	_until_on_duty(CHECKIN)
-	assert_str(_panel.hint_text()).is_equal(
-		"Security scanner and an officer: hire an officer on Staff"
-	)
+	assert_str(_panel.hint_text()).is_equal("Hire Security officer (Staff)")
 	_panel.hire_button(SECURITY).pressed.emit()
-	assert_str(_panel.hint_text()).is_equal(
-		"Security scanner and an officer: the officer is on the way"
-	)
+	assert_str(_panel.hint_text()).is_equal("Security officer on the way")
 	_until_on_duty(SECURITY)
 	_w.step()
 	assert_bool(_gate.is_open()).is_true()

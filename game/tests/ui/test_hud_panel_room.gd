@@ -86,6 +86,10 @@ func test_with_the_staff_card_open_the_camera_stays_steady() -> void:
 
 
 func test_with_the_offers_sheet_open_the_camera_stays_steady() -> void:
+	var flights := _main.get_node("FlightSim") as FlightSim
+	if flights.opened_tick < 0:
+		flights.open_airport()
+		await await_idle_frame()
 	var before_pos := _camera.position
 	var before_eye := _eye.global_position
 	var before_dist := _camera.distance

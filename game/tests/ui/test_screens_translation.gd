@@ -143,3 +143,21 @@ func test_the_money_card_rows_and_heading_are_routed() -> void:
 		assert_str(row[0]).starts_with("[")
 	assert_str(MoneySlot.heading(ledger)).starts_with("[")
 	assert_str(MoneySlot.heading(ledger)).contains("Today")
+
+
+func test_the_offer_panel_heading_is_routed() -> void:
+	var port := SubViewport.new()
+	add_child(port)
+	var desk := OfferDesk.new()
+	var sim := FlightSim.new()
+	sim.open_airport()
+	port.add_child(desk)
+	port.add_child(sim)
+	var panel := OfferPanel.new()
+	panel.desk = desk
+	panel.flights = sim
+	port.add_child(panel)
+	var title := panel.find_child("OfferTitle", true, false) as Label
+	assert_str(title.text).starts_with("[")
+	assert_str(title.text).contains("Airline Contracts")
+	port.free()

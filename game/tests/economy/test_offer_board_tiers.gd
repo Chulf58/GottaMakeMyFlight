@@ -86,7 +86,7 @@ func test_every_offer_follows_the_plane_sizes_and_fees_of_its_airlines_tier() ->
 			assert_int(offer["booked_passengers"]).is_between(
 				OfferTraits.fewest_booked(booked[0], booked[1], traits), booked[1]
 			)
-			var fees: Array = OfferBoard.TIER_FEES[own]
+			var fees: Array = OfferBoard.fee_range_for(own, offer["plane_size"])
 			assert_int(offer["fee_per_passenger"]).is_between(
 				OfferTraits.fee_of(fees[0], traits), OfferTraits.fee_of(fees[1], traits)
 			)
@@ -202,22 +202,50 @@ func test_a_starter_airline_cannot_carry_a_higher_tiers_terms() -> void:
 	bad["booked_passengers"] = OfferBoard.TIER_SIZES[1]["large"][0]
 	assert_bool(OfferBoard.new().from_snapshot(_day_with_first(bad))).is_false()
 	var dear := TestOfferBoard.record("O0N1", 0, 600)
+	dear["plane_size"] = "medium"
+	dear["booked_passengers"] = OfferBoard.STARTER_SIZES["medium"][0]
 	dear["fee_per_passenger"] = OfferBoard.TIER_FEES[1][1]
 	assert_bool(OfferBoard.new().from_snapshot(_day_with_first(dear))).is_false()
+	var over_small := TestOfferBoard.record("O0N1", 0, 600)
+	over_small["fee_per_passenger"] = OfferBoard.SMALL_FEE_MAX + 1
+	assert_bool(OfferBoard.new().from_snapshot(_day_with_first(over_small))).is_false()
 
 
-## Version 5 added the Loyal airline count and each offer's loyal mark; version 6
-## Odd hours and Exit fee, so a version 5 save is refused too.
-func test_the_offer_save_version_is_6_and_versions_4_and_5_are_refused() -> void:
-	assert_int(OfferBoard.SAVE_VERSION).is_greater(5)
+## Version 5 added the Loyal airline count and each offer's loyal mark, version 6
+## Odd hours and Exit fee, and version 7 small-class 4-8 passengers and 30-70
+## base fees, so versions 4 through 6 are refused.
+func test_the_offer_save_version_is_7_and_versions_4_to_6_are_refused() -> void:
+	assert_int(OfferBoard.SAVE_VERSION).is_equal(7)
 	var board := OfferBoard.new()
 	board.ensure_day(0, _rng, OfferBoard.MAX_TIER)
 	var data := board.to_snapshot()
 	assert_int(int(data["save_version"])).is_equal(OfferBoard.SAVE_VERSION)
-	data["save_version"] = 4
-	assert_bool(OfferBoard.new().from_snapshot(data)).is_false()
-	data["save_version"] = 5
-	assert_bool(OfferBoard.new().from_snapshot(data)).is_false()
+	for old_version in [4, 5, 6]:
+		data["save_version"] = old_version
+		assert_bool(OfferBoard.new().from_snapshot(data)).is_false()
 	# The control: the same save at the current version loads.
 	data["save_version"] = OfferBoard.SAVE_VERSION
 	assert_bool(OfferBoard.new().from_snapshot(data)).is_true()
+
+
+func test_small_class_revenue_matches_starter_and_medium_stays_untouched() -> void:
+	var starter := FlightSim.STARTER_TERMS
+	assert_str(starter["plane_size"]).is_equal(PlaneClasses.SMALL)
+	assert_int(starter["booked_passengers"]).is_equal(6)
+	assert_int(starter["fee_per_passenger"]).is_equal(50)
+	assert_int(int(starter["booked_passengers"]) * int(starter["fee_per_passenger"])).is_equal(300)
+	var small_pax: Array = OfferBoard.STARTER_SIZES[PlaneClasses.SMALL]
+	assert_array(small_pax).is_equal([4, 8])
+	var small_fees: Array = OfferBoard.fee_range_for(0, PlaneClasses.SMALL)
+	assert_array(small_fees).is_equal([30, 70])
+	assert_int(int(small_pax[0]) * int(small_fees[0])).is_equal(120)
+	assert_int(int(small_pax[1]) * int(small_fees[1])).is_equal(560)
+	@warning_ignore("integer_division")
+	var mid_rev := (
+		((int(small_pax[0]) + int(small_pax[1])) / 2)
+		* ((int(small_fees[0]) + int(small_fees[1])) / 2)
+	)
+	assert_int(mid_rev).is_equal(300)
+	assert_array(OfferBoard.STARTER_SIZES[PlaneClasses.MEDIUM]).is_equal([24, 48])
+	assert_array(OfferBoard.fee_range_for(0, PlaneClasses.MEDIUM)).is_equal([15, 35])
+	assert_array(OfferBoard.TIER_FEES).is_equal([[15, 35], [25, 45], [40, 60]])

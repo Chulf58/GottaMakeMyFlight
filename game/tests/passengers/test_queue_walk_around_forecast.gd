@@ -32,14 +32,14 @@ func after_test() -> void:
 static func _plain_approach(
 	grid: BuildGrid, line: Array, from: Vector2i, index: int
 ) -> Array[Vector2i]:
-	var path := StationQueue.path_to(grid, line, from, index)
+	var path := grid.find_path(from, line[index])
 	if path.size() < 2:
 		return path
 	var step: Vector2i = line[index] - path[path.size() - 2]
 	var front: Vector2i = line[index - 1] - line[index]
 	if step.x * front.x + step.y * front.y >= 0:
 		return path
-	var round := StationQueue.path_to(grid, line, from, index + 1)
+	var round := grid.find_path(from, line[index + 1])
 	round.append(line[index])
 	return round
 

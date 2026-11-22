@@ -192,3 +192,32 @@ func test_the_hint_clears_the_tray_status_and_cost_lines_with_a_tray_open() -> v
 	assert_bool(hint.intersects(_menu.preview_label().get_global_rect())).is_false()
 	assert_float(hint.end.y).is_less_equal(_menu.preview_label().get_global_rect().position.y)
 	assert_float(hint.position.y).is_greater_equal(0.0)
+
+
+func test_status_card_clears_open_staff_card_and_drops_when_staff_closes() -> void:
+	_mode.set_tool(BuildMode.Tool.NONE)
+	_menu._on_wages_paid(60, 0)
+	_menu.refresh_preview()
+	await await_idle_frame()
+	var bar_rect := _menu.bar().get_global_rect()
+	assert_float(_menu.status_card().get_global_rect().end.y).is_equal(
+		bar_rect.position.y - BuildMenu.GAP
+	)
+	_menu.press_staff()
+	await await_idle_frame()
+	await await_idle_frame()
+	var staff_rect := _panel.card().get_global_rect()
+	var card_rect := _menu.status_card().get_global_rect()
+	assert_bool(_menu.staff_open).is_true()
+	assert_bool(_panel.card().visible).is_true()
+	assert_bool(_menu.status_card().visible).is_true()
+	assert_float(card_rect.end.y).is_equal(staff_rect.position.y - BuildMenu.GAP)
+	assert_bool(card_rect.intersects(staff_rect)).is_false()
+	assert_float(_menu.stack_top()).is_equal(720.0 - card_rect.position.y)
+	_menu.press_staff()
+	await await_idle_frame()
+	await await_idle_frame()
+	assert_bool(_menu.staff_open).is_false()
+	assert_float(_menu.status_card().get_global_rect().end.y).is_equal(
+		bar_rect.position.y - BuildMenu.GAP
+	)

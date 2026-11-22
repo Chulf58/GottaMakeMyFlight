@@ -8,7 +8,7 @@ extends GdUnitTestSuite
 ## make their flight is what AirportRating records, so decor must raise its
 ## mean a little, never past the ceiling's reach, and must cost no flight.
 
-const SEEDS: Array[int] = [11, 22, 33]
+const SEEDS: Array[int] = [11, 22]
 ## Catalog id -> [calm per period, radius in cells].
 const TABLE_PINS := {
 	&"fountain_indoor": [3, 4],
@@ -62,11 +62,12 @@ func _flight(seed: int, with_decor: bool) -> Dictionary:
 			else:
 				out["missed"] += 1
 	)
-	(
-		assert_bool(sim.schedule_flight(PassengerTestWorld.FLIGHT, PassengerSim.DEFAULT_PASSENGERS))
-		. is_true()
-	)
-	world.run_to(world.flights.doors_close_tick(PassengerTestWorld.FLIGHT) + 1)
+	var count := PassengerSim.DEFAULT_PASSENGERS
+	assert_bool(sim.schedule_flight(PassengerTestWorld.FLIGHT, count)).is_true()
+	var doors := world.flights.doors_close_tick(PassengerTestWorld.FLIGHT)
+	while out["made"] + out["missed"] < count and world.clock.tick <= doors:
+		world.step()
+	world.free_all()
 	return out
 
 

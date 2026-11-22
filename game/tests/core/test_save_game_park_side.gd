@@ -18,8 +18,12 @@ func before() -> void:
 	_main = SaveTestKit.boot(self, SEED)
 	_save = SaveTestKit.save_game(_main)
 	SaveTestKit.start_airport(_main)
+	var flights: FlightSim = _main.get_node("FlightSim")
+	var sim: PassengerSim = _main.get_node("PassengerSim")
 	for i in PLAY_TICKS:
 		SaveTestKit.step(_main)
+		if flights.opened_tick > 0 and not sim.passenger_ids().is_empty():
+			break
 
 
 func after() -> void:
@@ -52,16 +56,15 @@ func test_a_bad_park_side_is_refused_before_anything_installs() -> void:
 	bad_hand["passengers"]["park_side"] = [stamp.merged({"hand": 2}, true)]
 	var twice := old.duplicate(true)
 	twice["passengers"]["park_side"] = [stamp, stamp.duplicate()]
+	var clock := _main.get_node("SimClock") as SimClock
+	var tick := clock.tick
+	var before := SaveTestKit.checksum(_main)
 	for bad: Dictionary in [bad_hand, twice]:
-		var clock := _main.get_node("SimClock") as SimClock
-		var tick := clock.tick
-		var before := SaveTestKit.checksum(_main)
 		assert_bool(_save.load_world(bad)).is_false()
 		print("refused: %s" % _save.message_text())
 		assert_str(_save.message_text()).starts_with("Load failed")
 		assert_str(_save.message_text()).contains("park side")
 		assert_int(clock.tick).is_equal(tick)
 		assert_str(SaveTestKit.checksum(_main)).is_equal(before)
-	var sum := SaveTestKit.checksum(_main)
 	assert_bool(_save.load_world(old)).is_true()
-	assert_str(SaveTestKit.checksum(_main)).is_not_equal(sum)
+	assert_str(SaveTestKit.checksum(_main)).is_not_equal(before)

@@ -169,10 +169,11 @@ func test_side_parked_and_pushback_bookings_face_the_stand() -> void:
 ## swing square reaches the spur band.
 func _nearest_to_spur(plane_class: String, side: String) -> Vector2i:
 	var best := Vector2i(-1, -1)
-	for cell in _kit.legal_cells(plane_class, side):
-		if cell.y != 60:
+	var west := side == StandPlacement.WEST
+	for x in GroundPlannerKit.SITE.grid_size.x:
+		var cell := Vector2i(x, 60)
+		if not _kit.is_legal(_kit.stand(cell, side), plane_class):
 			continue
-		var west := side == StandPlacement.WEST
 		if best.x < 0 or (cell.x < best.x if west else cell.x > best.x):
 			best = cell
 	return best
@@ -269,19 +270,19 @@ static func _clashes(held: Array[Dictionary]) -> Array[int]:
 ## pause; it takes one at a hold line, and the two flights' bookings never
 ## clash.
 func test_inbound_and_outbound_on_one_spur_resolve_with_a_pause() -> void:
+	var planner := _kit.planner()
 	for side in [StandPlacement.WEST, StandPlacement.EAST]:
 		var column := 128 if side == StandPlacement.WEST else 127
 		var a := _req("A", PlaneClasses.MEDIUM, Vector2i(column, 20), side, 600)
 		var found := {}
 		for minute in range(600 + 60, 600 + 300):
 			var b := _req("B", PlaneClasses.MEDIUM, Vector2i(column, 110), side, minute)
-			var planner := _kit.planner()
 			var out := planner.plan_all([a, b])
 			if not out["B"]["ok"]:
 				continue
 			for state: int in out["B"]["pauses"]:
 				var pause: Dictionary = out["B"]["pauses"][state]
-				if not pause.is_empty() and found.is_empty():
+				if not pause.is_empty():
 					found = {"minute": minute, "state": state, "pause": pause}
 					var check := _clashes(planner.bookings())
 					print(
@@ -292,6 +293,9 @@ func test_inbound_and_outbound_on_one_spur_resolve_with_a_pause() -> void:
 					)
 					assert_int(check[0]).is_equal(0)
 					assert_int(check[1]).is_greater(0)
+					break
+			if not found.is_empty():
+				break
 		assert_dict(found).override_failure_message("%s: B never paused" % side).is_not_empty()
 
 

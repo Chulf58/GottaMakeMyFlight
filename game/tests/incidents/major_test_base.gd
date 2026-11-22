@@ -2,14 +2,14 @@ class_name MajorTestBase
 extends GdUnitTestSuite
 ## The world the major incident suites share (TestIncidentMajors, TestIncidentMajorsVip;
 ## board 03e71ed7): a bare reference world with one small contract "AM" (booked
-## 12 of at most 16, so 4 extra fit) departing 08:00 from day 0, an open
+## 6 of at most 8, so 2 extra fit) departing 08:00 from day 0, an open
 ## airport and the clock never advanced, so the days after day 0 are not
 ## issued yet; a rating and a director bound to it. Each case drives the
 ## director's on_tick by hand.
 
 const DEPARTS := 480
-const BOOKED := 12
-const HEADROOM := 4
+const BOOKED := 6
+const HEADROOM := 2
 const CONTRACT := "AM"
 ## The issued one-off flights: the VIP flies on the first, the second is another.
 const VIP_FLIGHT := PassengerTestWorld.FLIGHT

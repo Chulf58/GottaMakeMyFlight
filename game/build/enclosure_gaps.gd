@@ -18,10 +18,44 @@ extends RefCounted
 ## Pure: it reads only the public BuildGrid API (floor_at, has_wall,
 ## is_indoor) and DoorPlacement.ways_out, and changes nothing.
 
+static var computations := 0
+static var _cached_token: Array = []
+static var _cached_edges: Array[Vector3i] = []
+static var _cached_runs: Array[Run] = []
+
+
+## Drops the kept gap cache, so tests or tools can force a fresh scan.
+static func forget() -> void:
+	_cached_token = []
+	_cached_edges = []
+	_cached_runs = []
+
 
 ## Every gap edge as Vector3i(x, y, side) (BuildGrid.Side), in cell index
 ## order (y, then x), then side order.
 static func gap_edges(grid: BuildGrid) -> Array[Vector3i]:
+	_ensure_cached(grid)
+	return _cached_edges.duplicate()
+
+
+## The gap edges grouped into runs: neighbouring edges on the same side along
+## one straight line are one run. In the order of each run's first edge.
+static func gap_runs(grid: BuildGrid) -> Array[Run]:
+	_ensure_cached(grid)
+	return _cached_runs.duplicate()
+
+
+static func _ensure_cached(grid: BuildGrid) -> void:
+	var token := [grid.grid_id(), grid.enclosure_version()]
+	if token == _cached_token:
+		return
+	computations += 1
+	_cached_token = token
+	_cached_edges = _compute_edges(grid)
+	_cached_runs = _compute_runs(_cached_edges)
+
+
+static func _compute_edges(grid: BuildGrid) -> Array[Vector3i]:
 	var edges: Array[Vector3i] = []
 	var in_building := _building_cells(grid)
 	var backs := {}
@@ -41,10 +75,7 @@ static func gap_edges(grid: BuildGrid) -> Array[Vector3i]:
 	return edges
 
 
-## The gap edges grouped into runs: neighbouring edges on the same side along
-## one straight line are one run. In the order of each run's first edge.
-static func gap_runs(grid: BuildGrid) -> Array[Run]:
-	var edges := gap_edges(grid)
+static func _compute_runs(edges: Array[Vector3i]) -> Array[Run]:
 	var known := {}
 	for edge in edges:
 		known[edge] = true

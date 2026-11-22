@@ -12,28 +12,37 @@ const REPLAY_TICKS := 600
 var _a: PassengerTestWorld
 var _b: PassengerTestWorld
 var _ids: Dictionary
-## Tick -> _signature(_a) after that tick.
+## Tick -> _state(_a) after that tick.
 var _trace: Dictionary = {}
+## Tick -> _signature(_a) at save boundaries.
+var _sig_trace: Dictionary = {}
 ## Passenger id -> whether it made the flight, in world A.
 var _made: Dictionary = {}
+var _saves: Dictionary = {}
+var _doors := 0
 
 
 func before() -> void:
+	PassengerTestWorld.tracker = null
+	_saves = _play_and_save()
 	PassengerTestWorld.tracker = self
 
 
 func after() -> void:
+	if _a != null:
+		_a.free_all()
+	_a = null
+	_trace.clear()
+	_sig_trace.clear()
+	_made.clear()
+	_saves.clear()
 	PassengerTestWorld.tracker = null
 
 
 func after_test() -> void:
-	for world in [_a, _b]:
-		if world != null:
-			world.free_all()
-	_a = null
+	if _b != null:
+		_b.free_all()
 	_b = null
-	_trace.clear()
-	_made.clear()
 
 
 ## Passengers 1 and 2 need a toilet from spawn, nobody else ever does. Every
@@ -81,6 +90,18 @@ func _load(text: String) -> PassengerTestWorld:
 	return world
 
 
+static func _state(world: PassengerTestWorld) -> Dictionary:
+	var toilets := world.sim.toilets
+	var holders: Array[int] = []
+	for id in toilets.visit_ids():
+		holders.append(toilets.stall_holder(toilets.visit_of(id).stall_id))
+	return {
+		"passengers": world.sim.to_snapshot(),
+		"wallet": world.sim.wallet.to_snapshot(),
+		"holders": holders,
+	}
+
+
 ## The passenger signature plus every toilet need, cooldown and visit.
 func _signature(world: PassengerTestWorld) -> String:
 	var toilets := world.sim.toilets
@@ -116,21 +137,31 @@ func _play_and_save() -> Dictionary:
 	assert_bool(sim.schedule_flight(PassengerTestWorld.FLIGHT, 12)).is_true()
 	_needs_in(_a)
 	sim.outcome.connect(func(id: int, made: bool) -> void: _made[id] = made)
-	var doors := _a.flights.doors_close_tick(PassengerTestWorld.FLIGHT)
-	while _a.clock.tick <= doors:
+	_doors = _a.flights.doors_close_tick(PassengerTestWorld.FLIGHT)
+	var replay_until := -1
+	while _a.clock.tick <= _doors:
 		_a.step()
 		for id in sim.toilets.visit_ids():
 			var p := _a.passenger(id)
 			var stage: String = Passenger.Stage.keys()[p.stage]
 			if not saves.has(stage) and p.stage_tick == _a.clock.tick:
 				saves[stage] = _save(_a)
-		_trace[_a.clock.tick] = _signature(_a)
+				_sig_trace[_a.clock.tick] = _signature(_a)
+				if saves.size() == 6:
+					replay_until = _a.clock.tick + REPLAY_TICKS
+		_trace[_a.clock.tick] = _state(_a)
+		if (
+			replay_until >= 0
+			and _a.clock.tick > replay_until
+			and _made.get(1, false)
+			and _made.get(2, false)
+		):
+			break
 	return saves
 
 
 func test_a_save_in_every_phase_of_a_visit_loads_and_plays_on_alike() -> void:
-	var saves := _play_and_save()
-	print("saved in %s" % [saves.keys()])
+	print("saved in %s" % [_saves.keys()])
 	for stage in [
 		"TOILET_WALK",
 		"TOILET_ENTER",
@@ -139,17 +170,16 @@ func test_a_save_in_every_phase_of_a_visit_loads_and_plays_on_alike() -> void:
 		"TOILET_STANDING_UP",
 		"TOILET_EXIT",
 	]:
-		assert_bool(saves.has(stage)).override_failure_message("no save in %s" % stage).is_true()
-	var doors := _a.flights.doors_close_tick(PassengerTestWorld.FLIGHT)
-	for stage: String in saves:
-		_b = _load(saves[stage])
+		assert_bool(_saves.has(stage)).override_failure_message("no save in %s" % stage).is_true()
+	for stage: String in _saves:
+		_b = _load(_saves[stage])
 		_needs_in(_b)
 		var start := _b.clock.tick
-		assert_str(_signature(_b)).is_equal(_trace[start])
+		assert_str(_signature(_b)).is_equal(_sig_trace[start])
 		var first_bad := -1
-		while _b.clock.tick <= mini(doors, start + REPLAY_TICKS) and first_bad < 0:
+		while _b.clock.tick <= mini(_doors, start + REPLAY_TICKS) and first_bad < 0:
 			_b.step()
-			if _signature(_b) != _trace[_b.clock.tick]:
+			if _state(_b) != _trace[_b.clock.tick]:
 				first_bad = _b.clock.tick
 		print("%s saved at %d: first differing tick %d" % [stage, start, first_bad])
 		assert_int(first_bad).override_failure_message("%s differs" % stage).is_equal(-1)
@@ -161,8 +191,7 @@ func test_a_save_in_every_phase_of_a_visit_loads_and_plays_on_alike() -> void:
 
 
 func test_a_toilet_state_no_play_could_reach_is_refused_and_changes_nothing() -> void:
-	var saves := _play_and_save()
-	var good: Dictionary = JSON.parse_string(saves["TOILET_USE"])["passengers"]
+	var good: Dictionary = JSON.parse_string(_saves["TOILET_USE"])["passengers"]
 	var visit: Dictionary = good["toilet"]["visits"][0]
 	var guest := int(visit["passenger"])
 	var cases: Array = []
@@ -222,8 +251,7 @@ func test_a_toilet_state_no_play_could_reach_is_refused_and_changes_nothing() ->
 
 
 func test_a_save_with_stale_toilet_deadlines_keeps_them_stale_for_the_next_tick() -> void:
-	var saves := _play_and_save()
-	var data: Dictionary = JSON.parse_string(saves["TOILET_USE"])
+	var data: Dictionary = JSON.parse_string(_saves["TOILET_USE"])
 	var passengers: Dictionary = data["passengers"]
 	var guest := int(passengers["toilet"]["visits"][0]["passenger"])
 	passengers["toilet"]["deadlines_stale"] = true

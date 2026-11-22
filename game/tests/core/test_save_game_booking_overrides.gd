@@ -45,19 +45,18 @@ func test_a_bad_booking_override_is_refused_before_anything_installs() -> void:
 	no_occurrence["passengers"]["booking_overrides"] = [entry.merged({"flight": "OVR"}, true)]
 	var no_list := old.duplicate(true)
 	no_list["passengers"].erase("booking_overrides")
+	var clock := _main.get_node("SimClock") as SimClock
+	var tick := clock.tick
+	var before := SaveTestKit.checksum(_main)
 	for bad: Dictionary in [no_extra, no_occurrence, no_list]:
-		var clock := _main.get_node("SimClock") as SimClock
-		var tick := clock.tick
-		var before := SaveTestKit.checksum(_main)
 		assert_bool(_save.load_world(bad)).is_false()
 		print("refused: %s" % _save.message_text())
 		assert_str(_save.message_text()).starts_with("Load failed")
 		assert_str(_save.message_text()).contains("booking")
 		assert_int(clock.tick).is_equal(tick)
 		assert_str(SaveTestKit.checksum(_main)).is_equal(before)
-	var sum := SaveTestKit.checksum(_main)
 	assert_bool(_save.load_world(old)).is_true()
-	assert_str(SaveTestKit.checksum(_main)).is_not_equal(sum)
+	assert_str(SaveTestKit.checksum(_main)).is_not_equal(before)
 
 
 ## An override past the saved contract's plane class maximum, and one for a
@@ -77,10 +76,10 @@ func test_an_override_the_saved_contract_cannot_carry_is_refused_before_anything
 	over["passengers"]["booking_overrides"] = [{"flight": key, "extra": room + 1}]
 	var unknown := old.duplicate(true)
 	unknown["passengers"]["booking_overrides"] = [{"flight": "FUT-d400", "extra": 1}]
+	var clock := _main.get_node("SimClock") as SimClock
+	var tick := clock.tick
+	var before := SaveTestKit.checksum(_main)
 	for bad: Dictionary in [over, unknown]:
-		var clock := _main.get_node("SimClock") as SimClock
-		var tick := clock.tick
-		var before := SaveTestKit.checksum(_main)
 		assert_bool(_save.load_world(bad)).is_false()
 		print("refused: %s" % _save.message_text())
 		assert_str(_save.message_text()).starts_with("Load failed")
