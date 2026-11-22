@@ -1,6 +1,6 @@
 class_name TestToonOutlinesAndMaterials
 extends GdUnitTestSuite
-## Regression tests for unified dark ink outline color/width across all 14
+## Regression tests for unified dark ink outline color/width across all 15
 ## material .tres files, shader compilation/uniform parity, and welded CUSTOM0
 ## smooth normals on static imports and RoofView (omitted on skinned rigs).
 
@@ -96,8 +96,8 @@ func test_outline_shader_default_ink_and_width_match_unified_palette() -> void:
 		assert_float(float(def_px)).is_equal_approx(UNIFIED_PX, 0.001)
 
 
-func test_all_14_materials_share_unified_opaque_ink_and_width() -> void:
-	assert_int(_materials.size()).is_equal(14)
+func test_all_15_materials_share_unified_opaque_ink_and_width() -> void:
+	assert_int(_materials.size()).is_equal(15)
 	var opaque_toon_count := 0
 	for path: String in _materials:
 		var mat: Resource = _materials[path]
@@ -122,7 +122,7 @@ func test_all_14_materials_share_unified_opaque_ink_and_width() -> void:
 				UNIFIED_PX, 0.001
 			)
 			opaque_toon_count += 1
-	assert_int(opaque_toon_count).is_equal(12)
+	assert_int(opaque_toon_count).is_equal(13)
 
 
 func test_glass_and_lights_stay_non_toon_standard_materials() -> void:
