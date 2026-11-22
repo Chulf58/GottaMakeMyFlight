@@ -238,3 +238,89 @@ func test_a_removed_lane_part_sends_admitted_passengers_back_without_clearance()
 		assert_int(p.security_phase).is_equal(SecurityRuntime.Phase.NONE)
 		assert_int(p.stage).is_equal(Passenger.Stage.TO_SECURITY)
 	assert_bool(w.world.sim.security.records.is_empty()).is_true()
+
+
+func test_admit_front_refuses_and_drops_stale_non_queued_members() -> void:
+	var w := _make(true)
+	w.world.step()
+	var sim := w.world.sim
+	var cells: Array = sim.layout.lanes[w.station]
+	var stale_made := w.world.passenger(w.send(0))
+	stale_made.stage = Passenger.Stage.MADE
+	stale_made.station = 0
+	stale_made.at = cells[0]
+	var stale_gate := w.world.passenger(w.send(0))
+	stale_gate.stage = Passenger.Stage.TO_GATE
+	stale_gate.station = 99
+	stale_gate.at = cells[0]
+	var valid := w.world.passenger(w.send(0))
+	valid.stage = Passenger.Stage.SECURITY_QUEUE
+	valid.station = w.station
+	valid.at = cells[0]
+	var q := sim._queue(w.station)
+	q["lane"] = [999999, valid.id]
+	assert_object(sim.security.ready_front(w.station, q, cells, true)).is_null()
+	assert_array(q["lane"]).is_equal([999999, valid.id])
+	q["lane"] = [stale_made.id, stale_gate.id, 999999, valid.id]
+	assert_object(sim.security.ready_front(w.station, q, cells, true)).is_null()
+	assert_array(q["lane"]).is_equal([stale_made.id, stale_gate.id, 999999, valid.id])
+	var results: Array[bool] = []
+	await (
+		assert_error(func() -> void: results.append(sim.security.admit_front(w.station, q)))
+		. is_push_error(
+			(
+				(
+					"SecurityRuntime.admit_front: refused passenger %d at station %d "
+					+ "(stage MADE, expected SECURITY_QUEUE)"
+				)
+				% [stale_made.id, w.station]
+			)
+		)
+	)
+	await (
+		assert_error(func() -> void: results.append(sim.security.admit_front(w.station, q)))
+		. is_push_error(
+			(
+				(
+					"SecurityRuntime.admit_front: refused passenger %d at station %d "
+					+ "(stage TO_GATE, expected SECURITY_QUEUE)"
+				)
+				% [stale_gate.id, w.station]
+			)
+		)
+	)
+	await (
+		assert_error(func() -> void: results.append(sim.security.admit_front(w.station, q)))
+		. is_push_error(
+			(
+				(
+					"SecurityRuntime.admit_front: refused passenger 999999 at station %d "
+					+ "(stage null, expected SECURITY_QUEUE)"
+				)
+				% w.station
+			)
+		)
+	)
+	assert_array(results).is_equal([false, false, false])
+	assert_array(q["lane"]).is_equal([valid.id])
+	assert_bool(sim.security.records.is_empty()).is_true()
+	assert_int(stale_made.stage).is_equal(Passenger.Stage.MADE)
+	assert_int(stale_made.station).is_equal(0)
+	assert_int(stale_made.security_phase).is_equal(SecurityRuntime.Phase.NONE)
+	assert_int(stale_gate.stage).is_equal(Passenger.Stage.TO_GATE)
+	assert_int(stale_gate.station).is_equal(99)
+	assert_int(stale_gate.security_phase).is_equal(SecurityRuntime.Phase.NONE)
+	assert_bool(w.admitted.has(stale_made.id)).is_false()
+	assert_bool(w.admitted.has(stale_gate.id)).is_false()
+	assert_object(sim.security.ready_front(w.station, q, cells, true)).is_same(valid)
+	var admitted_valid := sim.security.admit_front(w.station, q)
+	assert_bool(admitted_valid).is_true()
+	assert_array(q["lane"]).is_empty()
+	assert_int(valid.stage).is_equal(Passenger.Stage.SECURITY)
+	assert_bool(w.admitted.has(valid.id)).is_true()
+	var empty_res: Array[bool] = []
+	await (
+		assert_error(func() -> void: empty_res.append(sim.security.admit_front(w.station, q)))
+		. is_push_error("SecurityRuntime.admit_front: empty lane at station %d" % w.station)
+	)
+	assert_array(empty_res).is_equal([false])

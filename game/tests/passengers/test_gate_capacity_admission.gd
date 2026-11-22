@@ -250,3 +250,91 @@ func test_a_miss_while_the_gate_is_full_is_a_crowding_miss() -> void:
 	assert_int(behind.missed_stuck).is_equal(Passenger.Stuck.CROWDED)
 	var text := FlightResult.reason_text(front.missed_stage, front.missed_stuck)
 	assert_str(text).is_equal(FlightResult.CROWDED_TEXT)
+
+
+## Stale leading fronts (dangling, off-cell/moving, and on-cell non-SECURITY_QUEUE)
+## are drained loudly without reserving a gate spot or setting GATE_FULL, so a
+## valid queued passenger behind them at cells[0] is admitted on the same tick.
+func test_stale_front_is_dropped_without_reserving_a_gate_spot_or_setting_gate_full() -> void:
+	_world = TestStandingSpotClaims.seatless_world()
+	_world.step()
+	var sim := _world.sim
+	var stations: Array[int] = []
+	stations.assign(sim.layout.scanners)
+	stations.sort()
+	assert_int(stations.size()).is_equal(2)
+	var spots := sim.standing
+	var free := spots.free_nearest(sim.security.exit_cell(stations[0]))
+	var fake := 90000
+	for id: int in spots.spots:
+		if id != free[0]:
+			spots.claim(fake, id)
+			fake += 1
+	var cells0: Array = sim.layout.lanes[stations[0]]
+	var stale_moving := TestStandingSpotClaims.cleared(_world)
+	stale_moving.cleared = false
+	stale_moving.station = 0
+	stale_moving.stage = Passenger.Stage.MADE
+	stale_moving.stuck = Passenger.Stuck.NONE
+	stale_moving.set_path([cells0[1], cells0[0]])
+	var stale_made := TestStandingSpotClaims.cleared(_world)
+	stale_made.cleared = false
+	stale_made.station = 0
+	stale_made.stage = Passenger.Stage.MADE
+	stale_made.stuck = Passenger.Stuck.NONE
+	stale_made.at = cells0[0]
+	var valid := TestStandingSpotClaims.cleared(_world)
+	valid.cleared = false
+	valid.station = stations[0]
+	valid.stage = Passenger.Stage.SECURITY_QUEUE
+	valid.stuck = Passenger.Stuck.NONE
+	valid.at = cells0[0]
+	(sim._queue(stations[0])["lane"] as Array).assign(
+		[999999, stale_moving.id, stale_made.id, valid.id]
+	)
+	await (
+		assert_error(func() -> void: sim.gates.admit(sim))
+		. is_push_error(
+			(
+				(
+					"SecurityRuntime.admit_front: refused passenger 999999 at station %d "
+					+ "(stage null, expected SECURITY_QUEUE)"
+				)
+				% stations[0]
+			)
+		)
+	)
+	assert_array(sim.queue_of(stations[0])).is_empty()
+	assert_int(stale_moving.stage).is_equal(Passenger.Stage.MADE)
+	assert_int(stale_moving.stuck).is_equal(Passenger.Stuck.NONE)
+	assert_int(spots.reserved_of(stale_moving.id)).is_equal(StandingSpots.NO_SPOT)
+	assert_int(stale_made.stage).is_equal(Passenger.Stage.MADE)
+	assert_int(stale_made.stuck).is_equal(Passenger.Stuck.NONE)
+	assert_int(spots.reserved_of(stale_made.id)).is_equal(StandingSpots.NO_SPOT)
+	assert_int(valid.stage).is_equal(Passenger.Stage.SECURITY)
+	assert_int(spots.reserved_of(valid.id)).is_equal(free[0])
+	# Even with 0 free spots left, an off-cell stale front is dropped without GATE_FULL.
+	var stale_gate := TestStandingSpotClaims.cleared(_world)
+	stale_gate.cleared = false
+	stale_gate.station = 99
+	stale_gate.stage = Passenger.Stage.TO_GATE
+	stale_gate.stuck = Passenger.Stuck.NONE
+	stale_gate.at = sim.layout.lanes[stations[1]][1]
+	(sim._queue(stations[1])["lane"] as Array).assign([stale_gate.id])
+	await (
+		assert_error(func() -> void: sim.gates.admit(sim))
+		. is_push_error(
+			(
+				(
+					"SecurityRuntime.admit_front: refused passenger %d at station %d "
+					+ "(stage TO_GATE, expected SECURITY_QUEUE)"
+				)
+				% [stale_gate.id, stations[1]]
+			)
+		)
+	)
+	assert_array(sim.queue_of(stations[1])).is_empty()
+	assert_int(stale_gate.stage).is_equal(Passenger.Stage.TO_GATE)
+	assert_int(stale_gate.station).is_equal(99)
+	assert_int(stale_gate.stuck).is_equal(Passenger.Stuck.NONE)
+	assert_int(spots.reserved_of(stale_gate.id)).is_equal(StandingSpots.NO_SPOT)

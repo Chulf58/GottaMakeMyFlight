@@ -272,6 +272,8 @@ func ready_front(station: int, queue: Dictionary, cells: Array, open: bool) -> P
 	if not open or lane.is_empty():
 		return null
 	var front: Passenger = _host.get_passenger(lane[0])
+	if front == null or front.stage != Passenger.Stage.SECURITY_QUEUE:
+		return null
 	if front.at != cells[0] or front.is_moving():
 		return null
 	var record: Dictionary = records.get(station, {})
@@ -280,10 +282,31 @@ func ready_front(station: int, queue: Dictionary, cells: Array, open: bool) -> P
 	return front
 
 
-## Admits the queue front ready_front() gave.
-func admit_front(station: int, queue: Dictionary) -> void:
+## Admits the queue front ready_front() gave; refuses and drops a stale
+## non-SECURITY_QUEUE front or empty lane.
+func admit_front(station: int, queue: Dictionary) -> bool:
+	var lane: Array = queue.get("lane", [])
+	if lane.is_empty():
+		push_error("SecurityRuntime.admit_front: empty lane at station %d" % station)
+		return false
+	var front_id: int = lane.pop_front()
+	var front: Passenger = _host.get_passenger(front_id)
+	if front == null or front.stage != Passenger.Stage.SECURITY_QUEUE:
+		var stage_name := "null"
+		if front != null:
+			var key: Variant = Passenger.Stage.find_key(front.stage)
+			stage_name = str(front.stage) if key == null else str(key)
+		push_error(
+			(
+				(
+					"SecurityRuntime.admit_front: refused passenger %d at station %d "
+					+ "(stage %s, expected SECURITY_QUEUE)"
+				)
+				% [front_id, station, stage_name]
+			)
+		)
+		return false
 	var record: Dictionary = records.get(station, {})
-	var front: Passenger = _host.get_passenger((queue["lane"] as Array).pop_front())
 	var on_lane := is_lane(station)
 	if record.is_empty():
 		record = {"admitted": [], "returns": [], "main": 0, "berth": 0}
@@ -300,6 +323,7 @@ func admit_front(station: int, queue: Dictionary) -> void:
 		var passage: Array[Vector2i] = []
 		passage.assign(_host.layout.passages[station])
 		_enter(front, Phase.SCAN, passage)
+	return true
 
 
 ## Takes a passenger out of its station's service (it missed its flight or
