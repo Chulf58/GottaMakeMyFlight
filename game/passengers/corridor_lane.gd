@@ -122,7 +122,7 @@ static func _tapered_clamp(
 	var limit := _clamp_distance(pos_local, offset_dir, desired, _obstacles_near(grid, under))
 	if limit <= 0.001 or walk_dir.length_squared() < 1e-6:
 		return limit
-	for s in [0.4, 0.8, LOOKAHEAD_M]:
+	for s: float in [0.4, 0.8, LOOKAHEAD_M]:
 		var ahead := pos_local + walk_dir * s
 		var a_cell := Vector2i(floori(ahead.x), floori(ahead.y))
 		var d_ahead := _clamp_distance(ahead, offset_dir, desired, _obstacles_near(grid, a_cell))
