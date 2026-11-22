@@ -149,6 +149,20 @@ func _ready() -> void:
 		hud.save_game.loaded.connect(_on_loaded)
 
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_TRANSLATION_CHANGED and is_node_ready():
+		_retranslate()
+
+
+func _retranslate() -> void:
+	_caption.text = tr("Hint ({key} turns hints off)").format({"key": HOTKEY})
+	_show_me.text = tr("Show me")
+	_toggle.text = tr("Hints ({key})").format({"key": HOTKEY})
+	_reset.text = tr("Reset hints")
+	if _shown_id != &"":
+		_body.text = HintRules.text(_shown_id)
+
+
 func _exit_tree() -> void:
 	_yield_banner(false)
 

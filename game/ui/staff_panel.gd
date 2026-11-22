@@ -111,6 +111,7 @@ var _gaps: Array[Dictionary] = []
 var _since_poll := 0.0
 ## Role -> the Label with its counts, its Hire and its Fire button.
 var _counts: Dictionary = {}
+var _role_titles: Dictionary = {}
 var _hire: Dictionary = {}
 var _fire: Dictionary = {}
 
@@ -128,6 +129,11 @@ func _ready() -> void:
 	watch(staff)
 	if save_game != null:
 		save_game.loaded.connect(_on_loaded)
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_TRANSLATION_CHANGED and is_node_ready():
+		_retranslate()
 
 
 ## Follows `with_staff`'s hiring and members going on duty, and its grid's
@@ -487,7 +493,9 @@ func _build() -> void:
 		column.custom_minimum_size = Vector2(ROLE_WIDTH, 0.0)
 		_columns[role] = column
 		_roles_box.add_child(column)
-		column.add_child(_label(_role_name(role), &"HudCardName"))
+		var role_title := _label(_role_name(role), &"HudCardName")
+		_role_titles[role] = role_title
+		column.add_child(role_title)
 		var counts := _label("", &"HudSmall")
 		counts.name = "%sCounts" % ROLE_KEYS[role]
 		counts.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -570,3 +578,24 @@ func _button(row: Control, node_name: String, text: String, variation: StringNam
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(button)
 	return button
+
+
+func _retranslate() -> void:
+	for role in ROLES:
+		if _role_titles.has(role):
+			(_role_titles[role] as Label).text = _role_name(role)
+		if _hire.has(role):
+			(_hire[role] as Button).text = hire_text(role)
+		if _fire.has(role):
+			(_fire[role] as Button).text = tr("Fire", "staff button")
+	if _open_cue != "" and gate != null:
+		var contract := gate.flights.contract_of(FlightSim.DEFAULT_ID)
+		if not contract.is_empty():
+			_open_cue = tr("Open! Starter contract: {airline} to {destination}, daily").format(
+				{"airline": contract["airline"], "destination": contract["destination"]}
+			)
+	if staff != null:
+		if gate != null and gate.is_open():
+			var world := HintRules.read_world(staff.sim, hiring_hint_roles())
+			_gaps = Checklist.gap_lines(world, staff.sim.layout.seats.size(), _lock_texts())
+		refresh()

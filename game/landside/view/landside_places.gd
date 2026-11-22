@@ -48,6 +48,19 @@ var _lots := {}
 var _signs := {}
 
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_TRANSLATION_CHANGED and is_node_ready():
+		_retranslate_signs()
+
+
+func _retranslate_signs() -> void:
+	var text := MissMarkers.closed_caption()
+	for sign: Sprite3D in _signs.values():
+		var caption := sign.get_node_or_null("Caption") as Label3D
+		if caption != null:
+			caption.text = text
+
+
 ## Adds and removes bays, car parks and Closed signs to match the sim now.
 func refresh() -> void:
 	if landside == null or landside.definition == null:

@@ -60,6 +60,7 @@ var open_folder := Callable()
 var esc_closes: Callable
 ## The Audio controls card on the Settings view, or null while the menu is closed.
 var audio_card: AudioSettingsCard
+var language_picker: LanguagePicker
 
 var _layer: CanvasLayer
 var _question_layer: CanvasLayer
@@ -73,7 +74,14 @@ var _settings_page: Control
 var _load_page: Control
 var _save_list: SaveList
 var _status: Label
+var _status_spec := {}
 var _incidents_switch: CheckButton
+var _quit_log_switch: CheckButton
+var _quit_log_note: Label
+var _open_log_btn: Button
+var _settings_back: Button
+var _load_back: Button
+var _version: Label
 
 
 func _ready() -> void:
@@ -82,6 +90,11 @@ func _ready() -> void:
 		open_folder = OS.shell_open
 	if save_game != null:
 		save_game.loaded.connect(_on_loaded)
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_TRANSLATION_CHANGED and is_node_ready():
+		_retranslate()
 
 
 ## A menu that leaves the tree while open must not leave the game paused (the
@@ -161,6 +174,7 @@ func press_settings() -> void:
 		return
 	_main_page.visible = false
 	audio_card.visible = true
+	language_picker.visible = true
 	_settings_page.visible = true
 
 
@@ -168,6 +182,7 @@ func press_back() -> void:
 	if not _shown:
 		return
 	audio_card.visible = false
+	language_picker.visible = false
 	_settings_page.visible = false
 	_load_page.visible = false
 	_main_page.visible = true
@@ -284,7 +299,8 @@ func _show() -> void:
 	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
 	root.add_child(panel)
-	root.add_child(_version_label())
+	_version = _version_label()
+	root.add_child(_version)
 	var pages := VBoxContainer.new()
 	pages.add_theme_constant_override("separation", 12)
 	panel.add_child(pages)
@@ -300,6 +316,10 @@ func _show() -> void:
 	audio_card.name = "AudioSettings"
 	audio_card.visible = false
 	pages.add_child(audio_card)
+	language_picker = LanguagePicker.new()
+	language_picker.name = "LanguagePicker"
+	language_picker.visible = false
+	pages.add_child(language_picker)
 	_settings_page = _page("SettingsPage", tr("Settings"))
 	_settings_page.visible = false
 	pages.add_child(_settings_page)
@@ -312,7 +332,7 @@ func _show() -> void:
 	_settings_page.add_child(_incidents_switch)
 	if quit_log != null:
 		_add_quit_log_controls()
-	_button(_settings_page, "Back", tr("Back"), press_back)
+	_settings_back = _button(_settings_page, "Back", tr("Back"), press_back)
 	_load_page = _page("LoadPage", tr("Load", "menu"))
 	_load_page.visible = false
 	pages.add_child(_load_page)
@@ -320,7 +340,7 @@ func _show() -> void:
 	_save_list.name = "SaveList"
 	_save_list.chosen.connect(_on_save_chosen)
 	_load_page.add_child(_save_list)
-	_button(_load_page, "Back", tr("Back"), press_back)
+	_load_back = _button(_load_page, "Back", tr("Back"), press_back)
 	_status = Label.new()
 	_status.name = "Status"
 	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -334,23 +354,25 @@ func _show() -> void:
 ## The quit log's switch, the one line saying what it records, and the button
 ## that opens its folder.
 func _add_quit_log_controls() -> void:
-	var switch := CheckButton.new()
-	switch.name = "QuitLog"
-	switch.text = tr("Quit log")
-	switch.focus_mode = Control.FOCUS_NONE
-	switch.button_pressed = quit_log.is_enabled()
-	switch.toggled.connect(_on_quit_log_toggled)
-	_settings_page.add_child(switch)
-	var note := Label.new()
-	note.name = "QuitLogNote"
-	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	note.custom_minimum_size = Vector2(MENU_SIZE.x - 40.0, 0.0)
-	note.text = tr(
+	_quit_log_switch = CheckButton.new()
+	_quit_log_switch.name = "QuitLog"
+	_quit_log_switch.text = tr("Quit log")
+	_quit_log_switch.focus_mode = Control.FOCUS_NONE
+	_quit_log_switch.button_pressed = quit_log.is_enabled()
+	_quit_log_switch.toggled.connect(_on_quit_log_toggled)
+	_settings_page.add_child(_quit_log_switch)
+	_quit_log_note = Label.new()
+	_quit_log_note.name = "QuitLogNote"
+	_quit_log_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_quit_log_note.custom_minimum_size = Vector2(MENU_SIZE.x - 40.0, 0.0)
+	_quit_log_note.text = tr(
 		# gdlint:ignore = max-line-length
 		"Records where you stop playing: the day, money, stars, builds, flights and alerts, never what you click or type. The file stays on this computer and nothing is sent."
 	)
-	_settings_page.add_child(note)
-	_button(_settings_page, "OpenLogFolder", tr("Open log folder"), _on_open_log_folder)
+	_settings_page.add_child(_quit_log_note)
+	_open_log_btn = _button(
+		_settings_page, "OpenLogFolder", tr("Open log folder"), _on_open_log_folder
+	)
 
 
 func _on_quit_log_toggled(on: bool) -> void:
@@ -359,7 +381,7 @@ func _on_quit_log_toggled(on: bool) -> void:
 	# The file would not open: the switch goes back off and the line says why.
 	var switch: CheckButton = _settings_page.get_node("QuitLog")
 	switch.set_pressed_no_signal(false)
-	_set_status(tr("Could not start the quit log in {path}").format({"path": quit_log.log_dir}))
+	_set_status_spec({"kind": &"quit_log_error", "args": {"path": quit_log.log_dir}})
 
 
 ## Opens the quit log folder in the system's file browser, making it first so a
@@ -371,7 +393,7 @@ func _on_open_log_folder() -> void:
 	DirAccess.make_dir_recursive_absolute(folder)
 	var err: Variant = open_folder.call(folder)
 	if err is int and err != OK:
-		_set_status(tr("Could not open the log folder: {path}").format({"path": folder}))
+		_set_status_spec({"kind": &"log_folder_error", "args": {"path": folder}})
 
 
 ## The game's version in the bottom-right corner, small, read from the project
@@ -401,13 +423,14 @@ func _page(page_name: String, title: String) -> VBoxContainer:
 	return page
 
 
-func _button(page: Control, button_name: String, text: String, handler: Callable) -> void:
+func _button(page: Control, button_name: String, text: String, handler: Callable) -> Button:
 	var button := Button.new()
 	button.name = button_name
 	button.text = text
 	button.focus_mode = Control.FOCUS_NONE
 	button.pressed.connect(handler)
 	page.add_child(button)
+	return button
 
 
 ## The manual save first, then the autosaves.
@@ -425,8 +448,38 @@ func _on_save_chosen(path: String) -> void:
 
 
 func _set_status(text: String) -> void:
+	_status_spec = {} if text == "" else {"raw": text}
+	_render_status()
+
+
+func _set_status_spec(spec: Dictionary) -> void:
+	_status_spec = spec
+	_render_status()
+
+
+func _render_status() -> void:
 	if _status == null:
 		return
+	if _status_spec.is_empty():
+		_status.text = ""
+		_status.visible = false
+		return
+	var text := ""
+	match _status_spec.get("kind", &""):
+		&"quit_log_error":
+			text = tr("Could not start the quit log in {path}").format(_status_spec.get("args", {}))
+		&"log_folder_error":
+			text = tr("Could not open the log folder: {path}").format(_status_spec.get("args", {}))
+		_:
+			if _status_spec.has("msgid"):
+				var ctx := str(_status_spec.get("context", ""))
+				var msgid := str(_status_spec["msgid"])
+				text = tr(msgid, ctx) if ctx != "" else tr(msgid)
+				var args: Dictionary = _status_spec.get("args", {})
+				if not args.is_empty():
+					text = text.format(args)
+			else:
+				text = str(_status_spec.get("raw", ""))
 	_status.text = text
 	_status.visible = text != ""
 
@@ -442,13 +495,53 @@ func _free_layer() -> void:
 	_layer = null
 	_main_page = null
 	audio_card = null
+	language_picker = null
 	_settings_page = null
 	_load_page = null
 	_save_list = null
 	_status = null
+	_status_spec = {}
 	_incidents_switch = null
+	_quit_log_switch = null
+	_quit_log_note = null
+	_open_log_btn = null
+	_settings_back = null
+	_load_back = null
+	_version = null
 	if is_instance_valid(layer) and not layer.is_queued_for_deletion():
 		layer.queue_free()
+
+
+func _retranslate() -> void:
+	if not _shown or not is_instance_valid(_layer):
+		return
+	(_main_page.get_node("Title") as Label).text = tr("Game menu")
+	resume_button().text = tr("Resume ({key})").format({"key": ESC_KEY})
+	if save_game != null:
+		save_button().text = tr("Save", "menu")
+		load_button().text = tr("Load", "menu")
+		if _save_list != null:
+			_save_list.fill(_save_paths(), save_game.quick_save_path)
+	settings_button().text = tr("Settings")
+	(_settings_page.get_node("Title") as Label).text = tr("Settings")
+	_incidents_switch.text = tr("Incidents")
+	if _quit_log_switch != null:
+		_quit_log_switch.text = tr("Quit log")
+	if _quit_log_note != null:
+		_quit_log_note.text = tr(
+			# gdlint:ignore = max-line-length
+			"Records where you stop playing: the day, money, stars, builds, flights and alerts, never what you click or type. The file stays on this computer and nothing is sent."
+		)
+	if _open_log_btn != null:
+		_open_log_btn.text = tr("Open log folder")
+	if _settings_back != null:
+		_settings_back.text = tr("Back")
+	(_load_page.get_node("Title") as Label).text = tr("Load", "menu")
+	if _load_back != null:
+		_load_back.text = tr("Back")
+	if _version != null:
+		_version.text = tr("v{version}").format({"version": version_text()})
+	_render_status()
 
 
 func _show_question() -> void:

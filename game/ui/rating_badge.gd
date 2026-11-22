@@ -34,6 +34,12 @@ func _ready() -> void:
 	watch(rating)
 
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_TRANSLATION_CHANGED and is_node_ready():
+		if rating != null:
+			refresh()
+
+
 ## Follows `with_rating` and shows it at once; a rating followed before is let
 ## go, and following the same one again does nothing.
 func watch(with_rating: AirportRating) -> void:

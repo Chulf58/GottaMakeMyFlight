@@ -170,6 +170,12 @@ func _ready() -> void:
 		hover.register_provider(self)
 
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_TRANSLATION_CHANGED and is_node_ready():
+		_caption_sizes.clear()
+		sync()
+
+
 ## Also called on every grid edit (graph_changed, or edit_applied for a room
 ## edit), so a paused edit that removes a station or changes its lane length
 ## updates the sign at once. The sim rebuilds its

@@ -103,6 +103,24 @@ func _ready() -> void:
 		build_mode.tool_changed.connect(_on_tool_changed)
 
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_TRANSLATION_CHANGED and is_node_ready():
+		_retranslate()
+
+
+func _retranslate() -> void:
+	_toggle.text = tr("Planner ({key})").format({"key": HOTKEY})
+	var title := _sheet.find_child("PlannerTitle", true, false) as Label
+	if title != null:
+		title.text = tr("Flight planner")
+	var close_btn := _sheet.find_child("PlannerClose", true, false) as Button
+	if close_btn != null:
+		close_btn.text = tr("Close")
+	if _selected == "":
+		_summary.text = _hint_text()
+	refresh()
+
+
 func _process(_delta: float) -> void:
 	_toggle.position.x = LeftColumn.right_of(
 		get_tree(), LeftColumn.DEPARTURES_TOGGLE_GROUP, TOGGLE_LEFT

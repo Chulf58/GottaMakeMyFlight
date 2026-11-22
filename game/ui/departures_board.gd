@@ -269,6 +269,16 @@ func _ready() -> void:
 	refresh()
 
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_TRANSLATION_CHANGED and is_node_ready():
+		_retranslate()
+
+
+func _retranslate() -> void:
+	_toggle.text = tr("Departures ({key})").format({"key": HOTKEY})
+	_refresh(true)
+
+
 ## Lets the rows scroll in the room the column leaves the list (LeftColumn.
 ## list_room), so the checklist card under it always has its share and the
 ## cards never reach the Templates dock, and keeps _panel aligned under any

@@ -84,6 +84,13 @@ func _init() -> void:
 	walk.changed.connect(invalidate)
 
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_TRANSLATION_CHANGED and is_node_ready():
+		_static_stale = true
+		invalidate()
+		refresh()
+
+
 ## Shows the selected item, or hides the card with none.
 func refresh() -> void:
 	if selection == null or sim == null or build_mode == null:

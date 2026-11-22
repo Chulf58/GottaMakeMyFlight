@@ -32,12 +32,15 @@ var open_url: Callable
 var feedback_url: String = DemoMode.FEEDBACK_URL
 ## Collapsible audio settings card below the main menu panel.
 var audio_card: AudioSettingsCard
+var language_picker: LanguagePicker
 
 var _main_page: VBoxContainer
 var _load_page: VBoxContainer
+var _load_heading: Label
 var _audio_bar: HBoxContainer
 var _save_list: SaveList
 var _message: Label
+var _message_spec := {}
 var _buttons := {}
 
 
@@ -52,6 +55,11 @@ func _ready() -> void:
 	_build()
 	_show_message(GameBoot.take_refusal())
 	refresh()
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_TRANSLATION_CHANGED and is_node_ready():
+		_retranslate()
 
 
 ## Greys Continue when no compatible save exists, Load when no save exists at
@@ -178,11 +186,11 @@ func _build() -> void:
 	_load_page.name = "LoadPage"
 	_load_page.visible = false
 	pages.add_child(_load_page)
-	var heading := Label.new()
-	heading.name = "Heading"
-	heading.text = tr("Load", "menu")
-	heading.theme_type_variation = &"HudLarge"
-	_load_page.add_child(heading)
+	_load_heading = Label.new()
+	_load_heading.name = "Heading"
+	_load_heading.text = tr("Load", "menu")
+	_load_heading.theme_type_variation = &"HudLarge"
+	_load_page.add_child(_load_heading)
 	_save_list = SaveList.new()
 	_save_list.name = "SaveList"
 	_save_list.chosen.connect(_on_save_chosen)
@@ -191,8 +199,12 @@ func _build() -> void:
 	_audio_bar = HBoxContainer.new()
 	_audio_bar.name = "AudioBar"
 	_audio_bar.alignment = BoxContainer.ALIGNMENT_CENTER
+	_audio_bar.add_theme_constant_override("separation", 12)
 	column.add_child(_audio_bar)
 	_add_button(_audio_bar, "Audio", tr("Audio", "menu"), press_audio)
+	language_picker = LanguagePicker.new()
+	language_picker.name = "LanguagePicker"
+	_audio_bar.add_child(language_picker)
 	audio_card = AudioSettingsCard.new()
 	audio_card.name = "AudioSettings"
 	audio_card.custom_minimum_size = Vector2(PANEL_WIDTH, 0.0)
@@ -220,20 +232,68 @@ func _on_save_chosen(path: String) -> void:
 		GameBoot.start_load(path, change_scene)
 		return
 	if ver < 0:
-		_show_message(tr("This save file cannot be read."))
+		_show_save_error(&"unreadable")
 	elif ver < SaveGame.SAVE_VERSION:
-		_show_message(
-			tr(
-				# gdlint:ignore = max-line-length
-				"This save is from an older version and cannot be loaded after an update. Please start a New Airport."
-			)
-		)
+		_show_save_error(&"older")
 	else:
-		_show_message(
-			tr("This save is from a newer version and cannot be loaded. Please update the game.")
-		)
+		_show_save_error(&"newer")
+
+
+func _show_save_error(kind: StringName) -> void:
+	_message_spec = {"kind": kind}
+	_render_message()
 
 
 func _show_message(text: String) -> void:
+	_message_spec = {} if text == "" else {"raw": text}
+	_render_message()
+
+
+func _render_message() -> void:
+	if _message == null:
+		return
+	if _message_spec.is_empty():
+		_message.text = ""
+		_message.visible = false
+		return
+	var text := ""
+	match _message_spec.get("kind", &""):
+		&"unreadable":
+			text = tr("This save file cannot be read.")
+		&"older":
+			text = tr(
+				# gdlint:ignore = max-line-length
+				"This save is from an older version and cannot be loaded after an update. Please start a New Airport."
+			)
+		&"newer":
+			text = tr(
+				"This save is from a newer version and cannot be loaded. Please update the game."
+			)
+		_:
+			if _message_spec.has("msgid"):
+				var ctx := str(_message_spec.get("context", ""))
+				var msgid := str(_message_spec["msgid"])
+				text = tr(msgid, ctx) if ctx != "" else tr(msgid)
+				var args: Dictionary = _message_spec.get("args", {})
+				if not args.is_empty():
+					text = text.format(args)
+			else:
+				text = str(_message_spec.get("raw", ""))
 	_message.text = text
 	_message.visible = text != ""
+
+
+func _retranslate() -> void:
+	button("Continue").text = tr("Continue", "menu")
+	button("NewAirport").text = tr("New Airport", "menu")
+	button("Load").text = tr("Load", "menu")
+	button("Wishlist").text = tr("Wishlist", "menu")
+	button("SendFeedback").text = tr("Send Feedback")
+	button("Quit").text = tr("Quit", "menu")
+	button("Back").text = tr("Back", "menu")
+	button("Audio").text = tr("Audio", "menu")
+	if _load_heading != null:
+		_load_heading.text = tr("Load", "menu")
+	if _save_list != null:
+		_save_list.fill(SaveSlots.all_paths(), SaveSlots.manual_path())
+	_render_message()

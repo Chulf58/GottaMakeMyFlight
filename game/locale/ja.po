@@ -1,0 +1,335 @@
+# Curated T8 verification catalog for ja.
+msgid ""
+msgstr ""
+"Project-Id-Version: Gotta Make My Flight\n"
+"Language: ja\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+msgctxt "menu"
+msgid "Continue"
+msgstr "続ける"
+
+msgctxt "menu"
+msgid "New Airport"
+msgstr "新しい空港"
+
+msgctxt "menu"
+msgid "Load"
+msgstr "ロード"
+
+msgctxt "menu"
+msgid "Wishlist"
+msgstr "ウィッシュリスト"
+
+msgid "Send Feedback"
+msgstr "フィードバック"
+
+msgctxt "menu"
+msgid "Quit"
+msgstr "終了"
+
+msgctxt "menu"
+msgid "Audio"
+msgstr "オーディオ"
+
+msgctxt "menu"
+msgid "Back"
+msgstr "戻る"
+
+msgid "Language"
+msgstr "言語"
+
+msgid "Game menu"
+msgstr "ゲームメニュー"
+
+msgid "Resume ({key})"
+msgstr "再開 ({key})"
+
+msgctxt "menu"
+msgid "Save"
+msgstr "セーブ"
+
+msgid "Settings"
+msgstr "設定"
+
+msgid "Back"
+msgstr "戻る"
+
+msgid "Audio"
+msgstr "オーディオ"
+
+msgid "Mute audio"
+msgstr "ミュート"
+
+msgid "Master"
+msgstr "マスター"
+
+msgid "Ambience"
+msgstr "環境音"
+
+msgid "SFX"
+msgstr "効果音"
+
+msgid "{percent}%"
+msgstr "{percent}%"
+
+msgid "Incidents"
+msgstr "トラブル"
+
+msgid "Quit log"
+msgstr "終了ログ"
+
+msgid "Open log folder"
+msgstr "ログフォルダを開く"
+
+msgid "v{version}"
+msgstr "v{version}"
+
+msgid "Build mode"
+msgstr "建築モード"
+
+msgctxt "narrow build mode sign"
+msgid "Build"
+msgstr "建築"
+
+msgctxt "build menu"
+msgid "Building"
+msgstr "建物"
+
+msgctxt "build menu"
+msgid "Operations"
+msgstr "運営"
+
+msgctxt "build menu"
+msgid "Facilities"
+msgstr "設備"
+
+msgctxt "build menu"
+msgid "Food & Drink"
+msgstr "飲食"
+
+msgctxt "build menu"
+msgid "Shops"
+msgstr "ショップ"
+
+msgctxt "build menu"
+msgid "Decor"
+msgstr "装飾"
+
+msgctxt "build menu"
+msgid "Remove"
+msgstr "撤去"
+
+msgctxt "build menu"
+msgid "Templates"
+msgstr "テンプレート"
+
+msgctxt "build menu"
+msgid "Staff"
+msgstr "スタッフ"
+
+msgctxt "build menu"
+msgid "All"
+msgstr "すべて"
+
+msgctxt "build menu"
+msgid "Rooms"
+msgstr "部屋"
+
+msgctxt "build menu"
+msgid "Check-in desk"
+msgstr "チェックイン"
+
+msgctxt "build menu"
+msgid "Gate desk"
+msgstr "搭乗ゲート"
+
+msgctxt "build menu"
+msgid "Security"
+msgstr "保安検査"
+
+msgctxt "build menu"
+msgid "Bag room"
+msgstr "手荷物室"
+
+msgctxt "build menu"
+msgid "Toilet"
+msgstr "トイレ"
+
+msgctxt "price"
+msgid "Free"
+msgstr "無料"
+
+msgid "Locked"
+msgstr "ロック中"
+
+msgid "In the full game"
+msgstr "製品版で利用可"
+
+msgid "Offers ({count})"
+msgstr "オファー ({count})"
+
+msgid "Runway"
+msgstr "滑走路"
+
+msgid "Planner ({key})"
+msgstr "予定表 ({key})"
+
+msgid "Departures ({key})"
+msgstr "出発便 ({key})"
+
+msgid "Mood ({key})"
+msgstr "気分 ({key})"
+
+msgid "Hints ({key})"
+msgstr "ヒント ({key})"
+
+msgid "Reset hints"
+msgstr "ヒントをリセット"
+
+msgid "No flights yet"
+msgstr "まだ便がありません"
+
+msgctxt "clock"
+msgid "Day {day}  {time}"
+msgstr "{day}日目  {time}"
+
+msgid "Alerts"
+msgstr "通知"
+
+msgid "Alerts ({count})"
+msgstr "通知 ({count})"
+
+msgid "Alert history"
+msgstr "通知履歴"
+
+msgid "Show alert cards"
+msgstr "通知カードを表示"
+
+msgid "No alerts yet"
+msgstr "通知はまだありません"
+
+msgid "Today"
+msgstr "今日"
+
+msgid "Tomorrow"
+msgstr "明日"
+
+msgid "No flights scheduled"
+msgstr "予定された便はありません"
+
+msgid "Made {made}  Missed {missed}  In terminal {active}"
+msgstr "搭乗 {made}  乗り遅れ {missed}  滞在中 {active}"
+
+msgid "To open the airport"
+msgstr "空港を開港するには"
+
+msgid "Your airport needs"
+msgstr "空港に必要なもの"
+
+msgctxt "staff button"
+msgid "Hire · {wage}/day"
+msgstr "雇用 · {wage}/日"
+
+msgctxt "staff button"
+msgid "Fire"
+msgstr "解雇"
+
+msgid "Check-in agents"
+msgstr "チェックイン係"
+
+msgid "Security officers"
+msgstr "保安検査員"
+
+msgid "Gate agents"
+msgstr "ゲート係員"
+
+msgid "Shop staff"
+msgstr "店舗スタッフ"
+
+msgid "Cleaners"
+msgstr "清掃員"
+
+msgid "Ramp agents"
+msgstr "ランプ作業員"
+
+msgid "{hired} hired, {duty} on duty"
+msgstr "雇用 {hired}、勤務中 {duty}"
+
+msgid "{hired} hired, {duty} cleaning"
+msgstr "雇用 {hired}、清掃中 {duty}"
+
+msgctxt "mood overlay mode"
+msgid "Mood"
+msgstr "気分"
+
+msgctxt "mood overlay mode"
+msgid "Hunger"
+msgstr "空腹"
+
+msgctxt "mood overlay mode"
+msgid "Toilet"
+msgstr "トイレ"
+
+msgctxt "mood overlay mode"
+msgid "Boredom"
+msgstr "退屈"
+
+msgctxt "mood overlay mode"
+msgid "Late"
+msgstr "遅刻"
+
+msgctxt "speed button"
+msgid "Pause ({key})"
+msgstr "一時停止 ({key})"
+
+msgctxt "speed button"
+msgid "Speed {speed}x ({key})"
+msgstr "速度 {speed}x ({key})"
+
+msgctxt "gate caption"
+msgid "Gate {gate}"
+msgstr "{gate}番ゲート"
+
+msgctxt "gate name"
+msgid "Gate {gate}"
+msgstr "{gate}番ゲート"
+
+msgctxt "gate caption"
+msgid "up to small planes"
+msgstr "小型機まで"
+
+msgctxt "gate caption"
+msgid "up to medium planes"
+msgstr "中型機まで"
+
+msgctxt "gate caption"
+msgid "up to large planes"
+msgstr "大型機まで"
+
+msgctxt "gate caption"
+msgid "no room for a plane"
+msgstr "駐機スペースなし"
+
+msgctxt "gate caption"
+msgid "{minutes} min walk"
+msgstr "徒歩 {minutes} 分"
+
+msgctxt "sign caption"
+msgid "Closed"
+msgstr "閉鎖中"
+
+msgctxt "room type"
+msgid "Bag room"
+msgstr "手荷物室"
+
+msgctxt "room type"
+msgid "Toilet"
+msgstr "トイレ"
+
+msgctxt "room status"
+msgid "Ready"
+msgstr "準備完了"

@@ -104,6 +104,7 @@ var _header := HBoxContainer.new()
 var _cards := VBoxContainer.new()
 var _more := Button.new()
 var _tray := PanelContainer.new()
+var _tray_title := Label.new()
 var _tray_scroll := ScrollContainer.new()
 var _tray_lines := VBoxContainer.new()
 var _tray_button := Button.new()
@@ -147,6 +148,11 @@ func _ready() -> void:
 	if ramp_dispatch == null:
 		ramp_dispatch = get_node_or_null("../../RampDispatch") as RampDispatch
 	_build()
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_TRANSLATION_CHANGED and is_node_ready():
+		_retranslate()
 
 
 func _process(delta: float) -> void:
@@ -442,10 +448,10 @@ func _build() -> void:
 	add_child(_tray)
 	var column := VBoxContainer.new()
 	_tray.add_child(column)
-	var title := Label.new()
-	title.text = tr("Alert history")
-	title.theme_type_variation = &"HudCardName"
-	column.add_child(title)
+	_tray_title.name = "AlertHistoryTitle"
+	_tray_title.text = tr("Alert history")
+	_tray_title.theme_type_variation = &"HudCardName"
+	column.add_child(_tray_title)
 	_toggle.name = "AlertCardsToggle"
 	_toggle.text = tr("Show alert cards")
 	_toggle.focus_mode = Control.FOCUS_NONE
@@ -703,3 +709,25 @@ func _layout_cards() -> void:
 		var content := _tray_lines.get_combined_minimum_size().y
 		var tray_room := maxf(_stop_y() - _tray_scroll.global_position.y, 0.0)
 		_tray_scroll.custom_minimum_size.y = minf(content, tray_room)
+
+
+func _retranslate() -> void:
+	_tray_button.tooltip_text = tr("Alert history and the on/off switch for alert cards")
+	_more.tooltip_text = tr("Open the alert history")
+	_tray_title.text = tr("Alert history")
+	_toggle.text = tr("Show alert cards")
+	for child in _cards.get_children():
+		if not _notices.has(child.get_meta(META_KEY)):
+			(child as Control).tooltip_text = tr("Click to look at it")
+	_heights.clear()
+	_layout_dirty = true
+	if sim != null:
+		_scanned_tick = -1
+		refresh()
+	else:
+		var count := _board.active().size()
+		_tray_button.text = (
+			tr("Alerts") if count == 0 else tr("Alerts ({count})").format({"count": count})
+		)
+	_sync_tray()
+	_layout_cards()
