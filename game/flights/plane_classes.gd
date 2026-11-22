@@ -26,7 +26,7 @@ const REFERENCE_OFFSET := Vector3(0.0, 0.0, 1.7)
 ## Class -> {"models": the PlaneModels.PLANES names that may draw it,
 ## "passengers": [fewest, most] booked passengers}.
 const CLASSES := {
-	SMALL: {"models": ["tp_plane_03a"], "passengers": [8, 16]},
+	SMALL: {"models": ["tp_plane_03a"], "passengers": [4, 8]},
 	MEDIUM: {"models": ["tp_plane_04a", "tp_plane_05a"], "passengers": [24, 48]},
 	LARGE: {"models": ["tp_plane_06a", "tp_plane_07a"], "passengers": [48, 120]},
 }

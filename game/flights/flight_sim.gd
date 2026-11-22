@@ -1,6 +1,7 @@
-# gdlint:disable = max-public-methods
+# gdlint:disable = max-public-methods, max-file-lines
 # FlightSim is the one flight data API; ending a contract (end_contract,
-# active_contract_ids, contract_end_day) took it past the 20-method cap.
+# active_contract_ids, contract_end_day) took it past the 20-method cap, and the
+# v11 SAVE_VERSION note took it 4 lines past 1600.
 class_name FlightSim
 extends Node
 ## The flight schedule as plain data driven by SimClock ticks. Each flight is
@@ -135,8 +136,8 @@ const STARTER_TERMS := {
 	"airline": "Gotta Air",
 	"destination": "Oslo",
 	"plane_size": "small",
-	"booked_passengers": 12,
-	"fee_per_passenger": 25,
+	"booked_passengers": 6,
+	"fee_per_passenger": 50,
 }
 ## 2: occurrences are issued FlightTimetable.ISSUE_LEAD_TICKS (2400, was 1200)
 ## before their first state, which changes the saved next_day at some ticks.
@@ -163,7 +164,10 @@ const STARTER_TERMS := {
 ## 10: a flight's west or east stand holds "lane_x", the x of its spur
 ## (StandPlacement.is_stand; decision side-spur-move-design-s7-stands-carry-
 ## lane-x-the-wanted-spur). A version 9 save is refused; there is no migration.
-const SAVE_VERSION := 10
+## 11: small contracts carry 4-8 passengers (was 8-16, ruling small-plane-
+## passenger-count-and-fare-balance-4-8-passengers). A version 10 save is
+## refused; there is no migration.
+const SAVE_VERSION := 11
 ## The refusal of a flight no taxi pause fits (user ruling a-gate-has-no-size-
 ## planes-use-any-stand-they-fit-neighbours-share-apron-space).
 const TAXI_BUSY_TEXT := GroundPlanner.TAXI_BUSY_TEXT

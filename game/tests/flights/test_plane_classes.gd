@@ -93,7 +93,7 @@ func test_the_class_radius_is_the_largest_own_swing_radius_of_its_models() -> vo
 
 
 func test_the_passenger_ranges_are_the_ruled_ones() -> void:
-	assert_array(PlaneClasses.passenger_range(PlaneClasses.SMALL)).is_equal([8, 16])
+	assert_array(PlaneClasses.passenger_range(PlaneClasses.SMALL)).is_equal([4, 8])
 	assert_array(PlaneClasses.passenger_range(PlaneClasses.MEDIUM)).is_equal([24, 48])
 	assert_array(PlaneClasses.passenger_range(PlaneClasses.LARGE)).is_equal([48, 120])
 	for plane_class: String in PlaneClasses.ORDER:
@@ -122,8 +122,8 @@ func test_the_starter_contract_fits_its_class() -> void:
 
 func test_a_saved_offer_at_the_class_limits_loads() -> void:
 	var cases: Array = [
+		["small", 4, "Gotta Air"],
 		["small", 8, "Gotta Air"],
-		["small", 16, "Gotta Air"],
 		["medium", 24, "Gotta Air"],
 		["medium", 48, "Gotta Air"],
 		["large", 48, "Polar Jet"],
@@ -152,7 +152,7 @@ func test_a_drawn_offer_always_has_a_count_its_class_allows() -> void:
 
 func test_a_plane_view_picks_the_model_from_its_flights_airline_and_class() -> void:
 	var cases: Array = [
-		["Gotta Air", "small", 12, "tp_plane_03a"],
+		["Gotta Air", "small", 6, "tp_plane_03a"],
 		["Nordic Wing", "medium", 40, PlaneClasses.model_for("Nordic Wing", "medium")],
 		["Blue Fjord", "medium", 40, PlaneClasses.model_for("Blue Fjord", "medium")],
 		["Polar Jet", "large", 90, PlaneClasses.model_for("Polar Jet", "large")],
@@ -290,7 +290,9 @@ func _save_with(airline: String, plane_size: String, booked: int) -> Dictionary:
 	offers[0]["airline"] = airline
 	offers[0]["plane_size"] = plane_size
 	offers[0]["booked_passengers"] = booked
-	offers[0]["fee_per_passenger"] = OfferBoard.TIER_FEES[OfferBoard.tier_of(airline)][0]
+	offers[0]["fee_per_passenger"] = (
+		OfferBoard.fee_range_for(OfferBoard.tier_of(airline), plane_size)[0]
+	)
 	return TestOfferBoard.save_of(offers)
 
 

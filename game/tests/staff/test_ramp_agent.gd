@@ -58,8 +58,8 @@ func _add_contract_flight(
 		"destination": "Bergen",
 		"departure_minute": 480,
 		"plane_size": plane_size,
-		"booked_passengers": 12 if plane_size == PlaneClasses.SMALL else 30,
-		"fee_per_passenger": 30,
+		"booked_passengers": 6 if plane_size == PlaneClasses.SMALL else 30,
+		"fee_per_passenger": 50 if plane_size == PlaneClasses.SMALL else 30,
 	}
 	flights._contracts.append(flights._candidate(terms, "C", flights.gate_grounds()))
 	flights._insert(flights._record(fid, starts, "C", cid, 0))
