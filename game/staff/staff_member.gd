@@ -9,8 +9,10 @@ extends RefCounted
 
 ## SHOP: a server at a cafe or kiosk counter (ShopCounters). CLEANER: works no
 ## station; it walks to a mess or a full bin, its job (CleanerJobs). GATE: a
-## gate agent at a gate desk (GateDesks.DESK).
-enum Role { CHECKIN, SECURITY, SHOP, CLEANER, GATE }
+## gate agent at a gate desk (GateDesks.DESK). RAMP: airside ramp agent for
+## baggage shuttles, pushback tugs and marshalling (RampDispatch).
+enum Role { CHECKIN, SECURITY, SHOP, CLEANER, GATE, RAMP }
+enum RampJob { NONE, SHUTTLE, PUSHBACK, MARSHAL }
 ## WALKING_OUT: fired, on its way to the entrance; no longer staff. A cleaner
 ## is TO_STATION while it walks to its job and ON_DUTY while it cleans or
 ## empties it.
@@ -51,6 +53,9 @@ var work_left := 0
 ## StaffSim._replan() turned it back from a cell that went: `at` is that cell
 ## until it reaches the one it left (path[1]). Cleared on arriving there.
 var backing_out := false
+var ramp_job: RampJob = RampJob.NONE
+var ramp_shuttle_id := 0
+var ramp_flight_id := ""
 
 
 func in_pool() -> bool:

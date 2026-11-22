@@ -273,10 +273,10 @@ static func run(staff: StaffSim, post: Callable, repost: Callable) -> void:
 	_promote(staff, repost)
 	var spare: Array[StaffMember] = []
 	for m in _members(staff):
-		# A cleaner has no post: its jobs are CleanerJobs'.
 		if (
 			m.state != StaffMember.State.IDLE
 			or m.role == StaffMember.Role.CLEANER
+			or m.role == StaffMember.Role.RAMP
 			or (m.search_failed and not on_beat(m, staff.sim.tick))
 		):
 			continue

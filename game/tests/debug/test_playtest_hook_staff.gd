@@ -40,6 +40,7 @@ func test_a_new_game_snapshot_shows_no_staff() -> void:
 				"security": {"hired": 0, "on_duty": 0},
 				"gate": {"hired": 0, "on_duty": 0},
 				"shop": {"hired": 0, "on_duty": 0},
+				"ramp": {"hired": 0, "on_duty": 0},
 			}
 		)
 	)
@@ -55,11 +56,14 @@ func test_hire_staff_hires_by_role_name() -> void:
 	assert_int(pool.get_member(gate).role).is_equal(StaffMember.Role.GATE)
 	var shop: int = _hook.hire_staff("shop")
 	assert_int(pool.get_member(shop).role).is_equal(StaffMember.Role.SHOP)
+	var ramp: int = _hook.hire_staff("ramp")
+	assert_int(pool.get_member(ramp).role).is_equal(StaffMember.Role.RAMP)
 	var staff: Dictionary = _hook.snapshot()["staff"]
 	assert_int(staff["checkin"]["hired"]).is_equal(1)
 	assert_int(staff["security"]["hired"]).is_equal(1)
 	assert_int(staff["gate"]["hired"]).is_equal(1)
 	assert_int(staff["shop"]["hired"]).is_equal(1)
+	assert_int(staff["ramp"]["hired"]).is_equal(1)
 
 
 func test_an_unknown_role_hires_nobody() -> void:

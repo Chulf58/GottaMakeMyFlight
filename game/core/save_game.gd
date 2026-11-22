@@ -117,7 +117,9 @@ signal loaded(ok: bool)
 ## epoch; version 24 saves are refused (no migration before a release).
 ## 26: the day ledger part holds cumulative positive revenue ("total_earned");
 ## version 25 saves are refused (no migration before a release).
-const SAVE_VERSION := 26
+## 27: airside ramp agents (staff save version 7) with bidirectional ramp-job
+## SaveLinks validation; version 26 saves are refused (no migration).
+const SAVE_VERSION := 27
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"
@@ -881,9 +883,13 @@ func _stage_messes(data: Dictionary, staged: Dictionary) -> String:
 
 
 ## Checked against the staged layout, and the cleaners' jobs against the
-## staged messes.
+## staged messes; kept for SaveLinks ramp-job checks.
 func _stage_staff(data: Dictionary, staged: Dictionary) -> String:
-	return str(StaffSnapshot.load(data, staged["sim"], staged["messes"]).get("error", ""))
+	var loaded := StaffSnapshot.load(data, staged["sim"], staged["messes"])
+	if loaded.has("error"):
+		return str(loaded["error"])
+	staged["staff"] = loaded
+	return ""
 
 
 ## The line outside the entrance (EntranceLine) against the staged landside:

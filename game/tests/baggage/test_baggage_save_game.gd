@@ -57,7 +57,7 @@ func _first_bag(data: Dictionary) -> Dictionary:
 
 func test_the_save_holds_the_bags_of_checked_in_passengers() -> void:
 	assert_object(_unsettled()).is_not_null()
-	assert_int(SaveGame.SAVE_VERSION).is_equal(26)
+	assert_int(SaveGame.SAVE_VERSION).is_equal(27)
 	assert_int(int(_data["save_version"])).is_equal(SaveGame.SAVE_VERSION)
 	assert_int((_data["baggage"]["bags"] as Array).size()).is_greater(0)
 	var bag := _first_bag(_data)
@@ -175,6 +175,7 @@ func test_active_shuttle_round_trips_through_whole_world_save() -> void:
 		BuildEdit.place_object(&"baggage_cart", Vector2i(17, 14) + offset, 0)
 	)
 	assert_bool(cart.ok).is_true()
+	var ramp_id := (m.get_node("Staff") as StaffSim).hire(StaffMember.Role.RAMP)
 	var clock := m.get_node("SimClock") as SimClock
 	var bags := m.get_node("BaggageSim") as BaggageSim
 	while bags.shuttles().is_empty() and clock.tick < LIMIT:
@@ -189,6 +190,13 @@ func test_active_shuttle_round_trips_through_whole_world_save() -> void:
 	assert_int(s.cart_id).is_equal(orig.cart_id)
 	assert_array(s.bag_ids).is_equal(orig.bag_ids)
 	assert_int(s.waypoints.size()).is_equal(orig.waypoints.size())
+	assert_int(s.driver_staff_id).is_equal(ramp_id)
+	var loaded_staff := _main.get_node("Staff") as StaffSim
+	var driver := loaded_staff.get_member(s.driver_staff_id)
+	assert_object(driver).is_not_null()
+	assert_int(driver.role).is_equal(StaffMember.Role.RAMP)
+	assert_int(driver.ramp_job).is_equal(StaffMember.RampJob.SHUTTLE)
+	assert_int(driver.ramp_shuttle_id).is_equal(s.id)
 	while not _bags.shuttles().is_empty() and (_main.get_node("SimClock") as SimClock).tick < LIMIT:
 		SaveTestKit.step(_main)
 	assert_int(_bags.loaded_total).is_greater(0)

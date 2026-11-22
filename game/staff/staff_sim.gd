@@ -57,9 +57,10 @@ signal member_state_changed(id: int, state: StaffMember.State)
 ## 4: cleaners (Role.CLEANER) and each member's job and work left.
 ## 5: the stations the player closed ("closed", StationClosures).
 ## 6: the scanner faults and their repair ticks ("faults", StationFaults).
+## 7: airside ramp agents (Role.RAMP) with ramp_job, ramp_shuttle_id, ramp_flight_id.
 ## Only this version loads; older saves are refused (no migrations before a
 ## release).
-const SAVE_VERSION := 6
+const SAVE_VERSION := 7
 ## Who fire() lets go first: [state, slot] pairs, a helper before a primary
 ## in the same state, so firing keeps stations open where it can.
 const FIRE_ORDER := [
@@ -79,6 +80,7 @@ var forecast := false
 var closures: StationClosures
 ## The security stations a scanner fault stopped, and their repair ticks.
 var faults: StationFaults
+var ramp_dispatch: RampDispatch
 
 var _members: Array[StaffMember] = []
 var _by_id: Dictionary = {}
@@ -142,6 +144,8 @@ func hire(role: StaffMember.Role) -> int:
 ## Returns false, changing nothing, when every member of that role is already
 ## leaving or walking out, or none is hired.
 func fire(role: StaffMember.Role) -> bool:
+	if role == StaffMember.Role.RAMP:
+		return _fire_ramp()
 	for entry: Array in FIRE_ORDER:
 		var state: StaffMember.State = entry[0]
 		for i in range(_members.size() - 1, -1, -1):
@@ -319,7 +323,7 @@ func stations_of(role: StaffMember.Role) -> Array[int]:
 			return _shop_counters()
 		StaffMember.Role.GATE:
 			return _gate_desk_ids()
-		StaffMember.Role.CLEANER:
+		StaffMember.Role.CLEANER, StaffMember.Role.RAMP:
 			var none: Array[int] = []
 			return none
 	return sim.layout.scanners
@@ -469,6 +473,8 @@ func _finish_job(m: StaffMember) -> void:
 func _reconcile() -> void:
 	for i in range(_members.size() - 1, -1, -1):
 		var m := _members[i]
+		if m.role == StaffMember.Role.RAMP:
+			continue
 		if m.station != 0:
 			var workable := StaffPosts.workable(sim.grid, sim.layout, m.station, m.slot)
 			if not workable or not stations_of(m.role).has(m.station):
@@ -529,6 +535,61 @@ func _remove(m: StaffMember) -> void:
 	_unclaim(m)
 	_members.erase(m)
 	_by_id.erase(m.id)
+
+
+func _fire_ramp() -> bool:
+	for job in [
+		StaffMember.RampJob.NONE,
+		StaffMember.RampJob.MARSHAL,
+		StaffMember.RampJob.PUSHBACK,
+		StaffMember.RampJob.SHUTTLE,
+	]:
+		for i in range(_members.size() - 1, -1, -1):
+			var m := _members[i]
+			if m.role != StaffMember.Role.RAMP or m.ramp_job != job or m.leaving:
+				continue
+			if job == StaffMember.RampJob.NONE or job == StaffMember.RampJob.MARSHAL:
+				m.ramp_job = StaffMember.RampJob.NONE
+				m.ramp_shuttle_id = 0
+				m.ramp_flight_id = ""
+				_remove(m)
+			else:
+				m.leaving = true
+			staff_changed.emit()
+			return true
+	return false
+
+
+func _set_ramp_job(
+	m: StaffMember, job: StaffMember.RampJob, shuttle_id := 0, flight_id := ""
+) -> void:
+	if m == null or m.role != StaffMember.Role.RAMP:
+		return
+	if job == StaffMember.RampJob.NONE:
+		m.ramp_job = StaffMember.RampJob.NONE
+		m.ramp_shuttle_id = 0
+		m.ramp_flight_id = ""
+		if m.leaving:
+			m.leaving = false
+			_remove(m)
+		else:
+			_set_state(m, StaffMember.State.IDLE)
+		staff_changed.emit()
+		return
+	if m.leaving:
+		return
+	m.ramp_job = job
+	m.ramp_shuttle_id = shuttle_id if job == StaffMember.RampJob.SHUTTLE else 0
+	m.ramp_flight_id = (
+		flight_id
+		if (job == StaffMember.RampJob.PUSHBACK or job == StaffMember.RampJob.MARSHAL)
+		else ""
+	)
+	m.at = StaffMember.NO_CELL
+	m.station = 0
+	m.path.clear()
+	_set_state(m, StaffMember.State.ON_DUTY)
+	staff_changed.emit()
 
 
 ## A member walking out is gone: it reached the entrance or has no way there.

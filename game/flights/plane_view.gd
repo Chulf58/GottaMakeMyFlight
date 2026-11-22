@@ -379,6 +379,16 @@ func far_shadow_alpha() -> float:
 	return _far_material.albedo_color.a if _far_material != null else 0.0
 
 
+func tug_visible() -> bool:
+	return _props != null and _props.tug != null and _props.tug.visible
+
+
+func tug_global_transform() -> Transform3D:
+	if _props != null and _props.tug != null:
+		return _props.tug.global_transform
+	return Transform3D.IDENTITY
+
+
 ## The model a flight is drawn with: its contract's airline and plane class, or
 ## the starter's for a one-off flight.
 func model_of(id: String) -> String:

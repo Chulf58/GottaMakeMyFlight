@@ -36,6 +36,7 @@ const ROLES: Array[StaffMember.Role] = [
 	StaffMember.Role.GATE,
 	StaffMember.Role.SHOP,
 	StaffMember.Role.CLEANER,
+	StaffMember.Role.RAMP,
 ]
 const ROLE_KEYS := {
 	StaffMember.Role.CHECKIN: "Checkin",
@@ -43,6 +44,7 @@ const ROLE_KEYS := {
 	StaffMember.Role.GATE: "Gate",
 	StaffMember.Role.SHOP: "Shop",
 	StaffMember.Role.CLEANER: "Cleaner",
+	StaffMember.Role.RAMP: "Ramp",
 }
 ## The English msgids of the hire hints and the wall gap line. Tests compare
 ## against them; the card's lines are tr() of the same literals (_hire_hint(),
@@ -57,8 +59,11 @@ const HINTS := {
 ## (card_lines()) one with the count for several. It uses the sign's words,
 ## "Wall gap".
 const GAP_HINT := "Wall gap: close the open edge of the outer wall, marked in red"
-## A column's least width: five roles fit centred over the bar.
+## A column's least width: five roles fit centred over the bar, six shrink to fit 1280x720.
 const ROLE_WIDTH := 156.0
+const ROLE_WIDTH_SIX := 136.0
+const ROLE_SEPARATION := 10
+const ROLE_SEPARATION_SIX := 8
 ## The banner's top edge with the departures list off: under the three toggles.
 ## With the list open the card sits under it (LeftColumn.follow()).
 const BANNER_TOP := LeftColumn.LIST_TOP
@@ -80,11 +85,15 @@ const GAP_POLL_S := 1.0
 ## rebuilt from the loaded world (decision loading-a-save-always-comes-back-
 ## paused-at-1x-speed-with-hin). Optional.
 @export var save_game: SaveGame
+@export var unlocks: BuildUnlocks
 
 ## How many whole-grid gap scans have run, for the tests.
 var gap_scans := 0
 
 var _card := PanelContainer.new()
+var _roles_box := HBoxContainer.new()
+var _columns: Dictionary = {}
+var _unlocks: BuildUnlocks
 var _checklist := ChecklistCard.new()
 ## The card's title line.
 var _hint := _checklist.title_label()
@@ -108,6 +117,8 @@ var _fire: Dictionary = {}
 
 func _ready() -> void:
 	_build()
+	_resolve_unlocks()
+	_sync_ramp_column()
 	if menu != null:
 		menu.staff_toggled.connect(_on_staff_toggled)
 		_card.visible = menu.staff_open
@@ -364,6 +375,8 @@ func _role_name(role: StaffMember.Role) -> String:
 			return tr("Gate agents")
 		StaffMember.Role.SHOP:
 			return tr("Shop staff")
+		StaffMember.Role.RAMP:
+			return tr("Ramp agents")
 	return tr("Cleaners")
 
 
@@ -394,11 +407,41 @@ func _on_snapshot_loaded() -> void:
 func _on_loaded(ok: bool) -> void:
 	if not ok:
 		return
+	_sync_ramp_column()
 	if gate != null:
 		_on_snapshot_loaded()
 	else:
 		_scan_gaps()
 		refresh()
+
+
+func _on_tier_changed(_tier: int) -> void:
+	_sync_ramp_column()
+
+
+func _resolve_unlocks() -> void:
+	_unlocks = unlocks
+	if _unlocks == null and menu != null and menu.build_mode != null:
+		_unlocks = menu.build_mode.unlocks
+	if _unlocks != null and not _unlocks.tier_changed.is_connected(_on_tier_changed):
+		_unlocks.tier_changed.connect(_on_tier_changed)
+
+
+func _ramp_visible() -> bool:
+	return _unlocks == null or _unlocks.tier() >= BuildUnlocks.CAFE_TIER
+
+
+func _sync_ramp_column() -> void:
+	var show_ramp := _ramp_visible()
+	var ramp_col: Control = _columns.get(StaffMember.Role.RAMP)
+	if ramp_col != null:
+		ramp_col.visible = show_ramp
+	var col_w := ROLE_WIDTH_SIX if show_ramp else ROLE_WIDTH
+	var sep := ROLE_SEPARATION_SIX if show_ramp else ROLE_SEPARATION
+	_roles_box.add_theme_constant_override("separation", sep)
+	for role in _columns:
+		(_columns[role] as Control).custom_minimum_size = Vector2(col_w, 0.0)
+	BuildMenu.anchor_bottom_centre(_card, BuildMenu.MARGIN + BuildMenu.BAR_H + BuildMenu.GAP)
 
 
 func _on_flight_state(id: String, new_state: int) -> void:
@@ -437,19 +480,21 @@ func _build() -> void:
 	_card.theme = BuildMenu.HUD_THEME
 	BuildMenu.anchor_bottom_centre(_card, BuildMenu.MARGIN + BuildMenu.BAR_H + BuildMenu.GAP)
 	add_child(_card)
-	var roles := HBoxContainer.new()
-	roles.add_theme_constant_override("separation", 10)
-	_card.add_child(roles)
+	_roles_box.add_theme_constant_override("separation", ROLE_SEPARATION)
+	_card.add_child(_roles_box)
 	for role in ROLES:
 		var column := VBoxContainer.new()
 		column.custom_minimum_size = Vector2(ROLE_WIDTH, 0.0)
-		roles.add_child(column)
+		_columns[role] = column
+		_roles_box.add_child(column)
 		column.add_child(_label(_role_name(role), &"HudCardName"))
 		var counts := _label("", &"HudSmall")
 		counts.name = "%sCounts" % ROLE_KEYS[role]
+		counts.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		column.add_child(counts)
 		_counts[role] = counts
-		var row := HBoxContainer.new()
+		var row := VBoxContainer.new()
+		row.add_theme_constant_override("separation", 4)
 		column.add_child(row)
 		_hire[role] = _button(row, "Hire%s" % ROLE_KEYS[role], hire_text(role), &"HudButtonTeal")
 		_fire[role] = _button(
@@ -515,7 +560,7 @@ func _label(text: String, variation: StringName) -> Label:
 	return label
 
 
-func _button(row: HBoxContainer, node_name: String, text: String, variation: StringName) -> Button:
+func _button(row: Control, node_name: String, text: String, variation: StringName) -> Button:
 	var button := Button.new()
 	button.name = node_name
 	button.text = text

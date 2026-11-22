@@ -5,7 +5,7 @@ extends RefCounted
 ## planned differently after a load; station claims are rebuilt from the
 ## members. Cells are saved as [x, y].
 ##
-## Only the current version (StaffSim.SAVE_VERSION, 6) loads: an older save is
+## Only the current version (StaffSim.SAVE_VERSION, 7) loads: an older save is
 ## refused, never migrated (no save migrations before the first release,
 ## decision old-saves-are-not-supported-until-after-a-release-no-save-mi).
 ##
@@ -52,6 +52,9 @@ const MEMBER_KEYS := [
 	"job",
 	"job_bin",
 	"work_left",
+	"ramp_job",
+	"ramp_shuttle_id",
+	"ramp_flight_id",
 ]
 const INT_FIELDS := ["id", "role", "state", "station", "slot", "path_index", "seg_mm"]
 const BOOL_FIELDS := ["needs_replan", "search_failed", "leaving", "job_bin"]
@@ -85,6 +88,9 @@ static func save(
 					"job": m.job,
 					"job_bin": m.job_bin,
 					"work_left": m.work_left,
+					"ramp_job": m.ramp_job,
+					"ramp_shuttle_id": m.ramp_shuttle_id,
+					"ramp_flight_id": m.ramp_flight_id,
 				}
 			)
 		)
@@ -234,9 +240,13 @@ static func _member(record: Variant, sim: PassengerSim) -> Variant:
 	for key in MEMBER_KEYS:
 		if not record.has(key):
 			return "a member has no '%s'" % key
-	for key in ["job", "work_left"]:
+	for key in ["job", "work_left", "ramp_shuttle_id"]:
 		if not WholeNumber.is_whole(record[key]) or int(record[key]) < 0:
 			return "member field '%s' is not a whole number of 0 or more" % key
+	if not WholeNumber.is_whole(record["ramp_job"]):
+		return "member field 'ramp_job' is not a whole number"
+	if typeof(record["ramp_flight_id"]) != TYPE_STRING:
+		return "member field 'ramp_flight_id' is not a string"
 	for key in INT_FIELDS:
 		if not WholeNumber.is_whole(record[key]):
 			return "member field '%s' is not a whole number" % key
@@ -253,6 +263,8 @@ static func _member(record: Variant, sim: PassengerSim) -> Variant:
 		return "member %d has an unknown state" % m.id
 	if not StaffMember.Slot.values().has(int(record["slot"])):
 		return "member %d has an unknown slot" % m.id
+	if not StaffMember.RampJob.values().has(int(record["ramp_job"])):
+		return "member %d has an unknown ramp_job" % m.id
 	m.role = int(record["role"]) as StaffMember.Role
 	m.state = int(record["state"]) as StaffMember.State
 	m.station = int(record["station"])
@@ -265,6 +277,9 @@ static func _member(record: Variant, sim: PassengerSim) -> Variant:
 	m.job = int(record["job"])
 	m.job_bin = record["job_bin"]
 	m.work_left = int(record["work_left"])
+	m.ramp_job = int(record["ramp_job"]) as StaffMember.RampJob
+	m.ramp_shuttle_id = int(record["ramp_shuttle_id"])
+	m.ramp_flight_id = record["ramp_flight_id"]
 	# Saves from before the flag existed have none: not backing out.
 	if record.has("backing_out"):
 		if typeof(record["backing_out"]) != TYPE_BOOL:
@@ -283,15 +298,35 @@ static func _member(record: Variant, sim: PassengerSim) -> Variant:
 		if not m.path.is_empty() and not _adjacent(m.path[m.path.size() - 1], cell):
 			return "member %d has a path that jumps" % m.id
 		m.path.append(cell)
-	if m.role != StaffMember.Role.CLEANER:
+	if m.role != StaffMember.Role.CLEANER and m.role != StaffMember.Role.RAMP:
 		_release_unreachable(m, sim)
 	var problem := _place_problem(m)
-	if problem == "" and m.role == StaffMember.Role.CLEANER:
+	if problem == "" and m.role == StaffMember.Role.RAMP:
+		problem = _ramp_problem(m)
+	elif problem == "" and m.role == StaffMember.Role.CLEANER:
 		problem = _cleaner_problem(m)
+		if (
+			problem == ""
+			and (
+				m.ramp_job != StaffMember.RampJob.NONE
+				or m.ramp_shuttle_id != 0
+				or m.ramp_flight_id != ""
+			)
+		):
+			problem = "is no ramp agent but has a ramp job"
 	elif problem == "":
 		problem = _duty_problem(m, sim)
 		if problem == "" and (m.job != 0 or m.job_bin or m.work_left != 0):
 			problem = "is no cleaner but has a job"
+		if (
+			problem == ""
+			and (
+				m.ramp_job != StaffMember.RampJob.NONE
+				or m.ramp_shuttle_id != 0
+				or m.ramp_flight_id != ""
+			)
+		):
+			problem = "is no ramp agent but has a ramp job"
 	if problem != "":
 		return "member %d %s" % [m.id, problem]
 	return m
@@ -333,6 +368,8 @@ static func _place_problem(m: StaffMember) -> String:
 	if m.in_pool():
 		if not m.path.is_empty() or m.path_index != 0 or m.seg_mm != 0 or m.needs_replan:
 			return "is in the pool but has a walk"
+		if m.role == StaffMember.Role.RAMP:
+			return ""
 		return "" if m.state == StaffMember.State.IDLE else "is in the pool but not idle"
 	if m.path_index < 0 or m.path_index >= m.path.size() or m.path[m.path_index] != m.at:
 		return "does not stand on its path"
@@ -341,6 +378,48 @@ static func _place_problem(m: StaffMember) -> String:
 		length = Passenger.segment_mm(m.at, m.path[m.path_index + 1])
 	if m.seg_mm < 0 or (m.seg_mm > 0 and m.seg_mm >= length):
 		return "is further along its step than the step is long"
+	return ""
+
+
+static func _ramp_problem(m: StaffMember) -> String:
+	if (
+		not m.in_pool()
+		or m.station != 0
+		or m.slot != StaffMember.Slot.PRIMARY
+		or m.search_failed
+		or m.backing_out
+	):
+		return "is a ramp agent with indoor position or station state"
+	if m.job != 0 or m.job_bin or m.work_left != 0:
+		return "is a ramp agent with a cleaner job"
+	match m.ramp_job:
+		StaffMember.RampJob.NONE:
+			if m.state != StaffMember.State.IDLE or m.leaving:
+				return "is an idle ramp agent with wrong state or leaving"
+			if m.ramp_shuttle_id != 0 or m.ramp_flight_id != "":
+				return "is an idle ramp agent with a job id"
+		StaffMember.RampJob.SHUTTLE:
+			if (
+				m.state != StaffMember.State.ON_DUTY
+				or m.ramp_shuttle_id < 1
+				or m.ramp_flight_id != ""
+			):
+				return "has an invalid shuttle assignment"
+		StaffMember.RampJob.PUSHBACK:
+			if (
+				m.state != StaffMember.State.ON_DUTY
+				or m.ramp_shuttle_id != 0
+				or m.ramp_flight_id == ""
+			):
+				return "has an invalid pushback assignment"
+		StaffMember.RampJob.MARSHAL:
+			if (
+				m.state != StaffMember.State.ON_DUTY
+				or m.leaving
+				or m.ramp_shuttle_id != 0
+				or m.ramp_flight_id == ""
+			):
+				return "has an invalid marshal assignment"
 	return ""
 
 
