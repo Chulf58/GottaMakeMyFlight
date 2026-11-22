@@ -405,6 +405,7 @@ func snap() -> void:
 			var kept: Node3D = _nodes[id]
 			ActivityPoses.dress(kept, 0.0, 0.0)
 			DiningPose.apply(kept, DiningPose.Kind.NONE, 0.0, 0)
+			RepackPose.apply(kept, 0.0, 0.0, 0)
 			var p := sim.get_passenger(id)
 			if kept.get_meta(&"body") != PassengerLooks.body_of(id, p.variant):
 				_release(id)
@@ -504,6 +505,7 @@ func draw() -> void:
 		var fade: ClipCrossfade = node.get_meta(&"crossfade")
 		fade.ease_to(now, CROSSFADE_SECONDS)
 		fade.drawn = true
+		RepackPose.tick_frame(node, now)
 	_sync_follow_anchor()
 	_draw_late_marks()
 	layout_started.emit()
@@ -1063,6 +1065,7 @@ func _release(id: int) -> void:
 	_sit_off.erase(id)
 	ActivityPoses.dress(node, 0.0, 0.0)
 	DiningPose.apply(node, DiningPose.Kind.NONE, 0.0, 0)
+	RepackPose.apply(node, 0.0, 0.0, 0)
 	_props.release(id)
 	_turns.release(id)
 	_setoffs.erase(id)
@@ -1125,7 +1128,11 @@ func _pose(node: Node3D, p: Passenger, built: Dictionary) -> float:
 		# A runner puts its bags into the tray at a walk and runs on after
 		# (board b1754061): the walk clip at the pace it moves, so its feet do
 		# not slide, and the clip change blends as any other (ClipCrossfade).
-		var running := p.late and not SecurityLooks.putting_in(sim, p)
+		var exit_scan := (
+			SecurityLooks.in_basic_scan(sim, p)
+			and p.security_work <= SecurityLooks.BASIC_EXIT_WALK_TICKS
+		)
+		var running := p.late and not SecurityLooks.putting_in(sim, p) and not exit_scan
 		clip = "run" if running else "walk"
 		base = (
 			sim_mps
@@ -1224,6 +1231,7 @@ func _pose(node: Node3D, p: Passenger, built: Dictionary) -> float:
 			dining_kind = DiningPose.kind_for(StringName(visit.piece.get("def", &"")))
 			dining_amount = DiningPose.seated_weight(sim, p, visit)
 	DiningPose.apply(node, dining_kind, dining_amount, p.id)
+	RepackPose.apply(node, RepackPose.weight_for(p), _now(), p.id)
 	node.set_meta(&"base_speed", base)
 	var player := node.get_node("AnimationPlayer") as AnimationPlayer
 	var was: String = node.get_meta(&"clip", "")
@@ -1346,7 +1354,7 @@ func _chase(p: Passenger) -> void:
 	var target := SecurityLooks.target_offset(sim, p)
 	var now: Vector3 = _offsets.get(p.id, Vector3.ZERO)
 	now = now.move_toward(target, PassengerSim.WALK_MM / 1000.0)
-	if SecurityLooks.setting_off(sim, p):
+	if SecurityLooks.setting_off(sim, p) or SecurityLooks.in_basic_scan(sim, p):
 		now = target
 	if now == Vector3.ZERO:
 		_offsets.erase(p.id)
