@@ -30,7 +30,7 @@ func _gates(gates: Array[String]) -> void:
 static func _small(id: String, minute: int) -> Dictionary:
 	var terms := TestFlightContracts.terms(id, minute)
 	terms["plane_size"] = PlaneClasses.SMALL
-	terms["booked_passengers"] = 12
+	terms["booked_passengers"] = 6
 	return terms
 
 

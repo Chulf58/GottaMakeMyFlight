@@ -18,29 +18,55 @@ var _world: PassengerTestWorld
 var _ids: Dictionary
 ## Passenger id -> stages entered, in order.
 var _stages: Dictionary = {}
+var _base_world: PassengerTestWorld
+var _base_ids: Dictionary
+var _base_clean: Dictionary
 
 
 func before() -> void:
+	PassengerTestWorld.tracker = null
+	var grid := BuildGrid.new()
+	_base_ids = CafeTestLayout.build(grid, false)
+	_base_world = PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(700, 1700))
+	_base_world.sim.stage_changed.connect(_on_stage)
+	_base_clean = {
+		"clock": _base_world.clock.to_snapshot(),
+		"flights": _base_world.flights.to_snapshot(),
+		"sim": _base_world.sim.to_snapshot(),
+		"wallet": _base_world.sim.wallet.to_snapshot(),
+	}
 	PassengerTestWorld.tracker = self
 
 
 func after() -> void:
+	if _base_world != null:
+		_base_world.free_all()
+	_base_world = null
+	_base_clean.clear()
 	PassengerTestWorld.tracker = null
 
 
 func after_test() -> void:
-	if _world != null:
+	if _world != null and _world != _base_world:
 		_world.free_all()
-		_world = null
+	_world = null
 	_stages.clear()
 
 
-## The default flight, or with `roomy` one that boards at 1500 and closes at
-## 4000, so several guests fit in a visit before it.
-func _make(extra_tables := false, roomy := false) -> void:
+## Reuses the hoisted default world unless `extra_tables`, `roomy`, or a grid
+## edit (`fresh`) requires its own instance.
+func _make(extra_tables := false, roomy := false, fresh := false) -> void:
+	if not extra_tables and not roomy and not fresh:
+		_world = _base_world
+		_ids = _base_ids
+		assert_bool(_world.clock.from_snapshot(_base_clean["clock"])).is_true()
+		assert_bool(_world.flights.from_snapshot(_base_clean["flights"])).is_true()
+		assert_bool(_world.sim.from_snapshot(_base_clean["sim"])).is_true()
+		assert_bool(_world.sim.wallet.from_snapshot(_base_clean["wallet"])).is_true()
+		return
 	var grid := BuildGrid.new()
 	_ids = CafeTestLayout.build(grid, extra_tables)
-	var starts := FlightSim.schedule_starts(0)
+	var starts := PassengerTestWorld.starts_with(700, 1700)
 	if roomy:
 		starts = PassengerTestWorld.starts_with(1500, 4000)
 	_world = PassengerTestWorld.make(grid, starts)
@@ -106,7 +132,7 @@ func _visit_stages(id: int) -> Array:
 
 
 func test_both_cafes_are_usable_with_a_lane_and_two_seats() -> void:
-	_make()
+	_make(false, false, true)
 	_cafes().refresh()
 	var layout := _cafes().layout
 	assert_int(layout.cafes.size()).is_equal(2)
@@ -142,7 +168,7 @@ func test_an_airside_visit_runs_every_stage_and_resumes_to_the_gate() -> void:
 	assert_int(p.stage).is_in([Passenger.Stage.TO_GATE, Passenger.Stage.TO_EXIT])
 	assert_int(_cafes().seat_holder(visit.seat_key)).is_equal(0)
 	assert_array(_cafes().queue_of(_ids["air_counter"])).is_empty()
-	_world.run_to(PassengerTestWorld.doors_tick())
+	_world.run_to(_world.flights.doors_close_tick(PassengerTestWorld.FLIGHT))
 	assert_int(p.stage).is_equal(Passenger.Stage.MADE)
 
 
@@ -156,7 +182,7 @@ func test_a_landside_visit_starts_after_check_in_and_resumes_to_security() -> vo
 	assert_array(_visit_stages(p.id)).is_equal(VISIT_STAGES)
 	assert_int(p.stage).is_equal(Passenger.Stage.TO_SECURITY)
 	assert_bool(p.cleared).is_false()
-	_world.run_to(PassengerTestWorld.doors_tick())
+	_world.run_to(_world.flights.doors_close_tick(PassengerTestWorld.FLIGHT))
 	assert_int(p.stage).is_equal(Passenger.Stage.MADE)
 
 
@@ -257,7 +283,7 @@ func test_the_deadline_is_worked_out_again_after_an_edit() -> void:
 
 
 func test_removing_the_table_ends_the_visit_and_frees_the_queue() -> void:
-	_make()
+	_make(false, false, true)
 	var p := _spawn_to(Passenger.Stage.TO_GATE)
 	assert_bool(_cafes().try_visit(p)).is_true()
 	_world.step()
@@ -266,12 +292,12 @@ func test_removing_the_table_ends_the_visit_and_frees_the_queue() -> void:
 	assert_object(_cafes().visit_of(p.id)).is_null()
 	assert_array(_cafes().queue_of(_ids["air_counter"])).is_empty()
 	assert_bool(Passenger.in_cafe(p.stage)).is_false()
-	_world.run_to(PassengerTestWorld.doors_tick())
+	_world.run_to(_world.flights.doors_close_tick(PassengerTestWorld.FLIGHT))
 	assert_int(p.stage).is_equal(Passenger.Stage.MADE)
 
 
 func test_removing_the_counter_sends_a_queuing_guest_on() -> void:
-	_make()
+	_make(false, false, true)
 	var p := _spawn_to(Passenger.Stage.TO_GATE)
 	assert_bool(_cafes().try_visit(p)).is_true()
 	while p.stage != Passenger.Stage.CAFE_QUEUE and _world.clock.tick < 1400:
@@ -294,7 +320,8 @@ func test_doors_closing_on_a_guest_drops_its_visit() -> void:
 	# forecasts it afresh each second.
 	visit.dwell_end = 1000000
 	var key := visit.seat_key
-	while _world.clock.tick < PassengerTestWorld.doors_tick():
+	var doors := _world.flights.doors_close_tick(PassengerTestWorld.FLIGHT)
+	while _world.clock.tick < doors:
 		visit.deadline = 1000000
 		_world.step()
 	assert_int(p.stage).is_equal(Passenger.Stage.MISSED)
@@ -306,8 +333,8 @@ func test_doors_closing_on_a_guest_drops_its_visit() -> void:
 
 func test_a_visit_that_does_not_fit_before_doors_close_is_refused() -> void:
 	_make()
-	_world.run_to(1000)
-	var p := _spawn_to(Passenger.Stage.TO_SECURITY, 1600)
+	_world.run_to(1400)
+	var p := _spawn_to(Passenger.Stage.TO_SECURITY, 1650)
 	assert_bool(_cafes().try_visit(p)).is_false()
 	assert_object(_cafes().visit_of(p.id)).is_null()
 

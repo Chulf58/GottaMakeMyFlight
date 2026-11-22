@@ -88,7 +88,8 @@ func _run() -> void:
 		terms["destination"] = extra[2]
 		terms["airline"] = extra[3]
 		terms["plane_size"] = "small"
-		terms["booked_passengers"] = 12
+		terms["booked_passengers"] = 6
+		terms["fee_per_passenger"] = 50
 		print("PROBE accept %s=%s" % [extra[0], flights.accept_contract(terms)])
 	_hud.refresh()
 	await _frames(40)

@@ -116,5 +116,5 @@ func test_the_rail_top_is_the_panel_bottom_plus_the_group_gap() -> void:
 func _small(id: String, minute: int) -> Dictionary:
 	var terms := TestFlightContracts.terms(id, minute)
 	terms["plane_size"] = "small"
-	terms["booked_passengers"] = 12
+	terms["booked_passengers"] = 6
 	return terms

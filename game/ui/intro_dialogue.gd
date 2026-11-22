@@ -300,15 +300,15 @@ func _build_box() -> void:
 func _intro_body() -> String:
 	var welcome := tr(
 		# gdlint:ignore = max-line-length
-		"Welcome to your new airport! Passengers are on their way, and every one of them has a flight to catch."
+		"Welcome to your new airport! Open Operations on the bottom bar to place a check-in desk, security scanner, and gate desk."
 	)
-	var path := tr(
+	var staff_line := tr(
 		# gdlint:ignore = max-line-length
-		"Build them a path: entrance, then check-in, then security, then the gate exit. {pause} pauses, {speed} sets speed."
+		"Then open Staff to hire an agent, an officer, and a gate agent so the airport can open. {pause} pauses, {speed} sets speed."
 	)
 	var clock := tr("The clock starts when you close this.")
 	var keys := {"pause": CONTINUE_KEY, "speed": SPEED_KEYS_TEXT}
-	return "\n".join(PackedStringArray([welcome, path.format(keys), clock]))
+	return "\n".join(PackedStringArray([welcome, staff_line.format(keys), clock]))
 
 
 ## Sizes the box to its body text: never below the caller's height, never above

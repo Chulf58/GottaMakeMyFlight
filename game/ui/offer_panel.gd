@@ -281,12 +281,18 @@ func _ready() -> void:
 		desk.rating.changed.connect(_refresh_warning)
 	desk.contract_ended.connect(_on_contract_ended)
 	flights.planning_changed.connect(_refresh_fits)
+	flights.snapshot_loaded.connect(_sync_open_state)
+	flights.occurrence_added.connect(_on_flights_changed)
+	var gate := get_node_or_null("../AirportGate") as AirportGate
+	if gate != null:
+		gate.opened.connect(_on_airport_opened)
 	if build_mode != null:
 		build_mode.tool_changed.connect(_on_tool_changed)
 	if save_game != null:
 		save_game.loaded.connect(_on_loaded)
 	_refresh()
 	_refresh_warning()
+	_sync_open_state()
 
 
 func _notification(what: int) -> void:
@@ -298,13 +304,17 @@ func _retranslate() -> void:
 	if _sheet != null:
 		var title := _sheet.find_child("OfferTitle", true, false) as Label
 		if title != null:
-			title.text = tr("Today's offers")
+			title.text = tr("Airline Contracts — Accept to schedule flights")
 	if desk != null and flights != null:
 		_refresh()
 		_refresh_warning()
 
 
 func _process(_delta: float) -> void:
+	if flights != null and _button != null:
+		var open_now := flights.opened_tick >= 0
+		if _button.visible != open_now:
+			_sync_open_state()
 	if not _sheet.visible:
 		return
 	if flights.tick != _noted_tick:
@@ -329,9 +339,11 @@ func sheet() -> Control:
 
 
 ## Pauses the clock and shows the sheet, at once or, while another exclusive
-## dialog has the turn, when that one closes.
+## dialog has the turn, when that one closes. Hidden/refused until the airport
+## opens.
 func open() -> void:
-	if _sheet.visible or _is_waiting():
+	_sync_open_state()
+	if flights == null or flights.opened_tick < 0 or _sheet.visible or _is_waiting():
 		return
 	if clock == null:
 		_show()
@@ -490,7 +502,9 @@ func _build() -> void:
 	_sheet.add_child(sheet_column)
 	var title := Label.new()
 	title.name = "OfferTitle"
-	title.text = tr("Today's offers")
+	title.text = tr("Airline Contracts — Accept to schedule flights")
+	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	title.custom_minimum_size = Vector2(SHEET_W - 30.0, 0.0)
 	_style_label(title, &"HudTitle")
 	sheet_column.add_child(title)
 	_cards.name = "OfferCards"
@@ -516,6 +530,7 @@ func _on_loaded(ok: bool) -> void:
 	if not ok:
 		return
 	close()
+	_sync_open_state()
 	# The ending notice is not saved. The rail's own reset (reset_done) posts a
 	# warning still due once, whichever of the two handlers runs first, so this
 	# only drops the ending and lets the warning follow the loaded rating.
@@ -524,6 +539,24 @@ func _on_loaded(ok: bool) -> void:
 		rail.drop_notice(ENDED_KEY)
 	_ended_text = ""
 	_refresh_warning.call_deferred()
+
+
+func _sync_open_state() -> void:
+	var open_now := flights != null and flights.opened_tick >= 0
+	if _button != null:
+		_button.visible = open_now
+		_button.disabled = not open_now
+	if not open_now and _sheet != null:
+		close()
+
+
+func _on_airport_opened(_tick: int) -> void:
+	_sync_open_state()
+	_refresh()
+
+
+func _on_flights_changed(_id: String) -> void:
+	_sync_open_state()
 
 
 func _on_tool_changed(_tool: BuildMode.Tool) -> void:
@@ -581,6 +614,7 @@ func _set_note(label: Label, note: String) -> void:
 
 ## Rewrites each card's fit line for the sim as it is now.
 func _refresh_fits() -> void:
+	_sync_open_state()
 	for id: String in _fit_labels:
 		_set_fit(_fit_labels[id], desk.board.offer_of(id))
 

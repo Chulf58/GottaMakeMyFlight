@@ -71,8 +71,8 @@ func test_every_unmet_opening_need_has_its_own_line() -> void:
 		. contains_exactly(
 			[
 				Checklist.STAFF_SPOT,
-				"%s: %s" % [Checklist.CHECKIN, Checklist.NEXT["checkin"]["closed"]],
-				"%s: %s" % [Checklist.SECURITY, Checklist.NEXT["security"]["hire"]],
+				Checklist.NEXT["checkin"]["closed"],
+				Checklist.NEXT["security"]["hire"],
 				Checklist.GATE,
 				Checklist.SEATS,
 			]
@@ -85,10 +85,10 @@ func test_a_station_line_says_what_to_do_next() -> void:
 	var placing := _texts(Checklist.opening_lines(unmet, _counts(0, 0, 1, 0, 0)), false)
 	var walking := _texts(Checklist.opening_lines(unmet, _counts(1, 1, 1, 1, 1)), false)
 	print("placing %s, walking %s" % [placing, walking])
-	assert_array(placing).contains(["Check-in desk and an agent: place a desk"])
-	assert_array(placing).contains(["Security scanner and an officer: place a scanner"])
-	assert_array(walking).contains(["Check-in desk and an agent: the agent is on the way"])
-	assert_array(walking).contains(["Security scanner and an officer: the officer is on the way"])
+	assert_array(placing).contains(["Place Check-in (Operations)"])
+	assert_array(placing).contains(["Place Security (Operations)"])
+	assert_array(walking).contains(["Check-in agent on the way"])
+	assert_array(walking).contains(["Security officer on the way"])
 
 
 func test_seats_tick_off_but_are_never_an_opening_blocker() -> void:
@@ -106,8 +106,8 @@ func test_a_closed_bare_floor_card_lists_all_its_needs() -> void:
 	print("unmet %s, card '%s'" % [unmet, _panel.hint_text().replace("\n", " | ")])
 	assert_int(unmet.size()).is_equal(3)
 	assert_array(Array(todo)).contains([Checklist.ENTRANCE])
-	assert_array(Array(todo)).contains(["Check-in desk and an agent: place a desk"])
-	assert_array(Array(todo)).contains(["Security scanner and an officer: place a scanner"])
+	assert_array(Array(todo)).contains(["Place Check-in (Operations)"])
+	assert_array(Array(todo)).contains(["Place Security (Operations)"])
 	assert_str(_panel.hint_label().text).is_equal(Checklist.TITLE_CLOSED)
 	assert_bool(_panel.hint_card().visible).is_true()
 	# One row per unmet line, each with its box; a met line is folded away.
@@ -120,9 +120,7 @@ func test_the_reference_card_ticks_what_stands_and_hides_once_open_with_nothing_
 	var before := _panel.card_lines()
 	print("unstaffed %s" % [before])
 	assert_array(_texts(before, true)).contains([Checklist.ENTRANCE, Checklist.GATE])
-	assert_array(_texts(before, false)).contains(
-		["Check-in desk and an agent: hire an agent on Staff"]
-	)
+	assert_array(_texts(before, false)).contains(["Hire Check-in agent (Staff)"])
 	assert_int(StaffTestKit.staff_all(_w.staff)).is_greater(0)
 	_panel.refresh()
 	assert_array(_gate.unmet()).is_empty()
@@ -145,8 +143,8 @@ func test_gate_agent_line_shows_hire_then_walking_when_gate_desk_needs_staff() -
 	var counts_walking := _counts(1, 1, 1, 1, 1)
 	counts_walking["gate_staying"] = 1
 	var walking := _texts(Checklist.opening_lines(unmet, counts_walking), false)
-	assert_array(hire).contains(["Gate desk and an agent: hire a gate agent on Staff"])
-	assert_array(walking).contains(["Gate desk and an agent: the gate agent is on the way"])
+	assert_array(hire).contains(["Hire Gate agent (Staff)"])
+	assert_array(walking).contains(["Gate agent on the way"])
 
 
 func test_an_open_airport_lists_a_toilet_gap() -> void:

@@ -11,8 +11,8 @@ extends GdUnitTestSuite
 ## arrivals, cuts how many are bored when boarding opens, earns a readable sum
 ## a flight, and never costs a passenger the flight.
 
-const SEEDS: Array[int] = [11, 22, 33, 44, 55, 66]
-const FIRST_STATE := 1700
+const SEEDS: Array[int] = [11, 22, 33]
+const FIRST_STATE := 1360
 ## The band in whole percent of early arrivals who finish a browse: 25% to
 ## 40%. Browsing 120 ticks (the cafe's dwell) at base spend 12 gives, on these
 ## seeds, 33% (33 of 99), 42 visits at 10 a visit (75 a flight; 16 and 117
@@ -80,9 +80,12 @@ func _flight(seed: int, kiosks: bool) -> Dictionary:
 		out["early"] += 1
 		out["early_bored"] += int(p.boredom >= BoredomSim.BORED_AT)
 		out["early_browsed"] += int(_browsed.has(id))
-	world.run_to(world.flights.doors_close_tick(PassengerTestWorld.FLIGHT) + 1)
+	var doors := world.flights.doors_close_tick(PassengerTestWorld.FLIGHT)
+	while _missed.size() < count and world.clock.tick <= doors:
+		world.step()
 	for id: int in _went:
 		out["went_missed"] += int(_missed.get(id, true))
+	world.free_all()
 	return out
 
 

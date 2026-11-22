@@ -12,14 +12,30 @@ var _bag_world: BagTestWorld
 var _dispatch: RampDispatch
 var _rating: AirportRating
 var _finances: Finances
+var _save_main: Node
+var _save_control: Node
+var _clean_save_snap := {}
+var _shuttle_snap := {}
+var _shuttle_fid := ""
 
 
 func before() -> void:
 	PassengerTestWorld.tracker = self
+	_save_main = SaveTestKit.boot(self, 77)
+	_save_control = SaveTestKit.boot(self, 77)
+	_clean_save_snap = JSON.parse_string(
+		JSON.stringify(SaveTestKit.save_game(_save_main).snapshot(), "", true, true)
+	)
 
 
 func after() -> void:
 	PassengerTestWorld.tracker = null
+	if _save_main != null:
+		_save_main.free()
+		_save_main = null
+	if _save_control != null:
+		_save_control.free()
+		_save_control = null
 
 
 func after_test() -> void:
@@ -42,8 +58,8 @@ func _add_contract_flight(
 		"destination": "Bergen",
 		"departure_minute": 480,
 		"plane_size": plane_size,
-		"booked_passengers": 12 if plane_size == PlaneClasses.SMALL else 30,
-		"fee_per_passenger": 30,
+		"booked_passengers": 6 if plane_size == PlaneClasses.SMALL else 30,
+		"fee_per_passenger": 50 if plane_size == PlaneClasses.SMALL else 30,
 	}
 	flights._contracts.append(flights._candidate(terms, "C", flights.gate_grounds()))
 	flights._insert(flights._record(fid, starts, "C", cid, 0))
@@ -354,14 +370,16 @@ func test_fire_shuttle_mid_trip_defers_leaving_until_return() -> void:
 	assert_object(_dispatch.staff.get_member(id4)).is_null()
 
 
-func _boot_save_world(seed_val: int) -> Node:
-	var main := SaveTestKit.boot(self, seed_val)
-	SaveTestKit.start_airport(main)
-	var flights: FlightSim = main.get_node("FlightSim")
-	var clock: SimClock = main.get_node("SimClock")
+func _ensure_shuttle_snap() -> void:
+	if not _shuttle_snap.is_empty():
+		return
+	assert_bool(SaveTestKit.save_game(_save_main).load_world(_clean_save_snap)).is_true()
+	SaveTestKit.start_airport(_save_main)
+	var flights: FlightSim = _save_main.get_node("FlightSim")
+	var clock: SimClock = _save_main.get_node("SimClock")
 	while flights.opened_tick < 0 and clock.tick < 5000:
-		SaveTestKit.step(main)
-	var build: BuildMode = main.get_node("BuildMode")
+		SaveTestKit.step(_save_main)
+	var build: BuildMode = _save_main.get_node("BuildMode")
 	var offset := ReferenceTerminal.offset_on(build.grid)
 	RoomTool.mark(
 		build.grid, Rect2i(Vector2i(13, 14) + offset, Vector2i(4, 4)), &"bag_room", build.wallet()
@@ -371,28 +389,32 @@ func _boot_save_world(seed_val: int) -> Node:
 	build.lay_belt(Vector2i(16, 10) + offset, Vector2i(16, 14) + offset)
 	build.set_tool(BuildMode.Tool.NONE)
 	build.grid.apply(BuildEdit.place_object(&"baggage_cart", Vector2i(14, 15) + offset, 0))
-	SaveTestKit.step(main)
-	return main
+	SaveTestKit.step(_save_main)
+	var staff: StaffSim = _save_main.get_node("Staff")
+	var bag_sim: BaggageSim = _save_main.get_node("BaggageSim")
+	staff.hire(RAMP)
+	var fid := flights.flight_ids()[0]
+	var bag := bag_sim.check_in(99, fid, build.grid.object_at(Vector2i(15, 9) + offset))
+	assert_object(bag).is_not_null()
+	while bag_sim.shuttles().is_empty() and clock.tick < 6000:
+		SaveTestKit.step(_save_main)
+	assert_int(bag_sim.shuttles().size()).is_equal(1)
+	_shuttle_fid = fid
+	_shuttle_snap = JSON.parse_string(
+		JSON.stringify(SaveTestKit.save_game(_save_main).snapshot(), "", true, true)
+	)
 
 
 func test_save_load_v7_v27_bidirectional_savelinks_and_determinism() -> void:
-	var main := auto_free(_boot_save_world(77)) as Node
+	_ensure_shuttle_snap()
+	var main := _save_main
+	var clock: SimClock = main.get_node("SimClock")
+	if clock.tick != int(_shuttle_snap["clock"]["tick"]):
+		assert_bool(SaveTestKit.save_game(main).load_world(_shuttle_snap)).is_true()
 	var staff: StaffSim = main.get_node("Staff")
 	var bag_sim: BaggageSim = main.get_node("BaggageSim")
-	var flights: FlightSim = main.get_node("FlightSim")
-	var ramp_id := staff.hire(RAMP)
-	var fid := flights.flight_ids()[0]
-	var bag := bag_sim.check_in(
-		99,
-		fid,
-		main.get_node("BuildMode").grid.object_at(
-			Vector2i(15, 9) + ReferenceTerminal.offset_on(main.get_node("BuildMode").grid)
-		)
-	)
-	assert_object(bag).is_not_null()
-	while bag_sim.shuttles().is_empty() and (main.get_node("SimClock") as SimClock).tick < 6000:
-		SaveTestKit.step(main)
 	assert_int(bag_sim.shuttles().size()).is_equal(1)
+	var ramp_id := bag_sim.shuttles()[0].driver_staff_id
 	var worker := staff.get_member(ramp_id)
 	assert_int(worker.ramp_job).is_equal(StaffMember.RampJob.SHUTTLE)
 	assert_bool(staff.fire(RAMP)).is_true()
@@ -403,15 +425,13 @@ func test_save_load_v7_v27_bidirectional_savelinks_and_determinism() -> void:
 	assert_int(int(data["save_version"])).is_equal(SaveGame.SAVE_VERSION)
 	assert_int(int(data["staff"]["save_version"])).is_equal(StaffSim.SAVE_VERSION)
 
-	var control := auto_free(_boot_save_world(77)) as Node
+	var control := _save_control
 	var control_save := SaveTestKit.save_game(control)
 	assert_bool(control_save.load_world(data)).is_true()
 	assert_str(StaffTestKit.signature(control.get_node("Staff"))).is_equal(
 		StaffTestKit.signature(staff)
 	)
-	var remaining := maxi(
-		1, bag_sim.shuttles()[0].return_tick - (main.get_node("SimClock") as SimClock).tick + 2
-	)
+	var remaining := maxi(1, bag_sim.shuttles()[0].return_tick - clock.tick + 2)
 	for _i in remaining:
 		SaveTestKit.step(main)
 		SaveTestKit.step(control)
@@ -423,23 +443,10 @@ func test_save_load_v7_v27_bidirectional_savelinks_and_determinism() -> void:
 
 
 func test_savelinks_and_snapshot_refuse_malformed_ramp_claims() -> void:
-	var main := auto_free(_boot_save_world(88)) as Node
-	var staff: StaffSim = main.get_node("Staff")
-	var bag_sim: BaggageSim = main.get_node("BaggageSim")
-	var flights: FlightSim = main.get_node("FlightSim")
-	staff.hire(RAMP)
-	var fid := flights.flight_ids()[0]
-	bag_sim.check_in(
-		101,
-		fid,
-		main.get_node("BuildMode").grid.object_at(
-			Vector2i(15, 9) + ReferenceTerminal.offset_on(main.get_node("BuildMode").grid)
-		)
-	)
-	while bag_sim.shuttles().is_empty() and (main.get_node("SimClock") as SimClock).tick < 6000:
-		SaveTestKit.step(main)
-	var save := SaveTestKit.save_game(main)
-	var valid := JSON.parse_string(JSON.stringify(save.snapshot(), "", true, true)) as Dictionary
+	_ensure_shuttle_snap()
+	var fid := _shuttle_fid
+	var save := SaveTestKit.save_game(_save_control)
+	var valid := _shuttle_snap
 
 	# 1. Shuttle driver_staff_id disagrees with worker's ramp_shuttle_id.
 	var bad1: Dictionary = valid.duplicate(true)
@@ -501,7 +508,9 @@ func test_savelinks_and_snapshot_refuse_malformed_ramp_claims() -> void:
 
 
 func test_unstaffed_pushback_save_load_restores_alert_without_double_charge_and_savelinks() -> void:
-	var main := auto_free(SaveTestKit.boot(self, 91)) as Node
+	var main := _save_main
+	var save := SaveTestKit.save_game(main)
+	assert_bool(save.load_world(_clean_save_snap)).is_true()
 	SaveTestKit.start_airport(main)
 	var flights: FlightSim = main.get_node("FlightSim")
 	var clock: SimClock = main.get_node("SimClock")
@@ -523,7 +532,7 @@ func test_unstaffed_pushback_save_load_restores_alert_without_double_charge_and_
 			offer["fee_per_passenger"] = (
 				OfferBoard.TIER_FEES[OfferBoard.tier_of(offer["airline"])][0]
 			)
-			offer["departure_minute"] = 840
+			offer["departure_minute"] = 720
 			chosen_id = String(offer["id"])
 			break
 	assert_bool(board.from_snapshot(offers)).is_true()
@@ -547,7 +556,6 @@ func test_unstaffed_pushback_save_load_restores_alert_without_double_charge_and_
 	assert_int(alerts_before.size()).is_equal(1)
 	assert_that(alerts_before[0]["key"]).is_equal(AlertSources.RAMP_PUSHBACK)
 
-	var save := SaveTestKit.save_game(main)
 	var valid := JSON.parse_string(JSON.stringify(save.snapshot(), "", true, true)) as Dictionary
 
 	var bad_no_adj: Dictionary = valid.duplicate(true)
@@ -587,7 +595,7 @@ func test_unstaffed_pushback_save_load_restores_alert_without_double_charge_and_
 	assert_bool(save.load_world(bad_both)).is_false()
 	assert_str(save.message_text()).contains("both ramp agent and emergency pushback adjustment")
 
-	var control := auto_free(SaveTestKit.boot(self, 91)) as Node
+	var control := _save_control
 	var control_save := SaveTestKit.save_game(control)
 	assert_bool(control_save.load_world(valid)).is_true()
 	var c_finances: Finances = control.get_node("Finances")

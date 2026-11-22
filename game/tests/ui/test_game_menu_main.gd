@@ -131,7 +131,7 @@ func test_the_incidents_flag_survives_a_save_round_trip() -> void:
 	assert_bool(_director.is_enabled()).is_false()
 
 
-func test_the_intro_closing_asks_the_question_and_the_answer_sets_the_flag() -> void:
+func test_the_intro_closing_defers_the_incidents_question_until_day_2_after_opening() -> void:
 	assert_bool(_hud.open_intro()).is_true()
 	var cue := _hud.find_child("PhoneRingCue", true, false) as IntroDialogue.PhoneRingCue
 	assert_object(cue).is_not_null()
@@ -140,14 +140,61 @@ func test_the_intro_closing_asks_the_question_and_the_answer_sets_the_flag() -> 
 	assert_bool(_menu.is_question_open()).is_false()
 	_hud.dismiss_intro()
 	assert_object(_hud.intro()).is_null()
-	assert_bool(_menu.is_question_open()).is_true()
-	# The clock was held from the welcome page to here.
-	assert_bool(_clock.holds.is_holding()).is_true()
-	assert_bool(_director.is_enabled()).is_false()
-	_menu.question().accept_button().pressed.emit()
-	assert_bool(_director.is_enabled()).is_true()
+	# No back-to-back modal on a closed airport at frame 0.
 	assert_bool(_menu.is_question_open()).is_false()
 	assert_bool(_clock.holds.is_holding()).is_false()
+	var flights: FlightSim = _main.get_node("FlightSim")
+	var day2 := GameCalendar.day_start(1, _clock.epoch)
+	var day3 := GameCalendar.day_start(2, _clock.epoch)
+	# (b) Closed airport on Day 2 (even unpaused): prompt does NOT open.
+	_clock.set_paused(false)
+	_hud._on_clock_ticked(day2)
+	assert_bool(_menu.is_question_open()).is_false()
+	if flights.opened_tick < 0:
+		flights.open_airport()
+	day2 = GameCalendar.day_start(1, _clock.epoch)
+	day3 = GameCalendar.day_start(2, _clock.epoch)
+	# Still Day 1: question waits until Day 2 begins.
+	assert_bool(_menu.is_question_open()).is_false()
+	# (a) Paused clock on Day 2: prompt does NOT open.
+	_clock.set_paused(true)
+	_clock.tick = day2
+	_clock.ticked.emit(day2)
+	assert_bool(_menu.is_question_open()).is_false()
+	# (c) Another modal open on Day 2: prompt does NOT open until the modal closes.
+	_clock.set_paused(false)
+	var incident_panel: IncidentPanel = _main.get_node("IncidentPanel")
+	incident_panel.dialog_changed.emit(true)
+	_clock.ticked.emit(day2)
+	assert_bool(_menu.is_question_open()).is_false()
+	incident_panel.dialog_changed.emit(false)
+	# (d) Unpaused, open airport on Day 2 with no modal: prompt opens once.
+	_clock.ticked.emit(day2)
+	assert_bool(_menu.is_question_open()).is_true()
+	assert_bool(_clock.holds.is_holding()).is_true()
+	assert_bool(_director.is_enabled()).is_false()
+	_menu.question().decline_button().pressed.emit()
+	assert_bool(_director.is_enabled()).is_false()
+	assert_bool(_menu.is_question_open()).is_false()
+	assert_bool(_clock.holds.is_holding()).is_false()
+	# Repeated later ticks after answering do NOT reopen it.
+	_clock.tick = day2 + 10
+	_clock.ticked.emit(day2 + 10)
+	_clock.tick = day3
+	_clock.ticked.emit(day3)
+	assert_bool(_menu.is_question_open()).is_false()
+	# (e) Loading a save where the player already answered (disabled) stays silent on Day 2+.
+	var save := SaveTestKit.save_game(_main)
+	var answered_disabled: Dictionary = JSON.parse_string(JSON.stringify(save.snapshot()))
+	IntroDialogue.shown_this_session = false
+	assert_bool(_hud.open_intro()).is_true()
+	_hud.dismiss_intro()
+	assert_bool(save.load_world(answered_disabled)).is_true()
+	_clock.set_paused(false)
+	_clock.tick = day3 + 1
+	_clock.ticked.emit(day3 + 1)
+	assert_bool(_menu.is_question_open()).is_false()
+	_clock.set_paused(true)
 	IntroDialogue.shown_this_session = false
 
 

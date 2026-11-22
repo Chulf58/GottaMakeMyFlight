@@ -16,3 +16,6 @@ opencode.sh
 tools/blender/out/
 __pycache__/
 *.pyc
+antigravity.bat
+antigravity.sh
+.claude/agents/

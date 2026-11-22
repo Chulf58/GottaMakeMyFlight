@@ -22,12 +22,12 @@ extends SceneTree
 ## The plates go to tools/blender/out/offer_traits3_20261114/.
 
 const OUT_REL := "res://../tools/blender/out/offer_traits3_20261114"
-## Per card: booked, fee, traits and the loyal mark (each fee one the tier-0
-## draw gives with those traits: 35 -> 39 loyal, 25 stays, 25 -> 23 plain -> 25).
+## Per card: booked, fee, traits and the loyal mark (each fee one the small
+## draw gives with those traits: 70 -> 77 loyal, 50 stays, 50 -> 45 plain -> 50).
 const TERMS := [
-	[16, 39, {"up": "signing_bonus", "down": "exit_fee", "level": 2}, true],
-	[14, 25, {"up": "loyal_airline", "down": "odd_hours", "level": 1}, false],
-	[15, 25, {}, true],
+	[8, 77, {"up": "signing_bonus", "down": "exit_fee", "level": 2}, true],
+	[7, 50, {"up": "loyal_airline", "down": "odd_hours", "level": 1}, false],
+	[6, 50, {}, true],
 ]
 ## The Odd hours card departs at 22:00, outside the plain window.
 const ODD_MINUTE := 22 * 60

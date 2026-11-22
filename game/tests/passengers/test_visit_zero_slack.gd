@@ -22,6 +22,7 @@ var _world: PassengerTestWorld
 ## [stage, tick] entered by the passenger under test, in order.
 var _stages: Array = []
 var _outcome := CafeVisit.Outcome.NONE
+var _tracked_id := 0
 
 
 func before() -> void:
@@ -36,21 +37,42 @@ func after_test() -> void:
 	if _world != null:
 		_world.free_all()
 		_world = null
+	_tracked_id = 0
 	_stages.clear()
+
+
+func _on_stage(id: int, stage: Passenger.Stage) -> void:
+	if id != _tracked_id:
+		return
+	_stages.append([stage, _world.sim.tick])
+	if stage == Passenger.Stage.CAFE_STANDING_UP:
+		_outcome = _world.sim.cafes.visit_of(id).outcome
 
 
 func _track(p: Passenger) -> void:
+	_tracked_id = p.id
 	_stages.clear()
 	_outcome = CafeVisit.Outcome.NONE
-	var sim := _world.sim
-	sim.stage_changed.connect(
-		func(id: int, stage: Passenger.Stage) -> void:
-			if id != p.id:
-				return
-			_stages.append([stage, sim.tick])
-			if stage == Passenger.Stage.CAFE_STANDING_UP:
-				_outcome = sim.cafes.visit_of(id).outcome
-	)
+	if not _world.sim.stage_changed.is_connected(_on_stage):
+		_world.sim.stage_changed.connect(_on_stage)
+
+
+func _snap_state() -> Dictionary:
+	return {
+		"clock": _world.clock.to_snapshot(),
+		"flights": _world.flights.to_snapshot(),
+		"sim": _world.sim.to_snapshot(),
+		"wallet": _world.sim.wallet.to_snapshot(),
+	}
+
+
+func _restore_state(snap: Dictionary, doors: int) -> void:
+	assert_bool(_world.clock.from_snapshot(snap["clock"])).is_true()
+	var flights_data: Dictionary = snap["flights"].duplicate(true)
+	flights_data["flights"][0]["starts"] = PassengerTestWorld.starts_with(BOARDING, doors)
+	assert_bool(_world.flights.from_snapshot(flights_data)).is_true()
+	assert_bool(_world.sim.from_snapshot(snap["sim"])).is_true()
+	assert_bool(_world.sim.wallet.from_snapshot(snap["wallet"])).is_true()
 
 
 ## The tick `p` last entered `stage`, or -1.
@@ -62,23 +84,25 @@ func _entered(stage: Passenger.Stage) -> int:
 	return found
 
 
-## An airside guest at the point it can start a visit to a `venue` (a stall is a
-## walk-on counter: a grab and go order, no seat), with the doors closing at
-## `doors`. Returns {"admitted", "deadline"}; the guest has started when admitted.
-func _cafe_start(doors: int, venue: StringName = &"cafe", tables := true) -> Dictionary:
+func _cafe_ready(doors: int, venue: StringName = &"cafe", tables := true) -> Dictionary:
 	var grid := BuildGrid.new()
 	CafeTestLayout.build(grid, false, venue, tables)
 	_world = PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(BOARDING, doors))
 	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
-	_track(p)
 	p.hunger = 0
 	p.cafe_cooldown = 1000000
-	var cafes := _world.sim.cafes
-	var plan := {}
-	while plan.is_empty() and _world.clock.tick < BOARDING - 20:
+	while p.stage != Passenger.Stage.TO_GATE and _world.clock.tick < BOARDING - 20:
 		_world.step()
-		if p.stage == Passenger.Stage.TO_GATE:
-			plan = cafes.plan_visit(p)
+	assert_int(p.stage).is_equal(Passenger.Stage.TO_GATE)
+	return {"snap": _snap_state(), "id": p.id}
+
+
+func _cafe_commit(ready: Dictionary, doors: int) -> Dictionary:
+	_restore_state(ready["snap"], doors)
+	var p := _world.passenger(ready["id"])
+	_track(p)
+	var cafes := _world.sim.cafes
+	var plan := cafes.plan_visit(p)
 	if plan.is_empty():
 		return {"admitted": false, "p": p}
 	cafes.commit_visit(p, plan)
@@ -102,15 +126,12 @@ func _stall_run(p: Passenger) -> int:
 	return _world.clock.tick
 
 
-## A landside toilet user at the point it can start its visit, with the doors
-## closing at `doors`. Returns {"admitted", "deadline"}.
-func _toilet_start(doors: int) -> Dictionary:
+func _toilet_ready(doors: int) -> Dictionary:
 	var grid := BuildGrid.new()
 	ToiletTestLayout.build(grid, 1)
 	_world = PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(BOARDING, doors))
 	_world.run_to(10)
 	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
-	_track(p)
 	ToiletTestLayout.calm(p)
 	p.carry_on = 0
 	p.liquids = false
@@ -120,6 +141,13 @@ func _toilet_start(doors: int) -> Dictionary:
 	p.at = Vector2i(20, 14) + ReferenceTerminal.offset_on(_world.grid)
 	p.clear_path()
 	p.toilet_need = 90
+	return {"snap": _snap_state(), "id": p.id}
+
+
+func _toilet_commit(ready: Dictionary, doors: int) -> Dictionary:
+	_restore_state(ready["snap"], doors)
+	var p := _world.passenger(ready["id"])
+	_track(p)
 	var toilets := _world.sim.toilets
 	var plan := toilets.plan_visit(p)
 	if plan.is_empty():
@@ -142,18 +170,18 @@ func _free_world() -> void:
 
 
 func test_a_cafe_visit_admitted_at_any_slack_is_not_cut_short() -> void:
-	var base := _cafe_start(BASE_DOORS)
+	var ready := _cafe_ready(BASE_DOORS)
+	var base := _cafe_commit(ready, BASE_DOORS)
 	assert_bool(base["admitted"]).is_true()
 	_cafe_run(base["p"])
 	var due := _entered(Passenger.Stage.CAFE_STANDING_UP)
 	var shift: int = due - base["deadline"]
-	_free_world()
 	var admitted := 0
 	var refused := 0
 	var tightest := 1000
 	var report := ""
 	for k in OFFSETS:
-		var start := _cafe_start(BASE_DOORS + shift + k)
+		var start := _cafe_commit(ready, BASE_DOORS + shift + k)
 		if not start["admitted"]:
 			refused += 1
 		else:
@@ -173,7 +201,7 @@ func test_a_cafe_visit_admitted_at_any_slack_is_not_cut_short() -> void:
 						_outcome
 					]
 				)
-		_free_world()
+	_free_world()
 	# The sweep crosses the admission line: some offsets in, some out, and the
 	# tightest one admitted stands up a tick before its deadline.
 	assert_int(admitted).is_greater(0)
@@ -183,18 +211,18 @@ func test_a_cafe_visit_admitted_at_any_slack_is_not_cut_short() -> void:
 
 
 func test_a_toilet_visit_admitted_at_any_slack_is_not_cut_short() -> void:
-	var base := _toilet_start(BASE_DOORS)
+	var ready := _toilet_ready(BASE_DOORS)
+	var base := _toilet_commit(ready, BASE_DOORS)
 	assert_bool(base["admitted"]).is_true()
 	_toilet_run(base["p"])
 	var due := _entered(Passenger.Stage.TOILET_STANDING_UP)
 	var shift: int = due - base["deadline"]
-	_free_world()
 	var admitted := 0
 	var refused := 0
 	var tightest := 1000
 	var report := ""
 	for k in OFFSETS:
-		var start := _toilet_start(BASE_DOORS + shift + k)
+		var start := _toilet_commit(ready, BASE_DOORS + shift + k)
 		if not start["admitted"]:
 			refused += 1
 		else:
@@ -206,7 +234,7 @@ func test_a_toilet_visit_admitted_at_any_slack_is_not_cut_short() -> void:
 				report += (
 					" slack %d: stood up at %d (due %d);" % [start["deadline"] - due, stood, due]
 				)
-		_free_world()
+	_free_world()
 	assert_int(admitted).is_greater(0)
 	assert_int(refused).is_greater(0)
 	# Standing up on the deadline tick is the same as finishing the use there.
@@ -215,19 +243,19 @@ func test_a_toilet_visit_admitted_at_any_slack_is_not_cut_short() -> void:
 
 
 func test_a_stall_visit_admitted_at_any_slack_is_served_and_paid() -> void:
-	var base := _cafe_start(BASE_DOORS, &"stall", false)
+	var ready := _cafe_ready(BASE_DOORS, &"stall", false)
+	var base := _cafe_commit(ready, BASE_DOORS)
 	assert_bool(base["admitted"]).is_true()
 	assert_bool(_world.sim.cafes.visit_of(base["p"].id).walk_on()).is_true()
 	var due := _stall_run(base["p"])
 	assert_int(_world.sim.wallet.balance).is_greater(0)
 	var shift: int = due - base["deadline"]
-	_free_world()
 	var admitted := 0
 	var refused := 0
 	var tightest := 1000
 	var report := ""
 	for k in OFFSETS:
-		var start := _cafe_start(BASE_DOORS + shift + k, &"stall", false)
+		var start := _cafe_commit(ready, BASE_DOORS + shift + k)
 		if not start["admitted"]:
 			refused += 1
 		else:
@@ -239,7 +267,7 @@ func test_a_stall_visit_admitted_at_any_slack_is_served_and_paid() -> void:
 					" slack %d: ended at %d (due %d), paid %d;"
 					% [start["deadline"] - due, ended, due, _world.sim.wallet.balance]
 				)
-		_free_world()
+	_free_world()
 	assert_int(admitted).is_greater(0)
 	assert_int(refused).is_greater(0)
 	# Served on the deadline tick is given up unpaid, so the tightest admitted

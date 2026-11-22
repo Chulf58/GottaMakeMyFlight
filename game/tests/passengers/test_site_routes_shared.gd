@@ -2,9 +2,9 @@ class_name TestSiteRoutesShared
 extends GdUnitTestSuite
 ## SiteRoutes.distances() shares one whole-site search between callers that ask
 ## the same question of the same grid (board 4262b55f: a committed build edit
-## ran it about 5 times, each a flood fill of the site), and never answers
-## from an earlier grid: an edit that changes the open ground, the walls or the
-## objects makes the next call search again.
+## ran it about 5 times, each a flood fill of the site), ignores indoor non-door
+## occupants that cannot affect outdoor routes, and invalidates on edits that
+## change open ground, walls, or unfloored occupants.
 ##
 ## The world case builds the two-gate terminal a build edit meets, with the
 ## handlers that ask for routes on every graph change (TerminalLayout through
@@ -163,7 +163,18 @@ func test_a_committed_edit_on_the_two_gate_terminal_searches_each_field_once() -
 	grid.hold_signals()
 	var placed := grid.apply(BuildEdit.place_object(&"seat_row", ROW, 0))
 	grid.release_signals()
-	var made := SiteRoutes.searches - before
-	print("one committed edit ran %d searches (road, gate A's door, gate B's door)" % made)
+	var made_indoor := SiteRoutes.searches - before
+	print("indoor seat_row edit ran %d searches" % made_indoor)
 	assert_bool(placed.ok).is_true()
-	assert_int(made).is_equal(3)
+	assert_int(made_indoor).is_equal(0)
+
+	var before_wall := SiteRoutes.searches
+	grid.hold_signals()
+	var walled := grid.apply(BuildEdit.place_wall(BLOCK, BuildGrid.Side.SOUTH))
+	grid.release_signals()
+	var made_wall := SiteRoutes.searches - before_wall
+	print(
+		"one structural wall edit ran %d searches (road, gate A's door, gate B's door)" % made_wall
+	)
+	assert_bool(walled.ok).is_true()
+	assert_int(made_wall).is_equal(3)

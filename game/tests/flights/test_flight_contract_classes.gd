@@ -7,10 +7,10 @@ extends GdUnitTestSuite
 
 ## [plane_size, booked_passengers, fits]: the edges of each class and one past them.
 const CASES := [
-	["small", 7, false],
+	["small", 3, false],
+	["small", 4, true],
 	["small", 8, true],
-	["small", 16, true],
-	["small", 17, false],
+	["small", 9, false],
 	["medium", 23, false],
 	["medium", 24, true],
 	["medium", 48, true],
@@ -89,7 +89,12 @@ func test_the_offer_board_refuses_a_count_just_outside_its_size_range_on_load() 
 
 ## The accepted save domain changed (contracts hold their class's passenger
 ## range), so the version moved from 4; Runway R7's taxi plans moved it to 7,
-## offer traits on contracts to 8, per-contract taxi pairs to 9 and side stands'
-## lane_x to 10; there is no migration.
-func test_the_flight_save_version_is_10() -> void:
-	assert_int(int(_sim.to_snapshot()["save_version"])).is_equal(FlightSim.SAVE_VERSION)
+## offer traits on contracts to 8, per-contract taxi pairs to 9, side stands'
+## lane_x to 10 and small-class 4-8 passengers to 11; there is no migration.
+func test_the_flight_save_version_is_11_and_version_10_is_refused() -> void:
+	assert_int(FlightSim.SAVE_VERSION).is_equal(11)
+	var data := _sim.to_snapshot()
+	assert_int(int(data["save_version"])).is_equal(FlightSim.SAVE_VERSION)
+	var old := data.duplicate(true)
+	old["save_version"] = 10
+	assert_bool((auto_free(FlightSim.new()) as FlightSim).from_snapshot(old)).is_false()

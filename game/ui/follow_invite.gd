@@ -46,7 +46,7 @@ static func show_me(
 		return 0
 	if landside != null:
 		landside.select(0)
-	views.selected_id = id
+	views.select(id)
 	if camera != null:
 		camera.follow(views.follow_anchor)
 	return id
