@@ -94,7 +94,10 @@ var need_clusters := NeedCluster.new()
 ## The count clusters of close wish bubbles (board c8b16621; WishBadges): the
 ## cluster kind is a wish icon's code, the same view state as need_clusters.
 var wish_clusters := NeedCluster.new()
-var selected_id := 0
+var selected_id := 0:
+	set(value):
+		selected_id = value
+		_sync_follow_anchor()
 ## Moved pieces still in use, drawn at their old spot (RelocationGhosts).
 ## Holds no tick: it compares with the sim every frame.
 var ghosts := RelocationGhosts.new()
@@ -241,6 +244,15 @@ func _process(_delta: float) -> void:
 
 func node_for(id: int) -> Node3D:
 	return _nodes.get(id)
+
+
+## Selects passenger `id` (0 for none) and moves follow_anchor and the ring
+## to them now, so a camera told to follow the anchor next starts from them.
+func select(id: int) -> void:
+	if id != 0 and (_nodes.has(id) or _is_shown_id(id)):
+		selected_id = id
+	else:
+		selected_id = 0
 
 
 func active_count() -> int:
@@ -477,10 +489,7 @@ func draw() -> void:
 		var fade: ClipCrossfade = node.get_meta(&"crossfade")
 		fade.ease_to(now, CROSSFADE_SECONDS)
 		fade.drawn = true
-	if _nodes.has(selected_id):
-		follow_anchor.position = (_nodes[selected_id] as Node3D).position
-		_ring.position = follow_anchor.position + Vector3(0.0, 0.05, 0.0)
-	_ring.visible = _nodes.has(selected_id)
+	_sync_follow_anchor()
 	_draw_late_marks()
 	layout_started.emit()
 	# The icons lift over a bubble only while it shows, so they are laid out
@@ -947,6 +956,36 @@ func _visible(p: Passenger) -> bool:
 	if p.stage == Passenger.Stage.MISSED:
 		return sim.tick - p.outcome_tick <= MISSED_LINGER_TICKS
 	return true
+
+
+func _is_shown_id(id: int) -> bool:
+	if sim == null:
+		return false
+	var p := sim.get_passenger(id)
+	return p != null and _visible(p)
+
+
+func _sync_follow_anchor() -> void:
+	if selected_id != 0 and _nodes.has(selected_id):
+		var pos: Vector3
+		if _prev.has(selected_id) and _cur.has(selected_id):
+			var alpha := clock.alpha if clock != null else 1.0
+			pos = (_prev[selected_id] as Vector3).lerp(_cur[selected_id] as Vector3, alpha)
+		else:
+			pos = (_nodes[selected_id] as Node3D).position
+		follow_anchor.position = pos
+		_ring.position = pos + Vector3(0.0, 0.05, 0.0)
+		_ring.visible = true
+		return
+	if selected_id != 0 and sim != null:
+		var p := sim.get_passenger(selected_id)
+		if p != null and _visible(p):
+			var pos := draw_position(p)
+			follow_anchor.position = pos
+			_ring.position = pos + Vector3(0.0, 0.05, 0.0)
+			_ring.visible = false
+			return
+	_ring.visible = false
 
 
 ## A node of the passenger's body (PassengerLooks.body_of), from the pool when

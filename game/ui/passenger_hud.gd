@@ -312,7 +312,7 @@ func _drop_retired_selection() -> void:
 	var followed := sim.get_passenger(views.selected_id)
 	if followed != null and views.shows(followed):
 		return
-	views.selected_id = 0
+	views.select(0)
 	if camera != null:
 		camera.stop_follow()
 
@@ -331,11 +331,11 @@ func _unhandled_input(event: InputEvent) -> void:
 	var vehicle := landside_views.pick(eye, click.position) if landside_views != null else 0
 	if landside_views != null:
 		landside_views.select(vehicle)
-	views.selected_id = 0
+	views.select(0)
 	_built.clear()
 	if vehicle == 0:
 		_pick_built(eye, click.position)
-		views.selected_id = _passenger_at(eye, click.position)
+		views.select(_passenger_at(eye, click.position))
 		if views.selected_id != 0:
 			_built.clear()
 	_reveal_frames = REVEAL_FRAMES if _built.is_selected() else 0
@@ -354,7 +354,7 @@ func _select_built_object(object_id: int) -> void:
 	if landside_views != null:
 		landside_views.select(0)
 	if views != null:
-		views.selected_id = 0
+		views.select(0)
 	_built.select_object(object_id)
 	_reveal_frames = REVEAL_FRAMES
 	if camera != null:
@@ -425,7 +425,7 @@ func _close_selection() -> bool:
 	if landside_views != null:
 		landside_views.select(0)
 	if views != null:
-		views.selected_id = 0
+		views.select(0)
 	_built.clear()
 	_reveal_frames = 0
 	if camera != null:
@@ -1078,7 +1078,7 @@ func _on_follow_late_requested(flight_id: String) -> void:
 		landside_views.select(0)
 	_built.clear()
 	_reveal_frames = 0
-	views.selected_id = id
+	views.select(id)
 	if camera != null:
 		camera.follow(views.follow_anchor)
 	refresh()
