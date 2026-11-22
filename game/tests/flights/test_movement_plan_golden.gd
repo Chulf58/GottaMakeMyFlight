@@ -8,7 +8,7 @@ extends GdUnitTestSuite
 ## exit 7 at x 10.5, the four site corners of the peak speed test, and gates A
 ## and B together). Each route keeps its own points, entry direction and tick
 ## count, so later airside moves do not change what this pins. Rebuild it only
-## with tools/make_taxi_pose_golden.gd, which runs on a copy of 7ab97c7 and
+## with game/spike/make_taxi_pose_golden.gd, which runs on a copy of 7ab97c7 and
 ## never on HEAD.
 
 const GOLDEN := "res://tests/flights/taxi_pose_golden.bin"

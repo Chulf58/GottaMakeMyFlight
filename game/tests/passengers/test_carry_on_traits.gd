@@ -127,9 +127,8 @@ func test_a_current_version_save_keeps_the_traits_and_plays_out_the_same() -> vo
 	for i in 10:
 		_a.sim.spawn_now(PassengerTestWorld.FLIGHT)
 	_a.run_to(205)
-	assert_int(PassengerSim.SAVE_VERSION).is_equal(36)
 	var data: Dictionary = JSON.parse_string(JSON.stringify(_a.sim.to_snapshot()))
-	assert_int(int(data["save_version"])).is_equal(36)
+	assert_int(int(data["save_version"])).is_equal(PassengerSim.SAVE_VERSION)
 	var seen := {}
 	for record: Dictionary in data["passengers"]:
 		seen[int(record["carry_on"])] = true
@@ -149,3 +148,46 @@ func test_a_current_version_save_keeps_the_traits_and_plays_out_the_same() -> vo
 	assert_int(first_bad).override_failure_message("first differing tick %d" % first_bad).is_equal(
 		-1
 	)
+
+
+func _snapshot_pair() -> Dictionary:
+	_a = PassengerTestWorld.reference_world(SEED)
+	_a.sim.schedule_flight(PassengerTestWorld.FLIGHT, 24)
+	for i in 10:
+		_a.sim.spawn_now(PassengerTestWorld.FLIGHT)
+	_a.run_to(205)
+	_b = PassengerTestWorld.reference_world(1)
+	_b.clock.from_snapshot(JSON.parse_string(JSON.stringify(_a.clock.to_snapshot())))
+	_b.flights.from_snapshot(JSON.parse_string(JSON.stringify(_a.flights.to_snapshot())))
+	return JSON.parse_string(JSON.stringify(_a.sim.to_snapshot()))
+
+
+func test_a_current_version_save_missing_a_trait_is_refused() -> void:
+	var good := _snapshot_pair()
+	assert_bool(_b.sim.from_snapshot(good.duplicate(true))).is_true()
+	for field in ["carry_on", "liquids", "alarm"]:
+		var data := good.duplicate(true)
+		(data["passengers"][0] as Dictionary).erase(field)
+		assert_bool(_b.sim.from_snapshot(data)).override_failure_message(field).is_false()
+
+
+func test_bad_trait_values_in_a_current_version_save_are_refused() -> void:
+	var good := _snapshot_pair()
+	var cases := [
+		["carry_on", -1],
+		["carry_on", 3],
+		["carry_on", 1.5],
+		["carry_on", "1"],
+		["liquids", 1],
+		["liquids", "true"],
+		["alarm", 0],
+		["alarm", null],
+	]
+	for pair: Array in cases:
+		var data := good.duplicate(true)
+		data["passengers"][0][pair[0]] = pair[1]
+		(
+			assert_bool(_b.sim.from_snapshot(data))
+			. override_failure_message("%s = %s" % [pair[0], str(pair[1])])
+			. is_false()
+		)

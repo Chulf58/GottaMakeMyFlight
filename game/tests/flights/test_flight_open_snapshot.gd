@@ -53,9 +53,8 @@ func _saved(world: Array) -> Dictionary:
 
 
 func test_version_is_10_with_the_opening_tick_start_days_and_ended() -> void:
-	assert_int(FlightSim.SAVE_VERSION).is_equal(10)
 	var data: Dictionary = _saved(_opened_world(OPENED + 100))["flights"]
-	assert_int(int(data["save_version"])).is_equal(10)
+	assert_int(int(data["save_version"])).is_equal(FlightSim.SAVE_VERSION)
 	assert_int(int(data["opened_tick"])).is_equal(OPENED)
 	assert_int(int(data["start_day"]["AM"])).is_equal(3)
 	assert_int(int(data["start_day"]["LATE"])).is_equal(2)
@@ -139,24 +138,16 @@ func test_saves_of_other_versions_or_with_the_wrong_keys_for_theirs_are_refused(
 	v2_with_open["save_version"] = 2
 	var v3_without := good.duplicate(true)
 	v3_without.erase("start_day")
-	var v1 := good.duplicate(true)
-	v1["save_version"] = 1
-	var v4 := good.duplicate(true)
-	v4["save_version"] = 4
-	var v5 := good.duplicate(true)
-	v5["save_version"] = 5
-	var v6 := good.duplicate(true)
-	v6["save_version"] = 6
-	var v7 := good.duplicate(true)
-	v7["save_version"] = 7
-	var v8 := good.duplicate(true)
-	v8["save_version"] = 8
-	var v9 := good.duplicate(true)
-	v9["save_version"] = 9
-	# The current version is 10 (side stands' lane_x), so 11 is the future one.
-	var v11 := good.duplicate(true)
-	v11["save_version"] = 11
-	for bad in [v2_with_open, v3_without, v1, v4, v5, v6, v7, v8, v9, v11]:
+	var cases: Array[Dictionary] = [v2_with_open, v3_without]
+	for version in range(1, FlightSim.SAVE_VERSION):
+		var old := good.duplicate(true)
+		old["save_version"] = version
+		cases.append(old)
+	# Any version past the current one is refused too.
+	var future := good.duplicate(true)
+	future["save_version"] = FlightSim.SAVE_VERSION + 1
+	cases.append(future)
+	for bad in cases:
 		var target: FlightSim = auto_free(FlightSim.new())
 		assert_bool(target.from_snapshot(bad)).override_failure_message(str(bad)).is_false()
 		assert_int(target.opened_tick).is_equal(-1)

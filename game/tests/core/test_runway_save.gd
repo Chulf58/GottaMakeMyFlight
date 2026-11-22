@@ -103,7 +103,11 @@ func test_a_version_12_save_without_a_runway_is_refused_and_changes_nothing() ->
 func test_a_bad_runway_part_is_refused_and_changes_nothing() -> void:
 	_flights.runway.size = PlaneClasses.MEDIUM
 	var bad := _taken()
-	bad["runway"] = {"save_version": 2, "size": "huge", "works": RunwayWorks.new().to_snapshot()}
+	bad["runway"] = {
+		"save_version": Runway.SAVE_VERSION,
+		"size": "huge",
+		"works": RunwayWorks.new().to_snapshot(),
+	}
 	var before := SaveTestKit.checksum(_main)
 	assert_bool(_save.load_world(bad)).is_false()
 	assert_str(_flights.runway.size).is_equal(PlaneClasses.MEDIUM)

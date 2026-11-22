@@ -584,18 +584,16 @@ func checked_standing(data: Dictionary, by_id: Dictionary) -> Dictionary:
 
 ## The info desk state in `data` checked against `by_id` (the loaded
 ## passengers by id) at the saved tick `at`: InfoDesk.checked()'s dictionary or
-## {"error": why}. A save migrated from before version 12 has none (none is
-## live); a current one must carry it. Changes no sim state: from_snapshot()
-## installs the result, and SaveGame's staging runs the same check.
+## {"error": why}. Changes no sim state: from_snapshot() installs the result,
+## and SaveGame's staging runs the same check.
 func checked_info_desks(data: Dictionary, by_id: Dictionary, at: int) -> Dictionary:
 	return PassengerSimSave.checked_info_desks(self, data, by_id, at)
 
 
 ## The boarding files in `data` checked against `by_id`, with this sim's grid
 ## and layout (rebuilt from the grid): {"files": BoardingFiles} or {"error":
-## why}. A migrated older save has none; a current one must carry them. Changes
-## no sim state: from_snapshot() installs the result, and SaveGame's staging
-## runs the same check.
+## why}. Changes no sim state: from_snapshot() installs the result, and
+## SaveGame's staging runs the same check.
 func checked_boarding(data: Dictionary, by_id: Dictionary) -> Dictionary:
 	return PassengerSimSave.checked_boarding(self, data, by_id)
 

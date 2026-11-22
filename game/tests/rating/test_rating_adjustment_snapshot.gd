@@ -39,7 +39,7 @@ func test_adjustments_round_trip_through_json() -> void:
 	_filled()
 	var saved := _json()
 	print(saved["adjustments"])
-	assert_int(int(saved["save_version"])).is_equal(2)
+	assert_int(int(saved["save_version"])).is_equal(AirportRating.SAVE_VERSION)
 	assert_array(saved["adjustments"]).has_size(2)
 	assert_bool(_other.from_snapshot(saved)).is_true()
 	assert_array(_other.active_adjustments()).is_equal(_rating.active_adjustments())

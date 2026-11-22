@@ -107,13 +107,27 @@ func test_bad_versions_and_slots_are_refused() -> void:
 			"has no 'slot'"
 		],
 		"version 1":
-		[_changed(good, func(d: Dictionary) -> void: d["save_version"] = 1), "1 is not 7"],
+		[
+			_changed(good, func(d: Dictionary) -> void: d["save_version"] = 1),
+			"1 is not %d" % StaffSim.SAVE_VERSION
+		],
 		"version 4":
-		[_changed(good, func(d: Dictionary) -> void: d["save_version"] = 4), "4 is not 7"],
+		[
+			_changed(good, func(d: Dictionary) -> void: d["save_version"] = 4),
+			"4 is not %d" % StaffSim.SAVE_VERSION
+		],
 		"version 5":
-		[_changed(good, func(d: Dictionary) -> void: d["save_version"] = 5), "5 is not 7"],
-		"version 8":
-		[_changed(good, func(d: Dictionary) -> void: d["save_version"] = 8), "8 is not 7"],
+		[
+			_changed(good, func(d: Dictionary) -> void: d["save_version"] = 5),
+			"5 is not %d" % StaffSim.SAVE_VERSION
+		],
+		"future version":
+		[
+			_changed(
+				good, func(d: Dictionary) -> void: d["save_version"] = StaffSim.SAVE_VERSION + 1
+			),
+			"%d is not %d" % [StaffSim.SAVE_VERSION + 1, StaffSim.SAVE_VERSION]
+		],
 		"unknown slot":
 		[
 			_changed(good, func(d: Dictionary) -> void: d["members"][helper_at]["slot"] = 7),

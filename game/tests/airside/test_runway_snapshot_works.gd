@@ -7,7 +7,7 @@ func test_the_part_holds_the_size_and_the_works() -> void:
 	var runway := Runway.new(PlaneClasses.MEDIUM)
 	runway.works.begin(PlaneClasses.LARGE, 900)
 	var data := JSON.parse_string(JSON.stringify(runway.to_snapshot())) as Dictionary
-	assert_int(int(data["save_version"])).is_equal(2)
+	assert_int(int(data["save_version"])).is_equal(Runway.SAVE_VERSION)
 	var loaded := Runway.new()
 	assert_bool(loaded.from_snapshot(data)).is_true()
 	assert_str(loaded.size).is_equal(PlaneClasses.MEDIUM)

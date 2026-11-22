@@ -74,10 +74,10 @@ func _save(stand: Dictionary) -> Dictionary:
 ## it; the same save with the stand's lane_x taken out is refused, and so is it
 ## at save version 9.
 func test_the_flight_save_keeps_lane_x_and_refuses_older_saves() -> void:
-	assert_int(FlightSim.SAVE_VERSION).is_equal(10)
+	assert_int(FlightSim.SAVE_VERSION).is_greater(9)
 	var stand := _stand(SILLS[0], StandPlacement.SIDE_LANE_X)
 	var data := _save(stand)
-	assert_int(int(data["save_version"])).is_equal(10)
+	assert_int(int(data["save_version"])).is_equal(FlightSim.SAVE_VERSION)
 	var saved: Dictionary = data["flights"][0]["stand"]
 	print("saved stand %s" % saved)
 	assert_float(float(saved["lane_x"])).is_equal(-StandPlacement.SIDE_LANE_X)

@@ -129,7 +129,7 @@ func test_a_save_with_inconsistent_security_state_is_refused() -> void:
 	while a.world.passenger(ids[0]).security_phase != SecurityRuntime.Phase.REPACK:
 		a.world.step()
 	var good := _json(a.world.sim.to_snapshot())
-	assert_int(int(good["save_version"])).is_equal(36)
+	assert_int(int(good["save_version"])).is_equal(PassengerSim.SAVE_VERSION)
 	assert_int(good["security"].size()).is_equal(1)
 	var cases := {}
 	var no_record: Dictionary = good.duplicate(true)
@@ -242,6 +242,26 @@ func test_a_lane_save_with_impossible_work_is_refused() -> void:
 	)
 	var at_cap := _work(repacking, ids[0], SecurityRuntime.REPACK_TICKS)
 	_check_refused(true, a, [repacking, at_cap], cases)
+	a.world.free_all()
+
+
+func test_unpack_work_above_its_maximum_is_refused_and_maximum_is_accepted() -> void:
+	var a := SecurityTestWorld.make(true)
+	var id := a.send(2)
+	while a.world.passenger(id).security_phase != SecurityRuntime.Phase.UNPACK:
+		a.world.step()
+	var good := _json(a.world.sim.to_snapshot())
+	var b := SecurityTestWorld.make(true)
+	b.world.clock.from_snapshot(_json(a.world.clock.to_snapshot()))
+	b.world.flights.from_snapshot(_json(a.world.flights.to_snapshot()))
+	var over := _work(good, id, 12)
+	var problem: String = PassengerSnapshot.load(over, b.world.grid).get("error", "")
+	assert_str(problem).contains("more work left than its phase starts with")
+	var before := b.signature()
+	assert_bool(b.world.sim.from_snapshot(over)).is_false()
+	assert_str(b.signature()).is_equal(before)
+	assert_bool(b.world.sim.from_snapshot(_work(good, id, 11))).is_true()
+	b.world.free_all()
 	a.world.free_all()
 
 

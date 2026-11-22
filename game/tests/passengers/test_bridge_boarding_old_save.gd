@@ -25,8 +25,8 @@ func test_a_version_31_save_with_an_apron_walker_is_refused() -> void:
 			]
 		)
 	)
-	assert_int(PassengerSim.SAVE_VERSION).is_equal(36)
-	assert_str(old.get("error", "")).is_equal("save_version must be 36")
+	assert_int(PassengerSim.SAVE_VERSION).is_greater(31)
+	assert_str(old.get("error", "")).is_equal("save_version must be %d" % PassengerSim.SAVE_VERSION)
 	# The control: the version is what refuses it; at the current version the same
 	# fixture gets past the version check.
 	assert_str(str(current.get("error", ""))).not_contains("save_version")

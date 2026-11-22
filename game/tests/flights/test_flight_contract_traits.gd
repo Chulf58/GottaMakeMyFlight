@@ -31,7 +31,7 @@ func test_terms_without_traits_make_a_plain_contract() -> void:
 ## Contracts gained the traits term in flight save version 8; a version 7 save
 ## is refused, with no migration.
 func test_a_version_7_save_of_the_flights_is_refused() -> void:
-	assert_int(FlightSim.SAVE_VERSION).is_equal(10)
+	assert_int(FlightSim.SAVE_VERSION).is_greater(7)
 	assert_bool(_sim.accept_contract(_terms("OLD"))).is_true()
 	var data: Dictionary = JSON.parse_string(JSON.stringify(_sim.to_snapshot()))
 	data["save_version"] = 7

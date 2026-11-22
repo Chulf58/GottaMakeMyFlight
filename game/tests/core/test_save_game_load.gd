@@ -141,8 +141,8 @@ func test_parts_saved_on_different_ticks_are_refused() -> void:
 ## refused whole, with no migration, and change nothing, as is a version 24
 ## one (no calendar epoch in its clock).
 func test_a_version_6_save_from_the_toon_shell_is_refused() -> void:
-	assert_int(SaveGame.SAVE_VERSION).is_equal(27)
-	for version in [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 20, 21, 22, 23, 24, 25, 26]:
+	assert_int(SaveGame.SAVE_VERSION).is_greater(6)
+	for version in range(6, SaveGame.SAVE_VERSION):
 		var old := _older()
 		old["save_version"] = version
 		_assert_refused(old, "version %d" % version)
