@@ -101,6 +101,8 @@ var _gate_labels: Dictionary = {}
 var _links_view := GateLinksView.new()
 ## The construction works over a pending side spur and the runway upgrade.
 var _works := TaxiwayWorksView.new()
+var _last_route_ver := -1
+var _last_enclosure_ver := -1
 
 
 func _init() -> void:
@@ -239,6 +241,9 @@ func refresh() -> void:
 	if gates != null:
 		_refresh_gates()
 		return
+	if grid != null:
+		_last_route_ver = grid.route_version()
+		_last_enclosure_ver = grid.enclosure_version()
 	placement = StandPlacement.place(grid, site, live)
 	wanted = placement["stand"]
 	try_release()
@@ -843,6 +848,12 @@ func _apply_gate_stands() -> void:
 
 
 func _on_graph_changed(_cells: Array[Vector2i]) -> void:
+	if (
+		grid != null
+		and grid.route_version() == _last_route_ver
+		and grid.enclosure_version() == _last_enclosure_ver
+	):
+		return
 	refresh()
 
 

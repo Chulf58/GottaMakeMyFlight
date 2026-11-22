@@ -35,7 +35,9 @@ const SPARE_SIGNS := 4
 ## hover text shows only while it is active.
 var build_session: BuildSession
 
+var rebuilds := 0
 var _grid: BuildGrid
+var _enclosure_token: Array = []
 var _bars := MultiMeshInstance3D.new()
 var _signs: Array[Sprite3D] = []
 var _shown_signs := 0
@@ -77,17 +79,22 @@ func bind(grid: BuildGrid) -> void:
 	if _grid != null and _grid.graph_changed.is_connected(_on_graph_changed):
 		_grid.graph_changed.disconnect(_on_graph_changed)
 	_grid = grid
+	_enclosure_token = []
 	_grid.graph_changed.connect(_on_graph_changed)
 	rebuild()
 
 
 ## Draws the bars and signs again from the grid's gaps.
 func rebuild() -> void:
+	rebuilds += 1
 	var edges: Array[Vector3i] = []
 	var runs: Array[EnclosureGaps.Run] = []
 	if _grid != null:
+		_enclosure_token = [_grid.grid_id(), _grid.enclosure_version()]
 		edges = EnclosureGaps.gap_edges(_grid)
 		runs = EnclosureGaps.gap_runs(_grid)
+	else:
+		_enclosure_token = []
 	var multimesh := _bars.multimesh
 	multimesh.instance_count = edges.size()
 	_bar_transforms.clear()
@@ -184,6 +191,8 @@ func is_building() -> bool:
 
 
 func _on_graph_changed(_cells: Array[Vector2i]) -> void:
+	if _grid != null and [_grid.grid_id(), _grid.enclosure_version()] == _enclosure_token:
+		return
 	rebuild()
 
 
