@@ -233,9 +233,11 @@ func test_pa_ticker_positions_above_build_menu_and_clears_on_modals_and_load() -
 	DemoMode.clear_override()
 
 	# Opening OfferPanel suppresses and clears ticker.
+	assert_bool(world.flights.open_airport()).is_true()
 	_audio.pa_announced.emit("PA: Another announcement.")
 	assert_bool(ticker.visible).is_true()
 	offers.open()
+	assert_bool(offers.is_open()).is_true()
 	hud.refresh()
 	assert_bool(ticker.visible).is_false()
 	offers.close()
