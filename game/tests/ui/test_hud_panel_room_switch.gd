@@ -1,9 +1,10 @@
 class_name TestHudPanelRoomSwitch
 extends GdUnitTestSuite
-## On the real main scene, the camera makes room once when build mode opens a
-## tray, stays put while the player switches between build menus, and gives the
-## room back when the tray closes (decision camera-makes-room-once-per-build-
-## mode-open-not-on-every-menu-switch).
+## On the real main scene, opening build mode, switching between build menus,
+## swapping a hint into the banner slot, and closing the tray all leave
+## TycoonCamera completely steady at WHOLE_VIEW (decision panel-room-camera-
+## shifting-disabled-camera-stays-steady-for-panels-and-alerts, superseding
+## 77fa8631).
 
 const SEED := 4_402_028
 ## Domain tabs with different Tier-1 card counts: Building (seven cards, capped
@@ -42,7 +43,7 @@ func before_test() -> void:
 		_menu.press_category(_menu.open_category())
 	_staff.set_hint_yielded(false)
 	await _settle()
-	_camera.frame_start_view(StartView.area_for(_mode.grid), _room().free_fraction())
+	_camera.frame_start_view(StartView.area_for(_mode.grid))
 	_room().mark_sent()
 
 
@@ -50,9 +51,8 @@ func _room() -> PanelRoom:
 	return _hud.get_node("PanelRoom")
 
 
-## Frames enough for the panels to lay themselves out and PanelRoom to keep the
-## build stack (PanelRoom.REFIT_FRAMES), then
-## the camera's own easing run out.
+## Frames enough for the panels to lay themselves out (past REFIT_FRAMES), then
+## any camera easing runs out.
 func _settle() -> void:
 	for i in PanelRoom.REFIT_FRAMES + 2:
 		await get_tree().process_frame
@@ -74,7 +74,7 @@ func _assert_same_view(eye: Vector3, distance: float, room: Rect2) -> void:
 	assert_bool(_camera.room.is_equal_approx(room)).is_true()
 
 
-func test_opening_build_mode_reframes_once() -> void:
+func test_opening_build_mode_moves_and_zooms_nothing() -> void:
 	var eye_before := _eye.global_position
 	var distance_before := _camera.distance
 	var room_before := _camera.room
@@ -83,9 +83,8 @@ func test_opening_build_mode_reframes_once() -> void:
 	await _settle()
 	print("opened: ", _view())
 	assert_bool(_menu.is_tray_open()).is_true()
-	assert_bool(_camera.room.is_equal_approx(room_before)).is_false()
-	assert_bool(_eye.global_position.is_equal_approx(eye_before)).is_false()
-	assert_float(_camera.distance).is_not_equal(distance_before)
+	assert_bool(_camera.room.is_equal_approx(TycoonCamera.WHOLE_VIEW)).is_true()
+	_assert_same_view(eye_before, distance_before, room_before)
 
 
 func test_switching_between_build_menus_moves_and_zooms_nothing() -> void:
@@ -124,7 +123,7 @@ func test_a_hint_taking_the_banner_slot_on_a_switch_moves_nothing() -> void:
 	_assert_same_view(eye, distance, room)
 
 
-func test_closing_the_tray_after_switching_gives_the_screen_back() -> void:
+func test_closing_the_tray_after_switching_leaves_the_camera_steady() -> void:
 	var eye_before := _eye.global_position
 	var distance_before := _camera.distance
 	var room_before := _camera.room

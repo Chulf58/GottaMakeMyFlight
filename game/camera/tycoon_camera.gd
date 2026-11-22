@@ -61,10 +61,10 @@ const MIN_RAY_DOWN := 0.05
 @export var home_position := Vector3.ZERO
 @export var home_distance := 80.0
 @export var home_yaw := 0.0
-## How much roomier than the area itself a framed view is. The HUD panels are
-## already cut out of the room the area is fitted in (PanelRoom, the bottom bar
-## included), so this is only a little breathing space around it.
-@export var frame_margin := 1.15
+## How much roomier than the area itself a framed view is, keeping the start
+## area clear of the bottom bar and left column across supported aspect ratios
+## and UI scales while the camera stays at WHOLE_VIEW.
+@export var frame_margin := 1.45
 ## The height the area's walls reach, in metres: a framed view keeps the wall
 ## tops inside the room too, since the far wall's top shows above its foot.
 @export var frame_height := 2.5
