@@ -144,8 +144,10 @@ var _props := CarryOnProps.new()
 ## moved toward the target at walking speed once per tick.
 var _offsets: Dictionary = {}
 ## Passenger id -> its drawn right-hand corridor lane offset (CorridorLane),
-## moved toward the target by at most CorridorLane.CHASE_STEP_M per tick.
+## computed deterministically from the sim state.
 var _lanes: Dictionary = {}
+## Previous tick's _lanes per passenger id so _turn() measures non-lane motion.
+var _prev_lanes: Dictionary = {}
 ## Passenger id -> its drawn step onto a seat or into a shower on an activity
 ## visit, moved toward ActivityPoses.offset() by at most a walking step a tick,
 ## so a stay cut short or a removed piece eases the body back instead of
@@ -336,7 +338,9 @@ func sync() -> void:
 		seen[id] = true
 		_chase(p)
 		_chase_seat(p)
+		var prev_lane: Vector3 = _lanes.get(id, Vector3.ZERO)
 		_chase_lane(p)
+		_prev_lanes[id] = prev_lane if _nodes.has(id) else _lanes.get(id, Vector3.ZERO)
 		var steer := DoorSteer.offset_of(self, p, _steer_time())
 		var now := _base_position(p) + steer
 		if not _nodes.has(id):
@@ -391,6 +395,7 @@ func _resteer(steers: Dictionary, fresh: Dictionary) -> void:
 ## blend from before the load.
 func snap() -> void:
 	_turns.clear()
+	_prev_lanes.clear()
 	need_clusters.clear()
 	wish_clusters.clear()
 	_setoffs.clear()
@@ -412,11 +417,13 @@ func snap() -> void:
 		_offsets.erase(id)
 		_seats.erase(id)
 		_lanes.erase(id)
+		_prev_lanes.erase(id)
 		_sit_off.erase(id)
 		var p_snap := sim.get_passenger(id)
 		var lane := CorridorLane.target_offset(sim, p_snap)
 		if lane != Vector3.ZERO:
 			_lanes[id] = lane
+			_prev_lanes[id] = lane
 		var seat := ActivityPoses.offset(sim, p_snap)
 		if seat != Vector3.ZERO:
 			_seats[id] = seat
@@ -1062,6 +1069,7 @@ func _release(id: int) -> void:
 	_offsets.erase(id)
 	_seats.erase(id)
 	_lanes.erase(id)
+	_prev_lanes.erase(id)
 	_sit_off.erase(id)
 	ActivityPoses.dress(node, 0.0, 0.0)
 	DiningPose.apply(node, DiningPose.Kind.NONE, 0.0, 0)
@@ -1329,7 +1337,8 @@ func _turn(node: Node3D, p: Passenger, face: float) -> void:
 		node.rotation.y = lerp_angle(before, setoff, alpha)
 		return
 	_setoffs.erase(p.id)
-	var step: Vector3 = _cur[p.id] - _prev[p.id]
+	var lane_delta: Vector3 = _lanes.get(p.id, Vector3.ZERO) - _prev_lanes.get(p.id, Vector3.ZERO)
+	var step: Vector3 = _cur[p.id] - _prev[p.id] - lane_delta
 	var heading := walk_heading(p)
 	var keep := atan2(heading.x, heading.y) if heading != Vector2.ZERO else node.rotation.y
 	var target := _turns.target(p.id, keep)
@@ -1375,7 +1384,7 @@ func _chase_seat(p: Passenger) -> void:
 
 
 func _chase_lane(p: Passenger) -> void:
-	var now := CorridorLane.step_offset(sim, p, _lanes.get(p.id, Vector3.ZERO))
+	var now := CorridorLane.target_offset(sim, p)
 	if now == Vector3.ZERO:
 		_lanes.erase(p.id)
 	else:
