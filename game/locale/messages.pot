@@ -6281,3 +6281,23 @@ msgstr ""
 #: audio/audio_settings_card.gd
 msgid "{percent}%"
 msgstr ""
+
+#: ui/game_menu.gd
+msgid "Camera angle"
+msgstr ""
+
+#: ui/game_menu.gd
+msgid "Low (38°)"
+msgstr ""
+
+#: ui/game_menu.gd
+msgid "Medium (54°)"
+msgstr ""
+
+#: ui/game_menu.gd
+msgid "Top-Down (70°)"
+msgstr ""
+
+#: ui/game_menu.gd
+msgid "Custom ({angle}°)"
+msgstr ""

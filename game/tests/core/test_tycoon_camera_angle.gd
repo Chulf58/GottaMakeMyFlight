@@ -149,8 +149,14 @@ func test_the_v_key_cycles_the_step_and_a_modified_v_does_not() -> void:
 	assert_int(_rig.angle_step).is_equal(TycoonCamera.AngleStep.MEDIUM)
 
 
-func test_the_v_key_is_free_in_the_input_map() -> void:
+func test_camera_angle_input_action_is_the_sole_v_binding() -> void:
+	assert_bool(InputMap.has_action(TycoonCamera.ANGLE_ACTION)).is_true()
+	var events := InputMap.action_get_events(TycoonCamera.ANGLE_ACTION)
+	assert_int(events.size()).is_equal(1)
+	assert_int((events[0] as InputEventKey).physical_keycode).is_equal(KEY_V)
 	for action in InputMap.get_actions():
+		if action == TycoonCamera.ANGLE_ACTION:
+			continue
 		for event in InputMap.action_get_events(action):
 			# Ctrl+V (paste) is a different chord; the camera ignores modified V.
 			if event is InputEventKey and not (event.ctrl_pressed or event.meta_pressed):
