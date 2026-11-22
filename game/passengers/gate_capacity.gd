@@ -184,6 +184,13 @@ static func admit_all(
 	for station in stations:
 		if runtime.admit_return(station):
 			continue
+		var lane: Array = queues[station].get("lane", [])
+		while opens[station] and not lane.is_empty():
+			var head: Passenger = host.get_passenger(lane[0])
+			if head == null or head.stage != Passenger.Stage.SECURITY_QUEUE:
+				runtime.admit_front(station, queues[station])
+			else:
+				break
 		var front := runtime.ready_front(station, queues[station], cells[station], opens[station])
 		if front != null:
 			fronts.append([front.boarding_tick, station, front.id])
