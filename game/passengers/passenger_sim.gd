@@ -841,6 +841,7 @@ func _reconcile() -> void:
 	cafes.reconcile()
 	toilets.reconcile()
 	shops.reconcile()
+	PassengerEdits.recover_stranded(self)
 
 
 func _send_back(p: Passenger) -> void:
