@@ -6224,3 +6224,27 @@ msgstr ""
 msgctxt "pa"
 msgid "PA: Our terminal is now rated {stars} stars. Same carpet, slightly prouder management."
 msgstr ""
+
+#: ui/staff_panel.gd
+msgid "Ramp agents"
+msgstr ""
+
+#: ui/alert_sources.gd
+msgid "Ramp agent needed for baggage"
+msgstr ""
+
+#: ui/alert_sources.gd
+msgid "No ramp agents hired · hire one on Staff"
+msgstr ""
+
+#: ui/alert_sources.gd
+msgid "All ramp agents busy · hire another on Staff"
+msgstr ""
+
+#: ui/alert_sources.gd
+msgid "Ramp agent needed for pushback"
+msgstr ""
+
+#: ui/alert_sources.gd
+msgid "Emergency tug called (-{fee}) · Hire a ramp agent on Staff"
+msgstr ""

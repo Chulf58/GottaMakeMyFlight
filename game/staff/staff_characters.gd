@@ -37,10 +37,12 @@ extends Node3D
 const AGENT_SUIT := preload("res://assets/people/tcp_female_character_07.glb")
 const OFFICER := preload("res://assets/people/tcp_male_character_07.glb")
 const CLEANER_BODY := preload("res://assets/people/tcp_female_character_10.glb")
-## By StaffMember.Role: CHECKIN, SECURITY, SHOP, CLEANER, GATE.
-const CHARACTERS: Array[PackedScene] = [AGENT_SUIT, OFFICER, AGENT_SUIT, CLEANER_BODY, AGENT_SUIT]
+## By StaffMember.Role: CHECKIN, SECURITY, SHOP, CLEANER, GATE, RAMP.
+const CHARACTERS: Array[PackedScene] = [
+	AGENT_SUIT, OFFICER, AGENT_SUIT, CLEANER_BODY, AGENT_SUIT, OFFICER
+]
 ## Walk clip speeds measured by the Toon pipeline (SPEED lines), by role.
-const CLIP_WALK_MPS: Array[float] = [1.922, 1.952, 1.922, 1.922, 1.922]
+const CLIP_WALK_MPS: Array[float] = [1.922, 1.952, 1.922, 1.922, 1.922, 1.952]
 const LOOPED := ["idle", "walk"]
 ## The cleaner's work clip, played forward and back (it does not loop closed).
 const CLEAN_CLIP := "clean"
@@ -49,15 +51,28 @@ const CLEAN_CLIP := "clean"
 const GATE_SUIT_HUE := 0.54
 const GATE_SUIT_SAT := 0.68
 const GATE_SUIT_VALUE_MIN := 0.44
+## High-visibility safety orange shirt tint for Ramp Agents on OFFICER.
+const RAMP_VEST_HUE := 0.06
+const RAMP_VEST_SAT := 0.94
+const RAMP_VEST_VALUE_MIN := 0.80
+const SHUTTLE_OFFSET := Vector3(0.0, 0.0, -1.25)
+const PUSHBACK_TUG_OFFSET := Vector3(-2.15, 0.0, 2.6)
+const MARSHAL_SIDE_M := 1.8
+const MARSHAL_WALL_GAP_M := 1.2
 
-## Cached Gate Agent mesh/material tinted from AGENT_SUIT without altering .glb rigs.
+## Cached Gate Agent and Ramp Agent meshes/materials tinted without altering .glb rigs.
 static var _gate_split_mesh: Mesh
 static var _gate_cloth_mat: ShaderMaterial
+static var _ramp_split_mesh: Mesh
+static var _ramp_cloth_mat: ShaderMaterial
 
 @export var clock: SimClock
 @export var staff: StaffSim
+@export var baggage: BaggageSim
+@export var flights: FlightSim
+@export var plane_fleet: PlaneFleet
 
-var _pool: Array[Array] = [[], [], [], [], []]
+var _pool: Array[Array] = [[], [], [], [], [], []]
 ## Member id -> node.
 var _nodes: Dictionary = {}
 var _prev: Dictionary = {}
@@ -69,6 +84,7 @@ var _dirty := false
 
 
 func _ready() -> void:
+	process_priority = 1
 	for scene in CHARACTERS:
 		var probe := scene.instantiate()
 		var player := probe.get_node("AnimationPlayer") as AnimationPlayer
@@ -154,6 +170,32 @@ func sync(snap: bool = false) -> void:
 	var seen := {}
 	for id in staff.member_ids():
 		var m := staff.get_member(id)
+		if m.role == StaffMember.Role.RAMP:
+			if m.ramp_job == StaffMember.RampJob.NONE:
+				continue
+			var ramp_pose := _ramp_pose(m)
+			if ramp_pose.is_empty():
+				continue
+			seen[id] = true
+			var node: Node3D = _nodes.get(id)
+			if node != null and node.get_meta(&"role") != m.role:
+				_release(id)
+				node = null
+			var fresh := node == null
+			if fresh:
+				node = _take(m.role)
+				_nodes[id] = node
+			var ramp_now: Vector3 = ramp_pose["pos"]
+			if snap or fresh:
+				_prev[id] = ramp_now
+			else:
+				_prev[id] = _cur[id]
+			_cur[id] = ramp_now
+			node.rotation.y = float(ramp_pose["yaw"])
+			_play_clip(node, String(ramp_pose["clip"]), float(ramp_pose["speed"]))
+			if snap:
+				_tucks.erase(id)
+			continue
 		if m.in_pool():
 			continue
 		seen[id] = true
@@ -190,7 +232,24 @@ func draw() -> void:
 	var now := _now()
 	for id in _nodes:
 		var node: Node3D = _nodes[id]
-		node.position = (_prev[id] as Vector3).lerp(_cur[id], alpha)
+		var m := staff.get_member(id) if staff != null else null
+		if (
+			m != null
+			and m.role == StaffMember.Role.RAMP
+			and m.ramp_job == StaffMember.RampJob.PUSHBACK
+		):
+			var tug_xform := _live_tug_transform(m.ramp_flight_id)
+			if tug_xform != Transform3D.IDENTITY:
+				var pos := tug_xform * PUSHBACK_TUG_OFFSET
+				pos.y = BaggageShuttle.ground_y(_grid(), pos)
+				node.position = pos
+				var fwd := tug_xform.basis.z.slide(Vector3.UP)
+				if fwd.length() > 0.001:
+					node.rotation.y = atan2(fwd.x, fwd.z)
+			else:
+				node.position = (_prev[id] as Vector3).lerp(_cur[id], alpha)
+		else:
+			node.position = (_prev[id] as Vector3).lerp(_cur[id], alpha)
 		StaffArchTuck.pose(node, StaffArchTuck.weight(_tucks.get(id, {}), now))
 		var player := node.get_node("AnimationPlayer") as AnimationPlayer
 		var base: float = node.get_meta(&"base_speed", 1.0)
@@ -224,6 +283,8 @@ func _take(role: StaffMember.Role) -> Node3D:
 		node = CHARACTERS[role].instantiate() as Node3D
 		if role == StaffMember.Role.GATE:
 			_apply_gate_uniform(node)
+		elif role == StaffMember.Role.RAMP:
+			_apply_ramp_uniform(node)
 		node.set_meta(&"role", role)
 		add_child(node)
 	node.rotation.y = 0.0
@@ -241,18 +302,41 @@ static func _apply_gate_uniform(node: Node3D) -> void:
 	mi.mesh = _gate_split_mesh
 
 
+static func _apply_ramp_uniform(node: Node3D) -> void:
+	var mi := PassengerLooks.body_mesh(node)
+	if mi == null:
+		return
+	if _ramp_split_mesh == null:
+		_ramp_split_mesh = _build_ramp_mesh(mi.mesh)
+	mi.mesh = _ramp_split_mesh
+
+
 static func _build_gate_mesh(plain: Mesh) -> Mesh:
 	var arrays := plain.surface_get_arrays(0)
 	var parts := PassengerLooks.cloth_split(arrays[Mesh.ARRAY_INDEX], arrays[Mesh.ARRAY_COLOR])
 	if parts[1].is_empty():
 		return plain
+	return _split_cloth_mesh(plain, arrays, parts, _gate_material(plain, parts[1]))
+
+
+static func _build_ramp_mesh(plain: Mesh) -> Mesh:
+	var arrays := plain.surface_get_arrays(0)
+	var parts := PassengerLooks.cloth_split(arrays[Mesh.ARRAY_INDEX], arrays[Mesh.ARRAY_COLOR])
+	if parts[1].is_empty():
+		return plain
+	return _split_cloth_mesh(plain, arrays, parts, _ramp_material(plain, parts[1]))
+
+
+static func _split_cloth_mesh(
+	plain: Mesh, arrays: Array, parts: Array, cloth_mat: ShaderMaterial
+) -> Mesh:
 	var flags: int = (plain as ArrayMesh).surface_get_format(0) & Mesh.ARRAY_FLAG_USE_8_BONE_WEIGHTS
 	var mesh := ArrayMesh.new()
 	for i in 2:
 		arrays[Mesh.ARRAY_INDEX] = parts[i]
 		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {}, flags)
 	mesh.surface_set_material(0, plain.surface_get_material(0))
-	mesh.surface_set_material(1, _gate_material(plain, parts[1]))
+	mesh.surface_set_material(1, cloth_mat)
 	return mesh
 
 
@@ -284,6 +368,37 @@ static func _gate_material(plain: Mesh, cloth_index: PackedInt32Array) -> Shader
 		atlas.generate_mipmaps()
 		made.set_shader_parameter("albedo_texture", ImageTexture.create_from_image(atlas))
 	_gate_cloth_mat = made
+	return made
+
+
+static func _ramp_material(plain: Mesh, cloth_index: PackedInt32Array) -> ShaderMaterial:
+	if _ramp_cloth_mat != null:
+		return _ramp_cloth_mat
+	var base := plain.surface_get_material(0) as ShaderMaterial
+	var made := base.duplicate() as ShaderMaterial
+	var atlas := (base.get_shader_parameter("albedo_texture") as Texture2D).get_image()
+	if atlas != null:
+		atlas = atlas.duplicate() as Image
+		if atlas.has_mipmaps():
+			atlas.clear_mipmaps()
+		var width := atlas.get_width()
+		var height := atlas.get_height()
+		var uvs: PackedVector2Array = plain.surface_get_arrays(0)[Mesh.ARRAY_TEX_UV]
+		var texels := _cloth_texels(uvs, cloth_index, width, height)
+		var dark := PassengerLooks.dark_cells(atlas, texels)
+		var cols := width / PassengerLooks.SWATCH_PX.x
+		for t in texels:
+			var x := t % width
+			var y := t / width
+			if not dark.get(
+				(y / PassengerLooks.SWATCH_PX.y) * cols + x / PassengerLooks.SWATCH_PX.x, false
+			):
+				var c := atlas.get_pixel(x, y)
+				var v := RAMP_VEST_VALUE_MIN + (1.0 - RAMP_VEST_VALUE_MIN) * c.v
+				atlas.set_pixel(x, y, Color.from_hsv(RAMP_VEST_HUE, RAMP_VEST_SAT, v, c.a))
+		atlas.generate_mipmaps()
+		made.set_shader_parameter("albedo_texture", ImageTexture.create_from_image(atlas))
+	_ramp_cloth_mat = made
 	return made
 
 
@@ -352,7 +467,123 @@ func _pose(node: Node3D, m: StaffMember, moved: Vector3) -> void:
 		else:
 			var ahead := m.path[m.path_index + 1] - m.at
 			node.rotation.y = atan2(ahead.x, ahead.y)
+	_play_clip(node, clip, base)
+
+
+func _play_clip(node: Node3D, clip: String, base: float) -> void:
 	node.set_meta(&"base_speed", base)
 	if node.get_meta(&"clip", "") != clip:
 		node.set_meta(&"clip", clip)
 		(node.get_node("AnimationPlayer") as AnimationPlayer).play(clip)
+
+
+func _baggage() -> BaggageSim:
+	if baggage != null:
+		return baggage
+	if staff != null and staff.ramp_dispatch != null:
+		return staff.ramp_dispatch.baggage
+	return null
+
+
+func _flights() -> FlightSim:
+	if flights != null:
+		return flights
+	if staff != null and staff.ramp_dispatch != null:
+		return staff.ramp_dispatch.flights
+	return null
+
+
+func _grid() -> BuildGrid:
+	return staff.sim.grid if staff != null and staff.sim != null else null
+
+
+func _live_tug_transform(flight_id: String) -> Transform3D:
+	if plane_fleet == null or flight_id == "":
+		return Transform3D.IDENTITY
+	for view in plane_fleet.views:
+		if view.flight_id == flight_id and view.tug_visible():
+			return view.tug_global_transform()
+	return Transform3D.IDENTITY
+
+
+func _ramp_pose(m: StaffMember) -> Dictionary:
+	if m.ramp_job == StaffMember.RampJob.SHUTTLE:
+		return _shuttle_pose(m)
+	if m.ramp_job == StaffMember.RampJob.PUSHBACK:
+		return _pushback_pose(m)
+	if m.ramp_job == StaffMember.RampJob.MARSHAL:
+		return _marshal_pose(m)
+	return {}
+
+
+func _shuttle_pose(m: StaffMember) -> Dictionary:
+	var bag_sim := _baggage()
+	var shuttle := bag_sim.get_shuttle(m.ramp_shuttle_id) if bag_sim != null else null
+	if shuttle == null:
+		return {}
+	var cart_xform := shuttle.pose_at(bag_sim.tick, bag_sim.grid)
+	var pos := cart_xform * SHUTTLE_OFFSET
+	pos.y = BaggageShuttle.ground_y(bag_sim.grid, pos)
+	if shuttle.phase == BaggageShuttle.Phase.UNLOADING:
+		var to_cart := cart_xform.origin - pos
+		return {"pos": pos, "yaw": atan2(to_cart.x, to_cart.z), "clip": "idle", "speed": 1.0}
+	var forward := cart_xform.basis.z.slide(Vector3.UP)
+	var yaw := atan2(forward.x, forward.z) if forward.length() > 0.001 else 0.0
+	var next_xform := shuttle.pose_at(bag_sim.tick + 1, bag_sim.grid)
+	var step_m := (next_xform * SHUTTLE_OFFSET - pos).slide(Vector3.UP).length()
+	var speed := clampf((step_m * SimClock.TICK_RATE) / CLIP_WALK_MPS[m.role], 0.5, 2.5)
+	return {"pos": pos, "yaw": yaw, "clip": "walk", "speed": speed}
+
+
+func _pushback_pose(m: StaffMember) -> Dictionary:
+	var tug_xform := _live_tug_transform(m.ramp_flight_id)
+	if tug_xform != Transform3D.IDENTITY:
+		var live_pos := tug_xform * PUSHBACK_TUG_OFFSET
+		live_pos.y = BaggageShuttle.ground_y(_grid(), live_pos)
+		var fwd := tug_xform.basis.z.slide(Vector3.UP)
+		var live_yaw := atan2(fwd.x, fwd.z) if fwd.length() > 0.001 else 0.0
+		return {"pos": live_pos, "yaw": live_yaw, "clip": "walk", "speed": 1.0}
+	var flight_sim := _flights()
+	if flight_sim == null:
+		return {}
+	var stand := flight_sim.flight_stand(m.ramp_flight_id)
+	if stand.is_empty():
+		return {}
+	var model := PlaneClasses.flight_model(flight_sim, m.ramp_flight_id)
+	var twin := StandPlacement.north_twin(stand)
+	var stand_pt := StandPlacement.stand_point(twin)
+	var nose_z := (
+		stand_pt.z + float(PlaneModels.PLANES.get(model, {}).get("nose", StandPlacement.NOSE_M))
+	)
+	var pos := StandPlacement.to_world(
+		stand, Vector3(stand_pt.x, 0.0, nose_z) + PUSHBACK_TUG_OFFSET
+	)
+	pos.y = BaggageShuttle.ground_y(_grid(), pos)
+	return {
+		"pos": pos,
+		"yaw": StandPlacement.SIDE_YAW[StandPlacement.side_of(stand)],
+		"clip": "walk",
+		"speed": 1.0,
+	}
+
+
+func _marshal_pose(m: StaffMember) -> Dictionary:
+	var flight_sim := _flights()
+	if flight_sim == null:
+		return {}
+	var stand := flight_sim.flight_stand(m.ramp_flight_id)
+	if stand.is_empty():
+		return {}
+	var twin := StandPlacement.north_twin(stand)
+	var stand_pt := StandPlacement.stand_point(twin)
+	var local_pos := Vector3(
+		stand_pt.x - MARSHAL_SIDE_M, 0.0, float(twin["wall_z"]) - MARSHAL_WALL_GAP_M
+	)
+	var pos := StandPlacement.to_world(stand, local_pos)
+	pos.y = BaggageShuttle.ground_y(_grid(), pos)
+	return {
+		"pos": pos,
+		"yaw": StandPlacement.SIDE_YAW[StandPlacement.side_of(stand)] + PI,
+		"clip": "idle",
+		"speed": 1.0,
+	}

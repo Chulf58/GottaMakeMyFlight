@@ -1,4 +1,4 @@
-[gd_scene load_steps=53 format=3]
+[gd_scene load_steps=54 format=3]
 
 [ext_resource type="PackedScene" path="res://camera/tycoon_camera.tscn" id="1_cam"]
 [ext_resource type="Script" path="res://core/sim_clock.gd" id="2_clock"]
@@ -50,6 +50,7 @@
 [ext_resource type="Script" path="res://ui/hover_target.gd" id="51_hovertarget"]
 [ext_resource type="Script" path="res://build/owned_paving.gd" id="52_ownedpaving"]
 [ext_resource type="Script" path="res://telemetry/quit_log_recorder.gd" id="53_quitlog"]
+[ext_resource type="Script" path="res://staff/ramp_dispatch.gd" id="54_ramp"]
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_ground"]
 size = Vector2(2400, 2400)
@@ -310,6 +311,15 @@ flights = NodePath("../FlightSim")
 passengers = NodePath("../PassengerSim")
 build_mode = NodePath("../BuildMode")
 
+[node name="RampDispatch" type="Node" parent="." node_paths=PackedStringArray("clock", "staff", "baggage", "flights", "finances", "rating")]
+script = ExtResource("54_ramp")
+clock = NodePath("../SimClock")
+staff = NodePath("../Staff")
+baggage = NodePath("../BaggageSim")
+flights = NodePath("../FlightSim")
+finances = NodePath("../Finances")
+rating = NodePath("../AirportRating")
+
 [node name="PassengerViews" type="Node3D" parent="." node_paths=PackedStringArray("clock", "sim", "save_game", "incidents", "mood_overlay", "hover_target", "build_mode")]
 script = ExtResource("11_paxview")
 clock = NodePath("../SimClock")
@@ -326,10 +336,13 @@ clock = NodePath("../SimClock")
 sim = NodePath("../BaggageSim")
 save_game = NodePath("../SaveGame")
 
-[node name="StaffCharacters" type="Node3D" parent="." node_paths=PackedStringArray("clock", "staff")]
+[node name="StaffCharacters" type="Node3D" parent="." node_paths=PackedStringArray("clock", "staff", "baggage", "flights", "plane_fleet")]
 script = ExtResource("28_staffchars")
 clock = NodePath("../SimClock")
 staff = NodePath("../Staff")
+baggage = NodePath("../BaggageSim")
+flights = NodePath("../FlightSim")
+plane_fleet = NodePath("../PlaneFleet")
 
 [node name="PassengerHud" type="CanvasLayer" parent="." node_paths=PackedStringArray("clock", "flights", "sim", "views", "camera", "build_mode", "save_game", "landside_views")]
 script = ExtResource("12_hud")
@@ -421,13 +434,14 @@ finances = NodePath("../Finances")
 build_mode = NodePath("../BuildMode")
 save_game = NodePath("../SaveGame")
 
-[node name="StaffPanel" type="CanvasLayer" parent="." node_paths=PackedStringArray("staff", "gate", "menu", "save_game")]
+[node name="StaffPanel" type="CanvasLayer" parent="." node_paths=PackedStringArray("staff", "gate", "menu", "save_game", "unlocks")]
 layer = 2
 script = ExtResource("22_staffpanel")
 staff = NodePath("../Staff")
 gate = NodePath("../AirportGate")
 menu = NodePath("../BuildMenu")
 save_game = NodePath("../SaveGame")
+unlocks = NodePath("../BuildUnlocks")
 
 [node name="RatingBadge" type="CanvasLayer" parent="." node_paths=PackedStringArray("rating")]
 layer = 2

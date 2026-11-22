@@ -3,7 +3,7 @@ extends GdUnitTestSuite
 ## A true SaveGame round trip of an active scanner fault on the real main
 ## scene (decision scanner-fault-incident-design-stationfaults-beside-
 ## stationcl): the staff part keeps the fault and its repair tick (staff save
-## version 6), the incidents part keeps its plan (version 5), the loaded game
+## version 7), the incidents part keeps its plan (version 5), the loaded game
 ## reopens the scanner on the same tick as the unbroken one, and a save whose
 ## two copies of the repair tick disagree is refused. One boot of main.tscn.
 
@@ -104,7 +104,7 @@ func test_an_active_fault_round_trips_and_reopens_on_the_same_tick() -> void:
 			]
 		)
 	)
-	assert_int(int(data["staff"]["save_version"])).is_equal(6)
+	assert_int(int(data["staff"]["save_version"])).is_equal(7)
 	assert_int(int(data["incidents"]["save_version"])).is_equal(5)
 	var unbroken := _opens_on(station, repair + 20)
 	var ended_unbroken: String = _director.incidents().back()["state"]

@@ -179,7 +179,9 @@ const WAGES := {
 	StaffMember.Role.SHOP: 50,
 	StaffMember.Role.CLEANER: 40,
 	StaffMember.Role.GATE: 60,
+	StaffMember.Role.RAMP: 70,
 }
+const EMERGENCY_PUSHBACK_FEE := 150
 
 ## The share of its fee an airline pays for a passenger who makes the flight
 ## but whose bag missed it (ruling baggage-rides-a-player-built-belt-from-check-

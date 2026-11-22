@@ -29,6 +29,8 @@ const NO_ROUTE := &"no_route"
 const GATE_FULL := &"gate_full"
 const NO_STAFF := &"stations_no_staff"
 const STAFF_SPOT := &"staff_spot_unusable"
+const RAMP_BAGGAGE := &"ramp_baggage"
+const RAMP_PUSHBACK := &"ramp_pushback"
 ## Three game minutes (one real second is one game minute at 1x).
 const QUEUE_HOLD_TICKS := 3 * GameCalendar.TICKS_PER_MINUTE
 ## A stuck passenger re-plans now and then; a minute each way keeps a passing
@@ -235,6 +237,79 @@ static func closed_stations(sim: PassengerSim) -> Array[Dictionary]:
 				ROUTE_HOLD_TICKS
 			)
 		)
+	return out
+
+
+static func ramp(
+	sim: PassengerSim, baggage: BaggageSim = null, dispatch: RampDispatch = null
+) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	if sim == null or sim.staff == null:
+		return out
+	var resolved_dispatch := dispatch if dispatch != null else sim.staff.ramp_dispatch
+	var resolved_baggage := baggage
+	if resolved_baggage == null and resolved_dispatch != null:
+		resolved_baggage = resolved_dispatch.baggage
+	if resolved_baggage != null:
+		var waiting_carts := resolved_baggage.waiting_for_ramp_carts()
+		if not waiting_carts.is_empty():
+			var reason := resolved_baggage.waiting_for_ramp_reason(sim.staff)
+			if reason == "none_hired" or reason == "all_busy":
+				var targets: Array[Vector3] = []
+				for cart_id in waiting_carts:
+					if targets.size() >= MAX_TARGETS:
+						break
+					targets.append(object_point(sim.grid, cart_id))
+				var detail := (
+					_translator.tr("No ramp agents hired · hire one on Staff")
+					if reason == "none_hired"
+					else _translator.tr("All ramp agents busy · hire another on Staff")
+				)
+				(
+					out
+					. append(
+						{
+							"key": RAMP_BAGGAGE,
+							"title": _translator.tr("Ramp agent needed for baggage"),
+							"detail": detail,
+							"targets": targets,
+							"show_after": 0,
+							"clear_after": ROUTE_HOLD_TICKS,
+							"coral": true,
+						}
+					)
+				)
+	if resolved_dispatch != null:
+		var emergencies := resolved_dispatch.recent_emergencies()
+		if not emergencies.is_empty():
+			var targets: Array[Vector3] = []
+			for entry in emergencies:
+				var stand: Dictionary = entry.get("stand", {})
+				if stand.is_empty():
+					continue
+				var pt := StandPlacement.stand_point(stand)
+				var point := Vector3(pt.x, 0.0, pt.z)
+				if not targets.has(point) and targets.size() < MAX_TARGETS:
+					targets.append(point)
+			(
+				out
+				. append(
+					{
+						"key": RAMP_PUSHBACK,
+						"title": _translator.tr("Ramp agent needed for pushback"),
+						"detail":
+						(
+							_translator
+							. tr("Emergency tug called (-{fee}) · Hire a ramp agent on Staff")
+							. format({"fee": PriceTable.EMERGENCY_PUSHBACK_FEE})
+						),
+						"targets": targets,
+						"show_after": 0,
+						"clear_after": ROUTE_HOLD_TICKS,
+						"coral": true,
+					}
+				)
+			)
 	return out
 
 

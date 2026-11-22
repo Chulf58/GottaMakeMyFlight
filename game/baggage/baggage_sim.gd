@@ -50,6 +50,7 @@ signal bag_settled(bag_id: int, passenger_id: int, flight_id: String, loaded: bo
 signal shuttle_dispatched(shuttle_id: int, flight_id: String, cart_id: int)
 signal shuttle_arrived(shuttle_id: int, flight_id: String)
 signal shuttle_returned(shuttle_id: int, cart_id: int)
+signal shuttle_cancelled(shuttle_id: int, cart_id: int)
 
 ## Belt speed in mm per tick: 1 m/s, a tuning value.
 const BELT_MM := 50
@@ -210,6 +211,52 @@ func assign_shuttle_driver(shuttle_id: int, staff_id: int) -> bool:
 	return true
 
 
+func waiting_for_ramp_carts() -> Array[int]:
+	var out: Array[int] = []
+	if grid == null or flights == null or not shuttle_can_dispatch.is_valid():
+		return out
+	var ready_by_flight := {}
+	for bag in _bags:
+		if bag.is_settled() or bag.shuttle_id != 0 or tick < bag.cutoff_tick:
+			continue
+		if bag.state == Bag.State.IN_ROOM:
+			var list: Array[Bag] = ready_by_flight.get(bag.flight, [] as Array[Bag])
+			list.append(bag)
+			ready_by_flight[bag.flight] = list
+	var flight_keys := ready_by_flight.keys()
+	flight_keys.sort()
+	for flight_id: String in flight_keys:
+		var stand := flights.flight_stand(flight_id)
+		if stand.is_empty():
+			continue
+		var doors_close := flights.doors_close_tick(flight_id)
+		var by_cart := {}
+		for bag: Bag in ready_by_flight[flight_id]:
+			var cart_id := _cart_for_bag(bag)
+			if cart_id != 0:
+				by_cart[cart_id] = true
+		var cart_ids := by_cart.keys()
+		cart_ids.sort()
+		for cart_id: int in cart_ids:
+			if out.has(cart_id) or _cart_busy(cart_id):
+				continue
+			var plan := _shuttle_plan(cart_id, flight_id, stand)
+			var finish_tick := tick + int(plan["travel"]) + BaggageShuttle.UNLOAD_TICKS
+			if doors_close >= 0 and finish_tick >= doors_close:
+				continue
+			if not shuttle_can_dispatch.call(cart_id, flight_id):
+				out.append(cart_id)
+	return out
+
+
+func waiting_for_ramp_reason(staff: StaffSim = null) -> String:
+	if waiting_for_ramp_carts().is_empty():
+		return "none"
+	if staff != null and staff.count(StaffMember.Role.RAMP) == 0:
+		return "none_hired"
+	return "all_busy"
+
+
 func get_bag(id: int) -> Bag:
 	return _by_id.get(id)
 
@@ -331,6 +378,7 @@ func _reconcile() -> void:
 				if bag != null and not bag.is_settled():
 					_settle(bag, false, Bag.Cause.LOST, tick)
 			_shuttle_by_id.erase(shuttle.id)
+			shuttle_cancelled.emit(shuttle.id, shuttle.cart_id)
 		else:
 			kept_shuttles.append(shuttle)
 	_shuttles = kept_shuttles

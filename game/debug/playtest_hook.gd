@@ -68,6 +68,7 @@ const STAFF_ROLES := {
 	"security": StaffMember.Role.SECURITY,
 	"gate": StaffMember.Role.GATE,
 	"shop": StaffMember.Role.SHOP,
+	"ramp": StaffMember.Role.RAMP,
 }
 const CHECK_INTERVAL_S := 0.5
 ## A passenger stuck this long in sim seconds is an anomaly.

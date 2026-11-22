@@ -74,6 +74,8 @@ static func problem(data: Dictionary, staged: Dictionary) -> String:
 		found = _bag_problem(staged["baggage"], staged["grid"], flights)
 	if found == "":
 		found = _awaited_problem(data["settlement"], staged["baggage"]["bags"])
+	if found == "" and staged.has("staff"):
+		found = _ramp_problem(staged["staff"], staged["baggage"], flights, staged["rating"])
 	if found == "" and data.has("day_ledger"):
 		found = DayLedger.day_link_problem(data["day_ledger"], data["clock"])
 		if found == "":
@@ -302,3 +304,169 @@ static func _same_dictionary(a: Dictionary, b: Dictionary) -> bool:
 		if not b.has(key) or not _same(a[key], b[key]):
 			return false
 	return true
+
+
+static func _ramp_problem(
+	staff: Dictionary, baggage: Dictionary, flights: Dictionary, rating: Dictionary
+) -> String:
+	var live_flights := {}
+	for flight: Dictionary in flights["flights"]:
+		live_flights[flight["id"]] = flight
+	var contracts := {}
+	for contract: Dictionary in flights["contracts"]:
+		contracts[contract["id"]] = contract
+	var shuttles_by_id := {}
+	for shuttle: BaggageShuttle in baggage["shuttles"]:
+		shuttles_by_id[shuttle.id] = shuttle
+	var ramp_by_id := {}
+	var claimed_shuttles := {}
+	var claimed_pushbacks := {}
+	var claimed_marshals := {}
+	for m: StaffMember in staff["members"]:
+		if m.role != StaffMember.Role.RAMP:
+			if (
+				m.ramp_job != StaffMember.RampJob.NONE
+				or m.ramp_shuttle_id != 0
+				or m.ramp_flight_id != ""
+			):
+				return "staff: non-ramp member %d holds a ramp job" % m.id
+			continue
+		ramp_by_id[m.id] = m
+		if (
+			m.leaving
+			and m.ramp_job != StaffMember.RampJob.SHUTTLE
+			and m.ramp_job != StaffMember.RampJob.PUSHBACK
+		):
+			return "staff: leaving ramp agent %d holds no shuttle or pushback" % m.id
+		var problem := _ramp_member_problem(
+			m,
+			shuttles_by_id,
+			live_flights,
+			contracts,
+			claimed_shuttles,
+			claimed_pushbacks,
+			claimed_marshals
+		)
+		if problem != "":
+			return problem
+	for shuttle: BaggageShuttle in baggage["shuttles"]:
+		var worker: StaffMember = ramp_by_id.get(shuttle.driver_staff_id)
+		if (
+			shuttle.driver_staff_id <= 0
+			or worker == null
+			or worker.ramp_job != StaffMember.RampJob.SHUTTLE
+			or worker.ramp_shuttle_id != shuttle.id
+		):
+			return (
+				"baggage: shuttle %d driver %d is not a matching ramp agent"
+				% [shuttle.id, shuttle.driver_staff_id]
+			)
+	return _emergency_pushback_problem(live_flights, contracts, claimed_pushbacks, rating)
+
+
+static func _emergency_pushback_problem(
+	live_flights: Dictionary,
+	contracts: Dictionary,
+	claimed_pushbacks: Dictionary,
+	rating: Dictionary,
+) -> String:
+	var emergency_flights := {}
+	for adj: Dictionary in rating.get("adjustments", []):
+		var parsed := RampDispatch.parse_emergency_id(String(adj.get("id", "")))
+		if parsed.is_empty():
+			continue
+		var fid: String = parsed["flight"]
+		if int(adj.get("half_star_delta", 0)) != RampDispatch.EMERGENCY_RATING_HALF_STARS:
+			return "rating: emergency pushback %s has invalid half_star_delta" % fid
+		if emergency_flights.has(fid):
+			return "rating: flight %s has duplicate emergency pushback adjustments" % fid
+		emergency_flights[fid] = adj
+	for fid: String in claimed_pushbacks:
+		if emergency_flights.has(fid):
+			return (
+				"staff: flight %s pushback has both ramp agent and emergency pushback adjustment"
+				% fid
+			)
+	for fid: String in live_flights:
+		var flight: Dictionary = live_flights[fid]
+		if int(flight["state"]) != FlightSim.State.PUSHBACK:
+			continue
+		if _flight_self_taxis(flight, contracts):
+			continue
+		if not claimed_pushbacks.has(fid) and not emergency_flights.has(fid):
+			return (
+				"staff: flight %s in pushback lacks a ramp agent or emergency pushback adjustment"
+				% fid
+			)
+	return ""
+
+
+static func _ramp_member_problem(
+	m: StaffMember,
+	shuttles_by_id: Dictionary,
+	live_flights: Dictionary,
+	contracts: Dictionary,
+	claimed_shuttles: Dictionary,
+	claimed_pushbacks: Dictionary,
+	claimed_marshals: Dictionary,
+) -> String:
+	match m.ramp_job:
+		StaffMember.RampJob.SHUTTLE:
+			if claimed_shuttles.has(m.ramp_shuttle_id):
+				return "staff: shuttle %d is claimed by two ramp agents" % m.ramp_shuttle_id
+			claimed_shuttles[m.ramp_shuttle_id] = m.id
+			var shuttle: BaggageShuttle = shuttles_by_id.get(m.ramp_shuttle_id)
+			if shuttle == null:
+				return "staff: ramp agent %d names missing shuttle %d" % [m.id, m.ramp_shuttle_id]
+			if shuttle.driver_staff_id != m.id:
+				return (
+					"staff: ramp agent %d and shuttle %d driver disagree"
+					% [m.id, m.ramp_shuttle_id]
+				)
+		StaffMember.RampJob.PUSHBACK:
+			if claimed_pushbacks.has(m.ramp_flight_id):
+				return "staff: flight %s pushback has two ramp agents" % m.ramp_flight_id
+			claimed_pushbacks[m.ramp_flight_id] = m.id
+			var flight: Dictionary = live_flights.get(m.ramp_flight_id, {})
+			if flight.is_empty():
+				return (
+					"staff: ramp agent %d pushback flight %s is not live" % [m.id, m.ramp_flight_id]
+				)
+			if _flight_self_taxis(flight, contracts):
+				return (
+					"staff: ramp agent %d pushback flight %s self-taxis" % [m.id, m.ramp_flight_id]
+				)
+			var state := int(flight["state"])
+			if state != FlightSim.State.DOORS_CLOSED and state != FlightSim.State.PUSHBACK:
+				return (
+					"staff: ramp agent %d pushback flight %s is in invalid phase"
+					% [m.id, m.ramp_flight_id]
+				)
+		StaffMember.RampJob.MARSHAL:
+			if claimed_marshals.has(m.ramp_flight_id):
+				return "staff: flight %s marshal has two ramp agents" % m.ramp_flight_id
+			claimed_marshals[m.ramp_flight_id] = m.id
+			var flight: Dictionary = live_flights.get(m.ramp_flight_id, {})
+			if flight.is_empty():
+				return (
+					"staff: ramp agent %d marshal flight %s is not live" % [m.id, m.ramp_flight_id]
+				)
+			if _flight_self_taxis(flight, contracts):
+				return (
+					"staff: ramp agent %d marshal flight %s self-taxis" % [m.id, m.ramp_flight_id]
+				)
+			if int(flight["state"]) != FlightSim.State.TAXI_IN:
+				return (
+					"staff: ramp agent %d marshal flight %s is not in TAXI_IN"
+					% [m.id, m.ramp_flight_id]
+				)
+	return ""
+
+
+static func _flight_self_taxis(flight: Dictionary, contracts: Dictionary) -> bool:
+	var contract_id: String = flight.get("contract", "")
+	var contract: Dictionary = contracts.get(contract_id, {})
+	if contract.is_empty():
+		contract = FlightSim.STARTER_TERMS
+	var model := PlaneClasses.model_for(String(contract["airline"]), String(contract["plane_size"]))
+	return model == "" or PlaneClasses.self_taxis(model)

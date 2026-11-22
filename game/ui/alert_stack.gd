@@ -94,6 +94,8 @@ var build_tray_open := Callable()
 ## Returns the open build tray stack's current height from the bottom edge
 ## (BuildMenu.stack_top()); without it the stack's usual height is used.
 var build_stack_top := Callable()
+var baggage: BaggageSim
+var ramp_dispatch: RampDispatch
 
 var _board := AlertBoard.new()
 var _dirty := DirtyAlert.new()
@@ -111,6 +113,7 @@ var _shown_revision := -1
 var _route_causes: Array[Dictionary] = []
 var _gate_causes: Array[Dictionary] = []
 var _staff_causes: Array[Dictionary] = []
+var _ramp_causes: Array[Dictionary] = []
 var _scanned_tick := -1
 ## Key -> how many clicks its card has had, to step through its targets.
 var _clicks: Dictionary = {}
@@ -139,6 +142,10 @@ func _ready() -> void:
 	offset_top = HudLayout.MARGIN
 	grow_vertical = Control.GROW_DIRECTION_END
 	_cards_on = HudFlagSetting.load_boot_flag(settings_path, SETTING_KEY, true, "AlertStack")
+	if baggage == null:
+		baggage = get_node_or_null("../../BaggageSim") as BaggageSim
+	if ramp_dispatch == null:
+		ramp_dispatch = get_node_or_null("../../RampDispatch") as RampDispatch
 	_build()
 
 
@@ -181,11 +188,13 @@ func refresh() -> void:
 		_route_causes = AlertSources.no_route(sim)
 		_gate_causes = AlertSources.gate_full(sim)
 		_staff_causes = AlertSources.closed_stations(sim)
+		_ramp_causes = AlertSources.ramp(sim, baggage, ramp_dispatch)
 	var causes: Array[Dictionary] = []
 	causes.append_array(AlertSources.queue_full(sim))
 	causes.append_array(_route_causes)
 	causes.append_array(_gate_causes)
 	causes.append_array(_staff_causes)
+	causes.append_array(_ramp_causes)
 	causes.append_array(_dirty.cause())
 	var prev_active := {}
 	for alert in _board.active():
@@ -462,6 +471,8 @@ func _sync_cards() -> void:
 		var card := card_node(key)
 		if card == null:
 			card = _new_card(key)
+			if alert.get("coral", false):
+				card.theme_type_variation = &"HudCardCoral"
 			_cards.add_child(card)
 		var title := card.find_child("Title", true, false) as Label
 		var detail := card.find_child("Detail", true, false) as Label
