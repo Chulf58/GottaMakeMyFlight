@@ -12,9 +12,9 @@ extends GdUnitTestSuite
 
 const MAIN := "res://main/main.tscn"
 ## The checklist card's staff lines (Checklist.NEXT).
-const CI_HIRE := "Check-in desk and an agent: hire an agent on Staff"
-const SEC_HIRE := "Security scanner and an officer: hire an officer on Staff"
-const GATE_HIRE := "Gate desk and an agent: hire a gate agent on Staff"
+const CI_HIRE := "Hire Check-in agent (Staff)"
+const SEC_HIRE := "Hire Security officer (Staff)"
+const GATE_HIRE := "Hire Gate agent (Staff)"
 
 var _main: Node
 var _alerts_path := SaveTestKit.run_path("new_game_alerts")
@@ -129,10 +129,10 @@ func test_the_staff_hint_names_what_keeps_the_airport_closed() -> void:
 	assert_str(_boot["hint"]).is_equal(
 		(
 			"Entrance with a way through check-in and security to an exit\n"
-			+ "Check-in desk and an agent: place a desk\n"
-			+ "Security scanner and an officer: place a scanner\n"
-			+ "Gate desk by an exit that faces the planes\n"
-			+ "Seats near the gate"
+			+ "Place Check-in (Operations)\n"
+			+ "Place Security (Operations)\n"
+			+ "Place Gate Desk (Operations)\n"
+			+ "Place Seats near the gate (Operations)"
 		)
 	)
 	assert_str(_opened["hint_built"]).is_equal(CI_HIRE + "\n" + SEC_HIRE + "\n" + GATE_HIRE)

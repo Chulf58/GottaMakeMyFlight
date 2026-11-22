@@ -26,6 +26,7 @@ func before_test() -> void:
 	var desk: OfferDesk = auto_free(OfferDesk.new())
 	desk.runway = Runway.new(PlaneClasses.LARGE)
 	var sim := FlightSim.new()
+	sim.open_airport()
 	_port.add_child(sim)
 	_panel = OfferPanel.new()
 	_panel.desk = desk

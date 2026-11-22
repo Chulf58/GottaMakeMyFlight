@@ -91,11 +91,9 @@ func test_the_staff_lines_stay_unticked_while_the_members_walk_and_tick_on_arriv
 	assert_array(_gate.unmet()).contains([AirportGate.Blocker.NO_CHECKIN])
 	assert_array(_gate.unmet()).contains([AirportGate.Blocker.NO_SECURITY])
 	var open := _open_texts(lines, false)
-	assert_array(open).contains(["Check-in desk and an agent: the agent is on the way"])
-	assert_array(open).contains(["Security scanner and an officer: the officer is on the way"])
-	assert_array(Array(_rows())).contains(
-		["Security scanner and an officer: the officer is on the way"]
-	)
+	assert_array(open).contains(["Check-in agent on the way"])
+	assert_array(open).contains(["Security officer on the way"])
+	assert_array(Array(_rows())).contains(["Security officer on the way"])
 	# Arrival: every member on duty, the lines tick and fold away.
 	while _walking() > 0 and _w.clock.tick < LIMIT_TICKS:
 		_w.step()

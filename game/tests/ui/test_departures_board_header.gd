@@ -76,6 +76,8 @@ func test_the_header_shows_when_no_flight_is_scheduled() -> void:
 	empty.bind_clock(_world.clock)
 	_board.flights = empty
 	_board.refresh()
+	assert_bool(_board.is_shown()).is_false()
+	_board.set_shown(true)
 	assert_array(_board.shown_lines()).contains([DeparturesBoard.EMPTY_TEXT])
 	assert_str((_board.find_child("Counts", true, false) as Label).text).starts_with("Made ")
 

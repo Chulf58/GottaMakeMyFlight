@@ -103,6 +103,12 @@ var settings_path := SETTINGS_PATH
 var menu: BuildMenu
 
 var _shown := true
+## The player's saved on/off setting (false when manually collapsed/hidden).
+var _setting := true
+## Whether at least one scheduled flight is listed; 0 flights auto-collapses.
+var _has_flights := false
+## True when the player explicitly expanded the board while 0 flights exist.
+var _manual_open := false
 ## True while the inspect card has the list stepped aside (step_aside()).
 var _aside := false
 var _toggle := Button.new()
@@ -261,7 +267,10 @@ func _ready() -> void:
 	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	_scroll.add_child(_rows)
 	body.add_child(_scroll)
-	_shown = _load_setting()
+	_setting = _load_setting()
+	_shown = false
+	_has_flights = false
+	_manual_open = false
 	_apply_shown()
 	_toggle.toggled.connect(set_shown)
 	if flights != null:
@@ -323,19 +332,26 @@ func is_aside() -> bool:
 	return _aside
 
 
-## True while the panel is on.
+## True while the panel is expanded.
 func is_shown() -> bool:
 	return _shown
+
+
+## True while the player's persisted Departures preference is on.
+func is_setting_enabled() -> bool:
+	return _setting
 
 
 ## Shows or hides the panel and keeps the choice. The toggle button and the
 ## key both come through here.
 func set_shown(value: bool) -> void:
+	_setting = value
+	_manual_open = value and not _has_flights
+	_save_setting()
 	if value == _shown:
 		return
 	_shown = value
 	_apply_shown()
-	_save_setting()
 	refresh()
 
 
@@ -432,12 +448,33 @@ func _late_signature() -> Array:
 	return [passengers.get_instance_id(), passengers.revision]
 
 
+## True when `entries` lists at least one flight row (not empty).
+static func entries_have_flights(entries: Array[Dictionary]) -> bool:
+	for entry in entries:
+		if entry["kind"] == "row":
+			return true
+	return false
+
+
 func _refresh(force: bool) -> void:
-	if not _shown or flights == null or clock == null:
+	if flights == null or clock == null:
+		return
+	var entries := entries_for(flights, clock.tick, _late_counts())
+	var has_flights := entries_have_flights(entries)
+	if has_flights != _has_flights:
+		_has_flights = has_flights
+		if has_flights:
+			_manual_open = false
+			if _setting and not _shown:
+				_shown = true
+				_apply_shown()
+		elif not _manual_open and _shown:
+			_shown = false
+			_apply_shown()
+	if not _shown:
 		return
 	_counts.text = counts_text()
 	_counts.visible = passengers != null
-	var entries := entries_for(flights, clock.tick, _late_counts())
 	var gates := flights.gate_ids()
 	if not force and entries == _entries and gates == _gates:
 		return
@@ -796,7 +833,11 @@ func _on_pick_pressed(contract_id: String, gate_id: String) -> void:
 ## schedule.
 func _on_snapshot_loaded() -> void:
 	_close_picker()
+	_manual_open = false
 	_entries = []
+	if not _has_flights and _shown:
+		_shown = false
+		_apply_shown()
 	_refresh(false)
 
 
@@ -864,4 +905,4 @@ func _load_setting() -> bool:
 
 ## Writes the choice next to any other settings already in the file.
 func _save_setting() -> void:
-	HudFlagSetting.save_flag(settings_path, SETTING_KEY, _shown, "DeparturesBoard")
+	HudFlagSetting.save_flag(settings_path, SETTING_KEY, _setting, "DeparturesBoard")

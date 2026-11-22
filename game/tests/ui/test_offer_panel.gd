@@ -18,6 +18,7 @@ func before_test() -> void:
 	_desk = OfferDesk.new()
 	_desk.runway = Runway.new(PlaneClasses.LARGE)
 	_sim = FlightSim.new()
+	_sim.open_airport()
 	_port.add_child(_desk)
 	_port.add_child(_sim)
 	# 10:00 and 11:00 want gate C together, so O0N1 and O0N2 clash.
@@ -192,3 +193,28 @@ func test_a_panel_without_flights_builds_nothing() -> void:
 		. is_push_error("OfferPanel: desk and flights must both be set, so nothing is shown")
 	)
 	assert_int(bare.get_child_count()).is_equal(0)
+
+
+func test_the_sheet_title_explains_airline_contracts() -> void:
+	var title := _panel.find_child("OfferTitle", true, false) as Label
+	assert_object(title).is_not_null()
+	assert_str(title.text).is_equal("Airline Contracts — Accept to schedule flights")
+
+
+func test_offers_stay_hidden_until_the_airport_opens() -> void:
+	var closed_sim := FlightSim.new()
+	_port.add_child(closed_sim)
+	var closed_panel := OfferPanel.new()
+	closed_panel.desk = _desk
+	closed_panel.flights = closed_sim
+	_port.add_child(closed_panel)
+	assert_bool(closed_panel.toggle_button().visible).is_false()
+	assert_bool(closed_panel.toggle_button().disabled).is_true()
+	closed_panel.open()
+	assert_bool(closed_panel.is_open()).is_false()
+	closed_sim.open_airport()
+	closed_panel._process(0.0)
+	assert_bool(closed_panel.toggle_button().visible).is_true()
+	assert_bool(closed_panel.toggle_button().disabled).is_false()
+	closed_panel.open()
+	assert_bool(closed_panel.is_open()).is_true()
