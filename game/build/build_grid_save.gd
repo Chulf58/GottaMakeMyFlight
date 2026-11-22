@@ -45,6 +45,9 @@ static func load_into(grid: BuildGrid, data: Dictionary) -> bool:
 	grid._enclosure_stale = false
 	grid._pathing = loaded._pathing
 	grid._staff_pathing = loaded._staff_pathing
+	grid._divider_doors = loaded._divider_doors
+	grid._divider_doors_stale = loaded._divider_doors_stale
+	grid._synced_divider_doors = loaded._synced_divider_doors
 	grid._staff_reach_known = false
 	grid._lanes = null
 	return true
@@ -129,6 +132,9 @@ static func clone(grid: BuildGrid) -> BuildGrid:
 	copy._outside = grid._outside.duplicate()
 	copy._built = grid._built
 	copy._enclosure_stale = grid._enclosure_stale
+	copy._divider_doors = grid._divider_doors.duplicate()
+	copy._divider_doors_stale = grid._divider_doors_stale
+	copy._synced_divider_doors = {}
 	copy._staff_reach = grid._staff_reach.duplicate()
 	copy._staff_reach_known = grid._staff_reach_known
 	return copy
