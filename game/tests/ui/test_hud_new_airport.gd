@@ -94,7 +94,14 @@ func test_a_continued_game_keeps_the_saved_mood_overlay_and_mode() -> void:
 
 func test_a_new_airport_opens_the_departures_board_and_alert_cards_on_their_defaults() -> void:
 	GameBoot.new_airport = true
-	assert_bool(_board().is_shown()).is_true()
+	var board := _board()
+	assert_bool(board.is_setting_enabled()).is_true()
+	# With 0 flights on New Airport, the panel auto-collapses until a flight is scheduled.
+	assert_bool(board.is_shown()).is_false()
+	board.flights.open_airport()
+	board.flights.add_default_flight()
+	board.refresh()
+	assert_bool(board.is_shown()).is_true()
 	assert_bool(_stack().cards_on()).is_true()
 
 

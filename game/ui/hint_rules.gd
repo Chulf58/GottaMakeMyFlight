@@ -17,6 +17,14 @@ const FOOD := &"food"
 ## The invitation to click a passenger (FollowInvite). It is remembered in the
 ## file once the player has selected a passenger, not once it has shown.
 const FOLLOW_PASSENGER := &"follow_passenger"
+## Onboarding hints that may already be true on frame 0 and should not be
+## swallowed by the initial baseline read.
+const STARTUP_IDS: Array[StringName] = [
+	PLACE_CHECKIN,
+	PLACE_SECURITY,
+	PLACE_GATE_DESK,
+	PLACE_SEATS,
+]
 ## In priority order: the first one that is ready is shown.
 const IDS: Array[StringName] = [
 	PLACE_CHECKIN,
@@ -81,6 +89,10 @@ static func text(id: StringName) -> String:
 
 static func categories_for(id: StringName) -> Array:
 	return CATEGORIES[id]
+
+
+static func is_startup(id: StringName) -> bool:
+	return STARTUP_IDS.has(id)
 
 
 ## The hints whose cause is true in `world`, in IDS order. A cause is a state of

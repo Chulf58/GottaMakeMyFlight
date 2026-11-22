@@ -37,7 +37,8 @@ func _open(minutes: Array, size := PlaneClasses.SMALL) -> void:
 	var offers := TestOfferBoard.day_records(0, minutes)
 	for offer: Dictionary in offers:
 		offer["plane_size"] = size
-		offer["booked_passengers"] = 40 if size == PlaneClasses.MEDIUM else 12
+		offer["booked_passengers"] = 40 if size == PlaneClasses.MEDIUM else 6
+		offer["fee_per_passenger"] = 25 if size == PlaneClasses.MEDIUM else 50
 	assert_bool(_desk.board.from_snapshot(TestOfferBoard.save_of(offers))).is_true()
 	_panel = OfferPanel.new()
 	_panel.desk = _desk

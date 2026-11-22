@@ -96,17 +96,21 @@ func test_a_roller_guest_coming_in_is_drawn_off_the_axis_away_from_its_hand() ->
 	var p := _roller_guest()
 	_world.step()
 	var most := Vector3.ZERO
+	var within_ease := 0
 	for i in WALK_TICKS:
 		var off := _drawn_off(p)
-		# The tick position carries exactly DoorSteer's steer (nothing else
-		# moves a walker in from the door), and draw_position() agrees with it.
-		assert_vector(off).is_equal_approx(_steer(p), Vector3.ONE * 1e-5)
+		var lane := _views.corridor_offset(p.id)
+		var steer_part := off - lane
+		if p.grid_position().x < DoorSteer.EASE_M:
+			within_ease += 1
+		assert_vector(off).is_equal_approx(_steer(p) + lane, Vector3.ONE * 1e-5)
 		assert_vector(_views.draw_position(p)).is_equal_approx(
 			_views.tick_position(p.id, true), Vector3.ONE * 1e-5
 		)
-		if off.length() > most.length():
-			most = off
+		if steer_part.length() > most.length():
+			most = steer_part
 		_world.step()
+	assert_int(within_ease).is_greater(0)
 	var hand := CarryLead.hand_of(int(_views.carry_on_props().bag_state(p.id, 0)["place"]))
 	print("id %d hand %d: largest drawn offset %s" % [p.id, hand, most])
 	# Positive: the steer was drawn, near its whole size, across the door
@@ -173,10 +177,64 @@ func test_a_roller_with_a_hard_case_in_the_other_hand_is_not_steered() -> void:
 	assert_int(CarryLead.hand_of(int(case_bag["place"]))).is_not_equal(
 		CarryLead.hand_of(int(roller["place"]))
 	)
-	var offs := _walk(p, 6)
-	print("offsets: %s" % [offs])
-	for off in offs:
-		assert_vector(off).is_equal(Vector3.ZERO)
+	var steer_offs: Array[Vector3] = []
+	var lane_active := false
+	for i in 20:
+		_world.step()
+		var lane := _views.corridor_offset(p.id)
+		if lane.length() > 0.05:
+			lane_active = true
+		steer_offs.append(_drawn_off(p) - lane)
+	print("steer offsets: %s" % [steer_offs])
+	assert_bool(lane_active).is_true()
+	for off in steer_offs:
+		assert_vector(off).is_equal_approx(Vector3.ZERO, Vector3.ONE * 1e-5)
+
+
+func test_corridor_offset_is_zero_within_full_m_of_a_doorway() -> void:
+	var grid := PassengerTestWorld.floored(Vector2i(12, 9))
+	PassengerTestWorld.place(grid, &"entrance_door", DOOR, WEST)
+	PassengerTestWorld.place(grid, &"checkin_desk", Vector2i(9, 3), 0)
+	for y in 9:
+		if y != 4:
+			grid.apply(BuildEdit.place_wall(Vector2i(5, y), BuildGrid.Side.WEST))
+	var door_res := grid.apply(
+		BuildEdit.place_wall(Vector2i(5, 4), BuildGrid.Side.WEST, BuildGrid.WallKind.DOOR)
+	)
+	assert_bool(door_res.ok).is_true()
+	assert_int(grid.wall_kind(Vector2i(5, 4), BuildGrid.Side.WEST)).is_equal(
+		BuildGrid.WallKind.DOOR
+	)
+	var w := PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(60000, 80000))
+	var views := PassengerTestWorld.views()
+	views.clock = w.clock
+	views.sim = w.sim
+	add_child(views)
+	var p := w.passenger(w.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	var path: Array[Vector2i] = []
+	for x in range(0, 10):
+		path.append(Vector2i(x, 4))
+	p.stage = Passenger.Stage.TO_GATE
+	p.cleared = true
+	p.at = path[0]
+	p.set_path(path)
+	var within_full := 0
+	var outside_lane := false
+	for i in 80:
+		p.walk(PassengerSim.WALK_MM)
+		views.sync()
+		var dist := absf(p.grid_position().x - 5.0)
+		var lane := views.corridor_offset(p.id)
+		if dist <= DoorSteer.FULL_M:
+			within_full += 1
+			assert_vector(lane).is_equal(Vector3.ZERO)
+		elif p.grid_position().x > 2.5 and p.grid_position().x < 3.5 and lane.length() > 0.05:
+			outside_lane = true
+	print("doorway pass: %d ticks within FULL_M, outside_lane=%s" % [within_full, outside_lane])
+	assert_int(within_full).is_greater(0)
+	assert_bool(outside_lane).is_true()
+	views.free()
+	w.free_all()
 
 
 func test_a_case_leaving_the_free_hand_at_the_door_eases_the_steer_in() -> void:

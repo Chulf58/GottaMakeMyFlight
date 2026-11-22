@@ -378,3 +378,83 @@ func test_a_freed_menu_leaves_the_rail_stop_at_the_bar() -> void:
 	var bar_top := float(VIEW.y) - BuildMenu.MARGIN - BuildMenu.BAR_H
 	assert_float(stack._stop_y()).is_equal(bar_top - float(HudLayout.GROUP_GAP))
 	assert_float(stack._stop_y()).is_greater(open_stop)
+
+
+func test_status_card_moves_above_tray_on_open_and_drops_back_on_close() -> void:
+	_mode.set_tool(BuildMode.Tool.NONE)
+	_menu.refresh_preview()
+	await _settle()
+	assert_bool(_menu.is_tray_open()).is_false()
+	assert_bool(_menu.status_card().visible).is_false()
+	assert_float(_menu.stack_top()).is_equal(BuildMenu.MARGIN + BuildMenu.BAR_H)
+	_menu._on_wages_paid(60, 0)
+	_menu.refresh_preview()
+	await _settle()
+	var bar_top := _menu.bar().get_global_rect().position.y
+	var closed_rect := _menu.status_card().get_global_rect()
+	assert_bool(_menu.status_card().visible).is_true()
+	assert_str(_menu.status_label().text).is_equal("Wages paid: 60")
+	assert_float(closed_rect.end.y).is_equal(bar_top - float(HudLayout.GAP))
+	assert_float(closed_rect.end.y).is_equal(
+		float(VIEW.y) - (BuildMenu.MARGIN + BuildMenu.BAR_H + BuildMenu.GAP)
+	)
+	assert_float(_menu.stack_top()).is_equal(float(VIEW.y) - closed_rect.position.y)
+	_mode.set_tool(BuildMode.Tool.FLOOR)
+	await _settle()
+	assert_bool(_menu.is_tray_open()).is_true()
+	assert_float(_menu.tray_height()).is_equal(BuildMenu.TRAY_H)
+	assert_float(_menu.status_card().get_global_rect().end.y).is_equal(
+		_menu.tray().get_global_rect().position.y - float(HudLayout.GAP)
+	)
+	_open_tray()
+	await _settle()
+	assert_float(_menu.tray_height()).is_equal(BuildMenu.TRAY_FILTERED_H)
+	assert_float(_menu.status_card().get_global_rect().end.y).is_equal(
+		_menu.tray().get_global_rect().position.y - float(HudLayout.GAP)
+	)
+	_mode.set_tool(BuildMode.Tool.NONE)
+	await _settle()
+	assert_bool(_menu.is_tray_open()).is_false()
+	assert_float(_menu.status_card().get_global_rect().end.y).is_equal(
+		bar_top - float(HudLayout.GAP)
+	)
+
+
+func test_status_card_stays_docked_across_viewport_resize() -> void:
+	_mode.set_tool(BuildMode.Tool.NONE)
+	_menu._on_wages_paid(60, 0)
+	_menu.refresh_preview()
+	_port.size = Vector2i(1280, 720)
+	await _settle()
+	assert_bool(_menu.is_tray_open()).is_false()
+	var bar_top := _menu.bar().get_global_rect().position.y
+	assert_float(_menu.status_card().get_global_rect().end.y).is_equal(
+		bar_top - float(HudLayout.GAP)
+	)
+	_open_tray()
+	await _settle()
+	var tray_top := _menu.tray().get_global_rect().position.y
+	assert_float(_menu.status_card().get_global_rect().end.y).is_equal(
+		tray_top - float(HudLayout.GAP)
+	)
+
+
+func test_pa_ticker_clears_visible_status_card_when_tray_is_closed() -> void:
+	_mode.set_tool(BuildMode.Tool.NONE)
+	_menu._on_wages_paid(60, 0)
+	_menu.refresh_preview()
+	var ticker := _hud.get_node("PaTicker") as PaTicker
+	ticker.show_announcement("PA: Boarding now for GMF101.")
+	_hud.refresh()
+	await _settle()
+	var card_rect := _menu.status_card().get_global_rect()
+	var ticker_rect := ticker.get_global_rect()
+	var bar_rect := _menu.bar().get_global_rect()
+	assert_bool(_menu.is_tray_open()).is_false()
+	assert_bool(_menu.status_card().visible).is_true()
+	assert_bool(ticker.visible).is_true()
+	assert_float(_menu.stack_top()).is_equal(float(VIEW.y) - card_rect.position.y)
+	assert_float(card_rect.end.y).is_equal(bar_rect.position.y - float(HudLayout.GAP))
+	assert_float(ticker_rect.end.y).is_equal(card_rect.position.y - float(HudLayout.GAP))
+	assert_bool(ticker_rect.intersects(card_rect)).is_false()
+	ticker.clear_now()

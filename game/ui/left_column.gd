@@ -115,9 +115,39 @@ static func card_top(tree: SceneTree) -> float:
 	return list.global_position.y + list.get_combined_minimum_size().y + HudLayout.GAP
 
 
-## Moves `card` to card_top(); the card's owner calls it every frame.
+## The y a first-time hint card takes now: under any visible checklist card
+## (CARD_GROUP), or at card_top() when none is showing.
+static func hint_top(tree: SceneTree) -> float:
+	var top := card_top(tree)
+	if tree == null:
+		return top
+	for node in tree.get_nodes_in_group(CARD_GROUP):
+		var control := node as Control
+		if control == null or not control.is_visible_in_tree():
+			continue
+		var height := maxf(control.size.y, control.get_combined_minimum_size().y)
+		top = maxf(top, control.global_position.y + height + HudLayout.GAP)
+	return top
+
+
+## Height plus gap reserved under the checklist card for any visible hint card.
+static func hint_reserve(tree: SceneTree) -> float:
+	if tree == null:
+		return 0.0
+	var reserve := 0.0
+	for node in tree.get_nodes_in_group(HINT_GROUP):
+		var control := node as Control
+		if control == null or not control.is_visible_in_tree():
+			continue
+		reserve = maxf(reserve, control.get_combined_minimum_size().y + HudLayout.GAP)
+	return reserve
+
+
+## Moves `card` to card_top() (or hint_top() for a hint card); the card's owner
+## calls it every frame.
 static func follow(card: Control) -> void:
-	var top := card_top(card.get_tree())
+	var tree := card.get_tree()
+	var top := hint_top(tree) if card.is_in_group(HINT_GROUP) else card_top(tree)
 	if not is_equal_approx(card.offset_top, top):
 		card.offset_top = top
 		card.offset_bottom = top
@@ -133,15 +163,19 @@ static func room_below(top: float, layer: Vector2, bar_width: float) -> float:
 
 
 ## The height the departures list may take: the room under the toggles, less what
-## the card under it needs while one shows and the gap between.
+## the cards under it need while showing and the gaps between.
 static func list_room(tree: SceneTree, layer: Vector2, bar_width: float) -> float:
-	var need := 0.0
+	var card_need := 0.0
 	for card in tree.get_nodes_in_group(CARD_GROUP):
 		if (card as Control).is_visible_in_tree():
-			need = maxf(need, CARD_RESERVE)
+			card_need = maxf(card_need, CARD_RESERVE)
+	var hint_need := 0.0
 	for card in tree.get_nodes_in_group(HINT_GROUP):
 		if (card as Control).is_visible_in_tree():
-			need = maxf(need, (card as Control).get_combined_minimum_size().y)
+			hint_need = maxf(hint_need, (card as Control).get_combined_minimum_size().y)
+	var need := card_need + hint_need
+	if card_need > 0.0 and hint_need > 0.0:
+		need += HudLayout.GAP
 	var room := room_below(list_top(tree), layer, bar_width)
 	if need > 0.0:
 		room -= need + HudLayout.GAP

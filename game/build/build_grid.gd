@@ -67,6 +67,8 @@ const PAID_KEYS := ["floor_paid", "h_walls_paid", "v_walls_paid"]
 ## Highest purchase price a piece can carry (the int32 the arrays hold).
 const MAX_PAID := 2147483647
 
+static var _next_route_grid_id := 1
+
 var size := Vector2i.ZERO
 ## World position of the north-west corner of cell (0, 0).
 var origin := Vector3.ZERO
@@ -107,8 +109,16 @@ var _staff_reach_known := false
 var _last_after := {}
 var _last_after_known := false
 var _handoff_edit: BuildEdit = null
+var _handoff_version := -1
+var _handoff_sig: Array = []
 ## True inside an apply_batch() whose whole batch keeps reach.
 var _reach_cleared := false
+var _route_grid_id := 0
+var _floor_version := 0
+var _wall_version := 0
+var _enclosure_version := 0
+var _route_version := 0
+var _grid_version := 0
 ## Object id -> {"def": StringName, "anchor": Vector2i, "facing": int}.
 var _objects: Dictionary = {}
 var _next_object_id := 1
@@ -151,6 +161,8 @@ var _hold_depth := 0
 ## `grid_origin` is the world position of cell (0, 0)'s north-west corner, a
 ## Vector3; null centres the grid on the world origin at height 0.
 func _init(grid_size := DEFAULT_SIZE, grid_origin: Variant = null) -> void:
+	_route_grid_id = _next_route_grid_id
+	_next_route_grid_id += 1
 	_reset(grid_size, centred_origin(grid_size) if grid_origin == null else grid_origin)
 
 
@@ -231,24 +243,36 @@ func room_ids() -> Array[int]:
 	return ids
 
 
-## The cell data a walk outside reads: floors, objects, horizontal walls and
-## vertical walls, as copies: [PackedByteArray, PackedInt32Array,
-## PackedByteArray, PackedByteArray]. Changing them changes nothing on the
-## grid. route_state_equals() compares a copy with the grid as it stands now
-## (SiteRoutes.distances()).
+func grid_id() -> int:
+	return _route_grid_id
+
+
+func floor_version() -> int:
+	return _floor_version
+
+
+func wall_version() -> int:
+	return _wall_version
+
+
+func enclosure_version() -> int:
+	return _enclosure_version
+
+
+func route_version() -> int:
+	return _route_version
+
+
+## Token identifying this grid and its outdoor-route-relevant structural state
+## (floors, walls, unfloored occupants); indoor non-door occupants do not change it.
 func copy_route_state() -> Array:
-	return [_floor.duplicate(), _occupant.duplicate(), _h_walls.duplicate(), _v_walls.duplicate()]
+	return [_route_grid_id, _route_version]
 
 
-## Whether `snapshot`, a copy_route_state() result, is the grid's cell data now.
+## Whether `snapshot`, a copy_route_state() result, matches the grid's outdoor
+## route state now.
 func route_state_equals(snapshot: Array) -> bool:
-	return (
-		snapshot.size() == 4
-		and _floor == snapshot[0]
-		and _occupant == snapshot[1]
-		and _h_walls == snapshot[2]
-		and _v_walls == snapshot[3]
-	)
+	return snapshot.size() == 2 and snapshot[0] == _route_grid_id and snapshot[1] == _route_version
 
 
 ## Where a passenger stands to use the object, or BuildObjectDef.NO_CELL.
@@ -394,20 +418,49 @@ func passage_cells(object_id: int) -> Array[Vector2i]:
 ## a snapshot load skips all three, so an old save still loads. BeltShaper passes
 ## false per cell and checks a whole line's reach at once.
 func validate(edit: BuildEdit, check_reach := true) -> BuildResult:
-	_handoff_edit = null
+	var sig := _reach_sig(edit)
+	var cached_reach := (
+		check_reach
+		and check_staff_reach
+		and not _reach_cleared
+		and _last_after_known
+		and _handoff_version == _grid_version
+		and _handoff_sig == sig
+	)
+	if not cached_reach:
+		_handoff_edit = null
+		_handoff_version = -1
+		_handoff_sig = []
 	var result := GridRules.check(self, edit)
 	if result.ok:
 		var spot_problem := _spots.edit_problem(self, edit)
 		if spot_problem == null:
 			spot_problem = _officer_spot_problem(edit)
 		if spot_problem == null and check_reach:
-			spot_problem = staff_reach_problem([edit] as Array[BuildEdit])
-			if spot_problem == null and _last_after_known:
-				# Once this edit is committed its trial reach is the grid's.
+			if cached_reach:
 				_handoff_edit = edit
+			else:
+				spot_problem = staff_reach_problem([edit] as Array[BuildEdit])
+				if spot_problem == null and _last_after_known:
+					# Once this edit is committed its trial reach is the grid's.
+					_handoff_edit = edit
+					_handoff_version = _grid_version
+					_handoff_sig = sig
 		if spot_problem != null:
 			result = spot_problem
 	return result
+
+
+static func _reach_sig(edit: BuildEdit) -> Array:
+	return [
+		edit.kind,
+		edit.cell,
+		edit.side,
+		edit.wall_kind,
+		edit.def_id,
+		edit.facing,
+		edit.object_id,
+	]
 
 
 ## SecurityLanes.officer_spot_problem() for an edit that places an object or
@@ -456,6 +509,9 @@ func staff_reach() -> Dictionary:
 ## tried on the grid data, the reach worked out (one flood fill), and the data
 ## put back. The cost is that flood, and only when some spot is reached now.
 func staff_reach_problem(edits: Array[BuildEdit]) -> BuildResult:
+	_handoff_edit = null
+	_handoff_version = -1
+	_handoff_sig = []
 	return GridReach.staff_reach_problem(self, edits)
 
 
@@ -554,20 +610,37 @@ func _commit(edit: BuildEdit) -> BuildResult:
 	var inverse := BuildReceipt.inverse_before(self, edit) if recorder != null else null
 	match edit.kind:
 		BuildEdit.Kind.PAINT_FLOOR:
-			_floor[_index(edit.cell)] = edit.floor_type
-			_zone[_index(edit.cell)] = edit.zone_id
-			_floor_paid[_index(edit.cell)] = edit.paid
+			var floor_i := _index(edit.cell)
+			var had_floor := _floor[floor_i] != FLOOR_NONE
+			if _floor[floor_i] != edit.floor_type:
+				_floor_version += 1
+			if not had_floor:
+				_enclosure_version += 1
+				_route_version += 1
+			_floor[floor_i] = edit.floor_type
+			_zone[floor_i] = edit.zone_id
+			_floor_paid[floor_i] = edit.paid
 			result.dirty_cells = [edit.cell]
 		BuildEdit.Kind.REMOVE_FLOOR:
 			_floor[_index(edit.cell)] = FLOOR_NONE
 			_zone[_index(edit.cell)] = 0
 			_floor_paid[_index(edit.cell)] = 0
+			_floor_version += 1
+			_enclosure_version += 1
+			_route_version += 1
 			result.dirty_cells = [edit.cell]
 		BuildEdit.Kind.PLACE_WALL, BuildEdit.Kind.REMOVE_WALL:
 			var placing := edit.kind == BuildEdit.Kind.PLACE_WALL
+			var old_wall := _wall_value(edit.cell, edit.side)
+			var new_wall := edit.wall_kind if placing else WallKind.NONE
 			_enclosure_stale = true
-			_set_wall(edit.cell, edit.side, edit.wall_kind if placing else WallKind.NONE)
+			_set_wall(edit.cell, edit.side, new_wall)
 			_set_wall_paid(edit.cell, edit.side, edit.paid if placing else 0)
+			if old_wall != new_wall:
+				_wall_version += 1
+				if (old_wall == WallKind.NONE) != (new_wall == WallKind.NONE):
+					_enclosure_version += 1
+					_route_version += 1
 			result.dirty_cells = _edge_cells(edit.cell, edit.side)
 		BuildEdit.Kind.PLACE_OBJECT:
 			# An undo brings a removed object back under its own id.
@@ -579,12 +652,22 @@ func _commit(edit: BuildEdit) -> BuildResult:
 				result.object_id, edit.def_id, edit.cell, edit.facing, edit.paid
 			)
 			# A door object's back edge closes the wall line it stands in.
-			_enclosure_stale = _enclosure_stale or BuildCatalog.is_door(edit.def_id)
+			var is_door := BuildCatalog.is_door(edit.def_id)
+			_enclosure_stale = _enclosure_stale or is_door
+			if is_door:
+				_enclosure_version += 1
+			if _touches_unfloored(result.dirty_cells):
+				_route_version += 1
 		BuildEdit.Kind.REMOVE_OBJECT:
 			result.object_id = edit.object_id
 			var def_id: StringName = _objects[edit.object_id]["def"]
-			_enclosure_stale = _enclosure_stale or BuildCatalog.is_door(def_id)
+			var is_door := BuildCatalog.is_door(def_id)
+			_enclosure_stale = _enclosure_stale or is_door
+			if is_door:
+				_enclosure_version += 1
 			result.dirty_cells = _erase_object(edit.object_id)
+			if _touches_unfloored(result.dirty_cells):
+				_route_version += 1
 		BuildEdit.Kind.PLACE_ROOM:
 			result.room_id = edit.room_id
 			if edit.room_id == 0:
@@ -608,6 +691,9 @@ func _commit(edit: BuildEdit) -> BuildResult:
 		_staff_reach = _last_after
 	_staff_reach_known = _handoff_edit == edit
 	_handoff_edit = null
+	_handoff_version = -1
+	_handoff_sig = []
+	_grid_version += 1
 	_lanes = null
 	if recorder != null:
 		recorder.record(edit, result, inverse)
@@ -688,6 +774,7 @@ func to_snapshot() -> Dictionary:
 func from_snapshot(data: Dictionary) -> bool:
 	if not BuildGridSave.load_into(self, data):
 		return false
+	_bump_versions()
 	if recorder != null:
 		recorder.replaced = true
 	var every: Array[Vector2i] = []
@@ -749,6 +836,25 @@ func _reset(grid_size: Vector2i, grid_origin: Vector3) -> void:
 	_outside.fill(1)
 	_built = Rect2i()
 	_enclosure_stale = false
+	_bump_versions()
+
+
+func _bump_versions() -> void:
+	_floor_version += 1
+	_wall_version += 1
+	_enclosure_version += 1
+	_route_version += 1
+	_grid_version += 1
+	_handoff_edit = null
+	_handoff_version = -1
+	_handoff_sig = []
+
+
+func _touches_unfloored(cells: Array[Vector2i]) -> bool:
+	for cell in cells:
+		if _floor[_index(cell)] == FLOOR_NONE:
+			return true
+	return false
 
 
 func _insert_room(room_id: int, type: StringName, area: Rect2i) -> void:

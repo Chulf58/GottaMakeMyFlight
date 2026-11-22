@@ -96,14 +96,21 @@ func test_the_note_appears_when_the_clock_passes_the_slot_while_open() -> void:
 	)
 
 
-func test_a_closed_airport_names_the_lead_the_first_flight_needs_after_opening() -> void:
+func test_a_closed_airport_hides_offers_and_refuses_open_until_opened() -> void:
 	_sim.tick = GameCalendar.tick_at(0, NOON, 0)
+	assert_bool(_panel.toggle_button().visible).is_false()
 	_panel.open()
+	assert_bool(_panel.is_open()).is_false()
 	for id in ["O0N1", "O0N2"]:
 		assert_str(_panel.card_text(id)).contains("First flight 4 h 13 min after opening")
 	assert_str(_panel.card_text("O0N2")).contains(
 		"Departs 20:00 daily\nSmall plane\nFirst flight 4 h 13 min after opening"
 	)
+	_sim.open_airport()
+	_panel._process(0.0)
+	assert_bool(_panel.toggle_button().visible).is_true()
+	_panel.open()
+	assert_bool(_panel.is_open()).is_true()
 
 
 func test_the_closed_lead_is_the_lead_the_sim_uses_at_opening() -> void:
@@ -125,13 +132,15 @@ func test_the_lead_text_reads_hours_and_minutes() -> void:
 	assert_str(OfferPanel.lead_text(45 * 20)).is_equal("45 min")
 
 
-func test_accepting_while_closed_repeats_the_lead_in_the_message() -> void:
+func test_accepting_after_opening_prints_accepted_message() -> void:
 	_sim.tick = GameCalendar.tick_at(0, NOON, 0)
 	_panel.open()
+	assert_bool(_panel.is_open()).is_false()
+	_sim.open_airport()
+	_panel.open()
+	assert_bool(_panel.is_open()).is_true()
 	_panel.accept_button("O0N2").pressed.emit()
-	assert_str(_panel.message()).is_equal(
-		"Accepted Gotta Air to Oslo, first flight 4 h 13 min after opening"
-	)
+	assert_str(_panel.message()).is_equal("Accepted Gotta Air to Oslo")
 
 
 func test_accepting_a_slot_that_has_passed_repeats_tomorrow_in_the_message() -> void:
