@@ -106,15 +106,12 @@ static func to_list(sim: PassengerSim) -> Array:
 ## and no more than the largest plane class maximum. With `flights` (the saved
 ## flights, staged or restored) each must also be one set() could have made:
 ## its contract on record and running, its day not past and not issued, and
-## within the contract's class maximum. A save of the current version must
-## carry the list; an older migrated one has none. Changes no sim state:
-## from_snapshot() installs the result.
+## within the contract's class maximum. Changes no sim state: from_snapshot()
+## installs the result.
 static func checked(data: Dictionary, flights: FlightSim, epoch: int) -> Dictionary:
 	var overrides := {}
 	if not data.has("booking_overrides"):
-		if int(data["save_version"]) >= PassengerSim.SAVE_VERSION:
-			return {"error": "missing key 'booking_overrides'"}
-		return {"overrides": overrides}
+		return {"error": "missing key 'booking_overrides'"}
 	var list: Variant = data["booking_overrides"]
 	if typeof(list) != TYPE_ARRAY:
 		return {"error": "booking_overrides must be a list"}

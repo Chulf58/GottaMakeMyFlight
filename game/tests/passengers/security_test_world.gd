@@ -89,49 +89,6 @@ func run_until_cleared(ids: Array[int], limit := 3000) -> bool:
 	return ids.all(func(id: int) -> bool: return cleared.has(id))
 
 
-## A version 8 passenger save written as version 7 wrote it: no security
-## key, no phase fields, and a basic scanner's passenger in service as the
-## scanner's "serving" with a service end of the save tick plus its remaining
-## work. Neither the toilet nor the kiosk part existed yet: no "toilet" or
-## "shop" block, and no toilet, boredom or kiosk cooldown field on a record.
-## Only a basic scanner in SCAN can be written this way.
-static func as_v7(data: Dictionary) -> Dictionary:
-	var out := data.duplicate(true)
-	out["save_version"] = 7
-	var tick := str(out["tick"]).to_int()
-	var by_id := {}
-	for record: Dictionary in out["passengers"]:
-		by_id[int(record["id"])] = record
-	for entry: Dictionary in out["security"]:
-		var id := int(entry["admitted"][0])
-		var record: Dictionary = by_id[id]
-		assert(
-			(
-				entry["admitted"].size() == 1
-				and int(record["security_phase"]) == SecurityRuntime.Phase.SCAN
-			)
-		)
-		record["service_end"] = tick + int(record["security_work"])
-		for queue: Dictionary in out["queues"]:
-			if int(queue["station"]) == int(entry["station"]):
-				queue["serving"] = id
-	out.erase("security")
-	out.erase("toilet")
-	out.erase("shop")
-	for record: Dictionary in out["passengers"]:
-		for field in [
-			"security_phase",
-			"security_work",
-			"incident_resolved",
-			"toilet_need",
-			"toilet_cooldown",
-			"boredom",
-			"shop_cooldown"
-		]:
-			record.erase(field)
-	return out
-
-
 func runtime_record() -> Dictionary:
 	return world.sim.security.record_of(station)
 

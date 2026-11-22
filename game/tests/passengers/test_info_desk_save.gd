@@ -162,7 +162,7 @@ func test_the_cooldown_survives_a_save() -> void:
 func test_the_passenger_save_carries_the_visit_under_info_desk() -> void:
 	var p := _stuck_guest(func(g: Passenger) -> bool: return _a.sim.info_desks.holds(g))
 	var data: Dictionary = JSON.parse_string(JSON.stringify(_a.sim.to_snapshot()))
-	assert_int(int(data["save_version"])).is_equal(36)
+	assert_int(int(data["save_version"])).is_equal(PassengerSim.SAVE_VERSION)
 	assert_int(int(data["info_desk"]["visits"][0][0])).is_equal(p.id)
 	assert_int(int(data["info_desk"]["visits"][0][1])).is_equal(_a.sim.info_desks.desk_of(p))
 
@@ -196,17 +196,6 @@ func test_a_bad_info_desk_state_is_refused_whole() -> void:
 		assert_bool(_b.sim.from_snapshot(bad)).is_false()
 		assert_str(_b.signature()).is_equal(before)
 		assert_array(_b.sim.info_desks.to_list()["visits"]).is_empty()
-
-
-func test_a_save_from_before_version_12_loads_with_no_help_state() -> void:
-	var p := _stuck_guest(func(g: Passenger) -> bool: return _a.sim.info_desks.holds(g))
-	var old: Dictionary = JSON.parse_string(JSON.stringify(_a.sim.to_snapshot()))
-	old.erase("info_desk")
-	old["save_version"] = PassengerSnapshot.V10
-	_b = InfoDeskTestLayout.world()
-	assert_bool(_b.sim.from_snapshot(old)).is_true()
-	assert_bool(_b.sim.info_desks.to_list()["visits"].is_empty()).is_true()
-	assert_bool(_b.sim.info_desks.holds(_b.passenger(p.id))).is_false()
 
 
 func test_a_snapshot_that_cannot_be_live_is_refused_whole_and_for_its_own_reason() -> void:

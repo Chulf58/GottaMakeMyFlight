@@ -285,7 +285,8 @@ func test_a_bad_templates_snapshot_is_refused_and_keeps_the_list() -> void:
 		"bad facing": func(d: Dictionary) -> void: d["templates"][0]["pieces"][0]["facing"] = 4,
 		"zero size": func(d: Dictionary) -> void: d["templates"][0]["size"] = [0, 4],
 		"version 1, before floor": func(d: Dictionary) -> void: d["save_version"] = 1,
-		"next version": func(d: Dictionary) -> void: d["save_version"] = 3,
+		"next version":
+		func(d: Dictionary) -> void: d["save_version"] = RoomTemplates.SAVE_VERSION + 1,
 		"short floor": func(d: Dictionary) -> void: d["templates"][0]["floor"].pop_back(),
 		"bad floor type": func(d: Dictionary) -> void: d["templates"][0]["floor"][0] = [0, 1],
 		"extra key": func(d: Dictionary) -> void: d["templates"][0]["colour"] = 1,

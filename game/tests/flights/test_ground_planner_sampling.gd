@@ -12,7 +12,7 @@ extends GdUnitTestSuite
 ## of its legal set, eight neighbouring columns (every offset against the
 ## 8 m slice grid) and the rows either side of the gate hold line's cut-off,
 ## each with no pause and with the longest pause at a hold of each phase.
-## Every legal stand is swept by tools/ground_planner_sweep.gd, which is too
+## Every legal stand is swept by game/spike/ground_planner_sweep.gd, which is too
 ## slow for the suite (about 0.15 s a stand and plan). PUSHBACK is not sampled:
 ## the drawn plane staying inside its swing square through the turn is board
 ## 13e98b04's acceptance, and the planner books that square for the phase.

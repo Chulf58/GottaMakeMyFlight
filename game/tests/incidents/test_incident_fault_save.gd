@@ -104,8 +104,8 @@ func test_an_active_fault_round_trips_and_reopens_on_the_same_tick() -> void:
 			]
 		)
 	)
-	assert_int(int(data["staff"]["save_version"])).is_equal(7)
-	assert_int(int(data["incidents"]["save_version"])).is_equal(5)
+	assert_int(int(data["staff"]["save_version"])).is_equal(StaffSim.SAVE_VERSION)
+	assert_int(int(data["incidents"]["save_version"])).is_equal(IncidentSnapshot.SAVE_VERSION)
 	var unbroken := _opens_on(station, repair + 20)
 	var ended_unbroken: String = _director.incidents().back()["state"]
 	assert_bool(_save.load_from_file(_path)).is_true()

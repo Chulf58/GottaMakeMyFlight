@@ -92,5 +92,4 @@ func test_the_offer_board_refuses_a_count_just_outside_its_size_range_on_load() 
 ## offer traits on contracts to 8, per-contract taxi pairs to 9 and side stands'
 ## lane_x to 10; there is no migration.
 func test_the_flight_save_version_is_10() -> void:
-	assert_int(FlightSim.SAVE_VERSION).is_equal(10)
-	assert_int(int(_sim.to_snapshot()["save_version"])).is_equal(10)
+	assert_int(int(_sim.to_snapshot()["save_version"])).is_equal(FlightSim.SAVE_VERSION)

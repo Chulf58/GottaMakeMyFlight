@@ -32,19 +32,6 @@ const KEYS := [
 	"toilet",
 	"shop",
 ]
-## The last version before the security traits, migrated on load.
-const V6 := 6
-## The last version before the security runtime, migrated on load.
-const V7 := 7
-## The last version before the shorter lane unpack, migrated on load.
-const V8 := 8
-## The last version before the toilet need and visits, migrated on load.
-const V9 := 9
-## The last version before boredom, migrated on load.
-const V10 := 10
-## A version 8 lane started its unpack work at 6 ticks plus 8 per bag.
-const V8_UNPACK_TICKS := 6
-const V8_UNPACK_BAG_TICKS := 8
 const NO_SHOW_CAUSES := ["no_entrance", "late"]
 const INT_FIELDS := [
 	"id",
@@ -173,9 +160,7 @@ static func save(
 
 
 ## A dictionary with the restored state, or with an "error" key.
-static func load(saved: Dictionary, grid: BuildGrid) -> Dictionary:
-	var data := _migrated(saved)
-	var migrated := not is_same(data, saved)
+static func load(data: Dictionary, grid: BuildGrid) -> Dictionary:
 	var problem := _top_problem(data)
 	if problem != "":
 		return {"error": problem}
@@ -203,7 +188,7 @@ static func load(saved: Dictionary, grid: BuildGrid) -> Dictionary:
 	var passengers: Array[Passenger] = []
 	var ids := {}
 	for entry in data["passengers"]:
-		var p := _passenger(entry, grid, int(data["next_id"]), migrated)
+		var p := _passenger(entry, grid, int(data["next_id"]))
 		if p == null or ids.has(p.id) or not ParkRecovery.valid(p, out["tick"]):
 			return {"error": "passenger record %s is malformed or repeated" % str(entry).left(80)}
 		if not PassengerThoughts.ticks_ok(p, out["tick"]):
@@ -287,155 +272,6 @@ static func _record(p: Passenger) -> Dictionary:
 	return record
 
 
-## A version 6, 7, 8, 9 or 10 save as the current version, nothing drawn from
-## the sim RNG; each step runs in turn from the save's own version. Version 6 to
-## 7: every passenger gets zero bags and no liquids or alarm. Version 7 to 8:
-## no passenger has a security phase, except that a basic scanner's passenger
-## in service keeps that service exactly as it was: SCAN with the ticks left
-## to its saved service end as work, its incident counted as resolved, so it
-## ends on the same tick with no repack. Version 8 to 9: unpack work left is
-## scaled from the old start (6 + 8 per bag) to the new one, rounded up so a
-## passenger still unpacking keeps at least 1; a value past the old start is
-## left as it is and refused. Version 9 to 10: every passenger gets the toilet
-## need ToiletSim.migrated_need() gives its id and no cooldown, and there are
-## no toilet visits. Version 10 to 11: every passenger gets the boredom
-## BoredomSim.start_of() gives its id; its toilet need, cooldown and any toilet
-## visit are kept as saved, and it gets no kiosk cooldown and no kiosk visits.
-## Every migrated passenger collects no roller (collect_tick 0, ParkRecovery),
-## has no thoughts (PassengerThoughts) and came onto no standing spot's cell
-## (stand_from NO_CELL, ParkSide.stand_face()).
-## Every step sets a field or block only when the save has none, so a value the
-## save already holds is kept for the checks to accept or refuse. Any other save
-## is returned as it is, for the checks to accept or refuse. The given
-## dictionary is not edited.
-static func _migrated(data: Dictionary) -> Dictionary:
-	if (
-		not _whole(data.get("save_version"))
-		or int(data["save_version"]) not in [V6, V7, V8, V9, V10]
-	):
-		return data
-	var out := data.duplicate(true)
-	var passengers: Array = out["passengers"] if typeof(out.get("passengers")) == TYPE_ARRAY else []
-	var from_version := int(out["save_version"])
-	out["save_version"] = PassengerSim.SAVE_VERSION
-	if from_version == V6:
-		for record in passengers:
-			if typeof(record) == TYPE_DICTIONARY:
-				_set_missing(record, "carry_on", 0)
-				_set_missing(record, "liquids", false)
-				_set_missing(record, "alarm", false)
-	if from_version <= V7:
-		_add_security(out, passengers)
-	if from_version == V8:
-		_rescale_unpack(passengers)
-	if from_version <= V9:
-		_add_toilets(out, passengers)
-	_add_boredom(out, passengers)
-	return out
-
-
-## Sets `key` on `record` only when the record has no such key.
-static func _set_missing(record: Dictionary, key: String, value: Variant) -> void:
-	if not record.has(key):
-		record[key] = value
-
-
-## Version 7 to 8: the security runtime's phases and station records. A save
-## that already holds a "security" block keeps it and its queues as they are.
-static func _add_security(out: Dictionary, passengers: Array) -> void:
-	var by_id := {}
-	for record in passengers:
-		if typeof(record) == TYPE_DICTIONARY:
-			_set_missing(record, "security_phase", SecurityRuntime.Phase.NONE)
-			_set_missing(record, "security_work", 0)
-			_set_missing(record, "incident_resolved", false)
-			if _whole(record.get("id")):
-				by_id[int(record["id"])] = record
-	if out.has("security"):
-		return
-	var security := []
-	var tick := str(out.get("tick")).to_int()
-	var queues: Array = out["queues"] if typeof(out.get("queues")) == TYPE_ARRAY else []
-	for entry in queues:
-		if typeof(entry) != TYPE_DICTIONARY or not _whole(entry.get("serving")):
-			continue
-		var record: Dictionary = by_id.get(int(entry["serving"]), {})
-		var in_scan: bool = _whole(record.get("stage")) and _whole(record.get("service_end"))
-		if not in_scan or int(record["stage"]) != Passenger.Stage.SECURITY:
-			continue
-		record["security_phase"] = SecurityRuntime.Phase.SCAN
-		record["security_work"] = maxi(int(record["service_end"]) - tick, 0)
-		record["incident_resolved"] = true
-		var id := int(entry["serving"])
-		entry["serving"] = 0
-		security.append(
-			{
-				"station": entry.get("station"),
-				"admitted": [id],
-				"returns": [],
-				"main": id,
-				"berth": 0
-			}
-		)
-	out["security"] = security
-
-
-## Version 9 to 10: a toilet need from each passenger's id, no cooldown and no
-## visits. A record whose id is not a whole number is left for the checks.
-static func _add_toilets(out: Dictionary, passengers: Array) -> void:
-	for record in passengers:
-		if typeof(record) != TYPE_DICTIONARY or not _whole(record.get("id")):
-			continue
-		_set_missing(record, "toilet_need", ToiletSim.migrated_need(int(record["id"])))
-		_set_missing(record, "toilet_cooldown", 0)
-	_set_missing(out, "toilet", {"visits": [], "deadlines_stale": false})
-
-
-## Version 10 to 11: boredom from each passenger's id, no kiosk cooldown and
-## no kiosk visits. A record whose id is not a whole number is left for the
-## checks.
-static func _add_boredom(out: Dictionary, passengers: Array) -> void:
-	for record in passengers:
-		if typeof(record) == TYPE_DICTIONARY and _whole(record.get("id")):
-			_set_missing(record, "boredom", BoredomSim.start_of(int(record["id"])))
-			_set_missing(record, "shop_cooldown", 0)
-			_set_missing(record, "collect_tick", 0)
-			_set_missing(record, "halt_tick", 0)
-			_set_missing(record, "sat_late", false)
-			_set_missing(record, "seat_exiting", false)
-			_set_missing(record, "stand_from", [Passenger.NO_CELL.x, Passenger.NO_CELL.y])
-			_set_missing(record, "seat_piece", {})
-			_set_missing(record, "thoughts", [])
-			_set_missing(record, "thought_marks", [])
-	_set_missing(out, "shop", {"visits": [], "deadlines_stale": false})
-
-
-## Version 8 to 9: each passenger in UNPACK has its work left scaled to the new
-## start, which depends on its bags. A passenger whose bags or work are not
-## whole numbers, or whose work is past the old start, is left as it is for
-## the checks to refuse.
-static func _rescale_unpack(passengers: Array) -> void:
-	for record in passengers:
-		if typeof(record) != TYPE_DICTIONARY or not _whole(record.get("security_phase")):
-			continue
-		if int(record["security_phase"]) != SecurityRuntime.Phase.UNPACK:
-			continue
-		if not _whole(record.get("carry_on")) or not _whole(record.get("security_work")):
-			continue
-		var bags := int(record["carry_on"])
-		var work := int(record["security_work"])
-		if bags < 0 or bags > CarryOnTraits.MAX_BAGS or work < 0:
-			continue
-		var old_start := V8_UNPACK_TICKS + V8_UNPACK_BAG_TICKS * bags
-		if work > old_start:
-			continue
-		var new_start := (
-			SecurityRuntime.LANE_UNPACK_TICKS + SecurityRuntime.LANE_UNPACK_BAG_TICKS * bags
-		)
-		@warning_ignore("integer_division")
-		record["security_work"] = (work * new_start + old_start - 1) / old_start
-
-
 static func _top_problem(data: Dictionary) -> String:
 	for key in KEYS:
 		if not data.has(key):
@@ -476,9 +312,7 @@ static func _arrival_ok(value: Variant) -> bool:
 
 
 ## A Passenger from its record, or null when the record is malformed.
-static func _passenger(
-	entry: Variant, grid: BuildGrid, next_id: int, migrated := false
-) -> Passenger:
+static func _passenger(entry: Variant, grid: BuildGrid, next_id: int) -> Passenger:
 	if typeof(entry) != TYPE_DICTIONARY:
 		return null
 	var record: Dictionary = entry
@@ -493,9 +327,6 @@ static func _passenger(
 	var p := Passenger.new()
 	if not _fill(p, record, grid):
 		return null
-	if migrated:
-		# An old save has no seat placement: the grid's own (GateRelocation).
-		GateRelocation.derive_piece(p, grid)
 	var variant_ok := p.variant in [0, 1] and _arrival_ok(p.arrival_type)
 	var range_ok := (
 		p.mood >= 0

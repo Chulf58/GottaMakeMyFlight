@@ -154,8 +154,10 @@ func test_the_previous_part_version_is_refused_naming_the_version_it_needs() -> 
 	# place.
 	old["save_version"] = 9
 	var loaded := LandsideSnapshot.load(old, LandsideTestWorld.with_berths(1))
-	assert_int(LandsideSnapshot.SAVE_VERSION).is_equal(10)
-	assert_str(str(loaded.get("error", ""))).is_equal("save_version must be 10")
+	assert_int(LandsideSnapshot.SAVE_VERSION).is_greater(9)
+	assert_str(str(loaded.get("error", ""))).is_equal(
+		"save_version must be %d" % LandsideSnapshot.SAVE_VERSION
+	)
 
 
 func test_a_booking_for_a_flight_not_scheduled_breaks_the_link() -> void:

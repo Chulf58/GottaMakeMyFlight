@@ -376,8 +376,6 @@ func _boot_save_world(seed_val: int) -> Node:
 
 
 func test_save_load_v7_v27_bidirectional_savelinks_and_determinism() -> void:
-	assert_int(StaffSim.SAVE_VERSION).is_equal(7)
-	assert_int(SaveGame.SAVE_VERSION).is_equal(27)
 	var main := auto_free(_boot_save_world(77)) as Node
 	var staff: StaffSim = main.get_node("Staff")
 	var bag_sim: BaggageSim = main.get_node("BaggageSim")
@@ -402,8 +400,8 @@ func test_save_load_v7_v27_bidirectional_savelinks_and_determinism() -> void:
 
 	var save := SaveTestKit.save_game(main)
 	var data := JSON.parse_string(JSON.stringify(save.snapshot(), "", true, true)) as Dictionary
-	assert_int(int(data["save_version"])).is_equal(27)
-	assert_int(int(data["staff"]["save_version"])).is_equal(7)
+	assert_int(int(data["save_version"])).is_equal(SaveGame.SAVE_VERSION)
+	assert_int(int(data["staff"]["save_version"])).is_equal(StaffSim.SAVE_VERSION)
 
 	var control := auto_free(_boot_save_world(77)) as Node
 	var control_save := SaveTestKit.save_game(control)

@@ -256,3 +256,27 @@ func test_a_shop_state_no_play_could_reach_is_refused_and_changes_nothing() -> v
 		assert_str(problem).contains(case[0])
 		assert_bool(_b.sim.from_snapshot(case[1])).is_false()
 		assert_str(_signature(_b)).is_equal(before)
+
+
+func test_a_save_missing_boredom_or_out_of_range_is_refused() -> void:
+	_a = _kiosk_world(4242)
+	_a.sim.schedule_flight(PassengerTestWorld.FLIGHT, 24)
+	_a.sim.spawn_now(PassengerTestWorld.FLIGHT)
+	_a.run_to(40)
+	var good: Dictionary = JSON.parse_string(JSON.stringify(_a.sim.to_snapshot()))
+	_b = _kiosk_world(1)
+	_b.clock.from_snapshot(JSON.parse_string(JSON.stringify(_a.clock.to_snapshot())))
+	_b.flights.from_snapshot(JSON.parse_string(JSON.stringify(_a.flights.to_snapshot())))
+	var before := _signature(_b)
+	var missing := good.duplicate(true)
+	(missing["passengers"][0] as Dictionary).erase("boredom")
+	var high := good.duplicate(true)
+	(high["passengers"][0] as Dictionary)["boredom"] = BoredomSim.MAX + 1
+	var low := good.duplicate(true)
+	(low["passengers"][0] as Dictionary)["boredom"] = -1
+	for bad: Dictionary in [missing, high, low]:
+		var problem: String = PassengerSnapshot.load(bad, _b.grid).get("error", "")
+		assert_str(problem).is_not_empty()
+		assert_bool(_b.sim.from_snapshot(bad)).is_false()
+		assert_str(_signature(_b)).is_equal(before)
+	assert_bool(_b.sim.from_snapshot(good)).is_true()

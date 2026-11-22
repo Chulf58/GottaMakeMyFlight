@@ -114,14 +114,6 @@ static func valid(p: Passenger) -> bool:
 	return p.stage == Passenger.Stage.STANDING_UP or not p.seat_exiting
 
 
-## A passenger from an old save (version 10 or older) has no placement: the
-## grid's own for the row it holds (empty when the row is gone, which valid()
-## then refuses).
-static func derive_piece(p: Passenger, grid: BuildGrid) -> void:
-	if p.seat_object != 0 and p.seat_piece.is_empty():
-		p.seat_piece = Relocation.placement(grid, p.seat_object)
-
-
 ## The JSON shape of a seat placement, empty for none.
 static func piece_to_record(piece: Dictionary) -> Dictionary:
 	if piece.is_empty():

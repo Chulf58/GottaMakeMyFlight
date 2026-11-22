@@ -110,6 +110,12 @@ func test_bad_snapshots_are_rejected_whole() -> void:
 	var ghost_queue := good.duplicate(true)
 	ghost_queue["queues"].append({"station": 1, "lane": [12345], "holding": [], "serving": 0})
 	bad_cases.append(ghost_queue)
+	var bad_array := good.duplicate(true)
+	bad_array["passengers"] = "none"
+	bad_cases.append(bad_array)
+	var bad_record := good.duplicate(true)
+	bad_record["passengers"][0] = 7
+	bad_cases.append(bad_record)
 	_b = PassengerTestWorld.reference_world()
 	var before := _b.signature()
 	for bad in bad_cases:
