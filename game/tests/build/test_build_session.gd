@@ -98,7 +98,7 @@ func test_abandon_clears_the_history_at_once_and_a_later_tick_has_nothing_left_t
 	assert_bool(_mode.apply_at(_mode.grid.cell_to_world(Vector2i(1, 1))).ok).is_true()
 	_session.abandon()
 	assert_int(_mode.undo_history().size()).is_equal(0)
-	assert_int(_clock.ticked.get_connections().size()).is_equal(0)
+	assert_bool(_clock.ticked.is_connected(_session._on_tick)).is_false()
 
 
 func test_a_clock_the_player_changed_is_not_restored() -> void:

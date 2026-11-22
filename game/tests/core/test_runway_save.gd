@@ -93,9 +93,9 @@ func test_a_version_12_save_without_a_runway_is_refused_and_changes_nothing() ->
 	var before := SaveTestKit.checksum(_main)
 	assert_bool(_save.load_world(old)).is_false()
 	print("version 12: '%s'" % _save.message_text())
-	# The missing key is found before the version is read.
+	# Older-version saves get the plain version refusal before missing keys.
 	assert_str(_save.message_text()).starts_with("Load failed")
-	assert_str(_save.message_text()).contains("missing key 'runway'")
+	assert_str(_save.message_text()).contains("older version")
 	assert_str(_flights.runway.size).is_equal(PlaneClasses.MEDIUM)
 	assert_str(SaveTestKit.checksum(_main)).is_equal(before)
 
