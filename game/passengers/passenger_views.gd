@@ -140,6 +140,9 @@ var _props := CarryOnProps.new()
 ## Passenger id -> its drawn offset at security (SecurityLooks.target_offset),
 ## moved toward the target at walking speed once per tick.
 var _offsets: Dictionary = {}
+## Passenger id -> its drawn right-hand corridor lane offset (CorridorLane),
+## moved toward the target by at most CorridorLane.CHASE_STEP_M per tick.
+var _lanes: Dictionary = {}
 ## Passenger id -> its drawn step onto a seat or into a shower on an activity
 ## visit, moved toward ActivityPoses.offset() by at most a walking step a tick,
 ## so a stay cut short or a removed piece eases the body back instead of
@@ -277,6 +280,7 @@ func _base_position(p: Passenger) -> Vector3:
 		+ CafeChairs.offset(sim, p)
 		+ _seats.get(p.id, Vector3.ZERO)
 		+ _offsets.get(p.id, Vector3.ZERO)
+		+ _lanes.get(p.id, Vector3.ZERO)
 	)
 
 
@@ -298,6 +302,11 @@ func security_offset(id: int) -> Vector3:
 	return _offsets.get(id, Vector3.ZERO)
 
 
+## A passenger's drawn right-hand corridor lane offset now.
+func corridor_offset(id: int) -> Vector3:
+	return _lanes.get(id, Vector3.ZERO)
+
+
 ## Records positions for the tick that just ran and updates poses and bubbles.
 func sync() -> void:
 	var seen := {}
@@ -315,6 +324,7 @@ func sync() -> void:
 		seen[id] = true
 		_chase(p)
 		_chase_seat(p)
+		_chase_lane(p)
 		var steer := DoorSteer.offset_of(self, p, _steer_time())
 		var now := _base_position(p) + steer
 		if not _nodes.has(id):
@@ -388,13 +398,18 @@ func snap() -> void:
 				_release(id)
 		_offsets.erase(id)
 		_seats.erase(id)
+		_lanes.erase(id)
 		_sit_off.erase(id)
-		var seat := ActivityPoses.offset(sim, sim.get_passenger(id))
+		var p_snap := sim.get_passenger(id)
+		var lane := CorridorLane.target_offset(sim, p_snap)
+		if lane != Vector3.ZERO:
+			_lanes[id] = lane
+		var seat := ActivityPoses.offset(sim, p_snap)
 		if seat != Vector3.ZERO:
 			_seats[id] = seat
 		# A load starts every tray and bag over, with no transfer from before.
 		_props.release(id)
-		var target := SecurityLooks.target_offset(sim, sim.get_passenger(id))
+		var target := SecurityLooks.target_offset(sim, p_snap)
 		if target != Vector3.ZERO:
 			_offsets[id] = target
 		# Every clip is played again from the loaded tick: a node kept through
@@ -1005,6 +1020,7 @@ func _release(id: int) -> void:
 	_nodes.erase(id)
 	_offsets.erase(id)
 	_seats.erase(id)
+	_lanes.erase(id)
 	_sit_off.erase(id)
 	ActivityPoses.dress(node, 0.0, 0.0)
 	DiningPose.apply(node, DiningPose.Kind.NONE, 0.0, 0)
@@ -1309,6 +1325,14 @@ func _chase_seat(p: Passenger) -> void:
 		_seats.erase(p.id)
 	else:
 		_seats[p.id] = now
+
+
+func _chase_lane(p: Passenger) -> void:
+	var now := CorridorLane.step_offset(sim, p, _lanes.get(p.id, Vector3.ZERO))
+	if now == Vector3.ZERO:
+		_lanes.erase(p.id)
+	else:
+		_lanes[p.id] = now
 
 
 func _at_security(p: Passenger) -> bool:
