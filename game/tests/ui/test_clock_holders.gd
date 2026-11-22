@@ -1,11 +1,8 @@
 class_name TestClockHolders
 extends GdUnitTestSuite
-## Build mode, the Offers sheet and the unlock dialog share the clock's holds
-## (decision daily-incidents-technical-design-incidentdirector-shared-clo):
-## closing one never starts the clock under another, in either order; the last
-## to close gives the player's own pause and speed; a resume or a new speed
-## ends build mode and the sheet's hold but not the dialog's; and the dialog and
-## the sheet take the exclusive turn one after the other.
+## Modal dialogs (UnlockGuide) still hold the clock through ClockHolds, while
+## BuildSession and OfferPanel never take or release ClockHolds holds (ruling
+## player-owns-clock-and-persistent-build-undo-no-auto-pause-on-trays-offers-planner-direct-delete).
 
 var _port: SubViewport
 var _clock: SimClock
@@ -66,42 +63,19 @@ func _ticks_after(seconds: float) -> int:
 	return _clock.tick - before
 
 
-func test_build_mode_then_offers_closing_offers_first_stays_paused() -> void:
+func test_build_mode_and_offers_take_no_holds_and_leave_clock_running() -> void:
 	_press_speed(3)
 	_start_building()
 	_panel.open()
+	assert_bool(_session.active).is_true()
+	assert_bool(_panel.is_open()).is_true()
+	assert_int(_clock.holds.count()).is_equal(0)
+	assert_bool(_clock.paused).is_false()
+	assert_int(_ticks_after(0.11)).is_equal(6)
 	_panel.close()
-	assert_bool(_clock.paused).is_true()
-	assert_int(_ticks_after(0.11)).is_equal(0)
 	_session.set_building(false)
 	assert_bool(_clock.paused).is_false()
 	assert_int(_clock.speed).is_equal(3)
-	assert_int(_ticks_after(0.11)).is_equal(6)
-
-
-func test_build_mode_then_offers_ending_build_mode_first_stays_paused() -> void:
-	_press_speed(2)
-	_start_building()
-	_panel.open()
-	_session.set_building(false)
-	assert_bool(_clock.paused).is_true()
-	assert_int(_ticks_after(0.11)).is_equal(0)
-	_panel.close()
-	assert_bool(_clock.paused).is_false()
-	assert_int(_clock.speed).is_equal(2)
-
-
-func test_offers_then_build_mode_a_build_session_syncing_never_resumes() -> void:
-	_press_speed(1)
-	_panel.open()
-	_start_building()
-	_panel.close()
-	# Build mode's next frame: no player change, so it keeps holding.
-	_session.sync()
-	assert_bool(_session.active).is_true()
-	assert_bool(_clock.paused).is_true()
-	_session.set_building(false)
-	assert_bool(_clock.paused).is_false()
 
 
 func test_a_game_paused_before_both_stays_paused_after_both() -> void:
@@ -115,38 +89,16 @@ func test_a_game_paused_before_both_stays_paused_after_both() -> void:
 	assert_int(_clock.speed).is_equal(2)
 
 
-func test_pausing_while_both_hold_keeps_the_game_paused_after_both() -> void:
+func test_the_unlock_dialog_still_holds_the_clock_regardless_of_build_mode_or_offers() -> void:
 	_press_speed(3)
 	_start_building()
 	_panel.open()
-	_press_speed(0)
-	_panel.close()
-	_session.set_building(false)
-	assert_bool(_clock.paused).is_true()
-	assert_int(_clock.speed).is_equal(3)
-
-
-func test_resuming_while_both_hold_ends_build_mode_and_runs_under_the_sheet() -> void:
-	_press_speed(1)
-	_start_building()
-	_panel.open()
-	_press_speed(2)
-	_session.sync()
-	assert_bool(_session.active).is_false()
-	assert_int(_mode.tool).is_equal(BuildMode.Tool.NONE)
-	assert_bool(_panel.is_open()).is_true()
-	assert_bool(_clock.paused).is_false()
-	assert_int(_ticks_after(0.11)).is_equal(4)
-	_panel.close()
-	assert_bool(_clock.paused).is_false()
-	assert_int(_clock.speed).is_equal(2)
-
-
-func test_the_unlock_dialog_keeps_the_clock_paused_when_build_mode_ends() -> void:
-	_press_speed(3)
-	_start_building()
 	_guide.open_dialog([2])
+	assert_bool(_guide.is_open()).is_true()
+	assert_bool(_clock.paused).is_true()
+	assert_int(_clock.holds.count()).is_equal(1)
 	_session.set_building(false)
+	_panel.close()
 	assert_bool(_clock.paused).is_true()
 	_guide.dismiss()
 	assert_bool(_clock.paused).is_false()
@@ -164,51 +116,16 @@ func test_a_resume_while_the_unlock_dialog_is_open_waits_for_it_to_close() -> vo
 	assert_int(_clock.speed).is_equal(3)
 
 
-func test_offers_opened_under_the_unlock_dialog_opens_when_the_dialog_closes() -> void:
+func test_offers_opened_under_the_unlock_dialog_opens_immediately_without_a_hold() -> void:
 	_press_speed(1)
 	_guide.open_dialog([2])
 	_panel.open()
-	assert_bool(_panel.is_open()).is_false()
-	_guide.dismiss()
 	assert_bool(_panel.is_open()).is_true()
 	assert_bool(_clock.paused).is_true()
-	_panel.close()
-	assert_bool(_clock.paused).is_false()
-
-
-func test_the_unlock_dialog_opened_under_offers_shows_when_the_sheet_closes() -> void:
-	_press_speed(2)
-	_panel.open()
-	_guide.open_dialog([2])
-	assert_bool(_guide.is_open()).is_false()
-	_panel.close()
-	assert_bool(_guide.is_open()).is_true()
-	assert_bool(_clock.paused).is_true()
 	_guide.dismiss()
 	assert_bool(_clock.paused).is_false()
-	assert_int(_clock.speed).is_equal(2)
-
-
-## Play running under the open sheet (the player resumed) reaches a tier: the
-## sheet keeps the exclusive turn, so the dialog waits, holding the clock at
-## the tier, and opens when the sheet closes.
-func test_an_unlock_reached_while_play_runs_under_offers_waits_for_the_sheet() -> void:
-	_press_speed(1)
-	_panel.open()
-	_press_speed(3)
-	assert_bool(_clock.paused).is_false()
-	assert_int(_ticks_after(0.11)).is_equal(6)
-	_guide.open_dialog([2])
-	assert_bool(_guide.is_open()).is_false()
-	assert_bool(_panel.is_open()).is_true()
-	assert_bool(_clock.paused).is_true()
-	assert_int(_ticks_after(0.11)).is_equal(0)
 	_panel.close()
-	assert_bool(_guide.is_open()).is_true()
-	assert_bool(_clock.paused).is_true()
-	_guide.dismiss()
 	assert_bool(_clock.paused).is_false()
-	assert_int(_clock.speed).is_equal(3)
 
 
 ## The old dialog's layer leaves the tree a frame after a replacement; that

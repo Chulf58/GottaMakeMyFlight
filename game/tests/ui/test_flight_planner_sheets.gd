@@ -1,8 +1,8 @@
 class_name TestFlightPlannerSheets
 extends GdUnitTestSuite
-## The planner and the Offers sheet share the clock's exclusive turn. Opening one
-## while the other is open closes the other at once and takes its turn, in both
-## directions, leaving exactly one hold on the clock.
+## The planner and the Offers sheet share TopRow.SHEET_GROUP mutual exclusion
+## without acquiring ClockHolds holds (ruling
+## player-owns-clock-and-persistent-build-undo-no-auto-pause-on-trays-offers-planner-direct-delete).
 
 var _port: SubViewport
 var _clock: SimClock
@@ -47,10 +47,11 @@ func after_test() -> void:
 	_port.free()
 
 
-func test_opening_the_planner_over_offers_closes_offers_and_takes_the_turn() -> void:
+func test_opening_the_planner_over_offers_closes_offers_without_pausing() -> void:
 	_offers.open()
 	assert_bool(_offers.is_open()).is_true()
-	assert_int(_clock.holds.count()).is_equal(1)
+	assert_int(_clock.holds.count()).is_equal(0)
+	assert_bool(_clock.paused).is_false()
 	_planner.open()
 	print(
 		(
@@ -60,14 +61,14 @@ func test_opening_the_planner_over_offers_closes_offers_and_takes_the_turn() -> 
 	)
 	assert_bool(_offers.is_open()).is_false()
 	assert_bool(_planner.is_open()).is_true()
-	assert_int(_clock.holds.count()).is_equal(1)
-	assert_bool(_clock.paused).is_true()
+	assert_int(_clock.holds.count()).is_equal(0)
+	assert_bool(_clock.paused).is_false()
 
 
-func test_opening_offers_over_the_planner_closes_the_planner_and_takes_the_turn() -> void:
+func test_opening_offers_over_the_planner_closes_the_planner_without_pausing() -> void:
 	_planner.open()
 	assert_bool(_planner.is_open()).is_true()
-	assert_int(_clock.holds.count()).is_equal(1)
+	assert_int(_clock.holds.count()).is_equal(0)
 	_offers.open()
 	print(
 		(
@@ -77,13 +78,14 @@ func test_opening_offers_over_the_planner_closes_the_planner_and_takes_the_turn(
 	)
 	assert_bool(_planner.is_open()).is_false()
 	assert_bool(_offers.is_open()).is_true()
-	assert_int(_clock.holds.count()).is_equal(1)
-	assert_bool(_clock.paused).is_true()
+	assert_int(_clock.holds.count()).is_equal(0)
+	assert_bool(_clock.paused).is_false()
 
 
-func test_closing_the_last_sheet_releases_the_clock() -> void:
+func test_closing_the_last_sheet_leaves_a_paused_clock_paused() -> void:
+	_clock.set_paused(true)
 	_offers.open()
 	_planner.open()
 	_planner.close()
 	assert_int(_clock.holds.count()).is_equal(0)
-	assert_bool(_clock.paused).is_false()
+	assert_bool(_clock.paused).is_true()

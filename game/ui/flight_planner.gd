@@ -18,15 +18,13 @@ extends CanvasLayer
 ## through move_outcome like a Move to choice. Departure times never change here. A bar
 ## of a one-off flight or an ended contract cannot be selected or dragged.
 ##
-## The sheet pauses the game while open, as the Offers sheet does (decision
-## the-airline-offers-panel-pauses-the-game-while-it-is-open): a hold on the
-## clock's ClockHolds taken in the exclusive-dialog line, released on close; the
-## player resuming or picking a speed runs the game under the sheet. It joins
-## TopRow.SHEET_GROUP, so opening the Offers or Runway sheet closes it and the
-## reverse. It closes on Esc, on P, on its Close button, on a build tool pick
-## and when a save loads. While open it follows FlightSim.planning_changed
-## (checked every frame, since gates change while paused), occurrence_added,
-## contract_ended and the day turning over.
+## Opening or closing the sheet leaves the sim clock alone (ruling
+## player-owns-clock-and-persistent-build-undo-no-auto-pause-on-trays-offers-planner-direct-delete).
+## It joins TopRow.SHEET_GROUP, so opening the Offers or Runway sheet closes it
+## and the reverse. It closes on Esc, on P, on its Close button, on a build tool
+## pick and when a save loads. While open it follows FlightSim.planning_changed
+## (checked every frame), occurrence_added, contract_ended and the day turning
+## over.
 
 ## The input action for the toggle key, bound to P in project.godot.
 const ACTION := &"toggle_flight_planner"
@@ -53,7 +51,7 @@ const HOURS := 24
 const TOGGLE_LEFT := float(HudLayout.MARGIN + HudLayout.TOGGLE_W + HudLayout.GAP)
 
 @export var flights: FlightSim
-## Paused while the sheet is open; null leaves the clock alone.
+## Used for today's day and the clock line; FlightPlanner leaves clock pause/speed alone.
 @export var clock: SimClock
 ## Its tool changes close the sheet; null leaves the sheet to Esc and the button.
 @export var build_mode: BuildMode
@@ -76,7 +74,6 @@ var _dirty := true
 var _selected := ""
 var _selected_day := -1
 var _confirming := false
-var _hold := ClockHolds.NONE
 var _rebuilds := 0
 ## Greys the rows while a bar is dragged and carries out the drop.
 var _drag := PlannerDrag.new()
@@ -162,36 +159,25 @@ func toggle_button() -> Button:
 	return _toggle
 
 
-## Pauses the clock and shows the sheet, at once or, while another exclusive
-## dialog has the turn, when that one closes.
+## Shows the sheet without touching the sim clock.
 func open() -> void:
-	if _sheet.visible or _is_waiting():
+	if _sheet.visible:
 		return
-	if clock == null:
-		_show()
-		return
-	# Another top-row sheet holds the exclusive turn until it closes, so it is
-	# closed first; the turn then comes at once.
 	TopRow.close_others(self)
-	_hold = clock.holds.take_turn(self, _show, true)
+	_sheet.visible = true
+	_toggle.set_pressed_no_signal(true)
+	if flights != null:
+		flights.check_planning_changed()
+	refresh()
 
 
-## Hides the sheet, or stops it waiting to show, and releases its hold.
+## Hides the sheet.
 func close() -> void:
 	_toggle.set_pressed_no_signal(false)
-	if _is_waiting():
-		_release_clock()
-		return
 	if not _sheet.visible:
 		return
 	_sheet.visible = false
 	_deselect()
-	_release_clock()
-
-
-## A planner that leaves the tree while open must not leave the game paused.
-func _exit_tree() -> void:
-	_release_clock()
 
 
 ## The gates drawn, top to bottom.
@@ -346,31 +332,10 @@ static func _anchor_at(control: Control, fraction: float, inset: float) -> void:
 
 
 func _on_toggle() -> void:
-	if _sheet.visible or _is_waiting():
+	if _sheet.visible:
 		close()
 	else:
 		open()
-
-
-## The sheet's turn: it shows.
-func _show() -> void:
-	TopRow.close_others(self)
-	_sheet.visible = true
-	_toggle.set_pressed_no_signal(true)
-	if flights != null:
-		flights.check_planning_changed()
-	refresh()
-
-
-func _is_waiting() -> bool:
-	return not _sheet.visible and is_instance_valid(clock) and clock.holds.has(_hold)
-
-
-## Nothing is restored: with no hold left, the player's own pause applies.
-func _release_clock() -> void:
-	if is_instance_valid(clock):
-		clock.holds.release(_hold)
-	_hold = ClockHolds.NONE
 
 
 func _mark_dirty() -> void:

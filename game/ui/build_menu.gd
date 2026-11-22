@@ -121,7 +121,7 @@ const GRANT_HOLD_S := 8.0
 ## Optional: when set, a successful load ends any message hold (the notices
 ## belong to the world that was replaced).
 @export var save_game: SaveGame
-## Optional: paused while build mode lasts (BuildSession).
+## Kept for scene/test wiring compatibility; forwarded to BuildSession.
 @export var clock: SimClock
 ## Optional: marks the cards and tabs of a newly opened tier "New" (PassengerHud
 ## wires it with watch_guide()); without it no card or tab carries the mark.
@@ -131,8 +131,7 @@ var guide: UnlockGuide
 var staff_open := false
 ## The Staff button at the end of the bar.
 var staff_button := Button.new()
-## Build mode: a tray open or a tool picked (decision build-mode-pauses-the-
-## game-while-a-build-tray-is-open-closin). The frame is its on-screen sign.
+## Build mode: a tray open or a tool picked. The frame is its on-screen sign.
 var build_session := BuildSession.new()
 var build_frame := BuildModeFrame.new()
 ## The Templates page; press_category(TEMPLATES_PAGE) opens and closes it.
@@ -1119,8 +1118,7 @@ func _on_loaded(ok: bool) -> void:
 
 
 ## Closes any open tray, Staff card, held status banner, template paste or room
-## move and drops the build session's hold on the clock (used when a full-screen
-## modal takes over).
+## move and ends build mode (used when a full-screen modal takes over).
 func close_for_modal() -> void:
 	_open = NO_CATEGORY
 	_pending_scroll_tool = BuildMode.Tool.NONE

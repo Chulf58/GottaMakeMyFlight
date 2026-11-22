@@ -1,10 +1,10 @@
 class_name TestBuildUndoAfterEsc
 extends GdUnitTestSuite
-## The undo history survives ending build mode (Esc or closing the tray) until
-## the sim clock advances a tick (user-ruled 2026-11-11, decision build-mode-
-## pauses-the-game-while-a-build-tray-is-open-closin): Esc then Ctrl+Z still
-## undoes the last build and refunds it, because nothing can have happened while
-## the clock has not moved. One tick, a load or an outside edit and it is gone.
+## The undo history survives ending build mode (Esc or closing the tray) and
+## live sim ticks (ruling
+## player-owns-clock-and-persistent-build-undo-no-auto-pause-on-trays-offers-planner-direct-delete):
+## Esc then Ctrl+Z still undoes the last build and refunds it even after ticks
+## run. A load, rescue grant, or outside edit still clears it.
 ## Keys go through the viewport, as the player's do.
 
 const STRUCTURE := 0
@@ -116,19 +116,19 @@ func test_closing_the_tray_by_its_button_then_ctrl_z_undoes_too() -> void:
 	assert_int(_balance()).is_equal(before)
 
 
-func test_esc_then_one_tick_then_ctrl_z_has_nothing_to_undo() -> void:
+func test_esc_then_multiple_ticks_then_ctrl_z_undoes_the_door_and_refunds() -> void:
 	var before := _build_a_door()
-	var paid := before - _balance()
 	_esc()
-	_tick()
-	assert_int(_mode.undo_history().size()).is_equal(0)
+	for i in 5:
+		_tick()
+	assert_int(_mode.undo_history().size()).is_equal(1)
 	_ctrl_z()
-	assert_str(_mode.status_text()).contains(UndoStack.NOTHING_TO_UNDO)
-	assert_int(_mode.grid.object_ids().size()).is_equal(1)
-	assert_int(_balance()).is_equal(before - paid)
+	assert_str(_mode.status_text()).contains(UndoStack.UNDONE)
+	assert_int(_mode.grid.object_ids().size()).is_equal(0)
+	assert_int(_balance()).is_equal(before)
 
 
-func test_a_paused_clock_runs_no_tick_so_the_history_waits() -> void:
+func test_a_paused_clock_keeps_the_history_too() -> void:
 	var before := _build_a_door()
 	_esc()
 	_clock.set_paused(true)
@@ -138,9 +138,10 @@ func test_a_paused_clock_runs_no_tick_so_the_history_waits() -> void:
 	assert_int(_balance()).is_equal(before)
 
 
-func test_reopening_build_mode_before_a_tick_keeps_the_history() -> void:
+func test_reopening_build_mode_after_ticks_keeps_the_history() -> void:
 	var before := _build_a_door()
 	_esc()
+	_tick()
 	_menu.press_category(STRUCTURE)
 	_menu.build_session.sync()
 	assert_int(_mode.undo_history().size()).is_equal(1)
@@ -149,14 +150,14 @@ func test_reopening_build_mode_before_a_tick_keeps_the_history() -> void:
 	assert_int(_balance()).is_equal(before)
 
 
-func test_a_tick_after_reopening_and_closing_again_still_clears() -> void:
+func test_a_tick_after_reopening_and_closing_again_still_keeps_history() -> void:
 	_build_a_door()
 	_esc()
 	_menu.press_category(STRUCTURE)
 	_menu.build_session.sync()
 	_esc()
 	_tick()
-	assert_int(_mode.undo_history().size()).is_equal(0)
+	assert_int(_mode.undo_history().size()).is_equal(1)
 
 
 func test_a_load_after_esc_clears_the_history_without_a_tick() -> void:

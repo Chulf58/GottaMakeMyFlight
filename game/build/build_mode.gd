@@ -744,7 +744,7 @@ func undo() -> BuildResult:
 
 
 ## Forgets every action that could be undone, the grid's and the landside's
-## (BuildSession calls it when build mode ends).
+## (BuildSession.abandon() calls it on load).
 func clear_undo() -> void:
 	_history.clear()
 	_landside_placement.clear_undo()
