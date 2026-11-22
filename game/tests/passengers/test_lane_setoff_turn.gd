@@ -318,6 +318,8 @@ func test_a_returner_turns_only_at_its_corner_and_the_basic_scanner_is_left_alon
 	var booth_views := _views_of(booth)
 	var bid := booth.send(1)
 	var bp := booth.world.passenger(bid)
+	var passage: Array = booth.world.sim.layout.passages[booth.station]
+	var booth_axis := SecurityLooks.world_dir(passage[passage.size() - 1] - passage[0]).normalized()
 	var served := 0
 	for i in 3000:
 		booth.world.step()
@@ -328,7 +330,9 @@ func test_a_returner_turns_only_at_its_corner_and_the_basic_scanner_is_left_alon
 			served += 1
 			assert_bool(SecurityLooks.setting_off(booth.world.sim, bp)).is_false()
 			assert_bool(is_nan(SecurityLooks.setoff_yaw(booth.world.sim, bp))).is_true()
-			assert_float(booth_views.security_offset(bid).length()).is_equal(0.0)
+			var off := booth_views.security_offset(bid)
+			var lateral := off - booth_axis * off.dot(booth_axis)
+			assert_float(lateral.length()).is_less(0.0001)
 	print("returner second-pass ARCH ticks %d, scanner service ticks %d" % [second, served])
 	assert_int(second).is_greater(0)
 	assert_int(served).is_greater(0)

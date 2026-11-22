@@ -599,8 +599,12 @@ static func _basic_scan_offset(sim: PassengerSim, p: Passenger) -> Vector3:
 ## turn has ended before the bags reach the booth's rails; leaving, the cell it
 ## stands on stays a booth cell until it arrives in the cell past the booth.
 static func in_booth_passage(sim: PassengerSim, p: Passenger) -> bool:
-	if in_booth(sim.grid, p.at) or (in_basic_scan(sim, p) and p.security_work > 1):
+	if in_booth(sim.grid, p.at):
 		return true
+	if in_basic_scan(sim, p):
+		var drawn := sim.world_position(p) + _basic_scan_offset(sim, p)
+		if in_booth(sim.grid, sim.grid.world_to_cell(drawn)):
+			return true
 	var queued := p.stage == Passenger.Stage.SECURITY_QUEUE or p.stage == Passenger.Stage.SECURITY
 	if queued and _booth_entry(sim, p.at):
 		return true
