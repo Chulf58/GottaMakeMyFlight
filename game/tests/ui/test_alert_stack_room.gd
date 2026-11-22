@@ -1,10 +1,11 @@
 class_name TestAlertStackRoom
 extends GdUnitTestSuite
-## On the real main scene, a drawn alert card is cut from the screen share the
-## camera frames into (PanelRoom, decision panel-room-as-built-camera-frames-
-## the-terminal-in-the-screen), so a click on a card lands the problem below
-## the stack, not under it. A card coming or going only shifts the view: it is
-## no panel opening or closing, so it never zooms.
+## On the real main scene, spawning or clearing right-rail alert cards leaves
+## TycoonCamera position, zoom, and room (WHOLE_VIEW) completely steady, both
+## with and without a build tray open (decision panel-room-camera-shifting-
+## disabled-camera-stays-steady-for-panels-and-alerts, 66acd8b0). AlertStack
+## rectangles still report through PanelRoom.open_rects() for SelectReveal, and
+## clicking an alert card still glides the problem below the rail.
 
 const SEED := 5_120_311
 
@@ -54,12 +55,6 @@ func _settle() -> void:
 		_camera._process(0.05)
 
 
-func _free_pixels() -> Rect2:
-	var size := get_viewport().get_visible_rect().size
-	var free := _room().free_fraction()
-	return Rect2(free.position * size, free.size * size)
-
-
 func _clean() -> void:
 	for id in _sim.messes.mess_ids():
 		_sim.messes.clean(id)
@@ -82,7 +77,7 @@ func _spills() -> void:
 				placed.append(c)
 
 
-func test_a_drawn_card_is_cut_from_the_camera_room_and_never_zooms() -> void:
+func test_a_drawn_card_keeps_the_camera_steady_and_never_zooms() -> void:
 	(
 		assert_bool(_stack.cards_on())
 		. override_failure_message("alert cards are switched off in the test settings file")
@@ -92,6 +87,8 @@ func test_a_drawn_card_is_cut_from_the_camera_room_and_never_zooms() -> void:
 	var key := _room().open_key()
 	var distance := _camera.target_distance
 	var before := _camera.room
+	var eye := (_camera.get_node("Camera3D") as Camera3D).global_position
+	var pos := _camera.position
 	_spills()
 	_hud.refresh()
 	await _settle()
@@ -99,15 +96,26 @@ func test_a_drawn_card_is_cut_from_the_camera_room_and_never_zooms() -> void:
 	var cards := _stack.room_rect()
 	assert_bool(cards.has_area()).is_true()
 	assert_bool(_room().open_rects().has(cards)).is_true()
-	var free := _free_pixels()
 	print(
 		(
-			"ALERT_ROOM cards=%s free=%s before=%s key=%d/%d distance=%.2f/%.2f"
-			% [cards, free, before, key, _room().open_key(), distance, _camera.target_distance]
+			"ALERT_ROOM cards=%s room=%s before=%s key=%d/%d distance=%.2f/%.2f"
+			% [
+				cards,
+				_camera.room,
+				before,
+				key,
+				_room().open_key(),
+				distance,
+				_camera.target_distance
+			]
 		)
 	)
-	assert_bool(free.intersects(cards)).is_false()
-	assert_bool(_camera.room.is_equal_approx(before)).is_false()
+	assert_bool(_camera.room.is_equal_approx(TycoonCamera.WHOLE_VIEW)).is_true()
+	assert_bool(_camera.room.is_equal_approx(before)).is_true()
+	assert_vector(_camera.position).is_equal_approx(pos, Vector3.ONE * 0.001)
+	assert_vector((_camera.get_node("Camera3D") as Camera3D).global_position).is_equal_approx(
+		eye, Vector3.ONE * 0.001
+	)
 	assert_int(_room().open_key()).is_equal(key)
 	assert_float(_camera.target_distance).is_equal(distance)
 	_clean()
@@ -115,12 +123,15 @@ func test_a_drawn_card_is_cut_from_the_camera_room_and_never_zooms() -> void:
 	await _settle()
 	print(
 		(
-			"ALERT_ROOM_AFTER cards=%s keys=%s room=%s free=%s"
-			% [_stack.room_rect(), _stack.card_keys(), _camera.room, _room().free_fraction()]
+			"ALERT_ROOM_AFTER cards=%s keys=%s room=%s"
+			% [_stack.room_rect(), _stack.card_keys(), _camera.room]
 		)
 	)
 	assert_bool(_stack.room_rect().has_area()).is_false()
 	assert_bool(_camera.room.is_equal_approx(before)).is_true()
+	assert_vector((_camera.get_node("Camera3D") as Camera3D).global_position).is_equal_approx(
+		eye, Vector3.ONE * 0.001
+	)
 
 
 func test_a_jump_lands_the_problem_below_the_stack() -> void:
@@ -139,22 +150,24 @@ func test_a_jump_lands_the_problem_below_the_stack() -> void:
 	assert_bool(get_viewport().get_visible_rect().has_point(at)).is_true()
 
 
-## Board D3c: a card already up when a build tray opens must not zoom the view
-## out. The tray's refit fits the start area to the screen share without the
-## rail; before, the card's cut took the top strip of the screen and the camera
-## went about half as far again (32 m to 50 m in the D3c probe).
-func test_a_card_up_when_the_tray_opens_does_not_zoom() -> void:
+## Under ruling 66acd8b0, neither a drawn alert card nor opening a build tray
+## zooms or shifts TycoonCamera.
+func test_a_card_up_when_the_tray_opens_does_not_zoom_or_shift() -> void:
 	var menu := _main.get_node("BuildMenu") as BuildMenu
 	var mode := _main.get_node("BuildMode") as BuildMode
+	var eye := _camera.get_node("Camera3D") as Camera3D
 	var check_in := _operations_category()
-	_camera.frame_start_view(StartView.area_for(mode.grid), _room().free_fraction())
+	_camera.frame_start_view(StartView.area_for(mode.grid))
 	_room().mark_sent()
 	await _settle()
 	var closed := _camera.target_distance
+	var eye_closed := eye.global_position
 	menu.press_category(check_in)
 	await _settle()
-	var opened := _camera.target_distance
-	var opened_room := _camera.room
+	assert_bool(menu.is_tray_open()).is_true()
+	assert_float(_camera.target_distance).is_equal_approx(closed, 0.01)
+	assert_bool(_camera.room.is_equal_approx(TycoonCamera.WHOLE_VIEW)).is_true()
+	assert_vector(eye.global_position).is_equal_approx(eye_closed, Vector3.ONE * 0.001)
 	menu.press_category(check_in)
 	await _settle()
 	_spills()
@@ -166,55 +179,49 @@ func test_a_card_up_when_the_tray_opens_does_not_zoom() -> void:
 	var cards := _stack.room_rect()
 	print(
 		(
-			"ALERT_TRAY closed=%.3f opened=%.3f with_card=%.3f cards=%s room=%s/%s"
-			% [closed, opened, _camera.target_distance, cards, opened_room, _camera.room]
+			"ALERT_TRAY closed=%.3f with_card=%.3f cards=%s room=%s"
+			% [closed, _camera.target_distance, cards, _camera.room]
 		)
 	)
-	# Controls: the tray opening refits the distance, and the card is drawn
-	# and cut from the room (the view shifts), so the case below is engaged.
 	assert_bool(menu.is_tray_open()).is_true()
-	assert_float(absf(opened - closed)).is_greater(0.05)
 	assert_bool(cards.has_area()).is_true()
 	assert_bool(_room().open_rects().has(cards)).is_true()
-	assert_bool(_camera.room.is_equal_approx(opened_room)).is_false()
-	assert_float(_camera.target_distance).is_equal_approx(opened, 0.01)
+	assert_bool(_camera.room.is_equal_approx(TycoonCamera.WHOLE_VIEW)).is_true()
+	assert_float(_camera.target_distance).is_equal_approx(closed, 0.01)
+	assert_vector(eye.global_position).is_equal_approx(eye_closed, Vector3.ONE * 0.001)
 	menu.press_category(check_in)
 	await _settle()
 	assert_float(_camera.target_distance).is_equal_approx(closed, 0.01)
+	assert_vector(eye.global_position).is_equal_approx(eye_closed, Vector3.ONE * 0.001)
 
 
-## Board D3c: on the start view a card's shift stops where the start area's
-## south corners reach the tray stack's top, and the area stays inside the free
-## share's left and right edges. With no card the room is the free share as is.
-func test_a_card_never_pushes_the_start_area_under_the_tray() -> void:
+## Under ruling 66acd8b0, spawning an alert card while a build tray is open
+## leaves the camera room (WHOLE_VIEW), distance, and screen projection steady.
+func test_a_card_with_the_tray_open_leaves_the_view_steady() -> void:
 	var menu := _main.get_node("BuildMenu") as BuildMenu
 	var mode := _main.get_node("BuildMode") as BuildMode
+	var eye := _camera.get_node("Camera3D") as Camera3D
 	var check_in := _operations_category()
-	_camera.frame_start_view(StartView.area_for(mode.grid), _room().free_fraction())
+	_camera.frame_start_view(StartView.area_for(mode.grid))
 	_room().mark_sent()
 	menu.press_category(check_in)
 	await _settle()
-	assert_bool(_camera.room.is_equal_approx(_room().free_fraction())).is_true()
+	assert_bool(_camera.room.is_equal_approx(TycoonCamera.WHOLE_VIEW)).is_true()
 	var bare := _corners(mode.grid)
+	var eye_before := eye.global_position
+	var dist_before := _camera.distance
 	_spills()
 	_hud.refresh()
 	await _settle()
 	assert_array(_stack.card_keys()).is_equal([DirtyAlert.KEY])
-	var size := get_viewport().get_visible_rect().size
-	var tray_top := size.y - menu.stack_top()
-	var fit := _room().fit_fraction()
+	assert_bool(_room().open_rects().has(_stack.room_rect())).is_true()
 	var with_card := _corners(mode.grid)
-	print(
-		(
-			"ALERT_CLAMP tray_top=%.1f fit=%s room=%s free=%s bare=%s card=%s"
-			% [tray_top, fit, _camera.room, _room().free_fraction(), bare, with_card]
-		)
-	)
-	# Control: the card still shifts the view, down from where it was.
-	assert_float(with_card[0].y).is_greater(bare[0].y + 1.0)
-	for at in with_card:
-		assert_float(at.y).is_less_equal(tray_top + 0.5)
-		assert_float(at.x).is_between(fit.position.x * size.x - 0.5, fit.end.x * size.x + 0.5)
+	print("ALERT_STEADY room=%s bare=%s card=%s" % [_camera.room, bare, with_card])
+	assert_bool(_camera.room.is_equal_approx(TycoonCamera.WHOLE_VIEW)).is_true()
+	assert_float(_camera.distance).is_equal_approx(dist_before, 0.001)
+	assert_vector(eye.global_position).is_equal_approx(eye_before, Vector3.ONE * 0.001)
+	for i in bare.size():
+		assert_vector(with_card[i]).is_equal_approx(bare[i], Vector2.ONE * 0.01)
 	menu.press_category(check_in)
 	await _settle()
 

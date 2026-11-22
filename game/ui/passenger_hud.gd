@@ -27,12 +27,10 @@ extends CanvasLayer
 ## goes on the rail: made, missed, close-call saves and the main reasons; a
 ## later closing flight replaces it, and it leaves after
 ## FlightResultPanel.SHOW_SECONDS of real time or on a click, staying in the
-## alerts history. On
-## ready the camera frames the built area (StartView) inside the screen share
-## the open panels leave free (PanelRoom, which keeps telling the camera as
-## panels open and close). A new game opens paused under the
-## IntroDialogue (once per session, never in a probe, a test or a playtest);
-## closing it starts the clock at 1x.
+## alerts history. On ready the camera frames the built area (StartView) in
+## WHOLE_VIEW (decision 66acd8b0 keeps it steady when panels or alerts open). A
+## new game opens paused under the IntroDialogue (once per session, never in a
+## probe, a test or a playtest); closing it starts the clock at 1x.
 ##
 ## Economy policy of the Debug panel (Economy 7/8): its actions are debug aids
 ## and are labelled so. The starter terminal is written straight to the grid,
@@ -1042,12 +1040,12 @@ func _pa_modal_open() -> bool:
 
 func _frame_start_view() -> void:
 	if camera != null and build_mode != null:
-		camera.frame_start_view(StartView.area_for(build_mode.grid), _panel_room.free_fraction())
+		camera.frame_start_view(StartView.area_for(build_mode.grid))
 		_panel_room.mark_sent()
 
 
 ## The banner slot's screen rectangle while the status banner or a first-time
-## hint shows there, empty otherwise; PanelRoom cuts it from the camera room.
+## hint shows there, empty otherwise; SelectReveal avoids it on built selection.
 func _banner_rect() -> Rect2:
 	var rect := Rect2()
 	var staff := get_parent().get_node_or_null("StaffPanel") as StaffPanel

@@ -30,6 +30,7 @@ func _framed(area: Rect2) -> Vector3:
 
 func test_the_game_opens_framed_on_the_starter_terminal_floor() -> void:
 	var area := StartView.area_for(_mode.grid)
+	assert_bool(_camera.room.is_equal_approx(TycoonCamera.WHOLE_VIEW)).is_true()
 	assert_vector(_camera.home_position).is_equal_approx(_framed(area), Vector3.ONE * 0.001)
 	assert_vector(_camera.position).is_equal_approx(_camera.home_position, Vector3.ONE * 0.001)
 	assert_float(_camera.home_distance).is_less(60.0)
@@ -63,6 +64,7 @@ func test_loading_a_save_reframes_the_camera_on_what_it_built() -> void:
 	var area := StartView.area_for(_mode.grid)
 	var cell_centre := _mode.grid.cell_to_world(Vector2i(3, 3) + LandKit.FIRST_SITE)
 	assert_bool(area.has_point(Vector2(cell_centre.x, cell_centre.z))).is_true()
+	assert_bool(_camera.room.is_equal_approx(TycoonCamera.WHOLE_VIEW)).is_true()
 	assert_vector(_camera.home_position).is_equal_approx(_framed(area), Vector3.ONE * 0.001)
 	assert_vector(_camera.position).is_equal_approx(_camera.home_position, Vector3.ONE * 0.001)
 
