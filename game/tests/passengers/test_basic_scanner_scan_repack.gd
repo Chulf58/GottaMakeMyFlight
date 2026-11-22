@@ -56,6 +56,7 @@ func test_basic_scanner_holds_scan_in_booth_for_walking_and_late_passengers() ->
 
 			var held_in_booth := 0
 			var tucked_at_exit_cell := 0
+			var released_before_exit := 0
 			var last_scan_pos := Vector3.ZERO
 			var idle_past_exit_ticks := 0
 			var guard := 0
@@ -74,6 +75,14 @@ func test_basic_scanner_holds_scan_in_booth_for_walking_and_late_passengers() ->
 							held_in_booth += 1
 						if SecurityLooks.in_booth_passage(sim, p):
 							tucked_at_exit_cell += 1
+					if (
+						not p.is_moving()
+						and not SecurityLooks.in_booth(
+							sim.grid, sim.grid.world_to_cell(last_scan_pos)
+						)
+						and not SecurityLooks.in_booth_passage(sim, p)
+					):
+						released_before_exit += 1
 					if not p.is_moving() and last_scan_pos.distance_to(exit_world) < 0.05:
 						if p.security_work > 1:
 							idle_past_exit_ticks += 1
@@ -84,12 +93,13 @@ func test_basic_scanner_holds_scan_in_booth_for_walking_and_late_passengers() ->
 			assert_int(scan_ticks).is_equal(SecurityRuntime.work_for(SecurityRuntime.Phase.SCAN, p))
 			print(
 				(
-					"late=%s bags=%d: held_in_booth=%d tucked=%d idle_past_exit=%d last_dist_exit=%.3f"
+					"late=%s bags=%d: held_in_booth=%d tucked=%d released=%d idle_past_exit=%d last_dist_exit=%.3f"
 					% [
 						late,
 						bags,
 						held_in_booth,
 						tucked_at_exit_cell,
+						released_before_exit,
 						idle_past_exit_ticks,
 						last_scan_pos.distance_to(exit_world),
 					]
@@ -97,6 +107,7 @@ func test_basic_scanner_holds_scan_in_booth_for_walking_and_late_passengers() ->
 			)
 			assert_int(held_in_booth).is_greater(5)
 			assert_int(tucked_at_exit_cell).is_greater(5)
+			assert_int(released_before_exit).is_greater_equal(5)
 			assert_int(idle_past_exit_ticks).is_equal(0)
 			assert_float(last_scan_pos.distance_to(exit_world)).is_less(0.05)
 
