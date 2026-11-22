@@ -36,7 +36,8 @@ static func _replay(rng: RandomNumberGenerator, traits: Dictionary) -> Dictionar
 	var size: String = sizes[rng.randi_range(0, 1) % sizes.size()]
 	var booked_range: Array = OfferBoard.STARTER_SIZES[size]
 	var booked := rng.randi_range(booked_range[0], booked_range[1])
-	var fee := rng.randi_range(OfferBoard.FEE_MIN, OfferBoard.FEE_MAX)
+	var fees: Array = OfferBoard.fee_range_for(0, size)
+	var fee := rng.randi_range(fees[0], fees[1])
 	return {
 		"airline": airline,
 		"destination": destination,
@@ -112,16 +113,16 @@ func test_a_saved_offer_with_impossible_traits_or_fee_is_refused() -> void:
 		["traits", {"up": OfferTraits.SHOPPERS, "down": OfferTraits.RUSH_CROWD, "level": 1}],
 		["traits", {"up": "free_lunch", "down": OfferTraits.RUSH_CROWD, "level": 1}],
 		["traits", "plain"],
-		# A plain offer pays at most 90% of FEE_MAX, rounded.
-		["fee_per_passenger", OfferBoard.FEE_MAX, {}],
-		# Top fare +30% pays at least 130% of FEE_MIN, rounded.
+		# A plain offer pays at most 90% of SMALL_FEE_MAX, rounded.
+		["fee_per_passenger", OfferBoard.SMALL_FEE_MAX, {}],
+		# Top fare +30% pays at least 130% of SMALL_FEE_MIN, rounded.
 		[
 			"fee_per_passenger",
-			OfferBoard.FEE_MIN,
+			OfferBoard.SMALL_FEE_MIN,
 			{"up": "top_fare", "down": "rush_crowd", "level": 2}
 		],
-		# Full flight books from the top half of the small range only.
-		["booked_passengers", 8, {"up": "full_flight", "down": "rush_crowd", "level": 1}],
+		# Full flight books from the top half of the small range (6..8) only.
+		["booked_passengers", 5, {"up": "full_flight", "down": "rush_crowd", "level": 1}],
 	]
 	for case in cases:
 		var offers := TestOfferBoard.day_records(0, [600, 720, 840])
@@ -136,7 +137,7 @@ func test_a_saved_offer_with_impossible_traits_or_fee_is_refused() -> void:
 		)
 	var good := TestOfferBoard.day_records(0, [600, 720, 840])
 	good[0]["traits"] = {"up": "top_fare", "down": "rush_crowd", "level": 2}
-	good[0]["fee_per_passenger"] = OfferTraits.fee_of(OfferBoard.FEE_MAX, good[0]["traits"])
+	good[0]["fee_per_passenger"] = OfferTraits.fee_of(OfferBoard.SMALL_FEE_MAX, good[0]["traits"])
 	assert_bool(OfferBoard.new().from_snapshot(TestOfferBoard.save_of(good))).is_true()
 
 
@@ -144,11 +145,11 @@ func test_an_accepted_offer_makes_a_contract_with_its_frozen_traits() -> void:
 	var sim: FlightSim = auto_free(FlightSim.new())
 	var offers := TestOfferBoard.day_records(0, [600, 720, 840])
 	offers[0]["traits"] = {"up": "top_fare", "down": "rush_crowd", "level": 1}
-	offers[0]["fee_per_passenger"] = 28
+	offers[0]["fee_per_passenger"] = 58
 	var board := OfferBoard.new()
 	assert_bool(board.from_snapshot(TestOfferBoard.save_of(offers))).is_true()
 	assert_bool(board.accept("O0N1", sim)).is_true()
 	var contract := sim.contract_of("O0N1")
 	assert_dict(contract["traits"]).is_equal(offers[0]["traits"])
 	assert_bool((contract["traits"] as Dictionary).is_read_only()).is_true()
-	assert_int(contract["fee_per_passenger"]).is_equal(28)
+	assert_int(contract["fee_per_passenger"]).is_equal(58)

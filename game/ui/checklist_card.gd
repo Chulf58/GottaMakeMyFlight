@@ -81,8 +81,10 @@ func fit(room: float) -> void:
 	var text_w := FALLBACK_TEXT_W
 	if _rows.size.x > 0.0:
 		text_w = _rows.size.x - BOX - ROW_GAP
-	# The same room, width, rows and title as the last call give the same answer.
-	var key := [room, text_w, _revision, _title.visible, _title.text]
+	var reserve := LeftColumn.hint_reserve(get_tree() if is_inside_tree() else null)
+	var avail := maxf(0.0, room - reserve)
+	# The same available room, width, rows and title as the last call give the same answer.
+	var key := [avail, text_w, _revision, _title.visible, _title.text]
 	if key == _fit_key:
 		return
 	_fit_key = key
@@ -98,7 +100,7 @@ func fit(room: float) -> void:
 	for row in rows:
 		var needed := spent + _row_height(row, text_w) + (rows_sep if shown > 0 else 0.0)
 		var left_over := rows.size() - shown - 1
-		if needed + (more_h if left_over > 0 else 0.0) > room:
+		if needed + (more_h if left_over > 0 else 0.0) > avail:
 			break
 		spent = needed
 		shown += 1

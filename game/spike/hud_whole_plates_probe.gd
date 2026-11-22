@@ -346,7 +346,8 @@ func _open_with_flights() -> void:
 		terms["destination"] = f[2]
 		terms["airline"] = f[3]
 		terms["plane_size"] = "small"
-		terms["booked_passengers"] = 12
+		terms["booked_passengers"] = 6
+		terms["fee_per_passenger"] = 50
 		var ok := flights.accept_contract(terms)
 		print("PROBE accept %s=%s" % [f[0], ok])
 		if ok:

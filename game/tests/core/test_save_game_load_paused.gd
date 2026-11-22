@@ -72,10 +72,8 @@ func test_the_staff_hint_card_shows_once_after_loading_a_save_with_no_staff() ->
 	assert_bool(_save.load_from_file(_path)).is_true()
 	assert_bool(_panel.hint_card().visible).is_true()
 	assert_bool(_panel.hint_label().visible).is_true()
-	assert_str(_panel.hint_text()).contains("Check-in desk and an agent: hire an agent on Staff")
-	assert_str(_panel.hint_text()).contains(
-		"Security scanner and an officer: hire an officer on Staff"
-	)
+	assert_str(_panel.hint_text()).contains("Hire Check-in agent (Staff)")
+	assert_str(_panel.hint_text()).contains("Hire Security officer (Staff)")
 	assert_str(_panel.hint_label().text).is_equal(Checklist.TITLE_CLOSED)
 	assert_int(_main.find_children("StaffHintCard", "", true, false).size()).is_equal(1)
 	var lines := _panel.hint_text().split("\n")
@@ -122,6 +120,7 @@ func test_a_load_while_paused_at_2x_comes_back_paused_at_1x() -> void:
 func test_a_load_drops_every_hold_and_the_first_resume_runs_the_game() -> void:
 	var hud := _main.get_node("PassengerHud") as PassengerHud
 	hud.press_speed(3)
+	(_main.get_node("FlightSim") as FlightSim).open_airport()
 	(_main.get_node("OfferPanel") as OfferPanel).open()
 	var session := (_main.get_node("BuildMenu") as BuildMenu).build_session
 	session.set_building(true)

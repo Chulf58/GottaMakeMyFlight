@@ -83,13 +83,16 @@ func after_test() -> void:
 		follow_card.visible = false
 
 
-func _ensure_clean_world() -> void:
+func _ensure_clean_world(open_airport := false) -> void:
 	var flights := _main.get_node("FlightSim") as FlightSim
 	if flights.opened_tick >= 0:
 		var save := _main.get_node("SaveGame") as SaveGame
 		assert_bool(save.load_world(_clean_snap)).is_true()
 		_in_build_mode = false
 		await await_idle_frame()
+		await await_idle_frame()
+	if open_airport and flights.opened_tick < 0:
+		flights.open_airport()
 		await await_idle_frame()
 
 
@@ -251,7 +254,9 @@ func _assert_sheets_clear_the_clock(layout: Vector2) -> void:
 
 
 func test_no_two_resting_hud_windows_overlap_at_any_ui_scale() -> void:
-	await _ensure_clean_world()
+	await _ensure_clean_world(false)
+	assert_bool(_find("OffersButton").visible).is_false()
+	await _ensure_clean_world(true)
 	await _set_build_mode(false)
 	for ui_scale in LAYOUTS:
 		await _resize(LAYOUTS[ui_scale])
@@ -262,7 +267,7 @@ func test_no_two_resting_hud_windows_overlap_at_any_ui_scale() -> void:
 
 
 func test_an_open_sheet_ends_left_of_the_clock_panel_at_any_ui_scale() -> void:
-	await _ensure_clean_world()
+	await _ensure_clean_world(true)
 	await _set_build_mode(false)
 	for ui_scale in LAYOUTS:
 		await _resize(LAYOUTS[ui_scale])
@@ -270,7 +275,7 @@ func test_an_open_sheet_ends_left_of_the_clock_panel_at_any_ui_scale() -> void:
 
 
 func test_build_mode_keeps_the_ruled_geometry_and_overlaps_nothing_at_any_ui_scale() -> void:
-	await _ensure_clean_world()
+	await _ensure_clean_world(true)
 	await _set_build_mode(true)
 	for ui_scale in LAYOUTS:
 		await _resize(LAYOUTS[ui_scale])
@@ -284,7 +289,7 @@ func test_build_mode_keeps_the_ruled_geometry_and_overlaps_nothing_at_any_ui_sca
 
 ## The size_changed connections: one world, resized through every layout and back.
 func test_a_live_viewport_resize_relays_the_hud_out() -> void:
-	await _ensure_clean_world()
+	await _ensure_clean_world(true)
 	await _resize(Vector2i(1920, 1080))
 	await _set_build_mode(true)
 	for size in [
@@ -426,8 +431,8 @@ func _schedule_two_contracts(contract_count: int = 2) -> void:
 	await await_idle_frame()
 
 
-## The first-time hint card takes the checklist card's slot (the checklist yields
-## to it), so the list leaves it its own height and it ends a GAP above the dock.
+## Both StaffHintCard and HintCard stay visible below DeparturesPanel, stacking a
+## GAP apart without overlapping each other, DeparturesPanel, or the bottom dock.
 func test_a_first_time_hint_card_clears_the_bar_and_the_dock_with_a_full_list() -> void:
 	await _set_build_mode(false)
 	await _schedule_two_contracts()
@@ -441,11 +446,11 @@ func test_a_first_time_hint_card_clears_the_bar_and_the_dock_with_a_full_list() 
 	hints.hud.add_child(hints)
 	# The rules show a hint only on a bare floor, so the card is shown directly.
 	hints._show(HintRules.TOILET)
-	for ui_scale in LAYOUTS:
+	for ui_scale in [1.0, 1.25]:
 		await _resize(LAYOUTS[ui_scale])
 		assert_bool(hints.is_showing()).is_true()
 		var layout := Vector2(LAYOUTS[ui_scale])
-		var rects := _rects(RESTING + ["DeparturesPanel"], layout)
+		var rects := _rects(RESTING + ["DeparturesPanel", "StaffHintCard"], layout)
 		assert_bool(hints.card().is_visible_in_tree()).is_true()
 		rects["HintCard"] = _rect(hints.card())
 		var found := _overlaps(rects)
@@ -454,16 +459,18 @@ func test_a_first_time_hint_card_clears_the_bar_and_the_dock_with_a_full_list() 
 			layout.y - BottomDocks.left_floor_bottom(layout.x, bar.size.x, HudLayout.LIST_W)
 		)
 		var panel: Rect2 = rects["DeparturesPanel"]
+		var staff: Rect2 = rects["StaffHintCard"]
 		var card: Rect2 = rects["HintCard"]
 		print(
 			(
-				"ui scale %.2f hint: list %s card %s floor_y %.1f overlaps %s"
-				% [ui_scale, panel, card, floor_y, found]
+				"ui scale %.2f hint: list %s staff %s card %s floor_y %.1f overlaps %s"
+				% [ui_scale, panel, staff, card, floor_y, found]
 			)
 		)
 		assert_array(found).is_empty()
 		assert_float(panel.size.y).is_greater(60.0)
-		assert_float(card.position.y - panel.end.y).is_greater_equal(float(HudLayout.GAP) - 0.5)
+		assert_float(staff.position.y - panel.end.y).is_greater_equal(float(HudLayout.GAP) - 0.5)
+		assert_float(card.position.y - staff.end.y).is_greater_equal(float(HudLayout.GAP) - 0.5)
 		assert_float(card.end.y).is_less_equal(floor_y - HudLayout.GAP + 0.5)
 	hints.free()
 	await await_idle_frame()

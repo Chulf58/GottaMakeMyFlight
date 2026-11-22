@@ -14,7 +14,7 @@ const MINUTE := 553
 const FIRST := 1200
 const DOORS := 3800
 const PRUNED := 6300
-const BOOKED := 12
+const BOOKED := 6
 
 var _world: PassengerTestWorld
 

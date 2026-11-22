@@ -21,8 +21,8 @@ static func terms(id: String, minute: int, size := PlaneClasses.SMALL) -> Dictio
 		"destination": "Oslo",
 		"departure_minute": minute,
 		"plane_size": size,
-		"booked_passengers": 12 if size == PlaneClasses.SMALL else 40,
-		"fee_per_passenger": 25,
+		"booked_passengers": 6 if size == PlaneClasses.SMALL else 40,
+		"fee_per_passenger": 50 if size == PlaneClasses.SMALL else 25,
 	}
 
 

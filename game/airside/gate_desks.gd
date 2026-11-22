@@ -143,6 +143,9 @@ var _envelope_cells: Dictionary = {}
 ## change of owned land: the offer fit asks for it dozens of times a night.
 var _spare_stands: Dictionary = {}
 var _spare_land := ""
+var _last_route_ver := -1
+var _last_enclosure_ver := -1
+var _last_desk_ids: Array[int] = []
 
 
 func _ready() -> void:
@@ -190,6 +193,10 @@ func binding_of(gate: String) -> Dictionary:
 ## Keeps the links whose desk and exit stand, links the desks that have none,
 ## then says so (changed).
 func refresh() -> void:
+	if grid != null:
+		_last_route_ver = grid.route_version()
+		_last_enclosure_ver = grid.enclosure_version()
+		_last_desk_ids = desk_ids(grid)
 	var links := links_on(grid, bindings)
 	for link in links:
 		if link["gate"] == "":
@@ -978,6 +985,13 @@ func from_snapshot(data: Dictionary) -> bool:
 
 
 func _on_graph_changed(_cells: Array[Vector2i]) -> void:
+	if (
+		grid != null
+		and grid.route_version() == _last_route_ver
+		and grid.enclosure_version() == _last_enclosure_ver
+		and desk_ids(grid) == _last_desk_ids
+	):
+		return
 	refresh()
 
 

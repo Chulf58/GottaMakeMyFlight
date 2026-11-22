@@ -181,7 +181,7 @@ func test_a_gate_removal_checks_its_moves_on_the_spurs_it_leaves() -> void:
 	print("classes %s" % [_gates.classes])
 	var terms := SpurMoveKit.terms("C1")
 	terms["plane_size"] = PlaneClasses.SMALL
-	terms["booked_passengers"] = 12
+	terms["booked_passengers"] = 6
 	assert_bool(_flights.accept_contract(terms)).is_true()
 	assert_str(_flights.contract_of("C1")["gate"]).is_equal("A")
 	var removal := BuildEdit.remove_object(desk_a.object_id)

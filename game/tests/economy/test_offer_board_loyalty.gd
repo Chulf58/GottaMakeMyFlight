@@ -125,27 +125,26 @@ func test_an_older_save_version_is_refused() -> void:
 	assert_int(OfferBoard.SAVE_VERSION).is_greater(5)
 
 
-## Tier 0 fees run 15..35. Top fare +15% maps 15 -> 17, 16 -> 18, 17 -> 20, so
-## 19 is inside the min..max of the traited fees but no base fee rounds to it.
+## Small-offer fees run 30..70. Top fare +15% maps 36 -> 41, 37 -> 43, so
+## 42 is inside the min..max of the traited fees but no base fee rounds to it.
 func test_a_saved_fee_loads_only_when_a_base_fee_maps_to_it() -> void:
 	var top := {"up": "top_fare", "down": "rush_crowd", "level": 1}
 	var cases: Array = [
-		[top, false, 19, false],
-		[top, false, 18, true],
-		[top, false, 20, true],
-		# Plain terms pay 90%: 15 -> 14, 16 -> 14, 17 -> 15, ...; every fee 14..32 is
-		# reached, 33 is not (35 -> 32).
-		[{}, false, 33, false],
-		[{}, false, 32, true],
-		# Loyal on a neutral offer: 24 -> 26, 25 -> 28, so 27 is a gap; 15 -> 17.
-		[TestOfferBoard.NEUTRAL_TRAITS, true, 27, false],
-		[TestOfferBoard.NEUTRAL_TRAITS, true, 28, true],
-		[TestOfferBoard.NEUTRAL_TRAITS, true, 17, true],
-		[TestOfferBoard.NEUTRAL_TRAITS, true, 15, false],
-		[TestOfferBoard.NEUTRAL_TRAITS, false, 15, true],
-		# Top fare then Loyal: 15 -> 17 -> 19.
-		[top, true, 19, true],
-		[top, true, 18, false],
+		[top, false, 42, false],
+		[top, false, 41, true],
+		[top, false, 43, true],
+		# Plain terms pay 90%: 30 -> 27, ..., 70 -> 63; 64 is not reached.
+		[{}, false, 64, false],
+		[{}, false, 63, true],
+		# Loyal on a neutral offer: 34 -> 37, 35 -> 39, so 38 is a gap; 30 -> 33.
+		[TestOfferBoard.NEUTRAL_TRAITS, true, 38, false],
+		[TestOfferBoard.NEUTRAL_TRAITS, true, 39, true],
+		[TestOfferBoard.NEUTRAL_TRAITS, true, 33, true],
+		[TestOfferBoard.NEUTRAL_TRAITS, true, 30, false],
+		[TestOfferBoard.NEUTRAL_TRAITS, false, 30, true],
+		# Top fare then Loyal: 30 -> 35 -> 39.
+		[top, true, 39, true],
+		[top, true, 38, false],
 	]
 	for case in cases:
 		var offers := TestOfferBoard.day_records(6, [600, 720, 840])
@@ -181,7 +180,7 @@ func test_a_loyal_mark_the_count_cannot_explain_is_refused() -> void:
 		var offers := TestOfferBoard.day_records(case[1], [600, 720, 840])
 		for offer in offers:
 			offer["loyal"] = true
-			offer["fee_per_passenger"] = OfferTraits.loyal_fee_of(25, true)
+			offer["fee_per_passenger"] = OfferTraits.loyal_fee_of(50, true)
 		var data := TestOfferBoard.save_of(offers)
 		data["loyalty"] = case[0]
 		(
@@ -201,7 +200,7 @@ func test_a_missing_loyal_mark_the_count_requires_is_refused() -> void:
 	assert_bool(OfferBoard.new().from_snapshot(data)).is_false()
 	for offer in day_6:
 		offer["loyal"] = true
-		offer["fee_per_passenger"] = OfferTraits.loyal_fee_of(25, true)
+		offer["fee_per_passenger"] = OfferTraits.loyal_fee_of(50, true)
 	var day_5 := TestOfferBoard.day_records(5, [600, 720, 840])
 	for offer in day_5:
 		offer["status"] = OfferBoard.EXPIRED
@@ -209,7 +208,7 @@ func test_a_missing_loyal_mark_the_count_requires_is_refused() -> void:
 	data["loyalty"] = LOYAL_BY_DAY_5
 	assert_bool(OfferBoard.new().from_snapshot(data)).is_true()
 	day_5[0]["loyal"] = true
-	day_5[0]["fee_per_passenger"] = OfferTraits.loyal_fee_of(25, true)
+	day_5[0]["fee_per_passenger"] = OfferTraits.loyal_fee_of(50, true)
 	data = TestOfferBoard.save_of(day_5 + day_6)
 	data["loyalty"] = LOYAL_BY_DAY_5
 	assert_bool(OfferBoard.new().from_snapshot(data)).is_false()

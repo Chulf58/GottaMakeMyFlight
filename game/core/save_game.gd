@@ -119,7 +119,9 @@ signal loaded(ok: bool)
 ## version 25 saves are refused (no migration before a release).
 ## 27: airside ramp agents (staff save version 7) with bidirectional ramp-job
 ## SaveLinks validation; version 26 saves are refused (no migration).
-const SAVE_VERSION := 27
+## 28: small flights carry 4-8 passengers and small offers carry 30-70 base fees
+## (FlightSim v11, OfferBoard v7); version 27 saves are refused (no migration).
+const SAVE_VERSION := 28
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"

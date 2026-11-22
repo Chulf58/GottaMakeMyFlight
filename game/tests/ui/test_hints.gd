@@ -77,19 +77,32 @@ func test_opening_the_category_shows_its_hint_once_the_cause_has_held() -> void:
 	assert_bool(hints.card().visible).is_true()
 
 
-func test_a_cause_true_from_the_start_waits_for_a_category_or_inactivity() -> void:
+func test_a_startup_cause_true_from_the_start_fires_after_hold_without_waiting_idle() -> void:
 	var hints := _settled(_world(NO_DESK))
-	_run(hints, Hints.IDLE_S - 1.0, _world(NO_DESK))
+	_run(hints, HintRules.HOLD_S - 0.5, _world(NO_DESK))
 	assert_bool(hints.is_showing()).is_false()
-	_run(hints, 2.0, _world(NO_DESK))
+	_run(hints, 1.0, _world(NO_DESK))
 	assert_str(hints.shown_id()).is_equal(HintRules.PLACE_CHECKIN)
 
 
-func test_player_activity_restarts_the_inactivity_clock() -> void:
-	var hints := _settled(_world(NO_DESK))
-	_run(hints, Hints.IDLE_S - 5.0, _world(NO_DESK))
+func test_a_non_startup_cause_true_from_the_start_waits_for_a_category_or_inactivity() -> void:
+	var needy := _world({"stalls": 0, "max_toilet_need": ToiletSim.NEED_AT})
+	var hints := _settled(needy)
+	_run(hints, Hints.IDLE_S - 1.0, needy)
+	assert_bool(hints.is_showing()).is_false()
+	_run(hints, 2.0, needy)
+	assert_str(hints.shown_id()).is_equal(HintRules.TOILET)
+
+
+func test_player_activity_restarts_the_inactivity_clock_but_tab_clicks_do_not() -> void:
+	var needy := _world({"stalls": 0, "max_toilet_need": ToiletSim.NEED_AT})
+	var hints := _settled(needy)
+	# Opening an unrelated category repeatedly must not reset the inactivity clock.
+	_run(hints, Hints.IDLE_S - 5.0, needy, [0])
+	_run(hints, 2.0, needy, [1])
+	assert_float(hints._idle).is_greater(Hints.IDLE_S - 4.0)
 	hints.note_activity()
-	_run(hints, 10.0, _world(NO_DESK))
+	_run(hints, 10.0, needy)
 	assert_bool(hints.is_showing()).is_false()
 
 

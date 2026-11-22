@@ -15,9 +15,11 @@ const DAYS := 30
 ## RNG state (test_offer_board_traits checks the base draw against a replay),
 ## and again for save version 5 (the loyal mark, the loyalty count and the
 ## slice 2 traits in the trait draw), and for save version 6 (Odd hours offers
-## depart at 06:00 or 22:00, and trait seed version 3).
+## depart at 06:00 or 22:00, and trait seed version 3), and for save version 7
+## (small-class offers moved to 4..8 passengers and 30..70 fee_per_passenger,
+## ruling small-plane-passenger-count-and-fare-balance-4-8-passengers).
 const STATE_AFTER := 7055581944236607464
-const BEFORE_HASHES := [4188368192, 210904689, 395552472]
+const BEFORE_HASHES := [346436689, 3422562020, 832147442]
 
 
 func _rng() -> RandomNumberGenerator:

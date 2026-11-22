@@ -106,6 +106,7 @@ var _was_open := false
 var _open_cue := ""
 ## How many runs of open edges the outer wall has, read again on every edit.
 var _gap_runs := 0
+var _enclosure_token: Array = []
 ## The gap lines read at the last poll, while the airport is open.
 var _gaps: Array[Dictionary] = []
 var _since_poll := 0.0
@@ -122,6 +123,7 @@ func _ready() -> void:
 	_sync_ramp_column()
 	if menu != null:
 		menu.staff_toggled.connect(_on_staff_toggled)
+		menu.watch_staff_card(_card)
 		_card.visible = menu.staff_open
 	if staff == null:
 		push_error("StaffPanel: no StaffSim is set")
@@ -461,13 +463,17 @@ func _on_flight_state(id: String, new_state: int) -> void:
 
 
 func _on_graph_changed(_cells: Array[Vector2i]) -> void:
-	_scan_gaps()
+	var grid := staff.sim.grid
+	if [grid.grid_id(), grid.enclosure_version()] != _enclosure_token:
+		_scan_gaps()
 	refresh()
 
 
 func _scan_gaps() -> void:
 	gap_scans += 1
-	_gap_runs = EnclosureGaps.gap_runs(staff.sim.grid).size()
+	var grid := staff.sim.grid
+	_enclosure_token = [grid.grid_id(), grid.enclosure_version()]
+	_gap_runs = EnclosureGaps.gap_runs(grid).size()
 
 
 ## A room edit changes no walk graph, so graph_changed never follows it, and
@@ -477,7 +483,9 @@ func _scan_gaps() -> void:
 ## already reconciled its stations.
 func _on_edit_applied(_edit: BuildEdit, result: BuildResult) -> void:
 	if result.dirty_cells.is_empty():
-		_scan_gaps()
+		var grid := staff.sim.grid
+		if [grid.grid_id(), grid.enclosure_version()] != _enclosure_token:
+			_scan_gaps()
 		refresh()
 
 
