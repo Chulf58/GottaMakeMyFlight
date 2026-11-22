@@ -609,17 +609,14 @@ func test_demo_end_card_preempts_open_take_turn_dialogs_and_build_tray_on_rollov
 	clock.start_calendar()
 	var rollover := GameCalendar.day_start(DemoMode.MAX_DEMO_DAY, clock.epoch)
 
-	# Part 1: BuildSession + OfferPanel yielding tokens yield to HUD 3x (leaving
-	# OfferPanel's exclusive turn open) and SimClock.advance preempts it on rollover.
+	# Part 1: BuildMenu tray + OfferPanel leave the clock running at 3x
+	# (ruling ea4411e6) and SimClock.advance preempts both on rollover.
+	hud.press_speed(3)
 	menu.press_category(BuildMenu.category_of(BuildMode.Tool.FLOOR))
 	menu.build_session.sync()
-	assert_bool(clock.paused).is_true()
-	hud.press_speed(3)
-	menu.build_session.sync()
+	assert_bool(menu.is_tray_open()).is_true()
 	assert_bool(clock.paused).is_false()
 	offer_panel.open()
-	assert_bool(clock.paused).is_true()
-	hud.press_speed(3)
 	assert_bool(offer_panel.is_open()).is_true()
 	assert_bool(clock.paused).is_false()
 	clock.tick = rollover - 2

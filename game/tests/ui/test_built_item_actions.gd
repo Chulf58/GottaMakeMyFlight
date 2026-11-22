@@ -1,11 +1,12 @@
 class_name TestBuiltItemActions
 extends GdUnitTestSuite
 ## On the real main scene, the inspect window of a selected built item offers
-## Move and Delete (decision built-items-selectable-reuse-the-selection-window-
-## move-delete-close-open). Delete starts build mode and removes the item as one
-## refunded undo step; Move on a room, or on a piece in one, picks the room tool
-## and lifts the room; Move is disabled with a reason for a check-in desk and
-## for a lone piece.
+## Move and Delete. Under ruling
+## player-owns-clock-and-persistent-build-undo-no-auto-pause-on-trays-offers-planner-direct-delete,
+## Delete removes and refunds the item directly as one undo step without
+## entering build mode, opening a tray, or pausing the clock; Move on a room,
+## or on a piece in one, picks the room tool and lifts the room; Move is
+## disabled with a reason for a check-in desk and for a lone piece.
 
 const SEED := 6_113_312
 const ROOM_SIZE := Vector2i(3, 3)
@@ -147,6 +148,8 @@ func test_delete_removes_the_item_refunds_it_and_one_undo_restores_it() -> void:
 	assert_bool(actions.delete_disabled()).is_false()
 	assert_object(actions.session).is_same(_menu.build_session)
 	assert_bool(_menu.build_session.active).is_false()
+	var clock := _main.get_node("SimClock") as SimClock
+	clock.set_paused(false)
 	var result := actions.press_delete()
 	var paid_back := _mode.wallet().balance - before_balance
 	print(
@@ -166,8 +169,12 @@ func test_delete_removes_the_item_refunds_it_and_one_undo_restores_it() -> void:
 	assert_bool(_mode.grid.get_object(statue).is_empty()).is_true()
 	assert_int(saved_price).is_greater(0)
 	assert_int(paid_back).is_equal(PriceTable.refund_of(saved_price))
-	assert_bool(_menu.build_session.active).is_true()
+	assert_bool(_menu.build_session.active).is_false()
+	assert_bool(_menu.is_tray_open()).is_false()
+	assert_int(_mode.tool).is_equal(BuildMode.Tool.NONE)
+	assert_bool(clock.paused).is_false()
 	assert_int(_mode.undo_history().size()).is_equal(1)
+	clock.set_paused(true)
 	# The selection falls away with the item.
 	_hud.refresh()
 	assert_bool(_selection().is_selected()).is_false()

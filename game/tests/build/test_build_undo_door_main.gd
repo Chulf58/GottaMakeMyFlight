@@ -99,9 +99,9 @@ func test_escape_then_ctrl_z_undoes_the_door_until_a_tick_runs() -> void:
 	assert_bool(menu.is_tray_open()).is_false()
 
 
-## The other half of the same rule: once a tick has run after the Esc, the
-## history is gone and the Ctrl+Z has nothing to undo.
-func test_escape_then_a_tick_then_ctrl_z_has_nothing_to_undo() -> void:
+## Under ruling ea4411e6, undo persists across Esc and live sim ticks, so
+## Ctrl+Z after Esc and a tick still undoes the door and shows UNDONE.
+func test_escape_then_a_tick_then_ctrl_z_still_undoes() -> void:
 	var menu := _main.get_node("BuildMenu") as BuildMenu
 	_mode.clear_undo()
 	var cell := _place_exit_door()
@@ -111,10 +111,10 @@ func test_escape_then_a_tick_then_ctrl_z_has_nothing_to_undo() -> void:
 	_clock.set_paused(false)
 	_clock.advance(SimClock.STEP)
 	_clock.set_paused(true)
-	assert_int(_mode.undo_history().size()).is_equal(0)
+	assert_int(_mode.undo_history().size()).is_equal(1)
 	_mode._unhandled_input(_key(KEY_Z, true))
-	assert_str(_mode.status_text()).is_equal(UndoStack.NOTHING_TO_UNDO)
-	assert_int(_mode.grid.object_at(cell)).is_not_equal(0)
+	assert_str(_mode.status_text()).contains(UndoStack.UNDONE)
+	assert_int(_mode.grid.object_at(cell)).is_equal(0)
 
 
 func _key(code: Key, ctrl: bool) -> InputEventKey:

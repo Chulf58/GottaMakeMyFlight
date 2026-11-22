@@ -25,17 +25,10 @@ extends CanvasLayer
 ## ending its contract posts a second coral card that stays until clicked. The
 ## sheet itself shows only offers; a clash refusal stays on its offer's sheet.
 ##
-## While the sheet is open the game clock is paused (decision the-airline-offers-
-## panel-pauses-the-game-while-it-is-open) by a hold on the clock's shared
-## ClockHolds; closing it releases the hold, and the player's own speed, paused
-## included, applies again unless another hold (build mode, a dialog) still
-## pauses the game. The hold gives way to the player: resuming or picking
-## another speed while it is open runs the game under the sheet. The sheet is
-## one of the exclusive dialogs: opened while another has the turn (the unlock
-## dialog), it shows when that one closes, and it keeps the turn until it
-## closes even while the game runs under it, so a dialog that comes up meanwhile
-## holds the clock and shows once the sheet closes. The sheet closes on Esc and
-## when a build tool is picked.
+## Opening or closing the sheet leaves the sim clock alone (ruling
+## player-owns-clock-and-persistent-build-undo-no-auto-pause-on-trays-offers-planner-direct-delete).
+## It joins TopRow.SHEET_GROUP so opening another top-row sheet closes it, and
+## it closes on Esc, when a build tool is picked, and when a save loads.
 ##
 ## A card says "first flight tomorrow" when the sim would not fly today's slot
 ## (FlightTimetable.first_day), once the airport is open. Whether it would
@@ -82,7 +75,7 @@ const NEEDS_GATE_TEXT := "Needs another gate"
 
 @export var desk: OfferDesk
 @export var flights: FlightSim
-## Paused while the sheet is open; null leaves the clock alone.
+## Kept for scene/test wiring compatibility; OfferPanel leaves the clock alone.
 @export var clock: SimClock
 ## Its tool changes close the sheet; null leaves the sheet to Esc and the button.
 @export var build_mode: BuildMode
@@ -117,9 +110,6 @@ var _fit_taxis: Dictionary = {}
 var _earnings_labels: Dictionary = {}
 var _trait_rows: Dictionary = {}
 var _noted_tick := -1
-## The sheet's hold on the clock, from open() until it closes, the player
-## resumes or picks another speed, or a load drops it.
-var _hold := ClockHolds.NONE
 
 
 ## The airlines' warning once the rating is low: `low_days` day ends have
@@ -338,24 +328,12 @@ func sheet() -> Control:
 	return _sheet
 
 
-## Pauses the clock and shows the sheet, at once or, while another exclusive
-## dialog has the turn, when that one closes. Hidden/refused until the airport
-## opens.
+## Shows the sheet without touching the sim clock. Hidden/refused until the
+## airport opens.
 func open() -> void:
 	_sync_open_state()
-	if flights == null or flights.opened_tick < 0 or _sheet.visible or _is_waiting():
+	if flights == null or flights.opened_tick < 0 or _sheet.visible:
 		return
-	if clock == null:
-		_show()
-		return
-	# Another top-row sheet holds the exclusive turn until it closes, so it is
-	# closed first; the turn then comes at once.
-	TopRow.close_others(self)
-	_hold = clock.holds.take_turn(self, _show, true)
-
-
-## The sheet's turn: it shows.
-func _show() -> void:
 	TopRow.close_others(self)
 	_sheet.visible = true
 	_refresh_notes()
@@ -363,35 +341,13 @@ func _show() -> void:
 	_refresh_fits()
 
 
-## True while the sheet's hold waits for its turn.
-func _is_waiting() -> bool:
-	return not _sheet.visible and is_instance_valid(clock) and clock.holds.has(_hold)
-
-
-## Hides the sheet, or stops it waiting to show, and releases its hold.
+## Hides the sheet and clears transient refusals.
 func close() -> void:
-	if _is_waiting():
-		_release_clock()
-		return
 	if not _sheet.visible:
 		return
 	_sheet.visible = false
 	_clear_refusals()
 	_say_idle()
-	_release_clock()
-
-
-## A panel that leaves the tree while open must not leave the game paused (the
-## holds also end a hold whose owner leaves).
-func _exit_tree() -> void:
-	_release_clock()
-
-
-## Nothing is restored: with no hold left, the player's own pause applies.
-func _release_clock() -> void:
-	if is_instance_valid(clock):
-		clock.holds.release(_hold)
-	_hold = ClockHolds.NONE
 
 
 func toggle_button() -> Button:
@@ -518,14 +474,13 @@ func _build() -> void:
 
 
 func _on_toggle() -> void:
-	if _sheet.visible or _is_waiting():
+	if _sheet.visible:
 		close()
 	else:
 		open()
 
 
-## The loaded clock is the player's now, so the sheet closes. Installing the
-## clock dropped every hold already; the release in close() then ends nothing.
+## A load replaces the world the sheet was opened over, so it closes.
 func _on_loaded(ok: bool) -> void:
 	if not ok:
 		return

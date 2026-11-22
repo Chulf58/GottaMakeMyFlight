@@ -11,10 +11,9 @@ extends VBoxContainer
 ## never move (RoomMoveTool.never_moves_refusal()), for check-in desks, scanners
 ## and lane parts, for a single piece outside a room and for a car park.
 ##
-## Delete enters build mode, which pauses the game and keeps the undo history
-## (decision select-placed-items-design-click-order-gold-footprint-highli), then
-## removes the item or room through BuildMode.apply_edit(): paid back and one
-## undo step. A refused delete leaves build mode alone and says why.
+## Delete removes the item or room directly through BuildMode.apply_edit()
+## without entering build mode or pausing the clock: paid back and one undo
+## step (ruling ea4411e6). A refused delete leaves the item alone and says why.
 
 ## The English msgids of these texts: tests compare against them, and the card says
 ## tr() of the literal, because the POT extractor reads only literals.
@@ -31,8 +30,7 @@ const DELETE_REFUSED := "Can't delete: {reason}"
 
 ## The window's item card, which holds the selection, the build mode and the sim.
 var card: BuiltItemCard
-## Build mode as the player lives it; Delete starts it and refuses without one
-## (PassengerHud wires it from the BuildMenu).
+## Kept for PassengerHud wiring compatibility; Delete applies directly without build mode.
 var session: BuildSession
 
 var _move_button := Button.new()
@@ -118,19 +116,14 @@ func press_move() -> bool:
 	return false
 
 
-## Removes the selected item or room as one refunded undo step, inside build
-## mode. Returns the result, or null when nothing is selected that can be deleted
-## or no session is wired (an error).
+## Removes the selected item or room directly as one refunded undo step, without
+## entering build mode. Returns the result, or null when nothing is selected
+## that can be deleted.
 func press_delete() -> BuildResult:
 	if card == null or card.build_mode == null or not _delete.get("ok", false):
 		return null
-	if session == null:
-		push_error("BuiltItemActions: no build session wired, so Delete cannot start build mode")
-		return null
 	var mode := card.build_mode
 	var edit: BuildEdit = _delete["edit"]
-	if mode.check(edit).ok:
-		session.set_building(true)
 	var result := mode.apply_edit(edit)
 	if not result.ok:
 		_note = tr("Can't delete: {reason}").format({"reason": result.reason_text()})
