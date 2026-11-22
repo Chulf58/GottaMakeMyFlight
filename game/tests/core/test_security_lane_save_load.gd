@@ -31,8 +31,10 @@ func before() -> void:
 		SaveTestKit.step(_main)
 		var data := _save.snapshot()
 		_with_lane = JSON.parse_string(JSON.stringify(data, "", true, true))
+		var remove_edits: Array[BuildEdit] = []
 		for id in ids:
-			_grid.apply(BuildEdit.remove_object(id))
+			remove_edits.append(BuildEdit.remove_object(id))
+		_grid.apply_batch(remove_edits)
 		SaveTestKit.step(_main)
 
 
@@ -45,24 +47,46 @@ func after() -> void:
 ## and walling the floor in (the starter terminal itself has no room for a
 ## lane), and returns its
 ## object ids (arch first), or an empty array when none fits.
+func _scan_bounds() -> Rect2i:
+	var land: LandPlots = (_grid as SiteGrid).land if _grid is SiteGrid else null
+	if land == null or land.owned_plots().is_empty():
+		return Rect2i(Vector2i.ZERO, _grid.size)
+	var bounds := Rect2i()
+	for plot in land.owned_plots():
+		var rect := land.plot_cells(plot)
+		bounds = rect if not bounds.has_area() else bounds.merge(rect)
+	return bounds
+
+
+func _lane_room_cells(anchor: Vector2i) -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	for dy in range(-2, 3):
+		for dx in range(-1, 3):
+			cells.append(anchor + Vector2i(dx, dy))
+	return cells
+
+
 func _build_lane() -> Array[int]:
-	for y in _grid.size.y:
-		for x in _grid.size.x:
+	var bounds := _scan_bounds()
+	for y in range(bounds.position.y, bounds.end.y):
+		for x in range(bounds.position.x, bounds.end.x):
 			var anchor := Vector2i(x, y)
 			var lane := SecurityLanes.geometry(anchor, 0, SecurityLanes.RIGHT)
-			if not _floor_lane(SecurityLanes.lane_cells(lane)):
+			if not _floor_lane(_lane_room_cells(anchor)):
 				continue
+			# Walls close the lane's floor in before recognition, so routing sees indoor floor.
+			EnclosureKit.close_floor(_grid)
 			var ids := _place_lane(lane)
 			if ids.is_empty():
 				continue
 			var lanes := SecurityLaneBuilder.recognise(_grid)
 			if lanes.is_complete(ids[0]):
 				_arch_cell = anchor
-				# Walls close the lane's floor in, so passengers may use it.
-				EnclosureKit.close_floor(_grid)
 				return ids
+			var remove_edits: Array[BuildEdit] = []
 			for id in ids:
-				_grid.apply(BuildEdit.remove_object(id))
+				remove_edits.append(BuildEdit.remove_object(id))
+			_grid.apply_batch(remove_edits)
 	var none: Array[int] = []
 	return none
 
@@ -70,32 +94,42 @@ func _build_lane() -> Array[int]:
 ## Floors every bare cell of `cells` when none holds an object and the grid
 ## accepts floor on each bare one; false, changing nothing, otherwise.
 func _floor_lane(cells: Array[Vector2i]) -> bool:
+	var land: LandPlots = (_grid as SiteGrid).land if _grid is SiteGrid else null
 	var paint: Array[BuildEdit] = []
 	for cell in cells:
 		if not _grid.in_bounds(cell) or _grid.object_at(cell) != 0:
+			return false
+		if land != null and not land.owns_cell(cell):
 			return false
 		if _grid.floor_at(cell) == BuildGrid.FLOOR_NONE:
 			var edit := BuildEdit.paint_floor(cell, BuildGrid.FLOOR_TILE, 1)
 			if not _grid.validate(edit).ok:
 				return false
 			paint.append(edit)
-	for edit in paint:
-		assert_bool(_grid.apply(edit).ok).is_true()
+	if not paint.is_empty():
+		for result in _grid.apply_batch(paint):
+			assert_bool(result.ok).is_true()
 	return true
 
 
-## Places the arch and parts; on any refusal takes back what it placed.
+## Places the arch and parts in one batch; on any refusal takes back what it placed.
 func _place_lane(lane: Dictionary) -> Array[int]:
-	var ids: Array[int] = []
+	var edits: Array[BuildEdit] = []
 	for part in [SecurityLanes.ARCH] + SecurityLaneBuilder.PARTS:
 		var cell: Vector2i = lane["arch"] if part == SecurityLanes.ARCH else lane[part]
-		var result := _grid.apply(BuildEdit.place_object(part, cell, 0))
-		if not result.ok:
-			for id in ids:
-				_grid.apply(BuildEdit.remove_object(id))
+		edits.append(BuildEdit.place_object(part, cell, 0))
+	var ids: Array[int] = []
+	for result in _grid.apply_batch(edits):
+		if result.ok:
+			ids.append(result.object_id)
+		else:
+			if not ids.is_empty():
+				var remove_edits: Array[BuildEdit] = []
+				for id in ids:
+					remove_edits.append(BuildEdit.remove_object(id))
+				_grid.apply_batch(remove_edits)
 			ids.clear()
 			return ids
-		ids.append(result.object_id)
 	return ids
 
 

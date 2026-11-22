@@ -237,7 +237,8 @@ func _roller_turn_back(type: StringName, spent: int, reached: int) -> void:
 		_world.step()
 	assert_int(p.stage).is_equal(Passenger.Stage.SHOP_WALK)
 	var n := rows.size()
-	var held := reached / float(ActivityPoses.SHUFFLE_TICKS)
+	var raw := reached / float(ActivityPoses.SHUFFLE_TICKS)
+	var held := clampf((raw - 0.25) / 0.75, 0.0, 1.0) if type == &"lounge" else raw
 	var standing := 0
 	while standing < n and rows[standing].x == StageKinds.Pose.STANDING_UP:
 		standing += 1
@@ -249,7 +250,8 @@ func _roller_turn_back(type: StringName, spent: int, reached: int) -> void:
 			bad += " row %d share %.3f, held %.3f;" % [i, rows[i].y, held]
 		if i >= n - reached:
 			var back := n - 1 - i
-			var want := back / float(ActivityPoses.SHUFFLE_TICKS)
+			var step_back := back / float(ActivityPoses.SHUFFLE_TICKS)
+			var want := minf(held, step_back) if type == &"lounge" else step_back
 			if absf(rows[i].y - want) > 0.0001:
 				bad += " row %d share %.3f, step back wants %.3f;" % [i, rows[i].y, want]
 	assert_str(bad).override_failure_message("exit of %d rows:%s" % [n, bad]).is_empty()
@@ -310,7 +312,7 @@ func test_a_save_in_a_roller_visitors_turned_back_exit_keeps_its_step() -> void:
 	for i in 5:
 		_world.step()
 	var share := ActivityPoses.share(_world.sim, p)
-	assert_float(share).is_between(0.4, 0.6)
+	assert_float(share).is_equal_approx(2.0 / 9.0, 0.001)
 	var data: Dictionary = JSON.parse_string(ShopMoveKit.save_text(_world))
 	var record: Dictionary = data["passengers"]["shop"]["visits"][0]["relocation"]
 	assert_int(int(record["reached"])).is_equal(5)

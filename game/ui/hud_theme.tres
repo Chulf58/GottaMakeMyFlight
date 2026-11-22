@@ -348,12 +348,14 @@ base_font = ExtResource("1_4lnw6")
 variation_opentype = {
 2003265652: 800
 }
+spacing_top = -2
 
 [sub_resource type="FontVariation" id="FontVariation_m0d8d"]
 base_font = ExtResource("1_4lnw6")
 variation_opentype = {
 2003265652: 850
 }
+spacing_top = -2
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_eb7or"]
 content_margin_left = 10.0
@@ -455,6 +457,7 @@ base_font = ExtResource("1_4lnw6")
 variation_opentype = {
 2003265652: 700
 }
+spacing_top = -2
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_topcard"]
 content_margin_left = 8.0
