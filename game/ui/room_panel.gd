@@ -40,6 +40,12 @@ func _ready() -> void:
 	visible = false
 
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_TRANSLATION_CHANGED and is_node_ready():
+		if _build_mode != null and _room_id != 0:
+			show_room(_room_id)
+
+
 ## Follows `mode`'s focused room and its grid's edits.
 func watch(mode: BuildMode) -> void:
 	_build_mode = mode

@@ -83,6 +83,11 @@ func _ready() -> void:
 	_bind_session()
 
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_TRANSLATION_CHANGED and is_node_ready():
+		_dirty = true
+
+
 func _process(_delta: float) -> void:
 	_bind_session()
 	if _dirty:

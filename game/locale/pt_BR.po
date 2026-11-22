@@ -1,0 +1,335 @@
+# Curated T8 verification catalog for pt_BR.
+msgid ""
+msgstr ""
+"Project-Id-Version: Gotta Make My Flight\n"
+"Language: pt_BR\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+msgctxt "menu"
+msgid "Continue"
+msgstr "Continuar"
+
+msgctxt "menu"
+msgid "New Airport"
+msgstr "Novo aeroporto"
+
+msgctxt "menu"
+msgid "Load"
+msgstr "Carregar"
+
+msgctxt "menu"
+msgid "Wishlist"
+msgstr "Lista de desejos"
+
+msgid "Send Feedback"
+msgstr "Enviar feedback"
+
+msgctxt "menu"
+msgid "Quit"
+msgstr "Sair"
+
+msgctxt "menu"
+msgid "Audio"
+msgstr "Áudio"
+
+msgctxt "menu"
+msgid "Back"
+msgstr "Voltar"
+
+msgid "Language"
+msgstr "Idioma"
+
+msgid "Game menu"
+msgstr "Menu do jogo"
+
+msgid "Resume ({key})"
+msgstr "Retomar ({key})"
+
+msgctxt "menu"
+msgid "Save"
+msgstr "Salvar"
+
+msgid "Settings"
+msgstr "Configurações"
+
+msgid "Back"
+msgstr "Voltar"
+
+msgid "Audio"
+msgstr "Áudio"
+
+msgid "Mute audio"
+msgstr "Silenciar"
+
+msgid "Master"
+msgstr "Principal"
+
+msgid "Ambience"
+msgstr "Ambiente"
+
+msgid "SFX"
+msgstr "Efeitos"
+
+msgid "{percent}%"
+msgstr "{percent}%"
+
+msgid "Incidents"
+msgstr "Incidentes"
+
+msgid "Quit log"
+msgstr "Registro de saída"
+
+msgid "Open log folder"
+msgstr "Abrir pasta de logs"
+
+msgid "v{version}"
+msgstr "v{version}"
+
+msgid "Build mode"
+msgstr "Modo construção"
+
+msgctxt "narrow build mode sign"
+msgid "Build"
+msgstr "Construir"
+
+msgctxt "build menu"
+msgid "Building"
+msgstr "Edifício"
+
+msgctxt "build menu"
+msgid "Operations"
+msgstr "Operações"
+
+msgctxt "build menu"
+msgid "Facilities"
+msgstr "Instalações"
+
+msgctxt "build menu"
+msgid "Food & Drink"
+msgstr "Comida e bebida"
+
+msgctxt "build menu"
+msgid "Shops"
+msgstr "Lojas"
+
+msgctxt "build menu"
+msgid "Decor"
+msgstr "Decoração"
+
+msgctxt "build menu"
+msgid "Remove"
+msgstr "Remover"
+
+msgctxt "build menu"
+msgid "Templates"
+msgstr "Modelos"
+
+msgctxt "build menu"
+msgid "Staff"
+msgstr "Equipe"
+
+msgctxt "build menu"
+msgid "All"
+msgstr "Tudo"
+
+msgctxt "build menu"
+msgid "Rooms"
+msgstr "Salas"
+
+msgctxt "build menu"
+msgid "Check-in desk"
+msgstr "Balcão check-in"
+
+msgctxt "build menu"
+msgid "Gate desk"
+msgstr "Balcão de portão"
+
+msgctxt "build menu"
+msgid "Security"
+msgstr "Segurança"
+
+msgctxt "build menu"
+msgid "Bag room"
+msgstr "Sala de bagagem"
+
+msgctxt "build menu"
+msgid "Toilet"
+msgstr "Banheiro"
+
+msgctxt "price"
+msgid "Free"
+msgstr "Grátis"
+
+msgid "Locked"
+msgstr "Bloqueado"
+
+msgid "In the full game"
+msgstr "No jogo completo"
+
+msgid "Offers ({count})"
+msgstr "Ofertas ({count})"
+
+msgid "Runway"
+msgstr "Pista"
+
+msgid "Planner ({key})"
+msgstr "Agenda ({key})"
+
+msgid "Departures ({key})"
+msgstr "Partidas ({key})"
+
+msgid "Mood ({key})"
+msgstr "Humor ({key})"
+
+msgid "Hints ({key})"
+msgstr "Dicas ({key})"
+
+msgid "Reset hints"
+msgstr "Resetar dicas"
+
+msgid "No flights yet"
+msgstr "Sem voos ainda"
+
+msgctxt "clock"
+msgid "Day {day}  {time}"
+msgstr "Dia {day}  {time}"
+
+msgid "Alerts"
+msgstr "Alertas"
+
+msgid "Alerts ({count})"
+msgstr "Alertas ({count})"
+
+msgid "Alert history"
+msgstr "Histórico de alertas"
+
+msgid "Show alert cards"
+msgstr "Mostrar alertas"
+
+msgid "No alerts yet"
+msgstr "Sem alertas ainda"
+
+msgid "Today"
+msgstr "Hoje"
+
+msgid "Tomorrow"
+msgstr "Amanhã"
+
+msgid "No flights scheduled"
+msgstr "Nenhum voo agendado"
+
+msgid "Made {made}  Missed {missed}  In terminal {active}"
+msgstr "Embarcados {made}  Perdidos {missed}  No terminal {active}"
+
+msgid "To open the airport"
+msgstr "Para abrir o aeroporto"
+
+msgid "Your airport needs"
+msgstr "Seu aeroporto precisa"
+
+msgctxt "staff button"
+msgid "Hire · {wage}/day"
+msgstr "Contratar · {wage}/dia"
+
+msgctxt "staff button"
+msgid "Fire"
+msgstr "Demitir"
+
+msgid "Check-in agents"
+msgstr "Agentes check-in"
+
+msgid "Security officers"
+msgstr "Agentes segurança"
+
+msgid "Gate agents"
+msgstr "Agentes de portão"
+
+msgid "Shop staff"
+msgstr "Atendentes"
+
+msgid "Cleaners"
+msgstr "Zeladores"
+
+msgid "Ramp agents"
+msgstr "Agentes de pátio"
+
+msgid "{hired} hired, {duty} on duty"
+msgstr "{hired} contratados, {duty} em turno"
+
+msgid "{hired} hired, {duty} cleaning"
+msgstr "{hired} contratados, {duty} limpando"
+
+msgctxt "mood overlay mode"
+msgid "Mood"
+msgstr "Humor"
+
+msgctxt "mood overlay mode"
+msgid "Hunger"
+msgstr "Fome"
+
+msgctxt "mood overlay mode"
+msgid "Toilet"
+msgstr "Banheiro"
+
+msgctxt "mood overlay mode"
+msgid "Boredom"
+msgstr "Tédio"
+
+msgctxt "mood overlay mode"
+msgid "Late"
+msgstr "Atrasado"
+
+msgctxt "speed button"
+msgid "Pause ({key})"
+msgstr "Pausa ({key})"
+
+msgctxt "speed button"
+msgid "Speed {speed}x ({key})"
+msgstr "Velocidade {speed}x ({key})"
+
+msgctxt "gate caption"
+msgid "Gate {gate}"
+msgstr "Portão {gate}"
+
+msgctxt "gate name"
+msgid "Gate {gate}"
+msgstr "Portão {gate}"
+
+msgctxt "gate caption"
+msgid "up to small planes"
+msgstr "até aviões pequenos"
+
+msgctxt "gate caption"
+msgid "up to medium planes"
+msgstr "até aviões médios"
+
+msgctxt "gate caption"
+msgid "up to large planes"
+msgstr "até aviões grandes"
+
+msgctxt "gate caption"
+msgid "no room for a plane"
+msgstr "sem espaço para avião"
+
+msgctxt "gate caption"
+msgid "{minutes} min walk"
+msgstr "{minutes} min a pé"
+
+msgctxt "sign caption"
+msgid "Closed"
+msgstr "Fechado"
+
+msgctxt "room type"
+msgid "Bag room"
+msgstr "Sala de bagagem"
+
+msgctxt "room type"
+msgid "Toilet"
+msgstr "Banheiro"
+
+msgctxt "room status"
+msgid "Ready"
+msgstr "Pronto"

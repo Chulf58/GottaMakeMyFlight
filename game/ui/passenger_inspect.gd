@@ -113,6 +113,18 @@ func _ready() -> void:
 		menu.bar().minimum_size_changed.connect(fit)
 
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_TRANSLATION_CHANGED and is_node_ready():
+		_retranslate()
+
+
+func _retranslate() -> void:
+	_name.tooltip_text = tr("Follow this passenger")
+	for row in _rows:
+		row.tooltip_text = tr("Show where this happened")
+	refresh()
+
+
 ## Bottom-left, left of BuildMenu's centre column and above its Templates
 ## dock, growing upward via BottomDocks' clearance coordinator.
 func fit() -> void:

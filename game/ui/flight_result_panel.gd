@@ -19,6 +19,8 @@ const MAX_REASONS := 3
 const SHOW_SECONDS := 20.0
 
 var _label := Label.new()
+var _dismiss := Button.new()
+var _last_summary: Dictionary = {}
 
 
 func _init() -> void:
@@ -31,16 +33,22 @@ func _init() -> void:
 	add_child(column)
 	_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(_label)
-	var dismiss := Button.new()
-	dismiss.name = "DismissResult"
-	dismiss.text = tr("Dismiss")
-	dismiss.size_flags_horizontal = Control.SIZE_SHRINK_END
-	dismiss.focus_mode = Control.FOCUS_NONE
+	_dismiss.name = "DismissResult"
+	_dismiss.text = tr("Dismiss")
+	_dismiss.size_flags_horizontal = Control.SIZE_SHRINK_END
+	_dismiss.focus_mode = Control.FOCUS_NONE
 	# A normal action, so teal; yellow means needs-you (decision
 	# hud-look-warm-cozy-cream-cards-with-a-dark-outline-toon-pale).
-	dismiss.theme_type_variation = &"HudButtonTeal"
-	dismiss.pressed.connect(dismiss_result)
-	column.add_child(dismiss)
+	_dismiss.theme_type_variation = &"HudButtonTeal"
+	_dismiss.pressed.connect(dismiss_result)
+	column.add_child(_dismiss)
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_TRANSLATION_CHANGED and is_node_ready():
+		_dismiss.text = tr("Dismiss")
+		if not _last_summary.is_empty():
+			show_result(_last_summary)
 
 
 ## The theme's HudCardGreen look (the card in the green of HudButtonGreen, the
@@ -129,6 +137,7 @@ static func text_for(summary: Dictionary) -> String:
 
 
 func show_result(summary: Dictionary) -> void:
+	_last_summary = summary.duplicate()
 	theme_type_variation = variation_for(summary)
 	_label.text = text_for(summary)
 	visible = true

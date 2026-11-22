@@ -1,0 +1,335 @@
+# Curated T8 verification catalog for ko.
+msgid ""
+msgstr ""
+"Project-Id-Version: Gotta Make My Flight\n"
+"Language: ko\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+msgctxt "menu"
+msgid "Continue"
+msgstr "계속하기"
+
+msgctxt "menu"
+msgid "New Airport"
+msgstr "새 공항"
+
+msgctxt "menu"
+msgid "Load"
+msgstr "불러오기"
+
+msgctxt "menu"
+msgid "Wishlist"
+msgstr "찜하기"
+
+msgid "Send Feedback"
+msgstr "피드백 보내기"
+
+msgctxt "menu"
+msgid "Quit"
+msgstr "종료"
+
+msgctxt "menu"
+msgid "Audio"
+msgstr "오디오"
+
+msgctxt "menu"
+msgid "Back"
+msgstr "뒤로"
+
+msgid "Language"
+msgstr "언어"
+
+msgid "Game menu"
+msgstr "게임 메뉴"
+
+msgid "Resume ({key})"
+msgstr "계속 ({key})"
+
+msgctxt "menu"
+msgid "Save"
+msgstr "저장"
+
+msgid "Settings"
+msgstr "설정"
+
+msgid "Back"
+msgstr "뒤로"
+
+msgid "Audio"
+msgstr "오디오"
+
+msgid "Mute audio"
+msgstr "음소거"
+
+msgid "Master"
+msgstr "마스터"
+
+msgid "Ambience"
+msgstr "환경음"
+
+msgid "SFX"
+msgstr "효과음"
+
+msgid "{percent}%"
+msgstr "{percent}%"
+
+msgid "Incidents"
+msgstr "돌발 상황"
+
+msgid "Quit log"
+msgstr "종료 로그"
+
+msgid "Open log folder"
+msgstr "로그 폴더 열기"
+
+msgid "v{version}"
+msgstr "v{version}"
+
+msgid "Build mode"
+msgstr "건설 모드"
+
+msgctxt "narrow build mode sign"
+msgid "Build"
+msgstr "건설"
+
+msgctxt "build menu"
+msgid "Building"
+msgstr "건물"
+
+msgctxt "build menu"
+msgid "Operations"
+msgstr "운영"
+
+msgctxt "build menu"
+msgid "Facilities"
+msgstr "편의시설"
+
+msgctxt "build menu"
+msgid "Food & Drink"
+msgstr "식음료"
+
+msgctxt "build menu"
+msgid "Shops"
+msgstr "상점"
+
+msgctxt "build menu"
+msgid "Decor"
+msgstr "장식"
+
+msgctxt "build menu"
+msgid "Remove"
+msgstr "철거"
+
+msgctxt "build menu"
+msgid "Templates"
+msgstr "템플릿"
+
+msgctxt "build menu"
+msgid "Staff"
+msgstr "직원"
+
+msgctxt "build menu"
+msgid "All"
+msgstr "전체"
+
+msgctxt "build menu"
+msgid "Rooms"
+msgstr "방"
+
+msgctxt "build menu"
+msgid "Check-in desk"
+msgstr "체크인 데스크"
+
+msgctxt "build menu"
+msgid "Gate desk"
+msgstr "탑승구 데스크"
+
+msgctxt "build menu"
+msgid "Security"
+msgstr "보안 검색"
+
+msgctxt "build menu"
+msgid "Bag room"
+msgstr "수하물실"
+
+msgctxt "build menu"
+msgid "Toilet"
+msgstr "화장실"
+
+msgctxt "price"
+msgid "Free"
+msgstr "무료"
+
+msgid "Locked"
+msgstr "잠김"
+
+msgid "In the full game"
+msgstr "정식 버전 제공"
+
+msgid "Offers ({count})"
+msgstr "제안 ({count})"
+
+msgid "Runway"
+msgstr "활주로"
+
+msgid "Planner ({key})"
+msgstr "일정표 ({key})"
+
+msgid "Departures ({key})"
+msgstr "출발편 ({key})"
+
+msgid "Mood ({key})"
+msgstr "기분 ({key})"
+
+msgid "Hints ({key})"
+msgstr "힌트 ({key})"
+
+msgid "Reset hints"
+msgstr "힌트 초기화"
+
+msgid "No flights yet"
+msgstr "아직 항공편 없음"
+
+msgctxt "clock"
+msgid "Day {day}  {time}"
+msgstr "{day}일차  {time}"
+
+msgid "Alerts"
+msgstr "알림"
+
+msgid "Alerts ({count})"
+msgstr "알림 ({count})"
+
+msgid "Alert history"
+msgstr "알림 기록"
+
+msgid "Show alert cards"
+msgstr "알림 카드 표시"
+
+msgid "No alerts yet"
+msgstr "아직 알림 없음"
+
+msgid "Today"
+msgstr "오늘"
+
+msgid "Tomorrow"
+msgstr "내일"
+
+msgid "No flights scheduled"
+msgstr "예정된 항공편 없음"
+
+msgid "Made {made}  Missed {missed}  In terminal {active}"
+msgstr "탑승 {made}  놓침 {missed}  터미널 내 {active}"
+
+msgid "To open the airport"
+msgstr "공항을 열려면"
+
+msgid "Your airport needs"
+msgstr "공항에 필요한 항목"
+
+msgctxt "staff button"
+msgid "Hire · {wage}/day"
+msgstr "고용 · {wage}/일"
+
+msgctxt "staff button"
+msgid "Fire"
+msgstr "해고"
+
+msgid "Check-in agents"
+msgstr "체크인 직원"
+
+msgid "Security officers"
+msgstr "보안 요원"
+
+msgid "Gate agents"
+msgstr "탑승구 직원"
+
+msgid "Shop staff"
+msgstr "상점 직원"
+
+msgid "Cleaners"
+msgstr "미화원"
+
+msgid "Ramp agents"
+msgstr "지상조업 직원"
+
+msgid "{hired} hired, {duty} on duty"
+msgstr "고용 {hired}, 근무 {duty}"
+
+msgid "{hired} hired, {duty} cleaning"
+msgstr "고용 {hired}, 청소 {duty}"
+
+msgctxt "mood overlay mode"
+msgid "Mood"
+msgstr "기분"
+
+msgctxt "mood overlay mode"
+msgid "Hunger"
+msgstr "배고픔"
+
+msgctxt "mood overlay mode"
+msgid "Toilet"
+msgstr "화장실"
+
+msgctxt "mood overlay mode"
+msgid "Boredom"
+msgstr "지루함"
+
+msgctxt "mood overlay mode"
+msgid "Late"
+msgstr "지각"
+
+msgctxt "speed button"
+msgid "Pause ({key})"
+msgstr "일시정지 ({key})"
+
+msgctxt "speed button"
+msgid "Speed {speed}x ({key})"
+msgstr "배속 {speed}x ({key})"
+
+msgctxt "gate caption"
+msgid "Gate {gate}"
+msgstr "{gate}번 탑승구"
+
+msgctxt "gate name"
+msgid "Gate {gate}"
+msgstr "{gate}번 탑승구"
+
+msgctxt "gate caption"
+msgid "up to small planes"
+msgstr "소형기까지"
+
+msgctxt "gate caption"
+msgid "up to medium planes"
+msgstr "중형기까지"
+
+msgctxt "gate caption"
+msgid "up to large planes"
+msgstr "대형기까지"
+
+msgctxt "gate caption"
+msgid "no room for a plane"
+msgstr "주기 공간 없음"
+
+msgctxt "gate caption"
+msgid "{minutes} min walk"
+msgstr "도보 {minutes}분"
+
+msgctxt "sign caption"
+msgid "Closed"
+msgstr "폐쇄됨"
+
+msgctxt "room type"
+msgid "Bag room"
+msgstr "수하물실"
+
+msgctxt "room type"
+msgid "Toilet"
+msgstr "화장실"
+
+msgctxt "room status"
+msgid "Ready"
+msgstr "준비됨"

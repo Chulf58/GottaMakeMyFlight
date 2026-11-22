@@ -19,7 +19,11 @@ const FILL_TEAL_HOVER := Color(0.4, 0.744, 0.744, 1.0)
 var _audio: GAME_AUDIO
 var _dragging := false
 var _dirty_while_dragging := false
+var _heading: Label
 var _mute_switch: CheckButton
+var _master_label: Label
+var _ambience_label: Label
+var _sfx_label: Label
 var _master_slider: HSlider
 var _ambience_slider: HSlider
 var _sfx_slider: HSlider
@@ -34,11 +38,11 @@ func _init() -> void:
 	box.name = "Rows"
 	box.add_theme_constant_override("separation", 8)
 	add_child(box)
-	var heading := Label.new()
-	heading.name = "Title"
-	heading.text = tr("Audio")
-	heading.theme_type_variation = &"HudLarge"
-	box.add_child(heading)
+	_heading = Label.new()
+	_heading.name = "Title"
+	_heading.text = tr("Audio")
+	_heading.theme_type_variation = &"HudLarge"
+	box.add_child(_heading)
 	_mute_switch = CheckButton.new()
 	_mute_switch.name = "MuteAudio"
 	_mute_switch.text = tr("Mute audio")
@@ -48,12 +52,15 @@ func _init() -> void:
 	var master_parts := _add_slider_row(box, "Master", tr("Master"), _on_master_changed)
 	_master_slider = master_parts[0]
 	_master_value = master_parts[1]
+	_master_label = master_parts[2]
 	var ambience_parts := _add_slider_row(box, "Ambience", tr("Ambience"), _on_ambience_changed)
 	_ambience_slider = ambience_parts[0]
 	_ambience_value = ambience_parts[1]
+	_ambience_label = ambience_parts[2]
 	var sfx_parts := _add_slider_row(box, "SFX", tr("SFX"), _on_sfx_changed)
 	_sfx_slider = sfx_parts[0]
 	_sfx_value = sfx_parts[1]
+	_sfx_label = sfx_parts[2]
 
 
 func _ready() -> void:
@@ -61,6 +68,11 @@ func _ready() -> void:
 	if _audio != null and not _audio.changed.is_connected(sync_from_audio):
 		_audio.changed.connect(sync_from_audio)
 	sync_from_audio()
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_TRANSLATION_CHANGED and is_node_ready():
+		_retranslate()
 
 
 func _exit_tree() -> void:
@@ -133,7 +145,21 @@ func _add_slider_row(parent: Control, row_id: String, caption: String, handler: 
 	value_label.custom_minimum_size = Vector2(VALUE_WIDTH, 0.0)
 	value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	row.add_child(value_label)
-	return [slider, value_label]
+	return [slider, value_label, label]
+
+
+func _retranslate() -> void:
+	if _heading != null:
+		_heading.text = tr("Audio")
+	if _mute_switch != null:
+		_mute_switch.text = tr("Mute audio")
+	if _master_label != null:
+		_master_label.text = tr("Master")
+	if _ambience_label != null:
+		_ambience_label.text = tr("Ambience")
+	if _sfx_label != null:
+		_sfx_label.text = tr("SFX")
+	sync_from_audio()
 
 
 func _style_slider(slider: HSlider) -> void:

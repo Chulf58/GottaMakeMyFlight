@@ -193,6 +193,8 @@ var _raw_status := ""
 var _hold_is_grant := false
 ## A wages-paid message that waited for a rescue message's hold to end; "" if none.
 var _pending_wages := ""
+var _wages_hold_amount := 0
+var _wages_hold_owed := 0
 
 
 ## What a tool's card costs: the floor tile, one wall piece or the object.
@@ -290,6 +292,11 @@ func _ready() -> void:
 		save_game.loaded.connect(_on_loaded)
 	if day_ledger != null:
 		_money_slot.watch(day_ledger, settlement)
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_TRANSLATION_CHANGED and is_node_ready():
+		_retranslate()
 
 
 func _process(delta: float) -> void:
@@ -1064,6 +1071,9 @@ func _start_hold(message: String, is_grant: bool) -> void:
 		_held_status = _raw_status
 	_holding = true
 	_hold_is_grant = is_grant
+	if is_grant:
+		_wages_hold_amount = 0
+		_wages_hold_owed = 0
 	_status.text = message
 	# A held message is long on purpose (a rescue grant); it wraps and the card
 	# grows upward instead of cutting it short.
@@ -1079,13 +1089,19 @@ func _start_hold(message: String, is_grant: bool) -> void:
 func _on_wages_paid(amount: int, owed: int) -> void:
 	if amount <= 0:
 		return
-	var message := tr("Wages paid: {amount}").format({"amount": amount})
-	if owed > 0:
-		message = tr("Wages paid: {amount} ({owed} owed)").format({"amount": amount, "owed": owed})
+	_wages_hold_amount = amount
+	_wages_hold_owed = owed
+	var message := _wages_message(amount, owed)
 	if _holding and _hold_is_grant:
 		_pending_wages = message
 		return
 	_start_hold(message, false)
+
+
+func _wages_message(amount: int, owed: int) -> String:
+	if owed > 0:
+		return tr("Wages paid: {amount} ({owed} owed)").format({"amount": amount, "owed": owed})
+	return tr("Wages paid: {amount}").format({"amount": amount})
 
 
 ## A loaded world starts with a clean status line: the hold and the wages
@@ -1154,6 +1170,8 @@ func end_grant_hold() -> void:
 		_start_hold(waiting, false)
 		return
 	_pending_wages = ""
+	_wages_hold_amount = 0
+	_wages_hold_owed = 0
 	_holding = false
 	_show_status()
 
@@ -1196,3 +1214,66 @@ func stack_top() -> float:
 ## it grows up and out to both sides from there.
 static func anchor_bottom_centre(control: Control, bottom: float) -> void:
 	BuildMenuLayout.anchor_bottom_centre(control, bottom)
+
+
+func _retranslate() -> void:
+	templates_page.button.tooltip_text = tr("Templates", "build menu")
+	var cats := categories()
+	for i in cats.size():
+		if i < _category_buttons.size():
+			_category_buttons[i].tooltip_text = BuildMenuCatalog.shown(cats[i]["name"])
+	staff_button.tooltip_text = tr("Staff", "build menu")
+	for i in cats.size():
+		if i == remove_category():
+			continue
+		for tool: BuildMode.Tool in cats[i]["tools"]:
+			if not _cards.has(tool):
+				continue
+			var card_btn := _cards[tool] as ItemCardButton
+			var card_item := item(tool)
+			var shown_name := BuildMenuCatalog.shown(card_item[0])
+			card_btn.set_info(shown_name, ItemInfo.of(tool), BuildMenuCatalog.card_details(tool))
+			var name_label := card_btn.get_child(0).get_node_or_null("Name") as Label
+			if name_label != null:
+				name_label.text = shown_name
+			var badge_label := card_btn.get_node_or_null("RoomBadge/RoomBadgeLabel") as Label
+			if badge_label != null:
+				badge_label.text = tr("Room", "build menu")
+			var state: int = _card_states.get(tool, BuildMenuCatalog.CardState.OPEN)
+			var price_label := _price_labels[tool] as Label
+			if state == BuildMenuCatalog.CardState.TEASER:
+				price_label.text = tr("In the full game")
+			elif state == BuildMenuCatalog.CardState.LOCKED:
+				price_label.text = tr("Locked")
+			else:
+				var price := _card_price(tool)
+				price_label.text = (
+					tr("Free", "price") if _wallet == null or price == 0 else str(price)
+				)
+	_rotate_hint.text = RotateHint.text()
+	_retranslate_filters()
+	if _holding:
+		if not _hold_is_grant and _wages_hold_amount > 0:
+			_status.text = _wages_message(_wages_hold_amount, _wages_hold_owed)
+	elif build_mode != null:
+		_on_mode_status_changed(build_mode.status_text())
+	if _pending_wages != "" and _wages_hold_amount > 0:
+		_pending_wages = _wages_message(_wages_hold_amount, _wages_hold_owed)
+	_money_slot.refresh()
+	refresh_preview()
+	sync_tray_bounds()
+
+
+func _retranslate_filters() -> void:
+	if _filter_all_btn != null:
+		_filter_all_btn.text = tr("All", "build menu")
+	if _open >= 0 and _open < remove_category():
+		var entries := BuildMenuCatalog.subfilters(category_id(_open))
+		for pill in _filter_pill_pool:
+			if not pill.visible:
+				continue
+			var fid := str(pill.get_meta(&"filter_id", ""))
+			for entry: Dictionary in entries:
+				if entry["id"] == fid:
+					pill.text = BuildMenuCatalog.shown(entry["name"])
+					break

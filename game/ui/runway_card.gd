@@ -98,6 +98,24 @@ func _ready() -> void:
 	_refresh()
 
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_TRANSLATION_CHANGED and is_node_ready():
+		_retranslate()
+
+
+func _retranslate() -> void:
+	if _button != null:
+		_button.text = tr("Runway")
+	if _sheet != null:
+		var title := _sheet.find_child("RunwayTitle", true, false) as Label
+		if title != null:
+			title.text = tr("Runway")
+	if _upgrade != null:
+		_upgrade.text = tr("Upgrade runway")
+	if flights != null and finances != null:
+		_refresh()
+
+
 func _process(_delta: float) -> void:
 	if _sheet.visible and flights.tick - _noted_tick >= REFRESH_TICKS:
 		_refresh()

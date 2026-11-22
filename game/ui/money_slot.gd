@@ -50,6 +50,11 @@ func watch(day_ledger: DayLedger, with_settlement: Settlement) -> void:
 	refresh()
 
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_TRANSLATION_CHANGED and is_node_ready():
+		refresh()
+
+
 func refresh() -> void:
 	tooltip_text = card_text()
 	if ledger == null or not is_instance_valid(_card) or not _card.is_inside_tree():

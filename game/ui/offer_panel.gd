@@ -289,6 +289,21 @@ func _ready() -> void:
 	_refresh_warning()
 
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_TRANSLATION_CHANGED and is_node_ready():
+		_retranslate()
+
+
+func _retranslate() -> void:
+	if _sheet != null:
+		var title := _sheet.find_child("OfferTitle", true, false) as Label
+		if title != null:
+			title.text = tr("Today's offers")
+	if desk != null and flights != null:
+		_refresh()
+		_refresh_warning()
+
+
 func _process(_delta: float) -> void:
 	if not _sheet.visible:
 		return

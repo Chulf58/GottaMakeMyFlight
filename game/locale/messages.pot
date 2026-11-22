@@ -6248,3 +6248,36 @@ msgstr ""
 #: ui/alert_sources.gd
 msgid "Emergency tug called (-{fee}) · Hire a ramp agent on Staff"
 msgstr ""
+
+#: ui/language_picker.gd
+msgid "Language"
+msgstr ""
+
+#: ui/title_screen.gd
+msgctxt "menu"
+msgid "Audio"
+msgstr ""
+
+#: audio/audio_settings_card.gd
+msgid "Audio"
+msgstr ""
+
+#: audio/audio_settings_card.gd
+msgid "Mute audio"
+msgstr ""
+
+#: audio/audio_settings_card.gd
+msgid "Master"
+msgstr ""
+
+#: audio/audio_settings_card.gd
+msgid "Ambience"
+msgstr ""
+
+#: audio/audio_settings_card.gd
+msgid "SFX"
+msgstr ""
+
+#: audio/audio_settings_card.gd
+msgid "{percent}%"
+msgstr ""

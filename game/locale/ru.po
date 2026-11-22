@@ -1,0 +1,335 @@
+# Curated T8 verification catalog for ru.
+msgid ""
+msgstr ""
+"Project-Id-Version: Gotta Make My Flight\n"
+"Language: ru\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+
+msgctxt "menu"
+msgid "Continue"
+msgstr "Продолжить"
+
+msgctxt "menu"
+msgid "New Airport"
+msgstr "Новый аэропорт"
+
+msgctxt "menu"
+msgid "Load"
+msgstr "Загрузить"
+
+msgctxt "menu"
+msgid "Wishlist"
+msgstr "В желаемое"
+
+msgid "Send Feedback"
+msgstr "Отправить отзыв"
+
+msgctxt "menu"
+msgid "Quit"
+msgstr "Выход"
+
+msgctxt "menu"
+msgid "Audio"
+msgstr "Звук"
+
+msgctxt "menu"
+msgid "Back"
+msgstr "Назад"
+
+msgid "Language"
+msgstr "Язык"
+
+msgid "Game menu"
+msgstr "Меню игры"
+
+msgid "Resume ({key})"
+msgstr "Продолжить ({key})"
+
+msgctxt "menu"
+msgid "Save"
+msgstr "Сохранить"
+
+msgid "Settings"
+msgstr "Настройки"
+
+msgid "Back"
+msgstr "Назад"
+
+msgid "Audio"
+msgstr "Звук"
+
+msgid "Mute audio"
+msgstr "Без звука"
+
+msgid "Master"
+msgstr "Общая"
+
+msgid "Ambience"
+msgstr "Окружение"
+
+msgid "SFX"
+msgstr "Эффекты"
+
+msgid "{percent}%"
+msgstr "{percent}%"
+
+msgid "Incidents"
+msgstr "Происшествия"
+
+msgid "Quit log"
+msgstr "Журнал выхода"
+
+msgid "Open log folder"
+msgstr "Открыть папку"
+
+msgid "v{version}"
+msgstr "v{version}"
+
+msgid "Build mode"
+msgstr "Режим стройки"
+
+msgctxt "narrow build mode sign"
+msgid "Build"
+msgstr "Стройка"
+
+msgctxt "build menu"
+msgid "Building"
+msgstr "Здание"
+
+msgctxt "build menu"
+msgid "Operations"
+msgstr "Операции"
+
+msgctxt "build menu"
+msgid "Facilities"
+msgstr "Удобства"
+
+msgctxt "build menu"
+msgid "Food & Drink"
+msgstr "Еда и напитки"
+
+msgctxt "build menu"
+msgid "Shops"
+msgstr "Магазины"
+
+msgctxt "build menu"
+msgid "Decor"
+msgstr "Декор"
+
+msgctxt "build menu"
+msgid "Remove"
+msgstr "Удалить"
+
+msgctxt "build menu"
+msgid "Templates"
+msgstr "Шаблоны"
+
+msgctxt "build menu"
+msgid "Staff"
+msgstr "Персонал"
+
+msgctxt "build menu"
+msgid "All"
+msgstr "Все"
+
+msgctxt "build menu"
+msgid "Rooms"
+msgstr "Комнаты"
+
+msgctxt "build menu"
+msgid "Check-in desk"
+msgstr "Стойка регистр."
+
+msgctxt "build menu"
+msgid "Gate desk"
+msgstr "Стойка выхода"
+
+msgctxt "build menu"
+msgid "Security"
+msgstr "Досмотр"
+
+msgctxt "build menu"
+msgid "Bag room"
+msgstr "Багажное отд."
+
+msgctxt "build menu"
+msgid "Toilet"
+msgstr "Туалет"
+
+msgctxt "price"
+msgid "Free"
+msgstr "Бесплатно"
+
+msgid "Locked"
+msgstr "Закрыто"
+
+msgid "In the full game"
+msgstr "В полной версии"
+
+msgid "Offers ({count})"
+msgstr "Рейсы ({count})"
+
+msgid "Runway"
+msgstr "ВПП"
+
+msgid "Planner ({key})"
+msgstr "План ({key})"
+
+msgid "Departures ({key})"
+msgstr "Вылеты ({key})"
+
+msgid "Mood ({key})"
+msgstr "Настр. ({key})"
+
+msgid "Hints ({key})"
+msgstr "Подск. ({key})"
+
+msgid "Reset hints"
+msgstr "Сбросить подск."
+
+msgid "No flights yet"
+msgstr "Пока нет рейсов"
+
+msgctxt "clock"
+msgid "Day {day}  {time}"
+msgstr "День {day}  {time}"
+
+msgid "Alerts"
+msgstr "Уведомления"
+
+msgid "Alerts ({count})"
+msgstr "Уведомления ({count})"
+
+msgid "Alert history"
+msgstr "История уведомлений"
+
+msgid "Show alert cards"
+msgstr "Показывать карточки"
+
+msgid "No alerts yet"
+msgstr "Пока нет уведомлений"
+
+msgid "Today"
+msgstr "Сегодня"
+
+msgid "Tomorrow"
+msgstr "Завтра"
+
+msgid "No flights scheduled"
+msgstr "Рейсов не запланировано"
+
+msgid "Made {made}  Missed {missed}  In terminal {active}"
+msgstr "Успели {made}  Опоздали {missed}  В терминале {active}"
+
+msgid "To open the airport"
+msgstr "Чтобы открыть аэропорт"
+
+msgid "Your airport needs"
+msgstr "Аэропорту требуется"
+
+msgctxt "staff button"
+msgid "Hire · {wage}/day"
+msgstr "Нанять · {wage}/день"
+
+msgctxt "staff button"
+msgid "Fire"
+msgstr "Уволить"
+
+msgid "Check-in agents"
+msgstr "Сотр. регистрации"
+
+msgid "Security officers"
+msgstr "Сотр. досмотра"
+
+msgid "Gate agents"
+msgstr "Сотр. выходов"
+
+msgid "Shop staff"
+msgstr "Продавцы"
+
+msgid "Cleaners"
+msgstr "Уборщики"
+
+msgid "Ramp agents"
+msgstr "Перронная служба"
+
+msgid "{hired} hired, {duty} on duty"
+msgstr "Нанято {hired}, на смене {duty}"
+
+msgid "{hired} hired, {duty} cleaning"
+msgstr "Нанято {hired}, убирают {duty}"
+
+msgctxt "mood overlay mode"
+msgid "Mood"
+msgstr "Настроение"
+
+msgctxt "mood overlay mode"
+msgid "Hunger"
+msgstr "Голод"
+
+msgctxt "mood overlay mode"
+msgid "Toilet"
+msgstr "Туалет"
+
+msgctxt "mood overlay mode"
+msgid "Boredom"
+msgstr "Скука"
+
+msgctxt "mood overlay mode"
+msgid "Late"
+msgstr "Опаздывают"
+
+msgctxt "speed button"
+msgid "Pause ({key})"
+msgstr "Пауза ({key})"
+
+msgctxt "speed button"
+msgid "Speed {speed}x ({key})"
+msgstr "Скорость {speed}x ({key})"
+
+msgctxt "gate caption"
+msgid "Gate {gate}"
+msgstr "Выход {gate}"
+
+msgctxt "gate name"
+msgid "Gate {gate}"
+msgstr "Выход {gate}"
+
+msgctxt "gate caption"
+msgid "up to small planes"
+msgstr "до малых судов"
+
+msgctxt "gate caption"
+msgid "up to medium planes"
+msgstr "до средних судов"
+
+msgctxt "gate caption"
+msgid "up to large planes"
+msgstr "до крупных судов"
+
+msgctxt "gate caption"
+msgid "no room for a plane"
+msgstr "нет места для самолёта"
+
+msgctxt "gate caption"
+msgid "{minutes} min walk"
+msgstr "{minutes} мин пешком"
+
+msgctxt "sign caption"
+msgid "Closed"
+msgstr "Закрыто"
+
+msgctxt "room type"
+msgid "Bag room"
+msgstr "Багажное отд."
+
+msgctxt "room type"
+msgid "Toilet"
+msgstr "Туалет"
+
+msgctxt "room status"
+msgid "Ready"
+msgstr "Готово"

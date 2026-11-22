@@ -70,6 +70,12 @@ func _init() -> void:
 	add_child(_reason)
 
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_TRANSLATION_CHANGED and is_node_ready():
+		_stale = true
+		refresh()
+
+
 ## Shows the buttons for the selected item, or hides them with none.
 func refresh() -> void:
 	if card == null or not card.visible or card.build_mode == null or card.selection == null:

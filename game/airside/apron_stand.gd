@@ -143,6 +143,23 @@ func _ready() -> void:
 	_apply_live()
 
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_TRANSLATION_CHANGED and is_node_ready():
+		_retranslate()
+
+
+func _retranslate() -> void:
+	if grid == null:
+		return
+	refresh()
+	if gates != null:
+		_show_gate_labels()
+	elif _label != null:
+		var text := status_text()
+		_label.text = text
+		_label.visible = text != ""
+
+
 ## One more guarded-area mesh: two for the one stand, two per busy gate.
 func _add_area() -> void:
 	var area := MeshInstance3D.new()

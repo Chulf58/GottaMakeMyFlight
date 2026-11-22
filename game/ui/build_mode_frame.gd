@@ -45,6 +45,14 @@ func _init() -> void:
 	add_child(_sign)
 
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_TRANSLATION_CHANGED and is_node_ready():
+		if visible:
+			_fit()
+		else:
+			_sign_text.text = tr("Build mode")
+
+
 func set_building(on: bool) -> void:
 	visible = on
 	if on:

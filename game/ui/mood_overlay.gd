@@ -112,6 +112,18 @@ func _ready() -> void:
 	_try_activate()
 
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_TRANSLATION_CHANGED and is_node_ready():
+		_retranslate()
+
+
+func _retranslate() -> void:
+	_toggle.text = tr("Mood ({key})").format({"key": HOTKEY})
+	_legend.text = _legend_text(_mode)
+	for i in _mode_buttons.size():
+		_mode_buttons[i].text = _mode_caption(i)
+
+
 func _process(_delta: float) -> void:
 	_place_legend()
 	if not _active:

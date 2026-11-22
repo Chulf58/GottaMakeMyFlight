@@ -420,6 +420,13 @@ func _ready() -> void:
 		hover.register_provider(self)
 
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_TRANSLATION_CHANGED and is_node_ready():
+		_caption_sizes.clear()
+		rebuild()
+		refresh_walk()
+
+
 ## The end discs shown, one per gate.
 func ends() -> Array[MeshInstance3D]:
 	var out: Array[MeshInstance3D] = []

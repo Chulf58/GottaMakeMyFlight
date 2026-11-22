@@ -46,6 +46,11 @@ func attach(menu: BuildMenu) -> void:
 	_rebuild()
 
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_TRANSLATION_CHANGED and is_node_ready():
+		_retranslate()
+
+
 ## Shows or hides the page and marks its bar button.
 func sync(open: bool) -> void:
 	visible = open
@@ -286,3 +291,20 @@ func _mark_cards() -> void:
 	_save_card.set_pressed_no_signal(_paste.capturing)
 	for i in _cards.size():
 		_cards[i].set_pressed_no_signal(_paste.armed == i)
+
+
+func _retranslate() -> void:
+	if _save_card != null:
+		_save_card.set_info(
+			tr("Save room"),
+			[tr("Click a furnished room on the grid to save it as a reusable template.")],
+			[[tr("Click", "card hint"), &"HudHint"]]
+		)
+		var name_label := _save_card.get_child(0).get_node_or_null("Name") as Label
+		if name_label != null:
+			name_label.text = tr("Save room")
+		var sub_label := _save_card.get_child(0).get_node_or_null("SubLabel") as Label
+		if sub_label != null:
+			sub_label.text = tr("Pick a room")
+	refresh_locks()
+	_sync_width()

@@ -272,6 +272,23 @@ func _ready() -> void:
 	refresh()
 
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_TRANSLATION_CHANGED and is_node_ready():
+		_retranslate()
+
+
+func _retranslate() -> void:
+	var values := [0, 1, 2, 3]
+	for i in mini(_speed_buttons.size(), values.size()):
+		_dress_speed_button(_speed_buttons[i], values[i])
+	if _quiet_chip.get_child_count() > 0:
+		var quiet_label := _quiet_chip.get_child(0) as Label
+		if quiet_label != null:
+			quiet_label.text = tr("Quiet night: fast-forwarding")
+	if clock != null and sim != null:
+		refresh()
+
+
 func _process(_delta: float) -> void:
 	refresh()
 	if _reveal_frames > 0:
