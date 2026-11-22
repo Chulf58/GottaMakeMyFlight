@@ -37,6 +37,13 @@ var board := OfferBoard.new()
 
 var _day := -1
 var _bound: SimClock
+var _bound_gate: AirportGate
+var _was_open := false
+var _drawing := false
+var _refilling := false
+var _has_fitting_open := false
+var _next_stale_tick := -1
+var _no_slots_day := -1
 
 
 func _ready() -> void:
@@ -63,9 +70,14 @@ func bind_clock(sim_clock: SimClock) -> void:
 	_bound = sim_clock
 	clock = sim_clock
 	_day = GameCalendar.day_of(clock.tick, clock.epoch)
-	if flights != null and not flights.state_changed.is_connected(on_flight_state):
-		flights.state_changed.connect(on_flight_state)
+	_connect_flights()
+	if not board.changed.is_connected(_on_board_changed):
+		board.changed.connect(_on_board_changed)
+	_was_open = flights != null and flights.opened_tick >= 0
+	_drawing = true
 	_draw(_day)
+	_drawing = false
+	_refresh_refill_watch()
 	clock.ticked.connect(on_tick)
 
 
@@ -86,14 +98,28 @@ func on_flight_state(flight_id: String, state: int) -> void:
 ## day's offers, so they are fitted to the timetable as midnight leaves it
 ## (decision airline-offers-2-a-day-fit-the-free-gate-slots-1-needs-more,
 ## point 4). Ending a contract draws nothing from the RNG, so the order does
-## not change the draws.
+## not change the draws. On the tick the airport opens, Day-1 offers are fitted
+## behind the starter contract; during a day, once open fitting offers pass
+## their issue lead, a mid-day refill is attempted.
 func on_tick(tick: int) -> void:
+	if flights != null and flights.gate != null:
+		_connect_gate(flights.gate)
+	if not _was_open and flights != null and flights.opened_tick >= 0:
+		_on_airport_opened()
 	var day := GameCalendar.day_of(tick, clock.epoch)
-	if day == _day:
+	if day != _day:
+		_day = day
+		_no_slots_day = -1
+		_end_contract_if_due()
+		_drawing = true
+		_draw(day)
+		_drawing = false
+		_refresh_refill_watch()
 		return
-	_day = day
-	_end_contract_if_due()
-	_draw(day)
+	if _has_fitting_open and _next_stale_tick >= 0 and tick >= _next_stale_tick:
+		_refresh_refill_watch()
+		if not _has_fitting_open:
+			_try_refill()
 
 
 ## When the rating's low days have run out, the oldest contract still running
@@ -114,16 +140,160 @@ func _end_contract_if_due() -> void:
 
 
 ## Draws `day`'s offers for the biggest plane class the runway takes, fitted to
-## the flights' timetable when the desk has flights, or pushes an error and
+## the flights' timetable once the airport is open, or pushes an error and
 ## draws nothing when the desk has no runway to ask.
 func _draw(day: int) -> void:
-	var source := runway
-	if source == null and flights != null:
-		source = flights.runway
+	var source := _runway_source()
 	if source == null:
 		push_error("OfferDesk: no runway set, so no offers are drawn")
 		return
-	board.ensure_day(day, clock.rng, _tier(), source.size, flights, live_needs())
+	var fit_sim := flights if flights != null and flights.opened_tick >= 0 else null
+	var min_minute := _min_minute(day) if fit_sim != null else -1
+	board.ensure_day(day, clock.rng, _tier(), source.size, fit_sim, live_needs(), min_minute)
+
+
+func _connect_flights() -> void:
+	if flights == null:
+		return
+	if not flights.state_changed.is_connected(on_flight_state):
+		flights.state_changed.connect(on_flight_state)
+	if not flights.snapshot_loaded.is_connected(_on_snapshot_loaded):
+		flights.snapshot_loaded.connect(_on_snapshot_loaded)
+	if not flights.contract_ended.is_connected(_on_contract_ended_for_slots):
+		flights.contract_ended.connect(_on_contract_ended_for_slots)
+	if not flights.planning_changed.is_connected(_on_planning_changed):
+		flights.planning_changed.connect(_on_planning_changed)
+	_connect_gate(flights.gate)
+
+
+func _connect_gate(gate: AirportGate) -> void:
+	if gate == null or gate == _bound_gate:
+		return
+	if is_instance_valid(_bound_gate) and _bound_gate.opened.is_connected(_on_airport_opened):
+		_bound_gate.opened.disconnect(_on_airport_opened)
+	_bound_gate = gate
+	if not gate.opened.is_connected(_on_airport_opened):
+		gate.opened.connect(_on_airport_opened)
+
+
+func _on_airport_opened(_opened_tick := -1) -> void:
+	if _was_open or clock == null or flights == null or flights.opened_tick < 0:
+		return
+	_was_open = true
+	var day := GameCalendar.day_of(clock.tick, clock.epoch)
+	_day = day
+	_no_slots_day = -1
+	_drawing = true
+	if board.day_offer_count(day) > 0:
+		board.refit_day(day, flights, _min_minute(day))
+	else:
+		_draw(day)
+	_drawing = false
+	_refresh_refill_watch()
+
+
+func _on_snapshot_loaded() -> void:
+	_was_open = flights != null and flights.opened_tick >= 0
+	_no_slots_day = -1
+	if clock != null:
+		_day = GameCalendar.day_of(clock.tick, clock.epoch)
+	_refresh_refill_watch()
+
+
+func _on_board_changed() -> void:
+	if board.is_loading():
+		_refresh_refill_watch()
+		return
+	if not _can_refill():
+		return
+	_refresh_refill_watch()
+	if not _has_fitting_open:
+		_try_refill()
+
+
+func _on_contract_ended_for_slots(_contract_id: String) -> void:
+	_on_planning_changed()
+
+
+func _on_planning_changed() -> void:
+	_no_slots_day = -1
+	if not _can_refill():
+		return
+	_refresh_refill_watch()
+	if not _has_fitting_open:
+		_try_refill()
+
+
+func _can_refill() -> bool:
+	return (
+		not _drawing
+		and not _refilling
+		and clock != null
+		and flights != null
+		and flights.opened_tick >= 0
+		and _runway_source() != null
+	)
+
+
+func _refresh_refill_watch() -> void:
+	_has_fitting_open = false
+	_next_stale_tick = -1
+	if clock == null or flights == null or flights.opened_tick < 0:
+		return
+	var min_minute := _min_minute(_day)
+	for offer in board.open_offers():
+		if offer["day"] != _day:
+			continue
+		var minute := int(offer["departure_minute"])
+		if minute < min_minute:
+			continue
+		if FlightFit.fits(flights, OfferBoard.terms_of(offer)):
+			_has_fitting_open = true
+			var stale_tick := (
+				GameCalendar.tick_at(_day, minute, clock.epoch) - FlightTimetable.issue_lead() + 1
+			)
+			_next_stale_tick = (
+				stale_tick if _next_stale_tick < 0 else mini(_next_stale_tick, stale_tick)
+			)
+
+
+func _try_refill() -> void:
+	if not _can_refill() or _no_slots_day == _day:
+		return
+	if board.day_offer_count(_day) == 0:
+		return
+	@warning_ignore("integer_division")
+	var refills := maxi(0, board.day_offer_count(_day) / OfferBoard.OFFERS_PER_DAY - 1)
+	if refills >= OfferBoard.MAX_REFILLS_PER_DAY:
+		return
+	var source := _runway_source()
+	var tier := _tier()
+	var min_minute := _min_minute(_day)
+	if not OfferBoard.has_fitting_slot(flights, tier, source.size, min_minute):
+		_no_slots_day = _day
+		return
+	_refilling = true
+	board.refill_day(_day, clock.rng.seed, tier, source.size, flights, live_needs(), min_minute)
+	_refilling = false
+	_refresh_refill_watch()
+
+
+func _min_minute(day: int) -> int:
+	if clock == null:
+		return -1
+	var min_tick := clock.tick + FlightTimetable.issue_lead()
+	var since_day := min_tick - GameCalendar.day_start(day, clock.epoch)
+	if since_day <= 0:
+		return 0
+	return -GameCalendar.floor_div(-since_day, GameCalendar.TICKS_PER_MINUTE)
+
+
+func _runway_source() -> Runway:
+	if runway != null:
+		return runway
+	if flights != null:
+		return flights.runway
+	return null
 
 
 ## Which trait needs (OfferTraits.NEEDS_BAGS, NEEDS_SHOPS) the airport meets

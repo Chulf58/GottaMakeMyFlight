@@ -87,6 +87,12 @@ const OFFER_KEYS := [
 ## for-a-timetable-gap-passengers-per-plane-class); FlightContract.problem
 ## refuses a count outside the class's range.
 const OFFERS_PER_DAY := 3
+## Mid-day refills on a day (ruling day-1-pacing-fit-day-1-offers-into-same-day-
+## afternoon-evenin): at most MAX_REFILLS_PER_DAY batches of OFFERS_PER_DAY
+## follow the day's initial draw.
+const MAX_REFILLS_PER_DAY := 4
+const MAX_DAY_OFFERS := OFFERS_PER_DAY * (1 + MAX_REFILLS_PER_DAY)
+const REFILL_SEED_VERSION := 1
 const AIRLINES := ["Gotta Air", "Nordic Wing", "Blue Fjord", "Sunhop"]
 const DESTINATIONS := ["Oslo", "Berlin", "Lisbon", "Rome", "Dublin", "Athens"]
 ## Plane size -> [fewest, most] booked passengers.
@@ -130,6 +136,9 @@ const FIT_OFFERS := 2
 var _offers: Array[Dictionary] = []
 ## Airline -> {"days": flown days counted (1..LOYAL_DAYS), "last_day": the last}.
 var _loyalty: Dictionary = {}
+## True while from_snapshot() emits `changed`, so listeners do not treat a load
+## as a player action that triggers a refill.
+var _loading := false
 
 
 ## The [lowest, highest] base fee per passenger drawn for `plane_size` at `tier`.
@@ -209,17 +218,11 @@ func ensure_day(
 	tier := 0,
 	runway_class := PlaneClasses.LARGE,
 	flights: FlightSim = null,
-	live := {}
+	live := {},
+	min_minute := -1
 ) -> Array[String]:
 	var ids: Array[String] = []
-	if day < 0 or day > FlightContract.MAX_DAY:
-		push_error("OfferBoard: day %d is outside 0..%d" % [day, FlightContract.MAX_DAY])
-		return ids
-	if tier < 0 or tier > MAX_TIER:
-		push_error("OfferBoard: tier %d is outside 0..%d" % [tier, MAX_TIER])
-		return ids
-	if not PlaneClasses.is_plane_class(runway_class):
-		push_error("OfferBoard: runway class '%s' is not a plane class" % runway_class)
+	if not _draw_args_valid(day, tier, runway_class):
 		return ids
 	var expired := _expire_before(day)
 	var drawn := not _has_day(day)
@@ -231,12 +234,123 @@ func ensure_day(
 			_give_traits(offer, traits[number - 1], is_loyal(offer["airline"]))
 			fresh.append(offer)
 		if flights != null:
-			_fit(fresh, flights)
+			_fit(fresh, flights, min_minute)
 		for offer in fresh:
 			_offers.append(offer)
 			ids.append(offer["id"])
 	if expired or drawn:
 		changed.emit()
+	return ids
+
+
+## How many offers have been drawn for `day` so far (initial plus refills).
+func day_offer_count(day: int) -> int:
+	var count := 0
+	for offer in _offers:
+		if offer["day"] == day:
+			count += 1
+	return count
+
+
+## Re-fits the still-open offers of `day` against `flights` (used when the
+## airport opens so Day-1 offers fit behind the starter contract at slots >=
+## `min_minute`). Touches no RNG; returns true and emits `changed` when any
+## open offer's departure moved.
+func refit_day(day: int, flights: FlightSim, min_minute := -1) -> bool:
+	if flights == null:
+		return false
+	var open: Array[Dictionary] = []
+	var before: Array[int] = []
+	for offer in _offers:
+		if offer["day"] == day and offer["status"] == OPEN:
+			open.append(offer)
+			before.append(int(offer["departure_minute"]))
+	if open.is_empty():
+		return false
+	_fit(open, flights, min_minute)
+	var moved := false
+	for i in open.size():
+		if int(open[i]["departure_minute"]) != before[i]:
+			moved = true
+			break
+	if moved:
+		changed.emit()
+	return moved
+
+
+## True when `flights` has at least one plain departure slot at or after
+## `min_minute` for any plane size drawable at `tier` on `runway_class`.
+static func has_fitting_slot(
+	flights: FlightSim, tier: int, runway_class := PlaneClasses.LARGE, min_minute := -1
+) -> bool:
+	if not _draw_args_valid(0, tier, runway_class) or flights == null:
+		return false
+	var sizes := {}
+	for unlocked in range(tier + 1):
+		for size: String in offered_sizes(unlocked, runway_class):
+			sizes[size] = true
+	if sizes.is_empty():
+		return false
+	var slots := slots_of({})
+	for size: String in sizes:
+		var terms := {
+			"id": "FITCHECK",
+			"airline": AIRLINES[0],
+			"destination": DESTINATIONS[0],
+			"departure_minute": slots[0],
+			"plane_size": size,
+			"booked_passengers": PlaneClasses.passenger_range(size)[0],
+			"fee_per_passenger": FEE_MIN,
+			FlightContract.TRAITS_KEY: {},
+		}
+		for minute: int in slots:
+			if min_minute >= 0 and minute < min_minute:
+				continue
+			terms["departure_minute"] = minute
+			if FlightFit.fits(flights, terms):
+				return true
+	return false
+
+
+## Draws one mid-day refill batch of OFFERS_PER_DAY offers on `day` from a
+## deterministic stream keyed by (`world_seed`, `day`, wave) without mutating
+## SimClock.rng, expiring any leftover open offers on `day`. Refused (returns [])
+## when `day` has no initial draw yet, reached MAX_REFILLS_PER_DAY, or no free
+## slot >= `min_minute` remains on `flights`.
+func refill_day(
+	day: int,
+	world_seed: int,
+	tier := 0,
+	runway_class := PlaneClasses.LARGE,
+	flights: FlightSim = null,
+	live := {},
+	min_minute := -1
+) -> Array[String]:
+	var ids: Array[String] = []
+	if not _draw_args_valid(day, tier, runway_class) or flights == null or not _has_day(day):
+		return ids
+	var count := day_offer_count(day)
+	@warning_ignore("integer_division")
+	var wave := count / OFFERS_PER_DAY
+	if count % OFFERS_PER_DAY != 0 or wave < 1 or wave > MAX_REFILLS_PER_DAY:
+		return ids
+	if not has_fitting_slot(flights, tier, runway_class, min_minute):
+		return ids
+	_expire_day(day)
+	var refill_seed := _refill_seed(world_seed, day, wave)
+	var refill_rng := RandomNumberGenerator.new()
+	refill_rng.seed = refill_seed
+	var traits := OfferTraits.draw_day(refill_seed, day, OFFERS_PER_DAY, tier, live)
+	var fresh: Array[Dictionary] = []
+	for offset in range(1, OFFERS_PER_DAY + 1):
+		var offer := _draw(day, count + offset, refill_rng, tier, runway_class, traits[offset - 1])
+		_give_traits(offer, traits[offset - 1], is_loyal(offer["airline"]))
+		fresh.append(offer)
+	_fit(fresh, flights, min_minute)
+	for offer in fresh:
+		_offers.append(offer)
+		ids.append(offer["id"])
+	changed.emit()
 	return ids
 
 
@@ -317,6 +431,11 @@ func to_snapshot() -> Dictionary:
 	return {"save_version": SAVE_VERSION, "offers": list, "loyalty": _loyalty.duplicate(true)}
 
 
+## True while from_snapshot() is emitting `changed`.
+func is_loading() -> bool:
+	return _loading
+
+
 ## Restores a to_snapshot() dictionary, including one that went through JSON.
 ## Pushes an error and returns false, leaving the board unchanged, when
 ## anything is missing, mistyped or invalid, including an offer the board
@@ -332,9 +451,11 @@ func from_snapshot(data: Dictionary) -> bool:
 	if problem != "":
 		push_error("OfferBoard.from_snapshot: %s" % problem)
 		return false
+	_loading = true
 	_offers = loaded
 	_loyalty = loyalty
 	changed.emit()
+	_loading = false
 	return true
 
 
@@ -406,7 +527,9 @@ static func _give_traits(offer: Dictionary, traits: Dictionary, loyal: bool) -> 
 ## whenever one exists. An offer with no candidate slot keeps the slot it was
 ## drawn with, and its card says why it does not fit. Read-only on `flights`:
 ## every check is a trial on copies of its planning state.
-static func _fit(offers: Array[Dictionary], flights: FlightSim) -> void:
+static func _fit(offers: Array[Dictionary], flights: FlightSim, min_minute := -1) -> void:
+	if offers.is_empty():
+		return
 	# Per offer: [drawn slot index, how many slots it was drawn from].
 	var drawn: Array[Array] = []
 	for offer in offers:
@@ -414,9 +537,13 @@ static func _fit(offers: Array[Dictionary], flights: FlightSim) -> void:
 		drawn.append([slots.find(int(offer["departure_minute"])), slots.size()])
 	var cache := {}
 	var first: Dictionary = offers[0]
+	var firsts := _slots_where(flights, first, cache, true, min_minute)
+	if offers.size() == 1:
+		if not firsts.is_empty():
+			first["departure_minute"] = firsts[_pick(drawn[0], firsts.size())]
+		return
 	var second: Dictionary = offers[1]
-	var firsts := _slots_where(flights, first, cache, true)
-	var seconds := _slots_where(flights, second, cache, true)
+	var seconds := _slots_where(flights, second, cache, true, min_minute)
 	var paired := false
 	if not firsts.is_empty():
 		var start := _pick(drawn[0], firsts.size())
@@ -432,7 +559,7 @@ static func _fit(offers: Array[Dictionary], flights: FlightSim) -> void:
 	if not paired and not seconds.is_empty():
 		second["departure_minute"] = seconds[_pick(drawn[1], seconds.size())]
 	for index in range(FIT_OFFERS, offers.size()):
-		var pushes := _slots_where(flights, offers[index], cache, false)
+		var pushes := _slots_where(flights, offers[index], cache, false, min_minute)
 		if not pushes.is_empty():
 			offers[index]["departure_minute"] = pushes[_pick(drawn[index], pushes.size())]
 
@@ -445,13 +572,15 @@ static func _fit(offers: Array[Dictionary], flights: FlightSim) -> void:
 ## other terms. The second look at a gate blocker is taken only when a push slot
 ## is asked for.
 static func _slots_where(
-	flights: FlightSim, offer: Dictionary, cache: Dictionary, fitting: bool
+	flights: FlightSim, offer: Dictionary, cache: Dictionary, fitting: bool, min_minute := -1
 ) -> Array[int]:
 	var traits: Dictionary = offer[FlightContract.TRAITS_KEY]
-	var key := "%s|%s" % [offer["plane_size"], FlightContract.window(traits)]
+	var key := "%s|%s|%d" % [offer["plane_size"], FlightContract.window(traits), min_minute]
 	if not cache.has(key):
 		var by_minute := {}
 		for minute in slots_of(traits):
+			if min_minute >= 0 and minute < min_minute:
+				continue
 			by_minute[minute] = FlightFit.assess(flights, _terms_at(offer, minute), [], false)
 		cache[key] = by_minute
 	var out: Array[int] = []
@@ -520,6 +649,43 @@ func _expire_before(day: int) -> bool:
 	return any
 
 
+## Marks every open offer on `day` expired when a mid-day refill replaces them.
+func _expire_day(day: int) -> void:
+	for offer in _offers:
+		if offer["status"] == OPEN and offer["day"] == day:
+			offer["status"] = EXPIRED
+
+
+static func _draw_args_valid(day: int, tier: int, runway_class: String) -> bool:
+	if day < 0 or day > FlightContract.MAX_DAY:
+		push_error("OfferBoard: day %d is outside 0..%d" % [day, FlightContract.MAX_DAY])
+		return false
+	if tier < 0 or tier > MAX_TIER:
+		push_error("OfferBoard: tier %d is outside 0..%d" % [tier, MAX_TIER])
+		return false
+	if not PlaneClasses.is_plane_class(runway_class):
+		push_error("OfferBoard: runway class '%s' is not a plane class" % runway_class)
+		return false
+	return true
+
+
+static func _refill_seed(world_seed: int, day: int, wave: int) -> int:
+	var text := (
+		"gmmf-offer-refill|%s|%s|%s|%s"
+		% [str(REFILL_SEED_VERSION), str(world_seed), str(day), str(wave)]
+	)
+	var value := IncidentRoll.fnv1a_32(text.to_utf8_buffer())
+	return value if value != 0 else 1
+
+
+static func _offer_number(id: String) -> int:
+	var split := id.find("N")
+	if split < 2 or not id.begins_with("O"):
+		return -1
+	var number_text := id.substr(split + 1)
+	return number_text.to_int() if number_text.is_valid_int() else -1
+
+
 func _has_day(day: int) -> bool:
 	for offer in _offers:
 		if offer["day"] == day:
@@ -555,25 +721,38 @@ func _load_problem(data: Dictionary, into: Array[Dictionary]) -> String:
 		seen[offer["id"]] = true
 		per_day[offer["day"]] = per_day.get(offer["day"], 0) + 1
 		into.append(offer)
-	# Ids are unique and canonical for their day, so a full count is the full set.
+	# Ids are unique and canonical for their day, so a contiguous multiple of
+	# OFFERS_PER_DAY holds every batch of that day.
 	for day in per_day:
-		if per_day[day] != OFFERS_PER_DAY:
-			return "day %d must hold all %d of its offers" % [day, OFFERS_PER_DAY]
-	return _status_problem(into)
+		var count := int(per_day[day])
+		if count % OFFERS_PER_DAY != 0 or count > MAX_DAY_OFFERS:
+			return "day %d must hold a whole set of %d offers" % [day, OFFERS_PER_DAY]
+		for number in range(1, count + 1):
+			if not seen.has("O%dN%d" % [day, number]):
+				return "day %d is missing offer O%dN%d" % [day, day, number]
+	return _status_problem(into, per_day)
 
 
 ## "" when the statuses are ones a run could have saved: offers expire when a
-## later day starts, so an earlier day has none open and an expired offer has a
-## later recorded day behind it.
-func _status_problem(offers: Array[Dictionary]) -> String:
+## later day starts, and on the latest day an earlier batch may expire when a
+## refill replaces it while only the latest batch may remain open.
+func _status_problem(offers: Array[Dictionary], per_day: Dictionary) -> String:
 	var latest := -1
 	for offer in offers:
 		latest = maxi(latest, offer["day"])
+	if latest < 0:
+		return ""
+	var latest_batch_start := int(per_day[latest]) - OFFERS_PER_DAY + 1
 	for offer in offers:
-		if offer["status"] == OPEN and offer["day"] < latest:
-			return "offer %s is open but day %d has started" % [offer["id"], latest]
-		if offer["status"] == EXPIRED and offer["day"] >= latest:
-			return "offer %s is expired but no later day is recorded" % offer["id"]
+		if offer["day"] < latest:
+			if offer["status"] == OPEN:
+				return "offer %s is open but day %d has started" % [offer["id"], latest]
+		else:
+			var number := _offer_number(offer["id"])
+			if offer["status"] == OPEN and number < latest_batch_start:
+				return "offer %s is open from an earlier batch on day %d" % [offer["id"], latest]
+			if offer["status"] == EXPIRED and number >= latest_batch_start:
+				return "offer %s is expired but no later day is recorded" % offer["id"]
 	return ""
 
 
@@ -618,11 +797,9 @@ func _offer_problem(entry: Variant) -> String:
 ## Reads the same constants _draw does, so the two cannot drift apart.
 func _undrawable_problem(entry: Dictionary) -> String:
 	var day := int(entry["day"])
-	var ids := []
-	for number in range(1, OFFERS_PER_DAY + 1):
-		ids.append("O%dN%d" % [day, number])
-	if not ids.has(entry["id"]):
-		return "offer id '%s' is not one of day %d's %s" % [entry["id"], day, ids]
+	var number := _offer_number(entry["id"])
+	if str(entry["id"]) != "O%dN%d" % [day, number] or number < 1 or number > MAX_DAY_OFFERS:
+		return "offer id '%s' is not a valid id for day %d" % [entry["id"], day]
 	var tier := tier_of(entry["airline"])
 	if tier < 0 or not DESTINATIONS.has(entry["destination"]):
 		return "offer %s has an airline or destination the board never draws" % entry["id"]
@@ -676,9 +853,17 @@ static func _fee_drawable(fee: int, fees: Array, traits: Dictionary, loyal: bool
 static func _loyal_marks_problem(offers: Array[Dictionary], loyalty: Dictionary) -> String:
 	for offer in offers:
 		var entry: Dictionary = loyalty.get(offer["airline"], {"days": 0, "last_day": -1})
-		var loyal: bool = (
-			entry["days"] >= OfferTraits.LOYAL_DAYS and offer["day"] > entry["last_day"]
-		)
+		var full: bool = entry["days"] >= OfferTraits.LOYAL_DAYS
+		if _offer_number(offer["id"]) > OFFERS_PER_DAY:
+			var may_be_loyal: bool = full and offer["day"] >= entry["last_day"]
+			var must_be_loyal: bool = full and offer["day"] > entry["last_day"]
+			if (offer[LOYAL_KEY] and not may_be_loyal) or (not offer[LOYAL_KEY] and must_be_loyal):
+				return (
+					"offer %s is marked loyal %s but %s's count makes it invalid on day %d"
+					% [offer["id"], offer[LOYAL_KEY], offer["airline"], offer["day"]]
+				)
+			continue
+		var loyal: bool = full and offer["day"] > entry["last_day"]
 		if offer[LOYAL_KEY] != loyal:
 			return (
 				"offer %s is marked loyal %s but %s's count makes it %s on day %d"
