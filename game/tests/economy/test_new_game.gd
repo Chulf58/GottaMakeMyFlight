@@ -14,6 +14,7 @@ const MAIN := "res://main/main.tscn"
 ## The checklist card's staff lines (Checklist.NEXT).
 const CI_HIRE := "Check-in desk and an agent: hire an agent on Staff"
 const SEC_HIRE := "Security scanner and an officer: hire an officer on Staff"
+const GATE_HIRE := "Gate desk and an agent: hire a gate agent on Staff"
 
 var _main: Node
 var _alerts_path := SaveTestKit.run_path("new_game_alerts")
@@ -134,7 +135,7 @@ func test_the_staff_hint_names_what_keeps_the_airport_closed() -> void:
 			+ "Seats near the gate"
 		)
 	)
-	assert_str(_opened["hint_built"]).is_equal(CI_HIRE + "\n" + SEC_HIRE)
+	assert_str(_opened["hint_built"]).is_equal(CI_HIRE + "\n" + SEC_HIRE + "\n" + GATE_HIRE)
 	assert_str(_opened["hint_open"]).is_equal("Open! Starter contract: Gotta Air to Oslo, daily")
 
 

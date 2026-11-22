@@ -70,7 +70,8 @@ func after_test() -> void:
 ## PassengerViews from its visit's start (the views third in the result).
 func _sitting(table: StringName, roller := false, drawn := false) -> Array:
 	var grid := BuildGrid.new()
-	CafeTestLayout.build(grid, false, &"restaurant", true, &"cafe_counter", table)
+	var venue := &"cafe" if table == &"cafe_table" else &"restaurant"
+	CafeTestLayout.build(grid, false, venue, true, &"cafe_counter", table)
 	var world := PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
 	_worlds.append(world)
 	var p: Passenger = null
