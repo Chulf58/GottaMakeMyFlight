@@ -433,21 +433,32 @@ def _cmd_list(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_batches(args: argparse.Namespace) -> int:
-    tests_dir = Path(args.tests_dir)
-    if args.tier == "all":
-        all_suites = discover_test_suites(tests_dir)
-        if args.manifest_out:
-            Path(args.manifest_out).write_text(
-                json.dumps([all_suites]), encoding="utf-8"
-            )
-        print("res://tests")
-        return 0
-
-    buckets = classify_all(tests_dir)
-    suites = buckets[args.tier]
-    batches = chunk_suites(
+def build_batches(
+    tests_dir: Path,
+    tier: str,
+    max_chars: int = DEFAULT_MAX_BATCH_CHARS,
+    max_suites: int | None = DEFAULT_MAX_BATCH_SUITES,
+    base_overhead: int = DEFAULT_BASE_CMD_OVERHEAD,
+) -> list[list[str]]:
+    """Discover suites for a tier ('fast', 'medium', 'slow', or 'all') and chunk into batches."""
+    if tier == "all":
+        suites = discover_test_suites(tests_dir)
+    elif tier in TIERS:
+        suites = classify_all(tests_dir)[tier]
+    else:
+        raise ValueError(f"unknown tier: {tier!r}")
+    return chunk_suites(
         suites,
+        max_chars=max_chars,
+        max_suites=max_suites,
+        base_overhead=base_overhead,
+    )
+
+
+def _cmd_batches(args: argparse.Namespace) -> int:
+    batches = build_batches(
+        Path(args.tests_dir),
+        args.tier,
         max_chars=args.max_chars,
         max_suites=args.max_suites,
         base_overhead=args.base_overhead,

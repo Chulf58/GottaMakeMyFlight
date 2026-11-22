@@ -16,7 +16,7 @@ Tiers:
   --fast      Pure unit/math/logic suites (default GODOT_TIMEOUT=300)
   --medium    Suites with SubViewport, await, TestWorld/rigs, or scenes (default GODOT_TIMEOUT=900)
   --slow      main.tscn, PassengerViews, save/load, tuning/balance/snapshot suites (default GODOT_TIMEOUT=2400)
-  --all       Full gdUnit4 suite via -a res://tests (default GODOT_TIMEOUT=3600)
+  --all       Full gdUnit4 suite in bounded batches (default GODOT_TIMEOUT=3600)
 
 Options:
   --list      Print tier counts and file lists without running Godot
