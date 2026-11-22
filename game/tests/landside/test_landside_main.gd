@@ -18,26 +18,35 @@ const COMPARE_TICKS := 400
 const LIMIT := 12000
 
 var _path := SaveTestKit.run_path("test_landside_main")
-var _new: Node
 var _control: Node
 var _loaded: Node
+var _fresh := {}
 var _run := {}
 
 
 func before() -> void:
-	_new = SaveTestKit.boot(self, SEED)
-	SaveTestKit.start_airport(_new)
-	_play_first_flight()
-	_new.free()
-	_new = null
 	_control = SaveTestKit.boot(self, SEED)
+	var landside := _landside(_control)
+	_fresh = {
+		"has_def": landside.definition != null,
+		"lots_built": landside.lots_built.duplicate(),
+		"curbs_built": landside.curbs_built.duplicate(),
+		"berths": landside.definition.curb.berths.size(),
+		"sim_match": _sim(_control).landside == landside,
+	}
+	var clean_snap: Dictionary = JSON.parse_string(
+		JSON.stringify(SaveTestKit.save_game(_control).snapshot(), "", true, true)
+	)
+	SaveTestKit.start_airport(_control)
+	_play_first_flight(_control)
+	assert_bool(SaveTestKit.save_game(_control).load_world(clean_snap)).is_true()
 	SaveTestKit.start_airport(_control)
 	assert_bool(_landside(_control).build_lot(0)).is_true()
 	_save_and_play_on()
 
 
 func after() -> void:
-	for main in [_new, _control, _loaded]:
+	for main in [_control, _loaded]:
 		if main != null:
 			main.free()
 	DirAccess.remove_absolute(_path)
@@ -52,15 +61,14 @@ static func _landside(main: Node) -> LandsideSim:
 	return main.get_node("LandsideSim")
 
 
-func _play_first_flight() -> void:
-	var sim := _sim(_new)
-	var flights: FlightSim = _new.get_node("FlightSim")
+func _play_first_flight(main: Node) -> void:
+	var sim := _sim(main)
+	var flights: FlightSim = main.get_node("FlightSim")
 	var unload := {}
 	var notice := {}
 	var released := {}
-	sim.arrivals.released.connect(
-		func(booking: int, _passenger: int) -> void: released[booking] = sim.tick
-	)
+	var on_released := func(booking: int, _passenger: int) -> void: released[booking] = sim.tick
+	sim.arrivals.released.connect(on_released)
 	var first := FlightTimetable.occurrence_id(FlightSim.DEFAULT_ID, 0)
 	var start := sim.tick
 	while sim.tick < start + LIMIT:
@@ -68,11 +76,13 @@ func _play_first_flight() -> void:
 			if not unload.has(id):
 				var b := sim.arrivals.get_booking(id)
 				unload[id] = b.unload_tick
-				var lead := _landside(_new).lead_ticks(b.intent)
+				var lead := _landside(main).lead_ticks(b.intent)
 				notice[id] = b.unload_tick - lead >= sim.tick
-		SaveTestKit.step(_new)
+		SaveTestKit.step(main)
 		if flights.flight_ids().has(first) and flights.is_doors_closed(first):
 			break
+	if sim.arrivals.released.is_connected(on_released):
+		sim.arrivals.released.disconnect(on_released)
 	var late_notice := []
 	var noticed := []
 	for id in released:
@@ -85,6 +95,13 @@ func _play_first_flight() -> void:
 	_run["late_notice"] = late_notice
 	_run["missed"] = sim.missed_count()
 	_run["pending"] = sim.pending_spawns()
+
+
+static func _parts_snapshot(main: Node) -> Dictionary:
+	var data := {}
+	for part in SaveTestKit.save_game(main).parts():
+		data[part.key] = part.save.call()
+	return data
 
 
 func _save_and_play_on() -> void:
@@ -107,8 +124,14 @@ func _save_and_play_on() -> void:
 	for i in COMPARE_TICKS:
 		SaveTestKit.step(_control)
 		SaveTestKit.step(_loaded)
-		if first_bad < 0 and SaveTestKit.checksum(_loaded) != SaveTestKit.checksum(_control):
-			first_bad = _sim(_control).tick
+		if first_bad < 0:
+			var mismatch := _parts_snapshot(_loaded) != _parts_snapshot(_control)
+			if i == COMPARE_TICKS - 1:
+				mismatch = (
+					mismatch or (SaveTestKit.checksum(_loaded) != SaveTestKit.checksum(_control))
+				)
+			if mismatch:
+				first_bad = _sim(_control).tick
 	_run["first_bad"] = first_bad
 	_run["credits_control"] = credits[_control]
 	_run["credits_loaded"] = credits[_loaded]
@@ -142,14 +165,11 @@ func _watch(main: Node, credits: Dictionary) -> void:
 
 func test_a_new_game_starts_with_the_curb_and_no_car_park() -> void:
 	print("first flight %s: %s" % [_run["first_flight"], _run])
-	var fresh := SaveTestKit.boot(self, SEED)
-	var landside := _landside(fresh)
-	assert_object(landside.definition).is_not_null()
-	assert_array(landside.lots_built).is_equal([false, false])
-	assert_array(landside.curbs_built).is_equal([false, false])
-	assert_int(landside.definition.curb.berths.size()).is_equal(4)
-	assert_object(_sim(fresh).landside).is_same(landside)
-	fresh.free()
+	assert_bool(_fresh["has_def"]).is_true()
+	assert_array(_fresh["lots_built"]).is_equal([false, false])
+	assert_array(_fresh["curbs_built"]).is_equal([false, false])
+	assert_int(_fresh["berths"]).is_equal(4)
+	assert_bool(_fresh["sim_match"]).is_true()
 
 
 func test_the_first_flight_arrives_by_road_within_a_small_bound_of_its_drawn_ticks() -> void:

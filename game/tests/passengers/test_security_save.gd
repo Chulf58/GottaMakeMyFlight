@@ -35,12 +35,23 @@ const RULE_ERRORS := {
 	"REPACK work one over its start": "more work left than its phase starts with",
 }
 
+var _ref_lane: SecurityTestWorld
+var _ref_basic: SecurityTestWorld
+
 
 func before() -> void:
+	PassengerTestWorld.tracker = null
+	_ref_lane = SecurityTestWorld.make(true)
+	_ref_basic = SecurityTestWorld.make(false)
 	PassengerTestWorld.tracker = self
 
 
 func after() -> void:
+	for w: SecurityTestWorld in [_ref_lane, _ref_basic]:
+		if w != null:
+			w.world.free_all()
+	_ref_lane = null
+	_ref_basic = null
 	PassengerTestWorld.tracker = null
 
 
@@ -57,6 +68,10 @@ func _phases(w: SecurityTestWorld) -> String:
 	return ",".join(parts)
 
 
+static func _state(w: SecurityTestWorld) -> Dictionary:
+	return {"passengers": w.world.sim.to_snapshot(), "wallet": w.world.sim.wallet.to_snapshot()}
+
+
 func _check_tier(use_lane: bool) -> void:
 	var a := SecurityTestWorld.make(use_lane)
 	var ids := a.send_all(TRAITS)
@@ -71,7 +86,7 @@ func _check_tier(use_lane: bool) -> void:
 		a.world.clock.tick < stop and not ids.all(func(id: int) -> bool: return a.cleared.has(id))
 	):
 		a.world.step()
-		trace[a.world.sim.tick] = a.signature()
+		trace[a.world.sim.tick] = _state(a)
 		var now := _phases(a)
 		if now != last:
 			for id in ids:
@@ -84,25 +99,29 @@ func _check_tier(use_lane: bool) -> void:
 						_json(a.world.clock.to_snapshot()),
 						_json(a.world.flights.to_snapshot()),
 						_json(a.world.sim.to_snapshot()),
+						a.signature(),
 					]
 				)
 			)
 		last = now
 	var end := a.world.sim.tick
+	var end_sig := a.signature()
 	assert_bool(ids.all(func(id: int) -> bool: return a.cleared.has(id))).is_true()
 	var bad := []
+	var b := SecurityTestWorld.make(use_lane)
 	for save: Array in saves:
-		var b := SecurityTestWorld.make(use_lane)
 		assert_bool(b.world.clock.from_snapshot(save[1])).is_true()
 		assert_bool(b.world.flights.from_snapshot(save[2])).is_true()
 		assert_bool(b.world.sim.from_snapshot(save[3])).is_true()
-		assert_str(b.signature()).is_equal(trace[save[0]])
+		assert_str(b.signature()).is_equal(save[4])
 		while b.world.clock.tick < end:
 			b.world.step()
-			if b.signature() != trace[b.world.sim.tick]:
+			if _state(b) != trace[b.world.sim.tick]:
 				bad.append([save[0], b.world.sim.tick])
 				break
-		b.world.free_all()
+		if b.world.clock.tick == end and b.signature() != end_sig:
+			bad.append([save[0], end])
+	b.world.free_all()
 	print(
 		"lane %s: %d saves over phases %s, ticks to %d" % [use_lane, saves.size(), seen.keys(), end]
 	)
@@ -287,7 +306,7 @@ func _add_queue_cases(cases: Dictionary, good: Dictionary, admitted: int) -> voi
 func _check_refused(
 	use_lane: bool, a: SecurityTestWorld, accepted: Array, cases: Dictionary
 ) -> void:
-	var b := SecurityTestWorld.make(use_lane)
+	var b := _ref_lane if use_lane else _ref_basic
 	b.world.clock.from_snapshot(_json(a.world.clock.to_snapshot()))
 	b.world.flights.from_snapshot(_json(a.world.flights.to_snapshot()))
 	var before := b.signature()
@@ -306,7 +325,6 @@ func _check_refused(
 			)
 	for good: Dictionary in accepted:
 		assert_bool(b.world.sim.from_snapshot(good)).is_true()
-	b.world.free_all()
 
 
 ## A deep copy of `data` with `change` applied.

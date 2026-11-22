@@ -45,10 +45,14 @@ func before() -> void:
 		_first_bad[world] = -1
 	while _control.clock.tick <= _control.flights.doors_close_tick(PassengerTestWorld.FLIGHT):
 		_step(worlds)
-		var expected := _signature(_control)
+		var expected := _state(_control)
 		for world in _first_bad:
-			if _first_bad[world] < 0 and _signature(world) != expected:
+			if _first_bad[world] < 0 and _state(world) != expected:
 				_first_bad[world] = world.clock.tick
+	var full_expected := _signature(_control)
+	for world in [_waiting, _loaded]:
+		if _first_bad[world] < 0 and _signature(world) != full_expected:
+			_first_bad[world] = world.clock.tick
 
 
 func after() -> void:
@@ -58,7 +62,7 @@ func after() -> void:
 func _busy_world() -> PassengerTestWorld:
 	var grid := BuildGrid.new()
 	_ids = CafeTestLayout.build(grid, true)
-	var world := PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(1500, 4000), SEED)
+	var world := PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(1500, 2600), SEED)
 	for i in 12:
 		world.passenger(world.sim.spawn_now(PassengerTestWorld.FLIGHT)).hunger = HUNGRY
 	return world
@@ -104,7 +108,7 @@ func _load(text: String) -> PassengerTestWorld:
 	var data: Dictionary = JSON.parse_string(text)
 	var grid := BuildGrid.new()
 	assert_bool(grid.from_snapshot(data["grid"])).is_true()
-	var world := PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(1500, 4000), 99)
+	var world := PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(1500, 2600), 99)
 	assert_bool(world.clock.from_snapshot(data["clock"])).is_true()
 	assert_bool(world.flights.from_snapshot(data["flights"])).is_true()
 	assert_bool(world.sim.from_snapshot(data["passengers"])).is_true()
@@ -114,9 +118,12 @@ func _load(text: String) -> PassengerTestWorld:
 
 ## Everything a save of the world would hold: the passenger sim's whole
 ## snapshot (it only reads, and no edit is pending after a tick) and the wallet.
+static func _state(world: PassengerTestWorld) -> Dictionary:
+	return {"passengers": world.sim.to_snapshot(), "wallet": world.sim.wallet.to_snapshot()}
+
+
 static func _signature(world: PassengerTestWorld) -> String:
-	var state := {"passengers": world.sim.to_snapshot(), "wallet": world.sim.wallet.to_snapshot()}
-	return JSON.stringify(state, "", true, true)
+	return JSON.stringify(_state(world), "", true, true)
 
 
 func test_the_edit_met_guests_queuing_ordering_and_seated() -> void:

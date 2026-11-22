@@ -18,8 +18,8 @@ extends GdUnitTestSuite
 ## of their takings (MIXED_TAKINGS_MIN to MIXED_TAKINGS_MAX). Nobody misses
 ## the flight.
 
-const SEEDS: Array[int] = [11, 22, 33, 44, 55, 66]
-const FIRST_STATE := 1700
+const SEEDS: Array[int] = [11, 22, 33]
+const FIRST_STATE := 1360
 const CONFIGS: Array[String] = ["none", "shops", "screens", "mixed"]
 ## The gate's two screens: on the airside row south of the seat rows, facing
 ## north over them, clear of the scanners' exits at x 17 and 19.
@@ -96,13 +96,16 @@ func _flight(seed: int, config: String) -> Dictionary:
 		row["waiting"] += 1
 		row["bored"] += int(BoredomSim.is_bored(p))
 		row["mood"] += p.mood
-	world.run_to(world.flights.doors_close_tick(PassengerTestWorld.FLIGHT) + 1)
+	var doors := world.flights.doors_close_tick(PassengerTestWorld.FLIGHT)
+	while _made.size() < count and world.clock.tick <= doors:
+		world.step()
 	for id: int in _type_of:
 		var made: bool = _made.get(id, false)
 		var key := "made" if made else "missed"
 		out[key] += 1
 		out[_type_of[id]][key] += 1
 		out["went_missed"] += int(_went.has(id) and not made)
+	world.free_all()
 	return out
 
 

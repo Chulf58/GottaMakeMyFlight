@@ -63,29 +63,51 @@ const FAST_TICKS := 3.0
 
 var _world: PassengerTestWorld
 var _views: PassengerViews
+var _world_two: PassengerTestWorld
+var _views_two: PassengerViews
+var _snap_two: Dictionary
+var _world_one: PassengerTestWorld
+var _views_one: PassengerViews
+var _snap_one: Dictionary
+var _frame_cache: Dictionary = {}
 
 
 func before() -> void:
 	PassengerTestWorld.tracker = self
+	var prev := PassengerTestWorld.tracker
+	PassengerTestWorld.tracker = null
+	var built_two := _build_world(false)
+	_world_two = built_two[0]
+	_views_two = built_two[1]
+	_snap_two = built_two[2]
+	var built_one := _build_world(true)
+	_world_one = built_one[0]
+	_views_one = built_one[1]
+	_snap_one = built_one[2]
+	PassengerTestWorld.tracker = prev
 
 
 func after() -> void:
-	_free_world()
+	_free_worlds()
+	_frame_cache.clear()
 	PassengerTestWorld.tracker = null
 
 
-func _free_world() -> void:
-	if _views != null:
-		_views.free()
-		_world.free_all()
+func _free_worlds() -> void:
+	for pair in [[_views_two, _world_two], [_views_one, _world_one]]:
+		if pair[0] != null:
+			(pair[0] as PassengerViews).free()
+		if pair[1] != null:
+			(pair[1] as PassengerTestWorld).free_all()
+	_views_two = null
+	_world_two = null
+	_views_one = null
+	_world_one = null
 	_views = null
+	_world = null
 
 
-## A new world (each visit starts early in the flight's day, with every stall
-## free) with the views drawing.
-## With `one_scanner`, the terminal keeps only its first security scanner.
-func _new_world(one_scanner := false) -> void:
-	_free_world()
+func _build_world(one_scanner := false) -> Array:
 	var grid := BuildGrid.new()
 	ToiletTestLayout.build(grid)
 	if one_scanner:
@@ -95,22 +117,60 @@ func _new_world(one_scanner := false) -> void:
 		scanners.sort()
 		for id: int in scanners.slice(1):
 			assert_bool(grid.apply(BuildEdit.remove_object(id)).ok).is_true()
-	_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
-	_world.run_to(10)
-	_views = PassengerTestWorld.views()
-	_views.clock = _world.clock
-	_views.sim = _world.sim
-	add_child(_views)
+	var world := PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
+	world.run_to(10)
+	var views := PassengerTestWorld.views()
+	views.clock = world.clock
+	views.sim = world.sim
+	add_child(views)
 	# The test runs the pre-draw fallback itself at the end of each frame.
-	RenderingServer.frame_pre_draw.disconnect(_views.carry_on_props()._unposed)
+	RenderingServer.frame_pre_draw.disconnect(views.carry_on_props()._unposed)
+	var snap := {
+		"clock": world.clock.to_snapshot(),
+		"flights": world.flights.to_snapshot(),
+		"sim": world.sim.to_snapshot(),
+	}
+	return [world, views, snap]
+
+
+## Restores the hoisted world (each visit starts early in the flight's day,
+## with every stall free) and its views.
+## With `one_scanner`, the terminal keeps only its first security scanner.
+func _use_world(one_scanner := false) -> void:
+	var snap: Dictionary
+	if one_scanner:
+		if _world_one == null:
+			var built := _build_world(true)
+			_world_one = built[0]
+			_views_one = built[1]
+			_snap_one = built[2]
+		_world = _world_one
+		_views = _views_one
+		snap = _snap_one
+	else:
+		if _world_two == null:
+			var built := _build_world(false)
+			_world_two = built[0]
+			_views_two = built[1]
+			_snap_two = built[2]
+		_world = _world_two
+		_views = _views_two
+		snap = _snap_two
+	# Reset sim first and snap views before rewinding the clock so CarryOnProps
+	# _released_at records the old tick, never colliding with tick 10 spawns.
+	assert_bool(_world.sim.from_snapshot(snap["sim"])).is_true()
+	_views.snap()
+	assert_bool(_world.clock.from_snapshot(snap["clock"])).is_true()
+	assert_bool(_world.flights.from_snapshot(snap["flights"])).is_true()
+	_views.snap()
 
 
 ## A passenger with `count` bags, the first of `kind`, on its way to
-## security, sent to a stall in a new world. The kind is a hash of the id, so
-## passengers whose first bag is another kind are sent without bags until one
-## fits.
+## security, sent to a stall in the hoisted world. The kind is a hash of the
+## id, so passengers whose first bag is another kind are sent without bags
+## until one fits.
 func _visitor(kind: SecurityLooks.Kind, count := 1, one_scanner := false) -> Passenger:
-	_new_world(one_scanner)
+	_use_world(one_scanner)
 	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
 	while SecurityLooks.bag_kind(p, 0) != kind:
 		ToiletTestLayout.calm(p)
@@ -127,11 +187,21 @@ func _visitor(kind: SecurityLooks.Kind, count := 1, one_scanner := false) -> Pas
 	return p
 
 
+func _cached_frames(
+	kind: SecurityLooks.Kind, count := 1, ticks := FRAME_TICKS, one_scanner := false
+) -> Array:
+	var key := "%d:%d:%.2f:%s" % [kind, count, ticks, one_scanner]
+	if _frame_cache.has(key):
+		return _frame_cache[key]
+	var frames := await _visit_frames(_visitor(kind, count, one_scanner), ticks)
+	_frame_cache[key] = frames
+	return frames
+
+
 ## One frame `ticks` sim ticks on, as the game draws them: part of a tick
 ## (the clock's alpha between ticks), or several (a frame at 2x or 3x).
 func _tick(ticks: float) -> void:
 	_world.clock.advance(SimClock.STEP * ticks)
-	await get_tree().process_frame
 	await get_tree().create_timer(0.0, true, false, true).timeout
 	_views.carry_on_props()._unposed()
 
@@ -314,7 +384,7 @@ func test_a_bag_set_down_and_picked_up_in_a_stall_stays_under_its_partitions() -
 		runs.append([kind, 1, FAST_TICKS])
 	for run: Array in runs:
 		var count: int = run[1]
-		var frames := await _visit_frames(_visitor(run[0], count), run[2])
+		var frames := await _cached_frames(run[0], count, run[2])
 		var top := -INF
 		var set_down := [0, 0]
 		var picked_up := [0, 0]
@@ -359,7 +429,7 @@ func test_a_pulled_roller_trails_only_once_its_walker_is_out_of_the_stall() -> v
 	# built on: with two, the shared station choice (decision hold-line-rebuild-
 	# the-security-line-follows-where-people-sta) takes the scanner the walk to
 	# is shorter, a tie by the forecast, and the visitor leaves the other way.
-	var frames := await _visit_frames(_visitor(SecurityLooks.Kind.ROLLER, 1, true))
+	var frames := await _cached_frames(SecurityLooks.Kind.ROLLER, 1, FRAME_TICKS, true)
 	var getting_up := false
 	var bowl := 0
 	var pulled_over := 0
@@ -410,7 +480,7 @@ func test_a_pulled_roller_trails_only_once_its_walker_is_out_of_the_stall() -> v
 func test_no_bag_goes_into_a_side_partition_or_the_door() -> void:
 	for count in [1, 2]:
 		for kind in SecurityLooks.Kind.values():
-			var frames := await _visit_frames(_visitor(kind, count))
+			var frames := await _cached_frames(kind, count)
 			var seated := func(frame: Dictionary) -> bool:
 				return (
 					frame["stage"]
@@ -458,7 +528,7 @@ func test_a_bag_on_a_stall_floor_stands_upright_against_the_door() -> void:
 		for kind in [
 			SecurityLooks.Kind.CASE, SecurityLooks.Kind.ROLLER, SecurityLooks.Kind.BACKPACK
 		]:
-			var frames := await _visit_frames(_visitor(kind, count))
+			var frames := await _cached_frames(kind, count)
 			for b in count:
 				var door := Vector2(INF, -INF)
 				var settled := 0
@@ -501,7 +571,7 @@ func test_a_bag_on_a_stall_floor_stands_upright_against_the_door() -> void:
 func test_a_roller_keeps_its_grip_bar_in_the_hand_through_the_swaps() -> void:
 	# One scanner, for the walk on from the stall the swaps were counted on
 	# (see test_a_pulled_roller_trails_only_once_its_walker_is_out_of_the_stall).
-	var frames := await _visit_frames(_visitor(SecurityLooks.Kind.ROLLER, 1, true))
+	var frames := await _cached_frames(SecurityLooks.Kind.ROLLER, 1, FRAME_TICKS, true)
 	var swaps := [0, 0]
 	var held := 0
 	var loose := 0

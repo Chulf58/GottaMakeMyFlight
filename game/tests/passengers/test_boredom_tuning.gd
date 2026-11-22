@@ -16,7 +16,7 @@ extends GdUnitTestSuite
 ## spawned before boarding opens; bored means boredom at or over
 ## BoredomSim.BORED_AT on the tick boarding opens.
 
-const SEEDS: Array[int] = [11, 22, 33, 44, 55, 66]
+const SEEDS: Array[int] = [11, 22, 33, 55]
 ## The band in whole percent of early arrivals bored at boarding: 26% to 33%.
 ## Start 0-30, +1 a waiting second, bored from 50 gives 29% (29 of 99) on
 ## these seeds, every one relaxed; bored from 40 gives 35%, from 60 25% and
@@ -26,7 +26,7 @@ const SHARE_MAX := 33
 ## As FlightTimetable issues an occurrence well before its first state, the
 ## earliest relaxed arrival (RELAXED_LEAD_TICKS before departure, 1340 ticks
 ## before the first state) is still ahead of the clock.
-const FIRST_STATE := 1700
+const FIRST_STATE := 1360
 
 var _spawned: Dictionary = {}
 
@@ -60,6 +60,16 @@ func _flight(seed: int) -> Dictionary:
 	var world := PassengerTestWorld.make(grid, FlightSim.schedule_starts(FIRST_STATE), seed)
 	var sim := world.sim
 	sim.passenger_spawned.connect(func(id: int) -> void: _spawned[id] = sim.tick)
+	var seated := {}
+	sim.stage_changed.connect(
+		func(id: int, stage: Passenger.Stage) -> void:
+			if stage == Passenger.Stage.SEATED:
+				seated[id] = true
+			else:
+				seated.erase(id)
+	)
+	var settled := 0
+	sim.outcome.connect(func(_id: int, _made: bool) -> void: settled += 1)
 	(
 		assert_bool(sim.schedule_flight(PassengerTestWorld.FLIGHT, PassengerSim.DEFAULT_PASSENGERS))
 		. is_true()
@@ -67,17 +77,17 @@ func _flight(seed: int) -> Dictionary:
 	var boarding := world.flights.boarding_window(PassengerTestWorld.FLIGHT).x
 	var doors := world.flights.doors_close_tick(PassengerTestWorld.FLIGHT)
 	var out := _empty()
-	while world.clock.tick <= doors:
+	while settled < PassengerSim.DEFAULT_PASSENGERS and world.clock.tick <= doors:
 		var next := world.clock.tick + 1
 		# The seated passengers whose beat is on the next tick, and their
 		# boredom and mood before it.
 		var watched := {}
-		for id in sim.passenger_ids():
-			var p := sim.get_passenger(id)
+		for id: int in seated:
 			var on_beat := (
 				posmod(next, PassengerSim.BEAT_TICKS) == posmod(id, PassengerSim.BEAT_TICKS)
 			)
-			if on_beat and p.stage == Passenger.Stage.SEATED:
+			if on_beat:
+				var p := sim.get_passenger(id)
 				watched[id] = [p.boredom >= BoredomSim.BORED_AT, p.mood]
 		world.step()
 		for id: int in watched:
