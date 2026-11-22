@@ -218,6 +218,9 @@ func test_pa_ticker_positions_above_build_menu_and_clears_on_modals_and_load() -
 	assert_bool(ticker.visible).is_false()
 	_audio.pa_announced.emit("PA: Suppressed during intro.")
 	assert_bool(ticker.visible).is_false()
+	var cue := hud.find_child("PhoneRingCue", true, false) as IntroDialogue.PhoneRingCue
+	if cue != null:
+		cue.answer()
 	hud.dismiss_intro()
 
 	# Opening DemoEndCard clears ticker immediately.

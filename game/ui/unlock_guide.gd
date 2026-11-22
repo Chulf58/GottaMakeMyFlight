@@ -10,8 +10,8 @@ extends Node
 ##   the hold, so the player's own speed applies again unless another hold
 ##   still pauses the game. It is one of the exclusive dialogs: opened while
 ##   another has the turn (the Offers sheet), it shows when that one closes.
-##   The phone ring is a silent hook for now: `phone_ring` fires as the dialog
-##   opens and the audio work (board e612caf3) plays it later.
+##   When the dialog opens, `phone_ring` fires, `GameAudio` plays `&"phone_ring"`,
+##   and `IntroDialogue.PhoneRingCue` animates at bottom-centre.
 ## - The same dialog and ring also come the first time each big moment happens
 ##   in a game (BigFirsts, decisions phone-ring-and-help-dialog-also-on-big-
 ##   firsts-first-runway-u, opening-phone-call-right-after-the-airport-opens-
@@ -40,8 +40,7 @@ signal dialog_changed(open: bool)
 ## The marks changed: BuildMenu repaints its cards.
 signal changed
 ## The phone ring for a newly opened tier, or NO_TIER for a dialog that holds
-## only big firsts. Nothing plays it yet.
-## TODO(audio board e612caf3): play the ring here once the audio work lands.
+## only big firsts. Plays GameAudio phone_ring and shows PhoneRingCue when shown.
 signal phone_ring(tier: int)
 
 enum Mode { OFF, PROFILE }
@@ -77,6 +76,7 @@ var director: IncidentDirector
 
 var _layer: CanvasLayer
 var _dialog: IntroDialogue
+var _ring_cue: IntroDialogue.PhoneRingCue
 ## The dialog's hold on the clock, from open_dialog() until it closes or a load
 ## drops it. It does not give way to the player.
 var _hold := ClockHolds.NONE
@@ -155,6 +155,11 @@ func is_open() -> bool:
 ## The open dialog, or null.
 func dialog() -> IntroDialogue:
 	return _dialog
+
+
+## The ringing-phone icon cue on the active unlock layer, or null.
+func ring_cue() -> IntroDialogue.PhoneRingCue:
+	return _ring_cue
 
 
 ## Closes the open dialog as Continue would.
@@ -332,6 +337,8 @@ func _show_dialog(tiers: Array, firsts: Array = []) -> void:
 	var speaker: IntroDialogue.Speaker = words["speaker"]
 	_dialog = IntroDialogue.new(words["title"], words["body"], BOX_HEIGHT, false, speaker)
 	_layer.add_child(_dialog)
+	_ring_cue = IntroDialogue.PhoneRingCue.new()
+	_layer.add_child(_ring_cue)
 	add_child(_layer)
 	# Each close names its own layer, so a replaced dialog's layer leaving the
 	# tree a frame later cannot close the dialog that replaced it.
@@ -339,6 +346,7 @@ func _show_dialog(tiers: Array, firsts: Array = []) -> void:
 	_dialog.dismissed.connect(_on_dismissed.bind(_layer))
 	_dialog.tree_exiting.connect(close)
 	_layer.tree_exiting.connect(close)
+	_ring_cue.start_ring(false, false)
 	phone_ring.emit(tiers.back() if not tiers.is_empty() else NO_TIER)
 	if not replacing:
 		dialog_changed.emit(true)
@@ -391,8 +399,12 @@ func _on_loaded(ok: bool) -> void:
 
 func _free_dialog() -> void:
 	var layer := _layer
+	var cue := _ring_cue
 	_layer = null
 	_dialog = null
+	_ring_cue = null
+	if is_instance_valid(cue):
+		cue.stop_ring()
 	if is_instance_valid(layer) and not layer.is_queued_for_deletion():
 		layer.queue_free()
 

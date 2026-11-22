@@ -91,9 +91,12 @@ var _decline: Button
 
 ## True when a new game should open with the intro: not shown yet this session,
 ## the HUD belongs to the running scene (a normal launch, not a probe or a test
-## that builds the scene by hand) and the PlaytestHook switches are off.
-static func should_show(already_shown: bool, in_current_scene: bool, playtest_on: bool) -> bool:
-	return not already_shown and in_current_scene and not playtest_on
+## that builds the scene by hand), the PlaytestHook switches are off and this
+## boot is not loading a save (GameBoot.load_path).
+static func should_show(
+	already_shown: bool, in_current_scene: bool, playtest_on: bool, boot_load := false
+) -> bool:
+	return not already_shown and in_current_scene and not playtest_on and not boot_load
 
 
 ## The first-day intro by default; UnlockGuide passes its own title, body and a
@@ -173,7 +176,7 @@ func _input(event: InputEvent) -> void:
 
 ## A first press of F5 or F8 with no modifier: the keys SaveGame answers (it
 ## ignores a held key's echoes and a modified one).
-func _is_quick_key(key: InputEventKey) -> bool:
+static func _is_quick_key(key: InputEventKey) -> bool:
 	if key.echo or key.ctrl_pressed or key.alt_pressed or key.shift_pressed or key.meta_pressed:
 		return false
 	return key.keycode in [SaveGame.QUICK_SAVE_KEY, SaveGame.QUICK_LOAD_KEY]
@@ -400,3 +403,166 @@ func _place() -> void:
 		roundf((screen.x - GROUP_W * group_scale) / 2.0),
 		roundf(screen.y - BOX_BOTTOM - PORTRAIT_SIZE * group_scale)
 	)
+
+
+## Bottom-centre ringing-phone badge shared by New Airport intro and UnlockGuide
+## calls (decisions phone-ring-pop-up-for-big-moments and
+## phone-ring-sfx-and-new-airport-intro-ring-procedural-phone-r).
+class PhoneRingCue:
+	extends PanelContainer
+
+	signal answered
+
+	const RING_DURATION_S := 0.90
+	const CUE_SIZE := 64.0
+	const ICON_SIZE := 44.0
+	const CUE_BOTTOM := BuildMenu.MARGIN + BuildMenu.BAR_H + HudLayout.GAP
+	const PHONE_SVG := (
+		'<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">'
+		+ '<path d="M18 14c-4 0-7 3-7 8 0 17 14 31 31 31 5 0 8-3 8-7l-2-8-10-3-4 5'
+		+ 'c-5-2-9-6-11-11l5-4-3-11z" fill="#FFCC4D" stroke="#1A2142" stroke-width="4" '
+		+ 'stroke-linejoin="round" stroke-linecap="round"/>'
+		+ '<path d="M40 14c6 2 10 6 12 12" fill="none" stroke="#8CCECE" stroke-width="4" '
+		+ 'stroke-linecap="round"/>'
+		+ '<path d="M42 7c9 3 14 8 17 17" fill="none" stroke="#1A2142" stroke-width="3.5" '
+		+ 'stroke-linecap="round"/>'
+		+ "</svg>"
+	)
+
+	static var _cached_texture: Texture2D
+
+	var _button := Button.new()
+	var _icon := TextureRect.new()
+	var _ringing := false
+	var _answer_on_key := false
+	var _tween: Tween
+
+	func _init() -> void:
+		name = "PhoneRingCue"
+		theme = BuildMenu.HUD_THEME
+		theme_type_variation = &"HudTopCard"
+		process_mode = Node.PROCESS_MODE_ALWAYS
+		visible = false
+		anchor_left = 0.5
+		anchor_right = 0.5
+		anchor_top = 1.0
+		anchor_bottom = 1.0
+		offset_left = -CUE_SIZE * 0.5
+		offset_right = CUE_SIZE * 0.5
+		offset_top = -CUE_BOTTOM - CUE_SIZE
+		offset_bottom = -CUE_BOTTOM
+		grow_horizontal = Control.GROW_DIRECTION_BOTH
+		grow_vertical = Control.GROW_DIRECTION_BEGIN
+
+		_button.name = "AnswerButton"
+		_button.flat = true
+		_button.focus_mode = Control.FOCUS_NONE
+		_button.set_anchors_preset(Control.PRESET_FULL_RECT)
+		_button.pressed.connect(answer)
+		add_child(_button)
+
+		var center := CenterContainer.new()
+		center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		center.set_anchors_preset(Control.PRESET_FULL_RECT)
+		add_child(center)
+
+		_icon.name = "PhoneIcon"
+		_icon.texture = _phone_texture()
+		_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		_icon.custom_minimum_size = Vector2(ICON_SIZE, ICON_SIZE)
+		_icon.size = Vector2(ICON_SIZE, ICON_SIZE)
+		_icon.pivot_offset = Vector2(ICON_SIZE * 0.5, ICON_SIZE * 0.5)
+		center.add_child(_icon)
+
+	func _exit_tree() -> void:
+		_kill_tween()
+
+	func _input(event: InputEvent) -> void:
+		if not _ringing or not _answer_on_key or not visible:
+			return
+		var key := event as InputEventKey
+		if key == null or not key.pressed:
+			return
+		if IntroDialogue._is_quick_key(key):
+			return
+		get_viewport().set_input_as_handled()
+		if key.echo:
+			return
+		var space := key.physical_keycode == KEY_SPACE and not key.shift_pressed
+		if space or key.physical_keycode in [KEY_ENTER, KEY_KP_ENTER]:
+			answer()
+
+	## Starts the ringing animation and phone_ring SFX; auto-answers or auto-hides.
+	func start_ring(auto_answer := true, answer_on_key := false) -> void:
+		_kill_tween()
+		_ringing = true
+		_answer_on_key = answer_on_key
+		visible = true
+		_icon.rotation = 0.0
+		_icon.scale = Vector2.ONE
+		_play_ring_sfx()
+		_tween = create_tween()
+		_tween.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
+		_append_trill(_tween, 0.30)
+		_tween.tween_interval(0.11)
+		_append_trill(_tween, 0.33)
+		_tween.tween_interval(maxf(0.01, RING_DURATION_S - 0.74))
+		_tween.tween_callback(answer if auto_answer else stop_ring)
+
+	## Answers the incoming call immediately once while ringing.
+	func answer() -> void:
+		if not _ringing:
+			return
+		stop_ring()
+		answered.emit()
+
+	## Stops the ring beat and hides the cue without emitting answered.
+	func stop_ring() -> void:
+		_ringing = false
+		_answer_on_key = false
+		_kill_tween()
+		visible = false
+		_icon.rotation = 0.0
+		_icon.scale = Vector2.ONE
+
+	func is_ringing() -> bool:
+		return _ringing
+
+	func phone_icon() -> TextureRect:
+		return _icon
+
+	func answer_button() -> Button:
+		return _button
+
+	func _append_trill(tween: Tween, span: float) -> void:
+		var steps := 4
+		var step_s := span / float(steps + 1)
+		tween.tween_property(_icon, "scale", Vector2(1.12, 1.12), step_s * 0.5)
+		for i in steps:
+			var angle := 0.22 if i % 2 == 0 else -0.22
+			tween.tween_property(_icon, "rotation", angle, step_s)
+		tween.parallel().tween_property(_icon, "scale", Vector2.ONE, step_s)
+		tween.tween_property(_icon, "rotation", 0.0, step_s * 0.5)
+
+	func _play_ring_sfx() -> void:
+		var tree := get_tree()
+		if tree == null or tree.root == null:
+			return
+		var audio := tree.root.get_node_or_null("GameAudio")
+		if audio != null and audio.has_method(&"play_sfx"):
+			audio.play_sfx(&"phone_ring")
+
+	func _kill_tween() -> void:
+		if is_instance_valid(_tween):
+			_tween.kill()
+		_tween = null
+
+	static func _phone_texture() -> Texture2D:
+		if _cached_texture != null:
+			return _cached_texture
+		var img := Image.new()
+		if img.load_svg_from_string(PHONE_SVG, 2.0) == OK:
+			_cached_texture = ImageTexture.create_from_image(img)
+		return _cached_texture
