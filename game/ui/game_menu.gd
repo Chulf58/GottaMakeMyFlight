@@ -34,6 +34,8 @@ extends Node
 ## still meanwhile.
 signal dialog_changed(open: bool)
 
+enum ExitTarget { NONE, MAIN_MENU, QUIT_TO_DESKTOP }
+
 ## With the intro and the other dialogs, over the HUD.
 const LAYER := 10
 const MENU_SIZE := Vector2(520.0, 0.0)
@@ -57,6 +59,15 @@ const ESC_KEY := "Esc"
 @export var camera: TycoonCamera
 ## Opens a folder in the system's file browser; tests swap in a recorder.
 var open_folder := Callable()
+## Changes to a scene file; tests swap in a recorder. Defaults to the tree's
+## change_scene_to_file.
+var change_scene := Callable()
+## Quits the game; tests swap in a recorder.
+var quit_game := Callable()
+## Opens an external URL; tests swap in a recorder.
+var open_url := Callable()
+## Feedback URL shown by the Send Feedback button; hidden when empty.
+var feedback_url: String = DemoMode.FEEDBACK_URL
 ## Optional: called by an Esc the menu would open on; true means it closed a card
 ## (a selected built item or a followed passenger or vehicle) and took the key.
 ## PassengerHud sets it, so the first Esc closes the card and the next opens the menu.
@@ -64,6 +75,7 @@ var esc_closes: Callable
 ## The Audio controls card on the Settings view, or null while the menu is closed.
 var audio_card: AudioSettingsCard
 var language_picker: LanguagePicker
+var exit_confirm_page: Control
 var camera_angle_picker: HBoxContainer
 var camera_angle_option: OptionButton
 
@@ -74,6 +86,7 @@ var _question: IntroDialogue
 var _hold := ClockHolds.NONE
 var _question_hold := ClockHolds.NONE
 var _shown := false
+var _exit_target := ExitTarget.NONE
 var _main_page: Control
 var _settings_page: Control
 var _load_page: Control
@@ -87,6 +100,13 @@ var _quit_log_note: Label
 var _open_log_btn: Button
 var _settings_back: Button
 var _load_back: Button
+var _send_feedback_btn: Button
+var _main_menu_btn: Button
+var _quit_to_desktop_btn: Button
+var _exit_confirm_body: Label
+var _save_and_exit_btn: Button
+var _exit_without_saving_btn: Button
+var _exit_cancel_btn: Button
 var _version: Label
 
 
@@ -94,6 +114,12 @@ func _ready() -> void:
 	name = "GameMenu"
 	if not open_folder.is_valid():
 		open_folder = OS.shell_open
+	if not change_scene.is_valid():
+		change_scene = get_tree().change_scene_to_file
+	if not quit_game.is_valid():
+		quit_game = get_tree().quit
+	if not open_url.is_valid():
+		open_url = func(url: String) -> void: OS.shell_open(url)
 	if save_game != null:
 		save_game.loaded.connect(_on_loaded)
 
@@ -122,7 +148,10 @@ func _input(event: InputEvent) -> void:
 		return
 	get_viewport().set_input_as_handled()
 	if event.is_action_pressed("build_tool_none"):
-		close()
+		if exit_confirm_page != null and exit_confirm_page.visible:
+			_on_exit_cancel_pressed()
+		else:
+			close()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -189,11 +218,14 @@ func press_settings() -> void:
 func press_back() -> void:
 	if not _shown:
 		return
+	_set_status("")
+	_exit_target = ExitTarget.NONE
 	audio_card.visible = false
 	language_picker.visible = false
 	camera_angle_picker.visible = false
 	_settings_page.visible = false
 	_load_page.visible = false
+	exit_confirm_page.visible = false
 	_main_page.visible = true
 
 
@@ -321,6 +353,14 @@ func _show() -> void:
 		_button(_main_page, "Load", tr("Load", "menu"), press_load)
 		load_button().disabled = SaveSlots.existing(_save_paths()).is_empty()
 	_button(_main_page, "Settings", tr("Settings"), press_settings)
+	_send_feedback_btn = _button(
+		_main_page, "SendFeedback", tr("Send Feedback"), _on_feedback_pressed
+	)
+	_send_feedback_btn.visible = not feedback_url.is_empty()
+	_main_menu_btn = _button(_main_page, "MainMenu", tr("Main Menu", "menu"), _on_main_menu_pressed)
+	_quit_to_desktop_btn = _button(
+		_main_page, "QuitToDesktop", tr("Quit to Desktop", "menu"), _on_quit_to_desktop_pressed
+	)
 	audio_card = AudioSettingsCard.new()
 	audio_card.name = "AudioSettings"
 	audio_card.visible = false
@@ -351,6 +391,27 @@ func _show() -> void:
 	_save_list.chosen.connect(_on_save_chosen)
 	_load_page.add_child(_save_list)
 	_load_back = _button(_load_page, "Back", tr("Back"), press_back)
+	exit_confirm_page = _page("ExitConfirmPage", "")
+	exit_confirm_page.visible = false
+	pages.add_child(exit_confirm_page)
+	_exit_confirm_body = Label.new()
+	_exit_confirm_body.name = "Body"
+	_exit_confirm_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_exit_confirm_body.custom_minimum_size = Vector2(MENU_SIZE.x - 40.0, 0.0)
+	exit_confirm_page.add_child(_exit_confirm_body)
+	_save_and_exit_btn = _button(
+		exit_confirm_page, "SaveAndExit", tr("Save & Exit", "menu"), _on_save_and_exit_pressed
+	)
+	_save_and_exit_btn.visible = save_game != null
+	_exit_without_saving_btn = _button(
+		exit_confirm_page,
+		"ExitWithoutSaving",
+		tr("Exit without Saving", "menu"),
+		_on_exit_without_saving_pressed
+	)
+	_exit_cancel_btn = _button(
+		exit_confirm_page, "Cancel", tr("Cancel", "menu"), _on_exit_cancel_pressed
+	)
 	_status = Label.new()
 	_status.name = "Status"
 	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -480,6 +541,10 @@ func _render_status() -> void:
 			text = tr("Could not start the quit log in {path}").format(_status_spec.get("args", {}))
 		&"log_folder_error":
 			text = tr("Could not open the log folder: {path}").format(_status_spec.get("args", {}))
+		&"save_refused":
+			text = tr("Cannot save right now: {reason}").format(_status_spec.get("args", {}))
+		&"save_failed":
+			text = tr("Could not save the game.")
 		_:
 			if _status_spec.has("msgid"):
 				var ctx := str(_status_spec.get("context", ""))
@@ -499,8 +564,92 @@ func _on_incidents_toggled(on: bool) -> void:
 		director.set_enabled(on)
 
 
+func _on_feedback_pressed() -> void:
+	if not feedback_url.is_empty() and open_url.is_valid():
+		open_url.call(feedback_url)
+
+
+func _on_main_menu_pressed() -> void:
+	_open_exit_confirm(ExitTarget.MAIN_MENU)
+
+
+func _on_quit_to_desktop_pressed() -> void:
+	_open_exit_confirm(ExitTarget.QUIT_TO_DESKTOP)
+
+
+func _on_exit_cancel_pressed() -> void:
+	if not _shown:
+		return
+	_set_status("")
+	_exit_target = ExitTarget.NONE
+	exit_confirm_page.visible = false
+	_main_page.visible = true
+
+
+func _on_exit_without_saving_pressed() -> void:
+	if not _shown or _exit_target == ExitTarget.NONE:
+		return
+	_perform_exit()
+
+
+func _on_save_and_exit_pressed() -> void:
+	if not _shown or _exit_target == ExitTarget.NONE or save_game == null:
+		return
+	var problem := save_game.save_problem()
+	if problem != "":
+		_set_status_spec({"kind": &"save_refused", "args": {"reason": problem}})
+		return
+	if not save_game.save_to_file(save_game.quick_save_path):
+		var msg := save_game.message_text()
+		if msg == "":
+			_set_status_spec({"kind": &"save_failed"})
+		else:
+			_set_status(msg)
+		return
+	_perform_exit()
+
+
+func _open_exit_confirm(target: ExitTarget) -> void:
+	if not _shown:
+		return
+	_set_status("")
+	_exit_target = target
+	_update_exit_confirm_copy()
+	_main_page.visible = false
+	exit_confirm_page.visible = true
+
+
+func _update_exit_confirm_copy() -> void:
+	if exit_confirm_page == null:
+		return
+	var title := exit_confirm_page.get_node("Title") as Label
+	if _exit_target == ExitTarget.MAIN_MENU:
+		title.text = tr("Return to main menu?")
+		_exit_confirm_body.text = tr("Unsaved progress will be lost.")
+	elif _exit_target == ExitTarget.QUIT_TO_DESKTOP:
+		title.text = tr("Quit to desktop?")
+		_exit_confirm_body.text = tr("Unsaved progress will be lost.")
+	else:
+		title.text = ""
+		_exit_confirm_body.text = ""
+
+
+func _perform_exit() -> void:
+	var target := _exit_target
+	if quit_log != null:
+		quit_log.stop(QuitLogRecorder.REASON_QUIT_MENU)
+	close()
+	if target == ExitTarget.MAIN_MENU:
+		if change_scene.is_valid():
+			change_scene.call(GameBoot.TITLE_SCENE)
+	elif target == ExitTarget.QUIT_TO_DESKTOP:
+		if quit_game.is_valid():
+			quit_game.call()
+
+
 func _free_layer() -> void:
 	_shown = false
+	_exit_target = ExitTarget.NONE
 	if is_instance_valid(camera) and camera.pitch_changed.is_connected(_on_camera_pitch_changed):
 		camera.pitch_changed.disconnect(_on_camera_pitch_changed)
 	var layer := _layer
@@ -508,6 +657,7 @@ func _free_layer() -> void:
 	_main_page = null
 	audio_card = null
 	language_picker = null
+	exit_confirm_page = null
 	camera_angle_picker = null
 	camera_angle_option = null
 	_camera_angle_label = null
@@ -522,6 +672,13 @@ func _free_layer() -> void:
 	_open_log_btn = null
 	_settings_back = null
 	_load_back = null
+	_send_feedback_btn = null
+	_main_menu_btn = null
+	_quit_to_desktop_btn = null
+	_exit_confirm_body = null
+	_save_and_exit_btn = null
+	_exit_without_saving_btn = null
+	_exit_cancel_btn = null
 	_version = null
 	if is_instance_valid(layer) and not layer.is_queued_for_deletion():
 		layer.queue_free()
@@ -605,6 +762,20 @@ func _retranslate() -> void:
 		if _save_list != null:
 			_save_list.fill(_save_paths(), save_game.quick_save_path)
 	settings_button().text = tr("Settings")
+	if _send_feedback_btn != null:
+		_send_feedback_btn.text = tr("Send Feedback")
+	if _main_menu_btn != null:
+		_main_menu_btn.text = tr("Main Menu", "menu")
+	if _quit_to_desktop_btn != null:
+		_quit_to_desktop_btn.text = tr("Quit to Desktop", "menu")
+	if exit_confirm_page != null:
+		_update_exit_confirm_copy()
+		if _save_and_exit_btn != null:
+			_save_and_exit_btn.text = tr("Save & Exit", "menu")
+		if _exit_without_saving_btn != null:
+			_exit_without_saving_btn.text = tr("Exit without Saving", "menu")
+		if _exit_cancel_btn != null:
+			_exit_cancel_btn.text = tr("Cancel", "menu")
 	(_settings_page.get_node("Title") as Label).text = tr("Settings")
 	_sync_camera_angle_picker()
 	_incidents_switch.text = tr("Incidents")

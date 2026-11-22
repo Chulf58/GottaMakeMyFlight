@@ -5999,7 +5999,7 @@ msgstr ""
 msgid "Demo limit: 1 extra plot (more in the full game)"
 msgstr ""
 
-#: ui/title_screen.gd ui/demo_end_card.gd
+#: ui/title_screen.gd ui/demo_end_card.gd ui/game_menu.gd
 msgid "Send Feedback"
 msgstr ""
 
@@ -6192,6 +6192,51 @@ msgstr ""
 
 #: audio/audio_settings_card.gd
 msgid "{percent}%"
+msgstr ""
+
+#: ui/game_menu.gd
+msgctxt "menu"
+msgid "Main Menu"
+msgstr ""
+
+#: ui/game_menu.gd
+msgctxt "menu"
+msgid "Quit to Desktop"
+msgstr ""
+
+#: ui/game_menu.gd
+msgctxt "menu"
+msgid "Save & Exit"
+msgstr ""
+
+#: ui/game_menu.gd
+msgctxt "menu"
+msgid "Exit without Saving"
+msgstr ""
+
+#: ui/game_menu.gd
+msgctxt "menu"
+msgid "Cancel"
+msgstr ""
+
+#: ui/game_menu.gd
+msgid "Return to main menu?"
+msgstr ""
+
+#: ui/game_menu.gd
+msgid "Quit to desktop?"
+msgstr ""
+
+#: ui/game_menu.gd
+msgid "Unsaved progress will be lost."
+msgstr ""
+
+#: ui/game_menu.gd
+msgid "Cannot save right now: {reason}"
+msgstr ""
+
+#: ui/game_menu.gd
+msgid "Could not save the game."
 msgstr ""
 
 #: ui/game_menu.gd
