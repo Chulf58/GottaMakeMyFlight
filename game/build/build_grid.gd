@@ -77,6 +77,8 @@ var check_staff_reach := true
 ## read before the edit changes anything (BuildReceipt), and a snapshot load
 ## marks it replaced. BuildMode sets it for one player action (UndoStack).
 var recorder: BuildReceipt = null
+## How many times divider doors were recomputed (for tests that bound work).
+var divider_door_rebuilds := 0
 
 var _floor := PackedByteArray()
 var _zone := PackedInt32Array()
@@ -143,6 +145,11 @@ var _pathing: GridPathing = null
 ## is first asked for and kept up to date by the same relinks from then on;
 ## null until then, and after a load or a rebuild.
 var _staff_pathing: GridPathing = null
+## Canonical edge keys (GridPathing.door_edge_key()) of WallKind.DOOR edges
+## separating landside from airside; passengers never cross them.
+var _divider_doors := {}
+var _divider_doors_stale := true
+var _synced_divider_doors := {}
 ## Signal emissions held back by hold_signals(), in the order they happened.
 var _held: Array[Callable] = []
 var _hold_depth := 0
@@ -312,11 +319,58 @@ func can_route(from: Vector2i, to: Vector2i) -> bool:
 	return can_step(from, to) and not _is_security_cell(from) and not _is_security_cell(to)
 
 
-## A step passengers may take: can_route() between two indoor cells. The
-## passenger A* graph walks only these steps (GridPathing). can_route() stays
-## physical, for the rules about the structure (SecurityLanes).
+## A step passengers may take: can_route() between two indoor cells, never
+## crossing a security-divider door. The passenger A* graph walks only these
+## steps (GridPathing). can_route() stays physical, for the rules about the
+## structure (SecurityLanes).
 func can_passenger_route(from: Vector2i, to: Vector2i) -> bool:
-	return can_route(from, to) and is_indoor(from) and is_indoor(to)
+	return (
+		can_route(from, to)
+		and is_indoor(from)
+		and is_indoor(to)
+		and not crosses_divider_door(from, to)
+	)
+
+
+func has_any_door_wall() -> bool:
+	return _h_walls.find(WallKind.DOOR) >= 0 or _v_walls.find(WallKind.DOOR) >= 0
+
+
+func recognised_lanes() -> SecurityLanes:
+	return _recognised_lanes()
+
+
+func ensure_divider_doors() -> void:
+	if not _divider_doors_stale:
+		return
+	_divider_doors_stale = false
+	divider_door_rebuilds += 1
+	_divider_doors = GridPathing.divider_doors(self)
+
+
+func sync_divider_doors() -> void:
+	_synced_divider_doors = _divider_doors
+
+
+func crosses_divider_door(from: Vector2i, to: Vector2i) -> bool:
+	ensure_divider_doors()
+	if _divider_doors.is_empty():
+		return false
+	var step := to - from
+	if step.x == 0 or step.y == 0:
+		return _is_divider_edge(from, to)
+	var across := from + Vector2i(step.x, 0)
+	var down := from + Vector2i(0, step.y)
+	return (
+		_is_divider_edge(from, across)
+		or _is_divider_edge(across, to)
+		or _is_divider_edge(from, down)
+		or _is_divider_edge(down, to)
+	)
+
+
+func _is_divider_edge(a: Vector2i, b: Vector2i) -> bool:
+	return _divider_doors.has(GridPathing.door_edge_key(size.x, a, b))
 
 
 ## A step staff may take: any can_step(), so staff walk through a security
@@ -557,15 +611,18 @@ func _commit(edit: BuildEdit) -> BuildResult:
 			_floor[_index(edit.cell)] = edit.floor_type
 			_zone[_index(edit.cell)] = edit.zone_id
 			_floor_paid[_index(edit.cell)] = edit.paid
+			_divider_doors_stale = true
 			result.dirty_cells = [edit.cell]
 		BuildEdit.Kind.REMOVE_FLOOR:
 			_floor[_index(edit.cell)] = FLOOR_NONE
 			_zone[_index(edit.cell)] = 0
 			_floor_paid[_index(edit.cell)] = 0
+			_divider_doors_stale = true
 			result.dirty_cells = [edit.cell]
 		BuildEdit.Kind.PLACE_WALL, BuildEdit.Kind.REMOVE_WALL:
 			var placing := edit.kind == BuildEdit.Kind.PLACE_WALL
 			_enclosure_stale = true
+			_divider_doors_stale = true
 			_set_wall(edit.cell, edit.side, edit.wall_kind if placing else WallKind.NONE)
 			_set_wall_paid(edit.cell, edit.side, edit.paid if placing else 0)
 			result.dirty_cells = _edge_cells(edit.cell, edit.side)
@@ -580,11 +637,22 @@ func _commit(edit: BuildEdit) -> BuildResult:
 			)
 			# A door object's back edge closes the wall line it stands in.
 			_enclosure_stale = _enclosure_stale or BuildCatalog.is_door(edit.def_id)
+			_lanes = null
+			if _object_affects_divider_doors(
+				edit.def_id, result.dirty_cells, edit.cell, edit.facing
+			):
+				_divider_doors_stale = true
 		BuildEdit.Kind.REMOVE_OBJECT:
 			result.object_id = edit.object_id
-			var def_id: StringName = _objects[edit.object_id]["def"]
+			var removed: Dictionary = _objects[edit.object_id]
+			var def_id: StringName = removed["def"]
+			var anchor: Vector2i = removed["anchor"]
+			var facing: int = removed["facing"]
 			_enclosure_stale = _enclosure_stale or BuildCatalog.is_door(def_id)
 			result.dirty_cells = _erase_object(edit.object_id)
+			_lanes = null
+			if _object_affects_divider_doors(def_id, result.dirty_cells, anchor, facing):
+				_divider_doors_stale = true
 		BuildEdit.Kind.PLACE_ROOM:
 			result.room_id = edit.room_id
 			if edit.room_id == 0:
@@ -609,6 +677,9 @@ func _commit(edit: BuildEdit) -> BuildResult:
 	_staff_reach_known = _handoff_edit == edit
 	_handoff_edit = null
 	_lanes = null
+	for cell in result.dirty_cells:
+		var one := Rect2i(cell, Vector2i.ONE)
+		_built = one if _built.size == Vector2i.ZERO else _built.merge(one)
 	if recorder != null:
 		recorder.record(edit, result, inverse)
 	_emit_or_hold(func() -> void: edit_applied.emit(edit, result))
@@ -749,6 +820,9 @@ func _reset(grid_size: Vector2i, grid_origin: Vector3) -> void:
 	_outside.fill(1)
 	_built = Rect2i()
 	_enclosure_stale = false
+	_divider_doors = {}
+	_divider_doors_stale = true
+	_synced_divider_doors = {}
 
 
 func _insert_room(room_id: int, type: StringName, area: Rect2i) -> void:
@@ -857,10 +931,23 @@ func _relink_paths(dirty: Array[Vector2i]) -> Array[Vector2i]:
 		_outside = after
 	if _staff_pathing != null and not dirty.is_empty():
 		_staff_pathing.update(self, dirty)
+	var to_relink := dirty
+	if _pathing != null:
+		ensure_divider_doors()
+		if not is_same(_synced_divider_doors, _divider_doors):
+			var door_dirty := _flipped_divider_cells(_synced_divider_doors, _divider_doors)
+			_synced_divider_doors = _divider_doors
+			if not door_dirty.is_empty():
+				to_relink = dirty.duplicate()
+				for cell in door_dirty:
+					if not to_relink.has(cell):
+						to_relink.append(cell)
 	# With no graph yet, the cells it would relink: the one built later links
 	# the grid as it is then.
 	var cells := (
-		GridPathing.neighbourhood(self, dirty) if _pathing == null else _pathing.update(self, dirty)
+		GridPathing.neighbourhood(self, to_relink)
+		if _pathing == null
+		else _pathing.update(self, to_relink)
 	)
 	if flipped.is_empty():
 		return cells
@@ -883,6 +970,139 @@ func _relink_paths(dirty: Array[Vector2i]) -> Array[Vector2i]:
 			count += 1
 	cells.resize(count)
 	return cells
+
+
+func _object_affects_divider_doors(
+	def_id: StringName, cells: Array[Vector2i], anchor: Vector2i, facing: int
+) -> bool:
+	if not has_any_door_wall():
+		return false
+	if (
+		BuildCatalog.is_door(def_id)
+		or BuildCatalog.is_security(def_id)
+		or SecurityLanes.is_part(def_id)
+		or GateChairs.is_gate_seat_def(def_id)
+	):
+		return true
+	var touch := cells.duplicate()
+	var def := BuildCatalog.get_def(def_id)
+	var spot := def.interaction_cell(anchor, facing)
+	if spot != BuildObjectDef.NO_CELL and not touch.has(spot):
+		touch.append(spot)
+	var staff_spot := StaffSpots.cell_of(def_id, anchor, facing)
+	if staff_spot != BuildObjectDef.NO_CELL and not touch.has(staff_spot):
+		touch.append(staff_spot)
+	if _touches_zone_anchor_cells(cells, touch):
+		return true
+	return not _local_ring_connected(cells)
+
+
+func _touches_zone_anchor_cells(footprint: Array[Vector2i], touch: Array[Vector2i]) -> bool:
+	for id: int in _objects:
+		var record: Dictionary = _objects[id]
+		var other_def := StringName(record["def"])
+		var other_anchor: Vector2i = record["anchor"]
+		var other_facing: int = record["facing"]
+		if other_def == SecurityLanes.ARCH:
+			for mirror in SecurityLanes.MIRRORS:
+				var lane := SecurityLanes.geometry(other_anchor, other_facing, mirror)
+				for cell in SecurityLanes.lane_cells(lane):
+					if touch.has(cell):
+						return true
+		elif other_def == &"security_scanner":
+			var entry := BuildCatalog.get_def(other_def).interaction_cell(
+				other_anchor, other_facing
+			)
+			var back := BuildObjectDef.rotate_offset(Vector2i(0, -1), other_facing)
+			var exit_cell := other_anchor + back
+			if footprint.has(entry) or footprint.has(exit_cell):
+				return true
+		elif GateChairs.is_gate_seat_def(other_def):
+			var other_cells := BuildCatalog.get_def(other_def).footprint(other_anchor, other_facing)
+			var front_step := TerminalLayout.seat_front_of(other_def, other_facing)
+			for i in other_cells.size():
+				if (
+					GateChairs.has_chair(other_def, i)
+					and footprint.has(other_cells[i] + front_step)
+				):
+					return true
+	return false
+
+
+func _local_ring_connected(cells: Array[Vector2i]) -> bool:
+	if cells.is_empty():
+		return true
+	var blocked := {}
+	var box := Rect2i(cells[0], Vector2i.ONE)
+	for c in cells:
+		blocked[c] = true
+		box = box.merge(Rect2i(c, Vector2i.ONE))
+		for side in 4:
+			if wall_kind(c, side) == WallKind.DOOR:
+				return false
+	box = box.grow(1).intersection(Rect2i(Vector2i.ZERO, size))
+	var seeds: Array[Vector2i] = []
+	for c in cells:
+		for side in 4:
+			var n := c + SIDE_STEP[side]
+			if (
+				box.has_point(n)
+				and not blocked.has(n)
+				and wall_kind(c, side) == WallKind.NONE
+				and is_passenger_cell(n)
+				and not seeds.has(n)
+			):
+				seeds.append(n)
+	if seeds.size() <= 1:
+		return true
+	var seen := {seeds[0]: true}
+	var queue: Array[Vector2i] = [seeds[0]]
+	var head := 0
+	while head < queue.size():
+		var at := queue[head]
+		head += 1
+		for offset in GridPathing.NEIGHBOURS:
+			var nxt := at + offset
+			if (
+				not box.has_point(nxt)
+				or blocked.has(nxt)
+				or seen.has(nxt)
+				or not is_passenger_cell(nxt)
+			):
+				continue
+			if not can_route(at, nxt) or GridPathing.crosses_door_edge(self, at, nxt):
+				continue
+			seen[nxt] = true
+			queue.append(nxt)
+	for s in seeds:
+		if not seen.has(s):
+			return false
+	return true
+
+
+func _flipped_divider_cells(before: Dictionary, after: Dictionary) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	for key: int in before:
+		if not after.has(key):
+			_append_door_cells(key, out)
+	for key: int in after:
+		if not before.has(key):
+			_append_door_cells(key, out)
+	return out
+
+
+func _append_door_cells(key: int, out: Array[Vector2i]) -> void:
+	var horiz := (key & 1) == 0
+	var idx := key >> 1
+	@warning_ignore("integer_division")
+	var y := idx / (size.x + 1)
+	var x := idx - y * (size.x + 1)
+	var cell := Vector2i(x, y)
+	var other := cell + (Vector2i.UP if horiz else Vector2i.LEFT)
+	if in_bounds(cell) and not out.has(cell):
+		out.append(cell)
+	if in_bounds(other) and not out.has(other):
+		out.append(other)
 
 
 func _is_security_cell(cell: Vector2i) -> bool:
