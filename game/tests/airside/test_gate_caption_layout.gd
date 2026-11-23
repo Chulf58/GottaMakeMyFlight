@@ -11,11 +11,9 @@ extends GdUnitTestSuite
 ## exit (gates A and B); a camera straight over the desks.
 
 const SITE := preload("res://build/terminal_site.tres")
-## The side land's 85 grid columns west of the first site (SiteDefinition):
-## the cells below are written in the first site's columns and moved by it.
-const SIDE_LAND := Vector2i(85, 0)
 const EAST := Vector2i(19, 0)
-const DESK := Vector2i(19, 115) + SIDE_LAND
+
+var _desk := ReferenceTerminal.GATE_DESK_CELL + SITE.starter_offset
 
 var _grid: SiteGrid
 var _flights: FlightSim
@@ -36,7 +34,7 @@ func before() -> void:
 	_gates = GateDesks.new()
 	_gates.bind(_grid, _flights)
 	_grid.guard = _gates.edit_problem
-	for at in [DESK, DESK + EAST]:
+	for at in [_desk, _desk + EAST]:
 		assert_bool(_grid.apply(BuildEdit.place_object(GateDesks.DESK, at, 0)).ok).is_true()
 	_port = SubViewport.new()
 	_port.size = Vector2i(1920, 1080)
@@ -61,7 +59,7 @@ func before_test() -> void:
 
 ## The camera `height` metres straight over the two desks, north up.
 func _look_down(height: float) -> void:
-	var middle := (_grid.cell_to_world(DESK) + _grid.cell_to_world(DESK + EAST)) / 2.0
+	var middle := (_grid.cell_to_world(_desk) + _grid.cell_to_world(_desk + EAST)) / 2.0
 	var down := Basis(Vector3.RIGHT, Vector3.FORWARD, Vector3.UP)
 	_camera.global_transform = Transform3D(down, middle + Vector3.UP * height)
 

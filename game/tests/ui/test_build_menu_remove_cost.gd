@@ -7,11 +7,10 @@ extends GdUnitTestSuite
 ## cannot pay for still shows its shortfall.
 
 const SITE := preload("res://build/terminal_site.tres")
-## Side land west of the first site: grid cells shift this far east.
-const SIDE_LAND := Vector2i(85, 0)
+
 ## A north exit placed straight on the grid, so it was never paid for and its
 ## removal refunds nothing: the wall it leaves is the removal's whole cost.
-const EXIT_CELL := Vector2i(11, 112) + SIDE_LAND
+var _exit_cell := ReferenceTerminal.EXIT_CELL - Vector2i(9, 0) + SITE.starter_offset
 
 var _finances: Finances
 var _mode: BuildMode
@@ -34,11 +33,11 @@ func before_test() -> void:
 	_menu.build_mode = _mode
 	add_child(_menu)
 	_grid = _mode.grid as SiteGrid
-	assert_bool(_grid.apply(BuildEdit.remove_wall(EXIT_CELL, BuildGrid.Side.NORTH)).ok).is_true()
-	var door := _grid.apply(BuildEdit.place_object(&"exit_door", EXIT_CELL, 0))
+	assert_bool(_grid.apply(BuildEdit.remove_wall(_exit_cell, BuildGrid.Side.NORTH)).ok).is_true()
+	var door := _grid.apply(BuildEdit.place_object(&"exit_door", _exit_cell, 0))
 	assert_bool(door.ok).is_true()
 	_mode.set_tool(BuildMode.Tool.REMOVE)
-	_mode._update_ghost(_grid.cell_to_world(EXIT_CELL))
+	_mode._update_ghost(_grid.cell_to_world(_exit_cell))
 
 
 func after_test() -> void:

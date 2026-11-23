@@ -8,16 +8,15 @@ extends GdUnitTestSuite
 ## BuildStatus.front_warning() and the site grid's GateDesks warner. A control
 ## cell outside every envelope shows no gate warning.
 ##
-## The starter shell on the airport site, with its gate desk at (19, 115) by the
-## exit at (20, 112); the cells are those of test_stand_envelope.gd.
+## The starter shell on the airport site, with its gate desk at (19, 129) by the
+## exit at (20, 126); the cells are those of test_stand_envelope.gd.
 
 const SITE := preload("res://build/terminal_site.tres")
-## Side land west of the first site: grid cells shift this far east.
-const SIDE_LAND := Vector2i(85, 0)
-const DESK := Vector2i(19, 115) + SIDE_LAND
-const LARGE_CELL := Vector2i(45, 100) + SIDE_LAND
-const FREE_CELL := Vector2i(60, 100) + SIDE_LAND
 const WARNING := "Gate A will then take planes up to medium"
+
+var _desk := ReferenceTerminal.GATE_DESK_CELL + SITE.starter_offset
+var _large_cell := Vector2i(45, -10) + SITE.starter_offset
+var _free_cell := Vector2i(60, -10) + SITE.starter_offset
 
 var _finances: Finances
 var _mode: BuildMode
@@ -42,7 +41,7 @@ func before() -> void:
 	var grid := _mode.grid as SiteGrid
 	grid.guard = _gates.edit_problem
 	grid.warner = _gates.edit_warning
-	assert_bool(grid.apply(BuildEdit.place_object(GateDesks.DESK, DESK, 0)).ok).is_true()
+	assert_bool(grid.apply(BuildEdit.place_object(GateDesks.DESK, _desk, 0)).ok).is_true()
 	assert_str(_gates.max_class("A")).is_equal("large")
 	_mode.set_tool(BuildMode.Tool.FLOOR)
 
@@ -60,20 +59,20 @@ func _hover(cell: Vector2i) -> String:
 
 
 func test_hovering_the_large_only_space_warns_that_the_gate_takes_medium_at_most() -> void:
-	var over_large := _hover(LARGE_CELL)
-	var over_free := _hover(FREE_CELL)
+	var over_large := _hover(_large_cell)
+	var over_free := _hover(_free_cell)
 	print("status over the large-only cell '%s'; over the free cell '%s'" % [over_large, over_free])
 	assert_str(over_large).contains(WARNING)
 	# The control: outside every envelope there is no gate warning.
 	assert_str(over_free).not_contains("Gate A")
 	# The warning goes with the pointer, and nothing was built by hovering.
-	assert_int(_mode.grid.floor_at(LARGE_CELL)).is_equal(BuildGrid.FLOOR_NONE)
+	assert_int(_mode.grid.floor_at(_large_cell)).is_equal(BuildGrid.FLOOR_NONE)
 	assert_str(_gates.max_class("A")).is_equal("large")
 
 
 func test_the_warning_is_the_front_warning_for_the_edit() -> void:
-	var edit := BuildEdit.paint_floor(LARGE_CELL, BuildGrid.FLOOR_TILE, 1)
-	var free := BuildEdit.paint_floor(FREE_CELL, BuildGrid.FLOOR_TILE, 1)
+	var edit := BuildEdit.paint_floor(_large_cell, BuildGrid.FLOOR_TILE, 1)
+	var free := BuildEdit.paint_floor(_free_cell, BuildGrid.FLOOR_TILE, 1)
 	assert_str(BuildStatus.front_warning(_mode.grid, edit)).is_equal(WARNING)
 	assert_str(BuildStatus.front_warning(_mode.grid, free)).is_empty()
 	assert_str(BuildStatus.front_warning(_mode.grid, null)).is_empty()

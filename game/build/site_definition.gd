@@ -46,9 +46,9 @@ const SIDE_LAND_OPEN := true
 @export var road_z := -57.0
 @export var road_height := 0.1
 ## Where ReferenceTerminal's cells (and the starter shell) go on this grid:
-## the grid grew 110 rows north and 85 columns west, so the starter keeps its
-## world place (x -33 to -21, z -98 to -82).
-@export var starter_offset := Vector2i(85, 110)
+## shifted south near the road (x -33 to -21, z -84 to -68), leaving 8 cells
+## south (y 142..149) and opening north expansion room before the apron.
+@export var starter_offset := Vector2i(85, 124)
 ## The land plot columns' widths in cells, west to east (LandPlots); they add
 ## up to grid_size.x. Each part of the site is cut as evenly as whole cells
 ## allow, its first columns taking the extra cells (user ruling land-plots-are-

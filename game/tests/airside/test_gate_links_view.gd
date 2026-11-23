@@ -10,13 +10,11 @@ extends GdUnitTestSuite
 ## and a copy 44 cells east with its exit at (64, 112).
 
 const SITE := preload("res://build/terminal_site.tres")
-## The side land's 85 grid columns west of the first site (SiteDefinition):
-## the cells below are written in the first site's columns and moved by it.
-const SIDE_LAND := Vector2i(85, 0)
 const EAST := Vector2i(44, 0)
-const EXIT_WEST := Vector2i(20, 112) + SIDE_LAND
-const DESK_WEST := Vector2i(19, 115) + SIDE_LAND
-const DESK_EAST := DESK_WEST + EAST
+
+var _exit_west := ReferenceTerminal.EXIT_CELL + SITE.starter_offset
+var _desk_west := ReferenceTerminal.GATE_DESK_CELL + SITE.starter_offset
+var _desk_east := _desk_west + EAST
 
 var _grid: SiteGrid
 var _flights: FlightSim
@@ -49,22 +47,21 @@ func _desk(at: Vector2i) -> BuildResult:
 
 
 func test_a_link_runs_from_the_desk_to_its_exit_and_on_to_the_plane_door() -> void:
-	var west := _desk(DESK_WEST)
+	var west := _desk(_desk_west)
 	assert_bool(west.ok).is_true()
 	var binding := _gates.bindings[0]
 	var path := GateLinksView.link_points(_grid, binding)
 	var desk_centre := (
-		(_grid.cell_to_world(DESK_WEST) + _grid.cell_to_world(DESK_WEST + Vector2i.RIGHT)) / 2.0
+		(_grid.cell_to_world(_desk_west) + _grid.cell_to_world(_desk_west + Vector2i.RIGHT)) / 2.0
 	)
-	var exit_centre := _grid.cell_to_world(EXIT_WEST)
+	var exit_centre := _grid.cell_to_world(_exit_west)
 	var door := StandPlacement.door_point(StandPlacement.for_exit(_grid, binding["exit"]))
 	print("path %s; desk %s exit %s door %s" % [path, desk_centre, exit_centre, door])
 	assert_int(path.size()).is_equal(3)
 	var lift := _grid.origin.y + GateLinksView.LIFT_M
-	# It starts on the desk's north edge (the footprint's z runs 115..116), on
-	# the way from the footprint centre to the exit's centre: 0.5 of its 3 m
-	# north, so 1/6 of its 0.5 m east.
-	var edge := Vector3(desk_centre.x + 0.5 / 6.0, lift, _grid.origin.z + DESK_WEST.y)
+	# It starts on the desk's north edge, on the way from the footprint centre
+	# to the exit's centre: 0.5 of its 3 m north, so 1/6 of its 0.5 m east.
+	var edge := Vector3(desk_centre.x + 0.5 / 6.0, lift, _grid.origin.z + _desk_west.y)
 	assert_vector(path[0]).is_equal_approx(edge, Vector3.ONE * 1e-4)
 	assert_vector(path[1]).is_equal_approx(
 		Vector3(exit_centre.x, lift, exit_centre.z), Vector3.ONE * 1e-4
@@ -77,8 +74,8 @@ func test_a_link_runs_from_the_desk_to_its_exit_and_on_to_the_plane_door() -> vo
 
 
 func test_lines_ends_and_captions_show_only_in_build_mode() -> void:
-	assert_bool(_desk(DESK_WEST).ok).is_true()
-	assert_bool(_desk(DESK_EAST).ok).is_true()
+	assert_bool(_desk(_desk_west).ok).is_true()
+	assert_bool(_desk(_desk_east).ok).is_true()
 	var texts := []
 	for caption in _view.gate_captions():
 		texts.append(caption.text)
@@ -126,10 +123,10 @@ func test_lines_ends_and_captions_show_only_in_build_mode() -> void:
 
 
 func test_an_unlinked_desk_gets_a_sign_with_why_and_no_line() -> void:
-	var west := _desk(DESK_WEST)
-	assert_bool(_desk(DESK_EAST).ok).is_true()
+	var west := _desk(_desk_west)
+	assert_bool(_desk(_desk_east).ok).is_true()
 	assert_int(_view.signs().size()).is_equal(0)
-	assert_bool(_grid.apply(BuildEdit.remove_object(_grid.object_at(EXIT_WEST))).ok).is_true()
+	assert_bool(_grid.apply(BuildEdit.remove_object(_grid.object_at(_exit_west))).ok).is_true()
 	var signs := _view.signs()
 	var captions := []
 	for marker in signs:
@@ -145,7 +142,7 @@ func test_an_unlinked_desk_gets_a_sign_with_why_and_no_line() -> void:
 	assert_bool(signs[0].visible and signs[0].get_parent() == _view).is_true()
 	assert_float(signs[0].position.y).is_greater(BuildCatalog.get_def(GateDesks.DESK).height)
 	# The exit comes back: the desk links again and its sign goes.
-	assert_bool(_grid.apply(BuildEdit.place_object(&"exit_door", EXIT_WEST, 0)).ok).is_true()
+	assert_bool(_grid.apply(BuildEdit.place_object(&"exit_door", _exit_west, 0)).ok).is_true()
 	assert_int(_view.signs().size()).is_equal(0)
 	assert_int(_view.paths().size()).is_equal(2)
 

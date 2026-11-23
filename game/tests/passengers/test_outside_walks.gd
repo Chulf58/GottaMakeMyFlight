@@ -12,17 +12,26 @@ extends GdUnitTestSuite
 ## exit on its north wall, fifteen cells south of the plane door.
 
 const SITE := preload("res://build/terminal_site.tres")
-## The cells of the layout below, moved by the site's starter_offset so the
-## boxes stand where the starter terminal does, beside the plane stand.
-var _entrance_a := Vector2i(11, 35) + SITE.starter_offset
-var _entrance_b := Vector2i(21, 35) + SITE.starter_offset
-var _exit_cell := Vector2i(31, 10) + SITE.starter_offset
+const TEST_OFFSET := Vector2i(85, 110)
+## The cells of the layout below, placed on the site so the 30-row boxes sit
+## north of the road with room to spare.
+var _entrance_a := Vector2i(11, 35) + TEST_OFFSET
+var _entrance_b := Vector2i(21, 35) + TEST_OFFSET
+var _exit_cell := Vector2i(31, 10) + TEST_OFFSET
 ## A wall of box A, away from its door.
-var _gap_a := Vector2i(10, 32) + SITE.starter_offset
-var _gap_b := Vector2i(20, 32) + SITE.starter_offset
+var _gap_a := Vector2i(10, 32) + TEST_OFFSET
+var _gap_b := Vector2i(20, 32) + TEST_OFFSET
 
 var _world: PassengerTestWorld
 var _exit := 0
+var _site: SiteDefinition
+
+
+func _test_site() -> SiteDefinition:
+	if _site == null:
+		_site = SITE.duplicate() as SiteDefinition
+		_site.starter_offset = TEST_OFFSET
+	return _site
 
 
 func before() -> void:
@@ -36,7 +45,7 @@ func after() -> void:
 func before_test() -> void:
 	var grid := BuildGrid.new(SITE.grid_size, SITE.grid_origin)
 	var edits: Array[BuildEdit] = []
-	var off := SITE.starter_offset
+	var off := TEST_OFFSET
 	for box in [Rect2i(10, 30, 4, 6), Rect2i(20, 30, 4, 6), Rect2i(30, 10, 4, 4)]:
 		for y in range(box.position.y + off.y, box.end.y + off.y):
 			for x in range(box.position.x + off.x, box.end.x + off.x):
@@ -48,7 +57,7 @@ func before_test() -> void:
 		assert_bool(result.ok).override_failure_message(result.reason_text()).is_true()
 	EnclosureKit.close_floor(grid)
 	_world = PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
-	_world.sim.site = SITE
+	_world.sim.site = _test_site()
 	_exit = ReferenceTerminal.object_ids(grid)["exits"][0]
 
 
@@ -196,7 +205,7 @@ func test_an_apron_walker_walks_round_floor_laid_across_its_walk() -> void:
 	var here := p.apron_position()
 	(
 		assert_bool(
-			_world.grid.apply(BuildEdit.paint_floor(Vector2i(31, 5) + SITE.starter_offset, 1, 1)).ok
+			_world.grid.apply(BuildEdit.paint_floor(Vector2i(31, 5) + TEST_OFFSET, 1, 1)).ok
 		)
 		. is_true()
 	)
@@ -213,9 +222,7 @@ func test_an_apron_walker_with_no_way_on_waits_until_it_is_cleared() -> void:
 	var p := _apron_walker()
 	var row: Array[BuildEdit] = []
 	for x in SITE.grid_size.x:
-		row.append(
-			BuildEdit.paint_floor(Vector2i(x, 5 + SITE.starter_offset.y), BuildGrid.FLOOR_TILE, 1)
-		)
+		row.append(BuildEdit.paint_floor(Vector2i(x, 5 + TEST_OFFSET.y), BuildGrid.FLOOR_TILE, 1))
 	_world.grid.apply_batch(row)
 	var stood := p.apron_position()
 	_steps(30)
@@ -224,9 +231,7 @@ func test_an_apron_walker_with_no_way_on_waits_until_it_is_cleared() -> void:
 	assert_int(p.stuck).is_equal(Passenger.Stuck.NO_ROUTE)
 	assert_vector(p.apron_position()).is_equal(stood)
 	(
-		assert_bool(
-			_world.grid.apply(BuildEdit.remove_floor(Vector2i(40, 5) + SITE.starter_offset)).ok
-		)
+		assert_bool(_world.grid.apply(BuildEdit.remove_floor(Vector2i(40, 5) + TEST_OFFSET)).ok)
 		. is_true()
 	)
 	assert_int(p.stuck).is_equal(Passenger.Stuck.NONE)

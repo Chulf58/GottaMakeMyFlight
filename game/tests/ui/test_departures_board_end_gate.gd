@@ -4,8 +4,8 @@ extends GdUnitTestSuite
 ## contract kept busy (GATE_FLIGHTS_STUCK -> removed).
 
 const SITE := preload("res://build/terminal_site.tres")
-const SIDE_LAND := Vector2i(85, 0)
-const DESK_WEST := Vector2i(19, 115) + SIDE_LAND
+
+var _desk_west := ReferenceTerminal.GATE_DESK_CELL + SITE.starter_offset
 
 var _grid: SiteGrid
 var _flights: FlightSim
@@ -33,7 +33,7 @@ func after_test() -> void:
 
 
 func test_ending_the_only_contract_lets_its_gate_be_removed() -> void:
-	var desk := _grid.apply(BuildEdit.place_object(GateDesks.DESK, DESK_WEST, 0))
+	var desk := _grid.apply(BuildEdit.place_object(GateDesks.DESK, _desk_west, 0))
 	assert_bool(desk.ok).is_true()
 	assert_bool(_flights.accept_contract(TestFlightContracts.terms("X", 620))).is_true()
 	add_child(_planner)

@@ -9,6 +9,7 @@ extends GdUnitTestSuite
 ## built cell lies under them.
 
 const SITE := preload("res://build/terminal_site.tres")
+const SHELL_OFFSET := Vector2i(85, 110)
 ## The shell's west and east walls (ReferenceTerminal floor x 10 and 21), in
 ## its airside half (row 4 of the reference terminal).
 const WEST_CELL := Vector2i(10, 4)
@@ -21,7 +22,7 @@ var _grid: BuildGrid
 
 func before_test() -> void:
 	_grid = BuildGrid.new(SITE.grid_size, SITE.grid_origin)
-	assert_bool(StarterShell.place(_grid, SITE.starter_offset)).is_true()
+	assert_bool(StarterShell.place(_grid, SHELL_OFFSET)).is_true()
 
 
 ## Opens the shell's wall at `cell` on `side` and puts an exit door there.
@@ -38,7 +39,7 @@ func test_a_west_and_an_east_exit_walk_out_of_their_own_side_to_the_door() -> vo
 		[EAST_CELL, BuildGrid.Side.EAST, 1, StandPlacement.EAST],
 	]
 	for exit: Array in exits:
-		var cell: Vector2i = exit[0] + SITE.starter_offset
+		var cell: Vector2i = exit[0] + SHELL_OFFSET
 		var id := _add_exit(cell, exit[1], exit[2])
 		var stand := StandPlacement.for_cell(_grid, cell, id, exit[3])
 		var step := StandPlacement.out_step(stand)

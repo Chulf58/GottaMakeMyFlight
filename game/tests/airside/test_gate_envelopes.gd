@@ -16,16 +16,14 @@ extends GdUnitTestSuite
 ## test_stand_envelope.gd, north of the shell in row 100.
 
 const SITE := preload("res://build/terminal_site.tres")
-## The side land's 85 grid columns west of the first site (SiteDefinition):
-## the cells below are written in the first site's columns and moved by it.
 const SIDE_LAND := Vector2i(85, 0)
-const EXIT := Vector2i(20, 112) + SIDE_LAND
-const DESK := Vector2i(19, 115) + SIDE_LAND
-const SMALL_CELL := Vector2i(17, 100) + SIDE_LAND
-const MEDIUM_CELL := Vector2i(32, 100) + SIDE_LAND
-const LARGE_CELL := Vector2i(45, 100) + SIDE_LAND
 const WAY_CELL := Vector2i(17, 20) + SIDE_LAND
-const FREE_CELL := Vector2i(60, 100) + SIDE_LAND
+
+var _desk_cell := ReferenceTerminal.GATE_DESK_CELL + SITE.starter_offset
+var _small_cell := Vector2i(17, -10) + SITE.starter_offset
+var _medium_cell := Vector2i(32, -10) + SITE.starter_offset
+var _large_cell := Vector2i(45, -10) + SITE.starter_offset
+var _free_cell := Vector2i(60, -10) + SITE.starter_offset
 
 var _grid: SiteGrid
 var _flights: FlightSim
@@ -70,8 +68,8 @@ func _accept(id: String, minute: int, plane_class: String) -> void:
 
 func test_exits_19_m_apart_make_two_gates() -> void:
 	_shell_east(19)
-	assert_bool(_desk(DESK).ok).is_true()
-	var east := _desk(DESK + Vector2i(19, 0))
+	assert_bool(_desk(_desk_cell).ok).is_true()
+	var east := _desk(_desk_cell + Vector2i(19, 0))
 	print("19 m: %s, gates %s" % [east.ok, _gates.gate_ids()])
 	assert_bool(east.ok).is_true()
 	assert_array(_gates.gate_ids()).is_equal(["A", "B"])
@@ -79,8 +77,8 @@ func test_exits_19_m_apart_make_two_gates() -> void:
 
 func test_exits_18_m_apart_overlap_and_the_refusal_names_19_m() -> void:
 	_shell_east(18)
-	assert_bool(_desk(DESK).ok).is_true()
-	var east := _desk(DESK + Vector2i(18, 0))
+	assert_bool(_desk(_desk_cell).ok).is_true()
+	var east := _desk(_desk_cell + Vector2i(18, 0))
 	print("18 m: %s" % east.reason_text())
 	assert_int(east.reason).is_equal(BuildResult.Reason.GATE_STAND_OVERLAP)
 	assert_str(east.reason_text()).contains("19 m between exits")
@@ -88,8 +86,8 @@ func test_exits_18_m_apart_overlap_and_the_refusal_names_19_m() -> void:
 
 
 func test_a_desk_with_no_room_for_a_small_swing_is_refused() -> void:
-	assert_bool(_floor(SMALL_CELL).ok).is_true()
-	var refused := _desk(DESK)
+	assert_bool(_floor(_small_cell).ok).is_true()
+	var refused := _desk(_desk_cell)
 	print("no room: %s" % refused.reason_text())
 	assert_int(refused.reason).is_equal(BuildResult.Reason.GATE_NO_ROOM)
 	assert_str(refused.reason_text()).is_equal(
@@ -97,32 +95,32 @@ func test_a_desk_with_no_room_for_a_small_swing_is_refused() -> void:
 	)
 	assert_array(_gates.gate_ids()).is_empty()
 	# A control: with the floor gone the same desk makes a gate.
-	assert_bool(_grid.apply(BuildEdit.remove_floor(SMALL_CELL)).ok).is_true()
-	assert_bool(_desk(DESK).ok).is_true()
+	assert_bool(_grid.apply(BuildEdit.remove_floor(_small_cell)).ok).is_true()
+	assert_bool(_desk(_desk_cell).ok).is_true()
 	assert_array(_gates.gate_ids()).is_equal(["A"])
 
 
 func test_a_desk_whose_way_north_to_the_lane_is_built_over_is_refused() -> void:
 	assert_bool(_floor(WAY_CELL).ok).is_true()
-	var refused := _desk(DESK)
+	var refused := _desk(_desk_cell)
 	print("route blocked: %s" % refused.reason_text())
 	assert_int(refused.reason).is_equal(BuildResult.Reason.GATE_ROUTE_BLOCKED)
 	assert_array(_gates.gate_ids()).is_empty()
 	# A control: with the floor gone the same desk makes a gate.
 	assert_bool(_grid.apply(BuildEdit.remove_floor(WAY_CELL)).ok).is_true()
-	assert_bool(_desk(DESK).ok).is_true()
+	assert_bool(_desk(_desk_cell).ok).is_true()
 
 
 func test_max_class_drops_when_the_unused_larger_space_is_built_into() -> void:
-	assert_bool(_desk(DESK).ok).is_true()
+	assert_bool(_desk(_desk_cell).ok).is_true()
 	var seen := [_gates.max_class("A")]
 	# Medium flights are booked: the large-only space is still free to build.
 	_accept("M", 620, PlaneClasses.MEDIUM)
-	var warning := _grid.edit_warning(BuildEdit.paint_floor(LARGE_CELL, BuildGrid.FLOOR_TILE, 1))
+	var warning := _grid.edit_warning(BuildEdit.paint_floor(_large_cell, BuildGrid.FLOOR_TILE, 1))
 	var free_warning := _grid.edit_warning(
-		BuildEdit.paint_floor(FREE_CELL, BuildGrid.FLOOR_TILE, 1)
+		BuildEdit.paint_floor(_free_cell, BuildGrid.FLOOR_TILE, 1)
 	)
-	var built := _floor(LARGE_CELL)
+	var built := _floor(_large_cell)
 	seen.append(_gates.max_class("A"))
 	print("max class %s; warning '%s'; free cell warning '%s'" % [seen, warning, free_warning])
 	assert_bool(built.ok).is_true()
@@ -132,11 +130,11 @@ func test_max_class_drops_when_the_unused_larger_space_is_built_into() -> void:
 
 
 func test_an_edit_under_the_booked_class_envelope_is_refused_naming_the_gate() -> void:
-	assert_bool(_desk(DESK).ok).is_true()
+	assert_bool(_desk(_desk_cell).ok).is_true()
 	_accept("L", 620, PlaneClasses.LARGE)
-	var refused := _floor(LARGE_CELL)
-	var wall := _grid.apply(BuildEdit.place_wall(MEDIUM_CELL, BuildGrid.Side.NORTH))
-	var free := _floor(FREE_CELL)
+	var refused := _floor(_large_cell)
+	var wall := _grid.apply(BuildEdit.place_wall(_medium_cell, BuildGrid.Side.NORTH))
+	var free := _floor(_free_cell)
 	print(
 		"large booked: %s; wall: %s; free %s" % [refused.reason_text(), wall.reason_text(), free.ok]
 	)
@@ -144,18 +142,18 @@ func test_an_edit_under_the_booked_class_envelope_is_refused_naming_the_gate() -
 	assert_str(refused.reason_text()).ends_with("gate A, a large plane")
 	assert_dict(refused.detail_args).is_equal({"gate": "A", "plane": "large"})
 	assert_int(wall.reason).is_equal(BuildResult.Reason.GATE_ROUTE)
-	assert_int(_grid.floor_at(LARGE_CELL)).is_equal(BuildGrid.FLOOR_NONE)
+	assert_int(_grid.floor_at(_large_cell)).is_equal(BuildGrid.FLOOR_NONE)
 	assert_str(_gates.max_class("A")).is_equal("large")
 	# A control: outside every envelope the same edit is built.
 	assert_bool(free.ok).is_true()
 
 
 func test_an_undo_inside_the_booked_envelope_is_refused_on_the_copy() -> void:
-	assert_bool(_desk(DESK).ok).is_true()
-	assert_bool(_floor(LARGE_CELL).ok).is_true()
+	assert_bool(_desk(_desk_cell).ok).is_true()
+	assert_bool(_floor(_large_cell).ok).is_true()
 	var receipt := BuildReceipt.new()
 	_grid.recorder = receipt
-	assert_bool(_grid.apply(BuildEdit.remove_floor(LARGE_CELL)).ok).is_true()
+	assert_bool(_grid.apply(BuildEdit.remove_floor(_large_cell)).ok).is_true()
 	_grid.recorder = null
 	_accept("L", 620, PlaneClasses.LARGE)
 	var snapshot := _grid.to_snapshot()
@@ -180,19 +178,19 @@ func test_a_template_paste_inside_the_booked_envelope_is_refused_whole() -> void
 	var room := _grid.apply(BuildEdit.place_room(Rect2i(156, 21, 4, 3), &"cafe")).room_id
 	var template := RoomTemplate.capture(_grid, room)
 	assert_object(template).is_not_null()
-	assert_bool(_desk(DESK).ok).is_true()
+	assert_bool(_desk(_desk_cell).ok).is_true()
 	_accept("L", 620, PlaneClasses.LARGE)
 	# The same calls TemplatePaste.plan_at() makes: the plan on a trial copy.
 	var inside := BuildUndo.trial_copy_of(_grid).apply_sequence(
-		template.plan(LARGE_CELL, 0, _grid), BeltShaper.crossing_problem
+		template.plan(_large_cell, 0, _grid), BeltShaper.crossing_problem
 	)
 	var outside := BuildUndo.trial_copy_of(_grid).apply_sequence(
-		template.plan(FREE_CELL + Vector2i(10, 0), 0, _grid), BeltShaper.crossing_problem
+		template.plan(_free_cell + Vector2i(10, 0), 0, _grid), BeltShaper.crossing_problem
 	)
 	print("paste inside: %s; outside: %s" % [inside.reason_text(), outside.ok])
 	assert_int(inside.reason).is_equal(BuildResult.Reason.GATE_ROUTE)
 	assert_bool(outside.ok).is_true()
-	assert_int(_grid.floor_at(LARGE_CELL)).is_equal(BuildGrid.FLOOR_NONE)
+	assert_int(_grid.floor_at(_large_cell)).is_equal(BuildGrid.FLOOR_NONE)
 
 
 func test_the_three_refusal_texts() -> void:

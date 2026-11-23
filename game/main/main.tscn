@@ -131,10 +131,10 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 124, 0, -338)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 124, 0, -284)
 
 [node name="PushbackEnd" type="Marker3D" parent="Airside"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -26, 0, -143.9)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -26, 0, -129.9)
 
 [node name="Stand" type="Marker3D" parent="Airside"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -26, 0, -114.9)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -26, 0, -100.9)
 
 [node name="StandLane" type="Marker3D" parent="Airside"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -26, 0, -284)
