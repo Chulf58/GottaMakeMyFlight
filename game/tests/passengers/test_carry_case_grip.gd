@@ -10,8 +10,9 @@ extends GdUnitTestSuite
 ## hand (the hand staying put) the check reports it off.
 
 const FloatCheck := preload("res://spike/carry_float_check.gd")
+const CORRIDOR := Vector2i(5, 2)
 const DISPLACED_M := 0.10
-## Alarm passengers sent so one of them carries a hard case (kind follows id).
+## Passengers sent so one of them carries a hard case (kind follows id).
 const SENT := 10
 
 var _world: SecurityTestWorld
@@ -35,23 +36,26 @@ func after_test() -> void:
 		_world = null
 
 
-## Steps the lane (arch on (5, 6), a wall closing the corridor cell (4, 6)) until
-## a hard case is held in the front carry; returns its passenger id.
+## Steps the lane (arch on (5, 6), exit on (5, 4)) with walls on both edges
+## of CORRIDOR (5, 2) on the walk to the gate exit (5, 0) until a hard case
+## is held in the front carry; returns its passenger id.
 func _case_in_front() -> int:
 	_world = SecurityTestWorld.make(true)
 	(
 		assert_bool(
-			(
-				_world
-				. world
-				. sim
-				. grid
-				. apply(BuildEdit.place_wall(Vector2i(4, 6), BuildGrid.Side.WEST))
-				. ok
-			)
+			_world.world.sim.grid.apply(BuildEdit.place_wall(CORRIDOR, BuildGrid.Side.WEST)).ok
 		)
 		. is_true()
 	)
+	(
+		assert_bool(
+			_world.world.sim.grid.apply(BuildEdit.place_wall(CORRIDOR, BuildGrid.Side.EAST)).ok
+		)
+		. is_true()
+	)
+	for x in 12:
+		if x != 5:
+			_world.world.sim.grid.apply(BuildEdit.place_wall(Vector2i(x, 2), BuildGrid.Side.SOUTH))
 	_views = PassengerTestWorld.views()
 	_views.clock = _world.world.clock
 	_views.sim = _world.world.sim
@@ -60,7 +64,7 @@ func _case_in_front() -> int:
 	RenderingServer.frame_pre_draw.disconnect(props._unposed)
 	var traits: Array = []
 	for n in SENT:
-		traits.append([1, false, true])
+		traits.append([1, false, false])
 	var ids := _world.send_all(traits)
 	for tick in 6000:
 		_world.world.step()
@@ -70,9 +74,13 @@ func _case_in_front() -> int:
 		props._unposed()
 		for id in ids:
 			var p := _world.world.passenger(id)
-			if SecurityLooks.bag_kind(p, 0) != SecurityLooks.Kind.CASE:
+			if p == null or SecurityLooks.bag_kind(p, 0) != SecurityLooks.Kind.CASE:
 				continue
-			if props.bag_state(id, 0).get("held_by", -1) >= 0 and props.front_weight_of(id) >= 1.0:
+			if (
+				p.stage == Passenger.Stage.TO_GATE
+				and props.bag_state(id, 0).get("held_by", -1) >= 0
+				and props.front_weight_of(id) >= 1.0
+			):
 				return id
 	return -1
 

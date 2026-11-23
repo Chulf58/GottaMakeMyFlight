@@ -4,7 +4,7 @@ extends GdUnitTestSuite
 ## lane has admitted (decision security-lane-technical-design-one-station-per-
 ## lane-with-int, point 5): a primary fired mid-admission stays on duty,
 ## leaving, until the last admitted passenger is cleared, whatever phase it is
-## in (repack and return included), and the lane admits nobody new meanwhile.
+## in (repack and leave included), and the lane admits nobody new meanwhile.
 ## Firing lets a helper go before a primary, so the lane stays open.
 
 const SECURITY := StaffMember.Role.SECURITY
@@ -60,9 +60,10 @@ func test_a_primary_fired_mid_admission_stays_until_every_admitted_passenger_cle
 		assert_bool(m.leaving).is_true()
 	print("phases held through: %s, cleared at %s" % [phases.keys(), w.cleared.get(first)])
 	assert_bool(w.cleared.has(first)).is_true()
-	# The firing held through the repack and the walk back, not only the scan.
+	# The firing held through the berth repack and the exit leave, not only the scan.
+	assert_bool(phases.has(PHASE.TO_BERTH)).is_true()
 	assert_bool(phases.has(PHASE.REPACK)).is_true()
-	assert_bool(phases.has(PHASE.RETURN)).is_true()
+	assert_bool(phases.has(PHASE.LEAVE)).is_true()
 	w.world.step()
 	var gone := w.world.staff.get_member(officer)
 	assert_bool(gone == null or gone.state == StaffMember.State.WALKING_OUT).is_true()
@@ -79,7 +80,7 @@ func test_a_primary_fired_mid_admission_stays_until_every_admitted_passenger_cle
 func test_a_primary_fired_with_two_passengers_admitted_stays_until_both_clear() -> void:
 	var w := _lane()
 	var officer := StaffTestKit.seat(w.world.staff, w.station, PRIMARY)
-	var ids := w.send_all([[0, true, false], [2, false, false]])
+	var ids := w.send_all([[1, true, false], [2, false, false]])
 	var first: int = ids[0]
 	var second: int = ids[1]
 	var both := func() -> bool:
