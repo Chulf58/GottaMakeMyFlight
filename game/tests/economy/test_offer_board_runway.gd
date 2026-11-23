@@ -21,9 +21,12 @@ const DAYS := 30
 ## save version 8 (the charters array on OfferBoard.to_snapshot(), with offers
 ## and RNG state unchanged), and for Stage 2 S2-A (decision d19eb98b:
 ## PlaneClasses.max_offer_class() lifted to LARGE, so Tiers 1 and 2 on a large
-## runway now draw large offers while Tier 0 and STATE_AFTER stay unchanged).
-const STATE_AFTER := 7055581944236607464
-const BEFORE_HASHES := [691078160, 2025645667, 1339283240]
+## runway now draw large offers while Tier 0 and STATE_AFTER stay unchanged),
+## and for Stage 2 S2-B (ruling stage-2-s2b-peak-hour-rush-waves-morning-
+## evening-banks-plus-15-bonus: Day 2+ makes one peak-wave roll and draws
+## ~65% into 07:00-10:00 / 17:00-20:00 with +15% Peak Demand fee bonus).
+const STATE_AFTER := -878261620875140187
+const BEFORE_HASHES := [4288161598, 1800429161, 1989249912]
 
 
 func _rng() -> RandomNumberGenerator:

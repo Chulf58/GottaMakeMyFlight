@@ -38,7 +38,10 @@ func _open(minutes: Array, size := PlaneClasses.SMALL) -> void:
 	for offer: Dictionary in offers:
 		offer["plane_size"] = size
 		offer["booked_passengers"] = 40 if size == PlaneClasses.MEDIUM else 6
-		offer["fee_per_passenger"] = 25 if size == PlaneClasses.MEDIUM else 50
+		var base_fee := 25 if size == PlaneClasses.MEDIUM else 50
+		offer["fee_per_passenger"] = OfferBoard.apply_peak_bonus(
+			base_fee, int(offer["departure_minute"])
+		)
 	assert_bool(_desk.board.from_snapshot(TestOfferBoard.save_of(offers))).is_true()
 	_panel = OfferPanel.new()
 	_panel.desk = _desk

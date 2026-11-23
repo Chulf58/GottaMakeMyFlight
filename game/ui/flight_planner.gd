@@ -46,6 +46,9 @@ const BAR_LABEL := "BarLabel"
 ## The Label variation a disabled bar's label takes: the gate buttons' disabled text.
 const DISABLED_LABEL := &"HudBarLabelDisabled"
 const HOURS := 24
+const PEAK_BAND_COLOR := Color(0.96, 0.72, 0.22, 0.16)
+const PEAK_TAG_BG := Color(0.96, 0.72, 0.22, 0.24)
+const PEAK_TAG_TEXT := Color(0.55, 0.33, 0.05, 1.0)
 ## The toggle's x while the Departures toggle fits its grid slot; a wider one
 ## pushes it right (LeftColumn.right_of).
 const TOGGLE_LEFT := float(HudLayout.MARGIN + HudLayout.TOGGLE_W + HudLayout.GAP)
@@ -121,6 +124,10 @@ func _retranslate() -> void:
 	var close_btn := _sheet.find_child("PlannerClose", true, false) as Button
 	if close_btn != null:
 		close_btn.text = tr("Close")
+	for band in peak_bands():
+		var peak_lbl := _sheet.find_child("PeakLabel_%s" % band["wave"], true, false) as Label
+		if peak_lbl != null:
+			peak_lbl.text = tr("Peak")
 	if _selected == "":
 		_summary.text = _hint_text()
 	refresh()
@@ -235,6 +242,22 @@ func part(part_name: String) -> Control:
 	return _sheet.find_child(part_name, true, false) as Control
 
 
+## Peak rush bands rendered behind the gate tracks (07:00-10:00 and 17:00-20:00).
+static func peak_bands() -> Array[Dictionary]:
+	return [
+		{
+			"wave": OfferBoard.PEAK_WAVE_MORNING,
+			"start_minute": OfferBoard.MORNING_PEAK_START,
+			"end_minute": OfferBoard.MORNING_PEAK_END,
+		},
+		{
+			"wave": OfferBoard.PEAK_WAVE_EVENING,
+			"start_minute": OfferBoard.EVENING_PEAK_START,
+			"end_minute": OfferBoard.EVENING_PEAK_END,
+		},
+	]
+
+
 func summary_text() -> String:
 	return _summary.text
 
@@ -289,6 +312,7 @@ func _build() -> void:
 	column.add_theme_constant_override("separation", 6)
 	_sheet.add_child(column)
 	column.add_child(_build_header())
+	column.add_child(_build_peak_row())
 	var hour_row := HBoxContainer.new()
 	hour_row.add_theme_constant_override("separation", 4)
 	var pad := Control.new()
@@ -362,6 +386,45 @@ func _build_header() -> HBoxContainer:
 	close_btn.pressed.connect(close)
 	header.add_child(close_btn)
 	return header
+
+
+func _build_peak_row() -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.name = "PeakRow"
+	row.add_theme_constant_override("separation", 4)
+	var pad := Control.new()
+	pad.custom_minimum_size = Vector2(HEAD_W, 0.0)
+	row.add_child(pad)
+	var header := Control.new()
+	header.name = "PeakHeader"
+	header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.custom_minimum_size = Vector2(0.0, 16.0)
+	header.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for band in peak_bands():
+		var tag := ColorRect.new()
+		tag.name = "PeakTag_%s" % band["wave"]
+		tag.color = PEAK_TAG_BG
+		tag.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		tag.anchor_left = float(band["start_minute"]) / GameCalendar.MINUTES_PER_DAY
+		tag.anchor_right = float(band["end_minute"]) / GameCalendar.MINUTES_PER_DAY
+		tag.anchor_top = 0.0
+		tag.anchor_bottom = 1.0
+		tag.set_meta(&"wave", band["wave"])
+		tag.set_meta(&"start_minute", band["start_minute"])
+		tag.set_meta(&"end_minute", band["end_minute"])
+		var label := Label.new()
+		label.name = "PeakLabel_%s" % band["wave"]
+		label.text = tr("Peak")
+		label.theme_type_variation = &"HudHint"
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		label.add_theme_color_override("font_color", PEAK_TAG_TEXT)
+		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		label.set_anchors_preset(Control.PRESET_FULL_RECT)
+		tag.add_child(label)
+		header.add_child(tag)
+	row.add_child(header)
+	return row
 
 
 ## Puts `control` at `fraction` of its parent's width, `inset` px to the right.
@@ -464,6 +527,19 @@ func _add_row(row: Dictionary) -> void:
 	lane.custom_minimum_size = Vector2(0.0, ROW_H)
 	line.add_child(lane)
 	_tracks.append(lane)
+	for band in peak_bands():
+		var band_rect := ColorRect.new()
+		band_rect.name = "PeakBand_%s_%s" % [gate_id, band["wave"]]
+		band_rect.color = PEAK_BAND_COLOR
+		band_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		band_rect.anchor_left = float(band["start_minute"]) / GameCalendar.MINUTES_PER_DAY
+		band_rect.anchor_right = float(band["end_minute"]) / GameCalendar.MINUTES_PER_DAY
+		band_rect.anchor_top = 0.0
+		band_rect.anchor_bottom = 1.0
+		band_rect.set_meta(&"wave", band["wave"])
+		band_rect.set_meta(&"start_minute", band["start_minute"])
+		band_rect.set_meta(&"end_minute", band["end_minute"])
+		lane.add_child(band_rect)
 	for bar: Dictionary in row["bars"]:
 		lane.add_child(_make_bar(bar))
 	_rows.add_child(line)

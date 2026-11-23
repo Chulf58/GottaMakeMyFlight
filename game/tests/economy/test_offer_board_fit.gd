@@ -78,8 +78,17 @@ func test_an_empty_timetable_keeps_the_drawn_departures() -> void:
 		for number in range(1, OfferBoard.OFFERS_PER_DAY + 1):
 			var left := _offer_terms(fitted, number)
 			var right := _offer_terms(plain, number)
+			var left_min: int = left["departure_minute"]
+			var right_min: int = right["departure_minute"]
+			var expected_fee := OfferBoard.apply_peak_bonus(
+				OfferBoard._base_fee_before_peak(int(right["fee_per_passenger"]), right_min),
+				left_min
+			)
+			assert_int(int(left["fee_per_passenger"])).is_equal(expected_fee)
 			left.erase("departure_minute")
 			right.erase("departure_minute")
+			left.erase("fee_per_passenger")
+			right.erase("fee_per_passenger")
 			assert_dict(left).is_equal(right)
 	print("empty timetable: N2 moved off N1's gate time on %d of %d seeds" % [moved, SEEDS.size()])
 

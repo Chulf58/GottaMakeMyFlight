@@ -24,9 +24,9 @@ func before_test() -> void:
 	_sim.open_airport()
 	_port.add_child(_desk)
 	_port.add_child(_sim)
-	# 10:00, 12:00 (clashes with 10:00 at the one gate) and 20:00, each with its
+	# 11:00, 12:00 (clashes with 11:00 at the one gate) and 21:00, each with its
 	# own passengers and fee so the earnings differ from card to card.
-	var offers := TestOfferBoard.day_records(0, [600, 720, 1200])
+	var offers := TestOfferBoard.day_records(0, [660, 720, 1260])
 	var terms := [[6, 50], [8, 64], [8, 60]]
 	for i in offers.size():
 		offers[i]["booked_passengers"] = terms[i][0]

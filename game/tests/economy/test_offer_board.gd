@@ -31,7 +31,7 @@ static func record(id: String, day: int, minute: int, status := OfferBoard.OPEN)
 		"departure_minute": minute,
 		"plane_size": "small",
 		"booked_passengers": 6,
-		"fee_per_passenger": 50,
+		"fee_per_passenger": OfferBoard.apply_peak_bonus(50, minute),
 		"traits": NEUTRAL_TRAITS.duplicate(),
 		"loyal": false,
 		"status": status,
@@ -79,8 +79,10 @@ func test_a_day_draws_the_daily_count_of_valid_starter_offers() -> void:
 				OfferTraits.fewest_booked(booked_range[0], booked_range[1], traits), booked_range[1]
 			)
 			var fees: Array = OfferBoard.fee_range_for(0, offer["plane_size"])
+			var minute: int = offer["departure_minute"]
 			assert_int(offer["fee_per_passenger"]).is_between(
-				OfferTraits.fee_of(fees[0], traits), OfferTraits.fee_of(fees[1], traits)
+				OfferBoard.apply_peak_bonus(OfferTraits.fee_of(fees[0], traits), minute),
+				OfferBoard.apply_peak_bonus(OfferTraits.fee_of(fees[1], traits), minute)
 			)
 
 
@@ -196,7 +198,7 @@ func test_a_restored_rng_gives_the_offers_an_uninterrupted_run_would() -> void:
 
 ## A save whose day 0 is the valid draw with `key` set to `value` on its first offer.
 static func with_first(key: String, value: Variant) -> Dictionary:
-	var offers := day_records(0, [600, 720, 840])
+	var offers := day_records(0, [660, 720, 840])
 	offers[0][key] = value
 	return save_of(offers)
 
@@ -253,6 +255,9 @@ func test_the_extremes_of_every_draw_range_load() -> void:
 	var low := with_first("booked_passengers", small[0])
 	var high := with_first("booked_passengers", small[1])
 	var early := with_first("departure_minute", OfferBoard.DEPARTURE_FIRST_MINUTE)
+	early["offers"][0]["fee_per_passenger"] = OfferBoard.apply_peak_bonus(
+		50, OfferBoard.DEPARTURE_FIRST_MINUTE
+	)
 	var late := with_first("departure_minute", OfferBoard.DEPARTURE_LAST_MINUTE)
 	var cheap := with_first("fee_per_passenger", OfferBoard.SMALL_FEE_MIN)
 	var dear := with_first("fee_per_passenger", OfferBoard.SMALL_FEE_MAX)

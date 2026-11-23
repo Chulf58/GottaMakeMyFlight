@@ -135,7 +135,9 @@ signal loaded(ok: bool)
 ## 34: security overhaul S2 (BuildGridSave v2: fast_track on security_arch;
 ## PassengerSim v39: Passenger.vip and FAST_TRACK thought); version 33 saves are
 ## refused (no migration).
-const SAVE_VERSION := 34
+## 35: peak-hour rush waves (OfferBoard v9: +15% peak-slot fees on 07:00-10:00
+## and 17:00-20:00 offers); version 34 saves are refused (no migration).
+const SAVE_VERSION := 35
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"

@@ -77,6 +77,8 @@ const NEEDS_GATE_TEXT := "Needs another gate"
 const CHARTER_BADGE_TEXT := "One-off charter — flies today only"
 const BADGE_META := &"badge_monogram"
 const BADGE_BORDER := Color(0.1, 0.13, 0.26, 1.0)
+const PEAK_CHIP_FILL := Color(0.98, 0.87, 0.56, 1.0)
+const PEAK_CHIP_BORDER := Color(0.76, 0.54, 0.16, 1.0)
 const PULSE_TINT := Color(1.16, 1.06, 0.72, 0.76)
 const PULSE_HALF_S := 0.7
 const AIRLINE_BADGES := {
@@ -143,6 +145,7 @@ var _fit_labels: Dictionary = {}
 var _fit_taxis: Dictionary = {}
 var _earnings_labels: Dictionary = {}
 var _trait_rows: Dictionary = {}
+var _peak_chips: Dictionary = {}
 var _noted_tick := -1
 
 
@@ -255,6 +258,16 @@ static func card_lines(offer: Dictionary, note := "") -> PackedStringArray:
 	if note != "":
 		lines.insert(NOTE_LINE, note_line(note))
 	return lines
+
+
+## Peak-wave chip label for `departure_minute`, or "" for off-peak / Odd hours.
+static func _peak_chip_text(departure_minute: int) -> String:
+	var wave := OfferBoard.peak_wave(departure_minute)
+	if wave == OfferBoard.PEAK_WAVE_MORNING:
+		return TranslationServer.translate("Morning Peak +15%")
+	if wave == OfferBoard.PEAK_WAVE_EVENING:
+		return TranslationServer.translate("Evening Peak +15%")
+	return ""
 
 
 ## "Small plane", "Medium plane" or "Large plane" for a plane size.
@@ -742,6 +755,7 @@ func _refresh() -> void:
 	_fit_taxis.clear()
 	_earnings_labels.clear()
 	_trait_rows.clear()
+	_peak_chips.clear()
 	var charters := desk.board.open_charters()
 	var offers := desk.board.open_offers()
 	for charter in charters:
@@ -1035,6 +1049,10 @@ func _add_card(offer: Dictionary) -> void:
 		when.add_child(part)
 	for i in range(3, lines.size()):
 		texts.add_child(_card_label(lines[i], &"HudSmall"))
+	if not is_charter and OfferBoard.is_peak_minute(int(offer["departure_minute"])):
+		var chip := _peak_chip(offer)
+		texts.add_child(chip)
+		_peak_chips[id] = chip
 	var pitch := _card_label(route_pitch(offer), &"HudHint")
 	pitch.name = "Pitch_%s" % id
 	texts.add_child(pitch)
@@ -1160,6 +1178,33 @@ func _airline_badge(offer: Dictionary) -> PanelContainer:
 	_style_label(code, &"HudCardName")
 	badge.add_child(code)
 	return badge
+
+
+func _peak_chip(offer: Dictionary) -> PanelContainer:
+	var minute := int(offer["departure_minute"])
+	var chip := PanelContainer.new()
+	chip.name = "PeakChip_%s" % offer["id"]
+	chip.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	chip.mouse_filter = Control.MOUSE_FILTER_PASS
+	chip.tooltip_text = tr("Peak rush wave: +15% passenger fee included.")
+	var style := StyleBoxFlat.new()
+	style.bg_color = PEAK_CHIP_FILL
+	style.border_color = PEAK_CHIP_BORDER
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(8)
+	style.content_margin_left = 8.0
+	style.content_margin_right = 8.0
+	style.content_margin_top = 2.0
+	style.content_margin_bottom = 2.0
+	chip.add_theme_stylebox_override("panel", style)
+	var label := Label.new()
+	label.name = "PeakLabel"
+	label.text = _peak_chip_text(minute)
+	label.theme_type_variation = &"HudSmall"
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.add_theme_color_override("font_color", BADGE_BORDER)
+	chip.add_child(label)
+	return chip
 
 
 func _card_label(text: String, variation: StringName) -> Label:
