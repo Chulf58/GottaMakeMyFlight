@@ -236,8 +236,8 @@ func test_every_tray_fits_its_reserved_space_and_expected_height() -> void:
 	var expected_rows := {
 		"building": 1,
 		"operations": 2,
-		"facilities": 3,
-		"food": 2,
+		"facilities": 2,
+		"food": 1,
 		"shops": 2,
 		"decor": 2,
 		"landside": 1,
@@ -274,11 +274,11 @@ func test_wrapping_grid_shows_all_cards_with_no_subfilters_and_shrinks_on_tab_sw
 	var facilities_grid := _menu.card(BuildMode.Tool.TOILET_ROOM).get_parent() as GridContainer
 	assert_object(facilities_grid).is_instanceof(GridContainer)
 	assert_int(facilities_grid.columns).is_equal(9)
-	assert_float(_menu.tray_height()).is_equal(BuildMenu.tray_height_for_rows(3))
-	assert_float(_menu.tray().size.y).is_equal(BuildMenu.tray_height_for_rows(3))
+	assert_float(_menu.tray_height()).is_equal(BuildMenu.tray_height_for_rows(2))
+	assert_float(_menu.tray().size.y).is_equal(BuildMenu.tray_height_for_rows(2))
 	for tool: BuildMode.Tool in BuildMenu.CATEGORIES[FACILITIES]["tools"]:
 		assert_bool(_menu.card(tool).is_visible_in_tree()).is_true()
-	# Switching from 3-row Facilities (310 px) back to 1-row Building (106 px) shrinks
+	# Switching from 2-row Facilities (208 px) back to 1-row Building (106 px) shrinks
 	# PanelContainer.size.y immediately (anti-pattern 1caf2bb3).
 	_menu.press_category(BUILDING)
 	await get_tree().process_frame
@@ -385,7 +385,7 @@ func test_wrapping_grid_stays_rail_clear_under_pseudolocale_and_clamps_narrow_vi
 	var tray_rect := menu.tray().get_global_rect()
 	assert_float(tray_rect.size.x).is_equal_approx(BuildMenu.COLUMN_W, 0.5)
 	assert_float(tray_rect.size.x).is_less_equal(832.0)
-	assert_float(tray_rect.size.y).is_equal_approx(BuildMenu.tray_height_for_rows(3), 0.5)
+	assert_float(tray_rect.size.y).is_equal_approx(BuildMenu.tray_height_for_rows(2), 0.5)
 	assert_float(tray_rect.position.x).is_greater_equal(
 		float(HudLayout.MARGIN + HudLayout.LIST_W + HudLayout.GROUP_GAP)
 	)

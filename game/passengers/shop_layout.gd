@@ -53,7 +53,23 @@ func rebuild(grid: BuildGrid) -> void:
 				if grid.is_passenger_cell(entry["approach"]):
 					slots.append(entry)
 		if not slots.is_empty():
-			shops.append({"room": room_id, "slots": slots})
+			shops.append({"room": room_id, "type": status.type_id, "slots": slots})
+	# Standalone shop and activity services (ATM, currency exchange, nap pod)
+	# work anywhere walkable without requiring a room zone.
+	for id in ids:
+		var record := grid.get_object(id)
+		var service := ServiceTypes.by_piece(StringName(record["def"]))
+		if service == null or not service.shop:
+			continue
+		var at := Relocation.placement(grid, id)
+		var cells := BuildCatalog.get_def(at["def"]).footprint(at["anchor"], at["facing"])
+		var slots: Array[Dictionary] = []
+		for i in mini(service.seats_per_piece, cells.size()):
+			var entry := entry_at(id, i, 0, at)
+			if grid.is_passenger_cell(entry["approach"]):
+				slots.append(entry)
+		if not slots.is_empty():
+			shops.append({"room": 0, "type": service.id, "display": id, "slots": slots})
 
 
 ## The slot entry of slot `index` of browse piece `display` in room `room_id`

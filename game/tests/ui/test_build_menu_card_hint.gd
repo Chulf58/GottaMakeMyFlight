@@ -43,7 +43,7 @@ func test_every_area_tool_hover_popup_says_drag() -> void:
 			continue
 		assert_array(_hover_texts(tool)).contains(["Drag"])
 		checked += 1
-	assert_int(checked).is_greater_equal(15)
+	assert_int(checked).is_greater_equal(14)
 	assert_array(_hover_texts(BuildMode.Tool.TOILET_ROOM)).contains(["2x3 min", "Drag"])
 	assert_array(_hover_texts(BuildMode.Tool.BELT)).contains(["Drag a line", "Drag"])
 

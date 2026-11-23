@@ -21,7 +21,11 @@ static func build(
 	var ids := {}
 	for side: String in sides:
 		var rect := ShopTestLayout.AIRSIDE_ROOM if side == "air" else ShopTestLayout.LANDSIDE_ROOM
-		ids[side + "_room"] = _apply(grid, BuildEdit.place_room(rect, type)).room_id
+		ids[side + "_room"] = (
+			_apply(grid, BuildEdit.place_room(rect, type)).room_id
+			if RoomTypes.get_type(type) != null
+			else 0
+		)
 		var placed: Array = []
 		for i in pieces:
 			var anchor := Vector2i(ShopTestLayout.COUNTER_X + 3 * i, rect.position.y)

@@ -75,6 +75,27 @@ func rebuild(grid: BuildGrid, terminal: TerminalLayout) -> void:
 			cafes.append(
 				{"room": room_id, "type": status.type_id, "counters": counters, "seats": seats}
 			)
+	# Standalone food services (grab-and-go stall) work anywhere walkable without a room.
+	for id in ids:
+		var def_id := StringName(grid.get_object(id)["def"])
+		var service := ServiceTypes.by_piece(def_id)
+		if service == null or not service.food:
+			continue
+		var lane := _lane(grid, id, taken, {})
+		for cell in lane:
+			taken[cell] = true
+		if not lane.is_empty():
+			(
+				cafes
+				. append(
+					{
+						"room": 0,
+						"type": service.id,
+						"counters": [{"id": id, "lane": lane}],
+						"seats": [],
+					}
+				)
+			)
 
 
 ## The cafe entry for a room, or an empty dictionary when it is not usable.
@@ -85,11 +106,25 @@ func cafe(room_id: int) -> Dictionary:
 	return {}
 
 
+## The venue type id for `room_id` and `counter_id`, or &"" when not found.
+func venue_of(room_id: int, counter_id: int) -> StringName:
+	for entry in cafes:
+		if entry["room"] != room_id:
+			continue
+		for c in entry["counters"]:
+			if c["id"] == counter_id:
+				return entry["type"]
+	return &""
+
+
 ## A counter entry of a cafe, or an empty dictionary.
 func counter(room_id: int, counter_id: int) -> Dictionary:
-	for entry in cafe(room_id).get("counters", []):
-		if entry["id"] == counter_id:
-			return entry
+	for entry in cafes:
+		if entry["room"] != room_id:
+			continue
+		for c in entry["counters"]:
+			if c["id"] == counter_id:
+				return c
 	return {}
 
 

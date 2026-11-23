@@ -1,16 +1,13 @@
 class_name TestBuildMenuMoneyPage
 extends GdUnitTestSuite
-## The currency exchange and ATM in the Facilities domain tab: exchange room,
-## counter, ATM room and cash machine sit in Facilities with rendered thumbnails.
+## The standalone currency exchange and ATM cards in the Facilities domain tab.
 
 const TOOLS := [
-	BuildMode.Tool.EXCHANGE_ROOM,
 	BuildMode.Tool.EXCHANGE,
-	BuildMode.Tool.ATM_ROOM,
 	BuildMode.Tool.ATM,
 ]
-const NAMES := ["Exchange", "Exchange counter", "ATM", "Cash machine"]
-const ROOMS := {BuildMode.Tool.EXCHANGE_ROOM: &"exchange", BuildMode.Tool.ATM_ROOM: &"atm"}
+const NAMES := ["Exchange", "ATM"]
+const THUMBS := ["currency_exchange", "atm"]
 
 var _port: SubViewport
 var _mode: BuildMode
@@ -68,24 +65,17 @@ func test_the_cards_carry_their_names_prices_and_hover_sizes() -> void:
 		var hover := _hover_texts(tool)
 		assert_str(BuildMenu.item(tool)[0]).is_equal(NAMES[n])
 		assert_array(texts).contains([NAMES[n]])
-		if ROOMS.has(tool):
-			var room := RoomTypes.get_type(ROOMS[tool])
-			assert_str(str(BuildMode.TOOL_ROOMS[tool])).is_equal(str(room.id))
-			assert_str(room.display_name).is_equal(NAMES[n])
-			assert_array(texts).contains([BuildMenu.PRICE_TEXT])
-			assert_array(hover).contains(["%dx%d min" % [room.min_size.x, room.min_size.y], "Drag"])
-		else:
-			var def := BuildCatalog.get_def(BuildMode.tool_object(tool))
-			assert_array(hover).contains(["%dx%d" % [def.size.x, def.size.y], "Click"])
-			assert_int(BuildMenu.tool_price(tool)).is_equal(PriceTable.price_of_object(def.id))
-			assert_int(BuildMenu.tool_price(tool)).is_greater(0)
+		var def := BuildCatalog.get_def(BuildMode.tool_object(tool))
+		assert_array(hover).contains(["%dx%d" % [def.size.x, def.size.y], "Click"])
+		assert_int(BuildMenu.tool_price(tool)).is_equal(PriceTable.price_of_object(def.id))
+		assert_int(BuildMenu.tool_price(tool)).is_greater(0)
 
 
 func test_every_money_card_shows_its_rendered_thumbnail() -> void:
 	assert_array(BuildMenu.PLACEHOLDER_THUMBNAILS).is_empty()
-	assert_str(BuildMenu.item(BuildMode.Tool.EXCHANGE_ROOM)[1]).is_equal("exchange_room")
-	assert_str(BuildMenu.item(BuildMode.Tool.ATM_ROOM)[1]).is_equal("atm_room")
-	for tool in TOOLS:
+	for n in TOOLS.size():
+		var tool: BuildMode.Tool = TOOLS[n]
+		assert_str(BuildMenu.item(tool)[1]).is_equal(THUMBS[n])
 		var path := BuildMenu.THUMBNAIL_DIR % BuildMenu.item(tool)[1]
 		assert_bool(ResourceLoader.exists(path)).override_failure_message(path).is_true()
 		var picture := (

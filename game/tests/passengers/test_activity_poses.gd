@@ -248,7 +248,7 @@ func test_the_pose_eases_in_and_out_at_the_edges_of_the_stay() -> void:
 		if browsing and p.stage == Passenger.Stage.SHOP_BROWSE:
 			biggest_shuffle = maxf(biggest_shuffle, now.distance_to(last))
 		last = now
-	var dwell := RoomTypes.get_type(&"nap_pod").dwell_ticks
+	var dwell := ServiceTypes.find_def(&"nap_pod").dwell_ticks
 	print(
 		(
 			(

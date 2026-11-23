@@ -50,15 +50,13 @@ func _guest(world: PassengerTestWorld) -> Passenger:
 
 
 func test_a_stall_room_with_only_a_counter_is_ready_and_usable() -> void:
+	assert_object(RoomTypes.get_type(&"stall")).is_null()
 	var made := _world(&"stall", false)
 	var world: PassengerTestWorld = made[0]
 	var ids: Dictionary = made[1]
 	assert_bool(ids.has("air_table")).is_false()
-	for room in [ids["air_room"], ids["land_room"]]:
-		var status := RoomRules.status(world.grid, room)
-		assert_array(Array(status.notes)).is_empty()
-		assert_bool(status.ok).is_true()
-		assert_int(status.seats).is_equal(0)
+	assert_int(ids["air_room"]).is_equal(0)
+	assert_int(ids["land_room"]).is_equal(0)
 	world.sim.cafes.refresh()
 	var cafes := world.sim.cafes.layout.cafes
 	assert_int(cafes.size()).is_equal(2)
@@ -66,13 +64,10 @@ func test_a_stall_room_with_only_a_counter_is_ready_and_usable() -> void:
 		assert_str(String(cafe["type"])).is_equal("stall")
 		assert_array(cafe["seats"]).is_empty()
 		assert_array(cafe["counters"]).is_not_empty()
-	var type := RoomTypes.get_type(&"stall")
+	var type := ServiceTypes.get_service(&"stall")
 	assert_bool(type.walk_on).is_true()
 	assert_int(type.dwell_ticks).is_equal(0)
-	(
-		assert_array(type.required.map(func(need: Array) -> StringName: return need[0]))
-		. is_equal([&"grab_and_go_stall"])
-	)
+	assert_array(type.counter_pieces).is_equal([&"grab_and_go_stall"])
 
 
 func test_a_cafe_room_with_only_a_counter_still_needs_a_table() -> void:
@@ -116,19 +111,19 @@ func test_a_stall_visit_reserves_no_seat_and_the_guest_walks_on_after_paying() -
 	assert_int(visit.outcome).is_equal(CafeVisit.Outcome.COMPLETE)
 	assert_int(visit.amount).is_equal(
 		CafeSim.spend(
-			RoomTypes.get_type(&"stall").base_spend, mood, true, CafeVisit.Outcome.COMPLETE
+			ServiceTypes.get_service(&"stall").base_spend, mood, true, CafeVisit.Outcome.COMPLETE
 		)
 	)
 	assert_int(visit.amount).is_greater(0)
 	assert_int(world.sim.wallet.balance).is_equal(visit.amount)
 	assert_int(p.stage).is_equal(Passenger.Stage.TO_GATE)
 	assert_int(p.hunger).is_equal(0)
-	assert_int(p.mood).is_equal(mood + RoomTypes.get_type(&"stall").mood_bonus)
+	assert_int(p.mood).is_equal(mood + ServiceTypes.get_service(&"stall").mood_bonus)
 	world.run_to(world.flights.doors_close_tick(p.flight_id) + 1)
 	assert_int(p.stage).is_equal(Passenger.Stage.MADE)
 
 
-func test_a_table_in_a_stall_room_is_not_used() -> void:
+func test_a_table_beside_a_stall_is_not_used() -> void:
 	var made := _world(&"stall", true)
 	var world: PassengerTestWorld = made[0]
 	var p := _guest(world)

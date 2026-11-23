@@ -28,8 +28,7 @@ static func text(passenger_sim: PassengerSim, p: Passenger) -> String:
 	if p.stage == Passenger.Stage.SHOP_WALK or p.stage == Passenger.Stage.SHOP_BROWSE:
 		var store := passenger_sim.shops.store_name(p.id)
 		if store != "":
-			var room := passenger_sim.grid.get_room(passenger_sim.shops.visit_of(p.id).room)
-			var type := RoomTypes.get_type(room["type"])
+			var type := passenger_sim.shops.visit_type(p.id)
 			var shop := TranslationServer.translate(store, SHOP_CONTEXT)
 			if type.activity and p.stage == Passenger.Stage.SHOP_BROWSE:
 				return _words.activity(type.id, shop)

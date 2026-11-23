@@ -45,7 +45,12 @@ static func build(grid: BuildGrid, types: Array) -> Dictionary:
 		var rect := ShopTestLayout.AIRSIDE_ROOM
 		rect.position.x += BLOCK * i
 		rect.size.y -= 1
-		ids["rooms"].append(_apply(grid, BuildEdit.place_room(rect, type)).room_id)
+		var room_id := (
+			_apply(grid, BuildEdit.place_room(rect, type)).room_id
+			if RoomTypes.get_type(type) != null
+			else 0
+		)
+		ids["rooms"].append(room_id)
 		var pieces: Array = PIECES[type]
 		var counter := _place(grid, pieces[0], rect.position)
 		ids["counters"].append(0 if type == &"atm" else counter)

@@ -127,7 +127,10 @@ signal loaded(ok: bool)
 ## (LandsideSnapshot v11); version 29 saves are refused (no migration).
 ## 31: one-off same-day charters (FlightSim v12, OfferBoard v8); version 30
 ## saves are refused (no migration).
-const SAVE_VERSION := 31
+## 32: ATM, currency exchange, grab-and-go stall, and nap pod converted from
+## room types to standalone corridor services (PassengerSim v37); version 31
+## saves are refused (no migration).
+const SAVE_VERSION := 32
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"

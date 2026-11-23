@@ -341,6 +341,7 @@ static func build_context(
 		"checkin": {},
 		"info": {},
 		"shop_rooms": {},
+		"shop_pieces": {},
 		"gate_pax": {},
 		"ambient_pax": [],
 		"flights": flights,
@@ -383,9 +384,11 @@ static func _collect_passenger(
 			ctx["info"][desk] = eye
 	if p.stage == Passenger.Stage.SHOP_BROWSE:
 		var visit := sim.shops.visit_of(p.id)
-		if visit != null and visit.room != 0:
-			var list: Array = ctx["shop_rooms"].get_or_add(visit.room, [])
-			list.append(eye)
+		if visit != null:
+			if visit.room != 0:
+				(ctx["shop_rooms"].get_or_add(visit.room, []) as Array).append(eye)
+			elif visit.display != 0:
+				(ctx["shop_pieces"].get_or_add(visit.display, []) as Array).append(eye)
 	if p.stage == Passenger.Stage.TO_EXIT and fl != null and p.flight_id != "":
 		var gate := fl.flight_gate(p.flight_id)
 		if gate != "":
@@ -526,6 +529,11 @@ static func _shop_eval(
 	if ctx["info"].has(m.station):
 		return [Mode.SHOP, ctx["info"][m.station], true, SubMode.SHOP_INFO_DESK]
 	if sub == SubMode.SHOP_RETAIL:
+		var pieces: Dictionary = ctx.get("shop_pieces", {})
+		if pieces.has(m.station):
+			var best_piece := _nearest(staff_pos, pieces[m.station], SHOP_COUNTER_M)
+			if best_piece[1]:
+				return [Mode.SHOP, best_piece[0], true, sub]
 		var room := ShopCounters.room_of(sim.grid, m.station)
 		if room != 0 and ctx["shop_rooms"].has(room):
 			var best := _nearest(staff_pos, ctx["shop_rooms"][room], SHOP_COUNTER_M)

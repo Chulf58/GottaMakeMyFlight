@@ -88,7 +88,7 @@ const CATEGORIES := {
 		BuildMode.Tool.CAFE_ROOM,
 		BuildMode.Tool.BAR_ROOM,
 		BuildMode.Tool.RESTAURANT_ROOM,
-		BuildMode.Tool.STALL_ROOM,
+		BuildMode.Tool.GRAB_STALL,
 	],
 	BAGGAGE_CONNECT: [BuildMode.Tool.BAG_ROOM, BuildMode.Tool.BELT],
 	OFFERS: [],

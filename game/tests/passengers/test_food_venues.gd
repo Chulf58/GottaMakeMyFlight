@@ -80,7 +80,7 @@ func test_the_numbers_run_stall_cafe_bar_restaurant() -> void:
 	var bases: Array[int] = []
 	var moods: Array[int] = []
 	for id in VENUES:
-		var type := RoomTypes.get_type(id)
+		var type := ServiceTypes.find_def(id)
 		assert_bool(type.food).is_true()
 		visits.append(type.visit_ticks())
 		bases.append(type.base_spend)
@@ -112,14 +112,14 @@ func test_real_visits_take_longer_and_pay_more_up_the_ladder() -> void:
 		var seen := _measure(id)
 		order.append(seen["order"])
 		amount.append(seen["amount"])
-		assert_int(seen["mood"]).is_equal(RoomTypes.get_type(id).mood_bonus)
+		assert_int(seen["mood"]).is_equal(ServiceTypes.find_def(id).mood_bonus)
 	print("measured ticks from order to getting up %s, paid %s" % [order, amount])
 	for i in range(1, VENUES.size()):
 		assert_int(order[i]).is_greater(order[i - 1])
 		assert_int(amount[i]).is_greater(amount[i - 1])
 	# Exactly the order and the dwell, plus the walk to the seat.
 	for i in VENUES.size():
-		assert_int(order[i]).is_greater_equal(RoomTypes.get_type(VENUES[i]).visit_ticks())
+		assert_int(order[i]).is_greater_equal(ServiceTypes.find_def(VENUES[i]).visit_ticks())
 
 
 func test_a_restaurant_is_refused_where_a_cafe_still_fits() -> void:

@@ -1,25 +1,22 @@
 class_name TestBuildMenuActivitiesPage
 extends GdUnitTestSuite
 ## The activity and rest rooms in the Facilities domain tab: lounge, play area,
-## shower and nap pod rooms sit in Facilities beside their pieces.
+## and shower rooms sit in Facilities beside the standalone Nap pod piece.
 
 const TOOLS := [
 	BuildMode.Tool.PLAY_AREA_ROOM,
 	BuildMode.Tool.LOUNGE_ROOM,
 	BuildMode.Tool.SHOWER_ROOM,
-	BuildMode.Tool.NAP_POD_ROOM,
 ]
 const ROOMS := {
 	BuildMode.Tool.PLAY_AREA_ROOM: &"play_area",
 	BuildMode.Tool.LOUNGE_ROOM: &"lounge",
 	BuildMode.Tool.SHOWER_ROOM: &"shower",
-	BuildMode.Tool.NAP_POD_ROOM: &"nap_pod",
 }
 const EXPECTED_TABS := {
 	BuildMode.Tool.PLAY_AREA_ROOM: "facilities",
 	BuildMode.Tool.LOUNGE_ROOM: "facilities",
 	BuildMode.Tool.SHOWER_ROOM: "facilities",
-	BuildMode.Tool.NAP_POD_ROOM: "facilities",
 }
 
 var _port: SubViewport
@@ -65,6 +62,9 @@ func test_activity_and_rest_rooms_live_in_their_domain_tabs() -> void:
 	for tool in TOOLS:
 		var want_idx := BuildMenu.category_index(EXPECTED_TABS[tool])
 		assert_int(BuildMenu.category_of(tool)).is_equal(want_idx)
+	assert_int(BuildMenu.category_of(BuildMode.Tool.NAP_POD)).is_equal(
+		BuildMenu.category_index("facilities")
+	)
 
 
 func test_the_cards_carry_the_room_names_and_hover_minimum_sizes() -> void:
@@ -77,6 +77,12 @@ func test_the_cards_carry_the_room_names_and_hover_minimum_sizes() -> void:
 		assert_array(texts).contains([BuildMenu.PRICE_TEXT])
 		assert_array(hover).contains(["%dx%d min" % [room.min_size.x, room.min_size.y], "Drag"])
 		assert_bool(room.display_name.contains(BuildMenu.item(tool)[0].split("-")[0])).is_true()
+	_menu.press_category(BuildMenu.category_of(BuildMode.Tool.NAP_POD))
+	var nap_texts := _texts(_menu.card(BuildMode.Tool.NAP_POD))
+	var nap_hover := _hover_texts(BuildMode.Tool.NAP_POD)
+	assert_array(nap_texts).contains(["Nap pod"])
+	assert_array(nap_hover).contains(["1x1", "Click"])
+	assert_int(BuildMenu.tool_price(BuildMode.Tool.NAP_POD)).is_greater(0)
 
 
 func test_every_activities_card_shows_a_real_thumbnail() -> void:

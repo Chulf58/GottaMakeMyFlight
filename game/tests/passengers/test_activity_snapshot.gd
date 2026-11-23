@@ -92,7 +92,7 @@ func test_a_save_well_into_a_long_stay_loads_and_plays_on_alike() -> void:
 		while _a.clock.tick < end:
 			_a.step()
 			trace[_a.clock.tick] = _signature(_a)
-		var bonus := RoomTypes.get_type(type).mood_bonus
+		var bonus := ServiceTypes.find_def(type).mood_bonus
 		_b = _load(save)
 		var start := _b.clock.tick
 		assert_str(_signature(_b)).is_equal(trace[start])

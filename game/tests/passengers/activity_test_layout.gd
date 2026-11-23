@@ -16,13 +16,18 @@ const PIECES := {
 const TYPES: Array[StringName] = [&"play_area", &"lounge", &"shower", &"nap_pod"]
 
 
-## A grid holding ShopTestLayout's floor and a ready `type` room in its
-## airside half, and its ids: {"room", "use" (the use piece's object id)}.
+## A grid holding ShopTestLayout's floor and a ready `type` room (or standalone
+## corridor piece for `ServiceTypes` services) in its airside half, and its
+## ids: {"room", "use" (the use piece's object id)}.
 static func build(grid: BuildGrid, type: StringName) -> Dictionary:
 	ShopTestLayout.build(grid, [], 2)
 	var at := ReferenceTerminal.offset_on(grid)
-	var room := Rect2i(ShopTestLayout.AIRSIDE_ROOM.position + at, ShopTestLayout.AIRSIDE_ROOM.size)
-	var ids := {"room": _apply(grid, BuildEdit.place_room(room, type)).room_id}
+	var ids := {"room": 0}
+	if RoomTypes.get_type(type) != null:
+		var room := Rect2i(
+			ShopTestLayout.AIRSIDE_ROOM.position + at, ShopTestLayout.AIRSIDE_ROOM.size
+		)
+		ids["room"] = _apply(grid, BuildEdit.place_room(room, type)).room_id
 	for piece: Array in PIECES[type]:
 		var placed := _apply(grid, BuildEdit.place_object(piece[0], piece[1] + at, 0)).object_id
 		if not ids.has("use"):

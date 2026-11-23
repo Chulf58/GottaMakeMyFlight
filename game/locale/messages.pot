@@ -6732,3 +6732,31 @@ msgstr ""
 #: ui/hint_rules.gd
 msgid "Terminal messes lower passenger mood. Hire a Cleaner on the Staff card to keep things tidy."
 msgstr ""
+
+#: ui/item_info.gd
+msgid "Place on terminal floor. A server hands over the order."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A currency exchange stand. Passengers change money and pay a small fee."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Place on terminal floor. A server stands behind it and changes money."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Shop staff hired in Staff, and the spot in front clear. Does not cure boredom."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Place on terminal floor. The passenger uses it from the cell in front."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Keep the spot in front clear. No staff, no upkeep, and does not cure boredom."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Place on terminal floor. The passenger sits and leans back during a long wait."
+msgstr ""

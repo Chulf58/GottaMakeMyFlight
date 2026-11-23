@@ -99,16 +99,17 @@ func _on_paid(passenger_id: int, room_id: int, amount: int) -> void:
 	# Pops of one room share its column, so a pop paid while others of that
 	# room are still up steps aside in the label's plane to the first free
 	# slot in the order 0, +1, -1, +2, -2, ... Sideways steps keep it under
-	# the room label.
+	# the room label. Standalone services (room_id 0) key by negative piece id.
+	var col_key := room_id if room_id > 0 else -_piece_id(passenger_id)
 	var taken := {}
 	for live in _live:
-		if live.get_meta(&"room") == room_id:
+		if live.get_meta(&"room") == col_key:
 			taken[live.get_meta(&"slot")] = true
 	var n := 0
 	while taken.has(slot_at(n)):
 		n += 1
 	var label := _take()
-	label.set_meta(&"room", room_id)
+	label.set_meta(&"room", col_key)
 	_set_slot(label, slot_at(n))
 	label.text = tr("+${amount}", "money pop").format({"amount": amount})
 	label.position = _point(passenger_id, room_id)
@@ -277,8 +278,19 @@ func _key_of(camera: Camera3D) -> Array:
 	return [camera.global_transform, camera.fov, get_viewport().get_visible_rect().size]
 
 
+func _piece_id(passenger_id: int) -> int:
+	var cafe_visit := sim.cafes.visit_of(passenger_id)
+	if cafe_visit != null and cafe_visit.counter > 0:
+		return cafe_visit.counter
+	var shop_visit := sim.shops.visit_of(passenger_id)
+	if shop_visit != null and shop_visit.display > 0:
+		return shop_visit.display
+	return 0
+
+
 ## Where a pop starts: under the room label's column, RISE_M + GAP_M below the
-## label's bottom line. Over the guest's counter when the room is gone.
+## label's bottom line. Over the guest's counter or service piece when there
+## is no room.
 func _point(passenger_id: int, room_id: int) -> Vector3:
 	var grid := sim.grid
 	var lift := Vector3(0.0, RoomView.LABEL_Y - GAP_M - RISE_M, 0.0)
@@ -291,12 +303,11 @@ func _point(passenger_id: int, room_id: int) -> Vector3:
 			+ Vector3((area.size.x - 1) / 2.0, 0.0, (area.size.y - 1) / 2.0)
 		)
 		return middle + lift
-	var visit := sim.cafes.visit_of(passenger_id)
-	var counter := grid.get_object(visit.counter) if visit != null else {}
-	if not counter.is_empty():
-		var def := BuildCatalog.get_def(counter["def"])
-		var cells := def.footprint(counter["anchor"], counter["facing"])
-		return BuildView.object_transform(grid, cells, counter["facing"]).origin + lift
+	var piece := grid.get_object(_piece_id(passenger_id))
+	if not piece.is_empty():
+		var def := BuildCatalog.get_def(piece["def"])
+		var cells := def.footprint(piece["anchor"], piece["facing"])
+		return BuildView.object_transform(grid, cells, piece["facing"]).origin + lift
 	return grid.origin + lift
 
 

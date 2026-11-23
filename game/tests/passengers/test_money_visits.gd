@@ -96,16 +96,16 @@ func test_a_spare_time_visit_pays_the_fee_and_keeps_boredom_where_a_pharmacy_res
 		assert_int(NeedsPolicy.arbitrate(_world.sim, p)).is_equal(NeedsPolicy.Need.SHOP_BROWSE)
 		var visit := _world.sim.shops.visit_of(p.id)
 		assert_object(visit).override_failure_message(str(type)).is_not_null()
-		assert_int(visit.room).is_equal(_ids["air_room"])
+		assert_int(visit.room).is_equal(0)
 		assert_int(visit.display).is_equal(_ids["air_pieces"][0])
 		# The follow line names it in running text, keeping ATM in capitals.
 		assert_str(_world.sim.shops.store_name(p.id)).is_equal(STORE_NAMES[type])
-		var base := RoomTypes.get_type(type).base_spend
+		var base := ServiceTypes.find_def(type).base_spend
 		var expected := ShopSim.spend(base, p.mood, true)
 		_run_while_visiting(p)
 		print("%s: base %d, paid %s, boredom now %d" % [type, base, _paid, p.boredom])
 		assert_int(_paid.size()).override_failure_message(str(type)).is_equal(1)
-		assert_array(_paid[0].slice(0, 3)).is_equal([p.id, _ids["air_room"], expected])
+		assert_array(_paid[0].slice(0, 3)).is_equal([p.id, 0, expected])
 		assert_int(_world.sim.wallet.balance - balance).is_equal(expected)
 		# Not reset: boredom is where it was (or has risen), never 0.
 		assert_int(_paid[0][3]).override_failure_message(str(type)).is_greater_equal(START_BOREDOM)
@@ -145,7 +145,8 @@ func test_a_bored_passenger_never_plans_an_exchange_or_atm_visit() -> void:
 			. is_true()
 		)
 		assert_int(NeedsPolicy.arbitrate(_world.sim, calm)).is_equal(NeedsPolicy.Need.SHOP_BROWSE)
-		assert_int(_world.sim.shops.visit_of(calm.id).room).is_equal(_ids["air_room"])
+		assert_int(_world.sim.shops.visit_of(calm.id).room).is_equal(0)
+		assert_int(_world.sim.shops.visit_of(calm.id).display).is_equal(_ids["air_pieces"][0])
 		_free()
 
 
@@ -153,17 +154,18 @@ func test_an_unstaffed_exchange_is_closed_until_a_server_comes() -> void:
 	_money_world(&"exchange", false)
 	var counter: int = _ids["air_pieces"][0]
 	var p := _walker()
-	assert_bool(ShopCounters.room_open(_world.sim, _ids["air_room"])).is_false()
+	assert_bool(ShopCounters.piece_open(_world.sim, counter)).is_false()
 	assert_array(ShopCounters.closed(_world.sim)).contains([counter])
 	assert_bool(_world.sim.shops.wants_browse(p)).is_false()
 	assert_bool(_world.sim.shops.plan_visit(p, true).is_empty()).is_true()
 	NeedsPolicy.arbitrate(_world.sim, p)
 	assert_object(_world.sim.shops.visit_of(p.id)).is_null()
 	StaffTestKit.seat_server(_world.staff, counter)
-	assert_bool(ShopCounters.room_open(_world.sim, _ids["air_room"])).is_true()
+	assert_bool(ShopCounters.piece_open(_world.sim, counter)).is_true()
 	var plan := _world.sim.shops.plan_visit(p, true)
 	assert_bool(plan.is_empty()).is_false()
-	assert_int(plan["slot"]["room"]).is_equal(_ids["air_room"])
+	assert_int(plan["slot"]["room"]).is_equal(0)
+	assert_int(plan["slot"]["display"]).is_equal(counter)
 
 
 func test_the_atm_works_with_no_staff() -> void:
@@ -171,9 +173,9 @@ func test_the_atm_works_with_no_staff() -> void:
 	var p := _walker()
 	assert_array(ShopCounters.closed(_world.sim)).is_empty()
 	assert_array(_world.staff.stations_of(StaffMember.Role.SHOP)).is_empty()
-	assert_bool(ShopCounters.room_open(_world.sim, _ids["air_room"])).is_true()
+	assert_bool(ShopCounters.piece_open(_world.sim, _ids["air_pieces"][0])).is_true()
 	assert_int(NeedsPolicy.arbitrate(_world.sim, p)).is_equal(NeedsPolicy.Need.SHOP_BROWSE)
 	_run_while_visiting(p)
 	print("unstaffed atm: paid %s" % [_paid])
 	assert_int(_paid.size()).is_equal(1)
-	assert_int(_paid[0][1]).is_equal(_ids["air_room"])
+	assert_int(_paid[0][1]).is_equal(0)

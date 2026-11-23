@@ -455,9 +455,8 @@ func _piece_record() -> Dictionary:
 func _ticks_left(p: Passenger) -> int:
 	if p.stage != Passenger.Stage.SHOP_BROWSE:
 		return -1
+	var type := _world.sim.shops.visit_type(p.id)
 	var visit := _world.sim.shops.visit_of(p.id)
-	var room := _world.sim.grid.get_room(visit.room)
-	var type := RoomTypes.get_type(room["type"])
 	var end := mini(p.stage_tick + ShopSim.browse_ticks(type), visit.deadline)
 	return end - 1 - _world.clock.tick
 

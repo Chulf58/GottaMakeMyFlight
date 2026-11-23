@@ -216,7 +216,7 @@ func test_a_cafe_save_that_gave_up_beside_a_table_it_can_go_back_to_is_refused()
 func test_a_relocation_save_returning_into_a_room_of_another_kind_is_refused() -> void:
 	_cafe_exiting()
 	var data := _save()
-	for kind in ["toilet", "stall"]:
+	for kind in ["toilet", "bar"]:
 		(
 			assert_bool(_loads(_with_room_type(data, _ids["air_room"], kind)))
 			. override_failure_message(kind)

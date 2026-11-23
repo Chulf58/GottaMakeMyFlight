@@ -1,17 +1,15 @@
 class_name TestBuildMenuDiningPage
 extends GdUnitTestSuite
-## The food rooms in the Food & Drink domain tab: bar, restaurant and
-## grab-and-go stall rooms sit alongside Cafe and food counters/tables.
+## The food rooms in the Food & Drink domain tab: bar and restaurant rooms sit
+## alongside Cafe, standalone Grab-and-go stall, and food counters/tables.
 
 const TOOLS := [
 	BuildMode.Tool.BAR_ROOM,
 	BuildMode.Tool.RESTAURANT_ROOM,
-	BuildMode.Tool.STALL_ROOM,
 ]
 const ROOMS := {
 	BuildMode.Tool.BAR_ROOM: &"bar",
 	BuildMode.Tool.RESTAURANT_ROOM: &"restaurant",
-	BuildMode.Tool.STALL_ROOM: &"stall",
 }
 
 var _port: SubViewport
@@ -58,6 +56,7 @@ func test_food_rooms_live_in_the_food_and_drink_tab() -> void:
 	assert_int(food).is_equal(3)
 	for tool in TOOLS:
 		assert_int(BuildMenu.category_of(tool)).is_equal(food)
+	assert_int(BuildMenu.category_of(BuildMode.Tool.GRAB_STALL)).is_equal(food)
 
 
 func test_the_cards_carry_the_room_names_and_hover_minimum_sizes() -> void:
@@ -70,6 +69,11 @@ func test_the_cards_carry_the_room_names_and_hover_minimum_sizes() -> void:
 		assert_array(texts).contains([BuildMenu.PRICE_TEXT])
 		assert_array(hover).contains(["%dx%d min" % [room.min_size.x, room.min_size.y], "Drag"])
 		assert_bool(room.display_name.contains(BuildMenu.item(tool)[0].split("-")[0])).is_true()
+	var stall_texts := _texts(_menu.card(BuildMode.Tool.GRAB_STALL))
+	var stall_hover := _hover_texts(BuildMode.Tool.GRAB_STALL)
+	assert_array(stall_texts).contains(["Grab-and-go"])
+	assert_array(stall_hover).contains(["2x1", "Click"])
+	assert_int(BuildMenu.tool_price(BuildMode.Tool.GRAB_STALL)).is_greater(0)
 
 
 func test_every_dining_card_shows_a_real_thumbnail() -> void:

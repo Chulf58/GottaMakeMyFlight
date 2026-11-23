@@ -95,6 +95,6 @@ func test_an_exchange_fee_is_not_boosted() -> void:
 	assert_int(_world.sim.boredom.prize.distance_at(visit.slot["approach"])).is_equal(2)
 	while _world.sim.shops.visit_of(p.id) != null and _world.clock.tick < 3000:
 		_world.step()
-	var fee := RoomTypes.get_type(&"exchange").base_spend
+	var fee := ServiceTypes.get_service(&"exchange").base_spend
 	print("exchange beside a podium paid %s, fee %d" % [_paid, fee])
 	assert_array(_paid).is_equal([ShopSim.spend(fee, MOOD, true)])

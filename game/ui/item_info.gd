@@ -239,20 +239,6 @@ func texts(tool: BuildMode.Tool) -> Array:
 				tr("Passengers browse from the cells in front of it."),
 				tr("Inside a fashion store. Keep the cells in front clear."),
 			]
-		BuildMode.Tool.EXCHANGE_ROOM:
-			lines = [
-				tr(
-					"Marks floor as a currency exchange. Passengers change money and pay a small fee."
-				),
-				tr("Drag a rectangle, then add a counter. A server works it."),
-				tr("At least 2x3, with a counter and shop staff. A visit does not cure boredom."),
-			]
-		BuildMode.Tool.ATM_ROOM:
-			lines = [
-				tr("Marks floor as an ATM room. Passengers take out cash and pay a small fee."),
-				tr("Drag a rectangle, then add an ATM. It is self-service."),
-				tr("At least 1x2, with an ATM. No staff. A visit does not cure boredom."),
-			]
 		BuildMode.Tool.BAR_ROOM:
 			lines = [
 				tr(
@@ -269,16 +255,6 @@ func texts(tool: BuildMode.Tool) -> Array:
 				tr("Guests order at a cafe counter and sit at a dining table or a booth."),
 				tr(
 					"At least 4x4, with a counter and a table or booth. Shop staff serve at the counter."
-				),
-			]
-		BuildMode.Tool.STALL_ROOM:
-			lines = [
-				tr(
-					"Marks floor as a grab-and-go stall. Guests buy, pay and walk on, with no seat."
-				),
-				tr("It needs only a grab-and-go stall. A server hands over the order."),
-				tr(
-					"At least 3x3, with a counter. Shop staff serve. It earns the least of the food rooms."
 				),
 			]
 		BuildMode.Tool.PLAY_AREA_ROOM:
@@ -304,14 +280,6 @@ func texts(tool: BuildMode.Tool) -> Array:
 				),
 				tr("Drag a rectangle, then add a shower cubicle. It is self-service."),
 				tr("At least 2x2, with a shower cubicle. No staff. Each stay pays you a fee."),
-			]
-		BuildMode.Tool.NAP_POD_ROOM:
-			lines = [
-				tr(
-					"Marks floor as a nap pod room. Passengers pay to rest during a long wait and gain mood."
-				),
-				tr("Drag a rectangle, then add a nap pod. It is self-service."),
-				tr("At least 2x2, with a nap pod. No staff. Each stay pays you a fee."),
 			]
 		BuildMode.Tool.KIOSK_DISPLAY:
 			lines = [
@@ -504,10 +472,8 @@ func texts(tool: BuildMode.Tool) -> Array:
 		BuildMode.Tool.GRAB_STALL:
 			lines = [
 				tr("A grab-and-go stall, where guests buy and walk on."),
-				tr("Place it inside a grab-and-go room. A server hands over the order."),
-				tr(
-					"Wholly inside the room. Shop staff hired in Staff, and the spot in front clear."
-				),
+				tr("Place on terminal floor. A server hands over the order."),
+				tr("Shop staff hired in Staff, and the spot in front clear."),
 			]
 		BuildMode.Tool.DINING_TABLE:
 			lines = [
@@ -539,19 +505,17 @@ func texts(tool: BuildMode.Tool) -> Array:
 			]
 		BuildMode.Tool.EXCHANGE:
 			lines = [
-				tr("The currency exchange counter."),
+				tr("A currency exchange stand. Passengers change money and pay a small fee."),
+				tr("Place on terminal floor. A server stands behind it and changes money."),
 				tr(
-					"Place it inside an exchange room. A server stands behind it and changes money."
-				),
-				tr(
-					"Wholly inside the room. Shop staff hired in Staff, and the spot in front clear."
+					"Shop staff hired in Staff, and the spot in front clear. Does not cure boredom."
 				),
 			]
 		BuildMode.Tool.ATM:
 			lines = [
 				tr("A cash machine. One passenger uses it at a time and pays a small fee."),
-				tr("Place it inside an ATM room. The passenger uses it from the cell in front."),
-				tr("Keep the spot in front clear. No staff and no upkeep."),
+				tr("Place on terminal floor. The passenger uses it from the cell in front."),
+				tr("Keep the spot in front clear. No staff, no upkeep, and does not cure boredom."),
 			]
 		BuildMode.Tool.PHARMACY_COUNTER:
 			lines = [
@@ -576,8 +540,10 @@ func texts(tool: BuildMode.Tool) -> Array:
 		BuildMode.Tool.NAP_POD:
 			lines = [
 				tr("A nap pod. One passenger uses it at a time and pays a fee."),
-				tr("Place it inside a nap pod room. The passenger sits and leans back."),
-				tr("Keep the spot in front clear. No upkeep."),
+				tr(
+					"Place on terminal floor. The passenger sits and leans back during a long wait."
+				),
+				tr("Keep the spot in front clear. No staff and no upkeep."),
 			]
 		BuildMode.Tool.SOFA:
 			lines = [

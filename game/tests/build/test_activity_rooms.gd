@@ -1,27 +1,26 @@
 class_name TestActivityRooms
 extends GdUnitTestSuite
-## The activity and rest room types of F4-7 (decisions furniture-set-modelled-
-## on-copenhagen-airport-decor-calms-pas and food-and-drink-cafe-bar-sit-down-
-## restaurant-and-grab-and-go-st, point 3): the play area, the lounge, the
-## shower and the nap pod are shop-pipeline rooms (RoomType.shop) with
-## RoomType.activity set, each needing its catalogued pieces, with a dwell
-## above the kiosk's browse and a mood bonus. Only the shower and the nap pod
-## charge, at PriceTable's fees. All four are self-service.
+## The activity and rest room types (play area, lounge, shower) plus the
+## standalone corridor nap pod service (Slice B1a). Play area, lounge, and
+## shower are shop-pipeline rooms (RoomType.shop) with RoomType.activity set,
+## each needing its catalogued pieces, with a dwell above the kiosk's browse
+## and a mood bonus. Only the shower and the nap pod charge, at PriceTable's
+## fees. All four are self-service.
 
-const TYPES: Array[StringName] = [&"play_area", &"lounge", &"shower", &"nap_pod"]
-## Room type -> [use piece, its slots per piece, minimum size].
+const TYPES: Array[StringName] = [&"play_area", &"lounge", &"shower"]
+const ALL_TYPES: Array[StringName] = [&"play_area", &"lounge", &"shower", &"nap_pod"]
+## Service id -> [use piece, its slots per piece, minimum room size or Vector2i.ZERO].
 const SHAPE := {
 	&"play_area": [&"play_slide", 2, Vector2i(3, 4)],
 	&"lounge": [&"lounge_sofa", 2, Vector2i(2, 3)],
 	&"shower": [&"shower_cubicle", 1, Vector2i(2, 2)],
-	&"nap_pod": [&"nap_pod", 1, Vector2i(2, 2)],
+	&"nap_pod": [&"nap_pod", 1, Vector2i.ZERO],
 }
 ## Room type -> the tool that draws it.
 const TOOLS := {
 	&"play_area": BuildMode.Tool.PLAY_AREA_ROOM,
 	&"lounge": BuildMode.Tool.LOUNGE_ROOM,
 	&"shower": BuildMode.Tool.SHOWER_ROOM,
-	&"nap_pod": BuildMode.Tool.NAP_POD_ROOM,
 }
 
 
@@ -47,8 +46,21 @@ func test_each_type_is_an_activity_room_on_the_shop_pipeline_needing_catalogued_
 			assert_object(BuildCatalog.get_def(need[0])).is_not_null()
 		assert_array(ids_of(room)).contains([room.seat_piece])
 		assert_int(ShopSim.browse_ticks(room)).is_equal(room.dwell_ticks)
-	# Control: the kiosk and the money rooms set no dwell, so they keep the browse.
-	for other: StringName in [&"kiosk", &"pharmacy", &"exchange", &"atm"]:
+	# Nap pod is a standalone corridor service (not in RoomTypes).
+	assert_object(RoomTypes.get_type(&"nap_pod")).is_null()
+	var nap := ServiceTypes.get_service(&"nap_pod")
+	assert_object(nap).is_not_null()
+	assert_bool(nap.shop).is_true()
+	assert_bool(nap.activity).is_true()
+	assert_bool(nap.relieves_boredom).is_true()
+	assert_bool(nap.food).is_false()
+	assert_str(str(nap.seat_piece)).is_equal("nap_pod")
+	assert_int(nap.seats_per_piece).is_equal(1)
+	assert_int(nap.dwell_ticks).is_equal(300)
+	assert_int(nap.mood_bonus).is_equal(15)
+	assert_int(ShopSim.browse_ticks(nap)).is_equal(nap.dwell_ticks)
+	# Control: kiosks and pharmacies set no dwell, so they keep the browse.
+	for other: StringName in [&"kiosk", &"pharmacy"]:
 		var room := RoomTypes.get_type(other)
 		assert_bool(room.activity).override_failure_message(str(other)).is_false()
 		assert_int(ShopSim.browse_ticks(room)).is_equal(ShopSim.BROWSE_TICKS)
@@ -64,7 +76,7 @@ func ids_of(room: RoomTypes.RoomType) -> Array:
 
 func test_only_the_shower_and_the_nap_pod_charge_and_at_the_price_table_fees() -> void:
 	assert_int(RoomTypes.get_type(&"shower").base_spend).is_equal(PriceTable.SHOWER_FEE)
-	assert_int(RoomTypes.get_type(&"nap_pod").base_spend).is_equal(PriceTable.NAP_POD_FEE)
+	assert_int(ServiceTypes.get_service(&"nap_pod").base_spend).is_equal(PriceTable.NAP_POD_FEE)
 	assert_int(RoomTypes.get_type(&"play_area").base_spend).is_equal(0)
 	assert_int(RoomTypes.get_type(&"lounge").base_spend).is_equal(0)
 	assert_int(PriceTable.SHOWER_FEE).is_greater(0)
@@ -74,6 +86,8 @@ func test_only_the_shower_and_the_nap_pod_charge_and_at_the_price_table_fees() -
 func test_the_four_are_self_service_and_no_shopping_wish() -> void:
 	for type in TYPES:
 		assert_bool(ShopCounters.SELF_SERVICE_ROOMS.has(type)).is_true()
+	assert_bool(ShopCounters.SELF_SERVICE_ROOMS.has(&"nap_pod")).is_false()
+	for type in ALL_TYPES:
 		assert_bool(WishTable.CANDIDATES.has(type)).is_false()
 		for counter: StringName in ShopCounters.COUNTER_ROOMS:
 			assert_str(str(ShopCounters.COUNTER_ROOMS[counter])).is_not_equal(str(type))
@@ -87,12 +101,19 @@ func test_each_room_tool_draws_its_type() -> void:
 
 
 func test_a_room_with_its_pieces_is_ready_and_slots_are_the_cells_in_front() -> void:
-	for type in TYPES:
+	for type in ALL_TYPES:
 		var grid := BuildGrid.new()
 		var ids := ActivityTestLayout.build(grid, type)
-		var status := RoomRules.status(grid, ids["room"])
-		assert_bool(status.ok).override_failure_message("%s: %s" % [type, status.notes]).is_true()
-		assert_int(status.seats).is_equal(SHAPE[type][1])
+		if type != &"nap_pod":
+			var status := RoomRules.status(grid, ids["room"])
+			(
+				assert_bool(status.ok)
+				. override_failure_message("%s: %s" % [type, status.notes])
+				. is_true()
+			)
+			assert_int(status.seats).is_equal(SHAPE[type][1])
+		else:
+			assert_int(ids["room"]).is_equal(0)
 		var layout := ShopLayout.new()
 		layout.rebuild(grid)
 		assert_int(layout.shops.size()).is_equal(1)

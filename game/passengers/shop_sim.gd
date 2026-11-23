@@ -152,17 +152,17 @@ static func spend(base: int, mood: int, airside: bool) -> int:
 	return CafeSim.spend(base, mood, airside, CafeVisit.Outcome.COMPLETE)
 
 
-## Ticks a visit to a room of `type` stays at its slot: the type's dwell_ticks
-## (an activity or rest room's stay) when it has one, else BROWSE_TICKS.
-static func browse_ticks(type: RoomTypes.RoomType) -> int:
+## Ticks a visit to a service of `type` stays at its slot: the type's dwell_ticks
+## (an activity or rest service's stay) when it has one, else BROWSE_TICKS.
+static func browse_ticks(type: ServiceDef) -> int:
 	return type.dwell_ticks if type.dwell_ticks > 0 else BROWSE_TICKS
 
 
-## Ticks the stay of `visit` in a room of `type` lasts from the start of its
+## Ticks the stay of `visit` in a service of `type` lasts from the start of its
 ## browse stage: browse_ticks(), or, once the visitor is back at a piece that
 ## moved (Relocation), the stay still owed. While it leaves the old spot the
 ## stage clock is set so that the whole browse_ticks() ends with the exit.
-static func stay_ticks(visit: ShopVisit, type: RoomTypes.RoomType) -> int:
+static func stay_ticks(visit: ShopVisit, type: ServiceDef) -> int:
 	var moving := visit.relocation
 	if moving != null and not moving.exiting and moving.returns():
 		return moving.left
@@ -230,19 +230,18 @@ func plan_visit(p: Passenger, browsing := false) -> Dictionary:
 func _plan_wished(p: Passenger, wish: StringName) -> Dictionary:
 	var admit := func(slot: Dictionary, route: Dictionary) -> bool:
 		return _admits(p, slot, route, false)
-	var wished := func(type: RoomTypes.RoomType) -> bool:
-		return type.relieves_boredom and type.id == wish
+	var wished := func(type: ServiceDef) -> bool: return type.relieves_boredom and type.id == wish
 	var plan := _plan(p, 0, wished, admit)
 	if not plan.is_empty():
 		plan["fallback"] = false
 		return plan
-	var other := func(type: RoomTypes.RoomType) -> bool:
+	var other := func(type: ServiceDef) -> bool:
 		return type.relieves_boredom and not type.activity and type.id != wish
 	plan = _plan(p, 0, other, admit)
 	if not plan.is_empty():
 		plan["fallback"] = true
 		return plan
-	var activity := func(type: RoomTypes.RoomType) -> bool: return type.activity
+	var activity := func(type: ServiceDef) -> bool: return type.activity
 	plan = _plan(p, 0, activity, admit)
 	if not plan.is_empty():
 		plan["fallback"] = false
@@ -318,7 +317,7 @@ func step(p: Passenger) -> void:
 	# deadline is the last tick the passenger may leave the slot.
 	var browsed := (
 		p.stage == Passenger.Stage.SHOP_BROWSE
-		and _sim.tick - p.stage_tick >= stay_ticks(visit, _room_type(visit.room))
+		and _sim.tick - p.stage_tick >= stay_ticks(visit, _visit_type(visit))
 	)
 	if visit.relocation != null and visit.relocation.exiting and visit.relocation.returns():
 		# Leaving a piece that moved, the stay still owed: no deadline cuts the
@@ -363,17 +362,23 @@ func browse_facing(p: Passenger) -> Vector2i:
 	return visit.slot["facing"]
 
 
+## The service definition `passenger_id` is visiting, or null.
+func visit_type(passenger_id: int) -> ServiceDef:
+	var visit := visit_of(passenger_id)
+	return _visit_type(visit) if visit != null else null
+
+
 ## The name of the shop type `passenger_id` is visiting in running text
 ## ("kiosk", "pharmacy", "ATM": each word lower-cased unless it is all
-## capitals), or empty with no visit or when its room is gone.
+## capitals), or empty with no visit or when its room/piece is gone.
 func store_name(passenger_id: int) -> String:
 	var visit := visit_of(passenger_id)
 	if visit == null:
 		return ""
-	var room := _sim.grid.get_room(visit.room)
-	if room.is_empty():
+	var type := _visit_type(visit)
+	if type == null:
 		return ""
-	var words := RoomTypes.get_type(room["type"]).display_name.split(" ")
+	var words := type.display_name.split(" ")
 	for i in words.size():
 		if words[i] != words[i].to_upper():
 			words[i] = words[i].to_lower()
@@ -402,7 +407,7 @@ func visit_wish_state(passenger_id: int) -> WishTable.State:
 	if visit != null:
 		if visit.fallback:
 			return WishTable.State.SUBSTITUTED
-		var unmet := _room_type(visit.room).activity
+		var unmet := _visit_type(visit).activity
 		if wish_of(p) == WishTable.NONE:
 			return WishTable.State.NONE
 		return WishTable.State.WANTED if unmet else WishTable.State.FULFILLED
@@ -447,7 +452,7 @@ func _passing_shop(p: Passenger) -> bool:
 	refresh()
 	var reach := _reach_mm(p)
 	for shop in layout.shops:
-		if not ShopCounters.room_open(_sim, shop["room"]):
+		if not ShopCounters.shop_open(_sim, shop):
 			continue
 		for slot in shop["slots"]:
 			if _core.is_free(slot["key"]) and Passenger.octile_mm(p.at, slot["approach"]) <= reach:
@@ -459,15 +464,15 @@ func _passing_shop(p: Passenger) -> bool:
 ## {"slot", "route"} (FacilitySlots.nearest()). Slots at the same octile distance are tried in
 ## display id and then index order, and on an equal path the one tried first
 ## wins. Only slots within `reach_mm` by path count when it is above 0, only
-## shops whose RoomType `keep` accepts when it is set, and only slots `admit`
+## shops whose ServiceDef `keep` accepts when it is set, and only slots `admit`
 ## accepts (a slot entry and its route) when it is set. Empty when no such
 ## slot can be reached.
 func _plan(p: Passenger, reach_mm := 0, keep := Callable(), admit := Callable()) -> Dictionary:
 	var slots: Array = []
 	for shop in layout.shops:
-		if not ShopCounters.room_open(_sim, shop["room"]):
+		if not ShopCounters.shop_open(_sim, shop):
 			continue
-		if keep.is_valid() and not keep.call(_room_type(shop["room"])):
+		if keep.is_valid() and not keep.call(_shop_type(shop)):
 			continue
 		for slot in shop["slots"]:
 			slots.append(
@@ -479,12 +484,32 @@ func _plan(p: Passenger, reach_mm := 0, keep := Callable(), admit := Callable())
 	return {"slot": best["entry"], "route": best["route"]}
 
 
-func _room_type(room_id: int) -> RoomTypes.RoomType:
-	return RoomTypes.get_type(_sim.grid.get_room(room_id)["type"])
+func _shop_type(shop: Dictionary) -> ServiceDef:
+	return ServiceTypes.find_def(shop["type"])
 
 
-## Whether a visit to a room of `type` relieves boredom (its type's flag).
-static func _relieving(type: RoomTypes.RoomType) -> bool:
+func _slot_type(slot: Dictionary) -> ServiceDef:
+	var room_id := int(slot.get("room", 0))
+	if room_id > 0:
+		var room := _sim.grid.get_room(room_id)
+		return RoomTypes.get_type(room["type"]) if not room.is_empty() else null
+	var obj := _sim.grid.get_object(int(slot.get("display", 0)))
+	return ServiceTypes.by_piece(StringName(obj.get("def", &"")))
+
+
+func _visit_type(visit: ShopVisit) -> ServiceDef:
+	if visit.room > 0:
+		var room := _sim.grid.get_room(visit.room)
+		return RoomTypes.get_type(room["type"]) if not room.is_empty() else null
+	var def_id := StringName(visit.piece.get("def", &""))
+	if def_id == &"":
+		var obj := _sim.grid.get_object(visit.display)
+		def_id = StringName(obj.get("def", &""))
+	return ServiceTypes.by_piece(def_id)
+
+
+## Whether a visit to a service of `type` relieves boredom (its type's flag).
+static func _relieving(type: ServiceDef) -> bool:
 	return type.relieves_boredom
 
 
@@ -494,7 +519,7 @@ func _admits(p: Passenger, slot: Dictionary, route: Dictionary, browsing: bool) 
 	var arrival := VisitForecast.arrival(
 		_sim,
 		p,
-		_visit_ticks(p, route["mm"], _room_type(slot["room"])),
+		_visit_ticks(p, route["mm"], _slot_type(slot)),
 		slot["approach"],
 		0,
 		_resume_stage(p)
@@ -504,9 +529,9 @@ func _admits(p: Passenger, slot: Dictionary, route: Dictionary, browsing: bool) 
 	return VisitForecast.admits(_sim, p, arrival)
 
 
-## Ticks from now until a visit to a room of `type`, walking `walk_mm`, leaves
+## Ticks from now until a visit to a service of `type`, walking `walk_mm`, leaves
 ## its slot.
-func _visit_ticks(p: Passenger, walk_mm: int, type: RoomTypes.RoomType) -> int:
+func _visit_ticks(p: Passenger, walk_mm: int, type: ServiceDef) -> int:
 	var pre := ParkRecovery.stand_up_ticks(p) if p.stage == Passenger.Stage.SEATED else 0
 	return pre + JourneyForecast.walk_ticks(walk_mm) + ARRIVE_TICKS + browse_ticks(type)
 
@@ -549,7 +574,7 @@ func _walk_step(p: Passenger, visit: ShopVisit) -> void:
 ## nothing is settled and an error says so.
 func _settle(p: Passenger, visit: ShopVisit) -> void:
 	var airside := visit.resume_stage == Passenger.Stage.TO_GATE
-	var type := _room_type(visit.room)
+	var type := _visit_type(visit)
 	var amount := spend(type.base_spend, p.mood, airside)
 	if visit.fallback:
 		var wished := RoomTypes.get_type(wish_of(p)).base_spend
@@ -584,9 +609,12 @@ func _keep(p: Passenger, visit: ShopVisit) -> bool:
 	if _relocates(p, visit):
 		return visit_of(p.id) == visit
 	var slot := layout.slot(visit.display, visit.index)
-	var closed := (
-		p.stage != Passenger.Stage.SHOP_BROWSE and not ShopCounters.room_open(_sim, visit.room)
+	var open := (
+		ShopCounters.room_open(_sim, visit.room)
+		if visit.room > 0
+		else ShopCounters.piece_open(_sim, visit.display)
 	)
+	var closed := p.stage != Passenger.Stage.SHOP_BROWSE and not open
 	if slot.is_empty() or int(slot["room"]) != visit.room or closed:
 		if p.stage == Passenger.Stage.STANDING_UP:
 			_core.release(visit)
@@ -607,12 +635,12 @@ func _relocates(p: Passenger, visit: ShopVisit) -> bool:
 	if visit.relocation != null and visit.relocation.exiting:
 		# The room gone meanwhile ends the visit; otherwise the exit goes on at
 		# the old spot, and the return is judged when it ends.
-		if _sim.grid.get_room(visit.room).is_empty():
+		if visit.room > 0 and _sim.grid.get_room(visit.room).is_empty():
 			_end(p, visit)
 		return true
 	if not Relocation.moved(visit.piece, Relocation.placement(_sim.grid, visit.display)):
 		return false
-	if _sim.grid.get_room(visit.room).is_empty():
+	if visit.room > 0 and _sim.grid.get_room(visit.room).is_empty():
 		return false
 	match p.stage:
 		Passenger.Stage.SHOP_WALK:
@@ -633,7 +661,7 @@ func _relocates(p: Passenger, visit: ShopVisit) -> bool:
 ## no step further in first. With the end of the stay already under way it
 ## finishes and settles there as usual (a final exit).
 func _start_exit(p: Passenger, visit: ShopVisit) -> void:
-	var type := _room_type(visit.room)
+	var type := _visit_type(visit)
 	var left := stay_ticks(visit, type) - (_sim.tick - p.stage_tick)
 	var exit := ActivityPoses.turn_back_ticks(_sim, p)
 	var stepped := ActivityPoses.reach(_sim, p)
@@ -655,7 +683,7 @@ func _start_exit(p: Passenger, visit: ShopVisit) -> void:
 ## with-its-furniture-is-free-and-keeps-paid-pric, point 4).
 func _head_to_piece(p: Passenger, visit: ShopVisit) -> void:
 	refresh()
-	var type := _room_type(visit.room)
+	var type := _visit_type(visit)
 	var owed := browse_ticks(type)
 	if visit.relocation != null:
 		visit.relocation.exiting = false
@@ -665,11 +693,16 @@ func _head_to_piece(p: Passenger, visit: ShopVisit) -> void:
 	# The piece must still be one of the visit's own room (as for a cafe table
 	# or a toilet stall): in another room it is another shop's, and the visit
 	# was agreed for this one.
+	var open := (
+		ShopCounters.room_open(_sim, visit.room)
+		if visit.room > 0
+		else ShopCounters.piece_open(_sim, visit.display)
+	)
 	var usable := (
 		not slot.is_empty()
 		and int(slot["room"]) == visit.room
 		and Relocation.destination_ok(_sim.grid, visit.display, visit.piece["def"], visit.room)
-		and ShopCounters.room_open(_sim, visit.room)
+		and open
 	)
 	if usable:
 		route = VisitRoute.plan(_sim.grid, p, slot["approach"])

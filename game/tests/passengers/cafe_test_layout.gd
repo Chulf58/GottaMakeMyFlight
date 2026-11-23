@@ -40,7 +40,7 @@ static func build(
 	var built := ReferenceTerminal.build(grid)
 	assert(built, "reference terminal refused")
 	var at := ReferenceTerminal.offset_on(grid)
-	var type := RoomTypes.get_type(venue)
+	var type := ServiceTypes.find_def(venue)
 	var counter := counter_def if counter_def != &"" else type.counter_pieces[0]
 	var table := table_def
 	if table == &"":
@@ -58,9 +58,20 @@ static func build(
 		assert(result.ok, "cafe layout edit refused: %s" % result.reason_text())
 	# Walls close the floor in, so passengers may use it (TerminalEnclosure).
 	EnclosureKit.close_floor(grid)
+	var is_room := RoomTypes.get_type(venue) != null
 	var ids := {
-		"air_room": _apply(grid, BuildEdit.place_room(_moved(AIRSIDE_ROOM, at), venue)).room_id,
-		"land_room": _apply(grid, BuildEdit.place_room(_moved(LANDSIDE_ROOM, at), venue)).room_id,
+		"air_room":
+		(
+			_apply(grid, BuildEdit.place_room(_moved(AIRSIDE_ROOM, at), venue)).room_id
+			if is_room
+			else 0
+		),
+		"land_room":
+		(
+			_apply(grid, BuildEdit.place_room(_moved(LANDSIDE_ROOM, at), venue)).room_id
+			if is_room
+			else 0
+		),
 		"air_counter": _place(grid, counter, AIR_COUNTER + at),
 		"land_counter": _place(grid, counter, LAND_COUNTER + at),
 	}
