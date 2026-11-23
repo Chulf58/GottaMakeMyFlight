@@ -189,3 +189,47 @@ func test_each_hint_names_valid_build_tool_categories_for_its_opportunity() -> v
 	assert_array(HintRules.categories_for(HintRules.PLACE_CHECKIN)).contains([BuildMode.Tool.DESK])
 	assert_array(HintRules.categories_for(HintRules.TOILET)).contains([BuildMode.Tool.TOILET_ROOM])
 	assert_array(HintRules.categories_for(HintRules.SECOND_HIRE)).contains([HintRules.STAFF_CARD])
+
+
+func test_overnight_off_shift_does_not_trigger_shortage_or_poll_gaps() -> void:
+	var grid := BuildGrid.new()
+	ReferenceTerminal.build(grid)
+	var w := PassengerTestWorld.make(grid, FlightSim.schedule_starts(20_000))
+	w.auto_staff = false
+	assert_bool(w.flights.open_airport()).is_true()
+	var gate := auto_free(AirportGate.new()) as AirportGate
+	gate.bind(w.flights, w.staff)
+	var panel := auto_free(StaffPanel.new()) as StaffPanel
+	panel.staff = w.staff
+	panel.gate = gate
+	add_child(panel)
+	# Staff every desk and scanner (2 each), then step into overnight off-shift.
+	StaffTestKit.staff_all(w.staff, [CHECKIN, SECURITY])
+	w.step()
+	assert_bool(w.staff.is_off_shift()).is_true()
+	var world := HintRules.read_world(w.sim, panel.hiring_hint_roles())
+	assert_array(world["shortage_roles"]).is_empty()
+	assert_array(HintRules.causes(world)).not_contains([HintRules.SECOND_HIRE])
+	panel.poll_gaps()
+	var gap_texts: Array[String] = []
+	for entry in panel.card_lines():
+		gap_texts.append(str(entry["text"]))
+	assert_array(gap_texts).not_contains([Checklist.GAPS[HintRules.SECOND_HIRE]])
+	# Firing one check-in agent while off-shift leaves 2 desks vs 1 hired agent -> real shortage.
+	assert_bool(w.staff.fire(CHECKIN)).is_true()
+	world = HintRules.read_world(w.sim, panel.hiring_hint_roles())
+	assert_array(world["shortage_roles"]).is_equal([CHECKIN])
+	assert_array(HintRules.causes(world)).contains([HintRules.SECOND_HIRE])
+	panel.poll_gaps()
+	gap_texts.clear()
+	for entry in panel.card_lines():
+		gap_texts.append(str(entry["text"]))
+	assert_array(gap_texts).contains([Checklist.GAPS[HintRules.SECOND_HIRE]])
+	# Firing the second check-in agent -> 0-hired banner role takes over.
+	assert_bool(w.staff.fire(CHECKIN)).is_true()
+	assert_array(panel.hiring_hint_roles()).contains([CHECKIN])
+	world = HintRules.read_world(w.sim, panel.hiring_hint_roles())
+	assert_array(world["shortage_roles"]).is_equal([CHECKIN])
+	panel.free()
+	gate.free()
+	w.free_all()

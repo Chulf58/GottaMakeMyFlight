@@ -68,7 +68,7 @@ static func make(on_grid: BuildGrid, starts: Array[int], seed := 1) -> Passenger
 	# Connected before the sim binds, so it runs before the passenger tick.
 	world.clock.ticked.connect(
 		func(_tick: int) -> void:
-			if world.auto_staff:
+			if world.auto_staff and not world.staff.is_off_shift():
 				StaffTestKit.staff_all(world.staff, world.auto_staff_roles)
 	)
 	world.sim.bind(world.clock, world.flights, on_grid)

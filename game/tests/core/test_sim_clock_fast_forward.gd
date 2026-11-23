@@ -3,8 +3,8 @@ extends GdUnitTestSuite
 ## The quiet-night fast-forward on SimClock (decision quiet-nights-fast-forward-
 ## automatically-when-nothing-is-due): a source asked once a frame names the
 ## tick a fast-forward may run to; until then the clock runs at
-## FAST_FORWARD_SPEED, every tick, within MAX_STEPS_PER_FRAME, and stops on that
-## exact tick. The speed setting is never touched and nothing of it is saved.
+## FAST_FORWARD_SPEED, every tick, within FAST_FORWARD_MAX_STEPS, and stops on
+## that exact tick. The speed setting is never touched and nothing of it is saved.
 
 const FRAME := 1.0 / 60.0
 
@@ -73,24 +73,29 @@ func test_steps_per_frame_stay_within_the_cap() -> void:
 		clock.advance(d)
 		most = maxi(most, clock.tick - before)
 	print("most steps in one frame=%d" % most)
-	assert_int(most).is_equal(SimClock.MAX_STEPS_PER_FRAME)
+	assert_int(most).is_equal(SimClock.FAST_FORWARD_MAX_STEPS)
+	# Normal 1x-3x without fast-forward remains capped at MAX_STEPS_PER_FRAME (10).
+	var normal := _new_clock()
+	normal.set_speed(3)
+	normal.advance(2.0)
+	assert_int(normal.tick).is_equal(SimClock.MAX_STEPS_PER_FRAME)
 
 
-## The 2 s frame at 30x owes 1190 more ticks; the cap drops them, so with the
-## source gone a STEP-long frame at 2x runs exactly two ticks and leaves the
-## leftover fraction where it was.
+## A long fast-forward frame drops its backlog at FAST_FORWARD_MAX_STEPS, so
+## with the source gone a STEP-long frame at 2x runs exactly two ticks and
+## leaves the leftover fraction where it was.
 func test_a_long_fast_frame_drops_its_backlog() -> void:
 	var clock := _new_clock()
 	clock.set_speed(2)
 	clock.fast_forward_source = _source_at(1_000_000)
 	clock.advance(2.0 + SimClock.STEP * 0.4 / SimClock.FAST_FORWARD_SPEED)
-	assert_int(clock.tick).is_equal(SimClock.MAX_STEPS_PER_FRAME)
+	assert_int(clock.tick).is_equal(SimClock.FAST_FORWARD_MAX_STEPS)
 	var alpha := clock.alpha
 	assert_float(alpha).is_equal_approx(0.4, 0.001)
 	clock.fast_forward_source = Callable()
 	clock.advance(SimClock.STEP)
 	print("after the long frame: ticks=%d alpha %f -> %f" % [clock.tick, alpha, clock.alpha])
-	assert_int(clock.tick).is_equal(SimClock.MAX_STEPS_PER_FRAME + 2)
+	assert_int(clock.tick).is_equal(SimClock.FAST_FORWARD_MAX_STEPS + 2)
 	assert_float(clock.alpha).is_equal_approx(alpha, 0.0001)
 
 
@@ -122,7 +127,7 @@ func test_a_listener_that_pauses_stops_a_3x_frame_on_its_tick() -> void:
 
 
 ## Reaching the stop with less than a step left still turns that leftover into
-## player-speed time: 0.5 STEP of fast time is 0.5 / 30 STEP at 1x.
+## player-speed time: 0.5 STEP of fast time is 0.5 / FAST_FORWARD_SPEED STEP at 1x.
 func test_the_leftover_at_the_stop_is_rescaled_at_once() -> void:
 	var clock := _new_clock()
 	clock.fast_forward_source = _source_at(1)
