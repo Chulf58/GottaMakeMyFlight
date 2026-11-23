@@ -279,14 +279,11 @@ class Words:
 				tr("One agent works one desk or scanner. Hire another on the Staff card."),
 				tr("Passengers need a toilet. Build a toilet room and put a stall in it."),
 				tr("Hungry passengers need food. Build a cafe with a counter and a table."),
-<<<<<<< HEAD
 				tr("Drag a belt from the back of a check-in desk into your Bag Room."),
-=======
 				tr(
 					# gdlint:ignore = max-line-length
 					"Airlines are ready with new flights — click Offers at the top to review contracts."
 				),
->>>>>>> d72fc15b (Make airline offers proactive and engaging with rail alert, pulse, chime, and card personality)
 				tr("Click a passenger to follow them to their flight"),
 			]
 		)

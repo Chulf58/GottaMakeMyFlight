@@ -1,3 +1,4 @@
+# gdlint:disable = max-public-methods
 class_name TestHints
 extends GdUnitTestSuite
 ## The hint queue (HUD 7/7, decision first-time-hints-above-the-build-bar-
