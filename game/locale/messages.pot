@@ -7182,6 +7182,11 @@ msgctxt "build menu"
 msgid "Starter Shower"
 msgstr ""
 
+#: build/starter_room_kits.gd
+msgctxt "build menu"
+msgid "Starter Break Room"
+msgstr ""
+
 #: build/build_words.gd
 msgctxt "build status"
 msgid "{item} row of {count}, cost {cost}"
@@ -7225,4 +7230,77 @@ msgstr ""
 #: build/build_juice.gd
 msgctxt "build juice"
 msgid "+${amount}"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Break Room"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room type"
+msgid "Break Room"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room name, mid-sentence"
+msgid "break room"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room need"
+msgid "Needs a bench"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "status reason"
+msgid "needs a bench"
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Marks floor as a break room. Tired staff rest here during lulls to recover energy."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Drag a rectangle, then add a bench inside. High prestige speeds up recovery."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "At least 2x3, with a bench. Staff never leave a busy queue mid-rush."
+msgstr ""
+
+#: ui/room_panel.gd
+msgid "Benches {count}"
+msgstr ""
+
+#: ui/room_panel.gd
+msgid "Staff rest here during lulls"
+msgstr ""
+
+#: ui/room_panel.gd
+msgid "Prestige: Lv. {level} / 5 ({score} pts · +{bonus}% recovery)"
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "{hired} hired, {duty} cleaning, {on_break} on break"
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "{hired} hired, {duty} on duty, {on_break} on break"
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "On break {pct}%"
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "Tired {pct}%"
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "Rested {pct}%"
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "+ {count} more"
 msgstr ""

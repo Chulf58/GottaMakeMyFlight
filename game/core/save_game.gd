@@ -144,7 +144,9 @@ signal loaded(ok: bool)
 ## unlock_all); version 36 saves are refused (no migration).
 ## 38: multi-tier airline loyalty & Gold Hub Contracts (OfferBoard v10, FlightSim
 ## v13); version 37 saves are refused (no migration).
-const SAVE_VERSION := 38
+## 39: Break Room & soft Staff Energy (StaffSim v9); version 38 saves are
+## refused (no migration).
+const SAVE_VERSION := 39
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"

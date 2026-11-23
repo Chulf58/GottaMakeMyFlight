@@ -47,6 +47,7 @@ const CATEGORIES := [
 			BuildMode.Tool.SECURITY_LANE,
 			BuildMode.Tool.BELT,
 			BuildMode.Tool.BAG_ROOM,
+			BuildMode.Tool.BREAK_ROOM,
 		],
 	},
 	{
@@ -172,6 +173,7 @@ const ROOM_TOOLS := {
 	&"play_area": [BuildMode.Tool.PLAY_SLIDE, BuildMode.Tool.PLAY_BLOCKS],
 	&"lounge": [BuildMode.Tool.SOFA, BuildMode.Tool.ARMCHAIR, BuildMode.Tool.WORK_DESK],
 	&"shower": [BuildMode.Tool.SHOWER],
+	&"break_room": [BuildMode.Tool.BENCH],
 }
 ## Card name, thumbnail and non-catalog size text per tool. Object sizes come from BuildCatalog.
 const ITEMS := {
@@ -210,6 +212,7 @@ const ITEMS := {
 	BuildMode.Tool.PLAY_AREA_ROOM: ["Play area", "play_slide", "3x4 min"],
 	BuildMode.Tool.LOUNGE_ROOM: ["Lounge", "lounge_sofa", "2x3 min"],
 	BuildMode.Tool.SHOWER_ROOM: ["Shower", "shower_cubicle", "2x2 min"],
+	BuildMode.Tool.BREAK_ROOM: ["Break Room", "bench_1a", "2x3 min"],
 	BuildMode.Tool.SHOWER: ["Shower cubicle", "shower_cubicle", ""],
 	BuildMode.Tool.KIOSK_DISPLAY: ["Display stand", "kiosk_display", ""],
 	BuildMode.Tool.SEARCH_TABLE: ["Search table", "search_table", ""],
@@ -541,6 +544,7 @@ class Words:
 			tr("Grab-and-go", "build menu"),
 			tr("Play area", "build menu"),
 			tr("Lounge", "build menu"),
+			tr("Break Room", "build menu"),
 			tr("Shower", "build menu"),
 			tr("Shower cubicle", "build menu"),
 			tr("2x2 min", "build menu"),

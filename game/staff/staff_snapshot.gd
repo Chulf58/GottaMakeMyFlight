@@ -5,7 +5,7 @@ extends RefCounted
 ## planned differently after a load; station claims are rebuilt from the
 ## members. Cells are saved as [x, y].
 ##
-## Only the current version (StaffSim.SAVE_VERSION, 8) loads: an older save is
+## Only the current version (StaffSim.SAVE_VERSION, 9) loads: an older save is
 ## refused, never migrated (no save migrations before the first release,
 ## decision old-saves-are-not-supported-until-after-a-release-no-save-mi).
 ##
@@ -55,6 +55,10 @@ const MEMBER_KEYS := [
 	"ramp_job",
 	"ramp_shuttle_id",
 	"ramp_flight_id",
+	"energy",
+	"energy_ticks",
+	"break_room",
+	"break_spot",
 ]
 const INT_FIELDS := ["id", "role", "state", "station", "slot", "path_index", "seg_mm"]
 const BOOL_FIELDS := ["needs_replan", "search_failed", "leaving", "job_bin"]
@@ -96,6 +100,10 @@ static func save(
 					"ramp_job": m.ramp_job,
 					"ramp_shuttle_id": m.ramp_shuttle_id,
 					"ramp_flight_id": m.ramp_flight_id,
+					"energy": m.energy,
+					"energy_ticks": m.energy_ticks,
+					"break_room": m.break_room,
+					"break_spot": [m.break_spot.x, m.break_spot.y],
 				}
 			)
 		)
@@ -296,6 +304,23 @@ static func _member(record: Variant, sim: PassengerSim) -> Variant:
 	m.ramp_job = int(record["ramp_job"]) as StaffMember.RampJob
 	m.ramp_shuttle_id = int(record["ramp_shuttle_id"])
 	m.ramp_flight_id = record["ramp_flight_id"]
+	if not WholeNumber.is_whole(record["energy"]):
+		return "member %d energy is not a whole number" % m.id
+	m.energy = int(record["energy"])
+	if m.energy < StaffMember.ENERGY_MIN or m.energy > StaffMember.ENERGY_MAX:
+		return "member %d energy %d is out of range" % [m.id, m.energy]
+	if not WholeNumber.is_whole(record["energy_ticks"]) or int(record["energy_ticks"]) < 0:
+		return "member %d energy_ticks is not a whole number of 0 or more" % m.id
+	m.energy_ticks = int(record["energy_ticks"])
+	if not WholeNumber.is_whole(record["break_room"]) or int(record["break_room"]) < 0:
+		return "member %d break_room is not a whole number of 0 or more" % m.id
+	m.break_room = int(record["break_room"])
+	var break_spot: Variant = _cell(record["break_spot"])
+	if break_spot == null:
+		return "member %d break_spot is malformed" % m.id
+	m.break_spot = break_spot
+	if m.break_spot != StaffMember.NO_CELL and not sim.grid.in_bounds(m.break_spot):
+		return "member %d break_spot is off the grid" % m.id
 	# Saves from before the flag existed have none: not backing out.
 	if record.has("backing_out"):
 		if typeof(record["backing_out"]) != TYPE_BOOL:
@@ -347,6 +372,8 @@ static func _member(record: Variant, sim: PassengerSim) -> Variant:
 			)
 		):
 			problem = "is no ramp agent but has a ramp job"
+	if problem == "":
+		problem = _energy_break_problem(m, sim)
 	if problem != "":
 		return "member %d %s" % [m.id, problem]
 	return m
@@ -377,7 +404,11 @@ static func _stand_down(m: StaffMember) -> void:
 
 ## Whether the member's cell, path and progress agree.
 static func _place_problem(m: StaffMember) -> String:
-	var walking := m.state == StaffMember.State.TO_STATION or m.is_walking_to_exit()
+	var walking := (
+		m.state == StaffMember.State.TO_STATION
+		or m.state == StaffMember.State.TO_BREAK
+		or m.is_walking_to_exit()
+	)
 	if (
 		m.backing_out
 		and (not walking or m.in_pool() or m.path_index != 0 or m.path.size() < 2 or m.seg_mm <= 0)
@@ -490,6 +521,8 @@ static func _duty_problem(m: StaffMember, sim: PassengerSim) -> String:
 		if m.station != 0 or m.is_moving() or m.needs_replan or m.leaving:
 			return "is idle but has a station or a walk"
 		return ""
+	if m.is_on_break():
+		return ""
 	if m.state == StaffMember.State.OFF_SHIFT:
 		if m.station != 0 or not m.in_pool() or m.leaving:
 			return "is off shift but has a station, indoor position or leaving"
@@ -526,6 +559,38 @@ static func _of_role(m: StaffMember, sim: PassengerSim) -> bool:
 		StaffMember.Role.GATE:
 			return GateDesks.is_desk(sim.grid, m.station)
 	return sim.layout.scanners.has(m.station)
+
+
+static func _energy_break_problem(m: StaffMember, sim: PassengerSim) -> String:
+	if m.state == StaffMember.State.ON_DUTY:
+		if m.energy_ticks >= StaffMember.DRAIN_INTERVAL_TICKS:
+			return "has on-duty energy_ticks %d at or above drain interval" % m.energy_ticks
+	elif m.state == StaffMember.State.ON_BREAK:
+		if m.energy_ticks >= StaffMember.RECOVERY_THRESHOLD:
+			return "has on-break energy_ticks %d at or above recovery threshold" % m.energy_ticks
+	elif m.role == StaffMember.Role.RAMP and m.state == StaffMember.State.IDLE:
+		if m.energy_ticks >= StaffMember.RECOVERY_THRESHOLD:
+			return "has idle ramp energy_ticks %d at or above recovery threshold" % m.energy_ticks
+	elif m.energy_ticks != 0:
+		return "has non-zero energy_ticks outside duty or break"
+	if not m.is_on_break():
+		if m.break_room != 0 or m.break_spot != StaffMember.NO_CELL:
+			return "holds break_room or break_spot while not on break"
+		return ""
+	if m.role == StaffMember.Role.RAMP or m.in_pool() or m.station != 0 or m.leaving or m.job != 0:
+		return "has invalid role, station, pool or leaving state on break"
+	if not StaffBreakRooms.is_ready(sim.grid, m.break_room):
+		return "is on break in break_room %d, which is not ready" % m.break_room
+	if m.break_spot == StaffMember.NO_CELL or not sim.grid.is_walkable(m.break_spot):
+		return "has an unwalkable break_spot"
+	if sim.grid.room_at(m.break_spot) != m.break_room:
+		return "has a break_spot outside its break_room"
+	if m.state == StaffMember.State.TO_BREAK:
+		if not m.needs_replan and m.path_end() != m.break_spot:
+			return "walks to break but its path does not end at break_spot"
+	elif m.at != m.break_spot or m.is_moving() or m.needs_replan:
+		return "is on break away from break_spot or still moving"
+	return ""
 
 
 static func _cell(value: Variant) -> Variant:

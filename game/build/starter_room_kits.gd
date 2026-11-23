@@ -160,6 +160,18 @@ const KITS := {
 			{"def": &"shower_cubicle", "anchor": Vector2i(0, 0), "facing": 0},
 		],
 	},
+	&"break_room":
+	{
+		"name": "Starter Break Room",
+		"room_type": &"break_room",
+		"thumbnail": "bench_1a",
+		"size": Vector2i(3, 3),
+		"door": {"cell": Vector2i(1, 2), "side": BuildGrid.Side.SOUTH},
+		"pieces":
+		[
+			{"def": &"bench_1a", "anchor": Vector2i(0, 0), "facing": 0},
+		],
+	},
 }
 
 

@@ -53,6 +53,7 @@ signal staff_changed
 ## A member was hired into the pool (hire() only, never a load).
 signal hired(id: int, role: StaffMember.Role)
 signal member_state_changed(id: int, state: StaffMember.State)
+signal member_energy_changed(id: int, energy: int)
 
 ## 2: members save their post (slot).
 ## 3: shop servers (Role.SHOP) at counters; a version 2 save has none.
@@ -61,9 +62,10 @@ signal member_state_changed(id: int, state: StaffMember.State)
 ## 6: the scanner faults and their repair ticks ("faults", StationFaults).
 ## 7: airside ramp agents (Role.RAMP) with ramp_job, ramp_shuttle_id, ramp_flight_id.
 ## 8: overnight off-shift states (LEAVING_SHIFT, OFF_SHIFT).
+## 9: soft staff energy and break room states (TO_BREAK, ON_BREAK).
 ## Only this version loads; older saves are refused (no migrations before a
 ## release).
-const SAVE_VERSION := 8
+const SAVE_VERSION := 9
 ## Empty gap ahead before staff walk out for an overnight off-shift: 2 game hours.
 const SHIFT_GAP_TICKS := 2400
 ## How early staff return from off-shift before first morning activity: 30 game min.
@@ -75,6 +77,8 @@ const FIRE_ORDER := [
 	[StaffMember.State.OFF_SHIFT, StaffMember.Slot.PRIMARY],
 	[StaffMember.State.IDLE, StaffMember.Slot.PRIMARY],
 	[StaffMember.State.LEAVING_SHIFT, StaffMember.Slot.PRIMARY],
+	[StaffMember.State.ON_BREAK, StaffMember.Slot.PRIMARY],
+	[StaffMember.State.TO_BREAK, StaffMember.Slot.PRIMARY],
 	[StaffMember.State.TO_STATION, StaffMember.Slot.HELPER],
 	[StaffMember.State.ON_DUTY, StaffMember.Slot.HELPER],
 	[StaffMember.State.TO_STATION, StaffMember.Slot.PRIMARY],
@@ -206,6 +210,14 @@ func on_duty_count(role: StaffMember.Role) -> int:
 	return n
 
 
+## Members of `role` walking to or resting inside a Break Room.
+func on_break_count(role: StaffMember.Role) -> int:
+	var n := 0
+	for m in _members:
+		n += int(m.role == role and m.is_on_break())
+	return n
+
+
 ## Members of `role` walking out for or currently in an overnight off-shift.
 func off_shift_count(role: StaffMember.Role) -> int:
 	var n := 0
@@ -306,12 +318,20 @@ func step() -> void:
 	faults.clear_due(sim.tick)
 	_reconcile()
 	_recall_shift_if_due()
+	if not forecast:
+		StaffBreaks.step_energy(self)
+		StaffBreaks.update_breaks(self, _begin_break, _end_break)
 	StaffPosts.run(self, _post, _repost)
 	if not forecast:
 		_work_jobs()
 	_leave_shift_if_quiet()
 	for m: StaffMember in _members.duplicate():
-		if m.state == StaffMember.State.TO_STATION or _walking_to_exit(m) or _patrolling(m):
+		if (
+			m.state == StaffMember.State.TO_STATION
+			or m.state == StaffMember.State.TO_BREAK
+			or _walking_to_exit(m)
+			or _patrolling(m)
+		):
 			_walk(m)
 
 
@@ -444,6 +464,8 @@ func _unclaim(m: StaffMember) -> void:
 		claims.erase(m.station)
 	m.station = 0
 	m.slot = StaffMember.Slot.PRIMARY
+	m.break_room = 0
+	m.break_spot = StaffMember.NO_CELL
 	if m.job == 0:
 		return
 	# A bin's claim is the job itself (CleanerJobs.bin_holder()).
@@ -466,7 +488,8 @@ func _work_jobs() -> void:
 		if m.role != StaffMember.Role.CLEANER:
 			continue
 		if m.state == StaffMember.State.ON_DUTY:
-			m.work_left -= 1
+			if not (m.is_tired() and posmod(sim.tick, 5) == 0):
+				m.work_left -= 1
 			if m.work_left > 0:
 				continue
 			_finish_job(m)
@@ -561,6 +584,14 @@ func _reconcile() -> void:
 				_release(m)
 		if closures.release_due(m):
 			_release(m)
+		if m.is_on_break():
+			if (
+				not StaffBreakRooms.is_ready(sim.grid, m.break_room)
+				or m.break_spot == StaffMember.NO_CELL
+				or not sim.grid.is_walkable(m.break_spot)
+				or sim.grid.room_at(m.break_spot) != m.break_room
+			):
+				_end_break(m)
 		if m.job != 0 and not CleanerJobs.exists(self, m):
 			_release(m)
 		if not m.in_pool() and not sim.grid.is_walkable(m.at) and not _backing_out(m):
@@ -718,6 +749,26 @@ func _release(m: StaffMember) -> void:
 
 ## One tick of walking to a station's spot, a patrol waypoint, or out to the
 ## entrance. On the spot the member goes on duty; at patrol end it pauses idle.
+func _begin_break(m: StaffMember, room_id: int, spot: Vector2i, path: Array[Vector2i]) -> void:
+	_unclaim(m)
+	m.search_failed = false
+	m.needs_replan = false
+	m.patrol_wait = 0
+	m.break_room = room_id
+	m.break_spot = spot
+	if not m.in_pool() and m.at == spot and not m.is_moving():
+		m.clear_path()
+		_set_state(m, StaffMember.State.ON_BREAK)
+		return
+	m.at = path[0]
+	m.set_path(path)
+	_set_state(m, StaffMember.State.TO_BREAK)
+
+
+func _end_break(m: StaffMember) -> void:
+	_release(m)
+
+
 func _walk(m: StaffMember) -> void:
 	var state := m.state
 	if m.needs_replan:
@@ -737,6 +788,8 @@ func _walk(m: StaffMember) -> void:
 		_leave(m)
 	elif state == StaffMember.State.LEAVING_SHIFT:
 		_enter_off_shift(m)
+	elif state == StaffMember.State.TO_BREAK:
+		_set_state(m, StaffMember.State.ON_BREAK)
 	else:
 		m.work_left = CleanerJobs.work_ticks(self, m)
 		_set_state(m, StaffMember.State.ON_DUTY)
@@ -744,8 +797,11 @@ func _walk(m: StaffMember) -> void:
 
 ## Where a walking member is headed: its post's spot at its station, a
 ## cleaner's job spot (CleanerJobs.job_spot()), a patrolling cleaner's end cell,
-## or, when it walks out, the door cell of the entrance with the shortest path.
+## a break room spot, or, when it walks out, the door cell of the entrance with
+## the shortest path.
 func _target(m: StaffMember) -> Vector2i:
+	if m.state == StaffMember.State.TO_BREAK:
+		return m.break_spot
 	if not _walking_to_exit(m):
 		if m.role == StaffMember.Role.CLEANER:
 			if m.state == StaffMember.State.IDLE:
@@ -930,6 +986,11 @@ func _enter_off_shift(m: StaffMember) -> void:
 	m.clear_path()
 	m.needs_replan = false
 	m.search_failed = false
+	var prev := m.energy
+	m.energy = StaffMember.ENERGY_MAX
+	m.energy_ticks = 0
+	if m.energy != prev:
+		member_energy_changed.emit(m.id, m.energy)
 	_set_state(m, StaffMember.State.OFF_SHIFT)
 
 
@@ -941,6 +1002,7 @@ func _set_state(m: StaffMember, state: StaffMember.State) -> void:
 	if m.state == state:
 		return
 	m.state = state
+	m.energy_ticks = 0
 	member_state_changed.emit(m.id, state)
 
 
@@ -955,6 +1017,7 @@ func _on_graph_changed(cells: Array[Vector2i]) -> void:
 	for m in _members:
 		if (
 			m.state != StaffMember.State.TO_STATION
+			and m.state != StaffMember.State.TO_BREAK
 			and not _walking_to_exit(m)
 			and not _patrolling(m)
 		):

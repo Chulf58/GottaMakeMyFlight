@@ -87,6 +87,7 @@ static var every_tick := false
 ## What SecurityRuntime reads from its host (see its header).
 var tick := 0
 var layout: TerminalLayout
+var staff: StaffSim
 
 var _sim: PassengerSim
 var _runtime := SecurityRuntime.new()
@@ -334,6 +335,7 @@ func _setup(sim: PassengerSim, station: int, scarce: bool, candidate := 0) -> vo
 	_sim = sim
 	tick = sim.tick
 	layout = sim.layout
+	staff = sim.staff
 	_candidate = candidate
 	var waiting: Array[Passenger] = []
 	var dispersed: Array[Passenger] = []
@@ -927,11 +929,14 @@ func _next_event() -> int:
 			at = tick + 1
 		# Work that has run out waits on something else, which is its own event.
 		if u.stage == Passenger.Stage.SECURITY and _works(u) and u.security_work > 0:
-			var rate := _runtime.rate_for(u.station, u)
-			if rate > 0:
-				@warning_ignore("integer_division")
-				var ends := tick + maxi(1, (u.security_work + rate - 1) / rate)
-				at = ends if at < 0 else mini(at, ends)
+			if _runtime.is_officer_tired(u.station, u.security_phase):
+				at = tick + 1 if at < 0 else mini(at, tick + 1)
+			else:
+				var rate := _runtime.rate_for(u.station, u)
+				if rate > 0:
+					@warning_ignore("integer_division")
+					var ends := tick + maxi(1, (u.security_work + rate - 1) / rate)
+					at = ends if at < 0 else mini(at, ends)
 		if at >= 0 and (best < 0 or at < best):
 			best = at
 	return tick + 1 if every_tick else best
