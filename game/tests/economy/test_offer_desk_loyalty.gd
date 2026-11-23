@@ -1,8 +1,8 @@
 class_name TestOfferDeskLoyalty
 extends GdUnitTestSuite
-## OfferDesk counts Loyal airline days on its board from the flights' own
-## departures: each day on which a contract with the Loyal trait had a flight
-## depart counts once for that contract's airline.
+## OfferDesk counts airline loyalty days on its board from the flights' own
+## departures: each flown day increments that airline's loyalty once per day
+## (+1 normally, +2 when carrying the Loyal airline trait).
 
 const LOYAL := {"up": "loyal_airline", "down": "rush_crowd", "level": 1}
 
@@ -50,7 +50,7 @@ func _fly(id: String, nth: int) -> void:
 	assert_str(_departed.back()).is_equal(FlightTimetable.occurrence_id(id, day))
 
 
-func test_each_day_a_loyal_contract_departs_counts_once_for_its_airline() -> void:
+func test_each_day_a_contract_departs_counts_once_for_its_airline() -> void:
 	_accept("LA", 420, "Sunhop", LOYAL)
 	_accept("PL", 720, "Blue Fjord", {})
 	_accept("LB", 1020, "Sunhop", LOYAL)
@@ -61,16 +61,27 @@ func test_each_day_a_loyal_contract_departs_counts_once_for_its_airline() -> voi
 	for day in range(first + 1, first + 3):
 		for id in ["LA", "PL"]:
 			assert_bool(_departed.has(FlightTimetable.occurrence_id(id, day))).is_true()
-	assert_int(_desk.board.loyal_days("Sunhop")).is_equal(3)
-	assert_int(_desk.board.loyal_days("Blue Fjord")).is_equal(0)
+	# LOYAL_AIRLINE counts +2 days/day (3 days -> 6), plain counts +1/day (3 days -> 3 Bronze).
+	assert_int(_desk.board.loyal_days("Sunhop")).is_equal(6)
+	assert_int(_desk.board.loyal_days("Blue Fjord")).is_equal(3)
+	assert_int(_desk.board.loyalty_tier("Blue Fjord")).is_equal(OfferBoard.LOYALTY_TIER_BRONZE)
 
 
-func test_five_flown_days_make_the_airline_loyal() -> void:
+func test_loyal_airline_reaches_tiers_at_double_speed() -> void:
 	_accept("LA", 600, "Sunhop", LOYAL)
-	for nth in OfferTraits.LOYAL_DAYS:
-		assert_bool(_desk.board.is_loyal("Sunhop")).is_false()
-		_fly("LA", nth)
-	assert_bool(_desk.board.is_loyal("Sunhop")).is_true()
+	_fly("LA", 0)
+	assert_int(_desk.board.loyalty_tier("Sunhop")).is_equal(OfferBoard.LOYALTY_TIER_NONE)
+	_fly("LA", 1)
+	assert_int(_desk.board.loyal_days("Sunhop")).is_equal(4)
+	assert_int(_desk.board.loyalty_tier("Sunhop")).is_equal(OfferBoard.LOYALTY_TIER_BRONZE)
+	_fly("LA", 2)
+	_fly("LA", 3)
+	assert_int(_desk.board.loyal_days("Sunhop")).is_equal(8)
+	assert_int(_desk.board.loyalty_tier("Sunhop")).is_equal(OfferBoard.LOYALTY_TIER_SILVER)
+	_fly("LA", 4)
+	_fly("LA", 5)
+	assert_int(_desk.board.loyal_days("Sunhop")).is_equal(12)
+	assert_int(_desk.board.loyalty_tier("Sunhop")).is_equal(OfferBoard.LOYALTY_TIER_GOLD)
 
 
 func test_binding_the_clock_again_still_counts_each_departure_once() -> void:
@@ -79,4 +90,4 @@ func test_binding_the_clock_again_still_counts_each_departure_once() -> void:
 	_accept("LA", 600, "Sunhop", LOYAL)
 	_fly("LA", 0)
 	_fly("LA", 1)
-	assert_int(_desk.board.loyal_days("Sunhop")).is_equal(2)
+	assert_int(_desk.board.loyal_days("Sunhop")).is_equal(4)

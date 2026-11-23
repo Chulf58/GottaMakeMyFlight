@@ -83,17 +83,17 @@ func bind_clock(sim_clock: SimClock) -> void:
 	clock.ticked.connect(on_tick)
 
 
-## FlightSim.state_changed: a departed flight of a contract with the Loyal
-## airline trait counts its day toward that airline's loyalty on the board
-## (OfferBoard.note_flown counts each day once). A load emits no departure, and
-## the saved count already holds the days flown before it.
+## FlightSim.state_changed: a departed flight counts its day toward that
+## airline's loyalty on the board (+1 normally, +2 with LOYAL_AIRLINE trait).
 func on_flight_state(flight_id: String, state: int) -> void:
 	if state != FlightSim.State.DEPARTED:
 		return
 	var contract := flights.contract_of(flights.flight_contract_id(flight_id))
-	if contract.is_empty() or not OfferTraits.builds_loyalty(contract[FlightContract.TRAITS_KEY]):
+	if contract.is_empty():
 		return
-	board.note_flown(contract["airline"], FlightTimetable.parse_occurrence(flight_id)["day"])
+	var day: int = FlightTimetable.parse_occurrence(flight_id)["day"]
+	var gain := OfferTraits.loyalty_day_gain(contract[FlightContract.TRAITS_KEY])
+	board.note_flown(contract["airline"], day, gain)
 
 
 ## A new day first ends a contract the low rating has made due, then draws the
@@ -155,18 +155,23 @@ func has_fitting_charter() -> bool:
 
 
 ## When the rating's low days have run out, the oldest contract still running
-## ends (the first accepted: FlightSim lists them in acceptance order) and the
-## rating's count starts again, so at most one airline leaves per day end. The
-## count is used up even with no contract left to end. The rating must have
-## ticked first, so it has closed the day that just ended.
+## ends (unless it is a Hub contract with its +1 grace day still unused).
 func _end_contract_if_due() -> void:
-	if rating == null or flights == null or not rating.contract_ends():
+	if rating == null or flights == null:
+		return
+	if rating.low_days() == 0:
+		board.clear_hub_grace_used()
+	if not rating.contract_ends():
 		return
 	var running := flights.active_contract_ids()
 	rating.note_contract_ended()
 	if running.is_empty():
 		return
 	var contract := flights.contract_of(running[0])
+	if FlightContract.is_hub(contract) and not board.has_hub_grace_used(contract["id"]):
+		board.note_hub_grace_used(contract["id"])
+		return
+	board.clear_hub_grace_used(contract["id"])
 	if flights.end_contract(contract["id"]):
 		contract_ended.emit(contract)
 
@@ -181,7 +186,8 @@ func _draw(day: int) -> void:
 		return
 	var fit_sim := flights if flights != null and flights.opened_tick >= 0 else null
 	var min_minute := _min_minute(day) if fit_sim != null else -1
-	board.ensure_day(day, clock.rng, _tier(), source.size, fit_sim, live_needs(), min_minute)
+	var stars := rating.stars() if rating != null else RatingFormula.STARTING_STARS
+	board.ensure_day(day, clock.rng, _tier(), source.size, fit_sim, live_needs(), min_minute, stars)
 
 
 func _connect_flights() -> void:
@@ -193,9 +199,19 @@ func _connect_flights() -> void:
 		flights.snapshot_loaded.connect(_on_snapshot_loaded)
 	if not flights.contract_ended.is_connected(_on_contract_ended_for_slots):
 		flights.contract_ended.connect(_on_contract_ended_for_slots)
+	if not flights.ended_by_player.is_connected(_on_ended_by_player):
+		flights.ended_by_player.connect(_on_ended_by_player)
 	if not flights.planning_changed.is_connected(_on_planning_changed):
 		flights.planning_changed.connect(_on_planning_changed)
 	_connect_gate(flights.gate)
+
+
+func _on_ended_by_player(contract_id: String, _fee: int) -> void:
+	var contract := flights.contract_of(contract_id)
+	if contract.is_empty():
+		return
+	board.demote_loyalty(String(contract["airline"]))
+	board.clear_hub_grace_used(contract_id)
 
 
 func _connect_gate(gate: AirportGate) -> void:
@@ -301,9 +317,10 @@ func _try_refill() -> void:
 	var source := _runway_source()
 	var tier := _tier()
 	var min_minute := _min_minute(_day)
+	var stars := rating.stars() if rating != null else RatingFormula.STARTING_STARS
 	_refilling = true
 	var added := board.refill_day(
-		_day, clock.rng.seed, tier, source.size, flights, live_needs(), min_minute
+		_day, clock.rng.seed, tier, source.size, flights, live_needs(), min_minute, stars
 	)
 	_refilling = false
 	if added.is_empty():

@@ -90,12 +90,12 @@ func test_the_offer_board_refuses_a_count_just_outside_its_size_range_on_load() 
 ## The accepted save domain changed (contracts hold their class's passenger
 ## range), so the version moved from 4; Runway R7's taxi plans moved it to 7,
 ## offer traits on contracts to 8, per-contract taxi pairs to 9, side stands'
-## lane_x to 10, small-class 4-8 passengers to 11, and optional one_off_day
-## charters to 12; there is no migration.
-func test_the_flight_save_version_is_12_and_version_11_is_refused() -> void:
-	assert_int(FlightSim.SAVE_VERSION).is_equal(12)
+## lane_x to 10, small-class 4-8 passengers to 11, optional one_off_day charters
+## to 12, and optional is_hub to 13; there is no migration.
+func test_the_flight_save_version_is_13_and_version_12_is_refused() -> void:
+	assert_int(FlightSim.SAVE_VERSION).is_equal(13)
 	var data := _sim.to_snapshot()
 	assert_int(int(data["save_version"])).is_equal(FlightSim.SAVE_VERSION)
 	var old := data.duplicate(true)
-	old["save_version"] = 11
+	old["save_version"] = 12
 	assert_bool((auto_free(FlightSim.new()) as FlightSim).from_snapshot(old)).is_false()

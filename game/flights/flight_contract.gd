@@ -58,6 +58,9 @@ const TAXI_KEY := "taxi"
 ## Calendar day (>= 0) for a one-off same-day charter, or -1 for a repeating
 ## daily contract. Optional in TERM_KEYS and KEYS; stored as int by make().
 const ONE_OFF_DAY_KEY := "one_off_day"
+## True for a Gold Hub Contract (Stage 2 S2-C). Optional in TERM_KEYS and KEYS;
+## stored as bool by make().
+const IS_HUB_KEY := "is_hub"
 const TEXT_KEYS := ["airline", "destination", "gate", "plane_size"]
 const PLANE_SIZES := ["small", "medium", "large"]
 const MAX_BOOKED := 999
@@ -86,7 +89,7 @@ static func problem(data: Variant, keys: Array) -> String:
 	if typeof(data) != TYPE_DICTIONARY:
 		return "a contract must be a dictionary"
 	for key in data.keys():
-		if not keys.has(key) and key != TRAITS_KEY and key != ONE_OFF_DAY_KEY:
+		if not keys.has(key) and key != TRAITS_KEY and key != ONE_OFF_DAY_KEY and key != IS_HUB_KEY:
 			return "unknown contract key '%s'" % key
 	for key in keys:
 		if not data.has(key):
@@ -104,6 +107,11 @@ static func problem(data: Variant, keys: Array) -> String:
 		var one_off: Variant = data[ONE_OFF_DAY_KEY]
 		if not WholeNumber.is_whole(one_off) or int(one_off) < -1 or int(one_off) > MAX_DAY:
 			problem = "one_off_day must be -1 or a whole number from 0 to %d" % MAX_DAY
+	if problem == "" and data.has(IS_HUB_KEY):
+		if typeof(data[IS_HUB_KEY]) != TYPE_BOOL:
+			problem = "is_hub must be a boolean"
+		elif bool(data[IS_HUB_KEY]) and is_charter(data):
+			problem = "a one-off charter cannot be a hub contract"
 	if problem == "" and data.has(TRAITS_KEY):
 		problem = OfferTraits.problem(data[TRAITS_KEY])
 	if problem == "" and keys.has(TAXI_KEY):
@@ -126,10 +134,15 @@ static func make(data: Dictionary) -> Dictionary:
 		contract[key] = int(value) if typeof(value) == TYPE_FLOAT else value
 	contract[TRAITS_KEY] = OfferTraits.frozen(data.get(TRAITS_KEY, {}))
 	contract[ONE_OFF_DAY_KEY] = int(data.get(ONE_OFF_DAY_KEY, -1))
+	contract[IS_HUB_KEY] = bool(data.get(IS_HUB_KEY, false))
 	if data.has(TAXI_KEY):
 		contract[TAXI_KEY] = TaxiTimes.frozen(data[TAXI_KEY])
 	contract.make_read_only()
 	return contract
+
+
+static func is_hub(data: Dictionary) -> bool:
+	return bool(data.get(IS_HUB_KEY, false))
 
 
 static func one_off_day(data: Dictionary) -> int:

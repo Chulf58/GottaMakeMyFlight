@@ -24,9 +24,11 @@ const DAYS := 30
 ## runway now draw large offers while Tier 0 and STATE_AFTER stay unchanged),
 ## and for Stage 2 S2-B (ruling stage-2-s2b-peak-hour-rush-waves-morning-
 ## evening-banks-plus-15-bonus: Day 2+ makes one peak-wave roll and draws
-## ~65% into 07:00-10:00 / 17:00-20:00 with +15% Peak Demand fee bonus).
+## ~65% into 07:00-10:00 / 17:00-20:00 with +15% Peak Demand fee bonus),
+## and for Stage 2 S2-C (decision 92eaa854: OfferBoard v10 adds loyalty_tier,
+## is_hub, and hub_grace_used; STATE_AFTER and base offer draws stay unchanged).
 const STATE_AFTER := -878261620875140187
-const BEFORE_HASHES := [4288161598, 1800429161, 1989249912]
+const BEFORE_HASHES := [2792917084, 107561319, 3439690774]
 
 
 func _rng() -> RandomNumberGenerator:

@@ -142,7 +142,9 @@ signal loaded(ok: bool)
 ## refused (no migration).
 ## 37: game mode rules (part "rules", GameRules v1: sandbox, unlimited_funds,
 ## unlock_all); version 36 saves are refused (no migration).
-const SAVE_VERSION := 37
+## 38: multi-tier airline loyalty & Gold Hub Contracts (OfferBoard v10, FlightSim
+## v13); version 37 saves are refused (no migration).
+const SAVE_VERSION := 38
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"

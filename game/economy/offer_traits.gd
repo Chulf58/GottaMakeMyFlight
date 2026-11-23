@@ -50,9 +50,9 @@ const NEEDS_SHOPS := "shops"
 ## is 100 - MISSED_BAG_FEE_PERCENT). FULL_FLIGHT: bookings come from the top
 ## this percent of the plane size's range. RUSH_CROWD: the rushed arrival share.
 ## SIGNING_BONUS: dollars paid once, when the contract's first flight departs
-## (Settlement). LOYAL_AIRLINE: the percent more the airline's later offers pay
-## once it is loyal (LOYAL_FEE_PERCENT, the same at both levels; OfferBoard
-## counts the days). MISS_FINE: dollars per passenger who misses the flight.
+## (Settlement). LOYAL_AIRLINE: counts double (+2 days/day) toward the
+## airline's loyalty tiers (OfferBoard counts the days). MISS_FINE: dollars per
+## passenger who misses the flight.
 ## ODD_HOURS: the minutes the departure window widens at each end, the same at
 ## both levels (FlightContract.window: 06:00 to 22:00 instead of 07:00 to 21:00;
 ## decision odd-hours-and-exit-fee-offer-traits-odd-hours-widens-the-dep). An
@@ -97,7 +97,7 @@ const TABLE := {
 	},
 	LOYAL_AIRLINE:
 	{
-		"values": [10, 10],
+		"values": [2, 2],
 		"needs": "",
 	},
 	MISS_FINE:
@@ -137,9 +137,8 @@ const SEED_VERSION := 3
 ## An Exit fee contract's term: ending it with the End button costs its fee on
 ## its first day and the EXIT_FEE_DAYS - 1 days after it; then it is free.
 const EXIT_FEE_DAYS := 7
-## An airline is loyal after this many days on which one of its contracts with
-## LOYAL_AIRLINE had a flight depart; from then on its offers pay
-## LOYAL_FEE_PERCENT more, once, however many such contracts it has.
+## Legacy 5-day / +10% binary loyalty constants kept for compatibility; active
+## multi-tier loyalty thresholds and bonuses live on OfferBoard.
 const LOYAL_DAYS := 5
 const LOYAL_FEE_PERCENT := 10
 const LOYAL_LABEL := "Loyal: +10%"
@@ -192,10 +191,15 @@ static func fee_of(fee: int, traits: Dictionary) -> int:
 	return _percent_of(fee, 100 + more) if more >= 0 else fee
 
 
-## An offer fee `fee` (already fee_of) from a loyal airline when `loyal`:
-## LOYAL_FEE_PERCENT more, rounded half up; unchanged otherwise.
+## An offer fee `fee` (already fee_of) with `bonus_percent` added, rounded half
+## up; unchanged when `bonus_percent` <= 0.
+static func fee_with_bonus(fee: int, bonus_percent: int) -> int:
+	return _percent_of(fee, 100 + bonus_percent) if bonus_percent > 0 else fee
+
+
+## Legacy binary loyal fee helper kept for compatibility; see fee_with_bonus.
 static func loyal_fee_of(fee: int, loyal: bool) -> int:
-	return _percent_of(fee, 100 + LOYAL_FEE_PERCENT) if loyal else fee
+	return fee_with_bonus(fee, LOYAL_FEE_PERCENT if loyal else 0)
 
 
 ## The dollars each missed passenger costs under `traits`, 0 without Miss fine.
@@ -219,9 +223,14 @@ static func window_widening(traits: Dictionary) -> int:
 	return maxi(value(traits, ODD_HOURS), 0)
 
 
-## Whether a contract of `traits` counts its days toward its airline's loyalty.
+## Whether a contract of `traits` counts double toward its airline's loyalty.
 static func builds_loyalty(traits: Dictionary) -> bool:
 	return value(traits, LOYAL_AIRLINE) >= 0
+
+
+## Loyalty days earned per flown departure day: 2 with LOYAL_AIRLINE, else 1.
+static func loyalty_day_gain(traits: Dictionary) -> int:
+	return maxi(value(traits, LOYAL_AIRLINE), 1)
 
 
 ## The bookings of an offer whose drawn count `booked` is in [low, high]: with
@@ -265,12 +274,12 @@ static func card_tips(traits: Dictionary) -> PackedStringArray:
 	return PackedStringArray([tip_of(traits["up"], index), tip_of(traits["down"], index)])
 
 
-## The label of the loyal airline mark on a card.
+## Legacy binary loyal mark label kept for compatibility; OfferPanel renders tier badges.
 static func loyal_label() -> String:
 	return TranslationServer.translate("Loyal: +10%")
 
 
-## The tooltip of the loyal airline mark on a card.
+## Legacy binary loyal mark tooltip kept for compatibility; OfferPanel renders tier tips.
 static func loyal_tip() -> String:
 	return TranslationServer.translate("This airline is loyal to you: its offers pay 10% more.")
 
@@ -367,9 +376,10 @@ static func tip_of(id: String, index: int) -> String:
 			return (
 				TranslationServer
 				. translate(
-					"After {days} days this flight leaves, the airline's later offers pay {percent}% more."
+					# gdlint:ignore = max-line-length
+					"Counts double (+{days} days/day) toward airline loyalty tiers (Bronze +5%, Silver +10%, Gold +15%)."
 				)
-				. format({"days": LOYAL_DAYS, "percent": amount})
+				. format({"days": amount})
 			)
 		MISS_FINE:
 			return (

@@ -173,7 +173,9 @@ const STARTER_TERMS := {
 ## 12: contracts carry optional one_off_day (-1 for daily, >= 0 for one-off
 ## charters with CHARTER_BOARDING_TICKS). A version 11 save is refused; there is
 ## no migration.
-const SAVE_VERSION := 12
+## 13: contracts carry optional is_hub (false for standard, true for Gold Hub
+## contracts). A version 12 save is refused; there is no migration.
+const SAVE_VERSION := 13
 const CHARTER_LATE_TEXT := "this charter's departure window has already passed"
 ## The refusal of a flight no taxi pause fits (user ruling a-gate-has-no-size-
 ## planes-use-any-stand-they-fit-neighbours-share-apron-space).

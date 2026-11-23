@@ -1,4 +1,4 @@
-# gdlint:disable = max-public-methods
+# gdlint:disable = max-public-methods, max-file-lines
 class_name OfferBoard
 extends RefCounted
 ## The airline offers the player can take. Each game day a few offers are drawn
@@ -29,12 +29,12 @@ extends RefCounted
 ## booked_passengers when it is drawn; those stored terms are what a contract
 ## pays and books.
 ##
-## Loyal airline: the board counts, per airline, the days on which one of its
-## contracts with OfferTraits.LOYAL_AIRLINE had a flight depart (note_flown,
-## called by OfferDesk from the flights' departures). Once an airline has
-## OfferTraits.LOYAL_DAYS of them, each offer it is drawn after that has its fee
-## raised by OfferTraits.loyal_fee_of, after the fee traits, and is marked
-## "loyal" for the card. The count is saved; it never stacks past one raise.
+## Multi-tier airline loyalty: the board counts, per airline, each distinct
+## flown departure day (note_flown, called by OfferDesk: +1 normal, +2 with
+## OfferTraits.LOYAL_AIRLINE), advancing through Bronze (3d +5%), Silver
+## (7d +10%), and Gold (12d +15%). At Gold + 3.0+ stars, offers may draw as
+## Gold Hub Contracts (+10% extra fee bonus, +1 low-rating grace day). Early
+## player contract end demotes the airline by 1 tier.
 
 ## Fires when offers arrive, one is accepted or declined, or a save is loaded.
 signal changed
@@ -66,8 +66,11 @@ const STATUSES := [OPEN, ACCEPTED, DECLINED, EXPIRED]
 ## 9: peak-hour rush waves on Day 2+ apply +15% Peak Demand bonus on 07:00-10:00
 ## and 17:00-20:00 departures; saved peak-slot fees must match apply_peak_bonus.
 ## A version 8 save is refused; there is no migration.
-const SAVE_VERSION := 9
-const SAVE_KEYS := ["save_version", "offers", "loyalty", "charters"]
+## 10: multi-tier airline loyalty (Bronze 3d +5%, Silver 7d +10%, Gold 12d +15%),
+## loyalty_tier & is_hub on offers, and hub_grace_used tracking.
+## A version 9 save is refused; there is no migration.
+const SAVE_VERSION := 10
+const SAVE_KEYS := ["save_version", "offers", "loyalty", "charters", "hub_grace_used"]
 const CHARTER_SEED_VERSION := 1
 const CHARTER_PREFIX := "CH"
 ## Cutoff ticks before departure (= FlightTimetable.departure_offset at BASE for
@@ -85,6 +88,22 @@ const CHARTER_LAST_OFFER_MINUTE := 19 * 60 + 30
 ## Sorted, so a saved count's keys can be compared with it.
 const LOYALTY_KEYS := ["days", "last_day"]
 const LOYAL_KEY := "loyal"
+const LOYAL_TIER_KEY := "loyalty_tier"
+const HUB_KEY := FlightContract.IS_HUB_KEY
+const LOYALTY_BRONZE_DAYS := 3
+const LOYALTY_SILVER_DAYS := 7
+const LOYALTY_GOLD_DAYS := 12
+const LOYALTY_BRONZE_PERCENT := 5
+const LOYALTY_SILVER_PERCENT := 10
+const LOYALTY_GOLD_PERCENT := 15
+const LOYALTY_TIER_NONE := 0
+const LOYALTY_TIER_BRONZE := 1
+const LOYALTY_TIER_SILVER := 2
+const LOYALTY_TIER_GOLD := 3
+const HUB_MIN_STARS := 3.0
+const HUB_FEE_BONUS_PERCENT := 10
+const HUB_OFFER_CHANCE_PERCENT := 50
+const HUB_SEED_VERSION := 1
 const OFFER_KEYS := [
 	"id",
 	"day",
@@ -96,6 +115,8 @@ const OFFER_KEYS := [
 	"fee_per_passenger",
 	FlightContract.TRAITS_KEY,
 	LOYAL_KEY,
+	LOYAL_TIER_KEY,
+	HUB_KEY,
 	"status",
 ]
 const CHARTER_KEYS := [
@@ -184,8 +205,10 @@ const FIT_OFFERS := 2
 var _offers: Array[Dictionary] = []
 ## Dedicated one-off same-day charters in the order they were drawn.
 var _charters: Array[Dictionary] = []
-## Airline -> {"days": flown days counted (1..LOYAL_DAYS), "last_day": the last}.
+## Airline -> {"days": flown days counted (1..LOYALTY_GOLD_DAYS), "last_day": the last}.
 var _loyalty: Dictionary = {}
+## Contract ids of Hub contracts that already used their +1 low-rating grace day.
+var _hub_grace_used: Dictionary = {}
 ## True while from_snapshot() emits `changed`, so listeners do not treat a load
 ## as a player action that triggers a refill.
 var _loading := false
@@ -291,6 +314,8 @@ static func terms_of(offer: Dictionary) -> Dictionary:
 	terms[FlightContract.TRAITS_KEY] = offer[FlightContract.TRAITS_KEY]
 	if offer.has(FlightContract.ONE_OFF_DAY_KEY):
 		terms[FlightContract.ONE_OFF_DAY_KEY] = int(offer[FlightContract.ONE_OFF_DAY_KEY])
+	if offer.get(HUB_KEY, false):
+		terms[FlightContract.IS_HUB_KEY] = true
 	return terms
 
 
@@ -318,7 +343,8 @@ func ensure_day(
 	runway_class := PlaneClasses.LARGE,
 	flights: FlightSim = null,
 	live := {},
-	min_minute := -1
+	min_minute := -1,
+	stars := -1.0
 ) -> Array[String]:
 	var ids: Array[String] = []
 	if not _draw_args_valid(day, tier, runway_class):
@@ -327,11 +353,17 @@ func ensure_day(
 	expired = _expire_charters_before(day) or expired
 	var drawn := not _has_day(day)
 	if drawn:
+		var effective_stars := stars if stars >= 0.0 else (HUB_MIN_STARS if tier >= 1 else 0.0)
 		var fresh: Array[Dictionary] = []
 		var traits := OfferTraits.draw_day(rng.seed, day, OFFERS_PER_DAY, tier, live)
 		for number in range(1, OFFERS_PER_DAY + 1):
 			var offer := _draw(day, number, rng, tier, runway_class, traits[number - 1])
-			_give_traits(offer, traits[number - 1], is_loyal(offer["airline"]))
+			var offer_tier := loyalty_tier(offer["airline"])
+			var is_hub := (
+				is_hub_eligible(offer["airline"], effective_stars)
+				and _hub_roll(rng.seed, day, number)
+			)
+			_give_traits(offer, traits[number - 1], offer_tier, is_hub)
 			fresh.append(offer)
 		if flights != null:
 			_fit(fresh, flights, min_minute)
@@ -426,7 +458,8 @@ func refill_day(
 	runway_class := PlaneClasses.LARGE,
 	flights: FlightSim = null,
 	live := {},
-	min_minute := -1
+	min_minute := -1,
+	stars := -1.0
 ) -> Array[String]:
 	var ids: Array[String] = []
 	if not _draw_args_valid(day, tier, runway_class) or flights == null or not _has_day(day):
@@ -439,6 +472,7 @@ func refill_day(
 	if not has_fitting_slot(flights, tier, runway_class, min_minute):
 		return ids
 	_expire_day(day)
+	var effective_stars := stars if stars >= 0.0 else (HUB_MIN_STARS if tier >= 1 else 0.0)
 	var refill_seed := _refill_seed(world_seed, day, wave)
 	var refill_rng := RandomNumberGenerator.new()
 	refill_rng.seed = refill_seed
@@ -446,7 +480,12 @@ func refill_day(
 	var fresh: Array[Dictionary] = []
 	for offset in range(1, OFFERS_PER_DAY + 1):
 		var offer := _draw(day, count + offset, refill_rng, tier, runway_class, traits[offset - 1])
-		_give_traits(offer, traits[offset - 1], is_loyal(offer["airline"]))
+		var offer_tier := loyalty_tier(offer["airline"])
+		var is_hub := (
+			is_hub_eligible(offer["airline"], effective_stars)
+			and _hub_roll(refill_seed, day, count + offset)
+		)
+		_give_traits(offer, traits[offset - 1], offer_tier, is_hub)
 		fresh.append(offer)
 	_fit(fresh, flights, min_minute)
 	for offer in fresh:
@@ -617,33 +656,98 @@ func decline(id: String) -> bool:
 	return true
 
 
-## Counts `day` as a day on which a Loyal airline contract of `airline` flew.
-## True when it counted: a day already counted (or one before it) and an
-## airline that already has OfferTraits.LOYAL_DAYS are not, and an airline the
-## board never draws pushes an error.
-func note_flown(airline: String, day: int) -> bool:
+## Counts `day` as a flown departure day for `airline` (+1 normal, +2 for LOYAL_AIRLINE),
+## capped at LOYALTY_GOLD_DAYS. True when counted; false if `day` already counted or at cap.
+func note_flown(airline: String, day: int, days_to_add := 1) -> bool:
 	if tier_of(airline) < 0:
 		push_error("OfferBoard.note_flown: '%s' is not an airline the board draws" % airline)
 		return false
-	var entry: Dictionary = _loyalty.get(airline, {"days": 0, "last_day": -1})
-	if day <= entry["last_day"] or entry["days"] >= OfferTraits.LOYAL_DAYS:
+	if days_to_add < 1:
+		push_error("OfferBoard.note_flown: days_to_add %d must be >= 1" % days_to_add)
 		return false
-	_loyalty[airline] = {"days": entry["days"] + 1, "last_day": day}
+	var entry: Dictionary = _loyalty.get(airline, {"days": 0, "last_day": -1})
+	if day <= entry["last_day"] or entry["days"] >= LOYALTY_GOLD_DAYS:
+		return false
+	_loyalty[airline] = {
+		"days": mini(int(entry["days"]) + days_to_add, LOYALTY_GOLD_DAYS), "last_day": day
+	}
 	return true
 
 
-## The Loyal airline days counted for `airline`, 0 to OfferTraits.LOYAL_DAYS.
+## Loyalty days counted for `airline`, 0 to LOYALTY_GOLD_DAYS.
 func loyal_days(airline: String) -> int:
 	return _loyalty.get(airline, {"days": 0})["days"]
 
 
-## Whether `airline`'s offers drawn from now on pay the loyal raise.
+static func loyalty_tier_for_days(days: int) -> int:
+	if days >= LOYALTY_GOLD_DAYS:
+		return LOYALTY_TIER_GOLD
+	if days >= LOYALTY_SILVER_DAYS:
+		return LOYALTY_TIER_SILVER
+	if days >= LOYALTY_BRONZE_DAYS:
+		return LOYALTY_TIER_BRONZE
+	return LOYALTY_TIER_NONE
+
+
+static func loyalty_percent_for_tier(tier: int) -> int:
+	match tier:
+		LOYALTY_TIER_BRONZE:
+			return LOYALTY_BRONZE_PERCENT
+		LOYALTY_TIER_SILVER:
+			return LOYALTY_SILVER_PERCENT
+		LOYALTY_TIER_GOLD:
+			return LOYALTY_GOLD_PERCENT
+	return 0
+
+
+func loyalty_tier(airline: String) -> int:
+	return loyalty_tier_for_days(loyal_days(airline))
+
+
+func loyalty_fee_percent(airline: String) -> int:
+	return loyalty_percent_for_tier(loyalty_tier(airline))
+
+
 func is_loyal(airline: String) -> bool:
-	return loyal_days(airline) >= OfferTraits.LOYAL_DAYS
+	return loyalty_tier(airline) >= LOYALTY_TIER_BRONZE
 
 
-## JSON-safe state for a save: every offer with its day and status, the Loyal
-## airline count, and any same-day charters.
+func is_hub_eligible(airline: String, stars: float) -> bool:
+	return loyalty_tier(airline) == LOYALTY_TIER_GOLD and stars >= HUB_MIN_STARS
+
+
+## Cozy 1-tier demotion on early contract end: Gold -> Silver (7), Silver -> Bronze (3),
+## Bronze -> None (0), None -> 0.
+func demote_loyalty(airline: String) -> void:
+	if tier_of(airline) < 0:
+		push_error("OfferBoard.demote_loyalty: '%s' is not an airline the board draws" % airline)
+		return
+	var current := loyalty_tier(airline)
+	if current == LOYALTY_TIER_GOLD:
+		_loyalty[airline]["days"] = LOYALTY_SILVER_DAYS
+	elif current == LOYALTY_TIER_SILVER:
+		_loyalty[airline]["days"] = LOYALTY_BRONZE_DAYS
+	else:
+		_loyalty.erase(airline)
+
+
+func has_hub_grace_used(contract_id: String) -> bool:
+	return _hub_grace_used.has(contract_id)
+
+
+func note_hub_grace_used(contract_id: String) -> void:
+	if contract_id != "":
+		_hub_grace_used[contract_id] = true
+
+
+func clear_hub_grace_used(contract_id := "") -> void:
+	if contract_id == "":
+		_hub_grace_used.clear()
+	else:
+		_hub_grace_used.erase(contract_id)
+
+
+## JSON-safe state for a save: every offer, loyalty counts, charters, and Hub grace flags.
 func to_snapshot() -> Dictionary:
 	var list := []
 	for offer in _offers:
@@ -651,11 +755,14 @@ func to_snapshot() -> Dictionary:
 	var charter_list := []
 	for charter in _charters:
 		charter_list.append(charter.duplicate())
+	var grace_list := _hub_grace_used.keys()
+	grace_list.sort()
 	return {
 		"save_version": SAVE_VERSION,
 		"offers": list,
 		"loyalty": _loyalty.duplicate(true),
 		"charters": charter_list,
+		"hub_grace_used": grace_list,
 	}
 
 
@@ -665,14 +772,12 @@ func is_loading() -> bool:
 
 
 ## Restores a to_snapshot() dictionary, including one that went through JSON.
-## Pushes an error and returns false, leaving the board unchanged, when
-## anything is missing, mistyped or invalid, including an offer the board
-## could not have drawn and a day that does not hold its whole offer set.
 func from_snapshot(data: Dictionary) -> bool:
 	var loaded: Array[Dictionary] = []
 	var loaded_charters: Array[Dictionary] = []
+	var loaded_grace := {}
 	var loyalty := {}
-	var problem := _load_problem(data, loaded, loaded_charters)
+	var problem := _load_problem(data, loaded, loaded_charters, loaded_grace)
 	if problem == "":
 		problem = _loyalty_problem(data["loyalty"], loyalty)
 	if problem == "":
@@ -684,6 +789,7 @@ func from_snapshot(data: Dictionary) -> bool:
 	_offers = loaded
 	_charters = loaded_charters
 	_loyalty = loyalty
+	_hub_grace_used = loaded_grace
 	changed.emit()
 	_loading = false
 	return true
@@ -744,14 +850,28 @@ static func _draw_departure_minute(
 	return pool[rng.randi_range(0, pool.size() - 1)]
 
 
-## Gives a freshly drawn `offer` its frozen `traits` and its `loyal` mark, and
-## folds the fee and booking traits, the loyal raise, and the peak bonus into
-## its fee_per_passenger and booked_passengers.
-static func _give_traits(offer: Dictionary, traits: Dictionary, loyal: bool) -> void:
+static func _hub_roll(world_seed: int, day: int, number: int) -> bool:
+	var text := (
+		"gmmf-hub-offer|%s|%s|%s|%s"
+		% [str(HUB_SEED_VERSION), str(world_seed), str(day), str(number)]
+	)
+	var value := IncidentRoll.fnv1a_32(text.to_utf8_buffer())
+	var stream := IncidentRoll.new(value if value != 0 else 1)
+	return stream.below(100) < HUB_OFFER_CHANCE_PERCENT
+
+
+## Gives a freshly drawn `offer` its frozen `traits`, loyalty tier, and Hub flag,
+## folding traits, loyalty + Hub bonuses, and peak demand into its fee and bookings.
+static func _give_traits(
+	offer: Dictionary, traits: Dictionary, offer_tier: int, is_hub := false
+) -> void:
 	var booked_range: Array = TIER_SIZES[tier_of(offer["airline"])][offer["plane_size"]]
 	offer[FlightContract.TRAITS_KEY] = traits
-	offer[LOYAL_KEY] = loyal
-	var base_fee := _fee_of(offer["fee_per_passenger"], traits, loyal)
+	offer[LOYAL_TIER_KEY] = offer_tier
+	offer[LOYAL_KEY] = offer_tier > LOYALTY_TIER_NONE
+	offer[HUB_KEY] = is_hub
+	var bonus := loyalty_percent_for_tier(offer_tier) + (HUB_FEE_BONUS_PERCENT if is_hub else 0)
+	var base_fee := _fee_of(offer["fee_per_passenger"], traits, bonus)
 	offer["fee_per_passenger"] = apply_peak_bonus(base_fee, int(offer["departure_minute"]))
 	offer["booked_passengers"] = OfferTraits.booked_of(
 		offer["booked_passengers"], booked_range[1], traits
@@ -1190,10 +1310,13 @@ func _index_of(id: String) -> int:
 	return -1
 
 
-## "" and `into` filled with the saved offers and `into_charters` with saved
-## charters, or what is wrong with `data`.
+## "" and `into` filled with the saved offers, `into_charters` with saved
+## charters, and `into_grace` with Hub grace flags, or what is wrong with `data`.
 func _load_problem(
-	data: Dictionary, into: Array[Dictionary], into_charters: Array[Dictionary]
+	data: Dictionary,
+	into: Array[Dictionary],
+	into_charters: Array[Dictionary],
+	into_grace: Dictionary
 ) -> String:
 	var problem := _top_problem(data)
 	if problem != "":
@@ -1226,7 +1349,19 @@ func _load_problem(
 	problem = _status_problem(into, per_day)
 	if problem == "":
 		problem = _charters_load_problem(data.get("charters", []), into, into_charters)
+	if problem == "":
+		problem = _grace_load_problem(data.get("hub_grace_used", []), into_grace)
 	return problem
+
+
+static func _grace_load_problem(entries: Array, into: Dictionary) -> String:
+	for entry: Variant in entries:
+		if typeof(entry) != TYPE_STRING or entry == "":
+			return "hub_grace_used entries must be non-empty strings"
+		if into.has(entry):
+			return "hub_grace_used names '%s' twice" % entry
+		into[entry] = true
+	return ""
 
 
 func _charters_load_problem(
@@ -1368,7 +1503,7 @@ func _status_problem(offers: Array[Dictionary], per_day: Dictionary) -> String:
 	return ""
 
 
-## "" when `data` holds SAVE_KEYS ("charters" optional) with the current version and arrays.
+## "" when `data` holds SAVE_KEYS ("charters" and "hub_grace_used" optional).
 func _top_problem(data: Dictionary) -> String:
 	for key in data.keys():
 		if not SAVE_KEYS.has(key):
@@ -1378,11 +1513,14 @@ func _top_problem(data: Dictionary) -> String:
 			return "missing key '%s'" % key
 	if not WholeNumber.is_whole(data["save_version"]) or data["save_version"] != SAVE_VERSION:
 		return "save_version must be %d" % SAVE_VERSION
+	var problem := ""
 	if typeof(data["offers"]) != TYPE_ARRAY:
-		return "offers must be an array"
-	if data.has("charters") and typeof(data["charters"]) != TYPE_ARRAY:
-		return "charters must be an array"
-	return ""
+		problem = "offers must be an array"
+	elif data.has("charters") and typeof(data["charters"]) != TYPE_ARRAY:
+		problem = "charters must be an array"
+	elif data.has("hub_grace_used") and typeof(data["hub_grace_used"]) != TYPE_ARRAY:
+		problem = "hub_grace_used must be an array"
+	return problem
 
 
 ## "" when `entry` is exactly OFFER_KEYS with valid values.
@@ -1419,9 +1557,27 @@ func _undrawable_problem(entry: Dictionary) -> String:
 		return "offer %s has an airline or destination the board never draws" % entry["id"]
 	if not TIER_SIZES[tier].has(entry["plane_size"]):
 		return "offer %s has a plane size the board never draws" % entry["id"]
+	var problem := _loyalty_fields_problem(entry)
+	return problem if problem != "" else _range_problem(entry)
+
+
+static func _loyalty_fields_problem(entry: Dictionary) -> String:
 	if typeof(entry[LOYAL_KEY]) != TYPE_BOOL:
 		return "'%s' must be true or false" % LOYAL_KEY
-	return _range_problem(entry)
+	var offer_tier: Variant = entry[LOYAL_TIER_KEY]
+	if (
+		not WholeNumber.is_whole(offer_tier)
+		or int(offer_tier) < LOYALTY_TIER_NONE
+		or int(offer_tier) > LOYALTY_TIER_GOLD
+	):
+		return "'%s' must be 0 to %d" % [LOYAL_TIER_KEY, LOYALTY_TIER_GOLD]
+	if typeof(entry[HUB_KEY]) != TYPE_BOOL:
+		return "'%s' must be true or false" % HUB_KEY
+	if bool(entry[LOYAL_KEY]) != (int(offer_tier) > LOYALTY_TIER_NONE):
+		return "offer %s loyal and loyalty_tier disagree" % entry["id"]
+	if bool(entry[HUB_KEY]) and int(offer_tier) != LOYALTY_TIER_GOLD:
+		return "offer %s cannot be a Hub contract without Gold loyalty" % entry["id"]
+	return ""
 
 
 ## "" when the passengers, fee and departure are values _draw and its traits
@@ -1437,7 +1593,12 @@ func _range_problem(entry: Dictionary) -> String:
 	var fee := int(entry["fee_per_passenger"])
 	var minute := int(entry["departure_minute"])
 	if not _fee_drawable(
-		fee, fee_range_for(tier, entry["plane_size"]), traits, entry[LOYAL_KEY], minute
+		fee,
+		fee_range_for(tier, entry["plane_size"]),
+		traits,
+		int(entry[LOYAL_TIER_KEY]),
+		bool(entry[HUB_KEY]),
+		minute
 	):
 		return "offer %s has a fee no drawn fee of its tier gives" % entry["id"]
 	if not slots_of(traits).has(minute):
@@ -1445,52 +1606,47 @@ func _range_problem(entry: Dictionary) -> String:
 	return ""
 
 
-## The fee an offer of drawn fee `fee` pays with `traits`, from a loyal airline
-## when `loyal`: the fee traits first, then the loyal raise.
-static func _fee_of(fee: int, traits: Dictionary, loyal: bool) -> int:
-	return OfferTraits.loyal_fee_of(OfferTraits.fee_of(fee, traits), loyal)
+## The fee an offer of drawn fee `fee` pays with `traits` and `bonus_percent`.
+static func _fee_of(fee: int, traits: Dictionary, bonus_percent: int) -> int:
+	return OfferTraits.fee_with_bonus(OfferTraits.fee_of(fee, traits), bonus_percent)
 
 
 ## Whether some drawn fee in `fees` ([lowest, highest]) gives `fee` through
 ## _fee_of and apply_peak_bonus at `departure_minute`.
 static func _fee_drawable(
-	fee: int, fees: Array, traits: Dictionary, loyal: bool, departure_minute := -1
+	fee: int, fees: Array, traits: Dictionary, offer_tier: int, is_hub: bool, departure_minute := -1
 ) -> bool:
+	var bonus := loyalty_percent_for_tier(offer_tier) + (HUB_FEE_BONUS_PERCENT if is_hub else 0)
 	for drawn in range(fees[0], fees[1] + 1):
-		if apply_peak_bonus(_fee_of(drawn, traits, loyal), departure_minute) == fee:
+		if apply_peak_bonus(_fee_of(drawn, traits, bonus), departure_minute) == fee:
 			return true
 	return false
 
 
-## "" when every offer's loyal mark is the one the saved count gives it: an
-## offer is loyal exactly when its airline's count is OfferTraits.LOYAL_DAYS
-## (the count only grows and stops there) and the offer's day is after the last
-## counted day (a day's offers are drawn at its start, before any of its flights
-## depart). Both a loyal mark the count cannot explain and a missing one are
-## refused.
+## "" when every offer's loyalty_tier is valid given the saved count: day <= 1
+## initial offers cannot already be loyal, and any offer drawn after an airline's
+## last_day must carry at least its current loyalty_tier (demoted airlines may
+## keep higher historical offer tiers).
 static func _loyal_marks_problem(offers: Array[Dictionary], loyalty: Dictionary) -> String:
 	for offer in offers:
-		var entry: Dictionary = loyalty.get(offer["airline"], {"days": 0, "last_day": -1})
-		var full: bool = entry["days"] >= OfferTraits.LOYAL_DAYS
-		if _offer_number(offer["id"]) > OFFERS_PER_DAY:
-			var may_be_loyal: bool = full and offer["day"] >= entry["last_day"]
-			var must_be_loyal: bool = full and offer["day"] > entry["last_day"]
-			if (offer[LOYAL_KEY] and not may_be_loyal) or (not offer[LOYAL_KEY] and must_be_loyal):
-				return (
-					"offer %s is marked loyal %s but %s's count makes it invalid on day %d"
-					% [offer["id"], offer[LOYAL_KEY], offer["airline"], offer["day"]]
-				)
-			continue
-		var loyal: bool = full and offer["day"] > entry["last_day"]
-		if offer[LOYAL_KEY] != loyal:
+		var offer_tier := int(offer[LOYAL_TIER_KEY])
+		if offer["day"] <= 1 and _offer_number(offer["id"]) <= OFFERS_PER_DAY and offer_tier > 0:
 			return (
-				"offer %s is marked loyal %s but %s's count makes it %s on day %d"
-				% [offer["id"], offer[LOYAL_KEY], offer["airline"], loyal, offer["day"]]
+				"offer %s is marked loyalty tier %d too early on day %d"
+				% [offer["id"], offer_tier, offer["day"]]
 			)
+		var entry: Dictionary = loyalty.get(offer["airline"], {"days": 0, "last_day": -1})
+		var required_tier := loyalty_tier_for_days(int(entry["days"]))
+		if required_tier > LOYALTY_TIER_NONE and offer["day"] > entry["last_day"]:
+			if offer_tier < required_tier:
+				return (
+					"offer %s has loyalty tier %d below %s's tier %d on day %d"
+					% [offer["id"], offer_tier, offer["airline"], required_tier, offer["day"]]
+				)
 	return ""
 
 
-## "" and `into` filled with the saved Loyal airline count, or what is wrong.
+## "" and `into` filled with the saved airline loyalty counts, or what is wrong.
 static func _loyalty_problem(saved: Variant, into: Dictionary) -> String:
 	if typeof(saved) != TYPE_DICTIONARY:
 		return "loyalty must be a dictionary"
@@ -1505,11 +1661,12 @@ static func _loyalty_problem(saved: Variant, into: Dictionary) -> String:
 		if keys != LOYALTY_KEYS:
 			return "loyalty of %s holds exactly %s, not %s" % [airline, LOYALTY_KEYS, keys]
 		var days: Variant = entry["days"]
-		if not WholeNumber.is_whole(days) or days < 1 or days > OfferTraits.LOYAL_DAYS:
-			return "loyalty days of %s must be 1 to %d" % [airline, OfferTraits.LOYAL_DAYS]
+		if not WholeNumber.is_whole(days) or days < 1 or days > LOYALTY_GOLD_DAYS:
+			return "loyalty days of %s must be 1 to %d" % [airline, LOYALTY_GOLD_DAYS]
 		var last: Variant = entry["last_day"]
-		# Each counted day is a different day from 0 on, so the last is at least days - 1.
-		if not WholeNumber.is_whole(last) or last < days - 1 or last > FlightContract.MAX_DAY:
-			return "loyalty last_day of %s must be a day from %d" % [airline, days - 1]
+		@warning_ignore("integer_division")
+		var min_last := (int(days) - 1) / 2
+		if not WholeNumber.is_whole(last) or last < min_last or last > FlightContract.MAX_DAY:
+			return "loyalty last_day of %s must be a day from %d" % [airline, min_last]
 		into[airline] = {"days": int(days), "last_day": int(last)}
 	return ""
