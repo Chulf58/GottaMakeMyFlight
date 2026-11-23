@@ -231,7 +231,7 @@ func test_finished_day0_charter_does_not_block_day1_spur_moves_move_plan_or_gate
 	var gates := auto_free(GateDesks.new()) as GateDesks
 	gates.bind(site, sim)
 	site.guard = gates.edit_problem
-	var desk_cell := Vector2i(19, 115) + Vector2i(85, 0)
+	var desk_cell := ReferenceTerminal.GATE_DESK_CELL + site.site.starter_offset
 	var placed := site.apply(BuildEdit.place_object(GateDesks.DESK, desk_cell, 0))
 	assert_bool(placed.ok).is_true()
 	var gate_id: String = sim.gate_ids()[0]
