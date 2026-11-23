@@ -1,14 +1,9 @@
 class_name TestOfferBoardLoyalty
 extends GdUnitTestSuite
-## Loyal airline: the board counts, per airline, the days on which one of its
-## contracts with the Loyal trait had a flight depart; after OfferTraits.
-## LOYAL_DAYS such days that airline's later offers pay 10% more, folded into the
-## drawn fee and marked "loyal" on the offer for the card. The count is saved.
-## Also the save check on a traited fee: a fee loads only when some base fee of
-## the tier maps to it.
+## Bronze (3d +5%), Silver (7d +10%), Gold (12d +15%) loyalty progression and save validation.
 
-## Gotta Air flew its fifth Loyal day on day 5, so its day 6 offers may be loyal.
-const LOYAL_BY_DAY_5 := {"Gotta Air": {"days": 5, "last_day": 5}}
+const GOLD_BY_DAY_11 := {"Gotta Air": {"days": 12, "last_day": 11}}
+const BRONZE_BY_DAY_2 := {"Gotta Air": {"days": 3, "last_day": 2}}
 
 var _rng: RandomNumberGenerator
 
@@ -33,18 +28,24 @@ func _flown_days(board: OfferBoard, airline: String, days: Array) -> void:
 		board.note_flown(airline, day)
 
 
-func test_only_distinct_days_count_and_the_count_stops_at_loyal_days() -> void:
+func test_only_distinct_days_count_and_the_count_stops_at_gold_days() -> void:
 	var board := OfferBoard.new()
 	assert_bool(board.note_flown("Sunhop", 2)).is_true()
 	assert_bool(board.note_flown("Sunhop", 2)).is_false()
 	assert_int(board.loyal_days("Sunhop")).is_equal(1)
-	_flown_days(board, "Sunhop", [3, 4, 5])
-	assert_int(board.loyal_days("Sunhop")).is_equal(4)
-	assert_bool(board.is_loyal("Sunhop")).is_false()
-	assert_bool(board.note_flown("Sunhop", 6)).is_true()
+	assert_int(board.loyalty_tier("Sunhop")).is_equal(OfferBoard.LOYALTY_TIER_NONE)
+	_flown_days(board, "Sunhop", [3, 4])
+	assert_int(board.loyal_days("Sunhop")).is_equal(OfferBoard.LOYALTY_BRONZE_DAYS)
 	assert_bool(board.is_loyal("Sunhop")).is_true()
-	assert_bool(board.note_flown("Sunhop", 7)).is_false()
-	assert_int(board.loyal_days("Sunhop")).is_equal(OfferTraits.LOYAL_DAYS)
+	assert_int(board.loyalty_tier("Sunhop")).is_equal(OfferBoard.LOYALTY_TIER_BRONZE)
+	_flown_days(board, "Sunhop", [5, 6, 7, 8])
+	assert_int(board.loyalty_tier("Sunhop")).is_equal(OfferBoard.LOYALTY_TIER_SILVER)
+	_flown_days(board, "Sunhop", [9, 10, 11, 12])
+	assert_int(board.loyalty_tier("Sunhop")).is_equal(OfferBoard.LOYALTY_TIER_SILVER)
+	assert_bool(board.note_flown("Sunhop", 13)).is_true()
+	assert_int(board.loyalty_tier("Sunhop")).is_equal(OfferBoard.LOYALTY_TIER_GOLD)
+	assert_bool(board.note_flown("Sunhop", 14)).is_false()
+	assert_int(board.loyal_days("Sunhop")).is_equal(OfferBoard.LOYALTY_GOLD_DAYS)
 	assert_int(board.loyal_days("Blue Fjord")).is_equal(0)
 
 
@@ -56,10 +57,10 @@ func test_an_unknown_airline_or_an_earlier_day_is_not_counted() -> void:
 	assert_int(board.loyal_days("Sunhop")).is_equal(1)
 
 
-func test_a_loyal_airlines_later_offers_pay_ten_percent_more() -> void:
+func test_a_loyal_airlines_later_offers_pay_tier_bonus() -> void:
 	var plain := OfferBoard.new()
 	var loyal := OfferBoard.new()
-	_flown_days(loyal, "Sunhop", [0, 1, 2, 3, 4])
+	_flown_days(loyal, "Sunhop", [0, 1, 2, 3, 4, 5, 6])
 	var seed_value := _rng.seed
 	var before := _offer_from(plain, "Sunhop", 10)
 	_rng.seed = seed_value
@@ -68,6 +69,7 @@ func test_a_loyal_airlines_later_offers_pay_ten_percent_more() -> void:
 	assert_str(after["id"]).is_equal(before["id"])
 	assert_bool(before["loyal"]).is_false()
 	assert_bool(after["loyal"]).is_true()
+	assert_int(after["loyalty_tier"]).is_equal(OfferBoard.LOYALTY_TIER_SILVER)
 	assert_int(after["fee_per_passenger"]).is_equal(
 		OfferTraits.loyal_fee_of(before["fee_per_passenger"], true)
 	)
@@ -80,16 +82,20 @@ func test_a_loyal_airlines_later_offers_pay_ten_percent_more() -> void:
 
 func test_the_count_and_the_loyal_mark_survive_a_json_save() -> void:
 	var board := OfferBoard.new()
-	_flown_days(board, "Sunhop", [0, 1, 2, 3, 4])
+	_flown_days(board, "Sunhop", [0, 1, 2, 3, 4, 5, 6])
 	_flown_days(board, "Blue Fjord", [1, 3])
 	var offer := _offer_from(board, "Sunhop", 10)
 	var saved: Dictionary = JSON.parse_string(JSON.stringify(board.to_snapshot()))
 	var loaded := OfferBoard.new()
 	assert_bool(loaded.from_snapshot(saved)).is_true()
 	assert_bool(loaded.is_loyal("Sunhop")).is_true()
+	assert_int(loaded.loyalty_tier("Sunhop")).is_equal(OfferBoard.LOYALTY_TIER_SILVER)
 	assert_int(loaded.loyal_days("Blue Fjord")).is_equal(2)
 	assert_bool(loaded.note_flown("Blue Fjord", 3)).is_false()
 	assert_bool(loaded.offer_of(offer["id"])["loyal"]).is_true()
+	assert_int(loaded.offer_of(offer["id"])["loyalty_tier"]).is_equal(
+		OfferBoard.LOYALTY_TIER_SILVER
+	)
 	assert_dict(loaded.to_snapshot()).is_equal(board.to_snapshot())
 
 
@@ -97,7 +103,8 @@ func test_a_bad_saved_loyalty_count_is_refused() -> void:
 	var bad: Array = [
 		{"Nowhere Air": {"days": 1, "last_day": 0}},
 		{"Sunhop": {"days": 0, "last_day": 0}},
-		{"Sunhop": {"days": OfferTraits.LOYAL_DAYS + 1, "last_day": 9}},
+		{"Sunhop": {"days": OfferBoard.LOYALTY_GOLD_DAYS + 1, "last_day": 19}},
+		{"Sunhop": {"days": 12, "last_day": 4}},
 		{"Sunhop": {"days": 1, "last_day": -1}},
 		{"Sunhop": {"days": 1.5, "last_day": 2}},
 		{"Sunhop": {"days": 1}},
@@ -147,16 +154,17 @@ func test_a_saved_fee_loads_only_when_a_base_fee_maps_to_it() -> void:
 		[top, true, 38, false],
 	]
 	for case in cases:
-		var offers := TestOfferBoard.day_records(6, [660, 720, 840])
+		var offers := TestOfferBoard.day_records(12, [660, 720, 840])
 		offers[0]["traits"] = case[0]
 		offers[0]["loyal"] = case[1]
+		offers[0]["loyalty_tier"] = OfferBoard.LOYALTY_TIER_SILVER if case[1] else 0
 		offers[0]["fee_per_passenger"] = case[2]
 		# The other two offers fly for an airline with no count, so only the
 		# case's offer depends on the loyalty state.
 		for other in [1, 2]:
 			offers[other]["airline"] = "Sunhop"
 		var data := TestOfferBoard.save_of(offers)
-		data["loyalty"] = LOYAL_BY_DAY_5 if case[1] else {}
+		data["loyalty"] = {"Gotta Air": {"days": 7, "last_day": 11}} if case[1] else {}
 		(
 			assert_bool(OfferBoard.new().from_snapshot(data))
 			. override_failure_message(str(case))
@@ -164,53 +172,67 @@ func test_a_saved_fee_loads_only_when_a_base_fee_maps_to_it() -> void:
 		)
 
 
-## A loyal mark is possible only when the airline's saved count is full and the
-## offer was drawn after the last counted day; a count's last day is at least
-## its days - 1.
+## A loyal mark too early (day 0/1 initial draw) or inconsistent with tier/hub is refused.
 func test_a_loyal_mark_the_count_cannot_explain_is_refused() -> void:
-	var cases: Array = [
-		[{}, 6, false],
-		[{"Gotta Air": {"days": 4, "last_day": 5}}, 6, false],
-		[LOYAL_BY_DAY_5, 5, false],
-		[LOYAL_BY_DAY_5, 6, true],
-		[{"Gotta Air": {"days": 5, "last_day": 3}}, 6, false],
-		[{"Gotta Air": {"days": 5, "last_day": 4}}, 6, true],
-	]
-	for case in cases:
-		var offers := TestOfferBoard.day_records(case[1], [660, 720, 840])
-		for offer in offers:
-			offer["loyal"] = true
-			offer["fee_per_passenger"] = OfferTraits.loyal_fee_of(50, true)
-		var data := TestOfferBoard.save_of(offers)
-		data["loyalty"] = case[0]
-		(
-			assert_bool(OfferBoard.new().from_snapshot(data))
-			. override_failure_message(str(case))
-			. is_equal(case[2])
-		)
+	var early_day_1 := TestOfferBoard.day_records(1, [660, 720, 840])
+	early_day_1[0]["loyal"] = true
+	early_day_1[0]["loyalty_tier"] = OfferBoard.LOYALTY_TIER_BRONZE
+	early_day_1[0]["fee_per_passenger"] = OfferTraits.fee_with_bonus(50, 5)
+	assert_bool(OfferBoard.new().from_snapshot(TestOfferBoard.save_of(early_day_1))).is_false()
 
+	var hub_without_gold := TestOfferBoard.day_records(12, [660, 720, 840])
+	hub_without_gold[0]["loyal"] = true
+	hub_without_gold[0]["loyalty_tier"] = OfferBoard.LOYALTY_TIER_SILVER
+	hub_without_gold[0]["is_hub"] = true
+	hub_without_gold[0]["fee_per_passenger"] = OfferTraits.fee_with_bonus(50, 20)
+	var hub_data := TestOfferBoard.save_of(hub_without_gold)
+	hub_data["loyalty"] = {"Gotta Air": {"days": 7, "last_day": 11}}
+	assert_bool(OfferBoard.new().from_snapshot(hub_data)).is_false()
 
-## The inverse: an offer drawn after its airline's count was full must carry the
-## loyal mark, so a day 6 offer from an airline loyal by day 5 saved without it
-## is refused; its day 5 offers, drawn before the fifth day flew, are not loyal.
-func test_a_missing_loyal_mark_the_count_requires_is_refused() -> void:
-	var day_6 := TestOfferBoard.day_records(6, [660, 720, 840])
-	var data := TestOfferBoard.save_of(day_6)
-	data["loyalty"] = LOYAL_BY_DAY_5
-	assert_bool(OfferBoard.new().from_snapshot(data)).is_false()
-	for offer in day_6:
+	var tier_mismatch := TestOfferBoard.day_records(12, [660, 720, 840])
+	tier_mismatch[0]["loyal"] = false
+	tier_mismatch[0]["loyalty_tier"] = OfferBoard.LOYALTY_TIER_BRONZE
+	assert_bool(OfferBoard.new().from_snapshot(TestOfferBoard.save_of(tier_mismatch))).is_false()
+
+	var valid_gold := TestOfferBoard.day_records(12, [660, 720, 840])
+	for offer in valid_gold:
 		offer["loyal"] = true
-		offer["fee_per_passenger"] = OfferTraits.loyal_fee_of(50, true)
-	var day_5 := TestOfferBoard.day_records(5, [600, 720, 840])
-	for offer in day_5:
+		offer["loyalty_tier"] = OfferBoard.LOYALTY_TIER_GOLD
+		offer["fee_per_passenger"] = OfferTraits.fee_with_bonus(50, 15)
+	var valid_data := TestOfferBoard.save_of(valid_gold)
+	valid_data["loyalty"] = GOLD_BY_DAY_11
+	assert_bool(OfferBoard.new().from_snapshot(valid_data)).is_true()
+
+
+## An offer drawn after its airline earned a tier must carry at least that tier.
+func test_a_missing_loyal_mark_the_count_requires_is_refused() -> void:
+	var day_3 := TestOfferBoard.day_records(3, [660, 720, 840])
+	var data := TestOfferBoard.save_of(day_3)
+	data["loyalty"] = BRONZE_BY_DAY_2
+	assert_bool(OfferBoard.new().from_snapshot(data)).is_false()
+	for offer in day_3:
+		offer["loyal"] = true
+		offer["loyalty_tier"] = OfferBoard.LOYALTY_TIER_BRONZE
+		offer["fee_per_passenger"] = OfferTraits.fee_with_bonus(50, 5)
+	var day_2 := TestOfferBoard.day_records(2, [600, 720, 840])
+	for offer in day_2:
 		offer["status"] = OfferBoard.EXPIRED
-	data = TestOfferBoard.save_of(day_5 + day_6)
-	data["loyalty"] = LOYAL_BY_DAY_5
+	data = TestOfferBoard.save_of(day_2 + day_3)
+	data["loyalty"] = BRONZE_BY_DAY_2
 	assert_bool(OfferBoard.new().from_snapshot(data)).is_true()
-	day_5[0]["loyal"] = true
-	day_5[0]["fee_per_passenger"] = OfferTraits.loyal_fee_of(50, true)
-	data = TestOfferBoard.save_of(day_5 + day_6)
-	data["loyalty"] = LOYAL_BY_DAY_5
+	day_3[0]["loyalty_tier"] = OfferBoard.LOYALTY_TIER_GOLD
+	day_3[0]["fee_per_passenger"] = OfferTraits.fee_with_bonus(50, 15)
+	data = TestOfferBoard.save_of(day_2 + day_3)
+	data["loyalty"] = BRONZE_BY_DAY_2
+	# A higher historical tier (e.g. after demotion) is permitted; lower than current is refused.
+	assert_bool(OfferBoard.new().from_snapshot(data)).is_true()
+	var day_12 := TestOfferBoard.day_records(12, [660, 720, 840])
+	for offer in day_12:
+		offer["loyal"] = true
+		offer["loyalty_tier"] = OfferBoard.LOYALTY_TIER_SILVER
+		offer["fee_per_passenger"] = OfferTraits.fee_with_bonus(50, 10)
+	data = TestOfferBoard.save_of(day_12)
+	data["loyalty"] = GOLD_BY_DAY_11
 	assert_bool(OfferBoard.new().from_snapshot(data)).is_false()
 
 

@@ -125,7 +125,9 @@ static func _offer_problem(saved: Dictionary, board: OfferBoard, contracts: Arra
 		var id: String = offer["id"]
 		offer_ids[id] = true
 		var problem := _offer_entry_problem(
-			offer, by_id.get(id, {}), FlightContract.TERM_KEYS + [FlightContract.TRAITS_KEY]
+			offer,
+			by_id.get(id, {}),
+			FlightContract.TERM_KEYS + [FlightContract.TRAITS_KEY, FlightContract.IS_HUB_KEY]
 		)
 		if problem != "":
 			return problem

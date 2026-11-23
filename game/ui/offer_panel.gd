@@ -79,6 +79,8 @@ const BADGE_META := &"badge_monogram"
 const BADGE_BORDER := Color(0.1, 0.13, 0.26, 1.0)
 const PEAK_CHIP_FILL := Color(0.98, 0.87, 0.56, 1.0)
 const PEAK_CHIP_BORDER := Color(0.76, 0.54, 0.16, 1.0)
+const HUB_CHIP_FILL := Color(0.98, 0.85, 0.36, 1.0)
+const HUB_CHIP_BORDER := Color(0.74, 0.52, 0.08, 1.0)
 const PULSE_TINT := Color(1.16, 1.06, 0.72, 0.76)
 const PULSE_HALF_S := 0.7
 const AIRLINE_BADGES := {
@@ -1049,10 +1051,19 @@ func _add_card(offer: Dictionary) -> void:
 		when.add_child(part)
 	for i in range(3, lines.size()):
 		texts.add_child(_card_label(lines[i], &"HudSmall"))
-	if not is_charter and OfferBoard.is_peak_minute(int(offer["departure_minute"])):
-		var chip := _peak_chip(offer)
-		texts.add_child(chip)
-		_peak_chips[id] = chip
+	var is_hub := not is_charter and bool(offer.get(OfferBoard.HUB_KEY, false))
+	var is_peak := not is_charter and OfferBoard.is_peak_minute(int(offer["departure_minute"]))
+	if is_hub or is_peak:
+		var chips := HBoxContainer.new()
+		chips.name = "Chips_%s" % id
+		chips.add_theme_constant_override("separation", 6)
+		if is_hub:
+			chips.add_child(_hub_badge(offer))
+		if is_peak:
+			var chip := _peak_chip(offer)
+			chips.add_child(chip)
+			_peak_chips[id] = chip
+		texts.add_child(chips)
 	var pitch := _card_label(route_pitch(offer), &"HudHint")
 	pitch.name = "Pitch_%s" % id
 	texts.add_child(pitch)
@@ -1109,8 +1120,7 @@ func _add_card(offer: Dictionary) -> void:
 ## The trait line under the verdict row (OfferTraits.card_labels): the upside in
 ## HudGoodText and the downside in HudProblemText, each with its numbers as a
 ## tooltip; a plain offer shows PLAIN_LABEL in HudHint and no downside. An offer
-## from a loyal airline (OfferBoard's "loyal" mark) ends the line with
-## OfferTraits.LOYAL_LABEL in HudGoodText.
+## from a Bronze/Silver/Gold airline ends the line with its tier badge in HudGoodText.
 func _trait_row(offer: Dictionary) -> HBoxContainer:
 	if FlightContract.is_charter(offer):
 		var charter_row := HBoxContainer.new()
@@ -1128,9 +1138,27 @@ func _trait_row(offer: Dictionary) -> HBoxContainer:
 		return charter_row
 	var traits: Dictionary = offer[FlightContract.TRAITS_KEY]
 	var plain := OfferTraits.is_plain(traits)
-	var labels := Array(OfferTraits.card_labels(traits)) + [OfferTraits.loyal_label()]
-	var tips := Array(OfferTraits.card_tips(traits)) + [OfferTraits.loyal_tip()]
-	var shown: Array[bool] = [true, labels[1] != "", offer[OfferBoard.LOYAL_KEY]]
+	var tier := int(
+		offer.get(OfferBoard.LOYAL_TIER_KEY, 1 if offer.get(OfferBoard.LOYAL_KEY, false) else 0)
+	)
+	var loyal_text := ""
+	var loyal_tip := ""
+	match tier:
+		OfferBoard.LOYALTY_TIER_BRONZE:
+			loyal_text = tr("Bronze +5%")
+			loyal_tip = tr("Bronze loyalty: this airline's offers pay 5% more.")
+		OfferBoard.LOYALTY_TIER_SILVER:
+			loyal_text = tr("Silver +10%")
+			loyal_tip = tr("Silver loyalty: this airline's offers pay 10% more.")
+		OfferBoard.LOYALTY_TIER_GOLD:
+			loyal_text = tr("Gold +15%")
+			loyal_tip = tr(
+				# gdlint:ignore = max-line-length
+				"Gold loyalty: this airline's offers pay 15% more and unlock Hub Contracts at 3★+."
+			)
+	var labels := Array(OfferTraits.card_labels(traits)) + [loyal_text]
+	var tips := Array(OfferTraits.card_tips(traits)) + [loyal_tip]
+	var shown: Array[bool] = [true, labels[1] != "", tier > OfferBoard.LOYALTY_TIER_NONE]
 	var row := HBoxContainer.new()
 	row.name = "Traits_%s" % offer["id"]
 	row.add_theme_constant_override("separation", 18)
@@ -1177,6 +1205,34 @@ func _airline_badge(offer: Dictionary) -> PanelContainer:
 	code.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_style_label(code, &"HudCardName")
 	badge.add_child(code)
+	return badge
+
+
+func _hub_badge(offer: Dictionary) -> PanelContainer:
+	var badge := PanelContainer.new()
+	badge.name = "HubBadge_%s" % offer["id"]
+	badge.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	badge.mouse_filter = Control.MOUSE_FILTER_PASS
+	badge.tooltip_text = tr(
+		"Gold Hub Contract: +10% prestige fee bonus and +1 low-rating grace day."
+	)
+	var style := StyleBoxFlat.new()
+	style.bg_color = HUB_CHIP_FILL
+	style.border_color = HUB_CHIP_BORDER
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(8)
+	style.content_margin_left = 8.0
+	style.content_margin_right = 8.0
+	style.content_margin_top = 2.0
+	style.content_margin_bottom = 2.0
+	badge.add_theme_stylebox_override("panel", style)
+	var label := Label.new()
+	label.name = "HubLabel"
+	label.text = tr("Hub Contract")
+	label.theme_type_variation = &"HudSmall"
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.add_theme_color_override("font_color", BADGE_BORDER)
+	badge.add_child(label)
 	return badge
 
 

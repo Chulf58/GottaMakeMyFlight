@@ -14,7 +14,7 @@ func test_the_three_money_traits_are_in_the_table_at_both_levels() -> void:
 	assert_bool(OfferTraits.DOWNS.has(OfferTraits.MISS_FINE)).is_true()
 	assert_array(OfferTraits.TABLE[OfferTraits.SIGNING_BONUS]["values"]).is_equal([150, 300])
 	assert_array(OfferTraits.TABLE[OfferTraits.MISS_FINE]["values"]).is_equal([10, 20])
-	assert_array(OfferTraits.TABLE[OfferTraits.LOYAL_AIRLINE]["values"]).is_equal([10, 10])
+	assert_array(OfferTraits.TABLE[OfferTraits.LOYAL_AIRLINE]["values"]).is_equal([2, 2])
 	assert_array(Array(OfferTraits.card_labels(_paired("signing_bonus", "miss_fine", 2)))).is_equal(
 		["Signing bonus $300", "Miss fine $20"]
 	)

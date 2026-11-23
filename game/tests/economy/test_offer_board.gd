@@ -34,6 +34,8 @@ static func record(id: String, day: int, minute: int, status := OfferBoard.OPEN)
 		"fee_per_passenger": OfferBoard.apply_peak_bonus(50, minute),
 		"traits": NEUTRAL_TRAITS.duplicate(),
 		"loyal": false,
+		"loyalty_tier": 0,
+		"is_hub": false,
 		"status": status,
 	}
 

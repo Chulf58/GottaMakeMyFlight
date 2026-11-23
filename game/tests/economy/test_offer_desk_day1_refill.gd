@@ -199,7 +199,7 @@ func test_same_day_loyal_refill_loads_through_snapshot() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 123
 	board.ensure_day(4, rng, 0, PlaneClasses.LARGE, flights)
-	for day in OfferTraits.LOYAL_DAYS:
+	for day in [2, 3, 4]:
 		assert_bool(board.note_flown("Gotta Air", day)).is_true()
 	var ids := board.refill_day(4, rng.seed, 0, PlaneClasses.LARGE, flights)
 	assert_array(ids).has_size(OfferBoard.OFFERS_PER_DAY)

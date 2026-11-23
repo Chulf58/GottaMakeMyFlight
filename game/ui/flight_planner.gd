@@ -575,7 +575,54 @@ func _make_bar(bar: Dictionary) -> Button:
 		button.disabled_clicked.connect(_on_disabled_bar_pressed.bind(key, bar["day"], kind))
 		button.pressed.connect(_on_disabled_bar_pressed.bind(key, bar["day"], kind))
 	_add_departure_tick(button, bar)
+	if _is_hub_bar(bar):
+		_add_hub_tag(button)
 	return button
+
+
+func _is_hub_bar(bar: Dictionary) -> bool:
+	if flights == null or bar["contract"] == "":
+		return false
+	return FlightContract.is_hub(flights.contract_of(bar["contract"]))
+
+
+func _add_hub_tag(button: Button) -> void:
+	var tag := PanelContainer.new()
+	tag.name = "HubTag"
+	tag.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var style := StyleBoxFlat.new()
+	style.bg_color = OfferPanel.HUB_CHIP_FILL
+	style.border_color = OfferPanel.HUB_CHIP_BORDER
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(4)
+	style.content_margin_left = 4.0
+	style.content_margin_right = 4.0
+	style.content_margin_top = 0.0
+	style.content_margin_bottom = 0.0
+	tag.add_theme_stylebox_override("panel", style)
+	var label := Label.new()
+	label.name = "HubTagLabel"
+	label.text = tr("Hub")
+	label.theme_type_variation = &"HudHint"
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.add_theme_color_override("font_color", GateColours.TEXT)
+	tag.add_child(label)
+	button.add_child(tag)
+	button.resized.connect(_place_hub_tag.bind(button, tag))
+	_place_hub_tag.call_deferred(button, tag)
+
+
+static func _place_hub_tag(button: Button, tag: PanelContainer) -> void:
+	if not is_instance_valid(button) or not is_instance_valid(tag):
+		return
+	var min_size := tag.get_combined_minimum_size()
+	tag.size = min_size
+	var tick := button.find_child("DepartureTick", false, false) as Control
+	var left_bound := (tick.position.x + 2.0) if tick != null else 0.0
+	var fits := button.size.x - left_bound >= min_size.x + 8.0
+	tag.visible = fits
+	if fits:
+		tag.position = Vector2(button.size.x - min_size.x - 4.0, (button.size.y - min_size.y) * 0.5)
 
 
 ## "Oslo  Gotta Air: gate A 07:47 to 11:02". The hold runs from the first state to
@@ -594,6 +641,8 @@ func _bar_tooltip(bar: Dictionary) -> String:
 			}
 		)
 	)
+	if _is_hub_bar(bar):
+		base = "%s\n%s" % [base, tr("Hub Contract (+10% fee, +1 low-rating grace day)")]
 	if bar["active"]:
 		return (
 			"%s\n%s"
