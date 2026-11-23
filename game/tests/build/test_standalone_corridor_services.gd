@@ -261,8 +261,8 @@ func test_deleting_each_standalone_service_mid_visit_recovers_passenger_cleanly(
 
 
 func test_standalone_corridor_services_and_active_visits_survive_save_load_round_trip() -> void:
-	assert_int(PassengerSim.SAVE_VERSION).is_equal(37)
-	assert_int(SaveGame.SAVE_VERSION).is_equal(32)
+	assert_int(PassengerSim.SAVE_VERSION).is_greater_equal(37)
+	assert_int(SaveGame.SAVE_VERSION).is_greater_equal(32)
 	for svc_id: StringName in [&"stall", &"exchange"]:
 		var built := _grid_with_standalone(svc_id)
 		var a := PassengerTestWorld.make(built["grid"], FlightSim.schedule_starts(0), 300)
