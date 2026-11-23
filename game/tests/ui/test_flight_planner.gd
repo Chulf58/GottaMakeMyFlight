@@ -179,16 +179,26 @@ func test_the_day_follows_the_clock() -> void:
 	assert_int(_planner.shown_day()).is_equal(3)
 
 
-func test_a_bar_click_offers_only_the_gates_the_flight_fits() -> void:
+func test_a_bar_click_shows_every_other_gate_with_refusal_reasons() -> void:
 	_three_contracts()
 	_planner.open()
 	_press(_planner.bar_button("Y", 0))
 	print("summary: ", _planner.summary_text())
 	assert_str(_planner.selected_contract()).is_equal("Y")
 	assert_str(_planner.summary_text()).is_equal("11:00  Rome  Gate B")
-	# A is taken by X at that hour, B is Y's own: only C is offered.
-	assert_object(_planner.part("Move_" + "C") as Button).is_not_null()
-	assert_object(_planner.part("Move_" + "A") as Button).is_null()
+	assert_bool(_planner.part("PlannerPopover").visible).is_true()
+	# C fits; A is taken by X at that hour so Move_A is disabled with its reason; B is Y's own.
+	var move_c := _planner.part("Move_" + "C") as Button
+	var move_a := _planner.part("Move_" + "A") as Button
+	var reason_a := _planner.part("MoveReason_" + "A") as Label
+	assert_object(move_c).is_not_null()
+	assert_bool(move_c.disabled).is_false()
+	assert_object(move_a).is_not_null()
+	assert_bool(move_a.disabled).is_true()
+	assert_object(reason_a).is_not_null()
+	var expected := DeparturesBoard.reason_text(_sim, _sim.reassign_problem("Y", "A"), "A")
+	assert_str(reason_a.text).is_equal(expected)
+	assert_str(move_a.tooltip_text).is_equal(expected)
 	assert_object(_planner.part("Move_" + "B") as Button).is_null()
 	assert_object(_planner.part("EndContract") as Button).is_not_null()
 
@@ -204,7 +214,8 @@ func test_choosing_a_gate_moves_the_contract_through_the_departures_flow() -> vo
 		DeparturesBoard.MOVED_TEXT.format({"destination": "Rome", "gate": "C"})
 	)
 	assert_object(_planner.bar_button("Y", 0).get_parent()).is_equal(_planner.part("Track_" + "C"))
-	assert_str(_planner.selected_contract()).is_equal("Y")
+	assert_str(_planner.selected_contract()).is_equal("")
+	assert_bool(_planner.part("PlannerPopover").visible).is_false()
 
 
 func test_a_refused_move_says_why_and_keeps_the_selection() -> void:
@@ -300,3 +311,68 @@ func test_a_long_summary_wraps_and_the_sheet_stays_inside_the_window() -> void:
 	assert_int(summary.autowrap_mode).is_equal(TextServer.AUTOWRAP_WORD_SMART)
 	assert_int(summary.get_line_count()).is_greater(1)
 	assert_bool(view.encloses(sheet.get_global_rect())).is_true()
+
+
+func test_refused_gates_explain_stand_too_small_building_spur_and_bar_tooltips() -> void:
+	var grounds := {
+		"A": FlightGround.fallback("A"),
+		"B": {"stand": FlightGround.fallback("B")["stand"], "max_class": PlaneClasses.SMALL},
+		"C":
+		{
+			"stand": FlightGround.fallback("C")["stand"],
+			"max_class": "",
+			"next": FlightGround.fallback("C"),
+		},
+	}
+	_sim.stand_source = func() -> Dictionary: return grounds
+	_accept("X", 600, "Oslo")
+	_planner.open()
+	var bar_x := _planner.bar_button("X", 0)
+	assert_str(bar_x.tooltip_text).contains("drag")
+	assert_str(bar_x.tooltip_text).contains("Click")
+	_press(bar_x)
+	var move_b := _planner.part("Move_B") as Button
+	var move_c := _planner.part("Move_C") as Button
+	var reason_b := _planner.part("MoveReason_B") as Label
+	var reason_c := _planner.part("MoveReason_C") as Label
+	assert_object(move_b).is_not_null()
+	assert_bool(move_b.disabled).is_true()
+	assert_str(reason_b.text).contains("stand too small")
+	assert_object(move_c).is_not_null()
+	assert_bool(move_c.disabled).is_true()
+	assert_str(reason_c.text).contains("building taxi spur")
+
+
+func test_clicking_ended_and_one_off_bars_shows_inline_explanation_without_actions() -> void:
+	_three_contracts()
+	for t in range(_sim.tick + 1, GameCalendar.tick_at(0, 7 * 60, 0) + 1):
+		_sim.on_tick(t)
+	assert_bool(_sim.end_contract("X")).is_true()
+	(
+		assert_bool(
+			_sim.add_flight(
+				"ONE1", FlightSim.schedule_starts(GameCalendar.tick_at(0, 14 * 60, 0)), "C"
+			)
+		)
+		. is_true()
+	)
+	_planner.open()
+	var ended_bar := _planner.bar_button("X", 0)
+	assert_bool(ended_bar.disabled).is_true()
+	assert_str(ended_bar.tooltip_text).contains("Contract ended")
+	_press(ended_bar)
+	assert_bool(_planner.part("PlannerPopover").visible).is_true()
+	assert_str((_planner.part("DisabledBarNote") as Label).text).is_equal(
+		"Contract ended — cannot move"
+	)
+	assert_object(_planner.part("EndContract")).is_null()
+	assert_str(_planner.selected_contract()).is_equal("")
+	var one_off := _planner.bar_button("ONE1", 0)
+	assert_bool(one_off.disabled).is_true()
+	assert_str(one_off.tooltip_text).contains("One-off flight")
+	_press(one_off)
+	assert_bool(_planner.part("PlannerPopover").visible).is_true()
+	assert_str((_planner.part("DisabledBarNote") as Label).text).is_equal(
+		"One-off flight — cannot move"
+	)
+	assert_object(_planner.part("EndContract")).is_null()

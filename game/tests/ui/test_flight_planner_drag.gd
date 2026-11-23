@@ -261,3 +261,80 @@ func test_a_plain_click_on_a_bar_still_opens_move_and_end() -> void:
 	assert_object(_planner.part("EndContract")).is_not_null()
 	assert_object(_planner.part("Move_C")).is_not_null()
 	assert_str(_sim.contract_of("Y")["gate"]).is_equal("B")
+
+
+func _rect(control: Control) -> Rect2:
+	return control.get_global_transform_with_canvas() * Rect2(Vector2.ZERO, control.size)
+
+
+func _click_at(pos: Vector2) -> void:
+	await _move(pos)
+	await _button(true)
+	await _button(false)
+	await await_idle_frame()
+
+
+func test_popover_sits_beside_bar_inside_sheet_and_closes_on_outside_click_and_esc() -> void:
+	await _open()
+	var bar := _planner.bar_button("Y", 0)
+	await _click_at(_centre(bar))
+	bar = _planner.bar_button("Y", 0)
+	var popover := _planner.part("PlannerPopover")
+	var sheet := _planner.sheet()
+	assert_bool(popover.visible).is_true()
+	var pop_rect := _rect(popover)
+	var bar_rect := _rect(bar)
+	var sheet_rect := _rect(sheet)
+	assert_bool(sheet_rect.encloses(pop_rect)).is_true()
+	assert_float(pop_rect.position.y).is_less(sheet_rect.end.y - 200.0)
+	assert_float(absf(pop_rect.position.y - bar_rect.end.y)).is_less(120.0)
+	# Clicking empty lane outside the popover closes it.
+	await _click_at(_lane_at("C", 2.0))
+	assert_bool(popover.visible).is_false()
+	assert_str(_planner.selected_contract()).is_equal("")
+	# Esc closes the popover first, then a second Esc closes the sheet.
+	await _click_at(_centre(_planner.bar_button("Y", 0)))
+	assert_bool(popover.visible).is_true()
+	var esc := InputEventKey.new()
+	esc.keycode = KEY_ESCAPE
+	esc.physical_keycode = KEY_ESCAPE
+	esc.pressed = true
+	_port.push_input(esc)
+	await await_idle_frame()
+	assert_bool(popover.visible).is_false()
+	assert_bool(_planner.is_open()).is_true()
+	_port.push_input(esc)
+	await await_idle_frame()
+	assert_bool(_planner.is_open()).is_false()
+
+
+func test_dragging_a_bar_closes_open_popover_and_disabled_bar_click_explains_without_drag() -> void:
+	await _open()
+	var bar_y := _planner.bar_button("Y", 0)
+	await _click_at(_centre(bar_y))
+	bar_y = _planner.bar_button("Y", 0)
+	var popover := _planner.part("PlannerPopover")
+	assert_bool(popover.visible).is_true()
+	await _drag_over(bar_y, _centre(_track("C")))
+	assert_bool(_port.gui_is_dragging()).is_true()
+	assert_bool(popover.visible).is_false()
+	assert_str(_planner.selected_contract()).is_equal("")
+	await _button(false)
+	await await_idle_frame()
+	assert_str(_sim.contract_of("Y")["gate"]).is_equal("C")
+	# Issue today's X and end it: clicking it via viewport explains why, dragging does nothing.
+	_issue_today()
+	assert_bool(_sim.end_contract("X")).is_true()
+	_planner.refresh()
+	await await_idle_frame()
+	var ended_x := _planner.bar_button("X", 0)
+	assert_bool(ended_x.disabled).is_true()
+	await _click_at(_centre(ended_x))
+	assert_bool(popover.visible).is_true()
+	assert_str((_planner.part("DisabledBarNote") as Label).text).is_equal(
+		"Contract ended — cannot move"
+	)
+	await _drag_over(_planner.bar_button("X", 0), _centre(_track("B")))
+	assert_bool(_port.gui_is_dragging()).is_false()
+	await _button(false)
+	await await_idle_frame()
