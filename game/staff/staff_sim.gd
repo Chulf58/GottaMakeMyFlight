@@ -1,3 +1,5 @@
+# gdlint:disable = max-public-methods
+# StaffSim is the staff data API; shift queries (is_off_shift, off_shift_count) took it past 20.
 class_name StaffSim
 extends Node
 ## The staff pool as plain data. The player hires check-in agents, security
@@ -58,13 +60,21 @@ signal member_state_changed(id: int, state: StaffMember.State)
 ## 5: the stations the player closed ("closed", StationClosures).
 ## 6: the scanner faults and their repair ticks ("faults", StationFaults).
 ## 7: airside ramp agents (Role.RAMP) with ramp_job, ramp_shuttle_id, ramp_flight_id.
+## 8: overnight off-shift states (LEAVING_SHIFT, OFF_SHIFT).
 ## Only this version loads; older saves are refused (no migrations before a
 ## release).
-const SAVE_VERSION := 7
-## Who fire() lets go first: [state, slot] pairs, a helper before a primary
-## in the same state, so firing keeps stations open where it can.
+const SAVE_VERSION := 8
+## Empty gap ahead before staff walk out for an overnight off-shift: 2 game hours.
+const SHIFT_GAP_TICKS := 2400
+## How early staff return from off-shift before first morning activity: 30 game min.
+const RETURN_LEAD_TICKS := 600
+## Who fire() lets go first: [state, slot] pairs, off-shift and idle first, then
+## a helper before a primary in the same state, so firing keeps stations open
+## where it can.
 const FIRE_ORDER := [
+	[StaffMember.State.OFF_SHIFT, StaffMember.Slot.PRIMARY],
 	[StaffMember.State.IDLE, StaffMember.Slot.PRIMARY],
+	[StaffMember.State.LEAVING_SHIFT, StaffMember.Slot.PRIMARY],
 	[StaffMember.State.TO_STATION, StaffMember.Slot.HELPER],
 	[StaffMember.State.ON_DUTY, StaffMember.Slot.HELPER],
 	[StaffMember.State.TO_STATION, StaffMember.Slot.PRIMARY],
@@ -125,6 +135,8 @@ func hire(role: StaffMember.Role) -> int:
 	m.id = _next_id
 	_next_id += 1
 	m.role = role
+	if role != StaffMember.Role.RAMP and is_off_shift():
+		m.state = StaffMember.State.OFF_SHIFT
 	_members.append(m)
 	_by_id[m.id] = m
 	staff_changed.emit()
@@ -189,6 +201,31 @@ func on_duty_count(role: StaffMember.Role) -> int:
 	for m in _members:
 		n += int(m.role == role and m.state == StaffMember.State.ON_DUTY)
 	return n
+
+
+## Members of `role` walking out for or currently in an overnight off-shift.
+func off_shift_count(role: StaffMember.Role) -> int:
+	var n := 0
+	for m in _members:
+		n += int(
+			(
+				m.role == role
+				and (
+					m.state == StaffMember.State.OFF_SHIFT
+					or m.state == StaffMember.State.LEAVING_SHIFT
+				)
+			)
+		)
+	return n
+
+
+## True while any hired member is walking out for or resting in an overnight
+## off-shift.
+func is_off_shift() -> bool:
+	for m in _members:
+		if m.state == StaffMember.State.OFF_SHIFT or m.state == StaffMember.State.LEAVING_SHIFT:
+			return true
+	return false
 
 
 ## Every member on the roster or still walking out, for drawing and saving.
@@ -265,11 +302,13 @@ func world_position(m: StaffMember) -> Vector3:
 func step() -> void:
 	faults.clear_due(sim.tick)
 	_reconcile()
+	_recall_shift_if_due()
 	StaffPosts.run(self, _post, _repost)
 	if not forecast:
 		_work_jobs()
+	_leave_shift_if_quiet()
 	for m: StaffMember in _members.duplicate():
-		if m.state == StaffMember.State.TO_STATION or m.state == StaffMember.State.WALKING_OUT:
+		if m.state == StaffMember.State.TO_STATION or _walking_to_exit(m):
 			_walk(m)
 
 
@@ -487,6 +526,9 @@ func _reconcile() -> void:
 			if m.state == StaffMember.State.WALKING_OUT:
 				_leave(m)
 				continue
+			if m.state == StaffMember.State.LEAVING_SHIFT:
+				_enter_off_shift(m)
+				continue
 			if m.station != 0 or m.job != 0:
 				_release(m)
 			m.at = StaffMember.NO_CELL
@@ -646,6 +688,8 @@ func _walk(m: StaffMember) -> void:
 		_plan(m)
 	elif state == StaffMember.State.WALKING_OUT:
 		_leave(m)
+	elif state == StaffMember.State.LEAVING_SHIFT:
+		_enter_off_shift(m)
 	else:
 		m.work_left = CleanerJobs.work_ticks(self, m)
 		_set_state(m, StaffMember.State.ON_DUTY)
@@ -657,7 +701,7 @@ func _walk(m: StaffMember) -> void:
 ## where it stands (the lower entrance id on a tie; NO_CELL when it reaches
 ## none).
 func _target(m: StaffMember) -> Vector2i:
-	if m.state != StaffMember.State.WALKING_OUT:
+	if not _walking_to_exit(m):
 		if m.role == StaffMember.Role.CLEANER:
 			return CleanerJobs.job_spot(self, m)
 		return spot_of(m.station, m.slot)
@@ -676,8 +720,8 @@ func _target(m: StaffMember) -> Vector2i:
 
 
 ## A new path from where the member stands to its target. With none, a member
-## walking to a station gives it up and goes idle; one walking out is gone.
-## Returns whether it has a path.
+## walking to a station gives it up and goes idle; one walking out is gone;
+## one leaving shift goes off-shift in place. Returns whether it has a path.
 func _plan(m: StaffMember) -> bool:
 	var path := _path(m.at, _target(m))
 	if path.is_empty():
@@ -690,6 +734,8 @@ func _plan(m: StaffMember) -> bool:
 func _no_way(m: StaffMember) -> void:
 	if m.state == StaffMember.State.WALKING_OUT:
 		_leave(m)
+	elif m.state == StaffMember.State.LEAVING_SHIFT:
+		_enter_off_shift(m)
 	else:
 		_release(m)
 
@@ -699,17 +745,18 @@ func _no_way(m: StaffMember) -> void:
 ## member finishes it and plans on from its end; when the edit closed it, or
 ## removed the cell it was entering, the member turns back to the cell it just
 ## left, from where it is; with no way on it walks to the end of what it has
-## and plans again there. A member walking out with no way on is gone at once.
+## and plans again there. A member walking out with no way on is gone at once;
+## one leaving shift enters OFF_SHIFT in place.
 func _replan(m: StaffMember) -> void:
 	m.needs_replan = false
 	var target := _target(m)
-	var out := m.state == StaffMember.State.WALKING_OUT
+	var out := _walking_to_exit(m)
 	if m.backing_out:
 		# Already turned back: only what comes after the cell it left changes.
 		var back := m.path[1]
 		var tail := _path(back, target)
 		if out and tail.is_empty():
-			_leave(m)
+			_no_way(m)
 			return
 		var onward: Array[Vector2i] = [m.at, back]
 		onward.append_array(tail.slice(1))
@@ -738,11 +785,97 @@ func _replan(m: StaffMember) -> void:
 			path.append(here)
 		path.push_front(next)
 	if out and path[path.size() - 1] != target:
-		_leave(m)
+		_no_way(m)
 		return
 	m.set_path(path)
 	m.seg_mm = keep
 	m.backing_out = not sim.grid.is_walkable(m.path[0])
+
+
+func _walking_to_exit(m: StaffMember) -> bool:
+	return m.is_walking_to_exit()
+
+
+func _can_shift() -> bool:
+	return not forecast and sim != null and sim.flights != null and sim.flights.opened_tick >= 0
+
+
+func _next_activity_tick() -> int:
+	var next := sim.flights.next_morning_activity_tick()
+	var spawn := sim.next_spawn_tick()
+	if spawn >= 0:
+		next = spawn if next < 0 else mini(next, spawn)
+	return next
+
+
+func _recall_shift_if_due() -> void:
+	if not _can_shift():
+		return
+	var next_tick := _next_activity_tick()
+	var due := (
+		sim.active_count() > 0
+		or sim.flights.has_moving_flight()
+		or next_tick < 0
+		or next_tick - sim.tick <= RETURN_LEAD_TICKS
+	)
+	if not due:
+		return
+	for m in _members:
+		if m.state == StaffMember.State.OFF_SHIFT:
+			m.search_failed = false
+			_set_state(m, StaffMember.State.IDLE)
+		elif m.state == StaffMember.State.LEAVING_SHIFT:
+			_recall_leaving(m)
+
+
+func _recall_leaving(m: StaffMember) -> void:
+	if m.backing_out:
+		if m.path.size() >= 2 and sim.grid.is_walkable(m.path[1]):
+			m.at = m.path[1]
+		else:
+			m.at = StaffMember.NO_CELL
+	m.clear_path()
+	m.needs_replan = false
+	m.search_failed = false
+	_set_state(m, StaffMember.State.IDLE)
+
+
+func _leave_shift_if_quiet() -> void:
+	if not _can_shift():
+		return
+	if sim.active_count() > 0 or sim.flights.has_moving_flight():
+		return
+	var next_tick := _next_activity_tick()
+	if next_tick < 0 or next_tick - sim.tick <= SHIFT_GAP_TICKS:
+		return
+	for m in _members:
+		if m.role == StaffMember.Role.RAMP or m.leaving:
+			continue
+		if m.state == StaffMember.State.OFF_SHIFT or _walking_to_exit(m):
+			continue
+		if m.role == StaffMember.Role.CLEANER and m.job != 0 and not m.search_failed:
+			continue
+		_begin_leave_shift(m)
+
+
+func _begin_leave_shift(m: StaffMember) -> void:
+	_unclaim(m)
+	m.search_failed = false
+	if m.in_pool() or sim.layout.entrances.is_empty():
+		_enter_off_shift(m)
+		return
+	_set_state(m, StaffMember.State.LEAVING_SHIFT)
+	m.needs_replan = true
+	_replan(m)
+
+
+func _enter_off_shift(m: StaffMember) -> void:
+	_unclaim(m)
+	m.at = StaffMember.NO_CELL
+	m.clear_path()
+	m.needs_replan = false
+	m.search_failed = false
+	_set_state(m, StaffMember.State.OFF_SHIFT)
 
 
 func _path(from: Vector2i, to: Vector2i) -> Array[Vector2i]:
@@ -765,7 +898,7 @@ func _on_graph_changed(cells: Array[Vector2i]) -> void:
 	for cell in cells:
 		touched[cell] = true
 	for m in _members:
-		if m.state != StaffMember.State.TO_STATION and m.state != StaffMember.State.WALKING_OUT:
+		if m.state != StaffMember.State.TO_STATION and not _walking_to_exit(m):
 			continue
 		for i in range(m.path_index, m.path.size()):
 			if touched.has(m.path[i]):

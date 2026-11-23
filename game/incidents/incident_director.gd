@@ -54,11 +54,12 @@ signal inspector_resolved(incident: Dictionary)
 ## A spill may come this long before the day's first departure: two hours.
 const BUSY_LEAD_TICKS := 2 * 60 * GameCalendar.TICKS_PER_MINUTE
 ## A fire comes no sooner than this after the roll: the quiet-night lead plus
-## the most ticks one frame may run. The roll is on the midnight tick, perhaps
-## inside a fast-forward frame that runs on up to MAX_STEPS_PER_FRAME - 1 more
-## ticks; the next frame then still finds the stop (LEAD_TICKS before the
-## fire) ahead of the clock, so the day boundary itself need not be a stop.
-const FIRE_FLOOR_TICKS := QuietNight.LEAD_TICKS + SimClock.MAX_STEPS_PER_FRAME
+## the most ticks one fast-forward frame may run. The roll is on the midnight
+## tick, perhaps inside a fast-forward frame that runs on up to
+## FAST_FORWARD_MAX_STEPS - 1 more ticks; the next frame then still finds the
+## stop (LEAD_TICKS before the fire) ahead of the clock, so the day boundary
+## itself need not be a stop.
+const FIRE_FLOOR_TICKS := QuietNight.LEAD_TICKS + SimClock.FAST_FORWARD_MAX_STEPS
 const CHECKIN_PLACE := IncidentCatalogue.CHECKIN_PLACE
 const SECURITY_PLACE := IncidentCatalogue.SECURITY_PLACE
 
