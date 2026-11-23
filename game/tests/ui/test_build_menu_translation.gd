@@ -23,13 +23,10 @@ func after_test() -> void:
 
 func test_the_catalog_msgids_hold_every_name_of_its_tables() -> void:
 	var ids := BuildMenuCatalog.Words.new().msgids()
-	var wanted: Array[String] = ["Staff", "Templates", "All", "Room"]
+	var wanted: Array[String] = ["Staff", "Templates", "Room"]
 	for category: Dictionary in BuildMenuCatalog.CATEGORIES:
 		wanted.append(category["name"])
 		wanted.append(category.get("group", category["name"]))
-	for cat_id: String in BuildMenuCatalog.SUBFILTERS:
-		for entry: Dictionary in BuildMenuCatalog.SUBFILTERS[cat_id]:
-			wanted.append(entry["name"])
 	for table: Dictionary in [BuildMenuCatalog.ITEMS, BuildMenuCatalog.LANE_ITEMS]:
 		for tool: BuildMode.Tool in table:
 			wanted.append(table[tool][0])

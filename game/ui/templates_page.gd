@@ -9,8 +9,8 @@ extends ScrollContainer
 const SAVE_CARD := "CardSaveRoom"
 const BUTTON_NAME := "TemplatesButton"
 const TEMPLATE_ICON := "res://assets/ui/icons/templates.svg"
-const TEMPLATE_CARD_SIZE := Vector2(96.0, 118.0)
-const TEMPLATE_THUMB_SIZE := 44.0
+const TEMPLATE_CARD_SIZE := Vector2(80.0, 96.0)
+const TEMPLATE_THUMB_SIZE := 40.0
 
 ## The button that opens the page, placed inside CategoryBar by BuildMenuLayout.
 var button := Button.new()
@@ -31,7 +31,7 @@ func attach(menu: BuildMenu) -> void:
 	visible = false
 	size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_RESERVE
+	horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	_row.add_theme_constant_override("separation", 6)
 	_row.mouse_filter = Control.MOUSE_FILTER_PASS
