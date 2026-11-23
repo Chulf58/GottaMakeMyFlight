@@ -24,7 +24,7 @@ var _stack: AlertStack
 func before() -> void:
 	_base = SpurMoveKit.base_grid()
 	for result in _base.apply_batch(
-		ReferenceTerminal.shell_edits(SITE.starter_offset + WEST_SHELL)
+		ReferenceTerminal.shell_edits(SpurMoveKit.SHELL_OFFSET + WEST_SHELL)
 	):
 		assert_bool(result.ok).is_true()
 
@@ -39,10 +39,10 @@ func before_test() -> void:
 	add_child(_gates)
 	_gates.bind(_grid, _flights)
 	_grid.guard = _gates.edit_problem
-	var at := SpurMoveKit.WEST_EXIT + SITE.starter_offset + WEST_SHELL
+	var at := SpurMoveKit.WEST_EXIT + SpurMoveKit.SHELL_OFFSET + WEST_SHELL
 	assert_bool(_grid.apply(BuildEdit.remove_wall(at, BuildGrid.Side.WEST)).ok).is_true()
 	assert_bool(_grid.apply(BuildEdit.place_object(&"exit_door", at, 3)).ok).is_true()
-	var desk := SpurMoveKit.WEST_DESK + SITE.starter_offset + WEST_SHELL
+	var desk := SpurMoveKit.WEST_DESK + SpurMoveKit.SHELL_OFFSET + WEST_SHELL
 	var placed := _grid.apply(BuildEdit.place_object(GateDesks.DESK, desk, 0))
 	assert_bool(placed.ok).override_failure_message(placed.reason_text()).is_true()
 

@@ -9,11 +9,10 @@ extends GdUnitTestSuite
 
 const SITE := preload("res://build/terminal_site.tres")
 
-## The grid columns of side land west of the first site.
+## The grid columns of side land west of the first site (used by SITE.obstacles).
 const SIDE_LAND := Vector2i(85, 0)
-## ReferenceTerminal's cells on the site grid.
-const AT := Vector2i(0, 110) + SIDE_LAND
 
+var _at := SITE.starter_offset
 var _grid: BuildGrid
 var _layout: TerminalLayout
 var _entrance := 0
@@ -53,16 +52,18 @@ func test_an_entrance_walks_in_from_the_road_and_an_exit_out_to_the_plane() -> v
 	var out := SiteRoutes.departure(_grid, SITE, cells_out, stand)
 	print("entrance cells %d, walk in %s" % [cells_in.size(), into])
 	print("exit cells %d, walk out %s" % [cells_out.size(), out])
-	# Door (18, 127) out to row 149; door (20, 112) out to the plane door's
-	# cell (20, 105), straight ahead.
-	assert_int(cells_in.size()).is_equal(23)
+	# Door (ENTRANCE_CELL + starter_offset) out to road row; EXIT_CELL + starter_offset
+	# out to the plane door's cell, straight ahead.
+	assert_int(cells_in.size()).is_equal(
+		SITE.grid_size.y - (ReferenceTerminal.ENTRANCE_CELL.y + _at.y)
+	)
 	assert_int(cells_out.size()).is_equal(8)
 	assert_that(cells_out.back()).is_equal(StandPlacement.door_seed(_grid, stand))
 	for cell in cells_in.slice(1) + cells_out.slice(1):
 		assert_bool(SiteRoutes.is_open_ground(_grid, SITE, cell)).is_true()
 	assert_float(into[0].z).is_equal(SITE.road_z)
-	assert_vector(into.back()).is_equal(_grid.cell_to_world(ReferenceTerminal.ENTRANCE_CELL + AT))
-	assert_vector(out[0]).is_equal(_grid.cell_to_world(ReferenceTerminal.EXIT_CELL + AT))
+	assert_vector(into.back()).is_equal(_grid.cell_to_world(ReferenceTerminal.ENTRANCE_CELL + _at))
+	assert_vector(out[0]).is_equal(_grid.cell_to_world(ReferenceTerminal.EXIT_CELL + _at))
 	# The apron route stands on the site's ground (SiteRoutes.to_plane()).
 	var end := StandPlacement.door_point(stand)
 	assert_vector(out.back()).is_equal(Vector3(end.x, SITE.ground_height, end.z))
@@ -70,7 +71,7 @@ func test_an_entrance_walks_in_from_the_road_and_an_exit_out_to_the_plane() -> v
 
 func test_an_exit_on_another_wall_walks_round_to_the_plane_door() -> void:
 	# An exit in the shell's east wall, facing east.
-	var cell := Vector2i(21, 120) + SIDE_LAND
+	var cell := Vector2i(21, 10) + _at
 	assert_bool(_grid.apply(BuildEdit.remove_wall(cell, BuildGrid.Side.EAST)).ok).is_true()
 	var placed := _grid.apply(BuildEdit.place_object(&"exit_door", cell, 1))
 	assert_bool(placed.ok).is_true()
@@ -87,14 +88,11 @@ func test_an_exit_on_another_wall_walks_round_to_the_plane_door() -> void:
 
 
 func test_a_built_over_exit_walk_takes_the_exit_out_of_service_and_back() -> void:
-	# Floor round the exit's outward cell (105, 111) leaves it no open ground.
+	# Floor round the exit's outward cell leaves it no open ground.
+	var exit_cell := ReferenceTerminal.EXIT_CELL + _at
 	_paint(
 		(
-			[
-				Vector2i(19, 111) + SIDE_LAND,
-				Vector2i(21, 111) + SIDE_LAND,
-				Vector2i(20, 110) + SIDE_LAND
-			]
+			[exit_cell + Vector2i(-1, -1), exit_cell + Vector2i(1, -1), exit_cell + Vector2i(0, -2)]
 			as Array[Vector2i]
 		)
 	)
@@ -107,7 +105,7 @@ func test_a_built_over_exit_walk_takes_the_exit_out_of_service_and_back() -> voi
 	assert_array(_layout.open_exits(_grid)).is_empty()
 	assert_array(_layout.out_of_service).contains_exactly([_exit])
 	assert_bool(_layout.outside_routes.has(_exit)).is_false()
-	_clear(Vector2i(20, 110) + SIDE_LAND)
+	_clear(exit_cell + Vector2i(0, -2))
 	print(
 		(
 			"reopened: open exits %s, out of service %s"
@@ -119,12 +117,13 @@ func test_a_built_over_exit_walk_takes_the_exit_out_of_service_and_back() -> voi
 
 
 func test_a_built_over_entrance_walk_takes_the_entrance_out_of_service_and_back() -> void:
+	var entrance_cell := ReferenceTerminal.ENTRANCE_CELL + _at
 	_paint(
 		(
 			[
-				Vector2i(17, 128) + SIDE_LAND,
-				Vector2i(19, 128) + SIDE_LAND,
-				Vector2i(18, 129) + SIDE_LAND
+				entrance_cell + Vector2i(-1, 1),
+				entrance_cell + Vector2i(1, 1),
+				entrance_cell + Vector2i(0, 2)
 			]
 			as Array[Vector2i]
 		)
@@ -138,7 +137,7 @@ func test_a_built_over_entrance_walk_takes_the_entrance_out_of_service_and_back(
 	assert_array(_layout.passenger_entrances).is_empty()
 	assert_array(_layout.entrances).contains_exactly([_entrance])
 	assert_array(_layout.out_of_service).contains_exactly([_entrance])
-	_clear(Vector2i(18, 129) + SIDE_LAND)
+	_clear(entrance_cell + Vector2i(0, 2))
 	assert_array(_layout.passenger_entrances).contains_exactly([_entrance])
 	assert_int((_layout.outside_routes[_entrance] as Array).size()).is_greater(2)
 

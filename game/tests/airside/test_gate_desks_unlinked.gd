@@ -10,16 +10,14 @@ extends GdUnitTestSuite
 ## and a copy 44 cells east with its exit at (64, 112).
 
 const SITE := preload("res://build/terminal_site.tres")
-## The side land's 85 grid columns west of the first site (SiteDefinition):
-## the cells below are written in the first site's columns and moved by it.
-const SIDE_LAND := Vector2i(85, 0)
 const EAST := Vector2i(44, 0)
-const EXIT_WEST := Vector2i(20, 112) + SIDE_LAND
-const EXIT_EAST := EXIT_WEST + EAST
-const DESK_WEST := Vector2i(19, 115) + SIDE_LAND
-const DESK_EAST := DESK_WEST + EAST
+
+var _exit_west := ReferenceTerminal.EXIT_CELL + SITE.starter_offset
+var _exit_east := _exit_west + EAST
+var _desk_west := ReferenceTerminal.GATE_DESK_CELL + SITE.starter_offset
+var _desk_east := _desk_west + EAST
 ## A second north exit in the starter shell's wall, 9 m west of its exit.
-const EXIT_NEAR := Vector2i(11, 112) + SIDE_LAND
+var _exit_near := Vector2i(11, 2) + SITE.starter_offset
 
 var _grid: SiteGrid
 var _flights: FlightSim
@@ -51,17 +49,17 @@ func _open_exit(cell: Vector2i) -> BuildResult:
 
 
 func test_linked_desks_are_not_listed() -> void:
-	assert_bool(_desk(DESK_WEST).ok).is_true()
-	assert_bool(_desk(DESK_EAST).ok).is_true()
+	assert_bool(_desk(_desk_west).ok).is_true()
+	assert_bool(_desk(_desk_east).ok).is_true()
 	print("gates %s, unlinked %s" % [_gates.gate_ids(), _gates.unlinked()])
 	assert_array(_gates.gate_ids()).is_equal(["A", "B"])
 	assert_dict(_gates.unlinked()).is_empty()
 
 
 func test_a_desk_whose_exit_went_has_no_exit_in_reach() -> void:
-	var west := _desk(DESK_WEST)
-	var east := _desk(DESK_EAST)
-	assert_bool(_grid.apply(BuildEdit.remove_object(_grid.object_at(EXIT_WEST))).ok).is_true()
+	var west := _desk(_desk_west)
+	var east := _desk(_desk_east)
+	assert_bool(_grid.apply(BuildEdit.remove_object(_grid.object_at(_exit_west))).ok).is_true()
 	var unlinked := _gates.unlinked()
 	print("after the west exit went: gates %s, unlinked %s" % [_gates.gate_ids(), unlinked])
 	assert_array(unlinked.keys()).is_equal([west.object_id])
@@ -73,11 +71,11 @@ func test_a_desk_whose_exit_went_has_no_exit_in_reach() -> void:
 
 
 func test_a_desk_whose_only_exit_is_another_gates_names_that_gate() -> void:
-	assert_bool(_desk(DESK_WEST).ok).is_true()
+	assert_bool(_desk(_desk_west).ok).is_true()
 	# Built past the guard (which refuses it with GATE_NO_EXIT): the one exit in
 	# its reach is gate A's.
 	_grid.guard = Callable()
-	var second := _desk(DESK_WEST + Vector2i(-3, -1))
+	var second := _desk(_desk_west + Vector2i(-3, -1))
 	_grid.guard = _gates.edit_problem
 	assert_bool(second.ok).is_true()
 	var unlinked := _gates.unlinked()
@@ -88,20 +86,20 @@ func test_a_desk_whose_only_exit_is_another_gates_names_that_gate() -> void:
 		assert_array(
 			GateDesks.exits_in_reach(_grid, GateDesks.desk_footprint(_grid, second.object_id))
 		)
-		. is_equal([_grid.object_at(EXIT_WEST)])
+		. is_equal([_grid.object_at(_exit_west)])
 	)
 
 
 func test_a_desk_whose_free_exit_would_overlap_a_gate_names_that_gate() -> void:
-	var west := _desk(DESK_WEST)
+	var west := _desk(_desk_west)
 	# Its exit goes, a gate is made by a second exit 9 m west, and the exit comes
 	# back: its stand would overlap the new gate's, so the west desk stays
 	# unlinked (test_gate_desks.gd, the last case).
-	assert_bool(_grid.apply(BuildEdit.remove_object(_grid.object_at(EXIT_WEST))).ok).is_true()
-	assert_bool(_grid.apply(BuildEdit.remove_wall(EXIT_NEAR, BuildGrid.Side.NORTH)).ok).is_true()
-	assert_bool(_grid.apply(BuildEdit.place_object(&"exit_door", EXIT_NEAR, 0)).ok).is_true()
-	assert_bool(_desk(EXIT_NEAR + Vector2i(0, 3)).ok).is_true()
-	assert_bool(_grid.apply(BuildEdit.place_object(&"exit_door", EXIT_WEST, 0)).ok).is_true()
+	assert_bool(_grid.apply(BuildEdit.remove_object(_grid.object_at(_exit_west))).ok).is_true()
+	assert_bool(_grid.apply(BuildEdit.remove_wall(_exit_near, BuildGrid.Side.NORTH)).ok).is_true()
+	assert_bool(_grid.apply(BuildEdit.place_object(&"exit_door", _exit_near, 0)).ok).is_true()
+	assert_bool(_desk(_exit_near + Vector2i(0, 3)).ok).is_true()
+	assert_bool(_grid.apply(BuildEdit.place_object(&"exit_door", _exit_west, 0)).ok).is_true()
 	var unlinked := _gates.unlinked()
 	print("gates %s, unlinked %s" % [_gates.bindings, unlinked])
 	assert_array(unlinked.keys()).is_equal([west.object_id])
@@ -110,7 +108,7 @@ func test_a_desk_whose_free_exit_would_overlap_a_gate_names_that_gate() -> void:
 
 
 func test_a_usable_farther_exit_means_no_letter_not_an_overlap() -> void:
-	var west := _desk(DESK_WEST)
+	var west := _desk(_desk_west)
 	var gate_a := _gates.binding_of("A")
 	# A third shell 25 cells east of the starter, with two more exits in its
 	# north wall: the near one 16 m east of gate A's exit, under the 19 m the
@@ -120,8 +118,8 @@ func test_a_usable_farther_exit_means_no_letter_not_an_overlap() -> void:
 		ReferenceTerminal.shell_edits(SITE.starter_offset + Vector2i(25, 0))
 	):
 		assert_bool(result.ok).is_true()
-	var near_cell := EXIT_WEST + Vector2i(16, 0)
-	var far_cell := EXIT_WEST + Vector2i(20, 0)
+	var near_cell := _exit_west + Vector2i(16, 0)
+	var far_cell := _exit_west + Vector2i(20, 0)
 	var near := _open_exit(near_cell)
 	var far := _open_exit(far_cell).object_id
 	# A desk 3 cells from the near exit and 4 from the far one, clear of the near
@@ -161,12 +159,12 @@ func test_a_usable_farther_exit_means_no_letter_not_an_overlap() -> void:
 
 func test_exits_in_reach_are_nearest_first_within_the_link_reach() -> void:
 	var footprint := BuildCatalog.get_def(GateDesks.DESK).footprint(
-		Vector2i(14, 115) + SIDE_LAND, 0
+		Vector2i(14, 5) + SITE.starter_offset, 0
 	)
-	_grid.apply(BuildEdit.remove_wall(EXIT_NEAR, BuildGrid.Side.NORTH))
-	assert_bool(_grid.apply(BuildEdit.place_object(&"exit_door", EXIT_NEAR, 0)).ok).is_true()
-	var near := _grid.object_at(EXIT_NEAR)
-	var west := _grid.object_at(EXIT_WEST)
+	_grid.apply(BuildEdit.remove_wall(_exit_near, BuildGrid.Side.NORTH))
+	assert_bool(_grid.apply(BuildEdit.place_object(&"exit_door", _exit_near, 0)).ok).is_true()
+	var near := _grid.object_at(_exit_near)
+	var west := _grid.object_at(_exit_west)
 	var cells := [
 		GateDesks.reach_cells(_grid, footprint, near), GateDesks.reach_cells(_grid, footprint, west)
 	]
@@ -174,5 +172,7 @@ func test_exits_in_reach_are_nearest_first_within_the_link_reach() -> void:
 	assert_array(GateDesks.exits_in_reach(_grid, footprint)).is_equal([near])
 	# A control: a footprint between them reaches both, 4 cells each, so the
 	# lower id (the shell's west exit) first.
-	var between := BuildCatalog.get_def(GateDesks.DESK).footprint(Vector2i(15, 113) + SIDE_LAND, 0)
+	var between := BuildCatalog.get_def(GateDesks.DESK).footprint(
+		Vector2i(15, 3) + SITE.starter_offset, 0
+	)
 	assert_array(GateDesks.exits_in_reach(_grid, between)).is_equal([west, near])

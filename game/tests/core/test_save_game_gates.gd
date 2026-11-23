@@ -12,12 +12,12 @@ extends GdUnitTestSuite
 
 const SEED := 4_401_017
 const EAST := Vector2i(44, 0)
-## The grid columns of side land west of the first site.
-const SIDE_LAND := Vector2i(85, 0)
-const DESK_EAST := Vector2i(63, 115) + SIDE_LAND
-## In gate A's medium swing square but not its small one (test_stand_envelope.gd).
-const MEDIUM_CELL := Vector2i(32, 100) + SIDE_LAND
+const SITE := preload("res://build/terminal_site.tres")
 const STARTER := FlightSim.DEFAULT_ID
+
+var _desk_east := ReferenceTerminal.GATE_DESK_CELL + SITE.starter_offset + EAST
+## In gate A's medium swing square but not its small one (test_stand_envelope.gd).
+var _medium_cell := Vector2i(12, -12) + ReferenceTerminal.EXIT_CELL + SITE.starter_offset
 
 var _main: Node
 var _save: SaveGame
@@ -39,12 +39,15 @@ func before() -> void:
 	var plots := {}
 	for edit in shell:
 		plots[_mode.land_tool.land.plot_of(edit.cell)] = true
-	plots[_mode.land_tool.land.plot_of(DESK_EAST)] = true
+	plots[_mode.land_tool.land.plot_of(_desk_east)] = true
 	for plot: Vector2i in plots:
 		LandKit.buy_to(_mode.land_tool.land, plot)
 	for result in _mode.grid.apply_batch(shell):
 		assert_bool(result.ok).is_true()
-	assert_bool(_mode.grid.apply(BuildEdit.place_object(GateDesks.DESK, DESK_EAST, 0)).ok).is_true()
+	(
+		assert_bool(_mode.grid.apply(BuildEdit.place_object(GateDesks.DESK, _desk_east, 0)).ok)
+		. is_true()
+	)
 	# Until the airport opens with the starter contract (GMF101) at gate A.
 	for i in 6000:
 		if _flights.opened_tick >= 0:
@@ -178,7 +181,7 @@ func test_a_save_whose_flights_do_not_re_plan_is_refused_while_staged() -> void:
 ## gate under a booked medium plane, so the save is put together from two.) A
 ## control: the unmixed save loads.
 func test_a_save_whose_gate_shrank_below_a_contract_is_refused_while_staged() -> void:
-	var floor_edit := BuildEdit.paint_floor(MEDIUM_CELL, BuildGrid.FLOOR_TILE, 1)
+	var floor_edit := BuildEdit.paint_floor(_medium_cell, BuildGrid.FLOOR_TILE, 1)
 	assert_bool(_mode.grid.apply(floor_edit).ok).is_true()
 	assert_str(_gates.max_class("A")).is_equal(PlaneClasses.SMALL)
 	var small: Dictionary = (
@@ -199,7 +202,7 @@ func test_a_save_whose_gate_shrank_below_a_contract_is_refused_while_staged() ->
 			)
 		)
 	)
-	assert_bool(_mode.grid.apply(BuildEdit.remove_floor(MEDIUM_CELL)).ok).is_true()
+	assert_bool(_mode.grid.apply(BuildEdit.remove_floor(_medium_cell)).ok).is_true()
 	var board := (_main.get_node("OfferDesk") as OfferDesk).board
 	var taken := ""
 	# A new game's runway is small (Runway R9); this case is about the gate's class.

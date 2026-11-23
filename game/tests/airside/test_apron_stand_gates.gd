@@ -10,14 +10,11 @@ extends GdUnitTestSuite
 ## (stand x -26), gate B out of the exit 44 cells east (stand x 18).
 
 const SITE := preload("res://build/terminal_site.tres")
-## The side land's 85 grid columns west of the first site (SiteDefinition):
-## the cells below are written in the first site's columns and moved by it.
-const SIDE_LAND := Vector2i(85, 0)
 const EAST := Vector2i(44, 0)
-const DESK_WEST := Vector2i(19, 115) + SIDE_LAND
-## Under the plane parked at gate A's stand (x -26, z -115), and at B's.
-const FOOTPRINT_A := Vector2i(17, 95) + SIDE_LAND
-const FOOTPRINT_B := FOOTPRINT_A + EAST
+
+var _desk_west := ReferenceTerminal.GATE_DESK_CELL + SITE.starter_offset
+var _footprint_a := Vector2i(17, -15) + SITE.starter_offset
+var _footprint_b := _footprint_a + EAST
 
 var _grid: SiteGrid
 var _flights: FlightSim
@@ -38,7 +35,7 @@ func before_test() -> void:
 	_apron = auto_free(ApronStand.new()) as ApronStand
 	_apron.bind(_grid, SITE, _flights, _gates)
 	_grid.guard = _apron.edit_problem
-	for at in [DESK_WEST, DESK_WEST + EAST]:
+	for at in [_desk_west, _desk_west + EAST]:
 		assert_bool(_grid.apply(BuildEdit.place_object(GateDesks.DESK, at, 0)).ok).is_true()
 	_starts = FlightSim.schedule_starts(1000)
 
@@ -64,8 +61,8 @@ func test_each_gate_has_the_stand_out_from_its_own_exit() -> void:
 func test_the_guard_covers_only_the_gate_whose_flight_is_there() -> void:
 	assert_bool(_flights.add_flight("AT_B", _starts, "B")).is_true()
 	_flights.on_tick(_starts[FlightSim.State.BOARDING])
-	var at_b := _paint(FOOTPRINT_B)
-	var at_a := _paint(FOOTPRINT_A)
+	var at_b := _paint(_footprint_b)
+	var at_a := _paint(_footprint_a)
 	print("boarding at B: B footprint %s, A footprint %s" % [at_b.reason_text(), at_a.ok])
 	assert_int(at_b.reason).is_equal(BuildResult.Reason.PLANE_AREA)
 	assert_bool(at_a.ok).is_true()
@@ -73,12 +70,12 @@ func test_the_guard_covers_only_the_gate_whose_flight_is_there() -> void:
 	assert_str(_apron.busy_flight("A")).is_equal("")
 	_flights.on_tick(_starts[FlightSim.State.TAKEOFF])
 	assert_array(_apron.guard_rects()).is_empty()
-	assert_bool(_paint(FOOTPRINT_B).ok).is_true()
+	assert_bool(_paint(_footprint_b).ok).is_true()
 
 
 func test_a_gate_built_over_says_it_has_no_usable_stand() -> void:
 	assert_str(_apron.gate_status_text("A")).is_equal("")
-	assert_bool(_paint(FOOTPRINT_A).ok).is_true()
+	assert_bool(_paint(_footprint_a).ok).is_true()
 	print("A: '%s'; B: '%s'" % [_apron.gate_status_text("A"), _apron.gate_status_text("B")])
 	assert_str(_apron.gate_status_text("A")).contains("no usable stand")
 	assert_str(_apron.gate_status_text("B")).is_equal("")
@@ -87,7 +84,9 @@ func test_a_gate_built_over_says_it_has_no_usable_stand() -> void:
 
 
 func test_gate_desk_refusals_reach_the_site_guard() -> void:
-	var far := _grid.apply(BuildEdit.place_object(GateDesks.DESK, Vector2i(12, 125) + SIDE_LAND, 0))
+	var far := _grid.apply(
+		BuildEdit.place_object(GateDesks.DESK, Vector2i(12, 15) + SITE.starter_offset, 0)
+	)
 	print("desk by the entrance: %s" % far.reason_text())
 	assert_int(far.reason).is_equal(BuildResult.Reason.GATE_NO_EXIT)
 

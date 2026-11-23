@@ -57,7 +57,9 @@ func before_test() -> void:
 
 ## A second shell `offset` cells from the starter's, built before the guard.
 func _shell(offset: Vector2i) -> void:
-	for result in _grid.apply_batch(ReferenceTerminal.shell_edits(SITE.starter_offset + offset)):
+	for result in _grid.apply_batch(
+		ReferenceTerminal.shell_edits(SpurMoveKit.SHELL_OFFSET + offset)
+	):
 		assert_bool(result.ok).is_true()
 
 
@@ -69,7 +71,7 @@ func _bind() -> void:
 ## Opens the west exit of the shell at `offset` from the starter's and returns
 ## its id.
 func _west_exit(offset: Vector2i) -> int:
-	var at := SpurMoveKit.WEST_EXIT + SITE.starter_offset + offset
+	var at := SpurMoveKit.WEST_EXIT + SpurMoveKit.SHELL_OFFSET + offset
 	assert_bool(_grid.apply(BuildEdit.remove_wall(at, BuildGrid.Side.WEST)).ok).is_true()
 	var placed := _grid.apply(BuildEdit.place_object(&"exit_door", at, 3))
 	assert_bool(placed.ok).override_failure_message(placed.reason_text()).is_true()
@@ -78,7 +80,7 @@ func _west_exit(offset: Vector2i) -> int:
 
 func _desk_edit(offset: Vector2i) -> BuildEdit:
 	return BuildEdit.place_object(
-		GateDesks.DESK, SpurMoveKit.WEST_DESK + SITE.starter_offset + offset, 0
+		GateDesks.DESK, SpurMoveKit.WEST_DESK + SpurMoveKit.SHELL_OFFSET + offset, 0
 	)
 
 
@@ -141,7 +143,7 @@ func test_a_new_exit_counts_as_a_stand_only_when_it_would_be_a_gate() -> void:
 	assert_array(_gates.gate_ids()).is_empty()
 	var swing := _grid.world_to_cell(StandPlacement.stand_point(stand))
 	assert_bool(_grid.apply(SpurMoveKit.floor_at(swing)).ok).is_true()
-	var at := SpurMoveKit.WEST_EXIT + SITE.starter_offset + shell
+	var at := SpurMoveKit.WEST_EXIT + SpurMoveKit.SHELL_OFFSET + shell
 	var put_back := BuildEdit.place_object(&"exit_door", at, 3)
 	var after := SpurTrial.wanted_after(_gates, _grid, put_back)
 	var build := SideSpurs.build_lanes(_grid)

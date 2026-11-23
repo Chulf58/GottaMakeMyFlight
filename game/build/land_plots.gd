@@ -318,12 +318,25 @@ func own_around(cells: Array[Vector2i], within := Rect2i()) -> void:
 
 ## A new game's land on `site`: the starter shell's plots plus one ring
 ## (own_around() of every cell the shell's edits name), the ring kept on the
-## first site's columns (SiteDefinition.centre_columns), so a new game owns the
-## same 6 plots it did before the side land and buys any side land it wants.
+## first site's columns (SiteDefinition.centre_columns) and keeping at least
+## two rows north of the shell owned so a shell shifted south into the bottom
+## row still owns the same 6 plots (4..5, 3..5) for north expansion.
 func own_start(site: SiteDefinition) -> void:
 	var cells: Array[Vector2i] = []
 	for edit in ReferenceTerminal.shell_edits(site.starter_offset):
 		cells.append(edit.cell)
+	var min_row := plots.y
+	var cols := {}
+	for cell in cells:
+		var plot := plot_of(cell)
+		if in_site(plot):
+			min_row = mini(min_row, plot.y)
+			cols[plot.x] = true
+	if min_row == plots.y - 1 and min_row > 0:
+		for x: int in cols:
+			var north := plot_cells(Vector2i(x, min_row - 1))
+			if north.has_area():
+				cells.append(north.position)
 	own_around(cells, Rect2i(site.centre_columns.x, 0, site.centre_columns.y, plots.y))
 
 

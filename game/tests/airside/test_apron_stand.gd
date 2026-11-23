@@ -8,19 +8,18 @@ extends GdUnitTestSuite
 ## pass; the live stand survives a save.
 
 const SITE := preload("res://build/terminal_site.tres")
-## The side land's 85 grid columns west of the first site (SiteDefinition):
-## the cells below are written in the first site's columns and moved by it.
 const SIDE_LAND := Vector2i(85, 0)
-const STARTER_EXIT := Vector2i(20, 112) + SIDE_LAND
-const WEST_EXIT := Vector2i(11, 112) + SIDE_LAND
-## Under the parked plane at the starter stand (x -26, z -115).
-const FOOTPRINT_CELL := Vector2i(17, 95) + SIDE_LAND
 ## On the starter stand's way north, z -205.
 const ROUTE_CELL := Vector2i(17, 5) + SIDE_LAND
 ## Well east of everything the plane sweeps (x 17).
 const FREE_CELL := Vector2i(60, 30) + SIDE_LAND
 ## The first flight's start ticks.
 const FIRST := 1000
+
+var _starter_exit := ReferenceTerminal.EXIT_CELL + SITE.starter_offset
+var _west_exit := Vector2i(11, 2) + SITE.starter_offset
+## Under the parked plane at the starter stand.
+var _footprint_cell := Vector2i(17, -15) + SITE.starter_offset
 
 var _grid: SiteGrid
 var _flights: FlightSim
@@ -50,15 +49,15 @@ func _paint(cell: Vector2i) -> BuildResult:
 ## a second north exit, and floor in the gap straight out of the starter exit
 ## so its walk goes round.
 func _make_west_better() -> int:
-	assert_bool(_grid.apply(BuildEdit.remove_wall(WEST_EXIT, BuildGrid.Side.NORTH)).ok).is_true()
-	var placed := _grid.apply(BuildEdit.place_object(&"exit_door", WEST_EXIT, 0))
+	assert_bool(_grid.apply(BuildEdit.remove_wall(_west_exit, BuildGrid.Side.NORTH)).ok).is_true()
+	var placed := _grid.apply(BuildEdit.place_object(&"exit_door", _west_exit, 0))
 	assert_bool(placed.ok).is_true()
-	assert_bool(_paint(Vector2i(20, 110) + SIDE_LAND).ok).is_true()
+	assert_bool(_paint(Vector2i(20, 0) + SITE.starter_offset).ok).is_true()
 	return placed.object_id
 
 
 func test_a_better_stand_waits_for_the_outgoing_takeoff_and_never_moves_mid_turnaround() -> void:
-	var starter := _grid.object_at(STARTER_EXIT)
+	var starter := _grid.object_at(_starter_exit)
 	assert_bool(_flights.add_flight("F1", _starts)).is_true()
 	_to(_starts[FlightSim.State.TAXI_IN])
 	var west := _make_west_better()
@@ -99,7 +98,7 @@ func test_the_guard_refuses_building_on_the_plane_footprint_and_route_while_busy
 	assert_bool(_paint(FREE_CELL + Vector2i(0, 1)).ok).is_true()
 	assert_bool(_flights.add_flight("F1", _starts)).is_true()
 	_to(_starts[FlightSim.State.BOARDING])
-	var footprint := _paint(FOOTPRINT_CELL)
+	var footprint := _paint(_footprint_cell)
 	var route := _paint(ROUTE_CELL)
 	var wall := _grid.apply(BuildEdit.place_wall(ROUTE_CELL + Vector2i(0, 1), BuildGrid.Side.NORTH))
 	var free := _paint(FREE_CELL)
@@ -124,7 +123,7 @@ func test_the_guard_refuses_building_on_the_plane_footprint_and_route_while_busy
 	# Halfway out, the stand is behind the plane but the way north is not.
 	var mid := (_starts[FlightSim.State.TAXI_OUT] + _starts[FlightSim.State.TAKEOFF]) / 2
 	_to(mid)
-	var left := _paint(FOOTPRINT_CELL)
+	var left := _paint(_footprint_cell)
 	var ahead := _paint(ROUTE_CELL)
 	print("taxi out: stand %s, route ahead %s" % [left.ok, ahead.reason_text()])
 	assert_bool(left.ok).is_true()
@@ -135,7 +134,7 @@ func test_the_guard_refuses_building_on_the_plane_footprint_and_route_while_busy
 
 func test_nothing_is_guarded_with_no_flight_at_the_stand() -> void:
 	assert_array(_apron.guard_rects()).is_empty()
-	assert_bool(_paint(FOOTPRINT_CELL).ok).is_true()
+	assert_bool(_paint(_footprint_cell).ok).is_true()
 
 
 func test_the_live_stand_round_trips_a_snapshot_and_wanted_is_worked_out_again() -> void:

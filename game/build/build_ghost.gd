@@ -29,6 +29,7 @@ static func material(tint: Color, through := false) -> StandardMaterial3D:
 ## cleared hover key makes draw_area() draw both again on the way back.
 static func hide_area(mode: BuildMode) -> void:
 	mode._pointer_on_grid = false
+	mode._hover_point = null
 	mode._ghost.visible = false
 	mode._hover_key = ""
 	mode._set_status(BuildWords.status(BuildMode.DRAG_OVER_UI))
@@ -241,3 +242,77 @@ static func box(mode: BuildMode, extent: Vector3, tint: Material) -> MeshInstanc
 	box_node.material_override = tint
 	mode._ghost.add_child(box_node)
 	return box_node
+
+
+## World XZ footprint the pointer or active drag is hovering or building on
+## over `mode`'s grid, for build-mode overlays (GateLinksView clearance zone).
+static func clearance_target(mode: BuildMode) -> Dictionary:
+	if mode == null or mode.grid == null:
+		return {"active": false}
+	if mode.is_dragging() and mode._area_over_ui:
+		return {"active": false}
+	if mode.tool == BuildMode.Tool.BUY_LAND or BuildModeLandside.is_landside_tool(mode):
+		return {"active": false}
+	if mode._resize.active:
+		return _area_target(mode, mode._resize.rect(), true)
+	if mode._area.active:
+		if mode.tool == BuildMode.Tool.BELT:
+			var belt_cells: Array[Vector2i] = (
+				mode._belt_plan.cells if mode._belt_plan != null else [mode._area.end_cell()]
+			)
+			return _cells_target(mode.grid, belt_cells, true)
+		return _area_target(mode, mode._area.rect(), mode.tool != BuildMode.Tool.REMOVE)
+	if mode._row.active:
+		var row_cells: Array[Vector2i] = []
+		for edit in BuildDrags.row_edits(mode):
+			row_cells.append_array(StandEnvelope.edit_cells(edit))
+		return _cells_target(mode.grid, row_cells, true)
+	if mode.room_mover != null and mode.room_mover.active:
+		if mode.room_mover._plan == null:
+			return {"active": false}
+		return _area_target(mode, mode.room_mover._plan.to_rect, true)
+	if (
+		mode.templates != null
+		and mode.templates.armed >= 0
+		and mode.templates.armed < mode.templates.library.size()
+	):
+		if not mode._pointer_on_grid or mode._hover_point == null:
+			return {"active": false}
+		var template := mode.templates.library.get_template(mode.templates.armed)
+		var cell := mode.grid.world_to_cell(mode._hover_point)
+		return _area_target(mode, template.rect_at(cell, mode.templates.turns), true)
+	if not mode._pointer_on_grid or mode._hover_point == null:
+		return {"active": false}
+	if mode.tool == BuildMode.Tool.BELT:
+		var belt_cells: Array[Vector2i] = (
+			mode._belt_plan.cells
+			if mode._belt_plan != null
+			else [mode.grid.world_to_cell(mode._hover_point)]
+		)
+		return _cells_target(mode.grid, belt_cells, true)
+	if mode._hover_edit != null and not LandPlots.REMOVALS.has(mode._hover_edit.kind):
+		return _cells_target(mode.grid, StandEnvelope.edit_cells(mode._hover_edit), true)
+	return _cells_target(mode.grid, [mode.grid.world_to_cell(mode._hover_point)], false)
+
+
+static func _area_target(mode: BuildMode, area: Rect2i, building: bool) -> Dictionary:
+	if not area.has_area():
+		return {"active": false}
+	var bounds := Rect2(
+		Vector2(mode.grid.origin.x + area.position.x, mode.grid.origin.z + area.position.y),
+		Vector2(area.size),
+	)
+	var rects: Array[Rect2] = [bounds]
+	return {"active": true, "bounds": bounds, "rects": rects, "building": building}
+
+
+static func _cells_target(grid: BuildGrid, cells: Array[Vector2i], building: bool) -> Dictionary:
+	var rects: Array[Rect2] = []
+	var bounds := Rect2()
+	for cell in cells:
+		var cell_rect := Rect2(Vector2(grid.origin.x + cell.x, grid.origin.z + cell.y), Vector2.ONE)
+		bounds = cell_rect if rects.is_empty() else bounds.merge(cell_rect)
+		rects.append(cell_rect)
+	if rects.is_empty():
+		return {"active": false}
+	return {"active": true, "bounds": bounds, "rects": rects, "building": building}

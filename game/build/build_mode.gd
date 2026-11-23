@@ -328,6 +328,7 @@ var _coverage_material := BuildGhost.material(COVERAGE_TINT)
 var _wall_block_material := BuildGhost.material(WALL_BLOCK_TINT, true)
 var _status := ""
 var _hover_key := ""
+var _hover_point: Variant = null
 var _hover_edit: BuildEdit
 ## What the status line adds for the lane part under the pointer ("" for none).
 var _lane_hint := ""
@@ -938,6 +939,7 @@ func _over_grid_area(point: Vector3) -> bool:
 
 
 func _update_ghost(point: Variant) -> void:
+	_hover_point = point
 	_pointer_on_grid = point != null and _over_grid_area(point)
 	_landside_plan = null if is_dragging() else landside_plan_at(point)
 	if _landside_plan != null or BuildModeLandside.is_landside_tool(self) or tool == Tool.BUY_LAND:

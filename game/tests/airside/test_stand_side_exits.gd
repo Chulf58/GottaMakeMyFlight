@@ -10,9 +10,9 @@ extends GdUnitTestSuite
 ## stay south of the north lane band, on every row of the grid.
 
 const SITE := preload("res://build/terminal_site.tres")
+const SHELL_OFFSET := Vector2i(85, 110)
 ## Cells of the starter shell (ReferenceTerminal coordinates), moved onto the
-## grid by the site's starter offset: one row of its airside half in the west
-## and east walls, and a cell of the south wall away from the entrance.
+## grid by SHELL_OFFSET so both west and east side stands clear the road.
 const WEST_CELL := Vector2i(10, 4)
 const EAST_CELL := Vector2i(21, 4)
 const SOUTH_CELL := Vector2i(12, 17)
@@ -23,7 +23,7 @@ var _grid: BuildGrid
 
 func before() -> void:
 	_base = BuildGrid.new(SITE.grid_size, SITE.grid_origin)
-	assert_bool(StarterShell.place(_base, SITE.starter_offset)).is_true()
+	assert_bool(StarterShell.place(_base, SHELL_OFFSET)).is_true()
 
 
 func before_test() -> void:
@@ -33,7 +33,7 @@ func before_test() -> void:
 ## Opens the shell's wall at `cell` (shell coordinates) on `side` and puts an
 ## exit door there facing `facing`; its object id.
 func _add_exit(cell: Vector2i, side: int, facing: int) -> int:
-	var at := cell + SITE.starter_offset
+	var at := cell + SHELL_OFFSET
 	assert_bool(_grid.apply(BuildEdit.remove_wall(at, side)).ok).is_true()
 	var placed := _grid.apply(BuildEdit.place_object(&"exit_door", at, facing))
 	assert_bool(placed.ok).override_failure_message(placed.reason_text()).is_true()
@@ -47,17 +47,19 @@ func test_a_west_and_an_east_exit_get_their_side_stands() -> void:
 	var on_east := StandPlacement.for_exit(_grid, east)
 	print("west exit %d stand %s, east exit %d stand %s" % [west, on_west, east, on_east])
 	assert_dict(on_west).is_equal(
-		StandPlacement.for_cell(_grid, WEST_CELL + SITE.starter_offset, west, StandPlacement.WEST)
+		StandPlacement.for_cell(_grid, WEST_CELL + SHELL_OFFSET, west, StandPlacement.WEST)
 	)
 	assert_dict(on_east).is_equal(
-		StandPlacement.for_cell(_grid, EAST_CELL + SITE.starter_offset, east, StandPlacement.EAST)
+		StandPlacement.for_cell(_grid, EAST_CELL + SHELL_OFFSET, east, StandPlacement.EAST)
 	)
 	assert_str(StandPlacement.side_of(on_west)).is_equal(StandPlacement.WEST)
 	assert_str(StandPlacement.side_of(on_east)).is_equal(StandPlacement.EAST)
 	# Control: the shell's own exit still gives its north stand.
-	var north := _grid.object_at(ReferenceTerminal.EXIT_CELL + SITE.starter_offset)
+	var north := _grid.object_at(ReferenceTerminal.EXIT_CELL + SHELL_OFFSET)
 	assert_dict(StandPlacement.for_exit(_grid, north)).is_equal(
-		StandPlacement.starter_stand(_grid, SITE).merged({"exit": north}, true)
+		StandPlacement.for_cell(
+			_grid, ReferenceTerminal.EXIT_CELL + SHELL_OFFSET, north, StandPlacement.NORTH
+		)
 	)
 
 
@@ -76,7 +78,7 @@ func test_an_exit_facing_the_road_has_no_stand() -> void:
 ## of the middle), and wins. The shell's north exit is walled up first, so the
 ## shell stays closed (indoor) and only the two side exits are candidates.
 func test_a_walk_tie_goes_to_the_stand_with_the_shorter_way_to_its_lane() -> void:
-	var at := ReferenceTerminal.EXIT_CELL + SITE.starter_offset
+	var at := ReferenceTerminal.EXIT_CELL + SHELL_OFFSET
 	assert_bool(_grid.apply(BuildEdit.remove_object(_grid.object_at(at))).ok).is_true()
 	assert_bool(_grid.apply(BuildEdit.place_wall(at, BuildGrid.Side.NORTH)).ok).is_true()
 	var east := _add_exit(EAST_CELL, BuildGrid.Side.EAST, 1)
