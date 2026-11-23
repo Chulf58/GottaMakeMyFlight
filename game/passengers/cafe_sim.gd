@@ -1239,6 +1239,9 @@ func _settle(p: Passenger, visit: CafeVisit) -> void:
 	var base := venue.base_spend
 	var airside := visit.resume_stage == Passenger.Stage.TO_GATE
 	var amount := spend(base, p.mood, airside, visit.outcome)
+	if visit.room > 0 and _sim.grid != null:
+		var level := int(RoomPrestige.evaluate_room(_sim.grid, visit.room)["level"])
+		amount = RoomPrestige.apply_spend_bonus(amount, level)
 	if _sim.boredom.prize.boosts(p):
 		amount = PrizeCar.boosted(amount)
 	if _sim.wallet == null:

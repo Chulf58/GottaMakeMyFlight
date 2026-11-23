@@ -579,6 +579,9 @@ func _settle(p: Passenger, visit: ShopVisit) -> void:
 	if visit.fallback:
 		var wished := RoomTypes.get_type(wish_of(p)).base_spend
 		amount = int(spend(mini(type.base_spend, wished), p.mood, airside) * FALLBACK_SHARE)
+	if visit.room > 0 and not type.activity and _sim.grid != null:
+		var level := int(RoomPrestige.evaluate_room(_sim.grid, visit.room)["level"])
+		amount = RoomPrestige.apply_spend_bonus(amount, level)
 	# A purchase near a prize car pays more; a fee (activity, exchange, ATM) does not.
 	if type.relieves_boredom and not type.activity and _sim.boredom.prize.boosts(p):
 		amount = PrizeCar.boosted(amount)
