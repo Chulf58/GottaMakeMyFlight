@@ -5,7 +5,12 @@ extends GdUnitTestSuite
 ## 2. BuildMenu passive wages-paid grant_hold preempted only by real refusals.
 ## 3. SaveGame 'Saved to <path>' card clear of MoodToggle, HUD controls, and open sheets.
 
-const LAYOUTS := {1.0: Vector2i(1920, 1080), 1.25: Vector2i(1536, 864), 1.5: Vector2i(1280, 720)}
+const LAYOUTS := {
+	1.0: Vector2i(1920, 1080),
+	1.25: Vector2i(1536, 864),
+	1.4: Vector2i(1371, 771),
+	1.5: Vector2i(1280, 720),
+}
 const RESTING_CONTROLS := [
 	"MoneySlot",
 	"RatingCard",

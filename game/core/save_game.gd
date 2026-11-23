@@ -1028,13 +1028,75 @@ func _place_label() -> void:
 	if _label == null or not is_inside_tree():
 		return
 	var vp := get_viewport()
-	var view_w := vp.get_visible_rect().size.x if vp != null else 1536.0
+	var view := vp.get_visible_rect().size if vp != null else Vector2(1536.0, 864.0)
+	var view_w := view.x
+	var view_h := view.y
 	var min_left := float(HudLayout.MARGIN + HudLayout.LIST_W + HudLayout.GROUP_GAP)
 	var max_right := view_w - float(HudLayout.MARGIN + HudLayout.RAIL_W + HudLayout.GROUP_GAP)
 	if max_right - min_left < 120.0:
 		min_left = float(HudLayout.MARGIN)
 		max_right = maxf(min_left + 120.0, view_w - float(HudLayout.MARGIN))
-	var max_w := minf(float(HudLayout.SHEET_W), max_right - min_left)
+	var obstacles := _hud_obstacles()
+	var placed := _place_label_candidates(view_w, view_h, min_left, max_right, obstacles)
+	var next_pos: Vector2 = placed.position
+	var next_size: Vector2 = placed.size
+	_label.anchor_left = 0.0
+	_label.anchor_right = 0.0
+	_label.anchor_top = 0.0
+	_label.anchor_bottom = 0.0
+	_label.custom_minimum_size = Vector2(next_size.x, 0.0)
+	if not _label.position.is_equal_approx(next_pos):
+		_label.position = next_pos
+	if not _label.size.is_equal_approx(next_size):
+		_label.size = next_size
+
+
+func _place_label_candidates(
+	view_w: float, view_h: float, min_left: float, max_right: float, obstacles: Array[Rect2]
+) -> Rect2:
+	var safe := Rect2(
+		Vector2(HudLayout.MARGIN, HudLayout.MARGIN),
+		Vector2(
+			maxf(1.0, view_w - 2.0 * float(HudLayout.MARGIN)),
+			maxf(1.0, view_h - 2.0 * float(HudLayout.MARGIN))
+		)
+	)
+	var center_size := _label_size_for(minf(float(HudLayout.SHEET_W), max_right - min_left))
+	var half := center_size.x * 0.5
+	var center_min := min_left + half
+	var center_max := maxf(center_min, max_right - half)
+	var center_left := clampf(view_w * 0.5, center_min, center_max) - half
+	var slots := [
+		[center_left, float(TopRow.SHEET_TOP), center_size],
+		[
+			view_w - float(HudLayout.MARGIN + HudLayout.RAIL_W),
+			float(TopRow.SHEET_TOP),
+			_label_size_for(minf(float(HudLayout.RAIL_W), safe.size.x)),
+		],
+		[
+			float(HudLayout.MARGIN),
+			float(LeftColumn.TOP),
+			_label_size_for(minf(float(HudLayout.LIST_W), safe.size.x)),
+		],
+	]
+	for slot in slots:
+		var left: float = slot[0]
+		var start_y: float = slot[1]
+		var slot_size: Vector2 = slot[2]
+		var top := _first_clear_y(left, start_y, slot_size, obstacles, view_h)
+		var candidate := Rect2(Vector2(left, top), slot_size)
+		if safe.encloses(candidate) and _rect_clear(candidate, obstacles):
+			return candidate
+	var clamped_x := clampf(
+		center_left, safe.position.x, maxf(safe.position.x, safe.end.x - center_size.x)
+	)
+	var clamped_y := clampf(
+		float(TopRow.SHEET_TOP), safe.position.y, maxf(safe.position.y, safe.end.y - center_size.y)
+	)
+	return Rect2(Vector2(clamped_x, clamped_y), center_size)
+
+
+func _label_size_for(max_w: float) -> Vector2:
 	var width := max_w
 	if _label.text != "":
 		var font := _label.get_theme_font(&"font")
@@ -1050,36 +1112,67 @@ func _place_label() -> void:
 				font.get_string_size(_label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
 			)
 			width = clampf(ceilf(text_w + pad_x + 8.0), minf(120.0, max_w), max_w)
-	var half := width * 0.5
-	var center_min := min_left + half
-	var center_max := maxf(center_min, max_right - half)
-	var center_x := clampf(view_w * 0.5, center_min, center_max)
-	var left := center_x - half
-	var top := float(TopRow.SHEET_TOP)
-	_label.anchor_left = 0.0
-	_label.anchor_right = 0.0
-	_label.anchor_top = 0.0
-	_label.anchor_bottom = 0.0
 	_label.custom_minimum_size = Vector2(width, 0.0)
-	var height := _label.get_combined_minimum_size().y
+	return Vector2(width, _label.get_combined_minimum_size().y)
+
+
+func _first_clear_y(
+	left: float, start_y: float, size: Vector2, obstacles: Array[Rect2], view_h: float
+) -> float:
+	var top := start_y
+	var limit := view_h - float(HudLayout.MARGIN)
+	var changed := true
+	while changed and top + size.y <= limit:
+		changed = false
+		var candidate := Rect2(Vector2(left, top), size)
+		for obs in obstacles:
+			if candidate.intersects(obs):
+				top = maxf(top, obs.end.y + float(HudLayout.GAP))
+				changed = true
+				break
+	return top
+
+
+func _rect_clear(rect: Rect2, obstacles: Array[Rect2]) -> bool:
+	for obs in obstacles:
+		if rect.intersects(obs):
+			return false
+	return true
+
+
+func _hud_obstacles() -> Array[Rect2]:
+	var out: Array[Rect2] = []
 	var tree := get_tree()
 	if tree != null:
-		var candidate := Rect2(left, top, width, height)
 		for node in tree.get_nodes_in_group(TopRow.SHEET_GROUP):
 			if not node.has_method("is_open") or not node.is_open():
 				continue
 			if not node.has_method("sheet"):
 				continue
 			var sheet := node.sheet() as Control
-			if sheet == null or not sheet.is_visible_in_tree():
-				continue
-			var sheet_rect := sheet.get_global_rect()
-			if candidate.intersects(sheet_rect):
-				top = maxf(top, sheet_rect.end.y + float(HudLayout.GAP))
-				candidate = Rect2(left, top, width, height)
-	var next_pos := Vector2(left, top)
-	var next_size := Vector2(width, height)
-	if not _label.position.is_equal_approx(next_pos):
-		_label.position = next_pos
-	if not _label.size.is_equal_approx(next_size):
-		_label.size = next_size
+			if sheet != null and sheet.is_visible_in_tree():
+				out.append(sheet.get_global_rect())
+	var root := get_parent()
+	if root == null:
+		return out
+	var menu := root.get_node_or_null("BuildMenu")
+	if menu != null and menu.has_method("bar"):
+		var bar_ctrl := menu.bar() as Control
+		if bar_ctrl != null and bar_ctrl.is_visible_in_tree():
+			out.append(bar_ctrl.get_global_rect())
+	for node_name in [
+		"MoneySlot",
+		"RatingCard",
+		"RunwayButton",
+		"OffersButton",
+		"BuildModeSign",
+		"FlightPanel",
+		"MoodToggle",
+		"DeparturesToggle",
+		"PlannerToggle",
+		"DebugToggle",
+	]:
+		var ctrl := root.find_child(node_name, true, false) as Control
+		if ctrl != null and ctrl.is_visible_in_tree():
+			out.append(ctrl.get_global_rect())
+	return out
