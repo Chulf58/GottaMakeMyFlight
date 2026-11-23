@@ -483,6 +483,8 @@ func _lane(station: int) -> Dictionary:
 func _enter(p: Passenger, phase: Phase, path: Array[Vector2i] = []) -> void:
 	p.security_phase = phase
 	p.security_work = work_for(phase, p)
+	if phase == Phase.REPACK and _host is PassengerSim:
+		PassengerThoughts.security_search(p, _host.tick)
 	if not path.is_empty():
 		p.set_path(path)
 

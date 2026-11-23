@@ -7,19 +7,25 @@ extends GdUnitTestSuite
 ## throughput, because it is one station with one officer.
 ##
 ## The stream is 30 passengers sent 12 ticks apart with the spawn trait odds
-## (CarryOnTraits), on SecurityTestWorld's grid, once at a basic scanner and
-## once at a lane with only its primary officer.
+## (CarryOnTraits: 12% liquids, 8% alarm), on SecurityTestWorld's grid, at a
+## basic scanner, an unhelped lane (primary officer only, >= 1.55x), and a
+## helped lane (primary + helper officer, >= 1.75x) per ruling cfe9a3d2
+## (keeping REPACK_TICKS = 80 so full 4 s bubble/pat-down visibility holds and
+## hiring a lane helper is rewarded without bumping SAVE_VERSION).
 
 ## The lane must clear the stream at least this many times as fast as the
-## basic scanner, and not more than the price of three basic scanners would
-## buy.
-const MIN_SPEEDUP := 1.8
+## basic scanner (1.55x unhelped, 1.75x helped), and not more than the price of
+## three basic scanners would buy.
+const MIN_SPEEDUP := 1.55
+const MIN_HELPED_SPEEDUP := 1.75
 const MAX_SPEEDUP := 3.0
 const PASSENGERS := 30
 const GAP := 12
 const SEEDS: Array[int] = [1, 2]
 
 var _worlds: Array[SecurityTestWorld] = []
+var _cached_basic := 0
+var _cached_unhelped := 0
 
 
 func before() -> void:
@@ -41,16 +47,24 @@ func after_test() -> void:
 static func _traits(rng: RandomNumberGenerator) -> Array:
 	var roll := rng.randf()
 	var bags := 0 if roll < 0.2 else (1 if roll < 0.75 else 2)
-	return [bags, rng.randf() < 0.1, rng.randf() < 0.05]
+	return [
+		bags,
+		rng.randf() < CarryOnTraits.LIQUIDS_PERCENT / 100.0,
+		rng.randf() < CarryOnTraits.ALARM_PERCENT / 100.0,
+	]
 
 
 ## The tick the last of the stream is cleared at `use_lane`'s tier, over all
-## SEEDS.
-func _finish(use_lane: bool) -> int:
+## SEEDS; `helped` seats a helper officer alongside the primary on a lane.
+func _finish(use_lane: bool, helped := false) -> int:
 	var total := 0
 	for seed in SEEDS:
 		var w := SecurityTestWorld.make(use_lane, seed)
 		_worlds.append(w)
+		if use_lane and helped:
+			w.world.auto_staff = false
+			StaffTestKit.seat(w.world.staff, w.station, StaffMember.Slot.PRIMARY)
+			StaffTestKit.seat(w.world.staff, w.station, StaffMember.Slot.HELPER)
 		var rng := RandomNumberGenerator.new()
 		rng.seed = seed
 		var ids: Array[int] = []
@@ -66,17 +80,45 @@ func _finish(use_lane: bool) -> int:
 	return total
 
 
+func _basic_total() -> int:
+	if _cached_basic == 0:
+		_cached_basic = _finish(false)
+	return _cached_basic
+
+
+func _unhelped_total() -> int:
+	if _cached_unhelped == 0:
+		_cached_unhelped = _finish(true)
+	return _cached_unhelped
+
+
 func test_the_lane_clears_a_stream_much_faster_than_the_basic_scanner() -> void:
-	var basic := _finish(false)
-	var lane := _finish(true)
+	var basic := _basic_total()
+	var lane := _unhelped_total()
 	var speedup := float(basic) / float(lane)
 	print(
 		(
-			"last cleared over %d seeds: basic %d, lane %d, speedup %.2f"
+			"last cleared over %d seeds (unhelped): basic %d, lane %d, speedup %.2f"
 			% [SEEDS.size(), basic, lane, speedup]
 		)
 	)
 	assert_float(speedup).is_greater_equal(MIN_SPEEDUP)
+	assert_float(speedup).is_less_equal(MAX_SPEEDUP)
+
+
+func test_a_helped_lane_clears_a_stream_at_least_1_75x_faster() -> void:
+	var basic := _basic_total()
+	var unhelped := _unhelped_total()
+	var lane := _finish(true, true)
+	var speedup := float(basic) / float(lane)
+	print(
+		(
+			"last cleared over %d seeds (helped): basic %d, lane %d, speedup %.2f"
+			% [SEEDS.size(), basic, lane, speedup]
+		)
+	)
+	assert_int(lane).is_less(unhelped)
+	assert_float(speedup).is_greater_equal(MIN_HELPED_SPEEDUP)
 	assert_float(speedup).is_less_equal(MAX_SPEEDUP)
 
 

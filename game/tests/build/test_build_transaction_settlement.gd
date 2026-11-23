@@ -94,14 +94,15 @@ func test_a_batch_settles_exactly_before_the_grid_signals() -> void:
 	assert_int(wallet.balance).is_equal(1000 - 50)
 
 
-## The listeners see the same signals in the same order as before staging.
-func test_a_plan_publishes_one_applied_and_one_graph_signal_per_edit_in_order() -> void:
+## A multi-edit plan coalesces its relink and publishes every edit_applied in
+## order, followed by one graph_changed.
+func test_a_plan_publishes_its_applied_signals_in_order_then_one_graph_signal() -> void:
 	var grid := _grid_with_paid_wall()
 	_record_events(grid)
 	var result := BuildTransaction.commit_plan(grid, _entrance_plan(grid), Wallet.new(1000))
 	print("events %s" % [_events])
 	assert_bool(result.ok).is_true()
-	assert_array(_events).is_equal(["applied", "graph", "applied", "graph"])
+	assert_array(_events).is_equal(["applied", "applied", "graph"])
 
 
 func test_a_batch_publishes_its_signals_in_edit_order_then_one_graph_signal() -> void:

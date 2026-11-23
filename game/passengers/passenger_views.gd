@@ -160,6 +160,9 @@ var _sit_off: Dictionary = {}
 ## The yaw each view is drawn with, eased per tick (PassengerTurns); snap()
 ## starts every record over.
 var _turns := PassengerTurns.new()
+## Per-passenger fidget/reaction state holding sim-tick timestamps
+## (PassengerFidgetPose); cleared on snap() and erased on release().
+var _fidgets: Dictionary = {}
 ## Passenger id -> Vector3(yaw drawn at the tick before, yaw now, yaw the turn
 ## started from) while a lane passenger turns to the tray table and on into the
 ## arch (SecurityLooks.setoff_yaw(): set from the start yaw and the sim on each
@@ -395,6 +398,7 @@ func _resteer(steers: Dictionary, fresh: Dictionary) -> void:
 ## blend from before the load.
 func snap() -> void:
 	_turns.clear()
+	_fidgets.clear()
 	_prev_lanes.clear()
 	need_clusters.clear()
 	wish_clusters.clear()
@@ -411,6 +415,7 @@ func snap() -> void:
 			ActivityPoses.dress(kept, 0.0, 0.0)
 			DiningPose.apply(kept, DiningPose.Kind.NONE, 0.0, 0)
 			RepackPose.apply(kept, 0.0, 0.0, 0)
+			PassengerFidgetPose.reset(kept)
 			var p := sim.get_passenger(id)
 			if kept.get_meta(&"body") != PassengerLooks.body_of(id, p.variant):
 				_release(id)
@@ -535,8 +540,21 @@ func draw() -> void:
 		)
 		VipMarker.layout(node, bubble, camera, unit, _badge_lifts.get(id, 0.0))
 	_props.draw()
+	_sync_fidget_frames(now)
 	_markers.draw()
 	_sync_stall_doors(alpha)
+
+
+func _sync_fidget_frames(now: float) -> void:
+	if sim == null:
+		return
+	for id in _nodes:
+		var node: Node3D = _nodes[id]
+		var p := sim.get_passenger(id)
+		if p != null and _fidgets.has(id):
+			PassengerFidgetPose.tick_frame(sim, _props, node, p, _fidgets[id], now)
+		else:
+			PassengerFidgetPose.reset(node)
 
 
 func _sync_stall_doors(alpha: float) -> void:
@@ -1074,6 +1092,8 @@ func _release(id: int) -> void:
 	ActivityPoses.dress(node, 0.0, 0.0)
 	DiningPose.apply(node, DiningPose.Kind.NONE, 0.0, 0)
 	RepackPose.apply(node, 0.0, 0.0, 0)
+	PassengerFidgetPose.reset(node)
+	_fidgets.erase(id)
 	_props.release(id)
 	_turns.release(id)
 	_setoffs.erase(id)
@@ -1239,7 +1259,34 @@ func _pose(node: Node3D, p: Passenger, built: Dictionary) -> float:
 			dining_kind = DiningPose.kind_for(StringName(visit.piece.get("def", &"")))
 			dining_amount = DiningPose.seated_weight(sim, p, visit)
 	DiningPose.apply(node, dining_kind, dining_amount, p.id)
-	RepackPose.apply(node, RepackPose.weight_for(p), _now(), p.id)
+	var repack_amount := RepackPose.weight_for(p)
+	RepackPose.apply(node, repack_amount, _now(), p.id)
+	var step_moved := (
+		_cur.has(p.id)
+		and _prev.has(p.id)
+		and (_cur[p.id] as Vector3).distance_to(_prev[p.id] as Vector3) >= 0.001
+	)
+	var fidget_rec: Dictionary = _fidgets.get_or_add(p.id, {})
+	(
+		PassengerFidgetPose
+		. sync_passenger(
+			sim,
+			_props,
+			node,
+			p,
+			fidget_rec,
+			float(sim.tick) if sim != null else _now(),
+			moving or step_moved,
+			clip,
+			seat_pose,
+			activity,
+			at_cafe,
+			at_stall,
+			dining_amount,
+			repack_amount,
+			_snapping,
+		)
+	)
 	node.set_meta(&"base_speed", base)
 	var player := node.get_node("AnimationPlayer") as AnimationPlayer
 	var was: String = node.get_meta(&"clip", "")

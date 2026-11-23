@@ -542,7 +542,7 @@ func bubble_text(p: Passenger) -> String:
 		return text
 	if p.late and not p.is_done():
 		return "I'm late!"
-	return ""
+	return SecuritySearchReasons.bubble_of(p)
 
 
 ## The apron walk from an exit door to the door of a plane drawn with `model`

@@ -68,14 +68,20 @@ static func entry(id: int, text: String, rank: int, rect: Rect2, focused := fals
 ## passenger's speech, as before the calm view (a probe and test seam).
 ## The rule: a focused passenger shows its speech in every view and overlay mode
 ## (decision calm-cozy-default-view-quiet-world-detail-on-ask-soft-statio:
-## hovering a passenger shows its bubble); a passenger that is not focused shows
-## none, except a late one in Late mode.
+## hovering a passenger shows its bubble); active security search bubbles show
+## live in-world unless Late mode or lateness overrides them (decision
+## frequent-security-searches-live-in-world-comic-belt-keys-liq); any other
+## unfocused passenger shows none, except a late one in Late mode.
 static func shown_text(
 	speech: String, late: bool, focused: bool, late_mode: bool, every := false
 ) -> String:
 	if late_mode and late:
 		return LATE_TEXT
-	return speech if focused or every else ""
+	if focused or every:
+		return speech
+	if not late_mode and not late and SecuritySearchReasons.is_bubble_text(speech):
+		return speech
+	return ""
 
 
 ## What a bubble covers on screen: its text in the caption font (CaptionFont)

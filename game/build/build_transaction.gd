@@ -118,6 +118,10 @@ static func commit_plan(grid: BuildGrid, plan: Array[BuildEdit], wallet: Wallet)
 	var result: BuildResult = null
 	var object_id := 0
 	var mark := grid.hold_signals()
+	grid.begin_batch()
+	var was_cleared := grid._reach_cleared
+	if not was_cleared and plan.size() > 1 and grid.check_staff_reach:
+		grid._reach_cleared = GridReach.batch_keeps_reach(grid, plan)
 	for i in plan.size():
 		plan[i].paid = quotes[i].paid
 		result = grid.apply(plan[i])
@@ -128,11 +132,14 @@ static func commit_plan(grid: BuildGrid, plan: Array[BuildEdit], wallet: Wallet)
 			object_id = result.object_id
 		if i < plan.size() - 1:
 			cleared.append_array(result.dirty_cells)
+	grid._reach_cleared = was_cleared
 	var settlement := _settle(wallet, quotes, applied)
 	if not settlement.ok:
 		_roll_back(grid, snapshot, mark, "commit_plan", settlement)
+		grid.end_batch()
 		_emit_refused(grid, plan.back(), settlement)
 		return settlement
+	grid.end_batch()
 	grid.release_signals()
 	if not result.ok:
 		return result

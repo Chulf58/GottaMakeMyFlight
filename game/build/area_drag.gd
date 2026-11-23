@@ -198,6 +198,7 @@ static func _commit_with_walls(
 		snapshot = grid.to_snapshot()
 	var start := scratch.balance if scratch != null else 0
 	var mark := grid.hold_signals()
+	grid.begin_batch()
 	var results := BuildTransaction.commit_batch(grid, removals, scratch)
 	outcome._count(results)
 	var after_doors: Array[BuildEdit] = []
@@ -209,15 +210,18 @@ static func _commit_with_walls(
 			if not result.ok:
 				outcome._refuse(result)
 	if wallet == null:
+		grid.end_batch()
 		grid.release_signals()
 		return
 	var net := scratch.balance - start
 	var settlement := _settle_net(wallet, net)
 	if not settlement.ok:
 		_put_back(outcome, grid, removals, snapshot, mark, settlement)
+		grid.end_batch()
 		return
 	outcome.money = absi(net)
 	outcome.charged = net < 0
+	grid.end_batch()
 	grid.release_signals()
 
 

@@ -163,6 +163,12 @@ func test_every_speech_bubble_text_has_a_translation() -> void:
 		"Check-in is closed",
 		"Security is closed",
 		"Gate is closed",
+		"Forgot my belt!",
+		"Keys in pocket!",
+		"Coins in pocket!",
+		"Oversized shampoo!",
+		"Too much liquid!",
+		"Forgot my water bottle!",
 	]
 	assert_array(BubbleWords.msgids()).contains_exactly_in_any_order(sim_texts)
 	assert_str(BubbleWords.say("")).is_equal("")

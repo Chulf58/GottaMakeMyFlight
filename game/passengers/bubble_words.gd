@@ -42,4 +42,10 @@ class Words:
 			tr("Check-in is closed", "speech bubble"),
 			tr("Security is closed", "speech bubble"),
 			tr("Gate is closed", "speech bubble"),
+			tr("Forgot my belt!", "speech bubble"),
+			tr("Keys in pocket!", "speech bubble"),
+			tr("Coins in pocket!", "speech bubble"),
+			tr("Oversized shampoo!", "speech bubble"),
+			tr("Too much liquid!", "speech bubble"),
+			tr("Forgot my water bottle!", "speech bubble"),
 		]

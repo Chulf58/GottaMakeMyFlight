@@ -4,10 +4,11 @@ extends SkeletonModifier3D
 ## (ruling staff-station-interaction-poses-and-basic-scanner-scan-repac): replaces
 ## the plain idle clip with a gentle forward torso lean and alternating hands
 ## organizing bags at the floor/tray. Eases in after bags finish setting down
-## and eases out before REPACK ends so CarryStoop/CarryLead pickups are untouched.
+## and any pre-repack alarm/liquids reaction finishes, and eases out before
+## REPACK ends so CarryStoop/CarryLead pickups are untouched.
 
-const EASE_IN_START := 6.0
-const EASE_IN_END := 14.0
+const EASE_IN_START := 18.0
+const EASE_IN_END := 26.0
 const EASE_OUT_START := 14.0
 const EASE_OUT_END := 6.0
 
