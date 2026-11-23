@@ -31,33 +31,33 @@ enum Zone { UNDER_CANOPY, WEST, EAST }
 
 ## Patch centres, on the surface top.
 const SPOTS: Array[Vector3] = [
-	Vector3(-37.9, 0.1, -57.6),
-	Vector3(-30.3, 0.1, -57.6),
-	Vector3(-38.0, 0.2, -40.6),
-	Vector3(-27.0, 0.2, -40.6),
-	Vector3(-17.0, 0.2, -40.6),
-	Vector3(16.0, 0.2, -40.6),
-	Vector3(40.0, 0.2, -40.6),
+	Vector3(-24.8, 0.1, -57.6),
+	Vector3(-31.3, 0.1, -57.6),
+	Vector3(-40.0, 0.2, -40.6),
+	Vector3(-28.7, 0.2, -40.6),
+	Vector3(-17.8, 0.2, -40.6),
+	Vector3(15.7, 0.2, -40.6),
+	Vector3(39.8, 0.2, -40.6),
 	Vector3(31.7, 0.1, -27.0),
 	Vector3(31.7, 0.1, -17.0),
-	Vector3(-32.5, 0.2, -40.6),
-	Vector3(-22.0, 0.2, -40.6),
-	Vector3(22.0, 0.2, -40.6),
+	Vector3(-34.4, 0.2, -40.6),
+	Vector3(-23.2, 0.2, -40.6),
+	Vector3(21.5, 0.2, -40.6),
 ]
 ## How far each patch reaches from its centre along x and z.
 const HALVES: Array[Vector2] = [
-	Vector2(0.8, 0.4),
-	Vector2(0.8, 0.4),
-	Vector2(1.5, 0.35),
-	Vector2(1.5, 0.35),
-	Vector2(1.5, 0.35),
-	Vector2(1.5, 0.35),
-	Vector2(1.5, 0.35),
-	Vector2(1.2, 1.2),
-	Vector2(1.2, 1.2),
-	Vector2(1.5, 0.35),
-	Vector2(1.5, 0.35),
-	Vector2(1.5, 0.35),
+	Vector2(2.0, 0.45),
+	Vector2(2.0, 0.45),
+	Vector2(2.3, 0.22),
+	Vector2(2.6, 0.22),
+	Vector2(2.3, 0.22),
+	Vector2(2.2, 0.22),
+	Vector2(2.4, 0.22),
+	Vector2(2.0, 2.0),
+	Vector2(2.0, 2.0),
+	Vector2(2.3, 0.22),
+	Vector2(2.3, 0.22),
+	Vector2(2.0, 0.22),
 ]
 const ZONES: Array[int] = [
 	Zone.UNDER_CANOPY,
@@ -76,8 +76,8 @@ const ZONES: Array[int] = [
 ## The lot spot (LandsideSim.lots_built) a perch needs built, or -1.
 const LOTS: Array[int] = [-1, -1, -1, -1, -1, -1, -1, 0, 0, -1, -1, -1]
 ## Birds in one patch stand at least this far apart at bird scale 1, so two
-## perched crows (0.23 m wide, 0.56 m long) never overlap whatever their heading.
-const MIN_SPACING := 0.55
+## perched crows (0.23 m wide, 0.66 m long) keep clear air in any heading.
+const MIN_SPACING := 0.95
 ## A moving car or a passenger this close to a perched group scatters it. A
 ## car passing in the near lane (z -55) is 2.6 m from a road-edge patch and
 ## scatters it; a car past the road's centre line (z -50) is over 7.5 m away

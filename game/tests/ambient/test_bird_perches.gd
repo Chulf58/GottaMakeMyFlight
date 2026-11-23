@@ -173,3 +173,59 @@ func test_offsets_fit_the_patch_and_keep_apart() -> void:
 			for j in range(i + 1, offs.size()):
 				var apart := offs[i].distance_to(offs[j])
 				assert_float(apart).is_greater_equal(BirdPerches.MIN_SPACING * 1.5)
+
+
+func test_patches_are_disjoint_and_clear_of_street_dressing() -> void:
+	for i in BirdPerches.SPOTS.size():
+		var si := BirdPerches.SPOTS[i]
+		var hi := BirdPerches.HALVES[i]
+		for j in range(i + 1, BirdPerches.SPOTS.size()):
+			var sj := BirdPerches.SPOTS[j]
+			var hj := BirdPerches.HALVES[j]
+			var overlap_x := absf(si.x - sj.x) < hi.x + hj.x
+			var overlap_z := absf(si.z - sj.z) < hi.y + hj.y
+			(
+				assert_bool(overlap_x and overlap_z)
+				. override_failure_message("patches %d and %d overlap" % [i, j])
+				. is_false()
+			)
+	for p in LandsideStreetDressing.prop_specs():
+		var pos: Vector3 = p["pos"]
+		var hp: Vector2 = p["half"]
+		for j in BirdPerches.SPOTS.size():
+			var spot := BirdPerches.SPOTS[j]
+			var half := BirdPerches.HALVES[j]
+			var too_close_x := absf(pos.x - spot.x) < half.x + hp.x + 0.5
+			var too_close_z := absf(pos.z - spot.z) < half.y + hp.y + 0.5
+			(
+				assert_bool(too_close_x and too_close_z)
+				. override_failure_message("%s too close to perch %d" % [p["name"], j])
+				. is_false()
+			)
+
+
+func test_offsets_pack_reliably_across_many_seeds() -> void:
+	assert_float(BirdPerches.MIN_SPACING).is_greater_equal(0.90)
+	var rng := RandomNumberGenerator.new()
+	var counts := {
+		BirdPerches.Zone.UNDER_CANOPY: 3,
+		BirdPerches.Zone.WEST: 3,
+		BirdPerches.Zone.EAST: 3,
+	}
+	for s in 50:
+		rng.seed = s + 100
+		for i in BirdPerches.SPOTS.size():
+			var want: int = counts[BirdPerches.ZONES[i]]
+			if i == 3:
+				want = 4
+			elif BirdPerches.LOTS[i] >= 0:
+				want = 6
+			var offs := BirdPerches.offsets(rng, want, i, 1.5)
+			assert_int(offs.size()).override_failure_message("seed %d spot %d" % [s, i]).is_equal(
+				want
+			)
+			for a in offs.size():
+				for b in range(a + 1, offs.size()):
+					assert_float(offs[a].distance_to(offs[b])).is_greater_equal(
+						BirdPerches.MIN_SPACING * 1.5
+					)
