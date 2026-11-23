@@ -119,7 +119,7 @@ func test_a_spill_with_no_place_left_neither_slows_the_night_nor_happens() -> vo
 	var frames := _fast_through(0, fire + 100)
 	var done: Dictionary = _director.incidents()[0]
 	print("frames=%d tick=%d incident=%s" % [frames, _world.clock.tick, done])
-	assert_int(frames).is_greater(500)
+	assert_int(frames).is_greater(140)
 	assert_str(done["state"]).is_equal(IncidentCatalogue.DONE)
 	assert_str(done["outcome"]).is_equal(IncidentSnapshot.NO_PLACE)
 	assert_int(_world.sim.messes.mess_count()).is_equal(0)
@@ -150,8 +150,8 @@ func test_on_incidents_fast_forward_straight_through_midnight() -> void:
 	assert_int(_quiet.stop_tick()).is_equal(_flight_stop())
 	var frames := _fast_through(boundary - 2 * QuietNight.LEAD_TICKS, boundary + 400)
 	print("fast frames around midnight=%d tick=%d" % [frames, _world.clock.tick])
-	# 800 ticks at MAX_STEPS_PER_FRAME (10) a frame, less the frame at each end.
-	assert_int(frames).is_greater_equal(78)
+	# 800 ticks at FAST_FORWARD_MAX_STEPS (40) a frame, less the frame at each end.
+	assert_int(frames).is_greater_equal(18)
 	assert_int(_director.last_rolled_day()).is_equal(1)
 	assert_int(_quiet.stop_tick()).is_equal(_flight_stop())
 

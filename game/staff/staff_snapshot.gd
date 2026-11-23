@@ -5,7 +5,7 @@ extends RefCounted
 ## planned differently after a load; station claims are rebuilt from the
 ## members. Cells are saved as [x, y].
 ##
-## Only the current version (StaffSim.SAVE_VERSION, 7) loads: an older save is
+## Only the current version (StaffSim.SAVE_VERSION, 8) loads: an older save is
 ## refused, never migrated (no save migrations before the first release,
 ## decision old-saves-are-not-supported-until-after-a-release-no-save-mi).
 ##
@@ -357,9 +357,7 @@ static func _stand_down(m: StaffMember) -> void:
 
 ## Whether the member's cell, path and progress agree.
 static func _place_problem(m: StaffMember) -> String:
-	var walking := (
-		m.state == StaffMember.State.TO_STATION or m.state == StaffMember.State.WALKING_OUT
-	)
+	var walking := m.state == StaffMember.State.TO_STATION or m.is_walking_to_exit()
 	if (
 		m.backing_out
 		and (not walking or m.in_pool() or m.path_index != 0 or m.path.size() < 2 or m.seg_mm <= 0)
@@ -370,7 +368,9 @@ static func _place_problem(m: StaffMember) -> String:
 			return "is in the pool but has a walk"
 		if m.role == StaffMember.Role.RAMP:
 			return ""
-		return "" if m.state == StaffMember.State.IDLE else "is in the pool but not idle"
+		if m.state == StaffMember.State.IDLE or m.state == StaffMember.State.OFF_SHIFT:
+			return ""
+		return "is in the pool but not idle or off shift"
 	if m.path_index < 0 or m.path_index >= m.path.size() or m.path[m.path_index] != m.at:
 		return "does not stand on its path"
 	var length := 0
@@ -431,11 +431,14 @@ static func _cleaner_problem(m: StaffMember) -> String:
 	if m.job == 0 and m.job_bin:
 		return "has a bin job with no bin"
 	match m.state:
-		StaffMember.State.IDLE, StaffMember.State.WALKING_OUT:
+		StaffMember.State.IDLE, StaffMember.State.WALKING_OUT, StaffMember.State.LEAVING_SHIFT:
 			if m.job != 0 or m.work_left != 0:
 				return "is a cleaner with no job to do but has one"
 			if m.state == StaffMember.State.IDLE and (m.is_moving() or m.needs_replan):
 				return "is idle but has a walk"
+		StaffMember.State.OFF_SHIFT:
+			if m.job != 0 or m.work_left != 0 or not m.in_pool():
+				return "is an off-shift cleaner with a job or indoor position"
 		StaffMember.State.TO_STATION:
 			if m.job == 0 or m.work_left != 0:
 				return "walks to no job, or has work left before it gets there"
@@ -463,7 +466,11 @@ static func _duty_problem(m: StaffMember, sim: PassengerSim) -> String:
 		if m.station != 0 or m.is_moving() or m.needs_replan or m.leaving:
 			return "is idle but has a station or a walk"
 		return ""
-	if m.state == StaffMember.State.WALKING_OUT:
+	if m.state == StaffMember.State.OFF_SHIFT:
+		if m.station != 0 or not m.in_pool() or m.leaving:
+			return "is off shift but has a station, indoor position or leaving"
+		return ""
+	if m.is_walking_to_exit():
 		if m.station != 0 or m.leaving:
 			return "is walking out but has a station or is leaving"
 		return ""

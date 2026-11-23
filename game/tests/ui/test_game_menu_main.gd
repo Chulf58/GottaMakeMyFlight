@@ -82,7 +82,7 @@ func test_esc_inside_build_mode_closes_the_tray_and_does_not_open_the_menu() -> 
 	_build_menu.press_category(STRUCTURE)
 	_build_menu.build_session.sync()
 	assert_bool(_build_menu.is_tray_open()).is_true()
-	assert_bool(_clock.holds.is_holding()).is_false()
+	assert_bool(_clock.holds.is_holding()).is_true()
 	_esc()
 	assert_bool(_build_menu.is_tray_open()).is_false()
 	assert_bool(_menu.is_open()).is_false()

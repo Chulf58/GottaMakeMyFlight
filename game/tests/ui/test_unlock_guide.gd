@@ -72,7 +72,7 @@ func _earn(made: int) -> void:
 
 func test_the_dialog_opens_when_play_opens_a_tier_and_names_the_families() -> void:
 	assert_bool(_guide.is_open()).is_false()
-	_earn(50)
+	_earn(20)
 	assert_int(_unlocks.tier()).is_equal(2)
 	assert_bool(_guide.is_open()).is_true()
 	var body := _guide.dialog().body_text()
@@ -88,7 +88,7 @@ func test_the_phone_ring_hook_fires_with_the_dialog() -> void:
 	var audio := get_node_or_null("/root/GameAudio")
 	if audio != null and audio.has_method(&"reset_for_test"):
 		audio.reset_for_test()
-	_earn(50)
+	_earn(20)
 	assert_array(_rings).is_equal([2])
 	var cue := _guide.ring_cue()
 	assert_object(cue).is_not_null()
@@ -112,7 +112,7 @@ func test_a_load_opens_no_dialog() -> void:
 
 
 func test_a_saved_tier_never_shows_again_after_a_reload() -> void:
-	_earn(50)
+	_earn(20)
 	_guide.dismiss()
 	var data := JSON.parse_string(JSON.stringify(_unlocks.to_snapshot())) as Dictionary
 	_build_world()
@@ -125,18 +125,18 @@ func test_a_saved_tier_never_shows_again_after_a_reload() -> void:
 
 
 func test_a_new_game_shows_the_tier_dialog_again() -> void:
-	_earn(50)
+	_earn(20)
 	_guide.dismiss()
 	_build_world()
 	_rings.clear()
 	assert_bool(_unlocks.dialog_shown(2)).is_false()
-	_earn(50)
+	_earn(20)
 	assert_bool(_guide.is_open()).is_true()
 	assert_array(_rings).is_equal([2])
 
 
 func test_the_next_tier_still_shows_after_an_earlier_one_was_shown() -> void:
-	_earn(50)
+	_earn(20)
 	_guide.dismiss()
 	_earn(250)
 	assert_int(_unlocks.tier()).is_equal(3)
@@ -167,7 +167,7 @@ func test_a_skip_shows_exactly_the_tiers_not_shown_before() -> void:
 
 func test_a_guide_that_is_off_shows_nothing_and_marks_nothing() -> void:
 	_build_world(UnlockGuide.Mode.OFF)
-	_earn(50)
+	_earn(20)
 	assert_int(_unlocks.tier()).is_equal(2)
 	assert_bool(_guide.is_open()).is_false()
 	assert_bool(_guide.is_new(BuildMode.Tool.CAFE_ROOM)).is_false()
@@ -177,7 +177,7 @@ func test_a_guide_that_is_off_shows_nothing_and_marks_nothing() -> void:
 func test_opening_pauses_and_closing_gives_back_the_players_speed() -> void:
 	_clock.set_speed(2)
 	_clock.set_paused(false)
-	_earn(50)
+	_earn(20)
 	assert_bool(_clock.paused).is_true()
 	_guide.dismiss()
 	assert_bool(_clock.paused).is_false()
@@ -186,7 +186,7 @@ func test_opening_pauses_and_closing_gives_back_the_players_speed() -> void:
 
 func test_a_game_the_player_had_paused_stays_paused_after_the_dialog() -> void:
 	_clock.set_paused(true)
-	_earn(50)
+	_earn(20)
 	assert_bool(_guide.is_open()).is_true()
 	_guide.dismiss()
 	assert_bool(_clock.paused).is_true()
@@ -194,7 +194,7 @@ func test_a_game_the_player_had_paused_stays_paused_after_the_dialog() -> void:
 
 func test_a_clock_change_made_while_open_is_not_undone_on_close() -> void:
 	_clock.set_paused(false)
-	_earn(50)
+	_earn(20)
 	_clock.set_paused(false)
 	_clock.set_speed(3)
 	_guide.dismiss()
@@ -204,7 +204,7 @@ func test_a_clock_change_made_while_open_is_not_undone_on_close() -> void:
 
 func test_leaving_the_tree_with_the_dialog_open_does_not_leave_the_game_paused() -> void:
 	_clock.set_paused(false)
-	_earn(50)
+	_earn(20)
 	assert_bool(_clock.paused).is_true()
 	_port.remove_child(_guide)
 	assert_bool(_clock.paused).is_false()
@@ -214,7 +214,7 @@ func test_leaving_the_tree_with_the_dialog_open_does_not_leave_the_game_paused()
 func test_a_load_with_the_dialog_open_closes_it_and_leaves_the_clock_as_loaded() -> void:
 	_clock.set_speed(2)
 	_clock.set_paused(false)
-	_earn(50)
+	_earn(20)
 	assert_bool(_guide.is_open()).is_true()
 	var data := JSON.parse_string(JSON.stringify(_unlocks.to_snapshot())) as Dictionary
 	assert_bool(_unlocks.from_snapshot(data)).is_true()
@@ -241,7 +241,7 @@ func test_a_load_with_the_dialog_open_closes_it_and_leaves_the_clock_as_loaded()
 
 func test_every_unlocked_card_is_new_until_picked() -> void:
 	assert_bool(_guide.is_new(BuildMode.Tool.FLOOR)).is_false()
-	_earn(50)
+	_earn(20)
 	assert_bool(_guide.is_new(BuildMode.Tool.CAFE_ROOM)).is_true()
 	assert_bool(_guide.is_new(BuildMode.Tool.TREE)).is_false()
 	assert_bool(_guide.is_new(BuildMode.Tool.FLOOR)).is_false()
@@ -254,7 +254,7 @@ func test_every_unlocked_card_is_new_until_picked() -> void:
 
 
 func test_older_unseen_cards_stay_new_when_a_later_tier_opens() -> void:
-	_earn(50)
+	_earn(20)
 	_guide.dismiss()
 	_guide.mark_seen(BuildMode.Tool.CAFE_ROOM)
 	_earn(250)
@@ -265,7 +265,7 @@ func test_older_unseen_cards_stay_new_when_a_later_tier_opens() -> void:
 
 
 func test_a_reload_keeps_seen_cards_seen_and_unseen_ones_new() -> void:
-	_earn(50)
+	_earn(20)
 	_guide.mark_seen(BuildMode.Tool.CAFE_ROOM)
 	var data := JSON.parse_string(JSON.stringify(_unlocks.to_snapshot())) as Dictionary
 	_build_world()
@@ -276,8 +276,8 @@ func test_a_reload_keeps_seen_cards_seen_and_unseen_ones_new() -> void:
 
 
 func test_a_new_game_marks_nothing_seen() -> void:
-	_earn(50)
+	_earn(20)
 	_guide.mark_seen(BuildMode.Tool.CAFE_ROOM)
 	_build_world()
-	_earn(50)
+	_earn(20)
 	assert_bool(_guide.is_new(BuildMode.Tool.CAFE_ROOM)).is_true()

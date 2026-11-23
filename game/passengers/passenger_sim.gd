@@ -415,6 +415,19 @@ func pending_spawns() -> int:
 	return _schedule.size() + arrivals.pending()
 
 
+## Earliest pending spawn tick across _schedule and arrival bookings, or -1
+## when none.
+func next_spawn_tick() -> int:
+	var next := -1
+	if not _schedule.is_empty():
+		next = int(_schedule[0]["tick"])
+	for id in arrivals.booking_ids():
+		var b := arrivals.get_booking(id)
+		if b != null:
+			next = b.unload_tick if next < 0 else mini(next, b.unload_tick)
+	return next
+
+
 ## The lane at a station in order, front first. A desk keeps the passenger it
 ## is serving at the front; a scanner's serviced passenger is in its passage.
 func queue_of(station: int) -> Array[int]:

@@ -957,6 +957,29 @@ func next_event_tick() -> int:
 	return next
 
 
+## The next tick a scheduled flight approaches or an unissued active contract's
+## next occurrence could start receiving relaxed arrivals or approaching, or -1
+## when none is due. Read-only; QuietNight and StaffSim read it before
+## issue_tick.
+func next_morning_activity_tick() -> int:
+	var next := -1
+	for flight in _flights:
+		if flight["state"] == State.SCHEDULED:
+			next = _earliest(next, flight["starts"][State.APPROACH])
+	if opened_tick < 0:
+		return next
+	for contract in _contracts:
+		if not _ended.has(contract["id"]):
+			var day: int = _next_day[contract["id"]]
+			var starts := FlightTimetable.starts_for(contract, day, epoch)
+			var departure: int = starts[State.PUSHBACK]
+			var earliest := mini(
+				departure - ArrivalTypes.RELAXED_LEAD_TICKS, starts[State.APPROACH]
+			)
+			next = _earliest(next, earliest)
+	return next
+
+
 ## The earlier of two ticks, where -1 is none.
 static func _earliest(a: int, b: int) -> int:
 	return b if a < 0 else mini(a, b)

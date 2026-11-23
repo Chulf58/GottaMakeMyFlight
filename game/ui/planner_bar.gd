@@ -5,8 +5,11 @@ extends Button
 ## picks the flight up instead, and the press is dropped. The drag carries
 ## {contract, day, gate} and shows a small bar in the gate's colour under the
 ## pointer. A disabled bar (a one-off flight or an ended contract) cannot be
-## picked up. A drop over a bar is the drop on its row: the bar hands the check
-## and the drop to its PlannerTrack.
+## picked up; clicking it emits disabled_clicked so the planner can explain why.
+## A drop over a bar is the drop on its row: the bar hands the check and the
+## drop to its PlannerTrack.
+
+signal disabled_clicked
 
 ## The contract id, "" for a one-off flight.
 var contract := ""
@@ -24,6 +27,15 @@ static func drag_of(data: Variant) -> Dictionary:
 	if dict.size() != 3 or not dict.has_all(["contract", "day", "gate"]):
 		return {}
 	return dict
+
+
+func _gui_input(event: InputEvent) -> void:
+	if not disabled:
+		return
+	var click := event as InputEventMouseButton
+	if click != null and click.pressed and click.button_index == MOUSE_BUTTON_LEFT:
+		disabled_clicked.emit()
+		accept_event()
 
 
 func _get_drag_data(_at_position: Vector2) -> Variant:
