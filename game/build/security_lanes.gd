@@ -196,7 +196,14 @@ static func geometry(anchor: Vector2i, facing: int, mirror: int) -> Dictionary:
 	lane["confiscation_bin_cell"] = _cell(anchor, facing, mirror, CONFISCATION_BIN_OFFSET)
 	lane["search_table_id"] = 0
 	lane["confiscation_bin_id"] = 0
+	lane["fast_track"] = false
 	return lane
+
+
+## Whether passenger `p` qualifies for Fast-Track priority security lanes:
+## tight-connection / late flyers and VIP passengers.
+static func is_priority(p: Passenger) -> bool:
+	return p != null and (p.late or p.vip)
 
 
 ## Whether `def_id` is one of the four core lane parts.
@@ -285,6 +292,10 @@ func rebuild(grid: BuildGrid) -> void:
 
 func is_complete(arch: int) -> bool:
 	return _lanes.has(arch)
+
+
+func is_fast_track(arch: int) -> bool:
+	return bool(lane(arch).get("fast_track", false))
 
 
 ## The whole lane of `arch` (geometry() plus "arch_id" and "parts"), or an
@@ -468,6 +479,7 @@ func _evaluate(grid: BuildGrid, arch: int, mirror: int, others: Dictionary) -> D
 	var record := grid.get_object(arch)
 	var lane := geometry(record["anchor"], record["facing"], mirror)
 	lane["arch_id"] = arch
+	lane["fast_track"] = bool(record.get("fast_track", false))
 	var parts := {ARCH: arch}
 	var present := 0
 	var missing: int = Status.COMPLETE

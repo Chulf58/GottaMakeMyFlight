@@ -220,6 +220,8 @@ func sync_security(sim: PassengerSim, alpha: float) -> void:
 		return
 	_sync_bin_props(sim)
 	_sync_arch_beacons(sim, alpha)
+	for arch_id: int in _arch_nodes:
+		_sync_arch_badge(_arch_nodes[arch_id], sim.layout.security_lanes.is_fast_track(arch_id))
 
 
 func _sync_bin_props(sim: PassengerSim) -> void:
@@ -296,6 +298,46 @@ static func _make_arch_lamp(arch_node: Node3D) -> MeshInstance3D:
 	return lamp
 
 
+static func _sync_arch_badge(arch_node: Node3D, fast_track: bool) -> void:
+	var existing := arch_node.get_node_or_null("FastTrackBadge") as Node3D
+	if not fast_track:
+		if existing != null:
+			arch_node.remove_child(existing)
+			existing.free()
+		return
+	if existing != null:
+		return
+	var badge := Node3D.new()
+	badge.name = "FastTrackBadge"
+	badge.position = Vector3(0.0, 2.48, 0.0)
+	var bar := MeshInstance3D.new()
+	bar.name = "FastTrackBar"
+	var box := BoxMesh.new()
+	box.size = Vector3(0.76, 0.14, 0.18)
+	bar.mesh = box
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.98, 0.78, 0.16)
+	mat.emission_enabled = true
+	mat.emission = Color(0.95, 0.72, 0.12)
+	mat.emission_energy_multiplier = 0.45
+	bar.material_override = mat
+	badge.add_child(bar)
+	var label_text := TranslationServer.translate("Fast-Track")
+	for side in [1.0, -1.0]:
+		var label := CaptionFont.apply(Label3D.new())
+		label.name = "FastTrackLabel" if side > 0.0 else "FastTrackLabelBack"
+		label.text = label_text
+		label.font_size = 24
+		label.pixel_size = 0.005
+		label.modulate = Color(0.14, 0.1, 0.04)
+		label.outline_size = 0
+		label.position = Vector3(0.0, 0.0, 0.095 * side)
+		if side < 0.0:
+			label.rotation.y = PI
+		badge.add_child(label)
+	arch_node.add_child(badge)
+
+
 ## Edges (WallCutaway.wall_edges form) drawn as stubs right now.
 func cut_edges() -> Array[Vector3i]:
 	var result: Array[Vector3i] = []
@@ -354,8 +396,17 @@ func refresh(grid: BuildGrid) -> void:
 		_wall_version = wall_ver
 		_wall_kind_source = wall_kind_source
 	var doors_changed := _sync_objects()
+	_sync_all_arch_badges()
 	if floor_dirty or wall_dirty or doors_changed:
 		_draw_walls()
+
+
+func _sync_all_arch_badges() -> void:
+	if _grid == null or _arch_nodes.is_empty():
+		return
+	var lanes := _grid.recognised_lanes()
+	for arch_id: int in _arch_nodes:
+		_sync_arch_badge(_arch_nodes[arch_id], lanes.is_fast_track(arch_id))
 
 
 func _draw_floors() -> void:

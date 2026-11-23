@@ -70,6 +70,7 @@ const INT_FIELDS := [
 const CELL_FIELDS := ["at", "seat_cell", "seat_front", "stand_from"]
 const BOOL_FIELDS := [
 	"late",
+	"vip",
 	"cleared",
 	"needs_replan",
 	"liquids",

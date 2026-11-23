@@ -7034,3 +7034,50 @@ msgstr ""
 #: passengers/security_search_reasons.gd
 msgid "No one wants to open it at the checkpoint."
 msgstr ""
+
+#: build/build_view.gd
+msgid "Fast-Track"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Fast-Track: On"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Fast-Track: Off"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Switch this security lane back to Standard"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Switch this security lane to Fast-Track (VIP and tight-connection passengers)"
+msgstr ""
+
+#: passengers/passenger_thoughts.gd
+msgid "Breezed through Fast-Track security"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Security lane"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "2x3"
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A complete security lane: tray table, X-ray belt, arch and pickup table."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Click once to place all four parts together. Press R to turn it."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Needs clear floor for the lane, queue, exit and two officer spots."
+msgstr ""
+

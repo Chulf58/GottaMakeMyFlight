@@ -80,6 +80,8 @@ extends RefCounted
 ## 38: security overhaul S1: split body_resolved/bag_resolved on passengers and
 ## daily confiscation bin history ("confiscations"); version 37 saves are
 ## refused with no migration (the same decision).
+## 39: security overhaul S2: Passenger.vip and FAST_TRACK thought; version 38
+## saves are refused with no migration (the same decision).
 
 
 ## JSON-safe state for a save (PassengerSim.to_snapshot()). Reads only: it

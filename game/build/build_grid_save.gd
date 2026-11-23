@@ -6,6 +6,9 @@ extends RefCounted
 ## the first argument, and these read or fill its private data directly. The
 ## structural checks and the snapshot shape stay in BuildGridSnapshot.
 
+## 2: fast_track boolean persisted on security_arch objects.
+const SAVE_VERSION := 2
+
 
 ## Checks `data`, builds the grid it describes on a fresh BuildGrid and takes
 ## that grid's state into `grid`. Pushes an error and returns false, leaving
@@ -67,6 +70,8 @@ static func to_snapshot(grid: BuildGrid) -> Dictionary:
 			"facing": record["facing"],
 			"paid": record["paid"],
 		}
+		if StringName(record["def"]) == SecurityLanes.ARCH:
+			entry["fast_track"] = bool(record.get("fast_track", false))
 		objects.append(entry)
 	var rooms := []
 	for room_id in grid.room_ids():
@@ -222,7 +227,10 @@ static func _load_cells(grid: BuildGrid, data: Dictionary) -> String:
 		if problem != "":
 			return problem
 		var paid := int(entry.get("paid", 0))
-		grid._insert_object(int(entry["id"]), def_id, anchor, int(entry["facing"]), paid)
+		var fast_track := bool(entry.get("fast_track", false))
+		grid._insert_object(
+			int(entry["id"]), def_id, anchor, int(entry["facing"]), paid, fast_track
+		)
 	grid._next_object_id = int(data["next_object_id"])
 	grid._built = TerminalEnclosure.built_area(grid.size, grid._floor, grid._h_walls, grid._v_walls)
 	grid._outside = TerminalEnclosure.outside_within(

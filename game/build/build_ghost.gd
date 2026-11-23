@@ -290,6 +290,14 @@ static func clearance_target(mode: BuildMode) -> Dictionary:
 			else [mode.grid.world_to_cell(mode._hover_point)]
 		)
 		return _cells_target(mode.grid, belt_cells, true)
+	if mode.tool == BuildMode.Tool.SECURITY_LANE:
+		return _cells_target(
+			mode.grid,
+			SecurityLaneStamp.footprint_cells(
+				mode.grid.world_to_cell(mode._hover_point), mode.facing
+			),
+			true
+		)
 	if mode._hover_edit != null and not LandPlots.REMOVALS.has(mode._hover_edit.kind):
 		return _cells_target(mode.grid, StandEnvelope.edit_cells(mode._hover_edit), true)
 	return _cells_target(mode.grid, [mode.grid.world_to_cell(mode._hover_point)], false)

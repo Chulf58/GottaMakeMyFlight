@@ -387,6 +387,12 @@ func texts(tool: BuildMode.Tool) -> Array:
 				tr("Place it next to the search table slot. Resets at midnight."),
 				tr("No upkeep. Inspect it to see today's strangest finds."),
 			]
+		BuildMode.Tool.SECURITY_LANE:
+			lines = [
+				tr("A complete security lane: tray table, X-ray belt, arch and pickup table."),
+				tr("Click once to place all four parts together. Press R to turn it."),
+				tr("Needs clear floor for the lane, queue, exit and two officer spots."),
+			]
 		BuildMode.Tool.BUSH:
 			lines = [
 				tr("A bush. It calms passengers close to it, a little."),

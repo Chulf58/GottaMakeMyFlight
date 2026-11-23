@@ -44,6 +44,7 @@ const CATEGORIES := [
 			BuildMode.Tool.PICKUP_TABLE,
 			BuildMode.Tool.SEARCH_TABLE,
 			BuildMode.Tool.CONFISCATION_BIN,
+			BuildMode.Tool.SECURITY_LANE,
 			BuildMode.Tool.BELT,
 			BuildMode.Tool.BAG_ROOM,
 		],
@@ -213,6 +214,7 @@ const ITEMS := {
 	BuildMode.Tool.KIOSK_DISPLAY: ["Display stand", "kiosk_display", ""],
 	BuildMode.Tool.SEARCH_TABLE: ["Search table", "search_table", ""],
 	BuildMode.Tool.CONFISCATION_BIN: ["Confiscation bin", "confiscation_bin", ""],
+	BuildMode.Tool.SECURITY_LANE: ["Security lane", "arch", "2x3"],
 	BuildMode.Tool.BELT: ["Belt", "belt", "Drag a line"],
 	BuildMode.Tool.BAG_ROOM: ["Bag room", "bag_room", "2x2 min"],
 	BuildMode.Tool.CART: ["Bag cart", "cart", ""],
@@ -270,6 +272,8 @@ static func tool_price(tool: BuildMode.Tool) -> int:
 		return PriceTable.price_of_object(BuildMode.tool_object(tool))
 	if tool == BuildMode.Tool.BELT:
 		return PriceTable.price_of_object(BuildMode.BELT_PRICE_ID)
+	if tool == BuildMode.Tool.SECURITY_LANE:
+		return SecurityLaneStamp.price()
 	if BuildMode.LANDSIDE_BUILD_TOOLS.has(tool):
 		return PriceTable.price_of_landside(
 			LandsidePlacement.PRICE_IDS[BuildMode.LANDSIDE_BUILD_TOOLS[tool]]
@@ -562,6 +566,8 @@ class Words:
 			tr("Pickup table", "build menu"),
 			tr("Search table", "build menu"),
 			tr("Confiscation bin", "build menu"),
+			tr("Security lane", "build menu"),
+			tr("2x3", "build menu"),
 			tr("Needs belt end", "build menu"),
 			tr("Staff", "build menu"),
 		]

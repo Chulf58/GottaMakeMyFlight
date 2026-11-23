@@ -107,6 +107,7 @@ var apron: Array[Vector3] = []
 var apron_mm := 0
 var mood := MOOD_START
 var late := false
+var vip := false
 var cleared := false
 ## Set when an edit touched the committed path; replanned on the next tick.
 var needs_replan := false

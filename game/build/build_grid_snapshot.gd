@@ -165,6 +165,11 @@ static func _object_problem(entry: Variant) -> String:
 	# Optional: an object saved before purchase prices has none and paid 0.
 	if (entry as Dictionary).has("paid") and not _is_whole_in(entry["paid"], 0, BuildGrid.MAX_PAID):
 		return "object paid must be a whole number from 0 to %d" % BuildGrid.MAX_PAID
+	if (entry as Dictionary).has("fast_track"):
+		if typeof(entry["fast_track"]) != TYPE_BOOL:
+			return "object fast_track must be a boolean"
+		if StringName(entry["def"]) != SecurityLanes.ARCH and bool(entry["fast_track"]):
+			return "only security_arch may set fast_track"
 	return ""
 
 

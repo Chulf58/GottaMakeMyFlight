@@ -52,6 +52,11 @@ static func preview_price(menu: BuildMenu) -> Vector2i:
 		# Only the cells with no belt yet are bought; reshaping is free.
 		var line_cost := mode.belt_cells_to_buy() * BuildMenuCatalog.tool_price(BuildMode.Tool.BELT)
 		return Vector2i(line_cost, line_cost)
+	if mode.tool == BuildMode.Tool.SECURITY_LANE:
+		if not menu._pointer_on_grid():
+			return Vector2i.ZERO
+		var lane_cost := SecurityLaneStamp.price()
+		return Vector2i(lane_cost, lane_cost)
 	if mode.tool in BuildMode.LANDSIDE_BUILD_TOOLS or mode.tool == BuildMode.Tool.BUY_LAND:
 		return off_grid_price(menu)
 	var edit := mode.hover_edit()
