@@ -211,6 +211,7 @@ class Words:
 			tr("ATM", "room type"),
 			tr("Bag room", "room type"),
 			tr("Bar", "room type"),
+			tr("Break Room", "room type"),
 			tr("Cafe", "room type"),
 			tr("Duty free", "room type"),
 			tr("Exchange", "room type"),
@@ -228,6 +229,7 @@ class Words:
 			tr("atm", "room name, mid-sentence"),
 			tr("bag room", "room name, mid-sentence"),
 			tr("bar", "room name, mid-sentence"),
+			tr("break room", "room name, mid-sentence"),
 			tr("cafe", "room name, mid-sentence"),
 			tr("duty free", "room name, mid-sentence"),
 			tr("exchange", "room name, mid-sentence"),
@@ -247,6 +249,7 @@ class Words:
 			tr("Surface lot", "landside place"),
 			# Room requirement notes, the room panel and card
 			tr("Needs a belt end", "room need"),
+			tr("Needs a bench", "room need"),
 			tr("Needs a clothes rail", "room need"),
 			tr("Needs a counter", "room need"),
 			tr("Needs a display stand", "room need"),
@@ -267,6 +270,7 @@ class Words:
 			tr("Needs entrance", "room need"),
 			# The same notes in lower case, after "Not ready,"
 			tr("needs a belt end", "status reason"),
+			tr("needs a bench", "status reason"),
 			tr("needs a clothes rail", "status reason"),
 			tr("needs a counter", "status reason"),
 			tr("needs a display stand", "status reason"),

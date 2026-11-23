@@ -19,6 +19,8 @@ const CART := &"baggage_cart"
 const TOILET := &"toilet"
 const STALL := &"toilet_stall"
 const SINK := &"toilet_sink"
+const BREAK_ROOM := &"break_room"
+const BENCH := &"bench_1a"
 ## A toilet's upkeep line is one room total (decision toilet-design-queue-free-
 ## reservable-stalls-per-stall-daily-u, point 2): what RoomRules.daily_upkeep
 ## charges at midnight while it is ready, and what it will once it is.
@@ -93,6 +95,9 @@ func show_room(id: int) -> void:
 			else tr("Upkeep ${amount} per day once ready")
 		)
 		_line(upkeep.format({"amount": status.upkeep}))
+	elif status.type_id == BREAK_ROOM:
+		_line(tr("Benches {count}").format({"count": status.pieces.get(BENCH, 0)}))
+		_line(tr("Staff rest here during lulls"))
 	elif RoomTypes.get_type(status.type_id).activity:
 		_line(tr("Spots {count}").format({"count": status.seats}))
 		if status.base_spend > 0:
@@ -172,6 +177,13 @@ func _show_prestige(id: int, type_id: StringName) -> void:
 		_line(
 			tr("Prestige: Lv. {level} / 5 ({score} pts · +{bonus}% spend)").format(
 				{"level": level, "score": score, "bonus": spend_pct}
+			)
+		)
+	elif type_id == BREAK_ROOM:
+		var break_pct: int = prestige["break_bonus_percent"]
+		_line(
+			tr("Prestige: Lv. {level} / 5 ({score} pts · +{bonus}% recovery)").format(
+				{"level": level, "score": score, "bonus": break_pct}
 			)
 		)
 	else:

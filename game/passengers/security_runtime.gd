@@ -181,6 +181,24 @@ func _helped(station: int) -> bool:
 	return staff != null and staff.is_staffed(station, StaffMember.Slot.HELPER)
 
 
+func is_officer_tired(station: int, phase: int) -> bool:
+	if _host == null:
+		return false
+	var staff: StaffSim = _host.get("staff") as StaffSim
+	if staff == null:
+		return false
+	var slot := (
+		StaffMember.Slot.HELPER
+		if (phase == Phase.REPACK or phase == Phase.BODY_CHECK) and _helped(station)
+		else StaffMember.Slot.PRIMARY
+	)
+	var id := staff.staff_at(station, slot)
+	if id == 0:
+		return false
+	var m := staff.get_member(id)
+	return m != null and m.is_tired()
+
+
 static func body_pending(p: Passenger) -> bool:
 	return p.alarm and not p.body_resolved
 
@@ -429,7 +447,8 @@ func restore(with_records: Dictionary) -> void:
 func _advance_one(station: int, record: Dictionary, p: Passenger) -> void:
 	var phase := p.security_phase as Phase
 	if WORK_PHASES.has(phase):
-		p.security_work = maxi(p.security_work - rate_for(station, p), 0)
+		if not (is_officer_tired(station, phase) and posmod(_host.tick, 5) == 0):
+			p.security_work = maxi(p.security_work - rate_for(station, p), 0)
 	var on_lane := is_lane(station)
 	var lane := _lane(station) if on_lane else {}
 	if record["berth"] == p.id and phase == Phase.LEAVE and p.at != lane["berth"]:

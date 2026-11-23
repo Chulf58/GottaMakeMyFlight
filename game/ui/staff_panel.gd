@@ -64,6 +64,11 @@ const ROLE_WIDTH := 156.0
 const ROLE_WIDTH_SIX := 136.0
 const ROLE_SEPARATION := 10
 const ROLE_SEPARATION_SIX := 8
+const MAX_ENERGY_ROWS := 3
+const ENERGY_BAR_HEIGHT := 5.0
+const ENERGY_RESTED_COLOR := Color(0.35, 0.78, 0.45)
+const ENERGY_TIRED_COLOR := Color(0.9, 0.45, 0.25)
+const ENERGY_BREAK_COLOR := Color(0.35, 0.65, 0.92)
 const PULSE_TINT := Color(1.3, 1.12, 0.55)
 const PULSE_STEP_S := 0.22
 ## The banner's top edge with the departures list off: under the three toggles.
@@ -114,6 +119,7 @@ var _gaps: Array[Dictionary] = []
 var _since_poll := 0.0
 ## Role -> the Label with its counts, its Hire and its Fire button.
 var _counts: Dictionary = {}
+var _energy_boxes: Dictionary = {}
 var _role_titles: Dictionary = {}
 var _hire: Dictionary = {}
 var _fire: Dictionary = {}
@@ -150,6 +156,7 @@ func watch(with_staff: StaffSim) -> void:
 	staff = with_staff
 	staff.staff_changed.connect(refresh)
 	staff.member_state_changed.connect(_on_member_state)
+	staff.member_energy_changed.connect(_on_member_energy)
 	staff.sim.grid.graph_changed.connect(_on_graph_changed)
 	staff.sim.grid.edit_applied.connect(_on_edit_applied)
 	_scan_gaps()
@@ -208,24 +215,50 @@ func counts_text(role: StaffMember.Role) -> String:
 	var hired := staff.count(role)
 	var leaving := staff.leaving_count(role)
 	var off_shift := staff.off_shift_count(role)
+	var on_break := staff.on_break_count(role)
 	var duty := staff.on_duty_count(role)
 	var values := {
 		"hired": hired,
 		"duty": duty,
 		"leaving": leaving,
 		"off_shift": off_shift,
+		"on_break": on_break,
 	}
+	var line := ""
 	if off_shift > 0 and off_shift == hired and leaving == 0:
-		return tr("{hired} hired, off shift").format(values)
-	if role == StaffMember.Role.CLEANER:
+		line = tr("{hired} hired, off shift")
+	elif role == StaffMember.Role.CLEANER:
 		if off_shift > 0:
-			return tr("{hired} hired, {duty} cleaning, {off_shift} off shift").format(values)
-		if leaving > 0:
-			return tr("{hired} hired, {duty} cleaning, {leaving} leaving").format(values)
-		return tr("{hired} hired, {duty} cleaning").format(values)
-	if leaving > 0:
-		return tr("{hired} hired, {duty} on duty, {leaving} leaving").format(values)
-	return tr("{hired} hired, {duty} on duty").format(values)
+			line = tr("{hired} hired, {duty} cleaning, {off_shift} off shift")
+		elif leaving > 0:
+			line = tr("{hired} hired, {duty} cleaning, {leaving} leaving")
+		elif on_break > 0:
+			line = tr("{hired} hired, {duty} cleaning, {on_break} on break")
+		else:
+			line = tr("{hired} hired, {duty} cleaning")
+	elif leaving > 0:
+		line = tr("{hired} hired, {duty} on duty, {leaving} leaving")
+	elif on_break > 0:
+		line = tr("{hired} hired, {duty} on duty, {on_break} on break")
+	else:
+		line = tr("{hired} hired, {duty} on duty")
+	return line.format(values)
+
+
+func member_energy_text(member_id: int) -> String:
+	if staff == null:
+		return ""
+	var m := staff.get_member(member_id)
+	if m == null:
+		return ""
+	var line := ""
+	if m.is_on_break():
+		line = tr("On break {pct}%")
+	elif m.is_tired():
+		line = tr("Tired {pct}%")
+	else:
+		line = tr("Rested {pct}%")
+	return line.format({"pct": m.energy})
 
 
 ## What the card still asks for, one line each: the starter line while it
@@ -327,6 +360,7 @@ func refresh() -> void:
 	for role in ROLES:
 		(_counts[role] as Label).text = counts_text(role)
 		(_fire[role] as Button).disabled = _staying(role) == 0
+		_refresh_energy_box(role)
 	var prep_note := ""
 	if gate != null and gate.flights != null and gate.flights.opened_tick < 0:
 		prep_note = tr("Prep time — clock starts when staff reach stations")
@@ -492,6 +526,8 @@ func _staying(role: StaffMember.Role) -> int:
 
 func _on_staff_toggled(open: bool) -> void:
 	_card.visible = open
+	if open and staff != null:
+		refresh()
 	if not open:
 		_stop_hire_pulse()
 
@@ -502,6 +538,12 @@ func _exit_tree() -> void:
 
 func _on_member_state(_id: int, _state: StaffMember.State) -> void:
 	refresh()
+
+
+func _on_member_energy(_id: int, _energy: int) -> void:
+	if _card.visible:
+		for role in ROLES:
+			_refresh_energy_box(role)
 
 
 ## A load opens or closes the airport without an opening to announce. The gate
@@ -656,6 +698,12 @@ func _build() -> void:
 		counts.tooltip_text = tip
 		column.add_child(counts)
 		_counts[role] = counts
+		var energy_box := VBoxContainer.new()
+		energy_box.name = "%sEnergy" % ROLE_KEYS[role]
+		energy_box.add_theme_constant_override("separation", 2)
+		energy_box.visible = false
+		column.add_child(energy_box)
+		_energy_boxes[role] = energy_box
 		var row := VBoxContainer.new()
 		row.add_theme_constant_override("separation", 4)
 		column.add_child(row)
@@ -827,3 +875,46 @@ func _retranslate() -> void:
 			var world := HintRules.read_world(staff.sim, hiring_hint_roles())
 			_gaps = Checklist.gap_lines(world, staff.sim.layout.seats.size(), _lock_texts())
 		refresh()
+
+
+func _refresh_energy_box(role: StaffMember.Role) -> void:
+	var box := _energy_boxes.get(role) as VBoxContainer
+	if box == null or staff == null:
+		return
+	for child in box.get_children():
+		child.free()
+	var members: Array[StaffMember] = []
+	for id in staff.member_ids():
+		var m := staff.get_member(id)
+		if m != null and m.role == role and m.state != StaffMember.State.WALKING_OUT:
+			members.append(m)
+	box.visible = not members.is_empty()
+	if members.is_empty():
+		return
+	var shown := mini(members.size(), MAX_ENERGY_ROWS)
+	for i in shown:
+		var m := members[i]
+		var entry := VBoxContainer.new()
+		entry.add_theme_constant_override("separation", 1)
+		var lbl := _label(member_energy_text(m.id), &"HudSmall")
+		entry.add_child(lbl)
+		var bar := ProgressBar.new()
+		bar.show_percentage = false
+		bar.min_value = StaffMember.ENERGY_MIN
+		bar.max_value = StaffMember.ENERGY_MAX
+		bar.value = m.energy
+		bar.custom_minimum_size = Vector2(0.0, ENERGY_BAR_HEIGHT)
+		bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var fill := StyleBoxFlat.new()
+		fill.bg_color = (
+			ENERGY_BREAK_COLOR
+			if m.is_on_break()
+			else (ENERGY_TIRED_COLOR if m.is_tired() else ENERGY_RESTED_COLOR)
+		)
+		bar.add_theme_stylebox_override("fill", fill)
+		entry.add_child(bar)
+		box.add_child(entry)
+	var extra := members.size() - shown
+	if extra > 0:
+		var more := _label(tr("+ {count} more").format({"count": extra}), &"HudSmall")
+		box.add_child(more)

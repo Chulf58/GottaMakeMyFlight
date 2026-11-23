@@ -120,6 +120,7 @@ enum Tool {
 	SEARCH_TABLE,
 	CONFISCATION_BIN,
 	SECURITY_LANE,
+	BREAK_ROOM,
 }
 
 ## The landside build tools (LandsidePlacement), by the kind each builds. They
@@ -162,6 +163,7 @@ const TOOL_ROOMS := {
 	Tool.PLAY_AREA_ROOM: &"play_area",
 	Tool.LOUNGE_ROOM: &"lounge",
 	Tool.SHOWER_ROOM: &"shower",
+	Tool.BREAK_ROOM: &"break_room",
 }
 ## Tools under which the room under the pointer is followed for its panel.
 const ROOM_FOCUS_TOOLS := [
@@ -192,6 +194,7 @@ const ROOM_FOCUS_TOOLS := [
 	Tool.PLAY_AREA_ROOM,
 	Tool.LOUNGE_ROOM,
 	Tool.SHOWER_ROOM,
+	Tool.BREAK_ROOM,
 ]
 const TOOL_WALL_KINDS := {
 	Tool.WALL: BuildGrid.WallKind.PLAIN,
@@ -226,6 +229,7 @@ const AREA_TOOLS := [
 	Tool.PLAY_AREA_ROOM,
 	Tool.LOUNGE_ROOM,
 	Tool.SHOWER_ROOM,
+	Tool.BREAK_ROOM,
 	Tool.BELT,
 ]
 ## Zone id painted floors get. One terminal zone until zones become a tool.

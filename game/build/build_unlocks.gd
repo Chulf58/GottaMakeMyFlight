@@ -106,6 +106,7 @@ const TIERS := [
 			BuildMode.Tool.CHAIN,
 			BuildMode.Tool.CURB,
 			BuildMode.Tool.SURFACE_LOT,
+			BuildMode.Tool.BREAK_ROOM,
 		],
 	},
 	{

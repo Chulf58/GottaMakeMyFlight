@@ -220,6 +220,13 @@ static func _build() -> void:
 		[1, PriceTable.SHOWER_FEE, 200, 12]
 	)
 
+	var break_room := RoomType.new()
+	break_room.id = &"break_room"
+	break_room.display_name = "Break Room"
+	break_room.min_size = Vector2i(2, 3)
+	break_room.required = [[&"bench_1a", "Needs a bench"]]
+	_types[break_room.id] = break_room
+
 
 ## A food room type like the cafe: `numbers` is [base spend, order ticks,
 ## dwell ticks, mood bonus] and `pieces` is [counter pieces, table pieces],

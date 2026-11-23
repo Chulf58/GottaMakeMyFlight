@@ -48,12 +48,9 @@ static func eta(sim: PassengerSim, station: int, walk_mm: int, p: Passenger = nu
 		left = sim._serving_left(sim._queues[station])
 		waiting -= 1
 	var walk := p.pace_ticks(walk_mm) if p != null else JourneyForecast.walk_ticks(walk_mm)
+	var ticks := _checkin_ticks(sim, station) if station != 0 else PassengerSim.CHECKIN_TICKS
 	return (
-		walk
-		+ left
-		+ maxi(waiting, 0) * PassengerSim.CHECKIN_TICKS
-		+ PassengerSim.CHECKIN_TICKS
-		+ QueueRipple.desk_waits(sim, station, null)
+		walk + left + maxi(waiting, 0) * ticks + ticks + QueueRipple.desk_waits(sim, station, null)
 	)
 
 
@@ -68,8 +65,11 @@ static func wait_ticks(sim: PassengerSim, p: Passenger) -> int:
 		return maxi(0, p.service_end - sim.tick)
 	if p.station == 0 and not sim._any_open(sim.layout.desks):
 		return JourneyForecast.NEVER
-	if p.station == 0 or not sim._queues.has(p.station):
+	if p.station == 0:
 		return PassengerSim.CHECKIN_TICKS
+	var ticks := _checkin_ticks(sim, p.station)
+	if not sim._queues.has(p.station):
+		return ticks
 	var q: Dictionary = sim._queues[p.station]
 	var lane: Array = q["lane"]
 	var holding: Array = q["holding"]
@@ -80,12 +80,7 @@ static func wait_ticks(sim: PassengerSim, p: Passenger) -> int:
 	if q["serving"] != 0:
 		ahead -= 1
 	var waits := QueueRipple.desk_waits(sim, p.station, p)
-	return (
-		sim._serving_left(q)
-		+ maxi(ahead, 0) * PassengerSim.CHECKIN_TICKS
-		+ PassengerSim.CHECKIN_TICKS
-		+ waits
-	)
+	return sim._serving_left(q) + maxi(ahead, 0) * ticks + ticks + waits
 
 
 ## A station's tick: finished service, holding passengers moving into the
@@ -114,8 +109,18 @@ static func step(sim: PassengerSim, station: int) -> void:
 	if front.at != cells[0] or front.is_moving():
 		return
 	q["serving"] = front.id
-	front.service_end = sim.tick + PassengerSim.CHECKIN_TICKS
+	front.service_end = sim.tick + _checkin_ticks(sim, station)
 	sim._set_stage(front, Passenger.Stage.CHECKIN)
+
+
+static func _checkin_ticks(sim: PassengerSim, station: int) -> int:
+	if sim.staff == null:
+		return PassengerSim.CHECKIN_TICKS
+	var id := sim.staff.staff_at(station)
+	var m := sim.staff.get_member(id) if id != 0 else null
+	if m == null:
+		return PassengerSim.CHECKIN_TICKS
+	return maxi(1, roundi(float(PassengerSim.CHECKIN_TICKS) / m.work_speed_factor()))
 
 
 ## Whether `p`, waiting where it is for want of a place (QUEUE_FULL), has

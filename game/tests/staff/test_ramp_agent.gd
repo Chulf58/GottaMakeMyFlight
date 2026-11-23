@@ -595,6 +595,10 @@ func test_unstaffed_pushback_save_load_restores_alert_without_double_charge_and_
 				"ramp_job": StaffMember.RampJob.PUSHBACK,
 				"ramp_shuttle_id": 0,
 				"ramp_flight_id": fid,
+				"energy": StaffMember.ENERGY_MAX,
+				"energy_ticks": 0,
+				"break_room": 0,
+				"break_spot": [-1, -1],
 			}
 		)
 	)

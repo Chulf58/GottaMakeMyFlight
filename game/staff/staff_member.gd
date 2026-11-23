@@ -16,14 +16,37 @@ enum RampJob { NONE, SHUTTLE, PUSHBACK, MARSHAL }
 ## WALKING_OUT: fired, on its way to the entrance; no longer staff.
 ## LEAVING_SHIFT: overnight off-shift walkout to the entrance; still staff.
 ## OFF_SHIFT: off the floor overnight (at NO_CELL); still staff.
+## TO_BREAK: walking to a break room spot during a lull; still staff.
+## ON_BREAK: resting in a break room, recovering energy; still staff.
 ## A cleaner is TO_STATION while it walks to its job and ON_DUTY while it
 ## cleans or empties it.
-enum State { IDLE, TO_STATION, ON_DUTY, WALKING_OUT, LEAVING_SHIFT, OFF_SHIFT }
+enum State {
+	IDLE,
+	TO_STATION,
+	ON_DUTY,
+	WALKING_OUT,
+	LEAVING_SHIFT,
+	OFF_SHIFT,
+	TO_BREAK,
+	ON_BREAK,
+}
 ## The post it works at its station (StaffPosts): PRIMARY opens the station,
 ## HELPER (at a whole security lane only) speeds up its repacks.
 enum Slot { PRIMARY, HELPER }
 
 const NO_CELL := Vector2i(-1, -1)
+const ENERGY_MAX := 100
+const ENERGY_MIN := 0
+## Energy drain: 1 point per 180 on-duty ticks (~9 game-min; ~70 pts per 10.5h shift).
+const DRAIN_INTERVAL_TICKS := 180
+## Base energy recovery in a break room: 100 per tick toward 1200 (= 12 ticks/pt).
+## RoomPrestige.break_recovery_bonus_percent adds +0..10 per tick.
+const RECOVERY_BASE_RATE := 100
+const RECOVERY_THRESHOLD := 1200
+const TIRED_THRESHOLD := 25
+const BREAK_SEEK_THRESHOLD := 35
+const BREAK_DONE_THRESHOLD := 95
+const TIRED_WORK_FACTOR := 0.80
 
 var id := 0
 var role: Role = Role.CHECKIN
@@ -60,6 +83,22 @@ var backing_out := false
 var ramp_job: RampJob = RampJob.NONE
 var ramp_shuttle_id := 0
 var ramp_flight_id := ""
+var energy := ENERGY_MAX
+var energy_ticks := 0
+var break_room := 0
+var break_spot := NO_CELL
+
+
+func is_tired() -> bool:
+	return energy <= TIRED_THRESHOLD
+
+
+func is_on_break() -> bool:
+	return state == State.TO_BREAK or state == State.ON_BREAK
+
+
+func work_speed_factor() -> float:
+	return TIRED_WORK_FACTOR if is_tired() else 1.0
 
 
 func in_pool() -> bool:

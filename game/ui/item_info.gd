@@ -281,6 +281,14 @@ func texts(tool: BuildMode.Tool) -> Array:
 				tr("Drag a rectangle, then add a shower cubicle. It is self-service."),
 				tr("At least 2x2, with a shower cubicle. No staff. Each stay pays you a fee."),
 			]
+		BuildMode.Tool.BREAK_ROOM:
+			lines = [
+				tr(
+					"Marks floor as a break room. Tired staff rest here during lulls to recover energy."
+				),
+				tr("Drag a rectangle, then add a bench inside. High prestige speeds up recovery."),
+				tr("At least 2x3, with a bench. Staff never leave a busy queue mid-rush."),
+			]
 		BuildMode.Tool.KIOSK_DISPLAY:
 			lines = [
 				tr("A shelf unit. Each stand gives the kiosk two browse spots."),

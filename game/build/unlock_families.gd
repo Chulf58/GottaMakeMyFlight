@@ -45,6 +45,7 @@ const FAMILY_OF := {
 	BuildMode.Tool.TREE: COMFORT,
 	BuildMode.Tool.TREE_BENCH: COMFORT,
 	BuildMode.Tool.LOUNGE_ROOM: COMFORT,
+	BuildMode.Tool.BREAK_ROOM: COMFORT,
 	BuildMode.Tool.SOFA: COMFORT,
 	BuildMode.Tool.ARMCHAIR: COMFORT,
 	BuildMode.Tool.WORK_DESK: COMFORT,
