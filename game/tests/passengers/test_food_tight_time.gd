@@ -60,6 +60,8 @@ func _run(venue: StringName, lead := 700) -> Dictionary:
 	var guest := world.passenger(world.sim.spawn_now(PassengerTestWorld.FLIGHT))
 	guest.hunger = 0
 	guest.cafe_cooldown = 1000000
+	guest.liquids = false
+	guest.alarm = false
 	while guest.stage != Passenger.Stage.TO_SECURITY and world.clock.tick < spawn_at + 600:
 		world.step()
 	(
@@ -134,7 +136,8 @@ func _check_leaves_early(venue: StringName, lead := 700) -> void:
 
 
 func test_a_restaurant_guest_short_of_time_leaves_early_pays_less_and_makes_the_flight() -> void:
-	# 820 ticks ahead (was 700): the forecast now counts the visit before the
-	# walk to security, so at 700 the visit no longer fits (it was forecast as
-	# the guest's own walk to its committed scanner, 116 ticks for any visit).
-	_check_leaves_early(&"restaurant", 820)
+	# 920 ticks ahead (was 820, originally 700): the forecast counts the visit
+	# before the walk to security, and the 30-pax burst with higher repack
+	# rates (CarryOnTraits 12%/8%) plus the 2x3 dining table offset needs the
+	# extra post-leave margin to clear the apron before doors close.
+	_check_leaves_early(&"restaurant", 920)

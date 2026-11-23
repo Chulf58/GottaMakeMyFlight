@@ -66,19 +66,20 @@ func _sitting_walker(walls: Array[int]) -> Passenger:
 	p.carry_on = 1
 	p.cleared = true
 	var seat: Dictionary = chair[0]
+	p.seat_object = seat["object_id"]
+	p.seat_piece = Relocation.placement(_world.grid, p.seat_object)
 	p.stage = Passenger.Stage.TO_GATE
 	p.seat_cell = seat["cell"]
 	p.seat_front = seat["front"]
-	p.at = seat["front"]
-	p.clear_path()
+	p.at = seat["front"] + Vector2i(0, 1)
+	p.set_path([p.at, seat["front"]])
 	p.boarding_tick = _world.sim.tick + 100000
 	for n in 4:
 		await _tick()
-	p.seat_object = seat["object_id"]
-	p.seat_piece = Relocation.placement(_world.grid, p.seat_object)
+	p.at = seat["front"]
+	p.clear_path()
 	p.stage = Passenger.Stage.SITTING_DOWN
 	p.stage_tick = _world.sim.tick
-	p.clear_path()
 	return p
 
 
