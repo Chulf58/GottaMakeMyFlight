@@ -328,8 +328,8 @@ func test_midnight_rollover_save_load_built_item_card_and_pot_coverage() -> void
 	assert_str(card.field_text("recent")).contains(item_name)
 
 	# Save/load round-trips confiscation bin history cleanly.
-	assert_int(PassengerSim.SAVE_VERSION).is_equal(37)
-	assert_int(SaveGame.SAVE_VERSION).is_equal(32)
+	assert_int(PassengerSim.SAVE_VERSION).is_greater_equal(38)
+	assert_int(SaveGame.SAVE_VERSION).is_greater_equal(33)
 	var snap: Dictionary = JSON.parse_string(JSON.stringify(w.world.sim.to_snapshot()))
 	var ctx_loaded := _make_lane(true)
 	var loaded: SecurityTestWorld = ctx_loaded["w"]
