@@ -345,7 +345,7 @@
       "class": "1x1_tall",
       "style": 6,
       "sources": {
-        "decor/tc_metal_pole_1a.glb": "973590260dfc8d0c1cbeb4704c14bf0b7816dd2417c469760c87536e9cb11741"
+        "decor/tc_metal_pole_1a.glb": "7e4747ed6b26850a5c21ad7de88af114ef105af4321896ae710cbc0bbeb6c2a7"
       }
     },
     "metal_pole_chain": {
@@ -353,8 +353,8 @@
       "class": "1x3",
       "style": 6,
       "sources": {
-        "decor/tc_metal_pole_1a.glb": "973590260dfc8d0c1cbeb4704c14bf0b7816dd2417c469760c87536e9cb11741",
-        "decor/tc_metal_pole_chain_1a.glb": "8739575eb8c8a4ffc631b584c607d6378394aa0e4d89111696fa79ca3954b62d"
+        "decor/tc_metal_pole_1a.glb": "7e4747ed6b26850a5c21ad7de88af114ef105af4321896ae710cbc0bbeb6c2a7",
+        "decor/tc_metal_pole_chain_1a.glb": "a426005ad5e9c36b7c3cd221c561ae12d67c12abbe3b525cd9dffccb9e736825"
       }
     },
     "plant_pot_1a": {

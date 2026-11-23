@@ -400,7 +400,7 @@ FURNITURE = {
     "bench_2a_indoor": ("4x4", ["decor/tc_bench_2a_indoor"]),
     "bush": ("2x2", ["decor/tc_bush_1a"]),
     "fountain_indoor": ("2x2_tall", ["decor/tc_fountain_1a_indoor"]),
-    "metal_pole": ("1x1_tall", ["decor/tc_metal_pole_1a"]),
+    "metal_pole": ("1x1_tall", ["decor/tc_metal_pole_1a"], ["stanchion_pad"]),
     "metal_pole_chain": (
         "1x3",
         [
@@ -408,6 +408,7 @@ FURNITURE = {
             ("decor/tc_metal_pole_1a", (0.0, 1.0, 0.0)),
             ("decor/tc_metal_pole_1a", (0.0, -1.0, 0.0)),
         ],
+        ["belt_runner"],
     ),
     "plant_pot_1a": ("1x2_plant", ["decor/tc_plant_pot_1a"]),
     "plant_pot_2a": ("2x2", ["decor/tc_plant_pot_2a"]),
@@ -433,7 +434,7 @@ FURNITURE = {
     "work_desk": ("2x2", ["work_desk"]),
     "prize_podium": ("6x3", ["prize_podium", ("vehicles/tp_suv_01a", "Mount_Car")]),
 }
-ITEMS.update({item: (cls, pieces, []) for item, (cls, pieces) in FURNITURE.items()})
+ITEMS.update({item: (cls, pieces, []) if len(rest) == 0 else (cls, pieces, rest[0]) for item, (cls, pieces, *rest) in FURNITURE.items()})
 
 
 def _store_room(cls, depth, counter, browse):
@@ -955,6 +956,12 @@ def add_glyphs(extras):
             walk = [(-8.5, 0.0), (8.5, 0.0), (8.5, 2.2), (-8.5, 2.2)]
             objs.append(glyph_mesh("Glyph_Road", [road], ROAD_RGB, -0.12, 0.0))
             objs.append(glyph_mesh("Glyph_Sidewalk", [walk], SIDEWALK_RGB, -0.12, 0.0))
+        elif g == "stanchion_pad":
+            pad = [(-0.26, -0.26), (0.26, -0.26), (0.26, 0.26), (-0.26, 0.26)]
+            objs.append(glyph_mesh("Glyph_Stanchion_Pad", [pad], (0.84, 0.82, 0.79), -0.04, 0.0))
+        elif g == "belt_runner":
+            strip = [(-0.23, -1.19), (0.23, -1.19), (0.23, 1.19), (-0.23, 1.19)]
+            objs.append(glyph_mesh("Glyph_Belt_Runner", [strip], (0.84, 0.82, 0.79), -0.04, 0.0))
         elif g == "gate_posts":
             # Entry barrier lane pad, median curb island, and gate hinge housing.
             road = [(-8.8, -7.6), (-5.2, -7.6), (-5.2, 0.4), (-8.8, 0.4)]

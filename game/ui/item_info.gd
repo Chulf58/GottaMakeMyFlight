@@ -465,16 +465,20 @@ func texts(tool: BuildMode.Tool) -> Array:
 			]
 		BuildMode.Tool.POST:
 			lines = [
-				tr("A metal post. Passengers cannot walk through it."),
-				tr("Use posts and chains to steer a queue. They give a little calm nearby."),
+				tr("A retractable-belt stanchion post. Passengers cannot walk through it."),
+				tr(
+					"Use stanchions and queue belts to steer a queue. They give a little calm nearby."
+				),
 				tr("No upkeep. It earns nothing."),
 			]
 		BuildMode.Tool.CHAIN:
 			lines = [
 				tr(
-					"A chain between two posts, three cells long. Passengers cannot walk through it."
+					"A queue belt between two stanchions, three cells long. Passengers cannot walk through it."
 				),
-				tr("Use posts and chains to steer a queue. They give a little calm nearby."),
+				tr(
+					"Use stanchions and queue belts to steer a queue. They give a little calm nearby."
+				),
 				tr("No upkeep. It earns nothing."),
 			]
 		BuildMode.Tool.BIN:
