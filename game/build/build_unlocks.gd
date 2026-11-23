@@ -88,6 +88,8 @@ const TIERS := [
 			BuildMode.Tool.XRAY_BELT,
 			BuildMode.Tool.ARCH,
 			BuildMode.Tool.PICKUP_TABLE,
+			BuildMode.Tool.SEARCH_TABLE,
+			BuildMode.Tool.CONFISCATION_BIN,
 			BuildMode.Tool.BELT,
 			BuildMode.Tool.BAG_ROOM,
 			BuildMode.Tool.CART,

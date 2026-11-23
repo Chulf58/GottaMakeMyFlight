@@ -108,14 +108,16 @@ static func decor(p: Passenger, tick: int, cell: Vector2i) -> void:
 		record(p, Kind.NICE_DECOR, tick, cell)
 
 
-## On entering a security alarm or liquids repack: records one thought at
+## On entering a security alarm check or bag search: records one thought at
 ## `p`'s current cell and scanner station, with `value` = the deterministic
 ## comic reason index so the thought and speech bubble always match.
-static func security_search(p: Passenger, tick: int) -> void:
-	if not p.alarm and not p.liquids:
+static func security_search(
+	p: Passenger, tick: int, is_alarm := p.alarm and not p.body_resolved
+) -> void:
+	if not p.alarm and not (p.liquids and p.carry_on > 0):
 		return
-	var kind := Kind.SECURITY_ALARM if p.alarm else Kind.SECURITY_LIQUIDS
-	var idx := SecuritySearchReasons.reason_index(p.id, p.alarm)
+	var kind := Kind.SECURITY_ALARM if is_alarm else Kind.SECURITY_LIQUIDS
+	var idx := SecuritySearchReasons.reason_index(p.id, is_alarm)
 	record(p, kind, tick, p.at, p.station, idx)
 
 

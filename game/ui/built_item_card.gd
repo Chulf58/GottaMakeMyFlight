@@ -18,7 +18,19 @@ extends VBoxContainer
 ## What a selected object is, by its catalog identity. Staff work a DESK, a
 ## SCANNER, an ARCH with a whole lane (an incomplete one is just unready) and a
 ## COUNTER; a GATE_DESK links to a gate; a LANE_PART belongs to an arch's lane.
-enum Kind { PLAIN, DESK, SCANNER, ARCH, COUNTER, GATE_DESK, LANE_PART, ROOM, LANDSIDE }
+enum Kind {
+	PLAIN,
+	DESK,
+	SCANNER,
+	ARCH,
+	COUNTER,
+	GATE_DESK,
+	LANE_PART,
+	SEARCH_TABLE,
+	CONFISCATION_BIN,
+	ROOM,
+	LANDSIDE,
+}
 
 ## What a piece that is not a room costs to run per game day, by catalog id
 ## (the same charges Settlement books at midnight).
@@ -33,12 +45,16 @@ const KIND_OF_DEF := {
 	&"checkin_desk": Kind.DESK,
 	&"security_scanner": Kind.SCANNER,
 	SecurityLanes.ARCH: Kind.ARCH,
+	SecurityLanes.SEARCH_TABLE: Kind.SEARCH_TABLE,
+	SecurityLanes.CONFISCATION_BIN: Kind.CONFISCATION_BIN,
 	GateDesks.DESK: Kind.GATE_DESK,
 }
 const FIELDS: Array[String] = [
 	"where",
 	"seats",
 	"status",
+	"confiscated",
+	"recent",
 	"planes",
 	"walk",
 	"staff",
@@ -296,6 +312,18 @@ func _build_live() -> Dictionary:
 				else tr("Status: Not in a whole lane")
 			)
 			out = {"status": text}
+		Kind.SEARCH_TABLE:
+			var attached := sim.layout.security_lanes.lane_of_attachment(_static["id"]) != 0
+			out = {
+				"status":
+				(
+					tr("Status: Attached to a ready security lane")
+					if attached
+					else tr("Status: Not attached to a ready lane")
+				)
+			}
+		Kind.CONFISCATION_BIN:
+			out = _confiscation_bin_live(_static["id"])
 		Kind.ROOM:
 			out = _room_live()
 		Kind.LANDSIDE:
@@ -328,6 +356,46 @@ func _arch_live(arch: int) -> Dictionary:
 			)
 		}
 	return _station_live([arch])
+
+
+func _confiscation_bin_live(bin_id: int) -> Dictionary:
+	var attached := sim.layout.security_lanes.lane_of_attachment(bin_id) != 0
+	var count := sim.security.bins.count(bin_id)
+	var out := {
+		"status":
+		(
+			tr("Status: Attached to a ready security lane")
+			if attached
+			else tr("Status: Not attached to a ready lane")
+		),
+		"confiscated":
+		tr_n("Confiscated today: {count} item", "Confiscated today: {count} items", count).format(
+			{"count": count}
+		),
+	}
+	var items := sim.security.bins.items(bin_id)
+	if not items.is_empty():
+		var parts: PackedStringArray = []
+		var start := items.size() - 1
+		var stop := maxi(0, items.size() - 3)
+		for idx in range(start, stop - 1, -1):
+			var item_id := items[idx]
+			(
+				parts
+				. append(
+					(
+						tr("{item} ({quip})")
+						. format(
+							{
+								"item": SecuritySearchReasons.contraband_name(item_id),
+								"quip": SecuritySearchReasons.contraband_quip(item_id),
+							}
+						)
+					)
+				)
+			)
+		out["recent"] = tr("Recent: {items}").format({"items": ", ".join(parts)})
+	return out
 
 
 ## "Linked to Gate B", or why the desk is unlinked (DisplayWords.gate_unlinked).

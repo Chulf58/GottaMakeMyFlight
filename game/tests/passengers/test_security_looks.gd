@@ -57,7 +57,7 @@ func _watch(w: SecurityTestWorld, ids: Array[int]) -> Dictionary:
 			var p := sim.get_passenger(id)
 			if p.stage != Passenger.Stage.SECURITY:
 				continue
-			var key := "%d/%s" % [p.security_phase, p.incident_resolved]
+			var key := "%d/%s" % [p.security_phase, p.body_resolved or p.bag_resolved]
 			var entry: Dictionary = seen[id].get(key, {"tray": {}, "homes": {}})
 			entry["tray"][SecurityLooks.tray(sim, p)] = true
 			for home in SecurityLooks.bag_homes(sim, p):
@@ -100,34 +100,23 @@ func test_a_lane_shows_tray_unpack_ride_and_pickup() -> void:
 	assert_dict(leave["homes"]).is_equal({SecurityLooks.Home.HAND: true})
 
 
-func test_an_alarm_steps_aside_repacks_on_the_floor_and_walks_back() -> void:
+func test_a_bag_flag_steps_aside_repacks_and_leaves_without_walkback() -> void:
 	var w := _make(true)
-	var ids := w.send_all([[1, false, true]])
+	var ids := w.send_all([[1, true, false]])
 	var seen: Dictionary = _watch(w, ids)[ids[0]]
 	var lane := _lane(w)
-	print("alarm phases seen: %s" % [seen.keys()])
+	print("bag flag phases seen: %s" % [seen.keys()])
 	for phase in [SecurityRuntime.Phase.TO_BERTH, SecurityRuntime.Phase.REPACK]:
 		var entry: Dictionary = seen["%d/false" % phase]
 		assert_dict(entry["tray"]).is_equal({SecurityLooks.Tray.NONE: true})
 	var repack: Dictionary = seen["%d/false" % SecurityRuntime.Phase.REPACK]
 	assert_dict(repack["homes"]).is_equal({SecurityLooks.Home.FLOOR: true})
-	# Facing the return route it walks next (Security 7/8 front-carry round).
 	assert_that(repack["face"]).is_equal(Vector2(lane["front"]))
-	var back: Dictionary = seen["%d/true" % SecurityRuntime.Phase.RETURN]
-	assert_dict(back["homes"]).is_equal({SecurityLooks.Home.HAND: true})
-	# The second pass walks back to the unpack cell with the bag in hand, then
-	# puts it on a tray that rides the belt and waits at the pickup table, so
-	# no carried bag goes through the arch.
-	var again: Dictionary = seen["%d/true" % SecurityRuntime.Phase.ARCH]
-	assert_dict(again["tray"]).is_equal(
-		{SecurityLooks.Tray.NONE: true, SecurityLooks.Tray.RIDE: true}
-	)
-	assert_dict(again["homes"]).is_equal(
-		{SecurityLooks.Home.HAND: true, SecurityLooks.Home.TRAY: true}
-	)
-	var pickup: Dictionary = seen["%d/true" % SecurityRuntime.Phase.PICKUP]
-	assert_dict(pickup["tray"]).is_equal({SecurityLooks.Tray.OUT: true})
-	assert_dict(pickup["homes"]).contains_keys([SecurityLooks.Home.TRAY, SecurityLooks.Home.HAND])
+	assert_bool(seen.has("%d/true" % SecurityRuntime.Phase.ARCH)).is_false()
+	assert_bool(seen.has("%d/false" % SecurityRuntime.Phase.PICKUP)).is_false()
+	var leave: Dictionary = seen["%d/true" % SecurityRuntime.Phase.LEAVE]
+	assert_dict(leave["tray"]).is_equal({SecurityLooks.Tray.NONE: true})
+	assert_dict(leave["homes"]).is_equal({SecurityLooks.Home.HAND: true})
 
 
 ## Carry-on is drawn for the whole visit: the same bag node is in hand while

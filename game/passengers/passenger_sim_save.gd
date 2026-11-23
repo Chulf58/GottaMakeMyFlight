@@ -77,6 +77,9 @@ extends RefCounted
 ## 37: standalone corridor services (ATM, currency exchange, grab-and-go stall,
 ## nap pod) save visits with room 0 in CafeSnapshot / ShopSnapshot; a version
 ## 36 save is refused with no migration (the same decision).
+## 38: security overhaul S1: split body_resolved/bag_resolved on passengers and
+## daily confiscation bin history ("confiscations"); version 37 saves are
+## refused with no migration (the same decision).
 
 
 ## JSON-safe state for a save (PassengerSim.to_snapshot()). Reads only: it
@@ -170,6 +173,7 @@ static func from_snapshot(sim: PassengerSim, data: Dictionary) -> bool:
 	sim._queues = loaded["queues"]
 	sim._claims = tail_claims["claims"]
 	sim.security.restore(loaded["security"])
+	sim.security.bins.restore(loaded["confiscations"])
 	sim.cafes.restore(loaded["cafe"])
 	sim.toilets.restore(loaded["toilet"])
 	sim.shops.restore(loaded["shop"])

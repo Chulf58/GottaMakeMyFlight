@@ -28,5 +28,5 @@ static func draw(rng: RandomNumberGenerator, p: Passenger) -> void:
 		if roll < 0:
 			p.carry_on = bags
 			break
-	p.liquids = rng.randi_range(0, 99) < LIQUIDS_PERCENT
+	p.liquids = (rng.randi_range(0, 99) < LIQUIDS_PERCENT) and p.carry_on > 0
 	p.alarm = rng.randi_range(0, 99) < ALARM_PERCENT

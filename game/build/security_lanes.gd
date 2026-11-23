@@ -87,8 +87,15 @@ const ARCH := &"security_arch"
 const TRAY_TABLE := &"tray_table"
 const XRAY_BELT := &"xray_belt"
 const PICKUP_TABLE := &"pickup_table"
+const SEARCH_TABLE := &"search_table"
+const CONFISCATION_BIN := &"confiscation_bin"
 ## The parts in flow order.
 const PART_IDS: Array[StringName] = [TRAY_TABLE, XRAY_BELT, ARCH, PICKUP_TABLE]
+## Optional attachment pieces kept strictly outside PART_IDS so adding or
+## removing them never triggers broken() or ejects active passengers.
+const ATTACHMENT_IDS: Array[StringName] = [SEARCH_TABLE, CONFISCATION_BIN]
+const SEARCH_TABLE_OFFSET := Vector2i(-2, -1)
+const CONFISCATION_BIN_OFFSET := Vector2i(-2, -2)
 const RIGHT := 1
 const LEFT := -1
 ## The order candidates are tried in: the fixed mirror preference.
@@ -159,6 +166,8 @@ var _status := {}
 var _piece_owner := {}
 ## Cell -> the arch whose lane claimed it.
 var _cell_owner := {}
+## Optional attachment object id -> the arch whose lane uses it.
+var _attachment_owner := {}
 ## Officer spot cell of a whole lane -> [the arch, the cell it works beside].
 var _officer_spots := {}
 ## The interaction cells and staff spots of every object, as rebuild() saw them.
@@ -183,12 +192,21 @@ static func geometry(anchor: Vector2i, facing: int, mirror: int) -> Dictionary:
 	lane["return_route"] = route
 	var passage: Array[Vector2i] = [lane["unpack"], lane["arch"], lane["pickup"]]
 	lane["passage"] = passage
+	lane["search_table_cell"] = _cell(anchor, facing, mirror, SEARCH_TABLE_OFFSET)
+	lane["confiscation_bin_cell"] = _cell(anchor, facing, mirror, CONFISCATION_BIN_OFFSET)
+	lane["search_table_id"] = 0
+	lane["confiscation_bin_id"] = 0
 	return lane
 
 
-## Whether `def_id` is one of the four lane parts.
+## Whether `def_id` is one of the four core lane parts.
 static func is_part(def_id: StringName) -> bool:
 	return PART_IDS.has(def_id)
+
+
+## Whether `def_id` is an optional lane attachment (search table or confiscation bin).
+static func is_attachment(def_id: StringName) -> bool:
+	return ATTACHMENT_IDS.has(def_id)
 
 
 ## Every cell a lane names: its four part cells, its walk and officer cells
@@ -238,6 +256,7 @@ func rebuild(grid: BuildGrid) -> void:
 	_status.clear()
 	_piece_owner.clear()
 	_cell_owner.clear()
+	_attachment_owner.clear()
 	_officer_spots.clear()
 	var ids := grid.object_ids()
 	ids.sort()
@@ -261,6 +280,7 @@ func rebuild(grid: BuildGrid) -> void:
 				best = candidate
 		_candidates[arch] = best["lane"]
 		_status[arch] = best["status"]
+	_attach_optional(grid)
 
 
 func is_complete(arch: int) -> bool:
@@ -330,6 +350,43 @@ func status_words(arch: int) -> String:
 ## The arch whose whole lane owns the part `object_id`, or 0.
 func lane_of_piece(object_id: int) -> int:
 	return _piece_owner.get(object_id, 0)
+
+
+## The arch whose whole lane uses optional attachment `object_id`, or 0.
+func lane_of_attachment(object_id: int) -> int:
+	return _attachment_owner.get(object_id, 0)
+
+
+func _attach_optional(grid: BuildGrid) -> void:
+	for arch in complete_arches():
+		var lane_dict: Dictionary = _lanes[arch]
+		var st_cell: Vector2i = lane_dict["search_table_cell"]
+		var st_id := grid.object_at(st_cell)
+		var st_obj := grid.get_object(st_id)
+		if (
+			st_id != 0
+			and StringName(st_obj["def"]) == SEARCH_TABLE
+			and st_obj["anchor"] == st_cell
+			and not _attachment_owner.has(st_id)
+			and not _walled(grid, lane_dict["berth"], st_cell)
+		):
+			lane_dict["search_table_id"] = st_id
+			_attachment_owner[st_id] = arch
+		var bin_cell: Vector2i = lane_dict["confiscation_bin_cell"]
+		var bin_id := grid.object_at(bin_cell)
+		var bin_obj := grid.get_object(bin_id)
+		if (
+			bin_id != 0
+			and StringName(bin_obj["def"]) == CONFISCATION_BIN
+			and bin_obj["anchor"] == bin_cell
+			and not _attachment_owner.has(bin_id)
+			and (
+				not _walled(grid, lane_dict["helper_spot"], bin_cell)
+				or not _walled(grid, st_cell, bin_cell)
+			)
+		):
+			lane_dict["confiscation_bin_id"] = bin_id
+			_attachment_owner[bin_id] = arch
 
 
 ## The arch whose whole lane names `cell`, or 0.

@@ -158,7 +158,11 @@ func test_back_to_back_incidents_do_not_deadlock_and_nobody_skips() -> void:
 		for i in range(1, order.size()):
 			assert_int(w.admitted[order[i]]).is_greater(w.admitted[order[i - 1]])
 		if use_lane:
-			var incidents := order.filter(func(id: int) -> bool: return id != ids[4])
+			var incidents := order.filter(
+				func(id: int) -> bool:
+					var pax := w.world.passenger(id)
+					return pax.liquids and pax.carry_on > 0
+			)
 			for i in range(1, incidents.size()):
 				var before_free: int = berth_free_at[incidents[i - 1]]
 				assert_int(w.admitted[incidents[i]]).is_greater_equal(before_free)
@@ -166,10 +170,11 @@ func test_back_to_back_incidents_do_not_deadlock_and_nobody_skips() -> void:
 			var p := w.world.passenger(id)
 			assert_bool(p.cleared).is_true()
 			assert_int(p.security_phase).is_equal(SecurityRuntime.Phase.NONE)
-			assert_bool(p.incident_resolved).is_equal(p.liquids or p.alarm)
+			assert_bool(p.body_resolved).is_equal(p.alarm)
+			assert_bool(p.bag_resolved).is_equal(p.liquids and p.carry_on > 0)
 
 
-func test_a_returning_passenger_goes_ahead_of_the_queue_front() -> void:
+func test_bag_search_exits_from_berth_without_returning_through_arch() -> void:
 	var w := _make(true)
 	var ids := w.send_all(
 		[
@@ -184,42 +189,22 @@ func test_a_returning_passenger_goes_ahead_of_the_queue_front() -> void:
 	)
 	var first := ids[0]
 	var holders: Array[int] = []
-	var ready_tick := -1
-	var held_then := -1
-	var next_holder := 0
-	var front_waiting := false
-	var cells: Array = w.world.sim.layout.lanes[w.station]
+	var saw_repack := false
 	for i in 2000:
 		var p := w.world.passenger(first)
-		if (
-			ready_tick < 0
-			and p.security_phase == SecurityRuntime.Phase.RETURN
-			and not p.is_moving()
-		):
-			ready_tick = w.world.sim.tick
-			held_then = w.runtime_record().get("main", 0)
-			var lane := w.world.sim.queue_of(w.station)
-			front_waiting = not lane.is_empty() and w.world.passenger(lane[0]).at == cells[0]
+		if p.security_phase == SecurityRuntime.Phase.REPACK:
+			saw_repack = true
 		w.world.step()
 		var main: int = w.runtime_record().get("main", 0)
 		if main != 0 and (holders.is_empty() or holders[holders.size() - 1] != main):
 			holders.append(main)
-			if ready_tick >= 0 and next_holder == 0 and main != held_then:
-				next_holder = main
 		if ids.all(func(id: int) -> bool: return w.cleared.has(id)):
 			break
-	print(
-		(
-			"main holders %s; the returner was ready at %d while %d held main, front waiting: %s"
-			% [holders, ready_tick, held_then, front_waiting]
-		)
-	)
-	# A fresh passenger stood ready at the front, yet the returner went next.
-	assert_bool(front_waiting).is_true()
-	assert_int(next_holder).is_equal(first)
-	assert_int(holders.count(first)).is_equal(2)
+	assert_bool(saw_repack).is_true()
+	# Bag-flagged passenger resolves at berth and leaves without looping back through main/arch.
+	assert_int(holders.count(first)).is_equal(1)
 	assert_bool(ids.all(func(id: int) -> bool: return w.cleared.has(id))).is_true()
-	assert_int(w.cleared[first]).is_greater(w.cleared[ids[1]])
+	assert_bool(w.world.passenger(first).bag_resolved).is_true()
 
 
 func test_a_removed_lane_part_sends_admitted_passengers_back_without_clearance() -> void:

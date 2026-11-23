@@ -170,7 +170,18 @@ static func clearance(sim: PassengerSim, station: int, p: Passenger, join_tick: 
 	if sim == _boundary_sim and p.station != station:
 		# At the boundary one state answers every ask: the same candidate on
 		# the same terms has the same clearance (VisitForecast asks again).
-		key = [p.id, p.carry_on, p.liquids, p.alarm, p.late, station, join_tick, scarce]
+		key = [
+			p.id,
+			p.carry_on,
+			p.liquids,
+			p.alarm,
+			p.body_resolved,
+			p.bag_resolved,
+			p.late,
+			station,
+			join_tick,
+			scarce,
+		]
 		if _candidates.has(key):
 			return _candidates[key]
 	var replay := SecurityForecast.new()
@@ -557,7 +568,8 @@ func _add(p: Passenger) -> Passenger:
 	copy.halt_tick = p.halt_tick
 	copy.liquids = p.liquids
 	copy.alarm = p.alarm
-	copy.incident_resolved = p.incident_resolved
+	copy.body_resolved = p.body_resolved
+	copy.bag_resolved = p.bag_resolved
 	copy.security_phase = p.security_phase
 	copy.security_work = p.security_work
 	_units[copy.id] = copy
@@ -797,7 +809,7 @@ func _reach_counts(u: Passenger, was: Vector2i) -> bool:
 ## (SecurityRuntime._advance_one()). Nothing else reads where an admitted
 ## passenger is while it walks on.
 func _cell_counts(u: Passenger, from: Vector2i, to: Vector2i) -> bool:
-	if u.security_phase == SecurityRuntime.Phase.RETURN:
+	if u.security_phase == SecurityRuntime.Phase.LEAVE and u.path.size() >= 3:
 		return true
 	var line: Array = _lines[u.station]
 	return line.has(from) or line.has(to)
@@ -870,8 +882,20 @@ func _next_event() -> int:
 				at -= 1
 			# Stepping off the pickup cell, it frees it half way
 			# (SecurityRuntime._pickup_free()).
-			var off := (
-				u.security_phase in [SecurityRuntime.Phase.LEAVE, SecurityRuntime.Phase.TO_BERTH]
+			var off: bool = (
+				u.security_phase == SecurityRuntime.Phase.TO_BERTH
+				or (
+					u.security_phase == SecurityRuntime.Phase.LEAVE
+					and (
+						u.at
+						== (
+							_sim.layout.security_lanes.lane(u.station).get(
+								"pickup", Passenger.NO_CELL
+							)
+							as Vector2i
+						)
+					)
+				)
 			)
 			if off and u.seg_mm * 2 < left:
 				@warning_ignore("integer_division")
@@ -888,10 +912,11 @@ func _next_event() -> int:
 			at = tick + 1
 		# Work that has run out waits on something else, which is its own event.
 		if u.stage == Passenger.Stage.SECURITY and _works(u) and u.security_work > 0:
-			var rate := maxi(1, _runtime.rate(u.station, u.security_phase))
-			@warning_ignore("integer_division")
-			var ends := tick + maxi(1, (u.security_work + rate - 1) / rate)
-			at = ends if at < 0 else mini(at, ends)
+			var rate := _runtime.rate_for(u.station, u)
+			if rate > 0:
+				@warning_ignore("integer_division")
+				var ends := tick + maxi(1, (u.security_work + rate - 1) / rate)
+				at = ends if at < 0 else mini(at, ends)
 		if at >= 0 and (best < 0 or at < best):
 			best = at
 	return tick + 1 if every_tick else best
@@ -924,7 +949,7 @@ func _skip(ticks: int) -> void:
 			continue
 		var u: Passenger = _units[id]
 		if u.stage == Passenger.Stage.SECURITY and _works(u):
-			u.security_work -= ticks * _runtime.rate(u.station, u.security_phase)
+			u.security_work -= ticks * _runtime.rate_for(u.station, u)
 		if u.is_moving():
 			u.walk(ticks * u.pace_mm())
 

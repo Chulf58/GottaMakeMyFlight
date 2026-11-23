@@ -170,7 +170,7 @@ func test_a_save_with_inconsistent_security_state_is_refused() -> void:
 	negative["passengers"][0]["security_work"] = -1
 	cases["negative work"] = negative
 	var missing: Dictionary = good.duplicate(true)
-	(missing["passengers"][0] as Dictionary).erase("incident_resolved")
+	(missing["passengers"][0] as Dictionary).erase("body_resolved")
 	cases["a missing field"] = missing
 	var no_key: Dictionary = good.duplicate(true)
 	no_key.erase("security")
@@ -189,7 +189,7 @@ func test_a_save_with_inconsistent_security_state_is_refused() -> void:
 			_record(d, repacker)["security_phase"] = SecurityRuntime.Phase.SCAN
 	)
 	cases["repacking with the incident resolved"] = _changed(
-		good, func(d: Dictionary) -> void: _record(d, repacker)["incident_resolved"] = true
+		good, func(d: Dictionary) -> void: _record(d, repacker)["bag_resolved"] = true
 	)
 	_add_queue_cases(cases, good, repacker)
 	_check_refused(true, a, [good], cases)

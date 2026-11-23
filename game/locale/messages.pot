@@ -6776,3 +6776,261 @@ msgstr ""
 #: ui/build_menu_layout.gd
 msgid "✓"
 msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Search table"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Confiscation bin"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Search table"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Confiscation bin"
+msgstr ""
+
+#: ui/item_info.gd
+msgid "An inspection table where officers check flagged carry-on bags."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Place it beside the lane's side berth. Optional: the lane works without one."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "No upkeep. Holds the passenger's tray during bag searches."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A clear glass bin showing items taken at the security lane today."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Place it next to the search table slot. Resets at midnight."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "No upkeep. Inspect it to see today's strangest finds."
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Status: Attached to a ready security lane"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Status: Not attached to a ready lane"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Confiscated today: {count} item"
+msgid_plural "Confiscated today: {count} items"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/built_item_card.gd
+msgid "{item} ({quip})"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Recent: {items}"
+msgstr ""
+
+#: passengers/security_search_reasons.gd
+msgid "Giant alpine snow globe"
+msgstr ""
+
+#: passengers/security_search_reasons.gd
+msgid "Contains 400 ml of festive winter magic."
+msgstr ""
+
+#: passengers/security_search_reasons.gd
+msgid "Souvenir city snow globe"
+msgstr ""
+
+#: passengers/security_search_reasons.gd
+msgid "Too much decorative blizzard for cabin altitude."
+msgstr ""
+
+#: passengers/security_search_reasons.gd
+msgid "Musical penguin snow globe"
+msgstr ""
+
+#: passengers/security_search_reasons.gd
+msgid "Shakes nicely, still over the 100 ml limit."
+msgstr ""
+
+#: passengers/security_search_reasons.gd
+msgid "Family-size maple syrup jug"
+msgstr ""
+
+#: passengers/security_search_reasons.gd
+msgid "Emergency pancake rations are still a liquid."
+msgstr ""
+
+#: passengers/security_search_reasons.gd
+msgid "Artisanal pancake syrup"
+msgstr ""
+
+#: passengers/security_search_reasons.gd
+msgid "Declared as breakfast insurance."
+msgstr ""
+
+#: passengers/security_search_reasons.gd
+msgid "Emergency waffle syrup"
+msgstr ""
+
+#: passengers/security_search_reasons.gd
+msgid "Sticky situation in tray three."
+msgstr ""
+
+#: passengers/security_search_reasons.gd
+msgid "Ceramic garden gnome"
+msgstr ""
+
+#: passengers/security_search_reasons.gd
+msgid "Claimed to be a tiny travel companion."
+msgstr ""
+
+#: passengers/security_search_reasons.gd
+msgid "Uncle Barnaby's lucky gnome"
+msgstr ""
+
+#: passengers/security_search_reasons.gd
+msgid "Too heavy for the overhead bin."
+msgstr ""
+
+#: passengers/security_search_reasons.gd
+msgid "Pointy-hat lawn gnome"
+msgstr ""
+
+#: passengers/security_search_reasons.gd
+msgid "Refused to fit in a quart-size zip bag."
+msgstr ""
+
+#: passengers/security_search_reasons.gd
+msgid "Twelve-pound bowling ball"
+msgstr ""
+
+#: passengers/security_search_reasons.gd
+msgid "Definitely not a compact neck pillow."
+msgstr ""
+
+#: passengers/security_search_reasons.gd
+msgid "Lucky league bowling ball"
+msgstr ""
+
+#: passengers/security_search_reasons.gd
+msgid "Spare shoes were fine; the ball had to stay."
+msgstr ""
+
+#: passengers/security_search_reasons.gd
+msgid "Polished tournament ball"
+msgstr ""
+
+#: passengers/security_search_reasons.gd
+msgid "Would roll straight out of the overhead locker."
+msgstr ""
+
+#: passengers/security_search_reasons.gd
+msgid "Plastic lawn flamingo"
+msgstr ""
+
+#: passengers/security_search_reasons.gd
+msgid "Needs its own boarding pass at this height."
+msgstr ""
+
+#: passengers/security_search_reasons.gd
+msgid "Tropical souvenir flamingo"
+msgstr ""
+
+#: passengers/security_search_reasons.gd
+msgid "Tried to pass as a walking stick."
+msgstr ""
+
+#: passengers/security_search_reasons.gd
+msgid "Neon pink yard flamingo"
+msgstr ""
+
+#: passengers/security_search_reasons.gd
+msgid "Too fabulous for under-seat stowage."
+msgstr ""
+
+#: passengers/security_search_reasons.gd
+msgid "Giant bath-time rubber duck"
+msgstr ""
+
+#: passengers/security_search_reasons.gd
+msgid "Squeaked during the X-ray scan."
+msgstr ""
+
+#: passengers/security_search_reasons.gd
+msgid "Captain Squeaks the duck"
+msgstr ""
+
+#: passengers/security_search_reasons.gd
+msgid "Suspiciously buoyant carry-on cargo."
+msgstr ""
+
+#: passengers/security_search_reasons.gd
+msgid "Oversized squeaky duck"
+msgstr ""
+
+#: passengers/security_search_reasons.gd
+msgid "Filled with bathwater from hotel checkout."
+msgstr ""
+
+#: passengers/security_search_reasons.gd
+msgid "Comically giant wrench"
+msgstr ""
+
+#: passengers/security_search_reasons.gd
+msgid "Just in case the seat reclines slowly."
+msgstr ""
+
+#: passengers/security_search_reasons.gd
+msgid "Pocket-sized mega wrench"
+msgstr ""
+
+#: passengers/security_search_reasons.gd
+msgid "Definitely not an approved nail file."
+msgstr ""
+
+#: passengers/security_search_reasons.gd
+msgid "Half-metre pipe wrench"
+msgstr ""
+
+#: passengers/security_search_reasons.gd
+msgid "Way past the tool-length limit."
+msgstr ""
+
+#: passengers/security_search_reasons.gd
+msgid "Unlabelled mystery thermos"
+msgstr ""
+
+#: passengers/security_search_reasons.gd
+msgid "Smells faintly of soup, tea, or jet fuel."
+msgstr ""
+
+#: passengers/security_search_reasons.gd
+msgid "Grandma's mystery thermos"
+msgstr ""
+
+#: passengers/security_search_reasons.gd
+msgid "Could be cocoa; still 600 ml too large."
+msgstr ""
+
+#: passengers/security_search_reasons.gd
+msgid "Rattling stainless thermos"
+msgstr ""
+
+#: passengers/security_search_reasons.gd
+msgid "No one wants to open it at the checkpoint."
+msgstr ""

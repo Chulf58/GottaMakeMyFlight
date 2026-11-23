@@ -467,10 +467,12 @@ static func _security_eval(m: StaffMember, sim: PassengerSim) -> Array:
 	var pos := sim.world_position(pax) + SecurityLooks.target_offset(sim, pax) + eye
 	var sec_sub := SubMode.SEC_CLEAN
 	if SecurityRuntime.incident_open(pax):
-		if pax.alarm:
+		if pax.security_phase == SecurityRuntime.Phase.BODY_CHECK:
 			sec_sub = SubMode.SEC_ALARM
-		elif pax.liquids:
+		elif pax.liquids and pax.carry_on > 0 and not pax.bag_resolved:
 			sec_sub = SubMode.SEC_LIQUIDS
+		elif pax.alarm and not pax.body_resolved:
+			sec_sub = SubMode.SEC_ALARM
 	var sec_mode := (
 		Mode.SECURITY_REPACK
 		if pax.security_phase == SecurityRuntime.Phase.REPACK
@@ -493,7 +495,6 @@ static func _security_target_id(
 					in [
 						SecurityRuntime.Phase.TO_BERTH,
 						SecurityRuntime.Phase.REPACK,
-						SecurityRuntime.Phase.RETURN,
 					]
 				):
 					target_id = id
@@ -508,11 +509,14 @@ static func _security_target_id(
 					in [
 						SecurityRuntime.Phase.UNPACK,
 						SecurityRuntime.Phase.ARCH,
+						SecurityRuntime.Phase.BODY_CHECK,
 						SecurityRuntime.Phase.PICKUP,
 					]
 				):
 					target_id = id
 					break
+		if target_id == 0:
+			target_id = int(rec.get("berth", 0))
 	else:
 		target_id = int(admitted[0])
 	return target_id

@@ -18,6 +18,8 @@ const OBJECTS := {
 	BuildMode.Tool.XRAY_BELT: SecurityLanes.XRAY_BELT,
 	BuildMode.Tool.ARCH: SecurityLanes.ARCH,
 	BuildMode.Tool.PICKUP_TABLE: SecurityLanes.PICKUP_TABLE,
+	BuildMode.Tool.SEARCH_TABLE: SecurityLanes.SEARCH_TABLE,
+	BuildMode.Tool.CONFISCATION_BIN: SecurityLanes.CONFISCATION_BIN,
 	BuildMode.Tool.TOILET_STALL: &"toilet_stall",
 	BuildMode.Tool.TOILET_SINK: &"toilet_sink",
 	BuildMode.Tool.KIOSK_COUNTER: &"kiosk_counter",

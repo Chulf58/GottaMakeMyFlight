@@ -65,7 +65,7 @@ func test_a_helper_halves_a_repack_at_a_lane() -> void:
 	var helped := _lane(true)
 	assert_bool(helped.world.staff.is_staffed(helped.station, HELPER)).is_true()
 	var slow := _repack_ticks(alone, alone.send(1, true))
-	var fast := _repack_ticks(helped, helped.send(1, false, true))
+	var fast := _repack_ticks(helped, helped.send(1, true))
 	print("repack ticks: alone %d, helped %d" % [slow, fast])
 	assert_int(slow).is_equal(SecurityRuntime.REPACK_TICKS)
 	@warning_ignore("integer_division")
@@ -80,7 +80,7 @@ func test_a_helper_halves_a_repack_at_a_lane() -> void:
 
 func test_a_helper_leaving_mid_repack_slows_only_the_work_left() -> void:
 	var w := _lane(true)
-	var id := w.send(0, true)
+	var id := w.send(1, true)
 	assert_bool(_until_phase(w, id, REPACK)).is_true()
 	var p := w.world.passenger(id)
 	for i in 10:
@@ -117,7 +117,7 @@ func test_the_forecast_replays_the_helper_rate() -> void:
 ## does.
 func test_the_forecast_counts_a_helper_arriving_mid_repack() -> void:
 	var w := _lane(false)
-	var id := w.send(0, true)
+	var id := w.send(1, true)
 	assert_bool(_until_phase(w, id, REPACK)).is_true()
 	var helper := StaffTestKit.send_helper(w.world.staff, w.station, Vector2i(1, 4))
 	var now := w.world.clock.tick
@@ -145,7 +145,7 @@ func test_the_forecast_counts_a_helper_arriving_mid_repack() -> void:
 
 func test_a_save_mid_repack_with_a_helper_plays_on_identically() -> void:
 	var a := _lane(true)
-	var id := a.send(1, false, true)
+	var id := a.send(1, true)
 	assert_bool(_until_phase(a, id, REPACK)).is_true()
 	for i in 7:
 		a.world.step()

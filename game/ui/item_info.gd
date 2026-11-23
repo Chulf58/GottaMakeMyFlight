@@ -375,6 +375,18 @@ func texts(tool: BuildMode.Tool) -> Array:
 				tr("It stands past the arch, where cleared passengers leave the lane."),
 				tr("Part of a whole lane: arch, tray table, X-ray belt and pickup table."),
 			]
+		BuildMode.Tool.SEARCH_TABLE:
+			lines = [
+				tr("An inspection table where officers check flagged carry-on bags."),
+				tr("Place it beside the lane's side berth. Optional: the lane works without one."),
+				tr("No upkeep. Holds the passenger's tray during bag searches."),
+			]
+		BuildMode.Tool.CONFISCATION_BIN:
+			lines = [
+				tr("A clear glass bin showing items taken at the security lane today."),
+				tr("Place it next to the search table slot. Resets at midnight."),
+				tr("No upkeep. Inspect it to see today's strangest finds."),
+			]
 		BuildMode.Tool.BUSH:
 			lines = [
 				tr("A bush. It calms passengers close to it, a little."),

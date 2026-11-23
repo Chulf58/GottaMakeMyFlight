@@ -32,6 +32,8 @@ const FAMILY_OF := {
 	BuildMode.Tool.XRAY_BELT: SECURITY,
 	BuildMode.Tool.ARCH: SECURITY,
 	BuildMode.Tool.PICKUP_TABLE: SECURITY,
+	BuildMode.Tool.SEARCH_TABLE: SECURITY,
+	BuildMode.Tool.CONFISCATION_BIN: SECURITY,
 	BuildMode.Tool.BELT: BAGGAGE,
 	BuildMode.Tool.BAG_ROOM: BAGGAGE,
 	BuildMode.Tool.CART: BAGGAGE,

@@ -502,7 +502,7 @@ func test_security_alarm_liquids_and_clean_poses_differ_in_world() -> void:
 		var pax := _world.passenger(pid)
 		ToiletTestLayout.calm(pax)
 		pax.cafe_cooldown = 1000000
-		pax.carry_on = 0
+		pax.carry_on = 1 if label == "liquids" else 0
 		pax.alarm = label == "alarm"
 		pax.liquids = label == "liquids"
 		pax.stage = Passenger.Stage.TO_SECURITY
@@ -730,7 +730,7 @@ func test_idle_staff_fidget_in_beats_and_pause_while_walking_or_tucked() -> void
 	assert_bool((_views._poses.get(walker_id, {}) as Dictionary).has("xfade_idle_since")).is_false()
 
 
-func test_resolved_security_lane_returner_uses_clean_submode() -> void:
+func test_resolved_security_lane_incident_uses_clean_submode() -> void:
 	var sec_world := SecurityTestWorld.make(true, 15)
 	_world = sec_world.world
 	_world.auto_staff = false
@@ -738,30 +738,50 @@ func test_resolved_security_lane_returner_uses_clean_submode() -> void:
 	StaffTestKit.seat(_world.staff, sec_world.station, StaffMember.Slot.HELPER)
 	_attach_views(_world)
 	var officer_id := _world.staff.staff_at(sec_world.station)
+	var helper_id := _world.staff.staff_at(sec_world.station, StaffMember.Slot.HELPER)
 
-	for kind: String in ["alarm", "liquids"]:
-		var pid := sec_world.send(0, kind == "liquids", kind == "alarm")
-		var pax := _world.passenger(pid)
-		var expected_open := (
-			StaffStationPose.SubMode.SEC_ALARM
-			if kind == "alarm"
-			else StaffStationPose.SubMode.SEC_LIQUIDS
-		)
-		var saw_open := false
-		var saw_resolved_clean := false
-		for _i in 600:
-			_world.step()
-			_views.draw()
-			if _views.station_pose_mode(officer_id) == StaffStationPose.Mode.SECURITY_SCAN:
-				var sub := _views.station_pose_sub_mode(officer_id)
-				if not pax.incident_resolved and sub == expected_open:
-					saw_open = true
-				elif pax.incident_resolved and sub == StaffStationPose.SubMode.SEC_CLEAN:
-					saw_resolved_clean = true
-			if pax.stage == Passenger.Stage.TO_GATE:
-				break
-		assert_bool(saw_open).is_true()
-		assert_bool(saw_resolved_clean).is_true()
+	# Body alarm: primary uses SEC_ALARM during BODY_CHECK, then SEC_CLEAN once resolved.
+	var alarm_id := sec_world.send(1, false, true)
+	var alarm_pax := _world.passenger(alarm_id)
+	var saw_alarm_open := false
+	var saw_alarm_clean := false
+	for _i in 600:
+		_world.step()
+		_views.draw()
+		if _views.station_pose_mode(officer_id) == StaffStationPose.Mode.SECURITY_SCAN:
+			var sub := _views.station_pose_sub_mode(officer_id)
+			if not alarm_pax.body_resolved and sub == StaffStationPose.SubMode.SEC_ALARM:
+				saw_alarm_open = true
+			elif alarm_pax.body_resolved and sub == StaffStationPose.SubMode.SEC_CLEAN:
+				saw_alarm_clean = true
+		if alarm_pax.stage == Passenger.Stage.TO_GATE:
+			break
+	assert_bool(saw_alarm_open).is_true()
+	assert_bool(saw_alarm_clean).is_true()
+
+	# Bag flag: officer uses SEC_LIQUIDS while unresolved, helper uses SECURITY_REPACK at berth.
+	var bag_id := sec_world.send(1, true, false)
+	var bag_pax := _world.passenger(bag_id)
+	var saw_bag_scan := false
+	var saw_bag_repack := false
+	for _i in 600:
+		_world.step()
+		_views.draw()
+		if (
+			_views.station_pose_mode(officer_id) == StaffStationPose.Mode.SECURITY_SCAN
+			and _views.station_pose_sub_mode(officer_id) == StaffStationPose.SubMode.SEC_LIQUIDS
+		):
+			saw_bag_scan = true
+		if (
+			helper_id != 0
+			and _views.station_pose_mode(helper_id) == StaffStationPose.Mode.SECURITY_REPACK
+			and _views.station_pose_sub_mode(helper_id) == StaffStationPose.SubMode.SEC_LIQUIDS
+		):
+			saw_bag_repack = true
+		if bag_pax.stage == Passenger.Stage.TO_GATE:
+			break
+	assert_bool(saw_bag_scan).is_true()
+	assert_bool(saw_bag_repack).is_true()
 
 
 func test_variant_cycles_meet_at_neutral_boundary_and_submodes_crossfade_smoothly() -> void:

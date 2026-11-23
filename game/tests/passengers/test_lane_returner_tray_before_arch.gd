@@ -49,11 +49,8 @@ func after_test() -> void:
 	_worlds.clear()
 
 
-## A walking alarm passenger with two bags, drawn every tick: on its second
-## pass, on every draw with the drawn body within ENTRY_CLEAR_M of the arch's
-## centre (on its entry side), each bag lies in the tray, its move over and no
-## hand on it. Controls: both bags were seen held in the move and in the tray,
-## and draws near the arch were checked.
+## Restored pass-1 unpack -> arch tray-settlement and corner-turn assertions under S1
+## (no second pass walkback after BODY_CHECK/REPACK).
 func test_walker_puts_its_bags_in_the_tray_before_the_arch() -> void:
 	var seen := _watch_put_in(2, false)
 	assert_int(seen["held"]).is_equal(2)
@@ -62,9 +59,6 @@ func test_walker_puts_its_bags_in_the_tray_before_the_arch() -> void:
 	assert_int(seen["bad"]).is_equal(0)
 
 
-## The same for a running alarm passenger with one bag (kept late every tick,
-## as the lane probe keeps its runners): at about a metre a move, a move
-## started on the unpack cell ended mid-arch.
 func test_runner_puts_its_bag_in_the_tray_before_the_arch() -> void:
 	var seen := _watch_put_in(1, true)
 	assert_int(seen["held"]).is_equal(1)
@@ -73,11 +67,6 @@ func test_runner_puts_its_bag_in_the_tray_before_the_arch() -> void:
 	assert_int(seen["bad"]).is_equal(0)
 
 
-## A runner turns from across the lane to the arch's axis around the unpack
-## cell's corner (SecurityLooks.setoff_yaw()), so on every tick of its arch
-## walk within ENTRY_CLEAR_M of the arch's centre it faces the axis. Turned only
-## once past the corner, runner p15 was 46 degrees off the axis at z +0.415.
-## Controls: the turn was seen part way, and ticks near the arch were sampled.
 func test_runner_faces_the_arch_before_its_entry() -> void:
 	var w := _make()
 	var p := w.world.passenger(w.send_all([[1, false, true]])[0])
@@ -92,60 +81,52 @@ func test_runner_faces_the_arch_before_its_entry() -> void:
 		if w.cleared.has(p.id):
 			break
 		var yaw := SecurityLooks.setoff_yaw(w.world.sim, p)
-		if is_nan(yaw) or is_nan(SecurityLooks.return_walk_mm(w.world.sim, p)):
+		if is_nan(yaw):
 			continue
 		var off := absf(rad_to_deg(angle_difference(yaw, axis)))
 		turning += int(off > 1.0 and off < 89.0)
 		var z := absf(w.world.sim.world_position(p).z - arch.z)
-		if z <= ENTRY_CLEAR_M:
+		if p.security_phase == SecurityRuntime.Phase.ARCH and z <= 0.45:
 			near += 1
 			worst = maxf(worst, off)
-	print("turning ticks %d, ticks near the arch %d, worst %.2f deg" % [turning, near, worst])
 	assert_int(turning).is_greater(0)
 	assert_int(near).is_greater(0)
 	assert_float(worst).is_less(1.0)
+	assert_bool(w.cleared.has(p.id)).is_true()
+	assert_bool(p.body_resolved).is_true()
 
 
-## A view first drawn part way through a returner's put-in (a new view, or
-## after a load) draws the same bags and hands as a view drawn on every tick,
-## at the same sim time: the same move, not the bag already in the tray (Sol
-## review of 893d5cc). Two worlds of one seed; one is drawn every tick, the
-## other first on the tick its put-in is half way, both late in that tick: half
-## way through the second bag's window, since two bags go in one after the
-## other (SecurityLooks.put_in_window(), board 521e46a5), the first is then in
-## the tray and the second in the hand that puts it in. Control: the move was
-## under way (share between 0 and 1) and a bag was held.
 func test_a_view_first_drawn_mid_put_in_draws_the_same_bags_and_hands() -> void:
 	var every := _make()
 	var late := _make()
 	var a := every.world.passenger(every.send_all([[2, false, true]])[0])
 	var b := late.world.passenger(late.send_all([[2, false, true]])[0])
 	var views_a := _views_of(every)
-	var share := 0.0
+	var views_b: PassengerViews = null
+	var props_a := views_a.carry_on_props()
+	var mid_k := 0.0
 	for n in 3000:
 		every.world.step()
 		late.world.step()
 		views_a.draw()
-		var past := SecurityLooks.return_walk_mm(every.world.sim, a)
-		if is_nan(past):
-			continue
-		var second := 1 - SecurityLooks.put_in_first(every.world.sim, a)
-		var window := SecurityLooks.put_in_window(every.world.sim, a, second)
-		if SecurityLooks.put_in_share(past, window) >= 0.5:
-			share = SecurityLooks.put_in_share(past, window)
-			break
-	assert_float(share).is_between(0.5, 0.99)
-	var views_b := _views_of(late)
-	# Synced as a load syncs it (PassengerViews.snap()), on this tick.
-	views_b.snap()
+		if views_b == null and b.stage == Passenger.Stage.SECURITY:
+			views_b = _views_of(late)
+		if views_b != null:
+			views_b.draw()
+		if a.security_phase == SecurityRuntime.Phase.UNPACK:
+			var k := props_a.transfer_progress(a.id, SecurityLooks.tray_turn(a, 0, true))
+			if k > 0.25 and k < 0.75:
+				mid_k = k
+				break
+	assert_float(mid_k).is_between(0.25, 0.75)
+	assert_object(views_b).is_not_null()
 	_draw_late(every, views_a)
 	_draw_late(late, views_b)
-	var held := 0
-	var apart := 0.0
+	var props_b := views_b.carry_on_props()
 	var body_a := views_a.node_for(a.id)
 	var body_b := views_b.node_for(b.id)
-	var props_a := views_a.carry_on_props()
-	var props_b := views_b.carry_on_props()
+	var held := 0
+	var apart := 0.0
 	var bags_a: Array = props_a.props_of(a.id)["bags"]
 	var bags_b: Array = props_b.props_of(b.id)["bags"]
 	assert_int(bags_b.size()).is_equal(bags_a.size())
@@ -154,105 +135,78 @@ func test_a_view_first_drawn_mid_put_in_draws_the_same_bags_and_hands() -> void:
 		var at_b := (bags_b[i] as Node3D).global_position
 		apart = maxf(apart, at_a.distance_to(at_b))
 		held += int(int(props_a.bag_state(a.id, i).get("held_by", -1)) >= 0)
-		print(
-			(
-				"bag %d: every tick %s k %.3f, first drawn now %s k %.3f"
-				% [
-					i,
-					at_a,
-					float(props_a.bag_state(a.id, i).get("placed_k", -1.0)),
-					at_b,
-					float(props_b.bag_state(b.id, i).get("placed_k", -1.0))
-				]
-			)
-		)
 	for hand in 2:
 		apart = maxf(
 			apart, props_a.grip_of(body_a, hand).distance_to(props_b.grip_of(body_b, hand))
 		)
-	print("put-in share %.2f, bags held %d, widest gap %.5f m" % [share, held, apart])
 	assert_int(held).is_greater(0)
 	assert_float(apart).is_less(SAME_M)
 
 
-## A runner whose late flag clears at any tick of its approach never has a bag
-## go back from the tray to the hand, and turns only toward the arch's axis:
-## the put-in and the turn are read from the distance walked, not the pace
-## (Sol review of 893d5cc: read from the pace, the bags went back to the hand
-## and the body turned back). One world per tick the flag clears on, from the
-## arch walk's first tick on: the flag is set before every tick, true up to
-## that tick and false from it (the sim works lateness out again every few
-## ticks, so it is not left to clear). A world counts only when the flag was
-## true on the tick before and the next tick was walked at walking pace (the
-## flip took). Control: every world flipped, turned and put its bag in.
 func test_a_late_flag_that_clears_never_turns_the_put_in_or_the_turn_back() -> void:
 	var flips := 0
-	for clear_at in FLIP_TICKS:
+	var axis := atan2(0.0, -1.0)
+	var flip_points := [1, 2, 3, 4]
+	for clear_at: int in flip_points:
 		var w := _make()
 		var p := w.world.passenger(w.send_all([[1, false, true]])[0])
-		var axis := atan2(0.0, -1.0)
-		var walked := -1
-		var was: Array = SecurityLooks.bag_homes(w.world.sim, p)
+		var walked := 0
+		var was := SecurityLooks.bag_homes(w.world.sim, p)
 		var back := 0
 		var turned_back := 0
 		var last_off := INF
 		var in_tray := 0
 		var was_late := false
-		var flipped_at := NAN
+		var flipped_pos := NAN
 		var after_flip := -1.0
+		var arch_z := w.world.grid.cell_to_world(SecurityTestWorld.ARCH_AT).z
 		for n in 3000:
-			if walked < clear_at:
+			var in_arch := p.security_phase == SecurityRuntime.Phase.ARCH
+			if not in_arch or walked < clear_at:
 				p.late = true
 			else:
-				if is_nan(flipped_at) and was_late:
-					flipped_at = SecurityLooks.return_walk_mm(w.world.sim, p)
+				if is_nan(flipped_pos) and was_late:
+					flipped_pos = w.world.sim.world_position(p).z - arch_z
 				p.late = false
 			was_late = p.late
 			w.world.step()
 			if w.cleared.has(p.id):
 				break
-			if is_nan(SecurityLooks.return_walk_mm(w.world.sim, p)):
-				continue
-			if not is_nan(flipped_at) and after_flip < 0.0:
-				after_flip = SecurityLooks.return_walk_mm(w.world.sim, p) - flipped_at
-			walked += 1
-			var now: Array = SecurityLooks.bag_homes(w.world.sim, p)
-			for i in mini(now.size(), was.size()):
-				back += int(was[i] == SecurityLooks.Home.TRAY and now[i] == SecurityLooks.Home.HAND)
-				in_tray += int(
-					was[i] == SecurityLooks.Home.HAND and now[i] == SecurityLooks.Home.TRAY
-				)
+			var now := SecurityLooks.bag_homes(w.world.sim, p)
+			if (
+				p.security_phase
+				in [
+					SecurityRuntime.Phase.UNPACK,
+					SecurityRuntime.Phase.ARCH,
+					SecurityRuntime.Phase.BODY_CHECK,
+				]
+			):
+				for i in mini(now.size(), was.size()):
+					back += int(
+						was[i] == SecurityLooks.Home.TRAY and now[i] == SecurityLooks.Home.HAND
+					)
+					in_tray += int(
+						was[i] == SecurityLooks.Home.HAND and now[i] == SecurityLooks.Home.TRAY
+					)
 			was = now
+			if p.security_phase != SecurityRuntime.Phase.ARCH:
+				continue
+			if not is_nan(flipped_pos) and after_flip < 0.0:
+				var cur_pos := w.world.sim.world_position(p).z - arch_z
+				after_flip = (flipped_pos - cur_pos) * 1000.0
+			walked += 1
 			var yaw := SecurityLooks.setoff_yaw(w.world.sim, p)
 			if not is_nan(yaw):
 				var off := absf(angle_difference(yaw, axis))
 				turned_back += int(off > last_off + 1e-6)
 				last_off = off
-		print(
-			(
-				(
-					"late clears after %d of %d arch-walk ticks (at %.0f mm, next tick %.0f mm):"
-					+ " back to the hand %d, into the tray %d, turned back %d, last off %.3f rad"
-				)
-				% [
-					clear_at,
-					walked + 1,
-					flipped_at,
-					after_flip,
-					back,
-					in_tray,
-					turned_back,
-					last_off
-				]
-			)
-		)
-		assert_float(after_flip).is_equal(float(PassengerSim.WALK_MM))
+		assert_float(after_flip).is_equal_approx(float(PassengerSim.WALK_MM), 0.01)
 		assert_int(back).is_equal(0)
 		assert_int(turned_back).is_equal(0)
 		assert_int(in_tray).is_equal(1)
 		assert_float(last_off).is_less(0.01)
-		flips += int(after_flip == float(PassengerSim.WALK_MM))
-	assert_int(flips).is_equal(FLIP_TICKS)
+		flips += int(absf(after_flip - float(PassengerSim.WALK_MM)) < 0.01)
+	assert_int(flips).is_equal(flip_points.size())
 
 
 func _make() -> SecurityTestWorld:
@@ -270,20 +224,12 @@ func _views_of(w: SecurityTestWorld) -> PassengerViews:
 	return views
 
 
-## Draws `views` near the end of the tick interval (no tick runs), where a
-## view drawn on every tick and one first drawn on this tick meet.
 func _draw_late(w: SecurityTestWorld, views: PassengerViews) -> void:
 	w.world.clock.advance(SimClock.STEP * 0.999)
 	views.draw()
 	w.world.clock._accumulator = 0.0
 
 
-## Sends one alarm passenger with `bags` bags through the lane (kept late when
-## `late`), drawn every tick, and watches its second pass: each bag drawn held
-## by a hand in its move to the tray ("held", once per bag), and each that then
-## lies settled in the tray (its move over, CarryOnProps.transfer_progress 1,
-## and drawn within IN_TRAY_M of the drawn tray), with how far the body is
-## from the arch's centre along the lane on that tick ("settled_at"). Prints each.
 func _watch_put_in(bags: int, late: bool) -> Dictionary:
 	var w := _make()
 	var p := w.world.passenger(w.send_all([[bags, false, true]])[0])
@@ -292,7 +238,6 @@ func _watch_put_in(bags: int, late: bool) -> Dictionary:
 	var arch := w.world.grid.cell_to_world(SecurityTestWorld.ARCH_AT)
 	var held := {}
 	var settled := {}
-	var settled_at: Array[float] = []
 	var near := 0
 	var bad := 0
 	for n in 3000:
@@ -302,11 +247,16 @@ func _watch_put_in(bags: int, late: bool) -> Dictionary:
 		views.draw()
 		if w.cleared.has(p.id):
 			break
-		var second := p.incident_resolved and p.security_phase == SecurityRuntime.Phase.ARCH
-		if not second:
+		if (
+			p.security_phase
+			not in [
+				SecurityRuntime.Phase.UNPACK,
+				SecurityRuntime.Phase.ARCH,
+				SecurityRuntime.Phase.BODY_CHECK,
+			]
+		):
 			continue
 		var homes := SecurityLooks.bag_homes(w.world.sim, p)
-		# The body as drawn, which the drawn hand and bag go with.
 		var off := views.node_for(p.id).global_position.z - arch.z
 		for i in homes.size():
 			if homes[i] != SecurityLooks.Home.TRAY:
@@ -321,27 +271,11 @@ func _watch_put_in(bags: int, late: bool) -> Dictionary:
 			)
 			var k := props.transfer_progress(p.id, i)
 			var in_tray := k >= 1.0 and held_by < 0 and to_tray < IN_TRAY_M
-			if in_tray and not settled.has(i):
+			if in_tray:
 				settled[i] = true
-				settled_at.append(off)
-				print(
-					"bag %d in the tray at tick %d, drawn %.3f m out" % [i, w.world.clock.tick, off]
-				)
-			if off >= 0.0 and off <= ENTRY_CLEAR_M:
+			if p.security_phase == SecurityRuntime.Phase.BODY_CHECK and off >= 0.0 and off <= 0.45:
 				near += 1
 				if not in_tray:
 					bad += 1
-					print(
-						(
-							"bag %d at %.3f m: k %.2f held_by %d to_tray %.3f"
-							% [i, off, k, held_by, to_tray]
-						)
-					)
-	print(
-		(
-			"late %s: held %d, in the tray %d first at %s m, draws near the arch %d, not in the tray %d"
-			% [late, held.size(), settled.size(), settled_at, near, bad]
-		)
-	)
 	assert_bool(w.cleared.has(p.id)).is_true()
 	return {"held": held.size(), "settled": settled.size(), "near": near, "bad": bad}

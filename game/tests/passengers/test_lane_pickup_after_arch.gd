@@ -67,7 +67,7 @@ func test_bags_leave_the_tray_only_past_the_arch() -> void:
 					i,
 					w.world.clock.tick,
 					SecurityRuntime.Phase.keys()[p.security_phase],
-					p.incident_resolved,
+					p.body_resolved,
 					off,
 					passage
 				]
@@ -82,5 +82,5 @@ func test_bags_leave_the_tray_only_past_the_arch() -> void:
 		)
 	)
 	assert_bool(w.cleared.has(p.id)).is_true()
-	assert_int(seen).is_greater_equal(4)
+	assert_int(seen).is_equal(2)
 	assert_int(inside).is_equal(0)

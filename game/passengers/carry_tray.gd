@@ -25,6 +25,20 @@ static func placed(
 		SecurityLooks.Tray.IN, SecurityLooks.Tray.OUT:
 			var mount: Array = TRAY_MOUNTS[at]
 			return CarryOnProps.mount_world(grid, lane, mount[0], mount[1])
+		SecurityLooks.Tray.INSPECT:
+			var table_id := int(lane.get("search_table_id", 0))
+			if table_id == 0:
+				return Transform3D.IDENTITY
+			var obj := grid.get_object(table_id)
+			if obj.is_empty():
+				return Transform3D.IDENTITY
+			var cells: Array[Vector2i] = [obj["anchor"]]
+			return (
+				BuildView.object_transform(grid, cells, obj["facing"])
+				* CarryOnProps.mount_local(
+					InteriorKit.object_piece(SecurityLanes.SEARCH_TABLE), "Mount_Inspect"
+				)
+			)
 	return Transform3D.IDENTITY
 
 

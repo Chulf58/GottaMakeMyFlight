@@ -38,7 +38,7 @@ signal stage_changed(id: int, stage: Passenger.Stage)
 signal checked_in(id: int, desk: int)
 
 ## The history of SAVE_VERSION is in PassengerSimSave.
-const SAVE_VERSION := 37
+const SAVE_VERSION := 38
 ## 1.96 m/s; the Toon walk clips cover 1.92-1.95 m/s.
 const WALK_MM := 98
 ## 3.5 m/s, a jog (user-ruled); the Toon run clips cover 4.17-5.30 m/s,
@@ -215,6 +215,7 @@ func bind(with_clock: SimClock, with_flights: FlightSim, with_grid: BuildGrid) -
 	layout.rebuild(grid)
 	# Before the sim's own handler, so nothing reads a route an edit outdated.
 	routes.bind(grid)
+	security.bins.day = GameCalendar.day_of(tick, SimClock.epoch_of(clock))
 	security.bind(self, _security_admitted, _security_cleared, gates.placed.bind(self))
 	cafes.bind(self, _set_stage, _leave_station, _release_seat)
 	toilets.bind(self, _set_stage, _leave_station, _release_seat)
@@ -339,6 +340,9 @@ func spawn_now(flight_id: String, variant := -1) -> int:
 func on_tick(new_tick: int) -> void:
 	var started := Time.get_ticks_usec()
 	tick = new_tick
+	var day := GameCalendar.day_of(new_tick, SimClock.epoch_of(clock))
+	if day != security.bins.day:
+		security.bins.reset(day)
 	mark_changed()
 	entrance.step(self)
 	arrivals.step()
@@ -852,6 +856,7 @@ func _on_edit_applied(_edit: BuildEdit, _result: BuildResult) -> void:
 ## removed seat leaves its passenger standing.
 func _reconcile() -> void:
 	PassengerStations.reconcile(self)
+	security.bins.prune(grid)
 	PassengerGates.reconcile_seats(self)
 	cafes.reconcile()
 	toilets.reconcile()

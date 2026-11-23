@@ -168,31 +168,31 @@ func test_security_alarm_vs_security_clear_and_backwards_compat_security_beep() 
 	assert_int(_audio.sfx_count(&"security_clear")).is_equal(2)
 	assert_int(_audio.sfx_count(&"security_alarm")).is_equal(0)
 
-	# Alarm passenger triggers security_alarm immediately on entering TO_BERTH/REPACK,
-	# then once repacked and cleared through SECURITY -> TO_GATE plays security_clear
+	# Alarm passenger triggers security_alarm immediately on entering BODY_CHECK,
+	# then once resolved and cleared through SECURITY -> TO_GATE plays security_clear
 	# without repeating security_alarm.
 	fake_now[0] = 16000
 	var alarm_p := Passenger.new()
 	alarm_p.id = 3
 	alarm_p.alarm = true
 	alarm_p.stage = Passenger.Stage.SECURITY
-	alarm_p.security_phase = SecurityRuntime.Phase.TO_BERTH
+	alarm_p.security_phase = SecurityRuntime.Phase.BODY_CHECK
 	sim._passengers.append(alarm_p)
 	sim._by_id[alarm_p.id] = alarm_p
-	sim.security.records[7] = {"admitted": [alarm_p.id], "returns": [], "main": 0, "berth": 3}
+	sim.security.records[7] = {"admitted": [alarm_p.id], "returns": [], "main": 3, "berth": 0}
 	sim.stage_changed.emit(alarm_p.id, Passenger.Stage.SECURITY)
 	clock.ticked.emit(1)
 	assert_int(_audio.sfx_count(&"security_alarm")).is_equal(1)
 	assert_int(_audio.sfx_count(&"security_clear")).is_equal(2)
 
-	# Subsequent ticks in REPACK do not re-trigger alarm for the same passenger.
+	# Subsequent ticks do not re-trigger alarm for the same passenger.
 	fake_now[0] = 20000
-	alarm_p.security_phase = SecurityRuntime.Phase.REPACK
+	alarm_p.security_phase = SecurityRuntime.Phase.ARCH
 	clock.ticked.emit(2)
 	assert_int(_audio.sfx_count(&"security_alarm")).is_equal(1)
 
-	# After repack resolves and passenger clears security, clear chime plays cleanly.
-	alarm_p.incident_resolved = true
+	# After body check resolves and passenger clears security, clear chime plays cleanly.
+	alarm_p.body_resolved = true
 	alarm_p.security_phase = SecurityRuntime.Phase.NONE
 	sim.security.records.erase(7)
 	sim.stage_changed.emit(alarm_p.id, Passenger.Stage.TO_GATE)
