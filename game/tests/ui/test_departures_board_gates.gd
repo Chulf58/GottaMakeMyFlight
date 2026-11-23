@@ -61,7 +61,12 @@ func test_departures_rows_have_no_inline_gate_buttons_and_planner_moves_contract
 	_accept_x_and_y()
 	assert_array(_board.find_children("Gate_*", "Button", true, false)).is_empty()
 	_planner.bar_button("Y", 0).pressed.emit()
-	assert_object(_planner.part("Move_A")).is_null()
+	var move_a := _planner.part("Move_A") as Button
+	assert_object(move_a).is_not_null()
+	assert_bool(move_a.disabled).is_true()
+	assert_str((_planner.part("MoveReason_A") as Label).text).is_equal(
+		DeparturesBoard.reason_text(_sim, _sim.reassign_problem("Y", "A"), "A")
+	)
 	assert_object(_planner.part("Move_B")).is_null()
 	var move_c := _planner.part("Move_C") as Button
 	assert_object(move_c).is_not_null()

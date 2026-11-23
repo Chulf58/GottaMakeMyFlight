@@ -494,8 +494,24 @@ class PhoneRingCue:
 		if space or key.physical_keycode in [KEY_ENTER, KEY_KP_ENTER]:
 			answer()
 
-	## Starts the ringing animation and phone_ring SFX; auto-answers or auto-hides.
-	func start_ring(auto_answer := true, answer_on_key := false) -> void:
+	## Starts the ringing animation and phone_ring SFX after an optional settle
+	## delay; auto-answers or auto-hides.
+	func start_ring(auto_answer := true, answer_on_key := false, delay_s := 0.0) -> void:
+		_kill_tween()
+		_ringing = false
+		_answer_on_key = false
+		visible = false
+		_icon.rotation = 0.0
+		_icon.scale = Vector2.ONE
+		if delay_s <= 0.0:
+			_begin_ring(auto_answer, answer_on_key)
+			return
+		_tween = create_tween()
+		_tween.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
+		_tween.tween_interval(delay_s)
+		_tween.tween_callback(_begin_ring.bind(auto_answer, answer_on_key))
+
+	func _begin_ring(auto_answer: bool, answer_on_key: bool) -> void:
 		_kill_tween()
 		_ringing = true
 		_answer_on_key = answer_on_key

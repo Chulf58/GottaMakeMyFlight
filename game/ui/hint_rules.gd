@@ -205,17 +205,24 @@ static func _shortage_roles(sim: PassengerSim) -> Array:
 				and staff.staff_at(station) == 0
 			):
 				open += 1
-		if open > 0 and _spare(staff, role) == 0:
+		if open > _spare(staff, role):
 			roles.append(role)
 	return roles
 
 
-## Hired members of `role` not leaving and not yet sent anywhere.
+## Hired members of `role` not leaving and not yet claimed by a station
+## (including overnight off-shift members who return before morning arrivals).
 static func _spare(staff: StaffSim, role: StaffMember.Role) -> int:
 	var spare := 0
 	for id in staff.member_ids():
 		var m := staff.get_member(id)
-		if m.role == role and not m.leaving and m.state == StaffMember.State.IDLE:
+		if m.role != role or m.leaving:
+			continue
+		if (
+			m.state == StaffMember.State.IDLE
+			or m.state == StaffMember.State.OFF_SHIFT
+			or m.state == StaffMember.State.LEAVING_SHIFT
+		):
 			spare += 1
 	return spare
 

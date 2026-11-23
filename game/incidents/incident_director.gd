@@ -54,11 +54,12 @@ signal inspector_resolved(incident: Dictionary)
 ## A spill may come this long before the day's first departure: two hours.
 const BUSY_LEAD_TICKS := 2 * 60 * GameCalendar.TICKS_PER_MINUTE
 ## A fire comes no sooner than this after the roll: the quiet-night lead plus
-## the most ticks one frame may run. The roll is on the midnight tick, perhaps
-## inside a fast-forward frame that runs on up to MAX_STEPS_PER_FRAME - 1 more
-## ticks; the next frame then still finds the stop (LEAD_TICKS before the
-## fire) ahead of the clock, so the day boundary itself need not be a stop.
-const FIRE_FLOOR_TICKS := QuietNight.LEAD_TICKS + SimClock.MAX_STEPS_PER_FRAME
+## the most ticks one fast-forward frame may run. The roll is on the midnight
+## tick, perhaps inside a fast-forward frame that runs on up to
+## FAST_FORWARD_MAX_STEPS - 1 more ticks; the next frame then still finds the
+## stop (LEAD_TICKS before the fire) ahead of the clock, so the day boundary
+## itself need not be a stop.
+const FIRE_FLOOR_TICKS := QuietNight.LEAD_TICKS + SimClock.FAST_FORWARD_MAX_STEPS
 const CHECKIN_PLACE := IncidentCatalogue.CHECKIN_PLACE
 const SECURITY_PLACE := IncidentCatalogue.SECURITY_PLACE
 
@@ -84,8 +85,6 @@ var _last_rolled_day := -1
 var _next_major_day := 0
 var _next_id := 1
 var _incidents: Array[Dictionary] = []
-## The day the clock was last seen on. Derived from the tick, never saved.
-var _day := -1
 var _bound: SimClock
 var _bound_sim: PassengerSim
 ## What the majors do (inspector, rush, VIP, favour).
@@ -107,7 +106,6 @@ func bind(with_clock: SimClock, with_flights: FlightSim, with_passengers: Passen
 	flights = with_flights
 	passengers = with_passengers
 	_bound = clock
-	_day = GameCalendar.day_of(clock.tick, clock.epoch)
 	clock.ticked.connect(on_tick)
 	_follow_passengers(with_passengers)
 
@@ -126,13 +124,12 @@ func set_enabled(value: bool) -> void:
 			incident["state"] = IncidentCatalogue.DONE
 
 
-## A new day rolls, then what is due fires and what is over ends.
+## Rolls when due (at most once per day from the day after opening), then what
+## is due fires and what is over ends.
 func on_tick(tick: int) -> void:
 	var day := GameCalendar.day_of(tick, clock.epoch)
-	if day != _day:
-		_day = day
-		if _roll_due(day):
-			_roll(day, tick)
+	if _roll_due(day):
+		_roll(day, tick)
 	for incident in _incidents:
 		if incident["state"] == IncidentCatalogue.SCHEDULED and incident["fire_tick"] <= tick:
 			if IncidentCatalogue.is_major(incident["kind"]):
@@ -357,8 +354,6 @@ func from_snapshot(data: Dictionary) -> bool:
 	_next_major_day = loaded["next_major_day"]
 	_next_id = loaded["next_id"]
 	_incidents = loaded["incidents"]
-	if clock != null:
-		_day = GameCalendar.day_of(clock.tick, clock.epoch)
 	restored.emit()
 	return true
 
@@ -380,11 +375,13 @@ func _roll(day: int, tick: int) -> void:
 				and incident["state"] != IncidentCatalogue.DECLINED
 			)
 	)
+	var opened_day := GameCalendar.day_of(flights.opened_tick, clock.epoch)
 	var world := {
 		"tier": _tier(),
 		"places": spill_places().size(),
 		"faults": IncidentFault.stations(passengers).size(),
 		"contracts": flights.active_contract_ids().size(),
+		"guarantee_incident": day == opened_day + 1,
 	}
 	var candidates := IncidentCatalogue.candidates(world)
 	if forced_kind != "" and (not DemoMode.is_demo() or IncidentCatalogue.demo_allows(forced_kind)):

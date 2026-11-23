@@ -187,13 +187,21 @@ func hint_card() -> Control:
 ## service ends, so it is counted and named as leaving. A cleaner is on duty
 ## all day once hired, so its second count is how many are cleaning now.
 func counts_text(role: StaffMember.Role) -> String:
+	var hired := staff.count(role)
 	var leaving := staff.leaving_count(role)
+	var off_shift := staff.off_shift_count(role)
+	var duty := staff.on_duty_count(role)
 	var values := {
-		"hired": staff.count(role),
-		"duty": staff.on_duty_count(role),
+		"hired": hired,
+		"duty": duty,
 		"leaving": leaving,
+		"off_shift": off_shift,
 	}
+	if off_shift > 0 and off_shift == hired and leaving == 0:
+		return tr("{hired} hired, off shift").format(values)
 	if role == StaffMember.Role.CLEANER:
+		if off_shift > 0:
+			return tr("{hired} hired, {duty} cleaning, {off_shift} off shift").format(values)
 		if leaving > 0:
 			return tr("{hired} hired, {duty} cleaning, {leaving} leaving").format(values)
 		return tr("{hired} hired, {duty} cleaning").format(values)

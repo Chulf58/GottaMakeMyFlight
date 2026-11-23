@@ -1,8 +1,10 @@
 class_name TestBuildMenuOffers
 extends GdUnitTestSuite
-## Build mode and the Offers sheet neither pause nor resume the clock (ruling
-## player-owns-clock-and-persistent-build-undo-no-auto-pause-on-trays-offers-planner-direct-delete),
-## and opening a build tray/tool still closes the Offers sheet.
+## Build mode pauses the clock via a yielding ClockHolds hold while OfferPanel
+## stays unpaused (decision
+## build-mode-auto-pause-restored-while-offers-planner-stay-unpaused, 9e86b858):
+## closing the Offers sheet inside build mode keeps the game paused, and opening
+## a build tray over the sheet closes the sheet and pauses until build mode ends.
 
 const STRUCTURE := 0
 
@@ -55,30 +57,32 @@ func _press_speed(value: int) -> void:
 		_clock.set_speed(value)
 
 
-func test_closing_the_offers_sheet_inside_build_mode_leaves_clock_untouched() -> void:
+func test_closing_the_offers_sheet_inside_build_mode_keeps_the_game_paused() -> void:
 	_press_speed(2)
 	_menu.press_category(STRUCTURE)
 	_menu.build_session.sync()
+	assert_bool(_clock.paused).is_true()
 	_panel.open()
 	await get_tree().process_frame
 	_panel.close()
 	_menu.build_session.sync()
 	assert_bool(_menu.build_session.active).is_true()
-	assert_bool(_clock.paused).is_false()
+	assert_bool(_clock.paused).is_true()
 	assert_int(_clock.speed).is_equal(2)
 	_menu.press_category(STRUCTURE)
 	assert_bool(_clock.paused).is_false()
 	assert_int(_clock.speed).is_equal(2)
 
 
-func test_a_tray_opened_over_the_offers_sheet_closes_sheet_and_keeps_clock_state() -> void:
+func test_a_tray_opened_over_the_offers_sheet_closes_sheet_and_pauses_until_closed() -> void:
 	_press_speed(3)
 	_panel.open()
+	assert_bool(_clock.paused).is_false()
 	_menu.press_category(STRUCTURE)
 	assert_bool(_panel.is_open()).is_false()
 	_menu.build_session.sync()
 	assert_bool(_menu.build_session.active).is_true()
-	assert_bool(_clock.paused).is_false()
+	assert_bool(_clock.paused).is_true()
 	assert_int(_clock.speed).is_equal(3)
 	_menu.press_category(STRUCTURE)
 	assert_bool(_clock.paused).is_false()

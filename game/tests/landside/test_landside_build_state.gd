@@ -175,17 +175,17 @@ func test_curb_bays_add_berths_to_the_starter_curb() -> void:
 
 func test_a_built_bay_moves_the_queue_stop_upstream_of_its_first_berth() -> void:
 	assert_int(_sim.curb_stop_mm()).is_equal(STARTER.curb.stop_mm)
-	# Bay 0's first berth is at x 7.25 (36181 mm in), bay 1's at x 23.25 (20181
-	# mm). road_in comes in on the through road and moves over into the
-	# forecourt (400 + 9031 mm to x 34), then runs on along z -55.
-	assert_int(STARTER.berth_mm(5)).is_equal(36181)
-	assert_int(STARTER.berth_mm(7)).is_equal(20181)
+	# Bay 0's first berth is at x 7.25 (136181 mm in), bay 1's at x 23.25 (120181
+	# mm). road_in starts inside the east tunnel portal (+100 m lead) and moves over
+	# into the forecourt (100400 + 9031 mm to x 34), then runs on along z -55.
+	assert_int(STARTER.berth_mm(5)).is_equal(136181)
+	assert_int(STARTER.berth_mm(7)).is_equal(120181)
 	assert_bool(_sim.build_curb(0, 300)).is_true()
-	assert_int(_sim.curb_stop_mm()).is_equal(36181 - LandsideSim.BERTH_APPROACH_MM)
+	assert_int(_sim.curb_stop_mm()).is_equal(136181 - LandsideSim.BERTH_APPROACH_MM)
 	assert_bool(_sim.build_curb(1, 300)).is_true()
-	assert_int(_sim.curb_stop_mm()).is_equal(20181 - LandsideSim.BERTH_APPROACH_MM)
+	assert_int(_sim.curb_stop_mm()).is_equal(120181 - LandsideSim.BERTH_APPROACH_MM)
 	assert_bool(_sim.remove_curb(1)).is_true()
-	assert_int(_sim.curb_stop_mm()).is_equal(36181 - LandsideSim.BERTH_APPROACH_MM)
+	assert_int(_sim.curb_stop_mm()).is_equal(136181 - LandsideSim.BERTH_APPROACH_MM)
 	# The starter curb's stop is the same distance before its first berth.
 	assert_int(STARTER.berth_mm(0) - LandsideSim.BERTH_APPROACH_MM).is_equal(STARTER.curb.stop_mm)
 
@@ -245,7 +245,7 @@ func test_a_car_never_reverses_into_a_berth_or_lands_on_the_queue() -> void:
 
 func test_a_car_past_a_bay_does_not_go_back_to_it() -> void:
 	# A car that has driven on past bay 0 (a diverted car at the multi-storey's
-	# turn, 42531 mm in) takes a starter berth, not the free bay behind it.
+	# turn, 142531 mm in) takes a starter berth, not the free bay behind it.
 	assert_bool(_sim.build_curb(0, 300)).is_true()
 	assert_bool(_sim.build_lot(MULTI_STOREY, 5000)).is_true()
 	for i in 40:

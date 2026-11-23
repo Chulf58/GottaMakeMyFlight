@@ -10,19 +10,18 @@ extends GdUnitTestSuite
 ## Each fit costs a few hundred ms (test_the_cost_of_a_day_boundary_fit_on_two_
 ## busy_gates), so a case draws a handful of days.
 const SEEDS := [1, 42, 2024, 7_654_321]
-## One gate whose day is full: 195 minutes apart from 07:00 to 20:00.
-const FULL_DAY := [420, 615, 810, 1005, 1200]
+## One gate whose day is full for all plane sizes: 135 minutes apart from 07:00 to 20:30.
+const FULL_DAY := [420, 555, 690, 825, 960, 1095, 1230]
 ## Seed -> the fitted N1, N2 and N3 departures on one gate busy at 10:00 and
 ## 16:40 (test_golden_fitted_departures_on_a_busy_gate). Seed 2024 was
 ## measured again for trait seed version 3: its day 0 N1 is now an Odd hours
-## offer, which fits only at 06:00 or 22:00. Seeds 1 and 2024 N3 shifted -15 min
-## after small-plane self-taxi shrank the small pushback footprint of the busy
-## K600 contract (15.455 m -> 8.855 m), opening slot 480 (33 -> 34 candidates).
+## offer, which fits only at 06:00 or 22:00. Remeasured for the compressed
+## small-plane gate hold (131 min at BASE, [AT_STAND - lead_in, DEPARTED)).
 const GOLDEN_BUSY := {
-	1: [1215, 795, 495],
-	42: [1215, 795, 690],
-	2024: [360, 1230, 540],
-	7_654_321: [1215, 795, 450],
+	1: [795, 1200, 525],
+	42: [855, 1245, 690],
+	2024: [360, 1215, 555],
+	7_654_321: [810, 1200, 480],
 }
 
 
@@ -142,14 +141,17 @@ func test_one_busy_gate_still_gets_a_pair_that_fits_together() -> void:
 
 
 ## The pair is a pair, not two fits that each take the last free slot: on one
-## gate with one slot pair left, N1 and N2 never depart at the same time.
+## gate with limited free slots left, N1 and N2 fit together without clashing.
 func test_the_two_fit_offers_do_not_take_the_same_free_time() -> void:
 	var sim := _sim(["C"] as Array[String], [600, 1000])
 	for seed_value in SEEDS:
 		var board := OfferBoard.new()
 		board.ensure_day(0, _rng(seed_value), 0, PlaneClasses.LARGE, sim)
 		var minutes := _minutes(board)
-		assert_int(absi(minutes[0] - minutes[1])).is_greater_equal(195)
+		var first := _offer_terms(board, 1)
+		var second := _offer_terms(board, 2)
+		assert_bool(FlightFit.fits(sim, second, [first])).is_true()
+		assert_int(absi(minutes[0] - minutes[1])).is_greater_equal(135)
 
 
 ## A full gate: still three offers, none fits, each card has its reason, and the

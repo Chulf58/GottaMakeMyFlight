@@ -301,16 +301,24 @@ static func _stands_of(entries: Dictionary) -> Dictionary:
 	return out
 
 
-## The flight between TAXI_IN and TAKEOFF at the stand, or "". With gates,
-## the one at gate `gate`'s stand.
-func busy_flight(gate := "") -> String:
+## All live flights between TAXI_IN and TAKEOFF (exclusive), optionally filtered
+## to `gate`.
+func busy_flights(gate := "") -> Array[String]:
+	var out: Array[String] = []
 	for id in flights.flight_ids():
 		if gate != "" and flights.flight_gate(id) != gate:
 			continue
 		var state := flights.state_of(id)
 		if state >= FlightSim.State.TAXI_IN and state < FlightSim.State.TAKEOFF:
-			return id
-	return ""
+			out.append(id)
+	return out
+
+
+## The first flight between TAXI_IN and TAKEOFF at the stand, or "". With gates,
+## the first at gate `gate`'s stand.
+func busy_flight(gate := "") -> String:
+	var ids := busy_flights(gate)
+	return ids[0] if not ids.is_empty() else ""
 
 
 ## The live stand takes the wanted one when they differ and no flight is
@@ -351,11 +359,15 @@ static func same_stand(a: Dictionary, b: Dictionary) -> bool:
 ## at the stand. With gates, the side spurs issued flights still need too
 ## (spur_rects()).
 func guard_rects() -> Array[Rect2]:
-	if gates == null:
-		return _rects_of(busy_flight(), live, "")
 	var out: Array[Rect2] = []
+	if gates == null:
+		for id in busy_flights():
+			out.append_array(_rects_of(id, live, ""))
+		return out
 	for gate: String in gate_stands:
-		out.append_array(_rects_of(busy_flight(gate), gate_stands[gate]["live"], gate))
+		var stand: Dictionary = gate_stands[gate]["live"]
+		for id in busy_flights(gate):
+			out.append_array(_rects_of(id, stand, gate))
 	out.append_array(spur_rects())
 	return out
 
@@ -627,7 +639,7 @@ func _drawn_rects() -> Array[Rect2]:
 func _tick_key() -> Array:
 	var key := [
 		flights.tick,
-		busy_flight(),
+		busy_flights(),
 		live.get("x"),
 		live.get("wall_z"),
 		live.get("side"),
@@ -638,7 +650,7 @@ func _tick_key() -> Array:
 		for gate: String in gate_stands:
 			# A flight issued while the clock is paused adds a spur band
 			# (spur_rects()) at the same tick.
-			key.append_array([busy_flight(gate), _flies_before_takeoff(gate)])
+			key.append_array([busy_flights(gate), _flies_before_takeoff(gate)])
 	return key
 
 

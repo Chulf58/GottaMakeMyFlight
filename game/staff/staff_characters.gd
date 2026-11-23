@@ -299,7 +299,7 @@ func sync(snap: bool = false) -> void:
 		)
 		var can_fidget := (
 			not m.in_pool()
-			and m.state != StaffMember.State.WALKING_OUT
+			and not m.is_walking_to_exit()
 			and not m.is_moving()
 			and not cleaner_busy
 			and not inside

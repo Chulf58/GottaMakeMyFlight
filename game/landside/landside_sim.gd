@@ -252,12 +252,13 @@ func resolve_intent(intent: LandsideVehicle.Intent) -> LandsideVehicle.Intent:
 
 ## Ticks from entering road_in to letting the passengers out, on a free road
 ## and with the berths and slots as they are now: to the curb's stop and in
-## along the path of the berth a car there takes (the nearest free one, or
-## the nearest when all are taken), or to the turn of the lot a new car would
-## take (_lot_for(): the first open lot with a free slot), along its access
-## lane and in along its lowest free slot's path. Each leg ends on a tick of
-## its own, as the car changes lane there. A car handed over that long before
-## its unload tick gets out on it.
+## along the path of the nearest built berth from `stop` (`_nearest_berth()`,
+## because a curb dwell lasts 60 ticks while the inbound road drive is 300+
+## ticks), or to the turn of the lot a new car would take (_lot_for(): the
+## first open lot with a free slot), along its access lane and in along its
+## lowest free slot's path. Each leg ends on a tick of its own, as the car
+## changes lane there. A car handed over that long before its unload tick gets
+## out no earlier than it.
 func lead_ticks(intent: LandsideVehicle.Intent) -> int:
 	var spot := _lot_for(0)
 	if resolve_intent(intent) == LandsideVehicle.Intent.PARK:
@@ -268,9 +269,7 @@ func lead_ticks(intent: LandsideVehicle.Intent) -> int:
 			+ _ticks(paths.slot_stand[spot][slot] - _access_mm[spot])
 		)
 	var stop := curb_stop_mm()
-	var berth := _free_berth(stop, FAR_MM)
-	if berth < 0:
-		berth = _nearest_berth(stop)
+	var berth := _nearest_berth(stop)
 	if berth < 0:
 		return _ticks(stop)
 	return _ticks(stop) + _ticks(paths.berth_stand[berth] - stop)

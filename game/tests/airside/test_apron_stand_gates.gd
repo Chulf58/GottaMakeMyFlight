@@ -108,3 +108,21 @@ func test_the_gate_stands_round_trip_a_snapshot_and_a_wrong_one_is_refused() -> 
 	assert_str(ApronStand.stands_problem(swapped["stands"], _gates.bindings, _grid)).contains(
 		"gate A"
 	)
+
+
+func test_guard_rects_protects_concurrent_taxi_out_and_taxi_in_at_one_gate() -> void:
+	var first := FlightSim.schedule_starts(1000)
+	# Second small flight enters TAXI_IN as first enters TAXI_OUT on gate B.
+	var second := FlightSim.schedule_starts(first[FlightSim.State.TAXI_OUT] - 360)
+	assert_bool(_flights.add_flight("OUT_B", first, "B")).is_true()
+	assert_bool(_flights.add_flight("IN_B", second, "B")).is_true()
+	var overlap_tick: int = first[FlightSim.State.TAXI_OUT] + 300
+	_flights.on_tick(overlap_tick)
+	assert_int(_flights.state_of("OUT_B")).is_equal(FlightSim.State.TAXI_OUT)
+	assert_int(_flights.state_of("IN_B")).is_equal(FlightSim.State.TAXI_IN)
+	assert_array(_apron.busy_flights("B")).is_equal(["OUT_B", "IN_B"])
+	var stand_b: Dictionary = _apron.gate_stands["B"]["live"]
+	var expected := _apron._rects_of("OUT_B", stand_b, "B")
+	expected.append_array(_apron._rects_of("IN_B", stand_b, "B"))
+	assert_array(_apron.guard_rects()).is_equal(expected)
+	assert_int(_paint(FOOTPRINT_B).reason).is_equal(BuildResult.Reason.PLANE_AREA)

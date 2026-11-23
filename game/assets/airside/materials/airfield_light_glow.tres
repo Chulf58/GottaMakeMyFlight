@@ -1,0 +1,8 @@
+[gd_resource type="ShaderMaterial" load_steps=2 format=3]
+
+[ext_resource type="Shader" path="res://shaders/airfield_light_glow.gdshader" id="1_glow"]
+
+[resource]
+resource_name = "AirfieldLightGlow"
+render_priority = 2
+shader = ExtResource("1_glow")

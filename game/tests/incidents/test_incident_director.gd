@@ -34,6 +34,7 @@ func before_test() -> void:
 
 
 func after_test() -> void:
+	DemoMode.clear_override()
 	for id in _world.sim.messes.mess_ids():
 		_world.sim.messes.remove(id)
 
@@ -281,3 +282,64 @@ func test_the_card_words_name_the_cause_and_ask_for_a_cleaner_when_none_is_hired
 	assert_str(IncidentCatalogue.card_detail(incident, false, 0)).is_equal(
 		"A passenger dropped a coffee. Hire a cleaner to clean it."
 	)
+
+
+func test_day_2_guarantees_an_incident_across_seeds_while_day_1_stays_calm() -> void:
+	var saved_seed := _world.clock.rng.seed
+	var quiet_day3_plus := 0
+	for s in 30:
+		_world.clock.rng.seed = 1000 + s * 7919
+		var dir := auto_free(IncidentDirector.new()) as IncidentDirector
+		dir.bind(_world.clock, _world.flights, _world.sim)
+		dir.set_enabled(true)
+		# Day 0 (opening day = player Day 1): stays calm.
+		dir.on_tick(GameCalendar.day_start(0, 0) + 100)
+		assert_int(dir.last_rolled_day()).is_equal(-1)
+		assert_array(dir.incidents()).is_empty()
+		# Day 1 (opened_day + 1 = player Day 2): never rolls NONE.
+		dir.on_tick(GameCalendar.day_start(1, 0))
+		assert_int(dir.last_rolled_day()).is_equal(1)
+		assert_int(dir.incidents().size()).is_equal(1)
+		assert_str(dir.incidents()[0]["kind"]).is_not_equal(IncidentCatalogue.NONE)
+		# Day 2+ (player Day 3+): NONE_WEIGHT still produces quiet days.
+		var before_count := dir.incidents().size()
+		for d in range(2, 6):
+			dir.on_tick(GameCalendar.day_start(d, 0))
+			if dir.incidents().size() == before_count:
+				quiet_day3_plus += 1
+			before_count = dir.incidents().size()
+	_world.clock.rng.seed = saved_seed
+	assert_int(quiet_day3_plus).is_greater(0)
+
+
+func test_day_2_rolls_once_when_enabled_after_midnight_boundary() -> void:
+	var dir := auto_free(IncidentDirector.new()) as IncidentDirector
+	dir.bind(_world.clock, _world.flights, _world.sim)
+	var boundary := GameCalendar.day_start(1, 0)
+	dir.on_tick(boundary)
+	assert_int(dir.last_rolled_day()).is_equal(-1)
+	# Simulates clicking Accept on the Day 2 ask_incidents() dialog.
+	dir.set_enabled(true)
+	dir.on_tick(boundary + 1)
+	assert_int(dir.last_rolled_day()).is_equal(1)
+	assert_int(dir.incidents().size()).is_equal(1)
+	# A second tick on the same day never rolls again.
+	dir.on_tick(boundary + 2)
+	assert_int(dir.incidents().size()).is_equal(1)
+
+
+func test_day_2_in_demo_mode_never_rolls_none_and_stays_in_demo_catalogue() -> void:
+	DemoMode.set_override_for_test(true)
+	var saved_seed := _world.clock.rng.seed
+	for s in 25:
+		_world.clock.rng.seed = 2000 + s * 3571
+		var dir := auto_free(IncidentDirector.new()) as IncidentDirector
+		dir.bind(_world.clock, _world.flights, _world.sim)
+		dir.set_enabled(true)
+		dir.on_tick(GameCalendar.day_start(1, 0))
+		assert_int(dir.incidents().size()).is_equal(1)
+		var kind: String = dir.incidents()[0]["kind"]
+		assert_str(kind).is_not_equal(IncidentCatalogue.NONE)
+		assert_bool(IncidentCatalogue.demo_allows(kind)).is_true()
+	_world.clock.rng.seed = saved_seed
+	DemoMode.clear_override()
