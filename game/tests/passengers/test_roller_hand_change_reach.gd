@@ -46,7 +46,8 @@ func test_the_receiving_hand_reaches_the_bar_where_it_is_handed_over() -> void:
 	var worst_miss := 0.0
 	var worst_step := 0.0
 	var held_before := -1
-	while _world.clock.tick < 400 and p.stage != Passenger.Stage.CAFE_SITTING_DOWN:
+	var end_tick := _world.clock.tick + 400
+	while _world.clock.tick < end_tick and p.stage != Passenger.Stage.CAFE_SITTING_DOWN:
 		await _tick(1.0 / 3.0)
 		var body := _views.node_for(p.id)
 		if body == null or props.props_of(p.id).get("bags", []).is_empty():
@@ -112,6 +113,8 @@ func _cafe_guest() -> Passenger:
 		p = _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
 		_world.sim.entrance.forget(p.id)
 	p.carry_on = 1
+	p.liquids = false
+	p.alarm = false
 	p.hunger = 0
 	p.cafe_cooldown = 1000000
 	_followed = [p]
