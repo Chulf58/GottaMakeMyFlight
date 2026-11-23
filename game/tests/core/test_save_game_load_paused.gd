@@ -114,9 +114,9 @@ func test_a_load_while_paused_at_2x_comes_back_paused_at_1x() -> void:
 	assert_int(_clock.speed).is_equal(1)
 
 
-## Modal holds taken before the load (GameMenu, a held ClockHolds token) and
-## open non-pausing panels (Offers, build mode) all end with it: the game waits
-## paused at 1x, and the player's first resume runs it.
+## Holds taken before the load (build mode, GameMenu) and open non-pausing
+## panels (Offers) all end with it: the game waits paused at 1x, and the
+## player's first resume runs it.
 func test_a_load_drops_every_hold_and_the_first_resume_runs_the_game() -> void:
 	var hud := _main.get_node("PassengerHud") as PassengerHud
 	hud.press_speed(3)
@@ -127,7 +127,7 @@ func test_a_load_drops_every_hold_and_the_first_resume_runs_the_game() -> void:
 	session.sync()
 	var game_menu := _main.get_node("GameMenu") as GameMenu
 	assert_bool(game_menu.open()).is_true()
-	assert_int(_clock.holds.count()).is_equal(1)
+	assert_int(_clock.holds.count()).is_equal(2)
 	assert_bool(_save.load_from_file(_path)).is_true()
 	_has_terminal = true
 	assert_int(_clock.holds.count()).is_equal(0)

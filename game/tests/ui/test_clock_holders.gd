@@ -1,8 +1,9 @@
 class_name TestClockHolders
 extends GdUnitTestSuite
-## Modal dialogs (UnlockGuide) still hold the clock through ClockHolds, while
-## BuildSession and OfferPanel never take or release ClockHolds holds (ruling
-## player-owns-clock-and-persistent-build-undo-no-auto-pause-on-trays-offers-planner-direct-delete).
+## BuildSession takes a yielding hold on ClockHolds while building and
+## OfferPanel takes no hold; modal dialogs (UnlockGuide) hold the clock with
+## non-yielding exclusive turns (decision
+## build-mode-auto-pause-restored-while-offers-planner-stay-unpaused, 9e86b858).
 
 var _port: SubViewport
 var _clock: SimClock
@@ -64,19 +65,46 @@ func _ticks_after(seconds: float) -> int:
 	return _clock.tick - before
 
 
-func test_build_mode_and_offers_take_no_holds_and_leave_clock_running() -> void:
+func test_build_mode_holds_clock_while_offers_takes_no_hold() -> void:
 	_press_speed(3)
 	_start_building()
-	_panel.open()
 	assert_bool(_session.active).is_true()
+	assert_bool(_clock.paused).is_true()
+	assert_int(_clock.holds.count()).is_equal(1)
+	assert_int(_ticks_after(0.11)).is_equal(0)
+	_panel.open()
 	assert_bool(_panel.is_open()).is_true()
-	assert_int(_clock.holds.count()).is_equal(0)
-	assert_bool(_clock.paused).is_false()
-	assert_int(_ticks_after(0.11)).is_equal(6)
+	assert_int(_clock.holds.count()).is_equal(1)
+	assert_bool(_clock.paused).is_true()
 	_panel.close()
+	assert_bool(_clock.paused).is_true()
+	assert_int(_clock.holds.count()).is_equal(1)
 	_session.set_building(false)
 	assert_bool(_clock.paused).is_false()
 	assert_int(_clock.speed).is_equal(3)
+	assert_int(_clock.holds.count()).is_equal(0)
+	assert_int(_ticks_after(0.11)).is_equal(6)
+
+
+func test_offers_alone_leaves_clock_running_and_resuming_yields_build_hold() -> void:
+	_press_speed(2)
+	_panel.open()
+	assert_bool(_panel.is_open()).is_true()
+	assert_bool(_clock.paused).is_false()
+	assert_int(_clock.holds.count()).is_equal(0)
+	assert_int(_ticks_after(0.11)).is_equal(4)
+	_panel.close()
+	_start_building()
+	assert_bool(_clock.paused).is_true()
+	assert_int(_clock.holds.count()).is_equal(1)
+	_clock.set_paused(false)
+	_session.sync()
+	assert_bool(_session.active).is_true()
+	assert_bool(_clock.paused).is_false()
+	assert_int(_clock.holds.count()).is_equal(0)
+	assert_int(_ticks_after(0.11)).is_equal(4)
+	_session.set_building(false)
+	assert_bool(_clock.paused).is_false()
 
 
 func test_a_game_paused_before_both_stays_paused_after_both() -> void:
@@ -97,13 +125,15 @@ func test_the_unlock_dialog_still_holds_the_clock_regardless_of_build_mode_or_of
 	_guide.open_dialog([2])
 	assert_bool(_guide.is_open()).is_true()
 	assert_bool(_clock.paused).is_true()
-	assert_int(_clock.holds.count()).is_equal(1)
+	assert_int(_clock.holds.count()).is_equal(2)
 	_session.set_building(false)
 	_panel.close()
 	assert_bool(_clock.paused).is_true()
+	assert_int(_clock.holds.count()).is_equal(1)
 	_guide.dismiss()
 	assert_bool(_clock.paused).is_false()
 	assert_int(_clock.speed).is_equal(3)
+	assert_int(_clock.holds.count()).is_equal(0)
 
 
 func test_a_resume_while_the_unlock_dialog_is_open_waits_for_it_to_close() -> void:
