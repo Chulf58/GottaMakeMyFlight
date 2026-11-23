@@ -1,9 +1,11 @@
 class_name TestClockAndPersistentUndo
 extends GdUnitTestSuite
-## Regression suite for ruling
-## player-owns-clock-and-persistent-build-undo-no-auto-pause-on-trays-offers-planner-direct-delete
-## (ea4411e6):
-## - Build trays, OfferPanel, and FlightPlanner never pause or unpause SimClock.
+## Regression suite for decision
+## build-mode-auto-pause-restored-while-offers-planner-stay-unpaused (9e86b858,
+## partial override citing ea4411e6):
+## - Build trays auto-pause SimClock via a yielding ClockHolds hold and resume
+##   on close; Space can still unpause manually while building.
+## - OfferPanel and FlightPlanner never pause or unpause SimClock.
 ## - Ctrl+Z undo persists across tray closes and sim ticks (bounded to 20),
 ##   refuses cleanly on live wallet/grid conflicts, clears on load / RescueGrant,
 ##   and stays blocked while modal dialogs (GameMenu, IntroDialogue) own input.
@@ -130,13 +132,30 @@ func _ctrl_z() -> void:
 	_port.push_input(_key(KEY_Z, true))
 
 
-func test_trays_offers_and_planner_never_change_pause_or_speed() -> void:
+func test_build_tray_auto_pauses_space_unpauses_and_offers_planner_stay_unpaused() -> void:
 	_clock.set_speed(3)
 	_clock.set_paused(false)
 	_menu.press_category(STRUCTURE)
 	assert_bool(_menu.is_tray_open()).is_true()
+	assert_bool(_menu.build_session.active).is_true()
+	assert_bool(_clock.paused).is_true()
+	assert_int(_clock.holds.count()).is_equal(1)
+
+	# Space unpauses manually while staying in build mode.
+	_clock.set_paused(false)
+	_menu.build_session.sync()
+	assert_bool(_menu.is_tray_open()).is_true()
+	assert_bool(_menu.build_session.active).is_true()
+	assert_bool(_clock.paused).is_false()
+	assert_int(_clock.holds.count()).is_equal(0)
+	_menu.press_category(STRUCTURE)
+	assert_bool(_menu.build_session.active).is_false()
 	assert_bool(_clock.paused).is_false()
 	assert_int(_clock.speed).is_equal(3)
+
+	# Re-entering build mode pauses again and closing resumes when no other hold exists.
+	_menu.press_category(STRUCTURE)
+	assert_bool(_clock.paused).is_true()
 	_menu.press_category(STRUCTURE)
 	assert_bool(_clock.paused).is_false()
 	assert_int(_clock.speed).is_equal(3)
@@ -144,6 +163,7 @@ func test_trays_offers_and_planner_never_change_pause_or_speed() -> void:
 	_offers.open()
 	assert_bool(_offers.is_open()).is_true()
 	assert_bool(_clock.paused).is_false()
+	assert_int(_clock.holds.count()).is_equal(0)
 	assert_int(_clock.speed).is_equal(3)
 	_offers.close()
 	assert_bool(_clock.paused).is_false()
@@ -151,6 +171,7 @@ func test_trays_offers_and_planner_never_change_pause_or_speed() -> void:
 	_planner.open()
 	assert_bool(_planner.is_open()).is_true()
 	assert_bool(_clock.paused).is_false()
+	assert_int(_clock.holds.count()).is_equal(0)
 	assert_int(_clock.speed).is_equal(3)
 	_planner.close()
 	assert_bool(_clock.paused).is_false()
@@ -159,6 +180,7 @@ func test_trays_offers_and_planner_never_change_pause_or_speed() -> void:
 	_clock.set_paused(true)
 	_menu.press_category(STRUCTURE)
 	assert_bool(_clock.paused).is_true()
+	assert_int(_clock.holds.count()).is_equal(1)
 	_offers.open()
 	assert_bool(_clock.paused).is_true()
 	_planner.open()

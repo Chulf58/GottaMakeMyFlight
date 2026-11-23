@@ -130,29 +130,25 @@ func test_the_clock_fast_forwards_to_the_stop_and_stays_at_player_speed_after() 
 	assert_int(_world.clock.speed).is_equal(2)
 
 
-func test_a_modal_hold_stops_it_and_build_session_leaves_it_fast_forwarding() -> void:
+func test_a_build_hold_stops_it_and_gives_back_the_held_speed() -> void:
 	_world.flights.open_airport()
 	_world.clock.set_speed(3)
 	_world.clock.advance(FRAME)
 	assert_bool(_world.clock.is_fast_forwarding()).is_true()
 	var session := auto_free(BuildSession.new()) as BuildSession
 	session.clock = _world.clock
+	# A hold's owner must be in the tree (ClockHolds), so its hold ends with it.
 	add_child(session)
 	session.set_building(true)
 	session.sync()
-	assert_bool(_world.clock.paused).is_false()
-	assert_bool(_quiet.is_quiet()).is_true()
-	var holder := auto_free(Node.new()) as Node
-	add_child(holder)
-	var token := _world.clock.holds.acquire(holder, false)
 	assert_bool(_world.clock.paused).is_true()
 	assert_bool(_quiet.is_quiet()).is_false()
 	var held := _world.clock.tick
 	_world.clock.advance(FRAME)
 	assert_int(_world.clock.tick).is_equal(held)
 	assert_bool(_world.clock.is_fast_forwarding()).is_false()
-	# The hold ends with the player's own clock: running, at 3x.
-	_world.clock.holds.release(token)
+	# Ending build mode restores the player's own clock: running, at 3x.
+	session.set_building(false)
 	assert_bool(_world.clock.paused).is_false()
 	assert_int(_world.clock.speed).is_equal(3)
 	_world.clock.advance(FRAME)
