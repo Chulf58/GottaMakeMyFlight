@@ -106,9 +106,22 @@ static func _find_every_candidate(
 				continue
 			for side: String in StandPlacement.SIDES:
 				var stand := StandPlacement.for_cell(grid, cell, 0, side)
-				if SpareStand._fits(grid, site, stand, stands, plane_class):
+				if _candidate_fits(grid, site, stand, stands, plane_class):
 					return stand
 	return {}
+
+
+## Pre-prefix SpareStand candidate predicate kept locally for oracle parity.
+static func _candidate_fits(
+	grid: BuildGrid,
+	site: SiteDefinition,
+	stand: Dictionary,
+	stands: Array[Dictionary],
+	plane_class: String
+) -> bool:
+	if stands.any(func(other: Dictionary) -> bool: return GateDesks.stands_overlap(stand, other)):
+		return false
+	return StandEnvelope.blocked_part(grid, site, stand, plane_class) == StandEnvelope.Part.CLEAR
 
 
 ## SpareStand.find() skips a candidate whose parked cell is built on without

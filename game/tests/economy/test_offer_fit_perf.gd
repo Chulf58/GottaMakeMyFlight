@@ -62,8 +62,11 @@ func test_offer_board_tight_gap_bounds_trial_assignment_calls() -> void:
 			% [ensure_calls, ensure_ms, refill_calls, refill_ms]
 		)
 	)
-	assert_int(ensure_calls).is_less_equal(180)
-	assert_int(refill_calls).is_less_equal(180)
+	# Three distinct offered classes at Tier 2 on a Large runway (small, medium,
+	# large) need up to 3 * 57 base assessments plus another_gate_helps checks
+	# (~219 calls total), still bounded linearly and far below quadratic pairing.
+	assert_int(ensure_calls).is_less_equal(240)
+	assert_int(refill_calls).is_less_equal(240)
 
 
 func test_offer_desk_try_refill_does_not_double_check_has_fitting_slot() -> void:

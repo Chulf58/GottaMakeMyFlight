@@ -19,9 +19,11 @@ const DAYS := 30
 ## (small-class offers moved to 4..8 passengers and 30..70 fee_per_passenger,
 ## ruling small-plane-passenger-count-and-fare-balance-4-8-passengers), and for
 ## save version 8 (the charters array on OfferBoard.to_snapshot(), with offers
-## and RNG state unchanged).
+## and RNG state unchanged), and for Stage 2 S2-A (decision d19eb98b:
+## PlaneClasses.max_offer_class() lifted to LARGE, so Tiers 1 and 2 on a large
+## runway now draw large offers while Tier 0 and STATE_AFTER stay unchanged).
 const STATE_AFTER := 7055581944236607464
-const BEFORE_HASHES := [691078160, 1588298787, 1656781233]
+const BEFORE_HASHES := [691078160, 2025645667, 1339283240]
 
 
 func _rng() -> RandomNumberGenerator:
@@ -146,8 +148,18 @@ func test_offered_sizes_follow_the_runway() -> void:
 	assert_array(OfferBoard.offered_sizes(0, PlaneClasses.MEDIUM).keys()).is_equal(
 		["small", "medium"]
 	)
+	assert_array(OfferBoard.offered_sizes(0, PlaneClasses.LARGE).keys()).is_equal(
+		["small", "medium"]
+	)
 	assert_array(OfferBoard.offered_sizes(1, PlaneClasses.SMALL).keys()).is_empty()
 	assert_array(OfferBoard.offered_sizes(1, PlaneClasses.MEDIUM).keys()).is_equal(["medium"])
+	assert_array(OfferBoard.offered_sizes(1, PlaneClasses.LARGE).keys()).is_equal(
+		["medium", "large"]
+	)
+	assert_array(OfferBoard.offered_sizes(2, PlaneClasses.MEDIUM).keys()).is_equal(["medium"])
+	assert_array(OfferBoard.offered_sizes(2, PlaneClasses.LARGE).keys()).is_equal(
+		["medium", "large"]
+	)
 	assert_dict(OfferBoard.offered_sizes(0)).is_equal(OfferBoard.STARTER_SIZES)
 
 
