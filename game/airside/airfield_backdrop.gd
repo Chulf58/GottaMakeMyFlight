@@ -44,10 +44,14 @@ const YELLOW_UV := Vector2(0.6083, 0.0067)
 
 @export var flights: FlightSim
 @export var airside: Airside
+@export var clock: SimClock
 
 var _landmarks_root: Node3D
 var _runway_root: Node3D
 var _taxi_lights_root: Node3D
+var _radar_node: Node3D
+var _windsock_node: Node3D
+var _operations_life: AirfieldOperationsLife
 var _last_runway_size := ""
 var _last_paving_id := 0
 var _scenes := {}
@@ -317,6 +321,12 @@ func _ready() -> void:
 	add_child(_taxi_lights_root)
 
 	_build_landmarks()
+	_operations_life = AirfieldOperationsLife.new()
+	_operations_life.name = "OperationsLife"
+	_operations_life.clock = _resolve_clock()
+	_operations_life.radar_node = _radar_node
+	_operations_life.windsock_node = _windsock_node
+	add_child(_operations_life)
 	if flights != null:
 		flights.runway.size_changed.connect(rebuild_for_runway)
 		rebuild_for_runway(flights.runway.size)
@@ -410,6 +420,10 @@ func _build_landmarks() -> void:
 		if not is_equal_approx(s, 1.0):
 			node.scale = Vector3.ONE * s
 		_landmarks_root.add_child(node)
+		if spec["stem"] == "tp_radar_01a":
+			_radar_node = node
+		elif spec["stem"] == "windsock":
+			_windsock_node = node
 
 	for fspec in fence_specs():
 		var fnode := (_scene(LANDMARKS_DIR + fspec["stem"] + ".glb").instantiate()) as Node3D
@@ -687,6 +701,18 @@ static func _build_glow_multimesh(
 	mmi.material_override = GLOW_MATERIAL
 	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	return mmi
+
+
+func _resolve_clock() -> SimClock:
+	if clock != null:
+		return clock
+	if flights != null and flights.clock != null:
+		return flights.clock
+	if is_inside_tree():
+		var root := get_tree().root
+		if root != null:
+			return root.find_child("SimClock", true, false) as SimClock
+	return null
 
 
 func _scene(path: String) -> PackedScene:
