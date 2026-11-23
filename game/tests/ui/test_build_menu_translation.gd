@@ -74,7 +74,7 @@ func test_english_output_is_unchanged() -> void:
 	assert_str(BuildMenuCatalog.shown("Check-in desk")).is_equal("Check-in desk")
 	assert_str(BuildMenuCatalog.shown("")).is_empty()
 	assert_str(RotateHint.text()).is_equal(RotateHint.TEXT)
-	assert_str(BuildUnlocks.requirement_text(3)).is_equal("Unlocks at 3 stars and 200 passengers")
+	assert_str(BuildUnlocks.requirement_text(3)).is_equal("Unlocks at 3 stars and 120 passengers")
 	assert_str(BuildUnlocks.requirement_text(1)).is_equal("Not available yet")
 	assert_str(ItemCardButton.card_text("Floor", ["a", "b", "c"], "Locked")).is_equal(
 		"Floor\nLocked\na\nHow it works: b\nNeeds and upkeep: c"

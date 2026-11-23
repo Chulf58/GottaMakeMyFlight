@@ -9,7 +9,7 @@ extends RefCounted
 ## Returned for an unknown object id or a wall kind with no price.
 const NO_PRICE := -1
 
-const STARTING_BUDGET := 20000
+const STARTING_BUDGET := 25000
 ## Share of the price paid back when a floor tile, wall or object is removed.
 const REFUND_SHARE_PERCENT := 50
 
@@ -23,15 +23,15 @@ const WALL_PRICES := {
 const OBJECT_PRICES := {
 	&"checkin_desk": 400,
 	&"security_scanner": 900,
-	# Security lane parts: 2500 for a whole lane, under three basic scanners
-	# (2700) but well over two (decision security-tiers-the-old-single-scanner-
-	# stays-as-a-cheap-basic: the lane is the bigger, faster upgrade, run by one
-	# officer). The arch and the X-ray belt are the machines; the tables are
-	# plain furniture, a little under a cafe table.
-	&"security_arch": 1100,
-	&"xray_belt": 900,
-	&"tray_table": 250,
-	&"pickup_table": 250,
+	# Security lane parts: 1800 for a whole lane, double one basic scanner (900)
+	# (decision security-tiers-the-old-single-scanner-stays-as-a-cheap-basic and
+	# ruling starting-budget-25k-and-early-tier-2-capital-repricing: the lane is
+	# the bigger, faster upgrade, run by one officer). The arch and the X-ray
+	# belt are the machines; the tables are plain furniture, like a kiosk display.
+	&"security_arch": 800,
+	&"xray_belt": 600,
+	&"tray_table": 200,
+	&"pickup_table": 200,
 	&"seat_row": 250,
 	&"entrance_door": 300,
 	&"exit_door": 300,
@@ -127,18 +127,18 @@ const LANDSIDE_PRICES := {
 ## (user ruling land-plot-price-rises-with-each-plot-bought-from-a-small-tun:
 ## cheap first plots, each buy makes the next dearer, location plays no part).
 ## Past the end each plot costs the last step more again (price_of_land_plot()).
-## Tuning values, to be checked in a playtest: the first plot is about a
-## sixth of the floor it holds (625 tiles at FLOOR_PRICE), the tenth more than
-## the starting budget.
+## Tuning values, to be checked in a playtest: the first two plots are cheap
+## early expansion (ruling starting-budget-25k-and-early-tier-2-capital-
+## repricing), the tenth more than the starting budget.
 const LAND_PLOT_PRICES: Array[int] = [
-	2500, 3500, 5000, 7000, 9500, 12500, 16000, 20000, 24500, 29500
+	1500, 2500, 5000, 7000, 9500, 12500, 16000, 20000, 24500, 29500
 ]
 
 ## What the runway works cost, by the size they build (decision runway-upgrade-
 ## works-wait-for-a-timetable-gap-passengers-per-plane-class; design section 7).
-## Placeholders, to be tuned by playtest: a medium runway about two land plots,
-## a large one more than the starting budget twice over.
-const RUNWAY_PRICES := {"medium": 15000, "large": 40000}
+## Tuned by ruling starting-budget-25k-and-early-tier-2-capital-repricing: a
+## medium runway sits within Day 2-4 reach, a large one stays an Hour-2 stretch.
+const RUNWAY_PRICES := {"medium": 9000, "large": 40000}
 
 ## What a ready toilet room costs to run per stall per game day (decision
 ## toilet-design-queue-free-reservable-stalls-per-stall-daily-u, point 2),

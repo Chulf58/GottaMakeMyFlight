@@ -37,7 +37,7 @@ func _tier(tier: int) -> void:
 
 
 func test_prices_ticks_and_tiers_are_the_ruled_ones() -> void:
-	assert_int(PriceTable.runway_price(PlaneClasses.MEDIUM)).is_equal(15000)
+	assert_int(PriceTable.runway_price(PlaneClasses.MEDIUM)).is_equal(9000)
 	assert_int(PriceTable.runway_price(PlaneClasses.LARGE)).is_equal(40000)
 	assert_int(PriceTable.runway_price(PlaneClasses.SMALL)).is_equal(PriceTable.NO_PRICE)
 	assert_int(RunwayWorks.ticks(PlaneClasses.MEDIUM)).is_equal(1200)
@@ -72,15 +72,15 @@ func test_locked_below_the_tier_with_the_requirement_text() -> void:
 
 func test_a_wallet_short_of_the_price_refuses_and_keeps_its_money() -> void:
 	_tier(2)
-	_wallet = Wallet.new(14999)
+	_wallet = Wallet.new(8999)
 	var problem := RunwayWorks.problem(_sim, _unlocks, _wallet)
-	print("14999 for a 15000 upgrade: '%s'" % problem)
-	assert_str(problem).is_equal("Not enough money: the medium runway works cost $15000")
+	print("8999 for a 9000 upgrade: '%s'" % problem)
+	assert_str(problem).is_equal("Not enough money: the medium runway works cost $9000")
 	assert_str(RunwayWorks.buy(_sim, _unlocks, _wallet)).is_equal(problem)
-	assert_int(_wallet.balance).is_equal(14999)
+	assert_int(_wallet.balance).is_equal(8999)
 	assert_bool(_sim.runway.works.scheduled()).is_false()
 	# Control: exactly the price is enough.
-	_wallet = Wallet.new(15000)
+	_wallet = Wallet.new(9000)
 	assert_str(RunwayWorks.buy(_sim, _unlocks, _wallet)).is_empty()
 	assert_int(_wallet.balance).is_equal(0)
 
@@ -88,8 +88,8 @@ func test_a_wallet_short_of_the_price_refuses_and_keeps_its_money() -> void:
 func test_buying_charges_the_price_once_and_books_the_works() -> void:
 	_tier(2)
 	assert_str(RunwayWorks.buy(_sim, _unlocks, _wallet)).is_empty()
-	assert_int(_wallet.balance).is_equal(100000 - 15000)
-	assert_array(_spent).is_equal([-15000])
+	assert_int(_wallet.balance).is_equal(100000 - 9000)
+	assert_array(_spent).is_equal([-9000])
 	var works := _sim.runway.works
 	assert_bool(works.scheduled()).is_true()
 	assert_str(works.target).is_equal(PlaneClasses.MEDIUM)
@@ -98,7 +98,7 @@ func test_buying_charges_the_price_once_and_books_the_works() -> void:
 	assert_str(_sim.runway.size).is_equal(PlaneClasses.SMALL)
 	assert_str(RunwayWorks.problem(_sim, _unlocks, _wallet)).is_equal(RunwayWorks.BOOKED_TEXT)
 	assert_str(RunwayWorks.buy(_sim, _unlocks, _wallet)).is_equal(RunwayWorks.BOOKED_TEXT)
-	assert_int(_wallet.balance).is_equal(100000 - 15000)
+	assert_int(_wallet.balance).is_equal(100000 - 9000)
 
 
 func test_the_largest_runway_has_no_upgrade() -> void:
@@ -175,4 +175,4 @@ func test_the_card_refuses_an_upgrade_while_the_last_works_are_held() -> void:
 	assert_str(_sim.runway.size).is_equal(PlaneClasses.MEDIUM)
 	assert_str(RunwayWorks.problem(_sim, _unlocks, _wallet)).is_equal(RunwayWorks.HELD_TEXT)
 	assert_str(RunwayWorks.buy(_sim, _unlocks, _wallet)).is_equal(RunwayWorks.HELD_TEXT)
-	assert_int(_wallet.balance).is_equal(100000 - 15000)
+	assert_int(_wallet.balance).is_equal(100000 - 9000)

@@ -38,22 +38,24 @@ func test_every_catalog_object_has_a_positive_price() -> void:
 
 
 func test_each_security_lane_part_has_its_price() -> void:
-	assert_int(PriceTable.price_of_object(&"security_arch")).is_equal(1100)
-	assert_int(PriceTable.price_of_object(&"xray_belt")).is_equal(900)
-	assert_int(PriceTable.price_of_object(&"tray_table")).is_equal(250)
-	assert_int(PriceTable.price_of_object(&"pickup_table")).is_equal(250)
+	assert_int(PriceTable.price_of_object(&"security_arch")).is_equal(800)
+	assert_int(PriceTable.price_of_object(&"xray_belt")).is_equal(600)
+	assert_int(PriceTable.price_of_object(&"tray_table")).is_equal(200)
+	assert_int(PriceTable.price_of_object(&"pickup_table")).is_equal(200)
 	assert_int(PriceTable.price_of_object(&"security_scanner")).is_equal(900)
 
 
-## Decision security-tiers-the-old-single-scanner-stays-as-a-cheap-basic: the
-## lane is the bigger upgrade, so its four parts cost well over one scanner.
-func test_a_whole_security_lane_costs_more_than_two_basic_scanners() -> void:
+## Decision security-tiers-the-old-single-scanner-stays-as-a-cheap-basic and
+## ruling starting-budget-25k-and-early-tier-2-capital-repricing: the lane
+## total is 1800, double one basic scanner (900).
+func test_a_whole_security_lane_costs_1800_and_more_than_a_basic_scanner() -> void:
 	var lane := 0
 	for part in SecurityLanes.PART_IDS:
 		lane += PriceTable.price_of_object(part)
 	var scanner := PriceTable.price_of_object(&"security_scanner")
 	print("lane %d, scanner %d" % [lane, scanner])
-	assert_int(lane).is_greater(2 * scanner)
+	assert_int(lane).is_equal(1800)
+	assert_int(lane).is_greater(scanner)
 
 
 func test_price_table_covers_exactly_the_catalog() -> void:
@@ -106,6 +108,11 @@ func test_refund_of_an_unknown_object_is_not_laundered_to_zero() -> void:
 
 
 func test_starting_budget_covers_a_starter_terminal_at_roughly_half() -> void:
+	assert_int(PriceTable.STARTING_BUDGET).is_equal(25000)
+	assert_int(PriceTable.price_of_land_plot(0)).is_equal(1500)
+	assert_int(PriceTable.price_of_land_plot(1)).is_equal(2500)
+	assert_int(PriceTable.runway_price("medium")).is_equal(9000)
+	assert_int(PriceTable.runway_price("large")).is_equal(40000)
 	var cost := _starter_cost()
 	var share := float(cost) / PriceTable.STARTING_BUDGET
 	assert_float(share).is_between(0.4, 0.6)
