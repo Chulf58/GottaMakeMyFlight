@@ -14,6 +14,7 @@ const PLACE_SEATS := &"place_seats"
 const SECOND_HIRE := &"second_hire"
 const TOILET := &"toilet"
 const FOOD := &"food"
+const BAGGAGE_CONNECT := &"baggage_connect"
 ## The invitation to click a passenger (FollowInvite). It is remembered in the
 ## file once the player has selected a passenger, not once it has shown.
 const FOLLOW_PASSENGER := &"follow_passenger"
@@ -34,6 +35,7 @@ const IDS: Array[StringName] = [
 	SECOND_HIRE,
 	TOILET,
 	FOOD,
+	BAGGAGE_CONNECT,
 	FOLLOW_PASSENGER,
 ]
 
@@ -58,6 +60,7 @@ const TEXT := {
 	SECOND_HIRE: "One agent works one desk or scanner. Hire another on the Staff card.",
 	TOILET: "Passengers need a toilet. Build a toilet room and put a stall in it.",
 	FOOD: "Hungry passengers need food. Build a cafe with a counter and a table.",
+	BAGGAGE_CONNECT: "Drag a belt from the back of a check-in desk into your Bag Room.",
 	FOLLOW_PASSENGER: "Click a passenger to follow them to their flight",
 }
 
@@ -77,6 +80,7 @@ const CATEGORIES := {
 		BuildMode.Tool.RESTAURANT_ROOM,
 		BuildMode.Tool.STALL_ROOM,
 	],
+	BAGGAGE_CONNECT: [BuildMode.Tool.BAG_ROOM, BuildMode.Tool.BELT],
 	FOLLOW_PASSENGER: [],
 }
 
@@ -130,6 +134,8 @@ static func causes(world: Dictionary) -> Array[StringName]:
 		out.append(TOILET)
 	if int(world["cafes"]) == 0 and int(world["max_hunger"]) >= CafeSim.HUNGRY_AT:
 		out.append(FOOD)
+	if int(world.get("bag_rooms", 0)) > 0 and int(world.get("connected_desks", 0)) == 0:
+		out.append(BAGGAGE_CONNECT)
 	if bool(world.get("follow_ready", false)) and not bool(world.get("followed", false)):
 		out.append(FOLLOW_PASSENGER)
 	var ordered: Array[StringName] = []
@@ -179,7 +185,20 @@ static func read_world(sim: PassengerSim, hiring_roles: Array) -> Dictionary:
 		"max_hunger": hunger if sim.cafes.hunger_enabled else 0,
 		"stalls": sim.toilets.layout.stalls.size(),
 		"cafes": sim.cafes.layout.cafes.size(),
+		"bag_rooms": _bag_room_count(sim.grid),
+		"connected_desks": BagRoutes.build(sim.grid).connected_desk_count(),
 	}
+
+
+static func _bag_room_count(grid: BuildGrid) -> int:
+	if grid == null:
+		return 0
+	var count := 0
+	for room_id in grid.room_ids():
+		var room := grid.get_room(room_id)
+		if not room.is_empty() and StringName(room["type"]) == BeltShaper.BAG_ROOM:
+			count += 1
+	return count
 
 
 ## The roles (check-in, security) with a verified shortage: a usable station
@@ -250,6 +269,7 @@ class Words:
 				tr("One agent works one desk or scanner. Hire another on the Staff card."),
 				tr("Passengers need a toilet. Build a toilet room and put a stall in it."),
 				tr("Hungry passengers need food. Build a cafe with a counter and a table."),
+				tr("Drag a belt from the back of a check-in desk into your Bag Room."),
 				tr("Click a passenger to follow them to their flight"),
 			]
 		)

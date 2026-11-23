@@ -54,6 +54,7 @@ var _layout := RoomLabelLayout.new()
 var _labels: Array[Label3D] = []
 var _ready_material := _tint_material(READY_TINT)
 var _needs_material := _tint_material(NEEDS_TINT)
+var _port_overlay: BaggagePortOverlay
 
 
 static func _tint_material(tint: Color) -> StandardMaterial3D:
@@ -69,6 +70,11 @@ func watch(grid: BuildGrid) -> void:
 	_grid = grid
 	grid.edit_applied.connect(_on_edit_applied)
 	grid.graph_changed.connect(_on_graph_changed)
+	if _port_overlay == null:
+		_port_overlay = BaggagePortOverlay.new()
+		_port_overlay.name = "BaggagePortOverlay"
+		add_child(_port_overlay)
+	_port_overlay.watch(get_parent() as BuildMode, grid)
 	redraw()
 
 

@@ -82,6 +82,7 @@ var results := {}
 var loaded_total := 0
 var missed_total := 0
 
+var _wallet: Wallet
 var _bags: Array[Bag] = []
 var _by_id := {}
 var _next_id := 1
@@ -93,7 +94,7 @@ var _next_shuttle_id := 1
 func _ready() -> void:
 	if clock == null or flights == null or build_mode == null:
 		return
-	bind(clock, flights, build_mode.grid, passengers)
+	bind(clock, flights, build_mode.grid, passengers, build_mode.wallet())
 
 
 ## Listens to the clock, the grid's edits and loads, and (when given) the
@@ -103,11 +104,17 @@ func bind(
 	with_flights: FlightSim,
 	with_grid: BuildGrid,
 	with_passengers: PassengerSim = null,
+	with_wallet: Wallet = null,
 ) -> void:
 	clock = with_clock
 	flights = with_flights
 	grid = with_grid
 	passengers = with_passengers
+	_wallet = (
+		with_wallet
+		if with_wallet != null
+		else (build_mode.wallet() if build_mode != null else null)
+	)
 	tick = clock.tick
 	routes = BagRoutes.build(grid)
 	clock.ticked.connect(on_tick)
@@ -159,19 +166,18 @@ func has_ready_bag_room() -> bool:
 	return false
 
 
+## Number of check-in desks routed to a ready bag room (or to `room_id` when
+## nonzero), read from the live grid without mutating `routes` or `routes_stale`.
+func connected_desk_count(room_id: int = 0) -> int:
+	var field := BagRoutes.build(grid) if routes_stale or routes == null else routes
+	return field.connected_desk_count(room_id)
+
+
 ## Whether at least one check-in desk on the grid connects via belts (BagRoutes)
 ## to a ready bag room's belt end. Read from the live grid without mutating
 ## `routes` or `routes_stale`, so saves and loads always agree.
 func has_connected_bag_room() -> bool:
-	var field := BagRoutes.build(grid) if routes_stale or routes == null else routes
-	for object_id in grid.object_ids():
-		var record := grid.get_object(object_id)
-		if StringName(record["def"]) != BeltShaper.DESK:
-			continue
-		var entry := field.entry_of(object_id)
-		if not entry.is_empty() and field.has_route(entry["cell"]):
-			return true
-	return false
+	return connected_desk_count() > 0
 
 
 func on_tick(new_tick: int) -> void:
@@ -637,6 +643,12 @@ func _settle(bag: Bag, loaded: bool, cause: Bag.Cause, at_tick: int) -> void:
 	if loaded:
 		loaded_total += 1
 		result["loaded"] += 1
+		if (
+			_wallet != null
+			and PriceTable.CHECKED_BAG_BONUS > 0
+			and _wallet.can_credit(PriceTable.CHECKED_BAG_BONUS, Wallet.Category.FEES)
+		):
+			_wallet.credit(PriceTable.CHECKED_BAG_BONUS, Wallet.Category.FEES)
 	else:
 		missed_total += 1
 		result["missed"] += 1

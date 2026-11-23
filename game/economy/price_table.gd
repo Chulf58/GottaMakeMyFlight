@@ -188,6 +188,9 @@ const EMERGENCY_PUSHBACK_FEE := 150
 ## in-to-a-bag-roo: the reduction is a tuning value, to be checked in a
 ## playtest).
 const MISSED_BAG_FEE_PERCENT := 50
+## Per-bag handling bonus credited when a checked bag finishes loading onto its
+## flight (user ruling 1b70fa33).
+const CHECKED_BAG_BONUS := 10
 
 
 static func price_of_floor() -> int:
