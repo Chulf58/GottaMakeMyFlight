@@ -57,6 +57,8 @@ const OBJECT_PIECES := {
 	&"tray_table": "tray_table",
 	&"xray_belt": "xray_belt",
 	&"pickup_table": "pickup_table",
+	&"search_table": "security_search_table",
+	&"confiscation_bin": "security_confiscation_bin",
 	&"toilet_stall": "toilet_stall",
 	&"toilet_sink": "toilet_sink",
 	&"kiosk_counter": "kiosk_counter",

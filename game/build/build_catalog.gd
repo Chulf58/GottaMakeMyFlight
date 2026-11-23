@@ -139,6 +139,8 @@ static func _build() -> void:
 	_add(&"tray_table", "Tray table", Vector2i.ONE, Color(0.72, 0.74, 0.78), 0.85)
 	_add(&"xray_belt", "X-ray belt", Vector2i.ONE, Color(0.36, 0.42, 0.52), 1.4)
 	_add(&"pickup_table", "Pickup table", Vector2i.ONE, Color(0.64, 0.68, 0.74), 0.85)
+	_add(&"search_table", "Search table", Vector2i.ONE, Color(0.68, 0.72, 0.78), 0.86)
+	_add(&"confiscation_bin", "Confiscation bin", Vector2i.ONE, Color(0.85, 0.78, 0.25), 0.92)
 	_add(&"seat_row", "Gate seats", Vector2i(3, 1), Color(0.25, 0.45, 0.7), 0.8)
 	_add_door(&"entrance_door", "Entrance", Color(0.35, 0.7, 0.4))
 	_add_door(&"exit_door", "Exit to the plane", Color(0.3, 0.55, 0.85))

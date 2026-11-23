@@ -32,6 +32,8 @@ const OBJECT_PRICES := {
 	&"xray_belt": 600,
 	&"tray_table": 200,
 	&"pickup_table": 200,
+	&"search_table": 250,
+	&"confiscation_bin": 150,
 	&"seat_row": 250,
 	&"entrance_door": 300,
 	&"exit_door": 300,

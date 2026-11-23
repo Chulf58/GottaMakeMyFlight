@@ -250,18 +250,17 @@ static func _update_tick_state(
 		not blocked
 		and not moving
 		and p.stage == Passenger.Stage.SECURITY
-		and not p.incident_resolved
-		and (p.alarm or p.liquids)
-		and p.security_phase in [SecurityRuntime.Phase.SCAN, SecurityRuntime.Phase.ARCH]
+		and SecurityRuntime.incident_open(p)
+		and p.security_phase in [SecurityRuntime.Phase.SCAN, SecurityRuntime.Phase.BODY_CHECK]
 	)
 	if in_scan_hold:
-		var rkey := &"alarm_scan" if p.alarm else &"liquids_scan"
+		var rkey := &"alarm_scan" if SecurityRuntime.body_pending(p) else &"liquids_scan"
 		if record.get("react_key", &"") != rkey:
 			record["react_key"] = rkey
 			record["react_since"] = now
 	elif (
 		p.stage != Passenger.Stage.SECURITY
-		or p.security_phase not in [SecurityRuntime.Phase.SCAN, SecurityRuntime.Phase.ARCH]
+		or p.security_phase not in [SecurityRuntime.Phase.SCAN, SecurityRuntime.Phase.BODY_CHECK]
 	):
 		record.erase("react_key")
 		record.erase("react_since")
@@ -274,8 +273,7 @@ static func _update_tick_state(
 		not blocked
 		and p.stage == Passenger.Stage.SECURITY
 		and p.security_phase == SecurityRuntime.Phase.REPACK
-		and not p.incident_resolved
-		and (p.alarm or p.liquids)
+		and SecurityRuntime.incident_open(p)
 		and done_work < REPACK_REACTION_END
 	)
 	if in_repack_react:
@@ -391,9 +389,13 @@ static func _evaluate(
 
 
 static func _evaluate_security(p: Passenger, record: Dictionary, now: float) -> Dictionary:
-	if p.stage != Passenger.Stage.SECURITY or p.incident_resolved or not (p.alarm or p.liquids):
+	if p.stage != Passenger.Stage.SECURITY or not SecurityRuntime.incident_open(p):
 		return {}
-	var react_mode := Mode.ALARM if p.alarm else Mode.LIQUIDS
+	var react_mode := (
+		Mode.ALARM
+		if (p.security_phase == SecurityRuntime.Phase.BODY_CHECK or SecurityRuntime.body_pending(p))
+		else Mode.LIQUIDS
+	)
 	if p.security_phase == SecurityRuntime.Phase.REPACK:
 		if not record.has("repack_since"):
 			return {}
@@ -411,7 +413,7 @@ static func _evaluate_security(p: Passenger, record: Dictionary, now: float) -> 
 			"sub": 0,
 		}
 	if (
-		p.security_phase in [SecurityRuntime.Phase.SCAN, SecurityRuntime.Phase.ARCH]
+		p.security_phase in [SecurityRuntime.Phase.SCAN, SecurityRuntime.Phase.BODY_CHECK]
 		and not record.get("moving", false)
 		and record.has("react_since")
 	):

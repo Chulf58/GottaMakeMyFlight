@@ -543,6 +543,7 @@ func draw() -> void:
 	_sync_fidget_frames(now)
 	_markers.draw()
 	_sync_stall_doors(alpha)
+	_sync_security_views(alpha)
 
 
 func _sync_fidget_frames(now: float) -> void:
@@ -563,6 +564,13 @@ func _sync_stall_doors(alpha: float) -> void:
 	if build_view != null:
 		build_view.sync_stall_doors(sim, alpha)
 	StallDoors.sync_ghosts(sim, ghosts, alpha, _in_process)
+
+
+func _sync_security_views(alpha: float) -> void:
+	if build_view == null and build_mode != null:
+		build_view = build_mode.get_node_or_null("BuildView") as BuildView
+	if build_view != null:
+		build_view.sync_security(sim, alpha)
 
 
 ## The Late mode's disc mesh, one instance per late passenger, none drawn yet.

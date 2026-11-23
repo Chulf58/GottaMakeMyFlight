@@ -106,9 +106,9 @@ func test_skipped_ticks_change_no_forecast_at_the_lane() -> void:
 			SecurityRuntime.Phase.ARCH,
 			SecurityRuntime.Phase.TO_BERTH,
 			SecurityRuntime.Phase.REPACK,
-			SecurityRuntime.Phase.RETURN,
 			SecurityRuntime.Phase.PICKUP,
 			SecurityRuntime.Phase.LEAVE,
+			SecurityRuntime.Phase.BODY_CHECK,
 		]
 	)
 

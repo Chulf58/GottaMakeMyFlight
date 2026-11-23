@@ -285,35 +285,29 @@ func test_a_side_entry_turns_smoothly_from_its_walk() -> void:
 	assert_float(apart).is_less(0.001)
 
 
-## A returner's second pass through the arch starts beside the unpack cell and
-## never sets off from it; it is drawn with SecurityLooks.setoff_yaw() only on
-## its arch walk up to the arch cell, where it turns into the arch around the
-## unpack cell's corner (board 40d26b16; before, it was turned as any walker,
-## past the corner, and a runner was 46 degrees off the axis at the arch's
-## entry). At the basic scanner nothing sets off. Control: the returner did walk
-## its second pass and was turned there, and the scanner passenger was served.
-func test_a_returner_turns_only_at_its_corner_and_the_basic_scanner_is_left_alone() -> void:
+## Under S1, an alarm passenger completes BODY_CHECK at the arch without walking
+## back to the unpack cell; at the basic scanner nothing sets off.
+func test_body_alarm_resolves_without_second_pass_and_basic_scanner_is_left_alone() -> void:
 	var w := _make()
 	var views := _views_of(w)
 	var sim := w.world.sim
 	var id := w.send(1, false, true)
 	var p := w.world.passenger(id)
-	var second := 0
-	var cornered := 0
-	var unpack: Vector2i = sim.layout.security_lanes.lane(w.station)["unpack"]
+	var body_checks := 0
+	var returned := false
 	for i in 3000:
 		w.world.step()
 		views.draw()
 		if p.stage > Passenger.Stage.SECURITY:
 			break
-		if p.incident_resolved and p.security_phase == SecurityRuntime.Phase.ARCH:
-			second += 1
+		if p.security_phase == SecurityRuntime.Phase.BODY_CHECK:
+			body_checks += 1
 			assert_bool(SecurityLooks.setting_off(sim, p)).is_false()
-			if not is_nan(SecurityLooks.setoff_yaw(sim, p)):
-				cornered += 1
-				assert_int(p.path.size()).is_equal(3)
-				assert_bool(p.path[1] == unpack and p.path_index <= 1).is_true()
-	assert_int(cornered).is_greater(0)
+		if p.security_phase in [SecurityRuntime.Phase.TO_BERTH, SecurityRuntime.Phase.REPACK]:
+			returned = true
+	assert_int(body_checks).is_greater(0)
+	assert_bool(returned).is_false()
+	assert_bool(p.body_resolved).is_true()
 	var booth := _make(false)
 	var booth_views := _views_of(booth)
 	var bid := booth.send(1)
@@ -333,6 +327,5 @@ func test_a_returner_turns_only_at_its_corner_and_the_basic_scanner_is_left_alon
 			var off := booth_views.security_offset(bid)
 			var lateral := off - booth_axis * off.dot(booth_axis)
 			assert_float(lateral.length()).is_less(0.0001)
-	print("returner second-pass ARCH ticks %d, scanner service ticks %d" % [second, served])
-	assert_int(second).is_greater(0)
+	print("lane BODY_CHECK ticks %d, scanner service ticks %d" % [body_checks, served])
 	assert_int(served).is_greater(0)

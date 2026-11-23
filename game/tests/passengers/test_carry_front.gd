@@ -7,12 +7,12 @@ extends GdUnitTestSuite
 ## between the two over CarryOnProps.TRANSFER_TICKS of sim time with the bag
 ## in its hand.
 ##
-## The world is SecurityTestWorld's lane (arch on (5, 6), RIGHT) with a wall
-## on the west edge of the return route's first cell (4, 6), so that cell is
-## closed by the arch on one side and the wall on the other, as when a lane
-## stands against a wall.
+## The world is SecurityTestWorld's lane (arch on (5, 6), exit on (5, 4)) with
+## walls on both edges of CORRIDOR (5, 2) on the walk to the gate exit (5, 0),
+## so passengers carry in front entering and walking through (5, 2) and turn
+## back to side carry once leaving toward (5, 0).
 
-const CORRIDOR := Vector2i(4, 6)
+const CORRIDOR := Vector2i(5, 2)
 
 var _worlds: Array[SecurityTestWorld] = []
 var _views: Array[PassengerViews] = []
@@ -38,8 +38,18 @@ func after_test() -> void:
 func _make() -> SecurityTestWorld:
 	var w := SecurityTestWorld.make(true)
 	_worlds.append(w)
-	var wall := BuildEdit.place_wall(CORRIDOR, BuildGrid.Side.WEST)
-	assert_bool(w.world.sim.grid.apply(wall).ok).is_true()
+	(
+		assert_bool(w.world.sim.grid.apply(BuildEdit.place_wall(CORRIDOR, BuildGrid.Side.WEST)).ok)
+		. is_true()
+	)
+	(
+		assert_bool(w.world.sim.grid.apply(BuildEdit.place_wall(CORRIDOR, BuildGrid.Side.EAST)).ok)
+		. is_true()
+	)
+	for x in 12:
+		if x != 5:
+			w.world.sim.grid.apply(BuildEdit.place_wall(Vector2i(x, 2), BuildGrid.Side.SOUTH))
+	PassengerTestWorld.place(w.world.sim.grid, &"seat_row", Vector2i(8, 0), 0)
 	var views := PassengerTestWorld.views()
 	views.clock = w.world.clock
 	views.sim = w.world.sim
@@ -53,38 +63,37 @@ func _make() -> SecurityTestWorld:
 func test_a_cell_closed_on_both_flanks_means_a_front_carry() -> void:
 	var w := _make()
 	var sim := w.world.sim
-	var lane := sim.layout.security_lanes.lane(w.station)
 	assert_bool(sim.layout.security_lanes.is_complete(w.station)).is_true()
 	var p := Passenger.new()
 	p.carry_on = 1
-	var route: Array[Vector2i] = [lane["berth"], CORRIDOR, CORRIDOR + Vector2i(0, 1)]
+	var route: Array[Vector2i] = [CORRIDOR + Vector2i(0, 1), CORRIDOR, CORRIDOR + Vector2i(0, -1)]
 	p.at = route[0]
 	p.set_path(route)
-	# On the berth, walking into the corridor: the next cell is closed.
+	# Approaching CORRIDOR: next cell is closed on both flanks.
 	assert_bool(SecurityLooks.carry_front(sim, p)).is_true()
-	# In the corridor.
+	# Inside CORRIDOR.
 	p.path_index = 1
 	p.at = route[1]
 	assert_bool(SecurityLooks.carry_front(sim, p)).is_true()
-	# Arrived on the route's end: open to the west.
+	# Arrived in open hall past CORRIDOR: open on both flanks.
 	p.path_index = 2
 	p.at = route[2]
 	assert_bool(SecurityLooks.carry_front(sim, p)).is_false()
-	# Control: without the wall the corridor cell is open on one side.
+	# Control: without the west wall the corridor cell is open on one side.
 	sim.grid.apply(BuildEdit.remove_wall(CORRIDOR, BuildGrid.Side.WEST))
 	p.path_index = 1
 	p.at = route[1]
 	assert_bool(SecurityLooks.carry_front(sim, p)).is_false()
 
 
-## An alarm passenger walking back carries in front from the berth into the
-## corridor and back at the side on the route's end; each turn takes
-## TRANSFER_TICKS ticks, halfway after half of them.
+## A passenger leaving security through the narrow corridor carries in front
+## entering and crossing CORRIDOR and turns back to the side on exit; each turn
+## takes TRANSFER_TICKS ticks, halfway after half of them.
 func test_the_walk_back_switches_to_the_front_and_back_on_sim_time() -> void:
 	var w := _make()
 	var views := _views[-1]
 	var props := views.carry_on_props()
-	var ids := w.send_all([[1, false, true]])
+	var ids := w.send_all([[1, false, false]])
 	var p := w.world.passenger(ids[0])
 	var sim := w.world.sim
 	var front_cells := {}
@@ -96,18 +105,18 @@ func test_the_walk_back_switches_to_the_front_and_back_on_sim_time() -> void:
 		views.draw()
 		var front := SecurityLooks.carry_front(sim, p)
 		var carried := SecurityLooks.bag_homes(sim, p) == [SecurityLooks.Home.HAND]
-		if p.stage == Passenger.Stage.SECURITY and carried and front != was_front:
-			switches.append([sim.tick, front, p.at, p.security_phase])
+		if p.stage == Passenger.Stage.TO_GATE and carried and front != was_front:
+			switches.append([sim.tick, front, p.at, p.stage])
 			var start := sim.tick
 			var half := int(CarryOnProps.TRANSFER_TICKS / 2.0)
 			while sim.tick < start + half:
 				w.world.step()
 			views.draw()
 			halfway.append(props.front_weight_of(ids[0]))
-		if front and carried:
+		if front and carried and p.stage == Passenger.Stage.TO_GATE:
 			front_cells[p.at] = true
 		was_front = front and carried
-		if w.cleared.has(ids[0]):
+		if p.stage > Passenger.Stage.TO_GATE or p.is_done():
 			break
 	print(
 		(
@@ -118,7 +127,6 @@ func test_the_walk_back_switches_to_the_front_and_back_on_sim_time() -> void:
 	assert_bool(w.cleared.has(ids[0])).is_true()
 	assert_int(switches.size()).is_greater_equal(2)
 	assert_bool(switches[0][1]).is_true()
-	assert_int(switches[0][3]).is_equal(SecurityRuntime.Phase.RETURN)
 	assert_bool(switches[1][1]).is_false()
 	assert_bool(front_cells.has(CORRIDOR)).is_true()
 	# Halfway through each turn in time, three quarters of the way in pose
@@ -135,7 +143,7 @@ func test_a_load_in_the_corridor_starts_in_the_front_carry() -> void:
 	var w := _make()
 	var views := _views[-1]
 	var props := views.carry_on_props()
-	var ids := w.send_all([[1, false, true]])
+	var ids := w.send_all([[1, false, false]])
 	var p := w.world.passenger(ids[0])
 	var sim := w.world.sim
 	var front_at := -1
@@ -143,14 +151,13 @@ func test_a_load_in_the_corridor_starts_in_the_front_carry() -> void:
 		w.world.step()
 		views.draw()
 		if (
-			p.stage == Passenger.Stage.SECURITY
+			p.stage == Passenger.Stage.TO_GATE
 			and SecurityLooks.bag_homes(sim, p) == [SecurityLooks.Home.HAND]
 			and SecurityLooks.carry_front(sim, p)
 		):
 			front_at = sim.tick
 			break
 	assert_int(front_at).is_greater(0)
-	assert_int(p.security_phase).is_equal(SecurityRuntime.Phase.RETURN)
 	for tick in 2:
 		w.world.step()
 		views.draw()
@@ -170,7 +177,7 @@ func test_a_load_in_the_corridor_starts_in_the_front_carry() -> void:
 	assert_float(weight).is_equal(1.0)
 
 
-## On the walk back, the case turns back to the side upright ahead of the arm
+## Leaving the narrow corridor, the case turns back to the side upright ahead of the arm
 ## (CarryHand.bag_weight: the arm's weight squared on a turn from the
 ## front), so its lower end is not swung through the thigh, and both end the
 ## turn together. Control: the turn was seen part way (strictly between 0 and
@@ -179,7 +186,7 @@ func test_the_case_turns_back_to_the_side_ahead_of_the_arm() -> void:
 	var w := _make()
 	var views := _views[-1]
 	var props := views.carry_on_props()
-	var ids := w.send_all([[1, false, true]])
+	var ids := w.send_all([[1, false, false]])
 	var p := w.world.passenger(ids[0])
 	var sim := w.world.sim
 	var mid: Array = []
@@ -189,7 +196,7 @@ func test_the_case_turns_back_to_the_side_ahead_of_the_arm() -> void:
 		views.draw()
 		var carried := SecurityLooks.bag_homes(sim, p) == [SecurityLooks.Home.HAND]
 		var front := SecurityLooks.carry_front(sim, p) and carried
-		if was_front and not front and p.stage == Passenger.Stage.SECURITY:
+		if was_front and not front and p.stage == Passenger.Stage.TO_GATE:
 			var start := sim.tick
 			while sim.tick < start + int(CarryOnProps.TRANSFER_TICKS / 2.0):
 				w.world.step()

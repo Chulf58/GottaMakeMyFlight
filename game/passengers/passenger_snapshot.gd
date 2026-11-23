@@ -29,6 +29,7 @@ const KEYS := [
 	"flight_results",
 	"scheduled",
 	"security",
+	"confiscations",
 	"toilet",
 	"shop",
 ]
@@ -73,7 +74,8 @@ const BOOL_FIELDS := [
 	"needs_replan",
 	"liquids",
 	"alarm",
-	"incident_resolved",
+	"body_resolved",
+	"bag_resolved",
 	"sat_late",
 	"seat_exiting",
 ]
@@ -154,6 +156,7 @@ static func save(
 		"flight_results": result_list,
 		"scheduled": scheduled,
 		"security": sim.security.to_list(),
+		"confiscations": sim.security.bins.to_dict(),
 		"toilet": ToiletSnapshot.save(sim.toilets),
 		"shop": ShopSnapshot.save(sim.shops),
 	}
@@ -224,6 +227,10 @@ static func load(data: Dictionary, grid: BuildGrid) -> Dictionary:
 	if security.has("error"):
 		return security
 	out["security"] = security["records"]
+	var confiscations := _confiscations(data["confiscations"], grid)
+	if confiscations.has("error"):
+		return confiscations
+	out["confiscations"] = confiscations["data"]
 	var no_shows := _no_shows(data["no_shows"])
 	if no_shows.has("error"):
 		return no_shows
@@ -621,12 +628,10 @@ static func _security(
 		var p: Passenger = ids[id]
 		var admitted := station_of.has(id)
 		var phased := p.security_phase != SecurityRuntime.Phase.NONE
-		var returning := admitted and (records[station_of[id]]["returns"] as Array).has(id)
 		if (
 			(p.stage == Passenger.Stage.SECURITY) != admitted
 			or phased != admitted
 			or (not admitted and p.security_work != 0)
-			or returning != (p.security_phase == SecurityRuntime.Phase.RETURN)
 		):
 			return {"error": "passenger %d's security phase does not match its station" % id}
 	return {"records": records}
@@ -656,6 +661,50 @@ static func _service_problem(
 			):
 				return "passenger %d is admitted and in a queue as well" % id
 	return SecurityRuntime.record_problem(record, units, def == SecurityLanes.ARCH)
+
+
+static func _confiscations(raw: Variant, grid: BuildGrid) -> Dictionary:
+	if typeof(raw) != TYPE_DICTIONARY:
+		return {"error": "confiscations must be a dictionary"}
+	var dict: Dictionary = raw
+	if not dict.has("day") or not dict.has("bins"):
+		return {"error": "confiscations missing day or bins"}
+	if not _whole(dict["day"]) or int(dict["day"]) < 0:
+		return {"error": "confiscations day must be a whole number, 0 or more"}
+	if typeof(dict["bins"]) != TYPE_ARRAY:
+		return {"error": "confiscations bins must be an array"}
+	var seen := {}
+	var clean_bins := []
+	for entry: Variant in dict["bins"]:
+		if typeof(entry) != TYPE_DICTIONARY:
+			return {"error": "confiscation bin entry must be a dictionary"}
+		var rec: Dictionary = entry
+		for key in ["bin", "count", "items"]:
+			if not rec.has(key):
+				return {"error": "confiscation bin entry missing '%s'" % key}
+		if not _whole(rec["bin"]) or not _whole(rec["count"]) or typeof(rec["items"]) != TYPE_ARRAY:
+			return {"error": "confiscation bin entry is malformed"}
+		var bin_id := int(rec["bin"])
+		var count := int(rec["count"])
+		var items: Array = rec["items"]
+		if (
+			seen.has(bin_id)
+			or count < 0
+			or items.size() > SecurityRuntime.MAX_BIN_HISTORY
+			or count < items.size()
+		):
+			return {"error": "confiscation bin %d has invalid count or history" % bin_id}
+		var obj := grid.get_object(bin_id)
+		if obj.is_empty() or StringName(obj["def"]) != SecurityLanes.CONFISCATION_BIN:
+			return {"error": "confiscation bin %d is not on the grid" % bin_id}
+		seen[bin_id] = true
+		var clean_items: Array[int] = []
+		for v in items:
+			if not _whole(v) or int(v) < 0 or int(v) >= SecuritySearchReasons.CONTRABAND_COUNT:
+				return {"error": "confiscation bin %d has invalid item index" % bin_id}
+			clean_items.append(int(v))
+		clean_bins.append({"bin": bin_id, "count": count, "items": clean_items})
+	return {"data": {"day": int(dict["day"]), "bins": clean_bins}}
 
 
 static func _whole(value: Variant) -> bool:

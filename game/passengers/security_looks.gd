@@ -30,7 +30,7 @@ extends RefCounted
 ## unpack centre.
 
 enum Home { NONE, HAND, TRAY, FLOOR }
-enum Tray { NONE, IN, RIDE, OUT }
+enum Tray { NONE, IN, RIDE, OUT, INSPECT }
 ## The kinds of carry-on bag (decision carry-on-bag-kinds-backpack-shoulder-or-
 ## tote-bag-small-rolle): looks only, the sim never reads them.
 enum Kind { CASE, BACKPACK, SHOULDER, ROLLER }
@@ -256,7 +256,7 @@ static func _return_corner_yaw(sim: PassengerSim, p: Passenger) -> float:
 ## unpack cell and the arch cell, short of the arch cell. Read from the saved
 ## path and the distance walked on it.
 static func return_walk_mm(sim: PassengerSim, p: Passenger) -> float:
-	if p.stage != Passenger.Stage.SECURITY or not p.incident_resolved:
+	if p.stage != Passenger.Stage.SECURITY or not (p.body_resolved and p.bag_resolved):
 		return NAN
 	if p.security_phase != SecurityRuntime.Phase.ARCH or p.path_index > 1:
 		return NAN
@@ -376,23 +376,29 @@ static func face(sim: PassengerSim, p: Passenger) -> Vector2:
 		SecurityRuntime.Phase.UNPACK, SecurityRuntime.Phase.PICKUP:
 			return Vector2(lane["side"])
 		SecurityRuntime.Phase.REPACK:
+			if int(lane.get("search_table_id", 0)) != 0:
+				return -Vector2(lane["side"])
 			return Vector2(lane["front"])
 	return Vector2.ZERO
 
 
 ## Where the tray of `p` is: on the tray table at UNPACK, riding the belt in
-## ARCH, on the pickup table at PICKUP. A returner's ARCH starts beside the
-## unpack cell, so its tray appears once it reaches the unpack cell.
+## ARCH, on the pickup table at PICKUP, or on the attached search table at
+## TO_BERTH/REPACK.
 static func tray(sim: PassengerSim, p: Passenger) -> Tray:
-	if p.stage != Passenger.Stage.SECURITY or lane_of(sim, p).is_empty():
+	var lane := lane_of(sim, p)
+	if p.stage != Passenger.Stage.SECURITY or lane.is_empty():
 		return Tray.NONE
 	match p.security_phase:
 		SecurityRuntime.Phase.UNPACK:
 			return Tray.IN
-		SecurityRuntime.Phase.ARCH:
+		SecurityRuntime.Phase.ARCH, SecurityRuntime.Phase.BODY_CHECK:
 			return Tray.RIDE if _on_passage(sim, p) else Tray.NONE
 		SecurityRuntime.Phase.PICKUP:
 			return Tray.OUT
+		SecurityRuntime.Phase.TO_BERTH, SecurityRuntime.Phase.REPACK:
+			if int(lane.get("search_table_id", 0)) != 0:
+				return Tray.INSPECT
 	return Tray.NONE
 
 
@@ -844,20 +850,24 @@ static func stall_floor(stall: Dictionary, index: int, count: int) -> Transform3
 
 
 static func _security_home(sim: PassengerSim, p: Passenger, i: int) -> Home:
-	var on_lane := not lane_of(sim, p).is_empty()
+	var lane := lane_of(sim, p)
+	var on_lane := not lane.is_empty()
+	var has_search_table := on_lane and int(lane.get("search_table_id", 0)) != 0
 	var phase := p.security_phase as SecurityRuntime.Phase
 	var done := SecurityRuntime.work_for(phase, p) - p.security_work
 	var home := Home.HAND
 	match phase:
 		SecurityRuntime.Phase.REPACK:
-			home = Home.FLOOR
+			home = Home.TRAY if has_search_table else Home.FLOOR
+		SecurityRuntime.Phase.TO_BERTH:
+			home = Home.TRAY if has_search_table else Home.HAND
 		SecurityRuntime.Phase.UNPACK:
 			var in_tray := (
 				SecurityRuntime.LANE_UNPACK_TICKS
 				+ tray_turn(p, i, true) * SecurityRuntime.LANE_UNPACK_BAG_TICKS
 			)
 			home = Home.TRAY if done >= in_tray else Home.HAND
-		SecurityRuntime.Phase.ARCH:
+		SecurityRuntime.Phase.ARCH, SecurityRuntime.Phase.BODY_CHECK:
 			# A returner's second bag of two stays in the hand to its window.
 			var begun := _on_passage(sim, p) and _put_in_begun(sim, p, i)
 			home = Home.TRAY if begun else Home.HAND
@@ -905,7 +915,7 @@ static func tray_turn(p: Passenger, i: int, into: bool) -> int:
 ## posts, and the hand reached across them for the belt (user ruling "Pick up
 ## after the arch", board 0dd2c787 item b).
 static func _on_passage(sim: PassengerSim, p: Passenger) -> bool:
-	if not p.incident_resolved or p.path_index >= 1:
+	if not (p.body_resolved and p.bag_resolved) or p.path_index >= 1:
 		return true
 	var route: Array = lane_of(sim, p).get("return_route", [])
 	if route.is_empty():

@@ -98,10 +98,19 @@ func signature() -> String:
 	var parts := PackedStringArray([world.signature()])
 	for id in world.sim.passenger_ids():
 		var p := world.passenger(id)
-		parts.append(
-			(
-				"%d:%d:%d:%d:%d"
-				% [id, p.security_phase, p.security_work, int(p.incident_resolved), p.station]
+		(
+			parts
+			. append(
+				(
+					"%d:%d:%d:%d:%d"
+					% [
+						id,
+						p.security_phase,
+						p.security_work,
+						int(p.body_resolved) * 2 + int(p.bag_resolved),
+						p.station,
+					]
+				)
 			)
 		)
 	parts.append(str(world.sim.security.to_list()))

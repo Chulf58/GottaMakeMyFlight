@@ -115,7 +115,8 @@ static func _leaving(p: Passenger, cell: Vector2i, resume: Passenger.Stage) -> P
 	after.carry_on = p.carry_on
 	after.liquids = p.liquids
 	after.alarm = p.alarm
-	after.incident_resolved = p.incident_resolved
+	after.body_resolved = p.body_resolved
+	after.bag_resolved = p.bag_resolved
 	after.stage = resume
 	after.at = cell
 	after.clear_path()

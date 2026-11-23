@@ -130,7 +130,9 @@ signal loaded(ok: bool)
 ## 32: ATM, currency exchange, grab-and-go stall, and nap pod converted from
 ## room types to standalone corridor services (PassengerSim v37); version 31
 ## saves are refused (no migration).
-const SAVE_VERSION := 32
+## 33: security overhaul S1 (PassengerSim v38: split body_resolved/bag_resolved
+## and daily confiscation bin history); version 32 saves are refused (no migration).
+const SAVE_VERSION := 33
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"

@@ -140,11 +140,13 @@ var carry_on := 0
 var liquids := false
 var alarm := false
 ## Inside Stage.SECURITY (SecurityRuntime): the phase (SecurityRuntime.Phase,
-## NONE outside it) and the integer work left in it. incident_resolved is set
-## once its liquids or alarm repack is done; an incident resolves once.
+## NONE outside it) and the integer work left in it. body_resolved is set once
+## the arch wand pat-down finishes; bag_resolved is set once the carry-on bag
+## search finishes.
 var security_phase := 0
 var security_work := 0
-var incident_resolved := false
+var body_resolved := false
+var bag_resolved := false
 ## The sim tick a walker whose gate seat went while its roller parked stands
 ## collecting the bag to (ParkRecovery), 0 when it collects none.
 var collect_tick := 0

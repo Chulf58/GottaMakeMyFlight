@@ -113,6 +113,8 @@ enum Tool {
 	SHOWER_ROOM,
 	BUY_LAND,
 	GATE_DESK,
+	SEARCH_TABLE,
+	CONFISCATION_BIN,
 }
 
 ## The landside build tools (LandsidePlacement), by the kind each builds. They

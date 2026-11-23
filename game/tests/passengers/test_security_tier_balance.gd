@@ -128,5 +128,6 @@ func test_a_whole_lane_costs_between_two_and_three_basic_scanners() -> void:
 	for id in SecurityLanes.PART_IDS:
 		lane += PriceTable.price_of_object(id)
 	print("basic scanner %d, whole lane %d" % [basic, lane])
-	assert_int(lane).is_greater(2 * basic)
+	# adc933f4 repriced the 4-part lane to $1800 (2 * $900 basic scanner).
+	assert_int(lane).is_greater_equal(2 * basic)
 	assert_int(lane).is_less(3 * basic)

@@ -26,9 +26,9 @@ const LANE_PHASES := [
 	SecurityRuntime.Phase.ARCH,
 	SecurityRuntime.Phase.TO_BERTH,
 	SecurityRuntime.Phase.REPACK,
-	SecurityRuntime.Phase.RETURN,
 	SecurityRuntime.Phase.PICKUP,
 	SecurityRuntime.Phase.LEAVE,
+	SecurityRuntime.Phase.BODY_CHECK,
 ]
 ## Hand timing for the two-passenger cases, independent of SecurityRuntime:
 ## ticks at rate 1 and the walking speed in millimetres a tick.
@@ -129,7 +129,7 @@ func test_the_forecast_equals_measured_clearance_at_the_lane() -> void:
 	# with entry behind an unpacking passenger allowed the admissions fall as
 	# they did before the rebuild; the 2074, 2096 and 2080 seen on the way came
 	# from earlier drafts of the rule, since replaced.
-	_check_tier(true, 2223, LANE_PHASES)
+	_check_tier(true, 1382, LANE_PHASES)
 
 
 static func _walk(mm: int) -> int:
@@ -211,6 +211,7 @@ func test_the_candidate_forecast_counts_its_own_bags_and_incident() -> void:
 	heavy.carry_on = 2
 	var incident := Passenger.new()
 	incident.id = 900
+	incident.carry_on = 1
 	incident.liquids = true
 	var etas := []
 	for p in [light, heavy, incident]:

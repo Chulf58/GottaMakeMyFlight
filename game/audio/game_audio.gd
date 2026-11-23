@@ -886,8 +886,8 @@ func _seed_passengers(sim: PassengerSim) -> void:
 			if (
 				p.alarm
 				and (
-					p.incident_resolved
-					or p.security_phase == SecurityRuntime.Phase.TO_BERTH
+					p.body_resolved
+					or p.security_phase == SecurityRuntime.Phase.BODY_CHECK
 					or p.security_phase == SecurityRuntime.Phase.REPACK
 				)
 			):
@@ -959,8 +959,11 @@ func _check_security_alarms() -> void:
 			if p == null or not p.alarm:
 				continue
 			if (
-				p.security_phase == SecurityRuntime.Phase.TO_BERTH
-				or p.security_phase == SecurityRuntime.Phase.REPACK
+				p.security_phase == SecurityRuntime.Phase.BODY_CHECK
+				or (
+					p.security_phase == SecurityRuntime.Phase.REPACK
+					and not _passengers.security.is_lane(p.station)
+				)
 			):
 				_security_alarmed[id] = true
 				if can_play:

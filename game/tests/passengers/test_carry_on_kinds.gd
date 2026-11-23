@@ -9,7 +9,7 @@ extends GdUnitTestSuite
 ## lifted at security included; worn bags keep their carry, inside the
 ## corridor).
 
-const CORRIDOR := Vector2i(4, 6)
+const CORRIDOR := Vector2i(5, 2)
 const IDS := 2000
 
 var _worlds: Array[SecurityTestWorld] = []
@@ -280,8 +280,20 @@ func test_a_roller_swings_round_after_a_half_turn() -> void:
 func test_in_the_corridor_only_the_hard_case_turns_to_the_front() -> void:
 	var w := SecurityTestWorld.make(true)
 	_worlds.append(w)
-	var wall := BuildEdit.place_wall(CORRIDOR, BuildGrid.Side.WEST)
-	assert_bool(w.world.sim.grid.apply(wall).ok).is_true()
+	for cell in [Vector2i(5, 3), CORRIDOR]:
+		(
+			assert_bool(w.world.sim.grid.apply(BuildEdit.place_wall(cell, BuildGrid.Side.WEST)).ok)
+			. is_true()
+		)
+		(
+			assert_bool(w.world.sim.grid.apply(BuildEdit.place_wall(cell, BuildGrid.Side.EAST)).ok)
+			. is_true()
+		)
+	for x in 12:
+		if x != 5:
+			w.world.sim.grid.apply(BuildEdit.place_wall(Vector2i(x, 2), BuildGrid.Side.SOUTH))
+	for sx in [0, 6, 9]:
+		PassengerTestWorld.place(w.world.sim.grid, &"seat_row", Vector2i(sx, 0), 0)
 	var views := PassengerTestWorld.views()
 	views.clock = w.world.clock
 	views.sim = w.world.sim
@@ -290,18 +302,22 @@ func test_in_the_corridor_only_the_hard_case_turns_to_the_front() -> void:
 	var props := views.carry_on_props()
 	var sent: Array = []
 	for i in 8:
-		sent.append([1, false, true])
+		sent.append([1, false, false])
 	var ids := w.send_all(sent)
 	var seen := {}
 	var widest := 0.0
 	var centre := w.world.sim.grid.cell_to_world(CORRIDOR)
 	for i in 6000:
+		for id in ids:
+			var pax := w.world.passenger(id)
+			if pax.stage == Passenger.Stage.TO_GATE:
+				pax.late = true
 		w.world.step()
 		views.draw()
 		for id in ids:
 			var p := w.world.passenger(id)
 			var bags: Array[Node3D] = props.props_of(id)["bags"]
-			if p.at != CORRIDOR or p.security_phase != SecurityRuntime.Phase.RETURN:
+			if p.at != CORRIDOR or p.stage != Passenger.Stage.TO_GATE:
 				continue
 			if bags.is_empty() or props.transfer_progress(id, 0) < 1.0:
 				continue
@@ -322,7 +338,7 @@ func test_in_the_corridor_only_the_hard_case_turns_to_the_front() -> void:
 					widest = maxf(
 						widest, maxf(absf(box.position.x - centre.x), absf(box.end.x - centre.x))
 					)
-		if ids.all(func(id: int) -> bool: return w.cleared.has(id)):
+		if ids.all(func(id: int) -> bool: return w.world.passenger(id).at.y <= 1):
 			break
 	print(
 		(

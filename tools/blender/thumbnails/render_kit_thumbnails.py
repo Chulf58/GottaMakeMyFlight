@@ -240,6 +240,8 @@ ITEMS = {
     "xray_belt": ("1x1", ["xray_belt"], []),
     "arch": ("door_1x1", ["security_arch"], []),
     "pickup_table": ("1x1", ["pickup_table"], []),
+    "search_table": ("1x1", ["security_search_table"], []),
+    "confiscation_bin": ("1x1", ["security_confiscation_bin"], []),
     # Toilet pieces (decision toilet-design-queue-free-reservable-stalls-per-stall-daily-u):
     # the 1x2 stall with its doors closed and the sink with its 1.95 m mirror.
     "toilet_stall": ("1x2", ["toilet_stall"], []),
@@ -753,8 +755,8 @@ def kit_material(name):
             _materials[name] = toon_material(name)
         elif name == "TP_Atlas_Lights_1A_D":
             _materials[name] = unshaded_material(name)
-        elif name == "TP_Glass_1A_D":
-            _materials[name] = glass_material(name)
+        elif name == "TP_Glass_1A_D" or name == "ConfiscationGlass":
+            _materials[name] = glass_material("TP_Glass_1A_D")
         else:
             invalid("unmapped kit material '%s'" % name)
     return _materials[name]

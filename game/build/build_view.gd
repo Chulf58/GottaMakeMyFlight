@@ -52,6 +52,8 @@ var _cut_edges: Dictionary = {}
 var _area := MeshInstance3D.new()
 var _object_nodes: Dictionary = {}
 var _stall_nodes: Dictionary = {}
+var _bin_nodes: Dictionary = {}
+var _arch_nodes: Dictionary = {}
 var _drawn_grid_id := 0
 var _floor_version := -1
 var _wall_version := -1
@@ -212,6 +214,88 @@ func sync_stall_doors(sim: PassengerSim, alpha: float) -> void:
 		StallDoors.apply(_stall_nodes[stall_id], StallDoors.open_weight(sim, stall_id, alpha))
 
 
+## Updates confiscation bin prop meshes and security arch beacon strobes from `sim` and `alpha`.
+func sync_security(sim: PassengerSim, alpha: float) -> void:
+	if sim == null or sim.security == null:
+		return
+	_sync_bin_props(sim)
+	_sync_arch_beacons(sim, alpha)
+
+
+func _sync_bin_props(sim: PassengerSim) -> void:
+	for bin_id: int in _bin_nodes:
+		var bin_node: Node3D = _bin_nodes[bin_id]
+		var items: Array[int] = sim.security.bins.items(bin_id)
+		if bin_node.has_meta("drawn_items") and bin_node.get_meta("drawn_items") == items:
+			continue
+		bin_node.set_meta("drawn_items", items.duplicate())
+		for i in SecurityRuntime.MAX_BIN_HISTORY:
+			var mount := bin_node.find_child("Mount_Prop_%02d" % i, true, false) as Node3D
+			if mount == null:
+				continue
+			for child in mount.get_children():
+				mount.remove_child(child)
+				child.free()
+			if i < items.size():
+				var prop := InteriorKit.instantiate(
+					SecuritySearchReasons.contraband_piece(items[i])
+				)
+				if prop != null:
+					prop.name = "ContrabandProp"
+					mount.add_child(prop)
+
+
+func _sync_arch_beacons(sim: PassengerSim, alpha: float) -> void:
+	var strobe_red := int(floor((float(sim.tick) + alpha) * 0.4)) % 2 == 0
+	for arch_id: int in _arch_nodes:
+		var arch_node: Node3D = _arch_nodes[arch_id]
+		var lamp := arch_node.find_child("Arch_Lamp", true, false) as MeshInstance3D
+		if lamp == null:
+			lamp = _make_arch_lamp(arch_node)
+		var mat := (
+			(lamp.get_meta("beacon_mat") as StandardMaterial3D)
+			if lamp.has_meta("beacon_mat")
+			else null
+		)
+		if mat == null:
+			mat = StandardMaterial3D.new()
+			lamp.set_meta("beacon_mat", mat)
+			lamp.material_override = mat
+		var alarm_active := false
+		for pid: int in sim.security.record_of(arch_id).get("admitted", []):
+			var pax := sim.get_passenger(pid)
+			if pax != null and pax.security_phase == SecurityRuntime.Phase.BODY_CHECK:
+				alarm_active = true
+				break
+		if alarm_active:
+			var col := Color(0.95, 0.14, 0.14) if strobe_red else Color(1.0, 0.72, 0.08)
+			mat.albedo_color = col
+			mat.emission_enabled = true
+			mat.emission = col
+			mat.emission_energy_multiplier = 1.8
+		elif sim.security.is_lane(arch_id) and (sim.staff == null or sim.staff.is_open(arch_id)):
+			var clear_col := Color(0.18, 0.85, 0.34)
+			mat.albedo_color = clear_col
+			mat.emission_enabled = true
+			mat.emission = clear_col
+			mat.emission_energy_multiplier = 0.8
+		else:
+			mat.albedo_color = Color(0.35, 0.40, 0.46)
+			mat.emission_enabled = false
+
+
+static func _make_arch_lamp(arch_node: Node3D) -> MeshInstance3D:
+	var lamp := MeshInstance3D.new()
+	lamp.name = "Arch_Lamp"
+	var box := BoxMesh.new()
+	box.size = Vector3(0.165, 0.085, 0.03)
+	lamp.mesh = box
+	# Matches build_security_kit.py Arch_Lamp (-0.08..0.08, -0.34..-0.32, 2.27..2.35).
+	lamp.position = Vector3(0.0, 2.31, 0.335)
+	arch_node.add_child(lamp)
+	return lamp
+
+
 ## Edges (WallCutaway.wall_edges form) drawn as stubs right now.
 func cut_edges() -> Array[Vector3i]:
 	var result: Array[Vector3i] = []
@@ -244,6 +328,13 @@ func refresh(grid: BuildGrid) -> void:
 	var wall_dirty := new_grid or wall_ver != _wall_version or wall_kind_source != _wall_kind_source
 	_grid = grid
 	_drawn_grid_id = grid.grid_id()
+	if new_grid:
+		for object_id: int in _object_nodes.keys():
+			(_object_nodes[object_id] as Node3D).queue_free()
+		_object_nodes.clear()
+		_stall_nodes.clear()
+		_bin_nodes.clear()
+		_arch_nodes.clear()
 	if new_grid or floor_dirty:
 		(_area.mesh as PlaneMesh).size = Vector2(grid.size)
 		_area.position = grid.origin + Vector3(grid.size.x / 2.0, AREA_Y, grid.size.y / 2.0)
@@ -361,6 +452,8 @@ func _sync_objects() -> bool:
 			node.queue_free()
 			_object_nodes.erase(object_id)
 			_stall_nodes.erase(object_id)
+			_bin_nodes.erase(object_id)
+			_arch_nodes.erase(object_id)
 	for object_id in live:
 		if _object_nodes.has(object_id):
 			continue
@@ -376,6 +469,10 @@ func _sync_objects() -> bool:
 		if record["def"] == &"toilet_stall":
 			StallDoors.apply(created, 0.0)
 			_stall_nodes[object_id] = created
+		elif record["def"] == SecurityLanes.CONFISCATION_BIN:
+			_bin_nodes[object_id] = created
+		elif record["def"] == SecurityLanes.ARCH:
+			_arch_nodes[object_id] = created
 		add_child(created)
 		_object_nodes[object_id] = created
 	return doors_changed

@@ -43,12 +43,16 @@ func _bubble_of(views: PassengerViews, id: int) -> Label3D:
 	return views.node_for(id).get_node("Bubble") as Label3D
 
 
-func _run_until_repack(w: SecurityTestWorld, id: int, limit := 600) -> bool:
+func _run_until_phase(w: SecurityTestWorld, id: int, phase: int, limit := 600) -> bool:
 	var guard := 0
-	while w.world.passenger(id).security_phase != SecurityRuntime.Phase.REPACK and guard < limit:
+	while w.world.passenger(id).security_phase != phase and guard < limit:
 		w.world.step()
 		guard += 1
-	return w.world.passenger(id).security_phase == SecurityRuntime.Phase.REPACK
+	return w.world.passenger(id).security_phase == phase
+
+
+func _run_until_repack(w: SecurityTestWorld, id: int, limit := 600) -> bool:
+	return _run_until_phase(w, id, SecurityRuntime.Phase.REPACK, limit)
 
 
 func test_updated_alarm_and_liquids_rates_match_8_and_12_percent() -> void:
@@ -57,14 +61,21 @@ func test_updated_alarm_and_liquids_rates_match_8_and_12_percent() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = SEED
 	var alarms := 0
-	var liquids := 0
+	var liquids_with_bag := 0
+	var with_bag := 0
+	var no_bag_liquids := 0
 	for i in SAMPLES:
 		var p := Passenger.new()
 		CarryOnTraits.draw(rng, p)
 		alarms += int(p.alarm)
-		liquids += int(p.liquids)
+		if p.carry_on > 0:
+			with_bag += 1
+			liquids_with_bag += int(p.liquids)
+		elif p.liquids:
+			no_bag_liquids += 1
+	assert_int(no_bag_liquids).is_equal(0)
 	assert_float(alarms / float(SAMPLES)).is_equal_approx(0.08, TOLERANCE)
-	assert_float(liquids / float(SAMPLES)).is_equal_approx(0.12, TOLERANCE)
+	assert_float(liquids_with_bag / float(with_bag)).is_equal_approx(0.12, TOLERANCE)
 
 
 func test_reason_selection_is_deterministic_per_id_and_uses_right_pool() -> void:
@@ -74,7 +85,7 @@ func test_reason_selection_is_deterministic_per_id_and_uses_right_pool() -> void
 		var a := Passenger.new()
 		a.id = pid
 		a.stage = Passenger.Stage.SECURITY
-		a.security_phase = SecurityRuntime.Phase.REPACK
+		a.security_phase = SecurityRuntime.Phase.BODY_CHECK
 		a.alarm = true
 		var first_a := SecuritySearchReasons.bubble_of(a)
 		var second_a := SecuritySearchReasons.bubble_of(a)
@@ -82,7 +93,8 @@ func test_reason_selection_is_deterministic_per_id_and_uses_right_pool() -> void
 		assert_array(SecuritySearchReasons.ALARM_BUBBLES).contains([first_a])
 		seen_alarm[first_a] = true
 
-		# When both alarm and liquids are set, alarm pool stays deterministic.
+		# When both alarm and liquids are set, BODY_CHECK still uses the alarm pool.
+		a.carry_on = 1
 		a.liquids = true
 		assert_str(SecuritySearchReasons.bubble_of(a)).is_equal(first_a)
 
@@ -90,6 +102,7 @@ func test_reason_selection_is_deterministic_per_id_and_uses_right_pool() -> void
 		l.id = pid
 		l.stage = Passenger.Stage.SECURITY
 		l.security_phase = SecurityRuntime.Phase.REPACK
+		l.carry_on = 1
 		l.liquids = true
 		var first_l := SecuritySearchReasons.bubble_of(l)
 		assert_str(first_l).is_equal(SecuritySearchReasons.bubble_of(l))
@@ -103,7 +116,7 @@ func test_reason_selection_is_deterministic_per_id_and_uses_right_pool() -> void
 func test_late_wins_priority_over_security_bubble_and_bubble_clears_when_done() -> void:
 	_security = SecurityTestWorld.make(true)
 	var id := _security.send(1, false, true)
-	assert_bool(_run_until_repack(_security, id)).is_true()
+	assert_bool(_run_until_phase(_security, id, SecurityRuntime.Phase.BODY_CHECK)).is_true()
 	var p := _security.world.passenger(id)
 	var expected := SecuritySearchReasons.bubble_of(p)
 	assert_str(expected).is_not_empty()
@@ -131,10 +144,10 @@ func test_late_wins_priority_over_security_bubble_and_bubble_clears_when_done() 
 	assert_str(BubbleDeclutter.shown_text(expected, false, false, false)).is_equal(expected)
 	assert_str(BubbleDeclutter.shown_text("Queue full", false, false, false)).is_empty()
 
-	# Clears immediately when REPACK ends.
-	while p.security_phase == SecurityRuntime.Phase.REPACK:
+	# Clears immediately when BODY_CHECK ends.
+	while p.security_phase == SecurityRuntime.Phase.BODY_CHECK:
 		_security.world.step()
-	assert_bool(p.incident_resolved).is_true()
+	assert_bool(p.body_resolved).is_true()
 	assert_str(_security.world.sim.bubble_text(p)).is_empty()
 
 
@@ -187,7 +200,7 @@ func test_inspect_thought_matches_bubble_routes_through_tr_and_no_alerts_or_pena
 	var mood_before := p.mood
 	var money_before := wallet.balance
 
-	assert_bool(_run_until_repack(_security, id)).is_true()
+	assert_bool(_run_until_phase(_security, id, SecurityRuntime.Phase.BODY_CHECK)).is_true()
 	var bubble := SecuritySearchReasons.bubble_of(p)
 	var idx := SecuritySearchReasons.reason_index(p.id, true)
 	var want_thought := SecuritySearchReasons.ALARM_THOUGHTS[idx]
@@ -232,8 +245,8 @@ func test_inspect_thought_matches_bubble_routes_through_tr_and_no_alerts_or_pena
 	assert_array(PassengerThoughts.entries(loaded_p)).is_equal(PassengerThoughts.entries(p))
 	loaded_world.world.free_all()
 
-	# Once REPACK ends, now_line clears while the thought stays in the log.
-	while p.security_phase == SecurityRuntime.Phase.REPACK:
+	# Once BODY_CHECK ends, now_line clears while the thought stays in the log.
+	while p.security_phase == SecurityRuntime.Phase.BODY_CHECK:
 		_security.world.step()
 	assert_str(PassengerInspect.now_line(_security.world.sim, p)).is_empty()
 	assert_int(PassengerThoughts.entries(p).size()).is_equal(1)
