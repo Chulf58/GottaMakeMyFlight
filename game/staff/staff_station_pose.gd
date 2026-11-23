@@ -529,8 +529,9 @@ static func _shop_eval(
 	if ctx["info"].has(m.station):
 		return [Mode.SHOP, ctx["info"][m.station], true, SubMode.SHOP_INFO_DESK]
 	if sub == SubMode.SHOP_RETAIL:
-		if ctx["shop_pieces"].has(m.station):
-			var best_piece := _nearest(staff_pos, ctx["shop_pieces"][m.station], SHOP_COUNTER_M)
+		var pieces: Dictionary = ctx.get("shop_pieces", {})
+		if pieces.has(m.station):
+			var best_piece := _nearest(staff_pos, pieces[m.station], SHOP_COUNTER_M)
 			if best_piece[1]:
 				return [Mode.SHOP, best_piece[0], true, sub]
 		var room := ShopCounters.room_of(sim.grid, m.station)
