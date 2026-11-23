@@ -84,6 +84,9 @@ var alert_settings_path := HudFlagSetting.PATH
 var rating: AirportRating
 ## Gate desk links for click-row-to-focus; falls back to ../GateDesks.
 var gates: GateDesks
+## Charter gap source and panel to open when clicked; fall back to ../OfferDesk and ../OfferPanel.
+var offer_desk: OfferDesk
+var offer_panel: OfferPanel
 ## Whether the Debug toggle and its panel are built: dev builds only (decision
 ## debug-panel-is-for-dev-builds-only-the-hud-s-debug-toggle-an). A test sets it
 ## before add_child to build or leave out the debug tools.
@@ -191,6 +194,10 @@ func _ready() -> void:
 		rating = get_node_or_null("../AirportRating") as AirportRating
 	if gates == null:
 		gates = get_node_or_null("../GateDesks") as GateDesks
+	if offer_desk == null:
+		offer_desk = get_node_or_null("../OfferDesk") as OfferDesk
+	if offer_panel == null:
+		offer_panel = get_node_or_null("../OfferPanel") as OfferPanel
 	_departures_board.flights = flights
 	_departures_board.clock = clock
 	_departures_board.passengers = sim
@@ -219,8 +226,10 @@ func _ready() -> void:
 	_alerts.above = panel
 	_alerts.camera = camera
 	_alerts.flights = flights
+	_alerts.offer_desk = offer_desk
 	_alerts.late_suppressed = _departures_board.is_panel_visible
 	_alerts.late_card_pressed.connect(_on_follow_late_requested)
+	_alerts.charter_card_pressed.connect(_on_charter_card_pressed)
 	_alerts.settings_path = alert_settings_path
 	add_child(_alerts)
 	_pa_ticker.bottom_provider = _pa_bottom
@@ -494,6 +503,13 @@ func _shortcut_input(event: InputEvent) -> void:
 		viewport.set_input_as_handled()
 
 
+func _on_charter_card_pressed() -> void:
+	if offer_panel == null:
+		offer_panel = get_node_or_null("../OfferPanel") as OfferPanel
+	if offer_panel != null:
+		offer_panel.open()
+
+
 ## The dirty-terminal alert, one of the alert cards' causes, for tests and probes.
 func dirty_alert() -> DirtyAlert:
 	return _alerts.dirty_source()
@@ -530,6 +546,8 @@ func refresh() -> void:
 	_refresh_quiet_chip()
 	if _alerts.flights != flights:
 		_alerts.flights = flights
+	if _alerts.offer_desk != offer_desk:
+		_alerts.offer_desk = offer_desk
 	_alerts.refresh()
 	if _pa_modal_open():
 		_pa_ticker.clear_now()

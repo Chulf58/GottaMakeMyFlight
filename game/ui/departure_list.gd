@@ -78,6 +78,8 @@ static func _rows(flights: FlightSim, today: int) -> Array[Dictionary]:
 		var contract := flights.contract_of(contract_id)
 		if not open or int(start_days[contract_id]) > today:
 			continue
+		if FlightContract.is_charter(contract) and FlightContract.one_off_day(contract) != today:
+			continue
 		var end_day := flights.contract_end_day(contract_id)
 		if end_day >= 0 and today >= end_day:
 			continue

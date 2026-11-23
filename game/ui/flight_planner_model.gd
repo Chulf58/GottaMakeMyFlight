@@ -48,7 +48,11 @@ static func bars_for_day(sim: FlightSim, day: int) -> Array[Dictionary]:
 			var hold := _hold(sim, row, departure_day)
 			if hold.end <= day_start or hold.start >= day_start + DAY:
 				continue
-			bars.append(_bar(row, departure_day, hold, day_start, active))
+			var charter: bool = (
+				row["contract"] != ""
+				and FlightContract.is_charter(sim.contract_of(row["contract"]))
+			)
+			bars.append(_bar(row, departure_day, hold, day_start, active, charter))
 	return bars
 
 
@@ -76,7 +80,12 @@ static func _hold(sim: FlightSim, row: Dictionary, departure_day: int) -> Hold:
 
 
 static func _bar(
-	row: Dictionary, departure_day: int, hold: Hold, day_start: int, active: Array[String]
+	row: Dictionary,
+	departure_day: int,
+	hold: Hold,
+	day_start: int,
+	active: Array[String],
+	charter := false
 ) -> Dictionary:
 	var shown_start := maxi(hold.start, day_start)
 	var shown_end := mini(hold.end, day_start + DAY)
@@ -92,6 +101,7 @@ static func _bar(
 		"place": String(row["head"]).get_slice("  ", 1),
 		"airline": row["airline"],
 		"active": row["contract"] != "" and active.has(row["contract"]),
+		"charter": charter,
 		"from": float(shown_start - day_start) / DAY,
 		"to": float(shown_end - day_start) / DAY,
 		"cut_start": hold.start < day_start,

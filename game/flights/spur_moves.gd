@@ -78,7 +78,7 @@ static func release(world: Dictionary, side: String) -> int:
 	if world.get("open", true):
 		for contract: Dictionary in world["contracts"]:
 			if (
-				not world["ended"].has(contract["id"])
+				_contract_runs_ahead(world, contract)
 				and side_of_gate(world, contract["gate"]) == side
 			):
 				contracts.append(contract)
@@ -94,6 +94,8 @@ static func release(world: Dictionary, side: String) -> int:
 			var since := at - FlightTimetable.issue_tick(contract, 0, world["epoch"])
 			var day := GameCalendar.floor_div(since, GameCalendar.TICKS_PER_DAY)
 			if day < int(world["next_day"][contract["id"]]):
+				continue
+			if FlightContract.is_charter(contract) and day != FlightContract.one_off_day(contract):
 				continue
 			var starts := FlightTimetable.starts_for(contract, day, world["epoch"])
 			var takeoff := starts[FlightSim.State.TAKEOFF]
@@ -176,9 +178,14 @@ static func refusal(world: Dictionary) -> Dictionary:
 		var at := release(world, side)
 		var by_gate := {}
 		for contract: Dictionary in world["contracts"]:
-			if world["ended"].has(contract["id"]) or side_of_gate(world, contract["gate"]) != side:
+			if (
+				not _contract_runs_ahead(world, contract)
+				or side_of_gate(world, contract["gate"]) != side
+			):
 				continue
 			var day := first_day_from(world, contract, at)
+			if FlightContract.is_charter(contract) and day > FlightContract.one_off_day(contract):
+				continue
 			if resolve(world, contract, day).is_empty():
 				return {
 					"id": FlightTimetable.occurrence_id(contract["id"], day), "reason": NO_STAND
@@ -190,6 +197,16 @@ static func refusal(world: Dictionary) -> Dictionary:
 			if not meets.is_empty():
 				return meets
 	return {}
+
+
+## True when `contract` is not ended and, if a one-off charter, still has its
+## single day ahead unissued (`next_day <= one_off_day`).
+static func _contract_runs_ahead(world: Dictionary, contract: Dictionary) -> bool:
+	if world["ended"].has(contract["id"]):
+		return false
+	if not FlightContract.is_charter(contract):
+		return true
+	return int(world["next_day"].get(contract["id"], 0)) <= FlightContract.one_off_day(contract)
 
 
 ## The first occurrence at `gate` that meets another there: among its live
@@ -208,7 +225,12 @@ static func _gate_refusal(
 			)
 			held.append([flight["id"], flight["starts"], size])
 	for contract: Dictionary in contracts:
-		for day in range(int(world["next_day"][contract["id"]]), last + 1):
+		var end_day := (
+			mini(last, FlightContract.one_off_day(contract))
+			if FlightContract.is_charter(contract)
+			else last
+		)
+		for day in range(int(world["next_day"][contract["id"]]), end_day + 1):
 			var resolved := resolve(world, contract, day)
 			var id := FlightTimetable.occurrence_id(contract["id"], day)
 			(
@@ -228,8 +250,12 @@ static func _gate_refusal(
 			):
 				return {"id": held[j][0], "reason": GATE_MEETS}
 	for i in contracts.size():
+		if FlightContract.is_charter(contracts[i]):
+			continue
 		var a: Dictionary = resolve(world, contracts[i], last)["contract"]
 		for j in range(i + 1, contracts.size()):
+			if FlightContract.is_charter(contracts[j]):
+				continue
 			var b: Dictionary = resolve(world, contracts[j], last)["contract"]
 			if FlightTimetable.contracts_share_gate(a, b):
 				return {"id": FlightTimetable.occurrence_id(b["id"], last), "reason": GATE_MEETS}

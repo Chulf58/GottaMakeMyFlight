@@ -256,7 +256,9 @@ func schedule_flight(flight_id: String, count: int) -> bool:
 	count += BookingOverrides.take(self, flight_id)
 	# The contract's arrival traits, resolved once for both ways of arriving.
 	var contract := BookingOverrides.contract_of(self, flight_id)
-	var shares := ArrivalTypes.shares_for(contract.get(FlightContract.TRAITS_KEY, {}))
+	var shares := ArrivalTypes.shares_for(
+		contract.get(FlightContract.TRAITS_KEY, {}), FlightContract.is_charter(contract)
+	)
 	var at_once := FirstParty.due(self, flight_id)
 	if landside != null:
 		arrivals.schedule(flight_id, count, shares, at_once)

@@ -55,6 +55,9 @@ const TRAITS_KEY := "traits"
 ## The taxi pair [TAXI_IN, TAXI_OUT] of the gate the contract is assigned to
 ## (TaxiTimes): never in offer terms, required in KEYS.
 const TAXI_KEY := "taxi"
+## Calendar day (>= 0) for a one-off same-day charter, or -1 for a repeating
+## daily contract. Optional in TERM_KEYS and KEYS; stored as int by make().
+const ONE_OFF_DAY_KEY := "one_off_day"
 const TEXT_KEYS := ["airline", "destination", "gate", "plane_size"]
 const PLANE_SIZES := ["small", "medium", "large"]
 const MAX_BOOKED := 999
@@ -83,7 +86,7 @@ static func problem(data: Variant, keys: Array) -> String:
 	if typeof(data) != TYPE_DICTIONARY:
 		return "a contract must be a dictionary"
 	for key in data.keys():
-		if not keys.has(key) and key != TRAITS_KEY:
+		if not keys.has(key) and key != TRAITS_KEY and key != ONE_OFF_DAY_KEY:
 			return "unknown contract key '%s'" % key
 	for key in keys:
 		if not data.has(key):
@@ -97,6 +100,10 @@ static func problem(data: Variant, keys: Array) -> String:
 	if not PLANE_SIZES.has(data["plane_size"]):
 		return "plane_size must be one of %s" % [PLANE_SIZES]
 	var problem := _number_problem(data, keys)
+	if problem == "" and data.has(ONE_OFF_DAY_KEY):
+		var one_off: Variant = data[ONE_OFF_DAY_KEY]
+		if not WholeNumber.is_whole(one_off) or int(one_off) < -1 or int(one_off) > MAX_DAY:
+			problem = "one_off_day must be -1 or a whole number from 0 to %d" % MAX_DAY
 	if problem == "" and data.has(TRAITS_KEY):
 		problem = OfferTraits.problem(data[TRAITS_KEY])
 	if problem == "" and keys.has(TAXI_KEY):
@@ -118,10 +125,19 @@ static func make(data: Dictionary) -> Dictionary:
 		var value: Variant = data[key]
 		contract[key] = int(value) if typeof(value) == TYPE_FLOAT else value
 	contract[TRAITS_KEY] = OfferTraits.frozen(data.get(TRAITS_KEY, {}))
+	contract[ONE_OFF_DAY_KEY] = int(data.get(ONE_OFF_DAY_KEY, -1))
 	if data.has(TAXI_KEY):
 		contract[TAXI_KEY] = TaxiTimes.frozen(data[TAXI_KEY])
 	contract.make_read_only()
 	return contract
+
+
+static func one_off_day(data: Dictionary) -> int:
+	return int(data.get(ONE_OFF_DAY_KEY, -1))
+
+
+static func is_charter(data: Dictionary) -> bool:
+	return one_off_day(data) >= 0
 
 
 ## Why no contract can be assigned to gate `gate_id` on StandPlacement stand

@@ -66,6 +66,8 @@ static func requests(world: Dictionary, day: int) -> Array:
 		var id: String = contract["id"]
 		if not runs(world, id) or day < int(world["next_day"][id]):
 			continue
+		if FlightContract.is_charter(contract) and day != FlightContract.one_off_day(contract):
+			continue
 		# The stand and taxi pair it flies that day (SpurMoves.resolve()); none
 		# when its gate's new stand cannot take it, which SpurMoves.refusal() names.
 		var resolved := SpurMoves.resolve(world, contract, day)
@@ -82,9 +84,15 @@ static func requests(world: Dictionary, day: int) -> Array:
 
 
 ## Whether contract `id`'s days not yet issued are planned: it runs, or it
-## ended and still reserves its ground.
+## ended and still reserves its ground. A one-off charter stops running once its
+## single day has been issued (`next_day > one_off_day`).
 static func runs(world: Dictionary, id: String) -> bool:
-	return not world["ended"].has(id) or world["reserving"].has(id)
+	if world["ended"].has(id):
+		return world["reserving"].has(id)
+	for contract: Dictionary in world["contracts"]:
+		if contract["id"] == id and FlightContract.is_charter(contract):
+			return int(world["next_day"].get(id, 0)) <= FlightContract.one_off_day(contract)
+	return true
 
 
 ## id -> GroundPlanner result for every flight of day `day`.
@@ -140,6 +148,10 @@ static func days_from(world: Dictionary, from_day: int) -> Array[int]:
 			var next := int(world["next_day"][contract["id"]])
 			if next >= from_day:
 				seen[next] = true
+			if FlightContract.is_charter(contract):
+				var after := FlightContract.one_off_day(contract) + 1
+				if after >= from_day:
+					seen[after] = true
 	for day in live_days(world):
 		for sampled in [day, day + 1]:
 			if sampled >= from_day:

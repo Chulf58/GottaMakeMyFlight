@@ -125,7 +125,9 @@ signal loaded(ok: bool)
 ## refused (no migration).
 ## 30: landside highway portal endpoints shifted +100 m to ±140.4 m
 ## (LandsideSnapshot v11); version 29 saves are refused (no migration).
-const SAVE_VERSION := 30
+## 31: one-off same-day charters (FlightSim v12, OfferBoard v8); version 30
+## saves are refused (no migration).
+const SAVE_VERSION := 31
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"
@@ -668,6 +670,12 @@ func _runway_problem(data: Dictionary, staged: Dictionary) -> String:
 			return (
 				"offers: offer %s is a %s plane but the runway is %s"
 				% [offer["id"], offer["plane_size"], runway.size]
+			)
+	for charter: Dictionary in data["offers"].get("charters", []):
+		if not runway.takes(charter["plane_size"]):
+			return (
+				"offers: charter %s is a %s plane but the runway is %s"
+				% [charter["id"], charter["plane_size"], runway.size]
 			)
 	return ""
 

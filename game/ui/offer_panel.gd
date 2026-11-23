@@ -72,6 +72,7 @@ const ENDED_TITLE := "Contract ended"
 const EMPTY_TEXT := "No offers right now. New offers arrive at midnight."
 const FITS_TEXT := "Fits your gates now"
 const NEEDS_GATE_TEXT := "Needs another gate"
+const CHARTER_BADGE_TEXT := "One-off charter — flies today only"
 
 @export var desk: OfferDesk
 @export var flights: FlightSim
@@ -87,6 +88,7 @@ var alerts: AlertStack
 
 var _button: Button
 var _sheet: PanelContainer
+var _scroll: ScrollContainer
 var _cards: VBoxContainer
 var _message: Label
 ## The warning as the rating words it now, and as the card on the rail words it
@@ -195,12 +197,17 @@ static func card_lines(offer: Dictionary, note := "") -> PackedStringArray:
 	var minute: int = offer["departure_minute"]
 	# A daily minute as a time: the same at every epoch, so read at 0.
 	var time := GameCalendar.clock_text(GameCalendar.tick_at(0, minute, 0), 0)
+	var when_line := (
+		TranslationServer.translate("Departs {time} today").format({"time": time})
+		if FlightContract.is_charter(offer)
+		else TranslationServer.translate("Departs {time} daily").format({"time": time})
+	)
 	var lines := PackedStringArray(
 		[
 			TranslationServer.translate("{airline} to {destination}").format(
 				{"airline": offer["airline"], "destination": offer["destination"]}
 			),
-			TranslationServer.translate("Departs {time} daily").format({"time": time}),
+			when_line,
 			_plane_line(offer["plane_size"]),
 			(
 				TranslationServer
@@ -236,8 +243,12 @@ static func daily_earnings(offer: Dictionary) -> int:
 	return int(offer["booked_passengers"]) * int(offer["fee_per_passenger"])
 
 
-## The earnings line on a card, the figure the three offers are compared by.
+## The earnings line on a card, the figure the offers are compared by.
 static func earnings_text(offer: Dictionary) -> String:
+	if FlightContract.is_charter(offer):
+		return TranslationServer.translate("${amount} payout").format(
+			{"amount": daily_earnings(offer)}
+		)
 	return TranslationServer.translate("${amount} a day").format({"amount": daily_earnings(offer)})
 
 
@@ -339,6 +350,8 @@ func open() -> void:
 	_refresh_notes()
 	flights.check_planning_changed()
 	_refresh_fits()
+	_fit_scroll_height()
+	_fit_scroll_height.call_deferred()
 
 
 ## Hides the sheet and clears transient refusals.
@@ -433,11 +446,13 @@ func message() -> String:
 func _place_row() -> void:
 	TopRow.place_in_slot(_button, TopRow.OFFERS_SLOT, self)
 	TopRow.place_sheet(_sheet, self)
+	_fit_scroll_height()
 
 
 func _build() -> void:
 	_button = Button.new()
 	_sheet = PanelContainer.new()
+	_scroll = ScrollContainer.new()
 	_cards = VBoxContainer.new()
 	_message = Label.new()
 	_button.name = "OffersButton"
@@ -463,14 +478,40 @@ func _build() -> void:
 	title.custom_minimum_size = Vector2(SHEET_W - 30.0, 0.0)
 	_style_label(title, &"HudTitle")
 	sheet_column.add_child(title)
+	_scroll.name = "OfferCardsScroll"
+	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sheet_column.add_child(_scroll)
 	_cards.name = "OfferCards"
+	_cards.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_cards.add_theme_constant_override("separation", 6)
-	sheet_column.add_child(_cards)
+	_cards.sort_children.connect(_fit_scroll_height)
+	_scroll.add_child(_cards)
 	_message.name = "OfferMessage"
 	_message.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_message.custom_minimum_size = Vector2(SHEET_W - 30.0, 0.0)
 	_style_label(_message, &"HudSmall")
 	sheet_column.add_child(_message)
+
+
+func _fit_scroll_height() -> void:
+	if _sheet == null or _scroll == null or not is_inside_tree():
+		return
+	var viewport := get_viewport()
+	if viewport == null:
+		return
+	var viewport_h := viewport.get_visible_rect().size.y
+	if viewport_h <= 0.0:
+		return
+	var content_h := _cards.get_combined_minimum_size().y
+	var chrome := _sheet.get_combined_minimum_size().y - _scroll.get_combined_minimum_size().y
+	var max_scroll_h := maxf(0.0, viewport_h - TopRow.SHEET_TOP - float(HudLayout.MARGIN) - chrome)
+	var wanted := minf(content_h, max_scroll_h)
+	if not is_equal_approx(_scroll.custom_minimum_size.y, wanted):
+		_scroll.custom_minimum_size.y = wanted
+		var extent := TopRow.sheet_extent(viewport.get_visible_rect().size.x)
+		_sheet.custom_minimum_size.x = extent.y
+		_sheet.reset_size()
 
 
 func _on_toggle() -> void:
@@ -532,13 +573,19 @@ func _refresh() -> void:
 	_fit_taxis.clear()
 	_earnings_labels.clear()
 	_trait_rows.clear()
+	var charters := desk.board.open_charters()
 	var offers := desk.board.open_offers()
+	for charter in charters:
+		_add_card(charter)
 	for offer in offers:
 		_add_card(offer)
-	_button.text = tr("Offers ({count})").format({"count": offers.size()})
-	_offers_waiting = offers.size() > 0
+	var total := charters.size() + offers.size()
+	_button.text = tr("Offers ({count})").format({"count": total})
+	_offers_waiting = total > 0
 	_style_button()
 	_say_idle()
+	_fit_scroll_height()
+	_fit_scroll_height.call_deferred()
 	_noted_tick = flights.tick
 
 
@@ -546,6 +593,8 @@ func _refresh() -> void:
 ## closed a contract accepted starts at the opening, which is not known yet, so
 ## the note names the lead its slot needs after the opening.
 func _note_for(offer: Dictionary) -> String:
+	if FlightContract.is_charter(offer):
+		return ""
 	if flights.opened_tick < 0:
 		return tr("first flight {lead} after opening").format(
 			{"lead": lead_text(opening_lead_ticks())}
@@ -559,7 +608,7 @@ func _note_for(offer: Dictionary) -> String:
 func _refresh_notes() -> void:
 	_noted_tick = flights.tick
 	for id in _note_labels:
-		_set_note(_note_labels[id], _note_for(desk.board.offer_of(id)))
+		_set_note(_note_labels[id], _note_for(desk.board.any_offer_of(id)))
 
 
 func _set_note(label: Label, note: String) -> void:
@@ -571,7 +620,7 @@ func _set_note(label: Label, note: String) -> void:
 func _refresh_fits() -> void:
 	_sync_open_state()
 	for id: String in _fit_labels:
-		_set_fit(_fit_labels[id], desk.board.offer_of(id))
+		_set_fit(_fit_labels[id], desk.board.any_offer_of(id))
 
 
 func _set_fit(label: Label, offer: Dictionary) -> void:
@@ -712,6 +761,14 @@ func _add_card(offer: Dictionary) -> void:
 	var texts := VBoxContainer.new()
 	texts.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(texts)
+	var is_charter := FlightContract.is_charter(offer)
+	if is_charter:
+		var badge := _card_label(tr("One-off charter — flies today only"), &"HudGoodText")
+		badge.name = "CharterBadge_%s" % id
+		badge.add_theme_font_size_override(
+			"font_size", BuildMenu.HUD_THEME.get_font_size("font_size", &"HudSmall")
+		)
+		texts.add_child(badge)
 	var lines := card_lines(offer)
 	texts.add_child(_card_label(lines[0], &"HudTitle"))
 	# The departure and the plane share one row, so the trait line below the
@@ -730,14 +787,15 @@ func _add_card(offer: Dictionary) -> void:
 	note.name = "Note_%s" % id
 	_set_note(note, _note_for(offer))
 	texts.add_child(note)
-	texts.move_child(note, NOTE_LINE)
+	var note_index := NOTE_LINE + 1 if is_charter else NOTE_LINE
+	texts.move_child(note, note_index)
 	_note_labels[id] = note
 	# The verdict and the daily earnings share one row straight under the title,
 	# so the cards compare by reading down it without making the sheet taller.
 	var verdict := HBoxContainer.new()
 	verdict.name = "Verdict_%s" % id
 	texts.add_child(verdict)
-	texts.move_child(verdict, 1)
+	texts.move_child(verdict, 2 if is_charter else 1)
 	var fit := _card_label("", &"HudSmall")
 	fit.name = "Fit_%s" % id
 	fit.custom_minimum_size.x = VERDICT_FIT_W
@@ -780,7 +838,21 @@ func _add_card(offer: Dictionary) -> void:
 ## tooltip; a plain offer shows PLAIN_LABEL in HudHint and no downside. An offer
 ## from a loyal airline (OfferBoard's "loyal" mark) ends the line with
 ## OfferTraits.LOYAL_LABEL in HudGoodText.
-static func _trait_row(offer: Dictionary) -> HBoxContainer:
+func _trait_row(offer: Dictionary) -> HBoxContainer:
+	if FlightContract.is_charter(offer):
+		var charter_row := HBoxContainer.new()
+		charter_row.name = "Traits_%s" % offer["id"]
+		var badge := Label.new()
+		badge.name = "CharterTerms"
+		badge.text = tr("No exit fee")
+		badge.tooltip_text = tr("Flies once today only; no exit fee or daily commitment.")
+		badge.mouse_filter = Control.MOUSE_FILTER_PASS
+		badge.theme_type_variation = &"HudGoodText"
+		badge.add_theme_font_size_override(
+			"font_size", BuildMenu.HUD_THEME.get_font_size("font_size", &"HudSmall")
+		)
+		charter_row.add_child(badge)
+		return charter_row
 	var traits: Dictionary = offer[FlightContract.TRAITS_KEY]
 	var plain := OfferTraits.is_plain(traits)
 	var labels := Array(OfferTraits.card_labels(traits)) + [OfferTraits.loyal_label()]
@@ -827,7 +899,7 @@ func _card_button(text: String, variation: StringName, id: String) -> Button:
 
 
 func _on_accept(id: String) -> void:
-	var offer := desk.board.offer_of(id)
+	var offer := desk.board.any_offer_of(id)
 	var problem := flights.accept_problem(OfferBoard.terms_of(offer))
 	if problem != "":
 		_refuse(
@@ -871,7 +943,7 @@ func _say_idle() -> void:
 	_say(
 		(
 			tr("No offers right now. New offers arrive at midnight.")
-			if desk.board.open_offers().is_empty()
+			if desk.board.open_offers().is_empty() and desk.board.open_charters().is_empty()
 			else ""
 		)
 	)
@@ -881,6 +953,7 @@ func _say_idle() -> void:
 func _say(text: String) -> void:
 	_message.text = text
 	_message.visible = text != ""
+	_fit_scroll_height()
 
 
 ## Shows a refusal on the offer's own card, in place of any refusal on another.
@@ -890,6 +963,8 @@ func _refuse(id: String, text: String) -> void:
 	var label: Label = _refusal_labels[id]
 	label.text = text
 	label.visible = true
+	_fit_scroll_height()
+	_fit_scroll_height.call_deferred()
 
 
 ## Empties every card's refusal line.

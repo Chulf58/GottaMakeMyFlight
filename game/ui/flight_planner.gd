@@ -80,7 +80,7 @@ var _confirming := false
 ## Clicked disabled bar (ended contract or one-off flight): its bar key, day, and kind.
 var _note_key := ""
 var _note_day := -1
-var _note_one_off := false
+var _note_kind := 0
 var _rebuilds := 0
 ## Greys the rows while a bar is dragged and carries out the drop.
 var _drag := PlannerDrag.new()
@@ -495,9 +495,9 @@ func _make_bar(bar: Dictionary) -> Button:
 	if bar["active"]:
 		button.pressed.connect(_on_bar_pressed.bind(bar["contract"], bar["day"]))
 	else:
-		var one_off: bool = bar["contract"] == ""
-		button.disabled_clicked.connect(_on_disabled_bar_pressed.bind(key, bar["day"], one_off))
-		button.pressed.connect(_on_disabled_bar_pressed.bind(key, bar["day"], one_off))
+		var kind := 1 if bar["contract"] == "" else (2 if bar.get("charter", false) else 0)
+		button.disabled_clicked.connect(_on_disabled_bar_pressed.bind(key, bar["day"], kind))
+		button.pressed.connect(_on_disabled_bar_pressed.bind(key, bar["day"], kind))
 	_add_departure_tick(button, bar)
 	return button
 
@@ -526,11 +526,11 @@ func _bar_tooltip(bar: Dictionary) -> String:
 				tr("Click to move gate or end contract, or drag onto another gate row."),
 			]
 		)
-	var why := (
-		tr("One-off flight — cannot move")
-		if bar["contract"] == ""
-		else tr("Contract ended — cannot move")
-	)
+	var why := tr("Contract ended — cannot move")
+	if bar["contract"] == "":
+		why = tr("One-off flight — cannot move")
+	elif bar.get("charter", false):
+		why = tr("One-off charter — cannot move")
 	return "%s\n%s" % [base, why]
 
 
@@ -632,7 +632,7 @@ func _on_bar_pressed(contract_id: String, day: int) -> void:
 	_refresh()
 
 
-func _on_disabled_bar_pressed(key: String, day: int, one_off: bool) -> void:
+func _on_disabled_bar_pressed(key: String, day: int, kind: int) -> void:
 	var had_selected := _selected != ""
 	var was_open := _note_key == key and _note_day == day
 	_deselect()
@@ -640,7 +640,7 @@ func _on_disabled_bar_pressed(key: String, day: int, one_off: bool) -> void:
 	if not was_open:
 		_note_key = key
 		_note_day = day
-		_note_one_off = one_off
+		_note_kind = kind
 	if had_selected:
 		_dirty = true
 		_refresh()
@@ -670,7 +670,7 @@ func _deselect() -> void:
 	_confirming = false
 	_note_key = ""
 	_note_day = -1
-	_note_one_off = false
+	_note_kind = 0
 
 
 ## The selected bar's dictionary, or {} when it is not drawn any more.
@@ -739,9 +739,12 @@ func _show_disabled_popover(bar: Dictionary) -> void:
 	)
 	var note := Label.new()
 	note.name = "DisabledBarNote"
-	note.text = (
-		tr("One-off flight — cannot move") if _note_one_off else tr("Contract ended — cannot move")
-	)
+	if _note_kind == 1:
+		note.text = tr("One-off flight — cannot move")
+	elif _note_kind == 2:
+		note.text = tr("One-off charter — cannot move")
+	else:
+		note.text = tr("Contract ended — cannot move")
 	note.theme_type_variation = &"HudHint"
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_actions.add_child(note)

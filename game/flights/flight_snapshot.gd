@@ -221,11 +221,20 @@ static func _read_contracts(
 		if not gates.has(entry["gate"]):
 			return "contract gate '%s' has no stand" % entry["gate"]
 		var contract := FlightContract.make(entry)
+		if FlightContract.is_charter(contract):
+			var charter_day := FlightContract.one_off_day(contract)
+			if contract["first_day"] != charter_day:
+				return "charter %s first_day must match one_off_day" % contract["id"]
+			if charter_day > GameCalendar.day_of(tick, epoch):
+				return "charter %s one_off_day is in the future" % contract["id"]
 		var base := _with_taxi(contract, TaxiTimes.BASE)
 		var earliest := FlightTimetable.first_day(base, epoch, epoch)
 		var latest_taxi := [TaxiTimes.MAX_IN, TaxiTimes.BASE[1]]
 		var latest := FlightTimetable.first_day(_with_taxi(contract, latest_taxi), tick, epoch)
-		if contract["first_day"] < earliest or contract["first_day"] > latest:
+		if (
+			not FlightContract.is_charter(contract)
+			and (contract["first_day"] < earliest or contract["first_day"] > latest)
+		):
 			return "contract %s first_day is not one an acceptance could give" % contract["id"]
 		for other in out:
 			if other["id"] == contract["id"]:
@@ -272,6 +281,8 @@ static func _read_ended(
 	for contract in contracts:
 		if not days.has(contract["id"]):
 			continue
+		if FlightContract.is_charter(contract):
+			return "ended cannot name one-off charter %s" % contract["id"]
 		var value: Variant = days[contract["id"]]
 		if not WholeNumber.is_whole(value) or opened < 0:
 			return "ended for %s must be a whole day of an open airport" % contract["id"]
@@ -523,7 +534,9 @@ static func _starts_problem(
 	if TaxiTimes.problem(pair) != "":
 		return "flight %s taxi times %s are not a pair a gate gives" % [entry["id"], pair]
 	var departs := FlightTimetable.starts_for(contract, day, epoch)[FlightSim.State.PUSHBACK]
-	var built := FlightSim.schedule_starts(starts[0], pair)
+	var built := FlightSim.schedule_starts(
+		starts[0], pair, FlightTimetable.boarding_ticks_of(contract)
+	)
 	if starts != built or starts[FlightSim.State.PUSHBACK] != departs:
 		return "flight %s does not match its contract's timetable" % entry["id"]
 	var needed := TaxiTimes.for_stand(_stand_of(entry))

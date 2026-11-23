@@ -17,9 +17,11 @@ const DAYS := 30
 ## slice 2 traits in the trait draw), and for save version 6 (Odd hours offers
 ## depart at 06:00 or 22:00, and trait seed version 3), and for save version 7
 ## (small-class offers moved to 4..8 passengers and 30..70 fee_per_passenger,
-## ruling small-plane-passenger-count-and-fare-balance-4-8-passengers).
+## ruling small-plane-passenger-count-and-fare-balance-4-8-passengers), and for
+## save version 8 (the charters array on OfferBoard.to_snapshot(), with offers
+## and RNG state unchanged).
 const STATE_AFTER := 7055581944236607464
-const BEFORE_HASHES := [346436689, 3422562020, 832147442]
+const BEFORE_HASHES := [691078160, 1588298787, 1656781233]
 
 
 func _rng() -> RandomNumberGenerator:
