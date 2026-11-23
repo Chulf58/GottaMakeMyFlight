@@ -1,0 +1,13 @@
+[gd_resource type="StandardMaterial3D" format=3]
+
+[resource]
+resource_name = "ConfiscationGlass"
+transparency = 1
+cull_mode = 0
+depth_draw_mode = 0
+albedo_color = Color(0.76, 0.92, 1, 0.12)
+metallic_specular = 0.65
+roughness = 0.12
+rim_enabled = true
+rim = 0.4
+rim_tint = 0.7
