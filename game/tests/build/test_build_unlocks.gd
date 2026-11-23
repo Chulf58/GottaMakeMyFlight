@@ -127,12 +127,12 @@ func test_passengers_alone_do_not_open_a_tier() -> void:
 
 func test_meeting_the_stars_and_the_passengers_opens_the_tier() -> void:
 	_good_days(60)
-	_made(49)
+	_made(19)
 	_unlocks.check()
 	assert_int(_unlocks.tier()).is_equal(1)
 	_made(1)
 	_unlocks.check()
-	print("after 50 made: tier %d, announced %s" % [_unlocks.tier(), _opened])
+	print("after 20 made: tier %d, announced %s" % [_unlocks.tier(), _opened])
 	assert_int(_unlocks.tier()).is_equal(2)
 	assert_bool(_unlocks.allows(BuildMode.Tool.CAFE_ROOM)).is_true()
 	assert_bool(_unlocks.allows(BuildMode.Tool.TREE)).is_false()
@@ -157,7 +157,7 @@ func test_a_good_game_can_open_several_tiers_at_once() -> void:
 
 func test_an_open_tier_stays_open_when_the_rating_falls() -> void:
 	_good_days(60)
-	_made(50)
+	_made(20)
 	_unlocks.check()
 	assert_int(_unlocks.tier()).is_equal(2)
 	# A rating that only missed passengers: 1 star.
@@ -170,20 +170,43 @@ func test_an_open_tier_stays_open_when_the_rating_falls() -> void:
 	assert_bool(_unlocks.allows(BuildMode.Tool.CAFE_ROOM)).is_true()
 
 
-func test_the_check_runs_on_the_first_tick_of_each_game_day() -> void:
-	_unlocks.on_tick(0)
+func test_tier_2_unlocks_live_midday_without_waiting_for_midnight() -> void:
+	var clock: SimClock = auto_free(SimClock.new())
+	var live_unlocks: BuildUnlocks = auto_free(BuildUnlocks.new())
+	live_unlocks.rating = _rating
+	live_unlocks.passengers = _pax
+	live_unlocks.clock = clock
+	add_child(live_unlocks)
+	var opened: Array[int] = []
+	live_unlocks.unlocked.connect(func(tier: int, _text: String) -> void: opened.append(tier))
+
+	var midday := GameCalendar.day_start(1, 0) + 1000
+	clock.tick = midday
 	_good_days(60)
-	_made(50)
-	_unlocks.on_tick(1)
-	assert_int(_unlocks.tier()).is_equal(1)
-	_unlocks.on_tick(GameCalendar.TICKS_PER_DAY)
-	assert_int(_unlocks.tier()).is_equal(2)
+	_made(19)
+	clock.ticked.emit(midday)
+	assert_int(live_unlocks.tier()).is_equal(1)
+	assert_bool(live_unlocks.cafe_open()).is_false()
+	assert_bool(_pax.cafes.hunger_enabled).is_false()
+
+	_made(1)
+	clock.tick = midday + 1
+	clock.ticked.emit(midday + 1)
+	assert_int(live_unlocks.tier()).is_equal(2)
+	assert_bool(live_unlocks.cafe_open()).is_true()
+	assert_bool(_pax.cafes.hunger_enabled).is_true()
+	assert_array(opened).is_equal([2])
+
+	# Idempotent on later ticks of the same day.
+	clock.tick = midday + 2
+	clock.ticked.emit(midday + 2)
+	assert_array(opened).is_equal([2])
 
 
 func test_hunger_starts_with_the_cafe_tier() -> void:
 	assert_bool(_pax.cafes.hunger_enabled).is_false()
 	_good_days(60)
-	_made(50)
+	_made(20)
 	_unlocks.check()
 	assert_bool(_pax.cafes.hunger_enabled).is_true()
 
@@ -191,7 +214,7 @@ func test_hunger_starts_with_the_cafe_tier() -> void:
 func test_a_card_says_what_unlocks_it_and_how_far_the_game_is() -> void:
 	_made(12)
 	assert_str(_unlocks.unlock_text(BuildMode.Tool.CAFE_ROOM)).is_equal(
-		"Unlocks at 2 stars and 50 passengers (now 2.5 stars, 12 passengers)"
+		"Unlocks at 2 stars and 20 passengers (now 2.5 stars, 12 passengers)"
 	)
 	assert_str(BuildUnlocks.requirement_text(3)).is_equal("Unlocks at 3 stars and 200 passengers")
 	assert_str(BuildUnlocks.requirement_text(4)).is_equal("Unlocks at 4 stars and 600 passengers")
@@ -229,7 +252,7 @@ func test_a_bad_snapshot_is_refused_and_changes_nothing() -> void:
 		{"tier": 2.5, "made": 5, "shown": [], "seen": [], "firsts": []},
 		{"tier": 2, "made": 5, "shown": [], "seen": [], "firsts": [], "extra": 1},
 		# A tier saved with fewer made-flight passengers than it takes to open it.
-		{"tier": 2, "made": 49, "shown": [], "seen": [], "firsts": []},
+		{"tier": 2, "made": 19, "shown": [], "seen": [], "firsts": []},
 		{"tier": 3, "made": 199, "shown": [], "seen": [], "firsts": []},
 		{"tier": 4, "made": 0, "shown": [], "seen": [], "firsts": []},
 		{"tier": 4, "made": 599, "shown": [], "seen": [], "firsts": []},
@@ -242,7 +265,7 @@ func test_a_bad_snapshot_is_refused_and_changes_nothing() -> void:
 
 func test_a_snapshot_at_exactly_the_tier_requirement_is_taken() -> void:
 	for data: Dictionary in [
-		{"tier": 2, "made": 50, "shown": [], "seen": [], "firsts": []},
+		{"tier": 2, "made": 20, "shown": [], "seen": [], "firsts": []},
 		{"tier": 3, "made": 200, "shown": [], "seen": [], "firsts": []},
 		{"tier": 4, "made": 600, "shown": [], "seen": [], "firsts": []}
 	]:
