@@ -41,10 +41,15 @@ func _texts(control: Control) -> Array:
 	return out
 
 
-func _bag_room(with_end: bool) -> int:
+func _bag_room(with_end: bool, connected := false) -> int:
 	var room_id := _mode.grid.apply(BuildEdit.place_room(ROOM, &"bag_room")).room_id
 	if with_end:
 		PassengerTestWorld.place(_mode.grid, &"baggage_belt_end", ROOM.position, 0)
+	if connected:
+		PassengerTestWorld.place(_mode.grid, &"checkin_desk", Vector2i(2, 6), 0)
+		var plan := BeltShaper.plan_line(_mode.grid, Vector2i(3, 5), ROOM.position, 0)
+		assert_bool(plan.result.ok).is_true()
+		_mode.grid.apply_batch(plan.edits)
 	_mode.set_tool(BuildMode.Tool.NONE)
 	_mode.update_room_focus(_mode.grid.cell_to_world(Vector2i(4, 4)))
 	return room_id
@@ -61,20 +66,59 @@ func _key(code: Key) -> InputEventKey:
 func test_the_panel_for_an_unfinished_bag_room_names_what_it_needs_and_no_shop_figures() -> void:
 	_bag_room(false)
 	var texts := _texts(_menu.room_panel())
-	assert_array(texts).contains(["Bag room", "Needs a belt end"])
+	assert_array(texts).contains(
+		["Bag room", "Needs a belt dragged inside", "Belt ends 0", "Desks connected: 0"]
+	)
 	for text in texts:
 		assert_bool(text.begins_with("Seats")).override_failure_message(text).is_false()
 		assert_bool(text.begins_with("Base spend")).override_failure_message(text).is_false()
 
 
-func test_the_panel_for_a_ready_bag_room_says_ready_and_counts_its_belt_ends() -> void:
-	_bag_room(true)
+func test_the_panel_for_a_bag_room_with_end_but_zero_desks_is_amber_not_ready() -> void:
+	_bag_room(true, false)
 	var texts := _texts(_menu.room_panel())
-	assert_array(texts).contains(["Bag room", "Ready", "Belt ends 1"])
-	assert_array(texts).not_contains(["Needs a belt end"])
+	assert_array(texts).contains(
+		["Bag room", "Waiting for belt from check-in desk", "Belt ends 1", "Desks connected: 0"]
+	)
+	assert_array(texts).not_contains(["Ready", "Needs a belt dragged inside"])
+	var status_label: Label = null
+	for label in _menu.room_panel().find_children("*", "Label", true, false):
+		if (label as Label).text == "Waiting for belt from check-in desk":
+			status_label = label as Label
+	assert_object(status_label).is_not_null()
+	assert_str(String(status_label.theme_type_variation)).is_equal("HudAttentionText")
+
+
+func test_the_panel_for_a_connected_bag_room_says_ready_and_counts_desks() -> void:
+	_bag_room(true, true)
+	var texts := _texts(_menu.room_panel())
+	assert_array(texts).contains(["Bag room", "Ready", "Belt ends 1", "Desks connected: 1"])
+	assert_array(texts).not_contains(
+		["Needs a belt dragged inside", "Waiting for belt from check-in desk"]
+	)
 	for text in texts:
 		assert_bool(text.begins_with("Seats")).override_failure_message(text).is_false()
 		assert_bool(text.begins_with("Base spend")).override_failure_message(text).is_false()
+
+
+func test_the_panel_warns_when_a_cart_is_placed_with_no_ramp_agent() -> void:
+	var staff: StaffSim = auto_free(StaffSim.new())
+	_menu.room_panel().staff = staff
+	_bag_room(true, true)
+	PassengerTestWorld.place(_mode.grid, &"baggage_cart", Vector2i(4, 3), 0)
+	_menu.room_panel().show_room(_mode.grid.room_at(Vector2i(4, 4)))
+	assert_array(_texts(_menu.room_panel())).contains(["Needs a Ramp Agent (Staff)"])
+	staff.hire(StaffMember.Role.RAMP)
+	_menu.room_panel().show_room(_mode.grid.room_at(Vector2i(4, 4)))
+	assert_array(_texts(_menu.room_panel())).not_contains(["Needs a Ramp Agent (Staff)"])
+
+
+func test_cart_hover_info_mentions_hiring_a_ramp_agent_in_staff() -> void:
+	_menu.press_category(BuildMenu.category_index("operations"))
+	var card := _menu.card(BuildMode.Tool.CART) as ItemCardButton
+	var tooltip := card._get_tooltip(Vector2.ZERO)
+	assert_str(tooltip).contains("Ramp Agent")
+	assert_str(tooltip).contains("Staff")
 
 
 func test_the_cafe_panel_keeps_its_seats_and_base_spend() -> void:

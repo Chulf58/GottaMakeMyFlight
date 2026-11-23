@@ -64,6 +64,47 @@ func step_from(cell: Vector2i) -> Vector2i:
 	return next.get(cell, Vector2i.ZERO)
 
 
+## The belt end root cell reachable from `cell`, or Vector2i(-1, -1) with no route.
+func root_of(cell: Vector2i) -> Vector2i:
+	if not has_route(cell):
+		return Vector2i(-1, -1)
+	var cur := cell
+	while next.has(cur):
+		cur += next[cur]
+	return cur
+
+
+## Whether check-in desk `desk_id` has an outlet belt with a route to a ready bag room.
+func desk_connected(desk_id: int) -> bool:
+	var entry := entry_of(desk_id)
+	return not entry.is_empty() and has_route(entry["cell"])
+
+
+## Sorted check-in desk ids routed to a ready bag room (or to `room_id` when nonzero).
+func connected_desks(room_id: int = 0) -> Array[int]:
+	var out: Array[int] = []
+	if grid == null:
+		return out
+	var ids := grid.object_ids()
+	ids.sort()
+	for object_id in ids:
+		var record := grid.get_object(object_id)
+		if StringName(record["def"]) != BeltShaper.DESK:
+			continue
+		var entry := entry_of(object_id)
+		if entry.is_empty() or not has_route(entry["cell"]):
+			continue
+		if room_id != 0 and grid.room_at(root_of(entry["cell"])) != room_id:
+			continue
+		out.append(object_id)
+	return out
+
+
+## Number of check-in desks routed to a ready bag room (or to `room_id` when nonzero).
+func connected_desk_count(room_id: int = 0) -> int:
+	return connected_desks(room_id).size()
+
+
 ## Whether a bag can pass the edge from belt cell `cell` toward `step`.
 func joined(cell: Vector2i, step: Vector2i) -> bool:
 	var other := cell + step

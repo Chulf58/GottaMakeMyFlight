@@ -240,3 +240,17 @@ func test_the_off_mode_runs_nothing_and_hides_the_settings_row() -> void:
 	assert_bool(hints.is_showing()).is_false()
 	assert_bool(hints.settings_row().visible).is_false()
 	assert_bool(FileAccess.file_exists(_path)).is_false()
+
+
+func test_baggage_connect_hint_triggers_with_bag_room_and_zero_desks() -> void:
+	var unconnected := _world({"bag_rooms": 1, "connected_desks": 0})
+	var hints := _settled(_world())
+	_run(
+		hints, HintRules.HOLD_S + 0.5, unconnected, [BuildMenu.category_of(BuildMode.Tool.BAG_ROOM)]
+	)
+	assert_str(hints.shown_id()).is_equal(HintRules.BAGGAGE_CONNECT)
+	assert_str(hints.body_label().text).is_equal(
+		"Drag a belt from the back of a check-in desk into your Bag Room."
+	)
+	var connected := _world({"bag_rooms": 1, "connected_desks": 1})
+	assert_array(HintRules.causes(connected)).not_contains([HintRules.BAGGAGE_CONNECT])

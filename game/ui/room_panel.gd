@@ -15,6 +15,7 @@ const POSITION := Vector2(16.0, 64.0)
 const WIDTH := 280.0
 const BAG_ROOM := &"bag_room"
 const BELT_END := &"baggage_belt_end"
+const CART := &"baggage_cart"
 const TOILET := &"toilet"
 const STALL := &"toilet_stall"
 const SINK := &"toilet_sink"
@@ -22,7 +23,10 @@ const SINK := &"toilet_sink"
 ## reservable-stalls-per-stall-daily-u, point 2): what RoomRules.daily_upkeep
 ## charges at midnight while it is ready, and what it will once it is.
 
+var staff: StaffSim
+
 var _build_mode: BuildMode
+var _watched_staff: StaffSim
 var _room_id := 0
 var _dirty := false
 var _lines := VBoxContainer.new()
@@ -71,13 +75,15 @@ func show_room(id: int) -> void:
 	if status == null:
 		return
 	_line(DisplayWords.room_type(status.type_name), &"HudTitle")
+	if status.type_id == BAG_ROOM:
+		_show_bag_room(status, id)
+		reset_size()
+		return
 	if status.ok:
 		_line(DisplayWords.ready(), &"HudGoodText")
 	for note in DisplayWords.notes(status):
 		_line(note, &"HudAttentionText")
-	if status.type_id == BAG_ROOM:
-		_line(tr("Belt ends {count}").format({"count": status.pieces.get(BELT_END, 0)}))
-	elif status.type_id == TOILET:
+	if status.type_id == TOILET:
 		_line(tr("Stalls {count}").format({"count": status.pieces.get(STALL, 0)}))
 		_line(tr("Sinks {count}").format({"count": status.pieces.get(SINK, 0)}))
 		var upkeep := (
@@ -121,6 +127,56 @@ func _on_edit_applied(_edit: BuildEdit, _result: BuildResult) -> void:
 
 func _on_graph_changed(_cells: Array[Vector2i]) -> void:
 	_dirty = _room_id != 0
+
+
+func _on_staff_changed() -> void:
+	_dirty = _room_id != 0
+
+
+func _show_bag_room(status: RoomRules.RoomStatus, id: int) -> void:
+	var belt_ends: int = status.pieces.get(BELT_END, 0)
+	var connected := BagRoutes.build(_build_mode.grid).connected_desk_count(id)
+	if belt_ends == 0:
+		_line(tr("Needs a belt dragged inside"), &"HudAttentionText")
+		var notes := DisplayWords.notes(status)
+		for i in status.notes.size():
+			if status.notes[i] != "Needs a belt end":
+				_line(notes[i], &"HudAttentionText")
+	elif not status.ok:
+		for note in DisplayWords.notes(status):
+			_line(note, &"HudAttentionText")
+	elif connected == 0:
+		_line(tr("Waiting for belt from check-in desk"), &"HudAttentionText")
+	else:
+		_line(DisplayWords.ready(), &"HudGoodText")
+		if status.pieces.get(CART, 0) > 0:
+			var s := _resolve_staff()
+			if s != null and s.count(StaffMember.Role.RAMP) == 0:
+				_line(tr("Needs a Ramp Agent (Staff)"), &"HudAttentionText")
+	_line(tr("Belt ends {count}").format({"count": belt_ends}))
+	_line(tr("Desks connected: {count}").format({"count": connected}))
+
+
+func _resolve_staff() -> StaffSim:
+	var resolved := staff
+	if resolved == null and is_inside_tree():
+		var root := get_tree().root
+		if root != null:
+			resolved = root.find_child("Staff", true, false) as StaffSim
+	if resolved != _watched_staff:
+		if (
+			_watched_staff != null
+			and is_instance_valid(_watched_staff)
+			and _watched_staff.staff_changed.is_connected(_on_staff_changed)
+		):
+			_watched_staff.staff_changed.disconnect(_on_staff_changed)
+		_watched_staff = resolved
+		if (
+			_watched_staff != null
+			and not _watched_staff.staff_changed.is_connected(_on_staff_changed)
+		):
+			_watched_staff.staff_changed.connect(_on_staff_changed)
+	return resolved
 
 
 func _line(text: String, variation := &"") -> void:

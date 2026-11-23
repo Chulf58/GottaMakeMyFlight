@@ -31,6 +31,7 @@ const NO_STAFF := &"stations_no_staff"
 const STAFF_SPOT := &"staff_spot_unusable"
 const RAMP_BAGGAGE := &"ramp_baggage"
 const RAMP_PUSHBACK := &"ramp_pushback"
+const BAGGAGE_CONNECT := &"baggage_connect"
 const CHARTER_GAP := &"charter_gap"
 ## Three game minutes (one real second is one game minute at 1x).
 const QUEUE_HOLD_TICKS := 3 * GameCalendar.TICKS_PER_MINUTE
@@ -311,7 +312,48 @@ static func ramp(
 					}
 				)
 			)
+	out.append_array(baggage_connect(sim, resolved_baggage))
 	return out
+
+
+## Non-blocking info alert when at least one Bag Room exists with 0 connected
+## check-in desks (ruling 1b70fa33).
+static func baggage_connect(sim: PassengerSim, baggage: BaggageSim = null) -> Array[Dictionary]:
+	if sim == null or sim.grid == null:
+		return []
+	var targets: Array[Vector3] = []
+	for room_id in sim.grid.room_ids():
+		var room := sim.grid.get_room(room_id)
+		if room.is_empty() or StringName(room["type"]) != BeltShaper.BAG_ROOM:
+			continue
+		if targets.size() < MAX_TARGETS:
+			var area: Rect2i = room["rect"]
+			var middle := (
+				sim.grid.cell_to_world(area.position)
+				+ Vector3((area.size.x - 1) / 2.0, 0.0, (area.size.y - 1) / 2.0)
+			)
+			targets.append(Vector3(middle.x, 0.0, middle.z))
+	if targets.is_empty():
+		return []
+	var connected := (
+		baggage.has_connected_bag_room()
+		if baggage != null
+		else BagRoutes.build(sim.grid).connected_desk_count() > 0
+	)
+	if connected:
+		return []
+	return [
+		{
+			"key": BAGGAGE_CONNECT,
+			"title": _translator.tr("Bag room needs a belt"),
+			"detail":
+			_translator.tr("Drag a belt from the back of a check-in desk into your Bag Room."),
+			"targets": targets,
+			"show_after": 0,
+			"clear_after": 0,
+			"subtle": true,
+		}
+	]
 
 
 ## Subtle non-blocking gap chip when a same-day charter fits an open daytime gap.

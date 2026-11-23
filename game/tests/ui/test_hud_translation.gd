@@ -104,7 +104,18 @@ func test_the_quiet_night_chip_is_routed() -> void:
 func test_both_quiet_chip_msgids_are_in_messages_pot() -> void:
 	PseudoLocale.disable()
 	var entries := PotEntries.parse(FileAccess.get_file_as_string("res://locale/messages.pot"))
-	for expected_id: String in ["Quiet stretch: fast-forwarding", "Quiet night: fast-forwarding"]:
+	for expected_id: String in [
+		"Quiet stretch: fast-forwarding",
+		"Quiet night: fast-forwarding",
+		"Needs a belt dragged inside",
+		"Waiting for belt from check-in desk",
+		"Needs a Ramp Agent (Staff)",
+		"Desks connected: {count}",
+		"Bag room needs a belt",
+		"Drag a belt from the back of a check-in desk into your Bag Room.",
+		"Place one in a bag room so a hired Ramp Agent drives checked bags out to the parked plane.",
+		"Needs a Ramp Agent hired in Staff. Takes 1x2 tiles; no upkeep.",
+	]:
 		assert_int(PotEntries.complete(entries, "", expected_id)).is_equal(1)
 
 

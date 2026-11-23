@@ -185,7 +185,7 @@ func test_the_card_for_a_piece_shows_translated_name_and_room() -> void:
 
 
 ## The panel reads the mode's own grid, so the bag room is built there.
-func _panel_with_bag_room(with_end: bool) -> Array:
+func _panel_with_bag_room(with_end: bool, connected := false) -> Array:
 	var edits: Array[BuildEdit] = []
 	for y in range(2, 10):
 		for x in range(2, 10):
@@ -196,6 +196,11 @@ func _panel_with_bag_room(with_end: bool) -> Array:
 	assert_bool(made.ok).override_failure_message(made.reason_text()).is_true()
 	if with_end:
 		PassengerTestWorld.place(_mode.grid, &"baggage_belt_end", room.position, 0)
+	if connected:
+		PassengerTestWorld.place(_mode.grid, &"checkin_desk", Vector2i(2, 7), 0)
+		var plan := BeltShaper.plan_line(_mode.grid, Vector2i(3, 6), room.position, 0)
+		assert_bool(plan.result.ok).is_true()
+		_mode.grid.apply_batch(plan.edits)
 	var panel := RoomPanel.new()
 	add_child(panel)
 	panel.watch(_mode)
@@ -210,15 +215,15 @@ func test_the_room_panel_translates_title_and_requirement() -> void:
 	var texts := _texts(panel)
 	print("room panel (pseudo): %s" % [texts])
 	assert_str(_bare(texts[0])).starts_with("Bag room")
-	assert_str(_bare(texts[1])).starts_with("Needs a belt end")
+	assert_str(_bare(texts[1])).starts_with("Needs a belt dragged inside")
 	PseudoLocale.disable()
 	panel.show_room(made[1])
-	assert_array(_texts(panel).slice(0, 2)).is_equal(["Bag room", "Needs a belt end"])
+	assert_array(_texts(panel).slice(0, 2)).is_equal(["Bag room", "Needs a belt dragged inside"])
 	panel.free()
 
 
 func test_the_room_panel_translates_the_ready_state() -> void:
-	var made := _panel_with_bag_room(true)
+	var made := _panel_with_bag_room(true, true)
 	var panel: RoomPanel = made[0]
 	PseudoLocale.enable(0.4)
 	panel.show_room(made[1])

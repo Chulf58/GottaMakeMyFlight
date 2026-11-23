@@ -182,3 +182,23 @@ func test_a_dirty_terminal_is_a_cause_pointing_at_the_dirtiest_mess() -> void:
 		assert_bool(_world.sim.messes.clean(id)).is_true()
 	dirty.refresh()
 	assert_array(dirty.cause()).is_empty()
+
+
+func test_baggage_connect_alert_shows_when_bag_room_has_no_connected_desk_and_clears() -> void:
+	var grid := PassengerTestWorld.floored(Vector2i(14, 12))
+	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(0, 11), 3)
+	PassengerTestWorld.place(grid, &"checkin_desk", Vector2i(2, 9), 0)
+	grid.apply(BuildEdit.place_room(Rect2i(9, 4, 3, 3), &"bag_room"))
+	PassengerTestWorld.place(grid, &"baggage_belt_end", Vector2i(9, 5), 0)
+	_world = PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(4000, 5000))
+	var causes := AlertSources.baggage_connect(_world.sim)
+	assert_array(_keys(causes)).is_equal([AlertSources.BAGGAGE_CONNECT])
+	assert_bool(causes[0].get("subtle", false)).is_true()
+	assert_bool(causes[0].get("coral", false)).is_false()
+	assert_str(causes[0]["detail"]).is_equal(
+		"Drag a belt from the back of a check-in desk into your Bag Room."
+	)
+	var plan := BeltShaper.plan_line(grid, Vector2i(3, 8), Vector2i(9, 5), 0)
+	assert_bool(plan.result.ok).is_true()
+	grid.apply_batch(plan.edits)
+	assert_array(AlertSources.baggage_connect(_world.sim)).is_empty()
