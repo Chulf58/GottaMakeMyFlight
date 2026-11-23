@@ -77,6 +77,7 @@ func show_room(id: int) -> void:
 	_line(DisplayWords.room_type(status.type_name), &"HudTitle")
 	if status.type_id == BAG_ROOM:
 		_show_bag_room(status, id)
+		_show_prestige(id, status.type_id)
 		reset_size()
 		return
 	if status.ok:
@@ -105,6 +106,7 @@ func show_room(id: int) -> void:
 		if not RoomTypes.get_type(status.type_id).walk_on:
 			_line(tr("Seats {count}").format({"count": status.seats}))
 		_line(tr("Base spend ${amount} per visit").format({"amount": status.base_spend}))
+	_show_prestige(id, status.type_id)
 	reset_size()
 
 
@@ -155,6 +157,42 @@ func _show_bag_room(status: RoomRules.RoomStatus, id: int) -> void:
 				_line(tr("Needs a Ramp Agent (Staff)"), &"HudAttentionText")
 	_line(tr("Belt ends {count}").format({"count": belt_ends}))
 	_line(tr("Desks connected: {count}").format({"count": connected}))
+
+
+func _show_prestige(id: int, type_id: StringName) -> void:
+	var prestige := RoomPrestige.evaluate_room(_build_mode.grid, id)
+	var level: int = prestige["level"]
+	var score: int = prestige["score"]
+	var spend_pct: int = prestige["spend_bonus_percent"]
+	var room_type := RoomTypes.get_type(type_id)
+	var is_commercial := (
+		room_type != null and (room_type.food or (room_type.shop and not room_type.activity))
+	)
+	if is_commercial:
+		_line(
+			tr("Prestige: Lv. {level} / 5 ({score} pts · +{bonus}% spend)").format(
+				{"level": level, "score": score, "bonus": spend_pct}
+			)
+		)
+	else:
+		_line(
+			tr("Prestige: Lv. {level} / 5 ({score} pts)").format({"level": level, "score": score})
+		)
+	_line(
+		(
+			tr("Size {size} · Setup {setup} · Decor {decor} · Awards {trophy}")
+			. format(
+				{
+					"size": prestige["size_points"],
+					"setup": prestige["furnishing_points"],
+					"decor": prestige["decor_points"],
+					"trophy": prestige["trophy_points"],
+				}
+			)
+		)
+	)
+	if level < RoomPrestige.MAX_LEVEL:
+		_line(tr("Add decor or trophies to raise prestige"))
 
 
 func _resolve_staff() -> StaffSim:
