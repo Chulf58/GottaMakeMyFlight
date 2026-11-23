@@ -194,6 +194,8 @@ var _shown: Dictionary = {}
 var _seen: Dictionary = {}
 ## The big firsts (BigFirsts) whose dialog showed in this game.
 var _firsts: Dictionary = {}
+## True in Free-Build Sandbox with All Tiers & Land Unlocked enabled.
+var _unlock_all := false
 
 
 func _ready() -> void:
@@ -232,12 +234,12 @@ static func lock_text(gate: BuildUnlocks, required: bool, tool: BuildMode.Tool) 
 ## lock_words() puts the values into the player's words at display time.
 static func lock_args(gate: BuildUnlocks, required: bool, tool: BuildMode.Tool) -> Dictionary:
 	var needed := tier_of(tool)
-	if needed == 0:
+	if needed == 0 or not required:
 		return {}
-	if DemoMode.is_demo() and required and needed > DemoMode.MAX_PLAYABLE_TIER:
+	if DemoMode.is_demo() and needed > DemoMode.MAX_PLAYABLE_TIER:
 		return {"tier": needed}
 	if gate == null:
-		return {"unwired": true} if required else {}
+		return {"unwired": true}
 	return {} if gate.allows(tool) else gate.tier_args(needed)
 
 
@@ -315,7 +317,22 @@ static func requirement_text(tier: int) -> String:
 	)
 
 
+func set_unlock_all(on: bool) -> void:
+	var next := on and not DemoMode.is_demo()
+	if next == _unlock_all:
+		return
+	_unlock_all = next
+	_apply_hunger(tier())
+	tier_changed.emit(tier())
+
+
+func is_unlock_all() -> bool:
+	return _unlock_all and not DemoMode.is_demo()
+
+
 func tier() -> int:
+	if is_unlock_all():
+		return DemoMode.MAX_PLAYABLE_TIER if DemoMode.is_demo() else TIERS.size()
 	return _tier
 
 
@@ -325,6 +342,8 @@ func made_total() -> int:
 
 
 func allows(tool: BuildMode.Tool) -> bool:
+	if is_unlock_all():
+		return tier_of(tool) <= TIERS.size()
 	var cap := mini(_tier, DemoMode.MAX_PLAYABLE_TIER) if DemoMode.is_demo() else _tier
 	return tier_of(tool) <= cap
 
@@ -332,7 +351,7 @@ func allows(tool: BuildMode.Tool) -> bool:
 ## True from the cafe tier on: hunger, the food mood penalty and the cafe hint
 ## all start with it.
 func cafe_open() -> bool:
-	return _tier >= CAFE_TIER
+	return tier() >= CAFE_TIER
 
 
 ## The requirement of the tier `tool` needs, and how far the game is from it.
@@ -369,7 +388,7 @@ func on_tick(tick: int) -> void:
 ## Opens every tier whose stars and passengers are both met; one that is open
 ## stays open. Demo builds cap playable unlocks at MAX_PLAYABLE_TIER.
 func check() -> void:
-	if rating == null:
+	if rating == null or is_unlock_all():
 		return
 	var max_tier := DemoMode.MAX_PLAYABLE_TIER if DemoMode.is_demo() else TIERS.size()
 	if _tier >= max_tier or _made < TIERS[_tier]["passengers"]:
@@ -391,17 +410,17 @@ func note_made() -> void:
 
 
 ## True once the unlock dialog of `tier` has shown in this game.
-func dialog_shown(tier: int) -> bool:
-	return _shown.has(tier)
+func dialog_shown(for_tier: int) -> bool:
+	return is_unlock_all() or _shown.has(for_tier)
 
 
-func mark_dialog_shown(tier: int) -> void:
-	_shown[tier] = true
+func mark_dialog_shown(for_tier: int) -> void:
+	_shown[for_tier] = true
 
 
 ## True once the player hovered or picked the card of `tool` in this game.
 func tool_seen(tool: BuildMode.Tool) -> bool:
-	return _seen.has(tool)
+	return is_unlock_all() or _seen.has(tool)
 
 
 func mark_tool_seen(tool: BuildMode.Tool) -> void:
@@ -454,7 +473,7 @@ func from_snapshot(data: Dictionary) -> bool:
 	_firsts.clear()
 	for kind in data["firsts"]:
 		_firsts[kind] = true
-	tier_changed.emit(_tier)
+	tier_changed.emit(tier())
 	return true
 
 

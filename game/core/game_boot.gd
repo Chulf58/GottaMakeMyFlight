@@ -22,12 +22,15 @@ static var refusal := ""
 ## finishes booting and on SaveGame.load_world(). A main.tscn run that did not
 ## come through the title leaves it false, as it always was.
 static var new_airport := false
+## GameRules selected on TitleScreen for the next New Airport boot, or null for Career.
+static var pending_rules: GameRules = null
 
 
 ## Starts a new airport. `change` is SceneTree.change_scene_to_file or a stand-in.
-static func start_new(change: Callable) -> Error:
+static func start_new(change: Callable, rules: GameRules = null) -> Error:
 	load_path = ""
 	new_airport = true
+	pending_rules = GameRules.effective(rules)
 	return change.call(MAIN_SCENE)
 
 
@@ -35,7 +38,20 @@ static func start_new(change: Callable) -> Error:
 static func start_load(path: String, change: Callable) -> Error:
 	load_path = path
 	new_airport = false
+	pending_rules = null
 	return change.call(MAIN_SCENE)
+
+
+## Reads the pending New Airport rules without clearing them (clamped to Career when unset/demo).
+static func peek_pending_rules() -> GameRules:
+	return GameRules.effective(pending_rules)
+
+
+## Takes the pending New Airport rules and resets them so a later boot defaults to Career.
+static func take_pending_rules() -> GameRules:
+	var taken := GameRules.effective(pending_rules)
+	pending_rules = null
+	return taken
 
 
 ## The boot save, cleared so a later main.tscn starts new.

@@ -30,13 +30,17 @@ func _ready() -> void:
 		start_new_game()
 
 
-## Credits the starting budget. Returns false and changes nothing when the
-## wallet was already set up, by an earlier call or by restore().
-func start_new_game() -> bool:
+## Credits the starting budget for `rules` (or pending New Airport rules,
+## defaulting to Career). Returns false and changes nothing when already set up.
+func start_new_game(rules: GameRules = null) -> bool:
 	if _set_up:
 		return false
 	_set_up = true
-	return wallet.credit(PriceTable.STARTING_BUDGET, Wallet.Category.OPENING)
+	var fallback := GameBoot.peek_pending_rules() if GameBoot.load_path == "" else null
+	var active := GameRules.effective(rules if rules != null else fallback)
+	var ok := wallet.credit(active.starting_budget(), Wallet.Category.OPENING)
+	wallet.unlimited_funds = active.effective_unlimited_funds()
+	return ok
 
 
 ## Restores a Wallet.to_snapshot() dictionary and marks the wallet set up, so

@@ -69,6 +69,8 @@ const PIECE_NAMES := {
 ## How many repair plans this grant has made, ticks and prepare() together.
 ## A count only the tests read.
 var plans_made := 0
+## Disabled under Unlimited Funds sandbox rules.
+var disabled := false
 
 var _clock: SimClock
 var _sim: PassengerSim
@@ -112,6 +114,10 @@ func bind(with_clock: SimClock, sim: PassengerSim, with_wallet: Wallet) -> void:
 	_planned_tick = -REPLAN_TICKS
 
 
+func is_disabled() -> bool:
+	return disabled or (_wallet != null and _wallet.unlimited_funds)
+
+
 ## Works out now, outside a sim tick, whether there is a working path and, when
 ## there is none, the repair plan and its price bound, so the next tick starts
 ## from a known bound (see the class notes). _ready() and SaveGame call it;
@@ -124,7 +130,7 @@ func prepare() -> void:
 	_bound = -1
 	_path_dirty = true
 	_edit_seen = false
-	if _sim == null or _sim.grid == null:
+	if is_disabled() or _sim == null or _sim.grid == null:
 		return
 	if not has_working_path():
 		repair_plan()
@@ -155,6 +161,8 @@ func repair_plan() -> RepairPlan:
 ## Pays the grant if the airport is stuck and has not been helped in this
 ## event. True when a grant was paid. Called on every tick.
 func evaluate() -> bool:
+	if is_disabled():
+		return false
 	if has_working_path():
 		_granted = false
 		return false

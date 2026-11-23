@@ -24,7 +24,10 @@ func fill(paths: Array[String], manual_path: String) -> void:
 		var values := {"slot": _slot_name(path, manual_path), "time": _saved_at(path)}
 		var ver := SaveSlots.file_save_version(path)
 		if ver == SaveGame.SAVE_VERSION:
-			button.text = tr("{slot}, {time}").format(values)
+			if GameRules.save_is_sandbox(path):
+				button.text = tr("{slot}, {time} (Sandbox)").format(values)
+			else:
+				button.text = tr("{slot}, {time}").format(values)
 		elif ver < 0:
 			button.text = tr("{slot}, {time} (Unreadable)").format(values)
 		elif ver < SaveGame.SAVE_VERSION:

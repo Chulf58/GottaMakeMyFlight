@@ -35,6 +35,15 @@ var audio_card: AudioSettingsCard
 var language_picker: LanguagePicker
 
 var _main_page: VBoxContainer
+var _mode_page: VBoxContainer
+var _mode_heading: Label
+var _mode_summary: Label
+var _sandbox_demo_note: Label
+var _sandbox_options: VBoxContainer
+var _unlimited_toggle: CheckButton
+var _budget_note: Label
+var _unlock_all_toggle: CheckButton
+var _sandbox_selected := false
 var _load_page: VBoxContainer
 var _load_heading: Label
 var _audio_bar: HBoxContainer
@@ -69,6 +78,7 @@ func refresh() -> void:
 	button("Load").disabled = SaveSlots.existing().is_empty()
 	button("SendFeedback").visible = not feedback_url.is_empty()
 	_save_list.fill(SaveSlots.all_paths(), SaveSlots.manual_path())
+	_sync_mode_page()
 
 
 func press_continue() -> void:
@@ -78,12 +88,48 @@ func press_continue() -> void:
 
 
 func press_new_airport() -> void:
-	GameBoot.start_new(change_scene)
+	_sandbox_selected = false
+	if _unlimited_toggle != null:
+		_unlimited_toggle.set_pressed_no_signal(true)
+	if _unlock_all_toggle != null:
+		_unlock_all_toggle.set_pressed_no_signal(true)
+	_sync_mode_page()
+	_main_page.visible = false
+	_load_page.visible = false
+	_audio_bar.visible = false
+	audio_card.visible = false
+	_mode_page.visible = true
+
+
+func press_start_airport() -> void:
+	GameBoot.start_new(change_scene, selected_rules())
+
+
+func select_career() -> void:
+	_sandbox_selected = false
+	_sync_mode_page()
+
+
+func select_sandbox() -> void:
+	if DemoMode.is_demo():
+		_sandbox_selected = false
+	else:
+		_sandbox_selected = true
+	_sync_mode_page()
+
+
+func selected_rules() -> GameRules:
+	if not _sandbox_selected or DemoMode.is_demo():
+		return GameRules.career()
+	var unlimited := _unlimited_toggle != null and _unlimited_toggle.button_pressed
+	var unlock_all := _unlock_all_toggle != null and _unlock_all_toggle.button_pressed
+	return GameRules.make_sandbox(unlimited, unlock_all)
 
 
 func press_load() -> void:
 	refresh()
 	_main_page.visible = false
+	_mode_page.visible = false
 	_audio_bar.visible = false
 	audio_card.visible = false
 	_load_page.visible = true
@@ -91,6 +137,7 @@ func press_load() -> void:
 
 func press_back() -> void:
 	_load_page.visible = false
+	_mode_page.visible = false
 	_main_page.visible = true
 	_audio_bar.visible = true
 
@@ -121,6 +168,10 @@ func button(button_name: String) -> Button:
 
 func main_page() -> Control:
 	return _main_page
+
+
+func mode_page() -> Control:
+	return _mode_page
 
 
 func save_list() -> SaveList:
@@ -182,6 +233,7 @@ func _build() -> void:
 	_add_button(_main_page, "SendFeedback", tr("Send Feedback"), press_feedback)
 	button("SendFeedback").visible = not feedback_url.is_empty()
 	_add_button(_main_page, "Quit", tr("Quit", "menu"), press_quit)
+	_build_mode_page(pages)
 	_load_page = VBoxContainer.new()
 	_load_page.name = "LoadPage"
 	_load_page.visible = false
@@ -296,4 +348,109 @@ func _retranslate() -> void:
 		_load_heading.text = tr("Load", "menu")
 	if _save_list != null:
 		_save_list.fill(SaveSlots.all_paths(), SaveSlots.manual_path())
+	if _mode_heading != null:
+		_mode_heading.text = tr("New Airport", "menu")
+		button("CareerMode").text = tr("Career")
+		button("SandboxMode").text = tr("Free-Build Sandbox")
+		_sandbox_demo_note.text = tr("In the full game")
+		_unlimited_toggle.text = tr("Unlimited Funds")
+		_unlock_all_toggle.text = tr("All Tiers & Land Unlocked")
+		button("StartAirport").text = tr("Start Airport", "menu")
+		button("ModeBack").text = tr("Back", "menu")
+		_sync_mode_page()
 	_render_message()
+
+
+func _build_mode_page(pages: Control) -> void:
+	_mode_page = VBoxContainer.new()
+	_mode_page.name = "ModePage"
+	_mode_page.add_theme_constant_override("separation", 10)
+	_mode_page.visible = false
+	pages.add_child(_mode_page)
+	_mode_heading = Label.new()
+	_mode_heading.name = "Heading"
+	_mode_heading.text = tr("New Airport", "menu")
+	_mode_heading.theme_type_variation = &"HudLarge"
+	_mode_page.add_child(_mode_heading)
+	var mode_row := HBoxContainer.new()
+	mode_row.name = "ModeRow"
+	mode_row.add_theme_constant_override("separation", 8)
+	_mode_page.add_child(mode_row)
+	_add_button(mode_row, "CareerMode", tr("Career"), select_career)
+	var career_btn := button("CareerMode")
+	career_btn.toggle_mode = true
+	career_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_add_button(mode_row, "SandboxMode", tr("Free-Build Sandbox"), select_sandbox)
+	var sandbox_btn := button("SandboxMode")
+	sandbox_btn.toggle_mode = true
+	sandbox_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_sandbox_demo_note = Label.new()
+	_sandbox_demo_note.name = "SandboxDemoNote"
+	_sandbox_demo_note.text = tr("In the full game")
+	_sandbox_demo_note.theme_type_variation = &"HudHint"
+	_sandbox_demo_note.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_sandbox_demo_note.visible = DemoMode.is_demo()
+	_mode_page.add_child(_sandbox_demo_note)
+	_mode_summary = Label.new()
+	_mode_summary.name = "ModeSummary"
+	_mode_summary.theme_type_variation = &"HudSmall"
+	_mode_summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_mode_summary.custom_minimum_size = Vector2(PANEL_WIDTH - 32.0, 0.0)
+	_mode_page.add_child(_mode_summary)
+	_sandbox_options = VBoxContainer.new()
+	_sandbox_options.name = "SandboxOptions"
+	_sandbox_options.add_theme_constant_override("separation", 4)
+	_mode_page.add_child(_sandbox_options)
+	_unlimited_toggle = CheckButton.new()
+	_unlimited_toggle.name = "UnlimitedFunds"
+	_unlimited_toggle.text = tr("Unlimited Funds")
+	_unlimited_toggle.button_pressed = true
+	_unlimited_toggle.focus_mode = Control.FOCUS_NONE
+	_unlimited_toggle.toggled.connect(func(_on: bool) -> void: _sync_mode_page())
+	_sandbox_options.add_child(_unlimited_toggle)
+	_budget_note = Label.new()
+	_budget_note.name = "BudgetNote"
+	_budget_note.theme_type_variation = &"HudHint"
+	_sandbox_options.add_child(_budget_note)
+	_unlock_all_toggle = CheckButton.new()
+	_unlock_all_toggle.name = "UnlockAll"
+	_unlock_all_toggle.text = tr("All Tiers & Land Unlocked")
+	_unlock_all_toggle.button_pressed = true
+	_unlock_all_toggle.focus_mode = Control.FOCUS_NONE
+	_sandbox_options.add_child(_unlock_all_toggle)
+	_add_button(
+		_mode_page,
+		"StartAirport",
+		tr("Start Airport", "menu"),
+		press_start_airport,
+		&"HudButtonGreen"
+	)
+	_add_button(_mode_page, "ModeBack", tr("Back", "menu"), press_back)
+	_sync_mode_page()
+
+
+func _sync_mode_page() -> void:
+	if _mode_page == null:
+		return
+	var demo := DemoMode.is_demo()
+	if demo:
+		_sandbox_selected = false
+	var career_btn := button("CareerMode")
+	var sandbox_btn := button("SandboxMode")
+	career_btn.set_pressed_no_signal(not _sandbox_selected)
+	sandbox_btn.set_pressed_no_signal(_sandbox_selected)
+	sandbox_btn.disabled = demo
+	sandbox_btn.modulate = Color(0.65, 0.65, 0.7, 0.85) if demo else Color.WHITE
+	sandbox_btn.tooltip_text = tr("In the full game") if demo else ""
+	_sandbox_demo_note.visible = demo
+	_sandbox_options.visible = _sandbox_selected and not demo
+	if _sandbox_selected and not demo:
+		_mode_summary.text = tr("Free-build sandbox with rating, offers, and awards active.")
+		if _unlimited_toggle.button_pressed:
+			_budget_note.text = tr("No spending limit; Rescue Grant skipped.")
+		else:
+			_budget_note.text = tr("Starts with $250,000 budget.")
+	else:
+		_mode_summary.text = tr(
+			"Standard $25,000 budget, unlock progression, 1-5★ certification, and Career achievements."
+		)

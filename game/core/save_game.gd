@@ -140,7 +140,9 @@ signal loaded(ok: bool)
 ## 36: airport certification ladder (part "certification", AirportCertification
 ## v1: earned_star, medium_departed, large_departed); version 35 saves are
 ## refused (no migration).
-const SAVE_VERSION := 36
+## 37: game mode rules (part "rules", GameRules v1: sandbox, unlimited_funds,
+## unlock_all); version 36 saves are refused (no migration).
+const SAVE_VERSION := 37
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"
@@ -183,6 +185,8 @@ const HUD_THEME := preload("res://ui/hud_theme.tres")
 var pending_path := ""
 ## The autosave a day rollover queued, written once a save is allowed, or "".
 var autosave_pending := ""
+## Active Career or Free-Build Sandbox rules for this world.
+var rules: GameRules
 
 ## The game day the last autosave was queued for (or the loaded or starting day).
 var _autosave_day := 0
@@ -194,6 +198,8 @@ var _message := ""
 var _message_left := 0.0
 ## The on-screen message, made when the node enters the tree.
 var _label: Label
+var _sandbox_pill: PanelContainer
+var _sandbox_label: Label
 
 
 func _ready() -> void:
@@ -215,19 +221,27 @@ func _ready() -> void:
 	_label.visible = false
 	layer.add_child(_label)
 	add_child(layer)
+	_build_sandbox_pill()
 	var vp := get_viewport()
 	if vp != null and not vp.size_changed.is_connected(_place_label):
 		vp.size_changed.connect(_place_label)
+	if vp != null and not vp.size_changed.is_connected(_place_sandbox_pill):
+		vp.size_changed.connect(_place_sandbox_pill)
 	if quick_save_path == QUICK_SAVE_PATH:
 		quick_save_path = SaveSlots.manual_path()
 	if clock != null:
 		_autosave_day = GameCalendar.day_of(clock.tick, clock.epoch)
 		clock.ticked.connect(on_tick)
+	_connect_money_watchers()
 	var boot_path := GameBoot.take_load_path()
 	if boot_path != "":
+		GameBoot.take_pending_rules()
+		apply_rules(GameRules.career(), false)
 		if clock != null:
 			clock.set_paused(true)
 		_boot_load.call_deferred(boot_path)
+	else:
+		apply_rules(GameBoot.take_pending_rules(), true)
 	GameBoot.clear_new_airport.call_deferred()
 	var cert := ensure_certification()
 	if get_parent() != null:
@@ -242,6 +256,15 @@ func _exit_tree() -> void:
 	var vp := get_viewport()
 	if vp != null and vp.size_changed.is_connected(_place_label):
 		vp.size_changed.disconnect(_place_label)
+	if vp != null and vp.size_changed.is_connected(_place_sandbox_pill):
+		vp.size_changed.disconnect(_place_sandbox_pill)
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_TRANSLATION_CHANGED and is_node_ready():
+		if _sandbox_label != null:
+			_sandbox_label.text = tr("Sandbox")
+			_place_sandbox_pill()
 
 
 ## SimClock.ticked: the first tick of a new game day queues the autosave that
@@ -271,7 +294,9 @@ func retry_autosave() -> bool:
 ## are checked against it), the passengers before the staff, then the rest. A
 ## new part is one more entry here.
 func parts() -> Array[SavePart]:
+	var active_rules := ensure_rules()
 	var list: Array[SavePart] = [
+		SavePart.new("rules", active_rules.to_save_dict, _stage_rules, _install_rules),
 		SavePart.new("grid", build_mode.grid.to_snapshot, _stage_grid, build_mode.load_snapshot),
 		# Kept staged: the flights, the rating and the bookings read its calendar epoch.
 		SavePart.new(
@@ -353,8 +378,9 @@ func parts() -> Array[SavePart]:
 	]
 	if build_mode.land_tool != null and build_mode.land_tool.land != null:
 		# Right after the grid, whose built cells must stand on owned land.
+		var grid_at := list.find_custom(func(part: SavePart) -> bool: return part.key == "grid")
 		list.insert(
-			1,
+			grid_at + 1,
 			SavePart.new(
 				"land",
 				build_mode.land_tool.land.to_snapshot,
@@ -435,6 +461,55 @@ func ensure_certification() -> AirportCertification:
 	return certification
 
 
+## Returns the active GameRules, creating Career defaults when unset.
+func ensure_rules() -> GameRules:
+	if rules == null:
+		rules = GameRules.career()
+	return rules
+
+
+## True when running in Career mode (used by Career-only achievements).
+func is_career_mode() -> bool:
+	return ensure_rules().is_career_mode()
+
+
+## True when running in Free-Build Sandbox mode.
+func is_sandbox() -> bool:
+	return ensure_rules().is_sandbox()
+
+
+## Returns the HUD "Sandbox" badge control, if built.
+func sandbox_pill() -> Control:
+	return _sandbox_pill
+
+
+## Applies `next_rules` (clamped to Career in DemoMode) across Wallet,
+## RescueGrant, BuildMode, LandPlots, BuildUnlocks, and the HUD.
+func apply_rules(next_rules: GameRules, is_new_game: bool = false) -> void:
+	rules = GameRules.effective(next_rules)
+	var allow_unlimited := rules.effective_unlimited_funds()
+	var allow_unlock_all := rules.effective_unlock_all()
+	if finances != null and finances.wallet != null:
+		finances.wallet.unlimited_funds = allow_unlimited
+		if is_new_game and allow_unlimited and finances.wallet.balance < GameRules.UNLIMITED_BUDGET:
+			var diff := GameRules.UNLIMITED_BUDGET - finances.wallet.balance
+			finances.wallet.unlimited_funds = false
+			finances.wallet.credit(diff, Wallet.Category.OPENING)
+			finances.wallet.unlimited_funds = true
+	if rescue_grant != null:
+		rescue_grant.disabled = allow_unlimited
+	if build_mode != null:
+		build_mode.require_unlocks = not allow_unlock_all
+		if build_mode.land_tool != null and build_mode.land_tool.land != null:
+			build_mode.land_tool.land.gated = build_mode.require_unlocks
+			build_mode.land_tool.land.all_unlocked = allow_unlock_all
+			if is_new_game and allow_unlock_all:
+				build_mode.land_tool.land.own_all()
+	if unlocks != null:
+		unlocks.set_unlock_all(allow_unlock_all)
+	_sync_sandbox_hud()
+
+
 ## Why no save may be taken now, or "" when one may. Checked before any part
 ## is read.
 func save_problem() -> String:
@@ -505,6 +580,7 @@ func load_world(data: Variant) -> bool:
 	GameBoot.clear_new_airport()
 	_say("Loaded", false)
 	loaded.emit(true)
+	_sync_sandbox_hud()
 	return true
 
 
@@ -887,10 +963,35 @@ static func _letters(bindings: Array[Dictionary]) -> Array[String]:
 ## The land plots (LandPlots): the site's plot counts, plots on the site, and
 ## every built cell of the staged grid on owned land.
 func _stage_land(data: Dictionary, staged: Dictionary) -> String:
-	var problem := LandPlots.problem(data, build_mode.site)
+	var staged_rules := staged.get("rules") as GameRules
+	var unlock_all := staged_rules != null and staged_rules.effective_unlock_all()
+	var problem := LandPlots.problem(data, build_mode.site, unlock_all)
 	if problem == "" and staged.has("grid"):
 		problem = LandPlots.grid_problem(data, build_mode.site, staged["grid"])
 	return problem
+
+
+func _stage_rules(data: Dictionary, staged: Dictionary) -> String:
+	var problem := GameRules.validation_problem(data)
+	if problem != "":
+		return problem
+	var loaded := GameRules.new()
+	if not loaded.from_save_dict(data):
+		return "rules were refused"
+	if DemoMode.is_demo() and loaded.is_sandbox():
+		return tr("In the full game")
+	staged["rules"] = loaded
+	return ""
+
+
+func _install_rules(data: Dictionary) -> bool:
+	var loaded := GameRules.new()
+	if not loaded.from_save_dict(data):
+		return false
+	if DemoMode.is_demo() and loaded.is_sandbox():
+		return false
+	apply_rules(loaded, false)
+	return true
 
 
 ## Checked against the staged grid. Keeps the loaded passenger state and a
@@ -1244,8 +1345,99 @@ func _hud_obstacles() -> Array[Rect2]:
 		"DeparturesToggle",
 		"PlannerToggle",
 		"DebugToggle",
+		"SandboxPill",
 	]:
 		var ctrl := root.find_child(node_name, true, false) as Control
 		if ctrl != null and ctrl.is_visible_in_tree():
 			out.append(ctrl.get_global_rect())
 	return out
+
+
+func _build_sandbox_pill() -> void:
+	var hud_layer := CanvasLayer.new()
+	hud_layer.layer = 2
+	hud_layer.name = "SandboxHudLayer"
+	_sandbox_pill = PanelContainer.new()
+	_sandbox_pill.name = "SandboxPill"
+	_sandbox_pill.theme = HUD_THEME
+	_sandbox_pill.theme_type_variation = &"HudTopCard"
+	_sandbox_pill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_sandbox_pill.custom_minimum_size = Vector2(0.0, float(HudLayout.CHIP_H))
+	_sandbox_pill.visible = false
+	_sandbox_label = Label.new()
+	_sandbox_label.name = "SandboxLabel"
+	_sandbox_label.text = tr("Sandbox")
+	_sandbox_label.theme_type_variation = &"HudHint"
+	_sandbox_label.add_theme_font_size_override("font_size", HudLayout.CAPTION)
+	_sandbox_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_sandbox_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_sandbox_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_sandbox_pill.add_child(_sandbox_label)
+	hud_layer.add_child(_sandbox_pill)
+	add_child(hud_layer)
+	_place_sandbox_pill.call_deferred()
+
+
+func _place_sandbox_pill() -> void:
+	if _sandbox_pill == null:
+		return
+	var left := float(HudLayout.MARGIN + HudLayout.TOGGLE_W + HudLayout.GAP)
+	var root := get_parent()
+	if root != null:
+		var mood := root.find_child("MoodToggle", true, false) as Control
+		if mood != null and mood.is_visible_in_tree():
+			left = maxf(left, mood.get_global_rect().end.x + float(HudLayout.GAP))
+	_sandbox_pill.position = Vector2(left, LeftColumn.slot_top(LeftColumn.SLOT_MOOD))
+
+
+func _connect_money_watchers() -> void:
+	if finances != null and finances.wallet != null:
+		if not finances.wallet.changed.is_connected(_on_hud_money_refresh):
+			finances.wallet.changed.connect(_on_hud_money_refresh)
+	if unlocks != null and not unlocks.tier_changed.is_connected(_on_hud_money_refresh):
+		unlocks.tier_changed.connect(_on_hud_money_refresh)
+	if (
+		build_mode != null
+		and build_mode.land_tool != null
+		and build_mode.land_tool.land != null
+		and not build_mode.land_tool.land.changed.is_connected(_on_hud_money_refresh)
+	):
+		build_mode.land_tool.land.changed.connect(_on_hud_money_refresh)
+	var root := get_parent()
+	if root != null:
+		var menu := root.get_node_or_null("BuildMenu")
+		if menu != null and menu.get("guide") != null:
+			var guide_node := menu.get("guide") as Node
+			if (
+				guide_node != null
+				and guide_node.has_signal(&"changed")
+				and not guide_node.is_connected(&"changed", _on_hud_money_refresh)
+			):
+				guide_node.connect(&"changed", _on_hud_money_refresh)
+
+
+func _on_hud_money_refresh(_arg: Variant = null) -> void:
+	_sync_money_label()
+
+
+func _sync_sandbox_hud() -> void:
+	if _sandbox_pill != null:
+		_sandbox_pill.visible = ensure_rules().is_sandbox()
+		_place_sandbox_pill()
+	_sync_money_label()
+
+
+func _sync_money_label() -> void:
+	var root := get_parent()
+	if root == null:
+		return
+	var menu := root.get_node_or_null("BuildMenu")
+	if menu == null or not menu.has_method("money_label"):
+		return
+	var label := menu.money_label() as Label
+	if label == null:
+		return
+	if ensure_rules().effective_unlimited_funds():
+		label.text = "∞"
+	elif finances != null and finances.wallet != null:
+		label.text = str(finances.wallet.balance)

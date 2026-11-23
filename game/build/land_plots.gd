@@ -49,6 +49,8 @@ var bought := 0
 ## True when progression caps apply (BuildMode.require_unlocks); bare test
 ## worlds leave it false unless testing progression.
 var gated := false
+## True in Free-Build Sandbox with All Tiers & Land Unlocked enabled.
+var all_unlocked := false
 ## The plot columns the player may buy in (first column, count). On the site
 ## the side land is locked while SiteDefinition.SIDE_LAND_OPEN is false, so
 ## only the first site's columns are for sale (for_site()).
@@ -340,6 +342,12 @@ func own_start(site: SiteDefinition) -> void:
 	own_around(cells, Rect2i(site.centre_columns.x, 0, site.centre_columns.y, plots.y))
 
 
+## Marks every plot on the site owned without changing `bought` (Sandbox unlock_all).
+func own_all() -> void:
+	_owned.fill(1)
+	changed.emit()
+
+
 ## The LAND_NOT_OWNED refusal for an edit that builds on land the player does
 ## not own, else null. Floor, an object's footprint and a room need every
 ## cell owned; a wall needs an owned cell on one side of its edge, so the
@@ -461,7 +469,7 @@ func to_snapshot() -> Dictionary:
 ## no plot twice, all the start land owned, `bought` the plots beyond it, and
 ## every owned plot joined to the start land by edges. First of all the site's
 ## plot columns must cut its grid (site_problem()).
-static func problem(data: Dictionary, site: SiteDefinition) -> String:
+static func problem(data: Dictionary, site: SiteDefinition, unlock_all: bool = false) -> String:
 	var columns := site_problem(site)
 	if columns != "":
 		return columns
@@ -469,9 +477,29 @@ static func problem(data: Dictionary, site: SiteDefinition) -> String:
 	var why := land.snapshot_problem(data)
 	if why != "":
 		return why
+	if unlock_all:
+		return land._all_owned_problem(data)
 	var start := LandPlots.for_site(site)
 	start.own_start(site)
 	return land._reachable_problem(data, start.owned_plots())
+
+
+## Why a well-formed snapshot is invalid for Sandbox unlock_all (all plots owned, 0 bought), or "".
+func _all_owned_problem(data: Dictionary) -> String:
+	var owned := {}
+	for entry in data["owned"]:
+		var plot := Vector2i(int(entry[0]), int(entry[1]))
+		if owned.has(plot):
+			return "owned plot %s is listed twice" % [entry]
+		owned[plot] = true
+	if owned.size() != plots.x * plots.y:
+		return (
+			"sandbox unlock_all requires all %d plots owned, not %d"
+			% [plots.x * plots.y, owned.size()]
+		)
+	if int(data["bought"]) != 0:
+		return "'bought' must be 0 when all land is unlocked from start"
+	return ""
 
 
 ## Why a well formed snapshot's ownership could not come from buying plots
