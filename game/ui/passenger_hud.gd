@@ -5,8 +5,9 @@ extends CanvasLayer
 ## the buttons' tooltips). The
 ## flight rows and the made, missed and in-terminal counts live in the
 ## Departures list instead (decision top-right-clock-panel-slims-to-day-time-
-## and-speed-flight-row). While the clock fast-forwards a quiet night, a
-## "Quiet night: fast-forwarding" chip shows under that panel (QuietNight).
+## and-speed-flight-row). While the clock fast-forwards a quiet stretch or night,
+## a chip shows under that panel ("Quiet stretch: fast-forwarding" in daytime,
+## "Quiet night: fast-forwarding" overnight; QuietNight).
 ## On the left edge, the optional DeparturesBoard (B
 ## shows and hides it), which steps aside while the inspect card shows. Under
 ## the clock panel, the right rail (AlertStack): alert cards, which clear
@@ -62,6 +63,10 @@ const DEBUG_W := 260.0
 const REVEAL_FRAMES := 2
 ## The flight result card's key on the rail.
 const RESULT_KEY := &"flight_result"
+## Night hours for the fast-forward chip (20:00-05:59); daytime (06:00-19:59)
+## reads "Quiet stretch: fast-forwarding".
+const NIGHT_START_MINUTE := 20 * 60
+const NIGHT_END_MINUTE := GameCalendar.START_MINUTE
 
 @export var clock: SimClock
 @export var flights: FlightSim
@@ -320,10 +325,7 @@ func _retranslate() -> void:
 	var values := [0, 1, 2, 3]
 	for i in mini(_speed_buttons.size(), values.size()):
 		_dress_speed_button(_speed_buttons[i], values[i])
-	if _quiet_chip.get_child_count() > 0:
-		var quiet_label := _quiet_chip.get_child(0) as Label
-		if quiet_label != null:
-			quiet_label.text = tr("Quiet night: fast-forwarding")
+	_set_quiet_chip_text()
 	if clock != null and sim != null:
 		refresh()
 
@@ -572,10 +574,30 @@ func _build_quiet_chip() -> void:
 	_quiet_chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_quiet_chip.visible = false
 	var label := Label.new()
-	label.text = tr("Quiet night: fast-forwarding")
+	label.text = _quiet_chip_text()
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_quiet_chip.add_child(label)
 	add_child(_quiet_chip)
+
+
+func _is_quiet_night() -> bool:
+	if clock == null:
+		return true
+	var minute := GameCalendar.minute_of_day(clock.tick, clock.epoch)
+	return minute < NIGHT_END_MINUTE or minute >= NIGHT_START_MINUTE
+
+
+func _quiet_chip_text() -> String:
+	if _is_quiet_night():
+		return tr("Quiet night: fast-forwarding")
+	return tr("Quiet stretch: fast-forwarding")
+
+
+func _set_quiet_chip_text() -> void:
+	if _quiet_chip.get_child_count() > 0:
+		var quiet_label := _quiet_chip.get_child(0) as Label
+		if quiet_label != null:
+			quiet_label.text = _quiet_chip_text()
 
 
 ## Shows the chip while the clock fast-forwards, under the clock panel's real
@@ -583,6 +605,7 @@ func _build_quiet_chip() -> void:
 func _refresh_quiet_chip() -> void:
 	var fast := clock != null and clock.is_fast_forwarding()
 	_quiet_chip.visible = fast
+	_set_quiet_chip_text()
 	var top := _clock_panel.position.y + _clock_panel.size.y + HudLayout.GROUP_GAP
 	_quiet_chip.position = Vector2(_clock_panel.position.x, top)
 	_alerts.above = _quiet_chip if fast else _clock_panel
