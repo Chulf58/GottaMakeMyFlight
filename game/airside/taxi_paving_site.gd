@@ -99,6 +99,45 @@ static func on_site(flat: ArrayMesh) -> ArrayMesh:
 	return out
 
 
+## Cuts an overlay `flat` mesh (TaxiMarkings) along `_ramp_lines()` and lifts
+## every vertex by `lift_at()` so markings ride cleanly over the site ramp
+## without creating skirts.
+static func lift_overlay(flat: ArrayMesh) -> ArrayMesh:
+	if flat.get_surface_count() == 0:
+		return flat
+	var arrays := flat.surface_get_arrays(0)
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
+	var uvs: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV]
+	var index: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+	var lines := _ramp_lines()
+	var out_verts := PackedVector3Array()
+	for v in verts:
+		out_verts.append(v + Vector3.UP * lift_at(v))
+	var out_normals := normals.duplicate()
+	var out_uvs := uvs.duplicate()
+	var out_index := PackedInt32Array()
+	for t in range(0, index.size(), 3):
+		var tri := PackedVector3Array([verts[index[t]], verts[index[t + 1]], verts[index[t + 2]]])
+		var tri_uvs := PackedVector2Array([uvs[index[t]], uvs[index[t + 1]], uvs[index[t + 2]]])
+		if not _crossed(tri, lines):
+			out_index.append_array(PackedInt32Array([index[t], index[t + 1], index[t + 2]]))
+			continue
+		for piece: Array in _cut(tri, tri_uvs, lines):
+			var pts: PackedVector3Array = piece[0]
+			var piece_uvs: PackedVector2Array = piece[1]
+			for k in range(1, pts.size() - 1):
+				var base := out_verts.size()
+				for j in [0, k, k + 1]:
+					out_verts.append(pts[j] + Vector3.UP * lift_at(pts[j]))
+					out_normals.append(Vector3.UP)
+					out_uvs.append(piece_uvs[j])
+				out_index.append_array(PackedInt32Array([base, base + 1, base + 2]))
+	var out := ArrayMesh.new()
+	_add_surface(out, out_verts, out_normals, out_uvs, out_index, flat.surface_get_material(0))
+	return out
+
+
 ## The skirts' material: the paving's toon material without its outline pass.
 ## A skirt's outline is drawn at the skirt's depth, 1.5 to 3.5 cm under the
 ## site's own paving, but pushed a pixel or so up the screen, where the paving

@@ -233,7 +233,7 @@ func test_a_re_timed_occurrence_that_meets_another_at_its_gate_is_named() -> voi
 	var far_pair := TaxiTimes.for_stand(far)
 	var first := _contract("C1", 10 * 60)
 	# C2 departs as early as clears C1 at the gate on today's pair, plus a minute.
-	var held := FlightTimetable.reserved_ticks(pair)
+	var held := FlightTimetable.reserved_ticks(pair, first["plane_size"])
 	var gap := ceili(float(held + 20) / 20.0)
 	var second := _contract("C2", 10 * 60 + gap)
 	assert_bool(FlightTimetable.contracts_share_gate(first, second)).is_false()

@@ -173,9 +173,13 @@ static func closed(sim: PassengerSim) -> Array[int]:
 	var out: Array[int] = []
 	if sim.staff == null:
 		return out
+	var off_shift := sim.staff.is_off_shift()
 	for counter in sim.staff.stations_of(StaffMember.Role.SHOP):
-		if not sim.staff.is_open(counter):
-			out.append(counter)
+		if sim.staff.is_open(counter):
+			continue
+		if off_shift and MissSignals.only_off_shift(sim, counter, StaffMember.Role.SHOP):
+			continue
+		out.append(counter)
 	return out
 
 

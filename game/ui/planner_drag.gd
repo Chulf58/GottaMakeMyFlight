@@ -25,6 +25,8 @@ var message: Label
 var sheet: Control
 ## Called with (contract id, gate id) for a drop on a row that takes it.
 var on_drop: Callable
+## Called when a bar drag begins so any open popover can dismiss.
+var on_drag_begin: Callable
 ## The rows drawn now; the planner shares its own list.
 var tracks: Array[PlannerTrack] = []
 
@@ -46,13 +48,54 @@ static func drop_text(destination: String, gate_id: String) -> String:
 	)
 
 
+## Why `contract_id` cannot move to `gate_id` in the player's words, or "".
+static func refusal_text(sim: FlightSim, gate_id: String, problem: String) -> String:
+	var text := ""
+	if problem == "":
+		return text
+	if not FlightLabel.parse_clash(problem).is_empty():
+		text = DeparturesBoard.reason_text(sim, problem, gate_id)
+	elif problem.begins_with("gate ") and problem.contains(" takes no "):
+		text = _stand_problem_text(sim, gate_id)
+	elif problem.begins_with("the taxiway move would strand"):
+		text = problem
+	elif (
+		problem == FlightContract.ODD_HOURS_NIGHT_TEXT or problem == FlightContract.QUIET_NIGHT_TEXT
+	):
+		text = TranslationServer.translate("Gate {gate} — departs in quiet night").format(
+			{"gate": gate_id}
+		)
+	elif problem.contains("taxi route"):
+		text = TranslationServer.translate("Gate {gate} — taxi route unavailable").format(
+			{"gate": gate_id}
+		)
+	else:
+		text = DeparturesBoard.reason_text(sim, problem, gate_id)
+	return text
+
+
+static func _stand_problem_text(sim: FlightSim, gate_id: String) -> String:
+	var ground: Dictionary = sim.gate_grounds().get(gate_id, {})
+	var max_class: String = ground.get("max_class", "")
+	if max_class == "" and ground.has("next"):
+		if str(ground["next"].get("max_class", "")) != "":
+			return TranslationServer.translate("Gate {gate} — building taxi spur").format(
+				{"gate": gate_id}
+			)
+	if max_class == "":
+		return TranslationServer.translate("Gate {gate} — no usable stand").format(
+			{"gate": gate_id}
+		)
+	return TranslationServer.translate("Gate {gate} — stand too small").format({"gate": gate_id})
+
+
 ## Why `contract_id` cannot be dropped on each of `gates` now, in the words a
 ## Move to refusal uses: gate -> text, "" where it fits. Read-only.
 static func refusals(sim: FlightSim, contract_id: String, gates: Array[String]) -> Dictionary:
 	var out := {}
 	for gate_id in gates:
 		var problem := sim.reassign_problem(contract_id, gate_id)
-		out[gate_id] = "" if problem == "" else DeparturesBoard.reason_text(sim, problem, gate_id)
+		out[gate_id] = "" if problem == "" else refusal_text(sim, gate_id, problem)
 	return out
 
 
@@ -91,6 +134,8 @@ func _notification(what: int) -> void:
 			return
 		_drag = drag
 		_over = ""
+		if on_drag_begin.is_valid():
+			on_drag_begin.call()
 		message.text = tr("Drop the flight on another gate's row.")
 		show_rows()
 	elif what == NOTIFICATION_DRAG_END and is_dragging():

@@ -96,7 +96,7 @@ static func apply(mode: BuildMode, plan: LandsidePlacement.Plan) -> BuildResult:
 	var result := placement(mode).apply(plan, mode._history.peek())
 	mode._hover_key = ""
 	mode._status_note = ""
-	if not result.ok:
+	if result != null and not result.ok:
 		var msg := plan.text if plan != null and plan.text != "" else result.reason_text()
 		mode.notify_refusal(msg)
 	return result

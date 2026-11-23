@@ -96,7 +96,7 @@ const WIDTH_M := 30.0
 ## Height of the paving's top. The runway's asphalt lies at y 0.1 and the
 ## site's paving at y 0.2, so both cover the strips' ends; the grass is y -0.1.
 const HEIGHT_M := 0.0
-const MATERIAL := preload("res://assets/materials/tp_atlas_simple_toon.tres")
+const MATERIAL := preload("res://assets/airside/materials/taxi_paving_toon.tres")
 ## The runway's asphalt in the atlas: one column, the v range across one band.
 const ASPHALT_U := 0.5047
 const ASPHALT_V_FROM := 0.0010
@@ -123,12 +123,17 @@ var lines: Array[Rect2] = []
 var pads: Array[Rect2] = []
 ## The hold bar lines last built (hold_bars()).
 var bars: Array[Rect2] = []
+var _markings := MeshInstance3D.new()
 
 
 func _init() -> void:
 	name = "TaxiPaving"
 	top_level = true
 	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_markings.name = "Markings"
+	_markings.top_level = true
+	_markings.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(_markings)
 
 
 ## Builds the mesh for `routes` (world points) around the lane at `lane_z`,
@@ -139,7 +144,8 @@ func show_routes(
 	lane_z: float,
 	pad_list: Array[Rect2] = [],
 	holds := PackedVector3Array(),
-	runway_south_z := -INF
+	runway_south_z := -INF,
+	stand_pts := PackedVector3Array()
 ) -> void:
 	var route_strips := strips(routes, lane_z)
 	lines = centrelines(route_strips, lane_z)
@@ -149,6 +155,9 @@ func show_routes(
 	var marks := lines.duplicate()
 	marks.append_array(bars)
 	mesh = TaxiPavingSite.on_site(mesh_of(shown, marks, pads))
+	_markings.mesh = TaxiPavingSite.lift_overlay(
+		TaxiMarkings.mesh_of(shown, pads, holds, stand_pts, runway_south_z)
+	)
 
 
 ## `strip_list` (as strips() returns them) with each north-south strip whose

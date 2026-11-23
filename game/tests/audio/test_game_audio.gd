@@ -108,12 +108,35 @@ func test_ambience_loops_only_while_gameplay_is_in_tree() -> void:
 	add_child(mode)
 	assert_bool(_audio.is_ambience_playing()).is_true()
 	var amb_player := _audio.get_node("AmbiencePlayer") as AudioStreamPlayer
-	var wav := amb_player.stream as AudioStreamWAV
-	assert_object(wav).is_not_null()
-	assert_int(wav.loop_mode).is_equal(AudioStreamWAV.LOOP_FORWARD)
-	assert_int(wav.loop_end).is_equal(308700)
+	assert_str(String(amb_player.bus)).is_equal("Ambience")
+	var ogg := amb_player.stream as AudioStreamOggVorbis
+	assert_object(ogg).is_not_null()
+	assert_bool(ogg.loop).is_true()
+	assert_bool(ogg.has_loop()).is_true()
+	assert_float(ogg.get_length()).is_between(55.0, 95.0)
 	mode.free()
 	assert_bool(_audio.is_ambience_playing()).is_false()
+
+
+func test_prepare_ambience_stream_supports_ogg_and_wav_loops() -> void:
+	var raw_ogg := AudioStreamOggVorbis.new()
+	raw_ogg.loop = false
+	var prepared_ogg := _audio._prepare_ambience_stream(raw_ogg) as AudioStreamOggVorbis
+	assert_object(prepared_ogg).is_not_null()
+	assert_bool(prepared_ogg != raw_ogg).is_true()
+	assert_bool(prepared_ogg.loop).is_true()
+
+	var raw_wav := AudioStreamWAV.new()
+	raw_wav.mix_rate = 44100
+	raw_wav.format = AudioStreamWAV.FORMAT_16_BITS
+	raw_wav.data = PackedByteArray([0, 0, 0, 0])
+	raw_wav.loop_mode = AudioStreamWAV.LOOP_DISABLED
+	var prepared_wav := _audio._prepare_ambience_stream(raw_wav) as AudioStreamWAV
+	assert_object(prepared_wav).is_not_null()
+	assert_bool(prepared_wav != raw_wav).is_true()
+	assert_int(prepared_wav.loop_mode).is_equal(AudioStreamWAV.LOOP_FORWARD)
+	assert_int(prepared_wav.loop_begin).is_equal(0)
+	assert_int(prepared_wav.loop_end).is_greater(0)
 
 
 func test_ui_button_build_flight_departure_and_lump_cash_events_trigger_sfx() -> void:

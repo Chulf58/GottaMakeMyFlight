@@ -13,10 +13,12 @@ extends RefCounted
 ## baggage shuttles, pushback tugs and marshalling (RampDispatch).
 enum Role { CHECKIN, SECURITY, SHOP, CLEANER, GATE, RAMP }
 enum RampJob { NONE, SHUTTLE, PUSHBACK, MARSHAL }
-## WALKING_OUT: fired, on its way to the entrance; no longer staff. A cleaner
-## is TO_STATION while it walks to its job and ON_DUTY while it cleans or
-## empties it.
-enum State { IDLE, TO_STATION, ON_DUTY, WALKING_OUT }
+## WALKING_OUT: fired, on its way to the entrance; no longer staff.
+## LEAVING_SHIFT: overnight off-shift walkout to the entrance; still staff.
+## OFF_SHIFT: off the floor overnight (at NO_CELL); still staff.
+## A cleaner is TO_STATION while it walks to its job and ON_DUTY while it
+## cleans or empties it.
+enum State { IDLE, TO_STATION, ON_DUTY, WALKING_OUT, LEAVING_SHIFT, OFF_SHIFT }
 ## The post it works at its station (StaffPosts): PRIMARY opens the station,
 ## HELPER (at a whole security lane only) speeds up its repacks.
 enum Slot { PRIMARY, HELPER }
@@ -60,6 +62,10 @@ var ramp_flight_id := ""
 
 func in_pool() -> bool:
 	return at == NO_CELL
+
+
+func is_walking_to_exit() -> bool:
+	return state == State.WALKING_OUT or state == State.LEAVING_SHIFT
 
 
 ## Walking to or working a helper post.

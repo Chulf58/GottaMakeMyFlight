@@ -132,8 +132,10 @@ func test_an_offer_accepted_after_opening_starts_as_before() -> void:
 
 
 ## The gate is asked before anything is issued: opening on PM's issue tick
-## (4940) still issues PM-d0 on that tick. The starter then takes the first
-## minute after PM's reservation (7340 to 10640), so it starts at 10640.
+## (4940) still issues PM-d0 on that tick. PM (medium) holds 7340 to 11240;
+## the small starter holds from AT_STAND - 80 (1380 ticks before PUSHBACK) to
+## DEPARTED, so its first state (2660 ticks before PUSHBACK) sits 1280 ticks
+## earlier at 9960, and it is issued at 9960 - 2400 = 7560.
 func test_the_gate_opens_the_airport_before_the_tick_s_issue() -> void:
 	var gate: ReadyGate = auto_free(ReadyGate.new())
 	gate.flights = _sim
@@ -147,8 +149,12 @@ func test_the_gate_opens_the_airport_before_the_tick_s_issue() -> void:
 	assert_array(_added).is_equal(["PM-d0"])
 	assert_array(_sim.contract_ids()).is_equal(["PM", FlightSim.DEFAULT_ID])
 	var starter := FlightTimetable.occurrence_id(FlightSim.DEFAULT_ID, 0)
-	var starter_first := _pm_first + FlightTimetable.reserved_ticks()
-	assert_int(starter_first).is_equal(11240)
+	var pre_hold := (
+		FlightTimetable.reserved_ticks()
+		- FlightTimetable.reserved_ticks(TaxiTimes.BASE, PlaneClasses.SMALL)
+	)
+	var starter_first := _pm_first + FlightTimetable.reserved_ticks() - pre_hold
+	assert_int(starter_first).is_equal(9960)
 	_run_to(starter_first - FlightTimetable.ISSUE_LEAD_TICKS - 1)
 	assert_array(_added).is_equal(["PM-d0"])
 	_run_to(starter_first - FlightTimetable.ISSUE_LEAD_TICKS)

@@ -2,9 +2,9 @@ class_name TestQuietNight
 extends GdUnitTestSuite
 ## The quiet-night detector (decision quiet-nights-fast-forward-automatically-
 ## when-nothing-is-due): quiet means the airport is open, nobody is in the
-## terminal, no spawn is pending, no flight is moving and the clock is not
-## paused (every panel hold pauses it). While quiet, the clock fast-forwards to
-## LEAD_TICKS before the next flight event and stops there for good.
+## terminal, no flight is moving and the clock is not paused (every panel hold
+## pauses it). While quiet, the clock fast-forwards to LEAD_TICKS before the
+## next morning activity and stops there for good.
 
 ## The one-off flight's first state: far enough ahead that tick 0 is quiet.
 const FIRST := 20_000
@@ -61,12 +61,20 @@ func test_a_paused_clock_is_not_quiet() -> void:
 	assert_int(_quiet.stop_tick()).is_equal(-1)
 
 
-func test_a_pending_spawn_is_not_quiet() -> void:
+func test_a_pending_spawn_stays_quiet_until_lead_before_spawn() -> void:
 	_world.flights.open_airport()
 	assert_bool(_world.sim.schedule_flight(PassengerTestWorld.FLIGHT, 3)).is_true()
-	print("pending=%d" % _world.sim.pending_spawns())
+	print("pending=%d next_spawn=%d" % [_world.sim.pending_spawns(), _world.sim.next_spawn_tick()])
 	assert_int(_world.sim.pending_spawns()).is_greater(0)
-	assert_bool(_quiet.is_quiet()).is_false()
+	assert_bool(_quiet.is_quiet()).is_true()
+	var expected := (
+		mini(
+			FlightSim.schedule_starts(FIRST)[FlightSim.State.APPROACH],
+			_world.sim.next_spawn_tick(),
+		)
+		- QuietNight.LEAD_TICKS
+	)
+	assert_int(_quiet.stop_tick()).is_equal(expected)
 
 
 func test_a_passenger_in_the_terminal_is_not_quiet() -> void:
@@ -118,7 +126,7 @@ func test_the_clock_fast_forwards_to_the_stop_and_stays_at_player_speed_after() 
 			assert_bool(_world.clock.is_fast_forwarding()).is_true()
 	print("stop=%d tick=%d frames=%d" % [_expected_stop(), _world.clock.tick, frames])
 	assert_int(_world.clock.tick).is_equal(_expected_stop())
-	var fewest := _expected_stop() / float(SimClock.MAX_STEPS_PER_FRAME)
+	var fewest := _expected_stop() / float(SimClock.FAST_FORWARD_MAX_STEPS)
 	assert_float(float(frames)).is_less(fewest + 2.0)
 	# Inside the lead window the airport is still quiet, but nothing restarts it.
 	var event := _expected_stop() + QuietNight.LEAD_TICKS
@@ -130,31 +138,82 @@ func test_the_clock_fast_forwards_to_the_stop_and_stays_at_player_speed_after() 
 	assert_int(_world.clock.speed).is_equal(2)
 
 
-func test_a_modal_hold_stops_it_and_build_session_leaves_it_fast_forwarding() -> void:
+func test_a_build_hold_stops_it_and_gives_back_the_held_speed() -> void:
 	_world.flights.open_airport()
 	_world.clock.set_speed(3)
 	_world.clock.advance(FRAME)
 	assert_bool(_world.clock.is_fast_forwarding()).is_true()
 	var session := auto_free(BuildSession.new()) as BuildSession
 	session.clock = _world.clock
+	# A hold's owner must be in the tree (ClockHolds), so its hold ends with it.
 	add_child(session)
 	session.set_building(true)
 	session.sync()
-	assert_bool(_world.clock.paused).is_false()
-	assert_bool(_quiet.is_quiet()).is_true()
-	var holder := auto_free(Node.new()) as Node
-	add_child(holder)
-	var token := _world.clock.holds.acquire(holder, false)
 	assert_bool(_world.clock.paused).is_true()
 	assert_bool(_quiet.is_quiet()).is_false()
 	var held := _world.clock.tick
 	_world.clock.advance(FRAME)
 	assert_int(_world.clock.tick).is_equal(held)
 	assert_bool(_world.clock.is_fast_forwarding()).is_false()
-	# The hold ends with the player's own clock: running, at 3x.
-	_world.clock.holds.release(token)
+	# Ending build mode restores the player's own clock: running, at 3x.
+	session.set_building(false)
 	assert_bool(_world.clock.paused).is_false()
 	assert_int(_world.clock.speed).is_equal(3)
 	_world.clock.advance(FRAME)
 	assert_bool(_world.clock.is_fast_forwarding()).is_true()
 	assert_int(_world.clock.speed).is_equal(3)
+
+
+func test_a_13_5_hour_night_finishes_in_6_to_9_seconds_at_60_fps() -> void:
+	_world.flights.open_airport()
+	var target := 16_200
+	var frames := 0
+	while _world.clock.tick < target:
+		_world.clock.advance(FRAME)
+		frames += 1
+	var seconds := frames * FRAME
+	print("13.5h night: frames=%d seconds=%.2f" % [frames, seconds])
+	assert_int(frames).is_less_equal(ceili(float(target) / SimClock.FAST_FORWARD_MAX_STEPS) + 2)
+	assert_float(seconds).is_greater_equal(6.0)
+	assert_float(seconds).is_less_equal(9.0)
+
+
+func test_fast_forward_crosses_issue_tick_and_stops_ahead_of_first_arrival() -> void:
+	var grid := PassengerTestWorld.floored(Vector2i(12, 12))
+	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(0, 11), 3)
+	PassengerTestWorld.place(grid, &"checkin_desk", Vector2i(3, 2), 0)
+	PassengerTestWorld.place(grid, &"security_scanner", Vector2i(8, 2), 0)
+	var world := PassengerTestWorld.make(grid, FlightSim.schedule_starts(FIRST))
+	var snap := world.flights.to_snapshot()
+	snap["opened_tick"] = 0
+	snap["flights"] = []
+	assert_bool(world.flights.from_snapshot(snap)).is_true()
+	var quiet := auto_free(QuietNight.new()) as QuietNight
+	quiet.bind(world.clock, world.flights, world.sim)
+	var terms := TestFlightContracts.terms("GMF101", 18 * 60)
+	terms["plane_size"] = "small"
+	terms["booked_passengers"] = 6
+	assert_bool(world.flights.accept_contract(terms)).is_true()
+	var contract := world.flights.contract_of("GMF101")
+	var issue := FlightTimetable.issue_tick(contract, 0, 0)
+	var crossed_issue := false
+	var frames := 0
+	while world.clock.tick < 20_000 and frames < 2000:
+		world.clock.advance(FRAME)
+		frames += 1
+		if world.clock.tick >= issue and not crossed_issue:
+			crossed_issue = true
+			assert_int(world.sim.pending_spawns()).is_greater(0)
+			assert_int(world.sim.active_count()).is_equal(0)
+			assert_bool(quiet.is_quiet()).is_true()
+			assert_bool(world.clock.is_fast_forwarding()).is_true()
+		if crossed_issue and not world.clock.is_fast_forwarding():
+			break
+	var approach := world.flights.state_start("GMF101-d0", FlightSim.State.APPROACH)
+	var expected := mini(approach, world.sim.next_spawn_tick()) - QuietNight.LEAD_TICKS
+	print("issue=%d stop=%d expected=%d" % [issue, world.clock.tick, expected])
+	assert_bool(crossed_issue).is_true()
+	assert_int(world.clock.tick).is_greater(issue)
+	assert_int(world.clock.tick).is_equal(expected)
+	assert_int(world.sim.active_count()).is_equal(0)
+	world.free_all()

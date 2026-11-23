@@ -42,14 +42,16 @@ signal ticked(tick: int)
 const TICK_RATE := 20
 const STEP := 1.0 / TICK_RATE
 const SPEEDS: Array[int] = [1, 2, 3]
-## Most steps one frame may run. Past this the backlog is dropped, so a long
-## stall does not make the next frame run even longer.
+## Most steps one frame may run at normal 1x-3x speed. Past this the backlog
+## is dropped, so a long stall does not make the next frame run even longer.
 const MAX_STEPS_PER_FRAME := 10
-## Times the 1x rate a quiet-night fast-forward runs at: 600 ticks a second,
-## which is MAX_STEPS_PER_FRAME at 60 frames a second, so a faster rate would
-## only feed the backlog the cap drops. A 13.5-hour night (16,200 ticks, about
-## 270 s at 3x) then passes in about 27 s.
-const FAST_FORWARD_SPEED := 30
+## Most steps one frame may run during quiet-night fast-forward, decoupled from
+## MAX_STEPS_PER_FRAME so 1x-3x stays capped at 10 while an empty 13.5-hour
+## night (16,200 ticks) finishes in ~6.75 s at 60 fps.
+const FAST_FORWARD_MAX_STEPS := 40
+## Times the 1x rate a quiet-night fast-forward runs at: 2400 ticks a second,
+## matching FAST_FORWARD_MAX_STEPS at 60 frames a second.
+const FAST_FORWARD_SPEED := 120
 ## 2: the calendar epoch ("epoch") and whether the calendar is held
 ## ("calendar_held"). A version 1 save is refused; there is no migration.
 const SAVE_VERSION := 2
@@ -130,7 +132,9 @@ func advance(real_delta: float) -> void:
 	var fast := is_fast_forwarding()
 	_accumulator += real_delta * (FAST_FORWARD_SPEED if fast else speed)
 	var steps := 0
-	while _accumulator >= STEP and steps < MAX_STEPS_PER_FRAME:
+	while (
+		_accumulator >= STEP and steps < (FAST_FORWARD_MAX_STEPS if fast else MAX_STEPS_PER_FRAME)
+	):
 		_accumulator -= STEP
 		tick += 1
 		steps += 1
