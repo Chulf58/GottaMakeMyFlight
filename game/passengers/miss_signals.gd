@@ -52,15 +52,41 @@ static func closed_stations(sim: PassengerSim) -> Array[int]:
 	var out: Array[int] = []
 	if sim.staff == null:
 		return out
+	var off_shift := sim.staff.is_off_shift()
 	var stations: Array[int] = []
 	stations.append_array(sim.layout.desks)
 	stations.append_array(sim.layout.scanners)
 	stations.append_array(GateDesks.desk_ids(sim.grid))
 	stations.sort()
 	for station in stations:
-		if StaffPosts.usable(sim.grid, sim.layout, station) and not sim.staff.is_open(station):
-			out.append(station)
+		if not StaffPosts.usable(sim.grid, sim.layout, station) or sim.staff.is_open(station):
+			continue
+		if off_shift and only_off_shift(sim, station, _station_role(sim, station)):
+			continue
+		out.append(station)
 	return out
+
+
+## Whether `station` of `role` is closed solely because hired staff are
+## overnight off-shift (never true when player-closed, faulted, blocked,
+## unreachable, or when 0 of `role` are hired).
+static func only_off_shift(sim: PassengerSim, station: int, role: StaffMember.Role) -> bool:
+	if (
+		sim.staff.closures.is_closed(station)
+		or sim.staff.faults.is_faulted(station)
+		or sim.staff.spot_blocked(station)
+		or sim.staff.spot_unreachable(station)
+	):
+		return false
+	return sim.staff.count(role) > 0
+
+
+static func _station_role(sim: PassengerSim, station: int) -> StaffMember.Role:
+	if sim.layout.desks.has(station):
+		return StaffMember.Role.CHECKIN
+	if sim.layout.scanners.has(station):
+		return StaffMember.Role.SECURITY
+	return StaffMember.Role.GATE
 
 
 ## Why `station` is closed (PLAYER_CLOSED_REASON, FAULT_REASON,

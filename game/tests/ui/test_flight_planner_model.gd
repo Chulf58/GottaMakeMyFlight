@@ -146,3 +146,28 @@ func test_a_gate_that_lost_its_stand_has_no_row_and_no_bar() -> void:
 		bars += (row["bars"] as Array).size()
 	assert_int(rows.size()).is_equal(2)
 	assert_int(bars).is_equal(0)
+
+
+func test_six_small_flights_on_one_gate_render_non_overlapping_bars() -> void:
+	var slots := [420, 555, 690, 825, 960, 1095]
+	for i in slots.size():
+		var terms := TestFlightContracts.terms("S%d" % i, slots[i])
+		terms["plane_size"] = PlaneClasses.SMALL
+		terms["booked_passengers"] = 6
+		terms["fee_per_passenger"] = 50
+		assert_bool(_sim.accept_contract(terms)).is_true()
+		assert_str(_sim.contract_of("S%d" % i)["gate"]).is_equal("A")
+	# Issue S0-d1 and S1-d1 on day 1 so both issued and unissued small bars are checked.
+	_run_to(FlightTimetable.issue_tick(_sim.contract_of("S1"), 1, 0))
+	var bars: Array = _row(FlightPlannerModel.rows_for_day(_sim, 1), "A")["bars"]
+	assert_int(bars.size()).is_equal(slots.size())
+	var taxi := FlightTimetable.taxi_of(_sim.contract_of("S0"))
+	var expected_span := FlightTimetable.reserved_ticks(taxi, PlaneClasses.SMALL)
+	for i in bars.size():
+		var bar: Dictionary = bars[i]
+		assert_int(bar["end"] - bar["start"]).is_equal(expected_span)
+		assert_int(bar["departure"]).is_between(bar["start"], bar["end"])
+		if i > 0:
+			var prev: Dictionary = bars[i - 1]
+			assert_int(prev["end"]).is_less_equal(bar["start"])
+			assert_float(prev["to"]).is_less_equal(bar["from"])

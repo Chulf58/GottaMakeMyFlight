@@ -106,3 +106,22 @@ func test_the_list_shrinks_and_the_card_rises_when_rows_drop_out() -> void:
 	print("LIST rows after noon: %s" % [_board.shown_lines()])
 	assert_float(_panel().size.y).is_less(full)
 	_assert_card_under_list("rows dropped")
+
+
+func test_adding_flight_with_long_airline_never_spikes_panel_height_before_layout() -> void:
+	await _settle()
+	var two := _panel().size.y
+	var terms := TestFlightContracts.terms("Z", 15 * 60)
+	terms["destination"] = "Paris"
+	terms["airline"] = "Trans Continental Regional Airways"
+	assert_bool(_sim.accept_contract(terms)).is_true()
+	_board.refresh()
+	_board._process(0.016)
+	var heights: Array[float] = [_panel().size.y]
+	for i in 4:
+		await get_tree().process_frame
+		heights.append(_panel().size.y)
+	var settled := heights[heights.size() - 1]
+	assert_float(settled).is_greater(two)
+	for h in heights:
+		assert_float(h).is_less_equal(settled + 0.5)

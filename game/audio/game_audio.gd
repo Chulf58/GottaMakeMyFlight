@@ -30,7 +30,7 @@ const FINAL_CALL_POLL_TICKS := 10
 const FINAL_CALL_LEAD_TICKS := 300
 const STAR_MILESTONES: Array[float] = [3.0, 4.0, 5.0]
 
-const AMBIENCE_PATH := "res://assets/audio/terminal_ambience.wav"
+const AMBIENCE_PATH := "res://assets/audio/terminal_lounge.ogg"
 const SFX_PATHS := {
 	&"ui_click": "res://assets/audio/ui_click.wav",
 	&"build_place": "res://assets/audio/build_place.wav",
@@ -365,18 +365,28 @@ func _set_bus_level(bus_name: StringName, linear: float, bus_muted: bool) -> voi
 	AudioServer.set_bus_volume_db(idx, linear_to_db(maxf(linear, MIN_LINEAR)))
 
 
+func _prepare_ambience_stream(stream: AudioStream) -> AudioStream:
+	if stream == null:
+		return null
+	if stream is AudioStreamOggVorbis:
+		var ogg := stream.duplicate() as AudioStreamOggVorbis
+		ogg.loop = true
+		return ogg
+	if stream is AudioStreamWAV:
+		var wav := stream.duplicate() as AudioStreamWAV
+		wav.loop_mode = AudioStreamWAV.LOOP_FORWARD
+		wav.loop_begin = 0
+		if wav.loop_end <= 0:
+			wav.loop_end = int(round(wav.get_length() * float(wav.mix_rate)))
+		return wav
+	return stream
+
+
 func _setup_players() -> void:
 	_ambience_player = AudioStreamPlayer.new()
 	_ambience_player.name = "AmbiencePlayer"
 	_ambience_player.bus = BUS_AMBIENCE
-	var ambience := load(AMBIENCE_PATH) as AudioStreamWAV
-	if ambience != null:
-		var looped := ambience.duplicate() as AudioStreamWAV
-		looped.loop_mode = AudioStreamWAV.LOOP_FORWARD
-		looped.loop_begin = 0
-		if looped.loop_end <= 0:
-			looped.loop_end = int(round(looped.get_length() * float(looped.mix_rate)))
-		_ambience_player.stream = looped
+	_ambience_player.stream = _prepare_ambience_stream(load(AMBIENCE_PATH) as AudioStream)
 	add_child(_ambience_player)
 	for id: StringName in SFX_PATHS:
 		var stream := load(SFX_PATHS[id]) as AudioStream

@@ -121,7 +121,9 @@ signal loaded(ok: bool)
 ## SaveLinks validation; version 26 saves are refused (no migration).
 ## 28: small flights carry 4-8 passengers and small offers carry 30-70 base fees
 ## (FlightSim v11, OfferBoard v7); version 27 saves are refused (no migration).
-const SAVE_VERSION := 28
+## 29: overnight off-shift staff states (StaffSim v8); version 28 saves are
+## refused (no migration).
+const SAVE_VERSION := 29
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"

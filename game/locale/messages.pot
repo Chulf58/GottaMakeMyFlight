@@ -2627,6 +2627,14 @@ msgid "Your airport has grown"
 msgstr ""
 
 #: ui/staff_panel.gd
+msgid "{hired} hired, off shift"
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "{hired} hired, {duty} cleaning, {off_shift} off shift"
+msgstr ""
+
+#: ui/staff_panel.gd
 msgid "{hired} hired, {duty} cleaning, {leaving} leaving"
 msgstr ""
 

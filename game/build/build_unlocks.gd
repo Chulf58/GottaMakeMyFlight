@@ -7,9 +7,10 @@ extends Node
 ## passengers who made their flight reaches its threshold (placeholders,
 ## tuned by playtest). A tier, once reached, is never lost, and what the player
 ## built above the tier before a load stays usable (only picking the tool is
-## gated). The check runs on the first tick of each new game day, after the
-## AirportRating has recorded the finished flights' no-shows (the scene lists
-## this node after the rating, so its tick handler runs second).
+## gated). The check runs on every tick (after AirportRating has recorded
+## outcomes and finished flights' no-shows, since the scene lists this node
+## after the rating), so tiers open live mid-day as soon as both thresholds
+## are met.
 ##
 ## The cafe tier also starts passenger hunger: CafeSim.hunger_enabled follows
 ## cafe_open(), so before it no passenger grows hungry, loses mood to food or
@@ -40,7 +41,6 @@ const RUNWAY_TIERS := {"medium": 2, "large": 3}
 const UNLISTED_TIER := 99
 ## Most made-flight passengers counted (a save above it is refused).
 const MAX_MADE := 1000000000
-const NO_DAY := -1
 ## The English msgids: tests compare against them; lock_text() says tr() of the literals.
 const NOT_WIRED_TEXT := "Build unlocks are not wired"
 const IN_FULL_GAME_TEXT := "In the full game"
@@ -72,7 +72,7 @@ const TIERS := [
 	},
 	{
 		"stars": 2.0,
-		"passengers": 50,
+		"passengers": 20,
 		"facilities":
 		(
 			"cafe and bins, security lane, baggage, kiosk, screen, plants, benches, curb bay,"
@@ -189,7 +189,6 @@ static var _tool_by_room: Dictionary = {}
 
 var _tier := START_TIER
 var _made := 0
-var _checked_day := NO_DAY
 ## Tier -> true once its unlock dialog showed; Tool -> true once the player
 ## hovered or picked its card (both set by UnlockGuide, kept in the snapshot).
 var _shown: Dictionary = {}
@@ -359,12 +358,10 @@ func tier_args(needed: int) -> Dictionary:
 	return args
 
 
-## The first tick of a new game day runs the check.
+## Evaluates unlocks on every tick (after AirportRating has recorded outcomes
+## and no-shows). Demo builds stop unlocking once day >= MAX_DEMO_DAY.
 func on_tick(tick: int) -> void:
 	var day := GameCalendar.day_of(tick, SimClock.epoch_of(clock))
-	if day == _checked_day:
-		return
-	_checked_day = day
 	if DemoMode.is_demo() and day >= DemoMode.MAX_DEMO_DAY:
 		return
 	check()
@@ -375,8 +372,10 @@ func on_tick(tick: int) -> void:
 func check() -> void:
 	if rating == null:
 		return
-	var stars := rating.stars()
 	var max_tier := DemoMode.MAX_PLAYABLE_TIER if DemoMode.is_demo() else TIERS.size()
+	if _tier >= max_tier or _made < TIERS[_tier]["passengers"]:
+		return
+	var stars := rating.stars()
 	var reached := _tier
 	for i in range(_tier, max_tier):
 		var need: Dictionary = TIERS[i]
@@ -445,7 +444,6 @@ func from_snapshot(data: Dictionary) -> bool:
 	var max_tier := DemoMode.MAX_PLAYABLE_TIER if DemoMode.is_demo() else TIERS.size()
 	_tier = mini(int(data["tier"]), max_tier)
 	_made = int(data["made"])
-	_checked_day = NO_DAY
 	_shown.clear()
 	for tier in data["shown"]:
 		if int(tier) <= _tier:

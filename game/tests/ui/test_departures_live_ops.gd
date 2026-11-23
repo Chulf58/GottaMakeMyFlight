@@ -297,6 +297,92 @@ func test_hud_refresh_preserves_board_revision_caches_without_rescan() -> void:
 	assert_str(boarded_label.text).is_equal("1/6 boarded")
 
 
+func _accept_long(id: String, minute: int, destination: String, booked: int) -> String:
+	var terms := TestFlightContracts.terms(id, minute)
+	terms["destination"] = destination
+	terms["airline"] = "Trans Continental Regional Airways"
+	terms["plane_size"] = PlaneClasses.SMALL
+	terms["booked_passengers"] = booked
+	assert_bool(_world.flights.accept_contract(terms)).is_true()
+	return FlightTimetable.occurrence_id(id, 0)
+
+
+func _sample_panel_heights(frames: int) -> Array[float]:
+	var panel := _board.find_child("DeparturesPanel", true, false) as Control
+	var heights: Array[float] = [panel.size.y]
+	for i in frames:
+		await get_tree().process_frame
+		heights.append(panel.size.y)
+	return heights
+
+
+func test_boarding_and_late_count_update_in_place_without_panel_height_spike() -> void:
+	var occ := _accept_long("GA100", 11 * 60, "Oslo", 6)
+	_board.set_shown(true)
+	_hud.refresh()
+	for i in 3:
+		await get_tree().process_frame
+	var panel := _board.find_child("DeparturesPanel", true, false) as Control
+	var settled_h := panel.size.y
+	var row_box := _board.find_child("FlightRow_%s" % occ, true, false) as Control
+	var boarded_label := _board.find_child("Boarded_%s" % occ, true, false) as Label
+	assert_object(row_box).is_not_null()
+	assert_object(boarded_label).is_not_null()
+
+	# Boarding a passenger must update Boarded_* in place without recreating rows or spiking height.
+	var p1 := _world.sim.spawn_now(occ)
+	_world.sim._finish(_world.passenger(p1), true)
+	_hud.refresh()
+	_board._process(0.016)
+	var board_heights := await _sample_panel_heights(3)
+	assert_bool(is_instance_valid(row_box)).is_true()
+	assert_bool(is_instance_valid(boarded_label)).is_true()
+	assert_str(boarded_label.text).is_equal("1/6 boarded")
+	for h in board_heights:
+		assert_float(h).is_equal_approx(settled_h, 0.5)
+
+	# Incrementing an existing late count (1 -> 2) must update Late_* in place without height spike.
+	var p2 := _world.sim.spawn_now(occ)
+	_world.passenger(p2).late = true
+	_world.sim.mark_changed()
+	_hud.refresh()
+	for i in 3:
+		await get_tree().process_frame
+	var late_settled_h := panel.size.y
+	var late_btn := _board.late_button(occ)
+	assert_object(late_btn).is_not_null()
+	assert_str(late_btn.text).is_equal("1 running late")
+
+	var p3 := _world.sim.spawn_now(occ)
+	_world.passenger(p3).late = true
+	_world.sim.mark_changed()
+	_hud.refresh()
+	_board._process(0.016)
+	var late_heights := await _sample_panel_heights(3)
+	assert_bool(is_instance_valid(late_btn)).is_true()
+	assert_str(late_btn.text).is_equal("2 running late")
+	for h in late_heights:
+		assert_float(h).is_equal_approx(late_settled_h, 0.5)
+
+
+func test_rebuilding_rows_for_late_pill_never_spikes_panel_height() -> void:
+	var occ := _accept_long("GA100", 11 * 60, "Oslo", 6)
+	_board.set_shown(true)
+	_hud.refresh()
+	for i in 3:
+		await get_tree().process_frame
+	var pid := _world.sim.spawn_now(occ)
+	_world.passenger(pid).late = true
+	_world.sim.mark_changed()
+	_hud.refresh()
+	_board._process(0.016)
+	var heights := await _sample_panel_heights(4)
+	var settled_h := heights[heights.size() - 1]
+	assert_float(settled_h).is_greater(0.0)
+	for i in heights.size():
+		assert_float(heights[i]).is_less_equal(settled_h + 0.5)
+
+
 func test_live_ops_strings_are_in_messages_pot() -> void:
 	var template := FileAccess.get_file_as_string("res://locale/messages.pot")
 	var entries := PotEntries.parse(template)

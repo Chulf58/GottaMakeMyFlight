@@ -49,7 +49,7 @@ func after_test() -> void:
 func _earn_cafe_tier() -> void:
 	for i in 60:
 		_rating.record_passenger(0, true, PassengerSim.MOOD_MAX)
-	for i in 50:
+	for i in 20:
 		_pax.outcome.emit(i, true)
 	_unlocks.check()
 
@@ -149,11 +149,11 @@ func test_a_locked_card_keeps_its_description_and_live_requirement() -> void:
 	assert_array(card.info).is_equal(ItemInfo.of(BuildMode.Tool.CAFE_ROOM))
 	var text := card._get_tooltip(Vector2.ZERO)
 	assert_str(text).contains(ItemInfo.of(BuildMode.Tool.CAFE_ROOM)[0])
-	assert_str(text).contains("Unlocks at 2 stars and 50 passengers")
+	assert_str(text).contains("Unlocks at 2 stars and 20 passengers")
 	var hover: Control = auto_free(card._make_custom_tooltip(text))
 	assert_object(hover).is_not_null()
 	var requirement := hover.find_child("Requirement", true, false) as Label
-	assert_str(requirement.text).starts_with("Unlocks at 2 stars and 50 passengers")
+	assert_str(requirement.text).starts_with("Unlocks at 2 stars and 20 passengers")
 	assert_int(card.details.size()).is_equal(2)
 	assert_array(hover.find_children("*", "Label", true, false)).has_size(7 + card.details.size())
 

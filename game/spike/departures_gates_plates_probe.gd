@@ -145,11 +145,16 @@ func _size(entry: Array) -> void:
 	# 2: Move choices (C fits, A clashes).
 	bar_y.pressed.emit()
 	await _frames(3)
-	var move_a := _planner.part("Move_A")
+	var move_a := _planner.part("Move_A") as Button
 	var move_c := _planner.part("Move_C") as Button
-	print("ACTIONS %s A=%s C=%s" % [tag, move_a != null, move_c != null])
-	if move_a != null or move_c == null:
-		_invalid("%s: FlightPlanner did not offer Move_C without clashed Move_A" % tag)
+	print(
+		(
+			"ACTIONS %s A_disabled=%s C_enabled=%s"
+			% [tag, move_a != null and move_a.disabled, move_c != null and not move_c.disabled]
+		)
+	)
+	if move_a == null or not move_a.disabled or move_c == null or move_c.disabled:
+		_invalid("%s: FlightPlanner did not offer enabled Move_C with disabled Move_A" % tag)
 		return
 	await _plate("%s_actions" % tag, [move_c])
 	# 3: a move that works, then put Y back so the next size starts the same.

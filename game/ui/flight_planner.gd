@@ -63,7 +63,10 @@ var _hours := Control.new()
 var _rows := VBoxContainer.new()
 var _scroll := ScrollContainer.new()
 var _summary := Label.new()
-var _actions := HBoxContainer.new()
+var _overlay := Control.new()
+var _popover := PanelContainer.new()
+var _popover_title := Label.new()
+var _actions := VBoxContainer.new()
 var _message := Label.new()
 var _tracks: Array[PlannerTrack] = []
 ## What the grid shows now, so it is rebuilt only when it changes.
@@ -74,6 +77,10 @@ var _dirty := true
 var _selected := ""
 var _selected_day := -1
 var _confirming := false
+## Clicked disabled bar (ended contract or one-off flight): its bar key, day, and kind.
+var _note_key := ""
+var _note_day := -1
+var _note_one_off := false
 var _rebuilds := 0
 ## Greys the rows while a bar is dragged and carries out the drop.
 var _drag := PlannerDrag.new()
@@ -90,6 +97,7 @@ func _ready() -> void:
 	_drag.sheet = _sheet
 	_drag.tracks = _tracks
 	_drag.on_drop = _on_move_pressed
+	_drag.on_drag_begin = _on_drag_began
 	add_child(_drag)
 	if flights != null:
 		flights.planning_changed.connect(_mark_dirty)
@@ -126,14 +134,33 @@ func _process(_delta: float) -> void:
 		return
 	flights.check_planning_changed()
 	_refresh()
+	if _popover.visible:
+		_place_popover()
 
 
-## Esc closes an open sheet ahead of _unhandled_input (GameMenu sits after
-## PassengerHud in main.tscn, and BuildMode/selections sit behind it).
-## P toggles; a held key's repeats and modified presses are left alone.
+## Outside click closes an open popover; clicks inside it or on a bar stay theirs.
+func _input(event: InputEvent) -> void:
+	if not _sheet.visible or not _popover.visible:
+		return
+	var click := event as InputEventMouseButton
+	if click == null or not click.pressed or click.button_index != MOUSE_BUTTON_LEFT:
+		return
+	if _global_rect(_popover).has_point(click.position):
+		return
+	if _bar_at(click.position) != null:
+		return
+	_dismiss_popover()
+
+
+## Esc closes an open popover first, then the sheet ahead of _unhandled_input
+## (GameMenu sits after PassengerHud in main.tscn, and BuildMode/selections sit
+## behind it). P toggles; a held key's repeats and modified presses are left alone.
 func _shortcut_input(event: InputEvent) -> void:
 	if _sheet.visible and event.is_action_pressed("build_tool_none"):
-		close()
+		if _popover.visible:
+			_dismiss_popover()
+		else:
+			close()
 		get_viewport().set_input_as_handled()
 		return
 	var key := event as InputEventKey
@@ -293,13 +320,28 @@ func _build() -> void:
 	# A longer translation wraps instead of widening the sheet past the window.
 	_summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(_summary)
-	_actions.name = "PlannerActions"
-	_actions.add_theme_constant_override("separation", 6)
-	column.add_child(_actions)
 	_message.name = "PlannerMessage"
 	_message.theme_type_variation = &"HudHint"
 	_message.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(_message)
+	_overlay.name = "PlannerOverlay"
+	_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_overlay.resized.connect(_place_popover)
+	_sheet.add_child(_overlay)
+	_popover.name = "PlannerPopover"
+	_popover.visible = false
+	_popover.mouse_filter = Control.MOUSE_FILTER_STOP
+	_overlay.add_child(_popover)
+	var pop_box := VBoxContainer.new()
+	pop_box.add_theme_constant_override("separation", 6)
+	_popover.add_child(pop_box)
+	_popover_title.name = "PopoverTitle"
+	_popover_title.theme_type_variation = &"HudSmall"
+	_popover_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	pop_box.add_child(_popover_title)
+	_actions.name = "PlannerActions"
+	_actions.add_theme_constant_override("separation", 6)
+	pop_box.add_child(_actions)
 
 
 func _build_header() -> HBoxContainer:
@@ -388,6 +430,8 @@ func _rebuild() -> void:
 	_drag.show_rows()
 	if _selected != "" and _selected_bar().is_empty():
 		_deselect()
+	if _note_key != "" and _note_bar().is_empty():
+		_deselect()
 	_show_actions()
 
 
@@ -450,6 +494,10 @@ func _make_bar(bar: Dictionary) -> Button:
 	button.tooltip_text = _bar_tooltip(bar)
 	if bar["active"]:
 		button.pressed.connect(_on_bar_pressed.bind(bar["contract"], bar["day"]))
+	else:
+		var one_off: bool = bar["contract"] == ""
+		button.disabled_clicked.connect(_on_disabled_bar_pressed.bind(key, bar["day"], one_off))
+		button.pressed.connect(_on_disabled_bar_pressed.bind(key, bar["day"], one_off))
 	_add_departure_tick(button, bar)
 	return button
 
@@ -458,7 +506,7 @@ func _make_bar(bar: Dictionary) -> Button:
 ## DEPARTED; the tick on the bar is the departure.
 func _bar_tooltip(bar: Dictionary) -> String:
 	var airline := "" if bar["airline"] == "" else "  %s" % bar["airline"]
-	return (
+	var base := (
 		tr("{label}{airline}\nGate {gate}, held {from} to {to}")
 		. format(
 			{
@@ -470,6 +518,20 @@ func _bar_tooltip(bar: Dictionary) -> String:
 			}
 		)
 	)
+	if bar["active"]:
+		return (
+			"%s\n%s"
+			% [
+				base,
+				tr("Click to move gate or end contract, or drag onto another gate row."),
+			]
+		)
+	var why := (
+		tr("One-off flight — cannot move")
+		if bar["contract"] == ""
+		else tr("Contract ended — cannot move")
+	)
+	return "%s\n%s" % [base, why]
 
 
 ## A navy line across the bar where the flight leaves, when that is on the day.
@@ -570,10 +632,45 @@ func _on_bar_pressed(contract_id: String, day: int) -> void:
 	_refresh()
 
 
+func _on_disabled_bar_pressed(key: String, day: int, one_off: bool) -> void:
+	var had_selected := _selected != ""
+	var was_open := _note_key == key and _note_day == day
+	_deselect()
+	_message.text = ""
+	if not was_open:
+		_note_key = key
+		_note_day = day
+		_note_one_off = one_off
+	if had_selected:
+		_dirty = true
+		_refresh()
+	else:
+		_show_actions()
+
+
+func _dismiss_popover() -> void:
+	var had_selected := _selected != ""
+	_deselect()
+	if had_selected:
+		_dirty = true
+		_refresh()
+	else:
+		_show_actions()
+
+
+func _on_drag_began() -> void:
+	if _selected == "" and _note_key == "":
+		return
+	_dismiss_popover()
+
+
 func _deselect() -> void:
 	_selected = ""
 	_selected_day = -1
 	_confirming = false
+	_note_key = ""
+	_note_day = -1
+	_note_one_off = false
 
 
 ## The selected bar's dictionary, or {} when it is not drawn any more.
@@ -581,6 +678,15 @@ func _selected_bar() -> Dictionary:
 	for row in _shown:
 		for bar: Dictionary in row["bars"]:
 			if bar["contract"] == _selected and bar["day"] == _selected_day and bar["active"]:
+				return bar
+	return {}
+
+
+func _note_bar() -> Dictionary:
+	for row in _shown:
+		for bar: Dictionary in row["bars"]:
+			var key: String = bar["contract"] if bar["contract"] != "" else bar["flight"]
+			if key == _note_key and bar["day"] == _note_day and not bar["active"]:
 				return bar
 	return {}
 
@@ -593,80 +699,187 @@ func _hint_text() -> String:
 	)
 
 
-## The summary line and the Move to / End choices for the selected bar.
+## The summary line and the inline popover for the selected or clicked bar.
 func _show_actions() -> void:
 	for child in _actions.get_children():
 		_actions.remove_child(child)
 		child.queue_free()
+	var note_bar := _note_bar() if _note_key != "" else {}
+	if not note_bar.is_empty():
+		_show_disabled_popover(note_bar)
+		return
 	var bar := _selected_bar() if _selected != "" else {}
 	if bar.is_empty():
+		_popover.visible = false
 		_summary.text = _hint_text()
 		return
-	_summary.text = tr("{label}  Gate {gate}", "gate name").format(
+	var head := tr("{label}  Gate {gate}", "gate name").format(
 		{"label": bar["label"], "gate": bar["gate"]}
 	)
+	_summary.text = head
+	_popover_title.text = head
 	if _confirming:
 		_add_end_confirm()
+	else:
+		_add_move_choices(bar)
+		var end := Button.new()
+		end.name = "EndContract"
+		end.text = tr("End", "button: end the contract")
+		end.tooltip_text = tr("End this airline contract")
+		end.focus_mode = Control.FOCUS_NONE
+		end.pressed.connect(_on_end_pressed)
+		_actions.add_child(end)
+	_open_popover()
+
+
+func _show_disabled_popover(bar: Dictionary) -> void:
+	_summary.text = _hint_text()
+	_popover_title.text = tr("{label}  Gate {gate}", "gate name").format(
+		{"label": bar["label"], "gate": bar["gate"]}
+	)
+	var note := Label.new()
+	note.name = "DisabledBarNote"
+	note.text = (
+		tr("One-off flight — cannot move") if _note_one_off else tr("Contract ended — cannot move")
+	)
+	note.theme_type_variation = &"HudHint"
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_actions.add_child(note)
+	_open_popover()
+
+
+func _open_popover() -> void:
+	_popover.visible = true
+	_place_popover()
+	_place_popover.call_deferred()
+
+
+func _target_bar() -> Button:
+	if _note_key != "":
+		return bar_button(_note_key, _note_day)
+	if _selected != "":
+		return bar_button(_selected, _selected_day)
+	return null
+
+
+func _place_popover() -> void:
+	var bar := _target_bar()
+	if bar == null or not _popover.visible:
 		return
-	_add_move_choices(bar)
-	var end := Button.new()
-	end.name = "EndContract"
-	end.text = tr("End", "button: end the contract")
-	end.tooltip_text = tr("End this airline contract")
-	end.focus_mode = Control.FOCUS_NONE
-	end.pressed.connect(_on_end_pressed)
-	_actions.add_child(end)
+	var room_w := _overlay.size.x
+	var card_w := minf(360.0, maxf(240.0, room_w - float(HudLayout.GAP) * 2.0))
+	_popover.custom_minimum_size = Vector2(card_w, 0.0)
+	var card := _popover.get_combined_minimum_size()
+	_popover.size = card
+	if room_w <= 0.0 or _overlay.size.y <= 0.0:
+		return
+	var overlay_inv := _overlay.get_global_transform_with_canvas().affine_inverse()
+	var anchor := overlay_inv * _global_rect(bar)
+	var room := Rect2(Vector2.ZERO, _overlay.size)
+	var gap := float(HudLayout.GAP)
+	var candidates: Array[Vector2] = [
+		Vector2(anchor.position.x, anchor.end.y + gap),
+		Vector2(anchor.position.x, anchor.position.y - gap - card.y),
+		Vector2(anchor.end.x + gap, anchor.position.y),
+		Vector2(anchor.position.x - gap - card.x, anchor.position.y),
+	]
+	for pos in candidates:
+		if room.encloses(Rect2(pos, card)):
+			_popover.position = pos
+			return
+	var low := room.position
+	var high := (room.end - card).max(low)
+	var preferred := (
+		candidates[0]
+		if anchor.end.y + gap + card.y <= room.end.y or anchor.position.y - gap - card.y < 0.0
+		else candidates[1]
+	)
+	_popover.position = preferred.clamp(low, high)
+
+
+static func _global_rect(control: Control) -> Rect2:
+	return control.get_global_transform_with_canvas() * Rect2(Vector2.ZERO, control.size)
+
+
+func _bar_at(pos: Vector2) -> Button:
+	for bar in bar_buttons():
+		if _global_rect(bar).has_point(pos):
+			return bar
+	return null
 
 
 func _add_move_choices(bar: Dictionary) -> void:
-	var gates := flights.gate_ids()
-	var choices := DeparturesBoard.move_choices(flights, bar["contract"], gates)
-	var fitting: Array[String] = choices["fitting"]
+	var contract_id: String = bar["contract"]
+	var current: String = flights.contract_of(contract_id)["gate"]
+	var other_gates: Array[String] = []
+	for gate_id in flights.gate_ids():
+		if gate_id != current:
+			other_gates.append(gate_id)
 	var note := Label.new()
 	note.name = "MoveNote"
-	if fitting.is_empty():
-		note.text = (
-			tr("No other gate fits this flight")
-			if choices["any_other"]
-			else tr("No other gate exists")
-		)
+	if other_gates.is_empty():
+		note.text = tr("No other gate exists")
 		note.theme_type_variation = &"HudHint"
-	else:
-		note.text = tr("Move to:")
+		_actions.add_child(note)
+		return
+	note.text = tr("Move to:")
 	_actions.add_child(note)
-	for gate_id in fitting:
+	for gate_id in other_gates:
+		var problem := flights.reassign_problem(contract_id, gate_id)
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 6)
 		var choice := Button.new()
 		choice.name = "Move_%s" % gate_id
 		choice.text = gate_id
 		choice.focus_mode = Control.FOCUS_NONE
-		choice.pressed.connect(_on_move_pressed.bind(bar["contract"], gate_id))
-		_actions.add_child(choice)
+		if problem == "":
+			choice.pressed.connect(_on_move_pressed.bind(contract_id, gate_id))
+			row.add_child(choice)
+		else:
+			var reason := PlannerDrag.refusal_text(flights, gate_id, problem)
+			choice.disabled = true
+			choice.tooltip_text = reason
+			row.add_child(choice)
+			var why := Label.new()
+			why.name = "MoveReason_%s" % gate_id
+			why.text = reason
+			why.theme_type_variation = &"HudHint"
+			why.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			why.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			row.add_child(why)
 		choice.theme_type_variation = GateColours.variation_of(gate_id)
+		_actions.add_child(row)
 
 
 func _add_end_confirm() -> void:
 	var prompt := Label.new()
 	prompt.name = "EndPrompt"
 	prompt.text = DeparturesBoard.end_prompt(flights, _selected)
+	prompt.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_actions.add_child(prompt)
+	var buttons := HBoxContainer.new()
+	buttons.add_theme_constant_override("separation", 6)
 	var confirm := Button.new()
 	confirm.name = "ConfirmEnd"
 	confirm.text = tr("End contract")
 	confirm.focus_mode = Control.FOCUS_NONE
 	confirm.pressed.connect(_on_end_confirmed)
-	_actions.add_child(confirm)
+	buttons.add_child(confirm)
 	var keep := Button.new()
 	keep.name = "KeepContract"
 	keep.text = tr("Keep", "button: keep the contract")
 	keep.focus_mode = Control.FOCUS_NONE
 	keep.pressed.connect(_on_end_kept)
-	_actions.add_child(keep)
+	buttons.add_child(keep)
+	_actions.add_child(buttons)
 
 
 ## Moves the contract, or says why not. A refusal keeps the choices open.
 func _on_move_pressed(contract_id: String, gate_id: String) -> void:
 	var outcome := DeparturesBoard.move_outcome(flights, contract_id, gate_id)
 	_message.text = outcome["text"]
+	if outcome["moved"]:
+		_deselect()
 	_dirty = true
 	_refresh()
 

@@ -84,9 +84,9 @@ func test_a_template_with_a_locked_room_and_pieces_is_refused_whole() -> void:
 	)
 	assert_bool(result.ok).is_false()
 	assert_int(result.reason).is_equal(BuildResult.Reason.LOCKED)
-	assert_str(result.reason_text()).contains("Unlocks at 2 stars and 50 passengers")
+	assert_str(result.reason_text()).contains("Unlocks at 2 stars and 20 passengers")
 	assert_int(_paste.check_at(BARE_CENTRE).reason).is_equal(BuildResult.Reason.LOCKED)
-	assert_str(_paste.status_text()).contains("Unlocks at 2 stars and 50 passengers")
+	assert_str(_paste.status_text()).contains("Unlocks at 2 stars and 20 passengers")
 	assert_dict(_mode.grid.to_snapshot()).is_equal(snapshot)
 	assert_int(_mode.wallet().balance).is_equal(balance)
 	assert_int(_mode.undo_history().size()).is_equal(0)
@@ -114,7 +114,7 @@ func test_a_locked_paste_stores_english_and_shows_the_translated_detail() -> voi
 	assert_int(result.reason).is_equal(BuildResult.Reason.LOCKED)
 	assert_str(result.detail).is_equal("Locked at tier 2")
 	assert_int(result.detail_args["tier"]).is_equal(2)
-	assert_str(shown).contains("NOW UN 2 50 ")
+	assert_str(shown).contains("NOW UN 2 20 ")
 	assert_str(shown).not_contains("Unlocks at")
 	assert_str(shown).not_contains(result.detail)
 
@@ -136,7 +136,7 @@ func test_an_unwired_gate_refusal_stores_the_english_text_and_shows_the_translat
 func test_the_same_paste_is_placed_once_the_tier_is_open() -> void:
 	(
 		assert_bool(
-			_unlocks.from_snapshot({"tier": 2, "made": 50, "shown": [], "seen": [], "firsts": []})
+			_unlocks.from_snapshot({"tier": 2, "made": 20, "shown": [], "seen": [], "firsts": []})
 		)
 		. is_true()
 	)
@@ -195,7 +195,7 @@ func test_the_same_belt_template_is_placed_at_tier_2() -> void:
 	_arm_toilet_with_belt()
 	(
 		assert_bool(
-			_unlocks.from_snapshot({"tier": 2, "made": 50, "shown": [], "seen": [], "firsts": []})
+			_unlocks.from_snapshot({"tier": 2, "made": 20, "shown": [], "seen": [], "firsts": []})
 		)
 		. is_true()
 	)
