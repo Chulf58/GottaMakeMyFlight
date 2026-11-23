@@ -71,33 +71,35 @@ func test_shop_uniform_tint_differs_from_checkin_gate_and_ramp_with_burgundy_clo
 	assert_object(shop_mesh).is_not_same(ramp_mesh)
 	assert_int(shop_mesh.get_surface_count()).is_equal(2)
 
-	var mat_a := shop_mi.get_surface_override_material(1) as ShaderMaterial
-	var mat_b := shop_two_mi.get_surface_override_material(1) as ShaderMaterial
-	assert_object(mat_a).is_not_null()
-	assert_object(mat_b).is_not_null()
-	assert_object(mat_a).is_not_same(mat_b)
-	assert_object(shop_mi.get_active_material(1)).is_same(mat_a)
-	assert_object(shop_two_mi.get_active_material(1)).is_same(mat_b)
+	var shop_mat := shop_mi.get_active_material(1) as ShaderMaterial
+	var shop_two_mat := shop_two_mi.get_active_material(1) as ShaderMaterial
+	var gate_mat := gate_mesh.surface_get_material(1) as ShaderMaterial
+	var ramp_mat := ramp_mesh.surface_get_material(1) as ShaderMaterial
+	assert_object(shop_mat).is_not_null()
+	assert_object(shop_mat).is_same(shop_two_mat)
+	assert_object(shop_mat).is_not_same(gate_mat)
+	assert_object(shop_mat).is_not_same(ramp_mat)
 
-	for mat: ShaderMaterial in [mat_a, mat_b]:
-		var img := (mat.get_shader_parameter("albedo_texture") as Texture2D).get_image()
-		var burgundy_pixels := 0
-		for y in range(0, img.get_height(), 4):
-			for x in range(0, img.get_width(), 4):
-				var c := img.get_pixel(x, y)
-				if c.s > 0.45 and c.v >= 0.30 and (c.h >= 0.90 or c.h <= 0.02):
-					burgundy_pixels += 1
-		print("SHOP uniform burgundy cloth samples: %d" % burgundy_pixels)
-		assert_int(burgundy_pixels).is_greater(20)
+	var img := (shop_mat.get_shader_parameter("albedo_texture") as Texture2D).get_image()
+	var burgundy_pixels := 0
+	for y in range(0, img.get_height(), 4):
+		for x in range(0, img.get_width(), 4):
+			var c := img.get_pixel(x, y)
+			if c.s > 0.45 and c.v >= 0.30 and (c.h >= 0.90 or c.h <= 0.02):
+				burgundy_pixels += 1
+	print("SHOP uniform burgundy cloth samples: %d" % burgundy_pixels)
+	assert_int(burgundy_pixels).is_greater(20)
 
-	# Mutating one SHOP instance's cloth material leaves other SHOP instances and the .tres untouched.
-	var source_mat := load("res://assets/materials/tp_atlas_simple_toon.tres") as ShaderMaterial
-	mat_a.set_shader_parameter("albedo_tint", Color(0.1, 0.9, 0.2, 1.0))
-	assert_bool(mat_b.get_shader_parameter("albedo_tint") == Color.WHITE).is_true()
+	# Mutating SHOP's cached cloth material leaves GATE, RAMP, and tcp_atlas_toon.tres untouched.
+	var source_mat := load("res://assets/materials/tcp_atlas_toon.tres") as ShaderMaterial
+	shop_mat.set_shader_parameter("albedo_tint", Color(0.1, 0.9, 0.2, 1.0))
+	assert_bool(gate_mat.get_shader_parameter("albedo_tint") == Color.WHITE).is_true()
+	assert_bool(ramp_mat.get_shader_parameter("albedo_tint") == Color.WHITE).is_true()
 	assert_bool(source_mat.get_shader_parameter("albedo_tint") == Color.WHITE).is_true()
 	assert_object(source_mat.get_shader_parameter("albedo_texture")).is_not_same(
-		mat_a.get_shader_parameter("albedo_texture")
+		shop_mat.get_shader_parameter("albedo_texture")
 	)
+	shop_mat.set_shader_parameter("albedo_tint", Color.WHITE)
 
 
 func test_hand_props_attach_to_hand_bones_exclusively_and_hide_on_walk_tuck_and_pool() -> void:
@@ -262,11 +264,58 @@ func test_hand_props_attach_to_hand_bones_exclusively_and_hide_on_walk_tuck_and_
 	# Freeing a prop-owning character cleans up BoneAttachment3D and props with zero orphans.
 	var att_r := wand.get_parent()
 	assert_bool(is_instance_valid(att_r)).is_true()
-	officer.free()
+	officer.queue_free()
 	await get_tree().process_frame
 	assert_bool(is_instance_valid(officer)).is_false()
 	assert_bool(is_instance_valid(att_r)).is_false()
 	assert_bool(is_instance_valid(wand)).is_false()
+
+
+func test_hand_prop_waits_for_crossfade_blend_in() -> void:
+	var clock := auto_free(SimClock.new()) as SimClock
+	clock.paused = true
+	clock.tick = 250
+	var chars := auto_free(StaffCharacters.new()) as StaffCharacters
+	chars.clock = clock
+	add_child(chars)
+	var agent := chars._take(StaffMember.Role.GATE)
+	chars._nodes[102] = agent
+	chars._prev[102] = Vector3.ZERO
+	chars._cur[102] = Vector3.ZERO
+	var rec := {}
+	StaffStationPose.update(
+		rec, StaffStationPose.Mode.NONE, Vector2.ZERO, 100.0, StaffStationPose.SubMode.NONE, true, 1
+	)
+	(
+		StaffStationPose
+		. update(
+			rec,
+			StaffStationPose.Mode.NONE,
+			Vector2.ZERO,
+			220.0,
+			StaffStationPose.SubMode.NONE,
+			true,
+			1,
+		)
+	)
+	(
+		StaffStationPose
+		. update(
+			rec,
+			StaffStationPose.Mode.GATE,
+			Vector2.ZERO,
+			250.0,
+			StaffStationPose.SubMode.NONE,
+			false,
+			1,
+		)
+	)
+	chars._poses[102] = rec
+	chars.draw()
+	assert_int(chars.hand_prop_of(102)).is_equal(StaffHandProps.PropKind.NONE)
+	clock.tick = 250 + int(StaffStationPose.TRANSITION_TICKS)
+	chars.draw()
+	assert_int(chars.hand_prop_of(102)).is_equal(StaffHandProps.PropKind.BOARDING_PASS)
 
 
 func test_multi_variant_cycles_produce_distinct_skeleton_poses_per_role() -> void:
@@ -294,15 +343,16 @@ func test_multi_variant_cycles_produce_distinct_skeleton_poses_per_role() -> voi
 	assert_float(_max_bone_diff(snaps[1], snaps[2])).is_greater(0.15)
 	assert_float(_max_bone_diff(snaps[0], snaps[2])).is_greater(0.15)
 
-	# Idle fidget variants 0..3 produce distinct bone poses at peak mid-beat.
-	var fidget_snaps := []
+	# Idle fidget variants 0..3 produce distinct bone poses at active beat (u = 0.30).
+	var by_variant := {}
 	for sid in range(1, 5):
 		var stagger := float(posmod(sid * 47, 100))
 		var elapsed := (
 			float(StaffStationPose.IDLE_SETTLE_TICKS + StaffStationPose.FIDGET_PERIOD_TICKS)
 			- stagger
-			+ 40.0
+			+ 24.0
 		)
+		var v := StaffStationPose.idle_fidget_variant(sid, elapsed)
 		(
 			StaffStationPose
 			. pose(
@@ -317,9 +367,11 @@ func test_multi_variant_cycles_produce_distinct_skeleton_poses_per_role() -> voi
 			)
 		)
 		await _skeleton_tick(agent, sk)
-		fidget_snaps.append(_snapshot_bones(sk, ["Head", "Spine_01", "Arm.L", "Forearm.L"]))
-	assert_float(_max_bone_diff(fidget_snaps[0], fidget_snaps[1])).is_greater(0.15)
-	assert_float(_max_bone_diff(fidget_snaps[0], fidget_snaps[2])).is_greater(0.15)
+		by_variant[v] = _snapshot_bones(sk, ["Head", "Spine_01", "Arm.L", "Forearm.L"])
+	assert_int(by_variant.size()).is_equal(4)
+	for i in 4:
+		for j in range(i + 1, 4):
+			assert_float(_max_bone_diff(by_variant[i], by_variant[j])).is_greater(0.15)
 
 
 func test_hand_props_and_poses_reset_on_snap_load_backward_in_time() -> void:

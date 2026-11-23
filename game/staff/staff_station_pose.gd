@@ -86,6 +86,13 @@ static func look_of(record: Dictionary, now: float) -> Vector2:
 	return from.lerp(target, smoothstep(0.0, 1.0, k))
 
 
+## Effective idle-fidget start clock, keeping an interrupted clock until fade-out finishes.
+static func idle_since_of(record: Dictionary, now: float) -> float:
+	if record.has("xfade_idle_since"):
+		return float(record["xfade_idle_since"])
+	return float(record.get("idle_since", now))
+
+
 ## Active mode stored on `record` (kept while easing out to 0).
 static func mode_of(record: Dictionary) -> Mode:
 	return int(record.get("mode", Mode.NONE)) as Mode
@@ -192,11 +199,25 @@ static func update(
 	can_fidget: bool = false,
 	seed_id: int = 0,
 ) -> void:
+	var had_idle_since := record.has("idle_since")
+	var prev_idle_since := float(record.get("idle_since", tick))
+	var fidget_was_drawn := (
+		mode_of(record) == Mode.IDLE_FIDGET or xfade_mode_of(record) == Mode.IDLE_FIDGET
+	)
+	if record.has("xfade_idle_since") and tick < float(record["xfade_idle_since"]):
+		record.erase("xfade_idle_since")
 	var resolved_mode := new_mode
 	var resolved_sub := new_sub_mode
 	if new_mode == Mode.NONE:
 		resolved_sub = SubMode.NONE
 		if not can_fidget:
+			if (
+				fidget_was_drawn
+				and had_idle_since
+				and prev_idle_since <= tick
+				and not record.has("xfade_idle_since")
+			):
+				record["xfade_idle_since"] = prev_idle_since
 			record["idle_since"] = tick
 		else:
 			if not record.has("idle_since") or tick < float(record["idle_since"]):
@@ -205,6 +226,13 @@ static func update(
 			if _is_fidget_active(seed_id, elapsed):
 				resolved_mode = Mode.IDLE_FIDGET
 	else:
+		if (
+			fidget_was_drawn
+			and had_idle_since
+			and prev_idle_since <= tick
+			and not record.has("xfade_idle_since")
+		):
+			record["xfade_idle_since"] = prev_idle_since
 		record.erase("idle_since")
 	var active_now := resolved_mode != Mode.NONE
 	var target_look := look_deg if new_mode != Mode.NONE else Vector2.ZERO
@@ -222,6 +250,9 @@ static func update(
 		record["from"] = 0.0
 	if record.has("xfade_since") and tick < float(record["xfade_since"]):
 		_clear_xfade(record)
+	if record.has("look_since") and tick < float(record["look_since"]):
+		record.erase("look_since")
+		record.erase("look_from")
 	if active_now != prev_active:
 		record["from"] = weight_of(record, tick)
 		record["since"] = tick
@@ -261,6 +292,8 @@ static func update(
 		record["mode"] = Mode.NONE
 		record["sub_mode"] = SubMode.NONE
 		_clear_xfade(record)
+	if mode_of(record) != Mode.IDLE_FIDGET and xfade_mode_of(record) != Mode.IDLE_FIDGET:
+		record.erase("xfade_idle_since")
 	var prev_look: Vector2 = record.get("look_target", Vector2.ZERO)
 	if prev_look.distance_to(target_look) > 0.5:
 		record["look_from"] = look_of(record, tick)
@@ -403,10 +436,11 @@ static func _security_eval(m: StaffMember, sim: PassengerSim) -> Array:
 	var eye := Vector3(0.0, PASSENGER_EYE_M, 0.0)
 	var pos := sim.world_position(pax) + SecurityLooks.target_offset(sim, pax) + eye
 	var sec_sub := SubMode.SEC_CLEAN
-	if pax.alarm:
-		sec_sub = SubMode.SEC_ALARM
-	elif pax.liquids:
-		sec_sub = SubMode.SEC_LIQUIDS
+	if SecurityRuntime.incident_open(pax):
+		if pax.alarm:
+			sec_sub = SubMode.SEC_ALARM
+		elif pax.liquids:
+			sec_sub = SubMode.SEC_LIQUIDS
 	var sec_mode := (
 		Mode.SECURITY_REPACK
 		if pax.security_phase == SecurityRuntime.Phase.REPACK

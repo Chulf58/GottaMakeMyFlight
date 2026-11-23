@@ -622,10 +622,6 @@ func test_idle_staff_fidget_in_beats_and_pause_while_walking_or_tucked() -> void
 	StaffTestKit.staff_all(_w_staff_check(_world))
 	_attach_views(_world)
 
-	var idle_id := _world.staff.hire(StaffMember.Role.CHECKIN)
-	_world.step()
-	_views.draw()
-	# No desks free -> walks out? No, check-in desks may already be staffed -> stays in pool if full.
 	# Use a seated officer at a quiet scanner to observe settle -> fidget -> snap reset.
 	var officer_id := _world.staff.staff_at(arch)
 	assert_int(_views.station_pose_mode(officer_id)).is_equal(StaffStationPose.Mode.NONE)
@@ -665,7 +661,80 @@ func test_idle_staff_fidget_in_beats_and_pause_while_walking_or_tucked() -> void
 		if m.state == StaffMember.State.ON_DUTY:
 			break
 	assert_int(arch_fidgets).is_equal(0)
-	assert_int(idle_id).is_greater(0)
+
+	# Once settled on duty into an active fidget beat, interrupting without sync(true)
+	# eases bone rotation smoothly over EASE_TICKS instead of snapping in 1 frame.
+	var fidget_bones: Array[String] = ["Head", "Neck", "Spine_01", "Arm.L", "Forearm.L"]
+	var w_node := _views.node_for(walker_id)
+	var peak_delta := 0.0
+	for _i in 350:
+		_world.step()
+		_views.draw()
+		if (
+			_views.station_pose_mode(walker_id) == StaffStationPose.Mode.IDLE_FIDGET
+			and _views.idle_fidget_weight(walker_id) >= 0.99
+		):
+			var d := await _measure_pose_delta(w_node, fidget_bones)
+			if d > 0.08:
+				peak_delta = d
+				break
+	assert_float(peak_delta).is_greater(0.08)
+
+	var out_path := _world.grid.find_staff_path(m.at, LaneStaffWorld.ENTRANCE)
+	assert_int(out_path.size()).is_greater(1)
+	m.state = StaffMember.State.WALKING_OUT
+	m.set_path(out_path)
+	_world.step()
+	_world.step()
+	_views.draw()
+	assert_int(_views.station_pose_mode(walker_id)).is_equal(StaffStationPose.Mode.IDLE_FIDGET)
+	var mid_weight := _views.idle_fidget_weight(walker_id)
+	assert_float(mid_weight).is_greater(0.05)
+	assert_float(mid_weight).is_less(0.95)
+	var ease_delta := await _measure_pose_delta(w_node, fidget_bones)
+	assert_float(ease_delta).is_greater(0.02)
+	assert_float(ease_delta).is_less(peak_delta)
+
+	for _i in int(StaffStationPose.EASE_TICKS):
+		_world.step()
+		_views.draw()
+	assert_int(_views.station_pose_mode(walker_id)).is_equal(StaffStationPose.Mode.NONE)
+	assert_float(_views.idle_fidget_weight(walker_id)).is_equal(0.0)
+	assert_bool((_views._poses.get(walker_id, {}) as Dictionary).has("xfade_idle_since")).is_false()
+
+
+func test_resolved_security_lane_returner_uses_clean_submode() -> void:
+	var sec_world := SecurityTestWorld.make(true, 15)
+	_world = sec_world.world
+	_world.auto_staff = false
+	StaffTestKit.staff_all(_world.staff, [StaffMember.Role.SECURITY])
+	StaffTestKit.seat(_world.staff, sec_world.station, StaffMember.Slot.HELPER)
+	_attach_views(_world)
+	var officer_id := _world.staff.staff_at(sec_world.station)
+
+	for kind: String in ["alarm", "liquids"]:
+		var pid := sec_world.send(0, kind == "liquids", kind == "alarm")
+		var pax := _world.passenger(pid)
+		var expected_open := (
+			StaffStationPose.SubMode.SEC_ALARM
+			if kind == "alarm"
+			else StaffStationPose.SubMode.SEC_LIQUIDS
+		)
+		var saw_open := false
+		var saw_resolved_clean := false
+		for _i in 600:
+			_world.step()
+			_views.draw()
+			if _views.station_pose_mode(officer_id) == StaffStationPose.Mode.SECURITY_SCAN:
+				var sub := _views.station_pose_sub_mode(officer_id)
+				if not pax.incident_resolved and sub == expected_open:
+					saw_open = true
+				elif pax.incident_resolved and sub == StaffStationPose.SubMode.SEC_CLEAN:
+					saw_resolved_clean = true
+			if pax.stage == Passenger.Stage.TO_GATE:
+				break
+		assert_bool(saw_open).is_true()
+		assert_bool(saw_resolved_clean).is_true()
 
 
 func test_variant_cycles_meet_at_neutral_boundary_and_submodes_crossfade_smoothly() -> void:

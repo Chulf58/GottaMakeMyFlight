@@ -355,7 +355,7 @@ func draw() -> void:
 		var xfade_m := StaffStationPose.xfade_mode_of(pose_rec)
 		var xfade_s := StaffStationPose.xfade_sub_mode_of(pose_rec)
 		var draw_look := StaffStationPose.look_of(pose_rec, now)
-		var idle_since := float(pose_rec.get("idle_since", now))
+		var idle_since := StaffStationPose.idle_since_of(pose_rec, now)
 		(
 			StaffStationPose
 			. pose(
@@ -375,7 +375,9 @@ func draw() -> void:
 		var tuck_w := StaffArchTuck.weight(_tucks.get(id, {}), now)
 		StaffArchTuck.pose(node, tuck_w)
 		var walking := m != null and (m.is_moving() or String(node.get_meta(&"clip", "")) == "walk")
-		StaffHandProps.update(node, draw_mode, draw_sub, draw_w, now, id, walking, tuck_w > 0.0)
+		StaffHandProps.update(
+			node, draw_mode, draw_sub, draw_w * xfade_in, now, id, walking, tuck_w > 0.0
+		)
 		var player := node.get_node("AnimationPlayer") as AnimationPlayer
 		var base: float = node.get_meta(&"base_speed", 1.0)
 		player.speed_scale = 0.0 if paused else base * clock.speed
@@ -416,20 +418,15 @@ func _take(role: StaffMember.Role) -> Node3D:
 
 
 ## Splits the character's clothes surface and applies the role's UNIFORM_TINTS
-## colour without altering .glb rigs. Each SHOP character gets its own duplicated
-## surface override material so per-instance material edits stay isolated.
+## colour on a cached ArrayMesh without altering .glb rigs or adding per-instance
+## surface overrides (Dummy renderer logs null material errors on override free).
 static func _apply_role_uniform(node: Node3D, role: StaffMember.Role) -> void:
 	var mi := PassengerLooks.body_mesh(node)
 	if mi == null:
 		return
 	if not _uniform_meshes.has(role):
 		_uniform_meshes[role] = _build_tinted_mesh(mi.mesh, role)
-	var tinted_mesh: Mesh = _uniform_meshes[role]
-	mi.mesh = tinted_mesh
-	if role == StaffMember.Role.SHOP and tinted_mesh.get_surface_count() > 1:
-		var cloth_mat := tinted_mesh.surface_get_material(1)
-		if cloth_mat != null:
-			mi.set_surface_override_material(1, cloth_mat.duplicate())
+	mi.mesh = _uniform_meshes[role]
 
 
 static func _build_tinted_mesh(plain: Mesh, role: StaffMember.Role) -> Mesh:

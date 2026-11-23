@@ -230,3 +230,130 @@ func test_hand_prop_gating_rules_across_modes_walking_and_tuck() -> void:
 		)
 		. is_equal(StaffHandProps.PropKind.NONE)
 	)
+
+
+func test_idle_fidget_interruption_preserves_clock_and_backward_look_clears() -> void:
+	var rec := {}
+	StaffStationPose.update(
+		rec, StaffStationPose.Mode.NONE, Vector2.ZERO, 100.0, StaffStationPose.SubMode.NONE, true, 1
+	)
+	var entered_tick := -1.0
+	for tick in range(180, 420):
+		(
+			StaffStationPose
+			. update(
+				rec,
+				StaffStationPose.Mode.NONE,
+				Vector2.ZERO,
+				float(tick),
+				StaffStationPose.SubMode.NONE,
+				true,
+				1,
+			)
+		)
+		if StaffStationPose.mode_of(rec) == StaffStationPose.Mode.IDLE_FIDGET:
+			entered_tick = float(tick)
+			break
+	assert_float(entered_tick).is_greater(0.0)
+
+	# 1. Interruption by can_fidget = false preserves original idle_since for ease-out.
+	var pause_tick := entered_tick + 24.0
+	(
+		StaffStationPose
+		. update(
+			rec,
+			StaffStationPose.Mode.NONE,
+			Vector2.ZERO,
+			pause_tick,
+			StaffStationPose.SubMode.NONE,
+			false,
+			1,
+		)
+	)
+	assert_int(StaffStationPose.mode_of(rec)).is_equal(StaffStationPose.Mode.IDLE_FIDGET)
+	assert_float(float(rec["idle_since"])).is_equal(pause_tick)
+	assert_float(StaffStationPose.idle_since_of(rec, pause_tick + 2.0)).is_equal(100.0)
+	var mid_w := StaffStationPose.weight_of(rec, pause_tick + 2.0)
+	assert_float(mid_w).is_greater(0.0)
+	assert_float(mid_w).is_less(1.0)
+	(
+		StaffStationPose
+		. update(
+			rec,
+			StaffStationPose.Mode.NONE,
+			Vector2.ZERO,
+			pause_tick + StaffStationPose.EASE_TICKS,
+			StaffStationPose.SubMode.NONE,
+			false,
+			1,
+		)
+	)
+	assert_int(StaffStationPose.mode_of(rec)).is_equal(StaffStationPose.Mode.NONE)
+	assert_bool(rec.has("xfade_idle_since")).is_false()
+
+	# 2. Interruption by station mode preserves fidget clock through xfade_mode == IDLE_FIDGET.
+	rec.clear()
+	StaffStationPose.update(
+		rec, StaffStationPose.Mode.NONE, Vector2.ZERO, 100.0, StaffStationPose.SubMode.NONE, true, 1
+	)
+	var work_tick := entered_tick + 24.0
+	(
+		StaffStationPose
+		. update(
+			rec,
+			StaffStationPose.Mode.NONE,
+			Vector2.ZERO,
+			entered_tick,
+			StaffStationPose.SubMode.NONE,
+			true,
+			1,
+		)
+	)
+	(
+		StaffStationPose
+		. update(
+			rec,
+			StaffStationPose.Mode.CHECKIN,
+			Vector2(20.0, 4.0),
+			work_tick,
+			StaffStationPose.SubMode.NONE,
+			false,
+			1,
+		)
+	)
+	assert_bool(rec.has("idle_since")).is_false()
+	assert_int(StaffStationPose.xfade_mode_of(rec)).is_equal(StaffStationPose.Mode.IDLE_FIDGET)
+	assert_float(StaffStationPose.idle_since_of(rec, work_tick + 2.0)).is_equal(100.0)
+	assert_float(StaffStationPose.crossfade_out(rec, work_tick + 2.0)).is_greater(0.0)
+	(
+		StaffStationPose
+		. update(
+			rec,
+			StaffStationPose.Mode.CHECKIN,
+			Vector2(20.0, 4.0),
+			work_tick + StaffStationPose.TRANSITION_TICKS,
+			StaffStationPose.SubMode.NONE,
+			false,
+			1,
+		)
+	)
+	assert_int(StaffStationPose.xfade_mode_of(rec)).is_equal(StaffStationPose.Mode.NONE)
+	assert_bool(rec.has("xfade_idle_since")).is_false()
+
+	# 3. Backward tick clears look_since and look_from even when look_target matches (6d949060).
+	assert_bool(rec.has("look_since")).is_true()
+	assert_bool(rec.has("look_from")).is_true()
+	(
+		StaffStationPose
+		. update(
+			rec,
+			StaffStationPose.Mode.CHECKIN,
+			Vector2(20.0, 4.0),
+			50.0,
+			StaffStationPose.SubMode.NONE,
+			false,
+			1,
+		)
+	)
+	assert_bool(rec.has("look_since")).is_false()
+	assert_bool(rec.has("look_from")).is_false()
