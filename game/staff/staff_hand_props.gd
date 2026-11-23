@@ -5,7 +5,7 @@ extends RefCounted
 ## Props are visible only in their active matching station pose mode and hidden
 ## when walking, tucked, idle, pooled, or snapped on load (6d949060).
 
-enum PropKind { NONE, WAND, BOARDING_PASS, CLIPBOARD, COFFEE_CUP }
+enum PropKind { NONE, WAND, BOARDING_PASS, CLIPBOARD, COFFEE_CUP, BROOM, RAG, MARSHAL_WANDS }
 
 const TOON_BASE := preload("res://assets/materials/tp_atlas_simple_toon.tres")
 const PROP_META := &"staff_hand_props"
@@ -24,6 +24,11 @@ const COLOR_CLIPBOARD_CLIP := Color(0.32, 0.36, 0.42)
 const COLOR_CUP_BODY := Color(0.92, 0.88, 0.80)
 const COLOR_CUP_SLEEVE := Color(0.60, 0.40, 0.24)
 const COLOR_CUP_COFFEE := Color(0.22, 0.13, 0.08)
+const COLOR_BROOM_POLE := Color(0.62, 0.45, 0.27)
+const COLOR_BROOM_HEAD := Color(0.24, 0.48, 0.62)
+const COLOR_BROOM_BRISTLE := Color(0.86, 0.78, 0.56)
+const COLOR_RAG_CLOTH := Color(0.92, 0.84, 0.32)
+const COLOR_MARSHAL_TIP := Color(1.0, 0.56, 0.08)
 
 static var _white_tex: ImageTexture
 static var _materials: Dictionary = {}
@@ -39,8 +44,26 @@ static func desired_prop(
 	seed_id: int,
 	walking: bool,
 	tucked: bool,
+	role: int = -1,
+	job_bin: bool = false,
+	cleaner_working: bool = false,
+	cleaner_patrolling: bool = false,
 ) -> PropKind:
-	if walking or tucked or weight <= WEIGHT_MIN:
+	if tucked:
+		return PropKind.NONE
+	if role == StaffMember.Role.CLEANER:
+		if cleaner_working:
+			return PropKind.RAG if job_bin else PropKind.BROOM
+		if cleaner_patrolling:
+			return PropKind.BROOM
+		return PropKind.NONE
+	if (
+		mode == StaffStationPose.Mode.RAMP_PUSHBACK
+		and sub_mode == StaffStationPose.SubMode.RAMP_GUIDE
+		and weight > WEIGHT_MIN
+	):
+		return PropKind.MARSHAL_WANDS
+	if walking or weight <= WEIGHT_MIN:
 		return PropKind.NONE
 	match mode:
 		StaffStationPose.Mode.SECURITY_SCAN:
@@ -61,6 +84,8 @@ static func desired_prop(
 				and StaffStationPose.cafe_cup_active(sim_time, seed_id)
 			):
 				return PropKind.COFFEE_CUP
+		StaffStationPose.Mode.RAMP_MARSHAL:
+			return PropKind.MARSHAL_WANDS
 	return PropKind.NONE
 
 
@@ -74,8 +99,24 @@ static func update(
 	seed_id: int,
 	walking: bool,
 	tucked: bool,
+	role: int = -1,
+	job_bin: bool = false,
+	cleaner_working: bool = false,
+	cleaner_patrolling: bool = false,
 ) -> void:
-	var kind := desired_prop(mode, sub_mode, weight, sim_time, seed_id, walking, tucked)
+	var kind := desired_prop(
+		mode,
+		sub_mode,
+		weight,
+		sim_time,
+		seed_id,
+		walking,
+		tucked,
+		role,
+		job_bin,
+		cleaner_working,
+		cleaner_patrolling,
+	)
 	if kind == PropKind.NONE and not node.has_meta(PROP_META):
 		return
 	var rec := _ensure(node)
@@ -85,6 +126,10 @@ static func update(
 	for key: int in props:
 		var prop_node := props[key] as Node3D
 		prop_node.visible = (key == kind)
+	var extra: Dictionary = rec.get("extra", {})
+	for key: int in extra:
+		for prop_node: Node3D in extra[key]:
+			prop_node.visible = (key == kind)
 
 
 ## Hides every attached prop on `node` (used on snap/load and pool release).
@@ -97,6 +142,11 @@ static func hide_all(node: Node3D) -> void:
 		var prop_node := props[key] as Node3D
 		if is_instance_valid(prop_node):
 			prop_node.visible = false
+	var extra: Dictionary = rec.get("extra", {})
+	for key: int in extra:
+		for prop_node: Node3D in extra[key]:
+			if is_instance_valid(prop_node):
+				prop_node.visible = false
 
 
 ## Currently visible PropKind on `node`, or PropKind.NONE.
@@ -109,10 +159,15 @@ static func active_prop(node: Node3D) -> PropKind:
 		var prop_node := props[key] as Node3D
 		if is_instance_valid(prop_node) and prop_node.visible:
 			return key as PropKind
+	var extra: Dictionary = rec.get("extra", {})
+	for key: int in extra:
+		for prop_node: Node3D in extra[key]:
+			if is_instance_valid(prop_node) and prop_node.visible:
+				return key as PropKind
 	return PropKind.NONE
 
 
-## Returns the prop Node3D for `kind` on `node` (lazily attaching if needed).
+## Returns the primary prop Node3D for `kind` on `node` (lazily attaching if needed).
 static func prop_node(node: Node3D, kind: PropKind) -> Node3D:
 	if kind == PropKind.NONE or node == null:
 		return null
@@ -120,6 +175,24 @@ static func prop_node(node: Node3D, kind: PropKind) -> Node3D:
 	if rec.is_empty():
 		return null
 	return (rec["props"] as Dictionary).get(kind)
+
+
+## Returns all prop Node3Ds for `kind` on `node` (including dual-hand companions).
+static func prop_nodes(node: Node3D, kind: PropKind) -> Array[Node3D]:
+	var out: Array[Node3D] = []
+	if kind == PropKind.NONE or node == null:
+		return out
+	var rec := _ensure(node)
+	if rec.is_empty():
+		return out
+	var primary: Node3D = (rec["props"] as Dictionary).get(kind)
+	if primary != null:
+		out.append(primary)
+	var extra: Dictionary = rec.get("extra", {})
+	if extra.has(kind):
+		for n: Node3D in extra[kind]:
+			out.append(n)
+	return out
 
 
 static func _ensure(node: Node3D) -> Dictionary:
@@ -136,8 +209,14 @@ static func _ensure(node: Node3D) -> Dictionary:
 		PropKind.BOARDING_PASS: _add_prop(att_r, _build_boarding_pass()),
 		PropKind.COFFEE_CUP: _add_prop(att_r, _build_coffee_cup()),
 		PropKind.CLIPBOARD: _add_prop(att_l, _build_clipboard()),
+		PropKind.BROOM: _add_prop(att_r, _build_broom()),
+		PropKind.RAG: _add_prop(att_r, _build_rag()),
+		PropKind.MARSHAL_WANDS: _add_prop(att_r, _build_marshal_wand("MarshalWandR", true)),
 	}
-	var rec := {"att_r": att_r, "att_l": att_l, "props": props}
+	var extra := {
+		PropKind.MARSHAL_WANDS: [_add_prop(att_l, _build_marshal_wand("MarshalWandL", false))],
+	}
+	var rec := {"att_r": att_r, "att_l": att_l, "props": props, "extra": extra}
 	node.set_meta(PROP_META, rec)
 	return rec
 
@@ -268,17 +347,86 @@ static func _build_coffee_cup() -> Node3D:
 	return root
 
 
-static func _part(part_name: String, mesh: Mesh, color: Color, pos: Vector3) -> MeshInstance3D:
+static func _build_broom() -> Node3D:
+	var root := Node3D.new()
+	root.name = "Broom"
+	root.position = Vector3(0.025, 0.08, 0.015)
+	root.rotation_degrees = Vector3(78.0, 0.0, -8.0)
+	var pole := _part(
+		"Pole",
+		_cyl_mesh("broom_pole", 0.014, 0.014, 1.15),
+		COLOR_BROOM_POLE,
+		Vector3(0.0, -0.15, 0.0),
+	)
+	var head := _part(
+		"Head",
+		_box_mesh("broom_head", Vector3(0.24, 0.045, 0.065)),
+		COLOR_BROOM_HEAD,
+		Vector3(0.0, -0.73, 0.0),
+	)
+	var bristles := _part(
+		"Bristles",
+		_box_mesh("broom_bristles", Vector3(0.25, 0.08, 0.07)),
+		COLOR_BROOM_BRISTLE,
+		Vector3(0.0, -0.79, 0.0),
+	)
+	root.add_child(pole)
+	root.add_child(head)
+	root.add_child(bristles)
+	return root
+
+
+static func _build_rag() -> Node3D:
+	var root := Node3D.new()
+	root.name = "Rag"
+	root.position = Vector3(0.032, 0.09, 0.014)
+	root.rotation_degrees = Vector3(8.0, 12.0, -6.0)
+	var cloth := _part(
+		"Cloth",
+		_box_mesh("rag_cloth", Vector3(0.045, 0.14, 0.12)),
+		COLOR_RAG_CLOTH,
+		Vector3.ZERO,
+	)
+	root.add_child(cloth)
+	return root
+
+
+static func _build_marshal_wand(node_name: String, right_hand: bool) -> Node3D:
+	var root := Node3D.new()
+	root.name = node_name
+	root.position = Vector3(0.026 if right_hand else -0.026, 0.09, 0.018)
+	root.rotation_degrees = Vector3(-10.0, 0.0, 0.0)
+	var grip := _part(
+		"Grip",
+		_cyl_mesh("mw_grip", 0.016, 0.015, 0.12),
+		COLOR_WAND_GRIP,
+		Vector3(0.0, 0.0, 0.0),
+	)
+	var cone := _part(
+		"Cone",
+		_cyl_mesh("mw_cone", 0.022, 0.018, 0.24),
+		COLOR_MARSHAL_TIP,
+		Vector3(0.0, 0.18, 0.0),
+		1.65,
+	)
+	root.add_child(grip)
+	root.add_child(cone)
+	return root
+
+
+static func _part(
+	part_name: String, mesh: Mesh, color: Color, pos: Vector3, light_gain := 1.0
+) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	mi.name = part_name
 	mi.mesh = mesh
-	mi.material_override = _material(color)
+	mi.material_override = _material(color, light_gain)
 	mi.position = pos
 	return mi
 
 
-static func _material(color: Color) -> ShaderMaterial:
-	var key := color.to_rgba32()
+static func _material(color: Color, light_gain := 1.0) -> ShaderMaterial:
+	var key := "%d:%s" % [color.to_rgba32(), str(light_gain)]
 	if _materials.has(key):
 		return _materials[key]
 	if _white_tex == null:
@@ -288,6 +436,7 @@ static func _material(color: Color) -> ShaderMaterial:
 	var mat := TOON_BASE.duplicate() as ShaderMaterial
 	mat.set_shader_parameter("albedo_texture", _white_tex)
 	mat.set_shader_parameter("albedo_tint", color)
+	mat.set_shader_parameter("light_gain", light_gain)
 	if mat.next_pass is ShaderMaterial:
 		var outline := (mat.next_pass as ShaderMaterial).duplicate() as ShaderMaterial
 		outline.set_shader_parameter("outline_px", OUTLINE_PX)

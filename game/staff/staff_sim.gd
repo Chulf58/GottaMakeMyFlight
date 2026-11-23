@@ -107,6 +107,7 @@ var _counters: Array[int] = []
 var _counters_dirty := true
 var _gate_desks: Array[int] = []
 var _gate_desks_dirty := true
+var _last_unclaimed_sig := 0
 
 
 func _init() -> void:
@@ -135,6 +136,8 @@ func hire(role: StaffMember.Role) -> int:
 	m.id = _next_id
 	_next_id += 1
 	m.role = role
+	if role == StaffMember.Role.CLEANER:
+		m.patrol_wait = CleanerJobs.PATROL_PAUSE_TICKS
 	if role != StaffMember.Role.RAMP and is_off_shift():
 		m.state = StaffMember.State.OFF_SHIFT
 	_members.append(m)
@@ -308,7 +311,7 @@ func step() -> void:
 		_work_jobs()
 	_leave_shift_if_quiet()
 	for m: StaffMember in _members.duplicate():
-		if m.state == StaffMember.State.TO_STATION or _walking_to_exit(m):
+		if m.state == StaffMember.State.TO_STATION or _walking_to_exit(m) or _patrolling(m):
 			_walk(m)
 
 
@@ -318,7 +321,9 @@ func step() -> void:
 ## during the tick. It is saved still leaving and on duty, and the loaded
 ## game's next step() lets it go on the same tick as one never saved.
 func to_snapshot() -> Dictionary:
-	return StaffSnapshot.save(_members, _next_id, closures.live_ids(), faults.live())
+	return StaffSnapshot.save(
+		_members, _next_id, closures.live_ids(), faults.live(), _last_unclaimed_sig
+	)
 
 
 ## Restores a to_snapshot() dictionary, including one that went through JSON.
@@ -337,6 +342,11 @@ func from_snapshot(data: Dictionary) -> bool:
 	_counters_dirty = true
 	_gate_desks_dirty = true
 	rederive()
+	_last_unclaimed_sig = (
+		int(loaded["last_unclaimed_sig"])
+		if loaded.has("last_unclaimed_sig")
+		else CleanerJobs.unclaimed_signature(self)
+	)
 	staff_changed.emit()
 	return true
 
@@ -445,10 +455,13 @@ func _unclaim(m: StaffMember) -> void:
 
 
 ## Each cleaner, in id order: one on duty works a tick at its job and, done,
-## cleans the mess or empties the bin and goes idle; an idle one (one whose
-## last search failed only on its beat) takes the nearest job nobody holds
-## (CleanerJobs.nearest()) and sets out.
+## cleans the mess or empties the bin and goes idle; an idle one takes the
+## nearest job nobody holds (CleanerJobs.nearest()) and sets out, or patrols
+## indoor corridors/bins after PATROL_PAUSE_TICKS while waiting.
 func _work_jobs() -> void:
+	var unclaimed_sig := CleanerJobs.unclaimed_signature(self)
+	var new_unclaimed := unclaimed_sig != 0 and unclaimed_sig != _last_unclaimed_sig
+	_last_unclaimed_sig = unclaimed_sig
 	for m in _members:
 		if m.role != StaffMember.Role.CLEANER:
 			continue
@@ -459,13 +472,25 @@ func _work_jobs() -> void:
 			_finish_job(m)
 		if m.state != StaffMember.State.IDLE:
 			continue
-		if m.search_failed and not StaffPosts.on_beat(m, sim.tick):
-			continue
-		var pick := CleanerJobs.nearest(self, m)
-		if pick.is_empty():
+		if new_unclaimed:
+			m.search_failed = false
+		if not (m.search_failed and not StaffPosts.on_beat(m, sim.tick)):
+			var pick := CleanerJobs.nearest(self, m)
+			if not pick.is_empty():
+				_take_job(m, pick["job"], pick["bin"], pick["path"])
+				continue
 			m.search_failed = true
+		if m.is_moving():
 			continue
-		_take_job(m, pick["job"], pick["bin"], pick["path"])
+		if m.patrol_wait > 0:
+			m.patrol_wait -= 1
+			continue
+		var patrol := CleanerJobs.patrol_path(self, m, sim.tick)
+		if patrol.size() >= 2:
+			m.at = patrol[0]
+			m.set_path(patrol)
+		else:
+			m.patrol_wait = CleanerJobs.PATROL_PAUSE_TICKS
 
 
 ## Claims job `job` (a bin when `bin`) for idle cleaner `m` and sends it along
@@ -475,8 +500,23 @@ func _take_job(m: StaffMember, job: int, bin: bool, path: Array[Vector2i]) -> vo
 		push_error("StaffSim: mess %d was taken before cleaner %d could claim it" % [job, m.id])
 		return
 	m.search_failed = false
+	m.needs_replan = false
+	m.patrol_wait = 0
 	m.job = job
 	m.job_bin = bin
+	if m.is_moving() and m.seg_mm > 0 and not m.in_pool():
+		var here := m.at
+		var next := m.path[m.path_index + 1]
+		var keep := m.seg_mm
+		var spot: Vector2i = path[path.size() - 1]
+		if sim.grid.can_staff_route(here, next):
+			var tail := _path(next, spot)
+			if not tail.is_empty():
+				tail.push_front(here)
+				m.set_path(tail)
+				m.seg_mm = keep
+				_set_state(m, StaffMember.State.TO_STATION)
+				return
 	m.at = path[0]
 	m.set_path(path)
 	_set_state(m, StaffMember.State.TO_STATION)
@@ -493,6 +533,7 @@ func _finish_job(m: StaffMember) -> void:
 	m.job_bin = false
 	m.work_left = 0
 	m.search_failed = false
+	m.patrol_wait = CleanerJobs.PATROL_PAUSE_TICKS
 	m.clear_path()
 	_set_state(m, StaffMember.State.IDLE)
 
@@ -669,12 +710,14 @@ func _release(m: StaffMember) -> void:
 	_unclaim(m)
 	m.needs_replan = false
 	m.search_failed = false
+	if m.role == StaffMember.Role.CLEANER:
+		m.patrol_wait = CleanerJobs.PATROL_PAUSE_TICKS
 	m.clear_path()
 	_set_state(m, StaffMember.State.IDLE)
 
 
-## One tick of walking to a station's spot or out to the entrance. On the
-## spot the member goes on duty; at the entrance a member walking out is gone.
+## One tick of walking to a station's spot, a patrol waypoint, or out to the
+## entrance. On the spot the member goes on duty; at patrol end it pauses idle.
 func _walk(m: StaffMember) -> void:
 	var state := m.state
 	if m.needs_replan:
@@ -683,6 +726,10 @@ func _walk(m: StaffMember) -> void:
 			return
 	m.walk(PassengerSim.WALK_MM)
 	if m.is_moving():
+		return
+	if state == StaffMember.State.IDLE:
+		m.clear_path()
+		m.patrol_wait = CleanerJobs.PATROL_PAUSE_TICKS
 		return
 	if m.at != _target(m):
 		_plan(m)
@@ -696,13 +743,13 @@ func _walk(m: StaffMember) -> void:
 
 
 ## Where a walking member is headed: its post's spot at its station, a
-## cleaner's job spot (CleanerJobs.job_spot()), or, when
-## it walks out, the door cell of the entrance with the shortest path from
-## where it stands (the lower entrance id on a tie; NO_CELL when it reaches
-## none).
+## cleaner's job spot (CleanerJobs.job_spot()), a patrolling cleaner's end cell,
+## or, when it walks out, the door cell of the entrance with the shortest path.
 func _target(m: StaffMember) -> Vector2i:
 	if not _walking_to_exit(m):
 		if m.role == StaffMember.Role.CLEANER:
+			if m.state == StaffMember.State.IDLE:
+				return m.path_end()
 			return CleanerJobs.job_spot(self, m)
 		return spot_of(m.station, m.slot)
 	var best := StaffMember.NO_CELL
@@ -794,6 +841,14 @@ func _replan(m: StaffMember) -> void:
 
 func _walking_to_exit(m: StaffMember) -> bool:
 	return m.is_walking_to_exit()
+
+
+func _patrolling(m: StaffMember) -> bool:
+	return (
+		m.role == StaffMember.Role.CLEANER
+		and m.state == StaffMember.State.IDLE
+		and (m.is_moving() or m.needs_replan)
+	)
 
 
 func _can_shift() -> bool:
@@ -898,7 +953,11 @@ func _on_graph_changed(cells: Array[Vector2i]) -> void:
 	for cell in cells:
 		touched[cell] = true
 	for m in _members:
-		if m.state != StaffMember.State.TO_STATION and not _walking_to_exit(m):
+		if (
+			m.state != StaffMember.State.TO_STATION
+			and not _walking_to_exit(m)
+			and not _patrolling(m)
+		):
 			continue
 		for i in range(m.path_index, m.path.size()):
 			if touched.has(m.path[i]):

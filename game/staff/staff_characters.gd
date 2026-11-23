@@ -91,6 +91,8 @@ var _cur: Dictionary = {}
 var _tucks: Dictionary = {}
 ## Member id -> its station interaction pose record (StaffStationPose).
 var _poses: Dictionary = {}
+## Idle Role.RAMP member id -> stable airside staging slot index.
+var _ramp_idle_slots: Dictionary = {}
 ## Something changed between ticks: the next sync snaps instead of interpolating.
 var _dirty := false
 
@@ -150,7 +152,8 @@ func station_pose_weight(id: int) -> float:
 	var m := StaffStationPose.mode_of(rec)
 	if m == StaffStationPose.Mode.NONE or m == StaffStationPose.Mode.IDLE_FIDGET:
 		return 0.0
-	return StaffStationPose.weight_of(rec, _now())
+	var now := _now()
+	return StaffStationPose.weight_of(rec, now) * StaffStationPose.crossfade_in(rec, now)
 
 
 ## How far member `id`'s idle fidget beat is blended in now (0 rest, 1 active).
@@ -158,7 +161,8 @@ func idle_fidget_weight(id: int) -> float:
 	var rec: Dictionary = _poses.get(id, {})
 	if StaffStationPose.mode_of(rec) != StaffStationPose.Mode.IDLE_FIDGET:
 		return 0.0
-	return StaffStationPose.weight_of(rec, _now())
+	var now := _now()
+	return StaffStationPose.weight_of(rec, now) * StaffStationPose.crossfade_in(rec, now)
 
 
 ## Current StaffStationPose.Mode for member `id`.
@@ -220,12 +224,17 @@ func sync(snap: bool = false) -> void:
 	var seen := {}
 	var pose_ctx := StaffStationPose.build_context(staff, _flights(), plane_fleet, _baggage())
 	var tick_now := _tick()
+	if snap:
+		_ramp_idle_slots.clear()
 	for id in staff.member_ids():
 		var m := staff.get_member(id)
 		if m.role == StaffMember.Role.RAMP:
+			var slot_idx := 0
 			if m.ramp_job == StaffMember.RampJob.NONE:
-				continue
-			var ramp_pose := _ramp_pose(m)
+				slot_idx = _assign_ramp_idle_slot(id)
+			else:
+				_ramp_idle_slots.erase(id)
+			var ramp_pose := _ramp_pose(m, slot_idx)
 			if ramp_pose.is_empty():
 				continue
 			seen[id] = true
@@ -249,7 +258,9 @@ func sync(snap: bool = false) -> void:
 				_tucks.erase(id)
 				_poses.erase(id)
 				StaffHandProps.hide_all(node)
-			var ramp_eval := StaffStationPose.evaluate(m, staff, ramp_now, pose_ctx)
+			var ramp_eval := StaffStationPose.evaluate(
+				m, staff, ramp_now, pose_ctx, node.rotation.y
+			)
 			var ramp_look := StaffStationPose.compute_look_deg(
 				ramp_now, node.rotation.y, ramp_eval[1], ramp_eval[2]
 			)
@@ -261,7 +272,7 @@ func sync(snap: bool = false) -> void:
 					ramp_look,
 					tick_now,
 					ramp_eval[3],
-					false,
+					m.ramp_job == StaffMember.RampJob.NONE,
 					id,
 				)
 			)
@@ -292,7 +303,7 @@ func sync(snap: bool = false) -> void:
 			StaffHandProps.hide_all(node)
 		var inside := StaffArchTuck.in_arch_passage(staff.sim.grid, m)
 		StaffArchTuck.update(_tucks.get_or_add(id, {}), inside, tick_now)
-		var eval := StaffStationPose.evaluate(m, staff, now, pose_ctx)
+		var eval := StaffStationPose.evaluate(m, staff, now, pose_ctx, node.rotation.y)
 		var look := StaffStationPose.compute_look_deg(now, node.rotation.y, eval[1], eval[2])
 		var cleaner_busy := (
 			m.role == StaffMember.Role.CLEANER and m.state == StaffMember.State.ON_DUTY
@@ -370,13 +381,31 @@ func draw() -> void:
 				xfade_m,
 				xfade_s,
 				xfade_out,
+				m.role if m != null else -1,
 			)
 		)
 		var tuck_w := StaffArchTuck.weight(_tucks.get(id, {}), now)
 		StaffArchTuck.pose(node, tuck_w)
 		var walking := m != null and (m.is_moving() or String(node.get_meta(&"clip", "")) == "walk")
-		StaffHandProps.update(
-			node, draw_mode, draw_sub, draw_w * xfade_in, now, id, walking, tuck_w > 0.0
+		var is_cleaner := m != null and m.role == StaffMember.Role.CLEANER
+		var cleaner_working := is_cleaner and m.state == StaffMember.State.ON_DUTY
+		var cleaner_patrolling := is_cleaner and m.state == StaffMember.State.IDLE and m.is_moving()
+		(
+			StaffHandProps
+			. update(
+				node,
+				draw_mode,
+				draw_sub,
+				draw_w * xfade_in,
+				now,
+				id,
+				walking,
+				tuck_w > 0.0,
+				m.role if m != null else -1,
+				m.job_bin if m != null else false,
+				cleaner_working,
+				cleaner_patrolling,
+			)
 		)
 		var player := node.get_node("AnimationPlayer") as AnimationPlayer
 		var base: float = node.get_meta(&"base_speed", 1.0)
@@ -527,6 +556,20 @@ func _release(id: int) -> void:
 	_cur.erase(id)
 	_tucks.erase(id)
 	_poses.erase(id)
+	_ramp_idle_slots.erase(id)
+
+
+func _assign_ramp_idle_slot(id: int) -> int:
+	if _ramp_idle_slots.has(id):
+		return int(_ramp_idle_slots[id])
+	var used := {}
+	for existing_slot: int in _ramp_idle_slots.values():
+		used[existing_slot] = true
+	var slot := 0
+	while used.has(slot):
+		slot += 1
+	_ramp_idle_slots[id] = slot
+	return slot
 
 
 ## Sim time now, between ticks: the tick and the clock's alpha.
@@ -598,14 +641,75 @@ func _live_tug_transform(flight_id: String) -> Transform3D:
 	return Transform3D.IDENTITY
 
 
-func _ramp_pose(m: StaffMember) -> Dictionary:
+func _ramp_pose(m: StaffMember, idle_slot := 0) -> Dictionary:
 	if m.ramp_job == StaffMember.RampJob.SHUTTLE:
 		return _shuttle_pose(m)
 	if m.ramp_job == StaffMember.RampJob.PUSHBACK:
 		return _pushback_pose(m)
 	if m.ramp_job == StaffMember.RampJob.MARSHAL:
 		return _marshal_pose(m)
-	return {}
+	return _idle_ramp_pose(idle_slot)
+
+
+func _idle_ramp_pose(slot_idx: int) -> Dictionary:
+	var grid := _grid()
+	var flight_sim := _flights()
+	var base_pos := Vector3.ZERO
+	var yaw := 0.0
+	var placed := false
+	var stand := {}
+	if flight_sim != null:
+		if flight_sim.stand_source.is_valid():
+			var grounds := flight_sim.gate_grounds()
+			var gates := grounds.keys()
+			gates.sort()
+			if not gates.is_empty():
+				stand = grounds[gates[0]].get("stand", {})
+		if stand.is_empty():
+			for fid in flight_sim.flight_ids():
+				var cand := flight_sim.flight_stand(fid)
+				if not cand.is_empty():
+					stand = cand
+					break
+	if not stand.is_empty():
+		var twin := StandPlacement.north_twin(stand)
+		var stand_pt := StandPlacement.stand_point(twin)
+		var local_pos := Vector3(
+			stand_pt.x - MARSHAL_SIDE_M - 1.8 - float(slot_idx) * 1.8,
+			0.0,
+			float(twin["wall_z"]) - MARSHAL_WALL_GAP_M - 0.8,
+		)
+		base_pos = StandPlacement.to_world(stand, local_pos)
+		yaw = (
+			StandPlacement.SIDE_YAW[StandPlacement.side_of(stand)]
+			+ PI
+			+ float((slot_idx % 3) - 1) * 0.25
+		)
+		placed = true
+	if not placed and grid != null and staff != null and staff.sim != null:
+		if not staff.sim.layout.exits.is_empty():
+			var door_cell := staff.sim.layout.door_cell(grid, staff.sim.layout.exits[0])
+			base_pos = (grid.cell_to_world(door_cell) + Vector3(float(slot_idx) * 1.8, 0.0, -3.5))
+			yaw = PI + float((slot_idx % 3) - 1) * 0.25
+			placed = true
+	if not placed and grid != null:
+		for obj_id in grid.object_ids():
+			var rec := grid.get_object(obj_id)
+			if StringName(rec.get("def", &"")) == BaggageSim.CART_DEF:
+				base_pos = (
+					grid.cell_to_world(rec["anchor"])
+					+ Vector3(-2.0 - float(slot_idx) * 1.8, 0.0, -2.0)
+				)
+				yaw = PI * 0.75 + float((slot_idx % 3) - 1) * 0.25
+				placed = true
+				break
+	if not placed and grid != null:
+		base_pos = (
+			grid.origin + Vector3(float(grid.size.x) * 0.5 + float(slot_idx) * 1.8, 0.0, -3.5)
+		)
+		yaw = PI
+	base_pos.y = BaggageShuttle.ground_y(grid, base_pos)
+	return {"pos": base_pos, "yaw": yaw, "clip": "idle", "speed": 1.0}
 
 
 func _shuttle_pose(m: StaffMember) -> Dictionary:

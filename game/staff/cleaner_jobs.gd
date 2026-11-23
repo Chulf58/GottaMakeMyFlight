@@ -28,6 +28,10 @@ const CLEAN_TICKS: Array[int] = [30, 45, 60]
 const GROWN_EXTRA_TICKS := 30
 ## Ticks to empty a full bin.
 const EMPTY_TICKS := 40
+## Ticks to pause between idle corridor/bin patrol waypoints.
+const PATROL_PAUSE_TICKS := 50
+const PATROL_MIN_CELLS := 4
+const PATROL_MAX_CELLS := 24
 ## How many jobs with a path one search compares.
 const SEARCH_CANDIDATES := 6
 ## The most paths one search tries, found or not: a cleaner with no way to
@@ -182,3 +186,117 @@ static func _before(a: Array, b: Array) -> bool:
 	if a[1] != b[1]:
 		return not a[1]
 	return a[2] < b[2]
+
+
+## Deterministic hash of currently unclaimed messes and unheld full bins so
+## idle/patrolling cleaners wake up on the exact tick a new job appears.
+static func unclaimed_signature(staff: StaffSim) -> int:
+	if staff == null or staff.sim == null:
+		return 0
+	var bin_claims := {}
+	for id in staff.member_ids():
+		var other := staff.get_member(id)
+		if other.job_bin:
+			bin_claims[other.job] = id
+	var h := 17
+	var any := false
+	var messes := staff.sim.messes
+	for id in messes.mess_ids():
+		var mess := messes.get_mess(id)
+		if int(mess["claimed_by"]) == 0:
+			h = h * 31 + id
+			any = true
+	for bin in messes.full_bins():
+		if not bin_claims.has(bin):
+			h = h * 37 + bin
+			any = true
+	return h if any else 0
+
+
+## Picks a deterministic indoor corridor/bin patrol path for idle cleaner `m`,
+## or [] when no reachable indoor patrol point exists.
+static func patrol_path(staff: StaffSim, m: StaffMember, tick: int) -> Array[Vector2i]:
+	var empty: Array[Vector2i] = []
+	if staff == null or staff.sim == null or staff.sim.grid == null:
+		return empty
+	var starts := _starts(staff, m)
+	if starts.is_empty():
+		return empty
+	var grid := staff.sim.grid
+	var reach := grid.staff_reach()
+	var seen := {}
+	var waypoints: Array[Vector2i] = []
+	for id in grid.object_ids():
+		var rec := grid.get_object(id)
+		if StringName(rec.get("def", &"")) == MessSim.BIN_ID:
+			var spot := MessSim.approach_for(grid, rec["anchor"])
+			if spot != StaffMember.NO_CELL and _reachable_waypoint(grid, reach, starts, spot):
+				if not seen.has(spot):
+					seen[spot] = true
+					waypoints.append(spot)
+	if not reach.is_empty():
+		for cell: Vector2i in reach:
+			if (cell.x % 4 != 0 or cell.y % 4 != 0) or seen.has(cell):
+				continue
+			if not grid.is_indoor(cell) or not grid.is_walkable(cell):
+				continue
+			if grid.object_at(cell) != 0:
+				continue
+			if _within_patrol_band(starts, cell, PATROL_MIN_CELLS, PATROL_MAX_CELLS):
+				seen[cell] = true
+				waypoints.append(cell)
+	elif not m.in_pool():
+		var x0 := maxi(0, m.at.x - PATROL_MAX_CELLS)
+		var x1 := mini(grid.size.x - 1, m.at.x + PATROL_MAX_CELLS)
+		var y0 := maxi(0, m.at.y - PATROL_MAX_CELLS)
+		var y1 := mini(grid.size.y - 1, m.at.y + PATROL_MAX_CELLS)
+		for y in range(y0, y1 + 1):
+			for x in range(x0, x1 + 1):
+				if x % 4 != 0 or y % 4 != 0:
+					continue
+				var cell := Vector2i(x, y)
+				if seen.has(cell) or not grid.is_indoor(cell) or not grid.is_walkable(cell):
+					continue
+				if grid.object_at(cell) != 0:
+					continue
+				if _within_patrol_band(starts, cell, PATROL_MIN_CELLS, PATROL_MAX_CELLS):
+					seen[cell] = true
+					waypoints.append(cell)
+	if waypoints.is_empty():
+		return empty
+	waypoints.sort_custom(
+		func(a: Vector2i, b: Vector2i) -> bool: return a.y < b.y if a.y != b.y else a.x < b.x
+	)
+	var base_idx := posmod(tick + m.id * 37 + m.at.x * 13 + m.at.y * 29, waypoints.size())
+	var tries := mini(4, waypoints.size())
+	for step in tries:
+		var target := waypoints[(base_idx + step) % waypoints.size()]
+		if not m.in_pool() and target == m.at:
+			continue
+		var way := StaffPosts.path_in(staff, m, target)
+		if way.size() >= 2:
+			return way
+	return empty
+
+
+static func _reachable_waypoint(
+	grid: BuildGrid, reach: Dictionary, starts: Array[Vector2i], cell: Vector2i
+) -> bool:
+	if not grid.is_indoor(cell) or not grid.is_walkable(cell):
+		return false
+	if reach.is_empty():
+		return true
+	for start in starts:
+		if reach.has(start) and reach.get(cell) == reach[start]:
+			return true
+	return false
+
+
+static func _within_patrol_band(
+	starts: Array[Vector2i], cell: Vector2i, min_d: int, max_d: int
+) -> bool:
+	for start in starts:
+		var d := maxi(absi(cell.x - start.x), absi(cell.y - start.y))
+		if d >= min_d and d <= max_d:
+			return true
+	return false

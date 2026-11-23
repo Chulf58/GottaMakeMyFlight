@@ -398,9 +398,16 @@ func test_hand_props_and_poses_reset_on_snap_load_backward_in_time() -> void:
 	var saved_staff: Variant = JSON.parse_string(JSON.stringify(_world.staff.to_snapshot()))
 	var saved_pax: Variant = JSON.parse_string(JSON.stringify(_world.sim.to_snapshot()))
 
-	# Advance into active boarding -> GATE pose + BOARDING_PASS prop visible.
-	_world.run_to(GateWalkWorld.BOARDING + 40)
-	_views.draw()
+	# Advance into boarding when passenger approaches gate -> GATE pose + BOARDING_PASS prop visible.
+	_world.run_to(GateWalkWorld.BOARDING)
+	for _i in 120:
+		_world.step()
+		_views.draw()
+		if (
+			_views.station_pose_mode(gate_sid) == StaffStationPose.Mode.GATE
+			and _views.station_pose_weight(gate_sid) >= 0.99
+		):
+			break
 	assert_int(_views.station_pose_mode(gate_sid)).is_equal(StaffStationPose.Mode.GATE)
 	assert_int(_views.hand_prop_of(gate_sid)).is_equal(StaffHandProps.PropKind.BOARDING_PASS)
 

@@ -58,7 +58,7 @@ func test_idle_fidget_record_respects_settle_pauses_and_backward_tick_load_reset
 
 	# Before IDLE_SETTLE_TICKS elapses, stays Mode.NONE.
 	StaffStationPose.update(
-		rec, StaffStationPose.Mode.NONE, Vector2.ZERO, 150.0, StaffStationPose.SubMode.NONE, true, 1
+		rec, StaffStationPose.Mode.NONE, Vector2.ZERO, 115.0, StaffStationPose.SubMode.NONE, true, 1
 	)
 	assert_int(StaffStationPose.mode_of(rec)).is_equal(StaffStationPose.Mode.NONE)
 

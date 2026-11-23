@@ -61,7 +61,11 @@ const BOOL_FIELDS := ["needs_replan", "search_failed", "leaving", "job_bin"]
 
 
 static func save(
-	members: Array[StaffMember], next_id: int, closed: Array[int], faults: Array
+	members: Array[StaffMember],
+	next_id: int,
+	closed: Array[int],
+	faults: Array,
+	last_unclaimed_sig := 0,
 ) -> Dictionary:
 	var records := []
 	for m in members:
@@ -88,6 +92,7 @@ static func save(
 					"job": m.job,
 					"job_bin": m.job_bin,
 					"work_left": m.work_left,
+					"patrol_wait": m.patrol_wait,
 					"ramp_job": m.ramp_job,
 					"ramp_shuttle_id": m.ramp_shuttle_id,
 					"ramp_flight_id": m.ramp_flight_id,
@@ -100,6 +105,7 @@ static func save(
 		"members": records,
 		"closed": closed.duplicate(),
 		"faults": faults.duplicate(true),
+		"last_unclaimed_sig": last_unclaimed_sig,
 	}
 
 
@@ -156,7 +162,17 @@ static func load(saved: Dictionary, sim: PassengerSim, messes := {}) -> Dictiona
 	var faults: Variant = StationFaults.checked(data["faults"], sim.grid)
 	if faults is String:
 		return {"error": faults}
-	return {"next_id": next_id, "members": members, "closed": closed, "faults": faults}
+	var out := {"next_id": next_id, "members": members, "closed": closed, "faults": faults}
+	if data.has("last_unclaimed_sig"):
+		var raw_sig: Variant = data["last_unclaimed_sig"]
+		if (
+			not typeof(raw_sig) in [TYPE_INT, TYPE_FLOAT]
+			or not is_finite(float(raw_sig))
+			or float(raw_sig) != floor(float(raw_sig))
+		):
+			return {"error": "last_unclaimed_sig is not a whole number"}
+		out["last_unclaimed_sig"] = int(raw_sig)
+	return out
 
 
 ## The saved closed stations as ids, or a String naming what is wrong: a list
@@ -285,6 +301,10 @@ static func _member(record: Variant, sim: PassengerSim) -> Variant:
 		if typeof(record["backing_out"]) != TYPE_BOOL:
 			return "member field 'backing_out' is not true or false"
 		m.backing_out = record["backing_out"]
+	if record.has("patrol_wait"):
+		if not WholeNumber.is_whole(record["patrol_wait"]) or int(record["patrol_wait"]) < 0:
+			return "member field 'patrol_wait' is not a whole number of 0 or more"
+		m.patrol_wait = int(record["patrol_wait"])
 	var at: Variant = _cell(record["at"])
 	if at == null:
 		return "member %d stands on no cell" % m.id
@@ -434,8 +454,12 @@ static func _cleaner_problem(m: StaffMember) -> String:
 		StaffMember.State.IDLE, StaffMember.State.WALKING_OUT, StaffMember.State.LEAVING_SHIFT:
 			if m.job != 0 or m.work_left != 0:
 				return "is a cleaner with no job to do but has one"
-			if m.state == StaffMember.State.IDLE and (m.is_moving() or m.needs_replan):
-				return "is idle but has a walk"
+			if (
+				m.state == StaffMember.State.IDLE
+				and m.in_pool()
+				and (m.is_moving() or m.needs_replan)
+			):
+				return "is idle in the pool but has a walk"
 		StaffMember.State.OFF_SHIFT:
 			if m.job != 0 or m.work_left != 0 or not m.in_pool():
 				return "is an off-shift cleaner with a job or indoor position"

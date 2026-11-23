@@ -41,7 +41,9 @@ const MAX_LOOK_PITCH_UP_DEG := 12.0
 const MAX_LOOK_PITCH_DOWN_DEG := 18.0
 const PASSENGER_EYE_M := 1.45
 const STAFF_EYE_M := 1.55
-const GATE_INTERACT_M := 16.0
+const GATE_INTERACT_M := 7.0
+const SHOP_COUNTER_M := 5.0
+const AMBIENT_LOOK_M := 8.0
 
 const CHECKIN_CYCLE_SEC := 4.0
 const SECURITY_CYCLE_SEC := 3.8
@@ -49,9 +51,9 @@ const REPACK_CYCLE_SEC := 4.0
 const SHOP_CYCLE_SEC := 4.2
 const GATE_CYCLE_SEC := 3.8
 
-const IDLE_SETTLE_TICKS := 80
-const FIDGET_PERIOD_TICKS := 200
-const FIDGET_ACTIVE_TICKS := 80
+const IDLE_SETTLE_TICKS := 24
+const FIDGET_PERIOD_TICKS := 120
+const FIDGET_ACTIVE_TICKS := 84
 
 var mode: Mode = Mode.NONE
 var sub_mode: SubMode = SubMode.NONE
@@ -64,6 +66,7 @@ var idle_since := 0.0
 var look_yaw_deg := 0.0
 var look_pitch_deg := 0.0
 var variant_seed := 0
+var staff_role := -1
 
 
 ## Eased interaction weight (0 idle, 1 active) at sim time `now`. A record whose
@@ -235,7 +238,7 @@ static func update(
 			record["xfade_idle_since"] = prev_idle_since
 		record.erase("idle_since")
 	var active_now := resolved_mode != Mode.NONE
-	var target_look := look_deg if new_mode != Mode.NONE else Vector2.ZERO
+	var target_look := look_deg
 	if not record.has("active"):
 		record["active"] = active_now
 		record["mode"] = resolved_mode
@@ -339,7 +342,7 @@ static func build_context(
 		"info": {},
 		"shop_rooms": {},
 		"gate_pax": {},
-		"gate_boarding": {},
+		"ambient_pax": [],
 		"flights": flights,
 		"plane_fleet": plane_fleet,
 		"baggage": bag_sim,
@@ -348,12 +351,6 @@ static func build_context(
 		return ctx
 	var sim := staff.sim
 	var fl := flights if flights != null else sim.flights
-	if fl != null:
-		for fid in fl.flight_ids():
-			if fl.state_of(fid) == FlightSim.State.BOARDING:
-				var gate := fl.flight_gate(fid)
-				if gate != "":
-					ctx["gate_boarding"][gate] = true
 	for id in sim.passenger_ids():
 		var p := sim.get_passenger(id)
 		_collect_passenger(sim, fl, p, ctx)
@@ -363,41 +360,71 @@ static func build_context(
 static func _collect_passenger(
 	sim: PassengerSim, fl: FlightSim, p: Passenger, ctx: Dictionary
 ) -> void:
+	if p.is_done() or p.at.x < 0:
+		return
+	var eye := sim.world_position(p) + Vector3(0.0, PASSENGER_EYE_M, 0.0)
+	if (
+		p.is_moving()
+		or (
+			p.stage
+			in [
+				Passenger.Stage.CHECKIN_QUEUE,
+				Passenger.Stage.SECURITY_QUEUE,
+				Passenger.Stage.CAFE_QUEUE,
+			]
+		)
+	):
+		(ctx["ambient_pax"] as Array).append(eye)
 	if p.stage == Passenger.Stage.CHECKIN and p.station != 0:
-		ctx["checkin"][p.station] = sim.world_position(p) + Vector3(0.0, PASSENGER_EYE_M, 0.0)
+		ctx["checkin"][p.station] = eye
 	if sim.info_desks.holds(p) and not p.is_moving():
 		var desk := sim.info_desks.desk_of(p)
 		if desk != 0 and sim.info_desks.helping_at(desk):
-			ctx["info"][desk] = sim.world_position(p) + Vector3(0.0, PASSENGER_EYE_M, 0.0)
+			ctx["info"][desk] = eye
 	if p.stage == Passenger.Stage.SHOP_BROWSE:
 		var visit := sim.shops.visit_of(p.id)
 		if visit != null and visit.room != 0:
 			var list: Array = ctx["shop_rooms"].get_or_add(visit.room, [])
-			list.append(sim.world_position(p) + Vector3(0.0, PASSENGER_EYE_M, 0.0))
+			list.append(eye)
 	if p.stage == Passenger.Stage.TO_EXIT and fl != null and p.flight_id != "":
 		var gate := fl.flight_gate(p.flight_id)
 		if gate != "":
 			var list: Array = ctx["gate_pax"].get_or_add(gate, [])
-			list.append(sim.world_position(p) + Vector3(0.0, PASSENGER_EYE_M, 0.0))
+			list.append(eye)
 
 
 ## Desired [Mode, target_pos: Vector3, has_target: bool, SubMode] for `m` at `staff_pos`.
-static func evaluate(m: StaffMember, staff: StaffSim, staff_pos: Vector3, ctx: Dictionary) -> Array:
+static func evaluate(
+	m: StaffMember,
+	staff: StaffSim,
+	staff_pos: Vector3,
+	ctx: Dictionary,
+	staff_yaw: float = NAN,
+) -> Array:
+	var out: Array = [Mode.NONE, Vector3.ZERO, false, SubMode.NONE]
 	if m.role == StaffMember.Role.RAMP:
-		return _ramp_eval(m, staff, ctx)
-	if m.state != StaffMember.State.ON_DUTY or m.station == 0 or staff == null or staff.sim == null:
-		return [Mode.NONE, Vector3.ZERO, false, SubMode.NONE]
-	match m.role:
-		StaffMember.Role.CHECKIN:
-			if ctx["checkin"].has(m.station):
-				return [Mode.CHECKIN, ctx["checkin"][m.station], true, SubMode.NONE]
-		StaffMember.Role.SECURITY:
-			return _security_eval(m, staff.sim)
-		StaffMember.Role.SHOP:
-			return _shop_eval(m, staff.sim, staff_pos, ctx)
-		StaffMember.Role.GATE:
-			return _gate_eval(m, staff.sim, staff_pos, ctx)
-	return [Mode.NONE, Vector3.ZERO, false, SubMode.NONE]
+		out = _ramp_eval(m, staff, ctx)
+	elif (
+		m.state == StaffMember.State.ON_DUTY
+		and m.station != 0
+		and staff != null
+		and staff.sim != null
+	):
+		match m.role:
+			StaffMember.Role.CHECKIN:
+				if ctx["checkin"].has(m.station):
+					out = [Mode.CHECKIN, ctx["checkin"][m.station], true, SubMode.NONE]
+			StaffMember.Role.SECURITY:
+				out = _security_eval(m, staff.sim)
+			StaffMember.Role.SHOP:
+				out = _shop_eval(m, staff.sim, staff_pos, ctx)
+			StaffMember.Role.GATE:
+				out = _gate_eval(m, staff.sim, staff_pos, ctx)
+	if out[0] == Mode.NONE and not m.is_moving() and not m.is_walking_to_exit():
+		var glance := _ambient_look(staff_pos, staff_yaw, ctx)
+		if glance[1]:
+			return [Mode.NONE, glance[0], true, SubMode.NONE]
+	return out
 
 
 static func _ramp_eval(m: StaffMember, staff: StaffSim, ctx: Dictionary) -> Array:
@@ -498,11 +525,12 @@ static func _shop_eval(
 		return [Mode.SHOP, sim.world_position(pax) + Vector3(0.0, PASSENGER_EYE_M, 0.0), true, sub]
 	if ctx["info"].has(m.station):
 		return [Mode.SHOP, ctx["info"][m.station], true, SubMode.SHOP_INFO_DESK]
-	var room := ShopCounters.room_of(sim.grid, m.station)
-	if room != 0 and ctx["shop_rooms"].has(room):
-		var best := _nearest(staff_pos, ctx["shop_rooms"][room], GATE_INTERACT_M)
-		if best[1]:
-			return [Mode.SHOP, best[0], true, sub]
+	if sub == SubMode.SHOP_RETAIL:
+		var room := ShopCounters.room_of(sim.grid, m.station)
+		if room != 0 and ctx["shop_rooms"].has(room):
+			var best := _nearest(staff_pos, ctx["shop_rooms"][room], SHOP_COUNTER_M)
+			if best[1]:
+				return [Mode.SHOP, best[0], true, sub]
 	return [Mode.NONE, Vector3.ZERO, false, SubMode.NONE]
 
 
@@ -520,9 +548,28 @@ static func _gate_eval(
 	var nearest := _nearest(staff_pos, walkers, GATE_INTERACT_M)
 	if nearest[1]:
 		return [Mode.GATE, nearest[0], true, SubMode.NONE]
-	if ctx["gate_boarding"].get(gate, false):
-		return [Mode.GATE, Vector3.ZERO, false, SubMode.NONE]
 	return [Mode.NONE, Vector3.ZERO, false, SubMode.NONE]
+
+
+static func _ambient_look(staff_pos: Vector3, staff_yaw: float, ctx: Dictionary) -> Array:
+	var pts: Array = ctx.get("ambient_pax", [])
+	if pts.is_empty():
+		return [Vector3.ZERO, false]
+	var best_pt := Vector3.ZERO
+	var best_d := AMBIENT_LOOK_M
+	var found := false
+	var check_front := not is_nan(staff_yaw)
+	var inv_yaw := Basis(Vector3.UP, -staff_yaw) if check_front else Basis.IDENTITY
+	for pt: Vector3 in pts:
+		var d := staff_pos.distance_to(pt)
+		if d > best_d:
+			continue
+		if check_front and (inv_yaw * (pt - staff_pos)).z < -0.25:
+			continue
+		best_d = d
+		best_pt = pt
+		found = true
+	return [best_pt, found]
 
 
 static func _marshal_target(m: StaffMember, staff: StaffSim, ctx: Dictionary) -> Array:
@@ -596,10 +643,12 @@ static func pose(
 	new_xfade_mode: Mode = Mode.NONE,
 	new_xfade_sub_mode: SubMode = SubMode.NONE,
 	new_xfade_weight: float = 0.0,
+	new_role: int = -1,
 ) -> void:
 	var main_on := new_mode != Mode.NONE and new_weight > 0.0
 	var xfade_on := new_xfade_mode != Mode.NONE and new_xfade_weight > 0.0
-	var on := main_on or xfade_on
+	var look_on := look_deg.length_squared() > 0.0025
+	var on := main_on or xfade_on or look_on
 	if not on and not node.has_meta(&"station_pose"):
 		return
 	var mod := _of(node)
@@ -617,6 +666,7 @@ static func pose(
 	mod.look_yaw_deg = look_deg.x if on else 0.0
 	mod.look_pitch_deg = look_deg.y if on else 0.0
 	mod.variant_seed = seed_id
+	mod.staff_role = new_role
 
 
 ## Returns (and lazily adds) the StaffStationPose modifier on `node`'s skeleton.
@@ -641,7 +691,8 @@ func _process_modification_with_delta(_delta: float) -> void:
 	var xw := clampf(xfade_weight, 0.0, 1.0)
 	var has_main := mode != Mode.NONE and w > 0.0
 	var has_xfade := xfade_mode != Mode.NONE and xw > 0.0
-	if not has_main and not has_xfade:
+	var has_look := absf(look_yaw_deg) >= 0.05 or absf(look_pitch_deg) >= 0.05
+	if not has_main and not has_xfade and not has_look:
 		return
 	var skeleton := get_skeleton()
 	if skeleton == null:
@@ -650,11 +701,15 @@ func _process_modification_with_delta(_delta: float) -> void:
 		_apply_role_pose_for(skeleton, xfade_mode, xfade_sub_mode, xw)
 	if has_main:
 		_apply_role_pose_for(skeleton, mode, sub_mode, w)
+	var main_w := w if has_main else 0.0
+	var xfade_w := xw if has_xfade else 0.0
+	var idle_w := maxf(0.0, 1.0 - main_w - xfade_w)
 	var look_w := (
-		(w if (has_main and mode != Mode.IDLE_FIDGET) else 0.0)
-		+ (xw if (has_xfade and xfade_mode != Mode.IDLE_FIDGET) else 0.0)
+		main_w * (0.35 if mode == Mode.IDLE_FIDGET else 1.0)
+		+ xfade_w * (0.35 if xfade_mode == Mode.IDLE_FIDGET else 1.0)
+		+ 0.75 * idle_w
 	)
-	if look_w > 0.0:
+	if look_w > 0.0 and has_look:
 		_apply_look_at(skeleton, minf(look_w, 1.0))
 
 
@@ -673,6 +728,14 @@ func _apply_look_at(skeleton: Skeleton3D, w: float) -> void:
 func _apply_role_pose_for(
 	skeleton: Skeleton3D, p_mode: Mode, p_sub_mode: SubMode, w: float
 ) -> void:
+	var t := sim_time / float(SimClock.TICK_RATE) + float(posmod(variant_seed, 13)) * 0.43
+	if p_mode != Mode.IDLE_FIDGET:
+		var deep_legs := (
+			p_mode == Mode.RAMP_SHUTTLE
+			or (p_mode == Mode.RAMP_PUSHBACK and p_sub_mode == SubMode.RAMP_HOOKUP)
+		)
+		var knee_scale := 0.25 if deep_legs else 1.0
+		_apply_body_life(skeleton, t, w, 1.0, knee_scale)
 	match p_mode:
 		Mode.CHECKIN:
 			_pose_checkin(skeleton, w)
@@ -692,6 +755,39 @@ func _apply_role_pose_for(
 			_pose_ramp_pushback(skeleton, p_sub_mode, w)
 		Mode.IDLE_FIDGET:
 			_pose_idle_fidget(skeleton, w)
+
+
+func _apply_body_life(
+	skeleton: Skeleton3D, t: float, w: float, sway_scale: float, knee_scale: float
+) -> void:
+	if w <= 0.0:
+		return
+	var sway := sin(t * 1.15)
+	var breath := 0.5 + 0.5 * sin(t * 2.15)
+	var twist := sin(t * 0.85 + 0.7)
+	var hips_idx := skeleton.find_bone("Hips")
+	if hips_idx >= 0:
+		var hips_pose := skeleton.get_bone_global_pose(hips_idx)
+		hips_pose.origin.y += (0.006 * sin(t * 2.15) - 0.004 * absf(sway)) * w
+		hips_pose.origin.x += 0.012 * sway * sway_scale * w
+		hips_pose.basis = (
+			Basis(Vector3.UP, deg_to_rad(2.2 * twist * sway_scale * w))
+			* Basis(Vector3.BACK, deg_to_rad(2.4 * sway * sway_scale * w))
+			* hips_pose.basis
+		)
+		skeleton.set_bone_global_pose(hips_idx, hips_pose)
+	var knee_l := (2.2 + 1.8 * sway) * knee_scale * w
+	var knee_r := (2.2 - 1.8 * sway) * knee_scale * w
+	_rotate_char(skeleton, "Quad.L", Vector3.RIGHT, -knee_l)
+	_rotate_char(skeleton, "Shin.L", Vector3.RIGHT, knee_l * 1.6)
+	_rotate_char(skeleton, "Quad.R", Vector3.RIGHT, -knee_r)
+	_rotate_char(skeleton, "Shin.R", Vector3.RIGHT, knee_r * 1.6)
+	_rotate_char(skeleton, "Spine_01", Vector3.BACK, -1.5 * sway * sway_scale * w)
+	_rotate_char(skeleton, "Spine_02", Vector3.UP, 2.0 * cos(t * 1.15) * sway_scale * w)
+	_rotate_char(skeleton, "Spine_03", Vector3.RIGHT, 1.8 * breath * w)
+	_rotate_char(skeleton, "Spine_03", Vector3.UP, -1.6 * twist * sway_scale * w)
+	_rotate_char(skeleton, "Clavicle.L", Vector3.BACK, (1.4 * breath + 0.8 * sway) * w)
+	_rotate_char(skeleton, "Clavicle.R", Vector3.BACK, -(1.4 * breath - 0.8 * sway) * w)
 
 
 func _pose_checkin(skeleton: Skeleton3D, w: float) -> void:
@@ -763,10 +859,10 @@ func _pose_security_scan(skeleton: Skeleton3D, p_sub_mode: SubMode, w: float) ->
 		var arc := cos(t * 2.9)
 		_rotate_char(skeleton, "Spine_01", Vector3.RIGHT, 4.0 * w)
 		_rotate_char(skeleton, "Spine_02", Vector3.UP, -8.0 * arc * w)
-		_rotate_char(skeleton, "Arm.R", Vector3.RIGHT, (-44.0 + 14.0 * sweep) * w)
+		_rotate_char(skeleton, "Arm.R", Vector3.RIGHT, (-48.0 + 14.0 * sweep) * w)
 		_rotate_char(skeleton, "Arm.R", Vector3.UP, 20.0 * arc * w)
 		_rotate_char(skeleton, "Arm.R", Vector3.BACK, -14.0 * w)
-		_rotate_char(skeleton, "Forearm.R", Vector3.RIGHT, (-34.0 + 12.0 * sweep) * w)
+		_rotate_char(skeleton, "Forearm.R", Vector3.RIGHT, (-46.0 + 12.0 * sweep) * w)
 		_rotate_char(skeleton, "Hand.R", Vector3.UP, 16.0 * arc * w)
 		_rotate_char(skeleton, "Arm.L", Vector3.RIGHT, -58.0 * w)
 		_rotate_char(skeleton, "Arm.L", Vector3.BACK, 14.0 * w)
@@ -1036,6 +1132,8 @@ func _pose_idle_fidget(skeleton: Skeleton3D, w: float) -> void:
 		return
 	var u := clampf(pos / float(FIDGET_ACTIVE_TICKS), 0.0, 1.0)
 	var env := sin(PI * u) * w
+	var t_idle := sim_time / float(SimClock.TICK_RATE) + float(posmod(variant_seed, 13)) * 0.43
+	_apply_body_life(skeleton, t_idle, env, 1.15, 1.15)
 	var variant := idle_fidget_variant(variant_seed, elapsed)
 	match variant:
 		0:
@@ -1048,26 +1146,60 @@ func _pose_idle_fidget(skeleton: Skeleton3D, w: float) -> void:
 		1:
 			var scan := sin(PI * 2.0 * u) * w
 			_rotate_char(skeleton, "Spine_02", Vector3.UP, 6.0 * scan)
+			_rotate_char(skeleton, "Spine_03", Vector3.UP, 5.0 * scan)
 			_rotate_char(skeleton, "Neck", Vector3.UP, 12.0 * scan)
 			_rotate_char(skeleton, "Head", Vector3.UP, 16.0 * scan)
 		2:
-			_rotate_char(skeleton, "Spine_01", Vector3.RIGHT, -4.0 * env)
-			_rotate_char(skeleton, "Spine_02", Vector3.RIGHT, -4.0 * env)
-			_rotate_char(skeleton, "Head", Vector3.RIGHT, -4.0 * env)
-			_rotate_char(skeleton, "Arm.L", Vector3.BACK, 10.0 * env)
-			_rotate_char(skeleton, "Arm.L", Vector3.RIGHT, 6.0 * env)
-			_rotate_char(skeleton, "Forearm.L", Vector3.RIGHT, -14.0 * env)
-			_rotate_char(skeleton, "Arm.R", Vector3.BACK, -10.0 * env)
-			_rotate_char(skeleton, "Arm.R", Vector3.RIGHT, 6.0 * env)
-			_rotate_char(skeleton, "Forearm.R", Vector3.RIGHT, -14.0 * env)
+			if staff_role == StaffMember.Role.SHOP:
+				var sip := sin(PI * clampf((u - 0.15) / 0.70, 0.0, 1.0)) * env
+				_rotate_char(skeleton, "Spine_01", Vector3.RIGHT, -2.5 * env)
+				_rotate_char(skeleton, "Head", Vector3.RIGHT, -6.0 * sip)
+				_rotate_char(skeleton, "Arm.R", Vector3.RIGHT, -38.0 * sip)
+				_rotate_char(skeleton, "Arm.R", Vector3.UP, -12.0 * sip)
+				_rotate_char(skeleton, "Forearm.R", Vector3.RIGHT, -64.0 * sip)
+				_rotate_char(skeleton, "Arm.L", Vector3.RIGHT, -12.0 * env)
+				_rotate_char(skeleton, "Forearm.L", Vector3.RIGHT, -24.0 * env)
+			else:
+				_rotate_char(skeleton, "Spine_01", Vector3.RIGHT, -4.0 * env)
+				_rotate_char(skeleton, "Spine_02", Vector3.RIGHT, -4.0 * env)
+				_rotate_char(skeleton, "Head", Vector3.RIGHT, -4.0 * env)
+				_rotate_char(skeleton, "Arm.L", Vector3.BACK, 10.0 * env)
+				_rotate_char(skeleton, "Arm.L", Vector3.RIGHT, 6.0 * env)
+				_rotate_char(skeleton, "Forearm.L", Vector3.RIGHT, -14.0 * env)
+				_rotate_char(skeleton, "Arm.R", Vector3.BACK, -10.0 * env)
+				_rotate_char(skeleton, "Arm.R", Vector3.RIGHT, 6.0 * env)
+				_rotate_char(skeleton, "Forearm.R", Vector3.RIGHT, -14.0 * env)
 		3:
-			var dir := 1.0 if posmod(variant_seed, 2) == 0 else -1.0
-			_rotate_char(skeleton, "Spine_01", Vector3.BACK, 5.5 * dir * env)
-			_rotate_char(skeleton, "Spine_02", Vector3.BACK, -3.5 * dir * env)
-			_rotate_char(skeleton, "Arm.L", Vector3.RIGHT, -12.0 * env)
-			_rotate_char(skeleton, "Forearm.L", Vector3.RIGHT, -22.0 * env)
-			_rotate_char(skeleton, "Arm.R", Vector3.RIGHT, -12.0 * env)
-			_rotate_char(skeleton, "Forearm.R", Vector3.RIGHT, -22.0 * env)
+			if staff_role == StaffMember.Role.SHOP:
+				var wipe := sin(PI * 4.0 * u) * env
+				_rotate_char(skeleton, "Spine_01", Vector3.RIGHT, 6.0 * env)
+				_rotate_char(skeleton, "Spine_02", Vector3.UP, 8.0 * wipe)
+				_rotate_char(skeleton, "Head", Vector3.RIGHT, 10.0 * env)
+				_rotate_char(skeleton, "Arm.R", Vector3.RIGHT, -36.0 * env)
+				_rotate_char(skeleton, "Arm.R", Vector3.UP, 18.0 * wipe)
+				_rotate_char(skeleton, "Forearm.R", Vector3.RIGHT, -34.0 * env)
+				_rotate_char(skeleton, "Arm.L", Vector3.RIGHT, -18.0 * env)
+				_rotate_char(skeleton, "Forearm.L", Vector3.RIGHT, -32.0 * env)
+			elif (
+				staff_role
+				in [StaffMember.Role.CHECKIN, StaffMember.Role.GATE, StaffMember.Role.SECURITY]
+			):
+				var tap := sin(PI * 3.0 * u) * env
+				_rotate_char(skeleton, "Spine_01", Vector3.RIGHT, 3.0 * env)
+				_rotate_char(skeleton, "Head", Vector3.RIGHT, 10.0 * env)
+				_rotate_char(skeleton, "Arm.L", Vector3.RIGHT, -26.0 * env)
+				_rotate_char(skeleton, "Arm.L", Vector3.UP, -14.0 * env)
+				_rotate_char(skeleton, "Forearm.L", Vector3.RIGHT, -58.0 * env)
+				_rotate_char(skeleton, "Arm.R", Vector3.RIGHT, -28.0 * env)
+				_rotate_char(skeleton, "Forearm.R", Vector3.RIGHT, (-46.0 + 10.0 * tap) * env)
+			else:
+				var dir := 1.0 if posmod(variant_seed, 2) == 0 else -1.0
+				_rotate_char(skeleton, "Spine_01", Vector3.BACK, 5.5 * dir * env)
+				_rotate_char(skeleton, "Spine_02", Vector3.BACK, -3.5 * dir * env)
+				_rotate_char(skeleton, "Arm.L", Vector3.RIGHT, -12.0 * env)
+				_rotate_char(skeleton, "Forearm.L", Vector3.RIGHT, -22.0 * env)
+				_rotate_char(skeleton, "Arm.R", Vector3.RIGHT, -12.0 * env)
+				_rotate_char(skeleton, "Forearm.R", Vector3.RIGHT, -22.0 * env)
 
 
 func _rotate_char(skeleton: Skeleton3D, bone_name: String, axis_char: Vector3, deg: float) -> void:

@@ -143,7 +143,7 @@ func test_cleaning_removes_the_mess_and_the_mood_it_cost() -> void:
 	var mess := _messes().add(MessSim.Kind.LITTER, spot)
 	var watch := Vector2i(20, 12)
 	var guest := MessTestKit.guest(_world, watch)
-	MessTestKit.run_beats(_world, guest, 3)
+	MessTestKit.run_beats(_world, guest, DecorEffect.PERIOD_BEATS)
 	var lost := MessTestKit.START_MOOD - guest.mood
 	var dirt := _messes().dirt_at(watch)
 	var m := CleanerTestKit.cleaner_at(_world, Vector2i(17, 10))
@@ -155,7 +155,7 @@ func test_cleaning_removes_the_mess_and_the_mood_it_cost() -> void:
 	assert_bool(CleanerTestKit.step_until(_world, done)).is_true()
 	var took: int = _world.clock.tick - on_duty["tick"]
 	guest.mood = MessTestKit.START_MOOD
-	MessTestKit.run_beats(_world, guest, 3)
+	MessTestKit.run_beats(_world, guest, DecorEffect.PERIOD_BEATS)
 	print(
 		(
 			"before: dirt %d, mood lost %d; cleaned in %d ticks on duty; after: dirt %d, mood %d"
