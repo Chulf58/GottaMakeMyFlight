@@ -36,7 +36,18 @@ const KIND_OF_DEF := {
 	GateDesks.DESK: Kind.GATE_DESK,
 }
 const FIELDS: Array[String] = [
-	"where", "seats", "status", "planes", "walk", "staff", "queue", "upkeep"
+	"where",
+	"seats",
+	"status",
+	"planes",
+	"walk",
+	"staff",
+	"queue",
+	"fee",
+	"earned",
+	"parked",
+	"diverted",
+	"upkeep",
 ]
 
 var sim: PassengerSim
@@ -407,20 +418,45 @@ func _landside_live() -> Dictionary:
 	var spot: int = _static["spot"]
 	var closed := _lot_closed()
 	_live_closed = closed
-	var cars := land.lot_cars(spot) if _static["is_lot"] else land.curb_cars(spot)
-	return {
+	if _static["is_curb"]:
+		return {
+			"status": tr("Status: Open"),
+			"queue": _cars_text(land.curb_cars(spot)),
+			"fee": tr("Parking fee: Free"),
+		}
+	var occupied := land.lot_occupied(spot)
+	var earned: int = land.lot_earned_today[spot] if spot < land.lot_earned_today.size() else 0
+	var parked: int = land.lot_parked_today[spot] if spot < land.lot_parked_today.size() else 0
+	var diverted: int = (
+		land.lot_diverted_today[spot] if spot < land.lot_diverted_today.size() else 0
+	)
+	var out := {
 		"status": tr("Status: Closed") if closed else tr("Status: Open"),
-		"queue": _cars_text(cars),
+		"queue": _cars_text(occupied),
+		"fee": tr("Parking fee: ${fee}").format({"fee": land.parking_fee(spot)}),
+		"earned": tr("Earned today: ${amount}").format({"amount": earned}),
+		"parked":
+		tr_n("Parked today: {count} car", "Parked today: {count} cars", parked).format(
+			{"count": parked}
+		),
 	}
+	if diverted > 0:
+		out["diverted"] = (
+			tr_n("Diverted today: {count} car", "Diverted today: {count} cars", diverted)
+			. format({"count": diverted})
+		)
+	return out
 
 
-## "Cars: 3 of 12 spaces" for a car park, "... berths" for a curb bay.
+## "Occupancy: 3/12 spaces" for a car park, "... berths" for a curb bay.
 func _cars_text(cars: int) -> String:
 	var capacity: int = _static["capacity"]
 	var text := (
-		tr_n("Cars: {cars} of {capacity} berth", "Cars: {cars} of {capacity} berths", capacity)
+		tr_n("Occupancy: {cars}/{capacity} berth", "Occupancy: {cars}/{capacity} berths", capacity)
 		if _static["is_curb"]
-		else tr_n("Cars: {cars} of {capacity} space", "Cars: {cars} of {capacity} spaces", capacity)
+		else tr_n(
+			"Occupancy: {cars}/{capacity} space", "Occupancy: {cars}/{capacity} spaces", capacity
+		)
 	)
 	return text.format({"cars": cars, "capacity": capacity})
 

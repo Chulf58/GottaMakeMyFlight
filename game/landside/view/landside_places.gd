@@ -33,6 +33,9 @@ const LOT_YAW := -PI / 2.0
 const LOT_BARRIER_X := -7.0
 ## The Closed sign floats this high over the gate.
 const SIGN_HEIGHT := 4.0
+const BADGE_LIFT := 1.2
+const MULTI_FALLBACK_TOP := 28.5
+const SURFACE_FALLBACK_TOP := 3.1
 
 @export var landside: LandsideSim
 ## The road carriageway top, unified at y 0.10 across site road, extensions, and aprons.
@@ -44,6 +47,8 @@ var _starter_bays: Array[Node3D] = []
 var _bays := {}
 ## Lot spot -> its drawn car park.
 var _lots := {}
+## Lot spot -> its occupancy badge.
+var _badges := {}
 ## Lot spot -> its Closed sign.
 var _signs := {}
 ## Road extensions, highway portals, and forecourt/boulevard street dressing.
@@ -90,6 +95,16 @@ func refresh() -> void:
 		_match(_bays, spot, landside.curbs_built[spot], _new_bay.bind(definition, spot))
 	for spot in landside.lots_built.size():
 		_match(_lots, spot, landside.lots_built[spot], _new_lot.bind(definition, spot))
+		_match(_badges, spot, landside.lots_built[spot], _new_badge.bind(definition, spot))
+		if landside.lots_built[spot] and _badges.has(spot):
+			var badge: Label3D = _badges[spot]
+			var capacity := definition.lots[spot].slots.size()
+			badge.text = "%d/%d" % [landside.lot_occupied(spot), capacity]
+			badge.position = Vector3(
+				definition.lots[spot].centre.x,
+				lot_top_y(spot) + BADGE_LIFT,
+				definition.lots[spot].centre.z
+			)
 		var closed: bool = landside.lots_built[spot] and landside.lots_closed[spot]
 		_match(_signs, spot, closed, _new_sign.bind(definition, spot))
 	if not _signs.is_empty():
@@ -181,6 +196,36 @@ func closed_sign(spot: int) -> Sprite3D:
 	return _signs.get(spot)
 
 
+## The occupancy badge over lot spot `spot`, or null while unbuilt.
+func occupancy_badge(spot: int) -> Label3D:
+	return _badges.get(spot)
+
+
+## Highest world y across the drawn meshes of lot spot `spot` (or asset fallback).
+func lot_top_y(spot: int) -> float:
+	var lot := _lots.get(spot) as Node3D
+	if lot != null:
+		var top := -INF
+		for mi: MeshInstance3D in lot.find_children("*", "MeshInstance3D", true, false):
+			var box: AABB = (
+				(lot.transform * LandsideViews._to_model(lot, mi)) * mi.get_aabb()
+				if not lot.is_inside_tree()
+				else mi.global_transform * mi.get_aabb()
+			)
+			top = maxf(top, box.end.y)
+		if not is_inf(top):
+			return top
+	if (
+		landside != null
+		and landside.definition != null
+		and spot >= 0
+		and spot < landside.definition.lots.size()
+		and landside.definition.lots[spot].kind == LandsideLotSpot.Kind.MULTI_STOREY
+	):
+		return MULTI_FALLBACK_TOP
+	return SURFACE_FALLBACK_TOP
+
+
 ## Where the starter curb's bays stand: one per pair of berths 6.5 m apart
 ## along the kerb, paired from the berth nearest the curb's stop on, each
 ## origin on the kerb line (BAY_BERTH_Z behind its berths).
@@ -252,6 +297,25 @@ func _new_lot(definition: LandsideDefinition, spot: int) -> Node3D:
 	lot.name = "Lot%d" % spot
 	lot.transform = lot_transform(lot_spot)
 	return lot
+
+
+func _new_badge(definition: LandsideDefinition, spot: int) -> Label3D:
+	var lot_spot := definition.lots[spot]
+	var badge := CaptionFont.apply(Label3D.new())
+	badge.name = "OccupancyBadge%d" % spot
+	badge.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	badge.fixed_size = true
+	badge.no_depth_test = true
+	badge.shaded = false
+	badge.render_priority = 11
+	badge.outline_render_priority = 10
+	badge.font_size = 24
+	badge.outline_size = 6
+	badge.outline_modulate = MarkerIcons.OUTLINE
+	badge.modulate = Color(1.0, 0.96, 0.85)
+	badge.pixel_size = 1.0 / MissMarkers.FALLBACK_HEIGHT
+	badge.position = Vector3(lot_spot.centre.x, lot_top_y(spot) + BADGE_LIFT, lot_spot.centre.z)
+	return badge
 
 
 ## The closed-station sign family (MissMarkers): the grey "!" billboard at one

@@ -22,13 +22,13 @@ const ARRIVALS := {
 	32: [LandsideVehicle.Kind.TAXI, LandsideVehicle.Intent.DROP],
 	33: [LandsideVehicle.Kind.CAR, LandsideVehicle.Intent.DROP],
 	34: [LandsideVehicle.Kind.CAR, LandsideVehicle.Intent.DROP],
-	50: [LandsideVehicle.Kind.CAR, LandsideVehicle.Intent.PARK],
+	410: [LandsideVehicle.Kind.CAR, LandsideVehicle.Intent.PARK],
 }
-## The surface lot (spot 0) closes on this tick, after car 2 turned into it, so
-## the later parking cars go to the multi-storey (spot 1). Extending road_in by
-## +100 m east to the highway portal adds 200 ticks of inbound lead time, so
-## car 2 turns in on tick 252 and car 31 around tick 280.
-const CLOSE_SURFACE_TICK := 260
+## Shortest-walk routing sends initial parking cars (2 and 31) to the closer
+## multi-storey (spot 1). Closing spot 1 on tick 400, after both turned in
+## (~tick 328 and ~357), sends the later parking car (410) to the surface lot
+## (spot 0) so both lots' access, slot paths, slots, and exits are covered.
+const CLOSE_MULTI_STOREY_TICK := 400
 ## The way a parked car faces, by lot spot and slot row x, written out from
 ## starter_landside.tres (not from LandsidePlaces): into the stall, away from
 ## the aisle. The surface lot's aisle runs along x 31.7, the multi-storey's
@@ -77,8 +77,8 @@ func before() -> void:
 			var bookings: Array[int] = [booking]
 			booking += 1
 			_landside.add_vehicle(ARRIVALS[tick][0], ARRIVALS[tick][1], bookings)
-		if tick == CLOSE_SURFACE_TICK:
-			assert_bool(_landside.set_lot_closed(0, true)).is_true()
+		if tick == CLOSE_MULTI_STOREY_TICK:
+			assert_bool(_landside.set_lot_closed(1, true)).is_true()
 		_landside.step(tick, true, rng)
 		for id in _landside.vehicle_ids():
 			var v := _landside.get_vehicle(id)

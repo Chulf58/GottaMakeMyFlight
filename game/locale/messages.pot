@@ -1351,14 +1351,38 @@ msgid "Status: Closed"
 msgstr ""
 
 #: ui/built_item_card.gd
-msgid "Cars: {cars} of {capacity} berth"
-msgid_plural "Cars: {cars} of {capacity} berths"
+msgid "Occupancy: {cars}/{capacity} berth"
+msgid_plural "Occupancy: {cars}/{capacity} berths"
 msgstr[0] ""
 msgstr[1] ""
 
 #: ui/built_item_card.gd
-msgid "Cars: {cars} of {capacity} space"
-msgid_plural "Cars: {cars} of {capacity} spaces"
+msgid "Occupancy: {cars}/{capacity} space"
+msgid_plural "Occupancy: {cars}/{capacity} spaces"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/built_item_card.gd
+msgid "Parking fee: Free"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Parking fee: ${fee}"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Earned today: ${amount}"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Parked today: {count} car"
+msgid_plural "Parked today: {count} cars"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/built_item_card.gd
+msgid "Diverted today: {count} car"
+msgid_plural "Diverted today: {count} cars"
 msgstr[0] ""
 msgstr[1] ""
 
@@ -1640,11 +1664,11 @@ msgstr[0] ""
 msgstr[1] ""
 
 #: build/build_unlocks.gd
-msgid "cafe and bins, security lane, baggage, kiosk, screen, plants, benches, curb bay, medium runway"
+msgid "cafe and bins, security lane, baggage, kiosk, screen, plants, benches, curb bay, surface lot, medium runway"
 msgstr ""
 
 #: build/build_unlocks.gd
-msgid "food and services: bar, restaurant, grab-and-go, info desk, pharmacy, exchange, ATM, lounge, car park, large runway"
+msgid "food and services: bar, restaurant, grab-and-go, info desk, pharmacy, exchange, ATM, lounge, car park gate, large runway"
 msgstr ""
 
 #: build/build_unlocks.gd

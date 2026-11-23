@@ -39,7 +39,7 @@ func test_every_get_out_point_stands_on_the_surface_under_it() -> void:
 			off.append("berth %d %s gap %.3f" % [i, at, gap])
 	assert_array(off).is_empty()
 	# Controls: every berth was checked, and some stood on the sidewalk's top.
-	assert_int(STARTER.berth_count()).is_equal(8)
+	assert_int(STARTER.berth_count()).is_equal(6)
 	assert_int(on_sidewalk).is_greater_equal(2)
 
 

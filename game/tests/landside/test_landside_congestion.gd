@@ -58,9 +58,20 @@ func _delays(released: Dictionary, entered: Dictionary, lead: int) -> Array[int]
 	return out
 
 
+func _three_berths() -> LandsideDefinition:
+	var definition: LandsideDefinition = STARTER.duplicate(true)
+	var berths := definition.curb.berths.duplicate()
+	berths.append(Vector3(-24.75, 0.1, -57.2))
+	definition.curb.berths = berths
+	var get_out := definition.curb.get_out.duplicate()
+	get_out.append(Vector3(-24.75, 0.2, -59.4))
+	definition.curb.get_out = get_out
+	return definition
+
+
 func test_a_jammed_curb_delays_release_by_measured_ticks_against_a_control() -> void:
-	# Three berths, as the curb was before it became two bays.
-	var three := LandsideTestWorld.with_berths(3)
+	# Three berths, as the curb was before it became two berths.
+	var three := _three_berths()
 	var control := _bare_sim(three)
 	var jammed := _bare_sim(three)
 	var lead := control.lead_ticks(LandsideVehicle.Intent.DROP)
@@ -210,3 +221,26 @@ func test_a_full_lot_diverts_the_car_to_the_curb() -> void:
 	# free slot would have let it out.
 	assert_int(events[id] - 999).is_equal(curb_lead)
 	assert_int(sim.wallet.balance).is_equal(slots * LandsideSim.SURFACE_LOT_FEE)
+
+
+func test_two_berth_starter_curb_queues_wave_and_extra_bay_relieves_it() -> void:
+	assert_int(STARTER.curb.berths.size()).is_equal(2)
+	var starter_sim := _bare_sim()
+	var expanded_sim := _bare_sim()
+	assert_bool(expanded_sim.build_curb(0)).is_true()
+	var lead_starter := starter_sim.lead_ticks(LandsideVehicle.Intent.DROP)
+	var lead_expanded := expanded_sim.lead_ticks(LandsideVehicle.Intent.DROP)
+	var rel_starter := {}
+	var rel_expanded := {}
+	for i in 4:
+		var b1: Array[int] = [i + 1]
+		var b2: Array[int] = [i + 1]
+		starter_sim.add_vehicle(LandsideVehicle.Kind.TAXI, LandsideVehicle.Intent.DROP, b1)
+		expanded_sim.add_vehicle(LandsideVehicle.Kind.TAXI, LandsideVehicle.Intent.DROP, b2)
+	_run(starter_sim, 1, 1000, rel_starter)
+	_run(expanded_sim, 1, 1000, rel_expanded)
+	# With 2 starter berths, the 3rd and 4th cars queue for a berth to clear;
+	# adding Curb Bay 0 (4 berths total) lets all 4 cars pull straight into berths.
+	var starter_last: int = rel_starter.values().max() - lead_starter - 3 * SPACING
+	var expanded_last: int = rel_expanded.values().max() - lead_expanded - 3 * SPACING
+	assert_int(starter_last).is_greater(expanded_last)

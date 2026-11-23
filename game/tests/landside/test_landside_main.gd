@@ -168,7 +168,7 @@ func test_a_new_game_starts_with_the_curb_and_no_car_park() -> void:
 	assert_bool(_fresh["has_def"]).is_true()
 	assert_array(_fresh["lots_built"]).is_equal([false, false])
 	assert_array(_fresh["curbs_built"]).is_equal([false, false])
-	assert_int(_fresh["berths"]).is_equal(4)
+	assert_int(_fresh["berths"]).is_equal(2)
 	assert_bool(_fresh["sim_match"]).is_true()
 
 

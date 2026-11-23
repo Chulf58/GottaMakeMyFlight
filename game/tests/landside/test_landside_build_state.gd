@@ -162,15 +162,15 @@ func _berthed(cars: int) -> int:
 
 
 func test_curb_bays_add_berths_to_the_starter_curb() -> void:
-	assert_int(STARTER.berth_count()).is_equal(8)
+	assert_int(STARTER.berth_count()).is_equal(6)
+	assert_int(_berthed(9)).is_equal(2)
+	before_test()
+	assert_bool(_sim.build_curb(0, 300)).is_true()
 	assert_int(_berthed(9)).is_equal(4)
 	before_test()
 	assert_bool(_sim.build_curb(0, 300)).is_true()
-	assert_int(_berthed(9)).is_equal(6)
-	before_test()
-	assert_bool(_sim.build_curb(0, 300)).is_true()
 	assert_bool(_sim.build_curb(1, 300)).is_true()
-	assert_int(_berthed(9)).is_equal(8)
+	assert_int(_berthed(9)).is_equal(6)
 
 
 func test_a_built_bay_moves_the_queue_stop_upstream_of_its_first_berth() -> void:
@@ -178,8 +178,8 @@ func test_a_built_bay_moves_the_queue_stop_upstream_of_its_first_berth() -> void
 	# Bay 0's first berth is at x 7.25 (136181 mm in), bay 1's at x 23.25 (120181
 	# mm). road_in starts inside the east tunnel portal (+100 m lead) and moves over
 	# into the forecourt (100400 + 9031 mm to x 34), then runs on along z -55.
-	assert_int(STARTER.berth_mm(5)).is_equal(136181)
-	assert_int(STARTER.berth_mm(7)).is_equal(120181)
+	assert_int(STARTER.berth_mm(3)).is_equal(136181)
+	assert_int(STARTER.berth_mm(5)).is_equal(120181)
 	assert_bool(_sim.build_curb(0, 300)).is_true()
 	assert_int(_sim.curb_stop_mm()).is_equal(136181 - LandsideSim.BERTH_APPROACH_MM)
 	assert_bool(_sim.build_curb(1, 300)).is_true()
@@ -256,47 +256,94 @@ func test_a_car_past_a_bay_does_not_go_back_to_it() -> void:
 		var v := _sim.get_vehicle(id)
 		if v.lane == LandsideVehicle.Lane.BERTH:
 			in_berths += 1
-			# Starter berths only (0 to 3): bay 0's are behind the diverted cars.
-			assert_int(v.stop).is_less(4)
-	assert_int(in_berths).is_equal(4)
+			# Starter berths only (0 and 1): bay 0's are behind the diverted cars.
+			assert_int(v.stop).is_less(2)
+	assert_int(in_berths).is_equal(2)
 
 
 func test_lead_ticks_follow_the_lot_a_new_car_will_take() -> void:
 	assert_bool(_sim.build_lot(SURFACE, 1200)).is_true()
 	assert_bool(_sim.build_lot(MULTI_STOREY, 5000)).is_true()
-	var surface_lead := _sim.lead_ticks(LandsideVehicle.Intent.PARK)
-	var multi := STARTER.lots[MULTI_STOREY]
-	var access_mm := LandsideDefinition.length_mm(multi.access)
+	var multi_lead := _sim.lead_ticks(LandsideVehicle.Intent.PARK)
+	var surface := STARTER.lots[SURFACE]
+	var access_mm := LandsideDefinition.length_mm(surface.access)
 	# The drive includes pulling in along slot 0's path, from the gate to the
 	# stall: the passengers get out once the car stands there.
-	var multi_lead := (
-		ceili(float(multi.branch_mm) / LandsideSim.SPEED_MM)
+	var surface_lead := (
+		ceili(float(surface.branch_mm) / LandsideSim.SPEED_MM)
 		+ ceili(float(access_mm) / LandsideSim.SPEED_MM)
-		+ ceili(float(_sim.paths.slot_stand[MULTI_STOREY][0] - access_mm) / LandsideSim.SPEED_MM)
+		+ ceili(float(_sim.paths.slot_stand[SURFACE][0] - access_mm) / LandsideSim.SPEED_MM)
 	)
-	assert_int(multi_lead).is_not_equal(surface_lead)
-	# Fill the surface lot, which a car reaches first.
-	for i in 12:
+	assert_int(surface_lead).is_not_equal(multi_lead)
+	# Fill the multi-storey first, because its walk to the entrance is shorter.
+	for i in 31:
 		_car(LandsideVehicle.Intent.PARK)
-	_run(1, 1000)
-	assert_int(_sim.free_slots(SURFACE)).is_equal(0)
-	assert_int(_sim.lead_ticks(LandsideVehicle.Intent.PARK)).is_equal(multi_lead)
+	_run(1, 2200)
+	assert_int(_sim.free_slots(MULTI_STOREY)).is_equal(0)
+	assert_int(_sim.free_slots(SURFACE)).is_equal(12)
+	assert_int(_sim.lead_ticks(LandsideVehicle.Intent.PARK)).is_equal(surface_lead)
 	# A car handed over that long before its unload tick gets out on it.
 	var id := _car(LandsideVehicle.Intent.PARK)
 	var released := -1
-	for t in range(1000, 2000):
+	for t in range(2200, 3200):
 		for event in _sim.step(t, true, _rng):
 			if event["vehicle"] == id:
 				released = t
 		if released >= 0:
 			break
-	assert_int(_sim.get_vehicle(id).lot).is_equal(MULTI_STOREY)
-	assert_int(released - 999).is_equal(multi_lead)
+	assert_int(_sim.get_vehicle(id).lot).is_equal(SURFACE)
+	assert_int(released - 2199).is_equal(surface_lead)
+
+
+func test_shortest_walk_routing_picks_closer_multi_storey_over_upstream_surface_lot() -> void:
+	assert_bool(_sim.build_lot(SURFACE, 1200)).is_true()
+	assert_bool(_sim.build_lot(MULTI_STOREY, 5000)).is_true()
+	var grid := BuildGrid.new(LandsideTestWorld.SITE.grid_size, LandsideTestWorld.SITE.grid_origin)
+	ReferenceTerminal.build(grid, LandsideTestWorld.SITE.starter_offset)
+	_sim.grid = grid
+	var parked: Array[int] = []
+	_sim.parked.connect(func(_id: int, lot: int) -> void: parked.append(lot))
+	for i in 5:
+		_car(LandsideVehicle.Intent.PARK)
+	_run(1, 1500)
+	assert_int(parked.size()).is_equal(5)
+	assert_int(parked.count(MULTI_STOREY)).is_equal(5)
+	assert_int(_sim.free_slots(SURFACE)).is_equal(12)
+
+
+func test_shortest_walk_routing_follows_built_entrance_door() -> void:
+	assert_bool(_sim.build_lot(SURFACE, 1200)).is_true()
+	assert_bool(_sim.build_lot(MULTI_STOREY, 5000)).is_true()
+	# An entrance door right opposite the surface lot crossing (x ~ 25, z ~ -61).
+	var grid := BuildGrid.new(Vector2i(64, 64), Vector3(0.0, 0.22, -120.0))
+	var cell := Vector2i(25, 58)
+	var edits: Array[BuildEdit] = []
+	for y in range(56, 59):
+		for x in range(24, 27):
+			edits.append(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
+	for x in range(24, 27):
+		edits.append(BuildEdit.place_wall(Vector2i(x, 56), BuildGrid.Side.NORTH))
+		if x != cell.x:
+			edits.append(BuildEdit.place_wall(Vector2i(x, 58), BuildGrid.Side.SOUTH))
+	for y in range(56, 59):
+		edits.append(BuildEdit.place_wall(Vector2i(24, y), BuildGrid.Side.WEST))
+		edits.append(BuildEdit.place_wall(Vector2i(26, y), BuildGrid.Side.EAST))
+	edits.append(BuildEdit.place_object(&"entrance_door", cell, 2))
+	for res in grid.apply_batch(edits):
+		assert_bool(res.ok).is_true()
+	_sim.grid = grid
+	var parked: Array[int] = []
+	_sim.parked.connect(func(_id: int, lot: int) -> void: parked.append(lot))
+	for i in 3:
+		_car(LandsideVehicle.Intent.PARK)
+	_run(1, 1500)
+	assert_int(parked.size()).is_equal(3)
+	assert_int(parked.count(SURFACE)).is_equal(3)
 
 
 func test_a_curb_bay_with_a_car_in_it_cannot_be_removed() -> void:
 	assert_bool(_sim.build_curb(0, 300)).is_true()
-	assert_int(_berthed(6)).is_equal(6)
+	assert_int(_berthed(4)).is_equal(4)
 	assert_int(_sim.curb_cars(0)).is_equal(2)
 	assert_bool(_sim.remove_curb(0)).is_false()
 	assert_bool(_sim.curbs_built[0]).is_true()
@@ -337,7 +384,7 @@ func test_built_closed_and_paid_state_survives_a_save() -> void:
 
 func test_a_car_in_a_bay_berth_loads_with_the_bay_built() -> void:
 	assert_bool(_sim.build_curb(0, 300)).is_true()
-	assert_int(_berthed(6)).is_equal(6)
+	assert_int(_berthed(4)).is_equal(4)
 	# The passengers get out (no booking is left to save), the cars still dwell.
 	_run(800, 830)
 	assert_int(_sim.curb_cars(0)).is_equal(2)
