@@ -41,6 +41,8 @@ func before() -> void:
 		"flights": flights.flight_ids(),
 		"opened_tick": flights.opened_tick,
 		"departures": DeparturesBoard.lines_for(flights, clock.tick),
+		"board_shown":
+		(hud.find_child("DeparturesBoard", true, false) as DeparturesBoard).is_shown(),
 		"clock": (hud.find_child("Clock", true, false) as Label).text,
 		"hint": panel.hint_text(),
 	}
@@ -49,14 +51,10 @@ func before() -> void:
 	_opened["clock"] = (hud.find_child("Clock", true, false) as Label).text
 
 
-## Today's rows on the departures board, one per line. Changed for HUD 7/7
-## (board 3bd42402): DepartureList.text(), the old flight panel's text, had no
-## caller left and was removed, so the departures are read where they are drawn.
+## Today's rows on the departures board, one per line.
 static func _today_rows(flights: FlightSim, tick: int) -> String:
 	var rows := PackedStringArray()
 	for entry in DeparturesBoard.entries_for(flights, tick):
-		if entry["text"] == DeparturesBoard.TOMORROW_HEADING:
-			break
 		if entry["kind"] == "row":
 			rows.append(entry["text"])
 	return "\n".join(rows)
@@ -103,6 +101,8 @@ func _open(clock: SimClock, flights: FlightSim, hud: PassengerHud, panel: StaffP
 	_opened["departures"] = _today_rows(flights, clock.tick)
 	hud.refresh()
 	var board := hud.find_child("DeparturesBoard", true, false) as DeparturesBoard
+	_opened["board_shown"] = board.is_shown()
+	board.set_shown(true)
 	_opened["board"] = board.shown_lines()
 	_opened["pending"] = (_main.get_node("PassengerSim") as PassengerSim).pending_spawns()
 
@@ -119,6 +119,7 @@ func test_a_new_game_is_closed_with_no_contract_and_no_flight() -> void:
 	assert_array(_boot["contracts"]).is_empty()
 	assert_array(_boot["flights"]).is_empty()
 	assert_array(Array(_boot["departures"])).is_equal([DeparturesBoard.EMPTY_TEXT])
+	assert_bool(_boot["board_shown"]).is_false()
 	assert_str(_boot["clock"]).is_equal("Day 1  06:00")
 
 
@@ -168,6 +169,7 @@ func test_staffed_it_opens_on_the_next_tick_with_the_starter_contract() -> void:
 func test_the_flight_panel_shows_the_clock_and_no_flight_id() -> void:
 	var texts: PackedStringArray = _opened["panel_texts"]
 	assert_array(texts).is_equal([_opened["clock"]])
+	assert_bool(_opened["board_shown"]).is_false()
 	assert_array(_opened["board"]).contains([_opened["departures"]])
 	for text in texts:
 		assert_str(text).not_contains("Time ")

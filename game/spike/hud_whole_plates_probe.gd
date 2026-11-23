@@ -357,18 +357,18 @@ func _open_with_flights() -> void:
 	)
 	_reraise()
 	await _frames(20)
+	(_main.find_child("DeparturesBoard", true, false) as DeparturesBoard).set_shown(true)
+	await _frames(4)
 
 
 func _departures_subjects() -> Dictionary:
 	var board := _main.find_child("DeparturesBoard", true, false) as DeparturesBoard
 	var lines := board.shown_lines()
 	print("PLATE departures lines=%s" % [lines])
-	# Today's rows only: the board's entries up to its Tomorrow heading.
+	# Today's rows only.
 	var rows := 0
 	var clock: SimClock = _main.get_node("SimClock")
 	for entry in DeparturesBoard.entries_for(_main.get_node("FlightSim"), clock.tick):
-		if entry["text"] == DeparturesBoard.TOMORROW_HEADING:
-			break
 		if entry["kind"] == "row":
 			rows += 1
 	print("PLATE departures today_rows=%d" % rows)
