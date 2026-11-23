@@ -343,12 +343,16 @@ func _of_type(type: String) -> Array[Dictionary]:
 	return out
 
 
-## Ticks the paused clock by hand up to `tick`.
+## Ticks the paused clock by hand up to `tick`, without quiet-night fast-forward
+## overshooting the target tick.
 func _run_to(tick: int) -> void:
+	var saved := _clock.fast_forward_source
+	_clock.fast_forward_source = Callable()
 	_clock.set_paused(false)
 	while _clock.tick < tick:
 		_clock.advance(SimClock.STEP)
 	_clock.set_paused(true)
+	_clock.fast_forward_source = saved
 
 
 ## Draws the views for this tick, as the frame would, and runs the checks.

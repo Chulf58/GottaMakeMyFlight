@@ -275,3 +275,86 @@ func test_mixed_small_and_medium_gate_ordering_across_timetable_snapshot_and_spu
 		}
 	}
 	assert_str(SpurMoves.refusal(clash_world).get("reason", "")).is_equal(SpurMoves.GATE_MEETS)
+
+
+func test_off_lane_north_spare_stand_is_never_synthesized_or_accepted() -> void:
+	var f_stand: Dictionary = FlightGround.fallback("F")["stand"]
+	var east_off := f_stand.duplicate()
+	east_off["x"] = float(f_stand["x"]) + FlightGround.FALLBACK_SPACING_M
+	assert_str(FlightContract.assignment_problem("G", east_off)).contains("does not join")
+	var a_stand: Dictionary = FlightGround.fallback("A")["stand"]
+	var west_off := a_stand.duplicate()
+	west_off["x"] = float(a_stand["x"]) - FlightGround.FALLBACK_SPACING_M
+	assert_str(FlightContract.assignment_problem("H", west_off)).contains("does not join")
+
+	var sim_f := auto_free(FlightSim.new()) as FlightSim
+	sim_f.gate_source = func() -> Array[String]: return ["F"] as Array[String]
+	sim_f.stand_source = func() -> Dictionary: return {"F": FlightGround.fallback("F")}
+	sim_f.open_airport()
+	var with_spare := sim_f._with_spare_gate(sim_f.gate_grounds(), PlaneClasses.SMALL)
+	assert_int(with_spare.size()).is_equal(2)
+	var spare_stand: Dictionary = with_spare["A"]["stand"]
+	var joins := TaxiRoutes.joins_lane(StandPlacement.lane_join(spare_stand), FlightGround.layout())
+	assert_bool(joins).is_true()
+	assert_float(float(spare_stand["x"])).is_equal(
+		float(f_stand["x"]) - FlightGround.FALLBACK_SPACING_M
+	)
+
+	var sim_both := auto_free(FlightSim.new()) as FlightSim
+	sim_both.gate_source = func() -> Array[String]: return ["A", "F"] as Array[String]
+	sim_both.stand_source = func() -> Dictionary:
+		return {"A": FlightGround.fallback("A"), "F": FlightGround.fallback("F")}
+	sim_both.open_airport()
+	var no_spare := sim_both._with_spare_gate(sim_both.gate_grounds(), PlaneClasses.SMALL)
+	assert_int(no_spare.size()).is_equal(2)
+
+	var sim_bad := auto_free(FlightSim.new()) as FlightSim
+	sim_bad.gate_source = func() -> Array[String]: return ["G"] as Array[String]
+	sim_bad.stand_source = func() -> Dictionary:
+		return {"G": {"stand": east_off, "max_class": PlaneClasses.LARGE}}
+	sim_bad.open_airport()
+	assert_str(sim_bad.accept_problem(_small_terms("BAD", 600))).contains("does not join")
+	assert_bool(sim_bad.accept_contract(_small_terms("BAD", 600))).is_false()
+
+	var west_stand := StandPlacement.make(
+		3, -62.0, -150.0, StandPlacement.WEST, -StandPlacement.SIDE_LANE_X
+	)
+	var sim_west := auto_free(FlightSim.new()) as FlightSim
+	sim_west.gate_source = func() -> Array[String]: return ["W"] as Array[String]
+	sim_west.stand_source = func() -> Dictionary:
+		return {"W": {"stand": west_stand, "max_class": PlaneClasses.LARGE}}
+	sim_west.open_airport()
+	var west_spare := sim_west._with_spare_gate(sim_west.gate_grounds(), PlaneClasses.SMALL)
+	assert_int(west_spare.size()).is_equal(2)
+	var west_spare_stand: Dictionary = west_spare["A"]["stand"]
+	assert_str(StandPlacement.side_of(west_spare_stand)).is_equal(StandPlacement.NORTH)
+	assert_dict(west_spare_stand).is_equal(FlightGround.scene_stand())
+
+	var sim_mixed := auto_free(FlightSim.new()) as FlightSim
+	sim_mixed.gate_source = func() -> Array[String]: return ["C", "W"] as Array[String]
+	sim_mixed.stand_source = func() -> Dictionary:
+		return {
+			"C": FlightGround.fallback("C"),
+			"W": {"stand": west_stand, "max_class": PlaneClasses.LARGE},
+		}
+	sim_mixed.open_airport()
+	var mixed_spare := sim_mixed._with_spare_gate(sim_mixed.gate_grounds(), PlaneClasses.SMALL)
+	assert_int(mixed_spare.size()).is_equal(3)
+	var mixed_stand: Dictionary = mixed_spare["A"]["stand"]
+	assert_str(StandPlacement.side_of(mixed_stand)).is_equal(StandPlacement.NORTH)
+	assert_float(float(mixed_stand["x"])).is_equal(
+		float(FlightGround.fallback("C")["stand"]["x"]) + FlightGround.FALLBACK_SPACING_M
+	)
+
+	var overlap_west := StandPlacement.make(
+		4, -10.0, -100.0, StandPlacement.WEST, -StandPlacement.SIDE_LANE_X
+	)
+	var sim_overlap := auto_free(FlightSim.new()) as FlightSim
+	sim_overlap.gate_source = func() -> Array[String]: return ["W"] as Array[String]
+	sim_overlap.stand_source = func() -> Dictionary:
+		return {"W": {"stand": overlap_west, "max_class": PlaneClasses.LARGE}}
+	sim_overlap.open_airport()
+	var no_overlap_spare := sim_overlap._with_spare_gate(
+		sim_overlap.gate_grounds(), PlaneClasses.SMALL
+	)
+	assert_int(no_overlap_spare.size()).is_equal(1)

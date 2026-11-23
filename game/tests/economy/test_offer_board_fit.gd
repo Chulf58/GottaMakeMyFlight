@@ -16,11 +16,12 @@ const FULL_DAY := [420, 555, 690, 825, 960, 1095, 1230]
 ## 16:40 (test_golden_fitted_departures_on_a_busy_gate). Seed 2024 was
 ## measured again for trait seed version 3: its day 0 N1 is now an Odd hours
 ## offer, which fits only at 06:00 or 22:00. Remeasured for the compressed
-## small-plane gate hold (131 min at BASE, [AT_STAND - lead_in, DEPARTED)).
+## small-plane gate hold (131 min at BASE, [AT_STAND - lead_in, DEPARTED)) and
+## after main.tscn's Stand/PushbackEnd shifted 14 m south.
 const GOLDEN_BUSY := {
-	1: [795, 1200, 525],
-	42: [855, 1245, 690],
-	2024: [360, 1215, 555],
+	1: [795, 1200, 540],
+	42: [855, 1245, 705],
+	2024: [360, 1215, 570],
 	7_654_321: [810, 1200, 480],
 }
 

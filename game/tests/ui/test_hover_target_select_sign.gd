@@ -42,6 +42,7 @@ var _cars: LandsideViews
 var _menu: GameMenu
 var _desk := 0
 var _home := Vector3.ZERO
+var _passenger := 0
 var _car := 0
 var _room := 0
 
@@ -246,13 +247,17 @@ func _esc() -> void:
 	await await_idle_frame()
 
 
+## Follows one passenger; the first call spawns it and later calls reuse it,
+## keeping the test under the outside entrance line's capacity while desks stay closed.
 func _follow_passenger() -> void:
-	var id := _sim.spawn_now(FLIGHT_ID)
-	_views.sync()
-	_views.selected_id = id
+	if _passenger == 0 or _sim.get_passenger(_passenger) == null:
+		_passenger = _sim.spawn_now(FLIGHT_ID)
+		_views.sync()
+	assert_int(_passenger).is_greater(0)
+	_views.selected_id = _passenger
 	_rig.follow(_views.follow_anchor)
 	_hud.refresh()
-	assert_int(_views.selected_id).is_equal(id)
+	assert_int(_views.selected_id).is_equal(_passenger)
 	assert_bool(_rig.is_following()).is_true()
 
 

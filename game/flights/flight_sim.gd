@@ -1359,12 +1359,13 @@ func _assignment(
 
 ## `grounds` with one spare gate added: the first free letter, on the stand
 ## spare_stand_source gives for `plane_class` (none: grounds as they are), or
-## with no source FlightGround.FALLBACK_SPACING_M east of the eastmost stand,
-## taking any class. The run that ignores gate overlap tries it as well, so a
-## flight that meets only the planes parked at today's stands can still be told
-## another gate would help; the runway and the lane it shares stay booked as
-## they are. Not guaranteed: that the player can afford the gate, or place an
-## exit door at the source's stand.
+## with no source FlightGround.FALLBACK_SPACING_M east of the eastmost stand (or
+## west of the westmost when east leaves the taxi lane, omitted if neither joins
+## cleanly), taking any class. The run that ignores gate overlap tries it as
+## well, so a flight that meets only the planes parked at today's stands can
+## still be told another gate would help; the runway and the lane it shares stay
+## booked as they are. Not guaranteed: that the player can afford the gate, or
+## place an exit door at the source's stand.
 func _with_spare_gate(grounds: Dictionary, plane_class: String) -> Dictionary:
 	var spare: Dictionary = {}
 	var max_class := PlaneClasses.LARGE
@@ -1372,12 +1373,33 @@ func _with_spare_gate(grounds: Dictionary, plane_class: String) -> Dictionary:
 		spare = spare_stand_source.call(plane_class)
 		max_class = plane_class
 	else:
+		var eastmost := {}
+		var westmost := {}
 		for gate_id: String in grounds:
 			var stand: Dictionary = grounds[gate_id]["stand"]
-			if spare.is_empty() or float(stand["x"]) > float(spare["x"]):
-				spare = stand.duplicate()
-		if not spare.is_empty():
-			spare["x"] = float(spare["x"]) + FlightGround.FALLBACK_SPACING_M
+			if StandPlacement.side_of(stand) != StandPlacement.NORTH:
+				continue
+			if eastmost.is_empty() or float(stand["x"]) > float(eastmost["x"]):
+				eastmost = stand
+			if westmost.is_empty() or float(stand["x"]) < float(westmost["x"]):
+				westmost = stand
+		var candidates: Array[Dictionary] = []
+		if not eastmost.is_empty():
+			var east_cand := eastmost.duplicate()
+			east_cand["x"] = float(eastmost["x"]) + FlightGround.FALLBACK_SPACING_M
+			candidates.append(east_cand)
+			var west_cand := westmost.duplicate()
+			west_cand["x"] = float(westmost["x"]) - FlightGround.FALLBACK_SPACING_M
+			candidates.append(west_cand)
+		else:
+			candidates.append(FlightGround.scene_stand())
+		for cand in candidates:
+			if (
+				FlightContract.assignment_problem("", cand) == ""
+				and not _overlaps_any_stand(cand, grounds)
+			):
+				spare = cand
+				break
 	var out := grounds.duplicate()
 	if spare.is_empty():
 		return out
@@ -1386,6 +1408,13 @@ func _with_spare_gate(grounds: Dictionary, plane_class: String) -> Dictionary:
 			out[letter] = {"stand": spare, "max_class": max_class}
 			break
 	return out
+
+
+static func _overlaps_any_stand(cand: Dictionary, grounds: Dictionary) -> bool:
+	for gate_id: String in grounds:
+		if GateDesks.stands_overlap(cand, grounds[gate_id]["stand"]):
+			return true
+	return false
 
 
 ## An _assignment() result.

@@ -141,12 +141,23 @@ static func is_charter(data: Dictionary) -> bool:
 
 
 ## Why no contract can be assigned to gate `gate_id` on StandPlacement stand
-## `stand`: its routes need a taxi pair past TaxiTimes' bounds (an issue after
-## the first state, or a flight in the quiet night); "" when they do not. Every
-## path that assigns a gate (accept, trials, reassign, moves) asks it first and
-## refuses with these words, so assigned() never stores a pair that is not
-## valid.
+## `stand`: its join does not reach the taxi lane or its routes need a taxi
+## pair past TaxiTimes' bounds (an issue after the first state, or a flight in
+## the quiet night); "" when they do not. Every path that assigns a gate
+## (accept, trials, reassign, moves) asks it first and refuses with these
+## words, so assigned() never stores a stand or pair that is not valid.
 static func assignment_problem(gate_id: String, stand: Dictionary) -> String:
+	var layout := FlightGround.layout()
+	match StandPlacement.side_of(stand):
+		StandPlacement.WEST:
+			layout["west_x"] = minf(layout["west_x"], StandPlacement.lane_x_of(stand))
+		StandPlacement.EAST:
+			layout["east_x"] = maxf(layout["east_x"], StandPlacement.lane_x_of(stand))
+	if (
+		not StandPlacement.reaches_lane(stand)
+		or not TaxiRoutes.joins_lane(StandPlacement.lane_join(stand), layout)
+	):
+		return "gate %s's stand does not join the taxi lane" % gate_id
 	var pair := TaxiTimes.for_stand(stand)
 	if TaxiTimes.problem(pair) == "":
 		return ""

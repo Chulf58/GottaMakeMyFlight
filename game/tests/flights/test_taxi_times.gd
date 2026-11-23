@@ -70,9 +70,10 @@ func test_every_stand_of_the_first_site_keeps_1000_and_920() -> void:
 
 
 ## Gate A of the test fallbacks stands 84 m west of the scene's stand, past the
-## first site: its route in is 457 m, so it taxis in 20 ticks longer.
+## first site: its route in is 471 m (after main.tscn Stand moved 14 m south),
+## so it taxis in 60 ticks longer.
 func test_a_north_stand_past_the_first_site_taxis_longer() -> void:
-	assert_array(TaxiTimes.for_stand(FlightGround.fallback("A")["stand"])).is_equal([1020, 920])
+	assert_array(TaxiTimes.for_stand(FlightGround.fallback("A")["stand"])).is_equal([1060, 920])
 	assert_array(TaxiTimes.for_stand(FlightGround.fallback("B")["stand"])).is_equal([1000, 920])
 
 
