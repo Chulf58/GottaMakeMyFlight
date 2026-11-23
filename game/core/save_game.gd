@@ -123,9 +123,11 @@ signal loaded(ok: bool)
 ## (FlightSim v11, OfferBoard v7); version 27 saves are refused (no migration).
 ## 29: overnight off-shift staff states (StaffSim v8); version 28 saves are
 ## refused (no migration).
-## 30: one-off same-day charters (FlightSim v12, OfferBoard v8); version 29
+## 30: landside highway portal endpoints shifted +100 m to ±140.4 m
+## (LandsideSnapshot v11); version 29 saves are refused (no migration).
+## 31: one-off same-day charters (FlightSim v12, OfferBoard v8); version 30
 ## saves are refused (no migration).
-const SAVE_VERSION := 30
+const SAVE_VERSION := 31
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"

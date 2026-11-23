@@ -10,12 +10,20 @@ extends GdUnitTestSuite
 ## (OutsideWalks._default_departure) and an entrance has no road walk.
 
 const SITE := preload("res://build/terminal_site.tres")
-## The terminal below stands where the starter does, moved by the site's
-## starter_offset, so the plane stand is just north of its exit.
-var _entrance := Vector2i(16, 29) + SITE.starter_offset
-var _exit := Vector2i(16, 0) + SITE.starter_offset
+const TEST_OFFSET := Vector2i(85, 110)
+## The 30-row terminal below sits north of the road on the site grid.
+var _entrance := Vector2i(16, 29) + TEST_OFFSET
+var _exit := Vector2i(16, 0) + TEST_OFFSET
 
 var _world: PassengerTestWorld
+var _site: SiteDefinition
+
+
+func _test_site() -> SiteDefinition:
+	if _site == null:
+		_site = SITE.duplicate() as SiteDefinition
+		_site.starter_offset = TEST_OFFSET
+	return _site
 
 
 func before() -> void:
@@ -41,7 +49,7 @@ func after_test() -> void:
 ## stand), walled in.
 func _site_world() -> PassengerTestWorld:
 	var grid := BuildGrid.new(SITE.grid_size, SITE.grid_origin)
-	var off := SITE.starter_offset
+	var off := TEST_OFFSET
 	for y in range(0, 30):
 		for x in range(12, 21):
 			grid.apply(BuildEdit.paint_floor(Vector2i(x, y) + off, BuildGrid.FLOOR_TILE, 1))
@@ -52,7 +60,7 @@ func _site_world() -> PassengerTestWorld:
 	# Walls close the floor in, the doors filling their gaps (TerminalEnclosure).
 	EnclosureKit.close_floor(grid)
 	var world := PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
-	world.sim.site = SITE
+	world.sim.site = _test_site()
 	return world
 
 

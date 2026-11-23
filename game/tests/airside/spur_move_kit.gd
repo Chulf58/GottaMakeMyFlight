@@ -8,6 +8,9 @@ extends RefCounted
 ## spur at x -124 (SiteGrid.land).
 
 const SITE := preload("res://build/terminal_site.tres")
+## Fixed offset north of the road so a west gate on the shell keeps medium-plane
+## swing clearance south of its sill.
+const SHELL_OFFSET := Vector2i(85, 110)
 const WEST_EXIT := Vector2i(10, 6)
 const WEST_DESK := Vector2i(12, 5)
 ## A grid cell on the west edge far south of every stand and way out: building
@@ -25,7 +28,7 @@ const MINUTE := 12 * 60
 ## The starter shell on a fresh site grid, built once per file.
 static func base_grid() -> SiteGrid:
 	var grid := SiteGrid.new(SITE)
-	if not StarterShell.place(grid, SITE.starter_offset):
+	if not StarterShell.place(grid, SHELL_OFFSET):
 		push_error("SpurMoveKit: the starter shell did not place")
 	return grid
 
@@ -36,15 +39,13 @@ static func west_gate(grid: SiteGrid, sim: FlightSim, gates: GateDesks) -> int:
 	sim.open_airport()
 	gates.bind(grid, sim)
 	grid.guard = gates.edit_problem
-	var at := WEST_EXIT + SITE.starter_offset
+	var at := WEST_EXIT + SHELL_OFFSET
 	if not grid.apply(BuildEdit.remove_wall(at, BuildGrid.Side.WEST)).ok:
 		return 0
 	var exit := grid.apply(BuildEdit.place_object(&"exit_door", at, 3))
 	if not exit.ok:
 		return 0
-	if not (
-		grid.apply(BuildEdit.place_object(GateDesks.DESK, WEST_DESK + SITE.starter_offset, 0)).ok
-	):
+	if not (grid.apply(BuildEdit.place_object(GateDesks.DESK, WEST_DESK + SHELL_OFFSET, 0)).ok):
 		return 0
 	return exit.object_id if gates.gate_ids() == ["A"] else 0
 
@@ -56,11 +57,11 @@ static func east_gate(grid: SiteGrid, sim: FlightSim, gates: GateDesks) -> int:
 	sim.open_airport()
 	gates.bind(grid, sim)
 	grid.guard = gates.edit_problem
-	var at := EAST_EXIT + SITE.starter_offset
+	var at := EAST_EXIT + SHELL_OFFSET
 	if not grid.apply(BuildEdit.remove_wall(at, BuildGrid.Side.EAST)).ok:
 		return 0
 	var exit := grid.apply(BuildEdit.place_object(&"exit_door", at, 1))
-	var desk := ReferenceTerminal.GATE_DESK_CELL + SITE.starter_offset
+	var desk := ReferenceTerminal.GATE_DESK_CELL + SHELL_OFFSET
 	if not exit.ok or not grid.apply(BuildEdit.place_object(GateDesks.DESK, desk, 0)).ok:
 		return 0
 	return exit.object_id if gates.gate_ids() == ["A"] else 0

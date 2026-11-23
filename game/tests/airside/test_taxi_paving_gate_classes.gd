@@ -9,11 +9,9 @@ extends GdUnitTestSuite
 
 const MAIN_SCENE := "res://main/main.tscn"
 const SITE := preload("res://build/terminal_site.tres")
-## The side land's 85 grid columns west of the first site (SiteDefinition):
-## the cells below are written in the first site's columns and moved by it.
-const SIDE_LAND := Vector2i(85, 0)
 const EAST := Vector2i(44, 0)
-const DESK_WEST := Vector2i(19, 115) + SIDE_LAND
+
+var _desk_west := ReferenceTerminal.GATE_DESK_CELL + SITE.starter_offset
 
 var _grid: SiteGrid
 var _gates: GateDesks
@@ -56,7 +54,7 @@ func before_test() -> void:
 	_apron.airside = _airside
 	_apron.bind(_grid, SITE, flights, _gates)
 	_grid.guard = _apron.edit_problem
-	for at in [DESK_WEST, DESK_WEST + EAST]:
+	for at in [_desk_west, _desk_west + EAST]:
 		assert_bool(_grid.apply(BuildEdit.place_object(GateDesks.DESK, at, 0)).ok).is_true()
 
 

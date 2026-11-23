@@ -95,13 +95,16 @@ func test_a_party_in_the_car_park_steps_out_one_at_a_time() -> void:
 
 func test_the_party_stays_aboard_until_its_turn_and_no_entrance_lets_nobody_out() -> void:
 	var sim := _bare()
-	var out := _releases(sim, LandsideVehicle.Kind.TAXI, LandsideVehicle.Intent.DROP, [1, 2], 400)
+	var open_at := 100 + sim.lead_ticks(LandsideVehicle.Intent.DROP) + 100
+	var out := _releases(
+		sim, LandsideVehicle.Kind.TAXI, LandsideVehicle.Intent.DROP, [1, 2], open_at
+	)
 	var ticks: Array = out.keys()
 	ticks.sort()
 	print("late-entrance releases: %s" % [out])
 	# Nobody got out before the entrance opened; then one at once, one a gap later.
-	assert_int(ticks[0]).is_equal(400)
-	assert_int(ticks[1]).is_equal(400 + LandsideSim.RELEASE_GAP_TICKS)
+	assert_int(ticks[0]).is_equal(open_at)
+	assert_int(ticks[1]).is_equal(open_at + LandsideSim.RELEASE_GAP_TICKS)
 
 
 func test_the_vehicle_waits_for_its_last_passenger_before_it_leaves() -> void:

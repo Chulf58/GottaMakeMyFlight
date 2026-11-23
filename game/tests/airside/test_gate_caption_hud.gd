@@ -15,12 +15,10 @@ extends GdUnitTestSuite
 ## stands in for the top row.
 
 const SITE := preload("res://build/terminal_site.tres")
-## The side land's 85 grid columns west of the first site (SiteDefinition):
-## the cells below are written in the first site's columns and moved by it.
-const SIDE_LAND := Vector2i(85, 0)
 const EAST := Vector2i(19, 0)
-const DESK := Vector2i(19, 115) + SIDE_LAND
-const EXIT := Vector2i(20, 112) + SIDE_LAND
+
+var _desk := ReferenceTerminal.GATE_DESK_CELL + SITE.starter_offset
+var _exit := ReferenceTerminal.EXIT_CELL + SITE.starter_offset
 
 var _grid: SiteGrid
 var _flights: FlightSim
@@ -46,9 +44,12 @@ func before() -> void:
 	_gates.bind(_grid, _flights)
 	_grid.guard = _gates.edit_problem
 	for copy in [0, 1, 2]:
-		var desk := _grid.apply(BuildEdit.place_object(GateDesks.DESK, DESK + EAST * copy, 0))
+		var desk := _grid.apply(BuildEdit.place_object(GateDesks.DESK, _desk + EAST * copy, 0))
 		assert_bool(desk.ok).is_true()
-	assert_bool(_grid.apply(BuildEdit.remove_object(_grid.object_at(EXIT + EAST * 2))).ok).is_true()
+	(
+		assert_bool(_grid.apply(BuildEdit.remove_object(_grid.object_at(_exit + EAST * 2))).ok)
+		. is_true()
+	)
 	_port = SubViewport.new()
 	_port.size = Vector2i(1920, 1080)
 	add_child(_port)
@@ -73,7 +74,7 @@ func after() -> void:
 func before_test() -> void:
 	_view.markers = null
 	_hud.visible = true
-	_look_down(DESK, 40.0)
+	_look_down(_desk, 40.0)
 
 
 ## The camera `height` metres straight over `cell`, north up.
@@ -126,7 +127,7 @@ func test_a_caption_clear_of_the_hud_stays_on_its_desk() -> void:
 
 
 func test_two_nearby_captions_under_the_top_row_end_clear_of_it_and_of_each_other() -> void:
-	_look_down(DESK + EAST / 2, 215.0)
+	_look_down(_desk + EAST / 2, 215.0)
 	var unplaced := _unplaced()
 	var strip := _cover_down_to(maxf(unplaced[0].get_center().y, unplaced[1].get_center().y))
 	var view_size := Vector2(1920.0, 1080.0)
@@ -145,7 +146,7 @@ func test_two_nearby_captions_under_the_top_row_end_clear_of_it_and_of_each_othe
 
 
 func test_a_caption_under_the_top_row_slides_clear_of_an_unlinked_sign() -> void:
-	_look_down(DESK + EAST * 3 / 2, 215.0)
+	_look_down(_desk + EAST * 3 / 2, 215.0)
 	var unplaced := _unplaced()[1]
 	var strip := _cover_down_to(unplaced.position.y + 18.0)
 	var view_size := Vector2(1920.0, 1080.0)
@@ -189,7 +190,7 @@ func test_a_caption_covered_with_no_clear_spot_hides_instead_of_overlapping() ->
 
 
 func test_a_covered_caption_with_only_an_occupied_spot_nearby_hides_instead_of_stacking() -> void:
-	_look_down(DESK + EAST / 2, 120.0)
+	_look_down(_desk + EAST / 2, 120.0)
 	var homes := _unplaced()
 	assert_int(homes.size()).is_equal(2)
 	# Keep only Gate A's padded rect uncovered; cover the rest of the screen so

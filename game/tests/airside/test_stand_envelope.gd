@@ -9,8 +9,8 @@ extends GdUnitTestSuite
 ## into the larger ones.
 ##
 ## The starter shell's exit (ReferenceTerminal.EXIT_CELL at the starter offset,
-## cell (105, 112)) on the airport site: its stand point is
-## at x -26, z -114.9. The test cells lie north of the shell, in row 100.
+## cell (105, 126)) on the airport site: its stand point is
+## at x -26, z -100.9. The test cells lie north of the shell, in row 100.
 
 const SITE := preload("res://build/terminal_site.tres")
 ## Inside the small swing square (x -25.5).

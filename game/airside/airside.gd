@@ -176,7 +176,12 @@ func set_gate_classes(classes: Dictionary) -> void:
 
 func _show_paving() -> void:
 	paving.show_routes(
-		taxi_routes(), StandPlacement.TAXI_LANE_Z, stand_pads(), hold_points(), runway_south()
+		taxi_routes(),
+		StandPlacement.TAXI_LANE_Z,
+		stand_pads(),
+		hold_points(),
+		runway_south(),
+		stand_points()
 	)
 	props.show_layout(gate_stands, taxi_routes())
 

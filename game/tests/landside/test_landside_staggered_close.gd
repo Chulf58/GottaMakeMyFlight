@@ -106,7 +106,7 @@ func _events(size: int, close_after: int, listed := true) -> Dictionary:
 	for id in aboard:
 		closes[id if listed else id + 90] = first_out + close_after
 	var out := {}
-	for t in range(101, 400):
+	for t in range(101, first_out + 100):
 		for event in sim.step(t, true, rng, closes):
 			out[t] = event["bookings"]
 	return out

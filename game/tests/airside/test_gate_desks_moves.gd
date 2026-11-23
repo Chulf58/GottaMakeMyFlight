@@ -11,13 +11,11 @@ extends GdUnitTestSuite
 ## test_gate_desks.gd; the rail is an AlertStack in the tree, found by its group.
 
 const SITE := preload("res://build/terminal_site.tres")
-## The side land's 85 grid columns west of the first site (SiteDefinition):
-## the cells below are written in the first site's columns and moved by it.
-const SIDE_LAND := Vector2i(85, 0)
 const EAST := Vector2i(44, 0)
-const EXIT_WEST := Vector2i(20, 112) + SIDE_LAND
-const DESK_WEST := Vector2i(19, 115) + SIDE_LAND
-const DESK_EAST := DESK_WEST + EAST
+
+var _exit_west := ReferenceTerminal.EXIT_CELL + SITE.starter_offset
+var _desk_west := ReferenceTerminal.GATE_DESK_CELL + SITE.starter_offset
+var _desk_east := _desk_west + EAST
 
 var _grid: SiteGrid
 var _flights: FlightSim
@@ -41,8 +39,8 @@ func before_test() -> void:
 	_gates.bind(_grid, _flights)
 	_grid.guard = _gates.edit_problem
 	_grid.warner = _gates.edit_warning
-	_west = _grid.apply(BuildEdit.place_object(GateDesks.DESK, DESK_WEST, 0))
-	_east = _grid.apply(BuildEdit.place_object(GateDesks.DESK, DESK_EAST, 0))
+	_west = _grid.apply(BuildEdit.place_object(GateDesks.DESK, _desk_west, 0))
+	_east = _grid.apply(BuildEdit.place_object(GateDesks.DESK, _desk_east, 0))
 	assert_array(_gates.gate_ids()).is_equal(["A", "B"])
 
 
@@ -77,7 +75,7 @@ func test_the_preview_names_the_flight_and_the_gate_it_moves_to() -> void:
 
 func test_removing_the_exit_previews_the_same_move() -> void:
 	_accept("X", 620, "Blue Fjord")
-	var preview := _preview(_grid.object_at(EXIT_WEST))
+	var preview := _preview(_grid.object_at(_exit_west))
 	print("exit preview: '%s'" % preview)
 	assert_str(preview).is_equal("Blue Fjord to Oslo moves to Gate B")
 

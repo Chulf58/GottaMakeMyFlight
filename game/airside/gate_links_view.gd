@@ -57,6 +57,13 @@ const LINE_FILL := Color(0.38, 0.68, 0.98)
 const THROUGH_ALPHA := 0.6
 const END_RADIUS_M := 0.7
 const ENVELOPE_PX := 3.0
+## Height of the translucent stand clearance fill (under the 3 px outline at LIFT_M).
+const CLEARANCE_LIFT_M := 0.05
+## Distance in metres/cells from a gate's stand envelope within which hovering
+## or dragging in build mode highlights its clearance zone.
+const CLEARANCE_MARGIN_M := 6.0
+const CLEARANCE_NEAR_TINT := Color(0.45, 0.80, 0.85, 0.22)
+const CLEARANCE_OVERLAP_TINT := Color(0.95, 0.42, 0.16, 0.42)
 ## The "Gate A" caption stands this far over the desk's top.
 const CAPTION_LIFT_M := 0.5
 ## The steps an unlinked sign slides sideways off a wall-gap sign by.
@@ -108,6 +115,11 @@ var walk := GateWalk.new()
 ## How many times layout_signs() ran its layout rather than answering from the
 ## cache (tests read it).
 var sign_layouts := 0
+## BuildMode whose hover or drag highlights nearby gate clearance zones.
+var build_mode: BuildMode:
+	set(value):
+		build_mode = value
+		update_clearance()
 var _markers_looked := false
 var _walk_queued := false
 
@@ -120,6 +132,10 @@ var _rim := MeshInstance3D.new()
 var _fill := MeshInstance3D.new()
 var _envelope := MeshInstance3D.new()
 var _envelope_paths: Array[PackedVector3Array] = []
+var _clearance_near_material: StandardMaterial3D
+var _clearance_overlap_material: StandardMaterial3D
+var _clearance_meshes: Array[MeshInstance3D] = []
+var _clearance_entries: Array[Dictionary] = []
 var _ends: Array[MeshInstance3D] = []
 var _captions: Array[Label3D] = []
 var _signs: Array[Sprite3D] = []
@@ -153,6 +169,8 @@ func _init() -> void:
 		line.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		line.extra_cull_margin = 4.0
 		_links.add_child(line)
+	_clearance_near_material = _clearance_material(CLEARANCE_NEAR_TINT)
+	_clearance_overlap_material = _clearance_material(CLEARANCE_OVERLAP_TINT)
 
 
 ## Follows `on_gates`' links on `on_grid`.
@@ -168,6 +186,7 @@ func bind(on_grid: BuildGrid, on_gates: GateDesks) -> void:
 ## Shows the lines, end discs and gate captions while build mode lasts.
 func set_building(on: bool) -> void:
 	_links.visible = on
+	update_clearance()
 
 
 func is_building() -> bool:
@@ -232,6 +251,7 @@ func rebuild() -> void:
 	_draw_lines()
 	_draw_ends()
 	_draw_envelopes()
+	_draw_clearance()
 	while _captions.size() < gate_texts.size():
 		_captions.append(_make_caption("GateCaption", VERTICAL_ALIGNMENT_BOTTOM, 0.0))
 		_links.add_child(_captions[-1])
@@ -252,6 +272,7 @@ func rebuild() -> void:
 			_signs[i].set_meta("desk", desks[i])
 			_signs[i].set_meta("text", caption_for(unlinked[desks[i]]))
 	update_sizes(true)
+	update_clearance()
 
 
 ## The outline of the `plane_class` envelope at `stand` (StandEnvelope.rects():
@@ -345,6 +366,63 @@ func envelope_node() -> MeshInstance3D:
 	return _envelope
 
 
+## Non-overlapping XZ rectangles covering `plane_class`'s stand envelope at
+## `stand` (swing square plus the way north of it), so translucent fills have
+## uniform alpha without a double-blended seam.
+static func envelope_fill_rects(stand: Dictionary, plane_class: String) -> Array[Rect2]:
+	if StandPlacement.side_of(stand) != StandPlacement.NORTH:
+		return StandPlacement.rects_to_world(
+			stand, envelope_fill_rects(StandPlacement.north_twin(stand), plane_class)
+		)
+	var parts := StandEnvelope.rects(stand, plane_class)
+	var swing: Rect2 = parts[0]
+	var way: Rect2 = parts[1]
+	var out: Array[Rect2] = [swing]
+	if swing.position.y > way.position.y:
+		out.append(
+			Rect2(way.position.x, way.position.y, way.size.x, swing.position.y - way.position.y)
+		)
+	return out
+
+
+## The translucent clearance zone mesh for `gate`, or null when none exists.
+func clearance_node(gate: String) -> MeshInstance3D:
+	for i in _clearance_entries.size():
+		if _clearance_entries[i]["gate"] == gate:
+			return _clearance_meshes[i]
+	return null
+
+
+## Shows each gate's filled stand clearance zone while in build mode and
+## hovering or dragging within CLEARANCE_MARGIN_M of its envelope, shifting
+## to the stronger warning tint when a building edit or ghost overlaps it.
+func update_clearance() -> void:
+	var mode := _resolve_build_mode()
+	if not _links.visible or mode == null:
+		for zone in _clearance_meshes:
+			zone.visible = false
+		return
+	var target := BuildGhost.clearance_target(mode)
+	if not target.get("active", false):
+		for zone in _clearance_meshes:
+			zone.visible = false
+		return
+	var bounds: Rect2 = target["bounds"]
+	var target_rects: Array[Rect2] = target["rects"]
+	var building: bool = target["building"]
+	for i in _clearance_entries.size():
+		var zone := _clearance_meshes[i]
+		var env_rects: Array[Rect2] = _clearance_entries[i]["rects"]
+		if not _near_any(bounds, env_rects, CLEARANCE_MARGIN_M):
+			zone.visible = false
+			continue
+		zone.visible = true
+		var overlaps := building and _overlaps_any(target_rects, env_rects)
+		zone.material_override = (
+			_clearance_overlap_material if overlaps else _clearance_near_material
+		)
+
+
 ## Each gate's max_class envelope outline.
 func _draw_envelopes() -> void:
 	_envelope_paths.clear()
@@ -356,6 +434,103 @@ func _draw_envelopes() -> void:
 				var stand: Dictionary = _gates.stands[binding["gate"]]
 				_envelope_paths.append(envelope_outline(stand, plane_class, y))
 	_envelope.mesh = segments_mesh(_envelope_paths)
+
+
+func _resolve_build_mode() -> BuildMode:
+	if build_mode != null:
+		return build_mode
+	var parent := get_parent()
+	if parent != null and "build_mode" in parent and parent.get("build_mode") is BuildMode:
+		return parent.get("build_mode") as BuildMode
+	return null
+
+
+func _draw_clearance() -> void:
+	_clearance_entries.clear()
+	if _grid != null and _gates != null:
+		var y := _grid.origin.y + CLEARANCE_LIFT_M
+		for binding in _gates.bindings:
+			var gate: String = binding["gate"]
+			var plane_class := StandEnvelope.larger(
+				_gates.max_class(gate), _gates.booked_class(gate)
+			)
+			if plane_class == "":
+				continue
+			var stand: Dictionary = _gates.stands[gate]
+			(
+				_clearance_entries
+				. append(
+					{
+						"gate": gate,
+						"rects": StandEnvelope.rects(stand, plane_class),
+						"mesh": _rects_mesh(envelope_fill_rects(stand, plane_class), y),
+					}
+				)
+			)
+	while _clearance_meshes.size() < _clearance_entries.size():
+		var zone := MeshInstance3D.new()
+		zone.name = "ClearanceZone%d" % _clearance_meshes.size()
+		zone.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		zone.extra_cull_margin = 4.0
+		zone.visible = false
+		_links.add_child(zone)
+		_clearance_meshes.append(zone)
+	for i in _clearance_meshes.size():
+		var zone := _clearance_meshes[i]
+		if i < _clearance_entries.size():
+			zone.mesh = _clearance_entries[i]["mesh"]
+			zone.set_meta("gate", _clearance_entries[i]["gate"])
+		else:
+			zone.visible = false
+			zone.mesh = null
+
+
+static func _near_any(bounds: Rect2, env_rects: Array[Rect2], margin: float) -> bool:
+	for env in env_rects:
+		if bounds.intersects(env.grow(margin)):
+			return true
+	return false
+
+
+static func _overlaps_any(target_rects: Array[Rect2], env_rects: Array[Rect2]) -> bool:
+	for env in env_rects:
+		var trimmed := env.grow(-0.01)
+		if trimmed.size.x <= 0.0 or trimmed.size.y <= 0.0:
+			continue
+		for rect in target_rects:
+			if rect.intersects(trimmed):
+				return true
+	return false
+
+
+static func _rects_mesh(rects: Array[Rect2], y: float) -> ArrayMesh:
+	var verts := PackedVector3Array()
+	var index := PackedInt32Array()
+	for rect in rects:
+		var base := verts.size()
+		verts.append(Vector3(rect.position.x, y, rect.position.y))
+		verts.append(Vector3(rect.end.x, y, rect.position.y))
+		verts.append(Vector3(rect.end.x, y, rect.end.y))
+		verts.append(Vector3(rect.position.x, y, rect.end.y))
+		index.append_array(PackedInt32Array([base, base + 1, base + 2, base, base + 2, base + 3]))
+	var mesh := ArrayMesh.new()
+	if not verts.is_empty():
+		var arrays := []
+		arrays.resize(Mesh.ARRAY_MAX)
+		arrays[Mesh.ARRAY_VERTEX] = verts
+		arrays[Mesh.ARRAY_INDEX] = index
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	return mesh
+
+
+static func _clearance_material(tint: Color) -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.albedo_color = tint
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	material.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
+	return material
 
 
 ## The link paths drawn, one per gate in desk order (for probes and tests).
@@ -450,6 +625,7 @@ func _process(_delta: float) -> void:
 	layout_signs()
 	if _links.visible:
 		layout_captions()
+		update_clearance()
 
 
 ## The screen size in pixels of a caption saying `text` at

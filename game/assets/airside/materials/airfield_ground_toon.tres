@@ -1,0 +1,17 @@
+[gd_resource type="ShaderMaterial" load_steps=3 format=3]
+
+[ext_resource type="Shader" path="res://shaders/airfield_ground_toon.gdshader" id="1_ground"]
+[ext_resource type="Texture2D" path="res://assets/textures/tp_toon_ramp_1d_d.png" id="2_ramp"]
+
+[resource]
+resource_name = "AirfieldGroundToon"
+shader = ExtResource("1_ground")
+shader_parameter/ramp_texture = ExtResource("2_ramp")
+shader_parameter/light_gain = 1.0
+shader_parameter/runway_half_length = 192.0
+shader_parameter/grass_light = Color(0.38, 0.56, 0.30, 1)
+shader_parameter/grass_dark = Color(0.33, 0.50, 0.26, 1)
+shader_parameter/meadow_olive = Color(0.36, 0.49, 0.25, 1)
+shader_parameter/meadow_deep = Color(0.28, 0.44, 0.23, 1)
+shader_parameter/shoulder_turf = Color(0.41, 0.48, 0.27, 1)
+shader_parameter/border_earth = Color(0.36, 0.37, 0.24, 1)

@@ -13,12 +13,10 @@ extends GdUnitTestSuite
 ## the cells are those of test_stand_envelope.gd.
 
 const SITE := preload("res://build/terminal_site.tres")
-## The side land's 85 grid columns west of the first site (SiteDefinition):
-## the cells below are written in the first site's columns and moved by it.
-const SIDE_LAND := Vector2i(85, 0)
-const DESK := Vector2i(19, 115) + SIDE_LAND
-const LARGE_CELL := Vector2i(45, 100) + SIDE_LAND
-const FREE_CELL := Vector2i(60, 100) + SIDE_LAND
+
+var _desk := ReferenceTerminal.GATE_DESK_CELL + SITE.starter_offset
+var _large_cell := Vector2i(45, -10) + SITE.starter_offset
+var _free_cell := Vector2i(60, -10) + SITE.starter_offset
 
 var _grid: SiteGrid
 var _flights: FlightSim
@@ -55,15 +53,15 @@ func _captions() -> Array:
 
 
 func test_build_mode_outlines_the_max_class_envelope_with_its_class() -> void:
-	var desk := _grid.apply(BuildEdit.place_object(GateDesks.DESK, DESK, 0))
+	var desk := _grid.apply(BuildEdit.place_object(GateDesks.DESK, _desk, 0))
 	assert_bool(desk.ok).is_true()
 	var stand := StandPlacement.for_exit(_grid, _gates.bindings[0]["exit"])
 	var y := _grid.origin.y + GateLinksView.LIFT_M
 	var large := GateLinksView.envelope_outline(stand, PlaneClasses.LARGE, y)
 	var first := [_view.envelope_paths(), _captions()]
-	_floor(FREE_CELL)
+	_floor(_free_cell)
 	var control := _captions()
-	_floor(LARGE_CELL)
+	_floor(_large_cell)
 	var medium := GateLinksView.envelope_outline(stand, PlaneClasses.MEDIUM, y)
 	print(
 		"before %s; free cell %s; after the large-only cell %s" % [first[1], control, _captions()]
@@ -89,7 +87,7 @@ func test_build_mode_outlines_the_max_class_envelope_with_its_class() -> void:
 
 
 func test_the_desk_card_names_the_gates_biggest_plane() -> void:
-	var desk := _grid.apply(BuildEdit.place_object(GateDesks.DESK, DESK, 0))
+	var desk := _grid.apply(BuildEdit.place_object(GateDesks.DESK, _desk, 0))
 	assert_bool(desk.ok).is_true()
 	var sim := auto_free(PassengerSim.new()) as PassengerSim
 	sim.grid = _grid
@@ -112,7 +110,7 @@ func test_the_desk_card_names_the_gates_biggest_plane() -> void:
 	add_child(card)
 	card.refresh()
 	var before := card.field_text("planes")
-	_floor(LARGE_CELL)
+	_floor(_large_cell)
 	card.invalidate()
 	card.refresh()
 	var after := card.field_text("planes")

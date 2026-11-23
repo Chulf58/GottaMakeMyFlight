@@ -19,10 +19,6 @@ extends GdUnitTestSuite
 
 const SITE := preload("res://build/terminal_site.tres")
 const SHIFT := Vector2i(12, 0)
-## Side land west of the first site: grid cells shift this far east.
-const SIDE_LAND := Vector2i(85, 0)
-const EXIT_AT := Vector2i(20, 112) + SHIFT + SIDE_LAND
-const DESK_AT := Vector2i(19, 115) + SHIFT + SIDE_LAND
 ## The plot (column, row) holding the exit, and the one east of it.
 const PLOT_HOME := [5, 4]
 const PLOT_EAST := [6, 4]
@@ -34,6 +30,8 @@ const STRIP_WEST := 103
 const STRIP_EAST := 131
 const STRIP_ROWS := Vector2i(85, 149)
 
+var _exit_at := ReferenceTerminal.EXIT_CELL + SHIFT + SITE.starter_offset
+var _desk_at := ReferenceTerminal.GATE_DESK_CELL + SHIFT + SITE.starter_offset
 var _grid: SiteGrid
 var _flights: FlightSim
 var _gates: GateDesks
@@ -47,7 +45,7 @@ func before_test() -> void:
 	_gates = auto_free(GateDesks.new()) as GateDesks
 	_gates.bind(_grid, _flights)
 	_grid.guard = _gates.edit_problem
-	assert_bool(_grid.apply(BuildEdit.place_object(GateDesks.DESK, DESK_AT, 0)).ok).is_true()
+	assert_bool(_grid.apply(BuildEdit.place_object(GateDesks.DESK, _desk_at, 0)).ok).is_true()
 	assert_bool(_flights.accept_contract(TestFlightFit.terms("A1", 600))).is_true()
 
 

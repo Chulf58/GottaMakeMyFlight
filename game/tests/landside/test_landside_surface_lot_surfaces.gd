@@ -11,6 +11,7 @@ extends GdUnitTestSuite
 
 const STARTER := preload("res://landside/starter_landside.tres")
 const SITE_SCENE := preload("res://assets/buildings/tp_airport_site.glb")
+const ROAD_EXT_SCENE := preload("res://assets/landside/landside_road_ext.glb")
 const LOT_SCENE := preload("res://assets/landside/tp_parking_01a.glb")
 const CAR_SCENE := preload("res://assets/vehicles/tp_suv_01b.glb")
 ## main.tscn's Airside/Terminal.
@@ -24,7 +25,7 @@ const SAMPLE_MM := 50
 ## walker (0.25 m radius) keeps this far from a post's middle.
 const POST_CLEAR := 0.3 + 0.25
 ## The part of the map the meshes are read for (x and z).
-const AREA := Rect2(14.0, -62.0, 34.0, 58.0)
+const AREA := Rect2(14.0, -62.0, 146.0, 58.0)
 
 var _spot: LandsideLotSpot
 var _paths: LandsidePaths
@@ -38,6 +39,7 @@ func before() -> void:
 	_paths = LandsidePaths.new(STARTER)
 	_map = LandsideSurfaceMap.new(AREA)
 	_map.add_scene(SITE_SCENE, Transform3D(Basis(), SITE_AT))
+	_map.add_scene(ROAD_EXT_SCENE, Transform3D(Basis(), Vector3(43.0, 0.0, -46.0)))
 	var at := LandsidePlaces.lot_transform(_spot)
 	_map.add_scene(LOT_SCENE, at)
 	var lot: Node3D = LOT_SCENE.instantiate()

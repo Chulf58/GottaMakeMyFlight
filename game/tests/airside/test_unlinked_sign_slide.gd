@@ -10,11 +10,9 @@ extends GdUnitTestSuite
 ## (NO_EXIT).
 
 const SITE := preload("res://build/terminal_site.tres")
-## The side land's 85 grid columns west of the first site (SiteDefinition):
-## the cells below are written in the first site's columns and moved by it.
-const SIDE_LAND := Vector2i(85, 0)
-const DESK := Vector2i(19, 115) + SIDE_LAND
-const EXIT := Vector2i(20, 112) + SIDE_LAND
+
+var _desk := ReferenceTerminal.GATE_DESK_CELL + SITE.starter_offset
+var _exit := ReferenceTerminal.EXIT_CELL + SITE.starter_offset
 
 var _grid: SiteGrid
 var _flights: FlightSim
@@ -34,10 +32,10 @@ func before() -> void:
 	_gates = GateDesks.new()
 	_gates.bind(_grid, _flights)
 	_grid.guard = _gates.edit_problem
-	var desk := _grid.apply(BuildEdit.place_object(GateDesks.DESK, DESK, 0))
+	var desk := _grid.apply(BuildEdit.place_object(GateDesks.DESK, _desk, 0))
 	assert_bool(desk.ok).is_true()
 	_desk_id = desk.object_id
-	assert_bool(_grid.apply(BuildEdit.remove_object(_grid.object_at(EXIT))).ok).is_true()
+	assert_bool(_grid.apply(BuildEdit.remove_object(_grid.object_at(_exit))).ok).is_true()
 	_port = SubViewport.new()
 	_port.size = Vector2i(1920, 1080)
 	add_child(_port)
@@ -62,7 +60,7 @@ func after_test() -> void:
 ## The camera `distance` metres from the desk, pitched `pitch` degrees down,
 ## looking north.
 func _look(distance: float, pitch: float) -> void:
-	var at := _grid.cell_to_world(DESK) + Vector3(0.5, 0.0, 0.0)
+	var at := _grid.cell_to_world(_desk) + Vector3(0.5, 0.0, 0.0)
 	var down := deg_to_rad(pitch)
 	var eye := at + Vector3(0.0, sin(down), cos(down)) * distance
 	_camera.global_transform = Transform3D.IDENTITY.translated(eye).looking_at(at)
