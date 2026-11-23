@@ -25,12 +25,10 @@ const ARRIVALS := {
 	50: [LandsideVehicle.Kind.CAR, LandsideVehicle.Intent.PARK],
 }
 ## The surface lot (spot 0) closes on this tick, after car 2 turned into it, so
-## the later parking cars go to the multi-storey (spot 1). It was 45 until
-## road_in gained 3031 mm moving over into the forecourt (board 0169bc4b):
-## car 2 (6500 mm behind the taxi) then turned in on tick 52, and car 31 not
-## before tick 80. road_in starts 2600 mm further in (board 5fb27ab3), so both
-## turn in about 5 ticks earlier, still either side of this tick.
-const CLOSE_SURFACE_TICK := 55
+## the later parking cars go to the multi-storey (spot 1). Extending road_in by
+## +100 m east to the highway portal adds 200 ticks of inbound lead time, so
+## car 2 turns in on tick 252 and car 31 around tick 280.
+const CLOSE_SURFACE_TICK := 260
 ## The way a parked car faces, by lot spot and slot row x, written out from
 ## starter_landside.tres (not from LandsidePlaces): into the stall, away from
 ## the aisle. The surface lot's aisle runs along x 31.7, the multi-storey's

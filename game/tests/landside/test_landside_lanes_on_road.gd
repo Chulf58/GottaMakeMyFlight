@@ -14,9 +14,10 @@ extends GdUnitTestSuite
 
 const STARTER := preload("res://landside/starter_landside.tres")
 const SITE_SCENE := preload("res://assets/buildings/tp_airport_site.glb")
+const ROAD_EXT_SCENE := preload("res://assets/landside/landside_road_ext.glb")
 ## main.tscn's Airside/Terminal.
 const SITE_AT := Vector3(0.0, 0.0, -80.0)
-const AREA := Rect2(-44.0, -62.0, 88.0, 24.0)
+const AREA := Rect2(-160.0, -62.0, 320.0, 24.0)
 ## A car's footprint about its origin: half its width and half its length.
 ## The landside models' boxes (LandsideViews' "box" meta) are 2.12 to 2.47 m
 ## wide with the mirrors and 4.99 to 5.20 m long; the body without mirrors
@@ -25,9 +26,8 @@ const HALF_WIDTH := 1.05
 const HALF_LENGTH := 2.6
 ## Asphalt is under this; the sidewalk tops are at 0.2.
 const ROAD_TOP := 0.15
-## The Road mesh ends here; a corner past it is off the drawn map, not off
-## the road.
-const ROAD_END_X := 42.95
+## The extended road ends here at the tunnel backstops.
+const ROAD_END_X := 155.95
 ## Lot lanes are on the road while every corner is nearer the terminal than
 ## the far sidewalk's kerb (z -41.26).
 const LOT_LANE_MAX_Z := -43.5
@@ -44,6 +44,8 @@ var _map: LandsideSurfaceMap
 func before() -> void:
 	_map = LandsideSurfaceMap.new(AREA)
 	_map.add_scene(SITE_SCENE, Transform3D(Basis(), SITE_AT))
+	_map.add_scene(ROAD_EXT_SCENE, Transform3D(Basis(), Vector3(43.0, 0.0, -46.0)))
+	_map.add_scene(ROAD_EXT_SCENE, Transform3D(Basis(Vector3.UP, PI), Vector3(-43.0, 0.0, -46.0)))
 
 
 func test_every_car_on_a_road_lane_has_its_corners_on_the_asphalt() -> void:
@@ -132,7 +134,7 @@ func test_a_car_at_a_lane_end_is_wholly_on_the_asphalt() -> void:
 				# 5 cm in from the mesh's edge, which a corner on it may graze.
 				corner.x -= signf(corner.x) * 0.05
 				var top := _map.top(corner)
-				if top[1] != "Road" or float(top[0]) >= ROAD_TOP:
+				if not (top[1] in ["Road", "Road_Ext"]) or float(top[0]) >= ROAD_TOP:
 					off.append(
 						"end %s corner (%.2f, %.2f) on %s" % [at, corner.x, corner.z, top[1]]
 					)
@@ -197,7 +199,7 @@ func _check(
 					continue
 				checked += 1
 				var top := _map.top(corner)
-				if top[1] != "Road" or float(top[0]) >= ROAD_TOP:
+				if not (top[1] in ["Road", "Road_Ext"]) or float(top[0]) >= ROAD_TOP:
 					off.append(
 						(
 							"%s %d mm corner (%.2f, %.2f) on %s %.3f"

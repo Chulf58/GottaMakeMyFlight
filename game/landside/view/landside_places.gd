@@ -46,6 +46,19 @@ var _bays := {}
 var _lots := {}
 ## Lot spot -> its Closed sign.
 var _signs := {}
+## Road extensions, highway portals, and forecourt/boulevard street dressing.
+var _street_dressing: LandsideStreetDressing
+
+
+func _ready() -> void:
+	if _street_dressing == null:
+		_street_dressing = LandsideStreetDressing.new()
+		add_child(_street_dressing)
+
+
+## Returns the mounted LandsideStreetDressing node.
+func street_dressing() -> LandsideStreetDressing:
+	return _street_dressing
 
 
 func _notification(what: int) -> void:

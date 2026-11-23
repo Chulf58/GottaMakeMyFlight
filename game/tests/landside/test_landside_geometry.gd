@@ -12,13 +12,15 @@ const STARTER := preload("res://landside/starter_landside.tres")
 const BAY_SCENE := preload("res://assets/landside/tp_curb_bay_01a.glb")
 const LOT_SCENE := preload("res://assets/landside/tp_parking_01a.glb")
 const MULTI_SCENE := preload("res://assets/landside/tc_parking_2a.glb")
-const ROAD_EAST := 43.0
-const ROAD_WEST := -43.0
-## Where the lanes start and end: a car's origin, its 2.6 m half length inside
-## the road's drawn end, so a car appearing or vanishing there is on the
-## asphalt, not half on the lawn (board 5fb27ab3).
-const LANE_EAST := 40.4
-const LANE_WEST := -40.4
+const ROAD_EAST := 156.0
+const ROAD_WEST := -156.0
+const FORECOURT_EAST := 43.0
+const FORECOURT_WEST := -43.0
+## Where the lanes start and end: a car's origin, 4.4 m inside each tunnel
+## portal mouth at x ±136.0 (> HALF_LENGTH 2.6 m) so vehicles spawn and despawn
+## hidden inside solid tunnel portals on the extended asphalt.
+const LANE_EAST := 140.4
+const LANE_WEST := -140.4
 ## The near kerb line in the main scene (measured on tp_airport_shell.glb, the
 ## shell at z -80): the curb bay asset's origin stands on it, +z into the road.
 const KERB_Z := -58.7
@@ -109,8 +111,10 @@ func test_every_curb_is_a_whole_number_of_bays_with_berths_on_the_asset_markers(
 	bay_centres.sort()
 	for i in range(1, bay_centres.size()):
 		assert_float(bay_centres[i] - bay_centres[i - 1]).is_greater_equal(slab.size.x - TOLERANCE)
-	assert_float(bay_centres[0] - slab.size.x / 2.0).is_greater_equal(ROAD_WEST)
-	assert_float(bay_centres[bay_centres.size() - 1] + slab.size.x / 2.0).is_less_equal(ROAD_EAST)
+	assert_float(bay_centres[0] - slab.size.x / 2.0).is_greater_equal(FORECOURT_WEST)
+	assert_float(bay_centres[bay_centres.size() - 1] + slab.size.x / 2.0).is_less_equal(
+		FORECOURT_EAST
+	)
 	# Every get-out point is on the kerb side of its berth.
 	for i in STARTER.curb.berths.size():
 		assert_float(STARTER.curb.get_out[i].z).is_less(STARTER.curb.berths[i].z)
