@@ -51,11 +51,11 @@ ROAD_KERB_UV = (0.5468, 0.9906)
 ROAD_DASH_UV = (0.6820, 0.9900)
 
 SWATCHES = {
-    "asphalt": ("TP_Atlas_Simple_1A_D", ROAD_ASPHALT_UV, (60, 62, 62)),
+    "asphalt": ("TP_Atlas_Simple_Road_Flat", ROAD_ASPHALT_UV, (60, 62, 62)),
     "sidewalk": ("TP_Atlas_Simple_1A_D", ROAD_SIDEWALK_UV, (145, 139, 127)),
     "kerb": ("TP_Atlas_Simple_1A_D", ROAD_KERB_UV, (164, 157, 144)),
-    "dash": ("TP_Atlas_Simple_1A_D", ROAD_DASH_UV, (252, 251, 128)),
-    "crosswalk": ("TP_Atlas_Simple_1A_D", (11.5 / 32.0, 1.0 - 15.6 / 16.0), (236, 230, 224)),
+    "dash": ("TP_Atlas_Simple_Road_Flat", ROAD_DASH_UV, (252, 251, 128)),
+    "crosswalk": ("TP_Atlas_Simple_Road_Flat", (11.5 / 32.0, 1.0 - 15.6 / 16.0), (236, 230, 224)),
     "concrete_light": ("TP_Atlas_1A_D", ROAD_KERB_UV, (164, 157, 144)),
     "concrete_mid": ("TP_Atlas_1A_D", (14.5 / 32.0, 1.0 - 11.6 / 16.0), (122, 122, 122)),
     "concrete_cap": ("TP_Atlas_1A_D", (19.5 / 32.0, 1.0 - 5.2 / 16.0), (174, 165, 149)),
@@ -71,6 +71,7 @@ SWATCHES = {
 MAT_DEFS = {
     "TP_Atlas_1A_D": "tp_atlas_1a_d.png",
     "TP_Atlas_Simple_1A_D": "tp_atlas_1a_d.png",
+    "TP_Atlas_Simple_Road_Flat": "tp_atlas_1a_d.png",
     "TC_Road_1A_D": "tc_road_1a_d.png",
     "TC_Tree_1A_D": "tc_tree_1a_d.png",
     "TC_Tree_3A_D": "tc_tree_3a_d.png",
@@ -169,10 +170,11 @@ def verify_swatches():
     log("SWATCHES verified=%d" % len(SWATCHES))
 
 
-def add_quad_godot(bm, uvl, pts_godot, uv, expected_normal_godot=None):
+def add_quad_godot(bm, uvl, pts_godot, uv, expected_normal_godot=None, mat_idx=0):
     """Add a single quad from 4 Godot-space points, enforcing expected normal."""
     verts = [bm.verts.new(g2b(*p)) for p in pts_godot]
     f = bm.faces.new(verts)
+    f.material_index = mat_idx
     f.normal_update()
     if expected_normal_godot is not None:
         bn = g2b(*expected_normal_godot).normalized()
@@ -186,13 +188,15 @@ def add_quad_godot(bm, uvl, pts_godot, uv, expected_normal_godot=None):
     return f
 
 
-def make_mesh_object(name, bm, mat_name, parent=None):
+def make_mesh_object(name, bm, mat_names, parent=None):
     bmesh.ops.remove_doubles(bm, verts=bm.verts[:], dist=1e-5)
     bm.normal_update()
     me = bpy.data.meshes.new(name)
     bm.to_mesh(me)
     bm.free()
-    me.materials.append(ensure_material(mat_name))
+    names = [mat_names] if isinstance(mat_names, str) else list(mat_names)
+    for mat_name in names:
+        me.materials.append(ensure_material(mat_name))
     obj = bpy.data.objects.new(name, me)
     bpy.context.scene.collection.objects.link(obj)
     if parent is not None:
@@ -277,31 +281,33 @@ def build_road_ext():
     z0, z1 = -EXT_HALF_TOTAL_Z, -EXT_HALF_ROAD_Z
     z2, z3 = EXT_HALF_ROAD_Z, EXT_HALF_TOTAL_Z
 
-    # Tops: north sidewalk, asphalt carriageway, south sidewalk.
-    add_quad_godot(bm, uvl, [(x0, SIDEWALK_Y, z0), (x1, SIDEWALK_Y, z0), (x1, SIDEWALK_Y, z1), (x0, SIDEWALK_Y, z1)], ROAD_SIDEWALK_UV, (0, 1, 0))
-    add_quad_godot(bm, uvl, [(x0, ROAD_Y, z1), (x1, ROAD_Y, z1), (x1, ROAD_Y, z2), (x0, ROAD_Y, z2)], ROAD_ASPHALT_UV, (0, 1, 0))
-    add_quad_godot(bm, uvl, [(x0, SIDEWALK_Y, z2), (x1, SIDEWALK_Y, z2), (x1, SIDEWALK_Y, z3), (x0, SIDEWALK_Y, z3)], ROAD_SIDEWALK_UV, (0, 1, 0))
+    # Slot 0: TP_Atlas_Simple_1A_D (outlined) for kerb risers and upper outer sidewalk edges.
+    # Slot 1: TP_Atlas_Simple_Road_Flat (outline-free) for flat asphalt, flat sidewalk tops, and lower skirts.
+    # Tops: north sidewalk (1), asphalt carriageway (1), south sidewalk (1).
+    add_quad_godot(bm, uvl, [(x0, SIDEWALK_Y, z0), (x1, SIDEWALK_Y, z0), (x1, SIDEWALK_Y, z1), (x0, SIDEWALK_Y, z1)], ROAD_SIDEWALK_UV, (0, 1, 0), mat_idx=1)
+    add_quad_godot(bm, uvl, [(x0, ROAD_Y, z1), (x1, ROAD_Y, z1), (x1, ROAD_Y, z2), (x0, ROAD_Y, z2)], ROAD_ASPHALT_UV, (0, 1, 0), mat_idx=1)
+    add_quad_godot(bm, uvl, [(x0, SIDEWALK_Y, z2), (x1, SIDEWALK_Y, z2), (x1, SIDEWALK_Y, z3), (x0, SIDEWALK_Y, z3)], ROAD_SIDEWALK_UV, (0, 1, 0), mat_idx=1)
 
     # Inner kerb risers (share vertices with asphalt and sidewalk edges: zero T-junctions).
-    add_quad_godot(bm, uvl, [(x0, ROAD_Y, z1), (x1, ROAD_Y, z1), (x1, SIDEWALK_Y, z1), (x0, SIDEWALK_Y, z1)], ROAD_KERB_UV, (0, 0, 1))
-    add_quad_godot(bm, uvl, [(x0, ROAD_Y, z2), (x1, ROAD_Y, z2), (x1, SIDEWALK_Y, z2), (x0, SIDEWALK_Y, z2)], ROAD_KERB_UV, (0, 0, -1))
+    add_quad_godot(bm, uvl, [(x0, ROAD_Y, z1), (x1, ROAD_Y, z1), (x1, SIDEWALK_Y, z1), (x0, SIDEWALK_Y, z1)], ROAD_KERB_UV, (0, 0, 1), mat_idx=0)
+    add_quad_godot(bm, uvl, [(x0, ROAD_Y, z2), (x1, ROAD_Y, z2), (x1, SIDEWALK_Y, z2), (x0, SIDEWALK_Y, z2)], ROAD_KERB_UV, (0, 0, -1), mat_idx=0)
 
-    # Outer skirts down to y = ROAD_BOTTOM_Y (0.0, flush with tp_airport_site.glb Road at x = ±43).
-    # Split at ROAD_Y to share exact vertices with end caps.
-    add_quad_godot(bm, uvl, [(x0, ROAD_BOTTOM_Y, z0), (x1, ROAD_BOTTOM_Y, z0), (x1, ROAD_Y, z0), (x0, ROAD_Y, z0)], ROAD_KERB_UV, (0, 0, -1))
-    add_quad_godot(bm, uvl, [(x0, ROAD_Y, z0), (x1, ROAD_Y, z0), (x1, SIDEWALK_Y, z0), (x0, SIDEWALK_Y, z0)], ROAD_KERB_UV, (0, 0, -1))
-    add_quad_godot(bm, uvl, [(x0, ROAD_BOTTOM_Y, z3), (x1, ROAD_BOTTOM_Y, z3), (x1, ROAD_Y, z3), (x0, ROAD_Y, z3)], ROAD_KERB_UV, (0, 0, 1))
-    add_quad_godot(bm, uvl, [(x0, ROAD_Y, z3), (x1, ROAD_Y, z3), (x1, SIDEWALK_Y, z3), (x0, SIDEWALK_Y, z3)], ROAD_KERB_UV, (0, 0, 1))
+    # Outer skirts down to SKIRT_BOTTOM_Y = -0.12 (sitting cleanly into Ground y = -0.10):
+    # lower skirt (SKIRT_BOTTOM_Y..ROAD_Y) is outline-free; upper sidewalk edge (ROAD_Y..SIDEWALK_Y) keeps outline.
+    add_quad_godot(bm, uvl, [(x0, SKIRT_BOTTOM_Y, z0), (x1, SKIRT_BOTTOM_Y, z0), (x1, ROAD_Y, z0), (x0, ROAD_Y, z0)], ROAD_KERB_UV, (0, 0, -1), mat_idx=1)
+    add_quad_godot(bm, uvl, [(x0, ROAD_Y, z0), (x1, ROAD_Y, z0), (x1, SIDEWALK_Y, z0), (x0, SIDEWALK_Y, z0)], ROAD_KERB_UV, (0, 0, -1), mat_idx=0)
+    add_quad_godot(bm, uvl, [(x0, SKIRT_BOTTOM_Y, z3), (x1, SKIRT_BOTTOM_Y, z3), (x1, ROAD_Y, z3), (x0, ROAD_Y, z3)], ROAD_KERB_UV, (0, 0, 1), mat_idx=1)
+    add_quad_godot(bm, uvl, [(x0, ROAD_Y, z3), (x1, ROAD_Y, z3), (x1, SIDEWALK_Y, z3), (x0, SIDEWALK_Y, z3)], ROAD_KERB_UV, (0, 0, 1), mat_idx=0)
 
     # Far end cap at x1 (x0 is left open where it butts against tp_airport_site.glb Road).
     # Split sidewalk end caps at ROAD_Y so inner kerb bottom corners never form T-junctions.
-    add_quad_godot(bm, uvl, [(x1, ROAD_BOTTOM_Y, z0), (x1, ROAD_BOTTOM_Y, z1), (x1, ROAD_Y, z1), (x1, ROAD_Y, z0)], ROAD_KERB_UV, (1, 0, 0))
-    add_quad_godot(bm, uvl, [(x1, ROAD_Y, z0), (x1, ROAD_Y, z1), (x1, SIDEWALK_Y, z1), (x1, SIDEWALK_Y, z0)], ROAD_KERB_UV, (1, 0, 0))
-    add_quad_godot(bm, uvl, [(x1, ROAD_BOTTOM_Y, z1), (x1, ROAD_BOTTOM_Y, z2), (x1, ROAD_Y, z2), (x1, ROAD_Y, z1)], ROAD_ASPHALT_UV, (1, 0, 0))
-    add_quad_godot(bm, uvl, [(x1, ROAD_BOTTOM_Y, z2), (x1, ROAD_BOTTOM_Y, z3), (x1, ROAD_Y, z3), (x1, ROAD_Y, z2)], ROAD_KERB_UV, (1, 0, 0))
-    add_quad_godot(bm, uvl, [(x1, ROAD_Y, z2), (x1, ROAD_Y, z3), (x1, SIDEWALK_Y, z3), (x1, SIDEWALK_Y, z2)], ROAD_KERB_UV, (1, 0, 0))
+    add_quad_godot(bm, uvl, [(x1, SKIRT_BOTTOM_Y, z0), (x1, SKIRT_BOTTOM_Y, z1), (x1, ROAD_Y, z1), (x1, ROAD_Y, z0)], ROAD_KERB_UV, (1, 0, 0), mat_idx=1)
+    add_quad_godot(bm, uvl, [(x1, ROAD_Y, z0), (x1, ROAD_Y, z1), (x1, SIDEWALK_Y, z1), (x1, SIDEWALK_Y, z0)], ROAD_KERB_UV, (1, 0, 0), mat_idx=0)
+    add_quad_godot(bm, uvl, [(x1, SKIRT_BOTTOM_Y, z1), (x1, SKIRT_BOTTOM_Y, z2), (x1, ROAD_Y, z2), (x1, ROAD_Y, z1)], ROAD_ASPHALT_UV, (1, 0, 0), mat_idx=1)
+    add_quad_godot(bm, uvl, [(x1, SKIRT_BOTTOM_Y, z2), (x1, SKIRT_BOTTOM_Y, z3), (x1, ROAD_Y, z3), (x1, ROAD_Y, z2)], ROAD_KERB_UV, (1, 0, 0), mat_idx=1)
+    add_quad_godot(bm, uvl, [(x1, ROAD_Y, z2), (x1, ROAD_Y, z3), (x1, SIDEWALK_Y, z3), (x1, SIDEWALK_Y, z2)], ROAD_KERB_UV, (1, 0, 0), mat_idx=0)
 
-    road_obj = make_mesh_object("Road_Ext", bm, "TP_Atlas_Simple_1A_D", root)
+    road_obj = make_mesh_object("Road_Ext", bm, ["TP_Atlas_Simple_1A_D", "TP_Atlas_Simple_Road_Flat"], root)
 
     # Single-sided up-facing dashes matching tp_airport_site.glb centreline.
     dbm = bmesh.new()
@@ -316,7 +322,7 @@ def build_road_ext():
             [(dx0, DASH_Y, -DASH_HALF_Z), (dx1, DASH_Y, -DASH_HALF_Z), (dx1, DASH_Y, DASH_HALF_Z), (dx0, DASH_Y, DASH_HALF_Z)],
             ROAD_DASH_UV, (0, 1, 0),
         )
-    make_mesh_object("Road_Ext_Dashes", dbm, "TP_Atlas_Simple_1A_D", root)
+    make_mesh_object("Road_Ext_Dashes", dbm, "TP_Atlas_Simple_Road_Flat", root)
 
     # Verify zero T-junctions on Road_Ext.
     pts = [v.co.copy() for v in road_obj.data.vertices]
@@ -566,7 +572,7 @@ def build_crosswalk():
             )
             z += pitch
 
-    make_mesh_object("Crosswalk_Stripes", bm, "TP_Atlas_Simple_1A_D", root)
+    make_mesh_object("Crosswalk_Stripes", bm, "TP_Atlas_Simple_Road_Flat", root)
     return export_and_verify("landside_crosswalk")
 
 

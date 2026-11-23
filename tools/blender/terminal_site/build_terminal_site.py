@@ -111,6 +111,10 @@ PLOT = (-43.0, 43.0, -100.0, -60.0)  # x0, x1, z0, z1 of the first plot (the Too
 GROWN = (-128.0, 128.0, -210.0, -60.0)  # x0, x1, z0, z1 of the grown site (terminal_site.tres grid)
 CENTRE_X = (-43.0, 43.0)  # x0, x1 of the first site; side land lies west and east of it
 PAVE_Y = 0.2  # the Toon paving pads' top; the plot is paved flat at this height
+ROAD_Y = 0.10  # unified carriageway asphalt top across site road, extensions, and aprons
+ROAD_ASPHALT_UV = (0.5047, 0.9385)
+ROAD_SIDEWALK_UV = (0.5337, 0.9825)
+ROAD_FLAT_MAT = "TP_Atlas_Simple_Road_Flat"
 PAVE_MAX_Y = 0.21  # above this an island is a raised paving block (tops 0.219, 0.238, 0.257)
 ACCENT_MIN_LIFT = 0.001  # a flat island wholly this far over PAVE_Y is a tile accent (y 0.2031)
 DIP_MAX_Y = 0.15  # below this an island is part of a dip (pads 0.10, markings 0.1065)
@@ -329,6 +333,135 @@ def filter_road(road):
     bm.free()
     road.data.update()
     return n_tris
+
+
+def _gn_of(mw, face):
+    wn = (mw.to_3x3() @ face.normal).normalized()
+    return Vector((wn.x, wn.z, -wn.y))
+
+
+def seamless_road(road):
+    """Make Road's carriageway seamless with Road_Ext and parking aprons:
+    1. Delete x = +-43.0 end-cap faces where Road meets Road_Ext.
+    2. Bisect y = 0.0..0.20 outer sidewalk skirts at y = ROAD_Y so lower buried skirts
+       (y = 0.0..0.10) use outline-free TP_Atlas_Simple_Road_Flat under aprons.
+    3. Assign TP_Atlas_Simple_Road_Flat to carriageway asphalt, road paint/crosswalk
+       markings (y <= 0.15), flat y = PAVE_Y sidewalk tops, and lower skirts; keep
+       TP_Atlas_Simple_1A_D on raised kerbs, outer upper edges, and 3D fixtures.
+    4. Flatten asphalt vertex normals to strict world (0, 1, 0), unify asphalt UV to
+       ROAD_ASPHALT_UV, and unify south sidewalk top UV to ROAD_SIDEWALK_UV."""
+    mw = road.matrix_world
+    mwi = mw.inverted()
+    base_mat = road.data.materials[0]
+    flat_mat = bpy.data.materials.get(ROAD_FLAT_MAT)
+    if flat_mat is None:
+        flat_mat = base_mat.copy()
+        flat_mat.name = ROAD_FLAT_MAT
+    if len(road.data.materials) < 2:
+        road.data.materials.append(flat_mat)
+    else:
+        road.data.materials[1] = flat_mat
+
+    if hasattr(road.data, "has_custom_normals") and road.data.has_custom_normals:
+        bpy.context.view_layer.objects.active = road
+        bpy.ops.mesh.customdata_custom_splitnormals_clear()
+
+    bm = bmesh.new()
+    bm.from_mesh(road.data)
+    bm.faces.ensure_lookup_table()
+    uvl = bm.loops.layers.uv.active
+
+    caps = [
+        f for f in bm.faces
+        if (
+            all(abs(g(mw @ v.co).x - PLOT[1]) < 1e-3 for v in f.verts)
+            or all(abs(g(mw @ v.co).x - PLOT[0]) < 1e-3 for v in f.verts)
+        )
+    ]
+    if not caps:
+        die("expected x=+-43 end-cap faces on Road, found none")
+    n_caps = len(caps)
+    bmesh.ops.delete(bm, geom=caps, context="FACES")
+    bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context="VERTS")
+    bm.normal_update()
+
+    skirt_faces = [
+        f for f in bm.faces
+        if min(g(mw @ v.co).y for v in f.verts) < ROAD_Y - 1e-3
+        and 0.15 < max(g(mw @ v.co).y for v in f.verts) <= PAVE_Y + 1e-3
+        and abs(_gn_of(mw, f).y) < 0.2
+    ]
+    if skirt_faces:
+        skirt_geom = list(
+            {v for f in skirt_faces for v in f.verts}
+            | {e for f in skirt_faces for e in f.edges}
+            | set(skirt_faces)
+        )
+        plane_co = mwi @ Vector((0.0, -OFFSET_Z, ROAD_Y))
+        plane_no = (mwi.to_3x3() @ Vector((0.0, 0.0, 1.0))).normalized()
+        bmesh.ops.bisect_plane(bm, geom=skirt_geom, dist=1e-5, plane_co=plane_co, plane_no=plane_no)
+    bm.normal_update()
+
+    # Extend outer sidewalk skirts (z = -40, -52) down to SKIRT_FOOT_Y = -0.12 to match Road_Ext.
+    lowered_verts = set()
+    for f in bm.faces:
+        pts = [g(mw @ v.co) for v in f.verts]
+        if (
+            abs(_gn_of(mw, f).y) < 0.2
+            and min(p.y for p in pts) < 0.02
+            and max(p.y for p in pts) <= ROAD_Y + 1e-3
+            and all(p.z > -59.5 for p in pts)
+        ):
+            for v in f.verts:
+                gp = g(mw @ v.co)
+                if abs(gp.y) < 1e-3 and v not in lowered_verts:
+                    v.co = mwi @ Vector((gp.x, -(gp.z - OFFSET_Z), SKIRT_FOOT_Y))
+                    lowered_verts.add(v)
+    bm.normal_update()
+
+    asphalt_faces = 0
+    flat_faces = 0
+    for f in bm.faces:
+        pts = [g(mw @ v.co) for v in f.verts]
+        ys = [p.y for p in pts]
+        gn = _gn_of(mw, f)
+        if gn.y > 0.99 and all(abs(y - ROAD_Y) < 1e-3 for y in ys):
+            f.material_index = 1
+            f.smooth = False
+            for lp in f.loops:
+                lp[uvl].uv = ROAD_ASPHALT_UV
+            asphalt_faces += 1
+            flat_faces += 1
+        elif gn.y > 0.99 and all(abs(y - PAVE_Y) < 1e-3 for y in ys):
+            f.material_index = 1
+            f.smooth = False
+            if all(p.z >= -41.5 for p in pts):
+                for lp in f.loops:
+                    lp[uvl].uv = ROAD_SIDEWALK_UV
+            flat_faces += 1
+        elif min(ys) >= SKIRT_FOOT_Y - 0.01 and max(ys) <= 0.15:
+            f.material_index = 1
+            f.smooth = False
+            flat_faces += 1
+        else:
+            f.material_index = 0
+
+    asphalt_edges = {
+        e for f in bm.faces
+        if f.material_index == 1 and _gn_of(mw, f).y > 0.99
+        for e in f.edges
+        if len(e.link_faces) > 1
+        and any(lf.material_index == 0 or _gn_of(mw, lf).y < 0.99 for lf in e.link_faces)
+    }
+    if asphalt_edges:
+        bmesh.ops.split_edges(bm, edges=list(asphalt_edges))
+    bm.normal_update()
+    bm.to_mesh(road.data)
+    bm.free()
+    road.data.update()
+    rep("Road seamless pass: deleted %d x=+-43 caps, bisected %d outer skirts, assigned %d flat faces (%d asphalt)" % (
+        n_caps, len(skirt_faces), flat_faces, asphalt_faces))
+    return n_caps
 
 
 def fill_plot(lot, pad_loops, skirt_uv):
@@ -589,6 +722,7 @@ def main():
         o.parent = root
         o.matrix_world = mw
     road_dropped = filter_road(objs["Road"])
+    seamless_road(objs["Road"])
     pad_loops, skirt_uv = filter_lot(objs["Lot"])
     added = fill_plot(objs["Lot"], pad_loops, skirt_uv)
     added += split_plots(objs["Lot"], root, skirt_uv)
@@ -718,16 +852,25 @@ def reread(path, tag):
         if "mesh" in nd:
             pos_all = []
             nrm_all = []
+            uv_all = []
             tri_idx = []
+            tri_mats = []
             idx_count = 0
             for prim in js["meshes"][nd["mesh"]]["primitives"]:
                 idx_count += js["accessors"][prim["indices"]]["count"]
-                rec["mats"].append(mats[prim["material"]] if "material" in prim else None)
-                pos_all += read_accessor(js, binc, prim["attributes"]["POSITION"])
-                nrm_all += read_accessor(js, binc, prim["attributes"]["NORMAL"])
-                base = len(pos_all) - js["accessors"][prim["attributes"]["POSITION"]]["count"]
+                pmat = mats[prim["material"]] if "material" in prim else None
+                rec["mats"].append(pmat)
+                pos_p = read_accessor(js, binc, prim["attributes"]["POSITION"])
+                nrm_p = read_accessor(js, binc, prim["attributes"]["NORMAL"])
+                uv_p = read_accessor(js, binc, prim["attributes"]["TEXCOORD_0"]) if "TEXCOORD_0" in prim["attributes"] else [(0.0, 0.0)] * len(pos_p)
+                base = len(pos_all)
+                pos_all += pos_p
+                nrm_all += nrm_p
+                uv_all += uv_p
                 idx = [i[0] + base for i in read_accessor(js, binc, prim["indices"])]
-                tri_idx += [idx[k:k + 3] for k in range(0, len(idx), 3)]
+                for k in range(0, len(idx), 3):
+                    tri_idx.append(idx[k:k + 3])
+                    tri_mats.append(pmat)
             rec["tris"] = idx_count // 3
             rec["verts"] = len(pos_all)
             pts = [world @ Vector(p) for p in pos_all]
@@ -738,6 +881,9 @@ def reread(path, tag):
                 [round(c, 5) for c in p] for p in pos_all)).encode()).hexdigest()[:16]
             rec["pts"] = pts
             rec["tris_world"] = [tuple(pts[i] for i in t) for t in tri_idx]
+            rec["tri_idx"] = tri_idx
+            rec["tri_mats"] = tri_mats
+            rec["uvs"] = uv_all
             rec["nrm"] = [(world.to_3x3() @ Vector(n)).normalized() for n in nrm_all]
         out["nodes"][name] = rec
         for c in nd.get("children", []):
@@ -809,32 +955,57 @@ def verify(site, shell, expected, added, road_dropped):
     bad = [n for n, (p, t) in expected.items() if (site["nodes"][n]["parent"], site["nodes"][n]["tris"]) != (p, t)]
     if bad:
         die("re-read differs from the scene for %s" % bad)
-    if set(site["materials"]) != {"TP_Atlas_1A_D", "TP_Atlas_Simple_1A_D"} or site["images"] != ["tp_atlas_1a_d"]:
+    if set(site["materials"]) != {"TP_Atlas_1A_D", "TP_Atlas_Simple_1A_D", ROAD_FLAT_MAT} or site["images"] != ["tp_atlas_1a_d"]:
         die("written site has materials %s images %s" % (site["materials"], site["images"]))
     if any(b.endswith("->None") for b in site["binding"]):
         die("material without an atlas image: %s" % site["binding"])
     plot_mats = sorted({tuple(site["nodes"][n]["mats"]) for n in PLOT_NAMES + kerb_names()})
-    if site["nodes"]["Road"]["mats"] != ["TP_Atlas_Simple_1A_D"] or plot_mats != [("TP_Atlas_1A_D",)]:
+    if sorted(site["nodes"]["Road"]["mats"]) != ["TP_Atlas_Simple_1A_D", ROAD_FLAT_MAT] or plot_mats != [("TP_Atlas_1A_D",)]:
         die("node materials changed: Road %s plots %s" % (site["nodes"]["Road"]["mats"], plot_mats))
     a, b = site["nodes"]["Road"], shell["nodes"]["Road"]
-    # The Road is the shell's minus its sidewalk tile accents (user ruling buildable-outline-
-    # keeps-a-constant-on-screen-width-at-every-zoom, point 2). Every shell Road triangle
-    # that is not an accent must be in the written Road, and nothing else.
+    # The Road keeps every shell up-facing road/sidewalk triangle except the dropped sidewalk
+    # tile accents, with x = +-43.0 end-caps removed and asphalt normalized/UV-aligned.
     shell_accent = [t for t in b["tris_world"] if is_accent_tri(t)]
-    shell_rest = Counter(tri_key(t) for t in b["tris_world"] if not is_accent_tri(t))
-    site_all = Counter(tri_key(t) for t in a["tris_world"])
+    shell_up = Counter(
+        tri_key(t) for t in b["tris_world"]
+        if not is_accent_tri(t) and (t[1] - t[0]).cross(t[2] - t[0]).length > 1e-9
+        and (t[1] - t[0]).cross(t[2] - t[0]).normalized().y > 0.9
+    )
+    site_up = Counter(
+        tri_key(t) for t in a["tris_world"]
+        if (t[1] - t[0]).cross(t[2] - t[0]).length > 1e-9
+        and (t[1] - t[0]).cross(t[2] - t[0]).normalized().y > 0.9
+    )
     same_frame = all(abs(a["world"][r][c] - b["world"][r][c]) < 1e-6 for r in range(4) for c in range(4))
+    caps_left = [
+        t for t in a["tris_world"]
+        if all(abs(p.x - PLOT[1]) < 1e-3 for p in t) or all(abs(p.x - PLOT[0]) < 1e-3 for p in t)
+    ]
+    want_uv = (ROAD_ASPHALT_UV[0], 1.0 - ROAD_ASPHALT_UV[1])
+    bad_asphalt = 0
+    asphalt_tris = 0
+    for tri_v, tri_pts, tmat in zip(a["tri_idx"], a["tris_world"], a["tri_mats"]):
+        gn = (tri_pts[1] - tri_pts[0]).cross(tri_pts[2] - tri_pts[0])
+        if gn.length > 1e-9 and gn.normalized().y > 0.99 and all(abs(p.y - ROAD_Y) < 1e-3 for p in tri_pts):
+            asphalt_tris += 1
+            if tmat != ROAD_FLAT_MAT:
+                bad_asphalt += 1
+            for vi in tri_v:
+                if (a["nrm"][vi] - Vector((0.0, 1.0, 0.0))).length > 1e-4:
+                    bad_asphalt += 1
+                if abs(a["uvs"][vi][0] - want_uv[0]) > 1e-4 or abs(a["uvs"][vi][1] - want_uv[1]) > 1e-4:
+                    bad_asphalt += 1
     rep("")
     rep("ROAD site  verts %d tris %d positions %s %s" % (a["verts"], a["tris"], a["pos_hash"], fmt(a["lo"], a["hi"])))
     rep("ROAD shell verts %d tris %d positions %s %s" % (b["verts"], b["tris"], b["pos_hash"], fmt(b["lo"], b["hi"])))
     rep("ROAD world transform site %s shell %s" % ([round(v, 6) for row in a["world"] for v in row],
                                                    [round(v, 6) for row in b["world"] for v in row]))
-    rep("ROAD shell accent triangles %d (filter dropped %d); shell triangles left %d; site triangles %d; "
-        "site triangles not in the shell's rest %d; shell rest missing from the site %d" % (
-            len(shell_accent), road_dropped, sum(shell_rest.values()), sum(site_all.values()),
-            sum((site_all - shell_rest).values()), sum((shell_rest - site_all).values())))
-    if not same_frame or site_all != shell_rest or len(shell_accent) != road_dropped:
-        die("the site's Road is not the shell's Road minus its sidewalk tile accents")
+    rep("ROAD shell accent triangles %d (filter dropped %d); up-facing site vs shell diff %d/%d; "
+        "x=+-43 caps left %d; asphalt tris %d bad %d" % (
+            len(shell_accent), road_dropped, sum((site_up - shell_up).values()),
+            sum((shell_up - site_up).values()), len(caps_left), asphalt_tris, bad_asphalt))
+    if not same_frame or site_up != shell_up or len(shell_accent) != road_dropped or caps_left or bad_asphalt or asphalt_tris == 0:
+        die("the site's Road failed seamless road checks")
     # Under every dropped accent the sidewalk runs on: its centre lies on an up-facing site
     # Road triangle at PAVE_Y.
     walk = [t for t in a["tris_world"] if all(abs(p.y - PAVE_Y) < 1e-4 for p in t)]

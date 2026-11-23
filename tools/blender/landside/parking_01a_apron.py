@@ -68,6 +68,8 @@ BARRIERS = {
     "Entry_Barrier": (BARRIER_Z, (-ARM_HALF_X, -ARM_HALF_Z, -ARM_REACH), (ARM_HALF_X, ARM_HALF_Z, ARM_HALF_Z)),
     "Exit_Barrier": (-BARRIER_Z, (-ARM_HALF_X, -ARM_HALF_Z, -ARM_HALF_Z), (ARM_HALF_X, ARM_HALF_Z, ARM_REACH)),
 }
+ROAD_ASPHALT_UV = (0.5047, 0.9385)
+ROAD_FLAT_MAT = "TP_Atlas_Simple_Road_Flat"
 TOL = 0.011
 
 
@@ -257,9 +259,15 @@ def edit(objs):
         raise Fail("no UV layers")
     floor, floor_faces = _throat_floor(src)
     _islands_clear(src)
-    uv, spread = _uv_middle(floor, layers_src)
-    mat = o.data.materials[floor.material_index]
+    _uv, spread = _uv_middle(floor, layers_src)
+    base_mat = o.data.materials[floor.material_index]
     src.free()
+
+    mat = bpy.data.materials.get(ROAD_FLAT_MAT)
+    if mat is None:
+        mat = base_mat.copy()
+        mat.name = ROAD_FLAT_MAT
+    uv = [ROAD_ASPHALT_UV for _ in o.data.uv_layers]
 
     me = bpy.data.meshes.new(APRON_NAME)
     me.materials.append(mat)

@@ -27,7 +27,7 @@ ASSETS = os.path.join(REPO, "game", "assets", "landside")
 DECOR = os.path.join(REPO, "game", "assets", "decor")
 BUILDINGS = os.path.join(REPO, "game", "assets", "buildings")
 VEHICLES = os.path.join(REPO, "game", "assets", "vehicles")
-OUT = os.path.join(REPO, "tools", "blender", "out", "landside_overhaul")
+OUT = os.path.join(REPO, "tools", "blender", "out", "seamless-landside")
 
 
 def g2b(gx, gy, gz):
@@ -251,12 +251,12 @@ def render_portal_plates():
 
 
 def render_road_ext_plates():
-    box = (0.0, 113.0, 0.0, 0.20, -6.0, 6.0)
+    box = (0.0, 113.0, -0.12, 0.20, -6.0, 6.0)
     views = [
-        ("road_ext_ortho_N", (56.5, 0.0, -300), (56.5, 0.0, 0), (-1.5, 0.0, -7.0), 124.0, (1200, 220), None, box),
-        ("road_ext_ortho_S", (56.5, 0.0, 300), (56.5, 0.0, 0), (-1.5, 0.0, 7.0), 124.0, (1200, 220), None, box),
-        ("road_ext_ortho_W", (-120, 0.4, 0), (10, 0.0, 0), (-1.2, 0.0, -7.2), 18.0, (900, 280), None, (0.0, 20.0, 0.0, 0.20, -6.0, 6.0)),
-        ("road_ext_ortho_E", (220, 0.4, 0), (100, 0.0, 0), (114.5, 0.0, 0.0), 18.0, (900, 280), None, (95.0, 113.0, 0.0, 0.20, -6.0, 6.0)),
+        ("road_ext_ortho_N", (56.5, 0.0, -300), (56.5, 0.0, 0), (-1.5, -0.12, -7.0), 124.0, (1200, 220), None, box),
+        ("road_ext_ortho_S", (56.5, 0.0, 300), (56.5, 0.0, 0), (-1.5, -0.12, 7.0), 124.0, (1200, 220), None, box),
+        ("road_ext_ortho_W", (-120, 0.4, 0), (10, 0.0, 0), (-1.2, -0.12, -7.2), 18.0, (900, 280), None, (0.0, 20.0, -0.12, 0.20, -6.0, 6.0)),
+        ("road_ext_ortho_E", (220, 0.4, 0), (100, 0.0, 0), (114.5, -0.12, 0.0), 18.0, (900, 280), None, (95.0, 113.0, -0.12, 0.20, -6.0, 6.0)),
         ("road_ext_ortho_top", (56.5, 300, 0), (56.5, 0, 0), (56.5, 0.0, -7.2), 124.0, (1200, 240), Euler((0.0, 0.0, 0.0)), box),
         ("road_ext_ortho_bottom", (56.5, -300, 0), (56.5, 0, 0), (56.5, -1.3, -7.2), 124.0, (1200, 240), Euler((math.pi, 0.0, 0.0)), box),
     ]
@@ -331,7 +331,7 @@ def render_props_plates():
 
 
 def render_incontext_plates():
-    # A. Seam close-up at x = +43.0 where tp_airport_site.glb Road meets landside_road_ext.glb
+    # A. Seam close-ups at x = +43.0 and x = -43.0 where tp_airport_site.glb Road meets landside_road_ext.glb
     scene, cam, red = setup_scene()
     import_glb_placed(os.path.join(BUILDINGS, "tp_airport_site.glb"), "Site", 0.0, 0.0, -80.0)
     import_glb_placed(os.path.join(ASSETS, "landside_road_ext.glb"), "EastExt", 43.0, 0.0, -46.0)
@@ -340,11 +340,78 @@ def render_incontext_plates():
     import_glb_placed(os.path.join(ASSETS, "landside_bollard.glb"), "Bollard", 36.0, 0.2, -59.0)
     cube = add_ref_cube(red, 43.0, 0.2, -51.2)
     aim(cam, (32.0, 12.0, -24.0), (44.0, 0.2, -47.0), vfov_deg=44.0)
-    prove_and_render(
+    seam_e = prove_and_render(
         scene, cam, "incontext_seam_closeup",
-        (35.0, 55.0, 0.0, 6.0, -59.2, -40.0),
+        (35.0, 55.0, -0.12, 6.0, -59.2, -40.0),
         cube, (1280, 720),
         ray_checks=[("ext_asphalt", (50.0, 0.10, -48.0), "EastExt__Road_Ext")],
+    )
+
+    scene, cam, red = setup_scene()
+    import_glb_placed(os.path.join(BUILDINGS, "tp_airport_site.glb"), "Site", 0.0, 0.0, -80.0)
+    import_glb_placed(os.path.join(ASSETS, "landside_road_ext.glb"), "WestExt", -43.0, 0.0, -46.0, math.pi)
+    import_glb_placed(os.path.join(ASSETS, "tc_streetlight_2a.glb"), "LightWest", -52.0, 0.2, -51.4, math.pi * 0.5)
+    cube = add_ref_cube(red, -43.0, 0.2, -51.2)
+    aim(cam, (-32.0, 12.0, -24.0), (-44.0, 0.2, -47.0), vfov_deg=44.0)
+    seam_w = prove_and_render(
+        scene, cam, "incontext_seam_west",
+        (-55.0, -35.0, -0.12, 6.0, -56.0, -40.0),
+        cube, (1280, 720),
+        ray_checks=[("ext_asphalt_w", (-50.0, 0.10, -48.0), "WestExt__Road_Ext")],
+    )
+
+    # C. Forecourt + curb bays + crosswalk + surface & multi-storey parking aprons in context
+    scene, cam, red = setup_scene()
+    bpy.ops.mesh.primitive_plane_add(size=120.0, location=g2b(10.0, -0.10, -35.0))
+    ground = bpy.context.active_object
+    ground.name = "Ground_Ref"
+    gmat = bpy.data.materials.new("GroundGreen")
+    gmat.diffuse_color = (0.35, 0.55, 0.28, 1.0)
+    ground.data.materials.append(gmat)
+    import_glb_placed(os.path.join(BUILDINGS, "tp_airport_site.glb"), "Site", 0.0, 0.0, -80.0)
+    import_glb_placed(os.path.join(ASSETS, "landside_road_ext.glb"), "EastExt", 43.0, 0.0, -46.0)
+    import_glb_placed(os.path.join(ASSETS, "landside_road_ext.glb"), "WestExt", -43.0, 0.0, -46.0, math.pi)
+    import_glb_placed(os.path.join(ASSETS, "landside_crosswalk.glb"), "Xwalk", -2.0, 0.10, 0.0)
+    import_glb_placed(os.path.join(ASSETS, "tp_curb_bay_01a.glb"), "CurbBay0", -21.0, 0.10, -58.7)
+    import_glb_placed(os.path.join(ASSETS, "tp_curb_bay_01a.glb"), "CurbBay1", 6.5, 0.10, -58.7)
+    import_glb_placed(os.path.join(ASSETS, "tp_parking_01a.glb"), "SurfaceLot", 31.7, 0.0, -30.5, -math.pi * 0.5)
+    import_glb_placed(os.path.join(ASSETS, "tc_parking_2a.glb"), "MultiLot", 0.0, 0.0, -8.0)
+    cube = add_ref_cube(red, 16.0, 0.2, -40.8)
+    aim(cam, (10.0, 42.0, -108.0), (10.0, 0.2, -46.0), vfov_deg=48.0)
+    forecourt = prove_and_render(
+        scene, cam, "incontext_forecourt_aprons",
+        (-22.0, 42.0, -0.10, 4.0, -59.0, -34.0),
+        cube, (1400, 800),
+        ray_checks=[
+            ("lot0_apron", (31.7, 0.10, -38.8), "SurfaceLot__TP_Parking_01A_Apron"),
+            ("lot1_apron", (5.0, 0.10, -39.0), "MultiLot__Parking_2A_Apron"),
+            ("road_center", (10.0, 0.10, -48.0), "Site__Road"),
+        ],
+    )
+
+    # D. Close-up of parking aprons + south sidewalk + road seam (both lots)
+    cube.location = g2b(18.0, 0.7, -40.6)
+    aim(cam, (21.0, 18.0, -70.0), (21.0, 0.1, -39.0), vfov_deg=50.0)
+    aprons_close = prove_and_render(
+        scene, cam, "incontext_aprons_closeup",
+        (1.5, 40.0, -0.10, 2.5, -45.0, -34.0),
+        cube, (1400, 720),
+        ray_checks=[
+            ("lot0_apron_c", (31.7, 0.10, -38.8), "SurfaceLot__TP_Parking_01A_Apron"),
+            ("lot1_apron_c", (5.0, 0.10, -39.0), "MultiLot__Parking_2A_Apron"),
+        ],
+    )
+
+    make_grid_sheet(
+        "seamless_incontext_sheet.png",
+        [
+            ("seam_east", seam_e),
+            ("seam_west", seam_w),
+            ("forecourt_aprons", forecourt),
+            ("aprons_closeup", aprons_close),
+        ],
+        cols=2,
+        tile_w=780,
     )
 
     # B. East Portal + Road_Ext + Taxis entering/exiting at x = 136.5 & 140.4 + flanking trees/lights/sign

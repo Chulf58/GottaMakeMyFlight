@@ -30,6 +30,7 @@ const GLASS := "res://assets/materials/tp_glass.tres"
 const TOON_MATERIALS := [
 	"res://assets/materials/tp_atlas_toon.tres",
 	"res://assets/materials/tp_atlas_simple_toon.tres",
+	"res://assets/landside/materials/tp_atlas_simple_road_toon.tres",
 	"res://assets/materials/tp_lights.tres",
 	"res://assets/materials/tp_glass.tres",
 	"res://assets/materials/tc_building_17a_toon.tres",
@@ -46,9 +47,9 @@ const STEMS := [
 	"landside/tp_curb_bay_01a",
 ]
 const BAY := "landside/tp_curb_bay_01a"
-## Measured on tp_airport_shell.glb (survey this lane): road and sidewalk top are one
-## plane at y 0.107; the near kerb line runs at z -58.7 in the main scene (shell at z -80).
-const ROAD_TOP := 0.107
+## Unified carriageway top at y 0.10; the near kerb line runs at z -58.7 in the main scene
+## (shell at z -80).
+const ROAD_TOP := 0.10
 const KERB_Z := -58.7
 const GROUND_Y := -0.1
 const MARGIN_PX := 8.0
