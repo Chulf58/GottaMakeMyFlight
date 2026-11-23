@@ -200,6 +200,35 @@ func test_the_chain_is_three_cells_with_a_post_in_each_outer_cell() -> void:
 	node.free()
 
 
+func test_indoor_stanchions_and_queue_belt_attach_flush_with_toon_atlas_and_zero_seams() -> void:
+	for piece: String in ["decor/tc_metal_pole_1a", "decor/tc_metal_pole_chain_1a"]:
+		var inst := InteriorKit.instantiate(piece)
+		var counts := _seam_counts(inst)
+		assert_int(counts[0]).override_failure_message("%s zero_area" % piece).is_equal(0)
+		assert_int(counts[1]).override_failure_message("%s dup_coplanar" % piece).is_equal(0)
+		var meshes := inst.find_children("*", "MeshInstance3D", true, false)
+		assert_int(meshes.size()).is_greater(0)
+		for child in meshes:
+			var mesh := (child as MeshInstance3D).mesh
+			for s in mesh.get_surface_count():
+				var mat := mesh.surface_get_material(s) as ShaderMaterial
+				assert_object(mat).is_not_null()
+				assert_str(mat.resource_path).is_equal("res://assets/materials/tp_atlas_toon.tres")
+				assert_object(mat.next_pass).is_not_null()
+		inst.free()
+
+	var post_box := _bounds(&"metal_pole")
+	assert_float(post_box.position.y).is_equal_approx(0.0, 0.002)
+	assert_float(post_box.end.y).is_equal_approx(1.00, 0.01)
+	assert_float(post_box.size.x).is_between(0.28, 0.36)
+	var belt_box := _bounds(&"metal_pole_chain")
+	assert_float(belt_box.position.y).is_between(0.80, 0.86)
+	assert_float(belt_box.end.y).is_between(0.89, 0.95)
+	# Clip heads sit inside each post's 0.0455 m cassette radius at z = -1.0 and +1.0.
+	assert_float(belt_box.position.z - (-1.0)).is_between(0.02, 0.045)
+	assert_float(1.0 - belt_box.end.z).is_between(0.02, 0.045)
+
+
 ## The chain reserves its whole span: nothing else goes in a cell it covers,
 ## and a wall cannot cut across it. BuildGrid refuses a wall only on an edge
 ## inside one footprint (it does not refuse a wall along the footprint's outer

@@ -644,15 +644,15 @@ msgid "A statue. It calms the passengers around it, with a long reach."
 msgstr ""
 
 #: ui/item_info.gd
-msgid "A metal post. Passengers cannot walk through it."
+msgid "A retractable-belt stanchion post. Passengers cannot walk through it."
 msgstr ""
 
 #: ui/item_info.gd
-msgid "Use posts and chains to steer a queue. They give a little calm nearby."
+msgid "Use stanchions and queue belts to steer a queue. They give a little calm nearby."
 msgstr ""
 
 #: ui/item_info.gd
-msgid "A chain between two posts, three cells long. Passengers cannot walk through it."
+msgid "A queue belt between two stanchions, three cells long. Passengers cannot walk through it."
 msgstr ""
 
 #: ui/item_info.gd
@@ -1537,12 +1537,12 @@ msgstr ""
 
 #: build/furniture_tools.gd
 msgctxt "build menu"
-msgid "Post"
+msgid "Stanchion"
 msgstr ""
 
 #: build/furniture_tools.gd
 msgctxt "build menu"
-msgid "Chain"
+msgid "Queue belt"
 msgstr ""
 
 #: build/furniture_tools.gd

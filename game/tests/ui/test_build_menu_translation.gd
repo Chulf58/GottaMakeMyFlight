@@ -134,3 +134,37 @@ func test_every_build_menu_and_templates_msgid_is_in_the_pot() -> void:
 	print("build/templates POT entries checked: %d, missing: %s" % [checked, missing])
 	assert_int(checked).is_greater(90)
 	assert_array(missing).is_empty()
+
+
+func test_stanchion_and_queue_belt_labels_and_pot_entries() -> void:
+	assert_str(FurnitureTools.ITEMS[BuildMode.Tool.POST][0]).is_equal("Stanchion")
+	assert_str(FurnitureTools.ITEMS[BuildMode.Tool.CHAIN][0]).is_equal("Queue belt")
+	assert_str(BuildMenuCatalog.shown("Stanchion")).is_equal("Stanchion")
+	assert_str(BuildMenuCatalog.shown("Queue belt")).is_equal("Queue belt")
+	var post_info := ItemInfo.of(BuildMode.Tool.POST)
+	var chain_info := ItemInfo.of(BuildMode.Tool.CHAIN)
+	assert_int(post_info.size()).is_equal(3)
+	assert_int(chain_info.size()).is_equal(3)
+	assert_str(post_info[0].to_lower()).contains("stanchion")
+	assert_str(chain_info[0].to_lower()).contains("queue belt")
+
+	var template := FileAccess.get_file_as_string("res://locale/messages.pot").replace("\r\n", "\n")
+	var entries := PotEntries.parse(template)
+	assert_int(PotEntries.count(entries, BuildMenuCatalog.NAME_CONTEXT, "Post")).is_equal(0)
+	assert_int(PotEntries.count(entries, BuildMenuCatalog.NAME_CONTEXT, "Chain")).is_equal(0)
+	for word: String in ["Stanchion", "Queue belt"]:
+		assert_int(PotEntries.count(entries, BuildMenuCatalog.NAME_CONTEXT, word)).is_equal(1)
+		assert_int(PotEntries.complete(entries, BuildMenuCatalog.NAME_CONTEXT, word)).is_equal(1)
+	for line: String in post_info + chain_info:
+		assert_int(PotEntries.count(entries, "", line)).is_equal(1)
+		assert_int(PotEntries.complete(entries, "", line)).is_equal(1)
+
+	PseudoLocale.enable(0.4)
+	assert_str(BuildMenuCatalog.shown(FurnitureTools.ITEMS[BuildMode.Tool.POST][0])).starts_with(
+		"["
+	)
+	assert_str(BuildMenuCatalog.shown(FurnitureTools.ITEMS[BuildMode.Tool.CHAIN][0])).starts_with(
+		"["
+	)
+	assert_str(ItemInfo.of(BuildMode.Tool.POST)[0]).starts_with("[")
+	assert_str(ItemInfo.of(BuildMode.Tool.CHAIN)[0]).starts_with("[")
