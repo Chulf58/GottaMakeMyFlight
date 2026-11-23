@@ -6,6 +6,7 @@ extends RefCounted
 ## probes set _override deterministically and reset it in teardown.
 
 const MAX_PLAYABLE_TIER := 2
+const MAX_CERTIFICATION_STAR := 2
 const TEASER_TIER := 3
 const HIDDEN_MIN_TIER := 4
 const MAX_EXTRA_LAND_PLOTS := 1

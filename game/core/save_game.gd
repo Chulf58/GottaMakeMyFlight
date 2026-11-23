@@ -137,7 +137,10 @@ signal loaded(ok: bool)
 ## refused (no migration).
 ## 35: peak-hour rush waves (OfferBoard v9: +15% peak-slot fees on 07:00-10:00
 ## and 17:00-20:00 offers); version 34 saves are refused (no migration).
-const SAVE_VERSION := 35
+## 36: airport certification ladder (part "certification", AirportCertification
+## v1: earned_star, medium_departed, large_departed); version 35 saves are
+## refused (no migration).
+const SAVE_VERSION := 36
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"
@@ -170,6 +173,8 @@ const HUD_THEME := preload("res://ui/hud_theme.tres")
 ## The incidents; none (a test world) saves no "incidents" part. With one, a
 ## save without the part is refused.
 @export var incidents: IncidentDirector
+## Airport certification milestones; auto-created when unset so main.tscn stays untouched.
+@export var certification: AirportCertification
 ## Where F5 and F8 save and load. Tests point it at their own file. Left at
 ## QUICK_SAVE_PATH, _ready makes it SaveSlots.manual_path().
 @export var quick_save_path := QUICK_SAVE_PATH
@@ -224,6 +229,13 @@ func _ready() -> void:
 			clock.set_paused(true)
 		_boot_load.call_deferred(boot_path)
 	GameBoot.clear_new_airport.call_deferred()
+	var cert := ensure_certification()
+	if get_parent() != null:
+		var badge := get_parent().get_node_or_null("RatingBadge") as RatingBadge
+		if badge != null:
+			badge.watch_certification(cert)
+			if not loaded.is_connected(badge._on_save_loaded):
+				loaded.connect(badge._on_save_loaded)
 
 
 func _exit_tree() -> void:
@@ -384,7 +396,43 @@ func parts() -> Array[SavePart]:
 				incidents.from_snapshot
 			)
 		)
+	var cert := ensure_certification()
+	list.append(
+		SavePart.new(
+			"certification",
+			cert.to_save_dict,
+			SavePart.checked("certification", _stage_certification),
+			cert.from_save_dict
+		)
+	)
 	return list
+
+
+## Returns the scene's AirportCertification, creating and wiring it under SaveGame when unset.
+func ensure_certification() -> AirportCertification:
+	if certification == null:
+		if get_parent() != null:
+			certification = (
+				get_parent().get_node_or_null("AirportCertification") as AirportCertification
+			)
+		if certification == null:
+			certification = AirportCertification.new()
+			certification.name = "AirportCertification"
+			add_child(certification)
+	if settlement != null and settlement.certification == null:
+		settlement.certification = certification
+	if (
+		flights != null
+		or rating != null
+		or passengers != null
+		or baggage != null
+		or unlocks != null
+		or finances != null
+		or clock != null
+	):
+		certification.bind(flights, rating, passengers, baggage, unlocks, finances, clock)
+	certification.celebrate_handler = _on_certified
+	return certification
 
 
 ## Why no save may be taken now, or "" when one may. Checked before any part
@@ -431,13 +479,17 @@ func load_world(data: Variant) -> bool:
 		loaded.emit(false)
 		return false
 	pending_path = ""
+	var cert := ensure_certification()
+	cert.set_loading(true)
 	for part in parts():
 		if not _install(part, data):
+			cert.set_loading(false)
 			# Unreachable while each install repeats its own stage check; said
 			# loudly, because the world is then partly loaded.
 			_fail("Load", "the %s part was refused after it was checked" % part.key)
 			loaded.emit(false)
 			return false
+	cert.set_loading(false)
 	# The rescue grant's repair bound, worked out now rather than in a tick.
 	if rescue_grant != null:
 		rescue_grant.prepare()
@@ -981,6 +1033,25 @@ func _install_rating(data: Dictionary) -> bool:
 		return false
 	rating.bind(clock, flights, passengers)
 	return true
+
+
+static func _stage_certification(data: Dictionary) -> Dictionary:
+	var problem := AirportCertification.validation_problem(data)
+	if problem != "":
+		return {"error": problem}
+	return data
+
+
+func _on_certified(award: Dictionary) -> void:
+	if not is_inside_tree():
+		return
+	BigFirsts.show_certification(
+		int(award["star"]),
+		str(award["title"]),
+		int(award["grant"]),
+		int(award["bonus_percent"]),
+		self
+	)
 
 
 ## "" or why the file could not be written. The old file is replaced only
