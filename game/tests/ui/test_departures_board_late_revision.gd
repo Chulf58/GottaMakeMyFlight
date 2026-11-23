@@ -25,6 +25,7 @@ func before_test() -> void:
 	_board.clock = _world.clock
 	_board.passengers = _world.sim
 	add_child(_board)
+	_board.set_shown(true)
 
 
 func after_test() -> void:
@@ -99,3 +100,37 @@ func test_the_cache_is_keyed_on_the_revision_not_on_a_passenger_scan() -> void:
 	_world.sim.mark_changed()
 	_board.refresh()
 	assert_int(_board.late_count_of(PassengerTestWorld.FLIGHT)).is_equal(0)
+
+
+func test_reassigning_same_passengers_preserves_late_and_progress_cache() -> void:
+	var id := _world.sim.spawn_now(PassengerTestWorld.FLIGHT)
+	var p := _world.passenger(id)
+	p.late = true
+	_world.sim.mark_changed()
+	_board.refresh()
+	var late_key := _board._late_key.duplicate()
+	var progress_key := _board._progress_key.duplicate()
+	assert_array(late_key).is_not_empty()
+	assert_array(progress_key).is_not_empty()
+	assert_int(_board.late_count_of(PassengerTestWorld.FLIGHT)).is_equal(1)
+	assert_int(int(_board._progress.get("boarded", {}).get(PassengerTestWorld.FLIGHT, 0))).is_equal(
+		0
+	)
+	# Reassigning the same PassengerSim without changing revision must not clear keys or rescan.
+	p.late = false
+	_world.sim.flight_results[PassengerTestWorld.FLIGHT] = {"made": 1, "missed": 0}
+	for i in 3:
+		_board.passengers = _world.sim
+		assert_array(_board._late_key).is_equal(late_key)
+		assert_array(_board._progress_key).is_equal(progress_key)
+		_board.refresh()
+	assert_int(_board.late_count_of(PassengerTestWorld.FLIGHT)).is_equal(1)
+	assert_int(int(_board._progress.get("boarded", {}).get(PassengerTestWorld.FLIGHT, 0))).is_equal(
+		0
+	)
+	_world.sim.mark_changed()
+	_board.refresh()
+	assert_int(_board.late_count_of(PassengerTestWorld.FLIGHT)).is_equal(0)
+	assert_int(int(_board._progress.get("boarded", {}).get(PassengerTestWorld.FLIGHT, 0))).is_equal(
+		1
+	)

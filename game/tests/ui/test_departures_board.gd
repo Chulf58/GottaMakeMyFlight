@@ -1,8 +1,10 @@
 class_name TestDeparturesBoard
 extends GdUnitTestSuite
-## The departures board's lines (HUD 3/7, decision hud-steal-list-self-clearing-
-## alert-cards-money-hover-departu): today's and tomorrow's flights in time
-## order from the FlightSim, departed flights dropped, and the empty text.
+## The departures board's lines (decisions hud-steal-list-self-clearing-alert-
+## cards-money-hover-departu, departures-live-ops-drawer-and-actionable-on-time-
+## hud-stat): today's live non-departed flights in time order from FlightSim,
+## departed flights dropped, tomorrow's flights omitted, and EMPTY_TEXT when none
+## remain today.
 
 var _sim: FlightSim
 var _clock: SimClock
@@ -18,6 +20,7 @@ func before_test() -> void:
 	_board.flights = _sim
 	_board.clock = _clock
 	add_child(_board)
+	_board.set_shown(true)
 
 
 func after_test() -> void:
@@ -40,11 +43,9 @@ func _run_to(tick: int) -> void:
 	_clock.tick = tick
 
 
-func test_today_and_tomorrow_list_their_flights_in_time_order() -> void:
+func test_today_lists_its_live_flights_in_time_order_and_omits_tomorrow() -> void:
 	# Accepted at 09:00 for 20:00 and 11:20, plus 08:00, whose preparation
-	# window has passed, so it starts tomorrow (day 1). Each holds the gate for
-	# 195 minutes (FlightTimetable.reserved_ticks()), so 08:00 and 11:20 do not
-	# clash (the 11:20 flight was 11:00 when a flight held it for 165).
+	# window has passed, so it starts tomorrow (day 1) and is omitted today.
 	_run_to(GameCalendar.tick_at(0, 9 * 60, 0))
 	assert_bool(_sim.accept_contract(_terms("LATE", 20 * 60, "Rome", "Sunhop"))).is_true()
 	assert_bool(_sim.accept_contract(_terms("EARLY", 11 * 60 + 20, "Oslo", "Gotta Air"))).is_true()
@@ -56,31 +57,29 @@ func test_today_and_tomorrow_list_their_flights_in_time_order() -> void:
 		. contains_exactly(
 			[
 				DeparturesBoard.TODAY_HEADING,
-				# Today's next departing flight shows its doors time (HUD 3b).
 				"11:20  Oslo  Gotta Air  doors close 11:17",
-				"20:00  Rome  Sunhop",
-				DeparturesBoard.TOMORROW_HEADING,
-				"08:00  Lisbon  Sunhop",
-				"11:20  Oslo  Gotta Air",
 				"20:00  Rome  Sunhop",
 			]
 		)
 	)
+	assert_array(lines).not_contains([DeparturesBoard.TOMORROW_HEADING])
 
 
-func test_a_departed_flight_drops_off_and_tomorrow_keeps_its_row() -> void:
+func test_a_departed_flight_drops_off_today() -> void:
 	_run_to(GameCalendar.tick_at(0, 9 * 60, 0))
 	assert_bool(_sim.accept_contract(_terms("EARLY", 11 * 60 + 20, "Oslo", "Gotta Air"))).is_true()
 	assert_bool(_sim.accept_contract(_terms("LATE", 20 * 60, "Rome", "Sunhop"))).is_true()
 	var before := DeparturesBoard.lines_for(_sim, _clock.tick)
-	assert_array(before).contains(["11:20  Oslo  Gotta Air", "20:00  Rome  Sunhop"])
+	assert_array(before).contains(
+		["11:20  Oslo  Gotta Air  doors close 11:17", "20:00  Rome  Sunhop"]
+	)
 	_run_to(GameCalendar.tick_at(0, 14 * 60, 0))
 	assert_int(_sim.state_of("EARLY-d0")).is_equal(FlightSim.State.DEPARTED)
 	var after := DeparturesBoard.lines_for(_sim, _clock.tick)
-	var today := after.slice(1, after.find(DeparturesBoard.TOMORROW_HEADING))
-	print("after the 11:20 left, today: %s" % " | ".join(today))
-	assert_array(today).contains_exactly(["20:00  Rome  Sunhop  doors close 19:57"])
-	assert_array(after).contains(["11:20  Oslo  Gotta Air"])
+	print("after the 11:20 left, today: %s" % " | ".join(after))
+	assert_array(after).contains_exactly(
+		[DeparturesBoard.TODAY_HEADING, "20:00  Rome  Sunhop  doors close 19:57"]
+	)
 
 
 func test_the_board_is_empty_text_when_nothing_is_scheduled() -> void:
@@ -94,38 +93,25 @@ func test_a_closed_airport_lists_nothing() -> void:
 	)
 
 
-func test_a_day_with_no_flights_says_none_while_the_other_lists_its_own() -> void:
+func test_a_contract_that_starts_tomorrow_alone_shows_empty_text() -> void:
 	_run_to(GameCalendar.tick_at(0, 7 * 60 + 4, 0))
 	assert_bool(_sim.accept_contract(_terms("NEXT", 8 * 60, "Lisbon", "Sunhop"))).is_true()
-	(
-		assert_array(DeparturesBoard.lines_for(_sim, _clock.tick))
-		. contains_exactly(
-			[
-				DeparturesBoard.TODAY_HEADING,
-				DeparturesBoard.NONE_TEXT,
-				DeparturesBoard.TOMORROW_HEADING,
-				"08:00  Lisbon  Sunhop",
-			]
-		)
+	assert_array(DeparturesBoard.lines_for(_sim, _clock.tick)).contains_exactly(
+		[DeparturesBoard.EMPTY_TEXT]
 	)
 
 
 func test_more_flights_than_the_cap_collapse_into_a_count() -> void:
-	_run_to(GameCalendar.tick_at(0, 22 * 60, 0))
-	# One flight more than the cap, all tomorrow (accepted at 22:00). A gate
-	# holds each flight for FlightTimetable.reserved_ticks() (195 minutes) and
-	# departures keep to 07:00-21:00 (the quiet night, Runway R7), so one gate
-	# takes five a day: two gates take the six, 100 minutes apart, alternating.
 	_sim.gate_source = func() -> Array[String]: return ["C", "D"] as Array[String]
 	var total := DeparturesBoard.MAX_ROWS_PER_DAY + 1
 	for i in total:
-		var minute := 7 * 60 + i * 100
+		var minute := 8 * 60 + 30 + i * 100
 		assert_bool(_sim.accept_contract(_terms("F%d" % i, minute, "Oslo", "Gotta Air"))).is_true()
 	var lines := DeparturesBoard.lines_for(_sim, _clock.tick)
-	var tomorrow := lines.slice(lines.find(DeparturesBoard.TOMORROW_HEADING) + 1)
-	print("tomorrow: %s" % " | ".join(tomorrow))
-	assert_int(tomorrow.size()).is_equal(DeparturesBoard.MAX_ROWS_PER_DAY + 1)
-	assert_str(tomorrow[tomorrow.size() - 1]).is_equal(
+	var rows := lines.slice(1)
+	print("today rows: %s" % " | ".join(rows))
+	assert_int(rows.size()).is_equal(DeparturesBoard.MAX_ROWS_PER_DAY + 1)
+	assert_str(rows[rows.size() - 1]).is_equal(
 		"+%d more" % (total - DeparturesBoard.MAX_ROWS_PER_DAY)
 	)
 
@@ -137,4 +123,6 @@ func test_the_node_shows_the_same_lines_after_a_refresh() -> void:
 	assert_array(_board.shown_lines()).is_equal(DeparturesBoard.lines_for(_sim, _clock.tick))
 	_run_to(GameCalendar.tick_at(0, 14 * 60, 0))
 	_board.refresh()
+	assert_bool(_board.is_shown()).is_false()
+	_board.set_shown(true)
 	assert_array(_board.shown_lines()).is_equal(DeparturesBoard.lines_for(_sim, _clock.tick))

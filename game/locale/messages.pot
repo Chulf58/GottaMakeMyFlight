@@ -6366,6 +6366,59 @@ msgstr ""
 msgid "Airline Contracts — Accept to schedule flights"
 msgstr ""
 
+#: ui/departure_list.gd
+msgid "{boarded}/{booked} boarded"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "3-day rolling on-time rate (70% of your star rating)"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "In terminal: {active}"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "· {count} late"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "On time: {percent}%"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "On time: —"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "Departures ({key}) · {count} late"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "Departures ({key}) · {count} today"
+msgstr ""
+
+#: ui/departures_board.gd
+msgctxt "gate name"
+msgid "Click to focus Gate {gate}"
+msgstr ""
+
+#: ui/late_count.gd
+msgid "{time} {destination} · Click to follow"
+msgstr ""
+
+#: ui/late_count.gd
+msgid "{time} {flight} · Click to follow"
+msgstr ""
+
+#: ui/late_count.gd
+msgid "{flight} · Click to follow"
+msgstr ""
+
+#: ui/alert_stack.gd
+msgid "Click to follow the tightest running-late passenger"
+msgstr ""
+
 #: passengers/passenger_thoughts.gd
 msgid "Set off the scanner: forgot my belt!"
 msgstr ""

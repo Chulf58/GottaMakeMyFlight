@@ -68,18 +68,14 @@ func test_the_panel_stays_clear_of_the_result_card_with_many_flights() -> void:
 ## label trims with an ellipsis, never wraps, and stays one line tall, and a
 ## day still lists at most DeparturesBoard.MAX_ROWS_PER_DAY rows then "+n more".
 func test_long_names_trim_in_the_departures_list_and_the_day_stays_capped() -> void:
-	# A bare FlightSim and clock, as TestDeparturesBoard builds them: at 22:00
-	# two gates take six flights tomorrow, 100 minutes apart.
+	# A bare FlightSim and clock at 06:00: two gates take six flights today,
+	# 100 minutes apart from 08:30 so all six are scheduled today and capped at 5.
 	var sim: FlightSim = auto_free(FlightSim.new())
 	var clock: SimClock = auto_free(SimClock.new())
 	sim.open_airport()
-	var tick := GameCalendar.tick_at(0, 22 * 60, 0)
-	for t in range(sim.tick + 1, tick + 1):
-		sim.on_tick(t)
-	clock.tick = tick
 	sim.gate_source = func() -> Array[String]: return ["C", "D"] as Array[String]
 	for i in DeparturesBoard.MAX_ROWS_PER_DAY + 1:
-		var terms := TestFlightContracts.terms("L%d" % i, 7 * 60 + i * 100)
+		var terms := TestFlightContracts.terms("L%d" % i, 8 * 60 + 30 + i * 100)
 		terms["destination"] = "Ulaanbaatar International"
 		terms["airline"] = "Trans Continental Regional Airways"
 		assert_bool(sim.accept_contract(terms)).is_true()
@@ -88,6 +84,7 @@ func test_long_names_trim_in_the_departures_list_and_the_day_stays_capped() -> v
 	board.flights = sim
 	board.clock = clock
 	add_child(board)
+	board.set_shown(true)
 	for i in 3:
 		await get_tree().process_frame
 	var rows := board.find_child("Rows", true, false)
@@ -100,10 +97,11 @@ func test_long_names_trim_in_the_departures_list_and_the_day_stays_capped() -> v
 	reference.free()
 	var trimmed := 0
 	var row_count := 0
-	for row in rows.get_children():
-		if not row is HBoxContainer or row.name == "Picker":
+	for child in rows.get_children():
+		if not child is VBoxContainer:
 			continue
-		var label := row.get_child(0) as Label
+		var head_row := child.get_child(0) as HBoxContainer
+		var label := head_row.get_child(0) as Label
 		row_count += 1
 		assert_int(label.autowrap_mode).is_equal(TextServer.AUTOWRAP_OFF)
 		assert_int(label.text_overrun_behavior).is_equal(TextServer.OVERRUN_TRIM_ELLIPSIS)
@@ -115,20 +113,11 @@ func test_long_names_trim_in_the_departures_list_and_the_day_stays_capped() -> v
 			trimmed += 1
 	# Control: the long names really overflowed, so the ellipsis did the work.
 	assert_int(trimmed).is_greater(0)
-	# Each day lists at most MAX_ROWS_PER_DAY rows, then one "+n more".
+	# Today lists at most MAX_ROWS_PER_DAY rows, then one "+n more".
 	var lines := board.shown_lines()
-	var tomorrow := lines.find(DeparturesBoard.TOMORROW_HEADING)
-	var days := [lines.slice(1, tomorrow), lines.slice(tomorrow + 1)]
-	var collapsed := 0
-	for day in days:
-		assert_int(day.size()).is_less_equal(DeparturesBoard.MAX_ROWS_PER_DAY + 1)
-		if (day[day.size() - 1] as String).ends_with(" more"):
-			collapsed += 1
-			assert_str(day[day.size() - 1]).starts_with("+")
-			assert_int(day.size()).is_equal(DeparturesBoard.MAX_ROWS_PER_DAY + 1)
-	assert_int(collapsed).is_greater(0)
-	# Pinned on the rendered rows: all six flights leave tomorrow, so five rows
-	# are drawn and a label reads "+1 more".
+	var day := lines.slice(1)
+	assert_int(day.size()).is_equal(DeparturesBoard.MAX_ROWS_PER_DAY + 1)
+	assert_str(day[day.size() - 1]).is_equal("+1 more")
 	assert_int(row_count).is_equal(DeparturesBoard.MAX_ROWS_PER_DAY)
 	var more: Array[String] = []
 	for child in rows.get_children():

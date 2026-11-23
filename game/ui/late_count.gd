@@ -1,10 +1,24 @@
 class_name LateCount
 extends RefCounted
 ## How many passengers of each flight are running late, for the departures
-## board's soft "N running late" line (board 7f89cf1e, decision calm-cozy-
-## default-view-quiet-world-detail-on-ask-soft-statio part 4). A passenger
+## board's "N running late" pill and self-clearing alert card (decisions
+## calm-cozy-default-view-quiet-world-detail-on-ask-soft-statio part 4,
+## days-3-5-close-call-drama-ccbc48f5-last-second-save-counter, and
+## departures-live-ops-drawer-and-actionable-on-time-hud-stat). A passenger
 ## counts while Passenger.late holds and its journey is not over, the same test
 ## the passenger card's "Running late" line makes (PassengerInspect.now_line).
+
+const ALERT_KEY := &"late_runners"
+
+static var _translator := RefCounted.new()
+
+
+## Total running-late passengers across all flights in `counts` (by_flight()).
+static func total_late(counts: Dictionary) -> int:
+	var total := 0
+	for count: int in counts.values():
+		total += count
+	return total
 
 
 ## {flight id: passengers running late}, flights with nobody late left out.
@@ -25,6 +39,74 @@ static func text_for(count: int) -> String:
 		TranslationServer
 		. translate_plural("{count} running late", "{count} running late", count)
 		. format({"count": count})
+	)
+
+
+## Tightest active running-late passenger across all flights, or {} when none:
+## {"id", "flight", "total"}.
+static func tightest_overall(sim: PassengerSim) -> Dictionary:
+	if sim == null:
+		return {}
+	var total := 0
+	var best_id := 0
+	var best_flight := ""
+	var best_slack := 0
+	for id in sim.passenger_ids():
+		var p := sim.get_passenger(id)
+		if p == null or p.is_done() or not p.late:
+			continue
+		total += 1
+		var doors_close := sim.flights.doors_close_tick(p.flight_id) if sim.flights != null else -1
+		var slack := _slack_of(sim, p, doors_close)
+		if best_id == 0 or slack < best_slack or (slack == best_slack and p.id < best_id):
+			best_id = p.id
+			best_flight = p.flight_id
+			best_slack = slack
+	if total == 0:
+		return {}
+	return {"id": best_id, "flight": best_flight, "total": total}
+
+
+## Self-clearing AlertBoard cause for running-late passengers when the
+## Departures drawer is hidden; empty when nobody is late.
+static func alert_cause(sim: PassengerSim, flights: FlightSim) -> Array[Dictionary]:
+	var info := tightest_overall(sim)
+	if info.is_empty():
+		return []
+	var pid: int = info["id"]
+	var flight_id: String = info["flight"]
+	var total: int = info["total"]
+	var p := sim.get_passenger(pid)
+	var targets: Array[Vector3] = []
+	if p != null and sim.grid != null:
+		var at := sim.world_position(p)
+		targets.append(Vector3(at.x, 0.0, at.z))
+	return [
+		{
+			"key": ALERT_KEY,
+			"title": text_for(total),
+			"detail": _late_detail(flights, flight_id),
+			"targets": targets,
+			"flight": flight_id,
+			"show_after": 0,
+			"clear_after": 0,
+		}
+	]
+
+
+static func _late_detail(flights: FlightSim, flight_id: String) -> String:
+	if flights != null:
+		var parts := FlightLabel.parts(flights, true, flight_id)
+		if not parts.is_empty():
+			if parts[1] != "":
+				return _translator.tr("{time} {destination} · Click to follow").format(
+					{"time": parts[0], "destination": parts[1]}
+				)
+			return _translator.tr("{time} {flight} · Click to follow").format(
+				{"time": parts[0], "flight": FlightResultPanel.flight_title(flight_id)}
+			)
+	return _translator.tr("{flight} · Click to follow").format(
+		{"flight": FlightResultPanel.flight_title(flight_id)}
 	)
 
 

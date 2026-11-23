@@ -144,3 +144,64 @@ static func _row(
 		"gate": gate,
 		"flight": flight_id,
 	}
+
+
+## Scans `passengers` once into {"boarded": {flight: n}, "known": {flight: n}}
+## for live Boarded/Booked row telemetry.
+static func progress_scan(passengers: PassengerSim) -> Dictionary:
+	var boarded := {}
+	var known := {}
+	if passengers == null:
+		return {"boarded": boarded, "known": known}
+	for fid: String in passengers.flight_results:
+		var res: Dictionary = passengers.flight_results[fid]
+		var made := int(res.get("made", 0))
+		boarded[fid] = made
+		known[fid] = int(known.get(fid, 0)) + made + int(res.get("missed", 0))
+	for fid: String in passengers.no_shows:
+		var ns: Dictionary = passengers.no_shows[fid]
+		known[fid] = int(known.get(fid, 0)) + int(ns.get("no_entrance", 0)) + int(ns.get("late", 0))
+	for fid: String in passengers.arrivals.missed_by_flight:
+		known[fid] = int(known.get(fid, 0)) + int(passengers.arrivals.missed_by_flight[fid])
+	for pid in passengers.passenger_ids():
+		var p := passengers.get_passenger(pid)
+		if p != null and not p.is_done():
+			known[p.flight_id] = int(known.get(p.flight_id, 0)) + 1
+	for bid in passengers.arrivals.booking_ids():
+		var b := passengers.arrivals.get_booking(bid)
+		if b != null:
+			known[b.flight_id] = int(known.get(b.flight_id, 0)) + 1
+	for entry: Dictionary in passengers._schedule:
+		var fid: String = entry.get("flight", "")
+		if fid != "":
+			known[fid] = int(known.get(fid, 0)) + 1
+	return {"boarded": boarded, "known": known}
+
+
+## Live {"boarded", "booked"} for `flight_id` from `scan` (progress_scan()) and
+## its contract terms when unissued.
+static func row_progress(
+	flights: FlightSim,
+	passengers: PassengerSim,
+	flight_id: String,
+	contract_id: String,
+	scan: Dictionary
+) -> Dictionary:
+	var boarded := int((scan.get("boarded", {}) as Dictionary).get(flight_id, 0))
+	var known := int((scan.get("known", {}) as Dictionary).get(flight_id, 0))
+	var contract_booked := 0
+	if contract_id != "" and flights != null:
+		var contract := flights.contract_of(contract_id)
+		contract_booked = int(contract.get("booked_passengers", 0))
+		if passengers != null:
+			contract_booked += passengers.booking_override_of(flight_id)
+	return {"boarded": boarded, "booked": maxi(known, contract_booked)}
+
+
+## "3/6 boarded", or "" when nothing is booked yet.
+static func boarded_text(boarded: int, booked: int) -> String:
+	if booked <= 0:
+		return ""
+	return TranslationServer.translate("{boarded}/{booked} boarded").format(
+		{"boarded": boarded, "booked": booked}
+	)

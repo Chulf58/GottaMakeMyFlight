@@ -1,12 +1,12 @@
 class_name TestDeparturesBoardHeader
 extends GdUnitTestSuite
-## HUD 3b (board 05cf0cf6, decision top-right-clock-panel-slims-to-day-time-
-## and-speed-flight-row): the Departures list carries the Made / Missed / In
-## terminal counts in a header line, and its next departing flight's row shows
-## the game-clock time its doors close (decision flight-panel-the-next-
-## departing-flight-s-row-shows-a-doors-c); the other rows keep status words.
+## Live Ops header telemetry (decision departures-live-ops-drawer-and-actionable-
+## on-time-hud-stat): "In terminal: N" (with clickable "· K late" when K > 0)
+## and rolling 3-day "On time: XX%" (or "On time: —" with 0 rated passengers),
+## plus the next departing flight's doors-close caption under its row.
 
 var _world: PassengerTestWorld
+var _rating: AirportRating
 var _board: DeparturesBoard
 
 
@@ -23,12 +23,16 @@ func before_test() -> void:
 	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(0, 5), 3)
 	_world = PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(10, 20))
 	_world.flights.open_airport()
+	_rating = auto_free(AirportRating.new()) as AirportRating
+	_rating.bind(_world.clock, _world.flights, _world.sim)
 	_board = DeparturesBoard.new()
 	_board.settings_path = SaveTestKit.run_path("departures_board_header")
 	_board.flights = _world.flights
 	_board.clock = _world.clock
 	_board.passengers = _world.sim
+	_board.rating = _rating
 	add_child(_board)
+	_board.set_shown(true)
 
 
 func after_test() -> void:
@@ -38,12 +42,9 @@ func after_test() -> void:
 	_world.free_all()
 
 
-## Today's rows only: the list up to the Tomorrow heading.
 func _rows() -> Array[String]:
 	var rows: Array[String] = []
 	for entry in DeparturesBoard.entries_for(_world.flights, _world.clock.tick):
-		if entry["text"] == DeparturesBoard.TOMORROW_HEADING:
-			break
 		if entry["kind"] == "row":
 			rows.append(entry["text"])
 	return rows
@@ -58,17 +59,31 @@ func _terms(id: String, minute: int, destination: String, airline: String) -> Di
 	return terms
 
 
-func test_the_header_shows_the_counts_and_they_update() -> void:
+func test_the_header_shows_in_terminal_on_time_and_late_pill() -> void:
 	_board.refresh()
-	var header := _board.find_child("Counts", true, false) as Label
-	assert_str(header.text).is_equal("Made 0  Missed 0  In terminal 0")
-	_world.sim.spawn_now(PassengerTestWorld.FLIGHT)
+	var in_terminal := _board.find_child("InTerminal", true, false) as Label
+	var on_time := _board.find_child("OnTime", true, false) as Label
+	var late_btn := _board.find_child("HeaderLate", true, false) as Button
+	assert_str(in_terminal.text).is_equal("In terminal: 0")
+	assert_str(on_time.text).is_equal("On time: —")
+	assert_str(on_time.tooltip_text).contains("70%")
+	assert_bool(late_btn.visible).is_false()
+	var pid := _world.sim.spawn_now(PassengerTestWorld.FLIGHT)
+	_world.passenger(pid).late = true
+	_world.sim.mark_changed()
 	_board.refresh()
-	assert_str(header.text).is_equal("Made 0  Missed 0  In terminal 1")
-	assert_str(_board.counts_text()).is_equal(header.text)
+	assert_str(in_terminal.text).is_equal("In terminal: 1")
+	assert_bool(late_btn.visible).is_true()
+	assert_str(late_btn.text).is_equal("· 1 late")
+	var emitted: Array[String] = []
+	_board.follow_late_requested.connect(func(fid: String) -> void: emitted.append(fid))
+	late_btn.pressed.emit()
+	assert_array(emitted).is_equal([PassengerTestWorld.FLIGHT])
 	_world.run_to(21)
 	_board.refresh()
-	assert_str(header.text).is_equal("Made 0  Missed 1  In terminal 0")
+	assert_str(in_terminal.text).is_equal("In terminal: 0")
+	assert_str(on_time.text).is_equal("On time: 0%")
+	assert_bool(late_btn.visible).is_false()
 
 
 func test_the_header_shows_when_no_flight_is_scheduled() -> void:
@@ -79,7 +94,10 @@ func test_the_header_shows_when_no_flight_is_scheduled() -> void:
 	assert_bool(_board.is_shown()).is_false()
 	_board.set_shown(true)
 	assert_array(_board.shown_lines()).contains([DeparturesBoard.EMPTY_TEXT])
-	assert_str((_board.find_child("Counts", true, false) as Label).text).starts_with("Made ")
+	assert_str((_board.find_child("InTerminal", true, false) as Label).text).starts_with(
+		"In terminal:"
+	)
+	assert_str((_board.find_child("OnTime", true, false) as Label).text).starts_with("On time:")
 
 
 func test_the_header_sits_above_the_rows() -> void:
@@ -87,7 +105,6 @@ func test_the_header_sits_above_the_rows() -> void:
 	var header := _board.find_child("Counts", true, false) as Control
 	var rows := _board.find_child("DeparturesPanel", true, false).find_child("Rows", true, false)
 	assert_object(rows).is_not_null()
-	# The rows scroll in a container of their own, under the header.
 	assert_object(header.get_parent()).is_same(rows.get_parent().get_parent())
 	assert_int(header.get_index()).is_less(rows.get_parent().get_index())
 	assert_bool(header.is_visible_in_tree()).is_true()
@@ -119,16 +136,15 @@ func test_the_doors_time_moves_to_the_following_flight_once_the_doors_close() ->
 	)
 
 
-func test_tomorrow_rows_show_no_doors_time() -> void:
+func test_tomorrow_rows_are_omitted_and_show_no_doors_time() -> void:
 	_world.run_to(3000)
 	_world.flights.accept_contract(_terms("EARLY", 7 * 60, "Rome", "Sunhop"))
 	_board.refresh()
-	for entry in DeparturesBoard.entries_for(_world.flights, _world.clock.tick):
-		assert_str(entry["text"]).not_contains("doors close")
+	assert_array(DeparturesBoard.lines_for(_world.flights, _world.clock.tick)).contains_exactly(
+		[DeparturesBoard.EMPTY_TEXT]
+	)
 
 
-## The list is narrow, so the doors time sits on a caption line under the next
-## flight's row (its entry text still reads the whole "... doors close 06:01").
 func test_the_doors_time_is_drawn_under_the_next_row_only() -> void:
 	_world.flights.accept_contract(_terms("GA100", 11 * 60, "Oslo", "Gotta Air"))
 	_board.refresh()
@@ -136,5 +152,8 @@ func test_the_doors_time_is_drawn_under_the_next_row_only() -> void:
 	assert_int(found.size()).is_equal(1)
 	assert_str((found[0] as Label).text).is_equal("doors close 06:01")
 	var rows := _board.find_child("Rows", true, false)
-	var next_row := rows.get_child((found[0] as Node).get_index() - 1)
-	assert_str((next_row.get_child(0) as Label).text).is_equal("06:04  GMF101")
+	var doors := found[0] as Node
+	var row_box := doors.get_parent() as VBoxContainer
+	var head_row := row_box.get_child(0) as HBoxContainer
+	assert_str((head_row.get_child(0) as Label).text).is_equal("06:04  GMF101")
+	assert_int(rows.get_child_count()).is_greater(1)

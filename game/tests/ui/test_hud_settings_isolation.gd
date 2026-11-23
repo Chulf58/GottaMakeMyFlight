@@ -50,7 +50,7 @@ func after_test() -> void:
 func _seed_opposites() -> String:
 	_seeded = SaveTestKit.run_path("hud_isolation_seed")
 	var cfg := ConfigFile.new()
-	cfg.set_value(HudFlagSetting.SECTION, KEY_FLAG, false)
+	cfg.set_value(HudFlagSetting.SECTION, KEY_FLAG, true)
 	cfg.set_value(HudFlagSetting.SECTION, KEY_OFF_BY_DEFAULT, true)
 	cfg.set_value(HudFlagSetting.SECTION, KEY_STEP, 2)
 	assert_int(cfg.save(_seeded)).is_equal(OK)
@@ -70,7 +70,7 @@ func test_an_explicit_path_is_not_shielded() -> void:
 func test_a_load_from_the_protected_file_gives_the_default_not_what_is_saved() -> void:
 	var path := _seed_opposites()
 	var who := "test"
-	assert_bool(HudFlagSetting.load_flag(path, KEY_FLAG, true, who)).is_true()
+	assert_bool(HudFlagSetting.load_flag(path, KEY_FLAG, false, who)).is_false()
 	assert_bool(HudFlagSetting.load_flag(path, KEY_OFF_BY_DEFAULT, false, who)).is_false()
 	assert_int(HudFlagSetting.load_int(path, KEY_STEP, 1, who)).is_equal(1)
 
@@ -79,16 +79,16 @@ func test_a_save_to_the_protected_file_leaves_its_bytes_alone() -> void:
 	var path := _seed_opposites()
 	var before := FileAccess.get_file_as_bytes(path)
 	assert_int(before.size()).is_greater(0)
-	HudFlagSetting.save_flag(path, KEY_FLAG, true, "test")
+	HudFlagSetting.save_flag(path, KEY_FLAG, false, "test")
 	HudFlagSetting.save_flag(path, "hints", false, "test")
 	HudFlagSetting.save_int(path, KEY_STEP, 0, "test")
 	assert_array(FileAccess.get_file_as_bytes(path)).is_equal(before)
 
 
-func test_the_departures_board_is_shown_on_the_default_path() -> void:
+func test_the_departures_board_uses_its_default_on_the_default_path() -> void:
 	var board := _hud.find_child("DeparturesBoard", true, false) as DeparturesBoard
 	assert_object(board).is_not_null()
-	assert_bool(board.is_shown()).is_true()
+	assert_bool(board.is_shown()).is_false()
 
 
 func test_an_explicit_path_still_round_trips() -> void:

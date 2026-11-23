@@ -389,7 +389,7 @@ func test_lifted_floor_clears_bar_when_narrow_and_rests_at_margin_when_clear() -
 ## the "To open the airport" checklist down over the bar's left end and the
 ## Templates dock at UI scale 1.5. Two contracts are scheduled, so the departures
 ## list is long, and the opening checklist is still full.
-func _schedule_two_contracts(contract_count: int = 2) -> void:
+func _schedule_two_contracts(contract_count: int = 2, long_airline := false) -> void:
 	var flights := _main.get_node("FlightSim") as FlightSim
 	if flights.opened_tick < 0:
 		SaveTestKit.start_airport(_main)
@@ -400,7 +400,13 @@ func _schedule_two_contracts(contract_count: int = 2) -> void:
 	if _opened_snap.is_empty() and flights.contract_ids().is_empty():
 		var save := _main.get_node("SaveGame") as SaveGame
 		_opened_snap = JSON.parse_string(JSON.stringify(save.snapshot(), "", true, true))
-	if flights.contract_ids().size() > contract_count:
+	if (
+		not _opened_snap.is_empty()
+		and (
+			flights.contract_ids().size() > contract_count
+			or (long_airline and flights.contract_ids().size() != contract_count)
+		)
+	):
 		var save := _main.get_node("SaveGame") as SaveGame
 		assert_bool(save.load_world(_opened_snap)).is_true()
 		_in_build_mode = false
@@ -414,10 +420,20 @@ func _schedule_two_contracts(contract_count: int = 2) -> void:
 		# A new game's runway takes small planes only (Runway R9).
 		terms["plane_size"] = PlaneClasses.SMALL
 		terms["booked_passengers"] = PlaneClasses.passenger_range(PlaneClasses.SMALL)[0]
+		if long_airline:
+			var is_last := flights.contract_ids().size() == contract_count - 1
+			var suffix := " Ventures Corporation" if is_last else ""
+			terms["airline"] = (
+				"Trans Continental Regional Horizon International "
+				+ "Intercontinental Express Airways Charter Line Global"
+				+ suffix
+			)
 		if flights.contract_ids().size() < contract_count and flights.accept_problem(terms) == "":
 			assert_bool(flights.accept_contract(terms)).is_true()
 	assert_int(flights.contract_ids().size()).is_equal(contract_count)
-	(_find("DeparturesBoard") as DeparturesBoard).refresh()
+	var board := _find("DeparturesBoard") as DeparturesBoard
+	board.set_shown(true)
+	board.refresh()
 	await await_idle_frame()
 	# The checklist as a new game shows it: the contracts need an open airport, which
 	# ticks every line, so the card is given one line per need.
@@ -481,8 +497,8 @@ func test_a_first_time_hint_card_clears_the_bar_and_the_dock_with_a_full_list() 
 ## ends a GAP above the dock, at every layout.
 func test_the_left_column_cards_clear_the_bar_and_the_dock_with_flights_scheduled() -> void:
 	await _set_build_mode(false)
-	# Collapsing SLOT_RESET freed 48 px, so 3 contracts test scrolling at 1.5x.
-	await _schedule_two_contracts(3)
+	# Four wrapped today rows exceed the 1.5x room to exercise scrolling and folding.
+	await _schedule_two_contracts(4, true)
 	for ui_scale in LAYOUTS:
 		await _resize(LAYOUTS[ui_scale])
 		var layout := Vector2(LAYOUTS[ui_scale])
@@ -541,7 +557,7 @@ func _visible_rows(card: ChecklistCard) -> int:
 func test_the_column_fits_are_not_recomputed_on_an_unchanged_frame() -> void:
 	await _set_build_mode(false)
 	await _resize(LAYOUTS[1.5])
-	await _schedule_two_contracts(3)
+	await _schedule_two_contracts(4, true)
 	var checklist := (_main.get_node("StaffPanel") as StaffPanel).checklist()
 	var board := _find("DeparturesBoard") as DeparturesBoard
 	await await_idle_frame()

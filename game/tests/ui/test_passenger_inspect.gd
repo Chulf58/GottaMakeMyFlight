@@ -228,6 +228,8 @@ func _toggle() -> Control:
 ## Changed for HUD 7/7 (board 3bd42402, conductor ruling): "Card replaces board"
 ## means the list, so the list steps aside and the toggle stays.
 func test_the_board_steps_aside_while_a_passenger_is_inspected() -> void:
+	_board().set_shown(true)
+	DirAccess.remove_absolute(_settings)
 	_hud.refresh()
 	assert_bool(_list().is_visible_in_tree()).is_true()
 	assert_bool(_board().is_shown()).is_true()
@@ -251,23 +253,22 @@ func test_the_board_steps_aside_while_a_passenger_is_inspected() -> void:
 	assert_bool(_board().is_shown()).is_true()
 
 
-## Changed for HUD 7/7: the list, not the whole board, stays aside.
+## Changed for HUD 7/7 + 35d321c7: starts collapsed, B toggles while aside.
 func test_b_while_inspecting_changes_the_setting_and_the_board_stays_aside() -> void:
 	_select()
 	_board()._shortcut_input(_b_key())
 	_hud.refresh()
-	assert_bool(_board().is_shown()).is_false()
-	(
-		assert_bool(HudFlagSetting.load_flag(_settings, DeparturesBoard.SETTING_KEY, true, "test"))
-		. is_false()
-	)
-	assert_bool(_list().is_visible_in_tree()).is_false()
-	_board()._shortcut_input(_b_key())
-	_hud.refresh()
 	assert_bool(_board().is_shown()).is_true()
+	(
+		assert_bool(HudFlagSetting.load_flag(_settings, DeparturesBoard.SETTING_KEY, false, "test"))
+		. is_true()
+	)
 	assert_bool(_list().is_visible_in_tree()).is_false()
 	assert_bool(_toggle().is_visible_in_tree()).is_true()
 	_board()._shortcut_input(_b_key())
+	_hud.refresh()
+	assert_bool(_board().is_shown()).is_false()
+	assert_bool(_list().is_visible_in_tree()).is_false()
 	_views.selected_id = 0
 	_hud.refresh()
 	var panel := _board().find_child("DeparturesPanel", true, false) as Control
@@ -285,6 +286,7 @@ func test_b_while_inspecting_changes_the_setting_and_the_board_stays_aside() -> 
 ## User ruling 2026-11-13 ("Passenger card only"): a desk, room or car-park card
 ## leaves the list showing; only a passenger card makes it step aside (point 6).
 func test_a_built_item_card_leaves_the_departures_list_showing() -> void:
+	_board().set_shown(true)
 	var built := _inspect.built_card
 	# In the tree, so its own member nodes are parented and freed with it.
 	var mode := BuildMode.new()

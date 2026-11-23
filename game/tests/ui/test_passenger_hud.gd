@@ -37,15 +37,18 @@ func after_test() -> void:
 	_world.free_all()
 
 
-func test_counts_show_made_and_missed_after_doors_close() -> void:
-	var counts := _hud.find_child("Counts", true, false) as Label
+func test_counts_show_in_terminal_and_on_time_after_doors_close() -> void:
+	var board := _hud.find_child("DeparturesBoard", true, false) as DeparturesBoard
+	board.set_shown(true)
+	var in_terminal := _hud.find_child("InTerminal", true, false) as Label
+	var on_time := _hud.find_child("OnTime", true, false) as Label
 	_world.sim.spawn_now(PassengerTestWorld.FLIGHT)
 	_hud.refresh()
-	assert_str(counts.text).is_equal("Made 0  Missed 0  In terminal 1")
+	assert_str(in_terminal.text).is_equal("In terminal: 1")
+	assert_str(on_time.text).is_equal("On time: —")
 	_world.run_to(21)
 	_hud.refresh()
-	assert_str(counts.text).is_equal("Made 0  Missed 1  In terminal 0")
-	# HUD 7/7: the departures board's lines, as DepartureList.text() is gone.
+	assert_str(in_terminal.text).is_equal("In terminal: 0")
 	var departures := DeparturesBoard.lines_for(_world.flights, _world.clock.tick)
 	assert_str("\n".join(departures)).contains("GMF101  Doors closed")
 
@@ -121,6 +124,7 @@ func test_a_refused_debug_batch_after_departure_raises_no_error() -> void:
 
 func test_the_departures_follow_the_flight_after_the_doors_close() -> void:
 	var board := _hud.find_child("DeparturesBoard", true, false) as DeparturesBoard
+	board.set_shown(true)
 	for step in [
 		[21, "Doors closed"],
 		[85, "Pushback"],

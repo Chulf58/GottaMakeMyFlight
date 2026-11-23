@@ -1,11 +1,9 @@
 class_name TestDeparturesBoardAirlineStatus
 extends GdUnitTestSuite
 ## The status word of a Departures row follows the airline on line 2 (decision
-## departures-list-row-shows-the-airline-on-a-second-line, user-ruled
-## 2026-11-12: "After the airline"), never on line 1. Tick 0 is 06:00. X leaves
-## at 10:00 and Y at 11:00; the clock is run to X's doors-close tick, so X reads
-## "Doors closed" and Y is the next flight. The world is built once for the
-## file and no case changes it.
+## departures-list-row-shows-the-airline-on-a-second-line), never on line 1.
+## Tick 0 is 06:00. X leaves at 10:00 and Y at 11:00; the clock is run to X's
+## doors-close tick, so X reads "Doors closed" and Y is the next flight.
 
 const GATES: Array[String] = ["C", "A", "B"]
 const LONGEST := "Skyline Global"
@@ -34,6 +32,7 @@ func before() -> void:
 	_board.flights = _sim
 	_board.clock = _clock
 	add_child(_board)
+	_board.set_shown(true)
 	for i in 3:
 		await get_tree().process_frame
 	_rows = _board.find_child("Rows", true, false)
@@ -56,7 +55,6 @@ func _accept(id: String, minute: int, destination: String, airline: String) -> v
 
 
 func test_the_status_word_is_on_the_airline_line_after_the_airline() -> void:
-	# Control: X really is past its doors, so there is a status word to place.
 	var state := _sim.state_of(FlightTimetable.occurrence_id("X", 0))
 	print("X state ", state, " clock ", _clock.tick)
 	assert_int(state).is_equal(FlightSim.State.DOORS_CLOSED)
@@ -67,7 +65,8 @@ func test_the_status_word_is_on_the_airline_line_after_the_airline() -> void:
 
 
 func test_line_one_carries_no_status_word() -> void:
-	var line_one := _board.gate_button("X", 0).get_parent() as HBoxContainer
+	var row_box := _rows.find_child("FlightRow_X-d0", true, false) as VBoxContainer
+	var line_one := row_box.get_child(0) as HBoxContainer
 	var head := line_one.get_child(0) as Label
 	print("line one: ", head.text)
 	assert_str(head.text).is_equal("10:00  Oslo")
@@ -79,4 +78,6 @@ func test_the_next_flight_still_shows_doors_close_under_its_airline() -> void:
 	assert_str(airline.text).is_equal("Gotta Air")
 	var found := _board.find_children("DoorsClose", "Label", true, false)
 	assert_int(found.size()).is_equal(1)
-	assert_object(_rows.get_child((found[0] as Node).get_index() - 1)).is_same(airline)
+	var doors := found[0] as Node
+	var row_box := doors.get_parent() as VBoxContainer
+	assert_object(row_box.get_child(doors.get_index() - 1)).is_same(airline)

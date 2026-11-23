@@ -180,6 +180,7 @@ func test_the_departures_list_shows_the_flights() -> void:
 	_world.flights.accept_contract(_terms("GA100", 11 * 60, "Oslo", "Gotta Air"))
 	_hud.refresh()
 	var board := _hud.find_child("DeparturesBoard", true, false) as DeparturesBoard
+	board.set_shown(true)
 	assert_array(board.shown_lines()).contains(["11:00  Oslo  Gotta Air"])
 
 

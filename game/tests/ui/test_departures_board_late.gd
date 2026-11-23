@@ -25,6 +25,7 @@ func before() -> void:
 	_board.clock = _world.clock
 	_board.passengers = _world.sim
 	add_child(_board)
+	_board.set_shown(true)
 	_snap0 = _take_snap(_world)
 	_world.run_to(1850)
 	_snap1850 = _take_snap(_world)
@@ -45,6 +46,7 @@ func before_test() -> void:
 	_board.flights = _world.flights
 	_board.clock = _world.clock
 	_board.passengers = _world.sim
+	_board.set_shown(true)
 
 
 static func _take_snap(w: PassengerTestWorld) -> Dictionary:

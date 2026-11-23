@@ -1,8 +1,10 @@
 class_name TestDeparturesBoardSetting
 extends GdUnitTestSuite
-## The departures board's on/off setting (decision hud-steal-list-self-clearing-
-## alert-cards-money-hover-departu): the toggle button and the B key hide and
-## show it, the choice persists in a settings file, and PassengerHud mounts it.
+## The departures board's on/off setting (decisions hud-steal-list-self-clearing-
+## alert-cards-money-hover-departu, departures-live-ops-drawer-and-actionable-
+## on-time-hud-stat): collapsed by default on new games, the toggle button and
+## B key show and hide it, the choice persists in a settings file, and
+## PassengerHud mounts it.
 
 var _path: String
 var _sim: FlightSim
@@ -58,42 +60,44 @@ func _toggle(board: DeparturesBoard) -> Button:
 	return board.find_child("DeparturesToggle", true, false) as Button
 
 
-func test_the_board_is_on_by_default() -> void:
+func test_the_board_is_collapsed_by_default() -> void:
 	var board := _board()
-	assert_bool(board.is_shown()).is_true()
-	assert_bool(_panel(board).visible).is_true()
-
-
-func test_the_toggle_button_hides_and_shows_the_panel() -> void:
-	var board := _board()
-	assert_bool(_toggle(board).button_pressed).is_true()
-	_toggle(board).button_pressed = false
+	assert_bool(board.is_setting_enabled()).is_false()
 	assert_bool(board.is_shown()).is_false()
 	assert_bool(_panel(board).visible).is_false()
-	assert_bool(_toggle(board).visible).is_true()
+	assert_bool(_toggle(board).button_pressed).is_false()
+
+
+func test_the_toggle_button_shows_and_hides_the_panel() -> void:
+	var board := _board()
+	assert_bool(_toggle(board).button_pressed).is_false()
 	_toggle(board).button_pressed = true
 	assert_bool(board.is_shown()).is_true()
 	assert_bool(_panel(board).visible).is_true()
+	assert_bool(_toggle(board).visible).is_true()
+	_toggle(board).button_pressed = false
+	assert_bool(board.is_shown()).is_false()
+	assert_bool(_panel(board).visible).is_false()
 
 
 func test_the_choice_persists_to_the_next_board() -> void:
-	_board().set_shown(false)
+	_board().set_shown(true)
 	var second := _board()
-	assert_bool(second.is_shown()).is_false()
-	assert_bool(_panel(second).visible).is_false()
-	assert_bool(_toggle(second).button_pressed).is_false()
-	second.set_shown(true)
-	assert_bool(_board().is_shown()).is_true()
+	assert_bool(second.is_shown()).is_true()
+	assert_bool(_panel(second).visible).is_true()
+	assert_bool(_toggle(second).button_pressed).is_true()
+	second.set_shown(false)
+	assert_bool(_board().is_shown()).is_false()
 
 
 func test_the_setting_is_one_key_in_the_hud_section() -> void:
-	_board().set_shown(false)
+	_board().set_shown(true)
 	var cfg := ConfigFile.new()
 	assert_int(cfg.load(_path)).is_equal(OK)
-	assert_bool(cfg.get_value("hud", "departures_board", true)).is_false()
+	assert_bool(cfg.get_value("hud", "departures_board", false)).is_true()
 
 
-func test_an_unreadable_settings_file_starts_the_board_on_and_reports_it() -> void:
+func test_an_unreadable_settings_file_starts_the_board_collapsed_and_reports_it() -> void:
 	var file := FileAccess.open(_path, FileAccess.WRITE)
 	file.store_string("[hud\nbroken = =\n")
 	file.close()
@@ -104,25 +108,24 @@ func test_an_unreadable_settings_file_starts_the_board_on_and_reports_it() -> vo
 		assert_error(func() -> void: made.append(_board()))
 		. is_push_error("DeparturesBoard: cannot read %s (error %d)" % [_path, read_error])
 	)
-	assert_bool(made[0].is_shown()).is_true()
-	assert_bool(_panel(made[0]).visible).is_true()
-	assert_bool(_toggle(made[0]).button_pressed).is_true()
+	assert_bool(made[0].is_shown()).is_false()
+	assert_bool(_panel(made[0]).visible).is_false()
+	assert_bool(_toggle(made[0]).button_pressed).is_false()
 
 
 func test_a_failed_write_keeps_the_toggle_for_the_session_and_reports_it() -> void:
-	# The folder does not exist, so the board starts on (no file) and the save fails.
 	var path := SaveTestKit.run_dir("departures_board_missing_dir") + "/hud_settings.cfg"
 	var write_error := ConfigFile.new().save(path)
 	assert_int(write_error).is_not_equal(OK)
 	var board := _board_at(path)
-	assert_bool(board.is_shown()).is_true()
+	assert_bool(board.is_shown()).is_false()
 	(
-		assert_error(func() -> void: _toggle(board).button_pressed = false)
+		assert_error(func() -> void: _toggle(board).button_pressed = true)
 		. is_push_error("DeparturesBoard: cannot write %s (error %d)" % [path, write_error])
 	)
-	assert_bool(board.is_shown()).is_false()
-	assert_bool(_panel(board).visible).is_false()
-	assert_bool(_toggle(board).button_pressed).is_false()
+	assert_bool(board.is_shown()).is_true()
+	assert_bool(_panel(board).visible).is_true()
+	assert_bool(_toggle(board).button_pressed).is_true()
 	assert_bool(FileAccess.file_exists(path)).is_false()
 
 
@@ -131,7 +134,7 @@ func test_a_toggle_over_an_unreadable_file_changes_the_session_but_not_the_file(
 	seeded.set_value("hud", "other_key", 7)
 	assert_int(seeded.save(_path)).is_equal(OK)
 	var board := _board()
-	assert_bool(board.is_shown()).is_true()
+	assert_bool(board.is_shown()).is_false()
 	var garbage := "[hud\nbroken = =\n".to_utf8_buffer()
 	var file := FileAccess.open(_path, FileAccess.WRITE)
 	file.store_buffer(garbage)
@@ -141,12 +144,12 @@ func test_a_toggle_over_an_unreadable_file_changes_the_session_but_not_the_file(
 	var read_error := ConfigFile.new().load(_path)
 	assert_int(read_error).is_not_equal(OK)
 	(
-		assert_error(func() -> void: _toggle(board).button_pressed = false)
+		assert_error(func() -> void: _toggle(board).button_pressed = true)
 		. is_push_error("DeparturesBoard: cannot read %s (error %d)" % [_path, read_error])
 	)
-	assert_bool(board.is_shown()).is_false()
-	assert_bool(_panel(board).visible).is_false()
-	assert_bool(_toggle(board).button_pressed).is_false()
+	assert_bool(board.is_shown()).is_true()
+	assert_bool(_panel(board).visible).is_true()
+	assert_bool(_toggle(board).button_pressed).is_true()
 	assert_array(FileAccess.get_file_as_bytes(_path)).is_equal(recorded)
 
 
@@ -156,11 +159,11 @@ func test_toggling_keeps_other_keys_and_sections_in_the_file() -> void:
 	seeded.set_value("audio", "volume", 0.5)
 	assert_int(seeded.save(_path)).is_equal(OK)
 	var board := _board()
-	assert_bool(board.is_shown()).is_true()
-	board.set_shown(false)
+	assert_bool(board.is_shown()).is_false()
+	board.set_shown(true)
 	var cfg := ConfigFile.new()
 	assert_int(cfg.load(_path)).is_equal(OK)
-	assert_bool(cfg.get_value("hud", "departures_board", true)).is_false()
+	assert_bool(cfg.get_value("hud", "departures_board", false)).is_true()
 	assert_int(cfg.get_value("hud", "other_key", 0)).is_equal(7)
 	assert_float(cfg.get_value("audio", "volume", 0.0)).is_equal(0.5)
 
@@ -170,13 +173,13 @@ func test_the_key_toggles_the_board_and_a_held_key_does_not_repeat() -> void:
 	var board := _board()
 	assert_bool(_b_key().is_action_pressed(DeparturesBoard.ACTION)).is_true()
 	board._shortcut_input(_b_key())
-	assert_bool(board.is_shown()).is_false()
+	assert_bool(board.is_shown()).is_true()
 	var held := _b_key()
 	held.echo = true
 	board._shortcut_input(held)
-	assert_bool(board.is_shown()).is_false()
-	board._shortcut_input(_b_key())
 	assert_bool(board.is_shown()).is_true()
+	board._shortcut_input(_b_key())
+	assert_bool(board.is_shown()).is_false()
 
 
 func test_a_modified_b_does_not_toggle() -> void:
@@ -184,7 +187,7 @@ func test_a_modified_b_does_not_toggle() -> void:
 	var event := _b_key()
 	event.ctrl_pressed = true
 	board._shortcut_input(event)
-	assert_bool(board.is_shown()).is_true()
+	assert_bool(board.is_shown()).is_false()
 
 
 func test_the_key_is_free_of_every_other_action() -> void:
@@ -205,15 +208,18 @@ func test_the_hud_mounts_the_board() -> void:
 	add_child(hud)
 	var board := hud.find_child("DeparturesBoard", true, false) as DeparturesBoard
 	assert_object(board).is_not_null()
+	assert_bool(board.is_shown()).is_false()
+	board.set_shown(true)
 	assert_bool(board.is_shown()).is_true()
 	assert_object(board.flights).is_same(world.flights)
 	hud.free()
 	world.free_all()
 
 
-func test_zero_flights_auto_collapses_and_adding_a_flight_auto_expands() -> void:
+func test_zero_flights_auto_collapses_and_adding_a_flight_auto_expands_when_enabled() -> void:
 	var empty := auto_free(FlightSim.new()) as FlightSim
 	empty.open_airport()
+	HudFlagSetting.save_flag(_path, DeparturesBoard.SETTING_KEY, true, "test")
 	var board := DeparturesBoard.new()
 	board.settings_path = _path
 	board.flights = empty
@@ -231,7 +237,7 @@ func test_zero_flights_auto_collapses_and_adding_a_flight_auto_expands() -> void
 	assert_bool(_toggle(board).button_pressed).is_true()
 
 
-func test_manual_collapse_stays_collapsed_when_flights_arrive() -> void:
+func test_default_collapsed_stays_collapsed_when_flights_arrive() -> void:
 	var empty := auto_free(FlightSim.new()) as FlightSim
 	empty.open_airport()
 	var board := DeparturesBoard.new()
@@ -240,7 +246,6 @@ func test_manual_collapse_stays_collapsed_when_flights_arrive() -> void:
 	board.clock = _clock
 	add_child(board)
 	auto_free(board)
-	board.set_shown(false)
 	assert_bool(board.is_setting_enabled()).is_false()
 	empty.add_default_flight()
 	board.refresh()

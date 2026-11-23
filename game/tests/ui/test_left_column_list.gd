@@ -1,11 +1,9 @@
 class_name TestLeftColumnList
 extends GdUnitTestSuite
 ## The card under the departures list follows the list's settled bottom (decision
-## checklist-card-moves-to-the-top-left-column-slim-at-304-px-t): the list is a
-## child of a plain Control, so its height is its minimum (the control keeps the
-## size it was asked for, and a larger minimum only clamps it). After a gate
-## picker opens and closes, or rows drop out, the panel is back at its minimum
-## and the card top is the list's bottom plus GAP, so the two never overlap.
+## checklist-card-moves-to-the-top-left-column-slim-at-304-px-t): when rows grow
+## (e.g. a doors-close or extra flight row) and later drop out, the PanelContainer
+## shrinks back to its minimum and the card top is the list's bottom plus GAP.
 
 const GATES: Array[String] = ["C", "A", "B"]
 
@@ -30,6 +28,7 @@ func before_test() -> void:
 	_board.flights = _sim
 	_board.clock = _clock
 	add_child(_board)
+	_board.set_shown(true)
 	_card = PanelContainer.new()
 	var label := Label.new()
 	label.text = "card"
@@ -74,19 +73,25 @@ func _assert_card_under_list(label: String) -> void:
 	)
 
 
-func test_the_list_shrinks_back_and_the_card_follows_when_a_picker_closes() -> void:
+func test_the_list_grows_and_shrinks_back_when_a_flight_is_added_and_drops_out() -> void:
 	await _settle()
-	_assert_card_under_list("closed")
-	var closed := _panel().size.y
-	_board.gate_button("X", 0).pressed.emit()
+	_assert_card_under_list("two flights")
+	var two := _panel().size.y
+	var terms := TestFlightContracts.terms("Z", 15 * 60)
+	terms["destination"] = "Paris"
+	assert_bool(_sim.accept_contract(terms)).is_true()
+	_board.refresh()
 	await _settle()
-	var opened := _panel().size.y
-	_assert_card_under_list("picker open")
-	assert_float(opened).is_greater(closed)
-	_board.gate_button("X", 0).pressed.emit()
+	_assert_card_under_list("three flights")
+	assert_float(_panel().size.y).is_greater(two)
+	# By 12:00 the 10:00 flight has left, leaving Y (Doors closed) and Z (doors close 14:57).
+	for t in range(_sim.tick + 1, GameCalendar.tick_at(0, 12 * 60, 0) + 1):
+		_sim.on_tick(t)
+	_clock.tick = _sim.tick
+	_board.refresh()
 	await _settle()
-	_assert_card_under_list("picker closed")
-	assert_float(_panel().size.y).is_equal_approx(closed, 0.5)
+	_assert_card_under_list("after noon")
+	assert_float(_panel().size.y).is_equal_approx(two, 0.5)
 
 
 func test_the_list_shrinks_and_the_card_rises_when_rows_drop_out() -> void:
