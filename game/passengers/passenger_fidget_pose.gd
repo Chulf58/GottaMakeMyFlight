@@ -220,6 +220,8 @@ static func _update_tick_state(
 		record.erase("fade_since")
 		record.erase("react_key")
 		record.erase("react_since")
+		record.erase("repack_since")
+		record.erase("repack_span")
 		record.erase("close_call_since")
 		record["close_call_done"] = false
 
@@ -263,6 +265,32 @@ static func _update_tick_state(
 	):
 		record.erase("react_key")
 		record.erase("react_since")
+
+	# Security REPACK reaction timestamp (sim ticks after bag set-down finishes),
+	# capped cleanly before RepackPose.EASE_IN_START even on helped lanes.
+	var total_repack := float(SecurityRuntime.work_for(SecurityRuntime.Phase.REPACK, p))
+	var done_work := clampf(total_repack - float(p.security_work), 0.0, total_repack)
+	var in_repack_react := (
+		not blocked
+		and p.stage == Passenger.Stage.SECURITY
+		and p.security_phase == SecurityRuntime.Phase.REPACK
+		and not p.incident_resolved
+		and (p.alarm or p.liquids)
+		and done_work < REPACK_REACTION_END
+	)
+	if in_repack_react:
+		var r_since := float(record.get("repack_since", -1.0))
+		if r_since < 0.0 or now < r_since:
+			r_since = now
+			record["repack_since"] = r_since
+		var rate := 1.0
+		if sim != null and p.station != 0:
+			rate = float(maxi(sim.security.rate(p.station, SecurityRuntime.Phase.REPACK), 1))
+		var ticks_left := maxf(REPACK_REACTION_END - done_work, 0.0) / rate
+		record["repack_span"] = maxf(now - r_since + ticks_left, 0.0)
+	else:
+		record.erase("repack_since")
+		record.erase("repack_span")
 
 	# Wait timer for stationary queue or seated idle fidgets.
 	var waiting := (
@@ -367,18 +395,21 @@ static func _evaluate_security(p: Passenger, record: Dictionary, now: float) -> 
 		return {}
 	var react_mode := Mode.ALARM if p.alarm else Mode.LIQUIDS
 	if p.security_phase == SecurityRuntime.Phase.REPACK:
-		var total := float(SecurityRuntime.work_for(SecurityRuntime.Phase.REPACK, p))
-		var done := clampf(total - float(p.security_work) + fposmod(now, 1.0), 0.0, total)
-		var start_done := 6.0 if p.carry_on > 0 else 0.0
-		if done >= start_done and done < REPACK_REACTION_END:
-			var span := REPACK_REACTION_END - start_done
-			return {
-				"mode": react_mode,
-				"weight": _window_weight(done - start_done, 0.0, span, 3.0, 4.0),
-				"phase_t": (done - start_done) / float(SimClock.TICK_RATE),
-				"sub": 0,
-			}
-		return {}
+		if not record.has("repack_since"):
+			return {}
+		var since := float(record["repack_since"])
+		var span := float(record.get("repack_span", 0.0))
+		if now < since or span <= 0.0 or now - since >= span:
+			record.erase("repack_since")
+			record.erase("repack_span")
+			return {}
+		var elapsed := now - since
+		return {
+			"mode": react_mode,
+			"weight": _window_weight(elapsed, 0.0, span, 3.0, 4.0),
+			"phase_t": elapsed / float(SimClock.TICK_RATE),
+			"sub": 0,
+		}
 	if (
 		p.security_phase in [SecurityRuntime.Phase.SCAN, SecurityRuntime.Phase.ARCH]
 		and not record.get("moving", false)
@@ -664,9 +695,10 @@ func _pose_seated(skeleton: Skeleton3D, w: float, t: float, sub: int, free: Arra
 				_rotate_char(skeleton, "Head", Vector3.UP, -in_y * 6.0 * w)
 		1:
 			var look := sin(t * 1.4)
-			_rotate_char(skeleton, "Spine_01", Vector3.RIGHT, -4.0 * w)
-			_rotate_char(skeleton, "Spine_02", Vector3.RIGHT, -4.0 * w)
-			_rotate_char(skeleton, "Spine_02", Vector3.UP, 8.0 * look * w)
+			if bool(free[0]) and bool(free[1]):
+				_rotate_char(skeleton, "Spine_01", Vector3.RIGHT, -4.0 * w)
+				_rotate_char(skeleton, "Spine_02", Vector3.RIGHT, -4.0 * w)
+				_rotate_char(skeleton, "Spine_02", Vector3.UP, 8.0 * look * w)
 			_rotate_char(skeleton, "Neck", Vector3.UP, 14.0 * look * w)
 			_rotate_char(skeleton, "Head", Vector3.UP, 18.0 * look * w)
 			_rotate_char(skeleton, "Head", Vector3.RIGHT, -5.0 * w)
@@ -681,7 +713,8 @@ func _pose_seated(skeleton: Skeleton3D, w: float, t: float, sub: int, free: Arra
 		_:
 			var bob := pow(0.5 - 0.5 * cos(t * 1.8), 1.6)
 			var tilt_sign := 1.0 if posmod(variant_seed, 2) == 0 else -1.0
-			_rotate_char(skeleton, "Spine_02", Vector3.RIGHT, 4.0 * bob * w)
+			if bool(free[0]) and bool(free[1]):
+				_rotate_char(skeleton, "Spine_02", Vector3.RIGHT, 4.0 * bob * w)
 			_rotate_char(skeleton, "Neck", Vector3.RIGHT, 10.0 * bob * w)
 			_rotate_char(skeleton, "Head", Vector3.RIGHT, (-2.0 + 20.0 * bob) * w)
 			_rotate_char(skeleton, "Head", Vector3.BACK, 6.0 * tilt_sign * bob * w)

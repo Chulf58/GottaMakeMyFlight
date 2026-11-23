@@ -871,3 +871,190 @@ func test_snap_and_clock_backwards_load_reset() -> void:
 	assert_bool(cmod.active).is_true()
 	assert_int(cmod.mode).is_equal(PassengerFidgetPose.Mode.CLOSE_CALL)
 	assert_float(cmod.weight).is_greater(0.8)
+
+
+func test_helped_security_lane_repack_reaction_eases_without_snap() -> void:
+	for bags: int in [1, 0]:
+		var sec := SecurityTestWorld.make(true, 7)
+		_worlds.append(sec.world)
+		sec.world.auto_staff = false
+		StaffTestKit.seat(sec.world.staff, sec.station, StaffMember.Slot.PRIMARY)
+		StaffTestKit.seat(sec.world.staff, sec.station, StaffMember.Slot.HELPER)
+		var views := _track_views(sec.world)
+		var id := sec.send(bags, false, true)
+		var p := sec.world.passenger(id)
+
+		while p.security_phase != SecurityRuntime.Phase.REPACK and sec.world.clock.tick < 1500:
+			sec.world.step()
+			views.draw()
+		assert_int(p.security_phase).is_equal(SecurityRuntime.Phase.REPACK)
+		assert_int(sec.world.sim.security.rate(sec.station, SecurityRuntime.Phase.REPACK)).is_equal(
+			SecurityRuntime.HELPER_RATE
+		)
+
+		var node := views.node_for(id)
+		var mod := _fidget_of(node)
+		var prev_w := mod.weight if mod != null and mod.active else 0.0
+		assert_float(prev_w).is_equal(0.0)
+		var max_w := 0.0
+		var max_jump := 0.0
+		var saw_repack_pose := false
+		for _f in 60:
+			sec.world.clock.advance(SimClock.STEP / 3.0)
+			views.draw()
+			mod = _fidget_of(node)
+			var w := mod.weight if mod != null and mod.active else 0.0
+			if RepackPose.weight_for(p) > 0.0:
+				assert_float(w).is_equal(0.0)
+				saw_repack_pose = true
+				break
+			max_w = maxf(max_w, w)
+			max_jump = maxf(max_jump, absf(w - prev_w))
+			prev_w = w
+		assert_bool(saw_repack_pose).is_true()
+		assert_float(max_w).is_greater(0.5 if bags == 0 else 0.1)
+		assert_float(max_jump).is_less_equal(0.20)
+
+
+func test_seated_spine_guarded_when_arm_held_and_clock_null_snap_moving() -> void:
+	# 1. Seated variants 1 and 2 keep Spine_01/Spine_02 untouched when an arm is held.
+	var body := PassengerLooks.SCENES[0].instantiate() as Node3D
+	add_child(body)
+	_nodes.append(body)
+	var sk := _skeleton(body)
+	var player := body.get_node("AnimationPlayer") as AnimationPlayer
+	player.play("sit_idle")
+	player.speed_scale = 0.0
+	PassengerFidgetPose.apply(body, PassengerFidgetPose.Mode.SEATED, 1.0, 1.2, 1, 1, false, true)
+	var mod := _fidget_of(body)
+	assert_object(mod).is_not_null()
+	for sub: int in [1, 2]:
+		mod.sub_variant = sub
+		var spine_delta := await _sample_delta(null, sk, mod, ["Spine_01", "Spine_02"])
+		var head_delta := await _sample_delta(null, sk, mod, ["Head", "Neck"])
+		assert_float(spine_delta).is_less(0.0005)
+		assert_float(head_delta).is_greater(0.1)
+
+	# 2. Consistent _now() fallback when clock == null and sim.tick > 0, plus snap() stationary check.
+	var grid := PassengerTestWorld.floored(Vector2i(10, 8))
+	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(0, 7), 3)
+	PassengerTestWorld.place(grid, &"checkin_desk", Vector2i(6, 2), 0)
+	var world := _track_world(
+		PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(20, 600))
+	)
+	var views := _track_views(world)
+	for _k in 2:
+		var blk := world.sim.spawn_now(PassengerTestWorld.FLIGHT)
+		world.passenger(blk).carry_on = 0
+		for _t in 12:
+			world.step()
+	var id := world.sim.spawn_now(PassengerTestWorld.FLIGHT)
+	var p := world.passenger(id)
+	p.carry_on = 0
+	while (
+		not (p.stage == Passenger.Stage.CHECKIN_QUEUE and not p.is_moving())
+		and world.clock.tick < 600
+	):
+		world.step()
+		views.draw()
+	assert_int(p.stage).is_equal(Passenger.Stage.CHECKIN_QUEUE)
+	assert_int(world.clock.tick).is_greater(0)
+
+	# Snapshot stationary passenger, move cell, restore, and verify snap() keeps moving=false.
+	var saved_sim := world.sim.to_snapshot()
+	var saved_tick := world.clock.tick
+	var shifted_node := views.node_for(id)
+	shifted_node.position += Vector3(2.0, 0.0, 0.0)
+	views._cur[id] += Vector3(2.0, 0.0, 0.0)
+	assert_bool(world.sim.from_snapshot(saved_sim)).is_true()
+	views.snap()
+	assert_bool(views._fidgets.get(id, {}).get("moving", true)).is_false()
+	assert_float(views._fidgets.get(id, {}).get("wait_since", -1.0)).is_equal(float(saved_tick))
+
+	# With views.clock = null and sim.tick > 0, sync() + draw() never wipe last_tick/wait_since.
+	views.clock = null
+	views.sync()
+	views.draw()
+	assert_float(views._fidgets.get(id, {}).get("last_tick", -1.0)).is_equal(float(saved_tick))
+	assert_float(views._fidgets.get(id, {}).get("wait_since", -1.0)).is_equal(float(saved_tick))
+
+
+func test_fidget_survives_3x_frame_hitch_and_non_integer_frame_steps() -> void:
+	# 1. Active queue fidget survives a 3x frame hitch (MAX_STEPS_PER_FRAME clamp).
+	var grid := PassengerTestWorld.floored(Vector2i(10, 8))
+	PassengerTestWorld.place(grid, &"entrance_door", Vector2i(0, 7), 3)
+	PassengerTestWorld.place(grid, &"checkin_desk", Vector2i(6, 2), 0)
+	var world := _track_world(
+		PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(20, 600))
+	)
+	var views := _track_views(world)
+	for _k in 2:
+		var blk := world.sim.spawn_now(PassengerTestWorld.FLIGHT)
+		world.passenger(blk).carry_on = 0
+		for _t in 12:
+			world.step()
+	var id := world.sim.spawn_now(PassengerTestWorld.FLIGHT)
+	var p := world.passenger(id)
+	p.carry_on = 0
+	while (
+		not (p.stage == Passenger.Stage.CHECKIN_QUEUE and not p.is_moving())
+		and world.clock.tick < 600
+	):
+		world.step()
+		views.draw()
+	for _i in int(PassengerFidgetPose.QUEUE_SETTLE_TICKS + PassengerFidgetPose.EASE_TICKS + 12):
+		world.step()
+		views.draw()
+	var mod := _fidget_of(views.node_for(id))
+	assert_object(mod).is_not_null()
+	assert_bool(mod.active).is_true()
+	assert_float(mod.weight).is_greater(0.5)
+	var wait_since := float(views._fidgets.get(id, {}).get("wait_since", -1.0))
+	assert_float(wait_since).is_greater_equal(0.0)
+
+	world.clock.speed = 3
+	world.clock.advance(0.25)
+	views.draw()
+	world.clock.speed = 1
+	assert_int(p.stage).is_equal(Passenger.Stage.CHECKIN_QUEUE)
+	assert_float(float(views._fidgets.get(id, {}).get("wait_since", -1.0))).is_equal(wait_since)
+	assert_bool(mod.active).is_true()
+	assert_float(mod.weight).is_greater(0.5)
+
+	# 2. Helped-lane REPACK at non-integer frame dt (0.0213 s / ~47 FPS) keeps exact repack_span.
+	var sec := SecurityTestWorld.make(true, 7)
+	_worlds.append(sec.world)
+	sec.world.auto_staff = false
+	StaffTestKit.seat(sec.world.staff, sec.station, StaffMember.Slot.PRIMARY)
+	StaffTestKit.seat(sec.world.staff, sec.station, StaffMember.Slot.HELPER)
+	var sviews := _track_views(sec.world)
+	var sid := sec.send(0, false, true)
+	var sp := sec.world.passenger(sid)
+	while sp.security_phase != SecurityRuntime.Phase.REPACK and sec.world.clock.tick < 1500:
+		sec.world.step()
+		sviews.draw()
+	assert_int(sp.security_phase).is_equal(SecurityRuntime.Phase.REPACK)
+	var smod := _fidget_of(sviews.node_for(sid))
+	var first_span := float(sviews._fidgets.get(sid, {}).get("repack_span", -1.0))
+	assert_float(first_span).is_equal(9.0)
+	var prev_w := smod.weight if smod != null and smod.active else 0.0
+	var max_w := prev_w
+	var max_jump := 0.0
+	var saw_repack := false
+	for _f in 50:
+		sec.world.clock.advance(0.0213)
+		sviews.draw()
+		smod = _fidget_of(sviews.node_for(sid))
+		var w := smod.weight if smod != null and smod.active else 0.0
+		if RepackPose.weight_for(sp) > 0.0:
+			assert_float(w).is_equal(0.0)
+			saw_repack = true
+			break
+		if sviews._fidgets.get(sid, {}).has("repack_span"):
+			assert_float(float(sviews._fidgets[sid]["repack_span"])).is_equal(first_span)
+		max_w = maxf(max_w, w)
+		max_jump = maxf(max_jump, absf(w - prev_w))
+		prev_w = w
+	assert_bool(saw_repack).is_true()
+	assert_float(max_w).is_greater(0.5)
+	assert_float(max_jump).is_less_equal(0.25)

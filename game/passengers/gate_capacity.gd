@@ -459,11 +459,12 @@ func restore(state: Dictionary, spots: StandingSpots, by_id: Dictionary) -> void
 ## No seat on the way to the gate: a free seat first, else the nearest free
 ## standing spot (StandingSpots), walked to and then stood on. With neither the
 ## passenger is held where it is (StandingSpots.is_held()) and tries again on
-## the tick it got here and once a beat after.
+## the tick it got here and the next (after a VisitHandBack or edit), then once
+## a beat after.
 static func to_spot(sim: PassengerSim, p: Passenger) -> void:
 	var spot := sim.standing.spot_of(p.id)
 	if spot == StandingSpots.NO_SPOT:
-		if p.stage_tick != sim.tick and not sim._retry_now(p):
+		if sim.tick - p.stage_tick > 1 and not sim._retry_now(p):
 			return
 		if claim_seat(sim, p):
 			return
