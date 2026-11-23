@@ -344,6 +344,8 @@ static func has_fitting_slot(
 			if min_minute >= 0 and minute < min_minute:
 				continue
 			terms["departure_minute"] = minute
+			if flights.free_gates(terms).is_empty():
+				continue
 			if FlightFit.fits(flights, terms):
 				return true
 	return false
@@ -713,20 +715,57 @@ static func _fit(offers: Array[Dictionary], flights: FlightSim, min_minute := -1
 	if not firsts.is_empty():
 		var start := _pick(drawn[0], firsts.size())
 		first["departure_minute"] = firsts[start]
-		for step in firsts.size():
-			var minute: int = firsts[(start + step) % firsts.size()]
-			var joined := _joined_slot(flights, _terms_at(first, minute), second, seconds, drawn[1])
-			if joined >= 0:
-				first["departure_minute"] = minute
-				second["departure_minute"] = joined
-				paired = true
-				break
+		if not seconds.is_empty():
+			var first_key := _slot_key(first, min_minute)
+			var second_key := _slot_key(second, min_minute)
+			var first_cache: Dictionary = cache[first_key]
+			var second_cache: Dictionary = cache[second_key]
+			var free_cache := {}
+			var first_free := _free_gate_map(flights, first, firsts, free_cache)
+			var second_free := _free_gate_map(flights, second, seconds, free_cache)
+			for step in firsts.size():
+				var minute: int = firsts[(start + step) % firsts.size()]
+				var joined := _joined_slot(
+					flights,
+					_terms_at(first, minute),
+					first_cache[minute]["gate"],
+					first_free[minute],
+					second,
+					seconds,
+					drawn[1],
+					second_cache,
+					second_free
+				)
+				if joined >= 0:
+					first["departure_minute"] = minute
+					second["departure_minute"] = joined
+					paired = true
+					break
 	if not paired and not seconds.is_empty():
 		second["departure_minute"] = seconds[_pick(drawn[1], seconds.size())]
 	for index in range(FIT_OFFERS, offers.size()):
 		var pushes := _slots_where(flights, offers[index], cache, false, min_minute)
 		if not pushes.is_empty():
 			offers[index]["departure_minute"] = pushes[_pick(drawn[index], pushes.size())]
+
+
+static func _slot_key(offer: Dictionary, min_minute: int) -> String:
+	var traits: Dictionary = offer[FlightContract.TRAITS_KEY]
+	return "%s|%s|%d" % [offer["plane_size"], FlightContract.window(traits), min_minute]
+
+
+static func _free_gate_map(
+	flights: FlightSim, offer: Dictionary, minutes: Array[int], free_cache: Dictionary
+) -> Dictionary:
+	var size: String = offer["plane_size"]
+	var window := FlightContract.window(offer[FlightContract.TRAITS_KEY])
+	var out := {}
+	for minute in minutes:
+		var cache_key := "%s|%s|%d" % [size, window, minute]
+		if not free_cache.has(cache_key):
+			free_cache[cache_key] = flights.free_gates(_terms_at(offer, minute))
+		out[minute] = free_cache[cache_key]
+	return out
 
 
 ## The departure minutes, earliest first, at which `offer` fits `flights` now
@@ -740,7 +779,7 @@ static func _slots_where(
 	flights: FlightSim, offer: Dictionary, cache: Dictionary, fitting: bool, min_minute := -1
 ) -> Array[int]:
 	var traits: Dictionary = offer[FlightContract.TRAITS_KEY]
-	var key := "%s|%s|%d" % [offer["plane_size"], FlightContract.window(traits), min_minute]
+	var key := _slot_key(offer, min_minute)
 	if not cache.has(key):
 		var by_minute := {}
 		for minute in slots_of(traits):
@@ -772,18 +811,24 @@ static func _slots_where(
 static func _joined_slot(
 	flights: FlightSim,
 	first_terms: Dictionary,
+	first_gate: String,
+	first_free: Array[String],
 	second: Dictionary,
 	seconds: Array[int],
-	drawn: Array
+	drawn: Array,
+	second_cache: Dictionary,
+	second_free: Dictionary
 ) -> int:
 	var start := _pick(drawn, seconds.size())
 	for step in seconds.size():
 		var minute: int = seconds[(start + step) % seconds.size()]
 		var second_terms := _terms_at(second, minute)
-		if (
-			FlightFit.fits(flights, second_terms, [first_terms])
-			and FlightFit.fits(flights, first_terms, [second_terms])
+		var second_gate: String = second_cache[minute]["gate"]
+		if not flights.gates_pair_compatible(
+			first_terms, first_gate, first_free, second_terms, second_gate, second_free[minute]
 		):
+			continue
+		if flights.trial_pair_fits(first_terms, first_gate, second_terms, second_gate):
 			return minute
 	return -1
 

@@ -298,6 +298,8 @@ var _reported := {}
 ## state. Made on the first trial.
 var _trial_plans: FlightPlans
 var _trial_day_plans := {}
+var _trial_day_planners := {}
+var _trial_day_entries := {}
 var _trial_plans_key := ""
 ## The planning state planning_changed last saw (check_planning_changed()).
 var _planning_key := ""
@@ -450,6 +452,85 @@ func trial_assignment(
 			return assigned
 		extra.append(_candidate(earlier, assigned["gate"], grounds))
 	return _trial(terms, extra, ignore_gate_overlap, only_gate)
+
+
+## Gates in _best_fit order that take `terms`'s plane size and have no
+## timetable gate clash or assignment problem right now. Read-only.
+func free_gates(terms: Dictionary) -> Array[String]:
+	if FlightContract.window_problem(terms) != "" or not runway.takes(terms["plane_size"]):
+		return [] as Array[String]
+	var grounds := gate_grounds()
+	var out: Array[String] = []
+	for gate_id in _best_fit(grounds, terms["plane_size"]):
+		if FlightContract.assignment_problem(gate_id, grounds[gate_id]["stand"]) != "":
+			continue
+		var candidate := _candidate(terms, gate_id, grounds)
+		if (
+			FlightContract.is_charter(candidate)
+			and (
+				FlightTimetable.first_day(candidate, tick, epoch)
+				> FlightContract.one_off_day(candidate)
+			)
+		):
+			continue
+		if _gate_problem(candidate, _contracts) == "":
+			out.append(gate_id)
+	return out
+
+
+## True when `first_terms` (taking `first_gate` first) and `second_terms`
+## (taking `second_gate` first) each have a gate in `first_free` /
+## `second_free` that does not clash at the gate with the other.
+func gates_pair_compatible(
+	first_terms: Dictionary,
+	first_gate: String,
+	first_free: Array[String],
+	second_terms: Dictionary,
+	second_gate: String,
+	second_free: Array[String]
+) -> bool:
+	if second_free.is_empty() or first_free.is_empty():
+		return false
+	var grounds := gate_grounds()
+	if not grounds.has(first_gate) or not grounds.has(second_gate):
+		return false
+	var second_ok := false
+	for gate_id in second_free:
+		if gate_id != first_gate:
+			second_ok = true
+			break
+		if not FlightTimetable.contracts_share_gate(
+			_candidate(first_terms, first_gate, grounds), _candidate(second_terms, gate_id, grounds)
+		):
+			second_ok = true
+			break
+	if not second_ok:
+		return false
+	for gate_id in first_free:
+		if gate_id != second_gate:
+			return true
+		if not FlightTimetable.contracts_share_gate(
+			_candidate(second_terms, second_gate, grounds),
+			_candidate(first_terms, gate_id, grounds)
+		):
+			return true
+	return false
+
+
+## True when `first_terms` (known to fit alone at `first_gate`) and
+## `second_terms` (known to fit alone at `second_gate`) both fit whichever is
+## accepted first, skipping redundant single-contract checks.
+func trial_pair_fits(
+	first_terms: Dictionary, first_gate: String, second_terms: Dictionary, second_gate: String
+) -> bool:
+	var grounds := gate_grounds()
+	if not grounds.has(first_gate) or not grounds.has(second_gate):
+		return false
+	var first_cand := _candidate(first_terms, first_gate, grounds)
+	if _trial(second_terms, [first_cand], false)["gate"] == "":
+		return false
+	var second_cand := _candidate(second_terms, second_gate, grounds)
+	return _trial(first_terms, [second_cand], false)["gate"] != ""
 
 
 ## trial_assignment()'s answer for `terms` beside `extra`, checks of the terms
@@ -1478,9 +1559,110 @@ func _contracts_refusal(
 	if not stranded.is_empty():
 		return stranded
 	var days := FlightPlans.days_from(world, from_day)
+	if trial and world.get("works", []).is_empty() and SpurMoves.pending_sides(world).is_empty():
+		return _trial_cluster_refusal(world, days, subjects)
 	var planner := _trial_planner() if trial else _plans
 	var base := _trial_day_plan if trial else _day_plan
 	return SpurMoves.typed(_world(), world, planner.refusal(world, base, days, subjects), subjects)
+
+
+## Fast cluster-scoped refusal for read-only trials when no runway works or
+## pending side spurs link separate clusters on a day: only flights in a
+## connected [starts[0], starts[DEPARTED]] cluster containing a subject are
+## route-built and planned, while every other flight keeps _trial_day_plan.
+func _trial_cluster_refusal(world: Dictionary, days: Array[int], subjects: Array) -> Dictionary:
+	var planner := _trial_planner().planner
+	var world_epoch: int = world["epoch"]
+	var subject_contracts: Array[Dictionary] = []
+	for contract: Dictionary in world["contracts"]:
+		if subjects.has(contract["id"]):
+			subject_contracts.append(contract)
+	for day in days:
+		var subs: Array[Dictionary] = []
+		for contract in subject_contracts:
+			var cid: String = contract["id"]
+			if not FlightPlans.runs(world, cid) or day < int(world["next_day"][cid]):
+				continue
+			if FlightContract.is_charter(contract) and day != FlightContract.one_off_day(contract):
+				continue
+			var ground: Dictionary = world["grounds"].get(contract["gate"], {})
+			if ground.is_empty():
+				continue
+			var starts := FlightTimetable.starts_for(contract, day, world_epoch)
+			(
+				subs
+				. append(
+					{
+						"id": FlightTimetable.occurrence_id(cid, day),
+						"s0": int(starts[0]),
+						"s1": int(starts[State.DEPARTED]),
+						"class": contract["plane_size"],
+						"stand": ground["stand"],
+						"starts": starts,
+						"sub": true,
+					}
+				)
+			)
+		if subs.is_empty():
+			continue
+		var before := _trial_day_plan(day)
+		if _fast_accept_subjects(subs, day, world_epoch, before):
+			continue
+		var entries: Array[Dictionary] = _base_day_entries(day, world).duplicate()
+		for sub_entry in subs:
+			var pos := entries.size()
+			for idx in entries.size():
+				var cur: Dictionary = entries[idx]
+				if (
+					sub_entry["s0"] < cur["s0"]
+					or (sub_entry["s0"] == cur["s0"] and sub_entry["id"] < cur["id"])
+				):
+					pos = idx
+					break
+			entries.insert(pos, sub_entry)
+		var start_idx := 0
+		while start_idx < entries.size():
+			var end_idx := start_idx + 1
+			var cluster_end: int = entries[start_idx]["s1"]
+			var has_sub: bool = entries[start_idx]["sub"]
+			var first_sub := start_idx if has_sub else -1
+			while end_idx < entries.size() and entries[end_idx]["s0"] < cluster_end:
+				cluster_end = maxi(cluster_end, entries[end_idx]["s1"])
+				if entries[end_idx]["sub"]:
+					if not has_sub:
+						first_sub = end_idx
+					has_sub = true
+				end_idx += 1
+			if has_sub:
+				planner._clear()
+				for k in range(start_idx, first_sub):
+					var prev_res: Dictionary = before.get(entries[k]["id"], {})
+					if prev_res.get("ok", false):
+						planner._add(prev_res["bookings"])
+				for k in range(first_sub, end_idx):
+					var e: Dictionary = entries[k]
+					if not planner._buckets.is_empty() and float(e["s0"]) >= planner._held_until:
+						planner._buckets.clear()
+					if not e["sub"]:
+						var prev_res: Dictionary = before.get(e["id"], {})
+						if (
+							prev_res.get("ok", false)
+							and prev_res.get("pauses", {}).is_empty()
+							and planner.fits(prev_res["bookings"])
+						):
+							planner._add(prev_res["bookings"])
+							continue
+					var req := FlightGround.request(
+						e["id"], e["class"], e["stand"], e["starts"], world_epoch
+					)
+					var result := planner._plan(req)
+					if not result["ok"]:
+						if e["sub"]:
+							return {"id": e["id"], "reason": result["reason"]}
+						if before.has(e["id"]) and before[e["id"]]["ok"]:
+							return {"id": e["id"], "reason": GroundPlanner.TAXI_BUSY}
+			start_idx = end_idx
+	return {}
 
 
 ## The player's words for a taxi refusal ({"reason"}).
@@ -1587,10 +1769,130 @@ func _trial_day_plan(day: int) -> Dictionary:
 	)
 	if key != _trial_plans_key:
 		_trial_day_plans.clear()
+		_trial_day_planners.clear()
+		_trial_day_entries.clear()
 		_trial_plans_key = key
 	if not _trial_day_plans.has(day):
 		_trial_day_plans[day] = _trial_planner().plan_day(world, day)
 	return _trial_day_plans[day]
+
+
+## Cached sorted flight entries of the unmodified sim on `day`, sharing _trial_plans_key.
+func _base_day_entries(day: int, world: Dictionary) -> Array[Dictionary]:
+	if not _trial_day_entries.has(day):
+		var base_epoch: int = epoch
+		var entries: Array[Dictionary] = []
+		for list: String in ["landed", "flights"]:
+			for flight: Dictionary in world[list]:
+				if (
+					flight["contract"] != ""
+					and FlightPlans.day_of(flight["starts"], base_epoch) == day
+				):
+					var starts: Array = flight["starts"]
+					(
+						entries
+						. append(
+							{
+								"id": flight["id"],
+								"s0": int(starts[0]),
+								"s1": int(starts[State.DEPARTED]),
+								"class": FlightPlans.flight_class(world, flight),
+								"stand": flight["stand"],
+								"starts": starts,
+								"sub": false,
+							}
+						)
+					)
+		for contract: Dictionary in _contracts:
+			var cid: String = contract["id"]
+			if not FlightPlans.runs(world, cid) or day < int(_next_day[cid]):
+				continue
+			if FlightContract.is_charter(contract) and day != FlightContract.one_off_day(contract):
+				continue
+			var ground: Dictionary = world["grounds"].get(contract["gate"], {})
+			if ground.is_empty():
+				continue
+			var starts := FlightTimetable.starts_for(contract, day, base_epoch)
+			(
+				entries
+				. append(
+					{
+						"id": FlightTimetable.occurrence_id(cid, day),
+						"s0": int(starts[0]),
+						"s1": int(starts[State.DEPARTED]),
+						"class": contract["plane_size"],
+						"stand": ground["stand"],
+						"starts": starts,
+						"sub": false,
+					}
+				)
+			)
+		entries.sort_custom(
+			func(a: Dictionary, b: Dictionary) -> bool:
+				return a["s0"] < b["s0"] if a["s0"] != b["s0"] else a["id"] < b["id"]
+		)
+		_trial_day_entries[day] = entries
+	return _trial_day_entries[day]
+
+
+## Indexed bookings of _trial_day_plan(day)'s valid flights, cached alongside it.
+func _trial_day_planner(day: int, before: Dictionary) -> GroundPlanner:
+	if not _trial_day_planners.has(day):
+		var dp := FlightGround.planner()
+		for result: Dictionary in before.values():
+			if result["ok"]:
+				dp._add(result["bookings"])
+		_trial_day_planners[day] = dp
+	return _trial_day_planners[day]
+
+
+## True when every subject on `day` fits with no pause against _trial_day_plan(day)'s
+## bookings and no two subjects overlap in [s0, s1], so no existing flight can change.
+func _fast_accept_subjects(
+	subs: Array[Dictionary], day: int, world_epoch: int, before: Dictionary
+) -> bool:
+	if subs.size() > 1:
+		for i in subs.size():
+			for j in range(i + 1, subs.size()):
+				if subs[i]["s0"] < subs[j]["s1"] and subs[j]["s0"] < subs[i]["s1"]:
+					return false
+	var dp := _trial_day_planner(day, before)
+	for sub_entry in subs:
+		if not GroundPlanner.keeps_quiet_night(sub_entry["starts"], world_epoch):
+			return false
+		var req := FlightGround.request(
+			sub_entry["id"],
+			sub_entry["class"],
+			sub_entry["stand"],
+			sub_entry["starts"],
+			world_epoch
+		)
+		var shape := dp._shape(req)
+		var opts_in: Array = shape["options"][State.TAXI_IN]
+		var opts_out: Array = shape["options"][State.TAXI_OUT]
+		if (
+			opts_in.is_empty()
+			or not opts_in[0].is_empty()
+			or opts_out.is_empty()
+			or not opts_out[0].is_empty()
+		):
+			return false
+		var base := float(sub_entry["starts"][0])
+		var owner: String = sub_entry["id"]
+		var bookings := GroundPlanner._shifted(shape["fixed"], base, owner)
+		bookings.append_array(
+			GroundPlanner._shifted(
+				GroundPlanner._option_bookings(shape, State.TAXI_IN, 0), base, owner
+			)
+		)
+		bookings.append_array(
+			GroundPlanner._shifted(
+				GroundPlanner._option_bookings(shape, State.TAXI_OUT, 0), base, owner
+			)
+		)
+		if not dp.fits(bookings):
+			return false
+	return true
 
 
 ## The trial planner, made on first use.
@@ -1707,6 +2009,8 @@ func _prune() -> void:
 	for day: int in _trial_day_plans.keys():
 		if day < today:
 			_trial_day_plans.erase(day)
+			_trial_day_planners.erase(day)
+			_trial_day_entries.erase(day)
 
 
 ## Adds a pruned occurrence to _landed in timetable order. Occurrences prune by
