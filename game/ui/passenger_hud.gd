@@ -374,7 +374,12 @@ func _drop_retired_selection() -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	var click := event as InputEventMouseButton
-	if click == null or not click.pressed or click.button_index != MOUSE_BUTTON_LEFT:
+	if (
+		click == null
+		or not click.pressed
+		or click.button_index != MOUSE_BUTTON_LEFT
+		or click.alt_pressed
+	):
 		return
 	if views == null or camera == null or build_mode == null:
 		return

@@ -7121,3 +7121,98 @@ msgstr ""
 #: ui/build_menu_layout.gd
 msgid "Click (R rotates)"
 msgstr ""
+
+#: build/starter_room_kits.gd
+msgctxt "build menu"
+msgid "Starter Bar"
+msgstr ""
+
+#: build/starter_room_kits.gd
+msgctxt "build menu"
+msgid "Starter Restaurant"
+msgstr ""
+
+#: build/starter_room_kits.gd
+msgctxt "build menu"
+msgid "Starter Bag room"
+msgstr ""
+
+#: build/starter_room_kits.gd
+msgctxt "build menu"
+msgid "Starter Kiosk"
+msgstr ""
+
+#: build/starter_room_kits.gd
+msgctxt "build menu"
+msgid "Starter Pharmacy"
+msgstr ""
+
+#: build/starter_room_kits.gd
+msgctxt "build menu"
+msgid "Starter Duty free"
+msgstr ""
+
+#: build/starter_room_kits.gd
+msgctxt "build menu"
+msgid "Starter Fashion store"
+msgstr ""
+
+#: build/starter_room_kits.gd
+msgctxt "build menu"
+msgid "Starter Play area"
+msgstr ""
+
+#: build/starter_room_kits.gd
+msgctxt "build menu"
+msgid "Starter Lounge"
+msgstr ""
+
+#: build/starter_room_kits.gd
+msgctxt "build menu"
+msgid "Starter Shower"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build status"
+msgid "{item} row of {count}, cost {cost}"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build status"
+msgid "{item} row of {count}, cost {cost}, {blocked} blocked: {reason}"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build status"
+msgid "Nothing to place"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build status"
+msgid "Placed {count} {item}"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build status"
+msgid "Placed {count} {item} for {cost}"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build status"
+msgid "Placed {count} {item}, skipped {skipped}: {reason}"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build status"
+msgid "Placed {count} {item} for {cost}, skipped {skipped}: {reason}"
+msgstr ""
+
+#: build/build_juice.gd
+msgctxt "build juice"
+msgid "-${amount}"
+msgstr ""
+
+#: build/build_juice.gd
+msgctxt "build juice"
+msgid "+${amount}"
+msgstr ""

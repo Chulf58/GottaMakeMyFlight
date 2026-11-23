@@ -106,10 +106,12 @@ func test_starter_kit_cards_appear_in_toilet_and_cafe_contextual_trays_and_arm()
 	await await_idle_frame()
 	assert_str(String(_mode.starter_kit.armed)).is_equal("cafe")
 
-	# Lounge has no starter kit in B2.
+	# Lounge has a starter kit as of B3.
 	_menu.enter_room_context(&"lounge", 0)
 	await await_idle_frame()
-	assert_object(_menu.starter_kit_card(&"lounge")).is_null()
+	var lounge_kit := _menu.starter_kit_card(&"lounge")
+	assert_object(lounge_kit).is_not_null()
+	assert_bool(lounge_kit.is_visible_in_tree()).is_true()
 
 
 func test_enclosed_room_surfaces_localized_needs_entrance_note_in_room_panel() -> void:

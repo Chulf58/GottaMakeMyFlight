@@ -93,7 +93,12 @@ func _unhandled_input(event: InputEvent) -> void:
 	var click := event as InputEventMouseButton
 	if event.is_action_pressed("build_rotate"):
 		rotate_turns()
-	elif event.is_action_pressed("build_apply"):
+	elif (
+		event.is_action_pressed("build_apply")
+		and not (
+			event is InputEventWithModifiers and (event as InputEventWithModifiers).alt_pressed
+		)
+	):
 		var cell: Variant = _pointer_cell()
 		if cell != null:
 			set_down(cell)
@@ -212,6 +217,8 @@ func set_down(centre: Vector2i) -> BuildResult:
 		if move.cost <= 0
 		else tr("Moved {room} for {cost}", "room move").format({"room": name_of, "cost": move.cost})
 	)
+	var moved_rect := move.to_rect
+	var moved_cost := move.cost
 	active = false
 	room_id = 0
 	turns = 0
@@ -223,6 +230,13 @@ func set_down(centre: Vector2i) -> BuildResult:
 	_set_status(note)
 	active_changed.emit()
 	_mode.grid_changed.emit()
+	var moved_ids: Array[int] = []
+	var moved_cells := BuildDrags.rect_cells(moved_rect)
+	for c in moved_cells:
+		var oid := _mode.grid.object_at(c)
+		if oid != 0 and not moved_ids.has(oid):
+			moved_ids.append(oid)
+	_mode.emit_player_commit(&"room_move", moved_cells, moved_ids, moved_cost)
 	return result
 
 

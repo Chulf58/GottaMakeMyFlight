@@ -88,7 +88,12 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("build_rotate") and armed >= 0:
 		rotate_turns()
 		get_viewport().set_input_as_handled()
-	elif event.is_action_pressed("build_apply"):
+	elif (
+		event.is_action_pressed("build_apply")
+		and not (
+			event is InputEventWithModifiers and (event as InputEventWithModifiers).alt_pressed
+		)
+	):
 		var cell: Variant = _pointer_cell()
 		if cell != null:
 			click(cell)
@@ -263,11 +268,20 @@ func paste_at(cell: Vector2i) -> BuildResult:
 		_set_status(msg)
 		_mode.notify_refusal(msg)
 		return result
-	_note = PLACED % [template.name, before - _balance()]
+	var spent := before - _balance()
+	_note = PLACED % [template.name, spent]
 	_note_cell = cell
 	_set_status(_note)
 	_key = ""
 	_mode.grid_changed.emit()
+	var rect := template.rect_at(cell, turns)
+	var placed_ids: Array[int] = []
+	for edit: BuildEdit in edits:
+		if edit.kind == BuildEdit.Kind.PLACE_OBJECT:
+			var oid := _mode.grid.object_at(edit.cell)
+			if oid != 0 and not placed_ids.has(oid):
+				placed_ids.append(oid)
+	_mode.emit_player_commit(&"template", BuildDrags.rect_cells(rect), placed_ids, spent)
 	return result
 
 

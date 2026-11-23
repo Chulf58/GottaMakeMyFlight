@@ -119,6 +119,7 @@ static func apply(mode: BuildMode, point: Vector3) -> BuildResult:
 	mode._status_note = ""
 	var anchor := mode.grid.world_to_cell(point)
 	var edits := edits_for(anchor, mode.facing)
+	var before_bal := mode.wallet().balance if mode.wallet() != null else 0
 	var result := check(mode.grid, anchor, mode.facing, mode.wallet())
 	if not result.ok:
 		mode._show_status(result)
@@ -134,6 +135,19 @@ static func apply(mode: BuildMode, point: Vector3) -> BuildResult:
 		mode._redraw()
 		mode._hover_key = ""
 		mode.grid_changed.emit()
+		var after_bal := mode.wallet().balance if mode.wallet() != null else 0
+		var cells := footprint_cells(anchor, mode.facing)
+		var placed_ids: Array[int] = []
+		for c in cells:
+			var oid := mode.grid.object_at(c)
+			if oid != 0 and not placed_ids.has(oid):
+				placed_ids.append(oid)
+		mode.emit_player_commit(
+			&"security_lane",
+			cells,
+			placed_ids,
+			before_bal - after_bal if mode.wallet() != null else 0
+		)
 		mode._status_note = Words.new().placed_note(BuildMenuCatalog.shown("Security lane"))
 		mode._note_cell = anchor
 	mode._show_status(result)
