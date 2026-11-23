@@ -47,9 +47,13 @@ func test_baggage_tools_sit_in_operations_and_remove_stays_last() -> void:
 	assert_int(BuildMenu.REMOVE_CATEGORY).is_equal(BuildMenu.CATEGORIES.size() - 1)
 	assert_str(BuildMenu.CATEGORIES[BuildMenu.REMOVE_CATEGORY]["name"]).is_equal("Remove")
 	var tab_tools: Array = BuildMenu.CATEGORIES[ops]["tools"]
-	for tool in BAGGAGE_TOOLS:
+	for tool in [BuildMode.Tool.BELT, BuildMode.Tool.BAG_ROOM]:
 		assert_bool(tab_tools.has(tool)).is_true()
 		assert_int(BuildMenu.category_of(tool)).is_equal(ops)
+	assert_bool(tab_tools.has(BuildMode.Tool.CART)).is_false()
+	assert_array(BuildMenuCatalog.ROOM_TOOLS[&"bag_room"]).is_equal(
+		[BuildMode.Tool.BELT, BuildMode.Tool.CART]
+	)
 
 
 func test_every_tool_with_a_card_is_in_exactly_one_category() -> void:
@@ -58,7 +62,11 @@ func test_every_tool_with_a_card_is_in_exactly_one_category() -> void:
 		for category in BuildMenu.CATEGORIES:
 			if category["tools"].has(tool):
 				count += 1
-		assert_int(count).override_failure_message("tool %d" % tool).is_equal(1)
+		if BuildMenuCatalog.is_room_only_tool(tool):
+			assert_int(count).override_failure_message("room tool %d" % tool).is_equal(0)
+			assert_bool(BuildMenuCatalog.room_owners_of(tool).is_empty()).is_false()
+		else:
+			assert_int(count).override_failure_message("tool %d" % tool).is_equal(1)
 
 
 func test_the_baggage_cards_show_name_thumbnail_and_hover_size_and_needs() -> void:
@@ -86,9 +94,15 @@ func test_the_baggage_cards_show_name_thumbnail_and_hover_size_and_needs() -> vo
 
 func test_picking_a_baggage_tool_opens_operations_and_marks_its_card() -> void:
 	var ops := BuildMenu.category_index("operations")
-	for tool in BAGGAGE_TOOLS:
+	_menu.card(BuildMode.Tool.BELT).pressed.emit()
+	assert_int(_mode.tool).is_equal(BuildMode.Tool.BELT)
+	assert_int(_menu.open_category()).is_equal(ops)
+	assert_bool(_menu.is_tray_open()).is_true()
+	assert_bool(_menu.card(BuildMode.Tool.BELT).button_pressed).is_true()
+	for tool in [BuildMode.Tool.BAG_ROOM, BuildMode.Tool.CART]:
 		_menu.card(tool).pressed.emit()
 		assert_int(_mode.tool).is_equal(tool)
-		assert_int(_menu.open_category()).is_equal(ops)
+		assert_bool(_menu.is_room_context()).is_true()
+		assert_str(String(_menu.room_context_type())).is_equal("bag_room")
 		assert_bool(_menu.is_tray_open()).is_true()
 		assert_bool(_menu.card(tool).button_pressed).is_true()

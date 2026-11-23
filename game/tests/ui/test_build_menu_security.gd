@@ -69,7 +69,11 @@ func test_every_tool_with_a_card_is_in_exactly_one_category() -> void:
 		for category in BuildMenu.categories():
 			if category["tools"].has(tool):
 				count += 1
-		assert_int(count).override_failure_message("tool %d" % tool).is_equal(1)
+		if BuildMenuCatalog.is_room_only_tool(tool):
+			assert_int(count).override_failure_message("room tool %d" % tool).is_equal(0)
+			assert_bool(BuildMenuCatalog.room_owners_of(tool).is_empty()).is_false()
+		else:
+			assert_int(count).override_failure_message("tool %d" % tool).is_equal(1)
 
 
 func test_each_lane_tool_places_its_part() -> void:

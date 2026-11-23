@@ -114,9 +114,65 @@ static func build_tray(menu: BuildMenu) -> void:
 			var button := make_card(menu, tool)
 			grid.add_child(button)
 			menu._cards[tool] = button
+	var pool := menu._room_cards_pool
+	pool.name = "RoomCardsPool"
+	pool.visible = false
+	menu._tray_root.add_child(pool)
+	for tool: BuildMode.Tool in BuildMenuCatalog.ROOM_TOOL_OWNERS:
+		if BuildMenuCatalog.item(tool).is_empty():
+			continue
+		var button := make_card(menu, tool)
+		pool.add_child(button)
+		menu._cards[tool] = button
+	build_room_context(menu)
 
 
-static func make_card(menu: BuildMenu, tool: BuildMode.Tool) -> Button:
+static func build_room_context(menu: BuildMenu) -> void:
+	var room_box := menu._room_box
+	room_box.name = "RoomContextBox"
+	room_box.visible = false
+	room_box.add_theme_constant_override("separation", 6)
+	room_box.mouse_filter = Control.MOUSE_FILTER_PASS
+	menu._tray_root.add_child(room_box)
+	var header := menu._room_header
+	header.name = "RoomContextHeader"
+	header.add_theme_constant_override("separation", 8)
+	header.mouse_filter = Control.MOUSE_FILTER_PASS
+	room_box.add_child(header)
+	var back := menu._room_back_button
+	back.name = "RoomBackButton"
+	back.text = _words.back_label()
+	back.focus_mode = Control.FOCUS_NONE
+	back.theme_type_variation = &"HudButtonCompact"
+	back.pressed.connect(menu.exit_room_context)
+	header.add_child(back)
+	var title := menu._room_title
+	title.name = "RoomContextTitle"
+	title.theme_type_variation = &"HudCardName"
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	header.add_child(title)
+	var summary := menu._room_summary
+	summary.name = "RoomContextSummary"
+	summary.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	summary.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	summary.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	summary.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	summary.visible = false
+	summary.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	header.add_child(summary)
+	var room_grid := menu._room_grid
+	room_grid.name = "RoomContextGrid"
+	room_grid.columns = BuildMenu.MAX_COLUMNS
+	room_grid.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	room_grid.mouse_filter = Control.MOUSE_FILTER_PASS
+	room_grid.add_theme_constant_override("h_separation", BuildMenu.CARD_SEP)
+	room_grid.add_theme_constant_override("v_separation", BuildMenu.CARD_SEP)
+	room_box.add_child(room_grid)
+
+
+static func make_card(menu: BuildMenu, tool: BuildMode.Tool, price_table: Variant = null) -> Button:
+	var prices: Dictionary = menu._price_labels if price_table == null else price_table
 	var card_item := BuildMenuCatalog.item(tool)
 	var button := ItemCardButton.new()
 	button.set_info(
@@ -157,13 +213,33 @@ static func make_card(menu: BuildMenu, tool: BuildMode.Tool) -> Button:
 	name_label.add_theme_constant_override(&"line_spacing", 0)
 	var price_label := card_label(column, _words.free_price(), &"HudPrice", PRICE_LINES)
 	price_label.name = "Price"
-	menu._price_labels[tool] = price_label
+	prices[tool] = price_label
 	watch_fit(button)
 	if BuildMenuCatalog.is_room_tool(tool):
 		add_card_badge(
 			button, BuildMenuCatalog.shown("Room"), Color(0.55, 0.80, 0.80, 0.96), &"RoomBadge"
 		)
 	return button
+
+
+static func apply_required_badge(button: Control, mandatory: bool, satisfied: bool) -> void:
+	var existing := button.get_node_or_null("RequiredBadge") as PanelContainer
+	if not mandatory:
+		if existing != null:
+			existing.visible = false
+		return
+	var text := _words.satisfied_mark() if satisfied else _words.required_mark()
+	var bg := Color(0.50, 0.80, 0.45, 0.96) if satisfied else Color(1.0, 0.85, 0.40, 0.96)
+	if existing == null:
+		add_card_badge(button, text, bg, &"RequiredBadge")
+		return
+	existing.visible = true
+	var style := existing.get_theme_stylebox(&"panel") as StyleBoxFlat
+	if style != null:
+		style.bg_color = bg
+	var lbl := existing.get_node_or_null("RequiredBadgeLabel") as Label
+	if lbl != null:
+		lbl.text = text
 
 
 ## Compact corner pill over a card's top-left corner (`Room`, `Locked`, `3x4`).
@@ -230,7 +306,9 @@ static func card_label(
 	var label := Label.new()
 	label.text = text
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.autowrap_mode = (
+		TextServer.AUTOWRAP_OFF if lines <= 1 else TextServer.AUTOWRAP_WORD_SMART
+	)
 	label.max_lines_visible = lines
 	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	label.theme_type_variation = variation
@@ -306,7 +384,15 @@ static func fit_card(button: Button) -> void:
 
 
 static func _fit_font_to_width(text: String, font: Font, width: float, max_lines: int) -> int:
-	var size := HudLayout.fit_size(text, font, HudLayout.CAPTION, width, max_lines)
+	var size: int
+	if max_lines <= 1:
+		size = HudLayout.CAPTION
+		while (
+			size > 8 and font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x > width
+		):
+			size -= 1
+		return size
+	size = HudLayout.fit_size(text, font, HudLayout.CAPTION, width, max_lines)
 	while (
 		size > 9
 		and (
@@ -423,3 +509,12 @@ class Words:
 
 	func free_price() -> String:
 		return tr("Free", "price")
+
+	func back_label() -> String:
+		return tr("← Back")
+
+	func required_mark() -> String:
+		return tr("★")
+
+	func satisfied_mark() -> String:
+		return tr("✓")

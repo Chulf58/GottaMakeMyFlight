@@ -54,9 +54,13 @@ func test_the_food_category_holds_the_cafe_room_counter_and_table() -> void:
 	assert_int(food).is_less(BuildMenu.REMOVE_CATEGORY)
 	assert_str(BuildMenu.CATEGORIES[BuildMenu.REMOVE_CATEGORY]["name"]).is_equal("Remove")
 	_menu.category_button(food).pressed.emit()
+	assert_bool(_menu.card(BuildMode.Tool.CAFE_ROOM).is_visible_in_tree()).is_true()
+	assert_bool(_menu.card(BuildMode.Tool.COUNTER).is_visible_in_tree()).is_false()
+	assert_bool(_menu.card(BuildMode.Tool.TABLE).is_visible_in_tree()).is_false()
+	assert_array(Array(_texts(_menu.card(BuildMode.Tool.CAFE_ROOM)))).contains(["Cafe"])
+	_menu.enter_room_context(&"cafe")
 	for tool in [BuildMode.Tool.CAFE_ROOM, BuildMode.Tool.COUNTER, BuildMode.Tool.TABLE]:
 		assert_bool(_menu.card(tool).is_visible_in_tree()).is_true()
-	assert_array(Array(_texts(_menu.card(BuildMode.Tool.CAFE_ROOM)))).contains(["Cafe"])
 	assert_array(Array(_texts(_menu.card(BuildMode.Tool.COUNTER)))).contains(["Counter"])
 	assert_array(Array(_texts(_menu.card(BuildMode.Tool.TABLE)))).contains(["Table"])
 
@@ -65,7 +69,8 @@ func test_the_cafe_card_picks_the_room_tool() -> void:
 	_menu.category_button(_food()).pressed.emit()
 	_menu.card(BuildMode.Tool.CAFE_ROOM).pressed.emit()
 	assert_int(_mode.tool).is_equal(BuildMode.Tool.CAFE_ROOM)
-	assert_int(_menu.open_category()).is_equal(_food())
+	assert_bool(_menu.is_room_context()).is_true()
+	assert_str(String(_menu.room_context_type())).is_equal("cafe")
 
 
 func test_the_panel_is_hidden_with_no_room_under_the_pointer() -> void:

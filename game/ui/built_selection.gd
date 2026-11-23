@@ -11,6 +11,8 @@ extends RefCounted
 ## built landside spot, else nothing. A wall in sight clears, like plain floor.
 ## It only reads; the selection is view state and is never saved.
 
+signal changed
+
 enum Kind { NONE, OBJECT, ROOM, LANDSIDE }
 
 var kind := Kind.NONE
@@ -29,16 +31,22 @@ static func clicks_taken(mode: BuildMode) -> bool:
 
 
 func clear() -> void:
+	var prev := key()
 	kind = Kind.NONE
 	id = 0
 	spot = -1
+	if key() != prev:
+		changed.emit()
 
 
 ## Selects the grid object `object_id`, as a click on it would.
 func select_object(object_id: int) -> void:
-	clear()
+	var prev := key()
 	kind = Kind.OBJECT
 	id = object_id
+	spot = -1
+	if key() != prev:
+		changed.emit()
 
 
 func is_selected() -> bool:
@@ -57,17 +65,25 @@ func key() -> String:
 func pick(
 	grid: BuildGrid, view: BuildView, placement: LandsidePlacement, eye: Camera3D, at: Vector2
 ) -> bool:
-	clear()
+	var prev := key()
+	kind = Kind.NONE
+	id = 0
+	spot = -1
 	var from := eye.project_ray_origin(at)
 	var direction := eye.project_ray_normal(at)
 	var point: Variant = BuildMode.ground_point(from, direction, grid.origin.y)
 	if point != null:
 		var cell := grid.world_to_cell(point)
 		if grid.in_bounds(cell):
-			return _pick_on_grid(grid, view, eye, point, cell)
+			var picked := _pick_on_grid(grid, view, eye, point, cell)
+			if key() != prev:
+				changed.emit()
+			return picked
 	var ground: Variant = LandsidePlacement.ground_point(from, direction)
 	if ground != null and placement != null:
 		_pick_landside(placement, ground)
+	if key() != prev:
+		changed.emit()
 	return is_selected()
 
 

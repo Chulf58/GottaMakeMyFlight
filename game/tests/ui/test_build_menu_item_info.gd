@@ -33,19 +33,17 @@ func after() -> void:
 
 
 func _tray_tools() -> Array:
-	var tools: Array = []
-	for category in BuildMenu.categories():
-		for tool in category["tools"]:
-			if tool != BuildMode.Tool.REMOVE and not tools.has(tool):
-				tools.append(tool)
-	return tools
+	return BuildMenuCatalog.all_catalog_tools()
 
 
 func _card_for(tool: BuildMode.Tool) -> ItemCardButton:
-	for i in BuildMenu.categories().size():
-		if BuildMenu.categories()[i]["tools"].has(tool):
-			_menu.press_category(i)
-			break
+	if BuildMenuCatalog.is_room_only_tool(tool):
+		_menu.enter_room_context(BuildMenuCatalog.room_owners_of(tool)[0])
+	else:
+		for i in BuildMenu.categories().size():
+			if BuildMenu.categories()[i]["tools"].has(tool):
+				_menu.press_category(i)
+				break
 	return _menu.card(tool) as ItemCardButton
 
 

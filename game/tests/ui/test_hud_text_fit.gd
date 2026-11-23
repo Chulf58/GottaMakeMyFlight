@@ -24,6 +24,7 @@ func after_test() -> void:
 	if _port != null:
 		_port.free()
 		_port = null
+	DemoMode.clear_override()
 	PseudoLocale.disable()
 
 
@@ -162,6 +163,7 @@ func test_every_card_fits_at_plus_forty_percent() -> void:
 	var cards := 0
 	var wrapped := 0
 	var shrunk := 0
+	var seen := {}
 	var categories := BuildMenuCatalog.categories()
 	for i in categories.size():
 		if i == BuildMenuCatalog.remove_category():
@@ -170,8 +172,9 @@ func test_every_card_fits_at_plus_forty_percent() -> void:
 		await _frames(2)
 		for tool: BuildMode.Tool in categories[i]["tools"]:
 			var card := _menu.card(tool)
-			if card == null or not card.is_visible_in_tree():
+			if card == null or not card.is_visible_in_tree() or seen.has(tool):
 				continue
+			seen[tool] = true
 			cards += 1
 			_assert_card_size(card)
 			for label in _labels(card):
@@ -185,9 +188,67 @@ func test_every_card_fits_at_plus_forty_percent() -> void:
 				shrunk += 1 if small else 0
 				_assert_shrink_matches_need(label, small, where)
 			_assert_inside(card)
+	for room_type: StringName in RoomTypes.ids():
+		_menu.enter_room_context(room_type)
+		await _frames(2)
+		for entry: Dictionary in BuildMenuCatalog.room_context_entries(room_type):
+			var tool: BuildMode.Tool = entry["tool"]
+			var card := _menu.card(tool)
+			if card == null or not card.is_visible_in_tree() or seen.has(tool):
+				continue
+			seen[tool] = true
+			cards += 1
+			_assert_card_size(card)
+			for label in _labels(card):
+				var where := "room %s tool %d '%s'" % [room_type, tool, label.text]
+				assert_int(label.get_line_count()).override_failure_message(where).is_less_equal(2)
+				assert_int(label.get_visible_line_count()).override_failure_message(where).is_equal(
+					label.get_line_count()
+				)
+				wrapped += 1 if label.get_line_count() == 2 else 0
+				var small := label.get_theme_font_size(&"font_size") < 14
+				shrunk += 1 if small else 0
+				_assert_shrink_matches_need(label, small, where)
+			_assert_inside(card)
 	print("cards=%d wrapped=%d shrunk=%d" % [cards, wrapped, shrunk])
 	assert_int(cards).is_greater(60)
 	assert_int(wrapped).is_greater(0)
+
+
+func test_demo_teaser_in_the_full_game_fits_on_one_line_within_card() -> void:
+	DemoMode.set_override_for_test(true)
+	_port = SubViewport.new()
+	_port.size = Vector2i(1280, 720)
+	add_child(_port)
+	var rating: AirportRating = auto_free(AirportRating.new())
+	var pax: PassengerSim = auto_free(PassengerSim.new())
+	var unlocks := BuildUnlocks.new()
+	unlocks.rating = rating
+	unlocks.passengers = pax
+	unlocks.manual = true
+	_port.add_child(unlocks)
+	for i in 100:
+		rating.record_passenger(0, true, PassengerSim.MOOD_MAX)
+		pax.outcome.emit(i, true)
+	unlocks.check()
+	_mode = BuildMode.new()
+	_mode.grid_size = Vector2i(20, 20)
+	_mode.unlocks = unlocks
+	_mode.require_unlocks = true
+	_port.add_child(_mode)
+	_mode.set_process(false)
+	_menu = BuildMenu.new()
+	_menu.build_mode = _mode
+	_port.add_child(_menu)
+	_menu.press_category(BuildMenu.category_index("decor"))
+	await _frames(3)
+	var tree_card := _menu.card(BuildMode.Tool.TREE)
+	var price_label := _menu.card_price_label(BuildMode.Tool.TREE)
+	assert_str(price_label.text).is_equal("In the full game")
+	assert_int(price_label.get_line_count()).is_equal(1)
+	assert_int(price_label.get_visible_line_count()).is_equal(1)
+	_assert_card_size(tree_card)
+	_assert_inside(tree_card)
 
 
 ## What the label draws: its text through its own auto-translate switch. The

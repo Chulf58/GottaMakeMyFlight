@@ -97,8 +97,8 @@ func test_the_food_tray_fits_the_column_and_reserved_height() -> void:
 
 
 func test_picking_a_dining_tool_opens_food_and_presses_its_card() -> void:
-	var food := BuildMenu.category_index("food")
 	for tool in TOOLS:
 		_mode.set_tool(tool)
-		assert_int(_menu.open_category()).is_equal(food)
+		assert_bool(_menu.is_room_context()).is_true()
+		assert_str(String(_menu.room_context_type())).is_equal(String(ROOMS[tool]))
 		assert_bool(_menu.card(tool).button_pressed).is_true()

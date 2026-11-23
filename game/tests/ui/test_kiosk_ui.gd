@@ -50,9 +50,16 @@ func _texts(control: Control) -> Array:
 func test_the_kiosk_cards_lead_the_shops_tab_with_thumbnails_and_prices() -> void:
 	var all := BuildMenu.categories()
 	var shops := BuildMenu.category_index("shops")
-	assert_array((all[shops]["tools"] as Array).slice(0, 3)).is_equal(KIOSK_TOOLS)
+	assert_int((all[shops]["tools"] as Array)[0]).is_equal(BuildMode.Tool.KIOSK_ROOM)
+	assert_array(BuildMenuCatalog.ROOM_TOOLS[&"kiosk"]).is_equal(
+		[BuildMode.Tool.KIOSK_COUNTER, BuildMode.Tool.KIOSK_DISPLAY]
+	)
 	assert_str(all[BuildMenu.REMOVE_CATEGORY]["name"]).is_equal("Remove")
 	_menu.category_button(shops).pressed.emit()
+	assert_bool(_menu.card(BuildMode.Tool.KIOSK_ROOM).is_visible_in_tree()).is_true()
+	assert_bool(_menu.card(BuildMode.Tool.KIOSK_COUNTER).is_visible_in_tree()).is_false()
+	assert_bool(_menu.card(BuildMode.Tool.KIOSK_DISPLAY).is_visible_in_tree()).is_false()
+	_menu.enter_room_context(&"kiosk")
 	for tool in KIOSK_TOOLS:
 		assert_bool(_menu.card(tool).is_visible_in_tree()).is_true()
 		var picture := (
