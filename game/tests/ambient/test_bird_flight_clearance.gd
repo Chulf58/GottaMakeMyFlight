@@ -106,8 +106,9 @@ func test_flights_clear_the_world() -> void:
 func test_control_a_drop_onto_a_curb_bay_clashes() -> void:
 	# A body dropping straight down onto a curb bay's kerb must clash, so the
 	# check above can see a curb bay at all.
-	var from := Vector3(-21.5, 6.0, -57.6)
-	var to := Vector3(-21.5, 0.05, -57.6)
+	# Target the single starter curb bay's centre divider line (x = -12.0 after 54ae52b0).
+	var from := Vector3(-12.0, 6.0, -57.6)
+	var to := Vector3(-12.0, 0.05, -57.6)
 	var hit := ""
 	for e in _world:
 		var inv: Transform3D = e["inv"]
