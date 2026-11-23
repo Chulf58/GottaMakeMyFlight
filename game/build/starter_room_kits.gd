@@ -32,6 +32,134 @@ const KITS := {
 			{"def": &"cafe_table", "anchor": Vector2i(0, 2), "facing": 0},
 		],
 	},
+	&"bar":
+	{
+		"name": "Starter Bar",
+		"room_type": &"bar",
+		"thumbnail": "bar_room",
+		"size": Vector2i(4, 4),
+		"door": {"cell": Vector2i(1, 3), "side": BuildGrid.Side.SOUTH},
+		"pieces":
+		[
+			{"def": &"bar_counter", "anchor": Vector2i(1, 0), "facing": 0},
+		],
+	},
+	&"restaurant":
+	{
+		"name": "Starter Restaurant",
+		"room_type": &"restaurant",
+		"thumbnail": "restaurant_room",
+		"size": Vector2i(5, 5),
+		"door": {"cell": Vector2i(1, 4), "side": BuildGrid.Side.SOUTH},
+		"pieces":
+		[
+			{"def": &"cafe_counter", "anchor": Vector2i(0, 0), "facing": 0},
+			{"def": &"restaurant_table", "anchor": Vector2i(2, 1), "facing": 0},
+		],
+	},
+	&"bag_room":
+	{
+		"name": "Starter Bag room",
+		"room_type": &"bag_room",
+		"thumbnail": "bag_room",
+		"size": Vector2i(3, 3),
+		"door": {"cell": Vector2i(1, 2), "side": BuildGrid.Side.SOUTH},
+		"pieces":
+		[
+			{"def": &"baggage_belt_end", "anchor": Vector2i(0, 0), "facing": 0},
+			{"def": &"baggage_cart", "anchor": Vector2i(2, 0), "facing": 0},
+		],
+	},
+	&"kiosk":
+	{
+		"name": "Starter Kiosk",
+		"room_type": &"kiosk",
+		"thumbnail": "kiosk_room",
+		"size": Vector2i(4, 3),
+		"door": {"cell": Vector2i(1, 2), "side": BuildGrid.Side.SOUTH},
+		"pieces":
+		[
+			{"def": &"kiosk_counter", "anchor": Vector2i(0, 0), "facing": 0},
+			{"def": &"kiosk_display", "anchor": Vector2i(2, 0), "facing": 0},
+		],
+	},
+	&"pharmacy":
+	{
+		"name": "Starter Pharmacy",
+		"room_type": &"pharmacy",
+		"thumbnail": "pharmacy_room",
+		"size": Vector2i(4, 3),
+		"door": {"cell": Vector2i(1, 2), "side": BuildGrid.Side.SOUTH},
+		"pieces":
+		[
+			{"def": &"pharmacy_counter", "anchor": Vector2i(0, 0), "facing": 0},
+			{"def": &"pharmacy_shelf", "anchor": Vector2i(2, 0), "facing": 0},
+		],
+	},
+	&"duty_free":
+	{
+		"name": "Starter Duty free",
+		"room_type": &"duty_free",
+		"thumbnail": "duty_free_room",
+		"size": Vector2i(4, 3),
+		"door": {"cell": Vector2i(1, 2), "side": BuildGrid.Side.SOUTH},
+		"pieces":
+		[
+			{"def": &"duty_free_till", "anchor": Vector2i(0, 0), "facing": 0},
+			{"def": &"duty_free_shelf", "anchor": Vector2i(2, 0), "facing": 0},
+		],
+	},
+	&"fashion":
+	{
+		"name": "Starter Fashion store",
+		"room_type": &"fashion",
+		"thumbnail": "fashion_room",
+		"size": Vector2i(4, 3),
+		"door": {"cell": Vector2i(1, 2), "side": BuildGrid.Side.SOUTH},
+		"pieces":
+		[
+			{"def": &"fashion_till", "anchor": Vector2i(0, 0), "facing": 0},
+			{"def": &"fashion_rail", "anchor": Vector2i(2, 0), "facing": 0},
+		],
+	},
+	&"play_area":
+	{
+		"name": "Starter Play area",
+		"room_type": &"play_area",
+		"thumbnail": "play_slide",
+		"size": Vector2i(4, 3),
+		"door": {"cell": Vector2i(1, 2), "side": BuildGrid.Side.SOUTH},
+		"pieces":
+		[
+			{"def": &"play_slide", "anchor": Vector2i(0, 0), "facing": 0},
+			{"def": &"play_blocks", "anchor": Vector2i(2, 0), "facing": 0},
+		],
+	},
+	&"lounge":
+	{
+		"name": "Starter Lounge",
+		"room_type": &"lounge",
+		"thumbnail": "lounge_sofa",
+		"size": Vector2i(3, 3),
+		"door": {"cell": Vector2i(1, 2), "side": BuildGrid.Side.SOUTH},
+		"pieces":
+		[
+			{"def": &"lounge_sofa", "anchor": Vector2i(0, 0), "facing": 0},
+			{"def": &"lounge_armchair", "anchor": Vector2i(2, 0), "facing": 0},
+		],
+	},
+	&"shower":
+	{
+		"name": "Starter Shower",
+		"room_type": &"shower",
+		"thumbnail": "shower_cubicle",
+		"size": Vector2i(3, 2),
+		"door": {"cell": Vector2i(1, 1), "side": BuildGrid.Side.SOUTH},
+		"pieces":
+		[
+			{"def": &"shower_cubicle", "anchor": Vector2i(0, 0), "facing": 0},
+		],
+	},
 }
 
 
@@ -211,6 +339,16 @@ class Words:
 		return [
 			tr("Starter Toilet", "build menu"),
 			tr("Starter Cafe", "build menu"),
+			tr("Starter Bar", "build menu"),
+			tr("Starter Restaurant", "build menu"),
+			tr("Starter Bag room", "build menu"),
+			tr("Starter Kiosk", "build menu"),
+			tr("Starter Pharmacy", "build menu"),
+			tr("Starter Duty free", "build menu"),
+			tr("Starter Fashion store", "build menu"),
+			tr("Starter Play area", "build menu"),
+			tr("Starter Lounge", "build menu"),
+			tr("Starter Shower", "build menu"),
 			tr("Kit", "build menu"),
 			tr("Placed {kit} for {cost}", "build status"),
 			tr("{kit}: click to place", "build status"),

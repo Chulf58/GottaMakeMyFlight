@@ -93,9 +93,17 @@ static func hover_key(mode: BuildMode, plan: LandsidePlacement.Plan) -> String:
 ## Applies a landside plan (null when the tool has no landside to build on).
 ## Landside actions keep their own undo records (LandsidePlacement.apply()).
 static func apply(mode: BuildMode, plan: LandsidePlacement.Plan) -> BuildResult:
+	var before_bal := mode.wallet().balance if mode.wallet() != null else 0
 	var result := placement(mode).apply(plan, mode._history.peek())
 	mode._hover_key = ""
 	mode._status_note = ""
+	if result != null and result.ok and plan != null:
+		var after_bal := mode.wallet().balance if mode.wallet() != null else 0
+		var net_cost := before_bal - after_bal if mode.wallet() != null else 0
+		var kind := &"remove" if plan.action == LandsidePlacement.Action.REMOVE else &"landside"
+		mode.emit_player_commit(
+			kind, [] as Array[Vector2i], [] as Array[int], net_cost, plan.centre
+		)
 	if result != null and not result.ok:
 		var msg := plan.text if plan != null and plan.text != "" else result.reason_text()
 		mode.notify_refusal(msg)

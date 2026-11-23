@@ -273,6 +273,7 @@ func _ready() -> void:
 		_wallet = build_mode.wallet()
 		_room_panel.watch(build_mode)
 		build_mode.tool_changed.connect(_on_tool_changed)
+		build_mode.eyedropper_picked.connect(_on_eyedropper_picked)
 		build_mode.status_changed.connect(_on_mode_status_changed)
 		build_mode.refusal_shown.connect(_on_refusal_shown)
 		if build_mode.grid != null:
@@ -1561,6 +1562,23 @@ func _on_starter_kit_armed_changed() -> void:
 	for kit_id: StringName in _starter_kit_cards:
 		_starter_kit_cards[kit_id].set_pressed_no_signal(kit_id == armed_kit)
 	_show_status()
+
+
+func _on_eyedropper_picked(pick: Dictionary) -> void:
+	var picked_tool: BuildMode.Tool = pick.get("tool", BuildMode.Tool.NONE)
+	var room_type: StringName = pick.get("room_type", &"")
+	var room_id := int(pick.get("room_id", 0))
+	if room_type == &"":
+		return
+	if (
+		(
+			BuildMenuCatalog.is_room_only_tool(picked_tool)
+			and BuildMenuCatalog.room_owners_of(picked_tool).has(room_type)
+		)
+		or BuildMode.TOOL_ROOMS.get(picked_tool, &"") == room_type
+	):
+		enter_room_context(room_type, room_id)
+		_show_status()
 
 
 func _refresh_starter_kit_money() -> void:

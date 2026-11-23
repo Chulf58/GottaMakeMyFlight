@@ -55,7 +55,12 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("build_rotate"):
 		rotate_turns()
 		get_viewport().set_input_as_handled()
-	elif event.is_action_pressed("build_apply"):
+	elif (
+		event.is_action_pressed("build_apply")
+		and not (
+			event is InputEventWithModifiers and (event as InputEventWithModifiers).alt_pressed
+		)
+	):
 		var cell: Variant = _pointer_cell()
 		if cell != null:
 			place_at(cell)
@@ -172,6 +177,14 @@ func place_at(cell: Vector2i) -> BuildResult:
 	_key = ""
 	_mode._redraw()
 	_mode.grid_changed.emit()
+	var rect := StarterRoomKits.rect_at(armed, cell, turns)
+	var placed_ids: Array[int] = []
+	for edit: BuildEdit in edits:
+		if edit.kind == BuildEdit.Kind.PLACE_OBJECT:
+			var oid := _mode.grid.object_at(edit.cell)
+			if oid != 0 and not placed_ids.has(oid):
+				placed_ids.append(oid)
+	_mode.emit_player_commit(&"starter_kit", BuildDrags.rect_cells(rect), placed_ids, spent)
 	return result
 
 

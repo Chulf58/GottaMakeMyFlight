@@ -50,6 +50,8 @@ static func preview_price(menu: BuildMenu) -> Vector2i:
 		return held_price(menu)
 	if mode._resize.active:
 		return RoomResize.preview_price(mode.grid, mode._resize.room_id, mode._resize.rect())
+	if mode._item_row.active:
+		return ItemRowDrag.preview_price(mode)
 	var area := mode.dragged_area()
 	if mode.tool == BuildMode.Tool.FLOOR and area.has_area():
 		var rect_cost := floor_rect_cost(menu, area)

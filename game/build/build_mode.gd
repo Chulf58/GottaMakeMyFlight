@@ -36,6 +36,10 @@ signal refusal_shown(text: String)
 ## Emitted when the room under the pointer changes, 0 for none
 ## (update_room_focus()).
 signal room_focus_changed(room_id: int)
+## Emitted ONLY after an explicit player build action commits (for BuildJuice).
+signal player_committed(info: Dictionary)
+## Emitted when the Eyedropper picks a built item/room/wall/floor.
+signal eyedropper_picked(info: Dictionary)
 
 enum Tool {
 	NONE,
@@ -306,6 +310,7 @@ var status_is_refusal := false
 var _auto_facing := true
 var _view := BuildView.new()
 var _room_view := RoomView.new()
+var _juice := BuildJuice.new()
 var _focus_room := 0
 var _ghost := Node3D.new()
 var _valid_material := BuildGhost.material(VALID_TINT)
@@ -339,7 +344,11 @@ var _area := AreaDrag.new()
 var _resize := RoomResize.new()
 ## The Wall or Glass row being dragged, and the status line text it shows.
 var _row := WallRowDrag.new()
+var _item_row := ItemRowDrag.new()
 var _row_label := ""
+## Middle-mouse press tracking so camera drag-pans never trigger Eyedropper.
+var _middle_pressing := false
+var _middle_press_screen := Vector2.ZERO
 ## Where the pointer was at the press that began a drag, and whether it has
 ## since moved CLICK_SLOP_PX away.
 var _press_screen := Vector2.ZERO
@@ -394,6 +403,8 @@ func _ready() -> void:
 	add_child(templates)
 	add_child(room_mover)
 	add_child(starter_kit)
+	_juice.watch(self)
+	add_child(_juice)
 	set_tool(tool)
 
 
@@ -426,9 +437,12 @@ func _input(event: InputEvent) -> void:
 	if is_dragging() and event.is_action_released("build_apply"):
 		finish_area()
 		finish_row()
+		finish_item_row()
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if _handle_eyedropper_input(event):
+		return
 	if is_dragging() and _cancels_area(event):
 		cancel_area()
 		get_viewport().set_input_as_handled()
@@ -453,6 +467,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			begin_area(point)
 		elif point != null and DRAG_TOOLS.has(tool):
 			begin_row(point)
+		elif point != null and ItemRowDrag.is_repeatable(tool):
+			begin_item_row(point)
 		elif (
 			point != null
 			and tool == Tool.NONE
@@ -468,6 +484,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event.is_action_released("build_apply"):
 		finish_area()
 		finish_row()
+		finish_item_row()
 	elif event is InputEventMouseMotion and is_dragging():
 		var point: Variant = _mouse_ground()
 		if point == null or _pointer_over_ui():
@@ -478,8 +495,36 @@ func _unhandled_input(event: InputEvent) -> void:
 			_drag_moved = true
 		if _row.active:
 			move_row(point)
+		elif _item_row.active:
+			move_item_row(point)
 		else:
 			move_area(point)
+
+
+func _handle_eyedropper_input(event: InputEvent) -> bool:
+	var mb := event as InputEventMouseButton
+	if mb != null and mb.button_index == MOUSE_BUTTON_MIDDLE:
+		if mb.pressed:
+			_middle_pressing = not _pointer_over_ui()
+			_middle_press_screen = mb.position
+		elif _middle_pressing:
+			_middle_pressing = false
+			if (
+				not is_dragging()
+				and not _pointer_over_ui()
+				and mb.position.distance_to(_middle_press_screen) < CLICK_SLOP_PX
+			):
+				var pick_pt: Variant = _mouse_ground()
+				if pick_pt != null and pick_eyedropper_at(pick_pt):
+					get_viewport().set_input_as_handled()
+					return true
+	if Eyedropper.is_alt_left_press(event):
+		var pick_pt: Variant = _mouse_ground()
+		if pick_pt != null and not _pointer_over_ui():
+			pick_eyedropper_at(pick_pt)
+		get_viewport().set_input_as_handled()
+		return true
+	return false
 
 
 ## Picks a tool.
@@ -617,11 +662,31 @@ func _commit_edit(edit: BuildEdit, note_cell: Vector2i) -> BuildResult:
 	var warning := front_warning(grid, edit)
 	var result := check(edit)
 	var refused_by_check := not result.ok
+	var commit_cells: Array[Vector2i] = []
+	var wall_world := Vector3.ZERO
+	var has_wall_world := false
+	var before_bal := wallet().balance if wallet() != null else 0
 	if result.ok:
 		# A removed room's cells, read before it is gone: its dead ends change.
 		var touched: Array[Vector2i] = []
 		if edit.kind == BuildEdit.Kind.REMOVE_ROOM:
 			touched = BuildDrags.rect_cells(grid.get_room(edit.room_id).get("rect", Rect2i()))
+			commit_cells = touched.duplicate()
+		elif edit.kind == BuildEdit.Kind.REMOVE_OBJECT:
+			var rec := grid.get_object(edit.object_id)
+			var rdef := BuildCatalog.get_def(rec.get("def", &"")) if not rec.is_empty() else null
+			if rdef != null:
+				commit_cells = rdef.footprint(rec["anchor"], rec["facing"])
+		elif edit.kind == BuildEdit.Kind.PLACE_OBJECT:
+			var pdef := BuildCatalog.get_def(edit.def_id)
+			if pdef != null:
+				commit_cells = pdef.footprint(edit.cell, edit.facing)
+		elif edit.kind == BuildEdit.Kind.PLACE_WALL or edit.kind == BuildEdit.Kind.REMOVE_WALL:
+			commit_cells = [edit.cell]
+			wall_world = BuildView.wall_transform(grid, edit.cell, edit.side).origin
+			has_wall_world = true
+		else:
+			commit_cells = [edit.cell]
 		# The edit and the reshape it causes reach listeners as one change.
 		grid.hold_signals()
 		result = BuildTransaction.commit_plan(grid, DoorPlacement.edits_for(grid, edit), wallet())
@@ -633,6 +698,31 @@ func _commit_edit(edit: BuildEdit, note_cell: Vector2i) -> BuildResult:
 		_redraw()
 		_hover_key = ""
 		grid_changed.emit()
+		var after_bal := wallet().balance if wallet() != null else 0
+		var net_cost := before_bal - after_bal if wallet() != null else 0
+		var placed_ids: Array[int] = []
+		if edit.kind == BuildEdit.Kind.PLACE_OBJECT and result.object_id != 0:
+			placed_ids.append(result.object_id)
+		var commit_kind := (
+			&"remove"
+			if (
+				edit.kind
+				in [
+					BuildEdit.Kind.REMOVE_FLOOR,
+					BuildEdit.Kind.REMOVE_WALL,
+					BuildEdit.Kind.REMOVE_OBJECT,
+					BuildEdit.Kind.REMOVE_ROOM,
+				]
+			)
+			else &"place"
+		)
+		emit_player_commit(
+			commit_kind,
+			commit_cells,
+			placed_ids,
+			net_cost,
+			wall_world if has_wall_world else Vector3.INF
+		)
 		if warning != "":
 			_status_note = warning
 			_note_cell = note_cell
@@ -718,10 +808,66 @@ func finish_row() -> AreaDrag.Outcome:
 	return outcome
 
 
-## True while a rectangle or a wall row is being dragged; the drag then owns
-## the hover (BuildMenu's refusal card, GhostReason, hides).
+## Starts a repeatable item row drag on the cell under `point`.
+func begin_item_row(point: Vector3) -> void:
+	BuildDrags.begin_item_row(self, point)
+
+
+## Stretches the repeatable item row to the cell under `point`.
+func move_item_row(point: Vector3) -> void:
+	BuildDrags.move_item_row(self, point)
+
+
+## Commits every valid affordable item in the dragged row as one UndoStack action.
+func finish_item_row() -> AreaDrag.Outcome:
+	if not _item_row.active:
+		return null
+	_history.begin_action()
+	var outcome := BuildDrags.lay_item_row(self)
+	_history.end_action()
+	BuildDrags.report_item_row(self, outcome)
+	return outcome
+
+
+## Picks the tool and facing of whatever stands at ground `point`.
+func pick_eyedropper_at(point: Vector3) -> bool:
+	return Eyedropper.pick_at(self, point)
+
+
+## Emits `player_committed` for BuildJuice with normalized world position.
+func emit_player_commit(
+	kind: StringName,
+	cells: Array[Vector2i],
+	object_ids: Array[int],
+	net_cost: int,
+	world_pos := Vector3.INF
+) -> void:
+	var pos := world_pos
+	if pos == Vector3.INF:
+		if cells.is_empty():
+			pos = grid.origin
+		else:
+			var sum := Vector3.ZERO
+			for c in cells:
+				sum += grid.cell_to_world(c)
+			pos = sum / float(cells.size())
+	(
+		player_committed
+		. emit(
+			{
+				"kind": kind,
+				"cells": cells,
+				"object_ids": object_ids,
+				"net_cost": net_cost,
+				"world_pos": pos,
+			}
+		)
+	)
+
+
+## True while a rectangle, wall row, item row, or room resize is being dragged.
 func is_dragging() -> bool:
-	return _area.active or _row.active or _resize.active
+	return _area.active or _row.active or _resize.active or _item_row.active
 
 
 ## The edit under the pointer, or null (BuildMenu prices it for the cost line).
@@ -860,6 +1006,7 @@ func cancel_area() -> void:
 		return
 	_area.cancel()
 	_row.cancel()
+	_item_row.cancel()
 	_resize.cancel()
 	_hover_key = ""
 	_show_status(null)
@@ -998,8 +1145,11 @@ func _update_ghost(point: Variant) -> void:
 	if _area.active or _resize.active:
 		_draw_area()
 		return
-	if _row.active:
-		BuildGhost.draw_row(self)
+	if _row.active or _item_row.active:
+		if _row.active:
+			BuildGhost.draw_row(self)
+		else:
+			BuildGhost.draw_item_row(self)
 		return
 	if _status_note != "" and (point == null or grid.world_to_cell(point) != _note_cell):
 		_status_note = ""

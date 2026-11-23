@@ -140,6 +140,18 @@ static func room_hint(room_name: String) -> String:
 	return _words.room_hint(room)
 
 
+## "{item} row of {count}, cost {cost}", with optional ", {blocked} blocked: {reason}".
+static func item_row_drag(
+	item: String, count: int, cost: int, blocked: int, reason: String
+) -> String:
+	return _words.item_row_drag(item, count, cost, blocked, reason)
+
+
+## Result line after committing an item row drag.
+static func item_row_placed(item: String, outcome: AreaDrag.Outcome) -> String:
+	return _words.item_row_placed(item, outcome)
+
+
 ## Every English msgid, for the test that checks the list against the data.
 static func msgids() -> Array[String]:
 	return _words.msgids()
@@ -247,6 +259,55 @@ class Words:
 
 	func in_front(blocker: String) -> String:
 		return tr("{blocker} in front", "ghost reason").format({"blocker": blocker})
+
+	func item_row_drag(item: String, count: int, cost: int, blocked: int, reason: String) -> String:
+		if blocked > 0:
+			return (
+				tr(
+					"{item} row of {count}, cost {cost}, {blocked} blocked: {reason}",
+					"build status"
+				)
+				. format(
+					{
+						"item": item,
+						"count": count,
+						"cost": cost,
+						"blocked": blocked,
+						"reason": reason,
+					}
+				)
+			)
+		return tr("{item} row of {count}, cost {cost}", "build status").format(
+			{"item": item, "count": count, "cost": cost}
+		)
+
+	func item_row_placed(item: String, outcome: AreaDrag.Outcome) -> String:
+		if outcome.placed == 0 and outcome.skipped == 0:
+			return tr("Nothing to place", "build status")
+		if outcome.placed == 0:
+			return outcome.first_reason
+		var args := {
+			"item": item,
+			"count": outcome.placed,
+			"cost": outcome.money,
+			"skipped": outcome.skipped,
+			"reason": outcome.first_reason,
+		}
+		if outcome.skipped > 0:
+			if outcome.money != 0:
+				return (
+					tr(
+						"Placed {count} {item} for {cost}, skipped {skipped}: {reason}",
+						"build status"
+					)
+					. format(args)
+				)
+			return tr("Placed {count} {item}, skipped {skipped}: {reason}", "build status").format(
+				args
+			)
+		if outcome.money != 0:
+			return tr("Placed {count} {item} for {cost}", "build status").format(args)
+		return tr("Placed {count} {item}", "build status").format(args)
 
 	## Never called: every English line the data can produce inside tr(), so POT
 	## generation finds it. test_build_words.gd checks the list against the data.
@@ -391,6 +452,13 @@ class Words:
 			tr("{room} {width} x {height}", "build status"),
 			tr("{room} marked: {status}", "build status"),
 			tr("Drag to mark a {room}", "build status"),
+			tr("{item} row of {count}, cost {cost}", "build status"),
+			tr("{item} row of {count}, cost {cost}, {blocked} blocked: {reason}", "build status"),
+			tr("Nothing to place", "build status"),
+			tr("Placed {count} {item}", "build status"),
+			tr("Placed {count} {item} for {cost}", "build status"),
+			tr("Placed {count} {item}, skipped {skipped}: {reason}", "build status"),
+			tr("Placed {count} {item} for {cost}, skipped {skipped}: {reason}", "build status"),
 			# A door's blocker inside the refusal (BuildCatalog display_name, lower case)
 			tr("atm", "item name, mid-sentence"),
 			tr("baggage belt", "item name, mid-sentence"),

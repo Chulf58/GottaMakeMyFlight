@@ -22,7 +22,7 @@ static func edit_key(edit: BuildEdit) -> String:
 
 
 static func show_status(mode: BuildMode, result: BuildResult) -> void:
-	if mode._row.active:
+	if mode._row.active or mode._item_row.active:
 		mode._set_status(mode._row_label)
 		return
 	if mode._resize.active:

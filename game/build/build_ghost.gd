@@ -103,6 +103,36 @@ static func draw_row(mode: BuildMode) -> void:
 	mode._show_status(null)
 
 
+## Preview of a repeatable item row drag: valid candidates in green, blocked/unaffordable
+## candidates in red, plus exact total cost for the valid affordable subset.
+static func draw_item_row(mode: BuildMode) -> void:
+	var edits := mode._item_row.edits()
+	var purse := mode.wallet()
+	var bal := purse.balance if purse != null else -1
+	var key := (
+		"item_row:%s:%s:%d:%d:%d"
+		% [edits.front().cell, edits.back().cell, mode.tool, mode.facing, bal]
+	)
+	if key == mode._hover_key:
+		return
+	mode._hover_key = key
+	mode._hover_edit = null
+	var plan := ItemRowDrag.preview(
+		mode.grid, edits, mode.check, purse, mode.unlocks, mode.require_unlocks
+	)
+	clear(mode)
+	for i in plan.edits.size():
+		var tint := mode._valid_material if plan.valid[i] else mode._invalid_material
+		var edit := plan.edits[i]
+		object(mode, edit.def_id, edit.cell, edit.facing, tint)
+	var def := BuildCatalog.get_def(BuildMode.tool_object(mode.tool))
+	var item_name := DisplayWords.item(def.display_name) if def != null else ""
+	mode._row_label = BuildWords.item_row_drag(
+		item_name, plan.edits.size(), plan.cost, plan.blocked, plan.first_reason
+	)
+	mode._show_status(null)
+
+
 ## One tinted slab over the room's dragged rectangle, plus planned perimeter walls.
 static func draw_resize(mode: BuildMode) -> void:
 	var area := mode._resize.rect()
@@ -276,6 +306,11 @@ static func clearance_target(mode: BuildMode) -> Dictionary:
 		for edit in BuildDrags.row_edits(mode):
 			row_cells.append_array(StandEnvelope.edit_cells(edit))
 		return _cells_target(mode.grid, row_cells, true)
+	if mode._item_row.active:
+		var item_cells: Array[Vector2i] = []
+		for edit in mode._item_row.edits():
+			item_cells.append_array(StandEnvelope.edit_cells(edit))
+		return _cells_target(mode.grid, item_cells, true)
 	if mode.room_mover != null and mode.room_mover.active:
 		if mode.room_mover._plan == null:
 			return {"active": false}
