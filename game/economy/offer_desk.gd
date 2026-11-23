@@ -301,12 +301,14 @@ func _try_refill() -> void:
 	var source := _runway_source()
 	var tier := _tier()
 	var min_minute := _min_minute(_day)
-	if not OfferBoard.has_fitting_slot(flights, tier, source.size, min_minute):
+	_refilling = true
+	var added := board.refill_day(
+		_day, clock.rng.seed, tier, source.size, flights, live_needs(), min_minute
+	)
+	_refilling = false
+	if added.is_empty():
 		_no_slots_day = _day
 		return
-	_refilling = true
-	board.refill_day(_day, clock.rng.seed, tier, source.size, flights, live_needs(), min_minute)
-	_refilling = false
 	_refresh_refill_watch()
 
 

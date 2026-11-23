@@ -142,6 +142,7 @@ var _envelope_cells: Dictionary = {}
 ## Plane class -> spare_stand()'s answer, kept until the next refresh() or a
 ## change of owned land: the offer fit asks for it dozens of times a night.
 var _spare_stands: Dictionary = {}
+var _spare_prefix: Dictionary = {}
 var _spare_land := ""
 var _last_route_ver := -1
 var _last_enclosure_ver := -1
@@ -211,6 +212,7 @@ func refresh() -> void:
 	classes = {}
 	stands = {}
 	_spare_stands.clear()
+	_spare_prefix.clear()
 	for gate: String in _grounds:
 		stands[gate] = _grounds[gate]["stand"]
 		classes[gate] = _grounds[gate]["max_class"]
@@ -287,11 +289,14 @@ func spare_stand(plane_class: String) -> Dictionary:
 	var owned := str(land.owned_plots()) if land != null else ""
 	if owned != _spare_land:
 		_spare_stands.clear()
+		_spare_prefix.clear()
 		_spare_land = owned
 	if not _spare_stands.has(plane_class):
+		if _spare_prefix.is_empty():
+			_spare_prefix = SpareStand.build_prefix(grid, site_of(grid))
 		var taken: Array[Dictionary] = []
 		taken.assign(stands.values())
-		_spare_stands[plane_class] = SpareStand.find(grid, taken, plane_class)
+		_spare_stands[plane_class] = SpareStand.find(grid, taken, plane_class, _spare_prefix)
 	return _spare_stands[plane_class]
 
 
@@ -998,6 +1003,8 @@ func _on_graph_changed(_cells: Array[Vector2i]) -> void:
 ## A removal that ended gates moves their contracts first (_removal_problem()
 ## checked that they fit), before the graph change drops the gates.
 func _on_edit_applied(edit: BuildEdit, _result: BuildResult) -> void:
+	_spare_stands.clear()
+	_spare_prefix.clear()
 	if edit.kind != BuildEdit.Kind.REMOVE_OBJECT or flights == null:
 		return
 	var ending: Array[String] = []
