@@ -382,7 +382,13 @@ func _ensure_shuttle_snap() -> void:
 	var build: BuildMode = _save_main.get_node("BuildMode")
 	var offset := ReferenceTerminal.offset_on(build.grid)
 	RoomTool.mark(
-		build.grid, Rect2i(Vector2i(13, 14) + offset, Vector2i(4, 4)), &"bag_room", build.wallet()
+		build.grid, Rect2i(Vector2i(13, 14) + offset, Vector2i(4, 3)), &"bag_room", build.wallet()
+	)
+	build.grid.apply(BuildEdit.remove_wall(Vector2i(16, 14) + offset, BuildGrid.Side.NORTH))
+	build.grid.apply(
+		BuildEdit.place_wall(
+			Vector2i(14, 14) + offset, BuildGrid.Side.NORTH, BuildGrid.WallKind.DOOR
+		)
 	)
 	build.set_tool(BuildMode.Tool.BELT)
 	build.lay_belt(Vector2i(15, 10) + offset, Vector2i(16, 10) + offset)
@@ -687,6 +693,7 @@ func test_staff_panel_tier1_5_cols_and_tier2_6_cols_fit_1280() -> void:
 	var mode := BuildMode.new()
 	mode.grid_size = Vector2i(20, 20)
 	mode.unlocks = unlocks
+	mode.require_unlocks = true
 	port.add_child(unlocks)
 	port.add_child(mode)
 	var menu := BuildMenu.new()
@@ -707,7 +714,8 @@ func test_staff_panel_tier1_5_cols_and_tier2_6_cols_fit_1280() -> void:
 	for c in cols:
 		if (c as Control).visible:
 			visible_tier1 += 1
-	assert_int(visible_tier1).is_equal(5)
+	assert_int(visible_tier1).is_equal(4)
+	assert_bool(panel.is_role_visible(StaffMember.Role.SHOP)).is_false()
 	assert_bool((cols[cols.size() - 1] as Control).visible).is_false()
 
 	# Unlock Tier 2 -> Ramp agents column reveals live, 6 columns fit inside 1280x720 without overlap.
