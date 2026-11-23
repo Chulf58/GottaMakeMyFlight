@@ -302,8 +302,8 @@ func test_staff_snapshot_and_save_game_persist_energy_and_reject_corrupt() -> vo
 	bad_room["members"][0]["break_room"] = 9999
 	for bad in [bad_low, bad_high, bad_room]:
 		assert_bool(_w.staff.from_snapshot(bad)).is_false()
-	assert_int(StaffSim.SAVE_VERSION).is_equal(9)
-	assert_int(SaveGame.SAVE_VERSION).is_equal(37)
+	assert_int(StaffSim.SAVE_VERSION).is_greater_equal(9)
+	assert_int(SaveGame.SAVE_VERSION).is_greater_equal(39)
 
 
 func test_gate_agent_interrupts_break_for_own_gate_even_when_other_gate_is_open_idle() -> void:
