@@ -128,6 +128,7 @@ func test_the_panel_waits_behind_an_open_unlock_dialog_and_opens_when_it_closes(
 	_clock.set_paused(false)
 	var guide := _k.unlock_dialog()
 	assert_bool(guide.is_open()).is_true()
+	guide.answer_ring()
 	var id := _k.offer()
 	assert_bool(_panel.is_open()).is_false()
 	assert_bool(_clock.paused).is_true()

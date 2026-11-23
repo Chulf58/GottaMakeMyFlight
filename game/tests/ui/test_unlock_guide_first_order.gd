@@ -59,6 +59,7 @@ func test_the_big_firsts_dialog_shows_before_the_incident_notice() -> void:
 	assert_bool(_director.present(id, false)).is_true()
 	assert_bool(_guide.is_open()).is_true()
 	assert_bool(_panel.is_open()).is_false()
+	_guide.answer_ring()
 	assert_str(_guide.dialog().body_text()).is_equal(BigFirsts.body_for([BigFirsts.INCIDENT]))
 	_guide.dismiss()
 	assert_bool(_guide.is_open()).is_false()
@@ -70,6 +71,7 @@ func test_the_big_firsts_dialog_shows_before_the_incident_notice() -> void:
 ## it, and closing it moves straight to the first, never to the notice.
 func test_a_first_queued_behind_an_open_dialog_still_shows_before_the_notice() -> void:
 	_guide.open_dialog([2])
+	_guide.answer_ring()
 	assert_bool(_guide.is_open()).is_true()
 	var id := _director.add_scheduled()
 	assert_bool(_director.present(id, false)).is_true()
@@ -119,6 +121,7 @@ func test_the_main_scene_puts_the_hud_before_the_incident_panel() -> void:
 ## (test_unlock_guide_camera_gate.gd).
 func test_an_in_place_swap_sends_one_open_and_one_close() -> void:
 	_guide.open_dialog([2])
+	_guide.answer_ring()
 	_director.present(_director.add_scheduled(), false)
 	_guide.dismiss()
 	assert_array(_changes).is_equal([true])

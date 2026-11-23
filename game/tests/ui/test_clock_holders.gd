@@ -164,6 +164,7 @@ func test_offers_opened_under_the_unlock_dialog_opens_immediately_without_a_hold
 func test_a_replaced_unlock_dialog_leaving_never_closes_the_new_one() -> void:
 	_press_speed(2)
 	_guide.open_dialog([2])
+	_guide.answer_ring()
 	var old_layer := _guide.dialog().get_parent()
 	_guide.open_dialog([3])
 	var current := _guide.dialog()
