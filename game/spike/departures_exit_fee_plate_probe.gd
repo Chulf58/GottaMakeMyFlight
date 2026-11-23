@@ -1,10 +1,11 @@
 extends SceneTree
-## Windowed plate of the Departures End confirm for an Exit fee contract
-## (decision odd-hours-and-exit-fee-offer-traits-odd-hours-widens-the-dep), at UI
-## scale 1.25 and 1.5. The real main.tscn boots; the airport opens on one gate,
-## C, with a big Exit fee contract at 10:00 (Exit fee $120), and the probe
-## presses End on its row. Prints the question and checks it reads "End this
-## contract? Exit fee $120" and is inside the view before saving.
+## Windowed plate of the FlightPlanner End confirm for an Exit fee contract
+## (decision odd-hours-and-exit-fee-offer-traits-odd-hours-widens-the-dep,
+## departures-live-ops-drawer-and-actionable-on-time-hud-stat), at UI scale
+## 1.25 and 1.5. The real main.tscn boots; the airport opens on one gate, C, with
+## a big Exit fee contract at 10:00 (Exit fee $120), opens FlightPlanner (P),
+## selects the bar, and presses End. Prints the question and checks it reads
+## "End this contract? Exit fee $120" and is inside the view before saving.
 ##
 ## Run (one windowed Godot run project-wide; take the slot first):
 ##   timeout 300 Godot_v4.7.2-stable_win64_console.exe --display-driver windows \
@@ -34,9 +35,9 @@ func _run() -> void:
 	clock.set_paused(true)
 	await _frames(5)
 	var flights := main.get_node("FlightSim") as FlightSim
-	var boards := main.find_children("*", "DeparturesBoard", true, false)
-	if boards.is_empty():
-		print("PROBE_INVALID no DeparturesBoard in main.tscn")
+	var planners := main.find_children("*", "FlightPlanner", true, false)
+	if planners.is_empty():
+		print("PROBE_INVALID no FlightPlanner in main.tscn")
 		quit(1)
 		return
 	flights.gate_source = func() -> Array[String]: return ["C"] as Array[String]
@@ -46,30 +47,9 @@ func _run() -> void:
 	var terms := TestFlightFit.terms("XF", 600)
 	terms["traits"] = EXIT
 	print("PROBE contract XF at 10:00 accepted=", flights.accept_contract(terms))
-	var board := boards[0] as DeparturesBoard
-	board.visible = true
-	board.refresh()
-	await _frames(3)
-	var day := GameCalendar.day_of(clock.tick, 0)
-	var end := board.end_button("XF", day)
-	if end == null:
-		end = board.end_button("XF", day + 1)
-	if end == null:
-		print("PROBE_INVALID no End button on the XF row")
-		quit(1)
-		return
-	end.pressed.emit()
-	await _frames(3)
-	var confirm := board.find_child("EndConfirm", true, false) as Control
+	var planner := planners[0] as FlightPlanner
+	var confirm := await _open_confirm(planner, clock, flights)
 	if confirm == null:
-		print("PROBE_INVALID End opened no confirm")
-		quit(1)
-		return
-	var text := (confirm.get_node("EndPrompt") as Label).text
-	print("PROBE end prompt '%s' expected '%s' fee=%d" % [text, EXPECTED, flights.end_fee("XF")])
-	if text != EXPECTED:
-		print("PROBE_INVALID the End confirm does not show the Exit fee")
-		quit(1)
 		return
 	for ui_scale: float in [1.25, 1.5]:
 		root.content_scale_factor = ui_scale
@@ -91,6 +71,40 @@ func _run() -> void:
 			quit(1)
 			return
 	quit(0)
+
+
+func _open_confirm(planner: FlightPlanner, clock: SimClock, flights: FlightSim) -> Control:
+	planner.open()
+	await _frames(3)
+	var day := GameCalendar.day_of(clock.tick, 0)
+	var bar := planner.bar_button("XF", day)
+	if bar == null:
+		bar = planner.bar_button("XF", day + 1)
+	if bar == null:
+		print("PROBE_INVALID no XF bar in FlightPlanner")
+		quit(1)
+		return null
+	bar.pressed.emit()
+	await _frames(3)
+	var end := planner.part("EndContract") as Button
+	if end == null:
+		print("PROBE_INVALID no End button for the XF bar")
+		quit(1)
+		return null
+	end.pressed.emit()
+	await _frames(3)
+	var prompt := planner.part("EndPrompt") as Label
+	if prompt == null:
+		print("PROBE_INVALID End opened no confirm")
+		quit(1)
+		return null
+	var text := prompt.text
+	print("PROBE end prompt '%s' expected '%s' fee=%d" % [text, EXPECTED, flights.end_fee("XF")])
+	if text != EXPECTED:
+		print("PROBE_INVALID the End confirm does not show the Exit fee")
+		quit(1)
+		return null
+	return planner.part("PlannerActions")
 
 
 func _frames(count: int) -> void:

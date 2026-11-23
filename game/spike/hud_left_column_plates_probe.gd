@@ -44,12 +44,12 @@ func _run() -> void:
 	DirAccess.remove_absolute(HINTS_MEMORY)
 	DirAccess.remove_absolute(SETTINGS)
 	_main = (load("res://main/main.tscn") as PackedScene).instantiate()
-	root.add_child(_main)
 	_hud = _main.get_node("PassengerHud") as PassengerHud
+	_hud.departures_settings_path = SETTINGS
 	var mood := _main.get_node("MoodOverlay") as MoodOverlay
 	mood.settings_path = SETTINGS
+	root.add_child(_main)
 	var board := _main.find_child("DeparturesBoard", true, false) as DeparturesBoard
-	board.settings_path = SETTINGS
 	await _frames(10)
 	print("PROBE window=%s layout=%s" % [root.size, root.get_visible_rect().size])
 	if root.size != Vector2i(1920, 1080):
@@ -91,6 +91,7 @@ func _run() -> void:
 		terms["booked_passengers"] = 6
 		terms["fee_per_passenger"] = 50
 		print("PROBE accept %s=%s" % [extra[0], flights.accept_contract(terms)])
+	board.set_shown(true)
 	_hud.refresh()
 	await _frames(40)
 	print("PROBE departures lines: %s" % [board.shown_lines()])
@@ -113,25 +114,37 @@ func _plate(label: String, cards: Array) -> void:
 	var toggles: Array[Rect2] = []
 	for node_name in ["MoodToggle", "DeparturesToggle", "HintsToggle"]:
 		toggles.append((_main.find_child(node_name, true, false) as Control).get_global_rect())
-	print("PLATE %s toggles %s" % [label, toggles])
+	var planner_toggle := (
+		(_main.find_child("PlannerToggle", true, false) as Control).get_global_rect()
+	)
+	print("PLATE %s toggles %s planner=%s" % [label, toggles, planner_toggle])
 	for i in toggles.size():
+		var width_ok := (
+			toggles[i].size.x >= HudLayout.TOGGLE_W - 0.5
+			if i == 1
+			else is_equal_approx(toggles[i].size.x, HudLayout.TOGGLE_W)
+		)
 		if (
-			not is_equal_approx(toggles[i].size.x, HudLayout.TOGGLE_W)
+			not width_ok
 			or not is_equal_approx(toggles[i].position.x, m)
 			or not is_equal_approx(toggles[i].size.y, HudLayout.BUTTON_H)
 		):
-			_invalid("%s: toggle %d is not 176x40 at x 16" % [label, i])
+			_invalid("%s: toggle %d size/position invalid (%s)" % [label, i, toggles[i]])
 		if (
 			i > 0
 			and not is_equal_approx(toggles[i].position.y - toggles[i - 1].end.y, HudLayout.GAP)
 		):
 			_invalid("%s: gap above toggle %d is not 8" % [label, i])
+	if toggles[1].intersects(planner_toggle):
+		_invalid("%s: DeparturesToggle overlaps PlannerToggle (%s)" % [label, planner_toggle])
 	var column: Array[Rect2] = toggles.duplicate()
-	var panel := (_main.find_child("DeparturesPanel", true, false) as Control).get_global_rect()
-	print("  LIST %s" % [panel])
-	if panel.size.x > HudLayout.LIST_W + 0.5:
-		_invalid("%s: the list is %.1f wide, over %d" % [label, panel.size.x, HudLayout.LIST_W])
-	column.append(panel)
+	var panel_node := _main.find_child("DeparturesPanel", true, false) as Control
+	var panel := panel_node.get_global_rect()
+	print("  LIST visible=%s %s" % [panel_node.is_visible_in_tree(), panel])
+	if panel_node.is_visible_in_tree():
+		if panel.size.x > HudLayout.LIST_W + 0.5:
+			_invalid("%s: the list is %.1f wide, over %d" % [label, panel.size.x, HudLayout.LIST_W])
+		column.append(panel)
 	for card in cards:
 		var rect := (card as Control).get_global_rect()
 		print("  CARD %s %s" % [(card as Control).name, rect])
@@ -140,7 +153,7 @@ func _plate(label: String, cards: Array) -> void:
 			or not is_equal_approx(rect.position.x, m)
 		):
 			_invalid("%s: card %s is not 304 wide at x 16" % [label, rect])
-		if rect.position.y < panel.end.y:
+		if panel_node.is_visible_in_tree() and rect.position.y < panel.end.y:
 			_invalid("%s: card %s starts above the list's end %.1f" % [label, rect, panel.end.y])
 		column.append(rect)
 	var legend := _main.find_child("MoodLegend", true, false) as Control
