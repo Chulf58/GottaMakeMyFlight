@@ -44,6 +44,8 @@ extends VBoxContainer
 signal jumped(target: Vector3)
 ## The self-clearing late-runner card was clicked; carries the tightest flight id.
 signal late_card_pressed(flight_id: String)
+## The subtle charter-gap chip was clicked; opens OfferPanel.
+signal charter_card_pressed
 ## A cause transitioned from inactive to active on the board.
 signal alert_raised(key: StringName)
 ## reset() has dropped every card and notice; a poster of notices posts again.
@@ -99,6 +101,7 @@ var build_stack_top := Callable()
 var baggage: BaggageSim
 var ramp_dispatch: RampDispatch
 var flights: FlightSim
+var offer_desk: OfferDesk
 ## When valid and returning true (e.g. DeparturesPanel visible), suppresses the
 ## self-clearing late-runner card so it clears immediately.
 var late_suppressed := Callable()
@@ -215,8 +218,10 @@ func refresh() -> void:
 	causes.append_array(_gate_causes)
 	causes.append_array(_staff_causes)
 	causes.append_array(_ramp_causes)
+	var resolved_flights := flights if flights != null else sim.flights
 	causes.append_array(_dirty.cause())
 	causes.append_array(_current_late_causes())
+	causes.append_array(AlertSources.charter_gap(offer_desk, resolved_flights))
 	var prev_active := {}
 	for alert in _board.active():
 		prev_active[alert["key"]] = true
@@ -378,6 +383,11 @@ func press_card(key: StringName) -> bool:
 	if alert.is_empty():
 		return false
 	var targets: Array = alert["targets"]
+	if key == AlertSources.CHARTER_GAP:
+		if charter_card_pressed.get_connections().size() > 0:
+			charter_card_pressed.emit()
+			return true
+		return false
 	if key == LateCount.ALERT_KEY:
 		var flight_id := _late_flight if _late_flight != "" else String(alert.get("flight", ""))
 		if flight_id != "" and late_card_pressed.get_connections().size() > 0:
@@ -518,9 +528,13 @@ func _sync_cards() -> void:
 			card = _new_card(key)
 			if alert.get("coral", false):
 				card.theme_type_variation = &"HudCardCoral"
+			elif alert.get("subtle", false):
+				card.theme_type_variation = &"HudTopCard"
 			_cards.add_child(card)
 		var title := card.find_child("Title", true, false) as Label
 		var detail := card.find_child("Detail", true, false) as Label
+		if alert.get("subtle", false):
+			title.theme_type_variation = &"HudCardName"
 		if title.text != alert["title"] or detail.text != alert["detail"]:
 			_heights.erase(card.get_instance_id())
 		title.text = alert["title"]
@@ -549,11 +563,12 @@ func _new_card(key: StringName) -> PanelContainer:
 	card.set_meta(META_SEQ, _take_seq())
 	card.mouse_filter = Control.MOUSE_FILTER_STOP
 	card.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	card.tooltip_text = (
-		tr("Click to follow the tightest running-late passenger")
-		if key == LateCount.ALERT_KEY
-		else tr("Click to look at it")
-	)
+	if key == LateCount.ALERT_KEY:
+		card.tooltip_text = tr("Click to follow the tightest running-late passenger")
+	elif key == AlertSources.CHARTER_GAP:
+		card.tooltip_text = tr("Click to open Airline Contracts")
+	else:
+		card.tooltip_text = tr("Click to look at it")
 	card.gui_input.connect(_on_card_input.bind(key))
 	card.minimum_size_changed.connect(_on_card_resized.bind(card.get_instance_id()))
 	var column := VBoxContainer.new()
@@ -778,11 +793,14 @@ func _retranslate() -> void:
 	for child in _cards.get_children():
 		var meta_key: Variant = child.get_meta(META_KEY)
 		if not _notices.has(meta_key):
-			(child as Control).tooltip_text = (
-				tr("Click to follow the tightest running-late passenger")
-				if meta_key == LateCount.ALERT_KEY
-				else tr("Click to look at it")
-			)
+			if meta_key == LateCount.ALERT_KEY:
+				(child as Control).tooltip_text = tr(
+					"Click to follow the tightest running-late passenger"
+				)
+			elif meta_key == AlertSources.CHARTER_GAP:
+				(child as Control).tooltip_text = tr("Click to open Airline Contracts")
+			else:
+				(child as Control).tooltip_text = tr("Click to look at it")
 	_heights.clear()
 	_layout_dirty = true
 	if sim != null:

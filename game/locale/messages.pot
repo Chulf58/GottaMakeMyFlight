@@ -6454,3 +6454,43 @@ msgstr ""
 #: ui/passenger_inspect.gd
 msgid "Security search: \"{reason}\""
 msgstr ""
+
+#: ui/flight_planner.gd
+msgid "One-off charter — cannot move"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "One-off charter — flies today only"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Departs {time} today"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "${amount} payout"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "No exit fee"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Flies once today only; no exit fee or daily commitment."
+msgstr ""
+
+#: ui/alert_sources.gd
+msgid "Charter available"
+msgstr ""
+
+#: ui/alert_sources.gd
+msgid "One-off {time} flight to {destination} · click to review"
+msgstr ""
+
+#: ui/alert_stack.gd
+msgid "Click to open Airline Contracts"
+msgstr ""
+
+#: flights/flight_sim.gd
+msgid "this charter's departure window has already passed"
+msgstr ""

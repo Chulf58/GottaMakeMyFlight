@@ -1,3 +1,4 @@
+# gdlint:disable = max-public-methods
 class_name OfferBoard
 extends RefCounted
 ## The airline offers the player can take. Each game day a few offers are drawn
@@ -60,8 +61,24 @@ const STATUSES := [OPEN, ACCEPTED, DECLINED, EXPIRED]
 ## 7: small offers carry 4-8 passengers and 30-70 base fees (were 8-16 and
 ## 15-35, ruling small-plane-passenger-count-and-fare-balance-4-8-passengers).
 ## A version 6 save is refused; there is no migration.
-const SAVE_VERSION := 7
-const SAVE_KEYS := ["save_version", "offers", "loyalty"]
+## 8: dedicated "charters" array for same-day one-off charter offers (P4).
+## A version 7 save is refused; there is no migration.
+const SAVE_VERSION := 8
+const SAVE_KEYS := ["save_version", "offers", "loyalty", "charters"]
+const CHARTER_SEED_VERSION := 1
+const CHARTER_PREFIX := "CH"
+## Cutoff ticks before departure (= FlightTimetable.departure_offset at BASE for
+## CHARTER_BOARDING_TICKS = 380 -> 1840 ticks / 92 min).
+const CHARTER_CUTOFF_LEAD_TICKS := 1840
+const CHARTER_MIN_LEAD_MINUTES := 105
+const CHARTER_MAX_LEAD_MINUTES := 240
+const CHARTER_GAP_MARGIN_TICKS := 300
+const CHARTER_COOLDOWN_MINUTES := 150
+const MAX_CHARTERS_PER_DAY := 3
+## Active daytime window for charter offers (06:00..19:30), so overnight fast-
+## forward ticks never open or consume daily charter caps before morning.
+const CHARTER_FIRST_OFFER_MINUTE := GameCalendar.START_MINUTE
+const CHARTER_LAST_OFFER_MINUTE := 19 * 60 + 30
 ## Sorted, so a saved count's keys can be compared with it.
 const LOYALTY_KEYS := ["days", "last_day"]
 const LOYAL_KEY := "loyal"
@@ -77,6 +94,21 @@ const OFFER_KEYS := [
 	FlightContract.TRAITS_KEY,
 	LOYAL_KEY,
 	"status",
+]
+const CHARTER_KEYS := [
+	"id",
+	"day",
+	"airline",
+	"destination",
+	"departure_minute",
+	"plane_size",
+	"booked_passengers",
+	"fee_per_passenger",
+	FlightContract.TRAITS_KEY,
+	LOYAL_KEY,
+	"status",
+	FlightContract.ONE_OFF_DAY_KEY,
+	"cutoff_tick",
 ]
 
 ## Tuning values. A few offers a day; the starter tier has small and medium
@@ -134,6 +166,8 @@ const FIT_OFFERS := 2
 
 ## Offers in the order they were drawn.
 var _offers: Array[Dictionary] = []
+## Dedicated one-off same-day charters in the order they were drawn.
+var _charters: Array[Dictionary] = []
 ## Airline -> {"days": flown days counted (1..LOYAL_DAYS), "last_day": the last}.
 var _loyalty: Dictionary = {}
 ## True while from_snapshot() emits `changed`, so listeners do not treat a load
@@ -192,6 +226,8 @@ static func terms_of(offer: Dictionary) -> Dictionary:
 	for key in FlightContract.TERM_KEYS:
 		terms[key] = offer[key]
 	terms[FlightContract.TRAITS_KEY] = offer[FlightContract.TRAITS_KEY]
+	if offer.has(FlightContract.ONE_OFF_DAY_KEY):
+		terms[FlightContract.ONE_OFF_DAY_KEY] = int(offer[FlightContract.ONE_OFF_DAY_KEY])
 	return terms
 
 
@@ -225,6 +261,7 @@ func ensure_day(
 	if not _draw_args_valid(day, tier, runway_class):
 		return ids
 	var expired := _expire_before(day)
+	expired = _expire_charters_before(day) or expired
 	var drawn := not _has_day(day)
 	if drawn:
 		var fresh: Array[Dictionary] = []
@@ -363,36 +400,154 @@ func open_offers() -> Array[Dictionary]:
 	return open
 
 
+## Copies of the one-off charters still waiting for an answer, in the order drawn.
+func open_charters() -> Array[Dictionary]:
+	var open: Array[Dictionary] = []
+	for charter in _charters:
+		if charter["status"] == OPEN:
+			open.append(charter.duplicate())
+	return open
+
+
 ## A copy of the offer with this id, whatever its status, or {} if unknown.
 func offer_of(id: String) -> Dictionary:
 	var index := _index_of(id)
 	return _offers[index].duplicate() if index >= 0 else {}
 
 
-## Turns an open offer into a contract in `sim`. False (with an error) for an
-## unknown or settled offer, or when the sim refuses the terms, for example a
-## gate clash; a refused offer stays open.
+## A copy of the charter with this id, whatever its status, or {} if unknown.
+func charter_of(id: String) -> Dictionary:
+	var index := _charter_index_of(id)
+	return _charters[index].duplicate() if index >= 0 else {}
+
+
+## A copy of the daily offer or charter with this id, or {} if unknown.
+func any_offer_of(id: String) -> Dictionary:
+	var found := offer_of(id)
+	return found if not found.is_empty() else charter_of(id)
+
+
+## How many charters have been drawn for `day` so far.
+func day_charter_count(day: int) -> int:
+	var count := 0
+	for charter in _charters:
+		if charter["day"] == day:
+			count += 1
+	return count
+
+
+## True when `minute` of day (0..1439) lies in the active daytime charter window.
+static func is_charter_offer_minute(minute: int) -> bool:
+	return minute >= CHARTER_FIRST_OFFER_MINUTE and minute <= CHARTER_LAST_OFFER_MINUTE
+
+
+## Opens at most one small-plane same-day charter on `day` if the airport is open,
+## now is within active daytime hours, no charter is currently open, and at least
+## one gate has a quiet daytime gap with enough lead time before departure. Uses
+## an independent deterministic seed path so SimClock.rng never advances. Returns
+## the new charter id or "".
+func ensure_charter_for_gap(
+	day: int, now: int, epoch: int, world_seed: int, runway_class: String, flights: FlightSim
+) -> String:
+	if (
+		not _draw_args_valid(day, 0, runway_class)
+		or flights == null
+		or flights.opened_tick < 0
+		or not is_charter_offer_minute(GameCalendar.minute_of_day(now, epoch))
+		or not Runway.size_takes(runway_class, PlaneClasses.SMALL)
+		or not open_charters().is_empty()
+	):
+		return ""
+	var count := day_charter_count(day)
+	if count >= MAX_CHARTERS_PER_DAY:
+		return ""
+	var candidates := _quiet_gap_slots(day, now, epoch, flights)
+	if candidates.is_empty():
+		return ""
+	var rng := RandomNumberGenerator.new()
+	rng.seed = _charter_seed(world_seed, day, count + 1)
+	var minute: int = candidates[rng.randi_range(0, candidates.size() - 1)]
+	var airline: String = AIRLINES[rng.randi_range(0, AIRLINES.size() - 1)]
+	var destination: String = DESTINATIONS[rng.randi_range(0, DESTINATIONS.size() - 1)]
+	var pax_range: Array = STARTER_SIZES[PlaneClasses.SMALL]
+	var fees: Array = fee_range_for(0, PlaneClasses.SMALL)
+	var charter := {
+		"id": "%s%dN%d" % [CHARTER_PREFIX, day, count + 1],
+		"day": day,
+		FlightContract.ONE_OFF_DAY_KEY: day,
+		"cutoff_tick": GameCalendar.tick_at(day, minute, epoch) - CHARTER_CUTOFF_LEAD_TICKS,
+		"airline": airline,
+		"destination": destination,
+		"departure_minute": minute,
+		"plane_size": PlaneClasses.SMALL,
+		"booked_passengers": rng.randi_range(pax_range[0], pax_range[1]),
+		"fee_per_passenger": rng.randi_range(fees[0], fees[1]),
+		FlightContract.TRAITS_KEY: OfferTraits.frozen({}),
+		LOYAL_KEY: false,
+		"status": OPEN,
+	}
+	_charters.append(charter)
+	changed.emit()
+	return charter["id"]
+
+
+## Expires any open charter whose day has passed or whose cutoff tick passed.
+func expire_charters(now: int, day: int) -> bool:
+	var any := false
+	for charter in _charters:
+		if charter["status"] != OPEN:
+			continue
+		if int(charter["day"]) < day or now > int(charter["cutoff_tick"]):
+			charter["status"] = EXPIRED
+			any = true
+	if any:
+		changed.emit()
+	return any
+
+
+## Turns an open offer or charter into a contract in `sim`. False (with an error)
+## for an unknown or settled offer, or when the sim refuses the terms; a refused
+## offer stays open.
 func accept(id: String, sim: FlightSim) -> bool:
 	var index := _index_of(id)
-	if index < 0 or _offers[index]["status"] != OPEN:
+	if index >= 0:
+		if _offers[index]["status"] != OPEN:
+			push_error("OfferBoard.accept: '%s' is not an open offer" % id)
+			return false
+		if not sim.accept_contract(terms_of(_offers[index])):
+			return false
+		_offers[index]["status"] = ACCEPTED
+		QuitLog.note("offer_accepted")
+		changed.emit()
+		return true
+	var charter_index := _charter_index_of(id)
+	if charter_index < 0 or _charters[charter_index]["status"] != OPEN:
 		push_error("OfferBoard.accept: '%s' is not an open offer" % id)
 		return false
-	if not sim.accept_contract(terms_of(_offers[index])):
+	if not sim.accept_contract(terms_of(_charters[charter_index])):
 		return false
-	_offers[index]["status"] = ACCEPTED
-	QuitLog.note("offer_accepted")
+	_charters[charter_index]["status"] = ACCEPTED
+	QuitLog.note("charter_accepted")
 	changed.emit()
 	return true
 
 
-## Removes an open offer from the open list. False (with an error) for an
-## unknown or settled offer.
+## Removes an open offer or charter from the open list. False (with an error)
+## for an unknown or settled offer.
 func decline(id: String) -> bool:
 	var index := _index_of(id)
-	if index < 0 or _offers[index]["status"] != OPEN:
+	if index >= 0:
+		if _offers[index]["status"] != OPEN:
+			push_error("OfferBoard.decline: '%s' is not an open offer" % id)
+			return false
+		_offers[index]["status"] = DECLINED
+		changed.emit()
+		return true
+	var charter_index := _charter_index_of(id)
+	if charter_index < 0 or _charters[charter_index]["status"] != OPEN:
 		push_error("OfferBoard.decline: '%s' is not an open offer" % id)
 		return false
-	_offers[index]["status"] = DECLINED
+	_charters[charter_index]["status"] = DECLINED
 	changed.emit()
 	return true
 
@@ -422,13 +577,21 @@ func is_loyal(airline: String) -> bool:
 	return loyal_days(airline) >= OfferTraits.LOYAL_DAYS
 
 
-## JSON-safe state for a save: every offer with its day and status, and the
-## Loyal airline count.
+## JSON-safe state for a save: every offer with its day and status, the Loyal
+## airline count, and any same-day charters.
 func to_snapshot() -> Dictionary:
 	var list := []
 	for offer in _offers:
 		list.append(offer.duplicate())
-	return {"save_version": SAVE_VERSION, "offers": list, "loyalty": _loyalty.duplicate(true)}
+	var charter_list := []
+	for charter in _charters:
+		charter_list.append(charter.duplicate())
+	return {
+		"save_version": SAVE_VERSION,
+		"offers": list,
+		"loyalty": _loyalty.duplicate(true),
+		"charters": charter_list,
+	}
 
 
 ## True while from_snapshot() is emitting `changed`.
@@ -442,8 +605,9 @@ func is_loading() -> bool:
 ## could not have drawn and a day that does not hold its whole offer set.
 func from_snapshot(data: Dictionary) -> bool:
 	var loaded: Array[Dictionary] = []
+	var loaded_charters: Array[Dictionary] = []
 	var loyalty := {}
-	var problem := _load_problem(data, loaded)
+	var problem := _load_problem(data, loaded, loaded_charters)
 	if problem == "":
 		problem = _loyalty_problem(data["loyalty"], loyalty)
 	if problem == "":
@@ -453,6 +617,7 @@ func from_snapshot(data: Dictionary) -> bool:
 		return false
 	_loading = true
 	_offers = loaded
+	_charters = loaded_charters
 	_loyalty = loyalty
 	changed.emit()
 	_loading = false
@@ -649,6 +814,135 @@ func _expire_before(day: int) -> bool:
 	return any
 
 
+## Marks every open charter drawn before `day` expired; true if any was.
+func _expire_charters_before(day: int) -> bool:
+	var any := false
+	for charter in _charters:
+		if charter["status"] == OPEN and int(charter["day"]) < day:
+			charter["status"] = EXPIRED
+			any = true
+	return any
+
+
+func _quiet_gap_slots(day: int, now: int, epoch: int, flights: FlightSim) -> Array[int]:
+	var out: Array[int] = []
+	var min_tick := now + CHARTER_MIN_LEAD_MINUTES * GameCalendar.TICKS_PER_MINUTE
+	var max_tick := now + CHARTER_MAX_LEAD_MINUTES * GameCalendar.TICKS_PER_MINUTE
+	for minute in slots_of({}):
+		var dep_tick := GameCalendar.tick_at(day, minute, epoch)
+		if dep_tick < min_tick or dep_tick > max_tick:
+			continue
+		if _near_existing_charter(day, minute):
+			continue
+		if _is_quiet_gap_slot(flights, day, minute, epoch):
+			out.append(minute)
+	return out
+
+
+func _near_existing_charter(day: int, minute: int) -> bool:
+	for charter in _charters:
+		if int(charter["day"]) == day:
+			if absi(int(charter["departure_minute"]) - minute) < CHARTER_COOLDOWN_MINUTES:
+				return true
+	return false
+
+
+static func _is_quiet_gap_slot(flights: FlightSim, day: int, minute: int, epoch: int) -> bool:
+	var terms := {
+		"id": "CHGAPCHECK",
+		"airline": AIRLINES[0],
+		"destination": DESTINATIONS[0],
+		"departure_minute": minute,
+		"plane_size": PlaneClasses.SMALL,
+		"booked_passengers": STARTER_SIZES[PlaneClasses.SMALL][0],
+		"fee_per_passenger": SMALL_FEE_MIN,
+		FlightContract.TRAITS_KEY: {},
+		FlightContract.ONE_OFF_DAY_KEY: day,
+	}
+	var grounds := flights.gate_grounds()
+	for gate: String in flights.gate_ids():
+		var ground: Dictionary = grounds.get(gate, {})
+		if ground.is_empty():
+			continue
+		var candidate := FlightContract.assigned(
+			terms.merged({"first_day": day}), gate, ground["stand"]
+		)
+		if candidate.is_empty():
+			continue
+		var c_starts := FlightTimetable.starts_for(candidate, day, epoch)
+		var c_hold := FlightTimetable.gate_hold_span(c_starts, PlaneClasses.SMALL)
+		var win_start := c_hold[0] - CHARTER_GAP_MARGIN_TICKS
+		var win_end := c_hold[1] + CHARTER_GAP_MARGIN_TICKS
+		if not _gate_quiet_over(flights, gate, day, epoch, win_start, win_end):
+			continue
+		if flights.trial_assignment(terms, [], false, gate)["gate"] == gate:
+			return true
+	return false
+
+
+static func _gate_quiet_over(
+	flights: FlightSim, gate: String, day: int, epoch: int, win_start: int, win_end: int
+) -> bool:
+	for fid in flights.flight_ids():
+		if flights.flight_gate(fid) != gate:
+			continue
+		var starts: Array[int] = []
+		for s in FlightSim.STATE_COUNT:
+			starts.append(flights.state_start(fid, s))
+		var cid := flights.flight_contract_id(fid)
+		var p_size: String = (
+			flights.contract_of(cid).get("plane_size", PlaneClasses.MEDIUM)
+			if cid != ""
+			else PlaneClasses.MEDIUM
+		)
+		var hold := FlightTimetable.gate_hold_span(starts, p_size)
+		if FlightTimetable.holds_overlap(hold[0], hold[1], win_start, win_end):
+			return false
+	var start_days := flights.start_days
+	for cid in flights.contract_ids():
+		var other := flights.contract_of(cid)
+		if other["gate"] != gate or flights.contract_end_day(cid) >= 0:
+			continue
+		var check_days: Array[int] = [day - 1, day, day + 1]
+		if FlightContract.is_charter(other):
+			check_days = [FlightContract.one_off_day(other)]
+		for d in check_days:
+			if d < int(start_days.get(cid, 0)):
+				continue
+			if flights.state_of(FlightTimetable.occurrence_id(cid, d)) >= 0:
+				continue
+			var hold := FlightTimetable.gate_hold_span(
+				FlightTimetable.starts_for(other, d, epoch), other["plane_size"]
+			)
+			if FlightTimetable.holds_overlap(hold[0], hold[1], win_start, win_end):
+				return false
+	return true
+
+
+static func _charter_seed(world_seed: int, day: int, number: int) -> int:
+	var text := (
+		"gmmf-charter|%s|%s|%s|%s"
+		% [str(CHARTER_SEED_VERSION), str(world_seed), str(day), str(number)]
+	)
+	var value := IncidentRoll.fnv1a_32(text.to_utf8_buffer())
+	return value if value != 0 else 1
+
+
+static func _charter_number(id: String) -> int:
+	var split := id.find("N")
+	if split < 3 or not id.begins_with(CHARTER_PREFIX):
+		return -1
+	var number_text := id.substr(split + 1)
+	return number_text.to_int() if number_text.is_valid_int() else -1
+
+
+func _charter_index_of(id: String) -> int:
+	for i in _charters.size():
+		if _charters[i]["id"] == id:
+			return i
+	return -1
+
+
 ## Marks every open offer on `day` expired when a mid-day refill replaces them.
 func _expire_day(day: int) -> void:
 	for offer in _offers:
@@ -700,8 +994,11 @@ func _index_of(id: String) -> int:
 	return -1
 
 
-## "" and `into` filled with the saved offers, or what is wrong with `data`.
-func _load_problem(data: Dictionary, into: Array[Dictionary]) -> String:
+## "" and `into` filled with the saved offers and `into_charters` with saved
+## charters, or what is wrong with `data`.
+func _load_problem(
+	data: Dictionary, into: Array[Dictionary], into_charters: Array[Dictionary]
+) -> String:
 	var problem := _top_problem(data)
 	if problem != "":
 		return problem
@@ -730,7 +1027,126 @@ func _load_problem(data: Dictionary, into: Array[Dictionary]) -> String:
 		for number in range(1, count + 1):
 			if not seen.has("O%dN%d" % [day, number]):
 				return "day %d is missing offer O%dN%d" % [day, day, number]
-	return _status_problem(into, per_day)
+	problem = _status_problem(into, per_day)
+	if problem == "":
+		problem = _charters_load_problem(data.get("charters", []), into, into_charters)
+	return problem
+
+
+func _charters_load_problem(
+	entries: Array, offers: Array[Dictionary], into: Array[Dictionary]
+) -> String:
+	var seen := {}
+	var per_day := {}
+	var latest_offer_day := -1
+	for offer in offers:
+		latest_offer_day = maxi(latest_offer_day, int(offer["day"]))
+	var open_count := 0
+	var problem := ""
+	for entry in entries:
+		problem = _charter_problem(entry)
+		if problem != "":
+			break
+		var charter := {}
+		for key in CHARTER_KEYS:
+			var value: Variant = entry[key]
+			charter[key] = int(value) if typeof(value) == TYPE_FLOAT else value
+		charter[FlightContract.TRAITS_KEY] = OfferTraits.frozen(entry[FlightContract.TRAITS_KEY])
+		if seen.has(charter["id"]):
+			problem = "charter id '%s' appears twice" % charter["id"]
+			break
+		seen[charter["id"]] = true
+		per_day[charter["day"]] = per_day.get(charter["day"], 0) + 1
+		if charter["status"] == OPEN:
+			open_count += 1
+			if latest_offer_day >= 0 and int(charter["day"]) < latest_offer_day:
+				problem = (
+					"charter %s is open but day %d has started" % [charter["id"], latest_offer_day]
+				)
+				break
+		into.append(charter)
+	if problem == "" and open_count > 1:
+		problem = "at most one charter may be open"
+	if problem == "":
+		problem = _charter_days_problem(per_day, seen)
+	return problem
+
+
+func _charter_days_problem(per_day: Dictionary, seen: Dictionary) -> String:
+	for day in per_day:
+		var count := int(per_day[day])
+		if count > MAX_CHARTERS_PER_DAY:
+			return "day %d has more than %d charters" % [day, MAX_CHARTERS_PER_DAY]
+		for number in range(1, count + 1):
+			if not seen.has("%s%dN%d" % [CHARTER_PREFIX, day, number]):
+				return "day %d is missing charter %s%dN%d" % [day, CHARTER_PREFIX, day, number]
+	return ""
+
+
+func _charter_problem(entry: Variant) -> String:
+	if typeof(entry) != TYPE_DICTIONARY:
+		return "a charter must be a dictionary"
+	var problem := ""
+	for key in entry.keys():
+		if not CHARTER_KEYS.has(key):
+			problem = "unknown charter key '%s'" % key
+			break
+	for key in CHARTER_KEYS:
+		if problem == "" and not entry.has(key):
+			problem = "missing charter key '%s'" % key
+	if problem == "" and not STATUSES.has(entry["status"]):
+		problem = "status must be one of %s" % [STATUSES]
+	var day: Variant = entry.get("day")
+	if (
+		problem == ""
+		and (not WholeNumber.is_whole(day) or int(day) < 0 or int(day) > FlightContract.MAX_DAY)
+	):
+		problem = "day must be a whole number from 0 to %d" % FlightContract.MAX_DAY
+	if problem == "" and int(entry[FlightContract.ONE_OFF_DAY_KEY]) != int(day):
+		problem = "charter %s one_off_day must match day" % entry["id"]
+	if (
+		problem == ""
+		and (not WholeNumber.is_whole(entry["cutoff_tick"]) or int(entry["cutoff_tick"]) < 0)
+	):
+		problem = "charter %s cutoff_tick must be a non-negative whole number" % entry["id"]
+	if problem == "":
+		problem = FlightContract.problem(terms_of(entry), FlightContract.TERM_KEYS)
+	if problem == "":
+		problem = _charter_drawable_problem(entry)
+	return problem
+
+
+func _charter_drawable_problem(entry: Dictionary) -> String:
+	var day := int(entry["day"])
+	var number := _charter_number(str(entry["id"]))
+	var problem := ""
+	if str(entry["id"]) != "%s%dN%d" % [CHARTER_PREFIX, day, number] or number < 1:
+		problem = "charter id '%s' is not a valid id for day %d" % [entry["id"], day]
+	elif number > MAX_CHARTERS_PER_DAY:
+		problem = "charter id '%s' exceeds daily cap" % entry["id"]
+	elif not AIRLINES.has(entry["airline"]) or not DESTINATIONS.has(entry["destination"]):
+		problem = "charter %s has an airline or destination the board never draws" % entry["id"]
+	elif entry["plane_size"] != PlaneClasses.SMALL:
+		problem = "charter %s must be a small plane" % entry["id"]
+	elif typeof(entry[LOYAL_KEY]) != TYPE_BOOL or entry[LOYAL_KEY]:
+		problem = "charter %s loyal must be false" % entry["id"]
+	elif not (entry[FlightContract.TRAITS_KEY] as Dictionary).is_empty():
+		problem = "charter %s must have plain traits" % entry["id"]
+	return problem if problem != "" else _charter_range_problem(entry)
+
+
+static func _charter_range_problem(entry: Dictionary) -> String:
+	var pax_range: Array = STARTER_SIZES[PlaneClasses.SMALL]
+	var booked := int(entry["booked_passengers"])
+	if booked < int(pax_range[0]) or booked > int(pax_range[1]):
+		return "charter %s books %d passengers outside small range" % [entry["id"], booked]
+	var fees: Array = fee_range_for(0, PlaneClasses.SMALL)
+	var fee := int(entry["fee_per_passenger"])
+	if fee < int(fees[0]) or fee > int(fees[1]):
+		return "charter %s fee %d is outside small range" % [entry["id"], fee]
+	if not slots_of({}).has(int(entry["departure_minute"])):
+		return "charter %s departs off the board's departure slots" % entry["id"]
+	return ""
 
 
 ## "" when the statuses are ones a run could have saved: offers expire when a
@@ -756,18 +1172,20 @@ func _status_problem(offers: Array[Dictionary], per_day: Dictionary) -> String:
 	return ""
 
 
-## "" when `data` is exactly SAVE_KEYS with the current version and an array.
+## "" when `data` holds SAVE_KEYS ("charters" optional) with the current version and arrays.
 func _top_problem(data: Dictionary) -> String:
 	for key in data.keys():
 		if not SAVE_KEYS.has(key):
 			return "unknown key '%s'" % key
-	for key in SAVE_KEYS:
+	for key in ["save_version", "offers", "loyalty"]:
 		if not data.has(key):
 			return "missing key '%s'" % key
 	if not WholeNumber.is_whole(data["save_version"]) or data["save_version"] != SAVE_VERSION:
 		return "save_version must be %d" % SAVE_VERSION
 	if typeof(data["offers"]) != TYPE_ARRAY:
 		return "offers must be an array"
+	if data.has("charters") and typeof(data["charters"]) != TYPE_ARRAY:
+		return "charters must be an array"
 	return ""
 
 

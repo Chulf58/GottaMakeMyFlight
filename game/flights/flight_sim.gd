@@ -124,6 +124,9 @@ const STATE_COUNT := 11
 ## Departure is the start of PUSHBACK, so a longer TAXI_IN only moves the
 ## arrival earlier.
 const PHASE_TICKS: Array[int] = [100, 120, 140, 1000, 40, 1200, 60, 120, 920, 200]
+## Compact boarding length for same-day one-off charters (one_off_day >= 0),
+## giving a 90-minute (1,800-tick) small-plane gate hold at TaxiTimes.BASE.
+const CHARTER_BOARDING_TICKS := 380
 const DEFAULT_ID := "GMF101"
 ## The gate of add_flight and add_default_flight unless told otherwise.
 const DEFAULT_GATE := "C"
@@ -167,7 +170,11 @@ const STARTER_TERMS := {
 ## 11: small contracts carry 4-8 passengers (was 8-16, ruling small-plane-
 ## passenger-count-and-fare-balance-4-8-passengers). A version 10 save is
 ## refused; there is no migration.
-const SAVE_VERSION := 11
+## 12: contracts carry optional one_off_day (-1 for daily, >= 0 for one-off
+## charters with CHARTER_BOARDING_TICKS). A version 11 save is refused; there is
+## no migration.
+const SAVE_VERSION := 12
+const CHARTER_LATE_TEXT := "this charter's departure window has already passed"
 ## The refusal of a flight no taxi pause fits (user ruling a-gate-has-no-size-
 ## planes-use-any-stand-they-fit-neighbours-share-apron-space).
 const TAXI_BUSY_TEXT := GroundPlanner.TAXI_BUSY_TEXT
@@ -303,10 +310,15 @@ func _ready() -> void:
 
 ## Start ticks of every state for a flight whose SCHEDULED state begins at
 ## `first_tick` and that taxis with pair `taxi` (TaxiTimes).
-static func schedule_starts(first_tick: int, taxi: Array = TaxiTimes.BASE) -> Array[int]:
+static func schedule_starts(
+	first_tick: int, taxi: Array = TaxiTimes.BASE, boarding_ticks: int = -1
+) -> Array[int]:
+	var ticks := TaxiTimes.phase_ticks(taxi)
+	if boarding_ticks >= 0:
+		ticks[State.BOARDING] = boarding_ticks
 	var starts: Array[int] = [first_tick]
-	for ticks in TaxiTimes.phase_ticks(taxi):
-		starts.append(starts[starts.size() - 1] + ticks)
+	for phase_ticks in ticks:
+		starts.append(starts[starts.size() - 1] + phase_ticks)
 	return starts
 
 
@@ -386,6 +398,8 @@ func accept_contract(terms: Dictionary) -> bool:
 ## Read-only: it pushes no error and changes nothing, so a caller can ask first.
 func accept_problem(terms: Dictionary) -> String:
 	var problem := FlightContract.problem(terms, FlightContract.TERM_KEYS)
+	if problem == "" and FlightContract.is_charter(terms) and opened_tick < 0:
+		problem = "the airport is closed"
 	if problem == "" and not contract_of(terms["id"]).is_empty():
 		problem = "contract id '%s' is already used" % terms["id"]
 	if problem == "" and not runway.takes(terms["plane_size"]):
@@ -426,7 +440,7 @@ func accept_gate(terms: Dictionary) -> String:
 ## answer says whether the runway and lane would take the flight were a gate
 ## free.
 func trial_assignment(
-	terms: Dictionary, before: Array = [], ignore_gate_overlap := false
+	terms: Dictionary, before: Array = [], ignore_gate_overlap := false, only_gate := ""
 ) -> Dictionary:
 	var extra: Array[Dictionary] = []
 	var grounds := gate_grounds()
@@ -435,13 +449,17 @@ func trial_assignment(
 		if assigned["gate"] == "":
 			return assigned
 		extra.append(_candidate(earlier, assigned["gate"], grounds))
-	return _trial(terms, extra, ignore_gate_overlap)
+	return _trial(terms, extra, ignore_gate_overlap, only_gate)
 
 
 ## trial_assignment()'s answer for `terms` beside `extra`, checks of the terms
 ## first as accept_problem makes them.
-func _trial(terms: Dictionary, extra: Array[Dictionary], ignore_gate: bool) -> Dictionary:
+func _trial(
+	terms: Dictionary, extra: Array[Dictionary], ignore_gate: bool, only_gate := ""
+) -> Dictionary:
 	var problem := FlightContract.problem(terms, FlightContract.TERM_KEYS)
+	if problem == "" and FlightContract.is_charter(terms) and opened_tick < 0:
+		problem = "the airport is closed"
 	if problem == "" and not contract_of(terms["id"]).is_empty():
 		problem = "contract id '%s' is already used" % terms["id"]
 	for other in extra:
@@ -451,7 +469,7 @@ func _trial(terms: Dictionary, extra: Array[Dictionary], ignore_gate: bool) -> D
 		return _assigned("", problem, {}, BLOCKER_TERMS)
 	if not runway.takes(terms["plane_size"]):
 		return _assigned("", RunwayWorks.too_short_text(terms["plane_size"]), {}, BLOCKER_RUNWAY)
-	return _assignment(terms, extra, ignore_gate, true)
+	return _assignment(terms, extra, ignore_gate, true, only_gate)
 
 
 ## The gates with a stand now, sorted, from gate_source (DEFAULT_GATES while it
@@ -573,6 +591,8 @@ func reassign_problem(contract_id: String, gate_id: String) -> String:
 	var contract := contract_of(contract_id)
 	if contract.is_empty():
 		return "no contract '%s'" % contract_id
+	if FlightContract.is_charter(contract):
+		return "one-off charter %s cannot change gates" % contract_id
 	if _ended.has(contract_id):
 		return "contract %s has ended" % contract_id
 	if not gate_ids().has(gate_id):
@@ -591,12 +611,13 @@ func reassign_problem(contract_id: String, gate_id: String) -> String:
 ## Read-only; move_contracts() carries a plan out.
 func move_plan(from_gates: Array[String], to_gates: Array[String]) -> Dictionary:
 	var grounds := gate_grounds()
+	var world := _world(grounds)
 	var contracts := _contracts.duplicate()
 	var moves := {}
 	var stuck: Array[String] = []
 	for i in contracts.size():
 		var contract: Dictionary = contracts[i]
-		if not FlightPlans.runs(_world(grounds), contract["id"]):
+		if not FlightPlans.runs(world, contract["id"]):
 			continue
 		if not from_gates.has(contract["gate"]):
 			continue
@@ -661,8 +682,12 @@ func move_contracts(plan: Dictionary) -> bool:
 ## earlier release of a pending side spur that the end brings would strand a
 ## flight (SPUR_STRANDS_TEXT).
 func end_contract(contract_id: String) -> bool:
-	if contract_of(contract_id).is_empty():
+	var contract := contract_of(contract_id)
+	if contract.is_empty():
 		push_error("FlightSim.end_contract: no contract '%s'" % contract_id)
+		return false
+	if FlightContract.is_charter(contract):
+		push_error("FlightSim.end_contract: contract '%s' is a one-off charter" % contract_id)
 		return false
 	if _ended.has(contract_id):
 		push_error("FlightSim.end_contract: contract '%s' already ended" % contract_id)
@@ -705,7 +730,7 @@ func end_contract_by_player(contract_id: String) -> bool:
 ## Exit fee, an ended or an unknown one. Read-only; the End confirm shows it.
 func end_fee(contract_id: String) -> int:
 	var contract := contract_of(contract_id)
-	if contract.is_empty() or _ended.has(contract_id):
+	if contract.is_empty() or _ended.has(contract_id) or FlightContract.is_charter(contract):
 		return 0
 	var term_end: int = contract["first_day"] + OfferTraits.EXIT_FEE_DAYS
 	if GameCalendar.day_of(tick, epoch) >= term_end:
@@ -732,11 +757,12 @@ func is_reserving(contract_id: String) -> bool:
 	return _reserving.has(contract_id)
 
 
-## The contracts that have not ended, in acceptance order (oldest first).
+## The repeating contracts that have not ended, in acceptance order (oldest first).
+## One-off charters (one_off_day >= 0) are excluded.
 func active_contract_ids() -> Array[String]:
 	var ids: Array[String] = []
 	for contract in _contracts:
-		if not _ended.has(contract["id"]):
+		if not _ended.has(contract["id"]) and not FlightContract.is_charter(contract):
 			ids.append(contract["id"])
 	return ids
 
@@ -951,9 +977,12 @@ func next_event_tick() -> int:
 	if opened_tick < 0:
 		return next
 	for contract in _contracts:
-		if not _ended.has(contract["id"]):
-			var day: int = _next_day[contract["id"]]
-			next = _earliest(next, FlightTimetable.issue_tick(contract, day, epoch))
+		if _ended.has(contract["id"]):
+			continue
+		var day: int = _next_day[contract["id"]]
+		if FlightContract.is_charter(contract) and day > FlightContract.one_off_day(contract):
+			continue
+		next = _earliest(next, FlightTimetable.issue_tick(contract, day, epoch))
 	return next
 
 
@@ -969,14 +998,15 @@ func next_morning_activity_tick() -> int:
 	if opened_tick < 0:
 		return next
 	for contract in _contracts:
-		if not _ended.has(contract["id"]):
-			var day: int = _next_day[contract["id"]]
-			var starts := FlightTimetable.starts_for(contract, day, epoch)
-			var departure: int = starts[State.PUSHBACK]
-			var earliest := mini(
-				departure - ArrivalTypes.RELAXED_LEAD_TICKS, starts[State.APPROACH]
-			)
-			next = _earliest(next, earliest)
+		if _ended.has(contract["id"]):
+			continue
+		var day: int = _next_day[contract["id"]]
+		if FlightContract.is_charter(contract) and day > FlightContract.one_off_day(contract):
+			continue
+		var starts := FlightTimetable.starts_for(contract, day, epoch)
+		var departure: int = starts[State.PUSHBACK]
+		var earliest := mini(departure - ArrivalTypes.RELAXED_LEAD_TICKS, starts[State.APPROACH])
+		next = _earliest(next, earliest)
 	return next
 
 
@@ -1189,7 +1219,10 @@ func _candidate(terms: Dictionary, gate_id: String, grounds: Dictionary) -> Dict
 	var fields := terms.duplicate()
 	fields["first_day"] = 0
 	fields = FlightContract.assigned(fields, gate_id, grounds[gate_id]["stand"]).duplicate()
-	fields["first_day"] = FlightTimetable.first_day(fields, tick, epoch)
+	if FlightContract.is_charter(fields):
+		fields["first_day"] = FlightContract.one_off_day(fields)
+	else:
+		fields["first_day"] = FlightTimetable.first_day(fields, tick, epoch)
 	return FlightContract.make(fields)
 
 
@@ -1246,7 +1279,11 @@ static func _best_fit(grounds: Dictionary, plane_class: String) -> Array[String]
 ## it adds can be the answer, so a site with no room for one gives no gate; the
 ## gates already standing stay in the planning for the flights running there.
 func _assignment(
-	terms: Dictionary, extra: Array[Dictionary] = [], ignore_gate := false, trial := false
+	terms: Dictionary,
+	extra: Array[Dictionary] = [],
+	ignore_gate := false,
+	trial := false,
+	only_gate := ""
 ) -> Dictionary:
 	var gates := gate_ids()
 	if gates.is_empty():
@@ -1262,18 +1299,35 @@ func _assignment(
 	var tried := _best_fit(grounds, terms["plane_size"])
 	if ignore_gate and spare_stand_source.is_valid():
 		tried = tried.filter(func(gate_id: String) -> bool: return not existing.has(gate_id))
+	if only_gate != "":
+		if tried.has(only_gate):
+			tried = [only_gate] as Array[String]
+		else:
+			tried = [] as Array[String]
 	var running: Array[Dictionary] = []
 	running.append_array(_contracts)
 	running.append_array(extra)
 	var clash := ""
 	var busy := {}
 	var too_long := ""
+	var too_late := ""
 	for gate_id in tried:
 		var unassignable := FlightContract.assignment_problem(gate_id, grounds[gate_id]["stand"])
 		if unassignable != "":
 			too_long = unassignable if too_long == "" else too_long
 			continue
 		var candidate := _candidate(terms, gate_id, grounds)
+		if (
+			FlightContract.is_charter(candidate)
+			and (
+				FlightTimetable.first_day(candidate, tick, epoch)
+				> FlightContract.one_off_day(candidate)
+			)
+		):
+			too_late = TranslationServer.translate(
+				"this charter's departure window has already passed"
+			)
+			continue
 		var problem := "" if ignore_gate else _gate_problem(candidate, running)
 		if problem != "":
 			clash = problem if clash == "" else clash
@@ -1294,6 +1348,9 @@ func _assignment(
 	# Then the best fit's clash, then a route too long at every gate tried.
 	var problem := clash if clash != "" else too_long
 	var blocker := BLOCKER_GATE if clash != "" else BLOCKER_ROUTE
+	if problem == "" and too_late != "":
+		problem = too_late
+		blocker = BLOCKER_TERMS
 	if problem == "":
 		problem = "no gate takes a %s plane" % terms["plane_size"]
 		blocker = BLOCKER_STAND
@@ -1537,7 +1594,12 @@ func _issue_due(from_tick := tick) -> void:
 		if opened_tick < 0 or _ended.has(contract["id"]):
 			continue
 		var day: int = _next_day[contract["id"]]
-		while FlightTimetable.issue_tick(contract, day, epoch) <= tick:
+		var limit := (
+			FlightContract.one_off_day(contract)
+			if FlightContract.is_charter(contract)
+			else FlightContract.MAX_DAY
+		)
+		while day <= limit and FlightTimetable.issue_tick(contract, day, epoch) <= tick:
 			due.append([FlightTimetable.issue_tick(contract, day, epoch), index, day])
 			day += 1
 	due.sort_custom(_issued_before)

@@ -18,6 +18,9 @@ const NAMES: Array[String] = ["rushed", "typical", "relaxed"]
 ## placeholder near the survey in the ruling (about a third of travellers
 ## arrive two hours early).
 const SHARES: Array[int] = [15, 55, 30]
+## One-off same-day charters never draw RELAXED arrivals (who arrive 3h ahead),
+## keeping all bookings within the compact charter turnaround window.
+const CHARTER_SHARES: Array[int] = [15, 85, 0]
 ## Three game hours (user-ruled): the earliest relaxed arrival is this long
 ## before departure, 1340 ticks before the first state.
 const RELAXED_LEAD_TICKS := 3600
@@ -43,8 +46,11 @@ static func draw(rng: RandomNumberGenerator, shares: Array[int] = SHARES) -> Typ
 
 ## The shares of a flight whose contract has `traits` (OfferTraits): Shoppers
 ## sets the relaxed share, Rush crowd the rushed share, and the typical share
-## takes the rest. SHARES for a plain contract or a one-off flight ({}).
-static func shares_for(traits: Dictionary) -> Array[int]:
+## takes the rest. CHARTER_SHARES (0% RELAXED) for one-off charters; SHARES for
+## a plain contract or a one-off flight ({}).
+static func shares_for(traits: Dictionary, charter := false) -> Array[int]:
+	if charter:
+		return CHARTER_SHARES.duplicate()
 	var shares: Array[int] = SHARES.duplicate()
 	var relaxed := OfferTraits.value(traits, OfferTraits.SHOPPERS)
 	if relaxed >= 0:

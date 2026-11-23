@@ -46,10 +46,22 @@ static func taxi_of(contract: Dictionary) -> Array:
 	return contract[FlightContract.TAXI_KEY]
 
 
+## Boarding duration in ticks for `contract`: charters use the compact
+## same-day turnaround, regular contracts use FlightSim.PHASE_TICKS[BOARDING].
+static func boarding_ticks_of(contract: Dictionary) -> int:
+	return (
+		FlightSim.CHARTER_BOARDING_TICKS
+		if FlightContract.is_charter(contract)
+		else FlightSim.PHASE_TICKS[FlightSim.State.BOARDING]
+	)
+
+
 ## Ticks from the first state to the scheduled departure (start of PUSHBACK)
-## for a flight with taxi pair `taxi`.
-static func departure_offset(taxi: Array = TaxiTimes.BASE) -> int:
+## for a flight with taxi pair `taxi` (and optional `boarding_ticks` override).
+static func departure_offset(taxi: Array = TaxiTimes.BASE, boarding_ticks: int = -1) -> int:
 	var ticks := TaxiTimes.phase_ticks(taxi)
+	if boarding_ticks >= 0:
+		ticks[FlightSim.State.BOARDING] = boarding_ticks
 	var offset := 0
 	for state in FlightSim.State.PUSHBACK:
 		offset += ticks[state]
@@ -74,7 +86,9 @@ static func parse_occurrence(id: String) -> Dictionary:
 
 
 static func starts_for(contract: Dictionary, day: int, epoch: int) -> Array[int]:
-	return FlightSim.schedule_starts(_first_start(contract, day, epoch), taxi_of(contract))
+	return FlightSim.schedule_starts(
+		_first_start(contract, day, epoch), taxi_of(contract), boarding_ticks_of(contract)
+	)
 
 
 ## The first day >= 0 whose occurrence's first state is at or after `now`.
@@ -88,6 +102,8 @@ static func first_day(contract: Dictionary, now: int, epoch: int) -> int:
 ## `opened` (the tick the airport opened): the start of a contract accepted
 ## while the airport was closed. The days before it are never flown.
 static func opening_day(contract: Dictionary, opened: int, epoch: int) -> int:
+	if FlightContract.is_charter(contract):
+		return FlightContract.one_off_day(contract)
 	var issued := _day_at_or_after(issue_tick(contract, 0, epoch), opened)
 	return maxi(int(contract["first_day"]), issued)
 
@@ -103,27 +119,40 @@ static func prune_tick(starts: Array) -> int:
 
 ## The first day not yet issued at `now`.
 static func next_day(contract: Dictionary, now: int, epoch: int) -> int:
+	if FlightContract.is_charter(contract):
+		var target := FlightContract.one_off_day(contract)
+		return target if now < issue_tick(contract, target, epoch) else target + 1
 	var since_first := now - issue_tick(contract, 0, epoch)
 	var day := GameCalendar.floor_div(since_first, GameCalendar.TICKS_PER_DAY) + 1
 	return maxi(int(contract["first_day"]), day)
 
 
 ## True when two contracts would hold one gate at the same time on some day:
-## they share a gate and their gate holds overlap. Both repeat daily for ever.
-## A contract holds its gate from at most A = 1660 + TAXI_IN ticks before it
-## departs to C = 320 + TAXI_OUT after (small contracts hold a narrower window
-## inside it), so day 0 of one meets day k of the other with |k| >= 2 only when
-## A of one plus C of the other is more than a day. Their pairs' bounds
-## (TaxiTimes.MAX_IN, MAX_OUT) keep that sum at 7460 ticks or less, so comparing
-## day 0 of one with day -1, 0 and 1 of the other covers all. Both sides shift
-## by the same epoch, so the answer is the same for any E and is worked out at
-## E = 0.
+## they share a gate and their gate holds overlap. Repeating contracts repeat
+## daily forever; one-off charters (one_off_day >= 0) hold only that single day.
 static func contracts_share_gate(a: Dictionary, b: Dictionary) -> bool:
 	if a["gate"] != b["gate"]:
 		return false
-	var a_starts := starts_for(a, 0, 0)
 	var a_size: String = a.get("plane_size", PlaneClasses.MEDIUM)
 	var b_size: String = b.get("plane_size", PlaneClasses.MEDIUM)
+	if FlightContract.is_charter(a) and FlightContract.is_charter(b):
+		return shares_gate(
+			a["gate"],
+			starts_for(a, FlightContract.one_off_day(a), 0),
+			b["gate"],
+			starts_for(b, FlightContract.one_off_day(b), 0),
+			a_size,
+			b_size
+		)
+	if FlightContract.is_charter(a):
+		return contract_meets(
+			b, a["gate"], starts_for(a, FlightContract.one_off_day(a), 0), 0, a_size
+		)
+	if FlightContract.is_charter(b):
+		return contract_meets(
+			a, b["gate"], starts_for(b, FlightContract.one_off_day(b), 0), 0, b_size
+		)
+	var a_starts := starts_for(a, 0, 0)
 	for shift in [-1, 0, 1]:
 		if shares_gate(a["gate"], a_starts, b["gate"], starts_for(b, shift, 0), a_size, b_size):
 			return true
@@ -146,9 +175,12 @@ static func contract_meets(
 	if hold[0] >= hold[1] or contract["gate"] != gate:
 		return false
 	var c_size: String = contract.get("plane_size", PlaneClasses.MEDIUM)
+	if FlightContract.is_charter(contract):
+		var c_starts := starts_for(contract, FlightContract.one_off_day(contract), epoch)
+		return shares_gate(gate, starts, contract["gate"], c_starts, flight_size, c_size)
 	var first := _first_start(contract, 0, epoch)
 	var day_size := GameCalendar.TICKS_PER_DAY
-	var held := reserved_ticks(taxi_of(contract))
+	var held := reserved_ticks(taxi_of(contract), c_size, boarding_ticks_of(contract))
 	var lowest := GameCalendar.floor_div(hold[0] - first - held, day_size) + 1
 	var highest := -GameCalendar.floor_div(first - hold[1], day_size) - 1
 	for day in range(maxi(lowest, int(contract["first_day"])), highest + 1):
@@ -221,7 +253,7 @@ static func starts_valid(starts: Array[int]) -> bool:
 
 static func _first_start(contract: Dictionary, day: int, epoch: int) -> int:
 	var departure := GameCalendar.tick_at(day, int(contract["departure_minute"]), epoch)
-	return departure - departure_offset(taxi_of(contract))
+	return departure - departure_offset(taxi_of(contract), boarding_ticks_of(contract))
 
 
 ## The first day >= 0 whose tick, `day0` on day 0 and a day later each day
@@ -234,9 +266,11 @@ static func _day_at_or_after(day0: int, now: int) -> int:
 ## Ticks an occurrence with taxi pair `taxi` and `plane_size` holds its gate:
 ## matches gate_hold_span().
 static func reserved_ticks(
-	taxi: Array = TaxiTimes.BASE, plane_size: String = PlaneClasses.MEDIUM
+	taxi: Array = TaxiTimes.BASE, plane_size: String = PlaneClasses.MEDIUM, boarding_ticks: int = -1
 ) -> int:
 	var ticks := TaxiTimes.phase_ticks(taxi)
+	if boarding_ticks >= 0:
+		ticks[FlightSim.State.BOARDING] = boarding_ticks
 	if plane_size == PlaneClasses.SMALL:
 		var lead_in := maxi(0, int(taxi[0]) - int(taxi[1]))
 		var small_total := lead_in

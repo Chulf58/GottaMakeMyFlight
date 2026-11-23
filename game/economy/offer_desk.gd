@@ -13,6 +13,8 @@ extends Node
 ## airline and destination the player is told.
 signal contract_ended(contract: Dictionary)
 
+const CHARTER_CHECK_INTERVAL_TICKS := 300
+
 ## The clock to follow when this node enters a scene. A scene must set it: a
 ## desk with no clock pushes an error and never draws. Tests call bind_clock.
 @export var clock: SimClock
@@ -110,16 +112,46 @@ func on_tick(tick: int) -> void:
 	if day != _day:
 		_day = day
 		_no_slots_day = -1
+		board.expire_charters(tick, day)
 		_end_contract_if_due()
 		_drawing = true
 		_draw(day)
 		_drawing = false
 		_refresh_refill_watch()
 		return
+	board.expire_charters(tick, day)
 	if _has_fitting_open and _next_stale_tick >= 0 and tick >= _next_stale_tick:
 		_refresh_refill_watch()
 		if not _has_fitting_open:
 			_try_refill()
+	if tick % CHARTER_CHECK_INTERVAL_TICKS == 0:
+		try_open_charter()
+
+
+## Opens at most one same-day charter if the airport is open and a gate has a
+## quiet daytime gap. Deterministic from clock seed/day/count; returns id or "".
+func try_open_charter() -> String:
+	var source := _runway_source()
+	if clock == null or flights == null or flights.opened_tick < 0 or source == null:
+		return ""
+	if not OfferBoard.is_charter_offer_minute(GameCalendar.minute_of_day(clock.tick, clock.epoch)):
+		return ""
+	var day := GameCalendar.day_of(clock.tick, clock.epoch)
+	return board.ensure_charter_for_gap(
+		day, clock.tick, clock.epoch, clock.rng.seed, source.size, flights
+	)
+
+
+## True when an open charter can currently land at a gate before its cutoff.
+func has_fitting_charter() -> bool:
+	if flights == null or flights.opened_tick < 0:
+		return false
+	for charter in board.open_charters():
+		if clock != null and clock.tick > int(charter["cutoff_tick"]):
+			continue
+		if FlightFit.fits(flights, OfferBoard.terms_of(charter)):
+			return true
+	return false
 
 
 ## When the rating's low days have run out, the oldest contract still running

@@ -59,7 +59,7 @@ extends RefCounted
 ## copies SaveGame's stage steps kept.
 static func problem(data: Dictionary, staged: Dictionary) -> String:
 	var flights: Dictionary = staged["flights"]
-	var found := _offer_problem(data["offers"]["offers"], staged["offers"], flights["contracts"])
+	var found := _offer_problem(data["offers"], staged["offers"], flights["contracts"])
 	if found == "":
 		found = _flight_id_problem(staged["passengers"], staged["rating"], flights)
 	if found == "" and staged.has("incidents"):
@@ -115,31 +115,47 @@ static func _bag_problem(baggage: Dictionary, grid: BuildGrid, flights: Dictiona
 	return ""
 
 
-static func _offer_problem(saved: Array, board: OfferBoard, contracts: Array) -> String:
+static func _offer_problem(saved: Dictionary, board: OfferBoard, contracts: Array) -> String:
 	var by_id := {}
 	for contract in contracts:
 		by_id[contract["id"]] = contract
 	var offer_ids := {}
-	for entry in saved:
+	for entry in saved.get("offers", []):
 		var offer := board.offer_of(str(entry["id"]))
 		var id: String = offer["id"]
 		offer_ids[id] = true
-		var contract: Dictionary = by_id.get(id, {})
-		if offer["status"] != OfferBoard.ACCEPTED:
-			if not contract.is_empty():
-				return (
-					"offers: offer %s is %s but flights hold its contract" % [id, offer["status"]]
-				)
-			continue
-		if contract.is_empty():
-			return "offers: offer %s is accepted but flights hold no contract %s" % [id, id]
-		var keys: Array = FlightContract.TERM_KEYS + [FlightContract.TRAITS_KEY]
-		for key in keys:
-			if not _same(contract.get(key), offer.get(key)):
-				return "offers: contract %s has another %s than its offer" % [id, key]
+		var problem := _offer_entry_problem(
+			offer, by_id.get(id, {}), FlightContract.TERM_KEYS + [FlightContract.TRAITS_KEY]
+		)
+		if problem != "":
+			return problem
+	for entry in saved.get("charters", []):
+		var charter := board.charter_of(str(entry["id"]))
+		var id: String = charter["id"]
+		offer_ids[id] = true
+		var keys: Array = (
+			FlightContract.TERM_KEYS + [FlightContract.TRAITS_KEY, FlightContract.ONE_OFF_DAY_KEY]
+		)
+		var problem := _offer_entry_problem(charter, by_id.get(id, {}), keys)
+		if problem != "":
+			return problem
 	for id in by_id:
 		if not offer_ids.has(id) and id != FlightSim.DEFAULT_ID:
 			return "flights: contract %s is neither the starter nor an accepted offer" % id
+	return ""
+
+
+static func _offer_entry_problem(offer: Dictionary, contract: Dictionary, keys: Array) -> String:
+	var id: String = offer["id"]
+	if offer["status"] != OfferBoard.ACCEPTED:
+		if not contract.is_empty():
+			return "offers: offer %s is %s but flights hold its contract" % [id, offer["status"]]
+		return ""
+	if contract.is_empty():
+		return "offers: offer %s is accepted but flights hold no contract %s" % [id, id]
+	for key in keys:
+		if not _same(contract.get(key), offer.get(key)):
+			return "offers: contract %s has another %s than its offer" % [id, key]
 	return ""
 
 

@@ -31,6 +31,7 @@ const NO_STAFF := &"stations_no_staff"
 const STAFF_SPOT := &"staff_spot_unusable"
 const RAMP_BAGGAGE := &"ramp_baggage"
 const RAMP_PUSHBACK := &"ramp_pushback"
+const CHARTER_GAP := &"charter_gap"
 ## Three game minutes (one real second is one game minute at 1x).
 const QUEUE_HOLD_TICKS := 3 * GameCalendar.TICKS_PER_MINUTE
 ## A stuck passenger re-plans now and then; a minute each way keeps a passing
@@ -311,6 +312,38 @@ static func ramp(
 				)
 			)
 	return out
+
+
+## Subtle non-blocking gap chip when a same-day charter fits an open daytime gap.
+static func charter_gap(desk: OfferDesk, flights: FlightSim = null) -> Array[Dictionary]:
+	if desk == null or not desk.has_fitting_charter():
+		return []
+	var resolved := flights if flights != null else desk.flights
+	if resolved == null or resolved.opened_tick < 0:
+		return []
+	for charter in desk.board.open_charters():
+		if desk.clock != null and desk.clock.tick > int(charter["cutoff_tick"]):
+			continue
+		if not FlightFit.fits(resolved, OfferBoard.terms_of(charter)):
+			continue
+		var time := GameCalendar.clock_text(
+			GameCalendar.tick_at(0, int(charter["departure_minute"]), 0), 0
+		)
+		return [
+			{
+				"key": CHARTER_GAP,
+				"title": _translator.tr("Charter available"),
+				"detail":
+				_translator.tr("One-off {time} flight to {destination} · click to review").format(
+					{"time": time, "destination": charter["destination"]}
+				),
+				"targets": [],
+				"show_after": 0,
+				"clear_after": 0,
+				"subtle": true,
+			}
+		]
+	return []
 
 
 ## Whether a hired member is walking to `station` to take it up, not yet on duty.
