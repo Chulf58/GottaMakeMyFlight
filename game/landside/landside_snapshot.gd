@@ -36,7 +36,10 @@ extends RefCounted
 ## paths taper in and out along new curves, so a saved road_in, road_out, exit
 ## or berth path pos_mm names a place up to 2.6 m away, and a berth path's far
 ## side more. Version 9 is refused, with no migration.
-const SAVE_VERSION := 10
+## 11: road_in starts at +140.4 m and road_out / lot exits end at ±140.4 m
+## inside the highway tunnel portals, shifting curb.stop_mm and lot branch_mm by
+## +100000 mm. Version 10 is refused, with no migration.
+const SAVE_VERSION := 11
 const KEYS := [
 	"save_version",
 	"tick",
