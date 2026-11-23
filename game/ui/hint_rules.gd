@@ -16,6 +16,8 @@ const TOILET := &"toilet"
 const FOOD := &"food"
 const BAGGAGE_CONNECT := &"baggage_connect"
 const OFFERS := &"offers"
+const FLIGHT_PLANNER := &"flight_planner"
+const CLEANERS := &"cleaners"
 ## The invitation to click a passenger (FollowInvite). It is remembered in the
 ## file once the player has selected a passenger, not once it has shown.
 const FOLLOW_PASSENGER := &"follow_passenger"
@@ -38,6 +40,8 @@ const IDS: Array[StringName] = [
 	FOOD,
 	BAGGAGE_CONNECT,
 	OFFERS,
+	FLIGHT_PLANNER,
+	CLEANERS,
 	FOLLOW_PASSENGER,
 ]
 
@@ -64,6 +68,9 @@ const TEXT := {
 	FOOD: "Hungry passengers need food. Build a cafe with a counter and a table.",
 	BAGGAGE_CONNECT: "Drag a belt from the back of a check-in desk into your Bag Room.",
 	OFFERS: "Airlines are ready with new flights — click Offers at the top to review contracts.",
+	FLIGHT_PLANNER: "Open Planner (P) to view today's schedule or move flights between gates.",
+	CLEANERS:
+	"Terminal messes lower passenger mood. Hire a Cleaner on the Staff card to keep things tidy.",
 	FOLLOW_PASSENGER: "Click a passenger to follow them to their flight",
 }
 
@@ -85,6 +92,8 @@ const CATEGORIES := {
 	],
 	BAGGAGE_CONNECT: [BuildMode.Tool.BAG_ROOM, BuildMode.Tool.BELT],
 	OFFERS: [],
+	FLIGHT_PLANNER: [],
+	CLEANERS: [STAFF_CARD],
 	FOLLOW_PASSENGER: [],
 }
 
@@ -146,6 +155,14 @@ static func causes(world: Dictionary) -> Array[StringName]:
 		and not bool(world.get("offers_opened", false))
 	):
 		out.append(OFFERS)
+	if (
+		bool(world.get("airport_open", false))
+		and bool(world.get("has_scheduled_flights", false))
+		and not bool(world.get("planner_opened", false))
+	):
+		out.append(FLIGHT_PLANNER)
+	if int(world.get("mess_count", 0)) > 0 and int(world.get("cleaners_hired", 1)) == 0:
+		out.append(CLEANERS)
 	if bool(world.get("follow_ready", false)) and not bool(world.get("followed", false)):
 		out.append(FOLLOW_PASSENGER)
 	var ordered: Array[StringName] = []
@@ -197,6 +214,9 @@ static func read_world(sim: PassengerSim, hiring_roles: Array) -> Dictionary:
 		"cafes": sim.cafes.layout.cafes.size(),
 		"bag_rooms": _bag_room_count(sim.grid),
 		"connected_desks": BagRoutes.build(sim.grid).connected_desk_count(),
+		"mess_count":
+		(sim.messes.mess_count() + sim.messes.full_bins().size()) if sim.messes != null else 0,
+		"cleaners_hired": sim.staff.count(StaffMember.Role.CLEANER) if sim.staff != null else 0,
 	}
 
 
@@ -283,6 +303,11 @@ class Words:
 				tr(
 					# gdlint:ignore = max-line-length
 					"Airlines are ready with new flights — click Offers at the top to review contracts."
+				),
+				tr("Open Planner (P) to view today's schedule or move flights between gates."),
+				tr(
+					# gdlint:ignore = max-line-length
+					"Terminal messes lower passenger mood. Hire a Cleaner on the Staff card to keep things tidy."
 				),
 				tr("Click a passenger to follow them to their flight"),
 			]

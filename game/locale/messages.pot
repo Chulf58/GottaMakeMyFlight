@@ -6616,3 +6616,119 @@ msgstr ""
 #: ui/offer_panel.gd
 msgid "Reliable daily link to {destination} with {airline}."
 msgstr ""
+
+#: ui/checklist.gd
+msgid "Passengers walk from the entrance through security to the exit."
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Staff need a clear tile behind each station to work it."
+msgstr ""
+
+#: ui/checklist.gd ui/staff_panel.gd
+msgid "Gate desks stay closed until an agent is hired."
+msgstr ""
+
+#: ui/checklist.gd
+msgid "The airport opens once staff reach their stations."
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Opens boarding for your first flight."
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Keeps waiting passengers comfortable."
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Passengers check in here before security."
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Closed desks cannot serve waiting passengers."
+msgstr ""
+
+#: ui/checklist.gd ui/staff_panel.gd
+msgid "Stations stay closed until an agent is hired."
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Clears passengers and bags for the gate."
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Closed security lanes cannot clear passengers."
+msgstr ""
+
+#: ui/checklist.gd ui/staff_panel.gd
+msgid "Stations stay closed until an officer is hired."
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Each extra station needs its own staff member."
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Prevents comfort drops while passengers wait."
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Hungry passengers lose mood before boarding."
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "Seals the terminal so roof and rooms work."
+msgstr ""
+
+#: ui/staff_panel.gd ui/passenger_hud.gd
+msgid "Prep time — clock starts when staff reach stations"
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "Hire a ramp agent"
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "Checked bags wait until a ramp agent drives the cart."
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "Counters stay closed until shop staff arrive."
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "Serve {done}/{need} passengers to unlock Cafe & Baggage"
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "Works check-in desks to tag bags and print boarding passes. Hire 1 per open desk."
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "Runs security scanners and lanes to clear passengers and carry-on bags. Hire 1 per open scanner."
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "Works gate desks to start boarding and announce flights. Hire 1 per gate desk."
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "Runs cafe, bar, restaurant, and shop counters. Hire once you build a cafe or shop."
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "Mops terminal messes and empties full bins. Hire when litter builds up."
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "Drives baggage carts between your Bag Room and parked planes. Hire once you build a Bag Room."
+msgstr ""
+
+#: ui/hint_rules.gd
+msgid "Open Planner (P) to view today's schedule or move flights between gates."
+msgstr ""
+
+#: ui/hint_rules.gd
+msgid "Terminal messes lower passenger mood. Hire a Cleaner on the Staff card to keep things tidy."
+msgstr ""

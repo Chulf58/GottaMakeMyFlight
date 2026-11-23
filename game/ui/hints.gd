@@ -254,6 +254,12 @@ func reset_seen() -> void:
 	_since_end = INF
 
 
+## Re-enables hints if turned off and clears seen memory so hints replay.
+func reset_hints() -> void:
+	set_enabled(true)
+	reset_seen()
+
+
 ## The player did something: the inactivity clock starts again.
 func note_activity() -> void:
 	_idle = 0.0
@@ -281,6 +287,8 @@ func advance(delta: float, world: Dictionary, open_categories: Array) -> void:
 		return
 	if bool(world.get("offers_opened", false)):
 		_note_offers_opened()
+	if bool(world.get("planner_opened", false)):
+		_note_planner_opened()
 	if bool(world.get("followed", false)):
 		_note_followed()
 	_clock += delta
@@ -344,10 +352,15 @@ func _process(delta: float) -> void:
 		hiring = panel.hiring_hint_roles()
 	var world := HintRules.read_world(sim, hiring)
 	world.merge(FollowInvite.read(sim, hud.views, hud.landside_views))
+	var flights := hud.flights if hud != null else null
+	world["airport_open"] = flights != null and flights.opened_tick >= 0
+	world["has_scheduled_flights"] = (
+		flights != null
+		and (not flights.contract_ids().is_empty() or not flights.flight_ids().is_empty())
+	)
+	world["planner_opened"] = hud != null and hud.planner_opened
 	var offers := _offer_panel()
 	if offers != null:
-		var has_flights := hud != null and hud.flights != null
-		world["airport_open"] = has_flights and hud.flights.opened_tick >= 0
 		world["offers_waiting"] = (
 			offers.desk != null and not offers.desk.board.open_offers().is_empty()
 		)
@@ -452,6 +465,13 @@ func _note_offers_opened() -> void:
 	if not _seen.get(HintRules.OFFERS, false):
 		_mark_seen(HintRules.OFFERS)
 	if _shown_id == HintRules.OFFERS:
+		_end_hint()
+
+
+func _note_planner_opened() -> void:
+	if not _seen.get(HintRules.FLIGHT_PLANNER, false):
+		_mark_seen(HintRules.FLIGHT_PLANNER)
+	if _shown_id == HintRules.FLIGHT_PLANNER:
 		_end_hint()
 
 
@@ -607,5 +627,5 @@ func _build() -> void:
 	_reset.add_to_group(LeftColumn.TOGGLE_ROW_GROUP)
 	_reset.set_meta(LeftColumn.META_SLOT, LeftColumn.SLOT_RESET)
 	_reset.focus_mode = Control.FOCUS_NONE
-	_reset.pressed.connect(reset_seen)
+	_reset.pressed.connect(reset_hints)
 	_row.add_child(_reset)

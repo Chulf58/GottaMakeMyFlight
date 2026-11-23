@@ -98,6 +98,8 @@ var offer_panel: OfferPanel
 var debug_tools := OS.is_debug_build()
 ## End-of-demo Day 5 summary card (DemoEndCard); active only in demo builds.
 var demo_end_card := DemoEndCard.new()
+## True once the player has opened FlightPlanner in this session (for HintRules).
+var planner_opened := false
 
 var _departures_board := DeparturesBoard.new()
 ## The full-screen flight planner and its toggle on the Departures row; built
@@ -180,6 +182,7 @@ func _ready() -> void:
 	# A longer translation shortens the clock text with an ellipsis rather than push the speed
 	# buttons off the right edge: the label gives way, the buttons keep their size.
 	_time_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	_time_label.mouse_filter = Control.MOUSE_FILTER_PASS
 	row.add_child(_time_label)
 	for value in [0, 1, 2, 3]:
 		var button := Button.new()
@@ -219,8 +222,12 @@ func _ready() -> void:
 		add_child(_planner)
 		_planner.sheet().visibility_changed.connect(
 			func() -> void:
-				if is_inside_tree() and _planner.is_open() and is_instance_valid(_pa_ticker):
-					_pa_ticker.clear_now()
+				if not is_inside_tree():
+					return
+				if _planner.is_open():
+					planner_opened = true
+					if is_instance_valid(_pa_ticker):
+						_pa_ticker.clear_now()
 		)
 	# Only hide the rail when a top-row sheet actually overlaps it (narrow viewports).
 	_alerts.covered = func() -> bool:
@@ -328,6 +335,7 @@ func _retranslate() -> void:
 	for i in mini(_speed_buttons.size(), values.size()):
 		_dress_speed_button(_speed_buttons[i], values[i])
 	_set_quiet_chip_text()
+	_sync_clock_prep_tooltip()
 	if clock != null and sim != null:
 		refresh()
 
@@ -545,6 +553,7 @@ func refresh() -> void:
 		show_result_for(_unreported.back())
 		_unreported.clear()
 	_time_label.text = time_text()
+	_sync_clock_prep_tooltip()
 	if _departures_board.flights != flights:
 		_departures_board.flights = flights
 	if _departures_board.clock != clock:
@@ -637,6 +646,15 @@ func time_text() -> String:
 			"time": GameCalendar.clock_text(clock.tick, clock.epoch)
 		}
 	)
+
+
+func _sync_clock_prep_tooltip() -> void:
+	var tip := ""
+	if flights != null and flights.opened_tick < 0:
+		tip = tr("Prep time — clock starts when staff reach stations")
+	if _clock_panel != null:
+		_clock_panel.tooltip_text = tip
+	_time_label.tooltip_text = tip
 
 
 func seed_text() -> String:
