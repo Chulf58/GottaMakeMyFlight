@@ -244,8 +244,8 @@ static func _in_berth(sim: LandsideSim, berth: int, bookings: Array[int], gap: i
 	return id
 
 
-## The curb with bay 0 built (berths 4 and 5, upstream of the starter curb's
-## four): every berth but 4 holds a car in its unload gap, berth 4 a car kept
+## The curb with bay 0 built (berths 2 and 3, upstream of the starter curb's
+## two): every berth but 2 holds a car in its unload gap, berth 2 a car kept
 ## for the line, and a car waits on road_in at the stop, or with
 ## `starter_stop` at the starter curb's stop. One step with no line budget;
 ## whether that waiting car is kept for the line.
@@ -254,12 +254,12 @@ func _queued_kept(starter_stop: bool) -> bool:
 	assert_bool(sim.build_curb(0)).is_true()
 	var pos_mm := LandsideTestWorld.STARTER.curb.stop_mm if starter_stop else sim.curb_stop_mm()
 	var booking := 1
-	for berth in [0, 1, 2, 3, 5]:
+	for berth in [0, 1, 3]:
 		var party: Array[int] = [booking]
 		_in_berth(sim, berth, party, 5)
 		booking += 1
 	var kept_party: Array[int] = [booking]
-	var kept := _in_berth(sim, 4, kept_party, 0)
+	var kept := _in_berth(sim, 2, kept_party, 0)
 	var queued_party: Array[int] = [booking + 1]
 	var queued := sim.add_vehicle(
 		LandsideVehicle.Kind.TAXI, LandsideVehicle.Intent.DROP, queued_party
@@ -273,14 +273,14 @@ func _queued_kept(starter_stop: bool) -> bool:
 		pos_mm,
 		"stop",
 		sim.curb_stop_mm(),
-		"berth 4 split",
-		sim.paths.berth_split[4],
+		"berth 2 split",
+		sim.paths.berth_split[2],
 		"line held",
 		sim.line_held.keys(),
 		"denied",
 		sim.denied
 	)
-	# Control: the car in berth 4 was kept for the line, and the waiting car
+	# Control: the car in berth 2 was kept for the line, and the waiting car
 	# found no berth free.
 	assert_bool(sim.line_held.has(kept)).is_true()
 	assert_array(sim.denied).is_equal([booking])
@@ -293,6 +293,6 @@ func _queued_kept(starter_stop: bool) -> bool:
 ## starter curb's stop, downstream of bay 0) is held up by the cars in their
 ## unload gap, a road delay, not by the line.
 func test_a_kept_car_in_a_berth_the_waiting_car_cannot_take_does_not_keep_it() -> void:
-	# Control: at the stop before bay 0 it could take berth 4, so it is kept.
+	# Control: at the stop before bay 0 it could take berth 2, so it is kept.
 	assert_bool(_queued_kept(false)).is_true()
 	assert_bool(_queued_kept(true)).is_false()

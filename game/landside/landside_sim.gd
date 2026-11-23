@@ -77,6 +77,8 @@ const BERTH_APPROACH_MM := LandsidePaths.BERTH_APPROACH_MM
 @export var finances: Finances
 
 var wallet: Wallet
+## Optional: terminal grid whose entrance doors decide lot walk distances.
+var grid: BuildGrid
 ## The berth and slot paths of the definition.
 var paths: LandsidePaths
 ## The tick of the last step.
@@ -93,6 +95,10 @@ var lots_paid: Array[int] = []
 ## Per curb spot: whether a curb bay stands there, and its price as above.
 var curbs_built: Array[bool] = []
 var curbs_paid: Array[int] = []
+## Per lot spot: daily totals reset on game day rollover (inspect card only).
+var lot_earned_today: Array[int] = []
+var lot_parked_today: Array[int] = []
+var lot_diverted_today: Array[int] = []
 ## The bookings the last step() kept aboard for want of budget, in order.
 var denied: Array[int] = []
 ## Vehicle id -> true: the vehicles the last step() kept waiting for the line
@@ -102,6 +108,8 @@ var denied: Array[int] = []
 ## on the road a gap behind one of those. Rebuilt every step, so a car is kept
 ## only while the hold lasts.
 var line_held := {}
+
+var _stats_day := -1
 
 var _vehicles: Array[LandsideVehicle] = []
 ## The doors-close tick of each booking aboard's flight, as step() was given.
@@ -155,6 +163,10 @@ func use_definition(with_definition: LandsideDefinition) -> bool:
 	lots_paid.assign(_filled(definition.lots.size(), 0))
 	curbs_built.assign(_filled(definition.curb_spots.size(), false))
 	curbs_paid.assign(_filled(definition.curb_spots.size(), 0))
+	lot_earned_today.assign(_filled(definition.lots.size(), 0))
+	lot_parked_today.assign(_filled(definition.lots.size(), 0))
+	lot_diverted_today.assign(_filled(definition.lots.size(), 0))
+	_stats_day = -1
 	_vehicles.clear()
 	_by_id.clear()
 	_next_id = 1
@@ -181,6 +193,9 @@ func remove_lot(spot: int) -> bool:
 	lots_built[spot] = false
 	lots_closed[spot] = false
 	lots_paid[spot] = 0
+	lot_earned_today[spot] = 0
+	lot_parked_today[spot] = 0
+	lot_diverted_today[spot] = 0
 	return true
 
 
@@ -241,6 +256,13 @@ func curb_cars(spot: int) -> int:
 ## The free slots of lot spot `spot`: neither reserved nor parked in.
 func free_slots(spot: int) -> int:
 	return (_slots[spot] as Array).count(0) if lots_built[spot] else 0
+
+
+## How many spaces in lot spot `spot` are occupied or reserved.
+func lot_occupied(spot: int) -> int:
+	if spot < 0 or spot >= lots_built.size() or not lots_built[spot]:
+		return 0
+	return definition.lots[spot].slots.size() - free_slots(spot)
 
 
 ## What a car of `intent` will do: PARK only while some car park is open.
@@ -356,6 +378,7 @@ func step(
 	now: int, can_release: bool, rng: RandomNumberGenerator, closes := {}, budget := -1, kept := {}
 ) -> Array[Dictionary]:
 	tick = now
+	_sync_stats_day(now)
 	_closes = closes
 	_budget = budget
 	denied.clear()
@@ -408,6 +431,10 @@ func from_snapshot(data: Dictionary, bookings: ArrivalBookings) -> bool:
 	_by_id.clear()
 	for v in _vehicles:
 		_by_id[v.id] = v
+	lot_earned_today.assign(_filled(definition.lots.size(), 0))
+	lot_parked_today.assign(_filled(definition.lots.size(), 0))
+	lot_diverted_today.assign(_filled(definition.lots.size(), 0))
+	_stats_day = GameCalendar.day_of(tick, _clock_epoch())
 	_rederive()
 	bookings.restore(loaded)
 	return true
@@ -712,6 +739,8 @@ func _turn_into_lot(v: LandsideVehicle, spot: int) -> bool:
 	var slot := (_slots[spot] as Array).find(0)
 	if slot < 0:
 		v.intent = LandsideVehicle.Intent.DROP
+		if spot >= 0 and spot < lot_diverted_today.size():
+			lot_diverted_today[spot] += 1
 		diverted.emit(v.id)
 		return false
 	if not _lane_clear(LandsideVehicle.Lane.ACCESS, spot):
@@ -761,9 +790,13 @@ func _park(v: LandsideVehicle, rng: RandomNumberGenerator) -> void:
 	if wallet == null:
 		push_error("LandsideSim: no wallet to pay vehicle %d's parking fee into" % v.id)
 		return
-	if not wallet.credit(parking_fee(v.lot), Wallet.Category.PARKING):
+	var fee := parking_fee(v.lot)
+	if not wallet.credit(fee, Wallet.Category.PARKING):
 		push_error("LandsideSim: the wallet refused vehicle %d's parking fee" % v.id)
 		return
+	if v.lot >= 0 and v.lot < lot_parked_today.size():
+		lot_parked_today[v.lot] += 1
+		lot_earned_today[v.lot] += fee
 	parked.emit(v.id, v.lot)
 
 
@@ -834,35 +867,79 @@ func _lot_ahead(v: LandsideVehicle) -> int:
 	return spot
 
 
-## The lot a car at `pos_mm` on road_in takes: the open lot it reaches first
-## whose turn it has not passed and which has a free slot, or the first it
-## reaches when every one is full (it finds that out at the turn and drops at
-## the curb), or -1. lead_ticks() and resolve_intent() ask this for a new car
-## (position 0), so what they promise is what the car then does.
+## The lot a car at `pos_mm` on road_in takes: the open lot whose walk to the
+## terminal entrance is shortest (ties by upstream turn order, then spot index)
+## whose turn it has not passed and which has a free slot, or the shortest-walk
+## open lot ahead when every one is full (it finds that out at the turn and
+## drops at the curb), or -1. lead_ticks() and resolve_intent() ask this for a
+## new car (position 0), so what they promise is what the car then does.
 func _lot_for(pos_mm: int) -> int:
-	var first := -1
-	for spot in _lots_by_turn():
+	var fallback := -1
+	for spot in _lots_by_walk():
 		if definition.lots[spot].branch_mm < pos_mm:
 			continue
 		if free_slots(spot) > 0:
 			return spot
-		if first < 0:
-			first = spot
-	return first
+		if fallback < 0:
+			fallback = spot
+	return fallback
 
 
-## The open lots in the order a car on road_in reaches their turns.
-func _lots_by_turn() -> Array[int]:
+## The open lots ordered by walk distance to the terminal entrance (shortest
+## first; ties within 1 mm by upstream turn order, then spot index).
+func _lots_by_walk() -> Array[int]:
 	var spots: Array[int] = []
+	var walks := {}
+	var doors := _entrance_doors()
 	for spot in lots_built.size():
-		if lot_open(spot):
-			spots.append(spot)
+		if not lot_open(spot):
+			continue
+		spots.append(spot)
+		var kind := (
+			LandsidePlacement.Kind.MULTI_STOREY
+			if definition.lots[spot].kind == LandsideLotSpot.Kind.MULTI_STOREY
+			else LandsidePlacement.Kind.SURFACE_LOT
+		)
+		walks[spot] = LandsidePlacement.walk_to_door_m(definition, kind, spot, doors)
 	spots.sort_custom(
 		func(a: int, b: int) -> bool:
+			var diff := float(walks[a]) - float(walks[b])
+			if absf(diff) > 0.001:
+				return diff < 0.0
 			var by_turn := definition.lots[a].branch_mm - definition.lots[b].branch_mm
 			return a < b if by_turn == 0 else by_turn < 0
 	)
 	return spots
+
+
+func _entrance_doors() -> Array[Vector3]:
+	var active_grid := grid
+	if active_grid == null and is_inside_tree() and get_parent() != null:
+		var mode := get_parent().get_node_or_null("BuildMode") as BuildMode
+		if mode != null:
+			active_grid = mode.grid
+	var doors := LandsidePlacement.landside_doors(active_grid)
+	if not doors.is_empty():
+		return doors
+	if definition != null and definition.curb != null and not definition.curb.get_out.is_empty():
+		return [definition.curb.get_out[0]]
+	return [Vector3.ZERO]
+
+
+func _sync_stats_day(now: int) -> void:
+	var day := GameCalendar.day_of(now, _clock_epoch())
+	if day == _stats_day:
+		return
+	_stats_day = day
+	lot_earned_today.fill(0)
+	lot_parked_today.fill(0)
+	lot_diverted_today.fill(0)
+
+
+func _clock_epoch() -> int:
+	if is_inside_tree() and get_parent() != null:
+		return SimClock.epoch_of(get_parent().get_node_or_null("SimClock") as SimClock)
+	return 0
 
 
 ## The free berth, of the starter curb and the built curb bays, that a car at

@@ -42,12 +42,12 @@ static func _on_a_berth(point: Vector3, berths: PackedVector3Array) -> bool:
 	return false
 
 
-func test_the_starter_curb_is_two_bays_with_their_markers_on_its_four_berths() -> void:
+func test_the_starter_curb_is_one_bay_with_its_markers_on_its_two_berths() -> void:
 	_places.refresh()
 	print("starter bays %s" % [LandsidePlaces.bay_origins(STARTER, 0.107)])
-	assert_int(_places.bay_count()).is_equal(2)
+	assert_int(_places.bay_count()).is_equal(1)
 	var found := 0
-	for i in 2:
+	for i in 1:
 		var bay := _places.starter_bay(i)
 		assert_float(bay.position.z).is_equal_approx(-58.7, 0.001)
 		for at in _markers(bay):
@@ -66,7 +66,7 @@ func test_a_curb_bay_shows_while_its_spot_is_built() -> void:
 	assert_object(bay).is_not_null()
 	for at in _markers(bay):
 		assert_bool(_on_a_berth(at, STARTER.curb_spots[0].berths)).is_true()
-	assert_int(_places.bay_count()).is_equal(3)
+	assert_int(_places.bay_count()).is_equal(2)
 	assert_bool(_landside.remove_curb(0)).is_true()
 	_places.refresh()
 	assert_object(_places.bay_node(0)).is_null()

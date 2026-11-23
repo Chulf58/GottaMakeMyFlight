@@ -76,7 +76,7 @@ const TIERS := [
 		"facilities":
 		(
 			"cafe and bins, security lane, baggage, kiosk, screen, plants, benches, curb bay,"
-			+ " medium runway"
+			+ " surface lot, medium runway"
 		),
 		"tools":
 		[
@@ -102,6 +102,7 @@ const TIERS := [
 			BuildMode.Tool.POST,
 			BuildMode.Tool.CHAIN,
 			BuildMode.Tool.CURB,
+			BuildMode.Tool.SURFACE_LOT,
 		],
 	},
 	{
@@ -110,13 +111,12 @@ const TIERS := [
 		"facilities":
 		(
 			"food and services: bar, restaurant, grab-and-go, info desk, pharmacy,"
-			+ " exchange, ATM, lounge, car park, large runway"
+			+ " exchange, ATM, lounge, car park gate, large runway"
 		),
 		"tools":
 		[
 			BuildMode.Tool.TREE,
 			BuildMode.Tool.TREE_BENCH,
-			BuildMode.Tool.SURFACE_LOT,
 			BuildMode.Tool.LOT_GATE,
 			BuildMode.Tool.BAR_ROOM,
 			BuildMode.Tool.RESTAURANT_ROOM,
@@ -600,11 +600,12 @@ class Words:
 	func facilities() -> Array[String]:
 		return [
 			tr(
-				"cafe and bins, security lane, baggage, kiosk, screen, plants, benches, curb bay, medium runway"
+				# gdlint:ignore = max-line-length
+				"cafe and bins, security lane, baggage, kiosk, screen, plants, benches, curb bay, surface lot, medium runway"
 			),
 			tr(
 				# gdlint:ignore = max-line-length
-				"food and services: bar, restaurant, grab-and-go, info desk, pharmacy, exchange, ATM, lounge, car park, large runway"
+				"food and services: bar, restaurant, grab-and-go, info desk, pharmacy, exchange, ATM, lounge, car park gate, large runway"
 			),
 			tr(
 				# gdlint:ignore = max-line-length

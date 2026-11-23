@@ -142,6 +142,7 @@ func test_demo_caps_build_unlocks_at_tier_2_and_refuses_tier3_tier4_and_large_ru
 	assert_int(unlocks.made_total()).is_equal(1000)
 	assert_int(unlocks.tier()).is_equal(DemoMode.MAX_PLAYABLE_TIER)
 	assert_bool(unlocks.allows(BuildMode.Tool.CAFE_ROOM)).is_true()
+	assert_bool(unlocks.allows(BuildMode.Tool.SURFACE_LOT)).is_true()
 	assert_bool(unlocks.allows(BuildMode.Tool.TREE)).is_false()
 	assert_bool(unlocks.allows(BuildMode.Tool.MULTI_STOREY)).is_false()
 
@@ -230,6 +231,10 @@ func test_demo_build_menu_hides_teasers_at_tier1_and_shows_reordered_teasers_at_
 	assert_int(unlocks.tier()).is_equal(DemoMode.MAX_PLAYABLE_TIER)
 
 	assert_object(menu.card(BuildMode.Tool.CAFE_ROOM).modulate).is_equal(Color.WHITE)
+	assert_object(menu.card(BuildMode.Tool.SURFACE_LOT).modulate).is_equal(Color.WHITE)
+	assert_str(_card_last_line(menu.card(BuildMode.Tool.SURFACE_LOT))).is_not_equal(
+		"In the full game"
+	)
 	var tree_card := menu.card(BuildMode.Tool.TREE)
 	assert_bool(tree_card.visible).is_true()
 	assert_object(tree_card.modulate).is_equal(BuildMenu.LOCKED_TINT)

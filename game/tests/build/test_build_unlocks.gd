@@ -102,6 +102,7 @@ func test_the_tiers_hold_the_ruled_bundles() -> void:
 	assert_int(BuildUnlocks.tier_of(BuildMode.Tool.BIN)).is_equal(2)
 	assert_int(BuildUnlocks.tier_of(BuildMode.Tool.ARCH)).is_equal(2)
 	assert_int(BuildUnlocks.tier_of(BuildMode.Tool.CURB)).is_equal(2)
+	assert_int(BuildUnlocks.tier_of(BuildMode.Tool.SURFACE_LOT)).is_equal(2)
 	assert_int(BuildUnlocks.tier_of(BuildMode.Tool.TREE)).is_equal(3)
 	assert_int(BuildUnlocks.tier_of(BuildMode.Tool.LOT_GATE)).is_equal(3)
 	assert_int(BuildUnlocks.tier_of(BuildMode.Tool.WORK_DESK)).is_equal(3)

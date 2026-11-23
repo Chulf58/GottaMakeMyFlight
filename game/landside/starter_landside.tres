@@ -8,8 +8,8 @@
 [sub_resource type="Resource" id="Resource_curb"]
 script = ExtResource("2_curb")
 stop_mm = 147431
-berths = PackedVector3Array(-8.75, 0.1, -57.2, -15.25, 0.1, -57.2, -24.75, 0.1, -57.2, -31.25, 0.1, -57.2)
-get_out = PackedVector3Array(-8.75, 0.1, -59.4, -15.25, 0.2, -59.4, -24.75, 0.2, -59.4, -31.25, 0.2, -59.4)
+berths = PackedVector3Array(-8.75, 0.1, -57.2, -15.25, 0.1, -57.2)
+get_out = PackedVector3Array(-8.75, 0.1, -59.4, -15.25, 0.2, -59.4)
 
 [sub_resource type="Resource" id="Resource_lot_1"]
 script = ExtResource("3_lot")

@@ -78,8 +78,8 @@ func test_every_curb_is_a_whole_number_of_bays_with_berths_on_the_asset_markers(
 	var pitch := absf(second.x - first.x)
 	print("bay markers %s %s slab %s" % [first, second, slab])
 	assert_float(pitch).is_equal_approx(6.5, TOLERANCE)
-	# The starter curb is two bays: berths pair up at the markers' spacing.
-	assert_int(STARTER.curb.berths.size()).is_equal(4)
+	# The starter curb is one bay: its two berths stand at the markers' spacing.
+	assert_int(STARTER.curb.berths.size()).is_equal(2)
 	var starter_xs: Array[float] = []
 	for berth in STARTER.curb.berths:
 		starter_xs.append(berth.x)

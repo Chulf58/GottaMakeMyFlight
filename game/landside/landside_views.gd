@@ -55,6 +55,7 @@ var follow_anchor := Node3D.new()
 var selected_id := 0
 
 var _places := LandsidePlaces.new()
+var _pops := LandsidePops.new()
 ## The car parks' barrier arms, lifted for cars passing through.
 var _barriers := LotBarriers.new()
 ## Vehicle id -> its drawn model.
@@ -85,6 +86,10 @@ func _ready() -> void:
 	_places.name = "LandsidePlaces"
 	_places.landside = landside
 	add_child(_places)
+	_pops.name = "LandsidePops"
+	_pops.landside = landside
+	_pops.places = _places
+	add_child(_pops)
 	if clock != null:
 		clock.ticked.connect(_on_ticked)
 	if save_game != null:
@@ -129,6 +134,7 @@ func snap() -> void:
 	for id in _nodes.keys():
 		_release(id)
 	selected_id = 0
+	_pops.clear()
 	_barriers.restart()
 	sync()
 	_settle()
@@ -263,6 +269,10 @@ func vehicle_count() -> int:
 
 func places() -> LandsidePlaces:
 	return _places
+
+
+func pops() -> LandsidePops:
+	return _pops
 
 
 func barriers() -> LotBarriers:

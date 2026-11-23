@@ -10,7 +10,7 @@ extends GdUnitTestSuite
 
 const SEED := 6_200_301
 const BUILT := {
-	"bays": 3,
+	"bays": 2,
 	"curb_0": "res://assets/landside/tp_curb_bay_01a.glb",
 	"lot_0": "res://assets/landside/tp_parking_01a.glb",
 	"lot_1": "res://assets/landside/tc_parking_2a.glb",
@@ -83,7 +83,7 @@ func test_built_facilities_come_and_go_with_the_frames_and_return_after_a_load()
 	)
 	assert_bool(clock.paused).is_true()
 	assert_dict(before).is_equal(
-		{"bays": 2, "curb_0": "", "lot_0": "", "lot_1": "", "sign_0": false, "sign_1": false}
+		{"bays": 1, "curb_0": "", "lot_0": "", "lot_1": "", "sign_0": false, "sign_1": false}
 	)
 	assert_dict(built).is_equal(BUILT)
 	# Opened again, the surface lot stands without its sign; removed, it is gone.
@@ -91,7 +91,7 @@ func test_built_facilities_come_and_go_with_the_frames_and_return_after_a_load()
 		assert_dict(opened)
 		. is_equal(
 			{
-				"bays": 2,
+				"bays": 1,
 				"curb_0": "",
 				"lot_0": "res://assets/landside/tp_parking_01a.glb",
 				"lot_1": "",
@@ -102,7 +102,7 @@ func test_built_facilities_come_and_go_with_the_frames_and_return_after_a_load()
 	)
 	assert_bool(lot_removed).is_true()
 	assert_dict(removed).is_equal(
-		{"bays": 2, "curb_0": "", "lot_0": "", "lot_1": "", "sign_0": false, "sign_1": false}
+		{"bays": 1, "curb_0": "", "lot_0": "", "lot_1": "", "sign_0": false, "sign_1": false}
 	)
 	assert_bool(saved).is_true()
 	assert_bool(loaded).is_true()
