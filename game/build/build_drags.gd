@@ -63,9 +63,14 @@ static func lay_row(mode: BuildMode) -> AreaDrag.Outcome:
 	mode._row.cancel()
 	mode._hover_key = ""
 	var dirty: Array[Vector2i] = []
+	mode.grid.hold_signals()
+	mode.grid.begin_batch()
 	var outcome := WallRowDrag.apply(mode.grid, row_edits(mode), mode.check, mode.wallet(), dirty)
 	if outcome.placed > 0:
 		reshape_belts(mode, dirty)
+	mode.grid.end_batch()
+	mode.grid.release_signals()
+	if outcome.placed > 0:
 		mode._redraw()
 		mode.grid_changed.emit()
 	return outcome
@@ -113,9 +118,11 @@ static func finish_area(mode: BuildMode) -> AreaDrag.Outcome:
 	if mode.tool == BuildMode.Tool.REMOVE:
 		var touched := cells_a_clear_touches(mode, mode._area.rect())
 		mode.grid.hold_signals()
+		mode.grid.begin_batch()
 		outcome = AreaDrag.clear(mode.grid, mode._area.rect(), mode.wallet())
 		if outcome.placed > 0:
 			reshape_belts(mode, touched)
+		mode.grid.end_batch()
 		mode.grid.release_signals()
 	else:
 		outcome = AreaDrag.fill_floor(
@@ -135,9 +142,11 @@ static func finish_resize(mode: BuildMode) -> void:
 	var before := mode._resize.original()
 	mode._hover_key = ""
 	mode.grid.hold_signals()
+	mode.grid.begin_batch()
 	var result := mode._resize.finish(mode.grid, mode.wallet())
 	if result != null and result.ok:
 		reshape_belts(mode, rect_cells(before.merge(mode._resize.rect())))
+	mode.grid.end_batch()
 	mode.grid.release_signals()
 	if result != null and result.ok:
 		mode.grid_changed.emit()
@@ -150,9 +159,11 @@ static func finish_resize(mode: BuildMode) -> void:
 static func finish_room(mode: BuildMode) -> void:
 	var type: StringName = BuildMode.TOOL_ROOMS[mode.tool]
 	mode.grid.hold_signals()
+	mode.grid.begin_batch()
 	var result := RoomTool.mark(mode.grid, mode._area.rect(), type, mode.wallet())
 	if result.ok:
 		reshape_belts(mode, rect_cells(mode._area.rect()))
+	mode.grid.end_batch()
 	mode.grid.release_signals()
 	if result.ok:
 		mode.grid_changed.emit()

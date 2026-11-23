@@ -81,6 +81,8 @@ var check_staff_reach := true
 var recorder: BuildReceipt = null
 ## How many times divider doors were recomputed (for tests that bound work).
 var divider_door_rebuilds := 0
+## How many times _relink_paths() ran (for tests that bound relink work).
+var relink_count := 0
 
 var _floor := PackedByteArray()
 var _zone := PackedInt32Array()
@@ -163,6 +165,10 @@ var _synced_divider_doors := {}
 ## Signal emissions held back by hold_signals(), in the order they happened.
 var _held: Array[Callable] = []
 var _hold_depth := 0
+var _batch_depth := 0
+var _batch_dirty: Array[Vector2i] = []
+var _batch_dirty_set := {}
+var _hold_batch_marks: Array[int] = []
 
 
 ## `grid_origin` is the world position of cell (0, 0)'s north-west corner, a
@@ -586,14 +592,51 @@ func trial_answers(def_id: StringName, at: Vector2i, turn: int) -> Dictionary:
 	return out
 
 
+## Opens a relink-coalescing batch. While open (nesting-safe), apply(),
+## apply_batch() and apply_sequence() accumulate dirty cells instead of
+## running _relink_paths() and queueing graph_changed on each step; the
+## outermost end_batch() relinks and emits graph_changed once after all
+## edit_applied signals in the batch.
+func begin_batch() -> void:
+	_batch_depth += 1
+
+
+## Closes one relink-coalescing batch. On the outermost close with pending
+## dirty cells, relinks the A* graphs once and emits (or holds) one
+## graph_changed signal.
+func end_batch() -> void:
+	if _batch_depth <= 0:
+		push_error("BuildGrid.end_batch: mismatched end_batch()")
+		_batch_depth = 0
+		return
+	_batch_depth -= 1
+	if _batch_depth > 0 or _batch_dirty.is_empty():
+		return
+	var dirty := _batch_dirty
+	_batch_dirty = []
+	_batch_dirty_set.clear()
+	var relinked := _relink_paths(dirty)
+	_emit_or_hold(func() -> void: graph_changed.emit(relinked))
+
+
+func _finish_dirty(dirty: Array[Vector2i]) -> void:
+	if _batch_depth > 0:
+		for cell in dirty:
+			if not _batch_dirty_set.has(cell):
+				_batch_dirty_set[cell] = true
+				_batch_dirty.append(cell)
+		return
+	var relinked := _relink_paths(dirty)
+	_emit_or_hold(func() -> void: graph_changed.emit(relinked))
+
+
 ## Validates the edit and, if it is accepted, applies it and relinks the A*
 ## graph around its dirty cells. A refused edit changes nothing, and an edit
 ## with no dirty cells (a room) relinks and emits nothing.
 func apply(edit: BuildEdit) -> BuildResult:
 	var result := _commit(edit)
 	if result.ok and not result.dirty_cells.is_empty():
-		var relinked := _relink_paths(result.dirty_cells)
-		_emit_or_hold(func() -> void: graph_changed.emit(relinked))
+		_finish_dirty(result.dirty_cells)
 	return result
 
 
@@ -608,16 +651,17 @@ func apply_batch(edits: Array[BuildEdit]) -> Array[BuildResult]:
 	var dirty: Array[Vector2i] = []
 	# One flood for the whole batch when it keeps every reached spot reached
 	# (GridReach.batch_keeps_reach()); otherwise each edit is checked as it comes.
-	_reach_cleared = check_staff_reach and GridReach.batch_keeps_reach(self, edits)
+	var was_cleared := _reach_cleared
+	if not was_cleared:
+		_reach_cleared = check_staff_reach and GridReach.batch_keeps_reach(self, edits)
 	for edit in edits:
 		var result := _commit(edit)
 		results.append(result)
 		if result.ok:
 			dirty.append_array(result.dirty_cells)
-	_reach_cleared = false
+	_reach_cleared = was_cleared
 	if not dirty.is_empty():
-		var relinked := _relink_paths(dirty)
-		_emit_or_hold(func() -> void: graph_changed.emit(relinked))
+		_finish_dirty(dirty)
 	return results
 
 
@@ -633,7 +677,9 @@ func apply_batch(edits: Array[BuildEdit]) -> Array[BuildResult]:
 func apply_sequence(edits: Array[BuildEdit], rule: Callable) -> BuildResult:
 	var result := BuildResult.accepted()
 	var dirty: Array[Vector2i] = []
-	_reach_cleared = check_staff_reach and GridReach.batch_keeps_reach(self, edits)
+	var was_cleared := _reach_cleared
+	if not was_cleared:
+		_reach_cleared = check_staff_reach and GridReach.batch_keeps_reach(self, edits)
 	for edit in edits:
 		var problem: BuildResult = rule.call(self, edit) if rule.is_valid() else null
 		if problem != null:
@@ -643,10 +689,9 @@ func apply_sequence(edits: Array[BuildEdit], rule: Callable) -> BuildResult:
 		if not result.ok:
 			break
 		dirty.append_array(result.dirty_cells)
-	_reach_cleared = false
+	_reach_cleared = was_cleared
 	if not dirty.is_empty():
-		var relinked := _relink_paths(dirty)
-		_emit_or_hold(func() -> void: graph_changed.emit(relinked))
+		_finish_dirty(dirty)
 	if not result.ok:
 		return result
 	var whole := BuildResult.accepted()
@@ -780,6 +825,7 @@ func _commit(edit: BuildEdit) -> BuildResult:
 ## release_signals(): how many signals were already held.
 func hold_signals() -> int:
 	_hold_depth += 1
+	_hold_batch_marks.append(_batch_dirty.size())
 	return _held.size()
 
 
@@ -788,8 +834,16 @@ func hold_signals() -> int:
 ## hold_signals() mark), the signals held since that mark are discarded first,
 ## for a caller that put the grid back to how it was.
 func release_signals(drop_from := -1) -> void:
-	if drop_from >= 0 and drop_from < _held.size():
-		_held.resize(drop_from)
+	var dirty_mark := -1
+	if not _hold_batch_marks.is_empty():
+		dirty_mark = _hold_batch_marks.pop_back()
+	if drop_from >= 0:
+		if drop_from < _held.size():
+			_held.resize(drop_from)
+		if dirty_mark >= 0 and dirty_mark < _batch_dirty.size():
+			for i in range(dirty_mark, _batch_dirty.size()):
+				_batch_dirty_set.erase(_batch_dirty[i])
+			_batch_dirty.resize(dirty_mark)
 	_hold_depth -= 1
 	if _hold_depth > 0:
 		return
@@ -845,6 +899,9 @@ func to_snapshot() -> Dictionary:
 func from_snapshot(data: Dictionary) -> bool:
 	if not BuildGridSave.load_into(self, data):
 		return false
+	if _hold_depth == 0:
+		_batch_dirty.clear()
+		_batch_dirty_set.clear()
 	_bump_versions()
 	if recorder != null:
 		recorder.replaced = true
@@ -910,6 +967,10 @@ func _reset(grid_size: Vector2i, grid_origin: Vector3) -> void:
 	_divider_doors = {}
 	_divider_doors_stale = true
 	_synced_divider_doors = {}
+	_batch_depth = 0
+	_batch_dirty.clear()
+	_batch_dirty_set.clear()
+	_hold_batch_marks.clear()
 	_bump_versions()
 
 
@@ -1025,6 +1086,7 @@ func flood_area() -> Rect2i:
 ## (GridPathing.set_outside()); on the 86x150 site that took the edit opening
 ## a whole-site hall from about 13 ms to about 7 ms (board ee9914e6, L4).
 func _relink_paths(dirty: Array[Vector2i]) -> Array[Vector2i]:
+	relink_count += 1
 	for cell in dirty:
 		var one := Rect2i(cell, Vector2i.ONE)
 		_built = one if _built.size == Vector2i.ZERO else _built.merge(one)

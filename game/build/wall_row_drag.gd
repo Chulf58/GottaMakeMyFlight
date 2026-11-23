@@ -56,6 +56,10 @@ static func apply(
 	var outcome := AreaDrag.Outcome.new()
 	var before := wallet.balance if wallet != null else 0
 	grid.hold_signals()
+	grid.begin_batch()
+	var was_cleared := grid._reach_cleared
+	if not was_cleared and grid.check_staff_reach:
+		grid._reach_cleared = GridReach.batch_keeps_reach(grid, edits)
 	for i in edits.size():
 		var edit := edits[i]
 		var result: BuildResult = check.call(edit)
@@ -75,6 +79,8 @@ static func apply(
 			outcome.skipped += edits.size() - i
 			break
 		outcome.skipped += 1
+	grid._reach_cleared = was_cleared
+	grid.end_batch()
 	grid.release_signals()
 	if wallet != null:
 		outcome.money = absi(wallet.balance - before)
@@ -91,6 +97,9 @@ static func preview(
 	var report := Preview.new()
 	report.edits = edits
 	var stopped := false
+	var was_cleared := grid._reach_cleared
+	if not was_cleared and grid.check_staff_reach:
+		grid._reach_cleared = GridReach.batch_keeps_reach(grid, edits)
 	for edit in edits:
 		var result: BuildResult = check.call(edit)
 		var edge_cost := 0
@@ -108,6 +117,7 @@ static func preview(
 		report.blocked += 1
 		if report.first_reason == "":
 			report.first_reason = result.reason_text()
+	grid._reach_cleared = was_cleared
 	return report
 
 
