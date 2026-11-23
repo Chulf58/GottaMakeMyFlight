@@ -1,14 +1,10 @@
 class_name TestDepartureListTomorrow
 extends GdUnitTestSuite
-## When nothing leaves today but an accepted contract starts tomorrow, the
-## departures say so with the flight's time (board item "Smoke playtest 6
-## friction", point 1): a contract accepted at 07:04 for 08:00 misses its
-## day-0 preparation window and starts on day 1.
-##
-## Changed for HUD 7/7 (board 3bd42402): the old flight panel's "Tomorrow" line
-## came from DepartureList.text(), which had no caller left and was removed. The
-## departures board carries the same news under its Tomorrow heading, so these
-## read DeparturesBoard.lines_for.
+## A contract accepted at 07:04 for 08:00 misses its day-0 preparation window
+## and starts on day 1. Under departures-live-ops-drawer-and-actionable-on-
+## time-hud-stat (35d321c7), DeparturesBoard lists today's live flights only
+## (omitting Tomorrow rows), while DepartureList.rows_for_day(_, 1) still feeds
+## tomorrow's rows to FlightPlanner.
 
 const ACCEPTED_AT := 7 * 60 + 4
 
@@ -29,22 +25,14 @@ func _lisbon() -> Dictionary:
 	return terms
 
 
-func test_a_contract_that_starts_tomorrow_is_announced_with_its_time() -> void:
+func test_a_contract_that_starts_tomorrow_is_omitted_from_today_board_and_kept_for_day_1() -> void:
 	assert_bool(_sim.accept_contract(_lisbon())).is_true()
 	assert_int(int(_sim.start_days["SH1"])).is_equal(1)
 	var lines := DeparturesBoard.lines_for(_sim, _sim.tick)
-	print("nothing today, one tomorrow: %s" % " | ".join(lines))
-	(
-		assert_array(Array(lines))
-		. is_equal(
-			[
-				DeparturesBoard.TODAY_HEADING,
-				DeparturesBoard.NONE_TEXT,
-				DeparturesBoard.TOMORROW_HEADING,
-				"08:00  Lisbon  Sunhop",
-			]
-		)
-	)
+	assert_array(Array(lines)).is_equal([DeparturesBoard.EMPTY_TEXT])
+	var tomorrow := DepartureList.rows_for_day(_sim, 1)
+	assert_int(tomorrow.size()).is_equal(1)
+	assert_str(tomorrow[0]["line"]).is_equal("08:00  Lisbon  Sunhop")
 
 
 func test_an_ended_contract_is_not_announced() -> void:

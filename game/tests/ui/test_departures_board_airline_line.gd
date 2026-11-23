@@ -1,14 +1,12 @@
 class_name TestDeparturesBoardAirlineLine
 extends GdUnitTestSuite
-## Each Departures row is two lines (decision departures-list-row-shows-the-
-## airline-on-a-second-line, user-ruled 2026-11-12, board 6e77bed2): line 1 has
-## the time, the destination and the Gate and End buttons; line 2 has the
+## Each Live Ops Departures row is two lines (decisions departures-list-row-
+## shows-the-airline-on-a-second-line, departures-live-ops-drawer-and-
+## actionable-on-time-hud-stat): line 1 has the time, destination, and
+## boarded/booked progress (with no Gate or End buttons); line 2 has the
 ## airline's full name in small grey text (HudHint), never trimmed or cut; the
 ## list keeps its HudLayout.LIST_W width. The next flight's "doors close" caption
-## stays under the airline line (decision flight-panel-the-next-departing-
-## flight-s-row-shows-a-doors-c).
-##
-## Tick 0 is 06:00. X leaves at 10:00 (the next flight) and Y at 11:00.
+## stays under line 2.
 
 const GATES: Array[String] = ["C", "A", "B"]
 const LONGEST := "Skyline Global"
@@ -19,9 +17,6 @@ var _board: DeparturesBoard
 var _rows: Control
 
 
-## The world and the board are built once for the file; no case changes them
-## (the status word cases, which move the clock, are in
-## test_departures_board_airline_status.gd).
 func before() -> void:
 	_sim = FlightSim.new()
 	_clock = SimClock.new()
@@ -34,6 +29,7 @@ func before() -> void:
 	_board.flights = _sim
 	_board.clock = _clock
 	add_child(_board)
+	_board.set_shown(true)
 	for i in 3:
 		await get_tree().process_frame
 	_rows = _board.find_child("Rows", true, false)
@@ -55,24 +51,28 @@ func _accept(id: String, minute: int, destination: String, airline: String) -> v
 	assert_bool(_sim.accept_contract(terms)).is_true()
 
 
+func _row_box(id: String, day: int) -> VBoxContainer:
+	return _rows.find_child("FlightRow_%s" % FlightTimetable.occurrence_id(id, day), true, false)
+
+
 func _airline(id: String, day: int) -> Label:
 	return _rows.find_child("Airline_%s_%d" % [id, day], true, false) as Label
 
 
 func _line_one(id: String, day: int) -> HBoxContainer:
-	return _board.gate_button(id, day).get_parent() as HBoxContainer
+	return _row_box(id, day).get_child(0) as HBoxContainer
 
 
-func test_every_contract_row_has_the_full_airline_name_on_its_own_line() -> void:
+func test_every_today_contract_row_has_the_full_airline_name_on_its_own_line() -> void:
 	var expected := {"X": LONGEST, "Y": "Gotta Air"}
 	for id: String in expected:
-		for day in [0, 1]:
-			var label := _airline(id, day)
-			print("airline label ", id, " day ", day, ": ", label)
-			assert_object(label).is_not_null()
-			assert_str(label.text).starts_with(expected[id])
-			assert_int(label.text_overrun_behavior).is_equal(TextServer.OVERRUN_NO_TRIMMING)
-			assert_bool(label.clip_text).is_false()
+		var label := _airline(id, 0)
+		print("airline label ", id, " day 0: ", label)
+		assert_object(label).is_not_null()
+		assert_str(label.text).starts_with(expected[id])
+		assert_int(label.text_overrun_behavior).is_equal(TextServer.OVERRUN_NO_TRIMMING)
+		assert_bool(label.clip_text).is_false()
+		assert_object(_airline(id, 1)).is_null()
 
 
 func test_the_airline_line_is_small_grey_text_under_line_one() -> void:
@@ -87,7 +87,6 @@ func test_the_airline_name_is_not_cut_at_the_list_width() -> void:
 	var size := label.get_theme_font_size("font_size")
 	var wide := font.get_string_size(LONGEST, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
 	print("airline width ", wide, " label width ", label.size.x, " lines ", label.get_line_count())
-	# Control: the label was laid out and the name has a real width.
 	assert_float(wide).is_greater(20.0)
 	assert_float(label.size.x).is_greater(wide)
 	assert_int(label.get_line_count()).is_equal(1)
@@ -101,14 +100,16 @@ func test_the_list_stays_at_its_set_width() -> void:
 	assert_float(panel.size.x).is_equal_approx(float(HudLayout.LIST_W), 0.5)
 
 
-func test_line_one_has_the_time_the_destination_and_both_buttons() -> void:
+func test_line_one_has_time_destination_boarded_booked_and_no_gate_or_end_buttons() -> void:
 	var line_one := _line_one("X", 0)
 	var head := line_one.get_child(0) as Label
-	print("line one: ", head.text)
+	var boarded := line_one.get_child(1) as Label
+	print("line one: ", head.text, " | ", boarded.text)
 	assert_str(head.text).is_equal("10:00  Oslo")
 	assert_str(head.text).not_contains(LONGEST)
-	assert_object(_board.gate_button("X", 0).get_parent()).is_same(line_one)
-	assert_object(_board.end_button("X", 0).get_parent()).is_same(line_one)
+	assert_str(boarded.text).is_equal("0/40 boarded")
+	assert_array(_board.find_children("Gate_*", "Button", true, false)).is_empty()
+	assert_array(_board.find_children("End_*", "Button", true, false)).is_empty()
 
 
 func test_the_doors_close_line_stays_under_the_airline_of_the_next_flight_only() -> void:
@@ -116,8 +117,10 @@ func test_the_doors_close_line_stays_under_the_airline_of_the_next_flight_only()
 	assert_int(found.size()).is_equal(1)
 	var doors := found[0] as Label
 	assert_str(doors.text).starts_with("doors close")
-	assert_object(_rows.get_child(doors.get_index() - 1)).is_same(_airline("X", 0))
-	assert_object(_rows.get_child(doors.get_index() - 2)).is_same(_line_one("X", 0))
+	var row_box := _row_box("X", 0)
+	assert_object(doors.get_parent()).is_same(row_box)
+	assert_object(row_box.get_child(doors.get_index() - 1)).is_same(_airline("X", 0))
+	assert_object(row_box.get_child(doors.get_index() - 2)).is_same(_line_one("X", 0))
 
 
 func test_entries_carry_the_head_and_the_airline() -> void:

@@ -42,6 +42,8 @@ extends VBoxContainer
 
 ## A card was clicked and the camera sent to `target`.
 signal jumped(target: Vector3)
+## The self-clearing late-runner card was clicked; carries the tightest flight id.
+signal late_card_pressed(flight_id: String)
 ## A cause transitioned from inactive to active on the board.
 signal alert_raised(key: StringName)
 ## reset() has dropped every card and notice; a poster of notices posts again.
@@ -96,6 +98,10 @@ var build_tray_open := Callable()
 var build_stack_top := Callable()
 var baggage: BaggageSim
 var ramp_dispatch: RampDispatch
+var flights: FlightSim
+## When valid and returning true (e.g. DeparturesPanel visible), suppresses the
+## self-clearing late-runner card so it clears immediately.
+var late_suppressed := Callable()
 
 var _board := AlertBoard.new()
 var _dirty := DirtyAlert.new()
@@ -115,6 +121,9 @@ var _route_causes: Array[Dictionary] = []
 var _gate_causes: Array[Dictionary] = []
 var _staff_causes: Array[Dictionary] = []
 var _ramp_causes: Array[Dictionary] = []
+var _late_key := []
+var _late_causes: Array[Dictionary] = []
+var _late_flight := ""
 var _scanned_tick := -1
 ## Key -> how many clicks its card has had, to step through its targets.
 var _clicks: Dictionary = {}
@@ -176,6 +185,9 @@ func reset() -> void:
 	_clicks.clear()
 	for key: StringName in _notices.keys():
 		drop_notice(key)
+	_late_key = []
+	_late_causes.clear()
+	_late_flight = ""
 	_scanned_tick = -1
 	_shown_revision = _board.revision
 	_sync_cards()
@@ -202,6 +214,7 @@ func refresh() -> void:
 	causes.append_array(_staff_causes)
 	causes.append_array(_ramp_causes)
 	causes.append_array(_dirty.cause())
+	causes.append_array(_current_late_causes())
 	var prev_active := {}
 	for alert in _board.active():
 		prev_active[alert["key"]] = true
@@ -217,6 +230,20 @@ func refresh() -> void:
 	visible = not (covered.is_valid() and covered.call())
 	_place()
 	_layout_cards()
+
+
+func _current_late_causes() -> Array[Dictionary]:
+	if late_suppressed.is_valid() and bool(late_suppressed.call()):
+		_late_flight = ""
+		return []
+	var resolved_flights := flights if flights != null else sim.flights
+	var flight_key := resolved_flights.get_instance_id() if resolved_flights != null else 0
+	var key := [sim.get_instance_id(), sim.revision, flight_key]
+	if key != _late_key:
+		_late_key = key
+		_late_causes = LateCount.alert_cause(sim, resolved_flights)
+	_late_flight = String(_late_causes[0].get("flight", "")) if not _late_causes.is_empty() else ""
+	return _late_causes
 
 
 ## Puts `card` on the rail under `key`, newest first, replacing a notice up
@@ -341,13 +368,23 @@ func card_text(key: StringName) -> String:
 	return "%s\n%s" % [title.text, detail.text]
 
 
-## A click on the card for `key`: glides the camera to its next target and
-## emits `jumped`. False when no card is up for it or it has no place.
+## A click on the card for `key`: follows the tightest late passenger for
+## LATE_RUNNERS when connected, else glides the camera to its next target and
+## emits `jumped`. False when no card is up for it or it has no action/place.
 func press_card(key: StringName) -> bool:
 	var alert := _board.alert(key)
-	if alert.is_empty() or (alert["targets"] as Array).is_empty():
+	if alert.is_empty():
 		return false
 	var targets: Array = alert["targets"]
+	if key == LateCount.ALERT_KEY:
+		var flight_id := _late_flight if _late_flight != "" else String(alert.get("flight", ""))
+		if flight_id != "" and late_card_pressed.get_connections().size() > 0:
+			late_card_pressed.emit(flight_id)
+			if not targets.is_empty():
+				jumped.emit(targets[0])
+			return true
+	if targets.is_empty():
+		return false
 	var clicks: int = _clicks.get(key, 0)
 	_clicks[key] = clicks + 1
 	var target: Vector3 = targets[clicks % targets.size()]
@@ -510,7 +547,11 @@ func _new_card(key: StringName) -> PanelContainer:
 	card.set_meta(META_SEQ, _take_seq())
 	card.mouse_filter = Control.MOUSE_FILTER_STOP
 	card.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	card.tooltip_text = tr("Click to look at it")
+	card.tooltip_text = (
+		tr("Click to follow the tightest running-late passenger")
+		if key == LateCount.ALERT_KEY
+		else tr("Click to look at it")
+	)
 	card.gui_input.connect(_on_card_input.bind(key))
 	card.minimum_size_changed.connect(_on_card_resized.bind(card.get_instance_id()))
 	var column := VBoxContainer.new()
@@ -717,8 +758,13 @@ func _retranslate() -> void:
 	_tray_title.text = tr("Alert history")
 	_toggle.text = tr("Show alert cards")
 	for child in _cards.get_children():
-		if not _notices.has(child.get_meta(META_KEY)):
-			(child as Control).tooltip_text = tr("Click to look at it")
+		var meta_key: Variant = child.get_meta(META_KEY)
+		if not _notices.has(meta_key):
+			(child as Control).tooltip_text = (
+				tr("Click to follow the tightest running-late passenger")
+				if meta_key == LateCount.ALERT_KEY
+				else tr("Click to look at it")
+			)
 	_heights.clear()
 	_layout_dirty = true
 	if sim != null:

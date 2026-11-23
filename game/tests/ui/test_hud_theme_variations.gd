@@ -46,43 +46,35 @@ func test_the_build_mode_sign_uses_its_theme_variation() -> void:
 	assert_object(label.get_theme_color("font_color")).is_equal(BuildModeFrame.DARK)
 
 
-func test_departures_gate_buttons_use_the_compact_variation() -> void:
+func test_planner_gate_bars_and_move_buttons_use_the_compact_variation() -> void:
 	var sim := auto_free(FlightSim.new()) as FlightSim
 	var clock := auto_free(SimClock.new()) as SimClock
 	sim.open_airport()
 	sim.gate_source = func() -> Array[String]: return ["A", "B"] as Array[String]
-	var board := DeparturesBoard.new()
-	board.settings_path = SaveTestKit.run_path("hud_theme_variations")
-	board.flights = sim
-	board.clock = clock
 	assert_bool(sim.accept_contract(TestFlightContracts.terms("X", 600))).is_true()
-	add_child(board)
-	board.refresh()
-	var gate := board.gate_button("X", 0)
-	assert_object(gate).is_not_null()
-	# The Gate button wears its gate's colour through a HudGate* variation whose base
-	# type is HudButtonCompact (board bed80bdd): the colour lives in the theme, the
-	# compact sizing is inherited, and the button still carries no override.
-	var variation := gate.theme_type_variation
+	var planner := FlightPlanner.new()
+	planner.flights = sim
+	planner.clock = clock
+	add_child(planner)
+	planner.open()
+	var bar := planner.bar_button("X", 0)
+	assert_object(bar).is_not_null()
+	var variation := bar.theme_type_variation
 	assert_str(str(variation)).is_equal(str(GateColours.variation_of("A")))
 	assert_str(str(THEME.get_type_variation_base(variation))).is_equal("HudButtonCompact")
-	_assert_no_style_overrides(gate, STATES)
-	assert_bool(gate.has_theme_color_override("font_color")).is_false()
-	assert_bool(gate.has_theme_color_override("font_disabled_color")).is_false()
-	var normal := gate.get_theme_stylebox("normal")
+	_assert_no_style_overrides(bar, STATES)
+	assert_bool(bar.has_theme_color_override("font_color")).is_false()
+	assert_bool(bar.has_theme_color_override("font_disabled_color")).is_false()
+	var normal := bar.get_theme_stylebox("normal")
 	assert_object(normal).is_same(THEME.get_stylebox("normal", variation))
 	assert_float(normal.content_margin_top).is_equal(1.0)
 	assert_float(normal.content_margin_bottom).is_equal(1.0)
-	gate.pressed.emit()
-	var picks := board.find_children("Pick_*", "Button", true, false)
-	print("picker buttons: ", picks.size())
-	assert_int(picks.size()).is_greater(0)
-	for pick in picks:
-		assert_str(str((pick as Button).theme_type_variation)).is_equal("HudButtonCompact")
-		_assert_no_style_overrides(pick as Button, STATES)
-	var path := board.settings_path
-	board.free()
-	DirAccess.remove_absolute(path)
+	bar.pressed.emit()
+	var move_b := planner.part("Move_B") as Button
+	assert_object(move_b).is_not_null()
+	assert_str(str(move_b.theme_type_variation)).is_equal(str(GateColours.variation_of("B")))
+	_assert_no_style_overrides(move_b, STATES)
+	planner.free()
 
 
 func test_the_compact_buttons_keep_the_button_look() -> void:

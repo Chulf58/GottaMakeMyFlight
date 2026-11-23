@@ -78,6 +78,10 @@ const RESULT_KEY := &"flight_result"
 var departures_settings_path := DeparturesBoard.SETTINGS_PATH
 ## Where the alert cards keep their on/off choice; tests use their own.
 var alert_settings_path := HudFlagSetting.PATH
+## Rolling 3-day rating source for the Departures header; falls back to ../AirportRating.
+var rating: AirportRating
+## Gate desk links for click-row-to-focus; falls back to ../GateDesks.
+var gates: GateDesks
 ## Whether the Debug toggle and its panel are built: dev builds only (decision
 ## debug-panel-is-for-dev-builds-only-the-hud-s-debug-toggle-an). A test sets it
 ## before add_child to build or leave out the debug tools.
@@ -180,12 +184,18 @@ func _ready() -> void:
 		_speed_buttons.append(button)
 	_clock_panel = panel
 	_build_quiet_chip()
+	if rating == null:
+		rating = get_node_or_null("../AirportRating") as AirportRating
+	if gates == null:
+		gates = get_node_or_null("../GateDesks") as GateDesks
 	_departures_board.flights = flights
 	_departures_board.clock = clock
 	_departures_board.passengers = sim
+	_departures_board.rating = rating
 	_departures_board.settings_path = departures_settings_path
 	_departures_board.menu = get_node_or_null("../BuildMenu") as BuildMenu
 	_departures_board.follow_late_requested.connect(_on_follow_late_requested)
+	_departures_board.focus_gate_requested.connect(_on_focus_gate_requested)
 	add_child(_departures_board)
 	if flights != null and clock != null:
 		_planner.flights = flights
@@ -202,6 +212,9 @@ func _ready() -> void:
 		return TopRow.sheet_overlaps(get_tree(), _alerts.get_global_rect())
 	_alerts.above = panel
 	_alerts.camera = camera
+	_alerts.flights = flights
+	_alerts.late_suppressed = _departures_board.is_panel_visible
+	_alerts.late_card_pressed.connect(_on_follow_late_requested)
 	_alerts.settings_path = alert_settings_path
 	add_child(_alerts)
 	_pa_ticker.bottom_provider = _pa_bottom
@@ -473,9 +486,27 @@ func refresh() -> void:
 		show_result_for(_unreported.back())
 		_unreported.clear()
 	_time_label.text = time_text()
+	if _departures_board.flights != flights:
+		_departures_board.flights = flights
+	if _departures_board.clock != clock:
+		_departures_board.clock = clock
+	if _departures_board.passengers != sim:
+		_departures_board.passengers = sim
+	if _departures_board.rating != rating:
+		_departures_board.rating = rating
 	_departures_board.refresh()
+	_follow_label.text = follow_text()
+	_inspect.refresh()
+	_follow_label.visible = not _inspect.visible
+	_follow_card.sync()
+	# A passenger card takes the board's place on the left edge (decision 500fd5a0,
+	# point 6); a desk, room or car-park card leaves the list showing. Step aside
+	# before _alerts.refresh() so the late-runner alert card sees the current visibility.
+	_departures_board.step_aside(_inspect.shows_passenger())
 	# Before the rail, so it hangs under the chip on the frame the chip shows.
 	_refresh_quiet_chip()
+	if _alerts.flights != flights:
+		_alerts.flights = flights
 	_alerts.refresh()
 	if _pa_modal_open():
 		_pa_ticker.clear_now()
@@ -486,13 +517,6 @@ func refresh() -> void:
 		_seed_label.visible = _seed_label.text != ""
 		_status_label.text = _status
 		_status_label.visible = _status != ""
-	_follow_label.text = follow_text()
-	_inspect.refresh()
-	_follow_label.visible = not _inspect.visible
-	_follow_card.sync()
-	# A passenger card takes the board's place on the left edge (decision 500fd5a0,
-	# point 6); a desk, room or car-park card leaves the list showing.
-	_departures_board.step_aside(_inspect.shows_passenger())
 	if clock != null:
 		for i in _speed_buttons.size():
 			var on := clock.paused if i == 0 else not clock.paused and clock.speed == i
@@ -1171,6 +1195,35 @@ func _on_follow_late_requested(flight_id: String) -> void:
 	views.select(id)
 	if camera != null:
 		camera.follow(views.follow_anchor)
+	refresh()
+
+
+func _on_focus_gate_requested(gate_id: String) -> void:
+	if gate_id == "":
+		return
+	var desks := gates if gates != null else get_node_or_null("../GateDesks") as GateDesks
+	if desks == null:
+		return
+	var binding := desks.binding_of(gate_id)
+	if binding.is_empty():
+		return
+	var desk_id := int(binding.get("desk", 0))
+	var grid := (
+		sim.grid
+		if sim != null and sim.grid != null
+		else (build_mode.grid if build_mode != null else null)
+	)
+	if desk_id == 0 or grid == null or grid.get_object(desk_id).is_empty():
+		return
+	if landside_views != null:
+		landside_views.select(0)
+	if views != null:
+		views.select(0)
+	_built.clear()
+	_reveal_frames = 0
+	if camera != null:
+		var target := AlertSources.object_point(grid, desk_id)
+		camera.glide_to(target, minf(camera.distance, AlertStack.JUMP_DISTANCE))
 	refresh()
 
 

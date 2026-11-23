@@ -60,6 +60,7 @@ func before_test() -> void:
 	_hud.departures_settings_path = SaveTestKit.run_path("follow_late_board")
 	add_child(_hud)
 	_board = _hud.find_child("DeparturesBoard", true, false) as DeparturesBoard
+	_board.set_shown(true)
 	_inspect = _hud.find_child("PassengerInspect", true, false) as PassengerInspect
 
 
