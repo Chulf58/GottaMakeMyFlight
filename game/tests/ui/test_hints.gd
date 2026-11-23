@@ -1,3 +1,4 @@
+# gdlint:disable = max-public-methods
 class_name TestHints
 extends GdUnitTestSuite
 ## The hint queue (HUD 7/7, decision first-time-hints-above-the-build-bar-
@@ -254,3 +255,23 @@ func test_baggage_connect_hint_triggers_with_bag_room_and_zero_desks() -> void:
 	)
 	var connected := _world({"bag_rooms": 1, "connected_desks": 1})
 	assert_array(HintRules.causes(connected)).not_contains([HintRules.BAGGAGE_CONNECT])
+
+
+func test_offers_hint_fires_after_opening_and_clears_when_offer_panel_opens() -> void:
+	var closed := _world({"airport_open": false, "offers_waiting": true, "offers_opened": false})
+	var hints := _settled(closed)
+	_run(hints, 2.0, closed)
+	assert_bool(hints.is_showing()).is_false()
+	var opened_world := _world(
+		{"airport_open": true, "offers_waiting": true, "offers_opened": false}
+	)
+	_run(hints, HintRules.HOLD_S + 0.5, opened_world)
+	assert_str(hints.shown_id()).is_equal(HintRules.OFFERS)
+	assert_str(hints.body_label().text).is_equal(HintRules.text(HintRules.OFFERS))
+	assert_bool(hints.is_seen(HintRules.OFFERS)).is_true()
+	# Opening OfferPanel ends the hint at once and prevents re-showing.
+	var reviewed := _world({"airport_open": true, "offers_waiting": true, "offers_opened": true})
+	hints.advance(0.25, reviewed, [])
+	assert_bool(hints.is_showing()).is_false()
+	_run(hints, Hints.MIN_GAP_S + Hints.IDLE_S, opened_world)
+	assert_bool(hints.is_showing()).is_false()

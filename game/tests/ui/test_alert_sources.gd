@@ -202,3 +202,40 @@ func test_baggage_connect_alert_shows_when_bag_room_has_no_connected_desk_and_cl
 	assert_bool(plan.result.ok).is_true()
 	grid.apply_batch(plan.edits)
 	assert_array(AlertSources.baggage_connect(_world.sim)).is_empty()
+
+
+func test_offers_available_hidden_until_open_and_shows_when_unseen_offers_wait() -> void:
+	var clock := auto_free(SimClock.new()) as SimClock
+	clock.seed_rng(77)
+	clock.set_paused(true)
+	var flights := auto_free(FlightSim.new()) as FlightSim
+	flights.clock = clock
+	var desk := auto_free(OfferDesk.new()) as OfferDesk
+	desk.runway = Runway.new(PlaneClasses.LARGE)
+	desk.flights = flights
+	desk.clock = clock
+	add_child(clock)
+	add_child(flights)
+	add_child(desk)
+	assert_int(desk.board.open_offers().size()).is_equal(3)
+	# Hidden while closed (ruling 0c0f9ba5).
+	assert_array(AlertSources.offers_available(desk, flights, true)).is_empty()
+	flights.open_airport()
+	# Shown when open and unseen.
+	var causes := AlertSources.offers_available(desk, flights, true)
+	assert_array(_keys(causes)).is_equal([AlertSources.OFFERS_AVAILABLE])
+	assert_str(causes[0]["title"]).is_equal("Airline offers available")
+	assert_str(causes[0]["detail"]).is_equal("3 new contracts waiting · click to review")
+	assert_bool(causes[0].get("subtle", false)).is_true()
+	# Hidden once viewed (unseen = false).
+	assert_array(AlertSources.offers_available(desk, flights, false)).is_empty()
+	# Singular wording when 1 open offer remains.
+	var records := TestOfferBoard.day_records(0, [600, 720, 1200])
+	records[1]["status"] = OfferBoard.DECLINED
+	records[2]["status"] = OfferBoard.DECLINED
+	assert_bool(desk.board.from_snapshot(TestOfferBoard.save_of(records))).is_true()
+	var one := AlertSources.offers_available(desk, flights, true)
+	assert_str(one[0]["detail"]).is_equal("1 new contract waiting · click to review")
+	# Empty board produces no offers card.
+	var empty_desk := auto_free(OfferDesk.new()) as OfferDesk
+	assert_array(AlertSources.offers_available(empty_desk, flights, true)).is_empty()

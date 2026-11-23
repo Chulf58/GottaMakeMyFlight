@@ -51,6 +51,7 @@ const SFX_PATHS := {
 	&"security_clear": "res://assets/audio/security_clear.wav",
 	&"gate_chirp": "res://assets/audio/gate_chirp.wav",
 	&"cafe_clink": "res://assets/audio/cafe_clink.wav",
+	&"offer_chime": "res://assets/audio/pa_chime.wav",
 }
 const SFX_COOLDOWN_MS := {
 	&"ui_click": 25,
@@ -72,6 +73,7 @@ const SFX_COOLDOWN_MS := {
 	&"security_clear": 1800,
 	&"gate_chirp": 1600,
 	&"cafe_clink": 2400,
+	&"offer_chime": 1500,
 }
 const SFX_VOLUME_DB := {
 	&"checkin_stamp": -3.0,
@@ -79,6 +81,7 @@ const SFX_VOLUME_DB := {
 	&"security_clear": -4.0,
 	&"gate_chirp": -4.0,
 	&"cafe_clink": -3.5,
+	&"offer_chime": -4.5,
 }
 
 ## Shielded settings path during -s / --script runs (anti-pattern 1639342a).

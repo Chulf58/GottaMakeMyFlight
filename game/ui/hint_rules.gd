@@ -15,6 +15,7 @@ const SECOND_HIRE := &"second_hire"
 const TOILET := &"toilet"
 const FOOD := &"food"
 const BAGGAGE_CONNECT := &"baggage_connect"
+const OFFERS := &"offers"
 ## The invitation to click a passenger (FollowInvite). It is remembered in the
 ## file once the player has selected a passenger, not once it has shown.
 const FOLLOW_PASSENGER := &"follow_passenger"
@@ -36,6 +37,7 @@ const IDS: Array[StringName] = [
 	TOILET,
 	FOOD,
 	BAGGAGE_CONNECT,
+	OFFERS,
 	FOLLOW_PASSENGER,
 ]
 
@@ -61,6 +63,7 @@ const TEXT := {
 	TOILET: "Passengers need a toilet. Build a toilet room and put a stall in it.",
 	FOOD: "Hungry passengers need food. Build a cafe with a counter and a table.",
 	BAGGAGE_CONNECT: "Drag a belt from the back of a check-in desk into your Bag Room.",
+	OFFERS: "Airlines are ready with new flights — click Offers at the top to review contracts.",
 	FOLLOW_PASSENGER: "Click a passenger to follow them to their flight",
 }
 
@@ -81,6 +84,7 @@ const CATEGORIES := {
 		BuildMode.Tool.STALL_ROOM,
 	],
 	BAGGAGE_CONNECT: [BuildMode.Tool.BAG_ROOM, BuildMode.Tool.BELT],
+	OFFERS: [],
 	FOLLOW_PASSENGER: [],
 }
 
@@ -136,6 +140,12 @@ static func causes(world: Dictionary) -> Array[StringName]:
 		out.append(FOOD)
 	if int(world.get("bag_rooms", 0)) > 0 and int(world.get("connected_desks", 0)) == 0:
 		out.append(BAGGAGE_CONNECT)
+	if (
+		bool(world.get("airport_open", false))
+		and bool(world.get("offers_waiting", true))
+		and not bool(world.get("offers_opened", false))
+	):
+		out.append(OFFERS)
 	if bool(world.get("follow_ready", false)) and not bool(world.get("followed", false)):
 		out.append(FOLLOW_PASSENGER)
 	var ordered: Array[StringName] = []
@@ -270,6 +280,10 @@ class Words:
 				tr("Passengers need a toilet. Build a toilet room and put a stall in it."),
 				tr("Hungry passengers need food. Build a cafe with a counter and a table."),
 				tr("Drag a belt from the back of a check-in desk into your Bag Room."),
+				tr(
+					# gdlint:ignore = max-line-length
+					"Airlines are ready with new flights — click Offers at the top to review contracts."
+				),
 				tr("Click a passenger to follow them to their flight"),
 			]
 		)

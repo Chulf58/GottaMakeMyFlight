@@ -279,6 +279,8 @@ func reset_session() -> void:
 func advance(delta: float, world: Dictionary, open_categories: Array) -> void:
 	if _mode == Mode.OFF or not _enabled or _modal():
 		return
+	if bool(world.get("offers_opened", false)):
+		_note_offers_opened()
 	if bool(world.get("followed", false)):
 		_note_followed()
 	_clock += delta
@@ -342,6 +344,14 @@ func _process(delta: float) -> void:
 		hiring = panel.hiring_hint_roles()
 	var world := HintRules.read_world(sim, hiring)
 	world.merge(FollowInvite.read(sim, hud.views, hud.landside_views))
+	var offers := _offer_panel()
+	if offers != null:
+		var has_flights := hud != null and hud.flights != null
+		world["airport_open"] = has_flights and hud.flights.opened_tick >= 0
+		world["offers_waiting"] = (
+			offers.desk != null and not offers.desk.board.open_offers().is_empty()
+		)
+		world["offers_opened"] = offers.has_been_opened
 	advance(step, world, _open_categories())
 
 
@@ -436,6 +446,19 @@ func _note_followed() -> void:
 		_mark_seen(HintRules.FOLLOW_PASSENGER)
 	if _shown_id == HintRules.FOLLOW_PASSENGER:
 		_end_hint()
+
+
+func _note_offers_opened() -> void:
+	if not _seen.get(HintRules.OFFERS, false):
+		_mark_seen(HintRules.OFFERS)
+	if _shown_id == HintRules.OFFERS:
+		_end_hint()
+
+
+func _offer_panel() -> OfferPanel:
+	if hud != null and is_instance_valid(hud.offer_panel):
+		return hud.offer_panel
+	return _find("OfferPanel") as OfferPanel
 
 
 func _mark_seen(id: StringName) -> void:

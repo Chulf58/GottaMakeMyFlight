@@ -29,7 +29,7 @@ func test_a_world_with_every_need_met_has_no_cause() -> void:
 	assert_array(HintRules.causes(_world())).is_empty()
 
 
-func test_the_eight_hints_are_the_ruled_ones_and_first_miss_is_cut() -> void:
+func test_the_nine_hints_are_the_ruled_ones_and_first_miss_is_cut() -> void:
 	(
 		assert_array(HintRules.IDS)
 		. is_equal(
@@ -41,12 +41,44 @@ func test_the_eight_hints_are_the_ruled_ones_and_first_miss_is_cut() -> void:
 				HintRules.SECOND_HIRE,
 				HintRules.TOILET,
 				HintRules.FOOD,
+				HintRules.BAGGAGE_CONNECT,
+				HintRules.OFFERS,
 				HintRules.FOLLOW_PASSENGER,
 			]
 		)
 	)
 	for id in HintRules.IDS:
 		assert_str(HintRules.text(id)).is_not_empty()
+
+
+func test_offers_hint_is_due_once_airport_opens_and_clears_once_opened() -> void:
+	(
+		assert_array(HintRules.causes(_world({"airport_open": false, "offers_opened": false})))
+		. is_empty()
+	)
+	(
+		assert_array(HintRules.causes(_world({"airport_open": true, "offers_waiting": false})))
+		. is_empty()
+	)
+	(
+		assert_array(
+			HintRules.causes(
+				_world({"airport_open": true, "offers_waiting": true, "offers_opened": true})
+			)
+		)
+		. is_empty()
+	)
+	(
+		assert_array(
+			HintRules.causes(
+				_world({"airport_open": true, "offers_waiting": true, "offers_opened": false})
+			)
+		)
+		. is_equal([HintRules.OFFERS])
+	)
+	assert_str(HintRules.text(HintRules.OFFERS)).is_equal(
+		"Airlines are ready with new flights — click Offers at the top to review contracts."
+	)
 
 
 func test_the_check_in_hint_says_each_desk_needs_a_hired_agent() -> void:
