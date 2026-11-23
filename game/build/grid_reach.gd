@@ -8,6 +8,9 @@ extends RefCounted
 ## (_reach_after()). BuildGrid.staff_reach_problem(), apply_batch() and
 ## apply_sequence() call them.
 
+## How many times _reach_after() ran a StaffSpots.reach() flood (for tests).
+static var reach_flood_calls := 0
+
 
 static func staff_reach_problem(grid: BuildGrid, edits: Array[BuildEdit]) -> BuildResult:
 	grid._last_after_known = false
@@ -56,10 +59,21 @@ static func batch_keeps_reach(grid: BuildGrid, edits: Array[BuildEdit]) -> bool:
 	var parts := false
 	for edit in edits:
 		match edit.kind:
-			BuildEdit.Kind.REMOVE_FLOOR, BuildEdit.Kind.PLACE_WALL:
-				if not grid.in_bounds(edit.cell) or edit.side < 0 or edit.side > 3:
+			BuildEdit.Kind.REMOVE_FLOOR:
+				if not grid.in_bounds(edit.cell):
 					return false
 				trial.append(edit)
+			BuildEdit.Kind.PLACE_WALL:
+				if (
+					not grid.in_bounds(edit.cell)
+					or edit.side < 0
+					or edit.side > 3
+					or edit.wall_kind < BuildGrid.WallKind.PLAIN
+					or edit.wall_kind > BuildGrid.MAX_WALL_KIND
+				):
+					return false
+				if edit.wall_kind != BuildGrid.WallKind.DOOR:
+					trial.append(edit)
 			BuildEdit.Kind.REMOVE_OBJECT:
 				if _is_entrance(grid, edit.object_id):
 					return false
@@ -169,6 +183,7 @@ static func _reach_after(
 				if _is_entrance(grid, edit.object_id):
 					undo.append([edit, grid._objects[edit.object_id]])
 					grid._erase_object(edit.object_id)
+	reach_flood_calls += 1
 	var reach := StaffSpots.reach(grid)
 	if parts:
 		var trial_lanes := SecurityLanes.new()
