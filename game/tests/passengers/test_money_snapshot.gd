@@ -105,7 +105,8 @@ func _round_trip(type: StringName) -> void:
 		var start := _b.clock.tick
 		assert_str(_signature(_b)).is_equal(trace[start])
 		assert_int(_b.sim.shops.visit_ids().size()).is_equal(1)
-		assert_int(_b.sim.shops.visit_of(p.id).room).is_equal(ids["air_room"])
+		assert_int(_b.sim.shops.visit_of(p.id).room).is_equal(0)
+		assert_int(_b.sim.shops.visit_of(p.id).display).is_equal(ids["air_pieces"][0])
 		var first_bad := -1
 		while _b.clock.tick < start + REPLAY_TICKS and first_bad < 0:
 			_b.step()

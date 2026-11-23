@@ -115,16 +115,29 @@ static func _visit_problem(
 		return "the slot is not in room %d" % visit.room
 	if (visit.resume_stage == Passenger.Stage.TO_GATE) != p.cleared:
 		return "it resumes on the other side of security"
-	var type_id := StringName(grid.get_room(visit.room)["type"])
+	var type := _visit_service(visit, grid)
+	if type == null or not type.shop:
+		return "no such shop or service"
+	var type_id := type.id
 	if p.stage == Passenger.Stage.SHOP_BROWSE:
 		if p.at != slot["approach"] or p.is_moving():
 			return "it is browsing but not on its slot"
-		var browse := ShopSim.stay_ticks(visit, RoomTypes.get_type(type_id))
+		var browse := ShopSim.stay_ticks(visit, type)
 		if p.stage_tick > tick or p.stage_tick + browse <= tick:
 			return "the browse does not run past the saved tick"
 	if visit.fallback != fallback_of(p, type_id):
 		return "its fallback flag does not fit the visit"
 	return ""
+
+
+static func _visit_service(visit: ShopVisit, grid: BuildGrid) -> ServiceDef:
+	if visit.room > 0:
+		var room := grid.get_room(visit.room)
+		return RoomTypes.get_type(room["type"]) if not room.is_empty() else null
+	var def_id := StringName(grid.get_object(visit.display).get("def", &""))
+	if def_id == &"" and visit.relocation != null:
+		def_id = StringName(visit.relocation.source.get("def", &""))
+	return ServiceTypes.by_piece(def_id)
 
 
 ## Why a visit's Relocation cannot be what continuous play left, or "" when it
@@ -142,12 +155,16 @@ static func _relocation_problem(
 	var moving := visit.relocation
 	if moving == null:
 		return ""
-	var room := grid.get_room(visit.room)
-	if room.is_empty():
-		return "a relocation in a room that is gone"
-	var type := RoomTypes.get_type(room["type"])
+	var type: ServiceDef = null
+	if visit.room > 0:
+		var room := grid.get_room(visit.room)
+		if room.is_empty():
+			return "a relocation in a room that is gone"
+		type = RoomTypes.get_type(room["type"])
+	else:
+		type = ServiceTypes.by_piece(StringName(moving.source["def"]))
 	if type == null or not type.shop or moving.source["def"] != type.seat_piece:
-		return "a relocation from no browse piece of the room"
+		return "a relocation from no browse piece of the service"
 	var cells := BuildCatalog.get_def(moving.source["def"]).footprint(
 		moving.source["anchor"], moving.source["facing"]
 	)
@@ -205,7 +222,8 @@ static func _longest_exit(visit: ShopVisit, p: Passenger, grid: BuildGrid) -> in
 ## from the passenger (WishTable.of()), as play derives it. A visit to an
 ## activity or rest room is never one.
 static func fallback_of(p: Passenger, kind: StringName) -> bool:
-	if not BoredomSim.is_bored(p) or RoomTypes.get_type(kind).activity:
+	var type := ServiceTypes.find_def(kind)
+	if not BoredomSim.is_bored(p) or (type != null and type.activity):
 		return false
 	var wish := WishTable.of(p)
 	return wish != WishTable.NONE and wish != kind
@@ -229,7 +247,7 @@ static func _visit(entry: Variant) -> ShopVisit:
 	var resume := int(entry["resume_stage"])
 	if not RESUME_STAGES.has(resume) or visit.passenger < 1:
 		return null
-	if visit.room < 1 or visit.display < 1 or visit.index < 0:
+	if visit.room < 0 or visit.display < 1 or visit.index < 0:
 		return null
 	visit.resume_stage = resume as Passenger.Stage
 	if entry.has("relocation"):

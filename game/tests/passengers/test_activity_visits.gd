@@ -56,7 +56,7 @@ func _run_while_visiting(p: Passenger, limit := 3000) -> void:
 func test_each_piece_lowers_boredom_and_gives_its_mood_bonus_after_its_own_dwell() -> void:
 	for type in ActivityTestLayout.TYPES:
 		_activity_world(type)
-		var room_type := RoomTypes.get_type(type)
+		var room_type := ServiceTypes.find_def(type)
 		var p := ShopTestLayout.airside_guest(_world, 80)
 		p.mood = 50
 		assert_int(NeedsPolicy.arbitrate(_world.sim, p)).is_equal(NeedsPolicy.Need.BOREDOM)
@@ -102,7 +102,7 @@ func test_showers_and_nap_pods_charge_their_fee_and_the_play_area_and_lounge_do_
 		_run_while_visiting(p)
 		var charged := _world.sim.wallet.balance - balance
 		print("%s: fee %d, charged %d, paid signals %s" % [type, fees[type], charged, _paid])
-		assert_int(RoomTypes.get_type(type).base_spend).is_equal(fees[type])
+		assert_int(ServiceTypes.find_def(type).base_spend).is_equal(fees[type])
 		if fees[type] > 0:
 			var expected := ShopSim.spend(fees[type], 50, true)
 			assert_int(expected).is_greater(0)

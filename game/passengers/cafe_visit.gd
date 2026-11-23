@@ -44,4 +44,4 @@ var relocation: Relocation = null
 ## Whether the guest buys at the counter and walks on with no seat (the
 ## grab-and-go stall): no seat is reserved, and no sit or stand phase follows.
 func walk_on() -> bool:
-	return RoomTypes.get_type(venue).walk_on
+	return ServiceTypes.find_def(venue).walk_on

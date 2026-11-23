@@ -115,9 +115,9 @@ func test_every_bar_button_shows_its_drawn_icon_and_no_text() -> void:
 		assert_vector(button.custom_minimum_size).is_equal(BuildMenu.CATEGORY_SIZE)
 
 
-func test_all_77_build_tools_appear_exactly_once_across_the_seven_domain_tabs() -> void:
+func test_all_73_build_tools_appear_exactly_once_across_the_seven_domain_tabs() -> void:
 	var seen := {}
-	var expected_counts := [7, 12, 20, 10, 12, 12, 4]
+	var expected_counts := [7, 12, 17, 9, 12, 12, 4]
 	var cats := BuildMenu.categories()
 	for i in BuildMenu.REMOVE_CATEGORY:
 		var tools: Array = cats[i]["tools"]
@@ -126,7 +126,7 @@ func test_all_77_build_tools_appear_exactly_once_across_the_seven_domain_tabs() 
 			assert_bool(seen.has(tool)).override_failure_message("duplicate %d" % tool).is_false()
 			seen[tool] = true
 			assert_int(BuildMenu.category_of(tool)).is_equal(i)
-	assert_int(seen.size()).is_equal(77)
+	assert_int(seen.size()).is_equal(73)
 	for tool: BuildMode.Tool in BuildMode.Tool.values():
 		if tool == BuildMode.Tool.NONE or tool == BuildMode.Tool.REMOVE:
 			assert_bool(seen.has(tool)).is_false()
@@ -225,7 +225,7 @@ func test_every_thumbnail_meets_vf5_opacity_and_dining_rooms_are_distinct() -> v
 		BuildMode.Tool.CAFE_ROOM,
 		BuildMode.Tool.BAR_ROOM,
 		BuildMode.Tool.RESTAURANT_ROOM,
-		BuildMode.Tool.STALL_ROOM,
+		BuildMode.Tool.GRAB_STALL,
 	]
 	var dining_thumbs := {}
 	for tool: BuildMode.Tool in dining:

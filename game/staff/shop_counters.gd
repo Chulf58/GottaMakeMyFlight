@@ -29,27 +29,23 @@ extends RefCounted
 ## floor when it stands in none). It belongs to no room's type, so a kiosk's
 ## room_open() never counts it.
 
-## Counter piece -> the room type it works in (empty for a roomless counter).
+## Counter piece -> the room type it works in (empty for a standalone/roomless counter).
 const COUNTER_ROOMS := {
 	&"cafe_counter": &"cafe",
 	&"bar_counter": &"bar",
-	&"grab_and_go_stall": &"stall",
+	&"grab_and_go_stall": &"",
 	&"kiosk_counter": &"kiosk",
 	&"pharmacy_counter": &"pharmacy",
 	&"duty_free_till": &"duty_free",
 	&"fashion_till": &"fashion",
-	&"currency_exchange": &"exchange",
+	&"currency_exchange": &"",
 	&"info_desk": &"",
 }
 ## The shop room types that need no server: open whenever the room is ready
-## (the ATM, decision currency-exchange-and-atm-visits-front-cell-slot-small-
-## fee-no-boredom; and the activity and rest rooms, F4-7: the play area, the
-## lounge, the shower and the nap pod).
-const SELF_SERVICE_ROOMS: Array[StringName] = [
-	&"atm", &"play_area", &"lounge", &"shower", &"nap_pod"
-]
-## The counters that need no room.
-const ROOMLESS: Array[StringName] = [&"info_desk"]
+## (the play area, the lounge and the shower).
+const SELF_SERVICE_ROOMS: Array[StringName] = [&"play_area", &"lounge", &"shower"]
+## The counters that need no room (info desk, grab-and-go stall, currency exchange).
+const ROOMLESS: Array[StringName] = [&"info_desk", &"grab_and_go_stall", &"currency_exchange"]
 ## Where a server may stand, at facing 0 and in this order: behind the till,
 ## beside its west end, beside its east end; each with the footprint cell it
 ## works next to.
@@ -71,19 +67,22 @@ static func is_counter(grid: BuildGrid, id: int) -> bool:
 ## restaurant, the bar counter in a bar, and the grab-and-go stall in a stall;
 ## ruling 17fe639a).
 static func works_in(def_id: StringName, type_id: StringName) -> bool:
-	if type_id == COUNTER_ROOMS[def_id]:
+	if type_id == &"":
+		return false
+	if type_id == COUNTER_ROOMS.get(def_id, &""):
 		return true
-	return RoomTypes.get_type(type_id).counter_pieces.has(def_id)
+	var room := RoomTypes.get_type(type_id)
+	return room != null and room.counter_pieces.has(def_id)
 
 
-## Whether `id` is a counter that needs no room (an info desk).
+## Whether `id` is a counter that needs no room.
 static func is_roomless(grid: BuildGrid, id: int) -> bool:
 	return is_counter(grid, id) and ROOMLESS.has(StringName(grid.get_object(id)["def"]))
 
 
-## The room `counter` stands in, or 0 (also for an object that is no counter).
+## The room `counter` belongs to, or 0 (also for a roomless counter or non-counter).
 static func room_of(grid: BuildGrid, counter: int) -> int:
-	if not is_counter(grid, counter):
+	if not is_counter(grid, counter) or is_roomless(grid, counter):
 		return 0
 	return grid.room_at(grid.get_object(counter)["anchor"])
 
@@ -130,7 +129,9 @@ static func counters(grid: BuildGrid) -> Array[int]:
 ## Where the server of `counter` stands, or BuildObjectDef.NO_CELL when no
 ## cell will do (or `counter` is no counter in a room).
 static func spot(grid: BuildGrid, counter: int) -> Vector2i:
-	var room := room_of(grid, counter)
+	if not is_counter(grid, counter):
+		return BuildObjectDef.NO_CELL
+	var room := grid.room_at(grid.get_object(counter)["anchor"])
 	if room == 0 and not is_roomless(grid, counter):
 		return BuildObjectDef.NO_CELL
 	return _spots(grid, room).get(counter, BuildObjectDef.NO_CELL)
@@ -148,6 +149,28 @@ static func blocked(grid: BuildGrid, counter: int) -> bool:
 ## finish), so a kiosk server fired leaves at once.
 static func in_service(sim: PassengerSim, counter: int) -> bool:
 	return sim.cafes.serving_at(counter) != 0 or sim.info_desks.helping_at(counter)
+
+
+## Whether a ShopLayout `shop` entry (a room shop or a standalone service) is open.
+static func shop_open(sim: PassengerSim, shop: Dictionary) -> bool:
+	var room_id: int = shop.get("room", 0)
+	if room_id > 0:
+		return room_open(sim, room_id)
+	return piece_open(sim, int(shop.get("display", 0)))
+
+
+## Whether standalone service piece `display_id` is open: self-service
+## pieces are always open; staffed pieces require an on-duty server.
+static func piece_open(sim: PassengerSim, display_id: int) -> bool:
+	var record := sim.grid.get_object(display_id)
+	if record.is_empty():
+		return false
+	var service := ServiceTypes.by_piece(StringName(record["def"]))
+	if service == null:
+		return false
+	if not service.needs_staff:
+		return true
+	return sim.staff != null and sim.staff.is_open(display_id)
 
 
 ## Whether some counter in room `room_id` is open: a kiosk sells only then.
@@ -196,7 +219,10 @@ static func _spots(grid: BuildGrid, room: int) -> Dictionary:
 	var out := {}
 	for id in ids:
 		# Room 0 is open floor: only a roomless counter stands there.
-		if room_of(grid, id) != room or (room == 0 and not is_roomless(grid, id)):
+		if not is_counter(grid, id):
+			continue
+		var at_room := grid.room_at(grid.get_object(id)["anchor"])
+		if at_room != room or (room == 0 and not is_roomless(grid, id)):
 			continue
 		var record := grid.get_object(id)
 		var anchor: Vector2i = record["anchor"]

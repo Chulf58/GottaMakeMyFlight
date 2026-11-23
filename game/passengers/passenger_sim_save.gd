@@ -74,6 +74,9 @@ extends RefCounted
 ## hold clears, and the ones held on the last step are listed ("held_now"); a
 ## version 35 save has no such list and is refused with no migration (the
 ## same decision).
+## 37: standalone corridor services (ATM, currency exchange, grab-and-go stall,
+## nap pod) save visits with room 0 in CafeSnapshot / ShopSnapshot; a version
+## 36 save is refused with no migration (the same decision).
 
 
 ## JSON-safe state for a save (PassengerSim.to_snapshot()). Reads only: it

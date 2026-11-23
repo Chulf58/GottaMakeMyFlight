@@ -96,8 +96,7 @@ func test_a_bar_with_only_a_bar_counter_is_ready_with_two_stools_and_ignores_caf
 	assert_array(ShopCounters.counters(world.grid)).contains([ids["air_counter"]])
 
 
-## A bar accepts only bar_counter (not cafe_counter or cafe_table), and a stall
-## accepts only grab_and_go_stall (not cafe_counter), per ruling 17fe639a.
+## A bar accepts only bar_counter (not cafe_counter or cafe_table), per ruling 17fe639a.
 func test_bar_and_stall_refuse_cafe_counter_and_cafe_table() -> void:
 	var bar_cafe := _world(&"bar", &"cafe_counter", &"")
 	var bar_status := RoomRules.status(bar_cafe[0].grid, bar_cafe[1]["air_room"])
@@ -107,10 +106,6 @@ func test_bar_and_stall_refuse_cafe_counter_and_cafe_table() -> void:
 	var bar_both_status := RoomRules.status(bar_both_cafe[0].grid, bar_both_cafe[1]["air_room"])
 	assert_bool(bar_both_status.ok).is_false()
 	assert_array(Array(bar_both_status.notes)).contains(["Needs a counter", "Needs a table"])
-	var stall_cafe := _world(&"stall", &"cafe_counter", &"")
-	var stall_status := RoomRules.status(stall_cafe[0].grid, stall_cafe[1]["air_room"])
-	assert_bool(stall_status.ok).is_false()
-	assert_array(Array(stall_status.notes)).contains(["Needs a counter"])
 	var with_stools := _world(&"bar", &"bar_counter", &"")
 	var stools_status := RoomRules.status(with_stools[0].grid, with_stools[1]["air_room"])
 	assert_bool(stools_status.ok).is_true()
@@ -192,12 +187,12 @@ func test_a_cafe_takes_only_its_own_pieces() -> void:
 	assert_array(Array(restaurant_status.notes)).contains(["Needs a counter"])
 
 
-func test_a_grab_stall_alone_makes_a_stall_room_ready_and_serves_a_guest() -> void:
+func test_a_grab_stall_alone_serves_a_guest_with_no_room_zone() -> void:
 	var made := _world(&"stall", &"grab_and_go_stall", &"")
 	var world: PassengerTestWorld = made[0]
 	var ids: Dictionary = made[1]
-	for room in [ids["air_room"], ids["land_room"]]:
-		assert_bool(RoomRules.status(world.grid, room).ok).is_true()
+	assert_int(ids["air_room"]).is_equal(0)
+	assert_int(ids["land_room"]).is_equal(0)
 	world.sim.cafes.refresh()
 	assert_int(world.sim.cafes.layout.cafes.size()).is_equal(2)
 	assert_array(ShopCounters.counters(world.grid)).contains([ids["air_counter"]])
@@ -215,11 +210,9 @@ func test_which_counter_works_in_which_room() -> void:
 		[&"cafe_counter", &"cafe"]: true,
 		[&"cafe_counter", &"bar"]: false,
 		[&"cafe_counter", &"restaurant"]: true,
-		[&"cafe_counter", &"stall"]: false,
 		[&"bar_counter", &"bar"]: true,
 		[&"bar_counter", &"cafe"]: false,
 		[&"bar_counter", &"restaurant"]: false,
-		[&"grab_and_go_stall", &"stall"]: true,
 		[&"grab_and_go_stall", &"bar"]: false,
 		[&"grab_and_go_stall", &"cafe"]: false,
 	}
@@ -229,3 +222,4 @@ func test_which_counter_works_in_which_room() -> void:
 			. override_failure_message("%s in %s" % key)
 			. is_equal(works[key])
 		)
+	assert_bool(ShopCounters.ROOMLESS.has(&"grab_and_go_stall")).is_true()

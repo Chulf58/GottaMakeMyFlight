@@ -57,7 +57,7 @@ func _last_start(world: PassengerTestWorld, type: StringName) -> int:
 	var stay := (
 		JourneyForecast.walk_ticks(plan["route"]["mm"])
 		+ ShopSim.ARRIVE_TICKS
-		+ RoomTypes.get_type(type).dwell_ticks
+		+ ServiceTypes.find_def(type).dwell_ticks
 	)
 	return deadline - stay
 

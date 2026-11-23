@@ -85,8 +85,12 @@ func returns() -> bool:
 ## visitor leaves the old spot.
 static func destination_ok(grid: BuildGrid, id: int, def_id: StringName, room_id: int) -> bool:
 	var record := grid.get_object(id)
+	if record.is_empty() or record["def"] != def_id:
+		return false
+	if room_id == 0:
+		return ServiceTypes.is_standalone(def_id)
 	var room := grid.get_room(room_id)
-	if record.is_empty() or room.is_empty() or record["def"] != def_id:
+	if room.is_empty():
 		return false
 	var type := RoomTypes.get_type(room["type"])
 	var kind_ok := false

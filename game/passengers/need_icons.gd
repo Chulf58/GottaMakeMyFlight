@@ -154,7 +154,7 @@ static func provided(sim: PassengerSim) -> Dictionary:
 	sim.shops.refresh()
 	var relieving := false
 	for shop in sim.shops.layout.shops:
-		if RoomTypes.get_type(sim.grid.get_room(shop["room"])["type"]).relieves_boredom:
+		if ServiceTypes.find_def(shop["type"]).relieves_boredom:
 			relieving = true
 			break
 	return {

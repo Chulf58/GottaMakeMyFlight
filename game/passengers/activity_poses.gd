@@ -428,7 +428,7 @@ static func _piece(sim: PassengerSim, p: Passenger) -> Dictionary:
 	var visit := sim.shops.visit_of(p.id)
 	if visit == null:
 		return {}
-	var type := RoomTypes.get_type(_room_type_id(sim, visit))
+	var type := _visit_service(sim, visit)
 	# The piece as the visit last saw it (visit.piece): where a visitor stays
 	# or leaves a piece that moved with its room (Relocation).
 	var record := sim.grid.get_object(visit.display)
@@ -496,6 +496,12 @@ static func turn_back_ticks(sim: PassengerSim, p: Passenger) -> int:
 	return mini(full, back)
 
 
+static func _visit_service(sim: PassengerSim, visit: ShopVisit) -> ServiceDef:
+	if visit.room > 0:
+		return RoomTypes.get_type(_room_type_id(sim, visit))
+	return ServiceTypes.by_piece(StringName(visit.piece.get("def", &"")))
+
+
 static func _room_type_id(sim: PassengerSim, visit: ShopVisit) -> StringName:
 	var room := sim.grid.get_room(visit.room)
 	return room.get("type", &"") if not room.is_empty() else &""
@@ -506,7 +512,7 @@ static func _room_type_id(sim: PassengerSim, visit: ShopVisit) -> StringName:
 ## whichever comes first, so the last tick drawn staying has 0 left.
 static func _left(sim: PassengerSim, p: Passenger) -> int:
 	var visit := sim.shops.visit_of(p.id)
-	var type := RoomTypes.get_type(_room_type_id(sim, visit))
+	var type := _visit_service(sim, visit)
 	var end := p.stage_tick + ShopSim.stay_ticks(visit, type)
 	if not _exiting(visit):
 		end = mini(end, visit.deadline)

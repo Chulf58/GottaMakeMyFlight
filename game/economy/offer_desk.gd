@@ -343,6 +343,12 @@ func live_needs() -> Dictionary:
 			if RoomRules.status(baggage.grid, room_id).ok:
 				live[OfferTraits.NEEDS_SHOPS] = true
 				break
+	if not live[OfferTraits.NEEDS_SHOPS]:
+		for object_id in baggage.grid.object_ids():
+			var def_id := StringName(baggage.grid.get_object(object_id).get("def", &""))
+			if ServiceTypes.is_standalone(def_id):
+				live[OfferTraits.NEEDS_SHOPS] = true
+				break
 	return live
 
 

@@ -44,7 +44,7 @@ func _texts(control: Control) -> Array:
 
 
 func test_the_room_panel_shows_spots_and_a_fee_or_free_to_use() -> void:
-	for type in ActivityTestLayout.TYPES:
+	for type in [&"play_area", &"lounge", &"shower"]:
 		var mode := BuildMode.new()
 		mode.grid_size = Vector2i(20, 20)
 		add_child(mode)

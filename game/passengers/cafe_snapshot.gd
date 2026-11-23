@@ -140,9 +140,10 @@ static func _visit_problem(
 	var seat := cafes.seat(visit.room, visit.seat_key)
 	if exiting:
 		seat = Relocation.seat_at(moving.source, visit.seat_key)
-	# A room missing from the layout is refused by the seat check below; the
-	# default type only keeps the other checks running until then.
-	var venue := RoomTypes.get_type(cafes.cafe(visit.room).get("type", &"cafe"))
+	# A room or standalone counter missing from the layout is refused by the seat/
+	# counter checks below; the default type only keeps other checks running until then.
+	var venue_id := cafes.venue_of(visit.room, visit.counter)
+	var venue := ServiceTypes.find_def(venue_id if venue_id != &"" else &"cafe")
 	var key := visit.seat_key.split(":")
 	var key_ok := key.size() == 2 and key[0].is_valid_int() and key[1].is_valid_int()
 	key_ok = key_ok and int(key[0]) >= 1 and int(key[1]) >= 0
@@ -150,7 +151,8 @@ static func _visit_problem(
 	if venue.walk_on:
 		key_ok = visit.seat_key.is_empty()
 	var checks := [
-		[visit.room >= 1 and visit.counter >= 1, "room and counter ids must be 1 or more"],
+		[visit.room >= 0 and visit.counter >= 1, "counter id must be 1 or more and room 0 or more"],
+		[visit.room != 0 or venue_id != &"", "standalone food visit has no standalone counter"],
 		[key_ok, "seat key must be <table>:<seat>, or empty for a walk-on venue"],
 		[
 			(visit.resume_stage == Passenger.Stage.TO_GATE) == p.cleared,
@@ -240,7 +242,7 @@ static func _relocation_problem(visit: CafeVisit, p: Passenger, grid: BuildGrid)
 	var standing := p.stage == Passenger.Stage.CAFE_STANDING_UP
 	if visit.has_meta(CafeSim.TURNED_BACK) and not (moving.exiting and standing):
 		return "a turned-back stand-up that is not getting up at the old seat"
-	var venue := RoomTypes.get_type(grid.get_room(visit.room).get("type", visit.venue))
+	var venue := ServiceTypes.find_def(grid.get_room(visit.room).get("type", visit.venue))
 	var table_def := StringName(moving.source["def"])
 	if (
 		not venue.table_pieces.has(table_def)
@@ -342,8 +344,8 @@ static func _queues(list: Array, visits: Dictionary, cafes: CafeLayout) -> Dicti
 		ok = ok and WholeNumber.is_whole(entry["serving"]) and typeof(entry["lane"]) == TYPE_ARRAY
 		if not ok or queues.has(int(entry["counter"])):
 			return {"error": "a cafe queue is malformed or repeated"}
-		if int(entry["counter"]) < 1 or int(entry["room"]) < 1:
-			return {"error": "a cafe queue's counter and room ids must be 1 or more"}
+		if int(entry["counter"]) < 1 or int(entry["room"]) < 0:
+			return {"error": "a cafe queue's counter id must be 1 or more and room id 0 or more"}
 		var lane := []
 		for id in entry["lane"]:
 			if not WholeNumber.is_whole(id) or not visits.has(int(id)) or placed.has(int(id)):

@@ -441,7 +441,7 @@ func step_counters() -> void:
 			continue
 		q["serving"] = front.id
 		var ordering: CafeVisit = _visits[front.id]
-		ordering.service_end = _sim.tick + RoomTypes.get_type(ordering.venue).order_ticks
+		ordering.service_end = _sim.tick + ServiceTypes.find_def(ordering.venue).order_ticks
 		_set_stage.call(front, Passenger.Stage.CAFE_ORDER)
 
 
@@ -466,7 +466,7 @@ func step(p: Passenger) -> void:
 			_seat_step(p, visit)
 		Passenger.Stage.CAFE_SITTING_DOWN:
 			if _sim.tick - p.stage_tick >= sit_ticks(p, visit.piece):
-				var dwell := RoomTypes.get_type(visit.venue).dwell_ticks
+				var dwell := ServiceTypes.find_def(visit.venue).dwell_ticks
 				_set_stage.call(p, Passenger.Stage.CAFE_SEATED)
 				if visit.relocation != null:
 					# Back at its table after a move: only the dwell it still
@@ -670,11 +670,22 @@ func rederive() -> void:
 		else:
 			visit.seat = layout.seat(visit.room, visit.seat_key)
 			visit.piece = Relocation.placement(_sim.grid, int(visit.seat.get("object_id", 0)))
-		visit.venue = layout.cafe(visit.room).get("type", visit.venue)
-		if moving:
+		var venue_id := layout.venue_of(visit.room, visit.counter)
+		if venue_id != &"":
+			visit.venue = venue_id
+		elif moving:
 			# Its room is often not ready while the guest gets up (the walls stay
 			# behind), so the type comes from the room itself.
 			visit.venue = _sim.grid.get_room(visit.room).get("type", visit.venue)
+		elif visit.room == 0:
+			var obj := _sim.grid.get_object(visit.counter)
+			var svc := (
+				ServiceTypes.by_piece(StringName(obj.get("def", &"")))
+				if not obj.is_empty()
+				else null
+			)
+			if svc != null:
+				visit.venue = svc.id
 
 
 ## The visits `p` could start, nearest cafe by path first, ties to the lower
@@ -691,7 +702,8 @@ func _plans(p: Passenger, reach_mm := 0) -> Array[Dictionary]:
 		var lane: Array = counter["lane"]
 		if reach_mm > 0 and Passenger.octile_mm(p.at, lane[0]) > reach_mm:
 			continue
-		var walk_on := RoomTypes.get_type(cafe["type"]).walk_on
+		var venue_def := ServiceTypes.find_def(cafe["type"])
+		var walk_on := venue_def.walk_on
 		# A walk-on guest reserves no seat: the plan carries an empty one.
 		var seat := {} if walk_on else _free_seat(cafe, lane[0])
 		if seat.is_empty() and not walk_on:
@@ -717,7 +729,7 @@ func _plans(p: Passenger, reach_mm := 0) -> Array[Dictionary]:
 			"to_seat_mm": 0 if walk_on else seat["mm"],
 			"sit_ticks": 0 if walk_on else sit_ticks(p, _placement_of(seat)),
 			"up_ticks": 0 if walk_on else up_ticks(p, _placement_of(seat)),
-			"dwell_ticks": RoomTypes.get_type(cafe["type"]).dwell_ticks,
+			"dwell_ticks": venue_def.dwell_ticks,
 			"leave_cell": lane[0] if walk_on else seat["approach"],
 			"resume_stage": _resume_stage(p),
 			"walk_on": walk_on,
@@ -725,7 +737,11 @@ func _plans(p: Passenger, reach_mm := 0) -> Array[Dictionary]:
 		found.append(plan)
 	found.sort_custom(
 		func(a: Dictionary, b: Dictionary) -> bool:
-			return a["mm"] < b["mm"] or (a["mm"] == b["mm"] and a["room"] < b["room"])
+			if a["mm"] != b["mm"]:
+				return a["mm"] < b["mm"]
+			if a["room"] != b["room"]:
+				return a["room"] < b["room"]
+			return a["counter"]["id"] < b["counter"]["id"]
 	)
 	return found
 
@@ -756,7 +772,7 @@ func _soonest_counter(cafe: Dictionary) -> Dictionary:
 ## order in progress, the guests ahead and its own, each taking the order
 ## time of the counter's room type.
 func _order_eta(room_id: int, counter_id: int) -> int:
-	var each := RoomTypes.get_type(layout.cafe(room_id)["type"]).order_ticks
+	var each := ServiceTypes.find_def(layout.venue_of(room_id, counter_id)).order_ticks
 	var left := 0
 	var ahead := queue_of(counter_id).size()
 	var serving := serving_at(counter_id)
@@ -1100,7 +1116,7 @@ func _relocates(p: Passenger, visit: CafeVisit) -> bool:
 		return true
 	if not SEAT_STAGES.has(p.stage):
 		return false
-	var owed := RoomTypes.get_type(visit.venue).dwell_ticks
+	var owed := ServiceTypes.find_def(visit.venue).dwell_ticks
 	if visit.relocation != null:
 		owed = visit.relocation.left
 	match p.stage:
@@ -1138,7 +1154,7 @@ func _relocates(p: Passenger, visit: CafeVisit) -> bool:
 ## moving-a-room-with-its-furniture-is-free-and-keeps-paid-pric, point 4).
 func _head_to_seat(p: Passenger, visit: CafeVisit) -> void:
 	refresh()
-	var owed := RoomTypes.get_type(visit.venue).dwell_ticks
+	var owed := ServiceTypes.find_def(visit.venue).dwell_ticks
 	if visit.relocation != null:
 		visit.relocation.exiting = false
 		owed = visit.relocation.left
@@ -1219,7 +1235,7 @@ func _end(p: Passenger, visit: CafeVisit) -> void:
 func _settle(p: Passenger, visit: CafeVisit) -> void:
 	if visit.settled or visit.outcome == CafeVisit.Outcome.NONE:
 		return
-	var venue := RoomTypes.get_type(visit.venue)
+	var venue := ServiceTypes.find_def(visit.venue)
 	var base := venue.base_spend
 	var airside := visit.resume_stage == Passenger.Stage.TO_GATE
 	var amount := spend(base, p.mood, airside, visit.outcome)
@@ -1234,9 +1250,10 @@ func _settle(p: Passenger, visit: CafeVisit) -> void:
 	visit.amount = amount
 	visit.settled = true
 	p.hunger = 0
+	var facility := visit.room if visit.room > 0 else visit.counter
 	if visit.outcome == CafeVisit.Outcome.COMPLETE:
 		p.mood = mini(p.mood + venue.mood_bonus, PassengerSim.MOOD_MAX)
-		PassengerThoughts.record(p, PassengerThoughts.Kind.MEAL, _sim.tick, p.at, visit.room)
+		PassengerThoughts.record(p, PassengerThoughts.Kind.MEAL, _sim.tick, p.at, facility)
 	# A settled visit is one real use of its seat (MessSim).
 	_sim.messes.cafe_used(visit)
 	paid.emit(p.id, visit.room, amount)
@@ -1245,7 +1262,8 @@ func _settle(p: Passenger, visit: CafeVisit) -> void:
 ## Gives up before being served: no charge and nothing changes for the guest
 ## but the thought of food given up.
 func _abandon(p: Passenger, visit: CafeVisit) -> void:
-	PassengerThoughts.record(p, PassengerThoughts.Kind.FOOD_GIVEN_UP, _sim.tick, p.at, visit.room)
+	var facility := visit.room if visit.room > 0 else visit.counter
+	PassengerThoughts.record(p, PassengerThoughts.Kind.FOOD_GIVEN_UP, _sim.tick, p.at, facility)
 	_remove(visit)
 	_resume(p, visit)
 

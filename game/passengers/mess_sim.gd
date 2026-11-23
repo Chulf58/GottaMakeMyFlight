@@ -184,20 +184,24 @@ static func source_exists(grid: BuildGrid, source: String) -> bool:
 		"toilet", "shower":
 			return grid.get_room(id).get("type", &"") == StringName(parts[0])
 		"counter":
-			return def != null and RoomTypes.is_food_counter(def.id)
+			return def != null and ServiceTypes.is_food_counter(def.id)
 		"seat":
 			return def != null and index >= 0 and index < def.seats.size()
 	return def != null and index >= 0 and index < slots_of(def)
 
 
 ## How many browse slots a display piece `def` gives in the shop room types
-## that use it (ShopLayout); 0 for a piece no shop browses at.
+## and standalone services that use it (ShopLayout); 0 for a piece none use.
 static func slots_of(def: BuildObjectDef) -> int:
 	var most := 0
 	for type_id in RoomTypes.ids():
 		var type := RoomTypes.get_type(type_id)
 		if type.shop and type.seat_piece == def.id:
 			most = maxi(most, mini(type.seats_per_piece, def.size.x * def.size.y))
+	for service_id in ServiceTypes.ids():
+		var svc := ServiceTypes.get_service(service_id)
+		if svc.shop and svc.seat_piece == def.id:
+			most = maxi(most, mini(svc.seats_per_piece, def.size.x * def.size.y))
 	return most
 
 

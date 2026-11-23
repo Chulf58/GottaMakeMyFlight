@@ -66,7 +66,7 @@ func _at() -> Vector2i:
 
 
 func _dwell(type: StringName) -> int:
-	return ShopSim.browse_ticks(RoomTypes.get_type(type))
+	return ShopSim.browse_ticks(ServiceTypes.find_def(type))
 
 
 ## A bored airside passenger (50 mood) committed to a piece, run until it is
