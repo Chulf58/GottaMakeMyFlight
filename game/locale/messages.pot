@@ -4501,6 +4501,36 @@ msgctxt "speech bubble"
 msgid "Gate is closed"
 msgstr ""
 
+#: passengers/bubble_words.gd
+msgctxt "speech bubble"
+msgid "Forgot my belt!"
+msgstr ""
+
+#: passengers/bubble_words.gd
+msgctxt "speech bubble"
+msgid "Keys in pocket!"
+msgstr ""
+
+#: passengers/bubble_words.gd
+msgctxt "speech bubble"
+msgid "Coins in pocket!"
+msgstr ""
+
+#: passengers/bubble_words.gd
+msgctxt "speech bubble"
+msgid "Oversized shampoo!"
+msgstr ""
+
+#: passengers/bubble_words.gd
+msgctxt "speech bubble"
+msgid "Too much liquid!"
+msgstr ""
+
+#: passengers/bubble_words.gd
+msgctxt "speech bubble"
+msgid "Forgot my water bottle!"
+msgstr ""
+
 #: passengers/miss_markers.gd
 msgctxt "sign text"
 msgid "Queue full · {count} waiting"
@@ -6334,4 +6364,32 @@ msgstr ""
 
 #: ui/offer_panel.gd
 msgid "Airline Contracts — Accept to schedule flights"
+msgstr ""
+
+#: passengers/passenger_thoughts.gd
+msgid "Set off the scanner: forgot my belt!"
+msgstr ""
+
+#: passengers/passenger_thoughts.gd
+msgid "Set off the scanner: keys in pocket!"
+msgstr ""
+
+#: passengers/passenger_thoughts.gd
+msgid "Set off the scanner: coins in pocket!"
+msgstr ""
+
+#: passengers/passenger_thoughts.gd
+msgid "Stopped for liquids: oversized shampoo!"
+msgstr ""
+
+#: passengers/passenger_thoughts.gd
+msgid "Stopped for liquids: too much liquid!"
+msgstr ""
+
+#: passengers/passenger_thoughts.gd
+msgid "Stopped for liquids: forgot my water bottle!"
+msgstr ""
+
+#: ui/passenger_inspect.gd
+msgid "Security search: \"{reason}\""
 msgstr ""

@@ -15,7 +15,16 @@ extends RefCounted
 ## thought the cap drops does not come back early. Both are saved with the
 ## passenger (PassengerSnapshot). Thoughts never feed back into the sim.
 
-enum Kind { MEAL, FOOD_GIVEN_UP, TOILET_RELIEF, LONG_QUEUE, NICE_DECOR, MADE_CLOSE_CALL }
+enum Kind {
+	MEAL,
+	FOOD_GIVEN_UP,
+	TOILET_RELIEF,
+	LONG_QUEUE,
+	NICE_DECOR,
+	MADE_CLOSE_CALL,
+	SECURITY_ALARM,
+	SECURITY_LIQUIDS,
+}
 
 ## The most thoughts a passenger keeps; a new one drops the oldest.
 const CAP := 5
@@ -32,7 +41,14 @@ const DECOR_REPEAT_TICKS := 120 * GameCalendar.TICKS_PER_MINUTE
 const POSITIVE := [Kind.MEAL, Kind.TOILET_RELIEF, Kind.NICE_DECOR, Kind.MADE_CLOSE_CALL]
 ## Kinds recorded at a facility: a cafe or toilet room, a desk or scanner. Nice
 ## decor has none (facility 0).
-const AT_FACILITY := [Kind.MEAL, Kind.FOOD_GIVEN_UP, Kind.TOILET_RELIEF, Kind.LONG_QUEUE]
+const AT_FACILITY := [
+	Kind.MEAL,
+	Kind.FOOD_GIVEN_UP,
+	Kind.TOILET_RELIEF,
+	Kind.LONG_QUEUE,
+	Kind.SECURITY_ALARM,
+	Kind.SECURITY_LIQUIDS,
+]
 
 const _KIND := 0
 const _TICK := 1
@@ -92,6 +108,17 @@ static func decor(p: Passenger, tick: int, cell: Vector2i) -> void:
 		record(p, Kind.NICE_DECOR, tick, cell)
 
 
+## On entering a security alarm or liquids repack: records one thought at
+## `p`'s current cell and scanner station, with `value` = the deterministic
+## comic reason index so the thought and speech bubble always match.
+static func security_search(p: Passenger, tick: int) -> void:
+	if not p.alarm and not p.liquids:
+		return
+	var kind := Kind.SECURITY_ALARM if p.alarm else Kind.SECURITY_LIQUIDS
+	var idx := SecuritySearchReasons.reason_index(p.id, p.alarm)
+	record(p, kind, tick, p.at, p.station, idx)
+
+
 static func count(p: Passenger) -> int:
 	@warning_ignore("integer_division")
 	return p.thoughts.size() / STRIDE
@@ -137,6 +164,9 @@ static func text_of(kind: Kind, value: int) -> String:
 			return waited.format({"minutes": value})
 		Kind.MADE_CLOSE_CALL:
 			return TranslationServer.translate("Made my flight at the last second!")
+		Kind.SECURITY_ALARM, Kind.SECURITY_LIQUIDS:
+			var msg := SecuritySearchReasons.thought_msgid(kind == Kind.SECURITY_ALARM, value)
+			return TranslationServer.translate(msg) if msg != "" else ""
 	return TranslationServer.translate("Nice decor here")
 
 
@@ -150,12 +180,14 @@ static func mark_of(p: Passenger, kind: Kind) -> int:
 
 ## Whether a `kind` thought may carry `facility` and `value`: a facility kind
 ## (AT_FACILITY) has a positive facility and nice decor none; only a long
-## queue has a value (its minutes), never a negative one.
+## queue (minutes >= 0) and security search kinds (reason index) carry a value.
 static func sound(kind: int, facility: int, value: int) -> bool:
 	if kind < 0 or kind >= Kind.size():
 		return false
 	if (facility > 0) != (kind in AT_FACILITY) or facility < 0:
 		return false
+	if kind == Kind.SECURITY_ALARM or kind == Kind.SECURITY_LIQUIDS:
+		return SecuritySearchReasons.thought_msgid(kind == Kind.SECURITY_ALARM, value) != ""
 	return value >= 0 if kind == Kind.LONG_QUEUE else value == 0
 
 
@@ -213,3 +245,18 @@ static func _mark(p: Passenger, kind: Kind, tick: int) -> void:
 		p.thought_marks.fill(NO_MARK)
 	if kind < MARK_COUNT:
 		p.thought_marks[kind] = tick
+
+
+class Words:
+	extends RefCounted
+
+	## Never called: lists the security search thoughts inside tr() for POT extraction.
+	func security_msgids() -> Array[String]:
+		return [
+			tr("Set off the scanner: forgot my belt!"),
+			tr("Set off the scanner: keys in pocket!"),
+			tr("Set off the scanner: coins in pocket!"),
+			tr("Stopped for liquids: oversized shampoo!"),
+			tr("Stopped for liquids: too much liquid!"),
+			tr("Stopped for liquids: forgot my water bottle!"),
+		]
