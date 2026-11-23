@@ -75,8 +75,13 @@ const GAP_TOOLS := {
 }
 
 
-static func line(text: String, done: bool) -> Dictionary:
-	return {"text": text, "done": done}
+static func line(text: String, done: bool, why := "", action := {}) -> Dictionary:
+	return {
+		"text": text,
+		"done": done,
+		"why": "" if done else why,
+		"action": {} if done else action,
+	}
 
 
 ## The opening lines while the airport is closed. `unmet` is AirportGate.unmet().
@@ -89,7 +94,11 @@ static func opening_lines(unmet: Array, counts: Dictionary) -> Array[Dictionary]
 			TranslationServer.translate(
 				"Entrance with a way through check-in and security to an exit"
 			),
-			not unmet.has(BLOCKER.NO_PATH)
+			not unmet.has(BLOCKER.NO_PATH),
+			TranslationServer.translate(
+				"Passengers walk from the entrance through security to the exit."
+			),
+			{"kind": "tool", "tool": BuildMode.Tool.ENTRANCE}
 		)
 	)
 	if unmet.has(BLOCKER.STAFF_SPOT):
@@ -98,7 +107,10 @@ static func opening_lines(unmet: Array, counts: Dictionary) -> Array[Dictionary]
 				TranslationServer.translate(
 					"Staff can't reach a desk or scanner passengers need: clear its staff spot"
 				),
-				false
+				false,
+				TranslationServer.translate(
+					"Staff need a clear tile behind each station to work it."
+				)
 			)
 		)
 	out.append(
@@ -134,18 +146,27 @@ static func opening_lines(unmet: Array, counts: Dictionary) -> Array[Dictionary]
 			if walking
 			else TranslationServer.translate("Hire Gate agent (Staff)")
 		)
-		out.append(line(msg, false))
+		var gate_why := (
+			TranslationServer.translate("The airport opens once staff reach their stations.")
+			if walking
+			else TranslationServer.translate("Gate desks stay closed until an agent is hired.")
+		)
+		out.append(line(msg, false, gate_why, {"kind": "staff", "role": StaffMember.Role.GATE}))
 	else:
 		out.append(
 			line(
 				TranslationServer.translate("Place Gate Desk (Operations)"),
-				not unmet.has(BLOCKER.NO_GATE)
+				not unmet.has(BLOCKER.NO_GATE),
+				TranslationServer.translate("Opens boarding for your first flight."),
+				{"kind": "tool", "tool": BuildMode.Tool.GATE_DESK}
 			)
 		)
 	out.append(
 		line(
 			TranslationServer.translate("Place Seats near the gate (Operations)"),
-			int(counts["seats"]) > 0
+			int(counts["seats"]) > 0,
+			TranslationServer.translate("Keeps waiting passengers comfortable."),
+			{"kind": "tool", "tool": BuildMode.Tool.SEATS}
 		)
 	)
 	return out
@@ -162,15 +183,25 @@ static func gap_lines(world: Dictionary, seats: int, lock_texts: Dictionary) -> 
 		# the seats gap below cover them.
 		if not GAPS.has(cause):
 			continue
-		var locked: String = lock_texts.get(GAP_TOOLS.get(cause, BuildMode.Tool.NONE), "")
+		var tool: BuildMode.Tool = GAP_TOOLS.get(cause, BuildMode.Tool.NONE)
+		var locked: String = lock_texts.get(tool, "")
+		var why := _gap_why(cause)
+		var action := _gap_action(cause, locked != "")
 		if locked != "":
 			var need := TranslationServer.translate("{need} ({unlock})")
-			out.append(line(need.format({"need": _gap_need(cause), "unlock": locked}), false))
+			out.append(
+				line(need.format({"need": _gap_need(cause), "unlock": locked}), false, why, action)
+			)
 		else:
-			out.append(line(_gap_text(cause), false))
+			out.append(line(_gap_text(cause), false, why, action))
 	if seats == 0:
 		out.append(
-			line(TranslationServer.translate("Place Seats near the gate (Operations)"), false)
+			line(
+				TranslationServer.translate("Place Seats near the gate (Operations)"),
+				false,
+				TranslationServer.translate("Keeps waiting passengers comfortable."),
+				{"kind": "tool", "tool": BuildMode.Tool.SEATS}
+			)
 		)
 	return out
 
@@ -189,7 +220,53 @@ static func _station_state(
 
 
 static func _station_line(key: String, state: String) -> Dictionary:
-	return line(_station_text(key, state), state == "")
+	return line(
+		_station_text(key, state),
+		state == "",
+		_station_why(key, state),
+		_station_action(key, state)
+	)
+
+
+static func _station_why(key: String, state: String) -> String:
+	if state == "":
+		return ""
+	if key == "checkin":
+		match state:
+			"place":
+				return TranslationServer.translate("Passengers check in here before security.")
+			"closed":
+				return TranslationServer.translate("Closed desks cannot serve waiting passengers.")
+			"hire":
+				return TranslationServer.translate("Stations stay closed until an agent is hired.")
+			"walking":
+				return TranslationServer.translate(
+					"The airport opens once staff reach their stations."
+				)
+	match state:
+		"place":
+			return TranslationServer.translate("Clears passengers and bags for the gate.")
+		"closed":
+			return TranslationServer.translate("Closed security lanes cannot clear passengers.")
+		"hire":
+			return TranslationServer.translate("Stations stay closed until an officer is hired.")
+		"walking":
+			return TranslationServer.translate("The airport opens once staff reach their stations.")
+	return ""
+
+
+static func _station_action(key: String, state: String) -> Dictionary:
+	if state == "place":
+		return {
+			"kind": "tool",
+			"tool": BuildMode.Tool.DESK if key == "checkin" else BuildMode.Tool.SCANNER,
+		}
+	if state == "hire" or state == "walking":
+		return {
+			"kind": "staff",
+			"role": StaffMember.Role.CHECKIN if key == "checkin" else StaffMember.Role.SECURITY,
+		}
+	return {}
 
 
 ## The full line of a station: "" is its done form, else a NEXT key. One msgid
@@ -232,6 +309,28 @@ static func _gap_text(cause: StringName) -> String:
 				"Passengers need a toilet: build Toilet room (Facilities)"
 			)
 	return TranslationServer.translate("Passengers are hungry: build Cafe (Food & Drink)")
+
+
+static func _gap_why(cause: StringName) -> String:
+	match cause:
+		HintRules.PLACE_CHECKIN:
+			return TranslationServer.translate("Passengers check in here before security.")
+		HintRules.PLACE_SECURITY:
+			return TranslationServer.translate("Clears passengers and bags for the gate.")
+		HintRules.SECOND_HIRE:
+			return TranslationServer.translate("Each extra station needs its own staff member.")
+		HintRules.TOILET:
+			return TranslationServer.translate("Prevents comfort drops while passengers wait.")
+	return TranslationServer.translate("Hungry passengers lose mood before boarding.")
+
+
+static func _gap_action(cause: StringName, is_locked: bool) -> Dictionary:
+	if cause == HintRules.SECOND_HIRE:
+		return {"kind": "staff"}
+	if is_locked:
+		return {}
+	var tool: BuildMode.Tool = GAP_TOOLS.get(cause, BuildMode.Tool.NONE)
+	return {"kind": "tool", "tool": tool} if tool != BuildMode.Tool.NONE else {}
 
 
 ## What a gap line says before its ask, for the causes whose build tool can be

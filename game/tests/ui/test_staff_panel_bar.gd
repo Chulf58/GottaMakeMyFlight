@@ -161,20 +161,49 @@ func test_the_hint_sits_above_the_bar_and_clear_of_the_card() -> void:
 	assert_float(hint.end.x).is_less_equal(1280.0)
 
 
-func test_the_hint_does_not_take_mouse_input() -> void:
-	var controls: Array[Control] = [_panel.hint_card()]
+func test_the_hint_chrome_lets_clicks_through_while_actionable_rows_accept_clicks() -> void:
+	assert_int(_panel.hint_card().mouse_filter).is_equal(Control.MOUSE_FILTER_IGNORE)
+	var saw_actionable := false
 	for node in _panel.hint_card().find_children("*", "Control", true, false):
-		controls.append(node as Control)
-	# The card, its title, its rows, their tick boxes and their labels, and the
-	# "+N more" line.
-	assert_int(_panel.checklist().rows().size()).is_greater(0)
-	assert_int(controls.size()).is_equal(5 + 3 * _panel.checklist().rows().size())
-	for control in controls:
-		(
-			assert_int(control.mouse_filter)
-			. override_failure_message("%s takes mouse input" % control.get_path())
-			. is_equal(Control.MOUSE_FILTER_IGNORE)
+		var control := node as Control
+		var rc := control as ChecklistCard.RowControl
+		if rc != null and not rc.action.is_empty():
+			saw_actionable = true
+			assert_int(rc.mouse_filter).is_equal(Control.MOUSE_FILTER_STOP)
+		else:
+			assert_int(control.mouse_filter).is_equal(Control.MOUSE_FILTER_IGNORE)
+	assert_bool(saw_actionable).is_true()
+
+	var hint_rect := _panel.hint_card().get_global_rect()
+	_panel.fade_for(Rect2(hint_rect.get_center(), Vector2(24.0, 24.0)), 10.0)
+	for node in _panel.hint_card().find_children("*", "Control", true, false):
+		assert_int((node as Control).mouse_filter).is_equal(Control.MOUSE_FILTER_IGNORE)
+
+	_panel.fade_for(Rect2(), 10.0)
+	(
+		_panel
+		. checklist()
+		. show_lines(
+			"Test:",
+			[
+				Checklist.line("Empty action", false, "No jump"),
+				Checklist.line("With action", false, "Jumps", {"kind": "staff", "role": CHECKIN}),
+			]
 		)
+	)
+	var rows := _panel.checklist().rows()
+	assert_int(rows.size()).is_equal(2)
+	assert_int((rows[0] as Control).mouse_filter).is_equal(Control.MOUSE_FILTER_IGNORE)
+	assert_int((rows[1] as Control).mouse_filter).is_equal(Control.MOUSE_FILTER_STOP)
+	for node in _panel.hint_card().find_children("*", "Control", true, false):
+		var control := node as Control
+		var rc := control as ChecklistCard.RowControl
+		var expected := (
+			Control.MOUSE_FILTER_STOP
+			if rc != null and not rc.action.is_empty()
+			else Control.MOUSE_FILTER_IGNORE
+		)
+		assert_int(control.mouse_filter).is_equal(expected)
 
 
 func test_the_hint_clears_the_tray_status_and_cost_lines_with_a_tray_open() -> void:

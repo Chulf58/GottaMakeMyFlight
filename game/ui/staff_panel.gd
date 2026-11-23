@@ -64,6 +64,8 @@ const ROLE_WIDTH := 156.0
 const ROLE_WIDTH_SIX := 136.0
 const ROLE_SEPARATION := 10
 const ROLE_SEPARATION_SIX := 8
+const PULSE_TINT := Color(1.3, 1.12, 0.55)
+const PULSE_STEP_S := 0.22
 ## The banner's top edge with the departures list off: under the three toggles.
 ## With the list open the card sits under it (LeftColumn.follow()).
 const BANNER_TOP := LeftColumn.LIST_TOP
@@ -115,12 +117,15 @@ var _counts: Dictionary = {}
 var _role_titles: Dictionary = {}
 var _hire: Dictionary = {}
 var _fire: Dictionary = {}
+var _pulsed_hire: Button
+var _pulse_tween: Tween
 
 
 func _ready() -> void:
 	_build()
 	_resolve_unlocks()
-	_sync_ramp_column()
+	_sync_role_columns()
+	_checklist.row_activated.connect(_on_checklist_row_activated)
 	if menu != null:
 		menu.staff_toggled.connect(_on_staff_toggled)
 		menu.watch_staff_card(_card)
@@ -166,6 +171,19 @@ func hire_button(role: StaffMember.Role) -> Button:
 
 func fire_button(role: StaffMember.Role) -> Button:
 	return _fire[role]
+
+
+func role_column(role: StaffMember.Role) -> Control:
+	return _columns.get(role) as Control
+
+
+func is_role_visible(role: StaffMember.Role) -> bool:
+	var col := role_column(role)
+	return col != null and col.visible
+
+
+func role_tooltip(role: StaffMember.Role) -> String:
+	return _role_tooltip(role)
 
 
 ## The card's title line ("To open the airport", the starter line or "Your
@@ -239,13 +257,24 @@ func card_lines() -> Array[Dictionary]:
 			"{count} wall gaps: close the open edges of the outer wall, marked in red",
 			_gap_runs
 		)
-		out.append(Checklist.line(gap_hint.format({"count": _gap_runs}), false))
+		out.append(
+			Checklist.line(
+				gap_hint.format({"count": _gap_runs}),
+				false,
+				tr("Seals the terminal so roof and rooms work."),
+				{"kind": "tool", "tool": BuildMode.Tool.WALL}
+			)
+		)
 	for role in hiring_hint_roles():
 		var opening_role := (
 			role in [StaffMember.Role.CHECKIN, StaffMember.Role.SECURITY, StaffMember.Role.GATE]
 		)
 		if not (closed and opening_role):
-			out.append(Checklist.line(_hire_hint(role), false))
+			out.append(
+				Checklist.line(
+					_hire_hint(role), false, _hire_why(role), {"kind": "staff", "role": role}
+				)
+			)
 	if gate != null and not closed:
 		out.append_array(_gaps)
 	return out
@@ -289,18 +318,24 @@ func hiring_hint_roles() -> Array[StaffMember.Role]:
 ## the-build-bar-moment-of-need-per-profile-memory, point 1).
 func set_hint_yielded(yielded: bool) -> void:
 	_hint_yielded = yielded
-	_hint_box.visible = _hint.visible and not _hint_yielded
+	_hint_box.visible = _checklist.has_visible_content() and not _hint_yielded
 
 
 func refresh() -> void:
 	_track_opening()
+	_sync_role_columns()
 	for role in ROLES:
 		(_counts[role] as Label).text = counts_text(role)
 		(_fire[role] as Button).disabled = _staying(role) == 0
+	var prep_note := ""
+	if gate != null and gate.flights != null and gate.flights.opened_tick < 0:
+		prep_note = tr("Prep time — clock starts when staff reach stations")
+	_checklist.set_prep_note(prep_note)
 	var lines := card_lines()
 	_checklist.show_lines(_card_title(lines), lines)
+	_checklist.set_milestone(_milestone_text())
 	_hint.visible = _hint.text != "" or not lines.is_empty()
-	_hint_box.visible = _hint.visible and not _hint_yielded
+	_hint_box.visible = _checklist.has_visible_content() and not _hint_yielded
 
 
 ## "To open the airport" while closed, or "Ready: the airport opens on the next
@@ -371,7 +406,62 @@ func _hire_hint(role: StaffMember.Role) -> String:
 			return tr("Hire a security officer")
 		StaffMember.Role.GATE:
 			return tr("Hire a gate agent")
+		StaffMember.Role.RAMP:
+			return tr("Hire a ramp agent")
 	return tr("Hire shop staff")
+
+
+func _hire_why(role: StaffMember.Role) -> String:
+	match role:
+		StaffMember.Role.CHECKIN:
+			return tr("Stations stay closed until an agent is hired.")
+		StaffMember.Role.SECURITY:
+			return tr("Stations stay closed until an officer is hired.")
+		StaffMember.Role.GATE:
+			return tr("Gate desks stay closed until an agent is hired.")
+		StaffMember.Role.RAMP:
+			return tr("Checked bags wait until a ramp agent drives the cart.")
+	return tr("Counters stay closed until shop staff arrive.")
+
+
+func _milestone_text() -> String:
+	if gate == null or not gate.is_open() or _unlocks == null:
+		return ""
+	if _unlocks.tier() >= BuildUnlocks.CAFE_TIER:
+		return ""
+	if menu != null and menu.build_mode != null and not menu.build_mode.require_unlocks:
+		return ""
+	var need := int(BuildUnlocks.TIERS[BuildUnlocks.CAFE_TIER - 1]["passengers"])
+	var done := mini(_unlocks.made_total(), need)
+	return tr("Serve {done}/{need} passengers to unlock Cafe & Baggage").format(
+		{"done": done, "need": need}
+	)
+
+
+func _role_tooltip(role: StaffMember.Role) -> String:
+	match role:
+		StaffMember.Role.CHECKIN:
+			return tr(
+				"Works check-in desks to tag bags and print boarding passes. Hire 1 per open desk."
+			)
+		StaffMember.Role.SECURITY:
+			return tr(
+				# gdlint:ignore = max-line-length
+				"Runs security scanners and lanes to clear passengers and carry-on bags. Hire 1 per open scanner."
+			)
+		StaffMember.Role.GATE:
+			return tr(
+				"Works gate desks to start boarding and announce flights. Hire 1 per gate desk."
+			)
+		StaffMember.Role.SHOP:
+			return tr(
+				"Runs cafe, bar, restaurant, and shop counters. Hire once you build a cafe or shop."
+			)
+		StaffMember.Role.CLEANER:
+			return tr("Mops terminal messes and empties full bins. Hire when litter builds up.")
+	return tr(
+		"Drives baggage carts between your Bag Room and parked planes. Hire once you build a Bag Room."
+	)
 
 
 ## The Hire button's text: "Hire" with the role's daily wage (decision first-time-
@@ -402,6 +492,12 @@ func _staying(role: StaffMember.Role) -> int:
 
 func _on_staff_toggled(open: bool) -> void:
 	_card.visible = open
+	if not open:
+		_stop_hire_pulse()
+
+
+func _exit_tree() -> void:
+	_stop_hire_pulse()
 
 
 func _on_member_state(_id: int, _state: StaffMember.State) -> void:
@@ -423,7 +519,7 @@ func _on_snapshot_loaded() -> void:
 func _on_loaded(ok: bool) -> void:
 	if not ok:
 		return
-	_sync_ramp_column()
+	_sync_role_columns()
 	if gate != null:
 		_on_snapshot_loaded()
 	else:
@@ -432,28 +528,64 @@ func _on_loaded(ok: bool) -> void:
 
 
 func _on_tier_changed(_tier: int) -> void:
-	_sync_ramp_column()
+	_sync_role_columns()
+	refresh()
+
+
+func _on_unlock_outcome(_id: int, made: bool) -> void:
+	if made:
+		refresh()
 
 
 func _resolve_unlocks() -> void:
 	_unlocks = unlocks
 	if _unlocks == null and menu != null and menu.build_mode != null:
 		_unlocks = menu.build_mode.unlocks
-	if _unlocks != null and not _unlocks.tier_changed.is_connected(_on_tier_changed):
-		_unlocks.tier_changed.connect(_on_tier_changed)
+	if _unlocks != null:
+		if not _unlocks.tier_changed.is_connected(_on_tier_changed):
+			_unlocks.tier_changed.connect(_on_tier_changed)
+		if (
+			_unlocks.passengers != null
+			and not _unlocks.passengers.outcome.is_connected(_on_unlock_outcome)
+		):
+			_unlocks.passengers.outcome.connect(_on_unlock_outcome)
+
+
+func _unlocks_required() -> bool:
+	return menu == null or menu.build_mode == null or menu.build_mode.require_unlocks
 
 
 func _ramp_visible() -> bool:
-	return _unlocks == null or _unlocks.tier() >= BuildUnlocks.CAFE_TIER
+	return _unlocks == null or not _unlocks_required() or _unlocks.tier() >= BuildUnlocks.CAFE_TIER
 
 
-func _sync_ramp_column() -> void:
-	var show_ramp := _ramp_visible()
+func _shop_visible() -> bool:
+	if _unlocks == null or not _unlocks_required() or _unlocks.tier() >= BuildUnlocks.CAFE_TIER:
+		return true
+	if (
+		staff != null
+		and (
+			staff.count(StaffMember.Role.SHOP) > 0
+			or not staff.stations_of(StaffMember.Role.SHOP).is_empty()
+		)
+	):
+		return true
+	return false
+
+
+func _sync_role_columns() -> void:
 	var ramp_col: Control = _columns.get(StaffMember.Role.RAMP)
 	if ramp_col != null:
-		ramp_col.visible = show_ramp
-	var col_w := ROLE_WIDTH_SIX if show_ramp else ROLE_WIDTH
-	var sep := ROLE_SEPARATION_SIX if show_ramp else ROLE_SEPARATION
+		ramp_col.visible = _ramp_visible()
+	var shop_col: Control = _columns.get(StaffMember.Role.SHOP)
+	if shop_col != null:
+		shop_col.visible = _shop_visible()
+	var visible_count := 0
+	for role in _columns:
+		if (_columns[role] as Control).visible:
+			visible_count += 1
+	var col_w := ROLE_WIDTH_SIX if visible_count >= 6 else ROLE_WIDTH
+	var sep := ROLE_SEPARATION_SIX if visible_count >= 6 else ROLE_SEPARATION
 	_roles_box.add_theme_constant_override("separation", sep)
 	for role in _columns:
 		(_columns[role] as Control).custom_minimum_size = Vector2(col_w, 0.0)
@@ -505,28 +637,75 @@ func _build() -> void:
 	_roles_box.add_theme_constant_override("separation", ROLE_SEPARATION)
 	_card.add_child(_roles_box)
 	for role in ROLES:
+		var tip := _role_tooltip(role)
 		var column := VBoxContainer.new()
 		column.custom_minimum_size = Vector2(ROLE_WIDTH, 0.0)
+		column.mouse_filter = Control.MOUSE_FILTER_PASS
+		column.tooltip_text = tip
 		_columns[role] = column
 		_roles_box.add_child(column)
 		var role_title := _label(_role_name(role), &"HudCardName")
+		role_title.mouse_filter = Control.MOUSE_FILTER_PASS
+		role_title.tooltip_text = tip
 		_role_titles[role] = role_title
 		column.add_child(role_title)
 		var counts := _label("", &"HudSmall")
 		counts.name = "%sCounts" % ROLE_KEYS[role]
 		counts.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		counts.mouse_filter = Control.MOUSE_FILTER_PASS
+		counts.tooltip_text = tip
 		column.add_child(counts)
 		_counts[role] = counts
 		var row := VBoxContainer.new()
 		row.add_theme_constant_override("separation", 4)
 		column.add_child(row)
 		_hire[role] = _button(row, "Hire%s" % ROLE_KEYS[role], hire_text(role), &"HudButtonTeal")
+		(_hire[role] as Button).tooltip_text = tip
 		_fire[role] = _button(
 			row, "Fire%s" % ROLE_KEYS[role], tr("Fire", "staff button"), &"HudButtonCoral"
 		)
 		(_hire[role] as Button).pressed.connect(func() -> void: staff.hire(role))
 		(_fire[role] as Button).pressed.connect(func() -> void: staff.fire(role))
 	_build_hint()
+
+
+func _on_checklist_row_activated(action: Dictionary) -> void:
+	if menu == null or action.is_empty():
+		return
+	var kind := str(action.get("kind", ""))
+	if kind == "tool":
+		menu.focus_tool(int(action.get("tool", BuildMode.Tool.NONE)))
+	elif kind == "staff":
+		if not menu.staff_open:
+			menu.press_staff()
+		if action.has("role"):
+			_pulse_hire(action["role"] as StaffMember.Role)
+
+
+func _pulse_hire(role: StaffMember.Role) -> void:
+	_stop_hire_pulse()
+	var btn := _hire.get(role) as Button
+	if btn == null:
+		return
+	_pulsed_hire = btn
+	_pulse_tween = create_tween()
+	for i in 3:
+		_pulse_tween.tween_property(btn, "modulate", PULSE_TINT, PULSE_STEP_S)
+		_pulse_tween.tween_property(btn, "modulate", Color.WHITE, PULSE_STEP_S)
+	_pulse_tween.finished.connect(
+		func() -> void:
+			_pulsed_hire = null
+			_pulse_tween = null
+	)
+
+
+func _stop_hire_pulse() -> void:
+	if _pulse_tween != null:
+		_pulse_tween.kill()
+		_pulse_tween = null
+	if _pulsed_hire != null and is_instance_valid(_pulsed_hire):
+		_pulsed_hire.modulate = Color.WHITE
+	_pulsed_hire = null
 
 
 ## The hint sits in a HUD card of its own in the top-left column, LIST_W wide,
@@ -558,20 +737,46 @@ func _process(delta: float) -> void:
 
 
 ## Folds the checklist's lowest lines into "+N more" when the card would reach
-## the Templates dock or the bar's left end (LeftColumn.room_below).
+## the Templates dock, the bar's left end, or an open bottom menu stack.
 func _fit_checklist() -> void:
 	var bar_w := 0.0 if menu == null else menu.bar().get_combined_minimum_size().x
 	var layer := get_viewport().get_visible_rect().size
-	var room := LeftColumn.room_below(_hint_box.offset_top, layer, bar_w)
+	var room := maxf(
+		0.0, LeftColumn.room_below(_hint_box.offset_top, layer, bar_w) - float(HudLayout.GAP)
+	)
+	room = minf(room, _menu_stack_room(layer))
 	_checklist.fit(room - _hint_box.get_theme_stylebox("panel").get_minimum_size().y)
+
+
+func _menu_stack_room(layer: Vector2) -> float:
+	if menu == null:
+		return INF
+	var col_left := float(HudLayout.MARGIN)
+	var col_right := col_left + float(HudLayout.LIST_W) + float(HudLayout.GAP)
+	var floor_y := layer.y
+	if menu.is_tray_open() and menu.tray().is_visible_in_tree():
+		var tray_rect := menu.tray().get_global_rect()
+		if tray_rect.end.x > col_left and tray_rect.position.x < col_right:
+			floor_y = minf(floor_y, layer.y - menu.stack_top() - float(HudLayout.GAP))
+	for control: Control in [menu.status_card(), _card]:
+		if control == null or not control.is_visible_in_tree():
+			continue
+		var rect := control.get_global_rect()
+		if rect.end.x > col_left and rect.position.x < col_right:
+			floor_y = minf(floor_y, rect.position.y - float(HudLayout.GAP))
+	return maxf(0.0, floor_y - _hint_box.offset_top)
 
 
 ## Fades the hint card to FADED_ALPHA while `ghost` (the build ghost's bounds on
 ## screen, empty when there is none) overlaps it, and back to full opacity when
-## it does not, `delta` seconds of the fade. The card never takes a click, so
-## the ghost shows through and the pointer reaches the grid under it.
+## it does not, `delta` seconds of the fade. While covered by a build ghost,
+## actionable checklist rows also switch to click-through so grid clicks land.
 func fade_for(ghost: Rect2, delta: float) -> void:
 	HudLayout.fade_under_ghost(_hint_box, ghost, delta, FADED_ALPHA, FADE_SPEED)
+	var covered := (
+		ghost.has_area() and _hint_box.visible and _hint_box.get_global_rect().intersects(ghost)
+	)
+	_checklist.set_click_through(covered)
 
 
 func _label(text: String, variation: StringName) -> Label:
@@ -598,10 +803,17 @@ func _button(row: Control, node_name: String, text: String, variation: StringNam
 
 func _retranslate() -> void:
 	for role in ROLES:
+		var tip := _role_tooltip(role)
+		if _columns.has(role):
+			(_columns[role] as Control).tooltip_text = tip
 		if _role_titles.has(role):
 			(_role_titles[role] as Label).text = _role_name(role)
+			(_role_titles[role] as Label).tooltip_text = tip
+		if _counts.has(role):
+			(_counts[role] as Label).tooltip_text = tip
 		if _hire.has(role):
 			(_hire[role] as Button).text = hire_text(role)
+			(_hire[role] as Button).tooltip_text = tip
 		if _fire.has(role):
 			(_fire[role] as Button).text = tr("Fire", "staff button")
 	if _open_cue != "" and gate != null:

@@ -1,3 +1,4 @@
+# gdlint:disable = max-public-methods
 class_name TestHintRules
 extends GdUnitTestSuite
 ## The first-time hints' rules (HUD 7/7, decision first-time-hints-above-the-
@@ -29,7 +30,7 @@ func test_a_world_with_every_need_met_has_no_cause() -> void:
 	assert_array(HintRules.causes(_world())).is_empty()
 
 
-func test_the_nine_hints_are_the_ruled_ones_and_first_miss_is_cut() -> void:
+func test_the_twelve_hints_are_the_ruled_ones_and_first_miss_is_cut() -> void:
 	(
 		assert_array(HintRules.IDS)
 		. is_equal(
@@ -43,12 +44,107 @@ func test_the_nine_hints_are_the_ruled_ones_and_first_miss_is_cut() -> void:
 				HintRules.FOOD,
 				HintRules.BAGGAGE_CONNECT,
 				HintRules.OFFERS,
+				HintRules.FLIGHT_PLANNER,
+				HintRules.CLEANERS,
 				HintRules.FOLLOW_PASSENGER,
 			]
 		)
 	)
 	for id in HintRules.IDS:
 		assert_str(HintRules.text(id)).is_not_empty()
+
+
+func test_flight_planner_hint_fires_when_open_with_flights_until_opened() -> void:
+	(
+		assert_array(
+			(
+				HintRules
+				. causes(
+					_world(
+						{
+							"airport_open": false,
+							"offers_opened": true,
+							"has_scheduled_flights": true,
+							"planner_opened": false,
+						}
+					)
+				)
+			)
+		)
+		. is_empty()
+	)
+	(
+		assert_array(
+			(
+				HintRules
+				. causes(
+					_world(
+						{
+							"airport_open": true,
+							"offers_opened": true,
+							"has_scheduled_flights": false,
+							"planner_opened": false,
+						}
+					)
+				)
+			)
+		)
+		. is_empty()
+	)
+	(
+		assert_array(
+			(
+				HintRules
+				. causes(
+					_world(
+						{
+							"airport_open": true,
+							"offers_opened": true,
+							"has_scheduled_flights": true,
+							"planner_opened": true,
+						}
+					)
+				)
+			)
+		)
+		. is_empty()
+	)
+	(
+		assert_array(
+			(
+				HintRules
+				. causes(
+					_world(
+						{
+							"airport_open": true,
+							"offers_opened": true,
+							"has_scheduled_flights": true,
+							"planner_opened": false,
+						}
+					)
+				)
+			)
+		)
+		. is_equal([HintRules.FLIGHT_PLANNER])
+	)
+	assert_str(HintRules.text(HintRules.FLIGHT_PLANNER)).is_equal(
+		"Open Planner (P) to view today's schedule or move flights between gates."
+	)
+
+
+func test_cleaners_hint_fires_when_messes_appear_with_zero_cleaners_hired() -> void:
+	assert_array(HintRules.causes(_world({"mess_count": 0, "cleaners_hired": 0}))).is_empty()
+	assert_array(HintRules.causes(_world({"mess_count": 2, "cleaners_hired": 1}))).is_empty()
+	assert_array(HintRules.causes(_world({"mess_count": 1, "cleaners_hired": 0}))).is_equal(
+		[HintRules.CLEANERS]
+	)
+	assert_array(HintRules.categories_for(HintRules.CLEANERS)).is_equal([HintRules.STAFF_CARD])
+	(
+		assert_str(HintRules.text(HintRules.CLEANERS))
+		. is_equal(
+			"Terminal messes lower passenger mood. Hire a Cleaner on the Staff card to keep things tidy."
+		)
+	)
 
 
 func test_offers_hint_is_due_once_airport_opens_and_clears_once_opened() -> void:

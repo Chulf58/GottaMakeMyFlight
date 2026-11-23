@@ -77,6 +77,8 @@ const LOCKED_TINT := Color(0.5, 0.5, 0.55)
 ## the player hovers or picks its unseen tools (UnlockGuide.is_new); on cards it
 ## multiplies the affordability tint.
 const NEW_TINT := Color(1.0, 0.88, 0.45)
+const PULSE_TINT := Color(1.3, 1.12, 0.55)
+const PULSE_STEP_S := 0.22
 ## The money slot's amount when BuildMode has no wallet; a coin icon stands before it.
 const MONEY_TEXT := "--"
 
@@ -185,6 +187,8 @@ var _pending_wages := ""
 var _wages_hold_amount := 0
 var _wages_hold_owed := 0
 var _staff_card: Control
+var _pulsed_tool := BuildMode.Tool.NONE
+var _pulse_tween: Tween
 
 
 ## What a tool's card costs: the floor tile, one wall piece or the object.
@@ -382,7 +386,65 @@ func press_staff() -> void:
 
 ## A card click: picks its tool.
 func press_card(tool: BuildMode.Tool) -> void:
+	_stop_pulse()
 	build_mode.set_tool(tool)
+
+
+## Opens `tool`'s category tab (closing Staff if open) and briefly pulses its
+## card so a checklist jump highlights where to build. Returns false when hidden.
+func focus_tool(tool: BuildMode.Tool) -> bool:
+	var cat := category_of(tool)
+	if cat < 0 or cat >= remove_category() or not _cards.has(tool):
+		return false
+	if cat >= _category_buttons.size() or not _category_buttons[cat].visible:
+		return false
+	if (
+		int(_card_states.get(tool, BuildMenuCatalog.CardState.OPEN))
+		== BuildMenuCatalog.CardState.HIDDEN
+	):
+		return false
+	_set_staff_open(false)
+	_open = cat
+	templates_page.scroll_horizontal = 0
+	_browsing = true
+	if build_mode != null:
+		build_mode.set_tool(BuildMode.Tool.NONE)
+	_browsing = false
+	_sync()
+	_pulse_card(tool)
+	return true
+
+
+func pulsed_tool() -> BuildMode.Tool:
+	return _pulsed_tool
+
+
+func _pulse_card(tool: BuildMode.Tool) -> void:
+	_stop_pulse()
+	var card_btn := _cards.get(tool) as Control
+	if card_btn == null:
+		return
+	_pulsed_tool = tool
+	var base := _card_tint_for(tool, int(_card_states.get(tool, BuildMenuCatalog.CardState.OPEN)))
+	_pulse_tween = create_tween()
+	for i in 3:
+		_pulse_tween.tween_property(card_btn, "modulate", PULSE_TINT, PULSE_STEP_S)
+		_pulse_tween.tween_property(card_btn, "modulate", base, PULSE_STEP_S)
+	_pulse_tween.finished.connect(
+		func() -> void:
+			_pulsed_tool = BuildMode.Tool.NONE
+			_pulse_tween = null
+	)
+
+
+func _stop_pulse() -> void:
+	if _pulse_tween != null:
+		_pulse_tween.kill()
+		_pulse_tween = null
+	if _pulsed_tool != BuildMode.Tool.NONE and _cards.has(_pulsed_tool):
+		var state: int = _card_states.get(_pulsed_tool, BuildMenuCatalog.CardState.OPEN)
+		(_cards[_pulsed_tool] as Control).modulate = _card_tint_for(_pulsed_tool, state)
+	_pulsed_tool = BuildMode.Tool.NONE
 
 
 ## Follows `new_guide`: its "New" marks tint the cards and unpressed domain tabs,
@@ -675,7 +737,8 @@ func _refresh_money() -> void:
 			var price := _card_price(tool)
 			var label := _price_labels[tool] as Label
 			label.text = tr("Free", "price") if _wallet == null or price == 0 else str(price)
-		_cards[tool].modulate = _card_tint_for(tool, state)
+		if tool != _pulsed_tool:
+			_cards[tool].modulate = _card_tint_for(tool, state)
 	refresh_preview()
 
 
@@ -1034,6 +1097,8 @@ func _sync() -> void:
 	_sync_tab_tints()
 	for key in _cards:
 		_cards[key].set_pressed_no_signal(key == tool)
+	if _pulsed_tool != BuildMode.Tool.NONE and _open != category_of(_pulsed_tool):
+		_stop_pulse()
 	templates_page.sync(_open == TEMPLATES_PAGE)
 	_sync_tray_layout()
 	build_session.set_building(_open != NO_CATEGORY or tool != BuildMode.Tool.NONE)
