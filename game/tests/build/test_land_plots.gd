@@ -121,12 +121,13 @@ func test_each_buy_costs_the_next_price_and_the_price_rises() -> void:
 		paid.append(before - wallet.balance)
 		assert_int(before - wallet.balance).is_equal(price)
 	print("land prices paid %s, balance %d, next %d" % [paid, wallet.balance, _land.next_price()])
+	assert_array(paid).is_equal([1500, 2500, 5000, 7000])
 	assert_array(paid).is_equal(PriceTable.LAND_PLOT_PRICES.slice(0, 4))
 	for i in paid.size() - 1:
 		assert_int(paid[i + 1]).is_greater(paid[i])
 	assert_int(_land.bought).is_equal(4)
 	assert_int(changes[0]).is_equal(4)
-	assert_int(wallet.balance).is_equal(20000 - 2500 - 3500 - 5000 - 7000)
+	assert_int(wallet.balance).is_equal(20000 - 1500 - 2500 - 5000 - 7000)
 
 
 func test_the_price_keeps_rising_past_the_end_of_the_table() -> void:

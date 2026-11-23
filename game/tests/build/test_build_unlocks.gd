@@ -138,6 +138,16 @@ func test_meeting_the_stars_and_the_passengers_opens_the_tier() -> void:
 	assert_bool(_unlocks.allows(BuildMode.Tool.TREE)).is_false()
 	assert_array(_opened).has_size(1)
 	assert_str(_opened[0]).contains("cafe")
+	# Tier 3 needs 3 stars and 120 passengers: 119 stays Tier 2, 120 opens Tier 3.
+	_made(99)
+	_unlocks.check()
+	assert_int(_unlocks.made_total()).is_equal(119)
+	assert_int(_unlocks.tier()).is_equal(2)
+	_made(1)
+	_unlocks.check()
+	assert_int(_unlocks.made_total()).is_equal(120)
+	assert_int(_unlocks.tier()).is_equal(3)
+	assert_bool(_unlocks.allows(BuildMode.Tool.TREE)).is_true()
 
 
 func test_a_missed_passenger_is_not_counted() -> void:
@@ -216,7 +226,7 @@ func test_a_card_says_what_unlocks_it_and_how_far_the_game_is() -> void:
 	assert_str(_unlocks.unlock_text(BuildMode.Tool.CAFE_ROOM)).is_equal(
 		"Unlocks at 2 stars and 20 passengers (now 2.5 stars, 12 passengers)"
 	)
-	assert_str(BuildUnlocks.requirement_text(3)).is_equal("Unlocks at 3 stars and 200 passengers")
+	assert_str(BuildUnlocks.requirement_text(3)).is_equal("Unlocks at 3 stars and 120 passengers")
 	assert_str(BuildUnlocks.requirement_text(4)).is_equal("Unlocks at 4 stars and 600 passengers")
 
 
@@ -253,7 +263,7 @@ func test_a_bad_snapshot_is_refused_and_changes_nothing() -> void:
 		{"tier": 2, "made": 5, "shown": [], "seen": [], "firsts": [], "extra": 1},
 		# A tier saved with fewer made-flight passengers than it takes to open it.
 		{"tier": 2, "made": 19, "shown": [], "seen": [], "firsts": []},
-		{"tier": 3, "made": 199, "shown": [], "seen": [], "firsts": []},
+		{"tier": 3, "made": 119, "shown": [], "seen": [], "firsts": []},
 		{"tier": 4, "made": 0, "shown": [], "seen": [], "firsts": []},
 		{"tier": 4, "made": 599, "shown": [], "seen": [], "firsts": []},
 	]
@@ -266,7 +276,7 @@ func test_a_bad_snapshot_is_refused_and_changes_nothing() -> void:
 func test_a_snapshot_at_exactly_the_tier_requirement_is_taken() -> void:
 	for data: Dictionary in [
 		{"tier": 2, "made": 20, "shown": [], "seen": [], "firsts": []},
-		{"tier": 3, "made": 200, "shown": [], "seen": [], "firsts": []},
+		{"tier": 3, "made": 120, "shown": [], "seen": [], "firsts": []},
 		{"tier": 4, "made": 600, "shown": [], "seen": [], "firsts": []}
 	]:
 		assert_bool(_unlocks.from_snapshot(data)).is_true()

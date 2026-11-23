@@ -39,7 +39,7 @@ func test_locked_the_card_says_what_the_tier_asks_for_and_the_button_is_off() ->
 	_card.open()
 	print(_card.card_text())
 	assert_str(_card.card_text()).contains("Small runway, 384 m")
-	assert_str(_card.card_text()).contains("Next: Medium runway, 576 m, $15000, works take 1 hour")
+	assert_str(_card.card_text()).contains("Next: Medium runway, 576 m, $9000, works take 1 hour")
 	assert_str(_card.problem_text()).is_equal(BuildUnlocks.requirement_text(2))
 	assert_bool(_card.upgrade_button().disabled).is_true()
 	assert_str(_card.schedule_text()).is_empty()
@@ -52,7 +52,7 @@ func test_unlocked_and_funded_the_button_buys_and_the_card_shows_the_works() -> 
 	assert_bool(_card.upgrade_button().disabled).is_false()
 	_card.upgrade_button().pressed.emit()
 	print(_card.card_text())
-	assert_int(_finances.wallet.balance).is_equal(30000 - 15000)
+	assert_int(_finances.wallet.balance).is_equal(30000 - 9000)
 	assert_bool(_sim.runway.works.scheduled()).is_true()
 	var works := _sim.runway.works
 	assert_str(_card.schedule_text()).is_equal(
@@ -71,7 +71,7 @@ func test_unlocked_and_funded_the_button_buys_and_the_card_shows_the_works() -> 
 
 func test_a_short_wallet_shows_the_price_and_keeps_the_button_off() -> void:
 	_tier(2)
-	_finances.wallet.spend(30000 - 14999, Wallet.Category.BUILD)
+	_finances.wallet.spend(30000 - 8999, Wallet.Category.BUILD)
 	_card.open()
 	assert_str(_card.problem_text()).is_equal(RunwayWorks.short_text(PlaneClasses.MEDIUM))
 	assert_bool(_card.upgrade_button().disabled).is_true()

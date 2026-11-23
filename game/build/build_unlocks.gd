@@ -106,7 +106,7 @@ const TIERS := [
 	},
 	{
 		"stars": 3.0,
-		"passengers": 200,
+		"passengers": 120,
 		"facilities":
 		(
 			"food and services: bar, restaurant, grab-and-go, info desk, pharmacy,"
@@ -302,7 +302,7 @@ static func runway_tier(size: String) -> int:
 	return RUNWAY_TIERS.get(size, UNLISTED_TIER)
 
 
-## What tier `tier` asks for: "Unlocks at 3 stars and 200 passengers", or
+## What tier `tier` asks for: "Unlocks at 3 stars and 120 passengers", or
 ## "In the full game" above MAX_PLAYABLE_TIER in demo builds.
 static func requirement_text(tier: int) -> String:
 	if DemoMode.is_demo() and tier > DemoMode.MAX_PLAYABLE_TIER and tier <= TIERS.size():
