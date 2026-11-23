@@ -40,7 +40,7 @@ func test_an_empty_airport_fits_every_departure_at_its_gate() -> void:
 		assert_str(FlightFit.text(assessment, PlaneClasses.SMALL)).is_equal(FlightFit.FITS_TEXT)
 
 
-## Two hours after A1 the gate is still held (195 minutes), but the runway and
+## Two hours after A1 the gate is still held (131 minutes), but the runway and
 ## lane are free then, so a second gate would take it.
 func test_a_clash_a_free_gate_would_solve_says_build_another_gate() -> void:
 	assert_bool(_sim.accept_contract(terms("A1", 600))).is_true()

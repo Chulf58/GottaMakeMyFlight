@@ -21,7 +21,7 @@ func before_test() -> void:
 	_sim.open_airport()
 	_port.add_child(_desk)
 	_port.add_child(_sim)
-	# 10:00, 12:00 (still inside 10:00's 195 minutes at the gate) and 20:00.
+	# 10:00, 12:00 (still inside 10:00's 131-minute small-plane gate hold) and 20:00.
 	var offers := TestOfferBoard.day_records(0, [600, 720, 1200])
 	assert_bool(_desk.board.from_snapshot(TestOfferBoard.save_of(offers))).is_true()
 	_panel = OfferPanel.new()

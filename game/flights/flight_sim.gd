@@ -866,14 +866,44 @@ func flight_gate(id: String) -> String:
 	return _find(id).get("gate", "")
 
 
-## The live flight holding `gate` now (from its first state until it
-## departs), or "". Occurrences at one gate never overlap.
-func flight_at_gate(gate: String) -> String:
+## All live flights at `gate` now (in [starts[0], starts[DEPARTED])), in
+## timetable order.
+func flights_at_gate(gate: String) -> Array[String]:
+	var ids: Array[String] = []
 	for flight in _flights:
 		var starts: Array = flight["starts"]
 		if flight["gate"] == gate and starts[0] <= tick and tick < starts[State.DEPARTED]:
-			return flight["id"]
-	return ""
+			ids.append(flight["id"])
+	return ids
+
+
+## The primary live flight at `gate` now (from its first state until it
+## departs), or "". When multiple flights overlap at one gate, prefers the
+## flight holding the stand (AT_STAND..PUSHBACK), then TAXI_IN, then TAXI_OUT,
+## then earliest active (SCHEDULED..LANDING), then TAKEOFF.
+func flight_at_gate(gate: String) -> String:
+	var best := ""
+	var best_rank := 99
+	for flight in _flights:
+		var starts: Array = flight["starts"]
+		if flight["gate"] == gate and starts[0] <= tick and tick < starts[State.DEPARTED]:
+			var rank := _gate_priority(int(flight["state"]))
+			if rank < best_rank:
+				best_rank = rank
+				best = flight["id"]
+	return best
+
+
+static func _gate_priority(state: int) -> int:
+	if state >= State.AT_STAND and state <= State.PUSHBACK:
+		return 0
+	if state == State.TAXI_IN:
+		return 1
+	if state == State.TAXI_OUT:
+		return 2
+	if state <= State.LANDING:
+		return 3
+	return 4
 
 
 func state_of(id: String) -> int:
@@ -1116,7 +1146,14 @@ func _one_off_clash(starts: Array[int], gate: String) -> String:
 	# or one issued before its contract moved.
 	for flight in _flights:
 		if flight["contract"] != "":
-			if FlightTimetable.shares_gate(gate, starts, flight["gate"], flight["starts"]):
+			if FlightTimetable.shares_gate(
+				gate,
+				starts,
+				flight["gate"],
+				flight["starts"],
+				PlaneClasses.MEDIUM,
+				_flight_plane_size(flight)
+			):
 				return "would hold gate %s during %s" % [gate, flight["id"]]
 	return ""
 
@@ -1367,12 +1404,23 @@ func _gate_problem(contract: Dictionary, contracts: Array[Dictionary]) -> String
 	for flight in _flights:
 		if flight["contract"] == contract["id"]:
 			continue
-		if FlightTimetable.contract_meets(contract, flight["gate"], flight["starts"], epoch):
+		if FlightTimetable.contract_meets(
+			contract, flight["gate"], flight["starts"], epoch, _flight_plane_size(flight)
+		):
 			return (
 				"contract %s clashes with flight %s at gate %s"
 				% [contract["id"], flight["id"], flight["gate"]]
 			)
 	return ""
+
+
+func _flight_plane_size(flight: Dictionary) -> String:
+	var contract_id: String = flight.get("contract", "")
+	if contract_id != "":
+		var contract := contract_of(contract_id)
+		if not contract.is_empty():
+			return contract["plane_size"]
+	return PlaneClasses.MEDIUM
 
 
 ## The planning world of the sim now (FlightPlans), on `grounds`, its spur

@@ -109,10 +109,10 @@ func test_once_open_it_stays_open_after_everyone_is_fired() -> void:
 
 ## Opened at 1500: the calendar starts there (E = 1500, 06:00). The plane's
 ## lead alone would put the first state on the opening tick, but the one-off
-## GMF101 holds gate C to 3900, so the starter takes the first whole calendar
-## minute whose first state is at 3900 or later, and its first occurrence is
-## still issued on the opening tick. Old expected (lead ISSUE_LEAD_TICKS after
-## the opening): first state 1500 + 2400 = 3900. New: 3900, set by the gate.
+## GMF101 holds gate C to 3900, so the small starter takes the first whole
+## calendar minute whose gate hold (1280 ticks after SCHEDULED) is at 3900 or
+## later (first state 2620), and its first occurrence is still issued on the
+## opening tick.
 func test_the_starter_s_first_flight_fits_the_opening_and_repeats_daily() -> void:
 	_make()
 	_w.run_to(1500)
@@ -120,7 +120,7 @@ func test_the_starter_s_first_flight_fits_the_opening_and_repeats_daily() -> voi
 	assert_int(_w.flights.epoch).is_equal(1500)
 	var first := FlightTimetable.occurrence_id(STARTER, 0)
 	var start := _first_start_from(1500, 3900)
-	assert_int(start).is_equal(3900)
+	assert_int(start).is_equal(2620)
 	assert_array(_w.flights.flight_ids()).contains([first])
 	assert_int(_w.flights.state_start(first, FlightSim.State.SCHEDULED)).is_equal(start)
 	var pushback := _w.flights.state_start(first, FlightSim.State.PUSHBACK)
@@ -140,9 +140,8 @@ func test_the_starter_s_first_flight_fits_the_opening_and_repeats_daily() -> voi
 
 ## Opened at 1507, between raw minutes: the calendar starts there, so the
 ## opening is a whole calendar minute and nothing waits for the next raw one.
-## Old expected: issued at 1520 (not at 1507 or 1519), first state 3920. New:
-## issued on the opening tick 1507, first state 3907 (the first calendar
-## minute's first state at or after the one-off's 3900).
+## Issued on the opening tick 1507, first state 2627 (whose small gate hold
+## starts at 3907, the first calendar minute at or after the one-off's 3900).
 func test_an_opening_between_raw_minutes_issues_the_starter_at_once() -> void:
 	_make()
 	_w.run_to(1507)
@@ -150,18 +149,22 @@ func test_an_opening_between_raw_minutes_issues_the_starter_at_once() -> void:
 	var first := FlightTimetable.occurrence_id(STARTER, 0)
 	assert_array(_w.flights.flight_ids()).contains([first])
 	var start := _first_start_from(1507, 3900)
-	assert_int(start).is_equal(3907)
+	assert_int(start).is_equal(2627)
 	assert_int(_w.flights.state_start(first, FlightSim.State.SCHEDULED)).is_equal(start)
 
 
 ## The first state of the starter opened at `opened` (E = `opened`) at a
 ## TaxiTimes.BASE gate that is busy until `free`: the first whole calendar
 ## minute's departure at least StarterSlot.lead() after the opening whose
-## first state is at or after `free`.
+## small gate hold starts at or after `free`.
 static func _first_start_from(opened: int, free: int) -> int:
 	var offset := FlightTimetable.departure_offset()
+	var pre_hold := (
+		FlightTimetable.reserved_ticks()
+		- FlightTimetable.reserved_ticks(TaxiTimes.BASE, PlaneClasses.SMALL)
+	)
 	var departure := StarterSlot.whole_minute(opened + StarterSlot.lead(TaxiTimes.BASE), opened)
-	while departure - offset < free:
+	while departure - offset + pre_hold < free:
 		departure += GameCalendar.TICKS_PER_MINUTE
 	return departure - offset
 
