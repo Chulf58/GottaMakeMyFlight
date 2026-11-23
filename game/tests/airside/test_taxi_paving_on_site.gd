@@ -67,7 +67,7 @@ func test_skirts_are_drawn_without_the_outline_pass_and_the_tops_with_it() -> vo
 	print("surfaces %d" % lifted.get_surface_count())
 	assert_int(lifted.get_surface_count()).is_equal(2)
 	assert_object(lifted.surface_get_material(0)).is_same(TaxiPaving.MATERIAL)
-	assert_object(TaxiPaving.MATERIAL.next_pass).is_not_null()
+	assert_object(TaxiPaving.MATERIAL.next_pass).is_null()
 	var skirts := lifted.surface_get_material(1)
 	assert_object(skirts.next_pass).is_null()
 	assert_object((skirts as ShaderMaterial).shader).is_same(

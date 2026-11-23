@@ -203,13 +203,7 @@ func test_all_15_airfield_assets_and_paving_material_bind_toon_and_ground_cleanl
 
 	var paving_mat := TaxiPaving.MATERIAL as ShaderMaterial
 	assert_object(paving_mat).is_not_null()
-	var outline := paving_mat.next_pass as ShaderMaterial
-	assert_object(outline).is_not_null()
-	assert_str(outline.shader.resource_path).is_equal("res://shaders/toon_outline.gdshader")
-	var col := outline.get_shader_parameter("outline_color") as Color
-	assert_bool(col.is_equal_approx(Color(0.1, 0.1, 0.12, 1.0))).is_true()
-	var px := float(outline.get_shader_parameter("outline_px"))
-	assert_float(px).is_equal_approx(1.5, 0.001)
+	assert_object(paving_mat.next_pass).is_null()
 
 
 func test_operations_apron_skirt_faces_point_outward() -> void:

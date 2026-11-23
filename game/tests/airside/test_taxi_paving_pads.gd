@@ -320,7 +320,7 @@ func test_hold_bars_lie_across_the_stubs_and_south_lead_ins() -> void:
 	assert_int(bars.size()).is_equal(2 * holds.size())
 	for i in holds.size():
 		for bar in [bars[2 * i], bars[2 * i + 1]]:
-			assert_float(bar.size.x).is_equal_approx(TaxiPaving.WIDTH_M, 0.001)
+			assert_float(bar.size.x).is_equal_approx(TaxiPaving.HOLD_BAR_WIDTH_M, 0.001)
 			assert_float(bar.size.y).is_equal_approx(TaxiPaving.HOLD_LINE_M, 0.001)
 			# The bar lies on its leg's strip, corner to corner.
 			for corner in [bar.position, bar.end]:

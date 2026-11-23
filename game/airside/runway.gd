@@ -35,6 +35,10 @@ const STRIP_PIECE := "tp_runway_03a"
 const STRIPS := {SMALL: 3, MEDIUM: 5, LARGE: 7}
 const STRIP_LENGTH_M := 96.0
 const NAME_PREFIX := "Runway"
+const WIDTH_M := 64.0
+const TOP_Y := 0.1
+const SKIRT_Y := -0.12
+const MATERIAL := preload("res://assets/airside/materials/taxi_paving_toon.tres")
 
 ## The runway's size, one of PlaneClasses.ORDER. A new game starts small.
 var size: String = SMALL:
@@ -89,19 +93,83 @@ static func pieces(runway_size: String) -> Array[Dictionary]:
 	return list
 
 
-## A Node3D holding the pieces of a runway of `runway_size` as children at
-## their x, to be placed on the airport's runway line. The caller owns it.
+## A MeshInstance3D holding one continuous seamless runway asphalt surface for
+## `runway_size`, plus empty Node3D piece anchors at each Runway.pieces() x so
+## callers reading piece origins keep their contract.
 static func build(runway_size: String) -> Node3D:
-	var root := Node3D.new()
+	var len_m := length_m(runway_size)
+	if len_m <= 0.0:
+		var empty := Node3D.new()
+		empty.name = "%s%s" % [NAME_PREFIX, runway_size.capitalize()]
+		return empty
+	var root := MeshInstance3D.new()
 	root.name = "%s%s" % [NAME_PREFIX, runway_size.capitalize()]
+	root.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	root.mesh = _build_asphalt_mesh(len_m)
 	for entry in pieces(runway_size):
-		var scene: PackedScene = load(PlaneModels.PIECES[entry["piece"]]["path"])
-		var node: Node3D = scene.instantiate()
-		node.position.x = entry["x"]
+		var anchor := Node3D.new()
+		anchor.name = entry["piece"]
+		anchor.position.x = entry["x"]
 		if entry["turned"]:
-			node.rotation.y = PI
-		root.add_child(node)
+			anchor.rotation.y = PI
+		root.add_child(anchor)
 	return root
+
+
+static func _build_asphalt_mesh(len_m: float) -> ArrayMesh:
+	var half_x := len_m * 0.5
+	var half_z := WIDTH_M * 0.5
+	var verts := PackedVector3Array(
+		[
+			Vector3(-half_x, TOP_Y, -half_z),
+			Vector3(half_x, TOP_Y, -half_z),
+			Vector3(half_x, TOP_Y, half_z),
+			Vector3(-half_x, TOP_Y, half_z),
+		]
+	)
+	var normals := PackedVector3Array([Vector3.UP, Vector3.UP, Vector3.UP, Vector3.UP])
+	var uvs := PackedVector2Array(
+		[
+			Vector2(TaxiPaving.ASPHALT_U, TaxiPaving.ASPHALT_V_FROM),
+			Vector2(TaxiPaving.ASPHALT_U, TaxiPaving.ASPHALT_V_FROM),
+			Vector2(TaxiPaving.ASPHALT_U, TaxiPaving.ASPHALT_V_TO),
+			Vector2(TaxiPaving.ASPHALT_U, TaxiPaving.ASPHALT_V_TO),
+		]
+	)
+	var index := PackedInt32Array([0, 1, 2, 0, 2, 3])
+
+	var skirt_verts := PackedVector3Array()
+	var skirt_normals := PackedVector3Array()
+	var skirt_uvs := PackedVector2Array()
+	var skirt_index := PackedInt32Array()
+	var out_norms := [Vector3(0, 0, -1), Vector3(1, 0, 0), Vector3(0, 0, 1), Vector3(-1, 0, 0)]
+	var skirt_uv := Vector2(TaxiPaving.ASPHALT_U, TaxiPaving.ASPHALT_V_FROM)
+	for i in 4:
+		var a := verts[i]
+		var b := verts[(i + 1) % 4]
+		var base := skirt_verts.size()
+		skirt_verts.append_array([a, b, Vector3(b.x, SKIRT_Y, b.z), Vector3(a.x, SKIRT_Y, a.z)])
+		for _k in 4:
+			skirt_normals.append(out_norms[i])
+			skirt_uvs.append(skirt_uv)
+		skirt_index.append_array(
+			PackedInt32Array([base, base + 2, base + 1, base, base + 3, base + 2])
+		)
+
+	var out := ArrayMesh.new()
+	for surf in [
+		[verts, normals, uvs, index],
+		[skirt_verts, skirt_normals, skirt_uvs, skirt_index],
+	]:
+		var arrays := []
+		arrays.resize(Mesh.ARRAY_MAX)
+		arrays[Mesh.ARRAY_VERTEX] = surf[0]
+		arrays[Mesh.ARRAY_NORMAL] = surf[1]
+		arrays[Mesh.ARRAY_TEX_UV] = surf[2]
+		arrays[Mesh.ARRAY_INDEX] = surf[3]
+		out.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		out.surface_set_material(out.get_surface_count() - 1, MATERIAL)
+	return out
 
 
 ## Takes the new size when the works end at `tick` and drops their booking once
