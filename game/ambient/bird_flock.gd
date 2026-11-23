@@ -29,11 +29,12 @@ extends Node3D
 const CROW := preload("res://assets/birds/tfp_crow_01.glb")
 const VARIANTS: Array[String] = ["TFP_Crow_01A", "TFP_Crow_01B", "TFP_Crow_01C"]
 ## Groups per zone (BirdPerches.Zone), each zone keeping one perch free.
-const ZONE_GROUPS: Array[int] = [3, 4, 3]
-const GROUP_MIN := 3
-## The most birds per group by zone: three fit a forecourt patch at 1.5x, four
-## a sidewalk patch (a group must fit every patch of its zone).
-const ZONE_GROUP_MAX: Array[int] = [3, 4, 4]
+const ZONE_GROUPS: Array[int] = [3, 2, 3]
+const GROUP_MIN := 2
+## The most birds per group by zone: small flocks of 2-3 spaced birds.
+const ZONE_GROUP_MAX: Array[int] = [3, 3, 3]
+## Preferred minimum flat distance between two active groups' perches in the same zone.
+const MIN_GROUP_GAP := 9.0
 ## The idle clips' lowest vertex sits this far below the model origin
 ## (tools/blender/convert_crow.py CONTACT lines), so the origin goes this far
 ## above the perch top for the feet to stand on it.
@@ -168,8 +169,11 @@ func rebuild() -> void:
 		for i in there:
 			if BirdPerches.ZONES[i] == zone:
 				spots.append(i)
+		var chosen: Array[int] = []
 		for _i in mini(ZONE_GROUPS[zone], spots.size() - 1):
-			var spot: int = spots.pop_at(rng.randi_range(0, spots.size() - 1))
+			var spot := _pick_spaced_spot(spots, chosen)
+			spots.erase(spot)
+			chosen.append(spot)
 			groups.append(_new_group(spot))
 
 
@@ -301,7 +305,7 @@ func _new_group(spot: int) -> Dictionary:
 
 
 func _scatter(g: Dictionary, threats: PackedVector3Array) -> void:
-	var target := BirdPerches.pick(rng, g["spot"], closed_spots(g), threats)
+	var target := BirdPerches.pick(rng, g["spot"], _spaced_closed_spots(g), threats)
 	if target < 0:
 		return
 	var offs := BirdPerches.offsets(rng, g["birds"].size(), target, bird_scale)
@@ -413,3 +417,42 @@ func _play(b: Dictionary, clip: String, start_frac: float) -> void:
 func _on_loaded(ok: bool) -> void:
 	if ok:
 		rebuild()
+
+
+func _pick_spaced_spot(spots: Array[int], taken: Array[int]) -> int:
+	var clear: Array[int] = []
+	for s in spots:
+		if _far_from_all(s, taken):
+			clear.append(s)
+	var pool := clear if not clear.is_empty() else spots
+	return pool[rng.randi_range(0, pool.size() - 1)]
+
+
+func _spaced_closed_spots(skip: Dictionary) -> Array[int]:
+	var base := closed_spots(skip)
+	var from_spot: int = skip["spot"]
+	var zone: int = BirdPerches.ZONES[from_spot]
+	var busy := busy_spots(skip)
+	var zone_busy: Array[int] = []
+	for b in busy:
+		if BirdPerches.ZONES[b] == zone:
+			zone_busy.append(b)
+	var spaced: Array[int] = base.duplicate()
+	var open_far := 0
+	for i in BirdPerches.SPOTS.size():
+		if i == from_spot or BirdPerches.ZONES[i] != zone or base.has(i):
+			continue
+		if _far_from_all(i, zone_busy):
+			open_far += 1
+		else:
+			spaced.append(i)
+	return spaced if open_far > 0 else base
+
+
+static func _far_from_all(spot: int, others: Array[int]) -> bool:
+	var p: Vector3 = BirdPerches.SPOTS[spot]
+	for other in others:
+		var q: Vector3 = BirdPerches.SPOTS[other]
+		if Vector2(p.x - q.x, p.z - q.z).length() < MIN_GROUP_GAP:
+			return false
+	return true

@@ -423,3 +423,73 @@ static func _crow_skinned_min_y(crow: Node3D, skel: Skeleton3D, surfaces: Array)
 					v += (mats[bones[k * per + j]] * verts[k]) * w
 			min_y = minf(min_y, v.y)
 	return min_y
+
+
+func test_perched_birds_keep_clear_spacing_and_avoid_adjacent_clumps() -> void:
+	var crow: Node3D = auto_free(BirdFlock.CROW.instantiate() as Node3D)
+	var crow_length := 0.0
+	for v in BirdFlock.VARIANTS:
+		var mi := crow.find_child(v, true, false) as MeshInstance3D
+		assert_object(mi).is_not_null()
+		crow_length = maxf(crow_length, mi.get_aabb().size.z)
+	var min_apart := BirdPerches.MIN_SPACING * _flock.bird_scale
+	print("crow_length_1.5=%.3f min_apart=%.3f" % [crow_length * _flock.bird_scale, min_apart])
+	assert_float(min_apart).is_greater(crow_length * _flock.bird_scale)
+	for s in 20:
+		_flock.rng.seed = 2000 + s
+		_flock.rebuild()
+		var positions: Array[Vector3] = []
+		var west_spots: Array[int] = []
+		var east_spots: Array[int] = []
+		for g in _flock.groups:
+			var spot: int = g["spot"]
+			var zone: int = BirdPerches.ZONES[spot]
+			assert_int((g["birds"] as Array).size()).is_less_equal(3)
+			if zone == BirdPerches.Zone.WEST:
+				west_spots.append(spot)
+			elif zone == BirdPerches.Zone.EAST:
+				east_spots.append(spot)
+			for b in g["birds"]:
+				positions.append((b["node"] as Node3D).position)
+		assert_int(west_spots.size()).is_less_equal(2)
+		for z_spots in [west_spots, east_spots]:
+			for i in z_spots.size():
+				for j in range(i + 1, z_spots.size()):
+					var a := BirdPerches.SPOTS[z_spots[i]]
+					var b := BirdPerches.SPOTS[z_spots[j]]
+					var gap := Vector2(a.x - b.x, a.z - b.z).length()
+					assert_float(gap).is_greater_equal(BirdFlock.MIN_GROUP_GAP)
+		for i in positions.size():
+			for j in range(i + 1, positions.size()):
+				var d := (
+					Vector2(positions[i].x - positions[j].x, positions[i].z - positions[j].z)
+					. length()
+				)
+				assert_float(d).is_greater_equal(min_apart)
+	# Verify a scattered WEST group also lands >= MIN_GROUP_GAP from the other WEST group.
+	_flock.rng.seed = 1234
+	_flock.rebuild()
+	var west_group := {}
+	for g in _flock.groups:
+		if BirdPerches.ZONES[g["spot"]] == BirdPerches.Zone.WEST:
+			west_group = g
+			break
+	assert_dict(west_group).is_not_empty()
+	var src: Vector3 = BirdPerches.SPOTS[west_group["spot"]]
+	_flock.step(STEP, PackedVector3Array([src]))
+	var target: int = west_group["target"]
+	assert_int(target).is_not_equal(-1)
+	for g in _flock.groups:
+		if g != west_group and BirdPerches.ZONES[g["spot"]] == BirdPerches.Zone.WEST:
+			var other: Vector3 = BirdPerches.SPOTS[g["spot"]]
+			var tgt: Vector3 = BirdPerches.SPOTS[target]
+			assert_float(Vector2(tgt.x - other.x, tgt.z - other.z).length()).is_greater_equal(
+				BirdFlock.MIN_GROUP_GAP
+			)
+	_run(14.0, PackedVector3Array())
+	assert_int(west_group["target"]).is_equal(-1)
+	for i in west_group["birds"].size():
+		for j in range(i + 1, west_group["birds"].size()):
+			var pa: Vector3 = (west_group["birds"][i]["node"] as Node3D).position
+			var pb: Vector3 = (west_group["birds"][j]["node"] as Node3D).position
+			assert_float(Vector2(pa.x - pb.x, pa.z - pb.z).length()).is_greater_equal(min_apart)
