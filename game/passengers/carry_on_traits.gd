@@ -11,9 +11,10 @@ extends RefCounted
 ## placeholder: most travellers carry one, a quarter carry two.
 const BAG_SHARES: Array[int] = [20, 55, 25]
 const MAX_BAGS := 2
-## Whole percent of passengers who carry liquids and who set off the alarm.
-const LIQUIDS_PERCENT := 10
-const ALARM_PERCENT := 5
+## Whole percent of passengers who carry liquids and who set off the alarm
+## (ruling frequent-security-searches-live-in-world-comic-belt-keys-liq).
+const LIQUIDS_PERCENT := 12
+const ALARM_PERCENT := 8
 ## The RNG draws one passenger takes: bags, liquids, alarm, in that order.
 const DRAWS := 3
 

@@ -247,6 +247,9 @@ static func now_line(passenger_sim: PassengerSim, p: Passenger) -> String:
 	if p.stuck != Passenger.Stuck.NONE:
 		var stuck := TranslationServer.translate('Stuck: "{reason}"')
 		parts.append(stuck.format({"reason": BubbleWords.say(passenger_sim.bubble_text(p))}))
+	elif SecuritySearchReasons.is_active(p):
+		var search := TranslationServer.translate('Security search: "{reason}"')
+		parts.append(search.format({"reason": BubbleWords.say(SecuritySearchReasons.bubble_of(p))}))
 	return "   ".join(parts)
 
 
