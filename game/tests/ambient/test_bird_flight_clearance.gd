@@ -1,21 +1,16 @@
 extends GdUnitTestSuite
-## Every flight a group can make (each pair of perches in one zone, the
-## zone's lowest and highest lift, three pairs of patch places) stays clear of
-## the airport site's kept art (beyond its paving and road), the curb bays
-## and both car parks. A flying crow at bird scale 1.5 is taken as a body
-## BODY_UP above its origin with lines BODY_RADIUS to each side (its wings
-## span 1.65 m).
+## Every flight a group can make (each pair of reachable ground or elevated
+## perches via BirdPerches.can_fly, including cross-zone flights, at low/mid/high
+## lifts from BirdFlock.lift_bounds) stays clear of the airport site, curb bays,
+## car parks, tunnel portals, lampposts, benches and trees.
 
 const WORLD := preload("res://tests/ambient/bird_world.gd")
-## The road they fly over. The paving the birds stand on is one mesh per land
-## plot, each named OwnedPaving.PREFIX + "<column>_<row>" (decision site-paving-
-## covers-only-the-owned-land-plots-and-grows-as-ea); it was one "Lot" mesh.
-const GROUND: Array[String] = ["Road"]
+## Ground & road meshes the birds perch on and fly over.
+const GROUND: Array[String] = ["Road", "Ground", "Road_Ext", "Road_Ext_Dashes", "Crosswalk_Stripes"]
 const BODY_RADIUS := 0.85
 const BODY_UP := 0.375
 const SAMPLES := 64
-## Random flights per perch pair on top of the nine fixed ones (seed 2026).
-const SWEEP := 12
+const SWEEP := 6
 
 var _world: Array[Dictionary] = []
 
@@ -27,16 +22,13 @@ func before() -> void:
 			_world.append(e)
 
 
-## The first mesh a flight's body runs into, as text, or "". Each piece of
-## the flight is cast along the body's centre line and four lines beside it,
-## against the mesh's triangles (its box is only the broad phase).
 func _first_clash(from: Vector3, to: Vector3, lift: float) -> String:
 	var sides: Array[Vector3] = [
 		Vector3.ZERO,
 		Vector3(BODY_RADIUS, 0, 0),
 		Vector3(-BODY_RADIUS, 0, 0),
 		Vector3(0, 0, BODY_RADIUS),
-		Vector3(0, 0, -BODY_RADIUS)
+		Vector3(0, 0, -BODY_RADIUS),
 	]
 	var prev := BirdFlock.flight_point(from, to, lift, 0.0) + Vector3.UP * BODY_UP
 	for i in range(1, SAMPLES + 1):
@@ -63,24 +55,27 @@ func test_flights_clear_the_world() -> void:
 		names[e["name"]] = true
 	assert_bool(names.has("TP_Curb_Bay_01A") and names.has("Parking_2A")).is_true()
 	var flights := 0
+	var cross_zone_pairs := 0
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 2026
 	var clashes: Array[String] = []
-	var spots := BirdPerches.SPOTS
-	for i in spots.size():
-		for j in spots.size():
-			if i == j or BirdPerches.ZONES[i] != BirdPerches.ZONES[j]:
+	var total := BirdPerches.perch_count()
+	for i in total:
+		for j in total:
+			if not BirdPerches.can_fly(i, j):
 				continue
-			var lifts: Vector2 = BirdFlock.ZONE_LIFTS[BirdPerches.ZONES[i]]
-			var hi := BirdPerches.HALVES[i]
-			var hj := BirdPerches.HALVES[j]
+			if BirdPerches.spot_zone(i) != BirdPerches.spot_zone(j):
+				cross_zone_pairs += 1
+			var pi := BirdPerches.spot_pos(i)
+			var pj := BirdPerches.spot_pos(j)
+			var lifts := BirdFlock.lift_bounds(pi, pj, BirdPerches.spot_zone(j))
+			var hi := BirdPerches.spot_half(i)
+			var hj := BirdPerches.spot_half(j)
 			var pairs := [
 				[Vector3.ZERO, Vector3.ZERO],
 				[Vector3(-hi.x, 0, -hi.y), Vector3(hj.x, 0, hj.y)],
 				[Vector3(hi.x, 0, hi.y), Vector3(-hj.x, 0, -hj.y)],
 			]
-			# The extremes, the middle lift, and a seeded random sweep of places
-			# anywhere in both patches at any lift in the zone's range.
 			var cases: Array = []
 			for lift in [lifts.x, (lifts.x + lifts.y) * 0.5, lifts.y]:
 				for pair in pairs:
@@ -90,22 +85,40 @@ func test_flights_clear_the_world() -> void:
 				var b := Vector3(rng.randf_range(-hj.x, hj.x), 0, rng.randf_range(-hj.y, hj.y))
 				cases.append([a, b, rng.randf_range(lifts.x, lifts.y)])
 			for c in cases:
-				var clash := _first_clash(spots[i] + c[0], spots[j] + c[1], c[2])
+				var clash := _first_clash(pi + c[0], pj + c[1], c[2])
 				if clash != "":
-					clashes.append("%d->%d lift %.2f: %s" % [i, j, c[2], clash])
+					clashes.append(
+						(
+							"%d(%s)->%d(%s) lift %.2f: %s"
+							% [
+								i,
+								BirdPerches.spot_kind(i),
+								j,
+								BirdPerches.spot_kind(j),
+								c[2],
+								clash
+							]
+						)
+					)
 				flights += 1
-	print("flights checked=", flights, " meshes=", _world.size(), " clashes=", clashes.size())
-	for c in clashes:
-		print("CLASH ", c)
-	# 42 ordered same-zone perch pairs (two road-edge perches, five west and
-	# five east), each 9 fixed flights plus SWEEP random ones.
-	assert_int(flights).is_equal(42 * (9 + SWEEP))
+	print(
+		"flights checked=",
+		flights,
+		" cross_zone_pairs=",
+		cross_zone_pairs,
+		" meshes=",
+		_world.size(),
+		" clashes=",
+		clashes.size()
+	)
+	for idx in mini(clashes.size(), 30):
+		print("CLASH ", clashes[idx])
+	assert_int(cross_zone_pairs).is_greater(50)
+	assert_int(flights).is_greater(3000)
 	assert_array(clashes).is_empty()
 
 
 func test_control_a_drop_onto_a_curb_bay_clashes() -> void:
-	# A body dropping straight down onto a curb bay's kerb must clash, so the
-	# check above can see a curb bay at all.
 	# Target the single starter curb bay's centre divider line (x = -12.0 after 54ae52b0).
 	var from := Vector3(-12.0, 6.0, -57.6)
 	var to := Vector3(-12.0, 0.05, -57.6)

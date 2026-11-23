@@ -26,6 +26,7 @@ const MIN_LINEAR := 0.0001
 const POOL_SIZE := 8
 const PA_COOLDOWN_MS := 7500
 const PA_PRIORITY_COOLDOWN_MS := 2500
+const BIRD_SCATTER_COOLDOWN_MS := 5000
 const FINAL_CALL_POLL_TICKS := 10
 const FINAL_CALL_LEAD_TICKS := 300
 const STAR_MILESTONES: Array[float] = [3.0, 4.0, 5.0]
@@ -74,6 +75,7 @@ const SFX_COOLDOWN_MS := {
 	&"gate_chirp": 1600,
 	&"cafe_clink": 2400,
 	&"offer_chime": 1500,
+	&"bird_scatter": BIRD_SCATTER_COOLDOWN_MS,
 }
 const SFX_VOLUME_DB := {
 	&"checkin_stamp": -3.0,
@@ -82,6 +84,7 @@ const SFX_VOLUME_DB := {
 	&"gate_chirp": -4.0,
 	&"cafe_clink": -3.5,
 	&"offer_chime": -4.5,
+	&"bird_scatter": -10.0,
 }
 
 ## Shielded settings path during -s / --script runs (anti-pattern 1639342a).
@@ -95,6 +98,7 @@ var save_count := 0
 
 var _ambience_player: AudioStreamPlayer
 var _ambience_playing := false
+var _bird_player: AudioStreamPlayer
 var _pa_player: AudioStreamPlayer
 var _sfx_players: Array[AudioStreamPlayer] = []
 var _sfx_streams: Dictionary = {}
@@ -219,6 +223,8 @@ func reset_for_test() -> void:
 	_clock_ms = Callable()
 	for player in _sfx_players:
 		player.stop()
+	if _bird_player != null:
+		_bird_player.stop()
 	if _pa_player != null:
 		_pa_player.stop()
 	load_settings(DEFAULT_SETTINGS_PATH)
@@ -260,9 +266,15 @@ func is_ambience_playing() -> bool:
 	return _ambience_playing and _ambience_player != null and _ambience_player.playing
 
 
-## Plays `sfx_id` on the SFX bus when off cooldown; returns true when triggered.
+## Plays `sfx_id` on the SFX bus (or Ambience bus for `bird_scatter`) when off
+## cooldown; returns true when triggered.
 func play_sfx(sfx_id: StringName, ignore_cooldown := false) -> bool:
-	if not _sfx_streams.has(sfx_id) or _sfx_players.is_empty():
+	if not _sfx_streams.has(sfx_id):
+		return false
+	var use_bird := sfx_id == &"bird_scatter"
+	if use_bird and _bird_player == null:
+		return false
+	if not use_bird and _sfx_players.is_empty():
 		return false
 	var now := _now_ms()
 	var cooldown := int(SFX_COOLDOWN_MS.get(sfx_id, 0))
@@ -270,14 +282,26 @@ func play_sfx(sfx_id: StringName, ignore_cooldown := false) -> bool:
 		if now - int(_last_played_ms[sfx_id]) < cooldown:
 			return false
 	_last_played_ms[sfx_id] = now
-	var player := _sfx_players[_sfx_cursor]
-	_sfx_cursor = (_sfx_cursor + 1) % _sfx_players.size()
+	var player: AudioStreamPlayer
+	if use_bird:
+		player = _bird_player
+	else:
+		player = _sfx_players[_sfx_cursor]
+		_sfx_cursor = (_sfx_cursor + 1) % _sfx_players.size()
 	player.stream = _sfx_streams[sfx_id]
 	player.volume_db = float(SFX_VOLUME_DB.get(sfx_id, 0.0))
 	player.play()
 	_last_sfx = sfx_id
 	_sfx_counts[sfx_id] = int(_sfx_counts.get(sfx_id, 0)) + 1
 	return true
+
+
+## Plays the subtle wing-flutter/distant chirp scatter cue on the Ambience bus
+## when not paused, fast-forwarding, or suppressed, and off cooldown.
+func play_bird_scatter() -> bool:
+	if _suppress_events or _is_fast_forwarding() or _is_paused():
+		return false
+	return play_sfx(&"bird_scatter")
 
 
 func last_sfx() -> StringName:
@@ -405,6 +429,11 @@ func _setup_players() -> void:
 		var stream := load(SFX_PATHS[id]) as AudioStream
 		if stream != null:
 			_sfx_streams[id] = stream
+	_sfx_streams[&"bird_scatter"] = _build_bird_scatter_stream()
+	_bird_player = AudioStreamPlayer.new()
+	_bird_player.name = "BirdScatterPlayer"
+	_bird_player.bus = BUS_AMBIENCE
+	add_child(_bird_player)
 	_pa_player = AudioStreamPlayer.new()
 	_pa_player.name = "PAPlayer"
 	_pa_player.bus = BUS_SFX
@@ -1054,3 +1083,56 @@ func _on_wallet_transaction(amount: int, category: int, _claimed: Dictionary, _t
 	]
 	if lump_rewards.has(category):
 		play_sfx(&"cash_chime")
+
+
+static func _build_bird_scatter_stream() -> AudioStreamWAV:
+	const MIX_RATE := 22050
+	const DURATION_S := 0.36
+	var count := int(MIX_RATE * DURATION_S)
+	var bytes := PackedByteArray()
+	bytes.resize(count * 2)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20261123
+	var lp1 := 0.0
+	var lp2 := 0.0
+	var hp_prev := 0.0
+	var hp_out := 0.0
+	var lp_alpha := 0.28
+	var hp_alpha := 0.93
+	var phase1 := 0.0
+	var phase2 := 0.0
+	for i in count:
+		var t := float(i) / float(MIX_RATE)
+		# Soft 4-beat wing-flutter bursts (feathered band-passed air pulses).
+		var flutter_env := 0.0
+		for beat in [0.03, 0.105, 0.18, 0.255]:
+			var dt := (t - float(beat)) / 0.024
+			flutter_env += exp(-dt * dt)
+		var raw_noise := rng.randf_range(-1.0, 1.0)
+		lp1 += lp_alpha * (raw_noise - lp1)
+		lp2 += lp_alpha * (lp1 - lp2)
+		hp_out = hp_alpha * (hp_out + lp2 - hp_prev)
+		hp_prev = lp2
+		var flutter := hp_out * flutter_env * exp(-t * 2.2) * 0.42
+		# Two gentle distant crow chirps tucked softly behind the flutter.
+		var chirp := 0.0
+		if t >= 0.04 and t <= 0.12:
+			var u := (t - 0.04) / 0.08
+			var f := lerpf(920.0, 740.0, u)
+			phase1 += TAU * f / float(MIX_RATE)
+			chirp += (sin(phase1) + 0.35 * sin(phase1 * 2.0)) * sin(PI * u) * 0.08
+		elif t >= 0.15 and t <= 0.24:
+			var u := (t - 0.15) / 0.09
+			var f := lerpf(860.0, 690.0, u)
+			phase2 += TAU * f / float(MIX_RATE)
+			chirp += (sin(phase2) + 0.35 * sin(phase2 * 2.0)) * sin(PI * u) * 0.06
+		var fade := minf(t / 0.012, 1.0) * minf((DURATION_S - t) / 0.045, 1.0)
+		var sample := clampf((flutter + chirp) * fade, -0.85, 0.85)
+		var pcm := int(round(sample * 32767.0))
+		bytes.encode_s16(i * 2, pcm)
+	var wav := AudioStreamWAV.new()
+	wav.format = AudioStreamWAV.FORMAT_16_BITS
+	wav.mix_rate = MIX_RATE
+	wav.stereo = false
+	wav.data = bytes
+	return wav
