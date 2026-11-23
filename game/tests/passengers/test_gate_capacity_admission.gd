@@ -338,3 +338,35 @@ func test_stale_front_is_dropped_without_reserving_a_gate_spot_or_setting_gate_f
 	assert_int(stale_gate.station).is_equal(99)
 	assert_int(stale_gate.stuck).is_equal(Passenger.Stuck.NONE)
 	assert_int(spots.reserved_of(stale_gate.id)).is_equal(StandingSpots.NO_SPOT)
+
+
+## A passenger handed back to TO_GATE from CAFE_STANDING_UP via VisitHandBack
+## plans its gate seat/spot on tick T + 1 without stalling up to BEAT_TICKS.
+func test_visit_hand_back_to_gate_plans_spot_on_next_tick() -> void:
+	var grid := BuildGrid.new()
+	CafeTestLayout.build(grid)
+	var world := PassengerTestWorld.make(grid, FlightSim.schedule_starts(0))
+	_world = world
+	var p := world.passenger(world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	p.carry_on = 1
+	p.hunger = 0
+	p.cafe_cooldown = 1000000
+	p.liquids = false
+	p.alarm = false
+	while p.stage != Passenger.Stage.TO_GATE and world.clock.tick < 3000:
+		world.step()
+	assert_bool(world.sim.cafes.try_visit(p)).is_true()
+	while p.stage != Passenger.Stage.CAFE_STANDING_UP and world.clock.tick < 3000:
+		world.step()
+	while p.stage == Passenger.Stage.CAFE_STANDING_UP and world.clock.tick < 3000:
+		world.step()
+	assert_int(p.stage).is_equal(Passenger.Stage.TO_GATE)
+	var hand_back_tick := world.clock.tick
+	assert_int(p.stage_tick).is_equal(hand_back_tick)
+	assert_int(posmod(hand_back_tick + 1, PassengerSim.BEAT_TICKS)).is_not_equal(
+		posmod(p.id, PassengerSim.BEAT_TICKS)
+	)
+	world.step()
+	var claimed := p.seat_object != 0 or world.sim.standing.spot_of(p.id) != StandingSpots.NO_SPOT
+	assert_bool(claimed).is_true()
+	assert_bool(world.sim.standing.is_held(p)).is_false()

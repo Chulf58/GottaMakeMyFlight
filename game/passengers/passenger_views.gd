@@ -1276,7 +1276,7 @@ func _pose(node: Node3D, p: Passenger, built: Dictionary) -> float:
 			p,
 			fidget_rec,
 			float(sim.tick) if sim != null else _now(),
-			moving or step_moved,
+			moving or (step_moved and not _snapping),
 			clip,
 			seat_pose,
 			activity,
@@ -1351,7 +1351,9 @@ func _pose(node: Node3D, p: Passenger, built: Dictionary) -> float:
 
 ## The sim time now, in ticks, as frames draw it.
 func _now() -> float:
-	return clock.tick + clock.alpha if clock != null else 0.0
+	if clock != null:
+		return clock.tick + clock.alpha
+	return float(sim.tick) if sim != null else 0.0
 
 
 ## Turns a view one tick toward what it faces now (PassengerTurns): a seated
