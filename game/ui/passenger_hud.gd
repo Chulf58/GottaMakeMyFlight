@@ -41,6 +41,8 @@ extends CanvasLayer
 const PLAYTEST_HOOK := preload("res://debug/playtest_hook.gd")
 ## Above BuildMenu's layer, so the intro's backdrop covers the build bar too.
 const INTRO_LAYER := 10
+## Real-time settle delay on New Airport boot before the intro phone rings.
+const INTRO_RING_DELAY_S := 2.0
 const DEBUG_BATCH := 300
 const DEBUG_POLICY_TEXT := "Debug only: the terminal is free with no refunds; passengers pay fees."
 ## Where the follow text's bottom edge sits, up from the bottom of the screen.
@@ -133,6 +135,7 @@ var _panel_room := PanelRoom.new()
 var _unreported: Array[String] = []
 var _intro_layer: CanvasLayer
 var _intro_ring: IntroDialogue.PhoneRingCue
+var _intro_ring_delay_s := 0.0
 var _intro: IntroDialogue
 ## The intro's hold on the clock (SimClock.holds), which does not give way to
 ## the player: the clock starts when the intro closes, as its text says.
@@ -278,7 +281,7 @@ func _ready() -> void:
 		_playtest_switch_on(),
 		not GameBoot.load_path.is_empty()
 	):
-		open_intro()
+		open_intro(INTRO_RING_DELAY_S)
 	if save_game != null:
 		save_game.loaded.connect(_on_save_loaded)
 	if clock != null:
@@ -770,15 +773,17 @@ func unlock_guide() -> UnlockGuide:
 	return _unlock_guide
 
 
-## Pauses the clock and opens the intro dialogue after a brief ringing-phone
-## icon + ring sound beat, which stops the camera: at once, or, while another
-## exclusive dialog has the turn, when that one closes. Refused (false) when it
-## was already shown this session or is open/ringing.
-func open_intro() -> bool:
+## Pauses the clock and opens the intro dialogue after an optional settle delay
+## (`ring_delay_s`) and a ringing-phone icon + ring sound beat, which stops the
+## camera: at once, or, while another exclusive dialog has the turn, when that
+## one closes. Refused (false) when it was already shown this session or is
+## open/ringing.
+func open_intro(ring_delay_s: float = 0.0) -> bool:
 	if IntroDialogue.shown_this_session or _intro != null or _intro_ring != null or clock == null:
 		return false
 	IntroDialogue.shown_this_session = true
 	_incidents_prompt_pending = true
+	_intro_ring_delay_s = maxf(0.0, ring_delay_s)
 	_intro_hold = clock.holds.take_turn(self, _start_intro_ring)
 	return true
 
@@ -791,7 +796,7 @@ func _start_intro_ring() -> void:
 	if not _intro_layer.tree_exiting.is_connected(_close_intro):
 		_intro_layer.tree_exiting.connect(_close_intro)
 	_set_intro_camera_gated(true)
-	_intro_ring.start_ring(true, true)
+	_intro_ring.start_ring(true, true, _intro_ring_delay_s)
 
 
 func _on_intro_ring_answered() -> void:
@@ -829,6 +834,7 @@ func _set_intro_camera_gated(closed: bool) -> void:
 
 
 func _free_intro_ring() -> void:
+	_intro_ring_delay_s = 0.0
 	var ring := _intro_ring
 	_intro_ring = null
 	if is_instance_valid(ring):
@@ -1014,6 +1020,7 @@ func _fit_follow() -> void:
 ## intro's hold, so the clock runs at the player's own speed unless another
 ## hold still pauses it. Later calls find nothing open and do nothing.
 func _close_intro() -> void:
+	_intro_ring_delay_s = 0.0
 	if (
 		_intro_layer == null
 		and _intro_ring == null
@@ -1041,6 +1048,7 @@ func _close_intro() -> void:
 ## incident setting. Its hold is already gone, as incident_panel's is.
 func _end_intro_on_load() -> void:
 	_incidents_prompt_pending = false
+	_intro_ring_delay_s = 0.0
 	if (
 		_intro_layer == null
 		and _intro_ring == null

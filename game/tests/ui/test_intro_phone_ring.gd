@@ -236,3 +236,152 @@ func test_boot_load_skips_intro_ring_without_latching_session() -> void:
 	for path in [save_path, save_path + ".tmp", alerts_path, dep_path]:
 		if FileAccess.file_exists(path):
 			DirAccess.remove_absolute(path)
+
+
+func _push_key(keycode: Key) -> void:
+	var key := InputEventKey.new()
+	key.keycode = keycode
+	key.physical_keycode = keycode
+	key.pressed = true
+	_port.push_input(key)
+
+
+func test_ready_on_new_airport_boot_uses_intro_ring_delay_and_holds_clock() -> void:
+	assert_float(PassengerHud.INTRO_RING_DELAY_S).is_equal(2.0)
+	var alerts_path := SaveTestKit.run_path("boot_new_alerts")
+	var dep_path := SaveTestKit.run_path("boot_new_dep")
+	var prev_scene := get_tree().current_scene
+	var prev_load := GameBoot.load_path
+	var host := Node.new()
+	get_tree().root.add_child(host)
+	get_tree().current_scene = host
+	GameBoot.load_path = ""
+
+	var hud := PassengerHud.new()
+	hud.clock = _world.clock
+	hud.flights = _world.flights
+	hud.sim = _world.sim
+	hud.alert_settings_path = alerts_path
+	hud.departures_settings_path = dep_path
+	host.add_child(hud)
+
+	assert_bool(hud._in_current_scene()).is_true()
+	assert_bool(IntroDialogue.shown_this_session).is_true()
+	assert_bool(_world.clock.paused).is_true()
+	assert_int(_world.clock.holds.count()).is_equal(1)
+	assert_object(hud.intro()).is_null()
+	var cue := hud.find_child("PhoneRingCue", true, false) as IntroDialogue.PhoneRingCue
+	assert_object(cue).is_not_null()
+	assert_bool(cue.is_ringing()).is_false()
+	assert_bool(cue.is_visible_in_tree()).is_false()
+	assert_float(hud._intro_ring_delay_s).is_equal(PassengerHud.INTRO_RING_DELAY_S)
+	var audio := get_node_or_null("/root/GameAudio")
+	if audio != null and audio.has_method(&"sfx_count"):
+		assert_int(audio.sfx_count(&"phone_ring")).is_equal(0)
+
+	hud.dismiss_intro()
+	assert_bool(_world.clock.paused).is_false()
+	assert_int(_world.clock.holds.count()).is_equal(0)
+
+	get_tree().current_scene = prev_scene
+	GameBoot.load_path = prev_load
+	host.free()
+	for path in [alerts_path, dep_path]:
+		if FileAccess.file_exists(path):
+			DirAccess.remove_absolute(path)
+
+
+func test_pre_ring_delay_holds_clock_ignores_keys_then_rings_and_auto_opens() -> void:
+	var delay_s := 0.25
+	assert_bool(_hud.open_intro(delay_s)).is_true()
+	assert_bool(_world.clock.paused).is_true()
+	assert_int(_world.clock.holds.count()).is_equal(1)
+	assert_object(_hud.intro()).is_null()
+	var cue := _ring_cue()
+	assert_object(cue).is_not_null()
+	assert_bool(cue.is_ringing()).is_false()
+	assert_bool(cue.is_visible_in_tree()).is_false()
+	var audio := get_node_or_null("/root/GameAudio")
+	if audio != null and audio.has_method(&"sfx_count"):
+		assert_int(audio.sfx_count(&"phone_ring")).is_equal(0)
+
+	_push_key(KEY_SPACE)
+	_push_key(KEY_ENTER)
+	assert_object(_hud.intro()).is_null()
+	assert_bool(cue.is_ringing()).is_false()
+	assert_bool(_world.clock.paused).is_true()
+	if audio != null and audio.has_method(&"sfx_count"):
+		assert_int(audio.sfx_count(&"phone_ring")).is_equal(0)
+
+	await get_tree().create_timer(delay_s + 0.05).timeout
+	assert_bool(cue.is_ringing()).is_true()
+	assert_bool(cue.is_visible_in_tree()).is_true()
+	assert_object(_hud.intro()).is_null()
+	assert_bool(_world.clock.paused).is_true()
+	if audio != null and audio.has_method(&"sfx_count"):
+		assert_int(audio.sfx_count(&"phone_ring")).is_equal(1)
+
+	await get_tree().create_timer(IntroDialogue.PhoneRingCue.RING_DURATION_S + 0.15).timeout
+	assert_object(_hud.intro()).is_not_null()
+	assert_bool(_world.clock.paused).is_true()
+	assert_int(_world.clock.holds.count()).is_equal(1)
+
+	_hud.dismiss_intro()
+	assert_bool(_world.clock.paused).is_false()
+	assert_int(_world.clock.holds.count()).is_equal(0)
+
+
+func test_pre_ring_delay_allows_early_space_answer_once_ringing() -> void:
+	var delay_s := 0.2
+	assert_bool(_hud.open_intro(delay_s)).is_true()
+	await get_tree().create_timer(delay_s + 0.05).timeout
+	var cue := _ring_cue()
+	assert_object(cue).is_not_null()
+	assert_bool(cue.is_ringing()).is_true()
+	assert_object(_hud.intro()).is_null()
+	_push_key(KEY_SPACE)
+	assert_bool(cue.is_ringing()).is_false()
+	assert_object(_hud.intro()).is_not_null()
+	assert_bool(_world.clock.paused).is_true()
+	_hud.dismiss_intro()
+	assert_bool(_world.clock.paused).is_false()
+
+
+func test_cancelling_during_pre_ring_delay_never_rings_or_opens_dialogue() -> void:
+	var delay_s := 0.2
+	assert_bool(_hud.open_intro(delay_s)).is_true()
+	var cue := _ring_cue()
+	assert_object(cue).is_not_null()
+	assert_bool(cue.is_ringing()).is_false()
+	_hud.dismiss_intro()
+	assert_int(_world.clock.holds.count()).is_equal(0)
+	assert_bool(_world.clock.paused).is_false()
+	assert_float(_hud._intro_ring_delay_s).is_equal(0.0)
+	await get_tree().create_timer(delay_s + 0.1).timeout
+	assert_object(_ring_cue()).is_null()
+	assert_object(_hud.intro()).is_null()
+	var audio := get_node_or_null("/root/GameAudio")
+	if audio != null and audio.has_method(&"sfx_count"):
+		assert_int(audio.sfx_count(&"phone_ring")).is_equal(0)
+	assert_bool(_world.clock.paused).is_false()
+
+	IntroDialogue.shown_this_session = false
+	var save := SaveGame.new()
+	_port.add_child(save)
+	_hud.save_game = save
+	assert_bool(_hud.open_intro(delay_s)).is_true()
+	assert_bool(_world.clock.paused).is_true()
+	_world.clock.holds.clear()
+	_world.clock.set_paused(true)
+	_hud._on_save_loaded(true)
+	await await_idle_frame()
+	assert_object(_ring_cue()).is_null()
+	assert_object(_hud.intro()).is_null()
+	assert_int(_hud._camera_gates).is_equal(0)
+	assert_int(_world.clock.holds.count()).is_equal(0)
+	assert_float(_hud._intro_ring_delay_s).is_equal(0.0)
+	await get_tree().create_timer(delay_s + 0.1).timeout
+	assert_object(_ring_cue()).is_null()
+	assert_object(_hud.intro()).is_null()
+	if audio != null and audio.has_method(&"sfx_count"):
+		assert_int(audio.sfx_count(&"phone_ring")).is_equal(0)
