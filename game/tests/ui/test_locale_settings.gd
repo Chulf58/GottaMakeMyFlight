@@ -243,7 +243,7 @@ func test_game_menu_updates_in_place_preserving_settings_page_and_hold() -> void
 	kit.port.free()
 
 
-func test_build_menu_live_refresh_preserves_open_category_and_filter() -> void:
+func test_build_menu_live_refresh_preserves_open_category_across_locale_change() -> void:
 	var port := auto_free(SubViewport.new()) as SubViewport
 	port.size = Vector2i(1536, 864)
 	add_child(port)
@@ -255,23 +255,17 @@ func test_build_menu_live_refresh_preserves_open_category_and_filter() -> void:
 	port.add_child(menu)
 	var ops := BuildMenu.category_index("operations")
 	menu.press_category(ops)
-	var filters := BuildMenuCatalog.subfilters("operations")
-	var second_filter := str(filters[1]["id"])
-	menu.press_filter(second_filter)
 	assert_int(menu.open_category()).is_equal(ops)
-	assert_str(menu.active_filter()).is_equal(second_filter)
 	_settings().apply_locale("ja", false)
 	assert_int(menu.open_category()).is_equal(ops)
-	assert_str(menu.active_filter()).is_equal(second_filter)
+	assert_bool(menu.is_tray_open()).is_true()
 	assert_str(menu.category_button(ops).tooltip_text).is_equal(
 		TranslationServer.translate("Operations", "build menu")
-	)
-	assert_str(menu.filter_button("all").text).is_equal(
-		TranslationServer.translate("All", "build menu")
 	)
 	assert_str(menu.card(BuildMode.Tool.DESK).get_child(0).get_node("Name").text).is_equal(
 		TranslationServer.translate("Check-in desk", "build menu")
 	)
+	assert_float(menu.tray().get_global_rect().size.x).is_less_equal(BuildMenu.COLUMN_W + 0.5)
 
 
 func test_world_views_clear_cache_and_dirty_redraw_on_locale_change() -> void:

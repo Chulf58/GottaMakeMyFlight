@@ -4,8 +4,8 @@ extends GdUnitTestSuite
 ## rooms-with-their-pieces-kept-in-each-sa and hud-layout-templates-tab-
 ## refinement-320-px-right-rail-compac): its button sits inside the bottom
 ## icon bar between the domain tabs and Remove (no detached TemplatesDock),
-## opens the 136 px tray with no tool picked and build mode on, and renders
-## uniform 96x118 preview cards with size/lock badges.
+## opens the 106 px tray with no tool picked and build mode on, and renders
+## uniform 80x96 preview cards with size/lock badges.
 
 var _port: SubViewport
 var _finances: Finances

@@ -1,8 +1,8 @@
 class_name BuildMenuLayout
 extends RefCounted
-## The build menu's UI built in code: the category bar, the horizontal-scroll
-## item tray and its compact cards (Thumbnail + Name + Price), the status card
-## (status line, rotate hint and cost line) and the money slot (split out of
+## The build menu's UI built in code: the category bar, the wrapping grid
+## item tray and its compact 80x96 cards (Thumbnail + Name + Price), the status
+## card (status line, rotate hint and cost line) and the money slot (split out of
 ## BuildMenu, which calls these from _ready). Static only: each function takes
 ## the menu and fills its node and lookup members in the order the menu always
 ## did, so node names, paths and draw order stay as they were.
@@ -12,8 +12,9 @@ const COIN_ICON := "res://assets/ui/icons/coin.svg"
 ## The coin's side and the gap between it and the amount.
 const COIN_SIDE := HudLayout.CHIP_H - 4
 const COIN_GAP := 6
-## A card's padding on each side of its column.
+## A card's horizontal and vertical padding inside its 80x96 button.
 const CARD_PAD := 4.0
+const CARD_PAD_Y := 2.0
 ## A card name wraps onto at most two lines, then drops one font step
 ## (decision build-menu-card-names-wrap-to-two-lines-then-shrink-a-font-s).
 const CARD_LINES := 2
@@ -93,53 +94,25 @@ static func build_tray(menu: BuildMenu) -> void:
 	anchor_bottom_centre(menu._tray, BuildMenu.MARGIN + BuildMenu.BAR_H + BuildMenu.GAP)
 	menu.add_child(menu._tray)
 	menu._tray_root.name = "TrayRoot"
-	menu._tray_root.add_theme_constant_override("separation", 4)
+	menu._tray_root.add_theme_constant_override("separation", 0)
 	menu._tray_root.mouse_filter = Control.MOUSE_FILTER_PASS
 	menu._tray.add_child(menu._tray_root)
-	menu._filter_scroll.name = "FilterScroll"
-	menu._filter_scroll.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	menu._filter_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	menu._filter_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
-	menu._filter_scroll.clip_contents = true
-	menu._filter_scroll.visible = false
-	menu._filter_scroll.mouse_filter = Control.MOUSE_FILTER_PASS
-	menu._tray_root.add_child(menu._filter_scroll)
-	menu._filter_bar.name = "FilterBar"
-	menu._filter_bar.add_theme_constant_override("separation", 6)
-	menu._filter_bar.alignment = BoxContainer.ALIGNMENT_CENTER
-	menu._filter_bar.custom_minimum_size = Vector2(0.0, float(HudLayout.TRAY_FILTER_H - 4))
-	menu._filter_bar.visible = false
-	menu._filter_bar.mouse_filter = Control.MOUSE_FILTER_PASS
-	menu._filter_bar.minimum_size_changed.connect(menu._sync_filter_width)
-	menu._filter_scroll.add_child(menu._filter_bar)
-	menu._scroll.name = "TrayScroll"
-	# Ignore on the ScrollContainer itself so wheel events over cards and over tray
-	# padding both reach _tray._on_tray_gui_input with one unified WHEEL_STEP while
-	# child cards and the internal HScrollBar keep their own mouse input.
-	menu._scroll.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	menu._scroll.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	menu._scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	menu._scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_RESERVE
-	menu._scroll_content.name = "TrayRows"
-	menu._scroll_content.mouse_filter = Control.MOUSE_FILTER_PASS
-	menu._scroll_content.add_theme_constant_override("separation", 0)
-	menu._scroll_content.minimum_size_changed.connect(menu._sync_scroll_width)
-	menu._scroll.add_child(menu._scroll_content)
-	menu._tray_root.add_child(menu._scroll)
 	var cats := BuildMenuCatalog.categories()
 	for i in cats.size():
-		var row := HBoxContainer.new()
-		row.name = "Row_" + str(cats[i]["id"])
-		row.mouse_filter = Control.MOUSE_FILTER_PASS
-		row.add_theme_constant_override("separation", 6)
-		row.alignment = BoxContainer.ALIGNMENT_CENTER
-		menu._scroll_content.add_child(row)
-		menu._rows.append(row)
+		var grid := GridContainer.new()
+		grid.name = "Grid_" + str(cats[i]["id"])
+		grid.columns = BuildMenu.MAX_COLUMNS
+		grid.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		grid.mouse_filter = Control.MOUSE_FILTER_PASS
+		grid.add_theme_constant_override("h_separation", BuildMenu.CARD_SEP)
+		grid.add_theme_constant_override("v_separation", BuildMenu.CARD_SEP)
+		menu._tray_root.add_child(grid)
+		menu._rows.append(grid)
 		for tool in cats[i]["tools"]:
 			if BuildMenuCatalog.item(tool).is_empty():
 				continue
 			var button := make_card(menu, tool)
-			row.add_child(button)
+			grid.add_child(button)
 			menu._cards[tool] = button
 
 
@@ -181,6 +154,7 @@ static func make_card(menu: BuildMenu, tool: BuildMode.Tool) -> Button:
 	name_label.name = "Name"
 	name_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	name_label.add_theme_constant_override(&"line_spacing", 0)
 	var price_label := card_label(column, _words.free_price(), &"HudPrice", PRICE_LINES)
 	price_label.name = "Price"
 	menu._price_labels[tool] = price_label
@@ -230,18 +204,6 @@ static func add_card_badge(
 	return pill
 
 
-## Lightweight compact pill button for wide-tray sub-filter strips.
-static func make_filter_pill(text: String) -> Button:
-	var btn := Button.new()
-	btn.theme = BuildMenu.HUD_THEME
-	btn.theme_type_variation = &"HudButtonCompact"
-	btn.toggle_mode = true
-	btn.focus_mode = Control.FOCUS_NONE
-	btn.text = text
-	btn.add_theme_font_size_override(&"font_size", HudLayout.FIT_STEP)
-	return btn
-
-
 static func sync_status_card_bottom(card: Control, bottom: float) -> void:
 	card.offset_top = -bottom - BuildMenu.STATUS_H
 	card.offset_bottom = -bottom
@@ -251,10 +213,10 @@ static func card_column(button: Button) -> VBoxContainer:
 	var column := VBoxContainer.new()
 	column.set_anchors_preset(Control.PRESET_FULL_RECT)
 	column.offset_left = CARD_PAD
-	column.offset_top = CARD_PAD
+	column.offset_top = CARD_PAD_Y
 	column.offset_right = -CARD_PAD
-	column.offset_bottom = -CARD_PAD
-	column.add_theme_constant_override("separation", 1)
+	column.offset_bottom = -CARD_PAD_Y
+	column.add_theme_constant_override("separation", 0)
 	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	button.add_child(column)
 	return column
@@ -288,36 +250,72 @@ static func watch_fit(button: Button) -> void:
 			(label as Label).draw.connect(fit_card.bind(button), CONNECT_DEFERRED)
 
 
-## Wraps Name onto up to CARD_LINES lines at the caption size, one font step
-## smaller only when that is still not enough (decision
-## build-menu-card-names-wrap-to-two-lines-then-shrink-a-font-s), fits single-line
-## Price onto PRICE_LINES, and keeps Thumbnail fixed at BuildMenu.THUMB_SIZE
-## across both 1-line and 2-line card names. Measured from the font, not the
-## Label, because a wrapping Label reports its height only after the container
-## has sized it.
+## Fits Name (up to CARD_LINES lines) and Price (1 line) inside `button` without
+## clipping horizontally or overflowing vertically, while keeping Thumbnail fixed
+## at BuildMenu.THUMB_SIZE. Measured from the font, not the Label, because a
+## wrapping Label reports its height only after the container has sized it.
 static func fit_card(button: Button) -> void:
 	if not button.is_inside_tree():
 		return
 	var column := button.get_child(0) as VBoxContainer
 	var width := button.custom_minimum_size.x - 2.0 * CARD_PAD
+	var labels: Array[Label] = []
+	var thumb_h := 0.0
 	for child in column.get_children():
-		if not child is Label:
-			continue
-		var label := child as Label
-		var font := label.get_theme_font(&"font")
-		# atr() is the text the Label draws (it honours auto_translate_mode), so the
-		# fit measures what is shown, whether it is expanded once or twice.
-		var text := label.atr(label.text)
+		if child is Label:
+			labels.append(child as Label)
+		elif child is Control and (child as Control).visible:
+			thumb_h += (child as Control).custom_minimum_size.y
+	if labels.is_empty():
+		return
+	var sep := (
+		float(column.get_theme_constant(&"separation"))
+		* float(maxi(0, column.get_child_count() - 1))
+	)
+	var inner_h := button.custom_minimum_size.y - 2.0 * CARD_PAD_Y - thumb_h - sep
+	var name_label: Label = null
+	var used_h := 0.0
+	for label in labels:
 		var max_lines := label.max_lines_visible if label.max_lines_visible > 0 else CARD_LINES
-		var size := HudLayout.fit_size(text, font, HudLayout.CAPTION, width, max_lines)
-		if max_lines == 1:
-			while (
-				size > 9
-				and font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x > width
-			):
-				size -= 1
+		if max_lines > 1 and name_label == null:
+			name_label = label
+			continue
+		var font := label.get_theme_font(&"font")
+		var text := label.atr(label.text)
+		var size := _fit_font_to_width(text, font, width, max_lines)
 		if label.get_theme_font_size(&"font_size") != size:
 			label.add_theme_font_size_override(&"font_size", size)
+		used_h += font.get_height(size)
+	if name_label != null:
+		var font := name_label.get_theme_font(&"font")
+		var text := name_label.atr(name_label.text)
+		var max_lines := name_label.max_lines_visible
+		var size := _fit_font_to_width(text, font, width, max_lines)
+		var avail_h := maxf(0.0, inner_h - used_h)
+		var line_sp := float(name_label.get_theme_constant(&"line_spacing"))
+		while size > 9:
+			var lines := HudLayout.line_count(text, font, size, width)
+			var needed_h := (
+				float(lines) * font.get_height(size) + float(maxi(0, lines - 1)) * line_sp
+			)
+			if needed_h <= avail_h + 0.5:
+				break
+			size = HudLayout.step_down(size) if size > HudLayout.FIT_STEP else size - 1
+		if name_label.get_theme_font_size(&"font_size") != size:
+			name_label.add_theme_font_size_override(&"font_size", size)
+
+
+static func _fit_font_to_width(text: String, font: Font, width: float, max_lines: int) -> int:
+	var size := HudLayout.fit_size(text, font, HudLayout.CAPTION, width, max_lines)
+	while (
+		size > 9
+		and (
+			HudLayout.line_count(text, font, size, width) > max_lines
+			or HudLayout.widest_word(text, font, size) > width
+		)
+	):
+		size -= 1
+	return size
 
 
 static func size_text(tool: BuildMode.Tool) -> String:

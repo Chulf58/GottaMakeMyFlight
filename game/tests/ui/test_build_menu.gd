@@ -1,8 +1,8 @@
 class_name TestBuildMenu
 extends GdUnitTestSuite
-## BuildMenu over a BuildMode: six domain tabs + Remove, compact cards picking
-## the tool, unbound 1-9/0 number keys, Esc, horizontal scroll + camera wheel
-## isolation, and where the status line sits.
+## BuildMenu over a BuildMode: seven domain tabs + Templates + Remove + Staff,
+## slider-free 9-column wrapping grid with compact 80x96 cards, unbound 1-9/0
+## number keys, Esc, camera wheel isolation, and where the status line sits.
 
 const BUILDING := 0
 const OPERATIONS := 1
@@ -233,6 +233,15 @@ func test_the_status_line_shows_a_refusal_above_the_tray_then_above_the_bar_when
 
 
 func test_every_tray_fits_its_reserved_space_and_expected_height() -> void:
+	var expected_rows := {
+		"building": 1,
+		"operations": 2,
+		"facilities": 3,
+		"food": 2,
+		"shops": 2,
+		"decor": 2,
+		"landside": 1,
+	}
 	_mode.set_tool(BuildMode.Tool.NONE)
 	for i in BuildMenu.CATEGORIES.size():
 		if i == BuildMenu.REMOVE_CATEGORY:
@@ -240,52 +249,46 @@ func test_every_tray_fits_its_reserved_space_and_expected_height() -> void:
 		_menu.category_button(i).pressed.emit()
 		await get_tree().process_frame
 		await get_tree().process_frame
-		var want_h := _menu.tray_height()
-		var expect_filtered := (
-			BuildMenu.category_id(i) in ["operations", "facilities", "food", "shops"]
-		)
-		assert_float(want_h).is_equal(
-			BuildMenu.TRAY_FILTERED_H if expect_filtered else BuildMenu.TRAY_H
-		)
+		var cat_id := BuildMenu.category_id(i)
+		var want_h := BuildMenu.tray_height_for_rows(int(expected_rows[cat_id]))
+		assert_float(_menu.tray_height()).override_failure_message(cat_id).is_equal(want_h)
 		var need := _menu.tray().get_combined_minimum_size()
 		var rect := _menu.tray().get_global_rect()
 		assert_float(need.y).is_less_equal(want_h)
 		assert_float(rect.size.y).is_equal(want_h)
+		assert_float(rect.size.x).is_less_equal(832.0)
 		assert_float(need.x).is_less_equal(BuildMenu.COLUMN_W)
 		assert_float(need.x).is_greater(BuildMenu.CARD_SIZE.x)
+		for scroller in _menu.tray().find_children("*", "ScrollContainer", true, false):
+			assert_bool((scroller as Control).is_visible_in_tree()).is_false()
 
 
-func test_subfilters_and_dividers_filter_wide_trays_and_reset_on_tool_pick() -> void:
-	var food := BuildMenu.category_index("food")
-	_menu.press_category(food)
+func test_wrapping_grid_shows_all_cards_with_no_subfilters_and_shrinks_on_tab_switch() -> void:
+	assert_object(_menu.find_child("FilterScroll", true, false)).is_null()
+	assert_object(_menu.find_child("FilterBar", true, false)).is_null()
+	assert_object(_menu.find_child("TrayScroll", true, false)).is_null()
+	assert_int(_menu.tray().find_children("*", "VSeparator", true, false).size()).is_equal(0)
+	_menu.press_category(FACILITIES)
 	await get_tree().process_frame
 	await get_tree().process_frame
-	assert_float(_menu.tray_height()).is_equal(BuildMenu.TRAY_FILTERED_H)
-	assert_int(_menu.filter_buttons().size()).is_equal(3)
-	assert_bool(_menu.filter_button("all").button_pressed).is_true()
-	var food_row := _menu.card(BuildMode.Tool.CAFE_ROOM).get_parent()
-	var vis_seps := 0
-	for child in food_row.get_children():
-		if child is VSeparator and (child as Control).visible:
-			vis_seps += 1
-	assert_int(vis_seps).is_equal(3)
-	_menu.press_filter("rooms")
+	var facilities_grid := _menu.card(BuildMode.Tool.TOILET_ROOM).get_parent() as GridContainer
+	assert_object(facilities_grid).is_instanceof(GridContainer)
+	assert_int(facilities_grid.columns).is_equal(9)
+	assert_float(_menu.tray_height()).is_equal(BuildMenu.tray_height_for_rows(3))
+	assert_float(_menu.tray().size.y).is_equal(BuildMenu.tray_height_for_rows(3))
+	for tool: BuildMode.Tool in BuildMenu.CATEGORIES[FACILITIES]["tools"]:
+		assert_bool(_menu.card(tool).is_visible_in_tree()).is_true()
+	# Switching from 3-row Facilities (310 px) back to 1-row Building (106 px) shrinks
+	# PanelContainer.size.y immediately (anti-pattern 1caf2bb3).
+	_menu.press_category(BUILDING)
 	await get_tree().process_frame
-	assert_bool(_menu.card(BuildMode.Tool.CAFE_ROOM).is_visible_in_tree()).is_true()
-	assert_bool(_menu.card(BuildMode.Tool.BAR_ROOM).is_visible_in_tree()).is_true()
-	assert_bool(_menu.card(BuildMode.Tool.COUNTER).is_visible_in_tree()).is_false()
-	vis_seps = 0
-	for child in food_row.get_children():
-		if child is VSeparator and (child as Control).visible:
-			vis_seps += 1
-	assert_int(vis_seps).is_equal(0)
-	# Picking an item outside the active filter resets filter back to "all".
-	_mode.set_tool(BuildMode.Tool.COUNTER)
-	assert_str(_menu.active_filter()).is_equal("all")
-	assert_bool(_menu.card(BuildMode.Tool.COUNTER).is_visible_in_tree()).is_true()
+	await get_tree().process_frame
+	assert_float(_menu.tray_height()).is_equal(BuildMenu.TRAY_H)
+	assert_float(_menu.tray().size.y).is_equal(BuildMenu.TRAY_H)
+	assert_float(_menu.tray().size.x).is_equal(7.0 * 80.0 + 6.0 * 6.0 + 24.0)
 
 
-func test_mouse_wheel_over_tray_scrolls_horizontally_and_never_zooms_camera() -> void:
+func test_mouse_wheel_over_tray_never_zooms_camera_and_has_no_horizontal_slider() -> void:
 	var camera := TycoonCamera.new()
 	camera.settings_path = SaveTestKit.run_path("build_menu_wheel_cam")
 	var eye := Camera3D.new()
@@ -306,56 +309,27 @@ func test_mouse_wheel_over_tray_scrolls_horizontally_and_never_zooms_camera() ->
 	var tray_rect := _menu.tray().get_global_rect()
 	var card_pt := _menu.card(BuildMode.Tool.BUSH).get_global_rect().get_center()
 	var pad_pt := tray_rect.position + Vector2(6.0, 6.0)
-	assert_int(_menu.tray_scroll().scroll_horizontal).is_equal(0)
-	# At left scroll end: wheel up does not zoom camera.
-	_wheel(MOUSE_BUTTON_WHEEL_UP, card_pt)
-	assert_float(camera.target_distance).is_equal(start_dist)
-	# Unified step: wheel down over a card and over tray padding move by the same WHEEL_STEP.
-	_wheel(MOUSE_BUTTON_WHEEL_DOWN, card_pt)
-	var card_step := _menu.tray_scroll().scroll_horizontal
-	_wheel(MOUSE_BUTTON_WHEEL_DOWN, pad_pt)
-	var pad_step := _menu.tray_scroll().scroll_horizontal - card_step
-	assert_int(card_step).is_equal(roundi(BuildMenu.WHEEL_STEP))
-	assert_int(pad_step).is_equal(card_step)
-	assert_float(camera.target_distance).is_equal(start_dist)
-	# Scroll all the way past right end: still never zooms camera.
-	for _i in 40:
-		_wheel(MOUSE_BUTTON_WHEEL_DOWN, card_pt)
-	assert_float(camera.target_distance).is_equal(start_dist)
-	# Switching tabs resets scroll_horizontal to 0; short non-overflowing tab never zooms either.
-	var unlocks := BuildUnlocks.new()
-	unlocks.manual = true
-	unlocks.rating = auto_free(AirportRating.new())
-	unlocks.passengers = auto_free(PassengerSim.new())
-	_port.add_child(unlocks)
-	_mode.unlocks = unlocks
-	_mode.require_unlocks = true
-	_menu._refresh_cards()
-	_menu.press_category(FACILITIES)
-	await get_tree().process_frame
-	await get_tree().process_frame
-	assert_int(_menu.tray_scroll().scroll_horizontal).is_equal(0)
-	assert_float(_menu.tray().get_global_rect().size.x).is_less(BuildMenu.COLUMN_W)
-	var short_center := _menu.tray().get_global_rect().get_center()
-	_wheel(MOUSE_BUTTON_WHEEL_UP, short_center)
-	_wheel(MOUSE_BUTTON_WHEEL_DOWN, short_center)
-	_wheel(MOUSE_BUTTON_WHEEL_LEFT, short_center)
-	_wheel(MOUSE_BUTTON_WHEEL_RIGHT, short_center)
+	for pt in [card_pt, pad_pt]:
+		_wheel(MOUSE_BUTTON_WHEEL_UP, pt)
+		_wheel(MOUSE_BUTTON_WHEEL_DOWN, pt)
+		_wheel(MOUSE_BUTTON_WHEEL_LEFT, pt)
+		_wheel(MOUSE_BUTTON_WHEEL_RIGHT, pt)
 	assert_float(camera.target_distance).is_equal(start_dist)
 	DirAccess.remove_absolute(camera.settings_path)
 
 
-func test_arming_offscreen_tool_on_closed_menu_scrolls_card_into_tray_view() -> void:
+func test_arming_last_card_tool_on_closed_menu_shows_card_in_wrapping_grid() -> void:
 	_mode.set_tool(BuildMode.Tool.NONE)
 	assert_bool(_menu.is_tray_open()).is_false()
 	_mode.set_tool(BuildMode.Tool.PLAY_SLIDE)
-	for _i in 4:
-		await get_tree().process_frame
+	await get_tree().process_frame
+	await get_tree().process_frame
 	var slide_card := _menu.card(BuildMode.Tool.PLAY_SLIDE)
 	var tray_rect := _menu.tray().get_global_rect()
 	var card_rect := slide_card.get_global_rect()
 	assert_int(_menu.open_category()).is_equal(BuildMenu.category_index("facilities"))
-	assert_int(_menu.tray_scroll().scroll_horizontal).is_greater(1000)
+	assert_bool(slide_card.is_visible_in_tree()).is_true()
+	assert_float(tray_rect.size.x).is_less_equal(832.0)
 	assert_bool(tray_rect.encloses(card_rect)).is_true()
 
 
@@ -392,7 +366,7 @@ func test_the_cafe_room_counter_and_table_cards_show_their_renders() -> void:
 		assert_int(picture.find_children("*", "ColorRect", true, false).size()).is_equal(0)
 
 
-func test_facilities_filter_bar_stays_within_640_px_tray_under_pseudolocale() -> void:
+func test_wrapping_grid_stays_rail_clear_under_pseudolocale_and_clamps_narrow_viewport() -> void:
 	PseudoLocale.enable(0.4)
 	var port := SubViewport.new()
 	port.size = Vector2i(1536, 864)
@@ -409,36 +383,24 @@ func test_facilities_filter_bar_stays_within_640_px_tray_under_pseudolocale() ->
 	await get_tree().process_frame
 	await get_tree().process_frame
 	var tray_rect := menu.tray().get_global_rect()
-	var filter_scroll := menu.filter_scroll()
-	var filter_bar := menu.find_child("FilterBar", true, false) as HBoxContainer
-	var filter_rect := filter_scroll.get_global_rect()
-	assert_int(menu.filter_buttons().size()).is_equal(5)
-	assert_bool(filter_scroll.is_visible_in_tree()).is_true()
-	assert_float(menu.tray_height()).is_equal(BuildMenu.TRAY_FILTERED_H)
-	assert_float(tray_rect.size.y).is_equal_approx(BuildMenu.TRAY_FILTERED_H, 0.5)
-	assert_float(tray_rect.size.x).is_less_equal(BuildMenu.COLUMN_W + 0.5)
-	assert_float(filter_rect.position.x).is_greater_equal(tray_rect.position.x - 0.5)
-	assert_float(filter_rect.end.x).is_less_equal(tray_rect.end.x + 0.5)
-	assert_bool(tray_rect.grow(0.5).encloses(filter_rect)).is_true()
-	# Positive overflow control: long translated Facilities pills exceed tray_max_inner_width()
-	# yet stay clipped/scrollable inside the 640 px tray without blowing out tray height.
-	PseudoLocale.disable()
-	_translation = Translation.new()
-	_translation.locale = TranslationServer.get_locale()
-	for label: String in ["All", "Rooms", "Hygiene & Rest", "Services", "Lounge & Play"]:
-		_translation.add_message(label, label + " — Extended Translation Label", "build menu")
-	TranslationServer.add_translation(_translation)
-	menu._refresh_cards()
+	assert_float(tray_rect.size.x).is_equal_approx(BuildMenu.COLUMN_W, 0.5)
+	assert_float(tray_rect.size.x).is_less_equal(832.0)
+	assert_float(tray_rect.size.y).is_equal_approx(BuildMenu.tray_height_for_rows(3), 0.5)
+	assert_float(tray_rect.position.x).is_greater_equal(
+		float(HudLayout.MARGIN + HudLayout.LIST_W + HudLayout.GROUP_GAP)
+	)
+	assert_float(tray_rect.end.x).is_less_equal(
+		1536.0 - float(HudLayout.MARGIN + HudLayout.RAIL_W + HudLayout.GROUP_GAP)
+	)
+	for tool: BuildMode.Tool in BuildMenu.CATEGORIES[FACILITIES]["tools"]:
+		var card := menu.card(tool)
+		assert_bool(tray_rect.grow(0.5).encloses(card.get_global_rect())).is_true()
+	# Narrow viewport (< 792 + 2 * MARGIN): columns reduce dynamically so the tray never clips.
+	port.size = Vector2i(700, 720)
 	await get_tree().process_frame
 	await get_tree().process_frame
 	tray_rect = menu.tray().get_global_rect()
-	filter_rect = filter_scroll.get_global_rect()
-	assert_float(filter_bar.get_combined_minimum_size().x).is_greater(menu.tray_max_inner_width())
-	assert_float(menu.tray_height()).is_equal(BuildMenu.TRAY_FILTERED_H)
-	assert_float(tray_rect.size.y).is_equal_approx(BuildMenu.TRAY_FILTERED_H, 0.5)
-	assert_float(tray_rect.size.x).is_less_equal(BuildMenu.COLUMN_W + 0.5)
-	assert_float(filter_rect.position.x).is_greater_equal(tray_rect.position.x - 0.5)
-	assert_float(filter_rect.end.x).is_less_equal(tray_rect.end.x + 0.5)
-	assert_bool(tray_rect.grow(0.5).encloses(filter_rect)).is_true()
-	assert_float(filter_scroll.get_h_scroll_bar().max_value).is_greater(0.0)
+	assert_int(menu.tray_columns()).is_equal(7)
+	assert_bool(Rect2(Vector2.ZERO, Vector2(700.0, 720.0)).encloses(tray_rect)).is_true()
+	assert_float(tray_rect.size.x).is_less_equal(700.0 - 2.0 * float(HudLayout.MARGIN) + 0.5)
 	port.free()

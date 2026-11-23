@@ -1,11 +1,10 @@
 class_name TestHudTextFit
 extends GdUnitTestSuite
-## Build-menu card names wrap onto a second line and drop one font step only
-## when two lines are still not enough; the 96x126 compact card keeps its size
-## and fixed 52x52 thumbnail (decisions build-menu-card-names-wrap-to-two-lines-
-## then-shrink-a-font-s and build-menu-rework-six-domain-tabs-progressive-tab-
-## and-card-u, board T10 / d6f56ecf). The build status line wraps to two lines
-## instead of clipping (board T12 part 4).
+## Build-menu card names wrap onto up to two lines and step their font size down
+## cleanly to fit the 72 px width and 80x96 compact card height without clipping,
+## keeping the fixed 40x40 thumbnail (decisions build-menu-card-names-wrap-to-
+## two-lines-then-shrink-a-font-s and build-menu-slider-free-wrapping-grid-80x96-
+## cards-9-columns). The build status line wraps to two lines instead of clipping.
 
 ## Sample slot width for the pure HudLayout.fit_size / line_count unit cases.
 const SLOT_W := 100.0
@@ -124,7 +123,7 @@ func test_a_card_name_wraps_then_shrinks_and_the_card_keeps_its_size() -> void:
 	assert_int(name_label.autowrap_mode).is_equal(TextServer.AUTOWRAP_WORD_SMART)
 	assert_int(name_label.max_lines_visible).is_equal(2)
 	var resting := picture.size.y
-	name_label.text = _words(4)
+	name_label.text = _words(3)
 	await _frames(3)
 	print(
 		(
@@ -137,13 +136,15 @@ func test_a_card_name_wraps_then_shrinks_and_the_card_keeps_its_size() -> void:
 			]
 		)
 	)
-	assert_int(name_label.get_theme_font_size(&"font_size")).is_equal(14)
-	assert_int(name_label.get_line_count()).is_equal(2)
-	assert_vector(picture.size).is_equal(Vector2(BuildMenu.THUMB_SIZE, BuildMenu.THUMB_SIZE))
-	name_label.text = _words(5)
-	await _frames(3)
 	assert_int(name_label.get_theme_font_size(&"font_size")).is_equal(12)
 	assert_int(name_label.get_line_count()).is_equal(2)
+	assert_int(name_label.get_visible_line_count()).is_equal(2)
+	assert_vector(picture.size).is_equal(Vector2(BuildMenu.THUMB_SIZE, BuildMenu.THUMB_SIZE))
+	name_label.text = _words(6)
+	await _frames(3)
+	assert_int(name_label.get_theme_font_size(&"font_size")).is_less(12)
+	assert_int(name_label.get_line_count()).is_equal(2)
+	assert_int(name_label.get_visible_line_count()).is_equal(2)
 	assert_vector(picture.size).is_equal(Vector2(BuildMenu.THUMB_SIZE, BuildMenu.THUMB_SIZE))
 	name_label.text = WORD
 	await _frames(3)
@@ -153,9 +154,9 @@ func test_a_card_name_wraps_then_shrinks_and_the_card_keeps_its_size() -> void:
 	_assert_inside(card)
 
 
-## Every card of every tray at +40% (one expansion): no label needs more than two
-## lines, every label and the thumbnail stay inside the card, and the card keeps
-## its size. Some labels wrap (a positive control that the wrap is reached).
+## Every card of every tray at +40% (one expansion): no label clips beyond two
+## lines, every label and the thumbnail stay inside the 80x96 card, and the card
+## keeps its size. Some labels wrap (a positive control that the wrap is reached).
 func test_every_card_fits_at_plus_forty_percent() -> void:
 	await _build_menu(true)
 	var cards := 0
@@ -176,6 +177,9 @@ func test_every_card_fits_at_plus_forty_percent() -> void:
 			for label in _labels(card):
 				var where := "tool %d '%s'" % [tool, label.text]
 				assert_int(label.get_line_count()).override_failure_message(where).is_less_equal(2)
+				assert_int(label.get_visible_line_count()).override_failure_message(where).is_equal(
+					label.get_line_count()
+				)
 				wrapped += 1 if label.get_line_count() == 2 else 0
 				var small := label.get_theme_font_size(&"font_size") < 14
 				shrunk += 1 if small else 0
@@ -196,25 +200,30 @@ func _shown(label: Label) -> String:
 	return shown
 
 
-## One 12 px label is there only because its shown text needs more than two lines
-## at 14 px or holds a word wider than the slot; a 14 px label fits two lines with
-## no over-wide word. Measured on the text the label shows, in the label's own width.
+## A label drops below 14 px only when 14 px exceeds its horizontal slot or the
+## 80x96 card's vertical budget; otherwise it stays at 14 px.
 func _assert_shrink_matches_need(label: Label, small: bool, where: String) -> void:
 	var shown := _shown(label)
 	var font := label.get_theme_font(&"font")
 	var width := label.size.x
+	var max_lines := label.max_lines_visible if label.max_lines_visible > 0 else 2
 	var lines := HudLayout.line_count(shown, font, HudLayout.CAPTION, width)
 	var widest := HudLayout.widest_word(shown, font, HudLayout.CAPTION)
-	var needed := lines > 2 or widest > width
+	var needed := lines > max_lines or widest > width
+	if not needed and max_lines > 1 and lines > 1:
+		var avail_h := (
+			BuildMenu.CARD_SIZE.y - 2.0 * BuildMenuLayout.CARD_PAD_Y - BuildMenu.THUMB_SIZE - 20.0
+		)
+		var line_sp := float(label.get_theme_constant(&"line_spacing"))
+		var h14 := float(lines) * font.get_height(HudLayout.CAPTION) + float(lines - 1) * line_sp
+		needed = h14 > avail_h + 0.5
 	var detail := "%s shown '%s' at 14: lines=%d widest=%.1f slot=%.1f"
 	detail = detail % [where, shown, lines, widest, width]
 	assert_bool(small).override_failure_message(detail).is_equal(needed)
 
 
 ## A line that is already through tr() (one expansion, auto-translate off) and fits
-## two lines at 14 px stays at 14 px, though a second expansion would not fit. The
-## count is chosen so the second expansion needs a third line: the case a fit that
-## translates the stored text again would shrink.
+## one line at 14 px stays at 14 px, though a second expansion would wrap/shrink.
 func test_an_already_translated_line_that_fits_stays_at_the_caption_size() -> void:
 	await _build_menu(true)
 	_menu.press_category(BuildMenuCatalog.category_of(BuildMode.Tool.DESK))
@@ -224,28 +233,33 @@ func test_an_already_translated_line_that_fits_stays_at_the_caption_size() -> vo
 	var font := label.get_theme_font(&"font")
 	var width := label.size.x
 	var shown := ""
-	for count in range(2, 9):
-		var once := tr(_words(count))
+	for candidate in ["Gate", "Seat", "Counter", "Seats", "Desk"]:
+		var once := tr(candidate)
 		var twice := tr(once)
 		if (
-			HudLayout.line_count(once, font, 14, width) == 2
-			and HudLayout.line_count(twice, font, 14, width) > 2
+			HudLayout.line_count(once, font, 14, width) == 1
+			and HudLayout.widest_word(once, font, 14) <= width
+			and (
+				HudLayout.line_count(twice, font, 14, width) > 1
+				or HudLayout.widest_word(twice, font, 14) > width
+			)
 		):
 			shown = once
+			break
 	print("shown=[%s] width=%.0f" % [shown, width])
 	assert_str(shown).is_not_empty()
 	label.text = shown
 	await _frames(3)
-	assert_int(label.get_line_count()).is_equal(2)
+	assert_int(label.get_line_count()).is_equal(1)
 	assert_int(label.get_theme_font_size(&"font_size")).is_equal(14)
 	_assert_shrink_matches_need(label, false, "regression")
 
 
-## The card keeps its width and the tray keeps its height (the row stretches the
-## cards to the tray's inner height, as it did before any label wrapped).
+## The card keeps its 80x96 size and the tray keeps its row height.
 func _assert_card_size(card: Button) -> void:
 	var tray := _menu.find_child("ItemTray", true, false) as Control
 	assert_float(card.size.x).override_failure_message(card.name).is_equal(BuildMenu.CARD_SIZE.x)
+	assert_float(card.size.y).override_failure_message(card.name).is_equal(BuildMenu.CARD_SIZE.y)
 	assert_float(tray.size.y).override_failure_message(card.name).is_equal(_menu.tray_height())
 
 

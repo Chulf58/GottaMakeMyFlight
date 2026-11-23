@@ -403,12 +403,21 @@ func test_status_card_moves_above_tray_on_open_and_drops_back_on_close() -> void
 	await _settle()
 	assert_bool(_menu.is_tray_open()).is_true()
 	assert_float(_menu.tray_height()).is_equal(BuildMenu.TRAY_H)
+	assert_float(_menu.tray().size.y).is_equal(BuildMenu.TRAY_H)
 	assert_float(_menu.status_card().get_global_rect().end.y).is_equal(
 		_menu.tray().get_global_rect().position.y - float(HudLayout.GAP)
 	)
 	_open_tray()
 	await _settle()
-	assert_float(_menu.tray_height()).is_equal(BuildMenu.TRAY_FILTERED_H)
+	assert_float(_menu.tray_height()).is_equal(BuildMenu.tray_height_for_rows(2))
+	assert_float(_menu.tray().size.y).is_equal(BuildMenu.tray_height_for_rows(2))
+	assert_float(_menu.status_card().get_global_rect().end.y).is_equal(
+		_menu.tray().get_global_rect().position.y - float(HudLayout.GAP)
+	)
+	_mode.set_tool(BuildMode.Tool.FLOOR)
+	await _settle()
+	assert_float(_menu.tray_height()).is_equal(BuildMenu.TRAY_H)
+	assert_float(_menu.tray().size.y).is_equal(BuildMenu.TRAY_H)
 	assert_float(_menu.status_card().get_global_rect().end.y).is_equal(
 		_menu.tray().get_global_rect().position.y - float(HudLayout.GAP)
 	)

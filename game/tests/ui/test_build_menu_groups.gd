@@ -134,8 +134,9 @@ func test_all_77_build_tools_appear_exactly_once_across_the_seven_domain_tabs() 
 			assert_bool(seen.has(tool)).override_failure_message("missing %d" % tool).is_true()
 
 
-func test_room_cards_have_unique_labels_and_room_badges_and_96x118_size() -> void:
-	assert_vector(BuildMenu.CARD_SIZE).is_equal(Vector2(96.0, 118.0))
+func test_room_cards_have_unique_labels_and_room_badges_and_80x96_size() -> void:
+	assert_vector(BuildMenu.CARD_SIZE).is_equal(Vector2(80.0, 96.0))
+	assert_float(BuildMenu.THUMB_SIZE).is_equal(40.0)
 	var names_per_tab := {}
 	for i in BuildMenu.REMOVE_CATEGORY:
 		names_per_tab[i] = {}
@@ -149,7 +150,7 @@ func test_room_cards_have_unique_labels_and_room_badges_and_96x118_size() -> voi
 			)
 			seen_names[item_name] = true
 			var card := _menu.card(tool)
-			assert_vector(card.custom_minimum_size).is_equal(Vector2(96.0, 118.0))
+			assert_vector(card.custom_minimum_size).is_equal(Vector2(80.0, 96.0))
 			var badge := card.get_node_or_null("RoomBadge")
 			if BuildMenuCatalog.is_room_tool(tool):
 				(

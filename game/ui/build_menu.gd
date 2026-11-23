@@ -1,14 +1,16 @@
 # gdlint:disable = max-public-methods
 class_name BuildMenu
 extends CanvasLayer
-## The build menu (decisions hud-layout-bottom-category-bar-with-an-item-tray-time-and-fl
-## and build-menu-rework-six-domain-tabs-progressive-tab-and-card-u):
-## six domain tabs along the bottom edge plus Remove and Staff; clicking a
-## domain tab opens a horizontal-scrolling tray of compact item cards above it
-## (Thumbnail + 2-line Name + Price, with details in the 280 px hover popup);
-## locked tabs and locked cards stay hidden until their tier opens, with warm
-## "New" highlights on newly unlocked tabs and cards (and Tier 3 "In the full
-## game" teasers at the right end of trays once Tier 2 unlocks in DemoMode).
+## The build menu (decisions hud-layout-bottom-category-bar-with-an-item-tray-time-and-fl,
+## build-menu-rework-six-domain-tabs-progressive-tab-and-card-u and
+## build-menu-slider-free-wrapping-grid-80x96-cards-9-columns):
+## seven domain tabs along the bottom edge plus Templates, Remove and Staff;
+## clicking a domain tab opens a slider-free 9-column wrapping grid tray of
+## compact 80x96 item cards above it (40x40 Thumbnail + 2-line Name + Price,
+## with details in the 280 px hover popup); locked tabs and locked cards stay
+## hidden until their tier opens, with warm "New" highlights on newly unlocked
+## tabs and cards (and Tier 3 "In the full game" teasers at the end of trays
+## once Tier 2 unlocks in DemoMode).
 ## The status and refusal text and the cost line share one card above the tray
 ## (or right above the category bar while the tray is closed) (HUD 5/7); a money slot sits top-left.
 ## BuildMode keeps the tool logic: the menu calls set_tool() and rotate_facing()
@@ -83,7 +85,6 @@ const MARGIN := float(HudLayout.MARGIN)
 const BAR_H := float(HudLayout.BAR_H)
 const GAP := float(HudLayout.GAP)
 const TRAY_H := float(HudLayout.TRAY_H)
-const TRAY_FILTERED_H := float(HudLayout.TRAY_FILTERED_H)
 ## The status card's height; it grows upward while a long status wraps.
 const STATUS_H := float(HudLayout.BUTTON_H)
 ## A status wraps onto at most this many lines and then ends in an ellipsis
@@ -93,12 +94,13 @@ const HELD_LINES := 3
 ## Maximum width of the centre column the tray and status line live in;
 ## PassengerHud and PassengerInspect keep left of it.
 const COLUMN_W := float(HudLayout.TRAY_W)
-const CARD_SIZE := Vector2(96.0, 118.0)
-const THUMB_SIZE := 44.0
+const CARD_SIZE := Vector2(80.0, 96.0)
+const THUMB_SIZE := 40.0
+const CARD_SEP := 6
+const MAX_COLUMNS := 9
 ## A bar button: an icon (BarIcons) with its name in the tooltip.
 const CATEGORY_SIZE := Vector2(52.0, 44.0)
 const WHEEL_STEP := 64.0
-const SCROLL_RETRY_CAP := 6
 
 ## The one HUD theme (decision hud-look-warm-cozy-cream-cards-with-a-dark-outline-toon-pale).
 ## A CanvasLayer does not pass a theme down, so every top-level HUD Control
@@ -144,24 +146,12 @@ var _browsing := false
 var _bar := PanelContainer.new()
 var _tray := PanelContainer.new()
 var _tray_root := VBoxContainer.new()
-var _filter_scroll := ScrollContainer.new()
-var _filter_bar := HBoxContainer.new()
-var _filter_all_btn: Button
-var _filter_pill_pool: Array[Button] = []
-var _active_filter := "all"
-var _filter_open := false
-var _row_dividers: Dictionary = {}
-var _scroll := ScrollContainer.new()
-var _scroll_content := HBoxContainer.new()
-var _rows: Array[HBoxContainer] = []
+var _rows: Array[GridContainer] = []
 var _category_buttons: Array[Button] = []
 var _cards: Dictionary = {}
 ## Cached CardState per tool from the last _refresh_cards(), used by the cheap
 ## _refresh_money() path on wallet ticks so teaser/locked labels stay intact.
 var _card_states: Dictionary = {}
-var _pending_scroll_tool := BuildMode.Tool.NONE
-var _pending_scroll_tries := 0
-var _scroll_frame_queued := false
 ## The status line and the cost line on one card (HUD 5/7): the status text,
 ## the "R rotate" hint (RotateHint) in a slot of its own so a long refusal never
 ## pushes it onto a second line, and the cost.
@@ -345,10 +335,6 @@ func press_category(index: int) -> void:
 		build_mode.set_tool(BuildMode.Tool.NONE)
 		return
 	_open = index
-	_active_filter = "all"
-	_pending_scroll_tool = BuildMode.Tool.NONE
-	_scroll.scroll_horizontal = 0
-	_filter_scroll.scroll_horizontal = 0
 	templates_page.scroll_horizontal = 0
 	_browsing = true
 	build_mode.set_tool(BuildMode.Tool.NONE)
@@ -356,37 +342,28 @@ func press_category(index: int) -> void:
 	_sync()
 
 
-## Selects a sub-filter pill (`"all"` or a subfilter id) on the open multi-group tab.
-func press_filter(filter_id: String) -> void:
-	_active_filter = filter_id
-	_scroll.scroll_horizontal = 0
-	if _open >= 0 and _open < remove_category():
-		_apply_row_layout(_open)
-	_sync_tray_layout()
-
-
-func active_filter() -> String:
-	return _active_filter
-
-
-func filter_buttons() -> Array[Button]:
-	var out: Array[Button] = []
-	for child in _filter_bar.get_children():
-		var btn := child as Button
-		if btn != null and btn.visible:
-			out.append(btn)
-	return out
-
-
-func filter_button(filter_id: String) -> Button:
-	for btn in filter_buttons():
-		if str(btn.get_meta(&"filter_id", "")) == filter_id:
-			return btn
-	return null
+static func tray_height_for_rows(rows: int) -> float:
+	var count := maxi(1, rows)
+	return float(count) * CARD_SIZE.y + float(count - 1) * float(CARD_SEP) + 10.0
 
 
 func tray_height() -> float:
-	return TRAY_FILTERED_H if _tray.visible and _filter_open else TRAY_H
+	if not _tray.visible or _open < 0 or _open >= _rows.size():
+		return TRAY_H
+	var visible_count := _visible_card_count(_open)
+	if visible_count <= 0:
+		return TRAY_H
+	var cols := maxi(1, _rows[_open].columns)
+	var row_count := maxi(1, ceili(float(visible_count) / float(cols)))
+	return float(row_count) * CARD_SIZE.y + float(row_count - 1) * float(CARD_SEP) + _tray_pad_y()
+
+
+func tray_columns() -> int:
+	return clampi(
+		floori((tray_max_inner_width() + float(CARD_SEP)) / (CARD_SIZE.x + float(CARD_SEP))),
+		1,
+		MAX_COLUMNS
+	)
 
 
 ## The Staff button click: opens the hiring card (closing any tray and
@@ -396,7 +373,6 @@ func press_staff() -> void:
 		_set_staff_open(false)
 		return
 	_open = NO_CATEGORY
-	_pending_scroll_tool = BuildMode.Tool.NONE
 	_browsing = true
 	build_mode.set_tool(BuildMode.Tool.NONE)
 	_browsing = false
@@ -438,14 +414,6 @@ func tray_content() -> Control:
 	return _tray_root
 
 
-func tray_scroll() -> ScrollContainer:
-	return _scroll
-
-
-func filter_scroll() -> ScrollContainer:
-	return _filter_scroll
-
-
 func _tray_pad_x() -> float:
 	var style := _tray.get_theme_stylebox(&"panel")
 	if style == null:
@@ -453,9 +421,24 @@ func _tray_pad_x() -> float:
 	return style.get_margin(SIDE_LEFT) + style.get_margin(SIDE_RIGHT)
 
 
+func _tray_pad_y() -> float:
+	var style := _tray.get_theme_stylebox(&"panel")
+	if style == null:
+		return 0.0
+	return style.get_margin(SIDE_TOP) + style.get_margin(SIDE_BOTTOM)
+
+
+func _available_tray_width() -> float:
+	if is_inside_tree() and get_viewport() != null:
+		var view_w := get_viewport().get_visible_rect().size.x
+		if view_w > 0.0:
+			return minf(COLUMN_W, maxf(CARD_SIZE.x + _tray_pad_x(), view_w - 2.0 * MARGIN))
+	return COLUMN_W
+
+
 ## Maximum inner width inside `_tray` after subtracting its panel stylebox margins.
 func tray_max_inner_width() -> float:
-	return COLUMN_W - _tray_pad_x()
+	return _available_tray_width() - _tray_pad_x()
 
 
 func bar() -> Control:
@@ -594,10 +577,7 @@ func _set_staff_open(open: bool) -> void:
 func _on_tool_changed(tool: BuildMode.Tool) -> void:
 	if guide != null and tool != BuildMode.Tool.NONE:
 		guide.mark_seen(tool)
-	var prev_open := _open
-	var scroll_to := BuildMode.Tool.NONE
 	if tool == BuildMode.Tool.NONE:
-		_pending_scroll_tool = BuildMode.Tool.NONE
 		if not _browsing:
 			_open = NO_CATEGORY
 			_set_staff_open(false)
@@ -616,62 +596,10 @@ func _on_tool_changed(tool: BuildMode.Tool) -> void:
 		)
 		if index == remove_category() or index < 0 or tab_hidden or card_hidden:
 			_open = NO_CATEGORY
-			_pending_scroll_tool = BuildMode.Tool.NONE
 		else:
 			_open = index
-			if _open != prev_open or not _tool_in_filter(index, tool):
-				_active_filter = "all"
-				_scroll.scroll_horizontal = 0
-				_filter_scroll.scroll_horizontal = 0
-			scroll_to = tool
 	_sync()
-	if scroll_to != BuildMode.Tool.NONE:
-		_queue_scroll_to_card(scroll_to)
 	_show_status()
-
-
-## Queues scrolling `tool`'s card into view after `_sync()` makes its row visible
-## and after the ScrollContainer and HBoxContainer finish their layout sort.
-func _queue_scroll_to_card(tool: BuildMode.Tool) -> void:
-	_pending_scroll_tool = tool
-	_pending_scroll_tries = 0
-	if not is_inside_tree() or _scroll_frame_queued:
-		return
-	_scroll_frame_queued = true
-	get_tree().process_frame.connect(_step_pending_scroll, CONNECT_ONE_SHOT)
-
-
-func _step_pending_scroll() -> void:
-	_scroll_frame_queued = false
-	if not is_inside_tree() or _pending_scroll_tool == BuildMode.Tool.NONE:
-		return
-	if not _scroll.visible or not _cards.has(_pending_scroll_tool):
-		_pending_scroll_tool = BuildMode.Tool.NONE
-		return
-	var target := _cards[_pending_scroll_tool] as Control
-	if not target.is_visible_in_tree():
-		_pending_scroll_tool = BuildMode.Tool.NONE
-		return
-	var ready := _is_card_sorted(target) and _scroll.size.x > 0.0
-	if not ready and _pending_scroll_tries < SCROLL_RETRY_CAP:
-		_pending_scroll_tries += 1
-		_scroll_frame_queued = true
-		get_tree().process_frame.connect(_step_pending_scroll, CONNECT_ONE_SHOT)
-		return
-	_scroll.ensure_control_visible(target)
-	_pending_scroll_tool = BuildMode.Tool.NONE
-
-
-func _is_card_sorted(target: Control) -> bool:
-	if target.size.x <= 0.0:
-		return false
-	var parent := target.get_parent()
-	if parent == null:
-		return true
-	for child in parent.get_children():
-		if child is Control and (child as Control).visible:
-			return child == target or target.position.x > 0.0
-	return true
 
 
 func _on_tray_gui_input(event: InputEvent) -> void:
@@ -686,72 +614,42 @@ func _on_tray_gui_input(event: InputEvent) -> void:
 		and idx != MOUSE_BUTTON_WHEEL_RIGHT
 	):
 		return
-	if mb.pressed:
+	if mb.pressed and templates_page.visible:
 		var dir := -1.0 if idx == MOUSE_BUTTON_WHEEL_UP or idx == MOUSE_BUTTON_WHEEL_LEFT else 1.0
 		var factor := mb.factor if mb.factor > 0.0 else 1.0
 		var delta := roundi(dir * WHEEL_STEP * factor)
-		if (
-			_filter_scroll.visible
-			and _filter_scroll.get_global_rect().has_point(mb.global_position)
-			and _filter_bar.get_combined_minimum_size().x > _filter_scroll.size.x
-		):
-			_filter_scroll.scroll_horizontal = maxi(0, _filter_scroll.scroll_horizontal + delta)
-		elif _scroll.visible:
-			_scroll.scroll_horizontal = maxi(0, _scroll.scroll_horizontal + delta)
-		elif templates_page.visible:
-			templates_page.scroll_horizontal = maxi(0, templates_page.scroll_horizontal + delta)
+		templates_page.scroll_horizontal = maxi(0, templates_page.scroll_horizontal + delta)
 	_tray.accept_event()
 
 
-func _sync_scroll_width() -> void:
-	if _scroll == null:
-		return
-	var row_w := _scroll_content.get_combined_minimum_size().x
-	_scroll.custom_minimum_size = Vector2(minf(row_w, tray_max_inner_width()), 0.0)
-	if _tray.visible and _scroll.visible:
-		sync_tray_bounds()
-
-
-func _sync_filter_width() -> void:
-	if _filter_scroll == null or not _filter_scroll.visible:
-		return
-	var filter_row_w := _filter_bar.get_combined_minimum_size().x
-	_filter_scroll.custom_minimum_size = Vector2(
-		minf(filter_row_w, tray_max_inner_width()), float(HudLayout.TRAY_FILTER_H - 4)
-	)
-	if _tray.visible:
-		sync_tray_bounds()
-
-
 func sync_tray_bounds() -> void:
-	var h := tray_height()
 	var bottom := MARGIN + BAR_H + GAP
+	var max_w := _available_tray_width()
+	if _open >= 0 and _open < _rows.size():
+		var visible_count := _visible_card_count(_open)
+		if visible_count > 0:
+			_rows[_open].columns = mini(visible_count, tray_columns())
+	var h := tray_height()
 	if _tray.visible:
-		var max_inner := tray_max_inner_width()
-		if _scroll.visible:
-			var row_w := _scroll_content.get_combined_minimum_size().x
-			_scroll.custom_minimum_size = Vector2(minf(row_w, max_inner), 0.0)
-		if _filter_scroll.visible:
-			var filter_row_w := _filter_bar.get_combined_minimum_size().x
-			_filter_scroll.custom_minimum_size = Vector2(
-				minf(filter_row_w, max_inner), float(HudLayout.TRAY_FILTER_H - 4)
-			)
-		else:
-			_filter_scroll.custom_minimum_size = Vector2.ZERO
-		var tpl_w := templates_page.custom_minimum_size.x
-		var content_w := _scroll.custom_minimum_size.x if _scroll.visible else tpl_w
-		var filter_w := _filter_scroll.custom_minimum_size.x if _filter_open else 0.0
-		_tray.custom_minimum_size = Vector2.ZERO
+		var content_w := 0.0
+		if _open == TEMPLATES_PAGE:
+			templates_page.update_width()
+			content_w = templates_page.custom_minimum_size.x
+		elif _open >= 0 and _open < _rows.size():
+			var cols := maxi(1, _rows[_open].columns)
+			content_w = (float(cols) * CARD_SIZE.x + float(maxi(0, cols - 1)) * float(CARD_SEP))
 		var pad_x := _tray_pad_x()
-		var inner_w := minf(maxf(content_w, filter_w), max_inner)
-		var root_w := _tray_root.get_combined_minimum_size().x + pad_x
-		var w := clampf(maxf(inner_w + pad_x, root_w), 0.0, COLUMN_W)
+		var w := clampf(content_w + pad_x, 0.0, max_w)
 		_tray.custom_minimum_size = Vector2(w, h)
+		_tray_root.reset_size()
+		_tray.reset_size()
 		_tray.offset_left = -w * 0.5
 		_tray.offset_right = w * 0.5
 		_tray.offset_top = -bottom - h
 		_tray.offset_bottom = -bottom
 		_tray.size = Vector2(w, h)
+	_status_card.offset_left = -max_w * 0.5
+	_status_card.offset_right = max_w * 0.5
 	var card_bottom := bottom
 	if _tray.visible:
 		card_bottom = bottom + h + GAP
@@ -855,9 +753,10 @@ func _refresh_cards() -> void:
 		_sync_tray_layout()
 
 
-func _row_has_visible_card(index: int) -> bool:
+func _visible_card_count(index: int) -> int:
 	if index < 0 or index >= _rows.size():
-		return false
+		return 0
+	var count := 0
 	for tool in categories()[index]["tools"]:
 		if (
 			_cards.has(tool)
@@ -866,67 +765,26 @@ func _row_has_visible_card(index: int) -> bool:
 				!= BuildMenuCatalog.CardState.HIDDEN
 			)
 		):
-			return true
-	return false
+			count += 1
+	return count
 
 
-func _tool_in_filter(index: int, tool: BuildMode.Tool) -> bool:
-	if _active_filter == "all" or index < 0 or index >= remove_category():
-		return true
-	for entry: Dictionary in BuildMenuCatalog.subfilters(category_id(index)):
-		if entry["id"] == _active_filter:
-			return (entry["tools"] as Array).has(tool)
-	return true
-
-
-func _ensure_row_dividers(index: int, need: int) -> Array:
-	var pool: Array = _row_dividers.get(index, [])
-	while pool.size() < need:
-		var sep := VSeparator.new()
-		sep.name = "GroupSep%d" % pool.size()
-		sep.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		sep.visible = false
-		sep.custom_minimum_size = Vector2(2.0, CARD_SIZE.y - 16.0)
-		sep.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		sep.modulate = Color(0.55, 0.50, 0.44, 0.55)
-		_rows[index].add_child(sep)
-		pool.append(sep)
-	_row_dividers[index] = pool
-	return pool
-
-
-func _group_index_of(groups: Array, tool: BuildMode.Tool) -> int:
-	for g in groups.size():
-		if (groups[g] as Array).has(tool):
-			return g
-	return -1
+func _row_has_visible_card(index: int) -> bool:
+	return _visible_card_count(index) > 0
 
 
 func _apply_row_layout(index: int) -> void:
 	if index < 0 or index >= _rows.size() or index == remove_category():
 		return
 	var cats := categories()
-	var cat_id := str(cats[index]["id"])
-	var groups := BuildMenuCatalog.visual_groups(cat_id)
-	var filter_id := _active_filter if index == _open else "all"
-	var filter_tools: Array = []
-	if filter_id != "all":
-		for entry: Dictionary in BuildMenuCatalog.subfilters(cat_id):
-			if entry["id"] == filter_id:
-				filter_tools = entry["tools"]
-				break
 	var front_cards: Array[Control] = []
-	var front_groups: Array[int] = []
 	var teaser_cards: Array[Control] = []
 	for tool: BuildMode.Tool in cats[index]["tools"]:
 		if not _cards.has(tool):
 			continue
 		var card_btn := _cards[tool] as Control
 		var state: int = _card_states.get(tool, BuildMenuCatalog.CardState.OPEN)
-		var shown_here := (
-			state != BuildMenuCatalog.CardState.HIDDEN
-			and (filter_id == "all" or filter_tools.has(tool))
-		)
+		var shown_here := state != BuildMenuCatalog.CardState.HIDDEN
 		card_btn.visible = shown_here
 		if not shown_here:
 			continue
@@ -934,96 +792,16 @@ func _apply_row_layout(index: int) -> void:
 			teaser_cards.append(card_btn)
 		else:
 			front_cards.append(card_btn)
-			front_groups.append(_group_index_of(groups, tool))
-	var show_dividers := filter_id == "all" and not groups.is_empty()
-	var need_seps := maxi(0, groups.size() if show_dividers else 0)
-	var seps := _ensure_row_dividers(index, need_seps)
-	for sep: Control in seps:
-		sep.visible = false
 	var ordered: Array[Control] = []
-	var sep_used := 0
-	for k in front_cards.size():
-		if show_dividers and k > 0 and front_groups[k] != front_groups[k - 1]:
-			var sep := seps[sep_used] as Control
-			sep.visible = true
-			ordered.append(sep)
-			sep_used += 1
-		ordered.append(front_cards[k])
-	if show_dividers and not front_cards.is_empty() and not teaser_cards.is_empty():
-		var sep := seps[sep_used] as Control
-		sep.visible = true
-		ordered.append(sep)
+	ordered.append_array(front_cards)
 	ordered.append_array(teaser_cards)
+	if not ordered.is_empty():
+		_rows[index].columns = mini(ordered.size(), tray_columns())
 	for pos in ordered.size():
 		_rows[index].move_child(ordered[pos], pos)
 
 
-func _ensure_filter_pills(need_pills: int) -> void:
-	if _filter_all_btn == null:
-		_filter_all_btn = BuildMenuLayout.make_filter_pill(BuildMenuCatalog.shown("All"))
-		_filter_all_btn.name = "FilterAll"
-		_filter_all_btn.set_meta(&"filter_id", "all")
-		_filter_all_btn.pressed.connect(func() -> void: press_filter("all"))
-		_filter_bar.add_child(_filter_all_btn)
-	while _filter_pill_pool.size() < need_pills:
-		var pill := BuildMenuLayout.make_filter_pill("")
-		pill.name = "FilterPill%d" % _filter_pill_pool.size()
-		pill.visible = false
-		pill.pressed.connect(_on_filter_pill_pressed.bind(pill))
-		_filter_bar.add_child(pill)
-		_filter_pill_pool.append(pill)
-
-
-func _on_filter_pill_pressed(pill: Button) -> void:
-	press_filter(str(pill.get_meta(&"filter_id", "all")))
-
-
-func _rebuild_filter_bar() -> void:
-	var active_entries: Array[Dictionary] = []
-	if _open >= 0 and _open < remove_category():
-		for entry: Dictionary in BuildMenuCatalog.subfilters(category_id(_open)):
-			for tool: BuildMode.Tool in entry["tools"]:
-				if (
-					_cards.has(tool)
-					and (
-						_card_states.get(tool, BuildMenuCatalog.CardState.OPEN)
-						!= BuildMenuCatalog.CardState.HIDDEN
-					)
-				):
-					active_entries.append(entry)
-					break
-	var show := active_entries.size() >= 2
-	_filter_open = show
-	_filter_scroll.visible = show
-	_filter_bar.visible = show
-	if not show:
-		_active_filter = "all"
-		return
-	var valid_active := _active_filter == "all"
-	for entry in active_entries:
-		if entry["id"] == _active_filter:
-			valid_active = true
-			break
-	if not valid_active:
-		_active_filter = "all"
-	_ensure_filter_pills(active_entries.size())
-	_filter_all_btn.text = tr("All", "build menu")
-	_filter_all_btn.visible = true
-	_filter_all_btn.set_pressed_no_signal(_active_filter == "all")
-	for idx in _filter_pill_pool.size():
-		var pill := _filter_pill_pool[idx]
-		if idx < active_entries.size():
-			var entry := active_entries[idx]
-			pill.set_meta(&"filter_id", entry["id"])
-			pill.text = BuildMenuCatalog.shown(entry["name"])
-			pill.visible = true
-			pill.set_pressed_no_signal(_active_filter == entry["id"])
-		else:
-			pill.visible = false
-
-
 func _sync_tray_layout() -> void:
-	_rebuild_filter_bar()
 	sync_tray_bounds()
 
 
@@ -1191,7 +969,6 @@ func _on_loaded(ok: bool) -> void:
 ## move and ends build mode (used when a full-screen modal takes over).
 func close_for_modal() -> void:
 	_open = NO_CATEGORY
-	_pending_scroll_tool = BuildMode.Tool.NONE
 	_set_staff_open(false)
 	if build_mode != null:
 		build_mode.templates.disarm()
@@ -1215,7 +992,6 @@ func close_for_modal() -> void:
 func _end_build_mode_after_load() -> void:
 	build_session.abandon()
 	_open = NO_CATEGORY
-	_pending_scroll_tool = BuildMode.Tool.NONE
 	_set_staff_open(false)
 	if build_mode != null:
 		build_mode.set_tool(BuildMode.Tool.NONE)
@@ -1248,7 +1024,6 @@ func end_grant_hold() -> void:
 func _sync() -> void:
 	var tool := BuildMode.Tool.NONE if build_mode == null else build_mode.tool
 	_tray.visible = _open != NO_CATEGORY
-	_scroll.visible = _open >= 0
 	for i in _rows.size():
 		_rows[i].visible = i == _open
 	if _open >= 0 and _open < remove_category():
@@ -1328,7 +1103,6 @@ func _retranslate() -> void:
 					tr("Free", "price") if _wallet == null or price == 0 else str(price)
 				)
 	_rotate_hint.text = RotateHint.text()
-	_retranslate_filters()
 	if _holding:
 		if not _hold_is_grant and _wages_hold_amount > 0:
 			_status.text = _wages_message(_wages_hold_amount, _wages_hold_owed)
@@ -1339,18 +1113,3 @@ func _retranslate() -> void:
 	_money_slot.refresh()
 	refresh_preview()
 	sync_tray_bounds()
-
-
-func _retranslate_filters() -> void:
-	if _filter_all_btn != null:
-		_filter_all_btn.text = tr("All", "build menu")
-	if _open >= 0 and _open < remove_category():
-		var entries := BuildMenuCatalog.subfilters(category_id(_open))
-		for pill in _filter_pill_pool:
-			if not pill.visible:
-				continue
-			var fid := str(pill.get_meta(&"filter_id", ""))
-			for entry: Dictionary in entries:
-				if entry["id"] == fid:
-					pill.text = BuildMenuCatalog.shown(entry["name"])
-					break

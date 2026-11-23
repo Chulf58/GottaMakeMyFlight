@@ -20,9 +20,7 @@ const GROUP_GAP := 16
 const CHIP_H := 32
 const BUTTON_H := 40
 const BAR_H := 52
-const TRAY_H := 136
-const TRAY_FILTER_H := 32
-const TRAY_FILTERED_H := TRAY_H + TRAY_FILTER_H
+const TRAY_H := 106
 
 ## Widths, by role.
 ## A toggle button: the top row's Build mode sign, Runway and Offers, and the
@@ -34,7 +32,7 @@ const LIST_W := 304
 ## The right rail: the clock panel and the alert and result cards under it.
 const RAIL_W := 320
 const SHEET_W := 560
-const TRAY_W := 640
+const TRAY_W := 792
 
 ## Shared ghost-fade behaviour for cards that yield visually under a build ghost.
 const GHOST_FADED_ALPHA := 0.35

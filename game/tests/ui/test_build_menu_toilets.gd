@@ -141,6 +141,6 @@ func test_the_facilities_tray_fits_its_reserved_space_and_the_bar_fits_the_scree
 	var bar := _menu.bar().get_combined_minimum_size()
 	var layout_w := 1920.0 / 1.25
 	assert_float(need.x).is_less_equal(BuildMenu.COLUMN_W)
-	assert_float(need.y).is_less_equal(BuildMenu.TRAY_FILTERED_H)
+	assert_float(need.y).is_less_equal(BuildMenu.tray_height_for_rows(3))
 	assert_float(need.y).is_equal_approx(_menu.tray_height(), 0.5)
 	assert_float(bar.x).is_less_equal(layout_w - 2.0 * BuildMenu.MARGIN)
