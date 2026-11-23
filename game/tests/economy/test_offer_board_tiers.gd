@@ -94,27 +94,41 @@ func test_every_offer_follows_the_plane_sizes_and_fees_of_its_airlines_tier() ->
 			assert_str(FlightContract.problem(terms, FlightContract.TERM_KEYS)).is_empty()
 
 
-## Large planes are held back until stands and the lane are sized per class
-## (PlaneClasses.max_offer_class), whatever the tier or the stars behind it.
+## Large planes are offered at Tier 1+ on a large runway (PlaneClasses.max_offer_class() == LARGE),
+## while Tier 0 stays small and medium only.
 func test_no_tier_draws_a_large_offer_and_small_and_medium_still_draw() -> void:
-	assert_str(PlaneClasses.max_offer_class()).is_equal("medium")
-	var seen := {}
-	for stars in [1.0, 2.5, 3.0, 3.5, 4.0, 5.0]:
+	assert_str(PlaneClasses.max_offer_class()).is_equal(PlaneClasses.LARGE)
+	var starter_seen := {}
+	for stars in [1.0, 2.5]:
 		var tier := RatingFormula.tier(stars)
 		var offers := _draw_days(tier)
 		print("%.1f stars -> tier %d: %d offers" % [stars, tier, offers.size()])
 		assert_array(_large_offers(offers)).override_failure_message("%s stars" % stars).is_empty()
 		for offer in offers:
-			seen[offer["plane_size"]] = true
-	assert_array(seen.keys()).contains_exactly_in_any_order(["small", "medium"])
+			starter_seen[offer["plane_size"]] = true
+	assert_array(starter_seen.keys()).contains_exactly_in_any_order(["small", "medium"])
+	var high_seen := {}
+	for stars in [3.0, 3.5, 4.0, 5.0]:
+		var tier := RatingFormula.tier(stars)
+		var offers := _draw_days(tier)
+		print("%.1f stars -> tier %d: %d offers" % [stars, tier, offers.size()])
+		(
+			assert_array(_large_offers(offers))
+			. override_failure_message("%s stars" % stars)
+			. is_not_empty()
+		)
+		for offer in offers:
+			high_seen[offer["plane_size"]] = true
+	assert_array(high_seen.keys()).contains_exactly_in_any_order(["small", "medium", "large"])
 
 
 func test_the_offer_gate_leaves_every_tier_with_medium_and_tier_zero_untouched() -> void:
 	assert_dict(OfferBoard.offered_sizes(0)).is_equal(OfferBoard.STARTER_SIZES)
-	for tier in OfferBoard.MAX_TIER + 1:
+	assert_bool(OfferBoard.offered_sizes(0).has("large")).is_false()
+	for tier in range(1, OfferBoard.MAX_TIER + 1):
 		var offered := OfferBoard.offered_sizes(tier)
 		assert_bool(offered.has("medium")).is_true()
-		assert_bool(offered.has("large")).is_false()
+		assert_bool(offered.has("large")).is_true()
 		assert_array(OfferBoard.TIER_AIRLINES[tier]).is_not_empty()
 
 
