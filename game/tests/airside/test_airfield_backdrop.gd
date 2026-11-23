@@ -32,18 +32,24 @@ const ALL_LANDMARK_ASSETS := [
 	"tp_pick_up_01a",
 ]
 
+var _clock: SimClock
 var _airside: Airside
 var _flights: FlightSim
 var _backdrop: AirfieldBackdrop
 
 
 func before() -> void:
+	_clock = SimClock.new()
+	_clock.paused = true
 	_airside = TestStandLaneClearance.scene_airside()
 	_flights = FlightSim.new()
+	_flights.clock = _clock
 	_flights.runway.size = Runway.SMALL
 	_backdrop = AirfieldBackdrop.new()
 	_backdrop.airside = _airside
 	_backdrop.flights = _flights
+	_backdrop.clock = _clock
+	add_child(_clock)
 	add_child(_flights)
 	add_child(_airside)
 	add_child(_backdrop)
@@ -53,6 +59,7 @@ func after() -> void:
 	_backdrop.free()
 	_airside.free()
 	_flights.free()
+	_clock.free()
 
 
 func test_all_landmarks_stay_strictly_outside_playable_and_runway_bounds() -> void:
@@ -368,8 +375,10 @@ func test_backdrop_rebuild_stability_and_exit_tree_resets_ground_shader() -> voi
 
 	var tmp := AirfieldBackdrop.new()
 	var tmp_flights := FlightSim.new()
+	tmp_flights.clock = _clock
 	tmp_flights.runway.size = Runway.LARGE
 	tmp.flights = tmp_flights
+	tmp.clock = _clock
 	add_child(tmp_flights)
 	add_child(tmp)
 	(

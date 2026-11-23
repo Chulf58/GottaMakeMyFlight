@@ -4,18 +4,24 @@ extends GdUnitTestSuite
 ## apron surfaces, outline-free flat paving materials, end-only runway markings
 ## and wear, inset hold bars, and clean junction/pad shoulder line clipping.
 
+var _clock: SimClock
 var _airside: Airside
 var _flights: FlightSim
 var _backdrop: AirfieldBackdrop
 
 
 func before() -> void:
+	_clock = SimClock.new()
+	_clock.paused = true
 	_airside = TestStandLaneClearance.scene_airside()
 	_flights = FlightSim.new()
+	_flights.clock = _clock
 	_flights.runway.size = Runway.SMALL
 	_backdrop = AirfieldBackdrop.new()
 	_backdrop.airside = _airside
 	_backdrop.flights = _flights
+	_backdrop.clock = _clock
+	add_child(_clock)
 	add_child(_flights)
 	add_child(_airside)
 	add_child(_backdrop)
@@ -25,6 +31,7 @@ func after() -> void:
 	_backdrop.free()
 	_airside.free()
 	_flights.free()
+	_clock.free()
 
 
 func test_taxi_paving_shader_and_material_are_seamless_and_outline_free() -> void:
