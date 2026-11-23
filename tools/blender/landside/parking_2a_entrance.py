@@ -31,6 +31,8 @@ at world z -38). Its sides go down to the lawn (y -0.1). Every face takes one UV
 low end of the car park's own ramp to the first deck, so it is the same paving.
 """
 
+import os
+
 import bmesh
 import bpy
 from mathutils import Vector
@@ -60,6 +62,8 @@ ROAD_Y = 0.1
 LAWN_Y = -0.1
 # The ramp to the first deck behind the entrance: x 1.7..8.3 on z -21.9..-15.5.
 RAMP_X = (1.7, 8.3)
+ROAD_ASPHALT_UV = (0.5047, 0.9385)
+ROAD_FLAT_MAT = "TP_Atlas_Simple_Road_Flat"
 
 
 class Fail(Exception):
@@ -215,16 +219,38 @@ def _apron_y(z):
     return ROAD_Y + (FLOOR_Y - ROAD_Y) * (z - APRON_FOOT_Z) / (SLAB_EDGE_Z - APRON_FOOT_Z)
 
 
-def _add_apron(o, objs, uv, material):
+def _road_flat_material():
+    mat = bpy.data.materials.get(ROAD_FLAT_MAT)
+    if mat is not None:
+        return mat
+    repo = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    tex_path = os.path.join(repo, "game", "assets", "textures", "tp_atlas_1a_d.png")
+    img = bpy.data.images.load(tex_path, check_existing=True)
+    if img.size[0] == 0:
+        raise Fail("atlas failed to load: %s" % tex_path)
+    mat = bpy.data.materials.new(ROAD_FLAT_MAT)
+    mat.use_nodes = True
+    nt = mat.node_tree
+    bsdf = next(n for n in nt.nodes if n.type == "BSDF_PRINCIPLED")
+    tex = nt.nodes.new("ShaderNodeTexImage")
+    tex.image = img
+    nt.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
+    bsdf.inputs["Metallic"].default_value = 0.0
+    bsdf.inputs["Roughness"].default_value = 1.0
+    return mat
+
+
+def _add_apron(o, objs, _uv, _material):
     """The apron as its own mesh object beside `o`, in `o`'s mesh space and transform,
-    with `o`'s UV layers and `material`; appended to `objs` so the converter's part
-    checks and export cover it."""
+    with `o`'s UV layers and outline-free road material on ROAD_ASPHALT_UV."""
+    flat_mat = _road_flat_material()
     me = bpy.data.meshes.new(APRON_NAME)
-    me.materials.append(material)
+    me.materials.append(flat_mat)
     bm = bmesh.new()
     layers = [bm.loops.layers.uv.new(layer.name) for layer in o.data.uv_layers]
     x0, x1 = APRON_X
     za, zf, zs = APRON_START_Z, APRON_FOOT_Z, SLAB_EDGE_Z
+    uv = [ROAD_ASPHALT_UV for _ in layers]
     flat = [[uv[k]] * 4 for k in range(len(layers))]
     # Top: the flat run under and behind the sidewalk, then the slope to the slab.
     _add_face(bm, [(x0, ROAD_Y, za), (x1, ROAD_Y, za), (x1, ROAD_Y, zf), (x0, ROAD_Y, zf)], (0, 1, 0), 0, flat, layers)
@@ -348,6 +374,6 @@ def edit(objs):
         "material=%s uv_layers=%d uv0=%s ramp_faces_seen=%d"
         % (APRON_NAME, APRON_X[0], APRON_X[1], APRON_START_Z, SLAB_EDGE_Z, _apron_y(APRON_START_Z),
            _apron_y(SLAB_EDGE_Z), min(ys), len(apron.data.polygons), apron.data.materials[0].name,
-           len(apron.data.uv_layers), ramp_uv[0], ramp_faces),
+           len(apron.data.uv_layers), ROAD_ASPHALT_UV, ramp_faces),
         flush=True,
     )

@@ -13,6 +13,7 @@ extends EditorScenePostImport
 const MATERIALS := {
 	"TP_Atlas_1A_D": "res://assets/materials/tp_atlas_toon.tres",
 	"TP_Atlas_Simple_1A_D": "res://assets/materials/tp_atlas_simple_toon.tres",
+	"TP_Atlas_Simple_Road_Flat": "res://assets/landside/materials/tp_atlas_simple_road_toon.tres",
 	"TP_Atlas_Lights_1A_D": "res://assets/materials/tp_lights.tres",
 	"TP_Glass_1A_D": "res://assets/materials/tp_glass.tres",
 	"TCP_Atlas_1A_D": "res://assets/materials/tcp_atlas_toon.tres",
@@ -39,6 +40,9 @@ func _post_import(scene: Node) -> Object:
 		for i in mesh.get_surface_count():
 			var source := mesh.surface_get_material(i)
 			var key := source.resource_name if source != null else ""
+			if get_source_file().ends_with("tp_curb_bay_01a.glb") and key == "TP_Atlas_Simple_1A_D":
+				# Authored flat road markings skip outline even when converted via convert_toon_batch.py.
+				key = "TP_Atlas_Simple_Road_Flat"
 			if not MATERIALS.has(key):
 				push_error(
 					(

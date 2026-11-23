@@ -9,10 +9,9 @@ roof group that shell_view.gd dissolves):
 - Flat, single-sided, up-facing quads LIFT m above the asset origin. There are no side or
   bottom faces, so nothing is coplanar with the road and the toon outline hull (culled
   front faces of a normal-extruded copy) has no visible part.
-- Frame (Godot/glTF axes): origin at the centre of the kerb line at road-top height
-  (the shell's road and sidewalk top are one plane, y 0.107 in the shell's frame);
-  x runs along the kerb, +z points away from the kerb into the road. The bay covers
-  x -8..8, z 0..3.
+- Frame (Godot/glTF axes): origin at the centre of the kerb line at carriageway height
+  (y 0.10 across Road, Road_Ext, and aprons); x runs along the kerb, +z points away
+  from the kerb into the road. The bay covers x -8..8, z 0..3.
 - Two berths of 6.5 m between line centres (taxi 5.0 m, SUV 5.2 m, van 5.0 m long; van
   2.47 m wide in a 3.0 m bay), with a 1.5 m hatched end zone at each end. The kerb-side
   long edge has no line: the sidewalk edge is the boundary.
@@ -31,9 +30,9 @@ from mathutils import Vector
 
 STEM = "tp_curb_bay_01a"
 MESH_NAME = "TP_Curb_Bay_01A"
-# The FBX-side name, so the converter's TP rebind maps it to TP_Atlas_Simple_1A_D.
+# The FBX-side name, so the converter's TP rebind maps it (toon_post_import.gd assigns flat road toon).
 MATERIAL = "Atlas_Simple_1A_D"
-LIFT = 0.02
+LIFT = 0.012
 LINE = 0.25
 BERTH = 6.5
 END_ZONE = 1.5

@@ -35,8 +35,8 @@ const LOT_BARRIER_X := -7.0
 const SIGN_HEIGHT := 4.0
 
 @export var landside: LandsideSim
-## The road and sidewalk top, one plane in the shell (tp_airport_shell.glb).
-@export var road_top := 0.107
+## The road carriageway top, unified at y 0.10 across site road, extensions, and aprons.
+@export var road_top := 0.10
 
 ## The starter curb's bays, drawn once.
 var _starter_bays: Array[Node3D] = []
