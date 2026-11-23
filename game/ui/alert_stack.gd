@@ -165,6 +165,8 @@ func _notification(what: int) -> void:
 
 
 func _process(delta: float) -> void:
+	if not is_inside_tree():
+		return
 	advance(delta)
 
 
@@ -197,7 +199,7 @@ func reset() -> void:
 
 ## Reads every cause, updates the cards and the tray. Does nothing without a sim.
 func refresh() -> void:
-	if sim == null:
+	if sim == null or not is_inside_tree():
 		return
 	_dirty.refresh()
 	if sim.tick != _scanned_tick:
@@ -666,7 +668,12 @@ func _live_cards() -> Array[Control]:
 ## panel that grows with the day's flights pushes it down.
 func _place() -> void:
 	var top := float(HudLayout.MARGIN)
-	if above != null and above.is_visible_in_tree():
+	if (
+		above != null
+		and is_instance_valid(above)
+		and above.is_inside_tree()
+		and above.is_visible_in_tree()
+	):
 		top = above.get_global_rect().end.y + HudLayout.GROUP_GAP
 	if not is_equal_approx(top, offset_top):
 		offset_top = top
@@ -676,14 +683,20 @@ func _place() -> void:
 ## coordinator: GROUP_GAP above the category bar (or the open build tray stack)
 ## and above any visible bottom-right dock or DebugPanel.
 func _stop_y() -> float:
-	var view := get_viewport().get_visible_rect().size
+	if not is_inside_tree():
+		return 0.0
+	var viewport := get_viewport()
+	var tree := get_tree()
+	if viewport == null or tree == null:
+		return 0.0
+	var view := viewport.get_visible_rect().size
 	var tray_open: bool = build_tray_open.is_valid() and bool(build_tray_open.call())
 	var stack_top := (
 		float(build_stack_top.call())
 		if tray_open and build_stack_top.is_valid()
 		else BuildMenu.tray_stack_top()
 	)
-	return BottomDocks.right_stop_y(get_tree(), view, tray_open, stack_top)
+	return BottomDocks.right_stop_y(tree, view, tray_open, stack_top)
 
 
 ## Orders the cards newest first and draws as many as fit: at most MAX_CARDS,
@@ -697,10 +710,13 @@ func _stop_y() -> float:
 func _layout_cards() -> void:
 	if not is_inside_tree() or not is_visible_in_tree():
 		return
+	var viewport := get_viewport()
+	if viewport == null:
+		return
 	var key := [
 		global_position.y,
 		_stop_y(),
-		get_viewport().get_visible_rect().size,
+		viewport.get_visible_rect().size,
 		_cards_on,
 		_tray.visible,
 	]
@@ -753,6 +769,8 @@ func _layout_cards() -> void:
 
 
 func _retranslate() -> void:
+	if not is_inside_tree():
+		return
 	_tray_button.tooltip_text = tr("Alert history and the on/off switch for alert cards")
 	_more.tooltip_text = tr("Open the alert history")
 	_tray_title.text = tr("Alert history")

@@ -35,15 +35,16 @@ static func show_status(mode: BuildMode, result: BuildResult) -> void:
 		return
 	# An undo's note shows under the Belt tool too.
 	if mode._status_note != "" and not mode._area.active:
-		mode._set_status(mode._status_note)
+		mode._set_status(mode._status_note, mode._status_note_is_refusal)
 		return
 	if mode.tool == BuildMode.Tool.BELT:
 		var text := BuildWords.status(BuildMode.BELT_HINT)
 		if mode._area.active and mode._belt_plan != null:
 			text = BuildWords.belt_cells(mode._belt_plan.cells.size())
-		if result != null and not result.ok:
+		var belt_refused := result != null and not result.ok
+		if belt_refused:
 			text += "  " + result.reason_text()
-		mode._set_status(text)
+		mode._set_status(text, belt_refused and mode._pointer_on_grid)
 		return
 	if mode._area.active:
 		mode._set_status(mode._area.size_label())
@@ -66,7 +67,7 @@ static func show_status(mode: BuildMode, result: BuildResult) -> void:
 		text += ("  " if text != "" else "") + mode._front_warning
 	if mode._lane_hint != "":
 		text += ("  " if text != "" else "") + mode._lane_hint
-	mode._set_status(text)
+	mode._set_status(text, refused and mode._pointer_on_grid)
 
 
 ## What the status line says about the lane part at `cell`: the first thing

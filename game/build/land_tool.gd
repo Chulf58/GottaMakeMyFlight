@@ -43,6 +43,7 @@ var _valid_material := StandardMaterial3D.new()
 var _invalid_material := StandardMaterial3D.new()
 var _hovered := NO_PLOT
 var _hover_text := ""
+var _hover_refused := false
 
 
 func _init() -> void:
@@ -125,9 +126,11 @@ func hover(point: Variant) -> String:
 	_hover.visible = false
 	_price.visible = false
 	_hover_text = ""
+	_hover_refused = false
 	if plot == NO_PLOT:
 		return ""
 	var problem := land.buy_problem(plot, mode.wallet())
+	_hover_refused = problem != null
 	var cells := land.plot_cells(plot)
 	var demo_capped := (
 		problem != null
@@ -197,12 +200,17 @@ func price_label() -> Label3D:
 	return _price
 
 
+func last_hover_refused() -> bool:
+	return _hover_refused
+
+
 func _on_tool_changed(tool: BuildMode.Tool) -> void:
 	var was_gated := land.gated if land != null else false
 	_sync_gate()
 	visible = tool == BuildMode.Tool.BUY_LAND
 	_hovered = NO_PLOT
 	_hover_text = ""
+	_hover_refused = false
 	if visible and land != null and (DemoMode.is_demo() or land.gated != was_gated):
 		_draw_fills()
 

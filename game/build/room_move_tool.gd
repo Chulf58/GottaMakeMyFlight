@@ -119,7 +119,9 @@ func pick_up(point: Vector3, type: StringName) -> bool:
 	var rect: Rect2i = grid.get_room(id)["rect"]
 	var refusal := never_moves_refusal(grid, id)
 	if refusal != null:
-		_set_status("%s  %s" % [_name_of(id), refusal.reason_text()])
+		var msg := "%s  %s" % [_name_of(id), refusal.reason_text()]
+		_set_status(msg)
+		_mode.notify_refusal(msg)
 		return false
 	active = true
 	room_id = id
@@ -195,11 +197,15 @@ func set_down(centre: Vector2i) -> BuildResult:
 	var name_of := _name_of(room_id)
 	if not move.result.ok:
 		_mode.grid.edit_refused.emit(BuildEdit.resize_room(room_id, move.to_rect), move.result)
-		_set_status("%s  %s" % [name_of, move.result.reason_text()])
+		var msg := "%s  %s" % [name_of, move.result.reason_text()]
+		_set_status(msg)
+		_mode.notify_refusal(msg)
 		return move.result
 	var result := RoomMove.commit_move(_mode.grid, move, _mode.wallet(), _mode.undo_history())
 	if not result.ok:
-		_set_status("%s  %s" % [name_of, result.reason_text()])
+		var msg := "%s  %s" % [name_of, result.reason_text()]
+		_set_status(msg)
+		_mode.notify_refusal(msg)
 		return result
 	var note := (
 		tr("Moved {room}", "room move").format({"room": name_of})
@@ -278,7 +284,10 @@ func hover_at(cell: Variant) -> void:
 	var text := _hint(room_id)
 	if not ok:
 		text = "%s  %s" % [_name_of(room_id), _plan.result.reason_text()]
+	var changed := text != _status
 	_set_status(text)
+	if not ok and changed:
+		_mode.refusal_shown.emit(text)
 
 
 ## The pieces whose cells lie in the room as they stand now, doors left out

@@ -263,6 +263,9 @@ func _ready() -> void:
 		_room_panel.watch(build_mode)
 		build_mode.tool_changed.connect(_on_tool_changed)
 		build_mode.status_changed.connect(_on_mode_status_changed)
+		build_mode.refusal_shown.connect(_on_refusal_shown)
+		if build_mode.grid != null:
+			build_mode.grid.edit_refused.connect(_on_edit_refused)
 		build_mode.templates.status_changed.connect(_on_status_changed)
 		build_mode.templates.armed_changed.connect(_show_status)
 		build_mode.room_mover.status_changed.connect(_on_status_changed)
@@ -1076,6 +1079,30 @@ func _on_status_changed(text: String) -> void:
 	_show_status()
 
 
+func _on_refusal_shown(text: String) -> void:
+	if not _holding or _hold_is_grant or text == "":
+		return
+	_raw_status = text
+	_end_passive_hold()
+
+
+func _on_edit_refused(_edit: BuildEdit, result: BuildResult) -> void:
+	if not _holding or _hold_is_grant or result == null or result.ok:
+		return
+	var mode_text := build_mode.status_text() if build_mode != null else ""
+	_raw_status = mode_text if mode_text != "" else result.reason_text()
+	_end_passive_hold()
+
+
+func _end_passive_hold() -> void:
+	_pending_wages = ""
+	_wages_hold_amount = 0
+	_wages_hold_owed = 0
+	_holding = false
+	_hold_generation += 1
+	_show_status()
+
+
 ## The status line: the latest status text, and the "R rotate" hint (RotateHint)
 ## in its own label while a piece or a template that can turn is armed. A hold
 ## keeps its message.
@@ -1121,8 +1148,9 @@ func _start_hold(message: String, is_grant: bool) -> void:
 	_wrap_status(true)
 	_rotate_hint.visible = false
 	_hold_generation += 1
-	var timer := get_tree().create_timer(grant_hold_s)
-	timer.timeout.connect(_on_hold_timeout.bind(_hold_generation))
+	if is_inside_tree() and get_tree() != null:
+		var timer := get_tree().create_timer(grant_hold_s)
+		timer.timeout.connect(_on_hold_timeout.bind(_hold_generation))
 
 
 ## "Wages paid: N", with the debt left when there is one, held like a grant
