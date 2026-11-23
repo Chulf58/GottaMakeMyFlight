@@ -84,13 +84,14 @@ static func is_offer(kind: String) -> bool:
 
 ## The weight of `kind` in `world`: {"tier": the airline tier, "places": the
 ## places a spill can happen, "contracts": the running contracts, "faults":
-## the stations a scanner fault may stop, IncidentFault.stations()}. The rush,
+## the stations a scanner fault may stop, IncidentFault.stations(),
+## "guarantee_incident": optional bool dropping "none" weight to 0}. The rush,
 ## the VIP and the favour need a running contract to land on.
 static func weight(kind: String, world: Dictionary) -> int:
 	var contracts := int(world.get("contracts", 0)) > 0
 	match kind:
 		NONE:
-			return NONE_WEIGHT
+			return 0 if bool(world.get("guarantee_incident", false)) else NONE_WEIGHT
 		SPILL:
 			return mini(int(world.get("places", 0)), SPILL_MOST)
 		INSPECTOR:
