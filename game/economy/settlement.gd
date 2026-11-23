@@ -142,6 +142,8 @@ const INFO_SCREEN_ID := &"info_screen"
 @export var staff: StaffSim
 ## Without it every passenger who makes the flight pays the whole fee.
 @export var baggage: BaggageSim
+## Optional: applies the airport certification prestige fee bonus at payout time.
+var certification: AirportCertification
 
 var _sim: PassengerSim
 var _wallet: Wallet
@@ -528,6 +530,8 @@ func _on_outcome(id: int, made: bool) -> void:
 		return
 	_settled[id] = true
 	var fee: int = contract["fee_per_passenger"]
+	if certification != null:
+		fee = certification.apply_prestige_bonus(fee)
 	var paid := OfferTraits.missed_bag_paid_percent(contract[FlightContract.TRAITS_KEY])
 	if fee > 0 and bag_missed:
 		fee = PriceTable.fee_after_missed_bag(fee, paid)
