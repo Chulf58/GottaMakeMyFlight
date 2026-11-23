@@ -125,4 +125,4 @@ func test_guard_rects_protects_concurrent_taxi_out_and_taxi_in_at_one_gate() -> 
 	var expected := _apron._rects_of("OUT_B", stand_b, "B")
 	expected.append_array(_apron._rects_of("IN_B", stand_b, "B"))
 	assert_array(_apron.guard_rects()).is_equal(expected)
-	assert_int(_paint(FOOTPRINT_B).reason).is_equal(BuildResult.Reason.PLANE_AREA)
+	assert_int(_paint(_footprint_b).reason).is_equal(BuildResult.Reason.PLANE_AREA)
