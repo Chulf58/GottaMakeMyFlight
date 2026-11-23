@@ -68,9 +68,12 @@ func test_trait_shares_over_seeded_draws_match_the_tables() -> void:
 	rng.seed = SEED
 	var bags := [0, 0, 0]
 	var liquids := 0
+	var zero_bag_liquids := 0
 	var alarms := 0
 	for p in _drawn(rng, SAMPLES):
 		bags[p.carry_on] += 1
+		if p.carry_on == 0 and p.liquids:
+			zero_bag_liquids += 1
 		liquids += int(p.liquids)
 		alarms += int(p.alarm)
 	for n in bags.size():
@@ -81,7 +84,9 @@ func test_trait_shares_over_seeded_draws_match_the_tables() -> void:
 			. override_failure_message("%d bags: %.4f, want %.2f" % [n, share, want])
 			. is_equal_approx(want, TOLERANCE)
 		)
-	assert_float(liquids / float(SAMPLES)).is_equal_approx(
+	assert_int(zero_bag_liquids).is_equal(0)
+	var bag_carriers: int = SAMPLES - int(bags[0])
+	assert_float(liquids / float(bag_carriers)).is_equal_approx(
 		CarryOnTraits.LIQUIDS_PERCENT / 100.0, TOLERANCE
 	)
 	assert_float(alarms / float(SAMPLES)).is_equal_approx(

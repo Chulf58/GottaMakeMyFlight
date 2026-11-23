@@ -5468,6 +5468,11 @@ msgstr ""
 
 #: build/build_words.gd
 msgctxt "item name, mid-sentence"
+msgid "confiscation bin"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
 msgid "currency exchange"
 msgstr ""
 
@@ -5609,6 +5614,11 @@ msgstr ""
 #: build/build_words.gd
 msgctxt "item name, mid-sentence"
 msgid "screen"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "search table"
 msgstr ""
 
 #: build/build_words.gd

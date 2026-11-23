@@ -37,7 +37,7 @@ func _repacking() -> Array:
 	w.world.auto_staff = false
 	_worlds.append(w)
 	StaffTestKit.seat(w.world.staff, w.station, PRIMARY)
-	var id := w.send(0, true)
+	var id := w.send(1, true)
 	var stop := w.world.clock.tick + 2000
 	while w.world.passenger(id).security_phase != REPACK and w.world.clock.tick < stop:
 		w.world.step()

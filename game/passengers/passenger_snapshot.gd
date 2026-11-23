@@ -281,11 +281,13 @@ static func _record(p: Passenger) -> Dictionary:
 
 
 static func _top_problem(data: Dictionary) -> String:
+	if not data.has("save_version"):
+		return "missing key 'save_version'"
+	if not _whole(data["save_version"]) or int(data["save_version"]) != PassengerSim.SAVE_VERSION:
+		return "save_version must be %d" % PassengerSim.SAVE_VERSION
 	for key in KEYS:
 		if not data.has(key):
 			return "missing key '%s'" % key
-	if not _whole(data["save_version"]) or int(data["save_version"]) != PassengerSim.SAVE_VERSION:
-		return "save_version must be %d" % PassengerSim.SAVE_VERSION
 	if not SimClock.is_int64_string(data["tick"]) or str(data["tick"]).begins_with("-"):
 		return "tick must be a decimal string, 0 or more"
 	if not SimClock.is_int64_string(data["last_batch_seed"]):

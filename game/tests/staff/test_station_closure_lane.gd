@@ -36,7 +36,7 @@ func test_closing_a_lane_lets_every_admitted_passenger_finish_then_frees_both_of
 	var staff := _w.world.staff
 	var primary := staff.get_member(StaffTestKit.seat(staff, _w.station, PRIMARY))
 	var helper := staff.get_member(StaffTestKit.seat(staff, _w.station, HELPER))
-	var ids := _w.send_all([[0, true, false], [2, false, false]])
+	var ids := _w.send_all([[1, true, false], [2, false, false]])
 	var first: int = ids[0]
 	var second: int = ids[1]
 	var both := func() -> bool:
