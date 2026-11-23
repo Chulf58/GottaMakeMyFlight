@@ -252,7 +252,7 @@ func test_spur_head_and_connector_hold_bars_run_across_their_legs() -> void:
 		var across_z := holds[i] == head or holds[i] == gate
 		for bar in [bars[2 * i], bars[2 * i + 1]]:
 			var size := Vector2(bar.size.x, bar.size.y)
-			var want := Vector2(TaxiPaving.HOLD_LINE_M, TaxiPaving.WIDTH_M)
+			var want := Vector2(TaxiPaving.HOLD_LINE_M, TaxiPaving.HOLD_BAR_WIDTH_M)
 			if not across_z:
 				want = Vector2(want.y, want.x)
 			(

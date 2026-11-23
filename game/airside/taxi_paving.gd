@@ -111,9 +111,13 @@ const MARKING_UV := Vector2(0.6083, 0.0067)
 const SAME_M := 0.01
 ## How far the stand pads lie under the strips, still over the grass (y -0.1).
 const PAD_DROP_M := 0.02
-## A hold bar's two lines: each line's depth along the leg and the gap between.
+## A hold bar's two lines: each line's depth along the leg and the gap between,
+## inset inside the double-yellow shoulder lines and clear of perpendicular lane shoulders.
 const HOLD_LINE_M := 0.5
 const HOLD_GAP_M := 0.5
+const HOLD_BAR_INSET_M := 1.6
+const HOLD_BAR_WIDTH_M := WIDTH_M - 2.0 * HOLD_BAR_INSET_M
+const HOLD_LANE_CLEAR_M := 1.5
 
 ## The strips last built: strips(), run on to the wall lines (run_on_to_walls()).
 var shown: Array[Dictionary] = []
@@ -151,7 +155,7 @@ func show_routes(
 	lines = centrelines(route_strips, lane_z)
 	pads = pad_list.duplicate()
 	shown = run_on_to_walls(route_strips, pads)
-	bars = hold_bars(holds, WIDTH_M, runway_south_z, route_strips)
+	bars = hold_bars(holds, HOLD_BAR_WIDTH_M, runway_south_z, route_strips)
 	var marks := lines.duplicate()
 	marks.append_array(bars)
 	mesh = TaxiPavingSite.on_site(mesh_of(shown, marks, pads))
@@ -264,7 +268,7 @@ static func parked_footprint(stand_point: Vector3, model: String) -> Rect2:
 ## leg, `width` long in z.
 static func hold_bars(
 	holds: PackedVector3Array,
-	width := WIDTH_M,
+	width := HOLD_BAR_WIDTH_M,
 	clear_of_z := -INF,
 	strip_list: Array[Dictionary] = []
 ) -> Array[Rect2]:
@@ -272,13 +276,53 @@ static func hold_bars(
 	var reach := HOLD_GAP_M / 2.0 + HOLD_LINE_M
 	for at in holds:
 		if _on_east_west_leg(strip_list, at):
-			out.append(Rect2(at.x - reach, at.z - width / 2.0, HOLD_LINE_M, width))
-			out.append(Rect2(at.x + HOLD_GAP_M / 2.0, at.z - width / 2.0, HOLD_LINE_M, width))
+			var x := clamp_ew_hold_x(at.x, at, strip_list, reach)
+			out.append(Rect2(x - reach, at.z - width / 2.0, HOLD_LINE_M, width))
+			out.append(Rect2(x + HOLD_GAP_M / 2.0, at.z - width / 2.0, HOLD_LINE_M, width))
 			continue
-		var z := maxf(at.z, clear_of_z + HOLD_GAP_M + reach)
+		var z := clamp_ns_hold_z(at.z, at, clear_of_z, strip_list, reach)
 		out.append(Rect2(at.x - width / 2.0, z - reach, width, HOLD_LINE_M))
 		out.append(Rect2(at.x - width / 2.0, z + HOLD_GAP_M / 2.0, width, HOLD_LINE_M))
 	return out
+
+
+## Keeps a north-south leg's hold center z clear of `clear_of_z` and at least
+## HOLD_LANE_CLEAR_M clear of any perpendicular east-west strip edge it meets.
+static func clamp_ns_hold_z(
+	at_z: float, at: Vector3, clear_of_z: float, strip_list: Array[Dictionary], reach: float
+) -> float:
+	var min_z := clear_of_z + HOLD_GAP_M + reach
+	var z := maxf(at_z, min_z)
+	for strip in strip_list:
+		if strip.has("quad") or strip["across_x"]:
+			continue
+		var rect: Rect2 = strip["rect"]
+		if at.x < rect.position.x - SAME_M or at.x > rect.end.x + SAME_M:
+			continue
+		if z <= rect.position.y and rect.position.y - (z + reach) < HOLD_LANE_CLEAR_M:
+			z = maxf(min_z, rect.position.y - HOLD_LANE_CLEAR_M - reach)
+		elif z >= rect.end.y and (z - reach) - rect.end.y < HOLD_LANE_CLEAR_M:
+			z = maxf(z, rect.end.y + HOLD_LANE_CLEAR_M + reach)
+	return z
+
+
+## Keeps an east-west leg's hold center x at least HOLD_LANE_CLEAR_M clear of
+## any perpendicular north-south strip edge it meets.
+static func clamp_ew_hold_x(
+	at_x: float, at: Vector3, strip_list: Array[Dictionary], reach: float
+) -> float:
+	var x := at_x
+	for strip in strip_list:
+		if strip.has("quad") or not strip["across_x"]:
+			continue
+		var rect: Rect2 = strip["rect"]
+		if at.z < rect.position.y - SAME_M or at.z > rect.end.y + SAME_M:
+			continue
+		if x <= rect.position.x and rect.position.x - (x + reach) < HOLD_LANE_CLEAR_M:
+			x = minf(x, rect.position.x - HOLD_LANE_CLEAR_M - reach)
+		elif x >= rect.end.x and (x - reach) - rect.end.x < HOLD_LANE_CLEAR_M:
+			x = maxf(x, rect.end.x + HOLD_LANE_CLEAR_M + reach)
+	return x
 
 
 ## Whether `at` lies on the centre line of an east-west strip of `strip_list`

@@ -27,7 +27,6 @@ const FENCE_STEP_M := 7.85
 const APRON_RECT := Rect2(-142.0, -458.0, 284.0, 74.0)
 const APRON_TOP_Y := 0.0
 const APRON_SKIRT_Y := -0.12
-const APRON_SLAB_M := 14.0
 const RUNWAY_MARKING_Y := 0.108
 const RUNWAY_WEAR_Y := 0.1075
 const LIGHT_GROUND_Y := -0.10
@@ -40,7 +39,6 @@ const STUB_CLEAR_M := 18.0
 const STUB_XS := [-124.0, 124.0]
 
 const CONCRETE_UV := Vector2(2.5 / 32.0, 15.3 / 16.0)
-const CONCRETE_ALT_UV := Vector2(12.5 / 32.0, 11.25 / 16.0)
 const WHITE_UV := Vector2(11.5 / 32.0, 14.2 / 16.0)
 const YELLOW_UV := Vector2(0.6083, 0.0067)
 
@@ -425,19 +423,7 @@ func _build_service_apron_mesh() -> ArrayMesh:
 	var normals := PackedVector3Array()
 	var uvs := PackedVector2Array()
 	var index := PackedInt32Array()
-
-	var cols := ceili(APRON_RECT.size.x / APRON_SLAB_M)
-	var rows := ceili(APRON_RECT.size.y / APRON_SLAB_M)
-	for r in rows:
-		for c in cols:
-			var x0 := APRON_RECT.position.x + c * APRON_SLAB_M
-			var x1 := minf(x0 + APRON_SLAB_M, APRON_RECT.end.x)
-			var z0 := APRON_RECT.position.y + r * APRON_SLAB_M
-			var z1 := minf(z0 + APRON_SLAB_M, APRON_RECT.end.y)
-			var uv := CONCRETE_UV if (r + c) % 2 == 0 else CONCRETE_ALT_UV
-			_add_flat_quad(
-				Rect2(x0, z0, x1 - x0, z1 - z0), APRON_TOP_Y, uv, verts, normals, uvs, index
-			)
+	_add_flat_quad(APRON_RECT, APRON_TOP_Y, CONCRETE_UV, verts, normals, uvs, index)
 
 	var skirt_verts := PackedVector3Array()
 	var skirt_normals := PackedVector3Array()
@@ -473,10 +459,8 @@ func _build_service_apron_mesh() -> ArrayMesh:
 		)
 
 	var out := ArrayMesh.new()
-	_commit_surface(out, verts, normals, uvs, index, TaxiMarkings.material())
-	_commit_surface(
-		out, skirt_verts, skirt_normals, skirt_uvs, skirt_index, TaxiMarkings.material()
-	)
+	_commit_surface(out, verts, normals, uvs, index, TaxiPaving.MATERIAL)
+	_commit_surface(out, skirt_verts, skirt_normals, skirt_uvs, skirt_index, TaxiPaving.MATERIAL)
 	return out
 
 
@@ -529,19 +513,73 @@ func _build_runway_markings_mesh(runway_size: String) -> ArrayMesh:
 	var uvs := PackedVector2Array()
 	var index := PackedInt32Array()
 	var half := Runway.length_m(runway_size) * 0.5
+	if half <= 0.0:
+		return ArrayMesh.new()
 	var rz := StandPlacement.RUNWAY_Z
 	var y := RUNWAY_MARKING_Y
 
-	# White threshold bars & piano keys cleanly framing where 01A end chevron pads meet 03A.
-	# Centerline dashes, side lines and TDZ dots belong to the underlying tp_runway_03a mesh.
+	# Continuous white side edge lines across the usable runway between thresholds.
+	var usable_x0 := -half + 48.0
+	var usable_w := (half - 48.0) * 2.0
+	_add_flat_quad(
+		Rect2(usable_x0, rz - 28.45, usable_w, 0.9), y, WHITE_UV, verts, normals, uvs, index
+	)
+	_add_flat_quad(
+		Rect2(usable_x0, rz + 27.55, usable_w, 0.9), y, WHITE_UV, verts, normals, uvs, index
+	)
+
+	# End-only threshold bars, piano keys, TDZ bars, aiming-point bars, and blast-pad chevrons.
 	for end_sign: float in [-1.0, 1.0]:
 		var tx := end_sign * (half - 48.0)
 		var bar_x := tx if end_sign < 0.0 else tx - 2.2
-		_add_flat_quad(Rect2(bar_x, rz - 25.0, 2.2, 50.0), y, WHITE_UV, verts, normals, uvs, index)
+		_add_flat_quad(Rect2(bar_x, rz - 28.45, 2.2, 56.9), y, WHITE_UV, verts, normals, uvs, index)
 		var key_x0 := (-half + 52.0) if end_sign < 0.0 else (half - 68.0)
 		for k in 8:
 			var kz := rz - 21.0 + float(k) * 6.0 - 0.9
 			_add_flat_quad(Rect2(key_x0, kz, 16.0, 1.8), y, WHITE_UV, verts, normals, uvs, index)
+		var tdz_x := end_sign * (half - 78.0)
+		_add_flat_quad(
+			Rect2(tdz_x - 5.0, rz - 7.8, 10.0, 1.6), y, WHITE_UV, verts, normals, uvs, index
+		)
+		_add_flat_quad(
+			Rect2(tdz_x - 5.0, rz + 6.2, 10.0, 1.6), y, WHITE_UV, verts, normals, uvs, index
+		)
+		var aim_x := end_sign * (half - 104.0)
+		_add_flat_quad(
+			Rect2(aim_x - 11.0, rz - 11.3, 22.0, 3.6), y, WHITE_UV, verts, normals, uvs, index
+		)
+		_add_flat_quad(
+			Rect2(aim_x - 11.0, rz + 7.7, 22.0, 3.6), y, WHITE_UV, verts, normals, uvs, index
+		)
+		for cx_off: float in [16.0, 32.0]:
+			var tip_x := end_sign * (half - cx_off)
+			var wing_x := tip_x - end_sign * 10.0
+			for side_z: float in [-1.0, 1.0]:
+				_add_angled_quad(
+					[
+						Vector3(tip_x, y, rz),
+						Vector3(wing_x, y, rz + side_z * 16.0),
+						Vector3(wing_x - end_sign * 2.4, y, rz + side_z * 16.0),
+						Vector3(tip_x - end_sign * 2.4, y, rz),
+					],
+					YELLOW_UV,
+					verts,
+					normals,
+					uvs,
+					index
+				)
+
+	# Evenly spaced centerline dashes strictly inside the threshold piano keys.
+	var x_min := -half + 74.0
+	var span := (half - 74.0) * 2.0
+	var dash_len := 14.0
+	var count := maxi(3, roundi((span + 12.0) / 26.0))
+	if count % 2 == 0:
+		count += 1
+	var step := (span - dash_len) / float(count - 1)
+	for i in count:
+		var dx := x_min + float(i) * step
+		_add_flat_quad(Rect2(dx, rz - 0.55, dash_len, 1.1), y, WHITE_UV, verts, normals, uvs, index)
 
 	var out := ArrayMesh.new()
 	_commit_surface(out, verts, normals, uvs, index, TaxiMarkings.material())
@@ -555,22 +593,24 @@ func _build_runway_wear_mesh(runway_size: String) -> ArrayMesh:
 	var index := PackedInt32Array()
 	var rz := StandPlacement.RUNWAY_Z
 	var half := Runway.length_m(runway_size) * 0.5
-	var zones: Array[float] = [-40.0, half - 100.0]
-	if runway_size == Runway.MEDIUM or runway_size == Runway.LARGE:
-		zones.append(-110.0)
-	if runway_size == Runway.LARGE:
-		zones.append(-170.0)
-	for zx in zones:
+	if half <= 0.0:
+		return ArrayMesh.new()
+	var zones := [
+		[-half + 104.0, 0.0, 1.0],
+		[half - 104.0, 1.0, 0.0],
+	]
+	for zone: Array in zones:
+		var zx: float = zone[0]
+		var u0: float = zone[1]
+		var u1: float = zone[2]
 		var base := verts.size()
-		verts.append(Vector3(zx - 20.0, RUNWAY_WEAR_Y, rz - 9.5))
-		verts.append(Vector3(zx + 20.0, RUNWAY_WEAR_Y, rz - 9.5))
-		verts.append(Vector3(zx + 20.0, RUNWAY_WEAR_Y, rz + 9.5))
-		verts.append(Vector3(zx - 20.0, RUNWAY_WEAR_Y, rz + 9.5))
+		verts.append(Vector3(zx - 22.0, RUNWAY_WEAR_Y, rz - 9.5))
+		verts.append(Vector3(zx + 22.0, RUNWAY_WEAR_Y, rz - 9.5))
+		verts.append(Vector3(zx + 22.0, RUNWAY_WEAR_Y, rz + 9.5))
+		verts.append(Vector3(zx - 22.0, RUNWAY_WEAR_Y, rz + 9.5))
 		for _i in 4:
 			normals.append(Vector3.UP)
-		uvs.append_array(
-			[Vector2(0.0, 0.0), Vector2(1.0, 0.0), Vector2(1.0, 1.0), Vector2(0.0, 1.0)]
-		)
+		uvs.append_array([Vector2(u0, 0.0), Vector2(u1, 0.0), Vector2(u1, 1.0), Vector2(u0, 1.0)])
 		index.append_array(PackedInt32Array([base, base + 1, base + 2, base, base + 2, base + 3]))
 	var out := ArrayMesh.new()
 	_commit_surface(out, verts, normals, uvs, index, WEAR_MATERIAL)
@@ -679,6 +719,25 @@ static func _add_flat_quad(
 		normals.append(Vector3.UP)
 		uvs.append(uv)
 	index.append_array(PackedInt32Array([base, base + 1, base + 2, base, base + 2, base + 3]))
+
+
+static func _add_angled_quad(
+	pts: Array[Vector3],
+	uv: Vector2,
+	verts: PackedVector3Array,
+	normals: PackedVector3Array,
+	uvs: PackedVector2Array,
+	index: PackedInt32Array
+) -> void:
+	var base := verts.size()
+	verts.append_array(pts)
+	for _i in 4:
+		normals.append(Vector3.UP)
+		uvs.append(uv)
+	if (pts[1] - pts[0]).cross(pts[2] - pts[0]).y < 0.0:
+		index.append_array(PackedInt32Array([base, base + 1, base + 2, base, base + 2, base + 3]))
+	else:
+		index.append_array(PackedInt32Array([base, base + 2, base + 1, base, base + 3, base + 2]))
 
 
 static func _commit_surface(

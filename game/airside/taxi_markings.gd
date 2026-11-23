@@ -9,7 +9,8 @@ extends RefCounted
 const EDGE_INSET_INNER_M := 0.55
 const EDGE_INSET_OUTER_M := 1.05
 const EDGE_LINE_W := 0.24
-const JUNCTION_MOUTH_GROW_M := 1.20
+const COVER_GROW_M := EDGE_INSET_OUTER_M + EDGE_LINE_W * 0.5 + 0.15
+const JUNCTION_MOUTH_GROW_M := COVER_GROW_M
 const DEFAULT_COVER_GROW_M := 0.35
 const WHITE_UV := Vector2(11.5 / 32.0, 14.2 / 16.0)
 const RED_UV := Vector2(31.5 / 32.0, 0.45 / 16.0)
@@ -164,8 +165,12 @@ static func _uncovered_spans(
 		var or_rect: Rect2 = other["rect"]
 		var abuts := _rects_touch_or_overlap(owner_rect, or_rect, TaxiPaving.SAME_M)
 		var perp_abut := abuts and (bool(other["across_x"]) != owner_across)
-		var gx := JUNCTION_MOUTH_GROW_M if (not horizontal and perp_abut) else DEFAULT_COVER_GROW_M
-		var gy := JUNCTION_MOUTH_GROW_M if (horizontal and perp_abut) else DEFAULT_COVER_GROW_M
+		var gx := (
+			COVER_GROW_M if (abuts and (not horizontal or not perp_abut)) else DEFAULT_COVER_GROW_M
+		)
+		var gy := (
+			COVER_GROW_M if (abuts and (horizontal or not perp_abut)) else DEFAULT_COVER_GROW_M
+		)
 		var r := Rect2(
 			or_rect.position.x - gx,
 			or_rect.position.y - gy,
@@ -180,10 +185,12 @@ static func _uncovered_spans(
 				intervals = _subtract_interval(intervals, r.position.y, r.end.y)
 	for pad in pad_list:
 		var abuts := _rects_touch_or_overlap(owner_rect, pad, TaxiPaving.SAME_M)
-		var gx := JUNCTION_MOUTH_GROW_M if (not horizontal and abuts) else DEFAULT_COVER_GROW_M
-		var gy := JUNCTION_MOUTH_GROW_M if (horizontal and abuts) else DEFAULT_COVER_GROW_M
+		var grow := COVER_GROW_M if abuts else DEFAULT_COVER_GROW_M
 		var pr := Rect2(
-			pad.position.x - gx, pad.position.y - gy, pad.size.x + 2.0 * gx, pad.size.y + 2.0 * gy
+			pad.position.x - grow,
+			pad.position.y - grow,
+			pad.size.x + 2.0 * grow,
+			pad.size.y + 2.0 * grow
 		)
 		if horizontal:
 			if fixed_coord >= pr.position.y and fixed_coord <= pr.end.y:
@@ -236,8 +243,9 @@ static func _add_hold_dashed_bars(
 	for at in holds:
 		var ew := _is_east_west_hold(strip_list, at)
 		if ew:
+			var hx := TaxiPaving.clamp_ew_hold_x(at.x, at, strip_list, reach)
 			var dir := -1.0 if at.x < 0.0 else 1.0
-			var bx := at.x + dir * (reach + TaxiPaving.HOLD_GAP_M)
+			var bx := hx + dir * (reach + TaxiPaving.HOLD_GAP_M)
 			var z := at.z - half_w
 			while z + HOLD_DASH_LEN_M <= at.z + half_w + 0.05:
 				_add_rect(
@@ -256,7 +264,7 @@ static func _add_hold_dashed_bars(
 				)
 				z += step
 		else:
-			var z := maxf(at.z, runway_south_z + TaxiPaving.HOLD_GAP_M + reach)
+			var z := TaxiPaving.clamp_ns_hold_z(at.z, at, runway_south_z, strip_list, reach)
 			var bz := z - (reach + TaxiPaving.HOLD_GAP_M)
 			if bz - TaxiPaving.HOLD_LINE_M * 0.5 <= runway_south_z + 0.05:
 				bz = z + reach + TaxiPaving.HOLD_GAP_M
