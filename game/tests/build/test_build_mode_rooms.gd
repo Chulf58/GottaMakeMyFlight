@@ -64,17 +64,22 @@ func test_the_drag_status_names_the_room_and_its_size() -> void:
 	assert_str(_mode.status_text()).is_equal("Cafe 4 x 3")
 	_mode.move_area(_at(Vector2i(15, 5)))
 	_mode._update_ghost(_at(Vector2i(15, 5)))
-	assert_str(_mode.status_text()).is_equal("Cafe 13 x 3  Needs floor")
+	assert_str(_mode.status_text()).is_equal("Cafe 13 x 3")
 	_mode.cancel_area()
 	assert_array(_mode.grid.room_ids()).is_empty()
 
 
-func test_a_cafe_over_bare_ground_is_refused_with_its_reason() -> void:
+func test_a_cafe_over_bare_ground_auto_lays_floor_and_walls_while_overlap_refuses() -> void:
 	_mode.set_tool(BuildMode.Tool.CAFE_ROOM)
-	_drag(Vector2i(10, 3), Vector2i(15, 6))
-	assert_array(_mode.grid.room_ids()).is_empty()
-	assert_str(_mode.status_text()).is_equal("Needs floor")
-	assert_int(_changes).is_equal(0)
+	_drag(Vector2i(14, 3), Vector2i(16, 6))
+	assert_int(_mode.grid.room_ids().size()).is_equal(1)
+	assert_int(_mode.grid.floor_at(Vector2i(15, 4))).is_equal(BuildGrid.FLOOR_TILE)
+	assert_int(_changes).is_equal(1)
+	# Overlapping an existing room is refused whole with its reason.
+	_drag(Vector2i(13, 3), Vector2i(15, 5))
+	assert_int(_mode.grid.room_ids().size()).is_equal(1)
+	assert_str(_mode.status_text()).is_equal("Overlaps another room")
+	assert_int(_changes).is_equal(1)
 
 
 func test_a_single_click_with_the_cafe_tool_marks_nothing() -> void:

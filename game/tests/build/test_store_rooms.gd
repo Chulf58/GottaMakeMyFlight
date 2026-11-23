@@ -132,7 +132,11 @@ func test_each_store_says_what_it_misses_until_furnished_then_is_ready() -> void
 		assert_int(room_id).override_failure_message(str(type)).is_greater(0)
 		var empty := _notes(room_id)
 		print("empty %s: %s" % [type, empty])
-		assert_array(empty).is_equal(tools[3])
+		assert_array(empty).is_equal([tools[3][0], tools[3][1], RoomRules.NO_OPENING])
+		_mode.grid.apply(BuildEdit.remove_wall(Vector2i(4, 6), BuildGrid.Side.SOUTH))
+		_mode.grid.apply(
+			BuildEdit.place_wall(Vector2i(4, 6), BuildGrid.Side.SOUTH, BuildGrid.WallKind.DOOR)
+		)
 		assert_bool(_click(tools[1], COUNTER_AT).ok).is_true()
 		assert_array(_notes(room_id)).is_equal([tools[3][1]])
 		assert_bool(_click(tools[2], PIECE_AT).ok).is_true()
@@ -147,6 +151,7 @@ func test_each_store_says_what_it_misses_until_furnished_then_is_ready() -> void
 		assert_array(_notes(room_id)).is_equal([tools[3][1]])
 		_mode.apply_at(_at(COUNTER_AT))
 		_mode.grid.apply(BuildEdit.remove_room(room_id))
+		_mode.grid.apply(BuildEdit.remove_wall(Vector2i(4, 6), BuildGrid.Side.SOUTH))
 
 
 func test_the_retail_pieces_are_catalogued_priced_and_drawn_with_their_own_models() -> void:

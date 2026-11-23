@@ -160,6 +160,8 @@ var _room_grid := GridContainer.new()
 var _room_cards: Dictionary = {}
 var _room_price_labels: Dictionary = {}
 var _room_entries: Array[Dictionary] = []
+var _starter_kit_cards: Dictionary = {}
+var _starter_kit_price_labels: Dictionary = {}
 var _room_context_type: StringName = &""
 var _room_context_id := 0
 var _back_category := NO_CATEGORY
@@ -281,6 +283,9 @@ func _ready() -> void:
 		build_mode.templates.armed_changed.connect(_show_status)
 		build_mode.room_mover.status_changed.connect(_on_status_changed)
 		build_mode.room_mover.active_changed.connect(_show_status)
+		if build_mode.starter_kit != null:
+			build_mode.starter_kit.status_changed.connect(_on_status_changed)
+			build_mode.starter_kit.armed_changed.connect(_on_starter_kit_armed_changed)
 	if _wallet != null:
 		_wallet.changed.connect(_on_balance_changed)
 	if build_mode != null and build_mode.land_tool != null and build_mode.land_tool.land != null:
@@ -319,6 +324,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		and event.is_action_pressed("build_tool_none")
 		and (build_mode == null or build_mode.tool == BuildMode.Tool.NONE)
 	):
+		if (
+			build_mode != null
+			and build_mode.starter_kit != null
+			and build_mode.starter_kit.is_active()
+		):
+			return
 		if _selection != null and _selection.kind == BuiltSelection.Kind.ROOM:
 			return
 		exit_room_context()
@@ -501,6 +512,20 @@ func press_staff() -> void:
 func press_card(tool: BuildMode.Tool) -> void:
 	_stop_pulse()
 	build_mode.set_tool(tool)
+
+
+func starter_kit_card(kit_id: StringName) -> Button:
+	return _starter_kit_cards.get(kit_id) if is_room_context() else null
+
+
+func press_starter_kit(kit_id: StringName) -> bool:
+	if build_mode == null or build_mode.starter_kit == null:
+		return false
+	_stop_pulse()
+	if build_mode.starter_kit.armed == kit_id:
+		build_mode.starter_kit.disarm()
+		return false
+	return build_mode.starter_kit.try_arm(kit_id)
 
 
 ## Opens `tool`'s category tab (or its Contextual Room-Items tray for room-only
@@ -789,7 +814,12 @@ func _on_tool_changed(tool: BuildMode.Tool) -> void:
 		guide.mark_seen(tool)
 	if tool == BuildMode.Tool.NONE:
 		if not _browsing:
-			if is_room_context() and _has_selected_room():
+			var kit_active := (
+				build_mode != null
+				and build_mode.starter_kit != null
+				and build_mode.starter_kit.is_active()
+			)
+			if is_room_context() and (_has_selected_room() or kit_active):
 				_sync()
 				_show_status()
 				return
@@ -924,6 +954,7 @@ func _refresh_money() -> void:
 	_refresh_money_table(_cards, _price_labels)
 	if is_room_context():
 		_refresh_money_table(_room_cards, _room_price_labels)
+		_refresh_starter_kit_money()
 	refresh_preview()
 
 
@@ -1129,6 +1160,8 @@ func _on_mode_status_changed(text: String) -> void:
 		text = build_mode.templates.status_text()
 	elif text == "" and build_mode.room_mover.active:
 		text = build_mode.room_mover.status_text()
+	elif text == "" and build_mode.starter_kit != null and build_mode.starter_kit.is_active():
+		text = build_mode.starter_kit.status_text()
 	_on_status_changed(text)
 
 
@@ -1256,6 +1289,8 @@ func close_for_modal() -> void:
 	_set_staff_open(false)
 	if build_mode != null:
 		build_mode.templates.disarm()
+		if build_mode.starter_kit != null:
+			build_mode.starter_kit.disarm()
 		if build_mode.room_mover.active:
 			build_mode.room_mover.cancel()
 		build_mode.set_tool(BuildMode.Tool.NONE)
@@ -1324,6 +1359,13 @@ func _sync() -> void:
 		_cards[key].set_pressed_no_signal(key == tool)
 	for key in _room_cards:
 		_room_cards[key].set_pressed_no_signal(key == tool)
+	var armed_kit := (
+		build_mode.starter_kit.armed
+		if build_mode != null and build_mode.starter_kit != null
+		else &""
+	)
+	for kit_id: StringName in _starter_kit_cards:
+		_starter_kit_cards[kit_id].set_pressed_no_signal(kit_id == armed_kit)
 	var pulse_in_context := is_room_context() and _room_cards.has(_pulsed_tool)
 	if (
 		_pulsed_tool != BuildMode.Tool.NONE
@@ -1413,76 +1455,16 @@ func _clear_room_context_state() -> void:
 	_room_context_id = 0
 	_back_category = NO_CATEGORY
 	_room_entries.clear()
+	if build_mode != null and build_mode.starter_kit != null:
+		build_mode.starter_kit.disarm()
 
 
 func _rebuild_room_context_cards() -> void:
-	for child in _room_grid.get_children():
-		_room_grid.remove_child(child)
-		child.queue_free()
-	_room_cards.clear()
-	_room_price_labels.clear()
-	var grid: BuildGrid = build_mode.grid if build_mode != null else null
-	_room_entries = BuildMenuCatalog.room_context_entries(
-		_room_context_type, grid, _room_context_id
-	)
-	for entry: Dictionary in _room_entries:
-		var tool: BuildMode.Tool = entry["tool"]
-		var btn := BuildMenuLayout.make_card(self, tool, _room_price_labels)
-		btn.mouse_entered.connect(_on_card_hovered.bind(tool))
-		_room_grid.add_child(btn)
-		_room_cards[tool] = btn
+	BuildMenuLayout.rebuild_room_context_cards(self)
 
 
 func _refresh_room_context_state() -> void:
-	var type := RoomTypes.get_type(_room_context_type)
-	if type == null:
-		return
-	var room_name := DisplayWords.room_type(type.display_name)
-	_room_title.text = tr("{room} items").format({"room": room_name})
-	var grid: BuildGrid = build_mode.grid if build_mode != null else null
-	_room_context_id = _validated_room_id(_room_context_id)
-	var status: RoomRules.RoomStatus = (
-		RoomRules.status(grid, _room_context_id) if grid != null and _room_context_id != 0 else null
-	)
-	if status == null:
-		_room_summary.visible = false
-		_room_summary.text = ""
-	else:
-		_room_summary.visible = true
-		if status.ok:
-			_room_summary.text = DisplayWords.ready()
-			_room_summary.theme_type_variation = &"HudGoodText"
-		else:
-			_room_summary.text = DisplayWords.notes(status)[0]
-			_room_summary.theme_type_variation = &"HudAttentionText"
-	_room_entries = BuildMenuCatalog.room_context_entries(
-		_room_context_type, grid, _room_context_id
-	)
-	var front_cards: Array[Control] = []
-	var teaser_cards: Array[Control] = []
-	for entry: Dictionary in _room_entries:
-		var tool: BuildMode.Tool = entry["tool"]
-		if not _room_cards.has(tool):
-			continue
-		var btn := _room_cards[tool] as ItemCardButton
-		_update_card_visuals(tool, btn, _room_price_labels[tool] as Label)
-		BuildMenuLayout.apply_required_badge(btn, entry["mandatory"], entry["satisfied"])
-		var state: int = _card_states.get(tool, BuildMenuCatalog.CardState.OPEN)
-		var shown_here := state != BuildMenuCatalog.CardState.HIDDEN
-		btn.visible = shown_here
-		if not shown_here:
-			continue
-		if state == BuildMenuCatalog.CardState.TEASER:
-			teaser_cards.append(btn)
-		else:
-			front_cards.append(btn)
-	var ordered: Array[Control] = []
-	ordered.append_array(front_cards)
-	ordered.append_array(teaser_cards)
-	if not ordered.is_empty():
-		_room_grid.columns = mini(ordered.size(), tray_columns())
-	for pos in ordered.size():
-		_room_grid.move_child(ordered[pos], pos)
+	BuildMenuLayout.refresh_room_context_state(self)
 
 
 func _visible_room_card_count() -> int:
@@ -1497,26 +1479,19 @@ func _visible_room_card_count() -> int:
 			)
 		):
 			count += 1
+	if _starter_kit_cards.has(_room_context_type):
+		var unlocks: BuildUnlocks = build_mode.unlocks if build_mode != null else null
+		var required := build_mode.require_unlocks if build_mode != null else false
+		if (
+			StarterRoomKits.card_state(_room_context_type, unlocks, required, DemoMode.is_demo())
+			!= BuildMenuCatalog.CardState.HIDDEN
+		):
+			count += 1
 	return count
 
 
 func _room_header_min_width() -> float:
-	var sep := float(_room_header.get_theme_constant(&"separation"))
-	var w := (
-		_room_back_button.get_combined_minimum_size().x
-		+ sep
-		+ _room_title.get_combined_minimum_size().x
-	)
-	if _room_summary.visible and _room_summary.text != "":
-		var font := _room_summary.get_theme_font(&"font")
-		var fsize := _room_summary.get_theme_font_size(&"font_size")
-		var sum_w := (
-			font.get_string_size(_room_summary.text, HORIZONTAL_ALIGNMENT_LEFT, -1, fsize).x
-			if font != null
-			else 0.0
-		)
-		w += sep + sum_w
-	return w
+	return BuildMenuLayout.room_header_min_width(self)
 
 
 func _on_grid_edit_applied(edit: BuildEdit, result: BuildResult) -> void:
@@ -1526,7 +1501,17 @@ func _on_grid_edit_applied(edit: BuildEdit, result: BuildResult) -> void:
 		and edit != null
 		and edit.kind == BuildEdit.Kind.PLACE_ROOM
 		and build_mode != null
-		and BuildMode.TOOL_ROOMS.get(build_mode.tool, &"") == edit.room_type
+		and (
+			BuildMode.TOOL_ROOMS.get(build_mode.tool, &"") == edit.room_type
+			or (
+				build_mode.starter_kit != null
+				and build_mode.starter_kit.is_active()
+				and (
+					StarterRoomKits.get_kit(build_mode.starter_kit.armed).get("room_type", &"")
+					== edit.room_type
+				)
+			)
+		)
 	):
 		enter_room_context(edit.room_type, result.room_id)
 		return
@@ -1544,6 +1529,10 @@ func _on_grid_graph_changed(_cells: Array[Vector2i]) -> void:
 func _on_built_selection_changed() -> void:
 	if _selection == null:
 		return
+	if build_mode != null:
+		build_mode.set_selected_room(
+			_selection.id if _selection.kind == BuiltSelection.Kind.ROOM else 0
+		)
 	if (
 		_selection.kind == BuiltSelection.Kind.ROOM
 		and build_mode != null
@@ -1553,5 +1542,26 @@ func _on_built_selection_changed() -> void:
 		if not room.is_empty():
 			enter_room_context(StringName(room["type"]), _selection.id)
 			return
-	if is_room_context() and (build_mode == null or build_mode.tool == BuildMode.Tool.NONE):
+	var kit_active := (
+		build_mode != null and build_mode.starter_kit != null and build_mode.starter_kit.is_active()
+	)
+	if (
+		is_room_context()
+		and (build_mode == null or (build_mode.tool == BuildMode.Tool.NONE and not kit_active))
+	):
 		exit_room_context()
+
+
+func _on_starter_kit_armed_changed() -> void:
+	var armed_kit := (
+		build_mode.starter_kit.armed
+		if build_mode != null and build_mode.starter_kit != null
+		else &""
+	)
+	for kit_id: StringName in _starter_kit_cards:
+		_starter_kit_cards[kit_id].set_pressed_no_signal(kit_id == armed_kit)
+	_show_status()
+
+
+func _refresh_starter_kit_money() -> void:
+	BuildMenuLayout.refresh_starter_kit_money(self)

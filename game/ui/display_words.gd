@@ -264,7 +264,7 @@ class Words:
 			tr("Needs an ATM", "room need"),
 			tr("Needs an exchange counter", "room need"),
 			tr("Needs play blocks", "room need"),
-			tr("Needs a door or open side to the walkway", "room need"),
+			tr("Needs entrance", "room need"),
 			# The same notes in lower case, after "Not ready,"
 			tr("needs a belt end", "status reason"),
 			tr("needs a clothes rail", "status reason"),
@@ -284,7 +284,7 @@ class Words:
 			tr("needs an atm", "status reason"),
 			tr("needs an exchange counter", "status reason"),
 			tr("needs play blocks", "status reason"),
-			tr("needs a door or open side to the walkway", "status reason"),
+			tr("needs entrance", "status reason"),
 			# Security lane statuses, lower case, after "Not ready,"
 			tr("a wall cuts through the lane", "status reason"),
 			tr("clear the floor for the queue", "status reason"),

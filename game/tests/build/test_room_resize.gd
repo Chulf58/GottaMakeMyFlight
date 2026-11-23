@@ -55,18 +55,24 @@ func _on_line(axis: int, line: int, across: int) -> Vector3:
 	return _at(Vector2i(across, line)) - Vector3(0.0, 0.0, 0.5)
 
 
-## A press 0.1 m inside the cafe's east or north edge.
+## A press 0.1 m inside the current room rect's edge.
 func _press(side: int) -> Vector3:
-	if side == BuildGrid.Side.EAST:
-		return _on_line(0, CAFE.end.x, 4) - Vector3(0.1, 0.0, 0.0)
-	return _on_line(1, CAFE.position.y, 4) + Vector3(0.0, 0.0, 0.1)
+	var r := _rect()
+	match side:
+		BuildGrid.Side.EAST:
+			return _on_line(0, r.end.x, 4) - Vector3(0.1, 0.0, 0.0)
+		BuildGrid.Side.WEST:
+			return _on_line(0, r.position.x, 4) + Vector3(0.1, 0.0, 0.0)
+		BuildGrid.Side.SOUTH:
+			return _on_line(1, r.end.y, 4) - Vector3(0.0, 0.0, 0.1)
+	return _on_line(1, r.position.y, 4) + Vector3(0.0, 0.0, 0.1)
 
 
-## Presses the east or north edge, drags it to grid line `line` and releases.
+## Presses `side`, drags it to grid line `line` and releases.
 func _resize(side: int, line: int) -> void:
 	_mode.set_tool(BuildMode.Tool.CAFE_ROOM)
 	_mode.begin_area(_press(side))
-	var axis := 0 if side == BuildGrid.Side.EAST else 1
+	var axis := 0 if side == BuildGrid.Side.EAST or side == BuildGrid.Side.WEST else 1
 	_mode.move_area(_on_line(axis, line, 4))
 	_mode.finish_area()
 
@@ -131,10 +137,13 @@ func test_a_resize_into_another_room_is_refused_whole_with_its_reason() -> void:
 	assert_int(_mode.undo_history().size()).is_equal(steps)
 
 
-func test_a_resize_onto_bare_ground_is_refused_with_its_reason() -> void:
+func test_a_resize_onto_bare_ground_auto_lays_floor_and_moves_walls() -> void:
 	_resize(BuildGrid.Side.EAST, 15)
-	assert_that(_rect()).is_equal(CAFE)
-	assert_str(_mode.status_text()).is_equal("Needs floor")
+	assert_that(_rect()).is_equal(Rect2i(3, 3, 12, 4))
+	assert_int(_mode.grid.floor_at(Vector2i(14, 4))).is_equal(BuildGrid.FLOOR_TILE)
+	assert_int(_mode.grid.wall_kind(Vector2i(14, 4), BuildGrid.Side.EAST)).is_equal(
+		BuildGrid.WallKind.PLAIN
+	)
 
 
 func test_a_resize_across_a_wall_is_refused_with_its_reason() -> void:
@@ -147,13 +156,11 @@ func test_a_resize_across_a_wall_is_refused_with_its_reason() -> void:
 
 func test_the_room_may_grow_up_to_a_wall_but_not_on_through_it() -> void:
 	_mode.grid.apply(BuildEdit.place_wall(Vector2i(8, 5), BuildGrid.Side.EAST))
+	_resize(BuildGrid.Side.EAST, 10)
+	assert_that(_rect()).is_equal(CAFE)
+	assert_str(_mode.status_text()).is_equal("A wall is in the way of the room")
 	_resize(BuildGrid.Side.EAST, 9)
 	assert_that(_rect()).is_equal(Rect2i(3, 3, 6, 4))
-	_mode.begin_area(_on_line(0, 9, 4) - Vector3(0.1, 0.0, 0.0))
-	_mode.move_area(_on_line(0, 10, 4))
-	_mode.finish_area()
-	assert_that(_rect()).is_equal(Rect2i(3, 3, 6, 4))
-	assert_str(_mode.status_text()).is_equal("A wall is in the way of the room")
 
 
 func test_undo_restores_the_old_rect_and_the_same_room_id_in_one_step() -> void:
@@ -172,10 +179,13 @@ func test_undo_restores_the_old_rect_and_the_same_room_id_in_one_step() -> void:
 	assert_int(_mode.grid.room_at(Vector2i(7, 4))).is_equal(_room)
 
 
-func test_a_resize_costs_nothing() -> void:
+func test_a_resize_charges_only_net_new_walls_and_floor() -> void:
 	var balance := _finances.wallet.balance
 	_resize(BuildGrid.Side.EAST, 10)
-	assert_int(_finances.wallet.balance).is_equal(balance)
+	# Growing east by 2 removes 4 east walls (refund 80) and adds 8 walls (320) -> net 240.
+	var wall_cost := PriceTable.price_of_wall(BuildGrid.WallKind.PLAIN)
+	var expected_net := 8 * wall_cost - 4 * PriceTable.refund_of(wall_cost)
+	assert_int(_finances.wallet.balance).is_equal(balance - expected_net)
 	assert_that(_rect()).is_equal(Rect2i(3, 3, 7, 4))
 
 
@@ -186,7 +196,10 @@ func test_a_drag_that_never_moves_the_edge_does_nothing() -> void:
 	assert_int(_mode.undo_history().size()).is_equal(steps)
 
 
-func test_a_piece_left_outside_makes_the_room_not_ready_and_stays_put() -> void:
+func test_a_piece_left_outside_makes_the_room_not_ready_and_clipping_shrink_refuses() -> void:
+	_mode.grid.apply(
+		BuildEdit.place_wall(Vector2i(5, 6), BuildGrid.Side.SOUTH, BuildGrid.WallKind.DOOR)
+	)
 	_mode.set_tool(BuildMode.Tool.COUNTER)
 	_mode.apply_at(_at(Vector2i(4, 3)))
 	_mode.set_tool(BuildMode.Tool.TABLE)
@@ -194,8 +207,19 @@ func test_a_piece_left_outside_makes_the_room_not_ready_and_stays_put() -> void:
 	assert_bool(RoomRules.status(_mode.grid, _room).ok).is_true()
 	var counter := _mode.grid.object_at(Vector2i(4, 3))
 	assert_int(counter).is_greater(0)
+	# Shrinking NORTH to line 4 splits counter (4,3) from its order cell (4,4): refused!
 	_resize(BuildGrid.Side.NORTH, 4)
-	assert_that(_rect()).is_equal(Rect2i(3, 4, 5, 3))
+	assert_that(_rect()).is_equal(CAFE)
+	assert_str(_mode.status_text()).is_equal("The spot in front is blocked")
+	# Grow SOUTH first so shrinking NORTH to line 5 leaves counter + order cell (4,4) outside.
+	_resize(BuildGrid.Side.SOUTH, 8)
+	var door_edits := DoorPlacement.edits_for(
+		_mode.grid,
+		BuildEdit.place_wall(Vector2i(5, 7), BuildGrid.Side.SOUTH, BuildGrid.WallKind.DOOR)
+	)
+	_mode.grid.apply_batch(door_edits)
+	_resize(BuildGrid.Side.NORTH, 5)
+	assert_that(_rect()).is_equal(Rect2i(3, 5, 5, 3))
 	assert_int(_mode.grid.object_at(Vector2i(4, 3))).is_equal(counter)
 	var status := RoomRules.status(_mode.grid, _room)
 	assert_bool(status.ok).is_false()

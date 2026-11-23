@@ -185,11 +185,18 @@ func test_finishing_new_room_drag_binds_contextual_tray_and_live_checkmarks_foll
 	assert_str(_badge_text(_menu.card(BuildMode.Tool.BOOTH))).is_equal("✓")
 	assert_float(_badge_color(_menu.card(BuildMode.Tool.BOOTH)).g).is_greater(0.7)
 
-	# Place Counter inside the restaurant -> Counter turns ✓ and room summary becomes Ready!
+	# Place Counter inside the restaurant -> Counter turns ✓; add door -> Ready!
 	_menu.card(BuildMode.Tool.COUNTER).pressed.emit()
 	assert_bool(_mode.apply_at(_at(Vector2i(3, 3))).ok).is_true()
 	await await_idle_frame()
 	assert_str(_badge_text(_menu.card(BuildMode.Tool.COUNTER))).is_equal("✓")
+	assert_str(_menu.room_summary_label().text).is_equal(RoomRules.NO_OPENING)
+	var door_edit := BuildEdit.place_wall(
+		Vector2i(4, 7), BuildGrid.Side.SOUTH, BuildGrid.WallKind.DOOR
+	)
+	var door_edits := DoorPlacement.edits_for(_mode.grid, door_edit)
+	assert_bool(BuildTransaction.commit_plan(_mode.grid, door_edits, _finances.wallet).ok).is_true()
+	await await_idle_frame()
 	assert_str(_menu.room_summary_label().text).is_equal("Ready")
 
 

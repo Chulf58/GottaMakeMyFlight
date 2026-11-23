@@ -292,6 +292,10 @@ var lane_hint_scans := 0
 var templates := TemplatePaste.new()
 ## The picked-up room and its set-down (RoomMoveTool), made a child in _ready().
 var room_mover := RoomMoveTool.new()
+## Furnished Starter Room Kits placement tool (StarterKitTool), made a child in _ready().
+var starter_kit := StarterKitTool.new()
+## Currently selected room id in Tool.NONE (for always-on resize handles).
+var selected_room_id := 0
 ## The Buy land tool and the site's land plots (LandTool), made in _ready(); no land without a site.
 var land_tool: LandTool = null
 ## Whether the current status text represents an active refusal.
@@ -389,6 +393,7 @@ func _ready() -> void:
 	_history.invalidated.connect(_landside_placement.clear_undo)
 	add_child(templates)
 	add_child(room_mover)
+	add_child(starter_kit)
 	set_tool(tool)
 
 
@@ -448,6 +453,16 @@ func _unhandled_input(event: InputEvent) -> void:
 			begin_area(point)
 		elif point != null and DRAG_TOOLS.has(tool):
 			begin_row(point)
+		elif (
+			point != null
+			and tool == Tool.NONE
+			and selected_room_id != 0
+			and not templates.is_active()
+			and not room_mover.active
+			and not starter_kit.is_active()
+			and begin_selected_resize(point, selected_room_id)
+		):
+			get_viewport().set_input_as_handled()
 		elif point != null:
 			apply_at(point)
 	elif event.is_action_released("build_apply"):
@@ -526,6 +541,8 @@ func edit_at(point: Vector3) -> BuildEdit:
 		Tool.REMOVE:
 			return _removal_at(point, cell, side)
 	if TOOL_WALL_KINDS.has(tool):
+		if tool == Tool.DOOR:
+			return _door_wall_edit(point)
 		return BuildEdit.place_wall(cell, side, TOOL_WALL_KINDS[tool])
 	var def_id := tool_object(tool)
 	if def_id != &"":
@@ -534,6 +551,17 @@ func edit_at(point: Vector3) -> BuildEdit:
 			turn = DoorPlacement.auto_facing(grid, def_id, point, facing)
 		return BuildEdit.place_object(def_id, DoorPlacement.cell_under(grid, point), turn)
 	return null
+
+
+func _door_wall_edit(point: Vector3) -> BuildEdit:
+	var camera := get_viewport().get_camera_3d() if is_inside_tree() else null
+	var seen_wall := SightPick.seen_wall(grid, _view, camera, point)
+	if seen_wall.z >= 0:
+		return BuildEdit.place_wall(
+			Vector2i(seen_wall.x, seen_wall.y), seen_wall.z, BuildGrid.WallKind.DOOR
+		)
+	var edge := DoorPlacement.wall_edge_at(grid, point)
+	return BuildEdit.place_wall(Vector2i(edge.x, edge.y), edge.z, BuildGrid.WallKind.DOOR)
 
 
 ## Applies the current tool at a ground point, paid through BuildTransaction,
@@ -629,6 +657,38 @@ func _commit_edit(edit: BuildEdit, note_cell: Vector2i) -> BuildResult:
 ## outside the grid is a plain click, which the grid refuses with its reason.
 func begin_area(point: Vector3) -> void:
 	BuildDrags.begin_area(self, point)
+
+
+## Tracks the built room selected in Tool.NONE for always-on resize handles.
+func set_selected_room(room_id: int) -> void:
+	selected_room_id = room_id
+
+
+## Starts resizing selected room `room_id` if `point` hits one of its handles in Tool.NONE.
+func begin_selected_resize(point: Vector3, room_id: int) -> bool:
+	if (
+		tool != Tool.NONE
+		or room_id == 0
+		or templates.is_active()
+		or room_mover.active
+		or starter_kit.is_active()
+	):
+		return false
+	if not _resize.begin_handle(grid, room_id, point):
+		return false
+	_press_screen = _pointer_position()
+	_drag_moved = false
+	_status_note = ""
+	_hover_key = ""
+	return true
+
+
+## Ground point on the grid plane under `screen_pos`, or null without a camera.
+func ground_point_at(screen_pos: Vector2) -> Variant:
+	var camera := get_viewport().get_camera_3d() if is_inside_tree() else null
+	if camera == null:
+		return null
+	return grid_point(camera.project_ray_origin(screen_pos), camera.project_ray_normal(screen_pos))
 
 
 ## Starts a Wall or Glass row on the cell under a ground point, on the edge side

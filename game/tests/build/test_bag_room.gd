@@ -8,7 +8,7 @@ extends GdUnitTestSuite
 ## so these cases lay belt with the one Belt tool instead.
 
 const NEEDS_END := "Needs a belt end"
-const NEEDS_OPENING := "Needs a door or open side to the walkway"
+const NEEDS_OPENING := "Needs entrance"
 const ROOM := Rect2i(3, 3, 3, 3)
 
 var _mode: BuildMode
@@ -75,7 +75,7 @@ func test_a_bag_room_without_an_end_is_not_ready() -> void:
 	assert_int(room_id).is_greater(0)
 	var status := RoomRules.status(_mode.grid, room_id)
 	assert_bool(status.ok).is_false()
-	assert_array(_notes(room_id)).is_equal([NEEDS_END])
+	assert_array(_notes(room_id)).is_equal([NEEDS_END, NEEDS_OPENING])
 	assert_str(status.type_name).is_equal("Bag room")
 	assert_int(status.seats).is_equal(0)
 	assert_str(_mode.status_text()).is_equal("Bag room marked: Needs a belt end")
@@ -83,6 +83,9 @@ func test_a_bag_room_without_an_end_is_not_ready() -> void:
 
 func test_a_belt_end_inside_makes_the_bag_room_ready() -> void:
 	var room_id := _mark_bag_room(ROOM)
+	_mode.grid.apply(
+		BuildEdit.place_wall(Vector2i(4, 5), BuildGrid.Side.SOUTH, BuildGrid.WallKind.DOOR)
+	)
 	assert_bool(_lay(Vector2i(4, 4), Vector2i(4, 4)).ok).is_true()
 	assert_str(_def_at(Vector2i(4, 4))).is_equal("baggage_belt_end")
 	var status := RoomRules.status(_mode.grid, room_id)
@@ -94,7 +97,7 @@ func test_a_belt_dead_end_outside_the_room_is_a_plain_belt() -> void:
 	var room_id := _mark_bag_room(ROOM)
 	assert_bool(_lay(Vector2i(8, 8), Vector2i(8, 8)).ok).is_true()
 	assert_str(_def_at(Vector2i(8, 8))).is_equal("baggage_belt")
-	assert_array(_notes(room_id)).is_equal([NEEDS_END])
+	assert_array(_notes(room_id)).is_equal([NEEDS_END, NEEDS_OPENING])
 
 
 func test_a_real_belt_end_outside_the_room_does_not_count() -> void:
@@ -104,16 +107,24 @@ func test_a_real_belt_end_outside_the_room_does_not_count() -> void:
 	var end := _mode.grid.apply(BuildEdit.place_object(&"baggage_belt_end", Vector2i(8, 8), 0))
 	assert_bool(end.ok).is_true()
 	assert_str(_def_at(Vector2i(8, 8))).is_equal("baggage_belt_end")
-	assert_array(_notes(room_id)).is_equal([NEEDS_END])
+	assert_array(_notes(room_id)).is_equal([NEEDS_END, NEEDS_OPENING])
 	var saved := _mode.grid.to_snapshot()
 	assert_bool(_mode.load_snapshot(saved)).is_true()
 	assert_str(_def_at(Vector2i(8, 8))).is_equal("baggage_belt_end")
-	assert_array(_notes(_mode.grid.room_at(ROOM.position))).is_equal([NEEDS_END])
+	assert_array(_notes(_mode.grid.room_at(ROOM.position))).is_equal([NEEDS_END, NEEDS_OPENING])
 
 
 func test_belts_a_corner_a_merge_and_a_cart_do_not_stand_in_for_the_end() -> void:
 	# A 5x5 room, so a merge and a corner fit inside with no line beside another.
 	var room_id := _mark_bag_room(Rect2i(4, 4, 5, 5))
+	# Open belt passages on west/east and place an unobstructed entrance door on the south wall.
+	_mode.grid.apply(BuildEdit.remove_wall(Vector2i(4, 5), BuildGrid.Side.WEST))
+	_mode.grid.apply(BuildEdit.remove_wall(Vector2i(8, 5), BuildGrid.Side.EAST))
+	_mode.grid.apply(BuildEdit.remove_wall(Vector2i(8, 8), BuildGrid.Side.EAST))
+	_mode.grid.apply(BuildEdit.remove_wall(Vector2i(5, 8), BuildGrid.Side.SOUTH))
+	_mode.grid.apply(
+		BuildEdit.place_wall(Vector2i(5, 8), BuildGrid.Side.SOUTH, BuildGrid.WallKind.DOOR)
+	)
 	# A line through the room, then a branch from its middle that turns and
 	# leaves: every dead end is outside the room.
 	assert_bool(_lay(Vector2i(3, 5), Vector2i(9, 5)).ok).is_true()

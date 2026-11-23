@@ -15,7 +15,7 @@ extends RefCounted
 ## can be reached from the opening. Passenger code must check its own paths.
 
 const READY := "Ready"
-const NO_OPENING := "Needs a door or open side to the walkway"
+const NO_OPENING := "Needs entrance"
 const TOO_SMALL := "Too small: a %s needs at least %dx%d"
 
 

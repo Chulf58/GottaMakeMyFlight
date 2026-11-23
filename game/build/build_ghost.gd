@@ -103,16 +103,21 @@ static func draw_row(mode: BuildMode) -> void:
 	mode._show_status(null)
 
 
-## One tinted slab over the room's dragged rectangle, red when it would be refused.
+## One tinted slab over the room's dragged rectangle, plus planned perimeter walls.
 static func draw_resize(mode: BuildMode) -> void:
 	var area := mode._resize.rect()
-	var key := "resize:%s" % area
+	var purse := mode.wallet()
+	var key := "resize:%s:%d" % [area, purse.balance if purse != null else 0]
 	if key == mode._hover_key:
 		return
 	mode._hover_key = key
 	clear(mode)
-	var fits := RoomResize.check(mode.grid, mode._resize.room_id, area).ok
-	slab(mode, area, mode._valid_material if fits else mode._invalid_material)
+	var fits := RoomResize.check(mode.grid, mode._resize.room_id, area, purse).ok
+	var tint := mode._valid_material if fits else mode._invalid_material
+	slab(mode, area, tint)
+	for edit in RoomResize.plan(mode.grid, mode._resize.room_id, area):
+		if edit.kind == BuildEdit.Kind.PLACE_WALL:
+			wall(mode, edit.cell, edit.side, tint)
 	mode._show_status(null)
 
 
@@ -127,7 +132,7 @@ static func draw_area(mode: BuildMode) -> void:
 	var area := mode._area.rect()
 	var purse := mode.wallet()
 	var key := "area:%s" % area
-	if mode.tool == BuildMode.Tool.FLOOR and purse != null:
+	if (mode.tool == BuildMode.Tool.FLOOR or BuildMode.TOOL_ROOMS.has(mode.tool)) and purse != null:
 		key += ":%d" % purse.balance
 	if key == mode._hover_key:
 		return
@@ -136,11 +141,15 @@ static func draw_area(mode: BuildMode) -> void:
 	var tint := (
 		mode._area_remove_material if mode.tool == BuildMode.Tool.REMOVE else mode._valid_material
 	)
-	if (
-		BuildMode.TOOL_ROOMS.has(mode.tool)
-		and not RoomTool.check(mode.grid, area, BuildMode.TOOL_ROOMS[mode.tool]).ok
-	):
-		tint = mode._invalid_material
+	if BuildMode.TOOL_ROOMS.has(mode.tool):
+		var room_type: StringName = BuildMode.TOOL_ROOMS[mode.tool]
+		if not (
+			RoomTool.check(mode.grid, area, room_type, purse, mode.unlocks, mode.require_unlocks).ok
+		):
+			tint = mode._invalid_material
+		for edit in RoomTool.plan(mode.grid, area, room_type):
+			if edit.kind == BuildEdit.Kind.PLACE_WALL:
+				wall(mode, edit.cell, edit.side, tint)
 	# A floor rectangle the wallet cannot pay for lays nothing (CANT_AFFORD).
 	if (
 		mode.tool == BuildMode.Tool.FLOOR
@@ -271,6 +280,15 @@ static func clearance_target(mode: BuildMode) -> Dictionary:
 		if mode.room_mover._plan == null:
 			return {"active": false}
 		return _area_target(mode, mode.room_mover._plan.to_rect, true)
+	if mode.starter_kit != null and mode.starter_kit.is_active():
+		if not mode._pointer_on_grid or mode._hover_point == null:
+			return {"active": false}
+		var cell := mode.grid.world_to_cell(mode._hover_point)
+		return _area_target(
+			mode,
+			StarterRoomKits.rect_at(mode.starter_kit.armed, cell, mode.starter_kit.turns),
+			true
+		)
 	if (
 		mode.templates != null
 		and mode.templates.armed >= 0

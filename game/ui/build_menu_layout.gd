@@ -222,6 +222,203 @@ static func make_card(menu: BuildMenu, tool: BuildMode.Tool, price_table: Varian
 	return button
 
 
+static func make_starter_kit_card(menu: BuildMenu, kit_id: StringName) -> Button:
+	var shown_name := BuildMenuCatalog.shown(StarterRoomKits.display_name(kit_id))
+	var sz := StarterRoomKits.kit_size(kit_id)
+	var details := [
+		[_words.kit_size_label(sz), &"HudHint"],
+		[_words.rotate_detail(), &"HudHint"],
+	]
+	var button := ItemCardButton.new()
+	button.set_info(shown_name, _words.kit_info(), details)
+	button.name = "CardKit%s" % String(kit_id).capitalize()
+	button.toggle_mode = true
+	button.custom_minimum_size = BuildMenu.CARD_SIZE
+	button.focus_mode = Control.FOCUS_NONE
+	button.mouse_filter = Control.MOUSE_FILTER_PASS
+	button.pressed.connect(menu.press_starter_kit.bind(kit_id))
+	var column := card_column(button)
+	var picture := TextureRect.new()
+	var path := BuildMenuCatalog.THUMBNAIL_DIR % StarterRoomKits.thumbnail_id(kit_id)
+	if ResourceLoader.exists(path):
+		picture.texture = load(path)
+	picture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	picture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	picture.custom_minimum_size = Vector2(BuildMenu.THUMB_SIZE, BuildMenu.THUMB_SIZE)
+	picture.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	picture.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	picture.name = "Thumbnail"
+	column.add_child(picture)
+	var name_label := card_label(column, shown_name, &"HudCardName", CARD_LINES)
+	name_label.name = "Name"
+	name_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	name_label.add_theme_constant_override(&"line_spacing", 0)
+	var price_label := card_label(column, _words.free_price(), &"HudPrice", PRICE_LINES)
+	price_label.name = "Price"
+	menu._starter_kit_price_labels[kit_id] = price_label
+	watch_fit(button)
+	add_card_badge(
+		button, BuildMenuCatalog.shown("Kit"), Color(0.88, 0.74, 0.45, 0.96), &"KitBadge"
+	)
+	return button
+
+
+static func update_starter_kit_card(
+	menu: BuildMenu, kit_id: StringName, card_btn: ItemCardButton, state: int
+) -> void:
+	var price_label := menu._starter_kit_price_labels.get(kit_id) as Label
+	if price_label == null:
+		return
+	var unlocks: BuildUnlocks = menu.build_mode.unlocks if menu.build_mode != null else null
+	var required := menu.build_mode.require_unlocks if menu.build_mode != null else false
+	var lock := StarterRoomKits.lock_text(kit_id, unlocks, required)
+	card_btn.requirement = (
+		StarterRoomKits.lock_text.bind(kit_id, unlocks, required) if lock != "" else Callable()
+	)
+	var name_label := card_btn.get_child(0).get_node_or_null("Name") as Label
+	if name_label != null:
+		name_label.text = BuildMenuCatalog.shown(StarterRoomKits.display_name(kit_id))
+	var badge_label := card_btn.get_node_or_null("KitBadge/KitBadgeLabel") as Label
+	if badge_label != null:
+		badge_label.text = _words.kit_badge()
+	var price := StarterRoomKits.base_price(kit_id)
+	if state == BuildMenuCatalog.CardState.TEASER:
+		price_label.text = _words.in_full_game()
+		card_btn.modulate = BuildMenu.LOCKED_TINT
+	elif state == BuildMenuCatalog.CardState.LOCKED:
+		price_label.text = _words.locked_label()
+		card_btn.modulate = BuildMenu.LOCKED_TINT
+	else:
+		price_label.text = (
+			_words.free_price() if menu._wallet == null or price == 0 else str(price)
+		)
+		var affordable := menu._wallet == null or menu._wallet.can_afford(price)
+		card_btn.modulate = Color.WHITE if affordable else BuildMenu.unaffordable_tint()
+
+
+static func refresh_starter_kit_money(menu: BuildMenu) -> void:
+	var unlocks: BuildUnlocks = menu.build_mode.unlocks if menu.build_mode != null else null
+	var required := menu.build_mode.require_unlocks if menu.build_mode != null else false
+	for kit_id: StringName in menu._starter_kit_cards:
+		var state := StarterRoomKits.card_state(kit_id, unlocks, required, DemoMode.is_demo())
+		update_starter_kit_card(
+			menu, kit_id, menu._starter_kit_cards[kit_id] as ItemCardButton, state
+		)
+
+
+static func rebuild_room_context_cards(menu: BuildMenu) -> void:
+	for child in menu._room_grid.get_children():
+		menu._room_grid.remove_child(child)
+		child.queue_free()
+	menu._room_cards.clear()
+	menu._room_price_labels.clear()
+	menu._starter_kit_cards.clear()
+	menu._starter_kit_price_labels.clear()
+	var grid: BuildGrid = menu.build_mode.grid if menu.build_mode != null else null
+	menu._room_entries = BuildMenuCatalog.room_context_entries(
+		menu._room_context_type, grid, menu._room_context_id
+	)
+	for entry: Dictionary in menu._room_entries:
+		var tool: BuildMode.Tool = entry["tool"]
+		var btn := make_card(menu, tool, menu._room_price_labels)
+		btn.mouse_entered.connect(menu._on_card_hovered.bind(tool))
+		menu._room_grid.add_child(btn)
+		menu._room_cards[tool] = btn
+	if StarterRoomKits.has_kit(menu._room_context_type):
+		var kit_btn := make_starter_kit_card(menu, menu._room_context_type)
+		menu._room_grid.add_child(kit_btn)
+		menu._starter_kit_cards[menu._room_context_type] = kit_btn
+
+
+static func refresh_room_context_state(menu: BuildMenu) -> void:
+	var type := RoomTypes.get_type(menu._room_context_type)
+	if type == null:
+		return
+	var room_name := DisplayWords.room_type(type.display_name)
+	menu._room_title.text = _words.room_items_title(room_name)
+	var grid: BuildGrid = menu.build_mode.grid if menu.build_mode != null else null
+	menu._room_context_id = menu._validated_room_id(menu._room_context_id)
+	var status: RoomRules.RoomStatus = (
+		RoomRules.status(grid, menu._room_context_id)
+		if grid != null and menu._room_context_id != 0
+		else null
+	)
+	if status == null:
+		menu._room_summary.visible = false
+		menu._room_summary.text = ""
+	else:
+		menu._room_summary.visible = true
+		if status.ok:
+			menu._room_summary.text = DisplayWords.ready()
+			menu._room_summary.theme_type_variation = &"HudGoodText"
+		else:
+			menu._room_summary.text = DisplayWords.notes(status)[0]
+			menu._room_summary.theme_type_variation = &"HudAttentionText"
+	menu._room_entries = BuildMenuCatalog.room_context_entries(
+		menu._room_context_type, grid, menu._room_context_id
+	)
+	var front_cards: Array[Control] = []
+	var teaser_cards: Array[Control] = []
+	for entry: Dictionary in menu._room_entries:
+		var tool: BuildMode.Tool = entry["tool"]
+		if not menu._room_cards.has(tool):
+			continue
+		var btn := menu._room_cards[tool] as ItemCardButton
+		menu._update_card_visuals(tool, btn, menu._room_price_labels[tool] as Label)
+		apply_required_badge(btn, entry["mandatory"], entry["satisfied"])
+		var state: int = menu._card_states.get(tool, BuildMenuCatalog.CardState.OPEN)
+		var shown_here := state != BuildMenuCatalog.CardState.HIDDEN
+		btn.visible = shown_here
+		if not shown_here:
+			continue
+		if state == BuildMenuCatalog.CardState.TEASER:
+			teaser_cards.append(btn)
+		else:
+			front_cards.append(btn)
+	var ordered: Array[Control] = []
+	ordered.append_array(front_cards)
+	if menu._starter_kit_cards.has(menu._room_context_type):
+		var kit_btn := menu._starter_kit_cards[menu._room_context_type] as ItemCardButton
+		var unlocks: BuildUnlocks = menu.build_mode.unlocks if menu.build_mode != null else null
+		var required := menu.build_mode.require_unlocks if menu.build_mode != null else false
+		var state := StarterRoomKits.card_state(
+			menu._room_context_type, unlocks, required, DemoMode.is_demo()
+		)
+		var shown_kit := state != BuildMenuCatalog.CardState.HIDDEN
+		kit_btn.visible = shown_kit
+		if shown_kit:
+			update_starter_kit_card(menu, menu._room_context_type, kit_btn, state)
+			if state == BuildMenuCatalog.CardState.TEASER:
+				teaser_cards.append(kit_btn)
+			else:
+				ordered.append(kit_btn)
+	ordered.append_array(teaser_cards)
+	if not ordered.is_empty():
+		menu._room_grid.columns = mini(ordered.size(), menu.tray_columns())
+	for pos in ordered.size():
+		menu._room_grid.move_child(ordered[pos], pos)
+
+
+static func room_header_min_width(menu: BuildMenu) -> float:
+	var sep := float(menu._room_header.get_theme_constant(&"separation"))
+	var w := (
+		menu._room_back_button.get_combined_minimum_size().x
+		+ sep
+		+ menu._room_title.get_combined_minimum_size().x
+	)
+	if menu._room_summary.visible and menu._room_summary.text != "":
+		var font := menu._room_summary.get_theme_font(&"font")
+		var fsize := menu._room_summary.get_theme_font_size(&"font_size")
+		var sum_w := (
+			font.get_string_size(menu._room_summary.text, HORIZONTAL_ALIGNMENT_LEFT, -1, fsize).x
+			if font != null
+			else 0.0
+		)
+		w += sep + sum_w
+	return w
+
+
 static func apply_required_badge(button: Control, mandatory: bool, satisfied: bool) -> void:
 	var existing := button.get_node_or_null("RequiredBadge") as PanelContainer
 	if not mandatory:
@@ -518,3 +715,27 @@ class Words:
 
 	func satisfied_mark() -> String:
 		return tr("✓")
+
+	func kit_info() -> Array:
+		return [
+			tr("Furnished room kit"),
+			tr("Places floor, walls, a door, and required items in one click."),
+		]
+
+	func kit_size_label(sz: Vector2i) -> String:
+		return tr("{w}x{h} kit").format({"w": sz.x, "h": sz.y})
+
+	func rotate_detail() -> String:
+		return tr("Click (R rotates)")
+
+	func kit_badge() -> String:
+		return tr("Kit", "build menu")
+
+	func in_full_game() -> String:
+		return tr("In the full game")
+
+	func locked_label() -> String:
+		return tr("Locked")
+
+	func room_items_title(room_name: String) -> String:
+		return tr("{room} items").format({"room": room_name})

@@ -1,20 +1,21 @@
 class_name RoomResize
 extends RefCounted
 ## Resizing a built room by dragging one of its edges (decision
-## resize-rooms-first-drag-a-room-s-edge-to-grow-or-shrink-it-f). With a room
-## tool picked, a press in the outer band of a room of that tool's type grabs
-## the nearest edge; the pointer then moves that edge to the nearest grid line,
-## and the release gives the room its new rectangle in one RESIZE_ROOM edit.
-## The room keeps its type and id, furniture stays where it is (a piece left
-## outside makes the room not ready through RoomRules), and the edit is one
-## undo step with the old rectangle as its inverse (BuildReceipt).
+## resize-rooms-first-drag-a-room-s-edge-to-grow-or-shrink-it-f, upgraded by
+## B2 boundary-aware resize 593876df). Works both with the room's tool picked
+## and from always-on resize handles on a selected room in Tool.NONE.
 ##
-## Refused whole, with a status reason, when the grown strip has no floor, runs
-## into another room (the grid's rules) or the edge would cross a wall
-## (BuildResult.Reason.ROOM_WALL). BuildMode owns the input and the ghost.
+## Expanding/shrinking moves outer perimeter walls owned exclusively by the room
+## and fills newly added floor cells automatically as ONE atomic composite
+## transaction, while preserving shared walls/doors belonging to neighboring
+## rooms or terminal perimeter, and keeping existing furniture intact (or
+## refusing cleanly if a shrink's new wall would clip furniture or block its
+## interaction cell).
 
 ## How far in from a room's outer edge a press still grabs that edge, in metres.
 const EDGE_BAND := 0.3
+## How close to a resize handle midpoint a click in Tool.NONE grabs that handle.
+const HANDLE_HIT_RADIUS := 0.45
 
 var active := false
 var room_id := 0
@@ -30,30 +31,207 @@ var _original := Rect2i()
 var _target := Rect2i()
 
 
-## Whether the grid would accept room `id` taking `area`: the grid's rules,
-## then that no wall lies on a grid line the moving edge crosses.
-static func check(grid: BuildGrid, id: int, area: Rect2i) -> BuildResult:
-	var result := grid.validate(BuildEdit.resize_room(id, area))
-	if result.ok and wall_crossed(grid, grid.get_room(id)["rect"], area):
+## World positions of the 4 edge resize handles (North, East, South, West) of `rect`.
+static func handle_positions(grid: BuildGrid, rect: Rect2i) -> Array[Vector3]:
+	var out: Array[Vector3] = []
+	if not rect.has_area():
+		return out
+	var ox := grid.origin.x
+	var oz := grid.origin.z
+	var y := grid.origin.y
+	var cx := ox + (rect.position.x + rect.end.x) * 0.5
+	var cz := oz + (rect.position.y + rect.end.y) * 0.5
+	out.append(Vector3(cx, y, oz + rect.position.y))
+	out.append(Vector3(ox + rect.end.x, y, cz))
+	out.append(Vector3(cx, y, oz + rect.end.y))
+	out.append(Vector3(ox + rect.position.x, y, cz))
+	return out
+
+
+## The BuildGrid.Side of the handle hit at `point` on `rect` in Tool.NONE, or -1.
+static func handle_hit(grid: BuildGrid, rect: Rect2i, point: Vector3) -> int:
+	if not rect.has_area():
+		return -1
+	var positions := handle_positions(grid, rect)
+	var best := -1
+	var best_dist := HANDLE_HIT_RADIUS
+	for s in 4:
+		var hp := positions[s]
+		var dist := maxf(absf(point.x - hp.x), absf(point.z - hp.z))
+		if dist <= best_dist:
+			best = s
+			best_dist = dist
+	if best >= 0:
+		return best
+	var cell := grid.world_to_cell(point)
+	if grid.in_bounds(cell) and grid.object_at(cell) != 0:
+		return -1
+	return edge_side(grid, rect, point)
+
+
+## Canonical edge key for `(cell, edge_side)` so two cells sharing an edge match.
+static func _edge_key(cell: Vector2i, edge_side: int) -> Vector3i:
+	match edge_side:
+		BuildGrid.Side.SOUTH:
+			return Vector3i(cell.x, cell.y + 1, BuildGrid.Side.NORTH)
+		BuildGrid.Side.EAST:
+			return Vector3i(cell.x + 1, cell.y, BuildGrid.Side.WEST)
+	return Vector3i(cell.x, cell.y, edge_side)
+
+
+## Canonical edge key -> {"cell": inside cell, "side": outward side, "outside": outside cell}.
+static func _perimeter_map(area: Rect2i) -> Dictionary:
+	var map := {}
+	if not area.has_area():
+		return map
+	for x in range(area.position.x, area.end.x):
+		var n := Vector2i(x, area.position.y)
+		map[_edge_key(n, BuildGrid.Side.NORTH)] = {
+			"cell": n, "side": BuildGrid.Side.NORTH, "outside": n + Vector2i(0, -1)
+		}
+		var s := Vector2i(x, area.end.y - 1)
+		map[_edge_key(s, BuildGrid.Side.SOUTH)] = {
+			"cell": s, "side": BuildGrid.Side.SOUTH, "outside": s + Vector2i(0, 1)
+		}
+	for y in range(area.position.y, area.end.y):
+		var w := Vector2i(area.position.x, y)
+		map[_edge_key(w, BuildGrid.Side.WEST)] = {
+			"cell": w, "side": BuildGrid.Side.WEST, "outside": w + Vector2i(-1, 0)
+		}
+		var e := Vector2i(area.end.x - 1, y)
+		map[_edge_key(e, BuildGrid.Side.EAST)] = {
+			"cell": e, "side": BuildGrid.Side.EAST, "outside": e + Vector2i(1, 0)
+		}
+	return map
+
+
+## Composite edits to resize `id` from its current rect to `area`:
+## fills missing new floor cells, removes exclusive old perimeter walls no longer
+## on the boundary (preserving shared neighbor-room and terminal-perimeter walls),
+## resizes the room, and adds missing perimeter walls on the new boundary.
+static func plan(grid: BuildGrid, id: int, area: Rect2i) -> Array[BuildEdit]:
+	var edits: Array[BuildEdit] = []
+	var room := grid.get_room(id)
+	if room.is_empty():
+		edits.append(BuildEdit.resize_room(id, area))
+		return edits
+	var old: Rect2i = room["rect"]
+	if (
+		not area.has_area()
+		or not grid.in_bounds(area.position)
+		or not grid.in_bounds(area.end - Vector2i.ONE)
+	):
+		edits.append(BuildEdit.resize_room(id, area))
+		return edits
+	for y in range(area.position.y, area.end.y):
+		for x in range(area.position.x, area.end.x):
+			var cell := Vector2i(x, y)
+			if not old.has_point(cell) and grid.floor_at(cell) == BuildGrid.FLOOR_NONE:
+				edits.append(
+					BuildEdit.paint_floor(cell, BuildGrid.FLOOR_TILE, BuildMode.TERMINAL_ZONE)
+				)
+	var old_map := _perimeter_map(old)
+	var new_map := _perimeter_map(area)
+	var door_removals: Array[BuildEdit] = []
+	var wall_removals: Array[BuildEdit] = []
+	for key in old_map:
+		if new_map.has(key):
+			continue
+		var info: Dictionary = old_map[key]
+		var cell: Vector2i = info["cell"]
+		var edge: int = info["side"]
+		var outside: Vector2i = info["outside"]
+		var kind := grid.wall_kind(cell, edge)
+		if kind == BuildGrid.WallKind.NONE:
+			continue
+		if not grid.in_bounds(outside):
+			continue
+		if (
+			grid.floor_at(outside) != BuildGrid.FLOOR_NONE
+			and grid.zone_at(cell) != grid.zone_at(outside)
+		):
+			continue
+		var out_room := grid.room_at(outside)
+		if out_room != 0 and out_room != id:
+			continue
+		if not area.has_point(outside) and grid.floor_at(outside) == BuildGrid.FLOOR_NONE:
+			continue
+		var rem := BuildEdit.remove_wall(cell, edge)
+		if kind == BuildGrid.WallKind.DOOR:
+			door_removals.append(rem)
+		else:
+			wall_removals.append(rem)
+	edits.append_array(door_removals)
+	edits.append_array(wall_removals)
+	edits.append(BuildEdit.resize_room(id, area))
+	for key in new_map:
+		var info: Dictionary = new_map[key]
+		var cell: Vector2i = info["cell"]
+		var edge: int = info["side"]
+		if grid.wall_kind(cell, edge) != BuildGrid.WallKind.NONE:
+			continue
+		if DoorPlacement.on_a_way_out(grid, cell, edge):
+			continue
+		edits.append(BuildEdit.place_wall(cell, edge, BuildGrid.WallKind.PLAIN))
+	return edits
+
+
+static func _precheck(grid: BuildGrid, id: int, area: Rect2i) -> BuildResult:
+	var room := grid.get_room(id)
+	if room.is_empty():
+		return BuildResult.refused(BuildResult.Reason.NO_ROOM)
+	if (
+		not area.has_area()
+		or not grid.in_bounds(area.position)
+		or not grid.in_bounds(area.end - Vector2i.ONE)
+	):
+		return BuildResult.refused(BuildResult.Reason.OUT_OF_BOUNDS)
+	for y in range(area.position.y, area.end.y):
+		for x in range(area.position.x, area.end.x):
+			var occ := grid.room_at(Vector2i(x, y))
+			if occ != 0 and occ != id:
+				return BuildResult.refused(BuildResult.Reason.ROOM_OVERLAP)
+	if wall_crossed(grid, room["rect"], area):
 		return BuildResult.refused(BuildResult.Reason.ROOM_WALL)
-	return result
+	return BuildResult.accepted()
 
 
-## Whether growing `old` into `area` moves an edge across a wall: a wall on any
-## grid line from the old edge out to, but not including, the new edge, along
-## the room's span. The new edge itself may stand on a wall, which then bounds
-## the room. Shrinking crosses nothing.
+## Whether the grid and wallet would accept room `id` taking `area`:
+## boundary-aware composite validation plus no wall strictly inside the grown strip.
+static func check(grid: BuildGrid, id: int, area: Rect2i, wallet: Wallet = null) -> BuildResult:
+	var pre := _precheck(grid, id, area)
+	if not pre.ok:
+		return pre
+	return BuildTransaction.check_composite(grid, plan(grid, id, area), wallet)
+
+
+## Net cost preview Vector2i(max(0, net), max(0, net)) for BuildMenu's cost line.
+static func preview_price(grid: BuildGrid, id: int, area: Rect2i) -> Vector2i:
+	var pre := _precheck(grid, id, area)
+	if not pre.ok:
+		return Vector2i.ZERO
+	var staged := BuildTransaction.preview_composite(grid, plan(grid, id, area))
+	if not (staged["result"] as BuildResult).ok:
+		return Vector2i.ZERO
+	var net: int = staged["net"]
+	return Vector2i(maxi(0, net), maxi(0, net))
+
+
+## Whether growing `old` into `area` moves an edge across an external wall:
+## a wall on any grid line strictly between the old edge and the new edge along
+## the room's span. The old edge itself moves if exclusively owned; the new
+## edge may stand on a wall, which then bounds the room. Shrinking crosses nothing.
 static func wall_crossed(grid: BuildGrid, old: Rect2i, area: Rect2i) -> bool:
-	for x in range(area.position.x + 1, old.position.x + 1):
+	for x in range(area.position.x + 1, old.position.x):
 		if _column_line_walled(grid, x, old):
 			return true
-	for x in range(old.end.x, area.end.x):
+	for x in range(old.end.x + 1, area.end.x):
 		if _column_line_walled(grid, x, old):
 			return true
-	for y in range(area.position.y + 1, old.position.y + 1):
+	for y in range(area.position.y + 1, old.position.y):
 		if _row_line_walled(grid, y, old):
 			return true
-	for y in range(old.end.y, area.end.y):
+	for y in range(old.end.y + 1, area.end.y):
 		if _row_line_walled(grid, y, old):
 			return true
 	return false
@@ -103,9 +281,30 @@ func begin(grid: BuildGrid, point: Vector3, type: StringName) -> bool:
 	var grabbed := edge_side(grid, rect, point)
 	if grabbed < 0:
 		return false
+	return _start(id, type, rect, grabbed as BuildGrid.Side, cell)
+
+
+## Grabs a handle of the selected room `id` in Tool.NONE. False if `point` does
+## not hit a handle/edge of `id`.
+func begin_handle(grid: BuildGrid, id: int, point: Vector3) -> bool:
+	var room := grid.get_room(id)
+	if room.is_empty():
+		return false
+	var rect: Rect2i = room["rect"]
+	var grabbed := handle_hit(grid, rect, point)
+	if grabbed < 0:
+		return false
+	return _start(
+		id, StringName(room["type"]), rect, grabbed as BuildGrid.Side, grid.world_to_cell(point)
+	)
+
+
+func _start(
+	id: int, type: StringName, rect: Rect2i, grabbed: BuildGrid.Side, cell: Vector2i
+) -> bool:
 	active = true
 	room_id = id
-	side = grabbed as BuildGrid.Side
+	side = grabbed
 	pointer_cell = cell
 	note = ""
 	_type = type
@@ -152,32 +351,35 @@ func original() -> Rect2i:
 
 
 ## The status line while dragging: "Cafe 6 x 3", followed by the reason the
-## grid would refuse it.
-func label(grid: BuildGrid) -> String:
-	var text := (
-		"%s %d x %d" % [RoomTypes.get_type(_type).display_name, _target.size.x, _target.size.y]
+## grid or wallet would refuse it.
+func label(grid: BuildGrid, wallet: Wallet = null) -> String:
+	var text := BuildWords.room_size(
+		DisplayWords.room_type(RoomTypes.get_type(_type).display_name),
+		_target.size.x,
+		_target.size.y
 	)
-	var result := check(grid, room_id, _target)
+	var result := check(grid, room_id, _target, wallet)
 	if not result.ok:
 		text += "  " + result.reason_text()
 	return text
 
 
-## Ends the drag and gives the room its new rectangle through
-## BuildTransaction (a resize costs nothing, so `wallet` never pays). Null,
-## with nothing done, when the edge never moved. A refusal changes nothing and
-## the grid emits edit_refused for it. `note` holds the status line text.
+## Ends the drag and applies boundary-aware resize as ONE atomic composite
+## transaction through BuildTransaction. Null with nothing done when the edge
+## never moved. `note` holds the status line text.
 func finish(grid: BuildGrid, wallet: Wallet = null) -> BuildResult:
 	active = false
 	if _target == _original:
 		return null
-	var edit := BuildEdit.resize_room(room_id, _target)
-	var result := check(grid, room_id, _target)
-	if result.ok:
-		var plan: Array[BuildEdit] = [edit]
-		result = BuildTransaction.commit_plan(grid, plan, wallet)
+	var pre := _precheck(grid, room_id, _target)
+	var result: BuildResult
+	if not pre.ok:
+		grid._emit_or_hold(
+			func() -> void: grid.edit_refused.emit(BuildEdit.resize_room(room_id, _target), pre)
+		)
+		result = pre
 	else:
-		grid.edit_refused.emit(edit, result)
+		result = BuildTransaction.commit_composite(grid, plan(grid, room_id, _target), wallet)
 	note = _message(grid, result)
 	return result
 
@@ -187,6 +389,6 @@ func _message(grid: BuildGrid, result: BuildResult) -> String:
 	if not result.ok:
 		return result.reason_text()
 	var status := RoomRules.status(grid, room_id)
-	var room_name := RoomTypes.get_type(_type).display_name
+	var room_name := DisplayWords.room_type(RoomTypes.get_type(_type).display_name)
 	var size := _target.size
 	return "%s resized to %d x %d: %s" % [room_name, size.x, size.y, status.headline()]

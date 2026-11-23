@@ -294,6 +294,8 @@ func _ready() -> void:
 	_outline.selection = _built
 	_outline.build_mode = build_mode
 	add_child(_outline)
+	if not _built.changed.is_connected(_sync_selected_room):
+		_built.changed.connect(_sync_selected_room)
 	add_child(_inspect)
 	add_child(_inspect.marker)
 	_fit_follow()
@@ -380,6 +382,15 @@ func _unhandled_input(event: InputEvent) -> void:
 	# nothing, whatever stands under it.
 	if BuiltSelection.clicks_taken(build_mode):
 		return
+	if (
+		build_mode.tool == BuildMode.Tool.NONE
+		and _built.kind == BuiltSelection.Kind.ROOM
+		and _built.id != 0
+	):
+		var handle_pt: Variant = build_mode.ground_point_at(click.position)
+		if handle_pt != null and build_mode.begin_selected_resize(handle_pt, _built.id):
+			get_viewport().set_input_as_handled()
+			return
 	var eye := camera.get_node("Camera3D") as Camera3D
 	var vehicle := landside_views.pick(eye, click.position) if landside_views != null else 0
 	if landside_views != null:
@@ -461,12 +472,21 @@ func _passenger_at(eye: Camera3D, at: Vector2) -> int:
 ## (BuiltSelection.clicks_taken()), no passenger or vehicle is selected, and the
 ## item still stands.
 func _settle_built_selection() -> void:
+	if build_mode != null and build_mode.is_dragging() and _built.kind == BuiltSelection.Kind.ROOM:
+		_built.prune(build_mode.grid, build_mode.landside_placement())
+		return
 	var other := views != null and views.selected_id != 0
 	other = other or (landside_views != null and landside_views.selected_id != 0)
 	if build_mode == null or other or BuiltSelection.clicks_taken(build_mode):
 		_built.clear()
 	else:
 		_built.prune(build_mode.grid, build_mode.landside_placement())
+
+
+func _sync_selected_room() -> void:
+	if build_mode == null:
+		return
+	build_mode.set_selected_room(_built.id if _built.kind == BuiltSelection.Kind.ROOM else 0)
 
 
 ## Esc with a card open: drops the selected built item and the followed passenger
