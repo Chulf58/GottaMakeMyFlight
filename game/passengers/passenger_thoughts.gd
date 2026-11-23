@@ -24,6 +24,7 @@ enum Kind {
 	MADE_CLOSE_CALL,
 	SECURITY_ALARM,
 	SECURITY_LIQUIDS,
+	FAST_TRACK,
 }
 
 ## The most thoughts a passenger keeps; a new one drops the oldest.
@@ -38,7 +39,9 @@ const MARK_COUNT := 5
 const LONG_QUEUE_TICKS := 10 * GameCalendar.TICKS_PER_MINUTE
 ## Nice decor is thought again only this long after the last time.
 const DECOR_REPEAT_TICKS := 120 * GameCalendar.TICKS_PER_MINUTE
-const POSITIVE := [Kind.MEAL, Kind.TOILET_RELIEF, Kind.NICE_DECOR, Kind.MADE_CLOSE_CALL]
+const POSITIVE := [
+	Kind.MEAL, Kind.TOILET_RELIEF, Kind.NICE_DECOR, Kind.MADE_CLOSE_CALL, Kind.FAST_TRACK
+]
 ## Kinds recorded at a facility: a cafe or toilet room, a desk or scanner. Nice
 ## decor has none (facility 0).
 const AT_FACILITY := [
@@ -48,6 +51,7 @@ const AT_FACILITY := [
 	Kind.LONG_QUEUE,
 	Kind.SECURITY_ALARM,
 	Kind.SECURITY_LIQUIDS,
+	Kind.FAST_TRACK,
 ]
 
 const _KIND := 0
@@ -169,6 +173,8 @@ static func text_of(kind: Kind, value: int) -> String:
 		Kind.SECURITY_ALARM, Kind.SECURITY_LIQUIDS:
 			var msg := SecuritySearchReasons.thought_msgid(kind == Kind.SECURITY_ALARM, value)
 			return TranslationServer.translate(msg) if msg != "" else ""
+		Kind.FAST_TRACK:
+			return TranslationServer.translate("Breezed through Fast-Track security")
 	return TranslationServer.translate("Nice decor here")
 
 
@@ -261,4 +267,5 @@ class Words:
 			tr("Stopped for liquids: oversized shampoo!"),
 			tr("Stopped for liquids: too much liquid!"),
 			tr("Stopped for liquids: forgot my water bottle!"),
+			tr("Breezed through Fast-Track security"),
 		]

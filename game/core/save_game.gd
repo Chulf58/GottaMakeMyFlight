@@ -132,7 +132,10 @@ signal loaded(ok: bool)
 ## saves are refused (no migration).
 ## 33: security overhaul S1 (PassengerSim v38: split body_resolved/bag_resolved
 ## and daily confiscation bin history); version 32 saves are refused (no migration).
-const SAVE_VERSION := 33
+## 34: security overhaul S2 (BuildGridSave v2: fast_track on security_arch;
+## PassengerSim v39: Passenger.vip and FAST_TRACK thought); version 33 saves are
+## refused (no migration).
+const SAVE_VERSION := 34
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"

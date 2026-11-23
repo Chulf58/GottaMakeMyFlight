@@ -289,6 +289,26 @@ static func hold_ticks(lane: bool, p: Passenger) -> int:
 	return SecurityRuntime.work_for(SecurityRuntime.Phase.UNPACK, p) + LANE_ARCH_TICKS
 
 
+## Whether `candidate_ft` / `candidate_eta` beats `best` / `best_ft` / `best_eta`
+## for a passenger wanting `want_fast_track`. Used by both PassengerStations and
+## SecurityForecast so sim and forecast never diverge.
+static func picks_better_security(
+	want_fast_track: bool,
+	candidate_ft: bool,
+	candidate_eta: int,
+	best: int,
+	best_ft: bool,
+	best_eta: int
+) -> bool:
+	if best <= 0:
+		return true
+	var cand_match := candidate_ft == want_fast_track
+	var best_match := best_ft == want_fast_track
+	if cand_match != best_match:
+		return cand_match
+	return candidate_eta < best_eta
+
+
 ## Chooses `p`'s station, or leaves it waiting where it is. With `claimed`, it
 ## walks in from the line outside on the claim it was admitted with
 ## (EntranceLine): the place is its own, so no seeker inside goes first. A desk
@@ -302,6 +322,8 @@ static func choose(sim: PassengerSim, p: Passenger, claimed := false) -> void:
 		return
 	var best := 0
 	var best_eta := 0
+	var best_ft := false
+	var want_ft := not to_desk and SecurityLanes.is_priority(p)
 	var best_path: Array[Vector2i] = []
 	if not sim._any_open(candidates) and candidates.any(sim.layout.is_usable):
 		# Usable but none staffed, so all closed: wait where you stand.
@@ -334,9 +356,16 @@ static func choose(sim: PassengerSim, p: Passenger, claimed := false) -> void:
 			if to_desk
 			else sim_estimate(sim, station, p.pace_ticks(Passenger.path_mm(path)), p)
 		)
-		if best == 0 or station_eta < best_eta:
+		var cand_ft := not to_desk and sim.layout.security_lanes.is_fast_track(station)
+		var take := (
+			best == 0 or station_eta < best_eta
+			if to_desk
+			else picks_better_security(want_ft, cand_ft, station_eta, best, best_ft, best_eta)
+		)
+		if take:
 			best = station
 			best_eta = station_eta
+			best_ft = cand_ft
 			best_path = path
 	if best == 0:
 		if full:

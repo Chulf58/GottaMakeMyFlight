@@ -233,6 +233,25 @@ func get_object(object_id: int) -> Dictionary:
 	return _objects.get(object_id, {}).duplicate()
 
 
+func is_object_fast_track(object_id: int) -> bool:
+	return bool(_objects.get(object_id, {}).get("fast_track", false))
+
+
+func set_object_fast_track(object_id: int, enabled: bool) -> bool:
+	if not _objects.has(object_id):
+		return false
+	var record: Dictionary = _objects[object_id]
+	if StringName(record["def"]) != SecurityLanes.ARCH:
+		return false
+	if bool(record.get("fast_track", false)) == enabled:
+		return true
+	record["fast_track"] = enabled
+	_lanes = null
+	_grid_version += 1
+	_emit_or_hold(func() -> void: graph_changed.emit([] as Array[Vector2i]))
+	return true
+
+
 func object_ids() -> Array[int]:
 	var ids: Array[int] = []
 	ids.assign(_objects.keys())
@@ -1022,9 +1041,17 @@ func interaction_problem(spot: Vector2i, cells: Array[Vector2i]) -> BuildResult:
 
 
 func _insert_object(
-	object_id: int, def_id: StringName, anchor: Vector2i, facing: int, paid := 0
+	object_id: int,
+	def_id: StringName,
+	anchor: Vector2i,
+	facing: int,
+	paid := 0,
+	fast_track := false
 ) -> Array[Vector2i]:
-	_objects[object_id] = {"def": def_id, "anchor": anchor, "facing": facing, "paid": paid}
+	var record := {"def": def_id, "anchor": anchor, "facing": facing, "paid": paid}
+	if def_id == SecurityLanes.ARCH:
+		record["fast_track"] = fast_track
+	_objects[object_id] = record
 	var def := BuildCatalog.get_def(def_id)
 	var cells := def.footprint(anchor, facing)
 	for cell in cells:

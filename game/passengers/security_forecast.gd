@@ -178,6 +178,7 @@ static func clearance(sim: PassengerSim, station: int, p: Passenger, join_tick: 
 			p.body_resolved,
 			p.bag_resolved,
 			p.late,
+			p.vip,
 			station,
 			join_tick,
 			scarce,
@@ -249,9 +250,16 @@ static func _waiting_clearance(sim: PassengerSim, station: int, p: Passenger) ->
 	for at: int in sim.layout.scanners:
 		if sim._queues.has(at):
 			key.append(StationQueue.members(sim._queues[at]))
-		# A fault or a closure on the same tick changes where places are.
-		key.append(
-			[sim._is_open(at), sim.staff.faults.repair_tick(at) if sim.staff != null else -1]
+		# A fault, closure, or fast-track toggle on the same tick changes routing.
+		(
+			key
+			. append(
+				[
+					sim._is_open(at),
+					sim.staff.faults.repair_tick(at) if sim.staff != null else -1,
+					sim.layout.security_lanes.is_fast_track(at),
+				]
+			)
 		)
 	if not _waiting_memo.is_empty() and _waiting_memo[0] == key:
 		return _waiting_memo[1]
@@ -506,6 +514,8 @@ func _place_waiting(counts: Dictionary) -> void:
 			continue
 		var best := -1
 		var best_eta := 0
+		var best_ft := false
+		var want_ft := SecurityLanes.is_priority(u)
 		var best_path: Array[Vector2i] = []
 		for station: int in _stations:
 			var line: Array = _lines[station]
@@ -520,9 +530,13 @@ func _place_waiting(counts: Dictionary) -> void:
 			var eta := PassengerStations.estimate(
 				_runtime, self, station, _members_of(station), _walkers_of(station), walk, u
 			)
-			if best < 0 or eta < best_eta:
+			var cand_ft := _sim.layout.security_lanes.is_fast_track(station)
+			if PassengerStations.picks_better_security(
+				want_ft, cand_ft, eta, best, best_ft, best_eta
+			):
 				best = station
 				best_eta = eta
+				best_ft = cand_ft
 				best_path = path
 		if best < 0:
 			# Every free cell was taken by one who chose before it on this
@@ -565,6 +579,7 @@ func _add(p: Passenger) -> Passenger:
 	copy.stuck = p.stuck
 	copy.carry_on = p.carry_on
 	copy.late = p.late
+	copy.vip = p.vip
 	copy.halt_tick = p.halt_tick
 	copy.liquids = p.liquids
 	copy.alarm = p.alarm

@@ -173,6 +173,8 @@ static func _soonest_scanner(
 	sim: PassengerSim, from: Vector2i, p: Passenger, routed: bool
 ) -> Vector2i:
 	var best := Vector2i.ZERO
+	var best_ft := false
+	var want_ft := SecurityLanes.is_priority(p)
 	for id in sim.layout.scanners:
 		if not sim.layout.is_usable(id):
 			continue
@@ -180,8 +182,19 @@ static func _soonest_scanner(
 		if walk_mm >= NEVER_MM:
 			continue
 		var eta := sim.station_eta(id, walk_mm, p)
-		if best.y == 0 or eta < best.x:
+		var cand_ft := sim.layout.security_lanes.is_fast_track(id)
+		var take := false
+		if best.y == 0:
+			take = true
+		elif (eta < NEVER) != (best.x < NEVER):
+			take = eta < NEVER
+		else:
+			take = PassengerStations.picks_better_security(
+				want_ft, cand_ft, eta, best.y, best_ft, best.x
+			)
+		if take:
 			best = Vector2i(eta, id)
+			best_ft = cand_ft
 	return best
 
 

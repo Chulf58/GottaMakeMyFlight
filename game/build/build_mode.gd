@@ -115,6 +115,7 @@ enum Tool {
 	GATE_DESK,
 	SEARCH_TABLE,
 	CONFISCATION_BIN,
+	SECURITY_LANE,
 }
 
 ## The landside build tools (LandsidePlacement), by the kind each builds. They
@@ -549,6 +550,11 @@ func apply_at(point: Vector3) -> BuildResult:
 	var landside_plan := landside_plan_at(point)
 	if landside_plan != null or BuildModeLandside.is_landside_tool(self):
 		return BuildModeLandside.apply(self, landside_plan)
+	if tool == Tool.SECURITY_LANE:
+		_history.begin_action()
+		var stamp_result := SecurityLaneStamp.apply(self, point)
+		_history.end_action()
+		return stamp_result
 	_history.begin_action()
 	var result := _apply_at(point)
 	_history.end_action()
@@ -939,8 +945,11 @@ func _update_ghost(point: Variant) -> void:
 		_status_note = ""
 		_hover_key = ""
 		_show_status(null)
-	if tool == Tool.BELT:
-		BuildGhost.hover_belt(self, point)
+	if tool == Tool.BELT or tool == Tool.SECURITY_LANE:
+		if tool == Tool.BELT:
+			BuildGhost.hover_belt(self, point)
+		else:
+			SecurityLaneStamp.hover(self, point)
 		return
 	var edit: BuildEdit = null if point == null else edit_at(point)
 	_hover_edit = edit

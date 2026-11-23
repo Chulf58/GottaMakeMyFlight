@@ -56,7 +56,10 @@ static func show_status(mode: BuildMode, result: BuildResult) -> void:
 	)
 	var refused := result != null and not result.ok
 	# The facing is for an item that can be placed; a refusal shows its reason alone.
-	if BuildMode.tool_object(mode.tool) != &"" and not refused:
+	var shows_facing := (
+		BuildMode.tool_object(mode.tool) != &"" or mode.tool == BuildMode.Tool.SECURITY_LANE
+	)
+	if shows_facing and not refused:
 		text = BuildWords.facing_text(mode._facing_is_auto(), mode.facing)
 	if refused:
 		var reason := result.reason_text()

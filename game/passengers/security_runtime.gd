@@ -67,6 +67,8 @@ const BODY_CHECK_TICKS := 20
 const REPACK_TICKS := 80
 ## Maximum daily confiscated items stored per confiscation bin (newest kept).
 const MAX_BIN_HISTORY := 12
+## Light positive mood boost when a priority flyer clears a Fast-Track lane.
+const FAST_TRACK_MOOD_BONUS := 5
 ## Repack / check work done per tick at a lane when a helper officer assists:
 ## the work takes half as long (ruling security-lane-staffing-one-officer-
 ## opens-a-lane-and-a-second).
@@ -569,6 +571,14 @@ func _enter(p: Passenger, phase: Phase, path: Array[Vector2i] = []) -> void:
 
 
 func _clear(station: int, record: Dictionary, p: Passenger) -> void:
+	if _host is PassengerSim and is_lane(station):
+		var lane_dict := _lane(station)
+		if bool(lane_dict.get("fast_track", false)) and SecurityLanes.is_priority(p):
+			p.mood = mini(PassengerSim.MOOD_MAX, p.mood + FAST_TRACK_MOOD_BONUS)
+			if p.at != Passenger.NO_CELL:
+				PassengerThoughts.record(
+					p, PassengerThoughts.Kind.FAST_TRACK, _host.tick, p.at, station
+				)
 	_forget(station, record, p.id)
 	_reset(p)
 	_cleared.call(p)

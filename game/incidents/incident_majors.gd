@@ -84,6 +84,7 @@ func spawned(incident: Dictionary, passenger_id: int) -> void:
 	var p := _director.passengers.get_passenger(passenger_id)
 	if p != null and p.flight_id == incident["plan"]["flight"]:
 		incident["plan"]["target"] = passenger_id
+		p.vip = true
 
 
 ## A passenger finished its flight (made or missed).

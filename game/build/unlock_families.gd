@@ -34,6 +34,7 @@ const FAMILY_OF := {
 	BuildMode.Tool.PICKUP_TABLE: SECURITY,
 	BuildMode.Tool.SEARCH_TABLE: SECURITY,
 	BuildMode.Tool.CONFISCATION_BIN: SECURITY,
+	BuildMode.Tool.SECURITY_LANE: SECURITY,
 	BuildMode.Tool.BELT: BAGGAGE,
 	BuildMode.Tool.BAG_ROOM: BAGGAGE,
 	BuildMode.Tool.CART: BAGGAGE,

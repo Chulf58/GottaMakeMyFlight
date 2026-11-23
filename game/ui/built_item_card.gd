@@ -80,6 +80,7 @@ var live_builds := 0
 
 var _name := Label.new()
 var _labels := {}
+var _fast_track_button := Button.new()
 ## The grid-derived part: "kind", "name", the texts that never change with the
 ## sim ("where", "upkeep"), and per kind "id", "counters", "ready" (a room's
 ## RoomStatus), "arch", "plan_kind"/"spot"/"capacity". Empty for no selection.
@@ -108,6 +109,13 @@ func _init() -> void:
 		_labels[field] = label
 		add_child(label)
 	(_labels["where"] as Label).theme_type_variation = &"HudHint"
+	_fast_track_button.name = "FastTrackButton"
+	_fast_track_button.focus_mode = Control.FOCUS_NONE
+	_fast_track_button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	_fast_track_button.theme_type_variation = &"HudButtonTeal"
+	_fast_track_button.visible = false
+	_fast_track_button.pressed.connect(press_fast_track)
+	add_child(_fast_track_button)
 	walk.changed.connect(invalidate)
 
 
@@ -159,12 +167,60 @@ func field_text(field: String) -> String:
 	return label.text if label.visible and visible else ""
 
 
+func fast_track_button() -> Button:
+	return _fast_track_button
+
+
+func press_fast_track() -> bool:
+	var arch_id := _lane_arch_id()
+	if arch_id == 0 or sim == null or sim.grid == null:
+		return false
+	var next := not sim.grid.is_object_fast_track(arch_id)
+	if not sim.grid.set_object_fast_track(arch_id, next):
+		return false
+	_static_stale = true
+	invalidate()
+	refresh()
+	return true
+
+
+func _lane_arch_id() -> int:
+	if sim == null or sim.layout == null or _static.is_empty():
+		return 0
+	var lanes := sim.layout.security_lanes
+	var id := int(_static.get("id", 0))
+	match _static.get("kind"):
+		Kind.ARCH:
+			return id if lanes.is_complete(id) else 0
+		Kind.LANE_PART:
+			return lanes.lane_of_piece(id)
+		Kind.SEARCH_TABLE, Kind.CONFISCATION_BIN:
+			return lanes.lane_of_attachment(id)
+	return 0
+
+
 func _show() -> void:
 	_name.text = _static["name"]
 	for field in FIELDS:
 		var label: Label = _labels[field]
 		label.text = _static.get(field, _live.get(field, ""))
 		label.visible = label.text != ""
+	var arch_id := _lane_arch_id()
+	if arch_id != 0 and sim.grid != null:
+		var enabled := sim.grid.is_object_fast_track(arch_id)
+		_fast_track_button.visible = true
+		_fast_track_button.text = tr("Fast-Track: On") if enabled else tr("Fast-Track: Off")
+		var tip := (
+			tr("Switch this security lane back to Standard")
+			if enabled
+			else tr("Switch this security lane to Fast-Track (VIP and tight-connection passengers)")
+		)
+		_fast_track_button.tooltip_text = tip
+		_fast_track_button.theme_type_variation = (
+			&"HudButtonGreen" if enabled else &"HudButtonTeal"
+		)
+	else:
+		_fast_track_button.visible = false
 
 
 ## Follows the grid's edits and the staff's changes, which make the cached
