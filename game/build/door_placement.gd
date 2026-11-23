@@ -32,6 +32,29 @@ static func cell_under(grid: BuildGrid, point: Vector3) -> Vector2i:
 	return best
 
 
+## The wall edge under `point` as Vector3i(x, y, side), snapping from a just-
+## out-of-bounds point (e.g. clicking the outer face of a border wall) back onto
+## the in-bounds cell edge within LINE_SLACK_M.
+static func wall_edge_at(grid: BuildGrid, point: Vector3) -> Vector3i:
+	var cell := grid.world_to_cell(point)
+	var side: int = grid.nearest_side(point)
+	if grid.in_bounds(cell):
+		return Vector3i(cell.x, cell.y, side)
+	var offset := point - grid.cell_to_world(cell)
+	var best_cell := cell
+	var best_side := side
+	var best_gap := LINE_SLACK_M
+	for i in BuildGrid.SIDE_STEP.size():
+		var step: Vector2i = BuildGrid.SIDE_STEP[i]
+		var adj := cell + step
+		var gap := 0.5 - (offset.x * step.x + offset.z * step.y)
+		if gap <= best_gap and grid.in_bounds(adj):
+			best_cell = adj
+			best_side = (i + 2) % 4
+			best_gap = gap
+	return Vector3i(best_cell.x, best_cell.y, best_side)
+
+
 ## The grid step from a door's cell out through its back edge.
 static func back_step(facing: int) -> Vector2i:
 	return BuildObjectDef.rotate_offset(Vector2i(0, -1), facing)

@@ -26,11 +26,18 @@ static func show_status(mode: BuildMode, result: BuildResult) -> void:
 		mode._set_status(mode._row_label)
 		return
 	if mode._resize.active:
-		mode._set_status(mode._resize.label(mode.grid))
+		mode._set_status(mode._resize.label(mode.grid, mode.wallet()))
 		return
 	if mode._area.active and BuildMode.TOOL_ROOMS.has(mode.tool):
 		mode._set_status(
-			RoomTool.drag_label(mode.grid, mode._area.rect(), BuildMode.TOOL_ROOMS[mode.tool])
+			RoomTool.drag_label(
+				mode.grid,
+				mode._area.rect(),
+				BuildMode.TOOL_ROOMS[mode.tool],
+				mode.wallet(),
+				mode.unlocks,
+				mode.require_unlocks
+			)
 		)
 		return
 	# An undo's note shows under the Belt tool too.

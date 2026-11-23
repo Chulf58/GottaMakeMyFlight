@@ -24,10 +24,15 @@ var spot := -1
 
 
 ## Whether a build interaction owns world clicks: a tool picked, a template paste
-## armed or being saved, or a room being moved. The last two run with no tool
-## picked, and one click must have one owner.
+## or save active, a room being moved, or a starter room kit armed. The last three
+## run with no tool picked, and one click must have one owner.
 static func clicks_taken(mode: BuildMode) -> bool:
-	return mode.tool != BuildMode.Tool.NONE or mode.templates.is_active() or mode.room_mover.active
+	return (
+		mode.tool != BuildMode.Tool.NONE
+		or mode.templates.is_active()
+		or mode.room_mover.active
+		or (mode.starter_kit != null and mode.starter_kit.is_active())
+	)
 
 
 func clear() -> void:

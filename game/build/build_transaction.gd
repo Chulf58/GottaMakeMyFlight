@@ -183,6 +183,241 @@ static func commit_batch(
 	return results
 
 
+## Commits an all-or-nothing composite multi-edit batch (floors + perimeter
+## walls + room + furniture): checks `unlocks` (if wired or required), pre-
+## validates and quotes every edit in order on a trial copy of `grid`, checks
+## total net cost against `wallet` (one net spend or credit), then applies all
+## edits and settles once. A refusal mutates neither `grid` nor `wallet`.
+static func commit_composite(
+	grid: BuildGrid,
+	edits: Array[BuildEdit],
+	wallet: Wallet = null,
+	unlocks: BuildUnlocks = null,
+	require_unlocks := false,
+	extra_rule := Callable()
+) -> BuildResult:
+	if edits.is_empty():
+		return BuildResult.accepted()
+	var staged := stage_composite(grid, edits, wallet, unlocks, require_unlocks, extra_rule)
+	var staged_result: BuildResult = staged["result"]
+	if not staged_result.ok:
+		var failed_edit: BuildEdit = staged["failed_edit"]
+		_emit_refused(grid, failed_edit if failed_edit != null else edits[0], staged_result)
+		return staged_result
+	var quotes: Array[Quote] = staged["quotes"]
+	var net: int = staged["net"]
+	for i in edits.size():
+		edits[i].paid = quotes[i].paid
+	var snapshot := grid.to_snapshot()
+	var receipt := grid.recorder
+	var recorded := receipt.inverses.size() if receipt != null else 0
+	var mark := grid.hold_signals()
+	grid.begin_batch()
+	var whole := BuildResult.accepted()
+	var dirty_set := {}
+	var step_result: BuildResult = BuildResult.accepted()
+	var failed_step: BuildEdit = edits[0]
+	for edit in edits:
+		var problem := composite_rule(grid, edit)
+		if problem == null and extra_rule.is_valid():
+			problem = extra_rule.call(grid, edit)
+		if problem != null:
+			step_result = problem
+			failed_step = edit
+			break
+		step_result = grid.apply(edit)
+		if not step_result.ok:
+			failed_step = edit
+			break
+		if step_result.room_id != 0:
+			whole.room_id = step_result.room_id
+		if step_result.object_id != 0:
+			whole.object_id = step_result.object_id
+		for cell in step_result.dirty_cells:
+			if not dirty_set.has(cell):
+				dirty_set[cell] = true
+				whole.dirty_cells.append(cell)
+	if step_result.ok:
+		var settlement := _settle_net(wallet, net)
+		if not settlement.ok:
+			step_result = settlement
+	if not step_result.ok:
+		grid.recorder = null
+		var restored := grid.from_snapshot(snapshot)
+		grid.recorder = receipt
+		if restored:
+			if receipt != null:
+				receipt.inverses.resize(recorded)
+			grid.release_signals(mark)
+		else:
+			push_error(
+				(
+					(
+						"BuildTransaction.commit_composite: restoring the grid failed (%s);"
+						+ " partial edits stay on the grid"
+					)
+					% step_result.reason_text()
+				)
+			)
+			grid.release_signals()
+		grid.end_batch()
+		_emit_refused(grid, failed_step, step_result)
+		return step_result
+	grid.end_batch()
+	grid.release_signals()
+	return whole
+
+
+## Pre-validates and quotes `edits` against a trial copy of `grid`, checking
+## `unlocks` and total net cost against `wallet` without touching `grid` or
+## `wallet`. Returns {"result", "quotes", "net", "edits", "failed_edit"}.
+## Pass `quote_only := true` when `wallet` is null to quote real prices for
+## live preview without failing CANT_AFFORD.
+static func stage_composite(
+	grid: BuildGrid,
+	edits: Array[BuildEdit],
+	wallet: Wallet = null,
+	unlocks: BuildUnlocks = null,
+	require_unlocks := false,
+	extra_rule := Callable(),
+	quote_only := false
+) -> Dictionary:
+	if unlocks != null or require_unlocks:
+		var locked := BuildUnlocks.edits_lock_args(unlocks, require_unlocks, edits)
+		if not locked.is_empty():
+			var refusal := BuildResult.refused(BuildResult.Reason.LOCKED)
+			refusal.detail = (
+				BuildUnlocks.NOT_WIRED_TEXT
+				if locked.has("unwired")
+				else "Locked at tier %d" % locked["tier"]
+			)
+			refusal.detail_args = locked
+			return {
+				"result": refusal,
+				"quotes": [] as Array[Quote],
+				"net": 0,
+				"edits": edits,
+				"failed_edit": _first_locked_edit(unlocks, require_unlocks, edits),
+			}
+	if edits.is_empty():
+		return {
+			"result": BuildResult.accepted(),
+			"quotes": [] as Array[Quote],
+			"net": 0,
+			"edits": edits,
+			"failed_edit": null,
+		}
+	var scratch := BuildUndo.trial_copy_of(grid)
+	var quotes: Array[Quote] = []
+	var failed: Array[BuildEdit] = [null]
+	var free := wallet == null and not quote_only
+	var rule := func(on: BuildGrid, edit: BuildEdit) -> BuildResult:
+		failed[0] = edit
+		var problem := composite_rule(on, edit)
+		if problem == null and extra_rule.is_valid():
+			problem = extra_rule.call(on, edit)
+		if problem != null:
+			return problem
+		quotes.append(quote(on, edit, free))
+		return null
+	var result := scratch.apply_sequence(edits, rule)
+	if not result.ok:
+		return {
+			"result": result,
+			"quotes": quotes,
+			"net": 0,
+			"edits": edits,
+			"failed_edit": failed[0] if failed[0] != null else edits[0],
+		}
+	var net := 0
+	for q in quotes:
+		if not q.priced:
+			return {
+				"result": BuildResult.refused(BuildResult.Reason.UNPRICED),
+				"quotes": quotes,
+				"net": 0,
+				"edits": edits,
+				"failed_edit": edits[0],
+			}
+		net += q.net()
+	if wallet != null:
+		if net > 0 and not wallet.can_afford(net):
+			return {
+				"result": BuildResult.refused(BuildResult.Reason.CANT_AFFORD),
+				"quotes": quotes,
+				"net": net,
+				"edits": edits,
+				"failed_edit": edits[0],
+			}
+		if net < 0 and not wallet.can_credit(-net, Wallet.Category.BUILD):
+			return {
+				"result": BuildResult.refused(BuildResult.Reason.WALLET_FULL),
+				"quotes": quotes,
+				"net": net,
+				"edits": edits,
+				"failed_edit": edits[0],
+			}
+	return {
+		"result": BuildResult.accepted(),
+		"quotes": quotes,
+		"net": net,
+		"edits": edits,
+		"failed_edit": null,
+	}
+
+
+static func check_composite(
+	grid: BuildGrid,
+	edits: Array[BuildEdit],
+	wallet: Wallet = null,
+	unlocks: BuildUnlocks = null,
+	require_unlocks := false,
+	extra_rule := Callable()
+) -> BuildResult:
+	return stage_composite(grid, edits, wallet, unlocks, require_unlocks, extra_rule)["result"]
+
+
+static func preview_composite(
+	grid: BuildGrid,
+	edits: Array[BuildEdit],
+	unlocks: BuildUnlocks = null,
+	require_unlocks := false,
+	extra_rule := Callable()
+) -> Dictionary:
+	return stage_composite(grid, edits, null, unlocks, require_unlocks, extra_rule, true)
+
+
+static func composite_rule(grid: BuildGrid, edit: BuildEdit) -> BuildResult:
+	var problem := DoorPlacement.edge_problem(grid, edit)
+	if problem == null:
+		problem = BeltShaper.crossing_problem(grid, edit)
+	if problem == null:
+		problem = LaneWall.problem(grid, edit)
+	return problem
+
+
+static func _first_locked_edit(
+	unlocks: BuildUnlocks, require_unlocks: bool, edits: Array[BuildEdit]
+) -> BuildEdit:
+	for edit in edits:
+		var single: Array[BuildEdit] = [edit]
+		if not BuildUnlocks.edits_lock_args(unlocks, require_unlocks, single).is_empty():
+			return edit
+	return edits[0] if not edits.is_empty() else null
+
+
+static func _settle_net(wallet: Wallet, net: int) -> BuildResult:
+	if wallet == null or net == 0:
+		return BuildResult.accepted()
+	if net > 0 and not wallet.spend(net, Wallet.Category.BUILD):
+		return BuildResult.refused(BuildResult.Reason.CANT_AFFORD)
+	if net < 0:
+		if not wallet.can_credit(-net, Wallet.Category.BUILD):
+			return BuildResult.refused(BuildResult.Reason.WALLET_FULL)
+		wallet.credit(-net, Wallet.Category.BUILD)
+	return BuildResult.accepted()
+
+
 ## Puts the grid back to `snapshot` after a settlement that did not fit and
 ## drops the signals held since `mark`. When the restore itself is refused
 ## (BuildGrid.from_snapshot() false), the grid still holds the applied edits:

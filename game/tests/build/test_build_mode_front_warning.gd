@@ -30,6 +30,8 @@ func before_test() -> void:
 	_mode.move_area(_at(ROOM.end - Vector2i.ONE))
 	_mode.finish_area()
 	assert_int(_mode.grid.room_at(ROOM.position)).is_greater(0)
+	# Keep the bay at (3, 5) SOUTH open so placing a stall at (3, 4) reaches outside cleanly.
+	_mode.grid.apply(BuildEdit.remove_wall(Vector2i(3, 5), BuildGrid.Side.SOUTH))
 	_mode.set_tool(BuildMode.Tool.TOILET_STALL)
 
 

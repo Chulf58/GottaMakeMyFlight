@@ -42,12 +42,20 @@ static func preview_text(menu: BuildMenu) -> String:
 ## wallet must still hold the full door price (BuildTransaction.needed).
 static func preview_price(menu: BuildMenu) -> Vector2i:
 	var mode := menu.build_mode
-	if mode.room_mover.active or mode.templates.armed >= 0:
+	if (
+		mode.room_mover.active
+		or mode.templates.armed >= 0
+		or (mode.starter_kit != null and mode.starter_kit.is_active())
+	):
 		return held_price(menu)
+	if mode._resize.active:
+		return RoomResize.preview_price(mode.grid, mode._resize.room_id, mode._resize.rect())
 	var area := mode.dragged_area()
 	if mode.tool == BuildMode.Tool.FLOOR and area.has_area():
 		var rect_cost := floor_rect_cost(menu, area)
 		return Vector2i(rect_cost, rect_cost)
+	if BuildMode.TOOL_ROOMS.has(mode.tool) and area.has_area():
+		return RoomTool.preview_price(mode.grid, area, BuildMode.TOOL_ROOMS[mode.tool])
 	if mode.tool == BuildMode.Tool.BELT:
 		# Only the cells with no belt yet are bought; reshaping is free.
 		var line_cost := mode.belt_cells_to_buy() * BuildMenuCatalog.tool_price(BuildMode.Tool.BELT)
@@ -82,10 +90,12 @@ static func _removal_refused(menu: BuildMenu) -> bool:
 	return result != null and result.reason != BuildResult.Reason.CANT_AFFORD
 
 
-## The price of the room in hand (RoomMoveTool) or of the armed template paste.
+## The price of the room in hand (RoomMoveTool), armed starter kit, or armed template paste.
 static func held_price(menu: BuildMenu) -> Vector2i:
 	if menu.build_mode.room_mover.active:
 		return menu.build_mode.room_mover.preview_price()
+	if menu.build_mode.starter_kit != null and menu.build_mode.starter_kit.is_active():
+		return menu.build_mode.starter_kit.preview_price()
 	return menu.build_mode.templates.preview_price()
 
 

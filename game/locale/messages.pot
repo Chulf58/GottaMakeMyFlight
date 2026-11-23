@@ -3615,7 +3615,7 @@ msgstr ""
 
 #: ui/display_words.gd
 msgctxt "room need"
-msgid "Needs a door or open side to the walkway"
+msgid "Needs entrance"
 msgstr ""
 
 #: ui/display_words.gd
@@ -3710,7 +3710,7 @@ msgstr ""
 
 #: ui/display_words.gd
 msgctxt "status reason"
-msgid "needs a door or open side to the walkway"
+msgid "needs entrance"
 msgstr ""
 
 #: ui/display_words.gd
@@ -7081,3 +7081,43 @@ msgstr ""
 msgid "Needs clear floor for the lane, queue, exit and two officer spots."
 msgstr ""
 
+#: build/starter_room_kits.gd
+msgctxt "build menu"
+msgid "Starter Toilet"
+msgstr ""
+
+#: build/starter_room_kits.gd
+msgctxt "build menu"
+msgid "Starter Cafe"
+msgstr ""
+
+#: build/starter_room_kits.gd ui/build_menu.gd
+msgctxt "build menu"
+msgid "Kit"
+msgstr ""
+
+#: build/starter_room_kits.gd build/starter_kit_tool.gd
+msgctxt "build status"
+msgid "Placed {kit} for {cost}"
+msgstr ""
+
+#: build/starter_room_kits.gd build/starter_kit_tool.gd
+msgctxt "build status"
+msgid "{kit}: click to place"
+msgstr ""
+
+#: ui/build_menu_layout.gd
+msgid "Furnished room kit"
+msgstr ""
+
+#: ui/build_menu_layout.gd
+msgid "Places floor, walls, a door, and required items in one click."
+msgstr ""
+
+#: ui/build_menu_layout.gd
+msgid "{w}x{h} kit"
+msgstr ""
+
+#: ui/build_menu_layout.gd
+msgid "Click (R rotates)"
+msgstr ""

@@ -148,6 +148,7 @@ static func finish_resize(mode: BuildMode) -> void:
 	var result := mode._resize.finish(mode.grid, mode.wallet())
 	if result != null and result.ok:
 		reshape_belts(mode, rect_cells(before.merge(mode._resize.rect())))
+		mode._redraw()
 	mode.grid.end_batch()
 	mode.grid.release_signals()
 	if result != null and result.ok:
@@ -164,9 +165,12 @@ static func finish_room(mode: BuildMode) -> void:
 	var type: StringName = BuildMode.TOOL_ROOMS[mode.tool]
 	mode.grid.hold_signals()
 	mode.grid.begin_batch()
-	var result := RoomTool.mark(mode.grid, mode._area.rect(), type, mode.wallet())
+	var result := RoomTool.mark(
+		mode.grid, mode._area.rect(), type, mode.wallet(), mode.unlocks, mode.require_unlocks
+	)
 	if result.ok:
 		reshape_belts(mode, rect_cells(mode._area.rect()))
+		mode._redraw()
 	mode.grid.end_batch()
 	mode.grid.release_signals()
 	if result.ok:

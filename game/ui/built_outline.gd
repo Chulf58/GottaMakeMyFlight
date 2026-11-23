@@ -17,11 +17,15 @@ const LIFT_M := RoomView.TINT_Y + 0.02
 ## A car park's slab and kerb stand above the ground (LandsidePlacement.SLAB_HEIGHT), so
 ## its frame sits higher.
 const LANDSIDE_LIFT_M := LandsidePlacement.SLAB_HEIGHT + 0.15
+const HANDLE_SIZE := Vector3(0.36, 0.14, 0.36)
+const HANDLE_COLOR := Color(0.95, 0.92, 0.80)
 
 var selection: BuiltSelection
 var build_mode: BuildMode
 
 var _mesh := MeshInstance3D.new()
+var _handles := Node3D.new()
+var _handle_nodes: Array[MeshInstance3D] = []
 var _drawn := ""
 
 
@@ -34,6 +38,22 @@ func _init() -> void:
 	_mesh.material_override = material
 	_mesh.visible = false
 	add_child(_mesh)
+	var handle_mat := StandardMaterial3D.new()
+	handle_mat.albedo_color = HANDLE_COLOR
+	handle_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_handles.name = "ResizeHandles"
+	_handles.visible = false
+	add_child(_handles)
+	var handle_names := ["HandleNorth", "HandleEast", "HandleSouth", "HandleWest"]
+	var handle_box := BoxMesh.new()
+	handle_box.size = HANDLE_SIZE
+	for hname in handle_names:
+		var node := MeshInstance3D.new()
+		node.name = hname
+		node.mesh = handle_box
+		node.material_override = handle_mat
+		_handles.add_child(node)
+		_handle_nodes.append(node)
 
 
 func _process(_delta: float) -> void:
@@ -44,13 +64,18 @@ func _process(_delta: float) -> void:
 func refresh() -> void:
 	if selection == null or build_mode == null or not selection.is_selected():
 		_mesh.visible = false
+		_handles.visible = false
 		_drawn = ""
 		return
 	var grid := build_mode.grid
 	var rect := selection.outline_rect(grid, build_mode.landside_placement())
 	var key := "%s:%s" % [selection.key(), rect]
 	_mesh.visible = rect.has_area()
-	if key == _drawn or not _mesh.visible:
+	if not _mesh.visible:
+		_handles.visible = false
+		return
+	_refresh_handles(grid)
+	if key == _drawn:
 		return
 	_drawn = key
 	var on_landside := selection.kind == BuiltSelection.Kind.LANDSIDE
@@ -58,6 +83,44 @@ func refresh() -> void:
 	var outside := selection.kind == BuiltSelection.Kind.OBJECT
 	_mesh.mesh = frame_mesh(rect, width, outside)
 	_mesh.position.y = LANDSIDE_LIFT_M if on_landside else grid.origin.y + LIFT_M
+
+
+func _refresh_handles(grid: BuildGrid) -> void:
+	var show := (
+		selection.kind == BuiltSelection.Kind.ROOM
+		and build_mode.tool == BuildMode.Tool.NONE
+		and not build_mode.templates.is_active()
+		and not build_mode.room_mover.active
+		and (build_mode.starter_kit == null or not build_mode.starter_kit.is_active())
+		and not build_mode.is_dragging()
+	)
+	if not show:
+		_handles.visible = false
+		return
+	var room := grid.get_room(selection.id)
+	if room.is_empty():
+		_handles.visible = false
+		return
+	var positions := RoomResize.handle_positions(grid, room["rect"])
+	if positions.size() != 4:
+		_handles.visible = false
+		return
+	_handles.visible = true
+	for i in 4:
+		_handle_nodes[i].position = positions[i] + Vector3(0.0, LIFT_M + HANDLE_SIZE.y * 0.5, 0.0)
+
+
+func handles_visible() -> bool:
+	return _handles.visible
+
+
+func handle_positions() -> Array[Vector3]:
+	var out: Array[Vector3] = []
+	if not _handles.visible:
+		return out
+	for node in _handle_nodes:
+		out.append(node.position)
+	return out
 
 
 ## The outline is showing.

@@ -7,7 +7,7 @@ extends GdUnitTestSuite
 const ROOM := Rect2i(2, 2, 5, 4)
 const NEEDS_COUNTER := "Needs a counter"
 const NEEDS_TABLE := "Needs a table"
-const NEEDS_OPENING := "Needs a door or open side to the walkway"
+const NEEDS_OPENING := "Needs entrance"
 const TOO_SMALL := "Too small: a cafe needs at least 3x3"
 
 

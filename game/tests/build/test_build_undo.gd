@@ -202,7 +202,7 @@ func test_undo_of_a_remove_drag_brings_a_room_and_its_pieces_back() -> void:
 	var room := _mode.grid.room_at(Vector2i(2, 2))
 	assert_int(room).is_greater(0)
 	var counter := _click(BuildMode.Tool.COUNTER, Vector2i(3, 3)).object_id
-	var table := _click(BuildMode.Tool.TABLE, Vector2i(6, 5)).object_id
+	var table := _click(BuildMode.Tool.TABLE, Vector2i(4, 5)).object_id
 	assert_int(counter).is_greater(0)
 	assert_int(table).is_greater(0)
 	var built := _mode.grid.to_snapshot()

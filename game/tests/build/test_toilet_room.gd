@@ -8,7 +8,7 @@ extends GdUnitTestSuite
 
 const NEEDS_STALL := "Needs a toilet stall"
 const NEEDS_SINK := "Needs a sink"
-const NEEDS_OPENING := "Needs a door or open side to the walkway"
+const NEEDS_OPENING := "Needs entrance"
 const ROOM := Rect2i(3, 3, 3, 3)
 const STALL := BuildMode.Tool.TOILET_STALL
 const SINK := BuildMode.Tool.TOILET_SINK
@@ -101,7 +101,7 @@ func test_an_empty_toilet_needs_a_stall_then_a_sink() -> void:
 	assert_str(str(_mode.grid.get_room(room_id)["type"])).is_equal("toilet")
 	var status := RoomRules.status(_mode.grid, room_id)
 	assert_bool(status.ok).is_false()
-	assert_array(_notes(room_id)).is_equal([NEEDS_STALL, NEEDS_SINK])
+	assert_array(_notes(room_id)).is_equal([NEEDS_STALL, NEEDS_SINK, NEEDS_OPENING])
 	assert_str(status.type_name).is_equal("Toilet")
 	assert_int(status.seats).is_equal(0)
 	assert_str(_mode.status_text()).is_equal("Toilet marked: Needs a toilet stall")
@@ -110,11 +110,14 @@ func test_an_empty_toilet_needs_a_stall_then_a_sink() -> void:
 func test_a_stall_alone_still_needs_a_sink() -> void:
 	var room_id := _mark_toilet(ROOM)
 	assert_bool(_click(STALL, Vector2i(3, 3)).ok).is_true()
-	assert_array(_notes(room_id)).is_equal([NEEDS_SINK])
+	assert_array(_notes(room_id)).is_equal([NEEDS_SINK, NEEDS_OPENING])
 
 
 func test_a_stall_and_a_sink_make_the_toilet_ready() -> void:
 	var room_id := _mark_toilet(ROOM)
+	_mode.grid.apply(
+		BuildEdit.place_wall(Vector2i(4, 5), BuildGrid.Side.SOUTH, BuildGrid.WallKind.DOOR)
+	)
 	assert_bool(_click(STALL, Vector2i(3, 3)).ok).is_true()
 	assert_bool(_click(SINK, Vector2i(5, 3)).ok).is_true()
 	var status := RoomRules.status(_mode.grid, room_id)
@@ -127,6 +130,10 @@ func test_a_stall_and_a_sink_make_the_toilet_ready() -> void:
 
 func test_the_smallest_toilet_holds_a_stall_and_a_sink_with_their_approaches() -> void:
 	var room_id := _mark_toilet(Rect2i(3, 3, 2, 3))
+	_mode.grid.apply(BuildEdit.remove_wall(Vector2i(4, 5), BuildGrid.Side.SOUTH))
+	_mode.grid.apply(
+		BuildEdit.place_wall(Vector2i(4, 5), BuildGrid.Side.SOUTH, BuildGrid.WallKind.DOOR)
+	)
 	assert_bool(_click(STALL, Vector2i(3, 3)).ok).is_true()
 	assert_bool(_click(SINK, Vector2i(4, 3)).ok).is_true()
 	assert_array(_notes(room_id)).is_empty()
@@ -140,6 +147,11 @@ func test_a_toilet_one_cell_wide_is_too_small() -> void:
 
 func test_a_stall_whose_approach_is_outside_the_toilet_does_not_count() -> void:
 	var room_id := _mark_toilet(ROOM)
+	_mode.grid.apply(BuildEdit.remove_wall(Vector2i(3, 5), BuildGrid.Side.SOUTH))
+	_mode.grid.apply(BuildEdit.remove_wall(Vector2i(4, 5), BuildGrid.Side.SOUTH))
+	_mode.grid.apply(
+		BuildEdit.place_wall(Vector2i(4, 5), BuildGrid.Side.SOUTH, BuildGrid.WallKind.DOOR)
+	)
 	_click(SINK, Vector2i(5, 3))
 	# Rows 4 and 5 are the room's last two; the approach cell (3, 6) is not in it.
 	assert_bool(_click(STALL, Vector2i(3, 4)).ok).is_true()
@@ -150,12 +162,6 @@ func test_a_walled_toilet_needs_an_opening() -> void:
 	var room_id := _mark_toilet(ROOM)
 	_click(STALL, Vector2i(3, 3))
 	_click(SINK, Vector2i(5, 3))
-	for x in range(ROOM.position.x, ROOM.end.x):
-		_mode.grid.apply(BuildEdit.place_wall(Vector2i(x, ROOM.position.y), BuildGrid.Side.NORTH))
-		_mode.grid.apply(BuildEdit.place_wall(Vector2i(x, ROOM.end.y - 1), BuildGrid.Side.SOUTH))
-	for y in range(ROOM.position.y, ROOM.end.y):
-		_mode.grid.apply(BuildEdit.place_wall(Vector2i(ROOM.position.x, y), BuildGrid.Side.WEST))
-		_mode.grid.apply(BuildEdit.place_wall(Vector2i(ROOM.end.x - 1, y), BuildGrid.Side.EAST))
 	assert_array(_notes(room_id)).is_equal([NEEDS_OPENING])
 
 
@@ -187,6 +193,9 @@ func test_remove_takes_the_pieces_before_the_toilet() -> void:
 
 func test_a_ready_toilet_costs_its_stall_rate_per_stall_per_day() -> void:
 	var room_id := _mark_toilet(Rect2i(3, 3, 4, 3))
+	_mode.grid.apply(
+		BuildEdit.place_wall(Vector2i(4, 5), BuildGrid.Side.SOUTH, BuildGrid.WallKind.DOOR)
+	)
 	_click(STALL, Vector2i(3, 3))
 	_click(STALL, Vector2i(4, 3))
 	_click(STALL, Vector2i(5, 3))
@@ -209,6 +218,9 @@ func test_a_toilet_that_is_not_ready_costs_nothing() -> void:
 
 func test_a_stall_outside_the_toilet_is_not_charged() -> void:
 	var room_id := _mark_toilet(ROOM)
+	_mode.grid.apply(
+		BuildEdit.place_wall(Vector2i(4, 5), BuildGrid.Side.SOUTH, BuildGrid.WallKind.DOOR)
+	)
 	_click(STALL, Vector2i(3, 3))
 	_click(SINK, Vector2i(5, 3))
 	assert_bool(_click(STALL, Vector2i(10, 8)).ok).is_true()
@@ -222,6 +234,9 @@ func test_a_cafe_costs_no_upkeep_when_ready() -> void:
 	_mode.move_area(_at(Vector2i(7, 6)))
 	_mode.finish_area()
 	var room_id := _mode.grid.room_at(Vector2i(3, 3))
+	_mode.grid.apply(
+		BuildEdit.place_wall(Vector2i(5, 6), BuildGrid.Side.SOUTH, BuildGrid.WallKind.DOOR)
+	)
 	_click(BuildMode.Tool.COUNTER, Vector2i(3, 3))
 	_click(BuildMode.Tool.TABLE, Vector2i(4, 5))
 	assert_bool(RoomRules.status(_mode.grid, room_id).ok).is_true()
