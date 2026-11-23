@@ -46,6 +46,8 @@ signal jumped(target: Vector3)
 signal late_card_pressed(flight_id: String)
 ## The subtle charter-gap chip was clicked; opens OfferPanel.
 signal charter_card_pressed
+## The subtle airline-offers opportunity card was clicked; opens OfferPanel.
+signal offers_card_pressed
 ## A cause transitioned from inactive to active on the board.
 signal alert_raised(key: StringName)
 ## reset() has dropped every card and notice; a poster of notices posts again.
@@ -105,6 +107,8 @@ var offer_desk: OfferDesk
 ## When valid and returning true (e.g. DeparturesPanel visible), suppresses the
 ## self-clearing late-runner card so it clears immediately.
 var late_suppressed := Callable()
+## When valid, returns true while unreviewed daily/refill airline offers await.
+var offers_unseen := Callable()
 
 var _board := AlertBoard.new()
 var _dirty := DirtyAlert.new()
@@ -222,6 +226,8 @@ func refresh() -> void:
 	causes.append_array(_dirty.cause())
 	causes.append_array(_current_late_causes())
 	causes.append_array(AlertSources.charter_gap(offer_desk, resolved_flights))
+	var show_offers := not offers_unseen.is_valid() or bool(offers_unseen.call())
+	causes.append_array(AlertSources.offers_available(offer_desk, resolved_flights, show_offers))
 	var prev_active := {}
 	for alert in _board.active():
 		prev_active[alert["key"]] = true
@@ -383,9 +389,10 @@ func press_card(key: StringName) -> bool:
 	if alert.is_empty():
 		return false
 	var targets: Array = alert["targets"]
-	if key == AlertSources.CHARTER_GAP:
-		if charter_card_pressed.get_connections().size() > 0:
-			charter_card_pressed.emit()
+	if key == AlertSources.CHARTER_GAP or key == AlertSources.OFFERS_AVAILABLE:
+		var sig := charter_card_pressed if key == AlertSources.CHARTER_GAP else offers_card_pressed
+		if sig.get_connections().size() > 0:
+			sig.emit()
 			return true
 		return false
 	if key == LateCount.ALERT_KEY:
@@ -565,7 +572,7 @@ func _new_card(key: StringName) -> PanelContainer:
 	card.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	if key == LateCount.ALERT_KEY:
 		card.tooltip_text = tr("Click to follow the tightest running-late passenger")
-	elif key == AlertSources.CHARTER_GAP:
+	elif key == AlertSources.CHARTER_GAP or key == AlertSources.OFFERS_AVAILABLE:
 		card.tooltip_text = tr("Click to open Airline Contracts")
 	else:
 		card.tooltip_text = tr("Click to look at it")
@@ -797,7 +804,7 @@ func _retranslate() -> void:
 				(child as Control).tooltip_text = tr(
 					"Click to follow the tightest running-late passenger"
 				)
-			elif meta_key == AlertSources.CHARTER_GAP:
+			elif meta_key == AlertSources.CHARTER_GAP or meta_key == AlertSources.OFFERS_AVAILABLE:
 				(child as Control).tooltip_text = tr("Click to open Airline Contracts")
 			else:
 				(child as Control).tooltip_text = tr("Click to look at it")

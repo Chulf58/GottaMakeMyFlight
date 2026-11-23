@@ -6522,3 +6522,73 @@ msgstr ""
 #: ui/alert_sources.gd ui/hint_rules.gd
 msgid "Drag a belt from the back of a check-in desk into your Bag Room."
 msgstr ""
+
+#: ui/alert_sources.gd
+msgid "Airline offers available"
+msgstr ""
+
+#: ui/alert_sources.gd
+msgid "{count} new contract waiting · click to review"
+msgid_plural "{count} new contracts waiting · click to review"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/hint_rules.gd
+msgid "Airlines are ready with new flights — click Offers at the top to review contracts."
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Last-minute charter hop to {destination} — light bags, quick turnaround."
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Premium cabin demand to {destination} — passengers pay top fare."
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Holiday crowd bound for {destination} — plenty of time to shop."
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Smooth bag handling to {destination} — {airline} covers missed bags."
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Busy route to {destination} — almost every seat is spoken for."
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "{airline} brings a welcome bonus on your first flight to {destination}."
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Steady partner route to {destination} — fly often for higher fares."
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Crisp northern hop with {airline} — steady fjord and business flyers."
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Quick city-break run to Berlin — easygoing weekend flyers."
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Warm coastal route to Lisbon — sunlit travelers heading south."
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Classic Mediterranean hop to Rome — sightseeing crowds all day."
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Friendly island link to Dublin — reliable regional commuters."
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Sunny Aegean flight to Athens — leisure flyers ready to board."
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Reliable daily link to {destination} with {airline}."
+msgstr ""

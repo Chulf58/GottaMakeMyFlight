@@ -235,6 +235,8 @@ func _ready() -> void:
 	_alerts.late_suppressed = _departures_board.is_panel_visible
 	_alerts.late_card_pressed.connect(_on_follow_late_requested)
 	_alerts.charter_card_pressed.connect(_on_charter_card_pressed)
+	_alerts.offers_unseen = _has_unseen_offers
+	_alerts.offers_card_pressed.connect(_on_offers_card_pressed)
 	_alerts.settings_path = alert_settings_path
 	add_child(_alerts)
 	_pa_ticker.bottom_provider = _pa_bottom
@@ -505,11 +507,27 @@ func _shortcut_input(event: InputEvent) -> void:
 		viewport.set_input_as_handled()
 
 
-func _on_charter_card_pressed() -> void:
+func _resolve_offer_panel() -> OfferPanel:
 	if offer_panel == null:
 		offer_panel = get_node_or_null("../OfferPanel") as OfferPanel
-	if offer_panel != null:
-		offer_panel.open()
+	return offer_panel
+
+
+func _has_unseen_offers() -> bool:
+	var panel := _resolve_offer_panel()
+	return panel != null and panel.has_unseen_offers()
+
+
+func _on_charter_card_pressed() -> void:
+	var panel := _resolve_offer_panel()
+	if panel != null:
+		panel.open()
+
+
+func _on_offers_card_pressed() -> void:
+	var panel := _resolve_offer_panel()
+	if panel != null:
+		panel.open()
 
 
 ## The dirty-terminal alert, one of the alert cards' causes, for tests and probes.

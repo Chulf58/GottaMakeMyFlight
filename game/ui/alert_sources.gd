@@ -33,6 +33,7 @@ const RAMP_BAGGAGE := &"ramp_baggage"
 const RAMP_PUSHBACK := &"ramp_pushback"
 const BAGGAGE_CONNECT := &"baggage_connect"
 const CHARTER_GAP := &"charter_gap"
+const OFFERS_AVAILABLE := &"offers_available"
 ## Three game minutes (one real second is one game minute at 1x).
 const QUEUE_HOLD_TICKS := 3 * GameCalendar.TICKS_PER_MINUTE
 ## A stuck passenger re-plans now and then; a minute each way keeps a passing
@@ -386,6 +387,40 @@ static func charter_gap(desk: OfferDesk, flights: FlightSim = null) -> Array[Dic
 			}
 		]
 	return []
+
+
+## Subtle non-blocking opportunity card when fresh daily or refill offers await review.
+static func offers_available(
+	desk: OfferDesk, flights: FlightSim = null, unseen: bool = true
+) -> Array[Dictionary]:
+	if desk == null or not unseen:
+		return []
+	var resolved := flights if flights != null else desk.flights
+	if resolved == null or resolved.opened_tick < 0:
+		return []
+	var count := desk.board.open_offers().size()
+	if count == 0:
+		return []
+	return [
+		{
+			"key": OFFERS_AVAILABLE,
+			"title": _translator.tr("Airline offers available"),
+			"detail":
+			(
+				_translator
+				. tr_n(
+					"{count} new contract waiting · click to review",
+					"{count} new contracts waiting · click to review",
+					count
+				)
+				. format({"count": count})
+			),
+			"targets": [],
+			"show_after": 0,
+			"clear_after": 0,
+			"subtle": true,
+		}
+	]
 
 
 ## Whether a hired member is walking to `station` to take it up, not yet on duty.

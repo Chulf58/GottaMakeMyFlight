@@ -51,6 +51,8 @@ extends CanvasLayer
 ## or its works), which the open sheet checks for every frame because those
 ## change while the clock is paused under it.
 
+signal opened
+
 const SHEET_W := TopRow.SHEET_W
 const CARD_TEXT_W := 380.0
 ## The widths the fit and earnings lines share on the row under the title: the
@@ -73,6 +75,30 @@ const EMPTY_TEXT := "No offers right now. New offers arrive at midnight."
 const FITS_TEXT := "Fits your gates now"
 const NEEDS_GATE_TEXT := "Needs another gate"
 const CHARTER_BADGE_TEXT := "One-off charter — flies today only"
+const BADGE_META := &"badge_monogram"
+const BADGE_BORDER := Color(0.1, 0.13, 0.26, 1.0)
+const PULSE_TINT := Color(1.16, 1.06, 0.72, 0.76)
+const PULSE_HALF_S := 0.7
+const AIRLINE_BADGES := {
+	"Gotta Air": {"code": "GA", "color": Color(0.96, 0.76, 0.28, 1.0)},
+	"Nordic Wing": {"code": "NW", "color": Color(0.46, 0.74, 0.94, 1.0)},
+	"Blue Fjord": {"code": "BF", "color": Color(0.36, 0.78, 0.74, 1.0)},
+	"Sunhop": {"code": "SH", "color": Color(0.96, 0.60, 0.34, 1.0)},
+	"Polar Jet": {"code": "PJ", "color": Color(0.62, 0.84, 0.92, 1.0)},
+	"Aegean Sky": {"code": "AS", "color": Color(0.48, 0.68, 0.94, 1.0)},
+	"Skyline Global": {"code": "SG", "color": Color(0.76, 0.62, 0.90, 1.0)},
+	"Meridian Air": {"code": "MA", "color": Color(0.52, 0.82, 0.56, 1.0)},
+}
+const FALLBACK_BADGE_COLORS: Array[Color] = [
+	Color(0.96, 0.76, 0.28, 1.0),
+	Color(0.46, 0.74, 0.94, 1.0),
+	Color(0.36, 0.78, 0.74, 1.0),
+	Color(0.96, 0.60, 0.34, 1.0),
+	Color(0.62, 0.84, 0.92, 1.0),
+	Color(0.76, 0.62, 0.90, 1.0),
+	Color(0.52, 0.82, 0.56, 1.0),
+	Color(0.94, 0.64, 0.62, 1.0),
+]
 
 @export var desk: OfferDesk
 @export var flights: FlightSim
@@ -85,6 +111,8 @@ const CHARTER_BADGE_TEXT := "One-off charter — flies today only"
 ## The right rail the warning and ending notices go on; null finds the one in
 ## AlertStack.GROUP (the HUD builds it, so the scene does not wire it).
 var alerts: AlertStack
+var has_been_opened := false
+var pulsing := false
 
 var _button: Button
 var _sheet: PanelContainer
@@ -101,6 +129,10 @@ var _posted_rail := 0
 var _watched_rail: AlertStack
 var _ended_text := ""
 var _offers_waiting := false
+var _offers_unseen := false
+var _was_airport_open := false
+var _known_offer_ids: Dictionary = {}
+var _pulse_tween: Tween
 var _card_nodes: Dictionary = {}
 var _accept_buttons: Dictionary = {}
 var _decline_buttons: Dictionary = {}
@@ -267,6 +299,103 @@ static func note_line(note: String) -> String:
 	return note.left(1).to_upper() + note.substr(1)
 
 
+## Crisp 2-letter airline monogram for the offer card badge.
+static func airline_code(airline: String) -> String:
+	if AIRLINE_BADGES.has(airline):
+		return String(AIRLINE_BADGES[airline]["code"])
+	var words: Array[String] = []
+	for part in airline.strip_edges().split(" ", false):
+		words.append(part)
+	if words.size() >= 2:
+		return (words[0].left(1) + words[1].left(1)).to_upper()
+	if words.size() == 1:
+		return words[0].left(2).to_upper()
+	return "??"
+
+
+## Deterministic Toon palette swatch color for `airline`.
+static func airline_color(airline: String) -> Color:
+	if AIRLINE_BADGES.has(airline):
+		return AIRLINE_BADGES[airline]["color"]
+	var index := posmod(airline.hash(), FALLBACK_BADGE_COLORS.size())
+	return FALLBACK_BADGE_COLORS[index]
+
+
+## One-line cozy flavor pitch tailored to charter status, traits or destination.
+static func route_pitch(offer: Dictionary) -> String:
+	var airline := String(offer.get("airline", ""))
+	var destination := String(offer.get("destination", ""))
+	var template := ""
+	if FlightContract.is_charter(offer):
+		template = TranslationServer.translate(
+			"Last-minute charter hop to {destination} — light bags, quick turnaround."
+		)
+	else:
+		var traits: Dictionary = offer.get(FlightContract.TRAITS_KEY, {})
+		match String(traits.get("up", "")):
+			OfferTraits.TOP_FARE:
+				template = TranslationServer.translate(
+					"Premium cabin demand to {destination} — passengers pay top fare."
+				)
+			OfferTraits.SHOPPERS:
+				template = TranslationServer.translate(
+					"Holiday crowd bound for {destination} — plenty of time to shop."
+				)
+			OfferTraits.BAG_COVER:
+				template = TranslationServer.translate(
+					"Smooth bag handling to {destination} — {airline} covers missed bags."
+				)
+			OfferTraits.FULL_FLIGHT:
+				template = TranslationServer.translate(
+					"Busy route to {destination} — almost every seat is spoken for."
+				)
+			OfferTraits.SIGNING_BONUS:
+				template = TranslationServer.translate(
+					"{airline} brings a welcome bonus on your first flight to {destination}."
+				)
+			OfferTraits.LOYAL_AIRLINE:
+				template = TranslationServer.translate(
+					"Steady partner route to {destination} — fly often for higher fares."
+				)
+			_:
+				template = _destination_pitch(destination)
+	return template.format({"airline": airline, "destination": destination})
+
+
+static func _destination_pitch(destination: String) -> String:
+	var text := ""
+	match destination:
+		"Oslo":
+			text = TranslationServer.translate(
+				"Crisp northern hop with {airline} — steady fjord and business flyers."
+			)
+		"Berlin":
+			text = TranslationServer.translate(
+				"Quick city-break run to Berlin — easygoing weekend flyers."
+			)
+		"Lisbon":
+			text = TranslationServer.translate(
+				"Warm coastal route to Lisbon — sunlit travelers heading south."
+			)
+		"Rome":
+			text = TranslationServer.translate(
+				"Classic Mediterranean hop to Rome — sightseeing crowds all day."
+			)
+		"Dublin":
+			text = TranslationServer.translate(
+				"Friendly island link to Dublin — reliable regional commuters."
+			)
+		"Athens":
+			text = TranslationServer.translate(
+				"Sunny Aegean flight to Athens — leisure flyers ready to board."
+			)
+		_:
+			text = TranslationServer.translate(
+				"Reliable daily link to {destination} with {airline}."
+			)
+	return text
+
+
 func _ready() -> void:
 	if desk == null or flights == null:
 		push_error("OfferPanel: desk and flights must both be set, so nothing is shown")
@@ -282,7 +411,7 @@ func _ready() -> void:
 		desk.rating.changed.connect(_refresh_warning)
 	desk.contract_ended.connect(_on_contract_ended)
 	flights.planning_changed.connect(_refresh_fits)
-	flights.snapshot_loaded.connect(_sync_open_state)
+	flights.snapshot_loaded.connect(_on_snapshot_loaded)
 	flights.occurrence_added.connect(_on_flights_changed)
 	var gate := get_node_or_null("../AirportGate") as AirportGate
 	if gate != null:
@@ -291,9 +420,15 @@ func _ready() -> void:
 		build_mode.tool_changed.connect(_on_tool_changed)
 	if save_game != null:
 		save_game.loaded.connect(_on_loaded)
+	_was_airport_open = flights.opened_tick >= 0
+	_known_offer_ids = _open_offer_id_set()
 	_refresh()
 	_refresh_warning()
 	_sync_open_state()
+
+
+func _exit_tree() -> void:
+	_stop_pulse()
 
 
 func _notification(what: int) -> void:
@@ -346,12 +481,19 @@ func open() -> void:
 	if flights == null or flights.opened_tick < 0 or _sheet.visible:
 		return
 	TopRow.close_others(self)
+	_offers_unseen = false
+	has_been_opened = true
+	_stop_pulse()
 	_sheet.visible = true
 	_refresh_notes()
 	flights.check_planning_changed()
 	_refresh_fits()
 	_fit_scroll_height()
 	_fit_scroll_height.call_deferred()
+	opened.emit()
+	var rail := _rail()
+	if rail != null:
+		rail.refresh()
 
 
 ## Hides the sheet and clears transient refusals.
@@ -391,9 +533,14 @@ func decline_button(id: String) -> Button:
 func card_text(id: String) -> String:
 	var lines := PackedStringArray()
 	for label in _card_nodes[id].find_children("*", "Label", true, false):
-		if (label as Label).visible:
-			lines.append((label as Label).text)
+		var lbl := label as Label
+		if lbl.visible and not lbl.has_meta(BADGE_META):
+			lines.append(lbl.text)
 	return "\n".join(lines)
+
+
+func has_unseen_offers() -> bool:
+	return _offers_unseen
 
 
 ## The airlines' warning, as the Offers button's tooltip says it; "" when the
@@ -526,7 +673,7 @@ func _on_loaded(ok: bool) -> void:
 	if not ok:
 		return
 	close()
-	_sync_open_state()
+	_on_snapshot_loaded()
 	# The ending notice is not saved. The rail's own reset (reset_done) posts a
 	# warning still due once, whichever of the two handlers runs first, so this
 	# only drops the ending and lets the warning follow the loaded rating.
@@ -537,13 +684,35 @@ func _on_loaded(ok: bool) -> void:
 	_refresh_warning.call_deferred()
 
 
+func _on_snapshot_loaded() -> void:
+	_offers_unseen = false
+	_stop_pulse()
+	_was_airport_open = flights != null and flights.opened_tick >= 0
+	_known_offer_ids = _open_offer_id_set()
+	_sync_open_state()
+
+
 func _sync_open_state() -> void:
 	var open_now := flights != null and flights.opened_tick >= 0
+	var became_open := open_now and not _was_airport_open
+	_was_airport_open = open_now
 	if _button != null:
 		_button.visible = open_now
 		_button.disabled = not open_now
-	if not open_now and _sheet != null:
-		close()
+	if not open_now:
+		_offers_unseen = false
+		_stop_pulse()
+		if _sheet != null:
+			close()
+	elif (
+		became_open
+		and desk != null
+		and not desk.board.is_loading()
+		and not desk.board.open_offers().is_empty()
+		and (_sheet == null or not _sheet.visible)
+	):
+		_known_offer_ids = _open_offer_id_set()
+		_notify_fresh_offers()
 
 
 func _on_airport_opened(_tick: int) -> void:
@@ -587,6 +756,81 @@ func _refresh() -> void:
 	_fit_scroll_height()
 	_fit_scroll_height.call_deferred()
 	_noted_tick = flights.tick
+	_sync_fresh_offer_cue(offers)
+
+
+func _open_offer_id_set() -> Dictionary:
+	var ids := {}
+	if desk == null or desk.board == null:
+		return ids
+	for offer in desk.board.open_offers():
+		ids[String(offer["id"])] = true
+	return ids
+
+
+func _sync_fresh_offer_cue(offers: Array[Dictionary]) -> void:
+	var current_ids := {}
+	var has_new := false
+	for offer in offers:
+		var id := String(offer["id"])
+		current_ids[id] = true
+		if not _known_offer_ids.has(id):
+			has_new = true
+	_known_offer_ids = current_ids
+	if desk.board.is_loading() or flights == null or flights.opened_tick < 0:
+		return
+	if current_ids.is_empty():
+		_offers_unseen = false
+		_stop_pulse()
+	elif has_new and (_sheet == null or not _sheet.visible):
+		_notify_fresh_offers()
+
+
+func _notify_fresh_offers() -> void:
+	_offers_unseen = true
+	_start_pulse()
+	_play_offer_chime()
+
+
+func _start_pulse() -> void:
+	if _button == null or not is_inside_tree():
+		return
+	pulsing = true
+	if _pulse_tween != null and _pulse_tween.is_valid():
+		return
+	_button.modulate = Color.WHITE
+	_pulse_tween = create_tween()
+	_pulse_tween.set_loops()
+	(
+		_pulse_tween
+		. tween_property(_button, "modulate", PULSE_TINT, PULSE_HALF_S)
+		. set_trans(Tween.TRANS_SINE)
+		. set_ease(Tween.EASE_IN_OUT)
+	)
+	(
+		_pulse_tween
+		. tween_property(_button, "modulate", Color.WHITE, PULSE_HALF_S)
+		. set_trans(Tween.TRANS_SINE)
+		. set_ease(Tween.EASE_IN_OUT)
+	)
+
+
+func _stop_pulse() -> void:
+	pulsing = false
+	if _pulse_tween != null:
+		_pulse_tween.kill()
+		_pulse_tween = null
+	if _button != null:
+		_button.modulate = Color.WHITE
+
+
+func _play_offer_chime() -> void:
+	var tree := get_tree()
+	if tree == null or tree.root == null:
+		return
+	var audio := tree.root.get_node_or_null("GameAudio")
+	if audio != null and audio.has_method("play_sfx"):
+		audio.play_sfx(&"offer_chime")
 
 
 ## The first-flight note for an offer card right now. While the airport is
@@ -770,7 +1014,15 @@ func _add_card(offer: Dictionary) -> void:
 		)
 		texts.add_child(badge)
 	var lines := card_lines(offer)
-	texts.add_child(_card_label(lines[0], &"HudTitle"))
+	var header := HBoxContainer.new()
+	header.name = "Header_%s" % id
+	header.add_theme_constant_override("separation", 8)
+	texts.add_child(header)
+	header.add_child(_airline_badge(offer))
+	var title_label := _card_label(lines[0], &"HudTitle")
+	title_label.custom_minimum_size = Vector2(CARD_TEXT_W - 44.0, 0.0)
+	title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(title_label)
 	# The departure and the plane share one row, so the trait line below the
 	# verdict row costs the sheet no height (it stays inside 720 px at 1.5).
 	var when := HBoxContainer.new()
@@ -783,6 +1035,9 @@ func _add_card(offer: Dictionary) -> void:
 		when.add_child(part)
 	for i in range(3, lines.size()):
 		texts.add_child(_card_label(lines[i], &"HudSmall"))
+	var pitch := _card_label(route_pitch(offer), &"HudHint")
+	pitch.name = "Pitch_%s" % id
+	texts.add_child(pitch)
 	var note := _card_label("", &"HudSmall")
 	note.name = "Note_%s" % id
 	_set_note(note, _note_for(offer))
@@ -877,6 +1132,34 @@ func _trait_row(offer: Dictionary) -> HBoxContainer:
 		)
 		row.add_child(label)
 	return row
+
+
+func _airline_badge(offer: Dictionary) -> PanelContainer:
+	var airline := String(offer.get("airline", ""))
+	var badge := PanelContainer.new()
+	badge.name = "AirlineBadge_%s" % offer["id"]
+	badge.custom_minimum_size = Vector2(36.0, 26.0)
+	badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var style := StyleBoxFlat.new()
+	style.bg_color = airline_color(airline)
+	style.border_color = BADGE_BORDER
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(8)
+	style.content_margin_left = 4.0
+	style.content_margin_right = 4.0
+	style.content_margin_top = 1.0
+	style.content_margin_bottom = 1.0
+	badge.add_theme_stylebox_override("panel", style)
+	var code := Label.new()
+	code.name = "Monogram"
+	code.text = airline_code(airline)
+	code.set_meta(BADGE_META, true)
+	code.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	code.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_style_label(code, &"HudCardName")
+	badge.add_child(code)
+	return badge
 
 
 func _card_label(text: String, variation: StringName) -> Label:
