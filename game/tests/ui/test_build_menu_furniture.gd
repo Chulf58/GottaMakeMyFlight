@@ -51,15 +51,22 @@ func _tool_for(id: StringName) -> BuildMode.Tool:
 func test_every_furniture_tool_sits_in_a_domain_tab_with_no_paging_cards() -> void:
 	assert_array(_menu.tray().find_children("CardNext", "Button", true, false)).is_empty()
 	for tool in FurnitureTools.OBJECTS:
-		var cat := BuildMenu.category_of(tool)
-		assert_int(cat).is_between(2, 5)
-		assert_bool(_menu.category_button(cat).visible).is_true()
+		if BuildMenuCatalog.is_room_only_tool(tool):
+			assert_int(BuildMenu.category_of(tool)).is_equal(BuildMenu.NO_CATEGORY)
+			assert_bool(BuildMenuCatalog.room_owners_of(tool).is_empty()).is_false()
+		else:
+			var cat := BuildMenu.category_of(tool)
+			assert_int(cat).is_between(2, 5)
+			assert_bool(_menu.category_button(cat).visible).is_true()
 
 
 func test_every_furniture_card_shows_name_price_thumbnail_and_hover_size() -> void:
 	assert_array(BuildMenu.PLACEHOLDER_THUMBNAILS).is_empty()
 	for tool in FurnitureTools.OBJECTS:
-		_menu.press_category(BuildMenu.category_of(tool))
+		if BuildMenuCatalog.is_room_only_tool(tool):
+			_menu.enter_room_context(BuildMenuCatalog.room_owners_of(tool)[0])
+		else:
+			_menu.press_category(BuildMenu.category_of(tool))
 		var card := _menu.card(tool)
 		assert_object(card).override_failure_message("tool %d" % tool).is_not_null()
 		var id: StringName = FurnitureTools.OBJECTS[tool]

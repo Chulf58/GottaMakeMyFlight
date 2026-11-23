@@ -236,9 +236,9 @@ func test_every_tray_fits_its_reserved_space_and_expected_height() -> void:
 	var expected_rows := {
 		"building": 1,
 		"operations": 2,
-		"facilities": 2,
+		"facilities": 1,
 		"food": 1,
-		"shops": 2,
+		"shops": 1,
 		"decor": 2,
 		"landside": 1,
 	}
@@ -268,17 +268,18 @@ func test_wrapping_grid_shows_all_cards_with_no_subfilters_and_shrinks_on_tab_sw
 	assert_object(_menu.find_child("FilterBar", true, false)).is_null()
 	assert_object(_menu.find_child("TrayScroll", true, false)).is_null()
 	assert_int(_menu.tray().find_children("*", "VSeparator", true, false).size()).is_equal(0)
-	_menu.press_category(FACILITIES)
+	var decor := BuildMenu.category_index("decor")
+	_menu.press_category(decor)
 	await get_tree().process_frame
 	await get_tree().process_frame
-	var facilities_grid := _menu.card(BuildMode.Tool.TOILET_ROOM).get_parent() as GridContainer
-	assert_object(facilities_grid).is_instanceof(GridContainer)
-	assert_int(facilities_grid.columns).is_equal(9)
+	var decor_grid := _menu.card(BuildMode.Tool.BUSH).get_parent() as GridContainer
+	assert_object(decor_grid).is_instanceof(GridContainer)
+	assert_int(decor_grid.columns).is_equal(9)
 	assert_float(_menu.tray_height()).is_equal(BuildMenu.tray_height_for_rows(2))
 	assert_float(_menu.tray().size.y).is_equal(BuildMenu.tray_height_for_rows(2))
-	for tool: BuildMode.Tool in BuildMenu.CATEGORIES[FACILITIES]["tools"]:
+	for tool: BuildMode.Tool in BuildMenu.CATEGORIES[decor]["tools"]:
 		assert_bool(_menu.card(tool).is_visible_in_tree()).is_true()
-	# Switching from 2-row Facilities (208 px) back to 1-row Building (106 px) shrinks
+	# Switching from 2-row Decor (208 px) back to 1-row Building (106 px) shrinks
 	# PanelContainer.size.y immediately (anti-pattern 1caf2bb3).
 	_menu.press_category(BUILDING)
 	await get_tree().process_frame
@@ -321,14 +322,14 @@ func test_mouse_wheel_over_tray_never_zooms_camera_and_has_no_horizontal_slider(
 func test_arming_last_card_tool_on_closed_menu_shows_card_in_wrapping_grid() -> void:
 	_mode.set_tool(BuildMode.Tool.NONE)
 	assert_bool(_menu.is_tray_open()).is_false()
-	_mode.set_tool(BuildMode.Tool.PLAY_SLIDE)
+	_mode.set_tool(BuildMode.Tool.PRIZE_PODIUM)
 	await get_tree().process_frame
 	await get_tree().process_frame
-	var slide_card := _menu.card(BuildMode.Tool.PLAY_SLIDE)
+	var podium_card := _menu.card(BuildMode.Tool.PRIZE_PODIUM)
 	var tray_rect := _menu.tray().get_global_rect()
-	var card_rect := slide_card.get_global_rect()
-	assert_int(_menu.open_category()).is_equal(BuildMenu.category_index("facilities"))
-	assert_bool(slide_card.is_visible_in_tree()).is_true()
+	var card_rect := podium_card.get_global_rect()
+	assert_int(_menu.open_category()).is_equal(BuildMenu.category_index("decor"))
+	assert_bool(podium_card.is_visible_in_tree()).is_true()
 	assert_float(tray_rect.size.x).is_less_equal(832.0)
 	assert_bool(tray_rect.encloses(card_rect)).is_true()
 
@@ -379,7 +380,8 @@ func test_wrapping_grid_stays_rail_clear_under_pseudolocale_and_clamps_narrow_vi
 	var menu := BuildMenu.new()
 	menu.build_mode = mode
 	port.add_child(menu)
-	menu.press_category(FACILITIES)
+	var decor := BuildMenu.category_index("decor")
+	menu.press_category(decor)
 	await get_tree().process_frame
 	await get_tree().process_frame
 	var tray_rect := menu.tray().get_global_rect()
@@ -392,7 +394,7 @@ func test_wrapping_grid_stays_rail_clear_under_pseudolocale_and_clamps_narrow_vi
 	assert_float(tray_rect.end.x).is_less_equal(
 		1536.0 - float(HudLayout.MARGIN + HudLayout.RAIL_W + HudLayout.GROUP_GAP)
 	)
-	for tool: BuildMode.Tool in BuildMenu.CATEGORIES[FACILITIES]["tools"]:
+	for tool: BuildMode.Tool in BuildMenu.CATEGORIES[decor]["tools"]:
 		var card := menu.card(tool)
 		assert_bool(tray_rect.grow(0.5).encloses(card.get_global_rect())).is_true()
 	# Narrow viewport (< 792 + 2 * MARGIN): columns reduce dynamically so the tray never clips.

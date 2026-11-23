@@ -117,15 +117,25 @@ func test_every_bar_button_shows_its_drawn_icon_and_no_text() -> void:
 
 func test_all_73_build_tools_appear_exactly_once_across_the_seven_domain_tabs() -> void:
 	var seen := {}
-	var expected_counts := [7, 12, 17, 9, 12, 12, 4]
+	var expected_counts := [7, 11, 9, 4, 4, 12, 4]
 	var cats := BuildMenu.categories()
 	for i in BuildMenu.REMOVE_CATEGORY:
 		var tools: Array = cats[i]["tools"]
 		assert_int(tools.size()).is_equal(expected_counts[i])
 		for tool: BuildMode.Tool in tools:
 			assert_bool(seen.has(tool)).override_failure_message("duplicate %d" % tool).is_false()
+			assert_bool(BuildMenuCatalog.is_room_only_tool(tool)).is_false()
 			seen[tool] = true
 			assert_int(BuildMenu.category_of(tool)).is_equal(i)
+	assert_int(seen.size()).is_equal(51)
+	for tool: BuildMode.Tool in BuildMenuCatalog.ROOM_TOOL_OWNERS:
+		(
+			assert_bool(seen.has(tool))
+			. override_failure_message("duplicate room tool %d" % tool)
+			. is_false()
+		)
+		assert_int(BuildMenu.category_of(tool)).is_equal(BuildMenu.NO_CATEGORY)
+		seen[tool] = true
 	assert_int(seen.size()).is_equal(73)
 	for tool: BuildMode.Tool in BuildMode.Tool.values():
 		if tool == BuildMode.Tool.NONE or tool == BuildMode.Tool.REMOVE:

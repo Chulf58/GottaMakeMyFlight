@@ -52,13 +52,20 @@ func test_toilet_tools_lead_the_facilities_tab() -> void:
 	var facilities := BuildMenu.category_index("facilities")
 	assert_int(facilities).is_equal(2)
 	var tools: Array = BuildMenu.categories()[facilities]["tools"]
-	assert_array(tools.slice(0, 3)).is_equal(TOILET_TOOLS)
+	assert_int(tools[0]).is_equal(BuildMode.Tool.TOILET_ROOM)
+	assert_array(BuildMenuCatalog.ROOM_TOOLS[&"toilet"]).is_equal(
+		[BuildMode.Tool.TOILET_STALL, BuildMode.Tool.TOILET_SINK]
+	)
 	assert_str(_menu.category_button(facilities).tooltip_text).is_equal("Facilities")
 	assert_int(BuildMenu.remove_category()).is_equal(BuildMenu.REMOVE_CATEGORY)
 
 
 func test_the_toilet_cards_show_name_and_price_with_size_and_upkeep_in_hover() -> void:
 	_menu.category_button(BuildMenu.category_index("facilities")).pressed.emit()
+	assert_bool(_menu.card(BuildMode.Tool.TOILET_ROOM).is_visible_in_tree()).is_true()
+	assert_bool(_menu.card(BuildMode.Tool.TOILET_STALL).is_visible_in_tree()).is_false()
+	assert_bool(_menu.card(BuildMode.Tool.TOILET_SINK).is_visible_in_tree()).is_false()
+	_menu.enter_room_context(&"toilet")
 	for tool in TOILET_TOOLS:
 		assert_bool(_menu.card(tool).is_visible_in_tree()).is_true()
 	var stall_price := PriceTable.price_of_object(&"toilet_stall")
@@ -73,10 +80,10 @@ func test_the_toilet_cards_show_name_and_price_with_size_and_upkeep_in_hover() -
 		["Toilet", BuildMenu.PRICE_TEXT, "Room"]
 	)
 	assert_array(_texts(_menu.card(BuildMode.Tool.TOILET_STALL))).is_equal(
-		["Toilet stall", BuildMenu.PRICE_TEXT]
+		["Toilet stall", BuildMenu.PRICE_TEXT, "★"]
 	)
 	assert_array(_texts(_menu.card(BuildMode.Tool.TOILET_SINK))).is_equal(
-		["Sink", BuildMenu.PRICE_TEXT]
+		["Sink", BuildMenu.PRICE_TEXT, "★"]
 	)
 	assert_array(_texts(_hover(BuildMode.Tool.TOILET_ROOM))).contains(["2x3 min", "Drag"])
 	assert_array(_texts(_hover(BuildMode.Tool.TOILET_STALL))).contains(["1x2", "Click", upkeep])
@@ -127,11 +134,12 @@ func test_the_room_stall_and_sink_cards_use_their_rendered_thumbnails() -> void:
 
 
 func test_picking_a_toilet_card_picks_its_tool_and_opens_facilities() -> void:
-	var facilities := BuildMenu.category_index("facilities")
 	for tool in TOILET_TOOLS:
+		_menu.enter_room_context(&"toilet")
 		_menu.card(tool).pressed.emit()
 		assert_int(_mode.tool).is_equal(tool)
-		assert_int(_menu.open_category()).is_equal(facilities)
+		assert_bool(_menu.is_room_context()).is_true()
+		assert_str(String(_menu.room_context_type())).is_equal("toilet")
 		assert_bool(_menu.card(tool).button_pressed).is_true()
 
 

@@ -99,5 +99,6 @@ func test_every_activities_card_shows_a_real_thumbnail() -> void:
 func test_picking_an_activities_tool_opens_its_tab_and_presses_its_card() -> void:
 	for tool in TOOLS:
 		_mode.set_tool(tool)
-		assert_int(_menu.open_category()).is_equal(BuildMenu.category_of(tool))
+		assert_bool(_menu.is_room_context()).is_true()
+		assert_str(String(_menu.room_context_type())).is_equal(String(ROOMS[tool]))
 		assert_bool(_menu.card(tool).button_pressed).is_true()

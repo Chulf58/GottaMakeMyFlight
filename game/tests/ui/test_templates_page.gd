@@ -151,3 +151,36 @@ func test_locked_template_card_shows_lock_badge_and_updates_when_unlocked() -> v
 	assert_int(mode.templates.armed).is_equal(0)
 	assert_str(menu.status_label().text).is_equal(TemplatePaste.PLACE_HINT % "Cafe 5x4")
 	port.free()
+
+
+func test_ten_plus_templates_show_horizontal_scrollbar_without_clipping_cards() -> void:
+	var port := SubViewport.new()
+	port.size = Vector2i(1280, 720)
+	add_child(port)
+	var mode := BuildMode.new()
+	mode.grid_size = Vector2i(20, 20)
+	port.add_child(mode)
+	mode.set_process(false)
+	var menu := BuildMenu.new()
+	menu.build_mode = mode
+	port.add_child(menu)
+	for i in 10:
+		var tpl := RoomTemplate.new()
+		tpl.name = "Cafe %d" % i
+		tpl.room_type = &"cafe"
+		tpl.size = Vector2i(3, 3)
+		for k in 9:
+			tpl.floors.append(Vector2i(BuildGrid.FLOOR_TILE, 1))
+		mode.templates.library.add(tpl)
+	menu.press_category(BuildMenu.TEMPLATES_PAGE)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var page := menu.templates_page
+	var hbar := page.get_h_scroll_bar()
+	assert_bool(hbar.visible).is_true()
+	assert_float(menu.tray().size.y).is_equal_approx(menu.tray_height(), 0.5)
+	assert_float(menu.tray().size.y).is_greater(BuildMenu.TRAY_H)
+	var tray_rect := menu.tray().get_global_rect().grow(0.5)
+	assert_bool(tray_rect.encloses(page.save_card().get_global_rect())).is_true()
+	assert_bool(tray_rect.encloses(hbar.get_global_rect())).is_true()
+	port.free()

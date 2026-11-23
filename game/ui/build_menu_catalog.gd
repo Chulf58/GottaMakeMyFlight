@@ -44,7 +44,6 @@ const CATEGORIES := [
 			BuildMode.Tool.PICKUP_TABLE,
 			BuildMode.Tool.BELT,
 			BuildMode.Tool.BAG_ROOM,
-			BuildMode.Tool.CART,
 		],
 	},
 	{
@@ -53,22 +52,14 @@ const CATEGORIES := [
 		"tools":
 		[
 			BuildMode.Tool.TOILET_ROOM,
-			BuildMode.Tool.TOILET_STALL,
-			BuildMode.Tool.TOILET_SINK,
 			BuildMode.Tool.SHOWER_ROOM,
-			BuildMode.Tool.SHOWER,
 			BuildMode.Tool.NAP_POD,
 			BuildMode.Tool.INFO_DESK,
 			BuildMode.Tool.INFO_SCREEN,
 			BuildMode.Tool.EXCHANGE,
 			BuildMode.Tool.ATM,
 			BuildMode.Tool.LOUNGE_ROOM,
-			BuildMode.Tool.SOFA,
-			BuildMode.Tool.ARMCHAIR,
-			BuildMode.Tool.WORK_DESK,
 			BuildMode.Tool.PLAY_AREA_ROOM,
-			BuildMode.Tool.PLAY_BLOCKS,
-			BuildMode.Tool.PLAY_SLIDE,
 		],
 	},
 	{
@@ -77,13 +68,8 @@ const CATEGORIES := [
 		"tools":
 		[
 			BuildMode.Tool.CAFE_ROOM,
-			BuildMode.Tool.COUNTER,
-			BuildMode.Tool.TABLE,
 			BuildMode.Tool.BAR_ROOM,
-			BuildMode.Tool.BAR_COUNTER,
 			BuildMode.Tool.RESTAURANT_ROOM,
-			BuildMode.Tool.DINING_TABLE,
-			BuildMode.Tool.BOOTH,
 			BuildMode.Tool.GRAB_STALL,
 		],
 	},
@@ -93,17 +79,9 @@ const CATEGORIES := [
 		"tools":
 		[
 			BuildMode.Tool.KIOSK_ROOM,
-			BuildMode.Tool.KIOSK_COUNTER,
-			BuildMode.Tool.KIOSK_DISPLAY,
 			BuildMode.Tool.PHARMACY_ROOM,
-			BuildMode.Tool.PHARMACY_COUNTER,
-			BuildMode.Tool.PHARMACY_SHELF,
 			BuildMode.Tool.DUTY_FREE_ROOM,
-			BuildMode.Tool.DUTY_FREE_TILL,
-			BuildMode.Tool.DUTY_FREE_SHELF,
 			BuildMode.Tool.FASHION_ROOM,
-			BuildMode.Tool.FASHION_TILL,
-			BuildMode.Tool.FASHION_RAIL,
 		],
 	},
 	{
@@ -145,6 +123,53 @@ const NO_CATEGORY := -1
 ## The open category while the Templates page (TemplatesPage) is open; its
 ## bar button presses it like a category (press_category()).
 const TEMPLATES_PAGE := -2
+## The open state while the Contextual Room-Items tray is active.
+const ROOM_CONTEXT := -3
+## Room-only furniture tools hidden from main category tabs, mapped to their owning RoomTypes id(s).
+const ROOM_TOOL_OWNERS := {
+	BuildMode.Tool.CART: [&"bag_room"],
+	BuildMode.Tool.TOILET_STALL: [&"toilet"],
+	BuildMode.Tool.TOILET_SINK: [&"toilet"],
+	BuildMode.Tool.SHOWER: [&"shower"],
+	BuildMode.Tool.SOFA: [&"lounge"],
+	BuildMode.Tool.ARMCHAIR: [&"lounge"],
+	BuildMode.Tool.WORK_DESK: [&"lounge"],
+	BuildMode.Tool.PLAY_BLOCKS: [&"play_area"],
+	BuildMode.Tool.PLAY_SLIDE: [&"play_area"],
+	BuildMode.Tool.COUNTER: [&"cafe", &"restaurant"],
+	BuildMode.Tool.TABLE: [&"cafe"],
+	BuildMode.Tool.BAR_COUNTER: [&"bar"],
+	BuildMode.Tool.DINING_TABLE: [&"restaurant"],
+	BuildMode.Tool.BOOTH: [&"restaurant"],
+	BuildMode.Tool.KIOSK_COUNTER: [&"kiosk"],
+	BuildMode.Tool.KIOSK_DISPLAY: [&"kiosk"],
+	BuildMode.Tool.PHARMACY_COUNTER: [&"pharmacy"],
+	BuildMode.Tool.PHARMACY_SHELF: [&"pharmacy"],
+	BuildMode.Tool.DUTY_FREE_TILL: [&"duty_free"],
+	BuildMode.Tool.DUTY_FREE_SHELF: [&"duty_free"],
+	BuildMode.Tool.FASHION_TILL: [&"fashion"],
+	BuildMode.Tool.FASHION_RAIL: [&"fashion"],
+}
+## Ordered furniture tools shown inside each RoomType's contextual Room-Items tray.
+const ROOM_TOOLS := {
+	&"cafe": [BuildMode.Tool.COUNTER, BuildMode.Tool.TABLE],
+	&"bar": [BuildMode.Tool.BAR_COUNTER],
+	&"restaurant":
+	[
+		BuildMode.Tool.COUNTER,
+		BuildMode.Tool.DINING_TABLE,
+		BuildMode.Tool.BOOTH,
+	],
+	&"bag_room": [BuildMode.Tool.BELT, BuildMode.Tool.CART],
+	&"toilet": [BuildMode.Tool.TOILET_STALL, BuildMode.Tool.TOILET_SINK],
+	&"kiosk": [BuildMode.Tool.KIOSK_COUNTER, BuildMode.Tool.KIOSK_DISPLAY],
+	&"pharmacy": [BuildMode.Tool.PHARMACY_COUNTER, BuildMode.Tool.PHARMACY_SHELF],
+	&"duty_free": [BuildMode.Tool.DUTY_FREE_TILL, BuildMode.Tool.DUTY_FREE_SHELF],
+	&"fashion": [BuildMode.Tool.FASHION_TILL, BuildMode.Tool.FASHION_RAIL],
+	&"play_area": [BuildMode.Tool.PLAY_SLIDE, BuildMode.Tool.PLAY_BLOCKS],
+	&"lounge": [BuildMode.Tool.SOFA, BuildMode.Tool.ARMCHAIR, BuildMode.Tool.WORK_DESK],
+	&"shower": [BuildMode.Tool.SHOWER],
+}
 ## Card name, thumbnail and non-catalog size text per tool. Object sizes come from BuildCatalog.
 const ITEMS := {
 	BuildMode.Tool.FLOOR: ["Floor", "floor", "1x1 tile"],
@@ -329,6 +354,93 @@ static func card_details(tool: BuildMode.Tool) -> Array:
 ## Whether `tool` draws a room zone (used to disambiguate room cards from objects).
 static func is_room_tool(tool: BuildMode.Tool) -> bool:
 	return BuildMode.TOOL_ROOMS.has(tool)
+
+
+## Whether `tool` is room-only furniture hidden from main category tabs.
+static func is_room_only_tool(tool: BuildMode.Tool) -> bool:
+	return ROOM_TOOL_OWNERS.has(tool)
+
+
+## Owning RoomTypes id(s) for a room-only furniture tool, or empty when general.
+static func room_owners_of(tool: BuildMode.Tool) -> Array:
+	return ROOM_TOOL_OWNERS.get(tool, [])
+
+
+## The room-zone tool for `room_type`, or Tool.NONE.
+static func room_tool_for(room_type: StringName) -> BuildMode.Tool:
+	for tool: BuildMode.Tool in BuildMode.TOOL_ROOMS:
+		if BuildMode.TOOL_ROOMS[tool] == room_type:
+			return tool
+	return BuildMode.Tool.NONE
+
+
+## Every tool with a build menu card (main category tools plus room-only furniture).
+static func all_catalog_tools() -> Array[BuildMode.Tool]:
+	var out: Array[BuildMode.Tool] = []
+	for i in remove_category():
+		for tool: BuildMode.Tool in CATEGORIES[i]["tools"]:
+			if not out.has(tool):
+				out.append(tool)
+	for tool: BuildMode.Tool in ROOM_TOOL_OWNERS:
+		if not out.has(tool):
+			out.append(tool)
+	return out
+
+
+## Ordered entries for `room_type`'s contextual Room-Items tray:
+## mandatory starred items first (live checkmarks from RoomRules.status),
+## then optional pieces, then the room draw/expand tool.
+static func room_context_entries(
+	room_type: StringName, grid: BuildGrid = null, room_id: int = 0
+) -> Array[Dictionary]:
+	var type := RoomTypes.get_type(room_type)
+	var status: RoomRules.RoomStatus = (
+		RoomRules.status(grid, room_id) if grid != null and room_id != 0 else null
+	)
+	var mandatory_entries: Array[Dictionary] = []
+	var optional_entries: Array[Dictionary] = []
+	for tool: BuildMode.Tool in ROOM_TOOLS.get(room_type, []):
+		var def_id := _tool_def_for_room(tool, room_type)
+		var mandatory := false
+		var satisfied := false
+		if type != null and def_id != &"":
+			for need: Array in type.required:
+				var accepted := type.pieces_for(need[0])
+				if accepted.has(def_id):
+					mandatory = true
+					if status != null and _count_pieces(status.pieces, accepted) > 0:
+						satisfied = true
+					break
+		var entry := {
+			"tool": tool,
+			"mandatory": mandatory,
+			"satisfied": satisfied,
+			"room_tool": false,
+		}
+		if mandatory:
+			mandatory_entries.append(entry)
+		else:
+			optional_entries.append(entry)
+	var out: Array[Dictionary] = []
+	out.append_array(mandatory_entries)
+	out.append_array(optional_entries)
+	var room_tool := room_tool_for(room_type)
+	if room_tool != BuildMode.Tool.NONE:
+		out.append({"tool": room_tool, "mandatory": false, "satisfied": false, "room_tool": true})
+	return out
+
+
+static func _tool_def_for_room(tool: BuildMode.Tool, room_type: StringName) -> StringName:
+	if tool == BuildMode.Tool.BELT and room_type == &"bag_room":
+		return &"baggage_belt_end"
+	return BuildMode.tool_object(tool)
+
+
+static func _count_pieces(pieces: Dictionary, ids: Array[StringName]) -> int:
+	var total := 0
+	for id: StringName in ids:
+		total += int(pieces.get(id, 0))
+	return total
 
 
 ## Thumbnail id for a room type (`RoomTypes` id), matching its room-zone card.

@@ -78,14 +78,20 @@ func test_all_stores_live_in_the_shops_tab_in_order() -> void:
 	assert_int(shops).is_equal(4)
 	assert_bool(_menu.category_button(shops).visible).is_true()
 	assert_str(_menu.category_button(shops).tooltip_text).is_equal("Shops")
-	var expected := [
+	var expected_tab := [
 		BuildMode.Tool.KIOSK_ROOM,
-		BuildMode.Tool.KIOSK_COUNTER,
-		BuildMode.Tool.KIOSK_DISPLAY,
+		BuildMode.Tool.PHARMACY_ROOM,
+		BuildMode.Tool.DUTY_FREE_ROOM,
+		BuildMode.Tool.FASHION_ROOM,
 	]
+	assert_array(BuildMenu.categories()[shops]["tools"]).is_equal(expected_tab)
+	assert_array(BuildMenuCatalog.ROOM_TOOLS[&"kiosk"]).is_equal(
+		[BuildMode.Tool.KIOSK_COUNTER, BuildMode.Tool.KIOSK_DISPLAY]
+	)
 	for store_name in STORE_ORDER:
-		expected.append_array(STORES[store_name][1])
-	assert_array(BuildMenu.categories()[shops]["tools"]).is_equal(expected)
+		var room_id: StringName = STORES[store_name][0]
+		var room_pieces: Array = STORES[store_name][1].slice(1)
+		assert_array(BuildMenuCatalog.ROOM_TOOLS[room_id]).is_equal(room_pieces)
 
 
 func test_the_room_cards_carry_the_room_type_name_and_hover_minimum_size() -> void:
@@ -136,10 +142,10 @@ func test_every_store_card_shows_its_rendered_thumbnail() -> void:
 
 
 func test_picking_a_store_tool_opens_shops_and_presses_its_card() -> void:
-	var shops := BuildMenu.category_index("shops")
 	for store_name in STORE_ORDER:
+		var room_id: StringName = STORES[store_name][0]
 		for tool in STORES[store_name][1]:
 			_mode.set_tool(tool)
-			assert_int(_menu.open_category()).is_equal(shops)
+			assert_bool(_menu.is_room_context()).is_true()
+			assert_str(String(_menu.room_context_type())).is_equal(String(room_id))
 			assert_bool(_menu.card(tool).button_pressed).is_true()
-			assert_bool(_menu.category_button(shops).button_pressed).is_true()

@@ -272,11 +272,20 @@ func _require_unlocks() -> bool:
 	return _menu.build_mode.require_unlocks if _menu != null and _menu.build_mode != null else false
 
 
+func needed_height() -> float:
+	var h := BuildMenu.CARD_SIZE.y
+	if _menu != null and _row.get_combined_minimum_size().x > _menu.tray_max_inner_width() + 0.5:
+		var hbar := get_h_scroll_bar()
+		if hbar != null:
+			h += maxf(hbar.get_combined_minimum_size().y, hbar.size.y)
+	return h
+
+
 func update_width() -> void:
 	if _menu == null:
 		return
 	var row_w := _row.get_combined_minimum_size().x
-	custom_minimum_size = Vector2(minf(row_w, _menu.tray_max_inner_width()), 0.0)
+	custom_minimum_size = Vector2(minf(row_w, _menu.tray_max_inner_width()), needed_height())
 
 
 func _sync_width() -> void:

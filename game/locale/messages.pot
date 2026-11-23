@@ -6760,3 +6760,19 @@ msgstr ""
 #: ui/item_info.gd
 msgid "Place on terminal floor. The passenger sits and leans back during a long wait."
 msgstr ""
+
+#: ui/build_menu_layout.gd ui/build_menu.gd
+msgid "← Back"
+msgstr ""
+
+#: ui/build_menu.gd
+msgid "{room} items"
+msgstr ""
+
+#: ui/build_menu_layout.gd
+msgid "★"
+msgstr ""
+
+#: ui/build_menu_layout.gd
+msgid "✓"
+msgstr ""
