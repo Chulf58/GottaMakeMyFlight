@@ -1,10 +1,11 @@
 class_name TestBuildSession
 extends GdUnitTestSuite
-## BuildSession on its own (ruling
-## player-owns-clock-and-persistent-build-undo-no-auto-pause-on-trays-offers-planner-direct-delete):
-## tracks active state and emits changed(), leaves SimClock paused/speed
-## untouched, keeps undo history across tray closes and ticks, and clears
-## undo on abandon() (load).
+## BuildSession on its own (decision
+## build-mode-auto-pause-restored-while-offers-planner-stay-unpaused, 9e86b858):
+## acquires a yielding ClockHolds hold while active so build mode pauses the
+## clock and resumes on close, lets Space/speed keys unpause while staying
+## active, keeps undo history across tray closes and ticks, and clears undo on
+## abandon() (load).
 
 var _clock: SimClock
 var _mode: BuildMode
@@ -28,15 +29,13 @@ func after_test() -> void:
 		_session.free()
 
 
-func test_starting_and_ending_build_mode_leaves_a_running_clock_alone() -> void:
+func test_starting_build_mode_pauses_clock_and_ending_resumes_it() -> void:
 	_clock.set_speed(3)
 	_clock.set_paused(false)
 	_session.set_building(true)
-	_session.sync()
 	assert_bool(_session.active).is_true()
-	assert_bool(_clock.paused).is_false()
-	assert_int(_clock.speed).is_equal(3)
-	assert_int(_clock.holds.count()).is_equal(0)
+	assert_bool(_clock.paused).is_true()
+	assert_int(_clock.holds.count()).is_equal(1)
 	_session.set_building(false)
 	assert_bool(_session.active).is_false()
 	assert_bool(_clock.paused).is_false()
@@ -44,18 +43,47 @@ func test_starting_and_ending_build_mode_leaves_a_running_clock_alone() -> void:
 	assert_int(_clock.holds.count()).is_equal(0)
 
 
-func test_starting_and_ending_build_mode_leaves_a_paused_clock_paused() -> void:
+func test_starting_and_ending_build_mode_keeps_a_paused_clock_paused() -> void:
 	_clock.set_speed(2)
 	_clock.set_paused(true)
 	_session.set_building(true)
-	_session.sync()
 	assert_bool(_session.active).is_true()
 	assert_bool(_clock.paused).is_true()
-	assert_int(_clock.holds.count()).is_equal(0)
+	assert_int(_clock.holds.count()).is_equal(1)
 	_session.set_building(false)
 	assert_bool(_session.active).is_false()
 	assert_bool(_clock.paused).is_true()
 	assert_int(_clock.speed).is_equal(2)
+	assert_int(_clock.holds.count()).is_equal(0)
+
+
+func test_space_or_speed_key_unpauses_while_keeping_build_mode_active() -> void:
+	_clock.set_speed(2)
+	_clock.set_paused(false)
+	_session.set_building(true)
+	assert_bool(_clock.paused).is_true()
+	assert_int(_clock.holds.count()).is_equal(1)
+	_clock.set_paused(false)
+	_session.sync()
+	assert_bool(_session.active).is_true()
+	assert_bool(_clock.paused).is_false()
+	assert_int(_clock.holds.count()).is_equal(0)
+	_session.set_building(true)
+	assert_bool(_clock.paused).is_false()
+	_session.set_building(false)
+	assert_bool(_session.active).is_false()
+	assert_bool(_clock.paused).is_false()
+
+
+func test_sync_acquires_hold_when_clock_is_wired_later() -> void:
+	_session.clock = null
+	_session.set_building(true)
+	assert_bool(_session.active).is_true()
+	assert_bool(_clock.paused).is_false()
+	_session.clock = _clock
+	_session.sync()
+	assert_bool(_clock.paused).is_true()
+	assert_int(_clock.holds.count()).is_equal(1)
 
 
 func test_ending_keeps_the_undo_history_across_close_and_ticks() -> void:
@@ -88,14 +116,17 @@ func test_abandon_clears_the_history_at_once() -> void:
 	assert_bool(_mode.apply_at(_mode.grid.cell_to_world(Vector2i(1, 1))).ok).is_true()
 	_session.abandon()
 	assert_bool(_session.active).is_false()
+	assert_bool(_clock.paused).is_false()
+	assert_int(_clock.holds.count()).is_equal(0)
 	assert_int(_mode.undo_history().size()).is_equal(0)
 	assert_object(_mode.undo()).is_null()
 
 
-func test_leaving_the_tree_while_building_leaves_the_clock_alone() -> void:
+func test_leaving_the_tree_while_building_releases_hold_and_resumes_clock() -> void:
 	_clock.set_paused(false)
 	_session.set_building(true)
-	_session.sync()
+	assert_bool(_clock.paused).is_true()
+	assert_int(_clock.holds.count()).is_equal(1)
 	remove_child(_session)
 	assert_bool(_clock.paused).is_false()
 	assert_int(_clock.holds.count()).is_equal(0)

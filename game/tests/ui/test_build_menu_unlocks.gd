@@ -74,7 +74,7 @@ func test_clicking_a_locked_card_picks_nothing_and_shows_the_requirement() -> vo
 func test_an_unlock_reveals_new_tabs_and_cards_and_announces_what_opened() -> void:
 	for i in 60:
 		_rating.record_passenger(0, true, PassengerSim.MOOD_MAX)
-	for i in 50:
+	for i in 20:
 		_pax.outcome.emit(i, true)
 	_unlocks.check()
 	assert_int(_unlocks.tier()).is_equal(2)

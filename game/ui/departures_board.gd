@@ -86,6 +86,8 @@ var _today_count := 0
 var _last_toggle_text := ""
 var _progress := {}
 var _progress_key := []
+var _rows_pending_layout := false
+var _autowrap_labels: Array[Label] = []
 
 
 ## The board's lines for the clock at `tick`: "Today" and today's non-departed
@@ -207,6 +209,7 @@ func _ready() -> void:
 	_rows.name = "Rows"
 	_rows.add_theme_constant_override("separation", 3)
 	_rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_rows.sort_children.connect(_on_rows_sorted)
 	_scroll.name = "RowsScroll"
 	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	_scroll.add_child(_rows)
@@ -266,6 +269,8 @@ func _process(_delta: float) -> void:
 	_sync_panel_top()
 	if not _panel.is_visible_in_tree():
 		return
+	if _rows_pending_layout or _has_unlaid_autowrap():
+		return
 	var bar_w := 0.0 if menu == null else menu.bar().get_combined_minimum_size().x
 	var room := LeftColumn.list_room(get_tree(), get_viewport().get_visible_rect().size, bar_w)
 	var chrome := _panel.get_combined_minimum_size().y - _scroll.get_combined_minimum_size().y
@@ -274,6 +279,18 @@ func _process(_delta: float) -> void:
 		_scroll.custom_minimum_size.y = height
 		_panel.reset_size()
 		_scroll_sets += 1
+
+
+func _on_rows_sorted() -> void:
+	if _panel.is_visible_in_tree() and _rows.size.x > 0.0:
+		_rows_pending_layout = false
+
+
+func _has_unlaid_autowrap() -> bool:
+	for label in _autowrap_labels:
+		if is_instance_valid(label) and label.visible and label.size.x <= 0.0:
+			return true
+	return false
 
 
 func _sync_panel_top() -> void:
@@ -491,10 +508,96 @@ func _refresh(force: bool) -> void:
 	_sync_header()
 	if not force and entries == _entries:
 		return
+	if not force and _can_update_in_place(entries):
+		_update_rows_in_place(entries)
+		_entries = entries
+		_set_lines(entries)
+		return
 	_entries = entries
+	_set_lines(entries)
+	_rebuild_rows(entries)
+
+
+func _set_lines(entries: Array[Dictionary]) -> void:
 	_lines = PackedStringArray()
 	for entry in entries:
 		_lines.append(entry["text"])
+
+
+func _can_update_in_place(entries: Array[Dictionary]) -> bool:
+	if entries.size() != _entries.size() or _rows.get_child_count() != entries.size():
+		return false
+	for i in entries.size():
+		if not _row_shape_matches(_entries[i], entries[i]):
+			return false
+	return true
+
+
+static func _row_shape_matches(prev: Dictionary, cur: Dictionary) -> bool:
+	if prev["kind"] != cur["kind"]:
+		return false
+	if cur["kind"] != "row":
+		return true
+	return (
+		prev["flight"] == cur["flight"]
+		and prev["key"] == cur["key"]
+		and prev["gate"] == cur["gate"]
+		and (prev["boarded_text"] != "") == (cur["boarded_text"] != "")
+		and (prev["late"] != "") == (cur["late"] != "")
+		and (_line_two_text(prev) != "") == (_line_two_text(cur) != "")
+		and (prev["doors"] != "") == (cur["doors"] != "")
+	)
+
+
+func _update_rows_in_place(entries: Array[Dictionary]) -> void:
+	for i in entries.size():
+		var entry := entries[i]
+		if entry["kind"] == "row":
+			_update_row_in_place(_rows.get_child(i) as VBoxContainer, entry)
+		else:
+			var label := _rows.get_child(i) as Label
+			if label.text != entry["text"]:
+				label.text = entry["text"]
+
+
+func _update_row_in_place(row_box: VBoxContainer, entry: Dictionary) -> void:
+	var line_one := row_box.get_child(0) as HBoxContainer
+	var head_label := line_one.get_child(0) as Label
+	if head_label.text != entry["head"]:
+		head_label.text = entry["head"]
+	var boarded_str: String = entry["boarded_text"]
+	if boarded_str != "":
+		var boarded_label := line_one.get_child(1) as Label
+		if boarded_label.text != boarded_str:
+			boarded_label.text = boarded_str
+	var line_two := _line_two_text(entry)
+	var late_text: String = entry["late"]
+	if late_text == "":
+		if line_two != "":
+			var airline := row_box.get_child(1) as Label
+			if airline.text != line_two:
+				airline.text = line_two
+	else:
+		var flow := row_box.get_child(1) as HFlowContainer
+		var btn_idx := 0
+		if line_two != "":
+			var airline := flow.get_child(0) as Label
+			if airline.text != line_two:
+				airline.text = line_two
+			btn_idx = 1
+		var late_btn := flow.get_child(btn_idx) as Button
+		if late_btn.text != late_text:
+			late_btn.text = late_text
+	var doors_text: String = entry["doors"]
+	if doors_text != "":
+		var doors := row_box.get_child(row_box.get_child_count() - 1) as Label
+		if doors.text != doors_text:
+			doors.text = doors_text
+
+
+func _rebuild_rows(entries: Array[Dictionary]) -> void:
+	_autowrap_labels.clear()
+	_rows_pending_layout = true
 	for child in _rows.get_children():
 		_rows.remove_child(child)
 		child.queue_free()
@@ -554,38 +657,45 @@ func _add_row(entry: Dictionary) -> void:
 	_rows.add_child(row_box)
 
 
-func _add_row_line_two(row_box: VBoxContainer, entry: Dictionary) -> void:
-	var key: String = entry["key"]
+static func _line_two_text(entry: Dictionary) -> String:
 	var parts := PackedStringArray()
 	for part: String in [entry["airline"], entry["status"]]:
 		if part != "":
 			parts.append(part)
+	return "  ".join(parts)
+
+
+func _add_row_line_two(row_box: VBoxContainer, entry: Dictionary) -> void:
+	var key: String = entry["key"]
+	var line_two := _line_two_text(entry)
 	var late_text: String = entry["late"]
 	var airline_name := "Airline_%s" % key if key != "" else "Airline"
 	if late_text == "":
-		if not parts.is_empty():
+		if line_two != "":
 			var airline := Label.new()
 			airline.name = airline_name
-			airline.text = "  ".join(parts)
+			airline.text = line_two
 			airline.theme_type_variation = &"HudHint"
 			airline.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			airline.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			row_box.add_child(airline)
+			_autowrap_labels.append(airline)
 		return
 	var line := HFlowContainer.new()
 	line.name = "LateRow_%s" % entry["flight"]
 	line.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	line.add_theme_constant_override("h_separation", 6)
 	line.add_theme_constant_override("v_separation", 2)
-	if not parts.is_empty():
+	if line_two != "":
 		var airline := Label.new()
 		airline.name = airline_name
-		airline.text = "  ".join(parts)
+		airline.text = line_two
 		airline.theme_type_variation = &"HudHint"
 		airline.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		airline.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		airline.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		line.add_child(airline)
+		_autowrap_labels.append(airline)
 	var late_btn := Button.new()
 	late_btn.name = "Late_%s" % entry["flight"]
 	late_btn.text = late_text
