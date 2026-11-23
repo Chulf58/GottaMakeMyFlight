@@ -333,3 +333,48 @@ msgstr "Toilette"
 msgctxt "room status"
 msgid "Ready"
 msgstr "Bereit"
+
+msgid "Camera angle"
+msgstr "Kamerawinkel"
+
+msgid "Low (38°)"
+msgstr "Niedrig (38°)"
+
+msgid "Medium (54°)"
+msgstr "Mittel (54°)"
+
+msgid "Top-Down (70°)"
+msgstr "Draufsicht (70°)"
+
+msgid "Custom ({angle}°)"
+msgstr "Benutzerdefiniert ({angle}°)"
+
+msgid "Records where you stop playing: the day, money, stars, builds, flights and alerts, never what you click or type. The file stays on this computer and nothing is sent."
+msgstr "Speichert, wo du aufhörst: Tag, Geld, Sterne, Bauten, Flüge und Meldungen, aber nie, was du klickst oder tippst. Die Datei bleibt auf diesem Computer und nichts wird gesendet."
+
+msgid "doors close {time}"
+msgstr "Türen schließen {time}"
+
+msgid "Open! Starter contract: {airline} to {destination}, daily"
+msgstr "Geöffnet! Startvertrag: {airline} nach {destination}, täglich"
+
+msgid "Nobody on duty"
+msgstr "Niemand im Dienst"
+
+msgid "{count} station is closed · staff are on the way"
+msgid_plural "{count} stations are closed · staff are on the way"
+msgstr[0] "{count} Station ist geschlossen · Personal ist unterwegs"
+msgstr[1] "{count} Stationen sind geschlossen · Personal ist unterwegs"
+
+msgid "{count} station is closed · hire staff on the Staff card"
+msgid_plural "{count} stations are closed · hire staff on the Staff card"
+msgstr[0] "{count} Station ist geschlossen · Personal auf der Personalkarte einstellen"
+msgstr[1] "{count} Stationen sind geschlossen · Personal auf der Personalkarte einstellen"
+
+msgid "{count} station is closed · staff can't reach the staff spot"
+msgid_plural "{count} stations are closed · staff can't reach the staff spot"
+msgstr[0] "{count} Station ist geschlossen · Personal erreicht den Arbeitsplatz nicht"
+msgstr[1] "{count} Stationen sind geschlossen · Personal erreicht den Arbeitsplatz nicht"
+
+msgid "Staff can't get to work"
+msgstr "Personal kommt nicht zur Arbeit"
