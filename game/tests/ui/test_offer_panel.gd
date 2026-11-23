@@ -55,7 +55,7 @@ func test_each_open_offer_has_a_card_with_its_terms() -> void:
 	_panel.open()
 	assert_array(_panel.card_ids()).is_equal(["O0N1", "O0N2", "O0N3"])
 	var text := _panel.card_text("O0N1")
-	for part in ["Gotta Air", "Oslo", "10:00", "Small", "6 passengers", "$50"]:
+	for part in ["Gotta Air", "Oslo", "10:00", "Small", "6 passengers", "$58"]:
 		assert_str(text).contains(part)
 	assert_str(text).not_contains("Gate")
 

@@ -17,21 +17,31 @@ func before_test() -> void:
 
 
 ## The tier 0 draw replayed by hand from `rng`, in _draw's order: airline,
-## destination, slot, size, booked, fee. The slot is one draw: over the quarter
-## hours from 07:00 to 21:00, or with Odd hours between 06:00 and 22:00.
-static func _replay(rng: RandomNumberGenerator, traits: Dictionary) -> Dictionary:
+## destination, slot, size, booked, fee. Day 0 draws uniformly; Day 1+ makes
+## a peak-wave roll first and then draws from peak/off-peak (or Odd hours' 2 slots).
+static func _replay(rng: RandomNumberGenerator, traits: Dictionary, day := 0) -> Dictionary:
 	var airline: String = OfferBoard.AIRLINES[rng.randi_range(0, OfferBoard.AIRLINES.size() - 1)]
 	var destination: String = OfferBoard.DESTINATIONS[rng.randi_range(
 		0, OfferBoard.DESTINATIONS.size() - 1
 	)]
-	var span := FlightContract.window(traits)
 	var minute: int
-	if OfferTraits.window_widening(traits) > 0:
-		minute = span[rng.randi_range(0, 1)]
+	if day == 0:
+		var span := FlightContract.window(traits)
+		if OfferTraits.window_widening(traits) > 0:
+			minute = span[rng.randi_range(0, 1)]
+		else:
+			@warning_ignore("integer_division")
+			var last_slot: int = (span[1] - span[0]) / OfferBoard.DEPARTURE_STEP
+			minute = span[0] + rng.randi_range(0, last_slot) * OfferBoard.DEPARTURE_STEP
 	else:
-		@warning_ignore("integer_division")
-		var last_slot: int = (span[1] - span[0]) / OfferBoard.DEPARTURE_STEP
-		minute = span[0] + rng.randi_range(0, last_slot) * OfferBoard.DEPARTURE_STEP
+		var peak_roll := rng.randi_range(0, 99)
+		if OfferTraits.window_widening(traits) > 0:
+			var span := FlightContract.window(traits)
+			minute = span[rng.randi_range(0, 1)]
+		else:
+			var target_peak := peak_roll < int(round(OfferBoard.PEAK_OFFER_CHANCE * 100.0))
+			var pool := OfferBoard._peak_slots() if target_peak else OfferBoard._off_peak_slots()
+			minute = pool[rng.randi_range(0, pool.size() - 1)]
 	var sizes: Array = OfferBoard.STARTER_SIZES.keys()
 	var size: String = sizes[rng.randi_range(0, 1) % sizes.size()]
 	var booked_range: Array = OfferBoard.STARTER_SIZES[size]
@@ -58,11 +68,15 @@ func test_the_base_offers_of_a_seed_are_unchanged_and_the_rng_advances_as_before
 		board.ensure_day(day, _rng, 0, PlaneClasses.LARGE, null, ALL_LIVE)
 		for number in range(1, OfferBoard.OFFERS_PER_DAY + 1):
 			var offer := board.offer_of("O%dN%d" % [day, number])
-			var base := _replay(replay, offer["traits"])
+			var base := _replay(replay, offer["traits"], day)
 			for key in ["airline", "destination", "departure_minute", "plane_size"]:
 				assert_that(offer[key]).is_equal(base[key])
 			var traits: Dictionary = offer["traits"]
-			assert_int(offer["fee_per_passenger"]).is_equal(OfferTraits.fee_of(base["fee"], traits))
+			assert_int(offer["fee_per_passenger"]).is_equal(
+				OfferBoard.apply_peak_bonus(
+					OfferTraits.fee_of(base["fee"], traits), offer["departure_minute"]
+				)
+			)
 			var booked := OfferTraits.booked_of(base["booked"], base["range"][1], traits)
 			assert_int(offer["booked_passengers"]).is_equal(booked)
 			traited += int(not OfferTraits.is_plain(traits))
@@ -125,7 +139,7 @@ func test_a_saved_offer_with_impossible_traits_or_fee_is_refused() -> void:
 		["booked_passengers", 5, {"up": "full_flight", "down": "rush_crowd", "level": 1}],
 	]
 	for case in cases:
-		var offers := TestOfferBoard.day_records(0, [600, 720, 840])
+		var offers := TestOfferBoard.day_records(0, [660, 720, 840])
 		offers[0][case[0]] = case[1]
 		if case.size() > 2:
 			offers[0]["traits"] = case[2]
@@ -135,7 +149,7 @@ func test_a_saved_offer_with_impossible_traits_or_fee_is_refused() -> void:
 			. override_failure_message(str(case))
 			. is_false()
 		)
-	var good := TestOfferBoard.day_records(0, [600, 720, 840])
+	var good := TestOfferBoard.day_records(0, [660, 720, 840])
 	good[0]["traits"] = {"up": "top_fare", "down": "rush_crowd", "level": 2}
 	good[0]["fee_per_passenger"] = OfferTraits.fee_of(OfferBoard.SMALL_FEE_MAX, good[0]["traits"])
 	assert_bool(OfferBoard.new().from_snapshot(TestOfferBoard.save_of(good))).is_true()
@@ -143,7 +157,7 @@ func test_a_saved_offer_with_impossible_traits_or_fee_is_refused() -> void:
 
 func test_an_accepted_offer_makes_a_contract_with_its_frozen_traits() -> void:
 	var sim: FlightSim = auto_free(FlightSim.new())
-	var offers := TestOfferBoard.day_records(0, [600, 720, 840])
+	var offers := TestOfferBoard.day_records(0, [660, 720, 840])
 	offers[0]["traits"] = {"up": "top_fare", "down": "rush_crowd", "level": 1}
 	offers[0]["fee_per_passenger"] = 58
 	var board := OfferBoard.new()

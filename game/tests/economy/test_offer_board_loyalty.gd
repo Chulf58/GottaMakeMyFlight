@@ -147,7 +147,7 @@ func test_a_saved_fee_loads_only_when_a_base_fee_maps_to_it() -> void:
 		[top, true, 38, false],
 	]
 	for case in cases:
-		var offers := TestOfferBoard.day_records(6, [600, 720, 840])
+		var offers := TestOfferBoard.day_records(6, [660, 720, 840])
 		offers[0]["traits"] = case[0]
 		offers[0]["loyal"] = case[1]
 		offers[0]["fee_per_passenger"] = case[2]
@@ -177,7 +177,7 @@ func test_a_loyal_mark_the_count_cannot_explain_is_refused() -> void:
 		[{"Gotta Air": {"days": 5, "last_day": 4}}, 6, true],
 	]
 	for case in cases:
-		var offers := TestOfferBoard.day_records(case[1], [600, 720, 840])
+		var offers := TestOfferBoard.day_records(case[1], [660, 720, 840])
 		for offer in offers:
 			offer["loyal"] = true
 			offer["fee_per_passenger"] = OfferTraits.loyal_fee_of(50, true)
@@ -194,7 +194,7 @@ func test_a_loyal_mark_the_count_cannot_explain_is_refused() -> void:
 ## loyal mark, so a day 6 offer from an airline loyal by day 5 saved without it
 ## is refused; its day 5 offers, drawn before the fifth day flew, are not loyal.
 func test_a_missing_loyal_mark_the_count_requires_is_refused() -> void:
-	var day_6 := TestOfferBoard.day_records(6, [600, 720, 840])
+	var day_6 := TestOfferBoard.day_records(6, [660, 720, 840])
 	var data := TestOfferBoard.save_of(day_6)
 	data["loyalty"] = LOYAL_BY_DAY_5
 	assert_bool(OfferBoard.new().from_snapshot(data)).is_false()

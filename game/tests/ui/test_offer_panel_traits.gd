@@ -20,7 +20,7 @@ func before_test() -> void:
 	_sim = FlightSim.new()
 	_port.add_child(_desk)
 	_port.add_child(_sim)
-	var records := TestOfferBoard.day_records(0, [600, 720, 840])
+	var records := TestOfferBoard.day_records(0, [660, 720, 840])
 	records[0]["traits"] = {"up": "top_fare", "down": "rush_crowd", "level": 2}
 	# Top fare +30% of a drawn 50.
 	records[0]["fee_per_passenger"] = 65

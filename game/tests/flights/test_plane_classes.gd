@@ -290,8 +290,8 @@ func _save_with(airline: String, plane_size: String, booked: int) -> Dictionary:
 	offers[0]["airline"] = airline
 	offers[0]["plane_size"] = plane_size
 	offers[0]["booked_passengers"] = booked
-	offers[0]["fee_per_passenger"] = (
-		OfferBoard.fee_range_for(OfferBoard.tier_of(airline), plane_size)[0]
+	offers[0]["fee_per_passenger"] = OfferBoard.apply_peak_bonus(
+		OfferBoard.fee_range_for(OfferBoard.tier_of(airline), plane_size)[0], 480
 	)
 	return TestOfferBoard.save_of(offers)
 

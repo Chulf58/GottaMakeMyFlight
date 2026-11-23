@@ -87,8 +87,10 @@ func test_every_offer_follows_the_plane_sizes_and_fees_of_its_airlines_tier() ->
 				OfferTraits.fewest_booked(booked[0], booked[1], traits), booked[1]
 			)
 			var fees: Array = OfferBoard.fee_range_for(own, offer["plane_size"])
+			var minute: int = offer["departure_minute"]
 			assert_int(offer["fee_per_passenger"]).is_between(
-				OfferTraits.fee_of(fees[0], traits), OfferTraits.fee_of(fees[1], traits)
+				OfferBoard.apply_peak_bonus(OfferTraits.fee_of(fees[0], traits), minute),
+				OfferBoard.apply_peak_bonus(OfferTraits.fee_of(fees[1], traits), minute)
 			)
 			var terms := OfferBoard.terms_of(offer)
 			assert_str(FlightContract.problem(terms, FlightContract.TERM_KEYS)).is_empty()
@@ -175,7 +177,7 @@ func test_tiered_offers_survive_a_save_and_load() -> void:
 
 ## A saved tier-1 offer with terms in the tier's ranges.
 func _tier_one_record() -> Dictionary:
-	var record := TestOfferBoard.record("O0N1", 0, 600)
+	var record := TestOfferBoard.record("O0N1", 0, 660)
 	record["airline"] = OfferBoard.TIER_AIRLINES[1][0]
 	record["plane_size"] = "large"
 	record["booked_passengers"] = OfferBoard.TIER_SIZES[1]["large"][0]
@@ -184,7 +186,7 @@ func _tier_one_record() -> Dictionary:
 
 
 func _day_with_first(first: Dictionary) -> Dictionary:
-	var offers := TestOfferBoard.day_records(0, [600, 720, 840])
+	var offers := TestOfferBoard.day_records(0, [660, 720, 840])
 	offers[0] = first
 	return TestOfferBoard.save_of(offers)
 
@@ -211,30 +213,31 @@ func test_a_tier_one_offer_loads_and_is_checked_against_its_own_tier() -> void:
 
 
 func test_a_starter_airline_cannot_carry_a_higher_tiers_terms() -> void:
-	var bad := TestOfferBoard.record("O0N1", 0, 600)
+	var bad := TestOfferBoard.record("O0N1", 0, 660)
 	bad["plane_size"] = "large"
 	bad["booked_passengers"] = OfferBoard.TIER_SIZES[1]["large"][0]
 	assert_bool(OfferBoard.new().from_snapshot(_day_with_first(bad))).is_false()
-	var dear := TestOfferBoard.record("O0N1", 0, 600)
+	var dear := TestOfferBoard.record("O0N1", 0, 660)
 	dear["plane_size"] = "medium"
 	dear["booked_passengers"] = OfferBoard.STARTER_SIZES["medium"][0]
 	dear["fee_per_passenger"] = OfferBoard.TIER_FEES[1][1]
 	assert_bool(OfferBoard.new().from_snapshot(_day_with_first(dear))).is_false()
-	var over_small := TestOfferBoard.record("O0N1", 0, 600)
+	var over_small := TestOfferBoard.record("O0N1", 0, 660)
 	over_small["fee_per_passenger"] = OfferBoard.SMALL_FEE_MAX + 1
 	assert_bool(OfferBoard.new().from_snapshot(_day_with_first(over_small))).is_false()
 
 
 ## Version 5 added the Loyal airline count and each offer's loyal mark, version 6
 ## Odd hours and Exit fee, version 7 small-class 4-8 passengers and 30-70 base
-## fees, and version 8 dedicated same-day charters, so versions 4 through 7 are refused.
-func test_the_offer_save_version_is_8_and_versions_4_to_7_are_refused() -> void:
-	assert_int(OfferBoard.SAVE_VERSION).is_equal(8)
+## fees, version 8 dedicated same-day charters, and version 9 peak-hour rush
+## wave fee validation, so versions 4 through 8 are refused.
+func test_the_offer_save_version_is_9_and_versions_4_to_8_are_refused() -> void:
+	assert_int(OfferBoard.SAVE_VERSION).is_equal(9)
 	var board := OfferBoard.new()
 	board.ensure_day(0, _rng, OfferBoard.MAX_TIER)
 	var data := board.to_snapshot()
 	assert_int(int(data["save_version"])).is_equal(OfferBoard.SAVE_VERSION)
-	for old_version in [4, 5, 6, 7]:
+	for old_version in [4, 5, 6, 7, 8]:
 		data["save_version"] = old_version
 		assert_bool(OfferBoard.new().from_snapshot(data)).is_false()
 	# The control: the same save at the current version loads.

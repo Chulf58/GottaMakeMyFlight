@@ -63,7 +63,10 @@ const STATUSES := [OPEN, ACCEPTED, DECLINED, EXPIRED]
 ## A version 6 save is refused; there is no migration.
 ## 8: dedicated "charters" array for same-day one-off charter offers (P4).
 ## A version 7 save is refused; there is no migration.
-const SAVE_VERSION := 8
+## 9: peak-hour rush waves on Day 2+ apply +15% Peak Demand bonus on 07:00-10:00
+## and 17:00-20:00 departures; saved peak-slot fees must match apply_peak_bonus.
+## A version 8 save is refused; there is no migration.
+const SAVE_VERSION := 9
 const SAVE_KEYS := ["save_version", "offers", "loyalty", "charters"]
 const CHARTER_SEED_VERSION := 1
 const CHARTER_PREFIX := "CH"
@@ -159,6 +162,19 @@ const DEPARTURE_LAST_MINUTE := FlightContract.LAST_DEPARTURE_MINUTE
 const DEPARTURE_STEP := 15
 @warning_ignore("integer_division")
 const DEPARTURE_SLOTS := (DEPARTURE_LAST_MINUTE - DEPARTURE_FIRST_MINUTE) / DEPARTURE_STEP
+## Peak rush banks (Stage 2 S2-B): Morning 07:00-10:00 and Evening 17:00-20:00.
+## On Day 2+ (day >= 1), ~65% of non-Odd-hours draws land in these two banks and
+## carry +15% Peak Demand bonus on fee_per_passenger. Day 1 (day == 0) keeps its
+## uniform draw distribution for gentle afternoon/evening pacing, while
+## peak_wave() / apply_peak_bonus() stay pure functions of departure_minute.
+const MORNING_PEAK_START := 7 * 60
+const MORNING_PEAK_END := 10 * 60
+const EVENING_PEAK_START := 17 * 60
+const EVENING_PEAK_END := 20 * 60
+const PEAK_OFFER_CHANCE := 0.65
+const PEAK_FARE_BONUS_PERCENT := 15
+const PEAK_WAVE_MORNING := "morning"
+const PEAK_WAVE_EVENING := "evening"
 ## With flights to fit to, a day's first FIT_OFFERS offers depart at slots the
 ## gates have room for and the others where another gate is needed (decision
 ## airline-offers-2-a-day-fit-the-free-gate-slots-1-needs-more).
@@ -216,6 +232,53 @@ static func slots_of(traits: Dictionary) -> Array[int]:
 		return out
 	for minute in range(span[0], span[1] + 1, DEPARTURE_STEP):
 		out.append(minute)
+	return out
+
+
+## "morning" (07:00-10:00), "evening" (17:00-20:00), or "" for off-peak / Odd hours.
+static func peak_wave(departure_minute: int) -> String:
+	if departure_minute >= MORNING_PEAK_START and departure_minute <= MORNING_PEAK_END:
+		return PEAK_WAVE_MORNING
+	if departure_minute >= EVENING_PEAK_START and departure_minute <= EVENING_PEAK_END:
+		return PEAK_WAVE_EVENING
+	return ""
+
+
+static func is_peak_minute(departure_minute: int) -> bool:
+	return peak_wave(departure_minute) != ""
+
+
+## Applies the +15% Peak Demand bonus (rounded half up) when departing in a
+## peak wave; returns `base_amount` unchanged for off-peak and Odd hours slots.
+static func apply_peak_bonus(base_amount: int, departure_minute: int) -> int:
+	if not is_peak_minute(departure_minute):
+		return base_amount
+	@warning_ignore("integer_division")
+	return (base_amount * (100 + PEAK_FARE_BONUS_PERCENT) + 50) / 100
+
+
+static func _peak_slots() -> Array[int]:
+	var out: Array[int] = []
+	for minute in range(MORNING_PEAK_START, MORNING_PEAK_END + 1, DEPARTURE_STEP):
+		out.append(minute)
+	for minute in range(EVENING_PEAK_START, EVENING_PEAK_END + 1, DEPARTURE_STEP):
+		out.append(minute)
+	return out
+
+
+static func _off_peak_slots() -> Array[int]:
+	var out: Array[int] = []
+	for minute in range(DEPARTURE_FIRST_MINUTE, DEPARTURE_LAST_MINUTE + 1, DEPARTURE_STEP):
+		if not is_peak_minute(minute):
+			out.append(minute)
+	return out
+
+
+static func _wave_slots(wave: String) -> Array[int]:
+	var out: Array[int] = []
+	for minute in range(DEPARTURE_FIRST_MINUTE, DEPARTURE_LAST_MINUTE + 1, DEPARTURE_STEP):
+		if peak_wave(minute) == wave:
+			out.append(minute)
 	return out
 
 
@@ -627,9 +690,9 @@ func from_snapshot(data: Dictionary) -> bool:
 
 
 ## Every draw is made for every offer, in this order, so the RNG advances by
-## the same amount whatever the values turn out to be. The departure is one
-## draw over the slots of the offer's `traits` (slots_of), so an Odd hours offer
-## draws from its 2 slots and every other from 57: one call either way.
+## the same amount whatever the values turn out to be. Day 0 draws uniformly
+## over slots_of(traits) (one call); Day 1+ makes one peak-wave roll first and
+## then draws from peak/off-peak (or Odd hours' 2 slots), two calls either way.
 func _draw(
 	day: int,
 	number: int,
@@ -649,7 +712,7 @@ func _draw(
 	var sizes := offered_sizes(own, runway_class)
 	var destination: String = DESTINATIONS[rng.randi_range(0, DESTINATIONS.size() - 1)]
 	var slots := slots_of(traits)
-	var minute: int = slots[rng.randi_range(0, slots.size() - 1)]
+	var minute := _draw_departure_minute(day, rng, traits, slots)
 	# A pick among one size would skip its draw, so the range is never below two and
 	# the RNG advances the same whatever the offered sizes are.
 	var size: String = sizes.keys()[rng.randi_range(0, maxi(sizes.size(), 2) - 1) % sizes.size()]
@@ -668,36 +731,66 @@ func _draw(
 	}
 
 
+static func _draw_departure_minute(
+	day: int, rng: RandomNumberGenerator, traits: Dictionary, slots: Array[int]
+) -> int:
+	if day == 0:
+		return slots[rng.randi_range(0, slots.size() - 1)]
+	var peak_roll := rng.randi_range(0, 99)
+	if OfferTraits.window_widening(traits) > 0:
+		return slots[rng.randi_range(0, slots.size() - 1)]
+	var target_peak := peak_roll < int(round(PEAK_OFFER_CHANCE * 100.0))
+	var pool := _peak_slots() if target_peak else _off_peak_slots()
+	return pool[rng.randi_range(0, pool.size() - 1)]
+
+
 ## Gives a freshly drawn `offer` its frozen `traits` and its `loyal` mark, and
-## folds the fee and booking traits, then the loyal raise, into its
-## fee_per_passenger and booked_passengers.
+## folds the fee and booking traits, the loyal raise, and the peak bonus into
+## its fee_per_passenger and booked_passengers.
 static func _give_traits(offer: Dictionary, traits: Dictionary, loyal: bool) -> void:
 	var booked_range: Array = TIER_SIZES[tier_of(offer["airline"])][offer["plane_size"]]
 	offer[FlightContract.TRAITS_KEY] = traits
 	offer[LOYAL_KEY] = loyal
-	offer["fee_per_passenger"] = _fee_of(offer["fee_per_passenger"], traits, loyal)
+	var base_fee := _fee_of(offer["fee_per_passenger"], traits, loyal)
+	offer["fee_per_passenger"] = apply_peak_bonus(base_fee, int(offer["departure_minute"]))
 	offer["booked_passengers"] = OfferTraits.booked_of(
 		offer["booked_passengers"], booked_range[1], traits
 	)
 
 
+## Moves `offer` to `new_minute`, adding or stripping the +15% peak bonus when
+## crossing the peak/off-peak boundary.
+static func _set_departure_minute(offer: Dictionary, new_minute: int) -> void:
+	var old_minute := int(offer["departure_minute"])
+	if old_minute == new_minute:
+		return
+	if is_peak_minute(old_minute) != is_peak_minute(new_minute):
+		var base := _base_fee_before_peak(int(offer["fee_per_passenger"]), old_minute)
+		offer["fee_per_passenger"] = apply_peak_bonus(base, new_minute)
+	offer["departure_minute"] = new_minute
+
+
+static func _base_fee_before_peak(fee: int, departure_minute: int) -> int:
+	if not is_peak_minute(departure_minute):
+		return fee
+	@warning_ignore("integer_division")
+	var base := (fee * 100 + 50 + PEAK_FARE_BONUS_PERCENT - 1) / (100 + PEAK_FARE_BONUS_PERCENT)
+	if apply_peak_bonus(base, departure_minute) == fee:
+		return base
+	return int(round(float(fee) * 100.0 / float(100 + PEAK_FARE_BONUS_PERCENT)))
+
+
 ## Moves the departures of a day's freshly drawn `offers` (in draw order) onto
 ## the slots `flights` has room for now (decision airline-offers-2-a-day-fit-
-## the-free-gate-slots-1-needs-more, points 1 to 3). The first FIT_OFFERS get
-## slots they fit at, the rest a slot where only a free gate is missing
-## (FlightFit.another_gate_helps). Each offer's drawn slot index r among its d
-## slots (slots_of: 57, or 2 with Odd hours) picks from its n candidate slots,
-## earliest first, by floor(r * n / d), so nothing is drawn again. The two fit
-## offers must also fit together, whichever is accepted first: from their
-## picks on, the first slot of the second that joins the first's is taken,
-## and only when none does is the first's next slot tried, so a pair is found
-## whenever one exists. An offer with no candidate slot keeps the slot it was
-## drawn with, and its card says why it does not fit. Read-only on `flights`:
-## every check is a trial on copies of its planning state.
+## the-free-gate-slots-1-needs-more, points 1 to 3). Day 2+ (day >= 1) orders
+## candidate slots wave-aware (same wave -> other peak bank -> remaining slots);
+## Day 1 (day == 0) preserves uniform _pick ordering for gentle afternoon/evening
+## pacing (d97c94bd). Moving an offer across the peak/off-peak boundary always
+## updates its fee via _set_departure_minute.
 static func _fit(offers: Array[Dictionary], flights: FlightSim, min_minute := -1) -> void:
 	if offers.is_empty():
 		return
-	# Per offer: [drawn slot index, how many slots it was drawn from].
+	var wave_aware := int(offers[0].get("day", 0)) >= 1
 	var drawn: Array[Array] = []
 	for offer in offers:
 		var slots := slots_of(offer[FlightContract.TRAITS_KEY])
@@ -705,48 +798,111 @@ static func _fit(offers: Array[Dictionary], flights: FlightSim, min_minute := -1
 	var cache := {}
 	var first: Dictionary = offers[0]
 	var firsts := _slots_where(flights, first, cache, true, min_minute)
+	var first_ordered := (
+		_wave_ordered_slots(firsts, first)
+		if wave_aware
+		else _rotate_from(firsts, _pick(drawn[0], firsts.size()))
+	)
 	if offers.size() == 1:
-		if not firsts.is_empty():
-			first["departure_minute"] = firsts[_pick(drawn[0], firsts.size())]
+		if not first_ordered.is_empty():
+			_set_departure_minute(first, first_ordered[0])
 		return
 	var second: Dictionary = offers[1]
 	var seconds := _slots_where(flights, second, cache, true, min_minute)
+	var second_ordered := (
+		_wave_ordered_slots(seconds, second)
+		if wave_aware
+		else _rotate_from(seconds, _pick(drawn[1], seconds.size()))
+	)
+	var chosen_first := int(first["departure_minute"])
+	var chosen_second := int(second["departure_minute"])
 	var paired := false
-	if not firsts.is_empty():
-		var start := _pick(drawn[0], firsts.size())
-		first["departure_minute"] = firsts[start]
-		if not seconds.is_empty():
+	if not first_ordered.is_empty():
+		chosen_first = first_ordered[0]
+		if not second_ordered.is_empty():
 			var first_key := _slot_key(first, min_minute)
 			var second_key := _slot_key(second, min_minute)
 			var first_cache: Dictionary = cache[first_key]
 			var second_cache: Dictionary = cache[second_key]
 			var free_cache := {}
-			var first_free := _free_gate_map(flights, first, firsts, free_cache)
-			var second_free := _free_gate_map(flights, second, seconds, free_cache)
-			for step in firsts.size():
-				var minute: int = firsts[(start + step) % firsts.size()]
-				var joined := _joined_slot(
+			var first_free := _free_gate_map(flights, first, first_ordered, free_cache)
+			var second_free := _free_gate_map(flights, second, second_ordered, free_cache)
+			for minute in first_ordered:
+				var joined := _joined_ordered_slot(
 					flights,
 					_terms_at(first, minute),
 					first_cache[minute]["gate"],
 					first_free[minute],
 					second,
-					seconds,
-					drawn[1],
+					second_ordered,
 					second_cache,
 					second_free
 				)
 				if joined >= 0:
-					first["departure_minute"] = minute
-					second["departure_minute"] = joined
+					chosen_first = minute
+					chosen_second = joined
 					paired = true
 					break
-	if not paired and not seconds.is_empty():
-		second["departure_minute"] = seconds[_pick(drawn[1], seconds.size())]
+	if not paired and not second_ordered.is_empty():
+		chosen_second = second_ordered[0]
+	_set_departure_minute(first, chosen_first)
+	_set_departure_minute(second, chosen_second)
 	for index in range(FIT_OFFERS, offers.size()):
 		var pushes := _slots_where(flights, offers[index], cache, false, min_minute)
-		if not pushes.is_empty():
-			offers[index]["departure_minute"] = pushes[_pick(drawn[index], pushes.size())]
+		var ordered_pushes := (
+			_wave_ordered_slots(pushes, offers[index])
+			if wave_aware
+			else _rotate_from(pushes, _pick(drawn[index], pushes.size()))
+		)
+		if not ordered_pushes.is_empty():
+			_set_departure_minute(offers[index], ordered_pushes[0])
+
+
+static func _wave_ordered_slots(candidates: Array[int], offer: Dictionary) -> Array[int]:
+	if candidates.is_empty():
+		return []
+	var traits: Dictionary = offer[FlightContract.TRAITS_KEY]
+	var target := int(offer["departure_minute"])
+	var slots := slots_of(traits)
+	var drawn := [maxi(slots.find(target), 0), slots.size()]
+	if OfferTraits.window_widening(traits) > 0:
+		return _rotate_from(candidates, _pick(drawn, candidates.size()))
+	var target_wave := peak_wave(target)
+	var same: Array[int] = []
+	var other_peak: Array[int] = []
+	var rest: Array[int] = []
+	for minute in candidates:
+		var wave := peak_wave(minute)
+		if wave == target_wave:
+			same.append(minute)
+		elif target_wave != "" and wave != "":
+			other_peak.append(minute)
+		else:
+			rest.append(minute)
+	var out: Array[int] = []
+	if not same.is_empty():
+		var same_start := same.find(target)
+		if same_start < 0:
+			var wave_pool := _wave_slots(target_wave)
+			var wave_idx := maxi(wave_pool.find(target), 0)
+			same_start = _pick([wave_idx, wave_pool.size()], same.size())
+		out.append_array(_rotate_from(same, same_start))
+	if not other_peak.is_empty():
+		var wave_pool := _wave_slots(target_wave)
+		var wave_idx := maxi(wave_pool.find(target), 0)
+		var other_start := _pick([wave_idx, maxi(wave_pool.size(), 1)], other_peak.size())
+		out.append_array(_rotate_from(other_peak, other_start))
+	if not rest.is_empty():
+		out.append_array(_rotate_from(rest, _pick(drawn, rest.size())))
+	return out
+
+
+static func _rotate_from(items: Array[int], start: int) -> Array[int]:
+	var out: Array[int] = []
+	var count := items.size()
+	for step in count:
+		out.append(items[(start + step) % count])
+	return out
 
 
 static func _slot_key(offer: Dictionary, min_minute: int) -> String:
@@ -804,24 +960,19 @@ static func _slots_where(
 	return out
 
 
-## The first minute of `seconds` (where `second` fits alone), from the one
-## drawn slot `drawn` ([index, slot count], as _pick takes it) picks on and
-## round, at which `second` and the contract of `first_terms` both fit,
-## whichever is accepted first; -1 for none.
-static func _joined_slot(
+## The first minute in `second_ordered` (already wave-ordered) at which `second`
+## and `first_terms` both fit, whichever is accepted first; -1 for none.
+static func _joined_ordered_slot(
 	flights: FlightSim,
 	first_terms: Dictionary,
 	first_gate: String,
 	first_free: Array[String],
 	second: Dictionary,
-	seconds: Array[int],
-	drawn: Array,
+	second_ordered: Array[int],
 	second_cache: Dictionary,
 	second_free: Dictionary
 ) -> int:
-	var start := _pick(drawn, seconds.size())
-	for step in seconds.size():
-		var minute: int = seconds[(start + step) % seconds.size()]
+	for minute in second_ordered:
 		var second_terms := _terms_at(second, minute)
 		var second_gate: String = second_cache[minute]["gate"]
 		if not flights.gates_pair_compatible(
@@ -1284,9 +1435,12 @@ func _range_problem(entry: Dictionary) -> String:
 	if booked < fewest or booked > booked_range[1]:
 		return "offer %s books %d passengers outside its size's range" % [entry["id"], booked]
 	var fee := int(entry["fee_per_passenger"])
-	if not _fee_drawable(fee, fee_range_for(tier, entry["plane_size"]), traits, entry[LOYAL_KEY]):
+	var minute := int(entry["departure_minute"])
+	if not _fee_drawable(
+		fee, fee_range_for(tier, entry["plane_size"]), traits, entry[LOYAL_KEY], minute
+	):
 		return "offer %s has a fee no drawn fee of its tier gives" % entry["id"]
-	if not slots_of(traits).has(int(entry["departure_minute"])):
+	if not slots_of(traits).has(minute):
 		return "offer %s departs off the board's departure slots" % entry["id"]
 	return ""
 
@@ -1298,11 +1452,12 @@ static func _fee_of(fee: int, traits: Dictionary, loyal: bool) -> int:
 
 
 ## Whether some drawn fee in `fees` ([lowest, highest]) gives `fee` through
-## _fee_of. The rounding leaves gaps between the lowest and highest result, so
-## each drawn fee is tried rather than the two ends.
-static func _fee_drawable(fee: int, fees: Array, traits: Dictionary, loyal: bool) -> bool:
+## _fee_of and apply_peak_bonus at `departure_minute`.
+static func _fee_drawable(
+	fee: int, fees: Array, traits: Dictionary, loyal: bool, departure_minute := -1
+) -> bool:
 	for drawn in range(fees[0], fees[1] + 1):
-		if _fee_of(drawn, traits, loyal) == fee:
+		if apply_peak_bonus(_fee_of(drawn, traits, loyal), departure_minute) == fee:
 			return true
 	return false
 
