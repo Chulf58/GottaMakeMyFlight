@@ -6417,6 +6417,7 @@ msgstr ""
 
 #: ui/alert_stack.gd
 msgid "Click to follow the tightest running-late passenger"
+msgstr ""
 
 #: passengers/passenger_thoughts.gd
 msgid "Set off the scanner: forgot my belt!"
