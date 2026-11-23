@@ -11,6 +11,7 @@ const TEASER_TIER := 3
 const HIDDEN_MIN_TIER := 4
 const MAX_EXTRA_LAND_PLOTS := 1
 const MAX_DEMO_DAY := 5
+const SANDBOX_LOCK_TEXT := "In the full game"
 const STEAM_STORE_URL := "https://store.steampowered.com/"
 ## PLACEHOLDER: the feedback page for the Send Feedback button. Empty until set.
 const FEEDBACK_URL := ""
@@ -22,6 +23,10 @@ static func is_demo() -> bool:
 	if _override != -1:
 		return bool(_override)
 	return OS.get_environment("GMMF_DEMO") == "1" or OS.has_feature("demo")
+
+
+static func is_sandbox_allowed() -> bool:
+	return not is_demo()
 
 
 static func set_override_for_test(enabled: Variant) -> void:

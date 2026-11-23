@@ -61,6 +61,9 @@ var balance: int = 0
 var credit_claim: Callable
 ## Stamps each transaction with its tick; Finances sets the scene's clock.
 var clock: SimClock
+## True in Unlimited Funds sandbox mode: all non-negative spends and charges
+## succeed without reducing balance or creating unpaid debt.
+var unlimited_funds := false
 
 
 ## A starting balance outside [0, MAX_BALANCE] pushes an error and leaves the
@@ -73,7 +76,11 @@ func _init(starting_balance: int = 0) -> void:
 
 
 func can_afford(amount: int) -> bool:
-	return amount >= 0 and amount <= balance
+	if amount < 0:
+		return false
+	if unlimited_funds:
+		return true
+	return amount <= balance
 
 
 ## Adds `amount`, less what credit_claim takes for debts. Returns false and
@@ -84,6 +91,10 @@ func credit(amount: int, category: Category) -> bool:
 	var claimed: Variant = _valid_claims(amount, category)
 	if claimed == null:
 		return false
+	if unlimited_funds:
+		_claims(amount, true)
+		_emit(amount, category, claimed)
+		return true
 	if not _fits(amount, claimed):
 		push_error("Wallet.credit: %d is not creditable at balance %d" % [amount, balance])
 		return false
@@ -99,7 +110,11 @@ func credit(amount: int, category: Category) -> bool:
 ## an invalid claim, which pushes its error as credit() does.
 func can_credit(amount: int, category: Category) -> bool:
 	var claimed: Variant = _valid_claims(amount, category)
-	return claimed != null and _fits(amount, claimed)
+	if claimed == null:
+		return false
+	if unlimited_funds:
+		return amount >= 0
+	return _fits(amount, claimed)
 
 
 ## Takes `amount`. Returns false and leaves the balance unchanged when the
@@ -108,6 +123,9 @@ func can_credit(amount: int, category: Category) -> bool:
 func spend(amount: int, category: Category) -> bool:
 	if not _known(category) or not can_afford(amount):
 		return false
+	if unlimited_funds:
+		_emit(-amount, category, {})
+		return true
 	_set_balance(balance - amount)
 	_emit(-amount, category, {})
 	return true
@@ -121,10 +139,10 @@ func charge(amount: int, category: Category) -> int:
 	if amount < 0:
 		push_error("Wallet.charge: cannot charge %d" % amount)
 		return 0
-	var paid := mini(amount, balance)
+	var paid := amount if unlimited_funds else mini(amount, balance)
 	if not spend(paid, category):
 		return 0
-	if amount > paid:
+	if not unlimited_funds and amount > paid:
 		unpaid.emit(amount - paid, category, clock.tick if is_instance_valid(clock) else NO_TICK)
 	return paid
 

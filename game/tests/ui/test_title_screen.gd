@@ -20,6 +20,8 @@ func before_test() -> void:
 	GameBoot.load_path = ""
 	GameBoot.new_airport = false
 	GameBoot.refusal = ""
+	GameBoot.pending_rules = null
+	DemoMode.clear_override()
 	_scenes.clear()
 	_quits = 0
 	_port = SubViewport.new()
@@ -37,6 +39,10 @@ func after_test() -> void:
 	GameBoot.load_path = ""
 	GameBoot.new_airport = false
 	GameBoot.refusal = ""
+	GameBoot.pending_rules = null
+	DemoMode.clear_override()
+	GameBoot.pending_rules = null
+	DemoMode.clear_override()
 
 
 func _write(path: String, version := SaveGame.SAVE_VERSION) -> void:
@@ -96,8 +102,13 @@ func test_new_airport_starts_main_with_nothing_to_load() -> void:
 	GameBoot.load_path = "left over"
 	_build()
 	_title.button("NewAirport").pressed.emit()
+	assert_bool(_title.mode_page().visible).is_true()
+	assert_bool(_title.main_page().visible).is_false()
+	assert_bool(_title.selected_rules().is_career_mode()).is_true()
+	_title.button("StartAirport").pressed.emit()
 	assert_array(_scenes).is_equal([GameBoot.MAIN_SCENE])
 	assert_str(GameBoot.load_path).is_equal("")
+	assert_bool(GameBoot.pending_rules.is_career_mode()).is_true()
 
 
 func test_load_lists_every_save_and_a_pick_loads_it_through_main() -> void:
@@ -158,7 +169,18 @@ func test_every_label_and_button_is_routed_through_tr() -> void:
 	PseudoLocale.enable(0.4)
 	_build()
 	var texts: Array[String] = []
-	for name in ["Continue", "NewAirport", "Load", "SendFeedback", "Quit", "Back"]:
+	for name in [
+		"Continue",
+		"NewAirport",
+		"Load",
+		"SendFeedback",
+		"Quit",
+		"Back",
+		"CareerMode",
+		"SandboxMode",
+		"StartAirport",
+		"ModeBack",
+	]:
 		texts.append(_title.button(name).text)
 	texts.append(_title.save_list().button_for(SaveSlots.manual_path()).text)
 	print("title texts: %s" % [texts])

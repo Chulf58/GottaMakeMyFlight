@@ -379,7 +379,17 @@ func _ready() -> void:
 		grid = SiteGrid.new(site)
 	else:
 		grid = BuildGrid.new(grid_size, null if grid_centred else grid_origin)
+	var sandbox_unlock_all := (
+		GameBoot.load_path == ""
+		and GameBoot.pending_rules != null
+		and GameBoot.peek_pending_rules().effective_unlock_all()
+	)
+	if require_unlocks and sandbox_unlock_all:
+		require_unlocks = false
 	land_tool = LandTool.attach(self)
+	if land_tool.land != null and sandbox_unlock_all:
+		land_tool.land.all_unlocked = true
+		land_tool.land.own_all()
 	tool = BuildUnlocks.start_tool(unlocks, require_unlocks, tool)
 	# A refused land (LandPlots.error, already pushed) allows no building, so
 	# no starter either.
