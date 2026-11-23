@@ -70,9 +70,14 @@ func _earn(made: int) -> void:
 	_unlocks.check()
 
 
+func _earn_and_answer(made: int) -> void:
+	_earn(made)
+	_guide.answer_ring()
+
+
 func test_the_dialog_opens_when_play_opens_a_tier_and_names_the_families() -> void:
 	assert_bool(_guide.is_open()).is_false()
-	_earn(20)
+	_earn_and_answer(20)
 	assert_int(_unlocks.tier()).is_equal(2)
 	assert_bool(_guide.is_open()).is_true()
 	var body := _guide.dialog().body_text()
@@ -90,14 +95,19 @@ func test_the_phone_ring_hook_fires_with_the_dialog() -> void:
 		audio.reset_for_test()
 	_earn(20)
 	assert_array(_rings).is_equal([2])
+	assert_bool(_guide.is_ringing()).is_true()
+	assert_object(_guide.dialog()).is_null()
 	var cue := _guide.ring_cue()
 	assert_object(cue).is_not_null()
 	assert_bool(cue.is_ringing()).is_true()
 	assert_bool(cue.is_visible_in_tree()).is_true()
 	if audio != null and audio.has_method(&"sfx_count"):
 		assert_int(audio.sfx_count(&"phone_ring")).is_equal(1)
-	_guide.dismiss()
+	_guide.answer_ring()
 	assert_bool(cue.is_ringing()).is_false()
+	assert_object(_guide.dialog()).is_not_null()
+	_guide.dismiss()
+	assert_bool(_guide.is_open()).is_false()
 
 
 func test_a_load_opens_no_dialog() -> void:
@@ -130,7 +140,7 @@ func test_a_new_game_shows_the_tier_dialog_again() -> void:
 	_build_world()
 	_rings.clear()
 	assert_bool(_unlocks.dialog_shown(2)).is_false()
-	_earn(20)
+	_earn_and_answer(20)
 	assert_bool(_guide.is_open()).is_true()
 	assert_array(_rings).is_equal([2])
 
@@ -138,14 +148,14 @@ func test_a_new_game_shows_the_tier_dialog_again() -> void:
 func test_the_next_tier_still_shows_after_an_earlier_one_was_shown() -> void:
 	_earn(20)
 	_guide.dismiss()
-	_earn(250)
+	_earn_and_answer(250)
 	assert_int(_unlocks.tier()).is_equal(3)
 	assert_bool(_guide.is_open()).is_true()
 	assert_str(_guide.dialog().body_text()).not_contains("Security:")
 
 
 func test_two_tiers_opened_together_get_one_dialog_with_both_tiers_families() -> void:
-	_earn(250)
+	_earn_and_answer(250)
 	assert_int(_unlocks.tier()).is_equal(3)
 	assert_bool(_guide.is_open()).is_true()
 	assert_str(_guide.dialog().body_text()).contains("Security:")
@@ -156,7 +166,7 @@ func test_two_tiers_opened_together_get_one_dialog_with_both_tiers_families() ->
 
 func test_a_skip_shows_exactly_the_tiers_not_shown_before() -> void:
 	_unlocks.mark_dialog_shown(2)
-	_earn(250)
+	_earn_and_answer(250)
 	assert_int(_unlocks.tier()).is_equal(3)
 	assert_bool(_guide.is_open()).is_true()
 	var body := _guide.dialog().body_text()

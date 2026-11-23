@@ -285,6 +285,16 @@ func sfx_count(sfx_id: StringName) -> int:
 	return int(_sfx_counts.get(sfx_id, 0))
 
 
+## Stops any pool player currently playing `sfx_id` (for early-answered phone rings).
+func stop_sfx(sfx_id: StringName) -> void:
+	var target: AudioStream = _sfx_streams.get(sfx_id)
+	if target == null:
+		return
+	for player in _sfx_players:
+		if player.playing and player.stream == target:
+			player.stop()
+
+
 func _now_ms() -> int:
 	return int(_clock_ms.call()) if _clock_ms.is_valid() else Time.get_ticks_msec()
 

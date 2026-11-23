@@ -117,9 +117,13 @@ func test_space_answers_ringing_phone_without_closing_or_unpausing() -> void:
 
 
 func test_ring_timer_auto_answers_into_intro_dialogue() -> void:
+	assert_float(IntroDialogue.PhoneRingCue.RING_DURATION_S).is_between(1.8, 2.4)
 	assert_bool(_hud.open_intro()).is_true()
 	assert_object(_hud.intro()).is_null()
-	await get_tree().create_timer(IntroDialogue.PhoneRingCue.RING_DURATION_S + 0.15).timeout
+	await get_tree().create_timer(1.0).timeout
+	assert_object(_hud.intro()).is_null()
+	assert_bool(_ring_cue().is_ringing()).is_true()
+	await get_tree().create_timer(IntroDialogue.PhoneRingCue.RING_DURATION_S - 0.85).timeout
 	assert_object(_hud.intro()).is_not_null()
 	assert_bool(_world.clock.paused).is_true()
 	assert_int(_world.clock.holds.count()).is_equal(1)
@@ -182,15 +186,66 @@ func test_unlock_guide_opening_call_rings_audio_and_shows_icon() -> void:
 	_port.add_child(guide)
 	assert_bool(gate.open()).is_true()
 	assert_bool(guide.is_open()).is_true()
+	assert_bool(guide.is_ringing()).is_true()
+	assert_object(guide.dialog()).is_null()
 	var cue := guide.ring_cue()
 	assert_object(cue).is_not_null()
 	assert_bool(cue.is_ringing()).is_true()
 	assert_bool(cue.is_visible_in_tree()).is_true()
+	assert_bool(_world.clock.paused).is_true()
 	var audio := get_node_or_null("/root/GameAudio")
 	if audio != null and audio.has_method(&"sfx_count"):
 		assert_int(audio.sfx_count(&"phone_ring")).is_equal(1)
-	guide.dismiss()
+	cue.answer_button().pressed.emit()
 	assert_bool(cue.is_ringing()).is_false()
+	assert_bool(guide.is_ringing()).is_false()
+	assert_object(guide.dialog()).is_not_null()
+	assert_int(guide.dialog().speaker()).is_equal(IntroDialogue.Speaker.GOTTA_AIR)
+	assert_bool(_world.clock.paused).is_true()
+	guide.dismiss()
+	assert_bool(guide.is_open()).is_false()
+	assert_bool(_world.clock.paused).is_false()
+
+
+func test_unlock_guide_ring_auto_opens_dialog_after_duration_and_load_cancels() -> void:
+	var rating: AirportRating = auto_free(AirportRating.new())
+	var unlocks := BuildUnlocks.new()
+	unlocks.rating = rating
+	unlocks.passengers = _world.sim
+	unlocks.manual = true
+	_port.add_child(unlocks)
+	var save := SaveGame.new()
+	_port.add_child(save)
+	var guide := UnlockGuide.new()
+	guide.mode = UnlockGuide.Mode.PROFILE
+	guide.unlocks = unlocks
+	guide.clock = _world.clock
+	guide.save_game = save
+	_port.add_child(guide)
+	guide.open_dialog([2])
+	assert_bool(guide.is_ringing()).is_true()
+	assert_object(guide.dialog()).is_null()
+	await get_tree().create_timer(1.0).timeout
+	assert_bool(guide.is_ringing()).is_true()
+	assert_object(guide.dialog()).is_null()
+	await get_tree().create_timer(IntroDialogue.PhoneRingCue.RING_DURATION_S - 0.85).timeout
+	assert_bool(guide.is_ringing()).is_false()
+	assert_object(guide.dialog()).is_not_null()
+	assert_bool(_world.clock.paused).is_true()
+	guide.dismiss()
+	assert_bool(_world.clock.paused).is_false()
+
+	guide.open_dialog([3])
+	assert_bool(guide.is_ringing()).is_true()
+	_world.clock.holds.clear()
+	_world.clock.set_paused(true)
+	save.loaded.emit(true)
+	assert_bool(guide.is_open()).is_false()
+	assert_bool(guide.is_ringing()).is_false()
+	assert_int(_world.clock.holds.count()).is_equal(0)
+	await get_tree().create_timer(IntroDialogue.PhoneRingCue.RING_DURATION_S + 0.15).timeout
+	assert_bool(guide.is_open()).is_false()
+	assert_object(guide.dialog()).is_null()
 
 
 func test_boot_load_skips_intro_ring_without_latching_session() -> void:

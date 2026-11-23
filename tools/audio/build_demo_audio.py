@@ -18,7 +18,7 @@ stereo Ogg Vorbis cozy lounge soundtrack under game/assets/audio/:
   - joke_fault.wav        (340 ms warm low marimba power-down, 44100 Hz mono)
   - joke_queue_horn.wav   (260 ms gentle detuned two-note cozy horn, 44100 Hz mono)
   - star_up.wav           (300 ms warm ascending chime C5-E5-G5-C6, 44100 Hz mono)
-  - phone_ring.wav        (860 ms warm double-trill desk/cellphone ring, 44100 Hz mono)
+  - phone_ring.wav        (1920 ms two-ring double-trill desk/cellphone ring, 44100 Hz mono)
   - checkin_stamp.wav     (75 ms soft tactile desk stamp/thump, 44100 Hz mono)
   - security_alarm.wav    (210 ms short double-beep security alert, 44100 Hz mono)
   - security_clear.wav    (135 ms gentle positive security clear chime, 44100 Hz mono)
@@ -34,6 +34,7 @@ import random
 import shutil
 import struct
 import subprocess
+import sys
 import tempfile
 import wave
 from pathlib import Path
@@ -1012,13 +1013,15 @@ def build_star_up(sr: int = 44100) -> tuple[int, list[float]]:
 
 
 def build_phone_ring(sr: int = 44100) -> tuple[int, list[float]]:
-    """860 ms warm double-trill desk/cellphone ring (G5 + C6 cozy dual-tone)."""
-    dur = 0.860
+    """1920 ms two-ring double-trill desk/cellphone ring (G5 + C6 cozy dual-tone)."""
+    dur = 1.920
     n = int(dur * sr)
     out = [0.0] * n
     bursts = [
-        (0.000, 0.300, 0.018),
-        (0.410, 0.360, 0.060),
+        (0.000, 0.280, 0.018),
+        (0.380, 0.340, 0.055),
+        (1.150, 0.280, 0.018),
+        (1.530, 0.340, 0.055),
     ]
     f1 = 783.99
     f2 = 1046.50
@@ -1173,7 +1176,15 @@ def main() -> None:
         "gate_chirp.wav": build_gate_chirp,
         "cafe_clink.wav": build_cafe_clink,
     }
+    only: str | None = None
+    if "--only" in sys.argv:
+        idx = sys.argv.index("--only")
+        if idx + 1 >= len(sys.argv):
+            raise SystemExit("--only requires a filename")
+        only = sys.argv[idx + 1]
     for filename, fn in builders.items():
+        if only is not None and filename != only:
+            continue
         sr, samples = fn()
         target = OUT_DIR / filename
         _write_wav(target, sr, samples)
@@ -1183,6 +1194,8 @@ def main() -> None:
             f"wrote {target.relative_to(REPO_ROOT)} "
             f"({len(samples)} samples @ {sr} Hz, {size_kb:.1f} KB, boundary_delta={boundary_delta:.5f})"
         )
+    if only is not None:
+        return
 
     lounge_sr, lounge_l, lounge_r, stats = build_terminal_lounge_music()
     lounge_path = OUT_DIR / "terminal_lounge.ogg"

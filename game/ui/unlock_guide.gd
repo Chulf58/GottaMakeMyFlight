@@ -10,8 +10,10 @@ extends Node
 ##   the hold, so the player's own speed applies again unless another hold
 ##   still pauses the game. It is one of the exclusive dialogs: opened while
 ##   another has the turn (the Offers sheet), it shows when that one closes.
-##   When the dialog opens, `phone_ring` fires, `GameAudio` plays `&"phone_ring"`,
-##   and `IntroDialogue.PhoneRingCue` animates at bottom-centre.
+##   When the call arrives, `phone_ring` fires, `GameAudio` plays `&"phone_ring"`,
+##   and `IntroDialogue.PhoneRingCue` rings at bottom-centre before the dialog
+##   opens (auto-opening after `RING_DURATION_S`, or early on click / Space /
+##   Enter).
 ## - The same dialog and ring also come the first time each big moment happens
 ##   in a game (BigFirsts, decisions phone-ring-and-help-dialog-also-on-big-
 ##   firsts-first-runway-u, opening-phone-call-right-after-the-airport-opens-
@@ -77,6 +79,8 @@ var director: IncidentDirector
 var _layer: CanvasLayer
 var _dialog: IntroDialogue
 var _ring_cue: IntroDialogue.PhoneRingCue
+var _ringing_tiers: Array = []
+var _ringing_firsts: Array = []
 ## The dialog's hold on the clock, from open_dialog() until it closes or a load
 ## drops it. It does not give way to the player.
 var _hold := ClockHolds.NONE
@@ -129,6 +133,7 @@ func _ready() -> void:
 ## A guide that leaves the tree while its dialog is open must not leave the
 ## game paused (the holds also end a hold whose owner leaves).
 func _exit_tree() -> void:
+	_free_ring_cue()
 	_release_clock()
 
 
@@ -149,10 +154,14 @@ func mark_seen(tool: BuildMode.Tool) -> void:
 
 
 func is_open() -> bool:
-	return _dialog != null
+	return _is_active()
 
 
-## The open dialog, or null.
+func is_ringing() -> bool:
+	return _ring_cue != null and _ring_cue.is_ringing()
+
+
+## The open dialog, or null while ringing or closed.
 func dialog() -> IntroDialogue:
 	return _dialog
 
@@ -162,15 +171,25 @@ func ring_cue() -> IntroDialogue.PhoneRingCue:
 	return _ring_cue
 
 
-## Closes the open dialog as Continue would.
+## Answers an incoming ringing cue early, opening the queued dialog box now.
+func answer_ring() -> bool:
+	if _ring_cue == null or not _ring_cue.is_ringing():
+		return false
+	_ring_cue.answer()
+	return true
+
+
+## Closes the open dialog as Continue would, or cancels an active ring beat.
 func dismiss() -> void:
 	if _dialog != null:
 		_dialog.dismiss()
+	elif _layer != null and _is_active():
+		_close_dialog(_layer)
 
 
 ## Closes any open or waiting unlock dialog and releases its clock hold.
 func close_for_modal() -> void:
-	var was_open := _dialog != null
+	var was_open := _is_active()
 	_free_dialog()
 	_release_clock()
 	if was_open:
@@ -202,15 +221,27 @@ func _on_tiers_opened(first: int, last: int) -> void:
 		open_dialog(due)
 
 
+func _is_active() -> bool:
+	return _dialog != null or _ring_cue != null
+
+
+func _is_gotta_air_active() -> bool:
+	if _dialog != null:
+		return _dialog.speaker() == IntroDialogue.Speaker.GOTTA_AIR
+	return (
+		_ring_cue != null and _ringing_tiers.is_empty() and _ringing_firsts == [BigFirsts.OPENING]
+	)
+
+
 ## Pauses the clock and shows the dialog for `tiers` and `firsts`: at once, or
 ## queued behind an open Gotta Air call, or replacing an open Terminal Manager
 ## dialog in place, or waiting while another exclusive dialog has the turn.
 func open_dialog(tiers: Array, firsts: Array = []) -> void:
-	if _dialog != null and _dialog.speaker() == IntroDialogue.Speaker.GOTTA_AIR:
+	if _is_gotta_air_active():
 		_append_unique(_queued_tiers, tiers)
 		_append_unique(_queued_firsts, firsts)
 		return
-	if clock == null or _dialog != null:
+	if clock == null or _is_active():
 		_present_batch(tiers, firsts)
 		return
 	if clock.holds.has(_hold):
@@ -254,7 +285,7 @@ func _open_first(kind: String) -> void:
 	if unlocks.first_shown(kind):
 		return
 	unlocks.mark_first_shown(kind)
-	if _dialog != null:
+	if _is_active():
 		_append_unique(_queued_firsts, [kind])
 		return
 	open_dialog([], [kind])
@@ -327,29 +358,47 @@ func _words(tiers: Array, firsts: Array) -> Dictionary:
 func _show_dialog(tiers: Array, firsts: Array = []) -> void:
 	# A dialog that replaces an open one is the same open: dialog_changed keeps
 	# one true and one false, which PassengerHud counts to hold the camera.
-	var replacing := _dialog != null
-	if replacing:
+	var had_layer := _layer != null
+	var had_dialog := _dialog != null
+	if had_layer:
 		_free_dialog()
 	_layer = CanvasLayer.new()
 	_layer.name = "UnlockLayer"
 	_layer.layer = LAYER
-	var words := _words(tiers, firsts)
-	var speaker: IntroDialogue.Speaker = words["speaker"]
-	_dialog = IntroDialogue.new(words["title"], words["body"], BOX_HEIGHT, false, speaker)
-	_layer.add_child(_dialog)
-	_ring_cue = IntroDialogue.PhoneRingCue.new()
-	_layer.add_child(_ring_cue)
 	add_child(_layer)
 	# Each close names its own layer, so a replaced dialog's layer leaving the
 	# tree a frame later cannot close the dialog that replaced it.
-	var close := _close_dialog.bind(_layer)
-	_dialog.dismissed.connect(_on_dismissed.bind(_layer))
-	_dialog.tree_exiting.connect(close)
-	_layer.tree_exiting.connect(close)
-	_ring_cue.start_ring(false, false)
+	_layer.tree_exiting.connect(_close_dialog.bind(_layer))
+	if had_dialog:
+		_open_dialog_box(_layer, tiers, firsts)
+	else:
+		_ringing_tiers = tiers.duplicate()
+		_ringing_firsts = firsts.duplicate()
+		_ring_cue = IntroDialogue.PhoneRingCue.new()
+		_layer.add_child(_ring_cue)
+		_ring_cue.answered.connect(
+			_on_ring_answered.bind(_layer, tiers.duplicate(), firsts.duplicate())
+		)
+		_ring_cue.start_ring(true, true)
 	phone_ring.emit(tiers.back() if not tiers.is_empty() else NO_TIER)
-	if not replacing:
+	if not had_layer:
 		dialog_changed.emit(true)
+
+
+func _on_ring_answered(layer: CanvasLayer, tiers: Array, firsts: Array) -> void:
+	if layer != _layer or not is_instance_valid(_layer):
+		return
+	_free_ring_cue()
+	_open_dialog_box(_layer, tiers, firsts)
+
+
+func _open_dialog_box(layer: CanvasLayer, tiers: Array, firsts: Array) -> void:
+	var words := _words(tiers, firsts)
+	var speaker: IntroDialogue.Speaker = words["speaker"]
+	_dialog = IntroDialogue.new(words["title"], words["body"], BOX_HEIGHT, false, speaker)
+	layer.add_child(_dialog)
+	_dialog.dismissed.connect(_on_dismissed.bind(layer))
+	_dialog.tree_exiting.connect(_close_dialog.bind(layer))
 
 
 ## The player closed the dialog on `layer`: any tiers or firsts queued meanwhile
@@ -375,7 +424,7 @@ func _on_dismissed(layer: CanvasLayer) -> void:
 ## Closes the dialog shown on `layer`; a layer that is no longer the current
 ## one (replaced, or already closed) closes nothing. True when it closed one.
 func _close_dialog(layer: CanvasLayer) -> bool:
-	if _dialog == null or layer != _layer:
+	if layer == null or layer != _layer or not _is_active():
 		return false
 	_free_dialog()
 	_release_clock()
@@ -390,21 +439,29 @@ func _close_dialog(layer: CanvasLayer) -> bool:
 func _on_loaded(ok: bool) -> void:
 	if not ok:
 		return
-	var was_open := _dialog != null
+	var was_open := _is_active()
 	_free_dialog()
 	_release_clock()
 	if was_open:
 		dialog_changed.emit(false)
 
 
-func _free_dialog() -> void:
-	var layer := _layer
+func _free_ring_cue() -> void:
+	_ringing_tiers = []
+	_ringing_firsts = []
 	var cue := _ring_cue
-	_layer = null
-	_dialog = null
 	_ring_cue = null
 	if is_instance_valid(cue):
 		cue.stop_ring()
+		if not cue.is_queued_for_deletion():
+			cue.queue_free()
+
+
+func _free_dialog() -> void:
+	var layer := _layer
+	_layer = null
+	_dialog = null
+	_free_ring_cue()
 	if is_instance_valid(layer) and not layer.is_queued_for_deletion():
 		layer.queue_free()
 

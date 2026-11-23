@@ -87,6 +87,9 @@ func test_the_first_finished_runway_works_ring_and_show_the_runway_dialog() -> v
 	assert_bool(_guide.is_open()).is_false()
 	_finish_works(PlaneClasses.MEDIUM)
 	assert_bool(_guide.is_open()).is_true()
+	assert_bool(_guide.is_ringing()).is_true()
+	assert_object(_guide.dialog()).is_null()
+	_guide.answer_ring()
 	assert_array(_rings).is_equal([UnlockGuide.NO_TIER])
 	assert_str(_guide.dialog().body_text()).is_equal(BigFirsts.body_for([BigFirsts.RUNWAY]))
 	assert_bool(_unlocks.first_shown(BigFirsts.RUNWAY)).is_true()
@@ -102,6 +105,7 @@ func test_an_upgrade_before_the_airport_opens_is_the_first_upgrade() -> void:
 	assert_bool(sim.start_works(PlaneClasses.MEDIUM)).is_true()
 	assert_str(sim.runway.size).is_equal(PlaneClasses.MEDIUM)
 	assert_bool(_guide.is_open()).is_true()
+	_guide.answer_ring()
 	assert_array(_rings).is_equal([UnlockGuide.NO_TIER])
 	assert_str(_guide.dialog().body_text()).is_equal(BigFirsts.body_for([BigFirsts.RUNWAY]))
 	_guide.dismiss()
@@ -136,6 +140,8 @@ func test_a_second_runway_upgrade_shows_nothing() -> void:
 func test_the_first_major_incident_rings_and_shows_the_incident_dialog() -> void:
 	_present_major()
 	assert_bool(_guide.is_open()).is_true()
+	assert_bool(_guide.is_ringing()).is_true()
+	_guide.answer_ring()
 	assert_array(_rings).is_equal([UnlockGuide.NO_TIER])
 	assert_str(_guide.dialog().body_text()).is_equal(BigFirsts.body_for([BigFirsts.INCIDENT]))
 	assert_bool(_unlocks.first_shown(BigFirsts.INCIDENT)).is_true()
@@ -156,6 +162,7 @@ func test_the_two_firsts_are_separate_each_shows_once() -> void:
 	_guide.dismiss()
 	_finish_works(PlaneClasses.MEDIUM)
 	assert_bool(_guide.is_open()).is_true()
+	_guide.answer_ring()
 	assert_array(_rings).is_equal([UnlockGuide.NO_TIER, UnlockGuide.NO_TIER])
 	assert_str(_guide.dialog().body_text()).is_equal(BigFirsts.body_for([BigFirsts.RUNWAY]))
 
@@ -210,6 +217,7 @@ func test_a_first_pauses_the_clock_and_closing_gives_back_the_players_speed() ->
 
 func test_a_first_that_comes_while_the_tier_dialog_is_open_shows_when_it_closes() -> void:
 	_open_tier_two()
+	_guide.answer_ring()
 	assert_bool(_guide.is_open()).is_true()
 	assert_str(_guide.dialog().body_text()).contains("Food:")
 	_present_major()
@@ -227,6 +235,7 @@ func test_a_first_that_comes_while_the_tier_dialog_is_open_shows_when_it_closes(
 
 func test_a_tier_unlock_still_rings_with_its_tier_and_shows_its_families() -> void:
 	_open_tier_two()
+	_guide.answer_ring()
 	assert_array(_rings).is_equal([2])
 	assert_str(_guide.dialog().body_text()).contains("Runway:")
 	assert_bool(_unlocks.first_shown(BigFirsts.RUNWAY)).is_false()

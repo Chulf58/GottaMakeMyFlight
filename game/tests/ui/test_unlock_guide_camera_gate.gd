@@ -82,6 +82,7 @@ func after_test() -> void:
 ## A tier dialog is open when a major comes, so the first replaces it in place.
 func _swap_in_the_first() -> void:
 	_guide.open_dialog([2])
+	_guide.answer_ring()
 	assert_bool(_director.present(_director.add_scheduled(), false)).is_true()
 	_guide.dismiss()
 	assert_bool(_guide.is_open()).is_true()
@@ -108,5 +109,20 @@ func test_the_camera_gate_is_back_to_zero_after_a_load_with_the_swapped_dialog_o
 	_clock.set_speed(1)
 	_save.loaded.emit(true)
 	assert_bool(_guide.is_open()).is_false()
+	assert_int(_hud._camera_gates).is_equal(0)
+	assert_bool(_camera.is_processing()).is_true()
+
+
+func test_the_camera_gate_is_back_to_zero_after_a_load_while_ringing() -> void:
+	_guide.open_dialog([2])
+	assert_bool(_guide.is_ringing()).is_true()
+	assert_int(_hud._camera_gates).is_equal(1)
+	assert_bool(_camera.is_processing()).is_false()
+	_clock.holds.clear()
+	_clock.set_paused(true)
+	_clock.set_speed(1)
+	_save.loaded.emit(true)
+	assert_bool(_guide.is_open()).is_false()
+	assert_bool(_guide.is_ringing()).is_false()
 	assert_int(_hud._camera_gates).is_equal(0)
 	assert_bool(_camera.is_processing()).is_true()

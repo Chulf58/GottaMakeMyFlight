@@ -130,8 +130,13 @@ func test_opening_pauses_synchronously_on_the_opening_tick_and_shows_gotta_air()
 	assert_int(_clock.tick).is_equal(_flights.opened_tick)
 	assert_bool(_clock.paused).is_true()
 	assert_bool(_guide.is_open()).is_true()
+	assert_bool(_guide.is_ringing()).is_true()
+	assert_object(_guide.dialog()).is_null()
 	assert_array(_rings).is_equal([UnlockGuide.NO_TIER])
+	assert_bool(_guide.answer_ring()).is_true()
+	assert_bool(_guide.is_ringing()).is_false()
 	var dlg := _guide.dialog()
+	assert_object(dlg).is_not_null()
 	assert_int(dlg.speaker()).is_equal(IntroDialogue.Speaker.GOTTA_AIR)
 	assert_object((dlg.find_child("Portrait", true, false) as TextureRect).texture).is_same(
 		IntroDialogue.GOTTA_AIR_PORTRAIT
@@ -158,6 +163,7 @@ func test_opening_pauses_synchronously_on_the_opening_tick_and_shows_gotta_air()
 func test_other_unlock_guide_dialogs_keep_the_terminal_manager_speaker() -> void:
 	_build_unit_world()
 	_director.major_presented.emit({"id": 1, "kind": IncidentCatalogue.INSPECTOR})
+	_guide.answer_ring()
 	assert_int(_guide.dialog().speaker()).is_equal(IntroDialogue.Speaker.TERMINAL_MANAGER)
 	(
 		assert_object((_guide.dialog().find_child("Portrait", true, false) as TextureRect).texture)
@@ -172,6 +178,7 @@ func test_other_unlock_guide_dialogs_keep_the_terminal_manager_speaker() -> void
 	for i in 50:
 		_pax.outcome.emit(i, true)
 	_unlocks.check()
+	_guide.answer_ring()
 	assert_int(_guide.dialog().speaker()).is_equal(IntroDialogue.Speaker.TERMINAL_MANAGER)
 	assert_str((_guide.dialog().find_child("Name", true, false) as Label).text).is_equal(
 		"TERMINAL MANAGER"
@@ -189,6 +196,7 @@ func test_opening_call_never_shares_one_box_with_terminal_manager_firsts() -> vo
 	_clock.holds.release(other_hold)
 	# Gotta Air speaks alone first, then swaps in place to Terminal Manager under one hold.
 	assert_bool(_guide.is_open()).is_true()
+	_guide.answer_ring()
 	assert_int(_guide.dialog().speaker()).is_equal(IntroDialogue.Speaker.GOTTA_AIR)
 	assert_str(_guide.dialog().body_text()).contains("Gotta Air here.")
 	assert_str(_guide.dialog().body_text()).not_contains("A big event has come up.")
@@ -205,9 +213,11 @@ func test_open_dialog_while_gotta_air_is_open_queues_tiers_until_dismissed() -> 
 	_build_unit_world()
 	assert_bool(_gate.open()).is_true()
 	assert_bool(_guide.is_open()).is_true()
-	assert_int(_guide.dialog().speaker()).is_equal(IntroDialogue.Speaker.GOTTA_AIR)
+	assert_bool(_guide.is_ringing()).is_true()
+	# Tier arriving while Gotta Air is still ringing also queues behind Gotta Air.
 	_guide.open_dialog([2])
-	# Gotta Air stays on screen until dismissed; tier 2 waits behind it under one hold.
+	assert_array(_rings).is_equal([UnlockGuide.NO_TIER])
+	_guide.answer_ring()
 	assert_int(_guide.dialog().speaker()).is_equal(IntroDialogue.Speaker.GOTTA_AIR)
 	assert_str(_guide.dialog().body_text()).contains("Gotta Air here.")
 	assert_array(_rings).is_equal([UnlockGuide.NO_TIER])
@@ -317,6 +327,8 @@ func test_main_scene_wires_gate_and_flights_into_unlock_guide_on_opening() -> vo
 	assert_int(clock.tick).is_equal(flights.opened_tick)
 	assert_bool(clock.paused).is_true()
 	assert_bool(hud.unlock_guide().is_open()).is_true()
+	assert_bool(hud.unlock_guide().is_ringing()).is_true()
+	hud.unlock_guide().answer_ring()
 	assert_int(hud.unlock_guide().dialog().speaker()).is_equal(IntroDialogue.Speaker.GOTTA_AIR)
 	var dep := _starter_departure_text(flights, clock)
 	assert_str(hud.unlock_guide().dialog().body_text()).contains("leaves at %s." % dep)

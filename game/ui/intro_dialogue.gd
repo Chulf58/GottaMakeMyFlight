@@ -413,7 +413,7 @@ class PhoneRingCue:
 
 	signal answered
 
-	const RING_DURATION_S := 0.90
+	const RING_DURATION_S := 2.05
 	const CUE_SIZE := 64.0
 	const ICON_SIZE := 44.0
 	const CUE_BOTTOM := BuildMenu.MARGIN + BuildMenu.BAR_H + HudLayout.GAP
@@ -451,6 +451,7 @@ class PhoneRingCue:
 		offset_right = CUE_SIZE * 0.5
 		offset_top = -CUE_BOTTOM - CUE_SIZE
 		offset_bottom = -CUE_BOTTOM
+		pivot_offset = Vector2(CUE_SIZE * 0.5, CUE_SIZE * 0.5)
 		grow_horizontal = Control.GROW_DIRECTION_BOTH
 		grow_vertical = Control.GROW_DIRECTION_BEGIN
 
@@ -477,6 +478,9 @@ class PhoneRingCue:
 		center.add_child(_icon)
 
 	func _exit_tree() -> void:
+		if _ringing:
+			_stop_ring_sfx()
+		_ringing = false
 		_kill_tween()
 
 	func _input(event: InputEvent) -> void:
@@ -497,12 +501,7 @@ class PhoneRingCue:
 	## Starts the ringing animation and phone_ring SFX after an optional settle
 	## delay; auto-answers or auto-hides.
 	func start_ring(auto_answer := true, answer_on_key := false, delay_s := 0.0) -> void:
-		_kill_tween()
-		_ringing = false
-		_answer_on_key = false
-		visible = false
-		_icon.rotation = 0.0
-		_icon.scale = Vector2.ONE
+		stop_ring()
 		if delay_s <= 0.0:
 			_begin_ring(auto_answer, answer_on_key)
 			return
@@ -516,15 +515,16 @@ class PhoneRingCue:
 		_ringing = true
 		_answer_on_key = answer_on_key
 		visible = true
+		scale = Vector2.ONE
 		_icon.rotation = 0.0
 		_icon.scale = Vector2.ONE
 		_play_ring_sfx()
 		_tween = create_tween()
 		_tween.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
-		_append_trill(_tween, 0.30)
-		_tween.tween_interval(0.11)
-		_append_trill(_tween, 0.33)
-		_tween.tween_interval(maxf(0.01, RING_DURATION_S - 0.74))
+		_append_double_ring(_tween)
+		_tween.tween_interval(0.43)
+		_append_double_ring(_tween)
+		_tween.tween_interval(maxf(0.01, RING_DURATION_S - 1.87))
 		_tween.tween_callback(answer if auto_answer else stop_ring)
 
 	## Answers the incoming call immediately once while ringing.
@@ -536,10 +536,13 @@ class PhoneRingCue:
 
 	## Stops the ring beat and hides the cue without emitting answered.
 	func stop_ring() -> void:
+		if _ringing:
+			_stop_ring_sfx()
 		_ringing = false
 		_answer_on_key = false
 		_kill_tween()
 		visible = false
+		scale = Vector2.ONE
 		_icon.rotation = 0.0
 		_icon.scale = Vector2.ONE
 
@@ -552,14 +555,21 @@ class PhoneRingCue:
 	func answer_button() -> Button:
 		return _button
 
+	func _append_double_ring(tween: Tween) -> void:
+		_append_trill(tween, 0.28)
+		tween.tween_interval(0.10)
+		_append_trill(tween, 0.34)
+
 	func _append_trill(tween: Tween, span: float) -> void:
-		var steps := 4
+		var steps := 6
 		var step_s := span / float(steps + 1)
-		tween.tween_property(_icon, "scale", Vector2(1.12, 1.12), step_s * 0.5)
+		tween.tween_property(_icon, "scale", Vector2(1.18, 1.18), step_s * 0.5)
+		tween.parallel().tween_property(self, "scale", Vector2(1.08, 1.08), step_s * 0.5)
 		for i in steps:
-			var angle := 0.22 if i % 2 == 0 else -0.22
+			var angle := 0.26 if i % 2 == 0 else -0.26
 			tween.tween_property(_icon, "rotation", angle, step_s)
 		tween.parallel().tween_property(_icon, "scale", Vector2.ONE, step_s)
+		tween.parallel().tween_property(self, "scale", Vector2.ONE, step_s)
 		tween.tween_property(_icon, "rotation", 0.0, step_s * 0.5)
 
 	func _play_ring_sfx() -> void:
@@ -569,6 +579,14 @@ class PhoneRingCue:
 		var audio := tree.root.get_node_or_null("GameAudio")
 		if audio != null and audio.has_method(&"play_sfx"):
 			audio.play_sfx(&"phone_ring")
+
+	func _stop_ring_sfx() -> void:
+		var tree := get_tree()
+		if tree == null or tree.root == null:
+			return
+		var audio := tree.root.get_node_or_null("GameAudio")
+		if audio != null and audio.has_method(&"stop_sfx"):
+			audio.stop_sfx(&"phone_ring")
 
 	func _kill_tween() -> void:
 		if is_instance_valid(_tween):

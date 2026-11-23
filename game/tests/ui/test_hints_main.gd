@@ -152,6 +152,7 @@ func test_no_hint_is_picked_while_the_unlock_dialog_is_open() -> void:
 	var guide := _hud().unlock_guide()
 	guide.open_dialog([2])
 	assert_bool(guide.is_open()).is_true()
+	guide.answer_ring()
 	var left := Hints.IDLE_S + 5.0
 	while left > 0.0:
 		hints.advance(0.25, _world(), [BuildMenu.category_of(BuildMode.Tool.DESK)])
