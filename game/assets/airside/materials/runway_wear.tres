@@ -1,0 +1,11 @@
+[gd_resource type="ShaderMaterial" load_steps=3 format=3]
+
+[ext_resource type="Shader" path="res://shaders/runway_wear.gdshader" id="1_wear"]
+[ext_resource type="Texture2D" path="res://assets/textures/tp_toon_ramp_1d_d.png" id="2_ramp"]
+
+[resource]
+resource_name = "RunwayWearToon"
+shader = ExtResource("1_wear")
+shader_parameter/rubber_color = Color(0.08, 0.08, 0.09, 1)
+shader_parameter/intensity = 0.56
+shader_parameter/ramp_texture = ExtResource("2_ramp")

@@ -1,4 +1,4 @@
-[gd_scene load_steps=54 format=3]
+[gd_scene load_steps=55 format=3]
 
 [ext_resource type="PackedScene" path="res://camera/tycoon_camera.tscn" id="1_cam"]
 [ext_resource type="Script" path="res://core/sim_clock.gd" id="2_clock"]
@@ -51,13 +51,11 @@
 [ext_resource type="Script" path="res://build/owned_paving.gd" id="52_ownedpaving"]
 [ext_resource type="Script" path="res://telemetry/quit_log_recorder.gd" id="53_quitlog"]
 [ext_resource type="Script" path="res://staff/ramp_dispatch.gd" id="54_ramp"]
+[ext_resource type="Material" path="res://assets/airside/materials/airfield_ground_toon.tres" id="55_groundmat"]
+[ext_resource type="Script" path="res://airside/airfield_backdrop.gd" id="56_backdrop"]
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_ground"]
 size = Vector2(2400, 2400)
-
-[sub_resource type="StandardMaterial3D" id="Material_ground"]
-albedo_color = Color(0.36, 0.5, 0.3, 1)
-roughness = 1.0
 
 [sub_resource type="ProceduralSkyMaterial" id="Sky_material"]
 
@@ -100,7 +98,7 @@ directional_shadow_max_distance = 410.0
 [node name="Ground" type="MeshInstance3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.1, 0)
 mesh = SubResource("PlaneMesh_ground")
-surface_material_override/0 = SubResource("Material_ground")
+surface_material_override/0 = ExtResource("55_groundmat")
 
 [node name="TycoonCamera" parent="." instance=ExtResource("1_cam")]
 bounds_half_extent = 260.0
@@ -205,6 +203,11 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -80)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -338)
 script = ExtResource("44_runwayview")
 flights = NodePath("../../FlightSim")
+
+[node name="AirfieldBackdrop" type="Node3D" parent="Airside" node_paths=PackedStringArray("flights", "airside")]
+script = ExtResource("56_backdrop")
+flights = NodePath("../../FlightSim")
+airside = NodePath("..")
 
 [node name="FlightSim" type="Node" parent="." node_paths=PackedStringArray("clock")]
 script = ExtResource("4_sim")
