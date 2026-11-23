@@ -17,6 +17,11 @@ Generates compact, click-free 16-bit PCM WAV assets under game/assets/audio/:
   - joke_queue_horn.wav   (260 ms gentle detuned two-note cozy horn, 44100 Hz mono)
   - star_up.wav           (300 ms warm ascending chime C5-E5-G5-C6, 44100 Hz mono)
   - phone_ring.wav        (860 ms warm double-trill desk/cellphone ring, 44100 Hz mono)
+  - checkin_stamp.wav     (75 ms soft tactile desk stamp/thump, 44100 Hz mono)
+  - security_alarm.wav    (210 ms short double-beep security alert, 44100 Hz mono)
+  - security_clear.wav    (135 ms gentle positive security clear chime, 44100 Hz mono)
+  - gate_chirp.wav        (85 ms crisp boarding-pass scanner chirp, 44100 Hz mono)
+  - cafe_clink.wav        (125 ms soft ceramic cup/saucer clink, 44100 Hz mono)
 """
 
 from __future__ import annotations
@@ -460,6 +465,114 @@ def build_phone_ring(sr: int = 44100) -> tuple[int, list[float]]:
     return sr, out
 
 
+def build_checkin_stamp(sr: int = 44100) -> tuple[int, list[float]]:
+    """75 ms soft tactile desk stamp/thump."""
+    dur = 0.075
+    n = int(dur * sr)
+    rng = random.Random(404)
+    felt = _one_pole_lowpass([rng.uniform(-1.0, 1.0) for _ in range(n)], 1100.0, sr)
+    out = [0.0] * n
+    thump_phase = 0.0
+    wood_phase = 0.0
+    for i in range(n):
+        t = i / sr
+        thump_freq = 105.0 + 115.0 * math.exp(-t / 0.008)
+        thump_phase += TAU * thump_freq / sr
+        wood_phase += TAU * 315.0 / sr
+        thump = math.sin(thump_phase) * math.exp(-t / 0.015)
+        wood = 0.38 * math.sin(wood_phase) * math.exp(-t / 0.012)
+        tap = 0.22 * felt[i] * math.exp(-t / 0.004)
+        env = _env_attack_exp(t, dur, 0.0018, 0.022)
+        out[i] = 0.28 * (thump + wood + tap) * env
+    out[-1] = 0.0
+    return sr, out
+
+
+def build_security_alarm(sr: int = 44100) -> tuple[int, list[float]]:
+    """210 ms unmistakable short double-beep security alert (distinct from clear chime)."""
+    dur = 0.210
+    n = int(dur * sr)
+    out = [0.0] * n
+    pips = [
+        (0.000, 0.070, 740.0),
+        (0.110, 0.075, 740.0),
+    ]
+    for start_t, pip_dur, freq in pips:
+        for i in range(n):
+            t = i / sr - start_t
+            if t < 0.0 or t >= pip_dur:
+                continue
+            att = math.sin(0.5 * math.pi * min(1.0, t / 0.003))
+            rel = 1.0
+            rel_len = 0.010
+            if t > pip_dur - rel_len:
+                rel = 0.5 + 0.5 * math.cos(math.pi * (t - (pip_dur - rel_len)) / rel_len)
+            tone = (
+                math.sin(TAU * freq * t)
+                + 0.12 * math.sin(TAU * (freq * 2.0) * t)
+                + 0.18 * math.sin(TAU * (freq * 3.0) * t) * math.exp(-t / 0.030)
+            )
+            out[i] += 0.20 * tone * att * rel
+    out[-1] = 0.0
+    return sr, out
+
+
+def build_security_clear(sr: int = 44100) -> tuple[int, list[float]]:
+    """135 ms gentle positive two-note security clear chime (G5 -> C6)."""
+    return _render_bell_notes(
+        0.135,
+        [
+            (0.000, 783.99, 0.17, 0.024),
+            (0.042, 1046.50, 0.19, 0.038),
+        ],
+        sr,
+    )
+
+
+def build_gate_chirp(sr: int = 44100) -> tuple[int, list[float]]:
+    """85 ms crisp boarding-pass barcode-scanner chirp."""
+    dur = 0.085
+    n = int(dur * sr)
+    out = [0.0] * n
+    phase = 0.0
+    for i in range(n):
+        t = i / sr
+        freq = 1661.22 - 486.56 * math.exp(-t / 0.014)
+        phase += TAU * freq / sr
+        tone = math.sin(phase) + 0.10 * math.sin(2.0 * phase) * math.exp(-t / 0.018)
+        env = _env_attack_exp(t, dur, 0.0020, 0.022)
+        out[i] = 0.18 * tone * env
+    out[-1] = 0.0
+    return sr, out
+
+
+def build_cafe_clink(sr: int = 44100) -> tuple[int, list[float]]:
+    """125 ms soft ceramic cup/saucer clink."""
+    dur = 0.125
+    n = int(dur * sr)
+    out = [0.0] * n
+    taps = [
+        (0.000, 1.00),
+        (0.034, 0.45),
+    ]
+    for start_t, weight in taps:
+        for i in range(n):
+            t = i / sr - start_t
+            if t < 0.0:
+                continue
+            tap_dur = dur - start_t
+            env = _env_attack_exp(t, tap_dur, 0.0012, 0.020)
+            ceramic = (
+                0.46 * math.sin(TAU * 1860.0 * t) * math.exp(-t / 0.015)
+                + 0.34 * math.sin(TAU * 2790.0 * t) * math.exp(-t / 0.011)
+                + 0.18 * math.sin(TAU * 3740.0 * t) * math.exp(-t / 0.007)
+                + 0.26 * math.sin(TAU * 890.0 * t) * math.exp(-t / 0.006)
+            )
+            out[i] += 0.22 * weight * ceramic * env
+    out[-1] = 0.0
+    return sr, out
+
+
 def main() -> None:
     builders = {
         "terminal_ambience.wav": build_terminal_ambience,
@@ -477,6 +590,11 @@ def main() -> None:
         "joke_queue_horn.wav": build_joke_queue_horn,
         "star_up.wav": build_star_up,
         "phone_ring.wav": build_phone_ring,
+        "checkin_stamp.wav": build_checkin_stamp,
+        "security_alarm.wav": build_security_alarm,
+        "security_clear.wav": build_security_clear,
+        "gate_chirp.wav": build_gate_chirp,
+        "cafe_clink.wav": build_cafe_clink,
     }
     for filename, fn in builders.items():
         sr, samples = fn()

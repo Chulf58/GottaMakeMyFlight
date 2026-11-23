@@ -46,6 +46,11 @@ const SFX_PATHS := {
 	&"joke_queue_horn": "res://assets/audio/joke_queue_horn.wav",
 	&"star_up": "res://assets/audio/star_up.wav",
 	&"phone_ring": "res://assets/audio/phone_ring.wav",
+	&"checkin_stamp": "res://assets/audio/checkin_stamp.wav",
+	&"security_alarm": "res://assets/audio/security_alarm.wav",
+	&"security_clear": "res://assets/audio/security_clear.wav",
+	&"gate_chirp": "res://assets/audio/gate_chirp.wav",
+	&"cafe_clink": "res://assets/audio/cafe_clink.wav",
 }
 const SFX_COOLDOWN_MS := {
 	&"ui_click": 25,
@@ -62,6 +67,18 @@ const SFX_COOLDOWN_MS := {
 	&"joke_queue_horn": 15000,
 	&"star_up": 6000,
 	&"phone_ring": 200,
+	&"checkin_stamp": 1800,
+	&"security_alarm": 2200,
+	&"security_clear": 1800,
+	&"gate_chirp": 1600,
+	&"cafe_clink": 2400,
+}
+const SFX_VOLUME_DB := {
+	&"checkin_stamp": -3.0,
+	&"security_alarm": -2.0,
+	&"security_clear": -4.0,
+	&"gate_chirp": -4.0,
+	&"cafe_clink": -3.5,
 }
 
 ## Shielded settings path during -s / --script runs (anti-pattern 1639342a).
@@ -95,6 +112,7 @@ var _suppress_events := false
 var _last_pa_ms := -1
 var _last_final_call_check_tick := -FINAL_CALL_POLL_TICKS
 var _prev_stage: Dictionary = {}
+var _security_alarmed: Dictionary = {}
 var _announced_boarding: Dictionary = {}
 var _announced_final_call: Dictionary = {}
 var _announced_rush_ids: Dictionary = {}
@@ -188,6 +206,7 @@ func reset_for_test() -> void:
 	_last_pa_ms = -1
 	_last_final_call_check_tick = -FINAL_CALL_POLL_TICKS
 	_prev_stage.clear()
+	_security_alarmed.clear()
 	_announced_boarding.clear()
 	_announced_final_call.clear()
 	_announced_rush_ids.clear()
@@ -251,6 +270,7 @@ func play_sfx(sfx_id: StringName, ignore_cooldown := false) -> bool:
 	var player := _sfx_players[_sfx_cursor]
 	_sfx_cursor = (_sfx_cursor + 1) % _sfx_players.size()
 	player.stream = _sfx_streams[sfx_id]
+	player.volume_db = float(SFX_VOLUME_DB.get(sfx_id, 0.0))
 	player.play()
 	_last_sfx = sfx_id
 	_sfx_counts[sfx_id] = int(_sfx_counts.get(sfx_id, 0)) + 1
@@ -523,32 +543,56 @@ func _on_flight_sim_exited(flights: FlightSim) -> void:
 func _bind_passenger_sim(sim: PassengerSim) -> void:
 	if not is_instance_valid(sim) or not sim.is_inside_tree():
 		return
+	if _passengers != null and _passengers != sim:
+		_unbind_passenger_sim(_passengers)
 	_passengers = sim
 	_seed_passengers(sim)
 	var on_stage := _on_passenger_stage_changed.bind(sim)
 	if not sim.stage_changed.is_connected(on_stage):
 		sim.stage_changed.connect(on_stage)
+	var on_checked_in := _on_passenger_checked_in.bind(sim)
+	if not sim.checked_in.is_connected(on_checked_in):
+		sim.checked_in.connect(on_checked_in)
 	var on_outcome := _on_passenger_outcome.bind(sim)
 	if not sim.outcome.is_connected(on_outcome):
 		sim.outcome.connect(on_outcome)
+	if sim.cafes != null:
+		var on_cafe_paid := _on_cafe_paid.bind(sim)
+		if not sim.cafes.paid.is_connected(on_cafe_paid):
+			sim.cafes.paid.connect(on_cafe_paid)
 	var on_exit := _on_passenger_sim_exited.bind(sim)
 	if not sim.tree_exiting.is_connected(on_exit):
 		sim.tree_exiting.connect(on_exit, CONNECT_ONE_SHOT)
 
 
-func _on_passenger_sim_exited(sim: PassengerSim) -> void:
+func _unbind_passenger_sim(sim: PassengerSim) -> void:
 	if is_instance_valid(sim):
 		var on_stage := _on_passenger_stage_changed.bind(sim)
 		if sim.stage_changed.is_connected(on_stage):
 			sim.stage_changed.disconnect(on_stage)
+		var on_checked_in := _on_passenger_checked_in.bind(sim)
+		if sim.checked_in.is_connected(on_checked_in):
+			sim.checked_in.disconnect(on_checked_in)
 		var on_outcome := _on_passenger_outcome.bind(sim)
 		if sim.outcome.is_connected(on_outcome):
 			sim.outcome.disconnect(on_outcome)
+		if sim.cafes != null:
+			var on_cafe_paid := _on_cafe_paid.bind(sim)
+			if sim.cafes.paid.is_connected(on_cafe_paid):
+				sim.cafes.paid.disconnect(on_cafe_paid)
+		var on_exit := _on_passenger_sim_exited.bind(sim)
+		if sim.tree_exiting.is_connected(on_exit):
+			sim.tree_exiting.disconnect(on_exit)
 	if _passengers == sim:
 		_passengers = null
 		_prev_stage.clear()
+		_security_alarmed.clear()
 		_close_call_flights.clear()
 		_close_call_counts.clear()
+
+
+func _on_passenger_sim_exited(sim: PassengerSim) -> void:
+	_unbind_passenger_sim(sim)
 
 
 func _bind_incident_director(director: IncidentDirector) -> void:
@@ -699,6 +743,7 @@ func _on_edit_refused(_edit: BuildEdit, _result: BuildResult) -> void:
 
 
 func _on_clock_ticked(tick: int) -> void:
+	_check_security_alarms()
 	if (
 		tick >= _last_final_call_check_tick
 		and tick - _last_final_call_check_tick < FINAL_CALL_POLL_TICKS
@@ -808,12 +853,22 @@ func _seed_flights(flights: FlightSim) -> void:
 
 func _seed_passengers(sim: PassengerSim) -> void:
 	_prev_stage.clear()
+	_security_alarmed.clear()
 	_close_call_flights.clear()
 	_close_call_counts.clear()
 	for id in sim.passenger_ids():
 		var p := sim.get_passenger(id)
 		if p != null:
 			_prev_stage[id] = p.stage
+			if (
+				p.alarm
+				and (
+					p.incident_resolved
+					or p.security_phase == SecurityRuntime.Phase.TO_BERTH
+					or p.security_phase == SecurityRuntime.Phase.REPACK
+				)
+			):
+				_security_alarmed[id] = true
 	for flight_id: String in sim.flight_results.keys():
 		var cc := int(sim.flight_results[flight_id].get("close_calls", 0))
 		_close_call_counts[flight_id] = cc
@@ -838,15 +893,60 @@ func _seed_incidents(director: IncidentDirector) -> void:
 			_announced_rush_ids[int(incident.get("id", -1))] = true
 
 
-func _on_passenger_stage_changed(id: int, stage: Passenger.Stage, _sim: PassengerSim) -> void:
+func _on_passenger_stage_changed(id: int, stage: Passenger.Stage, sim: PassengerSim) -> void:
 	var prev: int = _prev_stage.get(id, -1)
 	_prev_stage[id] = stage
 	if prev == Passenger.Stage.SECURITY and stage == Passenger.Stage.TO_GATE:
-		_play_sim_sfx(&"security_beep")
+		var p := sim.get_passenger(id) if is_instance_valid(sim) else null
+		if p == null:
+			_play_sim_sfx(&"security_beep")
+		elif p.alarm and not _security_alarmed.has(id):
+			_security_alarmed[id] = true
+			_play_sim_sfx(&"security_alarm")
+		else:
+			_play_sim_sfx(&"security_clear")
+	elif stage == Passenger.Stage.APRON and prev != Passenger.Stage.APRON:
+		_play_sim_sfx(&"gate_chirp")
+	elif prev == Passenger.Stage.CAFE_ORDER and stage == Passenger.Stage.CAFE_TO_SEAT:
+		_play_sim_sfx(&"cafe_clink")
+
+
+func _on_passenger_checked_in(_id: int, _desk: int, _sim: PassengerSim) -> void:
+	_play_sim_sfx(&"checkin_stamp")
+
+
+func _on_cafe_paid(id: int, _room_id: int, _amount: int, sim: PassengerSim) -> void:
+	var p := sim.get_passenger(id) if is_instance_valid(sim) else null
+	if p != null and p.stage == Passenger.Stage.CAFE_ORDER:
+		_play_sim_sfx(&"cafe_clink")
+
+
+func _check_security_alarms() -> void:
+	if not is_instance_valid(_passengers):
+		return
+	for id: int in _security_alarmed.keys():
+		if _passengers.get_passenger(id) == null:
+			_security_alarmed.erase(id)
+	var can_play := not _suppress_events and not _is_fast_forwarding()
+	for record: Dictionary in _passengers.security.records.values():
+		for id: int in record.get("admitted", []):
+			if _security_alarmed.has(id):
+				continue
+			var p := _passengers.get_passenger(id)
+			if p == null or not p.alarm:
+				continue
+			if (
+				p.security_phase == SecurityRuntime.Phase.TO_BERTH
+				or p.security_phase == SecurityRuntime.Phase.REPACK
+			):
+				_security_alarmed[id] = true
+				if can_play:
+					_play_sim_sfx(&"security_alarm")
 
 
 func _on_passenger_outcome(id: int, made: bool, sim: PassengerSim) -> void:
 	_prev_stage.erase(id)
+	_security_alarmed.erase(id)
 	if not made or _suppress_events or _is_fast_forwarding() or not is_instance_valid(sim):
 		return
 	var p := sim.get_passenger(id)
