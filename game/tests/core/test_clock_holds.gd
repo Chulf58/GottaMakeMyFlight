@@ -191,6 +191,6 @@ func test_fast_forward_stays_off_while_any_hold_is_held() -> void:
 	assert_int(_ticks_after(0.11)).is_equal(0)
 	assert_bool(_clock.is_fast_forwarding()).is_false()
 	_clock.holds.release(token)
-	# Control: released, the same frame fast-forwards (10 steps, the cap).
-	assert_int(_ticks_after(0.1)).is_equal(SimClock.MAX_STEPS_PER_FRAME)
+	# Control: released, the same frame fast-forwards (FAST_FORWARD_MAX_STEPS steps, the cap).
+	assert_int(_ticks_after(0.1)).is_equal(SimClock.FAST_FORWARD_MAX_STEPS)
 	assert_bool(_clock.is_fast_forwarding()).is_true()

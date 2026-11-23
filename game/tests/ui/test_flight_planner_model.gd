@@ -53,10 +53,11 @@ func test_a_bar_spans_the_gate_hold_and_marks_the_departure() -> void:
 	assert_int(bars.size()).is_equal(1)
 	assert_int(bar["start"]).is_equal(starts[FlightSim.State.SCHEDULED])
 	assert_int(bar["end"]).is_equal(starts[FlightSim.State.DEPARTED])
-	# Gate A's fallback stand is 84 m west of the scene's, a 457 m route in, so X
-	# taxis in 1020 ticks, not 1000 (TaxiTimes): the hold is X's own pair's.
+	# Gate A's fallback stand is 84 m west of the scene's, a 471 m route in
+	# (after main.tscn Stand moved 14 m south), so X taxis in 1060 ticks, not
+	# 1000 (TaxiTimes): the hold is X's own pair's.
 	var taxi := FlightTimetable.taxi_of(_sim.contract_of("X"))
-	assert_array(taxi).is_equal([1020, 920])
+	assert_array(taxi).is_equal([1060, 920])
 	assert_int(bar["end"] - bar["start"]).is_equal(FlightTimetable.reserved_ticks(taxi))
 	assert_int(bar["departure"]).is_equal(GameCalendar.tick_at(0, 600, 0))
 	assert_str(bar["label"]).is_equal("10:00  Oslo")
