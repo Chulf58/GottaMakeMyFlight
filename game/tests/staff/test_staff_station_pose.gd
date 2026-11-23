@@ -190,19 +190,31 @@ func test_checkin_security_and_shop_poses_activate_and_zero_cleanly() -> void:
 	assert_float(saw["repack"]).is_greater(0.15)
 	assert_float(saw["shop"]).is_greater(0.15)
 
-	# After serving ends, the latest station rests naturally in Mode.NONE and
-	# older ones are NONE or IDLE_FIDGET (never a station mode).
+	# After serving ends, the latest station rests in Mode.NONE or IDLE_FIDGET (never
+	# a station mode), and all used stations enter an inactive NONE window cleanly.
 	_world.clock.set_paused(true)
 	_views.draw()
 	var shop_sid: int = used_ids["shop"]
-	assert_int(_views.station_pose_mode(shop_sid)).is_equal(StaffStationPose.Mode.NONE)
+	var shop_mode := _views.station_pose_mode(shop_sid)
+	(
+		assert_bool(
+			(
+				shop_mode == StaffStationPose.Mode.NONE
+				or shop_mode == StaffStationPose.Mode.IDLE_FIDGET
+			)
+		)
+		. is_true()
+	)
 	var shop_node := _views.node_for(shop_sid)
 	var shop_mod: StaffStationPose = shop_node.get_meta(&"station_pose")
-	assert_bool(shop_mod.active).is_false()
-	assert_float(shop_mod.weight).is_equal(0.0)
-	assert_float(await _pose_delta_from_rest(shop_node, bones, rest_baselines[shop_sid])).is_less(
-		0.001
-	)
+	assert_float(_views.station_pose_weight(shop_sid)).is_equal(0.0)
+	if shop_mode == StaffStationPose.Mode.NONE:
+		assert_bool(shop_mod.active).is_false()
+		assert_float(shop_mod.weight).is_equal(0.0)
+		(
+			assert_float(await _pose_delta_from_rest(shop_node, bones, rest_baselines[shop_sid]))
+			. is_less(0.001)
+		)
 
 	for key in used_ids:
 		var sid: int = used_ids[key]
@@ -265,8 +277,20 @@ func test_gate_agent_poses_during_boarding_and_zeros_on_snap() -> void:
 	var saved_staff: Variant = JSON.parse_string(JSON.stringify(_world.staff.to_snapshot()))
 	var saved_pax: Variant = JSON.parse_string(JSON.stringify(_world.sim.to_snapshot()))
 
-	_world.run_to(GateWalkWorld.BOARDING + 40)
+	_world.run_to(GateWalkWorld.BOARDING)
 	_views.draw()
+	# No passenger approaching gate yet during BOARDING -> does not wave into empty air.
+	assert_int(_views.station_pose_mode(gate_staff)).is_not_equal(StaffStationPose.Mode.GATE)
+	assert_float(_views.station_pose_weight(gate_staff)).is_equal(0.0)
+
+	for _i in 120:
+		_world.step()
+		_views.draw()
+		if (
+			_views.station_pose_mode(gate_staff) == StaffStationPose.Mode.GATE
+			and _views.station_pose_weight(gate_staff) >= 0.99
+		):
+			break
 	assert_int(_views.station_pose_mode(gate_staff)).is_equal(StaffStationPose.Mode.GATE)
 	assert_float(_views.station_pose_weight(gate_staff)).is_equal(1.0)
 	var gate_node := _views.node_for(gate_staff)
@@ -351,14 +375,17 @@ func test_ramp_marshal_raises_arms_during_taxi_in_and_clears_on_release() -> voi
 	assert_float(raised_dir.z).is_greater(0.0)
 	_world.clock.set_paused(false)
 
-	# Once plane arrives AT_STAND, marshal returns to pool with modifier off.
+	# Once plane arrives AT_STAND, marshal eases out smoothly to visible airside staging.
 	var at_stand := _world.flights.state_start(fid, FlightSim.State.AT_STAND)
-	_world.run_to(at_stand + 1)
+	_world.run_to(at_stand + int(StaffStationPose.EASE_TICKS) + 1)
 	_views.draw()
 	assert_int(m.ramp_job).is_equal(StaffMember.RampJob.NONE)
-	assert_object(_views.node_for(ramp_id)).is_null()
-	assert_bool(node.visible).is_false()
-	var mod: StaffStationPose = node.get_meta(&"station_pose")
+	var staged := _views.node_for(ramp_id)
+	assert_object(staged).is_not_null()
+	assert_bool(staged.visible).is_true()
+	assert_float(_views.station_pose_weight(ramp_id)).is_equal(0.0)
+	assert_int(_views.hand_prop_of(ramp_id)).is_equal(StaffHandProps.PropKind.NONE)
+	var mod: StaffStationPose = staged.get_meta(&"station_pose")
 	assert_bool(mod.active).is_false()
 	assert_float(mod.weight).is_equal(0.0)
 

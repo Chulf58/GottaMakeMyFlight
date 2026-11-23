@@ -52,6 +52,8 @@ var job := 0
 var job_bin := false
 ## Ticks of cleaning or emptying left while on duty at its job; 0 otherwise.
 var work_left := 0
+## Ticks remaining before an idle cleaner sets out on a corridor/bin patrol.
+var patrol_wait := 0
 ## StaffSim._replan() turned it back from a cell that went: `at` is that cell
 ## until it reaches the one it left (path[1]). Cleared on arriving there.
 var backing_out := false

@@ -672,7 +672,11 @@ func test_staff_characters_marshal_pose_visible_and_clears_at_stand() -> void:
 	_world.run_to(_world.flights.state_start(fid, FlightSim.State.AT_STAND))
 	assert_int(worker.ramp_job).is_equal(StaffMember.RampJob.NONE)
 	chars.sync(true)
-	assert_object(chars.node_for(ramp_id)).is_null()
+	var staged_node := chars.node_for(ramp_id)
+	assert_object(staged_node).is_not_null()
+	assert_bool(staged_node.visible).is_true()
+	assert_str(staged_node.get_meta(&"clip", "")).is_equal("idle")
+	assert_int(chars.hand_prop_of(ramp_id)).is_equal(StaffHandProps.PropKind.NONE)
 
 
 func test_staff_panel_tier1_5_cols_and_tier2_6_cols_fit_1280() -> void:
@@ -745,8 +749,12 @@ func test_staff_characters_hi_vis_uniform_and_apron_poses() -> void:
 	var officer_id := staff.hire(SECURITY)
 	var ramp_id := staff.hire(RAMP)
 	chars.sync(true)
-	# Idle Ramp Agent remains pooled/hidden.
-	assert_object(chars.node_for(ramp_id)).is_null()
+	# Idle Ramp Agent is staged visibly airside (not hidden in pool).
+	var idle_ramp := chars.node_for(ramp_id)
+	assert_object(idle_ramp).is_not_null()
+	assert_bool(idle_ramp.visible).is_true()
+	assert_str(idle_ramp.get_meta(&"clip", "")).is_equal("idle")
+	assert_int(chars.hand_prop_of(ramp_id)).is_equal(StaffHandProps.PropKind.NONE)
 
 	var bag := _bag_world.sim.check_in(1, BagTestWorld.FLIGHT, _bag_world.line())
 	_bag_world.run_to(bag.cutoff_tick)
