@@ -91,8 +91,21 @@ func test_the_clock_text_is_routed_and_keeps_its_values() -> void:
 func test_the_quiet_night_chip_is_routed() -> void:
 	var chip := _hud.find_child("QuietNightChip", true, false)
 	var label := chip.get_child(0) as Label
+	# Tick 0 is 06:00 (daytime), so the chip starts on Quiet stretch.
+	assert_str(label.text).starts_with("[")
+	assert_str(_plain(label.text)).starts_with("Quiet stretch: fast-forwarding")
+	# At 21:00 (overnight), the chip switches to Quiet night and stays routed.
+	_world.clock.tick = GameCalendar.tick_at(0, 21 * 60, _world.clock.epoch)
+	_hud.refresh()
 	assert_str(label.text).starts_with("[")
 	assert_str(_plain(label.text)).starts_with("Quiet night: fast-forwarding")
+
+
+func test_both_quiet_chip_msgids_are_in_messages_pot() -> void:
+	PseudoLocale.disable()
+	var entries := PotEntries.parse(FileAccess.get_file_as_string("res://locale/messages.pot"))
+	for expected_id: String in ["Quiet stretch: fast-forwarding", "Quiet night: fast-forwarding"]:
+		assert_int(PotEntries.complete(entries, "", expected_id)).is_equal(1)
 
 
 func test_the_follow_line_is_routed_part_by_part() -> void:

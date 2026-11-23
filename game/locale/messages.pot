@@ -3778,6 +3778,10 @@ msgid "Quiet night: fast-forwarding"
 msgstr ""
 
 #: ui/passenger_hud.gd
+msgid "Quiet stretch: fast-forwarding"
+msgstr ""
+
+#: ui/passenger_hud.gd
 msgctxt "clock"
 msgid "Day {day}  {time}"
 msgstr ""
