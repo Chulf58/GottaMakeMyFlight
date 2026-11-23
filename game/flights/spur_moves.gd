@@ -201,15 +201,31 @@ static func _gate_refusal(
 	var held: Array = []
 	for flight: Dictionary in world["flights"]:
 		if flight["gate"] == gate:
-			held.append([flight["id"], flight["starts"]])
+			var size := (
+				FlightPlans.flight_class(world, flight)
+				if flight.get("contract", "") != ""
+				else PlaneClasses.MEDIUM
+			)
+			held.append([flight["id"], flight["starts"], size])
 	for contract: Dictionary in contracts:
 		for day in range(int(world["next_day"][contract["id"]]), last + 1):
 			var resolved := resolve(world, contract, day)
 			var id := FlightTimetable.occurrence_id(contract["id"], day)
-			held.append([id, FlightTimetable.starts_for(resolved["contract"], day, world["epoch"])])
+			(
+				held
+				. append(
+					[
+						id,
+						FlightTimetable.starts_for(resolved["contract"], day, world["epoch"]),
+						contract["plane_size"],
+					]
+				)
+			)
 	for i in held.size():
 		for j in range(i + 1, held.size()):
-			if FlightTimetable.shares_gate(gate, held[i][1], gate, held[j][1]):
+			if FlightTimetable.shares_gate(
+				gate, held[i][1], gate, held[j][1], held[i][2], held[j][2]
+			):
 				return {"id": held[j][0], "reason": GATE_MEETS}
 	for i in contracts.size():
 		var a: Dictionary = resolve(world, contracts[i], last)["contract"]

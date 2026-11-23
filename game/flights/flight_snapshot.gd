@@ -388,11 +388,15 @@ static func _fixed_clash_problem(
 ) -> String:
 	for i in flights.size():
 		var a := flights[i]
+		var a_size := _flight_plane_size(a, contracts)
 		for j in range(i):
 			var b := flights[j]
 			if a["contract"] == b["contract"]:
 				continue
-			if not FlightTimetable.shares_gate(a["gate"], a["starts"], b["gate"], b["starts"]):
+			var b_size := _flight_plane_size(b, contracts)
+			if not FlightTimetable.shares_gate(
+				a["gate"], a["starts"], b["gate"], b["starts"], a_size, b_size
+			):
 				continue
 			if ended.has(b["contract"]):
 				return "flight %s clashes with %s of an ended contract" % [a["id"], b["id"]]
@@ -405,9 +409,24 @@ static func _fixed_clash_problem(
 		for flight in flights:
 			if flight["contract"] == "" or flight["contract"] == contract["id"]:
 				continue
-			if FlightTimetable.contract_meets(contract, flight["gate"], flight["starts"], epoch):
+			if FlightTimetable.contract_meets(
+				contract,
+				flight["gate"],
+				flight["starts"],
+				epoch,
+				_flight_plane_size(flight, contracts)
+			):
 				return "contract %s clashes with flight %s" % [contract["id"], flight["id"]]
 	return ""
+
+
+static func _flight_plane_size(flight: Dictionary, contracts: Array[Dictionary]) -> String:
+	var contract_id: String = flight.get("contract", "")
+	if contract_id != "":
+		for contract in contracts:
+			if contract["id"] == contract_id:
+				return contract["plane_size"]
+	return PlaneClasses.MEDIUM
 
 
 static func _flight_problem(entry: Variant, seen: Dictionary, gates: Array[String]) -> String:
