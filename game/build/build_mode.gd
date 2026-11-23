@@ -31,6 +31,8 @@ signal grid_changed
 signal tool_changed(new_tool: Tool)
 ## Emitted when the status line's text changes.
 signal status_changed(text: String)
+## Emitted when a build, demo-cap, or locked-tool refusal is shown or triggered.
+signal refusal_shown(text: String)
 ## Emitted when the room under the pointer changes, 0 for none
 ## (update_room_focus()).
 signal room_focus_changed(room_id: int)
@@ -307,6 +309,8 @@ var templates := TemplatePaste.new()
 var room_mover := RoomMoveTool.new()
 ## The Buy land tool and the site's land plots (LandTool), made in _ready(); no land without a site.
 var land_tool: LandTool = null
+## Whether the current status text represents an active refusal.
+var status_is_refusal := false
 
 ## False once R is pressed, until a tool is picked again. While true, the
 ## door tools ignore `facing` and use DoorPlacement.auto_facing().
@@ -352,6 +356,7 @@ var _press_screen := Vector2.ZERO
 var _drag_moved := false
 ## What the last rectangle or undo did, shown until the pointer leaves its cell.
 var _status_note := ""
+var _status_note_is_refusal := false
 var _note_cell := Vector2i.ZERO
 ## The Belt line the ghost shows (the drag, or the cell under the pointer).
 var _belt_plan: BeltShaper.Plan
@@ -481,7 +486,10 @@ func set_tool(new_tool: Tool) -> void:
 	var locked := BuildUnlocks.lock_text(unlocks, require_unlocks, new_tool)
 	if locked != "":
 		_status_note = locked
+		_status_note_is_refusal = true
 		_show_status(null)
+		_status_note_is_refusal = false
+		notify_refusal(locked)
 		return
 	_enter_tool(new_tool)
 
@@ -548,7 +556,11 @@ func edit_at(point: Vector3) -> BuildEdit:
 func apply_at(point: Vector3) -> BuildResult:
 	# A landside action is not a grid action: it keeps its own undo record.
 	if tool == Tool.BUY_LAND:
-		return land_tool.buy_at(point) if land_tool.land != null else null
+		var land_result := land_tool.buy_at(point) if land_tool.land != null else null
+		if land_result != null and not land_result.ok:
+			var msg := land_tool.hover(point)
+			notify_refusal(msg if msg != "" else land_result.reason_text())
+		return land_result
 	var landside_plan := landside_plan_at(point)
 	if landside_plan != null or BuildModeLandside.is_landside_tool(self):
 		return BuildModeLandside.apply(self, landside_plan)
@@ -613,6 +625,8 @@ func _commit_edit(edit: BuildEdit, note_cell: Vector2i) -> BuildResult:
 			)
 			_note_cell = note_cell
 	_show_status(result)
+	if not result.ok:
+		notify_refusal(_status if _status != "" else result.reason_text())
 	# A refusal from the grid or the transaction (inside commit_plan()) was
 	# emitted there.
 	if refused_by_check:
@@ -732,6 +746,7 @@ func undo() -> BuildResult:
 		_status_note = UndoStack.CANT_UNDO
 		if result.reason_text() != "":
 			_status_note += ": " + result.reason_text()
+		_status_note_is_refusal = true
 	var point: Variant = _mouse_ground()
 	if point != null:
 		_note_cell = grid.world_to_cell(point)
@@ -740,6 +755,9 @@ func undo() -> BuildResult:
 		# The landside hover keeps this note until the pointer meets another plan.
 		_hover_key = BuildModeLandside.hover_key(self, landside_plan_at(point))
 	_show_status(null)
+	_status_note_is_refusal = false
+	if result != null and not result.ok:
+		notify_refusal(_status_note)
 	return result
 
 
@@ -1045,8 +1063,23 @@ func _redraw() -> void:
 	_view.refresh(grid)
 
 
-func _set_status(text: String) -> void:
-	if text == _status:
+func notify_refusal(text: String) -> void:
+	if text == "":
+		return
+	if text != _status or not status_is_refusal:
+		_status = text
+		status_is_refusal = true
+		status_changed.emit(text)
+	else:
+		status_is_refusal = true
+	refusal_shown.emit(text)
+
+
+func _set_status(text: String, refusal := false) -> void:
+	if text == _status and refusal == status_is_refusal:
 		return
 	_status = text
+	status_is_refusal = refusal
 	status_changed.emit(text)
+	if refusal and text != "":
+		refusal_shown.emit(text)

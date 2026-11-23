@@ -71,7 +71,7 @@ static func hover(mode: BuildMode, plan: LandsidePlacement.Plan) -> void:
 	LandsidePlacement.draw(
 		mode._ghost, spots, plan, valid, mode._invalid_material, mode._marker_material
 	)
-	mode._set_status(plan.text)
+	mode._set_status(plan.text, not plan.result.ok)
 
 
 ## Hover for a landside tool, or Buy land (LandTool draws its own plot ghost).
@@ -81,7 +81,9 @@ static func hover_off_grid_tool(mode: BuildMode, point: Variant) -> void:
 		hover(mode, mode._landside_plan)
 		return
 	mode._ghost.visible = false
-	mode._set_status(mode.land_tool.hover(point) if mode.land_tool.land != null else "")
+	var text := mode.land_tool.hover(point) if mode.land_tool.land != null else ""
+	var refused := mode.land_tool.land != null and mode.land_tool.last_hover_refused()
+	mode._set_status(text, refused)
 
 
 static func hover_key(mode: BuildMode, plan: LandsidePlacement.Plan) -> String:
@@ -94,4 +96,7 @@ static func apply(mode: BuildMode, plan: LandsidePlacement.Plan) -> BuildResult:
 	var result := placement(mode).apply(plan, mode._history.peek())
 	mode._hover_key = ""
 	mode._status_note = ""
+	if not result.ok:
+		var msg := plan.text if plan != null and plan.text != "" else result.reason_text()
+		mode.notify_refusal(msg)
 	return result

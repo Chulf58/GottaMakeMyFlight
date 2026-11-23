@@ -130,6 +130,7 @@ const QUICK_SAVE_KEY := KEY_F5
 const QUICK_LOAD_KEY := KEY_F8
 ## How long a message stays on screen.
 const MESSAGE_SECONDS := 4.0
+const HUD_THEME := preload("res://ui/hud_theme.tres")
 
 @export var clock: SimClock
 @export var build_mode: BuildMode
@@ -181,10 +182,21 @@ func _ready() -> void:
 	layer.name = "SaveMessage"
 	_label = Label.new()
 	_label.name = "Message"
-	_label.position = Vector2(16.0, 56.0)
+	_label.theme = HUD_THEME
+	_label.theme_type_variation = &"HudSmall"
+	var card_style := HUD_THEME.get_stylebox(&"panel", &"HudTopCard")
+	if card_style != null:
+		_label.add_theme_stylebox_override(&"normal", card_style)
+	_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_label.visible = false
 	layer.add_child(_label)
 	add_child(layer)
+	var vp := get_viewport()
+	if vp != null and not vp.size_changed.is_connected(_place_label):
+		vp.size_changed.connect(_place_label)
 	if quick_save_path == QUICK_SAVE_PATH:
 		quick_save_path = SaveSlots.manual_path()
 	if clock != null:
@@ -196,6 +208,12 @@ func _ready() -> void:
 			clock.set_paused(true)
 		_boot_load.call_deferred(boot_path)
 	GameBoot.clear_new_airport.call_deferred()
+
+
+func _exit_tree() -> void:
+	var vp := get_viewport()
+	if vp != null and vp.size_changed.is_connected(_place_label):
+		vp.size_changed.disconnect(_place_label)
 
 
 ## SimClock.ticked: the first tick of a new game day queues the autosave that
@@ -520,6 +538,8 @@ func _process(delta: float) -> void:
 		_message_left -= delta
 		if _message_left <= 0.0 and _label != null:
 			_label.visible = false
+	if _label != null and _label.visible:
+		_place_label()
 
 
 func _unhandled_key_input(event: InputEvent) -> void:
@@ -975,5 +995,71 @@ func _say(text: String, is_error: bool) -> void:
 	if _label == null:
 		return
 	_label.text = text
-	_label.modulate = Color(1.0, 0.45, 0.4) if is_error else Color.WHITE
+	_label.modulate = Color.WHITE
+	if is_error:
+		_label.add_theme_color_override(&"font_color", Color(0.72, 0.2, 0.18, 1.0))
+	else:
+		_label.remove_theme_color_override(&"font_color")
+	_place_label()
 	_label.visible = true
+
+
+func _place_label() -> void:
+	if _label == null or not is_inside_tree():
+		return
+	var vp := get_viewport()
+	var view_w := vp.get_visible_rect().size.x if vp != null else 1536.0
+	var min_left := float(HudLayout.MARGIN + HudLayout.LIST_W + HudLayout.GROUP_GAP)
+	var max_right := view_w - float(HudLayout.MARGIN + HudLayout.RAIL_W + HudLayout.GROUP_GAP)
+	if max_right - min_left < 120.0:
+		min_left = float(HudLayout.MARGIN)
+		max_right = maxf(min_left + 120.0, view_w - float(HudLayout.MARGIN))
+	var max_w := minf(float(HudLayout.SHEET_W), max_right - min_left)
+	var width := max_w
+	if _label.text != "":
+		var font := _label.get_theme_font(&"font")
+		var font_size := _label.get_theme_font_size(&"font_size")
+		if font != null and font_size > 0:
+			var style := _label.get_theme_stylebox(&"normal")
+			var pad_x := (
+				style.get_margin(SIDE_LEFT) + style.get_margin(SIDE_RIGHT)
+				if style != null
+				else 24.0
+			)
+			var text_w := (
+				font.get_string_size(_label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
+			)
+			width = clampf(ceilf(text_w + pad_x + 8.0), minf(120.0, max_w), max_w)
+	var half := width * 0.5
+	var center_min := min_left + half
+	var center_max := maxf(center_min, max_right - half)
+	var center_x := clampf(view_w * 0.5, center_min, center_max)
+	var left := center_x - half
+	var top := float(TopRow.SHEET_TOP)
+	_label.anchor_left = 0.0
+	_label.anchor_right = 0.0
+	_label.anchor_top = 0.0
+	_label.anchor_bottom = 0.0
+	_label.custom_minimum_size = Vector2(width, 0.0)
+	var height := _label.get_combined_minimum_size().y
+	var tree := get_tree()
+	if tree != null:
+		var candidate := Rect2(left, top, width, height)
+		for node in tree.get_nodes_in_group(TopRow.SHEET_GROUP):
+			if not node.has_method("is_open") or not node.is_open():
+				continue
+			if not node.has_method("sheet"):
+				continue
+			var sheet := node.sheet() as Control
+			if sheet == null or not sheet.is_visible_in_tree():
+				continue
+			var sheet_rect := sheet.get_global_rect()
+			if candidate.intersects(sheet_rect):
+				top = maxf(top, sheet_rect.end.y + float(HudLayout.GAP))
+				candidate = Rect2(left, top, width, height)
+	var next_pos := Vector2(left, top)
+	var next_size := Vector2(width, height)
+	if not _label.position.is_equal_approx(next_pos):
+		_label.position = next_pos
+	if not _label.size.is_equal_approx(next_size):
+		_label.size = next_size

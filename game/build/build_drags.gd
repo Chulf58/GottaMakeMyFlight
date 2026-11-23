@@ -27,7 +27,9 @@ static func begin_area(mode: BuildMode, point: Vector3) -> void:
 	var cell := mode.grid.world_to_cell(point)
 	if not mode.grid.in_bounds(cell):
 		if mode.tool == BuildMode.Tool.BELT:
-			mode._show_status(BuildResult.refused(BuildResult.Reason.OUT_OF_BOUNDS))
+			var refused := BuildResult.refused(BuildResult.Reason.OUT_OF_BOUNDS)
+			mode._show_status(refused)
+			mode.notify_refusal(refused.reason_text())
 			return
 		mode.apply_at(point)
 		return
@@ -151,8 +153,10 @@ static func finish_resize(mode: BuildMode) -> void:
 	if result != null and result.ok:
 		mode.grid_changed.emit()
 	mode._status_note = mode._resize.note
+	mode._status_note_is_refusal = result != null and not result.ok
 	mode._note_cell = mode._resize.pointer_cell
 	mode._show_status(null)
+	mode._status_note_is_refusal = false
 
 
 ## Marks the released rectangle as a room of the current room tool's type.
@@ -168,8 +172,10 @@ static func finish_room(mode: BuildMode) -> void:
 	if result.ok:
 		mode.grid_changed.emit()
 	mode._status_note = RoomTool.message(mode.grid, result, type)
+	mode._status_note_is_refusal = not result.ok
 	mode._note_cell = mode._area.end_cell()
 	mode._show_status(null)
+	mode._status_note_is_refusal = false
 
 
 static func lay_belt(mode: BuildMode, from: Vector2i, to: Vector2i) -> BuildResult:
@@ -183,6 +189,10 @@ static func lay_belt(mode: BuildMode, from: Vector2i, to: Vector2i) -> BuildResu
 	mode._belt_plan = null
 	mode._hover_key = ""
 	mode._show_status(result)
+	if not result.ok:
+		mode.notify_refusal(
+			mode.status_text() if mode.status_text() != "" else result.reason_text()
+		)
 	if not plan.result.ok:
 		mode.grid.edit_refused.emit(
 			BuildEdit.place_object(BuildMode.BELT_PRICE_ID, to, mode.facing), result

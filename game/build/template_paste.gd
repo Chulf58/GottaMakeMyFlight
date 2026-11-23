@@ -123,6 +123,7 @@ func try_arm(index: int) -> bool:
 		_status = locked
 		status_changed.emit(locked)
 		armed_changed.emit()
+		_mode.notify_refusal(locked)
 		return false
 	arm(index)
 	return true
@@ -242,7 +243,9 @@ func paste_at(cell: Vector2i) -> BuildResult:
 	var result: BuildResult = planned["result"]
 	if not result.ok:
 		_mode.grid.edit_refused.emit(planned["edits"][0], result)
-		_set_status("%s  %s" % [template.name, result.reason_text()])
+		var msg := "%s  %s" % [template.name, result.reason_text()]
+		_set_status(msg)
+		_mode.notify_refusal(msg)
 		return result
 	# Fresh edits for the live grid: the check applied its own to the copy.
 	var edits := template.plan(cell, turns, _mode.grid)
@@ -256,7 +259,9 @@ func paste_at(cell: Vector2i) -> BuildResult:
 	history.end_action()
 	if not result.ok:
 		push_error("TemplatePaste.paste_at: the grid refused a paste its copy accepted")
-		_set_status("%s  %s" % [template.name, result.reason_text()])
+		var msg := "%s  %s" % [template.name, result.reason_text()]
+		_set_status(msg)
+		_mode.notify_refusal(msg)
 		return result
 	_note = PLACED % [template.name, before - _balance()]
 	_note_cell = cell
@@ -333,13 +338,18 @@ func _hover(cell: Variant) -> void:
 		elif edit.kind == BuildEdit.Kind.PLACE_OBJECT:
 			_ghost_piece(shaped.get(edit.cell, edit), material)
 	var text := PLACE_HINT % template.name
+	var is_refusal := not checked.ok
 	if not checked.ok:
 		text = "%s  %s" % [template.name, checked.reason_text()]
 	if _note != "" and cell == _note_cell:
 		text = _note
+		is_refusal = false
 	else:
 		_note = ""
+	var changed := text != _status
 	_set_status(text)
+	if is_refusal and changed:
+		_mode.refusal_shown.emit(text)
 
 
 func _ghost_slab(area: Rect2i, material: Material) -> void:

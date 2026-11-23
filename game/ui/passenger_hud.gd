@@ -204,12 +204,15 @@ func _ready() -> void:
 		add_child(_planner)
 		_planner.sheet().visibility_changed.connect(
 			func() -> void:
-				if _planner.is_open():
+				if is_inside_tree() and _planner.is_open() and is_instance_valid(_pa_ticker):
 					_pa_ticker.clear_now()
 		)
 	# Only hide the rail when a top-row sheet actually overlaps it (narrow viewports).
 	_alerts.covered = func() -> bool:
-		return TopRow.sheet_overlaps(get_tree(), _alerts.get_global_rect())
+		if not is_inside_tree() or not is_instance_valid(_alerts) or not _alerts.is_inside_tree():
+			return false
+		var tree := get_tree()
+		return tree != null and TopRow.sheet_overlaps(tree, _alerts.get_global_rect())
 	_alerts.above = panel
 	_alerts.camera = camera
 	_alerts.flights = flights
@@ -254,7 +257,12 @@ func _ready() -> void:
 	if menu != null:
 		_inspect.actions.session = menu.build_session
 		_alerts.build_tray_open = func() -> bool:
-			return is_instance_valid(menu) and menu.is_node_ready() and menu.is_tray_open()
+			return (
+				is_instance_valid(menu)
+				and menu.is_inside_tree()
+				and menu.is_node_ready()
+				and menu.is_tray_open()
+			)
 		_alerts.build_stack_top = menu.stack_top
 		menu.bar().minimum_size_changed.connect(_fit_follow)
 	_outline.selection = _built
@@ -309,6 +317,8 @@ func _retranslate() -> void:
 
 
 func _process(_delta: float) -> void:
+	if not is_inside_tree():
+		return
 	refresh()
 	if _reveal_frames > 0:
 		_reveal_frames -= 1
@@ -385,9 +395,12 @@ func _select_built_object(object_id: int) -> void:
 ## leaves the camera alone (decision clicking-a-built-desk-outside-build-mode-
 ## moves-the-camera-on).
 func _reveal_built() -> void:
-	if camera == null or build_mode == null or not _built.is_selected():
+	if not is_inside_tree() or camera == null or build_mode == null or not _built.is_selected():
 		return
 	var eye := camera.get_node("Camera3D") as Camera3D
+	var viewport := eye.get_viewport() if eye != null else null
+	if viewport == null:
+		return
 	var panels := _panel_room.open_rects()
 	if _inspect.visible:
 		panels.append(_inspect.get_global_rect())
@@ -396,7 +409,7 @@ func _reveal_built() -> void:
 		camera.position,
 		_built.outline_rect(build_mode.grid, build_mode.landside_placement()),
 		build_mode.grid.origin.y,
-		eye.get_viewport().get_visible_rect(),
+		viewport.get_visible_rect(),
 		panels
 	)
 	if target != null:
@@ -458,6 +471,11 @@ func _close_selection() -> bool:
 ## Space toggles the pause; Shift+1/2/3 set the speed. A held key's repeats
 ## are swallowed without acting again.
 func _shortcut_input(event: InputEvent) -> void:
+	if not is_inside_tree():
+		return
+	var viewport := get_viewport()
+	if viewport == null:
+		return
 	var key := event as InputEventKey
 	if key == null or not key.pressed or clock == null:
 		return
@@ -466,11 +484,11 @@ func _shortcut_input(event: InputEvent) -> void:
 	if key.physical_keycode == KEY_SPACE and not key.shift_pressed:
 		if not key.echo:
 			press_pause_toggle()
-		get_viewport().set_input_as_handled()
+		viewport.set_input_as_handled()
 	elif key.shift_pressed and SPEED_KEYS.has(key.physical_keycode):
 		if not key.echo:
 			press_speed(SPEED_KEYS[key.physical_keycode])
-		get_viewport().set_input_as_handled()
+		viewport.set_input_as_handled()
 
 
 ## The dirty-terminal alert, one of the alert cards' causes, for tests and probes.
@@ -479,6 +497,8 @@ func dirty_alert() -> DirtyAlert:
 
 
 func refresh() -> void:
+	if not is_inside_tree():
+		return
 	_drop_retired_selection()
 	# The card always shows the latest flight to close, replacing an open one.
 	if not _unreported.is_empty():
@@ -739,7 +759,7 @@ func _wire_demo_end_card() -> void:
 	demo_end_card.dialog_changed.connect(_gate_camera)
 	demo_end_card.dialog_changed.connect(
 		func(open: bool) -> void:
-			if open:
+			if open and is_inside_tree() and is_instance_valid(_pa_ticker):
 				_pa_ticker.clear_now()
 	)
 	add_child(demo_end_card)
@@ -921,9 +941,18 @@ func _drop_debug_nodes() -> void:
 ## The Debug toggle beside the bar's right end, or lifted a bar height when the
 ## bar leaves no room (BottomDocks); its panel stays a gap above the toggle.
 func _place_debug_docks() -> void:
+	if not is_inside_tree() or _debug_docks.size() < 2:
+		return
+	var viewport := get_viewport()
+	if viewport == null:
+		return
 	var menu := get_node_or_null("../BuildMenu") as BuildMenu
-	var bar_w := 0.0 if menu == null else menu.bar().get_combined_minimum_size().x
-	var beside := BottomDocks.beside_bar(get_viewport().get_visible_rect().size.x, bar_w)
+	var bar_w := (
+		0.0
+		if not is_instance_valid(menu) or not menu.is_node_ready()
+		else menu.bar().get_combined_minimum_size().x
+	)
+	var beside := BottomDocks.beside_bar(viewport.get_visible_rect().size.x, bar_w)
 	var corner_bottom := BottomDocks.bottom(beside)
 	var panel_bottom := BuildMenu.MARGIN + BuildMenu.BAR_H + BuildMenu.GAP
 	if not beside:
@@ -955,11 +984,16 @@ func _bottom_right_dock(dock_name: String, bottom: float) -> VBoxContainer:
 ## Keeps the follow card bottom-left, left of BuildMenu's centre column and
 ## clear of CategoryBar (BottomDocks), growing upward when wrapped.
 func _fit_follow() -> void:
-	var layer_w := get_viewport().get_visible_rect().size.x
+	if not is_inside_tree():
+		return
+	var viewport := get_viewport()
+	if viewport == null:
+		return
+	var layer_w := viewport.get_visible_rect().size.x
 	var menu := get_node_or_null("../BuildMenu") as BuildMenu
 	var bar_w := (
 		0.0
-		if menu == null or not menu.is_node_ready()
+		if not is_instance_valid(menu) or not menu.is_node_ready()
 		else menu.bar().get_combined_minimum_size().x
 	)
 	var bottom := BottomDocks.left_floor_bottom(layer_w, bar_w)
@@ -1056,7 +1090,12 @@ func _gate_camera(closed: bool) -> void:
 ## True when this HUD belongs to the running scene: a normal launch or a
 ## change_scene, not a probe or test that adds the scene under root by hand.
 func _in_current_scene() -> bool:
-	var current := get_tree().current_scene
+	if not is_inside_tree():
+		return false
+	var tree := get_tree()
+	if tree == null:
+		return false
+	var current := tree.current_scene
 	return current != null and (current == self or current.is_ancestor_of(self))
 
 
@@ -1095,6 +1134,8 @@ func _on_save_loaded(ok: bool) -> void:
 
 
 func _pa_bottom() -> float:
+	if not is_inside_tree():
+		return BuildMenu.MARGIN + BuildMenu.BAR_H + HudLayout.GAP
 	var menu := get_node_or_null("../BuildMenu") as BuildMenu
 	if menu != null and menu.is_node_ready():
 		if menu.is_tray_open() or menu.status_card().visible:
@@ -1118,6 +1159,8 @@ func _pa_modal_open() -> bool:
 		return true
 	if _planner != null and _planner.is_node_ready() and _planner.is_open():
 		return true
+	if not is_inside_tree():
+		return false
 	var offers := get_node_or_null("../OfferPanel") as OfferPanel
 	return offers != null and offers.is_node_ready() and offers.is_open()
 
@@ -1132,7 +1175,10 @@ func _frame_start_view() -> void:
 ## hint shows there, empty otherwise; SelectReveal avoids it on built selection.
 func _banner_rect() -> Rect2:
 	var rect := Rect2()
-	var staff := get_parent().get_node_or_null("StaffPanel") as StaffPanel
+	if not is_inside_tree():
+		return rect
+	var parent := get_parent()
+	var staff := parent.get_node_or_null("StaffPanel") as StaffPanel if parent != null else null
 	var cards: Array[Control] = [_hints.card()]
 	if staff != null:
 		cards.append(staff.hint_card())
