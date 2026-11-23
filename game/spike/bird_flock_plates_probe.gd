@@ -162,10 +162,12 @@ func _stage_wait() -> bool:
 	for g in _flock.groups:
 		if g["target"] >= 0:
 			_group = g
-			var near := BirdPerches.nearest(BirdPerches.SPOTS[g["spot"]], _flock.threats_now())
+			var near := BirdPerches.nearest(BirdPerches.spot_pos(g["spot"]), _flock.threats_now())
 			print("SCATTER spot=", g["spot"], " target=", g["target"], " nearest_threat_m=", near)
 			_clock.set_paused(true)
-			var mid: Vector3 = (BirdPerches.SPOTS[g["spot"]] + BirdPerches.SPOTS[g["target"]]) * 0.5
+			var mid: Vector3 = (
+				(BirdPerches.spot_pos(g["spot"]) + BirdPerches.spot_pos(g["target"])) * 0.5
+			)
 			_rig.glide_to(mid + Vector3.UP * 3.0, FLIGHT_DISTANCE)
 			_stage = "frame"
 			return false
@@ -205,7 +207,12 @@ func _stage_flight() -> bool:
 
 func _canopy_group() -> Dictionary:
 	for g in _flock.groups:
-		if BirdPerches.ZONES[g["spot"]] == BirdPerches.Zone.UNDER_CANOPY and g["target"] < 0:
+		var s: int = g["spot"]
+		if (
+			not BirdPerches.is_elevated(s)
+			and BirdPerches.spot_zone(s) == BirdPerches.Zone.UNDER_CANOPY
+			and g["target"] < 0
+		):
 			return g
 	return {}
 
@@ -295,7 +302,7 @@ func _prove_group(g: Dictionary, perched: bool) -> bool:
 
 
 func _prove_feet(g: Dictionary) -> bool:
-	var top: float = BirdPerches.SPOTS[g["spot"]].y
+	var top: float = BirdPerches.spot_pos(g["spot"]).y
 	var low := INF
 	var high := -INF
 	var hopping := 0

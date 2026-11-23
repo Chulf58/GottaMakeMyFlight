@@ -1,9 +1,11 @@
 extends RefCounted
 ## The outdoor surfaces the bird tests measure against, placed as main.tscn
-## and LandsidePlaces place them: the airport site (Airside/Terminal at
-## z -80), the starter curb bays and both car parks of the starter landside,
-## built. Each entry: {"name", "mesh": TriangleMesh, "inv": world to mesh
-## Transform3D, "xform": mesh to world, "box": world AABB}.
+## and LandsidePlaces place them: the ground plane (y -0.1), the airport site
+## (Airside/Terminal at z -80), the starter curb bays, both car parks of the
+## starter landside (built), and LandsideStreetDressing (road extensions,
+## tunnel portals, streetlights, benches, greenery). Each entry:
+## {"name", "mesh": TriangleMesh, "inv": world to mesh Transform3D,
+## "xform": mesh to world, "box": world AABB}.
 
 const SITE := "res://assets/buildings/tp_airport_site.glb"
 const SITE_AT := Vector3(0, 0, -80)
@@ -14,6 +16,13 @@ static func build(parent: Node) -> Array[Dictionary]:
 	var definition: LandsideDefinition = load(LANDSIDE)
 	var holder := Node3D.new()
 	parent.add_child(holder)
+	var ground_mesh := PlaneMesh.new()
+	ground_mesh.size = Vector2(2400, 2400)
+	var ground := MeshInstance3D.new()
+	ground.name = "Ground"
+	ground.position = Vector3(0, -0.1, 0)
+	ground.mesh = ground_mesh
+	holder.add_child(ground)
 	var site: Node3D = (load(SITE) as PackedScene).instantiate()
 	site.position = SITE_AT
 	holder.add_child(site)
@@ -30,6 +39,8 @@ static func build(parent: Node) -> Array[Dictionary]:
 		var lot: Node3D = (LandsidePlaces.MULTI if multi else LandsidePlaces.SURFACE).instantiate()
 		lot.transform = LandsidePlaces.lot_transform(lot_spot)
 		holder.add_child(lot)
+	var dressing := LandsideStreetDressing.new()
+	holder.add_child(dressing)
 	var out: Array[Dictionary] = []
 	for node in holder.find_children("*", "MeshInstance3D", true, false):
 		var mi := node as MeshInstance3D

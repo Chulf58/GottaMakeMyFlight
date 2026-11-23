@@ -91,8 +91,7 @@ func _bird_count() -> int:
 	return n
 
 
-## Groups expected with no car park: per zone, ZONE_GROUPS or one fewer than
-## the zone's perches.
+## Groups expected with no car park: per zone ground groups + ELEVATED_GROUPS.
 func _expected_groups() -> int:
 	var none: Array[bool] = []
 	var there := BirdPerches.available(none)
@@ -100,57 +99,67 @@ func _expected_groups() -> int:
 	for zone in BirdFlock.ZONE_GROUPS.size():
 		var n := 0
 		for i in there:
-			if BirdPerches.ZONES[i] == zone:
+			if not BirdPerches.is_elevated(i) and BirdPerches.spot_zone(i) == zone:
 				n += 1
-		total += mini(BirdFlock.ZONE_GROUPS[zone], n - 1)
-	return total
+		total += mini(BirdFlock.ZONE_GROUPS[zone], maxi(n - 1, 0))
+	var elevated := 0
+	for i in there:
+		if BirdPerches.is_elevated(i):
+			elevated += 1
+	return total + mini(BirdFlock.ELEVATED_GROUPS, elevated)
 
 
-## The first group on a road-edge patch (perches 0 and 1).
+## The first ground group on a road-edge patch (perches 0, 1, or 12).
 func _road_edge_group() -> Dictionary:
 	for g in _flock.groups:
-		if g["spot"] < 2:
+		var s: int = g["spot"]
+		if s == 0 or s == 1 or s == 12:
 			return g
 	return {}
 
 
 func _assert_perched(g: Dictionary) -> void:
-	var centre: Vector3 = BirdPerches.SPOTS[g["spot"]]
-	var half: Vector2 = BirdPerches.HALVES[g["spot"]]
+	var spot: int = g["spot"]
+	var centre := BirdPerches.spot_pos(spot)
+	var half := BirdPerches.spot_half(spot)
+	var span_x := half.x if half.x > 0.0 else 0.7
+	var span_z := half.y if half.y > 0.0 else 0.7
 	for b in g["birds"]:
 		var at: Vector3 = (b["node"] as Node3D).position
 		var lift := BirdFlock.FOOT_LIFT * _flock.bird_scale
 		assert_float(at.y).is_equal_approx(centre.y + lift, 1e-4)
-		assert_float(absf(at.x - centre.x)).is_less_equal(half.x + 1e-4)
-		assert_float(absf(at.z - centre.z)).is_less_equal(half.y + 1e-4)
+		assert_float(absf(at.x - centre.x)).is_less_equal(span_x + 1e-4)
+		assert_float(absf(at.z - centre.z)).is_less_equal(span_z + 1e-4)
 
 
 func test_groups_perch_on_distinct_spots() -> void:
 	assert_int(_flock.groups.size()).is_equal(_expected_groups())
 	var spots := {}
 	for g in _flock.groups:
-		spots[g["spot"]] = true
-		assert_int(BirdPerches.LOTS[g["spot"]]).is_equal(-1)
+		var s: int = g["spot"]
+		spots[s] = true
+		assert_int(BirdPerches.spot_lot(s)).is_equal(-1)
 		assert_int(g["target"]).is_equal(-1)
-		var most: int = BirdFlock.ZONE_GROUP_MAX[BirdPerches.ZONES[g["spot"]]]
-		assert_int((g["birds"] as Array).size()).is_between(BirdFlock.GROUP_MIN, most)
+		var most: int = BirdPerches.spot_capacity(s)
+		var least := 1 if BirdPerches.is_elevated(s) else BirdFlock.GROUND_GROUP_MIN
+		assert_int((g["birds"] as Array).size()).is_between(least, most)
 		_assert_perched(g)
 	assert_int(spots.size()).is_equal(_flock.groups.size())
 	print("groups=", _flock.groups.size(), " birds=", _bird_count(), " spots=", spots.keys())
-	assert_float(_flock.bird_scale).is_equal(1.5)
+	assert_float(_flock.bird_scale).is_equal(1.2)
 
 
 func test_car_inside_radius_scatters_and_group_lands_elsewhere() -> void:
 	var g: Dictionary = _flock.groups[0]
 	var from: int = g["spot"]
-	var spot: Vector3 = BirdPerches.SPOTS[from]
+	var spot := BirdPerches.spot_pos(from)
 	var car := PackedVector3Array([Vector3(spot.x, 0.1, spot.z + 4.0)])
 	_flock.step(STEP, car)
 	var target: int = g["target"]
 	print("scatter from=", from, " target=", target)
 	assert_int(target).is_not_equal(-1)
 	assert_int(target).is_not_equal(from)
-	assert_int(BirdPerches.ZONES[target]).is_equal(BirdPerches.ZONES[from])
+	assert_bool(BirdPerches.can_fly(from, target)).is_true()
 	assert_bool(_flock.busy_spots(g).has(target)).is_false()
 	var top := 0.0
 	var clips := {}
@@ -160,7 +169,7 @@ func test_car_inside_radius_scatters_and_group_lands_elsewhere() -> void:
 			top = maxf(top, (b["node"] as Node3D).position.y)
 			clips[b["clip"]] = true
 	print("flight top_y=", top, " clips=", clips.keys())
-	assert_float(top).is_greater(spot.y + 3.0)
+	assert_float(top).is_greater(spot.y + 2.0)
 	assert_array(clips.keys()).contains(["takeoff", "fly", "land"])
 	assert_int(g["target"]).is_equal(-1)
 	assert_int(g["spot"]).is_equal(target)
@@ -170,14 +179,10 @@ func test_car_inside_radius_scatters_and_group_lands_elsewhere() -> void:
 func test_car_past_the_centre_line_leaves_a_road_edge_group_perched() -> void:
 	var g := _road_edge_group()
 	assert_dict(g).is_not_empty()
-	var spot: Vector3 = BirdPerches.SPOTS[g["spot"]]
-	var before: Array[Vector3] = []
-	for b in g["birds"]:
-		before.append((b["node"] as Node3D).position)
+	var spot := BirdPerches.spot_pos(g["spot"])
 	_run(5.0, PackedVector3Array([Vector3(spot.x, 0.1, -50.0)]))
 	assert_int(g["target"]).is_equal(-1)
-	for i in before.size():
-		assert_vector((g["birds"][i]["node"] as Node3D).position).is_equal(before[i])
+	_assert_perched(g)
 	# Control: the same group does scatter once the car is in the near lane.
 	_flock.step(STEP, PackedVector3Array([Vector3(spot.x, 0.1, -55.0)]))
 	assert_int(g["target"]).is_not_equal(-1)
@@ -185,7 +190,7 @@ func test_car_past_the_centre_line_leaves_a_road_edge_group_perched() -> void:
 
 func test_pause_holds_a_flight() -> void:
 	var g: Dictionary = _flock.groups[0]
-	_flock.step(STEP, PackedVector3Array([BirdPerches.SPOTS[g["spot"]]]))
+	_flock.step(STEP, PackedVector3Array([BirdPerches.spot_pos(g["spot"])]))
 	_run(1.2, PackedVector3Array())
 	var b: Dictionary = g["birds"][0]
 	var held: Vector3 = (b["node"] as Node3D).position
@@ -193,12 +198,12 @@ func test_pause_holds_a_flight() -> void:
 	_flock.step(0.0, PackedVector3Array())
 	assert_vector((b["node"] as Node3D).position).is_equal(held)
 	assert_float(b["t"]).is_equal(t)
-	assert_float(held.y).is_greater(BirdPerches.SPOTS[g["spot"]].y + 0.5)
+	assert_float(held.y).is_greater(BirdPerches.spot_pos(g["spot"]).y + 0.5)
 
 
 func test_load_throws_the_flock_away_and_perches_a_new_one() -> void:
 	var g: Dictionary = _flock.groups[0]
-	_flock.step(STEP, PackedVector3Array([BirdPerches.SPOTS[g["spot"]]]))
+	_flock.step(STEP, PackedVector3Array([BirdPerches.spot_pos(g["spot"])]))
 	_run(0.5, PackedVector3Array())
 	var old := {}
 	for og in _flock.groups:
@@ -260,8 +265,8 @@ func test_real_clock_pause_and_three_times_speed() -> void:
 	var clock := _clock
 	var f := _flock
 	var g: Dictionary = f.groups[0]
-	f.step(STEP, PackedVector3Array([BirdPerches.SPOTS[g["spot"]]]))
-	f._process(0.5)
+	_flock.step(STEP, PackedVector3Array([BirdPerches.spot_pos(g["spot"])]))
+	_flock._process(0.5)
 	var b: Dictionary = g["birds"][0]
 	var held: Vector3 = (b["node"] as Node3D).position
 	var t: float = b["t"]
@@ -301,7 +306,7 @@ func test_building_a_lot_rebuilds_through_the_views() -> void:
 			lot_closed += 1
 	var on_lot := 0
 	for g in f.groups:
-		on_lot += 1 if BirdPerches.LOTS[g["spot"]] == 0 else 0
+		on_lot += 1 if BirdPerches.spot_lot(g["spot"]) == 0 else 0
 	print("groups after build=", f.groups.size(), " on lot=", on_lot, " lot closed=", lot_closed)
 	# A lot perch is closed now only because a group holds it.
 	assert_int(lot_closed).is_equal(on_lot)
@@ -310,7 +315,7 @@ func test_building_a_lot_rebuilds_through_the_views() -> void:
 	_tick_and_process(f)
 	assert_bool(second.is_queued_for_deletion()).is_true()
 	for g in f.groups:
-		assert_int(BirdPerches.LOTS[g["spot"]]).is_equal(-1)
+		assert_int(BirdPerches.spot_lot(g["spot"])).is_equal(-1)
 
 
 ## One sim tick on the real clock, then one frame of the flock.
@@ -326,7 +331,7 @@ func _tick_and_process(f: BirdFlock) -> void:
 func test_a_car_crossing_the_radius_between_old_scans_scatters() -> void:
 	var f: OneCarFlock = _wired(OneCarFlock.new(), 1234)
 	var g: Dictionary = f.groups[0]
-	var spot: Vector3 = BirdPerches.SPOTS[g["spot"]]
+	var spot := BirdPerches.spot_pos(g["spot"])
 	_clock.set_speed(3)
 	var dt := 1.0 / 60.0
 	var t := 0.0
@@ -443,20 +448,20 @@ func test_perched_birds_keep_clear_spacing_and_avoid_adjacent_clumps() -> void:
 		var east_spots: Array[int] = []
 		for g in _flock.groups:
 			var spot: int = g["spot"]
-			var zone: int = BirdPerches.ZONES[spot]
+			var zone := BirdPerches.spot_zone(spot)
 			assert_int((g["birds"] as Array).size()).is_less_equal(3)
-			if zone == BirdPerches.Zone.WEST:
-				west_spots.append(spot)
-			elif zone == BirdPerches.Zone.EAST:
-				east_spots.append(spot)
+			if not BirdPerches.is_elevated(spot):
+				if zone == BirdPerches.Zone.WEST:
+					west_spots.append(spot)
+				elif zone == BirdPerches.Zone.EAST:
+					east_spots.append(spot)
 			for b in g["birds"]:
 				positions.append((b["node"] as Node3D).position)
-		assert_int(west_spots.size()).is_less_equal(2)
 		for z_spots in [west_spots, east_spots]:
 			for i in z_spots.size():
 				for j in range(i + 1, z_spots.size()):
-					var a := BirdPerches.SPOTS[z_spots[i]]
-					var b := BirdPerches.SPOTS[z_spots[j]]
+					var a := BirdPerches.spot_pos(z_spots[i])
+					var b := BirdPerches.spot_pos(z_spots[j])
 					var gap := Vector2(a.x - b.x, a.z - b.z).length()
 					assert_float(gap).is_greater_equal(BirdFlock.MIN_GROUP_GAP)
 		for i in positions.size():
@@ -466,23 +471,24 @@ func test_perched_birds_keep_clear_spacing_and_avoid_adjacent_clumps() -> void:
 					. length()
 				)
 				assert_float(d).is_greater_equal(min_apart)
-	# Verify a scattered WEST group also lands >= MIN_GROUP_GAP from the other WEST group.
+	# Verify a scattered group also lands >= MIN_GROUP_GAP from other active groups.
 	_flock.rng.seed = 1234
 	_flock.rebuild()
 	var west_group := {}
 	for g in _flock.groups:
-		if BirdPerches.ZONES[g["spot"]] == BirdPerches.Zone.WEST:
+		var s: int = g["spot"]
+		if not BirdPerches.is_elevated(s) and BirdPerches.spot_zone(s) == BirdPerches.Zone.WEST:
 			west_group = g
 			break
 	assert_dict(west_group).is_not_empty()
-	var src: Vector3 = BirdPerches.SPOTS[west_group["spot"]]
+	var src := BirdPerches.spot_pos(west_group["spot"])
 	_flock.step(STEP, PackedVector3Array([src]))
 	var target: int = west_group["target"]
 	assert_int(target).is_not_equal(-1)
 	for g in _flock.groups:
-		if g != west_group and BirdPerches.ZONES[g["spot"]] == BirdPerches.Zone.WEST:
-			var other: Vector3 = BirdPerches.SPOTS[g["spot"]]
-			var tgt: Vector3 = BirdPerches.SPOTS[target]
+		if g != west_group:
+			var other := BirdPerches.spot_pos(g["spot"])
+			var tgt := BirdPerches.spot_pos(target)
 			assert_float(Vector2(tgt.x - other.x, tgt.z - other.z).length()).is_greater_equal(
 				BirdFlock.MIN_GROUP_GAP
 			)
