@@ -8,6 +8,4441 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 
+msgid "No flights yet"
+msgstr "아직 항공편 없음"
+
+msgid "No flights yet: the rating starts when passengers make or miss a flight."
+msgstr "아직 항공편이 없습니다. 승객이 탑승하거나 비행기를 놓치면 평가가 시작됩니다."
+
+msgid "Made it: {share}% ({made} of {count} passenger)"
+msgid_plural "Made it: {share}% ({made} of {count} passengers)"
+msgstr[0] "탑승률: {share}% ({count}명 중 {made}명)"
+
+msgid "Airport rating: {stars} of {max}"
+msgstr "공항 등급: {stars} / {max}"
+
+msgid "Mood: {mood} of {max}"
+msgstr "기분: {mood} / {max}"
+
+msgid "Incident adjustment: {amount} stars"
+msgstr "돌발 상황 보정: {amount}★"
+
+msgid "Days counted: {days} of {window}"
+msgstr "집계 일수: {days} / {window}일"
+
+msgid "Floor tile. Passengers can only walk and stand on floor."
+msgstr "바닥 타일입니다. 승객은 바닥 위에서만 걷고 서 있을 수 있습니다."
+
+msgid "Drag a rectangle to lay many tiles at once. Everything else is built on floor."
+msgstr "드래그하여 사각형 영역에 한꺼번에 깔 수 있습니다. 다른 시설은 모두 바닥 위에 짓습니다."
+
+msgid "Land you own. Removing a tile refunds half."
+msgstr "소유한 땅에만 놓을 수 있습니다. 철거 시 비용의 절반이 환불됩니다."
+
+msgid "A wall along a tile edge. Passengers cannot cross it and it blocks the view."
+msgstr "타일 경계에 세우는 벽입니다. 승객이 지나갈 수 없으며 시야도 가립니다."
+
+msgid "Drag along a line to build a row. Walls close in the terminal and its rooms."
+msgstr "선을 따라 드래그하여 줄지어 세울 수 있습니다. 벽으로 터미널과 방을 둘러쌉니다."
+
+msgid "One wall per tile edge. Removing it refunds half."
+msgstr "타일 한 변당 벽 하나를 세울 수 있습니다. 철거 시 절반이 환불됩니다."
+
+msgid "A glass wall. Passengers cannot cross it, but it lets the view through."
+msgstr "유리벽입니다. 승객이 지나갈 수는 없지만 반대편이 보입니다."
+
+msgid "Drag along a line like a wall. Screens and decor can be seen through glass."
+msgstr "벽처럼 선을 따라 드래그해 세웁니다. 안내 화면이나 장식은 유리 너머로도 보입니다."
+
+msgid "Costs more than a plain wall. One per tile edge."
+msgstr "일반 벽보다 비쌉니다. 타일 한 변당 하나를 세울 수 있습니다."
+
+msgid "A door in a wall. Passengers walk through it."
+msgstr "벽에 설치하는 문입니다. 승객이 이곳을 통해 이동합니다."
+
+msgid "Click a wall edge to put a door in the wall."
+msgstr "벽이 있는 변을 클릭해 문을 설치하세요."
+
+msgid "A plain wall on each side of it."
+msgstr "양옆에 일반 벽이 있어야 합니다."
+
+msgid "The way into the terminal. Passengers come in here from the road and car parks."
+msgstr "터미널로 들어오는 입구입니다. 도로와 주차장에서 온 승객이 이곳으로 입장합니다."
+
+msgid "Place it on the outer edge of the terminal, facing in."
+msgstr "터미널 바깥쪽 경계에 안쪽을 향하도록 배치하세요."
+
+msgid "The outside edge with no floor behind it. Keep the spot in front clear."
+msgstr "뒤쪽에 바닥이 없는 바깥쪽 경계에 배치합니다. 앞쪽 칸은 비워 두세요."
+
+msgid "The way out to the planes. Passengers leave the terminal here to board."
+msgstr "비행기로 나가는 출구입니다. 승객이 이곳을 통해 터미널에서 나가 탑승합니다."
+
+msgid "Place it on the outer edge. A gate desk links to an exit facing west, north or east."
+msgstr "바깥쪽 경계에 배치하세요. 탑승구 데스크는 서·북·동쪽을 향한 출구와 연결됩니다."
+
+msgid "Where passengers check in and hand over a bag."
+msgstr "승객이 체크인하고 위탁 수하물을 맡기는 곳입니다."
+
+msgid "A check-in agent works behind it. A belt from its back edge takes bags to a bag room."
+msgstr "뒤쪽에서 체크인 직원이 근무합니다. 뒷면에서 벨트를 연결하면 수하물을 수하물실로 보냅니다."
+
+msgid "An agent hired in Staff, or it stays closed. Keep the spot behind and in front clear."
+msgstr "직원 메뉴에서 직원을 고용하지 않으면 닫혀 있습니다. 앞뒤 공간을 비워 두세요."
+
+msgid "A basic security scanner. Passengers walk through it to be screened."
+msgstr "기본 보안 검색대입니다. 승객이 이곳을 통과해 보안 검색을 받습니다."
+
+msgid "A security officer works beside it. A full lane is faster but costs more."
+msgstr "옆에서 보안 요원이 근무합니다. 전체 보안 레인이 더 빠르지만 비용이 더 듭니다."
+
+msgid "An officer hired in Staff, or it stays closed. Keep its staff spot and way in clear."
+msgstr "직원 메뉴에서 보안 요원을 고용하지 않으면 닫혀 있습니다. 근무 위치와 진입로를 비워 두세요."
+
+msgid "A row of seats. Passengers wait here for their flight and their mood recovers."
+msgstr "일렬로 놓인 좌석입니다. 승객이 이곳에서 항공편을 기다리며 기분이 회복됩니다."
+
+msgid "Place it near the gate and turn it. Waiting passengers sit on it."
+msgstr "탑승구 근처에 놓고 방향을 맞추세요. 대기 중인 승객이 앉습니다."
+
+msgid "No staff and no upkeep. Add enough seats for the passengers waiting."
+msgstr "직원과 유지비가 필요 없습니다. 기다리는 승객 수에 맞게 좌석을 충분히 놓으세요."
+
+msgid "Makes a gate. It links to the nearest free exit facing the planes; the plane parks out from it."
+msgstr "탑승구를 만듭니다. 비행기 쪽을 향한 가장 가까운 빈 출구와 연결되며 그 바깥에 비행기가 주기합니다."
+
+msgid "Each flight is given a gate. A gate takes the next free letter, starting at A."
+msgstr "각 항공편에 탑승구가 배정됩니다. 탑승구 이름은 A부터 빈 알파벳 순서로 부여됩니다."
+
+msgid "Within 4 cells of a free exit facing the planes, with room for the plane. No staff needed."
+msgstr "비행기 쪽을 향한 빈 출구에서 4칸 이내이며 주기 공간이 확보되어야 합니다. 직원 불필요."
+
+msgid "A floor screen that entertains passengers waiting in front of it."
+msgstr "앞에서 기다리는 승객을 즐겁게 해 주는 바닥 설치형 스크린입니다."
+
+msgid "It covers a fan of floor up to 5 rows ahead. A plain wall blocks it, glass does not."
+msgstr "앞쪽 최대 5줄의 부채꼴 범위에 효과가 있습니다. 일반 벽은 막지만 유리벽은 통과합니다."
+
+msgid "Costs upkeep every day, inside a room or not."
+msgstr "방 안팎에 관계없이 매일 유지비가 듭니다."
+
+msgid "Marks floor as a cafe. Hungry passengers eat and drink here and their mood rises."
+msgstr "바닥을 카페로 지정합니다. 배고픈 승객이 먹고 마시며 기분이 좋아집니다."
+
+msgid "Drag a rectangle, then add a counter and a table. Guests order, then sit at the table."
+msgstr "사각형으로 드래그한 뒤 카운터와 테이블을 배치하세요. 손님이 주문한 뒤 테이블에 앉습니다."
+
+msgid "At least 3x3, with a counter and a table. Needs shop staff, or the counter stays closed."
+msgstr "최소 3x3 크기에 카운터와 테이블이 필요합니다. 상점 직원이 없으면 카운터가 닫혀 있습니다."
+
+msgid "The cafe counter, where guests order."
+msgstr "손님이 주문하는 카페 카운터입니다."
+
+msgid "Place it inside a cafe or restaurant. A server stands there."
+msgstr "카페나 레스토랑 안에 배치하세요. 직원이 이곳에 서서 응대합니다."
+
+msgid "Wholly inside the room. Shop staff hired in Staff, and the spot in front clear."
+msgstr "방 안에 완전히 들어가야 하며 상점 직원을 고용하고 앞쪽 공간을 비워 두어야 합니다."
+
+msgid "A table with a seat at each end. Cafe guests sit here to eat."
+msgstr "양 끝에 좌석이 있는 테이블입니다. 카페 손님이 앉아 식사합니다."
+
+msgid "It seats two. A guest walks from the counter to a free seat."
+msgstr "2인용입니다. 손님이 카운터에서 빈 좌석으로 걸어가 앉습니다."
+
+msgid "Inside a cafe. A bar uses bar counters, and a restaurant uses dining tables or booths."
+msgstr "카페 안에 배치합니다. 바에서는 바 카운터를, 레스토랑에서는 식탁이나 부스를 사용합니다."
+
+msgid "Marks floor as a toilet. Passengers who need one queue and use a stall."
+msgstr "바닥을 화장실로 지정합니다. 용무가 급한 승객이 줄을 서서 변기 칸을 이용합니다."
+
+msgid "Drag a rectangle, then add a stall and a sink inside."
+msgstr "사각형으로 드래그한 뒤 안에 변기 칸과 세면대를 배치하세요."
+
+msgid "At least 2x3, with a stall and a sink. Each stall costs upkeep every day when ready."
+msgstr "최소 2x3 크기에 변기 칸과 세면대가 필요합니다. 준비되면 변기 칸마다 매일 유지비가 듭니다."
+
+msgid "One toilet stall. One passenger uses it at a time."
+msgstr "변기 칸 1개입니다. 한 번에 승객 한 명씩 이용합니다."
+
+msgid "Place it inside a toilet room. A passenger walks in from the cell in front."
+msgstr "화장실 방 안에 배치하세요. 승객이 앞쪽 칸에서 안으로 들어갑니다."
+
+msgid "Keep the spot in front clear. Costs upkeep every day once its room is ready."
+msgstr "앞쪽 공간을 비워 두세요. 방이 준비되면 매일 유지비가 발생합니다."
+
+msgid "A sink. A toilet room is not ready without one."
+msgstr "세면대입니다. 이것이 없으면 화장실이 준비되지 않습니다."
+
+msgid "Place it inside a toilet room."
+msgstr "화장실 방 안에 배치하세요."
+
+msgid "Keep the spot in front clear. No upkeep of its own."
+msgstr "앞쪽 공간을 비워 두세요. 자체 유지비는 없습니다."
+
+msgid "Marks floor as a kiosk, a small shop. Bored passengers browse here and pay."
+msgstr "바닥을 작은 상점인 키오스크로 지정합니다. 심심한 승객이 구경하고 물건을 삽니다."
+
+msgid "Drag a rectangle, then add a counter and display stands. Guests browse at the stands."
+msgstr "사각형으로 드래그한 뒤 카운터와 진열대를 놓으세요. 손님이 진열대에서 구경합니다."
+
+msgid "At least 3x3, with a counter and a display stand. Shop staff serve at the counter."
+msgstr "최소 3x3 크기에 카운터와 진열대가 필요합니다. 상점 직원이 카운터에서 응대합니다."
+
+msgid "The kiosk's counter, with a till."
+msgstr "계산대가 있는 키오스크 카운터입니다."
+
+msgid "Place it inside a kiosk. A server stands behind it."
+msgstr "키오스크 안에 배치하세요. 직원이 뒤쪽에 섭니다."
+
+msgid "Wholly inside the kiosk. Shop staff hired in Staff, and the spot in front clear."
+msgstr "키오스크 안에 완전히 들어가야 하며 상점 직원을 고용하고 앞쪽 공간을 비워 두어야 합니다."
+
+msgid "Marks floor as a pharmacy. Passengers browse and buy here."
+msgstr "바닥을 약국으로 지정합니다. 승객이 둘러보고 물건을 구매합니다."
+
+msgid "Drag a rectangle, then add a counter and a shelf. Passengers browse at the shelf."
+msgstr "사각형으로 드래그한 뒤 카운터와 선반을 배치하세요. 승객이 선반에서 구경합니다."
+
+msgid "At least 3x3, with a counter and a shelf. Shop staff serve at the counter."
+msgstr "최소 3x3 크기에 카운터와 선반이 필요합니다. 상점 직원이 카운터에서 응대합니다."
+
+msgid "Marks floor as a duty free shop. Passengers browse and spend more than in a kiosk."
+msgstr "바닥을 면세점으로 지정합니다. 승객이 구경하며 키오스크보다 더 많은 돈을 씁니다."
+
+msgid "Drag a rectangle, then add a till and shelves. Passengers browse at the shelves."
+msgstr "사각형으로 드래그한 뒤 계산대와 선반을 놓으세요. 승객이 선반에서 구경합니다."
+
+msgid "At least 3x4, with a till and a shelf. Shop staff serve at the till."
+msgstr "최소 3x4 크기에 계산대와 선반이 필요합니다. 상점 직원이 계산대에서 응대합니다."
+
+msgid "The duty free shop's till."
+msgstr "면세점용 계산대입니다."
+
+msgid "Place it inside a duty free shop. A server stands behind it."
+msgstr "면세점 안에 배치하세요. 직원이 뒤쪽에 섭니다."
+
+msgid "Wholly inside the shop. Shop staff hired in Staff, and the spot in front clear."
+msgstr "상점 안에 완전히 들어가야 하며 상점 직원을 고용하고 앞쪽 공간을 비워 두어야 합니다."
+
+msgid "A duty free shelf. Each one gives two browse spots."
+msgstr "면세점 선반입니다. 하나당 구경 자리 2곳이 생깁니다."
+
+msgid "Passengers browse from the cells in front of it."
+msgstr "승객이 앞쪽 칸에서 상품을 둘러봅니다."
+
+msgid "Inside a duty free shop. Keep the cells in front clear."
+msgstr "면세점 안에 배치합니다. 앞쪽 칸을 비워 두세요."
+
+msgid "Marks floor as a fashion store. Passengers browse and spend more than in a kiosk."
+msgstr "바닥을 패션 매장으로 지정합니다. 승객이 구경하며 키오스크보다 더 많은 돈을 씁니다."
+
+msgid "Drag a rectangle, then add a till and clothes rails. Passengers browse at the rails."
+msgstr "사각형으로 드래그한 뒤 계산대와 옷걸이 행거를 배치하세요. 승객이 행거에서 구경합니다."
+
+msgid "At least 3x4, with a till and a clothes rail. Shop staff serve at the till."
+msgstr "최소 3x4 크기에 계산대와 옷걸이 행거가 필요합니다. 상점 직원이 계산대에서 응대합니다."
+
+msgid "The fashion store's till."
+msgstr "패션 매장용 계산대입니다."
+
+msgid "Place it inside a fashion store. A server stands behind it."
+msgstr "패션 매장 안에 배치하세요. 직원이 뒤쪽에 섭니다."
+
+msgid "Wholly inside the store. Shop staff hired in Staff, and the spot in front clear."
+msgstr "매장 안에 완전히 들어가야 하며 상점 직원을 고용하고 앞쪽 공간을 비워 두어야 합니다."
+
+msgid "A clothes rail. Each one gives two browse spots."
+msgstr "옷걸이 행거입니다. 하나당 구경 자리 2곳이 생깁니다."
+
+msgid "Inside a fashion store. Keep the cells in front clear."
+msgstr "패션 매장 안에 배치합니다. 앞쪽 칸을 비워 두세요."
+
+msgid "Marks floor as a currency exchange. Passengers change money and pay a small fee."
+msgstr "바닥을 환전소로 지정합니다. 승객이 환전하며 소액의 수수료를 냅니다."
+
+msgid "Drag a rectangle, then add a counter. A server works it."
+msgstr "사각형으로 드래그한 뒤 카운터를 배치하세요. 직원이 업무를 처리합니다."
+
+msgid "At least 2x3, with a counter and shop staff. A visit does not cure boredom."
+msgstr "최소 2x3 크기에 카운터와 상점 직원이 필요합니다. 방문해도 지루함은 해소되지 않습니다."
+
+msgid "Marks floor as an ATM room. Passengers take out cash and pay a small fee."
+msgstr "바닥을 ATM 실로 지정합니다. 승객이 현금을 인출하고 소액의 수수료를 냅니다."
+
+msgid "Drag a rectangle, then add an ATM. It is self-service."
+msgstr "사각형으로 드래그한 뒤 ATM을 배치하세요. 셀프 서비스로 운영됩니다."
+
+msgid "At least 1x2, with an ATM. No staff. A visit does not cure boredom."
+msgstr "최소 1x2 크기에 ATM이 필요합니다. 직원 불필요. 방문해도 지루함은 해소되지 않습니다."
+
+msgid "Marks floor as a bar. Guests stay longer than in a cafe, spend more, and gain most mood."
+msgstr "바닥을 바로 지정합니다. 카페보다 오래 머물며 더 많은 돈을 쓰고 기분이 가장 크게 오릅니다."
+
+msgid "Guests order at a bar counter and sit on its stools."
+msgstr "손님이 바 카운터에서 주문하고 스툴에 앉습니다."
+
+msgid "At least 3x4, with a bar counter. Shop staff serve at the counter."
+msgstr "최소 3x4 크기에 바 카운터가 필요합니다. 상점 직원이 카운터에서 응대합니다."
+
+msgid "Marks floor as a sit-down restaurant. Guests stay the longest and spend the most."
+msgstr "바닥을 레스토랑으로 지정합니다. 손님이 가장 오래 머물고 가장 많은 돈을 씁니다."
+
+msgid "Guests order at a cafe counter and sit at a dining table or a booth."
+msgstr "손님이 카페 카운터에서 주문하고 식탁이나 부스에 앉습니다."
+
+msgid "At least 4x4, with a counter and a table or booth. Shop staff serve at the counter."
+msgstr "최소 4x4 크기에 카운터와 식탁 또는 부스가 필요합니다. 상점 직원이 카운터에서 응대합니다."
+
+msgid "Marks floor as a grab-and-go stall. Guests buy, pay and walk on, with no seat."
+msgstr "바닥을 테이크아웃 매대로 지정합니다. 좌석 없이 손님이 사서 바로 지나갑니다."
+
+msgid "It needs only a grab-and-go stall. A server hands over the order."
+msgstr "테이크아웃 매대만 있으면 됩니다. 직원이 주문한 음식을 건넵니다."
+
+msgid "At least 3x3, with a counter. Shop staff serve. It earns the least of the food rooms."
+msgstr "최소 3x3 크기에 카운터가 필요합니다. 상점 직원이 응대하며 식음료 시설 중 수익이 가장 적습니다."
+
+msgid "Marks floor as a play area. Passengers stay and play for free and their mood rises."
+msgstr "바닥을 놀이 공간으로 지정합니다. 승객이 무료로 놀며 기분이 좋아집니다."
+
+msgid "Drag a rectangle, then add a slide and play blocks. It is self-service."
+msgstr "사각형으로 드래그한 뒤 미끄럼틀과 놀이 블록을 놓으세요. 셀프 서비스입니다."
+
+msgid "At least 3x4, with a slide and play blocks. No staff."
+msgstr "최소 3x4 크기에 미끄럼틀과 놀이 블록이 필요합니다. 직원 불필요."
+
+msgid "Marks floor as a lounge. Passengers rest on the sofas for free and their mood rises."
+msgstr "바닥을 라운지로 지정합니다. 승객이 무료로 소파에서 쉬며 기분이 좋아집니다."
+
+msgid "Drag a rectangle, then add a sofa. It is self-service."
+msgstr "사각형으로 드래그한 뒤 소파를 배치하세요. 셀프 서비스입니다."
+
+msgid "At least 2x3, with a sofa. No staff."
+msgstr "최소 2x3 크기에 소파가 필요합니다. 직원 불필요."
+
+msgid "Marks floor as a shower room. Passengers pay to wash during a long wait and gain mood."
+msgstr "바닥을 샤워실로 지정합니다. 대기 시간이 긴 승객이 유료로 씻으며 기분이 좋아집니다."
+
+msgid "Drag a rectangle, then add a shower cubicle. It is self-service."
+msgstr "사각형으로 드래그한 뒤 샤워 부스를 배치하세요. 셀프 서비스입니다."
+
+msgid "At least 2x2, with a shower cubicle. No staff. Each stay pays you a fee."
+msgstr "최소 2x2 크기에 샤워 부스가 필요합니다. 직원 불필요. 이용 시마다 요금을 받습니다."
+
+msgid "Marks floor as a nap pod room. Passengers pay to rest during a long wait and gain mood."
+msgstr "바닥을 수면 캡슐실로 지정합니다. 대기 시간이 긴 승객이 유료로 쉬며 기분이 좋아집니다."
+
+msgid "Drag a rectangle, then add a nap pod. It is self-service."
+msgstr "사각형으로 드래그한 뒤 수면 캡슐을 배치하세요. 셀프 서비스입니다."
+
+msgid "At least 2x2, with a nap pod. No staff. Each stay pays you a fee."
+msgstr "최소 2x2 크기에 수면 캡슐이 필요합니다. 직원 불필요. 이용 시마다 요금을 받습니다."
+
+msgid "A shelf unit. Each stand gives the kiosk two browse spots."
+msgstr "진열대입니다. 하나당 키오스크에 구경 자리 2곳이 생깁니다."
+
+msgid "Inside a kiosk. Keep the cells in front clear."
+msgstr "키오스크 안에 배치합니다. 앞쪽 칸을 비워 두세요."
+
+msgid "A baggage belt. It carries checked bags from a check-in desk to a bag room."
+msgstr "수하물 벨트입니다. 위탁 수하물을 체크인 데스크에서 수하물실까지 운반합니다."
+
+msgid "Drag a line. The belt shapes itself at turns and joins. Belts cannot cross."
+msgstr "선을 따라 드래그하세요. 꺾이거나 합류하는 구간은 자동 연결됩니다. 벨트끼리 교차할 수 없습니다."
+
+msgid "Start at a check-in desk's back and end in a bag room. A wall in the way blocks it."
+msgstr "체크인 데스크 뒤쪽에서 시작해 수하물실 안으로 연결하세요. 벽이 가로막으면 통과할 수 없습니다."
+
+msgid "Where checked bags end up. They are loaded onto the plane from here."
+msgstr "위탁 수하물이 모이는 곳입니다. 이곳에서 비행기로 짐을 싣습니다."
+
+msgid "Drag a rectangle, then run a belt into it. The belt's end piece goes inside."
+msgstr "사각형으로 드래그한 뒤 안으로 벨트를 연결하세요. 벨트 끝부분이 방 안에 들어가야 합니다."
+
+msgid "At least 2x2, with a belt end. A bag that arrives after the cutoff misses the plane."
+msgstr "최소 2x2 크기에 벨트 끝부분이 필요합니다. 마감 시각 이후 도착한 짐은 비행기를 놓칩니다."
+
+msgid "A baggage cart on wheels."
+msgstr "바퀴가 달린 수하물 카트입니다."
+
+msgid "Place one in a bag room so a hired Ramp Agent drives checked bags out to the parked plane."
+msgstr "수하물실에 배치하면 고용한 지상조업 직원이 주기된 비행기까지 위탁 수하물을 운반합니다."
+
+msgid "Needs a Ramp Agent hired in Staff. Takes 1x2 tiles; no upkeep."
+msgstr "직원 메뉴에서 지상조업 직원을 고용해야 합니다. 1x2 타일 크기, 유지비 없음."
+
+msgid "A curb bay on the road outside. Cars and taxis stop here and drop passengers off."
+msgstr "바깥 도로변 정차 구역입니다. 승용차와 택시가 멈춰 승객을 내려 줍니다."
+
+msgid "Click one of the marked spots by the road. Each bay has two berths."
+msgstr "도로 옆 표시된 자리를 클릭하세요. 구역당 정차 공간 2개가 있습니다."
+
+msgid "Marked spots only. The nearer an entrance, the shorter the walk."
+msgstr "표시된 자리에만 배치할 수 있습니다. 입구와 가까울수록 걷는 거리가 짧아집니다."
+
+msgid "A car park with 12 spaces. A car pays a fee when it parks."
+msgstr "12대 주차할 수 있는 주차장입니다. 차량이 주차할 때 요금을 냅니다."
+
+msgid "Click a marked spot. Passengers walk from the car park to an entrance."
+msgstr "표시된 자리를 클릭하세요. 승객이 주차장에서 입구까지 걸어옵니다."
+
+msgid "Marked spots only. Close it to let it drain before you remove it."
+msgstr "표시된 자리에만 배치할 수 있습니다. 철거하려면 먼저 폐쇄해 차량이 모두 빠져나가게 하세요."
+
+msgid "A big car park with 31 spaces. A car pays a higher fee than a surface lot when it parks."
+msgstr "31대 주차할 수 있는 대형 주차장입니다. 노상 주차장보다 더 높은 주차 요금을 받습니다."
+
+msgid "Opens or closes a car park."
+msgstr "주차장을 열거나 닫습니다."
+
+msgid "Click a built car park. A closed one takes no new cars and empties out."
+msgstr "건설된 주차장을 클릭하세요. 폐쇄하면 새 차량을 받지 않고 기존 차량이 빠져나갑니다."
+
+msgid "A car park can only be removed once no cars are in it."
+msgstr "주차장에 차량이 한 대도 없어야 철거할 수 있습니다."
+
+msgid "Buys a plot of land. You can only build on land you own."
+msgstr "부지 구획을 매입합니다. 소유한 땅에만 건설할 수 있습니다."
+
+msgid "Click a highlighted plot. Its price shows on it and rises with each plot you buy."
+msgstr "강조 표시된 구획을 클릭하세요. 가격은 구획 위에 표시되며 매입할수록 오릅니다."
+
+msgid "A plot next to land you already own."
+msgstr "이미 소유한 땅과 인접한 구획만 매입할 수 있습니다."
+
+msgid "The tray table of a security lane, where passengers unpack their bags."
+msgstr "보안 레인의 트레이 테이블입니다. 승객이 가방을 꺼내 담습니다."
+
+msgid "It stands beside the arch, on the side the lane's parts go."
+msgstr "보안 레인 부품이 놓이는 방향으로 검색 아치 옆에 배치합니다."
+
+msgid "Part of a whole lane: arch, tray table, X-ray belt and pickup table."
+msgstr "전체 보안 레인의 일부입니다: 검색 아치, 트레이 테이블, X선 벨트, 픽업 테이블."
+
+msgid "The X-ray belt of a security lane. Bags ride through it."
+msgstr "보안 레인의 X선 벨트입니다. 가방이 이 벨트를 통과합니다."
+
+msgid "It stands beside the arch. A lane officer works at it."
+msgstr "검색 아치 옆에 배치합니다. 레인 담당 보안 요원이 여기서 근무합니다."
+
+msgid "Part of a whole lane. Needs a security officer hired in Staff."
+msgstr "전체 보안 레인의 일부입니다. 직원 메뉴에서 보안 요원을 고용해야 합니다."
+
+msgid "The arch of a security lane. Passengers walk through it."
+msgstr "보안 레인의 검색 아치입니다. 승객이 이곳을 통과합니다."
+
+msgid "Place the arch first and the other parts around it. Its front faces the queue."
+msgstr "검색 아치를 먼저 놓고 주변에 다른 부품을 배치하세요. 앞면이 대기열을 향합니다."
+
+msgid "Part of a whole lane. Keep the spot in front and the walls around the lane clear."
+msgstr "전체 보안 레인의 일부입니다. 앞쪽 공간과 레인 주변 벽을 비워 두세요."
+
+msgid "The pickup table of a security lane, where passengers collect their bags."
+msgstr "보안 레인의 수하물 픽업 테이블입니다. 승객이 자기 가방을 챙깁니다."
+
+msgid "It stands past the arch, where cleared passengers leave the lane."
+msgstr "검색 아치를 지나 통과한 승객이 레인을 빠져나가는 위치에 배치합니다."
+
+msgid "A bush. It calms passengers close to it, a little."
+msgstr "관목입니다. 바로 근처 승객의 기분을 조금 진정시켜 줍니다."
+
+msgid "Passengers within a cell or so get calm, which becomes mood. Walls block it."
+msgstr "1칸 남짓 거리의 승객이 진정되어 기분이 오릅니다. 벽이 있으면 효과가 막힙니다."
+
+msgid "No upkeep. It earns nothing."
+msgstr "유지비 없음. 수익은 나지 않습니다."
+
+msgid "A planter. It calms passengers near it, a little."
+msgstr "화단입니다. 근처 승객의 기분을 조금 진정시켜 줍니다."
+
+msgid "Passengers within a couple of cells get calm, which becomes mood. Walls block it."
+msgstr "두어 칸 거리의 승객이 진정되어 기분이 오릅니다. 벽이 있으면 효과가 막힙니다."
+
+msgid "A large plant pot. It calms passengers near it, a little."
+msgstr "큰 화분입니다. 근처 승객의 기분을 조금 진정시켜 줍니다."
+
+msgid "An indoor tree. It calms the passengers around it."
+msgstr "실내 나무입니다. 주변 승객의 기분을 진정시켜 줍니다."
+
+msgid "Passengers within a few cells get calm, which becomes mood. Walls block it."
+msgstr "몇 칸 이내의 승객이 진정되어 기분이 오릅니다. 벽이 있으면 효과가 막힙니다."
+
+msgid "A bench. It seats two waiting passengers and calms passengers nearby."
+msgstr "벤치입니다. 대기 승객 2명이 앉을 수 있으며 근처 승객을 진정시킵니다."
+
+msgid "Gate passengers sit on it. Calm becomes mood, and a wall between them blocks it."
+msgstr "탑승객이 앉아 쉬며 진정 효과로 기분이 오릅니다. 사이에 벽이 있으면 효과가 막힙니다."
+
+msgid "A bench built around a tree. It calms the passengers near it."
+msgstr "나무를 둘러싼 벤치입니다. 근처 승객의 기분을 진정시켜 줍니다."
+
+msgid "A fountain. It calms the passengers around it the most, with a long reach."
+msgstr "분수입니다. 넓은 범위의 승객을 가장 크게 진정시켜 줍니다."
+
+msgid "A statue. It calms the passengers around it, with a long reach."
+msgstr "조각상입니다. 넓은 범위의 승객을 진정시켜 줍니다."
+
+msgid "A retractable-belt stanchion post. Passengers cannot walk through it."
+msgstr "접이식 차단봉 기둥입니다. 승객이 통과할 수 없습니다."
+
+msgid "Use stanchions and queue belts to steer a queue. They give a little calm nearby."
+msgstr "차단봉과 대기열 벨트로 줄을 유도하세요. 근처에 약간의 진정 효과를 줍니다."
+
+msgid "A queue belt between two stanchions, three cells long. Passengers cannot walk through it."
+msgstr "기둥 두 개 사이를 잇는 3칸 길이의 대기열 벨트입니다. 승객이 통과할 수 없습니다."
+
+msgid "A bin. Passengers drop litter in it instead of leaving it on the floor."
+msgstr "쓰레기통입니다. 승객이 바닥에 버리지 않고 이곳에 쓰레기를 버립니다."
+
+msgid "A bin takes litter from visits near it, and a cleaner empties it when it is full."
+msgstr "주변에서 생긴 쓰레기를 받아 두며, 가득 차면 미화원이 비웁니다."
+
+msgid "A cleaner hired in Staff. It gives no calm, and a bin in view takes a little back."
+msgstr "직원 메뉴에서 미화원을 고용하세요. 진정 효과는 없으며 시야 내 쓰레기통은 편안함을 약간 떨어뜨립니다."
+
+msgid "A bar counter, where guests order drinks."
+msgstr "손님이 음료를 주문하는 바 카운터입니다."
+
+msgid "Place it inside a bar. A server stands behind it and guests order from the cell in front."
+msgstr "바 안에 배치하세요. 직원이 뒤쪽에 서고 손님은 앞쪽 칸에서 주문합니다."
+
+msgid "Wholly inside the bar. Shop staff hired in Staff, and the spot in front clear."
+msgstr "바 안에 완전히 들어가야 하며 상점 직원을 고용하고 앞쪽 공간을 비워 두어야 합니다."
+
+msgid "A grab-and-go stall, where guests buy and walk on."
+msgstr "손님이 물건을 사서 바로 이동하는 테이크아웃 매대입니다."
+
+msgid "Place it inside a grab-and-go room. A server hands over the order."
+msgstr "테이크아웃 매장 안에 배치하세요. 직원이 주문한 상품을 건넵니다."
+
+msgid "A restaurant table with four seats."
+msgstr "4인용 레스토랑 식탁입니다."
+
+msgid "Place it inside a restaurant. A guest walks from the counter to a free seat."
+msgstr "레스토랑 안에 배치하세요. 손님이 카운터에서 빈자리로 걸어갑니다."
+
+msgid "Wholly inside the restaurant, with the cell behind each chair clear."
+msgstr "레스토랑 안에 완전히 들어가야 하며 각 의자 뒤쪽 칸을 비워 두어야 합니다."
+
+msgid "A restaurant booth with four seats."
+msgstr "4인용 레스토랑 부스 좌석입니다."
+
+msgid "Wholly inside the restaurant, with the cell behind each seat clear."
+msgstr "레스토랑 안에 완전히 들어가야 하며 각 좌석 뒤쪽 칸을 비워 두어야 합니다."
+
+msgid "A staffed desk that helps lost passengers."
+msgstr "길을 잃은 승객을 돕는 유인 안내 데스크입니다."
+
+msgid "A stuck passenger nearby walks over, is helped, gains mood and plans its route again."
+msgstr "근처에서 길을 헤매는 승객이 다가와 안내를 받으면 기분이 오르고 경로를 다시 찾습니다."
+
+msgid "Shop staff hired in Staff, or it does nothing. Works on open floor or in a room."
+msgstr "직원 메뉴에서 상점 직원을 고용해야 작동합니다. 열린 바닥이나 방 안 어디서든 작동합니다."
+
+msgid "An information display."
+msgstr "안내 정보 디스플레이입니다."
+
+msgid "Scenery for now: nothing in the game reacts to it."
+msgstr "현재는 장식용이며 게임 내 별도 상호작용은 없습니다."
+
+msgid "Costs upkeep every day."
+msgstr "매일 유지비가 듭니다."
+
+msgid "The currency exchange counter."
+msgstr "환전소 카운터입니다."
+
+msgid "Place it inside an exchange room. A server stands behind it and changes money."
+msgstr "환전소 방 안에 배치하세요. 직원이 뒤쪽에 서서 환전을 처리합니다."
+
+msgid "A cash machine. One passenger uses it at a time and pays a small fee."
+msgstr "현금인출기입니다. 승객 한 명씩 이용하며 소액의 수수료를 냅니다."
+
+msgid "Place it inside an ATM room. The passenger uses it from the cell in front."
+msgstr "ATM 실 안에 배치하세요. 승객이 앞쪽 칸에서 이용합니다."
+
+msgid "Keep the spot in front clear. No staff and no upkeep."
+msgstr "앞쪽 공간을 비워 두세요. 직원도 유지비도 필요 없습니다."
+
+msgid "The pharmacy counter, with a till."
+msgstr "계산대가 있는 약국 카운터입니다."
+
+msgid "Place it inside a pharmacy. A server stands behind it."
+msgstr "약국 안에 배치하세요. 직원이 뒤쪽에 섭니다."
+
+msgid "Wholly inside the pharmacy. Shop staff hired in Staff, and the spot in front clear."
+msgstr "약국 안에 완전히 들어가야 하며 상점 직원을 고용하고 앞쪽 공간을 비워 두어야 합니다."
+
+msgid "A pharmacy shelf. Each one gives one browse spot."
+msgstr "약국 진열 선반입니다. 하나당 구경 자리 1곳이 생깁니다."
+
+msgid "Passengers browse from the cell in front of it."
+msgstr "승객이 앞쪽 칸에서 상품을 둘러봅니다."
+
+msgid "Inside a pharmacy. Keep the cells in front clear."
+msgstr "약국 안에 배치합니다. 앞쪽 칸을 비워 두세요."
+
+msgid "A shower cubicle. One passenger uses it at a time and pays a fee."
+msgstr "샤워 부스입니다. 승객 한 명씩 이용하며 요금을 냅니다."
+
+msgid "Place it inside a shower room. The passenger steps in from the cell in front."
+msgstr "샤워실 안에 배치하세요. 승객이 앞쪽 칸에서 들어갑니다."
+
+msgid "Keep the spot in front clear. No upkeep."
+msgstr "앞쪽 공간을 비워 두세요. 유지비 없음."
+
+msgid "A nap pod. One passenger uses it at a time and pays a fee."
+msgstr "수면 캡슐입니다. 승객 한 명씩 이용하며 요금을 냅니다."
+
+msgid "Place it inside a nap pod room. The passenger sits and leans back."
+msgstr "수면 캡슐실 안에 배치하세요. 승객이 앉아 기대어 쉽니다."
+
+msgid "A two-seat sofa. Lounge guests rest on it."
+msgstr "2인용 소파입니다. 라운지 손님이 앉아 쉽니다."
+
+msgid "Place it inside a lounge. Each sofa gives two seats."
+msgstr "라운지 안에 배치하세요. 소파 하나당 좌석 2개가 생깁니다."
+
+msgid "No upkeep. The lounge is free to use."
+msgstr "유지비 없음. 라운지는 무료로 이용됩니다."
+
+msgid "A single armchair."
+msgstr "1인용 안락의자입니다."
+
+msgid "A passenger can sit on it, but a lounge needs a sofa. The armchair does not count."
+msgstr "승객이 앉을 수는 있지만 라운지 조건에는 소파가 필요합니다. 안락의자는 인정되지 않습니다."
+
+msgid "A work desk."
+msgstr "업무용 책상입니다."
+
+msgid "Play blocks for children."
+msgstr "어린이용 놀이 블록입니다."
+
+msgid "Place them inside a play area. A play area needs them and a slide."
+msgstr "놀이 공간 안에 배치하세요. 놀이 공간에는 블록과 미끄럼틀이 모두 필요합니다."
+
+msgid "No upkeep. The play area is free to use."
+msgstr "유지비 없음. 놀이 공간은 무료로 이용됩니다."
+
+msgid "A play slide. Children use it from the front."
+msgstr "미끄럼틀입니다. 아이들이 앞쪽에서 이용합니다."
+
+msgid "Place it inside a play area. Each slide gives two play spots."
+msgstr "놀이 공간 안에 배치하세요. 하나당 놀이 자리 2곳이 생깁니다."
+
+msgid "A prize car on a podium. Passengers near it spend a bit more in shops and food rooms."
+msgstr "단상 위의 경품 자동차입니다. 근처 승객이 상점과 식당에서 돈을 조금 더 씁니다."
+
+msgid "Waiting passengers who see it lose boredom. A second podium does not stack."
+msgstr "바라보는 대기 승객의 지루함이 줄어듭니다. 두 번째 단상은 효과가 중첩되지 않습니다."
+
+msgid "Costs upkeep every day. A plain wall blocks the view."
+msgstr "매일 유지비가 듭니다. 일반 벽이 있으면 시야가 가려집니다."
+
+msgctxt "card hint"
+msgid "Drag"
+msgstr "드래그"
+
+msgctxt "card hint"
+msgid "Click"
+msgstr "클릭"
+
+msgid "Upkeep {amount}/day"
+msgstr "유지비 {amount}/일"
+
+msgctxt "build menu"
+msgid "Building"
+msgstr "건물"
+
+msgctxt "build menu"
+msgid "Operations"
+msgstr "운영"
+
+msgctxt "build menu"
+msgid "Facilities"
+msgstr "편의시설"
+
+msgctxt "build menu"
+msgid "Food & Drink"
+msgstr "식음료"
+
+msgctxt "build menu"
+msgid "Decor"
+msgstr "장식"
+
+msgctxt "build menu"
+msgid "Landside & Parking"
+msgstr "육상 교통 및 주차"
+
+msgctxt "build menu"
+msgid "Templates"
+msgstr "템플릿"
+
+msgctxt "build menu"
+msgid "All"
+msgstr "전체"
+
+msgctxt "build menu"
+msgid "Room"
+msgstr "방"
+
+msgctxt "build menu"
+msgid "Check-in & Gate"
+msgstr "체크인 및 탑승구"
+
+msgctxt "build menu"
+msgid "Security"
+msgstr "보안 검색"
+
+msgctxt "build menu"
+msgid "Baggage"
+msgstr "수하물"
+
+msgctxt "build menu"
+msgid "Rooms"
+msgstr "방"
+
+msgctxt "build menu"
+msgid "Hygiene & Rest"
+msgstr "위생 및 휴식"
+
+msgctxt "build menu"
+msgid "Services"
+msgstr "서비스"
+
+msgctxt "build menu"
+msgid "Lounge & Play"
+msgstr "라운지 및 놀이"
+
+msgctxt "build menu"
+msgid "Items"
+msgstr "시설물"
+
+msgctxt "build menu"
+msgid "Cafe"
+msgstr "카페"
+
+msgctxt "build menu"
+msgid "Kiosk"
+msgstr "키오스크"
+
+msgctxt "build menu"
+msgid "Lounge"
+msgstr "라운지"
+
+msgctxt "build menu"
+msgid "Pharmacy"
+msgstr "약국"
+
+msgctxt "build menu"
+msgid "Shops"
+msgstr "상점"
+
+msgctxt "build menu"
+msgid "Duty free"
+msgstr "면세점"
+
+msgctxt "build menu"
+msgid "Remove"
+msgstr "철거"
+
+msgctxt "build menu"
+msgid "Floor"
+msgstr "바닥"
+
+msgctxt "build menu"
+msgid "1x1 tile"
+msgstr "1x1 타일"
+
+msgctxt "build menu"
+msgid "Wall"
+msgstr "벽"
+
+msgctxt "build menu"
+msgid "1 m edge"
+msgstr "1 m 변"
+
+msgctxt "build menu"
+msgid "Glass"
+msgstr "유리벽"
+
+msgctxt "build menu"
+msgid "Door"
+msgstr "문"
+
+msgctxt "build menu"
+msgid "Entrance"
+msgstr "입구"
+
+msgctxt "build menu"
+msgid "Exit"
+msgstr "출구"
+
+msgctxt "build menu"
+msgid "Check-in desk"
+msgstr "체크인 데스크"
+
+msgctxt "build menu"
+msgid "Scanner"
+msgstr "검색대"
+
+msgctxt "build menu"
+msgid "Seats"
+msgstr "좌석"
+
+msgctxt "build menu"
+msgid "Gate desk"
+msgstr "탑승구 데스크"
+
+msgctxt "build menu"
+msgid "Screen"
+msgstr "스크린"
+
+msgctxt "build menu"
+msgid "3x3 min"
+msgstr "최소 3x3"
+
+msgctxt "build menu"
+msgid "Counter"
+msgstr "카운터"
+
+msgctxt "build menu"
+msgid "Table"
+msgstr "테이블"
+
+msgctxt "build menu"
+msgid "Toilet"
+msgstr "화장실"
+
+msgctxt "build menu"
+msgid "2x3 min"
+msgstr "최소 2x3"
+
+msgctxt "build menu"
+msgid "Toilet stall"
+msgstr "변기 칸"
+
+msgctxt "build menu"
+msgid "Sink"
+msgstr "세면대"
+
+msgctxt "build menu"
+msgid "Kiosk counter"
+msgstr "키오스크 카운터"
+
+msgctxt "build menu"
+msgid "3x4 min"
+msgstr "최소 3x4"
+
+msgctxt "build menu"
+msgid "Duty Free Till"
+msgstr "면세점 계산대"
+
+msgctxt "build menu"
+msgid "Duty Free Shelf"
+msgstr "면세점 선반"
+
+msgctxt "build menu"
+msgid "Fashion Till"
+msgstr "패션 계산대"
+
+msgctxt "build menu"
+msgid "Exchange counter"
+msgstr "환전 카운터"
+
+msgctxt "build menu"
+msgid "Shower cubicle"
+msgstr "샤워 부스"
+
+msgctxt "build menu"
+msgid "Sleeping pod"
+msgstr "수면 캡슐"
+
+msgctxt "build menu"
+msgid "Shelf"
+msgstr "선반"
+
+msgctxt "build menu"
+msgid "Fashion store"
+msgstr "패션 매장"
+
+msgctxt "build menu"
+msgid "Clothes rail"
+msgstr "옷걸이 행거"
+
+msgctxt "build menu"
+msgid "Exchange"
+msgstr "환전소"
+
+msgctxt "build menu"
+msgid "ATM"
+msgstr "ATM"
+
+msgctxt "build menu"
+msgid "1x2 min"
+msgstr "최소 1x2"
+
+msgctxt "build menu"
+msgid "Bar"
+msgstr "바"
+
+msgctxt "build menu"
+msgid "Restaurant"
+msgstr "레스토랑"
+
+msgctxt "build menu"
+msgid "4x4 min"
+msgstr "최소 4x4"
+
+msgctxt "build menu"
+msgid "Grab-and-go"
+msgstr "테이크아웃"
+
+msgctxt "build menu"
+msgid "Play area"
+msgstr "놀이 공간"
+
+msgctxt "build menu"
+msgid "Shower"
+msgstr "샤워실"
+
+msgctxt "build menu"
+msgid "2x2 min"
+msgstr "최소 2x2"
+
+msgctxt "build menu"
+msgid "Nap pod"
+msgstr "수면 캡슐"
+
+msgctxt "build menu"
+msgid "Display stand"
+msgstr "진열대"
+
+msgctxt "build menu"
+msgid "Belt"
+msgstr "벨트"
+
+msgctxt "build menu"
+msgid "Drag a line"
+msgstr "선으로 드래그"
+
+msgctxt "build menu"
+msgid "Bag room"
+msgstr "수하물실"
+
+msgctxt "build menu"
+msgid "Bag cart"
+msgstr "수하물 카트"
+
+msgctxt "build menu"
+msgid "Curb bay"
+msgstr "정차 구역"
+
+msgctxt "build menu"
+msgid "16x3 m"
+msgstr "16x3 m"
+
+msgctxt "build menu"
+msgid "Surface lot"
+msgstr "노상 주차장"
+
+msgctxt "build menu"
+msgid "32x24 m"
+msgstr "32x24 m"
+
+msgctxt "build menu"
+msgid "Multi-storey"
+msgstr "주차 타워"
+
+msgctxt "build menu"
+msgid "24x52 m"
+msgstr "24x52 m"
+
+msgctxt "build menu"
+msgid "Open / close"
+msgstr "개방 / 폐쇄"
+
+msgctxt "build menu"
+msgid "A car park"
+msgstr "주차장 선택"
+
+msgctxt "build menu"
+msgid "Buy land"
+msgstr "부지 매입"
+
+msgctxt "build menu"
+msgid "about 21x25 m plot"
+msgstr "약 21x25 m 구획"
+
+msgctxt "build menu"
+msgid "Tray table"
+msgstr "트레이 테이블"
+
+msgctxt "build menu"
+msgid "X-ray belt"
+msgstr "X선 벨트"
+
+msgctxt "build menu"
+msgid "Arch"
+msgstr "검색 아치"
+
+msgctxt "build menu"
+msgid "Pickup table"
+msgstr "픽업 테이블"
+
+msgctxt "build menu"
+msgid "Needs belt end"
+msgstr "벨트 끝부분 필요"
+
+msgctxt "build menu"
+msgid "Staff"
+msgstr "직원"
+
+msgid "{reachable} of {total} seats reachable"
+msgstr "{total}석 중 {reachable}석 접근 가능"
+
+msgid "In {room}"
+msgstr "위치: {room}"
+
+msgid "Status: Part of a ready security lane"
+msgstr "상태: 준비된 보안 레인의 일부"
+
+msgid "Status: Not in a whole lane"
+msgstr "상태: 완전한 레인에 속하지 않음"
+
+msgid "Queue: {count} waiting"
+msgid_plural "Queue: {count} waiting"
+msgstr[0] "대기열: {count}명 대기 중"
+
+msgid "Status: Not ready, {reason}"
+msgstr "상태: 준비 안 됨, {reason}"
+
+msgid "Status: Linked to Gate {gate}"
+msgstr "상태: {gate}번 탑승구와 연결됨"
+
+msgid "Status: Not linked yet"
+msgstr "상태: 아직 연결되지 않음"
+
+msgid "Biggest plane: none, no room outside the exit"
+msgstr "최대 기종: 없음 (출구 바깥 공간 부족)"
+
+msgid "Status: Closed, {reason}"
+msgstr "상태: 폐쇄됨, {reason}"
+
+msgid "Status: Open"
+msgstr "상태: 운영 중"
+
+msgid "Status: Closed"
+msgstr "상태: 폐쇄됨"
+
+msgid "Occupancy: {cars}/{capacity} berth"
+msgid_plural "Occupancy: {cars}/{capacity} berths"
+msgstr[0] "점유 현황: {cars}/{capacity}면"
+
+msgid "Occupancy: {cars}/{capacity} space"
+msgid_plural "Occupancy: {cars}/{capacity} spaces"
+msgstr[0] "주차 현황: {cars}/{capacity}대"
+
+msgid "Parking fee: Free"
+msgstr "주차 요금: 무료"
+
+msgid "Parking fee: ${fee}"
+msgstr "주차 요금: ${fee}"
+
+msgid "Earned today: ${amount}"
+msgstr "오늘 수익: ${amount}"
+
+msgid "Parked today: {count} car"
+msgid_plural "Parked today: {count} cars"
+msgstr[0] "오늘 주차: {count}대"
+
+msgid "Diverted today: {count} car"
+msgid_plural "Diverted today: {count} cars"
+msgstr[0] "오늘 우회 차량: {count}대"
+
+msgid "Status: Not in use"
+msgstr "상태: 사용 안 함"
+
+msgid "{count} on duty"
+msgstr "근무 중 {count}"
+
+msgid "{count} on the way"
+msgstr "이동 중 {count}"
+
+msgid "Staff: none"
+msgstr "직원: 없음"
+
+msgid "Staff: {parts}"
+msgstr "직원: {parts}"
+
+msgid "{staff} · Open"
+msgstr "{staff} · 운영 중"
+
+msgid "{staff} · Closed, {reason}"
+msgstr "{staff} · 폐쇄됨, {reason}"
+
+msgid "Pick it up and set it down elsewhere"
+msgstr "집어 올려 다른 곳에 배치합니다"
+
+msgid "Can't delete: {reason}"
+msgstr "삭제 불가: {reason}"
+
+msgid "Move"
+msgstr "이동"
+
+msgid "Move room"
+msgstr "방 이동"
+
+msgid "This kind of room can't be moved yet"
+msgstr "이 종류의 방은 아직 이동할 수 없습니다"
+
+msgid "It is no longer there"
+msgstr "더 이상 그 자리에 없습니다"
+
+msgid "Single pieces outside a room can't be moved yet"
+msgstr "방 바깥의 개별 시설은 아직 이동할 수 없습니다"
+
+msgid "Car parks and curbs can't be moved yet"
+msgstr "주차장과 정차 구역은 아직 이동할 수 없습니다"
+
+msgid "Delete"
+msgstr "삭제"
+
+msgid "Delete room"
+msgstr "방 삭제"
+
+msgid "Take car parks and curbs back with the Remove tool"
+msgstr "주차장과 정차 구역은 철거 도구로 회수하세요"
+
+msgctxt "price"
+msgid "Free"
+msgstr "무료"
+
+msgid "Locked"
+msgstr "잠김"
+
+msgid "Wages paid: {amount}"
+msgstr "지급된 급여: {amount}"
+
+msgid "Wages paid: {amount} ({owed} owed)"
+msgstr "지급된 급여: {amount} (미지급 {owed})"
+
+msgid "How it works"
+msgstr "작동 방식"
+
+msgid "Needs and upkeep"
+msgstr "요건 및 유지비"
+
+msgid "How it works: {text}"
+msgstr "작동 방식: {text}"
+
+msgid "Needs and upkeep: {text}"
+msgstr "요건 및 유지비: {text}"
+
+msgid "Templates"
+msgstr "템플릿"
+
+msgid "Save room"
+msgstr "방 저장"
+
+msgid "Pick a room"
+msgstr "방 선택"
+
+msgid "{w}x{h}"
+msgstr "{w}x{h}"
+
+msgid "{count} pieces"
+msgstr "{count}개"
+
+msgid "Click a furnished room on the grid to save it as a reusable template."
+msgstr "배치된 방을 클릭하여 재사용 가능한 템플릿으로 저장하세요."
+
+msgid "Empty room footprint."
+msgstr "비어 있는 방 구획입니다."
+
+msgctxt "build menu"
+msgid "Bush"
+msgstr "관목"
+
+msgctxt "build menu"
+msgid "Planter"
+msgstr "화단"
+
+msgctxt "build menu"
+msgid "Plant pot"
+msgstr "화분"
+
+msgctxt "build menu"
+msgid "Tree"
+msgstr "나무"
+
+msgctxt "build menu"
+msgid "Bench"
+msgstr "벤치"
+
+msgctxt "build menu"
+msgid "Tree bench"
+msgstr "나무 벤치"
+
+msgctxt "build menu"
+msgid "Fountain"
+msgstr "분수"
+
+msgctxt "build menu"
+msgid "Statue"
+msgstr "조각상"
+
+msgctxt "build menu"
+msgid "Stanchion"
+msgstr "차단봉"
+
+msgctxt "build menu"
+msgid "Queue belt"
+msgstr "대기열 벨트"
+
+msgctxt "build menu"
+msgid "Bin"
+msgstr "쓰레기통"
+
+msgctxt "build menu"
+msgid "Bar counter"
+msgstr "바 카운터"
+
+msgctxt "build menu"
+msgid "Grab stall"
+msgstr "테이크아웃 매대"
+
+msgctxt "build menu"
+msgid "Dining table"
+msgstr "식탁"
+
+msgctxt "build menu"
+msgid "Booth"
+msgstr "부스 좌석"
+
+msgctxt "build menu"
+msgid "Info desk"
+msgstr "안내 데스크"
+
+msgctxt "build menu"
+msgid "Info screen"
+msgstr "안내 스크린"
+
+msgctxt "build menu"
+msgid "Cash machine"
+msgstr "현금인출기"
+
+msgctxt "build menu"
+msgid "Sofa"
+msgstr "소파"
+
+msgctxt "build menu"
+msgid "Armchair"
+msgstr "안락의자"
+
+msgctxt "build menu"
+msgid "Work desk"
+msgstr "업무용 책상"
+
+msgctxt "build menu"
+msgid "Play blocks"
+msgstr "놀이 블록"
+
+msgctxt "build menu"
+msgid "Play slide"
+msgstr "미끄럼틀"
+
+msgctxt "build menu"
+msgid "Prize podium"
+msgstr "경품 단상"
+
+msgid "{requirement} (now {stars} stars, {passengers} passenger)"
+msgid_plural "{requirement} (now {stars} stars, {passengers} passengers)"
+msgstr[0] "{requirement} (현재 {stars}★, 승객 {passengers}명)"
+
+msgid "Unlocked: {facilities}"
+msgstr "잠금 해제: {facilities}"
+
+msgid "Build unlocks are not wired"
+msgstr "건설 잠금 해제가 연결되지 않았습니다"
+
+msgid "Not available yet"
+msgstr "아직 사용할 수 없습니다"
+
+msgid "Unlocks at {stars} stars and {passengers} passenger"
+msgid_plural "Unlocks at {stars} stars and {passengers} passengers"
+msgstr[0] "{stars}★ 및 승객 {passengers}명 달성 시 해제"
+
+msgid "cafe and bins, security lane, baggage, kiosk, screen, plants, benches, curb bay, surface lot, medium runway"
+msgstr "카페 및 쓰레기통, 보안 레인, 수하물 시설, 키오스크, 안내 스크린, 화초, 벤치, 정차 구역, 노상 주차장, 중형 활주로"
+
+msgid "food and services: bar, restaurant, grab-and-go, info desk, pharmacy, exchange, ATM, lounge, car park gate, large runway"
+msgstr "식음료 및 서비스: 바, 레스토랑, 테이크아웃, 안내 데스크, 약국, 환전소, ATM, 라운지, 주차장 게이트, 대형 활주로"
+
+msgid "premium shops and amenities: duty free, fashion, shower, nap pod, play area, fountain, statue, multi-storey"
+msgstr "고급 상점 및 편의시설: 면세점, 패션 매장, 샤워실, 수면 캡슐, 놀이 공간, 분수, 조각상, 주차 타워"
+
+msgid "R rotate"
+msgstr "R 회전"
+
+msgctxt "narrow build mode sign"
+msgid "Build"
+msgstr "건설"
+
+msgid "Build mode"
+msgstr "건설 모드"
+
+msgid "Planner ({key})"
+msgstr "일정표 ({key})"
+
+msgid "Flight planner"
+msgstr "운항 일정표"
+
+msgid "Close"
+msgstr "닫기"
+
+msgctxt "calendar day"
+msgid "Day {day}"
+msgstr "{day}일차"
+
+msgid "No gate has a stand yet, so there is nothing to plan."
+msgstr "주기장이 있는 탑승구가 아직 없어 일정을 짤 수 없습니다."
+
+msgctxt "gate name"
+msgid "Gate {gate}"
+msgstr "{gate}번 탑승구"
+
+msgid ""
+"{label}{airline}\n"
+"Gate {gate}, held {from} to {to}"
+msgstr ""
+"{label}{airline}\n"
+"{gate}번 탑승구 ({from}~{to} 배정)"
+
+msgid "Click a flight to move it or end its contract, or drag it to another gate. Days already issued keep their gate."
+msgstr "항공편을 클릭해 이동하거나 계약을 종료하고, 다른 탑승구로 드래그하세요. 이미 확정된 날짜의 탑승구는 유지됩니다."
+
+msgctxt "gate name"
+msgid "{label}  Gate {gate}"
+msgstr "{label}  {gate}번 탑승구"
+
+msgctxt "button: end the contract"
+msgid "End"
+msgstr "종료"
+
+msgid "End this airline contract"
+msgstr "이 항공사 계약 종료"
+
+msgid "No other gate fits this flight"
+msgstr "이 항공편에 맞는 다른 탑승구가 없습니다"
+
+msgid "No other gate exists"
+msgstr "다른 탑승구가 없습니다"
+
+msgid "Move to:"
+msgstr "이동 대상:"
+
+msgid "End contract"
+msgstr "계약 종료"
+
+msgctxt "button: keep the contract"
+msgid "Keep"
+msgstr "유지"
+
+msgid "No flights scheduled"
+msgstr "예정된 항공편 없음"
+
+msgid "Today"
+msgstr "오늘"
+
+msgid "Tomorrow"
+msgstr "내일"
+
+msgid "None"
+msgstr "없음"
+
+msgid "+{count} more"
+msgstr "외 +{count}건"
+
+msgid "Departures ({key})"
+msgstr "출발편 ({key})"
+
+msgid "Made {made}  Missed {missed}  In terminal {active}"
+msgstr "탑승 {made}  놓침 {missed}  터미널 내 {active}"
+
+msgid "Move this flight to another gate"
+msgstr "이 항공편을 다른 탑승구로 이동"
+
+msgid "No gate has a stand"
+msgstr "주기장이 있는 탑승구가 없습니다"
+
+msgid "{destination} now uses gate {gate} for the days not yet issued"
+msgstr "{destination} 노선은 아직 확정되지 않은 날부터 {gate}번 탑승구를 사용합니다"
+
+msgid "End this contract? Exit fee ${fee}"
+msgstr "이 계약을 종료할까요? 해지 수수료 ${fee}"
+
+msgid "End this contract?"
+msgstr "이 계약을 종료할까요?"
+
+msgid "{destination} contract ended. Flights already booked still fly"
+msgstr "{destination} 계약이 종료되었습니다. 이미 예약된 항공편은 예정대로 운항합니다"
+
+msgid "Can't end this contract: another flight would have no taxi plan"
+msgstr "계약을 종료할 수 없습니다. 다른 항공편의 유도로 경로가 사라집니다"
+
+msgid "Can't end this contract: the {time} flight would have no taxi plan"
+msgstr "계약을 종료할 수 없습니다. {time} 항공편의 유도로 경로가 사라집니다"
+
+msgid "Can't end this contract: the {time} {airline} flight to {city} would have no taxi plan"
+msgstr "계약을 종료할 수 없습니다. {time} {city}행 {airline} 항공편의 유도로 경로가 사라집니다"
+
+msgid "Gate {gate} is busy when this flight needs it"
+msgstr "이 항공편이 필요한 시간에 {gate}번 탑승구가 사용 중입니다"
+
+msgid "The runway"
+msgstr "활주로"
+
+msgid "The taxi lane"
+msgstr "유도로"
+
+msgid "{subject} is taken by the {time} flight"
+msgstr "{subject}이(가) {time} 항공편에 배정되어 있습니다"
+
+msgid "{subject} is taken by the {time} {destination} flight"
+msgstr "{subject}이(가) {time} {destination}행 항공편에 배정되어 있습니다"
+
+msgid "Airlines are warning you: the airport rating is below {stars} stars."
+msgstr "항공사 경고: 공항 등급이 {stars}★ 미만입니다."
+
+msgid "{airline} to {destination} has ended its contract: the airport rating stayed low."
+msgstr "{airline} {destination} 노선이 공항 등급 저조로 계약을 해지했습니다."
+
+msgid "Flights already issued still fly; no new days will."
+msgstr "이미 확정된 항공편은 운항하지만 새 날짜는 배정되지 않습니다."
+
+msgid "first flight tomorrow"
+msgstr "첫 항공편 내일 출발"
+
+msgid "first flight on Day {day}"
+msgstr "첫 항공편 {day}일차"
+
+msgid "{hours} h"
+msgstr "{hours}시간"
+
+msgid "{minutes} min"
+msgstr "{minutes}분"
+
+msgid "{airline} to {destination}"
+msgstr "{airline} · {destination}행"
+
+msgid "Departs {time} daily"
+msgstr "매일 {time} 출발"
+
+msgid "Small plane"
+msgstr "소형기"
+
+msgid "Medium plane"
+msgstr "중형기"
+
+msgid "Large plane"
+msgstr "대형기"
+
+msgid "${amount} a day"
+msgstr "일일 ${amount}"
+
+msgid "Fits your gates now"
+msgstr "현재 탑승구에 적합"
+
+msgid "Needs another gate"
+msgstr "다른 탑승구 필요"
+
+msgid "Offers ({count})"
+msgstr "제안 ({count})"
+
+msgid "first flight {lead} after opening"
+msgstr "개항 {lead} 후 첫 항공편"
+
+msgid "Low airport rating"
+msgstr "낮은 공항 등급"
+
+msgid "Contract ended"
+msgstr "계약 종료"
+
+msgctxt "button: accept an offer"
+msgid "Accept"
+msgstr "수락"
+
+msgctxt "button: decline an offer"
+msgid "Decline"
+msgstr "거절"
+
+msgid "Can't accept {airline} to {destination}: {reason}"
+msgstr "{airline} {destination} 노선을 수락할 수 없습니다: {reason}"
+
+msgid "Accepted {airline} to {destination}"
+msgstr "{airline} {destination} 노선을 수락했습니다"
+
+msgid "Accepted {airline} to {destination}, {note}"
+msgstr "{airline} {destination} 노선을 수락했습니다 ({note})"
+
+msgid "it clashes with another flight"
+msgstr "다른 항공편과 시간이 겹칩니다"
+
+msgid "No offers right now. New offers arrive at midnight."
+msgstr "현재 제안이 없습니다. 자정에 새 제안이 도착합니다."
+
+msgid "Contracts end after {days} more low day."
+msgid_plural "Contracts end after {days} more low days."
+msgstr[0] "낮은 등급이 {days}일 더 지속되면 계약이 종료됩니다."
+
+msgid "{count} passenger booked   ${fee} per passenger"
+msgid_plural "{count} passengers booked   ${fee} per passenger"
+msgstr[0] "예약 승객 {count}명   1인당 ${fee}"
+
+msgid "Small runway, {length} m"
+msgstr "소형 활주로 ({length} m)"
+
+msgid "Medium runway, {length} m"
+msgstr "중형 활주로 ({length} m)"
+
+msgid "Large runway, {length} m"
+msgstr "대형 활주로 ({length} m)"
+
+msgid "Runway"
+msgstr "활주로"
+
+msgid "Upgrade runway"
+msgstr "활주로 확장"
+
+msgid "Next: {runway}, ${price}, works take {hours} hour"
+msgid_plural "Next: {runway}, ${price}, works take {hours} hours"
+msgstr[0] "다음 단계: {runway}, ${price}, 공사 {hours}시간 소요"
+
+msgid "Drop to move {destination} to gate {gate}. Days already issued keep their gate."
+msgstr "놓으면 {destination} 노선을 {gate}번 탑승구로 옮깁니다. 이미 확정된 날짜는 기존 탑승구를 유지합니다."
+
+msgid "Drop the flight on another gate's row."
+msgstr "다른 탑승구 행에 항공편을 놓으세요."
+
+msgid "Plain terms"
+msgstr "일반 조건"
+
+msgid "No catch, and 10% less pay."
+msgstr "까다로운 조건이 없는 대신 수익이 10% 낮습니다."
+
+msgid "Loyal: +10%"
+msgstr "단골 우대: +10%"
+
+msgid "This airline is loyal to you: its offers pay 10% more."
+msgstr "이 항공사는 신뢰 관계로 인해 제안 보수를 10% 더 지급합니다."
+
+msgid "Top fare +{percent}%"
+msgstr "최고 운임 +{percent}%"
+
+msgid "Shoppers"
+msgstr "쇼핑객 위주"
+
+msgid "Many shoppers"
+msgstr "쇼핑객 대거 탑승"
+
+msgid "Bag cover"
+msgstr "수하물 보장"
+
+msgid "Full bag cover"
+msgstr "수하물 전액 보장"
+
+msgid "Full flight"
+msgstr "만석 항공편"
+
+msgid "Packed flight"
+msgstr "초만원 항공편"
+
+msgid "Rush crowd"
+msgstr "지각 승객 다수"
+
+msgid "Big rush crowd"
+msgstr "지각 승객 대량 발생"
+
+msgid "Heavy bags"
+msgstr "무거운 수하물"
+
+msgid "Very heavy bags"
+msgstr "대량 수하물"
+
+msgid "Signing bonus ${amount}"
+msgstr "계약 보너스 ${amount}"
+
+msgid "Loyal airline"
+msgstr "단골 항공사"
+
+msgid "Miss fine ${amount}"
+msgstr "미탑승 벌금 ${amount}"
+
+msgid "Odd hours"
+msgstr "이른·늦은 시간대"
+
+msgid "Exit fee ${amount}"
+msgstr "해지 수수료 ${amount}"
+
+msgid "Pays {percent}% more per passenger."
+msgstr "승객 1인당 보수를 {percent}% 더 지급합니다."
+
+msgid "{percent}% of passengers come early with time to shop (usually 30%)."
+msgstr "승객의 {percent}%가 쇼핑할 시간을 두고 일찍 도착합니다 (보통 30%)."
+
+msgid "A missed bag costs {percent}% of the fee (usually 50%)."
+msgstr "수하물 누락 시 요금의 {percent}%만 감액됩니다 (보통 50%)."
+
+msgid "A missed bag costs nothing (usually 50% of the fee)."
+msgstr "수하물이 누락되어도 감액이 없습니다 (보통 요금의 50%)."
+
+msgid "Booked from the top half of the plane's range."
+msgstr "기종 정원의 상위 절반 구간에서 예약이 찹니다."
+
+msgid "Booked from the top quarter of the plane's range."
+msgstr "기종 정원의 최상위 25% 구간에서 예약이 찹니다."
+
+msgid "{percent}% of passengers arrive late in a rush (usually 15%)."
+msgstr "승객의 {percent}%가 늦게 도착해 서두릅니다 (보통 15%)."
+
+msgid "A missed bag costs the whole fee (usually 50%)."
+msgstr "수하물 누락 시 요금 전액이 감액됩니다 (보통 50%)."
+
+msgid "Pays ${amount} once, when this contract's first flight leaves."
+msgstr "이 계약의 첫 항공편이 출발할 때 ${amount}을 일회성으로 지급합니다."
+
+msgid "After {days} days this flight leaves, the airline's later offers pay {percent}% more."
+msgstr "이 항공편이 {days}일 운항하면 이후 해당 항공사의 제안 보수가 {percent}% 오릅니다."
+
+msgid "Each passenger who misses this flight costs ${amount}."
+msgstr "이 항공편을 놓친 승객 1명당 ${amount}의 벌금이 부과됩니다."
+
+msgid "Departs at 06:00 or 22:00, outside the usual 07:00 to 21:00."
+msgstr "일반 시간대(07:00~21:00) 밖인 06:00 또는 22:00에 출발합니다."
+
+msgid "Ending this contract in its first {days} days costs ${amount}."
+msgstr "첫 {days}일 이내에 계약을 해지하면 ${amount}의 수수료가 듭니다."
+
+msgid "the taxiway move would strand flight {id}"
+msgstr "유도로 이동 시 {id}편이 고립됩니다"
+
+msgid "Not enough money: the {size} runway works cost ${price}"
+msgstr "자금이 부족합니다: {size} 활주로 공사 비용은 ${price}입니다"
+
+msgid "the runway is too short for a {size} plane"
+msgstr "활주로가 {size} 기종에는 너무 짧습니다"
+
+msgctxt "runway size"
+msgid "small"
+msgstr "소형"
+
+msgctxt "runway size"
+msgid "medium"
+msgstr "중형"
+
+msgctxt "runway size"
+msgid "large"
+msgstr "대형"
+
+msgid "Runway works are already booked"
+msgstr "활주로 공사가 이미 예약되어 있습니다"
+
+msgid "The last runway works are still held in the timetable"
+msgstr "이전 활주로 공사가 아직 시간표에 남아 있습니다"
+
+msgid "The runway is already the largest size"
+msgstr "활주로가 이미 최대 크기입니다"
+
+msgid "The timetable leaves no quiet stretch for the works"
+msgstr "시간표에 공사를 진행할 한산한 시간대가 없습니다"
+
+msgid "Works on the {size} runway start {start} and end {finish}"
+msgstr "{size} 활주로 공사가 {start}에 시작해 {finish}에 끝납니다"
+
+msgid "Works on the {size} runway started {start} and end {finish}"
+msgstr "{size} 활주로 공사가 {start}에 시작되었으며 {finish}에 끝납니다"
+
+msgid "at {time}"
+msgstr "{time}"
+
+msgid "tomorrow at {time}"
+msgstr "내일 {time}"
+
+msgid "on Day {day} at {time}"
+msgstr "{day}일차 {time}"
+
+msgid "Waiting for taxiway works"
+msgstr "유도로 공사 대기 중"
+
+msgid "The west taxiway has moved"
+msgstr "서쪽 유도로가 이동했습니다"
+
+msgid "The east taxiway has moved"
+msgstr "동쪽 유도로가 이동했습니다"
+
+msgid "Taxiway moved"
+msgstr "유도로 이동됨"
+
+msgid "{flight} moved to Gate {gate}"
+msgstr "{flight}이(가) {gate}번 탑승구로 이동했습니다"
+
+msgid "{flight} moves to Gate {gate}"
+msgstr "{flight}이(가) {gate}번 탑승구로 이동합니다"
+
+msgid "Flights moved"
+msgstr "항공편 이동됨"
+
+msgid "{count} flight moved to Gate {gate}"
+msgid_plural "{count} flights moved to Gate {gate}"
+msgstr[0] "{count}편이 {gate}번 탑승구로 이동했습니다"
+
+msgid "{count} flight moves to Gate {gate}"
+msgid_plural "{count} flights move to Gate {gate}"
+msgstr[0] "{count}편이 {gate}번 탑승구로 이동합니다"
+
+msgid "Dismiss"
+msgstr "닫기"
+
+msgid "{airline} {destination}"
+msgstr "{airline} {destination}"
+
+msgid "{title} result"
+msgstr "{title} 결과"
+
+msgid "Made {made}   Missed {missed}"
+msgstr "탑승 {made}   놓침 {missed}"
+
+msgid "{count}  {reason}"
+msgstr "{count}  {reason}"
+
+msgid "{count}  Other"
+msgstr "{count}  기타"
+
+msgid "Waiting outside: check-in full"
+msgstr "밖에서 대기 중: 체크인 만원"
+
+msgid "Missed the flight"
+msgstr "항공편 놓침"
+
+msgid "No check-in desk to go to"
+msgstr "이용할 체크인 데스크가 없습니다"
+
+msgid "No security scanner or lane to go to"
+msgstr "이용할 보안 검색대가 없습니다"
+
+msgid "Waiting outside a full queue"
+msgstr "가득 찬 대기열 밖에서 대기 중"
+
+msgid "No walkable route"
+msgstr "이동 가능한 경로가 없습니다"
+
+msgid "The exit to the plane was blocked"
+msgstr "비행기로 나가는 출구가 막혀 있었습니다"
+
+msgid "Held up by crowds at the gate"
+msgstr "탑승구 혼잡으로 지체되었습니다"
+
+msgid "At the gate, but not boarded in time"
+msgstr "탑승구에 도착했지만 제때 탑승하지 못했습니다"
+
+msgid "Left the gate too late for the plane"
+msgstr "탑승구에서 너무 늦게 출발했습니다"
+
+msgid "Arrived after the doors closed"
+msgstr "탑승 마감 후 도착했습니다"
+
+msgid "Still walking to check-in"
+msgstr "아직 체크인으로 이동 중"
+
+msgid "Still queuing for check-in"
+msgstr "아직 체크인 줄에 대기 중"
+
+msgid "Still at the check-in desk"
+msgstr "아직 체크인 데스크 이용 중"
+
+msgid "Still walking to security"
+msgstr "아직 보안 검색으로 이동 중"
+
+msgid "Still queuing for security"
+msgstr "아직 보안 검색 줄에 대기 중"
+
+msgid "Still at security"
+msgstr "아직 보안 검색 중"
+
+msgid "Still walking to the gate"
+msgstr "아직 탑승구로 이동 중"
+
+msgid "Still at the cafe"
+msgstr "아직 카페에 있음"
+
+msgid "Still at the toilet"
+msgstr "아직 화장실에 있음"
+
+msgid "Still at a shop"
+msgstr "아직 상점에 있음"
+
+msgid "Waiting for drop-off"
+msgstr "하차 대기 중"
+
+msgid "Never arrived: the terminal has no entrance"
+msgstr "도착 실패: 터미널에 입구가 없습니다"
+
+msgid "Did not arrive before the doors closed"
+msgstr "탑승 마감 전에 도착하지 못했습니다"
+
+msgid "Day {day} {time}"
+msgstr "{day}일차 {time}"
+
+msgid ""
+"{when}  {title}\n"
+"{detail}"
+msgstr ""
+"{when}  {title}\n"
+"{detail}"
+
+msgid "still up"
+msgstr "진행 중"
+
+msgid "cleared {time}"
+msgstr "{time}에 해결됨"
+
+msgid "{when}  {title}, {end}"
+msgstr "{when}  {title}, {end}"
+
+msgid "Alerts"
+msgstr "알림"
+
+msgid "Alert history and the on/off switch for alert cards"
+msgstr "알림 기록 및 알림 카드 켜기/끄기 전환"
+
+msgid "Open the alert history"
+msgstr "알림 기록 열기"
+
+msgid "Alert history"
+msgstr "알림 기록"
+
+msgid "Show alert cards"
+msgstr "알림 카드 표시"
+
+msgid "Alerts ({count})"
+msgstr "알림 ({count})"
+
+msgid "Click to look at it"
+msgstr "클릭하여 확인"
+
+msgid "No alerts yet"
+msgstr "아직 알림 없음"
+
+msgid "{count} desk full · {waiting} waiting"
+msgid_plural "{count} desks full · {waiting} waiting"
+msgstr[0] "데스크 {count}곳 만원 · {waiting}명 대기"
+
+msgid "Check-in queue full"
+msgstr "체크인 대기열 만원"
+
+msgid "{count} lane full · {waiting} waiting"
+msgid_plural "{count} lanes full · {waiting} waiting"
+msgstr[0] "보안 레인 {count}곳 만원 · {waiting}명 대기"
+
+msgid "Security queue full"
+msgstr "보안 검색 대기열 만원"
+
+msgid "{count} passenger can't get where they are going"
+msgid_plural "{count} passengers can't get where they are going"
+msgstr[0] "승객 {count}명이 목적지로 이동할 수 없습니다"
+
+msgid "{count} passenger waits for a gate seat or a place to stand"
+msgid_plural "{count} passengers wait for a gate seat or a place to stand"
+msgstr[0] "승객 {count}명이 탑승구 좌석이나 설 자리를 기다리고 있습니다"
+
+msgid "Gate full"
+msgstr "탑승구 만원"
+
+msgid "{count} station is closed · hire staff on the Staff card"
+msgid_plural "{count} stations are closed · hire staff on the Staff card"
+msgstr[0] "시설 {count}곳이 폐쇄됨 · 직원 카드에서 직원을 고용하세요"
+
+msgid "Nobody on duty"
+msgstr "근무자 없음"
+
+msgid "{count} station is closed · staff can't reach the staff spot"
+msgid_plural "{count} stations are closed · staff can't reach the staff spot"
+msgstr[0] "시설 {count}곳이 폐쇄됨 · 직원이 근무 위치에 접근할 수 없습니다"
+
+msgid "Staff can't get to work"
+msgstr "직원이 근무지로 이동할 수 없음"
+
+msgid "The terminal is getting dirty. Hire a cleaner on the Staff card."
+msgstr "터미널이 지저분해지고 있습니다. 직원 카드에서 미화원을 고용하세요."
+
+msgid "The terminal is getting dirty. Place bins near the bar and toilets, or hire more cleaners."
+msgstr "터미널이 지저분해지고 있습니다. 바와 화장실 근처에 쓰레기통을 놓거나 미화원을 더 고용하세요."
+
+msgid "Dirty terminal"
+msgstr "터미널 청결 불량"
+
+msgid "Inspector visit tomorrow"
+msgstr "내일 점검관 방문 예정"
+
+msgid "Holiday rush tomorrow"
+msgstr "내일 연휴 혼잡 예정"
+
+msgid "A VIP wants to fly"
+msgstr "VIP 탑승 요청"
+
+msgid "A VIP wants to fly on {flight}. The first passenger to arrive for it is the VIP."
+msgstr "VIP가 {flight}에 탑승하고자 합니다. 해당 항공편에 가장 먼저 도착하는 승객이 VIP입니다."
+
+msgid "If it fails: your rating drops by {penalty} if the VIP misses the flight."
+msgstr "실패 시: VIP가 비행기를 놓치면 공항 등급이 {penalty} 하락합니다."
+
+msgid "An airline asks a favour"
+msgstr "항공사의 부탁"
+
+msgid "An airline asks you to fit {extra} more passengers onto {flight}."
+msgstr "항공사가 {flight}에 승객 {extra}명을 추가로 수용해 달라고 요청했습니다."
+
+msgid "Reward: {bonus} money now, and {extra} more passengers paying their fees."
+msgstr "보상: 즉시 {bonus}의 자금을 받고, 추가 승객 {extra}명의 이용 요금도 얻습니다."
+
+msgid "The VIP made the flight"
+msgstr "VIP 탑승 성공"
+
+msgid "The VIP boarded in a good mood. You earn {bonus} money."
+msgstr "VIP가 기분 좋게 탑승했습니다. {bonus}의 보상을 획득했습니다."
+
+msgid "The VIP missed the flight"
+msgstr "VIP 탑승 실패"
+
+msgid "Your rating drops by {penalty}."
+msgstr "공항 등급이 {penalty} 하락합니다."
+
+msgid "The inspector was happy"
+msgstr "점검관이 만족했습니다"
+
+msgid "You earn {bonus} money."
+msgstr "{bonus}의 보상을 획득했습니다."
+
+msgid "The inspector was not happy"
+msgstr "점검관이 불만족했습니다"
+
+msgid "The inspector found {found}. Your rating drops by {penalty}."
+msgstr "점검관이 {found} 문제를 지적했습니다. 공항 등급이 {penalty} 하락합니다."
+
+msgid "{count} mess on the floor ({allowed} allowed)"
+msgid_plural "{count} messes on the floor ({allowed} allowed)"
+msgstr[0] "바닥 오염 {count}곳 (허용 {allowed})"
+
+msgid "{count} passenger stuck in a full queue ({allowed} allowed)"
+msgid_plural "{count} passengers stuck in a full queue ({allowed} allowed)"
+msgstr[0] "가득 찬 대기열에 갇힌 승객 {count}명 (허용 {allowed})"
+
+msgid "{first} and {second}"
+msgstr "{first} 및 {second}"
+
+msgid "none"
+msgstr "없음"
+
+msgid "today's"
+msgstr "오늘의"
+
+msgid "tomorrow's"
+msgstr "내일의"
+
+msgid "day {day}'s"
+msgstr "{day}일차의"
+
+msgid "half a star"
+msgstr "별 반 개"
+
+msgid "{count} star"
+msgid_plural "{count} stars"
+msgstr[0] "별 {count}개"
+
+msgid "{count} stars"
+msgstr "별 {count}개"
+
+msgid "VIP for {flight}"
+msgstr "{flight} VIP"
+
+msgid "{day} {time} flight"
+msgstr "{day} {time} 항공편"
+
+msgid "The airport inspector visits tomorrow, some time between {from} and {to}."
+msgstr "공항 점검관이 내일 {from}~{to} 사이에 방문합니다."
+
+msgid "The inspector looks at messes on the floor and at queues that are full."
+msgstr "점검관은 바닥의 오염과 가득 찬 대기열을 확인합니다."
+
+msgid "Reward: {bonus} money if there are at most {max_messes} messes and at most {max_full_queue} passengers stuck in a full queue at the visit."
+msgstr "보상: 방문 시 바닥 오염이 {max_messes}곳 이하이고 대기열 정체 승객이 {max_full_queue}명 이하이면 {bonus} 지급."
+
+msgid "If it fails: your rating drops by {penalty}."
+msgstr "실패 시: 공항 등급이 {penalty} 하락합니다."
+
+msgid "Tomorrow is a holiday. {total} extra passengers are booked, spread over {count} of tomorrow's flights: {list}."
+msgstr "내일은 공휴일입니다. 내일 운항하는 {count}편({list})에 총 {total}명의 추가 승객이 예약되었습니다."
+
+msgid "Reward: every extra passenger pays the usual fee."
+msgstr "보상: 모든 추가 승객이 일반 이용 요금을 지불합니다."
+
+msgid "If it fails: queues grow, and passengers who miss their flight lower your rating as usual."
+msgstr "실패 시: 대기열이 길어지며 비행기를 놓친 승객만큼 평소대로 등급이 하락합니다."
+
+msgid "Reward: {bonus} money if the VIP makes the flight in a good mood (a mood of {good_mood} or higher when boarding)."
+msgstr "보상: VIP가 좋은 기분(탑승 시 기분 {good_mood} 이상)으로 탑승하면 {bonus} 지급."
+
+msgid "If it fails: the extra passengers need check-in and security too, and any who miss the flight lower your rating as usual."
+msgstr "실패 시: 추가 승객도 체크인과 보안 검색을 거쳐야 하며 놓친 승객은 평소대로 등급을 낮춥니다."
+
+msgid "The VIP made the flight, but their mood was below {good_mood} when boarding, so there is no bonus."
+msgstr "VIP가 탑승은 했지만 탑승 시 기분이 {good_mood} 미만이어서 보너스가 지급되지 않습니다."
+
+msgid "The clock stays paused until you choose."
+msgstr "선택할 때까지 시간이 멈춰 있습니다."
+
+msgid "The clock goes on when you close this."
+msgstr "이 창을 닫으면 시간이 다시 흐릅니다."
+
+msgid "Big news at the airport"
+msgstr "공항의 큰 소식"
+
+msgid "The runway works are done. Bigger planes can land now, so Offers can bring them flights."
+msgstr "활주로 공사가 완료되었습니다. 이제 더 큰 비행기가 착륙할 수 있어 제안 목록에 해당 항공편이 등장합니다."
+
+msgid "A big event has come up. Its notice says what it is and what you can do about it."
+msgstr "큰 행사가 생겼습니다. 안내문에서 내용과 대처 방법을 확인하세요."
+
+msgid "Your airport has grown"
+msgstr "공항이 성장했습니다"
+
+msgid "{hired} hired, off shift"
+msgstr "고용 {hired}, 비번"
+
+msgid "{hired} hired, {duty} cleaning, {off_shift} off shift"
+msgstr "고용 {hired}, 청소 {duty}, 비번 {off_shift}"
+
+msgid "{hired} hired, {duty} cleaning, {leaving} leaving"
+msgstr "고용 {hired}, 청소 {duty}, 퇴근 중 {leaving}"
+
+msgid "{hired} hired, {duty} cleaning"
+msgstr "고용 {hired}, 청소 {duty}"
+
+msgid "{hired} hired, {duty} on duty, {leaving} leaving"
+msgstr "고용 {hired}, 근무 {duty}, 퇴근 중 {leaving}"
+
+msgid "{hired} hired, {duty} on duty"
+msgstr "고용 {hired}, 근무 {duty}"
+
+msgid "Wall gap: close the open edge of the outer wall, marked in red"
+msgid_plural "{count} wall gaps: close the open edges of the outer wall, marked in red"
+msgstr[0] "벽 틈 {count}곳: 빨간색으로 표시된 외벽의 열린 부분을 닫으세요"
+
+msgid "To open the airport"
+msgstr "공항을 열려면"
+
+msgid "Ready: the airport opens on the next tick"
+msgstr "준비 완료: 다음 틱에 공항이 열립니다"
+
+msgid "Your airport needs"
+msgstr "공항에 필요한 항목"
+
+msgid "Open! Starter contract: {airline} to {destination}, daily"
+msgstr "개항! 초기 계약: {airline} {destination}행, 매일 운항"
+
+msgid "Hire a check-in agent"
+msgstr "체크인 직원 고용"
+
+msgid "Hire a security officer"
+msgstr "보안 요원 고용"
+
+msgid "Hire a gate agent"
+msgstr "탑승구 직원 고용"
+
+msgid "Hire shop staff"
+msgstr "상점 직원 고용"
+
+msgid "Check-in agents"
+msgstr "체크인 직원"
+
+msgid "Security officers"
+msgstr "보안 요원"
+
+msgid "Gate agents"
+msgstr "탑승구 직원"
+
+msgid "Shop staff"
+msgstr "상점 직원"
+
+msgid "Cleaners"
+msgstr "미화원"
+
+msgctxt "staff button"
+msgid "Hire · {wage}/day"
+msgstr "고용 · {wage}/일"
+
+msgctxt "staff button"
+msgid "Fire"
+msgstr "해고"
+
+msgid "Belt ends {count}"
+msgstr "벨트 끝부분 {count}"
+
+msgid "Needs a belt dragged inside"
+msgstr "벨트를 내부로 연결해야 합니다"
+
+msgid "Waiting for belt from check-in desk"
+msgstr "체크인 데스크에서 오는 벨트 대기 중"
+
+msgid "Needs a Ramp Agent (Staff)"
+msgstr "지상조업 직원 필요 (직원 메뉴)"
+
+msgid "Desks connected: {count}"
+msgstr "연결된 데스크: {count}"
+
+msgid "Stalls {count}"
+msgstr "변기 칸 {count}"
+
+msgid "Sinks {count}"
+msgstr "세면대 {count}"
+
+msgid "Upkeep ${amount} per day"
+msgstr "유지비 일일 ${amount}"
+
+msgid "Upkeep ${amount} per day once ready"
+msgstr "준비 후 유지비 일일 ${amount}"
+
+msgid "Spots {count}"
+msgstr "이용 자리 {count}"
+
+msgid "Fee ${amount} per visit"
+msgstr "이용 요금 회당 ${amount}"
+
+msgid "Free to use"
+msgstr "무료 이용"
+
+msgid "Browse spots {count}"
+msgstr "구경 자리 {count}"
+
+msgid "Base spend ${amount} per visit"
+msgstr "기본 지출 회당 ${amount}"
+
+msgid "Seats {count}"
+msgstr "좌석 {count}"
+
+msgid "Entrance with a way through check-in and security to an exit"
+msgstr "입구에서 체크인과 보안 검색을 거쳐 출구까지 이어지는 경로"
+
+msgid "Staff can't reach a desk or scanner passengers need: clear its staff spot"
+msgstr "승객이 이용할 데스크나 검색대에 직원이 닿을 수 없습니다. 근무 위치를 비워 주세요"
+
+msgid "{need} ({unlock})"
+msgstr "{need} ({unlock})"
+
+msgid "Check-in desk and an agent"
+msgstr "체크인 데스크와 직원"
+
+msgid "Security scanner and an officer"
+msgstr "보안 검색대와 요원"
+
+msgid "Passengers need a check-in desk"
+msgstr "승객에게 체크인 데스크가 필요합니다"
+
+msgid "Passengers need security"
+msgstr "승객에게 보안 검색이 필요합니다"
+
+msgid "Passengers need a toilet"
+msgstr "승객에게 화장실이 필요합니다"
+
+msgid "Passengers are hungry"
+msgstr "승객이 배고파합니다"
+
+msgid "Follow this passenger"
+msgstr "이 승객 따라가기"
+
+msgid "Thoughts"
+msgstr "생각"
+
+msgid "Show where this happened"
+msgstr "발생 위치 보기"
+
+msgid "Passenger {id}"
+msgstr "승객 {id}"
+
+msgid "Mood {mood}   Hunger {hunger}   Toilet {toilet}   Boredom {boredom}"
+msgstr "기분 {mood}   배고픔 {hunger}   화장실 {toilet}   지루함 {boredom}"
+
+msgid "Thoughts: none yet"
+msgstr "생각: 아직 없음"
+
+msgid "{thought} · {age}"
+msgstr "{thought} · {age}"
+
+msgid "The pin shows where they were at {time}"
+msgstr "핀은 {time} 기준 위치를 나타냅니다"
+
+msgid "Running late"
+msgstr "시간 촉박"
+
+msgid "Stuck: \"{reason}\""
+msgstr "이동 불가: \"{reason}\""
+
+msgid "Flight {title}"
+msgstr "항공편 {title}"
+
+msgid "Flight {title}, doors close {time}"
+msgstr "항공편 {title}, 탑승 마감 {time}"
+
+msgid "just now"
+msgstr "방금"
+
+msgid "{minutes} min ago"
+msgid_plural "{minutes} min ago"
+msgstr[0] "{minutes}분 전"
+
+msgid "{count} passenger"
+msgid_plural "{count} passengers"
+msgstr[0] "승객 {count}명"
+
+msgid "Flight {flights}"
+msgstr "항공편 {flights}"
+
+msgid "Empty, at the curb"
+msgstr "빈 차, 정차 구역 대기 중"
+
+msgid "At the curb"
+msgstr "정차 구역 정차 중"
+
+msgid "Parked, driver away"
+msgstr "주차됨, 운전자 부재"
+
+msgid "Parked"
+msgstr "주차됨"
+
+msgid "Empty, leaving"
+msgstr "빈 차, 출발 중"
+
+msgid "Leaving"
+msgstr "출발 중"
+
+msgid "Empty, driving on"
+msgstr "빈 차, 주행 중"
+
+msgid "Driving into the car park"
+msgstr "주차장으로 진입 중"
+
+msgid "Waiting to turn into the car park"
+msgstr "주차장 진입 대기 중"
+
+msgid "Driving to the car park"
+msgstr "주차장으로 이동 중"
+
+msgid "Queuing for the curb"
+msgstr "정차 구역 대기 중"
+
+msgid "Driving to the curb"
+msgstr "정차 구역으로 이동 중"
+
+msgid "On time"
+msgstr "정시"
+
+msgid "Drop-off delay: under 1 min"
+msgstr "하차 지연: 1분 미만"
+
+msgid "Drop-off delay: {minutes} min"
+msgid_plural "Drop-off delay: {minutes} min"
+msgstr[0] "하차 지연: {minutes}분"
+
+msgctxt "vehicle"
+msgid "Taxi"
+msgstr "택시"
+
+msgctxt "vehicle"
+msgid "Car"
+msgstr "승용차"
+
+msgid "{vehicle} {id}"
+msgstr "{vehicle} {id}"
+
+msgid "That hit the spot"
+msgstr "딱 원하던 맛이야"
+
+msgid "Gave up on getting food"
+msgstr "식사 포기함"
+
+msgid "What a relief"
+msgstr "휴, 살 것 같네"
+
+msgid "Waited {minutes} min in the queue"
+msgid_plural "Waited {minutes} min in the queue"
+msgstr[0] "줄에서 {minutes}분 기다림"
+
+msgid "Nice decor here"
+msgstr "여기 인테리어 좋네"
+
+msgctxt "room status"
+msgid "Ready"
+msgstr "준비됨"
+
+msgctxt "status reason"
+msgid "too small: a {room} needs at least {width}x{height}"
+msgstr "너무 작음: {room}은(는) 최소 {width}x{height} 크기가 필요합니다"
+
+msgctxt "room need"
+msgid "Too small: a {room} needs at least {width}x{height}"
+msgstr "너무 작음: {room}은(는) 최소 {width}x{height} 크기가 필요합니다"
+
+msgctxt "gate card"
+msgid "Status: unlinked: no exit facing the planes in {cells} cells"
+msgstr "상태: 미연결 ({cells}칸 이내에 비행기 방향 출구가 없음)"
+
+msgctxt "gate card"
+msgid "Status: unlinked: gate {gate} uses the exit"
+msgstr "상태: 미연결 ({gate}번 탑승구가 해당 출구 사용 중)"
+
+msgctxt "gate card"
+msgid "Status: unlinked: stand would overlap gate {gate}"
+msgstr "상태: 미연결 (주기장이 {gate}번 탑승구와 겹침)"
+
+msgctxt "gate card"
+msgid "Status: unlinked: no room for a plane"
+msgstr "상태: 미연결 (비행기 주기 공간 없음)"
+
+msgctxt "gate card"
+msgid "Status: unlinked: way to the lane blocked"
+msgstr "상태: 미연결 (유도로 경로가 막힘)"
+
+msgctxt "gate card"
+msgid "Status: unlinked: every gate letter in use"
+msgstr "상태: 미연결 (사용 가능한 탑승구 알파벳 없음)"
+
+msgid "Status: Scanner fault, fixed by {time}"
+msgstr "상태: 검색대 고장 ({time}까지 수리 예정)"
+
+msgctxt "gate card"
+msgid "Biggest plane: Small"
+msgstr "최대 수용 기종: 소형기"
+
+msgctxt "gate card"
+msgid "Biggest plane: Medium"
+msgstr "최대 수용 기종: 중형기"
+
+msgctxt "gate card"
+msgid "Biggest plane: Large"
+msgstr "최대 수용 기종: 대형기"
+
+msgctxt "gate card"
+msgid "Biggest plane: {class}"
+msgstr "최대 수용 기종: {class}"
+
+msgctxt "item name"
+msgid "ATM"
+msgstr "ATM"
+
+msgctxt "item name"
+msgid "Baggage belt"
+msgstr "수하물 벨트"
+
+msgctxt "item name"
+msgid "Baggage cart"
+msgstr "수하물 카트"
+
+msgctxt "item name"
+msgid "Bar counter"
+msgstr "바 카운터"
+
+msgctxt "item name"
+msgid "Belt corner"
+msgstr "벨트 코너"
+
+msgctxt "item name"
+msgid "Belt end"
+msgstr "벨트 끝부분"
+
+msgctxt "item name"
+msgid "Belt merge"
+msgstr "벨트 합류부"
+
+msgctxt "item name"
+msgid "Bench"
+msgstr "벤치"
+
+msgctxt "item name"
+msgid "Bin"
+msgstr "쓰레기통"
+
+msgctxt "item name"
+msgid "Bush"
+msgstr "관목"
+
+msgctxt "item name"
+msgid "Cafe counter"
+msgstr "카페 카운터"
+
+msgctxt "item name"
+msgid "Cafe table"
+msgstr "카페 테이블"
+
+msgctxt "item name"
+msgid "Chain"
+msgstr "대기열 벨트"
+
+msgctxt "item name"
+msgid "Check-in desk"
+msgstr "체크인 데스크"
+
+msgctxt "item name"
+msgid "Clothes rail"
+msgstr "옷걸이 행거"
+
+msgctxt "item name"
+msgid "Currency exchange"
+msgstr "환전소"
+
+msgctxt "item name"
+msgid "Display stand"
+msgstr "진열대"
+
+msgctxt "item name"
+msgid "Duty free shelf"
+msgstr "면세점 선반"
+
+msgctxt "item name"
+msgid "Duty free till"
+msgstr "면세점 계산대"
+
+msgctxt "item name"
+msgid "Entrance"
+msgstr "입구"
+
+msgctxt "item name"
+msgid "Exit to the plane"
+msgstr "비행기 탑승 출구"
+
+msgctxt "item name"
+msgid "Fashion till"
+msgstr "패션 매장 계산대"
+
+msgctxt "item name"
+msgid "Fountain"
+msgstr "분수"
+
+msgctxt "item name"
+msgid "Gate desk"
+msgstr "탑승구 데스크"
+
+msgctxt "item name"
+msgid "Gate seats"
+msgstr "탑승구 좌석"
+
+msgctxt "item name"
+msgid "Grab-and-go stall"
+msgstr "테이크아웃 매대"
+
+msgctxt "item name"
+msgid "Info desk"
+msgstr "안내 데스크"
+
+msgctxt "item name"
+msgid "Info screen"
+msgstr "안내 스크린"
+
+msgctxt "item name"
+msgid "Kiosk counter"
+msgstr "키오스크 카운터"
+
+msgctxt "item name"
+msgid "Lounge armchair"
+msgstr "라운지 안락의자"
+
+msgctxt "item name"
+msgid "Lounge sofa"
+msgstr "라운지 소파"
+
+msgctxt "item name"
+msgid "Nap pod"
+msgstr "수면 캡슐"
+
+msgctxt "item name"
+msgid "Pharmacy counter"
+msgstr "약국 카운터"
+
+msgctxt "item name"
+msgid "Pharmacy shelf"
+msgstr "약국 선반"
+
+msgctxt "item name"
+msgid "Pickup table"
+msgstr "픽업 테이블"
+
+msgctxt "item name"
+msgid "Plant pot"
+msgstr "화분"
+
+msgctxt "item name"
+msgid "Planter"
+msgstr "화단"
+
+msgctxt "item name"
+msgid "Play blocks"
+msgstr "놀이 블록"
+
+msgctxt "item name"
+msgid "Play slide"
+msgstr "미끄럼틀"
+
+msgctxt "item name"
+msgid "Post"
+msgstr "차단봉"
+
+msgctxt "item name"
+msgid "Prize podium"
+msgstr "경품 단상"
+
+msgctxt "item name"
+msgid "Restaurant booth"
+msgstr "레스토랑 부스"
+
+msgctxt "item name"
+msgid "Restaurant table"
+msgstr "레스토랑 식탁"
+
+msgctxt "item name"
+msgid "Screen"
+msgstr "스크린"
+
+msgctxt "item name"
+msgid "Security arch"
+msgstr "보안 검색 아치"
+
+msgctxt "item name"
+msgid "Security scanner"
+msgstr "보안 검색대"
+
+msgctxt "item name"
+msgid "Shower"
+msgstr "샤워 부스"
+
+msgctxt "item name"
+msgid "Sink"
+msgstr "세면대"
+
+msgctxt "item name"
+msgid "Statue"
+msgstr "조각상"
+
+msgctxt "item name"
+msgid "Toilet stall"
+msgstr "변기 칸"
+
+msgctxt "item name"
+msgid "Tray table"
+msgstr "트레이 테이블"
+
+msgctxt "item name"
+msgid "Tree"
+msgstr "나무"
+
+msgctxt "item name"
+msgid "Tree bench"
+msgstr "나무 벤치"
+
+msgctxt "item name"
+msgid "Work desk"
+msgstr "업무용 책상"
+
+msgctxt "item name"
+msgid "X-ray belt"
+msgstr "X선 벨트"
+
+msgctxt "room type"
+msgid "ATM"
+msgstr "ATM"
+
+msgctxt "room type"
+msgid "Bag room"
+msgstr "수하물실"
+
+msgctxt "room type"
+msgid "Bar"
+msgstr "바"
+
+msgctxt "room type"
+msgid "Cafe"
+msgstr "카페"
+
+msgctxt "room type"
+msgid "Duty free"
+msgstr "면세점"
+
+msgctxt "room type"
+msgid "Exchange"
+msgstr "환전소"
+
+msgctxt "room type"
+msgid "Fashion store"
+msgstr "패션 매장"
+
+msgctxt "room type"
+msgid "Grab-and-go stall"
+msgstr "테이크아웃 매장"
+
+msgctxt "room type"
+msgid "Kiosk"
+msgstr "키오스크"
+
+msgctxt "room type"
+msgid "Lounge"
+msgstr "라운지"
+
+msgctxt "room type"
+msgid "Nap pod"
+msgstr "수면 캡슐실"
+
+msgctxt "room type"
+msgid "Pharmacy"
+msgstr "약국"
+
+msgctxt "room type"
+msgid "Play area"
+msgstr "놀이 공간"
+
+msgctxt "room type"
+msgid "Restaurant"
+msgstr "레스토랑"
+
+msgctxt "room type"
+msgid "Shower"
+msgstr "샤워실"
+
+msgctxt "room type"
+msgid "Toilet"
+msgstr "화장실"
+
+msgctxt "room name, mid-sentence"
+msgid "atm"
+msgstr "ATM실"
+
+msgctxt "room name, mid-sentence"
+msgid "bag room"
+msgstr "수하물실"
+
+msgctxt "room name, mid-sentence"
+msgid "bar"
+msgstr "바"
+
+msgctxt "room name, mid-sentence"
+msgid "cafe"
+msgstr "카페"
+
+msgctxt "room name, mid-sentence"
+msgid "duty free"
+msgstr "면세점"
+
+msgctxt "room name, mid-sentence"
+msgid "exchange"
+msgstr "환전소"
+
+msgctxt "room name, mid-sentence"
+msgid "fashion store"
+msgstr "패션 매장"
+
+msgctxt "room name, mid-sentence"
+msgid "grab-and-go stall"
+msgstr "테이크아웃 매장"
+
+msgctxt "room name, mid-sentence"
+msgid "kiosk"
+msgstr "키오스크"
+
+msgctxt "room name, mid-sentence"
+msgid "lounge"
+msgstr "라운지"
+
+msgctxt "room name, mid-sentence"
+msgid "nap pod"
+msgstr "수면 캡슐실"
+
+msgctxt "room name, mid-sentence"
+msgid "pharmacy"
+msgstr "약국"
+
+msgctxt "room name, mid-sentence"
+msgid "play area"
+msgstr "놀이 공간"
+
+msgctxt "room name, mid-sentence"
+msgid "restaurant"
+msgstr "레스토랑"
+
+msgctxt "room name, mid-sentence"
+msgid "shower"
+msgstr "샤워실"
+
+msgctxt "room name, mid-sentence"
+msgid "toilet"
+msgstr "화장실"
+
+msgctxt "landside place"
+msgid "Curb bay"
+msgstr "정차 구역"
+
+msgctxt "landside place"
+msgid "Multi-storey car park"
+msgstr "주차 타워"
+
+msgctxt "landside place"
+msgid "Surface lot"
+msgstr "노상 주차장"
+
+msgctxt "room need"
+msgid "Needs a belt end"
+msgstr "벨트 끝부분 필요"
+
+msgctxt "room need"
+msgid "Needs a clothes rail"
+msgstr "옷걸이 행거 필요"
+
+msgctxt "room need"
+msgid "Needs a counter"
+msgstr "카운터 필요"
+
+msgctxt "room need"
+msgid "Needs a display stand"
+msgstr "진열대 필요"
+
+msgctxt "room need"
+msgid "Needs a kiosk counter"
+msgstr "키오스크 카운터 필요"
+
+msgctxt "room need"
+msgid "Needs a nap pod"
+msgstr "수면 캡슐 필요"
+
+msgctxt "room need"
+msgid "Needs a pharmacy counter"
+msgstr "약국 카운터 필요"
+
+msgctxt "room need"
+msgid "Needs a shelf"
+msgstr "선반 필요"
+
+msgctxt "room need"
+msgid "Needs a shower"
+msgstr "샤워 부스 필요"
+
+msgctxt "room need"
+msgid "Needs a sink"
+msgstr "세면대 필요"
+
+msgctxt "room need"
+msgid "Needs a slide"
+msgstr "미끄럼틀 필요"
+
+msgctxt "room need"
+msgid "Needs a sofa"
+msgstr "소파 필요"
+
+msgctxt "room need"
+msgid "Needs a table"
+msgstr "테이블 필요"
+
+msgctxt "room need"
+msgid "Needs a till"
+msgstr "계산대 필요"
+
+msgctxt "room need"
+msgid "Needs a toilet stall"
+msgstr "변기 칸 필요"
+
+msgctxt "room need"
+msgid "Needs an ATM"
+msgstr "ATM 필요"
+
+msgctxt "room need"
+msgid "Needs an exchange counter"
+msgstr "환전 카운터 필요"
+
+msgctxt "room need"
+msgid "Needs play blocks"
+msgstr "놀이 블록 필요"
+
+msgctxt "room need"
+msgid "Needs entrance"
+msgstr "출입구 필요"
+
+msgctxt "status reason"
+msgid "needs a belt end"
+msgstr "벨트 끝부분 필요"
+
+msgctxt "status reason"
+msgid "needs a clothes rail"
+msgstr "옷걸이 행거 필요"
+
+msgctxt "status reason"
+msgid "needs a counter"
+msgstr "카운터 필요"
+
+msgctxt "status reason"
+msgid "needs a display stand"
+msgstr "진열대 필요"
+
+msgctxt "status reason"
+msgid "needs a kiosk counter"
+msgstr "키오스크 카운터 필요"
+
+msgctxt "status reason"
+msgid "needs a nap pod"
+msgstr "수면 캡슐 필요"
+
+msgctxt "status reason"
+msgid "needs a pharmacy counter"
+msgstr "약국 카운터 필요"
+
+msgctxt "status reason"
+msgid "needs a shelf"
+msgstr "선반 필요"
+
+msgctxt "status reason"
+msgid "needs a shower"
+msgstr "샤워 부스 필요"
+
+msgctxt "status reason"
+msgid "needs a sink"
+msgstr "세면대 필요"
+
+msgctxt "status reason"
+msgid "needs a slide"
+msgstr "미끄럼틀 필요"
+
+msgctxt "status reason"
+msgid "needs a sofa"
+msgstr "소파 필요"
+
+msgctxt "status reason"
+msgid "needs a table"
+msgstr "테이블 필요"
+
+msgctxt "status reason"
+msgid "needs a till"
+msgstr "계산대 필요"
+
+msgctxt "status reason"
+msgid "needs a toilet stall"
+msgstr "변기 칸 필요"
+
+msgctxt "status reason"
+msgid "needs an atm"
+msgstr "ATM 필요"
+
+msgctxt "status reason"
+msgid "needs an exchange counter"
+msgstr "환전 카운터 필요"
+
+msgctxt "status reason"
+msgid "needs play blocks"
+msgstr "놀이 블록 필요"
+
+msgctxt "status reason"
+msgid "needs entrance"
+msgstr "출입구 필요"
+
+msgctxt "status reason"
+msgid "a wall cuts through the lane"
+msgstr "벽이 레인을 가로막고 있음"
+
+msgctxt "status reason"
+msgid "clear the floor for the queue"
+msgstr "대기열을 위해 바닥을 비워야 함"
+
+msgctxt "status reason"
+msgid "clear the floor for the repack spot"
+msgstr "짐 정리 공간 바닥을 비워야 함"
+
+msgctxt "status reason"
+msgid "clear the helper's spot by the repack spot"
+msgstr "짐 정리 공간 옆 보조 위치를 비워야 함"
+
+msgctxt "status reason"
+msgid "clear the officer's spot by the x-ray belt"
+msgstr "X선 벨트 옆 요원 위치를 비워야 함"
+
+msgctxt "status reason"
+msgid "clear the way back from the repack spot"
+msgstr "짐 정리 공간 뒤쪽 이동로를 비워야 함"
+
+msgctxt "status reason"
+msgid "clear the way out past the pickup table"
+msgstr "픽업 테이블 너머 출구 길을 비워야 함"
+
+msgctxt "status reason"
+msgid "clear the way through the arch"
+msgstr "검색 아치 통과로를 비워야 함"
+
+msgctxt "status reason"
+msgid "needs a pickup table"
+msgstr "픽업 테이블 필요"
+
+msgctxt "status reason"
+msgid "needs a tray table"
+msgstr "트레이 테이블 필요"
+
+msgctxt "status reason"
+msgid "needs an x-ray belt"
+msgstr "X선 벨트 필요"
+
+msgctxt "status reason"
+msgid "no arch"
+msgstr "검색 아치 없음"
+
+msgctxt "status reason"
+msgid "parts face different ways"
+msgstr "부품 방향이 서로 다름"
+
+msgctxt "status reason"
+msgid "closed by you"
+msgstr "플레이어가 폐쇄함"
+
+msgctxt "status reason"
+msgid "staff spot blocked"
+msgstr "직원 근무 위치 막힘"
+
+msgctxt "status reason"
+msgid "staff can't reach the staff spot"
+msgstr "직원이 근무 위치에 닿을 수 없음"
+
+msgctxt "status reason"
+msgid "no staff on duty"
+msgstr "근무 중인 직원 없음"
+
+msgctxt "status reason"
+msgid "scanner fault"
+msgstr "검색대 고장"
+
+msgctxt "gate card"
+msgid "Walk from security: no route"
+msgstr "보안 검색에서 도보: 경로 없음"
+
+msgctxt "gate card"
+msgid "Walk from security: {minutes} min"
+msgstr "보안 검색에서 도보 {minutes}분"
+
+msgid "Quiet night: fast-forwarding"
+msgstr "한산한 밤: 빨리 감는 중"
+
+msgid "Quiet stretch: fast-forwarding"
+msgstr "한산한 시간대: 빨리 감는 중"
+
+msgctxt "clock"
+msgid "Day {day}  {time}"
+msgstr "{day}일차  {time}"
+
+msgctxt "follow line"
+msgid "Passenger {id}"
+msgstr "승객 {id}"
+
+msgctxt "follow line"
+msgid "mood {value}"
+msgstr "기분 {value}"
+
+msgctxt "follow line"
+msgid "hunger {value}"
+msgstr "배고픔 {value}"
+
+msgctxt "follow line"
+msgid "toilet {value}"
+msgstr "화장실 {value}"
+
+msgctxt "passenger speech"
+msgid "\"{text}\""
+msgstr "\"{text}\""
+
+msgid "Hint ({key} turns hints off)"
+msgstr "힌트 ({key} 키로 힌트 끄기)"
+
+msgid "Hints ({key})"
+msgstr "힌트 ({key})"
+
+msgid "Reset hints"
+msgstr "힌트 초기화"
+
+msgid "Passengers need a check-in desk. Each desk also needs a hired agent: open Staff on the bar."
+msgstr "승객에게 체크인 데스크가 필요합니다. 데스크마다 고용한 직원도 필요하니 하단 바에서 직원 메뉴를 여세요."
+
+msgid "Passengers need security after check-in. Place a scanner or build a lane, and hire an officer."
+msgstr "체크인 후에는 보안 검색이 필요합니다. 검색대나 보안 레인을 설치하고 보안 요원을 고용하세요."
+
+msgid "One agent works one desk or scanner. Hire another on the Staff card."
+msgstr "직원 한 명은 데스크나 검색대 한 곳만 맡습니다. 직원 카드에서 추가로 고용하세요."
+
+msgid "Passengers need a toilet. Build a toilet room and put a stall in it."
+msgstr "승객에게 화장실이 필요합니다. 화장실을 만들고 변기 칸을 배치하세요."
+
+msgid "Hungry passengers need food. Build a cafe with a counter and a table."
+msgstr "배고픈 승객에게 음식이 필요합니다. 카운터와 테이블이 있는 카페를 지으세요."
+
+msgid "Game menu"
+msgstr "게임 메뉴"
+
+msgid "Resume ({key})"
+msgstr "계속 ({key})"
+
+msgid "v{version}"
+msgstr "v{version}"
+
+msgid "Settings"
+msgstr "설정"
+
+msgid "Incidents"
+msgstr "돌발 상황"
+
+msgid "Back"
+msgstr "뒤로"
+
+msgid "Daily incidents"
+msgstr "일일 돌발 상황"
+
+msgid "Accept turns daily incidents on, Decline leaves them off. You can change this any time: press {key}, then Settings."
+msgstr "수락하면 일일 돌발 상황이 켜지고, 거절하면 꺼진 상태로 유지됩니다. 언제든 {key} 키를 눌러 설정에서 바꿀 수 있습니다."
+
+msgid "Your first day at the airport"
+msgstr "공항에서의 첫날"
+
+msgid "Continue ({key})"
+msgstr "계속하기 ({key})"
+
+msgid "Accept"
+msgstr "수락"
+
+msgid "Decline"
+msgstr "거절"
+
+msgid "The clock starts when you close this."
+msgstr "이 창을 닫으면 시간이 흐르기 시작합니다."
+
+msgid "TERMINAL MANAGER"
+msgstr "터미널 관리자"
+
+msgid "Mood ({key})"
+msgstr "기분 ({key})"
+
+msgid "green fed, orange hungry, red starving"
+msgstr "초록 포만, 주황 배고픔, 빨강 굶주림"
+
+msgid "green fine, orange needs the toilet, red desperate"
+msgstr "초록 괜찮음, 주황 화장실 필요, 빨강 급박함"
+
+msgid "green content, orange bored, red very bored"
+msgstr "초록 만족, 주황 지루함, 빨강 매우 지루함"
+
+msgid "amber where passengers are running late"
+msgstr "호박색: 시간이 촉박한 승객이 있는 곳"
+
+msgid "green fine, red waiting long or unhappy"
+msgstr "초록 양호, 빨강 오래 대기 또는 불만"
+
+msgctxt "mood overlay mode"
+msgid "Hunger"
+msgstr "배고픔"
+
+msgctxt "mood overlay mode"
+msgid "Toilet"
+msgstr "화장실"
+
+msgctxt "mood overlay mode"
+msgid "Boredom"
+msgstr "지루함"
+
+msgctxt "mood overlay mode"
+msgid "Late"
+msgstr "지각"
+
+msgctxt "mood overlay mode"
+msgid "Mood"
+msgstr "기분"
+
+msgctxt "money card"
+msgid "Today"
+msgstr "오늘"
+
+msgctxt "money card"
+msgid "Since load"
+msgstr "불러온 이후"
+
+msgctxt "money card"
+msgid "Cash change today"
+msgstr "오늘 자금 변동"
+
+msgctxt "money card"
+msgid "Cash change since load"
+msgstr "불러온 후 자금 변동"
+
+msgctxt "money card"
+msgid "Airline fees"
+msgstr "항공사 수익"
+
+msgctxt "money card"
+msgid "Shops"
+msgstr "상점 수익"
+
+msgctxt "money card"
+msgid "Parking"
+msgstr "주차 수익"
+
+msgctxt "money card"
+msgid "Wages paid"
+msgstr "급여 지출"
+
+msgctxt "money card"
+msgid "Upkeep paid"
+msgstr "유지비 지출"
+
+msgctxt "money card"
+msgid "Airline fines"
+msgstr "항공사 벌금"
+
+msgctxt "money card"
+msgid "Operating result"
+msgstr "영업 손익"
+
+msgctxt "money card"
+msgid "Building"
+msgstr "건설비"
+
+msgctxt "money card"
+msgid "Rescue grant"
+msgstr "긴급 지원금"
+
+msgctxt "money card"
+msgid "Incidents"
+msgstr "돌발 상황"
+
+msgctxt "money card"
+msgid "Signing bonus"
+msgstr "계약 보너스"
+
+msgctxt "money card"
+msgid "Unpaid fines"
+msgstr "미지급 벌금"
+
+msgctxt "money card"
+msgid "Owed wages"
+msgstr "미지급 급여"
+
+msgctxt "money card"
+msgid "Owed upkeep"
+msgstr "미지급 유지비"
+
+msgctxt "room name, mid-sentence"
+msgid "ATM"
+msgstr "ATM실"
+
+msgctxt "passenger activity"
+msgid "Heading to the {shop}"
+msgstr "{shop}(으)로 이동 중"
+
+msgctxt "passenger activity"
+msgid "Browsing at the {shop}"
+msgstr "{shop} 둘러보는 중"
+
+msgctxt "passenger activity"
+msgid "Using the {shop}"
+msgstr "{shop} 이용 중"
+
+msgctxt "passenger activity"
+msgid "Playing in the {shop}"
+msgstr "{shop}에서 노는 중"
+
+msgctxt "passenger activity"
+msgid "Relaxing in the {shop}"
+msgstr "{shop}에서 휴식 중"
+
+msgctxt "passenger activity"
+msgid "Resting in the {shop}"
+msgstr "{shop}에서 쉬는 중"
+
+msgctxt "passenger activity"
+msgid "Heading to the food stall"
+msgstr "테이크아웃 매대로 이동 중"
+
+msgctxt "passenger activity"
+msgid "Queuing at the food stall"
+msgstr "테이크아웃 매대 줄 서는 중"
+
+msgctxt "passenger activity"
+msgid "Grabbing a snack"
+msgstr "간식 사는 중"
+
+msgctxt "passenger activity"
+msgid "Heading to the bar"
+msgstr "바로 이동 중"
+
+msgctxt "passenger activity"
+msgid "Queuing at the bar"
+msgstr "바 줄 서는 중"
+
+msgctxt "passenger activity"
+msgid "Ordering a drink"
+msgstr "음료 주문 중"
+
+msgctxt "passenger activity"
+msgid "Taking a drink to a seat"
+msgstr "음료를 들고 자리로 이동 중"
+
+msgctxt "passenger activity"
+msgid "Sitting down at the bar"
+msgstr "바 자리에 앉는 중"
+
+msgctxt "passenger activity"
+msgid "Having a drink"
+msgstr "음료 마시는 중"
+
+msgctxt "passenger activity"
+msgid "Leaving the bar"
+msgstr "바에서 나가는 중"
+
+msgctxt "passenger activity"
+msgid "Heading to the restaurant"
+msgstr "레스토랑으로 이동 중"
+
+msgctxt "passenger activity"
+msgid "Queuing at the restaurant"
+msgstr "레스토랑 줄 서는 중"
+
+msgctxt "passenger activity"
+msgid "Ordering a meal"
+msgstr "식사 주문 중"
+
+msgctxt "passenger activity"
+msgid "Taking a meal to a table"
+msgstr "음식을 들고 식탁으로 이동 중"
+
+msgctxt "passenger activity"
+msgid "Sitting down at the restaurant"
+msgstr "레스토랑 자리에 앉는 중"
+
+msgctxt "passenger activity"
+msgid "Having a meal"
+msgstr "식사 중"
+
+msgctxt "passenger activity"
+msgid "Leaving the restaurant"
+msgstr "레스토랑에서 나가는 중"
+
+msgctxt "passenger activity"
+msgid "Arriving"
+msgstr "도착 중"
+
+msgctxt "passenger activity"
+msgid "Heading to check-in"
+msgstr "체크인으로 이동 중"
+
+msgctxt "passenger activity"
+msgid "Queuing for check-in"
+msgstr "체크인 줄 서는 중"
+
+msgctxt "passenger activity"
+msgid "Checking in"
+msgstr "체크인 중"
+
+msgctxt "passenger activity"
+msgid "Heading to security"
+msgstr "보안 검색으로 이동 중"
+
+msgctxt "passenger activity"
+msgid "Queuing for security"
+msgstr "보안 검색 줄 서는 중"
+
+msgctxt "passenger activity"
+msgid "Going through security"
+msgstr "보안 검색 통과 중"
+
+msgctxt "passenger activity"
+msgid "Heading to the gate"
+msgstr "탑승구로 이동 중"
+
+msgctxt "passenger activity"
+msgid "Sitting down"
+msgstr "자리에 앉는 중"
+
+msgctxt "passenger activity"
+msgid "Waiting at the gate"
+msgstr "탑승구에서 대기 중"
+
+msgctxt "passenger activity"
+msgid "Standing at the gate"
+msgstr "탑승구에서 서서 대기 중"
+
+msgctxt "passenger activity"
+msgid "Getting up to board"
+msgstr "탑승하려고 일어나는 중"
+
+msgctxt "passenger activity"
+msgid "Heading to the exit"
+msgstr "출구로 이동 중"
+
+msgctxt "passenger activity"
+msgid "Walking to the plane"
+msgstr "비행기로 걸어가는 중"
+
+msgctxt "passenger activity"
+msgid "Boarded"
+msgstr "탑승 완료"
+
+msgctxt "passenger activity"
+msgid "Missed the flight"
+msgstr "비행기 놓침"
+
+msgctxt "passenger activity"
+msgid "Heading to the cafe"
+msgstr "카페로 이동 중"
+
+msgctxt "passenger activity"
+msgid "Queuing at the cafe"
+msgstr "카페 줄 서는 중"
+
+msgctxt "passenger activity"
+msgid "Ordering a coffee"
+msgstr "커피 주문 중"
+
+msgctxt "passenger activity"
+msgid "Taking a coffee to a seat"
+msgstr "커피를 들고 자리로 이동 중"
+
+msgctxt "passenger activity"
+msgid "Sitting down at the cafe"
+msgstr "카페 자리에 앉는 중"
+
+msgctxt "passenger activity"
+msgid "Having a coffee"
+msgstr "커피 마시는 중"
+
+msgctxt "passenger activity"
+msgid "Leaving the cafe"
+msgstr "카페에서 나가는 중"
+
+msgctxt "passenger activity"
+msgid "Heading to the toilet"
+msgstr "화장실로 이동 중"
+
+msgctxt "passenger activity"
+msgid "Going into a toilet stall"
+msgstr "화장실 칸으로 들어가는 중"
+
+msgctxt "passenger activity"
+msgid "In a toilet stall"
+msgstr "화장실 이용 중"
+
+msgctxt "passenger activity"
+msgid "Leaving the toilet"
+msgstr "화장실에서 나가는 중"
+
+msgctxt "passenger activity"
+msgid "Heading to a shop"
+msgstr "상점으로 이동 중"
+
+msgctxt "passenger activity"
+msgid "Browsing at a shop"
+msgstr "상점 둘러보는 중"
+
+msgctxt "speed button"
+msgid "Pause ({key})"
+msgstr "일시정지 ({key})"
+
+msgctxt "speed button"
+msgid "Speed {speed}x ({key})"
+msgstr "배속 {speed}x ({key})"
+
+msgctxt "apron caption"
+msgid "Gate {gate}: no usable stand. Keep its apron and the walk to it clear"
+msgstr "{gate}번 탑승구: 사용 가능한 주기장이 없습니다. 계류장과 이동 경로를 비워 두세요"
+
+msgctxt "apron caption"
+msgid "Gate {gate}: long walk to the plane: {meters} m"
+msgstr "{gate}번 탑승구: 비행기까지 도보 거리 김 ({meters} m)"
+
+msgctxt "apron caption"
+msgid "No usable stand: no exit facing the planes has a clear apron"
+msgstr "사용 가능한 주기장 없음: 비행기 방향 출구 앞 계류장이 비어 있지 않습니다"
+
+msgctxt "apron caption"
+msgid "Stand moves to the new exit after takeoff at {time}"
+msgstr "주기장은 {time} 이륙 후 새 출구로 이동합니다"
+
+msgctxt "apron caption"
+msgid "Long walk to the plane: {meters} m"
+msgstr "비행기까지 먼 거리: {meters} m"
+
+msgctxt "land tool"
+msgid "Buy  {price}"
+msgstr "매입  {price}"
+
+msgctxt "land tool"
+msgid "Click to buy this {width}x{height} m plot"
+msgstr "클릭하여 {width}x{height} m 구획 매입"
+
+msgctxt "gate caption"
+msgid "{minutes} min walk"
+msgstr "도보 {minutes}분"
+
+msgctxt "gate caption"
+msgid "Gate {gate}"
+msgstr "{gate}번 탑승구"
+
+msgctxt "gate caption"
+msgid "no room for a plane"
+msgstr "주기 공간 없음"
+
+msgctxt "gate caption"
+msgid "up to small planes"
+msgstr "소형기까지"
+
+msgctxt "gate caption"
+msgid "up to medium planes"
+msgstr "중형기까지"
+
+msgctxt "gate caption"
+msgid "up to large planes"
+msgstr "대형기까지"
+
+msgctxt "gate caption"
+msgid "up to {class} planes"
+msgstr "{class} 기종까지"
+
+msgctxt "gate caption"
+msgid "Unlinked: no exit facing the planes in {cells} cells"
+msgstr "미연결: {cells}칸 이내에 비행기 방향 출구 없음"
+
+msgctxt "gate caption"
+msgid "Unlinked: Gate {gate} uses the exit"
+msgstr "미연결: {gate}번 탑승구가 출구 사용 중"
+
+msgctxt "gate caption"
+msgid "Unlinked: stand would overlap Gate {gate}"
+msgstr "미연결: 주기장이 {gate}번 탑승구와 겹침"
+
+msgctxt "gate caption"
+msgid "Unlinked: no room for a plane"
+msgstr "미연결: 비행기 주기 공간 없음"
+
+msgctxt "gate caption"
+msgid "Unlinked: way to the lane blocked"
+msgstr "미연결: 유도로 경로 막힘"
+
+msgctxt "gate caption"
+msgid "Unlinked: every gate letter in use"
+msgstr "미연결: 모든 탑승구 알파벳 사용 중"
+
+msgctxt "sign caption"
+msgid "Closed"
+msgstr "폐쇄됨"
+
+msgctxt "sign text"
+msgid "Closed · no staff on duty"
+msgstr "폐쇄 · 근무 직원 없음"
+
+msgctxt "sign text"
+msgid "Closed by you"
+msgstr "플레이어가 폐쇄함"
+
+msgctxt "sign text"
+msgid "Closed · staff spot blocked"
+msgstr "폐쇄 · 직원 위치 막힘"
+
+msgctxt "sign text"
+msgid "Closed · staff can't reach the desk"
+msgstr "폐쇄 · 직원이 데스크에 도달 불가"
+
+msgctxt "sign text"
+msgid "Closed · staff can't reach the scanner"
+msgstr "폐쇄 · 요원이 검색대에 도달 불가"
+
+msgctxt "sign text"
+msgid "Closed · staff can't reach the counter"
+msgstr "폐쇄 · 직원이 카운터에 도달 불가"
+
+msgctxt "sign text"
+msgid "Closed · scanner fault, fixed by {time}"
+msgstr "폐쇄 · 검색대 고장 ({time} 수리 예정)"
+
+msgctxt "money pop"
+msgid "+${amount}"
+msgstr "+${amount}"
+
+msgctxt "speech bubble"
+msgid "I'm late!"
+msgstr "늦겠어!"
+
+msgctxt "speech bubble"
+msgid "Missed my flight!"
+msgstr "비행기 놓쳤어!"
+
+msgctxt "speech bubble"
+msgid "Where is check-in?"
+msgstr "체크인 어디야?"
+
+msgctxt "speech bubble"
+msgid "Where is security?"
+msgstr "보안 검색 어디야?"
+
+msgctxt "speech bubble"
+msgid "Queue full"
+msgstr "줄이 꽉 찼네"
+
+msgctxt "speech bubble"
+msgid "I can't get there"
+msgstr "거기로 갈 수가 없어"
+
+msgctxt "speech bubble"
+msgid "The exit is blocked"
+msgstr "출구가 막혔어"
+
+msgctxt "speech bubble"
+msgid "The gate is full"
+msgstr "탑승구가 꽉 찼어"
+
+msgctxt "speech bubble"
+msgid "Check-in is closed"
+msgstr "체크인이 닫혔네"
+
+msgctxt "speech bubble"
+msgid "Security is closed"
+msgstr "보안 검색이 닫혔네"
+
+msgctxt "speech bubble"
+msgid "Gate is closed"
+msgstr "탑승구가 닫혔네"
+
+msgctxt "speech bubble"
+msgid "Forgot my belt!"
+msgstr "벨트 깜빡했네!"
+
+msgctxt "speech bubble"
+msgid "Keys in pocket!"
+msgstr "주머니에 열쇠가!"
+
+msgctxt "speech bubble"
+msgid "Coins in pocket!"
+msgstr "주머니에 동전이!"
+
+msgctxt "speech bubble"
+msgid "Oversized shampoo!"
+msgstr "샴푸 용량이 초과됐네!"
+
+msgctxt "speech bubble"
+msgid "Too much liquid!"
+msgstr "액체가 너무 많았네!"
+
+msgctxt "speech bubble"
+msgid "Forgot my water bottle!"
+msgstr "물병을 깜빡했네!"
+
+msgctxt "sign text"
+msgid "Queue full · {count} waiting"
+msgid_plural "Queue full · {count} waiting"
+msgstr[0] "대기열 만원 · {count}명 대기"
+
+msgctxt "lane status"
+msgid "Lane ready"
+msgstr "레인 준비 완료"
+
+msgctxt "lane status"
+msgid "Needs a tray table"
+msgstr "트레이 테이블 필요"
+
+msgctxt "lane status"
+msgid "Needs an X-ray belt"
+msgstr "X선 벨트 필요"
+
+msgctxt "lane status"
+msgid "Needs a pickup table"
+msgstr "픽업 테이블 필요"
+
+msgctxt "lane status"
+msgid "Parts face different ways"
+msgstr "부품 방향이 서로 다름"
+
+msgctxt "lane status"
+msgid "A wall cuts through the lane"
+msgstr "벽이 레인을 가로막음"
+
+msgctxt "lane status"
+msgid "Clear the way through the arch"
+msgstr "검색 아치 통과로를 비워 주세요"
+
+msgctxt "lane status"
+msgid "Clear the floor for the queue"
+msgstr "대기열 바닥을 비워 주세요"
+
+msgctxt "lane status"
+msgid "Clear the floor for the repack spot"
+msgstr "짐 정리 공간 바닥을 비워 주세요"
+
+msgctxt "lane status"
+msgid "Clear the way back from the repack spot"
+msgstr "짐 정리 공간 뒤쪽 길을 비워 주세요"
+
+msgctxt "lane status"
+msgid "Clear the way out past the pickup table"
+msgstr "픽업 테이블 너머 출구를 비워 주세요"
+
+msgctxt "lane status"
+msgid "Clear the officer's spot by the X-ray belt"
+msgstr "X선 벨트 옆 요원 자리를 비워 주세요"
+
+msgctxt "lane status"
+msgid "Clear the helper's spot by the repack spot"
+msgstr "짐 정리 공간 옆 보조 자리를 비워 주세요"
+
+msgctxt "lane status"
+msgid "No arch"
+msgstr "검색 아치 없음"
+
+msgctxt "door hint"
+msgid "Put the {door} on a floor tile at the outside edge"
+msgstr "{door}은(는) 바깥쪽 경계 바닥 타일에 놓으세요"
+
+msgctxt "door hint"
+msgid "Put the {door} on the outside edge of the floor"
+msgstr "{door}은(는) 바닥의 바깥쪽 경계에 놓으세요"
+
+msgctxt "door hint"
+msgid "Clear the floor in front of the {door}"
+msgstr "{door} 앞쪽 바닥을 비워 주세요"
+
+msgctxt "door hint"
+msgid "Take down the glass or door wall behind the {door}"
+msgstr "{door} 뒤쪽의 유리벽이나 문을 제거하세요"
+
+msgctxt "door hint"
+msgid "The wall behind the {door} holds a door; pick another spot"
+msgstr "{door} 뒤쪽 벽에 문이 있습니다. 다른 위치를 선택하세요"
+
+msgctxt "ghost reason"
+msgid "{blocker} in front"
+msgstr "앞에 {blocker} 있음"
+
+msgctxt "build refusal"
+msgid "Outside the building area"
+msgstr "건설 가능 구역 밖입니다"
+
+msgctxt "build refusal"
+msgid "Needs floor"
+msgstr "바닥이 필요합니다"
+
+msgctxt "build refusal"
+msgid "Unknown floor type"
+msgstr "알 수 없는 바닥 유형입니다"
+
+msgctxt "build refusal"
+msgid "Zone id must be 0 or more"
+msgstr "구역 ID는 0 이상이어야 합니다"
+
+msgctxt "build refusal"
+msgid "Facing must be 0 to 3"
+msgstr "방향은 0에서 3 사이여야 합니다"
+
+msgctxt "build refusal"
+msgid "Unknown object"
+msgstr "알 수 없는 오브젝트입니다"
+
+msgctxt "build refusal"
+msgid "Overlaps another object"
+msgstr "다른 시설과 겹칩니다"
+
+msgctxt "build refusal"
+msgid "A wall runs through it"
+msgstr "벽이 관통하고 있습니다"
+
+msgctxt "build refusal"
+msgid "The spot in front is blocked"
+msgstr "앞쪽 자리가 막혀 있습니다"
+
+msgctxt "build refusal"
+msgid "Blocks the spot in front of another object"
+msgstr "다른 시설의 앞쪽 자리를 막습니다"
+
+msgctxt "build refusal"
+msgid "An object stands here"
+msgstr "여기에 이미 시설이 있습니다"
+
+msgctxt "build refusal"
+msgid "There is already a wall here"
+msgstr "여기에 이미 벽이 있습니다"
+
+msgctxt "build refusal"
+msgid "No wall here"
+msgstr "여기에 벽이 없습니다"
+
+msgctxt "build refusal"
+msgid "No such object"
+msgstr "해당 시설이 없습니다"
+
+msgctxt "build refusal"
+msgid "Unknown wall kind"
+msgstr "알 수 없는 벽 종류입니다"
+
+msgctxt "build refusal"
+msgid "A door needs a plain wall on each side"
+msgstr "문 양옆에는 일반 벽이 있어야 합니다"
+
+msgctxt "build refusal"
+msgid "A door stands beside this wall"
+msgstr "이 벽 옆에 문이 있습니다"
+
+msgctxt "build refusal"
+msgid "Entrances and exits need the outside edge, with no floor behind them"
+msgstr "입구와 출구는 뒤쪽에 바닥이 없는 바깥쪽 경계에 놓아야 합니다"
+
+msgctxt "build refusal"
+msgid "Keep the edge behind an entrance or exit open"
+msgstr "입구나 출구 뒤쪽 경계를 막지 마세요"
+
+msgctxt "build refusal"
+msgid "Unknown room type"
+msgstr "알 수 없는 방 유형입니다"
+
+msgctxt "build refusal"
+msgid "Overlaps another room"
+msgstr "다른 방과 겹칩니다"
+
+msgctxt "build refusal"
+msgid "A room covers this floor; remove the room first"
+msgstr "이 바닥에 방이 지정되어 있습니다. 먼저 방을 삭제하세요"
+
+msgctxt "build refusal"
+msgid "No such room"
+msgstr "해당 방이 없습니다"
+
+msgctxt "build refusal"
+msgid "Not enough money"
+msgstr "자금이 부족합니다"
+
+msgctxt "build refusal"
+msgid "This piece has no price"
+msgstr "이 부품에는 가격이 설정되어 있지 않습니다"
+
+msgctxt "build refusal"
+msgid "The money is at its limit; the refund would not fit"
+msgstr "보유 자금이 상한에 도달해 환불을 받을 수 없습니다"
+
+msgctxt "build refusal"
+msgid "Belts cannot cross; a belt joins at most three others"
+msgstr "벨트는 교차할 수 없으며 최대 세 갈래까지만 합류할 수 있습니다"
+
+msgctxt "build refusal"
+msgid "A wall is in the way of the belt"
+msgstr "벽이 벨트 경로를 막고 있습니다"
+
+msgctxt "build refusal"
+msgid "Only a belt piece changes shape"
+msgstr "벨트 부품만 모양이 바뀝니다"
+
+msgctxt "build refusal"
+msgid "Keep the staff spot behind a desk, beside a scanner or at a lane officer's post free, with a way in"
+msgstr "데스크 뒤, 검색대 옆, 레인 요원 위치의 직원 공간과 진입로를 비워 두세요"
+
+msgctxt "build refusal"
+msgid "A wall is in the way of the lane. Remove the wall first"
+msgstr "벽이 레인을 가로막고 있습니다. 먼저 벽을 철거하세요"
+
+msgctxt "build refusal"
+msgid "Put it on one of the marked landside spots"
+msgstr "표시된 육상 구역 자리에 배치하세요"
+
+msgctxt "build refusal"
+msgid "Every spot of this kind nearby is already built"
+msgstr "근처의 해당 유형 자리가 모두 건설되었습니다"
+
+msgctxt "build refusal"
+msgid "Cars are still in it. Close it and wait until it is empty"
+msgstr "아직 차량이 남아 있습니다. 폐쇄한 뒤 모두 빠져나갈 때까지 기다리세요"
+
+msgctxt "build refusal"
+msgid "A wall is in the way of the room"
+msgstr "벽이 방을 가로막고 있습니다"
+
+msgctxt "build refusal"
+msgid "A plane uses this apron. Build here after it takes off"
+msgstr "이 계류장을 비행기가 사용 중입니다. 이륙 후에 건설하세요"
+
+msgctxt "build refusal"
+msgid "You do not own this land. Buy the plot with Buy land first"
+msgstr "이 땅을 소유하고 있지 않습니다. 먼저 '부지 매입'으로 구획을 사세요"
+
+msgctxt "build refusal"
+msgid "You already own this plot"
+msgstr "이 구획은 이미 소유하고 있습니다"
+
+msgctxt "build refusal"
+msgid "Buy a plot next to land you own"
+msgstr "소유한 땅과 인접한 구획을 매입하세요"
+
+msgctxt "build refusal"
+msgid "Put a gate desk within 4 cells of a free exit facing the planes"
+msgstr "탑승구 데스크는 비행기 방향 빈 출구에서 4칸 이내에 놓아야 합니다"
+
+msgctxt "build refusal"
+msgid "A flight is still due at this gate. Remove it after the flight leaves"
+msgstr "이 탑승구에 예정된 항공편이 남아 있습니다. 출발 후에 철거하세요"
+
+msgctxt "build refusal"
+msgid "No other gate is free for these flights. Move them in Departures first"
+msgstr "이 항공편들을 옮길 빈 탑승구가 없습니다. 먼저 출발편 화면에서 이동하세요"
+
+msgctxt "build refusal"
+msgid "Something is in front of the door"
+msgstr "문 앞에 장애물이 있습니다"
+
+msgctxt "build refusal"
+msgid "A piece sits across the room's edge"
+msgstr "시설이 방 경계에 걸쳐 있습니다"
+
+msgctxt "build refusal"
+msgid "Desks, scanners and lane parts cannot move with a room"
+msgstr "데스크, 검색대, 레인 부품은 방과 함께 이동할 수 없습니다"
+
+msgctxt "build refusal"
+msgid "A piece does not fit at the new spot"
+msgstr "새 위치에 맞지 않는 시설이 있습니다"
+
+msgctxt "build refusal"
+msgid "Keep the way out clear for the passengers leaving the room"
+msgstr "방에서 나가는 승객을 위해 출구 경로를 비워 두세요"
+
+msgctxt "build refusal"
+msgid "The room changed since it was picked up. Pick it up again"
+msgstr "집어 올린 뒤 방 상태가 바뀌었습니다. 다시 선택하세요"
+
+msgctxt "build refusal"
+msgid "Not unlocked yet"
+msgstr "아직 잠금 해제되지 않았습니다"
+
+msgctxt "build refusal"
+msgid "No room for a plane outside this exit. Keep the ground out from it clear"
+msgstr "이 출구 바깥에 비행기가 설 공간이 없습니다. 바깥쪽 부지를 비워 두세요"
+
+msgctxt "build refusal"
+msgid "Something blocks the way from this exit to the taxi lane. Clear a path out from it"
+msgstr "이 출구에서 유도로로 나가는 길이 막혀 있습니다. 바깥쪽 경로를 비워 주세요"
+
+msgctxt "build refusal"
+msgid "A booked flight's plane needs this ground. Move its flights in Departures first"
+msgstr "예약된 항공편이 이 부지를 사용해야 합니다. 먼저 출발편 화면에서 해당 편을 옮기세요"
+
+msgctxt "build refusal"
+msgid "The side taxiway would have to move and leave a booked flight with no way to its gate"
+msgstr "측면 유도로가 이동하면서 예약된 항공편이 탑승구로 갈 수 없게 됩니다"
+
+msgctxt "ghost reason"
+msgid "Outside the building"
+msgstr "건설 구역 밖"
+
+msgctxt "ghost reason"
+msgid "Overlaps an object"
+msgstr "다른 시설과 겹침"
+
+msgctxt "ghost reason"
+msgid "A wall is in the way"
+msgstr "벽이 가로막음"
+
+msgctxt "ghost reason"
+msgid "Front spot blocked"
+msgstr "앞쪽 자리 막힘"
+
+msgctxt "ghost reason"
+msgid "Blocks a front spot"
+msgstr "다른 시설 앞을 막음"
+
+msgctxt "ghost reason"
+msgid "Wall already here"
+msgstr "이미 벽이 있음"
+
+msgctxt "ghost reason"
+msgid "Needs wall on both sides"
+msgstr "양옆에 벽 필요"
+
+msgctxt "ghost reason"
+msgid "A door is beside it"
+msgstr "옆에 문이 있음"
+
+msgctxt "ghost reason"
+msgid "Needs the outside edge"
+msgstr "바깥쪽 경계 필요"
+
+msgctxt "ghost reason"
+msgid "Keep the edge open"
+msgstr "바깥쪽 경계를 비워야 함"
+
+msgctxt "ghost reason"
+msgid "Overlaps a room"
+msgstr "다른 방과 겹침"
+
+msgctxt "ghost reason"
+msgid "Remove the room first"
+msgstr "먼저 방을 삭제하세요"
+
+msgctxt "ghost reason"
+msgid "Money at its limit"
+msgstr "자금 상한 도달"
+
+msgctxt "ghost reason"
+msgid "Belts cannot cross"
+msgstr "벨트 교차 불가"
+
+msgctxt "ghost reason"
+msgid "Keep the staff spot free"
+msgstr "직원 자리 확보 필요"
+
+msgctxt "ghost reason"
+msgid "A wall is in the lane"
+msgstr "레인 안에 벽이 있음"
+
+msgctxt "ghost reason"
+msgid "Bad zone id"
+msgstr "잘못된 구역 ID"
+
+msgctxt "ghost reason"
+msgid "Only belts change shape"
+msgstr "벨트만 모양 변경 가능"
+
+msgctxt "ghost reason"
+msgid "Needs a marked spot"
+msgstr "지정된 자리 필요"
+
+msgctxt "ghost reason"
+msgid "Spot already built"
+msgstr "이미 건설된 자리"
+
+msgctxt "ghost reason"
+msgid "Cars are still in it"
+msgstr "차량이 남아 있음"
+
+msgctxt "ghost reason"
+msgid "A plane is on the apron"
+msgstr "계류장에 비행기 있음"
+
+msgctxt "ghost reason"
+msgid "Buy this land first"
+msgstr "먼저 부지를 매입하세요"
+
+msgctxt "ghost reason"
+msgid "Plot already owned"
+msgstr "이미 소유한 구획"
+
+msgctxt "ghost reason"
+msgid "Not next to your land"
+msgstr "소유지와 인접하지 않음"
+
+msgctxt "ghost reason"
+msgid "No free exit nearby"
+msgstr "근처에 빈 출구 없음"
+
+msgctxt "ghost reason"
+msgid "Gates are too close"
+msgstr "탑승구 간격이 너무 좁음"
+
+msgctxt "ghost reason"
+msgid "A flight is due here"
+msgstr "예정된 항공편 있음"
+
+msgctxt "ghost reason"
+msgid "Flights have no gate"
+msgstr "항공편이 쓸 탑승구 없음"
+
+msgctxt "ghost reason"
+msgid "A piece is on the edge"
+msgstr "시설이 경계에 걸침"
+
+msgctxt "ghost reason"
+msgid "A piece cannot move"
+msgstr "이동할 수 없는 시설 있음"
+
+msgctxt "ghost reason"
+msgid "A piece does not fit"
+msgstr "시설이 맞지 않음"
+
+msgctxt "ghost reason"
+msgid "Blocks a way out"
+msgstr "출구를 막음"
+
+msgctxt "ghost reason"
+msgid "The room changed"
+msgstr "방이 변경됨"
+
+msgctxt "ghost reason"
+msgid "No room for the plane"
+msgstr "비행기 주기 공간 없음"
+
+msgctxt "ghost reason"
+msgid "Way to the lane blocked"
+msgstr "유도로 경로 막힘"
+
+msgctxt "ghost reason"
+msgid "A booked plane needs it"
+msgstr "예약된 비행기가 사용함"
+
+msgctxt "ghost reason"
+msgid "Strands a booked flight"
+msgstr "예약된 항공편이 고립됨"
+
+msgctxt "build status"
+msgid "Drag to lay a belt"
+msgstr "드래그하여 벨트 배치"
+
+msgctxt "build status"
+msgid "Not part of a lane"
+msgstr "보안 레인에 속하지 않음"
+
+msgctxt "build status"
+msgid "Its front is outside the room, so it will not count"
+msgstr "앞면이 방 바깥으로 나가 인정되지 않습니다"
+
+msgctxt "build status"
+msgid "Drag stops over the menu. Move back onto the floor to keep sizing"
+msgstr "메뉴 위에서는 드래그가 멈춥니다. 바닥으로 돌아와 크기를 조절하세요"
+
+msgctxt "door tool, mid-sentence"
+msgid "entrance"
+msgstr "입구"
+
+msgctxt "door tool, mid-sentence"
+msgid "exit"
+msgstr "출구"
+
+msgctxt "build refusal"
+msgid "Gates need {metres} m between exits. Widen the terminal"
+msgstr "탑승구 출구 사이는 {metres} m 이상 떨어져야 합니다. 터미널을 넓히세요"
+
+msgctxt "build refusal"
+msgid "{reason}: {detail}"
+msgstr "{reason}: {detail}"
+
+msgctxt "build status"
+msgid "{item} placed"
+msgstr "{item} 배치 완료"
+
+msgctxt "room move"
+msgid "Moved {room}"
+msgstr "{room} 이동 완료"
+
+msgctxt "room move"
+msgid "Moved {room} for {cost}"
+msgstr "{cost}에 {room} 이동 완료"
+
+msgctxt "room move"
+msgid "{room}: click to set down, right-click cancels"
+msgstr "{room}: 클릭하여 배치, 우클릭으로 취소"
+
+msgctxt "landside plan"
+msgid "Refunds {price}"
+msgstr "환불 {price}"
+
+msgctxt "landside plan"
+msgid "{place} (open, {count} car): click to close it"
+msgid_plural "{place} (open, {count} cars): click to close it"
+msgstr[0] "{place} (개방 중, {count}대): 클릭하여 폐쇄"
+
+msgctxt "landside plan"
+msgid "{place} (closed, {count} car): click to open it"
+msgid_plural "{place} (closed, {count} cars): click to open it"
+msgstr[0] "{place} (폐쇄됨, {count}대): 클릭하여 개방"
+
+msgctxt "landside plan"
+msgid "Remove {place}: {capacity}, {metres} m walk to the nearest landside door"
+msgstr "{place} 철거: {capacity}, 가장 가까운 입구까지 도보 {metres} m"
+
+msgctxt "landside plan"
+msgid "Remove {place}: {capacity}"
+msgstr "{place} 철거: {capacity}"
+
+msgctxt "landside plan"
+msgid "{place}: {capacity}, {metres} m walk to the nearest landside door"
+msgstr "{place}: {capacity}, 가장 가까운 입구까지 도보 {metres} m"
+
+msgctxt "landside plan"
+msgid "{place}: {capacity}"
+msgstr "{place}: {capacity}"
+
+msgctxt "landside place, mid-sentence"
+msgid "curb bay"
+msgstr "정차 구역"
+
+msgctxt "landside place, mid-sentence"
+msgid "surface lot"
+msgstr "노상 주차장"
+
+msgctxt "landside place, mid-sentence"
+msgid "multi-storey car park"
+msgstr "주차 타워"
+
+msgctxt "landside plan"
+msgid "{count} car is still in it. Close it and wait until it is empty"
+msgid_plural "{count} cars are still in it. Close it and wait until it is empty"
+msgstr[0] "아직 차량 {count}대가 남아 있습니다. 폐쇄하고 비워질 때까지 기다리세요"
+
+msgctxt "landside plan"
+msgid "{count} berth"
+msgid_plural "{count} berths"
+msgstr[0] "{count}면"
+
+msgctxt "landside plan"
+msgid "{count} space"
+msgid_plural "{count} spaces"
+msgstr[0] "{count}대 공간"
+
+msgid "Wall gap · close the outer wall so the roof can go on"
+msgstr "벽 틈 · 지붕을 씌우려면 외벽을 닫으세요"
+
+msgid "Taxiway works: the taxiway moves when the west side is quiet"
+msgstr "유도로 공사: 서쪽이 한산해지면 유도로가 이동합니다"
+
+msgid "Taxiway works: the taxiway moves when the east side is quiet"
+msgstr "유도로 공사: 동쪽이 한산해지면 유도로가 이동합니다"
+
+msgid "Taxiway works: the taxiway moves when the west side is quiet, forecast {when}"
+msgstr "유도로 공사: 서쪽이 한산해지면 이동합니다 (예상 {when})"
+
+msgid "Taxiway works: the taxiway moves when the east side is quiet, forecast {when}"
+msgstr "유도로 공사: 동쪽이 한산해지면 이동합니다 (예상 {when})"
+
+msgctxt "departure status"
+msgid "Boarding"
+msgstr "탑승 중"
+
+msgctxt "departure status"
+msgid "Doors closed"
+msgstr "탑승 마감"
+
+msgctxt "departure status"
+msgid "Pushback"
+msgstr "푸시백"
+
+msgctxt "departure status"
+msgid "Taxiing"
+msgstr "지상 이동"
+
+msgctxt "departure status"
+msgid "Taking off"
+msgstr "이륙 중"
+
+msgctxt "departure status"
+msgid "Departed"
+msgstr "출발 완료"
+
+msgid "doors close {time}"
+msgstr "탑승 마감 {time}"
+
+msgctxt "refusal detail"
+msgid "gate {gate} is too close"
+msgstr "{gate}번 탑승구가 너무 가까움"
+
+msgctxt "refusal detail"
+msgid "gate {gate}, a small plane"
+msgstr "{gate}번 탑승구 (소형기)"
+
+msgctxt "refusal detail"
+msgid "gate {gate}, a medium plane"
+msgstr "{gate}번 탑승구 (중형기)"
+
+msgctxt "refusal detail"
+msgid "gate {gate}, a large plane"
+msgstr "{gate}번 탑승구 (대형기)"
+
+msgctxt "build status"
+msgid "Belt {count} cell"
+msgid_plural "Belt {count} cells"
+msgstr[0] "벨트 {count}칸"
+
+msgctxt "build status"
+msgid "Facing auto"
+msgstr "방향 자동"
+
+msgctxt "build status"
+msgid "Facing {facing}"
+msgstr "방향 {facing}"
+
+msgctxt "build status"
+msgid "{width} x {height}"
+msgstr "{width} x {height}"
+
+msgctxt "build status"
+msgid "{room} {width} x {height}"
+msgstr "{room} {width} x {height}"
+
+msgctxt "build status"
+msgid "{room} marked: {status}"
+msgstr "{room} 지정됨: {status}"
+
+msgctxt "build status"
+msgid "Drag to mark a {room}"
+msgstr "드래그하여 {room} 지정"
+
+msgctxt "item name, mid-sentence"
+msgid "atm"
+msgstr "ATM"
+
+msgctxt "item name, mid-sentence"
+msgid "baggage belt"
+msgstr "수하물 벨트"
+
+msgctxt "item name, mid-sentence"
+msgid "baggage cart"
+msgstr "수하물 카트"
+
+msgctxt "item name, mid-sentence"
+msgid "bar counter"
+msgstr "바 카운터"
+
+msgctxt "item name, mid-sentence"
+msgid "belt corner"
+msgstr "벨트 코너"
+
+msgctxt "item name, mid-sentence"
+msgid "belt end"
+msgstr "벨트 끝부분"
+
+msgctxt "item name, mid-sentence"
+msgid "belt merge"
+msgstr "벨트 합류부"
+
+msgctxt "item name, mid-sentence"
+msgid "bench"
+msgstr "벤치"
+
+msgctxt "item name, mid-sentence"
+msgid "bin"
+msgstr "쓰레기통"
+
+msgctxt "item name, mid-sentence"
+msgid "bush"
+msgstr "관목"
+
+msgctxt "item name, mid-sentence"
+msgid "cafe counter"
+msgstr "카페 카운터"
+
+msgctxt "item name, mid-sentence"
+msgid "cafe table"
+msgstr "카페 테이블"
+
+msgctxt "item name, mid-sentence"
+msgid "chain"
+msgstr "대기열 벨트"
+
+msgctxt "item name, mid-sentence"
+msgid "check-in desk"
+msgstr "체크인 데스크"
+
+msgctxt "item name, mid-sentence"
+msgid "clothes rail"
+msgstr "옷걸이 행거"
+
+msgctxt "item name, mid-sentence"
+msgid "confiscation bin"
+msgstr "압수품 보관함"
+
+msgctxt "item name, mid-sentence"
+msgid "currency exchange"
+msgstr "환전소"
+
+msgctxt "item name, mid-sentence"
+msgid "display stand"
+msgstr "진열대"
+
+msgctxt "item name, mid-sentence"
+msgid "duty free shelf"
+msgstr "면세점 선반"
+
+msgctxt "item name, mid-sentence"
+msgid "duty free till"
+msgstr "면세점 계산대"
+
+msgctxt "item name, mid-sentence"
+msgid "entrance"
+msgstr "입구"
+
+msgctxt "item name, mid-sentence"
+msgid "exit to the plane"
+msgstr "비행기 탑승 출구"
+
+msgctxt "item name, mid-sentence"
+msgid "fashion till"
+msgstr "패션 매장 계산대"
+
+msgctxt "item name, mid-sentence"
+msgid "fountain"
+msgstr "분수"
+
+msgctxt "item name, mid-sentence"
+msgid "gate desk"
+msgstr "탑승구 데스크"
+
+msgctxt "item name, mid-sentence"
+msgid "gate seats"
+msgstr "탑승구 좌석"
+
+msgctxt "item name, mid-sentence"
+msgid "grab-and-go stall"
+msgstr "테이크아웃 매대"
+
+msgctxt "item name, mid-sentence"
+msgid "info desk"
+msgstr "안내 데스크"
+
+msgctxt "item name, mid-sentence"
+msgid "info screen"
+msgstr "안내 스크린"
+
+msgctxt "item name, mid-sentence"
+msgid "kiosk counter"
+msgstr "키오스크 카운터"
+
+msgctxt "item name, mid-sentence"
+msgid "lounge armchair"
+msgstr "라운지 안락의자"
+
+msgctxt "item name, mid-sentence"
+msgid "lounge sofa"
+msgstr "라운지 소파"
+
+msgctxt "item name, mid-sentence"
+msgid "nap pod"
+msgstr "수면 캡슐"
+
+msgctxt "item name, mid-sentence"
+msgid "pharmacy counter"
+msgstr "약국 카운터"
+
+msgctxt "item name, mid-sentence"
+msgid "pharmacy shelf"
+msgstr "약국 선반"
+
+msgctxt "item name, mid-sentence"
+msgid "pickup table"
+msgstr "픽업 테이블"
+
+msgctxt "item name, mid-sentence"
+msgid "plant pot"
+msgstr "화분"
+
+msgctxt "item name, mid-sentence"
+msgid "planter"
+msgstr "화단"
+
+msgctxt "item name, mid-sentence"
+msgid "play blocks"
+msgstr "놀이 블록"
+
+msgctxt "item name, mid-sentence"
+msgid "play slide"
+msgstr "미끄럼틀"
+
+msgctxt "item name, mid-sentence"
+msgid "post"
+msgstr "차단봉"
+
+msgctxt "item name, mid-sentence"
+msgid "prize podium"
+msgstr "경품 단상"
+
+msgctxt "item name, mid-sentence"
+msgid "restaurant booth"
+msgstr "레스토랑 부스"
+
+msgctxt "item name, mid-sentence"
+msgid "restaurant table"
+msgstr "레스토랑 식탁"
+
+msgctxt "item name, mid-sentence"
+msgid "screen"
+msgstr "스크린"
+
+msgctxt "item name, mid-sentence"
+msgid "search table"
+msgstr "수하물 정밀검색대"
+
+msgctxt "item name, mid-sentence"
+msgid "security arch"
+msgstr "보안 검색 아치"
+
+msgctxt "item name, mid-sentence"
+msgid "security scanner"
+msgstr "보안 검색대"
+
+msgctxt "item name, mid-sentence"
+msgid "shower"
+msgstr "샤워 부스"
+
+msgctxt "item name, mid-sentence"
+msgid "sink"
+msgstr "세면대"
+
+msgctxt "item name, mid-sentence"
+msgid "statue"
+msgstr "조각상"
+
+msgctxt "item name, mid-sentence"
+msgid "toilet stall"
+msgstr "변기 칸"
+
+msgctxt "item name, mid-sentence"
+msgid "tray table"
+msgstr "트레이 테이블"
+
+msgctxt "item name, mid-sentence"
+msgid "tree"
+msgstr "나무"
+
+msgctxt "item name, mid-sentence"
+msgid "tree bench"
+msgstr "나무 벤치"
+
+msgctxt "item name, mid-sentence"
+msgid "work desk"
+msgstr "업무용 책상"
+
+msgctxt "item name, mid-sentence"
+msgid "x-ray belt"
+msgstr "X선 벨트"
+
+msgctxt "station status"
+msgid "Closed by you"
+msgstr "플레이어가 폐쇄함"
+
+msgctxt "station status"
+msgid "Finishing current service"
+msgstr "현재 응대 마무리 중"
+
+msgctxt "station status"
+msgid "Waiting for staff"
+msgstr "직원 대기 중"
+
+msgctxt "station status"
+msgid "Staff on the way"
+msgstr "직원 이동 중"
+
+msgctxt "station status"
+msgid "Serving"
+msgstr "운영 중"
+
+msgctxt "station status"
+msgid "Scanner fault"
+msgstr "검색대 고장"
+
+msgctxt "station status"
+msgid "Scanner fault, fixed by {time}"
+msgstr "검색대 고장 ({time} 수리 예정)"
+
+msgctxt "menu"
+msgid "Save"
+msgstr "저장"
+
+msgctxt "menu"
+msgid "Load"
+msgstr "불러오기"
+
 msgctxt "menu"
 msgid "Continue"
 msgstr "계속하기"
@@ -17,46 +4452,407 @@ msgid "New Airport"
 msgstr "새 공항"
 
 msgctxt "menu"
-msgid "Load"
-msgstr "불러오기"
-
-msgctxt "menu"
 msgid "Wishlist"
 msgstr "찜하기"
-
-msgid "Send Feedback"
-msgstr "피드백 보내기"
 
 msgctxt "menu"
 msgid "Quit"
 msgstr "종료"
 
 msgctxt "menu"
-msgid "Audio"
-msgstr "오디오"
-
-msgctxt "menu"
 msgid "Back"
 msgstr "뒤로"
+
+msgid "{slot}, {time}"
+msgstr "{slot}, {time}"
+
+msgid "Manual save"
+msgstr "수동 저장"
+
+msgid "Autosave {number}"
+msgstr "자동 저장 {number}"
+
+msgid "Food: hungry passengers lose mood. A cafe feeds them."
+msgstr "식음료: 배고픈 승객은 기분이 떨어집니다. 카페에서 음식을 제공하세요."
+
+msgid "Security: more lanes mean shorter queues at the checkpoint."
+msgstr "보안 검색: 레인이 많을수록 검색대 대기줄이 짧아집니다."
+
+msgid "Baggage: belts carry checked bags. A late bag misses its flight."
+msgstr "수하물: 벨트가 위탁 수하물을 운반합니다. 늦은 짐은 비행기를 놓칩니다."
+
+msgid "Comfort: seats and lounges calm passengers who wait."
+msgstr "편안함: 좌석과 라운지는 기다리는 승객의 마음을 진정시켜 줍니다."
+
+msgid "Runway: a longer runway takes bigger planes."
+msgstr "활주로: 활주로가 길어질수록 더 큰 비행기가 착륙할 수 있습니다."
+
+msgid "Also new: {pieces}."
+msgstr "추가 항목: {pieces}."
+
+msgctxt "build refusal"
+msgid "A flight is still due at this gate. Remove it after the flight leaves: {flights}"
+msgid_plural "Flights are still due at this gate. Remove it after they leave: {flights}"
+msgstr[0] "이 탑승구에 예정된 항공편이 남아 있습니다. 출발 후에 철거하세요: {flights}"
+
+msgctxt "build refusal"
+msgid "No other gate is free for these flights. Move them in Departures first: {flights}"
+msgid_plural "No other gate is free for these flights. Move them in Departures first: {flights}"
+msgstr[0] "이 항공편들을 옮길 빈 탑승구가 없습니다. 먼저 출발편 화면에서 이동하세요: {flights}"
+
+msgctxt "build refusal"
+msgid "The side taxiway would have to move and leave a booked flight with no way to its gate: {flights}"
+msgid_plural "The side taxiway would have to move and leave booked flights with no way to their gates: {flights}"
+msgstr[0] "측면 유도로가 이동하면서 예약된 항공편이 탑승구로 갈 수 없게 됩니다: {flights}"
+
+msgctxt "flight label"
+msgid "the {time} flight"
+msgstr "{time} 항공편"
+
+msgctxt "flight label"
+msgid "the {time} {airline} flight to {city}"
+msgstr "{time} {city}행 {airline}편"
+
+msgctxt "offer clash"
+msgid "it clashes with the {time} {airline} flight to {city} on the runway"
+msgstr "{time} {city}행 {airline}편과 활주로 시간이 겹칩니다"
+
+msgctxt "offer clash"
+msgid "it clashes with the {time} {airline} flight to {city} on the taxi lane"
+msgstr "{time} {city}행 {airline}편과 유도로 시간이 겹칩니다"
+
+msgctxt "offer clash"
+msgid "it clashes with the {time} {airline} flight to {city} at gate {gate}"
+msgstr "{time} {city}행 {airline}편과 {gate}번 탑승구 시간이 겹칩니다"
+
+msgctxt "offer clash"
+msgid "it clashes with the {time} flight on the runway"
+msgstr "{time} 항공편과 활주로 시간이 겹칩니다"
+
+msgctxt "offer clash"
+msgid "it clashes with the {time} flight on the taxi lane"
+msgstr "{time} 항공편과 유도로 시간이 겹칩니다"
+
+msgctxt "offer clash"
+msgid "it clashes with the {time} flight at gate {gate}"
+msgstr "{time} 항공편과 {gate}번 탑승구 시간이 겹칩니다"
+
+msgctxt "offer clash"
+msgid "it clashes with another flight on the runway"
+msgstr "다른 항공편과 활주로 시간이 겹칩니다"
+
+msgctxt "offer clash"
+msgid "it clashes with another flight on the taxi lane"
+msgstr "다른 항공편과 유도로 시간이 겹칩니다"
+
+msgctxt "offer clash"
+msgid "it clashes with another flight at gate {gate}"
+msgstr "다른 항공편과 {gate}번 탑승구 시간이 겹칩니다"
+
+msgctxt "list of two"
+msgid "{first} and {second}"
+msgstr "{first} 및 {second}"
+
+msgctxt "list start"
+msgid "{first}, {rest}"
+msgstr "{first}, {rest}"
+
+msgctxt "list middle"
+msgid "{item}, {rest}"
+msgstr "{item}, {rest}"
+
+msgctxt "list end"
+msgid "{item} and {last}"
+msgstr "{item} 및 {last}"
+
+msgid "Quit log"
+msgstr "종료 로그"
+
+msgid "Records where you stop playing: the day, money, stars, builds, flights and alerts, never what you click or type. The file stays on this computer and nothing is sent."
+msgstr "게임을 종료한 시점의 상태(일차, 자금, 등급, 건설, 항공편, 알림)만 기록하며 클릭이나 입력 내용은 기록하지 않습니다. 파일은 이 컴퓨터에만 저장되며 외부로 전송되지 않습니다."
+
+msgid "Open log folder"
+msgstr "로그 폴더 열기"
+
+msgid "Could not open the log folder: {path}"
+msgstr "로그 폴더를 열 수 없습니다: {path}"
+
+msgid "Could not start the quit log in {path}"
+msgstr "{path}에 종료 로그를 시작할 수 없습니다"
+
+msgid "Passengers board at a gate. Place a gate desk by an exit that faces the planes."
+msgstr "승객은 탑승구에서 탑승합니다. 비행기 쪽을 향한 출구 옆에 탑승구 데스크를 놓으세요."
+
+msgid "Passengers wait at the gate. Place seats near it; the airport opens without them."
+msgstr "승객은 탑승구에서 대기합니다. 근처에 좌석을 놓으세요 (없어도 개항할 수 있습니다)."
+
+msgid "Click a passenger to follow them to their flight"
+msgstr "승객을 클릭해 항공편 탑승까지 따라가 보세요"
+
+msgid "Show me"
+msgstr "위치 보기"
+
+msgid "No carry-on bags"
+msgstr "기내 수하물 없음"
+
+msgid "{count} carry-on bag"
+msgid_plural "{count} carry-on bags"
+msgstr[0] "기내 수하물 {count}개"
+
+msgid "carrying liquids"
+msgstr "액체류 소지"
+
+msgid "a checked bag that missed the plane"
+msgstr "비행기를 놓친 위탁 수하물"
+
+msgid "a checked bag still to drop off"
+msgstr "아직 부치지 않은 위탁 수하물"
+
+msgid "no checked bag"
+msgstr "위탁 수하물 없음"
+
+msgid "a checked bag at the desk"
+msgstr "데스크에 있는 위탁 수하물"
+
+msgid "a checked bag on the belt"
+msgstr "벨트 위를 이동 중인 위탁 수하물"
+
+msgid "a checked bag stuck on the belt"
+msgstr "벨트에서 멈춘 위탁 수하물"
+
+msgid "a checked bag in the bag room"
+msgstr "수하물실에 있는 위탁 수하물"
+
+msgid "a checked bag loaded on the plane"
+msgstr "비행기에 실린 위탁 수하물"
+
+msgid "Cutting it fine, no shopping planned"
+msgstr "시간 빠듯함, 쇼핑 계획 없음"
+
+msgid "Cutting it fine, hoping for a quick stop at the kiosk"
+msgstr "시간 빠듯함, 키오스크에 잠깐 들르려 함"
+
+msgid "Cutting it fine, needs the pharmacy"
+msgstr "시간 빠듯함, 약국 방문 필요"
+
+msgid "Cutting it fine, hoping for duty free"
+msgstr "시간 빠듯함, 면세점 방문 희망"
+
+msgid "Cutting it fine, hoping to browse the fashion shop"
+msgstr "시간 빠듯함, 패션 매장 구경 희망"
+
+msgid "Right on time, no shopping planned"
+msgstr "적정 시간 도착, 쇼핑 계획 없음"
+
+msgid "Right on time, hoping for a quick stop at the kiosk"
+msgstr "적정 시간 도착, 키오스크에 잠깐 들르려 함"
+
+msgid "Right on time, needs the pharmacy"
+msgstr "적정 시간 도착, 약국 방문 필요"
+
+msgid "Right on time, hoping for duty free"
+msgstr "적정 시간 도착, 면세점 방문 희망"
+
+msgid "Right on time, hoping to browse the fashion shop"
+msgstr "적정 시간 도착, 패션 매장 구경 희망"
+
+msgid "Early bird, no shopping planned"
+msgstr "일찍 도착, 쇼핑 계획 없음"
+
+msgid "Early bird, hoping for a quick stop at the kiosk"
+msgstr "일찍 도착, 키오스크에 잠깐 들르려 함"
+
+msgid "Early bird, needs the pharmacy"
+msgstr "일찍 도착, 약국 방문 필요"
+
+msgid "Early bird, hoping for duty free"
+msgstr "일찍 도착, 면세점 방문 희망"
+
+msgid "Early bird, hoping to browse the fashion shop"
+msgstr "일찍 도착, 패션 매장 구경 희망"
+
+msgid "{count} desk full · {waiting} waiting · short queue: move the desk away from the wall"
+msgid_plural "{count} desks full · {waiting} waiting · short queue: move a desk away from the wall"
+msgstr[0] "데스크 {count}곳 만원 · {waiting}명 대기 · 대기열 짧음: 데스크를 벽에서 떼어 놓으세요"
+
+msgid "{count} lane full · {waiting} waiting · short queue: move the scanner away from the wall"
+msgid_plural "{count} lanes full · {waiting} waiting · short queue: move a scanner away from the wall"
+msgstr[0] "보안 레인 {count}곳 만원 · {waiting}명 대기 · 대기열 짧음: 검색대를 벽에서 떼어 놓으세요"
+
+msgctxt "sign text"
+msgid "Queue full · {count} waiting · short queue: move the desk away from the wall"
+msgid_plural "Queue full · {count} waiting · short queue: move the desk away from the wall"
+msgstr[0] "대기열 만원 · {count}명 대기 · 대기열 짧음: 데스크를 벽에서 떼어 놓으세요"
+
+msgctxt "sign text"
+msgid "Queue full · {count} waiting · short queue: move the scanner away from the wall"
+msgid_plural "Queue full · {count} waiting · short queue: move the scanner away from the wall"
+msgstr[0] "대기열 만원 · {count}명 대기 · 대기열 짧음: 검색대를 벽에서 떼어 놓으세요"
+
+msgctxt "sign text"
+msgid "Queue full · {count} waiting · short queue: move the counter away from the wall"
+msgid_plural "Queue full · {count} waiting · short queue: move the counter away from the wall"
+msgstr[0] "대기열 만원 · {count}명 대기 · 대기열 짧음: 카운터를 벽에서 떼어 놓으세요"
+
+msgid "{count} station is closed · staff are on the way"
+msgid_plural "{count} stations are closed · staff are on the way"
+msgstr[0] "시설 {count}곳 폐쇄됨 · 직원이 이동 중입니다"
+
+msgid "GOTTA AIR"
+msgstr "GOTTA AIR"
+
+msgid "Station manager"
+msgstr "공항 관리자"
+
+msgid "Gotta Air here. Welcome, your airport is open, and I hear it is the only one with a dent in the carpet."
+msgstr "여기는 Gotta Air입니다. 개항을 축하합니다! 카펫에 흠집이 난 유일한 공항이라고 들었습니다만."
+
+msgid "Our first flight to Oslo leaves at {departure_time}. It is a small plane, so please keep the luggage small too."
+msgstr "오슬로행 첫 항공편은 {departure_time}에 출발합니다. 소형기이니 짐도 가볍게 맞춰 주세요."
+
+msgid "Your first passengers are on their way in now."
+msgstr "첫 승객들이 지금 들어오고 있습니다."
+
+msgid "Good luck. Gotta make that flight!"
+msgstr "행운을 빕니다. 꼭 비행기를 타야 해요!"
+
+msgid "In the full game"
+msgstr "정식 버전 제공"
+
+msgid "Demo limit: 1 extra plot (more in the full game)"
+msgstr "데모 제한: 추가 부지 1개 (정식 버전에서 더 확장 가능)"
+
+msgid "Send Feedback"
+msgstr "피드백 보내기"
+
+msgid "{slot}, {time} (Older version)"
+msgstr "{slot}, {time} (구버전)"
+
+msgid "This save is from an older version and cannot be loaded after an update. Please start a New Airport."
+msgstr "이전 버전의 저장 파일이라 업데이트 후 불러올 수 없습니다. 새 공항을 시작해 주세요."
+
+msgid "This save file cannot be read."
+msgstr "이 저장 파일을 읽을 수 없습니다."
+
+msgid "This save is from a newer version and cannot be loaded. Please update the game."
+msgstr "더 새로운 버전의 저장 파일이라 불러올 수 없습니다. 게임을 업데이트해 주세요."
+
+msgid "{slot}, {time} (Unreadable)"
+msgstr "{slot}, {time} (읽기 불가)"
+
+msgid "{slot}, {time} (Newer version)"
+msgstr "{slot}, {time} (상위 버전)"
+
+msgid "Made my flight at the last second!"
+msgstr "아슬아슬하게 탑승했다!"
+
+msgid "{count} made it at the last second!"
+msgid_plural "{count} made it at the last second!"
+msgstr[0] "{count}명이 아슬아슬하게 탑승!"
+
+msgid "{count} running late"
+msgid_plural "{count} running late"
+msgstr[0] "시간 촉박 {count}명"
+
+msgid "Follow the tightest running-late passenger"
+msgstr "가장 시간이 촉박한 승객 따라가기"
+
+msgctxt "pa"
+msgid "PA: Boarding now for {airline} to {city} at Gate {gate}."
+msgstr "안내 방송: {gate}번 탑승구에서 {city}행 {airline} 항공편의 탑승을 시작합니다."
+
+msgctxt "pa"
+msgid "PA: Boarding now for {airline} to {city}."
+msgstr "안내 방송: {city}행 {airline} 항공편의 탑승을 시작합니다."
+
+msgctxt "pa"
+msgid "PA: Boarding now for {flight} at Gate {gate}."
+msgstr "안내 방송: {gate}번 탑승구에서 {flight} 항공편의 탑승을 시작합니다."
+
+msgctxt "pa"
+msgid "PA: Boarding now for {flight}."
+msgstr "안내 방송: {flight} 항공편의 탑승을 시작합니다."
+
+msgctxt "pa"
+msgid "PA: Final call for {airline} to {city} at Gate {gate}. Doors close soon."
+msgstr "안내 방송: {gate}번 탑승구 {city}행 {airline} 항공편 최종 탑승 안내입니다. 곧 탑승이 마감됩니다."
+
+msgctxt "pa"
+msgid "PA: Final call for {airline} to {city}. Doors close soon."
+msgstr "안내 방송: {city}행 {airline} 항공편 최종 탑승 안내입니다. 곧 탑승이 마감됩니다."
+
+msgctxt "pa"
+msgid "PA: Final call for {flight} at Gate {gate}. Doors close soon."
+msgstr "안내 방송: {gate}번 탑승구 {flight} 항공편 최종 탑승 안내입니다. 곧 탑승이 마감됩니다."
+
+msgctxt "pa"
+msgid "PA: Final call for {flight}. Doors close soon."
+msgstr "안내 방송: {flight} 항공편 최종 탑승 안내입니다. 곧 탑승이 마감됩니다."
+
+msgctxt "pa"
+msgid "PA: A minor beverage incident in the terminal. Please step around the enthusiasm."
+msgstr "안내 방송: 터미널 내에 작은 음료 사고가 있었습니다. 열정이 넘친 현장을 피해 지나가 주세요."
+
+msgctxt "pa"
+msgid "PA: One security scanner has paused for a brief reset. Other lanes remain open."
+msgstr "안내 방송: 보안 검색대 한 대가 간단한 재설정을 위해 잠시 멈췄습니다. 다른 레인은 정상 운영 중입니다."
+
+msgctxt "pa"
+msgid "PA: A seasonal rush is arriving. Everyone is early except the queue."
+msgstr "안내 방송: 연휴 인파가 몰리고 있습니다. 대기줄만 빼고 모두가 일찍 도착했군요."
+
+msgctxt "pa"
+msgid "PA: Check-in queue is full. Please admire the terminal flooring while waiting."
+msgstr "안내 방송: 체크인 대기열이 가득 찼습니다. 기다리시는 동안 터미널 바닥 타일을 감상해 보세요."
+
+msgctxt "pa"
+msgid "PA: Security queue is full. Take a moment to pre-untie your shoes."
+msgstr "안내 방송: 보안 검색 대기열이 가득 찼습니다. 미리 신발 끈을 풀어 두시는 것도 좋습니다."
+
+msgctxt "pa"
+msgid "PA: Bravo to the passenger who caught {airline} to {city} at Gate {gate} just in time."
+msgstr "안내 방송: {gate}번 탑승구에서 {city}행 {airline} 항공편에 아슬아슬하게 탑승하신 승객분께 박수를 보냅니다."
+
+msgctxt "pa"
+msgid "PA: Bravo to the passenger who caught {airline} to {city} just in time."
+msgstr "안내 방송: {city}행 {airline} 항공편에 아슬아슬하게 탑승하신 승객분께 박수를 보냅니다."
+
+msgctxt "pa"
+msgid "PA: Bravo to the passenger who caught {flight} at Gate {gate} just in time."
+msgstr "안내 방송: {gate}번 탑승구에서 {flight} 항공편에 아슬아슬하게 탑승하신 승객분께 박수를 보냅니다."
+
+msgctxt "pa"
+msgid "PA: Bravo to the passenger who caught {flight} with seconds to spare."
+msgstr "안내 방송: 출발 몇 초를 남기고 {flight}에 탑승하신 승객분께 박수를 보냅니다."
+
+msgctxt "pa"
+msgid "PA: Our terminal is now rated {stars} stars. Same carpet, slightly prouder management."
+msgstr "안내 방송: 우리 터미널이 {stars}성급 등급을 달성했습니다. 카펫은 그대로지만 경영진은 조금 더 뿌듯해합니다."
+
+msgid "Ramp agents"
+msgstr "지상조업 직원"
+
+msgid "Ramp agent needed for baggage"
+msgstr "수하물 운반에 지상조업 직원 필요"
+
+msgid "No ramp agents hired · hire one on Staff"
+msgstr "고용된 지상조업 직원 없음 · 직원 메뉴에서 고용하세요"
+
+msgid "All ramp agents busy · hire another on Staff"
+msgstr "모든 지상조업 직원이 작업 중 · 직원을 추가 고용하세요"
+
+msgid "Ramp agent needed for pushback"
+msgstr "푸시백에 지상조업 직원 필요"
+
+msgid "Emergency tug called (-{fee}) · Hire a ramp agent on Staff"
+msgstr "긴급 토잉카 호출 (-{fee}) · 직원 메뉴에서 지상조업 직원을 고용하세요"
 
 msgid "Language"
 msgstr "언어"
 
-msgid "Game menu"
-msgstr "게임 메뉴"
-
-msgid "Resume ({key})"
-msgstr "계속 ({key})"
-
 msgctxt "menu"
-msgid "Save"
-msgstr "저장"
-
-msgid "Settings"
-msgstr "설정"
-
-msgid "Back"
-msgstr "뒤로"
+msgid "Audio"
+msgstr "오디오"
 
 msgid "Audio"
 msgstr "오디오"
@@ -76,260 +4872,1257 @@ msgstr "효과음"
 msgid "{percent}%"
 msgstr "{percent}%"
 
-msgid "Incidents"
-msgstr "돌발 상황"
+msgctxt "menu"
+msgid "Main Menu"
+msgstr "메인 메뉴"
 
-msgid "Quit log"
-msgstr "종료 로그"
+msgctxt "menu"
+msgid "Quit to Desktop"
+msgstr "바탕화면으로 나가기"
 
-msgid "Open log folder"
-msgstr "로그 폴더 열기"
+msgctxt "menu"
+msgid "Save & Exit"
+msgstr "저장 후 나가기"
 
-msgid "v{version}"
-msgstr "v{version}"
+msgctxt "menu"
+msgid "Exit without Saving"
+msgstr "저장하지 않고 나가기"
 
-msgid "Build mode"
-msgstr "건설 모드"
+msgctxt "menu"
+msgid "Cancel"
+msgstr "취소"
 
-msgctxt "narrow build mode sign"
-msgid "Build"
-msgstr "건설"
+msgid "Return to main menu?"
+msgstr "메인 메뉴로 돌아갈까요?"
 
-msgctxt "build menu"
-msgid "Building"
-msgstr "건물"
+msgid "Quit to desktop?"
+msgstr "바탕화면으로 나갈까요?"
 
-msgctxt "build menu"
-msgid "Operations"
-msgstr "운영"
+msgid "Unsaved progress will be lost."
+msgstr "저장하지 않은 진행 내용은 사라집니다."
 
-msgctxt "build menu"
-msgid "Facilities"
-msgstr "편의시설"
+msgid "Cannot save right now: {reason}"
+msgstr "지금 저장할 수 없습니다: {reason}"
 
-msgctxt "build menu"
-msgid "Food & Drink"
-msgstr "식음료"
+msgid "Could not save the game."
+msgstr "게임을 저장할 수 없습니다."
 
-msgctxt "build menu"
-msgid "Shops"
-msgstr "상점"
+msgid "Camera angle"
+msgstr "카메라 각도"
 
-msgctxt "build menu"
-msgid "Decor"
-msgstr "장식"
+msgid "Low (38°)"
+msgstr "낮음 (38°)"
 
-msgctxt "build menu"
-msgid "Remove"
-msgstr "철거"
+msgid "Medium (54°)"
+msgstr "보통 (54°)"
 
-msgctxt "build menu"
-msgid "Templates"
-msgstr "템플릿"
+msgid "Top-Down (70°)"
+msgstr "위에서 내려다보기 (70°)"
 
-msgctxt "build menu"
-msgid "Staff"
-msgstr "직원"
+msgid "Custom ({angle}°)"
+msgstr "사용자 지정 ({angle}°)"
 
-msgctxt "build menu"
-msgid "All"
-msgstr "전체"
+msgid "Welcome to your new airport! Open Operations on the bottom bar to place a check-in desk, security scanner, and gate desk."
+msgstr "새 공항에 오신 것을 환영합니다! 하단 바에서 '운영'을 열어 체크인 데스크, 보안 검색대, 탑승구 데스크를 배치해 보세요."
 
-msgctxt "build menu"
-msgid "Rooms"
-msgstr "방"
+msgid "Then open Staff to hire an agent, an officer, and a gate agent so the airport can open. {pause} pauses, {speed} sets speed."
+msgstr "그런 다음 '직원'에서 체크인 직원, 보안 요원, 탑승구 직원을 고용하면 공항을 열 수 있습니다. {pause}로 일시정지, {speed}로 속도를 조절합니다."
 
-msgctxt "build menu"
-msgid "Check-in desk"
-msgstr "체크인 데스크"
+msgid "Now that the airport is open, some days bring trouble: a spill on the floor, an inspector, a holiday rush. Shall I send those your way?"
+msgstr "이제 공항이 열렸으니 어떤 날에는 바닥 오염이나 점검관 방문, 연휴 혼잡 같은 일이 생길 수 있습니다. 이런 돌발 상황을 활성화할까요?"
 
-msgctxt "build menu"
-msgid "Gate desk"
-msgstr "탑승구 데스크"
+msgid "Place Check-in (Operations)"
+msgstr "체크인 배치 (운영)"
 
-msgctxt "build menu"
-msgid "Security"
-msgstr "보안 검색"
+msgid "Open a closed Check-in desk"
+msgstr "닫힌 체크인 데스크 열기"
 
-msgctxt "build menu"
-msgid "Bag room"
-msgstr "수하물실"
+msgid "Hire Check-in agent (Staff)"
+msgstr "체크인 직원 고용 (직원)"
 
-msgctxt "build menu"
-msgid "Toilet"
-msgstr "화장실"
+msgid "Check-in agent on the way"
+msgstr "체크인 직원이 이동 중"
 
-msgctxt "price"
-msgid "Free"
-msgstr "무료"
+msgid "Place Security (Operations)"
+msgstr "보안 검색 배치 (운영)"
 
-msgid "Locked"
-msgstr "잠김"
+msgid "Open a closed Security scanner or lane"
+msgstr "닫힌 보안 검색대나 레인 열기"
 
-msgid "In the full game"
-msgstr "정식 버전 제공"
+msgid "Hire Security officer (Staff)"
+msgstr "보안 요원 고용 (직원)"
 
-msgid "Offers ({count})"
-msgstr "제안 ({count})"
+msgid "Security officer on the way"
+msgstr "보안 요원이 이동 중"
 
-msgid "Runway"
-msgstr "활주로"
+msgid "Place Gate Desk (Operations)"
+msgstr "탑승구 데스크 배치 (운영)"
 
-msgid "Planner ({key})"
-msgstr "일정표 ({key})"
+msgid "Hire Gate agent (Staff)"
+msgstr "탑승구 직원 고용 (직원)"
 
-msgid "Departures ({key})"
-msgstr "출발편 ({key})"
+msgid "Gate agent on the way"
+msgstr "탑승구 직원이 이동 중"
 
-msgid "Mood ({key})"
-msgstr "기분 ({key})"
+msgid "Place Seats near the gate (Operations)"
+msgstr "탑승구 근처에 좌석 배치 (운영)"
 
-msgid "Hints ({key})"
-msgstr "힌트 ({key})"
+msgid "Station unstaffed: hire staff (Staff)"
+msgstr "직원 미배치: 직원 고용 (직원)"
 
-msgid "Reset hints"
-msgstr "힌트 초기화"
+msgid "Passengers need a toilet: build Toilet room (Facilities)"
+msgstr "승객에게 화장실 필요: 화장실 건설 (편의시설)"
 
-msgid "No flights yet"
-msgstr "아직 항공편 없음"
+msgid "Passengers are hungry: build Cafe (Food & Drink)"
+msgstr "승객이 배고픔: 카페 건설 (식음료)"
 
-msgctxt "clock"
-msgid "Day {day}  {time}"
-msgstr "{day}일차  {time}"
+msgid "Airline Contracts — Accept to schedule flights"
+msgstr "항공사 계약 — 수락하여 항공편 편성"
 
-msgid "Alerts"
-msgstr "알림"
+msgid "{boarded}/{booked} boarded"
+msgstr "{boarded}/{booked}명 탑승"
 
-msgid "Alerts ({count})"
-msgstr "알림 ({count})"
+msgid "3-day rolling on-time rate (70% of your star rating)"
+msgstr "최근 3일 정시 탑승률 (공항 등급의 70% 반영)"
 
-msgid "Alert history"
-msgstr "알림 기록"
+msgid "In terminal: {active}"
+msgstr "터미널 내: {active}"
 
-msgid "Show alert cards"
-msgstr "알림 카드 표시"
+msgid "· {count} late"
+msgstr "· 지각 {count}"
 
-msgid "No alerts yet"
-msgstr "아직 알림 없음"
+msgid "On time: {percent}%"
+msgstr "정시율: {percent}%"
 
-msgid "Today"
-msgstr "오늘"
+msgid "On time: —"
+msgstr "정시율: —"
 
-msgid "Tomorrow"
-msgstr "내일"
+msgid "Departures ({key}) · {count} late"
+msgstr "출발편 ({key}) · 지각 {count}"
 
-msgid "No flights scheduled"
-msgstr "예정된 항공편 없음"
-
-msgid "Made {made}  Missed {missed}  In terminal {active}"
-msgstr "탑승 {made}  놓침 {missed}  터미널 내 {active}"
-
-msgid "To open the airport"
-msgstr "공항을 열려면"
-
-msgid "Your airport needs"
-msgstr "공항에 필요한 항목"
-
-msgctxt "staff button"
-msgid "Hire · {wage}/day"
-msgstr "고용 · {wage}/일"
-
-msgctxt "staff button"
-msgid "Fire"
-msgstr "해고"
-
-msgid "Check-in agents"
-msgstr "체크인 직원"
-
-msgid "Security officers"
-msgstr "보안 요원"
-
-msgid "Gate agents"
-msgstr "탑승구 직원"
-
-msgid "Shop staff"
-msgstr "상점 직원"
-
-msgid "Cleaners"
-msgstr "미화원"
-
-msgid "Ramp agents"
-msgstr "지상조업 직원"
-
-msgid "{hired} hired, {duty} on duty"
-msgstr "고용 {hired}, 근무 {duty}"
-
-msgid "{hired} hired, {duty} cleaning"
-msgstr "고용 {hired}, 청소 {duty}"
-
-msgctxt "mood overlay mode"
-msgid "Mood"
-msgstr "기분"
-
-msgctxt "mood overlay mode"
-msgid "Hunger"
-msgstr "배고픔"
-
-msgctxt "mood overlay mode"
-msgid "Toilet"
-msgstr "화장실"
-
-msgctxt "mood overlay mode"
-msgid "Boredom"
-msgstr "지루함"
-
-msgctxt "mood overlay mode"
-msgid "Late"
-msgstr "지각"
-
-msgctxt "speed button"
-msgid "Pause ({key})"
-msgstr "일시정지 ({key})"
-
-msgctxt "speed button"
-msgid "Speed {speed}x ({key})"
-msgstr "배속 {speed}x ({key})"
-
-msgctxt "gate caption"
-msgid "Gate {gate}"
-msgstr "{gate}번 탑승구"
+msgid "Departures ({key}) · {count} today"
+msgstr "출발편 ({key}) · 오늘 {count}편"
 
 msgctxt "gate name"
-msgid "Gate {gate}"
-msgstr "{gate}번 탑승구"
+msgid "Click to focus Gate {gate}"
+msgstr "클릭하여 {gate}번 탑승구 보기"
 
-msgctxt "gate caption"
-msgid "up to small planes"
-msgstr "소형기까지"
+msgid "{time} {destination} · Click to follow"
+msgstr "{time} {destination} · 클릭하여 따라가기"
 
-msgctxt "gate caption"
-msgid "up to medium planes"
-msgstr "중형기까지"
+msgid "{time} {flight} · Click to follow"
+msgstr "{time} {flight} · 클릭하여 따라가기"
 
-msgctxt "gate caption"
-msgid "up to large planes"
-msgstr "대형기까지"
+msgid "{flight} · Click to follow"
+msgstr "{flight} · 클릭하여 따라가기"
 
-msgctxt "gate caption"
-msgid "no room for a plane"
-msgstr "주기 공간 없음"
+msgid "Click to follow the tightest running-late passenger"
+msgstr "클릭하여 가장 시간이 촉박한 승객 따라가기"
 
-msgctxt "gate caption"
-msgid "{minutes} min walk"
-msgstr "도보 {minutes}분"
+msgid "Set off the scanner: forgot my belt!"
+msgstr "검색대 경보: 벨트 푸는 걸 깜빡했네!"
 
-msgctxt "sign caption"
-msgid "Closed"
-msgstr "폐쇄됨"
+msgid "Set off the scanner: keys in pocket!"
+msgstr "검색대 경보: 주머니에 열쇠가!"
+
+msgid "Set off the scanner: coins in pocket!"
+msgstr "검색대 경보: 주머니에 동전이!"
+
+msgid "Stopped for liquids: oversized shampoo!"
+msgstr "액체류 적발: 샴푸 용량이 초과됐네!"
+
+msgid "Stopped for liquids: too much liquid!"
+msgstr "액체류 적발: 액체가 너무 많았네!"
+
+msgid "Stopped for liquids: forgot my water bottle!"
+msgstr "액체류 적발: 물병을 깜빡했네!"
+
+msgid "Security search: \"{reason}\""
+msgstr "정밀 검색: \"{reason}\""
+
+msgid "One-off charter — cannot move"
+msgstr "단발성 전세기 — 이동 불가"
+
+msgid "One-off charter — flies today only"
+msgstr "단발성 전세기 — 오늘만 운항"
+
+msgid "Departs {time} today"
+msgstr "오늘 {time} 출발"
+
+msgid "${amount} payout"
+msgstr "보수 ${amount}"
+
+msgid "No exit fee"
+msgstr "해지 수수료 없음"
+
+msgid "Flies once today only; no exit fee or daily commitment."
+msgstr "오늘 하루만 1회 운항하며 해지 수수료나 매일 운항 의무가 없습니다."
+
+msgid "Charter available"
+msgstr "전세기 제안 도착"
+
+msgid "One-off {time} flight to {destination} · click to review"
+msgstr "단발성 {time} {destination}행 항공편 · 클릭하여 검토"
+
+msgid "Click to open Airline Contracts"
+msgstr "클릭하여 항공사 계약 열기"
+
+msgid "this charter's departure window has already passed"
+msgstr "이 전세기의 출발 시간대가 이미 지났습니다"
+
+msgid "Bag room needs a belt"
+msgstr "수하물실에 벨트가 필요합니다"
+
+msgid "Drag a belt from the back of a check-in desk into your Bag Room."
+msgstr "체크인 데스크 뒤쪽에서 수하물실 안으로 벨트를 드래그해 연결하세요."
+
+msgid "Airline offers available"
+msgstr "새 항공사 제안 있음"
+
+msgid "{count} new contract waiting · click to review"
+msgid_plural "{count} new contracts waiting · click to review"
+msgstr[0] "새 계약 {count}건 대기 중 · 클릭하여 검토"
+
+msgid "Airlines are ready with new flights — click Offers at the top to review contracts."
+msgstr "항공사들이 새 노선을 제안했습니다. 상단의 '제안'을 클릭해 계약을 검토하세요."
+
+msgid "Last-minute charter hop to {destination} — light bags, quick turnaround."
+msgstr "{destination}행 막판 단거리 전세기 — 수하물이 가볍고 회전이 빠릅니다."
+
+msgid "Premium cabin demand to {destination} — passengers pay top fare."
+msgstr "{destination}행 프리미엄 객실 수요 — 승객들이 높은 운임을 지불합니다."
+
+msgid "Holiday crowd bound for {destination} — plenty of time to shop."
+msgstr "{destination}행 휴가철 승객 — 쇼핑할 시간이 넉넉합니다."
+
+msgid "Smooth bag handling to {destination} — {airline} covers missed bags."
+msgstr "{destination}행 원활한 수하물 노선 — 누락된 수하물은 {airline}에서 부담합니다."
+
+msgid "Busy route to {destination} — almost every seat is spoken for."
+msgstr "{destination}행 인기 노선 — 거의 모든 좌석이 예약되었습니다."
+
+msgid "{airline} brings a welcome bonus on your first flight to {destination}."
+msgstr "{airline}이(가) {destination}행 첫 취항을 기념해 환영 보너스를 지급합니다."
+
+msgid "Steady partner route to {destination} — fly often for higher fares."
+msgstr "{destination}행 안정적인 파트너 노선 — 자주 운항하면 운임이 오릅니다."
+
+msgid "Crisp northern hop with {airline} — steady fjord and business flyers."
+msgstr "{airline}과(와) 함께하는 상쾌한 북유럽 노선 — 피오르드 관광객과 비즈니스 승객이 꾸준합니다."
+
+msgid "Quick city-break run to Berlin — easygoing weekend flyers."
+msgstr "베를린행 가벼운 도심 여행 노선 — 여유로운 주말 여행객이 많습니다."
+
+msgid "Warm coastal route to Lisbon — sunlit travelers heading south."
+msgstr "따뜻한 해안 도시 리스본행 — 햇살을 찾아 남쪽으로 떠나는 여행객들입니다."
+
+msgid "Classic Mediterranean hop to Rome — sightseeing crowds all day."
+msgstr "정통 지중해 노선 로마행 — 하루 종일 관광객들로 붐빕니다."
+
+msgid "Friendly island link to Dublin — reliable regional commuters."
+msgstr "정겨운 섬 노선 더블린행 — 꾸준한 지역 통근 및 출장 승객이 많습니다."
+
+msgid "Sunny Aegean flight to Athens — leisure flyers ready to board."
+msgstr "화창한 에게해 노선 아테네행 — 휴가를 떠나는 여가 승객들이 탑승을 기다립니다."
+
+msgid "Reliable daily link to {destination} with {airline}."
+msgstr "{airline}이(가) 운항하는 안정적인 {destination}행 일일 노선입니다."
+
+msgid "Passengers walk from the entrance through security to the exit."
+msgstr "승객은 입구에서 보안 검색을 거쳐 출구로 이동합니다."
+
+msgid "Staff need a clear tile behind each station to work it."
+msgstr "직원이 근무하려면 각 시설 뒤쪽에 빈 타일이 필요합니다."
+
+msgid "Gate desks stay closed until an agent is hired."
+msgstr "탑승구 데스크는 직원을 고용할 때까지 닫혀 있습니다."
+
+msgid "The airport opens once staff reach their stations."
+msgstr "직원이 근무 위치에 도착하면 공항이 열립니다."
+
+msgid "Opens boarding for your first flight."
+msgstr "첫 항공편의 탑승 수속을 시작합니다."
+
+msgid "Keeps waiting passengers comfortable."
+msgstr "대기 중인 승객을 편안하게 해 줍니다."
+
+msgid "Passengers check in here before security."
+msgstr "승객이 보안 검색 전에 이곳에서 체크인합니다."
+
+msgid "Closed desks cannot serve waiting passengers."
+msgstr "닫힌 데스크는 대기 중인 승객을 응대할 수 없습니다."
+
+msgid "Stations stay closed until an agent is hired."
+msgstr "직원을 고용할 때까지 시설이 닫혀 있습니다."
+
+msgid "Clears passengers and bags for the gate."
+msgstr "승객과 가방의 보안 검색을 마쳐 탑승구로 보냅니다."
+
+msgid "Closed security lanes cannot clear passengers."
+msgstr "닫힌 보안 레인은 승객을 통과시킬 수 없습니다."
+
+msgid "Stations stay closed until an officer is hired."
+msgstr "보안 요원을 고용할 때까지 시설이 닫혀 있습니다."
+
+msgid "Each extra station needs its own staff member."
+msgstr "시설을 추가할 때마다 담당 직원이 한 명씩 더 필요합니다."
+
+msgid "Prevents comfort drops while passengers wait."
+msgstr "기다리는 동안 승객의 쾌적도가 떨어지는 것을 막아 줍니다."
+
+msgid "Hungry passengers lose mood before boarding."
+msgstr "배고픈 승객은 탑승 전에 기분이 떨어집니다."
+
+msgid "Seals the terminal so roof and rooms work."
+msgstr "터미널을 밀폐하여 지붕과 방이 정상 작동하게 합니다."
+
+msgid "Prep time — clock starts when staff reach stations"
+msgstr "준비 시간 — 직원이 배치되면 시계가 움직입니다"
+
+msgid "Hire a ramp agent"
+msgstr "지상조업 직원 고용"
+
+msgid "Checked bags wait until a ramp agent drives the cart."
+msgstr "위탁 수하물은 지상조업 직원이 카트를 몰 때까지 대기합니다."
+
+msgid "Counters stay closed until shop staff arrive."
+msgstr "상점 직원이 도착할 때까지 카운터가 닫혀 있습니다."
+
+msgid "Serve {done}/{need} passengers to unlock Cafe & Baggage"
+msgstr "승객 {done}/{need}명을 응대하면 카페 및 수하물 시설이 잠금 해제됩니다"
+
+msgid "Works check-in desks to tag bags and print boarding passes. Hire 1 per open desk."
+msgstr "체크인 데스크에서 수하물 태그를 붙이고 탑승권을 발급합니다. 운영 중인 데스크당 1명을 고용하세요."
+
+msgid "Runs security scanners and lanes to clear passengers and carry-on bags. Hire 1 per open scanner."
+msgstr "보안 검색대와 레인을 운영하여 승객과 기내 수하물을 검사합니다. 운영 중인 검색대당 1명을 고용하세요."
+
+msgid "Works gate desks to start boarding and announce flights. Hire 1 per gate desk."
+msgstr "탑승구 데스크에서 탑승 수속과 안내를 담당합니다. 탑승구 데스크당 1명을 고용하세요."
+
+msgid "Runs cafe, bar, restaurant, and shop counters. Hire once you build a cafe or shop."
+msgstr "카페, 바, 레스토랑, 상점 카운터를 운영합니다. 카페나 상점을 지은 뒤 고용하세요."
+
+msgid "Mops terminal messes and empties full bins. Hire when litter builds up."
+msgstr "터미널 바닥 오염을 닦고 가득 찬 쓰레기통을 비웁니다. 쓰레기가 쌓이면 고용하세요."
+
+msgid "Drives baggage carts between your Bag Room and parked planes. Hire once you build a Bag Room."
+msgstr "수하물실과 주기된 비행기 사이에서 수하물 카트를 운전합니다. 수하물실을 지은 뒤 고용하세요."
+
+msgid "Open Planner (P) to view today's schedule or move flights between gates."
+msgstr "일정표(P)를 열어 오늘 일정을 보거나 탑승구 간 항공편을 옮길 수 있습니다."
+
+msgid "Terminal messes lower passenger mood. Hire a Cleaner on the Staff card to keep things tidy."
+msgstr "터미널이 지저분하면 승객 기분이 떨어집니다. 직원 카드에서 미화원을 고용해 청결을 유지하세요."
+
+msgid "Place on terminal floor. A server hands over the order."
+msgstr "터미널 바닥에 배치하세요. 직원이 주문한 상품을 건넵니다."
+
+msgid "A currency exchange stand. Passengers change money and pay a small fee."
+msgstr "환전 부스입니다. 승객이 환전하며 소액의 수수료를 지불합니다."
+
+msgid "Place on terminal floor. A server stands behind it and changes money."
+msgstr "터미널 바닥에 배치하세요. 직원이 뒤쪽에 서서 환전을 처리합니다."
+
+msgid "Shop staff hired in Staff, and the spot in front clear. Does not cure boredom."
+msgstr "직원 메뉴에서 상점 직원을 고용하고 앞쪽 공간을 비워 두세요. 지루함은 해소하지 않습니다."
+
+msgid "Place on terminal floor. The passenger uses it from the cell in front."
+msgstr "터미널 바닥에 배치하세요. 승객이 앞쪽 칸에서 이용합니다."
+
+msgid "Keep the spot in front clear. No staff, no upkeep, and does not cure boredom."
+msgstr "앞쪽 공간을 비워 두세요. 직원과 유지비가 없으며 지루함은 해소하지 않습니다."
+
+msgid "Place on terminal floor. The passenger sits and leans back during a long wait."
+msgstr "터미널 바닥에 배치하세요. 승객이 긴 대기 시간 동안 앉아서 기대어 쉽니다."
+
+msgid "← Back"
+msgstr "← 뒤로"
+
+msgid "{room} items"
+msgstr "{room} 시설물"
+
+msgid "★"
+msgstr "★"
+
+msgid "✓"
+msgstr "✓"
+
+msgctxt "build menu"
+msgid "Search table"
+msgstr "정밀검색대"
+
+msgctxt "build menu"
+msgid "Confiscation bin"
+msgstr "압수품 보관함"
+
+msgctxt "item name"
+msgid "Search table"
+msgstr "수하물 정밀검색대"
+
+msgctxt "item name"
+msgid "Confiscation bin"
+msgstr "압수품 보관함"
+
+msgid "An inspection table where officers check flagged carry-on bags."
+msgstr "보안 요원이 의심스러운 기내 수하물을 정밀 검사하는 테이블입니다."
+
+msgid "Place it beside the lane's side berth. Optional: the lane works without one."
+msgstr "보안 레인 옆 공간에 배치하세요. 선택 사항이며 없어도 레인은 작동합니다."
+
+msgid "No upkeep. Holds the passenger's tray during bag searches."
+msgstr "유지비 없음. 수하물 정밀 검사 중 승객의 트레이를 올려둡니다."
+
+msgid "A clear glass bin showing items taken at the security lane today."
+msgstr "오늘 보안 레인에서 압수된 물품들이 보이는 투명 유리 보관함입니다."
+
+msgid "Place it next to the search table slot. Resets at midnight."
+msgstr "정밀검색대 자리 옆에 배치하세요. 자정에 초기화됩니다."
+
+msgid "No upkeep. Inspect it to see today's strangest finds."
+msgstr "유지비 없음. 살펴보면 오늘 적발된 별난 물건들을 볼 수 있습니다."
+
+msgid "Status: Attached to a ready security lane"
+msgstr "상태: 준비된 보안 레인에 연결됨"
+
+msgid "Status: Not attached to a ready lane"
+msgstr "상태: 준비된 레인에 연결되지 않음"
+
+msgid "Confiscated today: {count} item"
+msgid_plural "Confiscated today: {count} items"
+msgstr[0] "오늘 압수품: {count}개"
+
+msgid "{item} ({quip})"
+msgstr "{item} ({quip})"
+
+msgid "Recent: {items}"
+msgstr "최근 압수품: {items}"
+
+msgid "Giant alpine snow globe"
+msgstr "거대한 알프스 스노우볼"
+
+msgid "Contains 400 ml of festive winter magic."
+msgstr "겨울의 낭만이 400 ml나 들어 있습니다."
+
+msgid "Souvenir city snow globe"
+msgstr "도시 기념 스노우볼"
+
+msgid "Too much decorative blizzard for cabin altitude."
+msgstr "기내에 싣기엔 장식용 눈보라 액체가 너무 많습니다."
+
+msgid "Musical penguin snow globe"
+msgstr "오르골 펭귄 스노우볼"
+
+msgid "Shakes nicely, still over the 100 ml limit."
+msgstr "흔들면 예쁘지만 역시 100 ml 제한 초과입니다."
+
+msgid "Family-size maple syrup jug"
+msgstr "대용량 메이플 시럽 통"
+
+msgid "Emergency pancake rations are still a liquid."
+msgstr "비상용 팬케이크 식량이라도 액체류는 액체류입니다."
+
+msgid "Artisanal pancake syrup"
+msgstr "수제 팬케이크 시럽"
+
+msgid "Declared as breakfast insurance."
+msgstr "아침 식사 보험용이라고 신고했습니다."
+
+msgid "Emergency waffle syrup"
+msgstr "비상용 와플 시럽"
+
+msgid "Sticky situation in tray three."
+msgstr "3번 트레이가 끈적끈적한 상황에 빠졌습니다."
+
+msgid "Ceramic garden gnome"
+msgstr "도자기 정원 요정 장식"
+
+msgid "Claimed to be a tiny travel companion."
+msgstr "작은 여행 동반자라고 우겼습니다."
+
+msgid "Uncle Barnaby's lucky gnome"
+msgstr "바나비 삼촌의 행운의 요정 인형"
+
+msgid "Too heavy for the overhead bin."
+msgstr "기내 선반에 넣기에는 너무 무겁습니다."
+
+msgid "Pointy-hat lawn gnome"
+msgstr "뾰족 모자 정원 요정"
+
+msgid "Refused to fit in a quart-size zip bag."
+msgstr "1리터 지퍼백에 도저히 들어가지 않았습니다."
+
+msgid "Twelve-pound bowling ball"
+msgstr "12파운드 볼링공"
+
+msgid "Definitely not a compact neck pillow."
+msgstr "아무리 봐도 휴대용 목베개는 아닙니다."
+
+msgid "Lucky league bowling ball"
+msgstr "행운의 리그용 볼링공"
+
+msgid "Spare shoes were fine; the ball had to stay."
+msgstr "볼링화는 통과했지만 공은 남기고 가야 했습니다."
+
+msgid "Polished tournament ball"
+msgstr "반짝이는 대회용 볼링공"
+
+msgid "Would roll straight out of the overhead locker."
+msgstr "기내 선반에서 그대로 굴러떨어질 게 뻔합니다."
+
+msgid "Plastic lawn flamingo"
+msgstr "플라스틱 정원 플라밍고"
+
+msgid "Needs its own boarding pass at this height."
+msgstr "이 크기면 전용 탑승권을 끊어야 할 판입니다."
+
+msgid "Tropical souvenir flamingo"
+msgstr "열대 기념품 플라밍고"
+
+msgid "Tried to pass as a walking stick."
+msgstr "지팡이라고 우기며 통과하려 했습니다."
+
+msgid "Neon pink yard flamingo"
+msgstr "네온 핑크 마당 플라밍고"
+
+msgid "Too fabulous for under-seat stowage."
+msgstr "앞좌석 아래에 쑤셔 넣기엔 너무 화려합니다."
+
+msgid "Giant bath-time rubber duck"
+msgstr "대형 목욕용 고무 오리"
+
+msgid "Squeaked during the X-ray scan."
+msgstr "X선 검사 도중 삑 소리를 냈습니다."
+
+msgid "Captain Squeaks the duck"
+msgstr "삑삑이 선장 오리 인형"
+
+msgid "Suspiciously buoyant carry-on cargo."
+msgstr "수상할 정도로 부력이 좋은 기내 수하물입니다."
+
+msgid "Oversized squeaky duck"
+msgstr "초대형 삑삑이 오리"
+
+msgid "Filled with bathwater from hotel checkout."
+msgstr "호텔 체크아웃 때 퍼 온 목욕물이 가득 차 있었습니다."
+
+msgid "Comically giant wrench"
+msgstr "만화처럼 거대한 렌치"
+
+msgid "Just in case the seat reclines slowly."
+msgstr "좌석 등받이가 뻑뻑할 때를 대비했다고 합니다."
+
+msgid "Pocket-sized mega wrench"
+msgstr "주머니 크기라 우긴 대형 렌치"
+
+msgid "Definitely not an approved nail file."
+msgstr "절대 반입 허용 손톱깎이가 아닙니다."
+
+msgid "Half-metre pipe wrench"
+msgstr "50 cm짜리 파이프 렌치"
+
+msgid "Way past the tool-length limit."
+msgstr "공구 길이 제한을 한참 넘겼습니다."
+
+msgid "Unlabelled mystery thermos"
+msgstr "라벨 없는 정체불명 보온병"
+
+msgid "Smells faintly of soup, tea, or jet fuel."
+msgstr "수프인지 차인지 항공유인지 모를 묘한 냄새가 희미하게 납니다."
+
+msgid "Grandma's mystery thermos"
+msgstr "할머니의 미스터리 보온병"
+
+msgid "Could be cocoa; still 600 ml too large."
+msgstr "코코아일 수도 있지만 여전히 600 ml 초과입니다."
+
+msgid "Rattling stainless thermos"
+msgstr "달그락거리는 스테인리스 보온병"
+
+msgid "No one wants to open it at the checkpoint."
+msgstr "검색대에서 아무도 열어 보고 싶어 하지 않았습니다."
+
+msgid "Fast-Track"
+msgstr "패스트트랙"
+
+msgid "Fast-Track: On"
+msgstr "패스트트랙: 켜짐"
+
+msgid "Fast-Track: Off"
+msgstr "패스트트랙: 꺼짐"
+
+msgid "Switch this security lane back to Standard"
+msgstr "이 보안 레인을 일반 레인으로 되돌립니다"
+
+msgid "Switch this security lane to Fast-Track (VIP and tight-connection passengers)"
+msgstr "이 보안 레인을 패스트트랙(VIP 및 시간 촉박 승객 전용)으로 전환합니다"
+
+msgid "Breezed through Fast-Track security"
+msgstr "패스트트랙 보안 검색을 순식간에 통과함"
+
+msgctxt "build menu"
+msgid "Security lane"
+msgstr "보안 레인"
+
+msgctxt "build menu"
+msgid "2x3"
+msgstr "2x3"
+
+msgid "A complete security lane: tray table, X-ray belt, arch and pickup table."
+msgstr "트레이 테이블, X선 벨트, 검색 아치, 픽업 테이블이 모두 포함된 완전한 보안 레인입니다."
+
+msgid "Click once to place all four parts together. Press R to turn it."
+msgstr "한 번 클릭으로 네 부품을 한꺼번에 배치합니다. R 키로 회전합니다."
+
+msgid "Needs clear floor for the lane, queue, exit and two officer spots."
+msgstr "레인과 대기열, 출구, 보안 요원 2명의 자리를 위한 빈 바닥이 필요합니다."
+
+msgctxt "build menu"
+msgid "Starter Toilet"
+msgstr "기본 화장실 세트"
+
+msgctxt "build menu"
+msgid "Starter Cafe"
+msgstr "기본 카페 세트"
+
+msgctxt "build menu"
+msgid "Kit"
+msgstr "세트"
+
+msgctxt "build status"
+msgid "Placed {kit} for {cost}"
+msgstr "{cost}에 {kit} 배치 완료"
+
+msgctxt "build status"
+msgid "{kit}: click to place"
+msgstr "{kit}: 클릭하여 배치"
+
+msgid "Furnished room kit"
+msgstr "완비된 방 세트"
+
+msgid "Places floor, walls, a door, and required items in one click."
+msgstr "한 번의 클릭으로 바닥, 벽, 문, 필수 시설을 한꺼번에 배치합니다."
+
+msgid "{w}x{h} kit"
+msgstr "{w}x{h} 세트"
+
+msgid "Click (R rotates)"
+msgstr "클릭하여 배치 (R 회전)"
+
+msgctxt "build menu"
+msgid "Starter Bar"
+msgstr "기본 바 세트"
+
+msgctxt "build menu"
+msgid "Starter Restaurant"
+msgstr "기본 레스토랑 세트"
+
+msgctxt "build menu"
+msgid "Starter Bag room"
+msgstr "기본 수하물실 세트"
+
+msgctxt "build menu"
+msgid "Starter Kiosk"
+msgstr "기본 키오스크 세트"
+
+msgctxt "build menu"
+msgid "Starter Pharmacy"
+msgstr "기본 약국 세트"
+
+msgctxt "build menu"
+msgid "Starter Duty free"
+msgstr "기본 면세점 세트"
+
+msgctxt "build menu"
+msgid "Starter Fashion store"
+msgstr "기본 패션 매장 세트"
+
+msgctxt "build menu"
+msgid "Starter Play area"
+msgstr "기본 놀이 공간 세트"
+
+msgctxt "build menu"
+msgid "Starter Lounge"
+msgstr "기본 라운지 세트"
+
+msgctxt "build menu"
+msgid "Starter Shower"
+msgstr "기본 샤워실 세트"
+
+msgctxt "build menu"
+msgid "Starter Break Room"
+msgstr "기본 휴게실 세트"
+
+msgctxt "build status"
+msgid "{item} row of {count}, cost {cost}"
+msgstr "{item} {count}줄 (비용 {cost})"
+
+msgctxt "build status"
+msgid "{item} row of {count}, cost {cost}, {blocked} blocked: {reason}"
+msgstr "{item} {count}줄 (비용 {cost}, {blocked}곳 불가: {reason})"
+
+msgctxt "build status"
+msgid "Nothing to place"
+msgstr "배치할 수 있는 대상이 없습니다"
+
+msgctxt "build status"
+msgid "Placed {count} {item}"
+msgstr "{item} {count}개 배치 완료"
+
+msgctxt "build status"
+msgid "Placed {count} {item} for {cost}"
+msgstr "{cost}에 {item} {count}개 배치 완료"
+
+msgctxt "build status"
+msgid "Placed {count} {item}, skipped {skipped}: {reason}"
+msgstr "{item} {count}개 배치 완료 ({skipped}곳 건너뜀: {reason})"
+
+msgctxt "build status"
+msgid "Placed {count} {item} for {cost}, skipped {skipped}: {reason}"
+msgstr "{cost}에 {item} {count}개 배치 완료 ({skipped}곳 건너뜀: {reason})"
+
+msgctxt "build juice"
+msgid "-${amount}"
+msgstr "-${amount}"
+
+msgctxt "build juice"
+msgid "+${amount}"
+msgstr "+${amount}"
+
+msgctxt "build menu"
+msgid "Break Room"
+msgstr "휴게실"
 
 msgctxt "room type"
-msgid "Bag room"
-msgstr "수하물실"
+msgid "Break Room"
+msgstr "휴게실"
 
-msgctxt "room type"
-msgid "Toilet"
-msgstr "화장실"
+msgctxt "room name, mid-sentence"
+msgid "break room"
+msgstr "휴게실"
 
-msgctxt "room status"
-msgid "Ready"
-msgstr "준비됨"
+msgctxt "room need"
+msgid "Needs a bench"
+msgstr "벤치 필요"
+
+msgctxt "status reason"
+msgid "needs a bench"
+msgstr "벤치 필요"
+
+msgid "Marks floor as a break room. Tired staff rest here during lulls to recover energy."
+msgstr "바닥을 휴게실로 지정합니다. 지친 직원이 한가한 틈에 이곳에서 쉬며 에너지를 회복합니다."
+
+msgid "Drag a rectangle, then add a bench inside. High prestige speeds up recovery."
+msgstr "사각형으로 드래그한 뒤 안에 벤치를 놓으세요. 방의 품격이 높을수록 회복이 빨라집니다."
+
+msgid "At least 2x3, with a bench. Staff never leave a busy queue mid-rush."
+msgstr "최소 2x3 크기에 벤치가 필요합니다. 직원은 바쁜 대기열을 한창중에 떠나지 않습니다."
+
+msgid "Benches {count}"
+msgstr "벤치 {count}"
+
+msgid "Staff rest here during lulls"
+msgstr "직원이 한산할 때 이곳에서 쉽니다"
+
+msgid "Prestige: Lv. {level} / 5 ({score} pts · +{bonus}% recovery)"
+msgstr "품격: 레벨 {level} / 5 ({score}점 · 회복 +{bonus}%)"
+
+msgid "{hired} hired, {duty} cleaning, {on_break} on break"
+msgstr "고용 {hired}, 청소 {duty}, 휴식 {on_break}"
+
+msgid "{hired} hired, {duty} on duty, {on_break} on break"
+msgstr "고용 {hired}, 근무 {duty}, 휴식 {on_break}"
+
+msgid "On break {pct}%"
+msgstr "휴식 중 {pct}%"
+
+msgid "Tired {pct}%"
+msgstr "피로 {pct}%"
+
+msgid "Rested {pct}%"
+msgstr "활력 {pct}%"
+
+msgid "+ {count} more"
+msgstr "외 +{count}건"
+
+msgctxt "build menu"
+msgid "Award trophy"
+msgstr "어워드 트로피"
+
+msgctxt "item name"
+msgid "Award trophy"
+msgstr "어워드 트로피"
+
+msgctxt "item name, mid-sentence"
+msgid "award trophy"
+msgstr "어워드 트로피"
+
+msgctxt "refusal detail"
+msgid "No award trophies available"
+msgstr "보유한 어워드 트로피가 없습니다"
+
+msgid "Earn an Award Trophy at the Annual Airport Awards"
+msgstr "연례 공항 어워드에서 수상하여 트로피를 획득하세요"
+
+msgid "An Annual Airport Awards trophy earned for airport excellence."
+msgstr "뛰어난 공항 운영을 기리는 연례 공항 어워드 트로피입니다."
+
+msgid "Place it inside any room to add +30 Room Prestige points."
+msgstr "아무 방 안에나 배치하면 방 품격 점수가 +30점 오릅니다."
+
+msgid "Free to place up to the number of trophies earned. No upkeep."
+msgstr "획득한 개수만큼 무료로 배치할 수 있으며 유지비도 없습니다."
+
+msgid "Year {year} Airport Awards"
+msgstr "{year}년차 공항 어워드"
+
+msgid "On-Time Champion"
+msgstr "정시 운항 챔피언"
+
+msgid "Spotless Terminal"
+msgstr "티 없이 깨끗한 터미널"
+
+msgid "Happiest Passengers"
+msgstr "가장 행복한 승객"
+
+msgid "Best Hospitality"
+msgstr "최고의 환대"
+
+msgid "Airport of the Year"
+msgstr "올해의 공항"
+
+msgid "Won"
+msgstr "수상"
+
+msgid "Nominated"
+msgstr "후보"
+
+msgid "+${amount}"
+msgstr "+${amount}"
+
+msgid "$0"
+msgstr "$0"
+
+msgid "Total awarded: +${cash} · {count} Award Trophy unlocked"
+msgid_plural "Total awarded: +${cash} · {count} Award Trophies unlocked"
+msgstr[0] "총 상금: +${cash} · 어워드 트로피 {count}개 잠금 해제"
+
+msgid "Place your Award Trophy from the Decor tab for +30 Room Prestige!"
+msgstr "장식 탭에서 어워드 트로피를 배치해 방 품격 +30 효과를 받으세요!"
+
+msgid "Win a category next year to earn an Award Trophy for +30 Room Prestige!"
+msgstr "내년에 한 부문에서 수상해 방 품격 +30 어워드 트로피를 얻어 보세요!"
+
+msgid "Continue"
+msgstr "계속하기"
+
+msgid "Sandbox"
+msgstr "샌드박스"
+
+msgid "Achievement Unlocked"
+msgstr "업적 달성"
+
+msgid "Certified {star}★: {title}"
+msgstr "{star}★ 인증 획득: {title}"
+
+msgid "Your airport earned {star}★ {title} certification!"
+msgstr "공항이 {star}★ {title} 인증을 획득했습니다!"
+
+msgid "One-time cash grant: +${grant}"
+msgstr "일회성 지원금: +${grant}"
+
+msgid "Permanent contract fee prestige bonus: +{percent}%"
+msgstr "영구 계약 수수료 명성 보너스: +{percent}%"
+
+msgid "Reach 2★ Regional Terminal to unlock permanent contract fee bonuses."
+msgstr "2★ 지역 터미널을 달성하면 영구 계약 수수료 보너스가 열립니다."
+
+msgid "Start a New Airport anytime, or wishlist the full game for larger planes, restaurants, lounges, car parks, and major airport chaos."
+msgstr "언제든 새 공항을 시작하거나, 대형 항공기·레스토랑·라운지·주차장·대규모 공항 혼란이 담긴 정식 버전을 찜해 두세요."
+
+msgid "Day 5 complete — thanks for playing the demo!"
+msgstr "5일차 완료 — 데모를 플레이해 주셔서 감사합니다!"
+
+msgid "Your 5-day airport summary"
+msgstr "5일간의 공항 요약"
+
+msgid "Passengers who made their flight"
+msgstr "탑승에 성공한 승객"
+
+msgid "Cash earned"
+msgstr "획득한 자금"
+
+msgid "${amount}"
+msgstr "${amount}"
+
+msgid "Current balance"
+msgstr "현재 잔액"
+
+msgid "Airport rating"
+msgstr "공항 등급"
+
+msgid "{stars} stars"
+msgstr "{stars}★"
+
+msgid "Wishlist on Steam"
+msgstr "Steam에서 찜하기"
+
+msgid "Back to Title"
+msgstr "타이틀로 돌아가기"
+
+msgid "Peak"
+msgstr "피크"
+
+msgid "Hub"
+msgstr "허브"
+
+msgid "Hub Contract (+10% fee, +1 low-rating grace day)"
+msgstr "허브 계약 (수수료 +10%, 낮은 등급 유예 +1일)"
+
+msgid "Click to move gate or end contract, or drag onto another gate row."
+msgstr "클릭하여 탑승구를 옮기거나 계약을 종료하고, 다른 탑승구 행으로 드래그하세요."
+
+msgid "Contract ended — cannot move"
+msgstr "계약 종료됨 — 이동 불가"
+
+msgid "One-off flight — cannot move"
+msgstr "단발성 항공편 — 이동 불가"
+
+msgid "Shop staff hired in Staff, and the spot in front clear."
+msgstr "직원 메뉴에서 상점 직원을 고용하고 앞쪽 공간을 비워 두어야 합니다."
+
+msgid "floor congestion: light flow to bottleneck"
+msgstr "바닥 혼잡도: 원활 ~ 병목"
+
+msgid "room prestige level"
+msgstr "방 품격 단계"
+
+msgctxt "mood overlay mode"
+msgid "Congestion"
+msgstr "혼잡도"
+
+msgctxt "mood overlay mode"
+msgid "Prestige"
+msgstr "품격"
+
+msgid "Light"
+msgstr "원활"
+
+msgid "Busy"
+msgstr "혼잡"
+
+msgid "Congested"
+msgstr "정체"
+
+msgid "Lv. 1"
+msgstr "레벨 1"
+
+msgid "Lv. 2"
+msgstr "레벨 2"
+
+msgid "Lv. 3"
+msgstr "레벨 3"
+
+msgid "Lv. 4"
+msgstr "레벨 4"
+
+msgid "Lv. 5"
+msgstr "레벨 5"
+
+msgid "Morning Peak +15%"
+msgstr "오전 피크 +15%"
+
+msgid "Evening Peak +15%"
+msgstr "저녁 피크 +15%"
+
+msgid "Bronze +5%"
+msgstr "브론즈 +5%"
+
+msgid "Bronze loyalty: this airline's offers pay 5% more."
+msgstr "브론즈 신뢰도: 이 항공사의 제안 보수가 5% 증가합니다."
+
+msgid "Silver +10%"
+msgstr "실버 +10%"
+
+msgid "Silver loyalty: this airline's offers pay 10% more."
+msgstr "실버 신뢰도: 이 항공사의 제안 보수가 10% 증가합니다."
+
+msgid "Gold +15%"
+msgstr "골드 +15%"
+
+msgid "Gold loyalty: this airline's offers pay 15% more and unlock Hub Contracts at 3★+."
+msgstr "골드 신뢰도: 이 항공사의 제안 보수가 15% 증가하고 3★ 이상에서 허브 계약이 열립니다."
+
+msgid "Gold Hub Contract: +10% prestige fee bonus and +1 low-rating grace day."
+msgstr "골드 허브 계약: 명성 수수료 보너스 +10%, 낮은 등급 유예 +1일."
+
+msgid "Hub Contract"
+msgstr "허브 계약"
+
+msgid "Peak rush wave: +15% passenger fee included."
+msgstr "피크 러시 시간대: 승객 요금 +15% 포함."
+
+msgid "Gate {gate} — departs in quiet night"
+msgstr "{gate}번 탑승구 — 한산한 밤 출발"
+
+msgid "Gate {gate} — taxi route unavailable"
+msgstr "{gate}번 탑승구 — 유도로 경로 없음"
+
+msgid "Gate {gate} — building taxi spur"
+msgstr "{gate}번 탑승구 — 연결 유도로 건설 중"
+
+msgid "Gate {gate} — no usable stand"
+msgstr "{gate}번 탑승구 — 사용 가능한 주기장 없음"
+
+msgid "Gate {gate} — stand too small"
+msgstr "{gate}번 탑승구 — 주기장이 너무 작음"
+
+msgid "Certification: {star}★ {title} (+{bonus}% contract fees)"
+msgstr "인증: {star}★ {title} (계약 수수료 +{bonus}%)"
+
+msgid "Click for airport certification progress."
+msgstr "클릭하여 공항 인증 진행 상황을 확인하세요."
+
+msgid "{star}★"
+msgstr "{star}★"
+
+msgid "Airport Certification"
+msgstr "공항 인증"
+
+msgid "Certification tracking is not active."
+msgstr "인증 추적이 활성화되어 있지 않습니다."
+
+msgid "{star}★ {title}"
+msgstr "{star}★ {title}"
+
+msgid "Unrated"
+msgstr "등급 없음"
+
+msgid "Current: {level} • Permanent contract fee bonus: +{bonus}%"
+msgstr "현재: {level} • 영구 계약 수수료 보너스: +{bonus}%"
+
+msgid "✓ {star}★ {title}"
+msgstr "✓ {star}★ {title}"
+
+msgid "Earned • +${grant} • +{bonus}% fees"
+msgstr "획득 완료 • +${grant} • 수수료 +{bonus}%"
+
+msgid "Earned • +${grant}"
+msgstr "획득 완료 • +${grant}"
+
+msgid "+${grant} • +{bonus}% fees"
+msgstr "+${grant} • 수수료 +{bonus}%"
+
+msgid "+${grant}"
+msgstr "+${grant}"
+
+msgid "Airport opened"
+msgstr "공항 개항"
+
+msgid "Rating: {current} / {target}★"
+msgstr "등급: {current} / {target}★"
+
+msgid "Passengers made: {current} / {target}"
+msgstr "탑승 성공 승객: {current} / {target}명"
+
+msgid "Operational security lane built"
+msgstr "가동 중인 보안 레인 건설"
+
+msgid "Operational bag room built"
+msgstr "가동 중인 수하물실 건설"
+
+msgid "Medium+ planes departed: {current} / {target}"
+msgstr "중형 이상 항공편 출발: {current} / {target}편"
+
+msgid "Large planes departed: {current} / {target}"
+msgstr "대형 항공편 출발: {current} / {target}편"
+
+msgid "Made rate: -- / {target}%"
+msgstr "탑승률: -- / {target}%"
+
+msgid "Made rate: {current}% / {target}%"
+msgstr "탑승률: {current}% / {target}%"
+
+msgid "Prestige: Lv. {level} / 5 ({score} pts · +{bonus}% spend)"
+msgstr "품격: 레벨 {level} / 5 ({score}점 · 소비 +{bonus}%)"
+
+msgid "Prestige: Lv. {level} / 5 ({score} pts)"
+msgstr "품격: 레벨 {level} / 5 ({score}점)"
+
+msgid "Size {size} · Setup {setup} · Decor {decor} · Awards {trophy}"
+msgstr "크기 {size} · 설비 {setup} · 장식 {decor} · 수상 {trophy}"
+
+msgid "Add decor or trophies to raise prestige"
+msgstr "장식이나 트로피를 추가해 품격을 높이세요"
+
+msgid "{slot}, {time} (Sandbox)"
+msgstr "{slot}, {time} (샌드박스)"
+
+msgid "Lv. {level}"
+msgstr "레벨 {level}"
+
+msgid "Train ${cost}"
+msgstr "훈련 ${cost}"
+
+msgid "Upgrade work speed to +{pct}%"
+msgstr "작업 속도를 +{pct}%로 강화"
+
+msgid "Max"
+msgstr "최대"
+
+msgid "Career"
+msgstr "커리어"
+
+msgid "Free-Build Sandbox"
+msgstr "자유 건설 샌드박스"
+
+msgid "Unlimited Funds"
+msgstr "자금 무제한"
+
+msgid "All Tiers & Land Unlocked"
+msgstr "모든 단계 및 부지 잠금 해제"
+
+msgctxt "menu"
+msgid "Start Airport"
+msgstr "공항 시작"
+
+msgid "Free-build sandbox with rating, offers, and awards active."
+msgstr "등급, 제안, 어워드가 활성화된 자유 건설 샌드박스입니다."
+
+msgid "No spending limit; Rescue Grant skipped."
+msgstr "지출 한도가 없으며 긴급 지원금은 지급되지 않습니다."
+
+msgid "Starts with $250,000 budget."
+msgstr "$250,000 예산으로 시작합니다."
+
+msgid "Standard $25,000 budget, unlock progression, 1-5★ certification, and Career achievements."
+msgstr "기본 $25,000 예산, 단계별 잠금 해제, 1~5★ 인증 및 커리어 업적을 지원합니다."
+
+msgid "Open for Business"
+msgstr "영업 개시"
+
+msgid "Open the airport"
+msgstr "공항 열기"
+
+msgid "First Departure"
+msgstr "첫 출발"
+
+msgid "Depart your first flight"
+msgstr "첫 항공편 출발시키기"
+
+msgid "Fifty Flyers"
+msgstr "50명의 비행"
+
+msgid "Serve 50 passengers"
+msgstr "승객 50명 응대"
+
+msgid "Busy Concourse"
+msgstr "북적이는 대합실"
+
+msgid "Serve 250 passengers"
+msgstr "승객 250명 응대"
+
+msgid "Thousand Flyers"
+msgstr "천 명의 비행"
+
+msgid "Serve 1,000 passengers"
+msgstr "승객 1,000명 응대"
+
+msgid "Local Strip"
+msgstr "지역 비행장"
+
+msgid "Earn 1★ Local Strip Certification"
+msgstr "1★ 지역 비행장 인증 획득"
+
+msgid "Regional Terminal"
+msgstr "지역 터미널"
+
+msgid "Earn 2★ Regional Terminal Certification"
+msgstr "2★ 지역 터미널 인증 획득"
+
+msgid "National Hub"
+msgstr "국내 허브"
+
+msgid "Earn 3★ National Hub Certification"
+msgstr "3★ 국내 허브 인증 획득"
+
+msgid "International Gateway"
+msgstr "국제 관문 공항"
+
+msgid "Earn 4★ International Gateway Certification"
+msgstr "4★ 국제 관문 공항 인증 획득"
+
+msgid "World-Class Airport"
+msgstr "세계적 수준의 공항"
+
+msgid "Earn 5★ World-Class Airport Certification"
+msgstr "5★ 세계적 수준의 공항 인증 획득"
+
+msgid "Build Tier 2"
+msgstr "건설 티어 2"
+
+msgid "Reach Build Tier 2"
+msgstr "건설 티어 2 달성"
+
+msgid "Build Tier 3"
+msgstr "건설 티어 3"
+
+msgid "Reach Build Tier 3"
+msgstr "건설 티어 3 달성"
+
+msgid "Build Tier 4"
+msgstr "건설 티어 4"
+
+msgid "Reach Build Tier 4"
+msgstr "건설 티어 4 달성"
+
+msgid "Security Pro"
+msgstr "보안 전문가"
+
+msgid "Build a full Security Lane"
+msgstr "완전한 보안 레인 건설"
+
+msgid "Baggage Master"
+msgstr "수하물의 달인"
+
+msgid "Open a ready Bag Room"
+msgstr "준비된 수하물실 운영 시작"
+
+msgid "Medium Wings"
+msgstr "중형기의 날개"
+
+msgid "Depart a Medium plane"
+msgstr "중형기 출발시키기"
+
+msgid "Heavy Jet"
+msgstr "대형 제트기"
+
+msgid "Depart a Large plane"
+msgstr "대형기 출발시키기"
+
+msgid "Gold Loyalty"
+msgstr "골드 단골 등급"
+
+msgid "Reach Gold loyalty with an airline"
+msgstr "항공사 한 곳과 골드 신뢰도 달성"
+
+msgid "Hub Partner"
+msgstr "허브 파트너"
+
+msgid "Accept a Gold Hub Contract"
+msgstr "골드 허브 계약 수락"
+
+msgid "Five-Star Room"
+msgstr "5성급 공간"
+
+msgid "Raise any room to Prestige Level 5"
+msgstr "아무 방이나 품격 레벨 5 달성"
+
+msgid "Award Winner"
+msgstr "어워드 수상자"
+
+msgid "Win an Annual Airport Award"
+msgstr "연례 공항 어워드 수상"
+
+msgid "Win Airport of the Year"
+msgstr "올해의 공항 수상"

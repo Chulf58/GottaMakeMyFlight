@@ -8,6 +8,4467 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n > 1);\n"
 
+msgid "No flights yet"
+msgstr "Sem voos ainda"
+
+msgid "No flights yet: the rating starts when passengers make or miss a flight."
+msgstr "Sem voos ainda: a avaliação começa quando passageiros embarcam ou perdem um voo."
+
+msgid "Made it: {share}% ({made} of {count} passenger)"
+msgid_plural "Made it: {share}% ({made} of {count} passengers)"
+msgstr[0] "Embarcaram: {share}% ({made} de {count} passageiro)"
+msgstr[1] "Embarcaram: {share}% ({made} de {count} passageiros)"
+
+msgid "Airport rating: {stars} of {max}"
+msgstr "Avaliação do aeroporto: {stars} de {max}"
+
+msgid "Mood: {mood} of {max}"
+msgstr "Humor: {mood} de {max}"
+
+msgid "Incident adjustment: {amount} stars"
+msgstr "Ajuste de incidentes: {amount} estrelas"
+
+msgid "Days counted: {days} of {window}"
+msgstr "Dias contados: {days} de {window}"
+
+msgid "Floor tile. Passengers can only walk and stand on floor."
+msgstr "Piso. Passageiros só andam e ficam em cima de piso."
+
+msgid "Drag a rectangle to lay many tiles at once. Everything else is built on floor."
+msgstr "Arraste um retângulo para colocar vários pisos de uma vez. Todo o resto é construído sobre piso."
+
+msgid "Land you own. Removing a tile refunds half."
+msgstr "Terreno que você possui. Remover um piso reembolsa metade."
+
+msgid "A wall along a tile edge. Passengers cannot cross it and it blocks the view."
+msgstr "Uma parede na borda do piso. Passageiros não atravessam e ela bloqueia a visão."
+
+msgid "Drag along a line to build a row. Walls close in the terminal and its rooms."
+msgstr "Arraste em linha para construir uma fileira. Paredes fecham o terminal e suas salas."
+
+msgid "One wall per tile edge. Removing it refunds half."
+msgstr "Uma parede por borda de piso. Remover reembolsa metade."
+
+msgid "A glass wall. Passengers cannot cross it, but it lets the view through."
+msgstr "Uma parede de vidro. Passageiros não atravessam, mas deixa a visão passar."
+
+msgid "Drag along a line like a wall. Screens and decor can be seen through glass."
+msgstr "Arraste em linha como uma parede. Telas e decoração podem ser vistas através do vidro."
+
+msgid "Costs more than a plain wall. One per tile edge."
+msgstr "Custa mais que uma parede comum. Uma por borda de piso."
+
+msgid "A door in a wall. Passengers walk through it."
+msgstr "Uma porta na parede. Passageiros passam por ela."
+
+msgid "Click a wall edge to put a door in the wall."
+msgstr "Clique na borda de uma parede para abrir uma porta."
+
+msgid "A plain wall on each side of it."
+msgstr "Uma parede comum de cada lado dela."
+
+msgid "The way into the terminal. Passengers come in here from the road and car parks."
+msgstr "A entrada do terminal. Passageiros chegam por aqui vindos da rua e dos estacionamentos."
+
+msgid "Place it on the outer edge of the terminal, facing in."
+msgstr "Coloque na borda externa do terminal, virada para dentro."
+
+msgid "The outside edge with no floor behind it. Keep the spot in front clear."
+msgstr "A borda externa sem piso atrás. Mantenha o espaço na frente livre."
+
+msgid "The way out to the planes. Passengers leave the terminal here to board."
+msgstr "A saída para os aviões. Passageiros deixam o terminal por aqui para embarcar."
+
+msgid "Place it on the outer edge. A gate desk links to an exit facing west, north or east."
+msgstr "Coloque na borda externa. Um balcão de portão se conecta a uma saída virada para oeste, norte ou leste."
+
+msgid "Where passengers check in and hand over a bag."
+msgstr "Onde os passageiros fazem check-in e despacham a bagagem."
+
+msgid "A check-in agent works behind it. A belt from its back edge takes bags to a bag room."
+msgstr "Um agente de check-in trabalha atrás dele. Uma esteira na borda traseira leva malas à sala de bagagem."
+
+msgid "An agent hired in Staff, or it stays closed. Keep the spot behind and in front clear."
+msgstr "Um agente contratado em Equipe, ou fica fechado. Mantenha a frente e os fundos livres."
+
+msgid "A basic security scanner. Passengers walk through it to be screened."
+msgstr "Um scanner de segurança básico. Passageiros passam por ele para inspeção."
+
+msgid "A security officer works beside it. A full lane is faster but costs more."
+msgstr "Um agente de segurança trabalha ao lado. Um corredor completo é mais rápido, mas custa mais."
+
+msgid "An officer hired in Staff, or it stays closed. Keep its staff spot and way in clear."
+msgstr "Um agente contratado em Equipe, ou fica fechado. Mantenha o posto e a entrada livres."
+
+msgid "A row of seats. Passengers wait here for their flight and their mood recovers."
+msgstr "Uma fileira de assentos. Passageiros esperam o voo aqui e recuperam o humor."
+
+msgid "Place it near the gate and turn it. Waiting passengers sit on it."
+msgstr "Coloque perto do portão e gire. Passageiros aguardando sentam nela."
+
+msgid "No staff and no upkeep. Add enough seats for the passengers waiting."
+msgstr "Sem equipe nem manutenção. Coloque assentos suficientes para quem espera."
+
+msgid "Makes a gate. It links to the nearest free exit facing the planes; the plane parks out from it."
+msgstr "Cria um portão. Conecta-se à saída livre mais próxima virada para os aviões; o avião estaciona ali fora."
+
+msgid "Each flight is given a gate. A gate takes the next free letter, starting at A."
+msgstr "Cada voo recebe um portão. O portão recebe a próxima letra livre, começando em A."
+
+msgid "Within 4 cells of a free exit facing the planes, with room for the plane. No staff needed."
+msgstr "A até 4 células de uma saída livre virada para os aviões, com espaço para a aeronave. Sem equipe."
+
+msgid "A floor screen that entertains passengers waiting in front of it."
+msgstr "Uma tela de piso que distrai passageiros esperando na frente dela."
+
+msgid "It covers a fan of floor up to 5 rows ahead. A plain wall blocks it, glass does not."
+msgstr "Cobre um leque de piso de até 5 fileiras à frente. Parede comum bloqueia, vidro não."
+
+msgid "Costs upkeep every day, inside a room or not."
+msgstr "Tem custo diário de manutenção, dentro de uma sala ou fora."
+
+msgid "Marks floor as a cafe. Hungry passengers eat and drink here and their mood rises."
+msgstr "Marca piso como café. Passageiros com fome comem e bebem aqui e recuperam humor."
+
+msgid "Drag a rectangle, then add a counter and a table. Guests order, then sit at the table."
+msgstr "Arraste um retângulo, depois adicione um balcão e uma mesa. Clientes pedem e sentam à mesa."
+
+msgid "At least 3x3, with a counter and a table. Needs shop staff, or the counter stays closed."
+msgstr "Pelo menos 3x3, com balcão e mesa. Precisa de atendentes, ou o balcão fica fechado."
+
+msgid "The cafe counter, where guests order."
+msgstr "O balcão do café, onde os clientes fazem o pedido."
+
+msgid "Place it inside a cafe or restaurant. A server stands there."
+msgstr "Coloque dentro de um café ou restaurante. Um atendente fica ali."
+
+msgid "Wholly inside the room. Shop staff hired in Staff, and the spot in front clear."
+msgstr "Inteiro dentro da sala. Atendente contratado em Equipe e espaço da frente livre."
+
+msgid "A table with a seat at each end. Cafe guests sit here to eat."
+msgstr "Uma mesa com dois lugares nas pontas. Clientes do café sentam aqui para comer."
+
+msgid "It seats two. A guest walks from the counter to a free seat."
+msgstr "Acomoda dois clientes. O visitante vai do balcão até um assento livre."
+
+msgid "Inside a cafe. A bar uses bar counters, and a restaurant uses dining tables or booths."
+msgstr "Dentro de um café. Um bar usa balcões de bar, e um restaurante usa mesas ou cabines."
+
+msgid "Marks floor as a toilet. Passengers who need one queue and use a stall."
+msgstr "Marca piso como banheiro. Passageiros que precisam entram na fila e usam uma cabine."
+
+msgid "Drag a rectangle, then add a stall and a sink inside."
+msgstr "Arraste um retângulo, depois adicione uma cabine e uma pia dentro."
+
+msgid "At least 2x3, with a stall and a sink. Each stall costs upkeep every day when ready."
+msgstr "Pelo menos 2x3, com cabine e pia. Cada cabine gera manutenção diária quando pronta."
+
+msgid "One toilet stall. One passenger uses it at a time."
+msgstr "Uma cabine de banheiro. Um passageiro usa por vez."
+
+msgid "Place it inside a toilet room. A passenger walks in from the cell in front."
+msgstr "Coloque dentro de um banheiro. O passageiro entra pela célula da frente."
+
+msgid "Keep the spot in front clear. Costs upkeep every day once its room is ready."
+msgstr "Mantenha a frente livre. Gera manutenção diária assim que a sala estiver pronta."
+
+msgid "A sink. A toilet room is not ready without one."
+msgstr "Uma pia. O banheiro não fica pronto sem uma."
+
+msgid "Place it inside a toilet room."
+msgstr "Coloque dentro de um banheiro."
+
+msgid "Keep the spot in front clear. No upkeep of its own."
+msgstr "Mantenha a frente livre. Sem manutenção própria."
+
+msgid "Marks floor as a kiosk, a small shop. Bored passengers browse here and pay."
+msgstr "Marca piso como quiosque, uma loja pequena. Passageiros entediados olham e compram aqui."
+
+msgid "Drag a rectangle, then add a counter and display stands. Guests browse at the stands."
+msgstr "Arraste um retângulo, depois adicione um balcão e expositores. Clientes escolhem nos expositores."
+
+msgid "At least 3x3, with a counter and a display stand. Shop staff serve at the counter."
+msgstr "Pelo menos 3x3, com balcão e expositor. Atendentes atendem no balcão."
+
+msgid "The kiosk's counter, with a till."
+msgstr "O balcão do quiosque, com caixa."
+
+msgid "Place it inside a kiosk. A server stands behind it."
+msgstr "Coloque dentro de um quiosque. Um atendente fica atrás dele."
+
+msgid "Wholly inside the kiosk. Shop staff hired in Staff, and the spot in front clear."
+msgstr "Inteiro dentro do quiosque. Atendente contratado em Equipe e espaço da frente livre."
+
+msgid "Marks floor as a pharmacy. Passengers browse and buy here."
+msgstr "Marca piso como farmácia. Passageiros olham e compram aqui."
+
+msgid "Drag a rectangle, then add a counter and a shelf. Passengers browse at the shelf."
+msgstr "Arraste um retângulo, depois adicione um balcão e uma prateleira. Passageiros escolhem na prateleira."
+
+msgid "At least 3x3, with a counter and a shelf. Shop staff serve at the counter."
+msgstr "Pelo menos 3x3, com balcão e prateleira. Atendentes atendem no balcão."
+
+msgid "Marks floor as a duty free shop. Passengers browse and spend more than in a kiosk."
+msgstr "Marca piso como loja duty free. Passageiros olham e gastam mais do que em um quiosque."
+
+msgid "Drag a rectangle, then add a till and shelves. Passengers browse at the shelves."
+msgstr "Arraste um retângulo, depois adicione um caixa e prateleiras. Passageiros escolhem nas prateleiras."
+
+msgid "At least 3x4, with a till and a shelf. Shop staff serve at the till."
+msgstr "Pelo menos 3x4, com caixa e prateleira. Atendentes atendem no caixa."
+
+msgid "The duty free shop's till."
+msgstr "O caixa da loja duty free."
+
+msgid "Place it inside a duty free shop. A server stands behind it."
+msgstr "Coloque dentro de uma loja duty free. Um atendente fica atrás dele."
+
+msgid "Wholly inside the shop. Shop staff hired in Staff, and the spot in front clear."
+msgstr "Inteiro dentro da loja. Atendente contratado em Equipe e espaço da frente livre."
+
+msgid "A duty free shelf. Each one gives two browse spots."
+msgstr "Uma prateleira duty free. Cada uma oferece dois pontos de compra."
+
+msgid "Passengers browse from the cells in front of it."
+msgstr "Passageiros olham a partir das células à frente dela."
+
+msgid "Inside a duty free shop. Keep the cells in front clear."
+msgstr "Dentro de uma loja duty free. Mantenha as células à frente livres."
+
+msgid "Marks floor as a fashion store. Passengers browse and spend more than in a kiosk."
+msgstr "Marca piso como loja de moda. Passageiros olham e gastam mais do que em um quiosque."
+
+msgid "Drag a rectangle, then add a till and clothes rails. Passengers browse at the rails."
+msgstr "Arraste um retângulo, depois adicione um caixa e araras. Passageiros escolhem nas araras."
+
+msgid "At least 3x4, with a till and a clothes rail. Shop staff serve at the till."
+msgstr "Pelo menos 3x4, com caixa e arara. Atendentes atendem no caixa."
+
+msgid "The fashion store's till."
+msgstr "O caixa da loja de moda."
+
+msgid "Place it inside a fashion store. A server stands behind it."
+msgstr "Coloque dentro de uma loja de moda. Um atendente fica atrás dele."
+
+msgid "Wholly inside the store. Shop staff hired in Staff, and the spot in front clear."
+msgstr "Inteiro dentro da loja. Atendente contratado em Equipe e espaço da frente livre."
+
+msgid "A clothes rail. Each one gives two browse spots."
+msgstr "Uma arara de roupas. Cada uma oferece dois pontos de compra."
+
+msgid "Inside a fashion store. Keep the cells in front clear."
+msgstr "Dentro de uma loja de moda. Mantenha as células à frente livres."
+
+msgid "Marks floor as a currency exchange. Passengers change money and pay a small fee."
+msgstr "Marca piso como casa de câmbio. Passageiros trocam dinheiro e pagam uma pequena taxa."
+
+msgid "Drag a rectangle, then add a counter. A server works it."
+msgstr "Arraste um retângulo, depois adicione um balcão. Um atendente trabalha nele."
+
+msgid "At least 2x3, with a counter and shop staff. A visit does not cure boredom."
+msgstr "Pelo menos 2x3, com balcão e atendente. A visita não alivia o tédio."
+
+msgid "Marks floor as an ATM room. Passengers take out cash and pay a small fee."
+msgstr "Marca piso como sala de caixa eletrônico. Passageiros sacam dinheiro e pagam uma taxa."
+
+msgid "Drag a rectangle, then add an ATM. It is self-service."
+msgstr "Arraste um retângulo, depois adicione um caixa eletrônico. É autoatendimento."
+
+msgid "At least 1x2, with an ATM. No staff. A visit does not cure boredom."
+msgstr "Pelo menos 1x2, com caixa eletrônico. Sem equipe. A visita não alivia o tédio."
+
+msgid "Marks floor as a bar. Guests stay longer than in a cafe, spend more, and gain most mood."
+msgstr "Marca piso como bar. Clientes ficam mais tempo que no café, gastam mais e ganham mais humor."
+
+msgid "Guests order at a bar counter and sit on its stools."
+msgstr "Clientes pedem em um balcão de bar e sentam nas banquetas."
+
+msgid "At least 3x4, with a bar counter. Shop staff serve at the counter."
+msgstr "Pelo menos 3x4, com balcão de bar. Atendentes atendem no balcão."
+
+msgid "Marks floor as a sit-down restaurant. Guests stay the longest and spend the most."
+msgstr "Marca piso como restaurante. Clientes ficam mais tempo e gastam mais."
+
+msgid "Guests order at a cafe counter and sit at a dining table or a booth."
+msgstr "Clientes pedem no balcão de café e sentam em uma mesa de jantar ou cabine."
+
+msgid "At least 4x4, with a counter and a table or booth. Shop staff serve at the counter."
+msgstr "Pelo menos 4x4, com balcão e mesa ou cabine. Atendentes atendem no balcão."
+
+msgid "Marks floor as a grab-and-go stall. Guests buy, pay and walk on, with no seat."
+msgstr "Marca piso como lanchonete rápida. Clientes compram, pagam e seguem andando, sem assento."
+
+msgid "It needs only a grab-and-go stall. A server hands over the order."
+msgstr "Precisa apenas de uma barraca rápida. Um atendente entrega o pedido."
+
+msgid "At least 3x3, with a counter. Shop staff serve. It earns the least of the food rooms."
+msgstr "Pelo menos 3x3, com balcão. Atendentes atendem. Rende menos que as outras salas de comida."
+
+msgid "Marks floor as a play area. Passengers stay and play for free and their mood rises."
+msgstr "Marca piso como área infantil. Passageiros ficam e brincam de graça e o humor sobe."
+
+msgid "Drag a rectangle, then add a slide and play blocks. It is self-service."
+msgstr "Arraste um retângulo, depois adicione um escorregador e blocos. É autoatendimento."
+
+msgid "At least 3x4, with a slide and play blocks. No staff."
+msgstr "Pelo menos 3x4, com escorregador e blocos de montar. Sem equipe."
+
+msgid "Marks floor as a lounge. Passengers rest on the sofas for free and their mood rises."
+msgstr "Marca piso como sala VIP. Passageiros descansam nos sofás de graça e o humor sobe."
+
+msgid "Drag a rectangle, then add a sofa. It is self-service."
+msgstr "Arraste um retângulo, depois adicione um sofá. É autoatendimento."
+
+msgid "At least 2x3, with a sofa. No staff."
+msgstr "Pelo menos 2x3, com um sofá. Sem equipe."
+
+msgid "Marks floor as a shower room. Passengers pay to wash during a long wait and gain mood."
+msgstr "Marca piso como sala de banho. Passageiros pagam para tomar banho em esperas longas e ganham humor."
+
+msgid "Drag a rectangle, then add a shower cubicle. It is self-service."
+msgstr "Arraste um retângulo, depois adicione uma cabine de chuveiro. É autoatendimento."
+
+msgid "At least 2x2, with a shower cubicle. No staff. Each stay pays you a fee."
+msgstr "Pelo menos 2x2, com cabine de chuveiro. Sem equipe. Cada uso paga uma taxa."
+
+msgid "Marks floor as a nap pod room. Passengers pay to rest during a long wait and gain mood."
+msgstr "Marca piso como sala de cápsula de sono. Passageiros pagam para descansar em esperas longas."
+
+msgid "Drag a rectangle, then add a nap pod. It is self-service."
+msgstr "Arraste um retângulo, depois adicione uma cápsula de sono. É autoatendimento."
+
+msgid "At least 2x2, with a nap pod. No staff. Each stay pays you a fee."
+msgstr "Pelo menos 2x2, com cápsula de sono. Sem equipe. Cada uso paga uma taxa."
+
+msgid "A shelf unit. Each stand gives the kiosk two browse spots."
+msgstr "Uma prateleira expositora. Cada unidade dá dois pontos de compra ao quiosque."
+
+msgid "Inside a kiosk. Keep the cells in front clear."
+msgstr "Dentro de um quiosque. Mantenha as células à frente livres."
+
+msgid "A baggage belt. It carries checked bags from a check-in desk to a bag room."
+msgstr "Uma esteira de bagagem. Leva malas despachadas do balcão de check-in até a sala de bagagem."
+
+msgid "Drag a line. The belt shapes itself at turns and joins. Belts cannot cross."
+msgstr "Arraste em linha. A esteira se ajusta em curvas e junções. Esteiras não podem cruzar."
+
+msgid "Start at a check-in desk's back and end in a bag room. A wall in the way blocks it."
+msgstr "Comece atrás de um balcão de check-in e termine em uma sala de bagagem. Paredes bloqueiam."
+
+msgid "Where checked bags end up. They are loaded onto the plane from here."
+msgstr "Onde as malas despachadas chegam. Elas são levadas para o avião a partir daqui."
+
+msgid "Drag a rectangle, then run a belt into it. The belt's end piece goes inside."
+msgstr "Arraste um retângulo e traga uma esteira para dentro. A ponta da esteira fica lá dentro."
+
+msgid "At least 2x2, with a belt end. A bag that arrives after the cutoff misses the plane."
+msgstr "Pelo menos 2x2, com ponta de esteira. Mala que chega após o limite perde o voo."
+
+msgid "A baggage cart on wheels."
+msgstr "Um carrinho de bagagem com rodas."
+
+msgid "Place one in a bag room so a hired Ramp Agent drives checked bags out to the parked plane."
+msgstr "Coloque na sala de bagagem para que um agente de pátio contratado leve as malas até o avião."
+
+msgid "Needs a Ramp Agent hired in Staff. Takes 1x2 tiles; no upkeep."
+msgstr "Precisa de agente de pátio contratado em Equipe. Ocupa 1x2 células; sem manutenção."
+
+msgid "A curb bay on the road outside. Cars and taxis stop here and drop passengers off."
+msgstr "Uma baia de embarque na via externa. Carros e táxis param aqui para deixar passageiros."
+
+msgid "Click one of the marked spots by the road. Each bay has two berths."
+msgstr "Clique em um dos pontos marcados junto à via. Cada baia tem duas vagas."
+
+msgid "Marked spots only. The nearer an entrance, the shorter the walk."
+msgstr "Apenas nos pontos marcados. Quanto mais perto da entrada, menor a caminhada."
+
+msgid "A car park with 12 spaces. A car pays a fee when it parks."
+msgstr "Um estacionamento com 12 vagas. Cada carro paga uma taxa ao estacionar."
+
+msgid "Click a marked spot. Passengers walk from the car park to an entrance."
+msgstr "Clique em um ponto marcado. Passageiros caminham do estacionamento até uma entrada."
+
+msgid "Marked spots only. Close it to let it drain before you remove it."
+msgstr "Apenas nos pontos marcados. Feche-o para esvaziar antes de remover."
+
+msgid "A big car park with 31 spaces. A car pays a higher fee than a surface lot when it parks."
+msgstr "Um grande estacionamento com 31 vagas. Cada carro paga uma taxa maior que no pátio aberto."
+
+msgid "Opens or closes a car park."
+msgstr "Abre ou fecha um estacionamento."
+
+msgid "Click a built car park. A closed one takes no new cars and empties out."
+msgstr "Clique em um estacionamento construído. Fechado, não recebe carros novos e esvazia."
+
+msgid "A car park can only be removed once no cars are in it."
+msgstr "Um estacionamento só pode ser removido quando não houver mais carros dentro."
+
+msgid "Buys a plot of land. You can only build on land you own."
+msgstr "Compra um lote de terreno. Você só pode construir em terrenos seus."
+
+msgid "Click a highlighted plot. Its price shows on it and rises with each plot you buy."
+msgstr "Clique em um lote destacado. O preço aparece nele e sobe a cada compra."
+
+msgid "A plot next to land you already own."
+msgstr "Um lote vizinho a um terreno que você já possui."
+
+msgid "The tray table of a security lane, where passengers unpack their bags."
+msgstr "A mesa de bandejas de um corredor de segurança, onde os passageiros preparam suas malas."
+
+msgid "It stands beside the arch, on the side the lane's parts go."
+msgstr "Fica ao lado do arco, no lado em que vão as peças do corredor."
+
+msgid "Part of a whole lane: arch, tray table, X-ray belt and pickup table."
+msgstr "Parte de um corredor completo: arco, mesa de bandejas, esteira de raio-X e mesa de retirada."
+
+msgid "The X-ray belt of a security lane. Bags ride through it."
+msgstr "A esteira de raio-X de um corredor de segurança. As malas passam por ela."
+
+msgid "It stands beside the arch. A lane officer works at it."
+msgstr "Fica ao lado do arco. Um agente do corredor trabalha nela."
+
+msgid "Part of a whole lane. Needs a security officer hired in Staff."
+msgstr "Parte de um corredor completo. Precisa de agente de segurança contratado em Equipe."
+
+msgid "The arch of a security lane. Passengers walk through it."
+msgstr "O arco de um corredor de segurança. Passageiros passam por ele."
+
+msgid "Place the arch first and the other parts around it. Its front faces the queue."
+msgstr "Coloque o arco primeiro e as demais peças em volta. A frente fica voltada para a fila."
+
+msgid "Part of a whole lane. Keep the spot in front and the walls around the lane clear."
+msgstr "Parte de um corredor completo. Mantenha a frente e as paredes em volta livres."
+
+msgid "The pickup table of a security lane, where passengers collect their bags."
+msgstr "A mesa de retirada de um corredor de segurança, onde os passageiros pegam suas malas."
+
+msgid "It stands past the arch, where cleared passengers leave the lane."
+msgstr "Fica depois do arco, onde passageiros liberados deixam o corredor."
+
+msgid "A bush. It calms passengers close to it, a little."
+msgstr "Um arbusto. Acalma um pouco os passageiros próximos."
+
+msgid "Passengers within a cell or so get calm, which becomes mood. Walls block it."
+msgstr "Passageiros a cerca de uma célula ganham calma, que vira humor. Paredes bloqueiam."
+
+msgid "No upkeep. It earns nothing."
+msgstr "Sem manutenção. Não gera renda."
+
+msgid "A planter. It calms passengers near it, a little."
+msgstr "Uma jardineira. Acalma um pouco os passageiros próximos."
+
+msgid "Passengers within a couple of cells get calm, which becomes mood. Walls block it."
+msgstr "Passageiros a poucas células ganham calma, que vira humor. Paredes bloqueiam."
+
+msgid "A large plant pot. It calms passengers near it, a little."
+msgstr "Um vaso grande com planta. Acalma um pouco os passageiros próximos."
+
+msgid "An indoor tree. It calms the passengers around it."
+msgstr "Uma árvore interna. Acalma os passageiros ao redor."
+
+msgid "Passengers within a few cells get calm, which becomes mood. Walls block it."
+msgstr "Passageiros a algumas células ganham calma, que vira humor. Paredes bloqueiam."
+
+msgid "A bench. It seats two waiting passengers and calms passengers nearby."
+msgstr "Um banco. Acomoda dois passageiros esperando e acalma quem está perto."
+
+msgid "Gate passengers sit on it. Calm becomes mood, and a wall between them blocks it."
+msgstr "Passageiros do portão sentam nele. Calma vira humor, e uma parede entre eles bloqueia."
+
+msgid "A bench built around a tree. It calms the passengers near it."
+msgstr "Um banco em volta de uma árvore. Acalma os passageiros próximos."
+
+msgid "A fountain. It calms the passengers around it the most, with a long reach."
+msgstr "Uma fonte. É o item que mais acalma passageiros ao redor, com longo alcance."
+
+msgid "A statue. It calms the passengers around it, with a long reach."
+msgstr "Uma estátua. Acalma os passageiros ao redor, com longo alcance."
+
+msgid "A retractable-belt stanchion post. Passengers cannot walk through it."
+msgstr "Um pedestal retrátil de fila. Passageiros não passam por ele."
+
+msgid "Use stanchions and queue belts to steer a queue. They give a little calm nearby."
+msgstr "Use pedestais e fitas de fila para guiar uma fila. Dão um pouco de calma por perto."
+
+msgid "A queue belt between two stanchions, three cells long. Passengers cannot walk through it."
+msgstr "Uma fita de fila entre dois pedestais, com três células. Passageiros não atravessam."
+
+msgid "A bin. Passengers drop litter in it instead of leaving it on the floor."
+msgstr "Uma lixeira. Passageiros jogam lixo nela em vez de sujar o piso."
+
+msgid "A bin takes litter from visits near it, and a cleaner empties it when it is full."
+msgstr "A lixeira recolhe sujeira de visitas próximas, e um zelador a esvazia quando enche."
+
+msgid "A cleaner hired in Staff. It gives no calm, and a bin in view takes a little back."
+msgstr "Zelador contratado em Equipe. Não acalma, e uma lixeira à vista tira um pouco de calma."
+
+msgid "A bar counter, where guests order drinks."
+msgstr "Um balcão de bar, onde clientes pedem bebidas."
+
+msgid "Place it inside a bar. A server stands behind it and guests order from the cell in front."
+msgstr "Coloque dentro de um bar. Um atendente fica atrás e clientes pedem pela célula da frente."
+
+msgid "Wholly inside the bar. Shop staff hired in Staff, and the spot in front clear."
+msgstr "Inteiro dentro do bar. Atendente contratado em Equipe e espaço da frente livre."
+
+msgid "A grab-and-go stall, where guests buy and walk on."
+msgstr "Uma barraca rápida, onde clientes compram e seguem andando."
+
+msgid "Place it inside a grab-and-go room. A server hands over the order."
+msgstr "Coloque dentro de uma lanchonete rápida. Um atendente entrega o pedido."
+
+msgid "A restaurant table with four seats."
+msgstr "Uma mesa de restaurante com quatro lugares."
+
+msgid "Place it inside a restaurant. A guest walks from the counter to a free seat."
+msgstr "Coloque dentro de um restaurante. O cliente vai do balcão até um lugar livre."
+
+msgid "Wholly inside the restaurant, with the cell behind each chair clear."
+msgstr "Inteira dentro do restaurante, com a célula atrás de cada cadeira livre."
+
+msgid "A restaurant booth with four seats."
+msgstr "Uma cabine de restaurante com quatro lugares."
+
+msgid "Wholly inside the restaurant, with the cell behind each seat clear."
+msgstr "Inteira dentro do restaurante, com a célula atrás de cada assento livre."
+
+msgid "A staffed desk that helps lost passengers."
+msgstr "Um balcão com atendente que ajuda passageiros perdidos."
+
+msgid "A stuck passenger nearby walks over, is helped, gains mood and plans its route again."
+msgstr "Um passageiro travado perto vai até lá, recebe ajuda, ganha humor e recalcula a rota."
+
+msgid "Shop staff hired in Staff, or it does nothing. Works on open floor or in a room."
+msgstr "Atendente contratado em Equipe, ou não funciona. Atua em piso aberto ou em sala."
+
+msgid "An information display."
+msgstr "Um painel de informações."
+
+msgid "Scenery for now: nothing in the game reacts to it."
+msgstr "Por enquanto é só cenário: nada no jogo interage com ele."
+
+msgid "Costs upkeep every day."
+msgstr "Tem custo diário de manutenção."
+
+msgid "The currency exchange counter."
+msgstr "O balcão da casa de câmbio."
+
+msgid "Place it inside an exchange room. A server stands behind it and changes money."
+msgstr "Coloque dentro de uma casa de câmbio. Um atendente fica atrás e troca dinheiro."
+
+msgid "A cash machine. One passenger uses it at a time and pays a small fee."
+msgstr "Um caixa eletrônico. Um passageiro usa por vez e paga uma pequena taxa."
+
+msgid "Place it inside an ATM room. The passenger uses it from the cell in front."
+msgstr "Coloque dentro de uma sala de caixa eletrônico. O passageiro usa pela célula da frente."
+
+msgid "Keep the spot in front clear. No staff and no upkeep."
+msgstr "Mantenha a frente livre. Sem equipe e sem manutenção."
+
+msgid "The pharmacy counter, with a till."
+msgstr "O balcão da farmácia, com caixa."
+
+msgid "Place it inside a pharmacy. A server stands behind it."
+msgstr "Coloque dentro de uma farmácia. Um atendente fica atrás dele."
+
+msgid "Wholly inside the pharmacy. Shop staff hired in Staff, and the spot in front clear."
+msgstr "Inteiro dentro da farmácia. Atendente contratado em Equipe e espaço da frente livre."
+
+msgid "A pharmacy shelf. Each one gives one browse spot."
+msgstr "Uma prateleira de farmácia. Cada uma oferece um ponto de compra."
+
+msgid "Passengers browse from the cell in front of it."
+msgstr "Passageiros olham a partir da célula à frente dela."
+
+msgid "Inside a pharmacy. Keep the cells in front clear."
+msgstr "Dentro de uma farmácia. Mantenha as células à frente livres."
+
+msgid "A shower cubicle. One passenger uses it at a time and pays a fee."
+msgstr "Uma cabine de chuveiro. Um passageiro usa por vez e paga uma taxa."
+
+msgid "Place it inside a shower room. The passenger steps in from the cell in front."
+msgstr "Coloque dentro de uma sala de banho. O passageiro entra pela célula da frente."
+
+msgid "Keep the spot in front clear. No upkeep."
+msgstr "Mantenha a frente livre. Sem manutenção."
+
+msgid "A nap pod. One passenger uses it at a time and pays a fee."
+msgstr "Uma cápsula de sono. Um passageiro usa por vez e paga uma taxa."
+
+msgid "Place it inside a nap pod room. The passenger sits and leans back."
+msgstr "Coloque dentro de uma sala de cápsula de sono. O passageiro senta e reclina."
+
+msgid "A two-seat sofa. Lounge guests rest on it."
+msgstr "Um sofá de dois lugares. Visitantes da sala VIP descansam nele."
+
+msgid "Place it inside a lounge. Each sofa gives two seats."
+msgstr "Coloque dentro de uma sala VIP. Cada sofá dá dois assentos."
+
+msgid "No upkeep. The lounge is free to use."
+msgstr "Sem manutenção. A sala VIP é gratuita."
+
+msgid "A single armchair."
+msgstr "Uma poltrona individual."
+
+msgid "A passenger can sit on it, but a lounge needs a sofa. The armchair does not count."
+msgstr "Passageiros podem sentar nela, mas uma sala VIP precisa de sofá. A poltrona não conta."
+
+msgid "A work desk."
+msgstr "Uma mesa de trabalho."
+
+msgid "Play blocks for children."
+msgstr "Blocos de montar para crianças."
+
+msgid "Place them inside a play area. A play area needs them and a slide."
+msgstr "Coloque dentro de uma área infantil. A área precisa deles e de um escorregador."
+
+msgid "No upkeep. The play area is free to use."
+msgstr "Sem manutenção. A área infantil é gratuita."
+
+msgid "A play slide. Children use it from the front."
+msgstr "Um escorregador infantil. Crianças usam pela frente."
+
+msgid "Place it inside a play area. Each slide gives two play spots."
+msgstr "Coloque dentro de uma área infantil. Cada escorregador dá dois espaços para brincar."
+
+msgid "A prize car on a podium. Passengers near it spend a bit more in shops and food rooms."
+msgstr "Um carro premiado em um pódio. Passageiros por perto gastam um pouco mais em lojas e comida."
+
+msgid "Waiting passengers who see it lose boredom. A second podium does not stack."
+msgstr "Passageiros esperando que o veem perdem tédio. Um segundo pódio não acumula."
+
+msgid "Costs upkeep every day. A plain wall blocks the view."
+msgstr "Tem custo diário de manutenção. Uma parede comum bloqueia a visão."
+
+msgctxt "card hint"
+msgid "Drag"
+msgstr "Arrastar"
+
+msgctxt "card hint"
+msgid "Click"
+msgstr "Clique"
+
+msgid "Upkeep {amount}/day"
+msgstr "Manutenção {amount}/dia"
+
+msgctxt "build menu"
+msgid "Building"
+msgstr "Edifício"
+
+msgctxt "build menu"
+msgid "Operations"
+msgstr "Operações"
+
+msgctxt "build menu"
+msgid "Facilities"
+msgstr "Instalações"
+
+msgctxt "build menu"
+msgid "Food & Drink"
+msgstr "Comida e bebida"
+
+msgctxt "build menu"
+msgid "Decor"
+msgstr "Decoração"
+
+msgctxt "build menu"
+msgid "Landside & Parking"
+msgstr "Acesso e Estacionamento"
+
+msgctxt "build menu"
+msgid "Templates"
+msgstr "Modelos"
+
+msgctxt "build menu"
+msgid "All"
+msgstr "Tudo"
+
+msgctxt "build menu"
+msgid "Room"
+msgstr "Sala"
+
+msgctxt "build menu"
+msgid "Check-in & Gate"
+msgstr "Check-in e Portão"
+
+msgctxt "build menu"
+msgid "Security"
+msgstr "Segurança"
+
+msgctxt "build menu"
+msgid "Baggage"
+msgstr "Bagagem"
+
+msgctxt "build menu"
+msgid "Rooms"
+msgstr "Salas"
+
+msgctxt "build menu"
+msgid "Hygiene & Rest"
+msgstr "Banho e Descanso"
+
+msgctxt "build menu"
+msgid "Services"
+msgstr "Serviços"
+
+msgctxt "build menu"
+msgid "Lounge & Play"
+msgstr "VIP e Infantil"
+
+msgctxt "build menu"
+msgid "Items"
+msgstr "Itens"
+
+msgctxt "build menu"
+msgid "Cafe"
+msgstr "Café"
+
+msgctxt "build menu"
+msgid "Kiosk"
+msgstr "Quiosque"
+
+msgctxt "build menu"
+msgid "Lounge"
+msgstr "Sala VIP"
+
+msgctxt "build menu"
+msgid "Pharmacy"
+msgstr "Farmácia"
+
+msgctxt "build menu"
+msgid "Shops"
+msgstr "Lojas"
+
+msgctxt "build menu"
+msgid "Duty free"
+msgstr "Duty free"
+
+msgctxt "build menu"
+msgid "Remove"
+msgstr "Remover"
+
+msgctxt "build menu"
+msgid "Floor"
+msgstr "Piso"
+
+msgctxt "build menu"
+msgid "1x1 tile"
+msgstr "Piso 1x1"
+
+msgctxt "build menu"
+msgid "Wall"
+msgstr "Parede"
+
+msgctxt "build menu"
+msgid "1 m edge"
+msgstr "Borda 1 m"
+
+msgctxt "build menu"
+msgid "Glass"
+msgstr "Vidro"
+
+msgctxt "build menu"
+msgid "Door"
+msgstr "Porta"
+
+msgctxt "build menu"
+msgid "Entrance"
+msgstr "Entrada"
+
+msgctxt "build menu"
+msgid "Exit"
+msgstr "Saída"
+
+msgctxt "build menu"
+msgid "Check-in desk"
+msgstr "Balcão check-in"
+
+msgctxt "build menu"
+msgid "Scanner"
+msgstr "Scanner"
+
+msgctxt "build menu"
+msgid "Seats"
+msgstr "Assentos"
+
+msgctxt "build menu"
+msgid "Gate desk"
+msgstr "Balcão de portão"
+
+msgctxt "build menu"
+msgid "Screen"
+msgstr "Tela"
+
+msgctxt "build menu"
+msgid "3x3 min"
+msgstr "Mín. 3x3"
+
+msgctxt "build menu"
+msgid "Counter"
+msgstr "Balcão"
+
+msgctxt "build menu"
+msgid "Table"
+msgstr "Mesa"
+
+msgctxt "build menu"
+msgid "Toilet"
+msgstr "Banheiro"
+
+msgctxt "build menu"
+msgid "2x3 min"
+msgstr "Mín. 2x3"
+
+msgctxt "build menu"
+msgid "Toilet stall"
+msgstr "Cabine sanitária"
+
+msgctxt "build menu"
+msgid "Sink"
+msgstr "Pia"
+
+msgctxt "build menu"
+msgid "Kiosk counter"
+msgstr "Balcão quiosque"
+
+msgctxt "build menu"
+msgid "3x4 min"
+msgstr "Mín. 3x4"
+
+msgctxt "build menu"
+msgid "Duty Free Till"
+msgstr "Caixa Duty Free"
+
+msgctxt "build menu"
+msgid "Duty Free Shelf"
+msgstr "Prateleira Duty Free"
+
+msgctxt "build menu"
+msgid "Fashion Till"
+msgstr "Caixa de Moda"
+
+msgctxt "build menu"
+msgid "Exchange counter"
+msgstr "Balcão de câmbio"
+
+msgctxt "build menu"
+msgid "Shower cubicle"
+msgstr "Box de chuveiro"
+
+msgctxt "build menu"
+msgid "Sleeping pod"
+msgstr "Cápsula de sono"
+
+msgctxt "build menu"
+msgid "Shelf"
+msgstr "Prateleira"
+
+msgctxt "build menu"
+msgid "Fashion store"
+msgstr "Loja de moda"
+
+msgctxt "build menu"
+msgid "Clothes rail"
+msgstr "Arara de roupas"
+
+msgctxt "build menu"
+msgid "Exchange"
+msgstr "Câmbio"
+
+msgctxt "build menu"
+msgid "ATM"
+msgstr "Caixa eletrônico"
+
+msgctxt "build menu"
+msgid "1x2 min"
+msgstr "Mín. 1x2"
+
+msgctxt "build menu"
+msgid "Bar"
+msgstr "Bar"
+
+msgctxt "build menu"
+msgid "Restaurant"
+msgstr "Restaurante"
+
+msgctxt "build menu"
+msgid "4x4 min"
+msgstr "Mín. 4x4"
+
+msgctxt "build menu"
+msgid "Grab-and-go"
+msgstr "Lanche rápido"
+
+msgctxt "build menu"
+msgid "Play area"
+msgstr "Área infantil"
+
+msgctxt "build menu"
+msgid "Shower"
+msgstr "Chuveiro"
+
+msgctxt "build menu"
+msgid "2x2 min"
+msgstr "Mín. 2x2"
+
+msgctxt "build menu"
+msgid "Nap pod"
+msgstr "Cápsula"
+
+msgctxt "build menu"
+msgid "Display stand"
+msgstr "Expositor"
+
+msgctxt "build menu"
+msgid "Belt"
+msgstr "Esteira"
+
+msgctxt "build menu"
+msgid "Drag a line"
+msgstr "Arraste linha"
+
+msgctxt "build menu"
+msgid "Bag room"
+msgstr "Sala de bagagem"
+
+msgctxt "build menu"
+msgid "Bag cart"
+msgstr "Carrinho malas"
+
+msgctxt "build menu"
+msgid "Curb bay"
+msgstr "Baia embarque"
+
+msgctxt "build menu"
+msgid "16x3 m"
+msgstr "16x3 m"
+
+msgctxt "build menu"
+msgid "Surface lot"
+msgstr "Pátio aberto"
+
+msgctxt "build menu"
+msgid "32x24 m"
+msgstr "32x24 m"
+
+msgctxt "build menu"
+msgid "Multi-storey"
+msgstr "Edifício-garagem"
+
+msgctxt "build menu"
+msgid "24x52 m"
+msgstr "24x52 m"
+
+msgctxt "build menu"
+msgid "Open / close"
+msgstr "Abrir / fechar"
+
+msgctxt "build menu"
+msgid "A car park"
+msgstr "Estacionamento"
+
+msgctxt "build menu"
+msgid "Buy land"
+msgstr "Comprar terreno"
+
+msgctxt "build menu"
+msgid "about 21x25 m plot"
+msgstr "lote cerca de 21x25 m"
+
+msgctxt "build menu"
+msgid "Tray table"
+msgstr "Mesa bandejas"
+
+msgctxt "build menu"
+msgid "X-ray belt"
+msgstr "Esteira raio-X"
+
+msgctxt "build menu"
+msgid "Arch"
+msgstr "Arco"
+
+msgctxt "build menu"
+msgid "Pickup table"
+msgstr "Mesa retirada"
+
+msgctxt "build menu"
+msgid "Needs belt end"
+msgstr "Precisa ponta esteira"
+
+msgctxt "build menu"
+msgid "Staff"
+msgstr "Equipe"
+
+msgid "{reachable} of {total} seats reachable"
+msgstr "{reachable} de {total} assentos acessíveis"
+
+msgid "In {room}"
+msgstr "Em: {room}"
+
+msgid "Status: Part of a ready security lane"
+msgstr "Status: Parte de um corredor pronto"
+
+msgid "Status: Not in a whole lane"
+msgstr "Status: Fora de um corredor completo"
+
+msgid "Queue: {count} waiting"
+msgid_plural "Queue: {count} waiting"
+msgstr[0] "Fila: {count} esperando"
+msgstr[1] "Fila: {count} esperando"
+
+msgid "Status: Not ready, {reason}"
+msgstr "Status: Não pronto, {reason}"
+
+msgid "Status: Linked to Gate {gate}"
+msgstr "Status: Ligado ao Portão {gate}"
+
+msgid "Status: Not linked yet"
+msgstr "Status: Ainda não ligado"
+
+msgid "Biggest plane: none, no room outside the exit"
+msgstr "Maior avião: nenhum, sem espaço fora da saída"
+
+msgid "Status: Closed, {reason}"
+msgstr "Status: Fechado, {reason}"
+
+msgid "Status: Open"
+msgstr "Status: Aberto"
+
+msgid "Status: Closed"
+msgstr "Status: Fechado"
+
+msgid "Occupancy: {cars}/{capacity} berth"
+msgid_plural "Occupancy: {cars}/{capacity} berths"
+msgstr[0] "Ocupação: {cars}/{capacity} vaga"
+msgstr[1] "Ocupação: {cars}/{capacity} vagas"
+
+msgid "Occupancy: {cars}/{capacity} space"
+msgid_plural "Occupancy: {cars}/{capacity} spaces"
+msgstr[0] "Ocupação: {cars}/{capacity} vaga"
+msgstr[1] "Ocupação: {cars}/{capacity} vagas"
+
+msgid "Parking fee: Free"
+msgstr "Tarifa: Grátis"
+
+msgid "Parking fee: ${fee}"
+msgstr "Tarifa: ${fee}"
+
+msgid "Earned today: ${amount}"
+msgstr "Ganho hoje: ${amount}"
+
+msgid "Parked today: {count} car"
+msgid_plural "Parked today: {count} cars"
+msgstr[0] "Estacionados hoje: {count} carro"
+msgstr[1] "Estacionados hoje: {count} carros"
+
+msgid "Diverted today: {count} car"
+msgid_plural "Diverted today: {count} cars"
+msgstr[0] "Desviados hoje: {count} carro"
+msgstr[1] "Desviados hoje: {count} carros"
+
+msgid "Status: Not in use"
+msgstr "Status: Fora de uso"
+
+msgid "{count} on duty"
+msgstr "{count} em turno"
+
+msgid "{count} on the way"
+msgstr "{count} a caminho"
+
+msgid "Staff: none"
+msgstr "Equipe: nenhuma"
+
+msgid "Staff: {parts}"
+msgstr "Equipe: {parts}"
+
+msgid "{staff} · Open"
+msgstr "{staff} · Aberto"
+
+msgid "{staff} · Closed, {reason}"
+msgstr "{staff} · Fechado, {reason}"
+
+msgid "Pick it up and set it down elsewhere"
+msgstr "Pegar e colocar em outro lugar"
+
+msgid "Can't delete: {reason}"
+msgstr "Não foi possível excluir: {reason}"
+
+msgid "Move"
+msgstr "Mover"
+
+msgid "Move room"
+msgstr "Mover sala"
+
+msgid "This kind of room can't be moved yet"
+msgstr "Este tipo de sala ainda não pode ser movido"
+
+msgid "It is no longer there"
+msgstr "Não está mais lá"
+
+msgid "Single pieces outside a room can't be moved yet"
+msgstr "Peças avulsas fora de sala ainda não podem ser movidas"
+
+msgid "Car parks and curbs can't be moved yet"
+msgstr "Estacionamentos e baias ainda não podem ser movidos"
+
+msgid "Delete"
+msgstr "Excluir"
+
+msgid "Delete room"
+msgstr "Excluir sala"
+
+msgid "Take car parks and curbs back with the Remove tool"
+msgstr "Remova estacionamentos e baias com a ferramenta Remover"
+
+msgctxt "price"
+msgid "Free"
+msgstr "Grátis"
+
+msgid "Locked"
+msgstr "Bloqueado"
+
+msgid "Wages paid: {amount}"
+msgstr "Salários pagos: {amount}"
+
+msgid "Wages paid: {amount} ({owed} owed)"
+msgstr "Salários pagos: {amount} ({owed} devidos)"
+
+msgid "How it works"
+msgstr "Como funciona"
+
+msgid "Needs and upkeep"
+msgstr "Requisitos e manutenção"
+
+msgid "How it works: {text}"
+msgstr "Como funciona: {text}"
+
+msgid "Needs and upkeep: {text}"
+msgstr "Requisitos e manutenção: {text}"
+
+msgid "Templates"
+msgstr "Modelos"
+
+msgid "Save room"
+msgstr "Salvar sala"
+
+msgid "Pick a room"
+msgstr "Escolher uma sala"
+
+msgid "{w}x{h}"
+msgstr "{w}x{h}"
+
+msgid "{count} pieces"
+msgstr "{count} peças"
+
+msgid "Click a furnished room on the grid to save it as a reusable template."
+msgstr "Clique em uma sala mobiliada na grade para salvá-la como modelo reutilizável."
+
+msgid "Empty room footprint."
+msgstr "Área da sala vazia."
+
+msgctxt "build menu"
+msgid "Bush"
+msgstr "Arbusto"
+
+msgctxt "build menu"
+msgid "Planter"
+msgstr "Jardineira"
+
+msgctxt "build menu"
+msgid "Plant pot"
+msgstr "Vaso de planta"
+
+msgctxt "build menu"
+msgid "Tree"
+msgstr "Árvore"
+
+msgctxt "build menu"
+msgid "Bench"
+msgstr "Banco"
+
+msgctxt "build menu"
+msgid "Tree bench"
+msgstr "Banco com árvore"
+
+msgctxt "build menu"
+msgid "Fountain"
+msgstr "Fonte"
+
+msgctxt "build menu"
+msgid "Statue"
+msgstr "Estátua"
+
+msgctxt "build menu"
+msgid "Stanchion"
+msgstr "Pedestal"
+
+msgctxt "build menu"
+msgid "Queue belt"
+msgstr "Fita de fila"
+
+msgctxt "build menu"
+msgid "Bin"
+msgstr "Lixeira"
+
+msgctxt "build menu"
+msgid "Bar counter"
+msgstr "Balcão de bar"
+
+msgctxt "build menu"
+msgid "Grab stall"
+msgstr "Barraca rápida"
+
+msgctxt "build menu"
+msgid "Dining table"
+msgstr "Mesa de jantar"
+
+msgctxt "build menu"
+msgid "Booth"
+msgstr "Cabine"
+
+msgctxt "build menu"
+msgid "Info desk"
+msgstr "Balcão info"
+
+msgctxt "build menu"
+msgid "Info screen"
+msgstr "Painel info"
+
+msgctxt "build menu"
+msgid "Cash machine"
+msgstr "Caixa eletrônico"
+
+msgctxt "build menu"
+msgid "Sofa"
+msgstr "Sofá"
+
+msgctxt "build menu"
+msgid "Armchair"
+msgstr "Poltrona"
+
+msgctxt "build menu"
+msgid "Work desk"
+msgstr "Mesa de trabalho"
+
+msgctxt "build menu"
+msgid "Play blocks"
+msgstr "Blocos"
+
+msgctxt "build menu"
+msgid "Play slide"
+msgstr "Escorregador"
+
+msgctxt "build menu"
+msgid "Prize podium"
+msgstr "Pódio prêmio"
+
+msgid "{requirement} (now {stars} stars, {passengers} passenger)"
+msgid_plural "{requirement} (now {stars} stars, {passengers} passengers)"
+msgstr[0] "{requirement} (atual {stars} estrelas, {passengers} passageiro)"
+msgstr[1] "{requirement} (atual {stars} estrelas, {passengers} passageiros)"
+
+msgid "Unlocked: {facilities}"
+msgstr "Desbloqueado: {facilities}"
+
+msgid "Build unlocks are not wired"
+msgstr "Desbloqueios de construção não estão conectados"
+
+msgid "Not available yet"
+msgstr "Ainda não disponível"
+
+msgid "Unlocks at {stars} stars and {passengers} passenger"
+msgid_plural "Unlocks at {stars} stars and {passengers} passengers"
+msgstr[0] "Desbloqueia com {stars} estrelas e {passengers} passageiro"
+msgstr[1] "Desbloqueia com {stars} estrelas e {passengers} passageiros"
+
+msgid "cafe and bins, security lane, baggage, kiosk, screen, plants, benches, curb bay, surface lot, medium runway"
+msgstr "café e lixeiras, corredor de segurança, bagagem, quiosque, tela, plantas, bancos, baia de embarque, pátio aberto, pista média"
+
+msgid "food and services: bar, restaurant, grab-and-go, info desk, pharmacy, exchange, ATM, lounge, car park gate, large runway"
+msgstr "comida e serviços: bar, restaurante, lanche rápido, balcão info, farmácia, câmbio, caixa eletrônico, sala VIP, cancela, pista grande"
+
+msgid "premium shops and amenities: duty free, fashion, shower, nap pod, play area, fountain, statue, multi-storey"
+msgstr "lojas e amenidades premium: duty free, moda, chuveiro, cápsula de sono, área infantil, fonte, estátua, edifício-garagem"
+
+msgid "R rotate"
+msgstr "R girar"
+
+msgctxt "narrow build mode sign"
+msgid "Build"
+msgstr "Construir"
+
+msgid "Build mode"
+msgstr "Modo construção"
+
+msgid "Planner ({key})"
+msgstr "Agenda ({key})"
+
+msgid "Flight planner"
+msgstr "Agenda de voos"
+
+msgid "Close"
+msgstr "Fechar"
+
+msgctxt "calendar day"
+msgid "Day {day}"
+msgstr "Dia {day}"
+
+msgid "No gate has a stand yet, so there is nothing to plan."
+msgstr "Nenhum portão tem posição de parada ainda, então não há nada a planejar."
+
+msgctxt "gate name"
+msgid "Gate {gate}"
+msgstr "Portão {gate}"
+
+msgid "{label}{airline}\nGate {gate}, held {from} to {to}"
+msgstr "{label}{airline}\nPortão {gate}, reservado de {from} a {to}"
+
+msgid "Click a flight to move it or end its contract, or drag it to another gate. Days already issued keep their gate."
+msgstr "Clique em um voo para movê-lo ou encerrar o contrato, ou arraste para outro portão. Dias já emitidos mantêm o portão."
+
+msgctxt "gate name"
+msgid "{label}  Gate {gate}"
+msgstr "{label}  Portão {gate}"
+
+msgctxt "button: end the contract"
+msgid "End"
+msgstr "Encerrar"
+
+msgid "End this airline contract"
+msgstr "Encerrar este contrato aéreo"
+
+msgid "No other gate fits this flight"
+msgstr "Nenhum outro portão comporta este voo"
+
+msgid "No other gate exists"
+msgstr "Não existe outro portão"
+
+msgid "Move to:"
+msgstr "Mover para:"
+
+msgid "End contract"
+msgstr "Encerrar contrato"
+
+msgctxt "button: keep the contract"
+msgid "Keep"
+msgstr "Manter"
+
+msgid "No flights scheduled"
+msgstr "Nenhum voo agendado"
+
+msgid "Today"
+msgstr "Hoje"
+
+msgid "Tomorrow"
+msgstr "Amanhã"
+
+msgid "None"
+msgstr "Nenhum"
+
+msgid "+{count} more"
+msgstr "+{count} mais"
+
+msgid "Departures ({key})"
+msgstr "Partidas ({key})"
+
+msgid "Made {made}  Missed {missed}  In terminal {active}"
+msgstr "Embarcados {made}  Perdidos {missed}  No terminal {active}"
+
+msgid "Move this flight to another gate"
+msgstr "Mover este voo para outro portão"
+
+msgid "No gate has a stand"
+msgstr "Nenhum portão tem posição de parada"
+
+msgid "{destination} now uses gate {gate} for the days not yet issued"
+msgstr "{destination} agora usa o portão {gate} nos dias ainda não emitidos"
+
+msgid "End this contract? Exit fee ${fee}"
+msgstr "Encerrar este contrato? Multa de saída ${fee}"
+
+msgid "End this contract?"
+msgstr "Encerrar este contrato?"
+
+msgid "{destination} contract ended. Flights already booked still fly"
+msgstr "Contrato para {destination} encerrado. Voos já agendados ainda decolam"
+
+msgid "Can't end this contract: another flight would have no taxi plan"
+msgstr "Não é possível encerrar: outro voo ficaria sem rota de táxi"
+
+msgid "Can't end this contract: the {time} flight would have no taxi plan"
+msgstr "Não é possível encerrar: o voo das {time} ficaria sem rota de táxi"
+
+msgid "Can't end this contract: the {time} {airline} flight to {city} would have no taxi plan"
+msgstr "Não é possível encerrar: o voo das {time} da {airline} para {city} ficaria sem rota de táxi"
+
+msgid "Gate {gate} is busy when this flight needs it"
+msgstr "Portão {gate} está ocupado quando este voo precisa dele"
+
+msgid "The runway"
+msgstr "A pista"
+
+msgid "The taxi lane"
+msgstr "A pista de táxi"
+
+msgid "{subject} is taken by the {time} flight"
+msgstr "{subject} está ocupado pelo voo das {time}"
+
+msgid "{subject} is taken by the {time} {destination} flight"
+msgstr "{subject} está ocupado pelo voo das {time} para {destination}"
+
+msgid "Airlines are warning you: the airport rating is below {stars} stars."
+msgstr "As companhias aéreas estão avisando: a avaliação do aeroporto está abaixo de {stars} estrelas."
+
+msgid "{airline} to {destination} has ended its contract: the airport rating stayed low."
+msgstr "{airline} para {destination} encerrou o contrato: a avaliação do aeroporto continuou baixa."
+
+msgid "Flights already issued still fly; no new days will."
+msgstr "Voos já emitidos continuam; nenhum novo dia será agendado."
+
+msgid "first flight tomorrow"
+msgstr "primeiro voo amanhã"
+
+msgid "first flight on Day {day}"
+msgstr "primeiro voo no Dia {day}"
+
+msgid "{hours} h"
+msgstr "{hours} h"
+
+msgid "{minutes} min"
+msgstr "{minutes} min"
+
+msgid "{airline} to {destination}"
+msgstr "{airline} para {destination}"
+
+msgid "Departs {time} daily"
+msgstr "Parte às {time} diariamente"
+
+msgid "Small plane"
+msgstr "Avião pequeno"
+
+msgid "Medium plane"
+msgstr "Avião médio"
+
+msgid "Large plane"
+msgstr "Avião grande"
+
+msgid "${amount} a day"
+msgstr "${amount} por dia"
+
+msgid "Fits your gates now"
+msgstr "Cabe nos seus portões agora"
+
+msgid "Needs another gate"
+msgstr "Precisa de outro portão"
+
+msgid "Offers ({count})"
+msgstr "Ofertas ({count})"
+
+msgid "first flight {lead} after opening"
+msgstr "primeiro voo {lead} após abrir"
+
+msgid "Low airport rating"
+msgstr "Avaliação baixa do aeroporto"
+
+msgid "Contract ended"
+msgstr "Contrato encerrado"
+
+msgctxt "button: accept an offer"
+msgid "Accept"
+msgstr "Aceitar"
+
+msgctxt "button: decline an offer"
+msgid "Decline"
+msgstr "Recusar"
+
+msgid "Can't accept {airline} to {destination}: {reason}"
+msgstr "Não é possível aceitar {airline} para {destination}: {reason}"
+
+msgid "Accepted {airline} to {destination}"
+msgstr "Aceito: {airline} para {destination}"
+
+msgid "Accepted {airline} to {destination}, {note}"
+msgstr "Aceito: {airline} para {destination}, {note}"
+
+msgid "it clashes with another flight"
+msgstr "ele conflita com outro voo"
+
+msgid "No offers right now. New offers arrive at midnight."
+msgstr "Sem ofertas no momento. Novas ofertas chegam à meia-noite."
+
+msgid "Contracts end after {days} more low day."
+msgid_plural "Contracts end after {days} more low days."
+msgstr[0] "Contratos encerram após mais {days} dia com nota baixa."
+msgstr[1] "Contratos encerram após mais {days} dias com nota baixa."
+
+msgid "{count} passenger booked   ${fee} per passenger"
+msgid_plural "{count} passengers booked   ${fee} per passenger"
+msgstr[0] "{count} passageiro reservado   ${fee} por passageiro"
+msgstr[1] "{count} passageiros reservados   ${fee} por passageiro"
+
+msgid "Small runway, {length} m"
+msgstr "Pista pequena, {length} m"
+
+msgid "Medium runway, {length} m"
+msgstr "Pista média, {length} m"
+
+msgid "Large runway, {length} m"
+msgstr "Pista grande, {length} m"
+
+msgid "Runway"
+msgstr "Pista"
+
+msgid "Upgrade runway"
+msgstr "Melhorar pista"
+
+msgid "Next: {runway}, ${price}, works take {hours} hour"
+msgid_plural "Next: {runway}, ${price}, works take {hours} hours"
+msgstr[0] "Próximo: {runway}, ${price}, obra leva {hours} hora"
+msgstr[1] "Próximo: {runway}, ${price}, obra leva {hours} horas"
+
+msgid "Drop to move {destination} to gate {gate}. Days already issued keep their gate."
+msgstr "Solte para mover {destination} para o portão {gate}. Dias já emitidos mantêm o portão."
+
+msgid "Drop the flight on another gate's row."
+msgstr "Solte o voo na linha de outro portão."
+
+msgid "Plain terms"
+msgstr "Termos simples"
+
+msgid "No catch, and 10% less pay."
+msgstr "Sem pegadinha, e 10% menos pagamento."
+
+msgid "Loyal: +10%"
+msgstr "Lealdade: +10%"
+
+msgid "This airline is loyal to you: its offers pay 10% more."
+msgstr "Esta companhia é fiel a você: as ofertas dela pagam 10% a mais."
+
+msgid "Top fare +{percent}%"
+msgstr "Tarifa máxima +{percent}%"
+
+msgid "Shoppers"
+msgstr "Compradores"
+
+msgid "Many shoppers"
+msgstr "Muitos compradores"
+
+msgid "Bag cover"
+msgstr "Cobertura de malas"
+
+msgid "Full bag cover"
+msgstr "Cobertura total de malas"
+
+msgid "Full flight"
+msgstr "Voo cheio"
+
+msgid "Packed flight"
+msgstr "Voo lotado"
+
+msgid "Rush crowd"
+msgstr "Turma apressada"
+
+msgid "Big rush crowd"
+msgstr "Grande turma apressada"
+
+msgid "Heavy bags"
+msgstr "Malas pesadas"
+
+msgid "Very heavy bags"
+msgstr "Malas muito pesadas"
+
+msgid "Signing bonus ${amount}"
+msgstr "Bônus de assinatura ${amount}"
+
+msgid "Loyal airline"
+msgstr "Companhia leal"
+
+msgid "Miss fine ${amount}"
+msgstr "Multa por perda ${amount}"
+
+msgid "Odd hours"
+msgstr "Horário alternativo"
+
+msgid "Exit fee ${amount}"
+msgstr "Multa de saída ${amount}"
+
+msgid "Pays {percent}% more per passenger."
+msgstr "Paga {percent}% a mais por passageiro."
+
+msgid "{percent}% of passengers come early with time to shop (usually 30%)."
+msgstr "{percent}% dos passageiros chegam cedo com tempo para comprar (normalmente 30%)."
+
+msgid "A missed bag costs {percent}% of the fee (usually 50%)."
+msgstr "Uma mala perdida custa {percent}% da tarifa (normalmente 50%)."
+
+msgid "A missed bag costs nothing (usually 50% of the fee)."
+msgstr "Uma mala perdida não custa nada (normalmente 50% da tarifa)."
+
+msgid "Booked from the top half of the plane's range."
+msgstr "Reservado na metade superior da capacidade do avião."
+
+msgid "Booked from the top quarter of the plane's range."
+msgstr "Reservado no quarto superior da capacidade do avião."
+
+msgid "{percent}% of passengers arrive late in a rush (usually 15%)."
+msgstr "{percent}% dos passageiros chegam atrasados com pressa (normalmente 15%)."
+
+msgid "A missed bag costs the whole fee (usually 50%)."
+msgstr "Uma mala perdida custa a tarifa inteira (normalmente 50%)."
+
+msgid "Pays ${amount} once, when this contract's first flight leaves."
+msgstr "Paga ${amount} uma vez quando o primeiro voo deste contrato decolar."
+
+msgid "After {days} days this flight leaves, the airline's later offers pay {percent}% more."
+msgstr "Após {days} dias de operação deste voo, as próximas ofertas da companhia pagam {percent}% a mais."
+
+msgid "Each passenger who misses this flight costs ${amount}."
+msgstr "Cada passageiro que perder este voo custa ${amount}."
+
+msgid "Departs at 06:00 or 22:00, outside the usual 07:00 to 21:00."
+msgstr "Parte às 06:00 ou 22:00, fora da janela comum das 07:00 às 21:00."
+
+msgid "Ending this contract in its first {days} days costs ${amount}."
+msgstr "Encerrar este contrato nos primeiros {days} dias custa ${amount}."
+
+msgid "the taxiway move would strand flight {id}"
+msgstr "a mudança da pista de táxi deixaria o voo {id} isolado"
+
+msgid "Not enough money: the {size} runway works cost ${price}"
+msgstr "Dinheiro insuficiente: as obras da pista de {size} custam ${price}"
+
+msgid "the runway is too short for a {size} plane"
+msgstr "a pista é curta demais para um avião de {size}"
+
+msgctxt "runway size"
+msgid "small"
+msgstr "pequeno porte"
+
+msgctxt "runway size"
+msgid "medium"
+msgstr "médio porte"
+
+msgctxt "runway size"
+msgid "large"
+msgstr "grande porte"
+
+msgid "Runway works are already booked"
+msgstr "As obras da pista já estão agendadas"
+
+msgid "The last runway works are still held in the timetable"
+msgstr "As últimas obras da pista ainda constam na programação"
+
+msgid "The runway is already the largest size"
+msgstr "A pista já está no tamanho máximo"
+
+msgid "The timetable leaves no quiet stretch for the works"
+msgstr "A grade de horários não tem janela calma para as obras"
+
+msgid "Works on the {size} runway start {start} and end {finish}"
+msgstr "Obras na pista de {size} começam {start} e terminam {finish}"
+
+msgid "Works on the {size} runway started {start} and end {finish}"
+msgstr "Obras na pista de {size} começaram {start} e terminam {finish}"
+
+msgid "at {time}"
+msgstr "às {time}"
+
+msgid "tomorrow at {time}"
+msgstr "amanhã às {time}"
+
+msgid "on Day {day} at {time}"
+msgstr "no Dia {day} às {time}"
+
+msgid "Waiting for taxiway works"
+msgstr "Aguardando obras na pista de táxi"
+
+msgid "The west taxiway has moved"
+msgstr "A pista de táxi oeste mudou de lugar"
+
+msgid "The east taxiway has moved"
+msgstr "A pista de táxi leste mudou de lugar"
+
+msgid "Taxiway moved"
+msgstr "Pista de táxi movida"
+
+msgid "{flight} moved to Gate {gate}"
+msgstr "{flight} movido para o Portão {gate}"
+
+msgid "{flight} moves to Gate {gate}"
+msgstr "{flight} muda para o Portão {gate}"
+
+msgid "Flights moved"
+msgstr "Voos movidos"
+
+msgid "{count} flight moved to Gate {gate}"
+msgid_plural "{count} flights moved to Gate {gate}"
+msgstr[0] "{count} voo movido para o Portão {gate}"
+msgstr[1] "{count} voos movidos para o Portão {gate}"
+
+msgid "{count} flight moves to Gate {gate}"
+msgid_plural "{count} flights move to Gate {gate}"
+msgstr[0] "{count} voo muda para o Portão {gate}"
+msgstr[1] "{count} voos mudam para o Portão {gate}"
+
+msgid "Dismiss"
+msgstr "Fechar"
+
+msgid "{airline} {destination}"
+msgstr "{airline} {destination}"
+
+msgid "{title} result"
+msgstr "Resultado de {title}"
+
+msgid "Made {made}   Missed {missed}"
+msgstr "Embarcados {made}   Perdidos {missed}"
+
+msgid "{count}  {reason}"
+msgstr "{count}  {reason}"
+
+msgid "{count}  Other"
+msgstr "{count}  Outro motivo"
+
+msgid "Waiting outside: check-in full"
+msgstr "Esperando fora: check-in lotado"
+
+msgid "Missed the flight"
+msgstr "Perdeu o voo"
+
+msgid "No check-in desk to go to"
+msgstr "Sem balcão de check-in disponível"
+
+msgid "No security scanner or lane to go to"
+msgstr "Sem scanner ou corredor de segurança disponível"
+
+msgid "Waiting outside a full queue"
+msgstr "Esperando fora de uma fila cheia"
+
+msgid "No walkable route"
+msgstr "Sem rota caminhável"
+
+msgid "The exit to the plane was blocked"
+msgstr "A saída para o avião estava bloqueada"
+
+msgid "Held up by crowds at the gate"
+msgstr "Retido pela multidão no portão"
+
+msgid "At the gate, but not boarded in time"
+msgstr "No portão, mas não embarcou a tempo"
+
+msgid "Left the gate too late for the plane"
+msgstr "Saiu do portão tarde demais para o avião"
+
+msgid "Arrived after the doors closed"
+msgstr "Chegou após o fechamento das portas"
+
+msgid "Still walking to check-in"
+msgstr "Ainda caminhando para o check-in"
+
+msgid "Still queuing for check-in"
+msgstr "Ainda na fila do check-in"
+
+msgid "Still at the check-in desk"
+msgstr "Ainda no balcão de check-in"
+
+msgid "Still walking to security"
+msgstr "Ainda caminhando para a segurança"
+
+msgid "Still queuing for security"
+msgstr "Ainda na fila da segurança"
+
+msgid "Still at security"
+msgstr "Ainda na segurança"
+
+msgid "Still walking to the gate"
+msgstr "Ainda caminhando para o portão"
+
+msgid "Still at the cafe"
+msgstr "Ainda no café"
+
+msgid "Still at the toilet"
+msgstr "Ainda no banheiro"
+
+msgid "Still at a shop"
+msgstr "Ainda em uma loja"
+
+msgid "Waiting for drop-off"
+msgstr "Esperando desembarque do carro"
+
+msgid "Never arrived: the terminal has no entrance"
+msgstr "Nunca chegou: o terminal não tem entrada"
+
+msgid "Did not arrive before the doors closed"
+msgstr "Não chegou antes do fechamento das portas"
+
+msgid "Day {day} {time}"
+msgstr "Dia {day} {time}"
+
+msgid "{when}  {title}\n{detail}"
+msgstr "{when}  {title}\n{detail}"
+
+msgid "still up"
+msgstr "ainda ativo"
+
+msgid "cleared {time}"
+msgstr "resolvido às {time}"
+
+msgid "{when}  {title}, {end}"
+msgstr "{when}  {title}, {end}"
+
+msgid "Alerts"
+msgstr "Alertas"
+
+msgid "Alert history and the on/off switch for alert cards"
+msgstr "Histórico de alertas e chave liga/desliga dos cartões"
+
+msgid "Open the alert history"
+msgstr "Abrir histórico de alertas"
+
+msgid "Alert history"
+msgstr "Histórico de alertas"
+
+msgid "Show alert cards"
+msgstr "Mostrar alertas"
+
+msgid "Alerts ({count})"
+msgstr "Alertas ({count})"
+
+msgid "Click to look at it"
+msgstr "Clique para ver"
+
+msgid "No alerts yet"
+msgstr "Sem alertas ainda"
+
+msgid "{count} desk full · {waiting} waiting"
+msgid_plural "{count} desks full · {waiting} waiting"
+msgstr[0] "{count} balcão cheio · {waiting} na fila"
+msgstr[1] "{count} balcões cheios · {waiting} na fila"
+
+msgid "Check-in queue full"
+msgstr "Fila do check-in cheia"
+
+msgid "{count} lane full · {waiting} waiting"
+msgid_plural "{count} lanes full · {waiting} waiting"
+msgstr[0] "{count} corredor cheio · {waiting} na fila"
+msgstr[1] "{count} corredores cheios · {waiting} na fila"
+
+msgid "Security queue full"
+msgstr "Fila da segurança cheia"
+
+msgid "{count} passenger can't get where they are going"
+msgid_plural "{count} passengers can't get where they are going"
+msgstr[0] "{count} passageiro não consegue chegar ao destino"
+msgstr[1] "{count} passageiros não conseguem chegar ao destino"
+
+msgid "{count} passenger waits for a gate seat or a place to stand"
+msgid_plural "{count} passengers wait for a gate seat or a place to stand"
+msgstr[0] "{count} passageiro espera assento ou lugar no portão"
+msgstr[1] "{count} passageiros esperam assento ou lugar no portão"
+
+msgid "Gate full"
+msgstr "Portão lotado"
+
+msgid "{count} station is closed · hire staff on the Staff card"
+msgid_plural "{count} stations are closed · hire staff on the Staff card"
+msgstr[0] "{count} posto fechado · contrate equipe no painel Equipe"
+msgstr[1] "{count} postos fechados · contrate equipe no painel Equipe"
+
+msgid "Nobody on duty"
+msgstr "Ninguém em turno"
+
+msgid "{count} station is closed · staff can't reach the staff spot"
+msgid_plural "{count} stations are closed · staff can't reach the staff spot"
+msgstr[0] "{count} posto fechado · equipe não alcança o ponto de trabalho"
+msgstr[1] "{count} postos fechados · equipe não alcança o ponto de trabalho"
+
+msgid "Staff can't get to work"
+msgstr "Equipe não consegue chegar ao posto"
+
+msgid "The terminal is getting dirty. Hire a cleaner on the Staff card."
+msgstr "O terminal está ficando sujo. Contrate um zelador no painel Equipe."
+
+msgid "The terminal is getting dirty. Place bins near the bar and toilets, or hire more cleaners."
+msgstr "O terminal está ficando sujo. Coloque lixeiras perto do bar e banheiros, ou contrate mais zeladores."
+
+msgid "Dirty terminal"
+msgstr "Terminal sujo"
+
+msgid "Inspector visit tomorrow"
+msgstr "Visita de inspetor amanhã"
+
+msgid "Holiday rush tomorrow"
+msgstr "Movimento de feriado amanhã"
+
+msgid "A VIP wants to fly"
+msgstr "Um VIP quer viajar"
+
+msgid "A VIP wants to fly on {flight}. The first passenger to arrive for it is the VIP."
+msgstr "Um VIP quer viajar no voo {flight}. O primeiro passageiro a chegar para ele é o VIP."
+
+msgid "If it fails: your rating drops by {penalty} if the VIP misses the flight."
+msgstr "Se falhar: sua avaliação cai {penalty} se o VIP perder o voo."
+
+msgid "An airline asks a favour"
+msgstr "Uma companhia pede um favor"
+
+msgid "An airline asks you to fit {extra} more passengers onto {flight}."
+msgstr "Uma companhia pede para você encaixar mais {extra} passageiros no voo {flight}."
+
+msgid "Reward: {bonus} money now, and {extra} more passengers paying their fees."
+msgstr "Recompensa: {bonus} em dinheiro agora, e mais {extra} passageiros pagando taxas."
+
+msgid "The VIP made the flight"
+msgstr "O VIP embarcou"
+
+msgid "The VIP boarded in a good mood. You earn {bonus} money."
+msgstr "O VIP embarcou de bom humor. Você ganhou {bonus} em dinheiro."
+
+msgid "The VIP missed the flight"
+msgstr "O VIP perdeu o voo"
+
+msgid "Your rating drops by {penalty}."
+msgstr "Sua avaliação caiu {penalty}."
+
+msgid "The inspector was happy"
+msgstr "O inspetor ficou satisfeito"
+
+msgid "You earn {bonus} money."
+msgstr "Você ganhou {bonus} em dinheiro."
+
+msgid "The inspector was not happy"
+msgstr "O inspetor não ficou satisfeito"
+
+msgid "The inspector found {found}. Your rating drops by {penalty}."
+msgstr "O inspetor encontrou {found}. Sua avaliação caiu {penalty}."
+
+msgid "{count} mess on the floor ({allowed} allowed)"
+msgid_plural "{count} messes on the floor ({allowed} allowed)"
+msgstr[0] "{count} sujeira no piso ({allowed} permitidas)"
+msgstr[1] "{count} sujeiras no piso ({allowed} permitidas)"
+
+msgid "{count} passenger stuck in a full queue ({allowed} allowed)"
+msgid_plural "{count} passengers stuck in a full queue ({allowed} allowed)"
+msgstr[0] "{count} passageiro preso em fila cheia ({allowed} permitidos)"
+msgstr[1] "{count} passageiros presos em fila cheia ({allowed} permitidos)"
+
+msgid "{first} and {second}"
+msgstr "{first} e {second}"
+
+msgid "none"
+msgstr "nada"
+
+msgid "today's"
+msgstr "de hoje"
+
+msgid "tomorrow's"
+msgstr "de amanhã"
+
+msgid "day {day}'s"
+msgstr "do dia {day}"
+
+msgid "half a star"
+msgstr "meia estrela"
+
+msgid "{count} star"
+msgid_plural "{count} stars"
+msgstr[0] "{count} estrela"
+msgstr[1] "{count} estrelas"
+
+msgid "{count} stars"
+msgstr "{count} estrelas"
+
+msgid "VIP for {flight}"
+msgstr "VIP para {flight}"
+
+msgid "{day} {time} flight"
+msgstr "voo de {day} às {time}"
+
+msgid "The airport inspector visits tomorrow, some time between {from} and {to}."
+msgstr "O inspetor do aeroporto visita amanhã, em algum momento entre {from} e {to}."
+
+msgid "The inspector looks at messes on the floor and at queues that are full."
+msgstr "O inspetor verifica sujeiras no piso e filas que estejam cheias."
+
+msgid "Reward: {bonus} money if there are at most {max_messes} messes and at most {max_full_queue} passengers stuck in a full queue at the visit."
+msgstr "Recompensa: {bonus} em dinheiro se houver no máximo {max_messes} sujeiras e no máximo {max_full_queue} passageiros presos em fila cheia na visita."
+
+msgid "If it fails: your rating drops by {penalty}."
+msgstr "Se falhar: sua avaliação cai {penalty}."
+
+msgid "Tomorrow is a holiday. {total} extra passengers are booked, spread over {count} of tomorrow's flights: {list}."
+msgstr "Amanhã é feriado. {total} passageiros extras reservaram, distribuídos em {count} voos de amanhã: {list}."
+
+msgid "Reward: every extra passenger pays the usual fee."
+msgstr "Recompensa: cada passageiro extra paga a taxa normal."
+
+msgid "If it fails: queues grow, and passengers who miss their flight lower your rating as usual."
+msgstr "Se falhar: as filas crescem, e passageiros que perderem o voo reduzem sua avaliação como de costume."
+
+msgid "Reward: {bonus} money if the VIP makes the flight in a good mood (a mood of {good_mood} or higher when boarding)."
+msgstr "Recompensa: {bonus} em dinheiro se o VIP embarcar de bom humor (humor {good_mood} ou mais ao embarcar)."
+
+msgid "If it fails: the extra passengers need check-in and security too, and any who miss the flight lower your rating as usual."
+msgstr "Se falhar: os passageiros extras também precisam de check-in e segurança, e quem perder o voo reduz sua avaliação como de costume."
+
+msgid "The VIP made the flight, but their mood was below {good_mood} when boarding, so there is no bonus."
+msgstr "O VIP embarcou, mas o humor estava abaixo de {good_mood} ao embarcar, então não há bônus."
+
+msgid "The clock stays paused until you choose."
+msgstr "O relógio fica pausado até você escolher."
+
+msgid "The clock goes on when you close this."
+msgstr "O relógio continua quando você fechar isto."
+
+msgid "Big news at the airport"
+msgstr "Grandes novidades no aeroporto"
+
+msgid "The runway works are done. Bigger planes can land now, so Offers can bring them flights."
+msgstr "As obras da pista terminaram. Aviões maiores já podem pousar, então Ofertas podem trazer esses voos."
+
+msgid "A big event has come up. Its notice says what it is and what you can do about it."
+msgstr "Surgiu um grande evento. O aviso mostra o que é e o que você pode fazer a respeito."
+
+msgid "Your airport has grown"
+msgstr "Seu aeroporto cresceu"
+
+msgid "{hired} hired, off shift"
+msgstr "{hired} contratados, fora de turno"
+
+msgid "{hired} hired, {duty} cleaning, {off_shift} off shift"
+msgstr "{hired} contratados, {duty} limpando, {off_shift} fora de turno"
+
+msgid "{hired} hired, {duty} cleaning, {leaving} leaving"
+msgstr "{hired} contratados, {duty} limpando, {leaving} saindo"
+
+msgid "{hired} hired, {duty} cleaning"
+msgstr "{hired} contratados, {duty} limpando"
+
+msgid "{hired} hired, {duty} on duty, {leaving} leaving"
+msgstr "{hired} contratados, {duty} em turno, {leaving} saindo"
+
+msgid "{hired} hired, {duty} on duty"
+msgstr "{hired} contratados, {duty} em turno"
+
+msgid "Wall gap: close the open edge of the outer wall, marked in red"
+msgid_plural "{count} wall gaps: close the open edges of the outer wall, marked in red"
+msgstr[0] "Falta na parede: feche a borda aberta da parede externa, marcada em vermelho"
+msgstr[1] "{count} falhas na parede: feche as bordas abertas da parede externa, marcadas em vermelho"
+
+msgid "To open the airport"
+msgstr "Para abrir o aeroporto"
+
+msgid "Ready: the airport opens on the next tick"
+msgstr "Pronto: o aeroporto abre no próximo instante"
+
+msgid "Your airport needs"
+msgstr "Seu aeroporto precisa"
+
+msgid "Open! Starter contract: {airline} to {destination}, daily"
+msgstr "Aberto! Contrato inicial: {airline} para {destination}, diário"
+
+msgid "Hire a check-in agent"
+msgstr "Contrate um agente de check-in"
+
+msgid "Hire a security officer"
+msgstr "Contrate um agente de segurança"
+
+msgid "Hire a gate agent"
+msgstr "Contrate um agente de portão"
+
+msgid "Hire shop staff"
+msgstr "Contrate atendentes de loja"
+
+msgid "Check-in agents"
+msgstr "Agentes check-in"
+
+msgid "Security officers"
+msgstr "Agentes segurança"
+
+msgid "Gate agents"
+msgstr "Agentes de portão"
+
+msgid "Shop staff"
+msgstr "Atendentes"
+
+msgid "Cleaners"
+msgstr "Zeladores"
+
+msgctxt "staff button"
+msgid "Hire · {wage}/day"
+msgstr "Contratar · {wage}/dia"
+
+msgctxt "staff button"
+msgid "Fire"
+msgstr "Demitir"
+
+msgid "Belt ends {count}"
+msgstr "Pontas de esteira: {count}"
+
+msgid "Needs a belt dragged inside"
+msgstr "Precisa de uma esteira trazida para dentro"
+
+msgid "Waiting for belt from check-in desk"
+msgstr "Aguardando esteira vinda do balcão de check-in"
+
+msgid "Needs a Ramp Agent (Staff)"
+msgstr "Precisa de agente de pátio (Equipe)"
+
+msgid "Desks connected: {count}"
+msgstr "Balcões conectados: {count}"
+
+msgid "Stalls {count}"
+msgstr "Cabines {count}"
+
+msgid "Sinks {count}"
+msgstr "Pias {count}"
+
+msgid "Upkeep ${amount} per day"
+msgstr "Manutenção ${amount} por dia"
+
+msgid "Upkeep ${amount} per day once ready"
+msgstr "Manutenção ${amount} por dia após pronta"
+
+msgid "Spots {count}"
+msgstr "Pontos {count}"
+
+msgid "Fee ${amount} per visit"
+msgstr "Taxa ${amount} por visita"
+
+msgid "Free to use"
+msgstr "Uso gratuito"
+
+msgid "Browse spots {count}"
+msgstr "Pontos de compra {count}"
+
+msgid "Base spend ${amount} per visit"
+msgstr "Gasto base ${amount} por visita"
+
+msgid "Seats {count}"
+msgstr "Assentos {count}"
+
+msgid "Entrance with a way through check-in and security to an exit"
+msgstr "Entrada com caminho passando por check-in e segurança até uma saída"
+
+msgid "Staff can't reach a desk or scanner passengers need: clear its staff spot"
+msgstr "Equipe não alcança um balcão ou scanner necessário: libere o posto de trabalho"
+
+msgid "{need} ({unlock})"
+msgstr "{need} ({unlock})"
+
+msgid "Check-in desk and an agent"
+msgstr "Balcão de check-in e um agente"
+
+msgid "Security scanner and an officer"
+msgstr "Scanner de segurança e um agente"
+
+msgid "Passengers need a check-in desk"
+msgstr "Passageiros precisam de um balcão de check-in"
+
+msgid "Passengers need security"
+msgstr "Passageiros precisam de segurança"
+
+msgid "Passengers need a toilet"
+msgstr "Passageiros precisam de um banheiro"
+
+msgid "Passengers are hungry"
+msgstr "Passageiros estão com fome"
+
+msgid "Follow this passenger"
+msgstr "Seguir este passageiro"
+
+msgid "Thoughts"
+msgstr "Pensamentos"
+
+msgid "Show where this happened"
+msgstr "Mostrar onde isso aconteceu"
+
+msgid "Passenger {id}"
+msgstr "Passageiro {id}"
+
+msgid "Mood {mood}   Hunger {hunger}   Toilet {toilet}   Boredom {boredom}"
+msgstr "Humor {mood}   Fome {hunger}   Banheiro {toilet}   Tédio {boredom}"
+
+msgid "Thoughts: none yet"
+msgstr "Pensamentos: nenhum ainda"
+
+msgid "{thought} · {age}"
+msgstr "{thought} · {age}"
+
+msgid "The pin shows where they were at {time}"
+msgstr "O marcador mostra onde estava às {time}"
+
+msgid "Running late"
+msgstr "Atrasado"
+
+msgid "Stuck: \"{reason}\""
+msgstr "Travado: \"{reason}\""
+
+msgid "Flight {title}"
+msgstr "Voo {title}"
+
+msgid "Flight {title}, doors close {time}"
+msgstr "Voo {title}, portas fecham às {time}"
+
+msgid "just now"
+msgstr "agora há pouco"
+
+msgid "{minutes} min ago"
+msgid_plural "{minutes} min ago"
+msgstr[0] "há {minutes} min"
+msgstr[1] "há {minutes} min"
+
+msgid "{count} passenger"
+msgid_plural "{count} passengers"
+msgstr[0] "{count} passageiro"
+msgstr[1] "{count} passageiros"
+
+msgid "Flight {flights}"
+msgstr "Voo {flights}"
+
+msgid "Empty, at the curb"
+msgstr "Vazio, na baia"
+
+msgid "At the curb"
+msgstr "Na baia"
+
+msgid "Parked, driver away"
+msgstr "Estacionado, motorista ausente"
+
+msgid "Parked"
+msgstr "Estacionado"
+
+msgid "Empty, leaving"
+msgstr "Vazio, saindo"
+
+msgid "Leaving"
+msgstr "Saindo"
+
+msgid "Empty, driving on"
+msgstr "Vazio, seguindo adiante"
+
+msgid "Driving into the car park"
+msgstr "Entrando no estacionamento"
+
+msgid "Waiting to turn into the car park"
+msgstr "Esperando para entrar no estacionamento"
+
+msgid "Driving to the car park"
+msgstr "Indo para o estacionamento"
+
+msgid "Queuing for the curb"
+msgstr "Na fila da baia"
+
+msgid "Driving to the curb"
+msgstr "Indo para a baia"
+
+msgid "On time"
+msgstr "No horário"
+
+msgid "Drop-off delay: under 1 min"
+msgstr "Atraso no desembarque: menos de 1 min"
+
+msgid "Drop-off delay: {minutes} min"
+msgid_plural "Drop-off delay: {minutes} min"
+msgstr[0] "Atraso no desembarque: {minutes} min"
+msgstr[1] "Atraso no desembarque: {minutes} min"
+
+msgctxt "vehicle"
+msgid "Taxi"
+msgstr "Táxi"
+
+msgctxt "vehicle"
+msgid "Car"
+msgstr "Carro"
+
+msgid "{vehicle} {id}"
+msgstr "{vehicle} {id}"
+
+msgid "That hit the spot"
+msgstr "Caiu muito bem"
+
+msgid "Gave up on getting food"
+msgstr "Desistiu de conseguir comida"
+
+msgid "What a relief"
+msgstr "Que alívio"
+
+msgid "Waited {minutes} min in the queue"
+msgid_plural "Waited {minutes} min in the queue"
+msgstr[0] "Esperou {minutes} min na fila"
+msgstr[1] "Esperou {minutes} min na fila"
+
+msgid "Nice decor here"
+msgstr "Bela decoração aqui"
+
+msgctxt "room status"
+msgid "Ready"
+msgstr "Pronto"
+
+msgctxt "status reason"
+msgid "too small: a {room} needs at least {width}x{height}"
+msgstr "pequena demais: {room} precisa de pelo menos {width}x{height}"
+
+msgctxt "room need"
+msgid "Too small: a {room} needs at least {width}x{height}"
+msgstr "Pequena demais: {room} precisa de pelo menos {width}x{height}"
+
+msgctxt "gate card"
+msgid "Status: unlinked: no exit facing the planes in {cells} cells"
+msgstr "Status: sem ligação: nenhuma saída virada para os aviões em {cells} células"
+
+msgctxt "gate card"
+msgid "Status: unlinked: gate {gate} uses the exit"
+msgstr "Status: sem ligação: o portão {gate} já usa esta saída"
+
+msgctxt "gate card"
+msgid "Status: unlinked: stand would overlap gate {gate}"
+msgstr "Status: sem ligação: posição sobreporia o portão {gate}"
+
+msgctxt "gate card"
+msgid "Status: unlinked: no room for a plane"
+msgstr "Status: sem ligação: sem espaço para avião"
+
+msgctxt "gate card"
+msgid "Status: unlinked: way to the lane blocked"
+msgstr "Status: sem ligação: caminho até a pista bloqueado"
+
+msgctxt "gate card"
+msgid "Status: unlinked: every gate letter in use"
+msgstr "Status: sem ligação: todas as letras de portão em uso"
+
+msgid "Status: Scanner fault, fixed by {time}"
+msgstr "Status: Falha no scanner, conserto até {time}"
+
+msgctxt "gate card"
+msgid "Biggest plane: Small"
+msgstr "Maior avião: Pequeno"
+
+msgctxt "gate card"
+msgid "Biggest plane: Medium"
+msgstr "Maior avião: Médio"
+
+msgctxt "gate card"
+msgid "Biggest plane: Large"
+msgstr "Maior avião: Grande"
+
+msgctxt "gate card"
+msgid "Biggest plane: {class}"
+msgstr "Maior avião: {class}"
+
+msgctxt "item name"
+msgid "ATM"
+msgstr "Caixa eletrônico"
+
+msgctxt "item name"
+msgid "Baggage belt"
+msgstr "Esteira de bagagem"
+
+msgctxt "item name"
+msgid "Baggage cart"
+msgstr "Carrinho de bagagem"
+
+msgctxt "item name"
+msgid "Bar counter"
+msgstr "Balcão de bar"
+
+msgctxt "item name"
+msgid "Belt corner"
+msgstr "Curva de esteira"
+
+msgctxt "item name"
+msgid "Belt end"
+msgstr "Ponta de esteira"
+
+msgctxt "item name"
+msgid "Belt merge"
+msgstr "Junção de esteira"
+
+msgctxt "item name"
+msgid "Bench"
+msgstr "Banco"
+
+msgctxt "item name"
+msgid "Bin"
+msgstr "Lixeira"
+
+msgctxt "item name"
+msgid "Bush"
+msgstr "Arbusto"
+
+msgctxt "item name"
+msgid "Cafe counter"
+msgstr "Balcão de café"
+
+msgctxt "item name"
+msgid "Cafe table"
+msgstr "Mesa de café"
+
+msgctxt "item name"
+msgid "Chain"
+msgstr "Fita de fila"
+
+msgctxt "item name"
+msgid "Check-in desk"
+msgstr "Balcão de check-in"
+
+msgctxt "item name"
+msgid "Clothes rail"
+msgstr "Arara de roupas"
+
+msgctxt "item name"
+msgid "Currency exchange"
+msgstr "Casa de câmbio"
+
+msgctxt "item name"
+msgid "Display stand"
+msgstr "Expositor"
+
+msgctxt "item name"
+msgid "Duty free shelf"
+msgstr "Prateleira duty free"
+
+msgctxt "item name"
+msgid "Duty free till"
+msgstr "Caixa duty free"
+
+msgctxt "item name"
+msgid "Entrance"
+msgstr "Entrada"
+
+msgctxt "item name"
+msgid "Exit to the plane"
+msgstr "Saída para o avião"
+
+msgctxt "item name"
+msgid "Fashion till"
+msgstr "Caixa de moda"
+
+msgctxt "item name"
+msgid "Fountain"
+msgstr "Fonte"
+
+msgctxt "item name"
+msgid "Gate desk"
+msgstr "Balcão de portão"
+
+msgctxt "item name"
+msgid "Gate seats"
+msgstr "Assentos de portão"
+
+msgctxt "item name"
+msgid "Grab-and-go stall"
+msgstr "Barraca rápida"
+
+msgctxt "item name"
+msgid "Info desk"
+msgstr "Balcão de informações"
+
+msgctxt "item name"
+msgid "Info screen"
+msgstr "Painel de informações"
+
+msgctxt "item name"
+msgid "Kiosk counter"
+msgstr "Balcão de quiosque"
+
+msgctxt "item name"
+msgid "Lounge armchair"
+msgstr "Poltrona de sala VIP"
+
+msgctxt "item name"
+msgid "Lounge sofa"
+msgstr "Sofá de sala VIP"
+
+msgctxt "item name"
+msgid "Nap pod"
+msgstr "Cápsula de sono"
+
+msgctxt "item name"
+msgid "Pharmacy counter"
+msgstr "Balcão de farmácia"
+
+msgctxt "item name"
+msgid "Pharmacy shelf"
+msgstr "Prateleira de farmácia"
+
+msgctxt "item name"
+msgid "Pickup table"
+msgstr "Mesa de retirada"
+
+msgctxt "item name"
+msgid "Plant pot"
+msgstr "Vaso de planta"
+
+msgctxt "item name"
+msgid "Planter"
+msgstr "Jardineira"
+
+msgctxt "item name"
+msgid "Play blocks"
+msgstr "Blocos de montar"
+
+msgctxt "item name"
+msgid "Play slide"
+msgstr "Escorregador"
+
+msgctxt "item name"
+msgid "Post"
+msgstr "Pedestal"
+
+msgctxt "item name"
+msgid "Prize podium"
+msgstr "Pódio de prêmio"
+
+msgctxt "item name"
+msgid "Restaurant booth"
+msgstr "Cabine de restaurante"
+
+msgctxt "item name"
+msgid "Restaurant table"
+msgstr "Mesa de restaurante"
+
+msgctxt "item name"
+msgid "Screen"
+msgstr "Tela"
+
+msgctxt "item name"
+msgid "Security arch"
+msgstr "Arco de segurança"
+
+msgctxt "item name"
+msgid "Security scanner"
+msgstr "Scanner de segurança"
+
+msgctxt "item name"
+msgid "Shower"
+msgstr "Chuveiro"
+
+msgctxt "item name"
+msgid "Sink"
+msgstr "Pia"
+
+msgctxt "item name"
+msgid "Statue"
+msgstr "Estátua"
+
+msgctxt "item name"
+msgid "Toilet stall"
+msgstr "Cabine de banheiro"
+
+msgctxt "item name"
+msgid "Tray table"
+msgstr "Mesa de bandejas"
+
+msgctxt "item name"
+msgid "Tree"
+msgstr "Árvore"
+
+msgctxt "item name"
+msgid "Tree bench"
+msgstr "Banco com árvore"
+
+msgctxt "item name"
+msgid "Work desk"
+msgstr "Mesa de trabalho"
+
+msgctxt "item name"
+msgid "X-ray belt"
+msgstr "Esteira de raio-X"
+
+msgctxt "room type"
+msgid "ATM"
+msgstr "Caixa eletrônico"
+
+msgctxt "room type"
+msgid "Bag room"
+msgstr "Sala de bagagem"
+
+msgctxt "room type"
+msgid "Bar"
+msgstr "Bar"
+
+msgctxt "room type"
+msgid "Cafe"
+msgstr "Café"
+
+msgctxt "room type"
+msgid "Duty free"
+msgstr "Duty free"
+
+msgctxt "room type"
+msgid "Exchange"
+msgstr "Câmbio"
+
+msgctxt "room type"
+msgid "Fashion store"
+msgstr "Loja de moda"
+
+msgctxt "room type"
+msgid "Grab-and-go stall"
+msgstr "Lanche rápido"
+
+msgctxt "room type"
+msgid "Kiosk"
+msgstr "Quiosque"
+
+msgctxt "room type"
+msgid "Lounge"
+msgstr "Sala VIP"
+
+msgctxt "room type"
+msgid "Nap pod"
+msgstr "Cápsula de sono"
+
+msgctxt "room type"
+msgid "Pharmacy"
+msgstr "Farmácia"
+
+msgctxt "room type"
+msgid "Play area"
+msgstr "Área infantil"
+
+msgctxt "room type"
+msgid "Restaurant"
+msgstr "Restaurante"
+
+msgctxt "room type"
+msgid "Shower"
+msgstr "Chuveiro"
+
+msgctxt "room type"
+msgid "Toilet"
+msgstr "Banheiro"
+
+msgctxt "room name, mid-sentence"
+msgid "atm"
+msgstr "caixa eletrônico"
+
+msgctxt "room name, mid-sentence"
+msgid "bag room"
+msgstr "sala de bagagem"
+
+msgctxt "room name, mid-sentence"
+msgid "bar"
+msgstr "bar"
+
+msgctxt "room name, mid-sentence"
+msgid "cafe"
+msgstr "café"
+
+msgctxt "room name, mid-sentence"
+msgid "duty free"
+msgstr "duty free"
+
+msgctxt "room name, mid-sentence"
+msgid "exchange"
+msgstr "casa de câmbio"
+
+msgctxt "room name, mid-sentence"
+msgid "fashion store"
+msgstr "loja de moda"
+
+msgctxt "room name, mid-sentence"
+msgid "grab-and-go stall"
+msgstr "lanchonete rápida"
+
+msgctxt "room name, mid-sentence"
+msgid "kiosk"
+msgstr "quiosque"
+
+msgctxt "room name, mid-sentence"
+msgid "lounge"
+msgstr "sala VIP"
+
+msgctxt "room name, mid-sentence"
+msgid "nap pod"
+msgstr "sala de cápsula"
+
+msgctxt "room name, mid-sentence"
+msgid "pharmacy"
+msgstr "farmácia"
+
+msgctxt "room name, mid-sentence"
+msgid "play area"
+msgstr "área infantil"
+
+msgctxt "room name, mid-sentence"
+msgid "restaurant"
+msgstr "restaurante"
+
+msgctxt "room name, mid-sentence"
+msgid "shower"
+msgstr "sala de banho"
+
+msgctxt "room name, mid-sentence"
+msgid "toilet"
+msgstr "banheiro"
+
+msgctxt "landside place"
+msgid "Curb bay"
+msgstr "Baia de embarque"
+
+msgctxt "landside place"
+msgid "Multi-storey car park"
+msgstr "Edifício-garagem"
+
+msgctxt "landside place"
+msgid "Surface lot"
+msgstr "Pátio aberto"
+
+msgctxt "room need"
+msgid "Needs a belt end"
+msgstr "Precisa de ponta de esteira"
+
+msgctxt "room need"
+msgid "Needs a clothes rail"
+msgstr "Precisa de arara de roupas"
+
+msgctxt "room need"
+msgid "Needs a counter"
+msgstr "Precisa de balcão"
+
+msgctxt "room need"
+msgid "Needs a display stand"
+msgstr "Precisa de expositor"
+
+msgctxt "room need"
+msgid "Needs a kiosk counter"
+msgstr "Precisa de balcão de quiosque"
+
+msgctxt "room need"
+msgid "Needs a nap pod"
+msgstr "Precisa de cápsula de sono"
+
+msgctxt "room need"
+msgid "Needs a pharmacy counter"
+msgstr "Precisa de balcão de farmácia"
+
+msgctxt "room need"
+msgid "Needs a shelf"
+msgstr "Precisa de prateleira"
+
+msgctxt "room need"
+msgid "Needs a shower"
+msgstr "Precisa de chuveiro"
+
+msgctxt "room need"
+msgid "Needs a sink"
+msgstr "Precisa de pia"
+
+msgctxt "room need"
+msgid "Needs a slide"
+msgstr "Precisa de escorregador"
+
+msgctxt "room need"
+msgid "Needs a sofa"
+msgstr "Precisa de sofá"
+
+msgctxt "room need"
+msgid "Needs a table"
+msgstr "Precisa de mesa"
+
+msgctxt "room need"
+msgid "Needs a till"
+msgstr "Precisa de caixa"
+
+msgctxt "room need"
+msgid "Needs a toilet stall"
+msgstr "Precisa de cabine sanitária"
+
+msgctxt "room need"
+msgid "Needs an ATM"
+msgstr "Precisa de caixa eletrônico"
+
+msgctxt "room need"
+msgid "Needs an exchange counter"
+msgstr "Precisa de balcão de câmbio"
+
+msgctxt "room need"
+msgid "Needs play blocks"
+msgstr "Precisa de blocos de montar"
+
+msgctxt "room need"
+msgid "Needs entrance"
+msgstr "Precisa de entrada"
+
+msgctxt "status reason"
+msgid "needs a belt end"
+msgstr "precisa de ponta de esteira"
+
+msgctxt "status reason"
+msgid "needs a clothes rail"
+msgstr "precisa de arara de roupas"
+
+msgctxt "status reason"
+msgid "needs a counter"
+msgstr "precisa de balcão"
+
+msgctxt "status reason"
+msgid "needs a display stand"
+msgstr "precisa de expositor"
+
+msgctxt "status reason"
+msgid "needs a kiosk counter"
+msgstr "precisa de balcão de quiosque"
+
+msgctxt "status reason"
+msgid "needs a nap pod"
+msgstr "precisa de cápsula de sono"
+
+msgctxt "status reason"
+msgid "needs a pharmacy counter"
+msgstr "precisa de balcão de farmácia"
+
+msgctxt "status reason"
+msgid "needs a shelf"
+msgstr "precisa de prateleira"
+
+msgctxt "status reason"
+msgid "needs a shower"
+msgstr "precisa de chuveiro"
+
+msgctxt "status reason"
+msgid "needs a sink"
+msgstr "precisa de pia"
+
+msgctxt "status reason"
+msgid "needs a slide"
+msgstr "precisa de escorregador"
+
+msgctxt "status reason"
+msgid "needs a sofa"
+msgstr "precisa de sofá"
+
+msgctxt "status reason"
+msgid "needs a table"
+msgstr "precisa de mesa"
+
+msgctxt "status reason"
+msgid "needs a till"
+msgstr "precisa de caixa"
+
+msgctxt "status reason"
+msgid "needs a toilet stall"
+msgstr "precisa de cabine sanitária"
+
+msgctxt "status reason"
+msgid "needs an atm"
+msgstr "precisa de caixa eletrônico"
+
+msgctxt "status reason"
+msgid "needs an exchange counter"
+msgstr "precisa de balcão de câmbio"
+
+msgctxt "status reason"
+msgid "needs play blocks"
+msgstr "precisa de blocos de montar"
+
+msgctxt "status reason"
+msgid "needs entrance"
+msgstr "precisa de entrada"
+
+msgctxt "status reason"
+msgid "a wall cuts through the lane"
+msgstr "uma parede corta o corredor"
+
+msgctxt "status reason"
+msgid "clear the floor for the queue"
+msgstr "libere o piso para a fila"
+
+msgctxt "status reason"
+msgid "clear the floor for the repack spot"
+msgstr "libere o piso para o ponto de reorganizar"
+
+msgctxt "status reason"
+msgid "clear the helper's spot by the repack spot"
+msgstr "libere o ponto do ajudante ao lado da retirada"
+
+msgctxt "status reason"
+msgid "clear the officer's spot by the x-ray belt"
+msgstr "libere o posto do agente junto à esteira de raio-X"
+
+msgctxt "status reason"
+msgid "clear the way back from the repack spot"
+msgstr "libere a volta do ponto de reorganizar"
+
+msgctxt "status reason"
+msgid "clear the way out past the pickup table"
+msgstr "libere a saída após a mesa de retirada"
+
+msgctxt "status reason"
+msgid "clear the way through the arch"
+msgstr "libere a passagem pelo arco"
+
+msgctxt "status reason"
+msgid "needs a pickup table"
+msgstr "precisa de mesa de retirada"
+
+msgctxt "status reason"
+msgid "needs a tray table"
+msgstr "precisa de mesa de bandejas"
+
+msgctxt "status reason"
+msgid "needs an x-ray belt"
+msgstr "precisa de esteira de raio-X"
+
+msgctxt "status reason"
+msgid "no arch"
+msgstr "sem arco"
+
+msgctxt "status reason"
+msgid "parts face different ways"
+msgstr "peças viradas para lados diferentes"
+
+msgctxt "status reason"
+msgid "closed by you"
+msgstr "fechado por você"
+
+msgctxt "status reason"
+msgid "staff spot blocked"
+msgstr "posto de trabalho bloqueado"
+
+msgctxt "status reason"
+msgid "staff can't reach the staff spot"
+msgstr "equipe não alcança o posto de trabalho"
+
+msgctxt "status reason"
+msgid "no staff on duty"
+msgstr "ninguém em turno"
+
+msgctxt "status reason"
+msgid "scanner fault"
+msgstr "falha no scanner"
+
+msgctxt "gate card"
+msgid "Walk from security: no route"
+msgstr "Caminhada da segurança: sem rota"
+
+msgctxt "gate card"
+msgid "Walk from security: {minutes} min"
+msgstr "Caminhada da segurança: {minutes} min"
+
+msgid "Quiet night: fast-forwarding"
+msgstr "Noite tranquila: acelerando o tempo"
+
+msgid "Quiet stretch: fast-forwarding"
+msgstr "Período calmo: acelerando o tempo"
+
+msgctxt "clock"
+msgid "Day {day}  {time}"
+msgstr "Dia {day}  {time}"
+
+msgctxt "follow line"
+msgid "Passenger {id}"
+msgstr "Passageiro {id}"
+
+msgctxt "follow line"
+msgid "mood {value}"
+msgstr "humor {value}"
+
+msgctxt "follow line"
+msgid "hunger {value}"
+msgstr "fome {value}"
+
+msgctxt "follow line"
+msgid "toilet {value}"
+msgstr "banheiro {value}"
+
+msgctxt "passenger speech"
+msgid "\"{text}\""
+msgstr "\"{text}\""
+
+msgid "Hint ({key} turns hints off)"
+msgstr "Dica ({key} desativa dicas)"
+
+msgid "Hints ({key})"
+msgstr "Dicas ({key})"
+
+msgid "Reset hints"
+msgstr "Resetar dicas"
+
+msgid "Passengers need a check-in desk. Each desk also needs a hired agent: open Staff on the bar."
+msgstr "Passageiros precisam de um balcão de check-in. Cada balcão também precisa de um agente contratado: abra Equipe na barra."
+
+msgid "Passengers need security after check-in. Place a scanner or build a lane, and hire an officer."
+msgstr "Passageiros precisam de segurança após o check-in. Coloque um scanner ou corredor completo e contrate um agente."
+
+msgid "One agent works one desk or scanner. Hire another on the Staff card."
+msgstr "Um agente atende um balcão ou scanner. Contrate outro no painel Equipe."
+
+msgid "Passengers need a toilet. Build a toilet room and put a stall in it."
+msgstr "Passageiros precisam de um banheiro. Construa um banheiro e coloque uma cabine dentro."
+
+msgid "Hungry passengers need food. Build a cafe with a counter and a table."
+msgstr "Passageiros com fome precisam de comida. Construa um café com balcão e mesa."
+
+msgid "Game menu"
+msgstr "Menu do jogo"
+
+msgid "Resume ({key})"
+msgstr "Retomar ({key})"
+
+msgid "v{version}"
+msgstr "v{version}"
+
+msgid "Settings"
+msgstr "Configurações"
+
+msgid "Incidents"
+msgstr "Incidentes"
+
+msgid "Back"
+msgstr "Voltar"
+
+msgid "Daily incidents"
+msgstr "Incidentes diários"
+
+msgid "Accept turns daily incidents on, Decline leaves them off. You can change this any time: press {key}, then Settings."
+msgstr "Aceitar ativa os incidentes diários; Recusar os mantém desligados. Você pode mudar quando quiser: aperte {key} e vá em Configurações."
+
+msgid "Your first day at the airport"
+msgstr "Seu primeiro dia no aeroporto"
+
+msgid "Continue ({key})"
+msgstr "Continuar ({key})"
+
+msgid "Accept"
+msgstr "Aceitar"
+
+msgid "Decline"
+msgstr "Recusar"
+
+msgid "The clock starts when you close this."
+msgstr "O relógio começa quando você fechar isto."
+
+msgid "TERMINAL MANAGER"
+msgstr "GERENTE DO TERMINAL"
+
+msgid "Mood ({key})"
+msgstr "Humor ({key})"
+
+msgid "green fed, orange hungry, red starving"
+msgstr "verde alimentado, laranja com fome, vermelho faminto"
+
+msgid "green fine, orange needs the toilet, red desperate"
+msgstr "verde tranquilo, laranja precisando de banheiro, vermelho apertado"
+
+msgid "green content, orange bored, red very bored"
+msgstr "verde satisfeito, laranja entediado, vermelho muito entediado"
+
+msgid "amber where passengers are running late"
+msgstr "âmbar onde passageiros estão atrasados"
+
+msgid "green fine, red waiting long or unhappy"
+msgstr "verde tranquilo, vermelho esperando muito ou infeliz"
+
+msgctxt "mood overlay mode"
+msgid "Hunger"
+msgstr "Fome"
+
+msgctxt "mood overlay mode"
+msgid "Toilet"
+msgstr "Banheiro"
+
+msgctxt "mood overlay mode"
+msgid "Boredom"
+msgstr "Tédio"
+
+msgctxt "mood overlay mode"
+msgid "Late"
+msgstr "Atrasado"
+
+msgctxt "mood overlay mode"
+msgid "Mood"
+msgstr "Humor"
+
+msgctxt "money card"
+msgid "Today"
+msgstr "Hoje"
+
+msgctxt "money card"
+msgid "Since load"
+msgstr "Desde o load"
+
+msgctxt "money card"
+msgid "Cash change today"
+msgstr "Variação hoje"
+
+msgctxt "money card"
+msgid "Cash change since load"
+msgstr "Variação desde o load"
+
+msgctxt "money card"
+msgid "Airline fees"
+msgstr "Taxas aéreas"
+
+msgctxt "money card"
+msgid "Shops"
+msgstr "Lojas"
+
+msgctxt "money card"
+msgid "Parking"
+msgstr "Estacionamento"
+
+msgctxt "money card"
+msgid "Wages paid"
+msgstr "Salários pagos"
+
+msgctxt "money card"
+msgid "Upkeep paid"
+msgstr "Manutenção paga"
+
+msgctxt "money card"
+msgid "Airline fines"
+msgstr "Multas aéreas"
+
+msgctxt "money card"
+msgid "Operating result"
+msgstr "Resultado operacional"
+
+msgctxt "money card"
+msgid "Building"
+msgstr "Construção"
+
+msgctxt "money card"
+msgid "Rescue grant"
+msgstr "Auxílio emergencial"
+
+msgctxt "money card"
+msgid "Incidents"
+msgstr "Incidentes"
+
+msgctxt "money card"
+msgid "Signing bonus"
+msgstr "Bônus de assinatura"
+
+msgctxt "money card"
+msgid "Unpaid fines"
+msgstr "Multas não pagas"
+
+msgctxt "money card"
+msgid "Owed wages"
+msgstr "Salários devidos"
+
+msgctxt "money card"
+msgid "Owed upkeep"
+msgstr "Manutenção devida"
+
+msgctxt "room name, mid-sentence"
+msgid "ATM"
+msgstr "caixa eletrônico"
+
+msgctxt "passenger activity"
+msgid "Heading to the {shop}"
+msgstr "Indo para: {shop}"
+
+msgctxt "passenger activity"
+msgid "Browsing at the {shop}"
+msgstr "Olhando em: {shop}"
+
+msgctxt "passenger activity"
+msgid "Using the {shop}"
+msgstr "Usando: {shop}"
+
+msgctxt "passenger activity"
+msgid "Playing in the {shop}"
+msgstr "Brincando em: {shop}"
+
+msgctxt "passenger activity"
+msgid "Relaxing in the {shop}"
+msgstr "Relaxando em: {shop}"
+
+msgctxt "passenger activity"
+msgid "Resting in the {shop}"
+msgstr "Descansando em: {shop}"
+
+msgctxt "passenger activity"
+msgid "Heading to the food stall"
+msgstr "Indo para a lanchonete rápida"
+
+msgctxt "passenger activity"
+msgid "Queuing at the food stall"
+msgstr "Na fila da lanchonete rápida"
+
+msgctxt "passenger activity"
+msgid "Grabbing a snack"
+msgstr "Pegando um lanche"
+
+msgctxt "passenger activity"
+msgid "Heading to the bar"
+msgstr "Indo para o bar"
+
+msgctxt "passenger activity"
+msgid "Queuing at the bar"
+msgstr "Na fila do bar"
+
+msgctxt "passenger activity"
+msgid "Ordering a drink"
+msgstr "Pedindo uma bebida"
+
+msgctxt "passenger activity"
+msgid "Taking a drink to a seat"
+msgstr "Levando a bebida para um lugar"
+
+msgctxt "passenger activity"
+msgid "Sitting down at the bar"
+msgstr "Sentando no bar"
+
+msgctxt "passenger activity"
+msgid "Having a drink"
+msgstr "Tomando uma bebida"
+
+msgctxt "passenger activity"
+msgid "Leaving the bar"
+msgstr "Saindo do bar"
+
+msgctxt "passenger activity"
+msgid "Heading to the restaurant"
+msgstr "Indo para o restaurante"
+
+msgctxt "passenger activity"
+msgid "Queuing at the restaurant"
+msgstr "Na fila do restaurante"
+
+msgctxt "passenger activity"
+msgid "Ordering a meal"
+msgstr "Pedindo uma refeição"
+
+msgctxt "passenger activity"
+msgid "Taking a meal to a table"
+msgstr "Levando a refeição para a mesa"
+
+msgctxt "passenger activity"
+msgid "Sitting down at the restaurant"
+msgstr "Sentando no restaurante"
+
+msgctxt "passenger activity"
+msgid "Having a meal"
+msgstr "Fazendo uma refeição"
+
+msgctxt "passenger activity"
+msgid "Leaving the restaurant"
+msgstr "Saindo do restaurante"
+
+msgctxt "passenger activity"
+msgid "Arriving"
+msgstr "Chegando"
+
+msgctxt "passenger activity"
+msgid "Heading to check-in"
+msgstr "Indo para o check-in"
+
+msgctxt "passenger activity"
+msgid "Queuing for check-in"
+msgstr "Na fila do check-in"
+
+msgctxt "passenger activity"
+msgid "Checking in"
+msgstr "Fazendo check-in"
+
+msgctxt "passenger activity"
+msgid "Heading to security"
+msgstr "Indo para a segurança"
+
+msgctxt "passenger activity"
+msgid "Queuing for security"
+msgstr "Na fila da segurança"
+
+msgctxt "passenger activity"
+msgid "Going through security"
+msgstr "Passando pela segurança"
+
+msgctxt "passenger activity"
+msgid "Heading to the gate"
+msgstr "Indo para o portão"
+
+msgctxt "passenger activity"
+msgid "Sitting down"
+msgstr "Sentando"
+
+msgctxt "passenger activity"
+msgid "Waiting at the gate"
+msgstr "Esperando no portão"
+
+msgctxt "passenger activity"
+msgid "Standing at the gate"
+msgstr "Em pé no portão"
+
+msgctxt "passenger activity"
+msgid "Getting up to board"
+msgstr "Levantando para embarcar"
+
+msgctxt "passenger activity"
+msgid "Heading to the exit"
+msgstr "Indo para a saída"
+
+msgctxt "passenger activity"
+msgid "Walking to the plane"
+msgstr "Caminhando até o avião"
+
+msgctxt "passenger activity"
+msgid "Boarded"
+msgstr "Embarcado"
+
+msgctxt "passenger activity"
+msgid "Missed the flight"
+msgstr "Perdeu o voo"
+
+msgctxt "passenger activity"
+msgid "Heading to the cafe"
+msgstr "Indo para o café"
+
+msgctxt "passenger activity"
+msgid "Queuing at the cafe"
+msgstr "Na fila do café"
+
+msgctxt "passenger activity"
+msgid "Ordering a coffee"
+msgstr "Pedindo um café"
+
+msgctxt "passenger activity"
+msgid "Taking a coffee to a seat"
+msgstr "Levando o café para um lugar"
+
+msgctxt "passenger activity"
+msgid "Sitting down at the cafe"
+msgstr "Sentando no café"
+
+msgctxt "passenger activity"
+msgid "Having a coffee"
+msgstr "Tomando um café"
+
+msgctxt "passenger activity"
+msgid "Leaving the cafe"
+msgstr "Saindo do café"
+
+msgctxt "passenger activity"
+msgid "Heading to the toilet"
+msgstr "Indo para o banheiro"
+
+msgctxt "passenger activity"
+msgid "Going into a toilet stall"
+msgstr "Entrando em uma cabine"
+
+msgctxt "passenger activity"
+msgid "In a toilet stall"
+msgstr "Na cabine do banheiro"
+
+msgctxt "passenger activity"
+msgid "Leaving the toilet"
+msgstr "Saindo do banheiro"
+
+msgctxt "passenger activity"
+msgid "Heading to a shop"
+msgstr "Indo para uma loja"
+
+msgctxt "passenger activity"
+msgid "Browsing at a shop"
+msgstr "Olhando em uma loja"
+
+msgctxt "speed button"
+msgid "Pause ({key})"
+msgstr "Pausa ({key})"
+
+msgctxt "speed button"
+msgid "Speed {speed}x ({key})"
+msgstr "Velocidade {speed}x ({key})"
+
+msgctxt "apron caption"
+msgid "Gate {gate}: no usable stand. Keep its apron and the walk to it clear"
+msgstr "Portão {gate}: sem posição utilizável. Mantenha o pátio e o acesso livres"
+
+msgctxt "apron caption"
+msgid "Gate {gate}: long walk to the plane: {meters} m"
+msgstr "Portão {gate}: caminhada longa até o avião: {meters} m"
+
+msgctxt "apron caption"
+msgid "No usable stand: no exit facing the planes has a clear apron"
+msgstr "Sem posição utilizável: nenhuma saída virada para os aviões tem pátio livre"
+
+msgctxt "apron caption"
+msgid "Stand moves to the new exit after takeoff at {time}"
+msgstr "A posição muda para a nova saída após a decolagem às {time}"
+
+msgctxt "apron caption"
+msgid "Long walk to the plane: {meters} m"
+msgstr "Caminhada longa até o avião: {meters} m"
+
+msgctxt "land tool"
+msgid "Buy  {price}"
+msgstr "Comprar  {price}"
+
+msgctxt "land tool"
+msgid "Click to buy this {width}x{height} m plot"
+msgstr "Clique para comprar este lote de {width}x{height} m"
+
+msgctxt "gate caption"
+msgid "{minutes} min walk"
+msgstr "{minutes} min a pé"
+
+msgctxt "gate caption"
+msgid "Gate {gate}"
+msgstr "Portão {gate}"
+
+msgctxt "gate caption"
+msgid "no room for a plane"
+msgstr "sem espaço para avião"
+
+msgctxt "gate caption"
+msgid "up to small planes"
+msgstr "até aviões pequenos"
+
+msgctxt "gate caption"
+msgid "up to medium planes"
+msgstr "até aviões médios"
+
+msgctxt "gate caption"
+msgid "up to large planes"
+msgstr "até aviões grandes"
+
+msgctxt "gate caption"
+msgid "up to {class} planes"
+msgstr "até aviões: {class}"
+
+msgctxt "gate caption"
+msgid "Unlinked: no exit facing the planes in {cells} cells"
+msgstr "Sem ligação: nenhuma saída para aviões em {cells} células"
+
+msgctxt "gate caption"
+msgid "Unlinked: Gate {gate} uses the exit"
+msgstr "Sem ligação: Portão {gate} usa a saída"
+
+msgctxt "gate caption"
+msgid "Unlinked: stand would overlap Gate {gate}"
+msgstr "Sem ligação: posição sobreporia o Portão {gate}"
+
+msgctxt "gate caption"
+msgid "Unlinked: no room for a plane"
+msgstr "Sem ligação: sem espaço para avião"
+
+msgctxt "gate caption"
+msgid "Unlinked: way to the lane blocked"
+msgstr "Sem ligação: caminho até a pista bloqueado"
+
+msgctxt "gate caption"
+msgid "Unlinked: every gate letter in use"
+msgstr "Sem ligação: todas as letras de portão em uso"
+
+msgctxt "sign caption"
+msgid "Closed"
+msgstr "Fechado"
+
+msgctxt "sign text"
+msgid "Closed · no staff on duty"
+msgstr "Fechado · ninguém em turno"
+
+msgctxt "sign text"
+msgid "Closed by you"
+msgstr "Fechado por você"
+
+msgctxt "sign text"
+msgid "Closed · staff spot blocked"
+msgstr "Fechado · posto bloqueado"
+
+msgctxt "sign text"
+msgid "Closed · staff can't reach the desk"
+msgstr "Fechado · equipe não alcança o balcão"
+
+msgctxt "sign text"
+msgid "Closed · staff can't reach the scanner"
+msgstr "Fechado · equipe não alcança o scanner"
+
+msgctxt "sign text"
+msgid "Closed · staff can't reach the counter"
+msgstr "Fechado · equipe não alcança o balcão"
+
+msgctxt "sign text"
+msgid "Closed · scanner fault, fixed by {time}"
+msgstr "Fechado · falha no scanner, conserto até {time}"
+
+msgctxt "money pop"
+msgid "+${amount}"
+msgstr "+${amount}"
+
+msgctxt "speech bubble"
+msgid "I'm late!"
+msgstr "Estou atrasado!"
+
+msgctxt "speech bubble"
+msgid "Missed my flight!"
+msgstr "Perdi meu voo!"
+
+msgctxt "speech bubble"
+msgid "Where is check-in?"
+msgstr "Onde é o check-in?"
+
+msgctxt "speech bubble"
+msgid "Where is security?"
+msgstr "Onde é a segurança?"
+
+msgctxt "speech bubble"
+msgid "Queue full"
+msgstr "Fila cheia"
+
+msgctxt "speech bubble"
+msgid "I can't get there"
+msgstr "Não consigo chegar lá"
+
+msgctxt "speech bubble"
+msgid "The exit is blocked"
+msgstr "A saída está bloqueada"
+
+msgctxt "speech bubble"
+msgid "The gate is full"
+msgstr "O portão está lotado"
+
+msgctxt "speech bubble"
+msgid "Check-in is closed"
+msgstr "Check-in fechado"
+
+msgctxt "speech bubble"
+msgid "Security is closed"
+msgstr "Segurança fechada"
+
+msgctxt "speech bubble"
+msgid "Gate is closed"
+msgstr "Portão fechado"
+
+msgctxt "speech bubble"
+msgid "Forgot my belt!"
+msgstr "Esqueci o cinto!"
+
+msgctxt "speech bubble"
+msgid "Keys in pocket!"
+msgstr "Chaves no bolso!"
+
+msgctxt "speech bubble"
+msgid "Coins in pocket!"
+msgstr "Moedas no bolso!"
+
+msgctxt "speech bubble"
+msgid "Oversized shampoo!"
+msgstr "Shampoo grande demais!"
+
+msgctxt "speech bubble"
+msgid "Too much liquid!"
+msgstr "Líquido demais!"
+
+msgctxt "speech bubble"
+msgid "Forgot my water bottle!"
+msgstr "Esqueci a garrafa d'água!"
+
+msgctxt "sign text"
+msgid "Queue full · {count} waiting"
+msgid_plural "Queue full · {count} waiting"
+msgstr[0] "Fila cheia · {count} esperando"
+msgstr[1] "Fila cheia · {count} esperando"
+
+msgctxt "lane status"
+msgid "Lane ready"
+msgstr "Corredor pronto"
+
+msgctxt "lane status"
+msgid "Needs a tray table"
+msgstr "Precisa de mesa de bandejas"
+
+msgctxt "lane status"
+msgid "Needs an X-ray belt"
+msgstr "Precisa de esteira de raio-X"
+
+msgctxt "lane status"
+msgid "Needs a pickup table"
+msgstr "Precisa de mesa de retirada"
+
+msgctxt "lane status"
+msgid "Parts face different ways"
+msgstr "Peças viradas para lados diferentes"
+
+msgctxt "lane status"
+msgid "A wall cuts through the lane"
+msgstr "Uma parede corta o corredor"
+
+msgctxt "lane status"
+msgid "Clear the way through the arch"
+msgstr "Libere a passagem pelo arco"
+
+msgctxt "lane status"
+msgid "Clear the floor for the queue"
+msgstr "Libere o piso para a fila"
+
+msgctxt "lane status"
+msgid "Clear the floor for the repack spot"
+msgstr "Libere o piso para o ponto de reorganizar"
+
+msgctxt "lane status"
+msgid "Clear the way back from the repack spot"
+msgstr "Libere a volta do ponto de reorganizar"
+
+msgctxt "lane status"
+msgid "Clear the way out past the pickup table"
+msgstr "Libere a saída após a mesa de retirada"
+
+msgctxt "lane status"
+msgid "Clear the officer's spot by the X-ray belt"
+msgstr "Libere o posto do agente junto à esteira de raio-X"
+
+msgctxt "lane status"
+msgid "Clear the helper's spot by the repack spot"
+msgstr "Libere o ponto do ajudante junto à retirada"
+
+msgctxt "lane status"
+msgid "No arch"
+msgstr "Sem arco"
+
+msgctxt "door hint"
+msgid "Put the {door} on a floor tile at the outside edge"
+msgstr "Coloque a {door} em um piso na borda externa"
+
+msgctxt "door hint"
+msgid "Put the {door} on the outside edge of the floor"
+msgstr "Coloque a {door} na borda externa do piso"
+
+msgctxt "door hint"
+msgid "Clear the floor in front of the {door}"
+msgstr "Libere o piso na frente da {door}"
+
+msgctxt "door hint"
+msgid "Take down the glass or door wall behind the {door}"
+msgstr "Remova a parede de vidro ou porta atrás da {door}"
+
+msgctxt "door hint"
+msgid "The wall behind the {door} holds a door; pick another spot"
+msgstr "A parede atrás da {door} tem uma porta; escolha outro lugar"
+
+msgctxt "ghost reason"
+msgid "{blocker} in front"
+msgstr "{blocker} na frente"
+
+msgctxt "build refusal"
+msgid "Outside the building area"
+msgstr "Fora da área de construção"
+
+msgctxt "build refusal"
+msgid "Needs floor"
+msgstr "Precisa de piso"
+
+msgctxt "build refusal"
+msgid "Unknown floor type"
+msgstr "Tipo de piso desconhecido"
+
+msgctxt "build refusal"
+msgid "Zone id must be 0 or more"
+msgstr "ID da zona deve ser 0 ou maior"
+
+msgctxt "build refusal"
+msgid "Facing must be 0 to 3"
+msgstr "Direção deve ser de 0 a 3"
+
+msgctxt "build refusal"
+msgid "Unknown object"
+msgstr "Objeto desconhecido"
+
+msgctxt "build refusal"
+msgid "Overlaps another object"
+msgstr "Sobrepõe outro objeto"
+
+msgctxt "build refusal"
+msgid "A wall runs through it"
+msgstr "Uma parede passa por ele"
+
+msgctxt "build refusal"
+msgid "The spot in front is blocked"
+msgstr "O espaço à frente está bloqueado"
+
+msgctxt "build refusal"
+msgid "Blocks the spot in front of another object"
+msgstr "Bloqueia o espaço à frente de outro objeto"
+
+msgctxt "build refusal"
+msgid "An object stands here"
+msgstr "Há um objeto aqui"
+
+msgctxt "build refusal"
+msgid "There is already a wall here"
+msgstr "Já existe uma parede aqui"
+
+msgctxt "build refusal"
+msgid "No wall here"
+msgstr "Não há parede aqui"
+
+msgctxt "build refusal"
+msgid "No such object"
+msgstr "Objeto inexistente"
+
+msgctxt "build refusal"
+msgid "Unknown wall kind"
+msgstr "Tipo de parede desconhecido"
+
+msgctxt "build refusal"
+msgid "A door needs a plain wall on each side"
+msgstr "Uma porta precisa de parede comum de cada lado"
+
+msgctxt "build refusal"
+msgid "A door stands beside this wall"
+msgstr "Há uma porta ao lado desta parede"
+
+msgctxt "build refusal"
+msgid "Entrances and exits need the outside edge, with no floor behind them"
+msgstr "Entradas e saídas precisam da borda externa, sem piso atrás"
+
+msgctxt "build refusal"
+msgid "Keep the edge behind an entrance or exit open"
+msgstr "Mantenha a borda atrás da entrada ou saída aberta"
+
+msgctxt "build refusal"
+msgid "Unknown room type"
+msgstr "Tipo de sala desconhecido"
+
+msgctxt "build refusal"
+msgid "Overlaps another room"
+msgstr "Sobrepõe outra sala"
+
+msgctxt "build refusal"
+msgid "A room covers this floor; remove the room first"
+msgstr "Uma sala ocupa este piso; remova a sala primeiro"
+
+msgctxt "build refusal"
+msgid "No such room"
+msgstr "Sala inexistente"
+
+msgctxt "build refusal"
+msgid "Not enough money"
+msgstr "Dinheiro insuficiente"
+
+msgctxt "build refusal"
+msgid "This piece has no price"
+msgstr "Esta peça não tem preço"
+
+msgctxt "build refusal"
+msgid "The money is at its limit; the refund would not fit"
+msgstr "O dinheiro está no limite; o reembolso não caberia"
+
+msgctxt "build refusal"
+msgid "Belts cannot cross; a belt joins at most three others"
+msgstr "Esteiras não podem cruzar; uma esteira se liga a no máximo três outras"
+
+msgctxt "build refusal"
+msgid "A wall is in the way of the belt"
+msgstr "Há uma parede no caminho da esteira"
+
+msgctxt "build refusal"
+msgid "Only a belt piece changes shape"
+msgstr "Apenas peças de esteira mudam de forma"
+
+msgctxt "build refusal"
+msgid "Keep the staff spot behind a desk, beside a scanner or at a lane officer's post free, with a way in"
+msgstr "Mantenha livre e com acesso o posto atrás de um balcão, ao lado do scanner ou do agente de corredor"
+
+msgctxt "build refusal"
+msgid "A wall is in the way of the lane. Remove the wall first"
+msgstr "Há uma parede no caminho do corredor. Remova a parede primeiro"
+
+msgctxt "build refusal"
+msgid "Put it on one of the marked landside spots"
+msgstr "Coloque em um dos pontos de acesso marcados"
+
+msgctxt "build refusal"
+msgid "Every spot of this kind nearby is already built"
+msgstr "Todos os pontos deste tipo por perto já foram construídos"
+
+msgctxt "build refusal"
+msgid "Cars are still in it. Close it and wait until it is empty"
+msgstr "Ainda há carros dentro. Feche e aguarde esvaziar"
+
+msgctxt "build refusal"
+msgid "A wall is in the way of the room"
+msgstr "Há uma parede no caminho da sala"
+
+msgctxt "build refusal"
+msgid "A plane uses this apron. Build here after it takes off"
+msgstr "Um avião usa este pátio. Construa após a decolagem"
+
+msgctxt "build refusal"
+msgid "You do not own this land. Buy the plot with Buy land first"
+msgstr "Você não possui este terreno. Compre o lote com Comprar terreno primeiro"
+
+msgctxt "build refusal"
+msgid "You already own this plot"
+msgstr "Você já possui este lote"
+
+msgctxt "build refusal"
+msgid "Buy a plot next to land you own"
+msgstr "Compre um lote vizinho ao terreno que você já possui"
+
+msgctxt "build refusal"
+msgid "Put a gate desk within 4 cells of a free exit facing the planes"
+msgstr "Coloque um balcão de portão a até 4 células de uma saída livre para os aviões"
+
+msgctxt "build refusal"
+msgid "A flight is still due at this gate. Remove it after the flight leaves"
+msgstr "Ainda há um voo previsto neste portão. Remova após a partida"
+
+msgctxt "build refusal"
+msgid "No other gate is free for these flights. Move them in Departures first"
+msgstr "Nenhum outro portão está livre para estes voos. Mova-os em Partidas primeiro"
+
+msgctxt "build refusal"
+msgid "Something is in front of the door"
+msgstr "Há algo na frente da porta"
+
+msgctxt "build refusal"
+msgid "A piece sits across the room's edge"
+msgstr "Uma peça atravessa a borda da sala"
+
+msgctxt "build refusal"
+msgid "Desks, scanners and lane parts cannot move with a room"
+msgstr "Balcões, scanners e peças de corredor não movem junto com a sala"
+
+msgctxt "build refusal"
+msgid "A piece does not fit at the new spot"
+msgstr "Uma peça não cabe no novo local"
+
+msgctxt "build refusal"
+msgid "Keep the way out clear for the passengers leaving the room"
+msgstr "Mantenha livre a saída para os passageiros que deixam a sala"
+
+msgctxt "build refusal"
+msgid "The room changed since it was picked up. Pick it up again"
+msgstr "A sala mudou depois que foi pega. Pegue novamente"
+
+msgctxt "build refusal"
+msgid "Not unlocked yet"
+msgstr "Ainda não desbloqueado"
+
+msgctxt "build refusal"
+msgid "No room for a plane outside this exit. Keep the ground out from it clear"
+msgstr "Sem espaço para avião fora desta saída. Mantenha a área externa livre"
+
+msgctxt "build refusal"
+msgid "Something blocks the way from this exit to the taxi lane. Clear a path out from it"
+msgstr "Algo bloqueia o caminho desta saída até a pista de táxi. Libere uma passagem"
+
+msgctxt "build refusal"
+msgid "A booked flight's plane needs this ground. Move its flights in Departures first"
+msgstr "O avião de um voo reservado precisa deste espaço. Mova os voos em Partidas primeiro"
+
+msgctxt "build refusal"
+msgid "The side taxiway would have to move and leave a booked flight with no way to its gate"
+msgstr "A pista de táxi lateral teria que mover e deixaria um voo reservado sem caminho até o portão"
+
+msgctxt "ghost reason"
+msgid "Outside the building"
+msgstr "Fora da área"
+
+msgctxt "ghost reason"
+msgid "Overlaps an object"
+msgstr "Sobrepõe objeto"
+
+msgctxt "ghost reason"
+msgid "A wall is in the way"
+msgstr "Parede no caminho"
+
+msgctxt "ghost reason"
+msgid "Front spot blocked"
+msgstr "Frente bloqueada"
+
+msgctxt "ghost reason"
+msgid "Blocks a front spot"
+msgstr "Bloqueia outra frente"
+
+msgctxt "ghost reason"
+msgid "Wall already here"
+msgstr "Já tem parede aqui"
+
+msgctxt "ghost reason"
+msgid "Needs wall on both sides"
+msgstr "Precisa parede dos dois lados"
+
+msgctxt "ghost reason"
+msgid "A door is beside it"
+msgstr "Porta ao lado"
+
+msgctxt "ghost reason"
+msgid "Needs the outside edge"
+msgstr "Precisa da borda externa"
+
+msgctxt "ghost reason"
+msgid "Keep the edge open"
+msgstr "Mantenha a borda aberta"
+
+msgctxt "ghost reason"
+msgid "Overlaps a room"
+msgstr "Sobrepõe uma sala"
+
+msgctxt "ghost reason"
+msgid "Remove the room first"
+msgstr "Remova a sala primeiro"
+
+msgctxt "ghost reason"
+msgid "Money at its limit"
+msgstr "Dinheiro no limite"
+
+msgctxt "ghost reason"
+msgid "Belts cannot cross"
+msgstr "Esteiras não cruzam"
+
+msgctxt "ghost reason"
+msgid "Keep the staff spot free"
+msgstr "Deixe o posto livre"
+
+msgctxt "ghost reason"
+msgid "A wall is in the lane"
+msgstr "Parede no corredor"
+
+msgctxt "ghost reason"
+msgid "Bad zone id"
+msgstr "ID de zona inválido"
+
+msgctxt "ghost reason"
+msgid "Only belts change shape"
+msgstr "Só esteiras mudam de forma"
+
+msgctxt "ghost reason"
+msgid "Needs a marked spot"
+msgstr "Precisa de ponto marcado"
+
+msgctxt "ghost reason"
+msgid "Spot already built"
+msgstr "Ponto já construído"
+
+msgctxt "ghost reason"
+msgid "Cars are still in it"
+msgstr "Ainda há carros dentro"
+
+msgctxt "ghost reason"
+msgid "A plane is on the apron"
+msgstr "Avião no pátio"
+
+msgctxt "ghost reason"
+msgid "Buy this land first"
+msgstr "Compre este terreno antes"
+
+msgctxt "ghost reason"
+msgid "Plot already owned"
+msgstr "Lote já é seu"
+
+msgctxt "ghost reason"
+msgid "Not next to your land"
+msgstr "Não é vizinho ao seu terreno"
+
+msgctxt "ghost reason"
+msgid "No free exit nearby"
+msgstr "Sem saída livre por perto"
+
+msgctxt "ghost reason"
+msgid "Gates are too close"
+msgstr "Portões perto demais"
+
+msgctxt "ghost reason"
+msgid "A flight is due here"
+msgstr "Há voo previsto aqui"
+
+msgctxt "ghost reason"
+msgid "Flights have no gate"
+msgstr "Voos sem portão"
+
+msgctxt "ghost reason"
+msgid "A piece is on the edge"
+msgstr "Peça na borda"
+
+msgctxt "ghost reason"
+msgid "A piece cannot move"
+msgstr "Peça não pode mover"
+
+msgctxt "ghost reason"
+msgid "A piece does not fit"
+msgstr "Peça não cabe"
+
+msgctxt "ghost reason"
+msgid "Blocks a way out"
+msgstr "Bloqueia uma saída"
+
+msgctxt "ghost reason"
+msgid "The room changed"
+msgstr "A sala mudou"
+
+msgctxt "ghost reason"
+msgid "No room for the plane"
+msgstr "Sem espaço para o avião"
+
+msgctxt "ghost reason"
+msgid "Way to the lane blocked"
+msgstr "Acesso à pista bloqueado"
+
+msgctxt "ghost reason"
+msgid "A booked plane needs it"
+msgstr "Voo reservado precisa disto"
+
+msgctxt "ghost reason"
+msgid "Strands a booked flight"
+msgstr "Isola um voo reservado"
+
+msgctxt "build status"
+msgid "Drag to lay a belt"
+msgstr "Arraste para pôr esteira"
+
+msgctxt "build status"
+msgid "Not part of a lane"
+msgstr "Fora de um corredor"
+
+msgctxt "build status"
+msgid "Its front is outside the room, so it will not count"
+msgstr "A frente está fora da sala, então não vai contar"
+
+msgctxt "build status"
+msgid "Drag stops over the menu. Move back onto the floor to keep sizing"
+msgstr "Arraste parou sobre o menu. Volte ao piso para continuar medindo"
+
+msgctxt "door tool, mid-sentence"
+msgid "entrance"
+msgstr "entrada"
+
+msgctxt "door tool, mid-sentence"
+msgid "exit"
+msgstr "saída"
+
+msgctxt "build refusal"
+msgid "Gates need {metres} m between exits. Widen the terminal"
+msgstr "Portões precisam de {metres} m entre saídas. Alargue o terminal"
+
+msgctxt "build refusal"
+msgid "{reason}: {detail}"
+msgstr "{reason}: {detail}"
+
+msgctxt "build status"
+msgid "{item} placed"
+msgstr "{item} colocado"
+
+msgctxt "room move"
+msgid "Moved {room}"
+msgstr "Movido: {room}"
+
+msgctxt "room move"
+msgid "Moved {room} for {cost}"
+msgstr "Movido: {room} por {cost}"
+
+msgctxt "room move"
+msgid "{room}: click to set down, right-click cancels"
+msgstr "{room}: clique para posicionar, botão direito cancela"
+
+msgctxt "landside plan"
+msgid "Refunds {price}"
+msgstr "Reembolsa {price}"
+
+msgctxt "landside plan"
+msgid "{place} (open, {count} car): click to close it"
+msgid_plural "{place} (open, {count} cars): click to close it"
+msgstr[0] "Local: {place} (aberto, {count} carro): clique para fechar"
+msgstr[1] "Local: {place} (aberto, {count} carros): clique para fechar"
+
+msgctxt "landside plan"
+msgid "{place} (closed, {count} car): click to open it"
+msgid_plural "{place} (closed, {count} cars): click to open it"
+msgstr[0] "Local: {place} (fechado, {count} carro): clique para abrir"
+msgstr[1] "Local: {place} (fechado, {count} carros): clique para abrir"
+
+msgctxt "landside plan"
+msgid "Remove {place}: {capacity}, {metres} m walk to the nearest landside door"
+msgstr "Remover {place}: {capacity}, {metres} m a pé até a porta mais próxima"
+
+msgctxt "landside plan"
+msgid "Remove {place}: {capacity}"
+msgstr "Remover {place}: {capacity}"
+
+msgctxt "landside plan"
+msgid "{place}: {capacity}, {metres} m walk to the nearest landside door"
+msgstr "{place}: {capacity}, {metres} m a pé até a porta mais próxima"
+
+msgctxt "landside plan"
+msgid "{place}: {capacity}"
+msgstr "{place}: {capacity}"
+
+msgctxt "landside place, mid-sentence"
+msgid "curb bay"
+msgstr "baia de embarque"
+
+msgctxt "landside place, mid-sentence"
+msgid "surface lot"
+msgstr "pátio aberto"
+
+msgctxt "landside place, mid-sentence"
+msgid "multi-storey car park"
+msgstr "edifício-garagem"
+
+msgctxt "landside plan"
+msgid "{count} car is still in it. Close it and wait until it is empty"
+msgid_plural "{count} cars are still in it. Close it and wait until it is empty"
+msgstr[0] "Ainda há {count} carro dentro. Feche e aguarde esvaziar"
+msgstr[1] "Ainda há {count} carros dentro. Feche e aguarde esvaziar"
+
+msgctxt "landside plan"
+msgid "{count} berth"
+msgid_plural "{count} berths"
+msgstr[0] "{count} vaga"
+msgstr[1] "{count} vagas"
+
+msgctxt "landside plan"
+msgid "{count} space"
+msgid_plural "{count} spaces"
+msgstr[0] "{count} vaga"
+msgstr[1] "{count} vagas"
+
+msgid "Wall gap · close the outer wall so the roof can go on"
+msgstr "Falta na parede · feche a parede externa para o telhado fechar"
+
+msgid "Taxiway works: the taxiway moves when the west side is quiet"
+msgstr "Obras na pista de táxi: a via muda quando o lado oeste estiver calmo"
+
+msgid "Taxiway works: the taxiway moves when the east side is quiet"
+msgstr "Obras na pista de táxi: a via muda quando o lado leste estiver calmo"
+
+msgid "Taxiway works: the taxiway moves when the west side is quiet, forecast {when}"
+msgstr "Obras na pista de táxi: a via muda quando o lado oeste estiver calmo, previsão {when}"
+
+msgid "Taxiway works: the taxiway moves when the east side is quiet, forecast {when}"
+msgstr "Obras na pista de táxi: a via muda quando o lado leste estiver calmo, previsão {when}"
+
+msgctxt "departure status"
+msgid "Boarding"
+msgstr "Embarcando"
+
+msgctxt "departure status"
+msgid "Doors closed"
+msgstr "Portas fechadas"
+
+msgctxt "departure status"
+msgid "Pushback"
+msgstr "Pushback"
+
+msgctxt "departure status"
+msgid "Taxiing"
+msgstr "Taxiando"
+
+msgctxt "departure status"
+msgid "Taking off"
+msgstr "Decolando"
+
+msgctxt "departure status"
+msgid "Departed"
+msgstr "Decolou"
+
+msgid "doors close {time}"
+msgstr "portas fecham às {time}"
+
+msgctxt "refusal detail"
+msgid "gate {gate} is too close"
+msgstr "o portão {gate} está perto demais"
+
+msgctxt "refusal detail"
+msgid "gate {gate}, a small plane"
+msgstr "portão {gate}, um avião pequeno"
+
+msgctxt "refusal detail"
+msgid "gate {gate}, a medium plane"
+msgstr "portão {gate}, um avião médio"
+
+msgctxt "refusal detail"
+msgid "gate {gate}, a large plane"
+msgstr "portão {gate}, um avião grande"
+
+msgctxt "build status"
+msgid "Belt {count} cell"
+msgid_plural "Belt {count} cells"
+msgstr[0] "Esteira {count} célula"
+msgstr[1] "Esteira {count} células"
+
+msgctxt "build status"
+msgid "Facing auto"
+msgstr "Direção automática"
+
+msgctxt "build status"
+msgid "Facing {facing}"
+msgstr "Direção {facing}"
+
+msgctxt "build status"
+msgid "{width} x {height}"
+msgstr "{width} x {height}"
+
+msgctxt "build status"
+msgid "{room} {width} x {height}"
+msgstr "{room} {width} x {height}"
+
+msgctxt "build status"
+msgid "{room} marked: {status}"
+msgstr "{room} marcado: {status}"
+
+msgctxt "build status"
+msgid "Drag to mark a {room}"
+msgstr "Arraste para marcar: {room}"
+
+msgctxt "item name, mid-sentence"
+msgid "atm"
+msgstr "caixa eletrônico"
+
+msgctxt "item name, mid-sentence"
+msgid "baggage belt"
+msgstr "esteira de bagagem"
+
+msgctxt "item name, mid-sentence"
+msgid "baggage cart"
+msgstr "carrinho de bagagem"
+
+msgctxt "item name, mid-sentence"
+msgid "bar counter"
+msgstr "balcão de bar"
+
+msgctxt "item name, mid-sentence"
+msgid "belt corner"
+msgstr "curva de esteira"
+
+msgctxt "item name, mid-sentence"
+msgid "belt end"
+msgstr "ponta de esteira"
+
+msgctxt "item name, mid-sentence"
+msgid "belt merge"
+msgstr "junção de esteira"
+
+msgctxt "item name, mid-sentence"
+msgid "bench"
+msgstr "banco"
+
+msgctxt "item name, mid-sentence"
+msgid "bin"
+msgstr "lixeira"
+
+msgctxt "item name, mid-sentence"
+msgid "bush"
+msgstr "arbusto"
+
+msgctxt "item name, mid-sentence"
+msgid "cafe counter"
+msgstr "balcão de café"
+
+msgctxt "item name, mid-sentence"
+msgid "cafe table"
+msgstr "mesa de café"
+
+msgctxt "item name, mid-sentence"
+msgid "chain"
+msgstr "fita de fila"
+
+msgctxt "item name, mid-sentence"
+msgid "check-in desk"
+msgstr "balcão de check-in"
+
+msgctxt "item name, mid-sentence"
+msgid "clothes rail"
+msgstr "arara de roupas"
+
+msgctxt "item name, mid-sentence"
+msgid "confiscation bin"
+msgstr "caixa de itens retidos"
+
+msgctxt "item name, mid-sentence"
+msgid "currency exchange"
+msgstr "casa de câmbio"
+
+msgctxt "item name, mid-sentence"
+msgid "display stand"
+msgstr "expositor"
+
+msgctxt "item name, mid-sentence"
+msgid "duty free shelf"
+msgstr "prateleira duty free"
+
+msgctxt "item name, mid-sentence"
+msgid "duty free till"
+msgstr "caixa duty free"
+
+msgctxt "item name, mid-sentence"
+msgid "entrance"
+msgstr "entrada"
+
+msgctxt "item name, mid-sentence"
+msgid "exit to the plane"
+msgstr "saída para o avião"
+
+msgctxt "item name, mid-sentence"
+msgid "fashion till"
+msgstr "caixa de moda"
+
+msgctxt "item name, mid-sentence"
+msgid "fountain"
+msgstr "fonte"
+
+msgctxt "item name, mid-sentence"
+msgid "gate desk"
+msgstr "balcão de portão"
+
+msgctxt "item name, mid-sentence"
+msgid "gate seats"
+msgstr "assentos de portão"
+
+msgctxt "item name, mid-sentence"
+msgid "grab-and-go stall"
+msgstr "barraca rápida"
+
+msgctxt "item name, mid-sentence"
+msgid "info desk"
+msgstr "balcão de informações"
+
+msgctxt "item name, mid-sentence"
+msgid "info screen"
+msgstr "painel de informações"
+
+msgctxt "item name, mid-sentence"
+msgid "kiosk counter"
+msgstr "balcão de quiosque"
+
+msgctxt "item name, mid-sentence"
+msgid "lounge armchair"
+msgstr "poltrona de sala VIP"
+
+msgctxt "item name, mid-sentence"
+msgid "lounge sofa"
+msgstr "sofá de sala VIP"
+
+msgctxt "item name, mid-sentence"
+msgid "nap pod"
+msgstr "cápsula de sono"
+
+msgctxt "item name, mid-sentence"
+msgid "pharmacy counter"
+msgstr "balcão de farmácia"
+
+msgctxt "item name, mid-sentence"
+msgid "pharmacy shelf"
+msgstr "prateleira de farmácia"
+
+msgctxt "item name, mid-sentence"
+msgid "pickup table"
+msgstr "mesa de retirada"
+
+msgctxt "item name, mid-sentence"
+msgid "plant pot"
+msgstr "vaso de planta"
+
+msgctxt "item name, mid-sentence"
+msgid "planter"
+msgstr "jardineira"
+
+msgctxt "item name, mid-sentence"
+msgid "play blocks"
+msgstr "blocos de montar"
+
+msgctxt "item name, mid-sentence"
+msgid "play slide"
+msgstr "escorregador"
+
+msgctxt "item name, mid-sentence"
+msgid "post"
+msgstr "pedestal"
+
+msgctxt "item name, mid-sentence"
+msgid "prize podium"
+msgstr "pódio de prêmio"
+
+msgctxt "item name, mid-sentence"
+msgid "restaurant booth"
+msgstr "cabine de restaurante"
+
+msgctxt "item name, mid-sentence"
+msgid "restaurant table"
+msgstr "mesa de restaurante"
+
+msgctxt "item name, mid-sentence"
+msgid "screen"
+msgstr "tela"
+
+msgctxt "item name, mid-sentence"
+msgid "search table"
+msgstr "mesa de revista"
+
+msgctxt "item name, mid-sentence"
+msgid "security arch"
+msgstr "arco de segurança"
+
+msgctxt "item name, mid-sentence"
+msgid "security scanner"
+msgstr "scanner de segurança"
+
+msgctxt "item name, mid-sentence"
+msgid "shower"
+msgstr "chuveiro"
+
+msgctxt "item name, mid-sentence"
+msgid "sink"
+msgstr "pia"
+
+msgctxt "item name, mid-sentence"
+msgid "statue"
+msgstr "estátua"
+
+msgctxt "item name, mid-sentence"
+msgid "toilet stall"
+msgstr "cabine de banheiro"
+
+msgctxt "item name, mid-sentence"
+msgid "tray table"
+msgstr "mesa de bandejas"
+
+msgctxt "item name, mid-sentence"
+msgid "tree"
+msgstr "árvore"
+
+msgctxt "item name, mid-sentence"
+msgid "tree bench"
+msgstr "banco com árvore"
+
+msgctxt "item name, mid-sentence"
+msgid "work desk"
+msgstr "mesa de trabalho"
+
+msgctxt "item name, mid-sentence"
+msgid "x-ray belt"
+msgstr "esteira de raio-X"
+
+msgctxt "station status"
+msgid "Closed by you"
+msgstr "Fechado por você"
+
+msgctxt "station status"
+msgid "Finishing current service"
+msgstr "Finalizando atendimento atual"
+
+msgctxt "station status"
+msgid "Waiting for staff"
+msgstr "Aguardando equipe"
+
+msgctxt "station status"
+msgid "Staff on the way"
+msgstr "Equipe a caminho"
+
+msgctxt "station status"
+msgid "Serving"
+msgstr "Atendendo"
+
+msgctxt "station status"
+msgid "Scanner fault"
+msgstr "Falha no scanner"
+
+msgctxt "station status"
+msgid "Scanner fault, fixed by {time}"
+msgstr "Falha no scanner, conserto até {time}"
+
+msgctxt "menu"
+msgid "Save"
+msgstr "Salvar"
+
+msgctxt "menu"
+msgid "Load"
+msgstr "Carregar"
+
 msgctxt "menu"
 msgid "Continue"
 msgstr "Continuar"
@@ -17,46 +4478,419 @@ msgid "New Airport"
 msgstr "Novo aeroporto"
 
 msgctxt "menu"
-msgid "Load"
-msgstr "Carregar"
-
-msgctxt "menu"
 msgid "Wishlist"
 msgstr "Lista de desejos"
-
-msgid "Send Feedback"
-msgstr "Enviar feedback"
 
 msgctxt "menu"
 msgid "Quit"
 msgstr "Sair"
 
 msgctxt "menu"
-msgid "Audio"
-msgstr "Áudio"
-
-msgctxt "menu"
 msgid "Back"
 msgstr "Voltar"
+
+msgid "{slot}, {time}"
+msgstr "{slot}, {time}"
+
+msgid "Manual save"
+msgstr "Salvamento manual"
+
+msgid "Autosave {number}"
+msgstr "Salvamento automático {number}"
+
+msgid "Food: hungry passengers lose mood. A cafe feeds them."
+msgstr "Comida: passageiros com fome perdem humor. Um café os alimenta."
+
+msgid "Security: more lanes mean shorter queues at the checkpoint."
+msgstr "Segurança: mais corredores encurtam as filas na inspeção."
+
+msgid "Baggage: belts carry checked bags. A late bag misses its flight."
+msgstr "Bagagem: esteiras levam malas despachadas. Mala atrasada perde o voo."
+
+msgid "Comfort: seats and lounges calm passengers who wait."
+msgstr "Conforto: assentos e salas VIP acalmam quem espera."
+
+msgid "Runway: a longer runway takes bigger planes."
+msgstr "Pista: uma pista maior recebe aviões maiores."
+
+msgid "Also new: {pieces}."
+msgstr "Também novo: {pieces}."
+
+msgctxt "build refusal"
+msgid "A flight is still due at this gate. Remove it after the flight leaves: {flights}"
+msgid_plural "Flights are still due at this gate. Remove it after they leave: {flights}"
+msgstr[0] "Ainda há um voo previsto neste portão. Remova após a partida: {flights}"
+msgstr[1] "Ainda há voos previstos neste portão. Remova após a partida: {flights}"
+
+msgctxt "build refusal"
+msgid "No other gate is free for these flights. Move them in Departures first: {flights}"
+msgid_plural "No other gate is free for these flights. Move them in Departures first: {flights}"
+msgstr[0] "Nenhum outro portão está livre para estes voos. Mova-os em Partidas primeiro: {flights}"
+msgstr[1] "Nenhum outro portão está livre para estes voos. Mova-os em Partidas primeiro: {flights}"
+
+msgctxt "build refusal"
+msgid "The side taxiway would have to move and leave a booked flight with no way to its gate: {flights}"
+msgid_plural "The side taxiway would have to move and leave booked flights with no way to their gates: {flights}"
+msgstr[0] "A pista de táxi lateral teria que mover e deixaria um voo reservado sem caminho até o portão: {flights}"
+msgstr[1] "A pista de táxi lateral teria que mover e deixaria voos reservados sem caminho até os portões: {flights}"
+
+msgctxt "flight label"
+msgid "the {time} flight"
+msgstr "o voo das {time}"
+
+msgctxt "flight label"
+msgid "the {time} {airline} flight to {city}"
+msgstr "o voo das {time} da {airline} para {city}"
+
+msgctxt "offer clash"
+msgid "it clashes with the {time} {airline} flight to {city} on the runway"
+msgstr "ele conflita com o voo das {time} da {airline} para {city} na pista"
+
+msgctxt "offer clash"
+msgid "it clashes with the {time} {airline} flight to {city} on the taxi lane"
+msgstr "ele conflita com o voo das {time} da {airline} para {city} na pista de táxi"
+
+msgctxt "offer clash"
+msgid "it clashes with the {time} {airline} flight to {city} at gate {gate}"
+msgstr "ele conflita com o voo das {time} da {airline} para {city} no portão {gate}"
+
+msgctxt "offer clash"
+msgid "it clashes with the {time} flight on the runway"
+msgstr "ele conflita com o voo das {time} na pista"
+
+msgctxt "offer clash"
+msgid "it clashes with the {time} flight on the taxi lane"
+msgstr "ele conflita com o voo das {time} na pista de táxi"
+
+msgctxt "offer clash"
+msgid "it clashes with the {time} flight at gate {gate}"
+msgstr "ele conflita com o voo das {time} no portão {gate}"
+
+msgctxt "offer clash"
+msgid "it clashes with another flight on the runway"
+msgstr "ele conflita com outro voo na pista"
+
+msgctxt "offer clash"
+msgid "it clashes with another flight on the taxi lane"
+msgstr "ele conflita com outro voo na pista de táxi"
+
+msgctxt "offer clash"
+msgid "it clashes with another flight at gate {gate}"
+msgstr "ele conflita com outro voo no portão {gate}"
+
+msgctxt "list of two"
+msgid "{first} and {second}"
+msgstr "{first} e {second}"
+
+msgctxt "list start"
+msgid "{first}, {rest}"
+msgstr "{first}, {rest}"
+
+msgctxt "list middle"
+msgid "{item}, {rest}"
+msgstr "{item}, {rest}"
+
+msgctxt "list end"
+msgid "{item} and {last}"
+msgstr "{item} e {last}"
+
+msgid "Quit log"
+msgstr "Registro de saída"
+
+msgid "Records where you stop playing: the day, money, stars, builds, flights and alerts, never what you click or type. The file stays on this computer and nothing is sent."
+msgstr "Registra onde você parou de jogar: dia, dinheiro, estrelas, construções, voos e alertas, nunca cliques ou teclas. O arquivo fica neste computador e nada é enviado."
+
+msgid "Open log folder"
+msgstr "Abrir pasta de logs"
+
+msgid "Could not open the log folder: {path}"
+msgstr "Não foi possível abrir a pasta de logs: {path}"
+
+msgid "Could not start the quit log in {path}"
+msgstr "Não foi possível iniciar o registro de saída em {path}"
+
+msgid "Passengers board at a gate. Place a gate desk by an exit that faces the planes."
+msgstr "Passageiros embarcam em um portão. Coloque um balcão de portão junto a uma saída virada para os aviões."
+
+msgid "Passengers wait at the gate. Place seats near it; the airport opens without them."
+msgstr "Passageiros esperam no portão. Coloque assentos por perto; o aeroporto abre sem eles."
+
+msgid "Click a passenger to follow them to their flight"
+msgstr "Clique em um passageiro para segui-lo até o voo"
+
+msgid "Show me"
+msgstr "Mostrar"
+
+msgid "No carry-on bags"
+msgstr "Sem bagagem de mão"
+
+msgid "{count} carry-on bag"
+msgid_plural "{count} carry-on bags"
+msgstr[0] "{count} bagagem de mão"
+msgstr[1] "{count} bagagens de mão"
+
+msgid "carrying liquids"
+msgstr "levando líquidos"
+
+msgid "a checked bag that missed the plane"
+msgstr "uma mala despachada que perdeu o avião"
+
+msgid "a checked bag still to drop off"
+msgstr "uma mala despachada ainda por entregar"
+
+msgid "no checked bag"
+msgstr "sem mala despachada"
+
+msgid "a checked bag at the desk"
+msgstr "uma mala despachada no balcão"
+
+msgid "a checked bag on the belt"
+msgstr "uma mala despachada na esteira"
+
+msgid "a checked bag stuck on the belt"
+msgstr "uma mala despachada travada na esteira"
+
+msgid "a checked bag in the bag room"
+msgstr "uma mala despachada na sala de bagagem"
+
+msgid "a checked bag loaded on the plane"
+msgstr "uma mala despachada embarcada no avião"
+
+msgid "Cutting it fine, no shopping planned"
+msgstr "Em cima da hora, sem compras previstas"
+
+msgid "Cutting it fine, hoping for a quick stop at the kiosk"
+msgstr "Em cima da hora, querendo passar rápido no quiosque"
+
+msgid "Cutting it fine, needs the pharmacy"
+msgstr "Em cima da hora, precisa da farmácia"
+
+msgid "Cutting it fine, hoping for duty free"
+msgstr "Em cima da hora, querendo ir ao duty free"
+
+msgid "Cutting it fine, hoping to browse the fashion shop"
+msgstr "Em cima da hora, querendo olhar a loja de moda"
+
+msgid "Right on time, no shopping planned"
+msgstr "Bem na hora, sem compras previstas"
+
+msgid "Right on time, hoping for a quick stop at the kiosk"
+msgstr "Bem na hora, querendo passar rápido no quiosque"
+
+msgid "Right on time, needs the pharmacy"
+msgstr "Bem na hora, precisa da farmácia"
+
+msgid "Right on time, hoping for duty free"
+msgstr "Bem na hora, querendo ir ao duty free"
+
+msgid "Right on time, hoping to browse the fashion shop"
+msgstr "Bem na hora, querendo olhar a loja de moda"
+
+msgid "Early bird, no shopping planned"
+msgstr "Chegou cedo, sem compras previstas"
+
+msgid "Early bird, hoping for a quick stop at the kiosk"
+msgstr "Chegou cedo, querendo passar rápido no quiosque"
+
+msgid "Early bird, needs the pharmacy"
+msgstr "Chegou cedo, precisa da farmácia"
+
+msgid "Early bird, hoping for duty free"
+msgstr "Chegou cedo, querendo ir ao duty free"
+
+msgid "Early bird, hoping to browse the fashion shop"
+msgstr "Chegou cedo, querendo olhar a loja de moda"
+
+msgid "{count} desk full · {waiting} waiting · short queue: move the desk away from the wall"
+msgid_plural "{count} desks full · {waiting} waiting · short queue: move a desk away from the wall"
+msgstr[0] "{count} balcão cheio · {waiting} na fila · fila curta: afaste o balcão da parede"
+msgstr[1] "{count} balcões cheios · {waiting} na fila · fila curta: afaste um balcão da parede"
+
+msgid "{count} lane full · {waiting} waiting · short queue: move the scanner away from the wall"
+msgid_plural "{count} lanes full · {waiting} waiting · short queue: move a scanner away from the wall"
+msgstr[0] "{count} corredor cheio · {waiting} na fila · fila curta: afaste o scanner da parede"
+msgstr[1] "{count} corredores cheios · {waiting} na fila · fila curta: afaste um scanner da parede"
+
+msgctxt "sign text"
+msgid "Queue full · {count} waiting · short queue: move the desk away from the wall"
+msgid_plural "Queue full · {count} waiting · short queue: move the desk away from the wall"
+msgstr[0] "Fila cheia · {count} na fila · fila curta: afaste o balcão da parede"
+msgstr[1] "Fila cheia · {count} na fila · fila curta: afaste o balcão da parede"
+
+msgctxt "sign text"
+msgid "Queue full · {count} waiting · short queue: move the scanner away from the wall"
+msgid_plural "Queue full · {count} waiting · short queue: move the scanner away from the wall"
+msgstr[0] "Fila cheia · {count} na fila · fila curta: afaste o scanner da parede"
+msgstr[1] "Fila cheia · {count} na fila · fila curta: afaste o scanner da parede"
+
+msgctxt "sign text"
+msgid "Queue full · {count} waiting · short queue: move the counter away from the wall"
+msgid_plural "Queue full · {count} waiting · short queue: move the counter away from the wall"
+msgstr[0] "Fila cheia · {count} na fila · fila curta: afaste o balcão da parede"
+msgstr[1] "Fila cheia · {count} na fila · fila curta: afaste o balcão da parede"
+
+msgid "{count} station is closed · staff are on the way"
+msgid_plural "{count} stations are closed · staff are on the way"
+msgstr[0] "{count} posto fechado · equipe a caminho"
+msgstr[1] "{count} postos fechados · equipe a caminho"
+
+msgid "GOTTA AIR"
+msgstr "GOTTA AIR"
+
+msgid "Station manager"
+msgstr "Gerente de estação"
+
+msgid "Gotta Air here. Welcome, your airport is open, and I hear it is the only one with a dent in the carpet."
+msgstr "Aqui é a Gotta Air. Boas-vindas! Seu aeroporto está aberto, e ouvi dizer que é o único com um amassado no carpete."
+
+msgid "Our first flight to Oslo leaves at {departure_time}. It is a small plane, so please keep the luggage small too."
+msgstr "Nosso primeiro voo para Oslo parte às {departure_time}. É um avião pequeno, então mantenham as malas pequenas também."
+
+msgid "Your first passengers are on their way in now."
+msgstr "Seus primeiros passageiros já estão entrando agora."
+
+msgid "Good luck. Gotta make that flight!"
+msgstr "Boa sorte. Não podemos perder esse voo!"
+
+msgid "In the full game"
+msgstr "No jogo completo"
+
+msgid "Demo limit: 1 extra plot (more in the full game)"
+msgstr "Limite da demo: 1 lote extra (mais no jogo completo)"
+
+msgid "Send Feedback"
+msgstr "Enviar feedback"
+
+msgid "{slot}, {time} (Older version)"
+msgstr "{slot}, {time} (Versão antiga)"
+
+msgid "This save is from an older version and cannot be loaded after an update. Please start a New Airport."
+msgstr "Este save é de uma versão anterior e não pode ser carregado após a atualização. Inicie um Novo aeroporto."
+
+msgid "This save file cannot be read."
+msgstr "Não foi possível ler este arquivo salvo."
+
+msgid "This save is from a newer version and cannot be loaded. Please update the game."
+msgstr "Este save é de uma versão mais recente e não pode ser carregado. Atualize o jogo."
+
+msgid "{slot}, {time} (Unreadable)"
+msgstr "{slot}, {time} (Ilegível)"
+
+msgid "{slot}, {time} (Newer version)"
+msgstr "{slot}, {time} (Versão mais nova)"
+
+msgid "Made my flight at the last second!"
+msgstr "Peguei meu voo no último segundo!"
+
+msgid "{count} made it at the last second!"
+msgid_plural "{count} made it at the last second!"
+msgstr[0] "{count} embarcou no último segundo!"
+msgstr[1] "{count} embarcaram no último segundo!"
+
+msgid "{count} running late"
+msgid_plural "{count} running late"
+msgstr[0] "{count} atrasado"
+msgstr[1] "{count} atrasados"
+
+msgid "Follow the tightest running-late passenger"
+msgstr "Seguir o passageiro mais atrasado"
+
+msgctxt "pa"
+msgid "PA: Boarding now for {airline} to {city} at Gate {gate}."
+msgstr "Aviso: Embarque imediato para {airline} destino {city} no Portão {gate}."
+
+msgctxt "pa"
+msgid "PA: Boarding now for {airline} to {city}."
+msgstr "Aviso: Embarque imediato para {airline} destino {city}."
+
+msgctxt "pa"
+msgid "PA: Boarding now for {flight} at Gate {gate}."
+msgstr "Aviso: Embarque imediato para {flight} no Portão {gate}."
+
+msgctxt "pa"
+msgid "PA: Boarding now for {flight}."
+msgstr "Aviso: Embarque imediato para {flight}."
+
+msgctxt "pa"
+msgid "PA: Final call for {airline} to {city} at Gate {gate}. Doors close soon."
+msgstr "Aviso: Última chamada para {airline} destino {city} no Portão {gate}. Portas fecham em breve."
+
+msgctxt "pa"
+msgid "PA: Final call for {airline} to {city}. Doors close soon."
+msgstr "Aviso: Última chamada para {airline} destino {city}. Portas fecham em breve."
+
+msgctxt "pa"
+msgid "PA: Final call for {flight} at Gate {gate}. Doors close soon."
+msgstr "Aviso: Última chamada para {flight} no Portão {gate}. Portas fecham em breve."
+
+msgctxt "pa"
+msgid "PA: Final call for {flight}. Doors close soon."
+msgstr "Aviso: Última chamada para {flight}. Portas fecham em breve."
+
+msgctxt "pa"
+msgid "PA: A minor beverage incident in the terminal. Please step around the enthusiasm."
+msgstr "Aviso: Um pequeno incidente com bebida no terminal. Por favor, desviem do entusiasmo."
+
+msgctxt "pa"
+msgid "PA: One security scanner has paused for a brief reset. Other lanes remain open."
+msgstr "Aviso: Um scanner de segurança pausou para breve reinicialização. Os outros corredores seguem abertos."
+
+msgctxt "pa"
+msgid "PA: A seasonal rush is arriving. Everyone is early except the queue."
+msgstr "Aviso: Movimento sazonal chegando. Todos chegaram cedo, menos a fila."
+
+msgctxt "pa"
+msgid "PA: Check-in queue is full. Please admire the terminal flooring while waiting."
+msgstr "Aviso: Fila do check-in lotada. Admirem o piso do terminal enquanto aguardam."
+
+msgctxt "pa"
+msgid "PA: Security queue is full. Take a moment to pre-untie your shoes."
+msgstr "Aviso: Fila da segurança lotada. Aproveitem para desamarrar os sapatos antes."
+
+msgctxt "pa"
+msgid "PA: Bravo to the passenger who caught {airline} to {city} at Gate {gate} just in time."
+msgstr "Aviso: Bravo ao passageiro que pegou {airline} para {city} no Portão {gate} bem na hora."
+
+msgctxt "pa"
+msgid "PA: Bravo to the passenger who caught {airline} to {city} just in time."
+msgstr "Aviso: Bravo ao passageiro que pegou {airline} para {city} bem na hora."
+
+msgctxt "pa"
+msgid "PA: Bravo to the passenger who caught {flight} at Gate {gate} just in time."
+msgstr "Aviso: Bravo ao passageiro que pegou {flight} no Portão {gate} bem na hora."
+
+msgctxt "pa"
+msgid "PA: Bravo to the passenger who caught {flight} with seconds to spare."
+msgstr "Aviso: Bravo ao passageiro que pegou {flight} faltando segundos."
+
+msgctxt "pa"
+msgid "PA: Our terminal is now rated {stars} stars. Same carpet, slightly prouder management."
+msgstr "Aviso: Nosso terminal agora tem {stars} estrelas. Mesmo carpete, gerência um pouco mais orgulhosa."
+
+msgid "Ramp agents"
+msgstr "Agentes de pátio"
+
+msgid "Ramp agent needed for baggage"
+msgstr "Agente de pátio necessário para bagagem"
+
+msgid "No ramp agents hired · hire one on Staff"
+msgstr "Nenhum agente de pátio contratado · contrate em Equipe"
+
+msgid "All ramp agents busy · hire another on Staff"
+msgstr "Todos os agentes de pátio ocupados · contrate outro em Equipe"
+
+msgid "Ramp agent needed for pushback"
+msgstr "Agente de pátio necessário para pushback"
+
+msgid "Emergency tug called (-{fee}) · Hire a ramp agent on Staff"
+msgstr "Reboque de emergência chamado (-{fee}) · Contrate um agente de pátio em Equipe"
 
 msgid "Language"
 msgstr "Idioma"
 
-msgid "Game menu"
-msgstr "Menu do jogo"
-
-msgid "Resume ({key})"
-msgstr "Retomar ({key})"
-
 msgctxt "menu"
-msgid "Save"
-msgstr "Salvar"
-
-msgid "Settings"
-msgstr "Configurações"
-
-msgid "Back"
-msgstr "Voltar"
+msgid "Audio"
+msgstr "Áudio"
 
 msgid "Audio"
 msgstr "Áudio"
@@ -76,260 +4910,1260 @@ msgstr "Efeitos"
 msgid "{percent}%"
 msgstr "{percent}%"
 
-msgid "Incidents"
-msgstr "Incidentes"
+msgctxt "menu"
+msgid "Main Menu"
+msgstr "Menu principal"
 
-msgid "Quit log"
-msgstr "Registro de saída"
+msgctxt "menu"
+msgid "Quit to Desktop"
+msgstr "Sair para a área de trabalho"
 
-msgid "Open log folder"
-msgstr "Abrir pasta de logs"
+msgctxt "menu"
+msgid "Save & Exit"
+msgstr "Salvar e sair"
 
-msgid "v{version}"
-msgstr "v{version}"
+msgctxt "menu"
+msgid "Exit without Saving"
+msgstr "Sair sem salvar"
 
-msgid "Build mode"
-msgstr "Modo construção"
+msgctxt "menu"
+msgid "Cancel"
+msgstr "Cancelar"
 
-msgctxt "narrow build mode sign"
-msgid "Build"
-msgstr "Construir"
+msgid "Return to main menu?"
+msgstr "Voltar ao menu principal?"
 
-msgctxt "build menu"
-msgid "Building"
-msgstr "Edifício"
+msgid "Quit to desktop?"
+msgstr "Sair para a área de trabalho?"
 
-msgctxt "build menu"
-msgid "Operations"
-msgstr "Operações"
+msgid "Unsaved progress will be lost."
+msgstr "O progresso não salvo será perdido."
 
-msgctxt "build menu"
-msgid "Facilities"
-msgstr "Instalações"
+msgid "Cannot save right now: {reason}"
+msgstr "Não é possível salvar agora: {reason}"
 
-msgctxt "build menu"
-msgid "Food & Drink"
-msgstr "Comida e bebida"
+msgid "Could not save the game."
+msgstr "Não foi possível salvar o jogo."
 
-msgctxt "build menu"
-msgid "Shops"
-msgstr "Lojas"
+msgid "Camera angle"
+msgstr "Ângulo da câmera"
 
-msgctxt "build menu"
-msgid "Decor"
-msgstr "Decoração"
+msgid "Low (38°)"
+msgstr "Baixo (38°)"
 
-msgctxt "build menu"
-msgid "Remove"
-msgstr "Remover"
+msgid "Medium (54°)"
+msgstr "Médio (54°)"
 
-msgctxt "build menu"
-msgid "Templates"
-msgstr "Modelos"
+msgid "Top-Down (70°)"
+msgstr "De cima (70°)"
 
-msgctxt "build menu"
-msgid "Staff"
-msgstr "Equipe"
+msgid "Custom ({angle}°)"
+msgstr "Personalizado ({angle}°)"
 
-msgctxt "build menu"
-msgid "All"
-msgstr "Tudo"
+msgid "Welcome to your new airport! Open Operations on the bottom bar to place a check-in desk, security scanner, and gate desk."
+msgstr "Boas-vindas ao seu novo aeroporto! Abra Operações na barra inferior para colocar um balcão de check-in, scanner de segurança e balcão de portão."
 
-msgctxt "build menu"
-msgid "Rooms"
-msgstr "Salas"
+msgid "Then open Staff to hire an agent, an officer, and a gate agent so the airport can open. {pause} pauses, {speed} sets speed."
+msgstr "Depois abra Equipe para contratar um agente, um segurança e um agente de portão para abrir o aeroporto. {pause} pausa, {speed} ajusta a velocidade."
 
-msgctxt "build menu"
-msgid "Check-in desk"
-msgstr "Balcão check-in"
+msgid "Now that the airport is open, some days bring trouble: a spill on the floor, an inspector, a holiday rush. Shall I send those your way?"
+msgstr "Agora que o aeroporto abriu, alguns dias trazem imprevistos: sujeira no piso, um inspetor, movimento de feriado. Posso mandar esses desafios para você?"
 
-msgctxt "build menu"
-msgid "Gate desk"
-msgstr "Balcão de portão"
+msgid "Place Check-in (Operations)"
+msgstr "Coloque Check-in (Operações)"
 
-msgctxt "build menu"
-msgid "Security"
-msgstr "Segurança"
+msgid "Open a closed Check-in desk"
+msgstr "Abra um balcão de check-in fechado"
 
-msgctxt "build menu"
-msgid "Bag room"
-msgstr "Sala de bagagem"
+msgid "Hire Check-in agent (Staff)"
+msgstr "Contrate agente de check-in (Equipe)"
 
-msgctxt "build menu"
-msgid "Toilet"
-msgstr "Banheiro"
+msgid "Check-in agent on the way"
+msgstr "Agente de check-in a caminho"
 
-msgctxt "price"
-msgid "Free"
-msgstr "Grátis"
+msgid "Place Security (Operations)"
+msgstr "Coloque Segurança (Operações)"
 
-msgid "Locked"
-msgstr "Bloqueado"
+msgid "Open a closed Security scanner or lane"
+msgstr "Abra um scanner ou corredor fechado"
 
-msgid "In the full game"
-msgstr "No jogo completo"
+msgid "Hire Security officer (Staff)"
+msgstr "Contrate agente de segurança (Equipe)"
 
-msgid "Offers ({count})"
-msgstr "Ofertas ({count})"
+msgid "Security officer on the way"
+msgstr "Agente de segurança a caminho"
 
-msgid "Runway"
-msgstr "Pista"
+msgid "Place Gate Desk (Operations)"
+msgstr "Coloque Balcão de portão (Operações)"
 
-msgid "Planner ({key})"
-msgstr "Agenda ({key})"
+msgid "Hire Gate agent (Staff)"
+msgstr "Contrate agente de portão (Equipe)"
 
-msgid "Departures ({key})"
-msgstr "Partidas ({key})"
+msgid "Gate agent on the way"
+msgstr "Agente de portão a caminho"
 
-msgid "Mood ({key})"
-msgstr "Humor ({key})"
+msgid "Place Seats near the gate (Operations)"
+msgstr "Coloque Assentos perto do portão (Operações)"
 
-msgid "Hints ({key})"
-msgstr "Dicas ({key})"
+msgid "Station unstaffed: hire staff (Staff)"
+msgstr "Posto sem equipe: contrate equipe (Equipe)"
 
-msgid "Reset hints"
-msgstr "Resetar dicas"
+msgid "Passengers need a toilet: build Toilet room (Facilities)"
+msgstr "Passageiros precisam de banheiro: construa Banheiro (Instalações)"
 
-msgid "No flights yet"
-msgstr "Sem voos ainda"
+msgid "Passengers are hungry: build Cafe (Food & Drink)"
+msgstr "Passageiros estão com fome: construa Café (Comida e bebida)"
 
-msgctxt "clock"
-msgid "Day {day}  {time}"
-msgstr "Dia {day}  {time}"
+msgid "Airline Contracts — Accept to schedule flights"
+msgstr "Contratos aéreos — Aceite para agendar voos"
 
-msgid "Alerts"
-msgstr "Alertas"
+msgid "{boarded}/{booked} boarded"
+msgstr "{boarded}/{booked} embarcaram"
 
-msgid "Alerts ({count})"
-msgstr "Alertas ({count})"
+msgid "3-day rolling on-time rate (70% of your star rating)"
+msgstr "Pontualidade móvel de 3 dias (70% da sua avaliação)"
 
-msgid "Alert history"
-msgstr "Histórico de alertas"
+msgid "In terminal: {active}"
+msgstr "No terminal: {active}"
 
-msgid "Show alert cards"
-msgstr "Mostrar alertas"
+msgid "· {count} late"
+msgstr "· {count} atrasado(s)"
 
-msgid "No alerts yet"
-msgstr "Sem alertas ainda"
+msgid "On time: {percent}%"
+msgstr "No horário: {percent}%"
 
-msgid "Today"
-msgstr "Hoje"
+msgid "On time: —"
+msgstr "No horário: —"
 
-msgid "Tomorrow"
-msgstr "Amanhã"
+msgid "Departures ({key}) · {count} late"
+msgstr "Partidas ({key}) · {count} atrasado(s)"
 
-msgid "No flights scheduled"
-msgstr "Nenhum voo agendado"
-
-msgid "Made {made}  Missed {missed}  In terminal {active}"
-msgstr "Embarcados {made}  Perdidos {missed}  No terminal {active}"
-
-msgid "To open the airport"
-msgstr "Para abrir o aeroporto"
-
-msgid "Your airport needs"
-msgstr "Seu aeroporto precisa"
-
-msgctxt "staff button"
-msgid "Hire · {wage}/day"
-msgstr "Contratar · {wage}/dia"
-
-msgctxt "staff button"
-msgid "Fire"
-msgstr "Demitir"
-
-msgid "Check-in agents"
-msgstr "Agentes check-in"
-
-msgid "Security officers"
-msgstr "Agentes segurança"
-
-msgid "Gate agents"
-msgstr "Agentes de portão"
-
-msgid "Shop staff"
-msgstr "Atendentes"
-
-msgid "Cleaners"
-msgstr "Zeladores"
-
-msgid "Ramp agents"
-msgstr "Agentes de pátio"
-
-msgid "{hired} hired, {duty} on duty"
-msgstr "{hired} contratados, {duty} em turno"
-
-msgid "{hired} hired, {duty} cleaning"
-msgstr "{hired} contratados, {duty} limpando"
-
-msgctxt "mood overlay mode"
-msgid "Mood"
-msgstr "Humor"
-
-msgctxt "mood overlay mode"
-msgid "Hunger"
-msgstr "Fome"
-
-msgctxt "mood overlay mode"
-msgid "Toilet"
-msgstr "Banheiro"
-
-msgctxt "mood overlay mode"
-msgid "Boredom"
-msgstr "Tédio"
-
-msgctxt "mood overlay mode"
-msgid "Late"
-msgstr "Atrasado"
-
-msgctxt "speed button"
-msgid "Pause ({key})"
-msgstr "Pausa ({key})"
-
-msgctxt "speed button"
-msgid "Speed {speed}x ({key})"
-msgstr "Velocidade {speed}x ({key})"
-
-msgctxt "gate caption"
-msgid "Gate {gate}"
-msgstr "Portão {gate}"
+msgid "Departures ({key}) · {count} today"
+msgstr "Partidas ({key}) · {count} hoje"
 
 msgctxt "gate name"
-msgid "Gate {gate}"
-msgstr "Portão {gate}"
+msgid "Click to focus Gate {gate}"
+msgstr "Clique para focar o Portão {gate}"
 
-msgctxt "gate caption"
-msgid "up to small planes"
-msgstr "até aviões pequenos"
+msgid "{time} {destination} · Click to follow"
+msgstr "{time} {destination} · Clique para seguir"
 
-msgctxt "gate caption"
-msgid "up to medium planes"
-msgstr "até aviões médios"
+msgid "{time} {flight} · Click to follow"
+msgstr "{time} {flight} · Clique para seguir"
 
-msgctxt "gate caption"
-msgid "up to large planes"
-msgstr "até aviões grandes"
+msgid "{flight} · Click to follow"
+msgstr "{flight} · Clique para seguir"
 
-msgctxt "gate caption"
-msgid "no room for a plane"
-msgstr "sem espaço para avião"
+msgid "Click to follow the tightest running-late passenger"
+msgstr "Clique para seguir o passageiro mais atrasado"
 
-msgctxt "gate caption"
-msgid "{minutes} min walk"
-msgstr "{minutes} min a pé"
+msgid "Set off the scanner: forgot my belt!"
+msgstr "Disparou o scanner: esqueci o cinto!"
 
-msgctxt "sign caption"
-msgid "Closed"
-msgstr "Fechado"
+msgid "Set off the scanner: keys in pocket!"
+msgstr "Disparou o scanner: chaves no bolso!"
+
+msgid "Set off the scanner: coins in pocket!"
+msgstr "Disparou o scanner: moedas no bolso!"
+
+msgid "Stopped for liquids: oversized shampoo!"
+msgstr "Parado por líquidos: shampoo grande demais!"
+
+msgid "Stopped for liquids: too much liquid!"
+msgstr "Parado por líquidos: líquido demais!"
+
+msgid "Stopped for liquids: forgot my water bottle!"
+msgstr "Parado por líquidos: esqueci a garrafa d'água!"
+
+msgid "Security search: \"{reason}\""
+msgstr "Revista de segurança: \"{reason}\""
+
+msgid "One-off charter — cannot move"
+msgstr "Fretamento único — não pode mover"
+
+msgid "One-off charter — flies today only"
+msgstr "Fretamento único — voa só hoje"
+
+msgid "Departs {time} today"
+msgstr "Parte às {time} hoje"
+
+msgid "${amount} payout"
+msgstr "Pagamento ${amount}"
+
+msgid "No exit fee"
+msgstr "Sem multa de saída"
+
+msgid "Flies once today only; no exit fee or daily commitment."
+msgstr "Voa só hoje; sem multa de saída nem compromisso diário."
+
+msgid "Charter available"
+msgstr "Fretamento disponível"
+
+msgid "One-off {time} flight to {destination} · click to review"
+msgstr "Voo único às {time} para {destination} · clique para ver"
+
+msgid "Click to open Airline Contracts"
+msgstr "Clique para abrir Contratos aéreos"
+
+msgid "this charter's departure window has already passed"
+msgstr "a janela de partida deste fretamento já passou"
+
+msgid "Bag room needs a belt"
+msgstr "Sala de bagagem precisa de esteira"
+
+msgid "Drag a belt from the back of a check-in desk into your Bag Room."
+msgstr "Arraste uma esteira da traseira de um balcão de check-in até a Sala de bagagem."
+
+msgid "Airline offers available"
+msgstr "Ofertas aéreas disponíveis"
+
+msgid "{count} new contract waiting · click to review"
+msgid_plural "{count} new contracts waiting · click to review"
+msgstr[0] "{count} novo contrato aguardando · clique para ver"
+msgstr[1] "{count} novos contratos aguardando · clique para ver"
+
+msgid "Airlines are ready with new flights — click Offers at the top to review contracts."
+msgstr "Companhias têm novos voos prontos — clique em Ofertas no topo para analisar contratos."
+
+msgid "Last-minute charter hop to {destination} — light bags, quick turnaround."
+msgstr "Fretamento de última hora para {destination} — malas leves, giro rápido."
+
+msgid "Premium cabin demand to {destination} — passengers pay top fare."
+msgstr "Alta demanda executiva para {destination} — passageiros pagam tarifa máxima."
+
+msgid "Holiday crowd bound for {destination} — plenty of time to shop."
+msgstr "Turistas rumo a {destination} — bastante tempo para fazer compras."
+
+msgid "Smooth bag handling to {destination} — {airline} covers missed bags."
+msgstr "Despacho tranquilo para {destination} — a {airline} cobre malas perdidas."
+
+msgid "Busy route to {destination} — almost every seat is spoken for."
+msgstr "Rota movimentada para {destination} — quase todos os assentos já reservados."
+
+msgid "{airline} brings a welcome bonus on your first flight to {destination}."
+msgstr "A {airline} traz um bônus de boas-vindas no seu primeiro voo para {destination}."
+
+msgid "Steady partner route to {destination} — fly often for higher fares."
+msgstr "Rota parceira estável para {destination} — voe com frequência por tarifas maiores."
+
+msgid "Crisp northern hop with {airline} — steady fjord and business flyers."
+msgstr "Salto nórdico com a {airline} — viajantes constantes de fiordes e negócios."
+
+msgid "Quick city-break run to Berlin — easygoing weekend flyers."
+msgstr "Escapada rápida para Berlim — viajantes tranquilos de fim de semana."
+
+msgid "Warm coastal route to Lisbon — sunlit travelers heading south."
+msgstr "Rota costeira quente para Lisboa — viajantes rumo ao sul ensolarado."
+
+msgid "Classic Mediterranean hop to Rome — sightseeing crowds all day."
+msgstr "Salto clássico mediterrâneo para Roma — turistas o dia inteiro."
+
+msgid "Friendly island link to Dublin — reliable regional commuters."
+msgstr "Ligação simpática para Dublin — passageiros regionais confiáveis."
+
+msgid "Sunny Aegean flight to Athens — leisure flyers ready to board."
+msgstr "Voo ensolarado para Atenas — viajantes de lazer prontos para embarcar."
+
+msgid "Reliable daily link to {destination} with {airline}."
+msgstr "Ligação diária confiável para {destination} com a {airline}."
+
+msgid "Passengers walk from the entrance through security to the exit."
+msgstr "Passageiros caminham da entrada pela segurança até a saída."
+
+msgid "Staff need a clear tile behind each station to work it."
+msgstr "A equipe precisa de uma célula livre atrás de cada posto para trabalhar."
+
+msgid "Gate desks stay closed until an agent is hired."
+msgstr "Balcões de portão ficam fechados até contratar um agente."
+
+msgid "The airport opens once staff reach their stations."
+msgstr "O aeroporto abre assim que a equipe chegar aos postos."
+
+msgid "Opens boarding for your first flight."
+msgstr "Abre o embarque do seu primeiro voo."
+
+msgid "Keeps waiting passengers comfortable."
+msgstr "Mantém confortáveis os passageiros que esperam."
+
+msgid "Passengers check in here before security."
+msgstr "Passageiros fazem check-in aqui antes da segurança."
+
+msgid "Closed desks cannot serve waiting passengers."
+msgstr "Balcões fechados não atendem quem está na fila."
+
+msgid "Stations stay closed until an agent is hired."
+msgstr "Postos ficam fechados até contratar um agente."
+
+msgid "Clears passengers and bags for the gate."
+msgstr "Libera passageiros e malas para o portão."
+
+msgid "Closed security lanes cannot clear passengers."
+msgstr "Corredores fechados não liberam passageiros."
+
+msgid "Stations stay closed until an officer is hired."
+msgstr "Postos ficam fechados até contratar um segurança."
+
+msgid "Each extra station needs its own staff member."
+msgstr "Cada posto extra precisa de um funcionário próprio."
+
+msgid "Prevents comfort drops while passengers wait."
+msgstr "Evita queda de conforto enquanto passageiros esperam."
+
+msgid "Hungry passengers lose mood before boarding."
+msgstr "Passageiros com fome perdem humor antes do embarque."
+
+msgid "Seals the terminal so roof and rooms work."
+msgstr "Fecha o terminal para que o telhado e as salas funcionem."
+
+msgid "Prep time — clock starts when staff reach stations"
+msgstr "Preparação — o relógio começa quando a equipe chegar aos postos"
+
+msgid "Hire a ramp agent"
+msgstr "Contrate um agente de pátio"
+
+msgid "Checked bags wait until a ramp agent drives the cart."
+msgstr "Malas despachadas esperam até um agente de pátio dirigir o carrinho."
+
+msgid "Counters stay closed until shop staff arrive."
+msgstr "Balcões ficam fechados até os atendentes chegarem."
+
+msgid "Serve {done}/{need} passengers to unlock Cafe & Baggage"
+msgstr "Atenda {done}/{need} passageiros para liberar Café e Bagagem"
+
+msgid "Works check-in desks to tag bags and print boarding passes. Hire 1 per open desk."
+msgstr "Atende balcões de check-in para etiquetar malas e emitir cartões de embarque. Contrate 1 por balcão aberto."
+
+msgid "Runs security scanners and lanes to clear passengers and carry-on bags. Hire 1 per open scanner."
+msgstr "Opera scanners e corredores de segurança para liberar passageiros e bagagem de mão. Contrate 1 por scanner aberto."
+
+msgid "Works gate desks to start boarding and announce flights. Hire 1 per gate desk."
+msgstr "Atende balcões de portão para iniciar embarques e anunciar voos. Contrate 1 por balcão de portão."
+
+msgid "Runs cafe, bar, restaurant, and shop counters. Hire once you build a cafe or shop."
+msgstr "Opera balcões de café, bar, restaurante e lojas. Contrate ao construir um café ou loja."
+
+msgid "Mops terminal messes and empties full bins. Hire when litter builds up."
+msgstr "Limpa sujeiras do terminal e esvazia lixeiras cheias. Contrate quando houver acúmulo de lixo."
+
+msgid "Drives baggage carts between your Bag Room and parked planes. Hire once you build a Bag Room."
+msgstr "Dirige carrinhos de bagagem entre a Sala de bagagem e os aviões estacionados. Contrate ao construir uma Sala de bagagem."
+
+msgid "Open Planner (P) to view today's schedule or move flights between gates."
+msgstr "Abra Agenda (P) para ver os voos de hoje ou mover voos entre portões."
+
+msgid "Terminal messes lower passenger mood. Hire a Cleaner on the Staff card to keep things tidy."
+msgstr "Sujeira no terminal reduz o humor dos passageiros. Contrate um Zelador no painel Equipe para manter tudo limpo."
+
+msgid "Place on terminal floor. A server hands over the order."
+msgstr "Coloque no piso do terminal. Um atendente entrega o pedido."
+
+msgid "A currency exchange stand. Passengers change money and pay a small fee."
+msgstr "Um balcão de câmbio. Passageiros trocam dinheiro e pagam uma pequena taxa."
+
+msgid "Place on terminal floor. A server stands behind it and changes money."
+msgstr "Coloque no piso do terminal. Um atendente fica atrás e troca dinheiro."
+
+msgid "Shop staff hired in Staff, and the spot in front clear. Does not cure boredom."
+msgstr "Atendente contratado em Equipe e frente livre. Não alivia o tédio."
+
+msgid "Place on terminal floor. The passenger uses it from the cell in front."
+msgstr "Coloque no piso do terminal. O passageiro usa pela célula da frente."
+
+msgid "Keep the spot in front clear. No staff, no upkeep, and does not cure boredom."
+msgstr "Mantenha a frente livre. Sem equipe, sem manutenção e não alivia o tédio."
+
+msgid "Place on terminal floor. The passenger sits and leans back during a long wait."
+msgstr "Coloque no piso do terminal. O passageiro senta e reclina durante esperas longas."
+
+msgid "← Back"
+msgstr "← Voltar"
+
+msgid "{room} items"
+msgstr "Itens: {room}"
+
+msgid "★"
+msgstr "★"
+
+msgid "✓"
+msgstr "✓"
+
+msgctxt "build menu"
+msgid "Search table"
+msgstr "Mesa de revista"
+
+msgctxt "build menu"
+msgid "Confiscation bin"
+msgstr "Caixa de retidos"
+
+msgctxt "item name"
+msgid "Search table"
+msgstr "Mesa de revista"
+
+msgctxt "item name"
+msgid "Confiscation bin"
+msgstr "Caixa de itens retidos"
+
+msgid "An inspection table where officers check flagged carry-on bags."
+msgstr "Uma mesa de inspeção onde agentes verificam bagagens de mão suspeitas."
+
+msgid "Place it beside the lane's side berth. Optional: the lane works without one."
+msgstr "Coloque ao lado da baia lateral do corredor. Opcional: o corredor funciona sem ela."
+
+msgid "No upkeep. Holds the passenger's tray during bag searches."
+msgstr "Sem manutenção. Segura a bandeja do passageiro durante a revista da bagagem."
+
+msgid "A clear glass bin showing items taken at the security lane today."
+msgstr "Uma caixa de vidro transparente mostrando os itens retidos na segurança hoje."
+
+msgid "Place it next to the search table slot. Resets at midnight."
+msgstr "Coloque ao lado do espaço da mesa de revista. Zera à meia-noite."
+
+msgid "No upkeep. Inspect it to see today's strangest finds."
+msgstr "Sem manutenção. Inspecione para ver os achados mais estranhos de hoje."
+
+msgid "Status: Attached to a ready security lane"
+msgstr "Status: Conectada a um corredor pronto"
+
+msgid "Status: Not attached to a ready lane"
+msgstr "Status: Não conectada a um corredor pronto"
+
+msgid "Confiscated today: {count} item"
+msgid_plural "Confiscated today: {count} items"
+msgstr[0] "Retidos hoje: {count} item"
+msgstr[1] "Retidos hoje: {count} itens"
+
+msgid "{item} ({quip})"
+msgstr "{item} ({quip})"
+
+msgid "Recent: {items}"
+msgstr "Recentes: {items}"
+
+msgid "Giant alpine snow globe"
+msgstr "Globo de neve alpino gigante"
+
+msgid "Contains 400 ml of festive winter magic."
+msgstr "Contém 400 ml de magia festiva de inverno."
+
+msgid "Souvenir city snow globe"
+msgstr "Globo de neve de lembrança"
+
+msgid "Too much decorative blizzard for cabin altitude."
+msgstr "Nevasca decorativa demais para a altitude da cabine."
+
+msgid "Musical penguin snow globe"
+msgstr "Globo de neve musical de pinguim"
+
+msgid "Shakes nicely, still over the 100 ml limit."
+msgstr "Chacoalha bem, mas passa do limite de 100 ml."
+
+msgid "Family-size maple syrup jug"
+msgstr "Galão família de xarope de bordo"
+
+msgid "Emergency pancake rations are still a liquid."
+msgstr "Ração de emergência para panquecas ainda conta como líquido."
+
+msgid "Artisanal pancake syrup"
+msgstr "Xarope artesanal de panqueca"
+
+msgid "Declared as breakfast insurance."
+msgstr "Declarado como seguro de café da manhã."
+
+msgid "Emergency waffle syrup"
+msgstr "Xarope de emergência para waffles"
+
+msgid "Sticky situation in tray three."
+msgstr "Situação pegajosa na bandeja três."
+
+msgid "Ceramic garden gnome"
+msgstr "Anão de jardim de cerâmica"
+
+msgid "Claimed to be a tiny travel companion."
+msgstr "Alegou ser um pequeno companheiro de viagem."
+
+msgid "Uncle Barnaby's lucky gnome"
+msgstr "Anão da sorte do tio Barnabé"
+
+msgid "Too heavy for the overhead bin."
+msgstr "Pesado demais para o bagageiro superior."
+
+msgid "Pointy-hat lawn gnome"
+msgstr "Anão de jardim de chapéu pontudo"
+
+msgid "Refused to fit in a quart-size zip bag."
+msgstr "Recusou-se a caber no saquinho plástico de 1 litro."
+
+msgid "Twelve-pound bowling ball"
+msgstr "Bola de boliche de cinco quilos"
+
+msgid "Definitely not a compact neck pillow."
+msgstr "Definitivamente não é um travesseiro de pescoço compacto."
+
+msgid "Lucky league bowling ball"
+msgstr "Bola de boliche da sorte da liga"
+
+msgid "Spare shoes were fine; the ball had to stay."
+msgstr "Os sapatos reservas passaram; a bola teve que ficar."
+
+msgid "Polished tournament ball"
+msgstr "Bola polida de torneio"
+
+msgid "Would roll straight out of the overhead locker."
+msgstr "Rolaría direto para fora do bagageiro superior."
+
+msgid "Plastic lawn flamingo"
+msgstr "Flamingo de plástico de jardim"
+
+msgid "Needs its own boarding pass at this height."
+msgstr "Precisaria de cartão de embarque próprio com essa altura."
+
+msgid "Tropical souvenir flamingo"
+msgstr "Flamingo tropical de lembrança"
+
+msgid "Tried to pass as a walking stick."
+msgstr "Tentou se passar por bengala."
+
+msgid "Neon pink yard flamingo"
+msgstr "Flamingo rosa-choque de quintal"
+
+msgid "Too fabulous for under-seat stowage."
+msgstr "Fabuloso demais para ir embaixo do assento."
+
+msgid "Giant bath-time rubber duck"
+msgstr "Pato de borracha gigante de banheira"
+
+msgid "Squeaked during the X-ray scan."
+msgstr "Fez quá-quá durante a passagem no raio-X."
+
+msgid "Captain Squeaks the duck"
+msgstr "Pato Capitão Quá-Quá"
+
+msgid "Suspiciously buoyant carry-on cargo."
+msgstr "Carga de mão suspeitosamente flutuante."
+
+msgid "Oversized squeaky duck"
+msgstr "Pato de borracha superdimensionado"
+
+msgid "Filled with bathwater from hotel checkout."
+msgstr "Cheio de água da banheira do hotel."
+
+msgid "Comically giant wrench"
+msgstr "Chave inglesa comicamente gigante"
+
+msgid "Just in case the seat reclines slowly."
+msgstr "Só para o caso de o assento reclinar devagar."
+
+msgid "Pocket-sized mega wrench"
+msgstr "Megachave inglesa de bolso"
+
+msgid "Definitely not an approved nail file."
+msgstr "Definitivamente não é uma lixa de unha aprovada."
+
+msgid "Half-metre pipe wrench"
+msgstr "Chave de grifo de meio metro"
+
+msgid "Way past the tool-length limit."
+msgstr "Muito além do limite de tamanho para ferramentas."
+
+msgid "Unlabelled mystery thermos"
+msgstr "Garrafa térmica misteriosa sem rótulo"
+
+msgid "Smells faintly of soup, tea, or jet fuel."
+msgstr "Cheira levemente a sopa, chá ou combustível de avião."
+
+msgid "Grandma's mystery thermos"
+msgstr "Garrafa térmica misteriosa da vovó"
+
+msgid "Could be cocoa; still 600 ml too large."
+msgstr "Pode ser chocolate quente; ainda passa 600 ml do limite."
+
+msgid "Rattling stainless thermos"
+msgstr "Garrafa térmica de inox chacoalhando"
+
+msgid "No one wants to open it at the checkpoint."
+msgstr "Ninguém quer abrir isso na inspeção."
+
+msgid "Fast-Track"
+msgstr "Via Rápida"
+
+msgid "Fast-Track: On"
+msgstr "Via Rápida: Ligada"
+
+msgid "Fast-Track: Off"
+msgstr "Via Rápida: Desligada"
+
+msgid "Switch this security lane back to Standard"
+msgstr "Voltar este corredor de segurança para Padrão"
+
+msgid "Switch this security lane to Fast-Track (VIP and tight-connection passengers)"
+msgstr "Mudar este corredor para Via Rápida (VIP e passageiros com conexão apertada)"
+
+msgid "Breezed through Fast-Track security"
+msgstr "Passou voando pela segurança Via Rápida"
+
+msgctxt "build menu"
+msgid "Security lane"
+msgstr "Corredor segurança"
+
+msgctxt "build menu"
+msgid "2x3"
+msgstr "2x3"
+
+msgid "A complete security lane: tray table, X-ray belt, arch and pickup table."
+msgstr "Um corredor de segurança completo: mesa de bandejas, esteira de raio-X, arco e mesa de retirada."
+
+msgid "Click once to place all four parts together. Press R to turn it."
+msgstr "Clique uma vez para colocar as quatro peças juntas. Aperte R para girar."
+
+msgid "Needs clear floor for the lane, queue, exit and two officer spots."
+msgstr "Precisa de piso livre para o corredor, fila, saída e dois postos de agente."
+
+msgctxt "build menu"
+msgid "Starter Toilet"
+msgstr "Banheiro pronto"
+
+msgctxt "build menu"
+msgid "Starter Cafe"
+msgstr "Café pronto"
+
+msgctxt "build menu"
+msgid "Kit"
+msgstr "Kit"
+
+msgctxt "build status"
+msgid "Placed {kit} for {cost}"
+msgstr "Colocado: {kit} por {cost}"
+
+msgctxt "build status"
+msgid "{kit}: click to place"
+msgstr "{kit}: clique para colocar"
+
+msgid "Furnished room kit"
+msgstr "Kit de sala mobiliada"
+
+msgid "Places floor, walls, a door, and required items in one click."
+msgstr "Coloca piso, paredes, porta e itens obrigatórios em um clique."
+
+msgid "{w}x{h} kit"
+msgstr "Kit {w}x{h}"
+
+msgid "Click (R rotates)"
+msgstr "Clique (R gira)"
+
+msgctxt "build menu"
+msgid "Starter Bar"
+msgstr "Bar pronto"
+
+msgctxt "build menu"
+msgid "Starter Restaurant"
+msgstr "Restaurante pronto"
+
+msgctxt "build menu"
+msgid "Starter Bag room"
+msgstr "Bagagem pronta"
+
+msgctxt "build menu"
+msgid "Starter Kiosk"
+msgstr "Quiosque pronto"
+
+msgctxt "build menu"
+msgid "Starter Pharmacy"
+msgstr "Farmácia pronta"
+
+msgctxt "build menu"
+msgid "Starter Duty free"
+msgstr "Duty free pronto"
+
+msgctxt "build menu"
+msgid "Starter Fashion store"
+msgstr "Moda pronta"
+
+msgctxt "build menu"
+msgid "Starter Play area"
+msgstr "Infantil pronto"
+
+msgctxt "build menu"
+msgid "Starter Lounge"
+msgstr "Sala VIP pronta"
+
+msgctxt "build menu"
+msgid "Starter Shower"
+msgstr "Chuveiro pronto"
+
+msgctxt "build menu"
+msgid "Starter Break Room"
+msgstr "Descanso pronto"
+
+msgctxt "build status"
+msgid "{item} row of {count}, cost {cost}"
+msgstr "Fileira de {count} {item}, custo {cost}"
+
+msgctxt "build status"
+msgid "{item} row of {count}, cost {cost}, {blocked} blocked: {reason}"
+msgstr "Fileira de {count} {item}, custo {cost}, {blocked} bloqueado(s): {reason}"
+
+msgctxt "build status"
+msgid "Nothing to place"
+msgstr "Nada para colocar"
+
+msgctxt "build status"
+msgid "Placed {count} {item}"
+msgstr "Colocado: {count} {item}"
+
+msgctxt "build status"
+msgid "Placed {count} {item} for {cost}"
+msgstr "Colocado: {count} {item} por {cost}"
+
+msgctxt "build status"
+msgid "Placed {count} {item}, skipped {skipped}: {reason}"
+msgstr "Colocado: {count} {item}, pulado(s) {skipped}: {reason}"
+
+msgctxt "build status"
+msgid "Placed {count} {item} for {cost}, skipped {skipped}: {reason}"
+msgstr "Colocado: {count} {item} por {cost}, pulado(s) {skipped}: {reason}"
+
+msgctxt "build juice"
+msgid "-${amount}"
+msgstr "-${amount}"
+
+msgctxt "build juice"
+msgid "+${amount}"
+msgstr "+${amount}"
+
+msgctxt "build menu"
+msgid "Break Room"
+msgstr "Sala descanso"
 
 msgctxt "room type"
-msgid "Bag room"
-msgstr "Sala de bagagem"
+msgid "Break Room"
+msgstr "Sala de descanso"
 
-msgctxt "room type"
-msgid "Toilet"
-msgstr "Banheiro"
+msgctxt "room name, mid-sentence"
+msgid "break room"
+msgstr "sala de descanso"
 
-msgctxt "room status"
-msgid "Ready"
-msgstr "Pronto"
+msgctxt "room need"
+msgid "Needs a bench"
+msgstr "Precisa de um banco"
+
+msgctxt "status reason"
+msgid "needs a bench"
+msgstr "precisa de um banco"
+
+msgid "Marks floor as a break room. Tired staff rest here during lulls to recover energy."
+msgstr "Marca piso como sala de descanso. Funcionários cansados descansam aqui nas pausas para recuperar energia."
+
+msgid "Drag a rectangle, then add a bench inside. High prestige speeds up recovery."
+msgstr "Arraste um retângulo, depois adicione um banco dentro. Prestígio alto acelera a recuperação."
+
+msgid "At least 2x3, with a bench. Staff never leave a busy queue mid-rush."
+msgstr "Pelo menos 2x3, com um banco. Funcionários nunca largam uma fila cheia no meio do movimento."
+
+msgid "Benches {count}"
+msgstr "Bancos {count}"
+
+msgid "Staff rest here during lulls"
+msgstr "A equipe descansa aqui nas pausas"
+
+msgid "Prestige: Lv. {level} / 5 ({score} pts · +{bonus}% recovery)"
+msgstr "Prestígio: Nv. {level} / 5 ({score} pts · +{bonus}% recuperação)"
+
+msgid "{hired} hired, {duty} cleaning, {on_break} on break"
+msgstr "{hired} contratados, {duty} limpando, {on_break} em pausa"
+
+msgid "{hired} hired, {duty} on duty, {on_break} on break"
+msgstr "{hired} contratados, {duty} em turno, {on_break} em pausa"
+
+msgid "On break {pct}%"
+msgstr "Em pausa {pct}%"
+
+msgid "Tired {pct}%"
+msgstr "Cansado {pct}%"
+
+msgid "Rested {pct}%"
+msgstr "Descansado {pct}%"
+
+msgid "+ {count} more"
+msgstr "+ {count} mais"
+
+msgctxt "build menu"
+msgid "Award trophy"
+msgstr "Troféu prêmio"
+
+msgctxt "item name"
+msgid "Award trophy"
+msgstr "Troféu de prêmio"
+
+msgctxt "item name, mid-sentence"
+msgid "award trophy"
+msgstr "troféu de prêmio"
+
+msgctxt "refusal detail"
+msgid "No award trophies available"
+msgstr "Nenhum troféu disponível"
+
+msgid "Earn an Award Trophy at the Annual Airport Awards"
+msgstr "Ganhe um Troféu nos Prêmios Anuais do Aeroporto"
+
+msgid "An Annual Airport Awards trophy earned for airport excellence."
+msgstr "Um troféu dos Prêmios Anuais do Aeroporto conquistado por excelência."
+
+msgid "Place it inside any room to add +30 Room Prestige points."
+msgstr "Coloque dentro de qualquer sala para somar +30 pontos de Prestígio da Sala."
+
+msgid "Free to place up to the number of trophies earned. No upkeep."
+msgstr "Grátis para colocar até o total de troféus ganhos. Sem manutenção."
+
+msgid "Year {year} Airport Awards"
+msgstr "Prêmios do Aeroporto — Ano {year}"
+
+msgid "On-Time Champion"
+msgstr "Campeão de Pontualidade"
+
+msgid "Spotless Terminal"
+msgstr "Terminal Impecável"
+
+msgid "Happiest Passengers"
+msgstr "Passageiros Mais Felizes"
+
+msgid "Best Hospitality"
+msgstr "Melhor Hospitalidade"
+
+msgid "Airport of the Year"
+msgstr "Aeroporto do Ano"
+
+msgid "Won"
+msgstr "Vencedor"
+
+msgid "Nominated"
+msgstr "Indicado"
+
+msgid "+${amount}"
+msgstr "+${amount}"
+
+msgid "$0"
+msgstr "$0"
+
+msgid "Total awarded: +${cash} · {count} Award Trophy unlocked"
+msgid_plural "Total awarded: +${cash} · {count} Award Trophies unlocked"
+msgstr[0] "Total premiado: +${cash} · {count} Troféu desbloqueado"
+msgstr[1] "Total premiado: +${cash} · {count} Troféus desbloqueados"
+
+msgid "Place your Award Trophy from the Decor tab for +30 Room Prestige!"
+msgstr "Coloque seu Troféu pela aba Decoração para ganhar +30 de Prestígio da Sala!"
+
+msgid "Win a category next year to earn an Award Trophy for +30 Room Prestige!"
+msgstr "Vença uma categoria no próximo ano para ganhar um Troféu e +30 de Prestígio!"
+
+msgid "Continue"
+msgstr "Continuar"
+
+msgid "Sandbox"
+msgstr "Modo livre"
+
+msgid "Achievement Unlocked"
+msgstr "Conquista desbloqueada"
+
+msgid "Certified {star}★: {title}"
+msgstr "Certificado {star}★: {title}"
+
+msgid "Your airport earned {star}★ {title} certification!"
+msgstr "Seu aeroporto recebeu a certificação {star}★ {title}!"
+
+msgid "One-time cash grant: +${grant}"
+msgstr "Bônus único em dinheiro: +${grant}"
+
+msgid "Permanent contract fee prestige bonus: +{percent}%"
+msgstr "Bônus permanente de prestígio nos contratos: +{percent}%"
+
+msgid "Reach 2★ Regional Terminal to unlock permanent contract fee bonuses."
+msgstr "Alcance 2★ Terminal Regional para liberar bônus permanentes nos contratos."
+
+msgid "Start a New Airport anytime, or wishlist the full game for larger planes, restaurants, lounges, car parks, and major airport chaos."
+msgstr "Inicie um Novo aeroporto quando quiser, ou adicione o jogo completo à Lista de desejos para aviões maiores, restaurantes, salas VIP, estacionamentos e muito mais movimento."
+
+msgid "Day 5 complete — thanks for playing the demo!"
+msgstr "Dia 5 concluído — obrigado por jogar a demo!"
+
+msgid "Your 5-day airport summary"
+msgstr "Resumo dos seus 5 dias de aeroporto"
+
+msgid "Passengers who made their flight"
+msgstr "Passageiros que pegaram o voo"
+
+msgid "Cash earned"
+msgstr "Dinheiro ganho"
+
+msgid "${amount}"
+msgstr "${amount}"
+
+msgid "Current balance"
+msgstr "Saldo atual"
+
+msgid "Airport rating"
+msgstr "Avaliação do aeroporto"
+
+msgid "{stars} stars"
+msgstr "{stars} estrelas"
+
+msgid "Wishlist on Steam"
+msgstr "Lista de desejos no Steam"
+
+msgid "Back to Title"
+msgstr "Voltar ao título"
+
+msgid "Peak"
+msgstr "Pico"
+
+msgid "Hub"
+msgstr "Hub"
+
+msgid "Hub Contract (+10% fee, +1 low-rating grace day)"
+msgstr "Contrato Hub (+10% taxa, +1 dia de tolerância em nota baixa)"
+
+msgid "Click to move gate or end contract, or drag onto another gate row."
+msgstr "Clique para trocar de portão ou encerrar contrato, ou arraste para outra linha de portão."
+
+msgid "Contract ended — cannot move"
+msgstr "Contrato encerrado — não pode mover"
+
+msgid "One-off flight — cannot move"
+msgstr "Voo único — não pode mover"
+
+msgid "Shop staff hired in Staff, and the spot in front clear."
+msgstr "Atendente contratado em Equipe e frente livre."
+
+msgid "floor congestion: light flow to bottleneck"
+msgstr "lotação do piso: fluxo leve até gargalo"
+
+msgid "room prestige level"
+msgstr "nível de prestígio da sala"
+
+msgctxt "mood overlay mode"
+msgid "Congestion"
+msgstr "Lotação"
+
+msgctxt "mood overlay mode"
+msgid "Prestige"
+msgstr "Prestígio"
+
+msgid "Light"
+msgstr "Leve"
+
+msgid "Busy"
+msgstr "Movimentado"
+
+msgid "Congested"
+msgstr "Lotado"
+
+msgid "Lv. 1"
+msgstr "Nv. 1"
+
+msgid "Lv. 2"
+msgstr "Nv. 2"
+
+msgid "Lv. 3"
+msgstr "Nv. 3"
+
+msgid "Lv. 4"
+msgstr "Nv. 4"
+
+msgid "Lv. 5"
+msgstr "Nv. 5"
+
+msgid "Morning Peak +15%"
+msgstr "Pico da manhã +15%"
+
+msgid "Evening Peak +15%"
+msgstr "Pico da noite +15%"
+
+msgid "Bronze +5%"
+msgstr "Bronze +5%"
+
+msgid "Bronze loyalty: this airline's offers pay 5% more."
+msgstr "Lealdade Bronze: ofertas desta companhia pagam 5% a mais."
+
+msgid "Silver +10%"
+msgstr "Prata +10%"
+
+msgid "Silver loyalty: this airline's offers pay 10% more."
+msgstr "Lealdade Prata: ofertas desta companhia pagam 10% a mais."
+
+msgid "Gold +15%"
+msgstr "Ouro +15%"
+
+msgid "Gold loyalty: this airline's offers pay 15% more and unlock Hub Contracts at 3★+."
+msgstr "Lealdade Ouro: ofertas pagam 15% a mais e liberam Contratos Hub em 3★+."
+
+msgid "Gold Hub Contract: +10% prestige fee bonus and +1 low-rating grace day."
+msgstr "Contrato Hub Ouro: +10% bônus de prestígio na taxa e +1 dia de tolerância em nota baixa."
+
+msgid "Hub Contract"
+msgstr "Contrato Hub"
+
+msgid "Peak rush wave: +15% passenger fee included."
+msgstr "Onda de horário de pico: +15% na taxa por passageiro incluído."
+
+msgid "Gate {gate} — departs in quiet night"
+msgstr "Portão {gate} — parte na noite tranquila"
+
+msgid "Gate {gate} — taxi route unavailable"
+msgstr "Portão {gate} — rota de táxi indisponível"
+
+msgid "Gate {gate} — building taxi spur"
+msgstr "Portão {gate} — construindo ramal de táxi"
+
+msgid "Gate {gate} — no usable stand"
+msgstr "Portão {gate} — sem posição utilizável"
+
+msgid "Gate {gate} — stand too small"
+msgstr "Portão {gate} — posição pequena demais"
+
+msgid "Certification: {star}★ {title} (+{bonus}% contract fees)"
+msgstr "Certificação: {star}★ {title} (+{bonus}% taxas de contrato)"
+
+msgid "Click for airport certification progress."
+msgstr "Clique para ver o progresso de certificação do aeroporto."
+
+msgid "{star}★"
+msgstr "{star}★"
+
+msgid "Airport Certification"
+msgstr "Certificação do aeroporto"
+
+msgid "Certification tracking is not active."
+msgstr "O acompanhamento de certificação não está ativo."
+
+msgid "{star}★ {title}"
+msgstr "{star}★ {title}"
+
+msgid "Unrated"
+msgstr "Sem classificação"
+
+msgid "Current: {level} • Permanent contract fee bonus: +{bonus}%"
+msgstr "Atual: {level} • Bônus permanente de taxa de contrato: +{bonus}%"
+
+msgid "✓ {star}★ {title}"
+msgstr "✓ {star}★ {title}"
+
+msgid "Earned • +${grant} • +{bonus}% fees"
+msgstr "Conquistado • +${grant} • +{bonus}% taxas"
+
+msgid "Earned • +${grant}"
+msgstr "Conquistado • +${grant}"
+
+msgid "+${grant} • +{bonus}% fees"
+msgstr "+${grant} • +{bonus}% taxas"
+
+msgid "+${grant}"
+msgstr "+${grant}"
+
+msgid "Airport opened"
+msgstr "Aeroporto aberto"
+
+msgid "Rating: {current} / {target}★"
+msgstr "Avaliação: {current} / {target}★"
+
+msgid "Passengers made: {current} / {target}"
+msgstr "Passageiros embarcados: {current} / {target}"
+
+msgid "Operational security lane built"
+msgstr "Corredor de segurança operacional construído"
+
+msgid "Operational bag room built"
+msgstr "Sala de bagagem operacional construída"
+
+msgid "Medium+ planes departed: {current} / {target}"
+msgstr "Aviões médios+ decolados: {current} / {target}"
+
+msgid "Large planes departed: {current} / {target}"
+msgstr "Aviões grandes decolados: {current} / {target}"
+
+msgid "Made rate: -- / {target}%"
+msgstr "Taxa de embarque: -- / {target}%"
+
+msgid "Made rate: {current}% / {target}%"
+msgstr "Taxa de embarque: {current}% / {target}%"
+
+msgid "Prestige: Lv. {level} / 5 ({score} pts · +{bonus}% spend)"
+msgstr "Prestígio: Nv. {level} / 5 ({score} pts · +{bonus}% gasto)"
+
+msgid "Prestige: Lv. {level} / 5 ({score} pts)"
+msgstr "Prestígio: Nv. {level} / 5 ({score} pts)"
+
+msgid "Size {size} · Setup {setup} · Decor {decor} · Awards {trophy}"
+msgstr "Tamanho {size} · Montagem {setup} · Decoração {decor} · Prêmios {trophy}"
+
+msgid "Add decor or trophies to raise prestige"
+msgstr "Adicione decoração ou troféus para aumentar o prestígio"
+
+msgid "{slot}, {time} (Sandbox)"
+msgstr "{slot}, {time} (Modo livre)"
+
+msgid "Lv. {level}"
+msgstr "Nv. {level}"
+
+msgid "Train ${cost}"
+msgstr "Treinar ${cost}"
+
+msgid "Upgrade work speed to +{pct}%"
+msgstr "Melhorar velocidade de trabalho para +{pct}%"
+
+msgid "Max"
+msgstr "Máx"
+
+msgid "Career"
+msgstr "Carreira"
+
+msgid "Free-Build Sandbox"
+msgstr "Modo livre"
+
+msgid "Unlimited Funds"
+msgstr "Fundos ilimitados"
+
+msgid "All Tiers & Land Unlocked"
+msgstr "Todos os níveis e terrenos liberados"
+
+msgctxt "menu"
+msgid "Start Airport"
+msgstr "Iniciar aeroporto"
+
+msgid "Free-build sandbox with rating, offers, and awards active."
+msgstr "Construção livre com avaliação, ofertas e prêmios ativos."
+
+msgid "No spending limit; Rescue Grant skipped."
+msgstr "Sem limite de gastos; Auxílio emergencial desativado."
+
+msgid "Starts with $250,000 budget."
+msgstr "Começa com orçamento de $250.000."
+
+msgid "Standard $25,000 budget, unlock progression, 1-5★ certification, and Career achievements."
+msgstr "Orçamento padrão de $25.000, progressão por níveis, certificação de 1-5★ e conquistas da Carreira."
+
+msgid "Open for Business"
+msgstr "Aberto para negócios"
+
+msgid "Open the airport"
+msgstr "Abra o aeroporto"
+
+msgid "First Departure"
+msgstr "Primeira decolagem"
+
+msgid "Depart your first flight"
+msgstr "Decole seu primeiro voo"
+
+msgid "Fifty Flyers"
+msgstr "Cinquenta viajantes"
+
+msgid "Serve 50 passengers"
+msgstr "Atenda 50 passageiros"
+
+msgid "Busy Concourse"
+msgstr "Saguão agitado"
+
+msgid "Serve 250 passengers"
+msgstr "Atenda 250 passageiros"
+
+msgid "Thousand Flyers"
+msgstr "Mil viajantes"
+
+msgid "Serve 1,000 passengers"
+msgstr "Atenda 1.000 passageiros"
+
+msgid "Local Strip"
+msgstr "Pista local"
+
+msgid "Earn 1★ Local Strip Certification"
+msgstr "Conquiste a certificação 1★ Pista Local"
+
+msgid "Regional Terminal"
+msgstr "Terminal regional"
+
+msgid "Earn 2★ Regional Terminal Certification"
+msgstr "Conquiste a certificação 2★ Terminal Regional"
+
+msgid "National Hub"
+msgstr "Hub nacional"
+
+msgid "Earn 3★ National Hub Certification"
+msgstr "Conquiste a certificação 3★ Hub Nacional"
+
+msgid "International Gateway"
+msgstr "Portal internacional"
+
+msgid "Earn 4★ International Gateway Certification"
+msgstr "Conquiste a certificação 4★ Portal Internacional"
+
+msgid "World-Class Airport"
+msgstr "Aeroporto de classe mundial"
+
+msgid "Earn 5★ World-Class Airport Certification"
+msgstr "Conquiste a certificação 5★ Aeroporto de Classe Mundial"
+
+msgid "Build Tier 2"
+msgstr "Nível de construção 2"
+
+msgid "Reach Build Tier 2"
+msgstr "Alcance o Nível de construção 2"
+
+msgid "Build Tier 3"
+msgstr "Nível de construção 3"
+
+msgid "Reach Build Tier 3"
+msgstr "Alcance o Nível de construção 3"
+
+msgid "Build Tier 4"
+msgstr "Nível de construção 4"
+
+msgid "Reach Build Tier 4"
+msgstr "Alcance o Nível de construção 4"
+
+msgid "Security Pro"
+msgstr "Mestre da segurança"
+
+msgid "Build a full Security Lane"
+msgstr "Construa um corredor de segurança completo"
+
+msgid "Baggage Master"
+msgstr "Mestre das bagagens"
+
+msgid "Open a ready Bag Room"
+msgstr "Abra uma sala de bagagem pronta"
+
+msgid "Medium Wings"
+msgstr "Asas médias"
+
+msgid "Depart a Medium plane"
+msgstr "Decole um avião médio"
+
+msgid "Heavy Jet"
+msgstr "Jato pesado"
+
+msgid "Depart a Large plane"
+msgstr "Decole um avião grande"
+
+msgid "Gold Loyalty"
+msgstr "Lealdade Ouro"
+
+msgid "Reach Gold loyalty with an airline"
+msgstr "Alcance lealdade Ouro com uma companhia aérea"
+
+msgid "Hub Partner"
+msgstr "Parceiro Hub"
+
+msgid "Accept a Gold Hub Contract"
+msgstr "Aceite um Contrato Hub Ouro"
+
+msgid "Five-Star Room"
+msgstr "Sala cinco estrelas"
+
+msgid "Raise any room to Prestige Level 5"
+msgstr "Eleve qualquer sala ao Prestígio Nível 5"
+
+msgid "Award Winner"
+msgstr "Premiado"
+
+msgid "Win an Annual Airport Award"
+msgstr "Vença um Prêmio Anual do Aeroporto"
+
+msgid "Win Airport of the Year"
+msgstr "Vença o prêmio de Aeroporto do Ano"

@@ -8,7 +8,6 @@ var _dir_before := ""
 var _title_dir := ""
 var _locale_before := ""
 var _pseudo_before := false
-var _extra_translation: Translation
 
 
 func before_test() -> void:
@@ -26,9 +25,6 @@ func before_test() -> void:
 
 
 func after_test() -> void:
-	if _extra_translation != null:
-		TranslationServer.remove_translation(_extra_translation)
-		_extra_translation = null
 	if _pseudo_before:
 		PseudoLocale.enable()
 	else:
@@ -130,10 +126,48 @@ func test_zero_missing_glyphs_across_all_10_endonyms_and_po_catalogs() -> void:
 		var po_text := FileAccess.get_file_as_string(po_path)
 		var entries := PotEntries.parse(po_text)
 		assert_int(entries.size()).is_greater(30)
+		var checked_entries := 0
+		var checked_strings := 0
 		for entry in entries:
-			var msgstr := str(entry.get("str", ""))
-			if msgstr != "":
-				_assert_all_glyphs(font, msgstr, "%s %s" % [code, entry.get("id", "")])
+			if str(entry.get("id", "")) == "":
+				continue
+			var strs: Array = entry.get("strs", [])
+			assert_array(strs).is_not_empty()
+			checked_entries += 1
+			for raw_msgstr in strs:
+				var msgstr := PotEntries.unescape(str(raw_msgstr))
+				assert_str(msgstr).is_not_empty()
+				checked_strings += 1
+				_assert_all_glyphs(
+					font,
+					msgstr,
+					"%s line %d (%s)" % [code, int(entry.get("line", 0)), entry.get("id", "")]
+				)
+		assert_int(checked_entries).is_greater_equal(1700)
+		assert_int(checked_strings).is_greater_equal(checked_entries)
+
+
+func test_pot_entries_parses_multiline_msgstr_and_plurals_with_escapes() -> void:
+	var sample := (
+		'msgid ""\n'
+		+ 'msgstr ""\n'
+		+ '"Content-Type: text/plain; charset=UTF-8\\n"\n\n'
+		+ 'msgctxt "ctx"\n'
+		+ 'msgid "Hello"\n'
+		+ 'msgstr ""\n'
+		+ '"Line \\"1\\"\\n"\n'
+		+ '"Line\\\\2\\t!"\n\n'
+		+ 'msgid "1 flight"\n'
+		+ 'msgid_plural "{n} flights"\n'
+		+ 'msgstr[0] "1 lot"\n'
+		+ 'msgstr[1] "{n} loty"\n'
+		+ 'msgstr[2] "{n} lotów"\n'
+	)
+	var entries := PotEntries.parse(sample)
+	assert_int(entries.size()).is_equal(3)
+	assert_array(entries[1]["strs"]).is_equal(['Line \\"1\\"\\nLine\\\\2\\t!'])
+	assert_str(PotEntries.unescape(entries[1]["strs"][0])).is_equal('Line "1"\nLine\\2\t!')
+	assert_array(entries[2]["strs"]).is_equal(["1 lot", "{n} loty", "{n} lotów"])
 
 
 func _assert_all_glyphs(font: Font, text: String, label: String) -> void:
@@ -351,11 +385,6 @@ func test_corrupt_or_unsupported_locale_cfg_fails_loud_and_returns_empty() -> vo
 
 
 func test_title_message_and_game_menu_status_retranslate_live() -> void:
-	_extra_translation = Translation.new()
-	_extra_translation.locale = "ja"
-	_extra_translation.add_message("This save file cannot be read.", "ja:unreadable")
-	_extra_translation.add_message("Could not start the quit log in {path}", "ja:quit_log:{path}")
-	TranslationServer.add_translation(_extra_translation)
 	SaveSlots.dir = _title_dir
 	DirAccess.make_dir_recursive_absolute(_title_dir)
 	var bad_file := FileAccess.open(SaveSlots.manual_path(), FileAccess.WRITE)
@@ -382,6 +411,6 @@ func test_title_message_and_game_menu_status_retranslate_live() -> void:
 	menu._set_status_spec({"kind": &"quit_log_error", "args": {"path": "/tmp/qlog"}})
 	assert_str(menu.status_text()).is_equal("Could not start the quit log in /tmp/qlog")
 	_settings().apply_locale("ja", false)
-	assert_str(title.message_text()).is_equal("ja:unreadable")
-	assert_str(menu.status_text()).is_equal("ja:quit_log:/tmp/qlog")
+	assert_str(title.message_text()).is_equal("このセーブファイルを読み込めませんでした。")
+	assert_str(menu.status_text()).is_equal("/tmp/qlog に終了ログを作成できませんでした")
 	kit.port.free()
