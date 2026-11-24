@@ -48,5 +48,5 @@ static func _price_of(edit: BuildEdit) -> int:
 		BuildEdit.Kind.PLACE_WALL:
 			return PriceTable.price_of_wall(edit.wall_kind)
 		BuildEdit.Kind.PLACE_OBJECT:
-			return PriceTable.price_of_object(edit.def_id)
+			return BuildCatalog.object_price(edit.def_id)
 	return 0

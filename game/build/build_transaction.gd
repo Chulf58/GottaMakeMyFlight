@@ -67,7 +67,7 @@ static func quote(grid: BuildGrid, edit: BuildEdit, free := false) -> Quote:
 			_sell(q, grid.wall_paid(edit.cell, edit.side))
 		BuildEdit.Kind.PLACE_OBJECT:
 			if BuildCatalog.get_def(edit.def_id) != null:
-				_buy(q, PriceTable.price_of_object(edit.def_id), 0)
+				_buy(q, BuildCatalog.object_price(edit.def_id), 0)
 		BuildEdit.Kind.REMOVE_OBJECT:
 			_sell(q, int(grid.get_object(edit.object_id).get("paid", 0)))
 	return q

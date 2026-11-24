@@ -121,6 +121,7 @@ enum Tool {
 	CONFISCATION_BIN,
 	SECURITY_LANE,
 	BREAK_ROOM,
+	AWARD_TROPHY,
 }
 
 ## The landside build tools (LandsidePlacement), by the kind each builds. They
@@ -288,6 +289,8 @@ const COVERAGE_TINT := Color(0.35, 0.65, 1.0, 0.35)
 		tool = value
 
 var grid: BuildGrid
+## Annual airport awards tracker; gates Career award_trophy placement count.
+var awards: AirportAwards
 var tool := Tool.FLOOR
 var facing := 0
 ## Probe hook: a viewport point read in place of the real mouse by the hover
@@ -543,7 +546,7 @@ func _handle_eyedropper_input(event: InputEvent) -> bool:
 
 ## Picks a tool.
 func set_tool(new_tool: Tool) -> void:
-	var locked := BuildUnlocks.lock_text(unlocks, require_unlocks, new_tool)
+	var locked := tool_lock_text(new_tool)
 	if locked != "":
 		_status_note = locked
 		_status_note_is_refusal = true
@@ -552,6 +555,17 @@ func set_tool(new_tool: Tool) -> void:
 		notify_refusal(locked)
 		return
 	_enter_tool(new_tool)
+
+
+## Reason `new_tool` cannot be picked now, or "" when it can.
+func tool_lock_text(new_tool: Tool) -> String:
+	if new_tool == Tool.AWARD_TROPHY and awards != null:
+		if not require_unlocks:
+			return ""
+		if awards.trophies_earned() <= 0:
+			return tr("Earn an Award Trophy at the Annual Airport Awards")
+		return ""
+	return BuildUnlocks.lock_text(unlocks, require_unlocks, new_tool)
 
 
 ## Picks a tool to move something already built: the tier lock gates picking a
@@ -1040,6 +1054,17 @@ func wallet() -> Wallet:
 ## no belt crossing and no lane part across a wall (LaneWall), then whether the
 ## wallet can pay for the edits it takes (BuildTransaction.check(), CANT_AFFORD).
 func check(edit: BuildEdit) -> BuildResult:
+	if (
+		edit.kind == BuildEdit.Kind.PLACE_OBJECT
+		and edit.def_id == AirportAwards.TROPHY_DEF_ID
+		and require_unlocks
+		and awards != null
+		and awards.trophies_available(grid) <= 0
+	):
+		var trophy_refusal := BuildResult.refused(BuildResult.Reason.LOCKED)
+		trophy_refusal.detail = "No award trophies available"
+		trophy_refusal.detail_args = {"awards": true}
+		return trophy_refusal
 	var result := DoorPlacement.check(grid, edit)
 	if not result.ok:
 		return result

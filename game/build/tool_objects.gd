@@ -29,4 +29,5 @@ const OBJECTS := {
 	BuildMode.Tool.DUTY_FREE_SHELF: &"duty_free_shelf",
 	BuildMode.Tool.FASHION_TILL: &"fashion_till",
 	BuildMode.Tool.FASHION_RAIL: &"fashion_rail",
+	BuildMode.Tool.AWARD_TROPHY: &"award_trophy",
 }

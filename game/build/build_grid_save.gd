@@ -312,8 +312,8 @@ static func _load_rooms(grid: BuildGrid, data: Dictionary) -> String:
 ## The most a saved object of `def_id` can have been bought for.
 static func _paid_cap(def_id: StringName) -> int:
 	if not BuildCatalog.is_belt(def_id):
-		return PriceTable.price_of_object(def_id)
+		return BuildCatalog.object_price(def_id)
 	var cap := 0
 	for id in BuildCatalog.BELT_IDS:
-		cap = maxi(cap, PriceTable.price_of_object(id))
+		cap = maxi(cap, BuildCatalog.object_price(id))
 	return cap

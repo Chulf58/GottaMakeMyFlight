@@ -7304,3 +7304,97 @@ msgstr ""
 #: ui/staff_panel.gd
 msgid "+ {count} more"
 msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Award trophy"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Award trophy"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "award trophy"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "refusal detail"
+msgid "No award trophies available"
+msgstr ""
+
+#: build/build_mode.gd
+msgid "Earn an Award Trophy at the Annual Airport Awards"
+msgstr ""
+
+#: ui/item_info.gd
+msgid "An Annual Airport Awards trophy earned for airport excellence."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Place it inside any room to add +30 Room Prestige points."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Free to place up to the number of trophies earned. No upkeep."
+msgstr ""
+
+#: ui/awards_ceremony.gd
+msgid "Year {year} Airport Awards"
+msgstr ""
+
+#: ui/awards_ceremony.gd
+msgid "On-Time Champion"
+msgstr ""
+
+#: ui/awards_ceremony.gd
+msgid "Spotless Terminal"
+msgstr ""
+
+#: ui/awards_ceremony.gd
+msgid "Happiest Passengers"
+msgstr ""
+
+#: ui/awards_ceremony.gd
+msgid "Best Hospitality"
+msgstr ""
+
+#: ui/awards_ceremony.gd
+msgid "Airport of the Year"
+msgstr ""
+
+#: ui/awards_ceremony.gd
+msgid "Won"
+msgstr ""
+
+#: ui/awards_ceremony.gd
+msgid "Nominated"
+msgstr ""
+
+#: ui/awards_ceremony.gd
+msgid "+${amount}"
+msgstr ""
+
+#: ui/awards_ceremony.gd
+msgid "$0"
+msgstr ""
+
+#: ui/awards_ceremony.gd
+msgid "Total awarded: +${cash} · {count} Award Trophy unlocked"
+msgid_plural "Total awarded: +${cash} · {count} Award Trophies unlocked"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/awards_ceremony.gd
+msgid "Place your Award Trophy from the Decor tab for +30 Room Prestige!"
+msgstr ""
+
+#: ui/awards_ceremony.gd
+msgid "Win a category next year to earn an Award Trophy for +30 Room Prestige!"
+msgstr ""
+
+#: ui/awards_ceremony.gd
+msgid "Continue"
+msgstr ""

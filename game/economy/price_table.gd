@@ -75,6 +75,7 @@ const OBJECT_PRICES := {
 	&"bench_2a_indoor": 900,
 	&"statue_indoor": 1200,
 	&"fountain_indoor": 1500,
+	&"award_trophy": 0,
 	# Services (Furniture 3b): food pieces sit around the cafe's 600 counter and
 	# 300 table, a four-seat table or booth a step above the cafe's two-seat
 	# table; the desks and booths are about a check-in desk (400) to a counter.

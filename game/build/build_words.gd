@@ -79,6 +79,10 @@ static func detail(result: BuildResult) -> String:
 		BuildResult.Reason.LOCKED:
 			if args.has("tier") or args.has("unwired"):
 				return BuildUnlocks.lock_words(args)
+			if args.has("awards"):
+				return _words.no_award_trophies()
+			if args.has("awards_unearned"):
+				return _words.earn_award_trophy()
 		BuildResult.Reason.MOVE_NO_FIT:
 			if args.has("inner"):
 				return (args["inner"] as BuildResult).reason_text()
@@ -182,6 +186,12 @@ class Words:
 
 	func gate_close(gate: String) -> String:
 		return tr("gate {gate} is too close", "refusal detail").format({"gate": gate})
+
+	func no_award_trophies() -> String:
+		return tr("No award trophies available", "refusal detail")
+
+	func earn_award_trophy() -> String:
+		return tr("Earn an Award Trophy at the Annual Airport Awards")
 
 	## "gate B, a large plane" for a booked class (PlaneClasses), one msgid per class;
 	## `english` is the detail as it came, for a class this list does not know.
@@ -444,6 +454,7 @@ class Words:
 			tr("gate {gate}, a small plane", "refusal detail"),
 			tr("gate {gate}, a medium plane", "refusal detail"),
 			tr("gate {gate}, a large plane", "refusal detail"),
+			tr("No award trophies available", "refusal detail"),
 			# Status lines of the belt, facing, area drag and room tools
 			tr_n("Belt {count} cell", "Belt {count} cells", 1, "build status"),
 			tr("Facing auto", "build status"),
@@ -461,6 +472,7 @@ class Words:
 			tr("Placed {count} {item} for {cost}, skipped {skipped}: {reason}", "build status"),
 			# A door's blocker inside the refusal (BuildCatalog display_name, lower case)
 			tr("atm", "item name, mid-sentence"),
+			tr("award trophy", "item name, mid-sentence"),
 			tr("baggage belt", "item name, mid-sentence"),
 			tr("baggage cart", "item name, mid-sentence"),
 			tr("bar counter", "item name, mid-sentence"),

@@ -146,7 +146,9 @@ signal loaded(ok: bool)
 ## v13); version 37 saves are refused (no migration).
 ## 39: Break Room & soft Staff Energy (StaffSim v9); version 38 saves are
 ## refused (no migration).
-const SAVE_VERSION := 39
+## 40: Annual Airport Awards (part "awards", AirportAwards v1); version 39 saves
+## are refused (no migration).
+const SAVE_VERSION := 40
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"
@@ -181,6 +183,9 @@ const HUD_THEME := preload("res://ui/hud_theme.tres")
 @export var incidents: IncidentDirector
 ## Airport certification milestones; auto-created when unset so main.tscn stays untouched.
 @export var certification: AirportCertification
+## Annual airport awards & ceremony; auto-created when unset so main.tscn stays untouched.
+@export var awards: AirportAwards
+@export var awards_ceremony: AwardsCeremony
 ## Where F5 and F8 save and load. Tests point it at their own file. Left at
 ## QUICK_SAVE_PATH, _ready makes it SaveSlots.manual_path().
 @export var quick_save_path := QUICK_SAVE_PATH
@@ -254,6 +259,7 @@ func _ready() -> void:
 			badge.watch_certification(cert)
 			if not loaded.is_connected(badge._on_save_loaded):
 				loaded.connect(badge._on_save_loaded)
+	ensure_awards()
 
 
 func _exit_tree() -> void:
@@ -435,6 +441,15 @@ func parts() -> Array[SavePart]:
 			cert.from_save_dict
 		)
 	)
+	var current_awards := ensure_awards()
+	list.append(
+		SavePart.new(
+			"awards",
+			current_awards.to_save_dict,
+			SavePart.checked("awards", _stage_awards),
+			current_awards.from_save_dict
+		)
+	)
 	return list
 
 
@@ -463,6 +478,34 @@ func ensure_certification() -> AirportCertification:
 		certification.bind(flights, rating, passengers, baggage, unlocks, finances, clock)
 	certification.celebrate_handler = _on_certified
 	return certification
+
+
+## Returns the scene's AirportAwards, creating and wiring it + AwardsCeremony when unset.
+func ensure_awards() -> AirportAwards:
+	if awards == null:
+		if get_parent() != null:
+			awards = get_parent().get_node_or_null("AirportAwards") as AirportAwards
+		if awards == null:
+			awards = AirportAwards.new()
+			awards.name = "AirportAwards"
+			add_child(awards)
+	if clock != null or flights != null or passengers != null or rating != null or finances != null:
+		awards.bind(clock, flights, passengers, rating, finances)
+	if awards_ceremony == null:
+		if get_parent() != null:
+			awards_ceremony = get_parent().get_node_or_null("AwardsCeremony") as AwardsCeremony
+		if awards_ceremony == null:
+			awards_ceremony = AwardsCeremony.new()
+			awards_ceremony.name = "AwardsCeremony"
+			add_child(awards_ceremony)
+	awards_ceremony.bind(awards, clock, self)
+	if build_mode != null:
+		build_mode.awards = awards
+	if get_parent() != null:
+		var menu := get_parent().get_node_or_null("BuildMenu") as BuildMenu
+		if menu != null:
+			menu.watch_awards(awards)
+	return awards
 
 
 ## Returns the active GameRules, creating Career defaults when unset.
@@ -559,16 +602,20 @@ func load_world(data: Variant) -> bool:
 		return false
 	pending_path = ""
 	var cert := ensure_certification()
+	var current_awards := ensure_awards()
 	cert.set_loading(true)
+	current_awards.set_loading(true)
 	for part in parts():
 		if not _install(part, data):
 			cert.set_loading(false)
+			current_awards.set_loading(false)
 			# Unreachable while each install repeats its own stage check; said
 			# loudly, because the world is then partly loaded.
 			_fail("Load", "the %s part was refused after it was checked" % part.key)
 			loaded.emit(false)
 			return false
 	cert.set_loading(false)
+	current_awards.set_loading(false)
 	# The rescue grant's repair bound, worked out now rather than in a tick.
 	if rescue_grant != null:
 		rescue_grant.prepare()
@@ -1142,6 +1189,13 @@ func _install_rating(data: Dictionary) -> bool:
 
 static func _stage_certification(data: Dictionary) -> Dictionary:
 	var problem := AirportCertification.validation_problem(data)
+	if problem != "":
+		return {"error": problem}
+	return data
+
+
+static func _stage_awards(data: Dictionary) -> Dictionary:
+	var problem := AirportAwards.validation_problem(data)
 	if problem != "":
 		return {"error": problem}
 	return data

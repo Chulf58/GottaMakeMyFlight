@@ -288,7 +288,7 @@ static func base_price(kit_id: StringName) -> int:
 	total += (perimeter - 1) * PriceTable.price_of_wall(BuildGrid.WallKind.PLAIN)
 	total += PriceTable.price_of_wall(BuildGrid.WallKind.DOOR)
 	for piece: Dictionary in kit["pieces"]:
-		var each := PriceTable.price_of_object(piece["def"])
+		var each := BuildCatalog.object_price(piece["def"])
 		if each == PriceTable.NO_PRICE:
 			return PriceTable.NO_PRICE
 		total += each

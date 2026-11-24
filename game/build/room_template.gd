@@ -117,7 +117,7 @@ func plan(centre: Vector2i, turns: int, grid: BuildGrid = null) -> Array[BuildEd
 func price() -> int:
 	var total := floors.size() * PriceTable.price_of_floor()
 	for piece in pieces:
-		var each := PriceTable.price_of_object(piece["def"])
+		var each := BuildCatalog.object_price(piece["def"])
 		if each == PriceTable.NO_PRICE:
 			return PriceTable.NO_PRICE
 		total += each

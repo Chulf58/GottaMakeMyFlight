@@ -611,4 +611,10 @@ func texts(tool: BuildMode.Tool) -> Array:
 				tr("Waiting passengers who see it lose boredom. A second podium does not stack."),
 				tr("Costs upkeep every day. A plain wall blocks the view."),
 			]
+		BuildMode.Tool.AWARD_TROPHY:
+			lines = [
+				tr("An Annual Airport Awards trophy earned for airport excellence."),
+				tr("Place it inside any room to add +30 Room Prestige points."),
+				tr("Free to place up to the number of trophies earned. No upkeep."),
+			]
 	return lines

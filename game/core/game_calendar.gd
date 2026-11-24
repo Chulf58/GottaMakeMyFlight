@@ -16,6 +16,7 @@ extends RefCounted
 const TICKS_PER_MINUTE := 20
 const MINUTES_PER_DAY := 24 * 60
 const TICKS_PER_DAY := TICKS_PER_MINUTE * MINUTES_PER_DAY
+const DAYS_PER_YEAR := 10
 ## The calendar starts (at E) at 06:00 on day 0.
 const START_MINUTE := 6 * 60
 const START_TICK_OF_DAY := START_MINUTE * TICKS_PER_MINUTE
@@ -62,3 +63,13 @@ static func tick_at(day: int, minute: int, epoch: int) -> int:
 static func floor_div(value: int, divisor: int) -> int:
 	@warning_ignore("integer_division")
 	return (value - posmod(value, divisor)) / divisor
+
+
+## Completed airport years at `day`: days 0..9 -> 0, 10..19 -> 1, 20..29 -> 2.
+static func year_of(day: int) -> int:
+	return floor_div(day, DAYS_PER_YEAR)
+
+
+## Day index within the current airport year, 0 to DAYS_PER_YEAR - 1.
+static func day_of_year(day: int) -> int:
+	return posmod(day, DAYS_PER_YEAR)
