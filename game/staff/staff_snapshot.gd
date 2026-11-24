@@ -5,7 +5,7 @@ extends RefCounted
 ## planned differently after a load; station claims are rebuilt from the
 ## members. Cells are saved as [x, y].
 ##
-## Only the current version (StaffSim.SAVE_VERSION, 9) loads: an older save is
+## Only the current version (StaffSim.SAVE_VERSION, 10) loads: an older save is
 ## refused, never migrated (no save migrations before the first release,
 ## decision old-saves-are-not-supported-until-after-a-release-no-save-mi).
 ##
@@ -59,8 +59,9 @@ const MEMBER_KEYS := [
 	"energy_ticks",
 	"break_room",
 	"break_spot",
+	"level",
 ]
-const INT_FIELDS := ["id", "role", "state", "station", "slot", "path_index", "seg_mm"]
+const INT_FIELDS := ["id", "role", "state", "station", "slot", "path_index", "seg_mm", "level"]
 const BOOL_FIELDS := ["needs_replan", "search_failed", "leaving", "job_bin"]
 
 
@@ -104,6 +105,7 @@ static func save(
 					"energy_ticks": m.energy_ticks,
 					"break_room": m.break_room,
 					"break_spot": [m.break_spot.x, m.break_spot.y],
+					"level": m.level,
 				}
 			)
 		)
@@ -304,6 +306,9 @@ static func _member(record: Variant, sim: PassengerSim) -> Variant:
 	m.ramp_job = int(record["ramp_job"]) as StaffMember.RampJob
 	m.ramp_shuttle_id = int(record["ramp_shuttle_id"])
 	m.ramp_flight_id = record["ramp_flight_id"]
+	m.level = int(record["level"])
+	if m.level < StaffMember.LEVEL_MIN or m.level > StaffMember.LEVEL_MAX:
+		return "member %d level %d is out of range" % [m.id, m.level]
 	if not WholeNumber.is_whole(record["energy"]):
 		return "member %d energy is not a whole number" % m.id
 	m.energy = int(record["energy"])

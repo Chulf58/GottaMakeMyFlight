@@ -441,7 +441,7 @@ func step_counters() -> void:
 			continue
 		q["serving"] = front.id
 		var ordering: CafeVisit = _visits[front.id]
-		ordering.service_end = _sim.tick + ServiceTypes.find_def(ordering.venue).order_ticks
+		ordering.service_end = _sim.tick + _order_ticks(counter_id, ordering.venue)
 		_set_stage.call(front, Passenger.Stage.CAFE_ORDER)
 
 
@@ -770,9 +770,9 @@ func _soonest_counter(cafe: Dictionary) -> Dictionary:
 
 ## Ticks until a newcomer joining a counter's queue now has its order: the
 ## order in progress, the guests ahead and its own, each taking the order
-## time of the counter's room type.
+## time of the counter's room type scaled by its server's training level.
 func _order_eta(room_id: int, counter_id: int) -> int:
-	var each := ServiceTypes.find_def(layout.venue_of(room_id, counter_id)).order_ticks
+	var each := _order_ticks(counter_id, layout.venue_of(room_id, counter_id))
 	var left := 0
 	var ahead := queue_of(counter_id).size()
 	var serving := serving_at(counter_id)
@@ -780,6 +780,17 @@ func _order_eta(room_id: int, counter_id: int) -> int:
 		left = maxi(0, (_visits[serving] as CafeVisit).service_end - _sim.tick)
 		ahead -= 1
 	return left + ahead * each + each
+
+
+func _order_ticks(counter_id: int, venue: StringName) -> int:
+	var base := ServiceTypes.find_def(venue).order_ticks
+	if _sim.staff == null:
+		return base
+	var staff_id := _sim.staff.staff_at(counter_id)
+	var m := _sim.staff.get_member(staff_id) if staff_id != 0 else null
+	if m == null:
+		return base
+	return maxi(1, roundi(float(base) / m.level_speed_factor()))
 
 
 ## The free seat nearest `from` that can be walked to from it, with the walk

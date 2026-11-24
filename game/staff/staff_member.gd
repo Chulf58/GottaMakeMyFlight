@@ -47,6 +47,9 @@ const TIRED_THRESHOLD := 25
 const BREAK_SEEK_THRESHOLD := 35
 const BREAK_DONE_THRESHOLD := 95
 const TIRED_WORK_FACTOR := 0.80
+const LEVEL_MIN := 1
+const LEVEL_MAX := 3
+const LEVEL_SPEED_PERCENTS: Array[int] = [100, 115, 130]
 
 var id := 0
 var role: Role = Role.CHECKIN
@@ -87,6 +90,7 @@ var energy := ENERGY_MAX
 var energy_ticks := 0
 var break_room := 0
 var break_spot := NO_CELL
+var level := LEVEL_MIN
 
 
 func is_tired() -> bool:
@@ -97,8 +101,36 @@ func is_on_break() -> bool:
 	return state == State.TO_BREAK or state == State.ON_BREAK
 
 
+func level_speed_percent() -> int:
+	var idx := clampi(level, LEVEL_MIN, LEVEL_MAX) - LEVEL_MIN
+	return LEVEL_SPEED_PERCENTS[idx]
+
+
+func level_speed_factor() -> float:
+	return float(level_speed_percent()) / 100.0
+
+
+func work_speed_percent() -> int:
+	var base := level_speed_percent()
+	@warning_ignore("integer_division")
+	return (base * 4) / 5 if is_tired() else base
+
+
 func work_speed_factor() -> float:
-	return TIRED_WORK_FACTOR if is_tired() else 1.0
+	return level_speed_factor() * (TIRED_WORK_FACTOR if is_tired() else 1.0)
+
+
+## Exact tick-derived work steps completed on `tick` for `speed_percent`
+## (80, 92, 100, 104, 115, 130). Equals 1 every tick at 100%, skips
+## posmod(tick, 5) == 0 at 80%, and telescopes cleanly over skipped ranges.
+static func steps_on_tick(tick: int, speed_percent: int) -> int:
+	if speed_percent == 100:
+		return 1
+	@warning_ignore("integer_division")
+	var next_cum := ((tick + 1) * speed_percent) / 100
+	@warning_ignore("integer_division")
+	var cur_cum := (tick * speed_percent) / 100
+	return next_cum - cur_cum
 
 
 func in_pool() -> bool:

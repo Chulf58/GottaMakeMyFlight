@@ -929,14 +929,11 @@ func _next_event() -> int:
 			at = tick + 1
 		# Work that has run out waits on something else, which is its own event.
 		if u.stage == Passenger.Stage.SECURITY and _works(u) and u.security_work > 0:
-			if _runtime.is_officer_tired(u.station, u.security_phase):
-				at = tick + 1 if at < 0 else mini(at, tick + 1)
-			else:
-				var rate := _runtime.rate_for(u.station, u)
-				if rate > 0:
-					@warning_ignore("integer_division")
-					var ends := tick + maxi(1, (u.security_work + rate - 1) / rate)
-					at = ends if at < 0 else mini(at, ends)
+			var rate := _runtime.rate_for(u.station, u)
+			if rate > 0:
+				var speed := _runtime.officer_work_speed_percent(u.station, u.security_phase)
+				var ends := SecurityRuntime.work_finish_tick(tick, u.security_work, rate, speed)
+				at = ends if at < 0 else mini(at, ends)
 		if at >= 0 and (best < 0 or at < best):
 			best = at
 	return tick + 1 if every_tick else best
@@ -968,8 +965,12 @@ func _skip(ticks: int) -> void:
 		if _cleared.has(id) or _left.has(id):
 			continue
 		var u: Passenger = _units[id]
-		if u.stage == Passenger.Stage.SECURITY and _works(u):
-			u.security_work -= ticks * _runtime.rate_for(u.station, u)
+		if u.stage == Passenger.Stage.SECURITY and _works(u) and u.security_work > 0:
+			var rate := _runtime.rate_for(u.station, u)
+			if rate > 0:
+				var speed := _runtime.officer_work_speed_percent(u.station, u.security_phase)
+				var steps := SecurityRuntime.work_steps_in_range(tick, ticks, speed)
+				u.security_work -= steps * rate
 		if u.is_moving():
 			u.walk(ticks * u.pace_mm())
 

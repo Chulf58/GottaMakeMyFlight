@@ -174,7 +174,7 @@ static func _visit_problem(
 		[
 			(
 				stage != Passenger.Stage.CAFE_ORDER
-				or _runs_past(visit.service_end, p.stage_tick, venue.order_ticks, tick)
+				or _runs_within(visit.service_end, p.stage_tick, venue.order_ticks, tick)
 			),
 			"the order does not end order_ticks after it started and after the saved tick"
 		],
@@ -288,6 +288,10 @@ static func _runs_from(start: int, length: int, tick: int) -> bool:
 ## ends it runs on the tick it ends, so a save never holds it at or past then.
 static func _runs_past(end: int, start: int, length: int, tick: int) -> bool:
 	return end == start + length and start <= tick and end > tick
+
+
+static func _runs_within(end: int, start: int, max_length: int, tick: int) -> bool:
+	return start <= tick and end > tick and end <= start + max_length
 
 
 static func _visit(entry: Variant) -> CafeVisit:

@@ -148,7 +148,9 @@ signal loaded(ok: bool)
 ## refused (no migration).
 ## 40: Annual Airport Awards (part "awards", AirportAwards v1); version 39 saves
 ## are refused (no migration).
-const SAVE_VERSION := 40
+## 41: In-panel staff training L1-L3 (StaffSim v10); version 40 saves are
+## refused (no migration).
+const SAVE_VERSION := 41
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"

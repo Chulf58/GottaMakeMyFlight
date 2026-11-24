@@ -54,6 +54,7 @@ signal staff_changed
 signal hired(id: int, role: StaffMember.Role)
 signal member_state_changed(id: int, state: StaffMember.State)
 signal member_energy_changed(id: int, energy: int)
+signal member_trained(id: int, level: int)
 
 ## 2: members save their post (slot).
 ## 3: shop servers (Role.SHOP) at counters; a version 2 save has none.
@@ -63,9 +64,10 @@ signal member_energy_changed(id: int, energy: int)
 ## 7: airside ramp agents (Role.RAMP) with ramp_job, ramp_shuttle_id, ramp_flight_id.
 ## 8: overnight off-shift states (LEAVING_SHIFT, OFF_SHIFT).
 ## 9: soft staff energy and break room states (TO_BREAK, ON_BREAK).
+## 10: per-member training level (StaffMember.level).
 ## Only this version loads; older saves are refused (no migrations before a
 ## release).
-const SAVE_VERSION := 9
+const SAVE_VERSION := 10
 ## Empty gap ahead before staff walk out for an overnight off-shift: 2 game hours.
 const SHIFT_GAP_TICKS := 2400
 ## How early staff return from off-shift before first morning activity: 30 game min.
@@ -253,6 +255,44 @@ func member_ids() -> Array[int]:
 
 func get_member(id: int) -> StaffMember:
 	return _by_id.get(id)
+
+
+## Roles whose work speed scales with training level (L1-L3).
+## Gate and Ramp agents gate/dispatch fixed flight timelines with no per-agent timed service loop.
+static func is_role_trainable(role: int) -> bool:
+	return (
+		role
+		in [
+			StaffMember.Role.CHECKIN,
+			StaffMember.Role.SECURITY,
+			StaffMember.Role.SHOP,
+			StaffMember.Role.CLEANER,
+		]
+	)
+
+
+## Trains member `id` up one level (L1->L2->L3), debiting `wallet` when set.
+func train(id: int, wallet: Wallet = null) -> bool:
+	var m := get_member(id)
+	if (
+		m == null
+		or not is_role_trainable(m.role)
+		or m.leaving
+		or m.state == StaffMember.State.WALKING_OUT
+		or m.state == StaffMember.State.LEAVING_SHIFT
+	):
+		return false
+	if m.level < StaffMember.LEVEL_MIN or m.level >= StaffMember.LEVEL_MAX:
+		return false
+	var cost := PriceTable.staff_train_cost(m.level)
+	if cost <= 0:
+		return false
+	if wallet != null and not wallet.spend(cost, Wallet.Category.BUILD):
+		return false
+	m.level += 1
+	member_trained.emit(id, m.level)
+	staff_changed.emit()
+	return true
 
 
 ## Whether a member is on duty at the station's `slot` post. Only the primary
@@ -488,8 +528,9 @@ func _work_jobs() -> void:
 		if m.role != StaffMember.Role.CLEANER:
 			continue
 		if m.state == StaffMember.State.ON_DUTY:
-			if not (m.is_tired() and posmod(sim.tick, 5) == 0):
-				m.work_left -= 1
+			var steps := StaffMember.steps_on_tick(sim.tick, m.work_speed_percent())
+			if steps > 0:
+				m.work_left = maxi(m.work_left - steps, 0)
 			if m.work_left > 0:
 				continue
 			_finish_job(m)

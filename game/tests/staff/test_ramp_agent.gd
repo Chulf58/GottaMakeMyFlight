@@ -599,6 +599,7 @@ func test_unstaffed_pushback_save_load_restores_alert_without_double_charge_and_
 				"energy_ticks": 0,
 				"break_room": 0,
 				"break_spot": [-1, -1],
+				"level": 1,
 			}
 		)
 	)

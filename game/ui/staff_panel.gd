@@ -1,3 +1,5 @@
+# gdlint:disable = max-public-methods
+# StaffPanel exposes query/button accessors for HUD tests; training accessors took it past 20.
 class_name StaffPanel
 extends CanvasLayer
 ## The hiring panel (Staff S2): for check-in agents, security officers, shop
@@ -93,6 +95,14 @@ const GAP_POLL_S := 1.0
 ## paused-at-1x-speed-with-hin). Optional.
 @export var save_game: SaveGame
 @export var unlocks: BuildUnlocks
+@export var finances: Finances
+
+var wallet: Wallet:
+	set(value):
+		wallet = value
+		_bind_wallet()
+		if is_node_ready() and staff != null:
+			refresh()
 
 ## How many whole-grid gap scans have run, for the tests.
 var gap_scans := 0
@@ -123,6 +133,8 @@ var _energy_boxes: Dictionary = {}
 var _role_titles: Dictionary = {}
 var _hire: Dictionary = {}
 var _fire: Dictionary = {}
+var _bound_wallet: Wallet
+var _retired_rows: Array[Node] = []
 var _pulsed_hire: Button
 var _pulse_tween: Tween
 
@@ -147,6 +159,8 @@ func _ready() -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_TRANSLATION_CHANGED and is_node_ready():
 		_retranslate()
+	elif what == NOTIFICATION_PREDELETE:
+		_flush_retired()
 
 
 ## Follows `with_staff`'s hiring and members going on duty, and its grid's
@@ -159,6 +173,7 @@ func watch(with_staff: StaffSim) -> void:
 	staff.member_energy_changed.connect(_on_member_energy)
 	staff.sim.grid.graph_changed.connect(_on_graph_changed)
 	staff.sim.grid.edit_applied.connect(_on_edit_applied)
+	_bind_wallet()
 	_scan_gaps()
 	if gate != null:
 		gate.changed.connect(refresh)
@@ -178,6 +193,24 @@ func hire_button(role: StaffMember.Role) -> Button:
 
 func fire_button(role: StaffMember.Role) -> Button:
 	return _fire[role]
+
+
+func train_button(member_id: int) -> Button:
+	var node_name := "Train%d" % member_id
+	for role in _energy_boxes:
+		var btn := (_energy_boxes[role] as Node).find_child(node_name, true, false) as Button
+		if btn != null:
+			return btn
+	return null
+
+
+func member_level_text(member_id: int) -> String:
+	if staff == null:
+		return ""
+	var m := staff.get_member(member_id)
+	if m == null:
+		return ""
+	return tr("Lv. {level}").format({"level": m.level})
 
 
 func role_column(role: StaffMember.Role) -> Control:
@@ -355,6 +388,7 @@ func set_hint_yielded(yielded: bool) -> void:
 
 
 func refresh() -> void:
+	_bind_wallet()
 	_track_opening()
 	_sync_role_columns()
 	for role in ROLES:
@@ -533,7 +567,49 @@ func _on_staff_toggled(open: bool) -> void:
 
 
 func _exit_tree() -> void:
+	_unbind_wallet()
 	_stop_hire_pulse()
+
+
+func _resolve_wallet() -> Wallet:
+	var found: Wallet = null
+	if wallet != null:
+		found = wallet
+	elif finances != null:
+		found = finances.wallet
+	elif menu != null and menu.build_mode != null and menu.build_mode.wallet() != null:
+		found = menu.build_mode.wallet()
+	elif save_game != null and save_game.finances != null:
+		found = save_game.finances.wallet
+	elif staff != null and staff.sim != null and staff.sim.wallet != null:
+		found = staff.sim.wallet
+	elif get_parent() != null:
+		var node := get_parent().get_node_or_null("Finances") as Finances
+		if node != null:
+			found = node.wallet
+	return found
+
+
+func _bind_wallet() -> void:
+	var resolved := _resolve_wallet()
+	if resolved == _bound_wallet:
+		return
+	_unbind_wallet()
+	_bound_wallet = resolved
+	if _bound_wallet != null:
+		_bound_wallet.changed.connect(_on_wallet_changed)
+
+
+func _unbind_wallet() -> void:
+	if _bound_wallet != null and _bound_wallet.changed.is_connected(_on_wallet_changed):
+		_bound_wallet.changed.disconnect(_on_wallet_changed)
+	_bound_wallet = null
+
+
+func _on_wallet_changed(_balance: int) -> void:
+	if _card.visible and staff != null:
+		for role in ROLES:
+			_refresh_energy_box(role)
 
 
 func _on_member_state(_id: int, _state: StaffMember.State) -> void:
@@ -877,12 +953,22 @@ func _retranslate() -> void:
 		refresh()
 
 
+func _flush_retired() -> void:
+	for node in _retired_rows:
+		if is_instance_valid(node):
+			node.free()
+	_retired_rows.clear()
+
+
 func _refresh_energy_box(role: StaffMember.Role) -> void:
 	var box := _energy_boxes.get(role) as VBoxContainer
 	if box == null or staff == null:
 		return
 	for child in box.get_children():
-		child.free()
+		box.remove_child(child)
+		_retired_rows.append(child)
+	if not _retired_rows.is_empty() and is_inside_tree():
+		_flush_retired.call_deferred()
 	var members: Array[StaffMember] = []
 	for id in staff.member_ids():
 		var m := staff.get_member(id)
@@ -891,6 +977,7 @@ func _refresh_energy_box(role: StaffMember.Role) -> void:
 	box.visible = not members.is_empty()
 	if members.is_empty():
 		return
+	var active_wallet := _resolve_wallet()
 	var shown := mini(members.size(), MAX_ENERGY_ROWS)
 	for i in shown:
 		var m := members[i]
@@ -913,6 +1000,36 @@ func _refresh_energy_box(role: StaffMember.Role) -> void:
 		)
 		bar.add_theme_stylebox_override("fill", fill)
 		entry.add_child(bar)
+		if StaffSim.is_role_trainable(role):
+			var train_row := HBoxContainer.new()
+			train_row.add_theme_constant_override("separation", 4)
+			var lv_lbl := _label(member_level_text(m.id), &"HudSmall")
+			lv_lbl.name = "Level%d" % m.id
+			lv_lbl.autowrap_mode = TextServer.AUTOWRAP_OFF
+			lv_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			train_row.add_child(lv_lbl)
+			if m.level < StaffMember.LEVEL_MAX:
+				var cost := PriceTable.staff_train_cost(m.level)
+				var btn := Button.new()
+				btn.name = "Train%d" % m.id
+				btn.text = tr("Train ${cost}").format({"cost": cost})
+				btn.focus_mode = Control.FOCUS_NONE
+				btn.theme_type_variation = &"HudButtonCompact"
+				btn.add_theme_font_size_override("font_size", HudLayout.CAPTION)
+				var cannot_train := m.leaving or m.state == StaffMember.State.LEAVING_SHIFT
+				btn.disabled = (
+					cannot_train or (active_wallet != null and not active_wallet.can_afford(cost))
+				)
+				btn.tooltip_text = tr("Upgrade work speed to +{pct}%").format({"pct": m.level * 15})
+				var member_id := m.id
+				btn.pressed.connect(func() -> void: staff.train(member_id, _resolve_wallet()))
+				train_row.add_child(btn)
+			else:
+				var max_lbl := _label(tr("Max"), &"HudSmall")
+				max_lbl.name = "Max%d" % m.id
+				max_lbl.autowrap_mode = TextServer.AUTOWRAP_OFF
+				train_row.add_child(max_lbl)
+			entry.add_child(train_row)
 		box.add_child(entry)
 	var extra := members.size() - shown
 	if extra > 0:

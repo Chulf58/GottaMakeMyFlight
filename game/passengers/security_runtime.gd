@@ -181,22 +181,49 @@ func _helped(station: int) -> bool:
 	return staff != null and staff.is_staffed(station, StaffMember.Slot.HELPER)
 
 
-func is_officer_tired(station: int, phase: int) -> bool:
+func officer_work_speed_percent(station: int, phase: int) -> int:
 	if _host == null:
-		return false
+		return 100
 	var staff: StaffSim = _host.get("staff") as StaffSim
 	if staff == null:
-		return false
-	var slot := (
-		StaffMember.Slot.HELPER
-		if (phase == Phase.REPACK or phase == Phase.BODY_CHECK) and _helped(station)
-		else StaffMember.Slot.PRIMARY
+		return 100
+	var helper_active := (
+		_helped(station)
+		and (phase == Phase.REPACK or (phase == Phase.BODY_CHECK and not _has_repack(station)))
 	)
+	var slot := StaffMember.Slot.HELPER if helper_active else StaffMember.Slot.PRIMARY
 	var id := staff.staff_at(station, slot)
 	if id == 0:
-		return false
+		return 100
 	var m := staff.get_member(id)
-	return m != null and m.is_tired()
+	return m.work_speed_percent() if m != null else 100
+
+
+static func work_steps_in_range(from_tick: int, ticks: int, speed_percent: int) -> int:
+	if ticks <= 0:
+		return 0
+	if speed_percent == 100:
+		return ticks
+	@warning_ignore("integer_division")
+	var end_cum := ((from_tick + ticks + 1) * speed_percent) / 100
+	@warning_ignore("integer_division")
+	var start_cum := ((from_tick + 1) * speed_percent) / 100
+	return end_cum - start_cum
+
+
+static func work_finish_tick(
+	from_tick: int, remaining_work: int, rate: int, speed_percent: int
+) -> int:
+	@warning_ignore("integer_division")
+	var needed := maxi(1, (remaining_work + rate - 1) / rate)
+	if speed_percent == 100:
+		return from_tick + needed
+	@warning_ignore("integer_division")
+	var base := ((from_tick + 1) * speed_percent) / 100
+	var target := base + needed
+	@warning_ignore("integer_division")
+	var finish := (target * 100 + speed_percent - 1) / speed_percent - 1
+	return maxi(from_tick + 1, finish)
 
 
 static func body_pending(p: Passenger) -> bool:
@@ -447,8 +474,10 @@ func restore(with_records: Dictionary) -> void:
 func _advance_one(station: int, record: Dictionary, p: Passenger) -> void:
 	var phase := p.security_phase as Phase
 	if WORK_PHASES.has(phase):
-		if not (is_officer_tired(station, phase) and posmod(_host.tick, 5) == 0):
-			p.security_work = maxi(p.security_work - rate_for(station, p), 0)
+		var speed := officer_work_speed_percent(station, phase)
+		var steps := StaffMember.steps_on_tick(_host.tick, speed)
+		if steps > 0:
+			p.security_work = maxi(p.security_work - rate_for(station, p) * steps, 0)
 	var on_lane := is_lane(station)
 	var lane := _lane(station) if on_lane else {}
 	if record["berth"] == p.id and phase == Phase.LEAVE and p.at != lane["berth"]:
