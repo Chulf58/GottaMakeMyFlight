@@ -141,6 +141,10 @@ func _initialize() -> void:
 	Engine.max_fps = SimClock.TICK_RATE * 3
 	_seed = randi()
 	_two_bag = "--two-bag" in OS.get_cmdline_user_args()
+	if _two_bag:
+		print("PROBE_INVALID --two-bag retired: rollers only on 1-bag passengers")
+		quit(1)
+		return
 	var out_rel := OUT_REL + ("-two-bag" if _two_bag else "")
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--out="):
@@ -314,11 +318,15 @@ func _near_used(seat: Dictionary, used: Dictionary) -> bool:
 ## two, the roller as bag `hand` (SecurityLooks.hand_of()). Kept on time on
 ## every tick.
 func _add(label: String, seat: Dictionary, variant: int, hand: int, bags := 1) -> void:
+	if bags > 1:
+		_invalid("%s requests %d-bag roller (retired)" % [label, bags])
+		return
+	var roller := 0
 	var p: Passenger = null
-	var roller := 0 if bags == 1 else hand
 	for attempt in 400:
 		p = _sim.get_passenger(_sim.spawn_now(StarterFlight.first_flight()))
-		if SecurityLooks.bag_kind(p, roller) == SecurityLooks.Kind.ROLLER:
+		p.carry_on = bags
+		if SecurityLooks.bag_kind(p, 0) == SecurityLooks.Kind.ROLLER:
 			break
 		p.carry_on = 0
 	ToiletTestLayout.calm(p)

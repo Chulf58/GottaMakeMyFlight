@@ -128,18 +128,17 @@ func _gate_sit(seat: Dictionary) -> Dictionary:
 	return await _watch(p, 0)
 
 
-## A cafe guest with a roller and one other bag, sitting down at the airside
-## cafe: the bag that is not the roller lies still on every settled frame,
-## while the drawn body eases off the sit offset (SitHold.offset()).
-func test_cafe_bag_beside_a_roller_lies_still() -> void:
+## A two-bag cafe guest sitting down at the airside cafe: its floor bags
+## lie still on every settled frame while the drawn body eases off the sit
+## offset (SitHold.offset()).
+func test_cafe_two_bags_lie_still() -> void:
 	var p := await _cafe_guest(
 		func(kinds: Array) -> bool:
-			return SecurityLooks.Kind.ROLLER in kinds and kinds[0] != kinds[1],
+			return SecurityLooks.Kind.ROLLER not in kinds and kinds[0] != kinds[1],
 		2
 	)
-	var other := 0 if SecurityLooks.bag_kind(p, 0) != SecurityLooks.Kind.ROLLER else 1
-	var got := await _watch(p, other)
-	_check("cafe bag beside a roller", got, 4)
+	var got := await _watch(p, 0)
+	_check("cafe two-bag", got, 4)
 
 
 ## A cafe guest with a single bag that is not a roller: it lies still too.

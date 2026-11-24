@@ -87,7 +87,7 @@ const VISITORS := [
 	["backpack", SecurityLooks.Kind.BACKPACK, 1, 0],
 	["shoulder", SecurityLooks.Kind.SHOULDER, 1, 0],
 	["roller", SecurityLooks.Kind.ROLLER, 1, 0],
-	["roller2", SecurityLooks.Kind.ROLLER, 2, 1],
+	["case2", SecurityLooks.Kind.CASE, 2, 1],
 ]
 ## The plated moments of each move (its progress window): set-down mid-drop,
 ## landing (a bag from the hand is let go from k 0.45, CarryLead.STALL_LET_GO;
@@ -365,12 +365,12 @@ func _spawn(kind: SecurityLooks.Kind, count: int) -> Passenger:
 	while true:
 		var p := _sim.get_passenger(_sim.spawn_now(flight))
 		ToiletTestLayout.calm(p)
-		p.carry_on = 0
+		p.carry_on = count
 		if SecurityLooks.bag_kind(p, 0) == kind:
-			p.carry_on = count
 			p.toilet_need = 95
 			p.toilet_cooldown = 0
 			return p
+		p.carry_on = 0
 	return null
 
 

@@ -47,10 +47,13 @@ func _corridor_walker(start := 2) -> Passenger:
 	add_child(_views)
 	RenderingServer.frame_pre_draw.disconnect(_views.carry_on_props()._unposed)
 	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	p.carry_on = 1
 	while SecurityLooks.bag_kind(p, 0) != SecurityLooks.Kind.ROLLER:
 		p.carry_on = 0
+		p.hunger = 0
+		p.cafe_cooldown = 1000000
 		p = _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
-	p.carry_on = 1
+		p.carry_on = 1
 	p.hunger = 0
 	p.cafe_cooldown = 1000000
 	while p.stage != Passenger.Stage.TO_GATE and _world.clock.tick < MAX_TICK:
@@ -59,7 +62,7 @@ func _corridor_walker(start := 2) -> Passenger:
 	# Walls on both sides of a stretch of the route ahead (a corridor no change
 	# of hand clears, as a doorway): the roller tucks there.
 	var edits: Array[BuildEdit] = []
-	for k in range(p.path_index + start, mini(p.path_index + start + 6, p.path.size() - 1)):
+	for k in range(p.path_index + start, mini(p.path_index + start + 6, p.path.size() - 2)):
 		var d: Vector2i = p.path[k + 1] - p.path[k]
 		var sides := (
 			[BuildGrid.Side.NORTH, BuildGrid.Side.SOUTH]
@@ -76,7 +79,7 @@ func _corridor_walker(start := 2) -> Passenger:
 
 
 func test_a_snap_beside_a_wall_draws_the_roller_tucked_at_once() -> void:
-	var p := _corridor_walker()
+	var p := _corridor_walker(1)
 	var props := _views.carry_on_props()
 	var tucked := false
 	while not tucked and p.stage != Passenger.Stage.CAFE_SEATED and _world.clock.tick < MAX_TICK:
@@ -107,9 +110,9 @@ func test_a_snap_before_the_walls_keeps_the_tuck_that_was_coming() -> void:
 	# The tuck turns on LOOK_TICKS and TUCK_TICKS of walk before the roller's
 	# settled footprint reaches the walls; a snap at that moment must look as
 	# far ahead as a walking guest does, not a standing one's few centimetres.
-	# The corridor starts six cells on, so the guest is walking when the tuck
-	# turns on.
-	var p := _corridor_walker(6)
+	# The corridor starts four cells on (outside the cafe room), so the guest
+	# is walking when the tuck turns on.
+	var p := _corridor_walker(4)
 	var props := _views.carry_on_props()
 	var on := false
 	while not on and p.stage != Passenger.Stage.CAFE_SEATED and _world.clock.tick < MAX_TICK:

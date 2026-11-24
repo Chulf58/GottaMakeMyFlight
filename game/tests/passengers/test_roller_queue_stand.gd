@@ -411,11 +411,11 @@ func test_walkers_stand_rollers_up_at_check_in_and_security_then_lift_them() -> 
 	_world.clock.ticked.connect(_keep_on_time)
 	while _followed.size() < GUESTS_AT_DESKS:
 		var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+		p.carry_on = 1
 		if SecurityLooks.bag_kind(p, 0) != ROLLER:
 			p.carry_on = 0
 			continue
 		ToiletTestLayout.calm(p)
-		p.carry_on = 1
 		p.liquids = false
 		p.alarm = false
 		_followed.append(p)
@@ -536,11 +536,11 @@ func _send_to_security(seen: Dictionary) -> bool:
 	var sent := 0
 	while sent < GUESTS_AT_DESKS:
 		var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+		p.carry_on = 1
 		if SecurityLooks.bag_kind(p, 0) != ROLLER:
 			p.carry_on = 0
 			continue
 		ToiletTestLayout.calm(p)
-		p.carry_on = 1
 		p.liquids = false
 		p.alarm = false
 		p.apron = []
@@ -585,6 +585,7 @@ func _cafe_guest() -> Passenger:
 	add_child(_views)
 	RenderingServer.frame_pre_draw.disconnect(_views.carry_on_props()._unposed)
 	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	p.carry_on = 1
 	while SecurityLooks.bag_kind(p, 0) != ROLLER:
 		# The others drawn on the way keep out of the cafe, so the guest orders
 		# at a free counter. Served at check-in in the order they joined
@@ -595,7 +596,7 @@ func _cafe_guest() -> Passenger:
 		p.hunger = 0
 		p.cafe_cooldown = 1000000
 		p = _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
-	p.carry_on = 1
+		p.carry_on = 1
 	p.hunger = 0
 	p.cafe_cooldown = 1000000
 	_guest = p

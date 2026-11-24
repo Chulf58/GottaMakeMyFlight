@@ -39,26 +39,48 @@ func _passenger(id: int) -> Passenger:
 	return p
 
 
-## The kind is the same every time for the same passenger, whatever else the
-## passenger holds, and the four kinds come up in about equal shares.
+## The kind is a fixed hash of the id: 1-bag passengers draw from all 4 kinds
+## (with every roller at 1.0x scale); 2-bag passengers draw only from CASE,
+## BACKPACK and SHOULDER (never ROLLER).
 func test_the_kind_is_a_fixed_hash_of_the_id() -> void:
-	var counts := [0, 0, 0, 0]
+	var one_counts := [0, 0, 0, 0]
+	var two_counts := [0, 0, 0, 0]
 	for id in range(1, IDS + 1):
 		var p := _passenger(id)
+		p.carry_on = 1
 		var kind := SecurityLooks.bag_kind(p, 0)
-		counts[kind] += 1
-		p.carry_on = 2
+		one_counts[kind] += 1
+		if kind == SecurityLooks.Kind.ROLLER:
+			assert_float(SecurityLooks.bag_scale(p)).is_equal(1.0)
 		p.variant = 1
 		p.stage = Passenger.Stage.SEATED
 		assert_int(SecurityLooks.bag_kind(p, 0)).is_equal(kind)
-		assert_int(SecurityLooks.bag_kind(_passenger(id), 0)).is_equal(kind)
-	print("first-bag kinds over %d ids (case, backpack, shoulder, roller): %s" % [IDS, counts])
-	for count: int in counts:
+		var one_again := _passenger(id)
+		one_again.carry_on = 1
+		assert_int(SecurityLooks.bag_kind(one_again, 0)).is_equal(kind)
+		p.carry_on = 2
+		var two_kind := SecurityLooks.bag_kind(p, 0)
+		two_counts[two_kind] += 1
+		assert_int(two_kind).is_not_equal(SecurityLooks.Kind.ROLLER)
+		assert_float(SecurityLooks.bag_scale(p)).is_equal(SecurityLooks.TWO_BAG_SCALE)
+		var two_again := _passenger(id)
+		two_again.carry_on = 2
+		assert_int(SecurityLooks.bag_kind(two_again, 0)).is_equal(two_kind)
+	print(
+		"1-bag first kinds over %d ids (case, backpack, shoulder, roller): %s" % [IDS, one_counts]
+	)
+	for count: int in one_counts:
 		assert_int(count).is_between(IDS * 18 / 100, IDS * 32 / 100)
+	print(
+		"2-bag first kinds over %d ids (case, backpack, shoulder, roller): %s" % [IDS, two_counts]
+	)
+	assert_int(two_counts[SecurityLooks.Kind.ROLLER]).is_equal(0)
+	for kind in SecurityLooks.TWO_BAG_KINDS:
+		assert_int(two_counts[kind]).is_between(IDS * 25 / 100, IDS * 42 / 100)
 
 
-## A second bag never repeats a backpack or a roller; a second shoulder bag
-## or hard case is allowed, and every kind still comes up as a second bag.
+## For <= 1 bags, a second bag never repeats a backpack or a roller; a second
+## shoulder bag or hard case is allowed, and every kind still comes up.
 func test_a_second_bag_never_repeats_a_backpack_or_a_roller() -> void:
 	var seconds := [0, 0, 0, 0]
 	var repeats := 0
@@ -71,10 +93,33 @@ func test_a_second_bag_never_repeats_a_backpack_or_a_roller() -> void:
 			repeats += 1
 			assert_int(first).is_not_equal(SecurityLooks.Kind.BACKPACK)
 			assert_int(first).is_not_equal(SecurityLooks.Kind.ROLLER)
-	print("second-bag kinds: %s, same kind twice: %d" % [seconds, repeats])
+	print("second-bag kinds (<=1): %s, same kind twice: %d" % [seconds, repeats])
 	assert_int(repeats).is_greater(0)
 	for count: int in seconds:
 		assert_int(count).is_greater(IDS / 10)
+
+
+## For 2-bag passengers, neither bag is ever a roller, all 3 non-roller kinds
+## appear, and bag 1 never repeats a backpack.
+func test_two_bag_passengers_never_get_a_roller_and_never_repeat_a_backpack() -> void:
+	var seconds := [0, 0, 0, 0]
+	var repeats := 0
+	for id in range(1, IDS + 1):
+		var p := _passenger(id)
+		p.carry_on = 2
+		var first := SecurityLooks.bag_kind(p, 0)
+		var second := SecurityLooks.bag_kind(p, 1)
+		assert_int(first).is_not_equal(SecurityLooks.Kind.ROLLER)
+		assert_int(second).is_not_equal(SecurityLooks.Kind.ROLLER)
+		seconds[second] += 1
+		if first == second:
+			repeats += 1
+			assert_int(first).is_not_equal(SecurityLooks.Kind.BACKPACK)
+	print("2-bag second kinds: %s, same kind twice: %d" % [seconds, repeats])
+	assert_int(seconds[SecurityLooks.Kind.ROLLER]).is_equal(0)
+	assert_int(repeats).is_greater(0)
+	for kind in SecurityLooks.TWO_BAG_KINDS:
+		assert_int(seconds[kind]).is_greater(IDS / 5)
 
 
 ## Each kind is carried its natural way, and its piece exists in the kit.

@@ -18,7 +18,7 @@ const VISITS := [
 	[SecurityLooks.Kind.BACKPACK, 1],
 	[SecurityLooks.Kind.SHOULDER, 1],
 	[SecurityLooks.Kind.ROLLER, 1],
-	[SecurityLooks.Kind.ROLLER, 2],
+	[SecurityLooks.Kind.CASE, 2],
 ]
 
 var _world: PassengerTestWorld
@@ -56,12 +56,13 @@ func _visitor(kind: SecurityLooks.Kind, count: int) -> Passenger:
 	# The test runs the pre-draw fallback itself at the end of each frame.
 	RenderingServer.frame_pre_draw.disconnect(_views.carry_on_props()._unposed)
 	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	p.carry_on = count
 	while SecurityLooks.bag_kind(p, 0) != kind:
 		ToiletTestLayout.calm(p)
 		p.carry_on = 0
 		p = _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+		p.carry_on = count
 	ToiletTestLayout.calm(p)
-	p.carry_on = count
 	p.liquids = false
 	p.alarm = false
 	p.stage = Passenger.Stage.TO_SECURITY
@@ -124,10 +125,10 @@ func _stall_frames(p: Passenger) -> Dictionary:
 	return out
 
 
-## Every bag kind, one bag and two rollers: no drawn frame in the stall has a
-## bag in the air, and each bag's set-down and pick-up are carried in the hand
-## (frames held while it moves). Control: both moves were seen, with held
-## frames, and frames resting on the floor.
+## Every bag kind (one bag, plus two non-roller bags): no drawn frame in the
+## stall has a bag in the air, and each bag's set-down and pick-up are carried
+## in the hand (frames held while it moves). Control: both moves were seen,
+## with held frames, and frames resting on the floor.
 func test_every_bag_in_a_stall_is_held_or_resting_on_every_frame() -> void:
 	for visit: Array in VISITS:
 		var kind: SecurityLooks.Kind = visit[0]

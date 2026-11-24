@@ -104,17 +104,15 @@ func test_only_a_case_beside_a_pulled_roller_turns() -> void:
 	)
 
 
-## A new guest whose first bag is a roller, with `bags` carry-on bags; with
-## two, its second is a hard case.
+## A new guest with `bags` carry-on bags: 1-bag roller, or 2-bag with a case.
 func _roller_guest(bags: int) -> Passenger:
+	var want := ROLLER if bags == 1 else CASE
 	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
-	while (
-		SecurityLooks.bag_kind(p, 0) != ROLLER
-		or (bags > 1 and SecurityLooks.bag_kind(p, 1) != CASE)
-	):
+	p.carry_on = bags
+	while SecurityLooks.bag_kind(p, 0) != want:
 		p.stage = Passenger.Stage.MADE
 		p = _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
-	p.carry_on = bags
+		p.carry_on = bags
 	return p
 
 
@@ -129,33 +127,20 @@ func _weights(p: Passenger, ticks: int) -> Array:
 	return out
 
 
-func test_a_roller_guest_with_a_case_coming_in_carries_it_in_front_then_at_the_side() -> void:
+func test_a_two_bag_guest_with_a_case_keeps_it_at_the_side_through_the_door() -> void:
 	var p := _roller_guest(2)
 	var weights := _weights(p, WALK_TICKS)
 	print("id %d along, arm, case: %s" % [p.id, weights])
 	var props := _views.carry_on_props()
-	var case_bag := props.bag_state(p.id, 1)
-	# Control: the case is in the hand, carried as a case, the roller pulled.
+	var case_bag := props.bag_state(p.id, 0)
+	# Under roller-suitcases-full-size-only-on-one-bag-passengers, 2-bag guests
+	# carry no roller, so the hard case stays in the side carry through the door.
 	assert_int(int(case_bag["place"]) / 4).is_equal(HAND)
 	assert_int(case_bag["carry"]).is_equal(SecurityLooks.Carry.HAND)
-	assert_int(props.bag_state(p.id, 0)["carry"]).is_equal(SecurityLooks.Carry.PULL)
-	# In front at the door: whole while within CASE_FRONT_M of the plane (the
-	# guest is made in the door cell, 0.6 m in, and starts in the front carry).
-	var near_whole := 0
-	var far_side := 0
+	assert_int(props.bag_state(p.id, 1)["kind"]).is_not_equal(ROLLER)
 	for w: Array in weights:
-		if float(w[0]) < DoorSteer.CASE_FRONT_M:
-			assert_float(float(w[2])).override_failure_message("at %.2f m" % w[0]).is_equal(1.0)
-			near_whole += 1
-	# And back at the side once well past the door.
-	var last: Array = weights.back()
-	assert_float(float(last[0])).is_greater(DoorSteer.CASE_FRONT_M + 0.5)
-	assert_float(float(last[1])).is_equal(0.0)
-	assert_float(float(last[2])).is_equal(0.0)
-	for w: Array in weights:
-		far_side += int(float(w[2]) == 0.0)
-	assert_int(near_whole).is_greater(0)
-	assert_int(far_side).is_greater(0)
+		assert_float(float(w[1])).is_equal(0.0)
+		assert_float(float(w[2])).is_equal(0.0)
 
 
 func test_a_roller_guest_with_no_case_keeps_the_side_carry_at_the_door() -> void:
@@ -167,10 +152,10 @@ func test_a_roller_guest_with_no_case_keeps_the_side_carry_at_the_door() -> void
 		assert_float(float(w[1])).is_equal(0.0)
 
 
-## A roller-and-case guest standing still in the check-in queue on `cell`,
-## having walked east onto it (test_queue_stand_side_sim's _queuer).
-func _queuer(cell: Vector2i) -> Passenger:
-	var p := _roller_guest(2)
+## A still guest standing in the check-in queue on `cell`, having walked east
+## onto it (test_queue_stand_side_sim's _queuer).
+func _queuer(cell: Vector2i, bags := 1) -> Passenger:
+	var p := _roller_guest(bags)
 	p.late = false
 	p.stage = Passenger.Stage.CHECKIN_QUEUE
 	p.at = cell
@@ -196,11 +181,10 @@ func _stand_still(p: Passenger, ticks: int) -> Array:
 	return [RollerPark.queued(props.bag_state(p.id, 0)), props.bag_turn_of(p.id)]
 
 
-func test_a_still_queue_at_the_door_stands_the_roller_and_keeps_the_case_in_front() -> void:
+func test_a_still_queue_at_the_door_stands_the_roller_without_turning_in_front() -> void:
 	var ticks := RollerPark.STILL_TICKS + ceili(RollerPark.QUEUE_STAND_TICKS) + 4
-	# Control: well away from the door the same still guest stands its roller,
-	# the case at its side.
-	var far := _queuer(Vector2i(6, 4))
+	# Control: well away from the door a 1-bag roller stands its roller.
+	var far := _queuer(Vector2i(6, 4), 1)
 	assert_bool(RollerPark.queue_still(_world.sim, far)).is_true()
 	var away := _stand_still(far, ticks)
 	print("away from the door: stood %s, case turn %.2f" % away)
@@ -208,8 +192,9 @@ func test_a_still_queue_at_the_door_stands_the_roller_and_keeps_the_case_in_fron
 	assert_float(float(away[1])).is_equal(0.0)
 	far.stage = Passenger.Stage.MADE
 	_views.sync()
-	# In the door cell: the roller is stood all the same, and the case is in front.
-	var near := _queuer(DOOR)
+	# In the door cell: a 1-bag roller stands up, and DoorSteer.case_front_at
+	# still matches a synthetic [ROLLER, CASE] pair.
+	var near := _queuer(DOOR, 1)
 	(
 		assert_bool(
 			DoorSteer.case_front_at(
@@ -225,4 +210,4 @@ func test_a_still_queue_at_the_door_stands_the_roller_and_keeps_the_case_in_fron
 	var at_door := _stand_still(near, ticks)
 	print("in the door cell: stood %s, case turn %.2f" % at_door)
 	assert_bool(at_door[0]).is_true()
-	assert_float(float(at_door[1])).is_equal(1.0)
+	assert_float(float(at_door[1])).is_equal(0.0)
