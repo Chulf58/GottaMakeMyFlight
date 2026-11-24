@@ -30,22 +30,64 @@ var settings_path := DEFAULT_SETTINGS_PATH
 var _current := DEFAULT_LOCALE
 
 
+func _init() -> void:
+	load_available_translations()
+
+
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	load_available_translations()
 	if Hints.launched_by_script(OS.get_cmdline_args()):
 		apply_locale(DEFAULT_LOCALE, false)
 		return
 	var saved := load_from_path(settings_path)
-	var initial := saved if saved != "" else normalize_os_locale(OS.get_locale())
-	apply_locale(initial, false)
+	apply_locale(resolve_startup_locale(saved, OS.get_locale()), false)
+
+
+static func load_available_translations() -> void:
+	var loaded := TranslationServer.get_loaded_locales()
+	for code: String in LOCALES:
+		if code == DEFAULT_LOCALE or loaded.has(code):
+			continue
+		var path := "res://locale/%s.po" % code
+		if not ResourceLoader.exists(path):
+			continue
+		var tr_res := ResourceLoader.load(path) as Translation
+		if tr_res != null:
+			TranslationServer.add_translation(tr_res)
 
 
 static func codes() -> PackedStringArray:
 	return PackedStringArray(LOCALES.keys())
 
 
+static func available_locales() -> PackedStringArray:
+	var out := PackedStringArray()
+	for code: String in LOCALES:
+		if is_available(code):
+			out.append(code)
+	return out
+
+
 static func is_supported(code: String) -> bool:
 	return LOCALES.has(code)
+
+
+static func is_available(code: String) -> bool:
+	if code == DEFAULT_LOCALE:
+		return true
+	if not LOCALES.has(code):
+		return false
+	return TranslationServer.get_loaded_locales().has(code)
+
+
+static func resolve_startup_locale(saved: String, os_locale: String) -> String:
+	if saved != "" and is_available(saved):
+		return saved
+	var os_code := normalize_os_locale(os_locale)
+	if is_available(os_code):
+		return os_code
+	return DEFAULT_LOCALE
 
 
 static func display_name(code: String) -> String:
@@ -119,6 +161,9 @@ static func load_from_path(path: String) -> String:
 func apply_locale(code: String, persist := false) -> bool:
 	if not is_supported(code):
 		return false
+	if not is_available(code):
+		apply_locale(DEFAULT_LOCALE, persist)
+		return false
 	_apply_font_fallbacks(code)
 	_current = code
 	TranslationServer.set_locale(code)
@@ -134,7 +179,7 @@ func select_locale(code: String) -> bool:
 
 func current_locale() -> String:
 	var active := TranslationServer.get_locale()
-	if is_supported(active):
+	if is_available(active):
 		return active
 	return _current
 
