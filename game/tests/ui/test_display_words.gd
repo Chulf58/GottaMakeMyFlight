@@ -259,19 +259,28 @@ func test_the_incident_offers_hold_each_whole_reward_and_failure_line() -> void:
 ## A German-style locale whose room names are capitalised nouns: the too-small note
 ## must keep the capital, so no translated text is case-transformed.
 func test_the_too_small_note_never_changes_the_case_of_a_translated_room_name() -> void:
-	var german := Translation.new()
-	german.locale = "de"
-	german.add_message("Cafe", "Kaffeehaus", "room type")
-	german.add_message("cafe", "Kaffeehaus", "room name, mid-sentence")
 	var old_locale := TranslationServer.get_locale()
-	TranslationServer.add_translation(german)
-	TranslationServer.set_locale("de")
 	var room := _room(Vector2i(2, 2))
 	var status := RoomRules.status(_grid, room)
+
+	TranslationServer.set_locale("de")
+	var de_note := DisplayWords.notes(status)[0]
+	var de_reason := DisplayWords.room_reason(status)
+
+	var synthetic := Translation.new()
+	synthetic.locale = "eo"
+	synthetic.add_message("Cafe", "Kaffeehaus", "room type")
+	synthetic.add_message("cafe", "Kaffeehaus", "room name, mid-sentence")
+	TranslationServer.add_translation(synthetic)
+	TranslationServer.set_locale("eo")
 	var note := DisplayWords.notes(status)[0]
 	var reason := DisplayWords.room_reason(status)
+
 	TranslationServer.set_locale(old_locale)
-	TranslationServer.remove_translation(german)
+	TranslationServer.remove_translation(synthetic)
+	print("too small de: '%s' | '%s'" % [de_note, de_reason])
 	print("too small note: '%s' | reason: '%s'" % [note, reason])
+	assert_str(de_note).is_equal("Zu klein: Café braucht mindestens 3x3")
+	assert_str(de_reason).is_equal("zu klein: Café braucht mindestens 3x3")
 	assert_str(note).is_equal("Too small: a Kaffeehaus needs at least 3x3")
 	assert_str(reason).is_equal("too small: a Kaffeehaus needs at least 3x3")
