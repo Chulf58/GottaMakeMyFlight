@@ -16,6 +16,13 @@ Pieces (written to game/assets/airside/props/<piece>.glb):
 - taxi_sign: a two-panel taxiway sign on short legs: a location panel (yellow letter
   and border on black) and a direction panel (black letter and arrow on yellow). Every
   glyph is its own node, so the wiring shows one letter per panel and one arrow.
+- airstairs: a mobile low-poly Toon airstairs unit (decisions 94ae5894, 710a78b4) on
+  four tyres and grounded stabilizer pads, with an articulated/telescopic upper flight
+  bridging port (+X) aircraft door sills from 0.63 m (04a) to 2.91 m (07a). Rests in
+  the .glb at ~1.58 m medium sill height (05a). Every pivot exports with zero rest
+  rotation; Stair_Pivot pitches the stair beam, Upper_Stairs slides along the beam
+  direction, Top_Platform and Step_L_*/Step_U_* counter-rotate to stay level, and
+  Lift_Base/Lift_Rod keep the twin hydraulic rams pinned between chassis and Lower_Stairs.
 
 The builder reuses tools/blender/interior/build_interior_kit.py: its box and cylinder
 helpers, the measured palette atlas swatches (every face on one swatch of
@@ -101,6 +108,7 @@ kit.PALETTE.update({
     "window": ("TP_Atlas_1A_D", 13, 12, 0.55, 0.0),
     "red": ("TP_Atlas_1A_D", 31, 0, 0.50, 0.0),
     "tug_yellow": ("TP_Atlas_1A_D", 1, 13, 0.45, 0.0),
+    "navy": ("TP_Atlas_1A_D", 30, 5, 0.50, 0.0),
 })
 
 # ---------------------------------------------------------------- jet bridge
@@ -185,6 +193,41 @@ LEGEND_W = 0.34
 STROKE = 0.075
 ARROW_W = 0.42
 LETTERS = "ABCDE"
+
+# ---------------------------------------------------------------- airstairs
+# Mobile Toon airstairs unit: +z is toward the aircraft door (Mount_TopDoor), -z is the
+# rear ground entry (Mount_BottomEntry). Built in the 05a medium rest pose (1.58 m).
+AS_HALF_W = 0.88
+AS_BODY_HALF = 0.84
+AS_PAD_OUT = 1.00
+AS_TYRE_R = 0.27
+AS_TYRE_Z = (-1.05, 1.05)
+AS_Z_REAR = -1.92
+AS_Z_FRONT = 1.54
+AS_PIVOT_Y = 0.14
+AS_PIVOT_Z = -1.25
+AS_REST_DEG = 28.0
+AS_REST_RAD = math.radians(AS_REST_DEG)
+AS_REST_SLIDE = 0.59
+AS_L_LOW = 2.15
+AS_L_UP = 2.15
+AS_UPPER_N = 0.175
+AS_PLAT_D = 0.96
+AS_PLAT_HALF = 0.66
+AS_RAIL_H = 0.94
+AS_STEPS = 7
+AS_STEP_SP = 0.29
+AS_STEP_FIRST = 0.14
+AS_LIFT_A = (0.0, 0.16, 0.95)
+AS_LIFT_B_S = 1.20
+AS_LIFT_B_N = -0.06
+AS_LIFT_BARREL = 0.90
+AS_LIFT_ROD = 0.85
+AS_H_REST = (AS_PIVOT_Y + (AS_REST_SLIDE + AS_L_UP) * math.sin(AS_REST_RAD)
+             + AS_UPPER_N * math.cos(AS_REST_RAD))
+AS_Z_HINGE_REST = (AS_PIVOT_Z + (AS_REST_SLIDE + AS_L_UP) * math.cos(AS_REST_RAD)
+                   - AS_UPPER_N * math.sin(AS_REST_RAD))
+AS_Z_DOOR_REST = AS_Z_HINGE_REST + AS_PLAT_D
 
 PIVOTS = {}  # piece -> {node: (parent, godot translation)} for check_rig()
 
@@ -682,6 +725,217 @@ def build_taxi_sign(root, c):
     glyph(p, "Glyph_Arrow_R", arrow_quads(True), dir_cx + LEGEND_W / 2.0 + gap, "ink", root, c)
 
 
+# ---------------------------------------------------------------- airstairs
+
+
+def _beam_pt(s, n, ox=0.0):
+    """Godot (x, y, z) from stair beam coordinate (s along slope, n perpendicular up) in
+    Stair_Pivot local space (rest angle AS_REST_RAD)."""
+    ca, sa = math.cos(AS_REST_RAD), math.sin(AS_REST_RAD)
+    return (ox, s * sa + n * ca, s * ca - n * sa)
+
+
+def _beam_box(name, x0, x1, s0, s1, n0, n1, pal, parent, c, ox=0.0, oy=0.0, oz=0.0):
+    """An oriented stair-beam box spanning [x0, x1] across and [s0, s1] x [n0, n1] in the
+    beam plane, shifted by (ox, oy, oz) in Godot axes."""
+    bm = bmesh.new()
+    verts = []
+    for x in (x0, x1):
+        for s in (s0, s1):
+            for n in (n0, n1):
+                px, py, pz = _beam_pt(s, n, x)
+                verts.append(bm.verts.new(gb(px + ox, py + oy, pz + oz)))
+    faces = (
+        (0, 2, 3, 1), (4, 5, 7, 6), (0, 1, 5, 4),
+        (2, 6, 7, 3), (0, 4, 6, 2), (1, 3, 7, 5),
+    )
+    for f in faces:
+        bm.faces.new([verts[i] for i in f])
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    return kit._finish_mesh(name, bm, pal, parent, c)
+
+
+def _beam_cyl(name, x, s, n0, n1, r, pal, parent, c, segs=8, ox=0.0, oy=0.0, oz=0.0):
+    """A cylinder along the beam normal (a stanchion post) centred on (x, s) from n0 to n1."""
+    bm = bmesh.new()
+    bmesh.ops.create_cone(bm, cap_ends=True, segments=segs, radius1=r, radius2=r, depth=n1 - n0)
+    # Default cone is along Blender Z (= Godot Y). Rotate in Blender YZ (about X) by -AS_REST_RAD
+    # so Blender Z aligns with beam normal N (Godot y=cos, z=-sin -> Blender y=sin, z=cos).
+    bmesh.ops.rotate(bm, verts=bm.verts, cent=(0, 0, 0), matrix=Matrix.Rotation(-AS_REST_RAD, 3, "X"))
+    px, py, pz = _beam_pt(s, (n0 + n1) / 2.0, x)
+    bmesh.ops.translate(bm, vec=Vector(gb(px + ox, py + oy, pz + oz)), verts=bm.verts)
+    return kit._finish_mesh(name, bm, pal, parent, c)
+
+
+def _pin_cyl(name, x, p0, p1, r, pal, parent, c, segs=10):
+    """A cylinder spanning from Godot (x, p0[0], p0[1]) to (x, p1[0], p1[1]) where p=(y, z)."""
+    dy, dz = p1[0] - p0[0], p1[1] - p0[1]
+    length = math.hypot(dy, dz)
+    bm = bmesh.new()
+    bmesh.ops.create_cone(bm, cap_ends=True, segments=segs, radius1=r, radius2=r, depth=length)
+    # Tilt Blender +Z (Godot +Y) toward (dy, dz): in Blender (y=-z, z=y), angle around X from +Z.
+    tilt = math.atan2(dz, dy)
+    bmesh.ops.rotate(bm, verts=bm.verts, cent=(0, 0, 0), matrix=Matrix.Rotation(-tilt, 3, "X"))
+    my, mz = (p0[0] + p1[0]) / 2.0, (p0[1] + p1[1]) / 2.0
+    bmesh.ops.translate(bm, vec=Vector(gb(x, my, mz)), verts=bm.verts)
+    return kit._finish_mesh(name, bm, pal, parent, c)
+
+
+def _add_step(piece, name, w_half, at_g, parent, c):
+    """One level tread pivot with metal tread plate and yellow anti-slip nosing."""
+    sp = pivot(piece, name, parent, c, at_g)
+    gbox(name + "_Plate", (-w_half, -0.035, -0.11), (w_half, 0.0, 0.085), "metal", sp, c)
+    gbox(name + "_Nose", (-w_half, -0.032, 0.085), (w_half, 0.003, 0.115), "tug_yellow", sp, c)
+    return sp
+
+
+def build_airstairs(root, c):
+    p = "airstairs"
+    W, B = AS_HALF_W, AS_BODY_HALF
+    pivot(p, "Mount_BottomEntry", root, c, (0.0, 0.0, AS_Z_REAR))
+    # Rear ground entry ramp/threshold plate, side curb brackets and safety nose strip.
+    gbox("Entry_Ramp", (-0.52, 0.0, AS_Z_REAR + 0.08), (0.52, 0.12, -1.32), "metal", root, c)
+    gbox("Entry_Lip", (-0.52, 0.0, AS_Z_REAR), (0.52, 0.125, AS_Z_REAR + 0.08), "tug_yellow", root, c)
+    # Rear entry side rails outboard of Lower_Stairs handrails, anchored cleanly to ground pad & Cowl_R.
+    for sx in (-1, 1):
+        x = sx * 0.68
+        px0, px1 = sorted((sx * 0.52, sx * 0.73))
+        gbox("Entry_Pad_%d" % sx, (px0, 0.0, AS_Z_REAR + 0.04), (px1, 0.12, -1.52), "dark", root, c)
+        gcyl_y("Entry_PostA_%d" % sx, x, AS_Z_REAR + 0.12, 0.10, 0.90, 0.024, "metal", root, c, segs=8)
+        gcyl_y("Entry_PostB_%d" % sx, x, -1.44, 0.54, 0.90, 0.024, "metal", root, c, segs=8)
+        gbox("Entry_Rail_%d" % sx, (x - 0.024, 0.87, AS_Z_REAR + 0.08), (x + 0.024, 0.92, -1.40),
+             "tug_yellow", root, c)
+
+    # Low well chassis frame + side sponsons split around the front and rear wheel arches.
+    gbox("Chassis_Cross_F", (-0.64, 0.08, 0.78), (0.64, 0.22, 1.46), "dark", root, c)
+    gbox("Chassis_Cross_R", (-0.64, 0.06, -1.42), (0.64, 0.10, -1.29), "dark", root, c)
+    gbox("Axle_F", (-0.70, AS_TYRE_R - 0.04, AS_TYRE_Z[1] - 0.05),
+         (0.70, AS_TYRE_R + 0.04, AS_TYRE_Z[1] + 0.05), "dark", root, c)
+    gbox("Axle_R", (-0.70, AS_TYRE_R - 0.04, AS_TYRE_Z[0] - 0.05),
+         (0.70, AS_TYRE_R + 0.04, AS_TYRE_Z[0] + 0.05), "dark", root, c)
+    for sx in (-1, 1):
+        x0, x1 = sorted((sx * 0.64, sx * B))
+        nx0, nx1 = sorted((sx * (B - 0.01), sx * (B + 0.015)))
+        # Side cowls (front cap, mid sponson, rear cap, wheel arch brows).
+        gbox("Cowl_F_%d" % sx, (x0, 0.16, 1.37), (x1, 0.64, 1.51), "white", root, c, bevel=0.02)
+        gbox("Cowl_M_%d" % sx, (x0, 0.18, -0.73), (x1, 0.66, 0.73), "white", root, c, bevel=0.02)
+        gbox("Cowl_R_%d" % sx, (x0, 0.16, -1.52), (x1, 0.56, -1.37), "white", root, c, bevel=0.02)
+        gbox("Fender_F_%d" % sx, (x0, 0.58, 0.73), (x1, 0.66, 1.37), "white", root, c, bevel=0.015)
+        gbox("Fender_R_%d" % sx, (x0, 0.57, -1.37), (x1, 0.65, -0.73), "white", root, c, bevel=0.015)
+        # Airline navy livery stripe on side cowls.
+        gbox("Stripe_M_%d" % sx, (nx0, 0.36, -0.71), (nx1, 0.48, 0.71), "navy", root, c)
+        gbox("Stripe_F_%d" % sx, (nx0, 0.36, 1.38), (nx1, 0.48, 1.49), "navy", root, c)
+        # Four tyres and hubcaps.
+        for wname, wz in (("R", AS_TYRE_Z[0]), ("F", AS_TYRE_Z[1])):
+            tx0, tx1 = sorted((sx * (W - 0.22), sx * W))
+            gcyl_x("Tyre_%s_%d" % (wname, sx), tx0, tx1, AS_TYRE_R, wz, AS_TYRE_R, "ink", root, c)
+            hx0, hx1 = sorted((sx * (W - 0.21), sx * (W + 0.01)))
+            gcyl_x("Hub_%s_%d" % (wname, sx), hx0, hx1, AS_TYRE_R, wz, 0.13, "light_grey", root, c, segs=8)
+        # Four grounded stabilizer outriggers + yellow jack pads.
+        for pname, pz in (("R", -1.45), ("F", 1.43)):
+            ax0, ax1 = sorted((sx * 0.74, sx * 0.95))
+            gbox("Jack_Arm_%s_%d" % (pname, sx), (ax0, 0.18, pz - 0.05), (ax1, 0.26, pz + 0.05), "dark", root, c)
+            gcyl_y("Jack_Leg_%s_%d" % (pname, sx), sx * 0.92, pz, 0.04, 0.26, 0.04, "metal", root, c, segs=8)
+            px0, px1 = sorted((sx * 0.84, sx * AS_PAD_OUT))
+            gbox("Jack_Pad_%s_%d" % (pname, sx), (px0, 0.0, pz - 0.09), (px1, 0.04, pz + 0.09),
+                 "tug_yellow", root, c)
+
+    # Front bumper, headlights, rear tail lamps, operator console and amber safety beacon.
+    gbox("Bumper_F", (-B, 0.14, 1.49), (B, 0.28, AS_Z_FRONT), "tug_yellow", root, c, bevel=0.02)
+    for sx in (-1, 1):
+        cx0, cx1 = sorted((sx * (B - 0.16), sx * (B + 0.02)))
+        gbox("Bumper_F_Corner_%d" % sx, (cx0, 0.13, 1.46), (cx1, 0.29, AS_Z_FRONT + 0.01), "ink", root, c)
+        gbox("Headlight_%d" % sx, (sx * 0.74 - 0.07, 0.42, 1.51), (sx * 0.74 + 0.07, 0.50, 1.52),
+             "text_white", root, c)
+        gbox("Taillight_%d" % sx, (sx * 0.74 - 0.06, 0.36, -1.53), (sx * 0.74 + 0.06, 0.44, -1.52),
+             "red", root, c)
+    gbox("Console_Base", (0.65, 0.66, 0.18), (0.83, 0.92, 0.54), "navy", root, c, bevel=0.01)
+    gbox("Console_Top", (0.64, 0.92, 0.17), (0.84, 0.97, 0.55), "dark", root, c)
+    gbox("Console_Btn_G", (0.71, 0.97, 0.26), (0.77, 1.00, 0.32), "lamp_green", root, c)
+    gbox("Console_Btn_R", (0.71, 0.97, 0.40), (0.77, 1.00, 0.46), "red", root, c)
+    gcyl_y("Beacon_Stem", 0.74, 1.24, 0.66, 0.74, 0.03, "dark", root, c, segs=8)
+    gcyl_y("Beacon", 0.74, 1.24, 0.74, 0.86, 0.065, "text_yellow", root, c, segs=8)
+
+    # Hydraulic lift cylinder barrels (Lift_Base on root) and piston rods (Lift_Rod on Lower_Stairs).
+    ax, ay, az = AS_LIFT_A
+    _, by_rel, bz_rel = _beam_pt(AS_LIFT_B_S, AS_LIFT_B_N)
+    by, bz = AS_PIVOT_Y + by_rel, AS_PIVOT_Z + bz_rel
+    dy, dz = by - ay, bz - az
+    dist = math.hypot(dy, dz)
+    uy, uz = dy / dist, dz / dist
+    lift_base = pivot(p, "Lift_Base", root, c, AS_LIFT_A)
+    for sx in (-1, 1):
+        _pin_cyl("Lift_Barrel_%d" % sx, sx * 0.32, (0.0, 0.0), (uy * AS_LIFT_BARREL, uz * AS_LIFT_BARREL),
+                 0.048, "dark", lift_base, c, segs=10)
+
+    # Articulated stair assembly: Stair_Pivot -> Lower_Stairs -> Upper_Stairs -> Top_Platform.
+    spiv = pivot(p, "Stair_Pivot", root, c, (0.0, AS_PIVOT_Y, AS_PIVOT_Z))
+    low = pivot(p, "Lower_Stairs", spiv, c, (0.0, 0.0, 0.0))
+    for sx in (-1, 1):
+        x0, x1 = sorted((sx * 0.54, sx * 0.62))
+        nx0, nx1 = sorted((sx * 0.615, sx * 0.63))
+        _beam_box("Low_Stringer_%d" % sx, x0, x1, -0.02, AS_L_LOW, -0.05, 0.16, "white", low, c)
+        _beam_box("Low_Trim_%d" % sx, nx0, nx1, 0.02, AS_L_LOW - 0.04, 0.01, 0.10, "navy", low, c)
+        for k, s in enumerate((0.08, 0.72, 1.38, 2.02)):
+            _beam_cyl("Low_Post_%d_%d" % (sx, k), sx * 0.58, s, 0.15, 0.94, 0.022, "metal", low, c, segs=8)
+        _beam_box("Low_Rail_%d" % sx, sx * 0.58 - 0.024, sx * 0.58 + 0.024, 0.04, AS_L_LOW - 0.04,
+                  0.92, 0.97, "tug_yellow", low, c)
+    _beam_box("Low_Soffit", -0.54, 0.54, 0.0, AS_L_LOW - 0.04, -0.05, -0.02, "dark", low, c)
+    _beam_box("Low_Lift_Beam", -0.40, 0.40, AS_LIFT_B_S - 0.08, AS_LIFT_B_S + 0.08, -0.08, -0.04,
+              "dark", low, c)
+    lift_rod = pivot(p, "Lift_Rod", low, c, (0.0, by_rel, bz_rel))
+    for sx in (-1, 1):
+        _pin_cyl("Lift_Piston_%d" % sx, sx * 0.32, (0.0, 0.0), (-uy * AS_LIFT_ROD, -uz * AS_LIFT_ROD),
+                 0.032, "metal", lift_rod, c, segs=10)
+    for i in range(AS_STEPS):
+        _add_step(p, "Step_L_%02d" % (i + 1), 0.535, _beam_pt(AS_STEP_FIRST + i * AS_STEP_SP, 0.0), low, c)
+
+    # Telescopic Upper_Stairs resting at AS_REST_SLIDE along Lower_Stairs beam.
+    up_rest = _beam_pt(AS_REST_SLIDE, 0.0)
+    up = pivot(p, "Upper_Stairs", low, c, up_rest)
+    for sx in (-1, 1):
+        x0, x1 = sorted((sx * 0.47, sx * 0.53))
+        nx0, nx1 = sorted((sx * 0.525, sx * 0.538))
+        _beam_box("Up_Stringer_%d" % sx, x0, x1, -0.02, AS_L_UP, 0.055, 0.28, "white", up, c)
+        _beam_box("Up_Trim_%d" % sx, nx0, nx1, 0.02, AS_L_UP - 0.04, 0.11, 0.21, "navy", up, c)
+        for k, s in enumerate((0.08, 0.75, 1.42, 2.08)):
+            _beam_cyl("Up_Post_%d_%d" % (sx, k), sx * 0.50, s, 0.27, 1.10, 0.022, "metal", up, c, segs=8)
+        _beam_box("Up_Rail_%d" % sx, sx * 0.50 - 0.024, sx * 0.50 + 0.024, 0.04, AS_L_UP + 0.18,
+                  1.085, 1.135, "tug_yellow", up, c)
+    _beam_box("Up_Soffit", -0.47, 0.47, 0.0, AS_L_UP - 0.02, 0.055, 0.095, "dark", up, c)
+    for i in range(AS_STEPS):
+        _add_step(p, "Step_U_%02d" % (i + 1), 0.465, _beam_pt(AS_STEP_FIRST + i * AS_STEP_SP, AS_UPPER_N),
+                  up, c)
+
+    # Self-leveling Top_Platform hinged at the top of Upper_Stairs.
+    plat_at = _beam_pt(AS_L_UP, AS_UPPER_N)
+    plat = pivot(p, "Top_Platform", up, c, plat_at)
+    PH = AS_PLAT_HALF
+    gbox("Plat_Deck", (-PH + 0.08, -0.08, -0.10), (PH - 0.08, 0.0, AS_PLAT_D - 0.05), "metal", plat, c)
+    gbox("Plat_Lip", (-0.44, -0.03, AS_PLAT_D - 0.05), (0.44, 0.004, AS_PLAT_D), "tug_yellow", plat, c)
+    gbox("Plat_Skirt_L", (-PH, -0.22, -0.10), (-PH + 0.08, 0.0, AS_PLAT_D - 0.05), "navy", plat, c)
+    gbox("Plat_Skirt_R", (PH - 0.08, -0.22, -0.10), (PH, 0.0, AS_PLAT_D - 0.05), "navy", plat, c)
+    gbox("Plat_Skirt_Rear", (-PH + 0.08, -0.22, -0.10), (PH - 0.08, -0.08, 0.04), "navy", plat, c)
+    for sx in (-1, 1):
+        rx = sx * 0.60
+        for k, pz in enumerate((-0.44, 0.02, 0.46, AS_PLAT_D - 0.06)):
+            y0 = 0.25 if pz < -0.1 else 0.0
+            gcyl_y("Plat_Post_%d_%d" % (sx, k), rx, pz, y0, AS_RAIL_H, 0.024, "metal", plat, c, segs=8)
+        gbox("Plat_Rail_Top_%d" % sx, (rx - 0.025, AS_RAIL_H - 0.04, -0.48),
+             (rx + 0.025, AS_RAIL_H + 0.02, AS_PLAT_D - 0.02), "tug_yellow", plat, c)
+        gbox("Plat_Rail_Mid_%d" % sx, (rx - 0.02, 0.46, 0.0),
+             (rx + 0.02, 0.50, AS_PLAT_D - 0.06), "light_grey", plat, c)
+        # Rear extension bracket connecting z=-0.44 post back to z=0.0 platform corner.
+        gbox("Plat_Bracket_%d" % sx, (rx - 0.02, 0.24, -0.46), (rx + 0.02, 0.29, 0.02), "metal", plat, c)
+        # Rubber docking bumpers at the front (+z) corners facing the aircraft skin.
+        bx0, bx1 = sorted((sx * 0.44, sx * (PH + 0.02)))
+        gbox("Dock_Bumper_Lo_%d" % sx, (bx0, -0.22, AS_PLAT_D - 0.05), (bx1, 0.02, AS_PLAT_D), "ink", plat, c)
+        px0, px1 = sorted((sx * 0.56, sx * (PH + 0.02)))
+        gbox("Dock_Bumper_Hi_%d" % sx, (px0, 0.02, AS_PLAT_D - 0.04), (px1, AS_RAIL_H - 0.02, AS_PLAT_D),
+             "ink", plat, c)
+    pivot(p, "Mount_TopDoor", plat, c, (0.0, 0.0, AS_PLAT_D))
+
+
 # ---------------------------------------------------------------- tables
 
 
@@ -699,11 +953,18 @@ TUG_LO = (-TUG_HALF_W - 0.01, 0.0, TUG_REAR - 0.07)
 TUG_HI = (TUG_HALF_W + 0.01, TUG_TOP, TUG_FRONT + 0.01)
 SIGN_LO = (-SIGN_HALF_W, 0.0, -FACE_Z - 0.024)
 SIGN_HI = (SIGN_HALF_W, SIGN_Y[1], FACE_Z + 0.024)
+AIRSTAIRS_LO = (-AS_PAD_OUT, 0.0, AS_Z_REAR)
+_AS_RAIL_TOP = max(
+    AS_H_REST + AS_RAIL_H + 0.02,
+    AS_PIVOT_Y + (AS_REST_SLIDE + AS_L_UP + 0.18) * math.sin(AS_REST_RAD) + 1.135 * math.cos(AS_REST_RAD),
+)
+AIRSTAIRS_HI = (AS_PAD_OUT, _AS_RAIL_TOP, AS_Z_DOOR_REST)
 
 PIECES = {
     "jet_bridge": (build_jet_bridge, (0, 0)) + blender_bounds(BRIDGE_LO, BRIDGE_HI),
     "pushback_tug": (build_pushback_tug, (0, 0)) + blender_bounds(TUG_LO, TUG_HI),
     "taxi_sign": (build_taxi_sign, (0, 0)) + blender_bounds(SIGN_LO, SIGN_HI),
+    "airstairs": (build_airstairs, (0, 0)) + blender_bounds(AIRSTAIRS_LO, AIRSTAIRS_HI),
 }
 EXTRA_NODES = {
     "jet_bridge": ["Walk_Slide", "Walk_Slide_Mesh", "Stair_Rise", "Stair_Rise_Mesh", "Curtain_Low",
@@ -715,6 +976,11 @@ EXTRA_NODES = {
     "taxi_sign": [n for ch in LETTERS for n in ("Glyph_Loc_" + ch, "Glyph_Loc_%s_Mesh" % ch,
                                                  "Glyph_Dir_" + ch, "Glyph_Dir_%s_Mesh" % ch)]
     + ["Glyph_Arrow_L", "Glyph_Arrow_L_Mesh", "Glyph_Arrow_R", "Glyph_Arrow_R_Mesh"],
+    "airstairs": ["Mount_BottomEntry", "Lift_Base", "Lift_Base_Mesh", "Stair_Pivot", "Lower_Stairs",
+                  "Lower_Stairs_Mesh", "Lift_Rod", "Lift_Rod_Mesh", "Upper_Stairs", "Upper_Stairs_Mesh",
+                  "Top_Platform", "Top_Platform_Mesh", "Mount_TopDoor"]
+    + [n for i in range(1, AS_STEPS + 1)
+       for n in ("Step_L_%02d" % i, "Step_L_%02d_Mesh" % i, "Step_U_%02d" % i, "Step_U_%02d" % i + "_Mesh")],
 }
 
 
@@ -775,6 +1041,34 @@ def check_rig(written):
                H_PARK, SLIDE_MAX, E_MIN, E_MAX, BOX_TOP, VEST_TOP))
     kit.log("TUG tug_front=%.2f tug_rear=%.2f deck_top=%.2f cab_z0=%.2f" % (TUG_FRONT, TUG_REAR, DECK_TOP, CAB_Z0))
     walk_report(written)
+    airstairs_report(written)
+
+
+def airstairs_report(written):
+    for piece, out in written:
+        if piece != "airstairs":
+            continue
+        js, _n = kit.parse_glb(out)
+        nodes = js.get("nodes", [])
+        parent = {ch: i for i, nd in enumerate(nodes) for ch in nd.get("children", [])}
+        by_name = {nd.get("name"): i for i, nd in enumerate(nodes)}
+        for name in ("Mount_BottomEntry", "Stair_Pivot", "Lower_Stairs", "Upper_Stairs",
+                     "Top_Platform", "Mount_TopDoor", "Lift_Base", "Lift_Rod"):
+            i = by_name.get(name)
+            if i is None:
+                kit.fail("airstairs: node %s missing from the written file" % name)
+                continue
+            at = Vector((0.0, 0.0, 0.0))
+            chain = []
+            cur = i
+            while cur is not None:
+                at += Vector(nodes[cur].get("translation", [0.0, 0.0, 0.0]))
+                chain.append(nodes[cur].get("name"))
+                cur = parent.get(cur)
+            kit.log("AIRSTAIRS %-18s rest_root=(%.4f, %.4f, %.4f) chain=%s"
+                    % (name, at.x, at.y, at.z, "/".join(reversed(chain))))
+        kit.log("AIRSTAIRS rest_h=%.4f rest_door_z=%.4f rest_deg=%.1f rest_slide=%.2f l_low=%.2f l_up=%.2f plat_d=%.2f"
+                % (AS_H_REST, AS_Z_DOOR_REST, AS_REST_DEG, AS_REST_SLIDE, AS_L_LOW, AS_L_UP, AS_PLAT_D))
 
 
 def walk_report(written):
