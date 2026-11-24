@@ -29,6 +29,7 @@ func after_test() -> void:
 		PseudoLocale.enable()
 	else:
 		PseudoLocale.disable()
+	LOCALE_SETTINGS.load_available_translations()
 	var settings := _settings()
 	settings.protected_path = LOCALE_SETTINGS.DEFAULT_SETTINGS_PATH
 	settings.settings_path = LOCALE_SETTINGS.DEFAULT_SETTINGS_PATH
@@ -443,3 +444,113 @@ func test_language_picker_popup_uses_cream_and_navy_hud_theme() -> void:
 		assert_str(popup.get_item_text(i)).is_equal(
 			LOCALE_SETTINGS.display_name(LOCALE_SETTINGS.codes()[i])
 		)
+
+
+func _unload_non_english_translations() -> void:
+	for code in LOCALE_SETTINGS.codes():
+		if code == LOCALE_SETTINGS.DEFAULT_LOCALE:
+			continue
+		var tr_obj := TranslationServer.get_translation_object(code)
+		while tr_obj != null and tr_obj.locale == code:
+			TranslationServer.remove_translation(tr_obj)
+			tr_obj = TranslationServer.get_translation_object(code)
+
+
+func test_export_presets_exclude_non_english_po_files_and_project_preloads_en_only() -> void:
+	var presets := ConfigFile.new()
+	assert_int(presets.load("res://export_presets.cfg")).is_equal(OK)
+	var held_out := [
+		"locale/de.po",
+		"locale/es.po",
+		"locale/fr.po",
+		"locale/ja.po",
+		"locale/ko.po",
+		"locale/pl.po",
+		"locale/pt_BR.po",
+		"locale/ru.po",
+		"locale/zh_CN.po",
+	]
+	for section in ["preset.0", "preset.1"]:
+		var raw_filter := str(presets.get_value(section, "exclude_filter", ""))
+		var parts := PackedStringArray()
+		for item in raw_filter.split(",", false):
+			parts.append(item.strip_edges())
+		for po_rel: String in held_out:
+			(
+				assert_bool(parts.has(po_rel))
+				. override_failure_message("%s exclude_filter missing %s" % [section, po_rel])
+				. is_true()
+			)
+		assert_bool(parts.has("locale/en.po")).is_false()
+
+	var project_cfg := ConfigFile.new()
+	assert_int(project_cfg.load("res://project.godot")).is_equal(OK)
+	var preloaded: PackedStringArray = project_cfg.get_value(
+		"internationalization", "locale/translations", PackedStringArray()
+	)
+	assert_array(Array(preloaded)).is_equal(["res://locale/en.po"])
+
+	var root_dir := ProjectSettings.globalize_path("res://..")
+	for script_name in ["tools/build_release.sh", "tools/build_demo.sh"]:
+		var script_path := root_dir.path_join(script_name)
+		if FileAccess.file_exists(script_path):
+			var text := FileAccess.get_file_as_string(script_path)
+			assert_str(text).contains("held_out_locales")
+			assert_str(text).not_contains("missing required Core Steam 10")
+
+
+func test_available_locales_and_language_picker_filter_to_loaded_locales() -> void:
+	assert_array(Array(LOCALE_SETTINGS.available_locales())).is_equal(
+		Array(LOCALE_SETTINGS.codes())
+	)
+	_unload_non_english_translations()
+	assert_array(Array(LOCALE_SETTINGS.available_locales())).is_equal(["en"])
+	assert_bool(LOCALE_SETTINGS.is_available("en")).is_true()
+	assert_bool(LOCALE_SETTINGS.is_available("ja")).is_false()
+	assert_bool(LOCALE_SETTINGS.is_available("de")).is_false()
+
+	var port := auto_free(SubViewport.new()) as SubViewport
+	port.size = Vector2i(1280, 720)
+	add_child(port)
+	var picker_en := LanguagePicker.new()
+	port.add_child(picker_en)
+	assert_int(picker_en.option_button().item_count).is_equal(1)
+	assert_str(picker_en.option_button().get_item_text(0)).is_equal("English")
+	assert_int(picker_en.option_button().get_popup().item_count).is_equal(1)
+	assert_str(picker_en.selected_code()).is_equal("en")
+
+	var de_res := ResourceLoader.load("res://locale/de.po") as Translation
+	assert_object(de_res).is_not_null()
+	TranslationServer.add_translation(de_res)
+	assert_array(Array(LOCALE_SETTINGS.available_locales())).is_equal(["en", "de"])
+	var picker_de := LanguagePicker.new()
+	port.add_child(picker_de)
+	assert_int(picker_de.option_button().item_count).is_equal(2)
+	assert_str(picker_de.option_button().get_item_text(0)).is_equal("English")
+	assert_str(picker_de.option_button().get_item_text(1)).is_equal("Deutsch")
+
+	LOCALE_SETTINGS.load_available_translations()
+	assert_array(Array(LOCALE_SETTINGS.available_locales())).is_equal(
+		Array(LOCALE_SETTINGS.codes())
+	)
+
+
+func test_unavailable_saved_config_or_requested_locale_falls_back_to_en() -> void:
+	assert_bool(LOCALE_SETTINGS.save_to_path(_cfg_path, "ja")).is_true()
+	_unload_non_english_translations()
+	var saved := LOCALE_SETTINGS.load_from_path(_cfg_path)
+	assert_str(saved).is_equal("ja")
+	assert_str(LOCALE_SETTINGS.resolve_startup_locale(saved, "ja_JP")).is_equal("en")
+	assert_str(LOCALE_SETTINGS.resolve_startup_locale("", "de_DE")).is_equal("en")
+
+	var settings := _settings()
+	var emitted: Array[String] = []
+	var cb := func(code: String) -> void: emitted.append(code)
+	settings.locale_changed.connect(cb)
+	assert_bool(settings.apply_locale("ja", false)).is_false()
+	settings.locale_changed.disconnect(cb)
+	assert_str(settings.current_locale()).is_equal("en")
+	assert_str(TranslationServer.get_locale()).is_equal("en")
+	assert_array(emitted).is_equal(["en"])
+
+	LOCALE_SETTINGS.load_available_translations()

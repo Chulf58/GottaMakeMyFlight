@@ -253,6 +253,7 @@ echo "[step 5] Auditing embedded PCK in $OUT_EXE..."
 PCK_COUNT="$(
 	python3 - "$OUT_EXE" <<'PY'
 import os
+import re
 import struct
 import sys
 
@@ -312,6 +313,27 @@ if not any(p in required for p in paths):
     sys.stderr.write("ERROR: neither res://core/demo_mode.gdc nor res://core/demo_mode.gd found in PCK\n")
     sys.exit(1)
 
+def has_locale_in_pck(code):
+    imported_pat = re.compile(rf"^res://\.godot/imported/{re.escape(code)}\.po-[0-9a-f]+\.translation$")
+    direct_paths = {f"res://locale/{code}.po", f"res://locale/{code}.translation"}
+    return [p for p in paths if imported_pat.match(p) or p in direct_paths]
+
+if not has_locale_in_pck("en"):
+    sys.stderr.write("ERROR: missing required English locale translation (res://locale/en.po) in PCK\n")
+    sys.exit(1)
+
+held_out_locales = ("zh_CN", "ja", "ko", "de", "fr", "es", "pt_BR", "ru", "pl")
+leaked_locales = []
+for code in held_out_locales:
+    leaked_locales.extend(has_locale_in_pck(code))
+if leaked_locales:
+    sys.stderr.write(
+        f"ERROR: AI-drafted non-English locale files found in demo PCK ({len(leaked_locales)}):\n"
+    )
+    for p in leaked_locales:
+        sys.stderr.write(f"  {p}\n")
+    sys.exit(1)
+
 excluded_prefixes = ("res://spike/", "res://tests/", "res://addons/gdUnit4/")
 excluded_suffixes = ("_probe.gd", "_probe.gdc", "_plates_probe.gd", "_plates_probe.gdc")
 bad = [
@@ -326,7 +348,7 @@ if bad:
 
 sys.stderr.write(
     f"[step 5] PCK audit OK: format=v{pack_version} (Godot {ver_major}.{ver_minor}.{ver_patch}), "
-    f"files={len(paths)}, demo_mode=present, excluded=0\n"
+    f"files={len(paths)}, demo_mode=present, locales=en-only (9 .po excluded), excluded=0\n"
 )
 print(len(paths))
 PY

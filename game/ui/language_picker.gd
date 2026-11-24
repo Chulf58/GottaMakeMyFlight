@@ -30,7 +30,7 @@ func _init(show_label := true) -> void:
 	popup.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
 	popup.theme = HUD_THEME
 	_option.custom_minimum_size = Vector2(OPTION_MIN_WIDTH, 0.0)
-	_codes = LOCALE_SETTINGS.codes()
+	_codes = LOCALE_SETTINGS.available_locales()
 	for code in _codes:
 		_option.add_item(LOCALE_SETTINGS.display_name(code))
 	_option.item_selected.connect(_on_item_selected)

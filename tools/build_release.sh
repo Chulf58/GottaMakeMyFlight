@@ -337,15 +337,25 @@ if missing_scripts:
     sys.stderr.write(f"ERROR: missing required 1.0 scripts in PCK: {', '.join(missing_scripts)}\n")
     sys.exit(1)
 
-required_locales = ("en", "zh_CN", "ja", "ko", "de", "fr", "es", "pt_BR", "ru", "pl")
-missing_locales = []
-for code in required_locales:
+def has_locale_in_pck(code):
     imported_pat = re.compile(rf"^res://\.godot/imported/{re.escape(code)}\.po-[0-9a-f]+\.translation$")
     direct_paths = {f"res://locale/{code}.po", f"res://locale/{code}.translation"}
-    if not any(imported_pat.match(p) or p in direct_paths for p in paths):
-        missing_locales.append(code)
-if missing_locales:
-    sys.stderr.write(f"ERROR: missing required Core Steam 10 locale translations in PCK: {', '.join(missing_locales)}\n")
+    return [p for p in paths if imported_pat.match(p) or p in direct_paths]
+
+if not has_locale_in_pck("en"):
+    sys.stderr.write("ERROR: missing required English locale translation (res://locale/en.po) in PCK\n")
+    sys.exit(1)
+
+held_out_locales = ("zh_CN", "ja", "ko", "de", "fr", "es", "pt_BR", "ru", "pl")
+leaked_locales = []
+for code in held_out_locales:
+    leaked_locales.extend(has_locale_in_pck(code))
+if leaked_locales:
+    sys.stderr.write(
+        f"ERROR: AI-drafted non-English locale files found in release PCK ({len(leaked_locales)}):\n"
+    )
+    for p in leaked_locales:
+        sys.stderr.write(f"  {p}\n")
     sys.exit(1)
 
 excluded_prefixes = ("res://spike/", "res://tests/", "res://addons/gdUnit4/")
@@ -362,7 +372,7 @@ if bad:
 
 sys.stderr.write(
     f"[step 5] PCK audit OK: format=v{pack_version} (Godot {ver_major}.{ver_minor}.{ver_patch}), "
-    f"files={len(paths)}, scripts={len(required_scripts)}/5, locales={len(required_locales)}/10, excluded=0\n"
+    f"files={len(paths)}, scripts={len(required_scripts)}/5, locales=en-only (9 .po excluded), excluded=0\n"
 )
 print(len(paths))
 PY
