@@ -114,7 +114,7 @@ func test_the_panel_hides_when_the_pointer_leaves_the_room() -> void:
 	assert_bool(_menu.room_panel().visible).is_false()
 
 
-func test_the_panel_sits_top_left_below_the_money_slot() -> void:
+func test_the_panel_sits_clear_of_the_left_column_and_below_the_money_slot() -> void:
 	_cafe()
 	_mode.set_tool(BuildMode.Tool.NONE)
 	_mode.update_room_focus(_mode.grid.cell_to_world(Vector2i(4, 4)))
@@ -123,6 +123,6 @@ func test_the_panel_sits_top_left_below_the_money_slot() -> void:
 	var rect: Rect2 = _menu.room_panel().get_global_rect()
 	var money := (_menu.money_label().get_parent() as Control).get_global_rect()
 	print("room panel %s, money slot %s" % [rect, money])
-	assert_float(rect.position.x).is_less(200.0)
+	assert_float(rect.position.x).is_greater_equal(TopRow.SHEET_MIN_LEFT)
 	assert_float(rect.position.y).is_greater_equal(money.end.y)
 	assert_float(rect.end.y).is_less(720.0 - BuildMenu.MARGIN - BuildMenu.BAR_H)

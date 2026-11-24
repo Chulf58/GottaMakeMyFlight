@@ -33,6 +33,7 @@ var _cert_chip := Label.new()
 var _drawer_layer := CanvasLayer.new()
 var _drawer := PanelContainer.new()
 var _drawer_summary := Label.new()
+var _drawer_scroll := ScrollContainer.new()
 var _drawer_rows := VBoxContainer.new()
 var _drawer_title := Label.new()
 var _close_btn := Button.new()
@@ -171,6 +172,12 @@ func open() -> void:
 	_refresh_drawer()
 	_drawer.visible = true
 	_place_drawer()
+	_fit_drawer_height.call_deferred()
+
+
+func _process(_delta: float) -> void:
+	if _drawer.visible:
+		_place_drawer()
 
 
 func close() -> void:
@@ -468,13 +475,43 @@ func _place_drawer() -> void:
 		return
 	var vp := get_viewport()
 	var view := vp.get_visible_rect().size if vp != null else Vector2(1536.0, 864.0)
+	var min_left := TopRow.sheet_min_left(get_tree()) if is_inside_tree() else TopRow.SHEET_MIN_LEFT
 	var right := view.x - float(HudLayout.MARGIN + HudLayout.RAIL_W + HudLayout.GAP)
-	var max_w := maxf(240.0, right - TopRow.SHEET_MIN_LEFT)
+	var max_w := maxf(240.0, right - min_left)
 	var width := minf(DRAWER_W, minf(max_w, view.x - 2.0 * float(HudLayout.MARGIN)))
-	_drawer.custom_minimum_size = Vector2(width, 0.0)
 	var max_x := maxf(float(HudLayout.MARGIN), view.x - width - float(HudLayout.MARGIN))
-	var x := clampf(TopRow.SHEET_MIN_LEFT, float(HudLayout.MARGIN), max_x)
-	_drawer.position = Vector2(x, TopRow.SHEET_TOP)
+	var x := clampf(min_left, float(HudLayout.MARGIN), max_x)
+	var target_pos := Vector2(x, TopRow.SHEET_TOP)
+	var size_changed := not is_equal_approx(_drawer.custom_minimum_size.x, width)
+	if size_changed:
+		_drawer.custom_minimum_size = Vector2(width, 0.0)
+	if not _drawer.position.is_equal_approx(target_pos):
+		_drawer.position = target_pos
+	_fit_drawer_height()
+	if size_changed:
+		_drawer.reset_size()
+
+
+func _fit_drawer_height() -> void:
+	if _drawer == null or _drawer_scroll == null or not _drawer.visible:
+		return
+	var vp := get_viewport()
+	var viewport_h := vp.get_visible_rect().size.y if vp != null else 864.0
+	if viewport_h <= 0.0:
+		return
+	var content_h := _drawer_rows.get_combined_minimum_size().y
+	var chrome := (
+		_drawer.get_combined_minimum_size().y - _drawer_scroll.get_combined_minimum_size().y
+	)
+	var bottom_clear := float(BuildMenu.MARGIN + BuildMenu.BAR_H + BuildMenu.GAP)
+	var max_scroll_h := maxf(0.0, viewport_h - TopRow.SHEET_TOP - bottom_clear - chrome)
+	var wanted := minf(content_h, max_scroll_h)
+	var need_reset := false
+	if not is_equal_approx(_drawer_scroll.custom_minimum_size.y, wanted):
+		_drawer_scroll.custom_minimum_size.y = wanted
+		need_reset = true
+	if need_reset or _drawer.size.y > _drawer.get_combined_minimum_size().y + 1.0:
+		_drawer.reset_size()
 
 
 static func _global_rect(ctrl: Control) -> Rect2:
@@ -534,6 +571,7 @@ func _build_drawer() -> void:
 	_drawer.custom_minimum_size = Vector2(DRAWER_W, 0.0)
 	_drawer_layer.add_child(_drawer)
 	var root_box := VBoxContainer.new()
+	root_box.sort_children.connect(_fit_drawer_height)
 	_drawer.add_child(root_box)
 	var header := HBoxContainer.new()
 	root_box.add_child(header)
@@ -552,8 +590,14 @@ func _build_drawer() -> void:
 	_drawer_summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	root_box.add_child(_drawer_summary)
 	root_box.add_child(HSeparator.new())
+	_drawer_scroll.name = "CertRowsScroll"
+	_drawer_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_drawer_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	root_box.add_child(_drawer_scroll)
 	_drawer_rows.name = "CertRows"
-	root_box.add_child(_drawer_rows)
+	_drawer_rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_drawer_rows.sort_children.connect(_fit_drawer_height)
+	_drawer_scroll.add_child(_drawer_rows)
 	_retranslate()
 
 
@@ -575,6 +619,11 @@ class StarRow:
 		var outline_colour := get_theme_color(&"star_outline", &"RatingStars")
 		for i in fills.size():
 			var shape := _star(Vector2(i * (STAR_SIZE + STAR_GAP) + STAR_SIZE / 2.0, size.y / 2.0))
+			var outline := shape.duplicate()
+			outline.append(shape[0])
+			# Draw the 2 px outline behind the polygon fills so only its outer 1 px
+			# frames the 16 px star without swallowing the arms and gold interior.
+			draw_polyline(outline, outline_colour, 2.0, true)
 			draw_colored_polygon(shape, empty)
 			if fills[i] >= 1.0:
 				draw_colored_polygon(shape, fill)
@@ -589,15 +638,14 @@ class StarRow:
 				)
 				for piece in Geometry2D.intersect_polygons(shape, half):
 					draw_colored_polygon(piece, fill)
-			var outline := shape.duplicate()
-			outline.append(shape[0])
-			draw_polyline(outline, outline_colour, 2.0, true)
 
 	## A five-point star around `centre`, point up, starting at the top point.
 	static func _star(centre: Vector2) -> PackedVector2Array:
+		var outer := STAR_SIZE / 2.0 - 1.0
+		var inner := outer * 0.48
 		var points := PackedVector2Array()
 		for k in 10:
-			var radius := STAR_SIZE / 2.0 if k % 2 == 0 else STAR_SIZE / 2.0 * 0.42
+			var radius := outer if k % 2 == 0 else inner
 			var angle := -PI / 2.0 + k * PI / 5.0
 			points.append(centre + Vector2(cos(angle), sin(angle)) * radius)
 		return points

@@ -11,7 +11,7 @@ extends PanelContainer
 ## followed. It reads RoomRules and follows the grid's own signals, so
 ## furniture placed while it is open shows on the next frame.
 
-const POSITION := Vector2(16.0, 64.0)
+const POSITION := Vector2(TopRow.SHEET_MIN_LEFT, TopRow.SHEET_TOP)
 const WIDTH := 280.0
 const BAG_ROOM := &"bag_room"
 const BELT_END := &"baggage_belt_end"
@@ -32,6 +32,7 @@ var _watched_staff: StaffSim
 var _room_id := 0
 var _dirty := false
 var _lines := VBoxContainer.new()
+var _legend_card: Control
 
 
 func _ready() -> void:
@@ -44,6 +45,7 @@ func _ready() -> void:
 	_lines.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_lines)
 	visible = false
+	_place()
 
 
 func _notification(what: int) -> void:
@@ -81,6 +83,7 @@ func show_room(id: int) -> void:
 		_show_bag_room(status, id)
 		_show_prestige(id, status.type_id)
 		reset_size()
+		_place()
 		return
 	if status.ok:
 		_line(DisplayWords.ready(), &"HudGoodText")
@@ -113,11 +116,37 @@ func show_room(id: int) -> void:
 		_line(tr("Base spend ${amount} per visit").format({"amount": status.base_spend}))
 	_show_prestige(id, status.type_id)
 	reset_size()
+	_place()
 
 
 func _process(_delta: float) -> void:
 	if _dirty:
 		show_room(_room_id)
+	elif visible:
+		_place()
+
+
+func _place() -> void:
+	var tree := get_tree() if is_inside_tree() else null
+	var vp := get_viewport()
+	var view := vp.get_visible_rect().size if vp != null else Vector2(1280.0, 720.0)
+	var min_x := LeftColumn.clear_right(tree, TopRow.SHEET_MIN_LEFT)
+	var card_w := maxf(size.x, WIDTH)
+	var max_x := maxf(float(HudLayout.MARGIN), view.x - card_w - float(HudLayout.MARGIN))
+	var x := clampf(min_x, float(HudLayout.MARGIN), max_x)
+	var y := TopRow.SHEET_TOP
+	if (_legend_card == null or not is_instance_valid(_legend_card)) and vp != null:
+		_legend_card = vp.find_child("MoodLegendCard", true, false) as Control
+	if _legend_card != null and _legend_card.is_visible_in_tree():
+		var lr := _legend_card.get_global_rect()
+		if lr.end.x > x and lr.position.x < x + card_w:
+			y = maxf(y, lr.end.y + float(HudLayout.GAP))
+	var bottom_limit := view.y - float(BuildMenu.MARGIN + BuildMenu.BAR_H + BuildMenu.GAP)
+	if size.y > 0.0:
+		y = minf(y, maxf(TopRow.SHEET_TOP, bottom_limit - size.y))
+	var target := Vector2(x, y)
+	if not position.is_equal_approx(target):
+		position = target
 
 
 ## Esc closes the panel and is not passed on, so it does not also drop a tool.

@@ -503,6 +503,7 @@ func open() -> void:
 	_refresh_notes()
 	flights.check_planning_changed()
 	_refresh_fits()
+	TopRow.place_sheet(_sheet, self)
 	_fit_scroll_height()
 	_fit_scroll_height.call_deferred()
 	opened.emit()
@@ -667,11 +668,20 @@ func _fit_scroll_height() -> void:
 		return
 	var content_h := _cards.get_combined_minimum_size().y
 	var chrome := _sheet.get_combined_minimum_size().y - _scroll.get_combined_minimum_size().y
-	var max_scroll_h := maxf(0.0, viewport_h - TopRow.SHEET_TOP - float(HudLayout.MARGIN) - chrome)
+	var bottom_clear := float(BuildMenu.MARGIN + BuildMenu.BAR_H + BuildMenu.GAP)
+	var max_scroll_h := maxf(0.0, viewport_h - TopRow.SHEET_TOP - bottom_clear - chrome)
 	var wanted := minf(content_h, max_scroll_h)
-	if not is_equal_approx(_scroll.custom_minimum_size.y, wanted):
+	var extent := TopRow.sheet_extent(
+		viewport.get_visible_rect().size.x, TopRow.sheet_min_left(get_tree())
+	)
+	var size_changed := (
+		not is_equal_approx(_scroll.custom_minimum_size.y, wanted)
+		or not is_equal_approx(_sheet.custom_minimum_size.x, extent.y)
+		or not is_equal_approx(_sheet.offset_left, extent.x)
+	)
+	if size_changed:
 		_scroll.custom_minimum_size.y = wanted
-		var extent := TopRow.sheet_extent(viewport.get_visible_rect().size.x)
+		TopRow.place_sheet(_sheet, self)
 		_sheet.custom_minimum_size.x = extent.y
 		_sheet.reset_size()
 

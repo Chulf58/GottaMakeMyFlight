@@ -54,6 +54,27 @@ static func right_of(tree: SceneTree, group: StringName, least: float) -> float:
 	return maxf(least, control.get_global_rect().end.x + HudLayout.GAP)
 
 
+## The x a GAP right of every visible left-column toggle or card, and never
+## left of `least`.
+static func clear_right(tree: SceneTree, least: float) -> float:
+	var x := least
+	if tree == null:
+		return x
+	for group in [
+		TOGGLE_ROW_GROUP,
+		DEPARTURES_TOGGLE_GROUP,
+		PLANNER_TOGGLE_GROUP,
+		LIST_GROUP,
+		CARD_GROUP,
+		HINT_GROUP,
+	]:
+		for node in tree.get_nodes_in_group(group):
+			var control := node as Control
+			if control != null and control.is_visible_in_tree():
+				x = maxf(x, control.get_global_rect().end.x + HudLayout.GAP)
+	return x
+
+
 ## The y of toggle slot `slot`, in layout pixels.
 static func slot_top(slot: int) -> float:
 	return float(TOP + slot * (HudLayout.BUTTON_H + HudLayout.GAP))
