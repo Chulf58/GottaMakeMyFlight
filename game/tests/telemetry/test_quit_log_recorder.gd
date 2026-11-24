@@ -71,7 +71,9 @@ func test_with_the_switch_on_the_session_starts_with_the_seed() -> void:
 	var first: Dictionary = _records()[0]
 	assert_str(first["type"]).is_equal("session_start")
 	assert_str(first["data"]["seed"]).is_equal("777")
-	assert_str(first["data"]["version"]).is_equal("0.1.0")
+	var expected_version := str(ProjectSettings.get_setting("application/config/version", ""))
+	assert_str(expected_version).is_not_empty()
+	assert_str(first["data"]["version"]).is_equal(expected_version)
 
 
 func test_a_day_end_and_the_next_day_start_carry_day_and_money() -> void:
