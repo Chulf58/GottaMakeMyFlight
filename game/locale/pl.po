@@ -4560,7 +4560,7 @@ msgstr[2] "Do tej bramki przypisane są loty. Usuń ją po ich odlocie: {flights
 msgctxt "build refusal"
 msgid "No other gate is free for these flights. Move them in Departures first: {flights}"
 msgid_plural "No other gate is free for these flights. Move them in Departures first: {flights}"
-msgstr[0] "Żadna inna bramka nie jest wolna dla tych lotów. Najpierw przenieś je w Odlotach: {flights}"
+msgstr[0] "Brak wolnej bramki dla tego lotu. Najpierw przenieś go w Odlotach: {flights}"
 msgstr[1] "Żadna inna bramka nie jest wolna dla tych lotów. Najpierw przenieś je w Odlotach: {flights}"
 msgstr[2] "Żadna inna bramka nie jest wolna dla tych lotów. Najpierw przenieś je w Odlotach: {flights}"
 

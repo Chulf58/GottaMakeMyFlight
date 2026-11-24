@@ -126,10 +126,48 @@ func test_zero_missing_glyphs_across_all_10_endonyms_and_po_catalogs() -> void:
 		var po_text := FileAccess.get_file_as_string(po_path)
 		var entries := PotEntries.parse(po_text)
 		assert_int(entries.size()).is_greater(30)
+		var checked_entries := 0
+		var checked_strings := 0
 		for entry in entries:
-			var msgstr := str(entry.get("str", ""))
-			if msgstr != "":
-				_assert_all_glyphs(font, msgstr, "%s %s" % [code, entry.get("id", "")])
+			if str(entry.get("id", "")) == "":
+				continue
+			var strs: Array = entry.get("strs", [])
+			assert_array(strs).is_not_empty()
+			checked_entries += 1
+			for raw_msgstr in strs:
+				var msgstr := PotEntries.unescape(str(raw_msgstr))
+				assert_str(msgstr).is_not_empty()
+				checked_strings += 1
+				_assert_all_glyphs(
+					font,
+					msgstr,
+					"%s line %d (%s)" % [code, int(entry.get("line", 0)), entry.get("id", "")]
+				)
+		assert_int(checked_entries).is_greater_equal(1700)
+		assert_int(checked_strings).is_greater_equal(checked_entries)
+
+
+func test_pot_entries_parses_multiline_msgstr_and_plurals_with_escapes() -> void:
+	var sample := (
+		'msgid ""\n'
+		+ 'msgstr ""\n'
+		+ '"Content-Type: text/plain; charset=UTF-8\\n"\n\n'
+		+ 'msgctxt "ctx"\n'
+		+ 'msgid "Hello"\n'
+		+ 'msgstr ""\n'
+		+ '"Line \\"1\\"\\n"\n'
+		+ '"Line\\\\2\\t!"\n\n'
+		+ 'msgid "1 flight"\n'
+		+ 'msgid_plural "{n} flights"\n'
+		+ 'msgstr[0] "1 lot"\n'
+		+ 'msgstr[1] "{n} loty"\n'
+		+ 'msgstr[2] "{n} lotów"\n'
+	)
+	var entries := PotEntries.parse(sample)
+	assert_int(entries.size()).is_equal(3)
+	assert_array(entries[1]["strs"]).is_equal(['Line \\"1\\"\\nLine\\\\2\\t!'])
+	assert_str(PotEntries.unescape(entries[1]["strs"][0])).is_equal('Line "1"\nLine\\2\t!')
+	assert_array(entries[2]["strs"]).is_equal(["1 lot", "{n} loty", "{n} lotów"])
 
 
 func _assert_all_glyphs(font: Font, text: String, label: String) -> void:

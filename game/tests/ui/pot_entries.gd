@@ -7,8 +7,9 @@ extends RefCounted
 ## msgid line that follows a msgid, or the end of the file, closes the one before.
 
 
-## Each entry as {"ctx", "id", "plural", "msgstr_keys", "line"}: the texts, the name of
-## each msgstr / msgstr[n] field it has (in file order), and the line its first field is on.
+## Each entry as {"ctx", "id", "plural", "msgstr_keys", "strs", "line"}: the texts, the name of
+## each msgstr / msgstr[n] field it has (in file order), their raw values, and the line its first
+## field is on.
 static func parse(text: String) -> Array[Dictionary]:
 	var entries: Array[Dictionary] = []
 	var cur := {}
@@ -41,10 +42,42 @@ static func parse(text: String) -> Array[Dictionary]:
 			field = "msgstr"
 			_begin(cur, number)
 			cur["msgstr_keys"].append(key)
-		elif row.begins_with('"') and field != "" and field != "msgstr":
-			cur[field] += _quoted(row)
+			cur["strs"].append(_quoted(body))
+		elif row.begins_with('"') and field != "":
+			if field == "msgstr":
+				var strs: Array = cur["strs"]
+				strs[strs.size() - 1] = str(strs[strs.size() - 1]) + _quoted(row)
+			else:
+				cur[field] += _quoted(row)
 	_close(entries, cur)
 	return entries
+
+
+## Resolve standard PO C-style escapes (\\, \", \n, \t, \r) in a parsed field value.
+static func unescape(raw: String) -> String:
+	var out := ""
+	var i := 0
+	var n := raw.length()
+	while i < n:
+		var ch := raw[i]
+		if ch == "\\" and i + 1 < n:
+			var next := raw[i + 1]
+			match next:
+				"n":
+					out += "\n"
+				"t":
+					out += "\t"
+				"r":
+					out += "\r"
+				'"', "\\":
+					out += next
+				_:
+					out += ch + next
+			i += 2
+			continue
+		out += ch
+		i += 1
+	return out
 
 
 ## How many entries have exactly this context, msgid and plural.
@@ -102,6 +135,7 @@ static func _begin(cur: Dictionary, number: int) -> void:
 	if cur.is_empty():
 		cur["line"] = number
 		cur["msgstr_keys"] = []
+		cur["strs"] = []
 
 
 static func _close(entries: Array[Dictionary], cur: Dictionary) -> void:
