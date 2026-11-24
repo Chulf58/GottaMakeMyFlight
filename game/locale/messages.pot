@@ -7398,3 +7398,555 @@ msgstr ""
 #: ui/awards_ceremony.gd
 msgid "Continue"
 msgstr ""
+
+#: core/save_game.gd
+msgid "Sandbox"
+msgstr ""
+
+#: ui/achievement_toast.gd
+msgid "Achievement Unlocked"
+msgstr ""
+
+#: ui/big_firsts.gd
+msgid "Certified {star}★: {title}"
+msgstr ""
+
+#: ui/big_firsts.gd
+msgid "Your airport earned {star}★ {title} certification!"
+msgstr ""
+
+#: ui/big_firsts.gd
+msgid "One-time cash grant: +${grant}"
+msgstr ""
+
+#: ui/big_firsts.gd
+msgid "Permanent contract fee prestige bonus: +{percent}%"
+msgstr ""
+
+#: ui/big_firsts.gd
+msgid "Reach 2★ Regional Terminal to unlock permanent contract fee bonuses."
+msgstr ""
+
+#: ui/demo_end_card.gd
+msgid "Start a New Airport anytime, or wishlist the full game for larger planes, restaurants, lounges, car parks, and major airport chaos."
+msgstr ""
+
+#: ui/demo_end_card.gd
+msgid "Day 5 complete — thanks for playing the demo!"
+msgstr ""
+
+#: ui/demo_end_card.gd
+msgid "Your 5-day airport summary"
+msgstr ""
+
+#: ui/demo_end_card.gd
+msgid "Passengers who made their flight"
+msgstr ""
+
+#: ui/demo_end_card.gd
+msgid "Cash earned"
+msgstr ""
+
+#: ui/demo_end_card.gd
+msgid "${amount}"
+msgstr ""
+
+#: ui/demo_end_card.gd
+msgid "Current balance"
+msgstr ""
+
+#: ui/demo_end_card.gd
+msgid "Airport rating"
+msgstr ""
+
+#: ui/demo_end_card.gd
+msgid "{stars} stars"
+msgstr ""
+
+#: ui/demo_end_card.gd
+msgid "Wishlist on Steam"
+msgstr ""
+
+#: ui/demo_end_card.gd
+msgid "Back to Title"
+msgstr ""
+
+#: ui/flight_planner.gd
+msgid "Peak"
+msgstr ""
+
+#: ui/flight_planner.gd
+msgid "Hub"
+msgstr ""
+
+#: ui/flight_planner.gd
+msgid "Hub Contract (+10% fee, +1 low-rating grace day)"
+msgstr ""
+
+#: ui/flight_planner.gd
+msgid "Click to move gate or end contract, or drag onto another gate row."
+msgstr ""
+
+#: ui/flight_planner.gd
+msgid "Contract ended — cannot move"
+msgstr ""
+
+#: ui/flight_planner.gd
+msgid "One-off flight — cannot move"
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Shop staff hired in Staff, and the spot in front clear."
+msgstr ""
+
+#: ui/mood_overlay.gd
+msgid "floor congestion: light flow to bottleneck"
+msgstr ""
+
+#: ui/mood_overlay.gd
+msgid "room prestige level"
+msgstr ""
+
+#: ui/mood_overlay.gd
+msgctxt "mood overlay mode"
+msgid "Congestion"
+msgstr ""
+
+#: ui/mood_overlay.gd
+msgctxt "mood overlay mode"
+msgid "Prestige"
+msgstr ""
+
+#: ui/mood_overlay.gd
+msgid "Light"
+msgstr ""
+
+#: ui/mood_overlay.gd
+msgid "Busy"
+msgstr ""
+
+#: ui/mood_overlay.gd
+msgid "Congested"
+msgstr ""
+
+#: ui/mood_overlay.gd
+msgid "Lv. 1"
+msgstr ""
+
+#: ui/mood_overlay.gd
+msgid "Lv. 2"
+msgstr ""
+
+#: ui/mood_overlay.gd
+msgid "Lv. 3"
+msgstr ""
+
+#: ui/mood_overlay.gd
+msgid "Lv. 4"
+msgstr ""
+
+#: ui/mood_overlay.gd
+msgid "Lv. 5"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Morning Peak +15%"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Evening Peak +15%"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Bronze +5%"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Bronze loyalty: this airline's offers pay 5% more."
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Silver +10%"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Silver loyalty: this airline's offers pay 10% more."
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Gold +15%"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Gold loyalty: this airline's offers pay 15% more and unlock Hub Contracts at 3★+."
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Gold Hub Contract: +10% prestige fee bonus and +1 low-rating grace day."
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Hub Contract"
+msgstr ""
+
+#: ui/offer_panel.gd
+msgid "Peak rush wave: +15% passenger fee included."
+msgstr ""
+
+#: ui/planner_drag.gd
+msgid "Gate {gate} — departs in quiet night"
+msgstr ""
+
+#: ui/planner_drag.gd
+msgid "Gate {gate} — taxi route unavailable"
+msgstr ""
+
+#: ui/planner_drag.gd
+msgid "Gate {gate} — building taxi spur"
+msgstr ""
+
+#: ui/planner_drag.gd
+msgid "Gate {gate} — no usable stand"
+msgstr ""
+
+#: ui/planner_drag.gd
+msgid "Gate {gate} — stand too small"
+msgstr ""
+
+#: ui/rating_badge.gd
+msgid "Certification: {star}★ {title} (+{bonus}% contract fees)"
+msgstr ""
+
+#: ui/rating_badge.gd
+msgid "Click for airport certification progress."
+msgstr ""
+
+#: ui/rating_badge.gd
+msgid "{star}★"
+msgstr ""
+
+#: ui/rating_badge.gd
+msgid "Airport Certification"
+msgstr ""
+
+#: ui/rating_badge.gd
+msgid "Certification tracking is not active."
+msgstr ""
+
+#: ui/rating_badge.gd
+msgid "{star}★ {title}"
+msgstr ""
+
+#: ui/rating_badge.gd
+msgid "Unrated"
+msgstr ""
+
+#: ui/rating_badge.gd
+msgid "Current: {level} • Permanent contract fee bonus: +{bonus}%"
+msgstr ""
+
+#: ui/rating_badge.gd
+msgid "✓ {star}★ {title}"
+msgstr ""
+
+#: ui/rating_badge.gd
+msgid "Earned • +${grant} • +{bonus}% fees"
+msgstr ""
+
+#: ui/rating_badge.gd
+msgid "Earned • +${grant}"
+msgstr ""
+
+#: ui/rating_badge.gd
+msgid "+${grant} • +{bonus}% fees"
+msgstr ""
+
+#: ui/rating_badge.gd
+msgid "+${grant}"
+msgstr ""
+
+#: ui/rating_badge.gd
+msgid "Airport opened"
+msgstr ""
+
+#: ui/rating_badge.gd
+msgid "Rating: {current} / {target}★"
+msgstr ""
+
+#: ui/rating_badge.gd
+msgid "Passengers made: {current} / {target}"
+msgstr ""
+
+#: ui/rating_badge.gd
+msgid "Operational security lane built"
+msgstr ""
+
+#: ui/rating_badge.gd
+msgid "Operational bag room built"
+msgstr ""
+
+#: ui/rating_badge.gd
+msgid "Medium+ planes departed: {current} / {target}"
+msgstr ""
+
+#: ui/rating_badge.gd
+msgid "Large planes departed: {current} / {target}"
+msgstr ""
+
+#: ui/rating_badge.gd
+msgid "Made rate: -- / {target}%"
+msgstr ""
+
+#: ui/rating_badge.gd
+msgid "Made rate: {current}% / {target}%"
+msgstr ""
+
+#: ui/room_panel.gd
+msgid "Prestige: Lv. {level} / 5 ({score} pts · +{bonus}% spend)"
+msgstr ""
+
+#: ui/room_panel.gd
+msgid "Prestige: Lv. {level} / 5 ({score} pts)"
+msgstr ""
+
+#: ui/room_panel.gd
+msgid "Size {size} · Setup {setup} · Decor {decor} · Awards {trophy}"
+msgstr ""
+
+#: ui/room_panel.gd
+msgid "Add decor or trophies to raise prestige"
+msgstr ""
+
+#: ui/save_list.gd
+msgid "{slot}, {time} (Sandbox)"
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "Lv. {level}"
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "Train ${cost}"
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "Upgrade work speed to +{pct}%"
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "Max"
+msgstr ""
+
+#: ui/title_screen.gd
+msgid "Career"
+msgstr ""
+
+#: ui/title_screen.gd
+msgid "Free-Build Sandbox"
+msgstr ""
+
+#: ui/title_screen.gd
+msgid "Unlimited Funds"
+msgstr ""
+
+#: ui/title_screen.gd
+msgid "All Tiers & Land Unlocked"
+msgstr ""
+
+#: ui/title_screen.gd
+msgctxt "menu"
+msgid "Start Airport"
+msgstr ""
+
+#: ui/title_screen.gd
+msgid "Free-build sandbox with rating, offers, and awards active."
+msgstr ""
+
+#: ui/title_screen.gd
+msgid "No spending limit; Rescue Grant skipped."
+msgstr ""
+
+#: ui/title_screen.gd
+msgid "Starts with $250,000 budget."
+msgstr ""
+
+#: ui/title_screen.gd
+msgid "Standard $25,000 budget, unlock progression, 1-5★ certification, and Career achievements."
+msgstr ""
+
+#: core/achievements.gd
+msgid "Open for Business"
+msgstr ""
+
+#: core/achievements.gd
+msgid "Open the airport"
+msgstr ""
+
+#: core/achievements.gd
+msgid "First Departure"
+msgstr ""
+
+#: core/achievements.gd
+msgid "Depart your first flight"
+msgstr ""
+
+#: core/achievements.gd
+msgid "Fifty Flyers"
+msgstr ""
+
+#: core/achievements.gd
+msgid "Serve 50 passengers"
+msgstr ""
+
+#: core/achievements.gd
+msgid "Busy Concourse"
+msgstr ""
+
+#: core/achievements.gd
+msgid "Serve 250 passengers"
+msgstr ""
+
+#: core/achievements.gd
+msgid "Thousand Flyers"
+msgstr ""
+
+#: core/achievements.gd
+msgid "Serve 1,000 passengers"
+msgstr ""
+
+#: core/achievements.gd
+#: rating/airport_certification.gd
+msgid "Local Strip"
+msgstr ""
+
+#: core/achievements.gd
+msgid "Earn 1★ Local Strip Certification"
+msgstr ""
+
+#: core/achievements.gd
+#: rating/airport_certification.gd
+msgid "Regional Terminal"
+msgstr ""
+
+#: core/achievements.gd
+msgid "Earn 2★ Regional Terminal Certification"
+msgstr ""
+
+#: core/achievements.gd
+#: rating/airport_certification.gd
+msgid "National Hub"
+msgstr ""
+
+#: core/achievements.gd
+msgid "Earn 3★ National Hub Certification"
+msgstr ""
+
+#: core/achievements.gd
+#: rating/airport_certification.gd
+msgid "International Gateway"
+msgstr ""
+
+#: core/achievements.gd
+msgid "Earn 4★ International Gateway Certification"
+msgstr ""
+
+#: core/achievements.gd
+#: rating/airport_certification.gd
+msgid "World-Class Airport"
+msgstr ""
+
+#: core/achievements.gd
+msgid "Earn 5★ World-Class Airport Certification"
+msgstr ""
+
+#: core/achievements.gd
+msgid "Build Tier 2"
+msgstr ""
+
+#: core/achievements.gd
+msgid "Reach Build Tier 2"
+msgstr ""
+
+#: core/achievements.gd
+msgid "Build Tier 3"
+msgstr ""
+
+#: core/achievements.gd
+msgid "Reach Build Tier 3"
+msgstr ""
+
+#: core/achievements.gd
+msgid "Build Tier 4"
+msgstr ""
+
+#: core/achievements.gd
+msgid "Reach Build Tier 4"
+msgstr ""
+
+#: core/achievements.gd
+msgid "Security Pro"
+msgstr ""
+
+#: core/achievements.gd
+msgid "Build a full Security Lane"
+msgstr ""
+
+#: core/achievements.gd
+msgid "Baggage Master"
+msgstr ""
+
+#: core/achievements.gd
+msgid "Open a ready Bag Room"
+msgstr ""
+
+#: core/achievements.gd
+msgid "Medium Wings"
+msgstr ""
+
+#: core/achievements.gd
+msgid "Depart a Medium plane"
+msgstr ""
+
+#: core/achievements.gd
+msgid "Heavy Jet"
+msgstr ""
+
+#: core/achievements.gd
+msgid "Depart a Large plane"
+msgstr ""
+
+#: core/achievements.gd
+msgid "Gold Loyalty"
+msgstr ""
+
+#: core/achievements.gd
+msgid "Reach Gold loyalty with an airline"
+msgstr ""
+
+#: core/achievements.gd
+msgid "Hub Partner"
+msgstr ""
+
+#: core/achievements.gd
+msgid "Accept a Gold Hub Contract"
+msgstr ""
+
+#: core/achievements.gd
+msgid "Five-Star Room"
+msgstr ""
+
+#: core/achievements.gd
+msgid "Raise any room to Prestige Level 5"
+msgstr ""
+
+#: core/achievements.gd
+msgid "Award Winner"
+msgstr ""
+
+#: core/achievements.gd
+msgid "Win an Annual Airport Award"
+msgstr ""
+
+#: core/achievements.gd
+msgid "Win Airport of the Year"
+msgstr ""
