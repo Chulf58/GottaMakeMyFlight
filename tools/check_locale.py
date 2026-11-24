@@ -15,9 +15,11 @@ SKIP_DIRS = {"addons", "tests", "spike", "debug"}
 
 NAMED_PLACEHOLDER_RE = re.compile(r"\{[^{}]+\}")
 PRINTF_PLACEHOLDER_RE = re.compile(
-    r"(?<!%)%(?:[-+#0]|\d+\$)?(?:\d+)?(?:\.\d+)?[sdifuxXogeEc]"
+    r"%%|(%(?:\d+\$)?[-+#0]*(?:\d+)?(?:\.\d+)?[sdifuxXogeEc])"
 )
-PLURAL_FORMS_RE = re.compile(r"(?:^|\n)Plural-Forms:\s*nplurals\s*=\s*(\d+)\s*;", re.MULTILINE)
+PLURAL_FORMS_RE = re.compile(
+    r"(?:^|\n)Plural-Forms:\s*nplurals\s*=\s*(\d+)\s*;\s*plural\s*=", re.MULTILINE
+)
 
 POT_DIRECTIVE_RE = re.compile(
     r'^(msgctxt|msgid_plural|msgid|msgstr(?:\[(\d+)\])?)\s+(".*")\s*$'
@@ -51,6 +53,7 @@ class PoEntry:
     msgid_plural: str | None = None
     msgstr: str | None = None
     msgstr_plural: dict[int, str] = field(default_factory=dict)
+    is_fuzzy: bool = False
 
     @property
     def is_header(self) -> bool:
@@ -85,6 +88,8 @@ def unescape_c_string(quoted: str, path: Path, line_no: int) -> str:
     n = len(inner)
     while i < n:
         ch = inner[i]
+        if ch == '"':
+            raise ParseError(f"{path}:{line_no}: unescaped quote inside string {quoted!r}")
         if ch != "\\":
             out.append(ch)
             i += 1
@@ -124,9 +129,10 @@ def parse_gettext_file(path: Path) -> list[PoEntry]:
     active_field: str | None = None
     active_plural_idx: int | None = None
     seen_fields: set[str] = set()
+    pending_fuzzy = False
 
-    def close_current() -> None:
-        nonlocal cur, active_field, active_plural_idx, seen_fields
+    def close_current(reset_flags: bool = False) -> None:
+        nonlocal cur, active_field, active_plural_idx, seen_fields, pending_fuzzy
         if cur is not None:
             if cur.msgid is None:
                 raise ParseError(f"{path}:{cur.line}: entry missing msgid")
@@ -135,13 +141,22 @@ def parse_gettext_file(path: Path) -> list[PoEntry]:
         active_field = None
         active_plural_idx = None
         seen_fields = set()
+        if reset_flags:
+            pending_fuzzy = False
 
     for line_no, raw in enumerate(text.splitlines(), 1):
         stripped = raw.strip()
         if stripped == "":
-            close_current()
+            close_current(reset_flags=True)
             continue
         if stripped.startswith("#"):
+            if stripped.startswith("#,"):
+                flags = {f.strip() for f in stripped[2:].split(",")}
+                if "fuzzy" in flags:
+                    if cur is not None:
+                        cur.is_fuzzy = True
+                    else:
+                        pending_fuzzy = True
             continue
 
         m = POT_DIRECTIVE_RE.match(stripped)
@@ -154,10 +169,11 @@ def parse_gettext_file(path: Path) -> list[PoEntry]:
             if cur is not None and base_dir in ("msgctxt", "msgid") and (
                 cur.msgstr is not None or cur.msgstr_plural
             ):
-                close_current()
+                close_current(reset_flags=False)
 
             if cur is None:
-                cur = PoEntry(line=line_no)
+                cur = PoEntry(line=line_no, is_fuzzy=pending_fuzzy)
+                pending_fuzzy = False
 
             if directive == "msgctxt":
                 if "msgctxt" in seen_fields or "msgid" in seen_fields:
@@ -662,8 +678,10 @@ def scan_translation_calls(
                         ctx = ""
                         if len(args) >= 2:
                             ctx_val = eval_string_expr(args[1], local_consts, global_consts)
-                            if ctx_val is not None:
-                                ctx = ctx_val
+                            if ctx_val is None:
+                                i = open_idx + 1
+                                continue
+                            ctx = ctx_val
                         calls.append(RuntimeCall(path=path, line=tok.line, msgctxt=ctx, msgid=msgid))
             elif kind in ("tr_n", "atr_n", "translate_plural"):
                 if len(args) >= 2:
@@ -673,8 +691,10 @@ def scan_translation_calls(
                         ctx = ""
                         if len(args) >= 4:
                             ctx_val = eval_string_expr(args[3], local_consts, global_consts)
-                            if ctx_val is not None:
-                                ctx = ctx_val
+                            if ctx_val is None:
+                                i = open_idx + 1
+                                continue
+                            ctx = ctx_val
                         calls.append(
                             RuntimeCall(
                                 path=path,
@@ -833,12 +853,15 @@ def find_missing_runtime_entries(
             missing.append(call)
         elif call.msgid_plural is not None and entry.msgid_plural != call.msgid_plural:
             missing.append(call)
+        elif call.msgid_plural is None and entry.is_plural:
+            missing.append(call)
     return missing
 
 
 def extract_placeholders(text: str) -> Counter[str]:
     """Return Counter of all {named} and printf tokens in text."""
-    tokens = NAMED_PLACEHOLDER_RE.findall(text) + PRINTF_PLACEHOLDER_RE.findall(text)
+    printf_tokens = [m.group(1) for m in PRINTF_PLACEHOLDER_RE.finditer(text) if m.group(1)]
+    tokens = NAMED_PLACEHOLDER_RE.findall(text) + printf_tokens
     return Counter(tokens)
 
 
@@ -857,6 +880,9 @@ def validate_po_file(
     nplurals: int | None = None
 
     for entry in entries:
+        if entry.is_fuzzy:
+            errors.append(f"{po_path}:{entry.line}: fuzzy entry {entry.msgid!r} is not allowed")
+
         if entry.is_header:
             if header is not None:
                 errors.append(f"{po_path}:{entry.line}: duplicate PO header entry")
