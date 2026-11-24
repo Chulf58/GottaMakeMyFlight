@@ -23,7 +23,6 @@ var _quits := 0
 var _urls: Array[String] = []
 var _quit_log_orig: QuitLogRecorder
 var _quick_save_orig := ""
-var _extra_translation: Translation
 var _locale_before := ""
 
 
@@ -67,9 +66,6 @@ func before_test() -> void:
 
 func after_test() -> void:
 	PseudoLocale.disable()
-	if _extra_translation != null:
-		TranslationServer.remove_translation(_extra_translation)
-		_extra_translation = null
 	var settings := _locale_settings()
 	var changed_locale: bool = settings.current_locale() != _locale_before
 	if changed_locale:
@@ -358,43 +354,48 @@ func test_save_and_exit_is_hidden_when_save_game_is_null() -> void:
 
 
 func test_new_buttons_confirm_copy_and_refusal_retranslate_live() -> void:
-	_extra_translation = Translation.new()
-	_extra_translation.locale = "ja"
-	_extra_translation.add_message("Main Menu", "ja:main_menu", "menu")
-	_extra_translation.add_message("Quit to Desktop", "ja:quit_desktop", "menu")
-	_extra_translation.add_message("Save & Exit", "ja:save_exit", "menu")
-	_extra_translation.add_message("Exit without Saving", "ja:exit_nosave", "menu")
-	_extra_translation.add_message("Cancel", "ja:cancel", "menu")
-	_extra_translation.add_message("Return to main menu?", "ja:confirm_title")
-	_extra_translation.add_message("Unsaved progress will be lost.", "ja:confirm_body")
-	_extra_translation.add_message("Cannot save right now: {reason}", "ja:refused:{reason}")
-	TranslationServer.add_translation(_extra_translation)
-
 	_menu.feedback_url = "https://example.com/feedback"
 	(_main.get_node("BaggageSim") as BaggageSim).routes_stale = true
 	_menu.open()
 	(_main_page().get_node("MainMenu") as Button).pressed.emit()
 	(_menu.exit_confirm_page.get_node("SaveAndExit") as Button).pressed.emit()
 	assert_bool(_menu.exit_confirm_page.visible).is_true()
+	assert_str((_main_page().get_node("SendFeedback") as Button).text).is_equal("Send Feedback")
+	assert_str((_main_page().get_node("MainMenu") as Button).text).is_equal("Main Menu")
+	assert_str((_main_page().get_node("QuitToDesktop") as Button).text).is_equal("Quit to Desktop")
+	assert_str((_menu.exit_confirm_page.get_node("Title") as Label).text).is_equal(
+		"Return to main menu?"
+	)
+	assert_str((_menu.exit_confirm_page.get_node("Body") as Label).text).is_equal(
+		"Unsaved progress will be lost."
+	)
+	assert_str((_menu.exit_confirm_page.get_node("SaveAndExit") as Button).text).is_equal(
+		"Save & Exit"
+	)
+	assert_str((_menu.exit_confirm_page.get_node("ExitWithoutSaving") as Button).text).is_equal(
+		"Exit without Saving"
+	)
+	assert_str((_menu.exit_confirm_page.get_node("Cancel") as Button).text).is_equal("Cancel")
+	assert_str(_menu.status_text()).is_equal(
+		"Cannot save right now: the last build change settles on the next tick"
+	)
 
 	_locale_settings().apply_locale("ja", false)
 	assert_bool(_menu.exit_confirm_page.visible).is_true()
 	assert_str((_main_page().get_node("SendFeedback") as Button).text).is_equal(
 		TranslationServer.translate("Send Feedback")
 	)
-	assert_str((_main_page().get_node("MainMenu") as Button).text).is_equal("ja:main_menu")
-	assert_str((_main_page().get_node("QuitToDesktop") as Button).text).is_equal("ja:quit_desktop")
-	assert_str((_menu.exit_confirm_page.get_node("Title") as Label).text).is_equal(
-		"ja:confirm_title"
+	assert_str((_main_page().get_node("MainMenu") as Button).text).is_equal("メインメニュー")
+	assert_str((_main_page().get_node("QuitToDesktop") as Button).text).is_equal("デスクトップへ終了")
+	assert_str((_menu.exit_confirm_page.get_node("Title") as Label).text).is_equal("メインメニューに戻りますか？")
+	assert_str((_menu.exit_confirm_page.get_node("Body") as Label).text).is_equal(
+		"保存していない進行状況は失われます。"
 	)
-	assert_str((_menu.exit_confirm_page.get_node("Body") as Label).text).is_equal("ja:confirm_body")
-	assert_str((_menu.exit_confirm_page.get_node("SaveAndExit") as Button).text).is_equal(
-		"ja:save_exit"
-	)
+	assert_str((_menu.exit_confirm_page.get_node("SaveAndExit") as Button).text).is_equal("保存して終了")
 	assert_str((_menu.exit_confirm_page.get_node("ExitWithoutSaving") as Button).text).is_equal(
-		"ja:exit_nosave"
+		"保存せずに終了"
 	)
-	assert_str((_menu.exit_confirm_page.get_node("Cancel") as Button).text).is_equal("ja:cancel")
+	assert_str((_menu.exit_confirm_page.get_node("Cancel") as Button).text).is_equal("キャンセル")
 	assert_str(_menu.status_text()).is_equal(
-		"ja:refused:the last build change settles on the next tick"
+		"今は保存できません: the last build change settles on the next tick"
 	)

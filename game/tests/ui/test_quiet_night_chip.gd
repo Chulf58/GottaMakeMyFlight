@@ -15,7 +15,6 @@ var _world: PassengerTestWorld
 var _hud: PassengerHud
 var _stop := -1
 var _saved_locale := ""
-var _added_translation: Translation
 
 
 func before() -> void:
@@ -41,9 +40,6 @@ func before_test() -> void:
 
 
 func after_test() -> void:
-	if _added_translation != null:
-		TranslationServer.remove_translation(_added_translation)
-		_added_translation = null
 	if not _saved_locale.is_empty():
 		_set_locale(_saved_locale)
 		_saved_locale = ""
@@ -244,21 +240,17 @@ func test_the_chip_refreshes_when_crossing_the_day_night_boundary() -> void:
 
 func test_locale_change_retranslates_the_active_day_or_night_chip_label() -> void:
 	_saved_locale = TranslationServer.get_locale()
-	_added_translation = Translation.new()
-	_added_translation.locale = "de"
-	_added_translation.add_message("Quiet stretch: fast-forwarding", "Ruhiger Abschnitt: Vorspulen")
-	_added_translation.add_message("Quiet night: fast-forwarding", "Ruhige Nacht: Vorspulen")
-	TranslationServer.add_translation(_added_translation)
 
 	_world.clock.tick = GameCalendar.tick_at(0, 9 * 60 + 37, _world.clock.epoch)
 	_stop = _world.clock.tick + 100_000
 	_world.clock.advance(FRAME)
 	await _settle()
+	assert_str(_chip_label().text).is_equal("Quiet stretch: fast-forwarding")
 	_set_locale("de")
-	assert_str(_chip_label().text).is_equal("Ruhiger Abschnitt: Vorspulen")
+	assert_str(_chip_label().text).is_equal("Ruhige Phase: Schnellvorlauf")
 
 	_world.clock.tick = GameCalendar.tick_at(0, 21 * 60, _world.clock.epoch)
 	_hud.refresh()
-	assert_str(_chip_label().text).is_equal("Ruhige Nacht: Vorspulen")
+	assert_str(_chip_label().text).is_equal("Ruhige Nacht: Schnellvorlauf")
 	_set_locale("en")
 	assert_str(_chip_label().text).is_equal("Quiet night: fast-forwarding")
