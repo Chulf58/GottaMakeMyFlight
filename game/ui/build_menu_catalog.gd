@@ -105,6 +105,7 @@ const CATEGORIES := [
 			BuildMode.Tool.CHAIN,
 			BuildMode.Tool.BIN,
 			BuildMode.Tool.PRIZE_PODIUM,
+			BuildMode.Tool.AWARD_TROPHY,
 		],
 	},
 	{
@@ -226,6 +227,7 @@ const ITEMS := {
 	BuildMode.Tool.MULTI_STOREY: ["Multi-storey", "multi_storey", "24x52 m"],
 	BuildMode.Tool.LOT_GATE: ["Open / close", "lot_gate", "A car park"],
 	BuildMode.Tool.BUY_LAND: ["Buy land", "buy_land", "about 21x25 m plot"],
+	BuildMode.Tool.AWARD_TROPHY: ["Award trophy", "statue_indoor", ""],
 }
 ## The security lane part cards, as ITEMS (item() looks in both).
 const LANE_ITEMS := {
@@ -248,9 +250,17 @@ const CARD_RUNNING_COSTS := {
 
 
 ## Progressive card visibility state (OPEN, TEASER, HIDDEN or unwired LOCKED).
-static func card_state(tool: int, unlocks: BuildUnlocks, require_unlocks: bool, demo: bool) -> int:
+static func card_state(
+	tool: int,
+	unlocks: BuildUnlocks,
+	require_unlocks: bool,
+	demo: bool,
+	awards: AirportAwards = null
+) -> int:
 	if not require_unlocks:
 		return CardState.OPEN
+	if tool == BuildMode.Tool.AWARD_TROPHY and awards != null:
+		return CardState.OPEN if awards.trophies_earned() > 0 else CardState.HIDDEN
 	var needed := BuildUnlocks.tier_of(tool as BuildMode.Tool)
 	if needed == 0:
 		return CardState.OPEN
@@ -264,6 +274,12 @@ static func card_state(tool: int, unlocks: BuildUnlocks, require_unlocks: bool, 
 	return CardState.HIDDEN
 
 
+static func money_text(wallet: Wallet, fallback: String) -> String:
+	if wallet == null:
+		return fallback
+	return "∞" if wallet.unlimited_funds else str(wallet.balance)
+
+
 ## What a tool's card costs: the floor tile, one wall piece or the object.
 ## 0 for a tool with no price (Remove, a room, no tool).
 static func tool_price(tool: BuildMode.Tool) -> int:
@@ -272,7 +288,7 @@ static func tool_price(tool: BuildMode.Tool) -> int:
 	if BuildMode.TOOL_WALL_KINDS.has(tool):
 		return PriceTable.price_of_wall(BuildMode.TOOL_WALL_KINDS[tool])
 	if BuildMode.tool_object(tool) != &"":
-		return PriceTable.price_of_object(BuildMode.tool_object(tool))
+		return BuildCatalog.object_price(BuildMode.tool_object(tool))
 	if tool == BuildMode.Tool.BELT:
 		return PriceTable.price_of_object(BuildMode.BELT_PRICE_ID)
 	if tool == BuildMode.Tool.SECURITY_LANE:
@@ -574,4 +590,5 @@ class Words:
 			tr("2x3", "build menu"),
 			tr("Needs belt end", "build menu"),
 			tr("Staff", "build menu"),
+			tr("Award trophy", "build menu"),
 		]

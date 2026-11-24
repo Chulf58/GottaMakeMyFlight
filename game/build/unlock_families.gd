@@ -57,6 +57,7 @@ const FAMILY_OF := {
 	BuildMode.Tool.PLAY_SLIDE: COMFORT,
 	BuildMode.Tool.FOUNTAIN: COMFORT,
 	BuildMode.Tool.STATUE: COMFORT,
+	BuildMode.Tool.AWARD_TROPHY: COMFORT,
 }
 
 

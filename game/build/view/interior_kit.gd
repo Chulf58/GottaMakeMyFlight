@@ -78,6 +78,7 @@ const OBJECT_PIECES := {
 	&"plant_pot_1a": "decor/tc_plant_pot_1a",
 	&"plant_pot_2a": "decor/tc_plant_pot_2a",
 	&"statue_indoor": "decor/tc_statue_1b_indoor",
+	&"award_trophy": "decor/tc_statue_1b_indoor",
 	&"trash_can": "decor/tc_trash_can_1a",
 	&"tree_indoor": "decor/tc_tree_3a_indoor",
 	# Services and activities kits (Furniture 3/3b); the podium carries its

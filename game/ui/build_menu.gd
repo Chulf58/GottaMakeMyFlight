@@ -131,6 +131,7 @@ const GRANT_HOLD_S := 8.0
 ## Optional: marks the cards and tabs of a newly opened tier "New" (PassengerHud
 ## wires it with watch_guide()); without it no card or tab carries the mark.
 var guide: UnlockGuide
+var awards: AirportAwards
 
 ## True while the hiring card is open; press_staff() changes it.
 var staff_open := false
@@ -714,6 +715,9 @@ func card_price_label(tool: BuildMode.Tool) -> Label:
 
 ## False while the wallet cannot pay the card's price; true with no wallet.
 func is_card_affordable(tool: BuildMode.Tool) -> bool:
+	var trophy := tool == BuildMode.Tool.AWARD_TROPHY and awards != null
+	if trophy and build_mode != null and build_mode.require_unlocks:
+		return awards.trophies_available(build_mode.grid) > 0
 	return _wallet == null or _wallet.can_afford(_card_price(tool))
 
 
@@ -951,7 +955,7 @@ func _on_balance_changed(_balance: int) -> void:
 ## label and every card's affordability/New/locked tint without rebuilding
 ## hover details or touching TEASER ("In the full game") / LOCKED labels.
 func _refresh_money() -> void:
-	_money.text = MONEY_TEXT if _wallet == null else str(_wallet.balance)
+	_money.text = BuildMenuCatalog.money_text(_wallet, MONEY_TEXT)
 	_refresh_money_table(_cards, _price_labels)
 	if is_room_context():
 		_refresh_money_table(_room_cards, _room_price_labels)
@@ -970,12 +974,21 @@ func _refresh_money_table(cards: Dictionary, labels: Dictionary) -> void:
 			(cards[tool] as Control).modulate = _card_tint_for(tool, state)
 
 
-## What a card says is locking it (BuildUnlocks.lock_text), "" when it is open
-## or the menu has no build mode.
+func watch_awards(with_awards: AirportAwards) -> void:
+	if awards == with_awards:
+		return
+	if awards != null and awards.trophies_changed.is_connected(_refresh_cards):
+		awards.trophies_changed.disconnect(_refresh_cards)
+	awards = with_awards
+	if awards != null and not awards.trophies_changed.is_connected(_refresh_cards):
+		awards.trophies_changed.connect(_refresh_cards)
+	if is_node_ready():
+		_refresh_cards()
+
+
+## What a card says is locking it (BuildUnlocks.lock_text), "" when it is open.
 func _lock_text(tool: BuildMode.Tool) -> String:
-	if build_mode == null:
-		return ""
-	return BuildUnlocks.lock_text(build_mode.unlocks, build_mode.require_unlocks, tool)
+	return "" if build_mode == null else build_mode.tool_lock_text(tool)
 
 
 func _card_tint_for(tool: BuildMode.Tool, state: int) -> Color:
@@ -995,14 +1008,14 @@ func _on_card_hovered(tool: BuildMode.Tool) -> void:
 ## requirement, teaser right-end ordering, tab visibility and unpressed tab "New"
 ## highlight.
 func _refresh_cards() -> void:
-	_money.text = MONEY_TEXT if _wallet == null else str(_wallet.balance)
+	_money.text = BuildMenuCatalog.money_text(_wallet, MONEY_TEXT)
 	var unlocks: BuildUnlocks = build_mode.unlocks if build_mode != null else null
 	var required := build_mode.require_unlocks if build_mode != null else false
 	var demo := DemoMode.is_demo()
 	for tool: BuildMode.Tool in BuildMenuCatalog.all_catalog_tools():
 		if not _cards.has(tool):
 			continue
-		var state := BuildMenuCatalog.card_state(tool, unlocks, required, demo)
+		var state := BuildMenuCatalog.card_state(tool, unlocks, required, demo, awards)
 		_card_states[tool] = state
 		var card_btn := _cards[tool] as ItemCardButton
 		_update_card_visuals(tool, card_btn, _price_labels[tool] as Label)
@@ -1522,6 +1535,8 @@ func _on_grid_edit_applied(edit: BuildEdit, result: BuildResult) -> void:
 
 
 func _on_grid_graph_changed(_cells: Array[Vector2i]) -> void:
+	if awards != null:
+		_refresh_money()
 	if is_room_context():
 		_refresh_room_context_state()
 		_sync_tray_layout()

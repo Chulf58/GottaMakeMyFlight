@@ -34,7 +34,10 @@ func test_every_catalog_object_has_a_positive_price() -> void:
 	# No fixed total: it would break on every piece the catalog gains, and
 	# test_price_table_covers_exactly_the_catalog already pins the two together.
 	for id in ids:
-		assert_int(PriceTable.price_of_object(id)).is_greater(0)
+		if BuildCatalog.is_free_object(id):
+			assert_int(PriceTable.price_of_object(id)).is_equal(0)
+		else:
+			assert_int(PriceTable.price_of_object(id)).is_greater(0)
 
 
 func test_each_security_lane_part_has_its_price() -> void:

@@ -46,6 +46,7 @@ const BELT_PATHS := {
 const BELT_IDS: Array[StringName] = [
 	&"baggage_belt", &"baggage_belt_corner", &"baggage_belt_feed", &"baggage_belt_end"
 ]
+const FREE_OBJECT_IDS: Array[StringName] = [&"award_trophy"]
 ## Which StaffMember.Role works a non-counter station piece; counters map via
 ## ShopCounters.COUNTER_ROOMS to Role.SHOP.
 const STAFF_ROLES := {
@@ -82,6 +83,17 @@ static func is_door(id: StringName) -> bool:
 
 static func is_belt(id: StringName) -> bool:
 	return BELT_IDS.has(id)
+
+
+static func is_free_object(id: StringName) -> bool:
+	return FREE_OBJECT_IDS.has(id)
+
+
+## Object price in dollars: 0 for earned-only free items, else PriceTable's price.
+static func object_price(id: StringName) -> int:
+	if is_free_object(id):
+		return 0
+	return PriceTable.price_of_object(id)
 
 
 ## Which StaffMember.Role works `id`, or -1 when `id` takes no staff.
@@ -264,6 +276,7 @@ static func _build_decor() -> void:
 	_add(&"plant_pot_1a", "Planter", Vector2i(1, 2), green, 1.62)
 	_add(&"plant_pot_2a", "Plant pot", Vector2i(2, 2), green, 0.68)
 	_add(&"statue_indoor", "Statue", Vector2i.ONE, stone, 2.4)
+	_add(&"award_trophy", "Award trophy", Vector2i.ONE, Color(0.95, 0.78, 0.22), 2.4)
 	_add(&"trash_can", "Bin", Vector2i.ONE, Color(0.4, 0.45, 0.5), 0.91)
 	_add(&"tree_indoor", "Tree", Vector2i(2, 2), green, 2.2)
 

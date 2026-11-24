@@ -151,6 +151,7 @@ class Words:
 		return [
 			# Object names (BuildObjectDef.display_name)
 			tr("ATM", "item name"),
+			tr("Award trophy", "item name"),
 			tr("Baggage belt", "item name"),
 			tr("Baggage cart", "item name"),
 			tr("Bar counter", "item name"),

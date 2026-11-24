@@ -258,6 +258,15 @@ func object_ids() -> Array[int]:
 	return ids
 
 
+## How many placed objects on the grid have catalog id `def_id`.
+func count_objects(def_id: StringName) -> int:
+	var total := 0
+	for record: Dictionary in _objects.values():
+		if StringName(record["def"]) == def_id:
+			total += 1
+	return total
+
+
 ## Id of the room `cell` belongs to, 0 for none.
 func room_at(cell: Vector2i) -> int:
 	return _room_at[_index(cell)] if in_bounds(cell) else 0

@@ -109,7 +109,10 @@ func lock_text(index: int) -> String:
 	if _mode == null or index < 0 or index >= library.size():
 		return ""
 	var edits := library.get_template(index).plan(Vector2i.ZERO, 0)
-	return BuildUnlocks.edits_lock_text(_mode.unlocks, _mode.require_unlocks, edits)
+	var awards_lock := _awards_lock_refusal(edits)
+	if awards_lock != null:
+		return awards_lock.reason_text()
+	return BuildUnlocks.edits_lock_text(_mode.unlocks, _mode.require_unlocks, _tier_edits(edits))
 
 
 ## Arms template `index` from UI only when all rooms/pieces in it are unlocked.
@@ -210,7 +213,12 @@ func save_room(room_id: int) -> RoomTemplate:
 func plan_at(cell: Vector2i) -> Dictionary:
 	var grid := _mode.grid
 	var edits := library.get_template(armed).plan(cell, turns, grid)
-	var locked := BuildUnlocks.edits_lock_args(_mode.unlocks, _mode.require_unlocks, edits)
+	var awards_lock := _awards_lock_refusal(edits)
+	if awards_lock != null:
+		return {"edits": edits, "result": awards_lock}
+	var locked := BuildUnlocks.edits_lock_args(
+		_mode.unlocks, _mode.require_unlocks, _tier_edits(edits)
+	)
 	if not locked.is_empty():
 		var refusal := BuildResult.refused(BuildResult.Reason.LOCKED)
 		refusal.detail = (
@@ -430,3 +438,36 @@ func _set_status(text: String) -> void:
 func _on_library_changed() -> void:
 	if armed >= library.size():
 		disarm()
+
+
+func _awards_lock_refusal(edits: Array[BuildEdit]) -> BuildResult:
+	if _mode == null or not _mode.require_unlocks or _mode.awards == null:
+		return null
+	var trophy_count := 0
+	for edit: BuildEdit in edits:
+		if edit.kind == BuildEdit.Kind.PLACE_OBJECT and edit.def_id == AirportAwards.TROPHY_DEF_ID:
+			trophy_count += 1
+	if trophy_count <= 0:
+		return null
+	if _mode.awards.trophies_earned() <= 0:
+		var unearned := BuildResult.refused(BuildResult.Reason.LOCKED)
+		unearned.detail = "Earn an Award Trophy at the Annual Airport Awards"
+		unearned.detail_args = {"awards_unearned": true}
+		return unearned
+	if trophy_count > _mode.awards.trophies_available(_mode.grid):
+		var exhausted := BuildResult.refused(BuildResult.Reason.LOCKED)
+		exhausted.detail = "No award trophies available"
+		exhausted.detail_args = {"awards": true}
+		return exhausted
+	return null
+
+
+func _tier_edits(edits: Array[BuildEdit]) -> Array[BuildEdit]:
+	if _mode == null or _mode.awards == null:
+		return edits
+	var filtered: Array[BuildEdit] = []
+	for edit: BuildEdit in edits:
+		if edit.kind == BuildEdit.Kind.PLACE_OBJECT and edit.def_id == AirportAwards.TROPHY_DEF_ID:
+			continue
+		filtered.append(edit)
+	return filtered
