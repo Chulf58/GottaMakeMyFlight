@@ -416,7 +416,7 @@ static func all_catalog_tools() -> Array[BuildMode.Tool]:
 
 ## Ordered entries for `room_type`'s contextual Room-Items tray:
 ## mandatory starred items first (live checkmarks from RoomRules.status),
-## then optional pieces, then the room draw/expand tool.
+## then optional pieces, then Door (to open the room's wall), then the room draw/expand tool.
 static func room_context_entries(
 	room_type: StringName, grid: BuildGrid = null, room_id: int = 0
 ) -> Array[Dictionary]:
@@ -451,6 +451,9 @@ static func room_context_entries(
 	var out: Array[Dictionary] = []
 	out.append_array(mandatory_entries)
 	out.append_array(optional_entries)
+	out.append(
+		{"tool": BuildMode.Tool.DOOR, "mandatory": false, "satisfied": false, "room_tool": false}
+	)
 	var room_tool := room_tool_for(room_type)
 	if room_tool != BuildMode.Tool.NONE:
 		out.append({"tool": room_tool, "mandatory": false, "satisfied": false, "room_tool": true})

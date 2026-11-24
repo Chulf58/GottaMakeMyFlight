@@ -6118,3 +6118,6 @@ msgstr "赢得一项年度机场大奖"
 
 msgid "Win Airport of the Year"
 msgstr "赢得「年度最佳机场」大奖"
+
+msgid "Fixed speed"
+msgstr "固定速度"

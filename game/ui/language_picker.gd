@@ -2,6 +2,7 @@ class_name LanguagePicker
 extends HBoxContainer
 
 const LOCALE_SETTINGS := preload("res://locale/locale_settings.gd")
+const HUD_THEME := preload("res://ui/hud_theme.tres")
 const LABEL_WIDTH := 128.0
 const OPTION_MIN_WIDTH := 168.0
 
@@ -13,6 +14,7 @@ var _codes := PackedStringArray()
 
 func _init(show_label := true) -> void:
 	_show_label = show_label
+	theme = HUD_THEME
 	add_theme_constant_override("separation", 10)
 	if _show_label:
 		_label = Label.new()
@@ -24,7 +26,9 @@ func _init(show_label := true) -> void:
 	_option.name = "Option"
 	_option.focus_mode = Control.FOCUS_NONE
 	_option.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
-	_option.get_popup().auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
+	var popup := _option.get_popup()
+	popup.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
+	popup.theme = HUD_THEME
 	_option.custom_minimum_size = Vector2(OPTION_MIN_WIDTH, 0.0)
 	_codes = LOCALE_SETTINGS.codes()
 	for code in _codes:

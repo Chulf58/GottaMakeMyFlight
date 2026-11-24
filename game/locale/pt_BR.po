@@ -6167,3 +6167,6 @@ msgstr "Vença um Prêmio Anual do Aeroporto"
 
 msgid "Win Airport of the Year"
 msgstr "Vença o prêmio de Aeroporto do Ano"
+
+msgid "Fixed speed"
+msgstr "Velocidade fixa"

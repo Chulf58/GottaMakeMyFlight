@@ -414,3 +414,32 @@ func test_title_message_and_game_menu_status_retranslate_live() -> void:
 	assert_str(title.message_text()).is_equal("このセーブファイルを読み込めませんでした。")
 	assert_str(menu.status_text()).is_equal("/tmp/qlog に終了ログを作成できませんでした")
 	kit.port.free()
+
+
+func test_language_picker_popup_uses_cream_and_navy_hud_theme() -> void:
+	var port := auto_free(SubViewport.new()) as SubViewport
+	port.size = Vector2i(1280, 720)
+	add_child(port)
+	var picker := LanguagePicker.new()
+	port.add_child(picker)
+	var popup := picker.option_button().get_popup()
+	assert_object(popup.theme).is_same(BuildMenu.HUD_THEME)
+	var panel := popup.get_theme_stylebox(&"panel") as StyleBoxFlat
+	assert_object(panel).is_not_null()
+	assert_float(panel.bg_color.r).is_greater(0.9)
+	assert_float(panel.bg_color.g).is_greater(0.88)
+	assert_float(panel.bg_color.b).is_greater(0.8)
+	assert_object(panel.border_color).is_equal(Color(0.1, 0.13, 0.26, 1.0))
+	assert_int(panel.border_width_left).is_greater(0)
+	var hover := popup.get_theme_stylebox(&"hover") as StyleBoxFlat
+	assert_object(hover).is_not_null()
+	assert_bool(hover != panel).is_true()
+	assert_object(popup.get_theme_color(&"font_color")).is_equal(Color(0.1, 0.13, 0.26, 1.0))
+	assert_object(popup.get_theme_color(&"font_hover_color")).is_equal(Color(0.1, 0.13, 0.26, 1.0))
+	assert_object(popup.get_theme_icon(&"radio_checked") as DPITexture).is_not_null()
+	assert_object(popup.get_theme_icon(&"radio_unchecked") as DPITexture).is_not_null()
+	assert_int(popup.item_count).is_equal(LOCALE_SETTINGS.codes().size())
+	for i in LOCALE_SETTINGS.codes().size():
+		assert_str(popup.get_item_text(i)).is_equal(
+			LOCALE_SETTINGS.display_name(LOCALE_SETTINGS.codes()[i])
+		)

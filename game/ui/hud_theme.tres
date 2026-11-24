@@ -1284,6 +1284,58 @@ corner_radius_top_right = 12
 corner_radius_bottom_right = 12
 corner_radius_bottom_left = 12
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_popup_panel"]
+content_margin_left = 8.0
+content_margin_top = 8.0
+content_margin_right = 8.0
+content_margin_bottom = 8.0
+bg_color = Color(0.96, 0.93, 0.86, 1)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(0.1, 0.13, 0.26, 1)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+shadow_color = Color(0, 0, 0, 0.28)
+shadow_size = 4
+shadow_offset = Vector2(0, 2)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_popup_hover"]
+content_margin_left = 8.0
+content_margin_top = 4.0
+content_margin_right = 8.0
+content_margin_bottom = 4.0
+bg_color = Color(0.78, 0.9, 0.87, 1)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(0.1, 0.13, 0.26, 0.35)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+
+[sub_resource type="StyleBoxLine" id="StyleBoxLine_popup_sep"]
+color = Color(0.1, 0.13, 0.26, 0.2)
+content_margin_top = 2.0
+content_margin_bottom = 2.0
+
+[sub_resource type="DPITexture" id="DPITexture_popup_checked"]
+_source = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 16 16\"><rect x=\"2\" y=\"2\" width=\"12\" height=\"12\" rx=\"3\" fill=\"#FFCC4D\" stroke=\"#1A2142\" stroke-width=\"2\"/><path d=\"M4.5 8.2L7 10.7L11.5 5.5\" fill=\"none\" stroke=\"#1A2142\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg>"
+
+[sub_resource type="DPITexture" id="DPITexture_popup_radio_checked"]
+_source = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 16 16\"><circle cx=\"8\" cy=\"8\" r=\"6\" fill=\"#FFCC4D\" stroke=\"#1A2142\" stroke-width=\"2\"/><circle cx=\"8\" cy=\"8\" r=\"2.6\" fill=\"#1A2142\"/></svg>"
+
+[sub_resource type="DPITexture" id="DPITexture_popup_radio_unchecked"]
+_source = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 16 16\"><circle cx=\"8\" cy=\"8\" r=\"6\" fill=\"#FFFDF7\" stroke=\"#1A2142\" stroke-width=\"2\" stroke-opacity=\"0.65\"/></svg>"
+
+[sub_resource type="DPITexture" id="DPITexture_popup_unchecked"]
+_source = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 16 16\"><rect x=\"2\" y=\"2\" width=\"12\" height=\"12\" rx=\"3\" fill=\"#FFFDF7\" stroke=\"#1A2142\" stroke-width=\"2\" stroke-opacity=\"0.65\"/></svg>"
+
 [resource]
 default_font =SubResource("FontVariation_74y5s")
 default_font_size = 18
@@ -1477,6 +1529,24 @@ Panel/styles/panel = SubResource("StyleBoxFlat_udfx2")
 PanelContainer/styles/panel = SubResource("StyleBoxFlat_udfx2")
 HudTopCard/base_type = &"PanelContainer"
 HudTopCard/styles/panel = SubResource("StyleBoxFlat_topcard")
+PopupMenu/colors/font_accelerator_color = Color(0.28, 0.31, 0.44, 1)
+PopupMenu/colors/font_color = Color(0.1, 0.13, 0.26, 1)
+PopupMenu/colors/font_disabled_color = Color(0.28, 0.31, 0.44, 1)
+PopupMenu/colors/font_hover_color = Color(0.1, 0.13, 0.26, 1)
+PopupMenu/colors/font_outline_color = Color(0, 0, 0, 0)
+PopupMenu/colors/font_separator_color = Color(0.28, 0.31, 0.44, 1)
+PopupMenu/constants/h_separation = 8
+PopupMenu/constants/item_end_padding = 6
+PopupMenu/constants/item_start_padding = 6
+PopupMenu/constants/v_separation = 6
+PopupMenu/font_sizes/font_size = 18
+PopupMenu/icons/checked = SubResource("DPITexture_popup_checked")
+PopupMenu/icons/radio_checked = SubResource("DPITexture_popup_radio_checked")
+PopupMenu/icons/radio_unchecked = SubResource("DPITexture_popup_radio_unchecked")
+PopupMenu/icons/unchecked = SubResource("DPITexture_popup_unchecked")
+PopupMenu/styles/hover = SubResource("StyleBoxFlat_popup_hover")
+PopupMenu/styles/panel = SubResource("StyleBoxFlat_popup_panel")
+PopupMenu/styles/separator = SubResource("StyleBoxLine_popup_sep")
 RatingStars/base_type = &"Control"
 RatingStars/colors/star_empty = Color(0.87, 0.85, 0.81, 1)
 RatingStars/colors/star_fill = Color(1, 0.82, 0.25, 1)

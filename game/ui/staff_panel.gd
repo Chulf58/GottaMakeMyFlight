@@ -1109,6 +1109,11 @@ func _refresh_energy_box(role: StaffMember.Role) -> void:
 				max_lbl.autowrap_mode = TextServer.AUTOWRAP_OFF
 				train_row.add_child(max_lbl)
 			entry.add_child(train_row)
+		else:
+			var fixed_lbl := _label(tr("Fixed speed"), &"HudHint")
+			fixed_lbl.name = "FixedSpeed%d" % m.id
+			fixed_lbl.custom_minimum_size.x = col_w
+			entry.add_child(fixed_lbl)
 		box.add_child(entry)
 	var extra := members.size() - shown
 	if extra > 0:

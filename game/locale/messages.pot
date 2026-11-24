@@ -7950,3 +7950,7 @@ msgstr ""
 #: core/achievements.gd
 msgid "Win Airport of the Year"
 msgstr ""
+
+#: ui/staff_panel.gd
+msgid "Fixed speed"
+msgstr ""

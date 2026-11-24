@@ -114,7 +114,7 @@ func test_clicking_room_tool_opens_contextual_tray_with_back_header_mandatory_an
 	assert_str(_menu.room_back_button().text).is_equal("← Back")
 	assert_str(_menu.room_title_label().text).is_equal("Lounge items")
 	assert_bool(_menu.room_summary_label().visible).is_false()
-	# Mandatory Sofa listed first with ★, followed by optional Armchair/Work desk, then Room card.
+	# Mandatory Sofa listed first with ★, then optional items, Door, and Room card.
 	var order := _visible_room_tools()
 	(
 		assert_array(order)
@@ -123,6 +123,7 @@ func test_clicking_room_tool_opens_contextual_tray_with_back_header_mandatory_an
 				BuildMode.Tool.SOFA,
 				BuildMode.Tool.ARMCHAIR,
 				BuildMode.Tool.WORK_DESK,
+				BuildMode.Tool.DOOR,
 				BuildMode.Tool.LOUNGE_ROOM,
 			]
 		)
@@ -130,6 +131,7 @@ func test_clicking_room_tool_opens_contextual_tray_with_back_header_mandatory_an
 	assert_str(_badge_text(_menu.card(BuildMode.Tool.SOFA))).is_equal("★")
 	assert_str(_badge_text(_menu.card(BuildMode.Tool.ARMCHAIR))).is_empty()
 	assert_str(_badge_text(_menu.card(BuildMode.Tool.WORK_DESK))).is_empty()
+	assert_str(_badge_text(_menu.card(BuildMode.Tool.DOOR))).is_empty()
 	assert_bool(_menu.card(BuildMode.Tool.LOUNGE_ROOM).button_pressed).is_true()
 
 
@@ -221,7 +223,7 @@ func test_bag_room_context_ticks_belt_when_belt_end_is_inside_and_keeps_cart_opt
 	_menu.enter_room_context(&"bag_room", room_id)
 	await await_idle_frame()
 	assert_array(_visible_room_tools()).is_equal(
-		[BuildMode.Tool.BELT, BuildMode.Tool.CART, BuildMode.Tool.BAG_ROOM]
+		[BuildMode.Tool.BELT, BuildMode.Tool.CART, BuildMode.Tool.DOOR, BuildMode.Tool.BAG_ROOM]
 	)
 	assert_str(_badge_text(_menu.card(BuildMode.Tool.BELT))).is_equal("★")
 	assert_str(_badge_text(_menu.card(BuildMode.Tool.CART))).is_empty()
@@ -270,3 +272,55 @@ func test_back_button_and_tab_switch_exit_room_context_and_shrink_tray_via_reset
 	assert_bool(_menu.is_room_context()).is_false()
 	assert_int(_menu.open_category()).is_equal(BuildMenu.category_index("building"))
 	assert_float(_menu.tray().size.y).is_equal(BuildMenu.TRAY_H)
+
+
+func test_contextual_room_tray_includes_door_card_and_arms_door_without_leaving_room_context(
+) -> void:
+	_menu.press_category(BuildMenu.category_index("facilities"))
+	_menu.card(BuildMode.Tool.TOILET_ROOM).pressed.emit()
+	_mode.begin_area(_at(Vector2i(4, 4)))
+	_mode.move_area(_at(Vector2i(6, 7)))
+	_mode.finish_area()
+	await await_idle_frame()
+	var room_id := _mode.grid.room_at(Vector2i(4, 4))
+	assert_int(room_id).is_greater(0)
+	assert_bool(_menu.is_room_context()).is_true()
+
+	var door_card := _menu.card(BuildMode.Tool.DOOR)
+	assert_object(door_card).is_not_null()
+	assert_bool(door_card.is_visible_in_tree()).is_true()
+	assert_str(_menu.card_price_text(BuildMode.Tool.DOOR)).is_equal(
+		str(PriceTable.price_of_wall(BuildGrid.WallKind.DOOR))
+	)
+	assert_str(_badge_text(door_card)).is_empty()
+
+	# Place required stall and sink so only "Needs entrance" remains.
+	_menu.card(BuildMode.Tool.TOILET_STALL).pressed.emit()
+	assert_bool(_mode.apply_at(_at(Vector2i(4, 4))).ok).is_true()
+	_menu.card(BuildMode.Tool.TOILET_SINK).pressed.emit()
+	assert_bool(_mode.apply_at(_at(Vector2i(6, 4))).ok).is_true()
+	await await_idle_frame()
+	assert_str(_menu.room_summary_label().text).is_equal(RoomRules.NO_OPENING)
+
+	# Clicking Door inside the room tray arms Tool.DOOR without leaving the room tray.
+	door_card.pressed.emit()
+	await await_idle_frame()
+	assert_int(_mode.tool).is_equal(BuildMode.Tool.DOOR)
+	assert_bool(_menu.is_room_context()).is_true()
+	assert_int(_menu.room_context_id()).is_equal(room_id)
+	assert_bool(door_card.button_pressed).is_true()
+
+	# Placing the door clears "Needs entrance" -> "Ready".
+	var door_edit := BuildEdit.place_wall(
+		Vector2i(5, 7), BuildGrid.Side.SOUTH, BuildGrid.WallKind.DOOR
+	)
+	var door_edits := DoorPlacement.edits_for(_mode.grid, door_edit)
+	assert_bool(BuildTransaction.commit_plan(_mode.grid, door_edits, _finances.wallet).ok).is_true()
+	await await_idle_frame()
+	assert_str(_menu.room_summary_label().text).is_equal("Ready")
+
+	# Door remains available in the Building tab as well.
+	_menu.press_category(BuildMenu.category_index("building"))
+	await await_idle_frame()
+	assert_bool(_menu.is_room_context()).is_false()
+	assert_bool(_menu.card(BuildMode.Tool.DOOR).is_visible_in_tree()).is_true()
