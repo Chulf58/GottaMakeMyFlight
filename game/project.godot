@@ -24,6 +24,7 @@ buses/default_bus_layout="res://default_bus_layout.tres"
 PlaytestHook="*res://debug/playtest_hook.gd"
 LocaleSettings="*res://locale/locale_settings.gd"
 GameAudio="*res://audio/game_audio.gd"
+SteamBridge="*res://core/steam_bridge.gd"
 
 [display]
 

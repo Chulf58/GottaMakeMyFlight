@@ -1,3 +1,5 @@
+# gdlint:disable = max-public-methods
+# ensure_achievements() alongside ensure_certification() and ensure_awards() took SaveGame to 21.
 class_name SaveGame
 extends Node
 ## The whole-world save (decision flights-and-economy-design-tick-derived-
@@ -188,6 +190,8 @@ const HUD_THEME := preload("res://ui/hud_theme.tres")
 ## Annual airport awards & ceremony; auto-created when unset so main.tscn stays untouched.
 @export var awards: AirportAwards
 @export var awards_ceremony: AwardsCeremony
+## Career achievement tracker; auto-created when unset so main.tscn stays untouched.
+@export var achievements: Achievements
 ## Where F5 and F8 save and load. Tests point it at their own file. Left at
 ## QUICK_SAVE_PATH, _ready makes it SaveSlots.manual_path().
 @export var quick_save_path := QUICK_SAVE_PATH
@@ -262,6 +266,7 @@ func _ready() -> void:
 			if not loaded.is_connected(badge._on_save_loaded):
 				loaded.connect(badge._on_save_loaded)
 	ensure_awards()
+	ensure_achievements()
 
 
 func _exit_tree() -> void:
@@ -510,6 +515,35 @@ func ensure_awards() -> AirportAwards:
 	return awards
 
 
+## Returns the scene's Achievements tracker, creating, loading, and wiring it under SaveGame.
+func ensure_achievements() -> Achievements:
+	if achievements == null:
+		if get_parent() != null:
+			achievements = get_parent().get_node_or_null("Achievements") as Achievements
+		if achievements == null:
+			achievements = Achievements.new()
+			achievements.name = "Achievements"
+			add_child(achievements)
+			achievements.load_profile()
+	if not achievements.unlocked.is_connected(_on_achievement_unlocked):
+		achievements.unlocked.connect(_on_achievement_unlocked)
+	var current_cert := ensure_certification()
+	var current_awards := ensure_awards()
+	achievements.bind(
+		flights,
+		passengers,
+		unlocks,
+		current_cert,
+		current_awards,
+		offer_desk,
+		build_mode,
+		baggage,
+		clock,
+		is_career_mode
+	)
+	return achievements
+
+
 ## Returns the active GameRules, creating Career defaults when unset.
 func ensure_rules() -> GameRules:
 	if rules == null:
@@ -605,12 +639,15 @@ func load_world(data: Variant) -> bool:
 	pending_path = ""
 	var cert := ensure_certification()
 	var current_awards := ensure_awards()
+	var current_achievements := ensure_achievements()
 	cert.set_loading(true)
 	current_awards.set_loading(true)
+	current_achievements.set_loading(true)
 	for part in parts():
 		if not _install(part, data):
 			cert.set_loading(false)
 			current_awards.set_loading(false)
+			current_achievements.set_loading(false)
 			# Unreachable while each install repeats its own stage check; said
 			# loudly, because the world is then partly loaded.
 			_fail("Load", "the %s part was refused after it was checked" % part.key)
@@ -618,6 +655,7 @@ func load_world(data: Variant) -> bool:
 			return false
 	cert.set_loading(false)
 	current_awards.set_loading(false)
+	current_achievements.set_loading(false)
 	# The rescue grant's repair bound, worked out now rather than in a tick.
 	if rescue_grant != null:
 		rescue_grant.prepare()
@@ -1213,6 +1251,12 @@ func _on_certified(award: Dictionary) -> void:
 		int(award["bonus_percent"]),
 		self
 	)
+
+
+func _on_achievement_unlocked(id: String, title: String, description: String) -> void:
+	if not is_inside_tree():
+		return
+	AchievementToast.show_unlocked(id, title, description, self)
 
 
 ## "" or why the file could not be written. The old file is replaced only
