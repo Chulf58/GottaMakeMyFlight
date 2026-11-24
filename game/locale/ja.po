@@ -6126,3 +6126,6 @@ msgstr "年次空港アワードで賞を獲得する"
 
 msgid "Win Airport of the Year"
 msgstr "「エアポート・オブ・ザ・イヤー」を受賞する"
+
+msgid "Fixed speed"
+msgstr "速度固定"

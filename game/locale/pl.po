@@ -6216,3 +6216,6 @@ msgstr "Wygraj doroczną Nagrodę Lotniskową"
 
 msgid "Win Airport of the Year"
 msgstr "Zdobądź tytuł Lotniska Roku"
+
+msgid "Fixed speed"
+msgstr "Stałe tempo"

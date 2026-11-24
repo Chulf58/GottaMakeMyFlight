@@ -6126,3 +6126,6 @@ msgstr "연례 공항 어워드 수상"
 
 msgid "Win Airport of the Year"
 msgstr "올해의 공항 수상"
+
+msgid "Fixed speed"
+msgstr "고정 속도"

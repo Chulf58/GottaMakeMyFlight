@@ -73,6 +73,7 @@ const STAGE_2_3_ENTRIES := [
 	["", "Hub Contract"],
 	["", "Hub"],
 	["", "Peak rush wave: +15% passenger fee included."],
+	["", "Fixed speed"],
 ]
 
 

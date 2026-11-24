@@ -6175,3 +6175,6 @@ msgstr "Remporter un Prix annuel de l'aéroport"
 
 msgid "Win Airport of the Year"
 msgstr "Remporter Aéroport de l'année"
+
+msgid "Fixed speed"
+msgstr "Vitesse fixe"

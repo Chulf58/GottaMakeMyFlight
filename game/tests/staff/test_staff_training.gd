@@ -446,6 +446,12 @@ func test_non_trainable_roles_refuse_train_and_hide_ui_button() -> void:
 	assert_object(panel.train_button(ramp_id)).is_null()
 	assert_object(panel.card().find_child("Level%d" % gate_id, true, false)).is_null()
 	assert_object(panel.card().find_child("Level%d" % ramp_id, true, false)).is_null()
+	for fixed_id in [gate_id, ramp_id]:
+		var fixed_lbl := panel.card().find_child("FixedSpeed%d" % fixed_id, true, false) as Label
+		assert_object(fixed_lbl).is_not_null()
+		assert_str(fixed_lbl.text).is_equal(TranslationServer.translate("Fixed speed"))
+		assert_str(String(fixed_lbl.theme_type_variation)).is_equal("HudHint")
+		assert_float(fixed_lbl.custom_minimum_size.x).is_greater(0.0)
 
 
 func test_leaving_and_leaving_shift_refused_while_off_shift_and_break_allowed() -> void:
