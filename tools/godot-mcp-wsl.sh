@@ -18,9 +18,11 @@ NPX_CLI='C:\Program Files\nodejs\node_modules\npm\bin\npx-cli.js'
 
 export GODOT_PATH="${GODOT_PATH:-C:/Users/chulf/AppData/Local/Programs/Godot/Godot_v4.7.2-stable_win64.exe}"
 # WSLENV carries these variables across into the Windows process.
-# GODOT_MCP_DISABLE_ELICITATION is forwarded only when the caller set it: the
-# Codex entry in ~/.codex/config.toml sets it (user ruling 2026-09-23, "Set it
-# for Codex"), the Claude Code entry in .mcp.json does not.
+# GODOT_MCP_DISABLE_ELICITATION is forwarded only when the caller set it.
+# godot-mcp-runtime checks `=== 'true'`, so normalize legacy `"1"` callers.
+if [ "${GODOT_MCP_DISABLE_ELICITATION:-}" = "1" ]; then
+  export GODOT_MCP_DISABLE_ELICITATION="true"
+fi
 # GMMF_PLAYTEST opts every MCP-launched game into the dev-only playtest hook
 # (game/debug/playtest_hook.gd; decision ai-playtester-a-dev-only-debug-hook-
 # event-log-state-queries-a); GMMF_HINTS forwards the onboarding hints/dialog
