@@ -8,6 +8,4441 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 
+msgid "No flights yet"
+msgstr "まだ便がありません"
+
+msgid "No flights yet: the rating starts when passengers make or miss a flight."
+msgstr "まだ便がありません。乗客が搭乗または乗り遅れると評価が始まります。"
+
+msgid "Made it: {share}% ({made} of {count} passenger)"
+msgid_plural "Made it: {share}% ({made} of {count} passengers)"
+msgstr[0] "搭乗率: {share}%（{count}人中{made}人）"
+
+msgid "Airport rating: {stars} of {max}"
+msgstr "空港評価: {stars} / {max}"
+
+msgid "Mood: {mood} of {max}"
+msgstr "気分: {mood} / {max}"
+
+msgid "Incident adjustment: {amount} stars"
+msgstr "トラブル補正: {amount}★"
+
+msgid "Days counted: {days} of {window}"
+msgstr "集計日数: {days} / {window}日"
+
+msgid "Floor tile. Passengers can only walk and stand on floor."
+msgstr "床タイルです。乗客は床の上しか歩いたり立ったりできません。"
+
+msgid "Drag a rectangle to lay many tiles at once. Everything else is built on floor."
+msgstr "ドラッグで四角形にまとめて敷けます。他の設備はすべて床の上に建てます。"
+
+msgid "Land you own. Removing a tile refunds half."
+msgstr "所有地内に置けます。撤去すると費用の半額が返金されます。"
+
+msgid "A wall along a tile edge. Passengers cannot cross it and it blocks the view."
+msgstr "タイルの辺に沿う壁です。乗客は通り抜けられず、視界も遮ります。"
+
+msgid "Drag along a line to build a row. Walls close in the terminal and its rooms."
+msgstr "直線にドラッグして並べて建てられます。壁でターミナルや部屋を囲みます。"
+
+msgid "One wall per tile edge. Removing it refunds half."
+msgstr "タイルの1辺につき壁を1つ置けます。撤去すると半額が返金されます。"
+
+msgid "A glass wall. Passengers cannot cross it, but it lets the view through."
+msgstr "ガラスの壁です。乗客は通り抜けられませんが、向こう側が見通せます。"
+
+msgid "Drag along a line like a wall. Screens and decor can be seen through glass."
+msgstr "壁と同じように直線ドラッグで建てられます。画面や装飾はガラス越しに見えます。"
+
+msgid "Costs more than a plain wall. One per tile edge."
+msgstr "通常の壁より高価です。タイルの1辺につき1つ置けます。"
+
+msgid "A door in a wall. Passengers walk through it."
+msgstr "壁に付けるドアです。乗客はここを通って移動します。"
+
+msgid "Click a wall edge to put a door in the wall."
+msgstr "壁のある辺をクリックしてドアを設置します。"
+
+msgid "A plain wall on each side of it."
+msgstr "両隣に通常の壁が必要です。"
+
+msgid "The way into the terminal. Passengers come in here from the road and car parks."
+msgstr "ターミナルへの入口です。道路や駐車場から来た乗客はここから入ります。"
+
+msgid "Place it on the outer edge of the terminal, facing in."
+msgstr "ターミナルの外周の辺に、内側向きに配置してください。"
+
+msgid "The outside edge with no floor behind it. Keep the spot in front clear."
+msgstr "背後に床がない外周の辺に置きます。手前のマスは空けておいてください。"
+
+msgid "The way out to the planes. Passengers leave the terminal here to board."
+msgstr "飛行機へ向かう出口です。乗客はここからターミナルを出て搭乗します。"
+
+msgid "Place it on the outer edge. A gate desk links to an exit facing west, north or east."
+msgstr "外周の辺に配置します。ゲートデスクは西・北・東向きの出口とつながります。"
+
+msgid "Where passengers check in and hand over a bag."
+msgstr "乗客がチェックインして手荷物を預ける場所です。"
+
+msgid "A check-in agent works behind it. A belt from its back edge takes bags to a bag room."
+msgstr "背後にチェックイン係が立ちます。背面の辺からベルトを繋ぐと手荷物を手荷物室へ運べます。"
+
+msgid "An agent hired in Staff, or it stays closed. Keep the spot behind and in front clear."
+msgstr "スタッフ画面で係員を雇わないと閉鎖されたままです。前後のマスを空けておいてください。"
+
+msgid "A basic security scanner. Passengers walk through it to be screened."
+msgstr "基本的な保安検査スキャナーです。乗客はここを通って検査を受けます。"
+
+msgid "A security officer works beside it. A full lane is faster but costs more."
+msgstr "隣に保安検査員が立ちます。フルレーンの方が高速ですが費用も高くなります。"
+
+msgid "An officer hired in Staff, or it stays closed. Keep its staff spot and way in clear."
+msgstr "スタッフ画面で検査員を雇わないと閉鎖されたままです。待機場所と入口を空けてください。"
+
+msgid "A row of seats. Passengers wait here for their flight and their mood recovers."
+msgstr "並びの座席です。乗客はここで搭乗を待ち、気分が回復します。"
+
+msgid "Place it near the gate and turn it. Waiting passengers sit on it."
+msgstr "搭乗ゲートの近くに置いて向きを合わせてください。待機中の乗客が座ります。"
+
+msgid "No staff and no upkeep. Add enough seats for the passengers waiting."
+msgstr "スタッフも維持費も不要です。待機する乗客数に見合う座席を用意してください。"
+
+msgid "Makes a gate. It links to the nearest free exit facing the planes; the plane parks out from it."
+msgstr "搭乗ゲートを作ります。駐機場向きの最も近い空き出口とつながり、その先に飛行機が駐機します。"
+
+msgid "Each flight is given a gate. A gate takes the next free letter, starting at A."
+msgstr "各便にゲートが割り当てられます。ゲート名はAから順に空いている文字が使われます。"
+
+msgid "Within 4 cells of a free exit facing the planes, with room for the plane. No staff needed."
+msgstr "飛行機側を向く空き出口から4マス以内で、駐機スペースがある場所に置けます。スタッフ不要。"
+
+msgid "A floor screen that entertains passengers waiting in front of it."
+msgstr "目の前で待つ乗客を楽しませるフロア設置型の画面です。"
+
+msgid "It covers a fan of floor up to 5 rows ahead. A plain wall blocks it, glass does not."
+msgstr "前方5列までの扇形範囲に効果があります。通常の壁は遮りますが、ガラスは通します。"
+
+msgid "Costs upkeep every day, inside a room or not."
+msgstr "部屋の内側でも外側でも、毎日維持費がかかります。"
+
+msgid "Marks floor as a cafe. Hungry passengers eat and drink here and their mood rises."
+msgstr "床をカフェに指定します。空腹の乗客が飲食して気分が上がります。"
+
+msgid "Drag a rectangle, then add a counter and a table. Guests order, then sit at the table."
+msgstr "四角形にドラッグし、カウンターとテーブルを置いてください。客は注文後にテーブルへ座ります。"
+
+msgid "At least 3x3, with a counter and a table. Needs shop staff, or the counter stays closed."
+msgstr "最小3x3、カウンターとテーブルが必要です。店舗スタッフがいないと閉鎖されたままです。"
+
+msgid "The cafe counter, where guests order."
+msgstr "客が注文するカフェカウンターです。"
+
+msgid "Place it inside a cafe or restaurant. A server stands there."
+msgstr "カフェまたはレストランの中に置きます。店員がここに立ちます。"
+
+msgid "Wholly inside the room. Shop staff hired in Staff, and the spot in front clear."
+msgstr "部屋の内側に収め、店舗スタッフを雇用し、手前のマスを空けておく必要があります。"
+
+msgid "A table with a seat at each end. Cafe guests sit here to eat."
+msgstr "両端に席があるテーブルです。カフェの客が座って食事をします。"
+
+msgid "It seats two. A guest walks from the counter to a free seat."
+msgstr "2人掛けです。客はカウンターから空いている席へ歩いて移動します。"
+
+msgid "Inside a cafe. A bar uses bar counters, and a restaurant uses dining tables or booths."
+msgstr "カフェの中に置きます。バーではバーカウンター、レストランではダイニングテーブルかブースを使います。"
+
+msgid "Marks floor as a toilet. Passengers who need one queue and use a stall."
+msgstr "床をトイレに指定します。用を足したい乗客が並んで個室を使います。"
+
+msgid "Drag a rectangle, then add a stall and a sink inside."
+msgstr "四角形にドラッグし、中にトイレ個室と洗面台を配置してください。"
+
+msgid "At least 2x3, with a stall and a sink. Each stall costs upkeep every day when ready."
+msgstr "最小2x3、トイレ個室と洗面台が必要です。稼働中は個室ごとに毎日の維持費がかかります。"
+
+msgid "One toilet stall. One passenger uses it at a time."
+msgstr "トイレ個室1つ分です。一度に1人の乗客が使います。"
+
+msgid "Place it inside a toilet room. A passenger walks in from the cell in front."
+msgstr "トイレ室内に配置します。乗客は手前のマスから中へ入ります。"
+
+msgid "Keep the spot in front clear. Costs upkeep every day once its room is ready."
+msgstr "手前のマスを空けておいてください。部屋が完成すると毎日維持費がかかります。"
+
+msgid "A sink. A toilet room is not ready without one."
+msgstr "洗面台です。これがないとトイレは利用可能になりません。"
+
+msgid "Place it inside a toilet room."
+msgstr "トイレ室内に配置してください。"
+
+msgid "Keep the spot in front clear. No upkeep of its own."
+msgstr "手前のマスを空けておいてください。単体での維持費はありません。"
+
+msgid "Marks floor as a kiosk, a small shop. Bored passengers browse here and pay."
+msgstr "床を小さな売店のキオスクに指定します。退屈な乗客が立ち寄って買い物をします。"
+
+msgid "Drag a rectangle, then add a counter and display stands. Guests browse at the stands."
+msgstr "四角形にドラッグし、カウンターと陳列台を置いてください。客は陳列台で商品を選びます。"
+
+msgid "At least 3x3, with a counter and a display stand. Shop staff serve at the counter."
+msgstr "最小3x3、カウンターと陳列台が必要です。店舗スタッフがカウンターで接客します。"
+
+msgid "The kiosk's counter, with a till."
+msgstr "レジ付きのキオスク用カウンターです。"
+
+msgid "Place it inside a kiosk. A server stands behind it."
+msgstr "キオスクの中に置きます。店員が背後に立ちます。"
+
+msgid "Wholly inside the kiosk. Shop staff hired in Staff, and the spot in front clear."
+msgstr "キオスク内に収め、店舗スタッフを雇用し、手前のマスを空けておく必要があります。"
+
+msgid "Marks floor as a pharmacy. Passengers browse and buy here."
+msgstr "床を薬局に指定します。乗客が立ち寄って買い物をします。"
+
+msgid "Drag a rectangle, then add a counter and a shelf. Passengers browse at the shelf."
+msgstr "四角形にドラッグし、カウンターと棚を置いてください。乗客は棚を見て回ります。"
+
+msgid "At least 3x3, with a counter and a shelf. Shop staff serve at the counter."
+msgstr "最小3x3、カウンターと棚が必要です。店舗スタッフがカウンターで接客します。"
+
+msgid "Marks floor as a duty free shop. Passengers browse and spend more than in a kiosk."
+msgstr "床を免税店に指定します。乗客はキオスクより多くお金を使ってくれます。"
+
+msgid "Drag a rectangle, then add a till and shelves. Passengers browse at the shelves."
+msgstr "四角形にドラッグし、レジと棚を置いてください。乗客は棚で商品を選びます。"
+
+msgid "At least 3x4, with a till and a shelf. Shop staff serve at the till."
+msgstr "最小3x4、レジと棚が必要です。店舗スタッフがレジで会計します。"
+
+msgid "The duty free shop's till."
+msgstr "免税店用のレジカウンターです。"
+
+msgid "Place it inside a duty free shop. A server stands behind it."
+msgstr "免税店の中に置きます。店員が背後に立ちます。"
+
+msgid "Wholly inside the shop. Shop staff hired in Staff, and the spot in front clear."
+msgstr "店舗内に収め、店舗スタッフを雇用し、手前のマスを空けておく必要があります。"
+
+msgid "A duty free shelf. Each one gives two browse spots."
+msgstr "免税店の陳列棚です。1つにつき2か所の閲覧スポットができます。"
+
+msgid "Passengers browse from the cells in front of it."
+msgstr "乗客は手前のマスから商品を選びます。"
+
+msgid "Inside a duty free shop. Keep the cells in front clear."
+msgstr "免税店の中に置きます。手前のマスは空けておいてください。"
+
+msgid "Marks floor as a fashion store. Passengers browse and spend more than in a kiosk."
+msgstr "床をファッション店に指定します。乗客はキオスクより多くお金を使ってくれます。"
+
+msgid "Drag a rectangle, then add a till and clothes rails. Passengers browse at the rails."
+msgstr "四角形にドラッグし、レジとハンガーラックを置いてください。乗客はラックで服を選びます。"
+
+msgid "At least 3x4, with a till and a clothes rail. Shop staff serve at the till."
+msgstr "最小3x4、レジとハンガーラックが必要です。店舗スタッフがレジで会計します。"
+
+msgid "The fashion store's till."
+msgstr "ファッション店用のレジカウンターです。"
+
+msgid "Place it inside a fashion store. A server stands behind it."
+msgstr "ファッション店の中に置きます。店員が背後に立ちます。"
+
+msgid "Wholly inside the store. Shop staff hired in Staff, and the spot in front clear."
+msgstr "店舗内に収め、店舗スタッフを雇用し、手前のマスを空けておく必要があります。"
+
+msgid "A clothes rail. Each one gives two browse spots."
+msgstr "ハンガーラックです。1つにつき2か所の閲覧スポットができます。"
+
+msgid "Inside a fashion store. Keep the cells in front clear."
+msgstr "ファッション店の中に置きます。手前のマスは空けておいてください。"
+
+msgid "Marks floor as a currency exchange. Passengers change money and pay a small fee."
+msgstr "床を両替所に指定します。乗客が両替し、少額の手数料が収益になります。"
+
+msgid "Drag a rectangle, then add a counter. A server works it."
+msgstr "四角形にドラッグし、カウンターを置いてください。店員が対応します。"
+
+msgid "At least 2x3, with a counter and shop staff. A visit does not cure boredom."
+msgstr "最小2x3、カウンターと店舗スタッフが必要です。利用しても退屈は解消されません。"
+
+msgid "Marks floor as an ATM room. Passengers take out cash and pay a small fee."
+msgstr "床をATMコーナーに指定します。乗客が現金を引き出し、少額の手数料が収益になります。"
+
+msgid "Drag a rectangle, then add an ATM. It is self-service."
+msgstr "四角形にドラッグし、ATMを置いてください。セルフサービスで稼働します。"
+
+msgid "At least 1x2, with an ATM. No staff. A visit does not cure boredom."
+msgstr "最小1x2、ATMが必要です。スタッフ不要。利用しても退屈は解消されません。"
+
+msgid "Marks floor as a bar. Guests stay longer than in a cafe, spend more, and gain most mood."
+msgstr "床をバーに指定します。カフェより滞在が長く、単価も高く、気分が大きく上がります。"
+
+msgid "Guests order at a bar counter and sit on its stools."
+msgstr "客はバーカウンターで注文し、スツールに座ります。"
+
+msgid "At least 3x4, with a bar counter. Shop staff serve at the counter."
+msgstr "最小3x4、バーカウンターが必要です。店舗スタッフがカウンターで接客します。"
+
+msgid "Marks floor as a sit-down restaurant. Guests stay the longest and spend the most."
+msgstr "床をレストランに指定します。滞在時間が最も長く、客単価も最高です。"
+
+msgid "Guests order at a cafe counter and sit at a dining table or a booth."
+msgstr "客はカフェカウンターで注文し、ダイニングテーブルかブースに座ります。"
+
+msgid "At least 4x4, with a counter and a table or booth. Shop staff serve at the counter."
+msgstr "最小4x4、カウンターとテーブルまたはブースが必要です。店舗スタッフが接客します。"
+
+msgid "Marks floor as a grab-and-go stall. Guests buy, pay and walk on, with no seat."
+msgstr "床をテイクアウト売店に指定します。客は購入してすぐ立ち去り、座席は不要です。"
+
+msgid "It needs only a grab-and-go stall. A server hands over the order."
+msgstr "テイクアウト売店本体だけを置けば動きます。店員が注文の商品を手渡します。"
+
+msgid "At least 3x3, with a counter. Shop staff serve. It earns the least of the food rooms."
+msgstr "最小3x3、カウンターが必要です。店舗スタッフが接客します。飲食施設では収益が最も控えめです。"
+
+msgid "Marks floor as a play area. Passengers stay and play for free and their mood rises."
+msgstr "床をプレイエリアに指定します。乗客が無料で遊んで気分が上がります。"
+
+msgid "Drag a rectangle, then add a slide and play blocks. It is self-service."
+msgstr "四角形にドラッグし、すべり台と遊具ブロックを置いてください。スタッフは不要です。"
+
+msgid "At least 3x4, with a slide and play blocks. No staff."
+msgstr "最小3x4、すべり台と遊具ブロックが必要です。スタッフ不要。"
+
+msgid "Marks floor as a lounge. Passengers rest on the sofas for free and their mood rises."
+msgstr "床をラウンジに指定します。乗客が無料でソファに座って休み、気分が上がります。"
+
+msgid "Drag a rectangle, then add a sofa. It is self-service."
+msgstr "四角形にドラッグし、ソファを置いてください。スタッフは不要です。"
+
+msgid "At least 2x3, with a sofa. No staff."
+msgstr "最小2x3、ソファが必要です。スタッフ不要。"
+
+msgid "Marks floor as a shower room. Passengers pay to wash during a long wait and gain mood."
+msgstr "床をシャワールームに指定します。長い待ち時間の間に乗客が有料で利用し、気分が上がります。"
+
+msgid "Drag a rectangle, then add a shower cubicle. It is self-service."
+msgstr "四角形にドラッグし、シャワーブースを置いてください。スタッフは不要です。"
+
+msgid "At least 2x2, with a shower cubicle. No staff. Each stay pays you a fee."
+msgstr "最小2x2、シャワーブースが必要です。スタッフ不要で、利用ごとに料金が入ります。"
+
+msgid "Marks floor as a nap pod room. Passengers pay to rest during a long wait and gain mood."
+msgstr "床を仮眠ポッド室に指定します。長い待ち時間の間に乗客が有料で休み、気分が上がります。"
+
+msgid "Drag a rectangle, then add a nap pod. It is self-service."
+msgstr "四角形にドラッグし、仮眠ポッドを置いてください。スタッフは不要です。"
+
+msgid "At least 2x2, with a nap pod. No staff. Each stay pays you a fee."
+msgstr "最小2x2、仮眠ポッドが必要です。スタッフ不要で、利用ごとに料金が入ります。"
+
+msgid "A shelf unit. Each stand gives the kiosk two browse spots."
+msgstr "陳列台です。1台につきキオスクに2か所の閲覧スポットができます。"
+
+msgid "Inside a kiosk. Keep the cells in front clear."
+msgstr "キオスクの中に置きます。手前のマスは空けておいてください。"
+
+msgid "A baggage belt. It carries checked bags from a check-in desk to a bag room."
+msgstr "手荷物ベルトです。預け荷物をチェックインカウンターから手荷物室へ運びます。"
+
+msgid "Drag a line. The belt shapes itself at turns and joins. Belts cannot cross."
+msgstr "直線ドラッグで敷きます。曲がり角や合流は自動で繋がります。交差はできません。"
+
+msgid "Start at a check-in desk's back and end in a bag room. A wall in the way blocks it."
+msgstr "チェックインカウンターの背面から手荷物室の中まで繋ぎます。途中の壁は通れません。"
+
+msgid "Where checked bags end up. They are loaded onto the plane from here."
+msgstr "預け荷物が集まる場所です。ここから飛行機へ積み込まれます。"
+
+msgid "Drag a rectangle, then run a belt into it. The belt's end piece goes inside."
+msgstr "四角形にドラッグし、中へベルトを引き込んでください。終端パーツが室内に収まる必要があります。"
+
+msgid "At least 2x2, with a belt end. A bag that arrives after the cutoff misses the plane."
+msgstr "最小2x2、ベルト終端が必要です。締切後に届いた荷物は飛行機に積めません。"
+
+msgid "A baggage cart on wheels."
+msgstr "車輪付きの手荷物カートです。"
+
+msgid "Place one in a bag room so a hired Ramp Agent drives checked bags out to the parked plane."
+msgstr "手荷物室に置くと、雇用したランプ作業員が預け荷物を駐機中の飛行機まで運びます。"
+
+msgid "Needs a Ramp Agent hired in Staff. Takes 1x2 tiles; no upkeep."
+msgstr "スタッフ画面でランプ作業員の雇用が必要です。1x2マス使用、維持費なし。"
+
+msgid "A curb bay on the road outside. Cars and taxis stop here and drop passengers off."
+msgstr "外の道路沿いの降車場です。車やタクシーが停車して乗客を降ろします。"
+
+msgid "Click one of the marked spots by the road. Each bay has two berths."
+msgstr "道路脇の印が付いた場所をクリックしてください。1区画に2台分の停車枠があります。"
+
+msgid "Marked spots only. The nearer an entrance, the shorter the walk."
+msgstr "印のある場所のみに置けます。入口に近いほど乗客の歩く距離が短くなります。"
+
+msgid "A car park with 12 spaces. A car pays a fee when it parks."
+msgstr "12台収容の駐車場です。車が駐車するたびに料金が入ります。"
+
+msgid "Click a marked spot. Passengers walk from the car park to an entrance."
+msgstr "印のある場所をクリックします。乗客は駐車場から入口まで歩きます。"
+
+msgid "Marked spots only. Close it to let it drain before you remove it."
+msgstr "印のある場所のみに置けます。撤去する前に閉鎖して車が出切るのを待ってください。"
+
+msgid "A big car park with 31 spaces. A car pays a higher fee than a surface lot when it parks."
+msgstr "31台収容の大型駐車場です。平面駐車場より高い駐車料金が入ります。"
+
+msgid "Opens or closes a car park."
+msgstr "駐車場を開放または閉鎖します。"
+
+msgid "Click a built car park. A closed one takes no new cars and empties out."
+msgstr "建てた駐車場をクリックします。閉鎖中は新しい車を入れず、残りの車が出て空になります。"
+
+msgid "A car park can only be removed once no cars are in it."
+msgstr "駐車場は中の車がすべていなくなってからでないと撤去できません。"
+
+msgid "Buys a plot of land. You can only build on land you own."
+msgstr "土地の区画を購入します。所有している土地にだけ建設できます。"
+
+msgid "Click a highlighted plot. Its price shows on it and rises with each plot you buy."
+msgstr "強調表示された区画をクリックします。価格は区画上に表示され、購入するたびに上がります。"
+
+msgid "A plot next to land you already own."
+msgstr "すでに所有している土地に隣接した区画が買えます。"
+
+msgid "The tray table of a security lane, where passengers unpack their bags."
+msgstr "保安検査レーンのトレイ台です。乗客が手荷物を取り出します。"
+
+msgid "It stands beside the arch, on the side the lane's parts go."
+msgstr "レーンの各パーツを並べる側で、保安ゲートの横に配置します。"
+
+msgid "Part of a whole lane: arch, tray table, X-ray belt and pickup table."
+msgstr "保安検査レーンを構成する一部です（ゲート・トレイ台・X線ベルト・荷物受取台）。"
+
+msgid "The X-ray belt of a security lane. Bags ride through it."
+msgstr "保安検査レーンのX線ベルトです。荷物がここを通過します。"
+
+msgid "It stands beside the arch. A lane officer works at it."
+msgstr "保安ゲートの横に置きます。レーン担当の検査員がここで作業します。"
+
+msgid "Part of a whole lane. Needs a security officer hired in Staff."
+msgstr "保安検査レーンの一部です。スタッフ画面で保安検査員の雇用が必要です。"
+
+msgid "The arch of a security lane. Passengers walk through it."
+msgstr "保安検査レーンのゲートです。乗客がここを通り抜けます。"
+
+msgid "Place the arch first and the other parts around it. Its front faces the queue."
+msgstr "最初にゲートを置き、周りに他のパーツを並べます。正面を列側に向けてください。"
+
+msgid "Part of a whole lane. Keep the spot in front and the walls around the lane clear."
+msgstr "保安検査レーンの一部です。手前のマスとレーン周囲に壁がないよう空けておいてください。"
+
+msgid "The pickup table of a security lane, where passengers collect their bags."
+msgstr "保安検査レーンの荷物受取台です。乗客が自分の荷物を回収します。"
+
+msgid "It stands past the arch, where cleared passengers leave the lane."
+msgstr "検査を終えた乗客がレーンから出る先、ゲートの向こう側に置きます。"
+
+msgid "A bush. It calms passengers close to it, a little."
+msgstr "低木です。すぐ近くの乗客を少し落ち着かせます。"
+
+msgid "Passengers within a cell or so get calm, which becomes mood. Walls block it."
+msgstr "周囲1マスほどの乗客が落ち着き、気分が上がります。壁があると遮られます。"
+
+msgid "No upkeep. It earns nothing."
+msgstr "維持費なし。収益は生みません。"
+
+msgid "A planter. It calms passengers near it, a little."
+msgstr "プランターです。近くの乗客を少し落ち着かせます。"
+
+msgid "Passengers within a couple of cells get calm, which becomes mood. Walls block it."
+msgstr "周囲2マスほどの乗客が落ち着き、気分が上がります。壁があると遮られます。"
+
+msgid "A large plant pot. It calms passengers near it, a little."
+msgstr "大きな植木鉢です。近くの乗客を少し落ち着かせます。"
+
+msgid "An indoor tree. It calms the passengers around it."
+msgstr "観葉樹です。周囲の乗客を落ち着かせます。"
+
+msgid "Passengers within a few cells get calm, which becomes mood. Walls block it."
+msgstr "周囲数マスの乗客が落ち着き、気分が上がります。壁があると遮られます。"
+
+msgid "A bench. It seats two waiting passengers and calms passengers nearby."
+msgstr "ベンチです。待機中の乗客が2人座れ、近くの乗客を落ち着かせます。"
+
+msgid "Gate passengers sit on it. Calm becomes mood, and a wall between them blocks it."
+msgstr "搭乗客が座れます。安らぎ効果で気分が上がりますが、壁を挟むと届きません。"
+
+msgid "A bench built around a tree. It calms the passengers near it."
+msgstr "木を囲むベンチです。近くの乗客を落ち着かせます。"
+
+msgid "A fountain. It calms the passengers around it the most, with a long reach."
+msgstr "噴水です。広い範囲の乗客を最も大きく落ち着かせます。"
+
+msgid "A statue. It calms the passengers around it, with a long reach."
+msgstr "彫像です。広い範囲の乗客を落ち着かせます。"
+
+msgid "A retractable-belt stanchion post. Passengers cannot walk through it."
+msgstr "ベルトパーテーションの支柱です。乗客は通り抜けられません。"
+
+msgid "Use stanchions and queue belts to steer a queue. They give a little calm nearby."
+msgstr "支柱とガイドベルトで待機列を誘導できます。近くに少し安らぎ効果を与えます。"
+
+msgid "A queue belt between two stanchions, three cells long. Passengers cannot walk through it."
+msgstr "2本の支柱を繋ぐ長さ3マスのガイドベルトです。乗客は通り抜けられません。"
+
+msgid "A bin. Passengers drop litter in it instead of leaving it on the floor."
+msgstr "ゴミ箱です。乗客が床に捨てずここにゴミを捨てます。"
+
+msgid "A bin takes litter from visits near it, and a cleaner empties it when it is full."
+msgstr "近くの利用で出たゴミを回収し、いっぱいになると清掃員が空にします。"
+
+msgid "A cleaner hired in Staff. It gives no calm, and a bin in view takes a little back."
+msgstr "スタッフ画面で清掃員を雇ってください。安らぎ効果はなく、視界内のゴミ箱は少し落ち着きを下げます。"
+
+msgid "A bar counter, where guests order drinks."
+msgstr "客が飲み物を注文するバーカウンターです。"
+
+msgid "Place it inside a bar. A server stands behind it and guests order from the cell in front."
+msgstr "バーの中に置きます。店員が背後に立ち、客は手前のマスから注文します。"
+
+msgid "Wholly inside the bar. Shop staff hired in Staff, and the spot in front clear."
+msgstr "バー内に収め、店舗スタッフを雇用し、手前のマスを空けておく必要があります。"
+
+msgid "A grab-and-go stall, where guests buy and walk on."
+msgstr "客が買ってそのまま持ち歩けるテイクアウト売店です。"
+
+msgid "Place it inside a grab-and-go room. A server hands over the order."
+msgstr "テイクアウト売店の部屋の中に置きます。店員が商品を手渡します。"
+
+msgid "A restaurant table with four seats."
+msgstr "4人掛けのレストランテーブルです。"
+
+msgid "Place it inside a restaurant. A guest walks from the counter to a free seat."
+msgstr "レストランの中に置きます。客はカウンターから空席へ歩いて向かいます。"
+
+msgid "Wholly inside the restaurant, with the cell behind each chair clear."
+msgstr "レストラン内に収め、各イスの後ろのマスを空けておく必要があります。"
+
+msgid "A restaurant booth with four seats."
+msgstr "4人掛けのレストランブース席です。"
+
+msgid "Wholly inside the restaurant, with the cell behind each seat clear."
+msgstr "レストラン内に収め、各座席の後ろのマスを空けておく必要があります。"
+
+msgid "A staffed desk that helps lost passengers."
+msgstr "迷子の乗客を案内する有人カウンターです。"
+
+msgid "A stuck passenger nearby walks over, is helped, gains mood and plans its route again."
+msgstr "近くで立ち往生した乗客が寄って案内を受け、気分が回復して経路を再計算します。"
+
+msgid "Shop staff hired in Staff, or it does nothing. Works on open floor or in a room."
+msgstr "店舗スタッフを雇わないと機能しません。オープンスペースでも部屋の中でも使えます。"
+
+msgid "An information display."
+msgstr "案内ディスプレイです。"
+
+msgid "Scenery for now: nothing in the game reacts to it."
+msgstr "現在のところ装飾用で、特別なゲーム効果はありません。"
+
+msgid "Costs upkeep every day."
+msgstr "毎日維持費がかかります。"
+
+msgid "The currency exchange counter."
+msgstr "両替所のカウンターです。"
+
+msgid "Place it inside an exchange room. A server stands behind it and changes money."
+msgstr "両替所の中に置きます。店員が背後に立って外貨を両替します。"
+
+msgid "A cash machine. One passenger uses it at a time and pays a small fee."
+msgstr "現金自動預け払い機です。1人ずつ利用し、少額の手数料が収益になります。"
+
+msgid "Place it inside an ATM room. The passenger uses it from the cell in front."
+msgstr "ATMコーナーの中に置きます。乗客は手前のマスから操作します。"
+
+msgid "Keep the spot in front clear. No staff and no upkeep."
+msgstr "手前のマスを空けておいてください。スタッフも維持費も不要です。"
+
+msgid "The pharmacy counter, with a till."
+msgstr "レジ付きの薬局カウンターです。"
+
+msgid "Place it inside a pharmacy. A server stands behind it."
+msgstr "薬局の中に置きます。店員が背後に立ちます。"
+
+msgid "Wholly inside the pharmacy. Shop staff hired in Staff, and the spot in front clear."
+msgstr "薬局内に収め、店舗スタッフを雇用し、手前のマスを空けておく必要があります。"
+
+msgid "A pharmacy shelf. Each one gives one browse spot."
+msgstr "薬局の商品棚です。1台につき1か所の閲覧スポットができます。"
+
+msgid "Passengers browse from the cell in front of it."
+msgstr "乗客は手前のマスから商品を選びます。"
+
+msgid "Inside a pharmacy. Keep the cells in front clear."
+msgstr "薬局の中に置きます。手前のマスは空けておいてください。"
+
+msgid "A shower cubicle. One passenger uses it at a time and pays a fee."
+msgstr "シャワーブースです。1人ずつ利用し、料金を支払います。"
+
+msgid "Place it inside a shower room. The passenger steps in from the cell in front."
+msgstr "シャワールームの中に置きます。乗客は手前のマスから入ります。"
+
+msgid "Keep the spot in front clear. No upkeep."
+msgstr "手前のマスを空けておいてください。維持費なし。"
+
+msgid "A nap pod. One passenger uses it at a time and pays a fee."
+msgstr "仮眠ポッドです。1人ずつ利用し、料金を支払います。"
+
+msgid "Place it inside a nap pod room. The passenger sits and leans back."
+msgstr "仮眠ポッド室の中に置きます。乗客は腰掛けて背もたれを倒して休みます。"
+
+msgid "A two-seat sofa. Lounge guests rest on it."
+msgstr "2人掛けソファです。ラウンジの客がくつろぎます。"
+
+msgid "Place it inside a lounge. Each sofa gives two seats."
+msgstr "ラウンジの中に置きます。ソファ1台で2席分になります。"
+
+msgid "No upkeep. The lounge is free to use."
+msgstr "維持費なし。ラウンジは無料で利用されます。"
+
+msgid "A single armchair."
+msgstr "1人掛けのアームチェアです。"
+
+msgid "A passenger can sit on it, but a lounge needs a sofa. The armchair does not count."
+msgstr "乗客は座れますが、ラウンジの要件にはソファが必要です。アームチェアは対象外です。"
+
+msgid "A work desk."
+msgstr "作業デスクです。"
+
+msgid "Play blocks for children."
+msgstr "子ども用の遊具ブロックです。"
+
+msgid "Place them inside a play area. A play area needs them and a slide."
+msgstr "プレイエリアの中に置きます。プレイエリアにはブロックとすべり台の両方が必要です。"
+
+msgid "No upkeep. The play area is free to use."
+msgstr "維持費なし。プレイエリアは無料で利用されます。"
+
+msgid "A play slide. Children use it from the front."
+msgstr "すべり台です。子どもたちが正面側から使います。"
+
+msgid "Place it inside a play area. Each slide gives two play spots."
+msgstr "プレイエリアの中に置きます。1台につき遊びスポットが2か所できます。"
+
+msgid "A prize car on a podium. Passengers near it spend a bit more in shops and food rooms."
+msgstr "展示台に乗った景品の車です。近くの乗客は売店や飲食店で少し多くお金を使います。"
+
+msgid "Waiting passengers who see it lose boredom. A second podium does not stack."
+msgstr "見た待機客の退屈が和らぎます。2台目を置いても効果は重複しません。"
+
+msgid "Costs upkeep every day. A plain wall blocks the view."
+msgstr "毎日維持費がかかります。通常の壁は視界を遮ります。"
+
+msgctxt "card hint"
+msgid "Drag"
+msgstr "ドラッグ"
+
+msgctxt "card hint"
+msgid "Click"
+msgstr "クリック"
+
+msgid "Upkeep {amount}/day"
+msgstr "維持費 {amount}/日"
+
+msgctxt "build menu"
+msgid "Building"
+msgstr "建物"
+
+msgctxt "build menu"
+msgid "Operations"
+msgstr "運営"
+
+msgctxt "build menu"
+msgid "Facilities"
+msgstr "設備"
+
+msgctxt "build menu"
+msgid "Food & Drink"
+msgstr "飲食"
+
+msgctxt "build menu"
+msgid "Decor"
+msgstr "装飾"
+
+msgctxt "build menu"
+msgid "Landside & Parking"
+msgstr "陸上交通・駐車場"
+
+msgctxt "build menu"
+msgid "Templates"
+msgstr "テンプレート"
+
+msgctxt "build menu"
+msgid "All"
+msgstr "すべて"
+
+msgctxt "build menu"
+msgid "Room"
+msgstr "部屋"
+
+msgctxt "build menu"
+msgid "Check-in & Gate"
+msgstr "チェックイン・ゲート"
+
+msgctxt "build menu"
+msgid "Security"
+msgstr "保安検査"
+
+msgctxt "build menu"
+msgid "Baggage"
+msgstr "手荷物"
+
+msgctxt "build menu"
+msgid "Rooms"
+msgstr "部屋"
+
+msgctxt "build menu"
+msgid "Hygiene & Rest"
+msgstr "衛生・休憩"
+
+msgctxt "build menu"
+msgid "Services"
+msgstr "サービス"
+
+msgctxt "build menu"
+msgid "Lounge & Play"
+msgstr "ラウンジ・キッズ"
+
+msgctxt "build menu"
+msgid "Items"
+msgstr "設備品"
+
+msgctxt "build menu"
+msgid "Cafe"
+msgstr "カフェ"
+
+msgctxt "build menu"
+msgid "Kiosk"
+msgstr "キオスク"
+
+msgctxt "build menu"
+msgid "Lounge"
+msgstr "ラウンジ"
+
+msgctxt "build menu"
+msgid "Pharmacy"
+msgstr "薬局"
+
+msgctxt "build menu"
+msgid "Shops"
+msgstr "ショップ"
+
+msgctxt "build menu"
+msgid "Duty free"
+msgstr "免税店"
+
+msgctxt "build menu"
+msgid "Remove"
+msgstr "撤去"
+
+msgctxt "build menu"
+msgid "Floor"
+msgstr "床"
+
+msgctxt "build menu"
+msgid "1x1 tile"
+msgstr "1x1 タイル"
+
+msgctxt "build menu"
+msgid "Wall"
+msgstr "壁"
+
+msgctxt "build menu"
+msgid "1 m edge"
+msgstr "1 m 辺"
+
+msgctxt "build menu"
+msgid "Glass"
+msgstr "ガラス壁"
+
+msgctxt "build menu"
+msgid "Door"
+msgstr "ドア"
+
+msgctxt "build menu"
+msgid "Entrance"
+msgstr "入口"
+
+msgctxt "build menu"
+msgid "Exit"
+msgstr "出口"
+
+msgctxt "build menu"
+msgid "Check-in desk"
+msgstr "チェックイン"
+
+msgctxt "build menu"
+msgid "Scanner"
+msgstr "スキャナー"
+
+msgctxt "build menu"
+msgid "Seats"
+msgstr "座席"
+
+msgctxt "build menu"
+msgid "Gate desk"
+msgstr "搭乗ゲート"
+
+msgctxt "build menu"
+msgid "Screen"
+msgstr "画面"
+
+msgctxt "build menu"
+msgid "3x3 min"
+msgstr "最小 3x3"
+
+msgctxt "build menu"
+msgid "Counter"
+msgstr "カウンター"
+
+msgctxt "build menu"
+msgid "Table"
+msgstr "テーブル"
+
+msgctxt "build menu"
+msgid "Toilet"
+msgstr "トイレ"
+
+msgctxt "build menu"
+msgid "2x3 min"
+msgstr "最小 2x3"
+
+msgctxt "build menu"
+msgid "Toilet stall"
+msgstr "トイレ個室"
+
+msgctxt "build menu"
+msgid "Sink"
+msgstr "洗面台"
+
+msgctxt "build menu"
+msgid "Kiosk counter"
+msgstr "キオスク台"
+
+msgctxt "build menu"
+msgid "3x4 min"
+msgstr "最小 3x4"
+
+msgctxt "build menu"
+msgid "Duty Free Till"
+msgstr "免税店レジ"
+
+msgctxt "build menu"
+msgid "Duty Free Shelf"
+msgstr "免税店棚"
+
+msgctxt "build menu"
+msgid "Fashion Till"
+msgstr "衣料店レジ"
+
+msgctxt "build menu"
+msgid "Exchange counter"
+msgstr "両替カウンター"
+
+msgctxt "build menu"
+msgid "Shower cubicle"
+msgstr "シャワー室"
+
+msgctxt "build menu"
+msgid "Sleeping pod"
+msgstr "仮眠ポッド"
+
+msgctxt "build menu"
+msgid "Shelf"
+msgstr "棚"
+
+msgctxt "build menu"
+msgid "Fashion store"
+msgstr "ファッション店"
+
+msgctxt "build menu"
+msgid "Clothes rail"
+msgstr "ハンガーラック"
+
+msgctxt "build menu"
+msgid "Exchange"
+msgstr "両替所"
+
+msgctxt "build menu"
+msgid "ATM"
+msgstr "ATM"
+
+msgctxt "build menu"
+msgid "1x2 min"
+msgstr "最小 1x2"
+
+msgctxt "build menu"
+msgid "Bar"
+msgstr "バー"
+
+msgctxt "build menu"
+msgid "Restaurant"
+msgstr "レストラン"
+
+msgctxt "build menu"
+msgid "4x4 min"
+msgstr "最小 4x4"
+
+msgctxt "build menu"
+msgid "Grab-and-go"
+msgstr "テイクアウト"
+
+msgctxt "build menu"
+msgid "Play area"
+msgstr "プレイエリア"
+
+msgctxt "build menu"
+msgid "Shower"
+msgstr "シャワー"
+
+msgctxt "build menu"
+msgid "2x2 min"
+msgstr "最小 2x2"
+
+msgctxt "build menu"
+msgid "Nap pod"
+msgstr "仮眠ポッド"
+
+msgctxt "build menu"
+msgid "Display stand"
+msgstr "陳列台"
+
+msgctxt "build menu"
+msgid "Belt"
+msgstr "ベルト"
+
+msgctxt "build menu"
+msgid "Drag a line"
+msgstr "線でドラッグ"
+
+msgctxt "build menu"
+msgid "Bag room"
+msgstr "手荷物室"
+
+msgctxt "build menu"
+msgid "Bag cart"
+msgstr "手荷物カート"
+
+msgctxt "build menu"
+msgid "Curb bay"
+msgstr "降車場"
+
+msgctxt "build menu"
+msgid "16x3 m"
+msgstr "16x3 m"
+
+msgctxt "build menu"
+msgid "Surface lot"
+msgstr "平面駐車場"
+
+msgctxt "build menu"
+msgid "32x24 m"
+msgstr "32x24 m"
+
+msgctxt "build menu"
+msgid "Multi-storey"
+msgstr "立体駐車場"
+
+msgctxt "build menu"
+msgid "24x52 m"
+msgstr "24x52 m"
+
+msgctxt "build menu"
+msgid "Open / close"
+msgstr "開閉"
+
+msgctxt "build menu"
+msgid "A car park"
+msgstr "駐車場を選択"
+
+msgctxt "build menu"
+msgid "Buy land"
+msgstr "土地購入"
+
+msgctxt "build menu"
+msgid "about 21x25 m plot"
+msgstr "約 21x25 m 区画"
+
+msgctxt "build menu"
+msgid "Tray table"
+msgstr "トレイ台"
+
+msgctxt "build menu"
+msgid "X-ray belt"
+msgstr "X線ベルト"
+
+msgctxt "build menu"
+msgid "Arch"
+msgstr "ゲート"
+
+msgctxt "build menu"
+msgid "Pickup table"
+msgstr "荷物受取台"
+
+msgctxt "build menu"
+msgid "Needs belt end"
+msgstr "ベルト終端が必要"
+
+msgctxt "build menu"
+msgid "Staff"
+msgstr "スタッフ"
+
+msgid "{reachable} of {total} seats reachable"
+msgstr "全{total}席中 {reachable}席に到達可能"
+
+msgid "In {room}"
+msgstr "場所: {room}"
+
+msgid "Status: Part of a ready security lane"
+msgstr "状態: 稼働可能な保安検査レーンの一部"
+
+msgid "Status: Not in a whole lane"
+msgstr "状態: 保安検査レーンが未完成"
+
+msgid "Queue: {count} waiting"
+msgid_plural "Queue: {count} waiting"
+msgstr[0] "待機列: {count}人"
+
+msgid "Status: Not ready, {reason}"
+msgstr "状態: 未完成（{reason}）"
+
+msgid "Status: Linked to Gate {gate}"
+msgstr "状態: {gate}番ゲートに接続済み"
+
+msgid "Status: Not linked yet"
+msgstr "状態: 未接続"
+
+msgid "Biggest plane: none, no room outside the exit"
+msgstr "対応機体: なし（出口の外に空きなし）"
+
+msgid "Status: Closed, {reason}"
+msgstr "状態: 閉鎖中（{reason}）"
+
+msgid "Status: Open"
+msgstr "状態: 稼働中"
+
+msgid "Status: Closed"
+msgstr "状態: 閉鎖中"
+
+msgid "Occupancy: {cars}/{capacity} berth"
+msgid_plural "Occupancy: {cars}/{capacity} berths"
+msgstr[0] "利用状況: {cars}/{capacity}枠"
+
+msgid "Occupancy: {cars}/{capacity} space"
+msgid_plural "Occupancy: {cars}/{capacity} spaces"
+msgstr[0] "駐車状況: {cars}/{capacity}台"
+
+msgid "Parking fee: Free"
+msgstr "駐車料金: 無料"
+
+msgid "Parking fee: ${fee}"
+msgstr "駐車料金: ${fee}"
+
+msgid "Earned today: ${amount}"
+msgstr "本日の収益: ${amount}"
+
+msgid "Parked today: {count} car"
+msgid_plural "Parked today: {count} cars"
+msgstr[0] "本日の駐車: {count}台"
+
+msgid "Diverted today: {count} car"
+msgid_plural "Diverted today: {count} cars"
+msgstr[0] "本日の満車離脱: {count}台"
+
+msgid "Status: Not in use"
+msgstr "状態: 未使用"
+
+msgid "{count} on duty"
+msgstr "勤務中 {count}"
+
+msgid "{count} on the way"
+msgstr "出勤中 {count}"
+
+msgid "Staff: none"
+msgstr "スタッフ: なし"
+
+msgid "Staff: {parts}"
+msgstr "スタッフ: {parts}"
+
+msgid "{staff} · Open"
+msgstr "{staff} · 稼働中"
+
+msgid "{staff} · Closed, {reason}"
+msgstr "{staff} · 閉鎖中（{reason}）"
+
+msgid "Pick it up and set it down elsewhere"
+msgstr "持ち上げて別の場所に置き直します"
+
+msgid "Can't delete: {reason}"
+msgstr "削除不可: {reason}"
+
+msgid "Move"
+msgstr "移動"
+
+msgid "Move room"
+msgstr "部屋を移動"
+
+msgid "This kind of room can't be moved yet"
+msgstr "この種類の部屋はまだ移動できません"
+
+msgid "It is no longer there"
+msgstr "もうそこには存在しません"
+
+msgid "Single pieces outside a room can't be moved yet"
+msgstr "部屋の外にある単体設備はまだ移動できません"
+
+msgid "Car parks and curbs can't be moved yet"
+msgstr "駐車場と降車場はまだ移動できません"
+
+msgid "Delete"
+msgstr "削除"
+
+msgid "Delete room"
+msgstr "部屋を削除"
+
+msgid "Take car parks and curbs back with the Remove tool"
+msgstr "駐車場と降車場は撤去ツールで削除してください"
+
+msgctxt "price"
+msgid "Free"
+msgstr "無料"
+
+msgid "Locked"
+msgstr "ロック中"
+
+msgid "Wages paid: {amount}"
+msgstr "支払済み給与: {amount}"
+
+msgid "Wages paid: {amount} ({owed} owed)"
+msgstr "支払済み給与: {amount}（未払い {owed}）"
+
+msgid "How it works"
+msgstr "仕組み"
+
+msgid "Needs and upkeep"
+msgstr "条件と維持費"
+
+msgid "How it works: {text}"
+msgstr "仕組み: {text}"
+
+msgid "Needs and upkeep: {text}"
+msgstr "条件と維持費: {text}"
+
+msgid "Templates"
+msgstr "テンプレート"
+
+msgid "Save room"
+msgstr "部屋を保存"
+
+msgid "Pick a room"
+msgstr "部屋を選択"
+
+msgid "{w}x{h}"
+msgstr "{w}x{h}"
+
+msgid "{count} pieces"
+msgstr "{count}個"
+
+msgid "Click a furnished room on the grid to save it as a reusable template."
+msgstr "配置済みの部屋をクリックすると、再利用できるテンプレートとして保存できます。"
+
+msgid "Empty room footprint."
+msgstr "空の部屋の区画です。"
+
+msgctxt "build menu"
+msgid "Bush"
+msgstr "低木"
+
+msgctxt "build menu"
+msgid "Planter"
+msgstr "プランター"
+
+msgctxt "build menu"
+msgid "Plant pot"
+msgstr "植木鉢"
+
+msgctxt "build menu"
+msgid "Tree"
+msgstr "観葉樹"
+
+msgctxt "build menu"
+msgid "Bench"
+msgstr "ベンチ"
+
+msgctxt "build menu"
+msgid "Tree bench"
+msgstr "木陰ベンチ"
+
+msgctxt "build menu"
+msgid "Fountain"
+msgstr "噴水"
+
+msgctxt "build menu"
+msgid "Statue"
+msgstr "彫像"
+
+msgctxt "build menu"
+msgid "Stanchion"
+msgstr "支柱ポール"
+
+msgctxt "build menu"
+msgid "Queue belt"
+msgstr "ガイドベルト"
+
+msgctxt "build menu"
+msgid "Bin"
+msgstr "ゴミ箱"
+
+msgctxt "build menu"
+msgid "Bar counter"
+msgstr "バーカウンター"
+
+msgctxt "build menu"
+msgid "Grab stall"
+msgstr "テイクアウト売店"
+
+msgctxt "build menu"
+msgid "Dining table"
+msgstr "ダイニングテーブル"
+
+msgctxt "build menu"
+msgid "Booth"
+msgstr "ブース席"
+
+msgctxt "build menu"
+msgid "Info desk"
+msgstr "案内デスク"
+
+msgctxt "build menu"
+msgid "Info screen"
+msgstr "案内画面"
+
+msgctxt "build menu"
+msgid "Cash machine"
+msgstr "ATM"
+
+msgctxt "build menu"
+msgid "Sofa"
+msgstr "ソファ"
+
+msgctxt "build menu"
+msgid "Armchair"
+msgstr "アームチェア"
+
+msgctxt "build menu"
+msgid "Work desk"
+msgstr "作業デスク"
+
+msgctxt "build menu"
+msgid "Play blocks"
+msgstr "遊具ブロック"
+
+msgctxt "build menu"
+msgid "Play slide"
+msgstr "すべり台"
+
+msgctxt "build menu"
+msgid "Prize podium"
+msgstr "展示車台"
+
+msgid "{requirement} (now {stars} stars, {passengers} passenger)"
+msgid_plural "{requirement} (now {stars} stars, {passengers} passengers)"
+msgstr[0] "{requirement}（現在 {stars}★、乗客 {passengers}人）"
+
+msgid "Unlocked: {facilities}"
+msgstr "解放済み: {facilities}"
+
+msgid "Build unlocks are not wired"
+msgstr "建築アンロック機能が接続されていません"
+
+msgid "Not available yet"
+msgstr "まだ利用できません"
+
+msgid "Unlocks at {stars} stars and {passengers} passenger"
+msgid_plural "Unlocks at {stars} stars and {passengers} passengers"
+msgstr[0] "{stars}★ かつ 乗客 {passengers}人 で解放"
+
+msgid "cafe and bins, security lane, baggage, kiosk, screen, plants, benches, curb bay, surface lot, medium runway"
+msgstr "カフェ・ゴミ箱、保安検査レーン、手荷物設備、キオスク、画面、観葉植物、ベンチ、降車場、平面駐車場、中型滑走路"
+
+msgid "food and services: bar, restaurant, grab-and-go, info desk, pharmacy, exchange, ATM, lounge, car park gate, large runway"
+msgstr "飲食・サービス（バー、レストラン、テイクアウト、案内デスク、薬局、両替所、ATM、ラウンジ、駐車場ゲート、大型滑走路）"
+
+msgid "premium shops and amenities: duty free, fashion, shower, nap pod, play area, fountain, statue, multi-storey"
+msgstr "高級店舗・快適設備（免税店、ファッション店、シャワー、仮眠ポッド、プレイエリア、噴水、彫像、立体駐車場）"
+
+msgid "R rotate"
+msgstr "R 回転"
+
+msgctxt "narrow build mode sign"
+msgid "Build"
+msgstr "建築"
+
+msgid "Build mode"
+msgstr "建築モード"
+
+msgid "Planner ({key})"
+msgstr "予定表 ({key})"
+
+msgid "Flight planner"
+msgstr "フライト予定表"
+
+msgid "Close"
+msgstr "閉じる"
+
+msgctxt "calendar day"
+msgid "Day {day}"
+msgstr "{day}日目"
+
+msgid "No gate has a stand yet, so there is nothing to plan."
+msgstr "駐機場のあるゲートがまだないため、予定を組めません。"
+
+msgctxt "gate name"
+msgid "Gate {gate}"
+msgstr "{gate}番ゲート"
+
+msgid ""
+"{label}{airline}\n"
+"Gate {gate}, held {from} to {to}"
+msgstr ""
+"{label}{airline}\n"
+"{gate}番ゲート（確保 {from}〜{to}）"
+
+msgid "Click a flight to move it or end its contract, or drag it to another gate. Days already issued keep their gate."
+msgstr "便をクリックして移動・契約終了するか、別ゲートへドラッグします。発券済みの日は元のゲートを維持します。"
+
+msgctxt "gate name"
+msgid "{label}  Gate {gate}"
+msgstr "{label}  {gate}番ゲート"
+
+msgctxt "button: end the contract"
+msgid "End"
+msgstr "終了"
+
+msgid "End this airline contract"
+msgstr "この航空会社との契約を終了"
+
+msgid "No other gate fits this flight"
+msgstr "この便に合う他のゲートがありません"
+
+msgid "No other gate exists"
+msgstr "他のゲートがありません"
+
+msgid "Move to:"
+msgstr "移動先:"
+
+msgid "End contract"
+msgstr "契約終了"
+
+msgctxt "button: keep the contract"
+msgid "Keep"
+msgstr "維持"
+
+msgid "No flights scheduled"
+msgstr "予定された便はありません"
+
+msgid "Today"
+msgstr "今日"
+
+msgid "Tomorrow"
+msgstr "明日"
+
+msgid "None"
+msgstr "なし"
+
+msgid "+{count} more"
+msgstr "ほか +{count}件"
+
+msgid "Departures ({key})"
+msgstr "出発便 ({key})"
+
+msgid "Made {made}  Missed {missed}  In terminal {active}"
+msgstr "搭乗 {made}  乗り遅れ {missed}  滞在中 {active}"
+
+msgid "Move this flight to another gate"
+msgstr "この便を別のゲートへ移動"
+
+msgid "No gate has a stand"
+msgstr "駐機場のあるゲートがありません"
+
+msgid "{destination} now uses gate {gate} for the days not yet issued"
+msgstr "{destination}便の未発券日は今後{gate}番ゲートを使用します"
+
+msgid "End this contract? Exit fee ${fee}"
+msgstr "この契約を終了しますか？ 違約金 ${fee}"
+
+msgid "End this contract?"
+msgstr "この契約を終了しますか？"
+
+msgid "{destination} contract ended. Flights already booked still fly"
+msgstr "{destination}線の契約を終了しました。予約済みの便はそのまま運航します"
+
+msgid "Can't end this contract: another flight would have no taxi plan"
+msgstr "契約を終了できません: 他の便の誘導路計画が成り立たなくなります"
+
+msgid "Can't end this contract: the {time} flight would have no taxi plan"
+msgstr "契約を終了できません: {time}発の便の誘導路計画が成り立たなくなります"
+
+msgid "Can't end this contract: the {time} {airline} flight to {city} would have no taxi plan"
+msgstr "契約を終了できません: {time}発 {airline} {city}行きの誘導路計画が成り立たなくなります"
+
+msgid "Gate {gate} is busy when this flight needs it"
+msgstr "この便が必要な時間帯に{gate}番ゲートが埋まっています"
+
+msgid "The runway"
+msgstr "滑走路"
+
+msgid "The taxi lane"
+msgstr "誘導路"
+
+msgid "{subject} is taken by the {time} flight"
+msgstr "{subject}は{time}発の便が使用中です"
+
+msgid "{subject} is taken by the {time} {destination} flight"
+msgstr "{subject}は{time}発 {destination}行きの便が使用中です"
+
+msgid "Airlines are warning you: the airport rating is below {stars} stars."
+msgstr "航空会社からの警告: 空港評価が{stars}★を下回っています。"
+
+msgid "{airline} to {destination} has ended its contract: the airport rating stayed low."
+msgstr "{airline}（{destination}行き）は空港評価の低迷により契約を打ち切りました。"
+
+msgid "Flights already issued still fly; no new days will."
+msgstr "発券済みの便は飛びますが、新しい日程は追加されません。"
+
+msgid "first flight tomorrow"
+msgstr "初便は明日"
+
+msgid "first flight on Day {day}"
+msgstr "初便は{day}日目"
+
+msgid "{hours} h"
+msgstr "{hours}時間"
+
+msgid "{minutes} min"
+msgstr "{minutes}分"
+
+msgid "{airline} to {destination}"
+msgstr "{airline} {destination}行き"
+
+msgid "Departs {time} daily"
+msgstr "毎日 {time} 発"
+
+msgid "Small plane"
+msgstr "小型機"
+
+msgid "Medium plane"
+msgstr "中型機"
+
+msgid "Large plane"
+msgstr "大型機"
+
+msgid "${amount} a day"
+msgstr "1日あたり ${amount}"
+
+msgid "Fits your gates now"
+msgstr "現在のゲートに対応"
+
+msgid "Needs another gate"
+msgstr "別のゲートが必要"
+
+msgid "Offers ({count})"
+msgstr "オファー ({count})"
+
+msgid "first flight {lead} after opening"
+msgstr "開港から{lead}後に初便"
+
+msgid "Low airport rating"
+msgstr "空港評価の低下"
+
+msgid "Contract ended"
+msgstr "契約終了"
+
+msgctxt "button: accept an offer"
+msgid "Accept"
+msgstr "受諾"
+
+msgctxt "button: decline an offer"
+msgid "Decline"
+msgstr "辞退"
+
+msgid "Can't accept {airline} to {destination}: {reason}"
+msgstr "{airline}（{destination}行き）を受諾できません: {reason}"
+
+msgid "Accepted {airline} to {destination}"
+msgstr "{airline}（{destination}行き）を受諾しました"
+
+msgid "Accepted {airline} to {destination}, {note}"
+msgstr "{airline}（{destination}行き）を受諾しました（{note}）"
+
+msgid "it clashes with another flight"
+msgstr "他の便と時間が競合しています"
+
+msgid "No offers right now. New offers arrive at midnight."
+msgstr "現在オファーはありません。新しいオファーは深夜0時に届きます。"
+
+msgid "Contracts end after {days} more low day."
+msgid_plural "Contracts end after {days} more low days."
+msgstr[0] "低評価があと{days}日続くと契約が終了します。"
+
+msgid "{count} passenger booked   ${fee} per passenger"
+msgid_plural "{count} passengers booked   ${fee} per passenger"
+msgstr[0] "予約 {count}人   乗客1人につき ${fee}"
+
+msgid "Small runway, {length} m"
+msgstr "小型滑走路（{length} m）"
+
+msgid "Medium runway, {length} m"
+msgstr "中型滑走路（{length} m）"
+
+msgid "Large runway, {length} m"
+msgstr "大型滑走路（{length} m）"
+
+msgid "Runway"
+msgstr "滑走路"
+
+msgid "Upgrade runway"
+msgstr "滑走路を拡張"
+
+msgid "Next: {runway}, ${price}, works take {hours} hour"
+msgid_plural "Next: {runway}, ${price}, works take {hours} hours"
+msgstr[0] "次段階: {runway}、費用 ${price}、工事 {hours}時間"
+
+msgid "Drop to move {destination} to gate {gate}. Days already issued keep their gate."
+msgstr "ドロップして{destination}便を{gate}番ゲートへ移動します。発券済みの日は元のゲートを維持します。"
+
+msgid "Drop the flight on another gate's row."
+msgstr "別のゲートの行に便をドロップしてください。"
+
+msgid "Plain terms"
+msgstr "標準条件"
+
+msgid "No catch, and 10% less pay."
+msgstr "特別な条件なし。報酬は10%少なめ。"
+
+msgid "Loyal: +10%"
+msgstr "信頼関係: +10%"
+
+msgid "This airline is loyal to you: its offers pay 10% more."
+msgstr "この航空会社は信頼関係により報酬が10%上乗せされます。"
+
+msgid "Top fare +{percent}%"
+msgstr "運賃ボーナス +{percent}%"
+
+msgid "Shoppers"
+msgstr "買い物客多め"
+
+msgid "Many shoppers"
+msgstr "買い物客多数"
+
+msgid "Bag cover"
+msgstr "手荷物補償"
+
+msgid "Full bag cover"
+msgstr "手荷物完全補償"
+
+msgid "Full flight"
+msgstr "満席近い便"
+
+msgid "Packed flight"
+msgstr "超満員便"
+
+msgid "Rush crowd"
+msgstr "駆け込み客"
+
+msgid "Big rush crowd"
+msgstr "駆け込み客多数"
+
+msgid "Heavy bags"
+msgstr "手荷物多め"
+
+msgid "Very heavy bags"
+msgstr "超大型手荷物"
+
+msgid "Signing bonus ${amount}"
+msgstr "契約ボーナス ${amount}"
+
+msgid "Loyal airline"
+msgstr "ロイヤル航空"
+
+msgid "Miss fine ${amount}"
+msgstr "乗り遅れ罰金 ${amount}"
+
+msgid "Odd hours"
+msgstr "早朝・深夜便"
+
+msgid "Exit fee ${amount}"
+msgstr "違約金 ${amount}"
+
+msgid "Pays {percent}% more per passenger."
+msgstr "乗客1人あたりの報酬が{percent}%増えます。"
+
+msgid "{percent}% of passengers come early with time to shop (usually 30%)."
+msgstr "乗客の{percent}%が買い物する余裕を持って早めに到着します（通常30%）。"
+
+msgid "A missed bag costs {percent}% of the fee (usually 50%)."
+msgstr "積み残した手荷物1個につき報酬の{percent}%を差し引かれます（通常50%）。"
+
+msgid "A missed bag costs nothing (usually 50% of the fee)."
+msgstr "手荷物を積み残しても罰金がありません（通常は報酬の50%）。"
+
+msgid "Booked from the top half of the plane's range."
+msgstr "機体定員の上位半数で予約が入ります。"
+
+msgid "Booked from the top quarter of the plane's range."
+msgstr "機体定員の上位4分の1で予約が入ります。"
+
+msgid "{percent}% of passengers arrive late in a rush (usually 15%)."
+msgstr "乗客の{percent}%が直前に駆け込みで到着します（通常15%）。"
+
+msgid "A missed bag costs the whole fee (usually 50%)."
+msgstr "手荷物を積み残すと報酬全額が差し引かれます（通常50%）。"
+
+msgid "Pays ${amount} once, when this contract's first flight leaves."
+msgstr "この契約の初便が出発したとき一度だけ${amount}が支払われます。"
+
+msgid "After {days} days this flight leaves, the airline's later offers pay {percent}% more."
+msgstr "この便が{days}日運航すると、以降の同社オファーの報酬が{percent}%増えます。"
+
+msgid "Each passenger who misses this flight costs ${amount}."
+msgstr "乗り遅れた乗客1人につき${amount}の罰金がかかります。"
+
+msgid "Departs at 06:00 or 22:00, outside the usual 07:00 to 21:00."
+msgstr "通常の07:00〜21:00を外れた06:00または22:00に出発します。"
+
+msgid "Ending this contract in its first {days} days costs ${amount}."
+msgstr "最初の{days}日以内に契約を終了すると${amount}かかります。"
+
+msgid "the taxiway move would strand flight {id}"
+msgstr "誘導路の移動により{id}便が孤立してしまいます"
+
+msgid "Not enough money: the {size} runway works cost ${price}"
+msgstr "資金不足です: {size}滑走路の工事には${price}かかります"
+
+msgid "the runway is too short for a {size} plane"
+msgstr "滑走路が{size}機には短すぎます"
+
+msgctxt "runway size"
+msgid "small"
+msgstr "小型"
+
+msgctxt "runway size"
+msgid "medium"
+msgstr "中型"
+
+msgctxt "runway size"
+msgid "large"
+msgstr "大型"
+
+msgid "Runway works are already booked"
+msgstr "滑走路工事はすでに予約済みです"
+
+msgid "The last runway works are still held in the timetable"
+msgstr "前回の滑走路工事の予定がまだ時刻表に残っています"
+
+msgid "The runway is already the largest size"
+msgstr "滑走路はすでに最大サイズです"
+
+msgid "The timetable leaves no quiet stretch for the works"
+msgstr "時刻表に工事を行える空き時間帯がありません"
+
+msgid "Works on the {size} runway start {start} and end {finish}"
+msgstr "{size}滑走路の工事は{start}に始まり{finish}に完了します"
+
+msgid "Works on the {size} runway started {start} and end {finish}"
+msgstr "{size}滑走路の工事は{start}に始まり{finish}に完了予定です"
+
+msgid "at {time}"
+msgstr "{time}"
+
+msgid "tomorrow at {time}"
+msgstr "明日 {time}"
+
+msgid "on Day {day} at {time}"
+msgstr "{day}日目 {time}"
+
+msgid "Waiting for taxiway works"
+msgstr "誘導路工事を待機中"
+
+msgid "The west taxiway has moved"
+msgstr "西側誘導路が移動しました"
+
+msgid "The east taxiway has moved"
+msgstr "東側誘導路が移動しました"
+
+msgid "Taxiway moved"
+msgstr "誘導路が移動しました"
+
+msgid "{flight} moved to Gate {gate}"
+msgstr "{flight}が{gate}番ゲートに移動しました"
+
+msgid "{flight} moves to Gate {gate}"
+msgstr "{flight}は{gate}番ゲートへ移動します"
+
+msgid "Flights moved"
+msgstr "便の移動"
+
+msgid "{count} flight moved to Gate {gate}"
+msgid_plural "{count} flights moved to Gate {gate}"
+msgstr[0] "{count}便が{gate}番ゲートに移動しました"
+
+msgid "{count} flight moves to Gate {gate}"
+msgid_plural "{count} flights move to Gate {gate}"
+msgstr[0] "{count}便が{gate}番ゲートへ移動します"
+
+msgid "Dismiss"
+msgstr "閉じる"
+
+msgid "{airline} {destination}"
+msgstr "{airline} {destination}"
+
+msgid "{title} result"
+msgstr "{title} 結果"
+
+msgid "Made {made}   Missed {missed}"
+msgstr "搭乗 {made}   乗り遅れ {missed}"
+
+msgid "{count}  {reason}"
+msgstr "{count}  {reason}"
+
+msgid "{count}  Other"
+msgstr "{count}  その他"
+
+msgid "Waiting outside: check-in full"
+msgstr "外で待機中: チェックイン満員"
+
+msgid "Missed the flight"
+msgstr "乗り遅れ"
+
+msgid "No check-in desk to go to"
+msgstr "向かえるチェックインカウンターがありません"
+
+msgid "No security scanner or lane to go to"
+msgstr "向かえる保安検査がありません"
+
+msgid "Waiting outside a full queue"
+msgstr "満員の待機列の外で待機中"
+
+msgid "No walkable route"
+msgstr "通行できる経路がありません"
+
+msgid "The exit to the plane was blocked"
+msgstr "飛行機への出口が塞がれていました"
+
+msgid "Held up by crowds at the gate"
+msgstr "ゲートの混雑で足止めされました"
+
+msgid "At the gate, but not boarded in time"
+msgstr "ゲートに着いたものの搭乗に間に合いませんでした"
+
+msgid "Left the gate too late for the plane"
+msgstr "ゲートを出るのが遅すぎました"
+
+msgid "Arrived after the doors closed"
+msgstr "搭乗締切後に到着しました"
+
+msgid "Still walking to check-in"
+msgstr "まだチェックインへ移動中"
+
+msgid "Still queuing for check-in"
+msgstr "まだチェックイン列に並んでいます"
+
+msgid "Still at the check-in desk"
+msgstr "まだチェックイン中"
+
+msgid "Still walking to security"
+msgstr "まだ保安検査へ移動中"
+
+msgid "Still queuing for security"
+msgstr "まだ保安検査列に並んでいます"
+
+msgid "Still at security"
+msgstr "まだ保安検査中"
+
+msgid "Still walking to the gate"
+msgstr "まだゲートへ移動中"
+
+msgid "Still at the cafe"
+msgstr "まだカフェにいます"
+
+msgid "Still at the toilet"
+msgstr "まだトイレにいます"
+
+msgid "Still at a shop"
+msgstr "まだ店にいます"
+
+msgid "Waiting for drop-off"
+msgstr "降車を待っています"
+
+msgid "Never arrived: the terminal has no entrance"
+msgstr "到着できず: ターミナルに入口がありません"
+
+msgid "Did not arrive before the doors closed"
+msgstr "搭乗締切までに到着しませんでした"
+
+msgid "Day {day} {time}"
+msgstr "{day}日目 {time}"
+
+msgid ""
+"{when}  {title}\n"
+"{detail}"
+msgstr ""
+"{when}  {title}\n"
+"{detail}"
+
+msgid "still up"
+msgstr "継続中"
+
+msgid "cleared {time}"
+msgstr "{time}に解消"
+
+msgid "{when}  {title}, {end}"
+msgstr "{when}  {title}（{end}）"
+
+msgid "Alerts"
+msgstr "通知"
+
+msgid "Alert history and the on/off switch for alert cards"
+msgstr "通知履歴と通知カードのオン／オフ切替"
+
+msgid "Open the alert history"
+msgstr "通知履歴を開く"
+
+msgid "Alert history"
+msgstr "通知履歴"
+
+msgid "Show alert cards"
+msgstr "通知カードを表示"
+
+msgid "Alerts ({count})"
+msgstr "通知 ({count})"
+
+msgid "Click to look at it"
+msgstr "クリックして確認"
+
+msgid "No alerts yet"
+msgstr "通知はまだありません"
+
+msgid "{count} desk full · {waiting} waiting"
+msgid_plural "{count} desks full · {waiting} waiting"
+msgstr[0] "{count}か所のカウンターが満員 · {waiting}人待ち"
+
+msgid "Check-in queue full"
+msgstr "チェックイン列が満員"
+
+msgid "{count} lane full · {waiting} waiting"
+msgid_plural "{count} lanes full · {waiting} waiting"
+msgstr[0] "{count}レーンが満員 · {waiting}人待ち"
+
+msgid "Security queue full"
+msgstr "保安検査列が満員"
+
+msgid "{count} passenger can't get where they are going"
+msgid_plural "{count} passengers can't get where they are going"
+msgstr[0] "{count}人の乗客が目的地へ進めない状態です"
+
+msgid "{count} passenger waits for a gate seat or a place to stand"
+msgid_plural "{count} passengers wait for a gate seat or a place to stand"
+msgstr[0] "{count}人の乗客がゲートの座席や立ち場所を待っています"
+
+msgid "Gate full"
+msgstr "ゲート満員"
+
+msgid "{count} station is closed · hire staff on the Staff card"
+msgid_plural "{count} stations are closed · hire staff on the Staff card"
+msgstr[0] "{count}か所が閉鎖中 · スタッフ画面で人員を雇用してください"
+
+msgid "Nobody on duty"
+msgstr "担当者不在"
+
+msgid "{count} station is closed · staff can't reach the staff spot"
+msgid_plural "{count} stations are closed · staff can't reach the staff spot"
+msgstr[0] "{count}か所が閉鎖中 · スタッフが配置位置にたどり着けません"
+
+msgid "Staff can't get to work"
+msgstr "スタッフが持ち場に行けません"
+
+msgid "The terminal is getting dirty. Hire a cleaner on the Staff card."
+msgstr "ターミナルが汚れてきています。スタッフ画面で清掃員を雇ってください。"
+
+msgid "The terminal is getting dirty. Place bins near the bar and toilets, or hire more cleaners."
+msgstr "ターミナルが汚れてきています。バーやトイレの近くにゴミ箱を置くか、清掃員を増やしてください。"
+
+msgid "Dirty terminal"
+msgstr "ターミナルの汚れ"
+
+msgid "Inspector visit tomorrow"
+msgstr "明日、検査官が視察に来ます"
+
+msgid "Holiday rush tomorrow"
+msgstr "明日は連休ラッシュ"
+
+msgid "A VIP wants to fly"
+msgstr "VIPが搭乗を希望"
+
+msgid "A VIP wants to fly on {flight}. The first passenger to arrive for it is the VIP."
+msgstr "VIPが{flight}に搭乗予定です。その便で最初に到着する乗客がVIPです。"
+
+msgid "If it fails: your rating drops by {penalty} if the VIP misses the flight."
+msgstr "失敗時: VIPが乗り遅れると空港評価が{penalty}下がります。"
+
+msgid "An airline asks a favour"
+msgstr "航空会社からの依頼"
+
+msgid "An airline asks you to fit {extra} more passengers onto {flight}."
+msgstr "航空会社から、{flight}にあと{extra}人多く乗せてほしいと頼まれました。"
+
+msgid "Reward: {bonus} money now, and {extra} more passengers paying their fees."
+msgstr "報酬: 今すぐ{bonus}を受け取れ、さらに{extra}人分の乗客料金が入ります。"
+
+msgid "The VIP made the flight"
+msgstr "VIPが搭乗に成功"
+
+msgid "The VIP boarded in a good mood. You earn {bonus} money."
+msgstr "VIPは上機嫌で搭乗しました。報酬 {bonus} を獲得。"
+
+msgid "The VIP missed the flight"
+msgstr "VIPが乗り遅れました"
+
+msgid "Your rating drops by {penalty}."
+msgstr "空港評価が{penalty}下がります。"
+
+msgid "The inspector was happy"
+msgstr "検査官は満足しました"
+
+msgid "You earn {bonus} money."
+msgstr "報酬 {bonus} を獲得。"
+
+msgid "The inspector was not happy"
+msgstr "検査官は不満でした"
+
+msgid "The inspector found {found}. Your rating drops by {penalty}."
+msgstr "検査官は{found}を指摘しました。空港評価が{penalty}下がります。"
+
+msgid "{count} mess on the floor ({allowed} allowed)"
+msgid_plural "{count} messes on the floor ({allowed} allowed)"
+msgstr[0] "床の汚れ {count}か所（許容 {allowed}）"
+
+msgid "{count} passenger stuck in a full queue ({allowed} allowed)"
+msgid_plural "{count} passengers stuck in a full queue ({allowed} allowed)"
+msgstr[0] "満員の列で足止め中の乗客 {count}人（許容 {allowed}）"
+
+msgid "{first} and {second}"
+msgstr "{first}、{second}"
+
+msgid "none"
+msgstr "なし"
+
+msgid "today's"
+msgstr "今日の"
+
+msgid "tomorrow's"
+msgstr "明日の"
+
+msgid "day {day}'s"
+msgstr "{day}日目の"
+
+msgid "half a star"
+msgstr "星0.5個"
+
+msgid "{count} star"
+msgid_plural "{count} stars"
+msgstr[0] "星{count}個"
+
+msgid "{count} stars"
+msgstr "星{count}個"
+
+msgid "VIP for {flight}"
+msgstr "{flight}のVIP"
+
+msgid "{day} {time} flight"
+msgstr "{day} {time}の便"
+
+msgid "The airport inspector visits tomorrow, some time between {from} and {to}."
+msgstr "空港検査官が明日、{from}〜{to}の間に視察へ来ます。"
+
+msgid "The inspector looks at messes on the floor and at queues that are full."
+msgstr "検査官は床の汚れと満員の待機列をチェックします。"
+
+msgid "Reward: {bonus} money if there are at most {max_messes} messes and at most {max_full_queue} passengers stuck in a full queue at the visit."
+msgstr "報酬: 視察時の床の汚れが{max_messes}か所以下、かつ満員列の足止め客が{max_full_queue}人以下なら{bonus}を獲得。"
+
+msgid "If it fails: your rating drops by {penalty}."
+msgstr "失敗時: 空港評価が{penalty}下がります。"
+
+msgid "Tomorrow is a holiday. {total} extra passengers are booked, spread over {count} of tomorrow's flights: {list}."
+msgstr "明日は祝日です。明日の{count}便（{list}）に計{total}人の追加乗客が予約されています。"
+
+msgid "Reward: every extra passenger pays the usual fee."
+msgstr "報酬: 追加の乗客全員から通常の料金が入ります。"
+
+msgid "If it fails: queues grow, and passengers who miss their flight lower your rating as usual."
+msgstr "失敗時: 列が長くなり、乗り遅れた乗客がいると通常どおり評価が下がります。"
+
+msgid "Reward: {bonus} money if the VIP makes the flight in a good mood (a mood of {good_mood} or higher when boarding)."
+msgstr "報酬: VIPが上機嫌（搭乗時の気分が{good_mood}以上）で搭乗すれば{bonus}を獲得。"
+
+msgid "If it fails: the extra passengers need check-in and security too, and any who miss the flight lower your rating as usual."
+msgstr "失敗時: 追加乗客もチェックインと保安検査が必要で、乗り遅れると通常どおり評価が下がります。"
+
+msgid "The VIP made the flight, but their mood was below {good_mood} when boarding, so there is no bonus."
+msgstr "VIPは搭乗しましたが、搭乗時の気分が{good_mood}未満だったためボーナスはありません。"
+
+msgid "The clock stays paused until you choose."
+msgstr "選択するまで時間は停止したままです。"
+
+msgid "The clock goes on when you close this."
+msgstr "これを閉じると時間が進みます。"
+
+msgid "Big news at the airport"
+msgstr "空港からのビッグニュース"
+
+msgid "The runway works are done. Bigger planes can land now, so Offers can bring them flights."
+msgstr "滑走路の工事が完了しました。より大型の機体が発着できるようになり、オファーに大型便が登場します。"
+
+msgid "A big event has come up. Its notice says what it is and what you can do about it."
+msgstr "大きな出来事が発生しました。内容と対応方法は通知を確認してください。"
+
+msgid "Your airport has grown"
+msgstr "空港が成長しました"
+
+msgid "{hired} hired, off shift"
+msgstr "雇用 {hired}、シフト外"
+
+msgid "{hired} hired, {duty} cleaning, {off_shift} off shift"
+msgstr "雇用 {hired}、清掃中 {duty}、シフト外 {off_shift}"
+
+msgid "{hired} hired, {duty} cleaning, {leaving} leaving"
+msgstr "雇用 {hired}、清掃中 {duty}、帰宅中 {leaving}"
+
+msgid "{hired} hired, {duty} cleaning"
+msgstr "雇用 {hired}、清掃中 {duty}"
+
+msgid "{hired} hired, {duty} on duty, {leaving} leaving"
+msgstr "雇用 {hired}、勤務中 {duty}、帰宅中 {leaving}"
+
+msgid "{hired} hired, {duty} on duty"
+msgstr "雇用 {hired}、勤務中 {duty}"
+
+msgid "Wall gap: close the open edge of the outer wall, marked in red"
+msgid_plural "{count} wall gaps: close the open edges of the outer wall, marked in red"
+msgstr[0] "壁の隙間 {count}か所: 赤く示された外壁の空きを閉じてください"
+
+msgid "To open the airport"
+msgstr "空港を開港するには"
+
+msgid "Ready: the airport opens on the next tick"
+msgstr "準備完了: 次の更新で空港が開港します"
+
+msgid "Your airport needs"
+msgstr "空港に必要なもの"
+
+msgid "Open! Starter contract: {airline} to {destination}, daily"
+msgstr "開港！初期契約: {airline} {destination}行き（毎日運航）"
+
+msgid "Hire a check-in agent"
+msgstr "チェックイン係を雇う"
+
+msgid "Hire a security officer"
+msgstr "保安検査員を雇う"
+
+msgid "Hire a gate agent"
+msgstr "ゲート係員を雇う"
+
+msgid "Hire shop staff"
+msgstr "店舗スタッフを雇う"
+
+msgid "Check-in agents"
+msgstr "チェックイン係"
+
+msgid "Security officers"
+msgstr "保安検査員"
+
+msgid "Gate agents"
+msgstr "ゲート係員"
+
+msgid "Shop staff"
+msgstr "店舗スタッフ"
+
+msgid "Cleaners"
+msgstr "清掃員"
+
+msgctxt "staff button"
+msgid "Hire · {wage}/day"
+msgstr "雇用 · {wage}/日"
+
+msgctxt "staff button"
+msgid "Fire"
+msgstr "解雇"
+
+msgid "Belt ends {count}"
+msgstr "ベルト終端 {count}"
+
+msgid "Needs a belt dragged inside"
+msgstr "ベルトを室内まで引き込む必要があります"
+
+msgid "Waiting for belt from check-in desk"
+msgstr "チェックインからのベルト接続待ち"
+
+msgid "Needs a Ramp Agent (Staff)"
+msgstr "ランプ作業員が必要です（スタッフ）"
+
+msgid "Desks connected: {count}"
+msgstr "接続済みカウンター: {count}"
+
+msgid "Stalls {count}"
+msgstr "個室 {count}"
+
+msgid "Sinks {count}"
+msgstr "洗面台 {count}"
+
+msgid "Upkeep ${amount} per day"
+msgstr "維持費 ${amount}/日"
+
+msgid "Upkeep ${amount} per day once ready"
+msgstr "稼働後の維持費 ${amount}/日"
+
+msgid "Spots {count}"
+msgstr "利用枠 {count}"
+
+msgid "Fee ${amount} per visit"
+msgstr "利用料 ${amount}/回"
+
+msgid "Free to use"
+msgstr "利用無料"
+
+msgid "Browse spots {count}"
+msgstr "閲覧スポット {count}"
+
+msgid "Base spend ${amount} per visit"
+msgstr "基本消費 ${amount}/回"
+
+msgid "Seats {count}"
+msgstr "座席数 {count}"
+
+msgid "Entrance with a way through check-in and security to an exit"
+msgstr "入口からチェックイン・保安検査を経て出口へ続く動線"
+
+msgid "Staff can't reach a desk or scanner passengers need: clear its staff spot"
+msgstr "乗客が使うカウンターやスキャナーにスタッフが到達できません。配置場所を空けてください"
+
+msgid "{need} ({unlock})"
+msgstr "{need}（{unlock}）"
+
+msgid "Check-in desk and an agent"
+msgstr "チェックインカウンターと係員"
+
+msgid "Security scanner and an officer"
+msgstr "保安検査スキャナーと検査員"
+
+msgid "Passengers need a check-in desk"
+msgstr "乗客がチェックインカウンターを必要としています"
+
+msgid "Passengers need security"
+msgstr "乗客が保安検査を必要としています"
+
+msgid "Passengers need a toilet"
+msgstr "乗客がトイレを必要としています"
+
+msgid "Passengers are hungry"
+msgstr "乗客が空腹です"
+
+msgid "Follow this passenger"
+msgstr "この乗客を追跡"
+
+msgid "Thoughts"
+msgstr "心の声"
+
+msgid "Show where this happened"
+msgstr "発生場所を表示"
+
+msgid "Passenger {id}"
+msgstr "乗客 {id}"
+
+msgid "Mood {mood}   Hunger {hunger}   Toilet {toilet}   Boredom {boredom}"
+msgstr "気分 {mood}   空腹 {hunger}   トイレ {toilet}   退屈 {boredom}"
+
+msgid "Thoughts: none yet"
+msgstr "心の声: まだありません"
+
+msgid "{thought} · {age}"
+msgstr "{thought} · {age}"
+
+msgid "The pin shows where they were at {time}"
+msgstr "ピンは{time}時点の居場所を示しています"
+
+msgid "Running late"
+msgstr "遅れ気味"
+
+msgid "Stuck: \"{reason}\""
+msgstr "立ち往生:「{reason}」"
+
+msgid "Flight {title}"
+msgstr "便 {title}"
+
+msgid "Flight {title}, doors close {time}"
+msgstr "便 {title}、搭乗締切 {time}"
+
+msgid "just now"
+msgstr "たった今"
+
+msgid "{minutes} min ago"
+msgid_plural "{minutes} min ago"
+msgstr[0] "{minutes}分前"
+
+msgid "{count} passenger"
+msgid_plural "{count} passengers"
+msgstr[0] "乗客 {count}人"
+
+msgid "Flight {flights}"
+msgstr "便 {flights}"
+
+msgid "Empty, at the curb"
+msgstr "空車・降車場に停車中"
+
+msgid "At the curb"
+msgstr "降車場に停車中"
+
+msgid "Parked, driver away"
+msgstr "駐車中（運転手不在）"
+
+msgid "Parked"
+msgstr "駐車中"
+
+msgid "Empty, leaving"
+msgstr "空車・出発中"
+
+msgid "Leaving"
+msgstr "出発中"
+
+msgid "Empty, driving on"
+msgstr "空車・通過中"
+
+msgid "Driving into the car park"
+msgstr "駐車場へ入庫中"
+
+msgid "Waiting to turn into the car park"
+msgstr "駐車場への進入待ち"
+
+msgid "Driving to the car park"
+msgstr "駐車場へ走行中"
+
+msgid "Queuing for the curb"
+msgstr "降車場の空き待ち"
+
+msgid "Driving to the curb"
+msgstr "降車場へ走行中"
+
+msgid "On time"
+msgstr "定刻どおり"
+
+msgid "Drop-off delay: under 1 min"
+msgstr "降車遅れ: 1分未満"
+
+msgid "Drop-off delay: {minutes} min"
+msgid_plural "Drop-off delay: {minutes} min"
+msgstr[0] "降車遅れ: {minutes}分"
+
+msgctxt "vehicle"
+msgid "Taxi"
+msgstr "タクシー"
+
+msgctxt "vehicle"
+msgid "Car"
+msgstr "乗用車"
+
+msgid "{vehicle} {id}"
+msgstr "{vehicle} {id}"
+
+msgid "That hit the spot"
+msgstr "ちょうど欲しかった味だ"
+
+msgid "Gave up on getting food"
+msgstr "食事をあきらめた"
+
+msgid "What a relief"
+msgstr "ふう、すっきりした"
+
+msgid "Waited {minutes} min in the queue"
+msgid_plural "Waited {minutes} min in the queue"
+msgstr[0] "列で{minutes}分待った"
+
+msgid "Nice decor here"
+msgstr "ここは雰囲気がいいな"
+
+msgctxt "room status"
+msgid "Ready"
+msgstr "準備完了"
+
+msgctxt "status reason"
+msgid "too small: a {room} needs at least {width}x{height}"
+msgstr "狭すぎます: {room}には最低{width}x{height}が必要です"
+
+msgctxt "room need"
+msgid "Too small: a {room} needs at least {width}x{height}"
+msgstr "狭すぎます: {room}には最低{width}x{height}が必要です"
+
+msgctxt "gate card"
+msgid "Status: unlinked: no exit facing the planes in {cells} cells"
+msgstr "状態: 未接続（{cells}マス以内に駐機場向きの出口がありません）"
+
+msgctxt "gate card"
+msgid "Status: unlinked: gate {gate} uses the exit"
+msgstr "状態: 未接続（その出口は{gate}番ゲートが使用中です）"
+
+msgctxt "gate card"
+msgid "Status: unlinked: stand would overlap gate {gate}"
+msgstr "状態: 未接続（駐機場が{gate}番ゲートと重なります）"
+
+msgctxt "gate card"
+msgid "Status: unlinked: no room for a plane"
+msgstr "状態: 未接続（飛行機の駐機スペースがありません）"
+
+msgctxt "gate card"
+msgid "Status: unlinked: way to the lane blocked"
+msgstr "状態: 未接続（誘導路への経路が塞がれています）"
+
+msgctxt "gate card"
+msgid "Status: unlinked: every gate letter in use"
+msgstr "状態: 未接続（ゲート記号がすべて使用中です）"
+
+msgid "Status: Scanner fault, fixed by {time}"
+msgstr "状態: スキャナー故障（{time}に復旧予定）"
+
+msgctxt "gate card"
+msgid "Biggest plane: Small"
+msgstr "最大対応機体: 小型機"
+
+msgctxt "gate card"
+msgid "Biggest plane: Medium"
+msgstr "最大対応機体: 中型機"
+
+msgctxt "gate card"
+msgid "Biggest plane: Large"
+msgstr "最大対応機体: 大型機"
+
+msgctxt "gate card"
+msgid "Biggest plane: {class}"
+msgstr "最大対応機体: {class}"
+
+msgctxt "item name"
+msgid "ATM"
+msgstr "ATM"
+
+msgctxt "item name"
+msgid "Baggage belt"
+msgstr "手荷物ベルト"
+
+msgctxt "item name"
+msgid "Baggage cart"
+msgstr "手荷物カート"
+
+msgctxt "item name"
+msgid "Bar counter"
+msgstr "バーカウンター"
+
+msgctxt "item name"
+msgid "Belt corner"
+msgstr "ベルト角"
+
+msgctxt "item name"
+msgid "Belt end"
+msgstr "ベルト終端"
+
+msgctxt "item name"
+msgid "Belt merge"
+msgstr "ベルト合流"
+
+msgctxt "item name"
+msgid "Bench"
+msgstr "ベンチ"
+
+msgctxt "item name"
+msgid "Bin"
+msgstr "ゴミ箱"
+
+msgctxt "item name"
+msgid "Bush"
+msgstr "低木"
+
+msgctxt "item name"
+msgid "Cafe counter"
+msgstr "カフェカウンター"
+
+msgctxt "item name"
+msgid "Cafe table"
+msgstr "カフェテーブル"
+
+msgctxt "item name"
+msgid "Chain"
+msgstr "ベルト"
+
+msgctxt "item name"
+msgid "Check-in desk"
+msgstr "チェックインカウンター"
+
+msgctxt "item name"
+msgid "Clothes rail"
+msgstr "ハンガーラック"
+
+msgctxt "item name"
+msgid "Currency exchange"
+msgstr "両替カウンター"
+
+msgctxt "item name"
+msgid "Display stand"
+msgstr "陳列台"
+
+msgctxt "item name"
+msgid "Duty free shelf"
+msgstr "免税店棚"
+
+msgctxt "item name"
+msgid "Duty free till"
+msgstr "免税店レジ"
+
+msgctxt "item name"
+msgid "Entrance"
+msgstr "入口"
+
+msgctxt "item name"
+msgid "Exit to the plane"
+msgstr "飛行機への出口"
+
+msgctxt "item name"
+msgid "Fashion till"
+msgstr "ファッション店レジ"
+
+msgctxt "item name"
+msgid "Fountain"
+msgstr "噴水"
+
+msgctxt "item name"
+msgid "Gate desk"
+msgstr "ゲートデスク"
+
+msgctxt "item name"
+msgid "Gate seats"
+msgstr "ゲート座席"
+
+msgctxt "item name"
+msgid "Grab-and-go stall"
+msgstr "テイクアウト売店"
+
+msgctxt "item name"
+msgid "Info desk"
+msgstr "案内デスク"
+
+msgctxt "item name"
+msgid "Info screen"
+msgstr "案内画面"
+
+msgctxt "item name"
+msgid "Kiosk counter"
+msgstr "キオスクカウンター"
+
+msgctxt "item name"
+msgid "Lounge armchair"
+msgstr "ラウンジアームチェア"
+
+msgctxt "item name"
+msgid "Lounge sofa"
+msgstr "ラウンジソファ"
+
+msgctxt "item name"
+msgid "Nap pod"
+msgstr "仮眠ポッド"
+
+msgctxt "item name"
+msgid "Pharmacy counter"
+msgstr "薬局カウンター"
+
+msgctxt "item name"
+msgid "Pharmacy shelf"
+msgstr "薬局棚"
+
+msgctxt "item name"
+msgid "Pickup table"
+msgstr "荷物受取台"
+
+msgctxt "item name"
+msgid "Plant pot"
+msgstr "植木鉢"
+
+msgctxt "item name"
+msgid "Planter"
+msgstr "プランター"
+
+msgctxt "item name"
+msgid "Play blocks"
+msgstr "遊具ブロック"
+
+msgctxt "item name"
+msgid "Play slide"
+msgstr "すべり台"
+
+msgctxt "item name"
+msgid "Post"
+msgstr "支柱ポール"
+
+msgctxt "item name"
+msgid "Prize podium"
+msgstr "展示車台"
+
+msgctxt "item name"
+msgid "Restaurant booth"
+msgstr "レストランブース"
+
+msgctxt "item name"
+msgid "Restaurant table"
+msgstr "レストランテーブル"
+
+msgctxt "item name"
+msgid "Screen"
+msgstr "フロア画面"
+
+msgctxt "item name"
+msgid "Security arch"
+msgstr "保安検査ゲート"
+
+msgctxt "item name"
+msgid "Security scanner"
+msgstr "保安検査スキャナー"
+
+msgctxt "item name"
+msgid "Shower"
+msgstr "シャワーブース"
+
+msgctxt "item name"
+msgid "Sink"
+msgstr "洗面台"
+
+msgctxt "item name"
+msgid "Statue"
+msgstr "彫像"
+
+msgctxt "item name"
+msgid "Toilet stall"
+msgstr "トイレ個室"
+
+msgctxt "item name"
+msgid "Tray table"
+msgstr "トレイ台"
+
+msgctxt "item name"
+msgid "Tree"
+msgstr "観葉樹"
+
+msgctxt "item name"
+msgid "Tree bench"
+msgstr "木陰ベンチ"
+
+msgctxt "item name"
+msgid "Work desk"
+msgstr "作業デスク"
+
+msgctxt "item name"
+msgid "X-ray belt"
+msgstr "X線ベルト"
+
+msgctxt "room type"
+msgid "ATM"
+msgstr "ATM"
+
+msgctxt "room type"
+msgid "Bag room"
+msgstr "手荷物室"
+
+msgctxt "room type"
+msgid "Bar"
+msgstr "バー"
+
+msgctxt "room type"
+msgid "Cafe"
+msgstr "カフェ"
+
+msgctxt "room type"
+msgid "Duty free"
+msgstr "免税店"
+
+msgctxt "room type"
+msgid "Exchange"
+msgstr "両替所"
+
+msgctxt "room type"
+msgid "Fashion store"
+msgstr "ファッション店"
+
+msgctxt "room type"
+msgid "Grab-and-go stall"
+msgstr "テイクアウト売店"
+
+msgctxt "room type"
+msgid "Kiosk"
+msgstr "キオスク"
+
+msgctxt "room type"
+msgid "Lounge"
+msgstr "ラウンジ"
+
+msgctxt "room type"
+msgid "Nap pod"
+msgstr "仮眠ポッド室"
+
+msgctxt "room type"
+msgid "Pharmacy"
+msgstr "薬局"
+
+msgctxt "room type"
+msgid "Play area"
+msgstr "プレイエリア"
+
+msgctxt "room type"
+msgid "Restaurant"
+msgstr "レストラン"
+
+msgctxt "room type"
+msgid "Shower"
+msgstr "シャワールーム"
+
+msgctxt "room type"
+msgid "Toilet"
+msgstr "トイレ"
+
+msgctxt "room name, mid-sentence"
+msgid "atm"
+msgstr "ATMコーナー"
+
+msgctxt "room name, mid-sentence"
+msgid "bag room"
+msgstr "手荷物室"
+
+msgctxt "room name, mid-sentence"
+msgid "bar"
+msgstr "バー"
+
+msgctxt "room name, mid-sentence"
+msgid "cafe"
+msgstr "カフェ"
+
+msgctxt "room name, mid-sentence"
+msgid "duty free"
+msgstr "免税店"
+
+msgctxt "room name, mid-sentence"
+msgid "exchange"
+msgstr "両替所"
+
+msgctxt "room name, mid-sentence"
+msgid "fashion store"
+msgstr "ファッション店"
+
+msgctxt "room name, mid-sentence"
+msgid "grab-and-go stall"
+msgstr "テイクアウト売店"
+
+msgctxt "room name, mid-sentence"
+msgid "kiosk"
+msgstr "キオスク"
+
+msgctxt "room name, mid-sentence"
+msgid "lounge"
+msgstr "ラウンジ"
+
+msgctxt "room name, mid-sentence"
+msgid "nap pod"
+msgstr "仮眠ポッド室"
+
+msgctxt "room name, mid-sentence"
+msgid "pharmacy"
+msgstr "薬局"
+
+msgctxt "room name, mid-sentence"
+msgid "play area"
+msgstr "プレイエリア"
+
+msgctxt "room name, mid-sentence"
+msgid "restaurant"
+msgstr "レストラン"
+
+msgctxt "room name, mid-sentence"
+msgid "shower"
+msgstr "シャワールーム"
+
+msgctxt "room name, mid-sentence"
+msgid "toilet"
+msgstr "トイレ"
+
+msgctxt "landside place"
+msgid "Curb bay"
+msgstr "降車場"
+
+msgctxt "landside place"
+msgid "Multi-storey car park"
+msgstr "立体駐車場"
+
+msgctxt "landside place"
+msgid "Surface lot"
+msgstr "平面駐車場"
+
+msgctxt "room need"
+msgid "Needs a belt end"
+msgstr "ベルト終端が必要"
+
+msgctxt "room need"
+msgid "Needs a clothes rail"
+msgstr "ハンガーラックが必要"
+
+msgctxt "room need"
+msgid "Needs a counter"
+msgstr "カウンターが必要"
+
+msgctxt "room need"
+msgid "Needs a display stand"
+msgstr "陳列台が必要"
+
+msgctxt "room need"
+msgid "Needs a kiosk counter"
+msgstr "キオスクカウンターが必要"
+
+msgctxt "room need"
+msgid "Needs a nap pod"
+msgstr "仮眠ポッドが必要"
+
+msgctxt "room need"
+msgid "Needs a pharmacy counter"
+msgstr "薬局カウンターが必要"
+
+msgctxt "room need"
+msgid "Needs a shelf"
+msgstr "棚が必要"
+
+msgctxt "room need"
+msgid "Needs a shower"
+msgstr "シャワーブースが必要"
+
+msgctxt "room need"
+msgid "Needs a sink"
+msgstr "洗面台が必要"
+
+msgctxt "room need"
+msgid "Needs a slide"
+msgstr "すべり台が必要"
+
+msgctxt "room need"
+msgid "Needs a sofa"
+msgstr "ソファが必要"
+
+msgctxt "room need"
+msgid "Needs a table"
+msgstr "テーブルが必要"
+
+msgctxt "room need"
+msgid "Needs a till"
+msgstr "レジが必要"
+
+msgctxt "room need"
+msgid "Needs a toilet stall"
+msgstr "トイレ個室が必要"
+
+msgctxt "room need"
+msgid "Needs an ATM"
+msgstr "ATMが必要"
+
+msgctxt "room need"
+msgid "Needs an exchange counter"
+msgstr "両替カウンターが必要"
+
+msgctxt "room need"
+msgid "Needs play blocks"
+msgstr "遊具ブロックが必要"
+
+msgctxt "room need"
+msgid "Needs entrance"
+msgstr "入口が必要"
+
+msgctxt "status reason"
+msgid "needs a belt end"
+msgstr "ベルト終端が必要"
+
+msgctxt "status reason"
+msgid "needs a clothes rail"
+msgstr "ハンガーラックが必要"
+
+msgctxt "status reason"
+msgid "needs a counter"
+msgstr "カウンターが必要"
+
+msgctxt "status reason"
+msgid "needs a display stand"
+msgstr "陳列台が必要"
+
+msgctxt "status reason"
+msgid "needs a kiosk counter"
+msgstr "キオスクカウンターが必要"
+
+msgctxt "status reason"
+msgid "needs a nap pod"
+msgstr "仮眠ポッドが必要"
+
+msgctxt "status reason"
+msgid "needs a pharmacy counter"
+msgstr "薬局カウンターが必要"
+
+msgctxt "status reason"
+msgid "needs a shelf"
+msgstr "棚が必要"
+
+msgctxt "status reason"
+msgid "needs a shower"
+msgstr "シャワーブースが必要"
+
+msgctxt "status reason"
+msgid "needs a sink"
+msgstr "洗面台が必要"
+
+msgctxt "status reason"
+msgid "needs a slide"
+msgstr "すべり台が必要"
+
+msgctxt "status reason"
+msgid "needs a sofa"
+msgstr "ソファが必要"
+
+msgctxt "status reason"
+msgid "needs a table"
+msgstr "テーブルが必要"
+
+msgctxt "status reason"
+msgid "needs a till"
+msgstr "レジが必要"
+
+msgctxt "status reason"
+msgid "needs a toilet stall"
+msgstr "トイレ個室が必要"
+
+msgctxt "status reason"
+msgid "needs an atm"
+msgstr "ATMが必要"
+
+msgctxt "status reason"
+msgid "needs an exchange counter"
+msgstr "両替カウンターが必要"
+
+msgctxt "status reason"
+msgid "needs play blocks"
+msgstr "遊具ブロックが必要"
+
+msgctxt "status reason"
+msgid "needs entrance"
+msgstr "入口が必要"
+
+msgctxt "status reason"
+msgid "a wall cuts through the lane"
+msgstr "壁がレーンを遮っています"
+
+msgctxt "status reason"
+msgid "clear the floor for the queue"
+msgstr "列のために床を空けてください"
+
+msgctxt "status reason"
+msgid "clear the floor for the repack spot"
+msgstr "荷造りスペースの床を空けてください"
+
+msgctxt "status reason"
+msgid "clear the helper's spot by the repack spot"
+msgstr "荷造りスペース横の補助員位置を空けてください"
+
+msgctxt "status reason"
+msgid "clear the officer's spot by the x-ray belt"
+msgstr "X線ベルト横の検査員位置を空けてください"
+
+msgctxt "status reason"
+msgid "clear the way back from the repack spot"
+msgstr "荷造りスペースからの戻り動線を空けてください"
+
+msgctxt "status reason"
+msgid "clear the way out past the pickup table"
+msgstr "荷物受取台の先の出口動線を空けてください"
+
+msgctxt "status reason"
+msgid "clear the way through the arch"
+msgstr "ゲートの通り道を空けてください"
+
+msgctxt "status reason"
+msgid "needs a pickup table"
+msgstr "荷物受取台が必要"
+
+msgctxt "status reason"
+msgid "needs a tray table"
+msgstr "トレイ台が必要"
+
+msgctxt "status reason"
+msgid "needs an x-ray belt"
+msgstr "X線ベルトが必要"
+
+msgctxt "status reason"
+msgid "no arch"
+msgstr "ゲートがありません"
+
+msgctxt "status reason"
+msgid "parts face different ways"
+msgstr "パーツの向きが揃っていません"
+
+msgctxt "status reason"
+msgid "closed by you"
+msgstr "手動で閉鎖中"
+
+msgctxt "status reason"
+msgid "staff spot blocked"
+msgstr "スタッフ位置が塞がれています"
+
+msgctxt "status reason"
+msgid "staff can't reach the staff spot"
+msgstr "スタッフが配置位置に到達できません"
+
+msgctxt "status reason"
+msgid "no staff on duty"
+msgstr "担当スタッフ不在"
+
+msgctxt "status reason"
+msgid "scanner fault"
+msgstr "スキャナー故障"
+
+msgctxt "gate card"
+msgid "Walk from security: no route"
+msgstr "保安検査からの徒歩: 経路なし"
+
+msgctxt "gate card"
+msgid "Walk from security: {minutes} min"
+msgstr "保安検査から徒歩 {minutes}分"
+
+msgid "Quiet night: fast-forwarding"
+msgstr "静かな夜間: 早送り中"
+
+msgid "Quiet stretch: fast-forwarding"
+msgstr "閑散時間帯: 早送り中"
+
+msgctxt "clock"
+msgid "Day {day}  {time}"
+msgstr "{day}日目  {time}"
+
+msgctxt "follow line"
+msgid "Passenger {id}"
+msgstr "乗客 {id}"
+
+msgctxt "follow line"
+msgid "mood {value}"
+msgstr "気分 {value}"
+
+msgctxt "follow line"
+msgid "hunger {value}"
+msgstr "空腹 {value}"
+
+msgctxt "follow line"
+msgid "toilet {value}"
+msgstr "トイレ {value}"
+
+msgctxt "passenger speech"
+msgid "\"{text}\""
+msgstr "「{text}」"
+
+msgid "Hint ({key} turns hints off)"
+msgstr "ヒント（{key} でヒント非表示）"
+
+msgid "Hints ({key})"
+msgstr "ヒント ({key})"
+
+msgid "Reset hints"
+msgstr "ヒントをリセット"
+
+msgid "Passengers need a check-in desk. Each desk also needs a hired agent: open Staff on the bar."
+msgstr "乗客にはチェックインカウンターが必要です。各カウンターには雇用した係員も必要です（下のバーからスタッフを開いてください）。"
+
+msgid "Passengers need security after check-in. Place a scanner or build a lane, and hire an officer."
+msgstr "チェックイン後には保安検査が必要です。スキャナーか保安検査レーンを置き、検査員を雇ってください。"
+
+msgid "One agent works one desk or scanner. Hire another on the Staff card."
+msgstr "スタッフ1人が担当できるのはカウンターやスキャナー1台です。スタッフ画面でもう1人雇ってください。"
+
+msgid "Passengers need a toilet. Build a toilet room and put a stall in it."
+msgstr "乗客がトイレを必要としています。トイレを建てて個室を設置してください。"
+
+msgid "Hungry passengers need food. Build a cafe with a counter and a table."
+msgstr "空腹の乗客が食事を必要としています。カウンターとテーブルを備えたカフェを建ててください。"
+
+msgid "Game menu"
+msgstr "ゲームメニュー"
+
+msgid "Resume ({key})"
+msgstr "再開 ({key})"
+
+msgid "v{version}"
+msgstr "v{version}"
+
+msgid "Settings"
+msgstr "設定"
+
+msgid "Incidents"
+msgstr "トラブル"
+
+msgid "Back"
+msgstr "戻る"
+
+msgid "Daily incidents"
+msgstr "日替わりトラブル"
+
+msgid "Accept turns daily incidents on, Decline leaves them off. You can change this any time: press {key}, then Settings."
+msgstr "「受諾」で日替わりトラブルが有効になり、「辞退」で無効のままになります。設定はいつでも {key} → 設定 から変更できます。"
+
+msgid "Your first day at the airport"
+msgstr "空港での最初の一日"
+
+msgid "Continue ({key})"
+msgstr "続ける（{key}）"
+
+msgid "Accept"
+msgstr "受諾"
+
+msgid "Decline"
+msgstr "辞退"
+
+msgid "The clock starts when you close this."
+msgstr "これを閉じると時間が動き出します。"
+
+msgid "TERMINAL MANAGER"
+msgstr "ターミナル管理官"
+
+msgid "Mood ({key})"
+msgstr "気分 ({key})"
+
+msgid "green fed, orange hungry, red starving"
+msgstr "緑 満腹 / 橙 空腹 / 赤 飢餓"
+
+msgid "green fine, orange needs the toilet, red desperate"
+msgstr "緑 平気 / 橙 トイレ希望 / 赤 限界"
+
+msgid "green content, orange bored, red very bored"
+msgstr "緑 満足 / 橙 退屈 / 赤 大変退屈"
+
+msgid "amber where passengers are running late"
+msgstr "琥珀色: 遅刻気味の乗客がいる場所"
+
+msgid "green fine, red waiting long or unhappy"
+msgstr "緑 良好 / 赤 長時間待機または不満"
+
+msgctxt "mood overlay mode"
+msgid "Hunger"
+msgstr "空腹"
+
+msgctxt "mood overlay mode"
+msgid "Toilet"
+msgstr "トイレ"
+
+msgctxt "mood overlay mode"
+msgid "Boredom"
+msgstr "退屈"
+
+msgctxt "mood overlay mode"
+msgid "Late"
+msgstr "遅刻"
+
+msgctxt "mood overlay mode"
+msgid "Mood"
+msgstr "気分"
+
+msgctxt "money card"
+msgid "Today"
+msgstr "今日"
+
+msgctxt "money card"
+msgid "Since load"
+msgstr "読込後"
+
+msgctxt "money card"
+msgid "Cash change today"
+msgstr "本日の収支"
+
+msgctxt "money card"
+msgid "Cash change since load"
+msgstr "読込後の収支"
+
+msgctxt "money card"
+msgid "Airline fees"
+msgstr "航空会社収入"
+
+msgctxt "money card"
+msgid "Shops"
+msgstr "店舗売上"
+
+msgctxt "money card"
+msgid "Parking"
+msgstr "駐車料金"
+
+msgctxt "money card"
+msgid "Wages paid"
+msgstr "人件費"
+
+msgctxt "money card"
+msgid "Upkeep paid"
+msgstr "維持費"
+
+msgctxt "money card"
+msgid "Airline fines"
+msgstr "航空会社罰金"
+
+msgctxt "money card"
+msgid "Operating result"
+msgstr "営業収支"
+
+msgctxt "money card"
+msgid "Building"
+msgstr "建築費"
+
+msgctxt "money card"
+msgid "Rescue grant"
+msgstr "救済補助金"
+
+msgctxt "money card"
+msgid "Incidents"
+msgstr "トラブル収支"
+
+msgctxt "money card"
+msgid "Signing bonus"
+msgstr "契約ボーナス"
+
+msgctxt "money card"
+msgid "Unpaid fines"
+msgstr "未払い罰金"
+
+msgctxt "money card"
+msgid "Owed wages"
+msgstr "未払い給与"
+
+msgctxt "money card"
+msgid "Owed upkeep"
+msgstr "未払い維持費"
+
+msgctxt "room name, mid-sentence"
+msgid "ATM"
+msgstr "ATMコーナー"
+
+msgctxt "passenger activity"
+msgid "Heading to the {shop}"
+msgstr "{shop}へ向かっています"
+
+msgctxt "passenger activity"
+msgid "Browsing at the {shop}"
+msgstr "{shop}を見て回っています"
+
+msgctxt "passenger activity"
+msgid "Using the {shop}"
+msgstr "{shop}を利用中"
+
+msgctxt "passenger activity"
+msgid "Playing in the {shop}"
+msgstr "{shop}で遊んでいます"
+
+msgctxt "passenger activity"
+msgid "Relaxing in the {shop}"
+msgstr "{shop}でくつろいでいます"
+
+msgctxt "passenger activity"
+msgid "Resting in the {shop}"
+msgstr "{shop}で休んでいます"
+
+msgctxt "passenger activity"
+msgid "Heading to the food stall"
+msgstr "テイクアウト売店へ向かっています"
+
+msgctxt "passenger activity"
+msgid "Queuing at the food stall"
+msgstr "テイクアウト売店に並んでいます"
+
+msgctxt "passenger activity"
+msgid "Grabbing a snack"
+msgstr "軽食を買っています"
+
+msgctxt "passenger activity"
+msgid "Heading to the bar"
+msgstr "バーへ向かっています"
+
+msgctxt "passenger activity"
+msgid "Queuing at the bar"
+msgstr "バーに並んでいます"
+
+msgctxt "passenger activity"
+msgid "Ordering a drink"
+msgstr "飲み物を注文中"
+
+msgctxt "passenger activity"
+msgid "Taking a drink to a seat"
+msgstr "飲み物を持って席へ移動中"
+
+msgctxt "passenger activity"
+msgid "Sitting down at the bar"
+msgstr "バーの席に座っています"
+
+msgctxt "passenger activity"
+msgid "Having a drink"
+msgstr "飲み物を飲んでいます"
+
+msgctxt "passenger activity"
+msgid "Leaving the bar"
+msgstr "バーを出るところです"
+
+msgctxt "passenger activity"
+msgid "Heading to the restaurant"
+msgstr "レストランへ向かっています"
+
+msgctxt "passenger activity"
+msgid "Queuing at the restaurant"
+msgstr "レストランに並んでいます"
+
+msgctxt "passenger activity"
+msgid "Ordering a meal"
+msgstr "食事を注文中"
+
+msgctxt "passenger activity"
+msgid "Taking a meal to a table"
+msgstr "料理を持ってテーブルへ移動中"
+
+msgctxt "passenger activity"
+msgid "Sitting down at the restaurant"
+msgstr "レストランの席に座っています"
+
+msgctxt "passenger activity"
+msgid "Having a meal"
+msgstr "食事中です"
+
+msgctxt "passenger activity"
+msgid "Leaving the restaurant"
+msgstr "レストランを出るところです"
+
+msgctxt "passenger activity"
+msgid "Arriving"
+msgstr "到着中"
+
+msgctxt "passenger activity"
+msgid "Heading to check-in"
+msgstr "チェックインへ向かっています"
+
+msgctxt "passenger activity"
+msgid "Queuing for check-in"
+msgstr "チェックインに並んでいます"
+
+msgctxt "passenger activity"
+msgid "Checking in"
+msgstr "チェックイン中"
+
+msgctxt "passenger activity"
+msgid "Heading to security"
+msgstr "保安検査へ向かっています"
+
+msgctxt "passenger activity"
+msgid "Queuing for security"
+msgstr "保安検査に並んでいます"
+
+msgctxt "passenger activity"
+msgid "Going through security"
+msgstr "保安検査を通過中"
+
+msgctxt "passenger activity"
+msgid "Heading to the gate"
+msgstr "搭乗ゲートへ向かっています"
+
+msgctxt "passenger activity"
+msgid "Sitting down"
+msgstr "席に座っています"
+
+msgctxt "passenger activity"
+msgid "Waiting at the gate"
+msgstr "搭乗ゲートで待機中"
+
+msgctxt "passenger activity"
+msgid "Standing at the gate"
+msgstr "搭乗ゲートで立って待機中"
+
+msgctxt "passenger activity"
+msgid "Getting up to board"
+msgstr "搭乗のため立ち上がっています"
+
+msgctxt "passenger activity"
+msgid "Heading to the exit"
+msgstr "出口へ向かっています"
+
+msgctxt "passenger activity"
+msgid "Walking to the plane"
+msgstr "飛行機へ歩いています"
+
+msgctxt "passenger activity"
+msgid "Boarded"
+msgstr "搭乗済み"
+
+msgctxt "passenger activity"
+msgid "Missed the flight"
+msgstr "乗り遅れ"
+
+msgctxt "passenger activity"
+msgid "Heading to the cafe"
+msgstr "カフェへ向かっています"
+
+msgctxt "passenger activity"
+msgid "Queuing at the cafe"
+msgstr "カフェに並んでいます"
+
+msgctxt "passenger activity"
+msgid "Ordering a coffee"
+msgstr "コーヒーを注文中"
+
+msgctxt "passenger activity"
+msgid "Taking a coffee to a seat"
+msgstr "コーヒーを持って席へ移動中"
+
+msgctxt "passenger activity"
+msgid "Sitting down at the cafe"
+msgstr "カフェの席に座っています"
+
+msgctxt "passenger activity"
+msgid "Having a coffee"
+msgstr "コーヒーを飲んでいます"
+
+msgctxt "passenger activity"
+msgid "Leaving the cafe"
+msgstr "カフェを出るところです"
+
+msgctxt "passenger activity"
+msgid "Heading to the toilet"
+msgstr "トイレへ向かっています"
+
+msgctxt "passenger activity"
+msgid "Going into a toilet stall"
+msgstr "トイレ個室に入っています"
+
+msgctxt "passenger activity"
+msgid "In a toilet stall"
+msgstr "トイレ個室を使用中"
+
+msgctxt "passenger activity"
+msgid "Leaving the toilet"
+msgstr "トイレを出るところです"
+
+msgctxt "passenger activity"
+msgid "Heading to a shop"
+msgstr "ショップへ向かっています"
+
+msgctxt "passenger activity"
+msgid "Browsing at a shop"
+msgstr "ショップを見て回っています"
+
+msgctxt "speed button"
+msgid "Pause ({key})"
+msgstr "一時停止 ({key})"
+
+msgctxt "speed button"
+msgid "Speed {speed}x ({key})"
+msgstr "速度 {speed}x ({key})"
+
+msgctxt "apron caption"
+msgid "Gate {gate}: no usable stand. Keep its apron and the walk to it clear"
+msgstr "{gate}番ゲート: 使用できる駐機場がありません。エプロンとそこへの経路を空けてください"
+
+msgctxt "apron caption"
+msgid "Gate {gate}: long walk to the plane: {meters} m"
+msgstr "{gate}番ゲート: 飛行機まで長距離（{meters} m）"
+
+msgctxt "apron caption"
+msgid "No usable stand: no exit facing the planes has a clear apron"
+msgstr "使用できる駐機場なし: エプロンが空いている飛行機側の出口がありません"
+
+msgctxt "apron caption"
+msgid "Stand moves to the new exit after takeoff at {time}"
+msgstr "駐機場は{time}の離陸後に新しい出口へ移動します"
+
+msgctxt "apron caption"
+msgid "Long walk to the plane: {meters} m"
+msgstr "飛行機まで長距離: {meters} m"
+
+msgctxt "land tool"
+msgid "Buy  {price}"
+msgstr "購入  {price}"
+
+msgctxt "land tool"
+msgid "Click to buy this {width}x{height} m plot"
+msgstr "クリックして {width}x{height} m の区画を購入"
+
+msgctxt "gate caption"
+msgid "{minutes} min walk"
+msgstr "徒歩 {minutes} 分"
+
+msgctxt "gate caption"
+msgid "Gate {gate}"
+msgstr "{gate}番ゲート"
+
+msgctxt "gate caption"
+msgid "no room for a plane"
+msgstr "駐機スペースなし"
+
+msgctxt "gate caption"
+msgid "up to small planes"
+msgstr "小型機まで"
+
+msgctxt "gate caption"
+msgid "up to medium planes"
+msgstr "中型機まで"
+
+msgctxt "gate caption"
+msgid "up to large planes"
+msgstr "大型機まで"
+
+msgctxt "gate caption"
+msgid "up to {class} planes"
+msgstr "{class}機まで"
+
+msgctxt "gate caption"
+msgid "Unlinked: no exit facing the planes in {cells} cells"
+msgstr "未接続: {cells}マス以内に飛行機向きの出口なし"
+
+msgctxt "gate caption"
+msgid "Unlinked: Gate {gate} uses the exit"
+msgstr "未接続: {gate}番ゲートが出口を使用中"
+
+msgctxt "gate caption"
+msgid "Unlinked: stand would overlap Gate {gate}"
+msgstr "未接続: 駐機場が{gate}番ゲートと重複"
+
+msgctxt "gate caption"
+msgid "Unlinked: no room for a plane"
+msgstr "未接続: 駐機スペースなし"
+
+msgctxt "gate caption"
+msgid "Unlinked: way to the lane blocked"
+msgstr "未接続: 誘導路への経路が遮断"
+
+msgctxt "gate caption"
+msgid "Unlinked: every gate letter in use"
+msgstr "未接続: 全ゲート記号が使用中"
+
+msgctxt "sign caption"
+msgid "Closed"
+msgstr "閉鎖中"
+
+msgctxt "sign text"
+msgid "Closed · no staff on duty"
+msgstr "閉鎖 · 担当スタッフ不在"
+
+msgctxt "sign text"
+msgid "Closed by you"
+msgstr "手動で閉鎖中"
+
+msgctxt "sign text"
+msgid "Closed · staff spot blocked"
+msgstr "閉鎖 · スタッフ位置が塞がり中"
+
+msgctxt "sign text"
+msgid "Closed · staff can't reach the desk"
+msgstr "閉鎖 · 係員がカウンターに到達不可"
+
+msgctxt "sign text"
+msgid "Closed · staff can't reach the scanner"
+msgstr "閉鎖 · 検査員がスキャナーに到達不可"
+
+msgctxt "sign text"
+msgid "Closed · staff can't reach the counter"
+msgstr "閉鎖 · 店員がカウンターに到達不可"
+
+msgctxt "sign text"
+msgid "Closed · scanner fault, fixed by {time}"
+msgstr "閉鎖 · スキャナー故障（{time}復旧予定）"
+
+msgctxt "money pop"
+msgid "+${amount}"
+msgstr "+${amount}"
+
+msgctxt "speech bubble"
+msgid "I'm late!"
+msgstr "遅れちゃう！"
+
+msgctxt "speech bubble"
+msgid "Missed my flight!"
+msgstr "乗り遅れた！"
+
+msgctxt "speech bubble"
+msgid "Where is check-in?"
+msgstr "チェックインはどこ？"
+
+msgctxt "speech bubble"
+msgid "Where is security?"
+msgstr "保安検査はどこ？"
+
+msgctxt "speech bubble"
+msgid "Queue full"
+msgstr "列がいっぱいだ"
+
+msgctxt "speech bubble"
+msgid "I can't get there"
+msgstr "あそこへ行けない！"
+
+msgctxt "speech bubble"
+msgid "The exit is blocked"
+msgstr "出口が塞がれてる"
+
+msgctxt "speech bubble"
+msgid "The gate is full"
+msgstr "ゲートがいっぱいだ"
+
+msgctxt "speech bubble"
+msgid "Check-in is closed"
+msgstr "チェックインが閉まってる"
+
+msgctxt "speech bubble"
+msgid "Security is closed"
+msgstr "保安検査が閉まってる"
+
+msgctxt "speech bubble"
+msgid "Gate is closed"
+msgstr "ゲートが閉まってる"
+
+msgctxt "speech bubble"
+msgid "Forgot my belt!"
+msgstr "ベルトを外し忘れた！"
+
+msgctxt "speech bubble"
+msgid "Keys in pocket!"
+msgstr "ポケットに鍵が！"
+
+msgctxt "speech bubble"
+msgid "Coins in pocket!"
+msgstr "ポケットに小銭が！"
+
+msgctxt "speech bubble"
+msgid "Oversized shampoo!"
+msgstr "大きいシャンプーだった！"
+
+msgctxt "speech bubble"
+msgid "Too much liquid!"
+msgstr "液体が多すぎた！"
+
+msgctxt "speech bubble"
+msgid "Forgot my water bottle!"
+msgstr "水筒を入れ忘れた！"
+
+msgctxt "sign text"
+msgid "Queue full · {count} waiting"
+msgid_plural "Queue full · {count} waiting"
+msgstr[0] "満員 · {count}人待ち"
+
+msgctxt "lane status"
+msgid "Lane ready"
+msgstr "レーン準備完了"
+
+msgctxt "lane status"
+msgid "Needs a tray table"
+msgstr "トレイ台が必要"
+
+msgctxt "lane status"
+msgid "Needs an X-ray belt"
+msgstr "X線ベルトが必要"
+
+msgctxt "lane status"
+msgid "Needs a pickup table"
+msgstr "荷物受取台が必要"
+
+msgctxt "lane status"
+msgid "Parts face different ways"
+msgstr "パーツの向きが不一致"
+
+msgctxt "lane status"
+msgid "A wall cuts through the lane"
+msgstr "壁がレーンを分断"
+
+msgctxt "lane status"
+msgid "Clear the way through the arch"
+msgstr "ゲートの通り道を空けてください"
+
+msgctxt "lane status"
+msgid "Clear the floor for the queue"
+msgstr "列の床を空けてください"
+
+msgctxt "lane status"
+msgid "Clear the floor for the repack spot"
+msgstr "荷造り場所の床を空けてください"
+
+msgctxt "lane status"
+msgid "Clear the way back from the repack spot"
+msgstr "荷造り場所からの戻り道を空けてください"
+
+msgctxt "lane status"
+msgid "Clear the way out past the pickup table"
+msgstr "受取台の先の出口を空けてください"
+
+msgctxt "lane status"
+msgid "Clear the officer's spot by the X-ray belt"
+msgstr "X線ベルト横の検査員位置を空けてください"
+
+msgctxt "lane status"
+msgid "Clear the helper's spot by the repack spot"
+msgstr "荷造り場所横の補助員位置を空けてください"
+
+msgctxt "lane status"
+msgid "No arch"
+msgstr "ゲートがありません"
+
+msgctxt "door hint"
+msgid "Put the {door} on a floor tile at the outside edge"
+msgstr "{door}は外周に面した床タイルに置いてください"
+
+msgctxt "door hint"
+msgid "Put the {door} on the outside edge of the floor"
+msgstr "{door}は床の外周の辺に置いてください"
+
+msgctxt "door hint"
+msgid "Clear the floor in front of the {door}"
+msgstr "{door}の手前の床を空けてください"
+
+msgctxt "door hint"
+msgid "Take down the glass or door wall behind the {door}"
+msgstr "{door}の背後にあるガラス壁やドアを外してください"
+
+msgctxt "door hint"
+msgid "The wall behind the {door} holds a door; pick another spot"
+msgstr "{door}の背後の壁にドアがあります。別の場所を選んでください"
+
+msgctxt "ghost reason"
+msgid "{blocker} in front"
+msgstr "手前に{blocker}"
+
+msgctxt "build refusal"
+msgid "Outside the building area"
+msgstr "建築可能エリアの外です"
+
+msgctxt "build refusal"
+msgid "Needs floor"
+msgstr "床が必要です"
+
+msgctxt "build refusal"
+msgid "Unknown floor type"
+msgstr "不明な床タイプです"
+
+msgctxt "build refusal"
+msgid "Zone id must be 0 or more"
+msgstr "ゾーンIDは0以上にしてください"
+
+msgctxt "build refusal"
+msgid "Facing must be 0 to 3"
+msgstr "向きは0〜3にしてください"
+
+msgctxt "build refusal"
+msgid "Unknown object"
+msgstr "不明なオブジェクトです"
+
+msgctxt "build refusal"
+msgid "Overlaps another object"
+msgstr "他の設備と重なっています"
+
+msgctxt "build refusal"
+msgid "A wall runs through it"
+msgstr "壁と重なっています"
+
+msgctxt "build refusal"
+msgid "The spot in front is blocked"
+msgstr "手前のマスが塞がれています"
+
+msgctxt "build refusal"
+msgid "Blocks the spot in front of another object"
+msgstr "他の設備の手前のマスを塞ぎます"
+
+msgctxt "build refusal"
+msgid "An object stands here"
+msgstr "ここにはすでに設備があります"
+
+msgctxt "build refusal"
+msgid "There is already a wall here"
+msgstr "ここにはすでに壁があります"
+
+msgctxt "build refusal"
+msgid "No wall here"
+msgstr "ここには壁がありません"
+
+msgctxt "build refusal"
+msgid "No such object"
+msgstr "対象の設備が見つかりません"
+
+msgctxt "build refusal"
+msgid "Unknown wall kind"
+msgstr "不明な壁の種類です"
+
+msgctxt "build refusal"
+msgid "A door needs a plain wall on each side"
+msgstr "ドアの両隣には通常の壁が必要です"
+
+msgctxt "build refusal"
+msgid "A door stands beside this wall"
+msgstr "この壁の隣にドアがあります"
+
+msgctxt "build refusal"
+msgid "Entrances and exits need the outside edge, with no floor behind them"
+msgstr "入口と出口は、背後に床がない外周の辺に置く必要があります"
+
+msgctxt "build refusal"
+msgid "Keep the edge behind an entrance or exit open"
+msgstr "入口や出口の背後の辺は塞がないでください"
+
+msgctxt "build refusal"
+msgid "Unknown room type"
+msgstr "不明な部屋タイプです"
+
+msgctxt "build refusal"
+msgid "Overlaps another room"
+msgstr "他の部屋と重なっています"
+
+msgctxt "build refusal"
+msgid "A room covers this floor; remove the room first"
+msgstr "この床には部屋が指定されています。先に部屋を削除してください"
+
+msgctxt "build refusal"
+msgid "No such room"
+msgstr "対象の部屋が見つかりません"
+
+msgctxt "build refusal"
+msgid "Not enough money"
+msgstr "資金が足りません"
+
+msgctxt "build refusal"
+msgid "This piece has no price"
+msgstr "このパーツには価格設定がありません"
+
+msgctxt "build refusal"
+msgid "The money is at its limit; the refund would not fit"
+msgstr "所持金が上限に達しているため返金できません"
+
+msgctxt "build refusal"
+msgid "Belts cannot cross; a belt joins at most three others"
+msgstr "ベルトは交差できません。1つのベルトは最大3本まで合流できます"
+
+msgctxt "build refusal"
+msgid "A wall is in the way of the belt"
+msgstr "壁がベルトを遮っています"
+
+msgctxt "build refusal"
+msgid "Only a belt piece changes shape"
+msgstr "形状が変わるのはベルトパーツだけです"
+
+msgctxt "build refusal"
+msgid "Keep the staff spot behind a desk, beside a scanner or at a lane officer's post free, with a way in"
+msgstr "カウンター背後・スキャナー横・レーン検査員位置のスタッフ用マスと通路を空けてください"
+
+msgctxt "build refusal"
+msgid "A wall is in the way of the lane. Remove the wall first"
+msgstr "壁がレーンの邪魔をしています。先に壁を撤去してください"
+
+msgctxt "build refusal"
+msgid "Put it on one of the marked landside spots"
+msgstr "道路側の印が付いた場所に配置してください"
+
+msgctxt "build refusal"
+msgid "Every spot of this kind nearby is already built"
+msgstr "近くのこの種類の場所はすべて建設済みです"
+
+msgctxt "build refusal"
+msgid "Cars are still in it. Close it and wait until it is empty"
+msgstr "まだ車が残っています。閉鎖して空になるまで待ってください"
+
+msgctxt "build refusal"
+msgid "A wall is in the way of the room"
+msgstr "壁が部屋を遮っています"
+
+msgctxt "build refusal"
+msgid "A plane uses this apron. Build here after it takes off"
+msgstr "このエプロンは飛行機が使用中です。離陸後に建設してください"
+
+msgctxt "build refusal"
+msgid "You do not own this land. Buy the plot with Buy land first"
+msgstr "この土地を所有していません。先に「土地購入」で区画を買ってください"
+
+msgctxt "build refusal"
+msgid "You already own this plot"
+msgstr "この区画はすでに所有しています"
+
+msgctxt "build refusal"
+msgid "Buy a plot next to land you own"
+msgstr "所有地に隣接した区画を購入してください"
+
+msgctxt "build refusal"
+msgid "Put a gate desk within 4 cells of a free exit facing the planes"
+msgstr "ゲートデスクは飛行機向きの空き出口から4マス以内に置いてください"
+
+msgctxt "build refusal"
+msgid "A flight is still due at this gate. Remove it after the flight leaves"
+msgstr "このゲートには予定便が残っています。出発後に撤去してください"
+
+msgctxt "build refusal"
+msgid "No other gate is free for these flights. Move them in Departures first"
+msgstr "これらの便を移せる空きゲートがありません。先に出発便画面で移動してください"
+
+msgctxt "build refusal"
+msgid "Something is in front of the door"
+msgstr "ドアの手前に何かあります"
+
+msgctxt "build refusal"
+msgid "A piece sits across the room's edge"
+msgstr "設備が部屋の境界をまたいでいます"
+
+msgctxt "build refusal"
+msgid "Desks, scanners and lane parts cannot move with a room"
+msgstr "カウンター、スキャナー、レーンパーツは部屋と一緒に移動できません"
+
+msgctxt "build refusal"
+msgid "A piece does not fit at the new spot"
+msgstr "移動先に収まらない設備があります"
+
+msgctxt "build refusal"
+msgid "Keep the way out clear for the passengers leaving the room"
+msgstr "部屋から出る乗客のための通路を空けておいてください"
+
+msgctxt "build refusal"
+msgid "The room changed since it was picked up. Pick it up again"
+msgstr "持ち上げてから部屋の状態が変わりました。もう一度選択してください"
+
+msgctxt "build refusal"
+msgid "Not unlocked yet"
+msgstr "まだアンロックされていません"
+
+msgctxt "build refusal"
+msgid "No room for a plane outside this exit. Keep the ground out from it clear"
+msgstr "この出口の外側に飛行機を駐機するスペースがありません。前の地面を空けてください"
+
+msgctxt "build refusal"
+msgid "Something blocks the way from this exit to the taxi lane. Clear a path out from it"
+msgstr "この出口から誘導路への経路が塞がれています。外への通路を空けてください"
+
+msgctxt "build refusal"
+msgid "A booked flight's plane needs this ground. Move its flights in Departures first"
+msgstr "予約済みの便がこの地面を必要としています。先に出発便画面で便を移動してください"
+
+msgctxt "build refusal"
+msgid "The side taxiway would have to move and leave a booked flight with no way to its gate"
+msgstr "横の誘導路が移動することになり、予約済みの便がゲートに入れなくなります"
+
+msgctxt "ghost reason"
+msgid "Outside the building"
+msgstr "建築エリア外"
+
+msgctxt "ghost reason"
+msgid "Overlaps an object"
+msgstr "他の設備と重複"
+
+msgctxt "ghost reason"
+msgid "A wall is in the way"
+msgstr "壁が邪魔"
+
+msgctxt "ghost reason"
+msgid "Front spot blocked"
+msgstr "手前のマスが塞がり"
+
+msgctxt "ghost reason"
+msgid "Blocks a front spot"
+msgstr "他の設備の前を塞ぐ"
+
+msgctxt "ghost reason"
+msgid "Wall already here"
+msgstr "すでに壁がある"
+
+msgctxt "ghost reason"
+msgid "Needs wall on both sides"
+msgstr "両側に壁が必要"
+
+msgctxt "ghost reason"
+msgid "A door is beside it"
+msgstr "隣にドアがある"
+
+msgctxt "ghost reason"
+msgid "Needs the outside edge"
+msgstr "外周の辺が必要"
+
+msgctxt "ghost reason"
+msgid "Keep the edge open"
+msgstr "外側の辺を空ける必要あり"
+
+msgctxt "ghost reason"
+msgid "Overlaps a room"
+msgstr "他の部屋と重複"
+
+msgctxt "ghost reason"
+msgid "Remove the room first"
+msgstr "先に部屋を削除"
+
+msgctxt "ghost reason"
+msgid "Money at its limit"
+msgstr "所持金が上限"
+
+msgctxt "ghost reason"
+msgid "Belts cannot cross"
+msgstr "ベルトは交差不可"
+
+msgctxt "ghost reason"
+msgid "Keep the staff spot free"
+msgstr "スタッフ位置を空ける必要あり"
+
+msgctxt "ghost reason"
+msgid "A wall is in the lane"
+msgstr "レーン内に壁がある"
+
+msgctxt "ghost reason"
+msgid "Bad zone id"
+msgstr "不正なゾーンID"
+
+msgctxt "ghost reason"
+msgid "Only belts change shape"
+msgstr "ベルトのみ変形可能"
+
+msgctxt "ghost reason"
+msgid "Needs a marked spot"
+msgstr "指定マスのみ配置可能"
+
+msgctxt "ghost reason"
+msgid "Spot already built"
+msgstr "この場所は建設済み"
+
+msgctxt "ghost reason"
+msgid "Cars are still in it"
+msgstr "車が残っている"
+
+msgctxt "ghost reason"
+msgid "A plane is on the apron"
+msgstr "エプロンに飛行機がいる"
+
+msgctxt "ghost reason"
+msgid "Buy this land first"
+msgstr "先にこの土地を購入"
+
+msgctxt "ghost reason"
+msgid "Plot already owned"
+msgstr "所有済みの区画"
+
+msgctxt "ghost reason"
+msgid "Not next to your land"
+msgstr "所有地に隣接していない"
+
+msgctxt "ghost reason"
+msgid "No free exit nearby"
+msgstr "近くに空き出口なし"
+
+msgctxt "ghost reason"
+msgid "Gates are too close"
+msgstr "ゲート同士が近すぎる"
+
+msgctxt "ghost reason"
+msgid "A flight is due here"
+msgstr "予定便がある"
+
+msgctxt "ghost reason"
+msgid "Flights have no gate"
+msgstr "便の行き先ゲートがない"
+
+msgctxt "ghost reason"
+msgid "A piece is on the edge"
+msgstr "設備が境界にある"
+
+msgctxt "ghost reason"
+msgid "A piece cannot move"
+msgstr "移動できない設備がある"
+
+msgctxt "ghost reason"
+msgid "A piece does not fit"
+msgstr "設備が収まらない"
+
+msgctxt "ghost reason"
+msgid "Blocks a way out"
+msgstr "出口を塞ぐ"
+
+msgctxt "ghost reason"
+msgid "The room changed"
+msgstr "部屋が変更された"
+
+msgctxt "ghost reason"
+msgid "No room for the plane"
+msgstr "駐機スペースなし"
+
+msgctxt "ghost reason"
+msgid "Way to the lane blocked"
+msgstr "誘導路への経路が遮断"
+
+msgctxt "ghost reason"
+msgid "A booked plane needs it"
+msgstr "予約便が使用予定"
+
+msgctxt "ghost reason"
+msgid "Strands a booked flight"
+msgstr "予約便が孤立する"
+
+msgctxt "build status"
+msgid "Drag to lay a belt"
+msgstr "ドラッグしてベルトを敷設"
+
+msgctxt "build status"
+msgid "Not part of a lane"
+msgstr "レーンの一部ではありません"
+
+msgctxt "build status"
+msgid "Its front is outside the room, so it will not count"
+msgstr "正面が部屋の外に出ているため有効になりません"
+
+msgctxt "build status"
+msgid "Drag stops over the menu. Move back onto the floor to keep sizing"
+msgstr "メニュー上ではドラッグが止まります。床に戻してサイズ調整を続けてください"
+
+msgctxt "door tool, mid-sentence"
+msgid "entrance"
+msgstr "入口"
+
+msgctxt "door tool, mid-sentence"
+msgid "exit"
+msgstr "出口"
+
+msgctxt "build refusal"
+msgid "Gates need {metres} m between exits. Widen the terminal"
+msgstr "ゲート出口の間隔は{metres} m以上必要です。ターミナルを広げてください"
+
+msgctxt "build refusal"
+msgid "{reason}: {detail}"
+msgstr "{reason}: {detail}"
+
+msgctxt "build status"
+msgid "{item} placed"
+msgstr "{item}を配置しました"
+
+msgctxt "room move"
+msgid "Moved {room}"
+msgstr "{room}を移動しました"
+
+msgctxt "room move"
+msgid "Moved {room} for {cost}"
+msgstr "{cost}で{room}を移動しました"
+
+msgctxt "room move"
+msgid "{room}: click to set down, right-click cancels"
+msgstr "{room}: クリックで設置、右クリックでキャンセル"
+
+msgctxt "landside plan"
+msgid "Refunds {price}"
+msgstr "返金 {price}"
+
+msgctxt "landside plan"
+msgid "{place} (open, {count} car): click to close it"
+msgid_plural "{place} (open, {count} cars): click to close it"
+msgstr[0] "{place}（開放中・{count}台）: クリックで閉鎖"
+
+msgctxt "landside plan"
+msgid "{place} (closed, {count} car): click to open it"
+msgid_plural "{place} (closed, {count} cars): click to open it"
+msgstr[0] "{place}（閉鎖中・{count}台）: クリックで開放"
+
+msgctxt "landside plan"
+msgid "Remove {place}: {capacity}, {metres} m walk to the nearest landside door"
+msgstr "{place}を撤去: {capacity}、最寄り入口まで徒歩 {metres} m"
+
+msgctxt "landside plan"
+msgid "Remove {place}: {capacity}"
+msgstr "{place}を撤去: {capacity}"
+
+msgctxt "landside plan"
+msgid "{place}: {capacity}, {metres} m walk to the nearest landside door"
+msgstr "{place}: {capacity}、最寄り入口まで徒歩 {metres} m"
+
+msgctxt "landside plan"
+msgid "{place}: {capacity}"
+msgstr "{place}: {capacity}"
+
+msgctxt "landside place, mid-sentence"
+msgid "curb bay"
+msgstr "降車場"
+
+msgctxt "landside place, mid-sentence"
+msgid "surface lot"
+msgstr "平面駐車場"
+
+msgctxt "landside place, mid-sentence"
+msgid "multi-storey car park"
+msgstr "立体駐車場"
+
+msgctxt "landside plan"
+msgid "{count} car is still in it. Close it and wait until it is empty"
+msgid_plural "{count} cars are still in it. Close it and wait until it is empty"
+msgstr[0] "まだ{count}台の車が残っています。閉鎖して空になるまでお待ちください"
+
+msgctxt "landside plan"
+msgid "{count} berth"
+msgid_plural "{count} berths"
+msgstr[0] "{count}枠"
+
+msgctxt "landside plan"
+msgid "{count} space"
+msgid_plural "{count} spaces"
+msgstr[0] "{count}台分"
+
+msgid "Wall gap · close the outer wall so the roof can go on"
+msgstr "壁の隙間 · 屋根を架けるために外壁を閉じてください"
+
+msgid "Taxiway works: the taxiway moves when the west side is quiet"
+msgstr "誘導路工事: 西側が空き次第、誘導路を移動します"
+
+msgid "Taxiway works: the taxiway moves when the east side is quiet"
+msgstr "誘導路工事: 東側が空き次第、誘導路を移動します"
+
+msgid "Taxiway works: the taxiway moves when the west side is quiet, forecast {when}"
+msgstr "誘導路工事: 西側が空き次第移動します（見込み {when}）"
+
+msgid "Taxiway works: the taxiway moves when the east side is quiet, forecast {when}"
+msgstr "誘導路工事: 東側が空き次第移動します（見込み {when}）"
+
+msgctxt "departure status"
+msgid "Boarding"
+msgstr "搭乗中"
+
+msgctxt "departure status"
+msgid "Doors closed"
+msgstr "搭乗終了"
+
+msgctxt "departure status"
+msgid "Pushback"
+msgstr "プッシュバック"
+
+msgctxt "departure status"
+msgid "Taxiing"
+msgstr "タキシング"
+
+msgctxt "departure status"
+msgid "Taking off"
+msgstr "離陸中"
+
+msgctxt "departure status"
+msgid "Departed"
+msgstr "出発済み"
+
+msgid "doors close {time}"
+msgstr "搭乗締切 {time}"
+
+msgctxt "refusal detail"
+msgid "gate {gate} is too close"
+msgstr "{gate}番ゲートと近すぎる"
+
+msgctxt "refusal detail"
+msgid "gate {gate}, a small plane"
+msgstr "{gate}番ゲート（小型機）"
+
+msgctxt "refusal detail"
+msgid "gate {gate}, a medium plane"
+msgstr "{gate}番ゲート（中型機）"
+
+msgctxt "refusal detail"
+msgid "gate {gate}, a large plane"
+msgstr "{gate}番ゲート（大型機）"
+
+msgctxt "build status"
+msgid "Belt {count} cell"
+msgid_plural "Belt {count} cells"
+msgstr[0] "ベルト {count}マス"
+
+msgctxt "build status"
+msgid "Facing auto"
+msgstr "向き 自動"
+
+msgctxt "build status"
+msgid "Facing {facing}"
+msgstr "向き {facing}"
+
+msgctxt "build status"
+msgid "{width} x {height}"
+msgstr "{width} x {height}"
+
+msgctxt "build status"
+msgid "{room} {width} x {height}"
+msgstr "{room} {width} x {height}"
+
+msgctxt "build status"
+msgid "{room} marked: {status}"
+msgstr "{room}を指定: {status}"
+
+msgctxt "build status"
+msgid "Drag to mark a {room}"
+msgstr "ドラッグして{room}を指定"
+
+msgctxt "item name, mid-sentence"
+msgid "atm"
+msgstr "ATM"
+
+msgctxt "item name, mid-sentence"
+msgid "baggage belt"
+msgstr "手荷物ベルト"
+
+msgctxt "item name, mid-sentence"
+msgid "baggage cart"
+msgstr "手荷物カート"
+
+msgctxt "item name, mid-sentence"
+msgid "bar counter"
+msgstr "バーカウンター"
+
+msgctxt "item name, mid-sentence"
+msgid "belt corner"
+msgstr "ベルト角"
+
+msgctxt "item name, mid-sentence"
+msgid "belt end"
+msgstr "ベルト終端"
+
+msgctxt "item name, mid-sentence"
+msgid "belt merge"
+msgstr "ベルト合流"
+
+msgctxt "item name, mid-sentence"
+msgid "bench"
+msgstr "ベンチ"
+
+msgctxt "item name, mid-sentence"
+msgid "bin"
+msgstr "ゴミ箱"
+
+msgctxt "item name, mid-sentence"
+msgid "bush"
+msgstr "低木"
+
+msgctxt "item name, mid-sentence"
+msgid "cafe counter"
+msgstr "カフェカウンター"
+
+msgctxt "item name, mid-sentence"
+msgid "cafe table"
+msgstr "カフェテーブル"
+
+msgctxt "item name, mid-sentence"
+msgid "chain"
+msgstr "ガイドベルト"
+
+msgctxt "item name, mid-sentence"
+msgid "check-in desk"
+msgstr "チェックインカウンター"
+
+msgctxt "item name, mid-sentence"
+msgid "clothes rail"
+msgstr "ハンガーラック"
+
+msgctxt "item name, mid-sentence"
+msgid "confiscation bin"
+msgstr "没収品ボックス"
+
+msgctxt "item name, mid-sentence"
+msgid "currency exchange"
+msgstr "両替カウンター"
+
+msgctxt "item name, mid-sentence"
+msgid "display stand"
+msgstr "陳列台"
+
+msgctxt "item name, mid-sentence"
+msgid "duty free shelf"
+msgstr "免税店棚"
+
+msgctxt "item name, mid-sentence"
+msgid "duty free till"
+msgstr "免税店レジ"
+
+msgctxt "item name, mid-sentence"
+msgid "entrance"
+msgstr "入口"
+
+msgctxt "item name, mid-sentence"
+msgid "exit to the plane"
+msgstr "飛行機への出口"
+
+msgctxt "item name, mid-sentence"
+msgid "fashion till"
+msgstr "ファッション店レジ"
+
+msgctxt "item name, mid-sentence"
+msgid "fountain"
+msgstr "噴水"
+
+msgctxt "item name, mid-sentence"
+msgid "gate desk"
+msgstr "ゲートデスク"
+
+msgctxt "item name, mid-sentence"
+msgid "gate seats"
+msgstr "ゲート座席"
+
+msgctxt "item name, mid-sentence"
+msgid "grab-and-go stall"
+msgstr "テイクアウト売店"
+
+msgctxt "item name, mid-sentence"
+msgid "info desk"
+msgstr "案内デスク"
+
+msgctxt "item name, mid-sentence"
+msgid "info screen"
+msgstr "案内画面"
+
+msgctxt "item name, mid-sentence"
+msgid "kiosk counter"
+msgstr "キオスクカウンター"
+
+msgctxt "item name, mid-sentence"
+msgid "lounge armchair"
+msgstr "ラウンジアームチェア"
+
+msgctxt "item name, mid-sentence"
+msgid "lounge sofa"
+msgstr "ラウンジソファ"
+
+msgctxt "item name, mid-sentence"
+msgid "nap pod"
+msgstr "仮眠ポッド"
+
+msgctxt "item name, mid-sentence"
+msgid "pharmacy counter"
+msgstr "薬局カウンター"
+
+msgctxt "item name, mid-sentence"
+msgid "pharmacy shelf"
+msgstr "薬局棚"
+
+msgctxt "item name, mid-sentence"
+msgid "pickup table"
+msgstr "荷物受取台"
+
+msgctxt "item name, mid-sentence"
+msgid "plant pot"
+msgstr "植木鉢"
+
+msgctxt "item name, mid-sentence"
+msgid "planter"
+msgstr "プランター"
+
+msgctxt "item name, mid-sentence"
+msgid "play blocks"
+msgstr "遊具ブロック"
+
+msgctxt "item name, mid-sentence"
+msgid "play slide"
+msgstr "すべり台"
+
+msgctxt "item name, mid-sentence"
+msgid "post"
+msgstr "支柱ポール"
+
+msgctxt "item name, mid-sentence"
+msgid "prize podium"
+msgstr "展示車台"
+
+msgctxt "item name, mid-sentence"
+msgid "restaurant booth"
+msgstr "レストランブース"
+
+msgctxt "item name, mid-sentence"
+msgid "restaurant table"
+msgstr "レストランテーブル"
+
+msgctxt "item name, mid-sentence"
+msgid "screen"
+msgstr "フロア画面"
+
+msgctxt "item name, mid-sentence"
+msgid "search table"
+msgstr "手荷物検査台"
+
+msgctxt "item name, mid-sentence"
+msgid "security arch"
+msgstr "保安検査ゲート"
+
+msgctxt "item name, mid-sentence"
+msgid "security scanner"
+msgstr "保安検査スキャナー"
+
+msgctxt "item name, mid-sentence"
+msgid "shower"
+msgstr "シャワーブース"
+
+msgctxt "item name, mid-sentence"
+msgid "sink"
+msgstr "洗面台"
+
+msgctxt "item name, mid-sentence"
+msgid "statue"
+msgstr "彫像"
+
+msgctxt "item name, mid-sentence"
+msgid "toilet stall"
+msgstr "トイレ個室"
+
+msgctxt "item name, mid-sentence"
+msgid "tray table"
+msgstr "トレイ台"
+
+msgctxt "item name, mid-sentence"
+msgid "tree"
+msgstr "観葉樹"
+
+msgctxt "item name, mid-sentence"
+msgid "tree bench"
+msgstr "木陰ベンチ"
+
+msgctxt "item name, mid-sentence"
+msgid "work desk"
+msgstr "作業デスク"
+
+msgctxt "item name, mid-sentence"
+msgid "x-ray belt"
+msgstr "X線ベルト"
+
+msgctxt "station status"
+msgid "Closed by you"
+msgstr "手動で閉鎖中"
+
+msgctxt "station status"
+msgid "Finishing current service"
+msgstr "現在の対応を完了中"
+
+msgctxt "station status"
+msgid "Waiting for staff"
+msgstr "スタッフ待ち"
+
+msgctxt "station status"
+msgid "Staff on the way"
+msgstr "スタッフ移動中"
+
+msgctxt "station status"
+msgid "Serving"
+msgstr "対応中"
+
+msgctxt "station status"
+msgid "Scanner fault"
+msgstr "スキャナー故障"
+
+msgctxt "station status"
+msgid "Scanner fault, fixed by {time}"
+msgstr "スキャナー故障（{time}復旧予定）"
+
+msgctxt "menu"
+msgid "Save"
+msgstr "セーブ"
+
+msgctxt "menu"
+msgid "Load"
+msgstr "ロード"
+
 msgctxt "menu"
 msgid "Continue"
 msgstr "続ける"
@@ -17,46 +4452,407 @@ msgid "New Airport"
 msgstr "新しい空港"
 
 msgctxt "menu"
-msgid "Load"
-msgstr "ロード"
-
-msgctxt "menu"
 msgid "Wishlist"
 msgstr "ウィッシュリスト"
-
-msgid "Send Feedback"
-msgstr "フィードバック"
 
 msgctxt "menu"
 msgid "Quit"
 msgstr "終了"
 
 msgctxt "menu"
-msgid "Audio"
-msgstr "オーディオ"
-
-msgctxt "menu"
 msgid "Back"
 msgstr "戻る"
+
+msgid "{slot}, {time}"
+msgstr "{slot}、{time}"
+
+msgid "Manual save"
+msgstr "手動セーブ"
+
+msgid "Autosave {number}"
+msgstr "オートセーブ {number}"
+
+msgid "Food: hungry passengers lose mood. A cafe feeds them."
+msgstr "食事: 空腹の乗客は気分が下がります。カフェで食事を提供しましょう。"
+
+msgid "Security: more lanes mean shorter queues at the checkpoint."
+msgstr "保安検査: レーンを増やすと検査場の列が短くなります。"
+
+msgid "Baggage: belts carry checked bags. A late bag misses its flight."
+msgstr "手荷物: ベルトで預け荷物を運びます。遅れた荷物は便に間に合いません。"
+
+msgid "Comfort: seats and lounges calm passengers who wait."
+msgstr "快適さ: 座席やラウンジがあると、待つ乗客が落ち着きます。"
+
+msgid "Runway: a longer runway takes bigger planes."
+msgstr "滑走路: 滑走路を延ばすとより大きな飛行機が着陸できます。"
+
+msgid "Also new: {pieces}."
+msgstr "新登場: {pieces}。"
+
+msgctxt "build refusal"
+msgid "A flight is still due at this gate. Remove it after the flight leaves: {flights}"
+msgid_plural "Flights are still due at this gate. Remove it after they leave: {flights}"
+msgstr[0] "このゲートには予定便が残っています。出発後に撤去してください: {flights}"
+
+msgctxt "build refusal"
+msgid "No other gate is free for these flights. Move them in Departures first: {flights}"
+msgid_plural "No other gate is free for these flights. Move them in Departures first: {flights}"
+msgstr[0] "これらの便を移せる空きゲートがありません。先に出発便画面で移動してください: {flights}"
+
+msgctxt "build refusal"
+msgid "The side taxiway would have to move and leave a booked flight with no way to its gate: {flights}"
+msgid_plural "The side taxiway would have to move and leave booked flights with no way to their gates: {flights}"
+msgstr[0] "横の誘導路が移動するため、予約済みの便がゲートへ入れなくなります: {flights}"
+
+msgctxt "flight label"
+msgid "the {time} flight"
+msgstr "{time}発の便"
+
+msgctxt "flight label"
+msgid "the {time} {airline} flight to {city}"
+msgstr "{time}発 {airline} {city}行き"
+
+msgctxt "offer clash"
+msgid "it clashes with the {time} {airline} flight to {city} on the runway"
+msgstr "{time}発 {airline} {city}行きと滑走路で時間が重なります"
+
+msgctxt "offer clash"
+msgid "it clashes with the {time} {airline} flight to {city} on the taxi lane"
+msgstr "{time}発 {airline} {city}行きと誘導路で時間が重なります"
+
+msgctxt "offer clash"
+msgid "it clashes with the {time} {airline} flight to {city} at gate {gate}"
+msgstr "{time}発 {airline} {city}行きと{gate}番ゲートで時間が重なります"
+
+msgctxt "offer clash"
+msgid "it clashes with the {time} flight on the runway"
+msgstr "{time}発の便と滑走路で時間が重なります"
+
+msgctxt "offer clash"
+msgid "it clashes with the {time} flight on the taxi lane"
+msgstr "{time}発の便と誘導路で時間が重なります"
+
+msgctxt "offer clash"
+msgid "it clashes with the {time} flight at gate {gate}"
+msgstr "{time}発の便と{gate}番ゲートで時間が重なります"
+
+msgctxt "offer clash"
+msgid "it clashes with another flight on the runway"
+msgstr "別の便と滑走路で時間が重なります"
+
+msgctxt "offer clash"
+msgid "it clashes with another flight on the taxi lane"
+msgstr "別の便と誘導路で時間が重なります"
+
+msgctxt "offer clash"
+msgid "it clashes with another flight at gate {gate}"
+msgstr "別の便と{gate}番ゲートで時間が重なります"
+
+msgctxt "list of two"
+msgid "{first} and {second}"
+msgstr "{first}、{second}"
+
+msgctxt "list start"
+msgid "{first}, {rest}"
+msgstr "{first}、{rest}"
+
+msgctxt "list middle"
+msgid "{item}, {rest}"
+msgstr "{item}、{rest}"
+
+msgctxt "list end"
+msgid "{item} and {last}"
+msgstr "{item}、{last}"
+
+msgid "Quit log"
+msgstr "終了ログ"
+
+msgid "Records where you stop playing: the day, money, stars, builds, flights and alerts, never what you click or type. The file stays on this computer and nothing is sent."
+msgstr "プレイ終了時の状況（日数・所持金・星評価・建築・便・通知）を記録します。クリックや入力内容は記録せず、ファイルはこのPC内に留まり外部送信は一切行われません。"
+
+msgid "Open log folder"
+msgstr "ログフォルダを開く"
+
+msgid "Could not open the log folder: {path}"
+msgstr "ログフォルダを開けませんでした: {path}"
+
+msgid "Could not start the quit log in {path}"
+msgstr "{path} に終了ログを作成できませんでした"
+
+msgid "Passengers board at a gate. Place a gate desk by an exit that faces the planes."
+msgstr "乗客はゲートから搭乗します。飛行機に面した出口の近くにゲートデスクを置いてください。"
+
+msgid "Passengers wait at the gate. Place seats near it; the airport opens without them."
+msgstr "乗客はゲートで搭乗を待ちます。近くに座席を置いてください（座席なしでも開港はできます）。"
+
+msgid "Click a passenger to follow them to their flight"
+msgstr "乗客をクリックすると搭乗までの動きを追跡できます"
+
+msgid "Show me"
+msgstr "場所を表示"
+
+msgid "No carry-on bags"
+msgstr "機内持込手荷物なし"
+
+msgid "{count} carry-on bag"
+msgid_plural "{count} carry-on bags"
+msgstr[0] "機内持込手荷物 {count}個"
+
+msgid "carrying liquids"
+msgstr "液体物を持参"
+
+msgid "a checked bag that missed the plane"
+msgstr "積み残された預け荷物"
+
+msgid "a checked bag still to drop off"
+msgstr "まだ預けていない手荷物"
+
+msgid "no checked bag"
+msgstr "預け荷物なし"
+
+msgid "a checked bag at the desk"
+msgstr "カウンターにある預け荷物"
+
+msgid "a checked bag on the belt"
+msgstr "ベルトを移動中の預け荷物"
+
+msgid "a checked bag stuck on the belt"
+msgstr "ベルトで詰まっている預け荷物"
+
+msgid "a checked bag in the bag room"
+msgstr "手荷物室にある預け荷物"
+
+msgid "a checked bag loaded on the plane"
+msgstr "飛行機に積み込み済みの預け荷物"
+
+msgid "Cutting it fine, no shopping planned"
+msgstr "時間ぎりぎり、買い物の予定なし"
+
+msgid "Cutting it fine, hoping for a quick stop at the kiosk"
+msgstr "時間ぎりぎり、キオスクに少し寄りたい"
+
+msgid "Cutting it fine, needs the pharmacy"
+msgstr "時間ぎりぎり、薬局に用あり"
+
+msgid "Cutting it fine, hoping for duty free"
+msgstr "時間ぎりぎり、免税店に寄りたい"
+
+msgid "Cutting it fine, hoping to browse the fashion shop"
+msgstr "時間ぎりぎり、ファッション店を見たい"
+
+msgid "Right on time, no shopping planned"
+msgstr "ちょうど良い時間、買い物の予定なし"
+
+msgid "Right on time, hoping for a quick stop at the kiosk"
+msgstr "ちょうど良い時間、キオスクに寄りたい"
+
+msgid "Right on time, needs the pharmacy"
+msgstr "ちょうど良い時間、薬局に用あり"
+
+msgid "Right on time, hoping for duty free"
+msgstr "ちょうど良い時間、免税店に寄りたい"
+
+msgid "Right on time, hoping to browse the fashion shop"
+msgstr "ちょうど良い時間、ファッション店を見たい"
+
+msgid "Early bird, no shopping planned"
+msgstr "かなり早めの到着、買い物の予定なし"
+
+msgid "Early bird, hoping for a quick stop at the kiosk"
+msgstr "かなり早めの到着、キオスクに少し寄りたい"
+
+msgid "Early bird, needs the pharmacy"
+msgstr "かなり早めの到着、薬局に用あり"
+
+msgid "Early bird, hoping for duty free"
+msgstr "かなり早めの到着、免税店に寄りたい"
+
+msgid "Early bird, hoping to browse the fashion shop"
+msgstr "かなり早めの到着、ファッション店を見たい"
+
+msgid "{count} desk full · {waiting} waiting · short queue: move the desk away from the wall"
+msgid_plural "{count} desks full · {waiting} waiting · short queue: move a desk away from the wall"
+msgstr[0] "{count}か所のカウンターが満員 · {waiting}人待ち · 列が短いです: カウンターを壁から離してください"
+
+msgid "{count} lane full · {waiting} waiting · short queue: move the scanner away from the wall"
+msgid_plural "{count} lanes full · {waiting} waiting · short queue: move a scanner away from the wall"
+msgstr[0] "{count}レーンが満員 · {waiting}人待ち · 列が短いです: スキャナーを壁から離してください"
+
+msgctxt "sign text"
+msgid "Queue full · {count} waiting · short queue: move the desk away from the wall"
+msgid_plural "Queue full · {count} waiting · short queue: move the desk away from the wall"
+msgstr[0] "満員 · {count}人待ち · 列が短いです: カウンターを壁から離してください"
+
+msgctxt "sign text"
+msgid "Queue full · {count} waiting · short queue: move the scanner away from the wall"
+msgid_plural "Queue full · {count} waiting · short queue: move the scanner away from the wall"
+msgstr[0] "満員 · {count}人待ち · 列が短いです: スキャナーを壁から離してください"
+
+msgctxt "sign text"
+msgid "Queue full · {count} waiting · short queue: move the counter away from the wall"
+msgid_plural "Queue full · {count} waiting · short queue: move the counter away from the wall"
+msgstr[0] "満員 · {count}人待ち · 列が短いです: カウンターを壁から離してください"
+
+msgid "{count} station is closed · staff are on the way"
+msgid_plural "{count} stations are closed · staff are on the way"
+msgstr[0] "{count}か所が閉鎖中 · スタッフが出勤中です"
+
+msgid "GOTTA AIR"
+msgstr "GOTTA AIR"
+
+msgid "Station manager"
+msgstr "空港マネージャー"
+
+msgid "Gotta Air here. Welcome, your airport is open, and I hear it is the only one with a dent in the carpet."
+msgstr "こちらゴッタエア。ようこそ、空港が開港しましたね。カーペットにへこみがある唯一の空港だとか。"
+
+msgid "Our first flight to Oslo leaves at {departure_time}. It is a small plane, so please keep the luggage small too."
+msgstr "最初のオスロ行きは{departure_time}発です。小型機なので、荷物も控えめにお願いしますね。"
+
+msgid "Your first passengers are on their way in now."
+msgstr "最初の乗客たちがまもなく到着します。"
+
+msgid "Good luck. Gotta make that flight!"
+msgstr "健闘を祈ります。乗り遅れないように！"
+
+msgid "In the full game"
+msgstr "製品版で利用可"
+
+msgid "Demo limit: 1 extra plot (more in the full game)"
+msgstr "体験版の上限: 追加土地は1区画まで（製品版でさらに拡張可能）"
+
+msgid "Send Feedback"
+msgstr "フィードバック"
+
+msgid "{slot}, {time} (Older version)"
+msgstr "{slot}、{time}（旧バージョン）"
+
+msgid "This save is from an older version and cannot be loaded after an update. Please start a New Airport."
+msgstr "このセーブデータは旧バージョンのため、アップデート後は読み込めません。「新しい空港」から始めてください。"
+
+msgid "This save file cannot be read."
+msgstr "このセーブファイルを読み込めませんでした。"
+
+msgid "This save is from a newer version and cannot be loaded. Please update the game."
+msgstr "このセーブデータは新しいバージョンのため読み込めません。ゲームをアップデートしてください。"
+
+msgid "{slot}, {time} (Unreadable)"
+msgstr "{slot}、{time}（読込不可）"
+
+msgid "{slot}, {time} (Newer version)"
+msgstr "{slot}、{time}（新バージョン）"
+
+msgid "Made my flight at the last second!"
+msgstr "ぎりぎりで間に合った！"
+
+msgid "{count} made it at the last second!"
+msgid_plural "{count} made it at the last second!"
+msgstr[0] "{count}人がぎりぎりで搭乗！"
+
+msgid "{count} running late"
+msgid_plural "{count} running late"
+msgstr[0] "遅刻気味 {count}人"
+
+msgid "Follow the tightest running-late passenger"
+msgstr "最も時間が迫っている遅刻気味の乗客を追跡"
+
+msgctxt "pa"
+msgid "PA: Boarding now for {airline} to {city} at Gate {gate}."
+msgstr "館内放送: {gate}番ゲートより、{airline} {city}行きの搭乗を開始いたします。"
+
+msgctxt "pa"
+msgid "PA: Boarding now for {airline} to {city}."
+msgstr "館内放送: {airline} {city}行きの搭乗を開始いたします。"
+
+msgctxt "pa"
+msgid "PA: Boarding now for {flight} at Gate {gate}."
+msgstr "館内放送: {gate}番ゲートより、{flight}の搭乗を開始いたします。"
+
+msgctxt "pa"
+msgid "PA: Boarding now for {flight}."
+msgstr "館内放送: {flight}の搭乗を開始いたします。"
+
+msgctxt "pa"
+msgid "PA: Final call for {airline} to {city} at Gate {gate}. Doors close soon."
+msgstr "館内放送: {gate}番ゲート、{airline} {city}行きの最終搭乗案内です。まもなく搭乗を締め切ります。"
+
+msgctxt "pa"
+msgid "PA: Final call for {airline} to {city}. Doors close soon."
+msgstr "館内放送: {airline} {city}行きの最終搭乗案内です。まもなく搭乗を締め切ります。"
+
+msgctxt "pa"
+msgid "PA: Final call for {flight} at Gate {gate}. Doors close soon."
+msgstr "館内放送: {gate}番ゲート、{flight}の最終搭乗案内です。まもなく搭乗を締め切ります。"
+
+msgctxt "pa"
+msgid "PA: Final call for {flight}. Doors close soon."
+msgstr "館内放送: {flight}の最終搭乗案内です。まもなく搭乗を締め切ります。"
+
+msgctxt "pa"
+msgid "PA: A minor beverage incident in the terminal. Please step around the enthusiasm."
+msgstr "館内放送: ターミナル内で小さな飲み物トラブルが発生しました。足元にご注意のうえ迂回してください。"
+
+msgctxt "pa"
+msgid "PA: One security scanner has paused for a brief reset. Other lanes remain open."
+msgstr "館内放送: 保安検査スキャナー1台が再起動のため一時停止しています。他のレーンをご利用ください。"
+
+msgctxt "pa"
+msgid "PA: A seasonal rush is arriving. Everyone is early except the queue."
+msgstr "館内放送: 行楽シーズンの混雑が始まりました。待機列以外は皆さまお早めの到着です。"
+
+msgctxt "pa"
+msgid "PA: Check-in queue is full. Please admire the terminal flooring while waiting."
+msgstr "館内放送: チェックインの列が満員です。お待ちの間、自慢の床タイルをご覧ください。"
+
+msgctxt "pa"
+msgid "PA: Security queue is full. Take a moment to pre-untie your shoes."
+msgstr "館内放送: 保安検査の列が満員です。今のうちに靴ひもを緩めておきましょう。"
+
+msgctxt "pa"
+msgid "PA: Bravo to the passenger who caught {airline} to {city} at Gate {gate} just in time."
+msgstr "館内放送: {gate}番ゲートから{airline} {city}行きにぎりぎりで間に合ったお客様、お見事です！"
+
+msgctxt "pa"
+msgid "PA: Bravo to the passenger who caught {airline} to {city} just in time."
+msgstr "館内放送: {airline} {city}行きにぎりぎりで間に合ったお客様、お見事です！"
+
+msgctxt "pa"
+msgid "PA: Bravo to the passenger who caught {flight} at Gate {gate} just in time."
+msgstr "館内放送: {gate}番ゲートから{flight}にぎりぎりで間に合ったお客様、お見事です！"
+
+msgctxt "pa"
+msgid "PA: Bravo to the passenger who caught {flight} with seconds to spare."
+msgstr "館内放送: 出発数秒前に{flight}へ駆け込んだお客様、お見事です！"
+
+msgctxt "pa"
+msgid "PA: Our terminal is now rated {stars} stars. Same carpet, slightly prouder management."
+msgstr "館内放送: 当ターミナルが星{stars}つに評価されました。カーペットは同じですが、運営陣は少し誇らしげです。"
+
+msgid "Ramp agents"
+msgstr "ランプ作業員"
+
+msgid "Ramp agent needed for baggage"
+msgstr "手荷物運搬にランプ作業員が必要"
+
+msgid "No ramp agents hired · hire one on Staff"
+msgstr "ランプ作業員が未雇用 · スタッフで雇ってください"
+
+msgid "All ramp agents busy · hire another on Staff"
+msgstr "ランプ作業員が全員作業中 · 追加で雇ってください"
+
+msgid "Ramp agent needed for pushback"
+msgstr "プッシュバックにランプ作業員が必要"
+
+msgid "Emergency tug called (-{fee}) · Hire a ramp agent on Staff"
+msgstr "緊急トーイング車を要請（-{fee}）· スタッフでランプ作業員を雇ってください"
 
 msgid "Language"
 msgstr "言語"
 
-msgid "Game menu"
-msgstr "ゲームメニュー"
-
-msgid "Resume ({key})"
-msgstr "再開 ({key})"
-
 msgctxt "menu"
-msgid "Save"
-msgstr "セーブ"
-
-msgid "Settings"
-msgstr "設定"
-
-msgid "Back"
-msgstr "戻る"
+msgid "Audio"
+msgstr "オーディオ"
 
 msgid "Audio"
 msgstr "オーディオ"
@@ -76,260 +4872,1257 @@ msgstr "効果音"
 msgid "{percent}%"
 msgstr "{percent}%"
 
-msgid "Incidents"
-msgstr "トラブル"
+msgctxt "menu"
+msgid "Main Menu"
+msgstr "メインメニュー"
 
-msgid "Quit log"
-msgstr "終了ログ"
+msgctxt "menu"
+msgid "Quit to Desktop"
+msgstr "デスクトップへ終了"
 
-msgid "Open log folder"
-msgstr "ログフォルダを開く"
+msgctxt "menu"
+msgid "Save & Exit"
+msgstr "保存して終了"
 
-msgid "v{version}"
-msgstr "v{version}"
+msgctxt "menu"
+msgid "Exit without Saving"
+msgstr "保存せずに終了"
 
-msgid "Build mode"
-msgstr "建築モード"
+msgctxt "menu"
+msgid "Cancel"
+msgstr "キャンセル"
 
-msgctxt "narrow build mode sign"
-msgid "Build"
-msgstr "建築"
+msgid "Return to main menu?"
+msgstr "メインメニューに戻りますか？"
 
-msgctxt "build menu"
-msgid "Building"
-msgstr "建物"
+msgid "Quit to desktop?"
+msgstr "ゲームを終了しますか？"
 
-msgctxt "build menu"
-msgid "Operations"
-msgstr "運営"
+msgid "Unsaved progress will be lost."
+msgstr "保存していない進行状況は失われます。"
 
-msgctxt "build menu"
-msgid "Facilities"
-msgstr "設備"
+msgid "Cannot save right now: {reason}"
+msgstr "今は保存できません: {reason}"
 
-msgctxt "build menu"
-msgid "Food & Drink"
-msgstr "飲食"
+msgid "Could not save the game."
+msgstr "ゲームを保存できませんでした。"
 
-msgctxt "build menu"
-msgid "Shops"
-msgstr "ショップ"
+msgid "Camera angle"
+msgstr "カメラ角度"
 
-msgctxt "build menu"
-msgid "Decor"
-msgstr "装飾"
+msgid "Low (38°)"
+msgstr "低め (38°)"
 
-msgctxt "build menu"
-msgid "Remove"
-msgstr "撤去"
+msgid "Medium (54°)"
+msgstr "標準 (54°)"
 
-msgctxt "build menu"
-msgid "Templates"
-msgstr "テンプレート"
+msgid "Top-Down (70°)"
+msgstr "見下ろし (70°)"
 
-msgctxt "build menu"
-msgid "Staff"
-msgstr "スタッフ"
+msgid "Custom ({angle}°)"
+msgstr "カスタム ({angle}°)"
 
-msgctxt "build menu"
-msgid "All"
-msgstr "すべて"
+msgid "Welcome to your new airport! Open Operations on the bottom bar to place a check-in desk, security scanner, and gate desk."
+msgstr "新しい空港へようこそ！下のバーから「運営」を開き、チェックイン・保安検査スキャナー・搭乗ゲートを配置しましょう。"
 
-msgctxt "build menu"
-msgid "Rooms"
-msgstr "部屋"
+msgid "Then open Staff to hire an agent, an officer, and a gate agent so the airport can open. {pause} pauses, {speed} sets speed."
+msgstr "続いて「スタッフ」でチェックイン係・保安検査員・ゲート係員を雇うと開港できます。{pause}で一時停止、{speed}で速度変更ができます。"
 
-msgctxt "build menu"
-msgid "Check-in desk"
-msgstr "チェックイン"
+msgid "Now that the airport is open, some days bring trouble: a spill on the floor, an inspector, a holiday rush. Shall I send those your way?"
+msgstr "空港が開港しましたね。日によっては床の汚れや検査官の視察、連休ラッシュといった出来事が起きます。こうしたトラブルを有効にしますか？"
 
-msgctxt "build menu"
-msgid "Gate desk"
-msgstr "搭乗ゲート"
+msgid "Place Check-in (Operations)"
+msgstr "チェックインを配置（運営）"
 
-msgctxt "build menu"
-msgid "Security"
-msgstr "保安検査"
+msgid "Open a closed Check-in desk"
+msgstr "閉鎖中のチェックインを開く"
 
-msgctxt "build menu"
-msgid "Bag room"
-msgstr "手荷物室"
+msgid "Hire Check-in agent (Staff)"
+msgstr "チェックイン係を雇う（スタッフ）"
 
-msgctxt "build menu"
-msgid "Toilet"
-msgstr "トイレ"
+msgid "Check-in agent on the way"
+msgstr "チェックイン係が出勤中"
 
-msgctxt "price"
-msgid "Free"
-msgstr "無料"
+msgid "Place Security (Operations)"
+msgstr "保安検査を配置（運営）"
 
-msgid "Locked"
-msgstr "ロック中"
+msgid "Open a closed Security scanner or lane"
+msgstr "閉鎖中の保安検査を開く"
 
-msgid "In the full game"
-msgstr "製品版で利用可"
+msgid "Hire Security officer (Staff)"
+msgstr "保安検査員を雇う（スタッフ）"
 
-msgid "Offers ({count})"
-msgstr "オファー ({count})"
+msgid "Security officer on the way"
+msgstr "保安検査員が出勤中"
 
-msgid "Runway"
-msgstr "滑走路"
+msgid "Place Gate Desk (Operations)"
+msgstr "搭乗ゲートを配置（運営）"
 
-msgid "Planner ({key})"
-msgstr "予定表 ({key})"
+msgid "Hire Gate agent (Staff)"
+msgstr "ゲート係員を雇う（スタッフ）"
 
-msgid "Departures ({key})"
-msgstr "出発便 ({key})"
+msgid "Gate agent on the way"
+msgstr "ゲート係員が出勤中"
 
-msgid "Mood ({key})"
-msgstr "気分 ({key})"
+msgid "Place Seats near the gate (Operations)"
+msgstr "ゲート近くに座席を配置（運営）"
 
-msgid "Hints ({key})"
-msgstr "ヒント ({key})"
+msgid "Station unstaffed: hire staff (Staff)"
+msgstr "担当者が不在: スタッフを雇う（スタッフ）"
 
-msgid "Reset hints"
-msgstr "ヒントをリセット"
+msgid "Passengers need a toilet: build Toilet room (Facilities)"
+msgstr "乗客にトイレが必要: トイレを建築（設備）"
 
-msgid "No flights yet"
-msgstr "まだ便がありません"
+msgid "Passengers are hungry: build Cafe (Food & Drink)"
+msgstr "乗客が空腹: カフェを建築（飲食）"
 
-msgctxt "clock"
-msgid "Day {day}  {time}"
-msgstr "{day}日目  {time}"
+msgid "Airline Contracts — Accept to schedule flights"
+msgstr "航空会社との契約 — 受諾して便を組もう"
 
-msgid "Alerts"
-msgstr "通知"
+msgid "{boarded}/{booked} boarded"
+msgstr "{boarded}/{booked}人搭乗"
 
-msgid "Alerts ({count})"
-msgstr "通知 ({count})"
+msgid "3-day rolling on-time rate (70% of your star rating)"
+msgstr "直近3日間の定時搭乗率（星評価の70%を占めます）"
 
-msgid "Alert history"
-msgstr "通知履歴"
+msgid "In terminal: {active}"
+msgstr "ターミナル内: {active}"
 
-msgid "Show alert cards"
-msgstr "通知カードを表示"
+msgid "· {count} late"
+msgstr "· 遅刻 {count}"
 
-msgid "No alerts yet"
-msgstr "通知はまだありません"
+msgid "On time: {percent}%"
+msgstr "定刻率: {percent}%"
 
-msgid "Today"
-msgstr "今日"
+msgid "On time: —"
+msgstr "定刻率: —"
 
-msgid "Tomorrow"
-msgstr "明日"
+msgid "Departures ({key}) · {count} late"
+msgstr "出発便 ({key}) · 遅刻 {count}"
 
-msgid "No flights scheduled"
-msgstr "予定された便はありません"
-
-msgid "Made {made}  Missed {missed}  In terminal {active}"
-msgstr "搭乗 {made}  乗り遅れ {missed}  滞在中 {active}"
-
-msgid "To open the airport"
-msgstr "空港を開港するには"
-
-msgid "Your airport needs"
-msgstr "空港に必要なもの"
-
-msgctxt "staff button"
-msgid "Hire · {wage}/day"
-msgstr "雇用 · {wage}/日"
-
-msgctxt "staff button"
-msgid "Fire"
-msgstr "解雇"
-
-msgid "Check-in agents"
-msgstr "チェックイン係"
-
-msgid "Security officers"
-msgstr "保安検査員"
-
-msgid "Gate agents"
-msgstr "ゲート係員"
-
-msgid "Shop staff"
-msgstr "店舗スタッフ"
-
-msgid "Cleaners"
-msgstr "清掃員"
-
-msgid "Ramp agents"
-msgstr "ランプ作業員"
-
-msgid "{hired} hired, {duty} on duty"
-msgstr "雇用 {hired}、勤務中 {duty}"
-
-msgid "{hired} hired, {duty} cleaning"
-msgstr "雇用 {hired}、清掃中 {duty}"
-
-msgctxt "mood overlay mode"
-msgid "Mood"
-msgstr "気分"
-
-msgctxt "mood overlay mode"
-msgid "Hunger"
-msgstr "空腹"
-
-msgctxt "mood overlay mode"
-msgid "Toilet"
-msgstr "トイレ"
-
-msgctxt "mood overlay mode"
-msgid "Boredom"
-msgstr "退屈"
-
-msgctxt "mood overlay mode"
-msgid "Late"
-msgstr "遅刻"
-
-msgctxt "speed button"
-msgid "Pause ({key})"
-msgstr "一時停止 ({key})"
-
-msgctxt "speed button"
-msgid "Speed {speed}x ({key})"
-msgstr "速度 {speed}x ({key})"
-
-msgctxt "gate caption"
-msgid "Gate {gate}"
-msgstr "{gate}番ゲート"
+msgid "Departures ({key}) · {count} today"
+msgstr "出発便 ({key}) · 本日 {count}便"
 
 msgctxt "gate name"
-msgid "Gate {gate}"
-msgstr "{gate}番ゲート"
+msgid "Click to focus Gate {gate}"
+msgstr "クリックして{gate}番ゲートを表示"
 
-msgctxt "gate caption"
-msgid "up to small planes"
-msgstr "小型機まで"
+msgid "{time} {destination} · Click to follow"
+msgstr "{time} {destination} · クリックして追跡"
 
-msgctxt "gate caption"
-msgid "up to medium planes"
-msgstr "中型機まで"
+msgid "{time} {flight} · Click to follow"
+msgstr "{time} {flight} · クリックして追跡"
 
-msgctxt "gate caption"
-msgid "up to large planes"
-msgstr "大型機まで"
+msgid "{flight} · Click to follow"
+msgstr "{flight} · クリックして追跡"
 
-msgctxt "gate caption"
-msgid "no room for a plane"
-msgstr "駐機スペースなし"
+msgid "Click to follow the tightest running-late passenger"
+msgstr "クリックして最も時間が迫った乗客を追跡"
 
-msgctxt "gate caption"
-msgid "{minutes} min walk"
-msgstr "徒歩 {minutes} 分"
+msgid "Set off the scanner: forgot my belt!"
+msgstr "スキャナー反応: ベルトを外し忘れた！"
 
-msgctxt "sign caption"
-msgid "Closed"
-msgstr "閉鎖中"
+msgid "Set off the scanner: keys in pocket!"
+msgstr "スキャナー反応: ポケットに鍵が！"
+
+msgid "Set off the scanner: coins in pocket!"
+msgstr "スキャナー反応: ポケットに小銭が！"
+
+msgid "Stopped for liquids: oversized shampoo!"
+msgstr "液体物で停止: シャンプーが大きすぎた！"
+
+msgid "Stopped for liquids: too much liquid!"
+msgstr "液体物で停止: 液体が多すぎた！"
+
+msgid "Stopped for liquids: forgot my water bottle!"
+msgstr "液体物で停止: 水筒を出し忘れた！"
+
+msgid "Security search: \"{reason}\""
+msgstr "手荷物検査:「{reason}」"
+
+msgid "One-off charter — cannot move"
+msgstr "単発チャーター便 — 移動不可"
+
+msgid "One-off charter — flies today only"
+msgstr "単発チャーター便 — 本日限定運航"
+
+msgid "Departs {time} today"
+msgstr "本日 {time} 発"
+
+msgid "${amount} payout"
+msgstr "報酬 ${amount}"
+
+msgid "No exit fee"
+msgstr "違約金なし"
+
+msgid "Flies once today only; no exit fee or daily commitment."
+msgstr "本日1回限りの運航です。違約金や毎日の継続義務はありません。"
+
+msgid "Charter available"
+msgstr "チャーター便あり"
+
+msgid "One-off {time} flight to {destination} · click to review"
+msgstr "本日限定 {time}発 {destination}行き · クリックして確認"
+
+msgid "Click to open Airline Contracts"
+msgstr "クリックして航空会社契約を開く"
+
+msgid "this charter's departure window has already passed"
+msgstr "このチャーター便の出発枠はすでに過ぎています"
+
+msgid "Bag room needs a belt"
+msgstr "手荷物室にベルトが必要です"
+
+msgid "Drag a belt from the back of a check-in desk into your Bag Room."
+msgstr "チェックインカウンターの背面から手荷物室の中へベルトをドラッグしてください。"
+
+msgid "Airline offers available"
+msgstr "新しい航空会社オファーがあります"
+
+msgid "{count} new contract waiting · click to review"
+msgid_plural "{count} new contracts waiting · click to review"
+msgstr[0] "{count}件の新規契約が待機中 · クリックして確認"
+
+msgid "Airlines are ready with new flights — click Offers at the top to review contracts."
+msgstr "航空会社が新しい便を用意しています。上部の「オファー」をクリックして契約を確認しましょう。"
+
+msgid "Last-minute charter hop to {destination} — light bags, quick turnaround."
+msgstr "{destination}への直前チャーター便 — 荷物少なめで折り返しもスムーズです。"
+
+msgid "Premium cabin demand to {destination} — passengers pay top fare."
+msgstr "{destination}への上級クラス需要 — 乗客が高額運賃を支払います。"
+
+msgid "Holiday crowd bound for {destination} — plenty of time to shop."
+msgstr "{destination}へ向かう行楽客 — 買い物を楽しむ余裕たっぷりです。"
+
+msgid "Smooth bag handling to {destination} — {airline} covers missed bags."
+msgstr "{destination}への手荷物安心便 — {airline}が積み残し分を補償します。"
+
+msgid "Busy route to {destination} — almost every seat is spoken for."
+msgstr "{destination}への人気路線 — ほぼ満席の予約が入っています。"
+
+msgid "{airline} brings a welcome bonus on your first flight to {destination}."
+msgstr "{airline}が{destination}初便に契約ボーナスを用意しました。"
+
+msgid "Steady partner route to {destination} — fly often for higher fares."
+msgstr "{destination}への安定パートナー路線 — 運航を続けると運賃が上がります。"
+
+msgid "Crisp northern hop with {airline} — steady fjord and business flyers."
+msgstr "{airline}の爽やかな北欧便 — フィヨルド観光客やビジネス客が安定して利用します。"
+
+msgid "Quick city-break run to Berlin — easygoing weekend flyers."
+msgstr "ベルリンへの気軽なショートトリップ便 — のんびりした週末旅行客が中心です。"
+
+msgid "Warm coastal route to Lisbon — sunlit travelers heading south."
+msgstr "温暖な海辺の街リスボン行き — 太陽を求めて南へ向かう旅人たちです。"
+
+msgid "Classic Mediterranean hop to Rome — sightseeing crowds all day."
+msgstr "定番の地中海路線ローマ行き — 終日観光客でにぎわいます。"
+
+msgid "Friendly island link to Dublin — reliable regional commuters."
+msgstr "親しみやすい島国路線ダブリン行き — 堅実な地域ビジネス・通勤客が利用します。"
+
+msgid "Sunny Aegean flight to Athens — leisure flyers ready to board."
+msgstr "陽気なエーゲ海路線アテネ行き — 休暇を楽しむ旅行者が搭乗を待っています。"
+
+msgid "Reliable daily link to {destination} with {airline}."
+msgstr "{airline}が結ぶ{destination}への安定した毎日運航便です。"
+
+msgid "Passengers walk from the entrance through security to the exit."
+msgstr "乗客は入口から保安検査を通って出口へと歩きます。"
+
+msgid "Staff need a clear tile behind each station to work it."
+msgstr "スタッフが作業するには各設備の背後に空きマスが必要です。"
+
+msgid "Gate desks stay closed until an agent is hired."
+msgstr "ゲートデスクは係員を雇うまで閉鎖されたままです。"
+
+msgid "The airport opens once staff reach their stations."
+msgstr "スタッフが持ち場に到着すると空港が開港します。"
+
+msgid "Opens boarding for your first flight."
+msgstr "最初の便の搭乗案内を開始できます。"
+
+msgid "Keeps waiting passengers comfortable."
+msgstr "搭乗を待つ乗客が快適に過ごせます。"
+
+msgid "Passengers check in here before security."
+msgstr "乗客は保安検査の前にここでチェックインします。"
+
+msgid "Closed desks cannot serve waiting passengers."
+msgstr "閉鎖中のカウンターでは乗客に対応できません。"
+
+msgid "Stations stay closed until an agent is hired."
+msgstr "係員を雇うまで設備は閉鎖されたままです。"
+
+msgid "Clears passengers and bags for the gate."
+msgstr "乗客と手荷物を検査してゲートへ通します。"
+
+msgid "Closed security lanes cannot clear passengers."
+msgstr "閉鎖中の保安検査レーンでは乗客を通せません。"
+
+msgid "Stations stay closed until an officer is hired."
+msgstr "検査員を雇うまで設備は閉鎖されたままです。"
+
+msgid "Each extra station needs its own staff member."
+msgstr "設備を増やすたびに担当スタッフも1人ずつ必要になります。"
+
+msgid "Prevents comfort drops while passengers wait."
+msgstr "待機中の乗客の快適さ低下を防ぎます。"
+
+msgid "Hungry passengers lose mood before boarding."
+msgstr "空腹の乗客は搭乗前に気分が下がってしまいます。"
+
+msgid "Seals the terminal so roof and rooms work."
+msgstr "ターミナルを囲い、屋根や部屋が機能するようにします。"
+
+msgid "Prep time — clock starts when staff reach stations"
+msgstr "開港準備中 — スタッフが持ち場に着くと時間が進みます"
+
+msgid "Hire a ramp agent"
+msgstr "ランプ作業員を雇う"
+
+msgid "Checked bags wait until a ramp agent drives the cart."
+msgstr "預け荷物はランプ作業員がカートを運転するまで待機します。"
+
+msgid "Counters stay closed until shop staff arrive."
+msgstr "店舗スタッフが到着するまでカウンターは閉鎖されたままです。"
+
+msgid "Serve {done}/{need} passengers to unlock Cafe & Baggage"
+msgstr "乗客を {done}/{need} 人案内するとカフェと手荷物設備が解放されます"
+
+msgid "Works check-in desks to tag bags and print boarding passes. Hire 1 per open desk."
+msgstr "チェックインカウンターで荷物タグ付けと搭乗券発券を担当します。稼働カウンター1台につき1人雇ってください。"
+
+msgid "Runs security scanners and lanes to clear passengers and carry-on bags. Hire 1 per open scanner."
+msgstr "保安検査スキャナー・レーンで乗客と機内持込手荷物を検査します。稼働スキャナー1台につき1人雇ってください。"
+
+msgid "Works gate desks to start boarding and announce flights. Hire 1 per gate desk."
+msgstr "ゲートデスクで搭乗開始と案内放送を担当します。ゲートデスク1台につき1人雇ってください。"
+
+msgid "Runs cafe, bar, restaurant, and shop counters. Hire once you build a cafe or shop."
+msgstr "カフェ・バー・レストラン・売店のカウンターを担当します。カフェや店舗を建てたら雇ってください。"
+
+msgid "Mops terminal messes and empties full bins. Hire when litter builds up."
+msgstr "ターミナル内の汚れを拭き取り、満杯のゴミ箱を空にします。ゴミが増えてきたら雇ってください。"
+
+msgid "Drives baggage carts between your Bag Room and parked planes. Hire once you build a Bag Room."
+msgstr "手荷物室と駐機中の飛行機の間で手荷物カートを運転します。手荷物室を建てたら雇ってください。"
+
+msgid "Open Planner (P) to view today's schedule or move flights between gates."
+msgstr "予定表 (P) を開くと本日のスケジュール確認やゲート間の便移動ができます。"
+
+msgid "Terminal messes lower passenger mood. Hire a Cleaner on the Staff card to keep things tidy."
+msgstr "ターミナルが汚れると乗客の気分が下がります。スタッフ画面で清掃員を雇って清潔に保ちましょう。"
+
+msgid "Place on terminal floor. A server hands over the order."
+msgstr "ターミナルの床に配置します。店員が注文の商品を手渡します。"
+
+msgid "A currency exchange stand. Passengers change money and pay a small fee."
+msgstr "外貨両替スタンドです。乗客が両替し、少額の手数料が収益になります。"
+
+msgid "Place on terminal floor. A server stands behind it and changes money."
+msgstr "ターミナルの床に配置します。店員が背後に立って両替を行います。"
+
+msgid "Shop staff hired in Staff, and the spot in front clear. Does not cure boredom."
+msgstr "店舗スタッフを雇用し、手前のマスを空けてください。退屈解消効果はありません。"
+
+msgid "Place on terminal floor. The passenger uses it from the cell in front."
+msgstr "ターミナルの床に配置します。乗客は手前のマスから利用します。"
+
+msgid "Keep the spot in front clear. No staff, no upkeep, and does not cure boredom."
+msgstr "手前のマスを空けてください。スタッフも維持費も不要で、退屈解消効果はありません。"
+
+msgid "Place on terminal floor. The passenger sits and leans back during a long wait."
+msgstr "ターミナルの床に配置します。乗客は長い待ち時間の間に腰掛けて背を倒して休みます。"
+
+msgid "← Back"
+msgstr "← 戻る"
+
+msgid "{room} items"
+msgstr "{room}の設備"
+
+msgid "★"
+msgstr "★"
+
+msgid "✓"
+msgstr "✓"
+
+msgctxt "build menu"
+msgid "Search table"
+msgstr "手荷物検査台"
+
+msgctxt "build menu"
+msgid "Confiscation bin"
+msgstr "没収品ボックス"
+
+msgctxt "item name"
+msgid "Search table"
+msgstr "手荷物検査台"
+
+msgctxt "item name"
+msgid "Confiscation bin"
+msgstr "没収品ボックス"
+
+msgid "An inspection table where officers check flagged carry-on bags."
+msgstr "要注意と判定された機内持込手荷物を検査員が詳しく調べる台です。"
+
+msgid "Place it beside the lane's side berth. Optional: the lane works without one."
+msgstr "レーン横の検査スペースに置きます。任意設置で、なくてもレーンは稼働します。"
+
+msgid "No upkeep. Holds the passenger's tray during bag searches."
+msgstr "維持費なし。手荷物検査中に乗客のトレイを置きます。"
+
+msgid "A clear glass bin showing items taken at the security lane today."
+msgstr "今日この保安検査レーンで没収された品物が並べて見える透明ボックスです。"
+
+msgid "Place it next to the search table slot. Resets at midnight."
+msgstr "手荷物検査台スペースの隣に置きます。中身は深夜0時にリセットされます。"
+
+msgid "No upkeep. Inspect it to see today's strangest finds."
+msgstr "維持費なし。調べると今日見つかった珍品を確認できます。"
+
+msgid "Status: Attached to a ready security lane"
+msgstr "状態: 稼働中の保安検査レーンに接続済み"
+
+msgid "Status: Not attached to a ready lane"
+msgstr "状態: 稼働中のレーンに未接続"
+
+msgid "Confiscated today: {count} item"
+msgid_plural "Confiscated today: {count} items"
+msgstr[0] "本日の没収品: {count}点"
+
+msgid "{item} ({quip})"
+msgstr "{item}（{quip}）"
+
+msgid "Recent: {items}"
+msgstr "最近の没収品: {items}"
+
+msgid "Giant alpine snow globe"
+msgstr "巨大なアルプス風スノードーム"
+
+msgid "Contains 400 ml of festive winter magic."
+msgstr "楽しい冬の魔法がたっぷり400 ml入っています。"
+
+msgid "Souvenir city snow globe"
+msgstr "ご当地土産のスノードーム"
+
+msgid "Too much decorative blizzard for cabin altitude."
+msgstr "機内持ち込みには吹雪の飾り水が多すぎました。"
+
+msgid "Musical penguin snow globe"
+msgstr "オルゴール付きペンギンのスノードーム"
+
+msgid "Shakes nicely, still over the 100 ml limit."
+msgstr "振るときれいですが、やはり100 ml制限を超えています。"
+
+msgid "Family-size maple syrup jug"
+msgstr "ファミリーサイズのメープルシロップ容器"
+
+msgid "Emergency pancake rations are still a liquid."
+msgstr "非常用のパンケーキ食料でも液体物扱いです。"
+
+msgid "Artisanal pancake syrup"
+msgstr "職人仕込みのパンケーキシロップ"
+
+msgid "Declared as breakfast insurance."
+msgstr "「朝食の保険」として申告されました。"
+
+msgid "Emergency waffle syrup"
+msgstr "緊急用ワッフルシロップ"
+
+msgid "Sticky situation in tray three."
+msgstr "3番トレイでべたべたの事態が発生しました。"
+
+msgid "Ceramic garden gnome"
+msgstr "陶器のガーデンノーム置物"
+
+msgid "Claimed to be a tiny travel companion."
+msgstr "「小さな旅の相棒」と言い張っていました。"
+
+msgid "Uncle Barnaby's lucky gnome"
+msgstr "バーナビーおじさんの幸運のノーム像"
+
+msgid "Too heavy for the overhead bin."
+msgstr "頭上の荷物棚には重すぎます。"
+
+msgid "Pointy-hat lawn gnome"
+msgstr "とんがり帽子の庭用ノーム像"
+
+msgid "Refused to fit in a quart-size zip bag."
+msgstr "1リットルジッパー袋にどうしても収まりませんでした。"
+
+msgid "Twelve-pound bowling ball"
+msgstr "12ポンドのボウリング球"
+
+msgid "Definitely not a compact neck pillow."
+msgstr "どう見ても携帯用ネックピローではありません。"
+
+msgid "Lucky league bowling ball"
+msgstr "縁起物のリーグ戦用ボウリング球"
+
+msgid "Spare shoes were fine; the ball had to stay."
+msgstr "スペア用シューズは通せましたが、球はお預かりです。"
+
+msgid "Polished tournament ball"
+msgstr "ぴかぴかの競技用ボウリング球"
+
+msgid "Would roll straight out of the overhead locker."
+msgstr "頭上の収納棚から転がり落ちてきそうです。"
+
+msgid "Plastic lawn flamingo"
+msgstr "プラスチック製の庭用フラミンゴ"
+
+msgid "Needs its own boarding pass at this height."
+msgstr "この高さでは専用の搭乗券が要りそうです。"
+
+msgid "Tropical souvenir flamingo"
+msgstr "南国土産のフラミンゴ置物"
+
+msgid "Tried to pass as a walking stick."
+msgstr "「杖」として通そうとしました。"
+
+msgid "Neon pink yard flamingo"
+msgstr "蛍光ピンクの庭用フラミンゴ"
+
+msgid "Too fabulous for under-seat stowage."
+msgstr "足元の座席下収納には華やかすぎます。"
+
+msgid "Giant bath-time rubber duck"
+msgstr "特大お風呂用ラバーダック"
+
+msgid "Squeaked during the X-ray scan."
+msgstr "X線検査中に「キュッ」と鳴きました。"
+
+msgid "Captain Squeaks the duck"
+msgstr "アヒルのスクィークス船長"
+
+msgid "Suspiciously buoyant carry-on cargo."
+msgstr "妙に浮力がありそうな機内持込手荷物です。"
+
+msgid "Oversized squeaky duck"
+msgstr "大きすぎる鳴き笛アヒル"
+
+msgid "Filled with bathwater from hotel checkout."
+msgstr "ホテルのチェックアウト時に詰めたお風呂のお湯入りでした。"
+
+msgid "Comically giant wrench"
+msgstr "漫画みたいに巨大なレンチ"
+
+msgid "Just in case the seat reclines slowly."
+msgstr "「座席のリクライニングが固い時用」だそうです。"
+
+msgid "Pocket-sized mega wrench"
+msgstr "自称ポケットサイズのメガレンチ"
+
+msgid "Definitely not an approved nail file."
+msgstr "どう見ても許可された爪やすりではありません。"
+
+msgid "Half-metre pipe wrench"
+msgstr "長さ50 cmのパイプレンチ"
+
+msgid "Way past the tool-length limit."
+msgstr "工具の長さ制限を大幅にオーバーしています。"
+
+msgid "Unlabelled mystery thermos"
+msgstr "ラベルなしの謎の水筒"
+
+msgid "Smells faintly of soup, tea, or jet fuel."
+msgstr "スープかお茶かジェット燃料か、かすかに不思議な匂いがします。"
+
+msgid "Grandma's mystery thermos"
+msgstr "おばあちゃんの謎の水筒"
+
+msgid "Could be cocoa; still 600 ml too large."
+msgstr "ココアかもしれませんが、600 mlオーバーです。"
+
+msgid "Rattling stainless thermos"
+msgstr "カラカラ鳴るステンレス水筒"
+
+msgid "No one wants to open it at the checkpoint."
+msgstr "検査場で誰も開けたくありませんでした。"
+
+msgid "Fast-Track"
+msgstr "ファストトラック"
+
+msgid "Fast-Track: On"
+msgstr "ファストトラック: オン"
+
+msgid "Fast-Track: Off"
+msgstr "ファストトラック: オフ"
+
+msgid "Switch this security lane back to Standard"
+msgstr "この保安検査レーンを通常レーンに戻します"
+
+msgid "Switch this security lane to Fast-Track (VIP and tight-connection passengers)"
+msgstr "この保安検査レーンをファストトラック（VIP・時間切迫客優先）に切り替えます"
+
+msgid "Breezed through Fast-Track security"
+msgstr "ファストトラック保安検査をすいすい通過した"
+
+msgctxt "build menu"
+msgid "Security lane"
+msgstr "保安検査レーン"
+
+msgctxt "build menu"
+msgid "2x3"
+msgstr "2x3"
+
+msgid "A complete security lane: tray table, X-ray belt, arch and pickup table."
+msgstr "トレイ台・X線ベルト・ゲート・荷物受取台が揃った一式保安検査レーンです。"
+
+msgid "Click once to place all four parts together. Press R to turn it."
+msgstr "1クリックで4パーツをまとめて配置できます。Rキーで向きを変えられます。"
+
+msgid "Needs clear floor for the lane, queue, exit and two officer spots."
+msgstr "レーン本体・待機列・出口・検査員2人分の空き床が必要です。"
+
+msgctxt "build menu"
+msgid "Starter Toilet"
+msgstr "スタータートイレ"
+
+msgctxt "build menu"
+msgid "Starter Cafe"
+msgstr "スターターカフェ"
+
+msgctxt "build menu"
+msgid "Kit"
+msgstr "キット"
+
+msgctxt "build status"
+msgid "Placed {kit} for {cost}"
+msgstr "{cost}で{kit}を配置しました"
+
+msgctxt "build status"
+msgid "{kit}: click to place"
+msgstr "{kit}: クリックで配置"
+
+msgid "Furnished room kit"
+msgstr "設備付き部屋キット"
+
+msgid "Places floor, walls, a door, and required items in one click."
+msgstr "床・壁・ドア・必要設備をワンクリックでまとめて配置します。"
+
+msgid "{w}x{h} kit"
+msgstr "{w}x{h} キット"
+
+msgid "Click (R rotates)"
+msgstr "クリックで配置（Rで回転）"
+
+msgctxt "build menu"
+msgid "Starter Bar"
+msgstr "スターターバー"
+
+msgctxt "build menu"
+msgid "Starter Restaurant"
+msgstr "スターターレストラン"
+
+msgctxt "build menu"
+msgid "Starter Bag room"
+msgstr "スターター手荷物室"
+
+msgctxt "build menu"
+msgid "Starter Kiosk"
+msgstr "スターターキオスク"
+
+msgctxt "build menu"
+msgid "Starter Pharmacy"
+msgstr "スターター薬局"
+
+msgctxt "build menu"
+msgid "Starter Duty free"
+msgstr "スターター免税店"
+
+msgctxt "build menu"
+msgid "Starter Fashion store"
+msgstr "スターターファッション店"
+
+msgctxt "build menu"
+msgid "Starter Play area"
+msgstr "スタータープレイエリア"
+
+msgctxt "build menu"
+msgid "Starter Lounge"
+msgstr "スターターラウンジ"
+
+msgctxt "build menu"
+msgid "Starter Shower"
+msgstr "スターターシャワー"
+
+msgctxt "build menu"
+msgid "Starter Break Room"
+msgstr "スターター休憩室"
+
+msgctxt "build status"
+msgid "{item} row of {count}, cost {cost}"
+msgstr "{item} {count}連（費用 {cost}）"
+
+msgctxt "build status"
+msgid "{item} row of {count}, cost {cost}, {blocked} blocked: {reason}"
+msgstr "{item} {count}連（費用 {cost}、{blocked}件不可: {reason}）"
+
+msgctxt "build status"
+msgid "Nothing to place"
+msgstr "配置できる場所がありません"
+
+msgctxt "build status"
+msgid "Placed {count} {item}"
+msgstr "{item}を{count}個配置しました"
+
+msgctxt "build status"
+msgid "Placed {count} {item} for {cost}"
+msgstr "{cost}で{item}を{count}個配置しました"
+
+msgctxt "build status"
+msgid "Placed {count} {item}, skipped {skipped}: {reason}"
+msgstr "{item}を{count}個配置しました（{skipped}件スキップ: {reason}）"
+
+msgctxt "build status"
+msgid "Placed {count} {item} for {cost}, skipped {skipped}: {reason}"
+msgstr "{cost}で{item}を{count}個配置しました（{skipped}件スキップ: {reason}）"
+
+msgctxt "build juice"
+msgid "-${amount}"
+msgstr "-${amount}"
+
+msgctxt "build juice"
+msgid "+${amount}"
+msgstr "+${amount}"
+
+msgctxt "build menu"
+msgid "Break Room"
+msgstr "休憩室"
 
 msgctxt "room type"
-msgid "Bag room"
-msgstr "手荷物室"
+msgid "Break Room"
+msgstr "休憩室"
 
-msgctxt "room type"
-msgid "Toilet"
-msgstr "トイレ"
+msgctxt "room name, mid-sentence"
+msgid "break room"
+msgstr "休憩室"
 
-msgctxt "room status"
-msgid "Ready"
-msgstr "準備完了"
+msgctxt "room need"
+msgid "Needs a bench"
+msgstr "ベンチが必要"
+
+msgctxt "status reason"
+msgid "needs a bench"
+msgstr "ベンチが必要"
+
+msgid "Marks floor as a break room. Tired staff rest here during lulls to recover energy."
+msgstr "床を休憩室に指定します。疲れたスタッフが空き時間にここで休んで体力を回復します。"
+
+msgid "Drag a rectangle, then add a bench inside. High prestige speeds up recovery."
+msgstr "四角形にドラッグし、中にベンチを置いてください。部屋の格式が高いほど回復が早くなります。"
+
+msgid "At least 2x3, with a bench. Staff never leave a busy queue mid-rush."
+msgstr "最小2x3、ベンチが必要です。混雑中に待機列を離れて休憩することはありません。"
+
+msgid "Benches {count}"
+msgstr "ベンチ {count}"
+
+msgid "Staff rest here during lulls"
+msgstr "スタッフが空き時間に休憩します"
+
+msgid "Prestige: Lv. {level} / 5 ({score} pts · +{bonus}% recovery)"
+msgstr "格式: レベル {level} / 5（{score} pt · 回復速度 +{bonus}%）"
+
+msgid "{hired} hired, {duty} cleaning, {on_break} on break"
+msgstr "雇用 {hired}、清掃中 {duty}、休憩中 {on_break}"
+
+msgid "{hired} hired, {duty} on duty, {on_break} on break"
+msgstr "雇用 {hired}、勤務中 {duty}、休憩中 {on_break}"
+
+msgid "On break {pct}%"
+msgstr "休憩中 {pct}%"
+
+msgid "Tired {pct}%"
+msgstr "疲労 {pct}%"
+
+msgid "Rested {pct}%"
+msgstr "元気 {pct}%"
+
+msgid "+ {count} more"
+msgstr "ほか +{count}件"
+
+msgctxt "build menu"
+msgid "Award trophy"
+msgstr "アワードトロフィー"
+
+msgctxt "item name"
+msgid "Award trophy"
+msgstr "アワードトロフィー"
+
+msgctxt "item name, mid-sentence"
+msgid "award trophy"
+msgstr "アワードトロフィー"
+
+msgctxt "refusal detail"
+msgid "No award trophies available"
+msgstr "配置できるトロフィーがありません"
+
+msgid "Earn an Award Trophy at the Annual Airport Awards"
+msgstr "年次空港アワードで受賞してトロフィーを獲得しましょう"
+
+msgid "An Annual Airport Awards trophy earned for airport excellence."
+msgstr "優れた空港運営に贈られる年次空港アワードのトロフィーです。"
+
+msgid "Place it inside any room to add +30 Room Prestige points."
+msgstr "好きな部屋の中に置くと、部屋の格式ポイントが +30 加算されます。"
+
+msgid "Free to place up to the number of trophies earned. No upkeep."
+msgstr "獲得数まで無料で配置でき、維持費もかかりません。"
+
+msgid "Year {year} Airport Awards"
+msgstr "{year}年目 空港アワード"
+
+msgid "On-Time Champion"
+msgstr "定時運航チャンピオン"
+
+msgid "Spotless Terminal"
+msgstr "ぴかぴかターミナル賞"
+
+msgid "Happiest Passengers"
+msgstr "乗客満足度ナンバーワン"
+
+msgid "Best Hospitality"
+msgstr "ベストホスピタリティ賞"
+
+msgid "Airport of the Year"
+msgstr "エアポート・オブ・ザ・イヤー"
+
+msgid "Won"
+msgstr "受賞"
+
+msgid "Nominated"
+msgstr "ノミネート"
+
+msgid "+${amount}"
+msgstr "+${amount}"
+
+msgid "$0"
+msgstr "$0"
+
+msgid "Total awarded: +${cash} · {count} Award Trophy unlocked"
+msgid_plural "Total awarded: +${cash} · {count} Award Trophies unlocked"
+msgstr[0] "獲得賞金合計: +${cash} · トロフィー {count}個獲得"
+
+msgid "Place your Award Trophy from the Decor tab for +30 Room Prestige!"
+msgstr "「装飾」タブからアワードトロフィーを置くと、部屋の格式が +30 上がります！"
+
+msgid "Win a category next year to earn an Award Trophy for +30 Room Prestige!"
+msgstr "来年どこかの部門で受賞すると、格式 +30 のアワードトロフィーが手に入ります！"
+
+msgid "Continue"
+msgstr "続ける"
+
+msgid "Sandbox"
+msgstr "サンドボックス"
+
+msgid "Achievement Unlocked"
+msgstr "実績解除"
+
+msgid "Certified {star}★: {title}"
+msgstr "{star}★認定達成: {title}"
+
+msgid "Your airport earned {star}★ {title} certification!"
+msgstr "あなたの空港が {star}★「{title}」認定を取得しました！"
+
+msgid "One-time cash grant: +${grant}"
+msgstr "一時補助金: +${grant}"
+
+msgid "Permanent contract fee prestige bonus: +{percent}%"
+msgstr "恒久的な契約報酬ボーナス: +{percent}%"
+
+msgid "Reach 2★ Regional Terminal to unlock permanent contract fee bonuses."
+msgstr "2★「地域ターミナル」に到達すると恒久的な契約報酬ボーナスが解放されます。"
+
+msgid "Start a New Airport anytime, or wishlist the full game for larger planes, restaurants, lounges, car parks, and major airport chaos."
+msgstr "いつでも「新しい空港」を始められます。大型機、レストラン、ラウンジ、駐車場、さらなる空港のカオスが待つ製品版をウィッシュリストに登録しましょう。"
+
+msgid "Day 5 complete — thanks for playing the demo!"
+msgstr "5日目完了 — 体験版をプレイしていただきありがとうございました！"
+
+msgid "Your 5-day airport summary"
+msgstr "5日間の空港まとめ"
+
+msgid "Passengers who made their flight"
+msgstr "搭乗できた乗客"
+
+msgid "Cash earned"
+msgstr "獲得資金"
+
+msgid "${amount}"
+msgstr "${amount}"
+
+msgid "Current balance"
+msgstr "現在の残高"
+
+msgid "Airport rating"
+msgstr "空港評価"
+
+msgid "{stars} stars"
+msgstr "{stars}★"
+
+msgid "Wishlist on Steam"
+msgstr "Steamでウィッシュリストに追加"
+
+msgid "Back to Title"
+msgstr "タイトルへ戻る"
+
+msgid "Peak"
+msgstr "ピーク"
+
+msgid "Hub"
+msgstr "ハブ"
+
+msgid "Hub Contract (+10% fee, +1 low-rating grace day)"
+msgstr "ハブ契約（報酬 +10%、低評価猶予 +1日）"
+
+msgid "Click to move gate or end contract, or drag onto another gate row."
+msgstr "クリックでゲート移動や契約終了、または別のゲート行へドラッグできます。"
+
+msgid "Contract ended — cannot move"
+msgstr "契約終了済み — 移動不可"
+
+msgid "One-off flight — cannot move"
+msgstr "単発便 — 移動不可"
+
+msgid "Shop staff hired in Staff, and the spot in front clear."
+msgstr "店舗スタッフを雇用し、手前のマスを空けておく必要があります。"
+
+msgid "floor congestion: light flow to bottleneck"
+msgstr "床の混雑度: スムーズ〜ボトルネック"
+
+msgid "room prestige level"
+msgstr "部屋の格式レベル"
+
+msgctxt "mood overlay mode"
+msgid "Congestion"
+msgstr "混雑度"
+
+msgctxt "mood overlay mode"
+msgid "Prestige"
+msgstr "格式"
+
+msgid "Light"
+msgstr "空いている"
+
+msgid "Busy"
+msgstr "やや混雑"
+
+msgid "Congested"
+msgstr "大混雑"
+
+msgid "Lv. 1"
+msgstr "レベル 1"
+
+msgid "Lv. 2"
+msgstr "レベル 2"
+
+msgid "Lv. 3"
+msgstr "レベル 3"
+
+msgid "Lv. 4"
+msgstr "レベル 4"
+
+msgid "Lv. 5"
+msgstr "レベル 5"
+
+msgid "Morning Peak +15%"
+msgstr "朝のピーク +15%"
+
+msgid "Evening Peak +15%"
+msgstr "夕方のピーク +15%"
+
+msgid "Bronze +5%"
+msgstr "ブロンズ +5%"
+
+msgid "Bronze loyalty: this airline's offers pay 5% more."
+msgstr "ブロンズ信頼度: この航空会社のオファー報酬が5%増えます。"
+
+msgid "Silver +10%"
+msgstr "シルバー +10%"
+
+msgid "Silver loyalty: this airline's offers pay 10% more."
+msgstr "シルバー信頼度: この航空会社のオファー報酬が10%増えます。"
+
+msgid "Gold +15%"
+msgstr "ゴールド +15%"
+
+msgid "Gold loyalty: this airline's offers pay 15% more and unlock Hub Contracts at 3★+."
+msgstr "ゴールド信頼度: この航空会社のオファー報酬が15%増え、3★以上でハブ契約が解放されます。"
+
+msgid "Gold Hub Contract: +10% prestige fee bonus and +1 low-rating grace day."
+msgstr "ゴールドハブ契約: 格式報酬ボーナス +10%、低評価猶予 +1日。"
+
+msgid "Hub Contract"
+msgstr "ハブ契約"
+
+msgid "Peak rush wave: +15% passenger fee included."
+msgstr "ピーク混雑便: 乗客報酬 +15% 込み。"
+
+msgid "Gate {gate} — departs in quiet night"
+msgstr "{gate}番ゲート — 静かな夜間に出発"
+
+msgid "Gate {gate} — taxi route unavailable"
+msgstr "{gate}番ゲート — 誘導路ルートなし"
+
+msgid "Gate {gate} — building taxi spur"
+msgstr "{gate}番ゲート — 連絡誘導路を建設中"
+
+msgid "Gate {gate} — no usable stand"
+msgstr "{gate}番ゲート — 使用できる駐機場なし"
+
+msgid "Gate {gate} — stand too small"
+msgstr "{gate}番ゲート — 駐機場が狭すぎる"
+
+msgid "Certification: {star}★ {title} (+{bonus}% contract fees)"
+msgstr "認定: {star}★ {title}（契約報酬 +{bonus}%）"
+
+msgid "Click for airport certification progress."
+msgstr "クリックして空港認定の進捗を確認します。"
+
+msgid "{star}★"
+msgstr "{star}★"
+
+msgid "Airport Certification"
+msgstr "空港認定"
+
+msgid "Certification tracking is not active."
+msgstr "認定の記録が有効になっていません。"
+
+msgid "{star}★ {title}"
+msgstr "{star}★ {title}"
+
+msgid "Unrated"
+msgstr "未認定"
+
+msgid "Current: {level} • Permanent contract fee bonus: +{bonus}%"
+msgstr "現在: {level} • 恒久的な契約報酬ボーナス: +{bonus}%"
+
+msgid "✓ {star}★ {title}"
+msgstr "✓ {star}★ {title}"
+
+msgid "Earned • +${grant} • +{bonus}% fees"
+msgstr "取得済み • +${grant} • 報酬 +{bonus}%"
+
+msgid "Earned • +${grant}"
+msgstr "取得済み • +${grant}"
+
+msgid "+${grant} • +{bonus}% fees"
+msgstr "+${grant} • 報酬 +{bonus}%"
+
+msgid "+${grant}"
+msgstr "+${grant}"
+
+msgid "Airport opened"
+msgstr "空港を開港"
+
+msgid "Rating: {current} / {target}★"
+msgstr "評価: {current} / {target}★"
+
+msgid "Passengers made: {current} / {target}"
+msgstr "搭乗達成: {current} / {target}人"
+
+msgid "Operational security lane built"
+msgstr "稼働中の保安検査レーンを建築"
+
+msgid "Operational bag room built"
+msgstr "稼働中の手荷物室を建築"
+
+msgid "Medium+ planes departed: {current} / {target}"
+msgstr "中型機以上の出発: {current} / {target}便"
+
+msgid "Large planes departed: {current} / {target}"
+msgstr "大型機の出発: {current} / {target}便"
+
+msgid "Made rate: -- / {target}%"
+msgstr "搭乗率: -- / {target}%"
+
+msgid "Made rate: {current}% / {target}%"
+msgstr "搭乗率: {current}% / {target}%"
+
+msgid "Prestige: Lv. {level} / 5 ({score} pts · +{bonus}% spend)"
+msgstr "格式: レベル {level} / 5（{score} pt · 客単価 +{bonus}%）"
+
+msgid "Prestige: Lv. {level} / 5 ({score} pts)"
+msgstr "格式: レベル {level} / 5（{score} pt）"
+
+msgid "Size {size} · Setup {setup} · Decor {decor} · Awards {trophy}"
+msgstr "広さ {size} · 設備 {setup} · 装飾 {decor} · 受賞 {trophy}"
+
+msgid "Add decor or trophies to raise prestige"
+msgstr "装飾やトロフィーを置いて格式を高めましょう"
+
+msgid "{slot}, {time} (Sandbox)"
+msgstr "{slot}、{time}（サンドボックス）"
+
+msgid "Lv. {level}"
+msgstr "レベル {level}"
+
+msgid "Train ${cost}"
+msgstr "研修 ${cost}"
+
+msgid "Upgrade work speed to +{pct}%"
+msgstr "作業速度を +{pct}% に強化"
+
+msgid "Max"
+msgstr "最大"
+
+msgid "Career"
+msgstr "キャリア"
+
+msgid "Free-Build Sandbox"
+msgstr "自由建築サンドボックス"
+
+msgid "Unlimited Funds"
+msgstr "資金無制限"
+
+msgid "All Tiers & Land Unlocked"
+msgstr "全段階・全土地解放済み"
+
+msgctxt "menu"
+msgid "Start Airport"
+msgstr "空港を開始"
+
+msgid "Free-build sandbox with rating, offers, and awards active."
+msgstr "評価・オファー・アワードが有効な自由建築サンドボックスです。"
+
+msgid "No spending limit; Rescue Grant skipped."
+msgstr "資金上限なし。救済補助金はスキップされます。"
+
+msgid "Starts with $250,000 budget."
+msgstr "$250,000の資金からスタートします。"
+
+msgid "Standard $25,000 budget, unlock progression, 1-5★ certification, and Career achievements."
+msgstr "通常の$25,000資金、段階的アンロック、1〜5★認定、キャリア実績に対応しています。"
+
+msgid "Open for Business"
+msgstr "開港営業開始"
+
+msgid "Open the airport"
+msgstr "空港を開港する"
+
+msgid "First Departure"
+msgstr "記念すべき初便"
+
+msgid "Depart your first flight"
+msgstr "最初の便を出発させる"
+
+msgid "Fifty Flyers"
+msgstr "50人の旅立ち"
+
+msgid "Serve 50 passengers"
+msgstr "乗客を50人送り出す"
+
+msgid "Busy Concourse"
+msgstr "にぎわうコンコース"
+
+msgid "Serve 250 passengers"
+msgstr "乗客を250人送り出す"
+
+msgid "Thousand Flyers"
+msgstr "千客万来エアポート"
+
+msgid "Serve 1,000 passengers"
+msgstr "乗客を1,000人送り出す"
+
+msgid "Local Strip"
+msgstr "地方飛行場"
+
+msgid "Earn 1★ Local Strip Certification"
+msgstr "1★「地方飛行場」認定を取得する"
+
+msgid "Regional Terminal"
+msgstr "地域ターミナル"
+
+msgid "Earn 2★ Regional Terminal Certification"
+msgstr "2★「地域ターミナル」認定を取得する"
+
+msgid "National Hub"
+msgstr "国内ハブ"
+
+msgid "Earn 3★ National Hub Certification"
+msgstr "3★「国内ハブ」認定を取得する"
+
+msgid "International Gateway"
+msgstr "国際ゲートウェイ"
+
+msgid "Earn 4★ International Gateway Certification"
+msgstr "4★「国際ゲートウェイ」認定を取得する"
+
+msgid "World-Class Airport"
+msgstr "世界水準の空港"
+
+msgid "Earn 5★ World-Class Airport Certification"
+msgstr "5★「世界水準の空港」認定を取得する"
+
+msgid "Build Tier 2"
+msgstr "建築ティア 2"
+
+msgid "Reach Build Tier 2"
+msgstr "建築ティア2に到達する"
+
+msgid "Build Tier 3"
+msgstr "建築ティア 3"
+
+msgid "Reach Build Tier 3"
+msgstr "建築ティア3に到達する"
+
+msgid "Build Tier 4"
+msgstr "建築ティア 4"
+
+msgid "Reach Build Tier 4"
+msgstr "建築ティア4に到達する"
+
+msgid "Security Pro"
+msgstr "保安検査のプロ"
+
+msgid "Build a full Security Lane"
+msgstr "フル構成の保安検査レーンを建てる"
+
+msgid "Baggage Master"
+msgstr "手荷物マスター"
+
+msgid "Open a ready Bag Room"
+msgstr "稼働可能な手荷物室を開設する"
+
+msgid "Medium Wings"
+msgstr "中型機の翼"
+
+msgid "Depart a Medium plane"
+msgstr "中型機を出発させる"
+
+msgid "Heavy Jet"
+msgstr "大型ジェット機"
+
+msgid "Depart a Large plane"
+msgstr "大型機を出発させる"
+
+msgid "Gold Loyalty"
+msgstr "ゴールド信頼関係"
+
+msgid "Reach Gold loyalty with an airline"
+msgstr "いずれかの航空会社とゴールド信頼度に到達する"
+
+msgid "Hub Partner"
+msgstr "ハブパートナー"
+
+msgid "Accept a Gold Hub Contract"
+msgstr "ゴールドハブ契約を受諾する"
+
+msgid "Five-Star Room"
+msgstr "五つ星の部屋"
+
+msgid "Raise any room to Prestige Level 5"
+msgstr "いずれかの部屋を格式レベル5にする"
+
+msgid "Award Winner"
+msgstr "アワード受賞空港"
+
+msgid "Win an Annual Airport Award"
+msgstr "年次空港アワードで賞を獲得する"
+
+msgid "Win Airport of the Year"
+msgstr "「エアポート・オブ・ザ・イヤー」を受賞する"

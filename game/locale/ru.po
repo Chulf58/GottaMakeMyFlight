@@ -8,6 +8,4501 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
 
+msgid "No flights yet"
+msgstr "Пока нет рейсов"
+
+msgid "No flights yet: the rating starts when passengers make or miss a flight."
+msgstr "Рейсов пока нет: рейтинг начнётся, когда пассажиры успеют на рейс или опоздают на него."
+
+msgid "Made it: {share}% ({made} of {count} passenger)"
+msgid_plural "Made it: {share}% ({made} of {count} passengers)"
+msgstr[0] "Успели: {share}% ({made} из {count} пассажира)"
+msgstr[1] "Успели: {share}% ({made} из {count} пассажиров)"
+msgstr[2] "Успели: {share}% ({made} из {count} пассажиров)"
+
+msgid "Airport rating: {stars} of {max}"
+msgstr "Рейтинг аэропорта: {stars} из {max}"
+
+msgid "Mood: {mood} of {max}"
+msgstr "Настроение: {mood} из {max}"
+
+msgid "Incident adjustment: {amount} stars"
+msgstr "Поправка за происшествия: {amount} зв."
+
+msgid "Days counted: {days} of {window}"
+msgstr "Учтено дней: {days} из {window}"
+
+msgid "Floor tile. Passengers can only walk and stand on floor."
+msgstr "Плитка пола. Пассажиры могут ходить и стоять только на полу."
+
+msgid "Drag a rectangle to lay many tiles at once. Everything else is built on floor."
+msgstr "Протяните прямоугольник, чтобы уложить сразу много плиток. Всё остальное строится на полу."
+
+msgid "Land you own. Removing a tile refunds half."
+msgstr "Земля в вашей собственности. Удаление плитки возвращает половину стоимости."
+
+msgid "A wall along a tile edge. Passengers cannot cross it and it blocks the view."
+msgstr "Стена по краю клетки. Пассажиры не могут пройти через неё, и она перекрывает обзор."
+
+msgid "Drag along a line to build a row. Walls close in the terminal and its rooms."
+msgstr "Протяните линию, чтобы построить ряд. Стены замыкают терминал и его помещения."
+
+msgid "One wall per tile edge. Removing it refunds half."
+msgstr "Одна стена на грань клетки. Удаление возвращает половину стоимости."
+
+msgid "A glass wall. Passengers cannot cross it, but it lets the view through."
+msgstr "Стеклянная стена. Пассажиры не проходят сквозь неё, но она пропускает обзор."
+
+msgid "Drag along a line like a wall. Screens and decor can be seen through glass."
+msgstr "Протяните линию, как обычную стену. Сквозь стекло видны экраны и декор."
+
+msgid "Costs more than a plain wall. One per tile edge."
+msgstr "Стоит дороже обычной стены. Одна на грань клетки."
+
+msgid "A door in a wall. Passengers walk through it."
+msgstr "Дверь в стене. Пассажиры проходят через неё."
+
+msgid "Click a wall edge to put a door in the wall."
+msgstr "Нажмите на грань со стеной, чтобы поставить в неё дверь."
+
+msgid "A plain wall on each side of it."
+msgstr "С каждой стороны от неё нужна обычная стена."
+
+msgid "The way into the terminal. Passengers come in here from the road and car parks."
+msgstr "Вход в терминал. Сюда пассажиры приходят с дороги и парковок."
+
+msgid "Place it on the outer edge of the terminal, facing in."
+msgstr "Разместите на внешнем краю терминала, лицом внутрь."
+
+msgid "The outside edge with no floor behind it. Keep the spot in front clear."
+msgstr "Внешний край без пола позади. Оставьте место перед входом свободным."
+
+msgid "The way out to the planes. Passengers leave the terminal here to board."
+msgstr "Выход к самолётам. Здесь пассажиры выходят из терминала на посадку."
+
+msgid "Place it on the outer edge. A gate desk links to an exit facing west, north or east."
+msgstr "Разместите на внешнем краю. Стойка выхода связывается с выходом на запад, север или восток."
+
+msgid "Where passengers check in and hand over a bag."
+msgstr "Здесь пассажиры проходят регистрацию и сдают багаж."
+
+msgid "A check-in agent works behind it. A belt from its back edge takes bags to a bag room."
+msgstr "За стойкой работает сотрудник регистрации. Лента с тыльной стороны уносит багаж в багажное отделение."
+
+msgid "An agent hired in Staff, or it stays closed. Keep the spot behind and in front clear."
+msgstr "Нужен сотрудник из раздела «Персонал», иначе стойка закрыта. Оставьте места спереди и сзади свободными."
+
+msgid "A basic security scanner. Passengers walk through it to be screened."
+msgstr "Базовый сканер досмотра. Пассажиры проходят через него для проверки."
+
+msgid "A security officer works beside it. A full lane is faster but costs more."
+msgstr "Рядом работает сотрудник досмотра. Полная линия быстрее, но стоит дороже."
+
+msgid "An officer hired in Staff, or it stays closed. Keep its staff spot and way in clear."
+msgstr "Нужен сотрудник из раздела «Персонал», иначе пост закрыт. Не перекрывайте место сотрудника и проход."
+
+msgid "A row of seats. Passengers wait here for their flight and their mood recovers."
+msgstr "Ряд кресел. Здесь пассажиры ждут рейс и восстанавливают настроение."
+
+msgid "Place it near the gate and turn it. Waiting passengers sit on it."
+msgstr "Поставьте рядом с выходом и поверните. Ожидающие пассажиры сядут сюда."
+
+msgid "No staff and no upkeep. Add enough seats for the passengers waiting."
+msgstr "Не требует персонала и обслуживания. Поставьте достаточно мест для ожидающих пассажиров."
+
+msgid "Makes a gate. It links to the nearest free exit facing the planes; the plane parks out from it."
+msgstr "Создаёт выход на посадку. Связывается с ближайшим свободным выходом к самолётам; самолёт паркуется снаружи."
+
+msgid "Each flight is given a gate. A gate takes the next free letter, starting at A."
+msgstr "Каждому рейсу назначается выход. Выход получает следующую свободную букву, начиная с A."
+
+msgid "Within 4 cells of a free exit facing the planes, with room for the plane. No staff needed."
+msgstr "В пределах 4 клеток от свободного выхода к самолётам, где есть место для борта. Персонал не нужен."
+
+msgid "A floor screen that entertains passengers waiting in front of it."
+msgstr "Напольный экран, развлекающий пассажиров, которые ждут перед ним."
+
+msgid "It covers a fan of floor up to 5 rows ahead. A plain wall blocks it, glass does not."
+msgstr "Охватывает сектор пола до 5 рядов вперёд. Обычная стена перекрывает обзор, стекло — нет."
+
+msgid "Costs upkeep every day, inside a room or not."
+msgstr "Требует ежедневного обслуживания, в комнате или на открытом полу."
+
+msgid "Marks floor as a cafe. Hungry passengers eat and drink here and their mood rises."
+msgstr "Отмечает пол как кафе. Голодные пассажиры едят и пьют здесь, а их настроение растёт."
+
+msgid "Drag a rectangle, then add a counter and a table. Guests order, then sit at the table."
+msgstr "Протяните прямоугольник, затем добавьте прилавок и столик. Гости заказывают еду и садятся за стол."
+
+msgid "At least 3x3, with a counter and a table. Needs shop staff, or the counter stays closed."
+msgstr "Минимум 3x3, с прилавком и столиком. Нужны продавцы, иначе прилавок закрыт."
+
+msgid "The cafe counter, where guests order."
+msgstr "Прилавок кафе, где гости делают заказ."
+
+msgid "Place it inside a cafe or restaurant. A server stands there."
+msgstr "Разместите внутри кафе или ресторана. За ним стоит продавец."
+
+msgid "Wholly inside the room. Shop staff hired in Staff, and the spot in front clear."
+msgstr "Полностью внутри комнаты. Нужны продавцы из «Персонала» и свободное место спереди."
+
+msgid "A table with a seat at each end. Cafe guests sit here to eat."
+msgstr "Столик с двумя стульями по бокам. Гости кафе садятся сюда поесть."
+
+msgid "It seats two. A guest walks from the counter to a free seat."
+msgstr "Рассчитан на двоих. Гость идёт от прилавка к свободному месту."
+
+msgid "Inside a cafe. A bar uses bar counters, and a restaurant uses dining tables or booths."
+msgstr "Внутри кафе. В баре используются барные стойки, а в ресторане — обеденные столы или диванчики."
+
+msgid "Marks floor as a toilet. Passengers who need one queue and use a stall."
+msgstr "Отмечает пол как туалет. Нуждающиеся пассажиры встают в очередь и пользуются кабинкой."
+
+msgid "Drag a rectangle, then add a stall and a sink inside."
+msgstr "Протяните прямоугольник, затем добавьте кабинку и раковину внутрь."
+
+msgid "At least 2x3, with a stall and a sink. Each stall costs upkeep every day when ready."
+msgstr "Минимум 2x3, с кабинкой и раковиной. Каждая кабинка требует ежедневного обслуживания после готовности."
+
+msgid "One toilet stall. One passenger uses it at a time."
+msgstr "Одна туалетная кабинка. Одновременно ею пользуется один пассажир."
+
+msgid "Place it inside a toilet room. A passenger walks in from the cell in front."
+msgstr "Разместите внутри туалета. Пассажир заходит с клетки перед кабинкой."
+
+msgid "Keep the spot in front clear. Costs upkeep every day once its room is ready."
+msgstr "Оставьте клетку спереди свободной. Требует ежедневного обслуживания, когда комната готова."
+
+msgid "A sink. A toilet room is not ready without one."
+msgstr "Раковина. Без неё туалет не готов к работе."
+
+msgid "Place it inside a toilet room."
+msgstr "Разместите внутри туалета."
+
+msgid "Keep the spot in front clear. No upkeep of its own."
+msgstr "Оставьте клетку спереди свободной. Собственного обслуживания не требует."
+
+msgid "Marks floor as a kiosk, a small shop. Bored passengers browse here and pay."
+msgstr "Отмечает пол как киоск — небольшой магазин. Скучающие пассажиры смотрят товары и платят."
+
+msgid "Drag a rectangle, then add a counter and display stands. Guests browse at the stands."
+msgstr "Протяните прямоугольник, затем добавьте прилавок и витрины. Гости выбирают товары у витрин."
+
+msgid "At least 3x3, with a counter and a display stand. Shop staff serve at the counter."
+msgstr "Минимум 3x3, с прилавком и витриной. Продавцы обслуживают у прилавка."
+
+msgid "The kiosk's counter, with a till."
+msgstr "Прилавок киоска с кассой."
+
+msgid "Place it inside a kiosk. A server stands behind it."
+msgstr "Разместите внутри киоска. Продавец стоит за ним."
+
+msgid "Wholly inside the kiosk. Shop staff hired in Staff, and the spot in front clear."
+msgstr "Полностью внутри киоска. Нужны продавцы из «Персонала» и свободное место спереди."
+
+msgid "Marks floor as a pharmacy. Passengers browse and buy here."
+msgstr "Отмечает пол как аптеку. Пассажиры заходят сюда за покупками."
+
+msgid "Drag a rectangle, then add a counter and a shelf. Passengers browse at the shelf."
+msgstr "Протяните прямоугольник, затем добавьте прилавок и полку. Пассажиры выбирают товары у полки."
+
+msgid "At least 3x3, with a counter and a shelf. Shop staff serve at the counter."
+msgstr "Минимум 3x3, с прилавком и полкой. Продавцы обслуживают у прилавка."
+
+msgid "Marks floor as a duty free shop. Passengers browse and spend more than in a kiosk."
+msgstr "Отмечает пол как магазин Duty Free. Пассажиры тратят здесь больше, чем в киоске."
+
+msgid "Drag a rectangle, then add a till and shelves. Passengers browse at the shelves."
+msgstr "Протяните прямоугольник, затем добавьте кассу и стеллажи. Пассажиры выбирают товары у стеллажей."
+
+msgid "At least 3x4, with a till and a shelf. Shop staff serve at the till."
+msgstr "Минимум 3x4, с кассой и стеллажом. Продавцы обслуживают на кассе."
+
+msgid "The duty free shop's till."
+msgstr "Касса магазина Duty Free."
+
+msgid "Place it inside a duty free shop. A server stands behind it."
+msgstr "Разместите внутри магазина Duty Free. Продавец стоит за ней."
+
+msgid "Wholly inside the shop. Shop staff hired in Staff, and the spot in front clear."
+msgstr "Полностью внутри магазина. Нужны продавцы из «Персонала» и свободное место спереди."
+
+msgid "A duty free shelf. Each one gives two browse spots."
+msgstr "Стеллаж Duty Free. Каждый даёт два места для осмотра товаров."
+
+msgid "Passengers browse from the cells in front of it."
+msgstr "Пассажиры осматривают товары с клеток перед ним."
+
+msgid "Inside a duty free shop. Keep the cells in front clear."
+msgstr "Внутри магазина Duty Free. Оставьте клетки спереди свободными."
+
+msgid "Marks floor as a fashion store. Passengers browse and spend more than in a kiosk."
+msgstr "Отмечает пол как бутик одежды. Пассажиры тратят здесь больше, чем в киоске."
+
+msgid "Drag a rectangle, then add a till and clothes rails. Passengers browse at the rails."
+msgstr "Протяните прямоугольник, затем добавьте кассу и вешалки с одеждой. Пассажиры выбирают у вешалок."
+
+msgid "At least 3x4, with a till and a clothes rail. Shop staff serve at the till."
+msgstr "Минимум 3x4, с кассой и вешалкой для одежды. Продавцы обслуживают на кассе."
+
+msgid "The fashion store's till."
+msgstr "Касса бутика одежды."
+
+msgid "Place it inside a fashion store. A server stands behind it."
+msgstr "Разместите внутри бутика одежды. Продавец стоит за ней."
+
+msgid "Wholly inside the store. Shop staff hired in Staff, and the spot in front clear."
+msgstr "Полностью внутри бутика. Нужны продавцы из «Персонала» и свободное место спереди."
+
+msgid "A clothes rail. Each one gives two browse spots."
+msgstr "Вешалка для одежды. Каждая даёт два места для осмотра товаров."
+
+msgid "Inside a fashion store. Keep the cells in front clear."
+msgstr "Внутри бутика одежды. Оставьте клетки спереди свободными."
+
+msgid "Marks floor as a currency exchange. Passengers change money and pay a small fee."
+msgstr "Отмечает пол как пункт обмена валют. Пассажиры меняют деньги и платят небольшую комиссию."
+
+msgid "Drag a rectangle, then add a counter. A server works it."
+msgstr "Протяните прямоугольник, затем добавьте стойку. За ней работает сотрудник."
+
+msgid "At least 2x3, with a counter and shop staff. A visit does not cure boredom."
+msgstr "Минимум 2x3, со стойкой и продавцом. Посещение не снимает скуку."
+
+msgid "Marks floor as an ATM room. Passengers take out cash and pay a small fee."
+msgstr "Отмечает пол как зону банкомата. Пассажиры снимают наличные и платят небольшую комиссию."
+
+msgid "Drag a rectangle, then add an ATM. It is self-service."
+msgstr "Протяните прямоугольник, затем поставьте банкомат. Он работает без персонала."
+
+msgid "At least 1x2, with an ATM. No staff. A visit does not cure boredom."
+msgstr "Минимум 1x2, с банкоматом. Персонал не нужен. Посещение не снимает скуку."
+
+msgid "Marks floor as a bar. Guests stay longer than in a cafe, spend more, and gain most mood."
+msgstr "Отмечает пол как бар. Гости задерживаются дольше, чем в кафе, тратят больше и получают максимум настроения."
+
+msgid "Guests order at a bar counter and sit on its stools."
+msgstr "Гости заказывают у барной стойки и садятся на табуреты."
+
+msgid "At least 3x4, with a bar counter. Shop staff serve at the counter."
+msgstr "Минимум 3x4, с барной стойкой. Продавцы обслуживают у стойки."
+
+msgid "Marks floor as a sit-down restaurant. Guests stay the longest and spend the most."
+msgstr "Отмечает пол как ресторан. Гости остаются здесь дольше всего и тратят больше всех."
+
+msgid "Guests order at a cafe counter and sit at a dining table or a booth."
+msgstr "Гости заказывают у прилавка кафе и садятся за обеденный стол или на диванчик."
+
+msgid "At least 4x4, with a counter and a table or booth. Shop staff serve at the counter."
+msgstr "Минимум 4x4, с прилавком и столом или диванчиком. Продавцы обслуживают у прилавка."
+
+msgid "Marks floor as a grab-and-go stall. Guests buy, pay and walk on, with no seat."
+msgstr "Отмечает пол как точку еды с собой. Гости покупают, платят и идут дальше без посадки."
+
+msgid "It needs only a grab-and-go stall. A server hands over the order."
+msgstr "Нужна только стойка еды с собой. Продавец выдаёт заказ."
+
+msgid "At least 3x3, with a counter. Shop staff serve. It earns the least of the food rooms."
+msgstr "Минимум 3x3, с прилавком. Обслуживают продавцы. Приносит меньше всего прибыли среди заведений общепита."
+
+msgid "Marks floor as a play area. Passengers stay and play for free and their mood rises."
+msgstr "Отмечает пол как игровую зону. Пассажиры играют бесплатно, и их настроение растёт."
+
+msgid "Drag a rectangle, then add a slide and play blocks. It is self-service."
+msgstr "Протяните прямоугольник, затем добавьте горку и игровые кубики. Работает без персонала."
+
+msgid "At least 3x4, with a slide and play blocks. No staff."
+msgstr "Минимум 3x4, с горкой и игровыми кубиками. Персонал не нужен."
+
+msgid "Marks floor as a lounge. Passengers rest on the sofas for free and their mood rises."
+msgstr "Отмечает пол как зал ожидания. Пассажиры отдыхают на диванах бесплатно, и их настроение растёт."
+
+msgid "Drag a rectangle, then add a sofa. It is self-service."
+msgstr "Протяните прямоугольник, затем поставьте диван. Работает без персонала."
+
+msgid "At least 2x3, with a sofa. No staff."
+msgstr "Минимум 2x3, с диваном. Персонал не нужен."
+
+msgid "Marks floor as a shower room. Passengers pay to wash during a long wait and gain mood."
+msgstr "Отмечает пол как душевую. Пассажиры платят за душ во время долгого ожидания и поднимают настроение."
+
+msgid "Drag a rectangle, then add a shower cubicle. It is self-service."
+msgstr "Протяните прямоугольник, затем добавьте душевую кабину. Работает без персонала."
+
+msgid "At least 2x2, with a shower cubicle. No staff. Each stay pays you a fee."
+msgstr "Минимум 2x2, с душевой кабиной. Персонал не нужен. Каждое посещение приносит доход."
+
+msgid "Marks floor as a nap pod room. Passengers pay to rest during a long wait and gain mood."
+msgstr "Отмечает пол как комнату со спальными капсулами. Пассажиры платят за отдых при долгом ожидании и поднимают настроение."
+
+msgid "Drag a rectangle, then add a nap pod. It is self-service."
+msgstr "Протяните прямоугольник, затем добавьте спальную капсулу. Работает без персонала."
+
+msgid "At least 2x2, with a nap pod. No staff. Each stay pays you a fee."
+msgstr "Минимум 2x2, со спальной капсулой. Персонал не нужен. Каждое посещение приносит доход."
+
+msgid "A shelf unit. Each stand gives the kiosk two browse spots."
+msgstr "Стеллаж. Каждая витрина даёт киоску два места для осмотра товаров."
+
+msgid "Inside a kiosk. Keep the cells in front clear."
+msgstr "Внутри киоска. Оставьте клетки спереди свободными."
+
+msgid "A baggage belt. It carries checked bags from a check-in desk to a bag room."
+msgstr "Багажная лента. Перевозит сданный багаж от стойки регистрации в багажное отделение."
+
+msgid "Drag a line. The belt shapes itself at turns and joins. Belts cannot cross."
+msgstr "Протяните линию. Лента сама подстраивается на поворотах и стыках. Ленты не могут пересекаться."
+
+msgid "Start at a check-in desk's back and end in a bag room. A wall in the way blocks it."
+msgstr "Начните с тыла стойки регистрации и закончите в багажном отделении. Стена на пути мешает."
+
+msgid "Where checked bags end up. They are loaded onto the plane from here."
+msgstr "Сюда поступает сданный багаж. Отсюда его грузят на самолёт."
+
+msgid "Drag a rectangle, then run a belt into it. The belt's end piece goes inside."
+msgstr "Протяните прямоугольник, затем заведите в него ленту. Конец ленты должен быть внутри."
+
+msgid "At least 2x2, with a belt end. A bag that arrives after the cutoff misses the plane."
+msgstr "Минимум 2x2, с концом ленты. Багаж, прибывший после окончания приёма, не попадёт на рейс."
+
+msgid "A baggage cart on wheels."
+msgstr "Багажная тележка на колёсах."
+
+msgid "Place one in a bag room so a hired Ramp Agent drives checked bags out to the parked plane."
+msgstr "Поставьте в багажном отделении, чтобы сотрудник перронной службы отвозил багаж к самолёту."
+
+msgid "Needs a Ramp Agent hired in Staff. Takes 1x2 tiles; no upkeep."
+msgstr "Нужен сотрудник перронной службы из «Персонала». Занимает 1x2 клетки; без содержания."
+
+msgid "A curb bay on the road outside. Cars and taxis stop here and drop passengers off."
+msgstr "Зона высадки у дороги снаружи. Здесь останавливаются машины и такси, высаживая пассажиров."
+
+msgid "Click one of the marked spots by the road. Each bay has two berths."
+msgstr "Нажмите на одну из отмеченных точек у дороги. В каждой зоне по два места."
+
+msgid "Marked spots only. The nearer an entrance, the shorter the walk."
+msgstr "Только отмеченные точки. Чем ближе к входу, тем короче путь пешком."
+
+msgid "A car park with 12 spaces. A car pays a fee when it parks."
+msgstr "Парковка на 12 мест. Машины платят за въезд."
+
+msgid "Click a marked spot. Passengers walk from the car park to an entrance."
+msgstr "Нажмите на отмеченную точку. Пассажиры идут с парковки ко входу."
+
+msgid "Marked spots only. Close it to let it drain before you remove it."
+msgstr "Только отмеченные точки. Закройте парковку, чтобы машины выехали перед сносом."
+
+msgid "A big car park with 31 spaces. A car pays a higher fee than a surface lot when it parks."
+msgstr "Большая парковка на 31 место. Машины платят здесь больше, чем на наземной парковке."
+
+msgid "Opens or closes a car park."
+msgstr "Открывает или закрывает парковку."
+
+msgid "Click a built car park. A closed one takes no new cars and empties out."
+msgstr "Нажмите на построенную парковку. Закрытая не принимает новые машины и постепенно пустеет."
+
+msgid "A car park can only be removed once no cars are in it."
+msgstr "Парковку можно удалить только тогда, когда на ней не осталось машин."
+
+msgid "Buys a plot of land. You can only build on land you own."
+msgstr "Покупает участок земли. Строить можно только на своей земле."
+
+msgid "Click a highlighted plot. Its price shows on it and rises with each plot you buy."
+msgstr "Нажмите на подсвеченный участок. Цена указана на нём и растёт с каждой покупкой."
+
+msgid "A plot next to land you already own."
+msgstr "Участок рядом с землёй, которой вы уже владеете."
+
+msgid "The tray table of a security lane, where passengers unpack their bags."
+msgstr "Стол для лотков на линии досмотра, где пассажиры выкладывают вещи."
+
+msgid "It stands beside the arch, on the side the lane's parts go."
+msgstr "Ставится рядом с рамкой, со стороны остальных частей линии."
+
+msgid "Part of a whole lane: arch, tray table, X-ray belt and pickup table."
+msgstr "Часть полной линии: рамка, стол для лотков, рентген-лента и стол выдачи."
+
+msgid "The X-ray belt of a security lane. Bags ride through it."
+msgstr "Рентген-лента линии досмотра. Через неё едут сумки."
+
+msgid "It stands beside the arch. A lane officer works at it."
+msgstr "Ставится рядом с рамкой. За ней работает сотрудник досмотра."
+
+msgid "Part of a whole lane. Needs a security officer hired in Staff."
+msgstr "Часть полной линии. Нужен сотрудник досмотра из раздела «Персонал»."
+
+msgid "The arch of a security lane. Passengers walk through it."
+msgstr "Рамка линии досмотра. Через неё проходят пассажиры."
+
+msgid "Place the arch first and the other parts around it. Its front faces the queue."
+msgstr "Сначала поставьте рамку, а остальные части вокруг неё. Лицом к очереди."
+
+msgid "Part of a whole lane. Keep the spot in front and the walls around the lane clear."
+msgstr "Часть полной линии. Не загораживайте вход спереди и стены вокруг линии."
+
+msgid "The pickup table of a security lane, where passengers collect their bags."
+msgstr "Стол выдачи линии досмотра, где пассажиры забирают вещи."
+
+msgid "It stands past the arch, where cleared passengers leave the lane."
+msgstr "Ставится за рамкой, где прошедшие досмотр пассажиры покидают линию."
+
+msgid "A bush. It calms passengers close to it, a little."
+msgstr "Куст. Немного успокаивает пассажиров рядом."
+
+msgid "Passengers within a cell or so get calm, which becomes mood. Walls block it."
+msgstr "Пассажиры в паре клеток успокаиваются, что улучшает настроение. Стены блокируют эффект."
+
+msgid "No upkeep. It earns nothing."
+msgstr "Без содержания. Дохода не приносит."
+
+msgid "A planter. It calms passengers near it, a little."
+msgstr "Клумба. Немного успокаивает пассажиров рядом."
+
+msgid "Passengers within a couple of cells get calm, which becomes mood. Walls block it."
+msgstr "Пассажиры в пределах пары клеток успокаиваются, что улучшает настроение. Стены блокируют эффект."
+
+msgid "A large plant pot. It calms passengers near it, a little."
+msgstr "Большой вазон с растением. Немного успокаивает пассажиров рядом."
+
+msgid "An indoor tree. It calms the passengers around it."
+msgstr "Дерево в помещении. Успокаивает пассажиров вокруг."
+
+msgid "Passengers within a few cells get calm, which becomes mood. Walls block it."
+msgstr "Пассажиры в нескольких клетках успокаиваются, что улучшает настроение. Стены блокируют эффект."
+
+msgid "A bench. It seats two waiting passengers and calms passengers nearby."
+msgstr "Скамейка. Вмещает двух ожидающих пассажиров и успокаивает людей рядом."
+
+msgid "Gate passengers sit on it. Calm becomes mood, and a wall between them blocks it."
+msgstr "Пассажиры у выхода садятся на неё. Спокойствие улучшает настроение, но стена между ними его блокирует."
+
+msgid "A bench built around a tree. It calms the passengers near it."
+msgstr "Скамейка вокруг дерева. Успокаивает пассажиров рядом."
+
+msgid "A fountain. It calms the passengers around it the most, with a long reach."
+msgstr "Фонтан. Сильнее всего успокаивает пассажиров вокруг и действует далеко."
+
+msgid "A statue. It calms the passengers around it, with a long reach."
+msgstr "Статуя. Успокаивает пассажиров вокруг на большом расстоянии."
+
+msgid "A retractable-belt stanchion post. Passengers cannot walk through it."
+msgstr "Стойка с вытяжной лентой. Пассажиры не могут пройти сквозь неё."
+
+msgid "Use stanchions and queue belts to steer a queue. They give a little calm nearby."
+msgstr "Используйте стойки и ленты, чтобы направлять очередь. Они немного успокаивают людей рядом."
+
+msgid "A queue belt between two stanchions, three cells long. Passengers cannot walk through it."
+msgstr "Лента очереди между двумя стойками длиной три клетки. Пассажиры не могут пройти сквозь неё."
+
+msgid "A bin. Passengers drop litter in it instead of leaving it on the floor."
+msgstr "Урна. Пассажиры выбрасывают мусор в неё, а не на пол."
+
+msgid "A bin takes litter from visits near it, and a cleaner empties it when it is full."
+msgstr "Урна собирает мусор от посетителей рядом, а уборщик опорожняет её, когда она полна."
+
+msgid "A cleaner hired in Staff. It gives no calm, and a bin in view takes a little back."
+msgstr "Убирает сотрудник из «Персонала». Успокоения не даёт, а видимая урна немного его снижает."
+
+msgid "A bar counter, where guests order drinks."
+msgstr "Барная стойка, где гости заказывают напитки."
+
+msgid "Place it inside a bar. A server stands behind it and guests order from the cell in front."
+msgstr "Разместите внутри бара. Продавец стоит за стойкой, а гости заказывают с клетки спереди."
+
+msgid "Wholly inside the bar. Shop staff hired in Staff, and the spot in front clear."
+msgstr "Полностью внутри бара. Нужны продавцы из «Персонала» и свободное место спереди."
+
+msgid "A grab-and-go stall, where guests buy and walk on."
+msgstr "Стойка еды с собой, где гости покупают еду и идут дальше."
+
+msgid "Place it inside a grab-and-go room. A server hands over the order."
+msgstr "Разместите внутри точки еды с собой. Продавец выдаёт заказ."
+
+msgid "A restaurant table with four seats."
+msgstr "Ресторанный стол на четыре места."
+
+msgid "Place it inside a restaurant. A guest walks from the counter to a free seat."
+msgstr "Разместите внутри ресторана. Гость идёт от прилавка к свободному месту."
+
+msgid "Wholly inside the restaurant, with the cell behind each chair clear."
+msgstr "Полностью внутри ресторана; клетка за каждым стулом должна быть свободна."
+
+msgid "A restaurant booth with four seats."
+msgstr "Ресторанный диванчик на четыре места."
+
+msgid "Wholly inside the restaurant, with the cell behind each seat clear."
+msgstr "Полностью внутри ресторана; клетка за каждым местом должна быть свободна."
+
+msgid "A staffed desk that helps lost passengers."
+msgstr "Стойка с сотрудником, помогающая потерявшимся пассажирам."
+
+msgid "A stuck passenger nearby walks over, is helped, gains mood and plans its route again."
+msgstr "Застрявший рядом пассажир подходит сюда, получает помощь, улучшает настроение и снова строит маршрут."
+
+msgid "Shop staff hired in Staff, or it does nothing. Works on open floor or in a room."
+msgstr "Нужен продавец из «Персонала», иначе стойка бездействует. Работает в зале и в комнате."
+
+msgid "An information display."
+msgstr "Информационное табло."
+
+msgid "Scenery for now: nothing in the game reacts to it."
+msgstr "Пока просто декорация: ничто в игре на неё не реагирует."
+
+msgid "Costs upkeep every day."
+msgstr "Требует ежедневного обслуживания."
+
+msgid "The currency exchange counter."
+msgstr "Стойка обмена валют."
+
+msgid "Place it inside an exchange room. A server stands behind it and changes money."
+msgstr "Разместите внутри обменника. Продавец стоит за стойкой и меняет деньги."
+
+msgid "A cash machine. One passenger uses it at a time and pays a small fee."
+msgstr "Банкомат. Один пассажир пользуется им за раз и платит небольшую комиссию."
+
+msgid "Place it inside an ATM room. The passenger uses it from the cell in front."
+msgstr "Разместите внутри зоны банкомата. Пассажир пользуется им с клетки спереди."
+
+msgid "Keep the spot in front clear. No staff and no upkeep."
+msgstr "Оставьте место спереди свободным. Не требует персонала и обслуживания."
+
+msgid "The pharmacy counter, with a till."
+msgstr "Прилавок аптеки с кассой."
+
+msgid "Place it inside a pharmacy. A server stands behind it."
+msgstr "Разместите внутри аптеки. Продавец стоит за ним."
+
+msgid "Wholly inside the pharmacy. Shop staff hired in Staff, and the spot in front clear."
+msgstr "Полностью внутри аптеки. Нужны продавцы из «Персонала» и свободное место спереди."
+
+msgid "A pharmacy shelf. Each one gives one browse spot."
+msgstr "Полка аптеки. Каждая даёт одно место для осмотра товаров."
+
+msgid "Passengers browse from the cell in front of it."
+msgstr "Пассажиры осматривают товары с клетки перед ней."
+
+msgid "Inside a pharmacy. Keep the cells in front clear."
+msgstr "Внутри аптеки. Оставьте клетки спереди свободными."
+
+msgid "A shower cubicle. One passenger uses it at a time and pays a fee."
+msgstr "Душевая кабина. Один пассажир пользуется ею за раз и платит за вход."
+
+msgid "Place it inside a shower room. The passenger steps in from the cell in front."
+msgstr "Разместите внутри душевой. Пассажир заходит с клетки спереди."
+
+msgid "Keep the spot in front clear. No upkeep."
+msgstr "Оставьте место спереди свободным. Без обслуживания."
+
+msgid "A nap pod. One passenger uses it at a time and pays a fee."
+msgstr "Спальная капсула. Один пассажир отдыхает в ней за раз и платит за вход."
+
+msgid "Place it inside a nap pod room. The passenger sits and leans back."
+msgstr "Разместите внутри комнаты со спальными капсулами. Пассажир садится и откидывается назад."
+
+msgid "A two-seat sofa. Lounge guests rest on it."
+msgstr "Двухместный диван. На нём отдыхают гости зала ожидания."
+
+msgid "Place it inside a lounge. Each sofa gives two seats."
+msgstr "Разместите внутри зала ожидания. Каждый диван даёт два места."
+
+msgid "No upkeep. The lounge is free to use."
+msgstr "Без обслуживания. Вход в зал ожидания бесплатный."
+
+msgid "A single armchair."
+msgstr "Одиночное кресло."
+
+msgid "A passenger can sit on it, but a lounge needs a sofa. The armchair does not count."
+msgstr "Пассажир может на нём сидеть, но залу ожидания нужен диван. Кресло не засчитывается."
+
+msgid "A work desk."
+msgstr "Рабочий стол."
+
+msgid "Play blocks for children."
+msgstr "Игровые кубики для детей."
+
+msgid "Place them inside a play area. A play area needs them and a slide."
+msgstr "Разместите внутри игровой зоны. Игровой зоне нужны они и горка."
+
+msgid "No upkeep. The play area is free to use."
+msgstr "Без обслуживания. Игровая зона бесплатная."
+
+msgid "A play slide. Children use it from the front."
+msgstr "Игровая горка. Дети пользуются ею спереди."
+
+msgid "Place it inside a play area. Each slide gives two play spots."
+msgstr "Разместите внутри игровой зоны. Каждая горка даёт два игровых места."
+
+msgid "A prize car on a podium. Passengers near it spend a bit more in shops and food rooms."
+msgstr "Призовой автомобиль на подиуме. Пассажиры рядом тратят чуть больше в магазинах и кафе."
+
+msgid "Waiting passengers who see it lose boredom. A second podium does not stack."
+msgstr "Ожидающие пассажиры, которые видят его, меньше скучают. Второй подиум эффекта не добавляет."
+
+msgid "Costs upkeep every day. A plain wall blocks the view."
+msgstr "Требует ежедневного обслуживания. Обычная стена перекрывает обзор."
+
+msgctxt "card hint"
+msgid "Drag"
+msgstr "Тянуть"
+
+msgctxt "card hint"
+msgid "Click"
+msgstr "Клик"
+
+msgid "Upkeep {amount}/day"
+msgstr "Содержимое {amount}/день"
+
+msgctxt "build menu"
+msgid "Building"
+msgstr "Здание"
+
+msgctxt "build menu"
+msgid "Operations"
+msgstr "Операции"
+
+msgctxt "build menu"
+msgid "Facilities"
+msgstr "Удобства"
+
+msgctxt "build menu"
+msgid "Food & Drink"
+msgstr "Еда и напитки"
+
+msgctxt "build menu"
+msgid "Decor"
+msgstr "Декор"
+
+msgctxt "build menu"
+msgid "Landside & Parking"
+msgstr "Подъезд и парковка"
+
+msgctxt "build menu"
+msgid "Templates"
+msgstr "Шаблоны"
+
+msgctxt "build menu"
+msgid "All"
+msgstr "Все"
+
+msgctxt "build menu"
+msgid "Room"
+msgstr "Комната"
+
+msgctxt "build menu"
+msgid "Check-in & Gate"
+msgstr "Регистрация и выход"
+
+msgctxt "build menu"
+msgid "Security"
+msgstr "Досмотр"
+
+msgctxt "build menu"
+msgid "Baggage"
+msgstr "Багаж"
+
+msgctxt "build menu"
+msgid "Rooms"
+msgstr "Комнаты"
+
+msgctxt "build menu"
+msgid "Hygiene & Rest"
+msgstr "Гигиена и отдых"
+
+msgctxt "build menu"
+msgid "Services"
+msgstr "Услуги"
+
+msgctxt "build menu"
+msgid "Lounge & Play"
+msgstr "Зал ожидания и игры"
+
+msgctxt "build menu"
+msgid "Items"
+msgstr "Предметы"
+
+msgctxt "build menu"
+msgid "Cafe"
+msgstr "Кафе"
+
+msgctxt "build menu"
+msgid "Kiosk"
+msgstr "Киоск"
+
+msgctxt "build menu"
+msgid "Lounge"
+msgstr "Зал ожидания"
+
+msgctxt "build menu"
+msgid "Pharmacy"
+msgstr "Аптека"
+
+msgctxt "build menu"
+msgid "Shops"
+msgstr "Магазины"
+
+msgctxt "build menu"
+msgid "Duty free"
+msgstr "Duty Free"
+
+msgctxt "build menu"
+msgid "Remove"
+msgstr "Удалить"
+
+msgctxt "build menu"
+msgid "Floor"
+msgstr "Пол"
+
+msgctxt "build menu"
+msgid "1x1 tile"
+msgstr "плитка 1x1"
+
+msgctxt "build menu"
+msgid "Wall"
+msgstr "Стена"
+
+msgctxt "build menu"
+msgid "1 m edge"
+msgstr "грань 1 м"
+
+msgctxt "build menu"
+msgid "Glass"
+msgstr "Стекло"
+
+msgctxt "build menu"
+msgid "Door"
+msgstr "Дверь"
+
+msgctxt "build menu"
+msgid "Entrance"
+msgstr "Вход"
+
+msgctxt "build menu"
+msgid "Exit"
+msgstr "Выход"
+
+msgctxt "build menu"
+msgid "Check-in desk"
+msgstr "Стойка регистр."
+
+msgctxt "build menu"
+msgid "Scanner"
+msgstr "Сканер"
+
+msgctxt "build menu"
+msgid "Seats"
+msgstr "Кресла"
+
+msgctxt "build menu"
+msgid "Gate desk"
+msgstr "Стойка выхода"
+
+msgctxt "build menu"
+msgid "Screen"
+msgstr "Экран"
+
+msgctxt "build menu"
+msgid "3x3 min"
+msgstr "мин. 3x3"
+
+msgctxt "build menu"
+msgid "Counter"
+msgstr "Прилавок"
+
+msgctxt "build menu"
+msgid "Table"
+msgstr "Столик"
+
+msgctxt "build menu"
+msgid "Toilet"
+msgstr "Туалет"
+
+msgctxt "build menu"
+msgid "2x3 min"
+msgstr "мин. 2x3"
+
+msgctxt "build menu"
+msgid "Toilet stall"
+msgstr "Кабинка"
+
+msgctxt "build menu"
+msgid "Sink"
+msgstr "Раковина"
+
+msgctxt "build menu"
+msgid "Kiosk counter"
+msgstr "Прилавок киоска"
+
+msgctxt "build menu"
+msgid "3x4 min"
+msgstr "мин. 3x4"
+
+msgctxt "build menu"
+msgid "Duty Free Till"
+msgstr "Касса Duty Free"
+
+msgctxt "build menu"
+msgid "Duty Free Shelf"
+msgstr "Стеллаж Duty Free"
+
+msgctxt "build menu"
+msgid "Fashion Till"
+msgstr "Касса бутика"
+
+msgctxt "build menu"
+msgid "Exchange counter"
+msgstr "Стойка обмена"
+
+msgctxt "build menu"
+msgid "Shower cubicle"
+msgstr "Душевая кабина"
+
+msgctxt "build menu"
+msgid "Sleeping pod"
+msgstr "Спальная капсула"
+
+msgctxt "build menu"
+msgid "Shelf"
+msgstr "Полка"
+
+msgctxt "build menu"
+msgid "Fashion store"
+msgstr "Бутик одежды"
+
+msgctxt "build menu"
+msgid "Clothes rail"
+msgstr "Вешалка"
+
+msgctxt "build menu"
+msgid "Exchange"
+msgstr "Обмен валют"
+
+msgctxt "build menu"
+msgid "ATM"
+msgstr "Банкомат"
+
+msgctxt "build menu"
+msgid "1x2 min"
+msgstr "мин. 1x2"
+
+msgctxt "build menu"
+msgid "Bar"
+msgstr "Бар"
+
+msgctxt "build menu"
+msgid "Restaurant"
+msgstr "Ресторан"
+
+msgctxt "build menu"
+msgid "4x4 min"
+msgstr "мин. 4x4"
+
+msgctxt "build menu"
+msgid "Grab-and-go"
+msgstr "Еда с собой"
+
+msgctxt "build menu"
+msgid "Play area"
+msgstr "Игровая зона"
+
+msgctxt "build menu"
+msgid "Shower"
+msgstr "Душевая"
+
+msgctxt "build menu"
+msgid "2x2 min"
+msgstr "мин. 2x2"
+
+msgctxt "build menu"
+msgid "Nap pod"
+msgstr "Спальная капсула"
+
+msgctxt "build menu"
+msgid "Display stand"
+msgstr "Витрина"
+
+msgctxt "build menu"
+msgid "Belt"
+msgstr "Лента"
+
+msgctxt "build menu"
+msgid "Drag a line"
+msgstr "Протянуть линию"
+
+msgctxt "build menu"
+msgid "Bag room"
+msgstr "Багажное отд."
+
+msgctxt "build menu"
+msgid "Bag cart"
+msgstr "Багажная тележка"
+
+msgctxt "build menu"
+msgid "Curb bay"
+msgstr "Зона высадки"
+
+msgctxt "build menu"
+msgid "16x3 m"
+msgstr "16x3 м"
+
+msgctxt "build menu"
+msgid "Surface lot"
+msgstr "Наземная парковка"
+
+msgctxt "build menu"
+msgid "32x24 m"
+msgstr "32x24 м"
+
+msgctxt "build menu"
+msgid "Multi-storey"
+msgstr "Многоярусная парковка"
+
+msgctxt "build menu"
+msgid "24x52 m"
+msgstr "24x52 м"
+
+msgctxt "build menu"
+msgid "Open / close"
+msgstr "Открыть / закрыть"
+
+msgctxt "build menu"
+msgid "A car park"
+msgstr "Парковка"
+
+msgctxt "build menu"
+msgid "Buy land"
+msgstr "Купить землю"
+
+msgctxt "build menu"
+msgid "about 21x25 m plot"
+msgstr "участок около 21x25 м"
+
+msgctxt "build menu"
+msgid "Tray table"
+msgstr "Стол для лотков"
+
+msgctxt "build menu"
+msgid "X-ray belt"
+msgstr "Рентген-лента"
+
+msgctxt "build menu"
+msgid "Arch"
+msgstr "Рамка"
+
+msgctxt "build menu"
+msgid "Pickup table"
+msgstr "Стол выдачи"
+
+msgctxt "build menu"
+msgid "Needs belt end"
+msgstr "Нужен конец ленты"
+
+msgctxt "build menu"
+msgid "Staff"
+msgstr "Персонал"
+
+msgid "{reachable} of {total} seats reachable"
+msgstr "Доступно мест: {reachable} из {total}"
+
+msgid "In {room}"
+msgstr "В комнате: {room}"
+
+msgid "Status: Part of a ready security lane"
+msgstr "Статус: часть готовой линии досмотра"
+
+msgid "Status: Not in a whole lane"
+msgstr "Статус: не в полной линии"
+
+msgid "Queue: {count} waiting"
+msgid_plural "Queue: {count} waiting"
+msgstr[0] "Очередь: {count} чел."
+msgstr[1] "Очередь: {count} чел."
+msgstr[2] "Очередь: {count} чел."
+
+msgid "Status: Not ready, {reason}"
+msgstr "Статус: не готово, {reason}"
+
+msgid "Status: Linked to Gate {gate}"
+msgstr "Статус: привязано к выходу {gate}"
+
+msgid "Status: Not linked yet"
+msgstr "Статус: пока не привязано"
+
+msgid "Biggest plane: none, no room outside the exit"
+msgstr "Макс. самолёт: нет, нет места за выходом"
+
+msgid "Status: Closed, {reason}"
+msgstr "Статус: закрыто, {reason}"
+
+msgid "Status: Open"
+msgstr "Статус: открыто"
+
+msgid "Status: Closed"
+msgstr "Статус: закрыто"
+
+msgid "Occupancy: {cars}/{capacity} berth"
+msgid_plural "Occupancy: {cars}/{capacity} berths"
+msgstr[0] "Занято: {cars}/{capacity} место"
+msgstr[1] "Занято: {cars}/{capacity} места"
+msgstr[2] "Занято: {cars}/{capacity} мест"
+
+msgid "Occupancy: {cars}/{capacity} space"
+msgid_plural "Occupancy: {cars}/{capacity} spaces"
+msgstr[0] "Занято: {cars}/{capacity} место"
+msgstr[1] "Занято: {cars}/{capacity} места"
+msgstr[2] "Занято: {cars}/{capacity} мест"
+
+msgid "Parking fee: Free"
+msgstr "Плата за парковку: бесплатно"
+
+msgid "Parking fee: ${fee}"
+msgstr "Плата за парковку: ${fee}"
+
+msgid "Earned today: ${amount}"
+msgstr "Заработано сегодня: ${amount}"
+
+msgid "Parked today: {count} car"
+msgid_plural "Parked today: {count} cars"
+msgstr[0] "Припарковано сегодня: {count} машина"
+msgstr[1] "Припарковано сегодня: {count} машины"
+msgstr[2] "Припарковано сегодня: {count} машин"
+
+msgid "Diverted today: {count} car"
+msgid_plural "Diverted today: {count} cars"
+msgstr[0] "Уехало без места сегодня: {count} машина"
+msgstr[1] "Уехало без места сегодня: {count} машины"
+msgstr[2] "Уехало без места сегодня: {count} машин"
+
+msgid "Status: Not in use"
+msgstr "Статус: не используется"
+
+msgid "{count} on duty"
+msgstr "На смене: {count}"
+
+msgid "{count} on the way"
+msgstr "В пути: {count}"
+
+msgid "Staff: none"
+msgstr "Персонал: нет"
+
+msgid "Staff: {parts}"
+msgstr "Персонал: {parts}"
+
+msgid "{staff} · Open"
+msgstr "{staff} · Открыто"
+
+msgid "{staff} · Closed, {reason}"
+msgstr "{staff} · Закрыто, {reason}"
+
+msgid "Pick it up and set it down elsewhere"
+msgstr "Поднять и переставить в другое место"
+
+msgid "Can't delete: {reason}"
+msgstr "Нельзя удалить: {reason}"
+
+msgid "Move"
+msgstr "Переместить"
+
+msgid "Move room"
+msgstr "Переместить комнату"
+
+msgid "This kind of room can't be moved yet"
+msgstr "Комнату этого типа пока нельзя перемещать"
+
+msgid "It is no longer there"
+msgstr "Объект уже исчез"
+
+msgid "Single pieces outside a room can't be moved yet"
+msgstr "Отдельные предметы вне комнаты пока нельзя перемещать"
+
+msgid "Car parks and curbs can't be moved yet"
+msgstr "Парковки и зоны высадки пока нельзя перемещать"
+
+msgid "Delete"
+msgstr "Удалить"
+
+msgid "Delete room"
+msgstr "Удалить комнату"
+
+msgid "Take car parks and curbs back with the Remove tool"
+msgstr "Парковки и зоны высадки убираются инструментом «Удалить»"
+
+msgctxt "price"
+msgid "Free"
+msgstr "Бесплатно"
+
+msgid "Locked"
+msgstr "Закрыто"
+
+msgid "Wages paid: {amount}"
+msgstr "Выплачено зарплат: {amount}"
+
+msgid "Wages paid: {amount} ({owed} owed)"
+msgstr "Выплачено зарплат: {amount} (долг {owed})"
+
+msgid "How it works"
+msgstr "Как это работает"
+
+msgid "Needs and upkeep"
+msgstr "Требования и содержание"
+
+msgid "How it works: {text}"
+msgstr "Как это работает: {text}"
+
+msgid "Needs and upkeep: {text}"
+msgstr "Требования и содержание: {text}"
+
+msgid "Templates"
+msgstr "Шаблоны"
+
+msgid "Save room"
+msgstr "Сохранить комнату"
+
+msgid "Pick a room"
+msgstr "Выберите комнату"
+
+msgid "{w}x{h}"
+msgstr "{w}x{h}"
+
+msgid "{count} pieces"
+msgstr "Предметов: {count}"
+
+msgid "Click a furnished room on the grid to save it as a reusable template."
+msgstr "Нажмите на обставленную комнату на сетке, чтобы сохранить её как шаблон."
+
+msgid "Empty room footprint."
+msgstr "Пустая область комнаты."
+
+msgctxt "build menu"
+msgid "Bush"
+msgstr "Куст"
+
+msgctxt "build menu"
+msgid "Planter"
+msgstr "Клумба"
+
+msgctxt "build menu"
+msgid "Plant pot"
+msgstr "Вазон"
+
+msgctxt "build menu"
+msgid "Tree"
+msgstr "Дерево"
+
+msgctxt "build menu"
+msgid "Bench"
+msgstr "Скамейка"
+
+msgctxt "build menu"
+msgid "Tree bench"
+msgstr "Скамейка у дерева"
+
+msgctxt "build menu"
+msgid "Fountain"
+msgstr "Фонтан"
+
+msgctxt "build menu"
+msgid "Statue"
+msgstr "Статуя"
+
+msgctxt "build menu"
+msgid "Stanchion"
+msgstr "Стойка очереди"
+
+msgctxt "build menu"
+msgid "Queue belt"
+msgstr "Лента очереди"
+
+msgctxt "build menu"
+msgid "Bin"
+msgstr "Урна"
+
+msgctxt "build menu"
+msgid "Bar counter"
+msgstr "Барная стойка"
+
+msgctxt "build menu"
+msgid "Grab stall"
+msgstr "Стойка с собой"
+
+msgctxt "build menu"
+msgid "Dining table"
+msgstr "Обеденный стол"
+
+msgctxt "build menu"
+msgid "Booth"
+msgstr "Диванчик"
+
+msgctxt "build menu"
+msgid "Info desk"
+msgstr "Инфостойка"
+
+msgctxt "build menu"
+msgid "Info screen"
+msgstr "Инфоэкран"
+
+msgctxt "build menu"
+msgid "Cash machine"
+msgstr "Банкомат"
+
+msgctxt "build menu"
+msgid "Sofa"
+msgstr "Диван"
+
+msgctxt "build menu"
+msgid "Armchair"
+msgstr "Кресло"
+
+msgctxt "build menu"
+msgid "Work desk"
+msgstr "Рабочий стол"
+
+msgctxt "build menu"
+msgid "Play blocks"
+msgstr "Игровые кубики"
+
+msgctxt "build menu"
+msgid "Play slide"
+msgstr "Игровая горка"
+
+msgctxt "build menu"
+msgid "Prize podium"
+msgstr "Призовой подиум"
+
+msgid "{requirement} (now {stars} stars, {passengers} passenger)"
+msgid_plural "{requirement} (now {stars} stars, {passengers} passengers)"
+msgstr[0] "{requirement} (сейчас {stars} зв., {passengers} пассажир)"
+msgstr[1] "{requirement} (сейчас {stars} зв., {passengers} пассажира)"
+msgstr[2] "{requirement} (сейчас {stars} зв., {passengers} пассажиров)"
+
+msgid "Unlocked: {facilities}"
+msgstr "Открыто: {facilities}"
+
+msgid "Build unlocks are not wired"
+msgstr "Разблокировки строительства не подключены"
+
+msgid "Not available yet"
+msgstr "Пока недоступно"
+
+msgid "Unlocks at {stars} stars and {passengers} passenger"
+msgid_plural "Unlocks at {stars} stars and {passengers} passengers"
+msgstr[0] "Откроется при {stars} зв. и {passengers} пассажире"
+msgstr[1] "Откроется при {stars} зв. и {passengers} пассажирах"
+msgstr[2] "Откроется при {stars} зв. и {passengers} пассажирах"
+
+msgid "cafe and bins, security lane, baggage, kiosk, screen, plants, benches, curb bay, surface lot, medium runway"
+msgstr "кафе и урны, линия досмотра, багаж, киоск, экран, растения, скамейки, зона высадки, наземная парковка, средняя ВПП"
+
+msgid "food and services: bar, restaurant, grab-and-go, info desk, pharmacy, exchange, ATM, lounge, car park gate, large runway"
+msgstr "питание и услуги: бар, ресторан, еда с собой, инфостойка, аптека, обмен валют, банкомат, зал ожидания, шлагбаум, большая ВПП"
+
+msgid "premium shops and amenities: duty free, fashion, shower, nap pod, play area, fountain, statue, multi-storey"
+msgstr "премиум-магазины и удобства: Duty Free, бутик, душевая, спальная капсула, игровая, фонтан, статуя, многоярусная парковка"
+
+msgid "R rotate"
+msgstr "R повернуть"
+
+msgctxt "narrow build mode sign"
+msgid "Build"
+msgstr "Стройка"
+
+msgid "Build mode"
+msgstr "Режим стройки"
+
+msgid "Planner ({key})"
+msgstr "План ({key})"
+
+msgid "Flight planner"
+msgstr "Планировщик рейсов"
+
+msgid "Close"
+msgstr "Закрыть"
+
+msgctxt "calendar day"
+msgid "Day {day}"
+msgstr "День {day}"
+
+msgid "No gate has a stand yet, so there is nothing to plan."
+msgstr "Ни у одного выхода пока нет стоянки — планировать нечего."
+
+msgctxt "gate name"
+msgid "Gate {gate}"
+msgstr "Выход {gate}"
+
+msgid "{label}{airline}\nGate {gate}, held {from} to {to}"
+msgstr "{label}{airline}\nВыход {gate}, занято с {from} по {to}"
+
+msgid "Click a flight to move it or end its contract, or drag it to another gate. Days already issued keep their gate."
+msgstr "Нажмите на рейс, чтобы перенести его или расторгнуть контракт, либо перетащите на другой выход. Уже выпущенные дни сохраняют свой выход."
+
+msgctxt "gate name"
+msgid "{label}  Gate {gate}"
+msgstr "{label}  Выход {gate}"
+
+msgctxt "button: end the contract"
+msgid "End"
+msgstr "Расторгнуть"
+
+msgid "End this airline contract"
+msgstr "Расторгнуть этот контракт с авиакомпанией"
+
+msgid "No other gate fits this flight"
+msgstr "Нет другого подходящего выхода"
+
+msgid "No other gate exists"
+msgstr "Других выходов нет"
+
+msgid "Move to:"
+msgstr "Перенести на:"
+
+msgid "End contract"
+msgstr "Расторгнуть контракт"
+
+msgctxt "button: keep the contract"
+msgid "Keep"
+msgstr "Оставить"
+
+msgid "No flights scheduled"
+msgstr "Рейсов не запланировано"
+
+msgid "Today"
+msgstr "Сегодня"
+
+msgid "Tomorrow"
+msgstr "Завтра"
+
+msgid "None"
+msgstr "Нет"
+
+msgid "+{count} more"
+msgstr "ещё +{count}"
+
+msgid "Departures ({key})"
+msgstr "Вылеты ({key})"
+
+msgid "Made {made}  Missed {missed}  In terminal {active}"
+msgstr "Успели {made}  Опоздали {missed}  В терминале {active}"
+
+msgid "Move this flight to another gate"
+msgstr "Перенести этот рейс на другой выход"
+
+msgid "No gate has a stand"
+msgstr "Ни у одного выхода нет стоянки"
+
+msgid "{destination} now uses gate {gate} for the days not yet issued"
+msgstr "Рейс «{destination}» теперь использует выход {gate} для ещё не выпущенных дней"
+
+msgid "End this contract? Exit fee ${fee}"
+msgstr "Расторгнуть контракт? Неустойка ${fee}"
+
+msgid "End this contract?"
+msgstr "Расторгнуть этот контракт?"
+
+msgid "{destination} contract ended. Flights already booked still fly"
+msgstr "Контракт с направлением «{destination}» расторгнут. Уже забронированные рейсы состоятся"
+
+msgid "Can't end this contract: another flight would have no taxi plan"
+msgstr "Нельзя расторгнуть контракт: другой рейс останется без маршрута руления"
+
+msgid "Can't end this contract: the {time} flight would have no taxi plan"
+msgstr "Нельзя расторгнуть контракт: рейс в {time} останется без маршрута руления"
+
+msgid "Can't end this contract: the {time} {airline} flight to {city} would have no taxi plan"
+msgstr "Нельзя расторгнуть контракт: рейс {airline} в {city} в {time} останется без маршрута руления"
+
+msgid "Gate {gate} is busy when this flight needs it"
+msgstr "Выход {gate} занят в нужное для этого рейса время"
+
+msgid "The runway"
+msgstr "ВПП"
+
+msgid "The taxi lane"
+msgstr "Рулёжная дорожка"
+
+msgid "{subject} is taken by the {time} flight"
+msgstr "{subject} занят(а) рейсом в {time}"
+
+msgid "{subject} is taken by the {time} {destination} flight"
+msgstr "{subject} занят(а) рейсом в {destination} в {time}"
+
+msgid "Airlines are warning you: the airport rating is below {stars} stars."
+msgstr "Авиакомпании предупреждают: рейтинг аэропорта ниже {stars} зв."
+
+msgid "{airline} to {destination} has ended its contract: the airport rating stayed low."
+msgstr "Авиакомпания {airline} (направление {destination}) расторгла контракт: рейтинг аэропорта оставался низким."
+
+msgid "Flights already issued still fly; no new days will."
+msgstr "Уже выпущенные рейсы выполнятся, новых дней не будет."
+
+msgid "first flight tomorrow"
+msgstr "первый рейс завтра"
+
+msgid "first flight on Day {day}"
+msgstr "первый рейс в день {day}"
+
+msgid "{hours} h"
+msgstr "{hours} ч"
+
+msgid "{minutes} min"
+msgstr "{minutes} мин"
+
+msgid "{airline} to {destination}"
+msgstr "{airline} → {destination}"
+
+msgid "Departs {time} daily"
+msgstr "Вылет ежедневно в {time}"
+
+msgid "Small plane"
+msgstr "Малый самолёт"
+
+msgid "Medium plane"
+msgstr "Средний самолёт"
+
+msgid "Large plane"
+msgstr "Крупный самолёт"
+
+msgid "${amount} a day"
+msgstr "${amount} в день"
+
+msgid "Fits your gates now"
+msgstr "Подходит к вашим выходам"
+
+msgid "Needs another gate"
+msgstr "Нужен ещё один выход"
+
+msgid "Offers ({count})"
+msgstr "Рейсы ({count})"
+
+msgid "first flight {lead} after opening"
+msgstr "первый рейс через {lead} после открытия"
+
+msgid "Low airport rating"
+msgstr "Низкий рейтинг аэропорта"
+
+msgid "Contract ended"
+msgstr "Контракт расторгнут"
+
+msgctxt "button: accept an offer"
+msgid "Accept"
+msgstr "Принять"
+
+msgctxt "button: decline an offer"
+msgid "Decline"
+msgstr "Отклонить"
+
+msgid "Can't accept {airline} to {destination}: {reason}"
+msgstr "Нельзя принять рейс {airline} в {destination}: {reason}"
+
+msgid "Accepted {airline} to {destination}"
+msgstr "Принят рейс {airline} в {destination}"
+
+msgid "Accepted {airline} to {destination}, {note}"
+msgstr "Принят рейс {airline} в {destination}, {note}"
+
+msgid "it clashes with another flight"
+msgstr "он пересекается с другим рейсом"
+
+msgid "No offers right now. New offers arrive at midnight."
+msgstr "Сейчас предложений нет. Новые появятся в полночь."
+
+msgid "Contracts end after {days} more low day."
+msgid_plural "Contracts end after {days} more low days."
+msgstr[0] "Контракты расторгнутся ещё через {days} день с низким рейтингом."
+msgstr[1] "Контракты расторгнутся ещё через {days} дня с низким рейтингом."
+msgstr[2] "Контракты расторгнутся ещё через {days} дней с низким рейтингом."
+
+msgid "{count} passenger booked   ${fee} per passenger"
+msgid_plural "{count} passengers booked   ${fee} per passenger"
+msgstr[0] "Забронировал {count} пассажир   ${fee} с пассажира"
+msgstr[1] "Забронировало {count} пассажира   ${fee} с пассажира"
+msgstr[2] "Забронировало {count} пассажиров   ${fee} с пассажира"
+
+msgid "Small runway, {length} m"
+msgstr "Малая ВПП, {length} м"
+
+msgid "Medium runway, {length} m"
+msgstr "Средняя ВПП, {length} м"
+
+msgid "Large runway, {length} m"
+msgstr "Большая ВПП, {length} м"
+
+msgid "Runway"
+msgstr "ВПП"
+
+msgid "Upgrade runway"
+msgstr "Улучшить ВПП"
+
+msgid "Next: {runway}, ${price}, works take {hours} hour"
+msgid_plural "Next: {runway}, ${price}, works take {hours} hours"
+msgstr[0] "Далее: {runway}, ${price}, работы займут {hours} ч"
+msgstr[1] "Далее: {runway}, ${price}, работы займут {hours} ч"
+msgstr[2] "Далее: {runway}, ${price}, работы займут {hours} ч"
+
+msgid "Drop to move {destination} to gate {gate}. Days already issued keep their gate."
+msgstr "Отпустите, чтобы перенести рейс «{destination}» на выход {gate}. Уже выпущенные дни сохранят свой выход."
+
+msgid "Drop the flight on another gate's row."
+msgstr "Перетащите рейс на строку другого выхода."
+
+msgid "Plain terms"
+msgstr "Простые условия"
+
+msgid "No catch, and 10% less pay."
+msgstr "Без подвохов, но оплата на 10% ниже."
+
+msgid "Loyal: +10%"
+msgstr "Лояльность: +10%"
+
+msgid "This airline is loyal to you: its offers pay 10% more."
+msgstr "Эта авиакомпания лояльна к вам: её рейсы платят на 10% больше."
+
+msgid "Top fare +{percent}%"
+msgstr "Макс. тариф +{percent}%"
+
+msgid "Shoppers"
+msgstr "Любители покупок"
+
+msgid "Many shoppers"
+msgstr "Много покупателей"
+
+msgid "Bag cover"
+msgstr "Компенсация багажа"
+
+msgid "Full bag cover"
+msgstr "Полная компенсация багажа"
+
+msgid "Full flight"
+msgstr "Полный рейс"
+
+msgid "Packed flight"
+msgstr "Битком набитый рейс"
+
+msgid "Rush crowd"
+msgstr "Толпа опаздывающих"
+
+msgid "Big rush crowd"
+msgstr "Большая толпа опаздывающих"
+
+msgid "Heavy bags"
+msgstr "Тяжёлый багаж"
+
+msgid "Very heavy bags"
+msgstr "Очень тяжёлый багаж"
+
+msgid "Signing bonus ${amount}"
+msgstr "Бонус за подписание ${amount}"
+
+msgid "Loyal airline"
+msgstr "Лояльная авиакомпания"
+
+msgid "Miss fine ${amount}"
+msgstr "Штраф за опоздание ${amount}"
+
+msgid "Odd hours"
+msgstr "Неудобные часы"
+
+msgid "Exit fee ${amount}"
+msgstr "Неустойка за выход ${amount}"
+
+msgid "Pays {percent}% more per passenger."
+msgstr "Платит на {percent}% больше за каждого пассажира."
+
+msgid "{percent}% of passengers come early with time to shop (usually 30%)."
+msgstr "{percent}% пассажиров приходят заранее, чтобы пройтись по магазинам (обычно 30%)."
+
+msgid "A missed bag costs {percent}% of the fee (usually 50%)."
+msgstr "Потерянный багаж стоит {percent}% от сбора (обычно 50%)."
+
+msgid "A missed bag costs nothing (usually 50% of the fee)."
+msgstr "Потерянный багаж ничего не стоит (обычно 50% от сбора)."
+
+msgid "Booked from the top half of the plane's range."
+msgstr "Загруженность в верхней половине вместимости самолёта."
+
+msgid "Booked from the top quarter of the plane's range."
+msgstr "Загруженность в верхней четверти вместимости самолёта."
+
+msgid "{percent}% of passengers arrive late in a rush (usually 15%)."
+msgstr "{percent}% пассажиров приходят впритык и спешат (обычно 15%)."
+
+msgid "A missed bag costs the whole fee (usually 50%)."
+msgstr "Потерянный багаж стоит полный сбор (обычно 50%)."
+
+msgid "Pays ${amount} once, when this contract's first flight leaves."
+msgstr "Выплачивает ${amount} один раз при вылете первого рейса по контракту."
+
+msgid "After {days} days this flight leaves, the airline's later offers pay {percent}% more."
+msgstr "После {days} дн. вылетов этого рейса следующие предложения компании платят на {percent}% больше."
+
+msgid "Each passenger who misses this flight costs ${amount}."
+msgstr "Каждый опоздавший пассажир обходится в ${amount}."
+
+msgid "Departs at 06:00 or 22:00, outside the usual 07:00 to 21:00."
+msgstr "Вылет в 06:00 или 22:00 — вне обычного окна с 07:00 до 21:00."
+
+msgid "Ending this contract in its first {days} days costs ${amount}."
+msgstr "Расторжение контракта в первые {days} дн. стоит ${amount}."
+
+msgid "the taxiway move would strand flight {id}"
+msgstr "перенос рулёжки отрежет рейс {id}"
+
+msgid "Not enough money: the {size} runway works cost ${price}"
+msgstr "Недостаточно денег: работы по ВПП ({size}) стоят ${price}"
+
+msgid "the runway is too short for a {size} plane"
+msgstr "ВПП слишком коротка для самолёта класса «{size}»"
+
+msgctxt "runway size"
+msgid "small"
+msgstr "малая"
+
+msgctxt "runway size"
+msgid "medium"
+msgstr "средняя"
+
+msgctxt "runway size"
+msgid "large"
+msgstr "большая"
+
+msgid "Runway works are already booked"
+msgstr "Работы на ВПП уже запланированы"
+
+msgid "The last runway works are still held in the timetable"
+msgstr "Прошлые работы на ВПП ещё числятся в расписании"
+
+msgid "The runway is already the largest size"
+msgstr "ВПП уже максимального размера"
+
+msgid "The timetable leaves no quiet stretch for the works"
+msgstr "В расписании нет тихого окна для работ"
+
+msgid "Works on the {size} runway start {start} and end {finish}"
+msgstr "Работы на ВПП ({size}) начнутся {start} и завершатся {finish}"
+
+msgid "Works on the {size} runway started {start} and end {finish}"
+msgstr "Работы на ВПП ({size}) начались {start} и завершатся {finish}"
+
+msgid "at {time}"
+msgstr "в {time}"
+
+msgid "tomorrow at {time}"
+msgstr "завтра в {time}"
+
+msgid "on Day {day} at {time}"
+msgstr "в день {day} в {time}"
+
+msgid "Waiting for taxiway works"
+msgstr "Ожидание работ на рулёжке"
+
+msgid "The west taxiway has moved"
+msgstr "Западная рулёжная дорожка перенесена"
+
+msgid "The east taxiway has moved"
+msgstr "Восточная рулёжная дорожка перенесена"
+
+msgid "Taxiway moved"
+msgstr "Рулёжная дорожка перенесена"
+
+msgid "{flight} moved to Gate {gate}"
+msgstr "Рейс {flight} перенесён на выход {gate}"
+
+msgid "{flight} moves to Gate {gate}"
+msgstr "Рейс {flight} переходит на выход {gate}"
+
+msgid "Flights moved"
+msgstr "Рейсы перенесены"
+
+msgid "{count} flight moved to Gate {gate}"
+msgid_plural "{count} flights moved to Gate {gate}"
+msgstr[0] "{count} рейс перенесён на выход {gate}"
+msgstr[1] "{count} рейса перенесены на выход {gate}"
+msgstr[2] "{count} рейсов перенесено на выход {gate}"
+
+msgid "{count} flight moves to Gate {gate}"
+msgid_plural "{count} flights move to Gate {gate}"
+msgstr[0] "{count} рейс переходит на выход {gate}"
+msgstr[1] "{count} рейса переходят на выход {gate}"
+msgstr[2] "{count} рейсов переходят на выход {gate}"
+
+msgid "Dismiss"
+msgstr "Скрыть"
+
+msgid "{airline} {destination}"
+msgstr "{airline} {destination}"
+
+msgid "{title} result"
+msgstr "{title}: итоги"
+
+msgid "Made {made}   Missed {missed}"
+msgstr "Успели {made}   Опоздали {missed}"
+
+msgid "{count}  {reason}"
+msgstr "{count}  {reason}"
+
+msgid "{count}  Other"
+msgstr "{count}  Другое"
+
+msgid "Waiting outside: check-in full"
+msgstr "Ждёт снаружи: регистрация заполнена"
+
+msgid "Missed the flight"
+msgstr "Опоздал на рейс"
+
+msgid "No check-in desk to go to"
+msgstr "Нет стойки регистрации"
+
+msgid "No security scanner or lane to go to"
+msgstr "Нет сканера или линии досмотра"
+
+msgid "Waiting outside a full queue"
+msgstr "Ждёт перед переполненной очередью"
+
+msgid "No walkable route"
+msgstr "Нет проходимого пути"
+
+msgid "The exit to the plane was blocked"
+msgstr "Выход к самолёту был заблокирован"
+
+msgid "Held up by crowds at the gate"
+msgstr "Задержан толпой у выхода"
+
+msgid "At the gate, but not boarded in time"
+msgstr "Дошёл до выхода, но не успел на посадку"
+
+msgid "Left the gate too late for the plane"
+msgstr "Покинул выход слишком поздно для посадки"
+
+msgid "Arrived after the doors closed"
+msgstr "Пришёл после закрытия дверей"
+
+msgid "Still walking to check-in"
+msgstr "Ещё шёл на регистрацию"
+
+msgid "Still queuing for check-in"
+msgstr "Ещё стоял в очереди на регистрацию"
+
+msgid "Still at the check-in desk"
+msgstr "Ещё был у стойки регистрации"
+
+msgid "Still walking to security"
+msgstr "Ещё шёл на досмотр"
+
+msgid "Still queuing for security"
+msgstr "Ещё стоял в очереди на досмотр"
+
+msgid "Still at security"
+msgstr "Ещё был на досмотре"
+
+msgid "Still walking to the gate"
+msgstr "Ещё шёл к выходу"
+
+msgid "Still at the cafe"
+msgstr "Ещё был в кафе"
+
+msgid "Still at the toilet"
+msgstr "Ещё был в туалете"
+
+msgid "Still at a shop"
+msgstr "Ещё был в магазине"
+
+msgid "Waiting for drop-off"
+msgstr "Ждал высадки"
+
+msgid "Never arrived: the terminal has no entrance"
+msgstr "Не прибыл: у терминала нет входа"
+
+msgid "Did not arrive before the doors closed"
+msgstr "Не успел прибыть до закрытия дверей"
+
+msgid "Day {day} {time}"
+msgstr "День {day} {time}"
+
+msgid "{when}  {title}\n{detail}"
+msgstr "{when}  {title}\n{detail}"
+
+msgid "still up"
+msgstr "ещё активно"
+
+msgid "cleared {time}"
+msgstr "снято в {time}"
+
+msgid "{when}  {title}, {end}"
+msgstr "{when}  {title}, {end}"
+
+msgid "Alerts"
+msgstr "Уведомления"
+
+msgid "Alert history and the on/off switch for alert cards"
+msgstr "История уведомлений и переключатель карточек уведомлений"
+
+msgid "Open the alert history"
+msgstr "Открыть историю уведомлений"
+
+msgid "Alert history"
+msgstr "История уведомлений"
+
+msgid "Show alert cards"
+msgstr "Показывать карточки"
+
+msgid "Alerts ({count})"
+msgstr "Уведомления ({count})"
+
+msgid "Click to look at it"
+msgstr "Нажмите, чтобы посмотреть"
+
+msgid "No alerts yet"
+msgstr "Пока нет уведомлений"
+
+msgid "{count} desk full · {waiting} waiting"
+msgid_plural "{count} desks full · {waiting} waiting"
+msgstr[0] "{count} стойка заполнена · ждут {waiting}"
+msgstr[1] "{count} стойки заполнены · ждут {waiting}"
+msgstr[2] "{count} стоек заполнены · ждут {waiting}"
+
+msgid "Check-in queue full"
+msgstr "Очередь на регистрацию заполнена"
+
+msgid "{count} lane full · {waiting} waiting"
+msgid_plural "{count} lanes full · {waiting} waiting"
+msgstr[0] "{count} линия заполнена · ждут {waiting}"
+msgstr[1] "{count} линии заполнены · ждут {waiting}"
+msgstr[2] "{count} линий заполнены · ждут {waiting}"
+
+msgid "Security queue full"
+msgstr "Очередь на досмотр заполнена"
+
+msgid "{count} passenger can't get where they are going"
+msgid_plural "{count} passengers can't get where they are going"
+msgstr[0] "{count} пассажир не может пройти к цели"
+msgstr[1] "{count} пассажира не могут пройти к цели"
+msgstr[2] "{count} пассажиров не могут пройти к цели"
+
+msgid "{count} passenger waits for a gate seat or a place to stand"
+msgid_plural "{count} passengers wait for a gate seat or a place to stand"
+msgstr[0] "{count} пассажир ждёт место у выхода"
+msgstr[1] "{count} пассажира ждут место у выхода"
+msgstr[2] "{count} пассажиров ждут место у выхода"
+
+msgid "Gate full"
+msgstr "Выход переполнен"
+
+msgid "{count} station is closed · hire staff on the Staff card"
+msgid_plural "{count} stations are closed · hire staff on the Staff card"
+msgstr[0] "{count} пост закрыт · наймите сотрудников во вкладке «Персонал»"
+msgstr[1] "{count} поста закрыты · наймите сотрудников во вкладке «Персонал»"
+msgstr[2] "{count} постов закрыто · наймите сотрудников во вкладке «Персонал»"
+
+msgid "Nobody on duty"
+msgstr "Никого нет на смене"
+
+msgid "{count} station is closed · staff can't reach the staff spot"
+msgid_plural "{count} stations are closed · staff can't reach the staff spot"
+msgstr[0] "{count} пост закрыт · сотрудник не может пройти к рабочему месту"
+msgstr[1] "{count} поста закрыты · сотрудники не могут пройти к рабочему месту"
+msgstr[2] "{count} постов закрыто · сотрудники не могут пройти к рабочему месту"
+
+msgid "Staff can't get to work"
+msgstr "Персонал не может пройти на место"
+
+msgid "The terminal is getting dirty. Hire a cleaner on the Staff card."
+msgstr "В терминале становится грязно. Наймите уборщика в разделе «Персонал»."
+
+msgid "The terminal is getting dirty. Place bins near the bar and toilets, or hire more cleaners."
+msgstr "В терминале становится грязно. Поставьте урны у бара и туалетов или наймите ещё уборщиков."
+
+msgid "Dirty terminal"
+msgstr "Грязный терминал"
+
+msgid "Inspector visit tomorrow"
+msgstr "Завтра визит инспектора"
+
+msgid "Holiday rush tomorrow"
+msgstr "Завтра праздничный наплыв"
+
+msgid "A VIP wants to fly"
+msgstr "VIP-пассажир хочет вылететь"
+
+msgid "A VIP wants to fly on {flight}. The first passenger to arrive for it is the VIP."
+msgstr "VIP хочет лететь рейсом {flight}. Первый прибывший пассажир этого рейса — VIP."
+
+msgid "If it fails: your rating drops by {penalty} if the VIP misses the flight."
+msgstr "При провале: ваш рейтинг снизится на {penalty}, если VIP опоздает на рейс."
+
+msgid "An airline asks a favour"
+msgstr "Авиакомпания просит об одолжении"
+
+msgid "An airline asks you to fit {extra} more passengers onto {flight}."
+msgstr "Авиакомпания просит вместить ещё {extra} пассажиров на рейс {flight}."
+
+msgid "Reward: {bonus} money now, and {extra} more passengers paying their fees."
+msgstr "Награда: {bonus} денег сразу и ещё {extra} пассажиров, оплачивающих сборы."
+
+msgid "The VIP made the flight"
+msgstr "VIP успел на рейс"
+
+msgid "The VIP boarded in a good mood. You earn {bonus} money."
+msgstr "VIP прошёл на посадку в хорошем настроении. Вы заработали {bonus} денег."
+
+msgid "The VIP missed the flight"
+msgstr "VIP опоздал на рейс"
+
+msgid "Your rating drops by {penalty}."
+msgstr "Ваш рейтинг снизится на {penalty}."
+
+msgid "The inspector was happy"
+msgstr "Инспектор остался доволен"
+
+msgid "You earn {bonus} money."
+msgstr "Вы получили {bonus} денег."
+
+msgid "The inspector was not happy"
+msgstr "Инспектор остался недоволен"
+
+msgid "The inspector found {found}. Your rating drops by {penalty}."
+msgstr "Инспектор выявил: {found}. Ваш рейтинг снизится на {penalty}."
+
+msgid "{count} mess on the floor ({allowed} allowed)"
+msgid_plural "{count} messes on the floor ({allowed} allowed)"
+msgstr[0] "{count} пятно на полу (допустимо {allowed})"
+msgstr[1] "{count} пятна на полу (допустимо {allowed})"
+msgstr[2] "{count} пятен на полу (допустимо {allowed})"
+
+msgid "{count} passenger stuck in a full queue ({allowed} allowed)"
+msgid_plural "{count} passengers stuck in a full queue ({allowed} allowed)"
+msgstr[0] "{count} пассажир застрял в полной очереди (допустимо {allowed})"
+msgstr[1] "{count} пассажира застряли в полной очереди (допустимо {allowed})"
+msgstr[2] "{count} пассажиров застряли в полной очереди (допустимо {allowed})"
+
+msgid "{first} and {second}"
+msgstr "{first} и {second}"
+
+msgid "none"
+msgstr "нет"
+
+msgid "today's"
+msgstr "сегодняшний"
+
+msgid "tomorrow's"
+msgstr "завтрашний"
+
+msgid "day {day}'s"
+msgstr "рейс дня {day}"
+
+msgid "half a star"
+msgstr "ползвезды"
+
+msgid "{count} star"
+msgid_plural "{count} stars"
+msgstr[0] "{count} звезда"
+msgstr[1] "{count} звезды"
+msgstr[2] "{count} звёзд"
+
+msgid "{count} stars"
+msgstr "{count} зв."
+
+msgid "VIP for {flight}"
+msgstr "VIP для {flight}"
+
+msgid "{day} {time} flight"
+msgstr "рейс {day} в {time}"
+
+msgid "The airport inspector visits tomorrow, some time between {from} and {to}."
+msgstr "Инспектор аэропорта приедет завтра, в промежутке с {from} до {to}."
+
+msgid "The inspector looks at messes on the floor and at queues that are full."
+msgstr "Инспектор проверяет грязь на полу и переполненные очереди."
+
+msgid "Reward: {bonus} money if there are at most {max_messes} messes and at most {max_full_queue} passengers stuck in a full queue at the visit."
+msgstr "Награда: {bonus} денег, если во время визита на полу не более {max_messes} пятен и в полной очереди не более {max_full_queue} чел."
+
+msgid "If it fails: your rating drops by {penalty}."
+msgstr "При провале: ваш рейтинг снизится на {penalty}."
+
+msgid "Tomorrow is a holiday. {total} extra passengers are booked, spread over {count} of tomorrow's flights: {list}."
+msgstr "Завтра праздник. Забронировано {total} доп. пассажиров, распределённых на {count} завтрашних рейса(ов): {list}."
+
+msgid "Reward: every extra passenger pays the usual fee."
+msgstr "Награда: каждый дополнительный пассажир платит обычный сбор."
+
+msgid "If it fails: queues grow, and passengers who miss their flight lower your rating as usual."
+msgstr "При провале: очереди вырастут, а опоздавшие пассажиры как обычно снизят рейтинг."
+
+msgid "Reward: {bonus} money if the VIP makes the flight in a good mood (a mood of {good_mood} or higher when boarding)."
+msgstr "Награда: {bonus} денег, если VIP сядет на рейс в хорошем настроении (не ниже {good_mood} при посадке)."
+
+msgid "If it fails: the extra passengers need check-in and security too, and any who miss the flight lower your rating as usual."
+msgstr "При провале: доп. пассажирам тоже нужны регистрация и досмотр, а опоздавшие как обычно снизят рейтинг."
+
+msgid "The VIP made the flight, but their mood was below {good_mood} when boarding, so there is no bonus."
+msgstr "VIP успел на рейс, но при посадке настроение было ниже {good_mood}, поэтому бонус не начислен."
+
+msgid "The clock stays paused until you choose."
+msgstr "Время остаётся на паузе, пока вы не выберете."
+
+msgid "The clock goes on when you close this."
+msgstr "Время пойдёт дальше, когда вы закроете это окно."
+
+msgid "Big news at the airport"
+msgstr "Важные новости аэропорта"
+
+msgid "The runway works are done. Bigger planes can land now, so Offers can bring them flights."
+msgstr "Работы на ВПП завершены. Теперь могут садиться более крупные самолёты, и в «Рейсах» появятся новые контракты."
+
+msgid "A big event has come up. Its notice says what it is and what you can do about it."
+msgstr "Началось крупное событие. В уведомлении указано, что произошло и что можно предпринять."
+
+msgid "Your airport has grown"
+msgstr "Ваш аэропорт вырос"
+
+msgid "{hired} hired, off shift"
+msgstr "Нанято {hired}, не на смене"
+
+msgid "{hired} hired, {duty} cleaning, {off_shift} off shift"
+msgstr "Нанято {hired}, убирают {duty}, вне смены {off_shift}"
+
+msgid "{hired} hired, {duty} cleaning, {leaving} leaving"
+msgstr "Нанято {hired}, убирают {duty}, уходят {leaving}"
+
+msgid "{hired} hired, {duty} cleaning"
+msgstr "Нанято {hired}, убирают {duty}"
+
+msgid "{hired} hired, {duty} on duty, {leaving} leaving"
+msgstr "Нанято {hired}, на смене {duty}, уходят {leaving}"
+
+msgid "{hired} hired, {duty} on duty"
+msgstr "Нанято {hired}, на смене {duty}"
+
+msgid "Wall gap: close the open edge of the outer wall, marked in red"
+msgid_plural "{count} wall gaps: close the open edges of the outer wall, marked in red"
+msgstr[0] "{count} разрыв в стене: закройте открытый край внешней стены (выделен красным)"
+msgstr[1] "{count} разрыва в стене: закройте открытые края внешней стены (выделены красным)"
+msgstr[2] "{count} разрывов в стене: закройте открытые края внешней стены (выделены красным)"
+
+msgid "To open the airport"
+msgstr "Чтобы открыть аэропорт"
+
+msgid "Ready: the airport opens on the next tick"
+msgstr "Готово: аэропорт откроется на следующем такте"
+
+msgid "Your airport needs"
+msgstr "Аэропорту требуется"
+
+msgid "Open! Starter contract: {airline} to {destination}, daily"
+msgstr "Открыто! Стартовый контракт: {airline} → {destination}, ежедневно"
+
+msgid "Hire a check-in agent"
+msgstr "Наймите сотрудника регистрации"
+
+msgid "Hire a security officer"
+msgstr "Наймите сотрудника досмотра"
+
+msgid "Hire a gate agent"
+msgstr "Наймите сотрудника выхода"
+
+msgid "Hire shop staff"
+msgstr "Наймите продавца"
+
+msgid "Check-in agents"
+msgstr "Сотр. регистрации"
+
+msgid "Security officers"
+msgstr "Сотр. досмотра"
+
+msgid "Gate agents"
+msgstr "Сотр. выходов"
+
+msgid "Shop staff"
+msgstr "Продавцы"
+
+msgid "Cleaners"
+msgstr "Уборщики"
+
+msgctxt "staff button"
+msgid "Hire · {wage}/day"
+msgstr "Нанять · {wage}/день"
+
+msgctxt "staff button"
+msgid "Fire"
+msgstr "Уволить"
+
+msgid "Belt ends {count}"
+msgstr "Концы ленты: {count}"
+
+msgid "Needs a belt dragged inside"
+msgstr "Нужна лента, проведённая внутрь"
+
+msgid "Waiting for belt from check-in desk"
+msgstr "Ожидание ленты от стойки регистрации"
+
+msgid "Needs a Ramp Agent (Staff)"
+msgstr "Нужен сотрудник перронной службы («Персонал»)"
+
+msgid "Desks connected: {count}"
+msgstr "Подключено стоек: {count}"
+
+msgid "Stalls {count}"
+msgstr "Кабинок: {count}"
+
+msgid "Sinks {count}"
+msgstr "Раковин: {count}"
+
+msgid "Upkeep ${amount} per day"
+msgstr "Содержание ${amount} в день"
+
+msgid "Upkeep ${amount} per day once ready"
+msgstr "Содержание ${amount} в день после готовности"
+
+msgid "Spots {count}"
+msgstr "Мест: {count}"
+
+msgid "Fee ${amount} per visit"
+msgstr "Плата ${amount} за визит"
+
+msgid "Free to use"
+msgstr "Бесплатно"
+
+msgid "Browse spots {count}"
+msgstr "Мест осмотра: {count}"
+
+msgid "Base spend ${amount} per visit"
+msgstr "Базовый чек ${amount} за визит"
+
+msgid "Seats {count}"
+msgstr "Мест: {count}"
+
+msgid "Entrance with a way through check-in and security to an exit"
+msgstr "Вход с проходом через регистрацию и досмотр к выходу"
+
+msgid "Staff can't reach a desk or scanner passengers need: clear its staff spot"
+msgstr "Сотрудники не могут дойти до нужной стойки или сканера: освободите место сотрудника"
+
+msgid "{need} ({unlock})"
+msgstr "{need} ({unlock})"
+
+msgid "Check-in desk and an agent"
+msgstr "Стойка регистрации и сотрудник"
+
+msgid "Security scanner and an officer"
+msgstr "Сканер досмотра и сотрудник"
+
+msgid "Passengers need a check-in desk"
+msgstr "Пассажирам нужна стойка регистрации"
+
+msgid "Passengers need security"
+msgstr "Пассажирам нужен досмотр"
+
+msgid "Passengers need a toilet"
+msgstr "Пассажирам нужен туалет"
+
+msgid "Passengers are hungry"
+msgstr "Пассажиры голодны"
+
+msgid "Follow this passenger"
+msgstr "Следить за этим пассажиром"
+
+msgid "Thoughts"
+msgstr "Мысли"
+
+msgid "Show where this happened"
+msgstr "Показать, где это случилось"
+
+msgid "Passenger {id}"
+msgstr "Пассажир {id}"
+
+msgid "Mood {mood}   Hunger {hunger}   Toilet {toilet}   Boredom {boredom}"
+msgstr "Настроение {mood}   Голод {hunger}   Туалет {toilet}   Скука {boredom}"
+
+msgid "Thoughts: none yet"
+msgstr "Мысли: пока нет"
+
+msgid "{thought} · {age}"
+msgstr "{thought} · {age}"
+
+msgid "The pin shows where they were at {time}"
+msgstr "Метка показывает, где они были в {time}"
+
+msgid "Running late"
+msgstr "Опаздывает"
+
+msgid "Stuck: \"{reason}\""
+msgstr "Застрял: «{reason}»"
+
+msgid "Flight {title}"
+msgstr "Рейс {title}"
+
+msgid "Flight {title}, doors close {time}"
+msgstr "Рейс {title}, двери закроются в {time}"
+
+msgid "just now"
+msgstr "только что"
+
+msgid "{minutes} min ago"
+msgid_plural "{minutes} min ago"
+msgstr[0] "{minutes} мин назад"
+msgstr[1] "{minutes} мин назад"
+msgstr[2] "{minutes} мин назад"
+
+msgid "{count} passenger"
+msgid_plural "{count} passengers"
+msgstr[0] "{count} пассажир"
+msgstr[1] "{count} пассажира"
+msgstr[2] "{count} пассажиров"
+
+msgid "Flight {flights}"
+msgstr "Рейс {flights}"
+
+msgid "Empty, at the curb"
+msgstr "Пустая, у обочины"
+
+msgid "At the curb"
+msgstr "У обочины"
+
+msgid "Parked, driver away"
+msgstr "Припаркована, водитель ушёл"
+
+msgid "Parked"
+msgstr "Припаркована"
+
+msgid "Empty, leaving"
+msgstr "Пустая, выезжает"
+
+msgid "Leaving"
+msgstr "Выезжает"
+
+msgid "Empty, driving on"
+msgstr "Пустая, едет дальше"
+
+msgid "Driving into the car park"
+msgstr "Заезжает на парковку"
+
+msgid "Waiting to turn into the car park"
+msgstr "Ждёт поворота на парковку"
+
+msgid "Driving to the car park"
+msgstr "Едет к парковке"
+
+msgid "Queuing for the curb"
+msgstr "В очереди к обочине"
+
+msgid "Driving to the curb"
+msgstr "Едет к обочине"
+
+msgid "On time"
+msgstr "Вовремя"
+
+msgid "Drop-off delay: under 1 min"
+msgstr "Задержка высадки: меньше 1 мин"
+
+msgid "Drop-off delay: {minutes} min"
+msgid_plural "Drop-off delay: {minutes} min"
+msgstr[0] "Задержка высадки: {minutes} мин"
+msgstr[1] "Задержка высадки: {minutes} мин"
+msgstr[2] "Задержка высадки: {minutes} мин"
+
+msgctxt "vehicle"
+msgid "Taxi"
+msgstr "Такси"
+
+msgctxt "vehicle"
+msgid "Car"
+msgstr "Машина"
+
+msgid "{vehicle} {id}"
+msgstr "{vehicle} {id}"
+
+msgid "That hit the spot"
+msgstr "То, что надо!"
+
+msgid "Gave up on getting food"
+msgstr "Так и не удалось поесть"
+
+msgid "What a relief"
+msgstr "Какое облегчение!"
+
+msgid "Waited {minutes} min in the queue"
+msgid_plural "Waited {minutes} min in the queue"
+msgstr[0] "Прождал {minutes} мин в очереди"
+msgstr[1] "Прождал {minutes} мин в очереди"
+msgstr[2] "Прождал {minutes} мин в очереди"
+
+msgid "Nice decor here"
+msgstr "Здесь красивый интерьер"
+
+msgctxt "room status"
+msgid "Ready"
+msgstr "Готово"
+
+msgctxt "status reason"
+msgid "too small: a {room} needs at least {width}x{height}"
+msgstr "слишком мала: комнате «{room}» нужно минимум {width}x{height}"
+
+msgctxt "room need"
+msgid "Too small: a {room} needs at least {width}x{height}"
+msgstr "Слишком мала: комнате «{room}» нужно минимум {width}x{height}"
+
+msgctxt "gate card"
+msgid "Status: unlinked: no exit facing the planes in {cells} cells"
+msgstr "Статус: не привязано: нет выхода к самолётам в пределах {cells} кл."
+
+msgctxt "gate card"
+msgid "Status: unlinked: gate {gate} uses the exit"
+msgstr "Статус: не привязано: выход {gate} уже занимает эту дверь"
+
+msgctxt "gate card"
+msgid "Status: unlinked: stand would overlap gate {gate}"
+msgstr "Статус: не привязано: стоянка наложится на выход {gate}"
+
+msgctxt "gate card"
+msgid "Status: unlinked: no room for a plane"
+msgstr "Статус: не привязано: нет места для самолёта"
+
+msgctxt "gate card"
+msgid "Status: unlinked: way to the lane blocked"
+msgstr "Статус: не привязано: путь к рулёжке заблокирован"
+
+msgctxt "gate card"
+msgid "Status: unlinked: every gate letter in use"
+msgstr "Статус: не привязано: все буквы выходов заняты"
+
+msgid "Status: Scanner fault, fixed by {time}"
+msgstr "Статус: сбой сканера, починят к {time}"
+
+msgctxt "gate card"
+msgid "Biggest plane: Small"
+msgstr "Макс. самолёт: Малый"
+
+msgctxt "gate card"
+msgid "Biggest plane: Medium"
+msgstr "Макс. самолёт: Средний"
+
+msgctxt "gate card"
+msgid "Biggest plane: Large"
+msgstr "Макс. самолёт: Крупный"
+
+msgctxt "gate card"
+msgid "Biggest plane: {class}"
+msgstr "Макс. самолёт: {class}"
+
+msgctxt "item name"
+msgid "ATM"
+msgstr "Банкомат"
+
+msgctxt "item name"
+msgid "Baggage belt"
+msgstr "Багажная лента"
+
+msgctxt "item name"
+msgid "Baggage cart"
+msgstr "Багажная тележка"
+
+msgctxt "item name"
+msgid "Bar counter"
+msgstr "Барная стойка"
+
+msgctxt "item name"
+msgid "Belt corner"
+msgstr "Поворот ленты"
+
+msgctxt "item name"
+msgid "Belt end"
+msgstr "Конец ленты"
+
+msgctxt "item name"
+msgid "Belt merge"
+msgstr "Стык лент"
+
+msgctxt "item name"
+msgid "Bench"
+msgstr "Скамейка"
+
+msgctxt "item name"
+msgid "Bin"
+msgstr "Урна"
+
+msgctxt "item name"
+msgid "Bush"
+msgstr "Куст"
+
+msgctxt "item name"
+msgid "Cafe counter"
+msgstr "Прилавок кафе"
+
+msgctxt "item name"
+msgid "Cafe table"
+msgstr "Столик кафе"
+
+msgctxt "item name"
+msgid "Chain"
+msgstr "Цепь"
+
+msgctxt "item name"
+msgid "Check-in desk"
+msgstr "Стойка регистрации"
+
+msgctxt "item name"
+msgid "Clothes rail"
+msgstr "Вешалка для одежды"
+
+msgctxt "item name"
+msgid "Currency exchange"
+msgstr "Обмен валют"
+
+msgctxt "item name"
+msgid "Display stand"
+msgstr "Витрина"
+
+msgctxt "item name"
+msgid "Duty free shelf"
+msgstr "Стеллаж Duty Free"
+
+msgctxt "item name"
+msgid "Duty free till"
+msgstr "Касса Duty Free"
+
+msgctxt "item name"
+msgid "Entrance"
+msgstr "Вход"
+
+msgctxt "item name"
+msgid "Exit to the plane"
+msgstr "Выход к самолёту"
+
+msgctxt "item name"
+msgid "Fashion till"
+msgstr "Касса бутика"
+
+msgctxt "item name"
+msgid "Fountain"
+msgstr "Фонтан"
+
+msgctxt "item name"
+msgid "Gate desk"
+msgstr "Стойка выхода"
+
+msgctxt "item name"
+msgid "Gate seats"
+msgstr "Кресла у выхода"
+
+msgctxt "item name"
+msgid "Grab-and-go stall"
+msgstr "Стойка еды с собой"
+
+msgctxt "item name"
+msgid "Info desk"
+msgstr "Инфостойка"
+
+msgctxt "item name"
+msgid "Info screen"
+msgstr "Инфоэкран"
+
+msgctxt "item name"
+msgid "Kiosk counter"
+msgstr "Прилавок киоска"
+
+msgctxt "item name"
+msgid "Lounge armchair"
+msgstr "Кресло зала ожидания"
+
+msgctxt "item name"
+msgid "Lounge sofa"
+msgstr "Диван зала ожидания"
+
+msgctxt "item name"
+msgid "Nap pod"
+msgstr "Спальная капсула"
+
+msgctxt "item name"
+msgid "Pharmacy counter"
+msgstr "Прилавок аптеки"
+
+msgctxt "item name"
+msgid "Pharmacy shelf"
+msgstr "Полка аптеки"
+
+msgctxt "item name"
+msgid "Pickup table"
+msgstr "Стол выдачи"
+
+msgctxt "item name"
+msgid "Plant pot"
+msgstr "Вазон"
+
+msgctxt "item name"
+msgid "Planter"
+msgstr "Клумба"
+
+msgctxt "item name"
+msgid "Play blocks"
+msgstr "Игровые кубики"
+
+msgctxt "item name"
+msgid "Play slide"
+msgstr "Игровая горка"
+
+msgctxt "item name"
+msgid "Post"
+msgstr "Стойка"
+
+msgctxt "item name"
+msgid "Prize podium"
+msgstr "Призовой подиум"
+
+msgctxt "item name"
+msgid "Restaurant booth"
+msgstr "Диванчик ресторана"
+
+msgctxt "item name"
+msgid "Restaurant table"
+msgstr "Стол ресторана"
+
+msgctxt "item name"
+msgid "Screen"
+msgstr "Экран"
+
+msgctxt "item name"
+msgid "Security arch"
+msgstr "Рамка досмотра"
+
+msgctxt "item name"
+msgid "Security scanner"
+msgstr "Сканер досмотра"
+
+msgctxt "item name"
+msgid "Shower"
+msgstr "Душ"
+
+msgctxt "item name"
+msgid "Sink"
+msgstr "Раковина"
+
+msgctxt "item name"
+msgid "Statue"
+msgstr "Статуя"
+
+msgctxt "item name"
+msgid "Toilet stall"
+msgstr "Туалетная кабинка"
+
+msgctxt "item name"
+msgid "Tray table"
+msgstr "Стол для лотков"
+
+msgctxt "item name"
+msgid "Tree"
+msgstr "Дерево"
+
+msgctxt "item name"
+msgid "Tree bench"
+msgstr "Скамейка у дерева"
+
+msgctxt "item name"
+msgid "Work desk"
+msgstr "Рабочий стол"
+
+msgctxt "item name"
+msgid "X-ray belt"
+msgstr "Рентген-лента"
+
+msgctxt "room type"
+msgid "ATM"
+msgstr "Банкомат"
+
+msgctxt "room type"
+msgid "Bag room"
+msgstr "Багажное отд."
+
+msgctxt "room type"
+msgid "Bar"
+msgstr "Бар"
+
+msgctxt "room type"
+msgid "Cafe"
+msgstr "Кафе"
+
+msgctxt "room type"
+msgid "Duty free"
+msgstr "Duty Free"
+
+msgctxt "room type"
+msgid "Exchange"
+msgstr "Обмен валют"
+
+msgctxt "room type"
+msgid "Fashion store"
+msgstr "Бутик одежды"
+
+msgctxt "room type"
+msgid "Grab-and-go stall"
+msgstr "Стойка еды с собой"
+
+msgctxt "room type"
+msgid "Kiosk"
+msgstr "Киоск"
+
+msgctxt "room type"
+msgid "Lounge"
+msgstr "Зал ожидания"
+
+msgctxt "room type"
+msgid "Nap pod"
+msgstr "Спальная капсула"
+
+msgctxt "room type"
+msgid "Pharmacy"
+msgstr "Аптека"
+
+msgctxt "room type"
+msgid "Play area"
+msgstr "Игровая зона"
+
+msgctxt "room type"
+msgid "Restaurant"
+msgstr "Ресторан"
+
+msgctxt "room type"
+msgid "Shower"
+msgstr "Душевая"
+
+msgctxt "room type"
+msgid "Toilet"
+msgstr "Туалет"
+
+msgctxt "room name, mid-sentence"
+msgid "atm"
+msgstr "банкомата"
+
+msgctxt "room name, mid-sentence"
+msgid "bag room"
+msgstr "багажного отделения"
+
+msgctxt "room name, mid-sentence"
+msgid "bar"
+msgstr "бара"
+
+msgctxt "room name, mid-sentence"
+msgid "cafe"
+msgstr "кафе"
+
+msgctxt "room name, mid-sentence"
+msgid "duty free"
+msgstr "магазина Duty Free"
+
+msgctxt "room name, mid-sentence"
+msgid "exchange"
+msgstr "обменника"
+
+msgctxt "room name, mid-sentence"
+msgid "fashion store"
+msgstr "бутика одежды"
+
+msgctxt "room name, mid-sentence"
+msgid "grab-and-go stall"
+msgstr "точки еды с собой"
+
+msgctxt "room name, mid-sentence"
+msgid "kiosk"
+msgstr "киоска"
+
+msgctxt "room name, mid-sentence"
+msgid "lounge"
+msgstr "зала ожидания"
+
+msgctxt "room name, mid-sentence"
+msgid "nap pod"
+msgstr "комнаты спальных капсул"
+
+msgctxt "room name, mid-sentence"
+msgid "pharmacy"
+msgstr "аптеки"
+
+msgctxt "room name, mid-sentence"
+msgid "play area"
+msgstr "игровой зоны"
+
+msgctxt "room name, mid-sentence"
+msgid "restaurant"
+msgstr "ресторана"
+
+msgctxt "room name, mid-sentence"
+msgid "shower"
+msgstr "душевой"
+
+msgctxt "room name, mid-sentence"
+msgid "toilet"
+msgstr "туалета"
+
+msgctxt "landside place"
+msgid "Curb bay"
+msgstr "Зона высадки"
+
+msgctxt "landside place"
+msgid "Multi-storey car park"
+msgstr "Многоярусная парковка"
+
+msgctxt "landside place"
+msgid "Surface lot"
+msgstr "Наземная парковка"
+
+msgctxt "room need"
+msgid "Needs a belt end"
+msgstr "Нужен конец ленты"
+
+msgctxt "room need"
+msgid "Needs a clothes rail"
+msgstr "Нужна вешалка для одежды"
+
+msgctxt "room need"
+msgid "Needs a counter"
+msgstr "Нужен прилавок"
+
+msgctxt "room need"
+msgid "Needs a display stand"
+msgstr "Нужна витрина"
+
+msgctxt "room need"
+msgid "Needs a kiosk counter"
+msgstr "Нужен прилавок киоска"
+
+msgctxt "room need"
+msgid "Needs a nap pod"
+msgstr "Нужна спальная капсула"
+
+msgctxt "room need"
+msgid "Needs a pharmacy counter"
+msgstr "Нужен прилавок аптеки"
+
+msgctxt "room need"
+msgid "Needs a shelf"
+msgstr "Нужна полка"
+
+msgctxt "room need"
+msgid "Needs a shower"
+msgstr "Нужен душ"
+
+msgctxt "room need"
+msgid "Needs a sink"
+msgstr "Нужна раковина"
+
+msgctxt "room need"
+msgid "Needs a slide"
+msgstr "Нужна горка"
+
+msgctxt "room need"
+msgid "Needs a sofa"
+msgstr "Нужен диван"
+
+msgctxt "room need"
+msgid "Needs a table"
+msgstr "Нужен столик"
+
+msgctxt "room need"
+msgid "Needs a till"
+msgstr "Нужна касса"
+
+msgctxt "room need"
+msgid "Needs a toilet stall"
+msgstr "Нужна туалетная кабинка"
+
+msgctxt "room need"
+msgid "Needs an ATM"
+msgstr "Нужен банкомат"
+
+msgctxt "room need"
+msgid "Needs an exchange counter"
+msgstr "Нужна стойка обмена"
+
+msgctxt "room need"
+msgid "Needs play blocks"
+msgstr "Нужны игровые кубики"
+
+msgctxt "room need"
+msgid "Needs entrance"
+msgstr "Нужен вход"
+
+msgctxt "status reason"
+msgid "needs a belt end"
+msgstr "нужен конец ленты"
+
+msgctxt "status reason"
+msgid "needs a clothes rail"
+msgstr "нужна вешалка для одежды"
+
+msgctxt "status reason"
+msgid "needs a counter"
+msgstr "нужен прилавок"
+
+msgctxt "status reason"
+msgid "needs a display stand"
+msgstr "нужна витрина"
+
+msgctxt "status reason"
+msgid "needs a kiosk counter"
+msgstr "нужен прилавок киоска"
+
+msgctxt "status reason"
+msgid "needs a nap pod"
+msgstr "нужна спальная капсула"
+
+msgctxt "status reason"
+msgid "needs a pharmacy counter"
+msgstr "нужен прилавок аптеки"
+
+msgctxt "status reason"
+msgid "needs a shelf"
+msgstr "нужна полка"
+
+msgctxt "status reason"
+msgid "needs a shower"
+msgstr "нужен душ"
+
+msgctxt "status reason"
+msgid "needs a sink"
+msgstr "нужна раковина"
+
+msgctxt "status reason"
+msgid "needs a slide"
+msgstr "нужна горка"
+
+msgctxt "status reason"
+msgid "needs a sofa"
+msgstr "нужен диван"
+
+msgctxt "status reason"
+msgid "needs a table"
+msgstr "нужен столик"
+
+msgctxt "status reason"
+msgid "needs a till"
+msgstr "нужна касса"
+
+msgctxt "status reason"
+msgid "needs a toilet stall"
+msgstr "нужна туалетная кабинка"
+
+msgctxt "status reason"
+msgid "needs an atm"
+msgstr "нужен банкомат"
+
+msgctxt "status reason"
+msgid "needs an exchange counter"
+msgstr "нужна стойка обмена"
+
+msgctxt "status reason"
+msgid "needs play blocks"
+msgstr "нужны игровые кубики"
+
+msgctxt "status reason"
+msgid "needs entrance"
+msgstr "нужен вход"
+
+msgctxt "status reason"
+msgid "a wall cuts through the lane"
+msgstr "линию пересекает стена"
+
+msgctxt "status reason"
+msgid "clear the floor for the queue"
+msgstr "освободите пол для очереди"
+
+msgctxt "status reason"
+msgid "clear the floor for the repack spot"
+msgstr "освободите пол для места сборов"
+
+msgctxt "status reason"
+msgid "clear the helper's spot by the repack spot"
+msgstr "освободите место помощника у зоны сборов"
+
+msgctxt "status reason"
+msgid "clear the officer's spot by the x-ray belt"
+msgstr "освободите место сотрудника у рентген-ленты"
+
+msgctxt "status reason"
+msgid "clear the way back from the repack spot"
+msgstr "освободите проход от места сборов"
+
+msgctxt "status reason"
+msgid "clear the way out past the pickup table"
+msgstr "освободите выход за столом выдачи"
+
+msgctxt "status reason"
+msgid "clear the way through the arch"
+msgstr "освободите проход через рамку"
+
+msgctxt "status reason"
+msgid "needs a pickup table"
+msgstr "нужен стол выдачи"
+
+msgctxt "status reason"
+msgid "needs a tray table"
+msgstr "нужен стол для лотков"
+
+msgctxt "status reason"
+msgid "needs an x-ray belt"
+msgstr "нужна рентген-лента"
+
+msgctxt "status reason"
+msgid "no arch"
+msgstr "нет рамки"
+
+msgctxt "status reason"
+msgid "parts face different ways"
+msgstr "части смотрят в разные стороны"
+
+msgctxt "status reason"
+msgid "closed by you"
+msgstr "закрыто вами"
+
+msgctxt "status reason"
+msgid "staff spot blocked"
+msgstr "место сотрудника занято"
+
+msgctxt "status reason"
+msgid "staff can't reach the staff spot"
+msgstr "сотрудник не может пройти к рабочему месту"
+
+msgctxt "status reason"
+msgid "no staff on duty"
+msgstr "нет персонала на смене"
+
+msgctxt "status reason"
+msgid "scanner fault"
+msgstr "сбой сканера"
+
+msgctxt "gate card"
+msgid "Walk from security: no route"
+msgstr "Путь от досмотра: нет маршрута"
+
+msgctxt "gate card"
+msgid "Walk from security: {minutes} min"
+msgstr "Путь от досмотра: {minutes} мин"
+
+msgid "Quiet night: fast-forwarding"
+msgstr "Спокойная ночь: ускорение"
+
+msgid "Quiet stretch: fast-forwarding"
+msgstr "Тихое окно: ускорение"
+
+msgctxt "clock"
+msgid "Day {day}  {time}"
+msgstr "День {day}  {time}"
+
+msgctxt "follow line"
+msgid "Passenger {id}"
+msgstr "Пассажир {id}"
+
+msgctxt "follow line"
+msgid "mood {value}"
+msgstr "настроение {value}"
+
+msgctxt "follow line"
+msgid "hunger {value}"
+msgstr "голод {value}"
+
+msgctxt "follow line"
+msgid "toilet {value}"
+msgstr "туалет {value}"
+
+msgctxt "passenger speech"
+msgid "\"{text}\""
+msgstr "«{text}»"
+
+msgid "Hint ({key} turns hints off)"
+msgstr "Подсказка ({key} — отключить подсказки)"
+
+msgid "Hints ({key})"
+msgstr "Подск. ({key})"
+
+msgid "Reset hints"
+msgstr "Сбросить подск."
+
+msgid "Passengers need a check-in desk. Each desk also needs a hired agent: open Staff on the bar."
+msgstr "Пассажирам нужна стойка регистрации. Каждой стойке нужен нанятый сотрудник: откройте «Персонал» на панели."
+
+msgid "Passengers need security after check-in. Place a scanner or build a lane, and hire an officer."
+msgstr "После регистрации пассажирам нужен досмотр. Поставьте сканер или линию и наймите сотрудника досмотра."
+
+msgid "One agent works one desk or scanner. Hire another on the Staff card."
+msgstr "Один сотрудник обслуживает одну стойку или сканер. Наймите ещё в окне «Персонал»."
+
+msgid "Passengers need a toilet. Build a toilet room and put a stall in it."
+msgstr "Пассажирам нужен туалет. Постройте комнату туалета и поставьте в неё кабинку."
+
+msgid "Hungry passengers need food. Build a cafe with a counter and a table."
+msgstr "Голодным пассажирам нужна еда. Постройте кафе с прилавком и столиком."
+
+msgid "Game menu"
+msgstr "Меню игры"
+
+msgid "Resume ({key})"
+msgstr "Продолжить ({key})"
+
+msgid "v{version}"
+msgstr "v{version}"
+
+msgid "Settings"
+msgstr "Настройки"
+
+msgid "Incidents"
+msgstr "Происшествия"
+
+msgid "Back"
+msgstr "Назад"
+
+msgid "Daily incidents"
+msgstr "Ежедневные происшествия"
+
+msgid "Accept turns daily incidents on, Decline leaves them off. You can change this any time: press {key}, then Settings."
+msgstr "«Принять» включает ежедневные происшествия, «Отклонить» — оставляет их выключенными. Это можно изменить в любое время: нажмите {key}, затем «Настройки»."
+
+msgid "Your first day at the airport"
+msgstr "Ваш первый день в аэропорту"
+
+msgid "Continue ({key})"
+msgstr "Продолжить ({key})"
+
+msgid "Accept"
+msgstr "Принять"
+
+msgid "Decline"
+msgstr "Отклонить"
+
+msgid "The clock starts when you close this."
+msgstr "Время пойдёт, когда вы закроете это окно."
+
+msgid "TERMINAL MANAGER"
+msgstr "ДИСПЕТЧЕР ТЕРМИНАЛА"
+
+msgid "Mood ({key})"
+msgstr "Настр. ({key})"
+
+msgid "green fed, orange hungry, red starving"
+msgstr "зелёный — сыт, оранжевый — голоден, красный — очень голоден"
+
+msgid "green fine, orange needs the toilet, red desperate"
+msgstr "зелёный — в порядке, оранжевый — хочет в туалет, красный — срочно нужен туалет"
+
+msgid "green content, orange bored, red very bored"
+msgstr "зелёный — доволен, оранжевый — скучает, красный — сильно скучает"
+
+msgid "amber where passengers are running late"
+msgstr "янтарный — там, где пассажиры опаздывают"
+
+msgid "green fine, red waiting long or unhappy"
+msgstr "зелёный — в порядке, красный — долго ждёт или недоволен"
+
+msgctxt "mood overlay mode"
+msgid "Hunger"
+msgstr "Голод"
+
+msgctxt "mood overlay mode"
+msgid "Toilet"
+msgstr "Туалет"
+
+msgctxt "mood overlay mode"
+msgid "Boredom"
+msgstr "Скука"
+
+msgctxt "mood overlay mode"
+msgid "Late"
+msgstr "Опаздывают"
+
+msgctxt "mood overlay mode"
+msgid "Mood"
+msgstr "Настроение"
+
+msgctxt "money card"
+msgid "Today"
+msgstr "Сегодня"
+
+msgctxt "money card"
+msgid "Since load"
+msgstr "С загрузки"
+
+msgctxt "money card"
+msgid "Cash change today"
+msgstr "Изменение кассы за сегодня"
+
+msgctxt "money card"
+msgid "Cash change since load"
+msgstr "Изменение кассы с загрузки"
+
+msgctxt "money card"
+msgid "Airline fees"
+msgstr "Сборы авиакомпаний"
+
+msgctxt "money card"
+msgid "Shops"
+msgstr "Магазины"
+
+msgctxt "money card"
+msgid "Parking"
+msgstr "Парковка"
+
+msgctxt "money card"
+msgid "Wages paid"
+msgstr "Зарплаты"
+
+msgctxt "money card"
+msgid "Upkeep paid"
+msgstr "Содержание"
+
+msgctxt "money card"
+msgid "Airline fines"
+msgstr "Штрафы авиакомпаний"
+
+msgctxt "money card"
+msgid "Operating result"
+msgstr "Итог работы"
+
+msgctxt "money card"
+msgid "Building"
+msgstr "Строительство"
+
+msgctxt "money card"
+msgid "Rescue grant"
+msgstr "Грант спасения"
+
+msgctxt "money card"
+msgid "Incidents"
+msgstr "Происшествия"
+
+msgctxt "money card"
+msgid "Signing bonus"
+msgstr "Бонус за подписание"
+
+msgctxt "money card"
+msgid "Unpaid fines"
+msgstr "Неоплаченные штрафы"
+
+msgctxt "money card"
+msgid "Owed wages"
+msgstr "Задолженность по зарплате"
+
+msgctxt "money card"
+msgid "Owed upkeep"
+msgstr "Задолженность по содержанию"
+
+msgctxt "room name, mid-sentence"
+msgid "ATM"
+msgstr "банкомата"
+
+msgctxt "passenger activity"
+msgid "Heading to the {shop}"
+msgstr "Идёт в {shop}"
+
+msgctxt "passenger activity"
+msgid "Browsing at the {shop}"
+msgstr "Смотрит товары в {shop}"
+
+msgctxt "passenger activity"
+msgid "Using the {shop}"
+msgstr "Пользуется {shop}"
+
+msgctxt "passenger activity"
+msgid "Playing in the {shop}"
+msgstr "Играет в {shop}"
+
+msgctxt "passenger activity"
+msgid "Relaxing in the {shop}"
+msgstr "Отдыхает в {shop}"
+
+msgctxt "passenger activity"
+msgid "Resting in the {shop}"
+msgstr "Спит в {shop}"
+
+msgctxt "passenger activity"
+msgid "Heading to the food stall"
+msgstr "Идёт к точке еды с собой"
+
+msgctxt "passenger activity"
+msgid "Queuing at the food stall"
+msgstr "Стоит в очереди за едой с собой"
+
+msgctxt "passenger activity"
+msgid "Grabbing a snack"
+msgstr "Берёт перекус с собой"
+
+msgctxt "passenger activity"
+msgid "Heading to the bar"
+msgstr "Идёт в бар"
+
+msgctxt "passenger activity"
+msgid "Queuing at the bar"
+msgstr "Стоит в очереди в бар"
+
+msgctxt "passenger activity"
+msgid "Ordering a drink"
+msgstr "Заказывает напиток"
+
+msgctxt "passenger activity"
+msgid "Taking a drink to a seat"
+msgstr "Несёт напиток к месту"
+
+msgctxt "passenger activity"
+msgid "Sitting down at the bar"
+msgstr "Садится в баре"
+
+msgctxt "passenger activity"
+msgid "Having a drink"
+msgstr "Пьёт напиток"
+
+msgctxt "passenger activity"
+msgid "Leaving the bar"
+msgstr "Уходит из бара"
+
+msgctxt "passenger activity"
+msgid "Heading to the restaurant"
+msgstr "Идёт в ресторан"
+
+msgctxt "passenger activity"
+msgid "Queuing at the restaurant"
+msgstr "Стоит в очереди в ресторан"
+
+msgctxt "passenger activity"
+msgid "Ordering a meal"
+msgstr "Заказывает блюдо"
+
+msgctxt "passenger activity"
+msgid "Taking a meal to a table"
+msgstr "Несёт еду к столику"
+
+msgctxt "passenger activity"
+msgid "Sitting down at the restaurant"
+msgstr "Садится в ресторане"
+
+msgctxt "passenger activity"
+msgid "Having a meal"
+msgstr "Ест"
+
+msgctxt "passenger activity"
+msgid "Leaving the restaurant"
+msgstr "Уходит из ресторана"
+
+msgctxt "passenger activity"
+msgid "Arriving"
+msgstr "Прибывает"
+
+msgctxt "passenger activity"
+msgid "Heading to check-in"
+msgstr "Идёт на регистрацию"
+
+msgctxt "passenger activity"
+msgid "Queuing for check-in"
+msgstr "В очереди на регистрацию"
+
+msgctxt "passenger activity"
+msgid "Checking in"
+msgstr "Проходит регистрацию"
+
+msgctxt "passenger activity"
+msgid "Heading to security"
+msgstr "Идёт на досмотр"
+
+msgctxt "passenger activity"
+msgid "Queuing for security"
+msgstr "В очереди на досмотр"
+
+msgctxt "passenger activity"
+msgid "Going through security"
+msgstr "Проходит досмотр"
+
+msgctxt "passenger activity"
+msgid "Heading to the gate"
+msgstr "Идёт к выходу"
+
+msgctxt "passenger activity"
+msgid "Sitting down"
+msgstr "Садится"
+
+msgctxt "passenger activity"
+msgid "Waiting at the gate"
+msgstr "Ждёт у выхода"
+
+msgctxt "passenger activity"
+msgid "Standing at the gate"
+msgstr "Стоит у выхода"
+
+msgctxt "passenger activity"
+msgid "Getting up to board"
+msgstr "Встаёт на посадку"
+
+msgctxt "passenger activity"
+msgid "Heading to the exit"
+msgstr "Идёт к выходу на посадку"
+
+msgctxt "passenger activity"
+msgid "Walking to the plane"
+msgstr "Идёт к самолёту"
+
+msgctxt "passenger activity"
+msgid "Boarded"
+msgstr "На борту"
+
+msgctxt "passenger activity"
+msgid "Missed the flight"
+msgstr "Опоздал на рейс"
+
+msgctxt "passenger activity"
+msgid "Heading to the cafe"
+msgstr "Идёт в кафе"
+
+msgctxt "passenger activity"
+msgid "Queuing at the cafe"
+msgstr "Стоит в очереди в кафе"
+
+msgctxt "passenger activity"
+msgid "Ordering a coffee"
+msgstr "Заказывает кофе"
+
+msgctxt "passenger activity"
+msgid "Taking a coffee to a seat"
+msgstr "Несёт кофе к столику"
+
+msgctxt "passenger activity"
+msgid "Sitting down at the cafe"
+msgstr "Садится в кафе"
+
+msgctxt "passenger activity"
+msgid "Having a coffee"
+msgstr "Пьёт кофе"
+
+msgctxt "passenger activity"
+msgid "Leaving the cafe"
+msgstr "Уходит из кафе"
+
+msgctxt "passenger activity"
+msgid "Heading to the toilet"
+msgstr "Идёт в туалет"
+
+msgctxt "passenger activity"
+msgid "Going into a toilet stall"
+msgstr "Заходит в кабинку туалета"
+
+msgctxt "passenger activity"
+msgid "In a toilet stall"
+msgstr "В кабинке туалета"
+
+msgctxt "passenger activity"
+msgid "Leaving the toilet"
+msgstr "Выходит из туалета"
+
+msgctxt "passenger activity"
+msgid "Heading to a shop"
+msgstr "Идёт в магазин"
+
+msgctxt "passenger activity"
+msgid "Browsing at a shop"
+msgstr "Смотрит товары в магазине"
+
+msgctxt "speed button"
+msgid "Pause ({key})"
+msgstr "Пауза ({key})"
+
+msgctxt "speed button"
+msgid "Speed {speed}x ({key})"
+msgstr "Скорость {speed}x ({key})"
+
+msgctxt "apron caption"
+msgid "Gate {gate}: no usable stand. Keep its apron and the walk to it clear"
+msgstr "Выход {gate}: нет пригодной стоянки. Оставьте перрон и путь к нему свободными"
+
+msgctxt "apron caption"
+msgid "Gate {gate}: long walk to the plane: {meters} m"
+msgstr "Выход {gate}: длинный путь к самолёту: {meters} м"
+
+msgctxt "apron caption"
+msgid "No usable stand: no exit facing the planes has a clear apron"
+msgstr "Нет пригодной стоянки: ни у одного выхода к самолётам нет свободного перрона"
+
+msgctxt "apron caption"
+msgid "Stand moves to the new exit after takeoff at {time}"
+msgstr "Стоянка перенесётся к новому выходу после взлёта в {time}"
+
+msgctxt "apron caption"
+msgid "Long walk to the plane: {meters} m"
+msgstr "Длинный путь к самолёту: {meters} м"
+
+msgctxt "land tool"
+msgid "Buy  {price}"
+msgstr "Купить  {price}"
+
+msgctxt "land tool"
+msgid "Click to buy this {width}x{height} m plot"
+msgstr "Нажмите, чтобы купить участок {width}x{height} м"
+
+msgctxt "gate caption"
+msgid "{minutes} min walk"
+msgstr "{minutes} мин пешком"
+
+msgctxt "gate caption"
+msgid "Gate {gate}"
+msgstr "Выход {gate}"
+
+msgctxt "gate caption"
+msgid "no room for a plane"
+msgstr "нет места для самолёта"
+
+msgctxt "gate caption"
+msgid "up to small planes"
+msgstr "до малых судов"
+
+msgctxt "gate caption"
+msgid "up to medium planes"
+msgstr "до средних судов"
+
+msgctxt "gate caption"
+msgid "up to large planes"
+msgstr "до крупных судов"
+
+msgctxt "gate caption"
+msgid "up to {class} planes"
+msgstr "до судов класса «{class}»"
+
+msgctxt "gate caption"
+msgid "Unlinked: no exit facing the planes in {cells} cells"
+msgstr "Не привязано: нет выхода к самолётам в пределах {cells} кл."
+
+msgctxt "gate caption"
+msgid "Unlinked: Gate {gate} uses the exit"
+msgstr "Не привязано: выход {gate} использует эту дверь"
+
+msgctxt "gate caption"
+msgid "Unlinked: stand would overlap Gate {gate}"
+msgstr "Не привязано: стоянка наложится на выход {gate}"
+
+msgctxt "gate caption"
+msgid "Unlinked: no room for a plane"
+msgstr "Не привязано: нет места для самолёта"
+
+msgctxt "gate caption"
+msgid "Unlinked: way to the lane blocked"
+msgstr "Не привязано: путь к рулёжке заблокирован"
+
+msgctxt "gate caption"
+msgid "Unlinked: every gate letter in use"
+msgstr "Не привязано: все буквы выходов заняты"
+
+msgctxt "sign caption"
+msgid "Closed"
+msgstr "Закрыто"
+
+msgctxt "sign text"
+msgid "Closed · no staff on duty"
+msgstr "Закрыто · нет персонала на смене"
+
+msgctxt "sign text"
+msgid "Closed by you"
+msgstr "Закрыто вами"
+
+msgctxt "sign text"
+msgid "Closed · staff spot blocked"
+msgstr "Закрыто · место сотрудника занято"
+
+msgctxt "sign text"
+msgid "Closed · staff can't reach the desk"
+msgstr "Закрыто · сотрудник не может дойти до стойки"
+
+msgctxt "sign text"
+msgid "Closed · staff can't reach the scanner"
+msgstr "Закрыто · сотрудник не может дойти до сканера"
+
+msgctxt "sign text"
+msgid "Closed · staff can't reach the counter"
+msgstr "Закрыто · сотрудник не может дойти до прилавка"
+
+msgctxt "sign text"
+msgid "Closed · scanner fault, fixed by {time}"
+msgstr "Закрыто · сбой сканера, починят к {time}"
+
+msgctxt "money pop"
+msgid "+${amount}"
+msgstr "+${amount}"
+
+msgctxt "speech bubble"
+msgid "I'm late!"
+msgstr "Я опаздываю!"
+
+msgctxt "speech bubble"
+msgid "Missed my flight!"
+msgstr "Опоздал на рейс!"
+
+msgctxt "speech bubble"
+msgid "Where is check-in?"
+msgstr "Где регистрация?"
+
+msgctxt "speech bubble"
+msgid "Where is security?"
+msgstr "Где досмотр?"
+
+msgctxt "speech bubble"
+msgid "Queue full"
+msgstr "Очередь полная"
+
+msgctxt "speech bubble"
+msgid "I can't get there"
+msgstr "Я не могу туда пройти"
+
+msgctxt "speech bubble"
+msgid "The exit is blocked"
+msgstr "Выход заблокирован"
+
+msgctxt "speech bubble"
+msgid "The gate is full"
+msgstr "У выхода нет места"
+
+msgctxt "speech bubble"
+msgid "Check-in is closed"
+msgstr "Регистрация закрыта"
+
+msgctxt "speech bubble"
+msgid "Security is closed"
+msgstr "Досмотр закрыт"
+
+msgctxt "speech bubble"
+msgid "Gate is closed"
+msgstr "Выход закрыт"
+
+msgctxt "speech bubble"
+msgid "Forgot my belt!"
+msgstr "Забыл снять ремень!"
+
+msgctxt "speech bubble"
+msgid "Keys in pocket!"
+msgstr "Ключи в кармане!"
+
+msgctxt "speech bubble"
+msgid "Coins in pocket!"
+msgstr "Мелочь в кармане!"
+
+msgctxt "speech bubble"
+msgid "Oversized shampoo!"
+msgstr "Слишком большой шампунь!"
+
+msgctxt "speech bubble"
+msgid "Too much liquid!"
+msgstr "Слишком много жидкости!"
+
+msgctxt "speech bubble"
+msgid "Forgot my water bottle!"
+msgstr "Забыл про бутылку воды!"
+
+msgctxt "sign text"
+msgid "Queue full · {count} waiting"
+msgid_plural "Queue full · {count} waiting"
+msgstr[0] "Очередь заполнена · ждёт {count}"
+msgstr[1] "Очередь заполнена · ждут {count}"
+msgstr[2] "Очередь заполнена · ждут {count}"
+
+msgctxt "lane status"
+msgid "Lane ready"
+msgstr "Линия готова"
+
+msgctxt "lane status"
+msgid "Needs a tray table"
+msgstr "Нужен стол для лотков"
+
+msgctxt "lane status"
+msgid "Needs an X-ray belt"
+msgstr "Нужна рентген-лента"
+
+msgctxt "lane status"
+msgid "Needs a pickup table"
+msgstr "Нужен стол выдачи"
+
+msgctxt "lane status"
+msgid "Parts face different ways"
+msgstr "Части смотрят в разные стороны"
+
+msgctxt "lane status"
+msgid "A wall cuts through the lane"
+msgstr "Линию пересекает стена"
+
+msgctxt "lane status"
+msgid "Clear the way through the arch"
+msgstr "Освободите проход через рамку"
+
+msgctxt "lane status"
+msgid "Clear the floor for the queue"
+msgstr "Освободите пол для очереди"
+
+msgctxt "lane status"
+msgid "Clear the floor for the repack spot"
+msgstr "Освободите пол для места сборов"
+
+msgctxt "lane status"
+msgid "Clear the way back from the repack spot"
+msgstr "Освободите проход от места сборов"
+
+msgctxt "lane status"
+msgid "Clear the way out past the pickup table"
+msgstr "Освободите выход за столом выдачи"
+
+msgctxt "lane status"
+msgid "Clear the officer's spot by the X-ray belt"
+msgstr "Освободите место сотрудника у рентген-ленты"
+
+msgctxt "lane status"
+msgid "Clear the helper's spot by the repack spot"
+msgstr "Освободите место помощника у зоны сборов"
+
+msgctxt "lane status"
+msgid "No arch"
+msgstr "Нет рамки"
+
+msgctxt "door hint"
+msgid "Put the {door} on a floor tile at the outside edge"
+msgstr "Поставьте {door} на плитку пола у внешнего края"
+
+msgctxt "door hint"
+msgid "Put the {door} on the outside edge of the floor"
+msgstr "Поставьте {door} на внешний край пола"
+
+msgctxt "door hint"
+msgid "Clear the floor in front of the {door}"
+msgstr "Освободите пол перед {door}"
+
+msgctxt "door hint"
+msgid "Take down the glass or door wall behind the {door}"
+msgstr "Уберите стеклянную стену или дверь позади {door}"
+
+msgctxt "door hint"
+msgid "The wall behind the {door} holds a door; pick another spot"
+msgstr "В стене за {door} уже есть дверь; выберите другое место"
+
+msgctxt "ghost reason"
+msgid "{blocker} in front"
+msgstr "спереди мешает: {blocker}"
+
+msgctxt "build refusal"
+msgid "Outside the building area"
+msgstr "За пределами зоны застройки"
+
+msgctxt "build refusal"
+msgid "Needs floor"
+msgstr "Нужен пол"
+
+msgctxt "build refusal"
+msgid "Unknown floor type"
+msgstr "Неизвестный тип пола"
+
+msgctxt "build refusal"
+msgid "Zone id must be 0 or more"
+msgstr "ID зоны должен быть не меньше 0"
+
+msgctxt "build refusal"
+msgid "Facing must be 0 to 3"
+msgstr "Направление должно быть от 0 до 3"
+
+msgctxt "build refusal"
+msgid "Unknown object"
+msgstr "Неизвестный объект"
+
+msgctxt "build refusal"
+msgid "Overlaps another object"
+msgstr "Пересекается с другим объектом"
+
+msgctxt "build refusal"
+msgid "A wall runs through it"
+msgstr "Через объект проходит стена"
+
+msgctxt "build refusal"
+msgid "The spot in front is blocked"
+msgstr "Клетка спереди заблокирована"
+
+msgctxt "build refusal"
+msgid "Blocks the spot in front of another object"
+msgstr "Перекрывает клетку перед другим объектом"
+
+msgctxt "build refusal"
+msgid "An object stands here"
+msgstr "Здесь стоит объект"
+
+msgctxt "build refusal"
+msgid "There is already a wall here"
+msgstr "Здесь уже есть стена"
+
+msgctxt "build refusal"
+msgid "No wall here"
+msgstr "Здесь нет стены"
+
+msgctxt "build refusal"
+msgid "No such object"
+msgstr "Нет такого объекта"
+
+msgctxt "build refusal"
+msgid "Unknown wall kind"
+msgstr "Неизвестный вид стены"
+
+msgctxt "build refusal"
+msgid "A door needs a plain wall on each side"
+msgstr "Двери нужна обычная стена с обеих сторон"
+
+msgctxt "build refusal"
+msgid "A door stands beside this wall"
+msgstr "Рядом с этой стеной стоит дверь"
+
+msgctxt "build refusal"
+msgid "Entrances and exits need the outside edge, with no floor behind them"
+msgstr "Входы и выходы ставятся на внешний край, без пола позади"
+
+msgctxt "build refusal"
+msgid "Keep the edge behind an entrance or exit open"
+msgstr "Оставьте край за входом или выходом открытым"
+
+msgctxt "build refusal"
+msgid "Unknown room type"
+msgstr "Неизвестный тип комнаты"
+
+msgctxt "build refusal"
+msgid "Overlaps another room"
+msgstr "Пересекается с другой комнатой"
+
+msgctxt "build refusal"
+msgid "A room covers this floor; remove the room first"
+msgstr "Этот пол занят комнатой; сначала удалите комнату"
+
+msgctxt "build refusal"
+msgid "No such room"
+msgstr "Нет такой комнаты"
+
+msgctxt "build refusal"
+msgid "Not enough money"
+msgstr "Недостаточно денег"
+
+msgctxt "build refusal"
+msgid "This piece has no price"
+msgstr "У этого объекта нет цены"
+
+msgctxt "build refusal"
+msgid "The money is at its limit; the refund would not fit"
+msgstr "Достигнут лимит денег; возврат не поместится"
+
+msgctxt "build refusal"
+msgid "Belts cannot cross; a belt joins at most three others"
+msgstr "Ленты не могут пересекаться; к одной ленте сходятся не более трёх"
+
+msgctxt "build refusal"
+msgid "A wall is in the way of the belt"
+msgstr "Стена преграждает путь ленте"
+
+msgctxt "build refusal"
+msgid "Only a belt piece changes shape"
+msgstr "Форму меняет только сегмент ленты"
+
+msgctxt "build refusal"
+msgid "Keep the staff spot behind a desk, beside a scanner or at a lane officer's post free, with a way in"
+msgstr "Оставьте рабочее место за стойкой, у сканера или у поста линии свободным и с подходом"
+
+msgctxt "build refusal"
+msgid "A wall is in the way of the lane. Remove the wall first"
+msgstr "Стена на пути линии. Сначала уберите стену"
+
+msgctxt "build refusal"
+msgid "Put it on one of the marked landside spots"
+msgstr "Разместите на одной из отмеченных точек у дороги"
+
+msgctxt "build refusal"
+msgid "Every spot of this kind nearby is already built"
+msgstr "Все точки этого типа рядом уже застроены"
+
+msgctxt "build refusal"
+msgid "Cars are still in it. Close it and wait until it is empty"
+msgstr "Внутри ещё есть машины. Закройте парковку и дождитесь, пока она опустеет"
+
+msgctxt "build refusal"
+msgid "A wall is in the way of the room"
+msgstr "Стена пересекает комнату"
+
+msgctxt "build refusal"
+msgid "A plane uses this apron. Build here after it takes off"
+msgstr "Этим перроном пользуется самолёт. Стройте после его взлёта"
+
+msgctxt "build refusal"
+msgid "You do not own this land. Buy the plot with Buy land first"
+msgstr "Эта земля вам не принадлежит. Сначала купите участок инструментом «Купить землю»"
+
+msgctxt "build refusal"
+msgid "You already own this plot"
+msgstr "Этот участок уже ваш"
+
+msgctxt "build refusal"
+msgid "Buy a plot next to land you own"
+msgstr "Купите участок рядом с вашей землёй"
+
+msgctxt "build refusal"
+msgid "Put a gate desk within 4 cells of a free exit facing the planes"
+msgstr "Поставьте стойку выхода в пределах 4 клеток от свободного выхода к самолётам"
+
+msgctxt "build refusal"
+msgid "A flight is still due at this gate. Remove it after the flight leaves"
+msgstr "К этому выходу ещё привязан рейс. Удалите его после вылета"
+
+msgctxt "build refusal"
+msgid "No other gate is free for these flights. Move them in Departures first"
+msgstr "Других свободных выходов для этих рейсов нет. Сначала перенесите их в «Вылетах»"
+
+msgctxt "build refusal"
+msgid "Something is in front of the door"
+msgstr "Перед дверью что-то стоит"
+
+msgctxt "build refusal"
+msgid "A piece sits across the room's edge"
+msgstr "Предмет заходит на край комнаты"
+
+msgctxt "build refusal"
+msgid "Desks, scanners and lane parts cannot move with a room"
+msgstr "Стойки, сканеры и части линий нельзя переносить вместе с комнатой"
+
+msgctxt "build refusal"
+msgid "A piece does not fit at the new spot"
+msgstr "Предмет не помещается на новом месте"
+
+msgctxt "build refusal"
+msgid "Keep the way out clear for the passengers leaving the room"
+msgstr "Оставьте выход свободным для пассажиров, покидающих комнату"
+
+msgctxt "build refusal"
+msgid "The room changed since it was picked up. Pick it up again"
+msgstr "Комната изменилась после того, как её подняли. Поднимите её заново"
+
+msgctxt "build refusal"
+msgid "Not unlocked yet"
+msgstr "Ещё не открыто"
+
+msgctxt "build refusal"
+msgid "No room for a plane outside this exit. Keep the ground out from it clear"
+msgstr "За этим выходом нет места для самолёта. Оставьте площадку снаружи свободной"
+
+msgctxt "build refusal"
+msgid "Something blocks the way from this exit to the taxi lane. Clear a path out from it"
+msgstr "Что-то перекрывает путь от этого выхода к рулёжке. Расчистите путь наружу"
+
+msgctxt "build refusal"
+msgid "A booked flight's plane needs this ground. Move its flights in Departures first"
+msgstr "Эта площадка нужна самолёту забронированного рейса. Сначала перенесите его рейсы в «Вылетах»"
+
+msgctxt "build refusal"
+msgid "The side taxiway would have to move and leave a booked flight with no way to its gate"
+msgstr "Боковую рулёжку придётся перенести, и забронированный рейс потеряет путь к своему выходу"
+
+msgctxt "ghost reason"
+msgid "Outside the building"
+msgstr "За пределами здания"
+
+msgctxt "ghost reason"
+msgid "Overlaps an object"
+msgstr "Пересекается с объектом"
+
+msgctxt "ghost reason"
+msgid "A wall is in the way"
+msgstr "Мешает стена"
+
+msgctxt "ghost reason"
+msgid "Front spot blocked"
+msgstr "Клетка спереди занята"
+
+msgctxt "ghost reason"
+msgid "Blocks a front spot"
+msgstr "Перекрывает клетку спереди"
+
+msgctxt "ghost reason"
+msgid "Wall already here"
+msgstr "Стена уже здесь"
+
+msgctxt "ghost reason"
+msgid "Needs wall on both sides"
+msgstr "Нужны стены с обеих сторон"
+
+msgctxt "ghost reason"
+msgid "A door is beside it"
+msgstr "Рядом дверь"
+
+msgctxt "ghost reason"
+msgid "Needs the outside edge"
+msgstr "Нужен внешний край"
+
+msgctxt "ghost reason"
+msgid "Keep the edge open"
+msgstr "Оставьте край открытым"
+
+msgctxt "ghost reason"
+msgid "Overlaps a room"
+msgstr "Пересекается с комнатой"
+
+msgctxt "ghost reason"
+msgid "Remove the room first"
+msgstr "Сначала удалите комнату"
+
+msgctxt "ghost reason"
+msgid "Money at its limit"
+msgstr "Достигнут лимит денег"
+
+msgctxt "ghost reason"
+msgid "Belts cannot cross"
+msgstr "Ленты не могут пересекаться"
+
+msgctxt "ghost reason"
+msgid "Keep the staff spot free"
+msgstr "Оставьте место персонала свободным"
+
+msgctxt "ghost reason"
+msgid "A wall is in the lane"
+msgstr "На линии стоит стена"
+
+msgctxt "ghost reason"
+msgid "Bad zone id"
+msgstr "Неверный ID зоны"
+
+msgctxt "ghost reason"
+msgid "Only belts change shape"
+msgstr "Форму меняют только ленты"
+
+msgctxt "ghost reason"
+msgid "Needs a marked spot"
+msgstr "Нужна отмеченная точка"
+
+msgctxt "ghost reason"
+msgid "Spot already built"
+msgstr "Точка уже застроена"
+
+msgctxt "ghost reason"
+msgid "Cars are still in it"
+msgstr "Внутри ещё есть машины"
+
+msgctxt "ghost reason"
+msgid "A plane is on the apron"
+msgstr "На перроне самолёт"
+
+msgctxt "ghost reason"
+msgid "Buy this land first"
+msgstr "Сначала купите эту землю"
+
+msgctxt "ghost reason"
+msgid "Plot already owned"
+msgstr "Участок уже ваш"
+
+msgctxt "ghost reason"
+msgid "Not next to your land"
+msgstr "Не граничит с вашей землёй"
+
+msgctxt "ghost reason"
+msgid "No free exit nearby"
+msgstr "Рядом нет свободного выхода"
+
+msgctxt "ghost reason"
+msgid "Gates are too close"
+msgstr "Выходы слишком близко"
+
+msgctxt "ghost reason"
+msgid "A flight is due here"
+msgstr "Здесь ожидается рейс"
+
+msgctxt "ghost reason"
+msgid "Flights have no gate"
+msgstr "У рейсов не останется выхода"
+
+msgctxt "ghost reason"
+msgid "A piece is on the edge"
+msgstr "Предмет на краю"
+
+msgctxt "ghost reason"
+msgid "A piece cannot move"
+msgstr "Предмет нельзя перенести"
+
+msgctxt "ghost reason"
+msgid "A piece does not fit"
+msgstr "Предмет не помещается"
+
+msgctxt "ghost reason"
+msgid "Blocks a way out"
+msgstr "Перекрывает выход"
+
+msgctxt "ghost reason"
+msgid "The room changed"
+msgstr "Комната изменилась"
+
+msgctxt "ghost reason"
+msgid "No room for the plane"
+msgstr "Нет места для самолёта"
+
+msgctxt "ghost reason"
+msgid "Way to the lane blocked"
+msgstr "Путь к рулёжке перекрыт"
+
+msgctxt "ghost reason"
+msgid "A booked plane needs it"
+msgstr "Нужно для заказанного самолёта"
+
+msgctxt "ghost reason"
+msgid "Strands a booked flight"
+msgstr "Отрезает заказанный рейс"
+
+msgctxt "build status"
+msgid "Drag to lay a belt"
+msgstr "Тяните, чтобы проложить ленту"
+
+msgctxt "build status"
+msgid "Not part of a lane"
+msgstr "Не входит в линию"
+
+msgctxt "build status"
+msgid "Its front is outside the room, so it will not count"
+msgstr "Передняя сторона снаружи комнаты, поэтому не засчитается"
+
+msgctxt "build status"
+msgid "Drag stops over the menu. Move back onto the floor to keep sizing"
+msgstr "Перетаскивание остановлено над меню. Верните курсор на пол, чтобы менять размер"
+
+msgctxt "door tool, mid-sentence"
+msgid "entrance"
+msgstr "вход"
+
+msgctxt "door tool, mid-sentence"
+msgid "exit"
+msgstr "выход"
+
+msgctxt "build refusal"
+msgid "Gates need {metres} m between exits. Widen the terminal"
+msgstr "Между выходами нужно {metres} м. Расширьте терминал"
+
+msgctxt "build refusal"
+msgid "{reason}: {detail}"
+msgstr "{reason}: {detail}"
+
+msgctxt "build status"
+msgid "{item} placed"
+msgstr "Размещено: {item}"
+
+msgctxt "room move"
+msgid "Moved {room}"
+msgstr "Перемещена комната: {room}"
+
+msgctxt "room move"
+msgid "Moved {room} for {cost}"
+msgstr "Перемещена комната «{room}» за {cost}"
+
+msgctxt "room move"
+msgid "{room}: click to set down, right-click cancels"
+msgstr "{room}: нажмите, чтобы поставить, ПКМ — отмена"
+
+msgctxt "landside plan"
+msgid "Refunds {price}"
+msgstr "Возврат {price}"
+
+msgctxt "landside plan"
+msgid "{place} (open, {count} car): click to close it"
+msgid_plural "{place} (open, {count} cars): click to close it"
+msgstr[0] "{place} (открыто, {count} машина): нажмите, чтобы закрыть"
+msgstr[1] "{place} (открыто, {count} машины): нажмите, чтобы закрыть"
+msgstr[2] "{place} (открыто, {count} машин): нажмите, чтобы закрыть"
+
+msgctxt "landside plan"
+msgid "{place} (closed, {count} car): click to open it"
+msgid_plural "{place} (closed, {count} cars): click to open it"
+msgstr[0] "{place} (закрыто, {count} машина): нажмите, чтобы открыть"
+msgstr[1] "{place} (закрыто, {count} машины): нажмите, чтобы открыть"
+msgstr[2] "{place} (закрыто, {count} машин): нажмите, чтобы открыть"
+
+msgctxt "landside plan"
+msgid "Remove {place}: {capacity}, {metres} m walk to the nearest landside door"
+msgstr "Удалить {place}: {capacity}, {metres} м пешком до ближайшей двери со стороны дороги"
+
+msgctxt "landside plan"
+msgid "Remove {place}: {capacity}"
+msgstr "Удалить {place}: {capacity}"
+
+msgctxt "landside plan"
+msgid "{place}: {capacity}, {metres} m walk to the nearest landside door"
+msgstr "{place}: {capacity}, {metres} м пешком до ближайшей двери со стороны дороги"
+
+msgctxt "landside plan"
+msgid "{place}: {capacity}"
+msgstr "{place}: {capacity}"
+
+msgctxt "landside place, mid-sentence"
+msgid "curb bay"
+msgstr "зона высадки"
+
+msgctxt "landside place, mid-sentence"
+msgid "surface lot"
+msgstr "наземная парковка"
+
+msgctxt "landside place, mid-sentence"
+msgid "multi-storey car park"
+msgstr "многоярусная парковка"
+
+msgctxt "landside plan"
+msgid "{count} car is still in it. Close it and wait until it is empty"
+msgid_plural "{count} cars are still in it. Close it and wait until it is empty"
+msgstr[0] "Внутри ещё {count} машина. Закройте парковку и дождитесь, пока она опустеет"
+msgstr[1] "Внутри ещё {count} машины. Закройте парковку и дождитесь, пока она опустеет"
+msgstr[2] "Внутри ещё {count} машин. Закройте парковку и дождитесь, пока она опустеет"
+
+msgctxt "landside plan"
+msgid "{count} berth"
+msgid_plural "{count} berths"
+msgstr[0] "{count} место"
+msgstr[1] "{count} места"
+msgstr[2] "{count} мест"
+
+msgctxt "landside plan"
+msgid "{count} space"
+msgid_plural "{count} spaces"
+msgstr[0] "{count} место"
+msgstr[1] "{count} места"
+msgstr[2] "{count} мест"
+
+msgid "Wall gap · close the outer wall so the roof can go on"
+msgstr "Разрыв стены · закройте внешнюю стену, чтобы появилась крыша"
+
+msgid "Taxiway works: the taxiway moves when the west side is quiet"
+msgstr "Работы на рулёжке: перенесётся, когда на западной стороне станет тихо"
+
+msgid "Taxiway works: the taxiway moves when the east side is quiet"
+msgstr "Работы на рулёжке: перенесётся, когда на восточной стороне станет тихо"
+
+msgid "Taxiway works: the taxiway moves when the west side is quiet, forecast {when}"
+msgstr "Работы на рулёжке: перенесётся, когда на западной стороне станет тихо, прогноз: {when}"
+
+msgid "Taxiway works: the taxiway moves when the east side is quiet, forecast {when}"
+msgstr "Работы на рулёжке: перенесётся, когда на восточной стороне станет тихо, прогноз: {when}"
+
+msgctxt "departure status"
+msgid "Boarding"
+msgstr "Посадка"
+
+msgctxt "departure status"
+msgid "Doors closed"
+msgstr "Двери закрыты"
+
+msgctxt "departure status"
+msgid "Pushback"
+msgstr "Буксировка"
+
+msgctxt "departure status"
+msgid "Taxiing"
+msgstr "Руление"
+
+msgctxt "departure status"
+msgid "Taking off"
+msgstr "Взлёт"
+
+msgctxt "departure status"
+msgid "Departed"
+msgstr "Вылетел"
+
+msgid "doors close {time}"
+msgstr "двери закроются в {time}"
+
+msgctxt "refusal detail"
+msgid "gate {gate} is too close"
+msgstr "выход {gate} слишком близко"
+
+msgctxt "refusal detail"
+msgid "gate {gate}, a small plane"
+msgstr "выход {gate}, малый самолёт"
+
+msgctxt "refusal detail"
+msgid "gate {gate}, a medium plane"
+msgstr "выход {gate}, средний самолёт"
+
+msgctxt "refusal detail"
+msgid "gate {gate}, a large plane"
+msgstr "выход {gate}, крупный самолёт"
+
+msgctxt "build status"
+msgid "Belt {count} cell"
+msgid_plural "Belt {count} cells"
+msgstr[0] "Лента: {count} клетка"
+msgstr[1] "Лента: {count} клетки"
+msgstr[2] "Лента: {count} клеток"
+
+msgctxt "build status"
+msgid "Facing auto"
+msgstr "Поворот: авто"
+
+msgctxt "build status"
+msgid "Facing {facing}"
+msgstr "Поворот: {facing}"
+
+msgctxt "build status"
+msgid "{width} x {height}"
+msgstr "{width} x {height}"
+
+msgctxt "build status"
+msgid "{room} {width} x {height}"
+msgstr "{room} {width} x {height}"
+
+msgctxt "build status"
+msgid "{room} marked: {status}"
+msgstr "Размечено «{room}»: {status}"
+
+msgctxt "build status"
+msgid "Drag to mark a {room}"
+msgstr "Протяните, чтобы разметить «{room}»"
+
+msgctxt "item name, mid-sentence"
+msgid "atm"
+msgstr "банкомат"
+
+msgctxt "item name, mid-sentence"
+msgid "baggage belt"
+msgstr "багажная лента"
+
+msgctxt "item name, mid-sentence"
+msgid "baggage cart"
+msgstr "багажная тележка"
+
+msgctxt "item name, mid-sentence"
+msgid "bar counter"
+msgstr "барная стойка"
+
+msgctxt "item name, mid-sentence"
+msgid "belt corner"
+msgstr "поворот ленты"
+
+msgctxt "item name, mid-sentence"
+msgid "belt end"
+msgstr "конец ленты"
+
+msgctxt "item name, mid-sentence"
+msgid "belt merge"
+msgstr "стык лент"
+
+msgctxt "item name, mid-sentence"
+msgid "bench"
+msgstr "скамейка"
+
+msgctxt "item name, mid-sentence"
+msgid "bin"
+msgstr "урна"
+
+msgctxt "item name, mid-sentence"
+msgid "bush"
+msgstr "куст"
+
+msgctxt "item name, mid-sentence"
+msgid "cafe counter"
+msgstr "прилавок кафе"
+
+msgctxt "item name, mid-sentence"
+msgid "cafe table"
+msgstr "столик кафе"
+
+msgctxt "item name, mid-sentence"
+msgid "chain"
+msgstr "цепь"
+
+msgctxt "item name, mid-sentence"
+msgid "check-in desk"
+msgstr "стойка регистрации"
+
+msgctxt "item name, mid-sentence"
+msgid "clothes rail"
+msgstr "вешалка для одежды"
+
+msgctxt "item name, mid-sentence"
+msgid "confiscation bin"
+msgstr "контейнер изъятия"
+
+msgctxt "item name, mid-sentence"
+msgid "currency exchange"
+msgstr "пункт обмена валют"
+
+msgctxt "item name, mid-sentence"
+msgid "display stand"
+msgstr "витрина"
+
+msgctxt "item name, mid-sentence"
+msgid "duty free shelf"
+msgstr "стеллаж Duty Free"
+
+msgctxt "item name, mid-sentence"
+msgid "duty free till"
+msgstr "касса Duty Free"
+
+msgctxt "item name, mid-sentence"
+msgid "entrance"
+msgstr "вход"
+
+msgctxt "item name, mid-sentence"
+msgid "exit to the plane"
+msgstr "выход к самолёту"
+
+msgctxt "item name, mid-sentence"
+msgid "fashion till"
+msgstr "касса бутика"
+
+msgctxt "item name, mid-sentence"
+msgid "fountain"
+msgstr "фонтан"
+
+msgctxt "item name, mid-sentence"
+msgid "gate desk"
+msgstr "стойка выхода"
+
+msgctxt "item name, mid-sentence"
+msgid "gate seats"
+msgstr "кресла у выхода"
+
+msgctxt "item name, mid-sentence"
+msgid "grab-and-go stall"
+msgstr "стойка еды с собой"
+
+msgctxt "item name, mid-sentence"
+msgid "info desk"
+msgstr "инфостойка"
+
+msgctxt "item name, mid-sentence"
+msgid "info screen"
+msgstr "инфоэкран"
+
+msgctxt "item name, mid-sentence"
+msgid "kiosk counter"
+msgstr "прилавок киоска"
+
+msgctxt "item name, mid-sentence"
+msgid "lounge armchair"
+msgstr "кресло зала ожидания"
+
+msgctxt "item name, mid-sentence"
+msgid "lounge sofa"
+msgstr "диван зала ожидания"
+
+msgctxt "item name, mid-sentence"
+msgid "nap pod"
+msgstr "спальная капсула"
+
+msgctxt "item name, mid-sentence"
+msgid "pharmacy counter"
+msgstr "прилавок аптеки"
+
+msgctxt "item name, mid-sentence"
+msgid "pharmacy shelf"
+msgstr "полка аптеки"
+
+msgctxt "item name, mid-sentence"
+msgid "pickup table"
+msgstr "стол выдачи"
+
+msgctxt "item name, mid-sentence"
+msgid "plant pot"
+msgstr "вазон"
+
+msgctxt "item name, mid-sentence"
+msgid "planter"
+msgstr "клумба"
+
+msgctxt "item name, mid-sentence"
+msgid "play blocks"
+msgstr "игровые кубики"
+
+msgctxt "item name, mid-sentence"
+msgid "play slide"
+msgstr "игровая горка"
+
+msgctxt "item name, mid-sentence"
+msgid "post"
+msgstr "стойка"
+
+msgctxt "item name, mid-sentence"
+msgid "prize podium"
+msgstr "призовой подиум"
+
+msgctxt "item name, mid-sentence"
+msgid "restaurant booth"
+msgstr "диванчик ресторана"
+
+msgctxt "item name, mid-sentence"
+msgid "restaurant table"
+msgstr "стол ресторана"
+
+msgctxt "item name, mid-sentence"
+msgid "screen"
+msgstr "экран"
+
+msgctxt "item name, mid-sentence"
+msgid "search table"
+msgstr "стол досмотра"
+
+msgctxt "item name, mid-sentence"
+msgid "security arch"
+msgstr "рамка досмотра"
+
+msgctxt "item name, mid-sentence"
+msgid "security scanner"
+msgstr "сканер досмотра"
+
+msgctxt "item name, mid-sentence"
+msgid "shower"
+msgstr "душ"
+
+msgctxt "item name, mid-sentence"
+msgid "sink"
+msgstr "раковина"
+
+msgctxt "item name, mid-sentence"
+msgid "statue"
+msgstr "статуя"
+
+msgctxt "item name, mid-sentence"
+msgid "toilet stall"
+msgstr "туалетная кабинка"
+
+msgctxt "item name, mid-sentence"
+msgid "tray table"
+msgstr "стол для лотков"
+
+msgctxt "item name, mid-sentence"
+msgid "tree"
+msgstr "дерево"
+
+msgctxt "item name, mid-sentence"
+msgid "tree bench"
+msgstr "скамейка у дерева"
+
+msgctxt "item name, mid-sentence"
+msgid "work desk"
+msgstr "рабочий стол"
+
+msgctxt "item name, mid-sentence"
+msgid "x-ray belt"
+msgstr "рентген-лента"
+
+msgctxt "station status"
+msgid "Closed by you"
+msgstr "Закрыто вами"
+
+msgctxt "station status"
+msgid "Finishing current service"
+msgstr "Завершает обслуживание"
+
+msgctxt "station status"
+msgid "Waiting for staff"
+msgstr "Ожидание сотрудника"
+
+msgctxt "station status"
+msgid "Staff on the way"
+msgstr "Сотрудник в пути"
+
+msgctxt "station status"
+msgid "Serving"
+msgstr "Обслуживает"
+
+msgctxt "station status"
+msgid "Scanner fault"
+msgstr "Сбой сканера"
+
+msgctxt "station status"
+msgid "Scanner fault, fixed by {time}"
+msgstr "Сбой сканера, починят к {time}"
+
+msgctxt "menu"
+msgid "Save"
+msgstr "Сохранить"
+
+msgctxt "menu"
+msgid "Load"
+msgstr "Загрузить"
+
 msgctxt "menu"
 msgid "Continue"
 msgstr "Продолжить"
@@ -17,46 +4512,431 @@ msgid "New Airport"
 msgstr "Новый аэропорт"
 
 msgctxt "menu"
-msgid "Load"
-msgstr "Загрузить"
-
-msgctxt "menu"
 msgid "Wishlist"
 msgstr "В желаемое"
-
-msgid "Send Feedback"
-msgstr "Отправить отзыв"
 
 msgctxt "menu"
 msgid "Quit"
 msgstr "Выход"
 
 msgctxt "menu"
-msgid "Audio"
-msgstr "Звук"
-
-msgctxt "menu"
 msgid "Back"
 msgstr "Назад"
+
+msgid "{slot}, {time}"
+msgstr "{slot}, {time}"
+
+msgid "Manual save"
+msgstr "Ручное сохранение"
+
+msgid "Autosave {number}"
+msgstr "Автосохранение {number}"
+
+msgid "Food: hungry passengers lose mood. A cafe feeds them."
+msgstr "Еда: голодные пассажиры теряют настроение. Их накормит кафе."
+
+msgid "Security: more lanes mean shorter queues at the checkpoint."
+msgstr "Досмотр: больше линий — короче очереди на контроле."
+
+msgid "Baggage: belts carry checked bags. A late bag misses its flight."
+msgstr "Багаж: ленты везут сданный багаж. Опоздавший багаж не успеет на рейс."
+
+msgid "Comfort: seats and lounges calm passengers who wait."
+msgstr "Комфорт: кресла и залы ожидания успокаивают ждущих пассажиров."
+
+msgid "Runway: a longer runway takes bigger planes."
+msgstr "ВПП: более длинная ВПП принимает крупные самолёты."
+
+msgid "Also new: {pieces}."
+msgstr "Также новое: {pieces}."
+
+msgctxt "build refusal"
+msgid "A flight is still due at this gate. Remove it after the flight leaves: {flights}"
+msgid_plural "Flights are still due at this gate. Remove it after they leave: {flights}"
+msgstr[0] "К этому выходу ещё привязан рейс. Удалите его после вылета: {flights}"
+msgstr[1] "К этому выходу ещё привязаны рейсы. Удалите его после их вылета: {flights}"
+msgstr[2] "К этому выходу ещё привязаны рейсы. Удалите его после их вылета: {flights}"
+
+msgctxt "build refusal"
+msgid "No other gate is free for these flights. Move them in Departures first: {flights}"
+msgid_plural "No other gate is free for these flights. Move them in Departures first: {flights}"
+msgstr[0] "Других свободных выходов для этого рейса нет. Сначала перенесите его в «Вылетах»: {flights}"
+msgstr[1] "Других свободных выходов для этих рейсов нет. Сначала перенесите их в «Вылетах»: {flights}"
+msgstr[2] "Других свободных выходов для этих рейсов нет. Сначала перенесите их в «Вылетах»: {flights}"
+
+msgctxt "build refusal"
+msgid "The side taxiway would have to move and leave a booked flight with no way to its gate: {flights}"
+msgid_plural "The side taxiway would have to move and leave booked flights with no way to their gates: {flights}"
+msgstr[0] "Боковую рулёжку придётся перенести, и заказанный рейс потеряет путь к выходу: {flights}"
+msgstr[1] "Боковую рулёжку придётся перенести, и заказанные рейсы потеряют путь к выходам: {flights}"
+msgstr[2] "Боковую рулёжку придётся перенести, и заказанные рейсы потеряют путь к выходам: {flights}"
+
+msgctxt "flight label"
+msgid "the {time} flight"
+msgstr "рейс в {time}"
+
+msgctxt "flight label"
+msgid "the {time} {airline} flight to {city}"
+msgstr "рейс {airline} в {city} в {time}"
+
+msgctxt "offer clash"
+msgid "it clashes with the {time} {airline} flight to {city} on the runway"
+msgstr "он пересекается на ВПП с рейсом {airline} в {city} в {time}"
+
+msgctxt "offer clash"
+msgid "it clashes with the {time} {airline} flight to {city} on the taxi lane"
+msgstr "он пересекается на рулёжке с рейсом {airline} в {city} в {time}"
+
+msgctxt "offer clash"
+msgid "it clashes with the {time} {airline} flight to {city} at gate {gate}"
+msgstr "он пересекается у выхода {gate} с рейсом {airline} в {city} в {time}"
+
+msgctxt "offer clash"
+msgid "it clashes with the {time} flight on the runway"
+msgstr "он пересекается на ВПП с рейсом в {time}"
+
+msgctxt "offer clash"
+msgid "it clashes with the {time} flight on the taxi lane"
+msgstr "он пересекается на рулёжке с рейсом в {time}"
+
+msgctxt "offer clash"
+msgid "it clashes with the {time} flight at gate {gate}"
+msgstr "он пересекается у выхода {gate} с рейсом в {time}"
+
+msgctxt "offer clash"
+msgid "it clashes with another flight on the runway"
+msgstr "он пересекается на ВПП с другим рейсом"
+
+msgctxt "offer clash"
+msgid "it clashes with another flight on the taxi lane"
+msgstr "он пересекается на рулёжке с другим рейсом"
+
+msgctxt "offer clash"
+msgid "it clashes with another flight at gate {gate}"
+msgstr "он пересекается у выхода {gate} с другим рейсом"
+
+msgctxt "list of two"
+msgid "{first} and {second}"
+msgstr "{first} и {second}"
+
+msgctxt "list start"
+msgid "{first}, {rest}"
+msgstr "{first}, {rest}"
+
+msgctxt "list middle"
+msgid "{item}, {rest}"
+msgstr "{item}, {rest}"
+
+msgctxt "list end"
+msgid "{item} and {last}"
+msgstr "{item} и {last}"
+
+msgid "Quit log"
+msgstr "Журнал выхода"
+
+msgid "Records where you stop playing: the day, money, stars, builds, flights and alerts, never what you click or type. The file stays on this computer and nothing is sent."
+msgstr "Записывает состояние при выходе: день, деньги, звёзды, постройки, рейсы и уведомления — без кликов и нажатий клавиш. Файл остаётся на этом компьютере и никуда не отправляется."
+
+msgid "Open log folder"
+msgstr "Открыть папку"
+
+msgid "Could not open the log folder: {path}"
+msgstr "Не удалось открыть папку журналов: {path}"
+
+msgid "Could not start the quit log in {path}"
+msgstr "Не удалось создать журнал выхода в {path}"
+
+msgid "Passengers board at a gate. Place a gate desk by an exit that faces the planes."
+msgstr "Посадка на рейс проходит у выхода. Поставьте стойку выхода рядом с выходом к самолётам."
+
+msgid "Passengers wait at the gate. Place seats near it; the airport opens without them."
+msgstr "Пассажиры ждут у выхода. Поставьте кресла рядом; аэропорт откроется и без них."
+
+msgid "Click a passenger to follow them to their flight"
+msgstr "Нажмите на пассажира, чтобы проследить его путь до рейса"
+
+msgid "Show me"
+msgstr "Показать"
+
+msgid "No carry-on bags"
+msgstr "Без ручной клади"
+
+msgid "{count} carry-on bag"
+msgid_plural "{count} carry-on bags"
+msgstr[0] "{count} предмет ручной клади"
+msgstr[1] "{count} предмета ручной клади"
+msgstr[2] "{count} предметов ручной клади"
+
+msgid "carrying liquids"
+msgstr "с жидкостями"
+
+msgid "a checked bag that missed the plane"
+msgstr "сданный багаж, не попавший на рейс"
+
+msgid "a checked bag still to drop off"
+msgstr "сданный багаж ещё не передан"
+
+msgid "no checked bag"
+msgstr "без сданного багажа"
+
+msgid "a checked bag at the desk"
+msgstr "сданный багаж на стойке"
+
+msgid "a checked bag on the belt"
+msgstr "сданный багаж на ленте"
+
+msgid "a checked bag stuck on the belt"
+msgstr "сданный багаж застрял на ленте"
+
+msgid "a checked bag in the bag room"
+msgstr "сданный багаж в багажном отделении"
+
+msgid "a checked bag loaded on the plane"
+msgstr "сданный багаж погружен на самолёт"
+
+msgid "Cutting it fine, no shopping planned"
+msgstr "Пришёл впритык, без планов на покупки"
+
+msgid "Cutting it fine, hoping for a quick stop at the kiosk"
+msgstr "Пришёл впритык, надеется заскочить в киоск"
+
+msgid "Cutting it fine, needs the pharmacy"
+msgstr "Пришёл впритык, нужна аптека"
+
+msgid "Cutting it fine, hoping for duty free"
+msgstr "Пришёл впритык, надеется зайти в Duty Free"
+
+msgid "Cutting it fine, hoping to browse the fashion shop"
+msgstr "Пришёл впритык, хочет заглянуть в бутик одежды"
+
+msgid "Right on time, no shopping planned"
+msgstr "Вовремя, без планов на покупки"
+
+msgid "Right on time, hoping for a quick stop at the kiosk"
+msgstr "Вовремя, надеется заскочить в киоск"
+
+msgid "Right on time, needs the pharmacy"
+msgstr "Вовремя, нужна аптека"
+
+msgid "Right on time, hoping for duty free"
+msgstr "Вовремя, надеется зайти в Duty Free"
+
+msgid "Right on time, hoping to browse the fashion shop"
+msgstr "Вовремя, хочет заглянуть в бутик одежды"
+
+msgid "Early bird, no shopping planned"
+msgstr "Ранняя пташка, без планов на покупки"
+
+msgid "Early bird, hoping for a quick stop at the kiosk"
+msgstr "Ранняя пташка, надеется заскочить в киоск"
+
+msgid "Early bird, needs the pharmacy"
+msgstr "Ранняя пташка, нужна аптека"
+
+msgid "Early bird, hoping for duty free"
+msgstr "Ранняя пташка, надеется зайти в Duty Free"
+
+msgid "Early bird, hoping to browse the fashion shop"
+msgstr "Ранняя пташка, хочет заглянуть в бутик одежды"
+
+msgid "{count} desk full · {waiting} waiting · short queue: move the desk away from the wall"
+msgid_plural "{count} desks full · {waiting} waiting · short queue: move a desk away from the wall"
+msgstr[0] "{count} стойка заполнена · ждут {waiting} · короткая очередь: отодвиньте стойку от стены"
+msgstr[1] "{count} стойки заполнены · ждут {waiting} · короткая очередь: отодвиньте стойку от стены"
+msgstr[2] "{count} стоек заполнены · ждут {waiting} · короткая очередь: отодвиньте стойку от стены"
+
+msgid "{count} lane full · {waiting} waiting · short queue: move the scanner away from the wall"
+msgid_plural "{count} lanes full · {waiting} waiting · short queue: move a scanner away from the wall"
+msgstr[0] "{count} линия заполнена · ждут {waiting} · короткая очередь: отодвиньте сканер от стены"
+msgstr[1] "{count} линии заполнены · ждут {waiting} · короткая очередь: отодвиньте сканер от стены"
+msgstr[2] "{count} линий заполнены · ждут {waiting} · короткая очередь: отодвиньте сканер от стены"
+
+msgctxt "sign text"
+msgid "Queue full · {count} waiting · short queue: move the desk away from the wall"
+msgid_plural "Queue full · {count} waiting · short queue: move the desk away from the wall"
+msgstr[0] "Очередь заполнена · ждёт {count} · короткая очередь: отодвиньте стойку от стены"
+msgstr[1] "Очередь заполнена · ждут {count} · короткая очередь: отодвиньте стойку от стены"
+msgstr[2] "Очередь заполнена · ждут {count} · короткая очередь: отодвиньте стойку от стены"
+
+msgctxt "sign text"
+msgid "Queue full · {count} waiting · short queue: move the scanner away from the wall"
+msgid_plural "Queue full · {count} waiting · short queue: move the scanner away from the wall"
+msgstr[0] "Очередь заполнена · ждёт {count} · короткая очередь: отодвиньте сканер от стены"
+msgstr[1] "Очередь заполнена · ждут {count} · короткая очередь: отодвиньте сканер от стены"
+msgstr[2] "Очередь заполнена · ждут {count} · короткая очередь: отодвиньте сканер от стены"
+
+msgctxt "sign text"
+msgid "Queue full · {count} waiting · short queue: move the counter away from the wall"
+msgid_plural "Queue full · {count} waiting · short queue: move the counter away from the wall"
+msgstr[0] "Очередь заполнена · ждёт {count} · короткая очередь: отодвиньте прилавок от стены"
+msgstr[1] "Очередь заполнена · ждут {count} · короткая очередь: отодвиньте прилавок от стены"
+msgstr[2] "Очередь заполнена · ждут {count} · короткая очередь: отодвиньте прилавок от стены"
+
+msgid "{count} station is closed · staff are on the way"
+msgid_plural "{count} stations are closed · staff are on the way"
+msgstr[0] "{count} пост закрыт · сотрудники уже в пути"
+msgstr[1] "{count} поста закрыты · сотрудники уже в пути"
+msgstr[2] "{count} постов закрыто · сотрудники уже в пути"
+
+msgid "GOTTA AIR"
+msgstr "GOTTA AIR"
+
+msgid "Station manager"
+msgstr "Начальник станции"
+
+msgid "Gotta Air here. Welcome, your airport is open, and I hear it is the only one with a dent in the carpet."
+msgstr "На связи Gotta Air. Добро пожаловать! Ваш аэропорт открыт — говорят, он единственный с вмятиной на ковре."
+
+msgid "Our first flight to Oslo leaves at {departure_time}. It is a small plane, so please keep the luggage small too."
+msgstr "Наш первый рейс в Осло вылетает в {departure_time}. Самолёт небольшой, так что и багаж придержите скромный."
+
+msgid "Your first passengers are on their way in now."
+msgstr "Первые пассажиры уже заходят в терминал."
+
+msgid "Good luck. Gotta make that flight!"
+msgstr "Удачи. Главное — успеть на рейс!"
+
+msgid "In the full game"
+msgstr "В полной версии"
+
+msgid "Demo limit: 1 extra plot (more in the full game)"
+msgstr "Лимит демо: 1 доп. участок (больше — в полной версии)"
+
+msgid "Send Feedback"
+msgstr "Отправить отзыв"
+
+msgid "{slot}, {time} (Older version)"
+msgstr "{slot}, {time} (старая версия)"
+
+msgid "This save is from an older version and cannot be loaded after an update. Please start a New Airport."
+msgstr "Это сохранение от старой версии и не загружается после обновления. Пожалуйста, начните «Новый аэропорт»."
+
+msgid "This save file cannot be read."
+msgstr "Не удалось прочитать файл сохранения."
+
+msgid "This save is from a newer version and cannot be loaded. Please update the game."
+msgstr "Это сохранение от более новой версии и не может быть загружено. Обновите игру."
+
+msgid "{slot}, {time} (Unreadable)"
+msgstr "{slot}, {time} (нечитаемо)"
+
+msgid "{slot}, {time} (Newer version)"
+msgstr "{slot}, {time} (новая версия)"
+
+msgid "Made my flight at the last second!"
+msgstr "Успел на рейс в последнюю секунду!"
+
+msgid "{count} made it at the last second!"
+msgid_plural "{count} made it at the last second!"
+msgstr[0] "{count} успел в последнюю секунду!"
+msgstr[1] "{count} успели в последнюю секунду!"
+msgstr[2] "{count} успели в последнюю секунду!"
+
+msgid "{count} running late"
+msgid_plural "{count} running late"
+msgstr[0] "{count} опаздывает"
+msgstr[1] "{count} опаздывают"
+msgstr[2] "{count} опаздывают"
+
+msgid "Follow the tightest running-late passenger"
+msgstr "Следить за самым опаздывающим пассажиром"
+
+msgctxt "pa"
+msgid "PA: Boarding now for {airline} to {city} at Gate {gate}."
+msgstr "ГГС: Начинается посадка на рейс {airline} в {city}, выход {gate}."
+
+msgctxt "pa"
+msgid "PA: Boarding now for {airline} to {city}."
+msgstr "ГГС: Начинается посадка на рейс {airline} в {city}."
+
+msgctxt "pa"
+msgid "PA: Boarding now for {flight} at Gate {gate}."
+msgstr "ГГС: Начинается посадка на рейс {flight}, выход {gate}."
+
+msgctxt "pa"
+msgid "PA: Boarding now for {flight}."
+msgstr "ГГС: Начинается посадка на рейс {flight}."
+
+msgctxt "pa"
+msgid "PA: Final call for {airline} to {city} at Gate {gate}. Doors close soon."
+msgstr "ГГС: Заканчивается посадка на рейс {airline} в {city}, выход {gate}. Скоро закрытие дверей."
+
+msgctxt "pa"
+msgid "PA: Final call for {airline} to {city}. Doors close soon."
+msgstr "ГГС: Заканчивается посадка на рейс {airline} в {city}. Скоро закрытие дверей."
+
+msgctxt "pa"
+msgid "PA: Final call for {flight} at Gate {gate}. Doors close soon."
+msgstr "ГГС: Заканчивается посадка на рейс {flight}, выход {gate}. Скоро закрытие дверей."
+
+msgctxt "pa"
+msgid "PA: Final call for {flight}. Doors close soon."
+msgstr "ГГС: Заканчивается посадка на рейс {flight}. Скоро закрытие дверей."
+
+msgctxt "pa"
+msgid "PA: A minor beverage incident in the terminal. Please step around the enthusiasm."
+msgstr "ГГС: Небольшое пролитие напитка в терминале. Просим обходить место с энтузиазмом и осторожностью."
+
+msgctxt "pa"
+msgid "PA: One security scanner has paused for a brief reset. Other lanes remain open."
+msgstr "ГГС: Один сканер досмотра приостановлен для короткой перезагрузки. Остальные линии работают."
+
+msgctxt "pa"
+msgid "PA: A seasonal rush is arriving. Everyone is early except the queue."
+msgstr "ГГС: Ожидается сезонный наплыв пассажиров. Все приехали заранее, кроме самой очереди."
+
+msgctxt "pa"
+msgid "PA: Check-in queue is full. Please admire the terminal flooring while waiting."
+msgstr "ГГС: Очередь на регистрацию заполнена. Пока ждёте, полюбуйтесь напольным покрытием терминала."
+
+msgctxt "pa"
+msgid "PA: Security queue is full. Take a moment to pre-untie your shoes."
+msgstr "ГГС: Очередь на досмотр заполнена. Самое время заранее развязать шнурки."
+
+msgctxt "pa"
+msgid "PA: Bravo to the passenger who caught {airline} to {city} at Gate {gate} just in time."
+msgstr "ГГС: Браво пассажиру, который в последний миг успел на рейс {airline} в {city} у выхода {gate}."
+
+msgctxt "pa"
+msgid "PA: Bravo to the passenger who caught {airline} to {city} just in time."
+msgstr "ГГС: Браво пассажиру, который в последний миг успел на рейс {airline} в {city}."
+
+msgctxt "pa"
+msgid "PA: Bravo to the passenger who caught {flight} at Gate {gate} just in time."
+msgstr "ГГС: Браво пассажиру, который в последний миг успел на рейс {flight} у выхода {gate}."
+
+msgctxt "pa"
+msgid "PA: Bravo to the passenger who caught {flight} with seconds to spare."
+msgstr "ГГС: Браво пассажиру, который успел на рейс {flight} за считанные секунды до вылета."
+
+msgctxt "pa"
+msgid "PA: Our terminal is now rated {stars} stars. Same carpet, slightly prouder management."
+msgstr "ГГС: Рейтинг нашего терминала теперь {stars} зв. Тот же ковёр, но чуть более гордое руководство."
+
+msgid "Ramp agents"
+msgstr "Перронная служба"
+
+msgid "Ramp agent needed for baggage"
+msgstr "Для багажа нужен сотрудник перронной службы"
+
+msgid "No ramp agents hired · hire one on Staff"
+msgstr "Нет сотрудников перронной службы · наймите в «Персонале»"
+
+msgid "All ramp agents busy · hire another on Staff"
+msgstr "Все сотрудники перронной службы заняты · наймите ещё в «Персонале»"
+
+msgid "Ramp agent needed for pushback"
+msgstr "Для буксировки нужен сотрудник перронной службы"
+
+msgid "Emergency tug called (-{fee}) · Hire a ramp agent on Staff"
+msgstr "Вызван аварийный тягач (-{fee}) · Наймите сотрудника перронной службы"
 
 msgid "Language"
 msgstr "Язык"
 
-msgid "Game menu"
-msgstr "Меню игры"
-
-msgid "Resume ({key})"
-msgstr "Продолжить ({key})"
-
 msgctxt "menu"
-msgid "Save"
-msgstr "Сохранить"
-
-msgid "Settings"
-msgstr "Настройки"
-
-msgid "Back"
-msgstr "Назад"
+msgid "Audio"
+msgstr "Звук"
 
 msgid "Audio"
 msgstr "Звук"
@@ -76,260 +4956,1263 @@ msgstr "Эффекты"
 msgid "{percent}%"
 msgstr "{percent}%"
 
-msgid "Incidents"
-msgstr "Происшествия"
+msgctxt "menu"
+msgid "Main Menu"
+msgstr "Главное меню"
 
-msgid "Quit log"
-msgstr "Журнал выхода"
+msgctxt "menu"
+msgid "Quit to Desktop"
+msgstr "Выйти на рабочий стол"
 
-msgid "Open log folder"
-msgstr "Открыть папку"
+msgctxt "menu"
+msgid "Save & Exit"
+msgstr "Сохранить и выйти"
 
-msgid "v{version}"
-msgstr "v{version}"
+msgctxt "menu"
+msgid "Exit without Saving"
+msgstr "Выйти без сохранения"
 
-msgid "Build mode"
-msgstr "Режим стройки"
+msgctxt "menu"
+msgid "Cancel"
+msgstr "Отмена"
 
-msgctxt "narrow build mode sign"
-msgid "Build"
-msgstr "Стройка"
+msgid "Return to main menu?"
+msgstr "Вернуться в главное меню?"
 
-msgctxt "build menu"
-msgid "Building"
-msgstr "Здание"
+msgid "Quit to desktop?"
+msgstr "Выйти на рабочий стол?"
 
-msgctxt "build menu"
-msgid "Operations"
-msgstr "Операции"
+msgid "Unsaved progress will be lost."
+msgstr "Несохранённый прогресс будет потерян."
 
-msgctxt "build menu"
-msgid "Facilities"
-msgstr "Удобства"
+msgid "Cannot save right now: {reason}"
+msgstr "Сейчас нельзя сохранить: {reason}"
 
-msgctxt "build menu"
-msgid "Food & Drink"
-msgstr "Еда и напитки"
+msgid "Could not save the game."
+msgstr "Не удалось сохранить игру."
 
-msgctxt "build menu"
-msgid "Shops"
-msgstr "Магазины"
+msgid "Camera angle"
+msgstr "Угол камеры"
 
-msgctxt "build menu"
-msgid "Decor"
-msgstr "Декор"
+msgid "Low (38°)"
+msgstr "Низкий (38°)"
 
-msgctxt "build menu"
-msgid "Remove"
-msgstr "Удалить"
+msgid "Medium (54°)"
+msgstr "Средний (54°)"
 
-msgctxt "build menu"
-msgid "Templates"
-msgstr "Шаблоны"
+msgid "Top-Down (70°)"
+msgstr "Сверху (70°)"
 
-msgctxt "build menu"
-msgid "Staff"
-msgstr "Персонал"
+msgid "Custom ({angle}°)"
+msgstr "Свой ({angle}°)"
 
-msgctxt "build menu"
-msgid "All"
-msgstr "Все"
+msgid "Welcome to your new airport! Open Operations on the bottom bar to place a check-in desk, security scanner, and gate desk."
+msgstr "Добро пожаловать в ваш новый аэропорт! Откройте «Операции» на нижней панели и поставьте стойку регистрации, сканер досмотра и стойку выхода."
 
-msgctxt "build menu"
-msgid "Rooms"
-msgstr "Комнаты"
+msgid "Then open Staff to hire an agent, an officer, and a gate agent so the airport can open. {pause} pauses, {speed} sets speed."
+msgstr "Затем откройте «Персонал» и наймите сотрудника регистрации, сотрудника досмотра и сотрудника выхода, чтобы аэропорт открылся. {pause} — пауза, {speed} — скорость."
 
-msgctxt "build menu"
-msgid "Check-in desk"
-msgstr "Стойка регистр."
+msgid "Now that the airport is open, some days bring trouble: a spill on the floor, an inspector, a holiday rush. Shall I send those your way?"
+msgstr "Теперь, когда аэропорт открыт, в иные дни случаются хлопоты: лужа на полу, визит инспектора или праздничный наплыв. Присылать их вам?"
 
-msgctxt "build menu"
-msgid "Gate desk"
-msgstr "Стойка выхода"
+msgid "Place Check-in (Operations)"
+msgstr "Поставьте стойку регистрации («Операции»)"
 
-msgctxt "build menu"
-msgid "Security"
-msgstr "Досмотр"
+msgid "Open a closed Check-in desk"
+msgstr "Откройте закрытую стойку регистрации"
 
-msgctxt "build menu"
-msgid "Bag room"
-msgstr "Багажное отд."
+msgid "Hire Check-in agent (Staff)"
+msgstr "Наймите сотрудника регистрации («Персонал»)"
 
-msgctxt "build menu"
-msgid "Toilet"
-msgstr "Туалет"
+msgid "Check-in agent on the way"
+msgstr "Сотрудник регистрации в пути"
 
-msgctxt "price"
-msgid "Free"
-msgstr "Бесплатно"
+msgid "Place Security (Operations)"
+msgstr "Поставьте досмотр («Операции»)"
 
-msgid "Locked"
-msgstr "Закрыто"
+msgid "Open a closed Security scanner or lane"
+msgstr "Откройте закрытый сканер или линию досмотра"
 
-msgid "In the full game"
-msgstr "В полной версии"
+msgid "Hire Security officer (Staff)"
+msgstr "Наймите сотрудника досмотра («Персонал»)"
 
-msgid "Offers ({count})"
-msgstr "Рейсы ({count})"
+msgid "Security officer on the way"
+msgstr "Сотрудник досмотра в пути"
 
-msgid "Runway"
-msgstr "ВПП"
+msgid "Place Gate Desk (Operations)"
+msgstr "Поставьте стойку выхода («Операции»)"
 
-msgid "Planner ({key})"
-msgstr "План ({key})"
+msgid "Hire Gate agent (Staff)"
+msgstr "Наймите сотрудника выхода («Персонал»)"
 
-msgid "Departures ({key})"
-msgstr "Вылеты ({key})"
+msgid "Gate agent on the way"
+msgstr "Сотрудник выхода в пути"
 
-msgid "Mood ({key})"
-msgstr "Настр. ({key})"
+msgid "Place Seats near the gate (Operations)"
+msgstr "Поставьте кресла у выхода («Операции»)"
 
-msgid "Hints ({key})"
-msgstr "Подск. ({key})"
+msgid "Station unstaffed: hire staff (Staff)"
+msgstr "Пост без сотрудника: наймите персонал («Персонал»)"
 
-msgid "Reset hints"
-msgstr "Сбросить подск."
+msgid "Passengers need a toilet: build Toilet room (Facilities)"
+msgstr "Пассажирам нужен туалет: постройте туалет («Удобства»)"
 
-msgid "No flights yet"
-msgstr "Пока нет рейсов"
+msgid "Passengers are hungry: build Cafe (Food & Drink)"
+msgstr "Пассажиры голодны: постройте кафе («Еда и напитки»)"
 
-msgctxt "clock"
-msgid "Day {day}  {time}"
-msgstr "День {day}  {time}"
+msgid "Airline Contracts — Accept to schedule flights"
+msgstr "Контракты авиакомпаний — примите, чтобы добавить рейсы"
 
-msgid "Alerts"
-msgstr "Уведомления"
+msgid "{boarded}/{booked} boarded"
+msgstr "На борту {boarded}/{booked}"
 
-msgid "Alerts ({count})"
-msgstr "Уведомления ({count})"
+msgid "3-day rolling on-time rate (70% of your star rating)"
+msgstr "Показатель пунктуальности за 3 дня (70% вашего звёздного рейтинга)"
 
-msgid "Alert history"
-msgstr "История уведомлений"
+msgid "In terminal: {active}"
+msgstr "В терминале: {active}"
 
-msgid "Show alert cards"
-msgstr "Показывать карточки"
+msgid "· {count} late"
+msgstr "· опаздывают {count}"
 
-msgid "No alerts yet"
-msgstr "Пока нет уведомлений"
+msgid "On time: {percent}%"
+msgstr "Вовремя: {percent}%"
 
-msgid "Today"
-msgstr "Сегодня"
+msgid "On time: —"
+msgstr "Вовремя: —"
 
-msgid "Tomorrow"
-msgstr "Завтра"
+msgid "Departures ({key}) · {count} late"
+msgstr "Вылеты ({key}) · {count} опазд."
 
-msgid "No flights scheduled"
-msgstr "Рейсов не запланировано"
-
-msgid "Made {made}  Missed {missed}  In terminal {active}"
-msgstr "Успели {made}  Опоздали {missed}  В терминале {active}"
-
-msgid "To open the airport"
-msgstr "Чтобы открыть аэропорт"
-
-msgid "Your airport needs"
-msgstr "Аэропорту требуется"
-
-msgctxt "staff button"
-msgid "Hire · {wage}/day"
-msgstr "Нанять · {wage}/день"
-
-msgctxt "staff button"
-msgid "Fire"
-msgstr "Уволить"
-
-msgid "Check-in agents"
-msgstr "Сотр. регистрации"
-
-msgid "Security officers"
-msgstr "Сотр. досмотра"
-
-msgid "Gate agents"
-msgstr "Сотр. выходов"
-
-msgid "Shop staff"
-msgstr "Продавцы"
-
-msgid "Cleaners"
-msgstr "Уборщики"
-
-msgid "Ramp agents"
-msgstr "Перронная служба"
-
-msgid "{hired} hired, {duty} on duty"
-msgstr "Нанято {hired}, на смене {duty}"
-
-msgid "{hired} hired, {duty} cleaning"
-msgstr "Нанято {hired}, убирают {duty}"
-
-msgctxt "mood overlay mode"
-msgid "Mood"
-msgstr "Настроение"
-
-msgctxt "mood overlay mode"
-msgid "Hunger"
-msgstr "Голод"
-
-msgctxt "mood overlay mode"
-msgid "Toilet"
-msgstr "Туалет"
-
-msgctxt "mood overlay mode"
-msgid "Boredom"
-msgstr "Скука"
-
-msgctxt "mood overlay mode"
-msgid "Late"
-msgstr "Опаздывают"
-
-msgctxt "speed button"
-msgid "Pause ({key})"
-msgstr "Пауза ({key})"
-
-msgctxt "speed button"
-msgid "Speed {speed}x ({key})"
-msgstr "Скорость {speed}x ({key})"
-
-msgctxt "gate caption"
-msgid "Gate {gate}"
-msgstr "Выход {gate}"
+msgid "Departures ({key}) · {count} today"
+msgstr "Вылеты ({key}) · {count} сегодня"
 
 msgctxt "gate name"
-msgid "Gate {gate}"
-msgstr "Выход {gate}"
+msgid "Click to focus Gate {gate}"
+msgstr "Нажмите, чтобы приблизить к выходу {gate}"
 
-msgctxt "gate caption"
-msgid "up to small planes"
-msgstr "до малых судов"
+msgid "{time} {destination} · Click to follow"
+msgstr "{time} {destination} · Нажмите, чтобы следить"
 
-msgctxt "gate caption"
-msgid "up to medium planes"
-msgstr "до средних судов"
+msgid "{time} {flight} · Click to follow"
+msgstr "{time} {flight} · Нажмите, чтобы следить"
 
-msgctxt "gate caption"
-msgid "up to large planes"
-msgstr "до крупных судов"
+msgid "{flight} · Click to follow"
+msgstr "{flight} · Нажмите, чтобы следить"
 
-msgctxt "gate caption"
-msgid "no room for a plane"
-msgstr "нет места для самолёта"
+msgid "Click to follow the tightest running-late passenger"
+msgstr "Нажмите, чтобы следить за самым опаздывающим пассажиром"
 
-msgctxt "gate caption"
-msgid "{minutes} min walk"
-msgstr "{minutes} мин пешком"
+msgid "Set off the scanner: forgot my belt!"
+msgstr "Сработал сканер: забыл снять ремень!"
 
-msgctxt "sign caption"
-msgid "Closed"
-msgstr "Закрыто"
+msgid "Set off the scanner: keys in pocket!"
+msgstr "Сработал сканер: ключи в кармане!"
+
+msgid "Set off the scanner: coins in pocket!"
+msgstr "Сработал сканер: мелочь в кармане!"
+
+msgid "Stopped for liquids: oversized shampoo!"
+msgstr "Задержан из-за жидкостей: слишком большой шампунь!"
+
+msgid "Stopped for liquids: too much liquid!"
+msgstr "Задержан из-за жидкостей: слишком много жидкости!"
+
+msgid "Stopped for liquids: forgot my water bottle!"
+msgstr "Задержан из-за жидкостей: забыл бутылку воды!"
+
+msgid "Security search: \"{reason}\""
+msgstr "Досмотр вещей: «{reason}»"
+
+msgid "One-off charter — cannot move"
+msgstr "Разовый чартер — нельзя перенести"
+
+msgid "One-off charter — flies today only"
+msgstr "Разовый чартер — летит только сегодня"
+
+msgid "Departs {time} today"
+msgstr "Вылет сегодня в {time}"
+
+msgid "${amount} payout"
+msgstr "Выплата ${amount}"
+
+msgid "No exit fee"
+msgstr "Без неустойки"
+
+msgid "Flies once today only; no exit fee or daily commitment."
+msgstr "Летит один раз только сегодня; без неустойки и ежедневных обязательств."
+
+msgid "Charter available"
+msgstr "Доступен чартер"
+
+msgid "One-off {time} flight to {destination} · click to review"
+msgstr "Разовый рейс в {destination} в {time} · нажмите, чтобы посмотреть"
+
+msgid "Click to open Airline Contracts"
+msgstr "Нажмите, чтобы открыть контракты авиакомпаний"
+
+msgid "this charter's departure window has already passed"
+msgstr "окно вылета этого чартера уже прошло"
+
+msgid "Bag room needs a belt"
+msgstr "Багажному отделению нужна лента"
+
+msgid "Drag a belt from the back of a check-in desk into your Bag Room."
+msgstr "Протяните ленту от тыла стойки регистрации в багажное отделение."
+
+msgid "Airline offers available"
+msgstr "Новые предложения от авиакомпаний"
+
+msgid "{count} new contract waiting · click to review"
+msgid_plural "{count} new contracts waiting · click to review"
+msgstr[0] "Ждёт {count} новый контракт · нажмите, чтобы посмотреть"
+msgstr[1] "Ждут {count} новых контракта · нажмите, чтобы посмотреть"
+msgstr[2] "Ждут {count} новых контрактов · нажмите, чтобы посмотреть"
+
+msgid "Airlines are ready with new flights — click Offers at the top to review contracts."
+msgstr "Авиакомпании готовы предложить новые рейсы — нажмите «Рейсы» вверху, чтобы просмотреть контракты."
+
+msgid "Last-minute charter hop to {destination} — light bags, quick turnaround."
+msgstr "Срочный чартер в {destination} — лёгкий багаж, быстрый оборот."
+
+msgid "Premium cabin demand to {destination} — passengers pay top fare."
+msgstr "Спрос на премиум-класс в {destination} — пассажиры платят по высшему тарифу."
+
+msgid "Holiday crowd bound for {destination} — plenty of time to shop."
+msgstr "Отпускная толпа направляется в {destination} — полно времени на покупки."
+
+msgid "Smooth bag handling to {destination} — {airline} covers missed bags."
+msgstr "Бережная обработка багажа до {destination} — {airline} покрывает потерянные сумки."
+
+msgid "Busy route to {destination} — almost every seat is spoken for."
+msgstr "Загруженный маршрут в {destination} — почти все места раскуплены."
+
+msgid "{airline} brings a welcome bonus on your first flight to {destination}."
+msgstr "{airline} даёт приветственный бонус за первый рейс в {destination}."
+
+msgid "Steady partner route to {destination} — fly often for higher fares."
+msgstr "Надёжный партнёрский рейс в {destination} — летайте чаще ради более высоких сборов."
+
+msgid "Crisp northern hop with {airline} — steady fjord and business flyers."
+msgstr "Свежий северный рейс с {airline} — постоянные туристы к фьордам и деловые пассажиры."
+
+msgid "Quick city-break run to Berlin — easygoing weekend flyers."
+msgstr "Короткий городской уикенд-рейс в Берлин — непринуждённые туристы выходного дня."
+
+msgid "Warm coastal route to Lisbon — sunlit travelers heading south."
+msgstr "Тёплый прибрежный маршрут в Лиссабон — солнечные путешественники на юг."
+
+msgid "Classic Mediterranean hop to Rome — sightseeing crowds all day."
+msgstr "Классический средиземноморский рейс в Рим — толпы любителей достопримечательностей."
+
+msgid "Friendly island link to Dublin — reliable regional commuters."
+msgstr "Дружелюбная островная линия в Дублин — надёжные региональные пассажиры."
+
+msgid "Sunny Aegean flight to Athens — leisure flyers ready to board."
+msgstr "Солнечный рейс к Эгейскому морю в Афины — отпускники, готовые к вылету."
+
+msgid "Reliable daily link to {destination} with {airline}."
+msgstr "Надёжный ежедневный рейс в {destination} от {airline}."
+
+msgid "Passengers walk from the entrance through security to the exit."
+msgstr "Пассажиры идут от входа через досмотр к выходу."
+
+msgid "Staff need a clear tile behind each station to work it."
+msgstr "Сотрудникам нужна свободная клетка позади каждого рабочего места."
+
+msgid "Gate desks stay closed until an agent is hired."
+msgstr "Стойки выходов закрыты, пока не нанят сотрудник выхода."
+
+msgid "The airport opens once staff reach their stations."
+msgstr "Аэропорт откроется, как только персонал дойдёт до своих постов."
+
+msgid "Opens boarding for your first flight."
+msgstr "Открывает посадку на ваш первый рейс."
+
+msgid "Keeps waiting passengers comfortable."
+msgstr "Поддерживает комфорт ожидающих пассажиров."
+
+msgid "Passengers check in here before security."
+msgstr "Пассажиры проходят здесь регистрацию перед досмотром."
+
+msgid "Closed desks cannot serve waiting passengers."
+msgstr "Закрытые стойки не могут обслуживать ожидающих пассажиров."
+
+msgid "Stations stay closed until an agent is hired."
+msgstr "Посты закрыты, пока не нанят сотрудник."
+
+msgid "Clears passengers and bags for the gate."
+msgstr "Пропускает пассажиров и ручную кладь к выходу."
+
+msgid "Closed security lanes cannot clear passengers."
+msgstr "Закрытые линии досмотра не пропускают пассажиров."
+
+msgid "Stations stay closed until an officer is hired."
+msgstr "Посты закрыты, пока не нанят сотрудник досмотра."
+
+msgid "Each extra station needs its own staff member."
+msgstr "Каждому дополнительному посту нужен отдельный сотрудник."
+
+msgid "Prevents comfort drops while passengers wait."
+msgstr "Не даёт комфорту падать во время ожидания."
+
+msgid "Hungry passengers lose mood before boarding."
+msgstr "Голодные пассажиры теряют настроение перед посадкой."
+
+msgid "Seals the terminal so roof and rooms work."
+msgstr "Замыкает терминал, чтобы работали крыша и комнаты."
+
+msgid "Prep time — clock starts when staff reach stations"
+msgstr "Подготовка — время пойдёт, когда персонал займёт места"
+
+msgid "Hire a ramp agent"
+msgstr "Наймите сотрудника перронной службы"
+
+msgid "Checked bags wait until a ramp agent drives the cart."
+msgstr "Сданный багаж ждёт, пока сотрудник перронной службы не вывезет тележку."
+
+msgid "Counters stay closed until shop staff arrive."
+msgstr "Прилавки закрыты, пока не придут продавцы."
+
+msgid "Serve {done}/{need} passengers to unlock Cafe & Baggage"
+msgstr "Обслужите {done}/{need} пассажиров, чтобы открыть кафе и багаж"
+
+msgid "Works check-in desks to tag bags and print boarding passes. Hire 1 per open desk."
+msgstr "Работает за стойкой регистрации: оформляет багаж и печатает посадочные талоны. Нанимайте по 1 на стойку."
+
+msgid "Runs security scanners and lanes to clear passengers and carry-on bags. Hire 1 per open scanner."
+msgstr "Работает на сканерах и линиях досмотра. Нанимайте по 1 на открытый сканер."
+
+msgid "Works gate desks to start boarding and announce flights. Hire 1 per gate desk."
+msgstr "Работает за стойкой выхода: начинает посадку и объявляет рейсы. Нанимайте по 1 на выход."
+
+msgid "Runs cafe, bar, restaurant, and shop counters. Hire once you build a cafe or shop."
+msgstr "Работает в кафе, барах, ресторанах и магазинах. Нанимайте, когда построите кафе или магазин."
+
+msgid "Mops terminal messes and empties full bins. Hire when litter builds up."
+msgstr "Вытирает грязь в терминале и опустошает полные урны. Нанимайте, когда накапливается мусор."
+
+msgid "Drives baggage carts between your Bag Room and parked planes. Hire once you build a Bag Room."
+msgstr "Возит багажные тележки между багажным отделением и самолётами. Нанимайте, когда построите багажное отделение."
+
+msgid "Open Planner (P) to view today's schedule or move flights between gates."
+msgstr "Откройте «План» (P), чтобы посмотреть расписание на сегодня или перенести рейсы между выходами."
+
+msgid "Terminal messes lower passenger mood. Hire a Cleaner on the Staff card to keep things tidy."
+msgstr "Грязь в терминале портит настроение пассажирам. Наймите уборщика в разделе «Персонал»."
+
+msgid "Place on terminal floor. A server hands over the order."
+msgstr "Поставьте на пол терминала. Продавец выдаёт заказ."
+
+msgid "A currency exchange stand. Passengers change money and pay a small fee."
+msgstr "Стойка обмена валют. Пассажиры меняют деньги и платят небольшую комиссию."
+
+msgid "Place on terminal floor. A server stands behind it and changes money."
+msgstr "Поставьте на пол терминала. За стойкой стоит продавец и меняет деньги."
+
+msgid "Shop staff hired in Staff, and the spot in front clear. Does not cure boredom."
+msgstr "Нужны продавцы из «Персонала» и свободное место спереди. Не снимает скуку."
+
+msgid "Place on terminal floor. The passenger uses it from the cell in front."
+msgstr "Поставьте на пол терминала. Пассажир пользуется им с клетки спереди."
+
+msgid "Keep the spot in front clear. No staff, no upkeep, and does not cure boredom."
+msgstr "Оставьте место спереди свободным. Персонал и содержание не нужны; не снимает скуку."
+
+msgid "Place on terminal floor. The passenger sits and leans back during a long wait."
+msgstr "Поставьте на пол терминала. Пассажир садится и отдыхает при долгом ожидании."
+
+msgid "← Back"
+msgstr "← Назад"
+
+msgid "{room} items"
+msgstr "Предметы: {room}"
+
+msgid "★"
+msgstr "★"
+
+msgid "✓"
+msgstr "✓"
+
+msgctxt "build menu"
+msgid "Search table"
+msgstr "Стол досмотра"
+
+msgctxt "build menu"
+msgid "Confiscation bin"
+msgstr "Контейнер изъятия"
+
+msgctxt "item name"
+msgid "Search table"
+msgstr "Стол досмотра"
+
+msgctxt "item name"
+msgid "Confiscation bin"
+msgstr "Контейнер изъятия"
+
+msgid "An inspection table where officers check flagged carry-on bags."
+msgstr "Стол, где сотрудники досматривают отмеченную ручную кладь."
+
+msgid "Place it beside the lane's side berth. Optional: the lane works without one."
+msgstr "Ставится у бокового места линии досмотра. Необязательно: линия работает и без него."
+
+msgid "No upkeep. Holds the passenger's tray during bag searches."
+msgstr "Без содержания. Держит лоток пассажира во время проверки сумки."
+
+msgid "A clear glass bin showing items taken at the security lane today."
+msgstr "Прозрачный стеклянный контейнер, показывающий вещи, изъятые на линии сегодня."
+
+msgid "Place it next to the search table slot. Resets at midnight."
+msgstr "Ставится рядом со слотом стола досмотра. Очищается в полночь."
+
+msgid "No upkeep. Inspect it to see today's strangest finds."
+msgstr "Без содержания. Осмотрите его, чтобы увидеть самые странные находки дня."
+
+msgid "Status: Attached to a ready security lane"
+msgstr "Статус: подключено к готовой линии досмотра"
+
+msgid "Status: Not attached to a ready lane"
+msgstr "Статус: не подключено к готовой линии"
+
+msgid "Confiscated today: {count} item"
+msgid_plural "Confiscated today: {count} items"
+msgstr[0] "Изъято сегодня: {count} предмет"
+msgstr[1] "Изъято сегодня: {count} предмета"
+msgstr[2] "Изъято сегодня: {count} предметов"
+
+msgid "{item} ({quip})"
+msgstr "{item} ({quip})"
+
+msgid "Recent: {items}"
+msgstr "Недавнее: {items}"
+
+msgid "Giant alpine snow globe"
+msgstr "Огромный альпийский снежный шар"
+
+msgid "Contains 400 ml of festive winter magic."
+msgstr "Внутри 400 мл праздничной зимней магии."
+
+msgid "Souvenir city snow globe"
+msgstr "Сувенирный городской снежный шар"
+
+msgid "Too much decorative blizzard for cabin altitude."
+msgstr "Слишком много декоративной метели для салона самолёта."
+
+msgid "Musical penguin snow globe"
+msgstr "Музыкальный снежный шар с пингвином"
+
+msgid "Shakes nicely, still over the 100 ml limit."
+msgstr "Трясётся отлично, но всё равно превышает лимит в 100 мл."
+
+msgid "Family-size maple syrup jug"
+msgstr "Семейная канистра кленового сиропа"
+
+msgid "Emergency pancake rations are still a liquid."
+msgstr "Запас блинчиков на чёрный день всё равно считается жидкостью."
+
+msgid "Artisanal pancake syrup"
+msgstr "Ремесленный сироп для блинов"
+
+msgid "Declared as breakfast insurance."
+msgstr "Задекларирован как «страховка на завтрак»."
+
+msgid "Emergency waffle syrup"
+msgstr "Аварийный сироп для вафель"
+
+msgid "Sticky situation in tray three."
+msgstr "Липкая история на третьем лотке."
+
+msgid "Ceramic garden gnome"
+msgstr "Керамический садовый гном"
+
+msgid "Claimed to be a tiny travel companion."
+msgstr "Пассажир уверял, что это «мини-попутчик»."
+
+msgid "Uncle Barnaby's lucky gnome"
+msgstr "Счастливый гном дяди Барнаби"
+
+msgid "Too heavy for the overhead bin."
+msgstr "Слишком тяжёлый для верхней полки."
+
+msgid "Pointy-hat lawn gnome"
+msgstr "Садовый гном в остроконечном колпаке"
+
+msgid "Refused to fit in a quart-size zip bag."
+msgstr "Наотрез отказался влезать в литровый пакет."
+
+msgid "Twelve-pound bowling ball"
+msgstr "Шар для боулинга на 12 фунтов"
+
+msgid "Definitely not a compact neck pillow."
+msgstr "Точно не похож на компактную подушку для шеи."
+
+msgid "Lucky league bowling ball"
+msgstr "Счастливый турнирный шар для боулинга"
+
+msgid "Spare shoes were fine; the ball had to stay."
+msgstr "Запасные туфли пропустили, а шар пришлось оставить."
+
+msgid "Polished tournament ball"
+msgstr "Отполированный шар для соревнований"
+
+msgid "Would roll straight out of the overhead locker."
+msgstr "Выкатится прямо с верхней багажной полки."
+
+msgid "Plastic lawn flamingo"
+msgstr "Пластиковый садовый фламинго"
+
+msgid "Needs its own boarding pass at this height."
+msgstr "При таком росте ему нужен отдельный билет."
+
+msgid "Tropical souvenir flamingo"
+msgstr "Тропический сувенирный фламинго"
+
+msgid "Tried to pass as a walking stick."
+msgstr "Пытался сойти за трость."
+
+msgid "Neon pink yard flamingo"
+msgstr "Неоново-розовый дворовый фламинго"
+
+msgid "Too fabulous for under-seat stowage."
+msgstr "Слишком эффектный, чтобы поместиться под креслом."
+
+msgid "Giant bath-time rubber duck"
+msgstr "Гигантская резиновая уточка для ванны"
+
+msgid "Squeaked during the X-ray scan."
+msgstr "Пискнула во время рентгена."
+
+msgid "Captain Squeaks the duck"
+msgstr "Уточка Капитан Писк"
+
+msgid "Suspiciously buoyant carry-on cargo."
+msgstr "Подозрительно плавучая ручная кладь."
+
+msgid "Oversized squeaky duck"
+msgstr "Негабаритная пищащая уточка"
+
+msgid "Filled with bathwater from hotel checkout."
+msgstr "Полная воды из ванны после выезда из отеля."
+
+msgid "Comically giant wrench"
+msgstr "Комически огромный гаечный ключ"
+
+msgid "Just in case the seat reclines slowly."
+msgstr "«На случай, если кресло будет туго откидываться»."
+
+msgid "Pocket-sized mega wrench"
+msgstr "«Карманный» мегаключ"
+
+msgid "Definitely not an approved nail file."
+msgstr "Это точно не одобренная пилочка для ногтей."
+
+msgid "Half-metre pipe wrench"
+msgstr "Полуметровый разводной ключ"
+
+msgid "Way past the tool-length limit."
+msgstr "Сильно превышает допустимую длину инструмента."
+
+msgid "Unlabelled mystery thermos"
+msgstr "Неподписанный загадочный термос"
+
+msgid "Smells faintly of soup, tea, or jet fuel."
+msgstr "Слегка пахнет супом, чаем или авиакеросином."
+
+msgid "Grandma's mystery thermos"
+msgstr "Бабушкин загадочный термос"
+
+msgid "Could be cocoa; still 600 ml too large."
+msgstr "Может, и какао, но всё равно на 600 мл больше нормы."
+
+msgid "Rattling stainless thermos"
+msgstr "Гремящий стальной термос"
+
+msgid "No one wants to open it at the checkpoint."
+msgstr "Никто на досмотре не решается его открыть."
+
+msgid "Fast-Track"
+msgstr "Приоритет"
+
+msgid "Fast-Track: On"
+msgstr "Приоритет: вкл."
+
+msgid "Fast-Track: Off"
+msgstr "Приоритет: выкл."
+
+msgid "Switch this security lane back to Standard"
+msgstr "Переключить эту линию досмотра обратно на обычную"
+
+msgid "Switch this security lane to Fast-Track (VIP and tight-connection passengers)"
+msgstr "Переключить эту линию на «Приоритет» (для VIP и спешащих пассажиров)"
+
+msgid "Breezed through Fast-Track security"
+msgstr "Промчался через приоритетный досмотр"
+
+msgctxt "build menu"
+msgid "Security lane"
+msgstr "Линия досмотра"
+
+msgctxt "build menu"
+msgid "2x3"
+msgstr "2x3"
+
+msgid "A complete security lane: tray table, X-ray belt, arch and pickup table."
+msgstr "Полная линия досмотра: стол для лотков, рентген-лента, рамка и стол выдачи."
+
+msgid "Click once to place all four parts together. Press R to turn it."
+msgstr "Нажмите один раз, чтобы поставить все четыре части вместе. R — повернуть."
+
+msgid "Needs clear floor for the lane, queue, exit and two officer spots."
+msgstr "Нужен свободный пол для линии, очереди, выхода и двух мест для сотрудников."
+
+msgctxt "build menu"
+msgid "Starter Toilet"
+msgstr "Стартовый туалет"
+
+msgctxt "build menu"
+msgid "Starter Cafe"
+msgstr "Стартовое кафе"
+
+msgctxt "build menu"
+msgid "Kit"
+msgstr "Набор"
+
+msgctxt "build status"
+msgid "Placed {kit} for {cost}"
+msgstr "Размещён набор «{kit}» за {cost}"
+
+msgctxt "build status"
+msgid "{kit}: click to place"
+msgstr "{kit}: нажмите, чтобы разместить"
+
+msgid "Furnished room kit"
+msgstr "Готовый набор комнаты"
+
+msgid "Places floor, walls, a door, and required items in one click."
+msgstr "Ставит пол, стены, дверь и нужные предметы одним кликом."
+
+msgid "{w}x{h} kit"
+msgstr "набор {w}x{h}"
+
+msgid "Click (R rotates)"
+msgstr "Клик (R — повернуть)"
+
+msgctxt "build menu"
+msgid "Starter Bar"
+msgstr "Стартовый бар"
+
+msgctxt "build menu"
+msgid "Starter Restaurant"
+msgstr "Стартовый ресторан"
+
+msgctxt "build menu"
+msgid "Starter Bag room"
+msgstr "Стартовое багажное отд."
+
+msgctxt "build menu"
+msgid "Starter Kiosk"
+msgstr "Стартовый киоск"
+
+msgctxt "build menu"
+msgid "Starter Pharmacy"
+msgstr "Стартовая аптека"
+
+msgctxt "build menu"
+msgid "Starter Duty free"
+msgstr "Стартовый Duty Free"
+
+msgctxt "build menu"
+msgid "Starter Fashion store"
+msgstr "Стартовый бутик одежды"
+
+msgctxt "build menu"
+msgid "Starter Play area"
+msgstr "Стартовая игровая зона"
+
+msgctxt "build menu"
+msgid "Starter Lounge"
+msgstr "Стартовый зал ожидания"
+
+msgctxt "build menu"
+msgid "Starter Shower"
+msgstr "Стартовая душевая"
+
+msgctxt "build menu"
+msgid "Starter Break Room"
+msgstr "Стартовая комната отдыха"
+
+msgctxt "build status"
+msgid "{item} row of {count}, cost {cost}"
+msgstr "{item}: ряд из {count}, цена {cost}"
+
+msgctxt "build status"
+msgid "{item} row of {count}, cost {cost}, {blocked} blocked: {reason}"
+msgstr "{item}: ряд из {count}, цена {cost}, заблокировано {blocked}: {reason}"
+
+msgctxt "build status"
+msgid "Nothing to place"
+msgstr "Нечего размещать"
+
+msgctxt "build status"
+msgid "Placed {count} {item}"
+msgstr "Размещено: {count} {item}"
+
+msgctxt "build status"
+msgid "Placed {count} {item} for {cost}"
+msgstr "Размещено: {count} {item} за {cost}"
+
+msgctxt "build status"
+msgid "Placed {count} {item}, skipped {skipped}: {reason}"
+msgstr "Размещено: {count} {item}, пропущено {skipped}: {reason}"
+
+msgctxt "build status"
+msgid "Placed {count} {item} for {cost}, skipped {skipped}: {reason}"
+msgstr "Размещено: {count} {item} за {cost}, пропущено {skipped}: {reason}"
+
+msgctxt "build juice"
+msgid "-${amount}"
+msgstr "-${amount}"
+
+msgctxt "build juice"
+msgid "+${amount}"
+msgstr "+${amount}"
+
+msgctxt "build menu"
+msgid "Break Room"
+msgstr "Комната отдыха"
 
 msgctxt "room type"
-msgid "Bag room"
-msgstr "Багажное отд."
+msgid "Break Room"
+msgstr "Комната отдыха"
 
-msgctxt "room type"
-msgid "Toilet"
-msgstr "Туалет"
+msgctxt "room name, mid-sentence"
+msgid "break room"
+msgstr "комнаты отдыха"
 
-msgctxt "room status"
-msgid "Ready"
-msgstr "Готово"
+msgctxt "room need"
+msgid "Needs a bench"
+msgstr "Нужна скамейка"
+
+msgctxt "status reason"
+msgid "needs a bench"
+msgstr "нужна скамейка"
+
+msgid "Marks floor as a break room. Tired staff rest here during lulls to recover energy."
+msgstr "Отмечает пол как комнату отдыха персонала. Уставшие сотрудники восстанавливают здесь силы в затишье."
+
+msgid "Drag a rectangle, then add a bench inside. High prestige speeds up recovery."
+msgstr "Протяните прямоугольник, затем поставьте скамейку внутрь. Высокий престиж ускоряет восстановление."
+
+msgid "At least 2x3, with a bench. Staff never leave a busy queue mid-rush."
+msgstr "Минимум 2x3, со скамейкой. Сотрудники не уходят от активной очереди в час пик."
+
+msgid "Benches {count}"
+msgstr "Скамеек: {count}"
+
+msgid "Staff rest here during lulls"
+msgstr "Здесь сотрудники отдыхают в затишье"
+
+msgid "Prestige: Lv. {level} / 5 ({score} pts · +{bonus}% recovery)"
+msgstr "Престиж: ур. {level} / 5 ({score} очк. · +{bonus}% к восстановлению)"
+
+msgid "{hired} hired, {duty} cleaning, {on_break} on break"
+msgstr "Нанято {hired}, убирают {duty}, отдыхают {on_break}"
+
+msgid "{hired} hired, {duty} on duty, {on_break} on break"
+msgstr "Нанято {hired}, на смене {duty}, отдыхают {on_break}"
+
+msgid "On break {pct}%"
+msgstr "Отдыхает {pct}%"
+
+msgid "Tired {pct}%"
+msgstr "Устал {pct}%"
+
+msgid "Rested {pct}%"
+msgstr "Бодр {pct}%"
+
+msgid "+ {count} more"
+msgstr "+ ещё {count}"
+
+msgctxt "build menu"
+msgid "Award trophy"
+msgstr "Кубок наград"
+
+msgctxt "item name"
+msgid "Award trophy"
+msgstr "Кубок наград"
+
+msgctxt "item name, mid-sentence"
+msgid "award trophy"
+msgstr "кубка наград"
+
+msgctxt "refusal detail"
+msgid "No award trophies available"
+msgstr "Нет доступных кубков наград"
+
+msgid "Earn an Award Trophy at the Annual Airport Awards"
+msgstr "Заработайте кубок на ежегодной премии аэропортов"
+
+msgid "An Annual Airport Awards trophy earned for airport excellence."
+msgstr "Кубок ежегодной премии аэропортов за отличную работу."
+
+msgid "Place it inside any room to add +30 Room Prestige points."
+msgstr "Поставьте в любую комнату, чтобы добавить +30 к престижу комнаты."
+
+msgid "Free to place up to the number of trophies earned. No upkeep."
+msgstr "Бесплатно до числа заработанных кубков. Без содержания."
+
+msgid "Year {year} Airport Awards"
+msgstr "Премия аэропортов, год {year}"
+
+msgid "On-Time Champion"
+msgstr "Чемпион пунктуальности"
+
+msgid "Spotless Terminal"
+msgstr "Безупречный терминал"
+
+msgid "Happiest Passengers"
+msgstr "Самые счастливые пассажиры"
+
+msgid "Best Hospitality"
+msgstr "Лучшее гостеприимство"
+
+msgid "Airport of the Year"
+msgstr "Аэропорт года"
+
+msgid "Won"
+msgstr "Победа"
+
+msgid "Nominated"
+msgstr "Номинация"
+
+msgid "+${amount}"
+msgstr "+${amount}"
+
+msgid "$0"
+msgstr "$0"
+
+msgid "Total awarded: +${cash} · {count} Award Trophy unlocked"
+msgid_plural "Total awarded: +${cash} · {count} Award Trophies unlocked"
+msgstr[0] "Итого наград: +${cash} · открыт {count} кубок наград"
+msgstr[1] "Итого наград: +${cash} · открыто {count} кубка наград"
+msgstr[2] "Итого наград: +${cash} · открыто {count} кубков наград"
+
+msgid "Place your Award Trophy from the Decor tab for +30 Room Prestige!"
+msgstr "Поставьте кубок наград из вкладки «Декор», чтобы получить +30 к престижу комнаты!"
+
+msgid "Win a category next year to earn an Award Trophy for +30 Room Prestige!"
+msgstr "Победите в номинации в следующем году, чтобы получить кубок наград (+30 к престижу комнаты)!"
+
+msgid "Continue"
+msgstr "Продолжить"
+
+msgid "Sandbox"
+msgstr "Песочница"
+
+msgid "Achievement Unlocked"
+msgstr "Достижение открыто"
+
+msgid "Certified {star}★: {title}"
+msgstr "Сертификат {star}★: {title}"
+
+msgid "Your airport earned {star}★ {title} certification!"
+msgstr "Ваш аэропорт получил сертификат {star}★ «{title}»!"
+
+msgid "One-time cash grant: +${grant}"
+msgstr "Разовый грант: +${grant}"
+
+msgid "Permanent contract fee prestige bonus: +{percent}%"
+msgstr "Постоянный бонус престижа к сборам по контракту: +{percent}%"
+
+msgid "Reach 2★ Regional Terminal to unlock permanent contract fee bonuses."
+msgstr "Достигните 2★ «Региональный терминал», чтобы открыть постоянные бонусы к контрактам."
+
+msgid "Start a New Airport anytime, or wishlist the full game for larger planes, restaurants, lounges, car parks, and major airport chaos."
+msgstr "Начните «Новый аэропорт» в любое время или добавьте полную игру в желаемое ради больших самолётов, ресторанов, залов ожидания, парковок и суматохи крупных аэропортов."
+
+msgid "Day 5 complete — thanks for playing the demo!"
+msgstr "День 5 завершён — спасибо за игру в демоверсию!"
+
+msgid "Your 5-day airport summary"
+msgstr "Итоги ваших 5 дней в аэропорту"
+
+msgid "Passengers who made their flight"
+msgstr "Пассажиров, успевших на рейс"
+
+msgid "Cash earned"
+msgstr "Заработано денег"
+
+msgid "${amount}"
+msgstr "${amount}"
+
+msgid "Current balance"
+msgstr "Текущий баланс"
+
+msgid "Airport rating"
+msgstr "Рейтинг аэропорта"
+
+msgid "{stars} stars"
+msgstr "{stars} зв."
+
+msgid "Wishlist on Steam"
+msgstr "В желаемое в Steam"
+
+msgid "Back to Title"
+msgstr "В главное меню"
+
+msgid "Peak"
+msgstr "Пик"
+
+msgid "Hub"
+msgstr "Хаб"
+
+msgid "Hub Contract (+10% fee, +1 low-rating grace day)"
+msgstr "Контракт хаба (+10% к сбору, +1 день запаса при низком рейтинге)"
+
+msgid "Click to move gate or end contract, or drag onto another gate row."
+msgstr "Нажмите, чтобы сменить выход или расторгнуть контракт, либо перетащите на строку другого выхода."
+
+msgid "Contract ended — cannot move"
+msgstr "Контракт расторгнут — перенести нельзя"
+
+msgid "One-off flight — cannot move"
+msgstr "Разовый рейс — перенести нельзя"
+
+msgid "Shop staff hired in Staff, and the spot in front clear."
+msgstr "Нужны продавцы из «Персонала» и свободное место спереди."
+
+msgid "floor congestion: light flow to bottleneck"
+msgstr "плотность потока: от свободного прохода к затору"
+
+msgid "room prestige level"
+msgstr "уровень престижа комнаты"
+
+msgctxt "mood overlay mode"
+msgid "Congestion"
+msgstr "Заторы"
+
+msgctxt "mood overlay mode"
+msgid "Prestige"
+msgstr "Престиж"
+
+msgid "Light"
+msgstr "Свободно"
+
+msgid "Busy"
+msgstr "Оживлённо"
+
+msgid "Congested"
+msgstr "Затор"
+
+msgid "Lv. 1"
+msgstr "Ур. 1"
+
+msgid "Lv. 2"
+msgstr "Ур. 2"
+
+msgid "Lv. 3"
+msgstr "Ур. 3"
+
+msgid "Lv. 4"
+msgstr "Ур. 4"
+
+msgid "Lv. 5"
+msgstr "Ур. 5"
+
+msgid "Morning Peak +15%"
+msgstr "Утренний пик +15%"
+
+msgid "Evening Peak +15%"
+msgstr "Вечерний пик +15%"
+
+msgid "Bronze +5%"
+msgstr "Бронза +5%"
+
+msgid "Bronze loyalty: this airline's offers pay 5% more."
+msgstr "Бронзовая лояльность: предложения этой авиакомпании платят на 5% больше."
+
+msgid "Silver +10%"
+msgstr "Серебро +10%"
+
+msgid "Silver loyalty: this airline's offers pay 10% more."
+msgstr "Серебряная лояльность: предложения этой авиакомпании платят на 10% больше."
+
+msgid "Gold +15%"
+msgstr "Золото +15%"
+
+msgid "Gold loyalty: this airline's offers pay 15% more and unlock Hub Contracts at 3★+."
+msgstr "Золотая лояльность: предложения платят на 15% больше и открывают контракты хаба от 3★+."
+
+msgid "Gold Hub Contract: +10% prestige fee bonus and +1 low-rating grace day."
+msgstr "Золотой контракт хаба: +10% престижный бонус к сбору и +1 день запаса при низком рейтинге."
+
+msgid "Hub Contract"
+msgstr "Контракт хаба"
+
+msgid "Peak rush wave: +15% passenger fee included."
+msgstr "Волна часа пик: +15% к сбору с пассажира включено."
+
+msgid "Gate {gate} — departs in quiet night"
+msgstr "Выход {gate} — вылет в тихую ночь"
+
+msgid "Gate {gate} — taxi route unavailable"
+msgstr "Выход {gate} — путь руления недоступен"
+
+msgid "Gate {gate} — building taxi spur"
+msgstr "Выход {gate} — строится отвод рулёжки"
+
+msgid "Gate {gate} — no usable stand"
+msgstr "Выход {gate} — нет пригодной стоянки"
+
+msgid "Gate {gate} — stand too small"
+msgstr "Выход {gate} — стоянка слишком мала"
+
+msgid "Certification: {star}★ {title} (+{bonus}% contract fees)"
+msgstr "Сертификация: {star}★ {title} (+{bonus}% к сборам)"
+
+msgid "Click for airport certification progress."
+msgstr "Нажмите, чтобы посмотреть прогресс сертификации аэропорта."
+
+msgid "{star}★"
+msgstr "{star}★"
+
+msgid "Airport Certification"
+msgstr "Сертификация аэропорта"
+
+msgid "Certification tracking is not active."
+msgstr "Отслеживание сертификации не активно."
+
+msgid "{star}★ {title}"
+msgstr "{star}★ {title}"
+
+msgid "Unrated"
+msgstr "Без рейтинга"
+
+msgid "Current: {level} • Permanent contract fee bonus: +{bonus}%"
+msgstr "Текущий: {level} • Постоянный бонус к сборам: +{bonus}%"
+
+msgid "✓ {star}★ {title}"
+msgstr "✓ {star}★ {title}"
+
+msgid "Earned • +${grant} • +{bonus}% fees"
+msgstr "Получено • +${grant} • +{bonus}% к сборам"
+
+msgid "Earned • +${grant}"
+msgstr "Получено • +${grant}"
+
+msgid "+${grant} • +{bonus}% fees"
+msgstr "+${grant} • +{bonus}% к сборам"
+
+msgid "+${grant}"
+msgstr "+${grant}"
+
+msgid "Airport opened"
+msgstr "Аэропорт открыт"
+
+msgid "Rating: {current} / {target}★"
+msgstr "Рейтинг: {current} / {target}★"
+
+msgid "Passengers made: {current} / {target}"
+msgstr "Обслужено пассажиров: {current} / {target}"
+
+msgid "Operational security lane built"
+msgstr "Построена работающая линия досмотра"
+
+msgid "Operational bag room built"
+msgstr "Построено работающее багажное отделение"
+
+msgid "Medium+ planes departed: {current} / {target}"
+msgstr "Вылетело средних и крупных бортов: {current} / {target}"
+
+msgid "Large planes departed: {current} / {target}"
+msgstr "Вылетело крупных бортов: {current} / {target}"
+
+msgid "Made rate: -- / {target}%"
+msgstr "Доля успевших: -- / {target}%"
+
+msgid "Made rate: {current}% / {target}%"
+msgstr "Доля успевших: {current}% / {target}%"
+
+msgid "Prestige: Lv. {level} / 5 ({score} pts · +{bonus}% spend)"
+msgstr "Престиж: ур. {level} / 5 ({score} очк. · +{bonus}% к тратам)"
+
+msgid "Prestige: Lv. {level} / 5 ({score} pts)"
+msgstr "Престиж: ур. {level} / 5 ({score} очк.)"
+
+msgid "Size {size} · Setup {setup} · Decor {decor} · Awards {trophy}"
+msgstr "Размер {size} · Оснащение {setup} · Декор {decor} · Награды {trophy}"
+
+msgid "Add decor or trophies to raise prestige"
+msgstr "Добавьте декор или кубки, чтобы повысить престиж"
+
+msgid "{slot}, {time} (Sandbox)"
+msgstr "{slot}, {time} (Песочница)"
+
+msgid "Lv. {level}"
+msgstr "Ур. {level}"
+
+msgid "Train ${cost}"
+msgstr "Обучить ${cost}"
+
+msgid "Upgrade work speed to +{pct}%"
+msgstr "Повысить скорость работы до +{pct}%"
+
+msgid "Max"
+msgstr "Макс."
+
+msgid "Career"
+msgstr "Карьера"
+
+msgid "Free-Build Sandbox"
+msgstr "Свободная песочница"
+
+msgid "Unlimited Funds"
+msgstr "Безлимитные средства"
+
+msgid "All Tiers & Land Unlocked"
+msgstr "Открыты все уровни и земля"
+
+msgctxt "menu"
+msgid "Start Airport"
+msgstr "Открыть аэропорт"
+
+msgid "Free-build sandbox with rating, offers, and awards active."
+msgstr "Свободная песочница с активным рейтингом, предложениями и наградами."
+
+msgid "No spending limit; Rescue Grant skipped."
+msgstr "Без лимита трат; грант спасения отключён."
+
+msgid "Starts with $250,000 budget."
+msgstr "Стартовый бюджет $250,000."
+
+msgid "Standard $25,000 budget, unlock progression, 1-5★ certification, and Career achievements."
+msgstr "Стандартный бюджет $25,000, прогресс разблокировок, сертификация 1–5★ и достижения карьеры."
+
+msgid "Open for Business"
+msgstr "Открытие состоялось"
+
+msgid "Open the airport"
+msgstr "Откройте аэропорт"
+
+msgid "First Departure"
+msgstr "Первый вылет"
+
+msgid "Depart your first flight"
+msgstr "Отправьте свой первый рейс"
+
+msgid "Fifty Flyers"
+msgstr "Полсотни пассажиров"
+
+msgid "Serve 50 passengers"
+msgstr "Обслужите 50 пассажиров"
+
+msgid "Busy Concourse"
+msgstr "Оживлённый зал"
+
+msgid "Serve 250 passengers"
+msgstr "Обслужите 250 пассажиров"
+
+msgid "Thousand Flyers"
+msgstr "Тысяча пассажиров"
+
+msgid "Serve 1,000 passengers"
+msgstr "Обслужите 1000 пассажиров"
+
+msgid "Local Strip"
+msgstr "Местный аэродром"
+
+msgid "Earn 1★ Local Strip Certification"
+msgstr "Получите сертификат 1★ «Местный аэродром»"
+
+msgid "Regional Terminal"
+msgstr "Региональный терминал"
+
+msgid "Earn 2★ Regional Terminal Certification"
+msgstr "Получите сертификат 2★ «Региональный терминал»"
+
+msgid "National Hub"
+msgstr "Национальный хаб"
+
+msgid "Earn 3★ National Hub Certification"
+msgstr "Получите сертификат 3★ «Национальный хаб»"
+
+msgid "International Gateway"
+msgstr "Международные ворота"
+
+msgid "Earn 4★ International Gateway Certification"
+msgstr "Получите сертификат 4★ «Международные ворота»"
+
+msgid "World-Class Airport"
+msgstr "Аэропорт мирового класса"
+
+msgid "Earn 5★ World-Class Airport Certification"
+msgstr "Получите сертификат 5★ «Аэропорт мирового класса»"
+
+msgid "Build Tier 2"
+msgstr "Уровень 2"
+
+msgid "Reach Build Tier 2"
+msgstr "Достигните 2-го уровня строительства"
+
+msgid "Build Tier 3"
+msgstr "Уровень 3"
+
+msgid "Reach Build Tier 3"
+msgstr "Достигните 3-го уровня строительства"
+
+msgid "Build Tier 4"
+msgstr "Уровень 4"
+
+msgid "Reach Build Tier 4"
+msgstr "Достигните 4-го уровня строительства"
+
+msgid "Security Pro"
+msgstr "Профи досмотра"
+
+msgid "Build a full Security Lane"
+msgstr "Постройте полную линию досмотра"
+
+msgid "Baggage Master"
+msgstr "Мастер багажа"
+
+msgid "Open a ready Bag Room"
+msgstr "Откройте готовое багажное отделение"
+
+msgid "Medium Wings"
+msgstr "Средние крылья"
+
+msgid "Depart a Medium plane"
+msgstr "Отправьте средний самолёт"
+
+msgid "Heavy Jet"
+msgstr "Тяжёлый лайнер"
+
+msgid "Depart a Large plane"
+msgstr "Отправьте крупный самолёт"
+
+msgid "Gold Loyalty"
+msgstr "Золотая лояльность"
+
+msgid "Reach Gold loyalty with an airline"
+msgstr "Достигните золотой лояльности с авиакомпанией"
+
+msgid "Hub Partner"
+msgstr "Партнёр хаба"
+
+msgid "Accept a Gold Hub Contract"
+msgstr "Примите золотой контракт хаба"
+
+msgid "Five-Star Room"
+msgstr "Пятизвёздочная комната"
+
+msgid "Raise any room to Prestige Level 5"
+msgstr "Поднимите престиж любой комнаты до 5-го уровня"
+
+msgid "Award Winner"
+msgstr "Лауреат премии"
+
+msgid "Win an Annual Airport Award"
+msgstr "Выиграйте ежегодную премию аэропортов"
+
+msgid "Win Airport of the Year"
+msgstr "Выиграйте премию «Аэропорт года»"
