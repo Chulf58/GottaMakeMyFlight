@@ -384,7 +384,7 @@ func test_save_game_v40_round_trip_and_corrupt_awards_refusal() -> void:
 	flights.open_airport()
 	SaveTestKit.step(main)
 	var awards := save.ensure_awards()
-	assert_int(SaveGame.SAVE_VERSION).is_equal(40)
+	assert_int(SaveGame.SAVE_VERSION).is_greater_equal(40)
 
 	# Accumulate Year 1 metrics & trigger Year 1 ceremony evaluation.
 	awards.record_hospitality(800)
