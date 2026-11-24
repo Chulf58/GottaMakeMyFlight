@@ -184,6 +184,8 @@ const WAGES := {
 	StaffMember.Role.GATE: 60,
 	StaffMember.Role.RAMP: 70,
 }
+const STAFF_TRAIN_L2 := 400
+const STAFF_TRAIN_L3 := 800
 const EMERGENCY_PUSHBACK_FEE := 150
 
 ## The share of its fee an airline pays for a passenger who makes the flight
@@ -248,6 +250,16 @@ static func wage_of(role: int) -> int:
 		push_error("PriceTable: no wage for staff role %d" % role)
 		return NO_PRICE
 	return WAGES[role]
+
+
+## Cost to train a staff member from `current_level` to the next level; 0 at L3+.
+static func staff_train_cost(current_level: int) -> int:
+	match current_level:
+		1:
+			return STAFF_TRAIN_L2
+		2:
+			return STAFF_TRAIN_L3
+	return 0
 
 
 ## The fee paid for a passenger whose bag missed the flight, rounded down:

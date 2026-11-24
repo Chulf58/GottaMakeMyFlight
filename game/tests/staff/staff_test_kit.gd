@@ -102,7 +102,7 @@ static func signature(staff: StaffSim) -> String:
 			parts
 			. append(
 				(
-					"%d|%d|%d|%d|%d|%s|%d|%d|%d|%d|%d|%d|%d|%d|%d|%s"
+					"%d|%d|%d|%d|%d|%s|%d|%d|%d|%d|%d|%d|%d|%d|%d|%s|%d"
 					% [
 						id,
 						m.role,
@@ -120,6 +120,7 @@ static func signature(staff: StaffSim) -> String:
 						m.ramp_job,
 						m.ramp_shuttle_id,
 						m.ramp_flight_id,
+						m.level,
 					]
 				)
 			)

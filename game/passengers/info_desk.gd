@@ -184,13 +184,23 @@ func _walk(p: Passenger, visit: Dictionary, desk: int) -> void:
 	var target := _sim.grid.interaction_cell(desk)
 	if p.at == target:
 		p.clear_path()
-		visit["end"] = _sim.tick + HELP_TICKS
+		visit["end"] = _sim.tick + _help_ticks(desk)
 		return
 	var path := _sim.grid.find_path(p.at, target)
 	if path.is_empty():
 		_drop(p)
 		return
 	p.set_path(path)
+
+
+func _help_ticks(desk: int) -> int:
+	if _sim.staff == null:
+		return HELP_TICKS
+	var staff_id := _sim.staff.staff_at(desk)
+	var m := _sim.staff.get_member(staff_id) if staff_id != 0 else null
+	if m == null:
+		return HELP_TICKS
+	return maxi(1, roundi(float(HELP_TICKS) / m.level_speed_factor()))
 
 
 ## Forgets a passenger that made or missed its flight.
