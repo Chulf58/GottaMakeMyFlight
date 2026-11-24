@@ -129,6 +129,7 @@ var _gaps: Array[Dictionary] = []
 var _since_poll := 0.0
 ## Role -> the Label with its counts, its Hire and its Fire button.
 var _counts: Dictionary = {}
+var _energy_scrolls: Dictionary = {}
 var _energy_boxes: Dictionary = {}
 var _role_titles: Dictionary = {}
 var _hire: Dictionary = {}
@@ -148,6 +149,9 @@ func _ready() -> void:
 		menu.staff_toggled.connect(_on_staff_toggled)
 		menu.watch_staff_card(_card)
 		_card.visible = menu.staff_open
+	var vp := get_viewport()
+	if vp != null and not vp.size_changed.is_connected(_fit_card):
+		vp.size_changed.connect(_fit_card)
 	if staff == null:
 		push_error("StaffPanel: no StaffSim is set")
 		return
@@ -404,6 +408,9 @@ func refresh() -> void:
 	_checklist.set_milestone(_milestone_text())
 	_hint.visible = _hint.text != "" or not lines.is_empty()
 	_hint_box.visible = _checklist.has_visible_content() and not _hint_yielded
+	_fit_card()
+	if is_inside_tree():
+		_fit_card.call_deferred()
 
 
 ## "To open the airport" while closed, or "Ready: the airport opens on the next
@@ -562,11 +569,16 @@ func _on_staff_toggled(open: bool) -> void:
 	_card.visible = open
 	if open and staff != null:
 		refresh()
+	elif open:
+		_fit_card()
 	if not open:
 		_stop_hire_pulse()
 
 
 func _exit_tree() -> void:
+	var vp := get_viewport()
+	if vp != null and vp.size_changed.is_connected(_fit_card):
+		vp.size_changed.disconnect(_fit_card)
 	_unbind_wallet()
 	_stop_hire_pulse()
 
@@ -610,6 +622,9 @@ func _on_wallet_changed(_balance: int) -> void:
 	if _card.visible and staff != null:
 		for role in ROLES:
 			_refresh_energy_box(role)
+		_fit_card()
+		if is_inside_tree():
+			_fit_card.call_deferred()
 
 
 func _on_member_state(_id: int, _state: StaffMember.State) -> void:
@@ -620,6 +635,9 @@ func _on_member_energy(_id: int, _energy: int) -> void:
 	if _card.visible:
 		for role in ROLES:
 			_refresh_energy_box(role)
+		_fit_card()
+		if is_inside_tree():
+			_fit_card.call_deferred()
 
 
 ## A load opens or closes the airport without an opening to announce. The gate
@@ -707,7 +725,50 @@ func _sync_role_columns() -> void:
 	_roles_box.add_theme_constant_override("separation", sep)
 	for role in _columns:
 		(_columns[role] as Control).custom_minimum_size = Vector2(col_w, 0.0)
-	BuildMenu.anchor_bottom_centre(_card, BuildMenu.MARGIN + BuildMenu.BAR_H + BuildMenu.GAP)
+		if _role_titles.has(role):
+			(_role_titles[role] as Label).custom_minimum_size.x = col_w
+		if _counts.has(role):
+			(_counts[role] as Label).custom_minimum_size.x = col_w
+	_fit_card()
+
+
+func _fit_card() -> void:
+	var vp := get_viewport()
+	var viewport_h := vp.get_visible_rect().size.y if vp != null else 864.0
+	var bottom_clear := float(BuildMenu.MARGIN + BuildMenu.BAR_H + BuildMenu.GAP)
+	var max_card_h := maxf(120.0, viewport_h - TopRow.SHEET_TOP - bottom_clear)
+	var style := _card.get_theme_stylebox("panel")
+	var card_pad := style.get_minimum_size().y if style != null else 0.0
+	var max_chrome := 0.0
+	for role in _columns:
+		var col := _columns[role] as VBoxContainer
+		if col == null or not col.visible:
+			continue
+		var scroll := _energy_scrolls.get(role) as ScrollContainer
+		var col_sep := col.get_theme_constant("separation")
+		var chrome := 0.0
+		var child_count := 0
+		for child in col.get_children():
+			var ctrl := child as Control
+			if ctrl == null or not ctrl.visible or ctrl == scroll:
+				continue
+			chrome += ctrl.get_combined_minimum_size().y
+			child_count += 1
+		if scroll != null and scroll.visible:
+			child_count += 1
+		chrome += maxf(0, child_count - 1) * col_sep
+		max_chrome = maxf(max_chrome, chrome)
+	var max_energy_h := maxf(0.0, max_card_h - card_pad - max_chrome)
+	for role in _energy_scrolls:
+		var scroll := _energy_scrolls[role] as ScrollContainer
+		var box := _energy_boxes.get(role) as VBoxContainer
+		if scroll == null or box == null or not scroll.visible:
+			continue
+		var wanted := minf(box.get_combined_minimum_size().y, max_energy_h)
+		if not is_equal_approx(scroll.custom_minimum_size.y, wanted):
+			scroll.custom_minimum_size.y = wanted
+	_card.reset_size()
+	BuildMenu.anchor_bottom_centre(_card, bottom_clear)
 
 
 func _on_flight_state(id: String, new_state: int) -> void:
@@ -763,24 +824,34 @@ func _build() -> void:
 		_columns[role] = column
 		_roles_box.add_child(column)
 		var role_title := _label(_role_name(role), &"HudCardName")
+		role_title.custom_minimum_size.x = ROLE_WIDTH
 		role_title.mouse_filter = Control.MOUSE_FILTER_PASS
 		role_title.tooltip_text = tip
 		_role_titles[role] = role_title
 		column.add_child(role_title)
 		var counts := _label("", &"HudSmall")
 		counts.name = "%sCounts" % ROLE_KEYS[role]
-		counts.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		counts.custom_minimum_size.x = ROLE_WIDTH
 		counts.mouse_filter = Control.MOUSE_FILTER_PASS
 		counts.tooltip_text = tip
 		column.add_child(counts)
 		_counts[role] = counts
+		var energy_scroll := ScrollContainer.new()
+		energy_scroll.name = "%sEnergyScroll" % ROLE_KEYS[role]
+		energy_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		energy_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		energy_scroll.visible = false
+		column.add_child(energy_scroll)
+		_energy_scrolls[role] = energy_scroll
 		var energy_box := VBoxContainer.new()
 		energy_box.name = "%sEnergy" % ROLE_KEYS[role]
+		energy_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		energy_box.add_theme_constant_override("separation", 2)
 		energy_box.visible = false
-		column.add_child(energy_box)
+		energy_scroll.add_child(energy_box)
 		_energy_boxes[role] = energy_box
 		var row := VBoxContainer.new()
+		row.size_flags_vertical = Control.SIZE_EXPAND_FILL | Control.SIZE_SHRINK_END
 		row.add_theme_constant_override("separation", 4)
 		column.add_child(row)
 		_hire[role] = _button(row, "Hire%s" % ROLE_KEYS[role], hire_text(role), &"HudButtonTeal")
@@ -962,6 +1033,7 @@ func _flush_retired() -> void:
 
 func _refresh_energy_box(role: StaffMember.Role) -> void:
 	var box := _energy_boxes.get(role) as VBoxContainer
+	var scroll := _energy_scrolls.get(role) as ScrollContainer
 	if box == null or staff == null:
 		return
 	for child in box.get_children():
@@ -975,8 +1047,14 @@ func _refresh_energy_box(role: StaffMember.Role) -> void:
 		if m != null and m.role == role and m.state != StaffMember.State.WALKING_OUT:
 			members.append(m)
 	box.visible = not members.is_empty()
+	if scroll != null:
+		scroll.visible = not members.is_empty()
+		if members.is_empty():
+			scroll.custom_minimum_size.y = 0.0
 	if members.is_empty():
 		return
+	var col := _columns.get(role) as Control
+	var col_w := col.custom_minimum_size.x if col != null else ROLE_WIDTH
 	var active_wallet := _resolve_wallet()
 	var shown := mini(members.size(), MAX_ENERGY_ROWS)
 	for i in shown:
@@ -984,6 +1062,7 @@ func _refresh_energy_box(role: StaffMember.Role) -> void:
 		var entry := VBoxContainer.new()
 		entry.add_theme_constant_override("separation", 1)
 		var lbl := _label(member_energy_text(m.id), &"HudSmall")
+		lbl.custom_minimum_size.x = col_w
 		entry.add_child(lbl)
 		var bar := ProgressBar.new()
 		bar.show_percentage = false

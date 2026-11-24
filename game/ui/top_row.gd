@@ -58,16 +58,22 @@ static func row_left(layer_width: float) -> float:
 
 
 ## The sheet's left edge and width in a layer `layer_width` wide: from the row's
-## left edge, SHEET_W wide, moved left (never past SHEET_MIN_LEFT) so it ends a
+## left edge, SHEET_W wide, moved left (never past `min_left`) so it ends a
 ## GAP before the clock panel. In a layout too narrow to leave a sheet any room
-## (the rail starts left of SHEET_MIN_LEFT) the width is 0 and the sheet is as
+## (the rail starts left of `min_left`) the width is 0 and the sheet is as
 ## wide as its content.
-static func sheet_extent(layer_width: float) -> Vector2:
+static func sheet_extent(layer_width: float, min_left := SHEET_MIN_LEFT) -> Vector2:
 	var right := _span_right(layer_width)
-	if right <= SHEET_MIN_LEFT:
-		return Vector2(SHEET_MIN_LEFT, 0.0)
-	var left := clampf(minf(row_left(layer_width), right - SHEET_W), SHEET_MIN_LEFT, right)
+	if right <= min_left:
+		return Vector2(min_left, 0.0)
+	var left := clampf(minf(row_left(layer_width), right - SHEET_W), min_left, right)
 	return Vector2(left, minf(SHEET_W, right - left))
+
+
+## The left-most x a top-row sheet may start: SHEET_MIN_LEFT or, when the
+## Planner toggle pushes past it, a GAP right of PlannerToggle.
+static func sheet_min_left(tree: SceneTree) -> float:
+	return LeftColumn.right_of(tree, LeftColumn.PLANNER_TOGGLE_GROUP, SHEET_MIN_LEFT)
 
 
 ## The left edge of `slot` in a layer that is `layer_width` wide.
@@ -91,7 +97,8 @@ static func place_in_slot(control: Control, slot: int, host: Node) -> void:
 
 ## Puts `sheet` under the row (see sheet_extent). Its height is its content's.
 static func place_sheet(sheet: Control, host: Node) -> void:
-	var extent := sheet_extent(_layer_width(host))
+	var min_left := sheet_min_left(host.get_tree()) if host.is_inside_tree() else SHEET_MIN_LEFT
+	var extent := sheet_extent(_layer_width(host), min_left)
 	_anchor_top_left(sheet, extent.x, SHEET_TOP, Vector2(extent.y, 0.0))
 
 
