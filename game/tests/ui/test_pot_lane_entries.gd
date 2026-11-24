@@ -29,6 +29,51 @@ const OTHERS := [
 	["staff button", "Hire · {wage}/day"],
 	["", "{count} station is closed · staff are on the way"],
 ]
+const STAGE_2_3_ENTRIES := [
+	["", "Achievement Unlocked"],
+	["", "Airport Certification"],
+	["", "Certification tracking is not active."],
+	["", "Unrated"],
+	["", "Certified {star}★: {title}"],
+	["", "Your airport earned {star}★ {title} certification!"],
+	["", "Year {year} Airport Awards"],
+	["", "Sandbox"],
+	["", "{slot}, {time} (Sandbox)"],
+	["", "Career"],
+	["", "Free-Build Sandbox"],
+	["", "Unlimited Funds"],
+	["", "All Tiers & Land Unlocked"],
+	["menu", "Start Airport"],
+	["mood overlay mode", "Congestion"],
+	["mood overlay mode", "Prestige"],
+	["", "floor congestion: light flow to bottleneck"],
+	["", "room prestige level"],
+	["", "Light"],
+	["", "Busy"],
+	["", "Congested"],
+	["", "Lv. 1"],
+	["", "Lv. 5"],
+	["", "Prestige: Lv. {level} / 5 ({score} pts · +{bonus}% spend)"],
+	["", "Prestige: Lv. {level} / 5 ({score} pts · +{bonus}% recovery)"],
+	["", "Size {size} · Setup {setup} · Decor {decor} · Awards {trophy}"],
+	["", "Add decor or trophies to raise prestige"],
+	["", "Lv. {level}"],
+	["", "Train ${cost}"],
+	["", "Upgrade work speed to +{pct}%"],
+	["", "Max"],
+	["", "On break {pct}%"],
+	["", "Tired {pct}%"],
+	["", "Rested {pct}%"],
+	["", "Morning Peak +15%"],
+	["", "Evening Peak +15%"],
+	["", "Peak"],
+	["", "Bronze +5%"],
+	["", "Silver +10%"],
+	["", "Gold +15%"],
+	["", "Hub Contract"],
+	["", "Hub"],
+	["", "Peak rush wave: +15% passenger fee included."],
+]
 
 
 func _entries() -> Array[Dictionary]:
@@ -77,3 +122,35 @@ func test_the_short_queue_words_the_wage_button_and_the_version_are_in_the_templ
 	missing.append_array(_missing(OTHERS))
 	print("missing other msgids: %s" % [missing])
 	assert_array(missing).is_empty()
+
+
+func test_stage_2_and_3_entries_are_in_the_template() -> void:
+	var entries := _entries()
+	assert_array(PotEntries.malformed(entries)).is_empty()
+	assert_array(PotEntries.duplicates(entries)).is_empty()
+	var pairs := STAGE_2_3_ENTRIES.duplicate()
+	for level: Dictionary in AirportCertification.LEVELS:
+		pairs.append(["", str(level["title"])])
+	for item: Dictionary in Achievements.CATALOG:
+		pairs.append(["", str(item["title"])])
+		pairs.append(["", str(item["description"])])
+	for cat: Dictionary in AirportAwards.CATEGORIES:
+		pairs.append(["", str(cat["title"])])
+	var missing := []
+	for pair: Array in pairs:
+		var complete := PotEntries.complete(entries, pair[0], pair[1])
+		if complete != 1:
+			missing.append([pair[0], pair[1], complete])
+	print("missing stage 2/3 msgids: %s" % [missing])
+	assert_array(missing).is_empty()
+	(
+		assert_int(
+			PotEntries.complete(
+				entries,
+				"",
+				"Total awarded: +${cash} · {count} Award Trophy unlocked",
+				"Total awarded: +${cash} · {count} Award Trophies unlocked"
+			)
+		)
+		. is_equal(1)
+	)
