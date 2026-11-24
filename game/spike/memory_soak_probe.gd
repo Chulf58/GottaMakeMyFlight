@@ -103,6 +103,7 @@ var _moved: Dictionary = {}
 var _forced_id := -1
 var _last_tick := -1
 var _still_frames := 0
+var _ceremonies_seen := 0
 
 
 func _initialize() -> void:
@@ -178,6 +179,7 @@ func _run() -> void:
 	_frames += 1
 	_frame_start = now
 	_accept_offers()
+	_dismiss_modals()
 	_clock.advance(SimClock.STEP)
 	if _clock.tick == _last_tick:
 		_still_frames += 1
@@ -425,6 +427,17 @@ func _accept_offers() -> void:
 	print("PROBE day=%d offers_accepted=%d contracts=%d" % [day, accepted, contracts])
 
 
+func _dismiss_modals() -> void:
+	var save_game := _main.get_node_or_null("SaveGame") as SaveGame
+	var ceremony: AwardsCeremony = save_game.awards_ceremony if save_game != null else null
+	if ceremony == null:
+		ceremony = _main.get_node_or_null("AwardsCeremony") as AwardsCeremony
+	while ceremony != null and ceremony.is_open():
+		_ceremonies_seen += 1
+		print("PROBE ceremony_closed count=%d tick=%d" % [_ceremonies_seen, _clock.tick])
+		ceremony.close()
+
+
 func _sample() -> void:
 	var sizes := _container_sizes()
 	if _first_sizes.is_empty():
@@ -535,7 +548,7 @@ func _report() -> void:
 	var peak := maxi(_peak_static, int(Performance.get_monitor(Performance.MEMORY_STATIC_MAX)))
 	print("PROBE headless counts no GPU memory; peak_mem_mb is static (CPU heap) memory only")
 	var done_format := "PROBE_SEED_DONE seed=%d days=%d ticks=%d stuck_events=%d hung=%d "
-	done_format += "peak_mem_mb=%.1f max_passengers=%d flights_made=%d"
+	done_format += "peak_mem_mb=%.1f max_passengers=%d flights_made=%d ceremonies=%d"
 	print(
 		(
 			done_format
@@ -548,6 +561,7 @@ func _report() -> void:
 				peak / 1048576.0,
 				_max_passengers,
 				_flights_made,
+				_ceremonies_seen,
 			]
 		)
 	)
