@@ -126,9 +126,18 @@ func test_seats_and_poses() -> void:
 
 func test_outside_and_on_grid_stages() -> void:
 	var outside := [
-		Passenger.Stage.SPAWNED, Passenger.Stage.APRON, Passenger.Stage.MADE, Passenger.Stage.MISSED
+		Passenger.Stage.SPAWNED,
+		Passenger.Stage.APRON,
+		Passenger.Stage.ON_BUS,
+		Passenger.Stage.MADE,
+		Passenger.Stage.MISSED,
 	]
-	var off_grid := [Passenger.Stage.APRON, Passenger.Stage.MADE, Passenger.Stage.MISSED]
+	var off_grid := [
+		Passenger.Stage.APRON,
+		Passenger.Stage.ON_BUS,
+		Passenger.Stage.MADE,
+		Passenger.Stage.MISSED,
+	]
 	for stage: int in Passenger.Stage.values():
 		assert_bool(StageKinds.is_outside(stage)).is_equal(outside.has(stage))
 		assert_bool(StageKinds.on_grid(stage)).is_equal(not off_grid.has(stage))
@@ -193,6 +202,7 @@ func test_every_stage_has_its_journey_leg_from_the_table_not_the_enum_order() ->
 		Passenger.Stage.STANDING_UP: StageKinds.Leg.AIRSIDE,
 		Passenger.Stage.TO_EXIT: StageKinds.Leg.AIRSIDE,
 		Passenger.Stage.APRON: StageKinds.Leg.APRON,
+		Passenger.Stage.ON_BUS: StageKinds.Leg.APRON,
 		Passenger.Stage.MADE: StageKinds.Leg.DONE,
 		Passenger.Stage.MISSED: StageKinds.Leg.DONE,
 		Passenger.Stage.CAFE_WALK: StageKinds.Leg.VISIT,

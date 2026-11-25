@@ -51,6 +51,7 @@ const STAGE_TEXT := {
 	Passenger.Stage.STANDING_UP: "At the gate, but not boarded in time",
 	Passenger.Stage.TO_EXIT: "Left the gate too late for the plane",
 	Passenger.Stage.APRON: "Left the gate too late for the plane",
+	Passenger.Stage.ON_BUS: "Left the gate too late for the plane",
 }
 ## A passenger caught in a facility visit, whatever its stage there
 ## (StageKinds.facility()). A miss records its stage, not which shop (a kiosk
@@ -112,6 +113,7 @@ static func _stage_texts() -> Dictionary:
 		Passenger.Stage.STANDING_UP: at_gate,
 		Passenger.Stage.TO_EXIT: too_late,
 		Passenger.Stage.APRON: too_late,
+		Passenger.Stage.ON_BUS: too_late,
 	}
 
 

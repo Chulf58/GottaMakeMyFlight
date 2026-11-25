@@ -52,6 +52,7 @@ const CEILING := 85
 const AWAY_STAGES: Array[Passenger.Stage] = [
 	Passenger.Stage.SPAWNED,
 	Passenger.Stage.APRON,
+	Passenger.Stage.ON_BUS,
 	Passenger.Stage.MADE,
 	Passenger.Stage.MISSED,
 ]

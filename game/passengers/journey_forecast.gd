@@ -18,6 +18,10 @@ extends RefCounted
 const RUN_ON_SLACK := 40
 ## Stop running only once this many ticks are spare again.
 const RUN_OFF_SLACK := 240
+## Extra margin for remote-stand bus dwell + shuttle staging before doors close.
+const BUS_WAIT_MARGIN_TICKS := 60
+## Matches BusShuttleSim.FINAL_CALL_LEAD_TICKS.
+const BUS_FINAL_CALL_LEAD_TICKS := 20
 ## The forecast when no way to the plane exists.
 const NEVER := 1000000
 ## A walk that never ends, in millimetres.
@@ -69,6 +73,20 @@ static func arrival_from(
 	return mini(sim.files.queued(sim, p, own), NEVER)
 
 
+static func bus_cycle_margin(sim: PassengerSim, flight_id: String) -> int:
+	if (
+		sim.flights == null
+		or not BusGatePairing.is_remote_stand_id(sim.flights.flight_stand_id(flight_id))
+	):
+		return 0
+	var one_way := 0
+	if sim.bus_shuttle != null:
+		one_way = int(sim.bus_shuttle.one_way_ticks_for(flight_id))
+	if one_way <= 0:
+		one_way = BusGatePairing.BUS_RETURN_MARGIN_TICKS
+	return one_way + BUS_FINAL_CALL_LEAD_TICKS + BUS_WAIT_MARGIN_TICKS
+
+
 ## The passenger's own way out with no wait in the boarding files: {"door":
 ## the exit door, "door_tick": the tick it reaches the door's cell (-1 once on
 ## the apron), "plane_tick": the tick it reaches the plane door, "plane": the
@@ -79,6 +97,8 @@ static func arrival_from(
 static func own_times(
 	sim: PassengerSim, p: Passenger, now: int, routed: bool, cleared := -1
 ) -> Dictionary:
+	if p.stage == Passenger.Stage.ON_BUS:
+		return _on_bus_times(sim, p, now)
 	if p.stage == Passenger.Stage.APRON:
 		var plane: Variant = null if p.apron.is_empty() else BoardingFiles.plane_key(p.apron.back())
 		return {
@@ -89,15 +109,7 @@ static func own_times(
 			"trail": p.apron_mm,
 		}
 	if p.stage == Passenger.Stage.TO_EXIT and p.exit_object != 0:
-		if not PassengerGates.gate_open(sim, p):
-			return {}
-		var apron := sim.files.apron_of(sim, p.exit_object, p)
-		return _times(
-			p.exit_object,
-			now + walk_ticks(p.remaining_mm() + sim.files.waiters.owed_mm(p.id)),
-			now + walk_ticks(p.remaining_mm() + sim.files.waiters.owed_mm(p.id) + apron["mm"]),
-			apron["plane"]
-		)
+		return _chosen_exit_times(sim, p, now)
 	var leg := _to_gate(sim, p, routed, cleared)
 	if leg.x >= NEVER:
 		return {}
@@ -112,11 +124,52 @@ static func own_times(
 	var exit := _exit_of(sim, Vector2i(leg.y, leg.z), routed, p)
 	if exit.x == 0:
 		return {}
+	return _planned_exit_times(sim, p, leave, exit)
+
+
+static func _on_bus_times(sim: PassengerSim, p: Passenger, now: int) -> Dictionary:
+	var rem := (
+		int(sim.bus_shuttle.remaining_ticks_for_passenger(p, now))
+		if sim.bus_shuttle != null
+		else BUS_WAIT_MARGIN_TICKS
+	)
+	return {
+		"door": p.exit_object,
+		"door_tick": -1,
+		"plane_tick": now + rem,
+		"plane": null,
+		"trail": 0,
+	}
+
+
+static func _chosen_exit_times(sim: PassengerSim, p: Passenger, now: int) -> Dictionary:
+	if not PassengerGates.gate_open(sim, p):
+		return {}
+	var door_tick := now + walk_ticks(p.remaining_mm() + sim.files.waiters.owed_mm(p.id))
+	if sim.layout.bus_exits.has(p.exit_object):
+		return _times(
+			p.exit_object, door_tick, door_tick + bus_cycle_margin(sim, p.flight_id), null
+		)
+	var apron := sim.files.apron_of(sim, p.exit_object, p)
+	return _times(
+		p.exit_object,
+		door_tick,
+		now + walk_ticks(p.remaining_mm() + sim.files.waiters.owed_mm(p.id) + apron["mm"]),
+		apron["plane"]
+	)
+
+
+static func _planned_exit_times(
+	sim: PassengerSim, p: Passenger, leave: int, exit: Vector3i
+) -> Dictionary:
+	var door_eta := leave + walk_ticks(exit.y)
+	if sim.layout.bus_exits.has(exit.x):
+		return _times(exit.x, door_eta, door_eta + bus_cycle_margin(sim, p.flight_id), null)
 	var plane_tick := leave + walk_ticks(exit.y + exit.z)
 	if plane_tick >= NEVER:
 		return {}
 	var plane: Variant = sim.files.apron_of(sim, exit.x, p)["plane"]
-	return _times(exit.x, leave + walk_ticks(exit.y), plane_tick, plane)
+	return _times(exit.x, door_eta, plane_tick, plane)
 
 
 static func _times(door: int, door_tick: int, plane_tick: int, plane: Variant) -> Dictionary:

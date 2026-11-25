@@ -45,6 +45,8 @@ enum Stage {
 	# reserved browse slot and browsing there.
 	SHOP_WALK,
 	SHOP_BROWSE,
+	# Riding a shuttle bus from a Bus Gate bay to a Remote Stand.
+	ON_BUS,
 }
 
 ## CROWDED is never a live status: it is only a missed passenger's cause
@@ -158,6 +160,8 @@ var halt_tick := 0
 ## saw it (ParkRecovery.note_sitting()): a late walker sets its roller down
 ## from the hand, with no park.
 var sat_late := false
+## True once the -6 mood comfort nudge for riding a shuttle bus was applied.
+var bus_nudged := false
 ## Its last thoughts, oldest first, PassengerThoughts.STRIDE numbers each
 ## (PassengerThoughts.record()).
 var thoughts := PackedInt64Array()

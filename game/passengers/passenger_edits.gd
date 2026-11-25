@@ -243,7 +243,12 @@ static func graph_changed(sim: PassengerSim, cells: Array[Vector2i]) -> void:
 	for cell in cells:
 		touched[cell] = true
 	for p in sim._passengers:
-		if p.is_done() or p.stage == Passenger.Stage.SECURITY or p.stage == Passenger.Stage.APRON:
+		if (
+			p.is_done()
+			or p.stage == Passenger.Stage.SECURITY
+			or p.stage == Passenger.Stage.APRON
+			or p.stage == Passenger.Stage.ON_BUS
+		):
 			continue
 		for i in range(p.path_index, p.path.size()):
 			if touched.has(p.path[i]):
@@ -278,12 +283,17 @@ static func set_stand(sim: PassengerSim, stand: Dictionary) -> void:
 ## walks to its own stand (exit id -> stand, exit id -> gate letter), and its
 ## passengers wait by its gate desk (gate letter -> desk object id).
 static func set_gate_stands(
-	sim: PassengerSim, exit_stands: Dictionary, exit_gates: Dictionary, gate_desk_ids: Dictionary
+	sim: PassengerSim,
+	exit_stands: Dictionary,
+	exit_gates: Dictionary,
+	gate_desk_ids: Dictionary,
+	bus_exits: Dictionary = {}
 ) -> void:
 	sim.layout.by_gate = true
 	sim.layout.exit_stands = exit_stands
 	sim.layout.exit_gates = exit_gates
 	sim.layout.gate_desk_ids = gate_desk_ids
+	sim.layout.bus_exits = bus_exits
 	sim._on_graph_changed([] as Array[Vector2i])
 
 

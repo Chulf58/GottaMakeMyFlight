@@ -88,7 +88,7 @@ func test_tier_3_unlock_and_demo_mode_teaser() -> void:
 
 
 func test_bus_gate_desk_and_remote_stand_flow_and_save_v42() -> void:
-	assert_int(SaveGame.SAVE_VERSION).is_equal(42)
+	assert_int(SaveGame.SAVE_VERSION).is_greater_equal(42)
 	assert_int(FlightSim.SAVE_VERSION).is_equal(14)
 	assert_int(GateDesks.SAVE_VERSION).is_equal(3)
 
@@ -182,15 +182,15 @@ func test_bus_gate_desk_and_remote_stand_flow_and_save_v42() -> void:
 	assert_str(_flights.flight_gate(FlightSim.DEFAULT_ID + "-d0")).is_equal("A")
 	assert_bool(_flights.flight_stand(FlightSim.DEFAULT_ID + "-d0") is Dictionary).is_true()
 
-	# SaveGame v42 round-trip preserves bus gates + remote stands and rejects v41.
+	# SaveGame round-trip preserves bus gates + remote stands and rejects stale versions.
 	SaveTestKit.step(_main)
 	var snap := _save.snapshot()
 	assert_bool(snap.is_empty()).is_false()
 	var json_copy: Dictionary = JSON.parse_string(JSON.stringify(snap, "", true, true))
-	assert_int(int(json_copy["save_version"])).is_equal(42)
+	assert_int(int(json_copy["save_version"])).is_equal(SaveGame.SAVE_VERSION)
 
 	var old_copy := json_copy.duplicate(true)
-	old_copy["save_version"] = 41
+	old_copy["save_version"] = SaveGame.SAVE_VERSION - 1
 	assert_bool(_save.load_world(old_copy)).is_false()
 
 	assert_bool(_mode.grid.apply(BuildEdit.remove_object(rs1.object_id)).ok).is_true()

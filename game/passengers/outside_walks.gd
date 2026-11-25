@@ -56,7 +56,7 @@ static func arrival(sim: PassengerSim, entrance: int) -> Array[Vector3]:
 static func departure(sim: PassengerSim, exit_door: int, model := "") -> Array[Vector3]:
 	if sim.site == null:
 		return _default_departure(sim, exit_door)
-	if not sim.layout.outside_routes.has(exit_door):
+	if not sim.layout.outside_routes.has(exit_door) or sim.layout.bus_exits.has(exit_door):
 		return [] as Array[Vector3]
 	var bridge := _bridge_walk(sim, exit_door, model)
 	if not bridge.is_empty():
@@ -109,7 +109,7 @@ static func revalidate(sim: PassengerSim) -> void:
 			var model := PlaneClasses.flight_model(sim.flights, p.flight_id)
 			# A walker boarding through the docked jet bridge is off the open
 			# ground: its walk, chosen at departure, is never rerouted.
-			if docks_at(sim, p.exit_object, model):
+			if sim.layout.bus_exits.has(p.exit_object) or docks_at(sim, p.exit_object, model):
 				continue
 			var door := sim.layout.door_cell(sim.grid, p.exit_object)
 			if _clear_ahead(sim, p, door):

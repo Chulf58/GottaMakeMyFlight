@@ -79,6 +79,7 @@ const BOOL_FIELDS := [
 	"bag_resolved",
 	"sat_late",
 	"seat_exiting",
+	"bus_nudged",
 ]
 
 

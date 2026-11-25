@@ -154,6 +154,8 @@ class Words:
 				text = tr("Heading to the exit", "passenger activity")
 			Passenger.Stage.APRON:
 				text = tr("Walking to the plane", "passenger activity")
+			Passenger.Stage.ON_BUS:
+				text = tr("On the shuttle bus", "passenger activity")
 			Passenger.Stage.MADE:
 				text = tr("Boarded", "passenger activity")
 			Passenger.Stage.MISSED:

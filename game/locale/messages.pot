@@ -8169,3 +8169,12 @@ msgstr ""
 #: ui/planner_drag.gd
 msgid "Stand {gate} — stand too small"
 msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "On the shuttle bus"
+msgstr ""
+
+#: passengers/passenger_thoughts.gd
+msgid "Shuttle ride to the plane"
+msgstr ""

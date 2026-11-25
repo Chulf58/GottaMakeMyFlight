@@ -72,6 +72,7 @@ const KINDS := {
 	# A browser stands on its slot cell, on the walkable floor.
 	Passenger.Stage.SHOP_WALK: [Facility.SHOP, Location.FLOOR, Pose.UPRIGHT],
 	Passenger.Stage.SHOP_BROWSE: [Facility.SHOP, Location.FLOOR, Pose.UPRIGHT],
+	Passenger.Stage.ON_BUS: [Facility.NONE, Location.APRON, Pose.UPRIGHT],
 }
 ## Stage -> Leg.
 const LEGS := {
@@ -106,6 +107,7 @@ const LEGS := {
 	Passenger.Stage.TOILET_EXIT: Leg.VISIT,
 	Passenger.Stage.SHOP_WALK: Leg.VISIT,
 	Passenger.Stage.SHOP_BROWSE: Leg.VISIT,
+	Passenger.Stage.ON_BUS: Leg.APRON,
 }
 
 

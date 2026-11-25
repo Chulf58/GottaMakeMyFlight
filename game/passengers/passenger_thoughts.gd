@@ -25,6 +25,7 @@ enum Kind {
 	SECURITY_ALARM,
 	SECURITY_LIQUIDS,
 	FAST_TRACK,
+	BUS_RIDE,
 }
 
 ## The most thoughts a passenger keeps; a new one drops the oldest.
@@ -175,6 +176,8 @@ static func text_of(kind: Kind, value: int) -> String:
 			return TranslationServer.translate(msg) if msg != "" else ""
 		Kind.FAST_TRACK:
 			return TranslationServer.translate("Breezed through Fast-Track security")
+		Kind.BUS_RIDE:
+			return TranslationServer.translate("Shuttle ride to the plane")
 	return TranslationServer.translate("Nice decor here")
 
 
@@ -268,4 +271,5 @@ class Words:
 			tr("Stopped for liquids: too much liquid!"),
 			tr("Stopped for liquids: forgot my water bottle!"),
 			tr("Breezed through Fast-Track security"),
+			tr("Shuttle ride to the plane"),
 		]
