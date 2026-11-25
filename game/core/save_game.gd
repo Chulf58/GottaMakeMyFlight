@@ -1,4 +1,4 @@
-# gdlint:disable = max-public-methods
+# gdlint:disable = max-public-methods, max-file-lines
 # ensure_achievements() alongside ensure_certification() and ensure_awards() took SaveGame to 21.
 class_name SaveGame
 extends Node
@@ -154,7 +154,9 @@ signal loaded(ok: bool)
 ## refused (no migration).
 ## 42: Remote stands & bus gates (GateDesks v3, FlightSim v14); version 41
 ## saves are refused (no migration).
-const SAVE_VERSION := 42
+## 43: BusShuttleSim ("buses" part), Passenger.Stage.ON_BUS (PassengerSim v40);
+## version 42 saves are refused (no migration).
+const SAVE_VERSION := 43
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"
@@ -178,6 +180,7 @@ const HUD_THEME := preload("res://ui/hud_theme.tres")
 @export var baggage: BaggageSim
 @export var day_ledger: DayLedger
 @export var landside: LandsideSim
+@export var bus_shuttle: BusShuttleSim
 ## The plane stand; none (a test world) saves no "apron" part.
 @export var apron: ApronStand
 ## The gate desks; none (a test world) saves no "gates" part.
@@ -419,6 +422,16 @@ func parts() -> Array[SavePart]:
 		# before the passengers, whose exits walk to its plane door.
 		var at := list.find_custom(func(part: SavePart) -> bool: return part.key == "passengers")
 		list.insert(at, SavePart.new("apron", apron.to_snapshot, _stage_apron, apron.from_snapshot))
+	if bus_shuttle != null:
+		list.append(
+			SavePart.new(
+				"buses",
+				bus_shuttle.to_snapshot,
+				func(data: Dictionary, staged: Dictionary) -> String:
+					return BusShuttleSnapshot.stage(data, staged, _staged_flight_sim),
+				bus_shuttle.from_snapshot
+			)
+		)
 	if unlocks != null:
 		list.append(
 			SavePart.new(
@@ -948,7 +961,10 @@ func _epoch_problem(data: Dictionary) -> String:
 ## Every part that keeps the tick was saved on the same one.
 func _ticks_problem(data: Dictionary) -> String:
 	var tick := str(data["clock"]["tick"]).to_int()
-	for key in ["flights", "passengers", "messes", "rating", "baggage", "landside"]:
+	var keys := ["flights", "passengers", "messes", "rating", "baggage", "landside"]
+	if data.has("buses"):
+		keys.append("buses")
+	for key in keys:
 		var value: Variant = data[key]["tick"]
 		var other := str(value).to_int() if typeof(value) == TYPE_STRING else int(value)
 		if other != tick:
@@ -1202,6 +1218,8 @@ func _stage_gate_exits(sim: PassengerSim, staged: Dictionary) -> void:
 	for binding in bindings:
 		sim.layout.gate_desk_ids[binding["gate"]] = binding["desk"]
 		if GateDesks.is_bus_binding(binding):
+			sim.layout.exit_gates[binding["exit"]] = binding["gate"]
+			sim.layout.bus_exits[binding["exit"]] = binding["gate"]
 			continue
 		sim.layout.exit_stands[binding["exit"]] = stands[binding["gate"]]
 		sim.layout.exit_gates[binding["exit"]] = binding["gate"]

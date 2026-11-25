@@ -111,7 +111,17 @@ static func close_doors(sim: PassengerSim) -> void:
 	BookingOverrides.clear_closed(sim)
 	for p in sim._passengers:
 		if not p.is_done() and sim.flights.is_doors_closed(p.flight_id):
+			if _in_bus_grace(sim, p):
+				continue
 			finish(sim, p, false)
+
+
+static func _in_bus_grace(sim: PassengerSim, p: Passenger) -> bool:
+	if sim.flights.state_of(p.flight_id) != FlightSim.State.DOORS_CLOSED:
+		return false
+	if p.stage == Passenger.Stage.ON_BUS:
+		return true
+	return p.stage == Passenger.Stage.APRON and sim.layout.bus_exits.has(p.exit_object)
 
 
 static func finish(sim: PassengerSim, p: Passenger, made: bool) -> void:

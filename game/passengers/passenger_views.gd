@@ -1001,7 +1001,7 @@ func shows(p: Passenger) -> bool:
 
 
 func _visible(p: Passenger) -> bool:
-	if p.stage == Passenger.Stage.MADE:
+	if p.stage == Passenger.Stage.MADE or p.stage == Passenger.Stage.ON_BUS:
 		return false
 	if p.stage == Passenger.Stage.MISSED:
 		return sim.tick - p.outcome_tick <= MISSED_LINGER_TICKS

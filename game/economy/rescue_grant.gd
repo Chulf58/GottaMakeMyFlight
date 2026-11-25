@@ -286,7 +286,7 @@ func _someone_can_make_a_flight() -> bool:
 		var p := _sim.get_passenger(id)
 		if p.is_done():
 			continue
-		if p.stage == Passenger.Stage.APRON:
+		if p.stage == Passenger.Stage.APRON or p.stage == Passenger.Stage.ON_BUS:
 			return true
 		var stage := p.stage
 		var start := p.at

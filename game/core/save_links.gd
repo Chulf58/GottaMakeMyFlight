@@ -76,6 +76,8 @@ static func problem(data: Dictionary, staged: Dictionary) -> String:
 		found = _awaited_problem(data["settlement"], staged["baggage"]["bags"])
 	if found == "" and staged.has("staff"):
 		found = _ramp_problem(staged["staff"], staged["baggage"], flights, staged["rating"])
+	if found == "" and staged.has("buses"):
+		found = _bus_problem(staged["buses"], flights)
 	if found == "" and data.has("day_ledger"):
 		found = DayLedger.day_link_problem(data["day_ledger"], data["clock"])
 		if found == "":
@@ -95,6 +97,36 @@ static func _awaited_problem(settlement: Dictionary, bags: Array[Bag]) -> String
 		var passenger := str(entry["passenger"]).to_int()
 		if not unsettled.has(passenger):
 			return "baggage: passenger %d awaits a bag but has no unsettled bag" % passenger
+	return ""
+
+
+static func _bus_problem(buses: Dictionary, flights: Dictionary) -> String:
+	var live := {}
+	for f: Dictionary in flights.get("flights", []):
+		live[String(f["id"])] = f
+	var contracts := {}
+	for contract: Dictionary in flights.get("contracts", []):
+		contracts[String(contract["id"])] = contract
+	for b: Dictionary in buses.get("buses", []):
+		if int(b["state"]) == BusShuttleSim.State.IDLE_AT_BAY:
+			continue
+		var fid := String(b["flight_id"])
+		if not live.has(fid):
+			return "buses: bus %s serves unknown flight %s" % [b["gate"], fid]
+		var flight: Dictionary = live[fid]
+		if String(flight["gate"]) != String(b["gate"]):
+			return "buses: bus %s flight %s belongs to gate %s" % [b["gate"], fid, flight["gate"]]
+		if String(flight["stand_id"]) != String(b["stand_id"]):
+			return (
+				"buses: bus %s flight %s stand %s does not match %s"
+				% [b["gate"], fid, flight["stand_id"], b["stand_id"]]
+			)
+		var expected_model := _flight_model(flight, contracts)
+		if String(b["model"]) != expected_model:
+			return (
+				"buses: bus %s flight %s model %s does not match %s"
+				% [b["gate"], fid, expected_model, b["model"]]
+			)
 	return ""
 
 
@@ -481,10 +513,14 @@ static func _ramp_member_problem(
 	return ""
 
 
-static func _flight_self_taxis(flight: Dictionary, contracts: Dictionary) -> bool:
+static func _flight_model(flight: Dictionary, contracts: Dictionary) -> String:
 	var contract_id: String = flight.get("contract", "")
 	var contract: Dictionary = contracts.get(contract_id, {})
 	if contract.is_empty():
 		contract = FlightSim.STARTER_TERMS
-	var model := PlaneClasses.model_for(String(contract["airline"]), String(contract["plane_size"]))
+	return PlaneClasses.model_for(String(contract["airline"]), String(contract["plane_size"]))
+
+
+static func _flight_self_taxis(flight: Dictionary, contracts: Dictionary) -> bool:
+	var model := _flight_model(flight, contracts)
 	return model == "" or PlaneClasses.self_taxis(model)

@@ -189,6 +189,7 @@ func _show_paving() -> void:
 		stand_points()
 	)
 	props.show_layout(gate_stands, taxi_routes())
+	props.show_remote_stands(remote_stands)
 
 
 ## The pad under every stand in use (TaxiPaving.stand_pad()): a gate's for the

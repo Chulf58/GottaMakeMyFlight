@@ -347,10 +347,10 @@ func test_planner_departures_board_airside_ops_and_save_v42() -> void:
 	assert_bool(rem_entry.is_empty()).is_false()
 	assert_str(DeparturesBoard._line_two_text(rem_entry)).contains("%s → R1" % _bg_near)
 
-	# SaveGame v42 round-trip preserves remote contract + paired bus gate.
+	# SaveGame round-trip preserves remote contract + paired bus gate.
 	var snap := _save.snapshot()
 	var json_copy: Dictionary = JSON.parse_string(JSON.stringify(snap, "", true, true))
-	assert_int(int(json_copy["save_version"])).is_equal(42)
+	assert_int(int(json_copy["save_version"])).is_equal(SaveGame.SAVE_VERSION)
 	assert_bool(_save.load_world(json_copy)).is_true()
 	var reloaded := _flights.contract_of(rem_id)
 	assert_str(reloaded["stand"]).is_equal("R1")

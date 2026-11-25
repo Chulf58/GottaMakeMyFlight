@@ -38,12 +38,14 @@ signal stage_changed(id: int, stage: Passenger.Stage)
 signal checked_in(id: int, desk: int)
 
 ## The history of SAVE_VERSION is in PassengerSimSave.
-const SAVE_VERSION := 39
+const SAVE_VERSION := 40
 ## 1.96 m/s; the Toon walk clips cover 1.92-1.95 m/s.
 const WALK_MM := 98
 ## 3.5 m/s, a jog (user-ruled); the Toon run clips cover 4.17-5.30 m/s,
 ## so they play at about 0.66x (male) and 0.84x (female).
 const RUN_MM := 175
+## Brisk stair climb pace for remote-stand bus riders unloading during DOORS_CLOSED grace.
+const BRISK_APRON_MM := 270
 const CHECKIN_TICKS := 60
 ## The sit clips last 1.2 s.
 const SIT_DOWN_TICKS := 24
@@ -78,6 +80,8 @@ const QUEUE_STAGES := [Passenger.Stage.CHECKIN_QUEUE, Passenger.Stage.SECURITY_Q
 @export var staff: StaffSim
 ## The road and car parks passengers arrive through; tests may leave it unset.
 @export var landside: LandsideSim
+## Optional apron shuttle sim tracking passengers in Passenger.Stage.ON_BUS.
+@export var bus_shuttle: Node
 @export var auto_schedule := true
 
 ## The apron walk after an exit door with no site (a test grid,
@@ -500,6 +504,8 @@ func move_exit_cells() -> Array[Vector2i]:
 
 ## Where the passenger stands on this tick, in world space.
 func world_position(p: Passenger) -> Vector3:
+	if p.stage == Passenger.Stage.ON_BUS and bus_shuttle != null:
+		return bus_shuttle.bus_position_for_passenger(p.id)
 	var where := StageKinds.location(p.stage)
 	if StageKinds.is_outside(p.stage) and not p.apron.is_empty():
 		return p.apron_position()
@@ -624,6 +630,8 @@ func _on_contract_ended(contract_id: String) -> void:
 
 ## An occurrence was issued: its booked passengers arrive within its window.
 func _on_occurrence_added(flight_id: String) -> void:
+	if not auto_schedule:
+		return
 	schedule_flight(flight_id, PassengerLifecycle.booked_passengers(self, flight_id))
 
 
@@ -703,10 +711,19 @@ func _advance(p: Passenger) -> void:
 
 
 func _move(p: Passenger) -> void:
+	if p.stage == Passenger.Stage.ON_BUS:
+		return
 	# A walker outside with no walk left stands where it is (OutsideWalks).
 	if StageKinds.is_outside(p.stage) and p.stuck == Passenger.Stuck.NO_ROUTE:
 		return
 	var speed := p.pace_mm()
+	if (
+		p.stage == Passenger.Stage.APRON
+		and layout.bus_exits.has(p.exit_object)
+		and flights != null
+		and flights.is_doors_closed(p.flight_id)
+	):
+		speed = maxi(speed, BRISK_APRON_MM)
 	if files.holds(p.id) or files.waiters.back_mm(p.id) > 0:
 		speed = files.step_of(self, p, speed)
 	# The line outside moves up together at a walk, so it keeps its spacing.
@@ -838,9 +855,12 @@ func set_stand(stand: Dictionary) -> void:
 ## walks to its own stand (exit id -> stand, exit id -> gate letter), and its
 ## passengers wait by its gate desk (gate letter -> desk object id).
 func set_gate_stands(
-	exit_stands: Dictionary, exit_gates: Dictionary, gate_desk_ids: Dictionary
+	exit_stands: Dictionary,
+	exit_gates: Dictionary,
+	gate_desk_ids: Dictionary,
+	bus_exits: Dictionary = {}
 ) -> void:
-	PassengerEdits.set_gate_stands(self, exit_stands, exit_gates, gate_desk_ids)
+	PassengerEdits.set_gate_stands(self, exit_stands, exit_gates, gate_desk_ids, bus_exits)
 	if staff != null:
 		staff._on_graph_changed([] as Array[Vector2i])
 

@@ -37,6 +37,7 @@ extends Node3D
 ## through-a-docked-jet-bridge, 2026-11-09), so the legend reads at play range.
 
 const BRIDGE_SCENE := preload("res://assets/airside/props/jet_bridge.glb")
+const AIRSTAIRS_SCENE := preload("res://assets/airside/props/airstairs.glb")
 const SIGN_SCENE := preload("res://assets/airside/props/taxi_sign.glb")
 const LANE_LETTER := "A"
 const STUB_LETTERS := "BCDE"
@@ -60,6 +61,8 @@ const DEFAULT_SIGN_SCALE := 2.5
 
 ## Gate letter -> {"node": the bridge, ...}
 var bridges: Dictionary = {}
+## Remote stand id -> {"node": airstairs, "joints": ..., "stand": ..., "docked": bool, ...}
+var airstairs_nodes: Dictionary = {}
 ## Bus gate letter -> MeshInstance3D ground bay marking.
 var bus_bay_nodes: Dictionary = {}
 ## The turn-off signs, in turn_offs() order.
@@ -100,6 +103,33 @@ func show_layout(stands: Dictionary, routes: Array[PackedVector3Array]) -> void:
 		_show_signs(turn_offs(routes, runway_north(), Airside.runway_south()))
 
 
+## Registers remote stands (`sid -> StandPlacement stand`) for airstairs docking.
+## Regular jet-bridge gates never receive airstairs.
+func show_remote_stands(remote: Dictionary) -> void:
+	for sid: String in airstairs_nodes.keys():
+		if not remote.has(sid):
+			(airstairs_nodes[sid]["node"] as Node3D).queue_free()
+			airstairs_nodes.erase(sid)
+	for sid: String in remote:
+		var stand: Dictionary = remote[sid]
+		if airstairs_nodes.has(sid) and airstairs_nodes[sid]["stand"] == stand:
+			continue
+		if not airstairs_nodes.has(sid):
+			var node: Node3D = AIRSTAIRS_SCENE.instantiate()
+			node.name = "Airstairs_%s" % sid
+			node.visible = false
+			add_child(node)
+			airstairs_nodes[sid] = {
+				"node": node,
+				"joints": AirstairsPose.joints_of(node),
+				"docked": false,
+				"model": "",
+				"pose": {},
+			}
+		airstairs_nodes[sid]["stand"] = stand.duplicate()
+		_pose_airstairs(sid)
+
+
 ## Shows a ground bus-bay marking for each bus gate in `bays` (gate -> Rect2).
 func show_bus_bays(bays: Dictionary) -> void:
 	for gate: String in bus_bay_nodes.keys():
@@ -131,7 +161,9 @@ func dock_plane(key: int, gate: String, model: String) -> void:
 	_reports[key] = report
 	if not before.is_empty() and before["gate"] != gate:
 		_pose_bridge(before["gate"])
+		_pose_airstairs(before["gate"])
 	_pose_bridge(gate)
+	_pose_airstairs(gate)
 
 
 ## Withdraws reporter `key`'s plane: its gate's bridge parks unless another
@@ -142,6 +174,7 @@ func release_plane(key: int) -> void:
 	var gate: String = _reports[key]["gate"]
 	_reports.erase(key)
 	_pose_bridge(gate)
+	_pose_airstairs(gate)
 
 
 ## The north edge of the runway asphalt (its strip piece about RUNWAY_Z).
@@ -234,6 +267,33 @@ func _pose_bridge(gate: String) -> void:
 	entry["docked"] = docked
 	entry["folded"] = folded
 	entry["model"] = model
+
+
+func _pose_airstairs(sid: String) -> void:
+	if not airstairs_nodes.has(sid):
+		return
+	var entry: Dictionary = airstairs_nodes[sid]
+	var model := ""
+	for key: int in _reports:
+		var report: Dictionary = _reports[key]
+		if report["gate"] == sid:
+			model = report["model"]
+			break
+	var node: Node3D = entry["node"]
+	if model != "" and AirstairsPose.docks(model):
+		var ground := AirstairsPose.ground_y(entry["stand"])
+		var solved := AirstairsPose.pose_for(entry["stand"], model, ground)
+		node.transform = solved["root"]
+		AirstairsPose.apply(entry["joints"], solved)
+		node.visible = true
+		entry["docked"] = true
+		entry["pose"] = solved
+		entry["model"] = model
+	else:
+		node.visible = false
+		entry["docked"] = false
+		entry["pose"] = {}
+		entry["model"] = model
 
 
 func _show_signs(list: Array[Dictionary]) -> void:

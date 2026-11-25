@@ -65,6 +65,9 @@ var by_gate := false
 ## -> that gate's letter.
 var exit_stands: Dictionary = {}
 var exit_gates: Dictionary = {}
+## With by_gate: exit door id -> gate letter for Bus Gate exits (those that
+## load a shuttle bus curb-side instead of walking onto a gate stand).
+var bus_exits: Dictionary = {}
 ## With by_gate: gate letter -> its gate desk's object id (GateDesks.bindings,
 ## the saved links), set by PassengerSim.set_gate_stands().
 var gate_desk_ids: Dictionary = {}
@@ -270,6 +273,14 @@ func _route_doors(grid: BuildGrid, ids: Array[int]) -> void:
 			continue
 		var edge := SiteDefinition.ROAD_STEP
 		var key: Variant = edge
+		if def != &"entrance_door" and bus_exits.has(id):
+			var out_step := DoorPlacement.back_step(record["facing"])
+			var step_cell: Vector2i = record["anchor"] + out_step
+			if not grid.in_bounds(step_cell) or grid.floor_at(step_cell) == BuildGrid.FLOOR_NONE:
+				outside_routes[id] = [step_cell if grid.in_bounds(step_cell) else record["anchor"]]
+			else:
+				out_of_service.append(id)
+			continue
 		if def == &"entrance_door":
 			if not fields.has(key):
 				var road := SiteRoutes.edge_cells(grid, site, edge)

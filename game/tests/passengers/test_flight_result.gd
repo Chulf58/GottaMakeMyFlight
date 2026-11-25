@@ -162,6 +162,7 @@ func test_each_stage_has_its_exact_reason_text() -> void:
 		Passenger.Stage.STANDING_UP: gate,
 		Passenger.Stage.TO_EXIT: late_exit,
 		Passenger.Stage.APRON: late_exit,
+		Passenger.Stage.ON_BUS: late_exit,
 		Passenger.Stage.CAFE_WALK: cafe,
 		Passenger.Stage.CAFE_QUEUE: cafe,
 		Passenger.Stage.CAFE_ORDER: cafe,

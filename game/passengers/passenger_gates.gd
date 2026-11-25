@@ -199,6 +199,8 @@ static func to_exit(sim: PassengerSim, p: Passenger) -> void:
 	if p.is_moving() or sim.files.is_pending(p.id):
 		return
 	if p.at == sim.layout.door_cell(sim.grid, p.exit_object):
+		if sim.layout.bus_exits.has(p.exit_object):
+			return
 		step_out(sim, p)
 	else:
 		drop_exit(sim, p)
@@ -303,3 +305,48 @@ static func apron_length_mm(sim: PassengerSim, exit_door: int, model := "") -> i
 	var walk := Passenger.new()
 	walk.apron = apron_points(sim, exit_door, model)
 	return walk.apron_total_mm()
+
+
+## Passengers waiting at Bus Gate `door_id` to board `flight_id`'s shuttle bus.
+static func passengers_at_bus_door(
+	sim: PassengerSim, door_id: int, flight_id: String
+) -> Array[Passenger]:
+	var out: Array[Passenger] = []
+	if sim == null or sim.grid == null:
+		return out
+	var cell := sim.layout.door_cell(sim.grid, door_id)
+	for p in sim._passengers:
+		if p.is_done() or p.stage != Passenger.Stage.TO_EXIT:
+			continue
+		if (
+			p.flight_id == flight_id
+			and p.exit_object == door_id
+			and not p.is_moving()
+			and p.at == cell
+		):
+			out.append(p)
+	return out
+
+
+## Moves `p` from the Bus Gate exit door onto the shuttle bus, applying the
+## shuttle comfort mood nudge and thought at most once.
+static func board_bus(sim: PassengerSim, p: Passenger, mood_penalty: int) -> void:
+	if sim == null or p == null or p.is_done():
+		return
+	p.clear_path()
+	if not p.bus_nudged:
+		p.bus_nudged = true
+		p.mood = maxi(p.mood - mood_penalty, 0)
+		if p.at != Passenger.NO_CELL:
+			PassengerThoughts.record(p, PassengerThoughts.Kind.BUS_RIDE, sim.tick, p.at)
+	sim._set_stage(p, Passenger.Stage.ON_BUS)
+
+
+## Unloads `p` from the shuttle bus onto the remote stand walk `walk` into Stage.APRON.
+static func unload_from_bus(sim: PassengerSim, p: Passenger, walk: Array[Vector3]) -> void:
+	if sim == null or p == null or p.is_done():
+		return
+	p.apron = walk
+	p.apron_mm = 0
+	sim._set_stage(p, Passenger.Stage.APRON)
+	sim.files.join_plane(sim, p)

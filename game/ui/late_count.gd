@@ -121,7 +121,13 @@ static func tightest_passenger(sim: PassengerSim, flight_id: String) -> int:
 	var best_slack := 0
 	for id in sim.passenger_ids():
 		var p := sim.get_passenger(id)
-		if p == null or p.is_done() or not p.late or p.flight_id != flight_id:
+		if (
+			p == null
+			or p.is_done()
+			or not p.late
+			or p.flight_id != flight_id
+			or p.stage == Passenger.Stage.ON_BUS
+		):
 			continue
 		var slack := _slack_of(sim, p, doors_close)
 		if best_id == 0 or slack < best_slack or (slack == best_slack and p.id < best_id):

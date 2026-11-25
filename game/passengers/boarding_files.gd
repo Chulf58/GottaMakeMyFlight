@@ -38,6 +38,8 @@ extends RefCounted
 
 ## The least walk between two walkers in one file, in mm.
 const GAP_MM := 700
+## Tighter single-body gap for bus riders rushing up airstairs during DOORS_CLOSED grace.
+const BUS_GRACE_GAP_MM := 450
 ## A save with no walker in any file.
 const EMPTY := {"doors": [], "planes": [], "pending": [], "delayed": [], "waiters": []}
 
@@ -153,6 +155,9 @@ func plane_file_of(id: int) -> Array[int]:
 ## waiter (FileWaiters.may_return()). Returns whether it joined.
 func join_door(sim: PassengerSim, p: Passenger) -> bool:
 	var door := p.exit_object
+	if sim.layout.bus_exits.has(door):
+		_hold(p.id, false)
+		return true
 	var ids: Array = _doors.get(door, [])
 	var at := _slot(sim, ids, _left(p), p.id, true, door_left(p))
 	if at < 0 or not waiters.may_return(sim, self, p):
@@ -170,6 +175,25 @@ func join_door(sim: PassengerSim, p: Passenger) -> bool:
 ## of its door's walk, or waits at the door. Returns whether it joined (a door
 ## with no walk outside has no apron file to join).
 func join_plane(sim: PassengerSim, p: Passenger) -> bool:
+	if sim.layout.bus_exits.has(p.exit_object):
+		if p.apron.is_empty():
+			_hold(p.id, false)
+			return true
+		var bus_key := plane_key(p.apron.back())
+		var lane_ids: Array = _planes.get(bus_key, [])
+		var left := plane_left(p)
+		var pos := lane_ids.size()
+		for k in lane_ids.size():
+			var other := sim.get_passenger(lane_ids[k])
+			var theirs := plane_left(other)
+			if left < theirs or (left == theirs and p.id < other.id):
+				pos = k
+				break
+		lane_ids.insert(pos, p.id)
+		_planes[bus_key] = lane_ids
+		_plane_of[p.id] = bus_key
+		_hold(p.id, false)
+		return true
 	var apron := apron_of(sim, p.exit_object, p)
 	if apron["plane"] == null:
 		_hold(p.id, false)
@@ -191,6 +215,8 @@ func join_plane(sim: PassengerSim, p: Passenger) -> bool:
 ## OutsideWalks) it takes its place in its apron file again by its new walk
 ## left at once, and stays in its door file: its walk so far is kept.
 func reroute(sim: PassengerSim, p: Passenger) -> void:
+	if sim.layout.bus_exits.has(p.exit_object):
+		return
 	if p.stage == Passenger.Stage.APRON:
 		_resort_plane(sim, p)
 		return
@@ -374,7 +400,7 @@ static func checked(
 	var kept := files.waiters.held_problem(files)
 	if kept != "":
 		return {"error": kept}
-	var missing := files._unfiled(by_id)
+	var missing := files._unfiled(by_id, sim)
 	if missing != "":
 		return {"error": missing}
 	return {"files": files}
@@ -510,7 +536,15 @@ func _room(sim: PassengerSim, ids: Array, p: Passenger, in_door: bool) -> int:
 	var ahead := sim.get_passenger(ids[k - 1])
 	var mine := _left(p) if in_door else plane_left(p)
 	var theirs := _left(ahead) if in_door else plane_left(ahead)
-	return maxi(0, mine - theirs - GAP_MM)
+	var gap := GAP_MM
+	if (
+		not in_door
+		and sim.layout.bus_exits.has(p.exit_object)
+		and sim.flights != null
+		and sim.flights.is_doors_closed(p.flight_id)
+	):
+		gap = BUS_GRACE_GAP_MM
+	return maxi(0, mine - theirs - gap)
 
 
 ## The step filed walker `p` may take behind the walkers waiting to join door
@@ -701,9 +735,17 @@ static func _left_by_its_gate(sim: PassengerSim, p: Passenger) -> bool:
 
 
 ## A walker that should be in a file and is not, or "".
-func _unfiled(by_id: Dictionary) -> String:
+func _unfiled(by_id: Dictionary, sim: PassengerSim = null) -> String:
 	for id: int in by_id:
 		var p: Passenger = by_id[id]
+		if sim != null and sim.layout.bus_exits.has(p.exit_object):
+			if (
+				p.stage == Passenger.Stage.APRON
+				and not p.apron.is_empty()
+				and not _plane_of.has(id)
+			):
+				return "apron passenger %d is not in a boarding file" % id
+			continue
 		if p.stage == Passenger.Stage.TO_EXIT and p.exit_object != 0:
 			if not _door_of.has(id) and not _pending.has(id):
 				return "passenger %d heading for exit %d is in no file" % [id, p.exit_object]
