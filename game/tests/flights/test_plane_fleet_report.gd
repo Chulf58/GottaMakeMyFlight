@@ -22,6 +22,9 @@ class HeldSim:
 	func flight_gate(id: String) -> String:
 		return held.get(id, "")
 
+	func flight_stand_id(id: String) -> String:
+		return held.get(id, "")
+
 
 func test_the_report_fires_again_after_a_gate_loses_and_regains_its_flight() -> void:
 	var airside := auto_free(TestStandLaneClearance.scene_airside()) as Airside

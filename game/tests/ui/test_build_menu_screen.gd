@@ -43,10 +43,14 @@ func test_operations_holds_gate_desk_seats_then_screen_in_order() -> void:
 	var ops := BuildMenu.category_index("operations")
 	var tools: Array = BuildMenu.categories()[ops]["tools"]
 	var i_gate := tools.find(BuildMode.Tool.GATE_DESK)
+	var i_bus_gate := tools.find(BuildMode.Tool.BUS_GATE_DESK)
+	var i_remote := tools.find(BuildMode.Tool.REMOTE_STAND)
 	var i_seats := tools.find(BuildMode.Tool.SEATS)
 	var i_screen := tools.find(BuildMode.Tool.SCREEN)
 	assert_int(i_gate).is_greater_equal(0)
-	assert_int(i_seats).is_equal(i_gate + 1)
+	assert_int(i_bus_gate).is_equal(i_gate + 1)
+	assert_int(i_remote).is_equal(i_bus_gate + 1)
+	assert_int(i_seats).is_equal(i_remote + 1)
 	assert_int(i_screen).is_equal(i_seats + 1)
 	assert_int(BuildMenu.category_of(BuildMode.Tool.SCREEN)).is_equal(ops)
 	assert_str(str(BuildMode.TOOL_OBJECTS[BuildMode.Tool.SCREEN])).is_equal(
