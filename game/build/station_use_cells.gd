@@ -66,7 +66,7 @@ static func of(grid: BuildGrid, def_id: StringName, anchor: Vector2i, facing: in
 	var answers := grid.trial_answers(def_id, anchor, facing)
 	if answers.is_empty():
 		return out
-	if def_id == GateDesks.DESK:
+	if def_id == GateDesks.DESK or def_id == GateDesks.BUS_DESK:
 		var front := BuildObjectDef.rotate_offset(Vector2i(0, 1), facing)
 		for cell in footprint:
 			if not footprint.has(cell + front):

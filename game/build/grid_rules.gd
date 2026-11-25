@@ -67,6 +67,9 @@ static func _check_paint_floor(grid: BuildGrid, edit: BuildEdit) -> BuildResult:
 		return BuildResult.refused(BuildResult.Reason.BAD_FLOOR_TYPE)
 	if edit.zone_id < 0:
 		return BuildResult.refused(BuildResult.Reason.BAD_ZONE)
+	var i := grid._index(edit.cell)
+	if grid._occupant[i] != 0 and grid._floor[i] == BuildGrid.FLOOR_NONE:
+		return BuildResult.refused(BuildResult.Reason.OCCUPIED, grid._occupant[i])
 	return BuildResult.accepted()
 
 
@@ -152,7 +155,18 @@ static func _wall_object_problem(grid: BuildGrid, cell: Vector2i, side: int) -> 
 	for pair in [[here, other], [there, cell]]:
 		if pair[0] != 0 and grid._reserved[grid._index(pair[1])] == pair[0]:
 			return BuildResult.refused(BuildResult.Reason.INTERACTION_BLOCKED, pair[0])
+	for obj_id in [here, there]:
+		if obj_id != 0 and _is_unfloored(grid, obj_id):
+			return BuildResult.refused(BuildResult.Reason.WALL_IN_FOOTPRINT, obj_id)
 	return null
+
+
+static func _is_unfloored(grid: BuildGrid, obj_id: int) -> bool:
+	var rec: Dictionary = grid._objects.get(obj_id, {})
+	if rec.is_empty():
+		return false
+	var def := BuildCatalog.get_def(rec["def"])
+	return def != null and def.unfloored
 
 
 static func _check_remove_wall(grid: BuildGrid, cell: Vector2i, side: int) -> BuildResult:
@@ -219,7 +233,7 @@ static func check_place_object(
 	if facing < 0 or facing > 3:
 		return BuildResult.refused(BuildResult.Reason.BAD_FACING)
 	var cells := def.footprint(anchor, facing)
-	var problem := _footprint_problem(grid, cells)
+	var problem := _footprint_problem(grid, cells, def.unfloored)
 	if problem != null:
 		return problem
 	problem = interaction_problem(grid, def.interaction_cell(anchor, facing), cells)
@@ -229,20 +243,35 @@ static func check_place_object(
 
 
 ## A refusal for the first footprint cell that cannot take an object, or null.
-static func _footprint_problem(grid: BuildGrid, cells: Array[Vector2i]) -> BuildResult:
+static func _footprint_problem(
+	grid: BuildGrid, cells: Array[Vector2i], unfloored := false
+) -> BuildResult:
 	for cell in cells:
 		if not grid.in_bounds(cell):
 			return BuildResult.refused(BuildResult.Reason.OUT_OF_BOUNDS)
 	for cell in cells:
 		var i := grid._index(cell)
-		if grid._floor[i] == BuildGrid.FLOOR_NONE:
-			return BuildResult.refused(BuildResult.Reason.NO_FLOOR)
+		var bad_floor := (
+			grid._floor[i] != BuildGrid.FLOOR_NONE
+			if unfloored
+			else grid._floor[i] == BuildGrid.FLOOR_NONE
+		)
+		if bad_floor:
+			return BuildResult.refused(
+				(
+					BuildResult.Reason.REMOTE_STAND_NEEDS_APRON
+					if unfloored
+					else BuildResult.Reason.NO_FLOOR
+				)
+			)
 		if grid._occupant[i] != 0:
 			return BuildResult.refused(BuildResult.Reason.OVERLAP, grid._occupant[i])
 		if grid._reserved[i] != 0:
 			return BuildResult.refused(BuildResult.Reason.INTERACTION_RESERVED, grid._reserved[i])
-		for side in [BuildGrid.Side.EAST, BuildGrid.Side.SOUTH]:
-			if cells.has(cell + BuildGrid.SIDE_STEP[side]) and grid._wall_value(cell, side) != 0:
+		for side in 4:
+			var check_side := unfloored or side in [BuildGrid.Side.EAST, BuildGrid.Side.SOUTH]
+			var in_fp := unfloored or cells.has(cell + BuildGrid.SIDE_STEP[side])
+			if check_side and in_fp and grid._wall_value(cell, side) != 0:
 				return BuildResult.refused(BuildResult.Reason.WALL_IN_FOOTPRINT)
 	return null
 

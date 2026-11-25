@@ -54,6 +54,7 @@ const STAFF_ROLES := {
 	&"security_scanner": StaffMember.Role.SECURITY,
 	&"security_arch": StaffMember.Role.SECURITY,
 	&"gate_desk": StaffMember.Role.GATE,
+	&"bus_gate_desk": StaffMember.Role.GATE,
 }
 
 static var _defs: Dictionary = {}
@@ -161,6 +162,11 @@ static func _build() -> void:
 	# of the nearest free exit facing the planes (GateDesks), staffed by a
 	# Gate Agent (StaffMember.Role.GATE) at its rear StaffSpots cell.
 	_add(GateDesks.DESK, "Gate desk", Vector2i(2, 1), Color(0.3, 0.5, 0.75), 2.02)
+	_add(GateDesks.BUS_DESK, "Bus gate desk", Vector2i(2, 1), Color(0.25, 0.58, 0.65), 2.02)
+	var remote := _add(
+		RemoteStands.STAND_ID, "Remote stand", Vector2i(2, 2), Color(0.35, 0.45, 0.55), 0.15
+	)
+	remote.unfloored = true
 	# Cafe pieces (interior-kit Cafe 1/2). The counter's interaction cell is its
 	# Mount_Order spot in front of the till; Mount_Staff behind it is not
 	# reserved until staff exist.

@@ -46,6 +46,7 @@ const OBJECT_PIECES := {
 	# The gate desk's own podium with its gate board (gates 2/4,
 	# tools/blender/interior/build_gate_kit.py).
 	&"gate_desk": "gate_desk",
+	&"bus_gate_desk": "gate_desk",
 	&"cafe_counter": "cafe_counter",
 	&"cafe_table": "cafe_table",
 	&"baggage_belt": "baggage_belt",

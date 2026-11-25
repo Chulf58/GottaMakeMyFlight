@@ -7954,3 +7954,126 @@ msgstr ""
 #: ui/staff_panel.gd
 msgid "Fixed speed"
 msgstr ""
+
+#: airside/gate_links_view.gd
+msgctxt "gate caption"
+msgid "Bus bay"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "No room for a 16 x 6 m bus bay outside this exit"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Place a remote stand on open apron ground outside the terminal"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Too close to another stand or bus bay"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Needs clear apron space for aircraft and taxiway access"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "A flight is still due at this remote stand. Remove it after the flight leaves"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "No bus bay room"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Place on open apron"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Stand too close"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Not enough apron room"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "bus gate desk"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "remote stand"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Bus gate"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Remote stand"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Bus gate desk"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Remote stand"
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Makes a bus gate. It links to an exit facing the apron with a 16 x 6 m bus bay outside."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Passengers board shuttle buses here to reach remote stands on the apron."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Within 4 cells of a free exit with clear 16 x 6 m apron room outside. Staffed by a Gate Agent."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "An apron parking stand with no jet bridge. Serves small, medium or large planes that fit."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Assigned IDs starting at R1 with automatic taxiway paving north to the taxi lane."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Place on an owned apron spot with clear room for aircraft and taxiway access. Requires a Bus gate desk to board."
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "refusal detail"
+msgid "stand {gate}, a small plane"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "refusal detail"
+msgid "stand {gate}, a medium plane"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "refusal detail"
+msgid "stand {gate}, a large plane"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Bus gate: 16 x 6 m apron bay"
+msgstr ""

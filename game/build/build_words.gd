@@ -197,13 +197,26 @@ class Words:
 	## `english` is the detail as it came, for a class this list does not know.
 	func gate_plane(gate: String, plane: String, english: String) -> String:
 		var text := ""
+		var remote := gate.begins_with(RemoteStands.ID_PREFIX)
 		match plane:
 			PlaneClasses.SMALL:
-				text = tr("gate {gate}, a small plane", "refusal detail")
+				text = (
+					tr("stand {gate}, a small plane", "refusal detail")
+					if remote
+					else tr("gate {gate}, a small plane", "refusal detail")
+				)
 			PlaneClasses.MEDIUM:
-				text = tr("gate {gate}, a medium plane", "refusal detail")
+				text = (
+					tr("stand {gate}, a medium plane", "refusal detail")
+					if remote
+					else tr("gate {gate}, a medium plane", "refusal detail")
+				)
 			PlaneClasses.LARGE:
-				text = tr("gate {gate}, a large plane", "refusal detail")
+				text = (
+					tr("stand {gate}, a large plane", "refusal detail")
+					if remote
+					else tr("gate {gate}, a large plane", "refusal detail")
+				)
 			_:
 				return english
 		return text.format({"gate": gate})
@@ -402,6 +415,14 @@ class Words:
 				"The side taxiway would have to move and leave a booked flight with no way to its gate",
 				"build refusal"
 			),
+			tr("No room for a 16 x 6 m bus bay outside this exit", "build refusal"),
+			tr("Place a remote stand on open apron ground outside the terminal", "build refusal"),
+			tr("Too close to another stand or bus bay", "build refusal"),
+			tr("Needs clear apron space for aircraft and taxiway access", "build refusal"),
+			tr(
+				"A flight is still due at this remote stand. Remove it after the flight leaves",
+				"build refusal"
+			),
 			# GhostReason.SHORT_TEXT
 			tr("Outside the building", "ghost reason"),
 			tr("Overlaps an object", "ghost reason"),
@@ -441,6 +462,10 @@ class Words:
 			tr("Way to the lane blocked", "ghost reason"),
 			tr("A booked plane needs it", "ghost reason"),
 			tr("Strands a booked flight", "ghost reason"),
+			tr("No bus bay room", "ghost reason"),
+			tr("Place on open apron", "ghost reason"),
+			tr("Stand too close", "ghost reason"),
+			tr("Not enough apron room", "ghost reason"),
 			# BuildMode status constants
 			tr("Drag to lay a belt", "build status"),
 			tr("Not part of a lane", "build status"),
@@ -454,6 +479,9 @@ class Words:
 			tr("gate {gate}, a small plane", "refusal detail"),
 			tr("gate {gate}, a medium plane", "refusal detail"),
 			tr("gate {gate}, a large plane", "refusal detail"),
+			tr("stand {gate}, a small plane", "refusal detail"),
+			tr("stand {gate}, a medium plane", "refusal detail"),
+			tr("stand {gate}, a large plane", "refusal detail"),
 			tr("No award trophies available", "refusal detail"),
 			# Status lines of the belt, facing, area drag and room tools
 			tr_n("Belt {count} cell", "Belt {count} cells", 1, "build status"),
@@ -481,6 +509,7 @@ class Words:
 			tr("belt merge", "item name, mid-sentence"),
 			tr("bench", "item name, mid-sentence"),
 			tr("bin", "item name, mid-sentence"),
+			tr("bus gate desk", "item name, mid-sentence"),
 			tr("bush", "item name, mid-sentence"),
 			tr("cafe counter", "item name, mid-sentence"),
 			tr("cafe table", "item name, mid-sentence"),
@@ -514,6 +543,7 @@ class Words:
 			tr("play slide", "item name, mid-sentence"),
 			tr("post", "item name, mid-sentence"),
 			tr("prize podium", "item name, mid-sentence"),
+			tr("remote stand", "item name, mid-sentence"),
 			tr("restaurant booth", "item name, mid-sentence"),
 			tr("restaurant table", "item name, mid-sentence"),
 			tr("screen", "item name, mid-sentence"),

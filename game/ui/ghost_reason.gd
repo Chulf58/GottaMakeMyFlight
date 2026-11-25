@@ -69,6 +69,11 @@ const SHORT_TEXT := {
 	BuildResult.Reason.GATE_ROUTE_BLOCKED: "Way to the lane blocked",
 	BuildResult.Reason.GATE_ROUTE: "A booked plane needs it",
 	BuildResult.Reason.SPUR_STRANDS: "Strands a booked flight",
+	BuildResult.Reason.BUS_BAY_BLOCKED: "No bus bay room",
+	BuildResult.Reason.REMOTE_STAND_NEEDS_APRON: "Place on open apron",
+	BuildResult.Reason.REMOTE_STAND_OVERLAP: "Stand too close",
+	BuildResult.Reason.REMOTE_STAND_NO_ROOM: "Not enough apron room",
+	BuildResult.Reason.REMOTE_STAND_IN_USE: "A flight is due here",
 }
 
 var build_mode: BuildMode

@@ -95,6 +95,9 @@ func test_every_catalog_id_has_a_loadable_piece() -> void:
 	var ids := BuildCatalog.ids()
 	assert_int(ids.size()).is_greater(0)
 	for id in ids:
+		var def := BuildCatalog.get_def(id)
+		if def != null and def.unfloored:
+			continue
 		var piece := InteriorKit.object_piece(id)
 		assert_str(piece).override_failure_message("no piece for %s" % id).is_not_empty()
 		var path := InteriorKit.piece_path(piece)

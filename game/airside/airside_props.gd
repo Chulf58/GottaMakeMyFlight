@@ -58,10 +58,10 @@ const DEFAULT_SIGN_SCALE := 2.5
 		for sign in signs:
 			sign.scale = Vector3.ONE * value
 
-## Gate letter -> {"node": the bridge, "joints", "root", "stand", "docked",
-## "folded" (drawn folded), "model" (the reported plane's model, "" for
-## none), "pose" (the JetBridgePose pose applied last)}.
+## Gate letter -> {"node": the bridge, ...}
 var bridges: Dictionary = {}
+## Bus gate letter -> MeshInstance3D ground bay marking.
+var bus_bay_nodes: Dictionary = {}
 ## The turn-off signs, in turn_offs() order.
 var signs: Array[Node3D] = []
 ## The turn-offs the signs stand at (turn_offs()).
@@ -98,6 +98,25 @@ func show_layout(stands: Dictionary, routes: Array[PackedVector3Array]) -> void:
 	if routes != _routes:
 		_routes = routes.duplicate()
 		_show_signs(turn_offs(routes, runway_north(), Airside.runway_south()))
+
+
+## Shows a ground bus-bay marking for each bus gate in `bays` (gate -> Rect2).
+func show_bus_bays(bays: Dictionary) -> void:
+	for gate: String in bus_bay_nodes.keys():
+		if not bays.has(gate):
+			(bus_bay_nodes[gate]["node"] as Node3D).queue_free()
+			bus_bay_nodes.erase(gate)
+	for gate: String in bays:
+		var bay: Rect2 = bays[gate]
+		if bus_bay_nodes.has(gate) and bus_bay_nodes[gate]["rect"] == bay:
+			continue
+		if bus_bay_nodes.has(gate):
+			(bus_bay_nodes[gate]["node"] as Node3D).queue_free()
+			bus_bay_nodes.erase(gate)
+		var mesh := BusBays.make_marking_mesh(bay)
+		mesh.name = "BusBay_%s" % gate
+		add_child(mesh)
+		bus_bay_nodes[gate] = {"node": mesh, "rect": bay}
 
 
 ## Docks gate `gate`'s bridge at the door of plane `model` (a PlaneModels
