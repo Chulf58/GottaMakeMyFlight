@@ -48,6 +48,7 @@ const KIND_OF_DEF := {
 	SecurityLanes.SEARCH_TABLE: Kind.SEARCH_TABLE,
 	SecurityLanes.CONFISCATION_BIN: Kind.CONFISCATION_BIN,
 	GateDesks.DESK: Kind.GATE_DESK,
+	GateDesks.BUS_DESK: Kind.GATE_DESK,
 }
 const FIELDS: Array[String] = [
 	"where",
@@ -474,6 +475,8 @@ func _gate_planes(desk: int) -> String:
 		return ""
 	for binding in gates.bindings:
 		if binding["desk"] == desk:
+			if GateDesks.is_bus_binding(binding):
+				return tr("Bus gate: 16 x 6 m apron bay")
 			var plane_class := gates.max_class(binding["gate"])
 			if gates.waits_on_spur(binding["gate"]):
 				return GateDesks.waiting_text()

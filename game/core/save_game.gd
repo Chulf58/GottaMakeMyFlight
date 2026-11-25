@@ -152,7 +152,9 @@ signal loaded(ok: bool)
 ## are refused (no migration).
 ## 41: In-panel staff training L1-L3 (StaffSim v10); version 40 saves are
 ## refused (no migration).
-const SAVE_VERSION := 41
+## 42: Remote stands & bus gates (GateDesks v3, FlightSim v14); version 41
+## saves are refused (no migration).
+const SAVE_VERSION := 42
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"
@@ -975,6 +977,7 @@ func _stage_gates(data: Dictionary, staged: Dictionary) -> String:
 		return str(loaded["error"])
 	staged["gates"] = loaded["gates"]
 	staged["spurs"] = loaded["spurs"]
+	staged["remote_stands"] = loaded["remote_stands"]
 	return ""
 
 
@@ -1033,21 +1036,67 @@ func _staged_flight_sim(staged: Dictionary) -> FlightSim:
 		return sim
 	var grid: BuildGrid = staged["grid"]
 	var bindings: Array[Dictionary] = staged["gates"]
-	var letters := _letters(bindings)
-	# The saved spurs, each side's wanted x from the staged grid (SideSpurs.wanted()).
-	var wanted := SideSpurs.wanted(grid, bindings.map(func(b: Dictionary) -> int: return b["exit"]))
+	var letters := _regular_letters(bindings)
+	var bus_letters := _bus_letters(bindings)
+	var reg_exits: Array = []
+	for binding in bindings:
+		if not GateDesks.is_bus_binding(binding):
+			reg_exits.append(binding["exit"])
+	var wanted := SideSpurs.wanted(grid, reg_exits)
 	var grounds := GateDesks.grounds_on(grid, bindings, staged["spurs"], wanted)
 	var spurs := SideSpurs.spurs_at(staged["spurs"], wanted)
+	var rem_grounds := _staged_remote_grounds(staged)
+	var rem_ids: Array[String] = []
+	for sid: String in rem_grounds:
+		rem_ids.append(sid)
+	rem_ids.sort()
 	sim.gate_source = func() -> Array[String]: return letters
 	sim.stand_source = func() -> Dictionary: return grounds
+	sim.bus_gate_source = func() -> Array[String]: return bus_letters
+	sim.remote_stand_source = func() -> Array[String]: return rem_ids
+	sim.remote_ground_source = func() -> Dictionary: return rem_grounds
 	sim.spur_source = func() -> Dictionary: return spurs
 	return sim
+
+
+func _staged_remote_grounds(staged: Dictionary) -> Dictionary:
+	var out := {}
+	var grid: BuildGrid = staged["grid"]
+	var site := GateDesks.site_of(grid)
+	var by_obj: Dictionary = staged.get("remote_stands", {})
+	for obj_id: int in by_obj:
+		var sid := String(by_obj[obj_id])
+		var anchor: Vector2i = grid.get_object(obj_id)["anchor"]
+		var stand := RemoteStands.stand_for_cell(grid, anchor)
+		out[sid] = {
+			"id": sid,
+			"object_id": obj_id,
+			"stand": stand,
+			"max_class": RemoteStands.max_class(grid, site, stand, obj_id),
+		}
+	return out
 
 
 static func _letters(bindings: Array[Dictionary]) -> Array[String]:
 	var out: Array[String] = []
 	for binding in bindings:
 		out.append(binding["gate"])
+	return out
+
+
+static func _regular_letters(bindings: Array[Dictionary]) -> Array[String]:
+	var out: Array[String] = []
+	for binding in bindings:
+		if not GateDesks.is_bus_binding(binding):
+			out.append(binding["gate"])
+	return out
+
+
+static func _bus_letters(bindings: Array[Dictionary]) -> Array[String]:
+	var out: Array[String] = []
+	for binding in bindings:
+		if GateDesks.is_bus_binding(binding):
+			out.append(binding["gate"])
 	return out
 
 
@@ -1149,9 +1198,11 @@ func _stage_gate_exits(sim: PassengerSim, staged: Dictionary) -> void:
 	var stands: Dictionary = staged["apron"]["stands"]
 	var bindings: Array[Dictionary] = staged["gates"]
 	for binding in bindings:
+		sim.layout.gate_desk_ids[binding["gate"]] = binding["desk"]
+		if GateDesks.is_bus_binding(binding):
+			continue
 		sim.layout.exit_stands[binding["exit"]] = stands[binding["gate"]]
 		sim.layout.exit_gates[binding["exit"]] = binding["gate"]
-		sim.layout.gate_desk_ids[binding["gate"]] = binding["desk"]
 	sim.layout.by_gate = true
 	var staged_flights := _staged_flight_sim(staged)
 	staged_flights.from_snapshot(staged["flights_data"])

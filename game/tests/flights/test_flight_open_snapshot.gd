@@ -52,8 +52,8 @@ func _saved(world: Array) -> Dictionary:
 	return JSON.parse_string(text)
 
 
-func test_version_is_13_with_the_opening_tick_start_days_and_ended() -> void:
-	assert_int(FlightSim.SAVE_VERSION).is_equal(13)
+func test_version_is_14_with_the_opening_tick_start_days_and_ended() -> void:
+	assert_int(FlightSim.SAVE_VERSION).is_equal(14)
 	var data: Dictionary = _saved(_opened_world(OPENED + 100))["flights"]
 	assert_int(int(data["save_version"])).is_equal(FlightSim.SAVE_VERSION)
 	assert_int(int(data["opened_tick"])).is_equal(OPENED)

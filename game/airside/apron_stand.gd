@@ -254,6 +254,8 @@ func refresh() -> void:
 func _refresh_gates() -> void:
 	var next := {}
 	for binding in gates.bindings:
+		if GateDesks.is_bus_binding(binding):
+			continue
 		var stand := SideSpurs.stand_for_exit(grid, binding["exit"], gates.spur_x)
 		next[binding["gate"]] = {
 			"live": stand,
@@ -264,13 +266,19 @@ func _refresh_gates() -> void:
 		desks[binding["gate"]] = binding["desk"]
 	var moved := _stands_of(next) != _stands_of(gate_stands) or desks != _desks_sent
 	gate_stands = next
-	# Each gate's pad follows its max_class, which building can change without
-	# moving any stand.
 	if airside != null:
 		var classes := {}
 		for gate: String in next:
 			classes[gate] = next[gate]["placement"]["max_class"]
 		airside.set_gate_classes(classes)
+		var rem_stands := {}
+		var rem_classes := {}
+		for sid: String in gates.remote_stands:
+			var entry: Dictionary = gates.remote_stands[sid]
+			rem_stands[sid] = entry["stand"]
+			rem_classes[sid] = entry["max_class"]
+		airside.set_remote_stands(rem_stands, rem_classes)
+		airside.set_bus_bays(BusBays.bays_for(grid, gates.bindings))
 	if moved:
 		_apply_live()
 
@@ -306,7 +314,7 @@ static func _stands_of(entries: Dictionary) -> Dictionary:
 func busy_flights(gate := "") -> Array[String]:
 	var out: Array[String] = []
 	for id in flights.flight_ids():
-		if gate != "" and flights.flight_gate(id) != gate:
+		if gate != "" and flights.flight_gate(id) != gate and flights.flight_stand_id(id) != gate:
 			continue
 		var state := flights.state_of(id)
 		if state >= FlightSim.State.TAXI_IN and state < FlightSim.State.TAKEOFF:
@@ -368,6 +376,10 @@ func guard_rects() -> Array[Rect2]:
 		var stand: Dictionary = gate_stands[gate]["live"]
 		for id in busy_flights(gate):
 			out.append_array(_rects_of(id, stand, gate))
+	for sid: String in gates.remote_stands:
+		var stand: Dictionary = gates.remote_stands[sid]["stand"]
+		for id in busy_flights(sid):
+			out.append_array(_rects_of(id, stand, sid))
 	out.append_array(spur_rects())
 	return out
 
@@ -646,11 +658,14 @@ func _tick_key() -> Array:
 		live.get("lane_x"),
 	]
 	if gates != null:
-		key = [flights.tick, _stands_of(gate_stands)]
+		var rem_ids := gates.remote_stand_ids()
+		key = [flights.tick, _stands_of(gate_stands), rem_ids]
 		for gate: String in gate_stands:
 			# A flight issued while the clock is paused adds a spur band
 			# (spur_rects()) at the same tick.
 			key.append_array([busy_flights(gate), _flies_before_takeoff(gate)])
+		for sid in rem_ids:
+			key.append_array([gates.remote_stands[sid]["stand"], busy_flights(sid)])
 	return key
 
 
@@ -792,9 +807,13 @@ static func _checked_stand(saved: Variant, on_site: SiteDefinition) -> Dictionar
 static func stands_problem(
 	stands: Dictionary, bindings: Array[Dictionary], on_grid: BuildGrid, lanes := {}
 ) -> String:
-	if stands.size() != bindings.size():
-		return "there are %d gates but %d stands" % [bindings.size(), stands.size()]
+	var regular: Array[Dictionary] = []
 	for binding in bindings:
+		if not GateDesks.is_bus_binding(binding):
+			regular.append(binding)
+	if stands.size() != regular.size():
+		return "there are %d gates but %d stands" % [regular.size(), stands.size()]
+	for binding in regular:
 		var saved: Dictionary = stands.get(binding["gate"], {})
 		if not same_stand(saved, SideSpurs.stand_for_exit(on_grid, binding["exit"], lanes)):
 			return "gate %s's stand is not the one out from its exit" % binding["gate"]

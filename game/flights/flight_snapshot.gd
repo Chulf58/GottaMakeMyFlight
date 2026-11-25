@@ -113,6 +113,7 @@ static func _entries(flights: Array[Dictionary]) -> Array:
 		var entry := {}
 		for key in FLIGHT_KEYS:
 			entry[key] = flight[key]
+		entry["stand_id"] = String(flight.get("stand_id", flight["gate"]))
 		entry["starts"] = (flight["starts"] as Array).duplicate()
 		entry["stand"] = (flight["stand"] as Dictionary).duplicate()
 		out.append(entry)
@@ -444,11 +445,14 @@ static func _flight_problem(entry: Variant, seen: Dictionary, gates: Array[Strin
 	if typeof(entry) != TYPE_DICTIONARY:
 		return "each flight must be a dictionary"
 	for key in entry.keys():
-		if not FLIGHT_KEYS.has(key):
+		if not FLIGHT_KEYS.has(key) and key != "stand_id":
 			return "unknown flight key '%s'" % key
 	for key in FLIGHT_KEYS:
 		if not entry.has(key):
 			return "a flight is missing '%s'" % key
+	if entry.has("stand_id"):
+		if typeof(entry["stand_id"]) != TYPE_STRING or entry["stand_id"] == "":
+			return "flight %s stand_id must be a non-empty string" % entry["id"]
 	if typeof(entry["id"]) != TYPE_STRING or entry["id"] == "" or seen.has(entry["id"]):
 		return "flight ids must be unique, non-empty strings"
 	seen[entry["id"]] = true
@@ -582,6 +586,7 @@ static func _record(entry: Dictionary, starts: Array[int]) -> Dictionary:
 		"starts": starts,
 		"state": int(entry["state"]),
 		"gate": entry["gate"],
+		"stand_id": String(entry.get("stand_id", entry["gate"])),
 		"contract": entry["contract"],
 		"day": int(entry["day"]),
 		"stand": _stand_of(entry),

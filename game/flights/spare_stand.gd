@@ -26,9 +26,16 @@ extends RefCounted
 ## (north, west, east). An optional precomputed blocked-cell data dictionary from
 ## build_prefix() may be passed to reuse across plane classes on the same grid.
 static func find(
-	grid: BuildGrid, stands: Array[Dictionary], plane_class: String, grid_cache := {}
+	grid: BuildGrid,
+	stands: Array[Dictionary],
+	plane_class: String,
+	grid_cache := {},
+	extra_swings: Array[Rect2] = [],
+	bus_bays: Array[Rect2] = [],
+	used_letters := -1
 ) -> Dictionary:
-	if stands.size() >= GateDesks.LETTERS.length():
+	var letter_count := stands.size() if used_letters < 0 else used_letters
+	if letter_count >= GateDesks.LETTERS.length():
 		return {}
 	var site := GateDesks.site_of(grid)
 	var land: LandPlots = (grid as SiteGrid).land if grid is SiteGrid else null
@@ -107,10 +114,13 @@ static func find(
 				):
 					continue
 				var stand := StandPlacement.for_cell(grid, cell, 0, side)
-				if _overlaps_any(stand, stands):
+				if (
+					_overlaps_any(stand, stands)
+					or _rects_overlap(GateDesks.private_rects(stand), extra_swings)
+				):
 					continue
 				var parts := StandEnvelope.rects(stand, plane_class)
-				if StandPlacement.reaches_road(grid, parts):
+				if StandPlacement.reaches_road(grid, parts) or _rects_overlap(parts, bus_bays):
 					continue
 				var clear := true
 				for rect in parts:
@@ -205,4 +215,15 @@ static func _overlaps_any(stand: Dictionary, stands: Array[Dictionary]) -> bool:
 	for other in stands:
 		if GateDesks.stands_overlap(stand, other):
 			return true
+	return false
+
+
+static func _rects_overlap(rects: Array[Rect2], others: Array[Rect2]) -> bool:
+	if others.is_empty():
+		return false
+	for rect in rects:
+		var shrunk := rect.grow(-0.01)
+		for other in others:
+			if shrunk.intersects(other):
+				return true
 	return false

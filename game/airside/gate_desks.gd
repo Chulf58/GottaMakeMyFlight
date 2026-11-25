@@ -79,15 +79,14 @@ const REFUSAL_OF := {
 }
 
 const DESK := &"gate_desk"
+const BUS_DESK := &"bus_gate_desk"
 ## How far (in cells, either way, diagonals counting one) a desk's footprint may
 ## be from the exit it links to.
 const LINK_CELLS := 4
 const LETTERS := "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-## 2: "spurs", each side's spur x now (decision side-spur-move-design-s7-stands-
-## carry-lane-x-the-wanted-spur, slice S7b), so a save taken while a spur waits
-## to move loads waiting. A version 1 save is refused; there is no migration.
-const SAVE_VERSION := 2
-const SAVE_KEYS := ["save_version", "gates", "spurs"]
+## 3: "remote_stands" alongside "gates" and "spurs".
+const SAVE_VERSION := 3
+const SAVE_KEYS := ["save_version", "gates", "spurs", "remote_stands"]
 ## A gate whose stand can take no plane until its side's pending spur moves
 ## (waits_on_spur()) says so on its card and sign (user ruling airside-
 ## construction-works-are-a-visible-stage-props-mark-th, point 4).
@@ -128,6 +127,8 @@ var classes: Dictionary = {}
 ## Gate letter -> its stand (SideSpurs.stand_for_exit) on its side's spur now,
 ## worked out on every refresh() with classes.
 var stands: Dictionary = {}
+## Remote stand ID ("R1", ...) -> {"id", "object_id", "stand", "max_class"}.
+var remote_stands: Dictionary = {}
 ## Side -> the x its spur runs at now, saved; it takes spur_wanted's only when
 ## FlightSim releases the side (release_spur()).
 var spur_x: Dictionary = SideSpurs.floor_lanes()
@@ -136,6 +137,7 @@ var spur_x: Dictionary = SideSpurs.floor_lanes()
 var spur_wanted: Dictionary = SideSpurs.floor_lanes()
 ## gate_grounds() as the last refresh() found them, with "next" on a pending side.
 var _grounds: Dictionary = {}
+var _remote_by_obj: Dictionary = {}
 ## "x|wall_z|side|lane_x|class|grid size" -> the envelope's cells, which only
 ## the stand decides.
 var _envelope_cells: Dictionary = {}
@@ -147,6 +149,7 @@ var _spare_land := ""
 var _last_route_ver := -1
 var _last_enclosure_ver := -1
 var _last_desk_ids: Array[int] = []
+var _last_remote_ids: Array[int] = []
 
 
 func _ready() -> void:
@@ -162,6 +165,9 @@ func bind(on_grid: BuildGrid, on_flights: FlightSim) -> void:
 	flights = on_flights
 	flights.gate_source = gate_ids
 	flights.stand_source = gate_grounds
+	flights.bus_gate_source = bus_gate_ids
+	flights.remote_stand_source = remote_stand_ids
+	flights.remote_ground_source = remote_stand_grounds
 	flights.spare_stand_source = spare_stand
 	flights.spur_source = spurs
 	flights.spur_release = release_spur
@@ -176,11 +182,36 @@ static func waiting_text() -> String:
 	return TranslationServer.translate("Waiting for taxiway works")
 
 
+static func is_bus_binding(binding: Dictionary) -> bool:
+	return bool(binding.get("is_bus_gate", false))
+
+
 func gate_ids() -> Array[String]:
 	var out: Array[String] = []
 	for binding in bindings:
-		out.append(binding["gate"])
+		if not is_bus_binding(binding):
+			out.append(binding["gate"])
 	return out
+
+
+func bus_gate_ids() -> Array[String]:
+	var out: Array[String] = []
+	for binding in bindings:
+		if is_bus_binding(binding):
+			out.append(binding["gate"])
+	return out
+
+
+func remote_stand_ids() -> Array[String]:
+	var out: Array[String] = []
+	for sid: String in remote_stands:
+		out.append(sid)
+	out.sort()
+	return out
+
+
+func remote_stand_grounds() -> Dictionary:
+	return remote_stands.duplicate(true)
 
 
 ## The binding of gate `gate`, or {}.
@@ -198,6 +229,7 @@ func refresh() -> void:
 		_last_route_ver = grid.route_version()
 		_last_enclosure_ver = grid.enclosure_version()
 		_last_desk_ids = desk_ids(grid)
+		_last_remote_ids = RemoteStands.object_ids(grid)
 	var links := links_on(grid, bindings)
 	for link in links:
 		if link["gate"] == "":
@@ -207,7 +239,7 @@ func refresh() -> void:
 					"GateDesks: every gate letter is in use; desk %d is no gate" % link["desk"]
 				)
 	bindings.assign(links.filter(func(link: Dictionary) -> bool: return link["gate"] != ""))
-	spur_wanted = SideSpurs.wanted(grid, _exits_of(bindings))
+	spur_wanted = SideSpurs.wanted(grid, _regular_exits(bindings))
 	_grounds = grounds_on(grid, bindings, spur_x, spur_wanted)
 	classes = {}
 	stands = {}
@@ -216,7 +248,42 @@ func refresh() -> void:
 	for gate: String in _grounds:
 		stands[gate] = _grounds[gate]["stand"]
 		classes[gate] = _grounds[gate]["max_class"]
+	_refresh_remote_stands()
 	changed.emit()
+
+
+func _refresh_remote_stands() -> void:
+	remote_stands = {}
+	if grid == null:
+		_remote_by_obj = {}
+		return
+	var site := site_of(grid)
+	var land: LandPlots = (grid as SiteGrid).land if grid is SiteGrid else null
+	var assigned := RemoteStands.assign_ids(grid, _remote_by_obj, _used_remote_flight_ids())
+	var next_by_obj := {}
+	for obj_id: int in assigned:
+		var sid: String = assigned[obj_id]
+		var anchor: Vector2i = grid.get_object(obj_id)["anchor"]
+		var stand := RemoteStands.stand_for_cell(grid, anchor)
+		var cls := RemoteStands.max_class(grid, site, stand, obj_id)
+		next_by_obj[obj_id] = {"id": sid, "object_id": obj_id}
+		remote_stands[sid] = {"id": sid, "object_id": obj_id, "stand": stand, "max_class": cls}
+	_remote_by_obj = next_by_obj
+
+
+func _used_remote_flight_ids() -> Array[String]:
+	var out: Array[String] = []
+	if flights == null:
+		return out
+	for cid in flights.active_contract_ids():
+		var sid := String(flights.contract_of(cid).get("stand", ""))
+		if sid.begins_with(RemoteStands.ID_PREFIX) and not out.has(sid):
+			out.append(sid)
+	for fid in flights.flight_ids():
+		var sid := flights.flight_stand_id(fid)
+		if sid.begins_with(RemoteStands.ID_PREFIX) and not out.has(sid):
+			out.append(sid)
+	return out
 
 
 ## Gate letter -> {"stand", "max_class"} for every gate (FlightSim.stand_source),
@@ -263,6 +330,8 @@ static func grounds_on(
 	var site := site_of(on_grid)
 	var out := {}
 	for binding in on_bindings:
+		if is_bus_binding(binding):
+			continue
 		var stand := SideSpurs.stand_for_exit(on_grid, binding["exit"], lanes)
 		var ground := {"stand": stand, "max_class": StandEnvelope.max_class(on_grid, site, stand)}
 		var side := StandPlacement.side_of(stand)
@@ -282,9 +351,19 @@ static func _exits_of(on_bindings: Array[Dictionary]) -> Array:
 	return on_bindings.map(func(binding: Dictionary) -> int: return binding["exit"])
 
 
+static func _regular_exits(on_bindings: Array[Dictionary]) -> Array:
+	var out: Array = []
+	for binding in on_bindings:
+		if not is_bus_binding(binding):
+			out.append(binding["exit"])
+	return out
+
+
 ## The stand of `plane_class` one more gate could have on the grid as it is, or
 ## {} (FlightSim.spare_stand_source; SpareStand has the rules).
 func spare_stand(plane_class: String) -> Dictionary:
+	if bindings.size() >= LETTERS.length():
+		return {}
 	var land: LandPlots = (grid as SiteGrid).land if grid is SiteGrid else null
 	var owned := str(land.owned_plots()) if land != null else ""
 	if owned != _spare_land:
@@ -296,7 +375,15 @@ func spare_stand(plane_class: String) -> Dictionary:
 			_spare_prefix = SpareStand.build_prefix(grid, site_of(grid))
 		var taken: Array[Dictionary] = []
 		taken.assign(stands.values())
-		_spare_stands[plane_class] = SpareStand.find(grid, taken, plane_class, _spare_prefix)
+		_spare_stands[plane_class] = SpareStand.find(
+			grid,
+			taken,
+			plane_class,
+			_spare_prefix,
+			RemoteStands.all_small_swings(grid),
+			BusBays.bay_rects_for(grid, bindings),
+			bindings.size()
+		)
 	return _spare_stands[plane_class]
 
 
@@ -315,10 +402,10 @@ func booked_class(gate: String) -> String:
 		return out
 	for contract_id in flights.active_contract_ids():
 		var contract := flights.contract_of(contract_id)
-		if contract["gate"] == gate:
+		if contract["gate"] == gate or String(contract.get("stand", "")) == gate:
 			out = StandEnvelope.larger(out, contract["plane_size"])
 	for flight_id in flights.flight_ids():
-		if flights.flight_gate(flight_id) != gate:
+		if flights.flight_gate(flight_id) != gate and flights.flight_stand_id(flight_id) != gate:
 			continue
 		if flights.state_of(flight_id) >= FlightSim.State.TAKEOFF:
 			continue
@@ -344,22 +431,52 @@ static func links_on(on_grid: BuildGrid, kept: Array[Dictionary]) -> Array[Dicti
 	var taken := {}
 	var linked := {}
 	var stands: Array[Dictionary] = []
+	var bays: Array[Rect2] = []
 	for binding in kept:
 		if is_desk(on_grid, binding["desk"]) and _is_gate_exit(on_grid, binding["exit"]):
-			links.append(binding.duplicate())
+			var copy := binding.duplicate()
+			if is_bus_desk(on_grid, binding["desk"]):
+				copy["is_bus_gate"] = true
+			links.append(copy)
 			taken[binding["exit"]] = true
 			linked[binding["desk"]] = true
-			stands.append(SideSpurs.link_stand(on_grid, binding["exit"]))
+			if is_bus_binding(copy):
+				var bay := BusBays.bay_rect(StandPlacement.for_exit(on_grid, binding["exit"]))
+				if bay.has_area():
+					bays.append(bay)
+			else:
+				stands.append(SideSpurs.link_stand(on_grid, binding["exit"]))
 	for desk in desk_ids(on_grid):
 		if linked.has(desk):
 			continue
-		var exit := nearest_exit(on_grid, desk_footprint(on_grid, desk), taken, stands)
+		if is_bus_desk(on_grid, desk):
+			var blocked := _blocked_envelopes(on_grid, stands)
+			var bexit := BusBays.nearest_bus_exit(
+				on_grid, desk_footprint(on_grid, desk), taken, bays, blocked
+			)
+			if bexit != 0:
+				links.append({"gate": "", "desk": desk, "exit": bexit, "is_bus_gate": true})
+				taken[bexit] = true
+				var bay := BusBays.bay_rect(StandPlacement.for_exit(on_grid, bexit))
+				if bay.has_area():
+					bays.append(bay)
+			continue
+		var exit := nearest_exit(on_grid, desk_footprint(on_grid, desk), taken, stands, true, bays)
 		if exit != 0:
 			links.append({"gate": "", "desk": desk, "exit": exit})
 			taken[exit] = true
 			stands.append(SideSpurs.link_stand(on_grid, exit))
 	links.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["desk"] < b["desk"])
 	return links
+
+
+static func _blocked_envelopes(on_grid: BuildGrid, stands: Array[Dictionary]) -> Array[Rect2]:
+	var out: Array[Rect2] = []
+	for stand in at_common_lanes(on_grid, stands):
+		out.append_array(StandEnvelope.rects(stand, PlaneClasses.SMALL))
+	for swing in RemoteStands.all_small_swings(on_grid):
+		out.append(swing)
+	return out
 
 
 ## The gate desks the bindings give no gate, and why (decision gates-1b-as-
@@ -397,12 +514,15 @@ static func _unlinked_reason(
 	var reach := exits_in_reach(on_grid, desk_footprint(on_grid, desk))
 	if reach.is_empty():
 		return {"why": Unlinked.NO_EXIT, "gate": ""}
+	if is_bus_desk(on_grid, desk):
+		return _unlinked_bus_reason(on_grid, reach, gate_of_exit, links)
 	# Every free exit in nearest_exit()'s order: one fit for a gate would link,
 	# so only a missing letter can stop it; otherwise the nearest free exit's
 	# unfitness is the reason (an overlap named for the gate it meets).
 	var stands: Array[Dictionary] = []
 	for link in links:
-		stands.append(SideSpurs.link_stand(on_grid, link["exit"]))
+		if not is_bus_binding(link):
+			stands.append(SideSpurs.link_stand(on_grid, link["exit"]))
 	var first := {}
 	for exit in reach:
 		if gate_of_exit.has(exit):
@@ -417,6 +537,29 @@ static func _unlinked_reason(
 			first = {"why": why, "gate": gate}
 	if not first.is_empty():
 		return first
+	return {"why": Unlinked.EXIT_TAKEN, "gate": gate_of_exit[reach[0]]}
+
+
+static func _unlinked_bus_reason(
+	on_grid: BuildGrid, reach: Array[int], gate_of_exit: Dictionary, links: Array[Dictionary]
+) -> Dictionary:
+	var site := site_of(on_grid)
+	var bays := BusBays.bay_rects_for(on_grid, links)
+	var stands: Array[Dictionary] = []
+	for link in links:
+		if not is_bus_binding(link):
+			stands.append(SideSpurs.link_stand(on_grid, link["exit"]))
+	var blocked := _blocked_envelopes(on_grid, stands)
+	var saw_free := false
+	for exit in reach:
+		if gate_of_exit.has(exit):
+			continue
+		saw_free = true
+		var stand := StandPlacement.for_exit(on_grid, exit)
+		if BusBays.bay_clear(on_grid, site, stand, bays, blocked):
+			return {"why": Unlinked.NO_LETTER, "gate": ""}
+	if saw_free:
+		return {"why": Unlinked.NO_ROOM, "gate": ""}
 	return {"why": Unlinked.EXIT_TAKEN, "gate": gate_of_exit[reach[0]]}
 
 
@@ -515,7 +658,7 @@ static func exits_in_reach(on_grid: BuildGrid, footprint: Array[Vector2i]) -> Ar
 ## The cells gate desk `desk` stands on.
 static func desk_footprint(on_grid: BuildGrid, desk: int) -> Array[Vector2i]:
 	var record := on_grid.get_object(desk)
-	return BuildCatalog.get_def(DESK).footprint(record["anchor"], record["facing"])
+	return BuildCatalog.get_def(record["def"]).footprint(record["anchor"], record["facing"])
 
 
 ## How many cells (diagonals counting one) `footprint` is from exit `exit`'s
@@ -528,9 +671,17 @@ static func reach_cells(on_grid: BuildGrid, footprint: Array[Vector2i], exit: in
 	return cells
 
 
+static func is_bus_desk(on_grid: BuildGrid, id: int) -> bool:
+	var record := on_grid.get_object(id)
+	return not record.is_empty() and StringName(record["def"]) == BUS_DESK
+
+
 static func is_desk(on_grid: BuildGrid, id: int) -> bool:
 	var record := on_grid.get_object(id)
-	return not record.is_empty() and StringName(record["def"]) == DESK
+	if record.is_empty():
+		return false
+	var def_id := StringName(record["def"])
+	return def_id == DESK or def_id == BUS_DESK
 
 
 ## The gate desks on `on_grid`, in id order.
@@ -552,24 +703,52 @@ static func nearest_exit(
 	footprint: Array[Vector2i],
 	taken: Dictionary,
 	stands: Array[Dictionary] = [],
-	fit := true
+	fit := true,
+	bays: Array[Rect2] = []
 ) -> int:
 	var best := 0
 	var best_cells := LINK_CELLS + 1
 	var ids := on_grid.object_ids()
 	ids.sort()
+	var remote_swings := RemoteStands.all_small_swings(on_grid)
 	for id in ids:
 		if taken.has(id) or not _is_gate_exit(on_grid, id):
 			continue
 		var cells := reach_cells(on_grid, footprint, id)
 		if cells >= best_cells:
 			continue
-		if fit and exit_unfit(on_grid, id, stands) >= 0:
+		if (
+			fit
+			and (
+				exit_unfit(on_grid, id, stands) >= 0
+				or _exit_hits_rects(on_grid, id, bays, remote_swings)
+			)
+		):
 			continue
 		if cells < best_cells:
 			best = id
 			best_cells = cells
 	return best
+
+
+static func _exit_hits_rects(
+	on_grid: BuildGrid, exit: int, bays: Array[Rect2], remote_swings: Array[Rect2]
+) -> bool:
+	if bays.is_empty() and remote_swings.is_empty():
+		return false
+	var env := StandEnvelope.rects(SideSpurs.link_stand(on_grid, exit), PlaneClasses.SMALL)
+	for r in env:
+		var shrunk := r.grow(-0.01)
+		for bay in bays:
+			if shrunk.intersects(bay):
+				return true
+	var priv := private_rects(SideSpurs.link_stand(on_grid, exit))
+	for p in priv:
+		var shrunk := p.grow(-0.01)
+		for swing in remote_swings:
+			if shrunk.intersects(swing):
+				return true
+	return false
 
 
 ## Whether stands `a` and `b` would share any private ground: their small-plane
@@ -609,12 +788,19 @@ func edit_problem(on_grid: BuildGrid, edit: BuildEdit) -> BuildResult:
 	var moves := {}
 	if edit.kind == BuildEdit.Kind.REMOVE_OBJECT:
 		problem = _removal_problem(on_grid, edit.object_id)
+		if problem == null:
+			problem = _remote_removal_problem(edit.object_id)
 		if problem == null and flights != null:
 			moves = _removal_plan(on_grid, edit.object_id)["moves"]
 	elif not REMOVALS.has(edit.kind):
 		problem = _route_problem(on_grid, edit)
-		if problem == null and edit.kind == BuildEdit.Kind.PLACE_OBJECT and edit.def_id == DESK:
-			problem = _placement_problem(on_grid, edit)
+		if problem == null and edit.kind == BuildEdit.Kind.PLACE_OBJECT:
+			if edit.def_id == DESK:
+				problem = _placement_problem(on_grid, edit)
+			elif edit.def_id == BUS_DESK:
+				problem = _bus_placement_problem(on_grid, edit)
+			elif edit.def_id == RemoteStands.STAND_ID:
+				problem = _remote_placement_problem(on_grid, edit)
 	# Then the side spurs the edit would move, with a removal's moves carried out
 	# in the same trial (SpurTrial): SPUR_STRANDS.
 	return problem if problem != null else SpurTrial.problem(self, on_grid, edit, moves)
@@ -625,16 +811,23 @@ func _placement_problem(on_grid: BuildGrid, edit: BuildEdit) -> BuildResult:
 	var links := links_on(on_grid, bindings)
 	var taken := {}
 	var stands: Array[Dictionary] = []
+	var bays: Array[Rect2] = []
 	for link in links:
 		taken[link["exit"]] = true
-		stands.append(SideSpurs.link_stand(on_grid, link["exit"]))
+		if is_bus_binding(link):
+			var bay := BusBays.bay_rect(StandPlacement.for_exit(on_grid, link["exit"]))
+			if bay.has_area():
+				bays.append(bay)
+		else:
+			stands.append(SideSpurs.link_stand(on_grid, link["exit"]))
 	var reach := nearest_exit(on_grid, footprint, taken, stands, false)
 	if reach == 0:
 		return BuildResult.refused(BuildResult.Reason.GATE_NO_EXIT)
-	if nearest_exit(on_grid, footprint, taken, stands) != 0:
+	if nearest_exit(on_grid, footprint, taken, stands, true, bays) != 0:
 		return null
-	# No exit in reach is fit for a gate: the nearest one's reason, an overlap
-	# naming the gate it meets.
+	var remote_swings := RemoteStands.all_small_swings(on_grid)
+	if _exit_hits_rects(on_grid, reach, bays, remote_swings):
+		return BuildResult.refused(BuildResult.Reason.GATE_STAND_OVERLAP)
 	var why := exit_unfit(on_grid, reach, stands)
 	if why != Unlinked.STAND_OVERLAP:
 		return BuildResult.refused(REFUSAL_OF[why])
@@ -648,11 +841,67 @@ func _placement_problem(on_grid: BuildGrid, edit: BuildEdit) -> BuildResult:
 	return BuildResult.refused(BuildResult.Reason.GATE_STAND_OVERLAP)
 
 
-## A GATE_ROUTE refusal naming the gate and its booked class when `edit` builds
-## on a cell of the envelope of the largest class booked at any gate, else null.
+func _bus_placement_problem(on_grid: BuildGrid, edit: BuildEdit) -> BuildResult:
+	var footprint := BuildCatalog.get_def(BUS_DESK).footprint(edit.cell, edit.facing)
+	var links := links_on(on_grid, bindings)
+	var taken := {}
+	var stands: Array[Dictionary] = []
+	var bays: Array[Rect2] = []
+	for link in links:
+		taken[link["exit"]] = true
+		if is_bus_binding(link):
+			var bay := BusBays.bay_rect(StandPlacement.for_exit(on_grid, link["exit"]))
+			if bay.has_area():
+				bays.append(bay)
+		else:
+			stands.append(SideSpurs.link_stand(on_grid, link["exit"]))
+	var reach := nearest_exit(on_grid, footprint, taken, stands, false)
+	if reach == 0:
+		return BuildResult.refused(BuildResult.Reason.GATE_NO_EXIT)
+	var blocked := _blocked_envelopes(on_grid, stands)
+	if BusBays.nearest_bus_exit(on_grid, footprint, taken, bays, blocked) != 0:
+		return null
+	return BuildResult.refused(BuildResult.Reason.BUS_BAY_BLOCKED)
+
+
+func _remote_placement_problem(on_grid: BuildGrid, edit: BuildEdit) -> BuildResult:
+	var links := links_on(on_grid, bindings)
+	var swings := RemoteStands.all_small_swings(on_grid)
+	var bays: Array[Rect2] = []
+	var reg_stands: Array[Dictionary] = []
+	for link in links:
+		if is_bus_binding(link):
+			var bay := BusBays.bay_rect(StandPlacement.for_exit(on_grid, link["exit"]))
+			if bay.has_area():
+				bays.append(bay)
+		else:
+			reg_stands.append(SideSpurs.stand_for_exit(on_grid, link["exit"], spur_x))
+	for stand in reg_stands:
+		var swing := RemoteStands.small_swing_rect(stand)
+		if swing.has_area():
+			swings.append(swing)
+	for stand in at_common_lanes(on_grid, reg_stands):
+		var swing := RemoteStands.small_swing_rect(stand)
+		if swing.has_area():
+			swings.append(swing)
+	var land: LandPlots = (on_grid as SiteGrid).land if on_grid is SiteGrid else null
+	return RemoteStands.placement_problem(on_grid, site_of(on_grid), land, edit.cell, swings, bays)
+
+
+## A GATE_ROUTE / REMOTE_STAND_OVERLAP / BUS_BAY_BLOCKED refusal when `edit`
+## builds on an active stand envelope or bus bay, else null.
 func _route_problem(on_grid: BuildGrid, edit: BuildEdit) -> BuildResult:
 	var built := StandEnvelope.edit_cells(edit)
 	for binding in bindings:
+		if is_bus_binding(binding):
+			var exit_stand := StandPlacement.for_exit(on_grid, binding["exit"])
+			if BusBays.is_bay_sill_wall(on_grid, exit_stand, edit):
+				continue
+			var bay := BusBays.bay_rect(exit_stand)
+			var bay_cells := BusBays.bay_cells(on_grid, bay)
+			if built.any(func(cell: Vector2i) -> bool: return bay_cells.has(cell)):
+				return BuildResult.refused(BuildResult.Reason.BUS_BAY_BLOCKED)
+			continue
 		var booked := booked_class(binding["gate"])
 		if booked == "":
 			continue
@@ -662,6 +911,24 @@ func _route_problem(on_grid: BuildGrid, edit: BuildEdit) -> BuildResult:
 			refusal.detail = "gate %s, a %s plane" % [binding["gate"], booked]
 			refusal.detail_args = {"gate": binding["gate"], "plane": booked}
 			return refusal
+	return _remote_route_problem(on_grid, built)
+
+
+func _remote_route_problem(on_grid: BuildGrid, built: Array[Vector2i]) -> BuildResult:
+	for sid: String in remote_stands:
+		var entry: Dictionary = remote_stands[sid]
+		var stand: Dictionary = entry["stand"]
+		var booked := booked_class(sid)
+		if booked != "":
+			var b_cells := StandEnvelope.cells(on_grid, stand, booked)
+			if built.any(func(cell: Vector2i) -> bool: return b_cells.has(cell)):
+				var refusal := BuildResult.refused(BuildResult.Reason.GATE_ROUTE)
+				refusal.detail = "stand %s, a %s plane" % [sid, booked]
+				refusal.detail_args = {"gate": sid, "plane": booked}
+				return refusal
+		var s_cells := StandEnvelope.cells(on_grid, stand, PlaneClasses.SMALL)
+		if built.any(func(cell: Vector2i) -> bool: return s_cells.has(cell)):
+			return BuildResult.refused(BuildResult.Reason.REMOTE_STAND_OVERLAP, entry["object_id"])
 	return null
 
 
@@ -700,6 +967,8 @@ func edit_warning(on_grid: BuildGrid, edit: BuildEdit) -> String:
 	var built := StandEnvelope.edit_cells(edit)
 	var lines := PackedStringArray()
 	for binding in bindings:
+		if is_bus_binding(binding):
+			continue
 		var now: String = classes.get(binding["gate"], "")
 		if now == "":
 			continue
@@ -745,6 +1014,19 @@ func _removal_problem(on_grid: BuildGrid, id: int) -> BuildResult:
 		refusal.detail = FlightLabel.english_list(stuck)
 		refusal.detail_args = {"flights": stuck}
 		return refusal
+	return null
+
+
+func _remote_removal_problem(id: int) -> BuildResult:
+	if not _remote_by_obj.has(id) or flights == null:
+		return null
+	var sid := String(_remote_by_obj[id]["id"])
+	for cid in flights.active_contract_ids():
+		if String(flights.contract_of(cid).get("stand", "")) == sid:
+			return BuildResult.refused(BuildResult.Reason.REMOTE_STAND_IN_USE)
+	for fid in flights.flight_ids():
+		if flights.flight_stand_id(fid) == sid and flights.state_of(fid) < FlightSim.State.DEPARTED:
+			return BuildResult.refused(BuildResult.Reason.REMOTE_STAND_IN_USE)
 	return null
 
 
@@ -883,25 +1165,43 @@ func to_snapshot() -> Dictionary:
 	var gates: Array = []
 	for binding in bindings:
 		gates.append(binding.duplicate())
-	return {"save_version": SAVE_VERSION, "gates": gates, "spurs": spur_x.duplicate()}
+	var remotes: Array = []
+	for sid in remote_stand_ids():
+		remotes.append({"id": sid, "object_id": remote_stands[sid]["object_id"]})
+	return {
+		"save_version": SAVE_VERSION,
+		"gates": gates,
+		"spurs": spur_x.duplicate(),
+		"remote_stands": remotes,
+	}
 
 
 ## The bindings a to_snapshot() dictionary holds, checked against `on_grid`:
-## {"gates": Array[Dictionary], "spurs": side -> x} or {"error": why}. Each gate
-## needs a letter from LETTERS, a gate desk and an exit facing west, north or
-## east on the grid; letters, desks and exits are each used once; and the set
-## must be one the links make on the grid (_set_problem()), so a load installs
-## exactly the saved gates. "spurs" holds a spur x for the west and the east
-## side (StandPlacement.lane_x_problem()).
+## {"gates": Array[Dictionary], "spurs": side -> x, "remote_stands": obj -> id}
+## or {"error": why}.
 static func checked(data: Dictionary, on_grid: BuildGrid) -> Dictionary:
 	if data.size() != SAVE_KEYS.size() or not data.has_all(SAVE_KEYS):
-		return {"error": "a gates part holds save_version, gates and spurs"}
+		return {"error": "a gates part holds save_version, gates, spurs and remote_stands"}
 	var version: Variant = data["save_version"]
 	if not WholeNumber.is_whole(version) or int(version) != SAVE_VERSION:
 		return {"error": "save_version must be %d" % SAVE_VERSION}
-	if typeof(data["gates"]) != TYPE_ARRAY:
-		return {"error": "'gates' is not a list"}
-	var spurs_saved: Variant = data["spurs"]
+	var lanes := _checked_spurs(data["spurs"])
+	if lanes.has("error"):
+		return lanes
+	var gates := _checked_gates(data["gates"], on_grid)
+	if gates.has("error"):
+		return gates
+	var remotes := RemoteStands.checked_snapshot(data["remote_stands"], on_grid)
+	if remotes.has("error"):
+		return remotes
+	return {
+		"gates": gates["gates"],
+		"spurs": lanes["spurs"],
+		"remote_stands": remotes["by_obj"],
+	}
+
+
+static func _checked_spurs(spurs_saved: Variant) -> Dictionary:
 	if typeof(spurs_saved) != TYPE_DICTIONARY or spurs_saved.size() != SideSpurs.SIDES.size():
 		return {"error": "'spurs' holds the west and the east spur x"}
 	var lanes := {}
@@ -910,15 +1210,23 @@ static func checked(data: Dictionary, on_grid: BuildGrid) -> Dictionary:
 		if why != "":
 			return {"error": "spur %s: %s" % [side, why]}
 		lanes[side] = float(spurs_saved[side])
+	return {"spurs": lanes}
+
+
+static func _checked_gates(saved: Variant, on_grid: BuildGrid) -> Dictionary:
+	if typeof(saved) != TYPE_ARRAY:
+		return {"error": "'gates' is not a list"}
 	var out: Array[Dictionary] = []
 	var used := {}
-	for entry: Variant in data["gates"]:
+	for entry: Variant in saved:
 		var problem := _entry_problem(entry, on_grid, used)
 		if problem != "":
 			return {"error": problem}
 		var binding := {
 			"gate": str(entry["gate"]), "desk": int(entry["desk"]), "exit": int(entry["exit"])
 		}
+		if bool(entry.get("is_bus_gate", false)):
+			binding["is_bus_gate"] = true
 		for key in GATE_KEYS:
 			used["%s:%s" % [key, binding[key]]] = true
 		out.append(binding)
@@ -926,29 +1234,41 @@ static func checked(data: Dictionary, on_grid: BuildGrid) -> Dictionary:
 	var problem := _set_problem(out, on_grid)
 	if problem != "":
 		return {"error": problem}
-	return {"gates": out, "spurs": lanes}
+	return {"gates": out}
 
 
 ## Why `bindings` (each checked alone) are not a set the game could have made on
 ## `on_grid`, or "": a desk out of its exit's reach, two gates whose stands
-## overlap, or a desk with no saved gate that refresh() would link (the load
-## would then not be the saved world).
+## overlap, or a desk with no saved gate that refresh() would link.
 static func _set_problem(bindings: Array[Dictionary], on_grid: BuildGrid) -> String:
-	var stands: Array[Dictionary] = []
+	var reg_bindings: Array[Dictionary] = []
+	var reg_stands: Array[Dictionary] = []
+	var bus_bindings: Array[Dictionary] = []
+	var bays: Array[Rect2] = []
 	for binding in bindings:
-		stands.append(SideSpurs.link_stand(on_grid, binding["exit"]))
-	stands = at_common_lanes(on_grid, stands)
-	for i in bindings.size():
-		var binding := bindings[i]
 		var footprint := desk_footprint(on_grid, binding["desk"])
 		if reach_cells(on_grid, footprint, binding["exit"]) > LINK_CELLS:
 			return "gate %s: its desk is out of its exit's reach" % binding["gate"]
-		for j in range(i + 1, bindings.size()):
-			if stands_overlap(stands[i], stands[j]):
+		if is_bus_binding(binding):
+			bus_bindings.append(binding)
+			bays.append(BusBays.bay_rect(StandPlacement.for_exit(on_grid, binding["exit"])))
+		else:
+			reg_bindings.append(binding)
+			reg_stands.append(SideSpurs.link_stand(on_grid, binding["exit"]))
+	reg_stands = at_common_lanes(on_grid, reg_stands)
+	var rem_swings := RemoteStands.all_small_swings(on_grid)
+	for i in reg_bindings.size():
+		if _exit_hits_rects(on_grid, reg_bindings[i]["exit"], bays, rem_swings):
+			return "gate %s overlaps a bus bay or remote stand" % reg_bindings[i]["gate"]
+		for j in range(i + 1, reg_bindings.size()):
+			if stands_overlap(reg_stands[i], reg_stands[j]):
 				return (
 					"gates %s and %s have overlapping stands"
-					% [binding["gate"], bindings[j]["gate"]]
+					% [reg_bindings[i]["gate"], reg_bindings[j]["gate"]]
 				)
+	var bus_err := _bus_set_problem(on_grid, bus_bindings, bays, reg_stands)
+	if bus_err != "":
+		return bus_err
 	for link in links_on(on_grid, bindings):
 		if link["gate"] == "":
 			return (
@@ -957,16 +1277,43 @@ static func _set_problem(bindings: Array[Dictionary], on_grid: BuildGrid) -> Str
 	return ""
 
 
+static func _bus_set_problem(
+	on_grid: BuildGrid,
+	bus_bindings: Array[Dictionary],
+	bays: Array[Rect2],
+	reg_stands: Array[Dictionary]
+) -> String:
+	var site := site_of(on_grid)
+	var blocked := _blocked_envelopes(on_grid, reg_stands)
+	for i in bus_bindings.size():
+		var other_bays: Array[Rect2] = []
+		for j in bays.size():
+			if j != i:
+				other_bays.append(bays[j])
+		var stand := StandPlacement.for_exit(on_grid, bus_bindings[i]["exit"])
+		if not BusBays.bay_clear(on_grid, site, stand, other_bays, blocked):
+			return "bus gate %s has a blocked bay" % bus_bindings[i]["gate"]
+	return ""
+
+
 static func _entry_problem(entry: Variant, on_grid: BuildGrid, used: Dictionary) -> String:
-	if typeof(entry) != TYPE_DICTIONARY or entry.size() != GATE_KEYS.size():
+	if typeof(entry) != TYPE_DICTIONARY:
 		return "a gate holds gate, desk and exit"
-	if not (entry as Dictionary).has_all(GATE_KEYS):
+	var dict: Dictionary = entry
+	var expect_bus := dict.has("is_bus_gate")
+	var valid_size := dict.size() == GATE_KEYS.size() + (1 if expect_bus else 0)
+	if not valid_size or not dict.has_all(GATE_KEYS):
 		return "a gate holds gate, desk and exit"
+	if expect_bus and typeof(dict["is_bus_gate"]) != TYPE_BOOL:
+		return "is_bus_gate must be a bool"
 	var letter: Variant = entry["gate"]
 	if typeof(letter) != TYPE_STRING or letter.length() != 1 or not LETTERS.contains(letter):
 		return "gate '%s' is not a letter A to Z" % [letter]
-	if not WholeNumber.is_whole(entry["desk"]) or not is_desk(on_grid, int(entry["desk"])):
+	var desk := int(entry["desk"]) if WholeNumber.is_whole(entry["desk"]) else 0
+	if desk == 0 or not is_desk(on_grid, desk):
 		return "gate %s: %s is not a gate desk" % [letter, entry["desk"]]
+	if bool(dict.get("is_bus_gate", false)) != is_bus_desk(on_grid, desk):
+		return "gate %s: bus gate flag disagrees with desk type" % letter
 	if not WholeNumber.is_whole(entry["exit"]) or not _is_gate_exit(on_grid, int(entry["exit"])):
 		return "gate %s: %s is not an exit facing west, north or east" % [letter, entry["exit"]]
 	for key in GATE_KEYS:
@@ -985,6 +1332,9 @@ func from_snapshot(data: Dictionary) -> bool:
 		return false
 	bindings.assign(loaded["gates"])
 	spur_x = loaded["spurs"]
+	_remote_by_obj = {}
+	for obj_id: int in loaded["remote_stands"]:
+		_remote_by_obj[obj_id] = {"id": loaded["remote_stands"][obj_id], "object_id": obj_id}
 	refresh()
 	return true
 
@@ -995,6 +1345,7 @@ func _on_graph_changed(_cells: Array[Vector2i]) -> void:
 		and grid.route_version() == _last_route_ver
 		and grid.enclosure_version() == _last_enclosure_ver
 		and desk_ids(grid) == _last_desk_ids
+		and RemoteStands.object_ids(grid) == _last_remote_ids
 	):
 		return
 	refresh()

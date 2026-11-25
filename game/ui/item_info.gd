@@ -109,6 +109,33 @@ func texts(tool: BuildMode.Tool) -> Array:
 					"Within 4 cells of a free exit facing the planes, with room for the plane. No staff needed."
 				),
 			]
+		BuildMode.Tool.BUS_GATE_DESK:
+			lines = [
+				tr(
+					# gdlint:ignore = max-line-length
+					"Makes a bus gate. It links to an exit facing the apron with a 16 x 6 m bus bay outside."
+				),
+				tr("Passengers board shuttle buses here to reach remote stands on the apron."),
+				tr(
+					# gdlint:ignore = max-line-length
+					"Within 4 cells of a free exit with clear 16 x 6 m apron room outside. Staffed by a Gate Agent."
+				),
+			]
+		BuildMode.Tool.REMOTE_STAND:
+			lines = [
+				tr(
+					# gdlint:ignore = max-line-length
+					"An apron parking stand with no jet bridge. Serves small, medium or large planes that fit."
+				),
+				tr(
+					# gdlint:ignore = max-line-length
+					"Assigned IDs starting at R1 with automatic taxiway paving north to the taxi lane."
+				),
+				tr(
+					# gdlint:ignore = max-line-length
+					"Place on an owned apron spot with clear room for aircraft and taxiway access. Requires a Bus gate desk to board."
+				),
+			]
 		BuildMode.Tool.SCREEN:
 			lines = [
 				tr("A floor screen that entertains passengers waiting in front of it."),

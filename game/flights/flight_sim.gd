@@ -175,7 +175,9 @@ const STARTER_TERMS := {
 ## no migration.
 ## 13: contracts carry optional is_hub (false for standard, true for Gold Hub
 ## contracts). A version 12 save is refused; there is no migration.
-const SAVE_VERSION := 13
+## 14: contracts carry optional "stand" (defaults to "gate") and flight records
+## carry "stand_id". A version 13 save is refused; there is no migration.
+const SAVE_VERSION := 14
 const CHARTER_LATE_TEXT := "this charter's departure window has already passed"
 ## The refusal of a flight no taxi pause fits (user ruling a-gate-has-no-size-
 ## planes-use-any-stand-they-fit-neighbours-share-apron-space).
@@ -233,6 +235,10 @@ var gate_source := Callable()
 ## largest plane class it holds} for the gates of gate_source (GateDesks sets
 ## it). Unset: FlightGround.fallback() for each gate.
 var stand_source := Callable()
+## Bus gate IDs and remote stand sources wired by GateDesks for Slices B2/B3.
+var bus_gate_source := Callable()
+var remote_stand_source := Callable()
+var remote_ground_source := Callable()
 ## Called as spare_stand_source(plane_class) for the stand one more gate could
 ## have for that class (StandPlacement stand), {} when the player could build
 ## none (GateDesks sets it from the build grid and SpareStand). Unset (a sim
@@ -571,6 +577,39 @@ func gate_ids() -> Array[String]:
 		gates.append(gate_id)
 	gates.sort()
 	return gates
+
+
+func bus_gate_ids() -> Array[String]:
+	if not bus_gate_source.is_valid():
+		return [] as Array[String]
+	var listed: Variant = bus_gate_source.call()
+	var out: Array[String] = []
+	if typeof(listed) == TYPE_ARRAY:
+		for g: Variant in listed:
+			if typeof(g) == TYPE_STRING and g != "" and not out.has(g):
+				out.append(g)
+	out.sort()
+	return out
+
+
+func remote_stand_ids() -> Array[String]:
+	if not remote_stand_source.is_valid():
+		return [] as Array[String]
+	var listed: Variant = remote_stand_source.call()
+	var out: Array[String] = []
+	if typeof(listed) == TYPE_ARRAY:
+		for s: Variant in listed:
+			if typeof(s) == TYPE_STRING and s != "" and not out.has(s):
+				out.append(s)
+	out.sort()
+	return out
+
+
+func remote_stand_grounds() -> Dictionary:
+	if not remote_ground_source.is_valid():
+		return {}
+	var given: Variant = remote_ground_source.call()
+	return (given as Dictionary).duplicate(true) if typeof(given) == TYPE_DICTIONARY else {}
 
 
 ## Gate letter -> {"stand", "max_class"} for every gate of gate_ids(): from
@@ -975,6 +1014,12 @@ func flight_gate(id: String) -> String:
 	return _find(id).get("gate", "")
 
 
+## The stand ID flight `id` uses ("A", "R1", ...); defaults to flight_gate(id).
+func flight_stand_id(id: String) -> String:
+	var rec := _find(id)
+	return String(rec.get("stand_id", rec.get("gate", "")))
+
+
 ## All live flights at `gate` now (in [starts[0], starts[DEPARTED])), in
 ## timetable order.
 func flights_at_gate(gate: String) -> Array[String]:
@@ -1126,8 +1171,17 @@ func to_snapshot() -> Dictionary:
 ## the sim unchanged, when anything is missing, mistyped or inconsistent, when
 ## a live flight's stand is not its gate's, or when a live flight's re-plan
 ## fails. Emits only snapshot_loaded: what the save had issued stays issued.
+func _snapshot_gates() -> Array[String]:
+	var out := gate_ids()
+	for bg in bus_gate_ids():
+		if not out.has(bg):
+			out.append(bg)
+	out.sort()
+	return out
+
+
 func from_snapshot(data: Dictionary) -> bool:
-	var loaded := FlightSnapshot.load(data, gate_ids(), epoch)
+	var loaded := FlightSnapshot.load(data, _snapshot_gates(), epoch)
 	var problem: String = loaded.get("error", "")
 	if problem == "":
 		problem = _load_plan_problem(loaded)
@@ -1152,7 +1206,7 @@ func from_snapshot(data: Dictionary) -> bool:
 ## "": what it checks, without installing anything or pushing an error. SaveGame
 ## stages a load with it.
 func load_problem(data: Dictionary) -> String:
-	var loaded := FlightSnapshot.load(data, gate_ids(), epoch)
+	var loaded := FlightSnapshot.load(data, _snapshot_gates(), epoch)
 	if loaded.has("error"):
 		return loaded["error"]
 	return _load_plan_problem(loaded)
@@ -1173,6 +1227,7 @@ func _load_plan_problem(loaded: Dictionary) -> String:
 				% [contract["id"], contract["plane_size"], runway.size]
 			)
 	var grounds := gate_grounds()
+	var remote := remote_stand_grounds()
 	var world := {
 		"spurs": spurs(),
 		"tick": loaded["tick"],
@@ -1189,7 +1244,10 @@ func _load_plan_problem(loaded: Dictionary) -> String:
 		"works": runway.works.fixed_bookings(),
 	}
 	for flight: Dictionary in loaded["flights"]:
-		var ground: Dictionary = grounds.get(flight["gate"], {})
+		var sid := String(flight.get("stand_id", flight["gate"]))
+		var ground: Dictionary = (
+			remote.get(sid, {}) if sid != flight["gate"] else grounds.get(flight["gate"], {})
+		)
 		if ground.is_empty() or not SpurMoves.holds_stand(flight, ground["stand"]):
 			return "flight %s is not at its gate's stand" % flight["id"]
 		var plane_class := FlightPlans.flight_class(world, flight)
@@ -1202,7 +1260,7 @@ func _load_plan_problem(loaded: Dictionary) -> String:
 			)
 	for contract: Dictionary in loaded["contracts"]:
 		var problem := (
-			_contract_ground_problem(contract, grounds)
+			_contract_ground_problem(contract, grounds, remote)
 			if FlightPlans.runs(world, contract["id"])
 			else ""
 		)
@@ -1221,8 +1279,13 @@ func _load_plan_problem(loaded: Dictionary) -> String:
 ## Why running or reserving `contract` cannot stand at its gate of `grounds`:
 ## the gate is too small for its plane, or its stand's routes need a longer taxi
 ## pair than the contract's (TaxiTimes.for_stand()); "" for neither.
-static func _contract_ground_problem(contract: Dictionary, grounds: Dictionary) -> String:
-	var ground: Dictionary = grounds.get(contract["gate"], {})
+static func _contract_ground_problem(
+	contract: Dictionary, grounds: Dictionary, remote := {}
+) -> String:
+	var sid := String(contract.get(FlightContract.STAND_KEY, contract["gate"]))
+	var ground: Dictionary = (
+		remote.get(sid, {}) if sid != contract["gate"] else grounds.get(contract["gate"], {})
+	)
 	if not FlightGround.class_fits(contract["plane_size"], ground.get("max_class", "")):
 		return (
 			"contract %s needs a %s gate, but gate %s takes %s"
@@ -1245,16 +1308,23 @@ static func _contract_ground_problem(contract: Dictionary, grounds: Dictionary) 
 ## A flight record with the state it is in at the current tick, at its gate's
 ## stand now.
 func _record(
-	id: String, starts: Array[int], gate: String, contract: String, day: int
+	id: String, starts: Array[int], gate: String, contract: String, day: int, stand_id := ""
 ) -> Dictionary:
+	var resolved_stand := gate if stand_id == "" else stand_id
+	var stand_dict: Dictionary = (
+		remote_stand_grounds().get(resolved_stand, {}).get("stand", {})
+		if resolved_stand != gate
+		else gate_grounds().get(gate, {}).get("stand", {})
+	)
 	return {
 		"id": id,
 		"starts": starts.duplicate(),
 		"state": FlightTimetable.state_at(starts, tick),
 		"gate": gate,
+		"stand_id": resolved_stand,
 		"contract": contract,
 		"day": day,
-		"stand": gate_grounds().get(gate, {}).get("stand", {}),
+		"stand": stand_dict,
 	}
 
 
@@ -1975,7 +2045,8 @@ static func _issued_before(a: Array, b: Array) -> bool:
 func _issue(contract: Dictionary, day: int) -> void:
 	var id := FlightTimetable.occurrence_id(contract["id"], day)
 	var starts := FlightTimetable.starts_for(contract, day, epoch)
-	_insert(_record(id, starts, contract["gate"], contract["id"], day))
+	var sid := String(contract.get(FlightContract.STAND_KEY, contract["gate"]))
+	_insert(_record(id, starts, contract["gate"], contract["id"], day, sid))
 	_next_day[contract["id"]] = day + 1
 	occurrence_added.emit(id)
 

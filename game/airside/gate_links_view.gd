@@ -210,10 +210,20 @@ static func link_points(grid: BuildGrid, binding: Dictionary, lanes := {}) -> Pa
 	var edge := (
 		centre + (exit - centre) * _leave_t(Rect2(area.position + origin, area.size), centre, exit)
 	)
-	var door := StandPlacement.door_point(SideSpurs.stand_for_exit(grid, binding["exit"], lanes))
+	var exit_stand := (
+		StandPlacement.for_exit(grid, binding["exit"])
+		if GateDesks.is_bus_binding(binding)
+		else SideSpurs.stand_for_exit(grid, binding["exit"], lanes)
+	)
+	var door_pos: Vector3
+	if GateDesks.is_bus_binding(binding):
+		var bay_mid := BusBays.bay_rect(exit_stand).get_center()
+		door_pos = Vector3(bay_mid.x, 0.0, bay_mid.y)
+	else:
+		door_pos = StandPlacement.door_point(exit_stand)
 	var y := grid.origin.y + LIFT_M
 	return PackedVector3Array(
-		[Vector3(edge.x, y, edge.y), Vector3(exit.x, y, exit.y), Vector3(door.x, y, door.z)]
+		[Vector3(edge.x, y, edge.y), Vector3(exit.x, y, exit.y), Vector3(door_pos.x, y, door_pos.z)]
 	)
 
 
@@ -357,6 +367,8 @@ func _queue_walk() -> void:
 
 
 func _caption_for(gate: String) -> String:
+	if _gates != null and GateDesks.is_bus_binding(_gates.binding_of(gate)):
+		return "%s\n%s" % [_words.title(gate), _words.bus_bay()]
 	return caption_text(
 		gate, _gates.max_class(gate), walk.minutes(gate), _gates.waits_on_spur(gate)
 	)
@@ -429,10 +441,17 @@ func _draw_envelopes() -> void:
 	if _grid != null and _gates != null:
 		var y := _grid.origin.y + LIFT_M
 		for binding in _gates.bindings:
+			if GateDesks.is_bus_binding(binding):
+				continue
 			var plane_class := _gates.max_class(binding["gate"])
 			if plane_class != "":
 				var stand: Dictionary = _gates.stands[binding["gate"]]
 				_envelope_paths.append(envelope_outline(stand, plane_class, y))
+		for sid: String in _gates.remote_stands:
+			var entry: Dictionary = _gates.remote_stands[sid]
+			var plane_class := String(entry.get("max_class", ""))
+			if plane_class != "":
+				_envelope_paths.append(envelope_outline(entry["stand"], plane_class, y))
 	_envelope.mesh = segments_mesh(_envelope_paths)
 
 
@@ -451,6 +470,14 @@ func _draw_clearance() -> void:
 		var y := _grid.origin.y + CLEARANCE_LIFT_M
 		for binding in _gates.bindings:
 			var gate: String = binding["gate"]
+			if GateDesks.is_bus_binding(binding):
+				var bay := BusBays.bay_rect(StandPlacement.for_exit(_grid, binding["exit"]))
+				if bay.has_area():
+					var bay_rects: Array[Rect2] = [bay]
+					_clearance_entries.append(
+						{"gate": gate, "rects": bay_rects, "mesh": _rects_mesh(bay_rects, y)}
+					)
+				continue
 			var plane_class := StandEnvelope.larger(
 				_gates.max_class(gate), _gates.booked_class(gate)
 			)
@@ -464,6 +491,24 @@ func _draw_clearance() -> void:
 						"gate": gate,
 						"rects": StandEnvelope.rects(stand, plane_class),
 						"mesh": _rects_mesh(envelope_fill_rects(stand, plane_class), y),
+					}
+				)
+			)
+		for sid: String in _gates.remote_stands:
+			var entry: Dictionary = _gates.remote_stands[sid]
+			var cls := StandEnvelope.larger(
+				String(entry.get("max_class", "")), _gates.booked_class(sid)
+			)
+			if cls == "":
+				continue
+			var stand: Dictionary = entry["stand"]
+			(
+				_clearance_entries
+				. append(
+					{
+						"gate": sid,
+						"rects": StandEnvelope.rects(stand, cls),
+						"mesh": _rects_mesh(envelope_fill_rects(stand, cls), y),
 					}
 				)
 			)
@@ -1027,6 +1072,9 @@ class Words:
 
 	func title(gate: String) -> String:
 		return tr("Gate {gate}", "gate caption").format({"gate": gate})
+
+	func bus_bay() -> String:
+		return tr("Bus bay", "gate caption")
 
 	## The second line: the biggest plane, or no room for one.
 	func class_line(plane_class: String) -> String:

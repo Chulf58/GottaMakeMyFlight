@@ -60,6 +60,11 @@ enum Reason {
 	GATE_ROUTE_BLOCKED,
 	GATE_ROUTE,
 	SPUR_STRANDS,
+	BUS_BAY_BLOCKED,
+	REMOTE_STAND_NEEDS_APRON,
+	REMOTE_STAND_OVERLAP,
+	REMOTE_STAND_NO_ROOM,
+	REMOTE_STAND_IN_USE,
 }
 
 const REASON_TEXT := {
@@ -127,6 +132,13 @@ const REASON_TEXT := {
 	"A booked flight's plane needs this ground. Move its flights in Departures first",
 	Reason.SPUR_STRANDS:
 	"The side taxiway would have to move and leave a booked flight with no way to its gate",
+	Reason.BUS_BAY_BLOCKED: "No room for a 16 x 6 m bus bay outside this exit",
+	Reason.REMOTE_STAND_NEEDS_APRON:
+	"Place a remote stand on open apron ground outside the terminal",
+	Reason.REMOTE_STAND_OVERLAP: "Too close to another stand or bus bay",
+	Reason.REMOTE_STAND_NO_ROOM: "Needs clear apron space for aircraft and taxiway access",
+	Reason.REMOTE_STAND_IN_USE:
+	"A flight is still due at this remote stand. Remove it after the flight leaves",
 }
 
 var ok: bool = true

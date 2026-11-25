@@ -11,6 +11,8 @@ const OBJECTS := {
 	BuildMode.Tool.ENTRANCE: &"entrance_door",
 	BuildMode.Tool.EXIT: &"exit_door",
 	BuildMode.Tool.GATE_DESK: GateDesks.DESK,
+	BuildMode.Tool.BUS_GATE_DESK: GateDesks.BUS_DESK,
+	BuildMode.Tool.REMOTE_STAND: RemoteStands.STAND_ID,
 	BuildMode.Tool.COUNTER: &"cafe_counter",
 	BuildMode.Tool.TABLE: &"cafe_table",
 	BuildMode.Tool.CART: &"baggage_cart",

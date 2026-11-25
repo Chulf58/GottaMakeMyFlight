@@ -140,6 +140,8 @@ const TIERS := [
 			BuildMode.Tool.SOFA,
 			BuildMode.Tool.ARMCHAIR,
 			BuildMode.Tool.WORK_DESK,
+			BuildMode.Tool.BUS_GATE_DESK,
+			BuildMode.Tool.REMOTE_STAND,
 		],
 	},
 	{

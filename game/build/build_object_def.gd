@@ -14,6 +14,7 @@ const NO_CELL := Vector2i(-1, -1)
 ## their own y axis: their long sides block sideways steps.
 @export var walk_through := false
 @export var has_interaction := false
+@export var unfloored := false
 ## The cell a passenger stands on to use the object, in the object's frame.
 ## It must lie outside the footprint and next to it.
 @export var interaction_offset := Vector2i.ZERO

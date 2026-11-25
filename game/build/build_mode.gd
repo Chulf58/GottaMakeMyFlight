@@ -122,6 +122,8 @@ enum Tool {
 	SECURITY_LANE,
 	BREAK_ROOM,
 	AWARD_TROPHY,
+	BUS_GATE_DESK,
+	REMOTE_STAND,
 }
 
 ## The landside build tools (LandsidePlacement), by the kind each builds. They

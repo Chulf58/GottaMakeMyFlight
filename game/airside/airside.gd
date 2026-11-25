@@ -112,6 +112,11 @@ var one_stand: Dictionary = {}
 var gate_stands: Dictionary = {}
 ## Gate letter -> its max_class, which sizes its stand pad (set_gate_classes()).
 var gate_classes: Dictionary = {}
+## Remote stand ID ("R1", ...) -> its StandPlacement stand and max_class.
+var remote_stands: Dictionary = {}
+var remote_classes: Dictionary = {}
+## Bus gate letter -> its 16 x 6 m bay Rect2.
+var bus_bays: Dictionary = {}
 ## The asphalt under the taxi routes, rebuilt with the graph.
 var paving := TaxiPaving.new()
 ## The jet bridges and taxi signs (board 4c08b8e5), laid out with the paving.
@@ -190,23 +195,39 @@ func _show_paving() -> void:
 ## classes up to its gate_classes entry, none for a gate with no class; every
 ## class's for a gate with no entry and for the one stand, which no gate sizes.
 ## A west or east gate's is its north twin's turned (TaxiPaving.pad_for()).
+func _combined_stands() -> Dictionary:
+	var out := gate_stands.duplicate()
+	out.merge(remote_stands)
+	return out
+
+
+func _combined_classes() -> Dictionary:
+	var out := gate_classes.duplicate()
+	out.merge(remote_classes)
+	return out
+
+
 func stand_pads() -> Array[Rect2]:
 	var out: Array[Rect2] = []
-	var points := stand_points()
-	var gates := gate_stands.keys()
-	for i in points.size():
+	var combined := _combined_stands()
+	var classes_by_id := _combined_classes()
+	if combined.is_empty():
+		var points := stand_points()
+		for pt in points:
+			out.append(TaxiPaving.stand_pad(pt, PlaneClasses.ORDER))
+		return out
+	for key: String in combined:
 		var classes := PlaneClasses.ORDER
-		if i < gates.size() and gate_classes.has(gates[i]):
-			classes = classes_up_to(gate_classes[gates[i]])
+		if classes_by_id.has(key):
+			classes = classes_up_to(classes_by_id[key])
 		if classes.is_empty():
 			continue
-		var side := StandPlacement.NORTH
-		if i < gates.size():
-			side = StandPlacement.side_of(gate_stands[gates[i]])
-		if side != StandPlacement.NORTH:
-			out.append(TaxiPaving.pad_for(gate_stands[gates[i]], classes))
+		var stand: Dictionary = combined[key]
+		if StandPlacement.side_of(stand) != StandPlacement.NORTH:
+			out.append(TaxiPaving.pad_for(stand, classes))
 		else:
-			out.append(TaxiPaving.stand_pad(points[i], classes))
+			var pt := graph.position_of(_gate_point(&"Stand", key))
+			out.append(TaxiPaving.stand_pad(pt, classes))
 	return out
 
 
@@ -230,12 +251,13 @@ static func runway_south() -> float:
 ## no gate has one.
 func stand_points() -> PackedVector3Array:
 	var out := PackedVector3Array()
-	if gate_stands.is_empty():
+	var combined := _combined_stands()
+	if combined.is_empty():
 		if graph.has_waypoint(&"Stand"):
 			out.append(graph.position_of(&"Stand"))
 		return out
-	for gate: String in gate_stands:
-		out.append(graph.position_of(_gate_point(&"Stand", gate)))
+	for key: String in combined:
+		out.append(graph.position_of(_gate_point(&"Stand", key)))
 	return out
 
 
@@ -251,13 +273,14 @@ func hold_points() -> PackedVector3Array:
 	for waypoint in [&"HoldIn", &"HoldRunway"]:
 		if graph.has_waypoint(waypoint):
 			out.append(graph.position_of(waypoint))
-	if gate_stands.is_empty():
+	var combined := _combined_stands()
+	if combined.is_empty():
 		if graph.has_waypoint(&"PushbackEnd"):
 			out.append_array(lead_in_hold(graph.position_of(&"PushbackEnd")))
 		return out
 	var head := PackedVector3Array()
-	for gate: String in gate_stands:
-		var stand: Dictionary = gate_stands[gate]
+	for key: String in combined:
+		var stand: Dictionary = combined[key]
 		out.append_array(stand_hold(stand))
 		if StandPlacement.side_of(stand) == StandPlacement.WEST and head.is_empty():
 			head.append(spur_head_hold(StandPlacement.lane_join(stand)))
@@ -324,7 +347,10 @@ func _joins_on_lane() -> bool:
 	for child in get_children():
 		if not (child is Marker3D and _on_lane(child.name) and not LANE_ENDS.has(child.name)):
 			continue
-		if not gate_stands.is_empty() and child.name == &"StandLane":
+		if (
+			(not gate_stands.is_empty() or not remote_stands.is_empty())
+			and child.name == &"StandLane"
+		):
 			continue
 		var join := graph.position_of(child.name)
 		if not TaxiRoutes.joins_lane(join, layout):
@@ -346,7 +372,8 @@ func _joins_on_lane() -> bool:
 ## lane, and refused.
 func lane_layout() -> Dictionary:
 	var layout := TaxiRoutes.north_only(graph.points())
-	var stands: Array = gate_stands.values() if not gate_stands.is_empty() else [one_stand]
+	var combined := _combined_stands()
+	var stands: Array = combined.values() if not combined.is_empty() else [one_stand]
 	for stand: Dictionary in stands:
 		match StandPlacement.side_of(stand):
 			StandPlacement.WEST:
@@ -359,7 +386,8 @@ func lane_layout() -> Dictionary:
 ## Every ground route a plane takes: taxi in, pushback and taxi out, for each
 ## gate with a stand, or for the one stand while no gate has one.
 func taxi_routes() -> Array[PackedVector3Array]:
-	var gates: Array = gate_stands.keys() if not gate_stands.is_empty() else [""]
+	var combined := _combined_stands()
+	var gates: Array = combined.keys() if not combined.is_empty() else [""]
 	var out: Array[PackedVector3Array] = []
 	for gate: String in gates:
 		for state in [FlightSim.State.TAXI_IN, FlightSim.State.PUSHBACK, FlightSim.State.TAXI_OUT]:
@@ -430,13 +458,48 @@ func set_gate_stands(stands: Dictionary) -> bool:
 	return rebuild()
 
 
-## The path a plane of `plane_class` follows in `state`, or an empty array
-## for a state that stays put. `gate` names the gate whose stand it uses; a
-## gate with no stand waypoints of its own uses Stand. The path is TaxiRoutes',
-## from this node's waypoints and the gate's Stand, PushbackEnd and StandLane.
-## The class picks the approach, touchdown and liftoff points; the taxi routes
-## are the same for every class. Empty for every state while a required
-## waypoint is missing, and for the taxi routes while routes_gate() is false.
+func set_remote_stands(stands: Dictionary, classes: Dictionary) -> bool:
+	if stands == remote_stands and classes == remote_classes and _built:
+		return true
+	_sync_stand_markers(remote_stands, stands)
+	remote_stands = stands.duplicate(true)
+	remote_classes = classes.duplicate()
+	stand_moves += 1
+	return rebuild()
+
+
+func set_bus_bays(bays: Dictionary) -> void:
+	if bays == bus_bays:
+		return
+	bus_bays = bays.duplicate()
+	props.show_bus_bays(bus_bays)
+
+
+func _sync_stand_markers(prev: Dictionary, next: Dictionary) -> void:
+	for sid: String in prev:
+		if not next.has(sid):
+			for base in [&"Stand", &"PushbackEnd", &"StandLane"]:
+				var gone := get_node_or_null(NodePath(String(_gate_point(base, sid))))
+				if gone != null:
+					remove_child(gone)
+					gone.free()
+	for sid: String in next:
+		var stand: Dictionary = next[sid]
+		var points := {
+			&"Stand": StandPlacement.stand_point(stand),
+			&"PushbackEnd": StandPlacement.pushback_end(stand),
+			&"StandLane": StandPlacement.lane_join(stand),
+		}
+		for base: StringName in points:
+			var waypoint := _gate_point(base, sid)
+			var marker := get_node_or_null(NodePath(String(waypoint))) as Marker3D
+			if marker == null:
+				marker = Marker3D.new()
+				marker.name = waypoint
+				add_child(marker)
+			marker.position = transform.affine_inverse() * (points[base] as Vector3)
+
+
 func phase_path(state: int, gate := "", plane_class := PlaneClasses.MEDIUM) -> PackedVector3Array:
 	for waypoint in REQUIRED_WAYPOINTS:
 		if not graph.has_waypoint(waypoint):
@@ -444,24 +507,21 @@ func phase_path(state: int, gate := "", plane_class := PlaneClasses.MEDIUM) -> P
 	var taxi := state == FlightSim.State.TAXI_IN or state == FlightSim.State.TAXI_OUT
 	if taxi and not routes_gate(gate):
 		return PackedVector3Array()
-	var gate_name := gate if gate_stands.has(gate) else ""
+	var combined := _combined_stands()
+	var gate_name := gate if combined.has(gate) else ""
 	var ends := {
 		"spot": graph.position_of(_stand_point(&"Stand", gate_name)),
 		"back": graph.position_of(_stand_point(&"PushbackEnd", gate_name)),
 		"join": graph.position_of(_stand_point(&"StandLane", gate_name)),
 	}
-	ends.merge(TaxiRoutes.spur_ends(gate_stands.get(gate_name, one_stand)))
+	ends.merge(TaxiRoutes.spur_ends(combined.get(gate_name, one_stand)))
 	var paths := TaxiRoutes.phase_paths(graph.points(), ends, plane_class, lane_layout())
 	return paths.get(state, PackedVector3Array())
 
 
-## Whether phase_path() gives gate `gate` its taxi routes: the last rebuild()
-## succeeded (every required waypoint, every link, every join on the lane), and
-## the gate has a stand of its own, or no gate has one (no gate desks: the one
-## stand serves every gate). With gate stands set, a gate not among them gets
-## none, so a plane is never drawn along a stand nobody planned it for.
 func routes_gate(gate: String) -> bool:
-	return _routable and (gate_stands.is_empty() or gate_stands.has(gate))
+	var combined := _combined_stands()
+	return _routable and (combined.is_empty() or combined.has(gate))
 
 
 ## The waypoint `base` of gate `gate`'s stand, or of the one stand for "".

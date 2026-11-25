@@ -61,6 +61,8 @@ const ONE_OFF_DAY_KEY := "one_off_day"
 ## True for a Gold Hub Contract (Stage 2 S2-C). Optional in TERM_KEYS and KEYS;
 ## stored as bool by make().
 const IS_HUB_KEY := "is_hub"
+## Stand ID assigned to the contract ("A", "R1", ...); defaults to "gate".
+const STAND_KEY := "stand"
 const TEXT_KEYS := ["airline", "destination", "gate", "plane_size"]
 const PLANE_SIZES := ["small", "medium", "large"]
 const MAX_BOOKED := 999
@@ -89,7 +91,14 @@ static func problem(data: Variant, keys: Array) -> String:
 	if typeof(data) != TYPE_DICTIONARY:
 		return "a contract must be a dictionary"
 	for key in data.keys():
-		if not keys.has(key) and key != TRAITS_KEY and key != ONE_OFF_DAY_KEY and key != IS_HUB_KEY:
+		var allowed: bool = (
+			keys.has(key)
+			or key == TRAITS_KEY
+			or key == ONE_OFF_DAY_KEY
+			or key == IS_HUB_KEY
+			or (keys.has("gate") and key == STAND_KEY)
+		)
+		if not allowed:
 			return "unknown contract key '%s'" % key
 	for key in keys:
 		if not data.has(key):
@@ -112,6 +121,9 @@ static func problem(data: Variant, keys: Array) -> String:
 			problem = "is_hub must be a boolean"
 		elif bool(data[IS_HUB_KEY]) and is_charter(data):
 			problem = "a one-off charter cannot be a hub contract"
+	if problem == "" and data.has(STAND_KEY):
+		if typeof(data[STAND_KEY]) != TYPE_STRING or String(data[STAND_KEY]) == "":
+			problem = "stand must be a non-empty string"
 	if problem == "" and data.has(TRAITS_KEY):
 		problem = OfferTraits.problem(data[TRAITS_KEY])
 	if problem == "" and keys.has(TAXI_KEY):
@@ -135,6 +147,8 @@ static func make(data: Dictionary) -> Dictionary:
 	contract[TRAITS_KEY] = OfferTraits.frozen(data.get(TRAITS_KEY, {}))
 	contract[ONE_OFF_DAY_KEY] = int(data.get(ONE_OFF_DAY_KEY, -1))
 	contract[IS_HUB_KEY] = bool(data.get(IS_HUB_KEY, false))
+	if data.has("gate"):
+		contract[STAND_KEY] = String(data.get(STAND_KEY, data["gate"]))
 	if data.has(TAXI_KEY):
 		contract[TAXI_KEY] = TaxiTimes.frozen(data[TAXI_KEY])
 	contract.make_read_only()
@@ -186,13 +200,16 @@ static func assignment_problem(gate_id: String, stand: Dictionary) -> String:
 ## first_day in `data` is kept; FlightSim sets a new contract's. The caller has
 ## checked assignment_problem(); a stand it refuses is a defect, pushed as an
 ## error and answered with {} (nothing to store).
-static func assigned(data: Dictionary, gate_id: String, stand: Dictionary) -> Dictionary:
+static func assigned(
+	data: Dictionary, gate_id: String, stand: Dictionary, stand_id := ""
+) -> Dictionary:
 	var problem := assignment_problem(gate_id, stand)
 	if problem != "":
 		push_error("FlightContract.assigned: %s" % problem)
 		return {}
 	var fields := data.duplicate()
 	fields["gate"] = gate_id
+	fields[STAND_KEY] = gate_id if stand_id == "" else stand_id
 	fields[TAXI_KEY] = TaxiTimes.for_stand(stand)
 	return make(fields)
 
