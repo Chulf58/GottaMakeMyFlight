@@ -27,6 +27,8 @@ const NIGHT_TEXT := "Departs in the quiet night"
 const RUNWAY_TEXT := "Runway too short for a %s plane"
 const STAND_TEXT := "No gate takes a %s plane"
 const NO_STAND_TEXT := "No gate has a stand yet"
+const NO_BUS_GATE_TEXT := "No bus gate available for remote stands"
+const CHARTER_CAPACITY_TEXT := "Charters over {count} passengers require a regular gate"
 
 
 ## The assessment of `terms` (FlightContract.TERM_KEYS) in `sim` now, with the
@@ -44,6 +46,7 @@ static func assess(
 		"fits": trial["gate"] != "",
 		"blocker": trial["blocker"],
 		"gate": trial["gate"],
+		"stand": trial.get("stand", trial["gate"]),
 		"problem": trial["problem"],
 		"another_gate_helps": helps,
 	}
@@ -75,5 +78,13 @@ static func text(assessment: Dictionary, plane_size: String) -> String:
 		FlightSim.BLOCKER_RUNWAY: RUNWAY_TEXT % plane_size,
 		FlightSim.BLOCKER_STAND:
 		NO_STAND_TEXT if problem == "no gate has a stand" else STAND_TEXT % plane_size,
+		FlightSim.BLOCKER_BUS_GATE:
+		TranslationServer.translate("No bus gate available for remote stands"),
+		FlightSim.BLOCKER_CHARTER_CAPACITY:
+		(
+			TranslationServer
+			. translate("Charters over {count} passengers require a regular gate")
+			. format({"count": BusGatePairing.BUS_CAPACITY})
+		),
 	}
 	return words.get(assessment["blocker"], problem.left(1).to_upper() + problem.substr(1))

@@ -505,14 +505,23 @@ func _add_row(row: Dictionary) -> void:
 	var head := PanelContainer.new()
 	head.name = "GateHead_%s" % gate_id
 	head.custom_minimum_size = Vector2(HEAD_W, ROW_H)
+	var is_remote := bool(row.get("is_remote", false))
 	var box := StyleBoxFlat.new()
-	box.bg_color = row["colour"]
+	box.bg_color = (
+		Color(row["colour"]).lerp(Color(0.95, 0.93, 0.88), 0.18) if is_remote else row["colour"]
+	)
 	box.set_corner_radius_all(6)
 	box.set_border_width_all(2)
 	box.border_color = GateColours.TEXT
 	head.add_theme_stylebox_override("panel", box)
 	var label := Label.new()
-	label.text = tr("Gate {gate}", "gate name").format({"gate": gate_id})
+	if is_remote:
+		head.tooltip_text = tr("Remote stand {stand} (bus-paired)", "remote stand tooltip").format(
+			{"stand": gate_id}
+		)
+		label.text = tr("Remote {stand}", "remote stand name").format({"stand": gate_id})
+	else:
+		label.text = tr("Gate {gate}", "gate name").format({"gate": gate_id})
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.add_theme_color_override("font_color", GateColours.TEXT)
@@ -552,9 +561,22 @@ func _make_bar(bar: Dictionary) -> Button:
 	button.gate = bar["gate"]
 	var key: String = bar["contract"] if bar["contract"] != "" else bar["flight"]
 	button.name = "Bar_%s_%d" % [key, bar["day"]]
-	button.text = bar["label"]
-	button.set_meta(FULL_TEXT, bar["label"])
-	button.set_meta(SHORT_TEXT, bar["place"])
+	var bus_gate := String(bar.get("bus_gate", ""))
+	var full_label := (
+		tr("{label} · Bus {gate}").format({"label": bar["label"], "gate": bus_gate})
+		if bus_gate != ""
+		else String(bar["label"])
+	)
+	var short_label := (
+		tr("{place} · Bus {gate}").format({"place": bar["place"], "gate": bus_gate})
+		if bus_gate != ""
+		else String(bar["place"])
+	)
+	button.text = full_label
+	button.set_meta(FULL_TEXT, full_label)
+	button.set_meta(SHORT_TEXT, short_label)
+	if bus_gate != "":
+		button.set_meta(&"bus_gate", bus_gate)
 	button.clip_text = true
 	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	button.focus_mode = Control.FOCUS_NONE
@@ -629,17 +651,19 @@ static func _place_hub_tag(button: Button, tag: PanelContainer) -> void:
 ## DEPARTED; the tick on the bar is the departure.
 func _bar_tooltip(bar: Dictionary) -> String:
 	var airline := "" if bar["airline"] == "" else "  %s" % bar["airline"]
+	var bus_gate := String(bar.get("bus_gate", ""))
+	var where_args := {
+		"label": bar["label"],
+		"airline": airline,
+		"gate": bar["gate"],
+		"bus": bus_gate,
+		"from": GameCalendar.clock_text(bar["start"], clock.epoch),
+		"to": GameCalendar.clock_text(bar["end"], clock.epoch),
+	}
 	var base := (
-		tr("{label}{airline}\nGate {gate}, held {from} to {to}")
-		. format(
-			{
-				"label": bar["label"],
-				"airline": airline,
-				"gate": bar["gate"],
-				"from": GameCalendar.clock_text(bar["start"], clock.epoch),
-				"to": GameCalendar.clock_text(bar["end"], clock.epoch),
-			}
-		)
+		tr("{label}{airline}\nRemote {gate} (Bus {bus}), held {from} to {to}").format(where_args)
+		if bus_gate != ""
+		else tr("{label}{airline}\nGate {gate}, held {from} to {to}").format(where_args)
 	)
 	if _is_hub_bar(bar):
 		base = "%s\n%s" % [base, tr("Hub Contract (+10% fee, +1 low-rating grace day)")]
@@ -838,9 +862,7 @@ func _show_actions() -> void:
 		_popover.visible = false
 		_summary.text = _hint_text()
 		return
-	var head := tr("{label}  Gate {gate}", "gate name").format(
-		{"label": bar["label"], "gate": bar["gate"]}
-	)
+	var head := _bar_head_text(bar)
 	_summary.text = head
 	_popover_title.text = head
 	if _confirming:
@@ -859,9 +881,7 @@ func _show_actions() -> void:
 
 func _show_disabled_popover(bar: Dictionary) -> void:
 	_summary.text = _hint_text()
-	_popover_title.text = tr("{label}  Gate {gate}", "gate name").format(
-		{"label": bar["label"], "gate": bar["gate"]}
-	)
+	_popover_title.text = _bar_head_text(bar)
 	var note := Label.new()
 	note.name = "DisabledBarNote"
 	if _note_kind == 1:
@@ -936,11 +956,22 @@ func _bar_at(pos: Vector2) -> Button:
 	return null
 
 
+func _bar_head_text(bar: Dictionary) -> String:
+	var bus_gate := String(bar.get("bus_gate", ""))
+	if bus_gate != "":
+		return tr("{label}  Remote {gate} · Bus {bus}", "remote stand name").format(
+			{"label": bar["label"], "gate": bar["gate"], "bus": bus_gate}
+		)
+	return tr("{label}  Gate {gate}", "gate name").format(
+		{"label": bar["label"], "gate": bar["gate"]}
+	)
+
+
 func _add_move_choices(bar: Dictionary) -> void:
 	var contract_id: String = bar["contract"]
-	var current: String = flights.contract_of(contract_id)["gate"]
+	var current := BusGatePairing.stand_id_of(flights.contract_of(contract_id))
 	var other_gates: Array[String] = []
-	for gate_id in flights.gate_ids():
+	for gate_id in flights.all_stand_ids():
 		if gate_id != current:
 			other_gates.append(gate_id)
 	var note := Label.new()

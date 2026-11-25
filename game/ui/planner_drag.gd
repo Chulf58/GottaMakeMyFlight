@@ -38,6 +38,15 @@ var _over := ""
 
 ## The text a drag over a row the flight fits shows: "Drop to move Rome to gate C. ...".
 static func drop_text(destination: String, gate_id: String) -> String:
+	if BusGatePairing.is_remote_stand_id(gate_id):
+		# gdlint:ignore = max-line-length
+		return (
+			TranslationServer
+			. translate(
+				"Drop to move {destination} to stand {gate}. Days already issued keep their stand."
+			)
+			. format({"destination": destination, "gate": gate_id})
+		)
 	# gdlint:ignore = max-line-length
 	return (
 		TranslationServer
@@ -59,6 +68,10 @@ static func refusal_text(sim: FlightSim, gate_id: String, problem: String) -> St
 		text = _stand_problem_text(sim, gate_id)
 	elif problem.begins_with("the taxiway move would strand"):
 		text = problem
+	elif problem.contains("has no bus gate"):
+		text = TranslationServer.translate("Stand {gate} — no free bus gate").format(
+			{"gate": gate_id}
+		)
 	elif (
 		problem == FlightContract.ODD_HOURS_NIGHT_TEXT or problem == FlightContract.QUIET_NIGHT_TEXT
 	):
@@ -75,18 +88,26 @@ static func refusal_text(sim: FlightSim, gate_id: String, problem: String) -> St
 
 
 static func _stand_problem_text(sim: FlightSim, gate_id: String) -> String:
-	var ground: Dictionary = sim.gate_grounds().get(gate_id, {})
+	var is_remote := BusGatePairing.is_remote_stand_id(gate_id)
+	var ground: Dictionary = sim.stand_grounds().get(gate_id, {})
 	var max_class: String = ground.get("max_class", "")
 	if max_class == "" and ground.has("next"):
 		if str(ground["next"].get("max_class", "")) != "":
-			return TranslationServer.translate("Gate {gate} — building taxi spur").format(
-				{"gate": gate_id}
+			var msg := (
+				"Stand {gate} — building taxi spur"
+				if is_remote
+				else "Gate {gate} — building taxi spur"
 			)
+			return TranslationServer.translate(msg).format({"gate": gate_id})
 	if max_class == "":
-		return TranslationServer.translate("Gate {gate} — no usable stand").format(
-			{"gate": gate_id}
+		var msg := (
+			"Stand {gate} — no usable stand" if is_remote else "Gate {gate} — no usable stand"
 		)
-	return TranslationServer.translate("Gate {gate} — stand too small").format({"gate": gate_id})
+		return TranslationServer.translate(msg).format({"gate": gate_id})
+	var small_msg := (
+		"Stand {gate} — stand too small" if is_remote else "Gate {gate} — stand too small"
+	)
+	return TranslationServer.translate(small_msg).format({"gate": gate_id})
 
 
 ## Why `contract_id` cannot be dropped on each of `gates` now, in the words a
@@ -116,8 +137,9 @@ func show_rows() -> void:
 	var refused := {}
 	var homes: Array[String] = []
 	if is_dragging():
-		refused = refusals(flights, _drag["contract"], flights.gate_ids())
-		homes = [_drag["gate"], flights.contract_of(_drag["contract"]).get("gate", "")]
+		refused = refusals(flights, _drag["contract"], flights.all_stand_ids())
+		var current := BusGatePairing.stand_id_of(flights.contract_of(_drag["contract"]))
+		homes = [_drag["gate"], current]
 	for track in tracks:
 		track.clear_drag()
 		if not is_dragging():

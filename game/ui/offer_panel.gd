@@ -895,7 +895,8 @@ func _refresh_fits() -> void:
 
 func _set_fit(label: Label, offer: Dictionary) -> void:
 	var assessment := FlightFit.assess(flights, OfferBoard.terms_of(offer))
-	var taxi: Array = flights.gate_taxi(assessment["gate"]) if assessment["fits"] else []
+	var stand_key := String(assessment.get("stand", assessment["gate"]))
+	var taxi: Array = flights.gate_taxi(stand_key) if assessment["fits"] else []
 	_fit_taxis[offer["id"]] = taxi if not taxi.is_empty() else TaxiTimes.BASE
 	if _note_labels.has(offer["id"]):
 		_set_note(_note_labels[offer["id"]], _note_for(offer))

@@ -8077,3 +8077,95 @@ msgstr ""
 #: ui/built_item_card.gd
 msgid "Bus gate: 16 x 6 m apron bay"
 msgstr ""
+
+#: flights/flight_fit.gd
+msgid "No bus gate available for remote stands"
+msgstr ""
+
+#: flights/flight_fit.gd
+msgid "Charters over {count} passengers require a regular gate"
+msgstr ""
+
+#: flights/flight_label.gd
+msgctxt "offer clash"
+msgid "it clashes with the {time} {airline} flight to {city} at stand {gate}"
+msgstr ""
+
+#: flights/flight_label.gd
+msgctxt "offer clash"
+msgid "it clashes with the {time} flight at stand {gate}"
+msgstr ""
+
+#: flights/flight_label.gd
+msgctxt "offer clash"
+msgid "it clashes with another flight at stand {gate}"
+msgstr ""
+
+#: ui/departures_board.gd
+msgctxt "gate name"
+msgid "Click to focus Gate {gate} → {stand}"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "{gate} → {stand}"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "{destination} now uses stand {stand} (Bus {gate}) for the days not yet issued"
+msgstr ""
+
+#: ui/departures_board.gd
+msgid "Stand {gate} has no free bus gate"
+msgstr ""
+
+#: ui/departures_board.gd
+msgctxt "stand name"
+msgid "Stand {gate}"
+msgstr ""
+
+#: ui/flight_planner.gd
+msgctxt "remote stand tooltip"
+msgid "Remote stand {stand} (bus-paired)"
+msgstr ""
+
+#: ui/flight_planner.gd
+msgctxt "remote stand name"
+msgid "Remote {stand}"
+msgstr ""
+
+#: ui/flight_planner.gd
+msgid "{label} · Bus {gate}"
+msgstr ""
+
+#: ui/flight_planner.gd
+msgid "{place} · Bus {gate}"
+msgstr ""
+
+#: ui/flight_planner.gd
+msgid "{label}{airline}\nRemote {gate} (Bus {bus}), held {from} to {to}"
+msgstr ""
+
+#: ui/flight_planner.gd
+msgctxt "remote stand name"
+msgid "{label}  Remote {gate} · Bus {bus}"
+msgstr ""
+
+#: ui/planner_drag.gd
+msgid "Drop to move {destination} to stand {gate}. Days already issued keep their stand."
+msgstr ""
+
+#: ui/planner_drag.gd
+msgid "Stand {gate} — no free bus gate"
+msgstr ""
+
+#: ui/planner_drag.gd
+msgid "Stand {gate} — building taxi spur"
+msgstr ""
+
+#: ui/planner_drag.gd
+msgid "Stand {gate} — no usable stand"
+msgstr ""
+
+#: ui/planner_drag.gd
+msgid "Stand {gate} — stand too small"
+msgstr ""

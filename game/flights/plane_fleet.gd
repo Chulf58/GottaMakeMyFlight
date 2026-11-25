@@ -65,13 +65,13 @@ func update_views() -> void:
 		views[i].slot = i % SLOTS
 
 
-## The gates the live flights are at, each once, in letter order.
+## The stands the live flights are at, each once, in stand order.
 func live_gates() -> Array[String]:
 	var out: Array[String] = []
 	for id in sim.flight_ids():
-		var gate := sim.flight_gate(id)
-		if gate != "" and not out.has(gate):
-			out.append(gate)
+		var stand := sim.flight_stand_id(id)
+		if stand != "" and not out.has(stand):
+			out.append(stand)
 	out.sort()
 	return out
 

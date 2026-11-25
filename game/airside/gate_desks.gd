@@ -166,6 +166,8 @@ func bind(on_grid: BuildGrid, on_flights: FlightSim) -> void:
 	flights.gate_source = gate_ids
 	flights.stand_source = gate_grounds
 	flights.bus_gate_source = bus_gate_ids
+	flights.bus_ground_source = func() -> Dictionary:
+		return BusGatePairing.bus_grounds_on(grid, bindings)
 	flights.remote_stand_source = remote_stand_ids
 	flights.remote_ground_source = remote_stand_grounds
 	flights.spare_stand_source = spare_stand
@@ -275,7 +277,7 @@ func _used_remote_flight_ids() -> Array[String]:
 	var out: Array[String] = []
 	if flights == null:
 		return out
-	for cid in flights.active_contract_ids():
+	for cid in flights.scheduled_contract_ids():
 		var sid := String(flights.contract_of(cid).get("stand", ""))
 		if sid.begins_with(RemoteStands.ID_PREFIX) and not out.has(sid):
 			out.append(sid)
@@ -400,7 +402,7 @@ func booked_class(gate: String) -> String:
 	var out := ""
 	if flights == null:
 		return out
-	for contract_id in flights.active_contract_ids():
+	for contract_id in flights.scheduled_contract_ids():
 		var contract := flights.contract_of(contract_id)
 		if contract["gate"] == gate or String(contract.get("stand", "")) == gate:
 			out = StandEnvelope.larger(out, contract["plane_size"])
@@ -1021,7 +1023,7 @@ func _remote_removal_problem(id: int) -> BuildResult:
 	if not _remote_by_obj.has(id) or flights == null:
 		return null
 	var sid := String(_remote_by_obj[id]["id"])
-	for cid in flights.active_contract_ids():
+	for cid in flights.scheduled_contract_ids():
 		if String(flights.contract_of(cid).get("stand", "")) == sid:
 			return BuildResult.refused(BuildResult.Reason.REMOTE_STAND_IN_USE)
 	for fid in flights.flight_ids():

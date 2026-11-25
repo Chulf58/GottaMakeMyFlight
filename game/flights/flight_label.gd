@@ -8,7 +8,10 @@ extends RefCounted
 ## What FlightSim's clash refusal reads like: "contract Y clashes with X at
 ## gate A", "... with flight X-d0 on the runway".
 static var _clash := RegEx.create_from_string(
-	"^contract \\S+ clashes with (flight )?(\\S+) (at gate (\\S+)|on the runway|on the taxi lane)$"
+	(
+		"^contract \\S+ clashes with (flight )?(\\S+) "
+		+ "(at (?:gate|stand) (\\S+)|on the runway|on the taxi lane)$"
+	)
 )
 
 
@@ -120,7 +123,9 @@ class Words:
 		elif named["airline"] == "" or named["city"] == "":
 			shape = "one-off"
 		var text := ""
-		match [shape, found["where"]]:
+		var where := String(found["where"])
+		var at_stand := where.begins_with("at stand")
+		match [shape, where]:
 			["full", "on the runway"]:
 				text = tr(
 					"it clashes with the {time} {airline} flight to {city} on the runway",
@@ -132,22 +137,37 @@ class Words:
 					"offer clash"
 				)
 			["full", _]:
-				text = tr(
-					"it clashes with the {time} {airline} flight to {city} at gate {gate}",
-					"offer clash"
+				text = (
+					tr(
+						"it clashes with the {time} {airline} flight to {city} at stand {gate}",
+						"offer clash"
+					)
+					if at_stand
+					else tr(
+						"it clashes with the {time} {airline} flight to {city} at gate {gate}",
+						"offer clash"
+					)
 				)
 			["one-off", "on the runway"]:
 				text = tr("it clashes with the {time} flight on the runway", "offer clash")
 			["one-off", "on the taxi lane"]:
 				text = tr("it clashes with the {time} flight on the taxi lane", "offer clash")
 			["one-off", _]:
-				text = tr("it clashes with the {time} flight at gate {gate}", "offer clash")
+				text = (
+					tr("it clashes with the {time} flight at stand {gate}", "offer clash")
+					if at_stand
+					else tr("it clashes with the {time} flight at gate {gate}", "offer clash")
+				)
 			[_, "on the runway"]:
 				text = tr("it clashes with another flight on the runway", "offer clash")
 			[_, "on the taxi lane"]:
 				text = tr("it clashes with another flight on the taxi lane", "offer clash")
 			_:
-				text = tr("it clashes with another flight at gate {gate}", "offer clash")
+				text = (
+					tr("it clashes with another flight at stand {gate}", "offer clash")
+					if at_stand
+					else tr("it clashes with another flight at gate {gate}", "offer clash")
+				)
 		var values := named.duplicate()
 		values["gate"] = found["gate"]
 		return text.format(values)

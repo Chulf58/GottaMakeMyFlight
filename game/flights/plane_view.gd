@@ -187,7 +187,7 @@ func update_pose() -> void:
 func sightings(time: float) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for id in sim.flight_ids():
-		if sim.flight_gate(id) != gate:
+		if sim.flight_stand_id(id) != gate:
 			continue
 		var at := pose_at(
 			starts_of(id),

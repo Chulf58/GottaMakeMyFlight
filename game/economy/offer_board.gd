@@ -948,10 +948,13 @@ static func _fit(offers: Array[Dictionary], flights: FlightSim, min_minute := -1
 			var first_free := _free_gate_map(flights, first, first_ordered, free_cache)
 			var second_free := _free_gate_map(flights, second, second_ordered, free_cache)
 			for minute in first_ordered:
+				var first_stand: String = first_cache[minute].get(
+					"stand", first_cache[minute]["gate"]
+				)
 				var joined := _joined_ordered_slot(
 					flights,
 					_terms_at(first, minute),
-					first_cache[minute]["gate"],
+					first_stand,
 					first_free[minute],
 					second,
 					second_ordered,
@@ -1094,7 +1097,7 @@ static func _joined_ordered_slot(
 ) -> int:
 	for minute in second_ordered:
 		var second_terms := _terms_at(second, minute)
-		var second_gate: String = second_cache[minute]["gate"]
+		var second_gate: String = second_cache[minute].get("stand", second_cache[minute]["gate"])
 		if not flights.gates_pair_compatible(
 			first_terms, first_gate, first_free, second_terms, second_gate, second_free[minute]
 		):
@@ -1175,13 +1178,13 @@ static func _is_quiet_gap_slot(flights: FlightSim, day: int, minute: int, epoch:
 		FlightContract.TRAITS_KEY: {},
 		FlightContract.ONE_OFF_DAY_KEY: day,
 	}
-	var grounds := flights.gate_grounds()
-	for gate: String in flights.gate_ids():
-		var ground: Dictionary = grounds.get(gate, {})
+	var grounds := flights.stand_grounds()
+	for stand_id: String in flights.all_stand_ids():
+		var ground: Dictionary = grounds.get(stand_id, {})
 		if ground.is_empty():
 			continue
 		var candidate := FlightContract.assigned(
-			terms.merged({"first_day": day}), gate, ground["stand"]
+			terms.merged({"first_day": day}), stand_id, ground["stand"], stand_id
 		)
 		if candidate.is_empty():
 			continue
@@ -1189,9 +1192,9 @@ static func _is_quiet_gap_slot(flights: FlightSim, day: int, minute: int, epoch:
 		var c_hold := FlightTimetable.gate_hold_span(c_starts, PlaneClasses.SMALL)
 		var win_start := c_hold[0] - CHARTER_GAP_MARGIN_TICKS
 		var win_end := c_hold[1] + CHARTER_GAP_MARGIN_TICKS
-		if not _gate_quiet_over(flights, gate, day, epoch, win_start, win_end):
+		if not _gate_quiet_over(flights, stand_id, day, epoch, win_start, win_end):
 			continue
-		if flights.trial_assignment(terms, [], false, gate)["gate"] == gate:
+		if flights.trial_assignment(terms, [], false, stand_id).get("stand", "") == stand_id:
 			return true
 	return false
 
@@ -1200,7 +1203,7 @@ static func _gate_quiet_over(
 	flights: FlightSim, gate: String, day: int, epoch: int, win_start: int, win_end: int
 ) -> bool:
 	for fid in flights.flight_ids():
-		if flights.flight_gate(fid) != gate:
+		if flights.flight_gate(fid) != gate and flights.flight_stand_id(fid) != gate:
 			continue
 		var starts: Array[int] = []
 		for s in FlightSim.STATE_COUNT:
@@ -1217,7 +1220,8 @@ static func _gate_quiet_over(
 	var start_days := flights.start_days
 	for cid in flights.contract_ids():
 		var other := flights.contract_of(cid)
-		if other["gate"] != gate or flights.contract_end_day(cid) >= 0:
+		var other_stand := BusGatePairing.stand_id_of(other)
+		if (other["gate"] != gate and other_stand != gate) or flights.contract_end_day(cid) >= 0:
 			continue
 		var check_days: Array[int] = [day - 1, day, day + 1]
 		if FlightContract.is_charter(other):
