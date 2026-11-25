@@ -313,8 +313,9 @@ func retry_autosave() -> bool:
 
 
 ## The save's parts in install order. The grid comes first (the passengers
-## are checked against it), the passengers before the staff, then the rest. A
-## new part is one more entry here.
+## are checked against it), the messes and staff before the passengers (so
+## boarding checks see the staged and loaded staff), then the rest. A new part
+## is one more entry here.
 func parts() -> Array[SavePart]:
 	var active_rules := ensure_rules()
 	var list: Array[SavePart] = [
@@ -335,14 +336,14 @@ func parts() -> Array[SavePart]:
 		),
 		# Checked against the saved gates (or, with no gate desks, the live ones).
 		SavePart.new("flights", flights.to_snapshot, _stage_flights, flights.from_snapshot),
-		SavePart.new(
-			"passengers", passengers.to_snapshot, _stage_passengers, passengers.from_snapshot
-		),
-		# Checked against the staged grid; installed after the grid it is on.
+		# Checked against the staged grid; installed before staff and passengers.
 		SavePart.new(
 			"messes", passengers.messes.to_snapshot, _stage_messes, passengers.messes.from_snapshot
 		),
 		SavePart.new("staff", staff.to_snapshot, _stage_staff, staff.from_snapshot),
+		SavePart.new(
+			"passengers", passengers.to_snapshot, _stage_passengers, passengers.from_snapshot
+		),
 		# The bookings are PassengerSim's; the part holds them with the cars.
 		SavePart.new(
 			"landside",
@@ -419,8 +420,8 @@ func parts() -> Array[SavePart]:
 		)
 	if apron != null:
 		# After the flights, which say whether the stand is in use, and
-		# before the passengers, whose exits walk to its plane door.
-		var at := list.find_custom(func(part: SavePart) -> bool: return part.key == "passengers")
+		# before messes, staff and passengers, whose exits walk to its plane door.
+		var at := list.find_custom(func(part: SavePart) -> bool: return part.key == "messes")
 		list.insert(at, SavePart.new("apron", apron.to_snapshot, _stage_apron, apron.from_snapshot))
 	if bus_shuttle != null:
 		list.append(
@@ -1152,14 +1153,10 @@ func _install_rules(data: Dictionary) -> bool:
 	return true
 
 
-## Checked against the staged grid. Keeps the loaded passenger state and a
-## bare PassengerSim on that grid, with its layout built, for the staff check
-## and the links (SaveLinks).
-func _stage_passengers(data: Dictionary, staged: Dictionary) -> String:
+func _staged_passenger_sim(staged: Dictionary) -> PassengerSim:
+	if staged.has("sim"):
+		return staged["sim"]
 	var grid: BuildGrid = staged["grid"]
-	var loaded := PassengerSnapshot.load(data, grid)
-	if loaded.has("error"):
-		return str(loaded["error"])
 	var sim := PassengerSim.new()
 	sim.grid = grid
 	if staged.has("gates") and staged.has("apron"):
@@ -1168,6 +1165,18 @@ func _stage_passengers(data: Dictionary, staged: Dictionary) -> String:
 	# The spots are derived past the security lanes' exit cells, which the
 	# runtime reads from its host's layout (a live sim binds it in bind()).
 	sim.security.bind(sim)
+	return sim
+
+
+## Checked against the staged grid and staged staff. Keeps the loaded passenger
+## state and the bare PassengerSim on that grid for the links (SaveLinks).
+func _stage_passengers(data: Dictionary, staged: Dictionary) -> String:
+	var grid: BuildGrid = staged["grid"]
+	var loaded := PassengerSnapshot.load(data, grid)
+	if loaded.has("error"):
+		return str(loaded["error"])
+	var had_sim := staged.has("sim")
+	var sim := _staged_passenger_sim(staged)
 	# The checks PassengerSim.from_snapshot() runs at install: info desks,
 	# standing spots, boarding files, ParkSide's saved stamps, the line outside
 	# the entrance, then the booking overrides against the staged flights.
@@ -1187,7 +1196,8 @@ func _stage_passengers(data: Dictionary, staged: Dictionary) -> String:
 	if not held.has("error"):
 		held = _checked_booking_overrides(data, staged)
 	if held.has("error"):
-		sim.free()
+		if not had_sim:
+			sim.free()
 		return str(held["error"])
 	staged["passengers"] = loaded
 	staged["sim"] = sim
@@ -1242,12 +1252,29 @@ func _stage_messes(data: Dictionary, staged: Dictionary) -> String:
 
 
 ## Checked against the staged layout, and the cleaners' jobs against the
-## staged messes; kept for SaveLinks ramp-job checks.
+## staged messes; binds the staged StaffSim onto staged["sim"] for passenger
+## boarding checks and keeps the loaded state for SaveLinks ramp-job checks.
 func _stage_staff(data: Dictionary, staged: Dictionary) -> String:
-	var loaded := StaffSnapshot.load(data, staged["sim"], staged["messes"])
+	var had_sim := staged.has("sim")
+	var sim := _staged_passenger_sim(staged)
+	var loaded := StaffSnapshot.load(data, sim, staged["messes"])
 	if loaded.has("error"):
+		if not had_sim:
+			sim.free()
 		return str(loaded["error"])
+	staged["sim"] = sim
+	var staged_staff := StaffSim.new()
+	staged_staff.sim = sim
+	staged_staff._next_id = loaded["next_id"]
+	staged_staff._members.assign(loaded["members"])
+	staged_staff.closures.assign(loaded["closed"])
+	staged_staff.faults.assign(loaded["faults"])
+	staged_staff._counters_dirty = true
+	staged_staff._gate_desks_dirty = true
+	staged_staff.rederive()
+	sim.staff = staged_staff
 	staged["staff"] = loaded
+	staged["staff_sim"] = staged_staff
 	return ""
 
 

@@ -223,6 +223,52 @@ func test_a_wallet_part_goes_through_finances_restore_before_any_new_game() -> v
 	fresh.free()
 
 
+func _step_until_boarding_door_file() -> bool:
+	var sim: PassengerSim = _main.get_node("PassengerSim")
+	for i in 3000:
+		var doors: Array = sim.files.to_dict()["doors"]
+		for entry: Dictionary in doors:
+			for id: int in entry["passengers"]:
+				if sim.get_passenger(id).stage == Passenger.Stage.TO_EXIT:
+					return true
+		SaveTestKit.step(_main)
+	return false
+
+
+func test_a_save_with_a_passenger_in_a_boarding_door_file_loads_back() -> void:
+	assert_bool(_step_until_boarding_door_file()).is_true()
+	var saved := _taken()
+	var saved_sum := SaveTestKit.checksum(_main)
+	for i in 5:
+		SaveTestKit.step(_main)
+	assert_str(SaveTestKit.checksum(_main)).is_not_equal(saved_sum)
+	assert_bool(_save.load_world(saved)).override_failure_message(_save.message_text()).is_true()
+	assert_str(_save.message_text()).is_equal("Loaded")
+	assert_str(SaveTestKit.checksum(_main)).is_equal(saved_sum)
+
+	# Loading also succeeds when the live world currently has no open gate staff.
+	var live_staff: StaffSim = _main.get_node("Staff")
+	live_staff.fire(StaffMember.Role.GATE)
+	assert_bool(_save.load_world(saved)).override_failure_message(_save.message_text()).is_true()
+	assert_str(_save.message_text()).is_equal("Loaded")
+	assert_str(SaveTestKit.checksum(_main)).is_equal(saved_sum)
+
+	# Negative case: if the gate desk is unstaffed in the saved staff state,
+	# a passenger in that gate's door file is still refused cleanly.
+	var bad := saved.duplicate(true)
+	var members: Array = bad["staff"]["members"]
+	var kept := []
+	for m: Dictionary in members:
+		if int(m["role"]) != StaffMember.Role.GATE:
+			kept.append(m)
+	assert_int(kept.size()).is_less(members.size())
+	bad["staff"]["members"] = kept
+	for i in 5:
+		SaveTestKit.step(_main)
+	_assert_refused(bad, "unstaffed gate door file")
+	assert_str(_save.message_text()).contains("not walking to that open exit")
+
+
 ## Finances that counts its restore() calls.
 class FinancesDouble:
 	extends Finances
