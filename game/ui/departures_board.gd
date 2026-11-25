@@ -162,6 +162,7 @@ static func _day_entries(
 					"contract": row["contract"],
 					"day": day,
 					"gate": row["gate"],
+					"stand": row.get("stand", row["gate"]),
 					"key": "%s_%d" % [row["contract"], day] if row["contract"] != "" else "",
 				}
 			)
@@ -542,6 +543,7 @@ static func _row_shape_matches(prev: Dictionary, cur: Dictionary) -> bool:
 		prev["flight"] == cur["flight"]
 		and prev["key"] == cur["key"]
 		and prev["gate"] == cur["gate"]
+		and prev.get("stand", prev["gate"]) == cur.get("stand", cur["gate"])
 		and (prev["boarded_text"] != "") == (cur["boarded_text"] != "")
 		and (prev["late"] != "") == (cur["late"] != "")
 		and (_line_two_text(prev) != "") == (_line_two_text(cur) != "")
@@ -618,12 +620,18 @@ func _add_row(entry: Dictionary) -> void:
 	row_box.name = "FlightRow_%s" % entry["flight"]
 	row_box.add_theme_constant_override("separation", 1)
 	var gate_id: String = entry["gate"]
+	var stand_id := String(entry.get("stand", gate_id))
 	if gate_id != "":
 		row_box.mouse_filter = Control.MOUSE_FILTER_STOP
 		row_box.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-		row_box.tooltip_text = tr("Click to focus Gate {gate}", "gate name").format(
-			{"gate": gate_id}
-		)
+		if stand_id != gate_id:
+			row_box.tooltip_text = tr("Click to focus Gate {gate} → {stand}", "gate name").format(
+				{"gate": gate_id, "stand": stand_id}
+			)
+		else:
+			row_box.tooltip_text = tr("Click to focus Gate {gate}", "gate name").format(
+				{"gate": gate_id}
+			)
 		row_box.gui_input.connect(_on_row_input.bind(gate_id))
 	else:
 		row_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -659,7 +667,14 @@ func _add_row(entry: Dictionary) -> void:
 
 static func _line_two_text(entry: Dictionary) -> String:
 	var parts := PackedStringArray()
-	for part: String in [entry["airline"], entry["status"]]:
+	var gate_id := String(entry.get("gate", ""))
+	var stand_id := String(entry.get("stand", gate_id))
+	var remote := ""
+	if gate_id != "" and stand_id != "" and stand_id != gate_id:
+		remote = TranslationServer.translate("{gate} → {stand}").format(
+			{"gate": gate_id, "stand": stand_id}
+		)
+	for part: String in [entry["airline"], remote, entry["status"]]:
 		if part != "":
 			parts.append(part)
 	return "  ".join(parts)
@@ -721,7 +736,7 @@ func _on_header_late_pressed() -> void:
 
 ## Shared schedule-action helpers called by FlightPlanner and PlannerDrag.
 static func move_choices(sim: FlightSim, contract_id: String, gates: Array[String]) -> Dictionary:
-	var current: String = sim.contract_of(contract_id)["gate"]
+	var current := BusGatePairing.stand_id_of(sim.contract_of(contract_id))
 	var fitting: Array[String] = []
 	var any_other := false
 	for gate_id in gates:
@@ -739,7 +754,22 @@ static func move_outcome(sim: FlightSim, contract_id: String, gate_id: String) -
 	if problem != "":
 		return {"moved": false, "text": reason_text(sim, problem, gate_id)}
 	sim.reassign_gate(contract_id, gate_id)
-	var destination: String = sim.contract_of(contract_id)["destination"]
+	var moved_contract := sim.contract_of(contract_id)
+	var destination: String = moved_contract["destination"]
+	if BusGatePairing.is_remote_contract(moved_contract):
+		return {
+			"moved": true,
+			"text":
+			(
+				TranslationServer
+				. translate(
+					"{destination} now uses stand {stand} (Bus {gate}) for the days not yet issued"
+				)
+				. format(
+					{"destination": destination, "stand": gate_id, "gate": moved_contract["gate"]}
+				)
+			),
+		}
 	return {
 		"moved": true,
 		"text":
@@ -815,6 +845,10 @@ static func reason_text(sim: FlightSim, reason: String, gate_id: String) -> Stri
 	var found := FlightLabel.parse_clash(reason)
 	var busy := TranslationServer.translate("Gate {gate} is busy when this flight needs it")
 	if found.is_empty():
+		if reason.contains("has no bus gate"):
+			return TranslationServer.translate("Stand {gate} has no free bus gate").format(
+				{"gate": gate_id}
+			)
 		return busy.format({"gate": gate_id})
 	var label := FlightLabel.parts(sim, found["is_flight"], found["id"])
 	if label.is_empty():
@@ -822,7 +856,11 @@ static func reason_text(sim: FlightSim, reason: String, gate_id: String) -> Stri
 	var subject := TranslationServer.translate("Gate {gate}", "gate name").format(
 		{"gate": found["gate"]}
 	)
-	if found["where"] == "on the runway":
+	if String(found["where"]).begins_with("at stand"):
+		subject = TranslationServer.translate("Stand {gate}", "stand name").format(
+			{"gate": found["gate"]}
+		)
+	elif found["where"] == "on the runway":
 		subject = TranslationServer.translate("The runway")
 	elif found["where"] == "on the taxi lane":
 		subject = TranslationServer.translate("The taxi lane")

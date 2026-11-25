@@ -407,7 +407,14 @@ static func _fixed_clash_problem(
 				continue
 			var b_size := _flight_plane_size(b, contracts)
 			if not FlightTimetable.shares_gate(
-				a["gate"], a["starts"], b["gate"], b["starts"], a_size, b_size
+				a["gate"],
+				a["starts"],
+				b["gate"],
+				b["starts"],
+				a_size,
+				b_size,
+				String(a.get("stand_id", a["gate"])),
+				String(b.get("stand_id", b["gate"]))
 			):
 				continue
 			if ended.has(b["contract"]):
@@ -426,7 +433,8 @@ static func _fixed_clash_problem(
 				flight["gate"],
 				flight["starts"],
 				epoch,
-				_flight_plane_size(flight, contracts)
+				_flight_plane_size(flight, contracts),
+				String(flight.get("stand_id", flight["gate"]))
 			):
 				return "contract %s clashes with flight %s" % [contract["id"], flight["id"]]
 	return ""

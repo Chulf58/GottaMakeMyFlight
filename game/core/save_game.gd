@@ -1050,9 +1050,11 @@ func _staged_flight_sim(staged: Dictionary) -> FlightSim:
 	for sid: String in rem_grounds:
 		rem_ids.append(sid)
 	rem_ids.sort()
+	var bus_grounds := BusGatePairing.bus_grounds_on(grid, bindings)
 	sim.gate_source = func() -> Array[String]: return letters
 	sim.stand_source = func() -> Dictionary: return grounds
 	sim.bus_gate_source = func() -> Array[String]: return bus_letters
+	sim.bus_ground_source = func() -> Dictionary: return bus_grounds
 	sim.remote_stand_source = func() -> Array[String]: return rem_ids
 	sim.remote_ground_source = func() -> Dictionary: return rem_grounds
 	sim.spur_source = func() -> Dictionary: return spurs

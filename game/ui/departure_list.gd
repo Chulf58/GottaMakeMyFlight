@@ -88,14 +88,27 @@ static func _rows(flights: FlightSim, today: int) -> Array[Dictionary]:
 		var doors := FlightTimetable.starts_for(contract, today, flights.epoch)[
 			FlightSim.State.DOORS_CLOSED
 		]
-		# An occurrence already issued keeps the gate it was issued at.
-		var gate := flights.flight_gate(FlightTimetable.occurrence_id(contract_id, today))
+		# An occurrence already issued keeps the gate and stand it was issued at.
+		var occurrence := FlightTimetable.occurrence_id(contract_id, today)
+		var gate := flights.flight_gate(occurrence)
 		if gate == "":
 			gate = contract["gate"]
+		var stand := flights.flight_stand_id(occurrence)
+		if stand == "":
+			stand = BusGatePairing.stand_id_of(contract)
 		var place_airline := [contract["destination"], contract["airline"]]
-		var occurrence := FlightTimetable.occurrence_id(contract_id, today)
 		rows.append(
-			_row(tick, doors, place_airline, state, contract_id, gate, occurrence, flights.epoch)
+			_row(
+				tick,
+				doors,
+				place_airline,
+				state,
+				contract_id,
+				gate,
+				occurrence,
+				flights.epoch,
+				stand
+			)
 		)
 	for id in flights.flight_ids():
 		if flights.flight_contract_id(id) != "":
@@ -105,7 +118,8 @@ static func _rows(flights: FlightSim, today: int) -> Array[Dictionary]:
 			var doors := flights.doors_close_tick(id)
 			var state := flights.state_of(id)
 			var gate := flights.flight_gate(id)
-			rows.append(_row(tick, doors, [id, ""], state, "", gate, id, flights.epoch))
+			var stand := flights.flight_stand_id(id)
+			rows.append(_row(tick, doors, [id, ""], state, "", gate, id, flights.epoch, stand))
 	rows.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["tick"] < b["tick"])
 	return rows
 
@@ -123,7 +137,8 @@ static func _row(
 	contract_id: String,
 	gate: String,
 	flight_id: String,
-	epoch: int
+	epoch: int,
+	stand := ""
 ) -> Dictionary:
 	var place: String = place_airline[0]
 	var airline: String = place_airline[1]
@@ -144,6 +159,7 @@ static func _row(
 		"departed": state == FlightSim.State.DEPARTED,
 		"contract": contract_id,
 		"gate": gate,
+		"stand": gate if stand == "" else stand,
 		"flight": flight_id,
 	}
 

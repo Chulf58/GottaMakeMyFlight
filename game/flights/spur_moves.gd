@@ -65,6 +65,10 @@ static func side_of_gate(world: Dictionary, gate: String) -> String:
 	)
 
 
+static func side_of_contract(world: Dictionary, contract: Dictionary) -> String:
+	return side_of_gate(world, BusGatePairing.stand_id_of(contract))
+
+
 ## Pending `side`'s release tick R in `world` (see the class notes), or -1 when
 ## it is not pending. Worked out once per world.
 static func release(world: Dictionary, side: String) -> int:
@@ -77,10 +81,7 @@ static func release(world: Dictionary, side: String) -> int:
 	var contracts: Array = []
 	if world.get("open", true):
 		for contract: Dictionary in world["contracts"]:
-			if (
-				_contract_runs_ahead(world, contract)
-				and side_of_gate(world, contract["gate"]) == side
-			):
+			if _contract_runs_ahead(world, contract) and side_of_contract(world, contract) == side:
 				contracts.append(contract)
 	var moved := true
 	while moved:
@@ -125,7 +126,8 @@ static func next_ground(world: Dictionary, gate: String) -> Dictionary:
 ## new stand cannot take it.
 static func resolve(world: Dictionary, contract: Dictionary, day: int) -> Dictionary:
 	var gate: String = contract["gate"]
-	var ground: Dictionary = world["grounds"].get(gate, {})
+	var stand_id := BusGatePairing.stand_id_of(contract)
+	var ground: Dictionary = world["grounds"].get(stand_id, {})
 	if ground.is_empty():
 		return {}
 	var side := StandPlacement.side_of(ground["stand"])
@@ -135,18 +137,22 @@ static func resolve(world: Dictionary, contract: Dictionary, day: int) -> Dictio
 		return {"contract": contract, "stand": ground["stand"]}
 	var cache: Dictionary = world.get_or_add("_resolved", {})
 	if not cache.has(contract["id"]):
-		cache[contract["id"]] = _moved(contract, gate, next_ground(world, gate))
+		cache[contract["id"]] = _moved(contract, gate, next_ground(world, stand_id), stand_id)
 	return cache[contract["id"]]
 
 
 ## `contract` assigned to gate `gate`'s ground `next`, or {} when it cannot be.
-static func _moved(contract: Dictionary, gate: String, next: Dictionary) -> Dictionary:
-	if FlightContract.assignment_problem(gate, next["stand"]) != "":
+static func _moved(
+	contract: Dictionary, gate: String, next: Dictionary, stand_id := ""
+) -> Dictionary:
+	var resolved_stand := gate if stand_id == "" else stand_id
+	if FlightContract.assignment_problem(resolved_stand, next["stand"]) != "":
 		return {}
 	if not FlightGround.class_fits(contract["plane_size"], next["max_class"]):
 		return {}
 	return {
-		"contract": FlightContract.assigned(contract, gate, next["stand"]), "stand": next["stand"]
+		"contract": FlightContract.assigned(contract, gate, next["stand"], resolved_stand),
+		"stand": next["stand"],
 	}
 
 
@@ -180,7 +186,7 @@ static func refusal(world: Dictionary) -> Dictionary:
 		for contract: Dictionary in world["contracts"]:
 			if (
 				not _contract_runs_ahead(world, contract)
-				or side_of_gate(world, contract["gate"]) != side
+				or side_of_contract(world, contract) != side
 			):
 				continue
 			var day := first_day_from(world, contract, at)
@@ -304,6 +310,10 @@ static func with_moves(
 	var out: Array[Dictionary] = []
 	for contract in contracts:
 		var to: String = moves.get(contract["id"], "")
+		var stand_id := BusGatePairing.stand_id_of(contract)
+		if to != "" and BusGatePairing.is_remote_contract(contract) and grounds.has(stand_id):
+			out.append(FlightContract.assigned(contract, to, grounds[stand_id]["stand"], stand_id))
+			continue
 		var ok := to != "" and grounds.has(to)
 		ok = ok and FlightContract.assignment_problem(to, grounds[to]["stand"]) == ""
 		out.append(FlightContract.assigned(contract, to, grounds[to]["stand"]) if ok else contract)

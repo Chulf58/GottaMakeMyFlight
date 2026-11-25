@@ -127,11 +127,18 @@ static func next_day(contract: Dictionary, now: int, epoch: int) -> int:
 	return maxi(int(contract["first_day"]), day)
 
 
-## True when two contracts would hold one gate at the same time on some day:
-## they share a gate and their gate holds overlap. Repeating contracts repeat
-## daily forever; one-off charters (one_off_day >= 0) hold only that single day.
+## True when two contracts would hold one stand or paired bus gate at the same
+## time on some day. Repeating contracts repeat daily forever; one-off charters
+## (one_off_day >= 0) hold only that single day.
 static func contracts_share_gate(a: Dictionary, b: Dictionary) -> bool:
-	if a["gate"] != b["gate"]:
+	var a_stand := BusGatePairing.stand_id_of(a)
+	var b_stand := BusGatePairing.stand_id_of(b)
+	var share_stand := a_stand == b_stand
+	var share_bus: bool = (
+		a["gate"] == b["gate"]
+		and (BusGatePairing.is_remote_contract(a) or BusGatePairing.is_remote_contract(b))
+	)
+	if not share_stand and not share_bus:
 		return false
 	var a_size: String = a.get("plane_size", PlaneClasses.MEDIUM)
 	var b_size: String = b.get("plane_size", PlaneClasses.MEDIUM)
@@ -142,50 +149,86 @@ static func contracts_share_gate(a: Dictionary, b: Dictionary) -> bool:
 			b["gate"],
 			starts_for(b, FlightContract.one_off_day(b), 0),
 			a_size,
-			b_size
+			b_size,
+			a_stand,
+			b_stand
 		)
 	if FlightContract.is_charter(a):
 		return contract_meets(
-			b, a["gate"], starts_for(a, FlightContract.one_off_day(a), 0), 0, a_size
+			b, a["gate"], starts_for(a, FlightContract.one_off_day(a), 0), 0, a_size, a_stand
 		)
 	if FlightContract.is_charter(b):
 		return contract_meets(
-			a, b["gate"], starts_for(b, FlightContract.one_off_day(b), 0), 0, b_size
+			a, b["gate"], starts_for(b, FlightContract.one_off_day(b), 0), 0, b_size, b_stand
 		)
 	var a_starts := starts_for(a, 0, 0)
 	for shift in [-1, 0, 1]:
-		if shares_gate(a["gate"], a_starts, b["gate"], starts_for(b, shift, 0), a_size, b_size):
+		if shares_gate(
+			a["gate"],
+			a_starts,
+			b["gate"],
+			starts_for(b, shift, 0),
+			a_size,
+			b_size,
+			a_stand,
+			b_stand
+		):
 			return true
 	return false
 
 
-## Whether a flight at `gate` with `starts` and `flight_size` would hold the gate
-## at the same time as an occurrence of `contract` on a day from its first_day.
-## Only the days whose gate hold overlaps the flight's are compared; they form
-## one contiguous range, found in closed form from the contract's full
-## schedule span (which always encloses gate_hold_span()).
+## Whether a flight at `gate` (on stand `stand_id`, defaulting to `gate`) with
+## `starts` and `flight_size` would hold the stand or paired bus gate at the
+## same time as an occurrence of `contract` on a day from its first_day.
 static func contract_meets(
 	contract: Dictionary,
 	gate: String,
 	starts: Array,
 	epoch: int,
-	flight_size: String = PlaneClasses.MEDIUM
+	flight_size: String = PlaneClasses.MEDIUM,
+	stand_id := ""
 ) -> bool:
+	var f_stand := gate if stand_id == "" else stand_id
+	var c_stand := BusGatePairing.stand_id_of(contract)
+	var c_gate := String(contract["gate"])
+	var share_stand := c_stand == f_stand
+	var share_bus: bool = c_gate == gate and (c_stand != c_gate or f_stand != gate)
+	if not share_stand and not share_bus:
+		return false
 	var hold := gate_hold_span(starts, flight_size)
-	if hold[0] >= hold[1] or contract["gate"] != gate:
+	var check_from := mini(hold[0], int(starts[0]))
+	var check_to := maxi(hold[1], int(starts[FlightSim.State.DEPARTED]))
+	if share_bus:
+		var f_bus := BusGatePairing.bus_hold_span(starts)
+		check_from = mini(check_from, f_bus[0])
+		check_to = maxi(check_to, f_bus[1])
+	if check_from >= check_to:
 		return false
 	var c_size: String = contract.get("plane_size", PlaneClasses.MEDIUM)
 	if FlightContract.is_charter(contract):
 		var c_starts := starts_for(contract, FlightContract.one_off_day(contract), epoch)
-		return shares_gate(gate, starts, contract["gate"], c_starts, flight_size, c_size)
-	var first := _first_start(contract, 0, epoch)
+		return shares_gate(gate, starts, c_gate, c_starts, flight_size, c_size, f_stand, c_stand)
+	var day0_starts := starts_for(contract, 0, epoch)
+	var day0_hold := gate_hold_span(day0_starts, c_size)
+	var c_from := mini(day0_hold[0], int(day0_starts[0]))
+	var c_to := maxi(day0_hold[1], int(day0_starts[FlightSim.State.DEPARTED]))
+	if share_bus:
+		var c_bus := BusGatePairing.bus_hold_span(day0_starts)
+		c_from = mini(c_from, c_bus[0])
+		c_to = maxi(c_to, c_bus[1])
 	var day_size := GameCalendar.TICKS_PER_DAY
-	var held := reserved_ticks(taxi_of(contract), c_size, boarding_ticks_of(contract))
-	var lowest := GameCalendar.floor_div(hold[0] - first - held, day_size) + 1
-	var highest := -GameCalendar.floor_div(first - hold[1], day_size) - 1
+	var lowest := GameCalendar.floor_div(check_from - c_to, day_size) + 1
+	var highest := -GameCalendar.floor_div(c_from - check_to, day_size) - 1
 	for day in range(maxi(lowest, int(contract["first_day"])), highest + 1):
 		if shares_gate(
-			gate, starts, contract["gate"], starts_for(contract, day, epoch), flight_size, c_size
+			gate,
+			starts,
+			c_gate,
+			starts_for(contract, day, epoch),
+			flight_size,
+			c_size,
+			f_stand,
+			c_stand
 		):
 			return true
 	return false
@@ -206,20 +249,28 @@ static func gate_hold_span(starts: Array, plane_size: String = PlaneClasses.MEDI
 	return [int(starts[0]), int(starts[FlightSim.State.DEPARTED])]
 
 
-## Whether two flights hold one gate at the same time, half-open.
+## Whether two flights hold the same stand (full stand hold) or the same paired
+## bus gate (bus gate hold), half-open.
 static func shares_gate(
 	a_gate: String,
 	a_starts: Array,
 	b_gate: String,
 	b_starts: Array,
 	a_size: String = PlaneClasses.MEDIUM,
-	b_size: String = PlaneClasses.MEDIUM
+	b_size: String = PlaneClasses.MEDIUM,
+	a_stand := "",
+	b_stand := ""
 ) -> bool:
-	if a_gate != b_gate:
-		return false
-	var a_hold := gate_hold_span(a_starts, a_size)
-	var b_hold := gate_hold_span(b_starts, b_size)
-	return holds_overlap(a_hold[0], a_hold[1], b_hold[0], b_hold[1])
+	var sa := a_gate if a_stand == "" else a_stand
+	var sb := b_gate if b_stand == "" else b_stand
+	if sa == sb:
+		var a_hold := gate_hold_span(a_starts, a_size)
+		var b_hold := gate_hold_span(b_starts, b_size)
+		if holds_overlap(a_hold[0], a_hold[1], b_hold[0], b_hold[1]):
+			return true
+	if a_gate == b_gate and (sa != a_gate or sb != b_gate):
+		return BusGatePairing.bus_holds_overlap(a_starts, b_starts)
+	return false
 
 
 ## True when the half-open gate holds [a_start, a_end) and [b_start, b_end) overlap.

@@ -24,9 +24,17 @@ static func rows_for_day(sim: FlightSim, day: int) -> Array[Dictionary]:
 	var rows: Array[Dictionary] = []
 	var by_gate := {}
 	for gate_id in sim.gate_ids():
-		var row := {"gate": gate_id, "colour": GateColours.of(gate_id), "bars": []}
+		var row := {
+			"gate": gate_id, "is_remote": false, "colour": GateColours.of(gate_id), "bars": []
+		}
 		rows.append(row)
 		by_gate[gate_id] = row
+	for stand_id in sim.remote_stand_ids():
+		var row := {
+			"gate": stand_id, "is_remote": true, "colour": GateColours.of(stand_id), "bars": []
+		}
+		rows.append(row)
+		by_gate[stand_id] = row
 	for bar in bars_for_day(sim, day):
 		if by_gate.has(bar["gate"]):
 			(by_gate[bar["gate"]]["bars"] as Array).append(bar)
@@ -89,10 +97,14 @@ static func _bar(
 ) -> Dictionary:
 	var shown_start := maxi(hold.start, day_start)
 	var shown_end := mini(hold.end, day_start + DAY)
+	var gate_id := String(row["gate"])
+	var stand_id := String(row.get("stand", gate_id))
+	var bus_gate := gate_id if stand_id != gate_id else ""
 	return {
 		"contract": row["contract"],
 		"flight": row["flight"],
-		"gate": row["gate"],
+		"gate": stand_id,
+		"bus_gate": bus_gate,
 		"day": departure_day,
 		"start": hold.start,
 		"end": hold.end,
