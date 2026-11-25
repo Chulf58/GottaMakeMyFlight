@@ -7,14 +7,14 @@ extends GdUnitTestSuite
 ## walled on both sides of one front at a time; the chair is asked of
 ## GateRoller.walled_tight(), GateCapacity.claim_seat() and reserve().
 
-## Guest kinds: one roller, two bags with the roller as bag 0 or bag 1, none.
-enum Bags { ONE, TWO_RIGHT, TWO_LEFT, NONE }
+## Guest kinds: one roller (1-bag), two non-roller bags (2-bag), none (0-bag).
+enum Bags { ONE, TWO, NONE }
 
 var _world: PassengerTestWorld
 var _seats: Array = []
 var _left := Vector2i.ZERO
 ## One guest per Bags kind.
-var _pool: Array[Passenger] = [null, null, null, null]
+var _pool: Array[Passenger] = [null, null, null]
 
 
 func before() -> void:
@@ -37,22 +37,21 @@ func before() -> void:
 	while _pool.has(null):
 		var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
 		ToiletTestLayout.calm(p)
-		p.carry_on = 0
+		p.carry_on = 1
 		var first := SecurityLooks.bag_kind(p, 0) == SecurityLooks.Kind.ROLLER
-		var second := SecurityLooks.bag_kind(p, 1) == SecurityLooks.Kind.ROLLER
 		var kind := Bags.NONE
 		if first and _pool[Bags.ONE] == null:
 			kind = Bags.ONE
-		elif first and not second and _pool[Bags.TWO_RIGHT] == null:
-			kind = Bags.TWO_RIGHT
-		elif second and not first and _pool[Bags.TWO_LEFT] == null:
-			kind = Bags.TWO_LEFT
+		elif not first and _pool[Bags.TWO] == null:
+			kind = Bags.TWO
 		elif _pool[Bags.NONE] != null:
+			p.carry_on = 0
 			continue
-		p.carry_on = [1, 2, 2, 0][kind]
+		p.carry_on = [1, 2, 0][kind]
 		p.cleared = true
 		p.stage = Passenger.Stage.TO_GATE
 		_pool[kind] = p
+	assert_bool(ParkRecovery.has_roller(_pool[Bags.TWO])).is_false()
 
 
 func after() -> void:
@@ -95,7 +94,7 @@ func test_a_walled_tight_chair_is_tight_only_for_a_roller() -> void:
 	var bad := 0
 	var line := "walled tight:"
 	for s in _seats.size():
-		for kind in [Bags.ONE, Bags.TWO_RIGHT, Bags.TWO_LEFT, Bags.NONE]:
+		for kind in [Bags.ONE, Bags.TWO, Bags.NONE]:
 			var q: Passenger = _pool[kind]
 			_bind(q, s)
 			for variant in 2:
@@ -103,20 +102,20 @@ func test_a_walled_tight_chair_is_tight_only_for_a_roller() -> void:
 				assert_bool(GateRoller.walled_tight(_world.sim, q, _seats[s])).is_false()
 		var made := _wall_in(s)
 		assert_int(made.size()).is_equal(2)
-		for kind in [Bags.ONE, Bags.TWO_RIGHT, Bags.TWO_LEFT, Bags.NONE]:
+		for kind in [Bags.ONE, Bags.TWO, Bags.NONE]:
 			var q: Passenger = _pool[kind]
 			_bind(q, s)
 			for variant in 2:
 				q.variant = variant
 				var is_tight := GateRoller.walled_tight(_world.sim, q, _seats[s])
 				line += " s%d k%d v%d %s" % [s, kind, variant, "T" if is_tight else "-"]
-				if kind == Bags.NONE:
+				if kind != Bags.ONE:
 					assert_bool(is_tight).is_false()
 					continue
 				if is_tight:
 					tight += 1
 					continue
-				var hand := _real_hand(q, kind, s)
+				var hand := _real_hand(q, s)
 				var frame := ParkSide._frame(_world.sim, _seats[s]["front"], _out(s))
 				var sc := SecurityLooks.bag_scale(q)
 				var placed := frame * GateRoller.spot(q, hand)
@@ -186,11 +185,7 @@ func test_a_roller_guest_takes_another_place() -> void:
 ## roller down with at that chair: a one-bag guest's is what the sim asks
 ## (SecurityLooks.hand_of(), ParkSide.hand(), chosen once the guest is near the
 ## chair and kept), a two-bag guest's its roller bag's.
-func _real_hand(q: Passenger, kind: int, s: int) -> int:
-	if kind == Bags.TWO_LEFT:
-		return 1
-	if kind == Bags.TWO_RIGHT:
-		return 0
+func _real_hand(q: Passenger, s: int) -> int:
 	_world.sim.set_meta(ParkSide.STAMPS, {})
 	q.at = _seats[s]["front"]
 	return SecurityLooks.hand_of(_world.sim, q, 0)
@@ -220,7 +215,7 @@ func test_the_real_hand_is_the_side_that_fits() -> void:
 				if fits < 0:
 					continue
 				one_side += 1
-				var got := _real_hand(q, Bags.ONE, s)
+				var got := _real_hand(q, s)
 				var frame := ParkSide._frame(_world.sim, front, _out(s))
 				var lying := frame * GateRoller.spot(q, got)
 				lying = Transform3D(

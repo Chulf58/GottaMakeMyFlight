@@ -262,7 +262,8 @@ func test_every_lifted_roller_hangs_by_its_bar() -> void:
 	var props := views.carry_on_props()
 	var ids: Array[int] = []
 	for n in 3:
-		ids.append(_send_roller(w, 1 + n % 2))
+		ids.append(_send_roller(w, 1))
+		assert_int(ids[-1]).is_greater_equal(0)
 		w.world.run_to(w.world.clock.tick + SecurityTestWorld.SPACING)
 	var lifted := 0
 	var off_bar := 0

@@ -152,6 +152,13 @@ func test_the_sim_is_scanned_once_per_tick_however_often_it_refreshes() -> void:
 	assert_int(_stack.scans).is_equal(2)
 
 
+func _hold_desk_service(world: PassengerTestWorld, desk: int) -> void:
+	var serving: int = world.sim._queue(desk)["serving"]
+	if serving != 0:
+		var p := world.passenger(serving)
+		p.service_end = maxi(p.service_end, world.sim.tick + 2)
+
+
 ## Two desks whose lanes hold 3 each, both full, with the card up.
 func test_a_paused_build_edit_updates_the_queue_card_without_a_tick() -> void:
 	var grid := PassengerTestWorld.floored(Vector2i(10, 5))
@@ -164,12 +171,21 @@ func test_a_paused_build_edit_updates_the_queue_card_without_a_tick() -> void:
 	world.step()
 	for i in 12:
 		world.sim.spawn_now(PassengerTestWorld.FLIGHT)
-		world.run_to(world.clock.tick + 12)
-	world.run_to(world.clock.tick + 25)
+		for t in 12:
+			world.step()
+			_hold_desk_service(world, first)
+			_hold_desk_service(world, second)
+	for i in 25:
+		world.step()
+		_hold_desk_service(world, first)
+		_hold_desk_service(world, second)
 	var stack := _stack_at(SaveTestKit.run_path("alert_stack_paused_edit"))
 	stack.sim = world.sim
 	stack.refresh()
-	world.run_to(world.clock.tick + AlertSources.QUEUE_HOLD_TICKS)
+	for i in AlertSources.QUEUE_HOLD_TICKS:
+		world.step()
+		_hold_desk_service(world, first)
+		_hold_desk_service(world, second)
 	stack.refresh()
 	assert_array(stack.card_keys()).is_equal([AlertSources.QUEUE_CHECKIN])
 	assert_str(stack.card_text(AlertSources.QUEUE_CHECKIN)).contains("2 desks full")

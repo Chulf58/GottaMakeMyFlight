@@ -212,8 +212,8 @@ func test_the_drawn_floor_bag_lies_still_at_its_spot_clear_of_the_feet() -> void
 	assert_int(hits).is_equal(0)
 
 
-## A two-bag walker (one roller and one other bag) at the first gate chair's
-## front, drawn a few ticks bound for the chair, then sitting down there.
+## A two-bag walker at the first gate chair's front, drawn a few ticks bound for
+## the chair, then sitting down there.
 func _sitting_walker() -> Passenger:
 	_world = PassengerTestWorld.reference_world()
 	_world.run_to(10)
@@ -221,14 +221,8 @@ func _sitting_walker() -> Passenger:
 	_views.clock = _world.clock
 	_views.sim = _world.sim
 	add_child(_views)
-	var p: Passenger = null
-	for attempt in 400:
-		p = _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
-		p.carry_on = 2
-		var kinds := [SecurityLooks.bag_kind(p, 0), SecurityLooks.bag_kind(p, 1)]
-		if SecurityLooks.Kind.ROLLER in kinds and kinds[0] != kinds[1]:
-			break
-		p.carry_on = 0
+	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	p.carry_on = 2
 	ToiletTestLayout.calm(p)
 	p.liquids = false
 	p.alarm = false

@@ -52,12 +52,13 @@ func _visitor(kind: SecurityLooks.Kind, count: int) -> Passenger:
 	add_child(_views)
 	RenderingServer.frame_pre_draw.disconnect(_views.carry_on_props()._unposed)
 	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	p.carry_on = count
 	while SecurityLooks.bag_kind(p, 0) != kind:
 		ToiletTestLayout.calm(p)
 		p.carry_on = 0
 		p = _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+		p.carry_on = count
 	ToiletTestLayout.calm(p)
-	p.carry_on = count
 	p.liquids = false
 	p.alarm = false
 	p.stage = Passenger.Stage.TO_SECURITY
@@ -125,7 +126,10 @@ func _after_visit(p: Passenger) -> Dictionary:
 
 func test_a_bag_leaving_a_stall_keeps_clear_of_its_front() -> void:
 	for count in [1, 2]:
-		for kind in SecurityLooks.Kind.values():
+		var kinds: Array = (
+			SecurityLooks.Kind.values() if count == 1 else SecurityLooks.TWO_BAG_KINDS
+		)
+		for kind in kinds:
 			var result := await _after_visit(_visitor(kind, count))
 			print(
 				(

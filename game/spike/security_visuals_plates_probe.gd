@@ -367,22 +367,20 @@ func _piece_box(piece: StringName) -> AABB:
 	return box
 
 
-## Spawns a passenger and gives it the first open role its first bag's kind
-## fits (a role for that kind first, then one for any kind); with none it
-## goes through without bags.
+## Spawns a passenger and gives it the first matching open role (else any-kind).
 func _send() -> int:
-	var id := _sim.spawn_now(StarterFlight.first_flight())
-	var p := _sim.get_passenger(id)
-	var kind := SecurityLooks.bag_kind(p, 0)
-	var traits: Array = [-1, 0, false, false]
-	for want in [kind, -1]:
-		var at := _roles.find_custom(func(r: Array) -> bool: return r[0] == want)
-		if at >= 0:
-			traits = _roles.pop_at(at)
+	var p := _sim.get_passenger(_sim.spawn_now(StarterFlight.first_flight()))
+	var at := -1
+	for i in _roles.size():
+		p.carry_on = _roles[i][1]
+		if _roles[i][0] >= 0 and SecurityLooks.bag_kind(p, 0) == _roles[i][0]:
+			at = i
 			break
-	print("SEND passenger=%d kinds=%s role=%s" % [id, [kind, SecurityLooks.bag_kind(p, 1)], traits])
+		if _roles[i][0] < 0 and at < 0:
+			at = i
+	var traits: Array = _roles.pop_at(at) if at >= 0 else [-1, 0, false, false]
 	if traits[0] >= 0:
-		_role_of[id] = traits
+		_role_of[p.id] = traits
 	p.carry_on = traits[1]
 	p.liquids = traits[2]
 	p.alarm = traits[3]
@@ -391,7 +389,9 @@ func _send() -> int:
 	p.apron_mm = 0
 	p.stage = Passenger.Stage.TO_SECURITY
 	p.clear_path()
-	return id
+	var kinds := [SecurityLooks.bag_kind(p, 0), SecurityLooks.bag_kind(p, 1)]
+	print("SEND passenger=%d kinds=%s role=%s" % [p.id, kinds, traits])
+	return p.id
 
 
 # ---------------------------------------------------------------- moments

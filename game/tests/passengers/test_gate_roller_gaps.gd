@@ -11,9 +11,8 @@ extends GdUnitTestSuite
 ## rows mixing them with one-bag guests are filled the same way, and a row of
 ## more than 32 fronts is walked to its end.
 
-## Guest kinds in a mixed row: one roller, or two bags with the roller as bag 0
-## (it lies on the right) or bag 1 (on the left).
-enum Bags { ONE, TWO_RIGHT, TWO_LEFT }
+## Guest kinds in a mixed row: one roller (1-bag), or two non-roller bags (2-bag).
+enum Bags { ONE, TWO }
 
 ## The roller shell's width across (test_gate_chair_roller_spot's shell box).
 const SHELL_WIDTH_M := 0.328
@@ -34,12 +33,6 @@ const LEG_NEED_M := [
 		[[0.455, 0.605], [0.47, 0.425]],
 	],
 ]
-## The worst two rollers overlap in one gap (m) per kind of shared gap in
-## test_mixed_rows_share_only_where_forced(), measured at the ruling that
-## accepted it (user-ruled 2026-11-09, "Legs clear, narrow shift
-## (Recommended)", board 4da2e8ff): a recorded known limit, forced by a wall or
-## a two-bag guest's fixed hand. No avoidable share is accepted.
-const KNOWN_OVERLAP_M := {"late": 0.3592, "boxed": 0.1792, "fixed": 0.1404, "walled": 0.1780}
 ## How far apart neighbouring chair fronts are.
 const CELL_M := 1.0
 const ORDERS_3 := [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]]
@@ -55,8 +48,8 @@ var _seats: Array = []
 var _left := Vector2i.ZERO
 var _guests: Array[Passenger] = []
 ## Guests by Bags kind, LONG_FRONTS of ONE (the first three are _guests) and
-## three of each two-bag kind.
-var _pool: Array = [[], [], []]
+## three of TWO.
+var _pool: Array = [[], []]
 
 
 func before() -> void:
@@ -76,27 +69,22 @@ func before() -> void:
 			_seats = line
 			_left = left
 			break
-	var wanted := [LONG_FRONTS, 3, 3]
-	while _pool[0].size() < wanted[0] or _pool[1].size() < 3 or _pool[2].size() < 3:
+	var wanted := [LONG_FRONTS, 3]
+	while _pool[0].size() < wanted[0] or _pool[1].size() < wanted[1]:
 		var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
 		# A fixture guest, not an arrival: it takes no place in the line outside.
 		_world.sim.entrance.forget(p.id)
 		ToiletTestLayout.calm(p)
-		p.carry_on = 0
-		var first := SecurityLooks.bag_kind(p, 0) == SecurityLooks.Kind.ROLLER
-		var second := SecurityLooks.bag_kind(p, 1) == SecurityLooks.Kind.ROLLER
-		var kinds: Array[int] = []
-		if first:
-			kinds = [Bags.ONE, Bags.TWO_RIGHT]
-		elif second:
-			kinds = [Bags.TWO_LEFT]
-		for kind in kinds:
-			if _pool[kind].size() < wanted[kind]:
-				p.carry_on = 1 if kind == Bags.ONE else 2
-				p.cleared = true
-				p.stage = Passenger.Stage.TO_EXIT
-				_pool[kind].append(p)
-				break
+		p.carry_on = 1
+		var roller := SecurityLooks.bag_kind(p, 0) == SecurityLooks.Kind.ROLLER
+		var kind := Bags.ONE if roller else Bags.TWO
+		if _pool[kind].size() < wanted[kind]:
+			p.carry_on = 1 if kind == Bags.ONE else 2
+			p.cleared = true
+			p.stage = Passenger.Stage.TO_EXIT
+			_pool[kind].append(p)
+		else:
+			p.carry_on = 0
 	for n in 3:
 		_guests.append(_pool[Bags.ONE][n])
 
@@ -174,8 +162,7 @@ func _seat_guests(guests: Array, seats: Array, order: Array, fallbacks := []) ->
 			)
 			assert_float(slide).is_equal_approx(GateChairs.CHAIR_OFFSET_M[index], 0.0001)
 		if p.carry_on > 1:
-			var roller := 0 if SecurityLooks.bag_kind(p, 0) == SecurityLooks.Kind.ROLLER else 1
-			hands[i] = SecurityLooks.hand_of(_world.sim, p, roller)
+			hands[i] = -1
 		else:
 			hands[i] = ParkSide.hand(_world.sim, p, fallbacks[i] if i < fallbacks.size() else 0)
 	return hands
@@ -344,88 +331,65 @@ static func _overlap(a: Passenger, b: Passenger) -> float:
 	return into - CELL_M
 
 
-## Two two-bag neighbours, both roller bags, both body variants each, either
-## arriving first, with no wall and with a wall on either outer side: each
-## keeps its bag's hand, so the two face one gap exactly when the right one's
-## roller is bag 1 and the left one's bag 0 (24 of 96 fills; no rule can move
-## that without changing a hand). Those two rollers fit the gap at
-## GateRoller.TWO_BAG_SIDE_M: the least clearance is printed and must be > 0.
-## Control: at the one-bag sides (GateRoller.LIE_SIDE_M) two male two-bag
-## rollers facing one gap overlap 0.0304 m.
+## Under roller-suitcases-full-size-only-on-one-bag-passengers, two-bag guests
+## never carry a roller, so two 2-bag neighbours share 0 gaps across every
+## order and walling; also verifies GateRoller.TWO_BAG_SIDE_M geometry clears
+## a 1 m gap while LIE_SIDE_M at TWO_BAG_SCALE would overlap.
 func test_two_bag_neighbours_never_overlap() -> void:
 	var sides := [-1, BuildGrid.SIDE_STEP.find(-_left), BuildGrid.SIDE_STEP.find(_left)]
 	var walled_at := [-1, 0, 1]
 	var shared := 0
-	var facing := 0
 	var cases := 0
-	var worst := -INF
+	var a: Passenger = _pool[Bags.TWO][0]
+	var b: Passenger = _pool[Bags.TWO][1]
+	assert_bool(ParkRecovery.has_roller(a)).is_false()
+	assert_bool(ParkRecovery.has_roller(b)).is_false()
 	for w in sides.size():
 		if sides[w] >= 0:
 			var made := _world.grid.apply(
 				BuildEdit.place_wall(_seats[walled_at[w]]["front"], sides[w])
 			)
 			assert_bool(made.ok).is_true()
-		for r0 in 2:
-			for r1 in 2:
-				var a: Passenger = _pool[Bags.TWO_RIGHT + r0][0]
-				var b: Passenger = _pool[Bags.TWO_RIGHT + r1][1]
-				for v in 4:
-					a.variant = v & 1
-					b.variant = v >> 1
-					for order in [[0, 1], [1, 0]]:
-						var hands := _seat_guests([a, b], [_seats[0], _seats[1]], order)
-						cases += 1
-						facing += int(r0 == 1 and r1 == 0)
-						if _shared(hands) > 0:
-							shared += 1
-							worst = maxf(worst, _overlap(a, b))
+		for v in 4:
+			a.variant = v & 1
+			b.variant = v >> 1
+			for order in [[0, 1], [1, 0]]:
+				var hands := _seat_guests([a, b], [_seats[0], _seats[1]], order)
+				cases += 1
+				if _shared(hands) > 0:
+					shared += 1
 		if sides[w] >= 0:
 			_world.grid.apply(BuildEdit.remove_wall(_seats[walled_at[w]]["front"], sides[w]))
 	var scale_by := SecurityLooks.TWO_BAG_SCALE
+	var two_bag_gap := (
+		GateRoller.side(0, 1, scale_by)
+		+ GateRoller.side(0, 0, scale_by)
+		+ SHELL_WIDTH_M * scale_by
+		- CELL_M
+	)
 	var old := GateRoller.side(0, 0) + GateRoller.side(0, 1) + SHELL_WIDTH_M * scale_by - CELL_M
 	print(
 		(
-			(
-				"two-bag neighbours: %d of %d fills face one gap (%d with bag 1 right of"
-				+ " bag 0), their rollers overlap at most %.4f m (< 0: %.3f m clear);"
-				+ " at the one-bag sides two male ones overlap %.4f m (> 0)"
-			)
-			% [shared, cases, facing, worst, -worst, old]
+			"two-bag neighbours: %d of %d fills share a gap (0); helper gap %.4f m (< 0), old %.4f m (> 0)"
+			% [shared, cases, two_bag_gap, old]
 		)
 	)
-	assert_int(cases).is_equal(96)
-	assert_int(shared).is_equal(facing)
-	assert_float(worst).is_less(0.0)
+	assert_int(cases).is_equal(24)
+	assert_int(shared).is_equal(0)
+	assert_float(two_bag_gap).is_less(0.0)
 	assert_float(old).is_greater(0.0)
 
 
-## Three in a row, each guest one-bag or two-bag with the roller as either bag,
-## either body variant, in every order of arrival, with no wall and with one on
-## the right of the first front: no gap holds two rollers that a choice could
-## have kept apart. Each gap that does is sorted by why (printed with counts and
-## the most two rollers overlap there): "fixed" (two two-bag rollers whose
-## hands face it; they fit, < 0), "late" (a two-bag guest took its chair after
-## its one-bag neighbour had chosen; its hand is its bag's), "boxed" (a one-bag
-## guest arrived with a roller already in or bound for each gap; it takes the
-## gap where the two overlap less, ParkSide._less_overlap()), "walled" (a
-## one-bag guest's wall rule). Every other is "avoidable", which must be 0. With
-## the two-bag guests bound first, none is late, and only boxed or walled
-## guests share. Guests are seated with their chair's piece, so each roller
-## lies at GateRoller.shuffle_side() for the chair's real slide. No guest's legs
-## reach into its own roller in any fill (LEG_NEED_M), and each kind's worst
-## overlap stays within KNOWN_OVERLAP_M, the limit the user accepted with the
-## legs kept clear (board 4da2e8ff; before it, a late, boxed or walled share
-## stayed within 0.029 m while the legs went 0.29 m into the roller).
+## Three in a row, each guest 1-bag roller or 2-bag non-roller, either body
+## variant, in every order of arrival, with no wall and with one on the right of
+## the first front: no gap holds two rollers that a choice could have kept
+## apart ("avoidable" == 0, "fixed" == 0), and no guest's legs reach into its
+## own roller in any fill (LEG_NEED_M).
 func test_mixed_rows_share_only_where_forced() -> void:
 	var wall_side := BuildGrid.SIDE_STEP.find(-_left)
 	var why := {"fixed": 0, "late": 0, "boxed": 0, "walled": 0, "avoidable": 0}
-	var most := {"fixed": -INF, "late": -INF, "boxed": -INF, "walled": -INF, "avoidable": -INF}
 	var cases := 0
 	var first_shared := 0
-	# Per kind: how many shared gaps overlap (> 0), and the worst one's fill.
-	var overlapping := {}
-	var worst := {}
-	# Fills where a guest's legs reach into its own roller, and the deepest.
 	var legs := 0
 	var leg_worst := 0.0
 	for walled in [false, true]:
@@ -436,8 +400,8 @@ func test_mixed_rows_share_only_where_forced() -> void:
 				)
 				. is_true()
 			)
-		for kinds_at in 27:
-			var kinds := [kinds_at % 3, (kinds_at / 3) % 3, kinds_at / 9]
+		for kinds_at in 8:
+			var kinds := [kinds_at & 1, (kinds_at >> 1) & 1, (kinds_at >> 2) & 1]
 			var guests: Array = []
 			for i in 3:
 				guests.append(_pool[kinds[i]][i])
@@ -449,69 +413,29 @@ func test_mixed_rows_share_only_where_forced() -> void:
 					cases += 1
 					var deepest := 0.0
 					for i in 3:
-						deepest = maxf(deepest, _leg_depth(guests[i], hands[i]))
+						if hands[i] >= 0:
+							deepest = maxf(deepest, _leg_depth(guests[i], hands[i]))
 					if deepest > 0.0:
 						legs += 1
 						leg_worst = maxf(leg_worst, deepest)
 					var forced := {0: 1} if walled else {}
-					var two_first := true
-					for i in 3:
-						for j in 3:
-							if kinds[i] == Bags.ONE and kinds[j] != Bags.ONE:
-								two_first = two_first and order.find(j) < order.find(i)
 					for i in 2:
 						if not (hands[i] == 1 and hands[i + 1] == 0):
 							continue
 						var kind := _why(i, kinds, order, hands, forced)
 						why[kind] += 1
-						var into := _overlap(guests[i], guests[i + 1])
-						if into > 0.0:
-							overlapping[kind] = int(overlapping.get(kind, 0)) + 1
-						if into > most[kind]:
-							worst[kind] = (
-								"seats %d|%d kinds %s order %s variants %d hands %s slides %+.2f %+.2f walled %s"
-								% [
-									i,
-									i + 1,
-									kinds,
-									order,
-									v,
-									hands,
-									GateRoller.slide_of(guests[i]),
-									GateRoller.slide_of(guests[i + 1]),
-									walled
-								]
-							)
-						most[kind] = maxf(most[kind], into)
-						if two_first and kind not in ["fixed", "boxed", "walled"]:
+						if kind not in ["fixed", "boxed", "walled"]:
 							first_shared += 1
 		if walled:
 			_world.grid.apply(BuildEdit.remove_wall(_seats[0]["front"], wall_side))
-	var line := "mixed rows: %d fills;" % cases
-	for kind: String in why:
-		line += " %s %d (most overlap %.4f m)" % [kind, why[kind], most[kind]]
+	var line := "mixed rows: %d fills; why %s" % [cases, why]
 	line += "; legs in their own roller %d fills (0), deepest %.3f m" % [legs, leg_worst]
-	print(line + "; two-bag bound first, shared but not fixed, boxed or walled: %d" % first_shared)
-	for kind: String in worst:
-		print(
-			(
-				"overlapping %s: %d fills, worst %.4f m: %s"
-				% [kind, overlapping.get(kind, 0), most[kind], worst[kind]]
-			)
-		)
-	assert_int(cases).is_equal(2592)
-	assert_int(why["avoidable"]).is_equal(0)
+	print(line + "; shared but not fixed, boxed or walled: %d" % first_shared)
+	assert_int(cases).is_equal(768)
+	for kind: String in ["fixed", "late", "boxed", "walled", "avoidable"]:
+		assert_int(why[kind]).is_equal(0)
 	assert_int(first_shared).is_equal(0)
-	assert_int(why["fixed"]).is_greater(0)
-	# The hard rule: no guest's legs in its own roller, in any fill.
 	assert_int(legs).is_equal(0)
-	# A user-accepted limit, not a target (user-ruled 2026-11-09, "Legs clear,
-	# narrow shift (Recommended)", board 4da2e8ff): with the legs clear, a wall
-	# or a two-bag guest's fixed hand can still put two rollers in one gap. The
-	# bound per kind is the measured worst at the ruling, so a change that
-	# makes any of them worse fails here.
-	for kind: String in KNOWN_OVERLAP_M:
-		assert_float(most[kind]).is_less_equal(KNOWN_OVERLAP_M[kind] + 0.0001)
 
 
 ## How far the legs of `q` (as seated by _seat_guests()) reach into its own

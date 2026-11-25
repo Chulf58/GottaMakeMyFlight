@@ -153,12 +153,13 @@ func _visitor(kind: SecurityLooks.Kind) -> Passenger:
 	add_child(_views)
 	RenderingServer.frame_pre_draw.disconnect(_views.carry_on_props()._unposed)
 	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	p.carry_on = 1
 	while SecurityLooks.bag_kind(p, 0) != kind:
 		ToiletTestLayout.calm(p)
 		p.carry_on = 0
 		p = _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+		p.carry_on = 1
 	ToiletTestLayout.calm(p)
-	p.carry_on = 1
 	p.liquids = false
 	p.alarm = false
 	p.stage = Passenger.Stage.TO_SECURITY

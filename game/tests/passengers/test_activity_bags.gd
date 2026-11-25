@@ -81,10 +81,11 @@ func _open(type: StringName, drawn: bool) -> void:
 ## last bag is of another kind are left airside, not bored.
 func _visitor(count: int, kind := -1) -> Passenger:
 	var p := ShopTestLayout.airside_guest(_world, 0)
+	p.carry_on = count
 	while kind >= 0 and SecurityLooks.bag_kind(p, count - 1) != kind:
 		p = ShopTestLayout.airside_guest(_world, 0)
+		p.carry_on = count
 	p.boredom = 80
-	p.carry_on = count
 	assert_int(NeedsPolicy.arbitrate(_world.sim, p)).is_equal(NeedsPolicy.Need.BOREDOM)
 	assert_object(_world.sim.shops.visit_of(p.id)).is_not_null()
 	while p.stage != Passenger.Stage.SHOP_BROWSE and _world.clock.tick < 3000:
@@ -197,10 +198,10 @@ func test_sofa_bags_are_set_down_beside_the_seat_and_picked_up() -> void:
 	await _drawn_stay(&"lounge", 2, SecurityLooks.Kind.SHOULDER)
 
 
-## Drawn at the nap pod: a hard case alone, and a roller as the second of two.
+## Drawn at the nap pod: a hard case alone, and a hard case as the second of two.
 func test_pod_bags_are_set_down_beside_the_seat_and_picked_up() -> void:
 	await _drawn_stay(&"nap_pod", 1, SecurityLooks.Kind.CASE)
-	await _drawn_stay(&"nap_pod", 2, SecurityLooks.Kind.ROLLER)
+	await _drawn_stay(&"nap_pod", 2, SecurityLooks.Kind.CASE)
 
 
 ## Drawn at the shower: a roller alone, and a backpack as the second of two.

@@ -440,17 +440,57 @@ func test_queue_fidgets_settle_delay_variants_and_carry_hand_safety() -> void:
 	assert_int(seen_subs.size()).is_equal(3)
 
 	# Verify 2-bag passenger keeps BOTH carrying hands untouched even if sub 0 requested.
-	p.carry_on = 2
-	world.step()
-	views.draw()
-	assert_bool(mod.free_right).is_false()
-	assert_bool(mod.free_left).is_false()
-	player.speed_scale = 0.0
-	mod.sub_variant = 0
-	var both_delta := await _sample_delta(
-		views, sk, mod, ["Arm.R", "Forearm.R", "Arm.L", "Forearm.L"]
+	var grid2 := PassengerTestWorld.floored(Vector2i(10, 8))
+	PassengerTestWorld.place(grid2, &"entrance_door", Vector2i(0, 7), 3)
+	PassengerTestWorld.place(grid2, &"checkin_desk", Vector2i(6, 2), 0)
+	var world2 := _track_world(
+		PassengerTestWorld.make(grid2, PassengerTestWorld.starts_with(20, 600))
 	)
-	player.speed_scale = prev_speed
+	var views2 := _track_views(world2)
+	for _k in 2:
+		var blk2 := world2.sim.spawn_now(PassengerTestWorld.FLIGHT)
+		world2.passenger(blk2).carry_on = 0
+		for _t in 12:
+			world2.step()
+	var id2 := world2.sim.spawn_now(PassengerTestWorld.FLIGHT)
+	var p2 := world2.passenger(id2)
+	p2.carry_on = 2
+	while (
+		SecurityLooks.bag_kind(p2, 0) != SecurityLooks.Kind.CASE
+		or SecurityLooks.bag_kind(p2, 1) != SecurityLooks.Kind.CASE
+	):
+		p2.stage = Passenger.Stage.MADE
+		id2 = world2.sim.spawn_now(PassengerTestWorld.FLIGHT)
+		p2 = world2.passenger(id2)
+		p2.carry_on = 2
+	while (
+		not (p2.stage == Passenger.Stage.CHECKIN_QUEUE and not p2.is_moving())
+		and world2.clock.tick < 600
+	):
+		world2.step()
+		views2.draw()
+	assert_int(p2.stage).is_equal(Passenger.Stage.CHECKIN_QUEUE)
+	for _i in int(PassengerFidgetPose.QUEUE_SETTLE_TICKS + PassengerFidgetPose.EASE_TICKS + 12):
+		world2.step()
+		views2.draw()
+	assert_int(p2.stage).is_equal(Passenger.Stage.CHECKIN_QUEUE)
+	var node2 := views2.node_for(id2)
+	var mod2 := _fidget_of(node2)
+	var sk2 := _skeleton(node2)
+	var player2 := node2.get_node("AnimationPlayer") as AnimationPlayer
+	assert_object(mod2).is_not_null()
+	assert_bool(mod2.active).is_true()
+	assert_int(mod2.mode).is_equal(PassengerFidgetPose.Mode.QUEUE)
+	assert_float(mod2.weight).is_greater(0.5)
+	assert_bool(mod2.free_right).is_false()
+	assert_bool(mod2.free_left).is_false()
+	var prev_speed2 := player2.speed_scale
+	player2.speed_scale = 0.0
+	mod2.sub_variant = 0
+	var both_delta := await _sample_delta(
+		views2, sk2, mod2, ["Arm.R", "Forearm.R", "Arm.L", "Forearm.L"]
+	)
+	player2.speed_scale = prev_speed2
 	assert_float(both_delta).is_less(0.0005)
 
 
@@ -604,6 +644,7 @@ func test_close_call_relief_on_late_boarding_before_despawn() -> void:
 		var id := world.sim.spawn_now(PassengerTestWorld.FLIGHT)
 		var p := world.passenger(id)
 		var match_case: bool = parity == 0
+		p.carry_on = 1 if match_case else 0
 		while (
 			posmod(p.id, 2) != parity
 			or (match_case and SecurityLooks.bag_kind(p, 0) != SecurityLooks.Kind.CASE)
@@ -611,7 +652,7 @@ func test_close_call_relief_on_late_boarding_before_despawn() -> void:
 			p.stage = Passenger.Stage.MADE
 			id = world.sim.spawn_now(PassengerTestWorld.FLIGHT)
 			p = world.passenger(id)
-		p.carry_on = 1 if match_case else 0
+			p.carry_on = 1 if match_case else 0
 		p.stage = Passenger.Stage.TO_GATE
 		p.cleared = true
 		p.late = true

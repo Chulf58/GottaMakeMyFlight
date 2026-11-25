@@ -258,12 +258,13 @@ func _roller_walker(seated: bool) -> Passenger:
 	add_child(_views)
 	RenderingServer.frame_pre_draw.disconnect(_views.carry_on_props()._unposed)
 	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	p.carry_on = 1
 	while SecurityLooks.bag_kind(p, 0) != SecurityLooks.Kind.ROLLER:
 		ToiletTestLayout.calm(p)
 		p.carry_on = 0
 		p = _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+		p.carry_on = 1
 	ToiletTestLayout.calm(p)
-	p.carry_on = 1
 	p.cleared = true
 	var seat: Dictionary = _world.sim.layout.seats[0]
 	p.stage = Passenger.Stage.SEATED if seated else Passenger.Stage.TO_GATE

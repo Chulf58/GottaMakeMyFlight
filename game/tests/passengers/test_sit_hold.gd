@@ -37,12 +37,13 @@ func _sitting_walker(roller: bool) -> Passenger:
 	_views.sim = _world.sim
 	add_child(_views)
 	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	p.carry_on = 1
 	while (SecurityLooks.bag_kind(p, 0) == SecurityLooks.Kind.ROLLER) != roller:
 		ToiletTestLayout.calm(p)
 		p.carry_on = 0
 		p = _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+		p.carry_on = 1
 	ToiletTestLayout.calm(p)
-	p.carry_on = 1
 	p.cleared = true
 	var seat: Dictionary = _world.sim.layout.seats[0]
 	p.seat_object = seat["object_id"]
@@ -169,10 +170,11 @@ func test_a_sofa_or_pod_visitor_sets_its_roller_down_before_it_sits() -> void:
 		_views.sim = _world.sim
 		add_child(_views)
 		var p := ShopTestLayout.airside_guest(_world, 0)
+		p.carry_on = 1
 		while SecurityLooks.bag_kind(p, 0) != SecurityLooks.Kind.ROLLER:
 			p = ShopTestLayout.airside_guest(_world, 0)
+			p.carry_on = 1
 		p.boredom = 80
-		p.carry_on = 1
 		assert_int(NeedsPolicy.arbitrate(_world.sim, p)).is_equal(NeedsPolicy.Need.BOREDOM)
 		while p.stage != Passenger.Stage.SHOP_BROWSE and _world.clock.tick < 3000:
 			await _tick()
@@ -248,9 +250,13 @@ func test_a_load_in_the_hold_of_a_cafe_sit_down_puts_the_body_at_the_approach() 
 	_views.sim = _world.sim
 	add_child(_views)
 	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
-	while SecurityLooks.bag_kind(p, 0) != SecurityLooks.Kind.ROLLER:
-		p = _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
 	p.carry_on = 1
+	while SecurityLooks.bag_kind(p, 0) != SecurityLooks.Kind.ROLLER:
+		p.carry_on = 0
+		p.hunger = 0
+		p.cafe_cooldown = 1000000
+		p = _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+		p.carry_on = 1
 	p.hunger = 0
 	p.cafe_cooldown = 1000000
 	while p.stage != Passenger.Stage.TO_GATE and _world.clock.tick < 900:

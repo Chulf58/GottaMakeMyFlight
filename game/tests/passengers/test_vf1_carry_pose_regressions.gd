@@ -312,10 +312,13 @@ func test_step_off_turns_onto_walk_and_desks_near_isolates_gate_desks() -> void:
 	views.sim = world.sim
 	add_child(views)
 	var p := world.passenger(world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	p.carry_on = 1
 	while SecurityLooks.bag_kind(p, 0) != SecurityLooks.Kind.ROLLER:
 		p.carry_on = 0
+		p.hunger = 0
+		p.cafe_cooldown = 1000000
 		p = world.passenger(world.sim.spawn_now(PassengerTestWorld.FLIGHT))
-	p.carry_on = 1
+		p.carry_on = 1
 	p.hunger = 0
 	p.cafe_cooldown = 1000000
 	while p.stage != Passenger.Stage.TO_GATE and world.clock.tick < 3000:

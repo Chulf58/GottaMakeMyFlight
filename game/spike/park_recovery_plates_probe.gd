@@ -221,6 +221,10 @@ func _initialize() -> void:
 			_dump = Vector2i(int(span.get_slice("-", 0)), int(span.get_slice("-", 1)))
 		elif arg.begins_with("--out="):
 			_out_dir = arg.get_slice("=", 1)
+	if _worn:
+		print("PROBE_INVALID --worn retired: 2-bag passengers never carry rollers")
+		quit(1)
+		return
 	DirAccess.make_dir_recursive_absolute(_out_dir)
 	print("PROBE sim_seed=%d out_dir=%s follow=%d" % [_seed, _out_dir, _follow_ticks])
 	_run.call_deferred()
@@ -288,12 +292,12 @@ func _walker() -> Passenger:
 	var p: Passenger = null
 	for attempt in 200:
 		p = _sim.get_passenger(_sim.spawn_now(StarterFlight.first_flight()))
-		var second := SecurityLooks.bag_kind(p, 1) == SecurityLooks.Kind.SHOULDER
-		if SecurityLooks.bag_kind(p, 0) == SecurityLooks.Kind.ROLLER and (second or not _worn):
+		p.carry_on = 1
+		if SecurityLooks.bag_kind(p, 0) == SecurityLooks.Kind.ROLLER:
 			break
 		p.carry_on = 0
 	ToiletTestLayout.calm(p)
-	p.carry_on = 2 if _worn else 1
+	p.carry_on = 1
 	p.liquids = false
 	p.alarm = false
 	p.cleared = true

@@ -28,12 +28,13 @@ func _walker(roller: bool, sit := true) -> Passenger:
 	_world = PassengerTestWorld.reference_world()
 	_world.run_to(10)
 	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	p.carry_on = 1
 	while (SecurityLooks.bag_kind(p, 0) == SecurityLooks.Kind.ROLLER) != roller:
 		ToiletTestLayout.calm(p)
 		p.carry_on = 0
 		p = _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+		p.carry_on = 1
 	ToiletTestLayout.calm(p)
-	p.carry_on = 1
 	p.cleared = true
 	var seat: Dictionary = _world.sim.layout.seats[0]
 	p.seat_object = seat["object_id"]

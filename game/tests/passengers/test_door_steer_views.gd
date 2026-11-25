@@ -50,17 +50,14 @@ func before_test() -> void:
 	_world.step()
 
 
-## A new guest whose first bag is a roller, with `bags` carry-on bags; with
-## two, its second is a hard case.
+## A new guest whose first bag is a roller (1-bag) or a 2-bag non-roller guest.
 func _roller_guest(bags := 1) -> Passenger:
 	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
-	while (
-		SecurityLooks.bag_kind(p, 0) != SecurityLooks.Kind.ROLLER
-		or (bags > 1 and SecurityLooks.bag_kind(p, 1) != SecurityLooks.Kind.CASE)
-	):
+	p.carry_on = bags
+	while bags == 1 and SecurityLooks.bag_kind(p, 0) != SecurityLooks.Kind.ROLLER:
 		p.stage = Passenger.Stage.MADE
 		p = _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
-	p.carry_on = bags
+		p.carry_on = bags
 	return p
 
 
@@ -162,21 +159,12 @@ func test_a_load_at_the_door_draws_the_steer_and_does_not_jump_next_tick() -> vo
 	assert_float(_largest_step(offs)).is_less(STEP_MAX_M)
 
 
-func test_a_roller_with_a_hard_case_in_the_other_hand_is_not_steered() -> void:
+func test_a_two_bag_guest_coming_in_is_not_steered() -> void:
 	var p := _roller_guest(2)
 	_world.step()
 	var props := _views.carry_on_props()
-	var roller := props.bag_state(p.id, 0)
-	var case_bag := props.bag_state(p.id, 1)
-	print("roller %s case %s" % [roller.get("place"), case_bag.get("place")])
-	# Control: both are held, in the two hands, the roller pulled.
-	assert_int(int(roller["place"]) / 4).is_equal(SecurityLooks.Home.HAND)
-	assert_int(roller["carry"]).is_equal(SecurityLooks.Carry.PULL)
-	assert_int(int(case_bag["place"]) / 4).is_equal(SecurityLooks.Home.HAND)
-	assert_int(case_bag["carry"]).is_equal(SecurityLooks.Carry.HAND)
-	assert_int(CarryLead.hand_of(int(case_bag["place"]))).is_not_equal(
-		CarryLead.hand_of(int(roller["place"]))
-	)
+	for i in 2:
+		assert_int(props.bag_state(p.id, i)["kind"]).is_not_equal(SecurityLooks.Kind.ROLLER)
 	var steer_offs: Array[Vector3] = []
 	var lane_active := false
 	for i in 20:
@@ -185,7 +173,7 @@ func test_a_roller_with_a_hard_case_in_the_other_hand_is_not_steered() -> void:
 		if lane.length() > 0.05:
 			lane_active = true
 		steer_offs.append(_drawn_off(p) - lane)
-	print("steer offsets: %s" % [steer_offs])
+	print("steer offsets (2-bag guest): %s" % [steer_offs])
 	assert_bool(lane_active).is_true()
 	for off in steer_offs:
 		assert_vector(off).is_equal_approx(Vector3.ZERO, Vector3.ONE * 1e-5)
@@ -237,22 +225,23 @@ func test_corridor_offset_is_zero_within_full_m_of_a_doorway() -> void:
 	w.free_all()
 
 
-func test_a_case_leaving_the_free_hand_at_the_door_eases_the_steer_in() -> void:
-	var p := _roller_guest(2)
+func test_a_lifted_roller_returning_to_pull_at_the_door_eases_the_steer_in() -> void:
+	var p := _roller_guest(1)
+	p.late = true
 	_world.step()
 	assert_vector(_steer(p)).is_equal(Vector3.ZERO)
-	# The case goes down out of the other hand, as CarryOnProps.sync() stamps
-	# a move for the next tick: its new place, the tick, its old place drawn.
-	var bag: Dictionary = _views.carry_on_props()._held[p.id]["bags"][1]
+	# The lifted roller returns to the pull, as CarryOnProps.sync() stamps a
+	# move for the next tick: its new place, the tick, its old place drawn.
+	var bag: Dictionary = _views.carry_on_props()._held[p.id]["bags"][0]
 	var place := int(bag["place"])
 	bag["home"] = place
-	bag["place"] = (SecurityLooks.Home.FLOOR * 2 + CarryLead.hand_of(place)) * 2
+	bag["place"] = place - 1
 	var tick := float(_world.clock.tick + 1)
 	bag["changed"] = tick
 	var lengths: Array[float] = []
 	for k in int(CarryOnProps.TRANSFER_TICKS) + 2:
 		lengths.append(DoorSteer.offset_of(_views, p, tick + k).length())
-	print("steer over the case's move: %s" % [lengths])
+	print("steer over the lift release: %s" % [lengths])
 	assert_float(lengths[0]).is_equal(0.0)
 	assert_float(lengths[lengths.size() - 1]).is_greater(0.08)
 	for i in range(1, lengths.size()):

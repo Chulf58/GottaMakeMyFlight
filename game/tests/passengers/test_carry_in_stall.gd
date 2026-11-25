@@ -172,12 +172,13 @@ func _use_world(one_scanner := false) -> void:
 func _visitor(kind: SecurityLooks.Kind, count := 1, one_scanner := false) -> Passenger:
 	_use_world(one_scanner)
 	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	p.carry_on = count
 	while SecurityLooks.bag_kind(p, 0) != kind:
 		ToiletTestLayout.calm(p)
 		p.carry_on = 0
 		p = _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+		p.carry_on = count
 	ToiletTestLayout.calm(p)
-	p.carry_on = count
 	p.liquids = false
 	p.alarm = false
 	p.stage = Passenger.Stage.TO_SECURITY
@@ -377,11 +378,14 @@ static func _count(frames: Array, check: Callable, label := "") -> int:
 ## between ticks and (one bag) at 3x speed, several ticks a frame. Controls:
 ## each bag was seen moving down to the floor and up again over the stall.
 func test_a_bag_set_down_and_picked_up_in_a_stall_stays_under_its_partitions() -> void:
-	var runs := []
-	for kind in [SecurityLooks.Kind.BACKPACK, SecurityLooks.Kind.ROLLER]:
-		runs.append([kind, 1, FRAME_TICKS])
-		runs.append([kind, 2, FRAME_TICKS])
-		runs.append([kind, 1, FAST_TICKS])
+	var runs := [
+		[SecurityLooks.Kind.BACKPACK, 1, FRAME_TICKS],
+		[SecurityLooks.Kind.BACKPACK, 2, FRAME_TICKS],
+		[SecurityLooks.Kind.BACKPACK, 1, FAST_TICKS],
+		[SecurityLooks.Kind.ROLLER, 1, FRAME_TICKS],
+		[SecurityLooks.Kind.CASE, 2, FRAME_TICKS],
+		[SecurityLooks.Kind.ROLLER, 1, FAST_TICKS],
+	]
 	for run: Array in runs:
 		var count: int = run[1]
 		var frames := await _cached_frames(run[0], count, run[2])
@@ -479,7 +483,10 @@ func test_a_pulled_roller_trails_only_once_its_walker_is_out_of_the_stall() -> v
 ## Control: each bag was in the stall's column on some frames.
 func test_no_bag_goes_into_a_side_partition_or_the_door() -> void:
 	for count in [1, 2]:
-		for kind in SecurityLooks.Kind.values():
+		var kinds: Array = (
+			SecurityLooks.Kind.values() if count == 1 else SecurityLooks.TWO_BAG_KINDS
+		)
+		for kind in kinds:
 			var frames := await _cached_frames(kind, count)
 			var seated := func(frame: Dictionary) -> bool:
 				return (
@@ -525,9 +532,12 @@ func test_no_bag_goes_into_a_side_partition_or_the_door() -> void:
 func test_a_bag_on_a_stall_floor_stands_upright_against_the_door() -> void:
 	var face := DOOR_IN_M - StallCarry.DOOR_GAP_M
 	for count in [1, 2]:
-		for kind in [
-			SecurityLooks.Kind.CASE, SecurityLooks.Kind.ROLLER, SecurityLooks.Kind.BACKPACK
-		]:
+		var kinds := (
+			[SecurityLooks.Kind.CASE, SecurityLooks.Kind.ROLLER, SecurityLooks.Kind.BACKPACK]
+			if count == 1
+			else [SecurityLooks.Kind.CASE, SecurityLooks.Kind.BACKPACK]
+		)
+		for kind in kinds:
 			var frames := await _cached_frames(kind, count)
 			for b in count:
 				var door := Vector2(INF, -INF)

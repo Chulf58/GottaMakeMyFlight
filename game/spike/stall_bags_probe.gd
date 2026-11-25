@@ -67,7 +67,7 @@ const VISITORS := [
 	["case", SecurityLooks.Kind.CASE, 1, ["down", "up"]],
 	["backpack", SecurityLooks.Kind.BACKPACK, 1, ["in", "down", "up", "out"]],
 	["roller", SecurityLooks.Kind.ROLLER, 1, ["in", "down", "up", "out"]],
-	["roller2", SecurityLooks.Kind.ROLLER, 2, ["down", "up", "out"]],
+	["case2", SecurityLooks.Kind.CASE, 2, ["down", "up", "out"]],
 ]
 ## Strip -> [frames, ticks between frames].
 const STRIPS := {"in": [16, 2], "down": [8, 1], "up": [10, 1], "out": [12, 2]}
@@ -196,12 +196,12 @@ func _spawn(kind: SecurityLooks.Kind, count: int) -> Passenger:
 	while true:
 		var p := _sim.get_passenger(_sim.spawn_now(flight))
 		ToiletTestLayout.calm(p)
-		p.carry_on = 0
+		p.carry_on = count
 		if SecurityLooks.bag_kind(p, 0) == kind:
-			p.carry_on = count
 			p.toilet_need = 95
 			p.toilet_cooldown = 0
 			return p
+		p.carry_on = 0
 	return null
 
 

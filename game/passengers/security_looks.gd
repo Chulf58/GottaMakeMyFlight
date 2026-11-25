@@ -51,6 +51,8 @@ const KIND_CARRY := {
 	Kind.SHOULDER: Carry.SHOULDER,
 	Kind.ROLLER: Carry.PULL,
 }
+## Carry-on kinds eligible for two-bag passengers (rollers stay 1.0x on 1-bag guests).
+const TWO_BAG_KINDS := [Kind.CASE, Kind.BACKPACK, Kind.SHOULDER]
 
 ## How far an unpacking or picking-up passenger steps toward its table.
 const STEP_M := 0.15
@@ -501,9 +503,21 @@ static func _stay_step(sim: PassengerSim, p: Passenger) -> Vector2i:
 
 ## The kind of carry-on bag `index` of `p`: a fixed hash of the passenger's id
 ## and the bag's index, so a save, a load and a replay draw the same bags
-## without any saved state, and the sim RNG is not drawn from. A second bag
-## never repeats a backpack or a roller (one back, one trailer).
+## without any saved state, and the sim RNG is not drawn from. Rollers go only
+## to one-bag passengers (decision roller-suitcases-full-size-only-on-one-bag-
+## passengers), so every roller renders at 1.0x scale; two-bag passengers pick
+## from CASE, BACKPACK and SHOULDER, and a second bag never repeats a backpack
+## (or a roller for <= 1 bags).
 static func bag_kind(p: Passenger, index: int) -> Kind:
+	if p.carry_on > 1:
+		var count := TWO_BAG_KINDS.size()
+		var first_idx := _mix(p.id * 2) % count
+		if index == 0:
+			return TWO_BAG_KINDS[first_idx]
+		var second_idx := _mix(p.id * 2 + 1) % count
+		if second_idx == first_idx and TWO_BAG_KINDS[first_idx] == Kind.BACKPACK:
+			second_idx = (first_idx + 1 + _mix(p.id * 2 + 7) % (count - 1)) % count
+		return TWO_BAG_KINDS[second_idx]
 	var first := _mix(p.id * 2) % Kind.size() as Kind
 	if index == 0:
 		return first

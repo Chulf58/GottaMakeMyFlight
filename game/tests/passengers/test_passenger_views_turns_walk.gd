@@ -61,10 +61,13 @@ func _roller_walker() -> Passenger:
 	# The test runs the pre-draw fallback itself at the end of each frame.
 	RenderingServer.frame_pre_draw.disconnect(_views.carry_on_props()._unposed)
 	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	p.carry_on = 1
 	while SecurityLooks.bag_kind(p, 0) != SecurityLooks.Kind.ROLLER:
 		p.carry_on = 0
+		p.hunger = 0
+		p.cafe_cooldown = 1000000
 		p = _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
-	p.carry_on = 1
+		p.carry_on = 1
 	p.hunger = 0
 	p.cafe_cooldown = 1000000
 	while p.stage != Passenger.Stage.TO_GATE and _world.clock.tick < 3000:

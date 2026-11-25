@@ -100,7 +100,7 @@ const ROLES := [
 	[SecurityLooks.Kind.SHOULDER, 1, true, false],
 	[SecurityLooks.Kind.ROLLER, 1, false, false],
 	[SecurityLooks.Kind.CASE, 2, false, false],
-	[SecurityLooks.Kind.ROLLER, 2, false, false],
+	[SecurityLooks.Kind.BACKPACK, 2, false, false],
 	[SecurityLooks.Kind.CASE, 1, false, true],
 	[-1, 2, true, false],
 	[-1, 0, false, false],
@@ -939,8 +939,14 @@ func _near_booth(id: int) -> bool:
 func _send() -> void:
 	var id := _sim.spawn_now(StarterFlight.first_flight())
 	var p := _sim.get_passenger(id)
-	var kind := SecurityLooks.bag_kind(p, 0)
-	var at := _roles.find_custom(func(r: Array) -> bool: return r[0] == kind)
+	var saved_bags := p.carry_on
+	var at := _roles.find_custom(
+		func(r: Array) -> bool:
+			if r[0] < 0:
+				return false
+			p.carry_on = r[1]
+			return SecurityLooks.bag_kind(p, 0) == r[0]
+	)
 	if at < 0:
 		at = _roles.find_custom(func(r: Array) -> bool: return r[0] == -1)
 	# More roles than bodies (lane mode): a body is reused only once every one was sent, so
@@ -948,6 +954,7 @@ func _send() -> void:
 	var uses: Dictionary = _bodies.get(CrossingBodies.USES, {})
 	var reuse := _lane_mode and uses.size() >= PassengerLooks.BODIES.size()
 	if at < 0 or not CrossingBodies.take(p, _bodies, reuse):
+		p.carry_on = saved_bags
 		return
 	var traits: Array = _roles.pop_at(at)
 	p.carry_on = traits[1]
@@ -963,6 +970,7 @@ func _send() -> void:
 	if traits.size() > 4 and traits[4]:
 		_runners[id] = true
 		p.late = true
+	var kind := SecurityLooks.bag_kind(p, 0)
 	print("SEND passenger=%d kinds=%s role=%s" % [id, [kind, SecurityLooks.bag_kind(p, 1)], traits])
 
 

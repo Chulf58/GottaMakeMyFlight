@@ -58,12 +58,13 @@ func _sitter(count: int) -> Passenger:
 	# The test runs the pre-draw fallback itself at the end of each frame.
 	RenderingServer.frame_pre_draw.disconnect(_views.carry_on_props()._unposed)
 	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	p.carry_on = count
 	while SecurityLooks.bag_kind(p, count - 1) != SecurityLooks.Kind.SHOULDER:
 		ToiletTestLayout.calm(p)
 		p.carry_on = 0
 		p = _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+		p.carry_on = count
 	ToiletTestLayout.calm(p)
-	p.carry_on = count
 	p.cleared = true
 	for seat: Dictionary in _world.sim.layout.seats:
 		p.stage = Passenger.Stage.SEATED

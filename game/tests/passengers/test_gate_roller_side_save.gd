@@ -47,17 +47,17 @@ func before_test() -> void:
 	for attempt in 400:
 		var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
 		ToiletTestLayout.calm(p)
+		p.carry_on = 1
 		var first := SecurityLooks.bag_kind(p, 0) == SecurityLooks.Kind.ROLLER
-		var second := SecurityLooks.bag_kind(p, 1) == SecurityLooks.Kind.ROLLER
 		p.carry_on = 0
 		p.cleared = true
 		p.stage = Passenger.Stage.TO_EXIT
 		if _one == null and first:
 			_one = p
 			p.carry_on = 1
-		elif _two == null and second and not first:
+		elif _two == null and first:
 			_two = p
-			p.carry_on = 2
+			p.carry_on = 1
 		if _one != null and _two != null:
 			break
 	assert_object(_one).is_not_null()
@@ -69,18 +69,23 @@ func after_test() -> void:
 
 
 ## The one-bag guest chooses at its front with both gaps free (its right),
-## then the two-bag guest takes the chair on its right; after a save and a
-## load the one-bag guest keeps its right. Control: chosen afresh with the
-## two-bag guest there (the stamp taken away) the side is the left, so the
-## late neighbour is the case the load used to flip.
-func test_a_late_two_bag_neighbour_does_not_flip_the_side_after_a_load() -> void:
+## then another one-bag roller guest takes the chair on its right (laying its
+## roller in its left gap); after a save and a load the first guest keeps its
+## right. Control: chosen afresh with the neighbour there (the first guest's
+## stamp taken away) the side is the left, so the late neighbour is the case
+## the load used to flip.
+func test_a_late_neighbour_does_not_flip_the_side_after_a_load() -> void:
 	_seat(_one, _seats[0])
 	var chosen := ParkSide.hand(_world.sim, _one, 0)
 	_seat(_two, _seats[1])
-	var kept := ParkSide.hand(_world.sim, _one, 0)
-	var two_hand := SecurityLooks.hand_of(_world.sim, _two, 1)
 	var stamps: Dictionary = (_world.sim.get_meta(ParkSide.STAMPS) as Dictionary).duplicate(true)
-	_world.sim.remove_meta(ParkSide.STAMPS)
+	stamps[_two.id] = ["gate %s" % _two.seat_cell, 1]
+	_world.sim.set_meta(ParkSide.STAMPS, stamps)
+	var two_hand := ParkSide.hand(_world.sim, _two, 0)
+	var kept := ParkSide.hand(_world.sim, _one, 0)
+	var without_one := stamps.duplicate(true)
+	without_one.erase(_one.id)
+	_world.sim.set_meta(ParkSide.STAMPS, without_one)
 	var fresh := ParkSide.hand(_world.sim, _one, 0)
 	_world.sim.set_meta(ParkSide.STAMPS, stamps)
 	var loaded := _load(_save())
@@ -88,7 +93,7 @@ func test_a_late_two_bag_neighbour_does_not_flip_the_side_after_a_load() -> void
 	print(
 		(
 			(
-				"one-bag guest's side: chosen %d, kept with the two-bag neighbour (hand %d) %d,"
+				"one-bag guest's side: chosen %d, kept with the neighbour (hand %d) %d,"
 				+ " chosen afresh %d (1), after a load %d (= chosen)"
 			)
 			% [chosen, two_hand, kept, fresh, after]

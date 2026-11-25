@@ -386,26 +386,17 @@ static func _pelvis_clearance(local_xf: Transform3D) -> float:
 	return best
 
 
-## A roller carried beside a hard case goes into a lane tray after the case and
-## comes out before it; any other pair keeps the bags' order. Control: the
-## passengers sampled include both orders of roller and case and another pair.
+## Under roller-suitcases-full-size-only-on-one-bag-passengers, 2-bag
+## passengers never carry a roller, so roller_beside_case() is false and
+## tray_turn() keeps the bags' order for every 2-bag passenger.
 func test_a_roller_beside_a_case_goes_in_last_and_comes_out_first() -> void:
-	var seen := {}
 	for id in range(1, 400):
 		var p := Passenger.new()
 		p.id = id
 		p.carry_on = 2
 		var kinds := [SecurityLooks.bag_kind(p, 0), SecurityLooks.bag_kind(p, 1)]
-		var roller := kinds.find(SecurityLooks.Kind.ROLLER)
-		if SecurityLooks.roller_beside_case(p):
-			seen["roller %d" % roller] = true
-			assert_int(SecurityLooks.tray_turn(p, roller, true)).is_equal(1)
-			assert_int(SecurityLooks.tray_turn(p, 1 - roller, true)).is_equal(0)
-			assert_int(SecurityLooks.tray_turn(p, roller, false)).is_equal(0)
-			assert_int(SecurityLooks.tray_turn(p, 1 - roller, false)).is_equal(1)
-		else:
-			seen["other"] = true
-			for i in 2:
-				assert_int(SecurityLooks.tray_turn(p, i, true)).is_equal(i)
-				assert_int(SecurityLooks.tray_turn(p, i, false)).is_equal(i)
-	assert_bool(seen.has("roller 0") and seen.has("roller 1") and seen.has("other")).is_true()
+		assert_int(kinds.find(SecurityLooks.Kind.ROLLER)).is_equal(-1)
+		assert_bool(SecurityLooks.roller_beside_case(p)).is_false()
+		for i in 2:
+			assert_int(SecurityLooks.tray_turn(p, i, true)).is_equal(i)
+			assert_int(SecurityLooks.tray_turn(p, i, false)).is_equal(i)

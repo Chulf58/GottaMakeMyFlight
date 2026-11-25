@@ -79,17 +79,18 @@ func _open(cell: Vector2i) -> bool:
 	return PullSide.walls_near(grid, at).is_empty() and PullSide.pieces_near(grid, at).is_empty()
 
 
-## A guest with a roller first, standing still in a check-in queue on _cell,
-## having walked east onto it, with `carry_on` bags.
+## A guest standing still in a check-in queue on _cell, having walked east onto
+## it, with `carry_on` bags (with a roller first when `carry_on <= 1`).
 func _queuer(carry_on := 1) -> Passenger:
 	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
 	# A fixture draw, not an arrival under test: no place in the line outside.
 	_world.sim.entrance.forget(p.id)
-	while SecurityLooks.bag_kind(p, 0) != ROLLER:
+	p.carry_on = carry_on
+	while carry_on <= 1 and SecurityLooks.bag_kind(p, 0) != ROLLER:
 		p.carry_on = 0
 		p = _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
 		_world.sim.entrance.forget(p.id)
-	p.carry_on = carry_on
+		p.carry_on = carry_on
 	p.late = false
 	p.stage = Passenger.Stage.CHECKIN_QUEUE
 	p.at = _cell
@@ -280,16 +281,18 @@ func test_a_turn_through_the_side_boundary_mid_stand_neither_jumps_nor_clips() -
 		assert_float(worst.y).is_less(JUMP_M)
 
 
-## A stand asked for on a roller in the right hand, walled on the right for
-## the way the sim has the guest face: a one-bag guest goes to the left first
-## (side_first() puts the stand off), a two-bag guest keeps the right and the
-## stand goes ahead as asked, no side chosen.
+## A stand asked for in the right hand, walled on the right for the way the
+## sim has the guest face: a one-bag roller guest goes to the left first
+## (side_first() puts the stand off), while a two-bag guest (no roller) leaves
+## no queue_hand stamp and lets the stand restamp directly.
 func test_a_two_bag_guest_keeps_its_usual_side() -> void:
 	var right := (SecurityLooks.Home.HAND * 2 + 0) * 2
 	var counts := [1, 2]
 	var seen := []
 	for carry_on: int in counts:
 		var p := _queuer(carry_on)
+		if carry_on > 1:
+			assert_bool(ParkRecovery.has_roller(p)).is_false()
 		var bag := {"kind": ROLLER, "place": right, "still_from": 100.0, "queue_still": true}
 		ParkSide.choose_stand(_world.sim, p, bag)
 		seen.append([bag.get("queue_hand", []), RollerPark.restamps(bag)])

@@ -42,10 +42,12 @@ func _sitter(stage: Passenger.Stage, roller := false) -> Passenger:
 	_starts = FlightSim.schedule_starts(0)
 	_world.run_to(10)
 	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	p.carry_on = 1 if roller else 0
 	while (SecurityLooks.bag_kind(p, 0) == SecurityLooks.Kind.ROLLER) != roller:
 		ToiletTestLayout.calm(p)
 		p.carry_on = 0
 		p = _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+		p.carry_on = 1 if roller else 0
 	_send_to_gate(p, 1 if roller else 0)
 	var goal := Passenger.Stage.SEATED
 	if stage == Passenger.Stage.SITTING_DOWN:

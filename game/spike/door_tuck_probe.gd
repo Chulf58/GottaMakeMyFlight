@@ -73,9 +73,13 @@ var _leaves: Array[MeshInstance3D] = []
 
 
 func _initialize() -> void:
+	if _two_bags():
+		print("PROBE_INVALID --two-bags retired: 2-bag passengers never carry rollers")
+		quit(1)
+		return
 	super._initialize()
 	if not _headless:
-		_strip = CaseStrip.new() if _two_bags() else DoorTuckStrip.new()
+		_strip = DoorTuckStrip.new()
 
 
 static func _two_bags() -> bool:
@@ -94,9 +98,9 @@ func _spawn(world: String, role: String, k: int) -> void:
 	if not _two_bags() or _ours.size() == before:
 		return
 	var p := _ours[-1]
+	p.carry_on = 2
 	if SecurityLooks.bag_kind(p, 1) == SecurityLooks.Kind.CASE:
-		p.carry_on = 2
-		print("TWO_BAGS id=%d roller and case" % p.id)
+		print("TWO_BAGS id=%d case" % p.id)
 
 
 func _collect_walls(world: String) -> void:
