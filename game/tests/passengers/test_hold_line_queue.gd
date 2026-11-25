@@ -33,6 +33,8 @@ func _ten_queued() -> Array[int]:
 		var p := HoldLineKit.passenger(
 			_world, HoldLineKit.HALL_DOOR + Vector2i(0, -1), Passenger.Stage.TO_CHECKIN, i % 3
 		)
+		if p.carry_on == 0 and SecurityLooks.bag_kind(p, 0) == SecurityLooks.Kind.ROLLER:
+			p.carry_on = 1
 		ids.append(p.id)
 		_world.run_to(_world.clock.tick + 14)
 	var q: Dictionary = _world.sim._queue(desk)

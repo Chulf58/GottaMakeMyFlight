@@ -657,10 +657,13 @@ func _step() -> void:
 		if walker and not _joins.has(id) and not _left.has(id):
 			walkers.append(u)
 			before.append([u.at, u.path_end()])
+	var claims_before := _claims.duplicate()
 	var stranded: Array = []
 	var joined := StationQueue.arrive(
 		_sim.grid, _queues, _cells, _lines, walkers, _units, tick, stranded, _claims, _known
 	)
+	if _claims != claims_before:
+		_changed = true
 	for u in joined:
 		u.stage = Passenger.Stage.SECURITY_QUEUE
 		_changed = true

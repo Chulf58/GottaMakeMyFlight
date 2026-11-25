@@ -109,9 +109,15 @@ func test_the_check_in_card_sums_what_each_full_desks_sign_counts() -> void:
 	_world.step()
 	for i in 12:
 		_world.sim.spawn_now(PassengerTestWorld.FLIGHT)
-		_world.run_to(_world.clock.tick + 12)
-	# The second desk's lane fills a little after the first's.
-	_world.run_to(_world.clock.tick + 25 + AlertSources.QUEUE_HOLD_TICKS)
+		for t in 12:
+			_world.step()
+			_hold_service(first)
+			_hold_service(second)
+	# Both desks fill and stay full over QUEUE_HOLD_TICKS.
+	for i in 25 + AlertSources.QUEUE_HOLD_TICKS:
+		_world.step()
+		_hold_service(first)
+		_hold_service(second)
 	var full := MissSignals.full_stations(_world.sim)
 	assert_array(full.keys()).contains_exactly_in_any_order([first, second])
 	var total := 0

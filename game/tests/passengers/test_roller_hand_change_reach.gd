@@ -108,11 +108,14 @@ func _cafe_guest() -> Passenger:
 	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
 	# A fixture draw, not an arrival under test: no place in the line outside.
 	_world.sim.entrance.forget(p.id)
+	p.carry_on = 1
 	while SecurityLooks.bag_kind(p, 0) != ROLLER:
 		p.carry_on = 0
+		p.hunger = 0
+		p.cafe_cooldown = 1000000
 		p = _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
 		_world.sim.entrance.forget(p.id)
-	p.carry_on = 1
+		p.carry_on = 1
 	p.liquids = false
 	p.alarm = false
 	p.hunger = 0
