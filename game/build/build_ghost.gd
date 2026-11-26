@@ -347,7 +347,7 @@ static func clearance_target(mode: BuildMode) -> Dictionary:
 		return _cells_target(
 			mode.grid,
 			SecurityLaneStamp.footprint_cells(
-				mode.grid.world_to_cell(mode._hover_point), mode.facing
+				SecurityLaneStamp.anchor_for(mode.grid, mode._hover_point, mode.facing), mode.facing
 			),
 			true
 		)

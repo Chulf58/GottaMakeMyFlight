@@ -110,11 +110,13 @@ func test_a_large_ghost_puts_the_card_beside_its_bounds_not_the_pointer() -> voi
 		)
 	)
 	assert_bool(_menu.ghost_reason().visible).is_true()
-	# Control: the 6x3 ghost's middle is well away from the hovered cell.
-	assert_float(ghost.get_center().distance_to(pointer)).is_greater(40.0)
+	# Control: the 6x3 ghost centers on the hovered cell and extends well past it.
+	assert_float(ghost.get_center().distance_to(pointer)).is_less(40.0)
+	assert_bool(ghost.has_point(pointer)).is_true()
+	assert_float(ghost.end.x - pointer.x).is_greater(60.0)
 	assert_float(ghost.size.x).is_greater(80.0)
 	_assert_beside_ghost(ghost)
-	# Placed off the pointer it would start about a cell right of it, inside the ghost.
+	# Placed off the pointer it would start just right of it, inside the ghost.
 	assert_float(_card_rect().position.x).is_greater(pointer.x + 60.0)
 
 

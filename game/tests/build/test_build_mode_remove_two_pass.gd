@@ -97,7 +97,7 @@ func test_a_rectangle_with_no_object_removes_the_floor_and_the_inner_and_edge_wa
 
 func test_an_object_outside_the_rectangle_does_not_stop_the_second_pass() -> void:
 	_mode.set_tool(BuildMode.Tool.SEATS)
-	assert_bool(_mode.apply_at(_at(Vector2i(1, 8))).ok).is_true()
+	assert_bool(_mode.apply_at(_at(Vector2i(2, 8))).ok).is_true()
 	_mode.set_tool(BuildMode.Tool.REMOVE)
 	var outcome := _drag(AREA)
 	assert_int(outcome.placed).is_equal(1)

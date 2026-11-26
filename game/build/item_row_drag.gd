@@ -48,6 +48,7 @@ const REPEATABLE_TOOLS := {
 
 var active := false
 var press_point := Vector3.ZERO
+var end_point := Vector3.ZERO
 
 var _start := Vector2i.ZERO
 var _end := Vector2i.ZERO
@@ -229,6 +230,7 @@ func begin(
 ) -> void:
 	active = true
 	press_point = point
+	end_point = point
 	_limit = grid_size
 	_start = cell
 	_end = cell

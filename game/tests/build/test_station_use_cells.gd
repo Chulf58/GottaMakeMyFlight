@@ -87,7 +87,10 @@ func test_desk_scanner_and_counter_tiles_match_the_sim_cells_at_every_facing() -
 		var def_id: StringName = STATIONS[tool]
 		for facing in 4:
 			var ghost := _ghost_at(tool, AT, facing)
-			var placed := _mode.grid.apply(BuildEdit.place_object(def_id, AT, facing))
+			var anchor := BuildMode.object_anchor(
+				_mode.grid, def_id, _mode.grid.cell_to_world(AT), facing
+			)
+			var placed := _mode.grid.apply(BuildEdit.place_object(def_id, anchor, facing))
 			assert_bool(placed.ok).is_true()
 			var id := placed.object_id
 			var passenger: Array = [_mode.grid.interaction_cell(id)]
@@ -123,10 +126,13 @@ func test_desk_scanner_and_counter_tiles_match_the_sim_cells_at_every_facing() -
 func test_the_gate_desk_shows_its_staff_spot_and_front_arrow_pointing_in() -> void:
 	for facing in 4:
 		var ghost := _ghost_at(BuildMode.Tool.GATE_DESK, AT, facing)
+		var anchor := BuildMode.object_anchor(
+			_mode.grid, GateDesks.DESK, _mode.grid.cell_to_world(AT), facing
+		)
 		var front := BuildObjectDef.rotate_offset(Vector2i(0, 1), facing)
-		var spot := StaffSpots.cell_of(GateDesks.DESK, AT, facing)
+		var spot := StaffSpots.cell_of(GateDesks.DESK, anchor, facing)
 		var row := Vector3.ZERO
-		var cells := BuildCatalog.get_def(GateDesks.DESK).footprint(AT, facing)
+		var cells := BuildCatalog.get_def(GateDesks.DESK).footprint(anchor, facing)
 		for cell in cells:
 			row += _mode.grid.cell_to_world(cell + front) / cells.size()
 		print(

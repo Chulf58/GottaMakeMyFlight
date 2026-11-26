@@ -344,9 +344,10 @@ func test_one_click_security_lane_stamp_places_all_facings_atomically_and_undoes
 	mode.set_tool(BuildMode.Tool.SECURITY_LANE)
 	for facing in 4:
 		mode.facing = facing
-		var anchor := Vector2i(9, 9)
+		var point := mode.grid.cell_to_world(Vector2i(9, 9))
+		var anchor := SecurityLaneStamp.anchor_for(mode.grid, point, facing)
 		var cash_before := finances.wallet.balance
-		var res := mode.apply_at(mode.grid.cell_to_world(anchor))
+		var res := mode.apply_at(point)
 		assert_bool(res.ok).override_failure_message("facing %d" % facing).is_true()
 		assert_int(finances.wallet.balance).is_equal(cash_before - expected_price)
 		var lanes := SecurityLanes.new()
