@@ -61,12 +61,12 @@ const HINTS := {
 ## (card_lines()) one with the count for several. It uses the sign's words,
 ## "Wall gap".
 const GAP_HINT := "Wall gap: close the open edge of the outer wall, marked in red"
-## A column's least width: five roles fit centred over the bar, six shrink to fit 1280x720.
-const ROLE_WIDTH := 156.0
-const ROLE_WIDTH_SIX := 136.0
+## A column's least width: five roles fit centred over the bar,
+## six fit 1280x720 with single-line headers.
+const ROLE_WIDTH := 168.0
+const ROLE_WIDTH_SIX := 148.0
 const ROLE_SEPARATION := 10
 const ROLE_SEPARATION_SIX := 8
-const MAX_ENERGY_ROWS := 3
 const ENERGY_BAR_HEIGHT := 5.0
 const ENERGY_RESTED_COLOR := Color(0.35, 0.78, 0.45)
 const ENERGY_TIRED_COLOR := Color(0.9, 0.45, 0.25)
@@ -407,7 +407,11 @@ func refresh() -> void:
 	_track_opening()
 	_sync_role_columns()
 	for role in ROLES:
-		(_counts[role] as Label).text = counts_text(role)
+		var counts_lbl := _counts[role] as Label
+		counts_lbl.text = counts_text(role)
+		var col := _columns.get(role) as Control
+		var col_w := col.custom_minimum_size.x if col != null else ROLE_WIDTH
+		_fit_single_line(counts_lbl, HudLayout.CAPTION, col_w)
 		(_fire[role] as Button).disabled = _staying(role) == 0
 		_refresh_energy_box(role)
 	var prep_note := ""
@@ -446,9 +450,12 @@ func _card_title(lines: Array[Dictionary]) -> String:
 
 func _opening_counts() -> Dictionary:
 	var layout := staff.sim.layout
+	var grid := staff.sim.grid
 	return {
+		"entrances": layout.entrances.size(),
 		"desks": layout.desks.size(),
 		"scanners": layout.scanners.size(),
+		"exits": layout.open_exits(grid).size(),
 		"seats": layout.seats.size(),
 		"checkin_staying": _staying(StaffMember.Role.CHECKIN),
 		"security_staying": _staying(StaffMember.Role.SECURITY),
@@ -739,9 +746,13 @@ func _sync_role_columns() -> void:
 	for role in _columns:
 		(_columns[role] as Control).custom_minimum_size = Vector2(col_w, 0.0)
 		if _role_titles.has(role):
-			(_role_titles[role] as Label).custom_minimum_size.x = col_w
+			var title_lbl := _role_titles[role] as Label
+			title_lbl.custom_minimum_size.x = col_w
+			_fit_single_line(title_lbl, HudLayout.CAPTION, col_w)
 		if _counts.has(role):
-			(_counts[role] as Label).custom_minimum_size.x = col_w
+			var counts_lbl := _counts[role] as Label
+			counts_lbl.custom_minimum_size.x = col_w
+			_fit_single_line(counts_lbl, HudLayout.CAPTION, col_w)
 	_fit_card()
 
 
@@ -836,19 +847,32 @@ func _build() -> void:
 		column.tooltip_text = tip
 		_columns[role] = column
 		_roles_box.add_child(column)
-		var role_title := _label(_role_name(role), &"HudCardName")
+		var role_title := _single_line_label(_role_name(role), &"HudCardName")
+		role_title.name = "%sTitle" % ROLE_KEYS[role]
 		role_title.custom_minimum_size.x = ROLE_WIDTH
 		role_title.mouse_filter = Control.MOUSE_FILTER_PASS
 		role_title.tooltip_text = tip
 		_role_titles[role] = role_title
 		column.add_child(role_title)
-		var counts := _label("", &"HudSmall")
+		var counts := _single_line_label("", &"HudSmall")
 		counts.name = "%sCounts" % ROLE_KEYS[role]
 		counts.custom_minimum_size.x = ROLE_WIDTH
+		counts.add_theme_font_size_override("font_size", HudLayout.CAPTION)
 		counts.mouse_filter = Control.MOUSE_FILTER_PASS
 		counts.tooltip_text = tip
 		column.add_child(counts)
 		_counts[role] = counts
+		var row := VBoxContainer.new()
+		row.name = "%sActions" % ROLE_KEYS[role]
+		row.add_theme_constant_override("separation", 4)
+		column.add_child(row)
+		_hire[role] = _button(row, "Hire%s" % ROLE_KEYS[role], hire_text(role), &"HudButtonTeal")
+		(_hire[role] as Button).tooltip_text = tip
+		_fire[role] = _button(
+			row, "Fire%s" % ROLE_KEYS[role], tr("Fire", "staff button"), &"HudButtonCoral"
+		)
+		(_hire[role] as Button).pressed.connect(func() -> void: staff.hire(role))
+		(_fire[role] as Button).pressed.connect(func() -> void: staff.fire(role))
 		var energy_scroll := ScrollContainer.new()
 		energy_scroll.name = "%sEnergyScroll" % ROLE_KEYS[role]
 		energy_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -863,17 +887,6 @@ func _build() -> void:
 		energy_box.visible = false
 		energy_scroll.add_child(energy_box)
 		_energy_boxes[role] = energy_box
-		var row := VBoxContainer.new()
-		row.size_flags_vertical = Control.SIZE_EXPAND_FILL | Control.SIZE_SHRINK_END
-		row.add_theme_constant_override("separation", 4)
-		column.add_child(row)
-		_hire[role] = _button(row, "Hire%s" % ROLE_KEYS[role], hire_text(role), &"HudButtonTeal")
-		(_hire[role] as Button).tooltip_text = tip
-		_fire[role] = _button(
-			row, "Fire%s" % ROLE_KEYS[role], tr("Fire", "staff button"), &"HudButtonCoral"
-		)
-		(_hire[role] as Button).pressed.connect(func() -> void: staff.hire(role))
-		(_fire[role] as Button).pressed.connect(func() -> void: staff.fire(role))
 	_build_hint()
 
 
@@ -991,10 +1004,27 @@ func _label(text: String, variation: StringName) -> Label:
 	var label := Label.new()
 	label.text = text
 	label.theme_type_variation = variation
-	# A longer translation wraps inside its column; ROLE_WIDTH keeps the four columns
-	# over the bar instead of the longest line widening them.
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	return label
+
+
+func _single_line_label(text: String, variation: StringName) -> Label:
+	var label := Label.new()
+	label.text = text
+	label.theme_type_variation = variation
+	label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	return label
+
+
+func _fit_single_line(label: Label, base_size: int, width: float) -> void:
+	var font := label.get_theme_font("font")
+	if font != null and label.text != "":
+		label.add_theme_font_size_override(
+			"font_size", HudLayout.fit_size(label.text, font, base_size, width, 1)
+		)
+	else:
+		label.add_theme_font_size_override("font_size", base_size)
 
 
 func _button(row: Control, node_name: String, text: String, variation: StringName) -> Button:
@@ -1066,16 +1096,13 @@ func _refresh_energy_box(role: StaffMember.Role) -> void:
 			scroll.custom_minimum_size.y = 0.0
 	if members.is_empty():
 		return
-	var col := _columns.get(role) as Control
-	var col_w := col.custom_minimum_size.x if col != null else ROLE_WIDTH
 	var active_wallet := _resolve_wallet()
-	var shown := mini(members.size(), MAX_ENERGY_ROWS)
-	for i in shown:
-		var m := members[i]
+	for m in members:
 		var entry := VBoxContainer.new()
+		entry.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		entry.add_theme_constant_override("separation", 1)
 		var lbl := _label(member_energy_text(m.id), &"HudSmall")
-		lbl.custom_minimum_size.x = col_w
+		lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		entry.add_child(lbl)
 		var bar := ProgressBar.new()
 		bar.show_percentage = false
@@ -1125,10 +1152,6 @@ func _refresh_energy_box(role: StaffMember.Role) -> void:
 		else:
 			var fixed_lbl := _label(tr("Fixed speed"), &"HudHint")
 			fixed_lbl.name = "FixedSpeed%d" % m.id
-			fixed_lbl.custom_minimum_size.x = col_w
+			fixed_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			entry.add_child(fixed_lbl)
 		box.add_child(entry)
-	var extra := members.size() - shown
-	if extra > 0:
-		var more := _label(tr("+ {count} more").format({"count": extra}), &"HudSmall")
-		box.add_child(more)

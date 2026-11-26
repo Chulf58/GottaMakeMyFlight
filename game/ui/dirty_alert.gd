@@ -12,15 +12,15 @@ extends RefCounted
 ## The dirt has a band so the card does not flicker as cleaners work: it
 ## shows once the dirt reaches SHOW_AT and stays until it falls below
 ## CLEAR_BELOW. One fresh mess costs MessSim.DIRT, an aged one AGED_DIRT and a
-## grown one GROWN_DIRT, so SHOW_AT is about eight fresh messes or three
-## grown ones, and the card clears when about three fresh ones are left.
+## grown one GROWN_DIRT, so SHOW_AT (2) triggers for a couple of Tier-1 toilet
+## messes or one aged mess, and clears once cleaned to 0.
 
 const KEY := &"dirty_terminal"
 ## The English msgids of the card's words. Tests compare against them; the card
 ## itself says tr() of the same literals, because the POT extractor reads only literals.
 const TITLE := "Dirty terminal"
-const SHOW_AT := 8
-const CLEAR_BELOW := 4
+const SHOW_AT := 2
+const CLEAR_BELOW := 1
 const HIRE_TEXT := "The terminal is getting dirty. Hire a cleaner on the Staff card."
 const BINS_TEXT := (
 	"The terminal is getting dirty. Place bins near the bar and toilets, "

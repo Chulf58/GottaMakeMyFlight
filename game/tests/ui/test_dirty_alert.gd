@@ -131,14 +131,14 @@ func test_a_different_sim_starts_the_card_again() -> void:
 
 
 func test_reset_starts_hidden_and_the_band_applies_afresh() -> void:
-	# 5 is inside the band: up before a reset, and not shown again by it.
+	# CLEAR_BELOW (1) is inside [CLEAR_BELOW, SHOW_AT - 1]: up before reset, not shown again.
 	_card.refresh_with(DirtyAlert.SHOW_AT, 0)
-	_card.refresh_with(5, 0)
+	_card.refresh_with(DirtyAlert.CLEAR_BELOW, 0)
 	assert_bool(_card.is_shown()).is_true()
 	_card.reset()
 	assert_bool(_card.is_shown()).is_false()
 	assert_str(_card.card_text()).is_equal("")
-	_card.refresh_with(5, 0)
+	_card.refresh_with(DirtyAlert.CLEAR_BELOW, 0)
 	assert_bool(_card.is_shown()).is_false()
 	_card.refresh_with(DirtyAlert.SHOW_AT, 0)
 	assert_bool(_card.is_shown()).is_true()

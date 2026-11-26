@@ -105,7 +105,7 @@ func test_a_closed_bare_floor_card_lists_all_its_needs() -> void:
 	var todo := _panel.hint_text().split("\n")
 	print("unmet %s, card '%s'" % [unmet, _panel.hint_text().replace("\n", " | ")])
 	assert_int(unmet.size()).is_equal(3)
-	assert_array(Array(todo)).contains([Checklist.ENTRANCE])
+	assert_array(Array(todo)).contains(["Place an entrance door"])
 	assert_array(Array(todo)).contains(["Place Check-in (Operations)"])
 	assert_array(Array(todo)).contains(["Place Security (Operations)"])
 	assert_str(_panel.hint_label().text).is_equal(Checklist.TITLE_CLOSED)
