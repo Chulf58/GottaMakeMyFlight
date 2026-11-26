@@ -1,11 +1,10 @@
 class_name PassengerInspect
 extends PanelContainer
 ## The inspect card of the followed passenger (HUD 4/7, decision passenger-
-## inspect-thoughts-recorded-at-sim-outcomes-saved-pin-marks-where), in the
-## bottom-left place of the follow text, which PassengerHud hides while the card
-## shows. Live status (stage, flight, mood, hunger, toilet need, boredom, and
-## on their own line whether it runs late and what holds it up right now,
-## both when both hold) is kept apart from its thoughts
+## inspect-thoughts-recorded-at-sim-outcomes-saved-pin-marks-where), docked
+## bottom-right via BottomDocks. Live status (stage, flight, mood, hunger,
+## toilet need, boredom, and on their own line whether it runs late and what
+## holds it up right now, both when both hold) is kept apart from its thoughts
 ## (PassengerThoughts), newest first, one button each, coral for a bad thought
 ## and green for a good one.
 ##
@@ -21,12 +20,9 @@ extends PanelContainer
 ## the thoughts says the pin shows where the passenger was. The passenger's
 ## name follows the passenger again. A thought with no cell pins nothing.
 
-## The card's widest, so it stays a card on a wide screen.
+## FollowCard width cap kept here for PassengerHud compatibility.
 const MAX_W := 420.0
-const MIN_W := 160.0
-## The card's bottom edge, up from the bottom of the screen: one GAP above the
-## category bar, as the follow text sits. The Templates button stands on the bar's
-## baseline at the left margin (TemplatesPage.attach()), so the card lies above it.
+## Bottom clearance above the centred CategoryBar; kept for test compatibility.
 const BOTTOM := BuildMenu.MARGIN + BuildMenu.BAR_H + BuildMenu.GAP
 
 var sim: PassengerSim
@@ -65,8 +61,8 @@ func _init() -> void:
 	name = "PassengerInspect"
 	visible = false
 	theme = BuildMenu.HUD_THEME
-	# The top-left column's cards stop a GAP above this card while it shows.
-	add_to_group(BottomDocks.LEFT_FLOOR_GROUP)
+	# Docks bottom-right; AlertStack stops GROUP_GAP above visible RIGHT_FLOOR_GROUP cards.
+	add_to_group(BottomDocks.RIGHT_FLOOR_GROUP)
 	var root := VBoxContainer.new()
 	add_child(root)
 	root.add_child(built_card)
@@ -111,6 +107,10 @@ func _ready() -> void:
 	var menu := get_node_or_null("../../BuildMenu") as BuildMenu
 	if menu != null and menu.is_node_ready():
 		menu.bar().minimum_size_changed.connect(fit)
+		if menu.tray() != null:
+			menu.tray().visibility_changed.connect(fit)
+		if menu.status_card() != null:
+			menu.status_card().visibility_changed.connect(fit)
 
 
 func _notification(what: int) -> void:
@@ -125,26 +125,34 @@ func _retranslate() -> void:
 	refresh()
 
 
-## Bottom-left, left of BuildMenu's centre column and above its Templates
-## dock, growing upward via BottomDocks' clearance coordinator.
+## Bottom-right, clear of CategoryBar, BuildTray, and DebugCorner/DebugPanel,
+## growing upward via BottomDocks' right-floor coordinator.
 func fit() -> void:
-	var layer_w := get_viewport().get_visible_rect().size.x
+	if not is_inside_tree():
+		return
+	var viewport := get_viewport()
+	if viewport == null:
+		return
+	var layer := viewport.get_visible_rect().size
 	var menu := get_node_or_null("../../BuildMenu") as BuildMenu
-	var bar_w := (
-		0.0
-		if menu == null or not menu.is_node_ready()
-		else menu.bar().get_combined_minimum_size().x
+	var has_menu := is_instance_valid(menu) and menu.is_node_ready()
+	var bar_w := 0.0 if not has_menu else menu.bar().get_combined_minimum_size().x
+	var tray_open := has_menu and menu.is_tray_open()
+	var stack_top := menu.stack_top() if has_menu else float(BuildMenu.MARGIN + BuildMenu.BAR_H)
+	var width := float(HudLayout.RAIL_W)
+	var bottom := BottomDocks.right_floor_bottom(
+		get_tree(), layer, width, bar_w, tray_open, stack_top, self
 	)
-	var bottom := BottomDocks.left_floor_bottom(layer_w, bar_w)
-	var width := BottomDocks.left_corner_width(layer_w, MIN_W, MAX_W)
-	anchor_left = 0.0
-	anchor_right = 0.0
+	custom_minimum_size = Vector2(width, 0.0)
+	anchor_left = 1.0
+	anchor_right = 1.0
 	anchor_top = 1.0
 	anchor_bottom = 1.0
-	offset_left = float(HudLayout.MARGIN)
-	offset_right = float(HudLayout.MARGIN) + width
+	offset_right = -float(HudLayout.MARGIN)
+	offset_left = -float(HudLayout.MARGIN) - width
 	offset_top = -bottom
 	offset_bottom = -bottom
+	grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	grow_vertical = Control.GROW_DIRECTION_BEGIN
 
 
@@ -160,6 +168,8 @@ func refresh() -> void:
 	actions.refresh()
 	_passenger_rows.visible = p != null
 	visible = p != null or built_card.visible
+	fit()
+	reset_size()
 	if p == null:
 		return
 	_name.text = PassengerNames.name_of(p.id)

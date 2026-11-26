@@ -171,17 +171,16 @@ func test_deselecting_or_a_load_clears_the_pin() -> void:
 	assert_bool(_inspect.marker.is_shown()).is_false()
 
 
-func test_the_card_sits_bottom_left_above_the_templates_button() -> void:
+func test_the_card_docks_bottom_right_at_rail_width() -> void:
 	_select()
-	var card := _hud.find_child("FollowCard", true, false) as Control
+	assert_float(_inspect.anchor_left).is_equal(1.0)
+	assert_float(_inspect.anchor_right).is_equal(1.0)
 	assert_float(_inspect.anchor_top).is_equal(1.0)
-	assert_float(_inspect.offset_left).is_equal(card.offset_left)
-	assert_float(_inspect.offset_right).is_less_equal(card.offset_right)
-	# Without detached TemplatesDock, bottom-left cards rest at HudLayout.MARGIN
-	# whenever CategoryBar stays clear horizontally (BottomDocks.left_floor_bottom).
-	assert_float(-_inspect.offset_bottom).is_equal(float(HudLayout.MARGIN))
-	assert_float(-_inspect.offset_bottom).is_equal(-card.offset_bottom)
-	assert_float(_inspect.offset_right - _inspect.offset_left).is_less_equal(PassengerInspect.MAX_W)
+	assert_float(_inspect.anchor_bottom).is_equal(1.0)
+	assert_float(-_inspect.offset_right).is_equal(float(HudLayout.MARGIN))
+	assert_float(_inspect.offset_right - _inspect.offset_left).is_equal(float(HudLayout.RAIL_W))
+	assert_float(-_inspect.offset_bottom).is_greater_equal(float(HudLayout.MARGIN))
+	assert_int(_inspect.grow_horizontal).is_equal(Control.GROW_DIRECTION_BEGIN)
 	assert_int(_inspect.grow_vertical).is_equal(Control.GROW_DIRECTION_BEGIN)
 
 

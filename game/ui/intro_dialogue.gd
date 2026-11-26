@@ -789,18 +789,17 @@ func _place() -> void:
 	)
 
 
-## Bottom-centre ringing-phone badge shared by New Airport intro and UnlockGuide
-## calls (decisions phone-ring-pop-up-for-big-moments and
-## phone-ring-sfx-and-new-airport-intro-ring-procedural-phone-r).
+## Top-centre ringing-phone badge beside Offers shared by New Airport intro and
+## UnlockGuide calls (decisions phone-ring-pop-up-for-big-moments and
+## hud-4-zone-enforcement-alertstack-toasts-bottom-right-inspect-staffpanel-cleanup).
 class PhoneRingCue:
 	extends PanelContainer
 
 	signal answered
 
 	const RING_DURATION_S := 2.05
-	const CUE_SIZE := 64.0
-	const ICON_SIZE := 44.0
-	const CUE_BOTTOM := BuildMenu.MARGIN + BuildMenu.BAR_H + HudLayout.GAP
+	const CUE_SIZE := float(HudLayout.BUTTON_H)
+	const ICON_SIZE := 28.0
 	const PHONE_SVG := (
 		'<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">'
 		+ '<path d="M18 14c-4 0-7 3-7 8 0 17 14 31 31 31 5 0 8-3 8-7l-2-8-10-3-4 5'
@@ -827,17 +826,8 @@ class PhoneRingCue:
 		theme_type_variation = &"HudTopCard"
 		process_mode = Node.PROCESS_MODE_ALWAYS
 		visible = false
-		anchor_left = 0.5
-		anchor_right = 0.5
-		anchor_top = 1.0
-		anchor_bottom = 1.0
-		offset_left = -CUE_SIZE * 0.5
-		offset_right = CUE_SIZE * 0.5
-		offset_top = -CUE_BOTTOM - CUE_SIZE
-		offset_bottom = -CUE_BOTTOM
+		custom_minimum_size = Vector2(CUE_SIZE, CUE_SIZE)
 		pivot_offset = Vector2(CUE_SIZE * 0.5, CUE_SIZE * 0.5)
-		grow_horizontal = Control.GROW_DIRECTION_BOTH
-		grow_vertical = Control.GROW_DIRECTION_BEGIN
 
 		_button.name = "AnswerButton"
 		_button.flat = true
@@ -861,11 +851,24 @@ class PhoneRingCue:
 		_icon.pivot_offset = Vector2(ICON_SIZE * 0.5, ICON_SIZE * 0.5)
 		center.add_child(_icon)
 
+	func _ready() -> void:
+		var vp := get_viewport()
+		if vp != null and not vp.size_changed.is_connected(_place):
+			vp.size_changed.connect(_place)
+		_place()
+
 	func _exit_tree() -> void:
+		var vp := get_viewport()
+		if vp != null and vp.size_changed.is_connected(_place):
+			vp.size_changed.disconnect(_place)
 		if _ringing:
 			_stop_ring_sfx()
 		_ringing = false
 		_kill_tween()
+
+	func _place() -> void:
+		if is_inside_tree() and get_viewport() != null:
+			TopRow.place_ring_cue(self, self, CUE_SIZE)
 
 	func _input(event: InputEvent) -> void:
 		if not _ringing or not _answer_on_key or not visible:
@@ -896,6 +899,7 @@ class PhoneRingCue:
 
 	func _begin_ring(auto_answer: bool, answer_on_key: bool) -> void:
 		_kill_tween()
+		_place()
 		_ringing = true
 		_answer_on_key = answer_on_key
 		visible = true

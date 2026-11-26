@@ -67,7 +67,7 @@ func test_the_menu_tells_the_hud_when_it_opens_and_closes() -> void:
 	assert_array(seen).is_equal([true, false])
 
 
-func test_the_settings_page_holds_only_the_incidents_switch_and_back() -> void:
+func test_the_settings_page_holds_incidents_reset_hints_and_back() -> void:
 	_menu.open()
 	_menu.settings_button().pressed.emit()
 	var switch := _menu.incidents_switch()
@@ -76,8 +76,9 @@ func test_the_settings_page_holds_only_the_incidents_switch_and_back() -> void:
 	var names: Array[String] = []
 	for child in switch.get_parent().get_children():
 		names.append(child.name)
-	assert_array(names).is_equal(["Title", "Incidents", "Back"])
+	assert_array(names).is_equal(["Title", "Incidents", "ResetHints", "Back"])
 	assert_bool(switch.button_pressed).is_false()
+	assert_str(_menu.reset_hints_button().text).is_equal("Reset hints")
 
 
 func test_the_incidents_switch_sets_and_clears_the_director_flag() -> void:

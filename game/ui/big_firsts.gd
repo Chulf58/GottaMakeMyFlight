@@ -13,7 +13,8 @@ const INCIDENT := "incident"
 ## Every kind, in the order a dialog lists them.
 const KINDS: Array[String] = [OPENING, RUNWAY, INCIDENT]
 const CERTIFICATION_TOAST_SECONDS := 8.0
-const CERTIFICATION_TOAST_W := 420.0
+const CERTIFICATION_TOAST_W := float(HudLayout.RAIL_W)
+const CERTIFICATION_RAIL_KEY := &"airport_certification"
 const ICON_GATES := preload("res://assets/ui/icons/gates.svg")
 const ICON_COIN := preload("res://assets/ui/icons/coin.svg")
 const ICON_SERVICES := preload("res://assets/ui/icons/services.svg")
@@ -224,7 +225,7 @@ static func certification_body(star: int, title: String, grant: int, bonus_perce
 
 
 ## Shows a non-blocking celebration toast for a newly earned certification milestone
-## and returns the CanvasLayer (attached under `host` when provided).
+## and routes it into AlertStack when present under `host`, or top-right standalone.
 static func show_certification(
 	star: int, title: String, grant: int, bonus_percent: int, host: Node = null
 ) -> CanvasLayer:
@@ -232,7 +233,7 @@ static func show_certification(
 		var old := host.get_node_or_null("CertificationToastLayer")
 		if old != null and is_instance_valid(old):
 			host.remove_child(old)
-			old.queue_free()
+			old.free()
 	var layer := CanvasLayer.new()
 	layer.name = "CertificationToastLayer"
 	layer.layer = TopRow.SHEET_LAYER + 1
@@ -240,19 +241,13 @@ static func show_certification(
 	card.name = "CertificationToast"
 	card.theme = BuildMenu.HUD_THEME
 	card.theme_type_variation = &"HudCardGreen"
-	card.anchor_left = 0.5
-	card.anchor_right = 0.5
-	card.anchor_top = 0.0
-	card.anchor_bottom = 0.0
-	card.offset_left = -CERTIFICATION_TOAST_W * 0.5
-	card.offset_right = CERTIFICATION_TOAST_W * 0.5
-	card.offset_top = TopRow.SHEET_TOP
-	card.offset_bottom = TopRow.SHEET_TOP
-	card.grow_vertical = Control.GROW_DIRECTION_END
-	layer.add_child(card)
+	card.custom_minimum_size = Vector2(CERTIFICATION_TOAST_W, 0.0)
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var box := VBoxContainer.new()
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	card.add_child(box)
 	var header := HBoxContainer.new()
+	header.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	box.add_child(header)
 	var stars := RatingBadge.StarRow.new()
 	stars.fills = RatingBadge.star_fills(float(star))
@@ -264,33 +259,101 @@ static func show_certification(
 		RatingBadge.STAR_SIZE
 	)
 	stars.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	stars.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	header.add_child(stars)
-	var heading := Label.new()
-	heading.name = "CertificationTitle"
-	heading.theme_type_variation = &"HudTitle"
-	heading.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	heading.text = certification_title(star, title)
-	header.add_child(heading)
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	header.add_child(spacer)
 	var close := Button.new()
 	close.name = "CertificationClose"
 	close.theme_type_variation = &"HudButtonCompact"
 	close.text = certification_close_text()
 	close.focus_mode = Control.FOCUS_NONE
-	close.pressed.connect(layer.queue_free)
 	header.add_child(close)
+	var heading := Label.new()
+	heading.name = "CertificationTitle"
+	heading.theme_type_variation = &"HudTitle"
+	heading.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	heading.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	heading.text = certification_title(star, title)
+	box.add_child(heading)
 	var body := Label.new()
 	body.name = "CertificationBody"
 	body.theme_type_variation = &"HudSmall"
 	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	body.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	body.text = certification_body(star, title, grant, bonus_percent)
 	box.add_child(body)
+	var rail := _find_alert_rail(host)
+	var layer_id := layer.get_instance_id()
+	var card_id := card.get_instance_id()
+	var rail_id := rail.get_instance_id() if rail != null else 0
+	var dismiss := func() -> void:
+		var r := instance_from_id(rail_id) as AlertStack
+		var c := instance_from_id(card_id) as Control
+		var l := instance_from_id(layer_id) as CanvasLayer
+		var can_drop := (
+			r != null
+			and is_instance_valid(r)
+			and c != null
+			and r.notice_card(CERTIFICATION_RAIL_KEY) == c
+		)
+		if can_drop:
+			r.drop_notice(CERTIFICATION_RAIL_KEY)
+		if l != null and is_instance_valid(l) and not l.is_queued_for_deletion():
+			l.queue_free()
+	close.pressed.connect(dismiss)
 	var timer := Timer.new()
 	timer.wait_time = CERTIFICATION_TOAST_SECONDS
 	timer.one_shot = true
 	timer.autostart = true
 	timer.process_mode = Node.PROCESS_MODE_ALWAYS
-	timer.timeout.connect(layer.queue_free)
+	timer.timeout.connect(dismiss)
 	layer.add_child(timer)
 	if host != null:
 		host.add_child(layer)
+	if rail != null:
+		card.tree_exiting.connect(
+			func() -> void:
+				var l := instance_from_id(layer_id) as CanvasLayer
+				if l != null and is_instance_valid(l) and not l.is_queued_for_deletion():
+					l.queue_free()
+		)
+		layer.tree_exiting.connect(
+			func() -> void:
+				var r := instance_from_id(rail_id) as AlertStack
+				var c := instance_from_id(card_id) as Control
+				if (
+					r != null
+					and is_instance_valid(r)
+					and c != null
+					and r.notice_card(CERTIFICATION_RAIL_KEY) == c
+				):
+					r.drop_notice(CERTIFICATION_RAIL_KEY)
+		)
+		rail.post_notice(
+			CERTIFICATION_RAIL_KEY, card, CERTIFICATION_TOAST_SECONDS, heading.text, body.text
+		)
+	else:
+		card.anchor_left = 1.0
+		card.anchor_right = 1.0
+		card.anchor_top = 0.0
+		card.anchor_bottom = 0.0
+		card.offset_right = -float(HudLayout.MARGIN)
+		card.offset_left = -float(HudLayout.MARGIN) - CERTIFICATION_TOAST_W
+		card.offset_top = float(HudLayout.MARGIN)
+		card.offset_bottom = float(HudLayout.MARGIN)
+		card.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+		card.grow_vertical = Control.GROW_DIRECTION_END
+		layer.add_child(card)
 	return layer
+
+
+static func _find_alert_rail(host: Node) -> AlertStack:
+	if host == null or not host.is_inside_tree():
+		return null
+	var tree := host.get_tree()
+	if tree == null:
+		return null
+	return tree.get_first_node_in_group(AlertStack.GROUP) as AlertStack
