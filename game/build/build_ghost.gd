@@ -315,6 +315,9 @@ static func clearance_target(mode: BuildMode) -> Dictionary:
 		if mode.room_mover._plan == null:
 			return {"active": false}
 		return _area_target(mode, mode.room_mover._plan.to_rect, true)
+	if mode.object_mover != null and mode.object_mover.active:
+		var cells := mode.object_mover.footprint_cells()
+		return _cells_target(mode.grid, cells, true) if not cells.is_empty() else {"active": false}
 	if mode.starter_kit != null and mode.starter_kit.is_active():
 		if not mode._pointer_on_grid or mode._hover_point == null:
 			return {"active": false}

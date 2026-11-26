@@ -18,6 +18,8 @@ static func build_rect(mode: BuildMode, camera: Camera3D) -> Rect2:
 	var ghost := ghost_of(mode)
 	if mode != null and mode.room_mover.active:
 		ghost = mode.room_mover.ghost_node()
+	elif mode != null and mode.object_mover.active:
+		ghost = mode.object_mover.ghost_node()
 	return screen_rect(ghost, camera)
 
 

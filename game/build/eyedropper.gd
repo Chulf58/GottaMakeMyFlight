@@ -156,6 +156,8 @@ static func pick_at(mode: BuildMode, point: Vector3) -> bool:
 	mode.templates.disarm()
 	if mode.room_mover.active:
 		mode.room_mover.cancel()
+	if mode.object_mover.active:
+		mode.object_mover.cancel()
 	if mode.starter_kit != null and mode.starter_kit.is_active():
 		mode.starter_kit.disarm()
 	mode.set_tool(picked_tool)

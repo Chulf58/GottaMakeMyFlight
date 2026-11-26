@@ -29,6 +29,8 @@ extends Node3D
 signal grid_changed
 ## Emitted by every set_tool(), NONE included, so the menu can follow it.
 signal tool_changed(new_tool: Tool)
+## Emitted before set_tool(Tool.NONE) when right-click clears the tool without closing the tray.
+signal tool_deselected
 ## Emitted when the status line's text changes.
 signal status_changed(text: String)
 ## Emitted when a build, demo-cap, or locked-tool refusal is shown or triggered.
@@ -305,6 +307,8 @@ var lane_hint_scans := 0
 var templates := TemplatePaste.new()
 ## The picked-up room and its set-down (RoomMoveTool), made a child in _ready().
 var room_mover := RoomMoveTool.new()
+## The picked-up single object and its set-down (ObjectMoveTool), made in _ready().
+var object_mover := ObjectMoveTool.new()
 ## Furnished Starter Room Kits placement tool (StarterKitTool), made a child in _ready().
 var starter_kit := StarterKitTool.new()
 ## Currently selected room id in Tool.NONE (for always-on resize handles).
@@ -358,6 +362,11 @@ var _row_label := ""
 ## Middle-mouse press tracking so camera drag-pans never trigger Eyedropper.
 var _middle_pressing := false
 var _middle_press_screen := Vector2.ZERO
+## Right-mouse press tracking so camera orbit drags never trigger deselect.
+var _right_pressing := false
+var _right_dragged := false
+var _right_press_screen := Vector2.ZERO
+var _right_cancelled_on_press := false
 ## Where the pointer was at the press that began a drag, and whether it has
 ## since moved CLICK_SLOP_PX away.
 var _press_screen := Vector2.ZERO
@@ -421,6 +430,7 @@ func _ready() -> void:
 	_history.invalidated.connect(_landside_placement.clear_undo)
 	add_child(templates)
 	add_child(room_mover)
+	add_child(object_mover)
 	add_child(starter_kit)
 	_juice.watch(self)
 	add_child(_juice)
@@ -463,18 +473,14 @@ func _unhandled_input(event: InputEvent) -> void:
 	if _handle_eyedropper_input(event):
 		return
 	if is_dragging() and _cancels_area(event):
+		if event is InputEventMouseButton:
+			_right_cancelled_on_press = true
+			_right_pressing = false
 		cancel_area()
 		get_viewport().set_input_as_handled()
 		return
-	if event.is_action_pressed("build_undo"):
-		undo()
-		get_viewport().set_input_as_handled()
+	if _handle_right_deselect_input(event) or _handle_shortcut_input(event):
 		return
-	for action in TOOL_ACTIONS:
-		if event.is_action_pressed(action):
-			set_tool(TOOL_ACTIONS[action])
-			get_viewport().set_input_as_handled()
-			return
 	if event.is_action_pressed("build_rotate"):
 		rotate_facing()
 		get_viewport().set_input_as_handled()
@@ -494,6 +500,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			and selected_room_id != 0
 			and not templates.is_active()
 			and not room_mover.active
+			and not object_mover.active
 			and not starter_kit.is_active()
 			and begin_selected_resize(point, selected_room_id)
 		):
@@ -544,6 +551,76 @@ func _handle_eyedropper_input(event: InputEvent) -> bool:
 		get_viewport().set_input_as_handled()
 		return true
 	return false
+
+
+func _handle_shortcut_input(event: InputEvent) -> bool:
+	if event.is_action_pressed("build_undo"):
+		undo()
+		get_viewport().set_input_as_handled()
+		return true
+	for action in TOOL_ACTIONS:
+		if event.is_action_pressed(action):
+			set_tool(TOOL_ACTIONS[action])
+			get_viewport().set_input_as_handled()
+			return true
+	return false
+
+
+func _handle_right_deselect_input(event: InputEvent) -> bool:
+	var motion := event as InputEventMouseMotion
+	if motion != null:
+		if _right_pressing and motion.position.distance_to(_right_press_screen) > CLICK_SLOP_PX:
+			_right_dragged = true
+		return false
+	var mb := event as InputEventMouseButton
+	if mb == null or mb.button_index != MOUSE_BUTTON_RIGHT:
+		return false
+	if mb.pressed:
+		_right_cancelled_on_press = false
+		_right_pressing = not _pointer_over_ui()
+		_right_dragged = false
+		_right_press_screen = mb.position
+		return false
+	var was_pressing := _right_pressing
+	var was_dragged := _right_dragged
+	_right_pressing = false
+	_right_dragged = false
+	if _right_cancelled_on_press:
+		_right_cancelled_on_press = false
+		return false
+	if (
+		not was_pressing
+		or was_dragged
+		or _pointer_over_ui()
+		or mb.position.distance_to(_right_press_screen) > CLICK_SLOP_PX
+	):
+		return false
+	return _cancel_or_deselect_on_right_click()
+
+
+func _cancel_or_deselect_on_right_click() -> bool:
+	if object_mover.active:
+		object_mover.cancel()
+	elif room_mover.active:
+		room_mover.cancel()
+	elif starter_kit.is_active():
+		starter_kit.disarm()
+	elif templates.is_active():
+		templates.disarm()
+	elif tool != Tool.NONE:
+		deselect_tool()
+	else:
+		return false
+	get_viewport().set_input_as_handled()
+	return true
+
+
+## Clears the armed tool to NONE without closing BuildMenu's open tray.
+func deselect_tool() -> void:
+	if tool == Tool.NONE:
+		return
+	tool_deselected.emit()
+	set_tool(Tool.NONE)
 
 
 ## Picks a tool.
@@ -806,6 +883,7 @@ func begin_selected_resize(point: Vector3, room_id: int) -> bool:
 		or room_id == 0
 		or templates.is_active()
 		or room_mover.active
+		or object_mover.active
 		or starter_kit.is_active()
 	):
 		return false

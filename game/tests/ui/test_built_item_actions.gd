@@ -253,17 +253,19 @@ func test_move_on_a_room_picks_the_room_tool_and_lifts_the_room() -> void:
 	assert_bool(_mode.room_mover.active).is_false()
 
 
-func test_move_on_a_piece_in_a_room_lifts_that_room() -> void:
+func test_move_on_a_piece_in_a_room_lifts_that_object() -> void:
 	var cell := _room_area.position + Vector2i.ONE
 	var statue := _place_statue(cell)
 	_select_object(statue)
 	var actions := _inspect.actions
-	assert_str(actions.move_text()).is_equal(BuiltItemActions.MOVE_ROOM)
+	assert_str(actions.move_text()).is_equal(BuiltItemActions.MOVE)
 	assert_bool(actions.move_disabled()).is_false()
 	assert_bool(actions.press_move()).is_true()
-	assert_bool(_mode.room_mover.active).is_true()
-	assert_int(_mode.room_mover.room_id).is_equal(_room)
-	_mode.set_tool(BuildMode.Tool.NONE)
+	assert_bool(_mode.object_mover.active).is_true()
+	assert_int(_mode.object_mover.object_id).is_equal(statue)
+	assert_bool(_mode.room_mover.active).is_false()
+	_mode.object_mover.cancel()
+	assert_bool(_mode.object_mover.active).is_false()
 	_mode.apply_edit(BuildEdit.remove_object(statue))
 
 
@@ -336,22 +338,32 @@ func test_a_refused_delete_changes_nothing_and_says_why() -> void:
 	assert_str(shown).contains("Can't delete: ")
 
 
-func test_move_is_disabled_with_a_reason_for_a_lone_piece() -> void:
+func test_move_on_a_lone_piece_lifts_that_object_while_doors_stay_disabled() -> void:
 	var statue := _place_statue(_plain_cell)
 	_select_object(statue)
 	var actions := _inspect.actions
 	print(
 		(
-			"lone piece window: move disabled %s delete disabled %s | %s"
-			% [actions.move_disabled(), actions.delete_disabled(), actions.reason_text()]
+			"lone piece window: move %s disabled %s delete disabled %s"
+			% [actions.move_text(), actions.move_disabled(), actions.delete_disabled()]
 		)
 	)
-	assert_bool(actions.move_disabled()).is_true()
-	assert_str(actions.reason_text()).contains(BuiltItemActions.NO_LOOSE_PIECE)
+	assert_str(actions.move_text()).is_equal(BuiltItemActions.MOVE)
+	assert_bool(actions.move_disabled()).is_false()
 	assert_bool(actions.delete_disabled()).is_false()
-	assert_bool(actions.press_move()).is_false()
+	assert_bool(actions.press_move()).is_true()
+	assert_bool(_mode.object_mover.active).is_true()
+	assert_int(_mode.object_mover.object_id).is_equal(statue)
 	assert_bool(_mode.room_mover.active).is_false()
+	_mode.object_mover.cancel()
 	_mode.apply_edit(BuildEdit.remove_object(statue))
+	var door := _door_without_back_wall()
+	assert_int(door).is_not_equal(0)
+	_select_object(door)
+	assert_bool(actions.move_disabled()).is_true()
+	assert_str(actions.reason_text()).contains(_unmovable_text())
+	assert_bool(actions.press_move()).is_false()
+	assert_bool(_mode.object_mover.active).is_false()
 
 
 func test_move_on_a_room_holding_a_security_piece_is_disabled_with_the_rooms_reason() -> void:
