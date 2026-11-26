@@ -86,8 +86,12 @@ func test_full_game_default_leaves_tiers_land_incidents_and_day6_untouched() -> 
 	assert_int(unlocks.tier()).is_equal(4)
 	assert_bool(unlocks.allows(BuildMode.Tool.TREE)).is_true()
 	assert_bool(unlocks.allows(BuildMode.Tool.MULTI_STOREY)).is_true()
-	assert_str(BuildUnlocks.requirement_text(3)).is_equal("Unlocks at 3 stars and 120 passengers")
-	assert_str(BuildUnlocks.requirement_text(4)).is_equal("Unlocks at 4 stars and 600 passengers")
+	assert_str(BuildUnlocks.requirement_text(3)).is_equal(
+		"Unlocks at 60% quality and 120 passengers"
+	)
+	assert_str(BuildUnlocks.requirement_text(4)).is_equal(
+		"Unlocks at 80% quality and 600 passengers"
+	)
 
 	var port: SubViewport = auto_free(SubViewport.new())
 	port.size = Vector2i(1536, 864)

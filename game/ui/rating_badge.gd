@@ -1,10 +1,10 @@
 class_name RatingBadge
 extends CanvasLayer
-## The airport rating in the HUD (Rating 2a, decision airport-rating-1-5-stars-
-## over-a-rolling-3-days-mostly-made-o): five stars in half steps with the
-## number beside them, an optional earned certification chip, and a tooltip
-## with the parts. Clicking the card toggles the Airport Certification drawer
-## on TopRow.SHEET_LAYER (joining TopRow.SHEET_GROUP) showing all 5 milestones,
+## The airport quality and certification badge in the HUD (Two Point split,
+## decision 4cf71a6b): live rolling 3-day AirportRating quality as a percentage,
+## an optional earned 1-5★ AirportCertification chip, and a tooltip with the
+## breakdown. Clicking the card toggles the Airport Certification drawer on
+## TopRow.SHEET_LAYER (joining TopRow.SHEET_GROUP) showing all 5 milestones,
 ## criteria progress, prestige fee bonus, and DemoMode "In the full game"
 ## teasers for 3★-5★.
 
@@ -13,6 +13,7 @@ const LEFT := float(HudLayout.MARGIN + HudLayout.MONEY_W + HudLayout.GAP)
 const STAR_COUNT := 5
 const STAR_SIZE := 16.0
 const STAR_GAP := 2.0
+const METER_SIZE := Vector2(28.0, 12.0)
 const DRAWER_W := 408.0
 const CERT_CHIP_COLOR := Color(0.56, 0.36, 0.02, 1.0)
 const EARNED_COLOR := Color(0.16, 0.45, 0.2, 1.0)
@@ -27,7 +28,7 @@ const NO_DATA_TEXT := "No flights yet"
 @export var certification: AirportCertification
 
 var _card := PanelContainer.new()
-var _star_row := StarRow.new()
+var _meter := QualityMeter.new()
 var _label := Label.new()
 var _cert_chip := Label.new()
 var _drawer_layer := CanvasLayer.new()
@@ -134,12 +135,12 @@ func card() -> PanelContainer:
 	return _card
 
 
-## The drawn stars; its `fills` are what the card shows.
-func star_row() -> StarRow:
-	return _star_row
+## The compact quality meter bar on the badge.
+func quality_meter() -> QualityMeter:
+	return _meter
 
 
-## The label beside the stars (named RatingText).
+## The quality label (named RatingText).
 func label() -> Label:
 	return _label
 
@@ -196,26 +197,27 @@ func press() -> void:
 	toggle_drawer()
 
 
-## The stars drawn: the rating's, or 0 while it has no data.
-func shown_stars() -> float:
-	if rating == null:
-		return 0.0
-	return rating.stars() if rating.has_data() else 0.0
+## The live 3-day quality percentage, or 0 while the rating has no data.
+func shown_quality() -> int:
+	if rating == null or not rating.has_data():
+		return 0
+	return AirportRating.quality_percent(rating.stars())
 
 
-## The number beside the stars, or "No flights yet".
+## The live quality label text, or "No flights yet".
 func summary_text() -> String:
 	if rating == null or not rating.has_data():
 		return tr("No flights yet")
-	return "%.1f" % rating.stars()
+	return tr("{percent}%").format({"percent": AirportRating.quality_percent(rating.stars())})
 
 
-## The card's tooltip: made share, mood, the incident adjustment (only while it
-## is not zero), days counted over the window, and earned certification summary.
+## The card's tooltip: quality percentage, made share, mood, bags (when
+## counted), incident adjustment (when non-zero), days counted, and earned
+## certification summary.
 func tooltip_text() -> String:
 	if rating == null or not rating.has_data():
 		var empty_tip := tr(
-			"No flights yet: the rating starts when passengers make or miss a flight."
+			"No flights yet: quality tracking starts when passengers make or miss a flight."
 		)
 		if certification != null:
 			if certification.earned_star() > 0:
@@ -251,20 +253,24 @@ func tooltip_text() -> String:
 		)
 	)
 	var lines: Array[String] = [
-		tr("Airport rating: {stars} of {max}").format(
-			{"stars": "%.1f" % parts["stars"], "max": STAR_COUNT}
+		tr("Airport quality: {percent}%").format(
+			{"percent": AirportRating.quality_percent(parts["stars"])}
 		),
 		made_line,
-		tr("Mood: {mood} of {max}").format(
-			{"mood": roundi(parts["mood_avg"]), "max": PassengerSim.MOOD_MAX}
-		),
+		tr("Mood: {mood}%").format({"mood": roundi(parts["mood_avg"])}),
 	]
-	if parts["adjustment"] != 0.0:
+	if int(parts["bags"]) > 0:
+		var total_bags := int(parts["bags"])
+		var loaded_bags := total_bags - int(parts["bags_missed"])
+		var bag_share := roundi((1.0 - float(parts["bags_missed_share"])) * 100.0)
 		lines.append(
-			tr("Incident adjustment: {amount} stars").format(
-				{"amount": "%+.1f" % parts["adjustment"]}
+			tr("Bags: {share}% ({loaded} of {total})").format(
+				{"share": bag_share, "loaded": loaded_bags, "total": total_bags}
 			)
 		)
+	if parts["adjustment"] != 0.0:
+		var adj_pct := roundi(float(parts["adjustment"]) * 20.0)
+		lines.append(tr("Incident adjustment: {amount}%").format({"amount": "%+d" % adj_pct}))
 	lines.append(
 		tr("Days counted: {days} of {window}").format(
 			{"days": parts["days"], "window": RatingFormula.WINDOW_DAYS}
@@ -292,8 +298,10 @@ func tooltip_text() -> String:
 
 
 func refresh() -> void:
-	_star_row.fills = star_fills(shown_stars())
-	_star_row.queue_redraw()
+	_meter.ratio = (
+		float(shown_quality()) / 100.0 if (rating != null and rating.has_data()) else -1.0
+	)
+	_meter.queue_redraw()
 	_label.text = summary_text()
 	_refresh_cert_chip()
 	_card.tooltip_text = tooltip_text()
@@ -440,8 +448,14 @@ func _criterion_text(criterion: Dictionary) -> String:
 		"Airport opened":
 			out = tr("Airport opened")
 		"Airport rating":
-			out = tr("Rating: {current} / {target}★").format(
-				{"current": "%.1f" % float(current), "target": "%.1f" % float(target)}
+			out = (
+				tr("Quality: {current}% / {target}%")
+				. format(
+					{
+						"current": AirportRating.quality_percent(float(current)),
+						"target": AirportRating.quality_percent(float(target)),
+					}
+				)
 			)
 		"Passengers made":
 			out = tr("Passengers made: {current} / {target}").format(
@@ -529,25 +543,25 @@ func _build() -> void:
 	_card.gui_input.connect(_on_card_gui_input)
 	add_child(_card)
 	# The card is BUTTON_H tall like the rest of the top row and ends before the
-	# centred top row: 16 px stars and a CAPTION label keep it inside 200 px.
+	# centred top row; quality meter + percentage + optional cert chip stay inside 200 px.
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 2)
+	row.add_theme_constant_override("separation", 6)
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_card.add_child(row)
-	_star_row.fills = star_fills(0.0)
-	_star_row.custom_minimum_size = Vector2(
-		STAR_COUNT * STAR_SIZE + (STAR_COUNT - 1) * STAR_GAP, STAR_SIZE
-	)
-	_star_row.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	_star_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_child(_star_row)
+	_meter.name = "QualityMeter"
+	_meter.custom_minimum_size = METER_SIZE
+	_meter.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_meter.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(_meter)
 	_label.name = "RatingText"
+	_label.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
 	_label.theme_type_variation = &"HudSmall"
 	_label.add_theme_font_size_override("font_size", HudLayout.CAPTION)
 	_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(_label)
 	_cert_chip.name = "CertChip"
+	_cert_chip.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
 	_cert_chip.theme_type_variation = &"HudSmall"
 	_cert_chip.add_theme_font_size_override("font_size", HudLayout.FIT_STEP)
 	_cert_chip.add_theme_color_override(&"font_color", CERT_CHIP_COLOR)
@@ -599,6 +613,31 @@ func _build_drawer() -> void:
 	_drawer_rows.sort_children.connect(_fit_drawer_height)
 	_drawer_scroll.add_child(_drawer_rows)
 	_retranslate()
+
+
+## Compact quality bar pill drawn beside the live percentage on RatingCard.
+class QualityMeter:
+	extends Control
+
+	const FILL_HIGH := Color(0.24, 0.66, 0.34, 1.0)
+	const FILL_MID := Color(0.95, 0.72, 0.18, 1.0)
+	const FILL_LOW := Color(0.84, 0.32, 0.28, 1.0)
+
+	var ratio := -1.0
+
+	func _draw() -> void:
+		var empty := get_theme_color(&"star_empty", &"RatingStars")
+		var outline := get_theme_color(&"star_outline", &"RatingStars")
+		var rect := Rect2(Vector2.ZERO, size)
+		draw_rect(rect, empty, true)
+		if ratio >= 0.0:
+			var fill_color := (
+				FILL_HIGH if ratio >= 0.6 else (FILL_MID if ratio >= 0.4 else FILL_LOW)
+			)
+			var inner_w := maxf(0.0, (size.x - 4.0) * clampf(ratio, 0.0, 1.0))
+			if inner_w > 0.0:
+				draw_rect(Rect2(2.0, 2.0, inner_w, maxf(0.0, size.y - 4.0)), fill_color, true)
+		draw_rect(rect, outline, false, 1.5)
 
 
 ## Draws the five stars from `fills`: an empty star under, the filled part

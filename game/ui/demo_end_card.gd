@@ -383,7 +383,13 @@ func _make_stats_card(stats: Dictionary) -> Control:
 		str(stats["passengers_made"]),
 		&"HudCardName"
 	)
-	_add_stars_row(grid, float(stats["stars"]))
+	_add_stat_row(
+		grid,
+		"QualityRow",
+		tr("Airport quality"),
+		tr("{percent}%").format({"percent": AirportRating.quality_percent(float(stats["stars"]))}),
+		&"HudCardName"
+	)
 	if not bool(stats["since_load"]) or int(stats["cash_earned"]) > 0:
 		_add_stat_row(
 			grid,
@@ -420,35 +426,6 @@ func _add_stat_row(
 	value.theme_type_variation = variation
 	value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	grid.add_child(value)
-
-
-func _add_stars_row(grid: GridContainer, stars: float) -> void:
-	var label := Label.new()
-	label.name = "StarsRowLabel"
-	label.text = tr("Airport rating")
-	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	grid.add_child(label)
-	var right := HBoxContainer.new()
-	right.name = "StarsRowBox"
-	right.alignment = BoxContainer.ALIGNMENT_END
-	right.add_theme_constant_override("separation", 8)
-	var star_row := RatingBadge.StarRow.new()
-	star_row.fills = RatingBadge.star_fills(stars)
-	star_row.custom_minimum_size = Vector2(
-		(
-			RatingBadge.STAR_COUNT * RatingBadge.STAR_SIZE
-			+ (RatingBadge.STAR_COUNT - 1) * RatingBadge.STAR_GAP
-		),
-		RatingBadge.STAR_SIZE
-	)
-	star_row.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	right.add_child(star_row)
-	var value := Label.new()
-	value.name = "StarsRowValue"
-	value.text = tr("{stars} stars").format({"stars": "%.1f" % stars})
-	value.theme_type_variation = &"HudCardName"
-	right.add_child(value)
-	grid.add_child(right)
 
 
 func _make_buttons() -> Control:
