@@ -166,9 +166,11 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event is InputEventMouseButton:
 		if event.pressed:
 			if event.button_index == MOUSE_BUTTON_WHEEL_UP:
-				zoom(1.0 / zoom_factor)
+				if not _pointer_over_ui():
+					zoom(1.0 / zoom_factor)
 			elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-				zoom(zoom_factor)
+				if not _pointer_over_ui():
+					zoom(zoom_factor)
 		elif event.button_index == MOUSE_BUTTON_RIGHT:
 			_flush_tilt()
 	elif event is InputEventMouseMotion:
@@ -619,3 +621,8 @@ func _aspect() -> float:
 		return 16.0 / 9.0
 	var size := get_viewport().get_visible_rect().size
 	return size.x / maxf(size.y, 1.0)
+
+
+func _pointer_over_ui() -> bool:
+	var viewport := get_viewport()
+	return viewport != null and viewport.gui_get_hovered_control() != null
