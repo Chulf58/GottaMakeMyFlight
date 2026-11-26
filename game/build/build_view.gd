@@ -190,6 +190,8 @@ func update_cutaway(toward_eye: Vector3) -> void:
 
 ## The kit kind of the grid's wall on an edge that has one.
 func grid_wall_kind(cell: Vector2i, side: int) -> int:
+	if _grid.has_belt_hatch(cell, side):
+		return InteriorKit.WallKind.BELT_HATCH
 	return KIT_WALL_KINDS[_grid.wall_kind(cell, side)]
 
 
@@ -449,7 +451,10 @@ func _draw_walls() -> void:
 		var at := _grid.origin + Vector3(vertex.x, 0.0, vertex.y)
 		for part in InteriorKit.post_parts(not posts[vertex]):
 			_place(placed, part[0], Transform3D(Basis.IDENTITY, at) * part[1])
-	_fill(placed, ["wall", "wall_glass", InteriorKit.GLASS_KERB, "wall_door", "wall_post"])
+	_fill(
+		placed,
+		["wall", "wall_glass", InteriorKit.GLASS_KERB, "wall_door", "wall_belt_hatch", "wall_post"]
+	)
 
 
 ## Entrance and exit doors: their piece hides and two jambs are drawn on the

@@ -59,6 +59,9 @@ func test_wall_parts_per_kind_full_and_cut() -> void:
 		"wall_glass"
 	)
 	assert_str(InteriorKit.wall_parts(InteriorKit.WallKind.DOOR, false)[0][0]).is_equal("wall_door")
+	assert_str(InteriorKit.wall_parts(InteriorKit.WallKind.BELT_HATCH, false)[0][0]).is_equal(
+		"wall_belt_hatch"
+	)
 	var plain_cut: Array = InteriorKit.wall_parts(InteriorKit.WallKind.PLAIN, true)
 	assert_str(plain_cut[0][0]).is_equal("wall")
 	assert_float((plain_cut[0][1] as Transform3D).basis.get_scale().y).is_equal_approx(
@@ -73,6 +76,13 @@ func test_wall_parts_per_kind_full_and_cut() -> void:
 		assert_str(part[0]).is_equal("wall")
 		assert_float(absf(at.origin.x)).is_equal_approx(InteriorKit.JAMB_OFFSET, 0.0001)
 		assert_float(at.basis.get_scale().x).is_equal_approx(InteriorKit.JAMB_WIDTH, 0.0001)
+	var hatch_cut: Array = InteriorKit.wall_parts(InteriorKit.WallKind.BELT_HATCH, true)
+	assert_int(hatch_cut.size()).is_equal(2)
+	for part in hatch_cut:
+		var at: Transform3D = part[1]
+		assert_str(part[0]).is_equal("wall")
+		assert_float(absf(at.origin.x)).is_equal_approx(InteriorKit.HATCH_JAMB_OFFSET, 0.0001)
+		assert_float(at.basis.get_scale().x).is_equal_approx(InteriorKit.HATCH_JAMB_WIDTH, 0.0001)
 	var post_cut: Transform3D = InteriorKit.post_parts(true)[0][1]
 	assert_float(post_cut.basis.get_scale().y * InteriorKit.POST_HEIGHT).is_equal_approx(
 		InteriorKit.STUB_HEIGHT, 0.0001

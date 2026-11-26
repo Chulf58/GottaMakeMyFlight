@@ -58,7 +58,40 @@ static func inverse_before(grid: BuildGrid, edit: BuildEdit) -> BuildEdit:
 		BuildEdit.Kind.RESHAPE_BELT:
 			var record := grid.get_object(grid.object_at(edit.cell))
 			inverse = BuildEdit.reshape_belt(edit.cell, record["def"], record["facing"])
+		BuildEdit.Kind.SET_BELT_HATCH:
+			inverse = BuildEdit.set_belt_hatch(
+				edit.cell, edit.side, grid.has_belt_hatch(edit.cell, edit.side)
+			)
 	return inverse
+
+
+## All inverses for `edit` read before it is applied, ordered so BuildUndo's
+## reversed replay restores dependent state first (belt or plain wall before any
+## hatch on its edge).
+static func inverses_before(grid: BuildGrid, edit: BuildEdit) -> Array[BuildEdit]:
+	var result: Array[BuildEdit] = []
+	match edit.kind:
+		BuildEdit.Kind.PLACE_WALL, BuildEdit.Kind.REMOVE_WALL:
+			var clears_hatch := (
+				grid.has_belt_hatch(edit.cell, edit.side)
+				and (
+					edit.kind == BuildEdit.Kind.REMOVE_WALL
+					or edit.wall_kind != BuildGrid.WallKind.PLAIN
+				)
+			)
+			if clears_hatch:
+				result.append(BuildEdit.set_belt_hatch(edit.cell, edit.side, true))
+		BuildEdit.Kind.REMOVE_OBJECT:
+			var record := grid.get_object(edit.object_id)
+			if not record.is_empty() and BuildCatalog.is_belt(record["def"]):
+				var anchor: Vector2i = record["anchor"]
+				for side in 4:
+					if grid.has_belt_hatch(anchor, side):
+						result.append(BuildEdit.set_belt_hatch(anchor, side, true))
+	var primary := inverse_before(grid, edit)
+	if primary != null:
+		result.append(primary)
+	return result
 
 
 ## Adds the inverse of an applied edit: `before` from inverse_before(), or for
@@ -70,6 +103,15 @@ func record(edit: BuildEdit, result: BuildResult, before: BuildEdit) -> void:
 	elif edit.kind == BuildEdit.Kind.PLACE_ROOM:
 		inverse = BuildEdit.remove_room(result.room_id)
 	inverses.append(inverse)
+
+
+## Adds all inverses of an applied edit from inverses_before(), or the removal
+## inverse for a placement.
+func record_many(edit: BuildEdit, result: BuildResult, befores: Array[BuildEdit]) -> void:
+	if edit.kind == BuildEdit.Kind.PLACE_OBJECT or edit.kind == BuildEdit.Kind.PLACE_ROOM:
+		record(edit, result, null)
+		return
+	inverses.append_array(befores)
 
 
 func is_empty() -> bool:

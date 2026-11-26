@@ -15,6 +15,7 @@ enum Kind {
 	REMOVE_ROOM,
 	RESHAPE_BELT,
 	RESIZE_ROOM,
+	SET_BELT_HATCH,
 }
 
 var kind: Kind = Kind.PAINT_FLOOR
@@ -23,6 +24,8 @@ var cell := Vector2i.ZERO
 var side: int = 0
 ## A BuildGrid.WallKind, for PLACE_WALL.
 var wall_kind: int = BuildGrid.WallKind.PLAIN
+## Whether a belt hatch is open on an interior plain wall edge, for SET_BELT_HATCH.
+var belt_hatch := false
 var floor_type: int = 0
 var zone_id: int = 0
 var def_id: StringName = &""
@@ -112,6 +115,15 @@ static func reshape_belt(at: Vector2i, id: StringName, turn: int) -> BuildEdit:
 	var edit := _make(Kind.RESHAPE_BELT, at)
 	edit.def_id = id
 	edit.facing = turn
+	return edit
+
+
+## Opens or closes the low belt hatch on interior plain wall edge `at`/`edge_side`.
+## Not a purchase; costs nothing.
+static func set_belt_hatch(at: Vector2i, edge_side: int, open: bool) -> BuildEdit:
+	var edit := _make(Kind.SET_BELT_HATCH, at)
+	edit.side = edge_side
+	edit.belt_hatch = open
 	return edit
 
 

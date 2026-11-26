@@ -10,7 +10,7 @@ extends RefCounted
 ## cell edge, posts on the vertex), front +Z at facing 0, so a piece goes in at
 ## the grid transform with no offset.
 
-enum WallKind { PLAIN, GLASS, DOOR }
+enum WallKind { PLAIN, GLASS, DOOR, BELT_HATCH }
 
 const PIECE_PATH := "res://assets/interior/%s.glb"
 const FOLDER_PIECE_PATH := "res://assets/%s.glb"
@@ -37,6 +37,10 @@ const GLASS_KERB := "wall_glass_kerb"
 ## this far either side of the door axis (the 0.8 m opening stays clear).
 const JAMB_WIDTH := 0.1
 const JAMB_OFFSET := 0.45
+## A cut belt hatch keeps narrow jamb stubs outside the 0.844 m belt opening
+## so cutaway never clips into the belt's outer rails (+-0.42 m).
+const HATCH_JAMB_WIDTH := 0.078
+const HATCH_JAMB_OFFSET := 0.461
 const OBJECT_PIECES := {
 	&"checkin_desk": "checkin_desk",
 	&"security_scanner": "security_scanner",
@@ -123,6 +127,7 @@ const WALL_PIECES := {
 	WallKind.PLAIN: "wall",
 	WallKind.GLASS: "wall_glass",
 	WallKind.DOOR: "wall_door",
+	WallKind.BELT_HATCH: "wall_belt_hatch",
 }
 
 ## piece name -> Array of [Mesh, Transform3D relative to the piece root].
@@ -154,6 +159,14 @@ static func wall_parts(kind: WallKind, cut: bool) -> Array:
 			return [
 				["wall", Transform3D(jamb, Vector3(-JAMB_OFFSET, 0.0, 0.0))],
 				["wall", Transform3D(jamb, Vector3(JAMB_OFFSET, 0.0, 0.0))],
+			]
+		WallKind.BELT_HATCH:
+			var hatch_jamb := Basis.from_scale(
+				Vector3(HATCH_JAMB_WIDTH, STUB_HEIGHT / WALL_HEIGHT, 1.0)
+			)
+			return [
+				["wall", Transform3D(hatch_jamb, Vector3(-HATCH_JAMB_OFFSET, 0.0, 0.0))],
+				["wall", Transform3D(hatch_jamb, Vector3(HATCH_JAMB_OFFSET, 0.0, 0.0))],
 			]
 	return [["wall", Transform3D(stub, Vector3.ZERO)]]
 

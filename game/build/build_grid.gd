@@ -54,7 +54,17 @@ const SIDE_STEP: Array[Vector2i] = [
 	Vector2i(0, -1), Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0)
 ]
 const SNAPSHOT_KEYS := [
-	"width", "height", "floor", "zone", "h_walls", "v_walls", "objects", "next_object_id"
+	"save_version",
+	"width",
+	"height",
+	"floor",
+	"zone",
+	"h_walls",
+	"v_walls",
+	"h_hatches",
+	"v_hatches",
+	"objects",
+	"next_object_id",
 ]
 const OBJECT_KEYS := ["id", "def", "anchor", "facing"]
 ## Each entry of the optional "rooms" snapshot key. "rect" is [x, y, w, h].
@@ -92,6 +102,10 @@ var _h_walls := PackedByteArray()
 ## The WallKind on the west edge of cell (x, y), at x + y * (size.x + 1).
 ## Column x == size.x holds the east border.
 var _v_walls := PackedByteArray()
+## Whether an interior plain wall edge has an auto-cut belt hatch (0 or 1),
+## indexed like _h_walls / _v_walls.
+var _h_hatches := PackedByteArray()
+var _v_hatches := PackedByteArray()
 ## Id of the object standing on each cell, 0 for none.
 var _occupant := PackedInt32Array()
 ## Id of the object whose interaction cell this is, 0 for none.
@@ -207,6 +221,13 @@ func wall_kind(cell: Vector2i, side: int) -> int:
 	if not in_bounds(cell) or side < 0 or side > 3:
 		return WallKind.NONE
 	return _wall_value(cell, side)
+
+
+## Whether an edge holds an auto-cut belt hatch through an interior plain wall.
+func has_belt_hatch(cell: Vector2i, side: int) -> bool:
+	if not in_bounds(cell) or side < 0 or side > 3:
+		return false
+	return _belt_hatch_value(cell, side) != 0
 
 
 ## The purchase price saved on a floor cell, 0 for none.
@@ -548,6 +569,7 @@ static func _reach_sig(edit: BuildEdit) -> Array:
 		edit.def_id,
 		edit.facing,
 		edit.object_id,
+		edit.belt_hatch,
 	]
 
 
@@ -734,7 +756,9 @@ func _commit(edit: BuildEdit) -> BuildResult:
 	if not result.ok:
 		_emit_or_hold(func() -> void: edit_refused.emit(edit, result))
 		return result
-	var inverse := BuildReceipt.inverse_before(self, edit) if recorder != null else null
+	var inverses: Array[BuildEdit] = (
+		BuildReceipt.inverses_before(self, edit) if recorder != null else ([] as Array[BuildEdit])
+	)
 	match edit.kind:
 		BuildEdit.Kind.PAINT_FLOOR:
 			var floor_i := _index(edit.cell)
@@ -766,6 +790,8 @@ func _commit(edit: BuildEdit) -> BuildResult:
 			_divider_doors_stale = true
 			_set_wall(edit.cell, edit.side, new_wall)
 			_set_wall_paid(edit.cell, edit.side, edit.paid if placing else 0)
+			if new_wall != WallKind.PLAIN and _belt_hatch_value(edit.cell, edit.side) != 0:
+				_set_belt_hatch(edit.cell, edit.side, false)
 			if old_wall != new_wall:
 				_wall_version += 1
 				if (old_wall == WallKind.NONE) != (new_wall == WallKind.NONE):
@@ -804,6 +830,14 @@ func _commit(edit: BuildEdit) -> BuildResult:
 			if is_door:
 				_enclosure_version += 1
 			result.dirty_cells = _erase_object(edit.object_id)
+			if BuildCatalog.is_belt(def_id):
+				for side in 4:
+					if _belt_hatch_value(anchor, side) != 0:
+						_set_belt_hatch(anchor, side, false)
+						_wall_version += 1
+						for edge_cell in _edge_cells(anchor, side):
+							if not result.dirty_cells.has(edge_cell):
+								result.dirty_cells.append(edge_cell)
 			if _touches_unfloored(result.dirty_cells):
 				_route_version += 1
 			_lanes = null
@@ -828,6 +862,12 @@ func _commit(edit: BuildEdit) -> BuildResult:
 			record["def"] = edit.def_id
 			record["facing"] = edit.facing
 			result.dirty_cells = [edit.cell]
+		BuildEdit.Kind.SET_BELT_HATCH:
+			var old_hatch := _belt_hatch_value(edit.cell, edit.side) != 0
+			_set_belt_hatch(edit.cell, edit.side, edit.belt_hatch)
+			if old_hatch != edit.belt_hatch:
+				_wall_version += 1
+			result.dirty_cells = _edge_cells(edit.cell, edit.side)
 	if _handoff_edit == edit:
 		_staff_reach = _last_after
 	_staff_reach_known = _handoff_edit == edit
@@ -840,7 +880,7 @@ func _commit(edit: BuildEdit) -> BuildResult:
 		var one := Rect2i(cell, Vector2i.ONE)
 		_built = one if _built.size == Vector2i.ZERO else _built.merge(one)
 	if recorder != null:
-		recorder.record(edit, result, inverse)
+		recorder.record_many(edit, result, inverses)
 	_emit_or_hold(func() -> void: edit_applied.emit(edit, result))
 	return result
 
@@ -973,6 +1013,8 @@ func _reset(grid_size: Vector2i, grid_origin: Vector3) -> void:
 	_floor = _zeros_bytes(cells)
 	_h_walls = _zeros_bytes(size.x * (size.y + 1))
 	_v_walls = _zeros_bytes((size.x + 1) * size.y)
+	_h_hatches = _zeros_bytes(size.x * (size.y + 1))
+	_v_hatches = _zeros_bytes((size.x + 1) * size.y)
 	_zone = _zeros_ints(cells)
 	_occupant = _zeros_ints(cells)
 	_reserved = _zeros_ints(cells)
@@ -1350,6 +1392,20 @@ func _set_wall_paid(cell: Vector2i, side: int, value: int) -> void:
 		_h_paid[_h_index(cell, side)] = value
 	else:
 		_v_paid[_v_index(cell, side)] = value
+
+
+func _belt_hatch_value(cell: Vector2i, side: int) -> int:
+	if side == Side.NORTH or side == Side.SOUTH:
+		return _h_hatches[_h_index(cell, side)]
+	return _v_hatches[_v_index(cell, side)]
+
+
+func _set_belt_hatch(cell: Vector2i, side: int, open: bool) -> void:
+	var val := 1 if open else 0
+	if side == Side.NORTH or side == Side.SOUTH:
+		_h_hatches[_h_index(cell, side)] = val
+	else:
+		_v_hatches[_v_index(cell, side)] = val
 
 
 ## Index of a north or south edge in the _h_walls layout.

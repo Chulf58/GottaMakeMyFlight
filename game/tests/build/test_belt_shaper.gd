@@ -160,21 +160,38 @@ func test_a_desk_placed_after_the_belt_reshapes_it_to_take_the_outlet() -> void:
 	assert_bool(_joined(Vector2i(4, 8), Vector2i(5, 7))).is_true()
 
 
-func test_no_link_through_a_wall_and_no_line_across_one() -> void:
-	_mode.grid.apply(BuildEdit.place_wall(Vector2i(5, 4), BuildGrid.Side.EAST))
+func test_no_link_through_a_glass_wall_and_no_line_across_one() -> void:
+	_mode.grid.apply(
+		BuildEdit.place_wall(Vector2i(5, 4), BuildGrid.Side.EAST, BuildGrid.WallKind.GLASS)
+	)
 	var refused := _mode.lay_belt(Vector2i(3, 4), Vector2i(8, 4))
 	assert_bool(refused.ok).is_false()
 	assert_int(refused.reason).is_equal(BuildResult.Reason.BELT_WALL)
 	assert_array(_mode.grid.object_ids()).is_empty()
 	assert_bool(_mode.lay_belt(Vector2i(3, 4), Vector2i(5, 4)).ok).is_true()
 	assert_bool(_mode.lay_belt(Vector2i(6, 4), Vector2i(8, 4)).ok).is_true()
-	# The two open ends meet at the wall, but the wall cuts the link.
+	# The two open ends meet at the glass wall, and the wall cuts the link.
 	var scene := BeltShaper.Scene.new(_mode.grid)
 	assert_array(scene.links(Vector2i(5, 4))).is_equal([Vector2i(-1, 0)])
 	assert_array(scene.links(Vector2i(6, 4))).is_equal([Vector2i(1, 0)])
 	# Control: with the wall treated as gone they would link.
 	scene.open_edges[Vector3i(5, 4, BuildGrid.Side.EAST)] = true
 	assert_int(scene.links(Vector2i(5, 4)).size()).is_equal(2)
+
+
+func test_unhatched_plain_wall_does_not_link_touching_belts_until_dragged_across() -> void:
+	_mode.grid.apply(BuildEdit.place_wall(Vector2i(5, 11), BuildGrid.Side.EAST))
+	assert_bool(_mode.lay_belt(Vector2i(3, 11), Vector2i(5, 11)).ok).is_true()
+	assert_bool(_mode.lay_belt(Vector2i(6, 11), Vector2i(8, 11)).ok).is_true()
+	assert_bool(_mode.grid.has_belt_hatch(Vector2i(5, 11), BuildGrid.Side.EAST)).is_false()
+	var scene := BeltShaper.Scene.new(_mode.grid)
+	assert_array(scene.links(Vector2i(5, 11))).is_equal([Vector2i(-1, 0)])
+	assert_array(scene.links(Vector2i(6, 11))).is_equal([Vector2i(1, 0)])
+	assert_bool(_mode.lay_belt(Vector2i(5, 11), Vector2i(6, 11)).ok).is_true()
+	assert_bool(_mode.grid.has_belt_hatch(Vector2i(5, 11), BuildGrid.Side.EAST)).is_true()
+	assert_str(_def(Vector2i(5, 11))).is_equal("baggage_belt")
+	assert_str(_def(Vector2i(6, 11))).is_equal("baggage_belt")
+	assert_bool(_joined(Vector2i(5, 11), Vector2i(6, 11))).is_true()
 
 
 func test_a_fourth_link_is_refused_and_changes_nothing() -> void:
