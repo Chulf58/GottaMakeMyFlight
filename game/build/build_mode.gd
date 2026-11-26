@@ -606,6 +606,21 @@ static func tool_object(for_tool: Tool) -> StringName:
 	return TOOL_OBJECTS.get(for_tool, FurnitureTools.OBJECTS.get(for_tool, &""))
 
 
+## Anchor cell for placing `def_id` at `point` with `turn`: 1x1 items preserve
+## DoorPlacement.cell_under() wall-line snapping; multi-tile objects center
+## their rotated footprint around `point`.
+static func object_anchor(
+	on_grid: BuildGrid, def_id: StringName, point: Vector3, turn: int
+) -> Vector2i:
+	var def := BuildCatalog.get_def(def_id)
+	if def == null or def.size == Vector2i.ONE:
+		return DoorPlacement.cell_under(on_grid, point)
+	var c_off := BuildObjectDef.rotate_point(
+		Vector2((def.size.x - 1) * 0.5, (def.size.y - 1) * 0.5), turn
+	)
+	return on_grid.world_to_cell(point - Vector3(c_off.x, 0.0, c_off.y))
+
+
 ## The edit the current tool would make at a ground point, or null for none.
 func edit_at(point: Vector3) -> BuildEdit:
 	var cell := grid.world_to_cell(point)
@@ -624,7 +639,7 @@ func edit_at(point: Vector3) -> BuildEdit:
 		var turn := facing
 		if _facing_is_auto():
 			turn = DoorPlacement.auto_facing(grid, def_id, point, facing)
-		return BuildEdit.place_object(def_id, DoorPlacement.cell_under(grid, point), turn)
+		return BuildEdit.place_object(def_id, object_anchor(grid, def_id, point, turn), turn)
 	return null
 
 

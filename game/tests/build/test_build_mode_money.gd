@@ -136,7 +136,7 @@ func test_a_floor_rectangle_over_laid_floor_charges_only_the_new_tiles() -> void
 func test_a_remove_rectangle_refunds_at_the_saved_price() -> void:
 	_fill(Rect2i(2, 2, 4, 4))
 	_mode.set_tool(BuildMode.Tool.SEATS)
-	assert_bool(_mode.apply_at(_at(Vector2i(2, 3))).ok).is_true()
+	assert_bool(_mode.apply_at(_at(Vector2i(3, 3))).ok).is_true()
 	var balance := _wallet().balance
 	_mode.set_tool(BuildMode.Tool.REMOVE)
 	_mode.begin_area(_at(Vector2i(2, 2)))
