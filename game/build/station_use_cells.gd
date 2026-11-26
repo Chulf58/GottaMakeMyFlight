@@ -175,15 +175,50 @@ static func draw(
 	for cell in over:
 		centre += grid.cell_to_world(cell)
 	var flow: Vector2i = cells["flow"]
+	var arrow := _make_arrow(
+		flow, centre / over.size() + Vector3(0.0, 0.115, 0.0), grid.object_at(over[0]) != 0
+	)
+	parent.add_child(arrow)
+
+
+## Draws the threshold tile on `outside` and the doorway arrow pointing from
+## `outside` into `door_cell` across the door edge on `door_side`.
+static func draw_door_entry(
+	parent: Node3D,
+	grid: BuildGrid,
+	outside: Vector2i,
+	door_cell: Vector2i,
+	door_side: int,
+	blocked: bool
+) -> void:
+	var tile := _tile(PASSENGER, blocked, grid.object_at(outside) != 0)
+	tile.position = grid.cell_to_world(outside) + Vector3(0.0, 0.06, 0.0)
+	tile.name = PASSENGER
+	tile.set_meta("role", PASSENGER)
+	tile.set_meta("cell", outside)
+	tile.set_meta("blocked", blocked)
+	tile.set_meta("door_entry", true)
+	parent.add_child(tile)
+	var flow := -BuildGrid.SIDE_STEP[door_side]
+	var edge_world := (
+		(grid.cell_to_world(outside) + grid.cell_to_world(door_cell)) * 0.5
+		+ Vector3(0.0, 0.115, 0.0)
+	)
+	var arrow := _make_arrow(flow, edge_world, true)
+	arrow.set_meta("door_entry", true)
+	parent.add_child(arrow)
+
+
+static func _make_arrow(flow: Vector2i, world_pos: Vector3, through: bool) -> MeshInstance3D:
 	var arrow := MeshInstance3D.new()
 	arrow.name = ARROW
 	arrow.mesh = _arrow()
-	arrow.material_override = _material(ARROW_TINT, grid.object_at(over[0]) != 0)
-	arrow.position = centre / over.size() + Vector3(0.0, 0.115, 0.0)
+	arrow.material_override = _material(ARROW_TINT, through)
+	arrow.position = world_pos
 	arrow.rotation.y = atan2(-float(flow.x), -float(flow.y))
 	arrow.set_meta("role", ARROW)
 	arrow.set_meta("flow", flow)
-	parent.add_child(arrow)
+	return arrow
 
 
 ## Whether an object of `def_id` with `facing` stands anchored on `cell`.
