@@ -229,6 +229,61 @@ static func _edge_key(cell: Vector2i, side: int) -> Vector3i:
 	return Vector3i(cell.x, cell.y, side)
 
 
+## Returns the rotated doorway {"cell", "side", "outside"} for `kit_id`
+## placed at `centre` rotated by `turns` quarter turns, or {} for unknown kits.
+static func door_edge(kit_id: StringName, centre: Vector2i, turns: int) -> Dictionary:
+	var kit := get_kit(kit_id)
+	if kit.is_empty():
+		return {}
+	var sz: Vector2i = kit["size"]
+	var rect := rect_at(kit_id, centre, turns)
+	var shift := rect.position + _turn_offset(sz, turns)
+	var door_info: Dictionary = kit["door"]
+	var door_cell := shift + BuildObjectDef.rotate_offset(door_info["cell"], turns)
+	var door_side := posmod(int(door_info["side"]) + turns, 4)
+	return {
+		"cell": door_cell,
+		"side": door_side,
+		"outside": door_cell + BuildGrid.SIDE_STEP[door_side],
+	}
+
+
+## Refusal when the doorway's outside threshold is out of bounds, lacks indoor
+## floor (outer wall / outdoor ground), or holds a non-walk-through object;
+## null when the doorway opens onto walkable indoor floor.
+static func door_problem(
+	grid: BuildGrid, kit_id: StringName, centre: Vector2i, turns: int
+) -> BuildResult:
+	if grid == null:
+		return null
+	var door := door_edge(kit_id, centre, turns)
+	if door.is_empty():
+		return null
+	var outside: Vector2i = door["outside"]
+	if not grid.in_bounds(outside):
+		return BuildResult.refused(BuildResult.Reason.OUT_OF_BOUNDS)
+	if grid.floor_at(outside) == BuildGrid.FLOOR_NONE:
+		return BuildResult.refused(BuildResult.Reason.NO_FLOOR)
+	if not grid.is_walkable(outside):
+		var oid := grid.object_at(outside)
+		var result := BuildResult.refused(BuildResult.Reason.DOOR_FRONT_BLOCKED, oid)
+		if oid != 0:
+			var def := BuildCatalog.get_def(grid.get_object(oid).get("def", &""))
+			if def != null and def.display_name != "":
+				result.detail = def.display_name.to_lower()
+		return result
+	return null
+
+
+## Extra composite validation rule enforcing door_problem() during staging
+## and commit while keeping plan() usable for ghost rendering.
+static func placement_rule(kit_id: StringName, centre: Vector2i, turns: int) -> Callable:
+	return func(on: BuildGrid, edit: BuildEdit) -> BuildResult:
+		if edit.kind == BuildEdit.Kind.PLACE_ROOM:
+			return door_problem(on, kit_id, centre, turns)
+		return null
+
+
 ## Builds the atomic composite edit list for placing `kit_id` centred at
 ## `centre` rotated by `turns` quarter turns: missing floors, missing perimeter
 ## plain walls, the rotated doorway, PLACE_ROOM, and all mandatory pieces.
@@ -253,9 +308,9 @@ static func plan(
 				edits.append(
 					BuildEdit.paint_floor(cell, BuildGrid.FLOOR_TILE, BuildMode.TERMINAL_ZONE)
 				)
-	var door_info: Dictionary = kit["door"]
-	var door_cell := shift + BuildObjectDef.rotate_offset(door_info["cell"], turns)
-	var door_side := posmod(int(door_info["side"]) + turns, 4)
+	var door := door_edge(kit_id, centre, turns)
+	var door_cell: Vector2i = door["cell"]
+	var door_side: int = door["side"]
 	var door_key := _edge_key(door_cell, door_side)
 	for edge in RoomTool.perimeter_edges(rect):
 		var cell: Vector2i = edge[0]

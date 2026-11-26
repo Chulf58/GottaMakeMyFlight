@@ -19,6 +19,7 @@ var _note_cell := Vector2i.ZERO
 var _key := ""
 var _valid_material := _tint(BuildMode.VALID_TINT)
 var _invalid_material := _tint(BuildMode.INVALID_TINT)
+var _wall_block_material := BuildGhost.material(BuildMode.WALL_BLOCK_TINT, true)
 
 
 static func _tint(color: Color) -> StandardMaterial3D:
@@ -142,8 +143,9 @@ func rotate_turns() -> void:
 func plan_at(cell: Vector2i) -> Dictionary:
 	var grid := _mode.grid
 	var edits := StarterRoomKits.plan(grid, armed, cell, turns)
+	var rule := StarterRoomKits.placement_rule(armed, cell, turns)
 	var staged := BuildTransaction.stage_composite(
-		grid, edits, _mode.wallet(), _mode.unlocks, _mode.require_unlocks
+		grid, edits, _mode.wallet(), _mode.unlocks, _mode.require_unlocks, rule
 	)
 	return {"edits": edits, "result": staged["result"], "net": staged["net"]}
 
@@ -155,11 +157,12 @@ func check_at(cell: Vector2i) -> BuildResult:
 func place_at(cell: Vector2i) -> BuildResult:
 	var kit_name := BuildMenuCatalog.shown(StarterRoomKits.display_name(armed))
 	var edits := StarterRoomKits.plan(_mode.grid, armed, cell, turns)
+	var rule := StarterRoomKits.placement_rule(armed, cell, turns)
 	var history := _mode.undo_history()
 	var before := _balance()
 	history.begin_action()
 	var result := BuildTransaction.commit_composite(
-		_mode.grid, edits, _mode.wallet(), _mode.unlocks, _mode.require_unlocks
+		_mode.grid, edits, _mode.wallet(), _mode.unlocks, _mode.require_unlocks, rule
 	)
 	if result.ok:
 		var rect := StarterRoomKits.rect_at(armed, cell, turns)
@@ -199,8 +202,9 @@ func preview_price_at(cell: Vector2i) -> Vector2i:
 	if not is_active() or _mode == null or _mode.grid == null:
 		return Vector2i.ZERO
 	var edits := StarterRoomKits.plan(_mode.grid, armed, cell, turns)
+	var rule := StarterRoomKits.placement_rule(armed, cell, turns)
 	var staged := BuildTransaction.preview_composite(
-		_mode.grid, edits, _mode.unlocks, _mode.require_unlocks
+		_mode.grid, edits, _mode.unlocks, _mode.require_unlocks, rule
 	)
 	if not (staged["result"] as BuildResult).ok:
 		return Vector2i.ZERO
@@ -253,6 +257,7 @@ func _hover(cell: Variant) -> void:
 			_ghost_wall(edit.cell, edit.side, edit.wall_kind, material)
 		elif edit.kind == BuildEdit.Kind.PLACE_OBJECT:
 			_ghost_piece(edit, material)
+	_ghost_door_entry(cell)
 	var text := tr("{kit}: click to place", "build status").format({"kit": kit_name})
 	var is_refusal := not checked.ok
 	if not checked.ok:
@@ -310,6 +315,36 @@ func _ghost_piece(edit: BuildEdit, material: Material) -> void:
 	node.scale = Vector3.ONE * 1.02
 	_ghost.add_child(node)
 	StationUseCells.draw(_ghost, _mode.grid, edit.def_id, edit.cell, edit.facing)
+
+
+func _ghost_door_entry(cell: Vector2i) -> void:
+	var door := StarterRoomKits.door_edge(armed, cell, turns)
+	if door.is_empty():
+		return
+	var door_cell: Vector2i = door["cell"]
+	var door_side: int = door["side"]
+	var outside: Vector2i = door["outside"]
+	var blocked := StarterRoomKits.door_problem(_mode.grid, armed, cell, turns) != null
+	StationUseCells.draw_door_entry(_ghost, _mode.grid, outside, door_cell, door_side, blocked)
+	if blocked:
+		_ghost_wall_block(door_cell, door_side)
+
+
+func _ghost_wall_block(cell: Vector2i, side: int) -> void:
+	var extent := Vector3(1.04, BuildGhost.WALL_BLOCK_HEIGHT, BuildGhost.WALL_BLOCK_DEPTH)
+	var mesh := BoxMesh.new()
+	mesh.size = extent
+	var bar := MeshInstance3D.new()
+	bar.name = "DoorBlockBar"
+	bar.mesh = mesh
+	bar.material_override = _wall_block_material
+	bar.transform = BuildView.wall_transform(_mode.grid, cell, side).translated_local(
+		Vector3(0.0, extent.y / 2.0, 0.0)
+	)
+	bar.set_meta("role", "DoorBlockBar")
+	bar.set_meta("cell", cell)
+	bar.set_meta("side", side)
+	_ghost.add_child(bar)
 
 
 func _clear_ghost() -> void:
