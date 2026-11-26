@@ -79,7 +79,7 @@ static func lay_row(mode: BuildMode) -> AreaDrag.Outcome:
 	return outcome
 
 
-## Starts a repeatable item row drag on the cell under `point`.
+## Starts a repeatable item row drag centered around `point`.
 static func begin_item_row(mode: BuildMode, point: Vector3) -> void:
 	var def_id := BuildMode.tool_object(mode.tool)
 	if def_id == &"" or not ItemRowDrag.is_repeatable(mode.tool):
@@ -88,15 +88,18 @@ static func begin_item_row(mode: BuildMode, point: Vector3) -> void:
 	if not mode.grid.in_bounds(cell):
 		mode.apply_at(point)
 		return
+	var anchor := BuildMode.object_anchor(mode.grid, def_id, point, mode.facing)
 	mode._status_note = ""
-	mode._item_row.begin(cell, point, mode.grid.size, def_id, mode.facing)
+	mode._item_row.begin(anchor, point, mode.grid.size, def_id, mode.facing)
 	mode._hover_key = ""
 
 
-## Stretches the repeatable item row to the cell under `point`.
+## Stretches the repeatable item row to the centered anchor under `point`.
 static func move_item_row(mode: BuildMode, point: Vector3) -> void:
 	if mode._item_row.active:
-		mode._item_row.move(mode.grid.world_to_cell(point))
+		var def_id := BuildMode.tool_object(mode.tool)
+		mode._item_row.end_point = point
+		mode._item_row.move(BuildMode.object_anchor(mode.grid, def_id, point, mode.facing))
 
 
 ## Lays the repeatable item row inside the caller's UndoStack bracket, or
@@ -143,7 +146,7 @@ static func report_item_row(mode: BuildMode, outcome: AreaDrag.Outcome) -> void:
 	var item_name := DisplayWords.item(def.display_name) if def != null else ""
 	mode._status_note = BuildWords.item_row_placed(item_name, outcome)
 	mode._status_note_is_refusal = outcome.placed == 0 and outcome.skipped > 0
-	mode._note_cell = mode._item_row.end_cell()
+	mode._note_cell = mode.grid.world_to_cell(mode._item_row.end_point)
 	mode._show_status(null)
 	mode._status_note_is_refusal = false
 	if mode._status_note_is_refusal or (outcome.placed == 0 and outcome.skipped > 0):

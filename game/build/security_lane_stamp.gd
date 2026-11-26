@@ -81,6 +81,14 @@ static func check(
 	return BuildResult.accepted()
 
 
+## Anchor cell for the 2x3 security lane stamp centered around `point`.
+static func anchor_for(
+	grid: BuildGrid, point: Vector3, facing: int, mirror := SecurityLanes.RIGHT
+) -> Vector2i:
+	var c_off := BuildObjectDef.rotate_point(Vector2(0.5 * mirror, 0.0), facing)
+	return grid.world_to_cell(point - Vector3(c_off.x, 0.0, c_off.y))
+
+
 static func hover(mode: BuildMode, point: Variant) -> void:
 	mode._hover_edit = null
 	if (
@@ -98,7 +106,7 @@ static func hover(mode: BuildMode, point: Variant) -> void:
 			mode._lane_hint = ""
 			mode._show_status(null)
 		return
-	var anchor := mode.grid.world_to_cell(point)
+	var anchor := anchor_for(mode.grid, point, mode.facing)
 	var purse := mode.wallet()
 	var bal := purse.balance if purse != null else -1
 	var key := "lane_stamp:%s:%d:%d" % [anchor, mode.facing, bal]
@@ -117,7 +125,7 @@ static func hover(mode: BuildMode, point: Variant) -> void:
 
 static func apply(mode: BuildMode, point: Vector3) -> BuildResult:
 	mode._status_note = ""
-	var anchor := mode.grid.world_to_cell(point)
+	var anchor := anchor_for(mode.grid, point, mode.facing)
 	var edits := edits_for(anchor, mode.facing)
 	var before_bal := mode.wallet().balance if mode.wallet() != null else 0
 	var result := check(mode.grid, anchor, mode.facing, mode.wallet())
@@ -149,7 +157,7 @@ static func apply(mode: BuildMode, point: Vector3) -> BuildResult:
 			before_bal - after_bal if mode.wallet() != null else 0
 		)
 		mode._status_note = Words.new().placed_note(BuildMenuCatalog.shown("Security lane"))
-		mode._note_cell = anchor
+		mode._note_cell = mode.grid.world_to_cell(point)
 	mode._show_status(result)
 	if not result.ok:
 		mode.notify_refusal(mode._status if mode._status != "" else result.reason_text())

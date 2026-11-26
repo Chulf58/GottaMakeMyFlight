@@ -151,7 +151,8 @@ static func opening_lines(unmet: Array, counts: Dictionary) -> Array[Dictionary]
 			if walking
 			else TranslationServer.translate("Gate desks stay closed until an agent is hired.")
 		)
-		out.append(line(msg, false, gate_why, {"kind": "staff", "role": StaffMember.Role.GATE}))
+		var action := {} if walking else {"kind": "staff", "role": StaffMember.Role.GATE}
+		out.append(line(msg, false, gate_why, action))
 	else:
 		out.append(
 			line(
@@ -261,7 +262,7 @@ static func _station_action(key: String, state: String) -> Dictionary:
 			"kind": "tool",
 			"tool": BuildMode.Tool.DESK if key == "checkin" else BuildMode.Tool.SCANNER,
 		}
-	if state == "hire" or state == "walking":
+	if state == "hire":
 		return {
 			"kind": "staff",
 			"role": StaffMember.Role.CHECKIN if key == "checkin" else StaffMember.Role.SECURITY,

@@ -65,6 +65,8 @@ static func desired_prop(
 		return PropKind.MARSHAL_WANDS
 	if walking or weight <= WEIGHT_MIN:
 		return PropKind.NONE
+	if role == StaffMember.Role.RAMP and mode == StaffStationPose.Mode.IDLE_FIDGET:
+		return PropKind.CLIPBOARD
 	match mode:
 		StaffStationPose.Mode.SECURITY_SCAN:
 			return PropKind.WAND
