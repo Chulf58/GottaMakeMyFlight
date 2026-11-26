@@ -26,6 +26,11 @@ func after_test() -> void:
 	_k.port.free()
 
 
+func _press_continue() -> void:
+	_panel.dialog().finish_reveal()
+	_panel.dialog().continue_button().pressed.emit()
+
+
 func test_an_announcement_pauses_and_continue_gives_back_the_players_speed() -> void:
 	_clock.set_speed(2)
 	_clock.set_paused(false)
@@ -33,7 +38,7 @@ func test_an_announcement_pauses_and_continue_gives_back_the_players_speed() -> 
 	assert_bool(_panel.is_open()).is_true()
 	assert_bool(_clock.paused).is_true()
 	assert_str(_panel.dialog().body_text()).contains("A test crew")
-	_panel.dialog().continue_button().pressed.emit()
+	_press_continue()
 	assert_bool(_panel.is_open()).is_false()
 	assert_bool(_clock.paused).is_false()
 	assert_int(_clock.speed).is_equal(2)
@@ -45,7 +50,7 @@ func test_an_announcement_is_shown_once_it_is_up_and_continue_only_closes_it() -
 	assert_bool(_panel.is_open()).is_true()
 	assert_bool(_k.is_shown(id)).is_true()
 	assert_array(_director.pending_presentation()).is_empty()
-	_panel.dialog().continue_button().pressed.emit()
+	_press_continue()
 	assert_bool(_k.is_shown(id)).is_true()
 	assert_str(_k.state_of(id)).is_equal(IncidentCatalogue.ANNOUNCED)
 
@@ -56,7 +61,7 @@ func test_the_players_own_speed_change_does_not_end_the_pause() -> void:
 	_clock.set_speed(3)
 	_clock.set_paused(false)
 	assert_bool(_clock.paused).is_true()
-	_panel.dialog().continue_button().pressed.emit()
+	_press_continue()
 	assert_bool(_clock.paused).is_false()
 	assert_int(_clock.speed).is_equal(3)
 
@@ -93,10 +98,11 @@ func test_decline_reaches_the_director() -> void:
 func test_an_offer_names_its_reward_and_its_failure() -> void:
 	_k.offer()
 	var body := _panel.dialog().body_text()
-	print("offer body: %s" % body)
+	var chips := "\n".join(_panel.dialog().chip_texts())
+	print("offer body: %s | chips: %s" % [body, chips])
 	assert_str(body).contains("A test crew")
-	assert_str(body).contains("Reward: Two stars of goodwill.")
-	assert_str(body).contains("If it fails: They leave and tell their friends.")
+	assert_str(chips).contains("Reward: Two stars of goodwill.")
+	assert_str(chips).contains("If it fails: They leave and tell their friends.")
 
 
 func test_an_offer_without_a_reward_or_a_failure_is_not_shown() -> void:
@@ -162,7 +168,7 @@ func test_dialogs_take_the_turn_in_the_order_they_asked() -> void:
 	_clock.holds.release(token)
 	assert_bool(_panel.is_open()).is_true()
 	assert_bool(guide.is_open()).is_false()
-	_panel.dialog().continue_button().pressed.emit()
+	_press_continue()
 	assert_bool(_panel.is_open()).is_false()
 	assert_bool(guide.is_open()).is_true()
 	assert_bool(_clock.paused).is_true()
@@ -179,7 +185,7 @@ func test_two_majors_show_one_after_the_other() -> void:
 	assert_bool(_panel.is_open()).is_true()
 	assert_bool(_panel.dialog().accept_button() == null).is_true()
 	assert_bool(_clock.paused).is_true()
-	_panel.dialog().continue_button().pressed.emit()
+	_press_continue()
 	assert_bool(_panel.is_open()).is_false()
 	assert_bool(_clock.paused).is_false()
 	assert_array(_director.pending_presentation()).is_empty()
@@ -198,7 +204,7 @@ func test_dialog_changed_tells_when_the_panel_opens_and_closes() -> void:
 	var seen: Array[bool] = []
 	_panel.dialog_changed.connect(func(open: bool) -> void: seen.append(open))
 	_k.announce()
-	_panel.dialog().continue_button().pressed.emit()
+	_press_continue()
 	assert_array(seen).is_equal([true, false])
 
 

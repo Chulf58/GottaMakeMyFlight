@@ -81,11 +81,10 @@ func test_the_dialog_opens_when_play_opens_a_tier_and_names_the_families() -> vo
 	assert_int(_unlocks.tier()).is_equal(2)
 	assert_bool(_guide.is_open()).is_true()
 	var body := _guide.dialog().body_text()
-	assert_str(body).contains("Food:")
-	assert_str(body).contains("Security:")
-	assert_str(body).contains("Baggage:")
-	assert_str(body).contains("Runway:")
-	assert_str(body).contains("The clock goes on")
+	assert_str(body).contains("New builds unlocked")
+	var chips := Array(_guide.dialog().chip_texts())
+	assert_array(chips).contains(["Food", "Security", "Baggage", "Comfort", "Runway", "More"])
+	assert_str(_guide.dialog().footer_text()).contains("The clock goes on")
 	assert_bool(_unlocks.dialog_shown(2)).is_true()
 
 
@@ -151,14 +150,14 @@ func test_the_next_tier_still_shows_after_an_earlier_one_was_shown() -> void:
 	_earn_and_answer(250)
 	assert_int(_unlocks.tier()).is_equal(3)
 	assert_bool(_guide.is_open()).is_true()
-	assert_str(_guide.dialog().body_text()).not_contains("Security:")
+	assert_array(Array(_guide.dialog().chip_texts())).not_contains(["Security"])
 
 
 func test_two_tiers_opened_together_get_one_dialog_with_both_tiers_families() -> void:
 	_earn_and_answer(250)
 	assert_int(_unlocks.tier()).is_equal(3)
 	assert_bool(_guide.is_open()).is_true()
-	assert_str(_guide.dialog().body_text()).contains("Security:")
+	assert_array(Array(_guide.dialog().chip_texts())).contains(["Security"])
 	assert_bool(_unlocks.dialog_shown(2)).is_true()
 	assert_bool(_unlocks.dialog_shown(3)).is_true()
 	assert_array(_rings).is_equal([3])
@@ -169,10 +168,9 @@ func test_a_skip_shows_exactly_the_tiers_not_shown_before() -> void:
 	_earn_and_answer(250)
 	assert_int(_unlocks.tier()).is_equal(3)
 	assert_bool(_guide.is_open()).is_true()
-	var body := _guide.dialog().body_text()
-	assert_str(body).not_contains("Security:")
-	assert_str(body).not_contains("Baggage:")
-	assert_str(body).contains("Runway:")
+	var chips := Array(_guide.dialog().chip_texts())
+	assert_array(chips).not_contains(["Security", "Baggage"])
+	assert_array(chips).contains(["Runway"])
 
 
 func test_a_guide_that_is_off_shows_nothing_and_marks_nothing() -> void:

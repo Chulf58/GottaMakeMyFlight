@@ -27,6 +27,7 @@ const POOL_SIZE := 8
 const PA_COOLDOWN_MS := 7500
 const PA_PRIORITY_COOLDOWN_MS := 2500
 const BIRD_SCATTER_COOLDOWN_MS := 5000
+const VOICE_BLIP_COOLDOWN_MS := 65
 const FINAL_CALL_POLL_TICKS := 10
 const FINAL_CALL_LEAD_TICKS := 300
 const STAR_MILESTONES: Array[float] = [3.0, 4.0, 5.0]
@@ -76,6 +77,8 @@ const SFX_COOLDOWN_MS := {
 	&"cafe_clink": 2400,
 	&"offer_chime": 1500,
 	&"bird_scatter": BIRD_SCATTER_COOLDOWN_MS,
+	&"voice_blip_manager": VOICE_BLIP_COOLDOWN_MS,
+	&"voice_blip_airline": VOICE_BLIP_COOLDOWN_MS,
 }
 const SFX_VOLUME_DB := {
 	&"checkin_stamp": -3.0,
@@ -85,6 +88,8 @@ const SFX_VOLUME_DB := {
 	&"cafe_clink": -3.5,
 	&"offer_chime": -4.5,
 	&"bird_scatter": -10.0,
+	&"voice_blip_manager": -11.0,
+	&"voice_blip_airline": -11.0,
 }
 
 ## Shielded settings path during -s / --script runs (anti-pattern 1639342a).
@@ -100,6 +105,7 @@ var _ambience_player: AudioStreamPlayer
 var _ambience_playing := false
 var _bird_player: AudioStreamPlayer
 var _pa_player: AudioStreamPlayer
+var _voice_player: AudioStreamPlayer
 var _sfx_players: Array[AudioStreamPlayer] = []
 var _sfx_streams: Dictionary = {}
 var _sfx_cursor := 0
@@ -227,6 +233,8 @@ func reset_for_test() -> void:
 		_bird_player.stop()
 	if _pa_player != null:
 		_pa_player.stop()
+	if _voice_player != null:
+		_voice_player.stop()
 	load_settings(DEFAULT_SETTINGS_PATH)
 	_sync_ambience()
 
@@ -302,6 +310,43 @@ func play_bird_scatter() -> bool:
 	if _suppress_events or _is_fast_forwarding() or _is_paused():
 		return false
 	return play_sfx(&"bird_scatter")
+
+
+## True when a procedural voice blip for `speaker_key` may play at `now_ms` on
+## `driver_name` (non-Dummy, unmuted, positive Master and SFX volumes, off cooldown).
+func can_play_voice_blip(
+	speaker_key: StringName = &"manager", now_ms: int = -1, driver_name: String = ""
+) -> bool:
+	if muted or master_volume <= MIN_LINEAR or sfx_volume <= MIN_LINEAR:
+		return false
+	var drv := driver_name if driver_name != "" else AudioServer.get_driver_name()
+	if drv == "Dummy":
+		return false
+	var sfx_id := &"voice_blip_airline" if speaker_key == &"airline" else &"voice_blip_manager"
+	if not _sfx_streams.has(sfx_id) or _voice_player == null:
+		return false
+	var check_ms := now_ms if now_ms >= 0 else _now_ms()
+	var cooldown := int(SFX_COOLDOWN_MS.get(sfx_id, VOICE_BLIP_COOLDOWN_MS))
+	if _last_played_ms.has(sfx_id) and check_ms - int(_last_played_ms[sfx_id]) < cooldown:
+		return false
+	return true
+
+
+## Plays a soft procedural gibberish voice blip while dialogue typewriter text
+## reveals; stays silent when muted, zero-volume, or on the Dummy audio driver.
+func play_voice_blip(speaker_key: StringName = &"manager") -> bool:
+	var now := _now_ms()
+	if not can_play_voice_blip(speaker_key, now, AudioServer.get_driver_name()):
+		return false
+	var sfx_id := &"voice_blip_airline" if speaker_key == &"airline" else &"voice_blip_manager"
+	_last_played_ms[sfx_id] = now
+	_voice_player.stream = _sfx_streams[sfx_id]
+	_voice_player.volume_db = float(SFX_VOLUME_DB.get(sfx_id, -11.0))
+	_voice_player.pitch_scale = randf_range(0.92, 1.14)
+	_voice_player.play()
+	_last_sfx = sfx_id
+	_sfx_counts[sfx_id] = int(_sfx_counts.get(sfx_id, 0)) + 1
+	return true
 
 
 func last_sfx() -> StringName:
@@ -430,6 +475,8 @@ func _setup_players() -> void:
 		if stream != null:
 			_sfx_streams[id] = stream
 	_sfx_streams[&"bird_scatter"] = _build_bird_scatter_stream()
+	_sfx_streams[&"voice_blip_manager"] = _build_voice_blip_stream(245.0, 1.05, 20261126)
+	_sfx_streams[&"voice_blip_airline"] = _build_voice_blip_stream(330.0, 1.12, 20261127)
 	_bird_player = AudioStreamPlayer.new()
 	_bird_player.name = "BirdScatterPlayer"
 	_bird_player.bus = BUS_AMBIENCE
@@ -438,6 +485,10 @@ func _setup_players() -> void:
 	_pa_player.name = "PAPlayer"
 	_pa_player.bus = BUS_SFX
 	add_child(_pa_player)
+	_voice_player = AudioStreamPlayer.new()
+	_voice_player.name = "VoiceBlipPlayer"
+	_voice_player.bus = BUS_SFX
+	add_child(_voice_player)
 	for i in POOL_SIZE:
 		var player := AudioStreamPlayer.new()
 		player.name = "SFXPlayer%d" % i
@@ -1130,6 +1181,35 @@ static func _build_bird_scatter_stream() -> AudioStreamWAV:
 		var sample := clampf((flutter + chirp) * fade, -0.85, 0.85)
 		var pcm := int(round(sample * 32767.0))
 		bytes.encode_s16(i * 2, pcm)
+	var wav := AudioStreamWAV.new()
+	wav.format = AudioStreamWAV.FORMAT_16_BITS
+	wav.mix_rate = MIX_RATE
+	wav.stereo = false
+	wav.data = bytes
+	return wav
+
+
+static func _build_voice_blip_stream(
+	base_hz: float, sweep_ratio: float, seed_val: int
+) -> AudioStreamWAV:
+	const MIX_RATE := 22050
+	const DURATION_S := 0.052
+	var count := int(MIX_RATE * DURATION_S)
+	var bytes := PackedByteArray()
+	bytes.resize(count * 2)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_val
+	var phase := 0.0
+	for i in count:
+		var t := float(i) / float(MIX_RATE)
+		var u := t / DURATION_S
+		var freq := lerpf(base_hz, base_hz * sweep_ratio, u)
+		phase += TAU * freq / float(MIX_RATE)
+		var tone := sin(phase) + 0.32 * sin(phase * 2.0) + 0.12 * sin(phase * 3.0)
+		var breath := rng.randf_range(-0.04, 0.04)
+		var env := sin(PI * clampf(u, 0.0, 1.0))
+		var sample := clampf((tone * 0.42 + breath) * env, -0.85, 0.85)
+		bytes.encode_s16(i * 2, int(round(sample * 32767.0)))
 	var wav := AudioStreamWAV.new()
 	wav.format = AudioStreamWAV.FORMAT_16_BITS
 	wav.mix_rate = MIX_RATE

@@ -834,6 +834,8 @@ func _wire_unlock_guide() -> void:
 		_unlock_guide.unlocks = build_mode.unlocks
 	_unlock_guide.clock = clock
 	_unlock_guide.save_game = save_game
+	_unlock_guide.offer_panel = _resolve_offer_panel()
+	_unlock_guide.runway_card = get_node_or_null("../RunwayCard") as RunwayCard
 	if flights != null:
 		_unlock_guide.runway = flights.runway
 	_unlock_guide.director = get_node_or_null("../IncidentDirector") as IncidentDirector

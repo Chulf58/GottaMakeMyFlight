@@ -295,6 +295,7 @@ func test_modal_dialogs_still_pause_clock_via_clock_holds() -> void:
 	assert_bool(_incident_panel.is_open()).is_true()
 	assert_bool(_clock.paused).is_true()
 	assert_int(_clock.holds.count()).is_equal(1)
+	_incident_panel.dialog().finish_reveal()
 	_incident_panel.dialog().continue_button().pressed.emit()
 	assert_bool(_clock.paused).is_false()
 	assert_int(_clock.holds.count()).is_equal(0)
