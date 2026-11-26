@@ -26,11 +26,17 @@ const CHARTER_SHARES: Array[int] = [15, 85, 0]
 const RELAXED_LEAD_TICKS := 3600
 ## Passenger timing is set against departure, not the plane's arrival (decision
 ## plane-stand-design-airside-moves-110-m-north-stand-snaps-to: a longer
-## TAXI_IN only brings the plane earlier). The usual window opens this long
-## before departure, as it did when the first state was 1960 ticks before it.
-const ARRIVAL_OPENS_BEFORE_DEPARTURE_TICKS := 1960
+## TAXI_IN only brings the plane earlier). The usual window opens at SCHEDULED
+## on a BASE flight (decision 21d34b4f: 2660 ticks before PUSHBACK, -130 s
+## before DOORS_CLOSED).
+const ARRIVAL_OPENS_BEFORE_DEPARTURE_TICKS := 2660
 ## Rushed passengers arrive in the last 15 game minutes of the usual window.
 const RUSHED_SPAN_TICKS := 300
+## Compact charters (shorter BOARDING than FlightSim.PHASE_TICKS[BOARDING]) keep
+## a wider spawn lead before doors close, bounded below BOARDING so all charter
+## passengers still arrive before boarding opens.
+const CHARTER_LAST_SPAWN_LEAD_TICKS := 800
+const BOARDING_SPAWN_BUFFER_TICKS := 160
 
 
 ## One type drawn with `shares` (whole percent per type, Type order, summing to
@@ -68,7 +74,11 @@ static func shares_for(traits: Dictionary, charter := false) -> Array[int]:
 ## is left of the typical window instead.
 static func window(type: Type, flights: FlightSim, flight_id: String, now: int) -> Vector2i:
 	var first_state := flights.state_start(flight_id, FlightSim.State.SCHEDULED)
-	var last := flights.doors_close_tick(flight_id) - PassengerSim.LAST_SPAWN_LEAD_TICKS
+	var doors := flights.doors_close_tick(flight_id)
+	var boarding := flights.state_start(flight_id, FlightSim.State.BOARDING)
+	var last := doors - PassengerSim.LAST_SPAWN_LEAD_TICKS
+	if doors - boarding < FlightSim.PHASE_TICKS[FlightSim.State.BOARDING]:
+		last = mini(doors - CHARTER_LAST_SPAWN_LEAD_TICKS, boarding - BOARDING_SPAWN_BUFFER_TICKS)
 	var departure := flights.state_start(flight_id, FlightSim.State.PUSHBACK)
 	var opens := maxi(first_state, departure - ARRIVAL_OPENS_BEFORE_DEPARTURE_TICKS)
 	var span := Vector2i(opens + 1, last)

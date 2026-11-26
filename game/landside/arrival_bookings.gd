@@ -44,6 +44,13 @@ signal missed(flight_id: String)
 const TAXI_SHARE := 40
 ## Whole percent of cars that mean to park (when a car park stands).
 const PARK_SHARE := 50
+## Small flights (at or below SMALL_FLIGHT_MAX_PAX bookings) cap party size at
+## SMALL_FLIGHT_MAX_PARTY so passengers arrive in several vehicles instead of clumps.
+const SMALL_FLIGHT_MAX_PAX := 12
+const SMALL_FLIGHT_MAX_PARTY := 2
+## Target minimum gap between consecutive vehicles in the same arrival-type
+## window when the window width allows it (4 s).
+const INTER_VEHICLE_GAP_TICKS := 80
 
 ## Transport misses by flight id, pruned with PassengerSim's flight results.
 var missed_by_flight := {}
@@ -73,41 +80,98 @@ func schedule(
 	flight_id: String, count: int, shares: Array[int] = ArrivalTypes.SHARES, first_at_once := false
 ) -> void:
 	var rng := _sim.clock.rng
+	var parties: Array[Dictionary] = []
+	var type_counts := {}
 	var left := count
 	while left > 0:
 		var kind := LandsideVehicle.Kind.CAR
 		if rng.randi_range(0, 99) < TAXI_SHARE:
 			kind = LandsideVehicle.Kind.TAXI
-		var size := rng.randi_range(1, mini(LandsideVehicle.MAX_PARTY[kind], left))
+		var cap: int = LandsideVehicle.MAX_PARTY[kind]
+		if count <= SMALL_FLIGHT_MAX_PAX:
+			cap = mini(cap, SMALL_FLIGHT_MAX_PARTY)
+		var size := rng.randi_range(1, mini(cap, left))
 		var intent := LandsideVehicle.Intent.DROP
 		if kind == LandsideVehicle.Kind.CAR and rng.randi_range(0, 99) < PARK_SHARE:
 			intent = LandsideVehicle.Intent.PARK
 		var arrival := ArrivalTypes.draw(rng, shares)
+		var variants: Array[int] = []
+		for i in size:
+			variants.append(rng.randi_range(0, 1))
+		var pinned := first_at_once and left == count
+		var slot_idx := 0
+		if not pinned:
+			slot_idx = int(type_counts.get(arrival, 0))
+			type_counts[arrival] = slot_idx + 1
+		(
+			parties
+			. append(
+				{
+					"kind": kind,
+					"size": size,
+					"intent": intent,
+					"arrival": arrival,
+					"variants": variants,
+					"pinned": pinned,
+					"slot": slot_idx,
+				}
+			)
+		)
+		left -= size
+	for p_info in parties:
+		var kind: LandsideVehicle.Kind = p_info["kind"]
+		var size: int = p_info["size"]
+		var intent: LandsideVehicle.Intent = p_info["intent"]
+		var arrival: ArrivalTypes.Type = p_info["arrival"]
 		var lead := _sim.landside.lead_ticks(intent)
 		var earliest := _sim.clock.tick + lead if first_at_once else _sim.clock.tick
 		var span := ArrivalTypes.window(arrival, _sim.flights, flight_id, earliest)
+		var slot_span := (
+			span
+			if p_info["pinned"]
+			else _sub_slot(span, p_info["slot"], int(type_counts.get(arrival, 1)))
+		)
 		# The party gets out one at a time (LandsideSim.RELEASE_GAP_TICKS apart), so
 		# its last member is out by the window's end (the drawn time is clamped, so
 		# the sim RNG draws stay as they were).
 		var stagger := (size - 1) * LandsideSim.RELEASE_GAP_TICKS
-		var at := mini(rng.randi_range(span.x, span.y), maxi(span.x, span.y - stagger))
-		if first_at_once and left == count:
+		var at := mini(rng.randi_range(slot_span.x, slot_span.y), maxi(span.x, span.y - stagger))
+		if p_info["pinned"]:
 			at = _sim.clock.tick + lead
 		var party := _next_id
+		var variants: Array[int] = p_info["variants"]
 		for i in size:
 			var b := ArrivalBooking.new()
 			b.id = _next_id
 			_next_id += 1
 			b.party = party
 			b.flight_id = flight_id
-			b.variant = rng.randi_range(0, 1)
+			b.variant = variants[i]
 			b.arrival = arrival
 			b.unload_tick = at + i * LandsideSim.RELEASE_GAP_TICKS
 			b.kind = kind
 			b.intent = intent
 			_bookings.append(b)
 			_by_id[b.id] = b
-		left -= size
+
+
+static func _sub_slot(span: Vector2i, slot: int, total: int) -> Vector2i:
+	if total <= 1 or span.y <= span.x:
+		return span
+	var width := span.y - span.x + 1
+	@warning_ignore("integer_division")
+	var sub_x := mini(span.x + (slot * width) / total, span.y)
+	@warning_ignore("integer_division")
+	var sub_y := (
+		span.y
+		if slot == total - 1
+		else clampi(span.x + ((slot + 1) * width) / total - 1, sub_x, span.y)
+	)
+	@warning_ignore("integer_division")
+	var pad := mini(INTER_VEHICLE_GAP_TICKS / 2, (sub_y - sub_x) / 4)
+	var lo := sub_x if slot == 0 else sub_x + pad
+	var hi := sub_y if slot == total - 1 else maxi(lo, sub_y - pad)
+	return Vector2i(lo, hi)
 
 
 ## One tick, at PassengerSim.tick: settle, step the road, release, board.

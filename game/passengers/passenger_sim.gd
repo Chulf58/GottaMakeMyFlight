@@ -51,8 +51,9 @@ const CHECKIN_TICKS := 60
 const SIT_DOWN_TICKS := 24
 const STAND_UP_TICKS := 24
 const DEFAULT_PASSENGERS := 24
-## The last scheduled spawn of a flight is this many ticks before doors close.
-const LAST_SPAWN_LEAD_TICKS := 800
+## The last scheduled spawn of a flight is this many ticks before doors close
+## (68 s: clears check-in and security with positive slack before doors close).
+const LAST_SPAWN_LEAD_TICKS := 1360
 ## A made or missed passenger is kept this long, then retired (a missed one
 ## stays drawn for PassengerViews.MISSED_LINGER_TICKS, which is the same).
 const SETTLED_KEEP_TICKS := 200

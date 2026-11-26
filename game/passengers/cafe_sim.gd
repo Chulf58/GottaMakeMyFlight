@@ -46,7 +46,7 @@ extends RefCounted
 ## journey on runs through the scanner queues. A visit whose cafe, counter or
 ## seat is gone ends the same way.
 ##
-## Hunger (point 5) rises once a simulated second; at HUNGRY_AT the passenger
+## Hunger (point 5) rises once every HUNGER_RISE_BEATS simulated seconds; at HUNGRY_AT the passenger
 ## heads for the nearest reachable cafe if the forecast allows, and otherwise
 ## its mood drops every few seconds. A walking passenger who comes near a cafe
 ## with lots of time to spare drops in too (browsing, airside from further
@@ -147,10 +147,12 @@ const TURN_BACK_HOLD_TICKS := (
 const TURNED_BACK := &"turned_back"
 ## Seats tried per visit, nearest the counter first.
 const SEAT_TRIES := 4
-const HUNGER_START_MIN := 40
-const HUNGER_START_MAX := 70
+const HUNGER_START_MIN := 0
+const HUNGER_START_MAX := 53
 const HUNGER_MAX := 100
 const HUNGRY_AT := 50
+## Hunger rises +1 once every this many passenger beats (seconds).
+const HUNGER_RISE_BEATS := 16
 ## A hungry passenger with no visit loses a mood point every this many beats.
 const HUNGRY_MOOD_BEATS := 5
 ## A refused hungry passenger tries again after this long.
@@ -162,7 +164,7 @@ const AIRSIDE_BROWSE_REACH_MM := 8000
 ## A browser drops in only with this much spare beyond the margin. Boarding
 ## caps the spare: in the reference flight a passenger who reaches the gate
 ## early has about 220 ticks beyond the margin, whatever it does before.
-const BROWSE_SPARE_TICKS := 100
+const BROWSE_SPARE_TICKS := 200
 const BROWSE_COOLDOWN_TICKS := 600
 ## Spend in whole percent: mood 0 spends 80% of the base, 100 spends 120%.
 const MOOD_SPEND_MIN := 80
@@ -330,11 +332,17 @@ func start_hunger(rng: RandomNumberGenerator) -> int:
 	return drawn if hunger_enabled else 0
 
 
-## Once a simulated second per passenger: hunger rises, unmet hunger costs
-## mood and a visit under way has its deadline forecast again. Whether a
-## visit starts is NeedsPolicy's to decide, after every need has risen.
+## Once a simulated second per passenger: hunger rises every HUNGER_RISE_BEATS
+## seconds, unmet hunger costs mood and a visit under way has its deadline
+## forecast again. Whether a visit starts is NeedsPolicy's to decide, after
+## every need has risen.
 func beat(p: Passenger) -> void:
-	p.hunger = mini(p.hunger + 1, HUNGER_MAX) if hunger_enabled else 0
+	@warning_ignore("integer_division")
+	var beat_number := _sim.tick / PassengerSim.BEAT_TICKS
+	if not hunger_enabled:
+		p.hunger = 0
+	elif posmod(beat_number, HUNGER_RISE_BEATS) == 0:
+		p.hunger = mini(p.hunger + 1, HUNGER_MAX)
 	var visit: CafeVisit = _visits.get(p.id)
 	if visit != null:
 		# The abandon-now forecast with live queues, once a second per guest;
@@ -344,8 +352,6 @@ func beat(p: Passenger) -> void:
 			visit.deadline = _live_deadline(p, visit)
 		return
 	var hungry := p.hunger >= HUNGRY_AT
-	@warning_ignore("integer_division")
-	var beat_number := _sim.tick / PassengerSim.BEAT_TICKS
 	if hungry and posmod(beat_number, HUNGRY_MOOD_BEATS) == 0:
 		p.mood = maxi(p.mood - 1, 0)
 

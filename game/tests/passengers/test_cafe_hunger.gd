@@ -81,7 +81,7 @@ func _hungers(seed: int) -> Array[int]:
 	return out
 
 
-func test_starting_hunger_is_40_to_70_from_the_sim_rng() -> void:
+func test_starting_hunger_is_within_start_range_from_the_sim_rng() -> void:
 	var first := _hungers(31)
 	assert_array(first).is_equal(_hungers(31))
 	var distinct := {}
@@ -92,14 +92,20 @@ func test_starting_hunger_is_40_to_70_from_the_sim_rng() -> void:
 	assert_int(distinct.size()).is_greater(3)
 
 
-func test_hunger_rises_one_a_second_up_to_100() -> void:
-	_world = PassengerTestWorld.reference_world()
-	var p := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+func test_hunger_rises_once_per_interval_up_to_100() -> void:
+	var grid := PassengerTestWorld.floored(Vector2i(8, 6))
+	_world = PassengerTestWorld.make(grid, PassengerTestWorld.starts_with(5000, 6000))
+	var p := Passenger.new()
+	p.id = 1000
 	p.hunger = 20
-	_world.run_to(_world.clock.tick + 10 * PassengerSim.BEAT_TICKS)
+	for i in 10 * CafeSim.HUNGER_RISE_BEATS:
+		_world.run_to((i + 1) * PassengerSim.BEAT_TICKS)
+		_world.sim.cafes.beat(p)
 	assert_int(p.hunger).is_equal(30)
 	p.hunger = CafeSim.HUNGER_MAX - 1
-	_world.run_to(_world.clock.tick + 3 * PassengerSim.BEAT_TICKS)
+	for i in CafeSim.HUNGER_RISE_BEATS:
+		_world.run_to(_world.clock.tick + PassengerSim.BEAT_TICKS)
+		_world.sim.cafes.beat(p)
 	assert_int(p.hunger).is_equal(CafeSim.HUNGER_MAX)
 
 
