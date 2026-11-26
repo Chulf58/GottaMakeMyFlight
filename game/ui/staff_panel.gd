@@ -172,7 +172,7 @@ func _notification(what: int) -> void:
 ## be bound to a PassengerSim.
 func watch(with_staff: StaffSim) -> void:
 	staff = with_staff
-	staff.staff_changed.connect(refresh)
+	staff.staff_changed.connect(_on_staff_changed)
 	staff.member_state_changed.connect(_on_member_state)
 	staff.member_energy_changed.connect(_on_member_energy)
 	staff.sim.grid.graph_changed.connect(_on_graph_changed)
@@ -353,13 +353,17 @@ func card_lines() -> Array[Dictionary]:
 ## Reads the gaps again (open airport only) and refreshes when they changed.
 ## _process calls it every GAP_POLL_S; tests call it directly.
 func poll_gaps() -> void:
-	var gaps: Array[Dictionary] = []
-	if gate != null and gate.is_open():
-		var world := HintRules.read_world(staff.sim, hiring_hint_roles())
-		gaps = Checklist.gap_lines(world, staff.sim.layout.seats.size(), _lock_texts())
+	var gaps := _read_gaps()
 	if gaps != _gaps:
 		_gaps = gaps
 		refresh()
+
+
+func _read_gaps() -> Array[Dictionary]:
+	if gate == null or not gate.is_open() or staff == null or staff.sim == null:
+		return []
+	var world := HintRules.read_world(staff.sim, hiring_hint_roles())
+	return Checklist.gap_lines(world, staff.sim.layout.seats.size(), _lock_texts())
 
 
 ## The roles whose hire line the banner shows: stations of the role stand that
@@ -391,6 +395,13 @@ func set_hint_yielded(yielded: bool) -> void:
 	_hint_box.visible = _checklist.has_visible_content() and not _hint_yielded
 
 
+func _on_staff_changed() -> void:
+	if gate != null and gate.is_open() and staff != null and staff.sim != null:
+		_gaps = _read_gaps()
+		_since_poll = 0.0
+	refresh()
+
+
 func refresh() -> void:
 	_bind_wallet()
 	_track_opening()
@@ -403,6 +414,8 @@ func refresh() -> void:
 	if gate != null and gate.flights != null and gate.flights.opened_tick < 0:
 		prep_note = tr("Prep time — clock starts when staff reach stations")
 	_checklist.set_prep_note(prep_note)
+	if gate != null and not gate.is_open():
+		_gaps = []
 	var lines := card_lines()
 	_checklist.show_lines(_card_title(lines), lines)
 	_checklist.set_milestone(_milestone_text())

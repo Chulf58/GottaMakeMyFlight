@@ -44,6 +44,8 @@ const GRACE_S := 10.0
 ## Seconds a hint stays up, and the least it stays once its cause is solved.
 const DWELL_S := 12.0
 const MIN_SHOW_S := 3.0
+## Hire hints dismiss immediately once a matching member is hired.
+const HIRE_HINTS: Array[StringName] = [HintRules.SECOND_HIRE, HintRules.CLEANERS]
 ## The least seconds between one hint ending and the next showing.
 const MIN_GAP_S := 20.0
 ## Seconds without a build edit or a category opened before a due hint shows
@@ -309,7 +311,8 @@ func advance(delta: float, world: Dictionary, open_categories: Array) -> void:
 	_track(causes, delta)
 	if is_showing():
 		_dwell += delta
-		if _dwell >= DWELL_S or (_dwell >= MIN_SHOW_S and not causes.has(_shown_id)):
+		var dismiss_on_solve := _dwell >= MIN_SHOW_S or HIRE_HINTS.has(_shown_id)
+		if _dwell >= DWELL_S or (dismiss_on_solve and not causes.has(_shown_id)):
 			_end_hint()
 		return
 	_since_end += delta
@@ -346,12 +349,20 @@ func _process(delta: float) -> void:
 		return
 	var step := _read_acc
 	_read_acc = 0.0
+	_read_and_advance(step)
+
+
+func _read_and_advance(step: float) -> void:
+	if _sim == null:
+		return
 	var panel := _banner()
 	var hiring: Array = []
 	if panel != null and panel.staff != null:
 		hiring = panel.hiring_hint_roles()
-	var world := HintRules.read_world(sim, hiring)
-	world.merge(FollowInvite.read(sim, hud.views, hud.landside_views))
+	var world := HintRules.read_world(_sim, hiring)
+	var views := hud.views if hud != null else null
+	var landside := hud.landside_views if hud != null else null
+	world.merge(FollowInvite.read(_sim, views, landside))
 	var flights := hud.flights if hud != null else null
 	world["airport_open"] = flights != null and flights.opened_tick >= 0
 	world["has_scheduled_flights"] = (
@@ -544,12 +555,24 @@ func _find(node_name: String) -> Node:
 ## Follows `sim`: a different sim is a different world, and a build edit is
 ## player activity.
 func _bind(sim: PassengerSim) -> void:
-	if _sim != null and is_instance_valid(_sim) and _sim.grid != null:
-		_sim.grid.edit_applied.disconnect(_on_edit)
+	if _sim != null and is_instance_valid(_sim):
+		if _sim.grid != null and _sim.grid.edit_applied.is_connected(_on_edit):
+			_sim.grid.edit_applied.disconnect(_on_edit)
+		if _sim.staff != null and _sim.staff.staff_changed.is_connected(_on_staff_changed):
+			_sim.staff.staff_changed.disconnect(_on_staff_changed)
 	_sim = sim
 	reset_session()
-	if _sim != null and _sim.grid != null:
-		_sim.grid.edit_applied.connect(_on_edit)
+	if _sim != null:
+		if _sim.grid != null:
+			_sim.grid.edit_applied.connect(_on_edit)
+		if _sim.staff != null:
+			_sim.staff.staff_changed.connect(_on_staff_changed)
+
+
+func _on_staff_changed() -> void:
+	if not reads_world or _sim == null:
+		return
+	_read_and_advance(0.0)
 
 
 func _on_edit(_edit: BuildEdit, _result: BuildResult) -> void:
