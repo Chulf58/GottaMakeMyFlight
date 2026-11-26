@@ -71,6 +71,7 @@ const SCAN_S := 0.15
 var rng := RandomNumberGenerator.new()
 var groups: Array[Dictionary] = []
 var _lots_seen: Array[bool] = []
+var _lots_kind_seen: Array[int] = []
 var _anim_speed := 1.0
 var _scan_left := 0.0
 var _tick_seen := true
@@ -142,7 +143,8 @@ func rebuild() -> void:
 		(puff["root"] as Node3D).queue_free()
 	_puffs.clear()
 	_lots_seen = _lots_now()
-	var there := BirdPerches.available(_lots_seen)
+	_lots_kind_seen = _lots_kind_now()
+	var there := BirdPerches.available(_lots_seen, _lots_kind_seen)
 	var chosen: Array[int] = []
 	for zone in ZONE_GROUPS.size():
 		var spots: Array[int] = []
@@ -186,10 +188,11 @@ func _spawn_elevated_groups(there: Array[int], chosen: Array[int]) -> void:
 		groups.append(_new_group(spot, true))
 
 
-## Every perch unavailable now (unbuilt lot) plus perches held or flown to by other groups.
+## Every perch unavailable now (unbuilt lot or covered surface lot) plus perches
+## held or flown to by other groups.
 func closed_spots(skip: Dictionary) -> Array[int]:
 	var out := busy_spots(skip)
-	var there := BirdPerches.available(_lots_seen)
+	var there := BirdPerches.available(_lots_seen, _lots_kind_seen)
 	for i in BirdPerches.perch_count():
 		if not there.has(i):
 			out.append(i)
@@ -200,20 +203,40 @@ func active_puff_count() -> int:
 	return _puffs.size()
 
 
+func lot_obstacles() -> Array[Dictionary]:
+	if landside_views == null or landside_views.landside == null:
+		return []
+	var sim := landside_views.landside
+	return BirdPerches.lot_obstacles_for(sim.definition, sim.lots_built, sim.lots_kind)
+
+
 func _lots_now() -> Array[bool]:
 	if landside_views == null or landside_views.landside == null:
 		return []
 	return landside_views.landside.lots_built.duplicate()
 
 
+func _lots_kind_now() -> Array[int]:
+	if landside_views == null or landside_views.landside == null:
+		return []
+	return landside_views.landside.lots_kind.duplicate()
+
+
 func _lots_changed() -> bool:
 	if landside_views == null or landside_views.landside == null:
-		return not _lots_seen.is_empty()
-	var now := landside_views.landside.lots_built
+		return not _lots_seen.is_empty() or not _lots_kind_seen.is_empty()
+	var sim := landside_views.landside
+	var now := sim.lots_built
 	if now.size() != _lots_seen.size():
 		return true
 	for i in now.size():
 		if now[i] != _lots_seen[i]:
+			return true
+	var kinds := sim.lots_kind
+	if kinds.size() != _lots_kind_seen.size():
+		return true
+	for i in kinds.size():
+		if kinds[i] != _lots_kind_seen[i]:
 			return true
 	return false
 
@@ -339,7 +362,9 @@ func _new_group(spot: int, elevated: bool) -> Dictionary:
 
 func _scatter(g: Dictionary, threats: PackedVector3Array, startled: bool) -> void:
 	var count := (g["birds"] as Array).size()
-	var target := BirdPerches.pick(rng, g["spot"], _spaced_closed_spots(g), threats, count)
+	var target := BirdPerches.pick(
+		rng, g["spot"], _spaced_closed_spots(g), threats, count, lot_obstacles()
+	)
 	if target < 0:
 		return
 	var offs := BirdPerches.offsets(rng, count, target, bird_scale)
@@ -648,6 +673,7 @@ func _spaced_closed_spots(skip: Dictionary) -> Array[int]:
 	var from_spot: int = skip["spot"]
 	var count := (skip["birds"] as Array).size()
 	var busy := busy_spots(skip)
+	var obs := lot_obstacles()
 	var spaced: Array[int] = base.duplicate()
 	var open_far := 0
 	for i in BirdPerches.perch_count():
@@ -655,7 +681,7 @@ func _spaced_closed_spots(skip: Dictionary) -> Array[int]:
 			i == from_spot
 			or base.has(i)
 			or BirdPerches.spot_capacity(i) < count
-			or not BirdPerches.can_fly(from_spot, i)
+			or not BirdPerches.can_fly(from_spot, i, obs)
 		):
 			continue
 		if _far_from_all(i, busy):

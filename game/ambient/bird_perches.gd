@@ -42,12 +42,12 @@ const SPOTS: Array[Vector3] = [
 	Vector3(-59.0, -0.1, -55.5),
 	Vector3(59.0, -0.1, -55.5),
 	Vector3(-70.0, 0.2, -40.6),
-	Vector3(-32.0, -0.1, -36.5),
-	Vector3(-22.0, -0.1, -36.5),
-	Vector3(-68.0, -0.1, -35.8),
+	Vector3(-97.5, 0.2, -40.6),
+	Vector3(-95.0, -0.1, -55.5),
+	Vector3(-109.0, -0.1, -55.5),
 	Vector3(70.0, 0.2, -40.6),
-	Vector3(52.0, -0.1, -29.0),
-	Vector3(68.0, -0.1, -35.8),
+	Vector3(95.0, -0.1, -55.5),
+	Vector3(109.0, -0.1, -55.5),
 ]
 ## How far each ground patch reaches from its centre along x and z.
 const HALVES: Array[Vector2] = [
@@ -71,7 +71,7 @@ const HALVES: Array[Vector2] = [
 	Vector2(2.2, 1.5),
 	Vector2(2.2, 1.5),
 	Vector2(2.3, 0.22),
-	Vector2(2.2, 1.2),
+	Vector2(1.6, 0.22),
 	Vector2(2.2, 1.2),
 	Vector2(2.2, 1.4),
 	Vector2(2.3, 0.22),
@@ -149,6 +149,7 @@ const LAND_CLEAR := 9.0
 ## Maximum flat distance for a single scatter flight across the landside.
 const MAX_FLIGHT_SPAN := 68.0
 ## Multi-storey footprint (Parking_2A: x -12..12, z -40..18) grown by wingspan margin.
+const MULTI_WING_MARGIN := 1.4
 const MULTI_CLEAR := Rect2(-13.4, -41.4, 26.8, 60.8)
 ## Local prop bounding boxes (x/z half-extents + top y) used for flight clearance.
 const PROP_BOXES := {
@@ -185,6 +186,7 @@ const MAX_HWY_LAMP_X := 75.0
 
 static var _all_cache: Array[Dictionary] = []
 static var _obstacle_cache: Array[Dictionary] = []
+static var _default_lot_cache: Array[Dictionary] = []
 static var _fly_cache: Dictionary = {}
 
 
@@ -351,25 +353,94 @@ static func nearest(centre: Vector3, threats: PackedVector3Array) -> float:
 	return best
 
 
-## The perches there are now: every perch whose lot (spot_lot) is built.
-static func available(lots_built: Array[bool]) -> Array[int]:
+## The perches there are now: every perch whose lot (spot_lot) is built as a
+## Surface lot (a Multi-Storey garage covers ground-level aisle perches).
+static func available(lots_built: Array[bool], lots_kind: Array[int] = []) -> Array[int]:
 	var out: Array[int] = []
 	var list := _perches()
 	for i in list.size():
 		var lot: int = list[i]["lot"]
-		if lot < 0 or (lot < lots_built.size() and lots_built[lot]):
+		if lot < 0:
 			out.append(i)
+		elif lot < lots_built.size() and lots_built[lot]:
+			var surface_pad := (
+				lots_kind.is_empty()
+				or (lot < lots_kind.size() and lots_kind[lot] == LandsideLotSpot.Kind.SURFACE)
+			)
+			if surface_pad:
+				out.append(i)
+	return out
+
+
+## Flight obstacles for every currently built parking pad, derived from its
+## active centre.x and footprint so Multi-Storey buildings on any pad block
+## flights while unbuilt pads do not.
+static func lot_obstacles_for(
+	definition: LandsideDefinition, lots_built: Array[bool], lots_kind: Array[int] = []
+) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	if definition == null:
+		return out
+	for spot in mini(definition.lots.size(), lots_built.size()):
+		if not lots_built[spot]:
+			continue
+		var pad := definition.lots[spot]
+		var kind: int = lots_kind[spot] if spot < lots_kind.size() else int(pad.kind)
+		if kind == LandsideLotSpot.Kind.MULTI_STOREY:
+			var lot := definition.lot_for_kind(spot, LandsideLotSpot.Kind.MULTI_STOREY)
+			var half_w := lot.footprint.x * 0.5 + MULTI_WING_MARGIN
+			(
+				out
+				. append(
+					{
+						"rect":
+						Rect2(
+							lot.centre.x - half_w,
+							MULTI_CLEAR.position.y,
+							half_w * 2.0,
+							MULTI_CLEAR.size.y
+						),
+						"min_y": -0.2,
+						"max_y": 29.0,
+					}
+				)
+			)
+		else:
+			var lot := definition.lot_for_kind(spot, LandsideLotSpot.Kind.SURFACE)
+			var half_w := lot.footprint.x * 0.5 + CLEARANCE_PAD
+			(
+				out
+				. append(
+					{
+						"rect": Rect2(lot.centre.x - half_w, -40.2 - CLEARANCE_PAD, 24.1, 34.8),
+						"min_y": 0.25,
+						"max_y": 3.2,
+					}
+				)
+			)
 	return out
 
 
 ## Whether a group can fly smoothly from `from_spot` to `to_spot` without
-## crossing the multi-storey, surface car park roof, or street props.
-static func can_fly(from_spot: int, to_spot: int) -> bool:
+## crossing built multi-storeys, surface car park roofs, or street props.
+## Pass `lot_obstacles` (from `lot_obstacles_for()`) to check against live built
+## pads; omitting it uses the starter default layout.
+static func can_fly(from_spot: int, to_spot: int, lot_obstacles: Variant = null) -> bool:
+	var resolved := _resolve_lot_obstacles(lot_obstacles)
+	var lot_obs: Array[Dictionary] = resolved["obs"]
+	var sig: String = resolved["sig"]
+	return _can_fly_with(from_spot, to_spot, lot_obs, sig)
+
+
+static func _can_fly_with(
+	from_spot: int, to_spot: int, lot_obs: Array[Dictionary], sig: String
+) -> bool:
 	if from_spot == to_spot:
 		return false
+	var sig_cache: Dictionary = _fly_cache.get(sig, {})
 	var key := (from_spot << 16) | to_spot
-	if _fly_cache.has(key):
-		return _fly_cache[key]
+	if sig_cache.has(key):
+		return sig_cache[key]
 	var a := spot_pos(from_spot)
 	var b := spot_pos(to_spot)
 	var ok := Vector2(a.x - b.x, a.z - b.z).length() <= MAX_FLIGHT_SPAN
@@ -386,11 +457,43 @@ static func can_fly(from_spot: int, to_spot: int) -> bool:
 				if not ok:
 					break
 				for lift: float in [lifts.x, (lifts.x + lifts.y) * 0.5, lifts.y]:
-					if not _curve_clear(pa, pb, lift):
+					if not _curve_clear(pa, pb, lift, lot_obs):
 						ok = false
 						break
-	_fly_cache[key] = ok
+	sig_cache[key] = ok
+	_fly_cache[sig] = sig_cache
 	return ok
+
+
+static func _resolve_lot_obstacles(lot_obstacles: Variant) -> Dictionary:
+	if lot_obstacles == null:
+		return {"obs": _default_lot_obstacles(), "sig": "default"}
+	var typed: Array[Dictionary] = []
+	typed.assign(lot_obstacles)
+	var parts := PackedStringArray()
+	for o in typed:
+		var r: Rect2 = o["rect"]
+		parts.append(
+			(
+				"%.2f,%.2f,%.2f,%.2f,%.2f"
+				% [r.position.x, r.position.y, r.size.x, r.size.y, o["max_y"]]
+			)
+		)
+	return {"obs": typed, "sig": "|".join(parts)}
+
+
+static func _default_lot_obstacles() -> Array[Dictionary]:
+	if not _default_lot_cache.is_empty():
+		return _default_lot_cache
+	_default_lot_cache = [
+		{"rect": MULTI_CLEAR, "min_y": -0.2, "max_y": 29.0},
+		{
+			"rect": Rect2(19.7 - CLEARANCE_PAD, -40.2 - CLEARANCE_PAD, 24.1, 34.8),
+			"min_y": 0.25,
+			"max_y": 3.2,
+		},
+	]
+	return _default_lot_cache
 
 
 static func _endpoints_of(spot: int, centre: Vector3, half: Vector2) -> Array[Vector3]:
@@ -414,14 +517,7 @@ static func _endpoints_of(spot: int, centre: Vector3, half: Vector2) -> Array[Ve
 static func _obstacles() -> Array[Dictionary]:
 	if not _obstacle_cache.is_empty():
 		return _obstacle_cache
-	var out: Array[Dictionary] = [
-		{"rect": MULTI_CLEAR, "min_y": -0.2, "max_y": 29.0},
-		{
-			"rect": Rect2(19.7 - CLEARANCE_PAD, -40.2 - CLEARANCE_PAD, 24.1, 34.8),
-			"min_y": 0.25,
-			"max_y": 3.2,
-		},
-	]
+	var out: Array[Dictionary] = []
 	for spec in LandsideStreetDressing.prop_specs():
 		var kind: String = spec["kind"]
 		if not PROP_BOXES.has(kind):
@@ -444,8 +540,10 @@ static func _obstacles() -> Array[Dictionary]:
 	return _obstacle_cache
 
 
-static func _curve_clear(from: Vector3, to: Vector3, lift: float) -> bool:
-	var obs := _obstacles()
+static func _curve_clear(
+	from: Vector3, to: Vector3, lift: float, lot_obs: Array[Dictionary]
+) -> bool:
+	var prop_obs := _obstacles()
 	var sides := [
 		Vector2.ZERO,
 		Vector2(BODY_RADIUS, 0.0),
@@ -457,13 +555,14 @@ static func _curve_clear(from: Vector3, to: Vector3, lift: float) -> bool:
 		var u := float(k) / 64.0
 		var body := BirdFlock.flight_point(from, to, lift, u) + Vector3.UP * BODY_UP
 		var base_pt := Vector2(body.x, body.z)
-		for o in obs:
-			if body.y > float(o["max_y"]) or body.y < float(o["min_y"]):
-				continue
-			var r := o["rect"] as Rect2
-			for s: Vector2 in sides:
-				if r.has_point(base_pt + s):
-					return false
+		for obs in [lot_obs, prop_obs]:
+			for o in obs:
+				if body.y > float(o["max_y"]) or body.y < float(o["min_y"]):
+					continue
+				var r := o["rect"] as Rect2
+				for s: Vector2 in sides:
+					if r.has_point(base_pt + s):
+						return false
 	return true
 
 
@@ -476,14 +575,18 @@ static func pick(
 	from_spot: int,
 	busy: Array[int],
 	threats: PackedVector3Array,
-	count := 1
+	count := 1,
+	lot_obstacles: Variant = null
 ) -> int:
+	var resolved := _resolve_lot_obstacles(lot_obstacles)
+	var lot_obs: Array[Dictionary] = resolved["obs"]
+	var sig: String = resolved["sig"]
 	var clear: Array[int] = []
 	var best := -1
 	var best_gap := -1.0
 	var list := _perches()
 	for i in list.size():
-		if busy.has(i) or not can_fly(from_spot, i):
+		if busy.has(i) or not _can_fly_with(from_spot, i, lot_obs, sig):
 			continue
 		if int(list[i]["capacity"]) < count:
 			continue

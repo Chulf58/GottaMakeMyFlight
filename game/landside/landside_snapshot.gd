@@ -39,7 +39,10 @@ extends RefCounted
 ## 11: road_in starts at +140.4 m and road_out / lot exits end at ±140.4 m
 ## inside the highway tunnel portals, shifting curb.stop_mm and lot branch_mm by
 ## +100000 mm. Version 10 is refused, with no migration.
-const SAVE_VERSION := 11
+## 12: south street holds a full row of kind-flexible parking pads and saves
+## each pad's built lot kind (`lots_kind`). Version 11 is refused, with no
+## migration.
+const SAVE_VERSION := 12
 const KEYS := [
 	"save_version",
 	"tick",
@@ -50,6 +53,7 @@ const KEYS := [
 	"next_vehicle_id",
 	"vehicles",
 	"lots_built",
+	"lots_kind",
 	"lots_closed",
 	"lots_paid",
 	"curbs_built",
@@ -142,6 +146,7 @@ static func save(
 		"next_vehicle_id": next_vehicle_id,
 		"vehicles": vehicle_list,
 		"lots_built": sim.lots_built.duplicate(),
+		"lots_kind": sim.lots_kind.duplicate(),
 		"lots_closed": sim.lots_closed.duplicate(),
 		"lots_paid": sim.lots_paid.duplicate(),
 		"curbs_built": sim.curbs_built.duplicate(),
@@ -164,6 +169,10 @@ static func load(data: Dictionary, definition: LandsideDefinition) -> Dictionary
 	var built: Array[bool] = []
 	built.assign(data["lots_built"])
 	out["lots_built"] = built
+	var kinds: Array[int] = []
+	for kind in data["lots_kind"]:
+		kinds.append(int(kind))
+	out["lots_kind"] = kinds
 	var closed: Array[bool] = []
 	closed.assign(data["lots_closed"])
 	out["lots_closed"] = closed
@@ -192,7 +201,9 @@ static func load(data: Dictionary, definition: LandsideDefinition) -> Dictionary
 	if bookings.has("error"):
 		return bookings
 	out["bookings"] = bookings["list"]
-	var vehicles := _vehicles(data["vehicles"], out["next_vehicle_id"], definition, built, curbs)
+	var vehicles := _vehicles(
+		data["vehicles"], out["next_vehicle_id"], definition, built, kinds, curbs
+	)
 	if vehicles.has("error"):
 		return vehicles
 	out["vehicles"] = vehicles["list"]
@@ -229,6 +240,7 @@ static func _top_problem(data: Dictionary, definition: LandsideDefinition) -> St
 static func _build_problem(data: Dictionary, definition: LandsideDefinition) -> String:
 	var sizes := {
 		"lots_built": definition.lots.size(),
+		"lots_kind": definition.lots.size(),
 		"lots_closed": definition.lots.size(),
 		"lots_paid": definition.lots.size(),
 		"curbs_built": definition.curb_spots.size(),
@@ -237,6 +249,13 @@ static func _build_problem(data: Dictionary, definition: LandsideDefinition) -> 
 	for key in sizes:
 		if typeof(data[key]) != TYPE_ARRAY or (data[key] as Array).size() != sizes[key]:
 			return "%s must be an array with one entry per spot" % key
+	for kind in data["lots_kind"]:
+		var valid_kind := (
+			_whole(kind)
+			and int(kind) in [LandsideLotSpot.Kind.SURFACE, LandsideLotSpot.Kind.MULTI_STOREY]
+		)
+		if not valid_kind:
+			return "lots_kind must hold valid car park kinds"
 	for key in ["lots_built", "lots_closed", "curbs_built"]:
 		for flag in data[key]:
 			if typeof(flag) != TYPE_BOOL:
@@ -251,6 +270,9 @@ static func _build_problem(data: Dictionary, definition: LandsideDefinition) -> 
 			var standing: bool = data[pair[0]][i]
 			if not standing and (pair[1] != "" and data[pair[1]][i] or int(data[pair[2]][i]) > 0):
 				return "a spot with nothing built is closed or has a price"
+	for i in definition.lots.size():
+		if not data["lots_built"][i] and int(data["lots_kind"][i]) != int(definition.lots[i].kind):
+			return "an unbuilt lot spot has a non-default kind"
 	return ""
 
 
@@ -299,12 +321,16 @@ static func _vehicles(
 	next_id: int,
 	definition: LandsideDefinition,
 	built: Array[bool],
+	kinds: Array[int],
 	curbs: Array[bool]
 ) -> Dictionary:
 	var out: Array[LandsideVehicle] = []
 	var held := {}
 	var last := 0
 	var paths := LandsidePaths.new(definition)
+	for i in built.size():
+		if built[i]:
+			paths.set_lot(i, definition.lot_for_kind(i, kinds[i] as LandsideLotSpot.Kind))
 	for entry in list:
 		var ok: bool = typeof(entry) == TYPE_DICTIONARY and entry.has("bookings")
 		for field in VEHICLE_INTS:
@@ -391,7 +417,7 @@ static func _vehicle_problem(
 		LandsideVehicle.Lane.BERTH:
 			stops = definition.berth_count()
 		LandsideVehicle.Lane.ACCESS, LandsideVehicle.Lane.SLOT:
-			stops = definition.lots[v.lot].slots.size()
+			stops = paths.lots[v.lot].slots.size()
 	# A car on a slot path with no slot is turning round at the gate.
 	var turning := (
 		v.lane == LandsideVehicle.Lane.SLOT

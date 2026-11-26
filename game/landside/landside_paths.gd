@@ -65,6 +65,9 @@ var slot_back: Array = []
 ## Per lot spot: the turn round at the gate, and its length.
 var turn_path: Array[PackedVector3Array] = []
 var turn_end: Array[int] = []
+## Active LandsideLotSpot per pad index (defaults to definition.lots[i], updated
+## by LandsideSim when a pad is built with a chosen kind).
+var lots: Array[LandsideLotSpot] = []
 
 
 func _init(with_definition: LandsideDefinition) -> void:
@@ -72,8 +75,22 @@ func _init(with_definition: LandsideDefinition) -> void:
 	out_mm = LandsideDefinition.mm_along(definition.road_in, definition.road_out[0])
 	for i in definition.berth_count():
 		_add_berth(i)
-	for spot in definition.lots:
-		_add_lot(spot)
+	var lot_count := definition.lots.size()
+	lots.resize(lot_count)
+	slot_path.resize(lot_count)
+	slot_end.resize(lot_count)
+	slot_stand.resize(lot_count)
+	slot_back.resize(lot_count)
+	turn_path.resize(lot_count)
+	turn_end.resize(lot_count)
+	for i in lot_count:
+		set_lot(i, definition.lots[i])
+
+
+## Replaces the active lot geometry for pad `spot` and rebuilds its paths.
+func set_lot(spot: int, lot_spot: LandsideLotSpot) -> void:
+	lots[spot] = lot_spot
+	_set_lot_paths(spot, lot_spot)
 
 
 ## The deck a slot of `lot` stands on: 0 for the ground, k for the deck whose
@@ -94,9 +111,9 @@ func path(lane: LandsideVehicle.Lane, lot: int, stop: int) -> PackedVector3Array
 		LandsideVehicle.Lane.ROAD_OUT:
 			return definition.road_out
 		LandsideVehicle.Lane.ACCESS:
-			return definition.lots[lot].access
+			return lots[lot].access
 		LandsideVehicle.Lane.LOT_EXIT:
-			return definition.lots[lot].exit
+			return lots[lot].exit
 		LandsideVehicle.Lane.BERTH:
 			return berth_path[stop]
 		LandsideVehicle.Lane.SLOT:
@@ -140,7 +157,7 @@ func facing(lane: LandsideVehicle.Lane, lot: int, stop: int, mm: int) -> Vector3
 ## path begins with), so it has none: empty.
 func lead_in(lane: LandsideVehicle.Lane, lot: int) -> PackedVector3Array:
 	if lane == LandsideVehicle.Lane.LOT_EXIT:
-		return definition.lots[lot].way_out
+		return lots[lot].way_out
 	return PackedVector3Array()
 
 
@@ -159,7 +176,7 @@ func handover(before: Array, now: Array) -> int:
 	elif lane_before == LandsideVehicle.Lane.ROAD_IN and lane_now == LandsideVehicle.Lane.BERTH:
 		off = 0
 	elif lane_before == LandsideVehicle.Lane.ROAD_IN and lane_now == LandsideVehicle.Lane.ACCESS:
-		off = definition.lots[now[1]].branch_mm
+		off = lots[now[1]].branch_mm
 	elif lane_before == LandsideVehicle.Lane.ACCESS and lane_now == LandsideVehicle.Lane.SLOT:
 		off = 0 if same_lot else -1
 	elif lane_before == LandsideVehicle.Lane.BERTH and lane_now == LandsideVehicle.Lane.ROAD_OUT:
@@ -174,7 +191,7 @@ func handover(before: Array, now: Array) -> int:
 ## every ramp to the aisle front, then out through the entrance opening when
 ## the lot has one, then the gate and the crossing.
 func lot_walk(spot: int, slot: int) -> Array[Vector3]:
-	var lot := definition.lots[spot]
+	var lot := lots[spot]
 	var at := lot.slots[slot]
 	var walk := PackedVector3Array([at])
 	var deck := deck_of(lot, at)
@@ -231,7 +248,7 @@ func _add_berth(index: int) -> void:
 	berth_slack.append(maxi((join - stand) - (join_mm - b), 0))
 
 
-func _add_lot(lot: LandsideLotSpot) -> void:
+func _set_lot_paths(spot: int, lot: LandsideLotSpot) -> void:
 	var paths: Array[PackedVector3Array] = []
 	var ends: Array[int] = []
 	var stands: Array[int] = []
@@ -253,10 +270,10 @@ func _add_lot(lot: LandsideLotSpot) -> void:
 		ends.append(LandsideDefinition.length_mm(points))
 		stands.append(stand)
 		backs.append(stand + roundi(slot.distance_to(inside[inside.size() - 2]) * 1000.0))
-	slot_path.append(paths)
-	slot_end.append(ends)
-	slot_stand.append(stands)
-	slot_back.append(backs)
+	slot_path[spot] = paths
+	slot_end[spot] = ends
+	slot_stand[spot] = stands
+	slot_back[spot] = backs
 	var turn := lot.access.duplicate()
 	_append(turn, lot.entrance[0] if not lot.entrance.is_empty() else lot.aisle_front)
 	# Back out down the way-out ramp (from its point at the entrance's first
@@ -264,8 +281,8 @@ func _add_lot(lot: LandsideLotSpot) -> void:
 	if not lot.way_out.is_empty():
 		_append_all(turn, lot.way_out.slice(1))
 	_append(turn, lot.exit[0])
-	turn_path.append(turn)
-	turn_end.append(LandsideDefinition.length_mm(turn))
+	turn_path[spot] = turn
+	turn_end[spot] = LandsideDefinition.length_mm(turn)
 
 
 ## The points between a berth's road line and its straight run: the way along
