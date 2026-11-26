@@ -390,7 +390,7 @@ func test_live_ops_strings_are_in_messages_pot() -> void:
 	assert_array(PotEntries.duplicates(entries)).is_empty()
 	var wanted := [
 		["", "{boarded}/{booked} boarded"],
-		["", "3-day rolling on-time rate (70% of your star rating)"],
+		["", "3-day rolling on-time rate (70% of your quality score)"],
 		["", "In terminal: {active}"],
 		["", "· {count} late"],
 		["", "On time: {percent}%"],

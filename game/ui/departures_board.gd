@@ -249,7 +249,7 @@ func _build_counts_header(body: VBoxContainer) -> void:
 	_on_time_label.name = "OnTime"
 	_on_time_label.theme_type_variation = &"HudHint"
 	_on_time_label.mouse_filter = Control.MOUSE_FILTER_STOP
-	_on_time_label.tooltip_text = tr("3-day rolling on-time rate (70% of your star rating)")
+	_on_time_label.tooltip_text = tr("3-day rolling on-time rate (70% of your quality score)")
 	_counts.add_child(_on_time_label)
 
 
@@ -261,7 +261,7 @@ func _notification(what: int) -> void:
 func _retranslate() -> void:
 	_last_toggle_text = ""
 	_header_late_btn.tooltip_text = tr("Follow the tightest running-late passenger")
-	_on_time_label.tooltip_text = tr("3-day rolling on-time rate (70% of your star rating)")
+	_on_time_label.tooltip_text = tr("3-day rolling on-time rate (70% of your quality score)")
 	_sync_toggle()
 	_refresh(true)
 

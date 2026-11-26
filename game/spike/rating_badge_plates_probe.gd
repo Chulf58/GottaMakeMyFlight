@@ -87,16 +87,16 @@ func _run() -> void:
 			"PROBE scale=%s window=%s layout=%s" % [scale, root.size, root.get_visible_rect().size]
 		)
 		await _boot(world_seed)
-		await _state("a_nodata", "No flights yet", 0.0)
+		await _state("a_nodata", "No flights yet", 0)
 		_feed(30, 40, 10)
-		await _state("b_mixed", "3.5", 3.5)
+		await _state("b_mixed", "70%", 70)
 		_reset()
 		_feed(1, 10, 9)
-		await _state("c_low", "", -1.0)
+		await _state("c_low", "", -1)
 		_expect(_rating.stars() <= RatingFormula.WARN_BELOW, "c: the rating is not low")
 		_reset()
 		_feed(10, 100, 0)
-		await _state("d_full", "5.0", 5.0)
+		await _state("d_full", "100%", 100)
 		_reset()
 		_feed(30, 40, 10)
 		await _tooltip_state()
@@ -134,21 +134,26 @@ func _feed(made: int, mood: int, missed: int) -> void:
 
 
 ## Checks the badge, then saves the window and the corner crop. `want_text` ""
-## and `want_stars` below 0 skip the text and star comparison with a fixed value;
+## and `want_quality` below 0 skip the text and quality comparison with a fixed value;
 ## the label must always equal what the rating says.
-func _state(label: String, want_text: String, want_stars: float) -> void:
+func _state(label: String, want_text: String, want_quality: int) -> void:
 	await _frames(4)
 	var name := "%s_%s" % [label, str(_scale).replace(".", "p")]
 	print("PLATE %s scale=%s" % [name, _scale])
 	var text := (_badge.card().find_child("RatingText", true, false) as Label).text
-	print("  TEXT badge='%s' stars=%.1f has_data=%s" % [text, _rating.stars(), _rating.has_data()])
+	print(
+		(
+			"  TEXT badge='%s' quality=%d%% has_data=%s"
+			% [text, AirportRating.quality_percent(_rating.stars()), _rating.has_data()]
+		)
+	)
 	_expect(text == _badge.summary_text(), "%s: label '%s' is not the summary" % [name, text])
 	if want_text != "":
 		_expect(text == want_text, "%s: label '%s', wanted '%s'" % [name, text, want_text])
-	if want_stars >= 0.0:
+	if want_quality >= 0:
 		_expect(
-			is_equal_approx(_badge.shown_stars(), want_stars),
-			"%s: %.1f stars shown, wanted %.1f" % [name, _badge.shown_stars(), want_stars]
+			_badge.shown_quality() == want_quality,
+			"%s: %d%% quality shown, wanted %d%%" % [name, _badge.shown_quality(), want_quality]
 		)
 	_check_layout(name)
 	await _save(name)

@@ -225,10 +225,14 @@ func test_hunger_starts_with_the_cafe_tier() -> void:
 func test_a_card_says_what_unlocks_it_and_how_far_the_game_is() -> void:
 	_made(12)
 	assert_str(_unlocks.unlock_text(BuildMode.Tool.CAFE_ROOM)).is_equal(
-		"Unlocks at 2 stars and 20 passengers (now 2.5 stars, 12 passengers)"
+		"Unlocks at 40% quality and 20 passengers (now 50% quality, 12 passengers)"
 	)
-	assert_str(BuildUnlocks.requirement_text(3)).is_equal("Unlocks at 3 stars and 120 passengers")
-	assert_str(BuildUnlocks.requirement_text(4)).is_equal("Unlocks at 4 stars and 600 passengers")
+	assert_str(BuildUnlocks.requirement_text(3)).is_equal(
+		"Unlocks at 60% quality and 120 passengers"
+	)
+	assert_str(BuildUnlocks.requirement_text(4)).is_equal(
+		"Unlocks at 80% quality and 600 passengers"
+	)
 
 
 func test_the_state_goes_through_a_snapshot_and_json() -> void:

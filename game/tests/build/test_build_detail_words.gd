@@ -208,14 +208,14 @@ func test_a_locked_paste_shows_the_tier_text_in_the_players_plural_words() -> vo
 	_translation = Translation.new()
 	_translation.locale = TranslationServer.get_locale()
 	_translation.add_plural_message(
-		"Unlocks at {stars} stars and {passengers} passenger",
-		PackedStringArray(["U1 {stars} {passengers}", "UN {stars} {passengers}"])
+		"Unlocks at {quality}% quality and {passengers} passenger",
+		PackedStringArray(["U1 {quality} {passengers}", "UN {quality} {passengers}"])
 	)
 	TranslationServer.add_translation(_translation)
 	var need := BuildUnlocks.requirement_text(2)
 	var shown := _refusal(BuildResult.Reason.LOCKED, need).reason_text()
 	print("locked (run-time translation): %s" % shown)
-	assert_str(need).starts_with("UN 2 ")
+	assert_str(need).starts_with("UN 40 ")
 	assert_str(shown).ends_with(": %s" % need)
 
 

@@ -14,7 +14,7 @@ msgid "No flights yet"
 msgstr ""
 
 #: ui/rating_badge.gd
-msgid "No flights yet: the rating starts when passengers make or miss a flight."
+msgid "No flights yet: quality tracking starts when passengers make or miss a flight."
 msgstr ""
 
 #: ui/rating_badge.gd
@@ -24,15 +24,23 @@ msgstr[0] ""
 msgstr[1] ""
 
 #: ui/rating_badge.gd
-msgid "Airport rating: {stars} of {max}"
+msgid "Airport quality: {percent}%"
 msgstr ""
 
 #: ui/rating_badge.gd
+msgid "Mood: {mood}%"
+msgstr ""
+
+#: locale/pseudolocale_probe.gd
 msgid "Mood: {mood} of {max}"
 msgstr ""
 
 #: ui/rating_badge.gd
-msgid "Incident adjustment: {amount} stars"
+msgid "Bags: {share}% ({loaded} of {total})"
+msgstr ""
+
+#: ui/rating_badge.gd
+msgid "Incident adjustment: {amount}%"
 msgstr ""
 
 #: ui/rating_badge.gd
@@ -1640,8 +1648,8 @@ msgid "Prize podium"
 msgstr ""
 
 #: build/build_unlocks.gd
-msgid "{requirement} (now {stars} stars, {passengers} passenger)"
-msgid_plural "{requirement} (now {stars} stars, {passengers} passengers)"
+msgid "{requirement} (now {quality}% quality, {passengers} passenger)"
+msgid_plural "{requirement} (now {quality}% quality, {passengers} passengers)"
 msgstr[0] ""
 msgstr[1] ""
 
@@ -1658,8 +1666,8 @@ msgid "Not available yet"
 msgstr ""
 
 #: build/build_unlocks.gd
-msgid "Unlocks at {stars} stars and {passengers} passenger"
-msgid_plural "Unlocks at {stars} stars and {passengers} passengers"
+msgid "Unlocks at {quality}% quality and {passengers} passenger"
+msgid_plural "Unlocks at {quality}% quality and {passengers} passengers"
 msgstr[0] ""
 msgstr[1] ""
 
@@ -1842,7 +1850,7 @@ msgid "{subject} is taken by the {time} {destination} flight"
 msgstr ""
 
 #: ui/offer_panel.gd
-msgid "Airlines are warning you: the airport rating is below {stars} stars."
+msgid "Airlines are warning you: the airport quality is below {percent}%."
 msgstr ""
 
 #: ui/offer_panel.gd
@@ -6226,7 +6234,7 @@ msgstr ""
 
 #: audio/pa_words.gd
 msgctxt "pa"
-msgid "PA: Our terminal is now rated {stars} stars. Same carpet, slightly prouder management."
+msgid "PA: Our terminal quality just reached {percent}%. Same carpet, slightly prouder management."
 msgstr ""
 
 #: ui/staff_panel.gd
@@ -6433,7 +6441,7 @@ msgid "{boarded}/{booked} boarded"
 msgstr ""
 
 #: ui/departures_board.gd
-msgid "3-day rolling on-time rate (70% of your star rating)"
+msgid "3-day rolling on-time rate (70% of your quality score)"
 msgstr ""
 
 #: ui/departures_board.gd
@@ -7456,11 +7464,7 @@ msgid "Current balance"
 msgstr ""
 
 #: ui/demo_end_card.gd
-msgid "Airport rating"
-msgstr ""
-
-#: ui/demo_end_card.gd
-msgid "{stars} stars"
+msgid "Airport quality"
 msgstr ""
 
 #: ui/demo_end_card.gd
@@ -7578,7 +7582,7 @@ msgid "Gold +15%"
 msgstr ""
 
 #: ui/offer_panel.gd
-msgid "Gold loyalty: this airline's offers pay 15% more and unlock Hub Contracts at 3★+."
+msgid "Gold loyalty: this airline's offers pay 15% more and unlock Hub Contracts at {percent}%+ quality."
 msgstr ""
 
 #: ui/offer_panel.gd
@@ -7670,7 +7674,7 @@ msgid "Airport opened"
 msgstr ""
 
 #: ui/rating_badge.gd
-msgid "Rating: {current} / {target}★"
+msgid "Quality: {current}% / {target}%"
 msgstr ""
 
 #: ui/rating_badge.gd

@@ -95,10 +95,10 @@ func test_a_low_rating_puts_a_coral_warning_on_the_rail_with_the_days_left() -> 
 	assert_bool(_rating.warning()).is_true()
 	var card := _stack.notice_card(OfferPanel.WARNING_KEY)
 	assert_object(card).is_not_null()
-	assert_str(_words(OfferPanel.WARNING_KEY)).contains("below 2 stars")
+	assert_str(_words(OfferPanel.WARNING_KEY)).contains("below 40%")
 	assert_str(_words(OfferPanel.WARNING_KEY)).contains("3 more low days")
 	assert_str(card.theme_type_variation).is_equal("HudCardCoral")
-	assert_str(_panel.warning_text()).contains("below 2 stars")
+	assert_str(_panel.warning_text()).contains("below 40%")
 	assert_str(_panel.toggle_button().tooltip_text).is_equal(_panel.warning_text())
 
 
@@ -113,7 +113,7 @@ func test_the_sheet_has_no_warning_line_and_shows_only_offers() -> void:
 	assert_int(cards.get_child_count()).is_greater(0)
 	for label in _panel.find_children("*", "Label", true, false):
 		var text := (label as Label).text
-		assert_str(text).not_contains("below 2 stars")
+		assert_str(text).not_contains("below 40%")
 		assert_str(text).not_contains("ended its contract")
 
 
@@ -147,7 +147,7 @@ func test_no_count_is_shown_once_the_low_days_are_used_up() -> void:
 		_miss(5, GameCalendar.day_start(day, 0))
 	assert_int(_rating.low_days()).is_greater_equal(RatingFormula.LOW_DAYS_TO_END)
 	assert_bool(_rating.warning()).is_true()
-	assert_str(_words(OfferPanel.WARNING_KEY)).contains("below 2 stars")
+	assert_str(_words(OfferPanel.WARNING_KEY)).contains("below 40%")
 	assert_str(_words(OfferPanel.WARNING_KEY)).not_contains("more low")
 
 
@@ -169,7 +169,7 @@ func test_a_warning_already_there_when_the_panel_opens_is_posted() -> void:
 	late.flights = _panel.flights
 	late.alerts = _stack
 	_port.add_child(late)
-	assert_str(_words(OfferPanel.WARNING_KEY)).contains("below 2 stars")
+	assert_str(_words(OfferPanel.WARNING_KEY)).contains("below 40%")
 
 
 func test_the_rail_is_found_through_its_group_when_not_set() -> void:
@@ -179,7 +179,7 @@ func test_the_rail_is_found_through_its_group_when_not_set() -> void:
 	_miss(10)
 	_stack.drop_notice(OfferPanel.WARNING_KEY)
 	_port.add_child(late)
-	assert_str(_words(OfferPanel.WARNING_KEY)).contains("below 2 stars")
+	assert_str(_words(OfferPanel.WARNING_KEY)).contains("below 40%")
 
 
 func test_the_warning_does_not_rebuild_the_cards() -> void:
@@ -243,11 +243,11 @@ func test_both_notices_are_in_the_history() -> void:
 	_desk.contract_ended.emit(_airline_left("Nordic Wing", "Rome"))
 	var text := "\n".join(_stack.history_lines())
 	assert_str(text).contains(OfferPanel.WARNING_TITLE)
-	assert_str(text).contains("below 2 stars")
+	assert_str(text).contains("below 40%")
 	assert_str(text).contains(OfferPanel.ENDED_TITLE)
 	assert_str(text).contains("Nordic Wing to Rome has ended its contract")
 	_make(100)
-	assert_str("\n".join(_stack.history_lines())).contains("below 2 stars")
+	assert_str("\n".join(_stack.history_lines())).contains("below 40%")
 
 
 func test_a_load_drops_the_ending_and_keeps_one_warning() -> void:
@@ -256,7 +256,7 @@ func test_a_load_drops_the_ending_and_keeps_one_warning() -> void:
 	_panel._on_loaded(true)
 	assert_object(_stack.notice_card(OfferPanel.ENDED_KEY)).is_null()
 	await await_idle_frame()
-	assert_str(_words(OfferPanel.WARNING_KEY)).contains("below 2 stars")
+	assert_str(_words(OfferPanel.WARNING_KEY)).contains("below 40%")
 	var warnings := 0
 	for line in _stack.history_lines():
 		warnings += 1 if line.contains(OfferPanel.WARNING_TITLE) else 0

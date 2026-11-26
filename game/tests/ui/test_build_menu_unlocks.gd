@@ -68,7 +68,7 @@ func test_tier1_shows_only_three_domain_tabs_and_fourteen_tier1_cards() -> void:
 func test_clicking_a_locked_card_picks_nothing_and_shows_the_requirement() -> void:
 	_menu.press_card(BuildMode.Tool.TREE)
 	assert_int(_mode.tool).is_not_equal(BuildMode.Tool.TREE)
-	assert_str(_menu.status_label().text).contains("Unlocks at 3 stars and 120 passengers")
+	assert_str(_menu.status_label().text).contains("Unlocks at 60% quality and 120 passengers")
 
 
 func test_an_unlock_reveals_new_tabs_and_cards_and_announces_what_opened() -> void:
