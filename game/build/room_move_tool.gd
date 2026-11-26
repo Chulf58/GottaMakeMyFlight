@@ -90,7 +90,6 @@ func _process(_delta: float) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if not active:
 		return
-	var click := event as InputEventMouseButton
 	if event.is_action_pressed("build_rotate"):
 		rotate_turns()
 	elif (
@@ -102,10 +101,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		var cell: Variant = _pointer_cell()
 		if cell != null:
 			set_down(cell)
-	elif (
-		event.is_action_pressed("build_tool_none")
-		or (click != null and click.pressed and click.button_index == MOUSE_BUTTON_RIGHT)
-	):
+	elif event.is_action_pressed("build_tool_none"):
 		cancel()
 	else:
 		return

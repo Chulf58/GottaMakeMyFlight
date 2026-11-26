@@ -52,7 +52,6 @@ func _process(_delta: float) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if not is_active():
 		return
-	var click := event as InputEventMouseButton
 	if event.is_action_pressed("build_rotate"):
 		rotate_turns()
 		get_viewport().set_input_as_handled()
@@ -66,10 +65,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if cell != null:
 			place_at(cell)
 		get_viewport().set_input_as_handled()
-	elif (
-		event.is_action_pressed("build_tool_none")
-		or (click != null and click.pressed and click.button_index == MOUSE_BUTTON_RIGHT)
-	):
+	elif event.is_action_pressed("build_tool_none"):
 		disarm()
 		get_viewport().set_input_as_handled()
 
@@ -109,6 +105,8 @@ func arm(kit_id: StringName) -> void:
 		_mode.templates.disarm()
 		if _mode.room_mover.active:
 			_mode.room_mover.cancel()
+		if _mode.object_mover.active:
+			_mode.object_mover.cancel()
 		if _mode.tool != BuildMode.Tool.NONE:
 			_mode.set_tool(BuildMode.Tool.NONE)
 	armed = kit_id

@@ -31,6 +31,7 @@ static func clicks_taken(mode: BuildMode) -> bool:
 		mode.tool != BuildMode.Tool.NONE
 		or mode.templates.is_active()
 		or mode.room_mover.active
+		or mode.object_mover.active
 		or (mode.starter_kit != null and mode.starter_kit.is_active())
 	)
 

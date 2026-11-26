@@ -142,6 +142,8 @@ func text() -> String:
 func refusal() -> BuildResult:
 	if build_mode != null and build_mode.room_mover.active:
 		return build_mode.room_mover.refusal()
+	if build_mode != null and build_mode.object_mover.active:
+		return build_mode.object_mover.refusal()
 	if build_mode == null or build_mode.tool == BuildMode.Tool.NONE:
 		return null
 	if not build_mode.pointer_on_grid() or build_mode.is_dragging():

@@ -157,10 +157,16 @@ func test_cancel_drops_the_room_with_no_change_on_esc_right_click_and_tool_chang
 				esc.pressed = true
 				_mover._unhandled_input(esc)
 			1:
-				var click := InputEventMouseButton.new()
-				click.button_index = MOUSE_BUTTON_RIGHT
-				click.pressed = true
-				_mover._unhandled_input(click)
+				var press := InputEventMouseButton.new()
+				press.button_index = MOUSE_BUTTON_RIGHT
+				press.pressed = true
+				press.position = Vector2(120, 120)
+				_mode._unhandled_input(press)
+				var release := InputEventMouseButton.new()
+				release.button_index = MOUSE_BUTTON_RIGHT
+				release.pressed = false
+				release.position = Vector2(120, 120)
+				_mode._unhandled_input(release)
 			2:
 				_mode.set_tool(BuildMode.Tool.FLOOR)
 		assert_bool(_mover.active).is_false()
