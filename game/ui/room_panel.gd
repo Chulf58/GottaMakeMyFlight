@@ -20,7 +20,7 @@ const TOILET := &"toilet"
 const STALL := &"toilet_stall"
 const SINK := &"toilet_sink"
 const BREAK_ROOM := &"break_room"
-const BENCH := &"bench_1a"
+const BREAK_ROOM_SEAT := &"lounge_sofa"
 ## A toilet's upkeep line is one room total (decision toilet-design-queue-free-
 ## reservable-stalls-per-stall-daily-u, point 2): what RoomRules.daily_upkeep
 ## charges at midnight while it is ready, and what it will once it is.
@@ -99,7 +99,12 @@ func show_room(id: int) -> void:
 		)
 		_line(upkeep.format({"amount": status.upkeep}))
 	elif status.type_id == BREAK_ROOM:
-		_line(tr("Benches {count}").format({"count": status.pieces.get(BENCH, 0)}))
+		var seat_count := 0
+		var break_type := RoomTypes.get_type(BREAK_ROOM)
+		if break_type != null:
+			for piece_id: StringName in break_type.pieces_for(BREAK_ROOM_SEAT):
+				seat_count += int(status.pieces.get(piece_id, 0))
+		_line(tr("Seating {count}").format({"count": seat_count}))
 		_line(tr("Staff rest here during lulls"))
 	elif RoomTypes.get_type(status.type_id).activity:
 		_line(tr("Spots {count}").format({"count": status.seats}))

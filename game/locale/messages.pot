@@ -8182,3 +8182,153 @@ msgstr ""
 #: passengers/passenger_thoughts.gd
 msgid "Shuttle ride to the plane"
 msgstr ""
+
+#: build/object_move_tool.gd
+msgid "Can't move while in use"
+msgstr ""
+
+#: build/object_move_tool.gd
+msgctxt "object move"
+msgid "Moved {item}"
+msgstr ""
+
+#: build/object_move_tool.gd
+msgctxt "object move"
+msgid "{item}: click to set down, right-click cancels"
+msgstr ""
+
+#: ui/big_firsts.gd
+msgid "Gotta Air here! Your airport is open, and our Oslo flight leaves at {departure_time}."
+msgstr ""
+
+#: ui/big_firsts.gd
+msgid "Gotta Air here! Your airport is open and passengers are heading in now."
+msgstr ""
+
+#: ui/big_firsts.gd
+msgid "Keep bags light for this small plane. Good luck, gotta make that flight!"
+msgstr ""
+
+#: ui/big_firsts.gd
+msgid "Runway works finished! Bigger planes can now land, bringing fresh airline offers."
+msgstr ""
+
+#: ui/big_firsts.gd
+msgid "Heads up! Your first big event just came in. Check the notice for details."
+msgstr ""
+
+#: ui/big_firsts.gd
+msgid "Bigger planes can land now, and your first big event has arrived."
+msgstr ""
+
+#: ui/big_firsts.gd
+msgid "1st Flight · {time}"
+msgstr ""
+
+#: ui/big_firsts.gd
+msgid "1st Flight"
+msgstr ""
+
+#: ui/big_firsts.gd
+msgid "Offers"
+msgstr ""
+
+#: ui/big_firsts.gd
+msgid "Larger planes"
+msgstr ""
+
+#: ui/big_firsts.gd
+msgid "New offers"
+msgstr ""
+
+#: ui/big_firsts.gd
+msgid "Major event"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Place an entrance door"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Place a check-in desk"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Place a security scanner"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Place an airside exit door"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Passengers board planes through an airside exit."
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Connect entrance, check-in, security and exit with open floor"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Messes need cleaning: hire a cleaner (Staff)"
+msgstr ""
+
+#: ui/checklist.gd
+msgid "Cleaners mop messes and empty bins so passenger mood stays up."
+msgstr ""
+
+#: ui/intro_dialogue.gd
+msgid "Next ({key})"
+msgstr ""
+
+#: ui/intro_dialogue.gd
+msgid "Welcome aboard! Build a check-in desk, scanner, and gate from Operations."
+msgstr ""
+
+#: ui/intro_dialogue.gd
+msgid "Hire staff to open the terminal. {pause} pauses, {speed} sets speed."
+msgstr ""
+
+#: ui/intro_dialogue.gd
+msgid "Check-in"
+msgstr ""
+
+#: ui/intro_dialogue.gd
+msgid "Security"
+msgstr ""
+
+#: ui/intro_dialogue.gd
+msgid "Staff"
+msgstr ""
+
+#: ui/unlock_guide.gd
+msgid "New builds unlocked! Pick them up in the build bar below."
+msgstr ""
+
+#: ui/unlock_guide.gd
+msgid "Open Offers"
+msgstr ""
+
+#: ui/unlock_guide.gd
+msgid "Open Runway"
+msgstr ""
+
+#: ui/unlock_guide.gd
+msgid "Food"
+msgstr ""
+
+#: ui/unlock_guide.gd
+msgid "Baggage"
+msgstr ""
+
+#: ui/unlock_guide.gd
+msgid "Comfort"
+msgstr ""
+
+#: ui/unlock_guide.gd
+msgid "More"
+msgstr ""
+
+#: ui/room_panel.gd
+msgid "Seating {count}"
+msgstr ""

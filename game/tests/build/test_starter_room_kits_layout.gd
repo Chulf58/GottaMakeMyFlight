@@ -272,6 +272,8 @@ func test_words_msgids_includes_all_13_starter_kit_names() -> void:
 
 
 func test_break_room_kit_is_spacious_indoor_lounge_and_room_type_accepts_seating() -> void:
+	assert_int(StarterRoomKits.max_tier(&"break_room")).is_less_equal(DemoMode.MAX_PLAYABLE_TIER)
+	assert_int(StarterRoomKits.max_tier(&"break_room")).is_equal(2)
 	var kit := StarterRoomKits.get_kit(&"break_room")
 	var sz: Vector2i = kit["size"]
 	assert_bool(sz.x >= 4 and sz.y >= 4).is_true()
