@@ -422,3 +422,155 @@ func test_hand_props_and_poses_reset_on_snap_load_backward_in_time() -> void:
 	assert_float(_views.station_pose_weight(gate_sid)).is_equal(0.0)
 	assert_float(_views.idle_fidget_weight(gate_sid)).is_equal(0.0)
 	assert_int(_views.hand_prop_of(gate_sid)).is_equal(StaffHandProps.PropKind.NONE)
+
+
+func test_cleaner_patrol_and_walk_to_mess_carry_broom_upright_without_arm_swing() -> void:
+	var chars := auto_free(StaffCharacters.new()) as StaffCharacters
+	add_child(chars)
+	var cleaner := chars._take(StaffMember.Role.CLEANER)
+	var sk := cleaner.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
+	var player := cleaner.get_node("AnimationPlayer") as AnimationPlayer
+	player.play("walk")
+	player.speed_scale = 0.0
+
+	# Without broom carry, walk clip swings Arm.R strongly across phases.
+	var swing_samples := []
+	for phase in [0.1, 0.45]:
+		player.seek(phase, true)
+		await get_tree().process_frame
+		await sk.skeleton_updated
+		swing_samples.append(_snapshot_bones(sk, ["Arm.R", "Forearm.R"]))
+	assert_float(_max_bone_diff(swing_samples[0], swing_samples[1])).is_greater(0.25)
+
+	# Patrol carry activates BroomCarryArm and keeps Arm.R/Forearm.R steady across walk stride.
+	(
+		StaffHandProps
+		. update(
+			cleaner,
+			StaffStationPose.Mode.NONE,
+			StaffStationPose.SubMode.NONE,
+			0.0,
+			10.0,
+			1,
+			true,
+			false,
+			StaffMember.Role.CLEANER,
+			false,
+			false,
+			true,
+		)
+	)
+	assert_int(StaffHandProps.active_prop(cleaner)).is_equal(StaffHandProps.PropKind.BROOM)
+	var broom := StaffHandProps.prop_node(cleaner, StaffHandProps.PropKind.BROOM)
+	(
+		assert_bool(broom.rotation_degrees.is_equal_approx(StaffHandProps.BROOM_CARRY_ROT_DEG))
+		. is_true()
+	)
+	var carry_arm := StaffHandProps.broom_carry_arm_of(cleaner)
+	assert_object(carry_arm).is_not_null()
+	assert_bool(carry_arm.active).is_true()
+
+	var carry_samples := []
+	var hand_samples := []
+	for phase in [0.1, 0.45]:
+		player.seek(phase, true)
+		await get_tree().process_frame
+		await sk.skeleton_updated
+		carry_samples.append(_snapshot_bones(sk, ["Arm.R", "Forearm.R"]))
+		hand_samples.append(_snapshot_bones(sk, ["Hand.R"]))
+	assert_float(_max_bone_diff(carry_samples[0], carry_samples[1])).is_less(
+		_max_bone_diff(swing_samples[0], swing_samples[1]) * 0.65
+	)
+	assert_float(_max_bone_diff(hand_samples[0], hand_samples[1])).is_less(0.10)
+
+	# Broom sits upright and clears floor (y >= 0.05 m) in carry pose.
+	var min_y := INF
+	for mi: MeshInstance3D in broom.find_children("*", "MeshInstance3D", true, false):
+		if mi.mesh != null:
+			for v in mi.mesh.get_faces():
+				min_y = minf(min_y, (mi.global_transform * v).y)
+	assert_float(min_y).is_greater(0.05)
+
+	# Cleaning ON_DUTY disables BroomCarryArm and restores sweep broom angle.
+	(
+		StaffHandProps
+		. update(
+			cleaner,
+			StaffStationPose.Mode.NONE,
+			StaffStationPose.SubMode.NONE,
+			0.0,
+			10.0,
+			1,
+			false,
+			false,
+			StaffMember.Role.CLEANER,
+			false,
+			true,
+			false,
+		)
+	)
+	assert_bool(carry_arm.active).is_false()
+	(
+		assert_bool(broom.rotation_degrees.is_equal_approx(StaffHandProps.BROOM_SWEEP_ROT_DEG))
+		. is_true()
+	)
+
+	# Arch tuck and hide_all disable BroomCarryArm and hide BROOM.
+	(
+		StaffHandProps
+		. update(
+			cleaner,
+			StaffStationPose.Mode.NONE,
+			StaffStationPose.SubMode.NONE,
+			0.0,
+			10.0,
+			1,
+			true,
+			true,
+			StaffMember.Role.CLEANER,
+			false,
+			false,
+			true,
+		)
+	)
+	assert_int(StaffHandProps.active_prop(cleaner)).is_equal(StaffHandProps.PropKind.NONE)
+	assert_bool(carry_arm.active).is_false()
+
+	# Integration: StaffCharacters shows BROOM + carry arm while patrolling or walking to mess.
+	var world := MessTestKit.open_world(7)
+	_world = world
+	var cid := world.staff.hire(StaffMember.Role.CLEANER)
+	assert_int(cid).is_greater(0)
+	_views = StaffCharacters.new()
+	_views.clock = world.clock
+	_views.staff = world.staff
+	add_child(_views)
+	var m := world.staff.get_member(cid)
+	var door := world.sim.layout.door_cell(world.grid, world.sim.layout.entrances[0])
+	var way: Array[Vector2i] = []
+	for y in world.grid.size.y:
+		for x in world.grid.size.x:
+			var cand := Vector2i(x, y)
+			if (
+				world.grid.is_indoor(cand)
+				and world.grid.is_walkable(cand)
+				and cand.distance_to(door) >= 3.0
+			):
+				var p := StaffPosts.path_in(world.staff, m, cand)
+				if p.size() >= 3:
+					way = p
+					break
+		if not way.is_empty():
+			break
+	assert_int(way.size()).is_greater_equal(3)
+	var dest: Vector2i = way[way.size() - 1]
+	world.sim.messes.add(MessSim.Kind.LITTER, dest)
+	world.staff._take_job(m, world.sim.messes.mess_ids()[0], false, way)
+	_views.sync(true)
+	_views.draw()
+	assert_int(_views.hand_prop_of(cid)).is_equal(StaffHandProps.PropKind.BROOM)
+	var cnode := _views.node_for(cid)
+	assert_bool(StaffHandProps.broom_carry_arm_of(cnode).active).is_true()
+	StaffHandProps.hide_all(cnode)
+	assert_int(_views.hand_prop_of(cid)).is_equal(StaffHandProps.PropKind.NONE)
+	assert_bool(StaffHandProps.broom_carry_arm_of(cnode).active).is_false()
