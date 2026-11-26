@@ -419,7 +419,18 @@ func draw() -> void:
 		var walking := m != null and (m.is_moving() or String(node.get_meta(&"clip", "")) == "walk")
 		var is_cleaner := m != null and m.role == StaffMember.Role.CLEANER
 		var cleaner_working := is_cleaner and m.state == StaffMember.State.ON_DUTY
-		var cleaner_patrolling := is_cleaner and m.state == StaffMember.State.IDLE and m.is_moving()
+		var cleaner_walking_to_mess := (
+			is_cleaner
+			and m.is_moving()
+			and m.state == StaffMember.State.TO_STATION
+			and m.job != 0
+			and not m.job_bin
+		)
+		var cleaner_patrolling := (
+			is_cleaner
+			and m.is_moving()
+			and (m.state == StaffMember.State.IDLE or cleaner_walking_to_mess)
+		)
 		(
 			StaffHandProps
 			. update(
