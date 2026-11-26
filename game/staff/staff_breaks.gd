@@ -5,7 +5,13 @@ extends RefCounted
 ## return immediately if unserved demand arrives while no other staff covers it.
 
 
+static func _is_airport_closed(staff: StaffSim) -> bool:
+	return staff.sim != null and staff.sim.flights != null and staff.sim.flights.opened_tick < 0
+
+
 static func step_energy(staff: StaffSim) -> void:
+	if _is_airport_closed(staff):
+		return
 	for id in staff.member_ids():
 		var m := staff.get_member(id)
 		var prev := m.energy
@@ -39,7 +45,7 @@ static func step_energy(staff: StaffSim) -> void:
 
 
 static func update_breaks(staff: StaffSim, begin_break: Callable, end_break: Callable) -> void:
-	if staff.sim == null or staff.sim.grid == null:
+	if staff.sim == null or staff.sim.grid == null or _is_airport_closed(staff):
 		return
 	for id in staff.member_ids():
 		var m := staff.get_member(id)
