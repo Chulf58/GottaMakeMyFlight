@@ -32,7 +32,7 @@ func after_test() -> void:
 		_port = null
 
 
-func _ref_world(first_tick := -1) -> PassengerTestWorld:
+func _ref_world(first_tick := -1, open := true) -> PassengerTestWorld:
 	var grid := BuildGrid.new()
 	ReferenceTerminal.build(grid)
 	var schedule := (
@@ -40,6 +40,8 @@ func _ref_world(first_tick := -1) -> PassengerTestWorld:
 	)
 	var w := PassengerTestWorld.make(grid, schedule)
 	w.auto_staff = false
+	if open:
+		assert_bool(w.flights.open_airport()).is_true()
 	return w
 
 
@@ -74,7 +76,7 @@ func _add_break_room(grid: BuildGrid, rect := BREAK_RECT, high_prestige := false
 
 
 func test_energy_drains_on_duty_and_resets_overnight_off_shift() -> void:
-	_w = _ref_world(20_000)
+	_w = _ref_world(20_000, false)
 	assert_bool(_w.flights.open_airport()).is_true()
 	var id := _w.staff.hire(CHECKIN)
 	var m := _w.staff.get_member(id)
@@ -307,7 +309,10 @@ func test_staff_snapshot_and_save_game_persist_energy_and_reject_corrupt() -> vo
 
 
 func test_gate_agent_interrupts_break_for_own_gate_even_when_other_gate_is_open_idle() -> void:
-	_w = _ref_world(20_000)
+	_w = _ref_world()
+	var snap := _w.flights.to_snapshot()
+	snap["flights"] = []
+	assert_bool(_w.flights.from_snapshot(snap)).is_true()
 	_add_break_room(_w.grid, BREAK_RECT, false)
 	var desk_a_res := _w.grid.apply(ReferenceTerminal.gate_desk_edit())
 	var desk_b_res := _w.grid.apply(BuildEdit.place_object(GateDesks.DESK, Vector2i(17, 5), 0))
@@ -450,3 +455,33 @@ func test_on_break_snapshot_round_trip_and_break_room_demolition_mid_break() -> 
 		_w.step()
 		guard += 1
 	assert_int(m.state).is_equal(StaffMember.State.ON_DUTY)
+
+
+func test_preopen_staff_do_not_drain_energy_or_seek_breaks_until_airport_opens() -> void:
+	_w = _ref_world(-1, false)
+	_add_break_room(_w.grid, BREAK_RECT, false)
+	assert_int(_w.flights.opened_tick).is_equal(-1)
+	var id := _w.staff.hire(CHECKIN)
+	var m := _w.staff.get_member(id)
+	while m.state != StaffMember.State.ON_DUTY and _w.clock.tick < 600:
+		_w.step()
+	assert_int(m.state).is_equal(StaffMember.State.ON_DUTY)
+
+	for _i in 2 * StaffMember.DRAIN_INTERVAL_TICKS:
+		_w.step()
+	assert_int(m.energy).is_equal(StaffMember.ENERGY_MAX)
+	assert_int(m.energy_ticks).is_equal(0)
+	assert_bool(m.is_on_break()).is_false()
+
+	m.energy = StaffMember.TIRED_THRESHOLD
+	for _i in 60:
+		_w.step()
+	assert_bool(m.is_on_break()).is_false()
+	assert_int(m.state).is_equal(StaffMember.State.ON_DUTY)
+
+	m.energy = StaffMember.ENERGY_MAX
+	m.energy_ticks = 0
+	assert_bool(_w.flights.open_airport()).is_true()
+	for _i in StaffMember.DRAIN_INTERVAL_TICKS:
+		_w.step()
+	assert_int(m.energy).is_equal(StaffMember.ENERGY_MAX - 1)
