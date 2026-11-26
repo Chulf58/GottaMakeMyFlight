@@ -87,12 +87,18 @@ var _pool: Array[Array] = [[], [], [], [], [], []]
 var _nodes: Dictionary = {}
 var _prev: Dictionary = {}
 var _cur: Dictionary = {}
+var _prev_yaw: Dictionary = {}
+var _cur_yaw: Dictionary = {}
 ## Member id -> its arch tuck record (StaffArchTuck).
 var _tucks: Dictionary = {}
 ## Member id -> its station interaction pose record (StaffStationPose).
 var _poses: Dictionary = {}
 ## Idle Role.RAMP member id -> stable airside staging slot index.
 var _ramp_idle_slots: Dictionary = {}
+## Role.RAMP member id -> {"was_busy", "returning", "tick"} for smooth job transitions.
+var _ramp_state: Dictionary = {}
+var _ramp_loop: Dictionary = {}
+var _ramp_loop_key := ""
 ## Something changed between ticks: the next sync snaps instead of interpolating.
 var _dirty := false
 
@@ -226,15 +232,28 @@ func sync(snap: bool = false) -> void:
 	var tick_now := _tick()
 	if snap:
 		_ramp_idle_slots.clear()
+		_ramp_state.clear()
+		_ramp_loop.clear()
+		_ramp_loop_key = ""
+		_prev_yaw.clear()
+		_cur_yaw.clear()
 	for id in staff.member_ids():
 		var m := staff.get_member(id)
-		if m.role == StaffMember.Role.RAMP:
-			var slot_idx := 0
+		if m.role == StaffMember.Role.RAMP and not (m.is_on_break() and not m.in_pool()):
+			if m.state == StaffMember.State.OFF_SHIFT:
+				continue
+			var ramp_pose := {}
+			var job_started := false
 			if m.ramp_job == StaffMember.RampJob.NONE:
-				slot_idx = _assign_ramp_idle_slot(id)
+				var slot_idx := _assign_ramp_idle_slot(id)
+				ramp_pose = _idle_ramp_patrol_pose(
+					id, slot_idx, _cached_ramp_loop(), tick_now, snap
+				)
 			else:
 				_ramp_idle_slots.erase(id)
-			var ramp_pose := _ramp_pose(m, slot_idx)
+				job_started = not bool(_ramp_state.get(id, {}).get("was_busy", false))
+				ramp_pose = _ramp_pose(m)
+				_ramp_state[id] = {"was_busy": true, "returning": false, "tick": int(tick_now)}
 			if ramp_pose.is_empty():
 				continue
 			seen[id] = true
@@ -247,13 +266,20 @@ func sync(snap: bool = false) -> void:
 				node = _take(m.role)
 				_nodes[id] = node
 			var ramp_now: Vector3 = ramp_pose["pos"]
-			if snap or fresh:
+			var ramp_yaw := float(ramp_pose["yaw"])
+			if snap or fresh or job_started:
 				_prev[id] = ramp_now
+				_prev_yaw[id] = ramp_yaw
+				node.position = ramp_now
 			else:
 				_prev[id] = _cur[id]
+				_prev_yaw[id] = _cur_yaw.get(id, ramp_yaw)
 			_cur[id] = ramp_now
-			node.rotation.y = float(ramp_pose["yaw"])
+			_cur_yaw[id] = ramp_yaw
+			node.rotation.y = ramp_yaw
 			_play_clip(node, String(ramp_pose["clip"]), float(ramp_pose["speed"]))
+			if job_started:
+				_poses.erase(id)
 			if snap:
 				_tucks.erase(id)
 				_poses.erase(id)
@@ -272,7 +298,7 @@ func sync(snap: bool = false) -> void:
 					ramp_look,
 					tick_now,
 					ramp_eval[3],
-					m.ramp_job == StaffMember.RampJob.NONE,
+					bool(ramp_pose.get("can_fidget", false)),
 					id,
 				)
 			)
@@ -355,8 +381,12 @@ func draw() -> void:
 					node.rotation.y = atan2(fwd.x, fwd.z)
 			else:
 				node.position = (_prev[id] as Vector3).lerp(_cur[id], alpha)
+				if _prev_yaw.has(id) and _cur_yaw.has(id):
+					node.rotation.y = lerp_angle(float(_prev_yaw[id]), float(_cur_yaw[id]), alpha)
 		else:
 			node.position = (_prev[id] as Vector3).lerp(_cur[id], alpha)
+			if _prev_yaw.has(id) and _cur_yaw.has(id):
+				node.rotation.y = lerp_angle(float(_prev_yaw[id]), float(_cur_yaw[id]), alpha)
 		var pose_rec: Dictionary = _poses.get(id, {})
 		var draw_mode := StaffStationPose.mode_of(pose_rec)
 		var draw_sub := StaffStationPose.sub_mode_of(pose_rec)
@@ -426,6 +456,8 @@ func _mark_dirty() -> void:
 
 
 func _on_graph_changed(_cells: Array[Vector2i]) -> void:
+	_ramp_loop.clear()
+	_ramp_loop_key = ""
 	_mark_dirty()
 
 
@@ -554,9 +586,12 @@ func _release(id: int) -> void:
 	_nodes.erase(id)
 	_prev.erase(id)
 	_cur.erase(id)
+	_prev_yaw.erase(id)
+	_cur_yaw.erase(id)
 	_tucks.erase(id)
 	_poses.erase(id)
 	_ramp_idle_slots.erase(id)
+	_ramp_state.erase(id)
 
 
 func _assign_ramp_idle_slot(id: int) -> int:
@@ -641,75 +676,130 @@ func _live_tug_transform(flight_id: String) -> Transform3D:
 	return Transform3D.IDENTITY
 
 
-func _ramp_pose(m: StaffMember, idle_slot := 0) -> Dictionary:
+func _ramp_pose(m: StaffMember) -> Dictionary:
 	if m.ramp_job == StaffMember.RampJob.SHUTTLE:
 		return _shuttle_pose(m)
 	if m.ramp_job == StaffMember.RampJob.PUSHBACK:
 		return _pushback_pose(m)
 	if m.ramp_job == StaffMember.RampJob.MARSHAL:
 		return _marshal_pose(m)
-	return _idle_ramp_pose(idle_slot)
+	return {}
 
 
-func _idle_ramp_pose(slot_idx: int) -> Dictionary:
+func _idle_ramp_patrol_pose(
+	id: int, slot_idx: int, ramp_loop: Dictionary, tick_now: float, snap: bool
+) -> Dictionary:
 	var grid := _grid()
-	var flight_sim := _flights()
-	var base_pos := Vector3.ZERO
-	var yaw := 0.0
-	var placed := false
-	var stand := {}
-	if flight_sim != null:
-		if flight_sim.stand_source.is_valid():
-			var grounds := flight_sim.gate_grounds()
-			var gates := grounds.keys()
-			gates.sort()
-			if not gates.is_empty():
-				stand = grounds[gates[0]].get("stand", {})
-		if stand.is_empty():
-			for fid in flight_sim.flight_ids():
-				var cand := flight_sim.flight_stand(fid)
-				if not cand.is_empty():
-					stand = cand
-					break
-	if not stand.is_empty():
-		var twin := StandPlacement.north_twin(stand)
-		var stand_pt := StandPlacement.stand_point(twin)
-		var local_pos := Vector3(
-			stand_pt.x - MARSHAL_SIDE_M - 1.8 - float(slot_idx) * 1.8,
-			0.0,
-			float(twin["wall_z"]) - MARSHAL_WALL_GAP_M - 0.8,
+	var patrol := RampPatrol.sample(ramp_loop, tick_now, slot_idx, grid)
+	var prev_st: Dictionary = _ramp_state.get(id, {})
+	var rolled_back := prev_st.is_empty() or int(prev_st.get("tick", int(tick_now))) > int(tick_now)
+	var returning_from_job := (
+		not snap
+		and not rolled_back
+		and (bool(prev_st.get("was_busy", false)) or bool(prev_st.get("returning", false)))
+		and _cur.has(id)
+	)
+	if returning_from_job:
+		var from_pos := _cur[id] as Vector3
+		var step_m := RampPatrol.PATROL_WALK_MPS / float(SimClock.TICK_RATE)
+		var path: Array = prev_st.get("path", [])
+		var idx := int(prev_st.get("idx", 1))
+		if bool(prev_st.get("was_busy", false)):
+			var plan := _plan_ramp_return(from_pos, patrol["pos"], ramp_loop, tick_now, slot_idx)
+			if not bool(plan["ok"]):
+				_ramp_state[id] = {"was_busy": false, "returning": false, "tick": int(tick_now)}
+				return patrol
+			path = plan["points"]
+			idx = 1
+		var step := _step_return_path(from_pos, path, idx, step_m, grid)
+		if not step.is_empty():
+			_ramp_state[id] = {
+				"was_busy": false,
+				"returning": true,
+				"path": path,
+				"idx": int(step["idx"]),
+				"tick": int(tick_now),
+			}
+			return step["pose"]
+	_ramp_state[id] = {"was_busy": false, "returning": false, "tick": int(tick_now)}
+	return patrol
+
+
+func _plan_ramp_return(
+	from_pos: Vector3,
+	patrol_pos: Vector3,
+	ramp_loop: Dictionary,
+	tick_now: float,
+	slot_idx: int,
+) -> Dictionary:
+	var grid := _grid()
+	var fl := _flights()
+	var plan0 := RampPatrol.plan_return_path(from_pos, patrol_pos, fl, grid)
+	if not bool(plan0["ok"]):
+		return plan0
+	var pts: Array = plan0["points"]
+	var dist_m := 0.0
+	for i in pts.size() - 1:
+		var a := pts[i] as Vector3
+		var b := pts[i + 1] as Vector3
+		dist_m += Vector2(b.x - a.x, b.z - a.z).length()
+	var step_m := RampPatrol.PATROL_WALK_MPS / float(SimClock.TICK_RATE)
+	var est_ticks := roundi(dist_m / step_m)
+	if est_ticks <= 1:
+		return plan0
+	var arr_pose := RampPatrol.sample(ramp_loop, tick_now + float(est_ticks), slot_idx, grid)
+	var plan_arr := RampPatrol.plan_return_path(from_pos, arr_pose["pos"], fl, grid)
+	return plan_arr if bool(plan_arr["ok"]) else plan0
+
+
+func _step_return_path(
+	from_pos: Vector3, path: Array, idx: int, step_m: float, grid: BuildGrid
+) -> Dictionary:
+	var flat_from := Vector2(from_pos.x, from_pos.z)
+	var cur_idx := idx
+	while cur_idx < path.size():
+		var wp := path[cur_idx] as Vector3
+		var wp2 := Vector2(wp.x, wp.z)
+		var dist := flat_from.distance_to(wp2)
+		if dist <= 1e-4:
+			cur_idx += 1
+			continue
+		var dir := wp2 - flat_from
+		var next_2d := wp2 if dist <= step_m else flat_from.move_toward(wp2, step_m)
+		var next_idx := cur_idx + 1 if dist <= step_m else cur_idx
+		var next_pos := Vector3(
+			next_2d.x,
+			BaggageShuttle.ground_y(grid, Vector3(next_2d.x, 0.0, next_2d.y)),
+			next_2d.y,
 		)
-		base_pos = StandPlacement.to_world(stand, local_pos)
-		yaw = (
-			StandPlacement.SIDE_YAW[StandPlacement.side_of(stand)]
-			+ PI
-			+ float((slot_idx % 3) - 1) * 0.25
-		)
-		placed = true
-	if not placed and grid != null and staff != null and staff.sim != null:
-		if not staff.sim.layout.exits.is_empty():
-			var door_cell := staff.sim.layout.door_cell(grid, staff.sim.layout.exits[0])
-			base_pos = (grid.cell_to_world(door_cell) + Vector3(float(slot_idx) * 1.8, 0.0, -3.5))
-			yaw = PI + float((slot_idx % 3) - 1) * 0.25
-			placed = true
-	if not placed and grid != null:
-		for obj_id in grid.object_ids():
-			var rec := grid.get_object(obj_id)
-			if StringName(rec.get("def", &"")) == BaggageSim.CART_DEF:
-				base_pos = (
-					grid.cell_to_world(rec["anchor"])
-					+ Vector3(-2.0 - float(slot_idx) * 1.8, 0.0, -2.0)
-				)
-				yaw = PI * 0.75 + float((slot_idx % 3) - 1) * 0.25
-				placed = true
-				break
-	if not placed and grid != null:
-		base_pos = (
-			grid.origin + Vector3(float(grid.size.x) * 0.5 + float(slot_idx) * 1.8, 0.0, -3.5)
-		)
-		yaw = PI
-	base_pos.y = BaggageShuttle.ground_y(grid, base_pos)
-	return {"pos": base_pos, "yaw": yaw, "clip": "idle", "speed": 1.0}
+		return {
+			"idx": next_idx,
+			"pose":
+			{
+				"pos": next_pos,
+				"yaw": atan2(dir.x, dir.y),
+				"clip": "walk",
+				"speed": RampPatrol.PATROL_WALK_MPS / CLIP_WALK_MPS[StaffMember.Role.RAMP],
+				"can_fidget": false,
+			},
+		}
+	return {}
+
+
+func _cached_ramp_loop() -> Dictionary:
+	var fl := _flights()
+	var key := ""
+	if fl != null:
+		if fl.stand_source.is_valid() or fl.remote_ground_source.is_valid():
+			key = str(fl.stand_grounds())
+		else:
+			var fids := fl.flight_ids()
+			if not fids.is_empty():
+				key = str(fl.flight_stand(fids[0]))
+	if _ramp_loop.is_empty() or key != _ramp_loop_key:
+		_ramp_loop_key = key
+		_ramp_loop = RampPatrol.build_loop(fl, _grid(), staff)
+	return _ramp_loop
 
 
 func _shuttle_pose(m: StaffMember) -> Dictionary:
