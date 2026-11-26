@@ -40,13 +40,9 @@ const CATEGORIES := [
 			BuildMode.Tool.SEATS,
 			BuildMode.Tool.SCREEN,
 			BuildMode.Tool.SCANNER,
-			BuildMode.Tool.TRAY_TABLE,
-			BuildMode.Tool.XRAY_BELT,
-			BuildMode.Tool.ARCH,
-			BuildMode.Tool.PICKUP_TABLE,
+			BuildMode.Tool.SECURITY_LANE,
 			BuildMode.Tool.SEARCH_TABLE,
 			BuildMode.Tool.CONFISCATION_BIN,
-			BuildMode.Tool.SECURITY_LANE,
 			BuildMode.Tool.BELT,
 			BuildMode.Tool.BAG_ROOM,
 			BuildMode.Tool.BREAK_ROOM,
@@ -57,13 +53,13 @@ const CATEGORIES := [
 		"name": "Facilities",
 		"tools":
 		[
-			BuildMode.Tool.TOILET_ROOM,
-			BuildMode.Tool.SHOWER_ROOM,
 			BuildMode.Tool.NAP_POD,
 			BuildMode.Tool.INFO_DESK,
 			BuildMode.Tool.INFO_SCREEN,
 			BuildMode.Tool.EXCHANGE,
 			BuildMode.Tool.ATM,
+			BuildMode.Tool.TOILET_ROOM,
+			BuildMode.Tool.SHOWER_ROOM,
 			BuildMode.Tool.LOUNGE_ROOM,
 			BuildMode.Tool.PLAY_AREA_ROOM,
 		],
@@ -73,10 +69,10 @@ const CATEGORIES := [
 		"name": "Food & Drink",
 		"tools":
 		[
+			BuildMode.Tool.GRAB_STALL,
 			BuildMode.Tool.CAFE_ROOM,
 			BuildMode.Tool.BAR_ROOM,
 			BuildMode.Tool.RESTAURANT_ROOM,
-			BuildMode.Tool.GRAB_STALL,
 		],
 	},
 	{
@@ -222,7 +218,7 @@ const ITEMS := {
 	BuildMode.Tool.KIOSK_DISPLAY: ["Display stand", "kiosk_display", ""],
 	BuildMode.Tool.SEARCH_TABLE: ["Search table", "search_table", ""],
 	BuildMode.Tool.CONFISCATION_BIN: ["Confiscation bin", "confiscation_bin", ""],
-	BuildMode.Tool.SECURITY_LANE: ["Security lane", "arch", "2x3"],
+	BuildMode.Tool.SECURITY_LANE: ["Security lane", "security_lane", "2x3"],
 	BuildMode.Tool.BELT: ["Belt", "belt", "Drag a line"],
 	BuildMode.Tool.BAG_ROOM: ["Bag room", "bag_room", "2x2 min"],
 	BuildMode.Tool.CART: ["Bag cart", "cart", ""],
@@ -233,13 +229,9 @@ const ITEMS := {
 	BuildMode.Tool.BUY_LAND: ["Buy land", "buy_land", "about 21x25 m plot"],
 	BuildMode.Tool.AWARD_TROPHY: ["Award trophy", "statue_indoor", ""],
 }
-## The security lane part cards, as ITEMS (item() looks in both).
-const LANE_ITEMS := {
-	BuildMode.Tool.TRAY_TABLE: ["Tray table", "tray_table", ""],
-	BuildMode.Tool.XRAY_BELT: ["X-ray belt", "xray_belt", ""],
-	BuildMode.Tool.ARCH: ["Arch", "arch", ""],
-	BuildMode.Tool.PICKUP_TABLE: ["Pickup table", "pickup_table", ""],
-}
+## Kept empty as an alias target (BuildMenu.LANE_ITEMS); the 4 loose core lane
+## parts are hidden from BuildMenuCatalog tabs and item() (ruling 709d31d6).
+const LANE_ITEMS := {}
 ## Hover details that say what the placed thing needs to work, in the warning
 ## colour: a bag room does nothing without a belt end.
 const CARD_NEEDS := {BuildMode.Tool.BAG_ROOM: "Needs belt end"}
@@ -327,10 +319,10 @@ static func remove_category() -> int:
 	return categories().size() - 1
 
 
-## A tool's card [name, thumbnail, size text] from ITEMS, LANE_ITEMS or
+## A tool's card [name, thumbnail, size text] from ITEMS or
 ## FurnitureTools.ITEMS, or an empty array for a tool with no card.
 static func item(tool: BuildMode.Tool) -> Array:
-	return ITEMS.get(tool, LANE_ITEMS.get(tool, FurnitureTools.ITEMS.get(tool, [])))
+	return ITEMS.get(tool, FurnitureTools.ITEMS.get(tool, []))
 
 
 ## What a card says its piece costs to run per day, or 0 for none.

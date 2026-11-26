@@ -242,6 +242,16 @@ ITEMS = {
     "pickup_table": ("1x1", ["pickup_table"], []),
     "search_table": ("1x1", ["security_search_table"], []),
     "confiscation_bin": ("1x1", ["security_confiscation_bin"], []),
+    "security_lane": (
+        "2x3",
+        [
+            ("tray_table", (0.5, -1.0, 0.0)),
+            ("xray_belt", (0.5, 0.0, 0.0)),
+            ("security_arch", (-0.5, 0.0, 0.0)),
+            ("pickup_table", (0.5, 1.0, 0.0)),
+        ],
+        [],
+    ),
     # Toilet pieces (decision toilet-design-queue-free-reservable-stalls-per-stall-daily-u):
     # the 1x2 stall with its doors closed and the sink with its 1.95 m mirror.
     "toilet_stall": ("1x2", ["toilet_stall"], []),

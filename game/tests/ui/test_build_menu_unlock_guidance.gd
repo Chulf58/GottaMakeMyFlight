@@ -70,7 +70,7 @@ func test_the_cards_and_tabs_of_a_new_tier_are_tinted_and_clear_when_seen() -> v
 	)
 	_open_cafe_tier()
 	assert_bool(_new_look(BuildMode.Tool.CAFE_ROOM)).is_true()
-	assert_bool(_new_look(BuildMode.Tool.XRAY_BELT)).is_true()
+	assert_bool(_new_look(BuildMode.Tool.SECURITY_LANE)).is_true()
 	assert_object(_menu.card(BuildMode.Tool.WALL).modulate).is_equal(Color.WHITE)
 	assert_bool(_menu.card(BuildMode.Tool.TREE).visible).is_false()
 	var food_idx := BuildMenu.category_index("food")

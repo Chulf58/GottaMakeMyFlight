@@ -1,8 +1,9 @@
 class_name TestBuildMenuSecurity
 extends GdUnitTestSuite
-## The security scanner and lane parts in the Operations domain tab: Scanner
-## followed by Tray table, X-ray belt, Arch and Pickup table in flow order,
-## each with its rendered thumbnail and 1x1 size in its hover popup.
+## The security tools in the Operations domain tab: Scanner, 1-click Security
+## lane kit, Search table and Confiscation bin in progression order, while the
+## 4 loose core lane parts stay hidden from the Build Menu yet mapped in
+## BuildMode.TOOL_OBJECTS.
 
 const LANE_TOOLS := [
 	BuildMode.Tool.TRAY_TABLE,
@@ -15,6 +16,12 @@ const LANE_DEFS := [
 	SecurityLanes.XRAY_BELT,
 	SecurityLanes.ARCH,
 	SecurityLanes.PICKUP_TABLE,
+]
+const SECURITY_MENU_TOOLS := [
+	BuildMode.Tool.SCANNER,
+	BuildMode.Tool.SECURITY_LANE,
+	BuildMode.Tool.SEARCH_TABLE,
+	BuildMode.Tool.CONFISCATION_BIN,
 ]
 
 var _port: SubViewport
@@ -51,20 +58,21 @@ func _hover_texts(tool: BuildMode.Tool) -> Array:
 	return _texts(popup)
 
 
-func test_scanner_and_lane_parts_sit_in_flow_order_in_operations() -> void:
+func test_scanner_and_security_kit_sit_in_progression_order_in_operations() -> void:
 	var ops := BuildMenu.category_index("operations")
 	var tools: Array = BuildMenu.categories()[ops]["tools"]
+	for hidden_tool: BuildMode.Tool in LANE_TOOLS:
+		assert_bool(tools.has(hidden_tool)).is_false()
 	var i_scanner := tools.find(BuildMode.Tool.SCANNER)
 	assert_int(i_scanner).is_greater_equal(0)
-	for offset in LANE_TOOLS.size():
-		assert_int(tools[i_scanner + 1 + offset]).is_equal(LANE_TOOLS[offset])
+	for offset in SECURITY_MENU_TOOLS.size():
+		assert_int(tools[i_scanner + offset]).is_equal(SECURITY_MENU_TOOLS[offset])
 	assert_int(BuildMenu.remove_category()).is_equal(BuildMenu.REMOVE_CATEGORY)
 	assert_str(BuildMenu.categories()[BuildMenu.remove_category()]["name"]).is_equal("Remove")
 
 
 func test_every_tool_with_a_card_is_in_exactly_one_category() -> void:
-	var tools: Array = BuildMenu.ITEMS.keys() + BuildMenu.LANE_ITEMS.keys()
-	for tool in tools:
+	for tool in BuildMenu.ITEMS.keys():
 		var count := 0
 		for category in BuildMenu.categories():
 			if category["tools"].has(tool):
@@ -74,6 +82,10 @@ func test_every_tool_with_a_card_is_in_exactly_one_category() -> void:
 			assert_bool(BuildMenuCatalog.room_owners_of(tool).is_empty()).is_false()
 		else:
 			assert_int(count).override_failure_message("tool %d" % tool).is_equal(1)
+	for tool in LANE_TOOLS:
+		assert_array(BuildMenuCatalog.item(tool)).is_empty()
+		for category in BuildMenu.categories():
+			assert_bool(category["tools"].has(tool)).is_false()
 
 
 func test_each_lane_tool_places_its_part() -> void:
@@ -81,25 +93,24 @@ func test_each_lane_tool_places_its_part() -> void:
 		assert_that(BuildMode.TOOL_OBJECTS[LANE_TOOLS[i]]).is_equal(LANE_DEFS[i])
 
 
-func test_the_lane_cards_show_name_price_thumbnail_and_hover_size() -> void:
-	for tool in LANE_TOOLS:
-		var card := _menu.card(tool)
-		assert_object(card).override_failure_message("tool %d" % tool).is_not_null()
-		assert_array(_texts(card)).contains([BuildMenu.LANE_ITEMS[tool][0]])
-		assert_array(_hover_texts(tool)).contains(["1x1", "Click"])
-		var price := PriceTable.price_of_object(BuildMode.TOOL_OBJECTS[tool])
-		assert_int(BuildMenu.tool_price(tool)).is_equal(price)
-		assert_bool(BuildMenu.PLACEHOLDER_THUMBNAILS.has(BuildMenu.LANE_ITEMS[tool][1])).is_false()
-		var picture := card.find_children("*", "TextureRect", true, false)[0] as TextureRect
-		assert_object(picture.texture).override_failure_message("tool %d" % tool).is_not_null()
-		var path := BuildMenu.THUMBNAIL_DIR % BuildMenu.LANE_ITEMS[tool][1]
-		assert_str(picture.texture.resource_path).is_equal(path)
-		assert_int(picture.find_children("*", "ColorRect", true, false).size()).is_equal(0)
+func test_the_security_lane_card_shows_name_price_thumbnail_and_hover_size() -> void:
+	var tool := BuildMode.Tool.SECURITY_LANE
+	var card := _menu.card(tool)
+	assert_object(card).is_not_null()
+	assert_array(_texts(card)).contains([BuildMenu.ITEMS[tool][0]])
+	assert_array(_hover_texts(tool)).contains(["2x3", "Click"])
+	assert_int(BuildMenu.tool_price(tool)).is_equal(SecurityLaneStamp.price())
+	assert_bool(BuildMenu.PLACEHOLDER_THUMBNAILS.has(BuildMenu.ITEMS[tool][1])).is_false()
+	var picture := card.find_children("*", "TextureRect", true, false)[0] as TextureRect
+	assert_object(picture.texture).is_not_null()
+	var path := BuildMenu.THUMBNAIL_DIR % BuildMenu.ITEMS[tool][1]
+	assert_str(picture.texture.resource_path).is_equal(path)
+	assert_int(picture.find_children("*", "ColorRect", true, false).size()).is_equal(0)
 
 
-func test_picking_a_lane_card_picks_its_tool_and_opens_operations() -> void:
+func test_picking_a_security_card_picks_its_tool_and_opens_operations() -> void:
 	var ops := BuildMenu.category_index("operations")
-	for tool in LANE_TOOLS:
+	for tool in SECURITY_MENU_TOOLS:
 		_menu.card(tool).pressed.emit()
 		assert_int(_mode.tool).is_equal(tool)
 		assert_int(_menu.open_category()).is_equal(ops)
