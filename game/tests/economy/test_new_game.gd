@@ -129,7 +129,7 @@ func test_a_new_game_is_closed_with_no_contract_and_no_flight() -> void:
 func test_the_staff_hint_names_what_keeps_the_airport_closed() -> void:
 	assert_str(_boot["hint"]).is_equal(
 		(
-			"Entrance with a way through check-in and security to an exit\n"
+			"Place a check-in desk\n"
 			+ "Place Check-in (Operations)\n"
 			+ "Place Security (Operations)\n"
 			+ "Place Gate Desk (Operations)\n"
