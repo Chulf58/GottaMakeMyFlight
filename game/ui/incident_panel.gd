@@ -35,7 +35,10 @@ signal dialog_changed(open: bool)
 
 ## The panel's canvas layer: with the intro and the unlock dialog, over the HUD.
 const LAYER := 10
-const BOX_HEIGHT := 400.0
+const BOX_HEIGHT := 340.0
+const MAX_BEAT_WORDS := 18
+const ICON_COIN := preload("res://assets/ui/icons/coin.svg")
+const ICON_SERVICES := preload("res://assets/ui/icons/services.svg")
 ## The English msgids of the two footers. Tests compare against them; the dialog
 ## itself says tr() of the same literals, because the POT extractor reads only literals.
 const ANNOUNCE_FOOTER := "The clock goes on when you close this."
@@ -96,6 +99,121 @@ func close_for_modal() -> void:
 	_release_clock()
 	if was_open:
 		dialog_changed.emit(false)
+
+
+## The concise 1-2 beat text, scannable Reward / Risk chips, and clock footer for
+## one major's copy.
+static func parts_for(copy: Dictionary, offer: bool) -> Dictionary:
+	var raw_body := str(copy.get("body", ""))
+	var beats: Array[String] = []
+	var chips: Array[Dictionary] = []
+	if offer:
+		beats = _split_beats(raw_body)
+		var reward := str(copy.get("reward", ""))
+		var failure := str(copy.get("failure", ""))
+		if reward != "":
+			(
+				chips
+				. append(
+					{
+						"icon": ICON_COIN,
+						"label": reward,
+						"tint": Color(0.22, 0.58, 0.34, 1.0),
+					}
+				)
+			)
+		if failure != "":
+			(
+				chips
+				. append(
+					{
+						"icon": ICON_SERVICES,
+						"label": failure,
+						"tint": Color(0.76, 0.28, 0.24, 1.0),
+					}
+				)
+			)
+	else:
+		var lines := raw_body.split("\n", false)
+		if lines.size() == 3:
+			beats = _split_beats(lines[0])
+			(
+				chips
+				. append(
+					{
+						"icon": ICON_COIN,
+						"label": lines[1],
+						"tint": Color(0.22, 0.58, 0.34, 1.0),
+					}
+				)
+			)
+			(
+				chips
+				. append(
+					{
+						"icon": ICON_SERVICES,
+						"label": lines[2],
+						"tint": Color(0.76, 0.28, 0.24, 1.0),
+					}
+				)
+			)
+		else:
+			beats = _split_beats(raw_body)
+	var footer := (
+		_translator.tr("The clock stays paused until you choose.")
+		if offer
+		else _translator.tr("The clock goes on when you close this.")
+	)
+	return {"beats": beats, "chips": chips, "footer": footer}
+
+
+static func _word_count(text: String) -> int:
+	return text.strip_edges().split(" ", false).size()
+
+
+static func _split_sentences(text: String) -> Array[String]:
+	var out: Array[String] = []
+	var start := 0
+	var n := text.length()
+	var i := 0
+	while i < n - 1:
+		var ch := text[i]
+		if (ch == "." or ch == "!" or ch == "?") and text[i + 1] == " ":
+			out.append(text.substr(start, i - start + 1).strip_edges())
+			i += 2
+			start = i
+			continue
+		i += 1
+	var tail := text.substr(start).strip_edges()
+	if tail != "":
+		out.append(tail)
+	return out
+
+
+static func _split_beats(text: String) -> Array[String]:
+	var clean := text.strip_edges()
+	if clean == "":
+		return []
+	var sentences := _split_sentences(clean)
+	if sentences.size() <= 1:
+		if _word_count(clean) > MAX_BEAT_WORDS and clean.find(": ") != -1:
+			var colon := clean.find(": ")
+			return [clean.substr(0, colon + 1).strip_edges(), clean.substr(colon + 2).strip_edges()]
+		return [clean]
+	if sentences.size() == 2:
+		if _word_count(clean) <= MAX_BEAT_WORDS:
+			return [clean]
+		if _word_count(sentences[1]) > MAX_BEAT_WORDS and sentences[1].find(": ") != -1:
+			var colon := sentences[1].find(": ")
+			var lead := sentences[0] + " " + sentences[1].substr(0, colon + 1)
+			if _word_count(lead) <= MAX_BEAT_WORDS:
+				return [lead, sentences[1].substr(colon + 2).strip_edges()]
+		return [sentences[0], sentences[1]]
+	@warning_ignore("integer_division")
+	var mid := (sentences.size() + 1) / 2
+	var first := " ".join(PackedStringArray(sentences.slice(0, mid)))
+	var second := " ".join(PackedStringArray(sentences.slice(mid)))
+	return [first, second]
 
 
 ## The panel's text for one major's copy.
@@ -180,7 +298,15 @@ func _show(incident: Dictionary) -> bool:
 	_layer = CanvasLayer.new()
 	_layer.name = "IncidentLayer"
 	_layer.layer = LAYER
-	_dialog = IntroDialogue.new(copy["title"], body_for(copy, offer), BOX_HEIGHT, offer)
+	var parts := parts_for(copy, offer)
+	_dialog = IntroDialogue.new(
+		copy["title"],
+		"\n".join(parts["beats"]),
+		BOX_HEIGHT,
+		offer,
+		IntroDialogue.Speaker.TERMINAL_MANAGER,
+		{"beats": parts["beats"], "chips": parts["chips"], "footer": parts["footer"]}
+	)
 	_layer.add_child(_dialog)
 	add_child(_layer)
 	if offer:

@@ -219,10 +219,10 @@ func test_a_first_that_comes_while_the_tier_dialog_is_open_shows_when_it_closes(
 	_open_tier_two()
 	_guide.answer_ring()
 	assert_bool(_guide.is_open()).is_true()
-	assert_str(_guide.dialog().body_text()).contains("Food:")
+	assert_array(Array(_guide.dialog().chip_texts())).contains(["Food"])
 	_present_major()
 	# One dialog at a time: the tier dialog keeps the screen, the first waits.
-	assert_str(_guide.dialog().body_text()).contains("Food:")
+	assert_array(Array(_guide.dialog().chip_texts())).contains(["Food"])
 	assert_array(_rings).is_equal([2])
 	_guide.dismiss()
 	assert_bool(_guide.is_open()).is_true()
@@ -237,7 +237,7 @@ func test_a_tier_unlock_still_rings_with_its_tier_and_shows_its_families() -> vo
 	_open_tier_two()
 	_guide.answer_ring()
 	assert_array(_rings).is_equal([2])
-	assert_str(_guide.dialog().body_text()).contains("Runway:")
+	assert_array(Array(_guide.dialog().chip_texts())).contains(["Runway"])
 	assert_bool(_unlocks.first_shown(BigFirsts.RUNWAY)).is_false()
 	assert_bool(_unlocks.first_shown(BigFirsts.INCIDENT)).is_false()
 

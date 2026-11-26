@@ -3,8 +3,9 @@ extends Node
 ## What the player is told when a build tier opens (decision new-unlock-tier-
 ## phone-ring-and-a-short-per-family-dialog-onc). Two things:
 ##
-## - A short dialog, the IntroDialogue's portrait and box with one line per
-##   family the tier brings (UnlockFamilies). It shows once per tier. It holds
+## - A short dialog, the IntroDialogue's portrait and box with a crisp intro beat,
+##   per-family chips (UnlockFamilies), and a clock-guidance footer. It shows once
+##   per tier. It holds
 ##   the clock paused while it is open (a hold on SimClock.holds that does not
 ##   give way to the player, as its text promises), and closing it releases
 ##   the hold, so the player's own speed applies again unless another hold
@@ -56,10 +57,26 @@ const LAYER := 10
 ## of the same literals, because the POT extractor reads only literals.
 const TITLE_TEXT := "Your airport has grown"
 const FOOTER_TEXT := "The clock goes on when you close this."
-## The dialog box's height: taller than the intro's, for a line per family.
-const BOX_HEIGHT := 400.0
+## The dialog box's height: compact two-beat layout with icon chips.
+const BOX_HEIGHT := 320.0
 ## The starter contract's day-0 occurrence issued on the opening tick.
 const STARTER_OCCURRENCE := "GMF101-d0"
+const FAMILY_ICONS := {
+	UnlockFamilies.FOOD: preload("res://assets/ui/icons/food.svg"),
+	UnlockFamilies.SECURITY: preload("res://assets/ui/icons/security.svg"),
+	UnlockFamilies.BAGGAGE: preload("res://assets/ui/icons/baggage.svg"),
+	UnlockFamilies.COMFORT: preload("res://assets/ui/icons/leisure.svg"),
+	UnlockFamilies.RUNWAY: preload("res://assets/ui/icons/gates.svg"),
+	UnlockFamilies.OTHER: preload("res://assets/ui/icons/templates.svg"),
+}
+const FAMILY_TINTS := {
+	UnlockFamilies.FOOD: Color(0.86, 0.50, 0.18, 1.0),
+	UnlockFamilies.SECURITY: Color(0.82, 0.54, 0.18, 1.0),
+	UnlockFamilies.BAGGAGE: Color(0.20, 0.56, 0.64, 1.0),
+	UnlockFamilies.COMFORT: Color(0.22, 0.58, 0.36, 1.0),
+	UnlockFamilies.RUNWAY: Color(0.24, 0.48, 0.78, 1.0),
+	UnlockFamilies.OTHER: Color(0.42, 0.46, 0.58, 1.0),
+}
 
 var mode := Mode.OFF
 var unlocks: BuildUnlocks
@@ -75,6 +92,9 @@ var flights: FlightSim
 var runway: Runway
 ## Optional: the director whose first major incident shows a dialog.
 var director: IncidentDirector
+## Optional: target panels opened by contextual call actions ("Open Offers", "Open Runway").
+var offer_panel: OfferPanel
+var runway_card: RunwayCard
 
 var _layer: CanvasLayer
 var _dialog: IntroDialogue
@@ -196,12 +216,9 @@ func close_for_modal() -> void:
 		dialog_changed.emit(false)
 
 
-## The dialog's text for the listed tiers: one line per family, then the note
-## about the clock.
-func body_for(tiers: Array) -> String:
-	return (
-		"\n".join(UnlockFamilies.lines(tiers)) + "\n" + tr("The clock goes on when you close this.")
-	)
+## The dialog's crisp intro beat for the listed tiers.
+func body_for(_tiers: Array) -> String:
+	return tr("New builds unlocked! Pick them up in the build bar below.")
 
 
 func _on_tier_changed(_tier: int) -> void:
@@ -329,30 +346,126 @@ func _departure_for_opening() -> String:
 	return _opening_departure if _opening_departure != "" else _starter_departure_text()
 
 
-## The dialog's title, text and speaker for the tiers and big firsts it holds.
+## The dialog's title, beats, chips, footer, action and speaker for the tiers
+## and big firsts it holds. Combined batches stay strictly within 1-2 beats.
 func _words(tiers: Array, firsts: Array) -> Dictionary:
+	var footer := tr("The clock goes on when you close this.")
 	if tiers.is_empty() and firsts == [BigFirsts.OPENING]:
+		var dep := _departure_for_opening()
+		var opening_beats := BigFirsts.beats_for(firsts, dep)
 		return {
 			"title": BigFirsts.opening_title_text(),
-			"body": BigFirsts.body_for(firsts, _departure_for_opening()),
+			"body": "\n".join(opening_beats),
+			"beats": opening_beats,
+			"chips": BigFirsts.chips_for(firsts, dep),
+			"footer": footer,
 			"speaker": IntroDialogue.Speaker.GOTTA_AIR,
+			"action_label": tr("Open Offers"),
+			"action_callback": _open_offers,
 		}
 	var speaker := IntroDialogue.Speaker.TERMINAL_MANAGER
 	var title := tr("Your airport has grown")
 	if firsts.is_empty():
-		return {"title": title, "body": body_for(tiers), "speaker": speaker}
-	if tiers.is_empty():
+		var intro := body_for(tiers)
 		return {
-			"title": BigFirsts.title_text(),
-			"body": BigFirsts.body_for(firsts),
+			"title": title,
+			"body": intro,
+			"beats": [intro],
+			"chips": _family_chips(tiers),
+			"footer": footer,
 			"speaker": speaker,
 		}
-	var lines := "\n".join(UnlockFamilies.lines(tiers))
-	return {
+	if tiers.is_empty():
+		var first_beats := BigFirsts.beats_for(firsts)
+		var out := {
+			"title": BigFirsts.title_text(),
+			"body": "\n".join(first_beats),
+			"beats": first_beats,
+			"chips": BigFirsts.chips_for(firsts),
+			"footer": footer,
+			"speaker": speaker,
+		}
+		if firsts.has(BigFirsts.RUNWAY):
+			out["action_label"] = tr("Open Runway")
+			out["action_callback"] = _open_runway
+		return out
+	var second_beat := (
+		BigFirsts.beats_for(firsts)[0]
+		if firsts.size() == 1
+		else BigFirsts.combined_beat_for(firsts)
+	)
+	var combined_beats: Array[String] = [body_for(tiers)]
+	if second_beat != "":
+		combined_beats.append(second_beat)
+	var combined_chips := _family_chips(tiers)
+	combined_chips.append_array(BigFirsts.chips_for(firsts))
+	var combined := {
 		"title": title,
-		"body": lines + "\n" + BigFirsts.body_for(firsts),
+		"body": "\n".join(combined_beats),
+		"beats": combined_beats,
+		"chips": combined_chips,
+		"footer": footer,
 		"speaker": speaker,
 	}
+	if firsts.has(BigFirsts.RUNWAY):
+		combined["action_label"] = tr("Open Runway")
+		combined["action_callback"] = _open_runway
+	return combined
+
+
+func _family_chips(tiers: Array) -> Array[Dictionary]:
+	var chips: Array[Dictionary] = []
+	var words := UnlockFamilies.Words.new()
+	var groups := UnlockFamilies.grouped(tiers)
+	for family: StringName in groups:
+		var pieces := ""
+		if family == UnlockFamilies.OTHER:
+			pieces = ListWords.join(PackedStringArray(UnlockFamilies._names(groups[family])))
+		(
+			chips
+			. append(
+				{
+					"icon": FAMILY_ICONS.get(family),
+					"label": _family_label(family),
+					"tint": FAMILY_TINTS.get(family, Color(0.24, 0.48, 0.78, 1.0)),
+					"tooltip": words.line(family, pieces),
+				}
+			)
+		)
+	return chips
+
+
+func _family_label(family: StringName) -> String:
+	match family:
+		UnlockFamilies.FOOD:
+			return tr("Food")
+		UnlockFamilies.SECURITY:
+			return tr("Security")
+		UnlockFamilies.BAGGAGE:
+			return tr("Baggage")
+		UnlockFamilies.COMFORT:
+			return tr("Comfort")
+		UnlockFamilies.RUNWAY:
+			return tr("Runway")
+	return tr("More")
+
+
+func _open_offers() -> void:
+	var panel := (
+		offer_panel if is_instance_valid(offer_panel) else get_node_or_null("../../OfferPanel")
+		as OfferPanel
+	)
+	if is_instance_valid(panel):
+		panel.open()
+
+
+func _open_runway() -> void:
+	var card := (
+		runway_card if is_instance_valid(runway_card) else get_node_or_null("../../RunwayCard")
+		as RunwayCard
+	)
+	if is_instance_valid(card):
+		card.open()
 
 
 func _show_dialog(tiers: Array, firsts: Array = []) -> void:
@@ -395,7 +508,14 @@ func _on_ring_answered(layer: CanvasLayer, tiers: Array, firsts: Array) -> void:
 func _open_dialog_box(layer: CanvasLayer, tiers: Array, firsts: Array) -> void:
 	var words := _words(tiers, firsts)
 	var speaker: IntroDialogue.Speaker = words["speaker"]
-	_dialog = IntroDialogue.new(words["title"], words["body"], BOX_HEIGHT, false, speaker)
+	var opts := {
+		"beats": words.get("beats", []),
+		"chips": words.get("chips", []),
+		"footer": words.get("footer", ""),
+		"action_label": words.get("action_label", ""),
+		"action_callback": words.get("action_callback", Callable()),
+	}
+	_dialog = IntroDialogue.new(words["title"], words["body"], BOX_HEIGHT, false, speaker, opts)
 	layer.add_child(_dialog)
 	_dialog.dismissed.connect(_on_dismissed.bind(layer))
 	_dialog.tree_exiting.connect(_close_dialog.bind(layer))

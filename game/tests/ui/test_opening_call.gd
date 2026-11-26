@@ -13,22 +13,6 @@ const MAIN := "res://main/main.tscn"
 const POT_ENTRIES := [
 	["", "GOTTA AIR"],
 	["", "Station manager"],
-	[
-		"",
-		(
-			"Gotta Air here. Welcome, your airport is open, and I hear it is the only one with"
-			+ " a dent in the carpet."
-		),
-	],
-	[
-		"",
-		(
-			"Our first flight to Oslo leaves at {departure_time}. It is a small plane, so please"
-			+ " keep the luggage small too."
-		),
-	],
-	["", "Your first passengers are on their way in now."],
-	["", "Good luck. Gotta make that flight!"],
 ]
 
 var _port: SubViewport
@@ -148,10 +132,14 @@ func test_opening_pauses_synchronously_on_the_opening_tick_and_shows_gotta_air()
 	assert_bool(dlg.scrolls()).is_false()
 	var dep_time := _starter_departure_text(_flights, _clock)
 	assert_str(dep_time).is_not_empty()
-	assert_str(dlg.body_text()).is_equal(BigFirsts.body_for([BigFirsts.OPENING], dep_time))
-	assert_str(dlg.body_text()).contains("dent in the carpet")
-	assert_str(dlg.body_text()).contains("leaves at %s." % dep_time)
-	assert_str(dlg.body_text()).contains("Gotta make that flight!")
+	var beats := dlg.beats()
+	assert_array(beats).is_equal(BigFirsts.beats_for([BigFirsts.OPENING], dep_time))
+	assert_str(beats[0]).contains("Gotta Air here!")
+	assert_str(beats[0]).contains("leaves at %s." % dep_time)
+	assert_str(beats[1]).contains("gotta make that flight!")
+	assert_array(Array(dlg.chip_texts())).is_equal(["1st Flight · %s" % dep_time, "Offers"])
+	assert_object(dlg.action_button()).is_not_null()
+	assert_str(dlg.action_button().text).is_equal("Open Offers")
 	_guide.dismiss()
 	assert_bool(_guide.is_open()).is_false()
 	assert_bool(_clock.paused).is_false()
@@ -198,8 +186,8 @@ func test_opening_call_never_shares_one_box_with_terminal_manager_firsts() -> vo
 	assert_bool(_guide.is_open()).is_true()
 	_guide.answer_ring()
 	assert_int(_guide.dialog().speaker()).is_equal(IntroDialogue.Speaker.GOTTA_AIR)
-	assert_str(_guide.dialog().body_text()).contains("Gotta Air here.")
-	assert_str(_guide.dialog().body_text()).not_contains("A big event has come up.")
+	assert_str(_guide.dialog().body_text()).contains("Gotta Air here!")
+	assert_str(_guide.dialog().body_text()).not_contains("first big event")
 	_guide.dismiss()
 	assert_bool(_guide.is_open()).is_true()
 	assert_int(_guide.dialog().speaker()).is_equal(IntroDialogue.Speaker.TERMINAL_MANAGER)
@@ -219,12 +207,12 @@ func test_open_dialog_while_gotta_air_is_open_queues_tiers_until_dismissed() -> 
 	assert_array(_rings).is_equal([UnlockGuide.NO_TIER])
 	_guide.answer_ring()
 	assert_int(_guide.dialog().speaker()).is_equal(IntroDialogue.Speaker.GOTTA_AIR)
-	assert_str(_guide.dialog().body_text()).contains("Gotta Air here.")
+	assert_str(_guide.dialog().body_text()).contains("Gotta Air here!")
 	assert_array(_rings).is_equal([UnlockGuide.NO_TIER])
 	_guide.dismiss()
 	assert_bool(_guide.is_open()).is_true()
 	assert_int(_guide.dialog().speaker()).is_equal(IntroDialogue.Speaker.TERMINAL_MANAGER)
-	assert_str(_guide.dialog().body_text()).contains("Food:")
+	assert_array(Array(_guide.dialog().chip_texts())).contains(["Food"])
 	assert_array(_rings).is_equal([UnlockGuide.NO_TIER, 2])
 	_guide.dismiss()
 	assert_bool(_guide.is_open()).is_false()

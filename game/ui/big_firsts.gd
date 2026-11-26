@@ -14,6 +14,9 @@ const INCIDENT := "incident"
 const KINDS: Array[String] = [OPENING, RUNWAY, INCIDENT]
 const CERTIFICATION_TOAST_SECONDS := 8.0
 const CERTIFICATION_TOAST_W := 420.0
+const ICON_GATES := preload("res://assets/ui/icons/gates.svg")
+const ICON_COIN := preload("res://assets/ui/icons/coin.svg")
+const ICON_SERVICES := preload("res://assets/ui/icons/services.svg")
 
 ## The words are built in static functions, which cannot call tr() (an Object
 ## method), so they go through this instance's tr().
@@ -34,64 +37,157 @@ static func opening_title_text() -> String:
 	return _translator.tr("Station manager")
 
 
+## The punchy beats for the big first `kind`; `departure_time` fills OPENING's
+## flight time (for example "08:13"). Each beat stays <= 18 words.
+static func _beats_for_kind(kind: String, departure_time := "") -> Array[String]:
+	match kind:
+		OPENING:
+			var beat1: String
+			if departure_time != "":
+				beat1 = (
+					_translator
+					. tr(
+						# gdlint:ignore = max-line-length
+						"Gotta Air here! Your airport is open, and our Oslo flight leaves at {departure_time}."
+					)
+					. format({"departure_time": departure_time})
+				)
+			else:
+				beat1 = (
+					_translator
+					. tr(
+						# gdlint:ignore = max-line-length
+						"Gotta Air here! Your airport is open and passengers are heading in now."
+					)
+				)
+			var beat2 := (
+				_translator
+				. tr(
+					# gdlint:ignore = max-line-length
+					"Keep bags light for this small plane. Good luck, gotta make that flight!"
+				)
+			)
+			return [beat1, beat2]
+		RUNWAY:
+			return [
+				(
+					_translator
+					. tr(
+						# gdlint:ignore = max-line-length
+						"Runway works finished! Bigger planes can now land, bringing fresh airline offers."
+					)
+				),
+			]
+		INCIDENT:
+			return [
+				(
+					_translator
+					. tr(
+						# gdlint:ignore = max-line-length
+						"Heads up! Your first big event just came in. Check the notice for details."
+					)
+				),
+			]
+	return []
+
+
 ## The words for the big first `kind`; `departure_time` fills OPENING's flight
 ## time (for example "08:13").
 static func line_for(kind: String, departure_time := "") -> String:
-	match kind:
-		OPENING:
-			return (
-				"\n"
-				. join(
-					PackedStringArray(
-						[
-							(
-								_translator
-								. tr(
-									# gdlint:ignore = max-line-length
-									"Gotta Air here. Welcome, your airport is open, and I hear it is the only one with a dent in the carpet."
-								)
-							),
-							(
-								_translator
-								. tr(
-									# gdlint:ignore = max-line-length
-									"Our first flight to Oslo leaves at {departure_time}. It is a small plane, so please keep the luggage small too."
-								)
-								. format({"departure_time": departure_time})
-							),
-							_translator.tr("Your first passengers are on their way in now."),
-							_translator.tr("Good luck. Gotta make that flight!"),
-						]
-					)
-				)
-			)
-		RUNWAY:
-			return (
-				_translator
-				. tr(
-					# gdlint:ignore = max-line-length
-					"The runway works are done. Bigger planes can land now, so Offers can bring them flights."
-				)
-			)
-		INCIDENT:
-			return (
-				_translator
-				. tr(
-					# gdlint:ignore = max-line-length
-					"A big event has come up. Its notice says what it is and what you can do about it."
-				)
-			)
-	return ""
+	return "\n".join(_beats_for_kind(kind, departure_time))
 
 
-## The dialog's text for the listed kinds: each kind's lines, then the note
-## about the clock.
-static func body_for(kinds: Array, departure_time := "") -> String:
-	var lines: Array[String] = []
+## The dialog's beats for the listed kinds, in KINDS order.
+static func beats_for(kinds: Array, departure_time := "") -> Array[String]:
+	var out: Array[String] = []
 	for kind: String in KINDS:
 		if kinds.has(kind):
-			lines.append(line_for(kind, departure_time))
-	return "\n".join(lines) + "\n" + _translator.tr("The clock goes on when you close this.")
+			out.append_array(_beats_for_kind(kind, departure_time))
+	return out
+
+
+## Single-beat summary (<= 18 words) when multiple airport firsts coalesce behind
+## a tier unlock so the combined dialog never exceeds two beats.
+static func combined_beat_for(kinds: Array) -> String:
+	if kinds.has(RUNWAY) and kinds.has(INCIDENT):
+		return (
+			_translator
+			. tr(
+				# gdlint:ignore = max-line-length
+				"Bigger planes can land now, and your first big event has arrived."
+			)
+		)
+	var beats := beats_for(kinds)
+	return beats[0] if not beats.is_empty() else ""
+
+
+## The dialog's text for the listed kinds, joined across its beats.
+static func body_for(kinds: Array, departure_time := "") -> String:
+	return "\n".join(beats_for(kinds, departure_time))
+
+
+## Scannable icon chips for the listed big-first kinds.
+static func chips_for(kinds: Array, departure_time := "") -> Array[Dictionary]:
+	var chips: Array[Dictionary] = []
+	if kinds.has(OPENING):
+		var flight_lbl := (
+			_translator.tr("1st Flight · {time}").format({"time": departure_time})
+			if departure_time != ""
+			else _translator.tr("1st Flight")
+		)
+		(
+			chips
+			. append(
+				{
+					"icon": ICON_GATES,
+					"label": flight_lbl,
+					"tint": Color(0.24, 0.56, 0.72, 1.0),
+				}
+			)
+		)
+		(
+			chips
+			. append(
+				{
+					"icon": ICON_COIN,
+					"label": _translator.tr("Offers"),
+					"tint": Color(0.84, 0.58, 0.16, 1.0),
+				}
+			)
+		)
+	if kinds.has(RUNWAY):
+		(
+			chips
+			. append(
+				{
+					"icon": ICON_GATES,
+					"label": _translator.tr("Larger planes"),
+					"tint": Color(0.24, 0.56, 0.72, 1.0),
+				}
+			)
+		)
+		(
+			chips
+			. append(
+				{
+					"icon": ICON_COIN,
+					"label": _translator.tr("New offers"),
+					"tint": Color(0.84, 0.58, 0.16, 1.0),
+				}
+			)
+		)
+	if kinds.has(INCIDENT):
+		(
+			chips
+			. append(
+				{
+					"icon": ICON_SERVICES,
+					"label": _translator.tr("Major event"),
+					"tint": Color(0.78, 0.36, 0.24, 1.0),
+				}
+			)
+		)
+	return chips
 
 
 ## Heading for an airport certification celebration card.
