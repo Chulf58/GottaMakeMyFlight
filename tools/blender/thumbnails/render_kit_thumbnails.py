@@ -152,6 +152,7 @@ CLASSES = {
     "lot": ((32.3, 24.0, 3.0), (8.85, 0.0, 1.5)),
     "multi": ((24.0, 52.0, 28.35), (0.0, 0.0, 14.17)),
     "gate": ((1.0, 15.0, 2.0), (-7.0, 0.0, 1.0)),
+    "remote_stand": ((11.4, 15.2, 3.3), (0.1, -0.8, 1.65)),
 }
 # The converted Toon assets import with every face its own island (split vertices),
 # so border lines would outline every triangle and crease lines are denser than the
@@ -162,7 +163,7 @@ CLASSES = {
 # Foliage materials draw silhouette lines only in any class: the game's hull shows
 # no line between leaves, and crease lines turn a bush into a net.
 SILHOUETTE_MATERIALS = {"TC_Tree_1A_D", "TC_Tree_3A_D"}
-NO_CREASE_CLASSES = {"bay", "lot", "multi", "gate", "1x2_plant", "2x2_tall"}
+NO_CREASE_CLASSES = {"bay", "lot", "multi", "gate", "remote_stand", "1x2_plant", "2x2_tall"}
 NO_CREASE_ITEMS = {"bench_2a_indoor"}
 
 # Catalog colours (build_catalog.gd), sRGB.
@@ -171,6 +172,8 @@ EXIT_RGB = (0.3, 0.55, 0.85)
 REMOVE_RGB = (0.86, 0.18, 0.16)
 # Under the curb bay and gate thumbnails, a strip of road and sidewalk; grout lines under floor.
 ROAD_RGB = (0.36, 0.37, 0.4)
+APRON_RGB = (0.56, 0.57, 0.59)
+STAND_LINE_RGB = (0.98, 0.78, 0.14)
 SIDEWALK_RGB = (0.74, 0.73, 0.7)
 POST_RGB = (0.28, 0.28, 0.3)
 GROUT_RGB = (0.42, 0.43, 0.46)
@@ -363,6 +366,17 @@ ITEMS = {
     "screen_stand": ("1x1_tall", [("screen_stand", (0.0, 0.0, 0.0), 18.0)], []),
     # The gate desk (Gates 2/4, build_gate_kit.py): 2.02 m to its gate board.
     "gate_desk": ("2x1_tall", ["gate_desk"], []),
+    # Bus gate desk: matching 2x1 podium with yellow+amber shuttle stripe & pictogram.
+    "bus_gate_desk": ("2x1_tall", ["bus_gate_desk"], []),
+    # Remote stand: apron bay markings, mobile airstairs (profile), and front-facing shuttle bus.
+    "remote_stand": (
+        "remote_stand",
+        [
+            ("airside/props/airstairs", (-2.9, 0.6, 0.0), -90.0),
+            ("airside/landmarks/tp_bus_01a", (3.4, -0.8, 0.0), 0.0),
+        ],
+        ["remote_stand_pad"],
+    ),
     # Landside (Landside 4/4). A piece is (name, Blender offset, Blender Z turn
     # in degrees[, the mesh objects to keep]); a car's nose (Godot +Z, Blender -Y)
     # turned -90 points along Blender -X, the way the near carriageway drives.
@@ -982,6 +996,22 @@ def add_glyphs(extras):
             objs.append(glyph_mesh("Glyph_Gate_Road", [road], ROAD_RGB, -0.12, 0.0))
             objs.append(glyph_mesh("Glyph_Gate_Island", [island], SIDEWALK_RGB, 0.0, 0.22))
             objs.append(glyph_mesh("Glyph_Gate_Box", [housing], POST_RGB, 0.22, 1.72))
+        elif g == "remote_stand_pad":
+            pad = [(-5.6, -8.4), (5.8, -8.4), (5.8, 6.8), (-5.6, 6.8)]
+            lead_in = [(-1.8, -8.0), (-1.2, -8.0), (-1.2, 3.2), (-1.8, 3.2)]
+            t_stop = [(-3.6, 3.2), (0.6, 3.2), (0.6, 3.8), (-3.6, 3.8)]
+            side_l = [(-5.3, -8.0), (-4.9, -8.0), (-4.9, 6.4), (-5.3, 6.4)]
+            side_r = [(5.1, -8.0), (5.5, -8.0), (5.5, 6.4), (5.1, 6.4)]
+            objs.append(glyph_mesh("Glyph_Stand_Pad", [pad], APRON_RGB, -0.18, 0.0))
+            objs.append(
+                glyph_mesh(
+                    "Glyph_Stand_Lines",
+                    [lead_in, t_stop, side_l, side_r],
+                    STAND_LINE_RGB,
+                    0.005,
+                    0.055,
+                )
+            )
     return objs
 
 
@@ -1073,6 +1103,10 @@ def render_item(item, path):
         for lineset in scene.view_layers[0].freestyle_settings.linesets:
             lineset.select_crease = False
             lineset.select_border = False
+    if item == "remote_stand":
+        scene.render.line_thickness = 0.55 * SUPERSAMPLE
+        for lineset in scene.view_layers[0].freestyle_settings.linesets:
+            lineset.linestyle.thickness = 0.55 * SUPERSAMPLE
     objs, mats = [], set()
     _mounts.clear()
     for entry in pieces:

@@ -25,6 +25,7 @@ enum Kind {
 	ARCH,
 	COUNTER,
 	GATE_DESK,
+	REMOTE_STAND,
 	LANE_PART,
 	SEARCH_TABLE,
 	CONFISCATION_BIN,
@@ -49,6 +50,7 @@ const KIND_OF_DEF := {
 	SecurityLanes.CONFISCATION_BIN: Kind.CONFISCATION_BIN,
 	GateDesks.DESK: Kind.GATE_DESK,
 	GateDesks.BUS_DESK: Kind.GATE_DESK,
+	RemoteStands.STAND_ID: Kind.REMOTE_STAND,
 }
 const FIELDS: Array[String] = [
 	"where",
@@ -57,6 +59,8 @@ const FIELDS: Array[String] = [
 	"confiscated",
 	"recent",
 	"planes",
+	"shuttle",
+	"flight",
 	"walk",
 	"staff",
 	"queue",
@@ -72,6 +76,8 @@ var selection: BuiltSelection
 var build_mode: BuildMode
 ## The gate links, for a gate desk's status; optional.
 var gates: GateDesks
+## The shuttle bus sim, for a bus gate desk's live status; optional.
+var bus_shuttle: BusShuttleSim
 ## A gate desk's walk from security (worked out again only after an edit).
 var walk := GateWalk.new()
 
@@ -95,6 +101,7 @@ var _live_stale := true
 var _live_closed := false
 var _watched_grid: BuildGrid
 var _watched_staff: StaffSim
+var _watched_gates: GateDesks
 
 
 func _init() -> void:
@@ -238,6 +245,14 @@ func _watch() -> void:
 			_watched_staff.staff_changed.connect(invalidate)
 			_watched_staff.member_state_changed.connect(_on_member_state)
 		_live_stale = true
+	if gates != _watched_gates:
+		if _watched_gates != null and _watched_gates.changed.is_connected(_on_gates_changed):
+			_watched_gates.changed.disconnect(_on_gates_changed)
+		_watched_gates = gates
+		if _watched_gates != null and not _watched_gates.changed.is_connected(_on_gates_changed):
+			_watched_gates.changed.connect(_on_gates_changed)
+		_static_stale = true
+		_live_stale = true
 
 
 func _on_grid_changed(_cells: Array[Vector2i]) -> void:
@@ -249,6 +264,11 @@ func _on_grid_edit(_edit: BuildEdit, _result: BuildResult) -> void:
 
 
 func _on_member_state(_id: int, _state: StaffMember.State) -> void:
+	invalidate()
+
+
+func _on_gates_changed() -> void:
+	_static_stale = true
 	invalidate()
 
 
@@ -358,9 +378,12 @@ func _build_live() -> Dictionary:
 			out = {
 				"status": _gate_status(_static["id"]),
 				"planes": _gate_planes(_static["id"]),
+				"shuttle": _gate_shuttle(_static["id"]),
 				"walk": _gate_walk(_static["id"]),
 				"staff": _gate_staff(_static["id"]),
 			}
+		Kind.REMOTE_STAND:
+			out = _remote_stand_live(_static["id"])
 		Kind.LANE_PART:
 			var in_lane := sim.layout.security_lanes.lane_of_piece(_static["id"]) != 0
 			var text := (
@@ -468,22 +491,220 @@ func _gate_status(desk: int) -> String:
 	return DisplayWords.gate_unlinked(reason)
 
 
-## "Biggest plane: Medium" for a linked desk's gate, GateDesks.waiting_text() for
-## one that waits on its side's spur, or "" for an unlinked desk.
+## "Biggest plane: Medium" for a linked desk's gate, served remote stands (or
+## "Needs a Remote stand") for a bus gate, GateDesks.waiting_text() for a spur-
+## blocked gate, or "" for an unlinked regular desk.
 func _gate_planes(desk: int) -> String:
+	if gates != null:
+		for binding in gates.bindings:
+			if binding["desk"] == desk:
+				if GateDesks.is_bus_binding(binding):
+					return _bus_gate_stands_text()
+				var plane_class := gates.max_class(binding["gate"])
+				if gates.waits_on_spur(binding["gate"]):
+					return GateDesks.waiting_text()
+				if plane_class == "":
+					return tr("Biggest plane: none, no room outside the exit")
+				return DisplayWords.biggest_plane(plane_class)
+	if sim != null and sim.grid != null and GateDesks.is_bus_desk(sim.grid, desk):
+		return _bus_gate_stands_text()
+	return ""
+
+
+func _bus_gate_stands_text() -> String:
+	var ids := _remote_stand_ids()
+	if ids.is_empty():
+		return tr("Needs a Remote stand")
+	var label := tr_n(
+		"Serves {count} remote stand ({ids})", "Serves {count} remote stands ({ids})", ids.size()
+	)
+	return label.format({"count": ids.size(), "ids": ", ".join(ids)})
+
+
+func _gate_shuttle(desk: int) -> String:
 	if gates == null:
 		return ""
 	for binding in gates.bindings:
-		if binding["desk"] == desk:
-			if GateDesks.is_bus_binding(binding):
-				return tr("Bus gate: 16 x 6 m apron bay")
-			var plane_class := gates.max_class(binding["gate"])
-			if gates.waits_on_spur(binding["gate"]):
-				return GateDesks.waiting_text()
-			if plane_class == "":
-				return tr("Biggest plane: none, no room outside the exit")
-			return DisplayWords.biggest_plane(plane_class)
+		if binding["desk"] == desk and GateDesks.is_bus_binding(binding):
+			return _shuttle_state_text(String(binding["gate"]))
 	return ""
+
+
+func _shuttle_state_text(gate: String) -> String:
+	var shuttle := _bus_shuttle()
+	if shuttle == null:
+		return tr("Shuttle: Idle at bay")
+	var bus := shuttle.bus_state(gate)
+	var sid := String(bus.get("stand_id", ""))
+	var aboard := (bus.get("aboard", []) as Array).size()
+	var text := tr("Shuttle: Idle at bay")
+	match int(bus.get("state", BusShuttleSim.State.IDLE_AT_BAY)):
+		BusShuttleSim.State.LOADING:
+			if sid != "":
+				text = tr("Shuttle: Boarding for {stand} ({count})").format(
+					{"stand": sid, "count": aboard}
+				)
+			else:
+				text = tr("Shuttle: Boarding ({count})").format({"count": aboard})
+		BusShuttleSim.State.DRIVING_OUT:
+			if sid != "":
+				text = tr("Shuttle: Driving to {stand}").format({"stand": sid})
+			else:
+				text = tr("Shuttle: Driving to stand")
+		BusShuttleSim.State.UNLOADING:
+			if sid != "":
+				text = tr("Shuttle: Unloading at {stand}").format({"stand": sid})
+			else:
+				text = tr("Shuttle: Unloading at stand")
+		BusShuttleSim.State.DRIVING_BACK:
+			text = tr("Shuttle: Returning to bay")
+	return text
+
+
+func _remote_stand_live(object_id: int) -> Dictionary:
+	var entry := _remote_stand_entry(object_id)
+	var sid := String(entry.get("id", ""))
+	var max_cls := String(entry.get("max_class", ""))
+	var status := tr("Stand: {id}").format({"id": sid}) if sid != "" else tr("Stand: Not assigned")
+	var planes := (
+		DisplayWords.biggest_plane(max_cls)
+		if max_cls != ""
+		else tr("Biggest plane: none, no room on apron")
+	)
+	var pairing := tr("Auto-paired with Bus gate") if _has_bus_gate() else tr("Needs a Bus gate")
+	return {
+		"status": status,
+		"planes": planes,
+		"shuttle": pairing,
+		"flight": _stand_flight_text(sid),
+	}
+
+
+func _remote_stand_entry(object_id: int) -> Dictionary:
+	if gates != null:
+		for sid: String in gates.remote_stands:
+			var entry: Dictionary = gates.remote_stands[sid]
+			if int(entry.get("object_id", 0)) == object_id:
+				return {"id": sid, "max_class": String(entry.get("max_class", ""))}
+	if sim == null or sim.grid == null:
+		return {}
+	var rec := sim.grid.get_object(object_id)
+	if rec.is_empty():
+		return {}
+	var stand := RemoteStands.stand_for_cell(sim.grid, rec["anchor"])
+	var site := (sim.grid as SiteGrid).site if sim.grid is SiteGrid else null
+	var max_cls := RemoteStands.max_class(sim.grid, site, stand, object_id)
+	var ids := RemoteStands.object_ids(sim.grid)
+	var idx := ids.find(object_id)
+	var sid := "R%d" % (idx + 1) if idx >= 0 else ""
+	return {"id": sid, "max_class": max_cls}
+
+
+func _remote_stand_ids() -> Array[String]:
+	if gates != null:
+		return gates.remote_stand_ids()
+	var ids: Array[String] = []
+	if sim != null and sim.grid != null:
+		var objs := RemoteStands.object_ids(sim.grid)
+		for i in objs.size():
+			ids.append("R%d" % (i + 1))
+	return ids
+
+
+func _has_bus_gate() -> bool:
+	if gates != null and not gates.bus_gate_ids().is_empty():
+		return true
+	if sim == null or sim.grid == null:
+		return false
+	for id in sim.grid.object_ids():
+		if GateDesks.is_bus_desk(sim.grid, id):
+			return true
+	return false
+
+
+func _flights() -> FlightSim:
+	if sim != null and sim.flights != null:
+		return sim.flights
+	if gates != null and gates.flights != null:
+		return gates.flights
+	return null
+
+
+func _bus_shuttle() -> BusShuttleSim:
+	if bus_shuttle != null:
+		return bus_shuttle
+	if sim != null and sim.bus_shuttle is BusShuttleSim:
+		return sim.bus_shuttle as BusShuttleSim
+	return null
+
+
+func _stand_flight_text(sid: String) -> String:
+	var flights := _flights()
+	if flights == null or sid == "":
+		return tr("Next flight: none scheduled")
+	var fid := flights.flight_at_gate(sid)
+	if fid != "" and flights.state_of(fid) < FlightSim.State.DEPARTED:
+		return (
+			tr("Flight: {head} · {status}")
+			. format(
+				{
+					"head": _live_flight_head(flights, fid),
+					"status": _flight_state_label(flights.state_of(fid)),
+				}
+			)
+		)
+	var row := _next_scheduled_row(flights, sid)
+	if row.is_empty():
+		return tr("Next flight: none scheduled")
+	var st := String(row.get("status", ""))
+	if st == "":
+		st = tr("Scheduled")
+	return tr("Next flight: {head} · {status}").format({"head": String(row["head"]), "status": st})
+
+
+func _live_flight_head(flights: FlightSim, fid: String) -> String:
+	var cid := flights.flight_contract_id(fid)
+	var push_tick := flights.state_start(fid, FlightSim.State.PUSHBACK)
+	if cid != "":
+		var contract := flights.contract_of(cid)
+		var dest := String(contract.get("destination", ""))
+		var dep_min := int(contract.get("departure_minute", -1))
+		if dep_min >= 0 and push_tick >= 0:
+			var day := GameCalendar.day_of(push_tick, flights.epoch)
+			var dep_tick := GameCalendar.tick_at(day, dep_min, flights.epoch)
+			var clock := GameCalendar.clock_text(dep_tick, flights.epoch)
+			return "%s %s" % [clock, dest] if dest != "" else clock
+		return dest if dest != "" else fid
+	if push_tick >= 0:
+		return "%s %s" % [GameCalendar.clock_text(push_tick, flights.epoch), fid]
+	return fid
+
+
+func _flight_state_label(state: int) -> String:
+	var word := DepartureList.status_word(state)
+	if word != "":
+		return word
+	var label := tr("Scheduled")
+	match state:
+		FlightSim.State.APPROACH, FlightSim.State.LANDING:
+			label = tr("Landing")
+		FlightSim.State.TAXI_IN:
+			label = tr("Taxiing in")
+		FlightSim.State.AT_STAND:
+			label = tr("At stand")
+	return label
+
+
+func _next_scheduled_row(flights: FlightSim, sid: String) -> Dictionary:
+	var today := GameCalendar.day_of(sim.tick, flights.epoch)
+	for day in [today, today + 1]:
+		for row in DepartureList.rows_for_day(flights, day):
+			if String(row.get("stand", "")) != sid:
+				continue
+			if bool(row.get("departed", false)):
+				continue
+			return row
+	return {}
 
 
 ## Staff and open/closed state for a gate desk; "" without a StaffSim.
