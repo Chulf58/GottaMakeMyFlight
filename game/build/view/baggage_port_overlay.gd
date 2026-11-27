@@ -7,6 +7,7 @@ extends Node3D
 ## baggage_belt_end inside a bag room. Clean, unshaded, outline-free.
 
 const CONNECTED_COLOR := Color(0.22, 0.85, 0.42, 0.9)
+const INBOUND_CONNECTED_COLOR := Color(0.20, 0.78, 0.95, 0.9)
 const UNCONNECTED_COLOR := Color(1.0, 0.68, 0.18, 0.9)
 ## Sits just above belt rail height (0.46 m) so markers stay legible even when
 ## a belt is already attached to the outlet or end.
@@ -88,13 +89,21 @@ func _should_show() -> bool:
 		return false
 	if (
 		build_mode != null
-		and (build_mode.tool == BuildMode.Tool.BELT or build_mode.tool == BuildMode.Tool.BAG_ROOM)
+		and (
+			build_mode.tool == BuildMode.Tool.BELT
+			or build_mode.tool == BuildMode.Tool.BAG_ROOM
+			or build_mode.tool == BuildMode.Tool.BAGGAGE_CLAIM
+			or build_mode.tool == BuildMode.Tool.CLAIM_CAROUSEL
+		)
 	):
 		return true
 	var sel := _resolve_selection()
 	if sel != null and sel.kind == BuiltSelection.Kind.ROOM:
 		var room := _grid.get_room(sel.id)
-		return not room.is_empty() and StringName(room["type"]) == BeltShaper.BAG_ROOM
+		if room.is_empty():
+			return false
+		var rtype := StringName(room["type"])
+		return rtype == BeltShaper.BAG_ROOM or rtype == BeltShaper.BAGGAGE_CLAIM
 	return false
 
 
@@ -129,8 +138,10 @@ func _rebuild() -> void:
 		var def_id := StringName(record["def"])
 		if def_id == BeltShaper.DESK:
 			_add_desk_outlet(object_id, record, routes)
+		elif def_id == BeltShaper.CLAIM_CAROUSEL:
+			_add_carousel_inlet(object_id, record, routes)
 		elif def_id == BeltShaper.END:
-			_add_belt_end(object_id, record, routed_roots)
+			_add_belt_end(object_id, record, routed_roots, routes)
 
 
 func _add_desk_outlet(object_id: int, record: Dictionary, routes: BagRoutes) -> void:
@@ -166,7 +177,44 @@ func _add_desk_outlet(object_id: int, record: Dictionary, routes: BagRoutes) -> 
 	)
 
 
-func _add_belt_end(object_id: int, record: Dictionary, routed_roots: Dictionary) -> void:
+func _add_carousel_inlet(object_id: int, record: Dictionary, routes: BagRoutes) -> void:
+	var ports := BuildCatalog.belt_ports(
+		BeltShaper.CLAIM_CAROUSEL, record["anchor"], record["facing"]
+	)
+	if ports.is_empty():
+		return
+	var port := ports[0]
+	var cell: Vector2i = port["cell"]
+	var side: Vector2i = port["side"]
+	var connected := routes.connected_carousels().has(object_id)
+	var color := INBOUND_CONNECTED_COLOR if connected else UNCONNECTED_COLOR
+	var mat := _material(color)
+	var arrow := MeshInstance3D.new()
+	arrow.name = "CarouselInletMarker_%d" % object_id
+	arrow.mesh = _port_arrow()
+	arrow.material_override = mat
+	arrow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var world_base := _grid.cell_to_world(cell) + Vector3(side.x, 0.0, side.y) * 0.55
+	arrow.position = Vector3(world_base.x, _grid.origin.y + PORT_Y, world_base.z)
+	arrow.rotation.y = atan2(float(side.x), float(side.y))
+	add_child(arrow)
+	(
+		_markers
+		. append(
+			{
+				"kind": &"carousel_inlet",
+				"object_id": object_id,
+				"cell": cell,
+				"connected": connected,
+				"color": color,
+			}
+		)
+	)
+
+
+func _add_belt_end(
+	object_id: int, record: Dictionary, routed_roots: Dictionary, routes: BagRoutes
+) -> void:
 	var cell: Vector2i = record["anchor"]
 	var room_id := _grid.room_at(cell)
 	if room_id == 0:
@@ -174,8 +222,13 @@ func _add_belt_end(object_id: int, record: Dictionary, routed_roots: Dictionary)
 	var room := _grid.get_room(room_id)
 	if room.is_empty() or StringName(room["type"]) != BeltShaper.BAG_ROOM:
 		return
-	var connected := routed_roots.has(cell)
-	var color := CONNECTED_COLOR if connected else UNCONNECTED_COLOR
+	var is_inbound := routes.inbound_component.has(cell)
+	var connected := routes.has_inbound_route(cell) if is_inbound else routed_roots.has(cell)
+	var color := (
+		(INBOUND_CONNECTED_COLOR if connected else UNCONNECTED_COLOR)
+		if is_inbound
+		else (CONNECTED_COLOR if connected else UNCONNECTED_COLOR)
+	)
 	var mat := _material(color)
 	var ring := MeshInstance3D.new()
 	ring.name = "BeltEndMarker_%d" % object_id
@@ -195,13 +248,18 @@ func _add_belt_end(object_id: int, record: Dictionary, routed_roots: Dictionary)
 		arrow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		var port_world := world_cell + Vector3(side.x, 0.0, side.y) * 0.55
 		arrow.position = Vector3(port_world.x, _grid.origin.y + PORT_Y, port_world.z)
-		arrow.rotation.y = atan2(float(side.x), float(side.y))
+		arrow.rotation.y = (
+			atan2(-float(side.x), -float(side.y))
+			if is_inbound
+			else atan2(float(side.x), float(side.y))
+		)
 		add_child(arrow)
 	(
 		_markers
 		. append(
 			{
 				"kind": &"belt_end",
+				"flow": &"inbound" if is_inbound else &"outbound",
 				"object_id": object_id,
 				"cell": cell,
 				"connected": connected,

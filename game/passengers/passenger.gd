@@ -55,6 +55,9 @@ enum Stage {
 	TO_PARKED_CAR,
 	TO_CURB_PICKUP,
 	WAIT_CURB_PICKUP,
+	# Arrivals A3 baggage claim stages.
+	TO_CLAIM,
+	AT_CLAIM,
 }
 
 enum Direction { DEPARTING, ARRIVING }
@@ -87,6 +90,10 @@ var arrival_done := false
 var wants_parked_car := false
 var pickup_vehicle := 0
 var pickup_berth := -1
+## Arrivals A3: inbound bag id, target claim carousel object id, and whether claimed.
+var claim_bag_id := 0
+var claim_carousel := 0
+var has_claimed_bag := false
 ## 0 or 1: which Toon character draws this passenger.
 var variant := 0
 ## When it set out for the airport (ArrivalTypes): scheduled passengers draw

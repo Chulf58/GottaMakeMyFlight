@@ -47,9 +47,12 @@ var bag_ids: Array[int] = []
 var pending_bag_ids: Array[int] = []
 ## Staff member id assigned as driver/loader (0 = automated / unassigned).
 var driver_staff_id := 0
+var inbound := false
 
 
 func carrying_bags() -> bool:
+	if inbound:
+		return phase == Phase.RETURNING and not bag_ids.is_empty()
 	return (
 		phase == Phase.OUTBOUND
 		or phase == Phase.UNLOADING

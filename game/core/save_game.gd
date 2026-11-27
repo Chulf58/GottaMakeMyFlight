@@ -169,7 +169,10 @@ signal loaded(ok: bool)
 ## claimants, pickup_ready, pickup_boarded), PassengerSim v44 (TO_PARKED_CAR,
 ## TO_CURB_PICKUP, WAIT_CURB_PICKUP, wants_parked_car, pickup_vehicle,
 ## pickup_berth); version 46 saves are refused (no migration).
-const SAVE_VERSION := 47
+## 48: Arrivals A3 baggage claim: BaggageSnapshot v4 (inbound bags/shuttles,
+## ON_CAROUSEL, CLAIMED, ON_PLANE, carousel), PassengerSim v45 (TO_CLAIM,
+## AT_CLAIM, claim_bag_id, claim_carousel, has_claimed_bag); v47 refused.
+const SAVE_VERSION := 48
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"

@@ -365,6 +365,28 @@ func texts(tool: BuildMode.Tool) -> Array:
 				),
 				tr("Needs a Ramp Agent hired in Staff. Takes 1x2 tiles; no upkeep."),
 			]
+		BuildMode.Tool.BAGGAGE_CLAIM:
+			lines = [
+				tr("Where arriving passengers pick up checked bags after leaving airside."),
+				tr(
+					(
+						"Drag a rectangle on landside, place a claim carousel, "
+						+ "and connect an inbound belt from a bag room."
+					)
+				),
+				tr("At least 6x4, with a claim carousel. Keep it on landside after the exit."),
+			]
+		BuildMode.Tool.CLAIM_CAROUSEL:
+			lines = [
+				tr("A circling baggage carousel for arriving passengers."),
+				tr(
+					(
+						"Place it inside a baggage claim room and feed its back port "
+						+ "with an inbound belt from a bag room."
+					)
+				),
+				tr("Needs a separate inbound belt line; cannot join check-in belts."),
+			]
 		BuildMode.Tool.CURB:
 			lines = [
 				tr(

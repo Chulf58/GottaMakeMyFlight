@@ -137,6 +137,16 @@ static func _build() -> void:
 	bag_room.required = [[&"baggage_belt_end", "Needs a belt end"]]
 	_types[bag_room.id] = bag_room
 
+	# Baggage claim (Arrivals A3, rulings 38bd3597, f32dbb20, 0d02128d):
+	# landside room holding a 4x2 prefab claim_carousel with 1-cell standing
+	# perimeter around it, fed by inbound belts from a bag room.
+	var baggage_claim := RoomType.new()
+	baggage_claim.id = &"baggage_claim"
+	baggage_claim.display_name = "Baggage claim"
+	baggage_claim.min_size = Vector2i(6, 4)
+	baggage_claim.required = [[&"claim_carousel", "Needs a claim carousel"]]
+	_types[baggage_claim.id] = baggage_claim
+
 	# Toilet (decision toilet-design-queue-free-reservable-stalls-per-stall-
 	# daily-u, points 1 and 2): each stall is one use slot, and the sink is
 	# required furniture. It seats nobody and earns nothing; each stall of a

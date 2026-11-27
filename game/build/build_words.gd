@@ -369,6 +369,7 @@ class Words:
 			tr("The money is at its limit; the refund would not fit", "build refusal"),
 			tr("Belts cannot cross; a belt joins at most three others", "build refusal"),
 			tr("A wall is in the way of the belt", "build refusal"),
+			tr("Check-in belts and baggage claim belts cannot join", "build refusal"),
 			tr("Only a belt piece changes shape", "build refusal"),
 			tr(
 				# gdlint:ignore = max-line-length
@@ -440,6 +441,7 @@ class Words:
 			tr("Remove the room first", "ghost reason"),
 			tr("Money at its limit", "ghost reason"),
 			tr("Belts cannot cross", "ghost reason"),
+			tr("Cannot join claim belt", "ghost reason"),
 			tr("Keep the staff spot free", "ghost reason"),
 			tr("A wall is in the lane", "ghost reason"),
 			tr("Bad zone id", "ghost reason"),
@@ -518,6 +520,7 @@ class Words:
 			tr("cafe table", "item name, mid-sentence"),
 			tr("chain", "item name, mid-sentence"),
 			tr("check-in desk", "item name, mid-sentence"),
+			tr("claim carousel", "item name, mid-sentence"),
 			tr("clothes rail", "item name, mid-sentence"),
 			tr("confiscation bin", "item name, mid-sentence"),
 			tr("currency exchange", "item name, mid-sentence"),

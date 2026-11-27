@@ -13,6 +13,10 @@ const ARRIVAL_MAX_LIFETIME_TICKS := 6000
 const PARK_PICKUP_SHARE := 30
 const CURB_PICKUP_PATIENCE_TICKS := 500
 const CURB_TIMEOUT_MOOD_LOSS := 4
+const CLAIM_PATIENCE_TICKS := 1600
+const CLAIM_MIN_ORBIT_TICKS := 40
+const CLAIM_BAG_MOOD_BONUS := 5
+const CLAIM_TIMEOUT_MOOD_LOSS := 6
 const SIDEWALK_Z := -59.95
 
 
@@ -78,6 +82,14 @@ static func spawn(sim: PassengerSim, flight_id: String, variant: int) -> Passeng
 	p.wants_parked_car = rng.randi_range(0, 99) < PARK_PICKUP_SHARE
 	p.pickup_vehicle = 0
 	p.pickup_berth = -1
+	p.claim_bag_id = 0
+	p.claim_carousel = 0
+	p.has_claimed_bag = false
+	if sim.baggage != null:
+		var inbound_bag := BaggageInbound.assign_owner(sim.baggage, flight_id, p.id)
+		if inbound_bag != null:
+			p.claim_bag_id = inbound_bag.id
+			p.checked_bag_color = inbound_bag.color
 	if not walk.is_empty():
 		p.stage = Passenger.Stage.DEPLANING
 		p.apron = walk
@@ -150,6 +162,10 @@ static func advance(sim: PassengerSim, p: Passenger) -> void:
 			_advance_curb_pickup(sim, p)
 		Passenger.Stage.WAIT_CURB_PICKUP:
 			_advance_wait_curb_pickup(sim, p)
+		Passenger.Stage.TO_CLAIM:
+			_advance_to_claim(sim, p)
+		Passenger.Stage.AT_CLAIM:
+			_advance_at_claim(sim, p)
 
 
 static func step_outside(sim: PassengerSim, p: Passenger, speed: int) -> void:
@@ -185,6 +201,10 @@ static func finish(sim: PassengerSim, p: Passenger) -> void:
 		sim.landside.release_claim(p.pickup_vehicle, p.id)
 	p.pickup_vehicle = 0
 	p.pickup_berth = -1
+	if p.claim_bag_id > 0 and not p.has_claimed_bag and sim.baggage != null:
+		BaggageInbound.abandon_bag(sim.baggage, p.claim_bag_id, Bag.Cause.LATE)
+	p.claim_bag_id = 0
+	p.claim_carousel = 0
 	sim._leave_station(p)
 	sim._release_seat(p)
 	sim.cafes.cleanup(p)
@@ -323,9 +343,200 @@ static func _enter_landside(sim: PassengerSim, p: Passenger, crossed_door: bool)
 	p.clear_path()
 	if crossed_door and p.at != Passenger.NO_CELL:
 		PassengerThoughts.record(p, PassengerThoughts.Kind.QUICK_EXIT, sim.tick, p.at)
-	# Seam (A3 baggage claim): route to baggage claim room/carousel before TO_ROAD_EXIT when built.
+	if _try_start_claim(sim, p):
+		return
 	sim._set_stage(p, Passenger.Stage.TO_ROAD_EXIT)
 	_advance_road_exit(sim, p)
+
+
+static func _try_start_claim(sim: PassengerSim, p: Passenger) -> bool:
+	if p.claim_bag_id <= 0 or p.has_claimed_bag or sim.baggage == null:
+		return false
+	var bag := sim.baggage.get_bag(p.claim_bag_id)
+	if bag == null or bag.is_settled():
+		p.claim_bag_id = 0
+		p.claim_carousel = 0
+		return false
+	var routes := BaggageInbound.live_routes(sim.baggage)
+	if routes == null:
+		return false
+	var candidates: Array[int] = []
+	if bag.carousel > 0 and routes.is_ready_carousel(bag.carousel):
+		candidates.append(bag.carousel)
+	for cid in routes.connected_carousels():
+		if not candidates.has(cid):
+			candidates.append(cid)
+	for cid in candidates:
+		var chosen := _best_claim_spot(sim, routes, cid, p)
+		if not chosen.is_empty():
+			p.claim_carousel = cid
+			sim._set_stage(p, Passenger.Stage.TO_CLAIM)
+			if bool(chosen["at_spot"]):
+				sim._set_stage(p, Passenger.Stage.AT_CLAIM)
+			else:
+				p.set_path(chosen["path"])
+			return true
+	BaggageInbound.abandon_bag(sim.baggage, p.claim_bag_id, Bag.Cause.NO_ROUTE)
+	p.claim_bag_id = 0
+	p.claim_carousel = 0
+	return false
+
+
+static func _advance_to_claim(sim: PassengerSim, p: Passenger) -> void:
+	var bag := sim.baggage.get_bag(p.claim_bag_id) if sim.baggage != null else null
+	var routes := BaggageInbound.live_routes(sim.baggage) if sim.baggage != null else null
+	if (
+		bag == null
+		or bag.is_settled()
+		or routes == null
+		or not routes.is_ready_carousel(p.claim_carousel)
+	):
+		_abort_claim_to_exit(sim, p)
+		return
+	if p.is_moving():
+		return
+	if p.path.size() >= 2 and p.at == p.path.back():
+		p.clear_path()
+		p.stuck = Passenger.Stuck.NONE
+		sim._set_stage(p, Passenger.Stage.AT_CLAIM)
+		_advance_at_claim(sim, p)
+		return
+	var chosen := _best_claim_spot(sim, routes, p.claim_carousel, p)
+	if not chosen.is_empty():
+		p.stuck = Passenger.Stuck.NONE
+		if bool(chosen["at_spot"]):
+			p.clear_path()
+			sim._set_stage(p, Passenger.Stage.AT_CLAIM)
+			_advance_at_claim(sim, p)
+		else:
+			p.set_path(chosen["path"])
+		return
+	if sim.tick - p.stage_tick >= ARRIVAL_NO_ROUTE_TIMEOUT_TICKS:
+		_abort_claim_to_exit(sim, p)
+		return
+	p.stuck = Passenger.Stuck.NO_ROUTE
+
+
+static func _advance_at_claim(sim: PassengerSim, p: Passenger) -> void:
+	var bag := sim.baggage.get_bag(p.claim_bag_id) if sim.baggage != null else null
+	var routes := BaggageInbound.live_routes(sim.baggage) if sim.baggage != null else null
+	if (
+		bag == null
+		or bag.is_settled()
+		or routes == null
+		or not routes.is_ready_carousel(p.claim_carousel)
+	):
+		_abort_claim_to_exit(sim, p)
+		return
+	if (
+		bag.carousel > 0
+		and bag.carousel != p.claim_carousel
+		and routes.is_ready_carousel(bag.carousel)
+	):
+		p.claim_carousel = bag.carousel
+		p.clear_path()
+		p.stuck = Passenger.Stuck.NONE
+		sim._set_stage(p, Passenger.Stage.TO_CLAIM)
+		_advance_to_claim(sim, p)
+		return
+	if (
+		bag.state == Bag.State.ON_CAROUSEL
+		and bag.carousel == p.claim_carousel
+		and sim.tick - bag.rest_tick >= CLAIM_MIN_ORBIT_TICKS
+	):
+		if BaggageInbound.claim_bag(sim.baggage, bag.id, p.id):
+			p.has_claimed_bag = true
+			p.claim_carousel = 0
+			p.mood = mini(100, p.mood + CLAIM_BAG_MOOD_BONUS)
+			if p.at != Passenger.NO_CELL and sim.grid != null and sim.grid.in_bounds(p.at):
+				PassengerThoughts.record(p, PassengerThoughts.Kind.CLAIMED_BAG, sim.tick, p.at)
+			sim._set_stage(p, Passenger.Stage.TO_ROAD_EXIT)
+			_advance_road_exit(sim, p)
+			return
+	if sim.tick - p.stage_tick >= CLAIM_PATIENCE_TICKS:
+		p.mood = maxi(0, p.mood - CLAIM_TIMEOUT_MOOD_LOSS)
+		_abort_claim_to_exit(sim, p)
+
+
+static func on_inbound_bag_lost(sim: PassengerSim, bag_id: int, passenger_id: int) -> void:
+	if sim == null or bag_id <= 0:
+		return
+	var p := sim.get_passenger(passenger_id) if passenger_id > 0 else null
+	if p == null or p.claim_bag_id != bag_id:
+		for pid in sim.passenger_ids():
+			var cand := sim.get_passenger(pid)
+			if cand != null and cand.claim_bag_id == bag_id:
+				p = cand
+				break
+	if p == null or p.arrival_done or p.has_claimed_bag or p.claim_bag_id != bag_id:
+		return
+	if p.stage == Passenger.Stage.TO_CLAIM or p.stage == Passenger.Stage.AT_CLAIM:
+		_abort_claim_to_exit(sim, p)
+	else:
+		p.claim_bag_id = 0
+		p.claim_carousel = 0
+		sim.mark_changed()
+
+
+static func _abort_claim_to_exit(sim: PassengerSim, p: Passenger) -> void:
+	if p.claim_bag_id > 0 and not p.has_claimed_bag and sim.baggage != null:
+		BaggageInbound.abandon_bag(sim.baggage, p.claim_bag_id, Bag.Cause.LOST)
+	p.claim_bag_id = 0
+	p.claim_carousel = 0
+	p.clear_path()
+	p.stuck = Passenger.Stuck.NONE
+	sim._set_stage(p, Passenger.Stage.TO_ROAD_EXIT)
+	_advance_road_exit(sim, p)
+
+
+static func _best_claim_spot(
+	sim: PassengerSim, routes: BagRoutes, carousel_id: int, p: Passenger
+) -> Dictionary:
+	var spots := _carousel_stand_spots(sim, routes, carousel_id)
+	if spots.is_empty():
+		return {}
+	var start := posmod(p.id, spots.size())
+	var best_path: Array[Vector2i] = []
+	for i in spots.size():
+		var spot: Vector2i = spots[(start + i) % spots.size()]
+		if spot == p.at:
+			return {"at_spot": true, "path": [] as Array[Vector2i]}
+		var path := sim.grid.find_path(p.at, spot)
+		if path.size() >= 2:
+			if best_path.is_empty():
+				best_path = path
+				break
+	if best_path.is_empty():
+		return {}
+	return {"at_spot": false, "path": best_path}
+
+
+static func _carousel_stand_spots(
+	sim: PassengerSim, routes: BagRoutes, carousel_id: int
+) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	if sim.grid == null or carousel_id <= 0:
+		return out
+	var rec := sim.grid.get_object(carousel_id)
+	if rec.is_empty() or StringName(rec["def"]) != BeltShaper.CLAIM_CAROUSEL:
+		return out
+	var def := BuildCatalog.get_def(BeltShaper.CLAIM_CAROUSEL)
+	var fp := def.footprint(rec["anchor"], rec["facing"])
+	var fp_set := {}
+	for fc in fp:
+		fp_set[fc] = true
+	var room_id := sim.grid.room_at(rec["anchor"])
+	for fc: Vector2i in fp:
+		for step in BuildGrid.SIDE_STEP:
+			var cell := fc + step
+			if fp_set.has(cell) or out.has(cell):
+				continue
+			if not sim.grid.is_passenger_cell(cell) or routes.is_belt(cell):
+				continue
+			if room_id != 0 and sim.grid.room_at(cell) != room_id:
+				continue
+			out.append(cell)
+	return out
 
 
 static func _start_outside_exit(sim: PassengerSim, p: Passenger, door: int) -> void:

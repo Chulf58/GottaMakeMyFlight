@@ -46,6 +46,7 @@ const CATEGORIES := [
 			BuildMode.Tool.CONFISCATION_BIN,
 			BuildMode.Tool.BELT,
 			BuildMode.Tool.BAG_ROOM,
+			BuildMode.Tool.BAGGAGE_CLAIM,
 			BuildMode.Tool.BREAK_ROOM,
 		],
 	},
@@ -132,6 +133,7 @@ const ROOM_CONTEXT := -3
 ## Room-only furniture tools hidden from main category tabs, mapped to their owning RoomTypes id(s).
 const ROOM_TOOL_OWNERS := {
 	BuildMode.Tool.CART: [&"bag_room"],
+	BuildMode.Tool.CLAIM_CAROUSEL: [&"baggage_claim"],
 	BuildMode.Tool.TOILET_STALL: [&"toilet"],
 	BuildMode.Tool.TOILET_SINK: [&"toilet"],
 	BuildMode.Tool.SHOWER: [&"shower"],
@@ -165,6 +167,7 @@ const ROOM_TOOLS := {
 		BuildMode.Tool.BOOTH,
 	],
 	&"bag_room": [BuildMode.Tool.BELT, BuildMode.Tool.CART],
+	&"baggage_claim": [BuildMode.Tool.CLAIM_CAROUSEL, BuildMode.Tool.BELT],
 	&"toilet": [BuildMode.Tool.TOILET_STALL, BuildMode.Tool.TOILET_SINK],
 	&"kiosk": [BuildMode.Tool.KIOSK_COUNTER, BuildMode.Tool.KIOSK_DISPLAY],
 	&"pharmacy": [BuildMode.Tool.PHARMACY_COUNTER, BuildMode.Tool.PHARMACY_SHELF],
@@ -224,6 +227,8 @@ const ITEMS := {
 	BuildMode.Tool.BELT: ["Belt", "belt", "Drag a line"],
 	BuildMode.Tool.BAG_ROOM: ["Bag room", "bag_room", "2x2 min"],
 	BuildMode.Tool.CART: ["Bag cart", "cart", ""],
+	BuildMode.Tool.BAGGAGE_CLAIM: ["Baggage claim", "bag_room", "6x4 min"],
+	BuildMode.Tool.CLAIM_CAROUSEL: ["Claim carousel", "belt", ""],
 	BuildMode.Tool.CURB: ["Curb bay", "curb_bay", "16x3 m"],
 	BuildMode.Tool.SURFACE_LOT: ["Surface lot", "surface_lot", "32x24 m"],
 	BuildMode.Tool.MULTI_STOREY: ["Multi-storey", "multi_storey", "24x52 m"],
@@ -238,6 +243,7 @@ const LANE_ITEMS := {}
 ## colour: a bag room does nothing without a belt end.
 const CARD_NEEDS := {
 	BuildMode.Tool.BAG_ROOM: "Needs belt end",
+	BuildMode.Tool.BAGGAGE_CLAIM: "Needs claim carousel",
 	BuildMode.Tool.BUS_GATE_DESK: "Needs Remote stand",
 	BuildMode.Tool.REMOTE_STAND: "Needs Bus gate",
 }
@@ -578,6 +584,10 @@ class Words:
 			tr("Drag a line", "build menu"),
 			tr("Bag room", "build menu"),
 			tr("Bag cart", "build menu"),
+			tr("Baggage claim", "build menu"),
+			tr("6x4 min", "build menu"),
+			tr("Claim carousel", "build menu"),
+			tr("Needs claim carousel", "build menu"),
 			tr("Curb bay", "build menu"),
 			tr("16x3 m", "build menu"),
 			tr("Surface lot", "build menu"),

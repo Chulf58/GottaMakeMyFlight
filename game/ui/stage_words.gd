@@ -168,6 +168,10 @@ class Words:
 				text = tr("Walking to curb pickup", "passenger activity")
 			Passenger.Stage.WAIT_CURB_PICKUP:
 				text = tr("Waiting for pickup taxi", "passenger activity")
+			Passenger.Stage.TO_CLAIM:
+				text = tr("Walking to baggage claim", "passenger activity")
+			Passenger.Stage.AT_CLAIM:
+				text = tr("Waiting at baggage claim", "passenger activity")
 			Passenger.Stage.MADE:
 				text = tr("Boarded", "passenger activity")
 			Passenger.Stage.MISSED:

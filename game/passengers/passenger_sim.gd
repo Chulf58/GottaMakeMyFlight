@@ -42,7 +42,7 @@ signal stage_changed(id: int, stage: Passenger.Stage)
 signal checked_in(id: int, desk: int)
 
 ## The history of SAVE_VERSION is in PassengerSimSave.
-const SAVE_VERSION := 44
+const SAVE_VERSION := 45
 ## 1.96 m/s; the Toon walk clips cover 1.92-1.95 m/s.
 const WALK_MM := 98
 ## 3.5 m/s, a jog (user-ruled); the Toon run clips cover 4.17-5.30 m/s,
@@ -99,6 +99,20 @@ const QUEUE_STAGES := [Passenger.Stage.CHECKIN_QUEUE, Passenger.Stage.SECURITY_Q
 @export var landside: LandsideSim
 ## Optional apron shuttle sim tracking passengers in Passenger.Stage.ON_BUS.
 @export var bus_shuttle: Node
+## Optional baggage sim for arrivals bag-claim linking; BaggageSim.bind() also wires it.
+@export var baggage: BaggageSim:
+	set(value):
+		if (
+			is_instance_valid(baggage)
+			and baggage.inbound_bag_lost.is_connected(_on_inbound_bag_lost)
+		):
+			baggage.inbound_bag_lost.disconnect(_on_inbound_bag_lost)
+		baggage = value
+		if (
+			is_instance_valid(baggage)
+			and not baggage.inbound_bag_lost.is_connected(_on_inbound_bag_lost)
+		):
+			baggage.inbound_bag_lost.connect(_on_inbound_bag_lost)
 @export var auto_schedule := true
 
 ## The apron walk after an exit door with no site (a test grid,
@@ -264,6 +278,11 @@ func bind(with_clock: SimClock, with_flights: FlightSim, with_grid: BuildGrid) -
 	# After the layout handler above, so staff read a rebuilt layout on edits.
 	if staff != null:
 		staff.bind(self)
+	if (
+		is_instance_valid(baggage)
+		and not baggage.inbound_bag_lost.is_connected(_on_inbound_bag_lost)
+	):
+		baggage.inbound_bag_lost.connect(_on_inbound_bag_lost)
 
 
 ## Schedules `count` passengers for a flight from the saved sim RNG. Each
@@ -670,6 +689,10 @@ func _on_deboarding_started(flight_id: String, count: int) -> void:
 	PassengerArrivals.schedule_deboarding(self, flight_id, count)
 
 
+func _on_inbound_bag_lost(bag_id: int, passenger_id: int, _flight_id: String) -> void:
+	PassengerArrivals.on_inbound_bag_lost(self, bag_id, passenger_id)
+
+
 ## A new passenger at the entrance, or, with a `walk` (where it got out of
 ## a car or taxi, ArrivalBookings), walking from there: the walk replaces the
 ## road start of the entrance's walk in (OutsideWalks), or ends at the
@@ -750,6 +773,8 @@ func _advance(p: Passenger) -> void:
 		Passenger.Stage.DEPLANING, Passenger.Stage.TO_AIRSIDE_EXIT, Passenger.Stage.TO_ROAD_EXIT:
 			PassengerArrivals.advance(self, p)
 		Passenger.Stage.TO_PARKED_CAR, Passenger.Stage.TO_CURB_PICKUP, Passenger.Stage.WAIT_CURB_PICKUP:
+			PassengerArrivals.advance(self, p)
+		Passenger.Stage.TO_CLAIM, Passenger.Stage.AT_CLAIM:
 			PassengerArrivals.advance(self, p)
 
 

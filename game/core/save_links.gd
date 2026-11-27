@@ -73,6 +73,8 @@ static func problem(data: Dictionary, staged: Dictionary) -> String:
 	if found == "":
 		found = _bag_problem(staged["baggage"], staged["grid"], flights)
 	if found == "":
+		found = _baggage_claim_problem(staged["passengers"], staged["baggage"], staged["grid"])
+	if found == "":
 		found = _awaited_problem(data["settlement"], staged["baggage"]["bags"])
 	if found == "" and staged.has("staff"):
 		found = _ramp_problem(staged["staff"], staged["baggage"], flights, staged["rating"])
@@ -132,18 +134,58 @@ static func _bus_problem(buses: Dictionary, flights: Dictionary) -> String:
 
 static func _bag_problem(baggage: Dictionary, grid: BuildGrid, flights: Dictionary) -> String:
 	var bags: Array[Bag] = baggage["bags"]
-	var found := BaggageSnapshot.grid_problem(bags, BagRoutes.build(grid))
+	var shuttles: Array[BaggageShuttle] = baggage.get("shuttles", [])
+	var found := BaggageSnapshot.grid_problem(bags, BagRoutes.build(grid), shuttles)
 	if found != "":
 		return "baggage: %s" % found
 	var live := {}
 	for flight in flights["flights"]:
 		live[flight["id"]] = true
 	for bag in bags:
-		if not bag.is_settled() and not live.has(bag.flight):
-			return "baggage: bag %d waits for flight %s, which is not live" % [bag.id, bag.flight]
+		if not bag.is_settled():
+			var needs_live := not bag.inbound or bag.state == Bag.State.ON_PLANE
+			if needs_live and not live.has(bag.flight):
+				return (
+					"baggage: bag %d waits for flight %s, which is not live" % [bag.id, bag.flight]
+				)
 	for id in (baggage["results"] as Dictionary).keys():
 		if not live.has(id) and not _issued(id, flights):
 			return "baggage: flight %s has results but is neither live nor issued" % id
+	return ""
+
+
+static func _baggage_claim_problem(
+	passengers: Dictionary, baggage: Dictionary, grid: BuildGrid
+) -> String:
+	var bag_by_id := {}
+	for bag: Bag in baggage.get("bags", []):
+		bag_by_id[bag.id] = bag
+	var routes := BagRoutes.build(grid)
+	for p: Passenger in passengers.get("passengers", []):
+		var claiming := p.stage == Passenger.Stage.TO_CLAIM or p.stage == Passenger.Stage.AT_CLAIM
+		if claiming and not p.arrival_done:
+			if p.claim_carousel <= 0 or not routes.is_ready_carousel(p.claim_carousel):
+				return (
+					"passengers: passenger %d claims missing carousel %d" % [p.id, p.claim_carousel]
+				)
+			var bag: Bag = bag_by_id.get(p.claim_bag_id)
+			if (
+				bag == null
+				or not bag.inbound
+				or bag.is_settled()
+				or (bag.passenger != 0 and bag.passenger != p.id)
+			):
+				return (
+					"passengers: passenger %d awaits invalid inbound bag %d"
+					% [p.id, p.claim_bag_id]
+				)
+		if p.has_claimed_bag and p.claim_bag_id > 0 and bag_by_id.has(p.claim_bag_id):
+			var cbag: Bag = bag_by_id[p.claim_bag_id]
+			if not cbag.inbound or cbag.state != Bag.State.CLAIMED:
+				return (
+					"passengers: passenger %d marks unclaimed bag %d claimed"
+					% [p.id, p.claim_bag_id]
+				)
 	return ""
 
 

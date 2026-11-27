@@ -245,7 +245,7 @@ script = ExtResource("30_landside")
 definition = ExtResource("32_landsidedef")
 finances = NodePath("../Finances")
 
-[node name="PassengerSim" type="Node" parent="." node_paths=PackedStringArray("clock", "flights", "build_mode", "finances", "staff", "landside", "bus_shuttle")]
+[node name="PassengerSim" type="Node" parent="." node_paths=PackedStringArray("clock", "flights", "build_mode", "finances", "staff", "landside", "bus_shuttle", "baggage")]
 script = ExtResource("10_pax")
 clock = NodePath("../SimClock")
 flights = NodePath("../FlightSim")
@@ -254,6 +254,7 @@ finances = NodePath("../Finances")
 staff = NodePath("../Staff")
 landside = NodePath("../LandsideSim")
 bus_shuttle = NodePath("../BusShuttleSim")
+baggage = NodePath("../BaggageSim")
 
 [node name="QuietNight" type="Node" parent="." node_paths=PackedStringArray("clock", "flights", "passengers", "incidents")]
 script = ExtResource("46_quietnight")

@@ -17,6 +17,7 @@ const OBJECTS := {
 	BuildMode.Tool.COUNTER: &"cafe_counter",
 	BuildMode.Tool.TABLE: &"cafe_table",
 	BuildMode.Tool.CART: &"baggage_cart",
+	BuildMode.Tool.CLAIM_CAROUSEL: &"claim_carousel",
 	BuildMode.Tool.TRAY_TABLE: SecurityLanes.TRAY_TABLE,
 	BuildMode.Tool.XRAY_BELT: SecurityLanes.XRAY_BELT,
 	BuildMode.Tool.ARCH: SecurityLanes.ARCH,

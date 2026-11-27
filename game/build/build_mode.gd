@@ -127,6 +127,8 @@ enum Tool {
 	AWARD_TROPHY,
 	BUS_GATE_DESK,
 	REMOTE_STAND,
+	BAGGAGE_CLAIM,
+	CLAIM_CAROUSEL,
 }
 
 ## The landside build tools (LandsidePlacement), by the kind each builds. They
@@ -159,6 +161,7 @@ const DRAG_OVER_UI := "Drag stops over the menu. Move back onto the floor to kee
 const TOOL_ROOMS := {
 	Tool.CAFE_ROOM: &"cafe",
 	Tool.BAG_ROOM: &"bag_room",
+	Tool.BAGGAGE_CLAIM: &"baggage_claim",
 	Tool.TOILET_ROOM: &"toilet",
 	Tool.KIOSK_ROOM: &"kiosk",
 	Tool.PHARMACY_ROOM: &"pharmacy",
@@ -178,6 +181,8 @@ const ROOM_FOCUS_TOOLS := [
 	Tool.COUNTER,
 	Tool.TABLE,
 	Tool.BAG_ROOM,
+	Tool.BAGGAGE_CLAIM,
+	Tool.CLAIM_CAROUSEL,
 	Tool.BELT,
 	Tool.CART,
 	Tool.TOILET_ROOM,
@@ -225,6 +230,7 @@ const AREA_TOOLS := [
 	Tool.REMOVE,
 	Tool.CAFE_ROOM,
 	Tool.BAG_ROOM,
+	Tool.BAGGAGE_CLAIM,
 	Tool.TOILET_ROOM,
 	Tool.KIOSK_ROOM,
 	Tool.PHARMACY_ROOM,

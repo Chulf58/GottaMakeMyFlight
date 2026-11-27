@@ -79,6 +79,8 @@ const KINDS := {
 	Passenger.Stage.TO_PARKED_CAR: [Facility.NONE, Location.FLOOR, Pose.UPRIGHT],
 	Passenger.Stage.TO_CURB_PICKUP: [Facility.NONE, Location.FLOOR, Pose.UPRIGHT],
 	Passenger.Stage.WAIT_CURB_PICKUP: [Facility.NONE, Location.FLOOR, Pose.UPRIGHT],
+	Passenger.Stage.TO_CLAIM: [Facility.NONE, Location.FLOOR, Pose.UPRIGHT],
+	Passenger.Stage.AT_CLAIM: [Facility.NONE, Location.FLOOR, Pose.UPRIGHT],
 }
 ## Stage -> Leg.
 const LEGS := {
@@ -120,6 +122,8 @@ const LEGS := {
 	Passenger.Stage.TO_PARKED_CAR: Leg.ARRIVAL,
 	Passenger.Stage.TO_CURB_PICKUP: Leg.ARRIVAL,
 	Passenger.Stage.WAIT_CURB_PICKUP: Leg.ARRIVAL,
+	Passenger.Stage.TO_CLAIM: Leg.ARRIVAL,
+	Passenger.Stage.AT_CLAIM: Leg.ARRIVAL,
 }
 
 

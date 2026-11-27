@@ -44,6 +44,7 @@ const SHORT_TEXT := {
 	BuildResult.Reason.WALLET_FULL: "Money at its limit",
 	BuildResult.Reason.BELT_CROSSING: "Belts cannot cross",
 	BuildResult.Reason.BELT_WALL: "A wall is in the way",
+	BuildResult.Reason.BELT_MIXED_FLOW: "Cannot join claim belt",
 	BuildResult.Reason.STAFF_SPOT: "Keep the staff spot free",
 	BuildResult.Reason.LANE_WALL: "A wall is in the lane",
 	BuildResult.Reason.BAD_ZONE: "Bad zone id",

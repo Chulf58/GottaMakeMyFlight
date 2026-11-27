@@ -11,7 +11,7 @@ extends RefCounted
 ## against the other parts: a settled passenger is retired and a desk can be
 ## demolished while its bags remain.
 
-const SAVE_VERSION := 3
+const SAVE_VERSION := 4
 const KEYS := [
 	"save_version",
 	"tick",
@@ -22,12 +22,16 @@ const KEYS := [
 	"results",
 	"loaded_total",
 	"missed_total",
+	"inbound_claimed_total",
+	"inbound_lost_total",
 ]
 const BAG_KEYS := [
 	"id",
+	"inbound",
 	"passenger",
 	"flight",
 	"desk",
+	"carousel",
 	"color",
 	"state",
 	"cause",
@@ -44,6 +48,7 @@ const BAG_KEYS := [
 ]
 const SHUTTLE_KEYS := [
 	"id",
+	"inbound",
 	"cart_id",
 	"flight",
 	"phase",
@@ -66,7 +71,7 @@ const SHUTTLE_KEYS := [
 const RESULT_KEYS := ["loaded", "missed", "causes"]
 ## The whole-number fields of a saved bag that are ticks or ids, at least 0.
 const COUNT_FIELDS := [
-	"id", "passenger", "desk", "color", "wait_tick", "created_tick", "shuttle_id"
+	"id", "passenger", "desk", "carousel", "color", "wait_tick", "created_tick", "shuttle_id"
 ]
 
 
@@ -78,9 +83,11 @@ static func save(sim: BaggageSim, next_id: int, next_shuttle_id := 1) -> Diction
 			. append(
 				{
 					"id": bag.id,
+					"inbound": bag.inbound,
 					"passenger": bag.passenger,
 					"flight": bag.flight,
 					"desk": bag.desk,
+					"carousel": bag.carousel,
 					"color": bag.color,
 					"state": bag.state,
 					"cause": bag.cause,
@@ -110,6 +117,8 @@ static func save(sim: BaggageSim, next_id: int, next_shuttle_id := 1) -> Diction
 		"results": sim.results.duplicate(true),
 		"loaded_total": sim.loaded_total,
 		"missed_total": sim.missed_total,
+		"inbound_claimed_total": sim.inbound_claimed_total,
+		"inbound_lost_total": sim.inbound_lost_total,
 	}
 
 
@@ -119,6 +128,7 @@ static func _save_shuttle(shuttle: BaggageShuttle) -> Dictionary:
 		saved_waypoints.append([pt.x, pt.y, pt.z])
 	return {
 		"id": shuttle.id,
+		"inbound": shuttle.inbound,
 		"cart_id": shuttle.cart_id,
 		"flight": shuttle.flight,
 		"phase": shuttle.phase,
@@ -178,6 +188,8 @@ static func load(data: Dictionary) -> Dictionary:
 		"results": results,
 		"loaded_total": int(data["loaded_total"]),
 		"missed_total": int(data["missed_total"]),
+		"inbound_claimed_total": int(data["inbound_claimed_total"]),
+		"inbound_lost_total": int(data["inbound_lost_total"]),
 	}
 
 
@@ -194,8 +206,20 @@ static func grid_problem(
 		if record.is_empty() or StringName(record["def"]) != BaggageSim.CART_DEF:
 			return "shuttle %d names missing cart %d" % [shuttle.id, shuttle.cart_id]
 	for bag in bags:
-		if bag.state == Bag.State.IN_ROOM and bag.shuttle_id == 0 and not routes.is_root(bag.cell):
-			return "bag %d is in the room at %s, which is no bag room's end" % [bag.id, bag.cell]
+		if bag.state == Bag.State.IN_ROOM and bag.shuttle_id == 0:
+			if bag.inbound:
+				if not BaggageInbound.is_bag_room_end_cell(routes.grid, bag.cell):
+					return (
+						"bag %d is inbound in the room at %s, which is no bag room's end"
+						% [bag.id, bag.cell]
+					)
+			elif not routes.is_root(bag.cell):
+				return (
+					"bag %d is in the room at %s, which is no bag room's end" % [bag.id, bag.cell]
+				)
+		if bag.state == Bag.State.ON_CAROUSEL:
+			if not bag.inbound or not routes.is_ready_carousel(bag.carousel):
+				return "bag %d is on missing or unready carousel %d" % [bag.id, bag.carousel]
 		if not bag.on_belt():
 			continue
 		var state := BaggageSim.belt_state(bag, routes)
@@ -223,7 +247,9 @@ static func _top_problem(data: Dictionary) -> String:
 		return problem
 	if not WholeNumber.is_whole(data["save_version"]) or int(data["save_version"]) != SAVE_VERSION:
 		return "save_version must be %d" % SAVE_VERSION
-	for key in ["tick", "loaded_total", "missed_total"]:
+	for key in [
+		"tick", "loaded_total", "missed_total", "inbound_claimed_total", "inbound_lost_total"
+	]:
 		if not _is_count(data[key]):
 			return "%s must be a whole number of at least 0" % key
 	for key in ["next_id", "next_shuttle_id"]:
@@ -290,6 +316,8 @@ static func _read_shuttle(entry: Dictionary, shuttle: BaggageShuttle) -> String:
 	]:
 		if not _is_count(entry[key]):
 			return "%s must be a whole number of at least 0" % key
+	if typeof(entry["inbound"]) != TYPE_BOOL:
+		return "inbound must be true or false"
 	if typeof(entry["flight"]) != TYPE_STRING or entry["flight"] == "":
 		return "flight must be a flight id"
 	if not _is_member(entry["phase"], BaggageShuttle.Phase.values()):
@@ -320,6 +348,7 @@ static func _read_shuttle(entry: Dictionary, shuttle: BaggageShuttle) -> String:
 			return "pending_bag_ids must hold positive whole numbers"
 		pending.append(int(raw))
 	shuttle.id = int(entry["id"])
+	shuttle.inbound = entry["inbound"]
 	shuttle.cart_id = int(entry["cart_id"])
 	shuttle.flight = entry["flight"]
 	shuttle.phase = int(entry["phase"]) as BaggageShuttle.Phase
@@ -403,6 +432,28 @@ static func _shuttle_links_problem(
 		by_id[bag.id] = bag
 	var claimed := {}
 	for shuttle in shuttles:
+		if shuttle.inbound:
+			if shuttle.phase == BaggageShuttle.Phase.LOADING:
+				return "shuttle %d: inbound shuttle cannot be loading" % shuttle.id
+			if shuttle.phase == BaggageShuttle.Phase.RETURNING:
+				if not shuttle.pending_bag_ids.is_empty() or shuttle.bag_ids.is_empty():
+					return "shuttle %d: returning inbound shuttle must carry bags" % shuttle.id
+				var ret_problem := _shuttle_bag_list_problem(
+					shuttle, by_id, claimed, shuttle.bag_ids, true
+				)
+				if ret_problem != "":
+					return ret_problem
+			else:
+				if not shuttle.bag_ids.is_empty() or shuttle.pending_bag_ids.is_empty():
+					return (
+						"shuttle %d: outbound inbound shuttle must hold pending bags" % shuttle.id
+					)
+				var pend_problem := _shuttle_bag_list_problem(
+					shuttle, by_id, claimed, shuttle.pending_bag_ids, true
+				)
+				if pend_problem != "":
+					return pend_problem
+			continue
 		if shuttle.phase == BaggageShuttle.Phase.RETURNING:
 			if not shuttle.bag_ids.is_empty() or not shuttle.pending_bag_ids.is_empty():
 				return "shuttle %d: returning shuttle must hold no bags" % shuttle.id
@@ -460,8 +511,15 @@ static func _shuttle_bag_list_problem(
 				"shuttle %d: bag %d belongs to flight %s, not %s"
 				% [shuttle.id, bag_id, bag.flight, shuttle.flight]
 			)
-		if bag.is_settled() or bag.state != Bag.State.IN_ROOM:
-			return "shuttle %d: names non-room bag %d" % [shuttle.id, bag_id]
+		if bag.inbound != shuttle.inbound:
+			return "shuttle %d: flow mismatch on bag %d" % [shuttle.id, bag_id]
+		var expected_state := (
+			Bag.State.IN_ROOM
+			if (not shuttle.inbound or shuttle.phase == BaggageShuttle.Phase.RETURNING)
+			else Bag.State.ON_PLANE
+		)
+		if bag.is_settled() or bag.state != expected_state:
+			return "shuttle %d: names wrong-state bag %d" % [shuttle.id, bag_id]
 		if claimed.has(bag_id):
 			return "shuttle %d: duplicates bag %d" % [shuttle.id, bag_id]
 		claimed[bag_id] = true
@@ -490,12 +548,13 @@ static func _read_bags(
 			problem = _bag_rules(bag, tick, shuttles)
 		if problem == "" and (bag.id <= last_id or bag.id >= next_id):
 			problem = "ids must rise and stay under next_id"
-		if problem == "" and owners.has(bag.passenger):
+		if problem == "" and bag.passenger > 0 and owners.has(bag.passenger):
 			problem = "passenger %d already has bag %d" % [bag.passenger, owners[bag.passenger]]
 		if problem != "":
 			return "bag %s: %s" % [entry.get("id", "?"), problem]
 		last_id = bag.id
-		owners[bag.passenger] = bag.id
+		if bag.passenger > 0:
+			owners[bag.passenger] = bag.id
 		out.append(bag)
 	return ""
 
@@ -507,9 +566,11 @@ static func _read_bag(entry: Dictionary, bag: Bag) -> String:
 	if problem != "":
 		return problem
 	bag.id = int(entry["id"])
+	bag.inbound = entry["inbound"]
 	bag.passenger = int(entry["passenger"])
 	bag.flight = entry["flight"]
 	bag.desk = int(entry["desk"])
+	bag.carousel = int(entry["carousel"])
 	bag.color = int(entry["color"])
 	bag.state = int(entry["state"]) as Bag.State
 	bag.cause = int(entry["cause"]) as Bag.Cause
@@ -549,8 +610,11 @@ static func _field_problem(entry: Dictionary) -> String:
 			problem = "%s must be a whole number of at least -1" % key
 	if problem == "" and not WholeNumber.is_whole(entry["cutoff_tick"]):
 		problem = "cutoff_tick must be a whole number"
-	if problem == "" and typeof(entry["from_desk"]) != TYPE_BOOL:
-		problem = "from_desk must be true or false"
+	if (
+		problem == ""
+		and (typeof(entry["from_desk"]) != TYPE_BOOL or typeof(entry["inbound"]) != TYPE_BOOL)
+	):
+		problem = "from_desk and inbound must be true or false"
 	if problem != "":
 		return problem
 	if typeof(entry["flight"]) != TYPE_STRING or entry["flight"] == "":
@@ -575,7 +639,8 @@ static func _bag_rules(bag: Bag, tick: int, shuttles: Dictionary) -> String:
 	elif bag.is_settled() and (bag.outcome_tick < bag.created_tick or bag.outcome_tick > tick):
 		problem = "its outcome tick is outside its life"
 	elif (
-		not bag.is_settled()
+		not bag.inbound
+		and not bag.is_settled()
 		and bag.shuttle_id == 0
 		and (
 			(bag.state != Bag.State.IN_ROOM and tick >= bag.cutoff_tick)
@@ -589,17 +654,46 @@ static func _bag_rules(bag: Bag, tick: int, shuttles: Dictionary) -> String:
 	elif (bag.state == Bag.State.MISSED) != (bag.cause != Bag.Cause.NONE):
 		problem = "a missed bag, and only a missed one, has a cause"
 	elif (
-		bag.state == Bag.State.IN_ROOM
+		(bag.state == Bag.State.IN_ROOM or bag.state == Bag.State.ON_CAROUSEL)
 		and (bag.rest_tick < bag.created_tick or bag.rest_tick > tick)
 	):
-		problem = "a bag in the room needs a rest tick in its life"
+		problem = "a bag in the room or on a carousel needs a rest tick in its life"
+	if problem == "" and bag.inbound:
+		if bag.desk != 0 or bag.from_desk:
+			problem = "an inbound bag cannot reference a check-in desk"
+		elif bag.state == Bag.State.AT_DESK or bag.state == Bag.State.LOADED:
+			problem = "an inbound bag cannot be at a desk or loaded onto departure"
+		elif bag.state == Bag.State.ON_CAROUSEL and (bag.carousel <= 0 or bag.shuttle_id != 0):
+			problem = "a carousel bag needs a carousel and no shuttle"
+	elif problem == "" and not bag.inbound:
+		if (
+			bag.carousel != 0
+			or bag.state == Bag.State.ON_CAROUSEL
+			or bag.state == Bag.State.CLAIMED
+			or bag.state == Bag.State.ON_PLANE
+		):
+			problem = "an outbound bag cannot use inbound states"
 	if problem == "" and bag.is_settled() and bag.shuttle_id != 0:
 		problem = "a settled bag cannot reference a shuttle"
 	if problem == "" and not bag.is_settled() and bag.shuttle_id > 0:
 		var shuttle: BaggageShuttle = shuttles.get(bag.shuttle_id)
-		if shuttle == null or not shuttle.bag_ids.has(bag.id):
+		if shuttle == null or shuttle.inbound != bag.inbound:
 			problem = "it names no active shuttle"
-		elif bag.state != Bag.State.IN_ROOM or not shuttle.carrying_bags():
+		elif bag.inbound:
+			if shuttle.phase == BaggageShuttle.Phase.RETURNING:
+				if (
+					not shuttle.bag_ids.has(bag.id)
+					or bag.state != Bag.State.IN_ROOM
+					or not shuttle.carrying_bags()
+				):
+					problem = "a returning inbound bag must be in the room on its shuttle"
+			elif not shuttle.pending_bag_ids.has(bag.id) or bag.state != Bag.State.ON_PLANE:
+				problem = "an unloading inbound bag must be on the plane for its shuttle"
+		elif (
+			not shuttle.bag_ids.has(bag.id)
+			or bag.state != Bag.State.IN_ROOM
+			or not shuttle.carrying_bags()
+		):
 			problem = "a bag riding a shuttle must be in the room on an active trip"
 	if problem == "":
 		problem = _edge_rules(bag)
@@ -670,11 +764,20 @@ static func _read_result(entry: Dictionary, out: Dictionary, flight: String) -> 
 ## bags still kept.
 static func _totals_problem(data: Dictionary, bags: Array[Bag], results: Dictionary) -> String:
 	var kept := {}
+	var kept_inbound_claimed := 0
+	var kept_inbound_lost := 0
 	for bag in bags:
-		if bag.is_settled():
-			var counts: Array = kept.get(bag.flight, [0, 0])
-			counts[0 if bag.state == Bag.State.LOADED else 1] += 1
-			kept[bag.flight] = counts
+		if not bag.is_settled():
+			continue
+		if bag.inbound:
+			if bag.state == Bag.State.CLAIMED:
+				kept_inbound_claimed += 1
+			else:
+				kept_inbound_lost += 1
+			continue
+		var counts: Array = kept.get(bag.flight, [0, 0])
+		counts[0 if bag.state == Bag.State.LOADED else 1] += 1
+		kept[bag.flight] = counts
 	var sums := [0, 0]
 	for flight in results:
 		sums[0] += results[flight]["loaded"]
@@ -685,6 +788,11 @@ static func _totals_problem(data: Dictionary, bags: Array[Bag], results: Diction
 			return "results for %s count fewer bags than are kept settled" % flight
 	if int(data["loaded_total"]) < sums[0] or int(data["missed_total"]) < sums[1]:
 		return "the totals are below the results"
+	if (
+		int(data["inbound_claimed_total"]) < kept_inbound_claimed
+		or int(data["inbound_lost_total"]) < kept_inbound_lost
+	):
+		return "the inbound totals are below kept settled inbound bags"
 	return ""
 
 

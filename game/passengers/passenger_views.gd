@@ -1288,6 +1288,21 @@ func _pose(node: Node3D, p: Passenger, built: Dictionary) -> float:
 		face = atan2(door.x, door.y)
 	elif not moving and p.stage == Passenger.Stage.WAIT_CURB_PICKUP:
 		face = 0.0
+	elif not moving and p.stage == Passenger.Stage.AT_CLAIM and p.claim_carousel > 0:
+		var carousel_rec := sim.grid.get_object(p.claim_carousel)
+		if (
+			not carousel_rec.is_empty()
+			and StringName(carousel_rec["def"]) == BeltShaper.CLAIM_CAROUSEL
+		):
+			var def := BuildCatalog.get_def(BeltShaper.CLAIM_CAROUSEL)
+			var fp := def.footprint(carousel_rec["anchor"], carousel_rec["facing"])
+			if not fp.is_empty():
+				var sum := Vector2.ZERO
+				for cell in fp:
+					sum += Vector2(cell)
+				var ahead := sum / float(fp.size()) - Vector2(p.at)
+				if ahead.length_squared() > 0.001:
+					face = atan2(ahead.x, ahead.y)
 	elif not moving and p.bin_detour_bin > 0 and p.bin_detour_end > 0:
 		var bin_rec := sim.grid.get_object(p.bin_detour_bin)
 		if not bin_rec.is_empty():

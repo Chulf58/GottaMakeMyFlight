@@ -14,7 +14,7 @@ extends RefCounted
 ## `passenger` and `desk` are historical: the passenger may be retired and
 ## the desk demolished while the bag still exists.
 
-enum State { AT_DESK, RIDING, BLOCKED, IN_ROOM, LOADED, MISSED }
+enum State { AT_DESK, RIDING, BLOCKED, IN_ROOM, LOADED, MISSED, ON_CAROUSEL, CLAIMED, ON_PLANE }
 enum Cause { NONE, LATE, NO_BELT, NO_ROUTE, LOST }
 
 ## Distance between two cell centres, in mm.
@@ -58,10 +58,12 @@ var rest_tick := -1
 var outcome_tick := -1
 ## Active BaggageShuttle id carrying this bag to the plane, or 0.
 var shuttle_id := 0
+var inbound := false
+var carousel := 0
 
 
 func is_settled() -> bool:
-	return state == State.LOADED or state == State.MISSED
+	return state == State.LOADED or state == State.MISSED or state == State.CLAIMED
 
 
 func on_belt() -> bool:

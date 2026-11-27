@@ -93,6 +93,46 @@ static func divider_doors(grid: BuildGrid) -> Dictionary:
 	return blocked
 
 
+## True when any walkable cell inside `area` sits in a trusted airside zone
+## (reachable from an airside anchor without crossing landside/divider doors,
+## while entrances exist).
+static func is_airside_area(grid: BuildGrid, area: Rect2i) -> bool:
+	if grid == null or area.size.x <= 0 or area.size.y <= 0:
+		return false
+	var anchors := _anchors(grid)
+	var entrances: Array[Vector2i] = anchors["entrances"]
+	if entrances.is_empty():
+		return false
+	var built := _doorless_components(grid)
+	var comp: PackedInt32Array = built["comp"]
+	if comp.is_empty():
+		return false
+	var doors: Array = built["doors"]
+	var w := grid.size.x
+	var land_seeds := {}
+	for cell in entrances:
+		if grid.in_bounds(cell):
+			var c: int = comp[cell.y * w + cell.x]
+			if c >= 0:
+				land_seeds[c] = true
+	if land_seeds.is_empty():
+		return false
+	var air_anchors := _air_anchors(grid, comp, land_seeds, anchors)
+	if air_anchors.is_empty():
+		return false
+	var landside := _landside_components(doors, land_seeds, air_anchors)
+	var airside := _airside_components(doors, landside, air_anchors)
+	for y in range(area.position.y, area.end.y):
+		for x in range(area.position.x, area.end.x):
+			var cell := Vector2i(x, y)
+			if not grid.in_bounds(cell):
+				continue
+			var c: int = comp[y * w + x]
+			if c >= 0 and airside.has(c):
+				return true
+	return false
+
+
 func rebuild(grid: BuildGrid) -> void:
 	if not staff:
 		grid.ensure_divider_doors()
@@ -402,6 +442,34 @@ static func _landside_components(
 				landside[nxt] = true
 				frontier.append(nxt)
 	return landside
+
+
+static func _airside_components(
+	doors: Array, landside: Dictionary, air_anchors: Dictionary
+) -> Dictionary:
+	var adj := {}
+	for d: Array in doors:
+		var ca: int = d[0]
+		var cb: int = d[1]
+		if not adj.has(ca):
+			adj[ca] = []
+		if not adj.has(cb):
+			adj[cb] = []
+		(adj[ca] as Array).append(cb)
+		(adj[cb] as Array).append(ca)
+	var airside := air_anchors.duplicate()
+	var frontier: Array[int] = []
+	for c: int in air_anchors:
+		frontier.append(c)
+	var head := 0
+	while head < frontier.size():
+		var c := frontier[head]
+		head += 1
+		for nxt: int in adj.get(c, []):
+			if not airside.has(nxt) and not landside.has(nxt):
+				airside[nxt] = true
+				frontier.append(nxt)
+	return airside
 
 
 static func crosses_door_edge(grid: BuildGrid, from: Vector2i, to: Vector2i) -> bool:
