@@ -324,3 +324,44 @@ func test_contextual_room_tray_includes_door_card_and_arms_door_without_leaving_
 	await await_idle_frame()
 	assert_bool(_menu.is_room_context()).is_false()
 	assert_bool(_menu.card(BuildMode.Tool.DOOR).is_visible_in_tree()).is_true()
+
+
+func test_break_room_contextual_tray_offers_indoor_seating_and_room_panel_counts_all_seating(
+) -> void:
+	assert_str(BuildMenuCatalog.room_thumbnail(&"break_room")).is_equal("lounge_sofa")
+	var room_id := _mode.grid.apply(BuildEdit.place_room(Rect2i(3, 3, 5, 5), &"break_room")).room_id
+	_menu.enter_room_context(&"break_room", room_id)
+	await await_idle_frame()
+	(
+		assert_array(_visible_room_tools())
+		. is_equal(
+			[
+				BuildMode.Tool.SOFA,
+				BuildMode.Tool.ARMCHAIR,
+				BuildMode.Tool.BENCH,
+				BuildMode.Tool.DOOR,
+				BuildMode.Tool.BREAK_ROOM,
+			]
+		)
+	)
+	assert_str(_badge_text(_menu.card(BuildMode.Tool.SOFA))).is_equal("★")
+	assert_str(_badge_text(_menu.card(BuildMode.Tool.ARMCHAIR))).is_equal("★")
+	assert_str(_badge_text(_menu.card(BuildMode.Tool.BENCH))).is_equal("★")
+
+	_menu.card(BuildMode.Tool.SOFA).pressed.emit()
+	assert_bool(_mode.apply_at(_at(Vector2i(4, 4))).ok).is_true()
+	_menu.card(BuildMode.Tool.ARMCHAIR).pressed.emit()
+	assert_bool(_mode.apply_at(_at(Vector2i(4, 6))).ok).is_true()
+	await await_idle_frame()
+	assert_str(_badge_text(_menu.card(BuildMode.Tool.SOFA))).is_equal("✓")
+	assert_str(_badge_text(_menu.card(BuildMode.Tool.ARMCHAIR))).is_equal("✓")
+	assert_str(_badge_text(_menu.card(BuildMode.Tool.BENCH))).is_equal("✓")
+
+	_mode.set_tool(BuildMode.Tool.NONE)
+	_mode.update_room_focus(_at(Vector2i(4, 4)))
+	var panel := _menu.room_panel()
+	var texts: Array[String] = []
+	for lbl in panel.find_children("*", "Label", true, false):
+		if (lbl as Label).is_visible_in_tree():
+			texts.append((lbl as Label).text)
+	assert_array(texts).contains(["Break Room", "Seating 2"])

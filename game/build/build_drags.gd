@@ -10,6 +10,8 @@ extends RefCounted
 ## Starts a Floor or Remove rectangle on the cell under a ground point. A press
 ## outside the grid is a plain click, which the grid refuses with its reason.
 static func begin_area(mode: BuildMode, point: Vector3) -> void:
+	if mode.object_mover.active:
+		return
 	# A room tool pressed in the outer band of a room of its type grabs that
 	# room's edge to resize it instead of marking a new room (RoomResize).
 	if (

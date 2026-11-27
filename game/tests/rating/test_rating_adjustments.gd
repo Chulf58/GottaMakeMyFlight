@@ -94,11 +94,12 @@ func test_an_adjustment_alone_makes_the_rating_low_and_the_badge_agrees() -> voi
 		)
 		. is_true()
 	)
-	print("adjusted %.1f, badge %.1f" % [_rating.stars(), badge.shown_stars()])
+	var expected_pct := AirportRating.quality_percent(_rating.stars())
+	print("adjusted %.1f, badge %d%%" % [_rating.stars(), badge.shown_quality()])
 	assert_float(_rating.stars()).is_less(RatingFormula.WARN_BELOW)
 	assert_bool(_rating.warning()).is_true()
-	assert_float(badge.shown_stars()).is_equal(_rating.stars())
-	assert_str(badge.label().text).is_equal("%.1f" % _rating.stars())
+	assert_int(badge.shown_quality()).is_equal(expected_pct)
+	assert_str(badge.label().text).is_equal("%d%%" % expected_pct)
 
 
 ## The day-end low count reads the adjusted stars too: the adjustment lasts the

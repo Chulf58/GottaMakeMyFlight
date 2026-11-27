@@ -58,7 +58,7 @@ func test_a_reset_rail_gets_the_warning_back_with_the_rating_unchanged() -> void
 	var again := _stack.notice_card(OfferPanel.WARNING_KEY)
 	assert_object(again).is_not_null()
 	assert_object(again).is_not_same(first)
-	assert_str(_warning_words()).contains("below 2 stars")
+	assert_str(_warning_words()).contains("below 40%")
 
 
 func test_a_replaced_rail_gets_the_warning_with_the_rating_unchanged() -> void:
@@ -69,7 +69,7 @@ func test_a_replaced_rail_gets_the_warning_with_the_rating_unchanged() -> void:
 	_port.add_child(_stack)
 	assert_object(_stack.notice_card(OfferPanel.WARNING_KEY)).is_null()
 	_miss(2)
-	assert_str(_warning_words()).contains("below 2 stars")
+	assert_str(_warning_words()).contains("below 40%")
 
 
 func test_resetting_the_old_rail_does_not_repost_on_the_new_one() -> void:

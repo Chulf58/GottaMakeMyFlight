@@ -55,10 +55,10 @@ func _until_on_duty(role: StaffMember.Role) -> void:
 
 func test_with_no_working_path_the_hint_names_the_path() -> void:
 	_make(false)
-	# The checklist card lists every need still open, the path first.
+	# The checklist card lists every need still open, diagnosing the missing entrance leg first.
 	assert_str(_panel.hint_text()).is_equal(
 		(
-			"Entrance with a way through check-in and security to an exit\n"
+			"Place an entrance door\n"
 			+ "Place Check-in (Operations)\n"
 			+ "Place Security (Operations)\n"
 			+ "Place Seats near the gate (Operations)"

@@ -84,9 +84,9 @@ func test_a_template_with_a_locked_room_and_pieces_is_refused_whole() -> void:
 	)
 	assert_bool(result.ok).is_false()
 	assert_int(result.reason).is_equal(BuildResult.Reason.LOCKED)
-	assert_str(result.reason_text()).contains("Unlocks at 2 stars and 20 passengers")
+	assert_str(result.reason_text()).contains("Unlocks at 40% quality and 20 passengers")
 	assert_int(_paste.check_at(BARE_CENTRE).reason).is_equal(BuildResult.Reason.LOCKED)
-	assert_str(_paste.status_text()).contains("Unlocks at 2 stars and 20 passengers")
+	assert_str(_paste.status_text()).contains("Unlocks at 40% quality and 20 passengers")
 	assert_dict(_mode.grid.to_snapshot()).is_equal(snapshot)
 	assert_int(_mode.wallet().balance).is_equal(balance)
 	assert_int(_mode.undo_history().size()).is_equal(0)
@@ -98,13 +98,19 @@ func test_a_locked_paste_stores_english_and_shows_the_translated_detail() -> voi
 	_translation = Translation.new()
 	_translation.locale = TranslationServer.get_locale()
 	_translation.add_plural_message(
-		"Unlocks at {stars} stars and {passengers} passenger",
-		PackedStringArray(["U1 {stars} {passengers}", "UN {stars} {passengers}"])
+		"Unlocks at {quality}% quality and {passengers} passenger",
+		PackedStringArray(["U1 {quality} {passengers}", "UN {quality} {passengers}"])
 	)
-	_translation.add_plural_message(
-		"{requirement} (now {stars} stars, {passengers} passenger)",
-		PackedStringArray(
-			["NOW {requirement} {stars}/{passengers}", "NOW {requirement} {stars}/{passengers}"]
+	(
+		_translation
+		. add_plural_message(
+			"{requirement} (now {quality}% quality, {passengers} passenger)",
+			PackedStringArray(
+				[
+					"NOW {requirement} {quality}/{passengers}",
+					"NOW {requirement} {quality}/{passengers}",
+				]
+			)
 		)
 	)
 	TranslationServer.add_translation(_translation)
@@ -114,7 +120,7 @@ func test_a_locked_paste_stores_english_and_shows_the_translated_detail() -> voi
 	assert_int(result.reason).is_equal(BuildResult.Reason.LOCKED)
 	assert_str(result.detail).is_equal("Locked at tier 2")
 	assert_int(result.detail_args["tier"]).is_equal(2)
-	assert_str(shown).contains("NOW UN 2 20 ")
+	assert_str(shown).contains("NOW UN 40 20 ")
 	assert_str(shown).not_contains("Unlocks at")
 	assert_str(shown).not_contains(result.detail)
 

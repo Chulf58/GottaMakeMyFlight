@@ -23,6 +23,13 @@ enum Speaker { TERMINAL_MANAGER, GOTTA_AIR }
 
 const PORTRAIT := preload("res://assets/ui/intro_manager_portrait.png")
 const GOTTA_AIR_PORTRAIT := preload("res://assets/ui/station_manager_portrait.png")
+const ICON_CHECKIN := preload("res://assets/ui/icons/check_in.svg")
+const ICON_SECURITY := preload("res://assets/ui/icons/security.svg")
+const ICON_STAFF := preload("res://assets/ui/icons/staff.svg")
+## Typewriter reveal speed in characters per second.
+const TYPEWRITER_CHARS_PER_SEC := 48.0
+const CHIP_ICON_SIZE := 18.0
+const BEAT_PILL_W := 68.0
 ## The Continue key's name, a placeholder in the button.
 const CONTINUE_KEY := "Space"
 ## The speed keys' names, a placeholder in the intro text.
@@ -72,6 +79,17 @@ static var shown_this_session := false
 var _done := false
 var _title_text := ""
 var _body_text := ""
+var _beats: Array[String] = []
+var _beat_index := 0
+var _chips: Array[Dictionary] = []
+var _footer_text := ""
+var _action_label := ""
+var _action_callback := Callable()
+var _typewriter_enabled := false
+var _revealing := false
+var _reveal_progress := 0.0
+var _bob_time := 0.0
+var _entrance_tween: Tween
 ## The height the caller asked for: the box is never shorter.
 var _box_height := BOX_SIZE.y
 var _offer := false
@@ -81,10 +99,15 @@ var _speaker := Speaker.TERMINAL_MANAGER
 var _group := Control.new()
 var _box := Panel.new()
 var _nameplate := PanelContainer.new()
+var _beat_pill_wrap := PanelContainer.new()
+var _beat_pill := Label.new()
 var _portrait := TextureRect.new()
 var _body_scroll := ScrollContainer.new()
 var _body := Label.new()
+var _chips_row := HFlowContainer.new()
+var _footer := Label.new()
 var _continue := Button.new()
+var _action_btn: Button
 var _accept: Button
 var _decline: Button
 
@@ -111,14 +134,17 @@ func _init(
 	body_text := "",
 	box_height := BOX_SIZE.y,
 	offer := false,
-	speaker := Speaker.TERMINAL_MANAGER
+	speaker := Speaker.TERMINAL_MANAGER,
+	options := {}
 ) -> void:
+	var default_intro := title_text == "" and body_text == "" and options.is_empty()
 	_title_text = title_text if title_text != "" else tr("Your first day at the airport")
-	_body_text = body_text if body_text != "" else _intro_body()
 	_box_height = box_height
 	_offer = offer
 	_speaker = speaker
+	_init_content(default_intro, body_text, options)
 	name = "IntroDialogue"
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	theme = BuildMenu.HUD_THEME
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
@@ -143,6 +169,7 @@ func _init(
 	_portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_portrait.position = Vector2.ZERO
 	_portrait.size = Vector2.ONE * PORTRAIT_SIZE
+	_portrait.pivot_offset = Vector2(PORTRAIT_SIZE * 0.5, PORTRAIT_SIZE)
 	_group.add_child(_portrait)
 	_nameplate.size = NAMEPLATE_SIZE
 	_set_box_height(_box_height)
@@ -153,13 +180,54 @@ func _ready() -> void:
 	get_viewport().size_changed.connect(_refit)
 	_fit_box()
 	_place()
+	_play_entrance_pop()
+
+
+func _exit_tree() -> void:
+	_kill_entrance_tween()
+	_reset_portrait_pose()
+
+
+func _process(delta: float) -> void:
+	if _done or not visible or not _revealing:
+		return
+	var total := _body.get_total_character_count()
+	if total <= 0:
+		finish_reveal()
+		return
+	_reveal_progress += delta * TYPEWRITER_CHARS_PER_SEC
+	var next_chars := mini(total, int(floor(_reveal_progress)))
+	if next_chars > _body.visible_characters:
+		_body.visible_characters = next_chars
+		_play_voice_blip()
+	_bob_time += delta
+	var wave := sin(_bob_time * 16.0)
+	_portrait.pivot_offset = Vector2(PORTRAIT_SIZE * 0.5, PORTRAIT_SIZE)
+	_portrait.scale = Vector2(1.0 + 0.025 * wave, 1.0 - 0.03 * wave)
+	_portrait.position.y = -absf(wave) * 5.0
+	if next_chars >= total:
+		finish_reveal()
+
+
+func _gui_input(event: InputEvent) -> void:
+	if _done or not visible:
+		return
+	var click := event as InputEventMouseButton
+	if click == null or not click.pressed or click.button_index != MOUSE_BUTTON_LEFT:
+		return
+	if not _box.get_global_rect().has_point(click.global_position):
+		return
+	accept_event()
+	if _revealing:
+		finish_reveal()
+	elif not _offer:
+		_advance_or_dismiss()
 
 
 ## Every key press is taken while the dialogue is open, except the bare quick
 ## save and quick load keys, which pass on to SaveGame (decision quicksave-f5-
 ## and-quickload-f8-work-while-a-dialog-is-open). Space (without Shift), Enter
-## and keypad Enter close it. The key is marked handled before closing, so the
-## HUD's Space pause toggle never sees the same press.
+## and keypad Enter skip reveal first, advance beats, then close it.
 func _input(event: InputEvent) -> void:
 	var key := event as InputEventKey
 	if _done or not visible or key == null or not key.pressed:
@@ -167,11 +235,15 @@ func _input(event: InputEvent) -> void:
 	if _is_quick_key(key):
 		return
 	get_viewport().set_input_as_handled()
-	if key.echo or _offer:
+	if key.echo:
 		return
 	var space := key.physical_keycode == KEY_SPACE and not key.shift_pressed
-	if space or key.physical_keycode in [KEY_ENTER, KEY_KP_ENTER]:
-		dismiss()
+	if not (space or key.physical_keycode in [KEY_ENTER, KEY_KP_ENTER]):
+		return
+	if _revealing:
+		finish_reveal()
+	elif not _offer:
+		_advance_or_dismiss()
 
 
 ## A first press of F5 or F8 with no modifier: the keys SaveGame answers (it
@@ -187,6 +259,9 @@ func dismiss() -> void:
 	if _done:
 		return
 	_done = true
+	_revealing = false
+	_kill_entrance_tween()
+	_reset_portrait_pose()
 	visible = false
 	dismissed.emit()
 
@@ -206,6 +281,24 @@ func choose(accepted: bool) -> void:
 
 func body_text() -> String:
 	return _body.text
+
+
+func beats() -> Array[String]:
+	return _beats.duplicate()
+
+
+func beat_index() -> int:
+	return _beat_index
+
+
+func is_revealing() -> bool:
+	return _revealing
+
+
+func finish_reveal() -> void:
+	_revealing = false
+	_body.visible_characters = -1
+	_reset_portrait_pose()
 
 
 func speaker() -> Speaker:
@@ -244,6 +337,57 @@ func decline_button() -> Button:
 	return _decline
 
 
+func action_button() -> Button:
+	return _action_btn
+
+
+func chips_row() -> Control:
+	return _chips_row
+
+
+func chip_texts() -> PackedStringArray:
+	var out := PackedStringArray()
+	for child in _chips_row.get_children():
+		var lbl := child.find_child("ChipLabel", true, false) as Label
+		if lbl != null:
+			out.append(lbl.text)
+	return out
+
+
+func beat_pill() -> Label:
+	return _beat_pill
+
+
+func footer_text() -> String:
+	return _footer.text
+
+
+func _init_content(default_intro: bool, body_text: String, options: Dictionary) -> void:
+	if default_intro:
+		_beats = _intro_beats()
+		_chips = _intro_chips()
+		_footer_text = tr("The clock starts when you close this.")
+		_typewriter_enabled = true
+	else:
+		var opt_beats: Array = options.get("beats", [])
+		if not opt_beats.is_empty():
+			for entry: Variant in opt_beats:
+				_beats.append(str(entry))
+			_typewriter_enabled = bool(options.get("typewriter", true))
+		else:
+			_beats = [body_text if body_text != "" else _intro_body()]
+			_typewriter_enabled = bool(options.get("typewriter", false))
+		for chip_entry: Variant in options.get("chips", []):
+			if chip_entry is Dictionary:
+				_chips.append(chip_entry)
+		_footer_text = str(options.get("footer", ""))
+		_action_label = str(options.get("action_label", ""))
+		var cb: Variant = options.get("action_callback", Callable())
+		if cb is Callable:
+			_action_callback = cb
+	_body_text = _beats[0] if not _beats.is_empty() else ""
+
+
 func _build_box() -> void:
 	_box.name = "Box"
 	_box.theme_type_variation = &"IntroBox"
@@ -259,10 +403,12 @@ func _build_box() -> void:
 	inner.offset_bottom = -10.0
 	inner.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_box.add_child(inner)
+	_build_beat_pill()
 	# A long body scrolls inside the box once the box is at MAX_BOX_H.
 	_body_scroll.name = "BodyScroll"
 	_body_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	_body_scroll.focus_mode = Control.FOCUS_NONE
+	_body_scroll.mouse_filter = Control.MOUSE_FILTER_PASS
 	_body_scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
 	# The portrait covers the box's left edge, so the text starts past it.
 	_body_scroll.offset_left = TEXT_LEFT
@@ -277,6 +423,8 @@ func _build_box() -> void:
 	_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_body.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_body_scroll.add_child(_body)
+	_build_chips_row()
+	_build_footer()
 	_continue.name = "Continue"
 	_continue.text = tr("Continue ({key})").format({"key": CONTINUE_KEY})
 	_continue.focus_mode = Control.FOCUS_NONE
@@ -285,38 +433,274 @@ func _build_box() -> void:
 	_continue.offset_top = -62.0
 	_continue.offset_right = -24.0
 	_continue.offset_bottom = -20.0
-	_continue.pressed.connect(dismiss)
+	_continue.pressed.connect(_on_continue_pressed)
 	_box.add_child(_continue)
 	if _offer:
 		_continue.visible = false
 		_accept = _corner_button("Accept", tr("Accept"), 0.0)
+		_accept.theme_type_variation = &"HudButtonGreen"
 		_accept.pressed.connect(choose.bind(true))
 		_decline = _corner_button("Decline", tr("Decline"), 270.0)
+		_decline.theme_type_variation = &"HudButtonCoral"
 		_decline.pressed.connect(choose.bind(false))
+	elif _action_label != "":
+		_action_btn = _corner_button("Action", _action_label, 270.0)
+		_action_btn.theme_type_variation = &"HudButtonTeal"
+		_action_btn.pressed.connect(_trigger_action)
+	_start_beat(0)
 
 
-## The first-day text, one msgid per paragraph, joined by line breaks. The
-## speed keys are placeholders so a language can keep or move them.
+func _build_beat_pill() -> void:
+	_beat_pill_wrap.name = "BeatPill"
+	_beat_pill_wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_beat_pill_wrap.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_beat_pill_wrap.offset_left = -24.0 - BEAT_PILL_W
+	_beat_pill_wrap.offset_top = 14.0
+	_beat_pill_wrap.offset_right = -24.0
+	_beat_pill_wrap.offset_bottom = 40.0
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.10, 0.13, 0.26, 0.92)
+	style.set_corner_radius_all(12)
+	style.content_margin_left = 10.0
+	style.content_margin_right = 10.0
+	style.content_margin_top = 2.0
+	style.content_margin_bottom = 2.0
+	_beat_pill_wrap.add_theme_stylebox_override("panel", style)
+	_beat_pill.name = "BeatLabel"
+	_beat_pill.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_beat_pill.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_beat_pill.theme_type_variation = &"HudSmall"
+	_beat_pill.add_theme_color_override("font_color", Color(0.99, 0.97, 0.92, 1.0))
+	_beat_pill_wrap.add_child(_beat_pill)
+	_box.add_child(_beat_pill_wrap)
+
+
+func _build_chips_row() -> void:
+	_chips_row.name = "ChipsRow"
+	_chips_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_chips_row.add_theme_constant_override("h_separation", 8)
+	_chips_row.add_theme_constant_override("v_separation", 6)
+	_chips_row.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	_chips_row.offset_left = TEXT_LEFT
+	_chips_row.offset_right = -BODY_RIGHT
+	_chips_row.offset_bottom = -BODY_BOTTOM - 4.0
+	_chips_row.offset_top = -BODY_BOTTOM - 4.0
+	_box.add_child(_chips_row)
+	for entry in _chips:
+		_chips_row.add_child(_make_chip(entry))
+	_chips_row.visible = not _chips.is_empty()
+
+
+func _make_chip(entry: Dictionary) -> PanelContainer:
+	var tint: Color = entry.get("tint", Color(0.20, 0.42, 0.64, 1.0))
+	var pill := PanelContainer.new()
+	pill.name = "Chip"
+	pill.mouse_filter = Control.MOUSE_FILTER_PASS
+	pill.tooltip_text = str(entry.get("tooltip", ""))
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(tint.r, tint.g, tint.b, 0.14)
+	style.border_color = Color(tint.r, tint.g, tint.b, 0.65)
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(12)
+	style.content_margin_left = 10.0
+	style.content_margin_right = 12.0
+	style.content_margin_top = 4.0
+	style.content_margin_bottom = 4.0
+	pill.add_theme_stylebox_override("panel", style)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pill.add_child(row)
+	var icon_val: Variant = entry.get("icon", null)
+	var icon_tex: Texture2D = null
+	if icon_val is Texture2D:
+		icon_tex = icon_val
+	elif icon_val is String and String(icon_val) != "":
+		icon_tex = load(String(icon_val)) as Texture2D
+	if icon_tex != null:
+		var icon := TextureRect.new()
+		icon.texture = icon_tex
+		icon.custom_minimum_size = Vector2(CHIP_ICON_SIZE, CHIP_ICON_SIZE)
+		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(icon)
+	var text := str(entry.get("label", ""))
+	var lbl := Label.new()
+	lbl.name = "ChipLabel"
+	lbl.text = text
+	lbl.theme_type_variation = &"HudSmall"
+	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var max_w := BOX_SIZE.x - TEXT_LEFT - BODY_RIGHT - 56.0
+	var font := BuildMenu.HUD_THEME.get_font(&"font", &"HudSmall")
+	var fsize := BuildMenu.HUD_THEME.get_font_size(&"font_size", &"HudSmall")
+	if font != null and font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fsize).x > max_w:
+		lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		lbl.custom_minimum_size.x = max_w
+	row.add_child(lbl)
+	return pill
+
+
+func _build_footer() -> void:
+	_footer.name = "Footer"
+	_footer.theme_type_variation = &"HudHint"
+	_footer.text = _footer_text
+	_footer.visible = _footer_text != ""
+	_footer.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_footer.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_footer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_footer.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	_footer.offset_left = TEXT_LEFT
+	_footer.offset_right = -544.0
+	_footer.offset_top = -62.0
+	_footer.offset_bottom = -20.0
+	_box.add_child(_footer)
+
+
+func _start_beat(idx: int) -> void:
+	_beat_index = clampi(idx, 0, maxi(0, _beats.size() - 1))
+	_body_text = _beats[_beat_index] if not _beats.is_empty() else ""
+	_body.text = _body_text
+	_reveal_progress = 0.0
+	_bob_time = 0.0
+	_reset_portrait_pose()
+	if _typewriter_enabled and _body_text != "":
+		_revealing = true
+		_body.visible_characters = 0
+	else:
+		_revealing = false
+		_body.visible_characters = -1
+	_sync_beat_chrome()
+
+
+func _sync_beat_chrome() -> void:
+	var multi := _beats.size() > 1
+	_beat_pill_wrap.visible = multi
+	if multi:
+		_beat_pill.text = "%d / %d" % [_beat_index + 1, _beats.size()]
+	var has_next := _beat_index < _beats.size() - 1
+	if has_next:
+		_continue.text = tr("Next ({key})").format({"key": CONTINUE_KEY})
+	else:
+		_continue.text = tr("Continue ({key})").format({"key": CONTINUE_KEY})
+
+
+func _on_continue_pressed() -> void:
+	if _revealing:
+		finish_reveal()
+		return
+	_advance_or_dismiss()
+
+
+func _advance_or_dismiss() -> void:
+	if _done:
+		return
+	if _beat_index < _beats.size() - 1:
+		_start_beat(_beat_index + 1)
+		_fit_box()
+		_place()
+	else:
+		dismiss()
+
+
+func _trigger_action() -> void:
+	if _done:
+		return
+	var cb := _action_callback
+	dismiss()
+	if cb.is_valid():
+		cb.call()
+
+
+func _play_entrance_pop() -> void:
+	_kill_entrance_tween()
+	if not _typewriter_enabled:
+		return
+	_box.pivot_offset = _box.size * 0.5
+	_box.scale = Vector2(0.94, 0.94)
+	_box.modulate.a = 0.0
+	_nameplate.modulate.a = 0.0
+	_entrance_tween = create_tween()
+	_entrance_tween.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
+	_entrance_tween.set_parallel(true)
+	(
+		_entrance_tween
+		. tween_property(_box, "scale", Vector2.ONE, 0.22)
+		. set_trans(Tween.TRANS_BACK)
+		. set_ease(Tween.EASE_OUT)
+	)
+	_entrance_tween.tween_property(_box, "modulate:a", 1.0, 0.16)
+	_entrance_tween.tween_property(_nameplate, "modulate:a", 1.0, 0.16)
+
+
+func _kill_entrance_tween() -> void:
+	if is_instance_valid(_entrance_tween):
+		_entrance_tween.kill()
+	_entrance_tween = null
+
+
+func _reset_portrait_pose() -> void:
+	_portrait.scale = Vector2.ONE
+	_portrait.position = Vector2.ZERO
+
+
+func _play_voice_blip() -> void:
+	var tree := get_tree()
+	if tree == null or tree.root == null:
+		return
+	var audio := tree.root.get_node_or_null("GameAudio")
+	if audio != null and audio.has_method(&"play_voice_blip"):
+		var who := &"airline" if _speaker == Speaker.GOTTA_AIR else &"manager"
+		audio.play_voice_blip(who)
+
+
+func _intro_beats() -> Array[String]:
+	var beat1 := tr("Welcome aboard! Build a check-in desk, scanner, and gate from Operations.")
+	var beat2 := tr("Hire staff to open the terminal. {pause} pauses, {speed} sets speed.").format(
+		{"pause": CONTINUE_KEY, "speed": SPEED_KEYS_TEXT}
+	)
+	return [beat1, beat2]
+
+
+func _intro_chips() -> Array[Dictionary]:
+	return [
+		{
+			"icon": ICON_CHECKIN,
+			"label": tr("Check-in"),
+			"tint": Color(0.24, 0.56, 0.72, 1.0),
+		},
+		{
+			"icon": ICON_SECURITY,
+			"label": tr("Security"),
+			"tint": Color(0.84, 0.52, 0.22, 1.0),
+		},
+		{
+			"icon": ICON_STAFF,
+			"label": tr("Staff"),
+			"tint": Color(0.22, 0.58, 0.36, 1.0),
+		},
+	]
+
+
+## Legacy fallback when an explicit single-string caller asks for the intro text.
 func _intro_body() -> String:
-	var welcome := tr(
-		# gdlint:ignore = max-line-length
-		"Welcome to your new airport! Open Operations on the bottom bar to place a check-in desk, security scanner, and gate desk."
-	)
-	var staff_line := tr(
-		# gdlint:ignore = max-line-length
-		"Then open Staff to hire an agent, an officer, and a gate agent so the airport can open. {pause} pauses, {speed} sets speed."
-	)
-	var clock := tr("The clock starts when you close this.")
-	var keys := {"pause": CONTINUE_KEY, "speed": SPEED_KEYS_TEXT}
-	return "\n".join(PackedStringArray([welcome, staff_line.format(keys), clock]))
+	return "\n".join(_intro_beats())
 
 
-## Sizes the box to its body text: never below the caller's height, never above
-## the cap from _max_box_height. Called once the dialogue is in the tree, where
-## the body has its theme font and its text is translated.
+## Sizes the box to its body text and optional chips row: never below the
+## caller's height, never above the cap from _max_box_height.
 func _fit_box() -> void:
+	var chips_h := 0.0
+	if not _chips.is_empty():
+		var chip_area_w := BOX_SIZE.x - TEXT_LEFT - BODY_RIGHT
+		_chips_row.custom_minimum_size.x = chip_area_w
+		var min_h := maxf(30.0, _chips_row.get_combined_minimum_size().y)
+		chips_h = min_h + 12.0
+		_chips_row.offset_bottom = -BODY_BOTTOM - 4.0
+		_chips_row.offset_top = -BODY_BOTTOM - 4.0 - min_h
+	_body_scroll.offset_bottom = -(BODY_BOTTOM + chips_h)
 	_body.size.x = BOX_SIZE.x - TEXT_LEFT - BODY_RIGHT
-	var wanted := _body.get_minimum_size().y + BODY_TOP + BODY_BOTTOM
+	var wanted := _body.get_minimum_size().y + BODY_TOP + BODY_BOTTOM + chips_h
 	var cap := _max_box_height()
 	_set_box_height(clampf(wanted, minf(_box_height, cap), cap))
 

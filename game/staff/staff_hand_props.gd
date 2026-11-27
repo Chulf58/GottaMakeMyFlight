@@ -9,9 +9,39 @@ enum PropKind { NONE, WAND, BOARDING_PASS, CLIPBOARD, COFFEE_CUP, BROOM, RAG, MA
 
 const TOON_BASE := preload("res://assets/materials/tp_atlas_simple_toon.tres")
 const PROP_META := &"staff_hand_props"
+const BROOM_CARRY_META := &"broom_carry_arm"
 const WEIGHT_MIN := 0.3
 const OUTLINE_PX := 1.0
 const OUTLINE_BIAS_M := 0.002
+const BROOM_SWEEP_POS := Vector3(0.025, 0.08, 0.015)
+const BROOM_SWEEP_ROT_DEG := Vector3(78.0, 0.0, -8.0)
+const BROOM_CARRY_POS := Vector3(0.032, 0.095, 0.015)
+const BROOM_CARRY_ROT_DEG := Vector3(98.0, 0.0, -4.0)
+const BROOM_CARRY_UPPER_DEG := 4.0
+const BROOM_CARRY_HALF_WIDTH := 0.27
+const BROOM_CARRY_UP_DEG := -16.0
+
+
+class BroomCarryModifier:
+	extends CarryArm
+
+	func _process_modification_with_delta(delta: float) -> void:
+		super._process_modification_with_delta(delta)
+		var skeleton := get_skeleton()
+		if skeleton == null:
+			return
+		var hand_idx := skeleton.find_bone(HANDS[side])
+		if hand_idx < 0:
+			return
+		var hand := skeleton.get_bone_global_pose(hand_idx)
+		var axis := hand.basis.y.normalized()
+		var thumb_now := hand.basis.z - axis * hand.basis.z.dot(axis)
+		var up_proj := Vector3.UP - axis * Vector3.UP.dot(axis)
+		if thumb_now.length() > 0.001 and up_proj.length() > 0.001:
+			var angle := thumb_now.normalized().signed_angle_to(up_proj.normalized(), axis)
+			hand.basis = Basis(axis, angle) * hand.basis
+			skeleton.set_bone_global_pose(hand_idx, hand)
+
 
 const COLOR_WAND_GRIP := Color(0.18, 0.21, 0.27)
 const COLOR_WAND_HEAD := Color(0.28, 0.38, 0.52)
@@ -120,6 +150,8 @@ static func update(
 		cleaner_patrolling,
 	)
 	if kind == PropKind.NONE and not node.has_meta(PROP_META):
+		if node.has_meta(BROOM_CARRY_META):
+			_set_broom_carry(node, false)
 		return
 	var rec := _ensure(node)
 	if rec.is_empty():
@@ -132,11 +164,20 @@ static func update(
 	for key: int in extra:
 		for prop_node: Node3D in extra[key]:
 			prop_node.visible = (key == kind)
+	var carry_broom := kind == PropKind.BROOM and not cleaner_working
+	var broom := props.get(PropKind.BROOM) as Node3D
+	if broom != null:
+		broom.position = BROOM_CARRY_POS if carry_broom else BROOM_SWEEP_POS
+		broom.rotation_degrees = BROOM_CARRY_ROT_DEG if carry_broom else BROOM_SWEEP_ROT_DEG
+	_set_broom_carry(node, carry_broom)
 
 
 ## Hides every attached prop on `node` (used on snap/load and pool release).
 static func hide_all(node: Node3D) -> void:
-	if node == null or not node.has_meta(PROP_META):
+	if node == null:
+		return
+	_set_broom_carry(node, false)
+	if not node.has_meta(PROP_META):
 		return
 	var rec: Dictionary = node.get_meta(PROP_META)
 	var props: Dictionary = rec.get("props", {})
@@ -144,11 +185,48 @@ static func hide_all(node: Node3D) -> void:
 		var prop_node := props[key] as Node3D
 		if is_instance_valid(prop_node):
 			prop_node.visible = false
+			if key == PropKind.BROOM:
+				prop_node.position = BROOM_SWEEP_POS
+				prop_node.rotation_degrees = BROOM_SWEEP_ROT_DEG
 	var extra: Dictionary = rec.get("extra", {})
 	for key: int in extra:
 		for prop_node: Node3D in extra[key]:
 			if is_instance_valid(prop_node):
 				prop_node.visible = false
+
+
+## Returns the CarryArm modifier used for cleaner broom carry on `node`, or null.
+static func broom_carry_arm_of(node: Node3D) -> CarryArm:
+	if node == null or not node.has_meta(BROOM_CARRY_META):
+		return null
+	return node.get_meta(BROOM_CARRY_META) as CarryArm
+
+
+static func _set_broom_carry(node: Node3D, carry_active: bool) -> void:
+	if not carry_active and not node.has_meta(BROOM_CARRY_META):
+		return
+	var arm: BroomCarryModifier
+	if node.has_meta(BROOM_CARRY_META):
+		arm = node.get_meta(BROOM_CARRY_META) as BroomCarryModifier
+	else:
+		var skeletons := node.find_children("*", "Skeleton3D", true, false)
+		if skeletons.is_empty():
+			return
+		var skeleton := skeletons[0] as Skeleton3D
+		arm = BroomCarryModifier.new()
+		arm.name = "BroomCarryArm"
+		arm.side = 0
+		arm.holds = true
+		arm.front_weight = 1.0
+		arm.front_upper_degrees = BROOM_CARRY_UPPER_DEG
+		arm.front_half_width = BROOM_CARRY_HALF_WIDTH
+		arm.front_up_degrees = BROOM_CARRY_UP_DEG
+		arm.grip_curl = 1.0
+		arm.active = false
+		skeleton.add_child(arm)
+		node.set_meta(BROOM_CARRY_META, arm)
+	if is_instance_valid(arm):
+		arm.active = carry_active
 
 
 ## Currently visible PropKind on `node`, or PropKind.NONE.
@@ -352,8 +430,8 @@ static func _build_coffee_cup() -> Node3D:
 static func _build_broom() -> Node3D:
 	var root := Node3D.new()
 	root.name = "Broom"
-	root.position = Vector3(0.025, 0.08, 0.015)
-	root.rotation_degrees = Vector3(78.0, 0.0, -8.0)
+	root.position = BROOM_SWEEP_POS
+	root.rotation_degrees = BROOM_SWEEP_ROT_DEG
 	var pole := _part(
 		"Pole",
 		_cyl_mesh("broom_pole", 0.014, 0.014, 1.15),

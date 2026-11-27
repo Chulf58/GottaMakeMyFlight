@@ -28,17 +28,16 @@ func test_the_rating_is_bound_to_the_scenes_own_clock_flights_and_passengers() -
 	assert_bool(clock.ticked.is_connected(rating.on_tick)).is_true()
 
 
-func test_a_new_game_shows_no_flights_yet_and_empty_stars_in_the_real_controls() -> void:
+func test_a_new_game_shows_no_flights_yet_without_duplicate_stars_in_the_real_controls() -> void:
 	var badge: RatingBadge = _main.get_node("RatingBadge")
 	assert_object(badge.rating).is_same(_main.get_node("AirportRating"))
 	var text := badge.find_child("RatingText", true, false) as Label
 	assert_object(text).is_not_null()
 	assert_bool(text.is_visible_in_tree()).is_true()
 	assert_str(text.text).is_equal("No flights yet")
-	var stars: Control = badge.card().get_child(0).get_child(0)
-	assert_object(stars).is_same(badge.star_row())
-	assert_bool(stars.is_visible_in_tree()).is_true()
-	assert_array(badge.star_row().fills).is_equal([0.0, 0.0, 0.0, 0.0, 0.0])
+	assert_int(badge.shown_quality()).is_equal(0)
+	for child in badge.card().find_children("*", "Control", true, false):
+		assert_bool(child is RatingBadge.StarRow).is_false()
 	assert_str(badge.card().tooltip_text).contains("No flights yet")
 
 

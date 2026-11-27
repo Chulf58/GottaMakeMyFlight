@@ -57,6 +57,7 @@ func test_a_load_shows_an_offer_that_was_still_waiting_for_its_turn() -> void:
 
 func test_a_shown_announcement_is_not_shown_again_after_a_load() -> void:
 	_k.announce()
+	_panel.dialog().finish_reveal()
 	_panel.dialog().continue_button().pressed.emit()
 	assert_bool(_panel.is_open()).is_false()
 	_k.load_happens()
@@ -86,6 +87,7 @@ func test_an_announcement_that_never_reached_the_screen_is_shown_after_the_load(
 	assert_bool(_panel.is_open()).is_true()
 	assert_str(_panel.dialog().body_text()).contains("A test crew")
 	assert_bool(_k.is_shown(id)).is_true()
+	_panel.dialog().finish_reveal()
 	_panel.dialog().continue_button().pressed.emit()
 	assert_array(_director.pending_presentation()).is_empty()
 

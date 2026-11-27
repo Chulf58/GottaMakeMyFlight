@@ -247,7 +247,7 @@ func test_staff_panel_and_room_panel_display_energy_and_prestige_recovery() -> v
 		"Prestige: Lv. 5 / 5 (%d pts · +%d%% recovery)"
 		% [eval["score"], eval["break_bonus_percent"]]
 	)
-	assert_array(room_texts).contains(["Break Room", "Benches 1", expected_prestige])
+	assert_array(room_texts).contains(["Break Room", "Seating 1", expected_prestige])
 
 	_w = _ref_world()
 	_add_break_room(_w.grid, BREAK_RECT, false)

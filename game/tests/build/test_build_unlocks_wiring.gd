@@ -44,7 +44,7 @@ func test_build_mode_refuses_a_locked_tool_and_takes_it_once_unlocked() -> void:
 	assert_int(mode.tool).is_equal(BuildMode.Tool.WALL)
 	mode.set_tool(BuildMode.Tool.CAFE_ROOM)
 	assert_int(mode.tool).is_equal(BuildMode.Tool.WALL)
-	assert_str(mode.status_text()).contains("Unlocks at 2 stars and 20 passengers")
+	assert_str(mode.status_text()).contains("Unlocks at 40% quality and 20 passengers")
 	_unlocks.from_snapshot({"tier": 2, "made": 20, "shown": [], "seen": [], "firsts": []})
 	mode.set_tool(BuildMode.Tool.CAFE_ROOM)
 	assert_int(mode.tool).is_equal(BuildMode.Tool.CAFE_ROOM)
@@ -76,7 +76,7 @@ func test_the_edits_of_a_plan_are_locked_by_their_room_and_their_pieces() -> voi
 	]
 	for locked: Array[BuildEdit] in [cafe_room, cafe_piece]:
 		assert_str(BuildUnlocks.edits_lock_text(_unlocks, true, locked)).starts_with(
-			"Unlocks at 2 stars and 20 passengers"
+			"Unlocks at 40% quality and 20 passengers"
 		)
 	assert_str(BuildUnlocks.edits_lock_text(_unlocks, true, start_piece)).is_empty()
 	assert_str(BuildUnlocks.edits_lock_text(_unlocks, true, floor_only)).is_empty()

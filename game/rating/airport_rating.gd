@@ -144,6 +144,12 @@ func stars() -> float:
 	return _adjusted_stars(_window(current_day()), _tick)
 
 
+## Maps a 1.0..5.0 rating value to a 0..100 quality percentage (1.0 -> 20%,
+## 2.5 -> 50%, 3.0 -> 60%, 4.0 -> 80%, 4.5 -> 90%, 5.0 -> 100%).
+static func quality_percent(stars_val: float) -> int:
+	return clampi(roundi(stars_val * 20.0), 0, 100)
+
+
 ## False until a passenger (or no-show) is inside the window.
 func has_data() -> bool:
 	var window := _window(current_day())

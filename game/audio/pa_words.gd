@@ -148,15 +148,20 @@ static func close_call_for(flights: FlightSim, flight_id: String) -> String:
 	return close_call(info["airline"], info["city"], info["gate"], flight_id)
 
 
-## Announcement when the terminal rating crosses a star milestone upward.
+## Announcement when the terminal quality crosses a milestone upward.
 static func star_milestone(stars_text: String) -> String:
+	var pct_text := stars_text
+	if stars_text.is_valid_float():
+		var val := stars_text.to_float()
+		if val <= RatingFormula.MAX_STARS:
+			pct_text = str(AirportRating.quality_percent(val))
 	return (
 		TranslationServer
 		. translate(
-			"PA: Our terminal is now rated {stars} stars. Same carpet, slightly prouder management.",
+			"PA: Our terminal quality just reached {percent}%. Same carpet, slightly prouder management.",
 			CONTEXT
 		)
-		. format({"stars": stars_text})
+		. format({"percent": pct_text})
 	)
 
 
@@ -181,7 +186,7 @@ static func msgids() -> PackedStringArray:
 			"PA: Bravo to the passenger who caught {airline} to {city} just in time.",
 			"PA: Bravo to the passenger who caught {flight} at Gate {gate} just in time.",
 			"PA: Bravo to the passenger who caught {flight} with seconds to spare.",
-			"PA: Our terminal is now rated {stars} stars. Same carpet, slightly prouder management.",
+			"PA: Our terminal quality just reached {percent}%. Same carpet, slightly prouder management.",
 		]
 	)
 

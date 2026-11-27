@@ -73,10 +73,10 @@ func test_door_edge_rotates_cleanly_across_all_turns() -> void:
 		],
 		&"kiosk":
 		[
-			{"cell": Vector2i(7, 8), "side": SOUTH, "outside": Vector2i(7, 9)},
+			{"cell": Vector2i(7, 9), "side": SOUTH, "outside": Vector2i(7, 10)},
 			{"cell": Vector2i(6, 7), "side": WEST, "outside": Vector2i(5, 7)},
-			{"cell": Vector2i(8, 6), "side": NORTH, "outside": Vector2i(8, 5)},
-			{"cell": Vector2i(8, 8), "side": EAST, "outside": Vector2i(9, 8)},
+			{"cell": Vector2i(7, 6), "side": NORTH, "outside": Vector2i(7, 5)},
+			{"cell": Vector2i(9, 7), "side": EAST, "outside": Vector2i(10, 7)},
 		],
 	}
 	for kit_id: StringName in expected:

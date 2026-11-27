@@ -20,14 +20,21 @@ class RoomType:
 	## charge per piece (PriceTable); none for a room that costs nothing to run.
 	var upkeep_piece: StringName = &""
 	var upkeep_per_piece := 0
+	## Alternative piece ids accepted for a required piece (`StringName -> Array[StringName]`).
+	var alt_pieces: Dictionary = {}
 
 	## The pieces that count as the required piece `need_id`: for a food room's
-	## counter or table every piece it accepts, else the piece itself.
+	## counter or table every piece it accepts, any registered alternatives,
+	## else the piece itself.
 	func pieces_for(need_id: StringName) -> Array[StringName]:
 		if counter_pieces.has(need_id):
 			return counter_pieces
 		if table_pieces.has(need_id):
 			return table_pieces
+		if alt_pieces.has(need_id):
+			var out: Array[StringName] = []
+			out.assign(alt_pieces[need_id])
+			return out
 		return [need_id]
 
 	## Whether a room of `size` cells is big enough, turned either way.
@@ -224,7 +231,8 @@ static func _build() -> void:
 	break_room.id = &"break_room"
 	break_room.display_name = "Break Room"
 	break_room.min_size = Vector2i(2, 3)
-	break_room.required = [[&"bench_1a", "Needs a bench"]]
+	break_room.required = [[&"lounge_sofa", "Needs a sofa"]]
+	break_room.alt_pieces[&"lounge_sofa"] = [&"lounge_sofa", &"lounge_armchair", &"bench_1a"]
 	_types[break_room.id] = break_room
 
 

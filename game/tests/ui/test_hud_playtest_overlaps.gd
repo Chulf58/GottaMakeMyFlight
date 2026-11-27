@@ -194,8 +194,8 @@ func test_rating_badge_stars_render_4_5_with_unclipped_gold_interior() -> void:
 		rating.record_passenger(10, true, 90)
 	rating.record_passenger(10, false, 0)
 	await _settle()
-	assert_str(badge.label().text).is_equal("4.5")
-	assert_array(badge.star_row().fills).is_equal([1.0, 1.0, 1.0, 1.0, 0.5])
+	assert_str(badge.label().text).is_equal("90%")
+	assert_int(badge.shown_quality()).is_equal(90)
 	var shape := RatingBadge.StarRow._star(Vector2(8.0, 8.0))
 	assert_int(Geometry2D.triangulate_polygon(shape).size()).is_equal(24)
 	# Outer radius leaves >= 1 px margin on all sides inside STAR_SIZE so the 2 px

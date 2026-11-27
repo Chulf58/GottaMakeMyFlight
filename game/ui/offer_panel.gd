@@ -156,8 +156,8 @@ var _noted_tick := -1
 static func warning_message(low_days: int) -> String:
 	var text := (
 		TranslationServer
-		. translate("Airlines are warning you: the airport rating is below {stars} stars.")
-		. format({"stars": int(RatingFormula.WARN_BELOW)})
+		. translate("Airlines are warning you: the airport quality is below {percent}%.")
+		. format({"percent": AirportRating.quality_percent(RatingFormula.WARN_BELOW)})
 	)
 	var left := RatingFormula.LOW_DAYS_TO_END - low_days
 	if left > 0:
@@ -1163,9 +1163,12 @@ func _trait_row(offer: Dictionary) -> HBoxContainer:
 			loyal_tip = tr("Silver loyalty: this airline's offers pay 10% more.")
 		OfferBoard.LOYALTY_TIER_GOLD:
 			loyal_text = tr("Gold +15%")
-			loyal_tip = tr(
-				# gdlint:ignore = max-line-length
-				"Gold loyalty: this airline's offers pay 15% more and unlock Hub Contracts at 3★+."
+			loyal_tip = (
+				tr(
+					# gdlint:ignore = max-line-length
+					"Gold loyalty: this airline's offers pay 15% more and unlock Hub Contracts at {percent}%+ quality."
+				)
+				. format({"percent": AirportRating.quality_percent(OfferBoard.HUB_MIN_STARS)})
 			)
 	var labels := Array(OfferTraits.card_labels(traits)) + [loyal_text]
 	var tips := Array(OfferTraits.card_tips(traits)) + [loyal_tip]

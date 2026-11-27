@@ -107,6 +107,8 @@ const TIERS := [
 			BuildMode.Tool.CURB,
 			BuildMode.Tool.SURFACE_LOT,
 			BuildMode.Tool.BREAK_ROOM,
+			BuildMode.Tool.SOFA,
+			BuildMode.Tool.ARMCHAIR,
 			BuildMode.Tool.AWARD_TROPHY,
 		],
 	},
@@ -137,8 +139,6 @@ const TIERS := [
 			BuildMode.Tool.EXCHANGE,
 			BuildMode.Tool.ATM,
 			BuildMode.Tool.LOUNGE_ROOM,
-			BuildMode.Tool.SOFA,
-			BuildMode.Tool.ARMCHAIR,
 			BuildMode.Tool.WORK_DESK,
 			BuildMode.Tool.BUS_GATE_DESK,
 			BuildMode.Tool.REMOTE_STAND,
@@ -234,7 +234,7 @@ static func lock_text(gate: BuildUnlocks, required: bool, tool: BuildMode.Tool) 
 
 ## What lock_text() says as values, none of it translated: {} when `tool` can be
 ## picked, {"unwired": true} for a required gate that is missing, else {"tier"}
-## and, once the game is rated, {"stars", "passengers"} as they stand now.
+## and, once the game is rated, {"quality", "passengers"} as they stand now.
 ## lock_words() puts the values into the player's words at display time.
 static func lock_args(gate: BuildUnlocks, required: bool, tool: BuildMode.Tool) -> Dictionary:
 	var needed := tier_of(tool)
@@ -254,9 +254,9 @@ static func lock_words(args: Dictionary) -> String:
 	if args.has("unwired"):
 		return Words.new().not_wired()
 	var text := requirement_text(args["tier"])
-	if not args.has("stars"):
+	if not args.has("quality"):
 		return text
-	return Words.new().requirement_now(text, args["stars"], args["passengers"])
+	return Words.new().requirement_now(text, int(args["quality"]), args["passengers"])
 
 
 ## The tool `wanted` as a mode's starting tool: itself when it may be picked, else
@@ -307,7 +307,7 @@ static func runway_tier(size: String) -> int:
 	return RUNWAY_TIERS.get(size, UNLISTED_TIER)
 
 
-## What tier `tier` asks for: "Unlocks at 3 stars and 120 passengers", or
+## What tier `tier` asks for: "Unlocks at 60% quality and 120 passengers", or
 ## "In the full game" above MAX_PLAYABLE_TIER in demo builds.
 static func requirement_text(tier: int) -> String:
 	if DemoMode.is_demo() and tier > DemoMode.MAX_PLAYABLE_TIER and tier <= TIERS.size():
@@ -315,10 +315,8 @@ static func requirement_text(tier: int) -> String:
 	if tier < 2 or tier > TIERS.size():
 		return Words.new().not_available()
 	var need: Dictionary = TIERS[tier - 1]
-	var stars: float = need["stars"]
-	return Words.new().requirement(
-		str(int(stars)) if is_equal_approx(stars, floorf(stars)) else str(stars), need["passengers"]
-	)
+	var quality := AirportRating.quality_percent(float(need["stars"]))
+	return Words.new().requirement(quality, need["passengers"])
 
 
 func set_unlock_all(on: bool) -> void:
@@ -368,14 +366,14 @@ func tier_text(needed: int) -> String:
 	return lock_words(tier_args(needed))
 
 
-## The values tier_text() puts into words: the tier, and the stars and made-flight
-## passengers as they stand now when the tier is one the game rates.
+## The values tier_text() puts into words: the tier, and the quality % and
+## made-flight passengers as they stand now when the tier is one the game rates.
 func tier_args(needed: int) -> Dictionary:
 	var args := {"tier": needed}
 	if DemoMode.is_demo() and needed > DemoMode.MAX_PLAYABLE_TIER:
 		return args
 	if needed >= 2 and needed <= TIERS.size() and rating != null:
-		args["stars"] = str(rating.stars())
+		args["quality"] = AirportRating.quality_percent(rating.stars())
 		args["passengers"] = _made
 	return args
 
@@ -596,24 +594,24 @@ class Words:
 	func in_full_game() -> String:
 		return tr("In the full game")
 
-	func requirement(stars: String, passengers: int) -> String:
+	func requirement(quality: int, passengers: int) -> String:
 		return (
 			tr_n(
-				"Unlocks at {stars} stars and {passengers} passenger",
-				"Unlocks at {stars} stars and {passengers} passengers",
+				"Unlocks at {quality}% quality and {passengers} passenger",
+				"Unlocks at {quality}% quality and {passengers} passengers",
 				passengers
 			)
-			. format({"stars": stars, "passengers": passengers})
+			. format({"quality": quality, "passengers": passengers})
 		)
 
-	func requirement_now(requirement: String, stars: String, passengers: int) -> String:
+	func requirement_now(requirement_str: String, quality: int, passengers: int) -> String:
 		return (
 			tr_n(
-				"{requirement} (now {stars} stars, {passengers} passenger)",
-				"{requirement} (now {stars} stars, {passengers} passengers)",
+				"{requirement} (now {quality}% quality, {passengers} passenger)",
+				"{requirement} (now {quality}% quality, {passengers} passengers)",
 				passengers
 			)
-			. format({"requirement": requirement, "stars": stars, "passengers": passengers})
+			. format({"requirement": requirement_str, "quality": quality, "passengers": passengers})
 		)
 
 	## Never called: each tier's facilities text inside tr(), so POT generation

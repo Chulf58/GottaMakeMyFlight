@@ -1,4 +1,4 @@
-# gdlint:disable = max-public-methods
+# gdlint:disable = max-public-methods, max-file-lines
 class_name BuildMenu
 extends CanvasLayer
 ## The build menu (decisions hud-layout-bottom-category-bar-with-an-item-tray-time-and-fl,
@@ -147,6 +147,7 @@ var _open := NO_CATEGORY
 ## True while a category click clears the tool, so the tool_changed(NONE)
 ## that follows does not close the tray being opened.
 var _browsing := false
+var _keep_tray_on_clear := false
 var _bar := PanelContainer.new()
 var _tray := PanelContainer.new()
 var _tray_root := VBoxContainer.new()
@@ -274,6 +275,7 @@ func _ready() -> void:
 		_wallet = build_mode.wallet()
 		_room_panel.watch(build_mode)
 		build_mode.tool_changed.connect(_on_tool_changed)
+		build_mode.tool_deselected.connect(_on_tool_deselected)
 		build_mode.eyedropper_picked.connect(_on_eyedropper_picked)
 		build_mode.status_changed.connect(_on_mode_status_changed)
 		build_mode.refusal_shown.connect(_on_refusal_shown)
@@ -285,6 +287,8 @@ func _ready() -> void:
 		build_mode.templates.armed_changed.connect(_show_status)
 		build_mode.room_mover.status_changed.connect(_on_status_changed)
 		build_mode.room_mover.active_changed.connect(_show_status)
+		build_mode.object_mover.status_changed.connect(_on_status_changed)
+		build_mode.object_mover.active_changed.connect(_show_status)
 		if build_mode.starter_kit != null:
 			build_mode.starter_kit.status_changed.connect(_on_status_changed)
 			build_mode.starter_kit.armed_changed.connect(_on_starter_kit_armed_changed)
@@ -814,11 +818,17 @@ func _set_staff_open(open: bool) -> void:
 		sync_tray_bounds()
 
 
+func _on_tool_deselected() -> void:
+	_keep_tray_on_clear = true
+
+
 func _on_tool_changed(tool: BuildMode.Tool) -> void:
+	var keep_tray := _keep_tray_on_clear
+	_keep_tray_on_clear = false
 	if guide != null and tool != BuildMode.Tool.NONE:
 		guide.mark_seen(tool)
 	if tool == BuildMode.Tool.NONE:
-		if not _browsing:
+		if not _browsing and not keep_tray:
 			var kit_active := (
 				build_mode != null
 				and build_mode.starter_kit != null
@@ -1174,6 +1184,8 @@ func _on_mode_status_changed(text: String) -> void:
 		text = build_mode.templates.status_text()
 	elif text == "" and build_mode.room_mover.active:
 		text = build_mode.room_mover.status_text()
+	elif text == "" and build_mode.object_mover.active:
+		text = build_mode.object_mover.status_text()
 	elif text == "" and build_mode.starter_kit != null and build_mode.starter_kit.is_active():
 		text = build_mode.starter_kit.status_text()
 	_on_status_changed(text)
@@ -1307,6 +1319,8 @@ func close_for_modal() -> void:
 			build_mode.starter_kit.disarm()
 		if build_mode.room_mover.active:
 			build_mode.room_mover.cancel()
+		if build_mode.object_mover.active:
+			build_mode.object_mover.cancel()
 		build_mode.set_tool(BuildMode.Tool.NONE)
 	build_session.set_building(false)
 	_pending_wages = ""

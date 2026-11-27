@@ -87,6 +87,8 @@ func refresh() -> void:
 		_key = key
 		_stale = false
 		_note = ""
+	elif card.selection.kind == BuiltSelection.Kind.OBJECT:
+		_move = _object_move_state(card.sim.grid, card.selection.id)
 	visible = true
 	_move_button.text = _move["label"]
 	_move_button.disabled = not _move["ok"]
@@ -101,12 +103,14 @@ func refresh() -> void:
 	_reason.visible = not lines.is_empty()
 
 
-## Picks the room tool and lifts the room the item is or stands in. False when
-## Move is disabled or the room refuses to be lifted.
+## Picks up a single object (ObjectMoveTool) or lifts a room (RoomMoveTool).
+## False when Move is disabled or the item refuses to be lifted.
 func press_move() -> bool:
 	if card == null or card.build_mode == null or not _move.get("ok", false):
 		return false
 	var mode := card.build_mode
+	if _move.get("kind") == BuiltSelection.Kind.OBJECT:
+		return mode.object_mover.pick_up(_move["object_id"], card.sim)
 	var rect: Rect2i = mode.grid.get_room(_move["room"])["rect"]
 	var point := mode.grid.cell_to_world(rect.position + (rect.size - Vector2i.ONE) / 2)
 	mode.set_tool_for_move(_move["tool"])
@@ -181,11 +185,16 @@ func _mark_stale_edit(_edit: BuildEdit, _result: BuildResult) -> void:
 
 func _move_state() -> Dictionary:
 	var grid := card.sim.grid
-	var found := _room_to_move()
-	if found["reason"] != "":
-		return _off(tr("Move"), found["reason"])
-	var room: int = found["room"]
-	var type := StringName(grid.get_room(room)["type"])
+	var selection := card.selection
+	if selection.kind == BuiltSelection.Kind.OBJECT:
+		return _object_move_state(grid, selection.id)
+	if selection.kind != BuiltSelection.Kind.ROOM:
+		return _off(tr("Move"), tr("Car parks and curbs can't be moved yet"))
+	var room: int = selection.id
+	var room_rec := grid.get_room(room)
+	if room_rec.is_empty():
+		return _off(tr("Move room"), tr("It is no longer there"))
+	var type := StringName(room_rec["type"])
 	var tool := tool_for_room(type)
 	if tool == BuildMode.Tool.NONE:
 		return _off(tr("Move room"), tr("This kind of room can't be moved yet"))
@@ -193,30 +202,36 @@ func _move_state() -> Dictionary:
 	if refusal != null:
 		return _off(tr("Move room"), refusal.reason_text())
 	return {
-		"ok": true, "label": tr("Move room"), "reason": "", "room": room, "type": type, "tool": tool
+		"ok": true,
+		"label": tr("Move room"),
+		"reason": "",
+		"kind": BuiltSelection.Kind.ROOM,
+		"room": room,
+		"type": type,
+		"tool": tool,
 	}
 
 
-## The room the selection moves with: {"room": id} for a room or a piece in one,
-## else {"reason": why not}.
-func _room_to_move() -> Dictionary:
-	var grid := card.sim.grid
-	var selection := card.selection
-	match selection.kind:
-		BuiltSelection.Kind.ROOM:
-			return {"room": selection.id, "reason": ""}
-		BuiltSelection.Kind.OBJECT:
-			var record := grid.get_object(selection.id)
-			if record.is_empty():
-				return {"room": 0, "reason": tr("It is no longer there")}
-			var room := grid.room_at(record["anchor"])
-			if _is_lane_piece(StringName(record["def"])):
-				return {"room": 0, "reason": _lane_piece_reason(room)}
-			return {
-				"room": room,
-				"reason": "" if room != 0 else tr("Single pieces outside a room can't be moved yet")
-			}
-	return {"room": 0, "reason": tr("Car parks and curbs can't be moved yet")}
+func _object_move_state(grid: BuildGrid, object_id: int) -> Dictionary:
+	var record := grid.get_object(object_id)
+	if record.is_empty():
+		return _off(tr("Move"), tr("It is no longer there"))
+	var def_id := StringName(record["def"])
+	if _is_lane_piece(def_id):
+		return _off(tr("Move"), _lane_piece_reason(grid.room_at(record["anchor"])))
+	var refusal := ObjectMoveTool.never_moves_refusal(grid, object_id)
+	if refusal != null:
+		return _off(tr("Move"), refusal.reason_text())
+	var busy := ObjectMoveTool.in_service_reason(grid, object_id, card.sim)
+	if busy != "":
+		return _off(tr("Move"), busy)
+	return {
+		"ok": true,
+		"label": tr("Move"),
+		"reason": "",
+		"kind": BuiltSelection.Kind.OBJECT,
+		"object_id": object_id,
+	}
 
 
 func _delete_state() -> Dictionary:
