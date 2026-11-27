@@ -34,6 +34,8 @@ static func line(p: Passenger, baggage: BaggageSim) -> String:
 ## Where `p`'s checked bag is: `bag` is the baggage sim's bag of the passenger,
 ## or null for none kept.
 static func checked_state(p: Passenger, bag: Bag) -> Checked:
+	if p.is_arriving():
+		return Checked.NONE
 	if bag == null:
 		return Checked.NOT_YET if BEFORE_DROP.has(p.stage) else Checked.NONE
 	match bag.state:

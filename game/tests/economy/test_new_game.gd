@@ -143,7 +143,7 @@ func test_the_staff_hint_names_what_keeps_the_airport_closed() -> void:
 ## Opened at tick 1, which is 06:00 (the calendar starts at the opening). The
 ## starter is issued on the opening tick and departs StarterSlot.lead() later.
 ## Old expected: issued at 20, first state 2420 (20 + ISSUE_LEAD_TICKS),
-## departing 10:14. New: issued at 1, first state 1, departing 08:13.
+## departing 10:14. New: issued at 1, first state 1, departing 08:17.
 func test_staffed_it_opens_on_the_next_tick_with_the_starter_contract() -> void:
 	assert_int(_opened["opened_tick"]).is_equal(1)
 	assert_int(_opened["epoch"]).is_equal(1)
@@ -158,7 +158,7 @@ func test_staffed_it_opens_on_the_next_tick_with_the_starter_contract() -> void:
 	assert_int(GameCalendar.day_of(_opened["pushback"], _opened["epoch"])).is_equal(0)
 	var doors_text := GameCalendar.clock_text(_opened["doors_close"], _opened["epoch"])
 	var departure_text := GameCalendar.clock_text(_opened["pushback"], _opened["epoch"])
-	assert_str(departure_text).is_equal("08:13")
+	assert_str(departure_text).is_equal("08:17")
 	assert_str(_opened["departures"]).is_equal(
 		departure_text + "  Oslo  Gotta Air  doors close " + doors_text
 	)

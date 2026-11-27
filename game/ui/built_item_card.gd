@@ -692,6 +692,8 @@ func _flight_state_label(state: int) -> String:
 			label = tr("Taxiing in")
 		FlightSim.State.AT_STAND:
 			label = tr("At stand")
+		FlightSim.State.DEBOARDING:
+			label = tr("Deboarding")
 	return label
 
 

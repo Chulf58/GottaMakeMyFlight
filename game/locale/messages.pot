@@ -5010,6 +5010,11 @@ msgstr ""
 
 #: build/build_words.gd
 msgctxt "ghost reason"
+msgid "Needs floor both sides"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
 msgid "Keep the edge open"
 msgstr ""
 
@@ -8918,4 +8923,71 @@ msgstr ""
 
 #: ui/staff_panel.gd
 msgid "Inspect {name}"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Airside exit doors need floor on both sides"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "airside exit door"
+msgstr ""
+
+#: passengers/passenger_thoughts.gd
+msgid "Smooth landing!"
+msgstr ""
+
+#: passengers/passenger_thoughts.gd
+msgid "Easy way out of airside"
+msgstr ""
+
+#: passengers/passenger_trip.gd
+msgid "Arriving passenger, heading out of the terminal"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Airside exit"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Deboarding"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Airside exit door"
+msgstr ""
+
+#: ui/item_info.gd
+msgid "One-way exit door from airside back to landside for arriving passengers and staff."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Place it on a divider wall facing airside; departing passengers cannot pass."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Needs floor on both sides. Keep the spot in front clear."
+msgstr ""
+
+#: ui/passenger_inspect.gd
+msgid "Arrived on {title}"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Deplaning"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Leaving airside"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Leaving the terminal"
 msgstr ""

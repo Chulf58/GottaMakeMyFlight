@@ -150,7 +150,7 @@ func test_a_gate_that_lost_its_stand_has_no_row_and_no_bar() -> void:
 
 
 func test_six_small_flights_on_one_gate_render_non_overlapping_bars() -> void:
-	var slots := [420, 555, 690, 825, 960, 1095]
+	var slots := [420, 560, 700, 840, 980, 1120]
 	for i in slots.size():
 		var terms := TestFlightContracts.terms("S%d" % i, slots[i])
 		terms["plane_size"] = PlaneClasses.SMALL

@@ -5,11 +5,12 @@ const FRAME := 1.0 / 60.0
 ## Boarding lasts 1200 ticks (60 s), not 400: the walk from the farthest gate seat to the
 ## plane in the reference terminal is about 915 ticks (test_boarding_window.gd measures it).
 ## TAXI_IN lasts 1000 and TAXI_OUT 920 ticks (decision runway-and-taxi-technical-
-## design-movement-plan-analytic-bookings-planned-pauses), so the plane arrives
-## at 1360, pushes back at 2660 and the flight ends at 3900.
-const STARTS: Array[int] = [0, 100, 220, 360, 1360, 1400, 2600, 2660, 2780, 3700, 3900]
+## design-movement-plan-analytic-bookings-planned-pauses), AT_STAND is 20 and
+## DEBOARDING is 100 ticks before BOARDING, so the plane arrives at 1360,
+## deboards at 1380, boards at 1480, pushes back at 2740 and ends at 3980.
+const STARTS: Array[int] = [0, 100, 220, 360, 1360, 1380, 1480, 2680, 2740, 2860, 3780, 3980]
 ## A little after the last state starts.
-const END_TICK := 3920
+const END_TICK := 4000
 const FLIGHT := "GMF101"
 
 var _changes: Array[Vector2i] = []

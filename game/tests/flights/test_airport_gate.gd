@@ -119,8 +119,8 @@ func test_the_starter_s_first_flight_fits_the_opening_and_repeats_daily() -> voi
 	assert_bool(_gate.open()).is_true()
 	assert_int(_w.flights.epoch).is_equal(1500)
 	var first := FlightTimetable.occurrence_id(STARTER, 0)
-	var start := _first_start_from(1500, 3900)
-	assert_int(start).is_equal(2620)
+	var start := _first_start_from(1500, 3980)
+	assert_int(start).is_equal(2700)
 	assert_array(_w.flights.flight_ids()).contains([first])
 	assert_int(_w.flights.state_start(first, FlightSim.State.SCHEDULED)).is_equal(start)
 	var pushback := _w.flights.state_start(first, FlightSim.State.PUSHBACK)
@@ -148,8 +148,8 @@ func test_an_opening_between_raw_minutes_issues_the_starter_at_once() -> void:
 	_gate.open()
 	var first := FlightTimetable.occurrence_id(STARTER, 0)
 	assert_array(_w.flights.flight_ids()).contains([first])
-	var start := _first_start_from(1507, 3900)
-	assert_int(start).is_equal(2627)
+	var start := _first_start_from(1507, 3980)
+	assert_int(start).is_equal(2707)
 	assert_int(_w.flights.state_start(first, FlightSim.State.SCHEDULED)).is_equal(start)
 
 

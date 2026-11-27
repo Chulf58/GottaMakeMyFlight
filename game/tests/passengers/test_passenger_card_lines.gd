@@ -107,7 +107,7 @@ func test_the_trip_line_names_the_arrival_and_the_wish() -> void:
 func test_the_trip_msgids_match_the_lines() -> void:
 	PseudoLocale.disable()
 	var ids := PassengerTrip.Words.new().msgids()
-	var wanted := []
+	var wanted := [PassengerTrip.ARRIVAL_LINE]
 	for type in PassengerTrip.LINES:
 		wanted.append_array((PassengerTrip.LINES[type] as Dictionary).values())
 	assert_array(Array(ids)).contains_exactly_in_any_order(wanted)

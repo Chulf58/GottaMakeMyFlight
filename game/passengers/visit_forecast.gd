@@ -76,6 +76,8 @@ static func leave_ticks(
 static func deadline(
 	sim: PassengerSim, p: Passenger, cell: Vector2i, delay: int, resume: Passenger.Stage
 ) -> int:
+	if p.is_arriving():
+		return JourneyForecast.NEVER
 	return (
 		sim.flights.doors_close_tick(p.flight_id)
 		- MARGIN_TICKS
@@ -89,6 +91,8 @@ static func deadline(
 static func live_deadline(
 	sim: PassengerSim, p: Passenger, cell: Vector2i, delay: int, resume: Passenger.Stage
 ) -> int:
+	if p.is_arriving():
+		return JourneyForecast.NEVER
 	var from_cell := deadline(sim, p, cell, delay, resume)
 	if p.at == cell:
 		return from_cell
@@ -97,6 +101,8 @@ static func live_deadline(
 
 ## Whether an arrival forecast leaves the margin before `p`'s doors close.
 static func admits(sim: PassengerSim, p: Passenger, arrival_tick: int) -> bool:
+	if p.is_arriving():
+		return true
 	return arrival_tick + MARGIN_TICKS <= sim.flights.doors_close_tick(p.flight_id)
 
 

@@ -151,6 +151,14 @@ static func revalidate(sim: PassengerSim) -> void:
 			_check_arrival(sim, p, to_doors)
 		elif p.stage == Passenger.Stage.MISSED:
 			_check_missed_outside(sim, p)
+		elif p.stage == Passenger.Stage.TO_ROAD_EXIT and p.walking_outside():
+			if p.apron.size() > 1 and not _clear_ahead(sim, p, p.at):
+				var walk := to_road_from(sim, p.apron_position())
+				if walk.size() > 1:
+					p.apron = walk
+					p.apron_mm = 0
+				else:
+					PassengerArrivals.finish(sim, p)
 		elif p.stage == Passenger.Stage.APRON:
 			var model := PlaneClasses.flight_model(sim.flights, p.flight_id)
 			# A walker boarding through the docked jet bridge is off the open

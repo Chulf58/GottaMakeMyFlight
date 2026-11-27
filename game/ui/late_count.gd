@@ -124,6 +124,7 @@ static func tightest_passenger(sim: PassengerSim, flight_id: String) -> int:
 		if (
 			p == null
 			or p.is_done()
+			or p.is_arriving()
 			or not p.late
 			or p.flight_id != flight_id
 			or p.stage == Passenger.Stage.ON_BUS

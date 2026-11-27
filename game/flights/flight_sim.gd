@@ -71,6 +71,9 @@ extends Node
 ## PassengerSim binds after FlightSim, so it sees the result.
 
 signal state_changed(flight_id: String, new_state: int)
+## Fires once as a flight enters DEBOARDING. PassengerSim schedules arriving
+## passengers staggered across its deboarding window.
+signal deboarding_started(flight_id: String, count: int)
 ## Fires once as a flight enters DOORS_CLOSED. The passenger slice stops
 ## boarding on it; is_doors_closed() answers the same question as a query.
 signal doors_closed(flight_id: String)
@@ -101,6 +104,7 @@ enum State {
 	LANDING,
 	TAXI_IN,
 	AT_STAND,
+	DEBOARDING,
 	BOARDING,
 	DOORS_CLOSED,
 	PUSHBACK,
@@ -109,8 +113,11 @@ enum State {
 	DEPARTED,
 }
 
-const STATE_COUNT := 11
+const STATE_COUNT := 12
 ## How long each state lasts in ticks, SCHEDULED to TAKEOFF. DEPARTED is final.
+## AT_STAND (20) is brief bridge-docking/marshal settle before DEBOARDING (100 for
+## small/medium regular, LARGE_DEBOARDING_TICKS for large, CHARTER_DEBOARDING_TICKS
+## for charters).
 ## BOARDING is 1200 ticks (60 s): in the reference terminal the walk from the
 ## farthest gate seat out through the exit and along the apron to the plane
 ## door is about 915 ticks at walking pace (test_boarding_window.gd).
@@ -121,11 +128,14 @@ const STATE_COUNT := 11
 ## pauses; test_airside_stand.gd). They are TaxiTimes.BASE: a contract flies
 ## its own taxi pair (FlightContract.TAXI_KEY), longer where its gate's route
 ## is (ruling taxi-time-follows-each-gate-s-route-length-far-side-gates-ta).
-## Departure is the start of PUSHBACK, so a longer TAXI_IN only moves the
-## arrival earlier.
-const PHASE_TICKS: Array[int] = [100, 120, 140, 1000, 40, 1200, 60, 120, 920, 200]
-## Compact boarding length for same-day one-off charters (one_off_day >= 0),
-## giving a 90-minute (1,800-tick) small-plane gate hold at TaxiTimes.BASE.
+## Departure is the start of PUSHBACK, so DEBOARDING and longer TAXI_IN move
+## earlier phases earlier while keeping departure anchored.
+const PHASE_TICKS: Array[int] = [100, 120, 140, 1000, 20, 100, 1200, 60, 120, 920, 200]
+## Longer deboarding phase for large regular flights (net +140 ticks vs old AT_STAND).
+const LARGE_DEBOARDING_TICKS := 160
+## Compact deboarding length for same-day one-off charters (net +40 ticks vs old AT_STAND).
+const CHARTER_DEBOARDING_TICKS := 60
+## Compact boarding length for same-day one-off charters (one_off_day >= 0).
 const CHARTER_BOARDING_TICKS := 380
 const DEFAULT_ID := "GMF101"
 ## The gate of add_flight and add_default_flight unless told otherwise.
@@ -177,7 +187,10 @@ const STARTER_TERMS := {
 ## contracts). A version 12 save is refused; there is no migration.
 ## 14: contracts carry optional "stand" (defaults to "gate") and flight records
 ## carry "stand_id". A version 13 save is refused; there is no migration.
-const SAVE_VERSION := 14
+## 15: State.DEBOARDING inserted before State.BOARDING (AT_STAND 40 -> 20) and
+## flight records carry "arriving_passengers". A version 14 save is refused;
+## there is no migration.
+const SAVE_VERSION := 15
 const CHARTER_LATE_TEXT := "this charter's departure window has already passed"
 ## The refusal of a flight no taxi pause fits (user ruling a-gate-has-no-size-
 ## planes-use-any-stand-they-fit-neighbours-share-apron-space).
@@ -324,9 +337,14 @@ func _ready() -> void:
 ## Start ticks of every state for a flight whose SCHEDULED state begins at
 ## `first_tick` and that taxis with pair `taxi` (TaxiTimes).
 static func schedule_starts(
-	first_tick: int, taxi: Array = TaxiTimes.BASE, boarding_ticks: int = -1
+	first_tick: int,
+	taxi: Array = TaxiTimes.BASE,
+	boarding_ticks: int = -1,
+	deboarding_ticks: int = -1
 ) -> Array[int]:
 	var ticks := TaxiTimes.phase_ticks(taxi)
+	if deboarding_ticks >= 0:
+		ticks[State.DEBOARDING] = deboarding_ticks
 	if boarding_ticks >= 0:
 		ticks[State.BOARDING] = boarding_ticks
 	var starts: Array[int] = [first_tick]
@@ -372,12 +390,14 @@ func add_default_flight() -> bool:
 ## would meet an occurrence at the gate. A one-off is not taxi-planned: it
 ## books no runway, lane or stand and takes no pause (FlightPlans), so its
 ## schedule may be any, as the tests' short ones are.
-func add_flight(id: String, starts: Array[int], gate := DEFAULT_GATE) -> bool:
+func add_flight(
+	id: String, starts: Array[int], gate := DEFAULT_GATE, arriving_passengers: int = 0
+) -> bool:
 	var problem := _one_off_problem(id, starts, gate)
 	if problem != "":
 		push_error("FlightSim: flight '%s' %s" % [id, problem])
 		return false
-	_insert(_record(id, starts, gate, "", -1))
+	_insert(_record(id, starts, gate, "", -1, "", maxi(0, arriving_passengers)))
 	_changed()
 	return true
 
@@ -1174,6 +1194,16 @@ func state_start(id: String, state: int) -> int:
 	return flight["starts"][state] if not flight.is_empty() else -1
 
 
+## Ticks from the start of DEBOARDING (x) to the start of BOARDING (y).
+func deboarding_window(id: String) -> Vector2i:
+	return Vector2i(state_start(id, State.DEBOARDING), state_start(id, State.BOARDING))
+
+
+## Arriving passenger manifest count for flight `id` (0 if none or unknown).
+func arriving_passengers_of(id: String) -> int:
+	return int(_find(id).get("arriving_passengers", 0))
+
+
 ## Ticks from the start of BOARDING (x) to the tick the doors close (y).
 func boarding_window(id: String) -> Vector2i:
 	return Vector2i(state_start(id, State.BOARDING), state_start(id, State.DOORS_CLOSED))
@@ -1414,7 +1444,13 @@ static func _contract_ground_problem(
 ## A flight record with the state it is in at the current tick, at its gate's
 ## stand now.
 func _record(
-	id: String, starts: Array[int], gate: String, contract: String, day: int, stand_id := ""
+	id: String,
+	starts: Array[int],
+	gate: String,
+	contract: String,
+	day: int,
+	stand_id := "",
+	arriving_passengers := 0
 ) -> Dictionary:
 	var resolved_stand := gate if stand_id == "" else stand_id
 	var stand_dict: Dictionary = (
@@ -1431,6 +1467,7 @@ func _record(
 		"contract": contract,
 		"day": day,
 		"stand": stand_dict,
+		"arriving_passengers": arriving_passengers,
 	}
 
 
@@ -2381,7 +2418,8 @@ func _issue(contract: Dictionary, day: int) -> void:
 	var id := FlightTimetable.occurrence_id(contract["id"], day)
 	var starts := FlightTimetable.starts_for(contract, day, epoch)
 	var sid := String(contract.get(FlightContract.STAND_KEY, contract["gate"]))
-	_insert(_record(id, starts, contract["gate"], contract["id"], day, sid))
+	var arriving := FlightTimetable.arriving_passengers_for(contract, day, id)
+	_insert(_record(id, starts, contract["gate"], contract["id"], day, sid, arriving))
 	_next_day[contract["id"]] = day + 1
 	occurrence_added.emit(id)
 
@@ -2451,7 +2489,9 @@ func _advance(flight: Dictionary) -> void:
 	while flight["state"] < State.DEPARTED and tick >= starts[flight["state"] + 1]:
 		flight["state"] += 1
 		state_changed.emit(flight["id"], flight["state"])
-		if flight["state"] == State.DOORS_CLOSED:
+		if flight["state"] == State.DEBOARDING:
+			deboarding_started.emit(flight["id"], int(flight.get("arriving_passengers", 0)))
+		elif flight["state"] == State.DOORS_CLOSED:
 			doors_closed.emit(flight["id"])
 
 

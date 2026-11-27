@@ -26,8 +26,9 @@ const CROWD_UNTIL := 390
 ## line here went from 24 cells to 13, so fewer newcomers get a place ahead of
 ## the guest. Its deadline now comes forward no further than 1079, and at 600
 ## the guest finished its visit before that (outcome COMPLETE); at 700 its
-## dwell would end at 1172.
-const START := 700
+## dwell would end at 1172. Moved 700 -> 780 when DEBOARDING shifted BOARDING
+## and DOORS_CLOSED +80 ticks later.
+const START := 780
 ## The guest of the burst case spawns this long before boarding opens (it was
 ## tick 0 when boarding opened at tick 700), so its schedule is as tight as
 ## the case needs whatever the phase lengths are. 600, moved from 700 for

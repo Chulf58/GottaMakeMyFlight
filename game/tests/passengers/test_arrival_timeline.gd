@@ -6,13 +6,13 @@ extends GdUnitTestSuite
 ## them and their pending arrivals, and the flight timeline and contract
 ## fields stay as they were.
 
-## 10:20: the occurrence departs at tick 5200, its first state is at 2540, it
-## is issued at 140 and its doors close at 5140.
+## 10:20: the occurrence departs at tick 5200, its first state is at 2460, it
+## is issued at 60 and its doors close at 5140.
 const CONTRACT := "ARR"
 const OCCURRENCE := "ARR-d0"
 const MINUTE := 620
-const FIRST := 2540
-const ISSUED := 140
+const FIRST := 2460
+const ISSUED := 60
 const DEPARTURE := 5200
 const BOOKED := 40
 ## The one-off flight's first state in the save tests.
@@ -59,8 +59,13 @@ func test_the_occurrence_exists_before_its_first_passenger_spawns() -> void:
 	assert_int(_issued_at).is_equal(ISSUED)
 	var earliest := 1 << 40
 	var before_first := 0
+	var departing_count := 0
 	for id in _a.sim.passenger_ids():
-		var spawned := _a.passenger(id).spawn_tick
+		var p := _a.passenger(id)
+		if not p.is_departing():
+			continue
+		departing_count += 1
+		var spawned := p.spawn_tick
 		earliest = mini(earliest, spawned)
 		before_first += int(spawned < FIRST + 1)
 	print(
@@ -69,7 +74,7 @@ func test_the_occurrence_exists_before_its_first_passenger_spawns() -> void:
 			% [_issued_at, earliest, before_first]
 		)
 	)
-	assert_int(_a.sim.passenger_ids().size()).is_equal(BOOKED)
+	assert_int(departing_count).is_equal(BOOKED)
 	assert_int(earliest).is_greater(_issued_at)
 	assert_int(earliest).is_greater_equal(DEPARTURE - ArrivalTypes.RELAXED_LEAD_TICKS)
 	assert_int(before_first).is_greater(0)
@@ -87,9 +92,9 @@ func _on_spawned(id: int) -> void:
 func test_the_timeline_and_contract_fields_are_unchanged() -> void:
 	# TAXI_IN is 1000 and TAXI_OUT 920 (were 600 and 720): the airside moved 28 m
 	# north and a planned pause still keeps the taxi speed under 16 m/s.
-	var phases: Array[int] = [100, 120, 140, 1000, 40, 1200, 60, 120, 920, 200]
+	var phases: Array[int] = [100, 120, 140, 1000, 20, 100, 1200, 60, 120, 920, 200]
 	assert_array(FlightSim.PHASE_TICKS).is_equal(phases)
-	assert_int(FlightTimetable.departure_offset()).is_equal(2660)
+	assert_int(FlightTimetable.departure_offset()).is_equal(2740)
 	(
 		assert_array(FlightContract.KEYS)
 		. is_equal(

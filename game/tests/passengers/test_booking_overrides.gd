@@ -11,15 +11,15 @@ extends GdUnitTestSuite
 const CONTRACT := "OVR"
 const OCCURRENCE := "OVR-d0"
 const MINUTE := 620
-const FIRST := 2540
-const ISSUED := 140
+const FIRST := 2460
+const ISSUED := 60
 const BOOKED := 4
 const HEADROOM := 4
 ## A second contract on the same gate, late enough to clear the first one's hold.
 const OTHER_CONTRACT := "OTH"
 const OTHER_OCCURRENCE := "OTH-d0"
 const OTHER_MINUTE := 900
-const OTHER_FIRST := 8140
+const OTHER_FIRST := 8060
 
 var _a: PassengerTestWorld
 var _b: PassengerTestWorld

@@ -129,8 +129,18 @@ func test_rushed_passengers_spawn_late_in_the_window_and_typical_ones_in_all_of_
 
 
 func test_a_window_already_behind_the_clock_falls_back_to_the_typical_window() -> void:
-	# The flight's first state is tick 0, so no relaxed arrival can come early.
-	var world := _flight(9, 0)
+	# Step to the usual-window opening so RELAXED's window is already behind the clock.
+	var grid := BuildGrid.new()
+	ReferenceTerminal.build(grid)
+	var world := PassengerTestWorld.make(grid, FlightSim.schedule_starts(0), 9)
+	_worlds.append(world)
+	var opens := (
+		FlightTimetable.departure_offset() - ArrivalTypes.ARRIVAL_OPENS_BEFORE_DEPARTURE_TICKS
+	)
+	world.run_to(opens)
+	assert_bool(world.sim.schedule_flight(PassengerTestWorld.FLIGHT, COUNT)).is_true()
+	world.run_to(_last(world) + 1)
+	assert_int(world.sim.passenger_ids().size()).is_equal(COUNT)
 	var by_type := _ticks_by_type(world)
 	var relaxed: Array = by_type[ArrivalTypes.Type.RELAXED]
 	assert_int(relaxed.size()).is_greater(0)

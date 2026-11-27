@@ -59,11 +59,11 @@ func test_no_taxi_busy_misclassifications_across_stand_positions() -> void:
 			var assessment := FlightFit.assess(sim, offer)
 			if not assessment["fits"] and assessment["blocker"] == FlightSim.BLOCKER_TAXI:
 				(
-					assert_bool(FlightFit.another_gate_helps(sim, offer))
+					assert_str(sim.trial_assignment(offer, [], true, gate)["gate"])
 					. override_failure_message(
 						"gate %s minute %d misclassified as BLOCKER_TAXI" % [gate, minute]
 					)
-					. is_false()
+					. is_empty()
 				)
 	# Outer side stand W clears consecutive small flights right past its gate hold too.
 	var west_sim := auto_free(FlightSim.new()) as FlightSim
@@ -76,7 +76,7 @@ func test_no_taxi_busy_misclassifications_across_stand_positions() -> void:
 	west_sim.open_airport()
 	assert_bool(west_sim.accept_contract(_small_terms("ANCHOR", 600))).is_true()
 	assert_str(west_sim.accept_problem(_small_terms("TIGHT", 720))).contains("clashes with ANCHOR")
-	assert_str(west_sim.accept_problem(_small_terms("CLEAR", 735))).is_empty()
+	assert_str(west_sim.accept_problem(_small_terms("CLEAR", 740))).is_empty()
 
 
 func test_medium_and_large_contracts_keep_full_scheduled_to_departed_hold() -> void:
@@ -87,9 +87,13 @@ func test_medium_and_large_contracts_keep_full_scheduled_to_departed_hold() -> v
 		var span := FlightTimetable.gate_hold_span(
 			FlightTimetable.starts_for(sim.contract_of("M1"), 0, 0), size
 		)
-		assert_int(span[1] - span[0]).is_equal(3900)
-		assert_str(sim.accept_problem(_medium_terms("M2", 794, size))).contains("clashes with M1")
-		assert_bool(sim.accept_contract(_medium_terms("M3", 795, size))).is_true()
+		var expected_span := 3980 if size == PlaneClasses.MEDIUM else 4040
+		var clear_gap := 199 if size == PlaneClasses.MEDIUM else 202
+		assert_int(span[1] - span[0]).is_equal(expected_span)
+		assert_str(sim.accept_problem(_medium_terms("M2", 600 + clear_gap - 1, size))).contains(
+			"clashes with M1"
+		)
+		assert_bool(sim.accept_contract(_medium_terms("M3", 600 + clear_gap, size))).is_true()
 
 
 func test_concurrent_small_flights_gate_priority_and_list() -> void:
@@ -99,18 +103,18 @@ func test_concurrent_small_flights_gate_priority_and_list() -> void:
 	assert_bool(sim.accept_contract(_small_terms("B", 735))).is_true()
 	var push_a := GameCalendar.tick_at(1, 600, 0)
 	# A in PUSHBACK (stand hold) while B is in SCHEDULED -> A wins.
-	_run_to(sim, push_a + 60)
+	_run_to(sim, push_a + 10)
 	assert_int(sim.state_of("A-d1")).is_equal(FlightSim.State.PUSHBACK)
 	assert_int(sim.state_of("B-d1")).is_equal(FlightSim.State.SCHEDULED)
 	assert_array(sim.flights_at_gate("C")).is_equal(["A-d1", "B-d1"])
 	assert_str(sim.flight_at_gate("C")).is_equal("A-d1")
 	# A in TAXI_OUT while B is in LANDING -> A (TAXI_OUT) beats B (LANDING).
-	_run_to(sim, push_a + 300)
+	_run_to(sim, push_a + 200)
 	assert_int(sim.state_of("A-d1")).is_equal(FlightSim.State.TAXI_OUT)
 	assert_int(sim.state_of("B-d1")).is_equal(FlightSim.State.LANDING)
 	assert_str(sim.flight_at_gate("C")).is_equal("A-d1")
 	# A still in TAXI_OUT while B enters TAXI_IN -> B (TAXI_IN) beats A (TAXI_OUT).
-	_run_to(sim, push_a + 500)
+	_run_to(sim, push_a + 400)
 	assert_int(sim.state_of("A-d1")).is_equal(FlightSim.State.TAXI_OUT)
 	assert_int(sim.state_of("B-d1")).is_equal(FlightSim.State.TAXI_IN)
 	assert_array(sim.flights_at_gate("C")).is_equal(["A-d1", "B-d1"])
@@ -230,7 +234,7 @@ func test_mixed_small_and_medium_gate_ordering_across_timetable_snapshot_and_spu
 		{"id": "M1", "departure_minute": 600, "plane_size": PlaneClasses.MEDIUM}
 	)
 	var c_sml := base.merged(
-		{"id": "S2", "departure_minute": 735, "plane_size": PlaneClasses.SMALL}
+		{"id": "S2", "departure_minute": 740, "plane_size": PlaneClasses.SMALL}
 	)
 	var clear_world := {
 		"spurs":

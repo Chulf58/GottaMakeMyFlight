@@ -39,7 +39,7 @@ func after_test() -> void:
 func _accept_many(count: int, destination: String, airline: String) -> void:
 	for i in count:
 		# Back to back at gate C from 07:00: five fit before the quiet night.
-		var terms := TestFlightContracts.terms("C%d" % i, 7 * 60 + i * 195)
+		var terms := TestFlightContracts.terms("C%d" % i, 7 * 60 + i * 199)
 		terms["destination"] = destination
 		terms["airline"] = airline
 		assert_bool(_world.flights.accept_contract(terms)).is_true()

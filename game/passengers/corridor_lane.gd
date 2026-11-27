@@ -155,7 +155,7 @@ static func _door_weight(grid: BuildGrid, pos_local: Vector2) -> float:
 			if id != 0 and not seen.has(id):
 				seen[id] = true
 				var record := grid.get_object(id)
-				if BuildCatalog.is_door(record["def"]):
+				if BuildCatalog.is_any_door(record["def"]):
 					var step := DoorPlacement.back_step(record["facing"])
 					var out := Vector2(step)
 					var plane := (

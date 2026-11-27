@@ -62,14 +62,14 @@ func test_a_refusal_sits_on_its_own_card_and_a_later_one_replaces_it() -> void:
 
 
 func test_a_clash_with_a_one_off_flight_is_named_by_time_and_flight() -> void:
-	_open_panel([495, 900, 1200])
+	_open_panel([510, 900, 1200])
 	assert_bool(_sim.add_default_flight()).is_true()
 	_panel.accept_button("O0N1").pressed.emit()
 	var text := _panel.refusal_text("O0N1")
 	print("clash text: %s" % text)
 	# A one-off (tests and debug only) books no runway since Runway R7 (the
 	# planner books the shared ground); it still holds its gate, gate C here.
-	assert_str(text).ends_with("it clashes with the 08:13 flight at gate C")
+	assert_str(text).ends_with("it clashes with the 08:17 flight at gate C")
 	assert_str(text).not_contains("GMF101")
 	assert_str(text).contains("at gate C")
 	assert_str(text).not_contains("contract O0N1")

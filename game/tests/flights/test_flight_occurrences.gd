@@ -33,10 +33,10 @@ func _run_to(target: int) -> void:
 
 
 ## 21:00 on day 0, the last departure the quiet night allows, is tick 18000.
-## Its occurrence starts at 18:47 (tick 15340), is issued two hours earlier
-## (12940) and departs at 18000 (DEPARTED at 19240), all on its departure day.
+## Its occurrence starts at 18:43 (tick 15260), is issued two hours earlier
+## (12860) and departs at 18000 (DEPARTED at 19240), all on its departure day.
 func test_the_last_departure_of_the_day_runs_under_its_departure_day() -> void:
-	var first := 15340
+	var first := 15260
 	var issued := first - FlightTimetable.ISSUE_LEAD_TICKS
 	var ended := first + FlightTimetable.reserved_ticks()
 	assert_bool(_sim.accept_contract(TestFlightContracts.terms("LAST", 1260))).is_true()
@@ -62,7 +62,7 @@ func test_the_last_departure_of_the_day_runs_under_its_departure_day() -> void:
 func test_a_departed_occurrence_is_pruned_an_hour_later_and_still_answers() -> void:
 	_sim.accept_contract(TestFlightContracts.terms("LAST", 1260))
 	# Departed at 19240, so dropped at 20440.
-	var pruned := 15340 + FlightTimetable.reserved_ticks() + FlightTimetable.PRUNE_AFTER_TICKS
+	var pruned := 15260 + FlightTimetable.reserved_ticks() + FlightTimetable.PRUNE_AFTER_TICKS
 	_run_to(pruned - 1)
 	assert_array(_sim.flight_ids()).is_equal(["LAST-d0"])
 	var window := _sim.boarding_window("LAST-d0")
@@ -104,10 +104,10 @@ func test_several_days_run_without_growing_state() -> void:
 	assert_int(snapshot["flights"].size()).is_equal(1)
 	assert_int(snapshot["next_day"].size()).is_equal(2)
 	assert_int(snapshot["landed"].size()).is_equal(2)
-	# Only the digit counts grow: the tick and the eleven start ticks of the live
+	# Only the digit counts grow: the tick and the twelve start ticks of the live
 	# flight and of each of yesterday's two landed ones (kept since flight save
 	# version 9) gain one digit each at most.
-	assert_int(JSON.stringify(snapshot).length()).is_less_equal(day_one_size + 1 + 3 * 11)
+	assert_int(JSON.stringify(snapshot).length()).is_less_equal(day_one_size + 1 + 3 * 12)
 
 
 ## flight_at_gate holds each day's occurrence from SCHEDULED until it departs
@@ -116,8 +116,8 @@ func test_flight_at_gate_follows_each_days_occurrence() -> void:
 	_sim.accept_contract(TestFlightContracts.terms("AM", 500))
 	assert_array(_sim.flight_ids()).is_equal(["AM-d0"])
 	assert_str(_sim.flight_at_gate("C")).is_equal("")
-	# 08:20 minus 133 minutes is 06:07, tick 140; it departs 3900 ticks later.
-	var first := 140
+	# 08:20 minus 137 minutes is 06:03, tick 60; it departs 3980 ticks later.
+	var first := 60
 	var ended := first + FlightTimetable.reserved_ticks()
 	_run_to(first)
 	assert_str(_sim.flight_at_gate("C")).is_equal("AM-d0")

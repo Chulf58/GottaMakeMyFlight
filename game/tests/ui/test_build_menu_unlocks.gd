@@ -60,7 +60,7 @@ func test_tier1_shows_only_three_domain_tabs_and_fourteen_tier1_cards() -> void:
 		assert_bool(card.visible).override_failure_message("tool %d" % tool).is_equal(want)
 		if card.visible:
 			shown_cards += 1
-	assert_int(shown_cards).is_equal(14)
+	assert_int(shown_cards).is_equal(15)
 	assert_object(_menu.card(BuildMode.Tool.WALL).modulate).is_equal(Color.WHITE)
 	assert_str(_menu.card_price_text(BuildMode.Tool.WALL)).is_not_equal(BuildMenu.LOCKED_TEXT)
 

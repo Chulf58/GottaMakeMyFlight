@@ -165,7 +165,8 @@ static func _raw_entry(occurrence: Dictionary) -> Dictionary:
 ## A save taken after an occurrence was pruned must not list it again.
 func test_a_pruned_occurrence_in_a_save_is_refused() -> void:
 	# NIGHT-d0 starts at 15340 and is pruned an hour after it departs.
-	var pruned := 15340 + FlightTimetable.reserved_ticks() + FlightTimetable.PRUNE_AFTER_TICKS
+	var night_start := GameCalendar.tick_at(0, 1260, 0) - FlightTimetable.departure_offset()
+	var pruned := night_start + FlightTimetable.reserved_ticks() + FlightTimetable.PRUNE_AFTER_TICKS
 	var good: Dictionary = _saved(_timetabled(pruned))["flights"]
 	assert_array(good["flights"]).is_empty()
 	assert_bool((auto_free(FlightSim.new()) as FlightSim).from_snapshot(good)).is_true()

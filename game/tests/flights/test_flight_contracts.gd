@@ -73,10 +73,10 @@ func test_the_contract_is_a_read_only_copy_of_the_terms() -> void:
 	assert_array(_sim.contract_ids()).is_equal(["GMF300"])
 
 
-## 08:20 starts its occurrence at tick 140 (08:20 minus 133 minutes is 06:07).
+## 08:20 starts its occurrence at tick 60 (08:20 minus 137 minutes is 06:03).
 func test_acceptance_after_todays_preparation_start_goes_to_tomorrow() -> void:
 	var start := GameCalendar.tick_at(0, 500, 0) - FlightTimetable.departure_offset()
-	assert_int(start).is_equal(140)
+	assert_int(start).is_equal(60)
 	for case in [[start - 1, 0], [start, 0], [start + 1, 1]]:
 		var sim := auto_free(FlightSim.new()) as FlightSim
 		sim.open_airport()
@@ -172,7 +172,7 @@ func test_a_contract_clashing_with_the_bootstrap_flight_is_refused() -> void:
 	assert_bool(_sim.accept_contract(terms("GMF101", bootstrap_minute()))).is_false()
 	# 11:27 starts at 09:14, 20 ticks before the bootstrap flight leaves the gate.
 	var clash := 6 * 60 + _held_minutes - 1 + _offset_minutes
-	assert_int(clash).is_equal(11 * 60 + 27)
+	assert_int(clash).is_equal(11 * 60 + 35)
 	assert_bool(_sim.accept_contract(terms("GMF800", clash))).is_false()
 	assert_bool(_sim.accept_contract(terms("GMF800", clash + 1))).is_true()
 

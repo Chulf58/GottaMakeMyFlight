@@ -43,7 +43,7 @@ extends Node
 signal changed
 
 ## 2: the incident adjustments ("adjustments"); version 1 is refused.
-const SAVE_VERSION := 2
+const SAVE_VERSION := 3
 
 @export var clock: SimClock
 @export var flights: FlightSim
@@ -85,6 +85,7 @@ func bind(with_clock: SimClock, with_flights: FlightSim, with_passengers: Passen
 	clock.ticked.connect(on_tick)
 	flights.doors_closed.connect(_on_doors_closed)
 	passengers.outcome.connect(_on_outcome)
+	passengers.arrival_finished.connect(_on_arrival_finished)
 	passengers.arrivals.missed.connect(_on_arrival_missed)
 	_bind_baggage()
 	_bound = true
@@ -130,6 +131,21 @@ func record_bag(tick: int, loaded: bool) -> void:
 	changed.emit()
 
 
+## One arriving passenger left the airport at `tick` with `mood`: contributes
+## to terminal mood without affecting departing made/missed counts.
+func record_arrival_mood(tick: int, mood: int) -> void:
+	if mood < 0 or mood > PassengerSim.MOOD_MAX:
+		push_error("AirportRating.record_arrival_mood: mood %d is out of range" % mood)
+		return
+	var totals := _today_after_rolling(tick)
+	if totals["arrived"] >= RatingFormula.MAX_DAY_COUNT:
+		push_error("AirportRating.record_arrival_mood: the day is full")
+		return
+	totals["arrived"] += 1
+	totals["arrived_mood_sum"] += mood
+	changed.emit()
+
+
 ## A flight's doors closed at `tick`; its no-shows are recorded on a later tick.
 func note_doors_closed(flight_id: String, tick: int) -> void:
 	for entry in _pending:
@@ -168,8 +184,9 @@ func parts() -> Dictionary:
 	if total > 0:
 		made_share = float(window["made"]) / total
 	var mood_avg := 0.0
-	if window["made"] > 0:
-		mood_avg = float(window["mood_sum"]) / window["made"]
+	var mood_count: int = window["made"] + window["arrived"]
+	if mood_count > 0:
+		mood_avg = float(window["mood_sum"] + window["arrived_mood_sum"]) / mood_count
 	var bags_missed_share := 0.0
 	if window["bags"] > 0:
 		bags_missed_share = float(window["bags_missed"]) / window["bags"]
@@ -298,6 +315,11 @@ func _unbind() -> void:
 		flights.doors_closed.disconnect(_on_doors_closed)
 	if is_instance_valid(passengers) and passengers.outcome.is_connected(_on_outcome):
 		passengers.outcome.disconnect(_on_outcome)
+	if (
+		is_instance_valid(passengers)
+		and passengers.arrival_finished.is_connected(_on_arrival_finished)
+	):
+		passengers.arrival_finished.disconnect(_on_arrival_finished)
 	if is_instance_valid(passengers):
 		var missed := passengers.arrivals.missed
 		if missed.is_connected(_on_arrival_missed):
@@ -349,7 +371,16 @@ func _on_outcome(id: int, made: bool) -> void:
 	if p == null:
 		push_error("AirportRating: no passenger %d for its outcome" % id)
 		return
+	if p.is_arriving():
+		return
 	record_passenger(passengers.tick, made, p.mood)
+
+
+func _on_arrival_finished(id: int) -> void:
+	var p := passengers.get_passenger(id)
+	if p == null or not p.is_arriving():
+		return
+	record_arrival_mood(passengers.tick, p.mood)
 
 
 func _on_arrival_missed(_flight_id: String) -> void:
@@ -362,7 +393,15 @@ func _on_bag_settled(_bag_id: int, _passenger_id: int, _flight_id: String, loade
 
 
 static func _empty_day() -> Dictionary:
-	return {"made": 0, "missed": 0, "mood_sum": 0, "bags": 0, "bags_missed": 0}
+	return {
+		"made": 0,
+		"missed": 0,
+		"mood_sum": 0,
+		"bags": 0,
+		"bags_missed": 0,
+		"arrived": 0,
+		"arrived_mood_sum": 0,
+	}
 
 
 ## Today's totals (created if need be) once the day has rolled to `tick`.
@@ -376,7 +415,16 @@ func _today_after_rolling(tick: int) -> Dictionary:
 
 ## Pooled totals of the window ending on `last_day`.
 func _window(last_day: int) -> Dictionary:
-	var window := {"made": 0, "missed": 0, "mood_sum": 0, "bags": 0, "bags_missed": 0, "days": 0}
+	var window := {
+		"made": 0,
+		"missed": 0,
+		"mood_sum": 0,
+		"bags": 0,
+		"bags_missed": 0,
+		"arrived": 0,
+		"arrived_mood_sum": 0,
+		"days": 0,
+	}
 	for day in range(last_day - RatingFormula.WINDOW_DAYS + 1, last_day + 1):
 		if not _days.has(day):
 			continue
@@ -386,6 +434,8 @@ func _window(last_day: int) -> Dictionary:
 		window["mood_sum"] += totals["mood_sum"]
 		window["bags"] += totals["bags"]
 		window["bags_missed"] += totals["bags_missed"]
+		window["arrived"] += int(totals.get("arrived", 0))
+		window["arrived_mood_sum"] += int(totals.get("arrived_mood_sum", 0))
 		if totals["made"] + totals["missed"] > 0:
 			window["days"] += 1
 	return window
@@ -441,5 +491,11 @@ func _adjusted_stars(window: Dictionary, at_tick: int) -> float:
 ## The stars of a pooled window.
 static func _stars_of(window: Dictionary) -> float:
 	return RatingFormula.stars(
-		window["made"], window["missed"], window["mood_sum"], window["bags"], window["bags_missed"]
+		window["made"],
+		window["missed"],
+		window["mood_sum"],
+		window["bags"],
+		window["bags_missed"],
+		int(window.get("arrived", 0)),
+		int(window.get("arrived_mood_sum", 0))
 	)

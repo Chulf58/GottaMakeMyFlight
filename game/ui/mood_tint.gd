@@ -150,6 +150,8 @@ static func color_of(badness: float, mode := Mode.MOOD) -> Color:
 ## Whether the passenger stands on the terminal floor or at a gate seat, where
 ## the overlay draws it: not on the road, the apron, a facility seat or done.
 static func on_floor(p: Passenger) -> bool:
+	if p.walking_outside():
+		return false
 	var where := StageKinds.location(p.stage)
 	return where == StageKinds.Location.FLOOR or where == StageKinds.Location.GATE_SEAT
 

@@ -153,7 +153,7 @@ func test_the_nightly_gap_bounds_the_release() -> void:
 		)
 	)
 	assert_int(late_takeoff).is_equal(GameCalendar.tick_at(day, 23 * 60 + 50, 0))
-	assert_int(early_issue).is_equal(GameCalendar.tick_at(day + 1, 60 + 47, 0))
+	assert_int(early_issue).is_equal(GameCalendar.tick_at(day + 1, 60 + 43, 0))
 	var evening := FlightTimetable.issue_tick(late, day, 0)
 	var world := _world(evening, [late, early])
 	var released := SpurMoves.release(world, StandPlacement.WEST)

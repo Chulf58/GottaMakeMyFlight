@@ -46,7 +46,7 @@ static func doors_tick() -> int:
 ## Start ticks for a flight that starts boarding at `boarding` and closes its
 ## doors at `doors`.
 static func starts_with(boarding: int, doors: int) -> Array[int]:
-	var starts: Array[int] = [0, 1, 2, 3, boarding - 1, boarding, doors]
+	var starts: Array[int] = [0, 1, 2, 3, boarding - 2, boarding - 1, boarding, doors]
 	starts.append_array([doors + 60, doors + 180, doors + 480, doors + 680])
 	return starts
 

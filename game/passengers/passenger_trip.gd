@@ -34,6 +34,8 @@ const LINES := {
 	},
 }
 
+const ARRIVAL_LINE := "Arriving passenger, heading out of the terminal"
+
 
 ## The trip line of passenger `p`, in the player's words.
 static func line(p: Passenger) -> String:
@@ -42,6 +44,8 @@ static func line(p: Passenger) -> String:
 
 ## The English msgid of `p`'s trip line.
 static func english(p: Passenger) -> String:
+	if p.is_arriving():
+		return ARRIVAL_LINE
 	return (LINES[p.arrival_type] as Dictionary)[WishTable.of(p)]
 
 
@@ -67,5 +71,6 @@ class Words:
 				tr("Early bird, needs the pharmacy"),
 				tr("Early bird, hoping for duty free"),
 				tr("Early bird, hoping to browse the fashion shop"),
+				tr("Arriving passenger, heading out of the terminal"),
 			]
 		)

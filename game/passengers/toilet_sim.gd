@@ -388,6 +388,8 @@ func _live_deadline(p: Passenger, visit: ToiletVisit) -> int:
 
 
 func _resume_stage(p: Passenger) -> Passenger.Stage:
+	if p.is_arriving():
+		return Passenger.Stage.TO_ROAD_EXIT
 	if p.stage == Passenger.Stage.TO_SECURITY:
 		return Passenger.Stage.TO_SECURITY
 	return Passenger.Stage.TO_GATE

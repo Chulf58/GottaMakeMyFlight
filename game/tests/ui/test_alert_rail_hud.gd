@@ -69,7 +69,7 @@ func _close_doors_with_misses(count: int) -> void:
 
 func _accept(count: int) -> void:
 	for i in count:
-		var terms := TestFlightContracts.terms("C%d" % i, 7 * 60 + (i + 1) * 195)
+		var terms := TestFlightContracts.terms("C%d" % i, 7 * 60 + (i + 1) * 199)
 		assert_bool(_world.flights.accept_contract(terms)).is_true()
 
 

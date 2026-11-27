@@ -82,7 +82,7 @@ func spawned(incident: Dictionary, passenger_id: int) -> void:
 	if not _waiting_vip(incident) or incident["plan"]["target"] != 0:
 		return
 	var p := _director.passengers.get_passenger(passenger_id)
-	if p != null and p.flight_id == incident["plan"]["flight"]:
+	if p != null and p.is_departing() and p.flight_id == incident["plan"]["flight"]:
 		incident["plan"]["target"] = passenger_id
 		p.vip = true
 

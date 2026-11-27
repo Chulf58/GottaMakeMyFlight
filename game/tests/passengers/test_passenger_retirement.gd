@@ -40,7 +40,7 @@ func _reference(count: int) -> Array[int]:
 
 
 func _late(count: int) -> Array[int]:
-	_world.run_to(1890)
+	_world.run_to(1970)
 	var ids: Array[int] = []
 	for i in count:
 		ids.append(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))

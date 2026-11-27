@@ -29,6 +29,8 @@ static func candidate(sim: PassengerSim, views: PassengerViews) -> int:
 		var p := sim.get_passenger(id)
 		if p == null or p.is_done() or not views.shows(p):
 			continue
+		if p.is_arriving():
+			continue
 		if best == 0 or p.stage < best_stage:
 			best = id
 			best_stage = p.stage

@@ -78,7 +78,7 @@ static func check(grid: BuildGrid, edit: BuildEdit) -> BuildResult:
 static func _named_front_blocker(
 	grid: BuildGrid, edit: BuildEdit, result: BuildResult
 ) -> BuildResult:
-	if edit.kind != BuildEdit.Kind.PLACE_OBJECT or not BuildCatalog.is_door(edit.def_id):
+	if edit.kind != BuildEdit.Kind.PLACE_OBJECT or not BuildCatalog.is_any_door(edit.def_id):
 		return result
 	if result.reason != BuildResult.Reason.INTERACTION_BLOCKED or result.blocking_object_id == 0:
 		return result
@@ -97,10 +97,13 @@ static func _named_front_blocker(
 static func edge_problem(grid: BuildGrid, edit: BuildEdit) -> BuildResult:
 	match edit.kind:
 		BuildEdit.Kind.PLACE_OBJECT:
-			if not BuildCatalog.is_door(edit.def_id):
-				return null
-			var outside := outside_door_problem(grid, edit.cell, edit.facing)
-			return null if outside.ok else outside
+			if BuildCatalog.is_door(edit.def_id):
+				var outside := outside_door_problem(grid, edit.cell, edit.facing)
+				return null if outside.ok else outside
+			if BuildCatalog.is_airside_exit(edit.def_id):
+				var inside := interior_door_problem(grid, edit.cell, edit.facing)
+				return null if inside.ok else inside
+			return null
 		BuildEdit.Kind.PLACE_WALL:
 			if on_a_way_out(grid, edit.cell, edit.side):
 				return BuildResult.refused(BuildResult.Reason.DOOR_WALLED)
@@ -108,6 +111,22 @@ static func edge_problem(grid: BuildGrid, edit: BuildEdit) -> BuildResult:
 			if beyond_a_door(grid, edit.cell):
 				return BuildResult.refused(BuildResult.Reason.DOOR_NOT_ON_EDGE)
 	return null
+
+
+## Whether an airside exit door at `anchor` and `facing` stands on interior
+## floor with floor beyond its back edge and no glass or door wall blocking it.
+static func interior_door_problem(grid: BuildGrid, anchor: Vector2i, facing: int) -> BuildResult:
+	var out := back_step(facing)
+	var back := anchor + out
+	if not grid.in_bounds(back) or grid.floor_at(back) == BuildGrid.FLOOR_NONE:
+		return BuildResult.refused(BuildResult.Reason.AIRSIDE_EXIT_NEEDS_FLOOR)
+	var side := BuildGrid.SIDE_STEP.find(out)
+	match grid.wall_kind(anchor, side):
+		BuildGrid.WallKind.NONE:
+			return BuildResult.accepted()
+		BuildGrid.WallKind.PLAIN:
+			return grid.validate(BuildEdit.remove_wall(anchor, side))
+	return BuildResult.refused(BuildResult.Reason.DOOR_WALLED)
 
 
 ## Whether an entrance or exit door object at `anchor` and `facing` stands on
@@ -140,12 +159,17 @@ static func auto_facing(grid: BuildGrid, def_id: StringName, point: Vector3, fal
 	var best := fallback
 	var best_tier := 2
 	var best_distance := INF
+	var interior := BuildCatalog.is_airside_exit(def_id)
 	for turn in 4:
 		var out := back_step(turn)
 		var tier := 2
 		if check(grid, BuildEdit.place_object(def_id, cell, turn)).ok:
 			tier = 0
-		elif grid.floor_at(cell + out) == BuildGrid.FLOOR_NONE:
+		elif (
+			grid.in_bounds(cell + out) and grid.floor_at(cell + out) != BuildGrid.FLOOR_NONE
+			if interior
+			else grid.floor_at(cell + out) == BuildGrid.FLOOR_NONE
+		):
 			tier = 1
 		var distance := 0.5 - (offset.x * out.x + offset.z * out.y)
 		if tier < best_tier or (tier == best_tier and tier < 2 and distance < best_distance):
@@ -165,12 +189,12 @@ static func edits_for(grid: BuildGrid, edit: BuildEdit) -> Array[BuildEdit]:
 	var plan: Array[BuildEdit] = [edit]
 	if edit.kind == BuildEdit.Kind.REMOVE_OBJECT:
 		var record := grid.get_object(edit.object_id)
-		if not record.is_empty() and BuildCatalog.is_door(record["def"]):
+		if not record.is_empty() and BuildCatalog.is_any_door(record["def"]):
 			var back := BuildGrid.SIDE_STEP.find(back_step(record["facing"]))
 			if grid.wall_kind(record["anchor"], back) == BuildGrid.WallKind.NONE:
 				plan.append(BuildEdit.place_wall(record["anchor"], back))
 		return plan
-	if edit.kind != BuildEdit.Kind.PLACE_OBJECT or not BuildCatalog.is_door(edit.def_id):
+	if edit.kind != BuildEdit.Kind.PLACE_OBJECT or not BuildCatalog.is_any_door(edit.def_id):
 		return plan
 	var side := BuildGrid.SIDE_STEP.find(back_step(edit.facing))
 	if grid.wall_kind(edit.cell, side) == BuildGrid.WallKind.PLAIN:
@@ -188,11 +212,19 @@ static func ways_out(grid: BuildGrid) -> Array:
 	return out
 
 
-## Whether the edge (from either cell beside it) is a door's back edge.
+## Whether the edge (from either cell beside it) is any door object's back edge.
 static func on_a_way_out(grid: BuildGrid, cell: Vector2i, side: int) -> bool:
 	var step := BuildGrid.SIDE_STEP[side]
-	for way in ways_out(grid):
-		if (cell == way[0] and step == way[1]) or (cell == way[0] + way[1] and step == -way[1]):
+	for object_id in grid.object_ids():
+		var record := grid.get_object(object_id)
+		if not BuildCatalog.is_any_door(record["def"]):
+			continue
+		var way_cell: Vector2i = record["anchor"]
+		var way_step := back_step(record["facing"])
+		if (
+			(cell == way_cell and step == way_step)
+			or (cell == way_cell + way_step and step == -way_step)
+		):
 			return true
 	return false
 

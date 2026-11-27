@@ -53,6 +53,7 @@ const CEILING := 85
 ## apron and finished.
 const AWAY_STAGES: Array[Passenger.Stage] = [
 	Passenger.Stage.SPAWNED,
+	Passenger.Stage.DEPLANING,
 	Passenger.Stage.APRON,
 	Passenger.Stage.ON_BUS,
 	Passenger.Stage.MADE,
@@ -178,7 +179,7 @@ func cells() -> Dictionary:
 ## shortfall (at most MAX_CALM per period, paid out the same way), to 0 at the
 ## lowest, whatever the mood was.
 func beat(p: Passenger) -> void:
-	if AWAY_STAGES.has(p.stage):
+	if AWAY_STAGES.has(p.stage) or p.walking_outside():
 		return
 	var cell := BoredomSim.watch_cell(p)
 	var net := net_calm_at(cell)

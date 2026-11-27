@@ -37,7 +37,7 @@ const TICKS := {PlaneClasses.MEDIUM: 1200, PlaneClasses.LARGE: 2400}
 ## The ticks a flight at TaxiTimes.BASE takes from its first state to DEPARTED
 ## (FlightSim.PHASE_TICKS added up), a test pins it: the least the booking is
 ## held after the works end.
-const HOLD_TICKS := 3900
+const HOLD_TICKS := 3980
 const SAVE_KEYS := ["target", "start", "finish"]
 const NO_TICK := -1
 

@@ -8,6 +8,8 @@ const SECURITY_IDS: Array[StringName] = [&"security_scanner", &"security_arch"]
 ## One-cell door markers on the terminal's edge: the front (interaction) side
 ## faces in, and the back edge leads out.
 const DOOR_IDS: Array[StringName] = [&"entrance_door", &"exit_door"]
+## One-way airside-to-landside exit door placed on an interior divider wall.
+const AIRSIDE_EXIT_ID: StringName = &"airside_exit_door"
 
 ## Where a baggage belt piece joins its neighbours, in the piece's frame at
 ## facing 0, from BAGGAGE_DATA (tools/blender/interior/build_baggage_kit.py).
@@ -80,6 +82,14 @@ static func is_security(id: StringName) -> bool:
 
 static func is_door(id: StringName) -> bool:
 	return DOOR_IDS.has(id)
+
+
+static func is_airside_exit(id: StringName) -> bool:
+	return id == AIRSIDE_EXIT_ID
+
+
+static func is_any_door(id: StringName) -> bool:
+	return DOOR_IDS.has(id) or id == AIRSIDE_EXIT_ID
 
 
 static func is_belt(id: StringName) -> bool:
@@ -157,6 +167,7 @@ static func _build() -> void:
 	_add(&"seat_row", "Gate seats", Vector2i(3, 1), Color(0.25, 0.45, 0.7), 0.8)
 	_add_door(&"entrance_door", "Entrance", Color(0.35, 0.7, 0.4))
 	_add_door(&"exit_door", "Exit to the plane", Color(0.3, 0.55, 0.85))
+	_add_door(AIRSIDE_EXIT_ID, "Airside exit door", Color(0.28, 0.72, 0.42))
 	# The gate desk (decision gates-technical-design-gate-desks-link-to-north-
 	# exits-one-st, point 1; ruling 17fe639a): a 2x1 counter that makes a gate
 	# of the nearest free exit facing the planes (GateDesks), staffed by a

@@ -47,7 +47,13 @@ enum Stage {
 	SHOP_BROWSE,
 	# Riding a shuttle bus from a Bus Gate bay to a Remote Stand.
 	ON_BUS,
+	# Arrivals lifecycle (Arrivals A1; seams for A2 pickup & A3 claim).
+	DEPLANING,
+	TO_AIRSIDE_EXIT,
+	TO_ROAD_EXIT,
 }
+
+enum Direction { DEPARTING, ARRIVING }
 
 ## CROWDED is never a live status: it is only a missed passenger's cause
 ## (missed_stuck), held back in a boarding file when its doors closed
@@ -66,7 +72,12 @@ const NO_CELL := Vector2i(-1, -1)
 const MOOD_START := 70
 
 var id := 0
+var direction: Direction = Direction.DEPARTING
 var flight_id := ""
+## Optional amenity stops taken/allowed after crossing to landside on arrival.
+var arrival_stops := 0
+var arrival_stop_cap := 0
+var arrival_done := false
 ## 0 or 1: which Toon character draws this passenger.
 var variant := 0
 ## When it set out for the airport (ArrivalTypes): scheduled passengers draw
@@ -214,8 +225,25 @@ func is_moving() -> bool:
 	return path_index < path.size() - 1
 
 
+func is_arriving() -> bool:
+	return direction == Direction.ARRIVING
+
+
+func is_departing() -> bool:
+	return direction == Direction.DEPARTING
+
+
 func is_done() -> bool:
-	return stage == Stage.MADE or stage == Stage.MISSED
+	return (
+		stage == Stage.MADE
+		or stage == Stage.MISSED
+		or (direction == Direction.ARRIVING and arrival_done)
+	)
+
+
+## Whether this arriving passenger is walking outside (deplaning apron/bridge or sidewalk to road).
+func walking_outside() -> bool:
+	return (stage == Stage.DEPLANING or stage == Stage.TO_ROAD_EXIT) and not apron.is_empty()
 
 
 ## Whether this missed passenger is actively walking an outside path (returning

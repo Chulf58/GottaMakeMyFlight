@@ -19,10 +19,10 @@ const FULL_DAY := [420, 555, 690, 825, 960, 1095, 1230]
 ## small-plane gate hold (131 min at BASE, [AT_STAND - lead_in, DEPARTED)) and
 ## after main.tscn's Stand/PushbackEnd shifted 14 m south.
 const GOLDEN_BUSY := {
-	1: [795, 1200, 540],
-	42: [855, 1245, 705],
-	2024: [360, 1215, 570],
-	7_654_321: [810, 1200, 480],
+	1: [795, 1215, 525],
+	42: [1200, 450, 720],
+	2024: [360, 1230, 570],
+	7_654_321: [1200, 465, 480],
 }
 
 

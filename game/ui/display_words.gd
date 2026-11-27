@@ -150,6 +150,7 @@ class Words:
 	func msgids() -> Array[String]:
 		return [
 			# Object names (BuildObjectDef.display_name)
+			tr("Airside exit door", "item name"),
 			tr("ATM", "item name"),
 			tr("Award trophy", "item name"),
 			tr("Baggage belt", "item name"),

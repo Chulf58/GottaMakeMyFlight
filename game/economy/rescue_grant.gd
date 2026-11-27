@@ -284,7 +284,7 @@ func _dearest_essential() -> int:
 func _someone_can_make_a_flight() -> bool:
 	for id in _sim.passenger_ids():
 		var p := _sim.get_passenger(id)
-		if p.is_done():
+		if p.is_done() or p.is_arriving():
 			continue
 		if p.stage == Passenger.Stage.APRON or p.stage == Passenger.Stage.ON_BUS:
 			return true

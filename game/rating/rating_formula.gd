@@ -43,18 +43,27 @@ const TIE_EPSILON := 1e-9
 
 
 ## Stars from pooled counts: `mood_sum` is the sum of the mood of the `made`
-## passengers at exit; `bags` bags settled, `bags_missed` of them missed.
-## 1 to 5 in half steps; no passengers gives STARTING_STARS.
+## departing passengers at exit, and `arrived` / `arrived_mood_sum` add arriving
+## passenger terminal mood to the mood share (while punctuality made/missed is
+## departing-only). `bags` bags settled, `bags_missed` of them missed.
+## 1 to 5 in half steps; no departing passengers gives STARTING_STARS.
 static func stars(
-	made: int, missed: int, mood_sum: int, bags: int = 0, bags_missed: int = 0
+	made: int,
+	missed: int,
+	mood_sum: int,
+	bags: int = 0,
+	bags_missed: int = 0,
+	arrived: int = 0,
+	arrived_mood_sum: int = 0
 ) -> float:
 	var total := made + missed
 	if total == 0:
 		return STARTING_STARS
 	var made_share := float(made) / total
 	var mood_share := 0.0
-	if made > 0:
-		mood_share = float(mood_sum) / (made * PassengerSim.MOOD_MAX)
+	var mood_count := made + arrived
+	if mood_count > 0:
+		mood_share = float(mood_sum + arrived_mood_sum) / (mood_count * PassengerSim.MOOD_MAX)
 	var bag_miss_share := 0.0
 	if bags > 0:
 		bag_miss_share = float(bags_missed) / bags

@@ -89,7 +89,7 @@ static func is_unmovable_def(def_id: StringName) -> bool:
 		or def_id == &"security_scanner"
 		or def_id == SecurityLanes.ARCH
 		or SecurityLanes.is_part(def_id)
-		or BuildCatalog.is_door(def_id)
+		or BuildCatalog.is_any_door(def_id)
 	)
 
 

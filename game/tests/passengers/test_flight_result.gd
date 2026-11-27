@@ -179,9 +179,10 @@ func test_each_stage_has_its_exact_reason_text() -> void:
 		Passenger.Stage.SHOP_WALK: kiosk,
 		Passenger.Stage.SHOP_BROWSE: kiosk,
 	}
-	# Every stage a passenger can be missed in is in the table, so a stage added
-	# to the enum without a reason fails here.
-	assert_int(expected.size()).is_equal(Passenger.Stage.size() - 2)
+	# Every stage a departing passenger can be missed in is in the table, so a stage
+	# added to the enum without a reason fails here (MADE, MISSED, and the three
+	# arriving-only stages are excluded).
+	assert_int(expected.size()).is_equal(Passenger.Stage.size() - 5)
 	for stage in expected:
 		assert_str(FlightResult.reason_text(stage, Passenger.Stuck.NONE)).is_equal(expected[stage])
 

@@ -40,7 +40,11 @@ const VISIT_INT_FIELDS := [
 ]
 const VISIT_BOOL_FIELDS := ["served", "settled"]
 const QUEUE_KEYS := ["counter", "room", "lane", "serving"]
-const RESUME_STAGES := [Passenger.Stage.TO_SECURITY, Passenger.Stage.TO_GATE]
+const RESUME_STAGES := [
+	Passenger.Stage.TO_SECURITY,
+	Passenger.Stage.TO_GATE,
+	Passenger.Stage.TO_ROAD_EXIT,
+]
 ## Stages before the order is made: getting up from a gate seat, walking to
 ## the queue, queuing and ordering.
 const UNSERVED_STAGES := [
@@ -155,7 +159,11 @@ static func _visit_problem(
 		[visit.room != 0 or venue_id != &"", "standalone food visit has no standalone counter"],
 		[key_ok, "seat key must be <table>:<seat>, or empty for a walk-on venue"],
 		[
-			(visit.resume_stage == Passenger.Stage.TO_GATE) == p.cleared,
+			(
+				visit.resume_stage == Passenger.Stage.TO_ROAD_EXIT and not p.cleared
+				if p.is_arriving()
+				else (visit.resume_stage == Passenger.Stage.TO_GATE) == p.cleared
+			),
 			"it resumes on the other side of security"
 		],
 		[venue.walk_on or not seat.is_empty(), "no such cafe seat"],

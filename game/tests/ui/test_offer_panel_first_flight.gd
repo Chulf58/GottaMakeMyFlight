@@ -102,9 +102,9 @@ func test_a_closed_airport_hides_offers_and_refuses_open_until_opened() -> void:
 	_panel.open()
 	assert_bool(_panel.is_open()).is_false()
 	for id in ["O0N1", "O0N2"]:
-		assert_str(_panel.card_text(id)).contains("First flight 4 h 13 min after opening")
+		assert_str(_panel.card_text(id)).contains("First flight 4 h 17 min after opening")
 	assert_str(_panel.card_text("O0N2")).contains(
-		"Departs 20:00 daily\nSmall plane\nFirst flight 4 h 13 min after opening"
+		"Departs 20:00 daily\nSmall plane\nFirst flight 4 h 17 min after opening"
 	)
 	_sim.open_airport()
 	_panel._process(0.0)
