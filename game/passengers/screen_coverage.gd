@@ -21,15 +21,22 @@ extends RefCounted
 ## The covered cells are derived from the grid, so nothing is saved.
 
 const SCREEN_ID := &"screen_stand"
+const INFO_SCREEN_ID := &"info_screen"
 ## How many rows in front of the screen it covers.
 const RANGE := 5
 ## How far the fan reaches to each side of the screen's axis, from the second
 ## row on.
 const MAX_HALF_WIDTH := 2
 
+var def_id: StringName = SCREEN_ID
+
 var _grid: BuildGrid
 var _covered: Dictionary = {}
 var _dirty := true
+
+
+func _init(target_id: StringName = SCREEN_ID) -> void:
+	def_id = target_id
 
 
 ## The fan in front of a screen at `anchor` and `facing`, before floor and
@@ -92,13 +99,18 @@ static func sight_clear(grid: BuildGrid, from: Vector2i, to: Vector2i) -> bool:
 	return true
 
 
-## The ids of every screen stand on `grid`, ascending.
-static func screen_ids(grid: BuildGrid) -> Array[int]:
+## The ids of every `target_id` piece on `grid`, ascending.
+static func ids_for(grid: BuildGrid, target_id: StringName) -> Array[int]:
 	var out: Array[int] = []
 	for id in grid.object_ids():
-		if grid.get_object(id)["def"] == SCREEN_ID:
+		if grid.get_object(id)["def"] == target_id:
 			out.append(id)
 	return out
+
+
+## The ids of every screen stand on `grid`, ascending.
+static func screen_ids(grid: BuildGrid) -> Array[int]:
+	return ids_for(grid, SCREEN_ID)
 
 
 ## What `grid`'s screens cost to run for one game day.
@@ -130,7 +142,7 @@ func cells() -> Dictionary:
 		return {}
 	if _dirty:
 		_covered.clear()
-		for id in screen_ids(_grid):
+		for id in ids_for(_grid, def_id):
 			var record := _grid.get_object(id)
 			for cell in covered_cells(_grid, record["anchor"], record["facing"]):
 				_covered[cell] = true

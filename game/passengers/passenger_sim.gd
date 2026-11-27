@@ -66,6 +66,12 @@ const MISSED_MAX_WALK_OUT_TICKS := 6000
 ## Stuck passengers retry once a simulated second, staggered by id; mood and
 ## the lateness forecast update on the same beat.
 const BEAT_TICKS := 20
+## Stuck or waiting passengers inside a Departure Board's sight fan retry
+## wayfinding more often without staff.
+const WAYFINDING_RETRY_TICKS := 5
+## Stuck mood loss per beat inside a Departure Board's sight fan (lighter relief
+## than a staffed Info desk's CALM_STUCK_LOSS).
+const BOARD_STUCK_LOSS := 2
 const SEAT_TRIES := 4
 const MOOD_MAX := 100
 ## A passenger standing at the gate loses a mood point every this many beats.
@@ -120,6 +126,8 @@ var decor := DecorEffect.new()
 var messes := MessSim.new()
 ## Help visits to staffed info desks for stuck passengers (InfoDesk).
 var info_desks := InfoDesk.new()
+## Sight-fan coverage of unstaffed Departure Boards (&"info_screen").
+var departure_boards := ScreenCoverage.new(ScreenCoverage.INFO_SCREEN_ID)
 ## Kiosk visits and browse slot reservations (ShopSim).
 var shops := ShopSim.new()
 ## Security service after admission, at every scanner and lane.
@@ -235,6 +243,7 @@ func bind(with_clock: SimClock, with_flights: FlightSim, with_grid: BuildGrid) -
 	decor.bind(self)
 	messes.bind(self)
 	info_desks.bind(self)
+	departure_boards.bind(grid)
 	shops.bind(self, _set_stage, _leave_station, _release_seat)
 	arrivals.bind(self, _spawn)
 	clock.ticked.connect(on_tick)
@@ -768,7 +777,10 @@ func _beat(p: Passenger) -> void:
 	# the terminal's reach: no stuck mood loss and no info desk help.
 	var on_road := p.stage == Passenger.Stage.SPAWNED
 	if p.stuck != Passenger.Stuck.NONE and not on_road:
-		change -= info_desks.stuck_loss(p)
+		var loss := info_desks.stuck_loss(p)
+		if loss > BOARD_STUCK_LOSS and departure_boards.covers(p.at):
+			loss = BOARD_STUCK_LOSS
+		change -= loss
 	# A bored passenger gets nothing from its seat (BoredomSim).
 	if p.stage == Passenger.Stage.SEATED and not BoredomSim.is_bored(p):
 		change += 1
@@ -930,7 +942,8 @@ func _serving_left(q: Dictionary) -> int:
 
 
 func _retry_now(p: Passenger) -> bool:
-	return posmod(tick, BEAT_TICKS) == posmod(p.id, BEAT_TICKS)
+	var period := WAYFINDING_RETRY_TICKS if departure_boards.covers(p.at) else BEAT_TICKS
+	return posmod(tick, period) == posmod(p.id, period)
 
 
 func _set_stage(p: Passenger, stage: Passenger.Stage) -> void:
