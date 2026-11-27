@@ -54,6 +54,7 @@ const INT_FIELDS := [
 	"odometer_mm",
 	"missed_stage",
 	"missed_stuck",
+	"missed_phase",
 	"hunger",
 	"cafe_cooldown",
 	"arrival_type",
@@ -366,6 +367,9 @@ static func _passenger(entry: Variant, grid: BuildGrid, next_id: int) -> Passeng
 		and p.stage < Passenger.Stage.size()
 		and p.missed_stage >= 0
 		and p.missed_stage < Passenger.Stage.size()
+		and p.missed_phase >= 0
+		and p.missed_phase < Passenger.MissedPhase.size()
+		and (p.stage == Passenger.Stage.MISSED or p.missed_phase == Passenger.MissedPhase.NONE)
 	)
 	var stuck_ok := (
 		p.stuck >= 0

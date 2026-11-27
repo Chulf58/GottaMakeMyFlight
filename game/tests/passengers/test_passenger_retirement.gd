@@ -51,16 +51,32 @@ func test_settled_passengers_are_kept_for_a_while_then_retired() -> void:
 	var ids := _reference(6)
 	ids.append_array(_late(2))
 	var kept_once := 0
-	while _world.clock.tick < PassengerTestWorld.doors_tick() + 400:
+	var made_ids: Array[int] = []
+	var missed_ids: Array[int] = []
+	var recorded := {}
+	while _world.clock.tick < PassengerTestWorld.doors_tick() + 1200:
 		_world.step()
 		for id in ids:
 			if not _outcomes.has(id):
 				assert_object(_world.passenger(id)).is_not_null()
 				continue
-			var kept: bool = _world.clock.tick - _outcomes[id] <= PassengerSim.SETTLED_KEEP_TICKS
-			if kept:
+			var p := _world.passenger(id)
+			if not recorded.has(id):
+				recorded[id] = true
+				if p.stage == Passenger.Stage.MADE:
+					made_ids.append(id)
+				else:
+					missed_ids.append(id)
+			if made_ids.has(id):
+				var kept: bool = (
+					_world.clock.tick - _outcomes[id] <= PassengerSim.SETTLED_KEEP_TICKS
+				)
+				if kept:
+					kept_once += 1
+				assert_bool(p != null).is_equal(kept)
+			elif _world.clock.tick - _outcomes[id] < PassengerSim.MISSED_DISMAY_TICKS:
 				kept_once += 1
-			assert_bool(_world.passenger(id) != null).is_equal(kept)
+				assert_object(p).is_not_null()
 	assert_int(_outcomes.size()).is_equal(8)
 	assert_int(kept_once).is_greater(0)
 	assert_int(_world.sim.made_count()).is_greater(0)
@@ -72,14 +88,18 @@ func test_settled_passengers_are_kept_for_a_while_then_retired() -> void:
 func test_totals_and_flight_results_survive_retirement() -> void:
 	var ids := _reference(6)
 	ids.append_array(_late(2))
-	_world.run_to(PassengerTestWorld.doors_tick() + 50)
+	_world.run_to(PassengerTestWorld.doors_tick() + 10)
 	var made := _world.sim.made_count()
 	var missed := _world.sim.missed_count()
 	assert_int(missed).is_greater(0)
 	var before := FlightResult.summarize(_world.sim, PassengerTestWorld.FLIGHT)
 	assert_int(before["made"]).is_equal(made)
 	assert_int(before["missed"]).is_equal(missed)
-	_world.run_to(PassengerTestWorld.doors_tick() + PassengerSim.SETTLED_KEEP_TICKS + 5)
+	while (
+		not _world.sim.passenger_ids().is_empty()
+		and _world.clock.tick < PassengerTestWorld.doors_tick() + 1200
+	):
+		_world.step()
 	assert_int(_world.sim.passenger_ids().size()).is_equal(0)
 	assert_int(_world.sim.made_count()).is_equal(made)
 	assert_int(_world.sim.missed_count()).is_equal(missed)

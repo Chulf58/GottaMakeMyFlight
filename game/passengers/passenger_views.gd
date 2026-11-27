@@ -461,7 +461,11 @@ func snap() -> void:
 ## The ground direction (x, z) a walking passenger is heading in, from the
 ## committed path step or apron leg it is on; zero when it is not walking.
 func walk_heading(p: Passenger) -> Vector2:
-	var outside := p.stage == Passenger.Stage.APRON or p.stage == Passenger.Stage.SPAWNED
+	var outside := (
+		p.stage == Passenger.Stage.APRON
+		or p.stage == Passenger.Stage.SPAWNED
+		or p.missed_walking_outside()
+	)
 	if outside and p.apron_mm < p.apron_total_mm():
 		var left := p.apron_mm
 		for i in range(1, p.apron.size()):
@@ -1004,6 +1008,8 @@ func _visible(p: Passenger) -> bool:
 	if p.stage == Passenger.Stage.MADE or p.stage == Passenger.Stage.ON_BUS:
 		return false
 	if p.stage == Passenger.Stage.MISSED:
+		if p.missed_phase != Passenger.MissedPhase.NONE:
+			return p.missed_phase != Passenger.MissedPhase.DONE
 		return sim.tick - p.outcome_tick <= MISSED_LINGER_TICKS
 	return true
 
@@ -1120,7 +1126,11 @@ func _pose(node: Node3D, p: Passenger, built: Dictionary) -> float:
 	var face := NAN
 	var clip := "idle"
 	var base := 1.0
-	var outside := p.stage == Passenger.Stage.APRON or p.stage == Passenger.Stage.SPAWNED
+	var outside := (
+		p.stage == Passenger.Stage.APRON
+		or p.stage == Passenger.Stage.SPAWNED
+		or p.missed_walking_outside()
+	)
 	var moving := (outside and p.apron_mm < p.apron_total_mm()) or p.is_moving()
 	var mm := PassengerSim.RUN_MM if p.late else PassengerSim.WALK_MM
 	var activity := ActivityPoses.kind(sim, p)
