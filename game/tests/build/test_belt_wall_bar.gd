@@ -22,8 +22,17 @@ func before() -> void:
 		for x in 16:
 			edits.append(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
 	_mode.grid.apply_batch(edits)
-	_mode.grid.apply(BuildEdit.place_wall(WALL_CELL, BuildGrid.Side.EAST))
-	_mode.grid.apply(BuildEdit.place_wall(ROW_WALL_CELL, BuildGrid.Side.SOUTH))
+	_mode.grid.apply(BuildEdit.place_wall(WALL_CELL, BuildGrid.Side.EAST, BuildGrid.WallKind.GLASS))
+	_mode.grid.apply(
+		BuildEdit.place_wall(ROW_WALL_CELL, BuildGrid.Side.SOUTH, BuildGrid.WallKind.GLASS)
+	)
+	_mode.grid.apply(
+		BuildEdit.place_wall(Vector2i(13, 13), BuildGrid.Side.EAST, BuildGrid.WallKind.PLAIN)
+	)
+	_mode.grid.apply(BuildEdit.remove_floor(Vector2i(13, 4)))
+	_mode.grid.apply(
+		BuildEdit.place_wall(Vector2i(12, 4), BuildGrid.Side.EAST, BuildGrid.WallKind.PLAIN)
+	)
 	_mode.set_tool(BuildMode.Tool.BELT)
 
 
@@ -160,3 +169,20 @@ func test_a_clear_line_draws_no_bar() -> void:
 			live += 1
 	print("live ghost children=%d" % live)
 	assert_int(live).is_greater(0)
+
+
+func test_interior_plain_wall_previews_valid_with_no_red_bar() -> void:
+	var plan := BeltShaper.plan_line(_mode.grid, Vector2i(12, 13), Vector2i(14, 13), 0)
+	assert_bool(plan.result.ok).is_true()
+	assert_int(plan.wall_side).is_equal(-1)
+	assert_array(plan.hatched_edges).is_equal([Vector3i(13, 13, BuildGrid.Side.EAST)])
+	BuildGhost.draw_belt(_mode, Vector2i(12, 13), Vector2i(14, 13))
+	assert_int(_live_bars().size()).is_equal(0)
+
+
+func test_outer_plain_wall_without_floor_on_both_sides_draws_red_bar() -> void:
+	var plan := BeltShaper.plan_line(_mode.grid, Vector2i(11, 4), Vector2i(13, 4), 0)
+	assert_int(plan.result.reason).is_equal(BuildResult.Reason.BELT_WALL)
+	assert_that(plan.wall_cell).is_equal(Vector2i(12, 4))
+	assert_int(plan.wall_side).is_equal(BuildGrid.Side.EAST)
+	_assert_bar_on(Vector2i(11, 4), Vector2i(13, 4), Vector2i(12, 4), BuildGrid.Side.EAST)

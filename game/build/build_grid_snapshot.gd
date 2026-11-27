@@ -11,6 +11,11 @@ static func problem(data: Dictionary) -> String:
 	for key in BuildGrid.SNAPSHOT_KEYS:
 		if not data.has(key):
 			return "missing key '%s'" % key
+	if (
+		not _is_whole(data["save_version"])
+		or int(data["save_version"]) != BuildGridSave.SAVE_VERSION
+	):
+		return "save_version must be %d" % BuildGridSave.SAVE_VERSION
 	for key in ["width", "height"]:
 		if not _is_whole_in(data[key], 1, BuildGrid.MAX_SIDE_CELLS):
 			return "%s must be a whole number from 1 to %d" % [key, BuildGrid.MAX_SIDE_CELLS]
@@ -26,6 +31,9 @@ static func problem(data: Dictionary) -> String:
 	if problem_text != "":
 		return problem_text
 	problem_text = _paid_problem(data, int(data["width"]), int(data["height"]))
+	if problem_text != "":
+		return problem_text
+	problem_text = _hatches_problem(data, int(data["width"]), int(data["height"]))
 	if problem_text != "":
 		return problem_text
 	return _rooms_problem(data)
@@ -127,6 +135,21 @@ static func _cells_problem(data: Dictionary, width: int, height: int) -> String:
 		for value in values:
 			if not _is_whole_in(value, 0, check[2]):
 				return "%s values must be whole numbers from 0 to %d" % [check[0], check[2]]
+	return ""
+
+
+static func _hatches_problem(data: Dictionary, width: int, height: int) -> String:
+	var checks := [
+		["h_hatches", width * (height + 1)],
+		["v_hatches", (width + 1) * height],
+	]
+	for check in checks:
+		var values: Variant = data[check[0]]
+		if typeof(values) != TYPE_ARRAY or (values as Array).size() != check[1]:
+			return "%s must be an array of %d values" % [check[0], check[1]]
+		for value in values:
+			if not _is_whole_in(value, 0, 1):
+				return "%s values must be whole numbers from 0 to 1" % check[0]
 	return ""
 
 

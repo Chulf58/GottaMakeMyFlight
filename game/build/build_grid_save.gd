@@ -7,7 +7,8 @@ extends RefCounted
 ## structural checks and the snapshot shape stay in BuildGridSnapshot.
 
 ## 2: fast_track boolean persisted on security_arch objects.
-const SAVE_VERSION := 2
+## 3: save_version, h_hatches and v_hatches persisted on the grid snapshot.
+const SAVE_VERSION := 3
 
 
 ## Checks `data`, builds the grid it describes on a fresh BuildGrid and takes
@@ -32,6 +33,8 @@ static func load_into(grid: BuildGrid, data: Dictionary) -> bool:
 	grid._zone = loaded._zone
 	grid._h_walls = loaded._h_walls
 	grid._v_walls = loaded._v_walls
+	grid._h_hatches = loaded._h_hatches
+	grid._v_hatches = loaded._v_hatches
 	grid._occupant = loaded._occupant
 	grid._reserved = loaded._reserved
 	grid._spots = loaded._spots
@@ -87,12 +90,15 @@ static func to_snapshot(grid: BuildGrid) -> Dictionary:
 			)
 		)
 	return {
+		"save_version": SAVE_VERSION,
 		"width": grid.size.x,
 		"height": grid.size.y,
 		"floor": Array(grid._floor),
 		"zone": Array(grid._zone),
 		"h_walls": Array(grid._h_walls),
 		"v_walls": Array(grid._v_walls),
+		"h_hatches": Array(grid._h_hatches),
+		"v_hatches": Array(grid._v_hatches),
 		"objects": objects,
 		"next_object_id": grid._next_object_id,
 		"origin": [grid.origin.x, grid.origin.y, grid.origin.z],
@@ -113,6 +119,8 @@ static func clone(grid: BuildGrid) -> BuildGrid:
 	copy._zone = grid._zone.duplicate()
 	copy._h_walls = grid._h_walls.duplicate()
 	copy._v_walls = grid._v_walls.duplicate()
+	copy._h_hatches = grid._h_hatches.duplicate()
+	copy._v_hatches = grid._v_hatches.duplicate()
 	copy._occupant = grid._occupant.duplicate()
 	copy._reserved = grid._reserved.duplicate()
 	copy._spots = StaffSpots.new()
@@ -179,9 +187,12 @@ static func cropped(grid: BuildGrid, area: Rect2i) -> BuildGrid:
 	copy._reserved = _window(grid._reserved, grid.size.x, cells)
 	copy._room_at = _window(grid._room_at, grid.size.x, cells)
 	copy._h_walls = _window(grid._h_walls, grid.size.x, north_south)
+	copy._h_hatches = _window(grid._h_hatches, grid.size.x, north_south)
 	copy._h_paid = _window(grid._h_paid, grid.size.x, north_south)
 	copy._v_walls = _window(grid._v_walls, grid.size.x + 1, west_east)
+	copy._v_hatches = _window(grid._v_hatches, grid.size.x + 1, west_east)
 	copy._v_paid = _window(grid._v_paid, grid.size.x + 1, west_east)
+	_clear_border_hatches(copy)
 	copy._next_object_id = grid._next_object_id
 	copy._next_room_id = grid._next_room_id
 	copy._built = TerminalEnclosure.built_area(copy.size, copy._floor, copy._h_walls, copy._v_walls)
@@ -232,6 +243,9 @@ static func _load_cells(grid: BuildGrid, data: Dictionary) -> String:
 			int(entry["id"]), def_id, anchor, int(entry["facing"]), paid, fast_track
 		)
 	grid._next_object_id = int(data["next_object_id"])
+	var hatch_problem := _load_hatches(grid, data)
+	if hatch_problem != "":
+		return hatch_problem
 	grid._built = TerminalEnclosure.built_area(grid.size, grid._floor, grid._h_walls, grid._v_walls)
 	grid._outside = TerminalEnclosure.outside_within(
 		grid, grid._h_walls, grid._v_walls, grid.flood_area()
@@ -317,3 +331,42 @@ static func _paid_cap(def_id: StringName) -> int:
 	for id in BuildCatalog.BELT_IDS:
 		cap = maxi(cap, BuildCatalog.object_price(id))
 	return cap
+
+
+static func _clear_border_hatches(grid: BuildGrid) -> void:
+	for x in grid.size.x:
+		grid._h_hatches[x] = 0
+		grid._h_hatches[grid.size.y * grid.size.x + x] = 0
+	for y in grid.size.y:
+		grid._v_hatches[y * (grid.size.x + 1)] = 0
+		grid._v_hatches[y * (grid.size.x + 1) + grid.size.x] = 0
+
+
+static func _load_hatches(grid: BuildGrid, data: Dictionary) -> String:
+	for i in grid._h_hatches.size():
+		grid._h_hatches[i] = int(data["h_hatches"][i])
+	for i in grid._v_hatches.size():
+		grid._v_hatches[i] = int(data["v_hatches"][i])
+	for y in grid.size.y + 1:
+		for x in grid.size.x:
+			if grid._h_hatches[y * grid.size.x + x] == 0:
+				continue
+			if y == 0 or y == grid.size.y:
+				return "h_hatches cannot open on outer border at (%d, %d)" % [x, y]
+			var check := GridRules.check(
+				grid, BuildEdit.set_belt_hatch(Vector2i(x, y), BuildGrid.Side.NORTH, true)
+			)
+			if not check.ok:
+				return "belt hatch at (%d, %d) north refused: %s" % [x, y, check.reason_text()]
+	for y in grid.size.y:
+		for x in grid.size.x + 1:
+			if grid._v_hatches[y * (grid.size.x + 1) + x] == 0:
+				continue
+			if x == 0 or x == grid.size.x:
+				return "v_hatches cannot open on outer border at (%d, %d)" % [x, y]
+			var check := GridRules.check(
+				grid, BuildEdit.set_belt_hatch(Vector2i(x, y), BuildGrid.Side.WEST, true)
+			)
+			if not check.ok:
+				return "belt hatch at (%d, %d) west refused: %s" % [x, y, check.reason_text()]
+	return ""
