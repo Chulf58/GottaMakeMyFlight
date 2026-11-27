@@ -27,6 +27,8 @@ enum Kind {
 	FAST_TRACK,
 	BUS_RIDE,
 	MISSED_FLIGHT,
+	LANDED_SMOOTH,
+	QUICK_EXIT,
 }
 
 ## The most thoughts a passenger keeps; a new one drops the oldest.
@@ -42,7 +44,13 @@ const LONG_QUEUE_TICKS := 10 * GameCalendar.TICKS_PER_MINUTE
 ## Nice decor is thought again only this long after the last time.
 const DECOR_REPEAT_TICKS := 120 * GameCalendar.TICKS_PER_MINUTE
 const POSITIVE := [
-	Kind.MEAL, Kind.TOILET_RELIEF, Kind.NICE_DECOR, Kind.MADE_CLOSE_CALL, Kind.FAST_TRACK
+	Kind.MEAL,
+	Kind.TOILET_RELIEF,
+	Kind.NICE_DECOR,
+	Kind.MADE_CLOSE_CALL,
+	Kind.FAST_TRACK,
+	Kind.LANDED_SMOOTH,
+	Kind.QUICK_EXIT,
 ]
 ## Kinds recorded at a facility: a cafe or toilet room, a desk or scanner. Nice
 ## decor has none (facility 0).
@@ -181,6 +189,10 @@ static func text_of(kind: Kind, value: int) -> String:
 			return TranslationServer.translate("Shuttle ride to the plane")
 		Kind.MISSED_FLIGHT:
 			return TranslationServer.translate("Missed my flight!")
+		Kind.LANDED_SMOOTH:
+			return TranslationServer.translate("Smooth landing!")
+		Kind.QUICK_EXIT:
+			return TranslationServer.translate("Easy way out of airside")
 	return TranslationServer.translate("Nice decor here")
 
 
@@ -276,4 +288,6 @@ class Words:
 			tr("Breezed through Fast-Track security"),
 			tr("Shuttle ride to the plane"),
 			tr("Missed my flight!"),
+			tr("Smooth landing!"),
+			tr("Easy way out of airside"),
 		]

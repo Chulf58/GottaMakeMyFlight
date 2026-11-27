@@ -38,7 +38,8 @@ func test_plane_04a_rotors_and_jet_fans_spin_when_powered_and_stop_at_gate() -> 
 			"id": contract_id,
 			"airline": spec[1],
 			"destination": "Oslo",
-			"departure_minute": TestFlightContracts.bootstrap_minute(),
+			"departure_minute":
+			TestFlightContracts.bootstrap_minute() + (3 if spec[0] == PlaneClasses.LARGE else 0),
 			"plane_size": spec[0],
 			"booked_passengers": PlaneClasses.passenger_range(spec[0])[0],
 			"fee_per_passenger": 20,

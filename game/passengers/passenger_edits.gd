@@ -27,6 +27,10 @@ static func replan(sim: PassengerSim, p: Passenger) -> void:
 			_relocate_stationary(sim, p)
 		return
 	var target := p.path_end()
+	if p.stage == Passenger.Stage.TO_AIRSIDE_EXIT:
+		p.clear_path()
+		PassengerArrivals.advance(sim, p)
+		return
 	var here := p.at
 	var next := p.path[p.path_index + 1]
 	var keep := p.seg_mm
@@ -93,6 +97,7 @@ static func recover_stranded(sim: PassengerSim) -> void:
 static func _is_recoverable(p: Passenger) -> bool:
 	return (
 		StageKinds.location(p.stage) == StageKinds.Location.FLOOR
+		and not p.walking_outside()
 		and not _STATION_OR_VISIT_OCCUPANCY.has(p.stage)
 	)
 
@@ -204,7 +209,7 @@ static func _crosses_door_back(grid: BuildGrid, cell: Vector2i, outside: Vector2
 	if obj == 0:
 		return false
 	var record := grid.get_object(obj)
-	if not BuildCatalog.is_door(record["def"]):
+	if not BuildCatalog.is_any_door(record["def"]):
 		return false
 	return cell + DoorPlacement.back_step(record["facing"]) == outside
 

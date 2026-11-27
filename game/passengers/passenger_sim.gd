@@ -30,7 +30,11 @@ extends Node
 ## their drawn tick.
 
 signal passenger_spawned(id: int)
+## Emitted when an arriving passenger spawns on a deboarding flight.
+signal arrival_spawned(id: int)
 signal outcome(id: int, made: bool)
+## Emitted when an arriving passenger completes its terminal walk-out to the road.
+signal arrival_finished(id: int)
 ## Every journey stage change, after it is made (the debug hook logs it).
 signal stage_changed(id: int, stage: Passenger.Stage)
 ## A passenger finished check-in at desk `desk` (an object id) and handed
@@ -38,7 +42,7 @@ signal stage_changed(id: int, stage: Passenger.Stage)
 signal checked_in(id: int, desk: int)
 
 ## The history of SAVE_VERSION is in PassengerSimSave.
-const SAVE_VERSION := 42
+const SAVE_VERSION := 43
 ## 1.96 m/s; the Toon walk clips cover 1.92-1.95 m/s.
 const WALK_MM := 98
 ## 3.5 m/s, a jog (user-ruled); the Toon run clips cover 4.17-5.30 m/s,
@@ -191,6 +195,8 @@ var _chose_exit: Dictionary = {}
 var _next_id := 1
 ## Pending spawns {"tick", "flight", "variant"}, in tick order.
 var _schedule: Array[Dictionary] = []
+## Pending arriving spawns {"tick", "flight", "variant"}, in tick order.
+var _arrival_schedule: Array[Dictionary] = []
 ## Flights whose arrivals are scheduled and whose doors have not closed.
 var _scheduled: Dictionary = {}
 ## Occurrence id -> extra passengers added when it is scheduled
@@ -253,6 +259,7 @@ func bind(with_clock: SimClock, with_flights: FlightSim, with_grid: BuildGrid) -
 	grid.edit_applied.connect(_on_edit_applied)
 	if auto_schedule:
 		flights.occurrence_added.connect(_on_occurrence_added)
+		flights.deboarding_started.connect(_on_deboarding_started)
 	flights.contract_ended.connect(_on_contract_ended)
 	# After the layout handler above, so staff read a rebuilt layout on edits.
 	if staff != null:
@@ -367,6 +374,7 @@ func on_tick(new_tick: int) -> void:
 	entrance.step(self)
 	arrivals.step()
 	PassengerLifecycle.spawn_due(self)
+	PassengerArrivals.spawn_due(self)
 	if staff != null:
 		staff.step()
 	_reconcile()
@@ -449,6 +457,9 @@ func next_spawn_tick() -> int:
 	var next := -1
 	if not _schedule.is_empty():
 		next = int(_schedule[0]["tick"])
+	if not _arrival_schedule.is_empty():
+		var arr_tick := int(_arrival_schedule[0]["tick"])
+		next = arr_tick if next < 0 else mini(next, arr_tick)
 	for id in arrivals.booking_ids():
 		var b := arrivals.get_booking(id)
 		if b != null:
@@ -525,7 +536,7 @@ func world_position(p: Passenger) -> Vector3:
 	if p.stage == Passenger.Stage.ON_BUS and bus_shuttle != null:
 		return bus_shuttle.bus_position_for_passenger(p.id)
 	var where := StageKinds.location(p.stage)
-	if StageKinds.is_outside(p.stage) and not p.apron.is_empty():
+	if (StageKinds.is_outside(p.stage) or p.walking_outside()) and not p.apron.is_empty():
 		return p.apron_position()
 	if where == StageKinds.Location.FACILITY_SEAT:
 		var in_stall := Passenger.in_toilet(p.stage)
@@ -653,6 +664,12 @@ func _on_occurrence_added(flight_id: String) -> void:
 	schedule_flight(flight_id, PassengerLifecycle.booked_passengers(self, flight_id))
 
 
+func _on_deboarding_started(flight_id: String, count: int) -> void:
+	if not auto_schedule:
+		return
+	PassengerArrivals.schedule_deboarding(self, flight_id, count)
+
+
 ## A new passenger at the entrance, or, with a `walk` (where it got out of
 ## a car or taxi, ArrivalBookings), walking from there: the walk replaces the
 ## road start of the entrance's walk in (OutsideWalks), or ends at the
@@ -730,13 +747,18 @@ func _advance(p: Passenger) -> void:
 		Passenger.Stage.TO_EXIT:
 			if not _chose_exit.has(p.id):
 				PassengerGates.to_exit(self, p)
+		Passenger.Stage.DEPLANING, Passenger.Stage.TO_AIRSIDE_EXIT, Passenger.Stage.TO_ROAD_EXIT:
+			PassengerArrivals.advance(self, p)
 
 
 func _move(p: Passenger) -> void:
 	if p.stage == Passenger.Stage.ON_BUS:
 		return
 	# A walker outside with no walk left stands where it is (OutsideWalks).
-	if StageKinds.is_outside(p.stage) and p.stuck == Passenger.Stuck.NO_ROUTE:
+	if (
+		(StageKinds.is_outside(p.stage) or p.walking_outside())
+		and p.stuck == Passenger.Stuck.NO_ROUTE
+	):
 		return
 	var speed := p.pace_mm()
 	if (
@@ -754,7 +776,9 @@ func _move(p: Passenger) -> void:
 	elif p.stage == Passenger.Stage.SPAWNED and entrance.has_claim(p.id):
 		# Admitted walkers reach the door one at a time, a gap apart.
 		speed = entrance.step_of(p, speed)
-	if p.stage == Passenger.Stage.APRON or p.stage == Passenger.Stage.SPAWNED:
+	if p.stage == Passenger.Stage.DEPLANING or p.walking_outside():
+		PassengerArrivals.step_outside(self, p, speed)
+	elif p.stage == Passenger.Stage.APRON or p.stage == Passenger.Stage.SPAWNED:
 		var total := p.apron_total_mm()
 		p.odometer_mm += mini(speed, total - p.apron_mm)
 		p.apron_mm = mini(p.apron_mm + speed, total)
@@ -779,7 +803,11 @@ func _beat(p: Passenger) -> void:
 		change -= 1
 	# On the road in (the line outside the entrance) a stuck passenger is out of
 	# the terminal's reach: no stuck mood loss and no info desk help.
-	var on_road := p.stage == Passenger.Stage.SPAWNED
+	var on_road := (
+		p.stage == Passenger.Stage.SPAWNED
+		or p.stage == Passenger.Stage.DEPLANING
+		or p.walking_outside()
+	)
 	if p.stuck != Passenger.Stuck.NONE and not on_road:
 		var loss := info_desks.stuck_loss(p)
 		if loss > BOARD_STUCK_LOSS and departure_boards.covers(p.at):
@@ -808,13 +836,14 @@ func _beat(p: Passenger) -> void:
 	# passenger acts on, by its priority table.
 	toilets.beat(p)
 	cafes.beat(p)
-	boredom.beat(p)
+	if p.is_departing():
+		boredom.beat(p)
 	shops.beat(p)
-	if not info_desks.holds(p) and p.bin_detour_bin == 0:
+	if not on_road and not info_desks.holds(p) and p.bin_detour_bin == 0:
 		NeedsPolicy.arbitrate(self, p)
-		if not on_road:
-			info_desks.beat(p)
-	_late_due.append(p)
+		info_desks.beat(p)
+	if p.is_departing():
+		_late_due.append(p)
 
 
 ## The lateness of every passenger whose beat fell on this tick, forecast at
@@ -837,7 +866,11 @@ func _settle_lateness() -> void:
 ## the margin for the rest), and one with no way to the plane is stuck, not
 ## late.
 func _late_now(p: Passenger) -> bool:
-	if p.is_done() or StageKinds.visit_facility(self, p) != StageKinds.Facility.NONE:
+	if (
+		p.is_done()
+		or p.is_arriving()
+		or StageKinds.visit_facility(self, p) != StageKinds.Facility.NONE
+	):
 		return false
 	var arrival := JourneyForecast.arrival_tick(self, p)
 	if arrival >= JourneyForecast.NEVER:

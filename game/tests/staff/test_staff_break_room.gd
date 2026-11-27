@@ -353,7 +353,18 @@ func test_gate_agent_interrupts_break_for_own_gate_even_when_other_gate_is_open_
 	# even though Gate B is open and idle.
 	var t := _w.clock.tick + 1
 	var starts: Array[int] = [
-		t, t + 1, t + 2, t + 3, t + 4, t + 10, t + 2000, t + 2060, t + 2180, t + 2480, t + 2680
+		t,
+		t + 1,
+		t + 2,
+		t + 3,
+		t + 4,
+		t + 5,
+		t + 10,
+		t + 2000,
+		t + 2060,
+		t + 2180,
+		t + 2480,
+		t + 2680
 	]
 	_w.flights.gate_source = func() -> Array[String]: return ["A", "B"] as Array[String]
 	assert_bool(_w.flights.add_flight("GA1", starts, "A")).is_true()

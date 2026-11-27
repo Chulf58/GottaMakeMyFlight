@@ -68,7 +68,9 @@ const KEYS := [
 	"flights",
 	"landed",
 ]
-const FLIGHT_KEYS := ["id", "starts", "state", "gate", "contract", "day", "stand"]
+const FLIGHT_KEYS := [
+	"id", "starts", "state", "gate", "contract", "day", "stand", "arriving_passengers"
+]
 ## Ticks stay exact through JSON (doubles) up to 2^53.
 const MAX_TICK := 9007199254740992
 
@@ -470,6 +472,11 @@ static func _flight_problem(entry: Variant, seen: Dictionary, gates: Array[Strin
 		return "flight %s contract must be a string" % entry["id"]
 	if not WholeNumber.is_whole(entry["state"]) or not WholeNumber.is_whole(entry["day"]):
 		return "flight %s state and day must be whole numbers" % entry["id"]
+	if (
+		not WholeNumber.is_whole(entry["arriving_passengers"])
+		or int(entry["arriving_passengers"]) < 0
+	):
+		return "flight %s arriving_passengers must be 0 or more" % entry["id"]
 	var values: Variant = entry["starts"]
 	if typeof(values) != TYPE_ARRAY or values.size() != FlightSim.STATE_COUNT:
 		return "starts must be an array of %d ticks" % FlightSim.STATE_COUNT
@@ -530,6 +537,9 @@ static func _occurrence_problem(
 	var problem := _starts_problem(entry, starts, contract, day, epoch)
 	if problem != "":
 		return problem
+	var expected_arriving := FlightTimetable.arriving_passengers_for(contract, day, entry["id"])
+	if int(entry["arriving_passengers"]) != expected_arriving:
+		return "flight %s arriving_passengers does not match its manifest" % entry["id"]
 	if tick >= 0 and tick >= FlightTimetable.prune_tick(starts):
 		return "flight %s should have been pruned" % entry["id"]
 	return ""
@@ -547,7 +557,10 @@ static func _starts_problem(
 		return "flight %s taxi times %s are not a pair a gate gives" % [entry["id"], pair]
 	var departs := FlightTimetable.starts_for(contract, day, epoch)[FlightSim.State.PUSHBACK]
 	var built := FlightSim.schedule_starts(
-		starts[0], pair, FlightTimetable.boarding_ticks_of(contract)
+		starts[0],
+		pair,
+		FlightTimetable.boarding_ticks_of(contract),
+		FlightTimetable.deboarding_ticks_of(contract)
 	)
 	if starts != built or starts[FlightSim.State.PUSHBACK] != departs:
 		return "flight %s does not match its contract's timetable" % entry["id"]
@@ -598,6 +611,7 @@ static func _record(entry: Dictionary, starts: Array[int]) -> Dictionary:
 		"contract": entry["contract"],
 		"day": int(entry["day"]),
 		"stand": _stand_of(entry),
+		"arriving_passengers": int(entry["arriving_passengers"]),
 	}
 
 

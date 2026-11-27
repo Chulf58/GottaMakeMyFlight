@@ -181,6 +181,7 @@ const START_STAGES: Array[Passenger.Stage] = [
 	Passenger.Stage.TO_GATE,
 	Passenger.Stage.STANDING,
 	Passenger.Stage.SEATED,
+	Passenger.Stage.TO_ROAD_EXIT,
 ]
 ## Ticks a visit takes beyond the forecast's legs up to the order being made,
 ## measured by test_visit_zero_slack.gd and explained by the phases: a guest
@@ -314,7 +315,15 @@ func wants_browse(p: Passenger) -> bool:
 	if p.hunger >= HUNGRY_AT or not _may_start(p):
 		return false
 	var walking := (
-		p.is_moving() and p.stage in [Passenger.Stage.TO_SECURITY, Passenger.Stage.TO_GATE]
+		p.is_moving()
+		and (
+			p.stage
+			in [
+				Passenger.Stage.TO_SECURITY,
+				Passenger.Stage.TO_GATE,
+				Passenger.Stage.TO_ROAD_EXIT,
+			]
+		)
 	)
 	return walking and _passing_cafe(p)
 
@@ -999,6 +1008,8 @@ func _open(counter_id: int) -> bool:
 
 
 func _resume_stage(p: Passenger) -> Passenger.Stage:
+	if p.is_arriving():
+		return Passenger.Stage.TO_ROAD_EXIT
 	if p.stage == Passenger.Stage.TO_SECURITY:
 		return Passenger.Stage.TO_SECURITY
 	return Passenger.Stage.TO_GATE

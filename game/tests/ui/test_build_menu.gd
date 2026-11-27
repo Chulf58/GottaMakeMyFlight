@@ -286,7 +286,7 @@ func test_wrapping_grid_shows_all_cards_with_no_subfilters_and_shrinks_on_tab_sw
 	await get_tree().process_frame
 	assert_float(_menu.tray_height()).is_equal(BuildMenu.TRAY_H)
 	assert_float(_menu.tray().size.y).is_equal(BuildMenu.TRAY_H)
-	assert_float(_menu.tray().size.x).is_equal(7.0 * 80.0 + 6.0 * 6.0 + 24.0)
+	assert_float(_menu.tray().size.x).is_equal(8.0 * 80.0 + 7.0 * 6.0 + 24.0)
 
 
 func test_mouse_wheel_over_tray_never_zooms_camera_and_has_no_horizontal_slider() -> void:

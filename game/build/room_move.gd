@@ -215,7 +215,7 @@ static func _members(grid: BuildGrid, rect: Rect2i, ids: Array[int]) -> BuildRes
 			seen[object_id] = true
 			var record := grid.get_object(object_id)
 			var def_id: StringName = record["def"]
-			if BuildCatalog.is_door(def_id):
+			if BuildCatalog.is_any_door(def_id):
 				continue
 			if not RoomTemplate.keeps_piece(def_id):
 				return BuildResult.refused(BuildResult.Reason.MOVE_UNMOVABLE, object_id)

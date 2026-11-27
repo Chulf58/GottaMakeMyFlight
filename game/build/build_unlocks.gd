@@ -58,6 +58,7 @@ const TIERS := [
 			BuildMode.Tool.WALL,
 			BuildMode.Tool.GLASS,
 			BuildMode.Tool.DOOR,
+			BuildMode.Tool.AIRSIDE_EXIT,
 			BuildMode.Tool.ENTRANCE,
 			BuildMode.Tool.EXIT,
 			BuildMode.Tool.DESK,
@@ -571,7 +572,11 @@ func _open_to(reached: int) -> void:
 	unlocked.emit(_tier, tr("Unlocked: {facilities}").format({"facilities": "; ".join(opened)}))
 
 
-func _on_outcome(_id: int, made: bool) -> void:
+func _on_outcome(id: int, made: bool) -> void:
+	if passengers != null:
+		var p := passengers.get_passenger(id)
+		if p != null and p.is_arriving():
+			return
 	if made:
 		note_made()
 

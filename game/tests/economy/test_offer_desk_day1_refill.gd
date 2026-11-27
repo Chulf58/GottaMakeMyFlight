@@ -112,7 +112,18 @@ func test_mid_day_refills_stop_when_no_same_day_slot_remains_and_at_cap() -> voi
 		safety += 1
 		var fitting := _fitting_same_day_offers(desk, flights, clock)
 		if fitting.is_empty():
-			break
+			if (
+				not OfferBoard.has_fitting_slot(
+					flights, 0, PlaneClasses.LARGE, _min_minute(clock, 0)
+				)
+				or desk.board.day_offer_count(0) >= OfferBoard.MAX_DAY_OFFERS
+			):
+				break
+			var open := desk.board.open_offers()
+			if open.is_empty():
+				break
+			desk.board.decline(open[0]["id"])
+			continue
 		for offer in fitting:
 			if flights.accept_problem(OfferBoard.terms_of(offer)) == "":
 				assert_bool(desk.board.accept(offer["id"], flights)).is_true()

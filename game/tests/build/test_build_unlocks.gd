@@ -69,6 +69,7 @@ func test_the_start_set_is_the_ruled_one() -> void:
 				"WALL",
 				"GLASS",
 				"DOOR",
+				"AIRSIDE_EXIT",
 				"ENTRANCE",
 				"EXIT",
 				"DESK",

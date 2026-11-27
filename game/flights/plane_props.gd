@@ -22,7 +22,10 @@ const TUG_SCENE := preload("res://assets/airside/props/pushback_tug.glb")
 const NOSE_GEAR := "_Wheels?_F([._][LR])?$"
 ## The states in which the plane stands at its gate and the bridge docks.
 const AT_GATE: Array[int] = [
-	FlightSim.State.AT_STAND, FlightSim.State.BOARDING, FlightSim.State.DOORS_CLOSED
+	FlightSim.State.AT_STAND,
+	FlightSim.State.DEBOARDING,
+	FlightSim.State.BOARDING,
+	FlightSim.State.DOORS_CLOSED,
 ]
 ## Share of TAXI_OUT over which the uncoupled tug drives clear before hiding.
 const PULLAWAY_END := 0.08

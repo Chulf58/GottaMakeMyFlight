@@ -54,6 +54,14 @@ func texts(tool: BuildMode.Tool) -> Array:
 				tr("Click a wall edge to put a door in the wall."),
 				tr("A plain wall on each side of it."),
 			]
+		BuildMode.Tool.AIRSIDE_EXIT:
+			lines = [
+				tr(
+					"One-way exit door from airside back to landside for arriving passengers and staff."
+				),
+				tr("Place it on a divider wall facing airside; departing passengers cannot pass."),
+				tr("Needs floor on both sides. Keep the spot in front clear."),
+			]
 		BuildMode.Tool.ENTRANCE:
 			lines = [
 				tr(

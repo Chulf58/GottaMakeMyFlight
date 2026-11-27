@@ -84,6 +84,8 @@ var entrances: Array[int] = []
 ## road. Passengers spawn and arrive only here.
 var passenger_entrances: Array[int] = []
 var exits: Array[int] = []
+## Placed airside_exit_door object ids (airside -> landside one-way doors).
+var airside_exits: Array[int] = []
 ## On a site, door id -> its walk outside (SiteRoutes.door_cells()) for each
 ## entrance and exit that has one.
 var outside_routes: Dictionary = {}
@@ -129,6 +131,7 @@ func rebuild(grid: BuildGrid) -> void:
 	entrances.clear()
 	passenger_entrances.clear()
 	exits.clear()
+	airside_exits.clear()
 	outside_routes.clear()
 	out_of_service.clear()
 	lanes.clear()
@@ -172,6 +175,8 @@ func rebuild(grid: BuildGrid) -> void:
 					passenger_entrances.append(id)
 			&"exit_door":
 				exits.append(id)
+			BuildCatalog.AIRSIDE_EXIT_ID:
+				airside_exits.append(id)
 			&"seat_row", &"bench_1a":
 				_add_seats(grid, id)
 	var taken := {}
@@ -231,6 +236,18 @@ func open_exits(grid: BuildGrid) -> Array[int]:
 		if is_exit_open(grid, door):
 			open.append(door)
 	return open
+
+
+## Whether airside_exit_door `door` is indoor on both sides and unobstructed.
+func is_airside_exit_open(grid: BuildGrid, door: int) -> bool:
+	var cell := door_cell(grid, door)
+	if cell == BuildObjectDef.NO_CELL or not grid.is_passenger_cell(cell):
+		return false
+	var out := door_outward(grid, door)
+	if grid.has_wall(cell, BuildGrid.SIDE_STEP.find(out)):
+		return false
+	var beyond := cell + out
+	return grid.in_bounds(beyond) and grid.is_passenger_cell(beyond)
 
 
 ## The open exits a passenger of a flight at gate `gate` may leave by: with

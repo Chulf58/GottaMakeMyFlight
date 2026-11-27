@@ -464,7 +464,7 @@ func _draw_door_objects(placed: Dictionary) -> void:
 		# The record the node was drawn from: the grid may have changed since
 		# the last refresh().
 		var record: Dictionary = (_object_nodes[object_id] as Node3D).get_meta("record")
-		if not BuildCatalog.is_door(record["def"]):
+		if not BuildCatalog.is_any_door(record["def"]):
 			continue
 		var anchor: Vector2i = record["anchor"]
 		var out := BuildObjectDef.rotate_offset(Vector2i(0, -1), record["facing"])
@@ -504,7 +504,7 @@ func _sync_objects() -> bool:
 	for object_id in _object_nodes.keys():
 		var node: Node3D = _object_nodes[object_id]
 		if not live.has(object_id) or node.get_meta("record") != _grid.get_object(object_id):
-			if BuildCatalog.is_door(node.get_meta("record")["def"]):
+			if BuildCatalog.is_any_door(node.get_meta("record")["def"]):
 				doors_changed = true
 			node.queue_free()
 			_object_nodes.erase(object_id)
@@ -515,7 +515,7 @@ func _sync_objects() -> bool:
 		if _object_nodes.has(object_id):
 			continue
 		var record := _grid.get_object(object_id)
-		if BuildCatalog.is_door(record["def"]):
+		if BuildCatalog.is_any_door(record["def"]):
 			doors_changed = true
 		var def := BuildCatalog.get_def(record["def"])
 		var created := make_object_node(def, null)

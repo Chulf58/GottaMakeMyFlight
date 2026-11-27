@@ -162,7 +162,10 @@ signal loaded(ok: bool)
 ## 45: PassengerSim v42 (checked_bag_color, bin_detour), BaggageSnapshot v3
 ## (bag color and one-by-one shuttle loading), StaffSim v11 (display_name,
 ## quirks, bag_carry, bag_target); version 44 saves are refused (no migration).
-const SAVE_VERSION := 45
+## 46: FlightSim v15 (DEBOARDING, arriving_passengers), PassengerSim v43
+## (Direction, arrival_schedule, arrival stages), AirportRating v3 (arrived mood);
+## version 45 saves are refused (no migration).
+const SAVE_VERSION := 46
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"

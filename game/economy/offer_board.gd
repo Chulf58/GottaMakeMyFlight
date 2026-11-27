@@ -78,8 +78,8 @@ const SAVE_KEYS := [
 const CHARTER_SEED_VERSION := 1
 const CHARTER_PREFIX := "CH"
 ## Cutoff ticks before departure (= FlightTimetable.departure_offset at BASE for
-## CHARTER_BOARDING_TICKS = 380 -> 1840 ticks / 92 min).
-const CHARTER_CUTOFF_LEAD_TICKS := 1840
+## CHARTER_BOARDING_TICKS = 380, CHARTER_DEBOARDING_TICKS = 60 -> 1880 ticks / 94 min).
+const CHARTER_CUTOFF_LEAD_TICKS := 1880
 const CHARTER_MIN_LEAD_MINUTES := 105
 const CHARTER_MAX_LEAD_MINUTES := 240
 const CHARTER_GAP_MARGIN_TICKS := 300

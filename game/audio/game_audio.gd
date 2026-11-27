@@ -731,6 +731,9 @@ func _bind_passenger_sim(sim: PassengerSim) -> void:
 	var on_outcome := _on_passenger_outcome.bind(sim)
 	if not sim.outcome.is_connected(on_outcome):
 		sim.outcome.connect(on_outcome)
+	var on_arrival_finished := _on_passenger_arrival_finished.bind(sim)
+	if not sim.arrival_finished.is_connected(on_arrival_finished):
+		sim.arrival_finished.connect(on_arrival_finished)
 	if sim.cafes != null:
 		var on_cafe_paid := _on_cafe_paid.bind(sim)
 		if not sim.cafes.paid.is_connected(on_cafe_paid):
@@ -751,6 +754,9 @@ func _unbind_passenger_sim(sim: PassengerSim) -> void:
 		var on_outcome := _on_passenger_outcome.bind(sim)
 		if sim.outcome.is_connected(on_outcome):
 			sim.outcome.disconnect(on_outcome)
+		var on_arrival_finished := _on_passenger_arrival_finished.bind(sim)
+		if sim.arrival_finished.is_connected(on_arrival_finished):
+			sim.arrival_finished.disconnect(on_arrival_finished)
 		if sim.cafes != null:
 			var on_cafe_paid := _on_cafe_paid.bind(sim)
 			if sim.cafes.paid.is_connected(on_cafe_paid):
@@ -1154,6 +1160,11 @@ func _check_security_alarms() -> void:
 				_security_alarmed[id] = true
 				if can_play:
 					_play_sim_sfx(&"security_alarm")
+
+
+func _on_passenger_arrival_finished(id: int, _sim: PassengerSim) -> void:
+	_prev_stage.erase(id)
+	_security_alarmed.erase(id)
 
 
 func _on_passenger_outcome(id: int, made: bool, sim: PassengerSim) -> void:

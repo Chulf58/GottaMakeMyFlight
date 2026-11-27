@@ -358,6 +358,7 @@ class Words:
 				"Entrances and exits need the outside edge, with no floor behind them",
 				"build refusal"
 			),
+			tr("Airside exit doors need floor on both sides", "build refusal"),
 			tr("Keep the edge behind an entrance or exit open", "build refusal"),
 			tr("Unknown room type", "build refusal"),
 			tr("Overlaps another room", "build refusal"),
@@ -433,6 +434,7 @@ class Words:
 			tr("Needs wall on both sides", "ghost reason"),
 			tr("A door is beside it", "ghost reason"),
 			tr("Needs the outside edge", "ghost reason"),
+			tr("Needs floor both sides", "ghost reason"),
 			tr("Keep the edge open", "ghost reason"),
 			tr("Overlaps a room", "ghost reason"),
 			tr("Remove the room first", "ghost reason"),
@@ -499,6 +501,7 @@ class Words:
 			tr("Placed {count} {item}, skipped {skipped}: {reason}", "build status"),
 			tr("Placed {count} {item} for {cost}, skipped {skipped}: {reason}", "build status"),
 			# A door's blocker inside the refusal (BuildCatalog display_name, lower case)
+			tr("airside exit door", "item name, mid-sentence"),
 			tr("atm", "item name, mid-sentence"),
 			tr("award trophy", "item name, mid-sentence"),
 			tr("baggage belt", "item name, mid-sentence"),

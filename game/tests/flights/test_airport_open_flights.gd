@@ -125,7 +125,7 @@ func test_skipped_days_leave_no_departed_flights_in_history() -> void:
 ## occurrence is the first whose preparation window is ahead, issued at once.
 func test_an_offer_accepted_after_opening_starts_as_before() -> void:
 	_sim.open_airport()
-	_run_to(100)
+	_run_to(50)
 	assert_bool(_sim.accept_contract(TestFlightContracts.terms("AM", 500))).is_true()
 	assert_array(_added).is_equal(["AM-d0"])
 	assert_int(_sim.state_start("AM-d0", FlightSim.State.SCHEDULED)).is_equal(_am_first)
@@ -173,7 +173,7 @@ func test_the_gate_opens_the_airport_before_the_tick_s_issue() -> void:
 func test_a_gate_full_all_day_never_opens_without_a_starter() -> void:
 	@warning_ignore("integer_division")
 	var held := FlightTimetable.reserved_ticks() / GameCalendar.TICKS_PER_MINUTE
-	assert_int(held).is_equal(195)
+	assert_int(held).is_equal(199)
 	var first := FlightContract.FIRST_DEPARTURE_MINUTE
 	var last := FlightContract.LAST_DEPARTURE_MINUTE
 	@warning_ignore("integer_division")

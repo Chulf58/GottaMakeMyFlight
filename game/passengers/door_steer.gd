@@ -140,8 +140,10 @@ static func offset_at(grid: BuildGrid, here: Vector3, heading: Vector2, side: fl
 		if weight <= best_weight:
 			continue
 		# The way it crosses: its heading where that is across the door, else
-		# the door's own way.
-		var way := out if door[0] == &"exit_door" else -out
+		# the door's own way (airside_exit_door crosses airside -> landside, out).
+		var way := (
+			out if (door[0] == &"exit_door" or door[0] == BuildCatalog.AIRSIDE_EXIT_ID) else -out
+		)
 		var walking := heading.normalized()
 		if absf(walking.dot(out)) >= CROSSING:
 			way = out * signf(walking.dot(out))
@@ -164,7 +166,7 @@ static func doors_near(grid: BuildGrid, here: Vector3) -> Array:
 				continue
 			seen[id] = true
 			var record := grid.get_object(id)
-			if not BuildCatalog.is_door(record["def"]):
+			if not BuildCatalog.is_any_door(record["def"]):
 				continue
 			var step := DoorPlacement.back_step(record["facing"])
 			var out := Vector2(step)

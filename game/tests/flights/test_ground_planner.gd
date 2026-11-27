@@ -12,24 +12,22 @@ extends GdUnitTestSuite
 const SIDE_LAND := Vector2i(85, 0)
 const MID_CELL := Vector2i(43, 60) + SIDE_LAND
 ## test_the_booking_windows_are_pinned(): a medium flight at MID_CELL departing
-## 10:00 on day 1 (starts 30940 ... 34840), no pause. Bookings by kind, the sum
+## 10:00 on day 1 (starts 30860 ... 34840), no pause. Bookings by kind, the sum
 ## of every window's length, and every booking but the slices as "kind x z
 ## width depth: from-to". The arrival is off the runway 192.153 ticks into
 ## TAXI_IN; the departure is on it 808.792 ticks into TAXI_OUT. Re-pinned when
-## model 04 parked 1.5 m further out (board f8c8987c): the medium footprint
-## shrank (reach 21.902 to 20.780 m), so its parked, corner and runway windows
-## did too.
+## DEBOARDING shifted APPROACH..AT_STAND 80 ticks earlier while anchoring PUSHBACK.
 const PINNED_COUNTS := {"parked": 1, "pushback": 2, "corner": 6, "slice": 101, "runway": 2}
-const PINNED_HELD := 16485.254
+const PINNED_HELD := 16565.254
 const PINNED_LINES: Array[String] = [
-	"parked -17.170 -181.520 28.340 29.820: 32300.000-33600.000",
+	"parked -17.170 -181.520 28.340 29.820: 32220.000-33600.000",
 	"pushback -23.600 -216.500 41.200 64.300: 33600.000-33720.000",
 	"pushback -17.170 -181.520 28.340 29.820: 33600.000-33720.000",
 	"corner -144.780 -358.780 49.561 41.561: 34640.000-34706.804",
-	"corner 103.220 -358.780 41.561 49.561: 31300.000-31558.793",
-	"corner 95.220 -312.780 49.561 49.561: 31372.213-31682.319",
-	"corner -23.780 -304.780 49.561 49.561: 31773.069-31975.751",
-	"runway -1000.000 -352.170 2000.000 28.340: 31040.000-31492.153",
+	"corner 103.220 -358.780 41.561 49.561: 31220.000-31478.793",
+	"corner 95.220 -312.780 49.561 49.561: 31292.213-31602.319",
+	"corner -23.780 -304.780 49.561 49.561: 31693.069-31895.751",
+	"runway -1000.000 -352.170 2000.000 28.340: 30960.000-31412.153",
 	"corner -31.780 -304.780 49.561 49.561: 33959.234-34179.885",
 	"corner -144.780 -312.780 49.561 49.561: 34259.034-34528.814",
 	"runway -1000.000 -352.170 2000.000 28.340: 34448.792-34840.000",

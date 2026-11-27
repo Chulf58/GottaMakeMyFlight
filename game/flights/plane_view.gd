@@ -72,6 +72,7 @@ const PREVIOUS_MOVE := {
 ## The moving state a standing state rests at the end of.
 const REST_AFTER := {
 	FlightSim.State.AT_STAND: FlightSim.State.TAXI_IN,
+	FlightSim.State.DEBOARDING: FlightSim.State.TAXI_IN,
 	FlightSim.State.BOARDING: FlightSim.State.TAXI_IN,
 	FlightSim.State.DOORS_CLOSED: FlightSim.State.TAXI_IN,
 }
@@ -91,7 +92,10 @@ const ROTOR_PATTERN := "^TP_Plane_\\d+A_(?:Propeller|Rotor|Fan)(?:[._][LRM])?$"
 const PROPELLER_REV_PER_TICK := 0.27
 ## Standing phases at the gate where passengers/crew are near and props stay off.
 const PROPELLER_STOPPED_PHASES: Array[int] = [
-	FlightSim.State.AT_STAND, FlightSim.State.BOARDING, FlightSim.State.DOORS_CLOSED
+	FlightSim.State.AT_STAND,
+	FlightSim.State.DEBOARDING,
+	FlightSim.State.BOARDING,
+	FlightSim.State.DOORS_CLOSED,
 ]
 
 @export var clock: SimClock

@@ -176,6 +176,10 @@ var _staff_pathing: GridPathing = null
 var _divider_doors := {}
 var _divider_doors_stale := true
 var _synced_divider_doors := {}
+## Canonical edge keys (GridPathing.door_edge_key()) of airside_exit_door back
+## edges: passable for arriving passengers (via explicit step) and staff,
+## blocked in both directions for departing passenger routing.
+var _airside_exit_edges := {}
 ## Signal emissions held back by hold_signals(), in the order they happened.
 var _held: Array[Callable] = []
 var _hold_depth := 0
@@ -407,10 +411,16 @@ func can_step(from: Vector2i, to: Vector2i) -> bool:
 	)
 
 
-## A step generic routing may take: can_step() allows it and neither cell is
-## a security object, which only its serviced passenger walks through.
+## A step generic routing may take: can_step() allows it, neither cell is a
+## security object (which only its serviced passenger walks through), and the
+## step does not cross an airside_exit_door back edge.
 func can_route(from: Vector2i, to: Vector2i) -> bool:
-	return can_step(from, to) and not _is_security_cell(from) and not _is_security_cell(to)
+	return (
+		can_step(from, to)
+		and not _is_security_cell(from)
+		and not _is_security_cell(to)
+		and not crosses_airside_exit(from, to)
+	)
 
 
 ## A step passengers may take: can_route() between two indoor cells, never
@@ -465,6 +475,44 @@ func crosses_divider_door(from: Vector2i, to: Vector2i) -> bool:
 
 func _is_divider_edge(a: Vector2i, b: Vector2i) -> bool:
 	return _divider_doors.has(GridPathing.door_edge_key(size.x, a, b))
+
+
+func divider_door_pairs() -> Array[Array]:
+	ensure_divider_doors()
+	if _divider_doors.is_empty():
+		return []
+	var area := flood_area()
+	if area.size.x <= 0 or area.size.y <= 0:
+		return []
+	var out: Array[Array] = []
+	for y in range(area.position.y, area.end.y):
+		for x in range(area.position.x, area.end.x):
+			var cell := Vector2i(x, y)
+			if y > area.position.y and _wall_value(cell, Side.NORTH) == WallKind.DOOR:
+				var north := Vector2i(x, y - 1)
+				if _is_divider_edge(cell, north):
+					out.append([cell, north])
+			if x > area.position.x and _wall_value(cell, Side.WEST) == WallKind.DOOR:
+				var west := Vector2i(x - 1, y)
+				if _is_divider_edge(cell, west):
+					out.append([cell, west])
+	return out
+
+
+func crosses_airside_exit(from: Vector2i, to: Vector2i) -> bool:
+	if _airside_exit_edges.is_empty():
+		return false
+	var step := to - from
+	if step.x == 0 or step.y == 0:
+		return _airside_exit_edges.has(GridPathing.door_edge_key(size.x, from, to))
+	var across := from + Vector2i(step.x, 0)
+	var down := from + Vector2i(0, step.y)
+	return (
+		_airside_exit_edges.has(GridPathing.door_edge_key(size.x, from, across))
+		or _airside_exit_edges.has(GridPathing.door_edge_key(size.x, across, to))
+		or _airside_exit_edges.has(GridPathing.door_edge_key(size.x, from, down))
+		or _airside_exit_edges.has(GridPathing.door_edge_key(size.x, down, to))
+	)
 
 
 ## A step staff may take: walkable floor or baggage belts (crossed from any
@@ -845,7 +893,7 @@ func _commit(edit: BuildEdit) -> BuildResult:
 			_enclosure_stale = _enclosure_stale or is_door
 			if is_door:
 				_enclosure_version += 1
-			if _touches_unfloored(result.dirty_cells):
+			if _touches_unfloored(result.dirty_cells) or BuildCatalog.is_airside_exit(edit.def_id):
 				_route_version += 1
 			_lanes = null
 			if _object_affects_divider_doors(
@@ -871,7 +919,7 @@ func _commit(edit: BuildEdit) -> BuildResult:
 						for edge_cell in _edge_cells(anchor, side):
 							if not result.dirty_cells.has(edge_cell):
 								result.dirty_cells.append(edge_cell)
-			if _touches_unfloored(result.dirty_cells):
+			if _touches_unfloored(result.dirty_cells) or BuildCatalog.is_airside_exit(def_id):
 				_route_version += 1
 			_lanes = null
 			if _object_affects_divider_doors(def_id, result.dirty_cells, anchor, facing):
@@ -1070,6 +1118,7 @@ func _reset(grid_size: Vector2i, grid_origin: Vector3) -> void:
 	_divider_doors = {}
 	_divider_doors_stale = true
 	_synced_divider_doors = {}
+	_airside_exit_edges = {}
 	_batch_depth = 0
 	_batch_dirty.clear()
 	_batch_dirty_set.clear()
@@ -1144,6 +1193,7 @@ func _insert_object(
 	if spot != BuildObjectDef.NO_CELL:
 		_reserved[_index(spot)] = object_id
 	_spots.add(object_id, StaffSpots.cell_of(def_id, anchor, facing))
+	_track_airside_exit(def_id, anchor, facing, true)
 	return cells
 
 
@@ -1157,8 +1207,20 @@ func _erase_object(object_id: int) -> Array[Vector2i]:
 	if spot != BuildObjectDef.NO_CELL:
 		_reserved[_index(spot)] = 0
 	_spots.remove(object_id, StaffSpots.cell_of(record["def"], record["anchor"], record["facing"]))
+	_track_airside_exit(record["def"], record["anchor"], record["facing"], false)
 	_objects.erase(object_id)
 	return cells
+
+
+func _track_airside_exit(def_id: StringName, anchor: Vector2i, facing: int, present: bool) -> void:
+	if not BuildCatalog.is_airside_exit(def_id):
+		return
+	var back := anchor + DoorPlacement.back_step(facing)
+	var key := GridPathing.door_edge_key(size.x, anchor, back)
+	if present:
+		_airside_exit_edges[key] = true
+	else:
+		_airside_exit_edges.erase(key)
 
 
 ## An orthogonal step between two walkable cells: no wall on the shared edge
@@ -1273,7 +1335,7 @@ func _object_affects_divider_doors(
 	if not has_any_door_wall():
 		return false
 	if (
-		BuildCatalog.is_door(def_id)
+		BuildCatalog.is_any_door(def_id)
 		or BuildCatalog.is_security(def_id)
 		or SecurityLanes.is_part(def_id)
 		or GateChairs.is_gate_seat_def(def_id)

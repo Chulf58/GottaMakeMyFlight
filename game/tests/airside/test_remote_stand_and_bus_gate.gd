@@ -89,7 +89,7 @@ func test_tier_3_unlock_and_demo_mode_teaser() -> void:
 
 func test_bus_gate_desk_and_remote_stand_flow_and_save_v42() -> void:
 	assert_int(SaveGame.SAVE_VERSION).is_greater_equal(42)
-	assert_int(FlightSim.SAVE_VERSION).is_equal(14)
+	assert_int(FlightSim.SAVE_VERSION).is_equal(15)
 	assert_int(GateDesks.SAVE_VERSION).is_equal(3)
 
 	var wing := _ensure_west_bay_wing()

@@ -477,6 +477,7 @@ func walk_heading(p: Passenger) -> Vector2:
 		p.stage == Passenger.Stage.APRON
 		or p.stage == Passenger.Stage.SPAWNED
 		or p.missed_walking_outside()
+		or p.walking_outside()
 	)
 	if outside and p.apron_mm < p.apron_total_mm():
 		var left := p.apron_mm
@@ -1021,6 +1022,8 @@ func shows(p: Passenger) -> bool:
 func _visible(p: Passenger) -> bool:
 	if p.stage == Passenger.Stage.MADE or p.stage == Passenger.Stage.ON_BUS:
 		return false
+	if p.is_arriving() and p.arrival_done:
+		return false
 	if p.stage == Passenger.Stage.MISSED:
 		if p.missed_phase != Passenger.MissedPhase.NONE:
 			return p.missed_phase != Passenger.MissedPhase.DONE
@@ -1146,6 +1149,7 @@ func _pose(node: Node3D, p: Passenger, built: Dictionary) -> float:
 		p.stage == Passenger.Stage.APRON
 		or p.stage == Passenger.Stage.SPAWNED
 		or p.missed_walking_outside()
+		or p.walking_outside()
 	)
 	var moving := (outside and p.apron_mm < p.apron_total_mm()) or p.is_moving()
 	var mm := PassengerSim.RUN_MM if p.late else PassengerSim.WALK_MM

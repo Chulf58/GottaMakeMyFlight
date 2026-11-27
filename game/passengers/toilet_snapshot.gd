@@ -25,7 +25,11 @@ extends RefCounted
 ## checked against the stall entry of the saved spot, not the grid's.
 
 const VISIT_FIELDS := ["passenger", "room", "stall", "resume_stage", "deadline"]
-const RESUME_STAGES := [Passenger.Stage.TO_SECURITY, Passenger.Stage.TO_GATE]
+const RESUME_STAGES := [
+	Passenger.Stage.TO_SECURITY,
+	Passenger.Stage.TO_GATE,
+	Passenger.Stage.TO_ROAD_EXIT,
+]
 ## The stages of a passenger leaving a stall's old spot, and of one on its way
 ## back into the stall at the new spot.
 const RELOCATED_EXITS := [Passenger.Stage.TOILET_STANDING_UP, Passenger.Stage.TOILET_EXIT]
@@ -113,7 +117,10 @@ static func _visit_problem(
 		return "no such toilet stall"
 	if int(stall["room"]) != visit.room:
 		return "the stall is not in room %d" % visit.room
-	if (visit.resume_stage == Passenger.Stage.TO_GATE) != p.cleared:
+	if p.is_arriving():
+		if visit.resume_stage != Passenger.Stage.TO_ROAD_EXIT or p.cleared:
+			return "it resumes on the wrong stage for an arriving passenger"
+	elif (visit.resume_stage == Passenger.Stage.TO_GATE) != p.cleared:
 		return "it resumes on the other side of security"
 	if ToiletSim.STALL_STAGES.has(p.stage) and (p.at != stall["approach"] or p.is_moving()):
 		return "it is inside the stall but not on its approach cell"

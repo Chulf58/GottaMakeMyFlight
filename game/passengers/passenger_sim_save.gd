@@ -104,7 +104,8 @@ static func to_snapshot(sim: PassengerSim) -> Dictionary:
 		sim._queues,
 		sim._next_id,
 		[sim._made, sim._missed],
-		sim._scheduled.keys()
+		sim._scheduled.keys(),
+		sim._arrival_schedule
 	)
 	data["info_desk"] = sim.info_desks.to_list()
 	data["standing"] = sim.standing.to_list()
@@ -179,6 +180,7 @@ static func from_snapshot(sim: PassengerSim, data: Dictionary) -> bool:
 	sim._made = loaded["made"]
 	sim._missed = loaded["missed"]
 	sim._schedule = loaded["schedule"]
+	sim._arrival_schedule = loaded["arrival_schedule"]
 	sim._queues = loaded["queues"]
 	sim._claims = tail_claims["claims"]
 	sim.security.restore(loaded["security"])

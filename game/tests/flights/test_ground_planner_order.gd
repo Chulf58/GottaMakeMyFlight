@@ -293,8 +293,8 @@ func test_the_planner_restarts_each_quiet_night() -> void:
 	)
 	assert_int(GroundPlanner.EARLIEST_DEPARTURE_MINUTE).is_equal(widest[0])
 	assert_int(GroundPlanner.LATEST_DEPARTURE_MINUTE).is_equal(widest[1])
-	_check_quiet_night(420, 1260, 410)
-	_check_quiet_night(360, 1320, 290)
+	_check_quiet_night(420, 1260, 406)
+	_check_quiet_night(360, 1320, 286)
 
 
 ## Plans a 12:00 flight between departures at `first` and `last` on days 1 and
@@ -324,7 +324,7 @@ func _check_quiet_night(first: int, last: int, quiet_minutes: int) -> void:
 				low = minf(low, booking["from"])
 				high = maxf(high, booking["to"])
 		spans[day] = Vector2(low, high)
-		var first_allowed := GameCalendar.tick_at(day, first, 0) - 2560
+		var first_allowed := GameCalendar.tick_at(day, first, 0) - 2640
 		var last_allowed := GameCalendar.tick_at(day, last, 0) + 1240
 		assert_float(low).is_greater_equal(first_allowed)
 		assert_float(high).is_less_equal(last_allowed)

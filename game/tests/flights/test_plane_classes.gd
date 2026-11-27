@@ -160,7 +160,10 @@ func test_a_plane_view_picks_the_model_from_its_flights_airline_and_class() -> v
 	for case in cases:
 		var sim := auto_free(FlightSim.new()) as FlightSim
 		sim.open_airport()
-		var terms := _terms("C1", TestFlightContracts.bootstrap_minute(), case[1], case[2], case[0])
+		var dep_minute := TestFlightContracts.bootstrap_minute()
+		if case[1] == PlaneClasses.LARGE:
+			dep_minute += 3
+		var terms := _terms("C1", dep_minute, case[1], case[2], case[0])
 		assert_bool(sim.accept_contract(terms)).is_true()
 		var view := _new_view(sim)
 		var flight := _first_flight_of(sim, "C1")

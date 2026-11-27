@@ -27,7 +27,11 @@ extends RefCounted
 ## (ShopSim.stay_ticks()).
 
 const VISIT_FIELDS := ["passenger", "room", "display", "slot", "resume_stage", "deadline"]
-const RESUME_STAGES := [Passenger.Stage.TO_SECURITY, Passenger.Stage.TO_GATE]
+const RESUME_STAGES := [
+	Passenger.Stage.TO_SECURITY,
+	Passenger.Stage.TO_GATE,
+	Passenger.Stage.TO_ROAD_EXIT,
+]
 ## Ticks into a stay tried when _longest_exit() asks the sim how long a turned
 ## back exit can be: more than the longest start of a stay (a stand-up, a lean
 ## back, a door wait and a step) takes.
@@ -113,7 +117,10 @@ static func _visit_problem(
 		return "no such browse slot"
 	if int(slot["room"]) != visit.room:
 		return "the slot is not in room %d" % visit.room
-	if (visit.resume_stage == Passenger.Stage.TO_GATE) != p.cleared:
+	if p.is_arriving():
+		if visit.resume_stage != Passenger.Stage.TO_ROAD_EXIT or p.cleared:
+			return "it resumes on the wrong stage for an arriving passenger"
+	elif (visit.resume_stage == Passenger.Stage.TO_GATE) != p.cleared:
 		return "it resumes on the other side of security"
 	var type := _visit_service(visit, grid)
 	if type == null or not type.shop:

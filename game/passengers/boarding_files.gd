@@ -614,7 +614,7 @@ func known(sim: PassengerSim) -> Array:
 			and q.station != 0
 			and (q.stage == Passenger.Stage.SECURITY or sim.tick >= q.boarding_tick)
 		)
-		if q.is_done() or not (out or sec):
+		if q.is_done() or q.is_arriving() or not (out or sec):
 			continue
 		var routed := leg != StageKinds.Leg.SECURITY
 		var own := JourneyForecast.own_times(sim, q, sim.tick, routed, cleared.get(id, -1))

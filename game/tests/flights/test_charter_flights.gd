@@ -47,7 +47,7 @@ func before() -> void:
 	var spawned_arrivals: Array[int] = []
 	var on_spawn := func(pid: int) -> void:
 		var p := sim.get_passenger(pid)
-		if p != null and p.flight_id == occ_id:
+		if p != null and p.is_departing() and p.flight_id == occ_id:
 			spawned_arrivals.append(p.arrival_type)
 	sim.passenger_spawned.connect(on_spawn)
 
@@ -120,7 +120,7 @@ func test_charter_compact_gate_hold_is_90_min_while_regular_remains_unchanged() 
 	assert_bool(sim.active_contract_ids().has("CH0N1")).is_false()
 	var starts := FlightTimetable.starts_for(contract, 0, 0)
 	var hold := FlightTimetable.gate_hold_span(starts, PlaneClasses.SMALL)
-	assert_int(hold[1] - hold[0]).is_equal(1800)
+	assert_int(hold[1] - hold[0]).is_equal(1840)
 	# FlightFit agrees with accept_problem and has zero BLOCKER_TAXI regressions.
 	var assessment := FlightFit.assess(sim, TestFlightFit.terms("REG", 720, PlaneClasses.SMALL))
 	assert_bool(assessment["fits"]).is_false()

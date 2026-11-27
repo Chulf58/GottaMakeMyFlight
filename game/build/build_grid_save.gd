@@ -54,6 +54,7 @@ static func load_into(grid: BuildGrid, data: Dictionary) -> bool:
 	grid._divider_doors = loaded._divider_doors
 	grid._divider_doors_stale = loaded._divider_doors_stale
 	grid._synced_divider_doors = loaded._synced_divider_doors
+	grid._airside_exit_edges = loaded._airside_exit_edges
 	grid._staff_reach_known = false
 	grid._lanes = null
 	return true
@@ -133,6 +134,7 @@ static func clone(grid: BuildGrid) -> BuildGrid:
 		copy._spots.add(
 			object_id, StaffSpots.cell_of(record["def"], record["anchor"], record["facing"])
 		)
+		copy._track_airside_exit(record["def"], record["anchor"], record["facing"], true)
 	copy._next_object_id = grid._next_object_id
 	copy._rooms = {}
 	for room_id in grid.room_ids():
@@ -170,6 +172,7 @@ static func cropped(grid: BuildGrid, area: Rect2i) -> BuildGrid:
 		record["anchor"] += shift
 		copy._objects[id] = record
 		copy._spots.add(id, StaffSpots.cell_of(record["def"], record["anchor"], record["facing"]))
+		copy._track_airside_exit(record["def"], record["anchor"], record["facing"], true)
 	for id in grid._rooms:
 		var room: Dictionary = grid._rooms[id].duplicate(true)
 		if not area.encloses(room["rect"]):

@@ -143,7 +143,7 @@ func test_the_pose_is_continuous_at_every_phase_edge() -> void:
 		assert_float(_angle(a.basis.z, b.basis.z)).override_failure_message(label).is_less(0.05)
 		assert_float(_angle(a.basis.x, b.basis.x)).override_failure_message(label).is_less(0.05)
 	assert_int(view.pose_at(starts, starts[1] - 0.001)["phase"]).is_equal(PlaneView.PHASE_LEAD_IN)
-	assert_int(view.pose_at(starts, starts[10] + 0.001)["phase"]).is_equal(
+	assert_int(view.pose_at(starts, starts[FlightSim.State.DEPARTED] + 0.001)["phase"]).is_equal(
 		PlaneView.PHASE_CLIMB_OUT
 	)
 

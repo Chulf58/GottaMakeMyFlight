@@ -312,7 +312,7 @@ func _member_state() -> Dictionary:
 			if object_id == 0 or state.has(object_id):
 				continue
 			var record := grid.get_object(object_id)
-			if not BuildCatalog.is_door(record["def"]):
+			if not BuildCatalog.is_any_door(record["def"]):
 				state[object_id] = record
 	return state
 

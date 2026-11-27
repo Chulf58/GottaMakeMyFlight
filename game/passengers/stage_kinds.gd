@@ -33,9 +33,9 @@ enum Pose { UPRIGHT, SITTING_DOWN, SEATED, STANDING_UP }
 ## by number. CHECKIN: on the road in or not yet checked in. SECURITY: checked
 ## in and heading for, queuing at or inside security. AIRSIDE: cleared, at or
 ## heading for the gate or the exit. APRON: the walk out to the plane. DONE:
-## made or missed. VISIT: on a facility visit, whose journey resumes at the
-## stage its facility keeps (resume_of()).
-enum Leg { CHECKIN, SECURITY, AIRSIDE, APRON, DONE, VISIT }
+## made or missed. ARRIVAL: arriving passenger deplaning or heading out.
+## VISIT: on a facility visit, whose journey resumes at the stage its facility keeps.
+enum Leg { CHECKIN, SECURITY, AIRSIDE, APRON, DONE, VISIT, ARRIVAL }
 
 ## Stage -> [Facility, Location, Pose].
 const KINDS := {
@@ -73,6 +73,9 @@ const KINDS := {
 	Passenger.Stage.SHOP_WALK: [Facility.SHOP, Location.FLOOR, Pose.UPRIGHT],
 	Passenger.Stage.SHOP_BROWSE: [Facility.SHOP, Location.FLOOR, Pose.UPRIGHT],
 	Passenger.Stage.ON_BUS: [Facility.NONE, Location.APRON, Pose.UPRIGHT],
+	Passenger.Stage.DEPLANING: [Facility.NONE, Location.APRON, Pose.UPRIGHT],
+	Passenger.Stage.TO_AIRSIDE_EXIT: [Facility.NONE, Location.FLOOR, Pose.UPRIGHT],
+	Passenger.Stage.TO_ROAD_EXIT: [Facility.NONE, Location.FLOOR, Pose.UPRIGHT],
 }
 ## Stage -> Leg.
 const LEGS := {
@@ -108,6 +111,9 @@ const LEGS := {
 	Passenger.Stage.SHOP_WALK: Leg.VISIT,
 	Passenger.Stage.SHOP_BROWSE: Leg.VISIT,
 	Passenger.Stage.ON_BUS: Leg.APRON,
+	Passenger.Stage.DEPLANING: Leg.ARRIVAL,
+	Passenger.Stage.TO_AIRSIDE_EXIT: Leg.ARRIVAL,
+	Passenger.Stage.TO_ROAD_EXIT: Leg.ARRIVAL,
 }
 
 

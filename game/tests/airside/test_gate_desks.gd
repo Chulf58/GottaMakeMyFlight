@@ -170,13 +170,13 @@ func test_removing_a_gate_with_a_flight_due_is_refused_until_it_has_left() -> vo
 func test_a_flight_due_is_named_like_the_departures_board_not_by_id() -> void:
 	var west := _desk(_desk_west)
 	assert_bool(_desk(_desk_east).ok).is_true()
-	assert_bool(_flights.accept_contract(TestFlightContracts.terms("X", 493))).is_true()
+	assert_bool(_flights.accept_contract(TestFlightContracts.terms("X", 497))).is_true()
 	assert_array(_flights.flight_ids()).is_equal(["X-d0"])
 	var removed := _grid.apply(BuildEdit.remove_object(west.object_id))
 	var text := removed.reason_text()
 	print("flight due: %s" % text)
 	assert_int(removed.reason).is_equal(BuildResult.Reason.GATE_IN_USE)
-	assert_str(text).contains("the 08:13 Gotta Air flight to Oslo")
+	assert_str(text).contains("the 08:17 Gotta Air flight to Oslo")
 	assert_str(text).not_contains("X-d0")
 
 
@@ -185,7 +185,7 @@ func test_a_flight_due_is_named_like_the_departures_board_not_by_id() -> void:
 func test_a_flight_taxiing_out_holds_the_gate_until_it_has_departed() -> void:
 	var west := _desk(_desk_west)
 	assert_bool(_desk(_desk_east).ok).is_true()
-	assert_bool(_flights.accept_contract(TestFlightContracts.terms("X", 493))).is_true()
+	assert_bool(_flights.accept_contract(TestFlightContracts.terms("X", 497))).is_true()
 	_flights.on_tick(_flights.state_start("X-d0", FlightSim.State.TAXI_OUT))
 	assert_int(_flights.state_of("X-d0")).is_equal(FlightSim.State.TAXI_OUT)
 	var held := _grid.apply(BuildEdit.remove_object(west.object_id))

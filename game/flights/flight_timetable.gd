@@ -46,6 +46,17 @@ static func taxi_of(contract: Dictionary) -> Array:
 	return contract[FlightContract.TAXI_KEY]
 
 
+## Deboarding duration in ticks for `contract`: compact charters use
+## FlightSim.CHARTER_DEBOARDING_TICKS, large regular contracts use
+## FlightSim.LARGE_DEBOARDING_TICKS, and small/medium use PHASE_TICKS[DEBOARDING].
+static func deboarding_ticks_of(contract: Dictionary) -> int:
+	if FlightContract.is_charter(contract):
+		return FlightSim.CHARTER_DEBOARDING_TICKS
+	if String(contract.get("plane_size", "")) == PlaneClasses.LARGE:
+		return FlightSim.LARGE_DEBOARDING_TICKS
+	return FlightSim.PHASE_TICKS[FlightSim.State.DEBOARDING]
+
+
 ## Boarding duration in ticks for `contract`: charters use the compact
 ## same-day turnaround, regular contracts use FlightSim.PHASE_TICKS[BOARDING].
 static func boarding_ticks_of(contract: Dictionary) -> int:
@@ -56,10 +67,32 @@ static func boarding_ticks_of(contract: Dictionary) -> int:
 	)
 
 
+## Deterministic arriving passenger count for an occurrence on `day`: 60-90% of
+## `booked_passengers` seeded from occurrence id/day, and 6-10 on the starter
+## flight #1 (GMF101-d0) so Day 1 shows arriving passengers right away.
+static func arriving_passengers_for(contract: Dictionary, day: int, occ_id := "") -> int:
+	if day < 0 or contract.is_empty():
+		return 0
+	var contract_id := String(contract.get("id", ""))
+	var resolved_id := occ_id if occ_id != "" else occurrence_id(contract_id, day)
+	var hashed := PlaneClasses.airline_hash("%s#%d" % [resolved_id, day])
+	if contract_id == FlightSim.DEFAULT_ID and day == 0:
+		return 6 + (hashed % 5)
+	var booked := int(contract.get("booked_passengers", 0))
+	if booked <= 0:
+		return 0
+	var pct := 60 + (hashed % 31)
+	return clampi(roundi(float(booked) * float(pct) / 100.0), 1, booked)
+
+
 ## Ticks from the first state to the scheduled departure (start of PUSHBACK)
-## for a flight with taxi pair `taxi` (and optional `boarding_ticks` override).
-static func departure_offset(taxi: Array = TaxiTimes.BASE, boarding_ticks: int = -1) -> int:
+## for a flight with taxi pair `taxi` (and optional boarding/deboarding overrides).
+static func departure_offset(
+	taxi: Array = TaxiTimes.BASE, boarding_ticks: int = -1, deboarding_ticks: int = -1
+) -> int:
 	var ticks := TaxiTimes.phase_ticks(taxi)
+	if deboarding_ticks >= 0:
+		ticks[FlightSim.State.DEBOARDING] = deboarding_ticks
 	if boarding_ticks >= 0:
 		ticks[FlightSim.State.BOARDING] = boarding_ticks
 	var offset := 0
@@ -87,7 +120,10 @@ static func parse_occurrence(id: String) -> Dictionary:
 
 static func starts_for(contract: Dictionary, day: int, epoch: int) -> Array[int]:
 	return FlightSim.schedule_starts(
-		_first_start(contract, day, epoch), taxi_of(contract), boarding_ticks_of(contract)
+		_first_start(contract, day, epoch),
+		taxi_of(contract),
+		boarding_ticks_of(contract),
+		deboarding_ticks_of(contract)
 	)
 
 
@@ -304,7 +340,12 @@ static func starts_valid(starts: Array[int]) -> bool:
 
 static func _first_start(contract: Dictionary, day: int, epoch: int) -> int:
 	var departure := GameCalendar.tick_at(day, int(contract["departure_minute"]), epoch)
-	return departure - departure_offset(taxi_of(contract), boarding_ticks_of(contract))
+	return (
+		departure
+		- departure_offset(
+			taxi_of(contract), boarding_ticks_of(contract), deboarding_ticks_of(contract)
+		)
+	)
 
 
 ## The first day >= 0 whose tick, `day0` on day 0 and a day later each day
@@ -317,9 +358,14 @@ static func _day_at_or_after(day0: int, now: int) -> int:
 ## Ticks an occurrence with taxi pair `taxi` and `plane_size` holds its gate:
 ## matches gate_hold_span().
 static func reserved_ticks(
-	taxi: Array = TaxiTimes.BASE, plane_size: String = PlaneClasses.MEDIUM, boarding_ticks: int = -1
+	taxi: Array = TaxiTimes.BASE,
+	plane_size: String = PlaneClasses.MEDIUM,
+	boarding_ticks: int = -1,
+	deboarding_ticks: int = -1
 ) -> int:
 	var ticks := TaxiTimes.phase_ticks(taxi)
+	if deboarding_ticks >= 0:
+		ticks[FlightSim.State.DEBOARDING] = deboarding_ticks
 	if boarding_ticks >= 0:
 		ticks[FlightSim.State.BOARDING] = boarding_ticks
 	if plane_size == PlaneClasses.SMALL:

@@ -38,7 +38,7 @@ static func keeps_piece(def_id: StringName) -> bool:
 	return not (
 		def_id == &"checkin_desk"
 		or BuildCatalog.is_security(def_id)
-		or BuildCatalog.is_door(def_id)
+		or BuildCatalog.is_any_door(def_id)
 		or SecurityLanes.is_part(def_id)
 	)
 

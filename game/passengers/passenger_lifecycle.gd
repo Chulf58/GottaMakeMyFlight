@@ -110,7 +110,7 @@ static func close_doors(sim: PassengerSim) -> void:
 			sim._scheduled.erase(flight_id)
 	BookingOverrides.clear_closed(sim)
 	for p in sim._passengers:
-		if not p.is_done() and sim.flights.is_doors_closed(p.flight_id):
+		if not p.is_done() and p.is_departing() and sim.flights.is_doors_closed(p.flight_id):
 			if _in_bus_grace(sim, p):
 				continue
 			finish(sim, p, false)
@@ -460,7 +460,10 @@ static func retire_settled(sim: PassengerSim) -> void:
 		var p := sim._passengers[i]
 		if not p.is_done():
 			continue
-		if p.stage == Passenger.Stage.MISSED and p.missed_phase != Passenger.MissedPhase.NONE:
+		if p.is_arriving():
+			if not p.arrival_done:
+				continue
+		elif p.stage == Passenger.Stage.MISSED and p.missed_phase != Passenger.MissedPhase.NONE:
 			if p.missed_phase != Passenger.MissedPhase.DONE:
 				continue
 		elif sim.tick - p.outcome_tick <= PassengerSim.SETTLED_KEEP_TICKS:

@@ -37,6 +37,7 @@ const OBJECT_PRICES := {
 	&"seat_row": 250,
 	&"entrance_door": 300,
 	&"exit_door": 300,
+	&"airside_exit_door": 180,
 	# A gate desk is priced like a check-in desk.
 	&"gate_desk": 400,
 	&"bus_gate_desk": 450,

@@ -35,7 +35,7 @@ func after_test() -> void:
 
 
 func _idle_starts() -> Array[int]:
-	return [0, 0, 0, 0, 0, 5000, 6200, 6260, 6380, 6680, 6880]
+	return [0, 0, 0, 0, 0, 100, 5000, 6200, 6260, 6380, 6680, 6880]
 
 
 func _setup_world(starts: Array[int] = []) -> String:

@@ -512,7 +512,7 @@ static func walls_near(grid: BuildGrid, at: Vector3) -> Array:
 ## piece's leaves where BuildView draws them), else none.
 static func door_leaves(grid: BuildGrid, object_id: int) -> Array:
 	var record := grid.get_object(object_id)
-	if record.is_empty() or not BuildCatalog.is_door(record["def"]):
+	if record.is_empty() or not BuildCatalog.is_any_door(record["def"]):
 		return []
 	var def := BuildCatalog.get_def(record["def"])
 	var cells := def.footprint(record["anchor"], record["facing"])
@@ -546,7 +546,7 @@ static func pieces_near(grid: BuildGrid, at: Vector3, but := &"") -> Array:
 				continue
 			var def: StringName = grid.get_object(id)["def"]
 			if (
-				BuildCatalog.is_door(def)
+				BuildCatalog.is_any_door(def)
 				or (
 					but != &""
 					and (def == but or (but == GATE_CHAIRS and GateChairs.is_gate_seat_def(def)))

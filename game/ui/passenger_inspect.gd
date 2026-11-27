@@ -341,6 +341,8 @@ func _vip_line(p: Passenger) -> String:
 ## no time to give, so only the flight shows.
 func _flight_line(p: Passenger) -> String:
 	var title := FlightResultPanel.title_for(flights, p.flight_id)
+	if p.is_arriving():
+		return tr("Arrived on {title}").format({"title": title})
 	var doors := flights.doors_close_tick(p.flight_id) if flights != null else -1
 	if doors < 0:
 		return tr("Flight {title}").format({"title": title})

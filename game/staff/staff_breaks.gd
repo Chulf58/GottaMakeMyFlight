@@ -280,12 +280,12 @@ static func _gate_desk_active(sim: PassengerSim, station: int) -> bool:
 		if sim.flights.flight_gate(fid) != gate_letter:
 			continue
 		var st: int = sim.flights.state_of(fid)
-		if st == FlightSim.State.BOARDING:
+		if st == FlightSim.State.BOARDING or st == FlightSim.State.DEBOARDING:
 			return true
 		if st == FlightSim.State.AT_STAND:
 			for pid in sim.passenger_ids():
 				var p := sim.get_passenger(pid)
-				if p.flight_id == fid and not p.is_done():
+				if p.flight_id == fid and p.is_departing() and not p.is_done():
 					return true
 	return false
 

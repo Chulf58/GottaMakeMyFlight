@@ -13,7 +13,10 @@ const DEPARTURE_DAY := 1
 const DEPARTURE_MINUTE := 600
 ## The parked states, drawn at the end of TAXI_IN.
 const PARKED_STATES: Array[int] = [
-	FlightSim.State.AT_STAND, FlightSim.State.BOARDING, FlightSim.State.DOORS_CLOSED
+	FlightSim.State.AT_STAND,
+	FlightSim.State.DEBOARDING,
+	FlightSim.State.BOARDING,
+	FlightSim.State.DOORS_CLOSED,
 ]
 ## An overlap smaller than this (m²) is two shapes sharing an edge: 0.01 m² is
 ## 0.3 mm along a 30 m plane (test_shared_ground_holds.gd uses the same).

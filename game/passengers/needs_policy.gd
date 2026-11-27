@@ -62,10 +62,19 @@ static func arbitrate(sim: PassengerSim, p: Passenger) -> Need:
 			sim.cafes.commit_visit(p, choice["plan"])
 		Need.BOREDOM, Need.SHOP_BROWSE:
 			sim.shops.commit_visit(p, choice["plan"])
+	if p.is_arriving() and choice["need"] != Need.NONE:
+		p.arrival_stops += 1
 	return choice["need"]
 
 
 static func _wants(sim: PassengerSim, p: Passenger, need: Need) -> bool:
+	if p.is_arriving():
+		if (
+			p.stage != Passenger.Stage.TO_ROAD_EXIT
+			or p.walking_outside()
+			or p.arrival_stops >= p.arrival_stop_cap
+		):
+			return false
 	match need:
 		Need.TOILET:
 			return sim.toilets.wants_visit(p)

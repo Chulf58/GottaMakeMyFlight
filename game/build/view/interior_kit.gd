@@ -47,6 +47,7 @@ const OBJECT_PIECES := {
 	&"seat_row": "seat_row",
 	&"entrance_door": "wall_door",
 	&"exit_door": "wall_door",
+	&"airside_exit_door": "wall_door",
 	# The gate desk's own podium with its gate board (gates 2/4,
 	# tools/blender/interior/build_gate_kit.py) and the shuttle-accented bus gate desk.
 	&"gate_desk": "gate_desk",
@@ -118,6 +119,7 @@ const OBJECT_PIECES := {
 const OBJECT_OFFSETS := {
 	&"entrance_door": Vector3(0.0, 0.0, -0.5),
 	&"exit_door": Vector3(0.0, 0.0, -0.5),
+	&"airside_exit_door": Vector3(0.0, 0.0, -0.5),
 	# A chain is three cells in a row with a post in each outer cell: its piece
 	# starts on one post and runs 2 m to the next, so it sits 1 m back of the
 	# centre, and the node adds the two posts (OBJECT_POSTS).
@@ -136,6 +138,11 @@ static var _meshes: Dictionary = {}
 
 ## The piece an object type is drawn with, or "" when the kit has none.
 static func object_piece(def_id: StringName) -> String:
+	if (
+		def_id == BuildCatalog.AIRSIDE_EXIT_ID
+		and ResourceLoader.exists(piece_path("airside_exit_door"))
+	):
+		return "airside_exit_door"
 	return OBJECT_PIECES.get(def_id, "")
 
 
@@ -189,6 +196,11 @@ static func piece_path(piece: String) -> String:
 ## points, and the posts in OBJECT_POSTS at their places in the piece's frame.
 ## An object that carries nothing is left as it is.
 static func attach_mounted(root: Node3D, def_id: StringName) -> void:
+	if (
+		def_id == BuildCatalog.AIRSIDE_EXIT_ID
+		and not ResourceLoader.exists(piece_path("airside_exit_door"))
+	):
+		_attach_airside_exit_sign(root)
 	for place in OBJECT_POSTS.get(def_id, []):
 		var post := instantiate(CHAIN_POST_PIECE)
 		post.position = place
@@ -208,6 +220,22 @@ static func attach_mounted(root: Node3D, def_id: StringName) -> void:
 	var carried := instantiate(entry[1])
 	carried.transform = frame.orthonormalized()
 	root.add_child(carried)
+
+
+static func _attach_airside_exit_sign(root: Node3D) -> void:
+	var box := BoxMesh.new()
+	box.size = Vector3(0.56, 0.16, 0.08)
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.14, 0.72, 0.34)
+	mat.emission_enabled = true
+	mat.emission = Color(0.14, 0.72, 0.34)
+	mat.emission_energy_multiplier = 0.65
+	var sign_mesh := MeshInstance3D.new()
+	sign_mesh.name = "AirsideExitSign"
+	sign_mesh.mesh = box
+	sign_mesh.material_override = mat
+	sign_mesh.position = Vector3(0.0, 2.22, 0.06)
+	root.add_child(sign_mesh)
 
 
 ## A fresh node tree of a piece, with its own toon materials.

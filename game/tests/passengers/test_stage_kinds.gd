@@ -54,7 +54,10 @@ func test_every_stage_is_presented_in_the_follow_panel_and_the_flight_result() -
 			. override_failure_message("stage %s has no follow panel text" % stage_name)
 			. is_not_empty()
 		)
-		if StageKinds.location(stage) == StageKinds.Location.SETTLED:
+		if (
+			StageKinds.location(stage) == StageKinds.Location.SETTLED
+			or StageKinds.leg(stage) == StageKinds.Leg.ARRIVAL
+		):
 			continue
 		var reason := FlightResult.reason_text(stage, Passenger.Stuck.NONE)
 		(
@@ -64,7 +67,7 @@ func test_every_stage_is_presented_in_the_follow_panel_and_the_flight_result() -
 		)
 		reasons += 1
 	print("fallback '%s', reasons %d" % [fallback, reasons])
-	assert_int(reasons).is_equal(Passenger.Stage.size() - 2)
+	assert_int(reasons).is_equal(Passenger.Stage.size() - 5)
 
 
 func test_cafe_toilet_and_kiosk_stages_belong_to_their_facility_and_no_other_does() -> void:
@@ -129,12 +132,14 @@ func test_outside_and_on_grid_stages() -> void:
 		Passenger.Stage.SPAWNED,
 		Passenger.Stage.APRON,
 		Passenger.Stage.ON_BUS,
+		Passenger.Stage.DEPLANING,
 		Passenger.Stage.MADE,
 		Passenger.Stage.MISSED,
 	]
 	var off_grid := [
 		Passenger.Stage.APRON,
 		Passenger.Stage.ON_BUS,
+		Passenger.Stage.DEPLANING,
 		Passenger.Stage.MADE,
 		Passenger.Stage.MISSED,
 	]
@@ -220,6 +225,9 @@ func test_every_stage_has_its_journey_leg_from_the_table_not_the_enum_order() ->
 		Passenger.Stage.TOILET_EXIT: StageKinds.Leg.VISIT,
 		Passenger.Stage.SHOP_WALK: StageKinds.Leg.VISIT,
 		Passenger.Stage.SHOP_BROWSE: StageKinds.Leg.VISIT,
+		Passenger.Stage.DEPLANING: StageKinds.Leg.ARRIVAL,
+		Passenger.Stage.TO_AIRSIDE_EXIT: StageKinds.Leg.ARRIVAL,
+		Passenger.Stage.TO_ROAD_EXIT: StageKinds.Leg.ARRIVAL,
 	}
 	assert_int(expected.size()).is_equal(Passenger.Stage.size())
 	assert_int(StageKinds.LEGS.size()).is_equal(Passenger.Stage.size())

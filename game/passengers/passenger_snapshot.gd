@@ -32,6 +32,7 @@ const KEYS := [
 	"confiscations",
 	"toilet",
 	"shop",
+	"arrival_schedule",
 ]
 const NO_SHOW_CAUSES := ["no_entrance", "late"]
 const INT_FIELDS := [
@@ -70,6 +71,9 @@ const INT_FIELDS := [
 	"halt_tick",
 	"bin_detour_bin",
 	"bin_detour_end",
+	"direction",
+	"arrival_stops",
+	"arrival_stop_cap",
 ]
 const CELL_FIELDS := ["at", "seat_cell", "seat_front", "stand_from"]
 const BOOL_FIELDS := [
@@ -84,6 +88,7 @@ const BOOL_FIELDS := [
 	"sat_late",
 	"seat_exiting",
 	"bus_nudged",
+	"arrival_done",
 ]
 
 
@@ -95,7 +100,8 @@ static func save(
 	queues: Dictionary,
 	next_id: int,
 	totals: Array,
-	scheduled: Array
+	scheduled: Array,
+	arrival_schedule: Array[Dictionary] = []
 ) -> Dictionary:
 	scheduled.sort()
 	var records := []
@@ -165,6 +171,7 @@ static func save(
 		"confiscations": sim.security.bins.to_dict(),
 		"toilet": ToiletSnapshot.save(sim.toilets),
 		"shop": ShopSnapshot.save(sim.shops),
+		"arrival_schedule": arrival_schedule.duplicate(true),
 	}
 
 
@@ -191,6 +198,21 @@ static func load(data: Dictionary, grid: BuildGrid) -> Dictionary:
 					"flight": entry["flight"],
 					"variant": int(entry["variant"]),
 					"arrival": int(entry["arrival"]),
+				}
+			)
+		)
+	var arrival_schedule: Array[Dictionary] = []
+	for entry in data["arrival_schedule"]:
+		problem = _arrival_spawn_problem(entry)
+		if problem != "":
+			return {"error": problem}
+		(
+			arrival_schedule
+			. append(
+				{
+					"tick": int(entry["tick"]),
+					"flight": entry["flight"],
+					"variant": int(entry["variant"]),
 				}
 			)
 		)
@@ -260,6 +282,7 @@ static func load(data: Dictionary, grid: BuildGrid) -> Dictionary:
 	out["flight_results"] = results
 	out["scheduled"] = scheduled
 	out["schedule"] = schedule
+	out["arrival_schedule"] = arrival_schedule
 	out["passengers"] = passengers
 	out["queues"] = queues
 	return out
@@ -303,7 +326,14 @@ static func _top_problem(data: Dictionary) -> String:
 	if not _whole(data["next_id"]) or int(data["next_id"]) < 1:
 		return "next_id must be a whole number, 1 or more"
 	for key in [
-		"schedule", "passengers", "queues", "no_shows", "flight_results", "scheduled", "security"
+		"schedule",
+		"arrival_schedule",
+		"passengers",
+		"queues",
+		"no_shows",
+		"flight_results",
+		"scheduled",
+		"security",
 	]:
 		if typeof(data[key]) != TYPE_ARRAY:
 			return "%s must be an array" % key
@@ -322,6 +352,16 @@ static func _spawn_problem(entry: Variant) -> String:
 		return "a schedule entry has a bad flight or variant"
 	if not entry.has("arrival") or not _arrival_ok(entry["arrival"]):
 		return "a schedule entry needs an arrival type"
+	return ""
+
+
+static func _arrival_spawn_problem(entry: Variant) -> String:
+	if typeof(entry) != TYPE_DICTIONARY or not (entry.has("tick") and entry.has("flight")):
+		return "an arrival schedule entry is malformed"
+	if not entry.has("variant") or not _whole(entry["tick"]) or not _whole(entry["variant"]):
+		return "an arrival schedule entry needs whole tick and variant"
+	if typeof(entry["flight"]) != TYPE_STRING or int(entry["variant"]) not in [0, 1]:
+		return "an arrival schedule entry has a bad flight or variant"
 	return ""
 
 
@@ -345,7 +385,14 @@ static func _passenger(entry: Variant, grid: BuildGrid, next_id: int) -> Passeng
 	var p := Passenger.new()
 	if not _fill(p, record, grid):
 		return null
-	var variant_ok := p.variant in [0, 1] and _arrival_ok(p.arrival_type)
+	var variant_ok := (
+		p.variant in [0, 1]
+		and _arrival_ok(p.arrival_type)
+		and p.direction >= 0
+		and p.direction < Passenger.Direction.size()
+		and p.arrival_stops >= 0
+		and p.arrival_stop_cap >= 0
+	)
 	var range_ok := (
 		p.mood >= 0
 		and p.mood <= PassengerSim.MOOD_MAX

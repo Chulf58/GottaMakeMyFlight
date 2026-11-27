@@ -156,6 +156,12 @@ class Words:
 				text = tr("Walking to the plane", "passenger activity")
 			Passenger.Stage.ON_BUS:
 				text = tr("On the shuttle bus", "passenger activity")
+			Passenger.Stage.DEPLANING:
+				text = tr("Deplaning", "passenger activity")
+			Passenger.Stage.TO_AIRSIDE_EXIT:
+				text = tr("Leaving airside", "passenger activity")
+			Passenger.Stage.TO_ROAD_EXIT:
+				text = tr("Leaving the terminal", "passenger activity")
 			Passenger.Stage.MADE:
 				text = tr("Boarded", "passenger activity")
 			Passenger.Stage.MISSED:

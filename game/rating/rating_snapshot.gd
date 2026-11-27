@@ -12,6 +12,9 @@ const DAY_KEYS := ["day", "made", "missed", "mood_sum"]
 ## Added with missed bags (Baggage B4). A day from before them has neither and
 ## loads with no bags; the two come as a pair.
 const BAG_KEYS := ["bags", "bags_missed"]
+## Added in save version 3 (Arrivals A1): arriving terminal mood without
+## counting toward departing made/missed.
+const ARRIVED_KEYS := ["arrived", "arrived_mood_sum"]
 const PENDING_KEYS := ["flight", "tick"]
 ## Ticks stay exact through JSON (doubles) up to 2^53.
 const MAX_TICK := 9007199254740992
@@ -40,6 +43,8 @@ static func save(
 			"mood_sum": totals["mood_sum"],
 			"bags": totals["bags"],
 			"bags_missed": totals["bags_missed"],
+			"arrived": int(totals.get("arrived", 0)),
+			"arrived_mood_sum": int(totals.get("arrived_mood_sum", 0)),
 		}
 		day_list.append(entry)
 	var pending_list := []
@@ -112,7 +117,12 @@ static func _read_days(entries: Array, current: int, out: Dictionary) -> String:
 	for entry in entries:
 		var keys: Array = DAY_KEYS
 		if typeof(entry) == TYPE_DICTIONARY and (entry.has("bags") or entry.has("bags_missed")):
-			keys = DAY_KEYS + BAG_KEYS
+			keys = keys + BAG_KEYS
+		if (
+			typeof(entry) == TYPE_DICTIONARY
+			and (entry.has("arrived") or entry.has("arrived_mood_sum"))
+		):
+			keys = keys + ARRIVED_KEYS
 		var problem := _entry_problem(entry, keys)
 		if problem == "":
 			problem = _day_problem(entry, previous, current)
@@ -125,6 +135,8 @@ static func _read_days(entries: Array, current: int, out: Dictionary) -> String:
 			"mood_sum": int(entry["mood_sum"]),
 			"bags": int(entry.get("bags", 0)),
 			"bags_missed": int(entry.get("bags_missed", 0)),
+			"arrived": int(entry.get("arrived", 0)),
+			"arrived_mood_sum": int(entry.get("arrived_mood_sum", 0)),
 		}
 	return ""
 
@@ -147,6 +159,16 @@ static func _day_problem(entry: Dictionary, previous: int, current: int) -> Stri
 		return "day %d bags must be a whole number from 0 to %d" % [int(day), cap]
 	if entry.has("bags_missed") and not _is_count(entry["bags_missed"], int(entry["bags"])):
 		return "day %d bags_missed must be a whole number up to bags" % int(day)
+	if entry.has("arrived") and not _is_count(entry["arrived"], cap):
+		return "day %d arrived must be a whole number from 0 to %d" % [int(day), cap]
+	if (
+		entry.has("arrived_mood_sum")
+		and not _is_count(entry["arrived_mood_sum"], int(entry["arrived"]) * PassengerSim.MOOD_MAX)
+	):
+		return (
+			"day %d arrived_mood_sum must be a whole number up to arrived * %d"
+			% [int(day), PassengerSim.MOOD_MAX]
+		)
 	return ""
 
 

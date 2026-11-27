@@ -53,6 +53,7 @@ enum Tool {
 	REMOVE,
 	GLASS,
 	DOOR,
+	AIRSIDE_EXIT,
 	ENTRANCE,
 	EXIT,
 	CAFE_ROOM,

@@ -15,6 +15,12 @@ const GOLDEN := "res://tests/flights/taxi_pose_golden.bin"
 const TOLERANCE := 1e-4
 ## The commit the table was built from, before MovementPlan existed.
 const REFERENCE_COMMIT := "7ab97c7"
+## Legacy FlightSim.State indices stored in taxi_pose_golden.bin (before DEBOARDING = 5).
+const GOLDEN_STATES := {
+	3: FlightSim.State.TAXI_IN,
+	7: FlightSim.State.PUSHBACK,
+	8: FlightSim.State.TAXI_OUT,
+}
 ## Routes and half-tick samples the table was built with: 8 stands x 3 phases,
 ## each 2 * ticks + 1 samples (600, 120 and 720 ticks).
 const ROUTES := 24
@@ -51,12 +57,11 @@ func test_flight_pose_matches_the_old_pose_every_half_tick() -> void:
 	var checked := 0
 	for route: Dictionary in _routes:
 		var ticks: int = route["ticks"]
+		var state := int(GOLDEN_STATES.get(route["state"], route["state"]))
 		var origins: PackedVector3Array = route["origins"]
 		var noses: PackedVector3Array = route["noses"]
 		for k in origins.size():
-			var pose := FlightPose.pose(
-				route["state"], k / (2.0 * ticks), route["points"], route["entry"]
-			)
+			var pose := FlightPose.pose(state, k / (2.0 * ticks), route["points"], route["entry"])
 			worst_origin = maxf(worst_origin, pose.origin.distance_to(origins[k]))
 			worst_nose = maxf(worst_nose, pose.basis.z.distance_to(noses[k]))
 			checked += 1
@@ -86,7 +91,8 @@ func test_a_plan_with_no_pause_matches_the_old_pose_every_half_tick() -> void:
 			var distance := MovementPlan.distance_at(plan, k * 0.5)
 			var at := MovementPlan.position_at(plan, k * 0.5)
 			worst_origin = maxf(worst_origin, at.distance_to(origins[k]))
-			if route["state"] != FlightSim.State.PUSHBACK:
+			var state := int(GOLDEN_STATES.get(route["state"], route["state"]))
+			if state != FlightSim.State.PUSHBACK:
 				var nose := MovementPlan.heading_at(points, distance, route["entry"])
 				worst_nose = maxf(worst_nose, nose.distance_to(noses[k]))
 				headings += 1

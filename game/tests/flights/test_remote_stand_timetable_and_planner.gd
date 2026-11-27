@@ -185,10 +185,10 @@ func test_nearest_bus_gate_pairing_staggered_reuse_and_clash_refusal() -> void:
 	assert_str(clash_trial["blocker"]).is_equal(FlightSim.BLOCKER_GATE)
 	assert_bool(_flights.accept_contract(_medium_terms("REM3", 900))).is_false()
 
-	# REM2 at 17:40 (190 min later): overlaps REG2 on A, overlaps REM1 on R1 (5 min),
-	# while [TAXI_IN, DOORS_CLOSED + bus_return] bus spans do not overlap -> R2 reuses _bg_near.
+	# REM2 at 17:45 (195 min after REM1, overlapping REM1 [TAXI_IN..DEPARTED] and REG2 on A
+	# while [TAXI_IN, DOORS_CLOSED + bus_return] bus spans do not overlap) -> R2 reuses _bg_near.
 	var s1 := FlightTimetable.starts_for(c1, 0, 0)
-	assert_bool(_flights.accept_contract(_medium_terms("REM2", 1060))).is_true()
+	assert_bool(_flights.accept_contract(_medium_terms("REM2", 1065))).is_true()
 	var c2 := _flights.contract_of("REM2")
 	var s2 := FlightTimetable.starts_for(c2, 0, 0)
 	assert_str(c2["stand"]).is_equal("R2")
@@ -225,10 +225,10 @@ func test_charters_prefer_regular_gates_and_reject_over_40_pax_on_remote() -> vo
 	assert_str(_flights.contract_of("CHSML1")["gate"]).is_equal("A")
 	assert_str(_flights.contract_of("CHSML1")["stand"]).is_equal("A")
 
-	# Regular gate A busy at 12:00 ([09:47..13:02]) -> <=40-pax charter at 12:30 uses R1.
+	# Regular gate A busy at 12:00 -> <=40-pax charter at 12:25 uses R1.
 	assert_bool(_flights.accept_contract(_medium_terms("BLK12", 720))).is_true()
 	assert_str(_flights.contract_of("BLK12")["gate"]).is_equal("A")
-	var ch_small_rem := _charter_terms("CHSML2", 750, 40)
+	var ch_small_rem := _charter_terms("CHSML2", 745, 40)
 	assert_bool(_flights.accept_contract(ch_small_rem)).is_true()
 	assert_str(_flights.contract_of("CHSML2")["stand"]).is_equal("R1")
 	assert_str(_flights.contract_of("CHSML2")["gate"]).is_equal(_bg_near)
