@@ -137,7 +137,8 @@ func test_a_save_mid_walk_and_mid_clean_plays_on_like_the_unbroken_run() -> void
 	assert_int(at_save[4]).is_greater(0)
 	assert_int(at_save[5]).is_greater(0)
 	assert_int(messes_before).is_greater(_a.sim.messes.mess_count())
-	assert_int(_a.sim.messes.fill_of(_bin)).is_equal(0)
+	# Emptied bin receives the 2 bags from the 2 cleaned messes (6 -> 0 -> 2).
+	assert_int(_a.sim.messes.fill_of(_bin)).is_equal(2)
 	assert_int(differ_at).is_equal(-1)
 	assert_int(checks).is_greater(1)
 
@@ -169,8 +170,8 @@ func test_a_save_whose_jobs_and_claims_disagree_is_refused() -> void:
 		"more work left than the job takes": [_overworked.bind(working.id)],
 		"walking with work left":
 		[func(_m: Dictionary, s: Dictionary) -> void: _member(s, walking.id)["work_left"] = 5],
-		"a bin job on a bin that is not full":
-		[func(m: Dictionary, _s: Dictionary) -> void: m["bins"][str(_bin)] = 3],
+		"a bin job on a bin below proactive threshold":
+		[func(m: Dictionary, _s: Dictionary) -> void: m["bins"][str(_bin)] = 2],
 		"two cleaners on one bin": [_both_on_the_bin.bind(walking.id)],
 		"a cleaner in a version 3 save":
 		[func(_m: Dictionary, s: Dictionary) -> void: s["save_version"] = 3],
@@ -261,6 +262,18 @@ func _agent_with_a_job(_messes: Dictionary, staff: Dictionary) -> void:
 				"job": 1,
 				"job_bin": false,
 				"work_left": 0,
+				"bag_carry": StaffMember.BagCarry.NONE,
+				"bag_target": 0,
+				"ramp_job": StaffMember.RampJob.NONE,
+				"ramp_shuttle_id": 0,
+				"ramp_flight_id": "",
+				"energy": StaffMember.ENERGY_MAX,
+				"energy_ticks": 0,
+				"break_room": 0,
+				"break_spot": [-1, -1],
+				"level": StaffMember.LEVEL_MIN,
+				"display_name": "Samira Patel",
+				"quirks": ["Early bird"],
 			}
 		)
 	)

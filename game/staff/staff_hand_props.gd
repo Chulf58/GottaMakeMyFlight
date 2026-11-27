@@ -5,16 +5,31 @@ extends RefCounted
 ## Props are visible only in their active matching station pose mode and hidden
 ## when walking, tucked, idle, pooled, or snapped on load (6d949060).
 
-enum PropKind { NONE, WAND, BOARDING_PASS, CLIPBOARD, COFFEE_CUP, BROOM, RAG, MARSHAL_WANDS }
+enum PropKind {
+	NONE,
+	WAND,
+	BOARDING_PASS,
+	CLIPBOARD,
+	COFFEE_CUP,
+	BROOM,
+	RAG,
+	MARSHAL_WANDS,
+	TRASH_BAG,
+	COFFEE_MUG,
+	PHONE,
+	MAGAZINE,
+	CLOTH,
+}
 
 const TOON_BASE := preload("res://assets/materials/tp_atlas_simple_toon.tres")
 const PROP_META := &"staff_hand_props"
 const BROOM_CARRY_META := &"broom_carry_arm"
+const BAG_CARRY_META := &"bag_carry_arm"
 const WEIGHT_MIN := 0.3
 const OUTLINE_PX := 1.0
 const OUTLINE_BIAS_M := 0.002
-const BROOM_SWEEP_POS := Vector3(0.025, 0.08, 0.015)
-const BROOM_SWEEP_ROT_DEG := Vector3(78.0, 0.0, -8.0)
+const BROOM_SWEEP_POS := Vector3(0.025, 0.075, -0.14)
+const BROOM_SWEEP_ROT_DEG := Vector3(90.0, 0.0, 0.0)
 const BROOM_CARRY_POS := Vector3(0.032, 0.095, 0.015)
 const BROOM_CARRY_ROT_DEG := Vector3(98.0, 0.0, -4.0)
 const BROOM_CARRY_UPPER_DEG := 4.0
@@ -54,15 +69,49 @@ const COLOR_CLIPBOARD_CLIP := Color(0.32, 0.36, 0.42)
 const COLOR_CUP_BODY := Color(0.92, 0.88, 0.80)
 const COLOR_CUP_SLEEVE := Color(0.60, 0.40, 0.24)
 const COLOR_CUP_COFFEE := Color(0.22, 0.13, 0.08)
+const COLOR_MUG_BODY := Color(0.26, 0.62, 0.68)
+const COLOR_MUG_RIM := Color(0.96, 0.94, 0.88)
+const COLOR_PHONE_CASE := Color(0.18, 0.22, 0.28)
+const COLOR_PHONE_SCREEN := Color(0.68, 0.86, 0.96)
+const COLOR_MAG_COVER := Color(0.92, 0.44, 0.34)
+const COLOR_MAG_PAGES := Color(0.97, 0.95, 0.90)
+const COLOR_MAG_STRIPE := Color(0.24, 0.56, 0.72)
+const COLOR_CLOTH_MAIN := Color(0.34, 0.72, 0.80)
+const COLOR_CLOTH_FOLD := Color(0.56, 0.84, 0.88)
 const COLOR_BROOM_POLE := Color(0.62, 0.45, 0.27)
 const COLOR_BROOM_HEAD := Color(0.24, 0.48, 0.62)
 const COLOR_BROOM_BRISTLE := Color(0.86, 0.78, 0.56)
 const COLOR_RAG_CLOTH := Color(0.92, 0.84, 0.32)
 const COLOR_MARSHAL_TIP := Color(1.0, 0.56, 0.08)
+const COLOR_BAG_BODY := Color(0.16, 0.18, 0.22)
+const COLOR_BAG_TIE := Color(0.86, 0.24, 0.22)
 
 static var _white_tex: ImageTexture
 static var _materials: Dictionary = {}
 static var _meshes: Dictionary = {}
+
+
+## Deterministic Break Room hand prop rotated by staff member id.
+static func break_prop_for(member_id: int) -> PropKind:
+	match posmod(member_id, 3):
+		0:
+			return PropKind.COFFEE_MUG
+		1:
+			return PropKind.PHONE
+		_:
+			return PropKind.MAGAZINE
+
+
+## Matching StaffStationPose.SubMode for a Break Room prop kind.
+static func break_sub_mode_for(kind: PropKind) -> StaffStationPose.SubMode:
+	match kind:
+		PropKind.COFFEE_MUG:
+			return StaffStationPose.SubMode.BREAK_COFFEE
+		PropKind.PHONE:
+			return StaffStationPose.SubMode.BREAK_PHONE
+		PropKind.MAGAZINE:
+			return StaffStationPose.SubMode.BREAK_MAGAZINE
+	return StaffStationPose.SubMode.NONE
 
 
 ## Which prop should be shown right now for the given pose state.
@@ -78,10 +127,13 @@ static func desired_prop(
 	job_bin: bool = false,
 	cleaner_working: bool = false,
 	cleaner_patrolling: bool = false,
+	cleaner_bag: bool = false,
 ) -> PropKind:
 	if tucked:
 		return PropKind.NONE
 	if role == StaffMember.Role.CLEANER:
+		if cleaner_bag:
+			return PropKind.TRASH_BAG
 		if cleaner_working:
 			return PropKind.RAG if job_bin else PropKind.BROOM
 		if cleaner_patrolling:
@@ -95,8 +147,11 @@ static func desired_prop(
 		return PropKind.MARSHAL_WANDS
 	if walking or weight <= WEIGHT_MIN:
 		return PropKind.NONE
+	if mode == StaffStationPose.Mode.BREAK_SEATED or mode == StaffStationPose.Mode.BREAK_CHAT:
+		return _break_prop_from_sub(sub_mode)
 	if role == StaffMember.Role.RAMP and mode == StaffStationPose.Mode.IDLE_FIDGET:
-		return PropKind.CLIPBOARD
+		if sub_mode == StaffStationPose.SubMode.NONE:
+			return PropKind.CLIPBOARD
 	match mode:
 		StaffStationPose.Mode.SECURITY_SCAN:
 			return PropKind.WAND
@@ -118,6 +173,27 @@ static func desired_prop(
 				return PropKind.COFFEE_CUP
 		StaffStationPose.Mode.RAMP_MARSHAL:
 			return PropKind.MARSHAL_WANDS
+		StaffStationPose.Mode.REACTION_WIPE:
+			return PropKind.CLOTH
+		StaffStationPose.Mode.REACTION_CLIPBOARD:
+			if sub_mode != StaffStationPose.SubMode.REACT_WATCH:
+				return PropKind.CLIPBOARD
+		StaffStationPose.Mode.IDLE_FIDGET:
+			if sub_mode == StaffStationPose.SubMode.LULL_WIPE:
+				return PropKind.CLOTH
+			if sub_mode == StaffStationPose.SubMode.LULL_CLIPBOARD:
+				return PropKind.CLIPBOARD
+	return PropKind.NONE
+
+
+static func _break_prop_from_sub(sub_mode: StaffStationPose.SubMode) -> PropKind:
+	match sub_mode:
+		StaffStationPose.SubMode.BREAK_COFFEE:
+			return PropKind.COFFEE_MUG
+		StaffStationPose.SubMode.BREAK_PHONE:
+			return PropKind.PHONE
+		StaffStationPose.SubMode.BREAK_MAGAZINE:
+			return PropKind.MAGAZINE
 	return PropKind.NONE
 
 
@@ -135,6 +211,7 @@ static func update(
 	job_bin: bool = false,
 	cleaner_working: bool = false,
 	cleaner_patrolling: bool = false,
+	cleaner_bag: bool = false,
 ) -> void:
 	var kind := desired_prop(
 		mode,
@@ -148,10 +225,13 @@ static func update(
 		job_bin,
 		cleaner_working,
 		cleaner_patrolling,
+		cleaner_bag,
 	)
 	if kind == PropKind.NONE and not node.has_meta(PROP_META):
 		if node.has_meta(BROOM_CARRY_META):
 			_set_broom_carry(node, false)
+		if node.has_meta(BAG_CARRY_META):
+			_set_bag_carry(node, false)
 		return
 	var rec := _ensure(node)
 	if rec.is_empty():
@@ -165,11 +245,13 @@ static func update(
 		for prop_node: Node3D in extra[key]:
 			prop_node.visible = (key == kind)
 	var carry_broom := kind == PropKind.BROOM and not cleaner_working
+	var carry_bag := kind == PropKind.TRASH_BAG and not cleaner_working
 	var broom := props.get(PropKind.BROOM) as Node3D
 	if broom != null:
 		broom.position = BROOM_CARRY_POS if carry_broom else BROOM_SWEEP_POS
 		broom.rotation_degrees = BROOM_CARRY_ROT_DEG if carry_broom else BROOM_SWEEP_ROT_DEG
 	_set_broom_carry(node, carry_broom)
+	_set_bag_carry(node, carry_bag)
 
 
 ## Hides every attached prop on `node` (used on snap/load and pool release).
@@ -177,6 +259,7 @@ static func hide_all(node: Node3D) -> void:
 	if node == null:
 		return
 	_set_broom_carry(node, false)
+	_set_bag_carry(node, false)
 	if not node.has_meta(PROP_META):
 		return
 	var rec: Dictionary = node.get_meta(PROP_META)
@@ -225,6 +308,34 @@ static func _set_broom_carry(node: Node3D, carry_active: bool) -> void:
 		arm.active = false
 		skeleton.add_child(arm)
 		node.set_meta(BROOM_CARRY_META, arm)
+	if is_instance_valid(arm):
+		arm.active = carry_active
+
+
+static func _set_bag_carry(node: Node3D, carry_active: bool) -> void:
+	if not carry_active and not node.has_meta(BAG_CARRY_META):
+		return
+	var arm: CarryArm
+	if node.has_meta(BAG_CARRY_META):
+		arm = node.get_meta(BAG_CARRY_META) as CarryArm
+	else:
+		var skeletons := node.find_children("*", "Skeleton3D", true, false)
+		if skeletons.is_empty():
+			return
+		var skeleton := skeletons[0] as Skeleton3D
+		arm = CarryArm.new()
+		arm.name = "BagCarryArm"
+		arm.side = 0
+		arm.holds = true
+		arm.angle_degrees = 15.0
+		arm.swing_kept = 0.28
+		arm.lean_back_degrees = -6.0
+		arm.rest_twist_weight = 1.0
+		arm.twist_degrees = 6.0
+		arm.grip_curl = 1.0
+		arm.active = false
+		skeleton.add_child(arm)
+		node.set_meta(BAG_CARRY_META, arm)
 	if is_instance_valid(arm):
 		arm.active = carry_active
 
@@ -292,6 +403,11 @@ static func _ensure(node: Node3D) -> Dictionary:
 		PropKind.BROOM: _add_prop(att_r, _build_broom()),
 		PropKind.RAG: _add_prop(att_r, _build_rag()),
 		PropKind.MARSHAL_WANDS: _add_prop(att_r, _build_marshal_wand("MarshalWandR", true)),
+		PropKind.COFFEE_MUG: _add_prop(att_r, _build_coffee_mug()),
+		PropKind.PHONE: _add_prop(att_r, _build_phone()),
+		PropKind.MAGAZINE: _add_prop(att_r, _build_magazine()),
+		PropKind.CLOTH: _add_prop(att_r, _build_cloth()),
+		PropKind.TRASH_BAG: _add_prop(att_r, _build_trash_bag()),
 	}
 	var extra := {
 		PropKind.MARSHAL_WANDS: [_add_prop(att_l, _build_marshal_wand("MarshalWandL", false))],
@@ -427,6 +543,115 @@ static func _build_coffee_cup() -> Node3D:
 	return root
 
 
+static func _build_coffee_mug() -> Node3D:
+	var root := Node3D.new()
+	root.name = "CoffeeMug"
+	root.position = Vector3(0.036, 0.088, 0.018)
+	root.rotation_degrees = Vector3(90.0, 0.0, 0.0)
+	var body := _part(
+		"Body",
+		_cyl_mesh("mug_body", 0.038, 0.035, 0.092),
+		COLOR_MUG_BODY,
+		Vector3.ZERO,
+	)
+	var rim := _part(
+		"Rim",
+		_cyl_mesh("mug_rim", 0.040, 0.040, 0.012),
+		COLOR_MUG_RIM,
+		Vector3(0.0, 0.044, 0.0),
+	)
+	var coffee := _part(
+		"Coffee",
+		_cyl_mesh("mug_top", 0.034, 0.034, 0.006),
+		COLOR_CUP_COFFEE,
+		Vector3(0.0, 0.048, 0.0),
+	)
+	var handle := _part(
+		"Handle",
+		_box_mesh("mug_handle", Vector3(0.022, 0.052, 0.014)),
+		COLOR_MUG_BODY,
+		Vector3(-0.042, 0.0, 0.0),
+	)
+	root.add_child(body)
+	root.add_child(rim)
+	root.add_child(coffee)
+	root.add_child(handle)
+	return root
+
+
+static func _build_phone() -> Node3D:
+	var root := Node3D.new()
+	root.name = "Phone"
+	root.position = Vector3(0.030, 0.100, 0.015)
+	root.rotation_degrees = Vector3(8.0, 22.0, -14.0)
+	var chassis := _part(
+		"Chassis",
+		_box_mesh("phone_chassis", Vector3(0.012, 0.145, 0.078)),
+		COLOR_PHONE_CASE,
+		Vector3.ZERO,
+	)
+	var screen := _part(
+		"Screen",
+		_box_mesh("phone_screen", Vector3(0.005, 0.130, 0.068)),
+		COLOR_PHONE_SCREEN,
+		Vector3(-0.006, 0.0, 0.0),
+	)
+	root.add_child(chassis)
+	root.add_child(screen)
+	return root
+
+
+static func _build_magazine() -> Node3D:
+	var root := Node3D.new()
+	root.name = "Magazine"
+	root.position = Vector3(0.034, 0.125, 0.022)
+	root.rotation_degrees = Vector3(10.0, -32.0, -16.0)
+	var pages := _part(
+		"Pages",
+		_box_mesh("mag_pages", Vector3(0.018, 0.22, 0.17)),
+		COLOR_MAG_PAGES,
+		Vector3.ZERO,
+	)
+	var cover := _part(
+		"Cover",
+		_box_mesh("mag_cover", Vector3(0.006, 0.218, 0.168)),
+		COLOR_MAG_COVER,
+		Vector3(0.009, 0.0, 0.0),
+	)
+	var stripe := _part(
+		"Stripe",
+		_box_mesh("mag_stripe", Vector3(0.008, 0.038, 0.154)),
+		COLOR_MAG_STRIPE,
+		Vector3(0.010, 0.062, 0.0),
+	)
+	root.add_child(pages)
+	root.add_child(cover)
+	root.add_child(stripe)
+	return root
+
+
+static func _build_cloth() -> Node3D:
+	var root := Node3D.new()
+	root.name = "WipeCloth"
+	root.position = Vector3(0.032, 0.088, 0.014)
+	root.rotation_degrees = Vector3(12.0, 10.0, -8.0)
+	var pad := _part(
+		"Pad",
+		_box_mesh("cloth_pad", Vector3(0.032, 0.13, 0.13)),
+		COLOR_CLOTH_MAIN,
+		Vector3.ZERO,
+	)
+	var fold := _part(
+		"Fold",
+		_box_mesh("cloth_fold", Vector3(0.022, 0.095, 0.095)),
+		COLOR_CLOTH_FOLD,
+		Vector3(-0.012, 0.01, 0.0),
+	)
+	root.add_child(pad)
+	root.add_child(fold)
+	return root
+
+
 static func _build_broom() -> Node3D:
 	var root := Node3D.new()
 	root.name = "Broom"
@@ -434,21 +659,21 @@ static func _build_broom() -> Node3D:
 	root.rotation_degrees = BROOM_SWEEP_ROT_DEG
 	var pole := _part(
 		"Pole",
-		_cyl_mesh("broom_pole", 0.014, 0.014, 1.15),
+		_cyl_mesh("broom_pole", 0.014, 0.014, 1.32),
 		COLOR_BROOM_POLE,
-		Vector3(0.0, -0.15, 0.0),
+		Vector3(0.0, -0.24, 0.0),
 	)
 	var head := _part(
 		"Head",
 		_box_mesh("broom_head", Vector3(0.24, 0.045, 0.065)),
 		COLOR_BROOM_HEAD,
-		Vector3(0.0, -0.73, 0.0),
+		Vector3(0.0, -0.90, 0.0),
 	)
 	var bristles := _part(
 		"Bristles",
 		_box_mesh("broom_bristles", Vector3(0.25, 0.08, 0.07)),
 		COLOR_BROOM_BRISTLE,
-		Vector3(0.0, -0.79, 0.0),
+		Vector3(0.0, -0.96, 0.0),
 	)
 	root.add_child(pole)
 	root.add_child(head)
@@ -491,6 +716,56 @@ static func _build_marshal_wand(node_name: String, right_hand: bool) -> Node3D:
 	)
 	root.add_child(grip)
 	root.add_child(cone)
+	return root
+
+
+static func _build_trash_bag() -> Node3D:
+	var root := Node3D.new()
+	root.name = "TrashBag"
+	# Centered inside gripped Hand.R palm so gathered neck sits in fist and sack hangs along +Y.
+	root.position = Vector3(0.026, 0.092, 0.012)
+	var crest := _part(
+		"Crest",
+		_cyl_mesh("bag_crest", 0.044, 0.022, 0.042),
+		COLOR_BAG_BODY,
+		Vector3(0.0, -0.028, 0.0),
+	)
+	var tie := _part(
+		"Tie",
+		_cyl_mesh("bag_tie", 0.028, 0.028, 0.026),
+		COLOR_BAG_TIE,
+		Vector3(0.0, 0.002, 0.0),
+	)
+	var neck := _part(
+		"Neck",
+		_cyl_mesh("bag_neck", 0.024, 0.058, 0.072),
+		COLOR_BAG_BODY,
+		Vector3(0.0, 0.046, 0.0),
+	)
+	var shoulder := _part(
+		"Shoulder",
+		_cyl_mesh("bag_shoulder", 0.058, 0.124, 0.112),
+		COLOR_BAG_BODY,
+		Vector3(0.0, 0.134, 0.0),
+	)
+	var body := _part(
+		"Body",
+		_cyl_mesh("bag_body", 0.124, 0.132, 0.136),
+		COLOR_BAG_BODY,
+		Vector3(0.0, 0.252, 0.0),
+	)
+	var base := _part(
+		"Base",
+		_cyl_mesh("bag_base", 0.132, 0.076, 0.064),
+		COLOR_BAG_BODY,
+		Vector3(0.0, 0.348, 0.0),
+	)
+	root.add_child(crest)
+	root.add_child(tie)
+	root.add_child(neck)
+	root.add_child(shoulder)
+	root.add_child(body)
+	root.add_child(base)
 	return root
 
 

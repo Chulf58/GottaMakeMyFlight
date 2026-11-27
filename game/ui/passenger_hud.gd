@@ -81,6 +81,8 @@ const NIGHT_END_MINUTE := GameCalendar.START_MINUTE
 ## Its loaded signal re-frames the start view on the loaded world.
 @export var save_game: SaveGame
 @export var build_mode: BuildMode
+@export var staff: StaffSim
+@export var staff_views: StaffCharacters
 ## Where the departures board keeps its on/off choice; tests use their own.
 var departures_settings_path := DeparturesBoard.SETTINGS_PATH
 ## Where the alert cards keep their on/off choice; tests use their own.
@@ -116,6 +118,11 @@ var _follow_card := FollowCard.new()
 var _follow_label := Label.new()
 ## The followed passenger's card; the follow text then hides.
 var _inspect := PassengerInspect.new()
+## The inspected staff member's card, mutually exclusive with _inspect.
+var _staff_inspect := StaffInspect.new()
+var _selected_staff_id := 0
+var _selected_staff_had_view := false
+var _bound_staff_panel: StaffPanel
 ## The clicked built item (BuiltSelection) and its gold floor outline; the
 ## inspect card shows its info in place of a passenger's.
 var _built := BuiltSelection.new()
@@ -298,6 +305,16 @@ func _ready() -> void:
 		_built.changed.connect(_sync_selected_room)
 	add_child(_inspect)
 	add_child(_inspect.marker)
+	if staff == null:
+		staff = get_node_or_null("../Staff") as StaffSim
+	if staff_views == null:
+		staff_views = get_node_or_null("../StaffCharacters") as StaffCharacters
+	_staff_inspect.staff = staff
+	_staff_inspect.views = staff_views
+	_staff_inspect.camera = camera
+	_staff_inspect.closed.connect(_on_staff_inspect_closed)
+	add_child(_staff_inspect)
+	_bind_staff_panel()
 	_fit_follow()
 	get_viewport().size_changed.connect(_fit_follow)
 	if IntroDialogue.should_show(
@@ -330,6 +347,9 @@ func _ready() -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_TRANSLATION_CHANGED and is_node_ready():
 		_retranslate()
+	elif what == NOTIFICATION_PREDELETE:
+		if is_instance_valid(_staff_inspect) and not _staff_inspect.is_inside_tree():
+			_staff_inspect.free()
 
 
 func _retranslate() -> void:
@@ -360,6 +380,32 @@ func _drop_retired_selection() -> void:
 	if landside_views != null and landside_views.selected_id != 0:
 		if not landside_views.has_vehicle(landside_views.selected_id):
 			landside_views.selected_id = 0
+			if camera != null:
+				camera.stop_follow()
+	if _selected_staff_id != 0:
+		var other_sel := (
+			(views != null and views.selected_id != 0)
+			or _built.is_selected()
+			or (landside_views != null and landside_views.selected_id != 0)
+		)
+		var m := staff.get_member(_selected_staff_id) if staff != null else null
+		var has_view := staff_views != null and staff_views.node_for(_selected_staff_id) != null
+		if has_view:
+			_selected_staff_had_view = true
+		var retired := (
+			m == null
+			or m.leaving
+			or m.state == StaffMember.State.WALKING_OUT
+			or m.state == StaffMember.State.OFF_SHIFT
+		)
+		var lost_view := (
+			not has_view
+			and (_selected_staff_had_view or (camera != null and camera.is_following()))
+		)
+		if other_sel:
+			_clear_staff_selection()
+		elif retired or lost_view:
+			_clear_staff_selection()
 			if camera != null:
 				camera.stop_follow()
 	if views == null or views.selected_id == 0:
@@ -402,16 +448,31 @@ func _unhandled_input(event: InputEvent) -> void:
 		landside_views.select(vehicle)
 	views.select(0)
 	_built.clear()
+	_clear_staff_selection()
 	if vehicle == 0:
 		_pick_built(eye, click.position)
 		views.select(_passenger_at(eye, click.position))
 		if views.selected_id != 0:
 			_built.clear()
+		else:
+			var staff_id := _staff_at(eye, click.position)
+			var m := staff.get_member(staff_id) if staff != null and staff_id != 0 else null
+			if (
+				m != null
+				and not m.leaving
+				and m.state != StaffMember.State.WALKING_OUT
+				and m.state != StaffMember.State.OFF_SHIFT
+			):
+				_built.clear()
+				_set_staff_selection(staff_id)
 	_reveal_frames = REVEAL_FRAMES if _built.is_selected() else 0
 	if vehicle != 0:
 		camera.follow(landside_views.follow_anchor)
 	elif views.selected_id != 0:
 		camera.follow(views.follow_anchor)
+	elif _selected_staff_id != 0:
+		if staff_views != null and staff_views.node_for(_selected_staff_id) != null:
+			camera.follow(staff_views.follow_anchor)
 	else:
 		camera.stop_follow()
 
@@ -424,6 +485,7 @@ func _select_built_object(object_id: int) -> void:
 		landside_views.select(0)
 	if views != null:
 		views.select(0)
+	_clear_staff_selection()
 	_built.select_object(object_id)
 	_reveal_frames = REVEAL_FRAMES
 	if camera != null:
@@ -473,6 +535,21 @@ func _passenger_at(eye: Camera3D, at: Vector2) -> int:
 	return views.pick(eye, at)
 
 
+func _staff_at(eye: Camera3D, at: Vector2) -> int:
+	if staff_views == null:
+		staff_views = get_node_or_null("../StaffCharacters") as StaffCharacters
+	if staff_views == null:
+		return 0
+	if _built.kind == BuiltSelection.Kind.OBJECT:
+		var limit := (
+			_built.object_hit_distance(build_mode.grid, eye, at)
+			if build_mode != null
+			else StaffCharacters.BODY_PICK_RANGE_M
+		)
+		return staff_views.pick_body(eye, at, limit)
+	return staff_views.pick(eye, at)
+
+
 ## A built item stays selected only while no build interaction owns the clicks
 ## (BuiltSelection.clicks_taken()), no passenger or vehicle is selected, and the
 ## item still stands.
@@ -501,13 +578,16 @@ func _close_selection() -> bool:
 	var vehicle := landside_views != null and landside_views.selected_id != 0
 	var passenger := views != null and views.selected_id != 0
 	var item := _built.is_selected()
-	if not (vehicle or passenger or item):
+	var staff_sel := _selected_staff_id != 0
+	if not (vehicle or passenger or item or staff_sel):
 		return false
 	if landside_views != null:
 		landside_views.select(0)
 	if views != null:
 		views.select(0)
 	_built.clear()
+	_clear_staff_selection()
+	_staff_inspect.refresh()
 	_reveal_frames = 0
 	if camera != null:
 		camera.stop_follow()
@@ -571,6 +651,7 @@ func dirty_alert() -> DirtyAlert:
 func refresh() -> void:
 	if not is_inside_tree():
 		return
+	_bind_staff_panel()
 	_drop_retired_selection()
 	# The card always shows the latest flight to close, replacing an open one.
 	if not _unreported.is_empty():
@@ -590,7 +671,15 @@ func refresh() -> void:
 	_departures_board.refresh()
 	_follow_label.text = follow_text()
 	_inspect.refresh()
-	_follow_label.visible = not _inspect.visible
+	if staff == null:
+		staff = get_node_or_null("../Staff") as StaffSim
+	if staff_views == null:
+		staff_views = get_node_or_null("../StaffCharacters") as StaffCharacters
+	_staff_inspect.staff = staff
+	_staff_inspect.views = staff_views
+	_staff_inspect.camera = camera
+	_staff_inspect.refresh()
+	_follow_label.visible = not _inspect.visible and not _staff_inspect.visible
 	_follow_card.sync()
 	# A passenger card takes the board's place on the left edge (decision 500fd5a0,
 	# point 6); a desk, room or car-park card leaves the list showing. Step aside
@@ -969,6 +1058,7 @@ func set_debug_open(value: bool) -> void:
 	if _debug_panel != null:
 		_debug_panel.visible = value
 		_inspect.fit()
+		_staff_inspect.fit()
 
 
 ## The debug starter button, a shortcut for what BuildMode's tools can also
@@ -1237,6 +1327,8 @@ func _on_save_loaded(ok: bool) -> void:
 		_end_intro_on_load()
 		# A loaded world may reuse the selected id for another item.
 		_built.clear()
+		_clear_staff_selection()
+		_staff_inspect.refresh()
 		# A flight that closed before the load belongs to the old world: its
 		# result must not reach the rail after the reset.
 		_unreported.clear()
@@ -1345,6 +1437,7 @@ func _on_follow_late_requested(flight_id: String) -> void:
 	if landside_views != null:
 		landside_views.select(0)
 	_built.clear()
+	_clear_staff_selection()
 	_reveal_frames = 0
 	views.select(id)
 	if camera != null:
@@ -1374,11 +1467,69 @@ func _on_focus_gate_requested(gate_id: String) -> void:
 	if views != null:
 		views.select(0)
 	_built.clear()
+	_clear_staff_selection()
 	_reveal_frames = 0
 	if camera != null:
 		var target := AlertSources.object_point(grid, desk_id)
 		camera.glide_to(target, minf(camera.distance, AlertStack.JUMP_DISTANCE))
 	refresh()
+
+
+func _bind_staff_panel() -> void:
+	if is_instance_valid(_bound_staff_panel):
+		return
+	var panel := get_node_or_null("../StaffPanel") as StaffPanel
+	if panel == null:
+		return
+	_bound_staff_panel = panel
+	if not panel.member_selected.is_connected(_on_staff_member_selected):
+		panel.member_selected.connect(_on_staff_member_selected)
+
+
+func _on_staff_member_selected(member_id: int) -> void:
+	if staff == null:
+		staff = get_node_or_null("../Staff") as StaffSim
+	if staff_views == null:
+		staff_views = get_node_or_null("../StaffCharacters") as StaffCharacters
+	var m := staff.get_member(member_id) if staff != null and member_id != 0 else null
+	if (
+		m == null
+		or m.leaving
+		or m.state == StaffMember.State.WALKING_OUT
+		or m.state == StaffMember.State.OFF_SHIFT
+	):
+		_clear_staff_selection()
+		refresh()
+		return
+	if landside_views != null:
+		landside_views.select(0)
+	if views != null:
+		views.select(0)
+	_built.clear()
+	_reveal_frames = 0
+	_set_staff_selection(member_id)
+	refresh()
+
+
+func _on_staff_inspect_closed() -> void:
+	_clear_staff_selection()
+	refresh()
+
+
+func _set_staff_selection(member_id: int) -> void:
+	_selected_staff_id = member_id
+	_selected_staff_had_view = staff_views != null and staff_views.node_for(member_id) != null
+	_staff_inspect.selected_id = member_id
+	if staff_views != null:
+		staff_views.select(member_id)
+
+
+func _clear_staff_selection() -> void:
+	_selected_staff_id = 0
+	_selected_staff_had_view = false
+	_staff_inspect.selected_id = 0
+	if staff_views != null and staff_views.selected_id != 0:
+		staff_views.select(0)
 
 
 func _is_pristine(grid: BuildGrid) -> bool:

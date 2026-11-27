@@ -110,43 +110,50 @@ func texts(tool: BuildMode.Tool) -> Array:
 					"Each flight is given a gate. A gate takes the next free letter, starting at A."
 				),
 				tr(
-					"Within 4 cells of a free exit facing the planes, with room for the plane. No staff needed."
+					# gdlint:ignore = max-line-length
+					"Within 4 cells of a free exit facing the planes, with room for the plane. Staffed by a Gate Agent."
 				),
 			]
 		BuildMode.Tool.BUS_GATE_DESK:
 			lines = [
 				tr(
 					# gdlint:ignore = max-line-length
-					"Makes a bus gate. It links to an exit facing the apron with a 16 x 6 m bus bay outside."
+					"Makes a bus gate using only a 16 x 6 m bus bay outside, saving terminal wall space for more gates."
 				),
-				tr("Passengers board shuttle buses here to reach remote stands on the apron."),
 				tr(
 					# gdlint:ignore = max-line-length
-					"Within 4 cells of a free exit with clear 16 x 6 m apron room outside. Staffed by a Gate Agent."
+					"Remote flights pair with any free Bus gate automatically, with no manual linking. An included shuttle bus drives passengers to the stand."
+				),
+				tr(
+					# gdlint:ignore = max-line-length
+					"Within 4 cells of a free exit with clear 16 x 6 m apron room outside. Needs a Remote stand and a Gate Agent."
 				),
 			]
 		BuildMode.Tool.REMOTE_STAND:
 			lines = [
 				tr(
 					# gdlint:ignore = max-line-length
-					"An apron parking stand with no jet bridge. Serves small, medium or large planes that fit."
+					"An apron parking stand away from the terminal wall, serving small, medium, or large planes that fit."
 				),
 				tr(
 					# gdlint:ignore = max-line-length
-					"Assigned IDs starting at R1 with automatic taxiway paving north to the taxi lane."
+					"Takes IDs starting at R1 with automatic taxiway paving. Flights pair automatically with any free Bus gate, with no manual linking."
 				),
 				tr(
 					# gdlint:ignore = max-line-length
-					"Place on an owned apron spot with clear room for aircraft and taxiway access. Requires a Bus gate desk to board."
+					"Place on an owned apron spot with clear room for aircraft and taxi access. Needs a Bus gate to board."
 				),
 			]
 		BuildMode.Tool.SCREEN:
 			lines = [
-				tr("A floor screen that entertains passengers waiting in front of it."),
 				tr(
-					"It covers a fan of floor up to 5 rows ahead. A plain wall blocks it, glass does not."
+					"An entertainment screen that slows boredom for waiting passengers in front of it."
 				),
-				tr("Costs upkeep every day, inside a room or not."),
+				tr(
+					# gdlint:ignore = max-line-length
+					"Boredom rises half as fast inside its 5-row sight fan. A plain wall blocks it, glass does not; kiosks still cure boredom."
+				),
+				tr("No staff needed. Costs upkeep every day, inside a room or not."),
 			]
 		BuildMode.Tool.CAFE_ROOM:
 			lines = [
@@ -537,9 +544,15 @@ func texts(tool: BuildMode.Tool) -> Array:
 			]
 		BuildMode.Tool.INFO_SCREEN:
 			lines = [
-				tr("An information display."),
-				tr("Scenery for now: nothing in the game reacts to it."),
-				tr("Costs upkeep every day."),
+				tr(
+					# gdlint:ignore = max-line-length
+					"An unstaffed flight departure board that calms nearby passengers and helps lost travellers re-plan."
+				),
+				tr(
+					# gdlint:ignore = max-line-length
+					"Covers a 5-row sight fan ahead (plain walls block it, glass does not). Gives mild passive calm and faster re-routing without staff, lighter than a staffed Info desk."
+				),
+				tr("No staff needed. Costs upkeep every day, inside a room or not."),
 			]
 		BuildMode.Tool.EXCHANGE:
 			lines = [

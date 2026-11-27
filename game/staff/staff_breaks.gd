@@ -87,6 +87,7 @@ static func _is_lull_for(staff: StaffSim, m: StaffMember) -> bool:
 		return (
 			m.state == StaffMember.State.IDLE
 			and m.job == 0
+			and m.bag_carry == StaffMember.BagCarry.NONE
 			and CleanerJobs.nearest(staff, m).is_empty()
 		)
 	if m.state == StaffMember.State.IDLE:

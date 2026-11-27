@@ -330,10 +330,13 @@ static func object(
 	StationUseCells.draw(mode._ghost, mode.grid, def_id, anchor, turn)
 
 
-## The cells the ghost tints as covered while `edit` places a screen stand:
-## ScreenCoverage.covered_cells() where it would stand; empty for any other edit.
+## The cells the ghost tints as covered while `edit` places a screen stand or
+## departure board: ScreenCoverage.covered_cells() where it would stand; empty
+## for any other edit.
 static func coverage_preview(on_grid: BuildGrid, edit: BuildEdit) -> Array[Vector2i]:
-	if edit.kind != BuildEdit.Kind.PLACE_OBJECT or edit.def_id != ScreenCoverage.SCREEN_ID:
+	if edit.kind != BuildEdit.Kind.PLACE_OBJECT:
+		return []
+	if edit.def_id != ScreenCoverage.SCREEN_ID and edit.def_id != ScreenCoverage.INFO_SCREEN_ID:
 		return []
 	return ScreenCoverage.covered_cells(on_grid, edit.cell, edit.facing)
 

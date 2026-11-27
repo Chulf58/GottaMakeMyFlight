@@ -33,6 +33,7 @@ enum State {
 ## The post it works at its station (StaffPosts): PRIMARY opens the station,
 ## HELPER (at a whole security lane only) speeds up its repacks.
 enum Slot { PRIMARY, HELPER }
+enum BagCarry { NONE, TO_BIN, TO_EXIT }
 
 const NO_CELL := Vector2i(-1, -1)
 const ENERGY_MAX := 100
@@ -78,6 +79,9 @@ var job := 0
 var job_bin := false
 ## Ticks of cleaning or emptying left while on duty at its job; 0 otherwise.
 var work_left := 0
+## Bag disposal carry after finishing a clean or emptying a bin.
+var bag_carry: BagCarry = BagCarry.NONE
+var bag_target := 0
 ## Ticks remaining before an idle cleaner sets out on a corridor/bin patrol.
 var patrol_wait := 0
 ## StaffSim._replan() turned it back from a cell that went: `at` is that cell
@@ -91,6 +95,8 @@ var energy_ticks := 0
 var break_room := 0
 var break_spot := NO_CELL
 var level := LEVEL_MIN
+var display_name := ""
+var quirks: Array[String] = []
 
 
 func is_tired() -> bool:

@@ -8364,3 +8364,558 @@ msgstr ""
 #: ui/offer_panel.gd:467
 msgid "Accept airlines that fit your gates. Each signed contract sends flights every day."
 msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "departure board"
+msgstr ""
+
+#: build/furniture_tools.gd
+msgctxt "build menu"
+msgid "Departure Board"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Check-in agent"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Security officer"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Gate agent"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Shop server"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Cleaner"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Ramp agent"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "{name} · {role}"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Walking out"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Heading off shift"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Off shift"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Heading to Break Room"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Resting in Break Room"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Driving baggage cart"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Operating pushback tug"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Marshalling aircraft"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Patrolling apron"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Emptying bin"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Cleaning mess"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Walking to full bin"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Walking to mess"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Patrolling terminal"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "On standby"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Walking to {station}"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Helping at Security lane"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "On duty at {station}"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Waiting for assignment"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Check-in desk"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Gate desk"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Security lane"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Security scanner"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Info desk"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Counter"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "station"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Coffee enthusiast"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Always humming"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Triple-checks tags"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Early bird"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Neat freak"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Window watcher"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Friendly waver"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Fast walker"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Keeps spare pens"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Polishes badges"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Loves rainy days"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Names the baggage carts"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Counts steps"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Smooth announcer"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Snack sharer"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Calm in a rush"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Finishing up this last one before I head out."
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Heading for the exit. Good luck, team!"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Heading home for the night."
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Off shift, resting up for tomorrow."
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Could really use a coffee in the Break Room."
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Feeling recharged and ready to head back."
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Putting my feet up for a minute."
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Running low on steam, hoping for a break soon."
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Ready and waiting for a station assignment."
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Cart's loaded, heading across the apron."
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Pushback clear, guiding the nose out."
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Wands up, bringing this bird in smoothly."
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Patrolling the apron, checking stands and cones."
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Emptying this full bin before it overflows."
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Cleaning up this mess, spotless in a jiffy."
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "On my way to empty a full bin."
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Spotted a mess, heading over with the mop."
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Doing the terminal rounds, keeping an eye out."
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Terminal looks tidy for now."
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Heading over to my check-in desk."
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Walking to my security post."
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Making my way to the gate desk."
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Heading to the counter to open up."
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "On my way to post."
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Scanner's acting up, waiting on the reset."
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Closing down the lane once this clears."
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Printing boarding passes and tagging bags."
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Helping repack carry-ons at the berth."
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Keeping an eye on the X-ray belt."
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Scanning boarding passes, welcome aboard!"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Serving a customer at the counter."
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Happy to help!"
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Desk is open, ready for the next flyer."
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Security belt is clear and ready."
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Gate desk is ready for boarding."
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Counter is stocked and ready."
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Mastered the station, Level 3 feels effortless."
+msgstr ""
+
+#: staff/staff_names.gd
+msgid "Loving the new skills from Level 2 training."
+msgstr ""
+
+#: ui/alert_sources.gd
+msgid "Bus gate needs a Remote stand"
+msgstr ""
+
+#: ui/alert_sources.gd
+msgid "Build a Remote stand on the apron. Flights pair with Bus gates automatically."
+msgstr ""
+
+#: ui/alert_sources.gd
+msgid "Remote stand needs a Bus gate"
+msgstr ""
+
+#: ui/alert_sources.gd
+msgid "Place a Bus gate desk near an apron exit. Remote flights pair automatically."
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Needs Remote stand"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Needs Bus gate"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Needs a Remote stand"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Serves {count} remote stand ({ids})"
+msgid_plural "Serves {count} remote stands ({ids})"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/built_item_card.gd
+msgid "Shuttle: Idle at bay"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Shuttle: Boarding for {stand} ({count})"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Shuttle: Boarding ({count})"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Shuttle: Driving to {stand}"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Shuttle: Driving to stand"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Shuttle: Unloading at {stand}"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Shuttle: Unloading at stand"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Shuttle: Returning to bay"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Stand: {id}"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Stand: Not assigned"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Biggest plane: none, no room on apron"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Auto-paired with Bus gate"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Needs a Bus gate"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Next flight: none scheduled"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Flight: {head} · {status}"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Scheduled"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Next flight: {head} · {status}"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Landing"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Taxiing in"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "At stand"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Departure Board"
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Within 4 cells of a free exit facing the planes, with room for the plane. Staffed by a Gate Agent."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Makes a bus gate using only a 16 x 6 m bus bay outside, saving terminal wall space for more gates."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Remote flights pair with any free Bus gate automatically, with no manual linking. An included shuttle bus drives passengers to the stand."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Within 4 cells of a free exit with clear 16 x 6 m apron room outside. Needs a Remote stand and a Gate Agent."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "An apron parking stand away from the terminal wall, serving small, medium, or large planes that fit."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Takes IDs starting at R1 with automatic taxiway paving. Flights pair automatically with any free Bus gate, with no manual linking."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Place on an owned apron spot with clear room for aircraft and taxi access. Needs a Bus gate to board."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "An entertainment screen that slows boredom for waiting passengers in front of it."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Boredom rises half as fast inside its 5-row sight fan. A plain wall blocks it, glass does not; kiosks still cure boredom."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "No staff needed. Costs upkeep every day, inside a room or not."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "An unstaffed flight departure board that calms nearby passengers and helps lost travellers re-plan."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Covers a 5-row sight fan ahead (plain walls block it, glass does not). Gives mild passive calm and faster re-routing without staff, lighter than a staffed Info desk."
+msgstr ""
+
+#: ui/staff_inspect.gd
+msgid "×"
+msgstr ""
+
+#: ui/staff_inspect.gd
+msgid "Focus"
+msgstr ""
+
+#: ui/staff_inspect.gd
+msgid "Focus camera on this staff member"
+msgstr ""
+
+#: ui/staff_inspect.gd
+msgid "{role} · Lv. {level}"
+msgstr ""
+
+#: ui/staff_inspect.gd
+msgid "Energy {pct}%"
+msgstr ""
+
+#: ui/staff_inspect.gd
+msgid "\"{thought}\""
+msgstr ""
+
+#: ui/staff_panel.gd
+msgid "Inspect {name}"
+msgstr ""

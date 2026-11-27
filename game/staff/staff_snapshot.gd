@@ -5,7 +5,7 @@ extends RefCounted
 ## planned differently after a load; station claims are rebuilt from the
 ## members. Cells are saved as [x, y].
 ##
-## Only the current version (StaffSim.SAVE_VERSION, 10) loads: an older save is
+## Only the current version (StaffSim.SAVE_VERSION, 11) loads: an older save is
 ## refused, never migrated (no save migrations before the first release,
 ## decision old-saves-are-not-supported-until-after-a-release-no-save-mi).
 ##
@@ -52,6 +52,8 @@ const MEMBER_KEYS := [
 	"job",
 	"job_bin",
 	"work_left",
+	"bag_carry",
+	"bag_target",
 	"ramp_job",
 	"ramp_shuttle_id",
 	"ramp_flight_id",
@@ -60,6 +62,8 @@ const MEMBER_KEYS := [
 	"break_room",
 	"break_spot",
 	"level",
+	"display_name",
+	"quirks",
 ]
 const INT_FIELDS := ["id", "role", "state", "station", "slot", "path_index", "seg_mm", "level"]
 const BOOL_FIELDS := ["needs_replan", "search_failed", "leaving", "job_bin"]
@@ -97,6 +101,8 @@ static func save(
 					"job": m.job,
 					"job_bin": m.job_bin,
 					"work_left": m.work_left,
+					"bag_carry": m.bag_carry,
+					"bag_target": m.bag_target,
 					"patrol_wait": m.patrol_wait,
 					"ramp_job": m.ramp_job,
 					"ramp_shuttle_id": m.ramp_shuttle_id,
@@ -106,6 +112,8 @@ static func save(
 					"break_room": m.break_room,
 					"break_spot": [m.break_spot.x, m.break_spot.y],
 					"level": m.level,
+					"display_name": m.display_name,
+					"quirks": m.quirks.duplicate(),
 				}
 			)
 		)
@@ -227,8 +235,8 @@ static func _jobs_problem(
 			var bin := grid.get_object(m.job)
 			if bin.get("def", &"") != MessSim.BIN_ID:
 				return "cleaner %d's job %d is not a bin on the grid" % [m.id, m.job]
-			if int(state["bins"].get(m.job, 0)) < MessSim.BIN_CAPACITY:
-				return "cleaner %d's bin %d is not full" % [m.id, m.job]
+			if int(state["bins"].get(m.job, 0)) < MessSim.BIN_EMPTY_MIN:
+				return "cleaner %d's bin %d is not at or above half full" % [m.id, m.job]
 			spot = MessSim.approach_for(grid, bin["anchor"])
 		else:
 			if not messes.has(m.job):
@@ -266,9 +274,11 @@ static func _member(record: Variant, sim: PassengerSim) -> Variant:
 	for key in MEMBER_KEYS:
 		if not record.has(key):
 			return "a member has no '%s'" % key
-	for key in ["job", "work_left", "ramp_shuttle_id"]:
+	for key in ["job", "work_left", "bag_target", "ramp_shuttle_id"]:
 		if not WholeNumber.is_whole(record[key]) or int(record[key]) < 0:
 			return "member field '%s' is not a whole number of 0 or more" % key
+	if not WholeNumber.is_whole(record["bag_carry"]):
+		return "member field 'bag_carry' is not a whole number"
 	if not WholeNumber.is_whole(record["ramp_job"]):
 		return "member field 'ramp_job' is not a whole number"
 	if typeof(record["ramp_flight_id"]) != TYPE_STRING:
@@ -289,6 +299,8 @@ static func _member(record: Variant, sim: PassengerSim) -> Variant:
 		return "member %d has an unknown state" % m.id
 	if not StaffMember.Slot.values().has(int(record["slot"])):
 		return "member %d has an unknown slot" % m.id
+	if not StaffMember.BagCarry.values().has(int(record["bag_carry"])):
+		return "member %d has an unknown bag_carry" % m.id
 	if not StaffMember.RampJob.values().has(int(record["ramp_job"])):
 		return "member %d has an unknown ramp_job" % m.id
 	m.role = int(record["role"]) as StaffMember.Role
@@ -303,12 +315,33 @@ static func _member(record: Variant, sim: PassengerSim) -> Variant:
 	m.job = int(record["job"])
 	m.job_bin = record["job_bin"]
 	m.work_left = int(record["work_left"])
+	m.bag_carry = int(record["bag_carry"]) as StaffMember.BagCarry
+	m.bag_target = int(record["bag_target"])
 	m.ramp_job = int(record["ramp_job"]) as StaffMember.RampJob
 	m.ramp_shuttle_id = int(record["ramp_shuttle_id"])
 	m.ramp_flight_id = record["ramp_flight_id"]
 	m.level = int(record["level"])
 	if m.level < StaffMember.LEVEL_MIN or m.level > StaffMember.LEVEL_MAX:
 		return "member %d level %d is out of range" % [m.id, m.level]
+	if typeof(record["display_name"]) != TYPE_STRING:
+		return "member %d display_name is not a string" % m.id
+	m.display_name = String(record["display_name"]).strip_edges()
+	if m.display_name == "":
+		return "member %d display_name is empty" % m.id
+	if typeof(record["quirks"]) != TYPE_ARRAY:
+		return "member %d quirks is not a list" % m.id
+	var raw_quirks: Array = record["quirks"]
+	if raw_quirks.is_empty() or raw_quirks.size() > 2:
+		return "member %d quirks count %d is out of range" % [m.id, raw_quirks.size()]
+	var seen_quirks := {}
+	for q: Variant in raw_quirks:
+		if typeof(q) != TYPE_STRING:
+			return "member %d has a malformed quirk" % m.id
+		var q_str := String(q)
+		if not StaffNames.QUIRKS.has(q_str) or seen_quirks.has(q_str):
+			return "member %d has an invalid or duplicate quirk '%s'" % [m.id, q_str]
+		seen_quirks[q_str] = true
+		m.quirks.append(q_str)
 	if not WholeNumber.is_whole(record["energy"]):
 		return "member %d energy is not a whole number" % m.id
 	m.energy = int(record["energy"])
@@ -354,7 +387,7 @@ static func _member(record: Variant, sim: PassengerSim) -> Variant:
 	if problem == "" and m.role == StaffMember.Role.RAMP:
 		problem = _ramp_problem(m)
 	elif problem == "" and m.role == StaffMember.Role.CLEANER:
-		problem = _cleaner_problem(m)
+		problem = _cleaner_problem(m, sim)
 		if (
 			problem == ""
 			and (
@@ -366,7 +399,16 @@ static func _member(record: Variant, sim: PassengerSim) -> Variant:
 			problem = "is no ramp agent but has a ramp job"
 	elif problem == "":
 		problem = _duty_problem(m, sim)
-		if problem == "" and (m.job != 0 or m.job_bin or m.work_left != 0):
+		if (
+			problem == ""
+			and (
+				m.job != 0
+				or m.job_bin
+				or m.work_left != 0
+				or m.bag_carry != StaffMember.BagCarry.NONE
+				or m.bag_target != 0
+			)
+		):
 			problem = "is no cleaner but has a job"
 		if (
 			problem == ""
@@ -446,7 +488,13 @@ static func _ramp_problem(m: StaffMember) -> String:
 		or m.backing_out
 	):
 		return "is a ramp agent with indoor position or station state"
-	if m.job != 0 or m.job_bin or m.work_left != 0:
+	if (
+		m.job != 0
+		or m.job_bin
+		or m.work_left != 0
+		or m.bag_carry != StaffMember.BagCarry.NONE
+		or m.bag_target != 0
+	):
 		return "is a ramp agent with a cleaner job"
 	match m.ramp_job:
 		StaffMember.RampJob.NONE:
@@ -479,16 +527,35 @@ static func _ramp_problem(m: StaffMember) -> String:
 	return ""
 
 
-## Whether a cleaner's state and job agree (see the class notes; the job
-## itself is checked by _jobs_problem()).
-static func _cleaner_problem(m: StaffMember) -> String:
+## Whether a cleaner's state, job and bag-carry fields agree (see the class
+## notes; jobs themselves are checked by _jobs_problem()).
+static func _cleaner_problem(m: StaffMember, sim: PassengerSim) -> String:
 	if m.station != 0 or m.slot != StaffMember.Slot.PRIMARY or m.leaving:
 		return "is a cleaner with a station, a helper slot or leaving"
 	if m.job == 0 and m.job_bin:
 		return "has a bin job with no bin"
+	if m.bag_carry == StaffMember.BagCarry.NONE:
+		if m.bag_target != 0:
+			return "has a bag target without carrying a bag"
+	else:
+		if m.job != 0 or m.job_bin:
+			return "carries a bag while holding a cleaning job"
+		if m.bag_target < 1:
+			return "carries a bag with no target"
+		if m.bag_carry == StaffMember.BagCarry.TO_BIN:
+			var rec := sim.grid.get_object(m.bag_target)
+			if rec.get("def", &"") != MessSim.BIN_ID:
+				return "carries a bag to bin %d which is not on the grid" % m.bag_target
+			if MessSim.approach_for(sim.grid, rec["anchor"]) == MessSim.NO_CELL:
+				return "carries a bag to bin %d with no approach" % m.bag_target
+		elif (
+			not sim.layout.entrances.has(m.bag_target)
+			or sim.layout.door_cell(sim.grid, m.bag_target) == StaffMember.NO_CELL
+		):
+			return "carries a bag to unknown entrance %d" % m.bag_target
 	match m.state:
 		StaffMember.State.IDLE, StaffMember.State.WALKING_OUT, StaffMember.State.LEAVING_SHIFT:
-			if m.job != 0 or m.work_left != 0:
+			if m.job != 0 or m.work_left != 0 or m.bag_carry != StaffMember.BagCarry.NONE:
 				return "is a cleaner with no job to do but has one"
 			if (
 				m.state == StaffMember.State.IDLE
@@ -497,16 +564,43 @@ static func _cleaner_problem(m: StaffMember) -> String:
 			):
 				return "is idle in the pool but has a walk"
 		StaffMember.State.OFF_SHIFT:
-			if m.job != 0 or m.work_left != 0 or not m.in_pool():
+			if (
+				m.job != 0
+				or m.work_left != 0
+				or m.bag_carry != StaffMember.BagCarry.NONE
+				or not m.in_pool()
+			):
 				return "is an off-shift cleaner with a job or indoor position"
 		StaffMember.State.TO_STATION:
-			if m.job == 0 or m.work_left != 0:
+			var active := (m.job != 0) or (m.bag_carry != StaffMember.BagCarry.NONE)
+			if not active or m.work_left != 0:
 				return "walks to no job, or has work left before it gets there"
+			if m.bag_carry != StaffMember.BagCarry.NONE:
+				if m.path.is_empty():
+					return "carries a bag without a path"
+				var bag_spot := (
+					MessSim.approach_for(sim.grid, sim.grid.get_object(m.bag_target)["anchor"])
+					if m.bag_carry == StaffMember.BagCarry.TO_BIN
+					else sim.layout.door_cell(sim.grid, m.bag_target)
+				)
+				if not m.needs_replan and (not m.is_moving() or m.path_end() != bag_spot):
+					return "carries a bag on a path not leading to %s" % bag_spot
 		StaffMember.State.ON_DUTY:
-			if m.job == 0 or m.work_left < 1:
+			var active := (m.job != 0) or (m.bag_carry != StaffMember.BagCarry.NONE)
+			if not active or m.work_left < 1:
 				return "is cleaning with no job or no work left"
 			if m.is_moving() or m.needs_replan:
 				return "is on duty but walking"
+			if m.bag_carry != StaffMember.BagCarry.NONE:
+				var spot := (
+					MessSim.approach_for(sim.grid, sim.grid.get_object(m.bag_target)["anchor"])
+					if m.bag_carry == StaffMember.BagCarry.TO_BIN
+					else sim.layout.door_cell(sim.grid, m.bag_target)
+				)
+				if m.at != spot:
+					return "disposes a bag away from its spot %s" % spot
+				if m.work_left > CleanerJobs.TOSS_BAG_TICKS:
+					return "has %d bag disposal ticks left above max" % m.work_left
 	return ""
 
 
@@ -582,7 +676,14 @@ static func _energy_break_problem(m: StaffMember, sim: PassengerSim) -> String:
 		if m.break_room != 0 or m.break_spot != StaffMember.NO_CELL:
 			return "holds break_room or break_spot while not on break"
 		return ""
-	if m.role == StaffMember.Role.RAMP or m.in_pool() or m.station != 0 or m.leaving or m.job != 0:
+	if (
+		m.role == StaffMember.Role.RAMP
+		or m.in_pool()
+		or m.station != 0
+		or m.leaving
+		or m.job != 0
+		or m.bag_carry != StaffMember.BagCarry.NONE
+	):
 		return "has invalid role, station, pool or leaving state on break"
 	if not StaffBreakRooms.is_ready(sim.grid, m.break_room):
 		return "is on break in break_room %d, which is not ready" % m.break_room

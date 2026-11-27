@@ -332,7 +332,7 @@ static func _build_services() -> void:
 	_add_dining(&"restaurant_table", "Restaurant table", Color(0.6, 0.45, 0.35), 1.01, false)
 	_add_dining(&"restaurant_booth", "Restaurant booth", Color(0.65, 0.3, 0.3), 1.15, true)
 	_add_counter(&"info_desk", "Info desk", 2.02, Color(0.3, 0.5, 0.75))
-	_add(&"info_screen", "Info screen", Vector2i.ONE, Color(0.16, 0.2, 0.3), 2.27)
+	_add(&"info_screen", "Departure Board", Vector2i.ONE, Color(0.16, 0.2, 0.3), 2.27)
 	_add_counter(&"currency_exchange", "Currency exchange", 2.16, Color(0.8, 0.7, 0.3))
 	var atm := _add(&"atm", "ATM", Vector2i.ONE, Color(0.35, 0.4, 0.5), 1.78)
 	atm.has_interaction = true

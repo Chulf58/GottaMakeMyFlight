@@ -26,8 +26,10 @@ extends RefCounted
 const CLEAN_TICKS: Array[int] = [30, 45, 60]
 ## Extra ticks for grown litter.
 const GROWN_EXTRA_TICKS := 30
-## Ticks to empty a full bin.
+## Ticks to empty a bin.
 const EMPTY_TICKS := 40
+## Ticks to toss a tied trash bag into a bin or utility exit.
+const TOSS_BAG_TICKS := 12
 ## Ticks to pause between idle corridor/bin patrol waypoints.
 const PATROL_PAUSE_TICKS := 50
 const PATROL_MIN_CELLS := 4
@@ -105,24 +107,42 @@ static func bin_holder(staff: StaffSim, bin: int) -> int:
 
 ## The job idle `m` takes now: {"job", "bin", "path"} with the path from
 ## where it stands (from an entrance's door cell in the pool), or {} for none.
+## Active messes and full bins take priority; proactive >= 50% bins run only
+## when no reachable mess or full bin is waiting.
 static func nearest(staff: StaffSim, m: StaffMember) -> Dictionary:
 	var starts := _starts(staff, m)
 	if starts.is_empty():
 		return {}
-	var bin_claims := {}
-	for id in staff.member_ids():
-		var other := staff.get_member(id)
-		if other.job_bin:
-			bin_claims[other.job] = id
-	var found: Array = []
+	var bin_claims := _bin_claims(staff)
+	var urgent: Array = []
 	var messes := staff.sim.messes
 	for id in messes.mess_ids():
 		var mess := messes.get_mess(id)
 		if int(mess["claimed_by"]) == 0:
-			_consider(staff, found, starts, id, false, mess["approach"])
+			_consider(staff, urgent, starts, id, false, mess["approach"])
 	for bin in messes.full_bins():
 		if not bin_claims.has(bin):
-			_consider(staff, found, starts, bin, true, spot_of(staff, bin, true))
+			_consider(staff, urgent, starts, bin, true, spot_of(staff, bin, true))
+	var best := _pick_nearest(staff, m, urgent)
+	if not best.is_empty() or urgent.size() > MAX_PATH_TRIES:
+		return best
+	var proactive: Array = []
+	for bin in messes.proactive_bins():
+		if not bin_claims.has(bin):
+			_consider(staff, proactive, starts, bin, true, spot_of(staff, bin, true))
+	return _pick_nearest(staff, m, proactive)
+
+
+static func _bin_claims(staff: StaffSim) -> Dictionary:
+	var claims := {}
+	for id in staff.member_ids():
+		var other := staff.get_member(id)
+		if other.job_bin:
+			claims[other.job] = id
+	return claims
+
+
+static func _pick_nearest(staff: StaffSim, m: StaffMember, found: Array) -> Dictionary:
 	found.sort_custom(_before)
 	var best := {}
 	var best_mm := 0
@@ -141,6 +161,91 @@ static func nearest(staff: StaffSim, m: StaffMember) -> Dictionary:
 		if reached == SEARCH_CANDIDATES:
 			break
 	return best
+
+
+static func bag_work_ticks() -> int:
+	return TOSS_BAG_TICKS
+
+
+## Cell the cleaner stands on to drop or toss its carried bag, or NO_CELL.
+static func bag_spot(staff: StaffSim, m: StaffMember) -> Vector2i:
+	if m.bag_carry == StaffMember.BagCarry.NONE or m.bag_target == 0:
+		return StaffMember.NO_CELL
+	var grid := staff.sim.grid
+	if m.bag_carry == StaffMember.BagCarry.TO_BIN:
+		var rec := grid.get_object(m.bag_target)
+		if rec.get("def", &"") != MessSim.BIN_ID:
+			return StaffMember.NO_CELL
+		return MessSim.approach_for(grid, rec["anchor"])
+	if not staff.sim.layout.entrances.has(m.bag_target):
+		return StaffMember.NO_CELL
+	return staff.sim.layout.door_cell(grid, m.bag_target)
+
+
+## Target object anchor/cell the cleaner faces while tossing a carried bag, or NO_CELL.
+static func bag_cell(staff: StaffSim, m: StaffMember) -> Vector2i:
+	if m.bag_carry == StaffMember.BagCarry.NONE or m.bag_target == 0:
+		return StaffMember.NO_CELL
+	var grid := staff.sim.grid
+	if m.bag_carry == StaffMember.BagCarry.TO_BIN:
+		var rec := grid.get_object(m.bag_target)
+		if rec.get("def", &"") != MessSim.BIN_ID:
+			return StaffMember.NO_CELL
+		return rec["anchor"]
+	if not staff.sim.layout.entrances.has(m.bag_target):
+		return StaffMember.NO_CELL
+	return staff.sim.layout.door_cell(grid, m.bag_target)
+
+
+## Whether `m`'s carried bag destination still exists and can accept the bag.
+static func bag_target_valid(staff: StaffSim, m: StaffMember) -> bool:
+	if m.bag_carry == StaffMember.BagCarry.NONE:
+		return false
+	if bag_spot(staff, m) == StaffMember.NO_CELL:
+		return false
+	if m.bag_carry == StaffMember.BagCarry.TO_BIN:
+		return staff.sim.messes.fill_of(m.bag_target) < MessSim.BIN_CAPACITY
+	return true
+
+
+## Picks the nearest reachable bag disposal destination: non-full bin when
+## `prefer_exit` is false, falling back to (or going directly to when true) the
+## nearest reachable entrance door cell. Returns {} when nothing is reachable.
+static func plan_bag_disposal(staff: StaffSim, m: StaffMember, prefer_exit: bool) -> Dictionary:
+	var starts := _starts(staff, m)
+	if starts.is_empty():
+		return {}
+	var grid := staff.sim.grid
+	var messes := staff.sim.messes
+	if not prefer_exit:
+		var bins: Array = []
+		for id in grid.object_ids():
+			var rec := grid.get_object(id)
+			if rec.get("def", &"") != MessSim.BIN_ID:
+				continue
+			if messes.fill_of(id) >= MessSim.BIN_CAPACITY:
+				continue
+			var spot := MessSim.approach_for(grid, rec["anchor"])
+			_consider(staff, bins, starts, id, true, spot)
+		var bin_pick := _pick_nearest(staff, m, bins)
+		if not bin_pick.is_empty():
+			return {
+				"carry": StaffMember.BagCarry.TO_BIN,
+				"target": int(bin_pick["job"]),
+				"path": bin_pick["path"],
+			}
+	var exits: Array = []
+	for door in staff.sim.layout.entrances:
+		var spot := staff.sim.layout.door_cell(grid, door)
+		_consider(staff, exits, starts, door, false, spot)
+	var exit_pick := _pick_nearest(staff, m, exits)
+	if not exit_pick.is_empty():
+		return {
+			"carry": StaffMember.BagCarry.TO_EXIT,
+			"target": int(exit_pick["job"]),
+			"path": exit_pick["path"],
+		}
+	return {}
 
 
 ## Where a search measures from: the member's cell, or every entrance's door
@@ -188,16 +293,12 @@ static func _before(a: Array, b: Array) -> bool:
 	return a[2] < b[2]
 
 
-## Deterministic hash of currently unclaimed messes and unheld full bins so
-## idle/patrolling cleaners wake up on the exact tick a new job appears.
+## Deterministic hash of currently unclaimed messes and unheld full or proactive
+## bins so idle/patrolling cleaners wake up on the exact tick a new job appears.
 static func unclaimed_signature(staff: StaffSim) -> int:
 	if staff == null or staff.sim == null:
 		return 0
-	var bin_claims := {}
-	for id in staff.member_ids():
-		var other := staff.get_member(id)
-		if other.job_bin:
-			bin_claims[other.job] = id
+	var bin_claims := _bin_claims(staff)
 	var h := 17
 	var any := false
 	var messes := staff.sim.messes
@@ -209,6 +310,10 @@ static func unclaimed_signature(staff: StaffSim) -> int:
 	for bin in messes.full_bins():
 		if not bin_claims.has(bin):
 			h = h * 37 + bin
+			any = true
+	for bin in messes.proactive_bins():
+		if not bin_claims.has(bin):
+			h = h * 41 + bin
 			any = true
 	return h if any else 0
 

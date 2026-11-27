@@ -192,6 +192,7 @@ var _badges_drawn: Array[Dictionary] = []
 ## placed count badge its VIP crown would sit on (with the gap over), so the
 ## crown stands over the badge (VipMarker.layout()). Rebuilt every frame.
 var _badge_lifts := {}
+var _checked_bags: CheckedSuitcaseViews
 
 
 func _ready() -> void:
@@ -231,6 +232,9 @@ func _ready() -> void:
 	_props.sim = sim
 	_props.views = self
 	add_child(_props)
+	_checked_bags = CheckedSuitcaseViews.new()
+	_checked_bags.name = "CheckedSuitcaseViews"
+	add_child(_checked_bags)
 	_badge_root = Node3D.new()
 	_badge_root.name = NeedCluster.ROOT
 	add_child(_badge_root)
@@ -252,6 +256,10 @@ func _process(_delta: float) -> void:
 
 func node_for(id: int) -> Node3D:
 	return _nodes.get(id)
+
+
+func checked_bag_node_for(id: int) -> Node3D:
+	return _checked_bags.node_for(id) if _checked_bags != null else null
 
 
 ## Selects passenger `id` (0 for none) and moves follow_anchor and the ring
@@ -365,6 +373,8 @@ func sync() -> void:
 			_release(id)
 	_props.sync()
 	_resteer(steers, fresh)
+	if _checked_bags != null:
+		_checked_bags.sync(sim, _nodes, _cur)
 	_markers.sync()
 
 
@@ -455,6 +465,8 @@ func snap() -> void:
 			heading = ParkSide.stand_face(sim, p)
 		if heading != Vector2.ZERO and not _turn_locked(node) and not _setoffs.has(id):
 			_turns.place(id, atan2(heading.x, heading.y))
+	if _checked_bags != null:
+		_checked_bags.snap()
 	draw()
 
 
@@ -548,6 +560,8 @@ func draw() -> void:
 	_markers.draw()
 	_sync_stall_doors(alpha)
 	_sync_security_views(alpha)
+	if _checked_bags != null:
+		_checked_bags.draw(_nodes, _turns, alpha)
 
 
 func _sync_fidget_frames(now: float) -> void:
@@ -1115,6 +1129,8 @@ func _release(id: int) -> void:
 	_cur.erase(id)
 	_stages.erase(id)
 	_odometers.erase(id)
+	if _checked_bags != null:
+		_checked_bags.release(id)
 	need_clusters.forget(id)
 	wish_clusters.forget(id)
 
@@ -1266,6 +1282,12 @@ func _pose(node: Node3D, p: Passenger, built: Dictionary) -> float:
 		# line moves (board 814a5cfd).
 		var door := EntranceLooks.face(sim, p)
 		face = atan2(door.x, door.y)
+	elif not moving and p.bin_detour_bin > 0 and p.bin_detour_end > 0:
+		var bin_rec := sim.grid.get_object(p.bin_detour_bin)
+		if not bin_rec.is_empty():
+			var ahead: Vector2i = bin_rec["anchor"] - p.at
+			if ahead != Vector2i.ZERO:
+				face = atan2(ahead.x, ahead.y)
 	ActivityPoses.dress(
 		node, ActivityPoses.recline(sim, p), ActivityPoses.foam(sim, p), ActivityPoses.bare(sim, p)
 	)

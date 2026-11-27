@@ -93,6 +93,29 @@ func pick(
 	return is_selected()
 
 
+## Distance from `eye`'s click ray origin to the selected OBJECT's 3D pick box,
+## or INF when no object is selected or missed.
+func object_hit_distance(grid: BuildGrid, eye: Camera3D, at: Vector2) -> float:
+	if kind != Kind.OBJECT or grid == null or eye == null:
+		return INF
+	var record := grid.get_object(id)
+	if record.is_empty():
+		return INF
+	var def := BuildCatalog.get_def(record["def"])
+	var rect := _world_rect(grid, _bounds(def.footprint(record["anchor"], record["facing"])))
+	var box := AABB(
+		Vector3(rect.position.x, grid.origin.y, rect.position.y),
+		Vector3(rect.size.x, BuildView.pick_height(def), rect.size.y)
+	)
+	var from := eye.project_ray_origin(at)
+	var dir := eye.project_ray_normal(at)
+	var hit: Variant = box.intersects_ray(from, dir)
+	if hit != null:
+		return from.distance_to(hit)
+	var ground: Variant = BuildMode.ground_point(from, dir, grid.origin.y)
+	return from.distance_to(ground) if ground != null else INF
+
+
 ## Drops the selection when its item is gone: the object or room removed, or
 ## the landside spot taken back.
 func prune(grid: BuildGrid, placement: LandsidePlacement) -> void:

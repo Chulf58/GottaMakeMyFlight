@@ -38,7 +38,7 @@ signal stage_changed(id: int, stage: Passenger.Stage)
 signal checked_in(id: int, desk: int)
 
 ## The history of SAVE_VERSION is in PassengerSimSave.
-const SAVE_VERSION := 41
+const SAVE_VERSION := 42
 ## 1.96 m/s; the Toon walk clips cover 1.92-1.95 m/s.
 const WALK_MM := 98
 ## 3.5 m/s, a jog (user-ruled); the Toon run clips cover 4.17-5.30 m/s,
@@ -66,6 +66,12 @@ const MISSED_MAX_WALK_OUT_TICKS := 6000
 ## Stuck passengers retry once a simulated second, staggered by id; mood and
 ## the lateness forecast update on the same beat.
 const BEAT_TICKS := 20
+## Stuck or waiting passengers inside a Departure Board's sight fan retry
+## wayfinding more often without staff.
+const WAYFINDING_RETRY_TICKS := 5
+## Stuck mood loss per beat inside a Departure Board's sight fan (lighter relief
+## than a staffed Info desk's CALM_STUCK_LOSS).
+const BOARD_STUCK_LOSS := 2
 const SEAT_TRIES := 4
 const MOOD_MAX := 100
 ## A passenger standing at the gate loses a mood point every this many beats.
@@ -120,6 +126,8 @@ var decor := DecorEffect.new()
 var messes := MessSim.new()
 ## Help visits to staffed info desks for stuck passengers (InfoDesk).
 var info_desks := InfoDesk.new()
+## Sight-fan coverage of unstaffed Departure Boards (&"info_screen").
+var departure_boards := ScreenCoverage.new(ScreenCoverage.INFO_SCREEN_ID)
 ## Kiosk visits and browse slot reservations (ShopSim).
 var shops := ShopSim.new()
 ## Security service after admission, at every scanner and lane.
@@ -235,6 +243,7 @@ func bind(with_clock: SimClock, with_flights: FlightSim, with_grid: BuildGrid) -
 	decor.bind(self)
 	messes.bind(self)
 	info_desks.bind(self)
+	departure_boards.bind(grid)
 	shops.bind(self, _set_stage, _leave_station, _release_seat)
 	arrivals.bind(self, _spawn)
 	clock.ticked.connect(on_tick)
@@ -652,7 +661,9 @@ func _spawn(
 	flight_id: String, variant: int, arrival := ArrivalTypes.Type.TYPICAL, walk: Array[Vector3] = []
 ) -> Passenger:
 	mark_changed()
-	return PassengerLifecycle.spawn(self, flight_id, variant, arrival, walk)
+	var p := PassengerLifecycle.spawn(self, flight_id, variant, arrival, walk)
+	p.checked_bag_color = Bag.color_for_passenger(p.id)
+	return p
 
 
 func _finish(p: Passenger, made: bool) -> void:
@@ -671,9 +682,11 @@ func _step(p: Passenger) -> void:
 			toilets.step(p)
 		StageKinds.Facility.SHOP:
 			shops.step(p)
-	# A help visit holds the passenger: its stage's own logic would plan again.
+	# A help visit or bin detour holds the passenger: its stage's own logic would plan again.
 	if info_desks.holds(p):
 		info_desks.step(p)
+	elif p.bin_detour_bin > 0:
+		BinDetour.step(self, p)
 	elif not VisitHandBack.is_hand_back(from, p.stage):
 		_advance(p)
 	_move(p)
@@ -768,7 +781,10 @@ func _beat(p: Passenger) -> void:
 	# the terminal's reach: no stuck mood loss and no info desk help.
 	var on_road := p.stage == Passenger.Stage.SPAWNED
 	if p.stuck != Passenger.Stuck.NONE and not on_road:
-		change -= info_desks.stuck_loss(p)
+		var loss := info_desks.stuck_loss(p)
+		if loss > BOARD_STUCK_LOSS and departure_boards.covers(p.at):
+			loss = BOARD_STUCK_LOSS
+		change -= loss
 	# A bored passenger gets nothing from its seat (BoredomSim).
 	if p.stage == Passenger.Stage.SEATED and not BoredomSim.is_bored(p):
 		change += 1
@@ -794,7 +810,7 @@ func _beat(p: Passenger) -> void:
 	cafes.beat(p)
 	boredom.beat(p)
 	shops.beat(p)
-	if not info_desks.holds(p):
+	if not info_desks.holds(p) and p.bin_detour_bin == 0:
 		NeedsPolicy.arbitrate(self, p)
 		if not on_road:
 			info_desks.beat(p)
@@ -888,6 +904,7 @@ func _reconcile() -> void:
 	security.bins.prune(grid)
 	PassengerGates.reconcile_seats(self)
 	cafes.reconcile()
+	BinDetour.reconcile(self)
 	toilets.reconcile()
 	shops.reconcile()
 	PassengerEdits.recover_stranded(self)
@@ -930,7 +947,8 @@ func _serving_left(q: Dictionary) -> int:
 
 
 func _retry_now(p: Passenger) -> bool:
-	return posmod(tick, BEAT_TICKS) == posmod(p.id, BEAT_TICKS)
+	var period := WAYFINDING_RETRY_TICKS if departure_boards.covers(p.at) else BEAT_TICKS
+	return posmod(tick, period) == posmod(p.id, period)
 
 
 func _set_stage(p: Passenger, stage: Passenger.Stage) -> void:

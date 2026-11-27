@@ -217,6 +217,9 @@ func test_malformed_shuttle_in_world_save_is_refused() -> void:
 		"cart_id": cart_id,
 		"flight": "GMF101-d0",
 		"phase": BaggageShuttle.Phase.OUTBOUND,
+		"load_start_tick": tick,
+		"load_step_ticks": BaggageShuttle.LOAD_STEP_TICKS,
+		"next_load_tick": tick,
 		"start_tick": tick,
 		"arrive_tick": tick + 40,
 		"unload_tick": tick + 60,
@@ -227,6 +230,7 @@ func test_malformed_shuttle_in_world_save_is_refused() -> void:
 		"target_yaw": 0.0,
 		"waypoints": [[0.0, 0.2, 0.0], [1.0, 0.2, -10.0]],
 		"bag_ids": [999_999],
+		"pending_bag_ids": [],
 		"driver_staff_id": 0,
 	}
 	# 1. Ghost bag_id in shuttle.bag_ids

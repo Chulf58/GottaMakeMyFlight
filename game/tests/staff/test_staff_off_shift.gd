@@ -98,12 +98,19 @@ func test_cleaner_finishes_reachable_mess_before_leaving_shift() -> void:
 	assert_int(cleaner.state).is_equal(StaffMember.State.TO_STATION)
 	assert_int(_w.staff.off_shift_count(CHECKIN)).is_equal(2)
 	var guard := 0
-	while _w.sim.messes.mess_count() > 0 and guard < LIMIT_TICKS:
+	while (
+		(_w.sim.messes.mess_count() > 0 or cleaner.bag_carry != StaffMember.BagCarry.NONE)
+		and guard < LIMIT_TICKS
+	):
 		_w.step()
 		guard += 1
 	assert_int(_w.sim.messes.mess_count()).is_equal(0)
 	assert_int(cleaner.job).is_equal(0)
-	assert_int(cleaner.state).is_equal(StaffMember.State.LEAVING_SHIFT)
+	assert_int(cleaner.bag_carry).is_equal(StaffMember.BagCarry.NONE)
+	(
+		assert_bool(cleaner.state in [StaffMember.State.LEAVING_SHIFT, StaffMember.State.OFF_SHIFT])
+		. is_true()
+	)
 	guard = 0
 	while cleaner.state != StaffMember.State.OFF_SHIFT and guard < LIMIT_TICKS:
 		_w.step()

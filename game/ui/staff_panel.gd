@@ -32,6 +32,8 @@ extends CanvasLayer
 ## FADED_ALPHA (it never takes a click). Without a `menu` (a test) the card is
 ## always shown.
 
+signal member_selected(member_id: int)
+
 const ROLES: Array[StaffMember.Role] = [
 	StaffMember.Role.CHECKIN,
 	StaffMember.Role.SECURITY,
@@ -206,6 +208,24 @@ func train_button(member_id: int) -> Button:
 		if btn != null:
 			return btn
 	return null
+
+
+func member_button(member_id: int) -> Button:
+	var node_name := "Member%d" % member_id
+	for role in _energy_boxes:
+		var btn := (_energy_boxes[role] as Node).find_child(node_name, true, false) as Button
+		if btn != null:
+			return btn
+	return null
+
+
+func member_name_text(member_id: int) -> String:
+	if staff == null:
+		return ""
+	var m := staff.get_member(member_id)
+	if m == null:
+		return ""
+	return m.display_name if m.display_name != "" else StaffNames.display_name_for(m.id)
 
 
 func member_level_text(member_id: int) -> String:
@@ -835,6 +855,7 @@ func _on_edit_applied(_edit: BuildEdit, result: BuildResult) -> void:
 func _build() -> void:
 	_card.name = "StaffCard"
 	_card.theme = BuildMenu.HUD_THEME
+	_card.add_to_group(BottomDocks.BOTTOM_STACK_GROUP)
 	BuildMenu.anchor_bottom_centre(_card, BuildMenu.MARGIN + BuildMenu.BAR_H + BuildMenu.GAP)
 	add_child(_card)
 	_roles_box.add_theme_constant_override("separation", ROLE_SEPARATION)
@@ -1098,9 +1119,23 @@ func _refresh_energy_box(role: StaffMember.Role) -> void:
 		return
 	var active_wallet := _resolve_wallet()
 	for m in members:
+		var member_id := m.id
 		var entry := VBoxContainer.new()
 		entry.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		entry.add_theme_constant_override("separation", 1)
+		var name_btn := Button.new()
+		name_btn.name = "Member%d" % member_id
+		name_btn.text = member_name_text(member_id)
+		name_btn.focus_mode = Control.FOCUS_NONE
+		name_btn.theme_type_variation = &"HudButtonCompact"
+		name_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		name_btn.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		name_btn.clip_text = true
+		name_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		name_btn.add_theme_font_size_override("font_size", HudLayout.CAPTION)
+		name_btn.tooltip_text = tr("Inspect {name}").format({"name": name_btn.text})
+		name_btn.pressed.connect(func() -> void: member_selected.emit(member_id))
+		entry.add_child(name_btn)
 		var lbl := _label(member_energy_text(m.id), &"HudSmall")
 		lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		entry.add_child(lbl)
@@ -1140,7 +1175,6 @@ func _refresh_energy_box(role: StaffMember.Role) -> void:
 					cannot_train or (active_wallet != null and not active_wallet.can_afford(cost))
 				)
 				btn.tooltip_text = tr("Upgrade work speed to +{pct}%").format({"pct": m.level * 15})
-				var member_id := m.id
 				btn.pressed.connect(func() -> void: staff.train(member_id, _resolve_wallet()))
 				train_row.add_child(btn)
 			else:

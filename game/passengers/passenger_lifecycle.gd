@@ -158,6 +158,8 @@ static func finish(sim: PassengerSim, p: Passenger, made: bool) -> void:
 	p.stuck = Passenger.Stuck.NONE
 	p.late = false
 	p.collect_tick = 0
+	p.bin_detour_bin = 0
+	p.bin_detour_end = 0
 	p.outcome_tick = sim.tick
 	p.needs_replan = false
 	var result: Dictionary = sim.flight_results.get(
