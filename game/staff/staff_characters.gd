@@ -72,6 +72,10 @@ const PUSHBACK_TUG_OFFSET := Vector3(-2.15, 0.0, 2.6)
 const MARSHAL_SIDE_M := 1.8
 const MARSHAL_WALL_GAP_M := 1.2
 const BELT_LIFT_M := BaggageViews.BELT_TOP
+const PICK_RADIUS_PX := 40.0
+const BODY_RADIUS_M := 0.35
+const BODY_HEIGHT_M := 1.7
+const BODY_PICK_RANGE_M := 1000.0
 
 ## Cached tinted meshes/materials by StaffMember.Role without altering .glb rigs.
 static var _uniform_meshes: Dictionary = {}
@@ -83,6 +87,13 @@ static var _uniform_mats: Dictionary = {}
 @export var flights: FlightSim
 @export var plane_fleet: PlaneFleet
 
+var selected_id := 0:
+	set(value):
+		selected_id = value
+		_sync_follow_anchor()
+var follow_anchor := Node3D.new()
+
+var _ring := MeshInstance3D.new()
 var _pool: Array[Array] = [[], [], [], [], [], []]
 ## Member id -> node.
 var _nodes: Dictionary = {}
@@ -108,6 +119,18 @@ var _dirty := false
 
 func _ready() -> void:
 	process_priority = 1
+	follow_anchor.name = "StaffFollowAnchor"
+	add_child(follow_anchor)
+	var torus := TorusMesh.new()
+	torus.inner_radius = 0.45
+	torus.outer_radius = 0.6
+	var ring_material := StandardMaterial3D.new()
+	ring_material.albedo_color = Color(0.25, 0.78, 0.86)
+	ring_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	torus.material = ring_material
+	_ring.mesh = torus
+	_ring.visible = false
+	add_child(_ring)
 	for scene in CHARACTERS:
 		var probe := scene.instantiate()
 		var player := probe.get_node("AnimationPlayer") as AnimationPlayer
@@ -129,11 +152,62 @@ func _ready() -> void:
 		sync(true)
 
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_PREDELETE:
+		if is_instance_valid(follow_anchor) and not follow_anchor.is_inside_tree():
+			follow_anchor.free()
+		if is_instance_valid(_ring) and not _ring.is_inside_tree():
+			_ring.free()
+
+
 func _process(_delta: float) -> void:
 	if _dirty:
 		_dirty = false
 		sync(true)
 	draw()
+
+
+func select(id: int) -> void:
+	if id != 0 and _nodes.has(id):
+		selected_id = id
+	else:
+		selected_id = 0
+
+
+func pick(camera: Camera3D, screen: Vector2) -> int:
+	var best := 0
+	var best_px := PICK_RADIUS_PX
+	for id in _nodes:
+		var node := _nodes[id] as Node3D
+		if not node.visible:
+			continue
+		var at := node.position + Vector3(0.0, 1.0, 0.0)
+		if camera.is_position_behind(at):
+			continue
+		var px := camera.unproject_position(at).distance_to(screen)
+		if px < best_px:
+			best = id
+			best_px = px
+	return best
+
+
+func pick_body(camera: Camera3D, screen: Vector2) -> int:
+	var best := 0
+	var best_m := INF
+	var from := camera.project_ray_origin(screen)
+	var to := from + camera.project_ray_normal(screen) * BODY_PICK_RANGE_M
+	for id in _nodes:
+		var node := _nodes[id] as Node3D
+		if not node.visible:
+			continue
+		var feet := node.position
+		var head := feet + Vector3(0.0, BODY_HEIGHT_M, 0.0)
+		var closest := Geometry3D.get_closest_points_between_segments(from, to, feet, head)
+		var gap_m := closest[0].distance_to(closest[1])
+		if gap_m <= BODY_RADIUS_M and gap_m < best_m:
+			best = id
+			best_m = gap_m
+	return best
 
 
 func node_for(id: int) -> Node3D:
@@ -380,6 +454,7 @@ func sync(snap: bool = false) -> void:
 	for id in _nodes.keys():
 		if not seen.has(id):
 			_release(id)
+	_sync_follow_anchor()
 
 
 ## Places every node between its last two tick positions.
@@ -477,6 +552,27 @@ func draw() -> void:
 		var player := node.get_node("AnimationPlayer") as AnimationPlayer
 		var base: float = node.get_meta(&"base_speed", 1.0)
 		player.speed_scale = 0.0 if paused else base * clock.speed
+	_sync_follow_anchor()
+
+
+func _sync_follow_anchor() -> void:
+	if selected_id != 0 and _nodes.has(selected_id):
+		var node := _nodes[selected_id] as Node3D
+		if node.visible:
+			var pos := node.position
+			if _prev.has(selected_id) and _cur.has(selected_id):
+				var alpha := clock.alpha if clock != null else 1.0
+				pos = (_prev[selected_id] as Vector3).lerp(_cur[selected_id] as Vector3, alpha)
+				pos.y += lerpf(
+					float(_prev_lift.get(selected_id, 0.0)),
+					float(_cur_lift.get(selected_id, 0.0)),
+					alpha,
+				)
+			follow_anchor.position = pos
+			_ring.position = pos + Vector3(0.0, 0.05, 0.0)
+			_ring.visible = true
+			return
+	_ring.visible = false
 
 
 func _on_ticked(_tick: int) -> void:
@@ -631,6 +727,8 @@ func _release(id: int) -> void:
 	_poses.erase(id)
 	_ramp_idle_slots.erase(id)
 	_ramp_state.erase(id)
+	if selected_id == id:
+		selected_id = 0
 
 
 func _assign_ramp_idle_slot(id: int) -> int:

@@ -16,6 +16,9 @@ const LEFT_FLOOR_GROUP := &"left_column_floor"
 ## Controls that grow up from the bottom-right corner (DebugCorner, DebugPanel):
 ## AlertStack stops GROUP_GAP above them.
 const RIGHT_FLOOR_GROUP := &"right_rail_floor"
+## Wide bottom-centre popups (StaffCard) that right-floor cards lift above on
+## narrow viewports when they overlap horizontally.
+const BOTTOM_STACK_GROUP := &"bottom_centre_stack"
 
 
 ## Whether the right dock stands beside a bar `bar_width` wide in a layer `layer_width` wide.
@@ -89,6 +92,13 @@ static func right_stop_y(
 	var rail_band := Rect2(
 		layer.x - float(HudLayout.MARGIN + HudLayout.RAIL_W), 0.0, float(HudLayout.RAIL_W), layer.y
 	)
+	for node in tree.get_nodes_in_group(BOTTOM_STACK_GROUP) if tree != null else []:
+		var stack_card := node as Control
+		if stack_card == null or not stack_card.is_visible_in_tree():
+			continue
+		var stack_rect := stack_card.get_global_rect()
+		if stack_rect.has_area() and stack_rect.intersects(rail_band):
+			stop = minf(stop, stack_rect.position.y - HudLayout.GROUP_GAP)
 	for node in tree.get_nodes_in_group(RIGHT_FLOOR_GROUP) if tree != null else []:
 		var card := node as Control
 		if card == null or not card.is_visible_in_tree():
@@ -126,6 +136,13 @@ static func right_floor_bottom(
 		var col_right := (layer.x + float(BuildMenu.COLUMN_W)) / 2.0
 		if col_right + float(HudLayout.GROUP_GAP) > card_left:
 			bottom_y = maxf(bottom_y, stack_top + float(HudLayout.GAP))
+	for node in tree.get_nodes_in_group(BOTTOM_STACK_GROUP) if tree != null else []:
+		var stack_card := node as Control
+		if stack_card == null or not stack_card.is_visible_in_tree():
+			continue
+		var stack_rect := stack_card.get_global_rect()
+		if stack_rect.has_area() and stack_rect.end.x + float(HudLayout.GROUP_GAP) > card_left:
+			bottom_y = maxf(bottom_y, layer.y - stack_rect.position.y + float(HudLayout.GAP))
 	for node in tree.get_nodes_in_group(RIGHT_FLOOR_GROUP) if tree != null else []:
 		var other := node as Control
 		if other == null or other == ignore or not other.is_visible_in_tree():

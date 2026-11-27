@@ -111,6 +111,10 @@ func _ready() -> void:
 			menu.tray().visibility_changed.connect(fit)
 		if menu.status_card() != null:
 			menu.status_card().visibility_changed.connect(fit)
+		menu.staff_toggled.connect(_on_staff_toggled)
+	var panel := get_node_or_null("../../StaffPanel") as StaffPanel
+	if panel != null and panel.card() != null:
+		panel.card().resized.connect(fit)
 
 
 func _notification(what: int) -> void:
@@ -123,6 +127,10 @@ func _retranslate() -> void:
 	for row in _rows:
 		row.tooltip_text = tr("Show where this happened")
 	refresh()
+
+
+func _on_staff_toggled(_open: bool) -> void:
+	fit()
 
 
 ## Bottom-right, clear of CategoryBar, BuildTray, and DebugCorner/DebugPanel,

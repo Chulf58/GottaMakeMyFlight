@@ -5,7 +5,7 @@ extends RefCounted
 ## planned differently after a load; station claims are rebuilt from the
 ## members. Cells are saved as [x, y].
 ##
-## Only the current version (StaffSim.SAVE_VERSION, 10) loads: an older save is
+## Only the current version (StaffSim.SAVE_VERSION, 11) loads: an older save is
 ## refused, never migrated (no save migrations before the first release,
 ## decision old-saves-are-not-supported-until-after-a-release-no-save-mi).
 ##
@@ -60,6 +60,8 @@ const MEMBER_KEYS := [
 	"break_room",
 	"break_spot",
 	"level",
+	"display_name",
+	"quirks",
 ]
 const INT_FIELDS := ["id", "role", "state", "station", "slot", "path_index", "seg_mm", "level"]
 const BOOL_FIELDS := ["needs_replan", "search_failed", "leaving", "job_bin"]
@@ -106,6 +108,8 @@ static func save(
 					"break_room": m.break_room,
 					"break_spot": [m.break_spot.x, m.break_spot.y],
 					"level": m.level,
+					"display_name": m.display_name,
+					"quirks": m.quirks.duplicate(),
 				}
 			)
 		)
@@ -309,6 +313,25 @@ static func _member(record: Variant, sim: PassengerSim) -> Variant:
 	m.level = int(record["level"])
 	if m.level < StaffMember.LEVEL_MIN or m.level > StaffMember.LEVEL_MAX:
 		return "member %d level %d is out of range" % [m.id, m.level]
+	if typeof(record["display_name"]) != TYPE_STRING:
+		return "member %d display_name is not a string" % m.id
+	m.display_name = String(record["display_name"]).strip_edges()
+	if m.display_name == "":
+		return "member %d display_name is empty" % m.id
+	if typeof(record["quirks"]) != TYPE_ARRAY:
+		return "member %d quirks is not a list" % m.id
+	var raw_quirks: Array = record["quirks"]
+	if raw_quirks.is_empty() or raw_quirks.size() > 2:
+		return "member %d quirks count %d is out of range" % [m.id, raw_quirks.size()]
+	var seen_quirks := {}
+	for q: Variant in raw_quirks:
+		if typeof(q) != TYPE_STRING:
+			return "member %d has a malformed quirk" % m.id
+		var q_str := String(q)
+		if not StaffNames.QUIRKS.has(q_str) or seen_quirks.has(q_str):
+			return "member %d has an invalid or duplicate quirk '%s'" % [m.id, q_str]
+		seen_quirks[q_str] = true
+		m.quirks.append(q_str)
 	if not WholeNumber.is_whole(record["energy"]):
 		return "member %d energy is not a whole number" % m.id
 	m.energy = int(record["energy"])

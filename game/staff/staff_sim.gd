@@ -65,9 +65,10 @@ signal member_trained(id: int, level: int)
 ## 8: overnight off-shift states (LEAVING_SHIFT, OFF_SHIFT).
 ## 9: soft staff energy and break room states (TO_BREAK, ON_BREAK).
 ## 10: per-member training level (StaffMember.level).
+## 11: per-member display_name and cozy quirks (StaffNames).
 ## Only this version loads; older saves are refused (no migrations before a
 ## release).
-const SAVE_VERSION := 10
+const SAVE_VERSION := 11
 ## Empty gap ahead before staff walk out for an overnight off-shift: 2 game hours.
 const SHIFT_GAP_TICKS := 2400
 ## How early staff return from off-shift before first morning activity: 30 game min.
@@ -142,6 +143,9 @@ func hire(role: StaffMember.Role) -> int:
 	m.id = _next_id
 	_next_id += 1
 	m.role = role
+	var name_seed := int(sim.clock.rng.seed) if sim != null and sim.clock != null else 0
+	m.display_name = StaffNames.display_name_for(m.id, name_seed)
+	m.quirks = StaffNames.quirk_keys_for(m.id, name_seed)
 	if role == StaffMember.Role.CLEANER:
 		m.patrol_wait = CleanerJobs.PATROL_PAUSE_TICKS
 	if role != StaffMember.Role.RAMP and is_off_shift():

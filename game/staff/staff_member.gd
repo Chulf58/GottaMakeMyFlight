@@ -91,6 +91,8 @@ var energy_ticks := 0
 var break_room := 0
 var break_spot := NO_CELL
 var level := LEVEL_MIN
+var display_name := ""
+var quirks: Array[String] = []
 
 
 func is_tired() -> bool:
