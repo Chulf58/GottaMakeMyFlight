@@ -130,7 +130,7 @@ func bind(
 ## error and returns null. While no check-in desk connects via belts to a
 ## ready bag room, the passenger checks no bag and it returns null with no
 ## error (decision baggage-loop-completion-connect-gated-penalties-visible-wait).
-func check_in(passenger_id: int, flight_id: String, desk_id: int) -> Bag:
+func check_in(passenger_id: int, flight_id: String, desk_id: int, color_index := -1) -> Bag:
 	if not has_connected_bag_room():
 		return null
 	for kept in _bags:
@@ -145,6 +145,11 @@ func check_in(passenger_id: int, flight_id: String, desk_id: int) -> Bag:
 	bag.passenger = passenger_id
 	bag.flight = flight_id
 	bag.desk = desk_id
+	bag.color = (
+		clampi(color_index, 0, Bag.SUITCASE_COLORS.size() - 1)
+		if color_index >= 0
+		else Bag.color_for_passenger(passenger_id)
+	)
 	bag.created_tick = clock.tick
 	bag.wait_tick = clock.tick
 	bag.cutoff_tick = flights.doors_close_tick(flight_id) - LOAD_LEAD_TICKS
@@ -221,9 +226,15 @@ func waiting_for_ramp_carts() -> Array[int]:
 	var out: Array[int] = []
 	if grid == null or flights == null or not shuttle_can_dispatch.is_valid():
 		return out
+	var reserved := _pending_shuttle_bags()
 	var ready_by_flight := {}
 	for bag in _bags:
-		if bag.is_settled() or bag.shuttle_id != 0 or tick < bag.cutoff_tick:
+		if (
+			bag.is_settled()
+			or bag.shuttle_id != 0
+			or reserved.has(bag.id)
+			or tick < bag.cutoff_tick
+		):
 			continue
 		if bag.state == Bag.State.IN_ROOM:
 			var list: Array[Bag] = ready_by_flight.get(bag.flight, [] as Array[Bag])
@@ -359,7 +370,9 @@ func from_snapshot(data: Dictionary) -> bool:
 
 
 func _on_checked_in(passenger_id: int, desk_id: int) -> void:
-	check_in(passenger_id, passengers.get_passenger(passenger_id).flight_id, desk_id)
+	var p := passengers.get_passenger(passenger_id)
+	var color_index := p.checked_bag_color if p != null else -1
+	check_in(passenger_id, p.flight_id, desk_id, color_index)
 
 
 func _on_edit_applied(_edit: BuildEdit, _result: BuildResult) -> void:
@@ -383,6 +396,7 @@ func _reconcile() -> void:
 				var bag := get_bag(bag_id)
 				if bag != null and not bag.is_settled():
 					_settle(bag, false, Bag.Cause.LOST, tick)
+			shuttle.pending_bag_ids.clear()
 			_shuttle_by_id.erase(shuttle.id)
 			shuttle_cancelled.emit(shuttle.id, shuttle.cart_id)
 		else:
@@ -400,6 +414,18 @@ func _reconcile() -> void:
 				_rest(bag)
 			else:
 				bag.state = state
+	for shuttle in _shuttles:
+		var live_pending: Array[int] = []
+		for bag_id in shuttle.pending_bag_ids:
+			var bag := get_bag(bag_id)
+			if (
+				bag != null
+				and not bag.is_settled()
+				and bag.state == Bag.State.IN_ROOM
+				and bag.shuttle_id == 0
+			):
+				live_pending.append(bag_id)
+		shuttle.pending_bag_ids = live_pending
 
 
 func _transfer() -> void:
@@ -470,6 +496,8 @@ func _rest(bag: Bag) -> void:
 func _advance_shuttles() -> void:
 	var kept: Array[BaggageShuttle] = []
 	for shuttle in _shuttles:
+		if shuttle.phase == BaggageShuttle.Phase.LOADING:
+			_advance_loading(shuttle)
 		if shuttle.phase == BaggageShuttle.Phase.OUTBOUND and tick >= shuttle.arrive_tick:
 			shuttle.phase = BaggageShuttle.Phase.UNLOADING
 			shuttle_arrived.emit(shuttle.id, shuttle.flight)
@@ -488,10 +516,41 @@ func _advance_shuttles() -> void:
 	_shuttles = kept
 
 
+func _advance_loading(shuttle: BaggageShuttle) -> void:
+	while (
+		not shuttle.pending_bag_ids.is_empty()
+		and (tick >= shuttle.next_load_tick or tick >= shuttle.start_tick)
+	):
+		var bag_id: int = shuttle.pending_bag_ids.pop_front()
+		var bag := get_bag(bag_id)
+		if bag != null and not bag.is_settled() and bag.state == Bag.State.IN_ROOM:
+			bag.shuttle_id = shuttle.id
+			shuttle.bag_ids.append(bag_id)
+			if tick < shuttle.start_tick:
+				shuttle.next_load_tick += maxi(1, shuttle.load_step_ticks)
+				break
+	if tick >= shuttle.start_tick:
+		shuttle.phase = BaggageShuttle.Phase.OUTBOUND
+
+
+func _pending_shuttle_bags() -> Dictionary:
+	var out := {}
+	for shuttle in _shuttles:
+		for bag_id in shuttle.pending_bag_ids:
+			out[bag_id] = true
+	return out
+
+
 func _settle_due() -> void:
+	var reserved := _pending_shuttle_bags()
 	var ready_by_flight := {}
 	for bag in _bags:
-		if bag.is_settled() or bag.shuttle_id != 0 or tick < bag.cutoff_tick:
+		if (
+			bag.is_settled()
+			or bag.shuttle_id != 0
+			or reserved.has(bag.id)
+			or tick < bag.cutoff_tick
+		):
 			continue
 		if bag.state == Bag.State.IN_ROOM:
 			var list: Array[Bag] = ready_by_flight.get(bag.flight, [] as Array[Bag])
@@ -519,8 +578,9 @@ func _dispatch_or_load(flight_id: String, room_bags: Array[Bag]) -> void:
 	for cart_id: int in cart_ids:
 		var group: Array[Bag] = by_cart[cart_id]
 		if cart_id == 0:
-			for bag in group:
-				_settle(bag, true, Bag.Cause.NONE, tick)
+			if stand.is_empty() or (doors_close >= 0 and tick >= doors_close):
+				for bag in group:
+					_settle(bag, false, Bag.Cause.LATE, tick)
 			continue
 		if stand.is_empty():
 			for bag in group:
@@ -550,6 +610,10 @@ func _cart_for_bag(bag: Bag) -> int:
 	var room_id := grid.room_at(bag.cell)
 	if room_id == 0:
 		return 0
+	var room := grid.get_room(room_id)
+	if room.is_empty():
+		return 0
+	var area: Rect2i = room["rect"]
 	var in_room: Array[int] = []
 	var ids := grid.object_ids()
 	ids.sort()
@@ -557,7 +621,7 @@ func _cart_for_bag(bag: Bag) -> int:
 		var record := grid.get_object(object_id)
 		if StringName(record["def"]) != CART_DEF:
 			continue
-		if grid.room_at(record["anchor"]) == room_id:
+		if RoomRules.piece_inside(grid, object_id, area):
 			in_room.append(object_id)
 	if in_room.is_empty():
 		return 0
@@ -607,15 +671,31 @@ func _start_shuttle(
 	plan: Dictionary,
 	group: Array[Bag],
 ) -> void:
+	var sorted := group.duplicate()
+	sorted.sort_custom(
+		func(a: Bag, b: Bag) -> bool:
+			return a.rest_tick < b.rest_tick or (a.rest_tick == b.rest_tick and a.id < b.id)
+	)
+	var doors_close := flights.doors_close_tick(flight_id)
 	var travel: int = plan["travel"]
+	var avail := (
+		(doors_close - tick - travel - BaggageShuttle.UNLOAD_TICKS)
+		if doors_close >= 0
+		else sorted.size() * BaggageShuttle.LOAD_STEP_TICKS
+	)
+	var step_ticks := clampi(
+		maxi(1, int((avail - 1) / float(maxi(1, sorted.size())))), 1, BaggageShuttle.LOAD_STEP_TICKS
+	)
+	var load_span := 0 if avail <= 1 else mini(avail - 1, sorted.size() * step_ticks)
 	var shuttle := BaggageShuttle.new()
 	shuttle.id = _next_shuttle_id
 	_next_shuttle_id += 1
 	shuttle.cart_id = cart_id
 	shuttle.flight = flight_id
-	shuttle.phase = BaggageShuttle.Phase.OUTBOUND
-	shuttle.start_tick = tick
-	shuttle.arrive_tick = tick + travel
+	shuttle.load_start_tick = tick
+	shuttle.load_step_ticks = step_ticks
+	shuttle.start_tick = tick + load_span
+	shuttle.arrive_tick = shuttle.start_tick + travel
 	shuttle.unload_tick = shuttle.arrive_tick + BaggageShuttle.UNLOAD_TICKS
 	shuttle.return_tick = shuttle.unload_tick + travel
 	shuttle.origin_world = plan["origin"]
@@ -623,9 +703,22 @@ func _start_shuttle(
 	shuttle.target_world = plan["target"]
 	shuttle.target_yaw = StandPlacement.SIDE_YAW[StandPlacement.side_of(stand)]
 	shuttle.waypoints = plan["route"]
-	for bag in group:
-		bag.shuttle_id = shuttle.id
-		shuttle.bag_ids.append(bag.id)
+	if load_span == 0:
+		shuttle.phase = BaggageShuttle.Phase.OUTBOUND
+		shuttle.next_load_tick = tick
+		for bag: Bag in sorted:
+			bag.shuttle_id = shuttle.id
+			shuttle.bag_ids.append(bag.id)
+	else:
+		shuttle.phase = BaggageShuttle.Phase.LOADING
+		shuttle.next_load_tick = tick + step_ticks
+		for i in sorted.size():
+			var bag: Bag = sorted[i]
+			if i == 0:
+				bag.shuttle_id = shuttle.id
+				shuttle.bag_ids.append(bag.id)
+			else:
+				shuttle.pending_bag_ids.append(bag.id)
 	_shuttles.append(shuttle)
 	_shuttle_by_id[shuttle.id] = shuttle
 	shuttle_dispatched.emit(shuttle.id, flight_id, cart_id)

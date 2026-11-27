@@ -82,6 +82,10 @@ func room(area: Rect2i) -> int:
 	return grid.room_at(area.position)
 
 
+func cart(cell := Vector2i(11, 7), facing := 0) -> int:
+	return PassengerTestWorld.place(grid, &"baggage_cart", cell, facing)
+
+
 ## Lays and shapes a belt line the way the Belt tool does, with no wallet.
 func lay(from: Vector2i, to: Vector2i) -> void:
 	var plan := BeltShaper.plan_line(grid, from, to, 0)

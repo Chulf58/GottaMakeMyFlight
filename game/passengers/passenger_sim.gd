@@ -38,7 +38,7 @@ signal stage_changed(id: int, stage: Passenger.Stage)
 signal checked_in(id: int, desk: int)
 
 ## The history of SAVE_VERSION is in PassengerSimSave.
-const SAVE_VERSION := 41
+const SAVE_VERSION := 42
 ## 1.96 m/s; the Toon walk clips cover 1.92-1.95 m/s.
 const WALK_MM := 98
 ## 3.5 m/s, a jog (user-ruled); the Toon run clips cover 4.17-5.30 m/s,
@@ -661,7 +661,9 @@ func _spawn(
 	flight_id: String, variant: int, arrival := ArrivalTypes.Type.TYPICAL, walk: Array[Vector3] = []
 ) -> Passenger:
 	mark_changed()
-	return PassengerLifecycle.spawn(self, flight_id, variant, arrival, walk)
+	var p := PassengerLifecycle.spawn(self, flight_id, variant, arrival, walk)
+	p.checked_bag_color = Bag.color_for_passenger(p.id)
+	return p
 
 
 func _finish(p: Passenger, made: bool) -> void:

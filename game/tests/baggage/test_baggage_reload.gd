@@ -72,6 +72,7 @@ func test_a_passenger_checks_one_bag() -> void:
 func test_a_save_after_every_tick_of_a_busy_run_reloads() -> void:
 	var world := BagTestWorld.make(self, 700)
 	var desks: Array[int] = [world.line(), world.side_desk()]
+	world.cart()
 	var states := {}
 	while world.clock.tick < 950:
 		world.step()

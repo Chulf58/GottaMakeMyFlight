@@ -46,14 +46,19 @@ func test_a_json_round_trip_loads_the_same_bags() -> void:
 
 func test_results_and_totals_round_trip() -> void:
 	var world := BagTestWorld.make(self, 400)
-	world.sim.check_in(1, BagTestWorld.FLIGHT, world.line())
+	var desk_id := world.line()
+	world.cart()
+	world.sim.check_in(1, BagTestWorld.FLIGHT, desk_id)
 	world.sim.check_in(2, BagTestWorld.FLIGHT, world.desk(Vector2i(2, 2)))
-	world.run_to(201)
+	world.run_to(200)
+	var unload := world.sim.shuttles()[0].unload_tick
+	world.run_to(unload)
 	var data: Dictionary = JSON.parse_string(JSON.stringify(world.sim.to_snapshot()))
 	var twin := BagTestWorld.make(self, 400)
 	twin.line()
+	twin.cart()
 	twin.desk(Vector2i(2, 2))
-	twin.run_to(201)
+	twin.run_to(unload)
 	assert_bool(twin.sim.from_snapshot(data)).is_true()
 	assert_str(twin.signature()).is_equal(world.signature())
 	assert_that(twin.sim.results).is_equal(world.sim.results)

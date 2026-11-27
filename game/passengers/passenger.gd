@@ -145,6 +145,7 @@ var shop_cooldown := 0
 ## What it brings to security (CarryOnTraits), drawn at spawn: 0 to 2 carry-on
 ## bags, and whether it carries liquids and whether it sets off the alarm.
 var carry_on := 0
+var checked_bag_color := 0
 var liquids := false
 var alarm := false
 ## Inside Stage.SECURITY (SecurityRuntime): the phase (SecurityRuntime.Phase,

@@ -23,12 +23,15 @@ func before_test() -> void:
 
 func test_loaded_bag_credits_handling_bonus_under_fees() -> void:
 	var desk_id := _world.line()
+	_world.cart()
 	var bag := _world.sim.check_in(1, BagTestWorld.FLIGHT, desk_id)
 	assert_object(bag).is_not_null()
 	_world.run_to(BagTestWorld.ARRIVAL)
 	assert_int(bag.state).is_equal(Bag.State.IN_ROOM)
 	assert_int(_wallet.balance).is_equal(0)
 	_world.run_to(bag.cutoff_tick)
+	assert_int(_world.sim.shuttles().size()).is_equal(1)
+	_world.run_to(_world.sim.shuttles()[0].unload_tick)
 	assert_int(bag.state).is_equal(Bag.State.LOADED)
 	assert_int(_wallet.balance).is_equal(PriceTable.CHECKED_BAG_BONUS)
 	assert_array(_txs).is_equal([[PriceTable.CHECKED_BAG_BONUS, Wallet.Category.FEES]])

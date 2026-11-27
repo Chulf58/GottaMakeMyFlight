@@ -42,4 +42,5 @@ static func connect_reference_desk2(grid: BuildGrid) -> int:
 			assert(applied.ok, "reference belt edit refused: %s" % applied.reason_text())
 	var room_id := grid.room_at(room_rect.position)
 	assert(RoomRules.status(grid, room_id).ok, "reference bag room is not ready")
+	PassengerTestWorld.place(grid, &"baggage_cart", Vector2i(14, 14), 0)
 	return room_id

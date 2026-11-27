@@ -59,6 +59,7 @@ const INT_FIELDS := [
 	"cafe_cooldown",
 	"arrival_type",
 	"carry_on",
+	"checked_bag_color",
 	"security_phase",
 	"security_work",
 	"toilet_need",
@@ -358,6 +359,8 @@ static func _passenger(entry: Variant, grid: BuildGrid, next_id: int) -> Passeng
 		and p.shop_cooldown >= 0
 		and p.carry_on >= 0
 		and p.carry_on <= CarryOnTraits.MAX_BAGS
+		and p.checked_bag_color >= 0
+		and p.checked_bag_color < Bag.SUITCASE_COLORS.size()
 		and p.security_phase >= 0
 		and p.security_phase < SecurityRuntime.Phase.size()
 		and p.security_work >= 0
