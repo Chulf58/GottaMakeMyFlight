@@ -32,6 +32,8 @@ const STAFF_SPOT := &"staff_spot_unusable"
 const RAMP_BAGGAGE := &"ramp_baggage"
 const RAMP_PUSHBACK := &"ramp_pushback"
 const BAGGAGE_CONNECT := &"baggage_connect"
+const BUS_GATE_NEEDS_STAND := &"bus_gate_needs_stand"
+const STAND_NEEDS_BUS_GATE := &"remote_stand_needs_bus_gate"
 const CHARTER_GAP := &"charter_gap"
 const OFFERS_AVAILABLE := &"offers_available"
 ## Three game minutes (one real second is one game minute at 1x).
@@ -247,13 +249,15 @@ static func ramp(
 	sim: PassengerSim, baggage: BaggageSim = null, dispatch: RampDispatch = null
 ) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
-	if sim == null or sim.staff == null:
+	if sim == null:
 		return out
-	var resolved_dispatch := dispatch if dispatch != null else sim.staff.ramp_dispatch
+	var resolved_dispatch := (
+		dispatch if dispatch != null else (sim.staff.ramp_dispatch if sim.staff != null else null)
+	)
 	var resolved_baggage := baggage
 	if resolved_baggage == null and resolved_dispatch != null:
 		resolved_baggage = resolved_dispatch.baggage
-	if resolved_baggage != null:
+	if sim.staff != null and resolved_baggage != null:
 		var waiting_carts := resolved_baggage.waiting_for_ramp_carts()
 		if not waiting_carts.is_empty():
 			var reason := resolved_baggage.waiting_for_ramp_reason(sim.staff)
@@ -282,7 +286,7 @@ static func ramp(
 						}
 					)
 				)
-	if resolved_dispatch != null:
+	if sim.staff != null and resolved_dispatch != null:
 		var emergencies := resolved_dispatch.recent_emergencies()
 		if not emergencies.is_empty():
 			var targets: Array[Vector3] = []
@@ -314,7 +318,61 @@ static func ramp(
 				)
 			)
 	out.append_array(baggage_connect(sim, resolved_baggage))
+	out.append_array(bus_pairing(sim))
 	return out
+
+
+## Self-clearing notice when the airport has only one half of the Bus gate /
+## Remote stand pair (ruling b4a4d6d1).
+static func bus_pairing(sim: PassengerSim) -> Array[Dictionary]:
+	if sim == null or sim.grid == null:
+		return []
+	var bus_ids: Array[int] = []
+	for id in sim.grid.object_ids():
+		if GateDesks.is_bus_desk(sim.grid, id):
+			bus_ids.append(id)
+	var stand_ids := RemoteStands.object_ids(sim.grid)
+	if not bus_ids.is_empty() and stand_ids.is_empty():
+		var targets: Array[Vector3] = []
+		for id in bus_ids:
+			if targets.size() >= MAX_TARGETS:
+				break
+			targets.append(object_point(sim.grid, id))
+		return [
+			{
+				"key": BUS_GATE_NEEDS_STAND,
+				"title": _translator.tr("Bus gate needs a Remote stand"),
+				"detail":
+				_translator.tr(
+					"Build a Remote stand on the apron. Flights pair with Bus gates automatically."
+				),
+				"targets": targets,
+				"show_after": 0,
+				"clear_after": 0,
+				"subtle": true,
+			}
+		]
+	if bus_ids.is_empty() and not stand_ids.is_empty():
+		var targets: Array[Vector3] = []
+		for id in stand_ids:
+			if targets.size() >= MAX_TARGETS:
+				break
+			targets.append(object_point(sim.grid, id))
+		return [
+			{
+				"key": STAND_NEEDS_BUS_GATE,
+				"title": _translator.tr("Remote stand needs a Bus gate"),
+				"detail":
+				_translator.tr(
+					"Place a Bus gate desk near an apron exit. Remote flights pair automatically."
+				),
+				"targets": targets,
+				"show_after": 0,
+				"clear_after": 0,
+				"subtle": true,
+			}
+		]
+	return []
 
 
 ## Non-blocking info alert when at least one Bag Room exists with 0 connected

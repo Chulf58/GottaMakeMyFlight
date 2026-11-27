@@ -186,8 +186,8 @@ const ITEMS := {
 	BuildMode.Tool.SCANNER: ["Scanner", "scanner", ""],
 	BuildMode.Tool.SEATS: ["Seats", "seats", ""],
 	BuildMode.Tool.GATE_DESK: ["Gate desk", "gate_desk", ""],
-	BuildMode.Tool.BUS_GATE_DESK: ["Bus gate", "gate_desk", ""],
-	BuildMode.Tool.REMOTE_STAND: ["Remote stand", "curb_bay", ""],
+	BuildMode.Tool.BUS_GATE_DESK: ["Bus gate", "bus_gate_desk", ""],
+	BuildMode.Tool.REMOTE_STAND: ["Remote stand", "remote_stand", ""],
 	BuildMode.Tool.SCREEN: ["Screen", "screen_stand", ""],
 	BuildMode.Tool.CAFE_ROOM: ["Cafe", "cafe_room", "3x3 min"],
 	BuildMode.Tool.COUNTER: ["Counter", "counter", ""],
@@ -234,7 +234,11 @@ const ITEMS := {
 const LANE_ITEMS := {}
 ## Hover details that say what the placed thing needs to work, in the warning
 ## colour: a bag room does nothing without a belt end.
-const CARD_NEEDS := {BuildMode.Tool.BAG_ROOM: "Needs belt end"}
+const CARD_NEEDS := {
+	BuildMode.Tool.BAG_ROOM: "Needs belt end",
+	BuildMode.Tool.BUS_GATE_DESK: "Needs Remote stand",
+	BuildMode.Tool.REMOTE_STAND: "Needs Bus gate",
+}
 ## Hover details that say what the placed thing costs to run, in the plain hint
 ## style (costs are never red), alongside FurnitureTools.RUNNING_COSTS: a toilet
 ## stall is charged its upkeep every game day once its room is ready, a screen
@@ -590,6 +594,8 @@ class Words:
 			tr("Security lane", "build menu"),
 			tr("2x3", "build menu"),
 			tr("Needs belt end", "build menu"),
+			tr("Needs Remote stand", "build menu"),
+			tr("Needs Bus gate", "build menu"),
 			tr("Staff", "build menu"),
 			tr("Award trophy", "build menu"),
 		]
