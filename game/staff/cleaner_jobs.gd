@@ -238,7 +238,7 @@ static func patrol_path(staff: StaffSim, m: StaffMember, tick: int) -> Array[Vec
 		for cell: Vector2i in reach:
 			if (cell.x % 4 != 0 or cell.y % 4 != 0) or seen.has(cell):
 				continue
-			if not grid.is_indoor(cell) or not grid.is_walkable(cell):
+			if not grid.is_indoor(cell) or not grid.is_walkable(cell) or grid.is_belt_cell(cell):
 				continue
 			if grid.object_at(cell) != 0:
 				continue
@@ -255,7 +255,12 @@ static func patrol_path(staff: StaffSim, m: StaffMember, tick: int) -> Array[Vec
 				if x % 4 != 0 or y % 4 != 0:
 					continue
 				var cell := Vector2i(x, y)
-				if seen.has(cell) or not grid.is_indoor(cell) or not grid.is_walkable(cell):
+				if (
+					seen.has(cell)
+					or not grid.is_indoor(cell)
+					or not grid.is_walkable(cell)
+					or grid.is_belt_cell(cell)
+				):
 					continue
 				if grid.object_at(cell) != 0:
 					continue
@@ -282,7 +287,7 @@ static func patrol_path(staff: StaffSim, m: StaffMember, tick: int) -> Array[Vec
 static func _reachable_waypoint(
 	grid: BuildGrid, reach: Dictionary, starts: Array[Vector2i], cell: Vector2i
 ) -> bool:
-	if not grid.is_indoor(cell) or not grid.is_walkable(cell):
+	if not grid.is_indoor(cell) or not grid.is_walkable(cell) or grid.is_belt_cell(cell):
 		return false
 	if reach.is_empty():
 		return true

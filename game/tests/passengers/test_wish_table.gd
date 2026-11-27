@@ -95,4 +95,6 @@ func test_the_wish_is_independent_of_the_starting_boredom() -> void:
 	for m: float in means:
 		assert_float(absf(m - mean)).is_less(0.6)
 	# Control: the start boredom does spread over its range.
-	assert_float(var_b).is_greater(50.0)
+	var span := BoredomSim.START_MAX - BoredomSim.START_MIN
+	var expected_var := float((span + 1) * (span + 1) - 1) / 12.0
+	assert_float(var_b).is_greater(expected_var * 0.90)

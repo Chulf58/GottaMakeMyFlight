@@ -156,7 +156,10 @@ signal loaded(ok: bool)
 ## saves are refused (no migration).
 ## 43: BusShuttleSim ("buses" part), Passenger.Stage.ON_BUS (PassengerSim v40);
 ## version 42 saves are refused (no migration).
-const SAVE_VERSION := 43
+## 44: OfferBoard v11 (day1_intro_shown), LandsideSnapshot v12 (lots_kind),
+## BuildGridSave v3 (h_hatches, v_hatches), PassengerSim v41 (missed_phase);
+## version 43 saves are refused (no migration).
+const SAVE_VERSION := 44
 ## Parts a version 2 save may lack: "day_ledger" came after the version.
 const OPTIONAL_PARTS := ["day_ledger"]
 const SAVE_DIR := "user://saves"

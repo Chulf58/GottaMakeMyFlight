@@ -112,7 +112,7 @@ func test_totals_below_the_retained_settled_passengers_are_refused() -> void:
 	_a.run_to(PassengerTestWorld.doors_tick() - 10)
 	for i in 4:
 		_a.sim.spawn_now(PassengerTestWorld.FLIGHT)
-	_a.run_to(PassengerTestWorld.doors_tick() + 50)
+	_a.run_to(PassengerTestWorld.doors_tick() + 20)
 	assert_int(_a.sim.passenger_ids().size()).is_equal(4)
 	var data := _round_trip()
 	_b = PassengerTestWorld.reference_world()

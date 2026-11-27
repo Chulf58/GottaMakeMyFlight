@@ -88,7 +88,9 @@ func test_a_lot_tool_snaps_to_the_spot_under_the_pointer_and_pays_for_it() -> vo
 	assert_vector(plan.centre).is_equal(STARTER.lots[0].centre)
 	assert_int(plan.price).is_equal(LOT_PRICE)
 	assert_bool(_placement.apply(plan, null).ok).is_true()
-	assert_array(_sim.lots_built).is_equal([true, false])
+	assert_int(_sim.lots_built.size()).is_equal(STARTER.lots.size())
+	assert_bool(_sim.lots_built[0]).is_true()
+	assert_int(_sim.lots_built.count(true)).is_equal(1)
 	assert_int(_sim.lots_paid[0]).is_equal(LOT_PRICE)
 	assert_int(_wallet.balance).is_equal(START_MONEY - LOT_PRICE)
 
@@ -101,11 +103,13 @@ func test_each_tool_finds_the_spot_of_its_own_kind() -> void:
 	assert_bool(multi.result.ok).is_true()
 	var bay := _placement.plan_build(LandsidePlacement.Kind.CURB, IN_BAY_1)
 	assert_int(bay.spot).is_equal(1)
-	# A multi-storey tool over a surface lot's ground is on no spot of its kind.
-	var wrong := _placement.plan_build(LandsidePlacement.Kind.MULTI_STOREY, IN_LOT_0)
-	assert_int(wrong.result.reason).is_equal(BuildResult.Reason.LANDSIDE_NOT_ON_SPOT)
-	var wrong_way := _placement.plan_build(LandsidePlacement.Kind.SURFACE_LOT, IN_MULTI)
-	assert_int(wrong_way.result.reason).is_equal(BuildResult.Reason.LANDSIDE_NOT_ON_SPOT)
+	# Every pad is kind-flexible: both tools snap cleanly onto any free pad.
+	var swapped_multi := _placement.plan_build(LandsidePlacement.Kind.MULTI_STOREY, IN_LOT_0)
+	assert_bool(swapped_multi.result.ok).is_true()
+	assert_int(swapped_multi.spot).is_equal(0)
+	var swapped_surface := _placement.plan_build(LandsidePlacement.Kind.SURFACE_LOT, IN_MULTI)
+	assert_bool(swapped_surface.result.ok).is_true()
+	assert_int(swapped_surface.spot).is_equal(1)
 
 
 func test_the_tool_snaps_to_the_nearest_free_spot() -> void:
@@ -132,7 +136,7 @@ func test_off_every_spot_is_refused_and_nothing_changes() -> void:
 		var result := _build(kind, NOWHERE)
 		assert_bool(result.ok).is_false()
 		assert_int(result.reason).is_equal(BuildResult.Reason.LANDSIDE_NOT_ON_SPOT)
-	assert_array(_sim.lots_built).is_equal([false, false])
+	assert_bool(_sim.lots_built.has(true)).is_false()
 	assert_array(_sim.curbs_built).is_equal([false, false])
 	assert_int(_wallet.balance).is_equal(START_MONEY)
 	assert_int(_placement.undo_size()).is_equal(0)

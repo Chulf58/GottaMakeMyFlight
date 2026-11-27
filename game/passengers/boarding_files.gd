@@ -428,6 +428,10 @@ func queued(sim: PassengerSim, p: Passenger, own: Dictionary) -> int:
 	var outside := []
 	var inside := {}
 	var door_free := {}
+	var corridor_free := {}
+	var outside_free := {}
+	var popped := {}
+	var overtaken := {}
 	var gap := step_ticks()
 	for e: Dictionary in entries:
 		if e["door_tick"] < 0:
@@ -436,6 +440,8 @@ func queued(sim: PassengerSim, p: Passenger, own: Dictionary) -> int:
 			if e["trail"] < GAP_MM and e["id"] != p.id:
 				var free: int = sim.tick + JourneyForecast.walk_ticks(GAP_MM - e["trail"]) + 1
 				door_free[e["door"]] = maxi(door_free.get(e["door"], free), free)
+				corridor_free[e["door"]] = maxi(corridor_free.get(e["door"], free), free)
+				outside_free[e["door"]] = maxi(outside_free.get(e["door"], free), free)
 		else:
 			var list: Array = inside.get(e["door"], [])
 			list.append([e["door_tick"], e["id"], e])
@@ -445,24 +451,34 @@ func queued(sim: PassengerSim, p: Passenger, own: Dictionary) -> int:
 	doors.sort()
 	for door: int in doors:
 		(inside[door] as Array).sort()
-	var next := {}
 	var o := 0
 	var plane_free := -JourneyForecast.NEVER
 	while true:
 		# The next walker to the plane door: the first outside, or the first
-		# indoors at each door, whichever is due soonest.
+		# indoors at each door, whichever is due soonest. A later-entering
+		# walker whose own door_tick precedes a delayed head's corridor_free
+		# joins ahead of it in walk-left.
 		var best: Array = []
 		if o < outside.size():
-			best = [outside[o][0], outside[o][1], 0, 0]
+			best = [outside[o][0], outside[o][1], 0, 0, -1]
 		for door: int in doors:
-			var k: int = next.get(door, 0)
-			if k >= (inside[door] as Array).size():
+			var list: Array = inside[door]
+			if list.is_empty():
 				continue
-			var e: Dictionary = inside[door][k][2]
+			var delays: Array = overtaken.get(door, [])
+			var pick := _next_door_pick(
+				sim.tick,
+				list,
+				corridor_free.get(door, -JourneyForecast.NEVER),
+				outside_free.get(door, -JourneyForecast.NEVER),
+				popped.get(door, []),
+				delays
+			)
+			var e: Dictionary = list[pick][2]
 			var at_door := maxi(e["door_tick"], door_free.get(door, e["door_tick"]))
 			var due: int = e["plane_tick"] + at_door - e["door_tick"]
 			if best.is_empty() or due < best[0] or (due == best[0] and e["id"] < best[1]):
-				best = [due, e["id"], door, at_door]
+				best = [due, e["id"], door, at_door, pick]
 		if best.is_empty():
 			break
 		var arrive := maxi(best[0], plane_free + gap)
@@ -470,23 +486,109 @@ func queued(sim: PassengerSim, p: Passenger, own: Dictionary) -> int:
 		if best[2] == 0:
 			o += 1
 		else:
-			next[best[2]] = next.get(best[2], 0) + 1
+			var door: int = best[2]
+			var picked: Dictionary = (inside[door] as Array).pop_at(best[4])[2]
 			# It leaves the door when the apron has room, and the next one
-			# indoors reaches the door a gap after that.
-			door_free[best[2]] = best[3] + arrive - best[0] + gap
+			# indoors reaches the door a gap after that. A pending walker on a
+			# wait spot is off the line and does not delay corridor_free behind
+			# it until admitted.
+			door_free[door] = best[3] + arrive - best[0] + gap
+			if not (_pending.has(picked["id"]) and waiters.owed_mm(picked["id"]) > 0):
+				var walk_gap := JourneyForecast.walk_ticks(GAP_MM)
+				corridor_free[door] = (
+					maxi(corridor_free.get(door, picked["door_tick"]), picked["door_tick"])
+					+ walk_gap
+				)
+				var door_popped: Array = popped.get(door, [])
+				door_popped.append(picked)
+				popped[door] = door_popped
+			if best[4] > 0:
+				var delays: Array = overtaken.get(door, [])
+				delays.append(int(picked.get("enter_tick", sim.tick)))
+				overtaken[door] = delays
 		if best[1] == p.id:
 			return arrive
 	return own["plane_tick"]
 
 
+func _next_door_pick(
+	now: int, list: Array, free_at: int, out_free: int, popped: Array, delays: Array
+) -> int:
+	var head: Dictionary = list[0][2]
+	var base := maxi(head["door_tick"], free_at)
+	if base > head["door_tick"]:
+		var walk_gap := JourneyForecast.walk_ticks(GAP_MM)
+		for idx in range(1, list.size()):
+			var cand: Dictionary = list[idx][2]
+			if cand["door_tick"] >= base:
+				break
+			var enter := int(cand.get("enter_tick", now))
+			if enter <= now:
+				continue
+			var same_or_later := 0
+			for t: int in delays:
+				if t >= enter:
+					same_or_later += 1
+			if cand["door_tick"] >= base - same_or_later * walk_gap:
+				continue
+			if _clears_corridor(now, enter, cand["door_tick"], out_free, popped, list, idx):
+				return idx
+	return 0
+
+
+func _clears_corridor(
+	now: int, enter: int, cand_door: int, out_free: int, popped: Array, list: Array, until_idx: int
+) -> bool:
+	var walk_gap := JourneyForecast.walk_ticks(GAP_MM)
+	var cand_rem := cand_door - enter
+	var has_prev := false
+	var prev_rem := 0
+	for u: Dictionary in popped:
+		var start := maxi(now, int(u.get("enter_tick", now)))
+		if start >= enter:
+			continue
+		prev_rem = _next_corridor_rem(u, start, enter, out_free, walk_gap, has_prev, prev_rem)
+		has_prev = true
+	for j in range(until_idx):
+		var w: Dictionary = list[j][2]
+		if _pending.has(w["id"]) and waiters.owed_mm(w["id"]) > 0:
+			continue
+		var start := maxi(now, int(w.get("enter_tick", now)))
+		if start >= enter:
+			return false
+		prev_rem = _next_corridor_rem(w, start, enter, out_free, walk_gap, has_prev, prev_rem)
+		has_prev = true
+		if cand_rem >= prev_rem:
+			return false
+	return true
+
+
+static func _next_corridor_rem(
+	u: Dictionary,
+	start: int,
+	enter: int,
+	out_free: int,
+	walk_gap: int,
+	has_prev: bool,
+	prev_rem: int
+) -> int:
+	if not has_prev:
+		var floor_rem: int = u["door_tick"] - enter
+		if out_free > -JourneyForecast.NEVER:
+			floor_rem = maxi(floor_rem, mini(0, out_free - enter))
+		return floor_rem
+	return mini(u["door_tick"] - start, maxi(u["door_tick"] - enter, prev_rem + walk_gap))
+
+
 ## The walkers the forecast knows of, each with its own times
-## (JourneyForecast.own_times() at a walk, unrouted, plus "id"), worked out
-## once per tick: every passenger out to the plane, airside and not on a
-## facility visit, or admitted to a security station. One being screened can
-## come out onto a file's way just ahead of a filed walker and hold it back
-## (board 54c9e0ce), so it is known from its security forecast, one replay
-## per station for all it holds (_cleared_at()). Those still walking to or
-## queuing for security are left out.
+## (JourneyForecast.own_times() at a walk, routed once airside and unrouted
+## while still in security, plus "id"), worked out once per tick: every
+## passenger out to the plane, airside and not on a facility visit, or
+## committed to a security station (walking to or queuing at it once boarding
+## opens, or inside it). One coming out of security can enter a file's way
+## ahead of a delayed walker and hold it back (board 54c9e0ce), so it is
+## known from its security forecast, one replay per station for all it holds
+## (_cleared_at()).
 func known(sim: PassengerSim) -> Array:
 	if _known_tick == sim.tick:
 		return _known
@@ -495,7 +597,8 @@ func known(sim: PassengerSim) -> Array:
 	var screened := {}
 	for id in sim.passenger_ids():
 		var q := sim.get_passenger(id)
-		if q.stage == Passenger.Stage.SECURITY and q.station != 0:
+		var sec := StageKinds.leg(q.stage) == StageKinds.Leg.SECURITY and q.station != 0
+		if sec and (q.stage == Passenger.Stage.SECURITY or sim.tick >= q.boarding_tick):
 			var ids: Array = screened.get(q.station, [])
 			ids.append(id)
 			screened[q.station] = ids
@@ -506,9 +609,15 @@ func known(sim: PassengerSim) -> Array:
 		var q := sim.get_passenger(id)
 		var leg := StageKinds.leg(q.stage)
 		var out := leg == StageKinds.Leg.AIRSIDE or leg == StageKinds.Leg.APRON
-		if q.is_done() or not (out or q.stage == Passenger.Stage.SECURITY):
+		var sec := (
+			leg == StageKinds.Leg.SECURITY
+			and q.station != 0
+			and (q.stage == Passenger.Stage.SECURITY or sim.tick >= q.boarding_tick)
+		)
+		if q.is_done() or not (out or sec):
 			continue
-		var own := JourneyForecast.own_times(sim, q, sim.tick, false, cleared.get(id, -1))
+		var routed := leg != StageKinds.Leg.SECURITY
+		var own := JourneyForecast.own_times(sim, q, sim.tick, routed, cleared.get(id, -1))
 		if not own.is_empty():
 			own["id"] = id
 			_known.append(own)

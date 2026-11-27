@@ -200,3 +200,85 @@ func test_one_replay_per_station_times_each_screened_walker_as_its_own_does() ->
 	assert_array(differ).is_empty()
 	assert_int(compared).is_greater(0)
 	assert_int(shared).is_greater(0)
+
+
+## A delayed head A, an intervening already-entered walker B ahead of a future
+## entrant C in walk-left when C joins: C's own door_tick precedes A's delayed
+## corridor_free, yet C joins behind B in door_file and must forecast behind B
+## rather than jumping past both A and B.
+func test_a_future_walker_does_not_jump_past_an_already_entered_walker() -> void:
+	_world = TestBoardingFiles.boarding_world()
+	_world.run_to(TestBoardingFiles.BOARDING + 5)
+	var delayed_a := TestBoardingFiles.walker(_world, Vector2i(20, 7))
+	for i in 3:
+		_world.step()
+	var entered_b := TestBoardingFiles.walker(_world, Vector2i(19, 7))
+	for i in 3:
+		_world.step()
+	for cell: Vector2i in [
+		Vector2i(20, 6),
+		Vector2i(18, 5),
+		Vector2i(19, 5),
+		Vector2i(20, 5),
+		Vector2i(18, 4),
+		Vector2i(19, 4),
+		Vector2i(20, 4),
+		Vector2i(19, 3),
+		Vector2i(20, 3),
+	]:
+		TestBoardingFiles.walker(_world, cell)
+		_world.step()
+	assert_int(_world.sim.files.door_of(delayed_a.id)).is_greater(0)
+	assert_int(_world.sim.files.door_of(entered_b.id)).is_equal(delayed_a.exit_object)
+	assert_bool(_world.sim.files.is_pending(delayed_a.id)).is_false()
+	assert_bool(_world.sim.files.is_pending(entered_b.id)).is_false()
+	var future_c := _world.passenger(_world.sim.spawn_now(PassengerTestWorld.FLIGHT))
+	TestBoardingFiles.turn_out(_world, future_c, Vector2i(19, 7))
+	future_c.stage = Passenger.Stage.TO_GATE
+	future_c.boarding_tick = _world.clock.tick + 2
+	var own_a := JourneyForecast.own_times(_world.sim, delayed_a, _world.clock.tick, false)
+	var own_b := JourneyForecast.own_times(_world.sim, entered_b, _world.clock.tick, false)
+	var own_c := JourneyForecast.own_times(_world.sim, future_c, _world.clock.tick, false)
+	var eta_a := JourneyForecast.arrival_tick(_world.sim, delayed_a)
+	var eta_b := JourneyForecast.arrival_tick(_world.sim, entered_b)
+	var eta_c := JourneyForecast.arrival_tick(_world.sim, future_c)
+	var made := {}
+	_world.sim.outcome.connect(
+		func(id: int, did: bool) -> void:
+			if did:
+				made[id] = _world.clock.tick
+	)
+	var door_order: Array[int] = []
+	var watched := [delayed_a.id, entered_b.id, future_c.id]
+	while (
+		not (delayed_a.is_done() and entered_b.is_done() and future_c.is_done())
+		and _world.clock.tick < TestBoardingFiles.DOORS
+	):
+		_world.step()
+		for id: int in watched:
+			var w := _world.sim.get_passenger(id)
+			if w != null and w.stage == Passenger.Stage.APRON and not door_order.has(id):
+				door_order.append(id)
+	print(
+		(
+			"own %s, eta [A:%d, B:%d, C:%d], made [A:%d, B:%d, C:%d], door order %s"
+			% [
+				[own_a["door_tick"], own_b["door_tick"], own_c["door_tick"]],
+				eta_a,
+				eta_b,
+				eta_c,
+				made.get(delayed_a.id, -1),
+				made.get(entered_b.id, -1),
+				made.get(future_c.id, -1),
+				door_order
+			]
+		)
+	)
+	assert_int(own_a["door_tick"]).is_less(own_b["door_tick"])
+	assert_int(own_b["door_tick"]).is_less(own_c["door_tick"])
+	assert_array(door_order).is_equal(watched)
+	assert_int(eta_a).is_less(eta_b)
+	assert_int(eta_b).is_less(eta_c)
+	assert_int(made.get(future_c.id, -1) - eta_c).is_between(
+		-TestBoardingFiles.FORECAST_SLACK, TestBoardingFiles.FORECAST_LATE
+	)

@@ -20,6 +20,7 @@ var modal_check := Callable()
 
 var _label := Label.new()
 var _tween: Tween
+var _last_bottom := -1.0
 
 
 func _init() -> void:
@@ -45,6 +46,13 @@ func _ready() -> void:
 		vp.size_changed.connect(place)
 	_connect_audio()
 	place()
+
+
+func _process(_delta: float) -> void:
+	if visible and bottom_provider.is_valid():
+		var next_bottom := float(bottom_provider.call())
+		if not is_equal_approx(next_bottom, _last_bottom):
+			place()
 
 
 func _exit_tree() -> void:
@@ -100,6 +108,7 @@ func place() -> void:
 	var bottom := DEFAULT_BOTTOM
 	if bottom_provider.is_valid():
 		bottom = float(bottom_provider.call())
+	_last_bottom = bottom
 	anchor_left = 0.5
 	anchor_right = 0.5
 	anchor_top = 1.0

@@ -114,7 +114,7 @@ func test_composite_commit_respects_build_unlocks_and_single_undo() -> void:
 
 func test_door_replaces_shared_room_wall_with_net_price_and_undo_restores_paid_wall() -> void:
 	_drag_room(BuildMode.Tool.TOILET_ROOM, Rect2i(3, 3, 3, 3))
-	_drag_room(BuildMode.Tool.TOILET_ROOM, Rect2i(6, 3, 3, 3))
+	_drag_room(BuildMode.Tool.CAFE_ROOM, Rect2i(6, 3, 3, 3))
 	# Shared wall at (5, 3..5) EAST == (6, 3..5) WEST should exist once as PLAIN paid 40.
 	assert_int(_mode.grid.wall_kind(Vector2i(5, 4), EAST)).is_equal(BuildGrid.WallKind.PLAIN)
 	assert_int(_mode.grid.wall_paid(Vector2i(5, 4), EAST)).is_equal(40)

@@ -1,3 +1,4 @@
+# gdlint:disable = max-public-methods
 class_name OfferPanel
 extends CanvasLayer
 ## Today's airline offers (Economy 6/8b). A button in the centred top row
@@ -79,6 +80,8 @@ const BADGE_META := &"badge_monogram"
 const BADGE_BORDER := Color(0.1, 0.13, 0.26, 1.0)
 const PEAK_CHIP_FILL := Color(0.98, 0.87, 0.56, 1.0)
 const PEAK_CHIP_BORDER := Color(0.76, 0.54, 0.16, 1.0)
+const REQ_CHIP_FILL := Color(0.99, 0.86, 0.42, 1.0)
+const REQ_CHIP_BORDER := Color(0.76, 0.50, 0.10, 1.0)
 const HUB_CHIP_FILL := Color(0.98, 0.85, 0.36, 1.0)
 const HUB_CHIP_BORDER := Color(0.74, 0.52, 0.08, 1.0)
 const PULSE_TINT := Color(1.16, 1.06, 0.72, 0.76)
@@ -120,6 +123,8 @@ var pulsing := false
 
 var _button: Button
 var _sheet: PanelContainer
+var _intro_banner: PanelContainer
+var _intro_label: Label
 var _scroll: ScrollContainer
 var _cards: VBoxContainer
 var _message: Label
@@ -135,6 +140,7 @@ var _ended_text := ""
 var _offers_waiting := false
 var _offers_unseen := false
 var _was_airport_open := false
+var _day1_auto_pop_pending := false
 var _known_offer_ids: Dictionary = {}
 var _pulse_tween: Tween
 var _card_nodes: Dictionary = {}
@@ -143,6 +149,7 @@ var _decline_buttons: Dictionary = {}
 var _note_labels: Dictionary = {}
 var _refusal_labels: Dictionary = {}
 var _fit_labels: Dictionary = {}
+var _req_chips: Dictionary = {}
 ## Offer id -> the taxi pair of the gate its last fit found, for its note.
 var _fit_taxis: Dictionary = {}
 var _earnings_labels: Dictionary = {}
@@ -456,6 +463,10 @@ func _retranslate() -> void:
 		var title := _sheet.find_child("OfferTitle", true, false) as Label
 		if title != null:
 			title.text = tr("Airline Contracts — Accept to schedule flights")
+	if _intro_label != null:
+		_intro_label.text = tr(
+			"Accept airlines that fit your gates. Each signed contract sends flights every day."
+		)
 	if desk != null and flights != null:
 		_refresh()
 		_refresh_warning()
@@ -466,6 +477,8 @@ func _process(_delta: float) -> void:
 		var open_now := flights.opened_tick >= 0
 		if _button.visible != open_now:
 			_sync_open_state()
+	if _day1_auto_pop_pending:
+		_try_day1_auto_pop()
 	if not _sheet.visible:
 		return
 	if flights.tick != _noted_tick:
@@ -498,6 +511,18 @@ func open() -> void:
 	TopRow.close_others(self)
 	_offers_unseen = false
 	has_been_opened = true
+	_day1_auto_pop_pending = false
+	var show_intro := (
+		desk != null
+		and desk.board != null
+		and not desk.board.is_day1_intro_shown()
+		and GameCalendar.day_of(flights.opened_tick, flights.epoch) == 0
+		and GameCalendar.day_of(flights.tick, flights.epoch) == 0
+	)
+	if show_intro:
+		desk.board.mark_day1_intro_shown()
+	if _intro_banner != null:
+		_intro_banner.visible = show_intro
 	_stop_pulse()
 	_sheet.visible = true
 	_refresh_notes()
@@ -517,6 +542,8 @@ func close() -> void:
 	if not _sheet.visible:
 		return
 	_sheet.visible = false
+	if _intro_banner != null:
+		_intro_banner.visible = false
 	_clear_refusals()
 	_say_idle()
 
@@ -599,6 +626,28 @@ func trait_row(id: String) -> HBoxContainer:
 	return _trait_rows[id]
 
 
+func requirement_chip(id: String) -> PanelContainer:
+	return _req_chips.get(id)
+
+
+func requirement_text(id: String) -> String:
+	var chip := _req_chips.get(id) as PanelContainer
+	if chip == null or not chip.visible:
+		return ""
+	var lbl := chip.get_node_or_null("RequirementLabel") as Label
+	return lbl.text if lbl != null else ""
+
+
+func intro_banner() -> PanelContainer:
+	return _intro_banner
+
+
+func intro_banner_text() -> String:
+	if _intro_label == null or _intro_banner == null or not _intro_banner.visible:
+		return ""
+	return _intro_label.text
+
+
 ## What the sheet says under the cards: the last accept's confirmation, or
 ## EMPTY_TEXT when no offer is open. A refusal is on its card, not here.
 func message() -> String:
@@ -641,6 +690,21 @@ func _build() -> void:
 	title.custom_minimum_size = Vector2(SHEET_W - 30.0, 0.0)
 	_style_label(title, &"HudTitle")
 	sheet_column.add_child(title)
+	_intro_banner = PanelContainer.new()
+	_intro_banner.name = "OfferIntroBanner"
+	_intro_banner.theme_type_variation = &"HudTopCard"
+	_intro_banner.visible = false
+	_intro_label = Label.new()
+	_intro_label.name = "OfferIntroLabel"
+	_intro_label.text = tr(
+		"Accept airlines that fit your gates. Each signed contract sends flights every day."
+	)
+	_intro_label.theme_type_variation = &"HudSmall"
+	_intro_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_intro_label.custom_minimum_size = Vector2(SHEET_W - 48.0, 0.0)
+	_intro_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_intro_banner.add_child(_intro_label)
+	sheet_column.add_child(_intro_banner)
 	_scroll.name = "OfferCardsScroll"
 	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -711,6 +775,7 @@ func _on_loaded(ok: bool) -> void:
 
 func _on_snapshot_loaded() -> void:
 	_offers_unseen = false
+	_day1_auto_pop_pending = false
 	_stop_pulse()
 	_was_airport_open = flights != null and flights.opened_tick >= 0
 	_known_offer_ids = _open_offer_id_set()
@@ -726,6 +791,7 @@ func _sync_open_state() -> void:
 		_button.disabled = not open_now
 	if not open_now:
 		_offers_unseen = false
+		_day1_auto_pop_pending = false
 		_stop_pulse()
 		if _sheet != null:
 			close()
@@ -740,9 +806,64 @@ func _sync_open_state() -> void:
 		_notify_fresh_offers()
 
 
-func _on_airport_opened(_tick: int) -> void:
+func _on_airport_opened(tick: int) -> void:
 	_sync_open_state()
 	_refresh()
+	if (
+		flights != null
+		and desk != null
+		and desk.board != null
+		and not desk.board.is_loading()
+		and GameCalendar.day_of(tick, flights.epoch) == 0
+		and GameCalendar.day_of(flights.tick, flights.epoch) == 0
+		and not desk.board.is_day1_intro_shown()
+		and not has_been_opened
+	):
+		_day1_auto_pop_pending = true
+		_try_day1_auto_pop()
+
+
+func _try_day1_auto_pop() -> void:
+	if not _day1_auto_pop_pending or flights == null or desk == null or desk.board == null:
+		_day1_auto_pop_pending = false
+		return
+	if (
+		desk.board.is_day1_intro_shown()
+		or has_been_opened
+		or flights.opened_tick < 0
+		or GameCalendar.day_of(flights.tick, flights.epoch) != 0
+	):
+		_day1_auto_pop_pending = false
+		return
+	if desk.board.open_offers().is_empty() or _any_modal_open():
+		return
+	_day1_auto_pop_pending = false
+	open()
+
+
+func _any_modal_open() -> bool:
+	var parent := get_parent()
+	if parent == null:
+		return false
+	var blocked := false
+	var hud := parent.get_node_or_null("PassengerHud") as PassengerHud
+	if hud != null:
+		var planner := hud.find_child("FlightPlanner", false, false) as FlightPlanner
+		blocked = (
+			hud.intro() != null
+			or (hud.unlock_guide() != null and hud.unlock_guide().is_open())
+			or (hud.demo_end_card != null and hud.demo_end_card.is_open())
+			or (planner != null and planner.is_open())
+		)
+	var menu := parent.get_node_or_null("GameMenu") as GameMenu
+	var incident := parent.get_node_or_null("IncidentPanel") as IncidentPanel
+	var runway := parent.get_node_or_null("RunwayCard") as RunwayCard
+	return (
+		blocked
+		or (menu != null and (menu.is_open() or menu.is_question_open()))
+		or (incident != null and incident.is_open())
+		or (runway != null and runway.is_open())
+	)
 
 
 func _on_flights_changed(_id: String) -> void:
@@ -764,6 +885,7 @@ func _refresh() -> void:
 	_note_labels.clear()
 	_refusal_labels.clear()
 	_fit_labels.clear()
+	_req_chips.clear()
 	_fit_taxis.clear()
 	_earnings_labels.clear()
 	_trait_rows.clear()
@@ -894,19 +1016,32 @@ func _refresh_fits() -> void:
 
 
 func _set_fit(label: Label, offer: Dictionary) -> void:
+	var id := String(offer["id"])
 	var assessment := FlightFit.assess(flights, OfferBoard.terms_of(offer))
+	var fits := bool(assessment["fits"])
 	var stand_key := String(assessment.get("stand", assessment["gate"]))
-	var taxi: Array = flights.gate_taxi(stand_key) if assessment["fits"] else []
-	_fit_taxis[offer["id"]] = taxi if not taxi.is_empty() else TaxiTimes.BASE
-	if _note_labels.has(offer["id"]):
-		_set_note(_note_labels[offer["id"]], _note_for(offer))
-	label.text = fit_line(assessment, offer["plane_size"])
-	label.theme_type_variation = &"HudGoodText" if assessment["fits"] else &"HudProblemText"
+	var taxi: Array = flights.gate_taxi(stand_key) if fits else []
+	_fit_taxis[id] = taxi if not taxi.is_empty() else TaxiTimes.BASE
+	if _note_labels.has(id):
+		_set_note(_note_labels[id], _note_for(offer))
+	var reason := fit_line(assessment, offer["plane_size"])
+	label.text = reason
+	label.theme_type_variation = &"HudGoodText" if fits else &"HudProblemText"
 	# HudGoodText is larger than the card's other small lines; both looks keep
 	# the HudSmall size.
 	label.add_theme_font_size_override(
 		"font_size", BuildMenu.HUD_THEME.get_font_size("font_size", &"HudSmall")
 	)
+	var chip := _req_chips.get(id) as PanelContainer
+	if chip != null:
+		chip.visible = not fits
+		var chip_lbl := chip.get_node_or_null("RequirementLabel") as Label
+		if chip_lbl != null:
+			chip_lbl.text = reason
+	var accept := _accept_buttons.get(id) as Button
+	if accept != null:
+		accept.disabled = not fits
+		accept.tooltip_text = "" if fits else reason
 
 
 ## Posts or drops the airlines' warning card from the rating, and words the
@@ -1095,7 +1230,6 @@ func _add_card(offer: Dictionary) -> void:
 	fit.name = "Fit_%s" % id
 	fit.custom_minimum_size.x = VERDICT_FIT_W
 	fit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_set_fit(fit, offer)
 	verdict.add_child(fit)
 	_fit_labels[id] = fit
 	var earnings := _card_label(earnings_text(offer), &"HudSmall")
@@ -1108,6 +1242,9 @@ func _add_card(offer: Dictionary) -> void:
 	texts.add_child(traits)
 	texts.move_child(traits, verdict.get_index() + 1)
 	_trait_rows[id] = traits
+	var req_chip := _requirement_chip(id)
+	texts.add_child(req_chip)
+	_req_chips[id] = req_chip
 	var refusal := Label.new()
 	refusal.name = "Refusal_%s" % id
 	refusal.visible = false
@@ -1126,6 +1263,7 @@ func _add_card(offer: Dictionary) -> void:
 	decline.pressed.connect(_on_decline.bind(id))
 	buttons.add_child(decline)
 	_decline_buttons[id] = decline
+	_set_fit(fit, offer)
 
 
 ## The trait line under the verdict row (OfferTraits.card_labels): the upside in
@@ -1270,6 +1408,32 @@ func _peak_chip(offer: Dictionary) -> PanelContainer:
 	var label := Label.new()
 	label.name = "PeakLabel"
 	label.text = _peak_chip_text(minute)
+	label.theme_type_variation = &"HudSmall"
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.add_theme_color_override("font_color", BADGE_BORDER)
+	chip.add_child(label)
+	return chip
+
+
+func _requirement_chip(id: String) -> PanelContainer:
+	var chip := PanelContainer.new()
+	chip.name = "RequirementChip_%s" % id
+	chip.visible = false
+	chip.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var style := StyleBoxFlat.new()
+	style.bg_color = REQ_CHIP_FILL
+	style.border_color = REQ_CHIP_BORDER
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(8)
+	style.content_margin_left = 8.0
+	style.content_margin_right = 8.0
+	style.content_margin_top = 2.0
+	style.content_margin_bottom = 2.0
+	chip.add_theme_stylebox_override("panel", style)
+	var label := Label.new()
+	label.name = "RequirementLabel"
+	label.set_meta(BADGE_META, true)
 	label.theme_type_variation = &"HudSmall"
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	label.add_theme_color_override("font_color", BADGE_BORDER)

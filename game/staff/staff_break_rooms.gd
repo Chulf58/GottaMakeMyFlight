@@ -42,7 +42,11 @@ static func spots_in(grid: BuildGrid, room_id: int) -> Array[Vector2i]:
 	for y in range(area.position.y, area.end.y):
 		for x in range(area.position.x, area.end.x):
 			var cell := Vector2i(x, y)
-			if grid.room_at(cell) != room_id or not grid.is_walkable(cell):
+			if (
+				grid.room_at(cell) != room_id
+				or not grid.is_walkable(cell)
+				or grid.is_belt_cell(cell)
+			):
 				continue
 			if interaction.has(cell):
 				fallback.append(cell)

@@ -391,7 +391,7 @@ func test_save_game_v37_round_trips_loyalty_hub_contracts_and_rejects_corrupt() 
 
 	var snap: Dictionary = JSON.parse_string(JSON.stringify(save.snapshot(), "", true, true))
 	assert_int(int(snap["save_version"])).is_greater_equal(38)
-	assert_int(int(snap["offers"]["save_version"])).is_equal(10)
+	assert_int(int(snap["offers"]["save_version"])).is_equal(OfferBoard.SAVE_VERSION)
 	assert_int(int(snap["flights"]["save_version"])).is_equal(FlightSim.SAVE_VERSION)
 	assert_int(FlightSim.SAVE_VERSION).is_greater_equal(14)
 

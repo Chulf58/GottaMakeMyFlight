@@ -1115,8 +1115,10 @@ func _apply_row_layout(index: int) -> void:
 	if index < 0 or index >= _rows.size() or index == remove_category():
 		return
 	var cats := categories()
-	var front_cards: Array[Control] = []
-	var teaser_cards: Array[Control] = []
+	var open_items: Array[Control] = []
+	var teaser_items: Array[Control] = []
+	var open_rooms: Array[Control] = []
+	var teaser_rooms: Array[Control] = []
 	for tool: BuildMode.Tool in cats[index]["tools"]:
 		if not _cards.has(tool):
 			continue
@@ -1126,13 +1128,22 @@ func _apply_row_layout(index: int) -> void:
 		card_btn.visible = shown_here
 		if not shown_here:
 			continue
+		var is_room := BuildMenuCatalog.is_room_tool(tool)
 		if state == BuildMenuCatalog.CardState.TEASER:
-			teaser_cards.append(card_btn)
+			if is_room:
+				teaser_rooms.append(card_btn)
+			else:
+				teaser_items.append(card_btn)
 		else:
-			front_cards.append(card_btn)
+			if is_room:
+				open_rooms.append(card_btn)
+			else:
+				open_items.append(card_btn)
 	var ordered: Array[Control] = []
-	ordered.append_array(front_cards)
-	ordered.append_array(teaser_cards)
+	ordered.append_array(open_items)
+	ordered.append_array(teaser_items)
+	ordered.append_array(open_rooms)
+	ordered.append_array(teaser_rooms)
 	if not ordered.is_empty():
 		_rows[index].columns = mini(ordered.size(), tray_columns())
 	for pos in ordered.size():

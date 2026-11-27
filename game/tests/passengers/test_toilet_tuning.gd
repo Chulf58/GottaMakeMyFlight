@@ -94,14 +94,15 @@ func test_a_fair_share_of_early_arrivals_use_a_toilet_and_all_who_go_make_it() -
 	var share: int = total["early_used"] * 100 / maxi(total["early"], 1)
 	print(
 		(
-			"pooled: %s; early share %d%% (need start %d-%d, +%d a second, high at %d)"
+			"pooled: %s; early share %d%% (need start %d-%d, +%d every %ds, high at %d)"
 			% [
 				total,
 				share,
 				ToiletSim.NEED_START_MIN,
 				ToiletSim.NEED_START_MAX,
 				ToiletSim.NEED_RISE,
-				ToiletSim.NEED_AT
+				ToiletSim.NEED_RISE_BEATS,
+				ToiletSim.NEED_AT,
 			]
 		)
 	)

@@ -968,6 +968,7 @@ func is_debug_open() -> bool:
 func set_debug_open(value: bool) -> void:
 	if _debug_panel != null:
 		_debug_panel.visible = value
+		_inspect.fit()
 
 
 ## The debug starter button, a shortcut for what BuildMode's tools can also
@@ -1256,13 +1257,8 @@ func _pa_bottom() -> float:
 	if staff != null and staff.is_node_ready():
 		var staff_card := staff.get_node_or_null("StaffCard") as Control
 		if staff_card != null and staff_card.visible:
-			return (
-				BuildMenu.MARGIN
-				+ BuildMenu.BAR_H
-				+ BuildMenu.GAP
-				+ staff_card.size.y
-				+ HudLayout.GAP
-			)
+			var staff_h := maxf(staff_card.size.y, staff_card.get_combined_minimum_size().y)
+			return BuildMenu.MARGIN + BuildMenu.BAR_H + BuildMenu.GAP + staff_h + HudLayout.GAP
 	return BuildMenu.MARGIN + BuildMenu.BAR_H + HudLayout.GAP
 
 

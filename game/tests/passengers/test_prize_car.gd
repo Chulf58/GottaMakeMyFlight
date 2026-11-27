@@ -150,8 +150,10 @@ func test_a_looker_in_view_loses_boredom_and_a_non_looker_gains_it() -> void:
 	_run_beats(BEATS)
 	print("after %d beats: looker %d, non-looker %d" % [BEATS, looker.boredom, other.boredom])
 	var expected_drop := BEATS / PrizeCar.LOOK_RELIEF_BEATS * PrizeCar.LOOK_RELIEF
+	@warning_ignore("integer_division")
+	var expected_rise := BEATS / BoredomSim.RISE_BEATS * BoredomSim.RISE
 	assert_int(looker.boredom).is_equal(START_BOREDOM - expected_drop)
-	assert_int(other.boredom).is_equal(START_BOREDOM + BEATS * BoredomSim.RISE)
+	assert_int(other.boredom).is_equal(START_BOREDOM + expected_rise)
 
 
 func test_a_looker_out_of_the_look_radius_or_without_a_car_gets_bored_as_usual() -> void:
@@ -159,8 +161,10 @@ func test_a_looker_out_of_the_look_radius_or_without_a_car_gets_bored_as_usual()
 	var far := _guest(Vector2i(14, 10 + PrizeCar.LOOK_RADIUS + 1), true)
 	# No car yet: a control proving the looker is engaged only by the podium.
 	_run_beats(BEATS)
-	assert_int(near.boredom).is_equal(START_BOREDOM + BEATS)
-	assert_int(far.boredom).is_equal(START_BOREDOM + BEATS)
+	@warning_ignore("integer_division")
+	var expected_rise := BEATS / BoredomSim.RISE_BEATS * BoredomSim.RISE
+	assert_int(near.boredom).is_equal(START_BOREDOM + expected_rise)
+	assert_int(far.boredom).is_equal(START_BOREDOM + expected_rise)
 	_podium()
 	near.boredom = START_BOREDOM
 	far.boredom = START_BOREDOM
@@ -170,7 +174,7 @@ func test_a_looker_out_of_the_look_radius_or_without_a_car_gets_bored_as_usual()
 	_run_beats(BEATS)
 	print("with the car: near %d, %d cells out %d" % [near.boredom, far.at.y - 8, far.boredom])
 	assert_int(near.boredom).is_less(START_BOREDOM)
-	assert_int(far.boredom).is_equal(START_BOREDOM + BEATS)
+	assert_int(far.boredom).is_equal(START_BOREDOM + expected_rise)
 
 
 func test_a_looker_who_is_not_waiting_does_not_look() -> void:

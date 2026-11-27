@@ -148,14 +148,15 @@ static func _chosen_exit_times(sim: PassengerSim, p: Passenger, now: int) -> Dic
 	var door_tick := now + walk_ticks(p.remaining_mm() + sim.files.waiters.owed_mm(p.id))
 	if sim.layout.bus_exits.has(p.exit_object):
 		return _times(
-			p.exit_object, door_tick, door_tick + bus_cycle_margin(sim, p.flight_id), null
+			p.exit_object, door_tick, door_tick + bus_cycle_margin(sim, p.flight_id), null, now
 		)
 	var apron := sim.files.apron_of(sim, p.exit_object, p)
 	return _times(
 		p.exit_object,
 		door_tick,
 		now + walk_ticks(p.remaining_mm() + sim.files.waiters.owed_mm(p.id) + apron["mm"]),
-		apron["plane"]
+		apron["plane"],
+		now
 	)
 
 
@@ -164,17 +165,24 @@ static func _planned_exit_times(
 ) -> Dictionary:
 	var door_eta := leave + walk_ticks(exit.y)
 	if sim.layout.bus_exits.has(exit.x):
-		return _times(exit.x, door_eta, door_eta + bus_cycle_margin(sim, p.flight_id), null)
+		return _times(exit.x, door_eta, door_eta + bus_cycle_margin(sim, p.flight_id), null, leave)
 	var plane_tick := leave + walk_ticks(exit.y + exit.z)
 	if plane_tick >= NEVER:
 		return {}
 	var plane: Variant = sim.files.apron_of(sim, exit.x, p)["plane"]
-	return _times(exit.x, door_eta, plane_tick, plane)
+	return _times(exit.x, door_eta, plane_tick, plane, leave)
 
 
-static func _times(door: int, door_tick: int, plane_tick: int, plane: Variant) -> Dictionary:
+static func _times(
+	door: int, door_tick: int, plane_tick: int, plane: Variant, enter_tick := -1
+) -> Dictionary:
 	return {
-		"door": door, "door_tick": door_tick, "plane_tick": plane_tick, "plane": plane, "trail": 0
+		"door": door,
+		"door_tick": door_tick,
+		"plane_tick": plane_tick,
+		"plane": plane,
+		"trail": 0,
+		"enter_tick": enter_tick,
 	}
 
 

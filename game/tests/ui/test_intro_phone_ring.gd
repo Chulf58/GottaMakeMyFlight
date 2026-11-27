@@ -78,8 +78,10 @@ func test_open_intro_starts_ring_beat_before_dialogue_and_click_answers() -> voi
 	assert_bool(cue.is_visible_in_tree()).is_true()
 	assert_object(cue.phone_icon().texture).is_not_null()
 	var rect := cue.get_global_rect()
-	assert_float(rect.get_center().x).is_equal_approx(640.0, 2.0)
-	assert_float(rect.end.y).is_less_equal(720.0 - BuildMenu.MARGIN - BuildMenu.BAR_H)
+	assert_float(cue.offset_top).is_less_equal(TopRow.SHEET_TOP + 0.5)
+	var max_y := TopRow.SHEET_TOP + IntroDialogue.PhoneRingCue.CUE_SIZE + 4.0
+	assert_float(rect.end.y).is_less_equal(max_y)
+	assert_float(rect.end.x).is_less_equal(1280.0 - HudLayout.MARGIN - HudLayout.RAIL_W)
 	assert_bool(_world.clock.paused).is_true()
 	assert_int(_world.clock.holds.count()).is_equal(1)
 	assert_bool(cam.is_processing()).is_false()

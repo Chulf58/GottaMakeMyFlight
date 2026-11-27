@@ -95,8 +95,10 @@ func _on_parked(_vehicle_id: int, lot: int) -> void:
 
 
 func _anchor(lot: int) -> Vector3:
-	var spot := landside.definition.lots[lot]
-	var top_y := MULTI_Y if spot.kind == LandsideLotSpot.Kind.MULTI_STOREY else SURFACE_Y
+	var spot := landside.lot_spot(lot)
+	var top_y := (
+		MULTI_Y if landside.lot_kind(lot) == LandsideLotSpot.Kind.MULTI_STOREY else SURFACE_Y
+	)
 	if places != null:
 		top_y = maxf(top_y, places.lot_top_y(lot) + 2.4)
 	return Vector3(spot.centre.x, top_y, spot.centre.z)

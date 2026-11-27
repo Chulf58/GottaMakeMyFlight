@@ -197,6 +197,7 @@ func test_inspect_thought_matches_bubble_routes_through_tr_and_no_alerts_or_pena
 	_security.world.sim.wallet = wallet
 	var id := _security.send(1, false, true)
 	var p := _security.world.passenger(id)
+	p.toilet_need = 0
 	var mood_before := p.mood
 	var money_before := wallet.balance
 

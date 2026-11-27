@@ -9,7 +9,7 @@ extends GdUnitTestSuite
 ## in a car park loads into a scene that plays on like the unsaved control,
 ## crediting the same parking fees and none on the load.
 
-const SEED := 2_910_026
+const SEED := 2_910_027
 const OTHER_SEED := 77
 ## Passengers drawn for less notice than the drive can be late by up to the
 ## drive (LandsideSim.lead_ticks()); the rest by no more than one curb dwell.
@@ -166,7 +166,9 @@ func _watch(main: Node, credits: Dictionary) -> void:
 func test_a_new_game_starts_with_the_curb_and_no_car_park() -> void:
 	print("first flight %s: %s" % [_run["first_flight"], _run])
 	assert_bool(_fresh["has_def"]).is_true()
-	assert_array(_fresh["lots_built"]).is_equal([false, false])
+	var built_lots: Array = _fresh["lots_built"]
+	assert_int(built_lots.size()).is_equal(_landside(_control).definition.lots.size())
+	assert_bool(built_lots.has(true)).is_false()
 	assert_array(_fresh["curbs_built"]).is_equal([false, false])
 	assert_int(_fresh["berths"]).is_equal(2)
 	assert_bool(_fresh["sim_match"]).is_true()

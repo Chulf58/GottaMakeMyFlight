@@ -2,7 +2,7 @@ class_name TestBuildMenuItemInfo
 extends GdUnitTestSuite
 ## The hover card on every build tray item (decisions build-menu-items-show-a-
 ## hover-card-with-a-description and build-menu-rework-six-domain-tabs-
-## progress-tab-and-card-u): all 80 tools have a 3-part ItemInfo and render a
+## progress-tab-and-card-u): all 76 menu tools have a 3-part ItemInfo and render a
 ## non-empty 280 px custom tooltip popup with footprint size, Click/Drag,
 ## upkeep/needs, description, and live lock requirement.
 
@@ -63,17 +63,17 @@ func test_every_tray_item_has_a_three_part_description() -> void:
 		for part in info:
 			assert_str(part).is_not_empty()
 		checked += 1
-	assert_int(checked).is_equal(80)
+	assert_int(checked).is_equal(76)
 
 
 func test_every_description_belongs_to_a_tray_item() -> void:
 	var tools := _tray_tools()
 	for tool in ItemInfo.tools():
 		assert_bool(tools.has(tool)).is_true()
-	assert_int(ItemInfo.tools().size()).is_equal(80)
+	assert_int(ItemInfo.tools().size()).is_equal(76)
 
 
-func test_all_80_tools_produce_a_hover_card_with_details_and_three_parts() -> void:
+func test_all_76_tools_produce_a_hover_card_with_details_and_three_parts() -> void:
 	var checked := 0
 	for tool in _tray_tools():
 		var card := _card_for(tool)
@@ -96,7 +96,7 @@ func test_all_80_tools_produce_a_hover_card_with_details_and_three_parts() -> vo
 			assert_array(texts).contains([BuildMenuCatalog.CARD_NEEDS[tool]])
 		shown.free()
 		checked += 1
-	assert_int(checked).is_equal(80)
+	assert_int(checked).is_equal(76)
 
 
 func test_hover_card_renders_when_only_details_or_partial_info_exist() -> void:

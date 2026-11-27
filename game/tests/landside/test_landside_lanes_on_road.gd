@@ -135,7 +135,10 @@ func test_a_car_at_a_lane_end_is_wholly_on_the_asphalt() -> void:
 				# 5 cm in from the mesh's edge, which a corner on it may graze.
 				corner.x -= signf(corner.x) * 0.05
 				var top := _map.top(corner)
-				if not (top[1] in ["Road", "Road_Ext"]) or float(top[0]) >= ROAD_TOP:
+				if (
+					not (top[1] in ["Road", "Road_Ext", "Road_Ext_Dashes"])
+					or float(top[0]) >= ROAD_TOP
+				):
 					off.append(
 						"end %s corner (%.2f, %.2f) on %s" % [at, corner.x, corner.z, top[1]]
 					)
@@ -200,7 +203,10 @@ func _check(
 					continue
 				checked += 1
 				var top := _map.top(corner)
-				if not (top[1] in ["Road", "Road_Ext"]) or float(top[0]) >= ROAD_TOP:
+				if (
+					not (top[1] in ["Road", "Road_Ext", "Road_Ext_Dashes"])
+					or float(top[0]) >= ROAD_TOP
+				):
 					off.append(
 						(
 							"%s %d mm corner (%.2f, %.2f) on %s %.3f"

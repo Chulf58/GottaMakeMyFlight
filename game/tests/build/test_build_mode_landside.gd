@@ -70,7 +70,9 @@ func test_the_three_build_tools_build_on_their_own_spots_and_pay() -> void:
 	assert_bool(_mode.apply_at(IN_MULTI).ok).is_true()
 	_mode.set_tool(BuildMode.Tool.CURB)
 	assert_bool(_mode.apply_at(IN_BAY_0).ok).is_true()
-	assert_array(_sim.lots_built).is_equal([true, true])
+	assert_bool(_sim.lots_built[0]).is_true()
+	assert_bool(_sim.lots_built[1]).is_true()
+	assert_int(_sim.lots_built.count(true)).is_equal(2)
 	assert_array(_sim.curbs_built).is_equal([true, false])
 	var spent := (
 		PriceTable.price_of_landside(&"surface_lot")
@@ -85,7 +87,7 @@ func test_a_click_off_every_spot_builds_nothing_and_says_so() -> void:
 	_mode.set_tool(BuildMode.Tool.SURFACE_LOT)
 	var result := _mode.apply_at(NOWHERE)
 	assert_int(result.reason).is_equal(BuildResult.Reason.LANDSIDE_NOT_ON_SPOT)
-	assert_array(_sim.lots_built).is_equal([false, false])
+	assert_bool(_sim.lots_built.has(true)).is_false()
 	_mode._update_ghost(NOWHERE)
 	assert_str(_mode.status_text()).contains("marked landside spots")
 
@@ -110,8 +112,8 @@ func test_hovering_a_spot_shows_its_capacity_and_walk_on_the_status_line() -> vo
 	assert_str(_mode.status_text()).contains("12 spaces")
 	assert_str(_mode.status_text()).contains("m walk to the nearest landside door")
 	assert_bool(_mode.pointer_on_grid()).is_true()
-	# The one surface lot spot is the one under the pointer, tinted.
-	assert_int(_ghost_slabs()).is_equal(1)
+	# All free parking pads are marked, with the one under the pointer tinted.
+	assert_int(_ghost_slabs()).is_equal(_sim.definition.lots.size())
 	# With the curb tool the other free bay is marked beside the tinted one.
 	_mode.set_tool(BuildMode.Tool.CURB)
 	_mode._update_ghost(IN_BAY_0)
@@ -251,7 +253,7 @@ func test_without_a_landside_the_tools_do_nothing() -> void:
 		_mode.set_tool(tool)
 		assert_object(_mode.apply_at(IN_LOT_0)).is_null()
 	assert_int(_balance()).is_equal(balance)
-	assert_array(_sim.lots_built).is_equal([false, false])
+	assert_bool(_sim.lots_built.has(true)).is_false()
 
 
 func test_the_menu_lists_the_tools_with_their_prices() -> void:

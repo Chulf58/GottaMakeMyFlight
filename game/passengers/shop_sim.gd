@@ -102,7 +102,7 @@ const BROWSE_COOLDOWN_TICKS := 600
 const BROWSE_REACH_MM := 5000
 const AIRSIDE_BROWSE_REACH_MM := 8000
 ## A spare-time browser drops in only with this much spare beyond the margin.
-const SPARE_TICKS := 100
+const SPARE_TICKS := 150
 ## The share of the spend a fallback visit pays, and the mood it costs, once,
 ## when it settles. Tuning values.
 const FALLBACK_SHARE := 0.5

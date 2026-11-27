@@ -94,7 +94,11 @@ static func spacing_problem(world: PassengerTestWorld, gaps: Dictionary) -> Stri
 				continue
 			var a := world.passenger(ids[k - 1])
 			var b := world.passenger(id)
-			var gap := BoardingFiles.door_left(b) - BoardingFiles.door_left(a)
+			var gap := (
+				BoardingFiles.door_left(b)
+				+ files.waiters.back_mm(b.id)
+				- (BoardingFiles.door_left(a) + files.waiters.back_mm(a.id))
+			)
 			if entry[0] == "apron":
 				gap = BoardingFiles.plane_left(b) - BoardingFiles.plane_left(a)
 			var key := "%s %d>%d" % [entry[0], a.id, b.id]

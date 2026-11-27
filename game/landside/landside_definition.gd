@@ -37,6 +37,20 @@ extends Resource
 ## Places for more curb bays; a new game has none built.
 @export var curb_spots: Array[LandsideCurbSpot] = []
 
+var _lot_cache := {}
+
+
+## Returns the LandsideLotSpot geometry for pad `spot` built as `target_kind`,
+## preserving `lots[spot]` when its default kind already matches.
+func lot_for_kind(spot: int, target_kind: LandsideLotSpot.Kind) -> LandsideLotSpot:
+	var base := lots[spot]
+	if base.kind == target_kind:
+		return base
+	var key := spot * 2 + int(target_kind)
+	if not _lot_cache.has(key):
+		_lot_cache[key] = LandsideLotSpot.for_kind(base, target_kind, road_in)
+	return _lot_cache[key]
+
 
 ## Every berth, the starter curb's first and then each curb spot's in order.
 ## A berth index (LandsideVehicle.stop) counts through this list whether or

@@ -38,13 +38,11 @@ func test_the_hint_card_and_its_buttons_are_routed() -> void:
 	auto_free(hints)
 	for text in [
 		hints.toggle_button().text,
-		hints.reset_button().text,
 		(hints.card().find_child("HintCaption", true, false) as Label).text,
 	]:
 		print("hints text: %s" % text)
 		assert_str(text).starts_with("[")
 	assert_str(hints.toggle_button().text).contains("Hints (H)")
-	assert_str(hints.reset_button().text).contains("Reset hints")
 
 
 func test_the_hint_sentences_come_through_the_profile() -> void:
@@ -71,9 +69,11 @@ func test_the_game_menu_and_the_question_are_routed() -> void:
 	menu.open()
 	var texts: Array[String] = [menu.resume_button().text, menu.settings_button().text]
 	texts.append(menu.incidents_switch().text)
+	texts.append(menu.reset_hints_button().text)
 	print("menu texts: %s" % [texts])
 	for text in texts:
 		assert_str(text).starts_with("[")
+	assert_str(menu.reset_hints_button().text).contains("Reset hints")
 	assert_str(menu.resume_button().text).contains("Resume (Esc)")
 	menu.close()
 	assert_bool(menu.ask_incidents()).is_true()

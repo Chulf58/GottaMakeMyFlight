@@ -287,7 +287,7 @@ func _place_of(v: LandsideVehicle) -> Dictionary:
 	var at := landside.world_position(v)
 	var dir := landside.heading(v)
 	if v.stage == LandsideVehicle.Stage.PARKED:
-		dir = LandsidePlaces.parked_heading(landside.definition.lots[v.lot], at)
+		dir = LandsidePlaces.parked_heading(landside.lot_spot(v.lot), at)
 	return {"place": [v.lane, v.lot, v.stop], "pos_mm": v.pos_mm, "dir": dir}
 
 

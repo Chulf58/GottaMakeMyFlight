@@ -50,6 +50,8 @@ static func check(grid: BuildGrid, edit: BuildEdit) -> BuildResult:
 				result = BuildResult.refused(BuildResult.Reason.NO_ROOM)
 		BuildEdit.Kind.RESHAPE_BELT:
 			result = _check_reshape_belt(grid, edit)
+		BuildEdit.Kind.SET_BELT_HATCH:
+			result = _check_set_belt_hatch(grid, edit)
 	return result
 
 
@@ -307,3 +309,40 @@ static func _check_reshape_belt(grid: BuildGrid, edit: BuildEdit) -> BuildResult
 	if edit.facing < 0 or edit.facing > 3:
 		return BuildResult.refused(BuildResult.Reason.BAD_FACING)
 	return BuildResult.accepted()
+
+
+static func _check_set_belt_hatch(grid: BuildGrid, edit: BuildEdit) -> BuildResult:
+	if not grid.in_bounds(edit.cell) or edit.side < 0 or edit.side > 3:
+		return BuildResult.refused(BuildResult.Reason.OUT_OF_BOUNDS)
+	var wall := grid._wall_value(edit.cell, edit.side)
+	if not edit.belt_hatch:
+		if wall == BuildGrid.WallKind.NONE:
+			return BuildResult.refused(BuildResult.Reason.NO_WALL)
+		if wall != BuildGrid.WallKind.PLAIN:
+			return BuildResult.refused(BuildResult.Reason.BAD_WALL_KIND)
+		return BuildResult.accepted()
+	var other := edit.cell + BuildGrid.SIDE_STEP[edit.side]
+	if not grid.in_bounds(other):
+		return BuildResult.refused(BuildResult.Reason.OUT_OF_BOUNDS)
+	if wall == BuildGrid.WallKind.NONE:
+		return BuildResult.refused(BuildResult.Reason.NO_WALL)
+	if wall != BuildGrid.WallKind.PLAIN:
+		return BuildResult.refused(BuildResult.Reason.BELT_WALL)
+	if (
+		grid._floor[grid._index(edit.cell)] == BuildGrid.FLOOR_NONE
+		or grid._floor[grid._index(other)] == BuildGrid.FLOOR_NONE
+	):
+		return BuildResult.refused(BuildResult.Reason.BELT_WALL)
+	if not _cell_is_belt(grid, edit.cell) or not _cell_is_belt(grid, other):
+		return BuildResult.refused(BuildResult.Reason.NOT_A_BELT)
+	var crossing := BeltShaper.crossing_problem(grid, edit)
+	if crossing != null:
+		return crossing
+	return BuildResult.accepted()
+
+
+static func _cell_is_belt(grid: BuildGrid, cell: Vector2i) -> bool:
+	var object_id := grid.object_at(cell)
+	if object_id == 0:
+		return false
+	return BuildCatalog.is_belt(grid._objects[object_id]["def"])

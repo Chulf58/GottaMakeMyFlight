@@ -2,8 +2,8 @@ class_name TestScreenRelief
 extends GdUnitTestSuite
 ## Screens slow boredom (Boredom 4/5; decision boredom-screens-halve-how-fast-
 ## boredom-rises-for-covered-wai): a waiting passenger a screen stand covers
-## gets bored at half the rate, RISE once every BoredomSim.SCREEN_RISE_BEATS
-## beats, and a screen never lowers boredom. Nobody else is slowed, two
+## gets bored at half the rate, RISE once every BoredomSim.RISE_BEATS *
+## BoredomSim.SCREEN_RISE_BEATS beats, and a screen never lowers boredom. Nobody else is slowed, two
 ## screens slow it no more than one, and removing the screen restores the full
 ## rate. A seated passenger watches from its chair.
 
@@ -78,7 +78,7 @@ func test_a_screen_halves_the_rise() -> void:
 func test_a_standing_passenger_in_coverage_gets_bored_at_half_the_rate() -> void:
 	_screen()
 	var p := _guest(Passenger.Stage.STANDING, 20)
-	var beats := 6 * BoredomSim.SCREEN_RISE_BEATS
+	var beats := 6 * BoredomSim.RISE_BEATS * BoredomSim.SCREEN_RISE_BEATS
 	_run_beats(p, beats)
 	print("%d beats under a screen: 20 -> %d" % [beats, p.boredom])
 	assert_int(p.stage).is_equal(Passenger.Stage.STANDING)
@@ -89,7 +89,7 @@ func test_a_screen_never_lowers_boredom() -> void:
 	_screen()
 	var p := _guest(Passenger.Stage.STANDING, 30)
 	var seen: Array[int] = [p.boredom]
-	for i in 4 * BoredomSim.SCREEN_RISE_BEATS:
+	for i in 4 * BoredomSim.RISE_BEATS * BoredomSim.SCREEN_RISE_BEATS:
 		_run_beats(p, 1)
 		assert_int(p.boredom).is_greater_equal(seen.back())
 		seen.append(p.boredom)
@@ -97,7 +97,7 @@ func test_a_screen_never_lowers_boredom() -> void:
 	assert_int(p.boredom).is_equal(30 + 4 * BoredomSim.RISE)
 	# It still stops at the cap.
 	p.boredom = BoredomSim.MAX
-	_run_beats(p, BoredomSim.SCREEN_RISE_BEATS)
+	_run_beats(p, BoredomSim.RISE_BEATS * BoredomSim.SCREEN_RISE_BEATS)
 	assert_int(p.boredom).is_equal(BoredomSim.MAX)
 
 
@@ -105,7 +105,7 @@ func test_a_passenger_behind_the_screen_rises_at_the_full_rate() -> void:
 	_screen(SCREEN_CELL, 2)
 	var p := _guest(Passenger.Stage.STANDING, 20)
 	assert_bool(_world.sim.boredom.watching(p)).is_false()
-	_run_beats(p, 6)
+	_run_beats(p, 6 * BoredomSim.RISE_BEATS)
 	assert_int(p.boredom).is_equal(20 + 6 * BoredomSim.RISE)
 
 
@@ -155,7 +155,7 @@ func test_a_seated_passenger_watches_from_its_chair() -> void:
 func test_two_screens_slow_it_no_more_than_one() -> void:
 	_screen()
 	var p := _guest(Passenger.Stage.STANDING, 20)
-	var beats := 4 * BoredomSim.SCREEN_RISE_BEATS
+	var beats := 4 * BoredomSim.RISE_BEATS * BoredomSim.SCREEN_RISE_BEATS
 	_run_beats(p, beats)
 	var with_one := p.boredom - 20
 	_screen(GUEST_CELL + Vector2i(0, 2), 2)
@@ -171,9 +171,9 @@ func test_two_screens_slow_it_no_more_than_one() -> void:
 func test_removing_the_screen_restores_the_full_rate() -> void:
 	var screen := _screen()
 	var p := _guest(Passenger.Stage.STANDING, 40)
-	_run_beats(p, 2 * BoredomSim.SCREEN_RISE_BEATS)
+	_run_beats(p, 2 * BoredomSim.RISE_BEATS * BoredomSim.SCREEN_RISE_BEATS)
 	assert_int(p.boredom).is_equal(40 + 2 * BoredomSim.RISE)
 	assert_bool(_world.grid.apply(BuildEdit.remove_object(screen)).ok).is_true()
 	var before := p.boredom
-	_run_beats(p, 3)
+	_run_beats(p, 3 * BoredomSim.RISE_BEATS)
 	assert_int(p.boredom).is_equal(before + 3 * BoredomSim.RISE)

@@ -24,6 +24,7 @@ const WALK_STAGES: Array[Passenger.Stage] = [
 	Passenger.Stage.TO_SECURITY,
 	Passenger.Stage.TO_GATE,
 	Passenger.Stage.TO_EXIT,
+	Passenger.Stage.MISSED,
 ]
 
 

@@ -49,7 +49,12 @@ static func day_records(day: int, minutes: Array) -> Array:
 
 
 static func save_of(offers: Array) -> Dictionary:
-	return {"save_version": OfferBoard.SAVE_VERSION, "offers": offers, "loyalty": {}}
+	return {
+		"save_version": OfferBoard.SAVE_VERSION,
+		"offers": offers,
+		"loyalty": {},
+		"day1_intro_shown": false,
+	}
 
 
 func test_a_day_draws_the_daily_count_of_valid_starter_offers() -> void:
@@ -167,10 +172,12 @@ func test_changed_fires_when_offers_arrive_or_one_is_declined_only() -> void:
 func test_a_save_through_json_restores_offers_and_dispositions() -> void:
 	var ids := _board.ensure_day(0, _rng)
 	_board.decline(ids[0])
+	_board.mark_day1_intro_shown()
 	_board.ensure_day(1, _rng)
 	var parsed: Variant = JSON.parse_string(JSON.stringify(_board.to_snapshot()))
 	var loaded := OfferBoard.new()
 	assert_bool(loaded.from_snapshot(parsed)).is_true()
+	assert_bool(loaded.is_day1_intro_shown()).is_true()
 	assert_array(loaded.open_offers()).is_equal(_board.open_offers())
 	assert_str(loaded.offer_of(ids[0])["status"]).is_equal(OfferBoard.DECLINED)
 	assert_dict(loaded.to_snapshot()).is_equal(_board.to_snapshot())
@@ -217,7 +224,26 @@ func test_a_bad_save_is_refused_whole_and_leaves_the_board_alone() -> void:
 		with_first("day", -1),
 		with_first("id", "O0N2"),
 		save_of(["not a record"]),
-		{"save_version": OfferBoard.SAVE_VERSION + 1, "offers": []},
+		{
+			"save_version": OfferBoard.SAVE_VERSION + 1,
+			"offers": [],
+			"loyalty": {},
+			"day1_intro_shown": false,
+		},
+		{"save_version": 10, "offers": [], "loyalty": {}, "day1_intro_shown": false},
+		{"save_version": OfferBoard.SAVE_VERSION, "offers": [], "loyalty": {}},
+		{
+			"save_version": OfferBoard.SAVE_VERSION,
+			"offers": [],
+			"loyalty": {},
+			"day1_intro_shown": 1
+		},
+		{
+			"save_version": OfferBoard.SAVE_VERSION,
+			"offers": [],
+			"loyalty": {},
+			"day1_intro_shown": "true",
+		},
 		{"save_version": OfferBoard.SAVE_VERSION},
 		{"offers": []},
 		{"save_version": OfferBoard.SAVE_VERSION, "offers": [], "extra": 1},

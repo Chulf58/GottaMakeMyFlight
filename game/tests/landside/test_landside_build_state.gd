@@ -371,9 +371,23 @@ func test_built_closed_and_paid_state_survives_a_save() -> void:
 	var other: LandsideSim = auto_free(LandsideSim.new())
 	assert_bool(other.use_definition(STARTER)).is_true()
 	assert_bool(other.from_snapshot(loaded, ArrivalBookings.new())).is_true()
-	assert_array(other.lots_built).is_equal([true, true])
-	assert_array(other.lots_closed).is_equal([true, false])
-	assert_array(other.lots_paid).is_equal([1200, 5000])
+	var expected_built := []
+	expected_built.resize(STARTER.lots.size())
+	expected_built.fill(false)
+	expected_built[0] = true
+	expected_built[1] = true
+	var expected_closed := []
+	expected_closed.resize(STARTER.lots.size())
+	expected_closed.fill(false)
+	expected_closed[0] = true
+	var expected_paid := []
+	expected_paid.resize(STARTER.lots.size())
+	expected_paid.fill(0)
+	expected_paid[0] = 1200
+	expected_paid[1] = 5000
+	assert_array(other.lots_built).is_equal(expected_built)
+	assert_array(other.lots_closed).is_equal(expected_closed)
+	assert_array(other.lots_paid).is_equal(expected_paid)
 	assert_array(other.curbs_built).is_equal([false, true])
 	assert_array(other.curbs_paid).is_equal([0, 300])
 	assert_str(JSON.stringify(other.to_snapshot(ArrivalBookings.new(), 1500))).is_equal(text)
@@ -403,12 +417,30 @@ func test_a_part_with_the_build_state_wrong_is_refused_whole() -> void:
 	var data := _sim.to_snapshot(ArrivalBookings.new(), 0)
 	var nothing := "a spot with nothing built is closed or has a price"
 	var prices := "whole prices, 0 or more"
+	var n := STARTER.lots.size()
+	var closed_unbuilt := []
+	closed_unbuilt.resize(n)
+	closed_unbuilt.fill(false)
+	closed_unbuilt[1] = true
+	var paid_unbuilt := []
+	paid_unbuilt.resize(n)
+	paid_unbuilt.fill(0)
+	paid_unbuilt[0] = 1200
+	paid_unbuilt[1] = 500
+	var neg_paid := []
+	neg_paid.resize(n)
+	neg_paid.fill(0)
+	neg_paid[0] = -1200
+	var frac_paid := []
+	frac_paid.resize(n)
+	frac_paid.fill(0)
+	frac_paid[0] = 1200.5
 	# Each case: the keys it breaks and the error it must be refused with.
 	var cases := {
-		"closed with nothing built": [{"lots_closed": [false, true]}, nothing],
-		"a price with nothing built": [{"lots_paid": [1200, 500]}, nothing],
-		"a negative price": [{"lots_paid": [-1200, 0]}, prices],
-		"a fractional price": [{"lots_paid": [1200.5, 0]}, prices],
+		"closed with nothing built": [{"lots_closed": closed_unbuilt}, nothing],
+		"a price with nothing built": [{"lots_paid": paid_unbuilt}, nothing],
+		"a negative price": [{"lots_paid": neg_paid}, prices],
+		"a fractional price": [{"lots_paid": frac_paid}, prices],
 		"too few lot entries": [{"lots_closed": [false]}, "lots_closed must be an array"],
 		"too many curb entries": [{"curbs_built": [false, false, false]}, "curbs_built must be"],
 		"a curb price with no bay": [{"curbs_paid": [300, 0]}, nothing],

@@ -126,6 +126,10 @@ static func _in_bus_grace(sim: PassengerSim, p: Passenger) -> bool:
 
 static func finish(sim: PassengerSim, p: Passenger, made: bool) -> void:
 	var close_call := false
+	var was_stage := p.stage
+	var was_apron := p.apron.duplicate()
+	var was_apron_mm := p.apron_mm
+	var was_pos := p.apron_position() if not p.apron.is_empty() else Vector3.ZERO
 	if made:
 		var doors_close := sim.flights.doors_close_tick(p.flight_id) if sim.flights != null else -1
 		close_call = p.late or (doors_close >= 0 and doors_close - sim.tick <= CLOSE_CALL_TICKS)
@@ -141,6 +145,8 @@ static func finish(sim: PassengerSim, p: Passenger, made: bool) -> void:
 		var waiting := p.stage == Passenger.Stage.SPAWNED and sim.entrance.waiting(p.id)
 		if waiting and p.stuck == Passenger.Stuck.NONE:
 			p.missed_stuck = Passenger.Stuck.QUEUE_FULL
+		if p.at != Passenger.NO_CELL:
+			PassengerThoughts.record(p, PassengerThoughts.Kind.MISSED_FLIGHT, sim.tick, p.at)
 	sim.entrance.forget(p.id)
 	sim._leave_station(p)
 	sim._release_seat(p)
@@ -153,6 +159,7 @@ static func finish(sim: PassengerSim, p: Passenger, made: bool) -> void:
 	p.late = false
 	p.collect_tick = 0
 	p.outcome_tick = sim.tick
+	p.needs_replan = false
 	var result: Dictionary = sim.flight_results.get(
 		p.flight_id, {"made": 0, "missed": 0, "close_calls": 0, "causes": {}}
 	)
@@ -171,8 +178,255 @@ static func finish(sim: PassengerSim, p: Passenger, made: bool) -> void:
 		result["causes"][cause] = int(result["causes"].get(cause, 0)) + 1
 		p.mood = 0
 		p.clear_path()
+		p.missed_phase = Passenger.MissedPhase.PAUSE
+		if was_stage == Passenger.Stage.APRON and not was_apron.is_empty() and was_apron_mm > 0:
+			p.apron = _reverse_apron_to_start(was_apron, was_apron_mm, was_pos)
+			p.apron_mm = 0
+		elif was_stage == Passenger.Stage.SPAWNED and not was_apron.is_empty():
+			p.apron = [was_pos] as Array[Vector3]
+			p.apron_mm = 0
+		else:
+			p.apron = []
+			p.apron_mm = 0
 	sim.flight_results[p.flight_id] = result
 	sim.outcome.emit(p.id, made)
+
+
+## Steps one missed passenger through its dismay pause, terminal exit walk,
+## outside sidewalk walk to the road, or bounded no-route safety timeout.
+static func step_missed(sim: PassengerSim, p: Passenger) -> void:
+	if sim.tick - p.outcome_tick >= PassengerSim.MISSED_MAX_WALK_OUT_TICKS:
+		_finish_missed_walk(p)
+		return
+	match p.missed_phase:
+		Passenger.MissedPhase.PAUSE:
+			if sim.tick - p.outcome_tick < PassengerSim.MISSED_DISMAY_TICKS:
+				return
+			_begin_missed_walk_out(sim, p)
+		Passenger.MissedPhase.APRON_RETURN:
+			var total := p.apron_total_mm()
+			var speed := p.pace_mm()
+			p.odometer_mm += mini(speed, total - p.apron_mm)
+			p.apron_mm = mini(p.apron_mm + speed, total)
+			if p.apron_mm >= total:
+				p.apron = []
+				p.apron_mm = 0
+				_begin_to_entrance(sim, p, false)
+		Passenger.MissedPhase.TO_ENTRANCE:
+			if p.needs_replan:
+				p.needs_replan = false
+				_replan_to_entrance(sim, p)
+				if p.missed_phase != Passenger.MissedPhase.TO_ENTRANCE:
+					return
+			if p.is_moving():
+				QueueRipple.walk(p, p.pace_mm(), sim.tick)
+			if not p.is_moving():
+				var door := _exit_entrance_at(sim, p.at)
+				if door != 0:
+					_start_road_from_door(sim, p, door)
+				else:
+					_begin_to_entrance(sim, p, false)
+		Passenger.MissedPhase.TO_ROAD:
+			var total := p.apron_total_mm()
+			var speed := p.pace_mm()
+			p.odometer_mm += mini(speed, total - p.apron_mm)
+			p.apron_mm = mini(p.apron_mm + speed, total)
+			if p.apron_mm >= total:
+				_finish_missed_walk(p)
+		Passenger.MissedPhase.STUCK_WAIT:
+			if sim.tick - p.stage_tick >= PassengerSim.MISSED_NO_ROUTE_TIMEOUT_TICKS:
+				_finish_missed_walk(p)
+				return
+			var beat := (
+				posmod(sim.tick, PassengerSim.BEAT_TICKS) == posmod(p.id, PassengerSim.BEAT_TICKS)
+			)
+			if p.needs_replan or beat:
+				p.needs_replan = false
+				_retry_stuck_missed(sim, p)
+
+
+static func _begin_missed_walk_out(sim: PassengerSim, p: Passenger) -> void:
+	if (
+		p.missed_stage == Passenger.Stage.APRON
+		and not p.apron.is_empty()
+		and p.apron_mm < p.apron_total_mm()
+	):
+		p.missed_phase = Passenger.MissedPhase.APRON_RETURN
+		p.stage_tick = sim.tick
+		step_missed(sim, p)
+		return
+	if p.missed_stage == Passenger.Stage.SPAWNED:
+		if sim.site == null:
+			_finish_missed_walk(p)
+			return
+		var pos := p.apron_position() if not p.apron.is_empty() else sim.grid.cell_to_world(p.at)
+		var walk := OutsideWalks.to_road_from(sim, pos)
+		if walk.is_empty():
+			_enter_missed_stuck(sim, p, pos)
+			return
+		if walk.size() <= 1:
+			_finish_missed_walk(p)
+			return
+		p.apron = walk
+		p.apron_mm = 0
+		p.missed_phase = Passenger.MissedPhase.TO_ROAD
+		p.stage_tick = sim.tick
+		step_missed(sim, p)
+		return
+	_begin_to_entrance(sim, p, true)
+
+
+static func _begin_to_entrance(sim: PassengerSim, p: Passenger, step_now: bool) -> void:
+	var door := _exit_entrance_at(sim, p.at)
+	if door != 0:
+		_start_road_from_door(sim, p, door)
+		if step_now and p.missed_phase == Passenger.MissedPhase.TO_ROAD:
+			step_missed(sim, p)
+		return
+	var path := _find_entrance_path(sim, p.at)
+	if path.size() < 2:
+		_enter_missed_stuck(sim, p)
+		return
+	p.set_path(path)
+	p.missed_phase = Passenger.MissedPhase.TO_ENTRANCE
+	p.stage_tick = sim.tick
+	if step_now:
+		QueueRipple.walk(p, p.pace_mm(), sim.tick)
+		if not p.is_moving():
+			var reached := _exit_entrance_at(sim, p.at)
+			if reached != 0:
+				_start_road_from_door(sim, p, reached)
+
+
+static func _replan_to_entrance(sim: PassengerSim, p: Passenger) -> void:
+	if not p.is_moving() or p.seg_mm == 0:
+		_begin_to_entrance(sim, p, false)
+		return
+	var here := p.at
+	var next := p.path[p.path_index + 1]
+	var keep := p.seg_mm
+	if sim.grid.can_staff_route(here, next):
+		if _exit_entrance_at(sim, next) != 0:
+			p.set_path([here, next])
+			p.seg_mm = keep
+			return
+		var tail := _find_entrance_path(sim, next)
+		if not tail.is_empty():
+			tail.push_front(here)
+			p.set_path(tail)
+			p.seg_mm = keep
+			return
+	elif sim.grid.is_walkable(here):
+		keep = Passenger.segment_mm(here, next) - keep
+		p.at = next
+		var back := _find_entrance_path(sim, here)
+		if back.is_empty():
+			back = [here]
+		back.push_front(next)
+		p.set_path(back)
+		p.seg_mm = keep
+		return
+	p.clear_path()
+	_enter_missed_stuck(sim, p)
+
+
+static func _retry_stuck_missed(sim: PassengerSim, p: Passenger) -> void:
+	if p.missed_stage == Passenger.Stage.SPAWNED and sim.site != null and not p.apron.is_empty():
+		var walk := OutsideWalks.to_road_from(sim, p.apron_position())
+		if walk.size() > 1:
+			p.apron = walk
+			p.apron_mm = 0
+			p.missed_phase = Passenger.MissedPhase.TO_ROAD
+			p.stage_tick = sim.tick
+		elif walk.size() == 1:
+			_finish_missed_walk(p)
+		return
+	if not p.apron.is_empty() and p.missed_stage == Passenger.Stage.APRON:
+		if OutsideWalks._clear_ahead(sim, p, p.at):
+			p.missed_phase = Passenger.MissedPhase.APRON_RETURN
+			p.stage_tick = sim.tick
+		return
+	_begin_to_entrance(sim, p, false)
+
+
+static func _start_road_from_door(sim: PassengerSim, p: Passenger, door: int) -> void:
+	p.clear_path()
+	if sim.site == null:
+		_finish_missed_walk(p)
+		return
+	var walk := OutsideWalks.departure_to_road(sim, door)
+	if walk.size() <= 1:
+		_finish_missed_walk(p)
+		return
+	p.apron = walk
+	p.apron_mm = 0
+	p.missed_phase = Passenger.MissedPhase.TO_ROAD
+	p.stage_tick = sim.tick
+
+
+static func _enter_missed_stuck(
+	sim: PassengerSim, p: Passenger, outside_pos := Vector3.ZERO
+) -> void:
+	p.clear_path()
+	if outside_pos != Vector3.ZERO:
+		p.apron = [outside_pos] as Array[Vector3]
+		p.apron_mm = 0
+	if p.missed_phase != Passenger.MissedPhase.STUCK_WAIT:
+		p.stage_tick = sim.tick
+	p.missed_phase = Passenger.MissedPhase.STUCK_WAIT
+
+
+static func _finish_missed_walk(p: Passenger) -> void:
+	p.clear_path()
+	p.apron = []
+	p.apron_mm = 0
+	p.missed_phase = Passenger.MissedPhase.DONE
+
+
+static func _entrance_doors(sim: PassengerSim) -> Array[int]:
+	if sim.site != null or not sim.layout.passenger_entrances.is_empty():
+		return sim.layout.passenger_entrances
+	return sim.layout.entrances
+
+
+static func _exit_entrance_at(sim: PassengerSim, cell: Vector2i) -> int:
+	for door in _entrance_doors(sim):
+		if sim.layout.door_cell(sim.grid, door) == cell:
+			return door
+	return 0
+
+
+static func _find_entrance_path(sim: PassengerSim, from: Vector2i) -> Array[Vector2i]:
+	var best: Array[Vector2i] = []
+	var best_mm := 0
+	for door in _entrance_doors(sim):
+		var cell := sim.layout.door_cell(sim.grid, door)
+		var path := sim.grid.find_staff_path(from, cell)
+		if path.is_empty():
+			continue
+		var mm := Passenger.path_mm(path)
+		if best.is_empty() or mm < best_mm:
+			best = path
+			best_mm = mm
+	return best
+
+
+static func _reverse_apron_to_start(
+	apron: Array[Vector3], mm_walked: int, here: Vector3
+) -> Array[Vector3]:
+	var out: Array[Vector3] = [here]
+	var left := mm_walked
+	var last_passed := 0
+	for i in range(1, apron.size()):
+		var seg := roundi(apron[i - 1].distance_to(apron[i]) * 1000.0)
+		if left <= seg:
+			break
+		left -= seg
+		last_passed = i
+	for i in range(last_passed, -1, -1):
+		if out[out.size() - 1].distance_to(apron[i]) > 0.001:
+			out.append(apron[i])
+	return out
 
 
 ## Whether schedule `entry` was due and held back because the entrance line
@@ -202,7 +456,12 @@ static func _count_line_miss(sim: PassengerSim, flight_id: String) -> void:
 static func retire_settled(sim: PassengerSim) -> void:
 	for i in range(sim._passengers.size() - 1, -1, -1):
 		var p := sim._passengers[i]
-		if not p.is_done() or sim.tick - p.outcome_tick <= PassengerSim.SETTLED_KEEP_TICKS:
+		if not p.is_done():
+			continue
+		if p.stage == Passenger.Stage.MISSED and p.missed_phase != Passenger.MissedPhase.NONE:
+			if p.missed_phase != Passenger.MissedPhase.DONE:
+				continue
+		elif sim.tick - p.outcome_tick <= PassengerSim.SETTLED_KEEP_TICKS:
 			continue
 		var leftover := settled_leftovers(sim, p)
 		if leftover != "":

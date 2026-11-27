@@ -64,11 +64,29 @@ class Scene:
 		var side := BuildGrid.SIDE_STEP.find(step)
 		if not grid.in_bounds(cell) or not grid.has_wall(cell, side):
 			return true
+		if grid.has_belt_hatch(cell, side):
+			return true
 		var other := cell + step
 		var back := BuildGrid.SIDE_STEP.find(-step)
 		return (
 			open_edges.has(Vector3i(cell.x, cell.y, side))
 			or open_edges.has(Vector3i(other.x, other.y, back))
+		)
+
+	## Whether `cell -> cell + step` crosses an interior plain wall (floored on both
+	## sides) that a belt drag automatically cuts a belt hatch through.
+	func can_cut_hatch(cell: Vector2i, step: Vector2i) -> bool:
+		var side := BuildGrid.SIDE_STEP.find(step)
+		if side < 0 or not grid.in_bounds(cell):
+			return false
+		var other := cell + step
+		if not grid.in_bounds(other):
+			return false
+		if grid.wall_kind(cell, side) != BuildGrid.WallKind.PLAIN:
+			return false
+		return (
+			grid.floor_at(cell) != BuildGrid.FLOOR_NONE
+			and grid.floor_at(other) != BuildGrid.FLOOR_NONE
 		)
 
 	## The steps from `cell` toward each of its links.
@@ -209,6 +227,8 @@ class Plan:
 	## before it: the ghost draws its bar there. wall_side is -1 for none.
 	var wall_cell := Vector2i.ZERO
 	var wall_side := -1
+	## Newly crossed interior plain wall edges [cell.x, cell.y, side] cut by this line.
+	var hatched_edges: Array[Vector3i] = []
 
 
 static func plan_line(grid: BuildGrid, from: Vector2i, to: Vector2i, turn: int) -> Plan:
@@ -216,12 +236,20 @@ static func plan_line(grid: BuildGrid, from: Vector2i, to: Vector2i, turn: int) 
 	plan.cells = path(from, to)
 	var scene := Scene.new(grid)
 	for i in range(1, plan.cells.size()):
-		var step := plan.cells[i] - plan.cells[i - 1]
-		if not scene.open(plan.cells[i - 1], step):
-			plan.result = BuildResult.refused(BuildResult.Reason.BELT_WALL)
-			plan.wall_cell = plan.cells[i - 1]
-			plan.wall_side = BuildGrid.SIDE_STEP.find(step)
-			return plan
+		var prev := plan.cells[i - 1]
+		var step := plan.cells[i] - prev
+		if not scene.open(prev, step):
+			var side := BuildGrid.SIDE_STEP.find(step)
+			if scene.can_cut_hatch(prev, step):
+				var edge := Vector3i(prev.x, prev.y, side)
+				if not scene.open_edges.has(edge):
+					scene.open_edges[edge] = true
+					plan.hatched_edges.append(edge)
+			else:
+				plan.result = BuildResult.refused(BuildResult.Reason.BELT_WALL)
+				plan.wall_cell = prev
+				plan.wall_side = side
+				return plan
 	for cell in plan.cells:
 		if scene.is_belt(cell):
 			continue
@@ -238,8 +266,20 @@ static func plan_line(grid: BuildGrid, from: Vector2i, to: Vector2i, turn: int) 
 	if cut_off != null:
 		plan.result = cut_off
 		return plan
+	var hatch_endpoints := {}
+	var touch_cells: Array[Vector2i] = plan.new_cells.duplicate()
+	for edge in plan.hatched_edges:
+		plan.edits.append(BuildEdit.set_belt_hatch(Vector2i(edge.x, edge.y), edge.z, true))
+		var a := Vector2i(edge.x, edge.y)
+		var b := a + BuildGrid.SIDE_STEP[edge.z]
+		hatch_endpoints[a] = true
+		hatch_endpoints[b] = true
+		if not touch_cells.has(a):
+			touch_cells.append(a)
+		if not touch_cells.has(b):
+			touch_cells.append(b)
 	var reshapes: Array[BuildEdit] = []
-	for cell in around(plan.new_cells):
+	for cell in around(touch_cells):
 		if not scene.is_belt(cell):
 			continue
 		var def := BELT
@@ -254,15 +294,20 @@ static func plan_line(grid: BuildGrid, from: Vector2i, to: Vector2i, turn: int) 
 			return plan
 		if next[0] != def or next[1] != facing:
 			reshapes.append(BuildEdit.reshape_belt(cell, next[0], next[1]))
-		if scene.added.has(cell) or next[0] != def or next[1] != facing:
+		if (
+			scene.added.has(cell)
+			or hatch_endpoints.has(cell)
+			or next[0] != def
+			or next[1] != facing
+		):
 			plan.shapes.append([next[0], cell, next[1]])
 	plan.edits.append_array(reshapes)
 	return plan
 
 
 ## BELT_CROSSING when `edit` would give a belt cell a fourth link: a desk whose
-## outlet points into a belt cell, or a wall taken away between linked cells.
-## Null when it adds no link.
+## outlet points into a belt cell, a belt hatch opened on a wall, or a wall taken
+## away between linked cells. Null when it adds no link.
 static func crossing_problem(grid: BuildGrid, edit: BuildEdit) -> BuildResult:
 	var scene := Scene.new(grid)
 	var targets: Array[Vector2i] = []
@@ -276,6 +321,10 @@ static func crossing_problem(grid: BuildGrid, edit: BuildEdit) -> BuildResult:
 		BuildEdit.Kind.REMOVE_WALL:
 			scene.open_edges[Vector3i(edit.cell.x, edit.cell.y, edit.side)] = true
 			targets = [edit.cell, edit.cell + BuildGrid.SIDE_STEP[edit.side]]
+		BuildEdit.Kind.SET_BELT_HATCH:
+			if edit.belt_hatch:
+				scene.open_edges[Vector3i(edit.cell.x, edit.cell.y, edit.side)] = true
+				targets = [edit.cell, edit.cell + BuildGrid.SIDE_STEP[edit.side]]
 	for cell in targets:
 		if scene.is_belt(cell) and scene.links(cell).size() > 3:
 			return BuildResult.refused(BuildResult.Reason.BELT_CROSSING)

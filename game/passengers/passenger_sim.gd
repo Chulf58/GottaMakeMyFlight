@@ -38,7 +38,7 @@ signal stage_changed(id: int, stage: Passenger.Stage)
 signal checked_in(id: int, desk: int)
 
 ## The history of SAVE_VERSION is in PassengerSimSave.
-const SAVE_VERSION := 40
+const SAVE_VERSION := 41
 ## 1.96 m/s; the Toon walk clips cover 1.92-1.95 m/s.
 const WALK_MM := 98
 ## 3.5 m/s, a jog (user-ruled); the Toon run clips cover 4.17-5.30 m/s,
@@ -51,11 +51,18 @@ const CHECKIN_TICKS := 60
 const SIT_DOWN_TICKS := 24
 const STAND_UP_TICKS := 24
 const DEFAULT_PASSENGERS := 24
-## The last scheduled spawn of a flight is this many ticks before doors close.
-const LAST_SPAWN_LEAD_TICKS := 800
-## A made or missed passenger is kept this long, then retired (a missed one
-## stays drawn for PassengerViews.MISSED_LINGER_TICKS, which is the same).
+## The last scheduled spawn of a flight is this many ticks before doors close
+## (68 s: clears check-in and security with positive slack before doors close).
+const LAST_SPAWN_LEAD_TICKS := 1360
+## A made passenger (or legacy direct MISSED override) is kept this long, then
+## retired; walk-out MISSED passengers stay until reaching the road or timing out.
 const SETTLED_KEEP_TICKS := 200
+## How long a missed passenger pauses in dismay before walking out (~1.5 s).
+const MISSED_DISMAY_TICKS := 30
+## How long a missed passenger with no route to any entrance waits before retiring.
+const MISSED_NO_ROUTE_TIMEOUT_TICKS := 100
+## Upper bound on a missed passenger's walk-out from outcome_tick before forced retirement.
+const MISSED_MAX_WALK_OUT_TICKS := 6000
 ## Stuck passengers retry once a simulated second, staggered by id; mood and
 ## the lateness forecast update on the same beat.
 const BEAT_TICKS := 20
@@ -369,6 +376,8 @@ func on_tick(new_tick: int) -> void:
 	for p in _passengers:
 		if not p.is_done():
 			_step(p)
+		elif p.stage == Passenger.Stage.MISSED and p.missed_phase != Passenger.MissedPhase.NONE:
+			PassengerLifecycle.step_missed(self, p)
 	# The tick's boundary: every forecast that decides something on the next
 	# tick, against one state (SecurityForecast.begin_boundary()).
 	SecurityForecast.begin_boundary(self)

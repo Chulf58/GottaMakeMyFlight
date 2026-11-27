@@ -143,24 +143,25 @@ static func summarize(sim: PassengerSim, flight_id: String) -> Dictionary:
 	var counts := {}
 	var held: int = mini(sim.entrance.held_missed.get(flight_id, 0), on_road)
 	if on_road - held > 0:
-		counts[TranslationServer.translate("Waiting for drop-off")] = on_road - held
+		counts[String(TranslationServer.translate("Waiting for drop-off"))] = on_road - held
 	if held > 0:
-		counts[TranslationServer.translate("Waiting outside: check-in full")] = held
+		counts[String(TranslationServer.translate("Waiting outside: check-in full"))] = held
 	var causes: Dictionary = result.get("causes", {})
 	for cause: Vector2i in causes:
 		var text := reason_text(cause.x as Passenger.Stage, cause.y as Passenger.Stuck)
 		counts[text] = int(counts.get(text, 0)) + causes[cause]
 	var no_shows: Dictionary = sim.no_shows.get(flight_id, {})
 	var no_show_texts := {
-		"no_entrance": TranslationServer.translate("Never arrived: the terminal has no entrance"),
-		"late": TranslationServer.translate("Did not arrive before the doors closed"),
+		"no_entrance":
+		String(TranslationServer.translate("Never arrived: the terminal has no entrance")),
+		"late": String(TranslationServer.translate("Did not arrive before the doors closed")),
 	}
 	for cause in no_show_texts:
 		if no_shows.get(cause, 0) > 0:
 			counts[no_show_texts[cause]] = no_shows[cause]
 	var reasons := []
 	for text in counts:
-		reasons.append({"text": text, "count": counts[text]})
+		reasons.append({"text": str(text), "count": counts[text]})
 	reasons.sort_custom(_larger_first)
 	return {
 		"flight": flight_id,
@@ -174,4 +175,4 @@ static func summarize(sim: PassengerSim, flight_id: String) -> Dictionary:
 static func _larger_first(a: Dictionary, b: Dictionary) -> bool:
 	if a["count"] != b["count"]:
 		return a["count"] > b["count"]
-	return a["text"] < b["text"]
+	return str(a["text"]) < str(b["text"])

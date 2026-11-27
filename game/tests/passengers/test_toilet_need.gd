@@ -2,10 +2,10 @@ class_name TestToiletNeed
 extends GdUnitTestSuite
 ## The toilet need (decision toilet-design-queue-free-reservable-stalls-per-
 ## stall-daily-u, point 5; decision a-passenger-with-a-high-need-detours-to-
-## the-nearest-facility): drawn from the sim RNG at spawn, rising once a
-## second; from ToiletSim.NEED_AT the passenger detours to a toilet only when
-## the forecast allows, and otherwise carries on and loses mood. With hunger
-## high as well, the toilet comes first.
+## the-nearest-facility): drawn from the sim RNG at spawn, rising once every
+## ToiletSim.NEED_RISE_BEATS seconds; from ToiletSim.NEED_AT the passenger detours
+## to a toilet only when the forecast allows, and otherwise carries on and loses
+## mood. With hunger high as well, the toilet comes first.
 
 ## A floored world with the exit on the north edge, a cafe in the north-east
 ## and a toilet room south of it, everyone airside. With no gate seats a
@@ -76,7 +76,7 @@ func _next_beat(p: Passenger) -> int:
 	return t
 
 
-func test_the_need_is_drawn_at_spawn_and_rises_once_a_second() -> void:
+func test_the_need_is_drawn_at_spawn_and_rises_once_per_interval() -> void:
 	_world = PassengerTestWorld.reference_world(7)
 	var seen := {}
 	for i in 40:
@@ -91,8 +91,8 @@ func test_the_need_is_drawn_at_spawn_and_rises_once_a_second() -> void:
 	_world.sim.entrance.forget(p.id)
 	ToiletTestLayout.calm(p)
 	p.toilet_need = 10
-	_world.run_to(_world.clock.tick + 5 * PassengerSim.BEAT_TICKS)
-	print("need after 5 beats %d" % p.toilet_need)
+	_world.run_to(_world.clock.tick + 5 * ToiletSim.NEED_RISE_BEATS * PassengerSim.BEAT_TICKS)
+	print("need after 5 rise intervals %d" % p.toilet_need)
 	assert_int(p.toilet_need).is_equal(10 + 5 * ToiletSim.NEED_RISE)
 
 

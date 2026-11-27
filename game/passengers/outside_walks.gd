@@ -42,6 +42,50 @@ static func arrival(sim: PassengerSim, entrance: int) -> Array[Vector3]:
 	return SiteRoutes.arrival(sim.grid, sim.site, sim.layout.outside_routes[entrance])
 
 
+## The reversed walk out from entrance `entrance` to the road, or empty when
+## there is none.
+static func departure_to_road(sim: PassengerSim, entrance: int) -> Array[Vector3]:
+	var walk := arrival(sim, entrance)
+	if walk.is_empty():
+		return walk
+	walk.reverse()
+	return walk
+
+
+## The walk from an outdoor or door world position `here` back out to the road
+## edge on the site, or empty when there is no route or no site.
+static func to_road_from(sim: PassengerSim, here: Vector3) -> Array[Vector3]:
+	if sim.site == null:
+		return [] as Array[Vector3]
+	var grid := sim.grid
+	var site := sim.site
+	var start := grid.world_to_cell(here)
+	if not grid.in_bounds(start) and here.z >= site.grid_origin.z + grid.size.y - 0.5:
+		var road_pt := Vector3(here.x, site.road_height, site.road_z)
+		if here.distance_to(road_pt) < 0.05:
+			return [here] as Array[Vector3]
+		return [here, road_pt] as Array[Vector3]
+	var door := _entrance_at(sim, start)
+	if door != 0 and sim.layout.outside_routes.has(door):
+		var walk := departure_to_road(sim, door)
+		if not walk.is_empty():
+			walk[0] = here
+		return walk
+	var seeds := SiteRoutes.edge_cells(grid, site, SiteDefinition.ROAD_STEP)
+	if seeds.is_empty():
+		return [] as Array[Vector3]
+	var dist := SiteRoutes.distances(grid, site, seeds)
+	var cells := _cells_from(sim, here, dist)
+	if cells.is_empty():
+		return [] as Array[Vector3]
+	var walk: Array[Vector3] = [here]
+	for cell in SiteRoutes.corners(cells):
+		walk.append(SiteRoutes.ground(grid, site, cell))
+	var at_edge := SiteRoutes.ground(grid, site, cells[cells.size() - 1])
+	walk.append(Vector3(at_edge.x, site.road_height, site.road_z))
+	return walk
+
+
 ## The walk from exit `exit_door`'s cell to the door of a plane drawn with
 ## `model` ("" for the stand's door), or empty when there is none. On a site
 ## it is chosen whole here (decision bridge-boarding-sim-route-chosen-at-
@@ -105,6 +149,8 @@ static func revalidate(sim: PassengerSim) -> void:
 		var p := sim.get_passenger(id)
 		if p.stage == Passenger.Stage.SPAWNED:
 			_check_arrival(sim, p, to_doors)
+		elif p.stage == Passenger.Stage.MISSED:
+			_check_missed_outside(sim, p)
 		elif p.stage == Passenger.Stage.APRON:
 			var model := PlaneClasses.flight_model(sim.flights, p.flight_id)
 			# A walker boarding through the docked jet bridge is off the open
@@ -140,6 +186,34 @@ static func revalidate(sim: PassengerSim) -> void:
 ## A road walker keeps its walk while its entrance is in use and the walk is
 ## clear, and otherwise takes the shortest walk to an entrance in use.
 ## `to_doors` keeps each entrance's distance field (entrance id -> field).
+static func _check_missed_outside(sim: PassengerSim, p: Passenger) -> void:
+	if p.missed_phase == Passenger.MissedPhase.TO_ROAD:
+		if p.apron.size() <= 1 or _clear_ahead(sim, p, p.at):
+			return
+		var walk := to_road_from(sim, p.apron_position())
+		if walk.size() > 1:
+			p.apron = walk
+			p.apron_mm = 0
+		elif walk.size() == 1:
+			p.apron = []
+			p.apron_mm = 0
+			p.missed_phase = Passenger.MissedPhase.DONE
+		else:
+			p.apron = [p.apron_position()] as Array[Vector3]
+			p.apron_mm = 0
+			p.missed_phase = Passenger.MissedPhase.STUCK_WAIT
+			p.stage_tick = sim.tick
+	elif p.missed_phase == Passenger.MissedPhase.APRON_RETURN:
+		var model := PlaneClasses.flight_model(sim.flights, p.flight_id)
+		if sim.layout.bus_exits.has(p.exit_object) or docks_at(sim, p.exit_object, model):
+			return
+		if not _clear_ahead(sim, p, p.at):
+			p.apron = [p.apron_position()] as Array[Vector3]
+			p.apron_mm = 0
+			p.missed_phase = Passenger.MissedPhase.STUCK_WAIT
+			p.stage_tick = sim.tick
+
+
 static func _check_arrival(sim: PassengerSim, p: Passenger, to_doors: Dictionary) -> void:
 	var entrance := _entrance_at(sim, p.at)
 	if sim.layout.passenger_entrances.has(entrance) and _clear_ahead(sim, p, p.at):

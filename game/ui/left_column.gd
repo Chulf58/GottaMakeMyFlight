@@ -1,12 +1,11 @@
 class_name LeftColumn
 extends RefCounted
-## The top-left column (decisions hud-grid-and-rails-one-spacing-grid-centred-
+## The HUD's top-left column (decisions hud-grid-and-rails-one-spacing-grid-centred-
 ## top-row-right-ra, part 4, and checklist-card-moves-to-the-top-left-column-
-## slim-at-304-px-t): the Mood, Departures and Hints toggles and the Reset hints
-## button stacked on the margin under the money row, then the departures list,
-## then the checklist or first-time hint card. Every number is HudLayout's. The
-## buttons and the cards live in different scenes, so this holds the one place
-## each takes its slot.
+## slim-at-304-px-t): the Mood, Departures and Hints toggles stacked on the
+## margin under the money row, then the departures list, then the checklist or
+## first-time hint card. Every number is HudLayout's. The buttons and the cards
+## live in different scenes, so this holds the one place each takes its slot.
 
 ## The group the departures list joins, so a card finds where the list ends.
 const LIST_GROUP := &"left_column_list"
@@ -19,12 +18,12 @@ const HINT_GROUP := &"left_column_hint"
 ## however wide a translation makes it (board T10).
 const DEPARTURES_TOGGLE_GROUP := &"left_column_departures_toggle"
 const PLANNER_TOGGLE_GROUP := &"left_column_planner_toggle"
-## Every column toggle / Reset button joins this with META_SLOT, so list_top()
-## collapses hidden rows (such as Hints/Reset hints) dynamically.
+## Every column toggle joins this with META_SLOT, so list_top() collapses hidden
+## rows (such as Hints) dynamically.
 const TOGGLE_ROW_GROUP := &"left_column_toggles"
 const META_SLOT := &"left_column_slot"
-## A card that grows up from the bottom-left (the inspect card, follow card):
-## while one shows over the column, the column's cards stop a GAP above it.
+## A card that grows up from the bottom-left (FollowCard): while one shows over
+## the column, the column's cards stop a GAP above it.
 const FLOOR_GROUP := BottomDocks.LEFT_FLOOR_GROUP
 ## What the list leaves the card under it when the card shows: the card's padding,
 ## its title, one line and a "+N more" line.
@@ -34,14 +33,11 @@ const CARD_RESERVE := 136.0
 const SLOT_MOOD := 0
 const SLOT_DEPARTURES := 1
 const SLOT_HINTS := 2
-## Reset hints, the row under Hints (HUD 7/7, board 3bd42402). list_top()
-## collapses it (and SLOT_HINTS) whenever those buttons are hidden.
-const SLOT_RESET := 3
-const SLOTS := 4
+const SLOTS := 3
 
 ## Under the money row (which is BUTTON_H high on the margin), one group gap.
 const TOP := HudLayout.MARGIN + HudLayout.BUTTON_H + HudLayout.GROUP_GAP
-## Full 4-slot LIST_TOP constant (when Mood, Departures, Hints and Reset are all shown).
+## Full 3-slot LIST_TOP constant (when Mood, Departures and Hints are all shown).
 const LIST_TOP := TOP + SLOTS * (HudLayout.BUTTON_H + HudLayout.GAP)
 
 
@@ -81,8 +77,8 @@ static func slot_top(slot: int) -> float:
 
 
 ## Where the departures list (and collapsed card slot) starts: a GAP below the
-## lowest visible column toggle or Reset hints button, collapsing hidden rows
-## (SLOT_HINTS / SLOT_RESET) instead of leaving a dead 48 px gap.
+## lowest visible column toggle, collapsing hidden rows (SLOT_HINTS) instead of
+## leaving a dead 48 px gap.
 static func list_top(tree: SceneTree) -> float:
 	var bottom := slot_top(SLOT_DEPARTURES) + float(HudLayout.BUTTON_H + HudLayout.GAP)
 	if tree == null:

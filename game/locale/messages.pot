@@ -8332,3 +8332,35 @@ msgstr ""
 #: ui/room_panel.gd
 msgid "Seating {count}"
 msgstr ""
+
+#: passengers/passenger_thoughts.gd:183
+msgid "Missed my flight!"
+msgstr ""
+
+#: ui/item_info.gd:85
+msgid "Compact, cheap starter scanner. Screens one passenger at a time; repacks block the line."
+msgstr ""
+
+#: ui/item_info.gd:89
+msgid "A security officer works beside it. A Security lane is ~1.9x faster for busy airports."
+msgstr ""
+
+#: ui/item_info.gd:93
+msgid "Needs an officer hired in Staff. Keep its staff spot and way in clear."
+msgstr ""
+
+#: ui/item_info.gd:403
+msgid "1-click 4-part X-ray lane (~1.9x faster throughput) with a non-blocking side repack berth."
+msgstr ""
+
+#: ui/item_info.gd:407
+msgid "Places tray table, X-ray belt, arch and pickup table; press R to turn. Toggle Fast-Track on a built lane."
+msgstr ""
+
+#: ui/item_info.gd:411
+msgid "Needs one officer to open; a second helper officer gives 2x search and repack speed."
+msgstr ""
+
+#: ui/offer_panel.gd:467
+msgid "Accept airlines that fit your gates. Each signed contract sends flights every day."
+msgstr ""

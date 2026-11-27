@@ -5,9 +5,10 @@ extends CanvasLayer
 ## auto-dismiss and bare `tr(...)` calls for translation guard compliance.
 
 const TOAST_SECONDS := 6.0
-const TOAST_W := 380.0
+const TOAST_W := float(HudLayout.RAIL_W)
 const LAYER_NAME := &"AchievementToastLayer"
 const CARD_NAME := &"AchievementToast"
+const RAIL_KEY := &"achievement_unlocked"
 
 var _id := ""
 var _title_msgid := ""
@@ -18,6 +19,8 @@ var _title_label: Label
 var _body_label: Label
 var _close_button: Button
 var _timer: Timer
+var _rail: AlertStack
+var _dismissing := false
 
 
 func _notification(what: int) -> void:
@@ -25,8 +28,12 @@ func _notification(what: int) -> void:
 		_refresh_texts()
 
 
-## Shows a non-blocking toast for an unlocked achievement and attaches it under `host`
-## when provided, replacing any previous toast cleanly with zero orphans.
+func _exit_tree() -> void:
+	_detach_from_rail()
+
+
+## Shows a non-blocking toast for an unlocked achievement and routes it into
+## AlertStack when present under `host`, or top-right standalone otherwise.
 static func show_unlocked(
 	id: String, title: String, description: String, host: Node = null
 ) -> AchievementToast:
@@ -37,8 +44,14 @@ static func show_unlocked(
 			old.free()
 	var toast := AchievementToast.new()
 	toast._build(id, title, description)
+	var rail := _find_rail(host)
 	if host != null:
 		host.add_child(toast)
+	if rail != null:
+		toast._attach_to_rail(rail)
+	else:
+		toast._anchor_standalone_top_right()
+		toast.add_child(toast._card)
 	return toast
 
 
@@ -63,7 +76,11 @@ func close_button() -> Button:
 
 
 func dismiss() -> void:
-	if is_instance_valid(self):
+	if _dismissing or not is_instance_valid(self):
+		return
+	_dismissing = true
+	_detach_from_rail()
+	if not is_queued_for_deletion():
 		queue_free()
 
 
@@ -79,17 +96,8 @@ func _build(id: String, title: String, description: String) -> void:
 	_card.theme = BuildMenu.HUD_THEME
 	_card.theme_type_variation = &"HudCardGreen"
 	_card.mouse_filter = Control.MOUSE_FILTER_PASS
-	_card.anchor_left = 0.5
-	_card.anchor_right = 0.5
-	_card.anchor_top = 1.0
-	_card.anchor_bottom = 1.0
-	_card.offset_left = -TOAST_W * 0.5
-	_card.offset_right = TOAST_W * 0.5
-	var bottom_offset := -float(HudLayout.MARGIN + HudLayout.BAR_H + HudLayout.GAP)
-	_card.offset_top = bottom_offset
-	_card.offset_bottom = bottom_offset
-	_card.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	add_child(_card)
+	_card.custom_minimum_size = Vector2(TOAST_W, 0.0)
+	_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
 	var box := VBoxContainer.new()
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -137,6 +145,56 @@ func _build(id: String, title: String, description: String) -> void:
 	_timer.process_mode = Node.PROCESS_MODE_ALWAYS
 	_timer.timeout.connect(dismiss)
 	add_child(_timer)
+
+
+static func _find_rail(host: Node) -> AlertStack:
+	if host == null or not host.is_inside_tree():
+		return null
+	var tree := host.get_tree()
+	if tree == null:
+		return null
+	return tree.get_first_node_in_group(AlertStack.GROUP) as AlertStack
+
+
+func _attach_to_rail(rail: AlertStack) -> void:
+	_rail = rail
+	if not _card.tree_exiting.is_connected(_on_card_exiting):
+		_card.tree_exiting.connect(_on_card_exiting)
+	rail.post_notice(
+		RAIL_KEY,
+		_card,
+		TOAST_SECONDS,
+		tr("Achievement Unlocked"),
+		"%s: %s" % [tr(_title_msgid), tr(_description_msgid)]
+	)
+
+
+func _detach_from_rail() -> void:
+	if is_instance_valid(_card) and _card.tree_exiting.is_connected(_on_card_exiting):
+		_card.tree_exiting.disconnect(_on_card_exiting)
+	if is_instance_valid(_rail) and _rail.notice_card(RAIL_KEY) == _card:
+		_rail.drop_notice(RAIL_KEY)
+	_rail = null
+
+
+func _on_card_exiting() -> void:
+	_rail = null
+	if not _dismissing and is_instance_valid(self) and not is_queued_for_deletion():
+		_dismissing = true
+		queue_free()
+
+
+func _anchor_standalone_top_right() -> void:
+	_card.anchor_left = 1.0
+	_card.anchor_right = 1.0
+	_card.anchor_top = 0.0
+	_card.anchor_bottom = 0.0
+	_card.offset_right = -float(HudLayout.MARGIN)
+	_card.offset_left = -float(HudLayout.MARGIN) - TOAST_W
+	_card.offset_top = float(HudLayout.MARGIN)
+	_card.offset_bottom = float(HudLayout.MARGIN)
+	_card.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	_card.grow_vertical = Control.GROW_DIRECTION_END
 
 
 func _refresh_texts() -> void:
