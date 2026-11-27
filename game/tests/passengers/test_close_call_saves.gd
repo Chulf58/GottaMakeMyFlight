@@ -72,7 +72,9 @@ func test_on_time_outside_window_and_missed_late_do_not_count() -> void:
 	PassengerLifecycle.finish(_world.sim, missed, false)
 	assert_int(_world.sim.flight_results[PassengerTestWorld.FLIGHT]["close_calls"]).is_equal(0)
 	assert_array(PassengerThoughts.entries(early)).is_empty()
-	assert_array(PassengerThoughts.entries(missed)).is_empty()
+	var missed_entries := PassengerThoughts.entries(missed)
+	assert_int(missed_entries.size()).is_equal(1)
+	assert_int(missed_entries[0]["kind"]).is_equal(PassengerThoughts.Kind.MISSED_FLIGHT)
 
 
 func test_close_calls_and_thought_survive_snapshot_round_trip() -> void:

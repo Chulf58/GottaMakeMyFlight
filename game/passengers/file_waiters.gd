@@ -351,21 +351,34 @@ func _taken(sim: PassengerSim, files: BoardingFiles, order: Array[Passenger]) ->
 			taken.append_array(_back(p.id, own, own + _ground(shift(p))))
 	for id in ids():
 		if not seen.has(id):
+			seen[id] = true
 			var q := sim.get_passenger(id)
 			taken.append_array(_back(id, own_point(sim, q), own_point(sim, q) + _ground(shift(q))))
 	for door: int in doors:
 		for id in files.door_file(door):
 			var filed := sim.get_passenger(id)
-			if not seen.has(id) and files.allowed(sim, filed, PassengerSim.WALK_MM) == 0:
+			if not seen.has(id):
 				seen[id] = true
-				taken.append([id, own_point(sim, filed) + _ground(shift(filed)), -1])
-	# Passengers on a standing spot, about to set off: a wait spot and the walks
-	# to and from it keep clear of them, though they crowd no one (the 0.6 m
-	# lattice is closer than the gap).
+				var rank := -1 if files.allowed(sim, filed, PassengerSim.WALK_MM) == 0 else -4
+				taken.append([id, own_point(sim, filed) + _ground(shift(filed)), rank])
+	# Passengers on a standing spot or standing up from a gate seat, about to
+	# set off: a wait spot and the walks to and from it keep clear of them,
+	# though they crowd no one. Gate stand-ups use rank -4 (placing only) so an
+	# already-placed waiter is never held back on may_return().
 	for id in sim.passenger_ids():
-		if not seen.has(id) and sim.standing.spot_of(id) != StandingSpots.NO_SPOT:
-			var q := sim.get_passenger(id)
+		if seen.has(id):
+			continue
+		var q := sim.get_passenger(id)
+		if sim.standing.spot_of(id) != StandingSpots.NO_SPOT:
+			seen[id] = true
 			taken.append([id, own_point(sim, q) + _ground(shift(q)), -2])
+		elif (
+			q.stage == Passenger.Stage.STANDING_UP
+			and sim.tick >= q.boarding_tick
+			and StageKinds.visit_facility(sim, q) == StageKinds.Facility.NONE
+		):
+			seen[id] = true
+			taken.append([id, Vector2(q.seat_front.x + 0.5, q.seat_front.y + 0.5), -4])
 	return taken
 
 
@@ -392,8 +405,8 @@ static func _back(id: int, own: Vector2, at: Vector2) -> Array:
 
 ## The points of `taken` that are not `id`'s and rank before `before`, by
 ## `mode`: PLACING takes all; CROWDING leaves out where a walker walking out
-## stands (rank -2) and the walks back (rank -3); RETURNING leaves out only the
-## walks back, which no one stands on yet.
+## stands (rank -2), the walks back (rank -3) and placing-only obstacles
+## (rank -4); RETURNING leaves out the walks back and placing-only obstacles.
 static func _others(taken: Array, id: int, before: int, mode := PLACING) -> Array[Vector2]:
 	var out: Array[Vector2] = []
 	for entry: Array in taken:
@@ -402,7 +415,7 @@ static func _others(taken: Array, id: int, before: int, mode := PLACING) -> Arra
 		if mode == CROWDING:
 			counts = rank >= -1 and rank < before
 		elif mode == RETURNING:
-			counts = rank != -3
+			counts = rank != -3 and rank != -4
 		if entry[0] != id and counts:
 			out.append(entry[1])
 	return out

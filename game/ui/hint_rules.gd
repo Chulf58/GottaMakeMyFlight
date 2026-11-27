@@ -78,7 +78,7 @@ const TEXT := {
 ## hint's opportunity: the player opening that tab while the cause is true.
 const CATEGORIES := {
 	PLACE_CHECKIN: [BuildMode.Tool.DESK],
-	PLACE_SECURITY: [BuildMode.Tool.SCANNER, BuildMode.Tool.ARCH],
+	PLACE_SECURITY: [BuildMode.Tool.SCANNER, BuildMode.Tool.SECURITY_LANE],
 	PLACE_GATE_DESK: [BuildMode.Tool.GATE_DESK],
 	PLACE_SEATS: [BuildMode.Tool.SEATS],
 	SECOND_HIRE: [STAFF_CARD],

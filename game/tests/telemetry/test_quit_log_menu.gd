@@ -71,7 +71,7 @@ func test_the_settings_page_holds_the_switch_a_note_and_the_folder_button() -> v
 	for child in _page().get_children():
 		names.append(child.name)
 	assert_array(names).is_equal(
-		["Title", "Incidents", "QuitLog", "QuitLogNote", "OpenLogFolder", "Back"]
+		["Title", "Incidents", "ResetHints", "QuitLog", "QuitLogNote", "OpenLogFolder", "Back"]
 	)
 	assert_bool(_switch().button_pressed).is_false()
 	var note: Label = _page().get_node("QuitLogNote")
