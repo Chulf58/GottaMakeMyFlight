@@ -33,6 +33,11 @@ const FEED := &"baggage_belt_feed"
 const END := &"baggage_belt_end"
 const DESK := &"checkin_desk"
 const BAG_ROOM := &"bag_room"
+const CLAIM_CAROUSEL := &"claim_carousel"
+const BAGGAGE_CLAIM := &"baggage_claim"
+const FLOW_NONE := 0
+const FLOW_OUTBOUND := 1
+const FLOW_INBOUND := 2
 
 
 ## The grid as it stands, or as it would be with extra belt cells, a wall
@@ -107,16 +112,23 @@ class Scene:
 		var room_id := grid.room_at(cell)
 		return room_id != 0 and grid.get_room(room_id)["type"] == &"bag_room"
 
-	## Whether the object on `next` is a desk whose belt outlet points into `cell`.
+	## Whether the object on `next` is a desk or carousel whose belt port points into `cell`.
 	func _outlet_into(cell: Vector2i, next: Vector2i) -> bool:
+		return _outlet_flow(cell, next) != FLOW_NONE
+
+	func _outlet_flow(cell: Vector2i, next: Vector2i) -> int:
 		var object_id := grid.object_at(next)
 		if object_id == 0:
-			return false
+			return FLOW_NONE
 		var record := grid.get_object(object_id)
-		for port in BuildCatalog.belt_ports(record["def"], record["anchor"], record["facing"]):
+		var def_id := StringName(record["def"])
+		for port in BuildCatalog.belt_ports(def_id, record["anchor"], record["facing"]):
 			if port["cell"] == next and next + port["side"] == cell:
-				return true
-		return false
+				if def_id == DESK:
+					return FLOW_OUTBOUND
+				if def_id == CLAIM_CAROUSEL:
+					return FLOW_INBOUND
+		return FLOW_NONE
 
 
 ## The piece and facing for a belt cell in `scene`, [def id, facing], given
@@ -278,6 +290,10 @@ static func plan_line(grid: BuildGrid, from: Vector2i, to: Vector2i, turn: int) 
 			touch_cells.append(a)
 		if not touch_cells.has(b):
 			touch_cells.append(b)
+	var mix := _mixed_flow_problem(scene, touch_cells)
+	if mix != null:
+		plan.result = mix
+		return plan
 	var reshapes: Array[BuildEdit] = []
 	for cell in around(touch_cells):
 		if not scene.is_belt(cell):
@@ -305,19 +321,24 @@ static func plan_line(grid: BuildGrid, from: Vector2i, to: Vector2i, turn: int) 
 	return plan
 
 
-## BELT_CROSSING when `edit` would give a belt cell a fourth link: a desk whose
-## outlet points into a belt cell, a belt hatch opened on a wall, or a wall taken
-## away between linked cells. Null when it adds no link.
+## BELT_CROSSING when `edit` would give a belt cell a fourth link, or
+## BELT_MIXED_FLOW when `edit` would bridge outbound check-in and inbound
+## baggage claim components. Null when it adds no problem.
 static func crossing_problem(grid: BuildGrid, edit: BuildEdit) -> BuildResult:
 	var scene := Scene.new(grid)
 	var targets: Array[Vector2i] = []
 	match edit.kind:
 		BuildEdit.Kind.PLACE_OBJECT:
-			for port in BuildCatalog.belt_ports(edit.def_id, edit.cell, edit.facing):
-				var into: Vector2i = port["cell"] + port["side"]
-				var side := BuildGrid.SIDE_STEP.find(-(port["side"] as Vector2i))
-				scene.outlets[Vector3i(into.x, into.y, side)] = true
-				targets.append(into)
+			if BuildCatalog.is_belt(edit.def_id):
+				scene.added[edit.cell] = true
+				targets.append(edit.cell)
+			else:
+				var flow := _def_flow(edit.def_id)
+				for port in BuildCatalog.belt_ports(edit.def_id, edit.cell, edit.facing):
+					var into: Vector2i = port["cell"] + port["side"]
+					var side := BuildGrid.SIDE_STEP.find(-(port["side"] as Vector2i))
+					scene.outlets[Vector3i(into.x, into.y, side)] = flow
+					targets.append(into)
 		BuildEdit.Kind.REMOVE_WALL:
 			scene.open_edges[Vector3i(edit.cell.x, edit.cell.y, edit.side)] = true
 			targets = [edit.cell, edit.cell + BuildGrid.SIDE_STEP[edit.side]]
@@ -325,7 +346,49 @@ static func crossing_problem(grid: BuildGrid, edit: BuildEdit) -> BuildResult:
 			if edit.belt_hatch:
 				scene.open_edges[Vector3i(edit.cell.x, edit.cell.y, edit.side)] = true
 				targets = [edit.cell, edit.cell + BuildGrid.SIDE_STEP[edit.side]]
+	var mix := _mixed_flow_problem(scene, targets)
+	if mix != null:
+		return mix
 	for cell in targets:
 		if scene.is_belt(cell) and scene.links(cell).size() > 3:
 			return BuildResult.refused(BuildResult.Reason.BELT_CROSSING)
+	return null
+
+
+static func _def_flow(def_id: StringName) -> int:
+	if def_id == DESK:
+		return FLOW_OUTBOUND
+	if def_id == CLAIM_CAROUSEL:
+		return FLOW_INBOUND
+	return FLOW_NONE
+
+
+static func _mixed_flow_problem(scene: Scene, seeds: Array[Vector2i]) -> BuildResult:
+	var visited := {}
+	for start in seeds:
+		if not scene.is_belt(start) or visited.has(start):
+			continue
+		var flows := FLOW_NONE
+		var queue: Array[Vector2i] = [start]
+		visited[start] = true
+		var head := 0
+		while head < queue.size():
+			var cur := queue[head]
+			head += 1
+			for side in BuildGrid.SIDE_STEP.size():
+				var step: Vector2i = BuildGrid.SIDE_STEP[side]
+				var nxt := cur + step
+				if not scene.grid.in_bounds(nxt) or not scene.open(cur, step):
+					continue
+				if scene.is_belt(nxt):
+					if not visited.has(nxt):
+						visited[nxt] = true
+						queue.append(nxt)
+				else:
+					flows |= scene._outlet_flow(cur, nxt)
+					var key := Vector3i(cur.x, cur.y, side)
+					if scene.outlets.has(key):
+						flows |= int(scene.outlets[key])
+			if (flows & (FLOW_OUTBOUND | FLOW_INBOUND)) == (FLOW_OUTBOUND | FLOW_INBOUND):
+				return BuildResult.refused(BuildResult.Reason.BELT_MIXED_FLOW)
 	return null

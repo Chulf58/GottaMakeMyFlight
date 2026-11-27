@@ -35,6 +35,7 @@ enum Reason {
 	WALLET_FULL,
 	BELT_CROSSING,
 	BELT_WALL,
+	BELT_MIXED_FLOW,
 	NOT_A_BELT,
 	STAFF_SPOT,
 	LANE_WALL,
@@ -99,6 +100,7 @@ const REASON_TEXT := {
 	Reason.WALLET_FULL: "The money is at its limit; the refund would not fit",
 	Reason.BELT_CROSSING: "Belts cannot cross; a belt joins at most three others",
 	Reason.BELT_WALL: "A wall is in the way of the belt",
+	Reason.BELT_MIXED_FLOW: "Check-in belts and baggage claim belts cannot join",
 	Reason.NOT_A_BELT: "Only a belt piece changes shape",
 	Reason.STAFF_SPOT:
 	(

@@ -38,6 +38,8 @@ const FAMILY_OF := {
 	BuildMode.Tool.BELT: BAGGAGE,
 	BuildMode.Tool.BAG_ROOM: BAGGAGE,
 	BuildMode.Tool.CART: BAGGAGE,
+	BuildMode.Tool.BAGGAGE_CLAIM: BAGGAGE,
+	BuildMode.Tool.CLAIM_CAROUSEL: BAGGAGE,
 	BuildMode.Tool.BENCH: COMFORT,
 	BuildMode.Tool.BUSH: COMFORT,
 	BuildMode.Tool.PLANTER: COMFORT,

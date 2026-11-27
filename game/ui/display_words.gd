@@ -167,6 +167,7 @@ class Words:
 			tr("Cafe table", "item name"),
 			tr("Chain", "item name"),
 			tr("Check-in desk", "item name"),
+			tr("Claim carousel", "item name"),
 			tr("Clothes rail", "item name"),
 			tr("Confiscation bin", "item name"),
 			tr("Currency exchange", "item name"),
@@ -214,6 +215,7 @@ class Words:
 			# Room type names (RoomTypes.RoomType.display_name)
 			tr("ATM", "room type"),
 			tr("Bag room", "room type"),
+			tr("Baggage claim", "room type"),
 			tr("Bar", "room type"),
 			tr("Break Room", "room type"),
 			tr("Cafe", "room type"),
@@ -232,6 +234,7 @@ class Words:
 			# The same room names in lower case, inside a sentence ("a cafe needs...")
 			tr("atm", "room name, mid-sentence"),
 			tr("bag room", "room name, mid-sentence"),
+			tr("baggage claim", "room name, mid-sentence"),
 			tr("bar", "room name, mid-sentence"),
 			tr("break room", "room name, mid-sentence"),
 			tr("cafe", "room name, mid-sentence"),
@@ -253,6 +256,7 @@ class Words:
 			tr("Surface lot", "landside place"),
 			# Room requirement notes, the room panel and card
 			tr("Needs a belt end", "room need"),
+			tr("Needs a claim carousel", "room need"),
 			tr("Needs a bench", "room need"),
 			tr("Needs a clothes rail", "room need"),
 			tr("Needs a counter", "room need"),
@@ -274,6 +278,7 @@ class Words:
 			tr("Needs entrance", "room need"),
 			# The same notes in lower case, after "Not ready,"
 			tr("needs a belt end", "status reason"),
+			tr("needs a claim carousel", "status reason"),
 			tr("needs a bench", "status reason"),
 			tr("needs a clothes rail", "status reason"),
 			tr("needs a counter", "status reason"),

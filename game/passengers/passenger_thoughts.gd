@@ -31,6 +31,7 @@ enum Kind {
 	QUICK_EXIT,
 	PARKED_CAR,
 	CURB_TIMEOUT,
+	CLAIMED_BAG,
 }
 
 ## The most thoughts a passenger keeps; a new one drops the oldest.
@@ -54,6 +55,7 @@ const POSITIVE := [
 	Kind.LANDED_SMOOTH,
 	Kind.QUICK_EXIT,
 	Kind.PARKED_CAR,
+	Kind.CLAIMED_BAG,
 ]
 ## Kinds recorded at a facility: a cafe or toilet room, a desk or scanner. Nice
 ## decor has none (facility 0).
@@ -200,6 +202,8 @@ static func text_of(kind: Kind, value: int) -> String:
 			return TranslationServer.translate("Walking to my parked car")
 		Kind.CURB_TIMEOUT:
 			return TranslationServer.translate("Gave up waiting for a taxi")
+		Kind.CLAIMED_BAG:
+			return TranslationServer.translate("Got my suitcase!")
 	return TranslationServer.translate("Nice decor here")
 
 
@@ -299,4 +303,5 @@ class Words:
 			tr("Easy way out of airside"),
 			tr("Walking to my parked car"),
 			tr("Gave up waiting for a taxi"),
+			tr("Got my suitcase!"),
 		]

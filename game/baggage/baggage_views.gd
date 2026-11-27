@@ -25,6 +25,12 @@ const CART_DECK_Y := 0.36
 const CART_LAYER_STEP_M := 0.22
 const STACK_STEP_M := 0.26
 const STACK_YAW_RAD := 0.07
+## Claim carousel stadium track geometry (claim_carousel.glb, Arrivals A0/A3).
+const CAROUSEL_TRACK_Y := 0.355
+const CAROUSEL_HALF_STRAIGHT_X := 1.00
+const CAROUSEL_CURVE_RADIUS := 0.61
+const CAROUSEL_SPUR_Z := -1.00
+const CAROUSEL_SPUR_X := 0.50
 ## Radius of a bag's turn on a corner piece, about the cell's inner corner.
 ## The belt lane runs from 0.15 to 0.85 m from it (build_baggage_kit.py); a
 ## 0.39 x 0.55 m bag on this turn stays between 0.30 and 0.78 m. Under 0.5 so
@@ -257,6 +263,67 @@ static func _stack_yaw(stack_index: int) -> float:
 	return STACK_YAW_RAD if stack_index % 2 == 1 else -STACK_YAW_RAD
 
 
+## World transform of an ON_CAROUSEL bag orbiting the 4x2 claim_carousel stadium
+## track at `at_tick`, or null when the carousel is gone.
+static func carousel_transform(grid: BuildGrid, bag: Bag, at_tick: int) -> Variant:
+	if grid == null or bag.carousel <= 0:
+		return null
+	var record := grid.get_object(bag.carousel)
+	if record.is_empty() or StringName(record["def"]) != BeltShaper.CLAIM_CAROUSEL:
+		return null
+	var def := BuildCatalog.get_def(BeltShaper.CLAIM_CAROUSEL)
+	var piece_xf := BuildView.object_transform(
+		grid, def.footprint(record["anchor"], record["facing"]), record["facing"]
+	)
+	var dist_m := float(maxi(0, at_tick - bag.rest_tick)) * (BaggageSim.BELT_MM / 1000.0)
+	var spur_len := -CAROUSEL_CURVE_RADIUS - CAROUSEL_SPUR_Z
+	var local_pos: Vector3
+	var heading: Vector3
+	if dist_m < spur_len:
+		local_pos = Vector3(CAROUSEL_SPUR_X, CAROUSEL_TRACK_Y, CAROUSEL_SPUR_Z + dist_m)
+		heading = Vector3(0.0, 0.0, 1.0)
+	else:
+		var back_first := CAROUSEL_SPUR_X + CAROUSEL_HALF_STRAIGHT_X
+		var curve_len := PI * CAROUSEL_CURVE_RADIUS
+		var front_len := 2.0 * CAROUSEL_HALF_STRAIGHT_X
+		var back_last := CAROUSEL_HALF_STRAIGHT_X - CAROUSEL_SPUR_X
+		var loop_len := back_first + curve_len + front_len + curve_len + back_last
+		var s := fposmod(dist_m - spur_len, loop_len)
+		if s < back_first:
+			local_pos = Vector3(CAROUSEL_SPUR_X - s, CAROUSEL_TRACK_Y, -CAROUSEL_CURVE_RADIUS)
+			heading = Vector3(-1.0, 0.0, 0.0)
+		elif s < back_first + curve_len:
+			var angle := (s - back_first) / CAROUSEL_CURVE_RADIUS
+			local_pos = Vector3(
+				-CAROUSEL_HALF_STRAIGHT_X - CAROUSEL_CURVE_RADIUS * sin(angle),
+				CAROUSEL_TRACK_Y,
+				-CAROUSEL_CURVE_RADIUS * cos(angle)
+			)
+			heading = Vector3(-cos(angle), 0.0, sin(angle))
+		elif s < back_first + curve_len + front_len:
+			var u := s - (back_first + curve_len)
+			local_pos = Vector3(
+				-CAROUSEL_HALF_STRAIGHT_X + u, CAROUSEL_TRACK_Y, CAROUSEL_CURVE_RADIUS
+			)
+			heading = Vector3(1.0, 0.0, 0.0)
+		elif s < back_first + curve_len + front_len + curve_len:
+			var angle := (s - (back_first + curve_len + front_len)) / CAROUSEL_CURVE_RADIUS
+			local_pos = Vector3(
+				CAROUSEL_HALF_STRAIGHT_X + CAROUSEL_CURVE_RADIUS * sin(angle),
+				CAROUSEL_TRACK_Y,
+				CAROUSEL_CURVE_RADIUS * cos(angle)
+			)
+			heading = Vector3(cos(angle), 0.0, -sin(angle))
+		else:
+			var u := s - (back_first + curve_len + front_len + curve_len)
+			local_pos = Vector3(
+				CAROUSEL_HALF_STRAIGHT_X - u, CAROUSEL_TRACK_Y, -CAROUSEL_CURVE_RADIUS
+			)
+			heading = Vector3(-1.0, 0.0, 0.0)
+	var local_xf := Transform3D(Basis(Vector3.UP, atan2(heading.x, heading.z)), local_pos)
+	return piece_xf * local_xf
+
+
 ## Records the transforms for the tick that just ran.
 func sync() -> void:
 	var drawn := {}
@@ -266,6 +333,8 @@ func sync() -> void:
 		var now: Variant = null
 		if bag.on_belt():
 			now = belt_transform(sim.grid, bag)
+		elif bag.state == Bag.State.ON_CAROUSEL:
+			now = carousel_transform(sim.grid, bag, sim.tick)
 		elif bag.state == Bag.State.AT_DESK and desk_stacks.has(bag.id):
 			now = desk_transform(sim.grid, bag.desk, desk_stacks[bag.id])
 		elif bag.state == Bag.State.IN_ROOM and room_stacks.has(bag.id):

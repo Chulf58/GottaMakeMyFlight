@@ -94,6 +94,8 @@ extends RefCounted
 ## 44: arrivals landside pickup stages (TO_PARKED_CAR, TO_CURB_PICKUP,
 ## WAIT_CURB_PICKUP), wants_parked_car, pickup_vehicle, pickup_berth, and
 ## PARKED_CAR / CURB_TIMEOUT thoughts; version 43 saves are refused.
+## 45: arrivals baggage claim stages (TO_CLAIM, AT_CLAIM), claim_bag_id,
+## claim_carousel, has_claimed_bag, and CLAIMED_BAG thoughts; v44 refused.
 
 
 ## JSON-safe state for a save (PassengerSim.to_snapshot()). Reads only: it

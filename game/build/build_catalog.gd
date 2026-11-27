@@ -26,6 +26,7 @@ const BELT_PORT_SIDES := {
 }
 const BELT_PORTS := {
 	&"checkin_desk": [[Vector2i(1, 0), "B"]],
+	&"claim_carousel": [[Vector2i(2, 0), "B"]],
 	&"baggage_belt": [[Vector2i.ZERO, "F"], [Vector2i.ZERO, "B"]],
 	&"baggage_belt_corner": [[Vector2i.ZERO, "F"], [Vector2i.ZERO, "R"]],
 	&"baggage_belt_feed": [[Vector2i.ZERO, "F"], [Vector2i.ZERO, "L"], [Vector2i.ZERO, "R"]],
@@ -214,6 +215,7 @@ static func _build() -> void:
 	_add(&"baggage_belt_feed", "Belt merge", Vector2i.ONE, belt_color, 0.46)
 	_add(&"baggage_belt_end", "Belt end", Vector2i.ONE, Color(0.9, 0.75, 0.25), 1.3)
 	_add(&"baggage_cart", "Baggage cart", Vector2i(1, 2), Color(0.3, 0.5, 0.75), 1.62)
+	_add(&"claim_carousel", "Claim carousel", Vector2i(4, 2), Color(0.45, 0.55, 0.72), 1.0)
 	# Toilet pieces (Toilets 3/5). A stall is one use slot, one cell wide and two
 	# deep: the door at the front, the toilet in the rear cell. Each piece's
 	# interaction cell is its Mount_Approach, the cell in front of it, kept clear

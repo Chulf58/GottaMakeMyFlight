@@ -59,6 +59,7 @@ const OBJECT_PIECES := {
 	&"baggage_belt_feed": "baggage_belt_feed",
 	&"baggage_belt_end": "baggage_belt_end",
 	&"baggage_cart": "baggage_cart",
+	&"claim_carousel": "claim_carousel",
 	&"security_arch": "security_arch",
 	&"tray_table": "tray_table",
 	&"xray_belt": "xray_belt",

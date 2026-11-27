@@ -95,6 +95,8 @@ const TIERS := [
 			BuildMode.Tool.BELT,
 			BuildMode.Tool.BAG_ROOM,
 			BuildMode.Tool.CART,
+			BuildMode.Tool.BAGGAGE_CLAIM,
+			BuildMode.Tool.CLAIM_CAROUSEL,
 			BuildMode.Tool.KIOSK_ROOM,
 			BuildMode.Tool.KIOSK_COUNTER,
 			BuildMode.Tool.KIOSK_DISPLAY,

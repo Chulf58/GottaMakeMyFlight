@@ -14,6 +14,8 @@ extends PanelContainer
 const POSITION := Vector2(TopRow.SHEET_MIN_LEFT, TopRow.SHEET_TOP)
 const WIDTH := 280.0
 const BAG_ROOM := &"bag_room"
+const BAGGAGE_CLAIM := &"baggage_claim"
+const CLAIM_CAROUSEL := &"claim_carousel"
 const BELT_END := &"baggage_belt_end"
 const CART := &"baggage_cart"
 const TOILET := &"toilet"
@@ -81,6 +83,12 @@ func show_room(id: int) -> void:
 	_line(DisplayWords.room_type(status.type_name), &"HudTitle")
 	if status.type_id == BAG_ROOM:
 		_show_bag_room(status, id)
+		_show_prestige(id, status.type_id)
+		reset_size()
+		_place()
+		return
+	if status.type_id == BAGGAGE_CLAIM:
+		_show_baggage_claim(status, id)
 		_show_prestige(id, status.type_id)
 		reset_size()
 		_place()
@@ -196,6 +204,24 @@ func _show_bag_room(status: RoomRules.RoomStatus, id: int) -> void:
 				_line(tr("Needs a Ramp Agent (Staff)"), &"HudAttentionText")
 	_line(tr("Belt ends {count}").format({"count": belt_ends}))
 	_line(tr("Desks connected: {count}").format({"count": connected}))
+
+
+func _show_baggage_claim(status: RoomRules.RoomStatus, id: int) -> void:
+	var carousels: int = status.pieces.get(CLAIM_CAROUSEL, 0)
+	var connected := BagRoutes.build(_build_mode.grid).connected_carousels(id).size()
+	if not status.ok:
+		for note in DisplayWords.notes(status):
+			_line(note, &"HudAttentionText")
+	elif status.airside_warning:
+		_line(tr("In airside zone: move to landside"), &"HudAttentionText")
+		if connected == 0:
+			_line(tr("Waiting for belt from bag room"), &"HudAttentionText")
+	elif connected == 0:
+		_line(tr("Waiting for belt from bag room"), &"HudAttentionText")
+	else:
+		_line(DisplayWords.ready(), &"HudGoodText")
+	_line(tr("Carousels {count}").format({"count": carousels}))
+	_line(tr("Carousels connected: {count}").format({"count": connected}))
 
 
 func _show_prestige(id: int, type_id: StringName) -> void:

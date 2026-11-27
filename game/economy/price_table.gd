@@ -52,6 +52,7 @@ const OBJECT_PRICES := {
 	&"baggage_belt_feed": 90,
 	&"baggage_belt_end": 200,
 	&"baggage_cart": 120,
+	&"claim_carousel": 900,
 	# Toilet pieces: a stall (partition, door, pan) costs about a cafe table; the
 	# sink is plain plumbing. The stall is the one with a running cost.
 	&"toilet_stall": 300,

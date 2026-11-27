@@ -9034,3 +9034,117 @@ msgstr ""
 #: landside/view/vehicle_inspect.gd
 msgid "Driving to curb pickup"
 msgstr ""
+
+#: build/build_words.gd
+msgctxt "build refusal"
+msgid "Check-in belts and baggage claim belts cannot join"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "ghost reason"
+msgid "Cannot join claim belt"
+msgstr ""
+
+#: build/build_words.gd
+msgctxt "item name, mid-sentence"
+msgid "claim carousel"
+msgstr ""
+
+#: passengers/passenger_thoughts.gd
+msgid "Got my suitcase!"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Baggage claim"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "6x4 min"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Claim carousel"
+msgstr ""
+
+#: ui/build_menu_catalog.gd
+msgctxt "build menu"
+msgid "Needs claim carousel"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "item name"
+msgid "Claim carousel"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room type"
+msgid "Baggage claim"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room name, mid-sentence"
+msgid "baggage claim"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "room need"
+msgid "Needs a claim carousel"
+msgstr ""
+
+#: ui/display_words.gd
+msgctxt "status reason"
+msgid "needs a claim carousel"
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Where arriving passengers pick up checked bags after leaving airside."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Drag a rectangle on landside, place a claim carousel, and connect an inbound belt from a bag room."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "At least 6x4, with a claim carousel. Keep it on landside after the exit."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "A circling baggage carousel for arriving passengers."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Place it inside a baggage claim room and feed its back port with an inbound belt from a bag room."
+msgstr ""
+
+#: ui/item_info.gd
+msgid "Needs a separate inbound belt line; cannot join check-in belts."
+msgstr ""
+
+#: ui/room_panel.gd
+msgid "In airside zone: move to landside"
+msgstr ""
+
+#: ui/room_panel.gd
+msgid "Waiting for belt from bag room"
+msgstr ""
+
+#: ui/room_panel.gd
+msgid "Carousels {count}"
+msgstr ""
+
+#: ui/room_panel.gd
+msgid "Carousels connected: {count}"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Walking to baggage claim"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Waiting at baggage claim"
+msgstr ""

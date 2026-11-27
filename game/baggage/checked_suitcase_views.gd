@@ -97,7 +97,11 @@ func _has_connected_bag_room(sim: PassengerSim) -> bool:
 
 
 func _wants_suitcase(sim: PassengerSim, p: Passenger) -> bool:
-	if p == null or not _has_connected_bag_room(sim):
+	if p == null:
+		return false
+	if p.is_arriving():
+		return p.has_claimed_bag and not p.arrival_done
+	if not _has_connected_bag_room(sim):
 		return false
 	if PassengerBags.BEFORE_DROP.has(p.stage):
 		return true

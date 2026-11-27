@@ -38,6 +38,7 @@ class RoomStatus:
 	var upkeep := 0
 	## BuildCatalog id -> how many of that piece count for the room.
 	var pieces: Dictionary = {}
+	var airside_warning := false
 
 	## "Ready", or the first note.
 	func headline() -> String:
@@ -78,6 +79,8 @@ static func status(grid: BuildGrid, room_id: int) -> RoomStatus:
 				result.seats += reachable_seats(grid, object_id).size()
 	result.upkeep = result.pieces.get(type.upkeep_piece, 0) * type.upkeep_per_piece
 	result.ok = result.notes.is_empty()
+	if result.type_id == &"baggage_claim":
+		result.airside_warning = GridPathing.is_airside_area(grid, area)
 	return result
 
 

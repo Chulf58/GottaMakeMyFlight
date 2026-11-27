@@ -76,6 +76,8 @@ const INT_FIELDS := [
 	"arrival_stop_cap",
 	"pickup_vehicle",
 	"pickup_berth",
+	"claim_bag_id",
+	"claim_carousel",
 ]
 const CELL_FIELDS := ["at", "seat_cell", "seat_front", "stand_from"]
 const BOOL_FIELDS := [
@@ -92,6 +94,7 @@ const BOOL_FIELDS := [
 	"bus_nudged",
 	"arrival_done",
 	"wants_parked_car",
+	"has_claimed_bag",
 ]
 
 
@@ -452,6 +455,20 @@ static func _passenger(entry: Variant, grid: BuildGrid, next_id: int) -> Passeng
 			or (not p.wants_parked_car and p.pickup_vehicle == 0 and p.pickup_berth == -1)
 		)
 	)
+	var claim_ok := (
+		p.claim_bag_id >= 0
+		and p.claim_carousel >= 0
+		and (
+			p.direction == Passenger.Direction.ARRIVING
+			or (p.claim_bag_id == 0 and p.claim_carousel == 0 and not p.has_claimed_bag)
+		)
+		and (not p.has_claimed_bag or (p.claim_bag_id > 0 and p.claim_carousel == 0))
+		and (
+			(p.claim_carousel > 0)
+			== (p.stage == Passenger.Stage.TO_CLAIM or p.stage == Passenger.Stage.AT_CLAIM)
+		)
+		and (not p.arrival_done or p.claim_carousel == 0)
+	)
 	var stuck_ok := (
 		p.stuck >= 0
 		and p.stuck < Passenger.Stuck.size()
@@ -460,7 +477,15 @@ static func _passenger(entry: Variant, grid: BuildGrid, next_id: int) -> Passeng
 	)
 	var index_ok := p.path_index >= 0 and p.path_index < maxi(p.path.size(), 1)
 	if (
-		not (variant_ok and range_ok and stage_ok and pickup_ok and stuck_ok and index_ok)
+		not (
+			variant_ok
+			and range_ok
+			and stage_ok
+			and pickup_ok
+			and claim_ok
+			and stuck_ok
+			and index_ok
+		)
 		or not _stand_from_ok(p)
 		or not GateRelocation.valid(p)
 		or p.id < 1
