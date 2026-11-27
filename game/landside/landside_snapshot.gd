@@ -42,7 +42,10 @@ extends RefCounted
 ## 12: south street holds a full row of kind-flexible parking pads and saves
 ## each pad's built lot kind (`lots_kind`). Version 11 is refused, with no
 ## migration.
-const SAVE_VERSION := 12
+## 13: parked-car pickup (`claimants`, `pickup_ready`) and curb PICKUP taxis
+## (`Intent.PICKUP`, `pickup_boarded`). Version 12 is refused, with no
+## migration.
+const SAVE_VERSION := 13
 const KEYS := [
 	"save_version",
 	"tick",
@@ -74,6 +77,7 @@ const VEHICLE_INTS := [
 	"stage_tick",
 	"leave_tick",
 	"release_wait",
+	"pickup_boarded",
 ]
 ## The lane each stage may stand on.
 ## DRIVE on a berth or slot path is pulling in, LEAVE there pulling out.
@@ -132,7 +136,11 @@ static func save(
 		missed.append({"flight": flight, "count": bookings.missed_by_flight[flight]})
 	var vehicle_list := []
 	for v in vehicles:
-		var record := {"bookings": v.bookings.duplicate()}
+		var record := {
+			"bookings": v.bookings.duplicate(),
+			"claimants": v.claimants.duplicate(),
+			"pickup_ready": v.pickup_ready,
+		}
 		for field in VEHICLE_INTS:
 			record[field] = v.get(field)
 		vehicle_list.append(record)
@@ -306,7 +314,10 @@ static func _booking_problem(b: ArrivalBooking, last: int, next_id: int) -> Stri
 		return "its variant or arrival type is out of range"
 	if b.kind < 0 or b.kind >= LandsideVehicle.Kind.size():
 		return "its vehicle kind is out of range"
-	if b.intent < 0 or b.intent >= LandsideVehicle.Intent.size() or b.unload_tick < 0:
+	if (
+		b.intent not in [LandsideVehicle.Intent.DROP, LandsideVehicle.Intent.PARK]
+		or b.unload_tick < 0
+	):
 		return "its intent or unload tick is out of range"
 	if b.state == ArrivalBooking.State.AWAITING and b.vehicle == 0:
 		return ""
@@ -332,19 +343,34 @@ static func _vehicles(
 		if built[i]:
 			paths.set_lot(i, definition.lot_for_kind(i, kinds[i] as LandsideLotSpot.Kind))
 	for entry in list:
-		var ok: bool = typeof(entry) == TYPE_DICTIONARY and entry.has("bookings")
+		var ok: bool = (
+			typeof(entry) == TYPE_DICTIONARY
+			and entry.has("bookings")
+			and entry.has("claimants")
+			and entry.has("pickup_ready")
+		)
 		for field in VEHICLE_INTS:
 			ok = ok and entry.has(field) and _whole(entry[field])
-		ok = ok and typeof(entry["bookings"]) == TYPE_ARRAY
+		ok = (
+			ok
+			and typeof(entry["bookings"]) == TYPE_ARRAY
+			and typeof(entry["claimants"]) == TYPE_ARRAY
+			and typeof(entry["pickup_ready"]) == TYPE_BOOL
+		)
 		if not ok:
 			return {"error": "a vehicle is malformed"}
 		var v := LandsideVehicle.new()
 		for field in VEHICLE_INTS:
 			v.set(field, int(entry[field]))
+		v.pickup_ready = entry["pickup_ready"]
 		for id in entry["bookings"]:
 			if not _whole(id) or v.bookings.has(int(id)):
 				return {"error": "vehicle %d lists a bad or repeated booking" % v.id}
 			v.bookings.append(int(id))
+		for cid in entry["claimants"]:
+			if not _whole(cid) or int(cid) <= 0 or v.claimants.has(int(cid)):
+				return {"error": "vehicle %d lists a bad or repeated claimant" % v.id}
+			v.claimants.append(int(cid))
 		var problem := _vehicle_problem(v, last, next_id, paths, built, curbs)
 		var key := ""
 		if problem == "" and v.lane == LandsideVehicle.Lane.BERTH:
@@ -452,6 +478,30 @@ static func _vehicle_problem(
 	)
 	if v.release_wait > 0 and not standing:
 		return "it waits to let a passenger out away from its berth or slot"
+	if v.pickup_boarded < 0 or v.pickup_boarded > int(LandsideVehicle.MAX_PARTY[v.kind]):
+		return "its pickup boarded count is out of range"
+	if v.pickup_boarded > 0 and v.intent != LandsideVehicle.Intent.PICKUP:
+		return "a non-pickup vehicle boarded pickup passengers"
+	if (
+		v.pickup_boarded > 0
+		and (
+			v.lane == LandsideVehicle.Lane.ROAD_IN
+			or (v.lane == LandsideVehicle.Lane.BERTH and v.stage == LandsideVehicle.Stage.DRIVE)
+		)
+	):
+		return "a pickup taxi boarded passengers before reaching a curb berth"
+	if (
+		v.intent == LandsideVehicle.Intent.PICKUP
+		and (v.kind != LandsideVehicle.Kind.TAXI or not v.bookings.is_empty() or lot_lane)
+	):
+		return "a pickup vehicle must be an empty curb taxi"
+	if (
+		not v.claimants.is_empty()
+		and (v.stage != LandsideVehicle.Stage.PARKED or not v.bookings.is_empty() or v.pickup_ready)
+	):
+		return "only an unclaimed parked car may hold claimants"
+	if v.pickup_ready and (v.stage != LandsideVehicle.Stage.PARKED or not v.bookings.is_empty()):
+		return "only an empty parked car may be pickup-ready"
 	return ""
 
 

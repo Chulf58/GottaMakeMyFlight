@@ -45,6 +45,8 @@ extends Node
 signal parked(vehicle_id: int, lot: int)
 ## A car that meant to park found its lot full and drives on to the curb.
 signal diverted(vehicle_id: int)
+## A parked car's active arriving-passenger claims were invalidated before boarding.
+signal pickup_claim_lost(vehicle_id: int, claimant_ids: Array[int])
 
 ## 10 m/s along a lane.
 const SPEED_MM := 500
@@ -64,6 +66,8 @@ const SURFACE_LOT_FEE := 20
 const MULTI_STOREY_FEE := 35
 const STAY_MIN_TICKS := GameCalendar.TICKS_PER_DAY
 const STAY_MAX_TICKS := 3 * GameCalendar.TICKS_PER_DAY
+## Minimum parked duration before an arriving passenger may claim a car (4.8 game hours).
+const PARK_CLAIM_MIN_TICKS := 288 * GameCalendar.TICKS_PER_MINUTE
 ## Further ahead than any car can be.
 const FAR_MM := 1 << 40
 ## How far before its first berth a curb's queue head stands: the starter
@@ -110,8 +114,11 @@ var denied: Array[int] = []
 ## on the road a gap behind one of those. Rebuilt every step, so a car is kept
 ## only while the hold lasts.
 var line_held := {}
+## Pickups boarded at the curb during the last step(), {"vehicle": id, "passengers": ids}.
+var picked_up: Array[Dictionary] = []
 
 var _stats_day := -1
+var _curb_waiters: Array[int] = []
 
 var _vehicles: Array[LandsideVehicle] = []
 ## The doors-close tick of each booking aboard's flight, as step() was given.
@@ -371,7 +378,117 @@ func drop_booking(vehicle_id: int, booking_id: int) -> void:
 	if v.bookings.is_empty():
 		v.release_wait = 0
 	if v.bookings.is_empty() and v.lane == LandsideVehicle.Lane.ROAD_IN:
-		v.intent = LandsideVehicle.Intent.DROP
+		if v.intent != LandsideVehicle.Intent.PICKUP:
+			v.intent = LandsideVehicle.Intent.DROP
+
+
+## Number of curb berths currently built (starter curb plus built curb bays).
+func built_berth_count() -> int:
+	var count := 0
+	for i in _berths.size():
+		if _berth_built(i):
+			count += 1
+	return count
+
+
+## Whether berth `berth` exists and its curb spot is built.
+func is_berth_built(berth: int) -> bool:
+	return berth >= 0 and berth < _berths.size() and _berth_built(berth)
+
+
+## Active PICKUP taxis currently on road_in or in a curb berth.
+func active_pickup_taxis() -> int:
+	var count := 0
+	for v in _vehicles:
+		if (
+			v.intent == LandsideVehicle.Intent.PICKUP
+			and v.lane in [LandsideVehicle.Lane.ROAD_IN, LandsideVehicle.Lane.BERTH]
+		):
+			count += 1
+	return count
+
+
+## Remaining passenger capacity across inbound PICKUP taxis not yet dwelling at the curb.
+func inbound_pickup_capacity() -> int:
+	var cap := 0
+	for v in _vehicles:
+		if v.intent != LandsideVehicle.Intent.PICKUP:
+			continue
+		var inbound := (
+			v.lane == LandsideVehicle.Lane.ROAD_IN
+			or (v.lane == LandsideVehicle.Lane.BERTH and v.stage == LandsideVehicle.Stage.DRIVE)
+		)
+		if inbound:
+			cap += maxi(int(LandsideVehicle.MAX_PARTY[v.kind]) - v.pickup_boarded, 0)
+	return cap
+
+
+## Whether spawning another curb PICKUP taxi preserves at least 1 DROP berth.
+func can_spawn_pickup_taxi() -> bool:
+	var berths := built_berth_count()
+	if berths <= 0:
+		return false
+	return active_pickup_taxis() < maxi(1, berths - 1)
+
+
+## Oldest unclaimed PARKED vehicle past PARK_CLAIM_MIN_TICKS (ties by id), or null.
+func eligible_parked_car() -> LandsideVehicle:
+	var best: LandsideVehicle = null
+	for v in _vehicles:
+		if (
+			v.stage != LandsideVehicle.Stage.PARKED
+			or not v.bookings.is_empty()
+			or not v.claimants.is_empty()
+			or v.pickup_ready
+		):
+			continue
+		if v.lot < 0 or v.lot >= lots_built.size() or not lots_built[v.lot]:
+			continue
+		if tick - v.stage_tick < PARK_CLAIM_MIN_TICKS:
+			continue
+		if (
+			best == null
+			or v.stage_tick < best.stage_tick
+			or (v.stage_tick == best.stage_tick and v.id < best.id)
+		):
+			best = v
+	return best
+
+
+## Claims the oldest eligible PARKED car for arriving `passenger_id`, or returns null.
+func claim_parked_car(passenger_id: int) -> LandsideVehicle:
+	var v := eligible_parked_car()
+	if v == null:
+		return null
+	v.claimants.append(passenger_id)
+	return v
+
+
+## Releases `passenger_id`'s claim on `vehicle_id` if present.
+func release_claim(vehicle_id: int, passenger_id: int) -> void:
+	var v: LandsideVehicle = _by_id.get(vehicle_id)
+	if v == null:
+		return
+	v.claimants.erase(passenger_id)
+
+
+## Boards `passenger_id` into claimed PARKED car `vehicle_id` so it pulls out via _grant().
+func board_parked_car(vehicle_id: int, passenger_id: int) -> bool:
+	var v: LandsideVehicle = _by_id.get(vehicle_id)
+	if (
+		v == null
+		or v.stage != LandsideVehicle.Stage.PARKED
+		or not v.claimants.has(passenger_id)
+		or v.lot < 0
+		or v.lot >= lots_built.size()
+		or not lots_built[v.lot]
+	):
+		return false
+	v.claimants.erase(passenger_id)
+	if v.claimants.is_empty():
+		v.pickup_ready = true
+		v.stage_tick = tick
+	return true
 
 
 func vehicle_ids() -> Array[int]:
@@ -402,14 +519,22 @@ func get_vehicle(id: int) -> LandsideVehicle:
 ## until the next step, and its vehicle in `line_held`. `kept` holds the
 ## vehicles kept for the line on the step before (line_held as it was then).
 func step(
-	now: int, can_release: bool, rng: RandomNumberGenerator, closes := {}, budget := -1, kept := {}
+	now: int,
+	can_release: bool,
+	rng: RandomNumberGenerator,
+	closes := {},
+	budget := -1,
+	kept := {},
+	curb_waiters: Array[int] = []
 ) -> Array[Dictionary]:
 	tick = now
 	_sync_stats_day(now)
 	_closes = closes
 	_budget = budget
+	_curb_waiters = curb_waiters.duplicate()
 	denied.clear()
 	line_held.clear()
+	picked_up.clear()
 	var released: Array[Dictionary] = []
 	for v in _vehicles:
 		v.release_wait = maxi(v.release_wait - 1, 0)
@@ -555,11 +680,12 @@ func _grant(spot: int, gate: LandsideVehicle, moving_in: bool) -> void:
 		var due := (
 			v.stage == LandsideVehicle.Stage.PARKED
 			and v.bookings.is_empty()
-			and tick >= v.leave_tick
+			and (v.pickup_ready or (v.claimants.is_empty() and tick >= v.leave_tick))
 		)
-		if due and (v.leave_tick < best_tick or (v.leave_tick == best_tick and v.id < best.id)):
+		var req_tick := v.stage_tick if v.pickup_ready else v.leave_tick
+		if due and (req_tick < best_tick or (req_tick == best_tick and v.id < best.id)):
 			best = v
-			best_tick = v.leave_tick
+			best_tick = req_tick
 	if best == null:
 		return
 	# A car turning round at the gate leaves the way it came in: it waits too.
@@ -578,6 +704,7 @@ func _grant(spot: int, gate: LandsideVehicle, moving_in: bool) -> void:
 		return
 	_slots[spot][best.stop] = 0
 	best.leave_tick = 0
+	best.pickup_ready = false
 	_set_stage(best, LandsideVehicle.Stage.LEAVE)
 
 
@@ -603,7 +730,14 @@ func _step_curb(can_release: bool, released: Array[Dictionary]) -> void:
 	for v in _members(LandsideVehicle.Lane.BERTH, -1):
 		if v.stage != LandsideVehicle.Stage.DWELL:
 			continue
-		if not v.bookings.is_empty():
+		if v.intent == LandsideVehicle.Intent.PICKUP:
+			if (
+				v.pickup_boarded > 0
+				and tick - v.stage_tick < DWELL_TICKS
+				and not _curb_waiters.is_empty()
+			):
+				_board_curb_pickup(v)
+		elif not v.bookings.is_empty():
 			if can_release and v.release_wait == 0:
 				_release(v, [definition.berth_get_out(v.stop)], released)
 				v.stage_tick = tick
@@ -656,8 +790,8 @@ func _drive_road(waiting: int, can_release: bool, released: Array[Dictionary]) -
 ## (`leader_held`), or waiting at the stop while a berth it could take holds
 ## one (_berth_kept()), it is kept for the line too (line_held).
 func _drive_road_in(v: LandsideVehicle, leader: int, waiting: int, leader_held: bool) -> int:
-	# An empty car never parks, however it got here (a save included).
-	if v.bookings.is_empty():
+	# An empty DROP/PARK car never parks, however it got here (a save included).
+	if v.bookings.is_empty() and v.intent != LandsideVehicle.Intent.PICKUP:
 		v.intent = LandsideVehicle.Intent.DROP
 	var spot := _lot_ahead(v)
 	var stop := curb_stop_mm()
@@ -703,11 +837,26 @@ func _pull_in(
 	if v.pos_mm < stand:
 		return v.pos_mm if v.pos_mm <= split else leader
 	_set_stage(v, LandsideVehicle.Stage.DWELL)
-	if v.bookings.is_empty():
+	if v.intent == LandsideVehicle.Intent.PICKUP:
+		if _board_curb_pickup(v) == 0:
+			v.stage_tick = tick - DWELL_TICKS
+	elif v.bookings.is_empty():
 		v.stage_tick = tick - DWELL_TICKS
 	elif can_release:
 		_release(v, [definition.berth_get_out(v.stop)], released)
 	return leader
+
+
+func _board_curb_pickup(v: LandsideVehicle) -> int:
+	var cap: int = int(LandsideVehicle.MAX_PARTY[v.kind]) - v.pickup_boarded
+	if cap <= 0 or _curb_waiters.is_empty():
+		return 0
+	var boarded: Array[int] = []
+	while boarded.size() < cap and not _curb_waiters.is_empty():
+		boarded.append(_curb_waiters.pop_front())
+	v.pickup_boarded += boarded.size()
+	picked_up.append({"vehicle": v.id, "passengers": boarded})
+	return boarded.size()
 
 
 ## A car pulling out of its berth, a gap behind `leader`; the berth is free
@@ -885,6 +1034,10 @@ func _set_stage(v: LandsideVehicle, stage: LandsideVehicle.Stage) -> void:
 
 
 func _remove(v: LandsideVehicle) -> void:
+	if not v.claimants.is_empty():
+		var lost := v.claimants.duplicate()
+		v.claimants.clear()
+		pickup_claim_lost.emit(v.id, lost)
 	_vehicles.erase(v)
 	_by_id.erase(v.id)
 

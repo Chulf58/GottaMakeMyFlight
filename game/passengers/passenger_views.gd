@@ -1286,6 +1286,8 @@ func _pose(node: Node3D, p: Passenger, built: Dictionary) -> float:
 		# line moves (board 814a5cfd).
 		var door := EntranceLooks.face(sim, p)
 		face = atan2(door.x, door.y)
+	elif not moving and p.stage == Passenger.Stage.WAIT_CURB_PICKUP:
+		face = 0.0
 	elif not moving and p.bin_detour_bin > 0 and p.bin_detour_end > 0:
 		var bin_rec := sim.grid.get_object(p.bin_detour_bin)
 		if not bin_rec.is_empty():

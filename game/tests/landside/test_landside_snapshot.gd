@@ -173,3 +173,38 @@ func test_a_booking_for_a_flight_not_scheduled_breaks_the_link() -> void:
 	problem = SaveLinks._landside_problem(loaded, {"scheduled": {}}, flights)
 	print(problem)
 	assert_str(problem).contains("neither live nor issued")
+
+
+func test_pickup_in_lot_and_early_boarding_are_refused() -> void:
+	var sim: LandsideSim = auto_free(LandsideSim.new())
+	assert_bool(sim.use_definition(LandsideTestWorld.with_berths(1))).is_true()
+	assert_bool(sim.build_lot(0, 0, LandsideLotSpot.Kind.SURFACE)).is_true()
+	sim.add_vehicle(LandsideVehicle.Kind.TAXI, LandsideVehicle.Intent.PICKUP, [] as Array[int])
+	var bookings := ArrivalBookings.new()
+	var snap: Dictionary = JSON.parse_string(JSON.stringify(sim.to_snapshot(bookings, 0)))
+
+	# Early pickup_boarded > 0 while still on ROAD_IN must be refused.
+	var early: Dictionary = snap.duplicate(true)
+	early["vehicles"][0]["pickup_boarded"] = 1
+	var early_res := LandsideSnapshot.load(early, LandsideTestWorld.with_berths(1))
+	assert_str(str(early_res.get("error", ""))).contains("before reaching a curb berth")
+
+	# Early pickup_boarded > 0 while BERTH + Stage.DRIVE must be refused.
+	var driving_berth: Dictionary = snap.duplicate(true)
+	driving_berth["vehicles"][0]["lane"] = LandsideVehicle.Lane.BERTH
+	driving_berth["vehicles"][0]["stop"] = 0
+	driving_berth["vehicles"][0]["pos_mm"] = sim.paths.berth_stand[0] - 500
+	driving_berth["vehicles"][0]["pickup_boarded"] = 1
+	var berth_res := LandsideSnapshot.load(driving_berth, LandsideTestWorld.with_berths(1))
+	assert_str(str(berth_res.get("error", ""))).contains("before reaching a curb berth")
+
+	# Intent.PICKUP inside a parking lot lane must be refused.
+	var lot_pickup: Dictionary = snap.duplicate(true)
+	lot_pickup["vehicles"][0]["lane"] = LandsideVehicle.Lane.SLOT
+	lot_pickup["vehicles"][0]["lot"] = 0
+	lot_pickup["vehicles"][0]["stop"] = 0
+	lot_pickup["vehicles"][0]["pos_mm"] = sim.paths.slot_stand[0][0]
+	lot_pickup["vehicles"][0]["stage"] = LandsideVehicle.Stage.PARKED
+	lot_pickup["vehicles"][0]["leave_tick"] = 100
+	var lot_res := LandsideSnapshot.load(lot_pickup, LandsideTestWorld.with_berths(1))
+	assert_str(str(lot_res.get("error", ""))).contains("empty curb taxi")

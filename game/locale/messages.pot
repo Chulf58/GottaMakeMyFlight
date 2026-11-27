@@ -8991,3 +8991,46 @@ msgstr ""
 msgctxt "passenger activity"
 msgid "Leaving the terminal"
 msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Walking to parked car"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Walking to curb pickup"
+msgstr ""
+
+#: ui/stage_words.gd
+msgctxt "passenger activity"
+msgid "Waiting for pickup taxi"
+msgstr ""
+
+#: passengers/passenger_thoughts.gd
+msgid "Walking to my parked car"
+msgstr ""
+
+#: passengers/passenger_thoughts.gd
+msgid "Gave up waiting for a taxi"
+msgstr ""
+
+#: landside/view/vehicle_inspect.gd
+msgid "Parked, driver returning"
+msgstr ""
+
+#: landside/view/vehicle_inspect.gd
+msgid "Picking up passenger"
+msgstr ""
+
+#: landside/view/vehicle_inspect.gd
+msgid "Leaving with passenger"
+msgstr ""
+
+#: landside/view/vehicle_inspect.gd
+msgid "Queuing for curb pickup"
+msgstr ""
+
+#: landside/view/vehicle_inspect.gd
+msgid "Driving to curb pickup"
+msgstr ""

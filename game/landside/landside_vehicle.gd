@@ -6,8 +6,9 @@ extends RefCounted
 
 enum Kind { TAXI, CAR }
 ## DROP: let the passengers out at the curb. PARK: park in a car park; a car
-## that finds no free space turns into DROP before the turn.
-enum Intent { DROP, PARK }
+## that finds no free space turns into DROP before the turn. PICKUP: taxi
+## arriving empty to pick up waiting arriving passengers at the curb.
+enum Intent { DROP, PARK, PICKUP }
 ## DRIVE and QUEUE are on road_in or a lot's access lane (QUEUE when it
 ## could not move a full step); DWELL is in a curb berth; PARKED in a slot;
 ## LEAVE on road_out or a lot's exit lane.
@@ -37,3 +38,9 @@ var leave_tick := 0
 ## passenger at a time (LandsideSim.RELEASE_GAP_TICKS apart). 0 when the next
 ## may get out at once, and always 0 with nobody aboard.
 var release_wait := 0
+## Arriving passenger ids claiming this parked car (walking to it), or empty.
+var claimants: Array[int] = []
+## True once a claimant boarded this parked car and it is ready to pull out.
+var pickup_ready := false
+## Count of arriving passengers that boarded this PICKUP taxi at the curb.
+var pickup_boarded := 0

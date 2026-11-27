@@ -278,6 +278,36 @@ static func _landside_problem(
 	for id in (landside["missed"] as Dictionary).keys():
 		if not live.has(id) and not _issued(id, flights):
 			return "landside: flight %s has misses but is neither live nor issued" % id
+	return _landside_pickup_problem(landside, passengers)
+
+
+static func _landside_pickup_problem(landside: Dictionary, passengers: Dictionary) -> String:
+	var pax_by_id := {}
+	for p: Passenger in passengers.get("passengers", []):
+		pax_by_id[p.id] = p
+	var veh_by_id := {}
+	for v: LandsideVehicle in landside.get("vehicles", []):
+		veh_by_id[v.id] = v
+		for pid: int in v.claimants:
+			var p: Passenger = pax_by_id.get(pid)
+			if (
+				p == null
+				or not p.is_arriving()
+				or p.stage != Passenger.Stage.TO_PARKED_CAR
+				or p.pickup_vehicle != v.id
+			):
+				return (
+					"landside: vehicle %d claimant %d is not an arriving passenger walking to it"
+					% [v.id, pid]
+				)
+	for p: Passenger in passengers.get("passengers", []):
+		if p.pickup_vehicle > 0:
+			var v: LandsideVehicle = veh_by_id.get(p.pickup_vehicle)
+			if v == null or v.stage != LandsideVehicle.Stage.PARKED or not v.claimants.has(p.id):
+				return (
+					"landside: passenger %d claims vehicle %d, which does not list it"
+					% [p.id, p.pickup_vehicle]
+				)
 	return ""
 
 

@@ -194,7 +194,15 @@ func step() -> void:
 	for b in _bookings:
 		if b.state == ArrivalBooking.State.IN_VEHICLE and _sim.entrance.held_now.has(b.id):
 			kept[b.vehicle] = true
-	var events := landside.step(_sim.tick, can_release, _sim.clock.rng, closes, budget, kept)
+	var curb_waiters := PassengerArrivals.curb_pickup_waiters(_sim)
+	var events := landside.step(
+		_sim.tick, can_release, _sim.clock.rng, closes, budget, kept, curb_waiters
+	)
+	for pickup in landside.picked_up:
+		for pid: int in pickup["passengers"]:
+			var p := _sim.get_passenger(pid)
+			if p != null and not p.arrival_done:
+				PassengerArrivals.finish(_sim, p)
 	for event in events:
 		var walk: Array[Vector3] = event["walk"]
 		for id: int in event["bookings"]:
@@ -211,6 +219,7 @@ func step() -> void:
 			_sim.entrance.held[b.id] = true
 			_sim.entrance.held_now[b.id] = true
 	_board(landside)
+	_spawn_pickup_taxis(landside)
 
 
 ## Bookings not yet released or settled.
@@ -311,6 +320,18 @@ func _board(landside: LandsideSim) -> void:
 			var b: ArrivalBooking = _by_id[id]
 			b.state = ArrivalBooking.State.IN_VEHICLE
 			b.vehicle = vehicle
+
+
+func _spawn_pickup_taxis(landside: LandsideSim) -> void:
+	var waiters := PassengerArrivals.curb_pickup_waiters(_sim)
+	if waiters.is_empty():
+		return
+	if waiters.size() <= landside.inbound_pickup_capacity():
+		return
+	if landside.can_spawn_pickup_taxi():
+		landside.add_vehicle(
+			LandsideVehicle.Kind.TAXI, LandsideVehicle.Intent.PICKUP, [] as Array[int]
+		)
 
 
 func _drop(b: ArrivalBooking) -> void:
