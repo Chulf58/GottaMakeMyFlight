@@ -466,6 +466,9 @@ func _draw_door_objects(placed: Dictionary) -> void:
 		var record: Dictionary = (_object_nodes[object_id] as Node3D).get_meta("record")
 		if not BuildCatalog.is_any_door(record["def"]):
 			continue
+		if record["def"] == BuildCatalog.AIRSIDE_EXIT_ID:
+			(_object_nodes[object_id] as Node3D).visible = true
+			continue
 		var anchor: Vector2i = record["anchor"]
 		var out := BuildObjectDef.rotate_offset(Vector2i(0, -1), record["facing"])
 		var side := BuildGrid.SIDE_STEP.find(out)

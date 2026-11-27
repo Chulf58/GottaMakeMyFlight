@@ -18,11 +18,17 @@ const CLAIM_MIN_ORBIT_TICKS := 40
 const CLAIM_BAG_MOOD_BONUS := 5
 const CLAIM_TIMEOUT_MOOD_LOSS := 6
 const SIDEWALK_Z := -59.95
+const CURB_WAIT_X_OFFSETS := [0.0, -0.75, 0.75, -1.50, 1.50]
+const CURB_WAIT_ROW_STEP_Z := 0.75
+const CURB_WAIT_MIN_SEP_SQ := 0.25
 
 
 static func schedule_deboarding(sim: PassengerSim, flight_id: String, count: int) -> void:
 	if count <= 0 or sim.flights == null:
 		return
+	var stand_id := sim.flights.flight_stand_id(flight_id)
+	if BusGatePairing.is_remote_stand_id(stand_id):
+		count = mini(count, BusGatePairing.BUS_CAPACITY)
 	var window := sim.flights.deboarding_window(flight_id)
 	var start_t := maxi(sim.tick + 1, window.x)
 	var end_t := maxi(start_t, window.y - DEBOARD_FINISH_MARGIN_TICKS)
@@ -177,21 +183,87 @@ static func step_outside(sim: PassengerSim, p: Passenger, speed: int) -> void:
 	if p.apron_mm < total:
 		return
 	if p.stage == Passenger.Stage.DEPLANING:
-		p.apron = []
-		p.apron_mm = 0
-		var door_cell := sim.layout.door_cell(sim.grid, p.exit_object)
-		if door_cell != Passenger.NO_CELL:
-			p.at = door_cell
-		p.clear_path()
-		p.stuck = Passenger.Stuck.NONE
-		sim._set_stage(p, Passenger.Stage.TO_AIRSIDE_EXIT)
-		_plan_airside_exit(sim, p)
+		if _waits_for_inbound_bus(sim, p):
+			return
+		_enter_airside_from_deplane(sim, p, p.exit_object)
 	elif p.stage == Passenger.Stage.TO_ROAD_EXIT:
 		finish(sim, p)
 	elif p.stage == Passenger.Stage.TO_PARKED_CAR:
 		_finish_parked_car_walk(sim, p)
 	elif p.stage == Passenger.Stage.TO_CURB_PICKUP:
 		_arrive_at_curb_pickup(sim, p)
+
+
+## Moves arriving `p` from the remote stand curb onto the inbound shuttle bus
+## without the outbound -6 mood penalty or outbound bus thought.
+static func board_bus(sim: PassengerSim, p: Passenger) -> void:
+	if sim == null or p == null or p.is_done():
+		return
+	p.clear_path()
+	p.apron = []
+	p.apron_mm = 0
+	p.stuck = Passenger.Stuck.NONE
+	sim._set_stage(p, Passenger.Stage.ON_BUS)
+
+
+## Unloads arriving `p` from the inbound shuttle bus at `exit_id` into TO_AIRSIDE_EXIT.
+static func unload_from_bus(sim: PassengerSim, p: Passenger, exit_id: int) -> void:
+	if sim == null or p == null or p.is_done():
+		return
+	_enter_airside_from_deplane(sim, p, exit_id)
+
+
+static func _enter_airside_from_deplane(sim: PassengerSim, p: Passenger, exit_id: int) -> void:
+	p.apron = []
+	p.apron_mm = 0
+	var door := exit_id
+	var door_cell := (
+		sim.layout.door_cell(sim.grid, door)
+		if sim.grid != null and door != 0
+		else Passenger.NO_CELL
+	)
+	if door_cell == Passenger.NO_CELL or sim.grid == null or not sim.grid.in_bounds(door_cell):
+		var fallback := 0
+		if sim.grid != null:
+			var open := sim.layout.open_exits(sim.grid)
+			if not open.is_empty():
+				fallback = open[0]
+			elif not sim.layout.exits.is_empty():
+				fallback = sim.layout.exits[0]
+		door = fallback
+		door_cell = (
+			sim.layout.door_cell(sim.grid, door)
+			if sim.grid != null and door != 0
+			else Passenger.NO_CELL
+		)
+	if door_cell == Passenger.NO_CELL or sim.grid == null or not sim.grid.in_bounds(door_cell):
+		finish(sim, p)
+		return
+	p.exit_object = door
+	p.at = door_cell
+	p.clear_path()
+	p.stuck = Passenger.Stuck.NONE
+	sim._set_stage(p, Passenger.Stage.TO_AIRSIDE_EXIT)
+	_plan_airside_exit(sim, p)
+
+
+static func _waits_for_inbound_bus(sim: PassengerSim, p: Passenger) -> bool:
+	if (
+		sim.bus_shuttle == null
+		or sim.flights == null
+		or not sim.layout.bus_exits.has(p.exit_object)
+	):
+		return false
+	var stand_id := sim.flights.flight_stand_id(p.flight_id)
+	if not BusGatePairing.is_remote_stand_id(stand_id):
+		return false
+	if sim.bus_shuttle.has_inbound_for(p.flight_id):
+		return true
+	var fst := sim.flights.state_of(p.flight_id)
+	if fst < 0 or fst >= FlightSim.State.DOORS_CLOSED:
+		return false
+	var gate := sim.flights.flight_gate(p.flight_id)
+	return not sim.bus_shuttle.bus_state(gate).is_empty()
 
 
 static func finish(sim: PassengerSim, p: Passenger) -> void:
@@ -289,7 +361,7 @@ static func _advance_curb_pickup(sim: PassengerSim, p: Passenger) -> void:
 		return
 	var door := _entrance_at(sim, p.at)
 	if door != 0:
-		var walk := _walk_to_curb_pickup(sim, door, p.pickup_berth)
+		var walk := _walk_to_curb_pickup(sim, door, p.pickup_berth, p.id)
 		if walk.size() >= 2:
 			p.clear_path()
 			p.stuck = Passenger.Stuck.NONE
@@ -580,7 +652,7 @@ static func _try_start_curb_pickup(sim: PassengerSim, p: Passenger, door: int) -
 	var berth := _nearest_built_berth(sim, from_pt)
 	if berth < 0:
 		return false
-	var walk := _walk_to_curb_pickup(sim, door, berth)
+	var walk := _walk_to_curb_pickup(sim, door, berth, p.id)
 	if walk.size() < 2:
 		return false
 	p.clear_path()
@@ -607,6 +679,13 @@ static func _finish_parked_car_walk(sim: PassengerSim, p: Passenger) -> void:
 
 static func _arrive_at_curb_pickup(sim: PassengerSim, p: Passenger) -> void:
 	var pos := p.apron_position()
+	if (
+		sim.landside != null
+		and sim.landside.definition != null
+		and p.pickup_berth >= 0
+		and _point_taken(pos, _curb_taken_positions(sim, p.pickup_berth, p.id))
+	):
+		pos = _curb_wait_spot(sim, p.pickup_berth, p.id)
 	p.apron = [pos] as Array[Vector3]
 	p.apron_mm = 0
 	p.clear_path()
@@ -635,7 +714,7 @@ static func _fallback_from_invalid_car(sim: PassengerSim, p: Passenger) -> void:
 		return
 	var here := p.apron_position()
 	var backtrack := _backtrack_to_sidewalk(sim, p, here)
-	var curb := _curb_walk_from_outdoor(sim, backtrack)
+	var curb := _curb_walk_from_outdoor(sim, backtrack, p.id)
 	if not curb.is_empty():
 		p.clear_path()
 		p.stuck = Passenger.Stuck.NONE
@@ -653,7 +732,7 @@ static func _fallback_from_invalid_car(sim: PassengerSim, p: Passenger) -> void:
 
 static func _reroute_curb_pickup_or_exit(sim: PassengerSim, p: Passenger) -> void:
 	if p.walking_outside():
-		var curb := _curb_walk_from_outdoor(sim, [p.apron_position()])
+		var curb := _curb_walk_from_outdoor(sim, [p.apron_position()], p.id)
 		if not curb.is_empty():
 			p.pickup_berth = int(curb["berth"])
 			p.apron = curb["walk"]
@@ -662,7 +741,9 @@ static func _reroute_curb_pickup_or_exit(sim: PassengerSim, p: Passenger) -> voi
 	_fallback_to_sidewalk(sim, p)
 
 
-static func _curb_walk_from_outdoor(sim: PassengerSim, prefix: Array[Vector3]) -> Dictionary:
+static func _curb_walk_from_outdoor(
+	sim: PassengerSim, prefix: Array[Vector3], exclude_pid := 0
+) -> Dictionary:
 	if sim.landside == null or sim.site == null or sim.landside.built_berth_count() <= 0:
 		return {}
 	var walk: Array[Vector3] = prefix.duplicate()
@@ -680,7 +761,7 @@ static func _curb_walk_from_outdoor(sim: PassengerSim, prefix: Array[Vector3]) -
 	var berth := _nearest_built_berth(sim, sidewalk_pt)
 	if berth < 0:
 		return {}
-	var target := sim.landside.definition.berth_get_out(berth)
+	var target := _curb_wait_spot(sim, berth, exclude_pid)
 	_append_point(walk, Vector3(sidewalk_pt.x, target.y, target.z))
 	_append_point(walk, target)
 	if walk.size() < 2:
@@ -732,19 +813,70 @@ static func _walk_to_parked_car(
 	return walk
 
 
-static func _walk_to_curb_pickup(sim: PassengerSim, door: int, berth: int) -> Array[Vector3]:
+static func _walk_to_curb_pickup(
+	sim: PassengerSim, door: int, berth: int, exclude_pid := 0
+) -> Array[Vector3]:
 	if sim.site == null or sim.landside == null or sim.landside.definition == null:
 		return [] as Array[Vector3]
 	var door_walk := OutsideWalks.departure_to_road(sim, door)
 	if door_walk.size() < 2:
 		return [] as Array[Vector3]
-	var target := sim.landside.definition.berth_get_out(berth)
+	var target := _curb_wait_spot(sim, berth, exclude_pid)
 	var walk: Array[Vector3] = []
 	walk.assign(door_walk.slice(0, door_walk.size() - 1))
 	var edge_pt: Vector3 = walk[walk.size() - 1]
 	_append_point(walk, Vector3(edge_pt.x, target.y, target.z))
 	_append_point(walk, target)
 	return walk
+
+
+static func _curb_taken_positions(
+	sim: PassengerSim, berth: int, exclude_pid: int
+) -> Array[Vector3]:
+	var taken: Array[Vector3] = []
+	for id in sim.passenger_ids():
+		if id == exclude_pid:
+			continue
+		var other := sim.get_passenger(id)
+		if (
+			other == null
+			or other.arrival_done
+			or not other.is_arriving()
+			or other.pickup_berth != berth
+			or other.apron.is_empty()
+		):
+			continue
+		if other.stage == Passenger.Stage.TO_CURB_PICKUP:
+			taken.append(other.apron[other.apron.size() - 1])
+		elif other.stage == Passenger.Stage.WAIT_CURB_PICKUP:
+			taken.append(other.apron[0])
+	return taken
+
+
+static func _point_taken(cand: Vector3, taken: Array[Vector3]) -> bool:
+	for pt in taken:
+		var dx := cand.x - pt.x
+		var dz := cand.z - pt.z
+		if dx * dx + dz * dz < CURB_WAIT_MIN_SEP_SQ:
+			return true
+	return false
+
+
+static func _curb_wait_spot(sim: PassengerSim, berth: int, exclude_pid: int) -> Vector3:
+	var base := sim.landside.definition.berth_get_out(berth)
+	var taken := _curb_taken_positions(sim, berth, exclude_pid)
+	var cols := CURB_WAIT_X_OFFSETS.size()
+	for slot_idx in taken.size() + 1:
+		var row := slot_idx / cols
+		var col := slot_idx % cols
+		var cand := Vector3(
+			base.x + float(CURB_WAIT_X_OFFSETS[col]),
+			base.y,
+			base.z - CURB_WAIT_ROW_STEP_Z * float(row)
+		)
+		if not _point_taken(cand, taken):
+			return cand
+	return base
 
 
 static func _nearest_built_berth(sim: PassengerSim, from_pt: Vector3) -> int:
@@ -916,6 +1048,7 @@ static func _arrival_door_and_walk(sim: PassengerSim, flight_id: String) -> Dict
 	var gate := (
 		sim.flights.flight_gate(flight_id) if sim.flights != null else FlightSim.DEFAULT_GATE
 	)
+	var stand_id := sim.flights.flight_stand_id(flight_id) if sim.flights != null else ""
 	var model := PlaneClasses.flight_model(sim.flights, flight_id) if sim.flights != null else ""
 	var candidates := sim.layout.open_exits_for(sim.grid, gate)
 	if candidates.is_empty():
@@ -926,10 +1059,33 @@ static func _arrival_door_and_walk(sim: PassengerSim, flight_id: String) -> Dict
 	for door in candidates:
 		if fallback_door == 0 and sim.grid.in_bounds(sim.layout.door_cell(sim.grid, door)):
 			fallback_door = door
+		if BusGatePairing.is_remote_stand_id(stand_id):
+			continue
 		var walk := OutsideWalks.departure(sim, door, model)
 		if walk.size() >= 2:
 			walk.reverse()
 			return {"door": door, "walk": walk}
+	if BusGatePairing.is_remote_stand_id(stand_id) and sim.flights != null:
+		var bus_door := fallback_door
+		for door in candidates:
+			if (
+				sim.layout.bus_exits.has(door)
+				and sim.grid.in_bounds(sim.layout.door_cell(sim.grid, door))
+			):
+				bus_door = door
+				break
+		var stand := sim.flights.flight_stand(flight_id)
+		if stand.is_empty():
+			stand = sim.flights.remote_stand_grounds().get(stand_id, {}).get("stand", {})
+		if not stand.is_empty():
+			var site := (sim.grid as SiteGrid).site if sim.grid is SiteGrid else sim.site
+			var gy := AirstairsPose.ground_y(stand) if site != null else sim.grid.origin.y
+			var stop_pose := BusShuttleRoutes.stop_pose_for(stand, model, gy)
+			var door_idx := posmod(sim._next_id, 4)
+			var walk := BusShuttleRoutes.bus_unload_walk(stop_pose, door_idx)
+			if walk.size() >= 2:
+				walk.reverse()
+				return {"door": bus_door, "walk": walk}
 	return {"door": fallback_door, "walk": [] as Array[Vector3]}
 
 

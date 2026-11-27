@@ -123,6 +123,11 @@ static func _bus_problem(buses: Dictionary, flights: Dictionary) -> String:
 				"buses: bus %s flight %s stand %s does not match %s"
 				% [b["gate"], fid, flight["stand_id"], b["stand_id"]]
 			)
+		if (
+			bool(b.get("inbound", false))
+			and not BusGatePairing.is_remote_stand_id(String(b["stand_id"]))
+		):
+			return "buses: inbound bus %s stand %s is not remote" % [b["gate"], b["stand_id"]]
 		var expected_model := _flight_model(flight, contracts)
 		if String(b["model"]) != expected_model:
 			return (

@@ -223,6 +223,44 @@ func test_entrance_door_piece_drops_to_jambs_like_a_door_wall() -> void:
 	assert_int(_jamb_count(view)).is_equal(0)
 
 
+func test_airside_exit_door_stays_visible_when_interior_wall_cuts() -> void:
+	var grid := BuildGrid.new(Vector2i(8, 8))
+	for y in range(2, 6):
+		for x in range(2, 6):
+			grid.apply(BuildEdit.paint_floor(Vector2i(x, y), BuildGrid.FLOOR_TILE, 1))
+	for x in range(2, 6):
+		grid.apply(BuildEdit.place_wall(Vector2i(x, 3), BuildGrid.Side.SOUTH))
+	var exit_id := -1
+	for edit in DoorPlacement.edits_for(
+		grid, BuildEdit.place_object(BuildCatalog.AIRSIDE_EXIT_ID, Vector2i(3, 3), 2)
+	):
+		var res := grid.apply(edit)
+		assert_bool(res.ok).is_true()
+		if res.object_id > 0:
+			exit_id = res.object_id
+	var door_id := grid.apply(BuildEdit.place_object(&"entrance_door", Vector2i(4, 3), 2)).object_id
+	assert_int(exit_id).is_greater(0)
+	assert_int(door_id).is_greater(0)
+	var view := auto_free(BuildView.new()) as BuildView
+	view.cutaway_enabled = true
+	add_child(view)
+	view.refresh(grid)
+	var exit_node := view.object_node(exit_id)
+	var door_node := view.object_node(door_id)
+	var wall_edge := Vector3i(2, 4, NORTH)
+	var exit_edge := Vector3i(3, 4, NORTH)
+	view.update_cutaway(_toward_eye(0.0))
+	assert_array(view.cut_edges()).contains([wall_edge])
+	assert_array(view.cut_edges()).not_contains([exit_edge])
+	assert_bool(exit_node.visible).is_true()
+	assert_bool(door_node.visible).is_false()
+	assert_int(_jamb_count(view)).is_equal(2)
+	view.update_cutaway(_toward_eye(180.0))
+	assert_bool(exit_node.visible).is_true()
+	assert_bool(door_node.visible).is_false()
+	assert_int(_jamb_count(view)).is_equal(2)
+
+
 ## Wall instances scaled to a jamb's width.
 func _jamb_count(view: BuildView) -> int:
 	var count := 0

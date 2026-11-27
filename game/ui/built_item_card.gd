@@ -537,8 +537,12 @@ func _shuttle_state_text(gate: String) -> String:
 	var bus := shuttle.bus_state(gate)
 	var sid := String(bus.get("stand_id", ""))
 	var aboard := (bus.get("aboard", []) as Array).size()
+	var inbound := bool(bus.get("inbound", false))
+	var state := int(bus.get("state", BusShuttleSim.State.IDLE_AT_BAY))
+	if inbound:
+		return _inbound_shuttle_text(state, sid, aboard)
 	var text := tr("Shuttle: Idle at bay")
-	match int(bus.get("state", BusShuttleSim.State.IDLE_AT_BAY)):
+	match state:
 		BusShuttleSim.State.LOADING:
 			if sid != "":
 				text = tr("Shuttle: Boarding for {stand} ({count})").format(
@@ -558,6 +562,28 @@ func _shuttle_state_text(gate: String) -> String:
 				text = tr("Shuttle: Unloading at stand")
 		BusShuttleSim.State.DRIVING_BACK:
 			text = tr("Shuttle: Returning to bay")
+	return text
+
+
+func _inbound_shuttle_text(state: int, sid: String, aboard: int) -> String:
+	var text := tr("Shuttle: Idle at bay")
+	match state:
+		BusShuttleSim.State.DRIVING_OUT:
+			if sid != "":
+				text = tr("Shuttle: Heading to {stand} for arrivals").format({"stand": sid})
+			else:
+				text = tr("Shuttle: Heading to stand for arrivals")
+		BusShuttleSim.State.LOADING:
+			if sid != "":
+				text = tr("Shuttle: Boarding arrivals at {stand} ({count})").format(
+					{"stand": sid, "count": aboard}
+				)
+			else:
+				text = tr("Shuttle: Boarding arrivals ({count})").format({"count": aboard})
+		BusShuttleSim.State.DRIVING_BACK:
+			text = tr("Shuttle: Returning with arrivals ({count})").format({"count": aboard})
+		BusShuttleSim.State.UNLOADING:
+			text = tr("Shuttle: Unloading arrivals at bay")
 	return text
 
 

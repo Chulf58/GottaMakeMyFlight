@@ -82,7 +82,13 @@ static func arriving_passengers_for(contract: Dictionary, day: int, occ_id := ""
 	if booked <= 0:
 		return 0
 	var pct := 60 + (hashed % 31)
-	return clampi(roundi(float(booked) * float(pct) / 100.0), 1, booked)
+	var count := clampi(roundi(float(booked) * float(pct) / 100.0), 1, booked)
+	if (
+		BusGatePairing.is_remote_contract(contract)
+		or BusGatePairing.is_remote_stand_id(BusGatePairing.stand_id_of(contract))
+	):
+		count = mini(count, BusGatePairing.BUS_CAPACITY)
+	return count
 
 
 ## Ticks from the first state to the scheduled departure (start of PUSHBACK)

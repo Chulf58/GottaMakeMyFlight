@@ -8797,6 +8797,30 @@ msgid "Shuttle: Returning to bay"
 msgstr ""
 
 #: ui/built_item_card.gd
+msgid "Shuttle: Heading to {stand} for arrivals"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Shuttle: Heading to stand for arrivals"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Shuttle: Boarding arrivals at {stand} ({count})"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Shuttle: Boarding arrivals ({count})"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Shuttle: Returning with arrivals ({count})"
+msgstr ""
+
+#: ui/built_item_card.gd
+msgid "Shuttle: Unloading arrivals at bay"
+msgstr ""
+
+#: ui/built_item_card.gd
 msgid "Stand: {id}"
 msgstr ""
 

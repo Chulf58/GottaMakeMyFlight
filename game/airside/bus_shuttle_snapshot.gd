@@ -1,11 +1,12 @@
 class_name BusShuttleSnapshot
 extends RefCounted
-## Snapshot pack and checked validator for BusShuttleSim (SaveGame v43).
+## Snapshot pack and checked validator for BusShuttleSim (SaveGame v49).
 
-const SNAPSHOT_VERSION := 1
+const SNAPSHOT_VERSION := 2
 const BUS_KEYS := [
 	"gate",
 	"state",
+	"inbound",
 	"flight_id",
 	"stand_id",
 	"model",
@@ -31,6 +32,7 @@ static func pack(tick: int, buses: Dictionary) -> Dictionary:
 				{
 					"gate": gate,
 					"state": int(b["state"]),
+					"inbound": bool(b.get("inbound", false)),
 					"flight_id": String(b["flight_id"]),
 					"stand_id": String(b["stand_id"]),
 					"model": String(b["model"]),
@@ -120,6 +122,8 @@ static func _entry_problem(
 	seen_gates[gate] = true
 	if not WholeNumber.is_whole(e["state"]) or int(e["state"]) < 0 or int(e["state"]) > 4:
 		return "bus '%s' has invalid state" % gate
+	if typeof(e["inbound"]) != TYPE_BOOL:
+		return "bus '%s' inbound flag must be true or false" % gate
 	var state := int(e["state"])
 	if not WholeNumber.is_whole(e["exit"]) or int(e["exit"]) != int(bus_grounds[gate]["exit"]):
 		return "bus '%s' exit door does not match the bus gate" % gate
@@ -136,6 +140,7 @@ static func _flight_and_aboard_problem(
 	claimed_pax: Dictionary
 ) -> String:
 	var fid := str(e["flight_id"])
+	var inbound := bool(e["inbound"])
 	if (
 		typeof(e["flight_id"]) != TYPE_STRING
 		or typeof(e["stand_id"]) != TYPE_STRING
@@ -146,7 +151,8 @@ static func _flight_and_aboard_problem(
 	var model := String(e["model"])
 	if state == BusShuttleSim.State.IDLE_AT_BAY:
 		if (
-			fid != ""
+			inbound
+			or fid != ""
 			or stand_id != ""
 			or model != ""
 			or typeof(e["aboard"]) != TYPE_ARRAY
@@ -166,15 +172,23 @@ static func _flight_and_aboard_problem(
 			return "bus '%s' tick field '%s' must be whole" % [gate, key]
 	if int(e["start_tick"]) > saved_tick or int(e["arrive_tick"]) < int(e["start_tick"]):
 		return "bus '%s' drive ticks are inconsistent" % gate
-	return _aboard_problem(e, gate, fid, by_id, claimed_pax)
+	return _aboard_problem(e, gate, fid, state, inbound, by_id, claimed_pax)
 
 
 static func _aboard_problem(
-	e: Dictionary, gate: String, fid: String, by_id: Dictionary, claimed_pax: Dictionary
+	e: Dictionary,
+	gate: String,
+	fid: String,
+	state: int,
+	inbound: bool,
+	by_id: Dictionary,
+	claimed_pax: Dictionary
 ) -> String:
 	if typeof(e["aboard"]) != TYPE_ARRAY:
 		return "bus '%s' aboard list must be a list" % gate
 	var aboard: Array = e["aboard"]
+	if inbound and state == BusShuttleSim.State.DRIVING_OUT and not aboard.is_empty():
+		return "inbound bus '%s' driving out must be empty" % gate
 	if aboard.size() > BusGatePairing.BUS_CAPACITY:
 		return "bus '%s' exceeds BUS_CAPACITY" % gate
 	for raw_pid: Variant in aboard:
@@ -186,6 +200,8 @@ static func _aboard_problem(
 		var p: Passenger = by_id[pid]
 		if p.stage != Passenger.Stage.ON_BUS or p.flight_id != fid:
 			return "bus '%s' passenger %d does not match stage/flight" % [gate, pid]
+		if p.is_arriving() != inbound:
+			return "bus '%s' passenger %d direction does not match trip" % [gate, pid]
 		claimed_pax[pid] = gate
 	return ""
 
@@ -197,6 +213,7 @@ static func _clean_entry(e: Dictionary) -> Dictionary:
 	return {
 		"gate": String(e["gate"]),
 		"state": int(e["state"]),
+		"inbound": bool(e["inbound"]),
 		"flight_id": String(e["flight_id"]),
 		"stand_id": String(e["stand_id"]),
 		"model": String(e["model"]),

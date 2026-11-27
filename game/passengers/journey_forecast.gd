@@ -55,6 +55,8 @@ static func arrival_tick(sim: PassengerSim, p: Passenger) -> int:
 static func arrival_from(
 	sim: PassengerSim, p: Passenger, now: int, routed := false, in_files := true
 ) -> int:
+	if p.is_arriving():
+		return NEVER
 	if p.is_done():
 		return p.outcome_tick
 	if StageKinds.leg(p.stage) == StageKinds.Leg.VISIT:
@@ -97,6 +99,8 @@ static func bus_cycle_margin(sim: PassengerSim, flight_id: String) -> int:
 static func own_times(
 	sim: PassengerSim, p: Passenger, now: int, routed: bool, cleared := -1
 ) -> Dictionary:
+	if p.is_arriving():
+		return {}
 	if p.stage == Passenger.Stage.ON_BUS:
 		return _on_bus_times(sim, p, now)
 	if p.stage == Passenger.Stage.APRON:
