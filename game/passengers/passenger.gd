@@ -168,6 +168,10 @@ var halt_tick := 0
 var sat_late := false
 ## True once the -6 mood comfort nudge for riding a shuttle bus was applied.
 var bus_nudged := false
+## Active bin-use detour after a cafe or kiosk visit: target bin object id (0
+## when none), and tick tossing finishes (-1 while walking to the bin).
+var bin_detour_bin := 0
+var bin_detour_end := 0
 ## Its last thoughts, oldest first, PassengerThoughts.STRIDE numbers each
 ## (PassengerThoughts.record()).
 var thoughts := PackedInt64Array()

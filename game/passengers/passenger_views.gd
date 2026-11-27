@@ -1282,6 +1282,12 @@ func _pose(node: Node3D, p: Passenger, built: Dictionary) -> float:
 		# line moves (board 814a5cfd).
 		var door := EntranceLooks.face(sim, p)
 		face = atan2(door.x, door.y)
+	elif not moving and p.bin_detour_bin > 0 and p.bin_detour_end > 0:
+		var bin_rec := sim.grid.get_object(p.bin_detour_bin)
+		if not bin_rec.is_empty():
+			var ahead: Vector2i = bin_rec["anchor"] - p.at
+			if ahead != Vector2i.ZERO:
+				face = atan2(ahead.x, ahead.y)
 	ActivityPoses.dress(
 		node, ActivityPoses.recline(sim, p), ActivityPoses.foam(sim, p), ActivityPoses.bare(sim, p)
 	)

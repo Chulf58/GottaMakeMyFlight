@@ -592,6 +592,8 @@ func test_unstaffed_pushback_save_load_restores_alert_without_double_charge_and_
 				"job": 0,
 				"job_bin": false,
 				"work_left": 0,
+				"bag_carry": StaffMember.BagCarry.NONE,
+				"bag_target": 0,
 				"ramp_job": StaffMember.RampJob.PUSHBACK,
 				"ramp_shuttle_id": 0,
 				"ramp_flight_id": fid,

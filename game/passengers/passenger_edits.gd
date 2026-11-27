@@ -279,6 +279,7 @@ static func graph_changed(sim: PassengerSim, cells: Array[Vector2i]) -> void:
 	sim.entrance.invalidate()
 	# Walkers outside keep a walk that is still there, or stop (site only).
 	OutsideWalks.revalidate(sim)
+	BinDetour.reconcile(sim)
 
 
 ## The live plane stand moved (ApronStand): exits walk to its door from now

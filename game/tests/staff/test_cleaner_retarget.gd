@@ -132,6 +132,15 @@ func test_a_cleaner_with_no_way_to_its_mess_takes_another_and_leaves_it_unclaime
 		held[m.job] = true
 		return far_done.call()
 	assert_bool(CleanerTestKit.step_until(_world, watch)).is_true()
+	# Bagged mess carries out to the entrance door before the cleaner goes IDLE and retries `near`.
+	(
+		assert_bool(
+			CleanerTestKit.step_until(
+				_world, func() -> bool: return m.state == StaffMember.State.IDLE
+			)
+		)
+		. is_true()
+	)
 	_world.run_to(_world.clock.tick + 3 * PassengerSim.BEAT_TICKS)
 	var near := _messes().get_mess(setup[1])
 	print(

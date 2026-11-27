@@ -69,7 +69,13 @@ const SHOWER_EVERY := 3
 ## A bin takes litter dropped this many cells from it (Chebyshev), in sight.
 const BIN_RANGE := 3
 ## Litter a bin holds before it is full and takes no more.
-const BIN_CAPACITY := 12
+const BIN_CAPACITY := 6
+## Minimum litter in a bin before an idle cleaner proactively empties it (>= 50%).
+const BIN_EMPTY_MIN := 3
+## How far a departing cafe or kiosk passenger detours to toss litter in a bin.
+const BIN_DETOUR_RANGE := 6
+const BIN_TOSS_TICKS := 14
+const BIN_DETOUR_SLACK_TICKS := 40
 const BIN_ID := &"trash_can"
 ## The most messes at once.
 const MAX_MESSES := 40
@@ -206,14 +212,37 @@ static func slots_of(def: BuildObjectDef) -> int:
 
 
 ## The walkable cell a cleaner stands on to clean a mess at `cell`: the cell
-## itself, else the first walkable neighbour in AROUND order; NO_CELL for none.
+## itself, else the first unblocked walkable neighbour in AROUND order; NO_CELL for none.
 static func approach_for(grid: BuildGrid, cell: Vector2i) -> Vector2i:
 	if grid.is_walkable(cell):
 		return cell
 	for step in AROUND:
-		if grid.is_walkable(cell + step):
+		if _step_open(grid, cell, step):
 			return cell + step
 	return NO_CELL
+
+
+static func _step_open(grid: BuildGrid, from: Vector2i, step: Vector2i) -> bool:
+	if not grid.is_walkable(from + step):
+		return false
+	if step.x == 0 or step.y == 0:
+		var side := BuildGrid.SIDE_STEP.find(step)
+		return side >= 0 and grid.wall_kind(from, side) == BuildGrid.WallKind.NONE
+	var across := Vector2i(step.x, 0)
+	var down := Vector2i(0, step.y)
+	var side_a := BuildGrid.SIDE_STEP.find(across)
+	var side_b := BuildGrid.SIDE_STEP.find(down)
+	var a_open := (
+		grid.is_walkable(from + across)
+		and grid.wall_kind(from, side_a) == BuildGrid.WallKind.NONE
+		and grid.wall_kind(from + across, side_b) == BuildGrid.WallKind.NONE
+	)
+	var b_open := (
+		grid.is_walkable(from + down)
+		and grid.wall_kind(from, side_b) == BuildGrid.WallKind.NONE
+		and grid.wall_kind(from + down, side_a) == BuildGrid.WallKind.NONE
+	)
+	return a_open or b_open
 
 
 func bind(sim: PassengerSim) -> void:
@@ -229,27 +258,28 @@ func bind(sim: PassengerSim) -> void:
 
 
 ## A cafe visit was settled: one use of its seat (of its counter at a walk-on
-## stall). A visit whose seat or counter is gone leaves nothing.
-func cafe_used(visit: CafeVisit) -> void:
+## stall). A visit whose seat or counter is gone leaves nothing. When `detoured`
+## is set, the passenger carries the litter to a bin instead of dropping it here.
+func cafe_used(visit: CafeVisit, detoured := false) -> void:
 	var kind := Kind.SPILL if SPILL_VENUES.has(visit.venue) else Kind.LITTER
 	if visit.walk_on():
 		var spot := _grid.interaction_cell(visit.counter)
 		if spot != BuildObjectDef.NO_CELL:
-			_use(counter_source(visit.counter), CAFE_EVERY, kind, spot)
+			_use(counter_source(visit.counter), CAFE_EVERY, kind, spot, detoured)
 	elif not visit.seat.is_empty():
-		_use(seat_source(visit.seat_key), CAFE_EVERY, kind, visit.seat["approach"])
+		_use(seat_source(visit.seat_key), CAFE_EVERY, kind, visit.seat["approach"], detoured)
 
 
 ## A shop visit's browse finished in a room of type `type_id`: a kiosk's slot
 ## or a shower room counts one use. Other shop types leave nothing.
-func shop_used(visit: ShopVisit, type_id: StringName) -> void:
+func shop_used(visit: ShopVisit, type_id: StringName, detoured := false) -> void:
 	if visit.slot.is_empty():
 		return
 	var spot: Vector2i = visit.slot["approach"]
 	if type_id == KIOSK_TYPE:
-		_use(slot_source(visit.slot_key()), KIOSK_EVERY, Kind.LITTER, spot)
+		_use(slot_source(visit.slot_key()), KIOSK_EVERY, Kind.LITTER, spot, detoured)
 	elif type_id == SHOWER_TYPE:
-		_use(shower_source(visit.room), SHOWER_EVERY, Kind.SPILL, spot)
+		_use(shower_source(visit.room), SHOWER_EVERY, Kind.SPILL, spot, detoured)
 
 
 ## A toilet stall was used (the need reset in it): one use of its room.
@@ -337,6 +367,41 @@ func full_bins() -> Array[int]:
 	return full
 
 
+## Non-full bins on the grid at or above half capacity (BIN_EMPTY_MIN), in id order.
+func proactive_bins() -> Array[int]:
+	var found: Array[int] = []
+	for bin: int in _bins.keys():
+		var fill := fill_of(bin)
+		if (
+			fill >= BIN_EMPTY_MIN
+			and fill < BIN_CAPACITY
+			and _grid.get_object(bin).get("def", &"") == BIN_ID
+		):
+			found.append(bin)
+	found.sort()
+	return found
+
+
+## Adds one piece of litter to `bin` and counts it caught. False if gone or full.
+func add_to_bin(bin: int) -> bool:
+	if _grid.get_object(bin).get("def", &"") != BIN_ID:
+		return false
+	var fill := fill_of(bin)
+	if fill >= BIN_CAPACITY:
+		return false
+	_bins[bin] = fill + 1
+	caught += 1
+	return true
+
+
+## Walkable approach cell beside `bin`, or NO_CELL if gone or blocked.
+func bin_approach(bin: int) -> Vector2i:
+	var record := _grid.get_object(bin)
+	if record.get("def", &"") != BIN_ID:
+		return NO_CELL
+	return approach_for(_grid, record["anchor"])
+
+
 ## A cleaner emptied `bin`: its fill goes back to 0, so it takes litter again.
 ## False for an object that is not a bin.
 func empty_bin(bin: int) -> bool:
@@ -402,6 +467,32 @@ func sources() -> Array[String]:
 ## The bin that takes litter dropped at `cell`: the nearest one within
 ## BIN_RANGE that is not full and is seen from `cell`, ties to the lower id;
 ## 0 for none.
+## Nearest non-full bins within BIN_DETOUR_RANGE cells of `cell` that have a walkable
+## approach, ordered nearest first (ties to lower object id).
+func detour_bins_near(cell: Vector2i) -> Array[Dictionary]:
+	var list: Array[Dictionary] = []
+	for id in _sorted_objects():
+		var record := _grid.get_object(id)
+		if record["def"] != BIN_ID or fill_of(id) >= BIN_CAPACITY:
+			continue
+		var at: Vector2i = record["anchor"]
+		var distance := maxi(absi(at.x - cell.x), absi(at.y - cell.y))
+		if distance > BIN_DETOUR_RANGE:
+			continue
+		var spot := approach_for(_grid, at)
+		if spot == NO_CELL:
+			continue
+		list.append({"id": id, "anchor": at, "spot": spot, "dist": distance})
+	list.sort_custom(
+		func(a: Dictionary, b: Dictionary) -> bool:
+			if int(a["dist"]) != int(b["dist"]):
+				return int(a["dist"]) < int(b["dist"])
+			return int(a["id"]) < int(b["id"])
+	)
+	return list
+
+
+## Nearest bin in range that catches litter right now (without a passenger detour).
 func bin_for(cell: Vector2i) -> int:
 	var best := 0
 	var best_distance := BIN_RANGE + 1
@@ -685,10 +776,13 @@ static func _cell_of(value: Variant) -> Vector2i:
 
 
 ## One real use of `source`: every `every`th leaves a mess of `kind` at `cell`,
-## litter caught by a bin in range when there is one.
-func _use(source: String, every: int, kind: Kind, cell: Vector2i) -> void:
+## litter caught by a bin in range when there is one. When `detoured` is set for
+## litter, the passenger carries it to a bin directly instead of dropping it here.
+func _use(source: String, every: int, kind: Kind, cell: Vector2i, detoured := false) -> void:
 	var count := uses_of(source) + 1
 	_counters[source] = count
+	if detoured and kind == Kind.LITTER:
+		return
 	if count % every != 0:
 		return
 	if kind == Kind.LITTER:

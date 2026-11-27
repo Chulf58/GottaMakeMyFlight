@@ -11,7 +11,7 @@ extends SkeletonModifier3D
 ## yielding cleanly whenever CarryArm, CarryStoop, DiningPose, RepackPose,
 ## PodRecline, or SHOWER controls arms or torso.
 
-enum Mode { NONE, ALARM, LIQUIDS, QUEUE, SEATED, CLOSE_CALL }
+enum Mode { NONE, ALARM, LIQUIDS, QUEUE, SEATED, CLOSE_CALL, BIN_TOSS }
 
 const QUEUE_SETTLE_TICKS := 12.0
 const SEATED_SETTLE_TICKS := 10.0
@@ -342,6 +342,19 @@ static func _evaluate(
 	if not sec_eval.is_empty():
 		return sec_eval
 
+	# 2.5. Bin toss gesture when paused at a trash bin after a cafe or kiosk visit.
+	if p.bin_detour_bin > 0 and p.bin_detour_end > 0 and not record.get("moving", false):
+		var span := float(MessSim.BIN_TOSS_TICKS)
+		var start := float(p.bin_detour_end) - span
+		var elapsed := maxf(now - start, 0.0)
+		if elapsed < span:
+			return {
+				"mode": Mode.BIN_TOSS,
+				"weight": _window_weight(elapsed, 0.0, span, 3.0, 3.0),
+				"phase_t": clampf(elapsed / span, 0.0, 1.0),
+				"sub": 0,
+			}
+
 	# 3. Stationary queue or seated idle fidgets.
 	var wait_since := float(record.get("wait_since", -1.0))
 	if wait_since >= 0.0:
@@ -553,6 +566,8 @@ func _process_modification_with_delta(_delta: float) -> void:
 			_pose_seated(skeleton, w, phase_t, sub_variant, free)
 		Mode.CLOSE_CALL:
 			_pose_close_call(skeleton, w, phase_t, sub_variant, free)
+		Mode.BIN_TOSS:
+			_pose_bin_toss(skeleton, w, phase_t, free)
 
 
 func _sibling_yields(skeleton: Skeleton3D) -> bool:
@@ -750,6 +765,24 @@ func _pose_close_call(skeleton: Skeleton3D, w: float, t: float, sub: int, free: 
 			_rotate_char(skeleton, "Arm" + suffix, Vector3.BACK, out_z * 8.0 * w)
 			_rotate_char(skeleton, "Forearm" + suffix, Vector3.RIGHT, -104.0 * w)
 			_rotate_char(skeleton, "Forearm" + suffix, Vector3.UP, in_y * (34.0 + 14.0 * wipe) * w)
+
+
+func _pose_bin_toss(skeleton: Skeleton3D, w: float, u: float, free: Array) -> void:
+	var arc := sin(PI * clampf(u, 0.0, 1.0))
+	var dip := smoothstep(0.30, 0.58, u) * (1.0 - smoothstep(0.62, 0.92, u))
+	var side := 0 if free[0] else (1 if free[1] else -1)
+	if bool(free[0]) and bool(free[1]):
+		_rotate_char(skeleton, "Spine_01", Vector3.RIGHT, 6.0 * arc * w)
+	_rotate_char(skeleton, "Head", Vector3.RIGHT, 10.0 * arc * w)
+	if side >= 0:
+		var suffix := _suffix(side)
+		var out_z := _outward_z(side)
+		var in_y := _inward_y(side)
+		_rotate_char(skeleton, "Arm" + suffix, Vector3.RIGHT, (-56.0 * arc - 14.0 * dip) * w)
+		_rotate_char(skeleton, "Arm" + suffix, Vector3.UP, in_y * 14.0 * arc * w)
+		_rotate_char(skeleton, "Arm" + suffix, Vector3.BACK, out_z * 8.0 * arc * w)
+		_rotate_char(skeleton, "Forearm" + suffix, Vector3.RIGHT, (-42.0 * arc + 24.0 * dip) * w)
+		_rotate_char(skeleton, "Hand" + suffix, Vector3.RIGHT, 18.0 * dip * w)
 
 
 func _rotate_char(skeleton: Skeleton3D, bone_name: String, axis_char: Vector3, deg: float) -> void:

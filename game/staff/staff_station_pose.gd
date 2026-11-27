@@ -14,6 +14,7 @@ enum Mode {
 	SECURITY_REPACK,
 	SHOP,
 	GATE,
+	CLEANER,
 	RAMP_MARSHAL,
 	RAMP_SHUTTLE,
 	RAMP_PUSHBACK,
@@ -36,6 +37,11 @@ enum SubMode {
 	SHOP_CAFE,
 	SHOP_BAR,
 	SHOP_RETAIL,
+	CLEANER_SWEEP,
+	CLEANER_MOP,
+	CLEANER_BIN,
+	CLEANER_BAG_CARRY,
+	CLEANER_BAG_TOSS,
 	RAMP_HOOKUP,
 	RAMP_GUIDE,
 	BREAK_COFFEE,
@@ -453,6 +459,8 @@ static func evaluate(
 	var out: Array = [Mode.NONE, Vector3.ZERO, false, SubMode.NONE]
 	if m.role == StaffMember.Role.RAMP:
 		out = _ramp_eval(m, staff, ctx)
+	elif m.role == StaffMember.Role.CLEANER and staff != null and staff.sim != null:
+		out = _cleaner_eval(m, staff)
 	elif (
 		m.state == StaffMember.State.ON_DUTY
 		and m.station != 0
@@ -495,6 +503,39 @@ static func _ramp_eval(m: StaffMember, staff: StaffSim, ctx: Dictionary) -> Arra
 		var st := fl.state_of(m.ramp_flight_id) if fl != null else -1
 		var sub := SubMode.RAMP_HOOKUP if st == FlightSim.State.DOORS_CLOSED else SubMode.RAMP_GUIDE
 		return [Mode.RAMP_PUSHBACK, target[0], target[1], sub]
+	return [Mode.NONE, Vector3.ZERO, false, SubMode.NONE]
+
+
+static func _cleaner_eval(m: StaffMember, staff: StaffSim) -> Array:
+	var grid := staff.sim.grid
+	if m.state == StaffMember.State.ON_DUTY:
+		if m.bag_carry != StaffMember.BagCarry.NONE:
+			var cell := CleanerJobs.bag_cell(staff, m)
+			if cell != StaffMember.NO_CELL:
+				var pt := grid.origin + Vector3(cell.x, 0.82, cell.y)
+				return [Mode.CLEANER, pt, true, SubMode.CLEANER_BAG_TOSS]
+			return [Mode.CLEANER, Vector3.ZERO, false, SubMode.CLEANER_BAG_TOSS]
+		if m.job_bin:
+			var cell := CleanerJobs.job_cell(staff, m)
+			if cell != StaffMember.NO_CELL:
+				var pt := grid.origin + Vector3(cell.x, 0.78, cell.y)
+				return [Mode.CLEANER, pt, true, SubMode.CLEANER_BIN]
+			return [Mode.CLEANER, Vector3.ZERO, false, SubMode.CLEANER_BIN]
+		if m.job != 0:
+			var mess := staff.sim.messes.get_mess(m.job)
+			var kind := int(mess.get("kind", MessSim.Kind.LITTER))
+			var sub := (
+				SubMode.CLEANER_MOP
+				if kind == MessSim.Kind.SPILL or kind == MessSim.Kind.TOILET
+				else SubMode.CLEANER_SWEEP
+			)
+			var cell: Vector2i = mess.get("cell", StaffMember.NO_CELL)
+			if cell != StaffMember.NO_CELL:
+				var pt := grid.origin + Vector3(cell.x, 0.08, cell.y)
+				return [Mode.CLEANER, pt, true, sub]
+			return [Mode.CLEANER, Vector3.ZERO, false, sub]
+	if m.bag_carry != StaffMember.BagCarry.NONE:
+		return [Mode.CLEANER, Vector3.ZERO, false, SubMode.CLEANER_BAG_CARRY]
 	return [Mode.NONE, Vector3.ZERO, false, SubMode.NONE]
 
 
@@ -796,14 +837,16 @@ func _apply_role_pose_for(
 		or p_mode == Mode.BREAK_SEATED
 		or p_mode == Mode.BREAK_CHAT
 		or (p_mode == Mode.REACTION_STRETCH and p_sub_mode == SubMode.REACT_WALK_YAWN)
+		or (p_mode == Mode.CLEANER and p_sub_mode == SubMode.CLEANER_BAG_CARRY)
 	)
 	if not skip_body_life:
 		var deep_legs := (
 			p_mode == Mode.RAMP_SHUTTLE
 			or (p_mode == Mode.RAMP_PUSHBACK and p_sub_mode == SubMode.RAMP_HOOKUP)
 		)
-		var knee_scale := 0.25 if deep_legs else 1.0
-		_apply_body_life(skeleton, t, w, 1.0, knee_scale)
+		var knee_scale := 0.25 if deep_legs else (0.35 if p_mode == Mode.CLEANER else 1.0)
+		var sway_scale := 0.45 if p_mode == Mode.CLEANER else 1.0
+		_apply_body_life(skeleton, t, w, sway_scale, knee_scale)
 	match p_mode:
 		Mode.CHECKIN:
 			_pose_checkin(skeleton, w)
@@ -815,6 +858,8 @@ func _apply_role_pose_for(
 			_pose_shop(skeleton, p_sub_mode, w)
 		Mode.GATE:
 			_pose_gate(skeleton, w)
+		Mode.CLEANER:
+			_pose_cleaner(skeleton, p_sub_mode, w)
 		Mode.RAMP_MARSHAL:
 			_pose_marshal(skeleton, w)
 		Mode.RAMP_SHUTTLE:
@@ -1190,6 +1235,63 @@ func _pose_ramp_pushback(skeleton: Skeleton3D, p_sub_mode: SubMode, w: float) ->
 	_rotate_char(skeleton, "Forearm.L", Vector3.RIGHT, -82.0 * w)
 	_rotate_char(skeleton, "Arm.R", Vector3.RIGHT, (-18.0 + 8.0 * guide) * w)
 	_rotate_char(skeleton, "Forearm.R", Vector3.RIGHT, (-24.0 + 8.0 * guide) * w)
+
+
+func _pose_cleaner(skeleton: Skeleton3D, p_sub_mode: SubMode, w: float) -> void:
+	var t := sim_time / float(SimClock.TICK_RATE) + float(posmod(variant_seed, 13)) * 0.43
+	if p_sub_mode == SubMode.CLEANER_BAG_CARRY:
+		_rotate_char(skeleton, "Spine_01", Vector3.BACK, 2.5 * w)
+		_rotate_char(skeleton, "Clavicle.R", Vector3.BACK, -3.0 * w)
+		return
+	if p_sub_mode == SubMode.CLEANER_BAG_TOSS:
+		var toss := 0.5 + 0.5 * sin(t * 5.2)
+		_rotate_char(skeleton, "Spine_01", Vector3.RIGHT, (8.0 + 4.0 * toss) * w)
+		_rotate_char(skeleton, "Spine_02", Vector3.UP, (6.0 * toss) * w)
+		_rotate_char(skeleton, "Arm.R", Vector3.RIGHT, (-52.0 - 18.0 * toss) * w)
+		_rotate_char(skeleton, "Arm.R", Vector3.UP, 10.0 * w)
+		_rotate_char(skeleton, "Arm.R", Vector3.BACK, -12.0 * w)
+		_rotate_char(skeleton, "Forearm.R", Vector3.RIGHT, (-34.0 - 14.0 * toss) * w)
+		_rotate_char(skeleton, "Arm.L", Vector3.RIGHT, -14.0 * w)
+		_rotate_char(skeleton, "Forearm.L", Vector3.RIGHT, -22.0 * w)
+		return
+	if p_sub_mode == SubMode.CLEANER_BIN:
+		var pull := 0.5 + 0.5 * sin(t * 3.8)
+		_rotate_char(skeleton, "Spine_01", Vector3.RIGHT, (12.0 - 3.0 * pull) * w)
+		_rotate_char(skeleton, "Arm.R", Vector3.RIGHT, (-40.0 - 14.0 * pull) * w)
+		_rotate_char(skeleton, "Arm.R", Vector3.UP, 14.0 * w)
+		_rotate_char(skeleton, "Arm.R", Vector3.BACK, -8.0 * w)
+		_rotate_char(skeleton, "Forearm.R", Vector3.RIGHT, (-44.0 - 10.0 * pull) * w)
+		_rotate_char(skeleton, "Arm.L", Vector3.RIGHT, (-42.0 - 14.0 * pull) * w)
+		_rotate_char(skeleton, "Arm.L", Vector3.UP, -14.0 * w)
+		_rotate_char(skeleton, "Arm.L", Vector3.BACK, 8.0 * w)
+		_rotate_char(skeleton, "Forearm.L", Vector3.RIGHT, (-46.0 - 10.0 * pull) * w)
+		return
+	var is_mop := p_sub_mode == SubMode.CLEANER_MOP
+	var freq := 3.6 if is_mop else 4.6
+	var sweep := sin(t * freq)
+	var push := cos(t * freq)
+	_rotate_char(skeleton, "Spine_01", Vector3.RIGHT, (26.0 if is_mop else 24.0) * w)
+	_rotate_char(skeleton, "Spine_02", Vector3.UP, 10.0 * sweep * w)
+	_rotate_char(skeleton, "Spine_02", Vector3.RIGHT, (6.0 + 2.0 * push) * w)
+	_rotate_char(skeleton, "Arm.R", Vector3.RIGHT, (-52.0 + 6.0 * push) * w)
+	_rotate_char(skeleton, "Arm.R", Vector3.UP, (24.0 + 18.0 * sweep) * w)
+	_rotate_char(skeleton, "Arm.R", Vector3.BACK, (20.0 + 4.0 * sweep) * w)
+	_rotate_char(skeleton, "Forearm.R", Vector3.RIGHT, (96.0 + 6.0 * push) * w)
+	_rotate_char(skeleton, "Arm.L", Vector3.RIGHT, (28.0 - 4.0 * push) * w)
+	_rotate_char(skeleton, "Arm.L", Vector3.UP, (-16.0 + 14.0 * sweep) * w)
+	_rotate_char(skeleton, "Arm.L", Vector3.BACK, (-28.0 + 4.0 * sweep) * w)
+	_rotate_char(skeleton, "Forearm.L", Vector3.RIGHT, (-74.0 + 5.0 * push) * w)
+	_rotate_char(skeleton, "Forearm.L", Vector3.BACK, -46.0 * w)
+	var hr_idx := skeleton.find_bone("Hand.R")
+	var hl_idx := skeleton.find_bone("Hand.L")
+	if hr_idx >= 0 and hl_idx >= 0:
+		var hr_pose := skeleton.get_bone_global_pose(hr_idx)
+		var hl_pose := skeleton.get_bone_global_pose(hl_idx)
+		var to_top := hl_pose.origin - hr_pose.origin
+		if to_top.length() > 0.05:
+			var align := Quaternion(hr_pose.basis.z.normalized(), to_top.normalized())
+			hr_pose.basis = Basis(Quaternion.IDENTITY.slerp(align, w)) * hr_pose.basis
+			skeleton.set_bone_global_pose(hr_idx, hr_pose)
 
 
 func _pose_idle_fidget(skeleton: Skeleton3D, p_sub_mode: SubMode, w: float) -> void:

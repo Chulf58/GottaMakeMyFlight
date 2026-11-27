@@ -65,7 +65,8 @@ signal member_trained(id: int, level: int)
 ## 8: overnight off-shift states (LEAVING_SHIFT, OFF_SHIFT).
 ## 9: soft staff energy and break room states (TO_BREAK, ON_BREAK).
 ## 10: per-member training level (StaffMember.level).
-## 11: per-member display_name and cozy quirks (StaffNames).
+## 11: per-member display_name and cozy quirks (StaffNames), cleaner
+## bag-to-bin carry (bag_carry, bag_target), and >= 50% bin jobs.
 ## Only this version loads; older saves are refused (no migrations before a
 ## release).
 const SAVE_VERSION := 11
@@ -532,7 +533,10 @@ func _unclaim(m: StaffMember) -> void:
 	m.slot = StaffMember.Slot.PRIMARY
 	m.break_room = 0
 	m.break_spot = StaffMember.NO_CELL
+	m.bag_carry = StaffMember.BagCarry.NONE
+	m.bag_target = 0
 	if m.job == 0:
+		m.work_left = 0
 		return
 	# A bin's claim is the job itself (CleanerJobs.bin_holder()).
 	if not m.job_bin and not forecast:
@@ -542,10 +546,11 @@ func _unclaim(m: StaffMember) -> void:
 	m.work_left = 0
 
 
-## Each cleaner, in id order: one on duty works a tick at its job and, done,
-## cleans the mess or empties the bin and goes idle; an idle one takes the
-## nearest job nobody holds (CleanerJobs.nearest()) and sets out, or patrols
-## indoor corridors/bins after PATROL_PAUSE_TICKS while waiting.
+## Each cleaner, in id order: one on duty works a tick at its job or bag
+## disposal and, done, updates messes/bins and either starts carrying a trash
+## bag or goes idle; an idle one takes the nearest job nobody holds
+## (CleanerJobs.nearest()) and sets out, or patrols indoor corridors/bins after
+## PATROL_PAUSE_TICKS while waiting.
 func _work_jobs() -> void:
 	var unclaimed_sig := CleanerJobs.unclaimed_signature(self)
 	var new_unclaimed := unclaimed_sig != 0 and unclaimed_sig != _last_unclaimed_sig
@@ -558,6 +563,9 @@ func _work_jobs() -> void:
 			if steps > 0:
 				m.work_left = maxi(m.work_left - steps, 0)
 			if m.work_left > 0:
+				continue
+			if m.bag_carry != StaffMember.BagCarry.NONE:
+				_finish_disposal(m)
 				continue
 			_finish_job(m)
 		if m.state != StaffMember.State.IDLE:
@@ -614,20 +622,84 @@ func _take_job(m: StaffMember, job: int, bin: bool, path: Array[Vector2i]) -> vo
 	_set_state(m, StaffMember.State.TO_STATION)
 
 
-## A cleaner's work is done: the mess is cleaned or the bin emptied, and it
-## stands idle where it is.
+## A cleaner's sweep/empty work is done: remove the mess or empty the bin, then
+## carry the bagged rubbish to the nearest non-full bin (or entrance disposal
+## after emptying a bin / when no bin is reachable).
 func _finish_job(m: StaffMember) -> void:
-	if m.job_bin:
+	var was_bin := m.job_bin
+	if was_bin:
 		sim.messes.empty_bin(m.job)
 	else:
 		sim.messes.clean(m.job)
 	m.job = 0
 	m.job_bin = false
 	m.work_left = 0
+	_start_bag_disposal(m, was_bin)
+
+
+func _start_bag_disposal(m: StaffMember, prefer_exit: bool) -> void:
+	var plan := CleanerJobs.plan_bag_disposal(self, m, prefer_exit)
+	if plan.is_empty():
+		_clear_bag(m)
+		return
+	m.bag_carry = plan["carry"]
+	m.bag_target = int(plan["target"])
+	m.needs_replan = false
+	m.search_failed = false
+	m.patrol_wait = 0
+	var way: Array[Vector2i] = plan["path"]
+	if not m.in_pool() and way.size() <= 1 and m.at == way[0]:
+		m.clear_path()
+		m.work_left = CleanerJobs.bag_work_ticks()
+		_set_state(m, StaffMember.State.ON_DUTY)
+		return
+	m.at = way[0]
+	m.set_path(way)
+	_set_state(m, StaffMember.State.TO_STATION)
+
+
+func _finish_disposal(m: StaffMember) -> void:
+	if m.bag_carry == StaffMember.BagCarry.TO_BIN:
+		if not sim.messes.add_to_bin(m.bag_target):
+			_reroute_bag(m)
+			return
+	_clear_bag(m)
+
+
+func _clear_bag(m: StaffMember) -> void:
+	m.bag_carry = StaffMember.BagCarry.NONE
+	m.bag_target = 0
+	m.work_left = 0
 	m.search_failed = false
 	m.patrol_wait = CleanerJobs.PATROL_PAUSE_TICKS
 	m.clear_path()
 	_set_state(m, StaffMember.State.IDLE)
+
+
+func _reroute_bag(m: StaffMember, prefer_exit := false) -> bool:
+	var plan := CleanerJobs.plan_bag_disposal(self, m, prefer_exit)
+	if plan.is_empty():
+		_clear_bag(m)
+		return false
+	m.bag_carry = plan["carry"]
+	m.bag_target = int(plan["target"])
+	m.search_failed = false
+	var way: Array[Vector2i] = plan["path"]
+	if not m.in_pool() and way.size() <= 1 and m.at == way[0]:
+		m.clear_path()
+		m.needs_replan = false
+		m.work_left = CleanerJobs.bag_work_ticks()
+		_set_state(m, StaffMember.State.ON_DUTY)
+		return true
+	m.work_left = 0
+	if m.is_moving() and not m.in_pool() and m.seg_mm > 0:
+		m.needs_replan = true
+	else:
+		m.needs_replan = false
+		m.at = way[0]
+		m.set_path(way)
+	_set_state(m, StaffMember.State.TO_STATION)
+	return true
 
 
 ## Members of a station that is gone, not usable, or whose staff spot is
@@ -663,6 +735,8 @@ func _reconcile() -> void:
 				_end_break(m)
 		if m.job != 0 and not CleanerJobs.exists(self, m):
 			_release(m)
+		if m.bag_carry != StaffMember.BagCarry.NONE and not CleanerJobs.bag_target_valid(self, m):
+			_reroute_bag(m)
 		if not m.in_pool() and not sim.grid.is_staff_walkable(m.at) and not _backing_out(m):
 			if m.state == StaffMember.State.WALKING_OUT:
 				_leave(m)
@@ -670,7 +744,7 @@ func _reconcile() -> void:
 			if m.state == StaffMember.State.LEAVING_SHIFT:
 				_enter_off_shift(m)
 				continue
-			if m.station != 0 or m.job != 0:
+			if m.station != 0 or m.job != 0 or m.bag_carry != StaffMember.BagCarry.NONE:
 				_release(m)
 			m.at = StaffMember.NO_CELL
 			m.clear_path()
@@ -683,16 +757,18 @@ func _reconcile() -> void:
 			m.at = StaffMember.NO_CELL
 			m.clear_path()
 		var cleaner := m.role == StaffMember.Role.CLEANER
-		if (
-			cleaner
-			and m.state == StaffMember.State.ON_DUTY
-			and m.at != CleanerJobs.job_spot(self, m)
-		):
-			# An edit moved the job's spot (a bin's first free side): walk to
-			# it and start the work over there.
-			m.work_left = 0
-			_set_state(m, StaffMember.State.TO_STATION)
-			m.needs_replan = true
+		if cleaner and m.state == StaffMember.State.ON_DUTY:
+			var spot := (
+				CleanerJobs.bag_spot(self, m)
+				if m.bag_carry != StaffMember.BagCarry.NONE
+				else CleanerJobs.job_spot(self, m)
+			)
+			if spot == StaffMember.NO_CELL or m.at != spot:
+				# An edit moved the job or bag spot (a bin's first free side): walk to
+				# it and start the work over there.
+				m.work_left = 0
+				_set_state(m, StaffMember.State.TO_STATION)
+				m.needs_replan = true
 		if (
 			m.state == StaffMember.State.ON_DUTY
 			and not cleaner
@@ -868,14 +944,18 @@ func _walk(m: StaffMember) -> void:
 	elif state == StaffMember.State.TO_BREAK:
 		_set_state(m, StaffMember.State.ON_BREAK)
 	else:
-		m.work_left = CleanerJobs.work_ticks(self, m)
+		m.work_left = (
+			CleanerJobs.bag_work_ticks()
+			if m.bag_carry != StaffMember.BagCarry.NONE
+			else CleanerJobs.work_ticks(self, m)
+		)
 		_set_state(m, StaffMember.State.ON_DUTY)
 
 
 ## Where a walking member is headed: its post's spot at its station, a
-## cleaner's job spot (CleanerJobs.job_spot()), a patrolling cleaner's end cell,
-## a break room spot, or, when it walks out, the door cell of the entrance with
-## the shortest path.
+## cleaner's job or bag spot, a patrolling cleaner's end cell, a break room
+## spot, or, when it walks out, the door cell of the entrance with the shortest
+## path.
 func _target(m: StaffMember) -> Vector2i:
 	if m.state == StaffMember.State.TO_BREAK:
 		return m.break_spot
@@ -883,6 +963,8 @@ func _target(m: StaffMember) -> Vector2i:
 		if m.role == StaffMember.Role.CLEANER:
 			if m.state == StaffMember.State.IDLE:
 				return m.path_end()
+			if m.bag_carry != StaffMember.BagCarry.NONE:
+				return CleanerJobs.bag_spot(self, m)
 			return CleanerJobs.job_spot(self, m)
 		return spot_of(m.station, m.slot)
 	var best := StaffMember.NO_CELL
@@ -916,6 +998,27 @@ func _no_way(m: StaffMember) -> void:
 		_leave(m)
 	elif m.state == StaffMember.State.LEAVING_SHIFT:
 		_enter_off_shift(m)
+	elif m.role == StaffMember.Role.CLEANER and m.bag_carry != StaffMember.BagCarry.NONE:
+		var plan := CleanerJobs.plan_bag_disposal(
+			self, m, m.bag_carry == StaffMember.BagCarry.TO_BIN
+		)
+		if plan.is_empty():
+			_release(m)
+			return
+		var next_carry: StaffMember.BagCarry = plan["carry"]
+		var next_target := int(plan["target"])
+		if next_carry == m.bag_carry and next_target == m.bag_target:
+			_release(m)
+			return
+		m.bag_carry = next_carry
+		m.bag_target = next_target
+		var way: Array[Vector2i] = plan["path"]
+		if way.size() <= 1 and m.at == way[0]:
+			m.clear_path()
+			m.work_left = CleanerJobs.bag_work_ticks()
+			_set_state(m, StaffMember.State.ON_DUTY)
+		else:
+			m.set_path(way)
 	else:
 		_release(m)
 
@@ -1041,7 +1144,11 @@ func _leave_shift_if_quiet() -> void:
 			continue
 		if m.state == StaffMember.State.OFF_SHIFT or _walking_to_exit(m):
 			continue
-		if m.role == StaffMember.Role.CLEANER and m.job != 0 and not m.search_failed:
+		if (
+			m.role == StaffMember.Role.CLEANER
+			and (m.job != 0 or m.bag_carry != StaffMember.BagCarry.NONE)
+			and not m.search_failed
+		):
 			continue
 		_begin_leave_shift(m)
 

@@ -68,6 +68,8 @@ const INT_FIELDS := [
 	"shop_cooldown",
 	"collect_tick",
 	"halt_tick",
+	"bin_detour_bin",
+	"bin_detour_end",
 ]
 const CELL_FIELDS := ["at", "seat_cell", "seat_front", "stand_from"]
 const BOOL_FIELDS := [
@@ -204,6 +206,9 @@ static func load(data: Dictionary, grid: BuildGrid) -> Dictionary:
 		# the lane behind it until then.
 		if p.halt_tick < 0 or p.halt_tick > out["tick"]:
 			return {"error": "passenger %d stopped walking after the saved tick" % p.id}
+		var bin_err := _bin_detour_problem(p, grid, out["tick"])
+		if bin_err != "":
+			return {"error": bin_err}
 		ids[p.id] = p
 		passengers.append(p)
 	var cafe := CafeSnapshot.load(data["cafe"], ids, grid, out["tick"])
@@ -716,6 +721,33 @@ static func _confiscations(raw: Variant, grid: BuildGrid) -> Dictionary:
 			clean_items.append(int(v))
 		clean_bins.append({"bin": bin_id, "count": count, "items": clean_items})
 	return {"data": {"day": int(dict["day"]), "bins": clean_bins}}
+
+
+static func _bin_detour_problem(p: Passenger, grid: BuildGrid, tick: int) -> String:
+	if p.bin_detour_bin < 0:
+		return "passenger %d has negative bin_detour_bin" % p.id
+	if p.bin_detour_bin == 0:
+		if p.bin_detour_end != 0:
+			return "passenger %d has bin_detour_end without a bin" % p.id
+		return ""
+	if p.stage != Passenger.Stage.TO_SECURITY and p.stage != Passenger.Stage.TO_GATE:
+		return "passenger %d detours to a bin outside TO_SECURITY or TO_GATE" % p.id
+	var rec := grid.get_object(p.bin_detour_bin)
+	if rec.get("def", &"") != MessSim.BIN_ID:
+		return "passenger %d detours to missing bin %d" % [p.id, p.bin_detour_bin]
+	var spot := MessSim.approach_for(grid, rec["anchor"])
+	if spot == MessSim.NO_CELL:
+		return "passenger %d detours to unreachable bin %d" % [p.id, p.bin_detour_bin]
+	if p.bin_detour_end == -1:
+		var arrived := not p.is_moving() and p.at == spot and p.path.size() >= 2
+		if p.path.is_empty() or (not arrived and not p.is_moving()) or p.path_end() != spot:
+			return "passenger %d walks bin detour without a path to approach %s" % [p.id, spot]
+		return ""
+	if p.is_moving() or p.at != spot:
+		return "passenger %d tosses at bin away from approach %s" % [p.id, spot]
+	if p.bin_detour_end <= tick or p.bin_detour_end > tick + MessSim.BIN_TOSS_TICKS:
+		return "passenger %d has invalid bin_detour_end %d" % [p.id, p.bin_detour_end]
+	return ""
 
 
 static func _whole(value: Variant) -> bool:

@@ -471,7 +471,8 @@ func sync(snap: bool = false) -> void:
 		var eval := StaffStationPose.evaluate(m, staff, now, pose_ctx, look_yaw)
 		_update_rush_state(id, m, eval, pose_ctx, tick_now, snap)
 		var cleaner_busy := (
-			m.role == StaffMember.Role.CLEANER and m.state == StaffMember.State.ON_DUTY
+			m.role == StaffMember.Role.CLEANER
+			and (m.state == StaffMember.State.ON_DUTY or m.bag_carry != StaffMember.BagCarry.NONE)
 		)
 		var can_fidget := (
 			not m.in_pool()
@@ -579,12 +580,18 @@ func draw() -> void:
 		var walking := m != null and (m.is_moving() or String(node.get_meta(&"clip", "")) == "walk")
 		var is_cleaner := m != null and m.role == StaffMember.Role.CLEANER
 		var cleaner_working := is_cleaner and m.state == StaffMember.State.ON_DUTY
+		var cleaner_bag := (
+			is_cleaner
+			and m.bag_carry != StaffMember.BagCarry.NONE
+			and (m.state == StaffMember.State.TO_STATION or m.state == StaffMember.State.ON_DUTY)
+		)
 		var cleaner_walking_to_mess := (
 			is_cleaner
 			and m.is_moving()
 			and m.state == StaffMember.State.TO_STATION
 			and m.job != 0
 			and not m.job_bin
+			and m.bag_carry == StaffMember.BagCarry.NONE
 		)
 		var cleaner_patrolling := (
 			is_cleaner
@@ -606,6 +613,7 @@ func draw() -> void:
 				m.job_bin if m != null else false,
 				cleaner_working,
 				cleaner_patrolling,
+				cleaner_bag,
 			)
 		)
 		var player := node.get_node("AnimationPlayer") as AnimationPlayer
@@ -833,11 +841,17 @@ func _pose(node: Node3D, m: StaffMember, moved: Vector3) -> void:
 	var clip := "idle"
 	var base := 1.0
 	if m.state == StaffMember.State.ON_DUTY and m.role == StaffMember.Role.CLEANER:
-		clip = CLEAN_CLIP
-		var job := CleanerJobs.job_cell(staff, m)
-		var ahead := job - m.at
-		if ahead != Vector2i.ZERO and job != StaffMember.NO_CELL:
-			node.rotation.y = bin_yaw(m.at, job) if m.job_bin else atan2(ahead.x, ahead.y)
+		clip = "idle"
+		var target := (
+			CleanerJobs.bag_cell(staff, m)
+			if m.bag_carry != StaffMember.BagCarry.NONE
+			else CleanerJobs.job_cell(staff, m)
+		)
+		var ahead := target - m.at
+		if ahead != Vector2i.ZERO and target != StaffMember.NO_CELL:
+			node.rotation.y = atan2(ahead.x, ahead.y)
+		elif moved.length() > 0.001:
+			node.rotation.y = atan2(moved.x, moved.z)
 	elif m.state == StaffMember.State.ON_DUTY:
 		node.rotation.y = post_yaw(m.station, m.slot)
 	elif m.is_moving():

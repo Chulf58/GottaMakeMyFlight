@@ -682,9 +682,11 @@ func _step(p: Passenger) -> void:
 			toilets.step(p)
 		StageKinds.Facility.SHOP:
 			shops.step(p)
-	# A help visit holds the passenger: its stage's own logic would plan again.
+	# A help visit or bin detour holds the passenger: its stage's own logic would plan again.
 	if info_desks.holds(p):
 		info_desks.step(p)
+	elif p.bin_detour_bin > 0:
+		BinDetour.step(self, p)
 	elif not VisitHandBack.is_hand_back(from, p.stage):
 		_advance(p)
 	_move(p)
@@ -808,7 +810,7 @@ func _beat(p: Passenger) -> void:
 	cafes.beat(p)
 	boredom.beat(p)
 	shops.beat(p)
-	if not info_desks.holds(p):
+	if not info_desks.holds(p) and p.bin_detour_bin == 0:
 		NeedsPolicy.arbitrate(self, p)
 		if not on_road:
 			info_desks.beat(p)
@@ -902,6 +904,7 @@ func _reconcile() -> void:
 	security.bins.prune(grid)
 	PassengerGates.reconcile_seats(self)
 	cafes.reconcile()
+	BinDetour.reconcile(self)
 	toilets.reconcile()
 	shops.reconcile()
 	PassengerEdits.recover_stranded(self)
