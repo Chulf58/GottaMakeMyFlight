@@ -119,15 +119,15 @@ func test_it_does_not_rise_on_the_walk_to_a_gate_seat_and_rises_once_seated() ->
 	assert_int(walked).is_greater(2)
 	assert_int(p.stage).is_equal(Passenger.Stage.SEATED)
 	var seated := p.boredom
-	_run_beats(p, 10)
+	_run_beats(p, 10 * BoredomSim.RISE_BEATS)
 	assert_int(p.stage).is_equal(Passenger.Stage.SEATED)
-	print("10 beats seated: %d -> %d" % [seated, p.boredom])
+	print("10 rises seated: %d -> %d" % [seated, p.boredom])
 	assert_int(p.boredom).is_equal(seated + 10 * BoredomSim.RISE)
 
 
-func test_it_rises_once_a_second_standing_at_the_gate() -> void:
+func test_it_rises_once_per_interval_standing_at_the_gate() -> void:
 	var p := _guest(Passenger.Stage.STANDING, 20)
-	_run_beats(p, 10)
+	_run_beats(p, 10 * BoredomSim.RISE_BEATS)
 	assert_int(p.stage).is_equal(Passenger.Stage.STANDING)
 	assert_int(p.boredom).is_equal(20 + 10 * BoredomSim.RISE)
 

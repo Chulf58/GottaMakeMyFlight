@@ -4,16 +4,17 @@ extends RefCounted
 ## (decision boredom-and-shops-design-boredom-need-while-waiting-kiosk-sh,
 ## point 1). Boredom is an integer from 0 to MAX. A passenger starts with
 ## start_of() its id, so neither a spawn nor a migrated save draws from the
-## sim RNG. It rises RISE once a simulated second only while the passenger
-## waits: in a queue (check-in, security, a cafe counter) or at the gate,
-## seated or standing (WAITING_STAGES). Walking, being served and every
+## sim RNG. It rises RISE once every RISE_BEATS waiting seconds only while the
+## passenger waits: in a queue (check-in, security, a cafe counter) or at the
+## gate, seated or standing (WAITING_STAGES). Walking, being served and every
 ## facility visit leave it as it is, and so does being entertained
 ## (entertained()).
 ##
 ## A waiting passenger a screen stand covers (ScreenCoverage, Boredom 4/5;
 ## decision boredom-screens-halve-how-fast-boredom-rises-for-covered-wai)
 ## watches it, and its boredom rises at half the rate: RISE once every
-## SCREEN_RISE_BEATS seconds, however many screens cover it. A screen never
+## RISE_BEATS * SCREEN_RISE_BEATS waiting seconds, however many screens cover
+## it. A screen never
 ## lowers boredom, so a long wait still ends in a kiosk visit
 ## (test_screen_tuning). A seated passenger watches from its chair's cell,
 ## everyone else from the cell it is on.
@@ -30,11 +31,12 @@ extends RefCounted
 ## facility). A finished kiosk browse resets it (ShopSim, which NeedsPolicy
 ## asks after hunger). Tuned by test_boredom_tuning.
 
-const START_MIN := 0
-const START_MAX := 30
+const START_MIN := 14
+const START_MAX := 36
 const MAX := 100
-## The rise once a waiting second.
+## The rise once every RISE_BEATS waiting seconds.
 const RISE := 1
+const RISE_BEATS := 2
 const BORED_AT := 50
 ## While a screen covers a waiting passenger, boredom rises RISE only once
 ## every this many beats: half the rate.
@@ -103,17 +105,18 @@ func rises(p: Passenger) -> bool:
 	return WAITING_STAGES.has(p.stage) and not entertained(p)
 
 
-## Once a simulated second per passenger: boredom rises while it waits, at half
-## the rate under a screen, and a bored passenger with no visit under way loses
-## mood.
+## Once a simulated second per passenger: boredom rises every RISE_BEATS waiting
+## seconds (half the rate under a screen), and a bored passenger with no visit
+## under way loses mood.
 func beat(p: Passenger) -> void:
 	@warning_ignore("integer_division")
 	var beat_number := _sim.tick / PassengerSim.BEAT_TICKS
-	var slowed := watching(p) and posmod(beat_number, SCREEN_RISE_BEATS) != 0
+	var step := RISE_BEATS * SCREEN_RISE_BEATS if watching(p) else RISE_BEATS
+	var due := posmod(beat_number, step) == 0
 	if prize.looks(p):
 		if posmod(beat_number, PrizeCar.LOOK_RELIEF_BEATS) == 0:
 			p.boredom = maxi(p.boredom - PrizeCar.LOOK_RELIEF, 0)
-	elif rises(p) and not slowed:
+	elif rises(p) and due:
 		p.boredom = mini(p.boredom + RISE, MAX)
 	if not is_bored(p) or StageKinds.visit_facility(_sim, p) != StageKinds.Facility.NONE:
 		return

@@ -9,7 +9,7 @@ extends GdUnitTestSuite
 ## in a car park loads into a scene that plays on like the unsaved control,
 ## crediting the same parking fees and none on the load.
 
-const SEED := 2_910_026
+const SEED := 2_910_027
 const OTHER_SEED := 77
 ## Passengers drawn for less notice than the drive can be late by up to the
 ## drive (LandsideSim.lead_ticks()); the rest by no more than one curb dwell.

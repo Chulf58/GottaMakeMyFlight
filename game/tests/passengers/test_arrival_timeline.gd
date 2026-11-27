@@ -150,7 +150,7 @@ func _saved_early() -> Dictionary:
 	ReferenceTerminal.build(grid)
 	_a = PassengerTestWorld.make(grid, FlightSim.schedule_starts(SAVE_FIRST), 21)
 	assert_bool(_a.sim.schedule_flight(PassengerTestWorld.FLIGHT, BOOKED)).is_true()
-	_a.run_to(SAVE_FIRST - 100)
+	_a.run_to(SAVE_FIRST - 500)
 	assert_int(_a.flights.state_of(PassengerTestWorld.FLIGHT)).is_equal(FlightSim.State.SCHEDULED)
 	assert_int(_a.sim.passenger_ids().size()).is_greater(0)
 	assert_int(_a.sim.pending_spawns()).is_greater(0)

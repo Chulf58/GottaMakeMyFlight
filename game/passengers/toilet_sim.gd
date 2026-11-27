@@ -13,7 +13,7 @@ extends RefCounted
 ## (the need reset in the stall, also when the stall goes mid-use; not a visit
 ## given up before it) counts once towards the room's next mess (MessSim).
 ##
-## The toilet need (point 5) rises once a simulated second. From NEED_AT the
+## The toilet need (point 5) rises once every NEED_RISE_BEATS simulated seconds. From NEED_AT the
 ## passenger looks for the stall nearest by path; when every stall is
 ## reserved, none can be reached, or the forecast says there is no time, it
 ## carries on and tries again after RETRY_TICKS, losing a mood point every
@@ -45,11 +45,12 @@ extends RefCounted
 ## stall, the choice of stall and the reconcile walk are FacilitySlots', shared
 ## with ShopSim; the phases, poses and what an interrupted use leaves are here.
 
-const NEED_START_MIN := 30
-const NEED_START_MAX := 90
+const NEED_START_MIN := 14
+const NEED_START_MAX := 82
 const NEED_MAX := 100
-## The need rises this much once a simulated second.
+## The need rises this much once every NEED_RISE_BEATS simulated seconds.
 const NEED_RISE := 1
+const NEED_RISE_BEATS := 3
 const NEED_AT := 70
 ## A passenger with a high need and no visit loses a mood point every this
 ## many beats.
@@ -198,11 +199,14 @@ func refuse(p: Passenger) -> void:
 	p.toilet_cooldown = _sim.tick + RETRY_TICKS
 
 
-## Once a simulated second per passenger: the need rises, a high need with
-## no visit costs mood, and a visit under way has its deadline forecast
-## again. Whether a visit starts is NeedsPolicy's to decide.
+## Once a simulated second per passenger: the need rises every NEED_RISE_BEATS
+## seconds, a high need with no visit costs mood, and a visit under way has its
+## deadline forecast again. Whether a visit starts is NeedsPolicy's to decide.
 func beat(p: Passenger) -> void:
-	p.toilet_need = mini(p.toilet_need + NEED_RISE, NEED_MAX)
+	@warning_ignore("integer_division")
+	var beat_number := _sim.tick / PassengerSim.BEAT_TICKS
+	if posmod(beat_number, NEED_RISE_BEATS) == 0:
+		p.toilet_need = mini(p.toilet_need + NEED_RISE, NEED_MAX)
 	var visit := visit_of(p.id)
 	if visit != null:
 		# The abandon-now forecast with live queues, once a second per visit.
@@ -211,8 +215,6 @@ func beat(p: Passenger) -> void:
 		return
 	if p.toilet_need < NEED_AT:
 		return
-	@warning_ignore("integer_division")
-	var beat_number := _sim.tick / PassengerSim.BEAT_TICKS
 	if posmod(beat_number, MOOD_BEATS) == 0:
 		p.mood = maxi(p.mood - 1, 0)
 

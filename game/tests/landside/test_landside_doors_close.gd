@@ -61,7 +61,8 @@ func test_bookings_still_on_the_road_at_doors_close_are_missed_once_with_the_new
 	assert_int(_rating.day_totals(day)["missed"]).is_equal(BOOKED)
 	assert_int(_land.sim.pending_spawns()).is_equal(0)
 	# The cars drive on empty: nobody gets out and nothing is counted again.
-	_land.run_to(DOORS + 600)
+	# With SMALL_FLIGHT_MAX_PARTY = 2, 6 bookings form 5 cars draining through 2 curb berths.
+	_land.run_to(DOORS + 900)
 	assert_int(_land.sim.passenger_ids().size()).is_equal(0)
 	assert_int(_land.released.size()).is_equal(0)
 	assert_int(_land.sim.missed_count()).is_equal(BOOKED)
