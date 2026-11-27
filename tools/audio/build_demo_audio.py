@@ -24,6 +24,11 @@ stereo Ogg Vorbis cozy lounge soundtrack under game/assets/audio/:
   - security_clear.wav    (135 ms gentle positive security clear chime, 44100 Hz mono)
   - gate_chirp.wav        (85 ms crisp boarding-pass scanner chirp, 44100 Hz mono)
   - cafe_clink.wav        (125 ms soft ceramic cup/saucer clink, 44100 Hz mono)
+  - staff_mumble.wav      (145 ms warm cozy two-syllable staff chat mumble, 44100 Hz mono)
+  - staff_sip.wav         (140 ms soft ceramic mug tap and warm coffee sip, 44100 Hz mono)
+  - staff_cheer.wav       (210 ms warm celebratory mini-cheer chime, 44100 Hz mono)
+  - staff_wipe.wav        (155 ms soft two-stroke counter cloth wipe, 44100 Hz mono)
+  - staff_yawn.wav        (280 ms gentle descending tired yawn-sigh hum, 44100 Hz mono)
 """
 
 from __future__ import annotations
@@ -1153,6 +1158,123 @@ def build_cafe_clink(sr: int = 44100) -> tuple[int, list[float]]:
     return sr, out
 
 
+def build_staff_mumble(sr: int = 44100) -> tuple[int, list[float]]:
+    """145 ms warm cozy two-syllable conversational staff mumble."""
+    dur = 0.145
+    n = int(dur * sr)
+    rng = random.Random(505)
+    breath = _one_pole_lowpass([rng.uniform(-1.0, 1.0) for _ in range(n)], 900.0, sr)
+    breath = _one_pole_highpass(breath, 240.0, sr)
+    out = [0.0] * n
+    syllables = [
+        (0.000, 0.058, 225.0, 265.0, 0.24),
+        (0.072, 0.068, 250.0, 215.0, 0.20),
+    ]
+    for start_t, syl_dur, f0, f1, amp in syllables:
+        phase = 0.0
+        for i in range(n):
+            t = i / sr - start_t
+            if t < 0.0 or t >= syl_dur:
+                continue
+            u = t / syl_dur
+            freq = f0 + (f1 - f0) * (0.5 - 0.5 * math.cos(math.pi * u))
+            phase += TAU * freq / sr
+            formant = (
+                0.68 * math.sin(phase)
+                + 0.28 * math.sin(2.0 * phase)
+                + 0.12 * math.sin(3.0 * phase)
+            )
+            env = math.sin(math.pi * min(1.0, max(0.0, u))) ** 1.15
+            out[i] += amp * (formant + 0.12 * breath[i]) * env
+    out[-1] = 0.0
+    return sr, out
+
+
+def build_staff_sip(sr: int = 44100) -> tuple[int, list[float]]:
+    """140 ms soft ceramic mug tap and warm coffee sip."""
+    dur = 0.140
+    n = int(dur * sr)
+    rng = random.Random(606)
+    sip_air = _one_pole_lowpass([rng.uniform(-1.0, 1.0) for _ in range(n)], 1700.0, sr)
+    sip_air = _one_pole_highpass(sip_air, 520.0, sr)
+    out = [0.0] * n
+    sip_phase = 0.0
+    for i in range(n):
+        t = i / sr
+        sip_freq = 440.0 + 170.0 * (1.0 - math.exp(-t / 0.045))
+        sip_phase += TAU * sip_freq / sr
+        sip_env = _env_attack_exp(t, dur, 0.014, 0.042)
+        sip = (0.20 * sip_air[i] + 0.10 * math.sin(sip_phase)) * sip_env
+        clink = 0.0
+        if t >= 0.075:
+            ct = t - 0.075
+            c_env = _env_attack_exp(ct, dur - 0.075, 0.0015, 0.016)
+            clink = 0.14 * (
+                0.60 * math.sin(TAU * 1680.0 * ct) + 0.40 * math.sin(TAU * 2520.0 * ct)
+            ) * c_env
+        out[i] = sip + clink
+    out[-1] = 0.0
+    return sr, out
+
+
+def build_staff_cheer(sr: int = 44100) -> tuple[int, list[float]]:
+    """210 ms warm upbeat celebratory mini-cheer chime (E5 -> G#5 -> B5)."""
+    return _render_bell_notes(
+        0.210,
+        [
+            (0.000, 659.25, 0.19, 0.032),
+            (0.055, 830.61, 0.21, 0.038),
+            (0.110, 987.77, 0.24, 0.056),
+        ],
+        sr,
+    )
+
+
+def build_staff_wipe(sr: int = 44100) -> tuple[int, list[float]]:
+    """155 ms soft two-stroke counter cloth wipe."""
+    dur = 0.155
+    n = int(dur * sr)
+    rng = random.Random(707)
+    cloth = _one_pole_lowpass([rng.uniform(-1.0, 1.0) for _ in range(n)], 1850.0, sr)
+    cloth = _one_pole_highpass(cloth, 420.0, sr)
+    out = [0.0] * n
+    strokes = [
+        (0.000, 0.068, 0.30),
+        (0.078, 0.072, 0.25),
+    ]
+    for start_t, st_dur, amp in strokes:
+        for i in range(n):
+            t = i / sr - start_t
+            if t < 0.0 or t >= st_dur:
+                continue
+            u = t / st_dur
+            env = math.sin(math.pi * min(1.0, max(0.0, u)))
+            out[i] += amp * cloth[i] * env
+    out[-1] = 0.0
+    return sr, out
+
+
+def build_staff_yawn(sr: int = 44100) -> tuple[int, list[float]]:
+    """280 ms gentle descending cozy tired yawn-sigh hum."""
+    dur = 0.280
+    n = int(dur * sr)
+    rng = random.Random(808)
+    sigh = _one_pole_lowpass([rng.uniform(-1.0, 1.0) for _ in range(n)], 950.0, sr)
+    sigh = _one_pole_highpass(sigh, 210.0, sr)
+    out = [0.0] * n
+    phase = 0.0
+    for i in range(n):
+        t = i / sr
+        u = t / dur
+        freq = 330.0 - 135.0 * (0.5 - 0.5 * math.cos(math.pi * u))
+        phase += TAU * freq / sr
+        hum = 0.65 * math.sin(phase) + 0.24 * math.sin(2.0 * phase)
+        env = math.sin(math.pi * min(1.0, max(0.0, u))) ** 1.3
+        out[i] = 0.22 * (hum + 0.18 * sigh[i]) * env
+    out[-1] = 0.0
+    return sr, out
+
+
 def main() -> None:
     builders = {
         "terminal_ambience.wav": build_terminal_ambience,
@@ -1175,6 +1297,11 @@ def main() -> None:
         "security_clear.wav": build_security_clear,
         "gate_chirp.wav": build_gate_chirp,
         "cafe_clink.wav": build_cafe_clink,
+        "staff_mumble.wav": build_staff_mumble,
+        "staff_sip.wav": build_staff_sip,
+        "staff_cheer.wav": build_staff_cheer,
+        "staff_wipe.wav": build_staff_wipe,
+        "staff_yawn.wav": build_staff_yawn,
     }
     only: str | None = None
     if "--only" in sys.argv:

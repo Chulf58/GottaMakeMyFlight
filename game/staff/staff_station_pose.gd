@@ -18,6 +18,13 @@ enum Mode {
 	RAMP_SHUTTLE,
 	RAMP_PUSHBACK,
 	IDLE_FIDGET,
+	BREAK_SEATED,
+	BREAK_CHAT,
+	REACTION_WAVE,
+	REACTION_WIPE,
+	REACTION_STRETCH,
+	REACTION_CLIPBOARD,
+	REACTION_CHEER,
 }
 
 enum SubMode {
@@ -31,6 +38,17 @@ enum SubMode {
 	SHOP_RETAIL,
 	RAMP_HOOKUP,
 	RAMP_GUIDE,
+	BREAK_COFFEE,
+	BREAK_PHONE,
+	BREAK_MAGAZINE,
+	BREAK_STAND,
+	REACT_CLIPBOARD,
+	REACT_WATCH,
+	REACT_WALK_YAWN,
+	LULL_WIPE,
+	LULL_STRETCH,
+	LULL_CLIPBOARD,
+	LULL_WATCH,
 }
 
 const EASE_TICKS := 6.0
@@ -201,6 +219,8 @@ static func update(
 	new_sub_mode: SubMode = SubMode.NONE,
 	can_fidget: bool = false,
 	seed_id: int = 0,
+	lull_mode: Mode = Mode.IDLE_FIDGET,
+	lull_sub: SubMode = SubMode.NONE,
 ) -> void:
 	var had_idle_since := record.has("idle_since")
 	var prev_idle_since := float(record.get("idle_since", tick))
@@ -227,7 +247,8 @@ static func update(
 				record["idle_since"] = tick
 			var elapsed := tick - float(record["idle_since"])
 			if _is_fidget_active(seed_id, elapsed):
-				resolved_mode = Mode.IDLE_FIDGET
+				resolved_mode = lull_mode
+				resolved_sub = lull_sub
 	else:
 		if (
 			fidget_was_drawn
@@ -339,10 +360,14 @@ static func build_context(
 		bag_sim = staff.ramp_dispatch.baggage
 	var ctx := {
 		"checkin": {},
+		"checkin_queue": {},
+		"security_queue": {},
+		"station_active_pax": {},
 		"info": {},
 		"shop_rooms": {},
 		"shop_pieces": {},
 		"gate_pax": {},
+		"gate_desks": {},
 		"ambient_pax": [],
 		"flights": flights,
 		"plane_fleet": plane_fleet,
@@ -351,6 +376,8 @@ static func build_context(
 	if staff == null or staff.sim == null:
 		return ctx
 	var sim := staff.sim
+	for letter: String in sim.layout.gate_desk_ids:
+		ctx["gate_desks"][int(sim.layout.gate_desk_ids[letter])] = letter
 	var fl := flights if flights != null else sim.flights
 	for id in sim.passenger_ids():
 		var p := sim.get_passenger(id)
@@ -376,6 +403,25 @@ static func _collect_passenger(
 		)
 	):
 		(ctx["ambient_pax"] as Array).append(eye)
+	if (
+		p.station != 0
+		and (
+			p.stage
+			in [
+				Passenger.Stage.CHECKIN,
+				Passenger.Stage.CHECKIN_QUEUE,
+				Passenger.Stage.SECURITY,
+				Passenger.Stage.SECURITY_QUEUE,
+			]
+		)
+	):
+		ctx["station_active_pax"][p.station] = int(ctx["station_active_pax"].get(p.station, 0)) + 1
+	if p.stage == Passenger.Stage.CHECKIN_QUEUE and p.station != 0:
+		if not ctx["checkin_queue"].has(p.station):
+			ctx["checkin_queue"][p.station] = eye
+	if p.stage == Passenger.Stage.SECURITY_QUEUE and p.station != 0:
+		if not ctx["security_queue"].has(p.station):
+			ctx["security_queue"][p.station] = eye
 	if p.stage == Passenger.Stage.CHECKIN and p.station != 0:
 		ctx["checkin"][p.station] = eye
 	if sim.info_desks.holds(p) and not p.is_moving():
@@ -737,11 +783,21 @@ func _apply_look_at(skeleton: Skeleton3D, w: float) -> void:
 	_rotate_char(skeleton, "Head", Vector3.RIGHT, pitch * 0.6)
 
 
+func rotate_char(skeleton: Skeleton3D, bone_name: String, axis_char: Vector3, deg: float) -> void:
+	_rotate_char(skeleton, bone_name, axis_char, deg)
+
+
 func _apply_role_pose_for(
 	skeleton: Skeleton3D, p_mode: Mode, p_sub_mode: SubMode, w: float
 ) -> void:
 	var t := sim_time / float(SimClock.TICK_RATE) + float(posmod(variant_seed, 13)) * 0.43
-	if p_mode != Mode.IDLE_FIDGET:
+	var skip_body_life := (
+		p_mode == Mode.IDLE_FIDGET
+		or p_mode == Mode.BREAK_SEATED
+		or p_mode == Mode.BREAK_CHAT
+		or (p_mode == Mode.REACTION_STRETCH and p_sub_mode == SubMode.REACT_WALK_YAWN)
+	)
+	if not skip_body_life:
 		var deep_legs := (
 			p_mode == Mode.RAMP_SHUTTLE
 			or (p_mode == Mode.RAMP_PUSHBACK and p_sub_mode == SubMode.RAMP_HOOKUP)
@@ -766,7 +822,9 @@ func _apply_role_pose_for(
 		Mode.RAMP_PUSHBACK:
 			_pose_ramp_pushback(skeleton, p_sub_mode, w)
 		Mode.IDLE_FIDGET:
-			_pose_idle_fidget(skeleton, w)
+			_pose_idle_fidget(skeleton, p_sub_mode, w)
+		_:
+			StaffReactionPoses.apply_pose(self, skeleton, p_mode, p_sub_mode, w)
 
 
 func _apply_body_life(
@@ -1134,7 +1192,7 @@ func _pose_ramp_pushback(skeleton: Skeleton3D, p_sub_mode: SubMode, w: float) ->
 	_rotate_char(skeleton, "Forearm.R", Vector3.RIGHT, (-24.0 + 8.0 * guide) * w)
 
 
-func _pose_idle_fidget(skeleton: Skeleton3D, w: float) -> void:
+func _pose_idle_fidget(skeleton: Skeleton3D, p_sub_mode: SubMode, w: float) -> void:
 	var elapsed := maxf(sim_time - idle_since, 0.0)
 	if elapsed < float(IDLE_SETTLE_TICKS):
 		return
@@ -1146,6 +1204,8 @@ func _pose_idle_fidget(skeleton: Skeleton3D, w: float) -> void:
 	var env := sin(PI * u) * w
 	var t_idle := sim_time / float(SimClock.TICK_RATE) + float(posmod(variant_seed, 13)) * 0.43
 	_apply_body_life(skeleton, t_idle, env, 1.15, 1.15)
+	if StaffReactionPoses.apply_lull_pose(self, skeleton, p_sub_mode, env, t_idle):
+		return
 	var variant := idle_fidget_variant(variant_seed, elapsed)
 	match variant:
 		0:

@@ -5,7 +5,20 @@ extends RefCounted
 ## Props are visible only in their active matching station pose mode and hidden
 ## when walking, tucked, idle, pooled, or snapped on load (6d949060).
 
-enum PropKind { NONE, WAND, BOARDING_PASS, CLIPBOARD, COFFEE_CUP, BROOM, RAG, MARSHAL_WANDS }
+enum PropKind {
+	NONE,
+	WAND,
+	BOARDING_PASS,
+	CLIPBOARD,
+	COFFEE_CUP,
+	BROOM,
+	RAG,
+	MARSHAL_WANDS,
+	COFFEE_MUG,
+	PHONE,
+	MAGAZINE,
+	CLOTH,
+}
 
 const TOON_BASE := preload("res://assets/materials/tp_atlas_simple_toon.tres")
 const PROP_META := &"staff_hand_props"
@@ -54,6 +67,15 @@ const COLOR_CLIPBOARD_CLIP := Color(0.32, 0.36, 0.42)
 const COLOR_CUP_BODY := Color(0.92, 0.88, 0.80)
 const COLOR_CUP_SLEEVE := Color(0.60, 0.40, 0.24)
 const COLOR_CUP_COFFEE := Color(0.22, 0.13, 0.08)
+const COLOR_MUG_BODY := Color(0.26, 0.62, 0.68)
+const COLOR_MUG_RIM := Color(0.96, 0.94, 0.88)
+const COLOR_PHONE_CASE := Color(0.18, 0.22, 0.28)
+const COLOR_PHONE_SCREEN := Color(0.68, 0.86, 0.96)
+const COLOR_MAG_COVER := Color(0.92, 0.44, 0.34)
+const COLOR_MAG_PAGES := Color(0.97, 0.95, 0.90)
+const COLOR_MAG_STRIPE := Color(0.24, 0.56, 0.72)
+const COLOR_CLOTH_MAIN := Color(0.34, 0.72, 0.80)
+const COLOR_CLOTH_FOLD := Color(0.56, 0.84, 0.88)
 const COLOR_BROOM_POLE := Color(0.62, 0.45, 0.27)
 const COLOR_BROOM_HEAD := Color(0.24, 0.48, 0.62)
 const COLOR_BROOM_BRISTLE := Color(0.86, 0.78, 0.56)
@@ -63,6 +85,29 @@ const COLOR_MARSHAL_TIP := Color(1.0, 0.56, 0.08)
 static var _white_tex: ImageTexture
 static var _materials: Dictionary = {}
 static var _meshes: Dictionary = {}
+
+
+## Deterministic Break Room hand prop rotated by staff member id.
+static func break_prop_for(member_id: int) -> PropKind:
+	match posmod(member_id, 3):
+		0:
+			return PropKind.COFFEE_MUG
+		1:
+			return PropKind.PHONE
+		_:
+			return PropKind.MAGAZINE
+
+
+## Matching StaffStationPose.SubMode for a Break Room prop kind.
+static func break_sub_mode_for(kind: PropKind) -> StaffStationPose.SubMode:
+	match kind:
+		PropKind.COFFEE_MUG:
+			return StaffStationPose.SubMode.BREAK_COFFEE
+		PropKind.PHONE:
+			return StaffStationPose.SubMode.BREAK_PHONE
+		PropKind.MAGAZINE:
+			return StaffStationPose.SubMode.BREAK_MAGAZINE
+	return StaffStationPose.SubMode.NONE
 
 
 ## Which prop should be shown right now for the given pose state.
@@ -95,8 +140,11 @@ static func desired_prop(
 		return PropKind.MARSHAL_WANDS
 	if walking or weight <= WEIGHT_MIN:
 		return PropKind.NONE
+	if mode == StaffStationPose.Mode.BREAK_SEATED or mode == StaffStationPose.Mode.BREAK_CHAT:
+		return _break_prop_from_sub(sub_mode)
 	if role == StaffMember.Role.RAMP and mode == StaffStationPose.Mode.IDLE_FIDGET:
-		return PropKind.CLIPBOARD
+		if sub_mode == StaffStationPose.SubMode.NONE:
+			return PropKind.CLIPBOARD
 	match mode:
 		StaffStationPose.Mode.SECURITY_SCAN:
 			return PropKind.WAND
@@ -118,6 +166,27 @@ static func desired_prop(
 				return PropKind.COFFEE_CUP
 		StaffStationPose.Mode.RAMP_MARSHAL:
 			return PropKind.MARSHAL_WANDS
+		StaffStationPose.Mode.REACTION_WIPE:
+			return PropKind.CLOTH
+		StaffStationPose.Mode.REACTION_CLIPBOARD:
+			if sub_mode != StaffStationPose.SubMode.REACT_WATCH:
+				return PropKind.CLIPBOARD
+		StaffStationPose.Mode.IDLE_FIDGET:
+			if sub_mode == StaffStationPose.SubMode.LULL_WIPE:
+				return PropKind.CLOTH
+			if sub_mode == StaffStationPose.SubMode.LULL_CLIPBOARD:
+				return PropKind.CLIPBOARD
+	return PropKind.NONE
+
+
+static func _break_prop_from_sub(sub_mode: StaffStationPose.SubMode) -> PropKind:
+	match sub_mode:
+		StaffStationPose.SubMode.BREAK_COFFEE:
+			return PropKind.COFFEE_MUG
+		StaffStationPose.SubMode.BREAK_PHONE:
+			return PropKind.PHONE
+		StaffStationPose.SubMode.BREAK_MAGAZINE:
+			return PropKind.MAGAZINE
 	return PropKind.NONE
 
 
@@ -292,6 +361,10 @@ static func _ensure(node: Node3D) -> Dictionary:
 		PropKind.BROOM: _add_prop(att_r, _build_broom()),
 		PropKind.RAG: _add_prop(att_r, _build_rag()),
 		PropKind.MARSHAL_WANDS: _add_prop(att_r, _build_marshal_wand("MarshalWandR", true)),
+		PropKind.COFFEE_MUG: _add_prop(att_r, _build_coffee_mug()),
+		PropKind.PHONE: _add_prop(att_r, _build_phone()),
+		PropKind.MAGAZINE: _add_prop(att_r, _build_magazine()),
+		PropKind.CLOTH: _add_prop(att_r, _build_cloth()),
 	}
 	var extra := {
 		PropKind.MARSHAL_WANDS: [_add_prop(att_l, _build_marshal_wand("MarshalWandL", false))],
@@ -424,6 +497,115 @@ static func _build_coffee_cup() -> Node3D:
 	root.add_child(body)
 	root.add_child(sleeve)
 	root.add_child(coffee)
+	return root
+
+
+static func _build_coffee_mug() -> Node3D:
+	var root := Node3D.new()
+	root.name = "CoffeeMug"
+	root.position = Vector3(0.036, 0.088, 0.018)
+	root.rotation_degrees = Vector3(90.0, 0.0, 0.0)
+	var body := _part(
+		"Body",
+		_cyl_mesh("mug_body", 0.038, 0.035, 0.092),
+		COLOR_MUG_BODY,
+		Vector3.ZERO,
+	)
+	var rim := _part(
+		"Rim",
+		_cyl_mesh("mug_rim", 0.040, 0.040, 0.012),
+		COLOR_MUG_RIM,
+		Vector3(0.0, 0.044, 0.0),
+	)
+	var coffee := _part(
+		"Coffee",
+		_cyl_mesh("mug_top", 0.034, 0.034, 0.006),
+		COLOR_CUP_COFFEE,
+		Vector3(0.0, 0.048, 0.0),
+	)
+	var handle := _part(
+		"Handle",
+		_box_mesh("mug_handle", Vector3(0.022, 0.052, 0.014)),
+		COLOR_MUG_BODY,
+		Vector3(-0.042, 0.0, 0.0),
+	)
+	root.add_child(body)
+	root.add_child(rim)
+	root.add_child(coffee)
+	root.add_child(handle)
+	return root
+
+
+static func _build_phone() -> Node3D:
+	var root := Node3D.new()
+	root.name = "Phone"
+	root.position = Vector3(0.030, 0.100, 0.015)
+	root.rotation_degrees = Vector3(8.0, 22.0, -14.0)
+	var chassis := _part(
+		"Chassis",
+		_box_mesh("phone_chassis", Vector3(0.012, 0.145, 0.078)),
+		COLOR_PHONE_CASE,
+		Vector3.ZERO,
+	)
+	var screen := _part(
+		"Screen",
+		_box_mesh("phone_screen", Vector3(0.005, 0.130, 0.068)),
+		COLOR_PHONE_SCREEN,
+		Vector3(-0.006, 0.0, 0.0),
+	)
+	root.add_child(chassis)
+	root.add_child(screen)
+	return root
+
+
+static func _build_magazine() -> Node3D:
+	var root := Node3D.new()
+	root.name = "Magazine"
+	root.position = Vector3(0.034, 0.125, 0.022)
+	root.rotation_degrees = Vector3(10.0, -32.0, -16.0)
+	var pages := _part(
+		"Pages",
+		_box_mesh("mag_pages", Vector3(0.018, 0.22, 0.17)),
+		COLOR_MAG_PAGES,
+		Vector3.ZERO,
+	)
+	var cover := _part(
+		"Cover",
+		_box_mesh("mag_cover", Vector3(0.006, 0.218, 0.168)),
+		COLOR_MAG_COVER,
+		Vector3(0.009, 0.0, 0.0),
+	)
+	var stripe := _part(
+		"Stripe",
+		_box_mesh("mag_stripe", Vector3(0.008, 0.038, 0.154)),
+		COLOR_MAG_STRIPE,
+		Vector3(0.010, 0.062, 0.0),
+	)
+	root.add_child(pages)
+	root.add_child(cover)
+	root.add_child(stripe)
+	return root
+
+
+static func _build_cloth() -> Node3D:
+	var root := Node3D.new()
+	root.name = "WipeCloth"
+	root.position = Vector3(0.032, 0.088, 0.014)
+	root.rotation_degrees = Vector3(12.0, 10.0, -8.0)
+	var pad := _part(
+		"Pad",
+		_box_mesh("cloth_pad", Vector3(0.032, 0.13, 0.13)),
+		COLOR_CLOTH_MAIN,
+		Vector3.ZERO,
+	)
+	var fold := _part(
+		"Fold",
+		_box_mesh("cloth_fold", Vector3(0.022, 0.095, 0.095)),
+		COLOR_CLOTH_FOLD,
+		Vector3(-0.012, 0.01, 0.0),
+	)
+	root.add_child(pad)
+	root.add_child(fold)
 	return root
 
 

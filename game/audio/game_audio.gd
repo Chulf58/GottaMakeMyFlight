@@ -28,6 +28,14 @@ const PA_COOLDOWN_MS := 7500
 const PA_PRIORITY_COOLDOWN_MS := 2500
 const BIRD_SCATTER_COOLDOWN_MS := 5000
 const VOICE_BLIP_COOLDOWN_MS := 65
+const STAFF_REACTION_COOLDOWN_MS := 1400
+const STAFF_REACTION_IDS: Array[StringName] = [
+	&"staff_mumble",
+	&"staff_sip",
+	&"staff_cheer",
+	&"staff_wipe",
+	&"staff_yawn",
+]
 const FINAL_CALL_POLL_TICKS := 10
 const FINAL_CALL_LEAD_TICKS := 300
 const STAR_MILESTONES: Array[float] = [3.0, 4.0, 5.0]
@@ -54,6 +62,11 @@ const SFX_PATHS := {
 	&"gate_chirp": "res://assets/audio/gate_chirp.wav",
 	&"cafe_clink": "res://assets/audio/cafe_clink.wav",
 	&"offer_chime": "res://assets/audio/pa_chime.wav",
+	&"staff_mumble": "res://assets/audio/staff_mumble.wav",
+	&"staff_sip": "res://assets/audio/staff_sip.wav",
+	&"staff_cheer": "res://assets/audio/staff_cheer.wav",
+	&"staff_wipe": "res://assets/audio/staff_wipe.wav",
+	&"staff_yawn": "res://assets/audio/staff_yawn.wav",
 }
 const SFX_COOLDOWN_MS := {
 	&"ui_click": 25,
@@ -76,6 +89,11 @@ const SFX_COOLDOWN_MS := {
 	&"gate_chirp": 1600,
 	&"cafe_clink": 2400,
 	&"offer_chime": 1500,
+	&"staff_mumble": 4200,
+	&"staff_sip": 5500,
+	&"staff_cheer": 2500,
+	&"staff_wipe": 5000,
+	&"staff_yawn": 6500,
 	&"bird_scatter": BIRD_SCATTER_COOLDOWN_MS,
 	&"voice_blip_manager": VOICE_BLIP_COOLDOWN_MS,
 	&"voice_blip_airline": VOICE_BLIP_COOLDOWN_MS,
@@ -87,6 +105,11 @@ const SFX_VOLUME_DB := {
 	&"gate_chirp": -4.0,
 	&"cafe_clink": -3.5,
 	&"offer_chime": -4.5,
+	&"staff_mumble": -10.0,
+	&"staff_sip": -9.0,
+	&"staff_cheer": -6.5,
+	&"staff_wipe": -10.5,
+	&"staff_yawn": -9.5,
 	&"bird_scatter": -10.0,
 	&"voice_blip_manager": -11.0,
 	&"voice_blip_airline": -11.0,
@@ -118,11 +141,13 @@ var _desks_by_id: Dictionary = {}
 var _clock: SimClock
 var _flights: FlightSim
 var _passengers: PassengerSim
+var _staff: StaffSim
 var _incidents: IncidentDirector
 var _rating: AirportRating
 var _save_game: SaveGame
 var _suppress_events := false
 var _last_pa_ms := -1
+var _last_staff_reaction_ms := -1
 var _last_final_call_check_tick := -FINAL_CALL_POLL_TICKS
 var _prev_stage: Dictionary = {}
 var _security_alarmed: Dictionary = {}
@@ -217,6 +242,7 @@ func reset_for_test() -> void:
 	_last_played_ms.clear()
 	_suppress_events = false
 	_last_pa_ms = -1
+	_last_staff_reaction_ms = -1
 	_last_final_call_check_tick = -FINAL_CALL_POLL_TICKS
 	_prev_stage.clear()
 	_security_alarmed.clear()
@@ -344,6 +370,50 @@ func play_voice_blip(speaker_key: StringName = &"manager") -> bool:
 	_voice_player.volume_db = float(SFX_VOLUME_DB.get(sfx_id, -11.0))
 	_voice_player.pitch_scale = randf_range(0.92, 1.14)
 	_voice_player.play()
+	_last_sfx = sfx_id
+	_sfx_counts[sfx_id] = int(_sfx_counts.get(sfx_id, 0)) + 1
+	return true
+
+
+## True when a subtle staff reaction cue (`STAFF_REACTION_IDS`) may play at
+## `now_ms` on `driver_name` (non-Dummy, unmuted, positive volumes, unpaused,
+## not fast-forwarding, and past both per-cue and global reaction cooldowns).
+func can_play_staff_reaction(
+	sfx_id: StringName, now_ms: int = -1, driver_name: String = ""
+) -> bool:
+	if not STAFF_REACTION_IDS.has(sfx_id) or not _sfx_streams.has(sfx_id):
+		return false
+	if muted or master_volume <= MIN_LINEAR or sfx_volume <= MIN_LINEAR:
+		return false
+	var drv := driver_name if driver_name != "" else AudioServer.get_driver_name()
+	if drv == "Dummy" or _suppress_events or _is_fast_forwarding() or _is_paused():
+		return false
+	var check_ms := now_ms if now_ms >= 0 else _now_ms()
+	if (
+		_last_staff_reaction_ms >= 0
+		and check_ms - _last_staff_reaction_ms < STAFF_REACTION_COOLDOWN_MS
+	):
+		return false
+	var cooldown := int(SFX_COOLDOWN_MS.get(sfx_id, 0))
+	return not (_last_played_ms.has(sfx_id) and check_ms - int(_last_played_ms[sfx_id]) < cooldown)
+
+
+## Plays a subtle cooldown-gated staff reaction cue on the SFX pool; stays
+## silent when muted, zero-volume, paused, fast-forwarding, or on Dummy audio.
+func play_staff_reaction(sfx_id: StringName) -> bool:
+	var now := _now_ms()
+	if not can_play_staff_reaction(sfx_id, now, AudioServer.get_driver_name()):
+		return false
+	if _sfx_players.is_empty():
+		return false
+	_last_staff_reaction_ms = now
+	_last_played_ms[sfx_id] = now
+	var player := _sfx_players[_sfx_cursor]
+	_sfx_cursor = (_sfx_cursor + 1) % _sfx_players.size()
+	player.stream = _sfx_streams[sfx_id]
+	player.volume_db = float(SFX_VOLUME_DB.get(sfx_id, -9.0))
+	player.pitch_scale = randf_range(0.95, 1.07)
+	player.play()
 	_last_sfx = sfx_id
 	_sfx_counts[sfx_id] = int(_sfx_counts.get(sfx_id, 0)) + 1
 	return true
@@ -523,6 +593,8 @@ func _on_node_added(node: Node) -> void:
 		_when_ready(node, _bind_clock.bind(node))
 	elif node is PassengerSim:
 		_when_ready(node, _bind_passenger_sim.bind(node))
+	elif node is StaffSim:
+		_when_ready(node, _bind_staff_sim.bind(node))
 	elif node is IncidentDirector:
 		_when_ready(node, _bind_incident_director.bind(node))
 	elif node is AirportRating:
@@ -696,6 +768,40 @@ func _unbind_passenger_sim(sim: PassengerSim) -> void:
 
 func _on_passenger_sim_exited(sim: PassengerSim) -> void:
 	_unbind_passenger_sim(sim)
+
+
+func _bind_staff_sim(staff: StaffSim) -> void:
+	if not is_instance_valid(staff) or not staff.is_inside_tree():
+		return
+	if _staff != null and _staff != staff:
+		_unbind_staff_sim(_staff)
+	_staff = staff
+	var on_trained := _on_staff_trained.bind(staff)
+	if not staff.member_trained.is_connected(on_trained):
+		staff.member_trained.connect(on_trained)
+	var on_exit := _on_staff_sim_exited.bind(staff)
+	if not staff.tree_exiting.is_connected(on_exit):
+		staff.tree_exiting.connect(on_exit, CONNECT_ONE_SHOT)
+
+
+func _unbind_staff_sim(staff: StaffSim) -> void:
+	if is_instance_valid(staff):
+		var on_trained := _on_staff_trained.bind(staff)
+		if staff.member_trained.is_connected(on_trained):
+			staff.member_trained.disconnect(on_trained)
+		var on_exit := _on_staff_sim_exited.bind(staff)
+		if staff.tree_exiting.is_connected(on_exit):
+			staff.tree_exiting.disconnect(on_exit)
+	if _staff == staff:
+		_staff = null
+
+
+func _on_staff_sim_exited(staff: StaffSim) -> void:
+	_unbind_staff_sim(staff)
+
+
+func _on_staff_trained(_id: int, _level: int, _staff_sim: StaffSim) -> void:
+	play_staff_reaction(&"staff_cheer")
 
 
 func _bind_incident_director(director: IncidentDirector) -> void:

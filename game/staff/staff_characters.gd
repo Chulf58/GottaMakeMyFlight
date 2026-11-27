@@ -43,7 +43,10 @@ const CHARACTERS: Array[PackedScene] = [
 ]
 ## Walk clip speeds measured by the Toon pipeline (SPEED lines), by role.
 const CLIP_WALK_MPS: Array[float] = [1.922, 1.952, 1.922, 1.922, 1.922, 1.952]
-const LOOPED := ["idle", "walk"]
+const LOOPED := ["idle", "walk", "sit_idle"]
+const BREAK_SHUFFLE_TICKS := 12
+const BREAK_SIT_DOWN_CLIP := "sit_down"
+const BREAK_SIT_IDLE_CLIP := "sit_idle"
 ## The cleaner's work clip, played forward and back (it does not loop closed).
 const CLEAN_CLIP := "clean"
 ## Cozy warm burgundy jacket/skirt tint for Shop Servers on AGENT_SUIT:
@@ -113,6 +116,14 @@ var _ramp_idle_slots: Dictionary = {}
 var _ramp_state: Dictionary = {}
 var _ramp_loop: Dictionary = {}
 var _ramp_loop_key := ""
+var _break_views: Dictionary = {}
+var _chat_state: Dictionary = {}
+var _cheer_until: Dictionary = {}
+var _rush_state: Dictionary = {}
+var _served_once: Dictionary = {}
+var _last_pose_key: Dictionary = {}
+var _last_sync_tick := -1.0
+var _suppress_next_dirty := false
 ## Something changed between ticks: the next sync snaps instead of interpolating.
 var _dirty := false
 
@@ -136,6 +147,8 @@ func _ready() -> void:
 		var player := probe.get_node("AnimationPlayer") as AnimationPlayer
 		for clip in LOOPED:
 			player.get_animation(clip).loop_mode = Animation.LOOP_LINEAR
+		if player.has_animation(BREAK_SIT_DOWN_CLIP):
+			player.get_animation(BREAK_SIT_DOWN_CLIP).loop_mode = Animation.LOOP_NONE
 		if player.has_animation(CLEAN_CLIP):
 			player.get_animation(CLEAN_CLIP).loop_mode = Animation.LOOP_PINGPONG
 		probe.free()
@@ -143,6 +156,7 @@ func _ready() -> void:
 		clock.ticked.connect(_on_ticked)
 	if staff != null:
 		staff.staff_changed.connect(_mark_dirty)
+		staff.member_trained.connect(_on_member_trained)
 		if staff.sim != null:
 			staff.sim.grid.graph_changed.connect(_on_graph_changed)
 			var messes := MessViews.new()
@@ -324,6 +338,15 @@ func sync(snap: bool = false) -> void:
 	var seen := {}
 	var pose_ctx := StaffStationPose.build_context(staff, _flights(), plane_fleet, _baggage())
 	var tick_now := _tick()
+	var back_in_time := _last_sync_tick >= 0.0 and tick_now < _last_sync_tick
+	_last_sync_tick = tick_now
+	if snap or back_in_time:
+		_break_views.clear()
+		_chat_state.clear()
+		_cheer_until.clear()
+		_rush_state.clear()
+		_served_once.clear()
+		_last_pose_key.clear()
 	if snap:
 		_ramp_idle_slots.clear()
 		_ramp_state.clear()
@@ -331,6 +354,8 @@ func sync(snap: bool = false) -> void:
 		_ramp_loop_key = ""
 		_prev_yaw.clear()
 		_cur_yaw.clear()
+	var resting_pos := _prepare_break_views(tick_now, snap)
+	_chat_state = StaffChatBubbles.pairs_for(staff, resting_pos, tick_now)
 	for id in staff.member_ids():
 		var m := staff.get_member(id)
 		if m.role == StaffMember.Role.RAMP and not (m.is_on_break() and not m.in_pool()):
@@ -408,8 +433,10 @@ func sync(snap: bool = false) -> void:
 		if fresh:
 			node = _take(m.role)
 			_nodes[id] = node
-		var now := staff.world_position(m)
-		var lift := belt_lift_for(_grid(), m)
+		var on_break := m.state == StaffMember.State.ON_BREAK
+		var bv: Dictionary = _break_views.get(id, {}) if on_break else {}
+		var now := (bv["pos"] as Vector3) if on_break and bv.has("pos") else staff.world_position(m)
+		var lift := 0.0 if on_break else belt_lift_for(_grid(), m)
 		if snap or fresh:
 			_prev[id] = now
 			_prev_lift[id] = lift
@@ -418,17 +445,31 @@ func sync(snap: bool = false) -> void:
 			_prev_lift[id] = _cur_lift.get(id, lift)
 		_cur[id] = now
 		_cur_lift[id] = lift
-		_pose(node, m, (_cur[id] as Vector3) - (_prev[id] as Vector3))
+		if on_break:
+			var break_yaw := float(bv.get("yaw", node.rotation.y))
+			if snap or fresh or not _cur_yaw.has(id):
+				_prev_yaw[id] = break_yaw
+				node.rotation.y = break_yaw
+			else:
+				_prev_yaw[id] = _cur_yaw[id]
+			_cur_yaw[id] = break_yaw
+			_play_break_clip(node, bv, snap)
+		else:
+			_prev_yaw.erase(id)
+			_cur_yaw.erase(id)
+			_pose(node, m, (_cur[id] as Vector3) - (_prev[id] as Vector3))
 		# A snapped sync (a load among them: member ids survive it) starts the
 		# tuck, station pose and hand props over, settled where the member stands.
 		if snap:
 			_tucks.erase(id)
 			_poses.erase(id)
 			StaffHandProps.hide_all(node)
+			StaffChatBubbles.hide(node)
 		var inside := StaffArchTuck.in_arch_passage(staff.sim.grid, m)
 		StaffArchTuck.update(_tucks.get_or_add(id, {}), inside, tick_now)
-		var eval := StaffStationPose.evaluate(m, staff, now, pose_ctx, node.rotation.y)
-		var look := StaffStationPose.compute_look_deg(now, node.rotation.y, eval[1], eval[2])
+		var look_yaw := float(_cur_yaw.get(id, node.rotation.y))
+		var eval := StaffStationPose.evaluate(m, staff, now, pose_ctx, look_yaw)
+		_update_rush_state(id, m, eval, pose_ctx, tick_now, snap)
 		var cleaner_busy := (
 			m.role == StaffMember.Role.CLEANER and m.state == StaffMember.State.ON_DUTY
 		)
@@ -439,18 +480,33 @@ func sync(snap: bool = false) -> void:
 			and not cleaner_busy
 			and not inside
 		)
+		var extra := {
+			"tick_now": tick_now,
+			"seated": bool(bv.get("seated", false)),
+			"standing_rest": bool(bv.get("standing_rest", false)),
+			"chat_info": _chat_state.get(id, {}),
+			"cheer_until": float(_cheer_until.get(id, -1.0)),
+			"can_fidget": can_fidget,
+			"has_served": bool(_served_once.get(id, false)),
+		}
+		var reacted := StaffReactionPoses.evaluate_member(m, now, pose_ctx, eval, extra)
+		var look := StaffStationPose.compute_look_deg(now, look_yaw, reacted[1], reacted[2])
+		var pose_rec: Dictionary = _poses.get_or_add(id, {})
 		(
 			StaffStationPose
 			. update(
-				_poses.get_or_add(id, {}),
-				eval[0],
+				pose_rec,
+				reacted[0],
 				look,
 				tick_now,
-				eval[3],
-				can_fidget,
+				reacted[3],
+				bool(reacted[4]),
 				id,
+				reacted[5],
+				reacted[6],
 			)
 		)
+		_emit_reaction_audio(id, pose_rec, snap or fresh)
 	for id in _nodes.keys():
 		if not seen.has(id):
 			_release(id)
@@ -462,6 +518,9 @@ func draw() -> void:
 	var alpha := clock.alpha if clock != null else 1.0
 	var paused := clock == null or clock.paused
 	var now := _now()
+	var vp := get_viewport()
+	var cam := vp.get_camera_3d() if vp != null else null
+	var unit := NeedIcons.unit_of(vp, cam)
 	for id in _nodes:
 		var node: Node3D = _nodes[id]
 		var m := staff.get_member(id) if staff != null else null
@@ -550,8 +609,11 @@ func draw() -> void:
 			)
 		)
 		var player := node.get_node("AnimationPlayer") as AnimationPlayer
+		if String(node.get_meta(&"clip", "")) == BREAK_SIT_DOWN_CLIP and not player.is_playing():
+			_play_clip(node, BREAK_SIT_IDLE_CLIP, 1.0)
 		var base: float = node.get_meta(&"base_speed", 1.0)
 		player.speed_scale = 0.0 if paused else base * clock.speed
+		_layout_chat_bubble(node, id, m, cam, unit)
 	_sync_follow_anchor()
 
 
@@ -584,6 +646,9 @@ func _on_ticked(_tick: int) -> void:
 ## Inside a tick the tick's own sync shows the change; between ticks the next
 ## frame resyncs.
 func _mark_dirty() -> void:
+	if _suppress_next_dirty:
+		_suppress_next_dirty = false
+		return
 	if clock == null or not clock.is_in_tick():
 		_dirty = true
 
@@ -601,11 +666,13 @@ func _take(role: StaffMember.Role) -> Node3D:
 		node = free.pop_back()
 		node.visible = true
 		StaffHandProps.hide_all(node)
+		StaffChatBubbles.hide(node)
 	else:
 		node = CHARACTERS[role].instantiate() as Node3D
 		if UNIFORM_TINTS.has(role):
 			_apply_role_uniform(node, role)
 		node.set_meta(&"role", role)
+		NeedIcons.find_head(node)
 		add_child(node)
 	node.rotation.y = 0.0
 	return node
@@ -715,6 +782,7 @@ func _release(id: int) -> void:
 	StaffStationPose.pose(node, StaffStationPose.Mode.NONE, 0.0, 0.0, Vector2.ZERO, 0)
 	StaffArchTuck.pose(node, 0.0)
 	StaffHandProps.hide_all(node)
+	StaffChatBubbles.hide(node)
 	_pool[node.get_meta(&"role")].append(node)
 	_nodes.erase(id)
 	_prev.erase(id)
@@ -727,6 +795,12 @@ func _release(id: int) -> void:
 	_poses.erase(id)
 	_ramp_idle_slots.erase(id)
 	_ramp_state.erase(id)
+	_break_views.erase(id)
+	_chat_state.erase(id)
+	_cheer_until.erase(id)
+	_rush_state.erase(id)
+	_served_once.erase(id)
+	_last_pose_key.erase(id)
 	if selected_id == id:
 		selected_id = 0
 
@@ -1012,3 +1086,176 @@ func _marshal_pose(m: StaffMember) -> Dictionary:
 		"clip": "idle",
 		"speed": 1.0,
 	}
+
+
+func _on_member_trained(id: int, _level: int) -> void:
+	var m := staff.get_member(id) if staff != null else null
+	if m == null or m.in_pool() or m.state == StaffMember.State.ON_BREAK:
+		return
+	_cheer_until[id] = _tick() + StaffReactionPoses.CHEER_DURATION_TICKS
+	_suppress_next_dirty = true
+
+
+func _prepare_break_views(tick_now: float, snap: bool) -> Dictionary:
+	var resting := {}
+	if staff == null:
+		return resting
+	for id in staff.member_ids():
+		var m := staff.get_member(id)
+		if m != null and m.state == StaffMember.State.ON_BREAK and not m.in_pool():
+			var bv := _step_break_view(id, m, tick_now, snap)
+			resting[id] = bv["pos"]
+		else:
+			_break_views.erase(id)
+	return resting
+
+
+func _step_break_view(id: int, m: StaffMember, tick_now: float, snap: bool) -> Dictionary:
+	var grid := _grid()
+	var seat := StaffBreakRooms.seat_for(grid, m.break_room, m.break_spot, m.role)
+	if seat.is_empty():
+		var standing_yaw := 0.0
+		if grid != null and m.break_room > 0:
+			var room := grid.get_room(m.break_room)
+			if not room.is_empty():
+				var area: Rect2i = room["rect"]
+				var center := (
+					(
+						grid.cell_to_world(area.position)
+						+ grid.cell_to_world(area.end - Vector2i.ONE)
+					)
+					* 0.5
+				)
+				var delta := center - staff.world_position(m)
+				if delta.length() > 0.1:
+					standing_yaw = atan2(delta.x, delta.z)
+		var stand_bv := {
+			"room": m.break_room,
+			"spot": m.break_spot,
+			"pos": staff.world_position(m),
+			"yaw": standing_yaw,
+			"seated": false,
+			"standing_rest": true,
+			"start_tick": tick_now,
+		}
+		_break_views[id] = stand_bv
+		return stand_bv
+	var prev: Dictionary = _break_views.get(id, {})
+	var seat_pos: Vector3 = seat["seat_pos"]
+	var same_seat := (
+		not prev.is_empty()
+		and not snap
+		and not bool(prev.get("standing_rest", false))
+		and int(prev.get("room", 0)) == m.break_room
+		and Vector2i(prev.get("spot", StaffMember.NO_CELL)) == m.break_spot
+		and (prev.get("seat_pos", Vector3.ZERO) as Vector3).distance_squared_to(seat_pos) < 0.0001
+		and tick_now >= float(prev.get("start_tick", 0.0))
+	)
+	var start_tick := (
+		float(prev["start_tick"])
+		if same_seat
+		else (tick_now - float(BREAK_SHUFFLE_TICKS) if snap else tick_now)
+	)
+	var elapsed := maxf(tick_now - start_tick, 0.0)
+	var step_t := clampf((elapsed / float(BREAK_SHUFFLE_TICKS) - 0.25) / 0.75, 0.0, 1.0)
+	var approach_pos := grid.cell_to_world(m.break_spot)
+	var bv := {
+		"room": m.break_room,
+		"spot": m.break_spot,
+		"approach": approach_pos,
+		"seat_pos": seat_pos,
+		"pos": approach_pos.lerp(seat_pos, step_t),
+		"yaw": float(seat["yaw"]),
+		"start_tick": start_tick,
+		"seated": elapsed >= float(BREAK_SHUFFLE_TICKS),
+		"standing_rest": false,
+	}
+	_break_views[id] = bv
+	return bv
+
+
+func _play_break_clip(node: Node3D, bv: Dictionary, snap: bool) -> void:
+	if not bool(bv.get("seated", false)):
+		_play_clip(node, "idle", 1.0)
+		return
+	if snap:
+		_play_clip(node, BREAK_SIT_IDLE_CLIP, 1.0)
+		return
+	var current := String(node.get_meta(&"clip", ""))
+	if current != BREAK_SIT_DOWN_CLIP and current != BREAK_SIT_IDLE_CLIP:
+		_play_clip(node, BREAK_SIT_DOWN_CLIP, 1.0)
+
+
+func _layout_chat_bubble(node: Node3D, id: int, m: StaffMember, cam: Camera3D, unit: float) -> void:
+	var chat: Dictionary = _chat_state.get(id, {})
+	var bv: Dictionary = _break_views.get(id, {})
+	var settled := (
+		m != null
+		and m.state == StaffMember.State.ON_BREAK
+		and (bool(bv.get("seated", false)) or bool(bv.get("standing_rest", false)))
+	)
+	var show := settled and bool(chat.get("show_icon", false))
+	var icon := int(chat.get("icon_kind", StaffChatBubbles.IconKind.COFFEE))
+	StaffChatBubbles.layout(node, show, icon as StaffChatBubbles.IconKind, cam, unit)
+
+
+func _update_rush_state(
+	id: int,
+	m: StaffMember,
+	eval: Array,
+	pose_ctx: Dictionary,
+	tick_now: float,
+	snap: bool,
+) -> void:
+	if snap or m.state != StaffMember.State.ON_DUTY or m.station == 0:
+		_rush_state.erase(id)
+		return
+	var is_active := int(eval[0]) != StaffStationPose.Mode.NONE
+	var queued := int(pose_ctx.get("station_active_pax", {}).get(m.station, 0))
+	var load_count := maxi(queued, 1 if is_active else 0)
+	if load_count > 0:
+		_served_once[id] = true
+	var rush: Dictionary = _rush_state.get(id, {})
+	if int(rush.get("station", 0)) != m.station:
+		rush = {"station": m.station, "peak": 0, "waves": 0, "last_tick": tick_now, "last_load": 0}
+	if load_count > 0:
+		if int(rush.get("last_load", 0)) == 0:
+			rush["waves"] = int(rush.get("waves", 0)) + 1
+		rush["peak"] = maxi(int(rush.get("peak", 0)), load_count)
+		rush["last_tick"] = tick_now
+		rush["last_load"] = load_count
+		_rush_state[id] = rush
+		return
+	if int(rush.get("last_load", 0)) > 0:
+		rush["last_load"] = 0
+		var peak := int(rush.get("peak", 0))
+		var waves := int(rush.get("waves", 0))
+		if peak >= StaffReactionPoses.RUSH_PEAK_MIN or waves >= StaffReactionPoses.RUSH_PEAK_MIN:
+			_cheer_until[id] = tick_now + StaffReactionPoses.CHEER_DURATION_TICKS
+			_rush_state.erase(id)
+			return
+	elif tick_now - float(rush.get("last_tick", tick_now)) > StaffReactionPoses.BUSY_GAP_MAX_TICKS:
+		_rush_state.erase(id)
+		return
+	_rush_state[id] = rush
+
+
+func _emit_reaction_audio(id: int, pose_rec: Dictionary, skip: bool) -> void:
+	var cur_mode := StaffStationPose.mode_of(pose_rec)
+	var cur_sub := StaffStationPose.sub_mode_of(pose_rec)
+	if skip or not _last_pose_key.has(id):
+		_last_pose_key[id] = [cur_mode, cur_sub]
+		return
+	var prev: Array = _last_pose_key[id]
+	_last_pose_key[id] = [cur_mode, cur_sub]
+	var sfx := StaffReactionPoses.reaction_sound_for(prev[0], prev[1], cur_mode, cur_sub)
+	if sfx == &"":
+		return
+	var audio := _game_audio()
+	if audio != null and audio.has_method("play_staff_reaction"):
+		audio.play_staff_reaction(sfx)
+
+
+func _game_audio() -> Node:
+	var tree := get_tree()
+	return tree.root.get_node_or_null("GameAudio") if tree != null else null
