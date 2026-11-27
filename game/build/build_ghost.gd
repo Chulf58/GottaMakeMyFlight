@@ -153,6 +153,9 @@ static func draw_resize(mode: BuildMode) -> void:
 
 ## One tinted slab over the whole rectangle, with its size on the status line.
 static func draw_area(mode: BuildMode) -> void:
+	if mode._wall_remove.active:
+		draw_wall_remove(mode)
+		return
 	if mode._resize.active:
 		draw_resize(mode)
 		return
@@ -173,6 +176,18 @@ static func draw_area(mode: BuildMode) -> void:
 	)
 	if BuildMode.TOOL_ROOMS.has(mode.tool):
 		var room_type: StringName = BuildMode.TOOL_ROOMS[mode.tool]
+		var extend := RoomResize.auto_extend(mode.grid, area, room_type)
+		if not extend.is_empty():
+			var ext_id := int(extend["room_id"])
+			var ext_rect: Rect2i = extend["rect"]
+			var ext_fits := RoomResize.check(mode.grid, ext_id, ext_rect, purse).ok
+			tint = mode._valid_material if ext_fits else mode._invalid_material
+			slab(mode, ext_rect, tint)
+			for edit in RoomResize.plan(mode.grid, ext_id, ext_rect):
+				if edit.kind == BuildEdit.Kind.PLACE_WALL:
+					wall(mode, edit.cell, edit.side, tint)
+			mode._show_status(null)
+			return
 		if not (
 			RoomTool.check(mode.grid, area, room_type, purse, mode.unlocks, mode.require_unlocks).ok
 		):
@@ -189,6 +204,71 @@ static func draw_area(mode: BuildMode) -> void:
 		tint = mode._invalid_material
 	slab(mode, area, tint)
 	mode._show_status(null)
+
+
+## Highlights every wall along the active wall-remove drag in red (or invalid
+## if blocked) and updates the status line with count and refund.
+static func draw_wall_remove(mode: BuildMode) -> void:
+	var edge_list := mode._wall_remove.edges(mode.grid)
+	var purse := mode.wallet()
+	var bal := purse.balance if purse != null else -1
+	var key := "wall_remove:%s:%d:%d" % [edge_list, mode.grid.wall_version(), bal]
+	if key == mode._hover_key:
+		return
+	mode._hover_key = key
+	mode._hover_edit = null
+	var plan := WallRowDrag.RemoveDrag.preview(mode.grid, edge_list, mode.check, purse)
+	clear(mode)
+	for i in plan.edits.size():
+		var tint := mode._wall_remove_material if plan.valid[i] else mode._invalid_material
+		wall(mode, plan.edits[i].cell, plan.edits[i].side, tint, 2.0)
+	var valid_count := plan.edits.size() - plan.blocked
+	var label := "Remove %d wall%s" % [valid_count, "" if valid_count == 1 else "s"]
+	if plan.cost > 0:
+		label += ", refund %d" % plan.cost
+	if plan.blocked > 0:
+		label += ", %d blocked: %s" % [plan.blocked, plan.first_reason]
+	mode._row_label = label
+	mode._show_status(null)
+
+
+## Highlights a hovered room resize edge unmistakably along its full edge plus
+## visible handle grips on all four edges.
+static func draw_resize_hover(mode: BuildMode, hover: Dictionary) -> void:
+	var rect: Rect2i = hover["rect"]
+	var side: int = hover["side"]
+	var key := "resize_hover:%s:%s:%d:%d" % [hover["room_id"], rect, side, mode.tool]
+	if key == mode._hover_key:
+		return
+	mode._hover_key = key
+	clear(mode)
+	var ox := mode.grid.origin.x
+	var oz := mode.grid.origin.z
+	var y := mode.grid.origin.y + 0.10
+	var bar_extent: Vector3
+	var bar_pos: Vector3
+	match side:
+		BuildGrid.Side.NORTH:
+			bar_extent = Vector3(rect.size.x, 0.16, 0.24)
+			bar_pos = Vector3(ox + rect.position.x + rect.size.x * 0.5, y, oz + rect.position.y)
+		BuildGrid.Side.SOUTH:
+			bar_extent = Vector3(rect.size.x, 0.16, 0.24)
+			bar_pos = Vector3(ox + rect.position.x + rect.size.x * 0.5, y, oz + rect.end.y)
+		BuildGrid.Side.WEST:
+			bar_extent = Vector3(0.24, 0.16, rect.size.y)
+			bar_pos = Vector3(ox + rect.position.x, y, oz + rect.position.y + rect.size.y * 0.5)
+		_:
+			bar_extent = Vector3(0.24, 0.16, rect.size.y)
+			bar_pos = Vector3(ox + rect.end.x, y, oz + rect.position.y + rect.size.y * 0.5)
+	var bar := box(mode, bar_extent, mode._resize_hover_material)
+	bar.position = bar_pos
+	var positions := RoomResize.handle_positions(mode.grid, rect)
+	for i in positions.size():
+		var is_hovered := i == side
+		var grip_size := Vector3(0.46, 0.24, 0.46) if is_hovered else Vector3(0.32, 0.14, 0.32)
+		var grip_mat := mode._resize_hover_material if is_hovered else mode._resize_handle_material
+		var grip := box(mode, grip_size, grip_mat)
+		grip.position = positions[i] + Vector3(0.0, grip_size.y * 0.5 + 0.02, 0.0)
 
 
 static func clear(mode: BuildMode) -> void:
@@ -292,6 +372,11 @@ static func clearance_target(mode: BuildMode) -> Dictionary:
 		return {"active": false}
 	if mode.tool == BuildMode.Tool.BUY_LAND or BuildModeLandside.is_landside_tool(mode):
 		return {"active": false}
+	if mode._wall_remove.active:
+		var wall_cells: Array[Vector2i] = []
+		for edge in mode._wall_remove.edges(mode.grid):
+			wall_cells.append(Vector2i(edge.x, edge.y))
+		return _cells_target(mode.grid, wall_cells, false)
 	if mode._resize.active:
 		return _area_target(mode, mode._resize.rect(), true)
 	if mode._area.active:
@@ -300,6 +385,12 @@ static func clearance_target(mode: BuildMode) -> Dictionary:
 				mode._belt_plan.cells if mode._belt_plan != null else [mode._area.end_cell()]
 			)
 			return _cells_target(mode.grid, belt_cells, true)
+		if BuildMode.TOOL_ROOMS.has(mode.tool):
+			var extend := RoomResize.auto_extend(
+				mode.grid, mode._area.rect(), BuildMode.TOOL_ROOMS[mode.tool]
+			)
+			if not extend.is_empty():
+				return _area_target(mode, extend["rect"], true)
 		return _area_target(mode, mode._area.rect(), mode.tool != BuildMode.Tool.REMOVE)
 	if mode._row.active:
 		var row_cells: Array[Vector2i] = []

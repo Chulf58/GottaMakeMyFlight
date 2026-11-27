@@ -180,14 +180,14 @@ func test_the_ground_band_takes_a_wall_seen_from_straight_above() -> void:
 	assert_int(_mode.edit_at(far).kind).is_equal(BuildEdit.Kind.REMOVE_FLOOR)
 
 
-func test_the_remove_hover_over_a_wall_is_orange_and_bigger_than_a_placed_wall() -> void:
+func test_the_remove_hover_over_a_wall_is_red_and_bigger_than_a_placed_wall() -> void:
 	await _draw_walls()
 	_mode._update_ghost(_ground_under_wall(1.25))
 	var ghost := _mode.get_node("Ghost") as Node3D
 	assert_int(ghost.get_child_count()).is_equal(1)
 	var box := ghost.get_child(0) as MeshInstance3D
 	var tint := (box.material_override as StandardMaterial3D).albedo_color
-	assert_that(tint).is_equal(BuildMode.AREA_REMOVE_TINT)
+	assert_that(tint).is_equal(BuildMode.WALL_REMOVE_TINT)
 	var size := (box.mesh as BoxMesh).size
 	assert_float(size.z).is_greater(BuildView.WALL_THICKNESS * 1.5)
 	assert_float(size.y).is_greater_equal(BuildView.WALL_HEIGHT)
@@ -228,9 +228,9 @@ func test_a_click_on_a_wall_that_slips_across_a_cell_border_still_takes_the_wall
 	assert_int(_mode.grid.floor_at(_mode.grid.world_to_cell(to))).is_equal(BuildGrid.FLOOR_TILE)
 
 
-func test_a_real_drag_still_clears_a_rectangle() -> void:
+func test_a_real_drag_from_floor_still_clears_a_rectangle() -> void:
 	await _draw_walls()
-	var press := _camera.unproject_position(Vector3(4.9, 1.25, 4.0))
+	var press := _camera.unproject_position(Vector3(4.5, 0.0, 6.5))
 	var dragged := press + Vector2(0.0, -120.0)
 	_mode.pointer_override = press
 	_mode._unhandled_input(_click(true))

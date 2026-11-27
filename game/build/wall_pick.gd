@@ -9,7 +9,10 @@ extends RefCounted
 
 ## Extra height past a wall's top that still picks it: the top face is as thick
 ## as the wall, so a click on it crosses the edge just above the top.
-const TOP_SLACK_M := 0.1
+const TOP_SLACK_M := 0.18
+## Half-thickness of a wall's pick volume so clicks on a wall stub's front or
+## back cap hit reliably even at steep camera angles.
+const HIT_HALF_THICKNESS_M := BuildView.WALL_THICKNESS * 0.5 + 0.04
 ## The no-edge answer of first_wall(): an edge whose side (z) is -1.
 const NO_EDGE := Vector3i(0, 0, -1)
 
@@ -45,30 +48,78 @@ static func pick_height(grid: BuildGrid, view: BuildView, edge: Vector3i) -> flo
 	return (drawn if drawn > 0.0 else BuildView.WALL_HEIGHT) + TOP_SLACK_M
 
 
-## The nearest wall edge the straight line from `from` to `to` crosses at a
-## height the wall reaches, as (x, y, side) in WallCutaway.wall_edges form,
-## or NO_EDGE. The line is walked across the grid lines it crosses, so the
-## cost grows with the grid's width, not with the number of walls.
+static func _wall_box(
+	grid: BuildGrid, view: BuildView, axis: int, line: int, idx: int, edge: Vector3i
+) -> AABB:
+	var height := pick_height(grid, view, edge)
+	var pad := HIT_HALF_THICKNESS_M
+	if axis == 0:
+		return AABB(
+			Vector3(float(line) - pad, 0.0, float(idx)),
+			Vector3(pad * 2.0, height, 1.0),
+		)
+	return AABB(
+		Vector3(float(idx), 0.0, float(line) - pad),
+		Vector3(1.0, height, pad * 2.0),
+	)
+
+
+## The nearest wall edge whose 3D pick volume the straight line from `from` to
+## `to` hits at a height the wall reaches, as (x, y, side) in
+## WallCutaway.wall_edges form, or NO_EDGE.
 static func first_wall(grid: BuildGrid, view: BuildView, from: Vector3, to: Vector3) -> Vector3i:
 	var start := from - grid.origin
 	var span := to - from
-	var nearest := INF
+	var reach := span.length()
+	if reach < 0.000001:
+		return NO_EDGE
+	var dir := span / reach
+	var nearest := reach + 0.001
 	var found := NO_EDGE
-	for axis in [0, 2]:
-		if absf(span[axis]) < 0.000001:
-			continue
+	var pad := HIT_HALF_THICKNESS_M
+	for axis: int in [0, 2]:
+		var min_a := minf(start[axis], start[axis] + span[axis]) - pad
+		var max_a := maxf(start[axis], start[axis] + span[axis]) + pad
 		var cells := grid.size.x if axis == 0 else grid.size.y
-		var low := maxi(0, ceili(minf(start[axis], start[axis] + span[axis])))
-		var high := mini(cells, floori(maxf(start[axis], start[axis] + span[axis])))
+		var low := maxi(0, floori(min_a))
+		var high := mini(cells, ceili(max_a))
+		var other := 2 - axis
+		var other_cells := grid.size.y if axis == 0 else grid.size.x
+		var min_o_all := maxi(0, floori(minf(start[other], start[other] + span[other]) - 0.05))
+		var max_o_all := mini(
+			other_cells - 1, floori(maxf(start[other], start[other] + span[other]) + 0.05)
+		)
 		for line in range(low, high + 1):
-			var t := (line - start[axis]) / span[axis]
-			if t >= nearest:
-				continue
-			var at := start + span * t
-			var edge := edge_on_line(grid, axis, line, at)
-			if edge.z < 0 or not grid.has_wall(Vector2i(edge.x, edge.y), edge.z):
-				continue
-			if at.y <= pick_height(grid, view, edge):
-				nearest = t
-				found = edge
+			var min_o := min_o_all
+			var max_o := max_o_all
+			if absf(span[axis]) >= 0.000001:
+				var t_lo := (float(line) - pad - start[axis]) / span[axis]
+				var t_hi := (float(line) + pad - start[axis]) / span[axis]
+				var o_a := start[other] + span[other] * clampf(minf(t_lo, t_hi), 0.0, 1.0)
+				var o_b := start[other] + span[other] * clampf(maxf(t_lo, t_hi), 0.0, 1.0)
+				min_o = maxi(0, floori(minf(o_a, o_b) - 0.05))
+				max_o = mini(other_cells - 1, floori(maxf(o_a, o_b) + 0.05))
+			for idx in range(min_o, max_o + 1):
+				var cell := (
+					Vector2i(line if line < grid.size.x else line - 1, idx)
+					if axis == 0
+					else Vector2i(idx, line if line < grid.size.y else line - 1)
+				)
+				var side := (
+					(BuildGrid.Side.WEST if line < grid.size.x else BuildGrid.Side.EAST)
+					if axis == 0
+					else (BuildGrid.Side.NORTH if line < grid.size.y else BuildGrid.Side.SOUTH)
+				)
+				if not grid.has_wall(cell, side):
+					continue
+				var edge := Vector3i(cell.x, cell.y, side)
+				var hit: Variant = _wall_box(grid, view, axis, line, idx, edge).intersects_ray(
+					start, dir
+				)
+				if hit == null:
+					continue
+				var dist := start.distance_to(hit)
+				if dist < nearest:
+					nearest = dist
+					found = edge
 	return found

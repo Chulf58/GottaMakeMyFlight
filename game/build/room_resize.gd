@@ -371,24 +371,103 @@ func finish(grid: BuildGrid, wallet: Wallet = null) -> BuildResult:
 	active = false
 	if _target == _original:
 		return null
-	var pre := _precheck(grid, room_id, _target)
-	var result: BuildResult
-	if not pre.ok:
-		grid._emit_or_hold(
-			func() -> void: grid.edit_refused.emit(BuildEdit.resize_room(room_id, _target), pre)
-		)
-		result = pre
-	else:
-		result = BuildTransaction.commit_composite(grid, plan(grid, room_id, _target), wallet)
-	note = _message(grid, result)
+	var result := commit_area(grid, room_id, _target, wallet)
+	note = status_message(grid, room_id, _type, _target, result)
 	return result
 
 
+## Commits a room resize to `area` as ONE atomic composite transaction.
+static func commit_area(
+	grid: BuildGrid, id: int, area: Rect2i, wallet: Wallet = null
+) -> BuildResult:
+	var pre := _precheck(grid, id, area)
+	if not pre.ok:
+		grid._emit_or_hold(
+			func() -> void: grid.edit_refused.emit(BuildEdit.resize_room(id, area), pre)
+		)
+		return pre
+	return BuildTransaction.commit_composite(grid, plan(grid, id, area), wallet)
+
+
 ## "Cafe resized to 6 x 3: Needs a counter", or the refusal's reason.
-func _message(grid: BuildGrid, result: BuildResult) -> String:
+static func status_message(
+	grid: BuildGrid, id: int, type: StringName, area: Rect2i, result: BuildResult
+) -> String:
 	if not result.ok:
 		return result.reason_text()
-	var status := RoomRules.status(grid, room_id)
-	var room_name := DisplayWords.room_type(RoomTypes.get_type(_type).display_name)
-	var size := _target.size
+	var status := RoomRules.status(grid, id)
+	var room_name := DisplayWords.room_type(RoomTypes.get_type(type).display_name)
+	var size := area.size
 	return "%s resized to %d x %d: %s" % [room_name, size.x, size.y, status.headline()]
+
+
+## Status line for an auto-extending room drag: "Cafe 6 x 3" plus refusal reason.
+static func extend_label(
+	grid: BuildGrid, id: int, type: StringName, area: Rect2i, wallet: Wallet = null
+) -> String:
+	var text := BuildWords.room_size(
+		DisplayWords.room_type(RoomTypes.get_type(type).display_name), area.size.x, area.size.y
+	)
+	var result := check(grid, id, area, wallet)
+	if not result.ok:
+		text += "  " + result.reason_text()
+	return text
+
+
+## If `drag_rect` is flush along a full edge of an existing room of `type` with
+## no overlap (so their union is an exact rectangle), returns
+## `{"room_id": id, "rect": union_rect}`, else `{}`.
+static func auto_extend(grid: BuildGrid, drag_rect: Rect2i, type: StringName) -> Dictionary:
+	if not drag_rect.has_area():
+		return {}
+	for id in grid.room_ids():
+		var room := grid.get_room(id)
+		if room.is_empty() or StringName(room["type"]) != type:
+			continue
+		var r: Rect2i = room["rect"]
+		if r.intersects(drag_rect):
+			continue
+		var match_ew := (
+			r.position.y == drag_rect.position.y
+			and r.size.y == drag_rect.size.y
+			and (drag_rect.end.x == r.position.x or drag_rect.position.x == r.end.x)
+		)
+		var match_ns := (
+			r.position.x == drag_rect.position.x
+			and r.size.x == drag_rect.size.x
+			and (drag_rect.end.y == r.position.y or drag_rect.position.y == r.end.y)
+		)
+		if match_ew or match_ns:
+			return {"room_id": id, "rect": r.merge(drag_rect)}
+	return {}
+
+
+## When hovering a resizable room edge (either via a matching room tool in
+## `TOOL_ROOMS` or a selected room's handle/edge in `Tool.NONE`), returns
+## `{"room_id": id, "rect": rect, "side": side}` with `side >= 0`, else `{}`.
+static func hover_edge(
+	grid: BuildGrid, tool: int, selected_room_id: int, point: Variant
+) -> Dictionary:
+	if point == null:
+		return {}
+	var p: Vector3 = point
+	if tool == BuildMode.Tool.NONE and selected_room_id != 0:
+		var room := grid.get_room(selected_room_id)
+		if room.is_empty():
+			return {}
+		var rect: Rect2i = room["rect"]
+		var hit_side := handle_hit(grid, rect, p)
+		if hit_side >= 0:
+			return {"room_id": selected_room_id, "rect": rect, "side": hit_side}
+		return {}
+	if BuildMode.TOOL_ROOMS.has(tool):
+		var type: StringName = BuildMode.TOOL_ROOMS[tool]
+		var cell := grid.world_to_cell(p)
+		var id := grid.room_at(cell)
+		if id == 0 or StringName(grid.get_room(id)["type"]) != type:
+			return {}
+		var rect: Rect2i = grid.get_room(id)["rect"]
+		var hit_side := edge_side(grid, rect, p)
+		if hit_side >= 0:
+			return {"room_id": id, "rect": rect, "side": hit_side}
+	return {}
