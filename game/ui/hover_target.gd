@@ -62,7 +62,7 @@ extends Node
 ## made against. When PassengerViews is not processing (a paused tree), this node's
 ## own _process resolves instead (it runs in every pause mode).
 
-enum Kind { PASSENGER, SIGN }
+enum Kind { PASSENGER, SIGN, STAFF }
 
 const GROUP := &"hover_target"
 ## How far outside its rect a sign still wins, in viewport px.
@@ -79,9 +79,12 @@ const TOOLTIP_LAYER := 3
 ## When set, a click a sign takes also ends the passenger, vehicle or built
 ## selection and the camera follow, as a click elsewhere would.
 @export var hud: PassengerHud
+@export var staff_views: StaffCharacters
 
 ## (passenger id) -> String, the tooltip text of a passenger; set by lane B.
 var passenger_text: Callable
+## (staff id) -> String, optional override for hovered staff tooltip text.
+var staff_text: Callable
 ## Test and probe seam: a Vector2 read as the pointer instead of the mouse.
 var pointer_override: Variant = null
 
@@ -110,6 +113,7 @@ class Target:
 	extends RefCounted
 	var kind := Kind.PASSENGER
 	var passenger_id := 0
+	var staff_id := 0
 	var provider: Object
 	var key: Variant
 	var rect := Rect2()
@@ -122,6 +126,8 @@ class Target:
 			return false
 		if kind == Kind.PASSENGER:
 			return other.passenger_id == passenger_id
+		if kind == Kind.STAFF:
+			return other.staff_id == staff_id
 		return other.provider == provider and other.key == key
 
 
@@ -176,6 +182,10 @@ func shown_target() -> Target:
 
 func hovered_passenger() -> int:
 	return _passenger_of(_hovered)
+
+
+func hovered_staff() -> int:
+	return _hovered.staff_id if _hovered != null and _hovered.kind == Kind.STAFF else 0
 
 
 ## The pinned passenger's id, also while they are behind the camera and
@@ -273,6 +283,8 @@ func _target_at(at: Vector2, signs: Array[Target], eye: Camera3D) -> Target:
 	var found := _sign_at(at, signs)
 	if found == null and eye != null:
 		found = _passenger_target(_passenger_under(eye, at), eye)
+		if found == null:
+			found = _staff_target(_staff_under(eye, at), eye)
 	if found == null:
 		return null
 	for rect in _hud_rects():
@@ -322,6 +334,47 @@ func _passenger_target(id: int, eye: Camera3D) -> Target:
 	target.rect = Rect2(eye.unproject_position(head), Vector2.ZERO)
 	if passenger_text.is_valid():
 		target.text = passenger_text.call(id)
+	return target
+
+
+func _resolve_staff_views() -> StaffCharacters:
+	if staff_views == null and is_inside_tree():
+		staff_views = get_node_or_null("../StaffCharacters") as StaffCharacters
+	return staff_views
+
+
+func _staff_under(eye: Camera3D, at: Vector2) -> int:
+	var sv := _resolve_staff_views()
+	if sv == null:
+		return 0
+	if landside_views != null and landside_views.pick(eye, at) != 0:
+		return 0
+	var view := build_mode.get_node_or_null("BuildView") as BuildView if build_mode else null
+	if view != null:
+		_built_probe.pick(build_mode.grid, view, build_mode.landside_placement(), eye, at)
+		if _built_probe.kind == BuiltSelection.Kind.OBJECT:
+			return sv.pick_body(eye, at)
+	return sv.pick(eye, at)
+
+
+func _staff_target(id: int, eye: Camera3D) -> Target:
+	var sv := _resolve_staff_views()
+	var node := sv.node_for(id) if sv != null and id != 0 else null
+	if node == null or not node.visible or eye == null:
+		return null
+	var head := node.position + Vector3(0.0, StaffCharacters.BODY_HEIGHT_M, 0.0)
+	if eye.is_position_behind(head):
+		return null
+	var target := Target.new()
+	target.kind = Kind.STAFF
+	target.staff_id = id
+	target.rect = Rect2(eye.unproject_position(head), Vector2.ZERO)
+	if staff_text.is_valid():
+		target.text = staff_text.call(id)
+	elif sv.staff != null:
+		var m := sv.staff.get_member(id)
+		if m != null:
+			target.text = StaffNames.hover_caption(sv.staff.sim, m)
 	return target
 
 
