@@ -205,18 +205,26 @@ func pick(camera: Camera3D, screen: Vector2) -> int:
 	return best
 
 
-func pick_body(camera: Camera3D, screen: Vector2) -> int:
+func pick_body(camera: Camera3D, screen: Vector2, max_range_m := BODY_PICK_RANGE_M) -> int:
 	var best := 0
 	var best_m := INF
 	var from := camera.project_ray_origin(screen)
-	var to := from + camera.project_ray_normal(screen) * BODY_PICK_RANGE_M
+	var dir := camera.project_ray_normal(screen)
 	for id in _nodes:
 		var node := _nodes[id] as Node3D
 		if not node.visible:
 			continue
 		var feet := node.position
+		var limit := BODY_PICK_RANGE_M
+		if dir.y < -0.0001 and from.y > feet.y:
+			limit = minf(limit, (feet.y - from.y) / dir.y)
+		if limit <= 0.0:
+			continue
+		var to := from + dir * limit
 		var head := feet + Vector3(0.0, BODY_HEIGHT_M, 0.0)
 		var closest := Geometry3D.get_closest_points_between_segments(from, to, feet, head)
+		if from.distance_to(closest[0]) > max_range_m:
+			continue
 		var gap_m := closest[0].distance_to(closest[1])
 		if gap_m <= BODY_RADIUS_M and gap_m < best_m:
 			best = id

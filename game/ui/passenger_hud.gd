@@ -541,7 +541,12 @@ func _staff_at(eye: Camera3D, at: Vector2) -> int:
 	if staff_views == null:
 		return 0
 	if _built.kind == BuiltSelection.Kind.OBJECT:
-		return staff_views.pick_body(eye, at)
+		var limit := (
+			_built.object_hit_distance(build_mode.grid, eye, at)
+			if build_mode != null
+			else StaffCharacters.BODY_PICK_RANGE_M
+		)
+		return staff_views.pick_body(eye, at, limit)
 	return staff_views.pick(eye, at)
 
 

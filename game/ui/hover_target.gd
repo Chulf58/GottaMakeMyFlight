@@ -353,7 +353,8 @@ func _staff_under(eye: Camera3D, at: Vector2) -> int:
 	if view != null:
 		_built_probe.pick(build_mode.grid, view, build_mode.landside_placement(), eye, at)
 		if _built_probe.kind == BuiltSelection.Kind.OBJECT:
-			return sv.pick_body(eye, at)
+			var dist := _built_probe.object_hit_distance(build_mode.grid, eye, at)
+			return sv.pick_body(eye, at, dist)
 	return sv.pick(eye, at)
 
 
