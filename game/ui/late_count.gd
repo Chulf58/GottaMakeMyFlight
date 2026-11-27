@@ -26,7 +26,7 @@ static func by_flight(sim: PassengerSim) -> Dictionary:
 	var counts := {}
 	for id in sim.passenger_ids():
 		var p := sim.get_passenger(id)
-		if p.late and not p.is_done():
+		if p.late and not p.is_done() and not p.is_arriving():
 			counts[p.flight_id] = int(counts.get(p.flight_id, 0)) + 1
 	return counts
 
@@ -53,7 +53,7 @@ static func tightest_overall(sim: PassengerSim) -> Dictionary:
 	var best_slack := 0
 	for id in sim.passenger_ids():
 		var p := sim.get_passenger(id)
-		if p == null or p.is_done() or not p.late:
+		if p == null or p.is_done() or p.is_arriving() or not p.late:
 			continue
 		total += 1
 		var doors_close := sim.flights.doors_close_tick(p.flight_id) if sim.flights != null else -1

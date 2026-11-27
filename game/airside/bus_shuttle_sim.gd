@@ -101,6 +101,7 @@ func sync_gates() -> void:
 	var site := (grid as SiteGrid).site if grid is SiteGrid else null
 	for gate: String in _buses.keys():
 		if not grounds.has(gate):
+			_release_stranded_inbound(_buses[gate])
 			_clear_bus_pax(_buses[gate])
 			_buses.erase(gate)
 	for gate: String in grounds:
@@ -133,10 +134,13 @@ func pose_at(gate: String, time: float) -> Dictionary:
 		return {"visible": false, "origin": Vector3.ZERO, "yaw": 0.0}
 	var bus: Dictionary = _buses[gate]
 	var state := int(bus["state"])
-	if state == State.IDLE_AT_BAY or state == State.LOADING:
+	var inbound := bool(bus.get("inbound", false))
+	if state == State.IDLE_AT_BAY:
 		return _static_pose(bus["bay_pose"])
+	if state == State.LOADING:
+		return _static_pose(bus["stop_pose"] if inbound else bus["bay_pose"])
 	if state == State.UNLOADING:
-		return _static_pose(bus["stop_pose"])
+		return _static_pose(bus["bay_pose"] if inbound else bus["stop_pose"])
 	var rev := state == State.DRIVING_BACK
 	var start_pose: Dictionary = bus["stop_pose"] if rev else bus["bay_pose"]
 	var end_pose: Dictionary = bus["bay_pose"] if rev else bus["stop_pose"]
@@ -172,7 +176,7 @@ func final_call_tick_for(flight_id: String) -> int:
 
 
 func remaining_ticks_for_passenger(p: Passenger, now: int) -> int:
-	if not _pax_to_gate.has(p.id):
+	if p.is_arriving() or not _pax_to_gate.has(p.id):
 		return 0
 	var gate := String(_pax_to_gate[p.id])
 	var bus: Dictionary = _buses.get(gate, {})
@@ -199,6 +203,18 @@ func remaining_ticks_for_passenger(p: Passenger, now: int) -> int:
 
 func has_active_bus_for_passenger(pid: int) -> bool:
 	return _pax_to_gate.has(pid)
+
+
+func has_inbound_for(flight_id: String) -> bool:
+	for bus: Dictionary in _buses.values():
+		if not bool(bus.get("inbound", false)):
+			continue
+		if String(bus.get("flight_id", "")) != flight_id:
+			continue
+		var st := int(bus.get("state", State.IDLE_AT_BAY))
+		if st == State.DRIVING_OUT or st == State.LOADING:
+			return true
+	return false
 
 
 func passenger_ids_on_buses() -> Dictionary:
@@ -230,6 +246,7 @@ func from_snapshot(data: Variant) -> bool:
 		var bus: Dictionary = _buses[gate]
 		for key in [
 			"state",
+			"inbound",
 			"flight_id",
 			"stand_id",
 			"model",
@@ -262,6 +279,7 @@ func _new_bus(gate: String, exit_id: int, stand: Dictionary, bay_pose: Dictionar
 		"stand": stand,
 		"bay_pose": bay_pose,
 		"state": State.IDLE_AT_BAY,
+		"inbound": false,
 		"flight_id": "",
 		"stand_id": "",
 		"model": "",
@@ -282,7 +300,8 @@ func _step_idle(bus: Dictionary) -> void:
 		return
 	var gate := String(bus["gate"])
 	for fid in flights.flights_at_gate(gate):
-		if flights.state_of(fid) == FlightSim.State.BOARDING:
+		var fst := flights.state_of(fid)
+		if fst == FlightSim.State.BOARDING and not _has_inbound_waiting(fid):
 			var sid := flights.flight_stand_id(fid)
 			var model := PlaneClasses.flight_model(flights, fid)
 			var plan := _plan_for(gate, sid, model)
@@ -292,6 +311,7 @@ func _step_idle(bus: Dictionary) -> void:
 			var final_call := flights.doors_close_tick(fid) - drive_ticks - FINAL_CALL_LEAD_TICKS
 			if tick >= final_call:
 				continue
+			bus["inbound"] = false
 			bus["state"] = State.LOADING
 			bus["flight_id"] = fid
 			bus["stand_id"] = sid
@@ -304,10 +324,42 @@ func _step_idle(bus: Dictionary) -> void:
 			bus["aboard"] = [] as Array[int]
 			_step_loading(bus)
 			return
+		var wants_inbound := false
+		if fst == FlightSim.State.TAXI_IN or fst == FlightSim.State.AT_STAND:
+			wants_inbound = (
+				(passengers.auto_schedule and flights.arriving_passengers_of(fid) > 0)
+				or _has_inbound_waiting(fid)
+			)
+		elif fst == FlightSim.State.DEBOARDING or fst == FlightSim.State.BOARDING:
+			wants_inbound = _has_inbound_waiting(fid)
+		if wants_inbound:
+			var sid := flights.flight_stand_id(fid)
+			var model := PlaneClasses.flight_model(flights, fid)
+			var plan := _plan_for(gate, sid, model)
+			if plan.is_empty():
+				return
+			var drive_ticks := maxi(1, ceili(float(plan["route_len"]) / SPEED_M_PER_TICK))
+			bus["inbound"] = true
+			bus["state"] = State.DRIVING_OUT
+			bus["flight_id"] = fid
+			bus["stand_id"] = sid
+			bus["model"] = model
+			bus["stop_pose"] = plan["stop_pose"]
+			bus["route"] = plan["route"]
+			bus["route_len"] = plan["route_len"]
+			bus["start_tick"] = tick
+			bus["arrive_tick"] = tick + drive_ticks
+			bus["load_tick"] = tick
+			bus["last_board_tick"] = -1
+			bus["aboard"] = [] as Array[int]
+			return
 
 
 func _step_loading(bus: Dictionary) -> void:
 	var fid := String(bus["flight_id"])
+	if bool(bus.get("inbound", false)):
+		_step_loading_inbound(bus, fid)
+		return
 	if flights == null or flights.state_of(fid) < 0:
 		_reset_to_bay(bus)
 		return
@@ -361,13 +413,28 @@ func _depart(bus: Dictionary) -> void:
 func _step_driving_out(bus: Dictionary) -> void:
 	if tick < int(bus["arrive_tick"]):
 		return
+	var fid := String(bus["flight_id"])
+	if bool(bus.get("inbound", false)):
+		var fst := flights.state_of(fid) if flights != null else -1
+		if fst < 0 or fst >= FlightSim.State.PUSHBACK:
+			_start_return(bus)
+			return
+		bus["state"] = State.LOADING
+		bus["load_tick"] = tick
+		bus["last_board_tick"] = -1
+		bus_arrived.emit(String(bus["gate"]), fid)
+		_step_loading(bus)
+		return
 	bus["state"] = State.UNLOADING
 	bus["unload_tick"] = tick
-	bus_arrived.emit(String(bus["gate"]), String(bus["flight_id"]))
+	bus_arrived.emit(String(bus["gate"]), fid)
 	_step_unloading(bus)
 
 
 func _step_unloading(bus: Dictionary) -> void:
+	if bool(bus.get("inbound", false)):
+		_step_unloading_inbound(bus)
+		return
 	var aboard: Array = bus["aboard"]
 	var fid := String(bus["flight_id"])
 	if flights != null and flights.state_of(fid) >= 0:
@@ -422,6 +489,11 @@ func _start_return(bus: Dictionary) -> void:
 func _step_driving_back(bus: Dictionary) -> void:
 	if tick < int(bus["arrive_tick"]):
 		return
+	if bool(bus.get("inbound", false)) and not (bus["aboard"] as Array).is_empty():
+		bus["state"] = State.UNLOADING
+		bus["unload_tick"] = tick
+		_step_unloading(bus)
+		return
 	var gate := String(bus["gate"])
 	_reset_to_bay(bus)
 	bus_returned.emit(gate)
@@ -430,6 +502,7 @@ func _step_driving_back(bus: Dictionary) -> void:
 func _reset_to_bay(bus: Dictionary) -> void:
 	_clear_bus_pax(bus)
 	bus["state"] = State.IDLE_AT_BAY
+	bus["inbound"] = false
 	bus["flight_id"] = ""
 	bus["stand_id"] = ""
 	bus["model"] = ""
@@ -437,6 +510,112 @@ func _reset_to_bay(bus: Dictionary) -> void:
 	bus["route"] = PackedVector3Array()
 	bus["route_len"] = 0.0
 	bus["last_board_tick"] = -1
+
+
+func _step_loading_inbound(bus: Dictionary, fid: String) -> void:
+	var aboard: Array = bus["aboard"]
+	var fst := flights.state_of(fid) if flights != null else -1
+	if fst < 0 or fst >= FlightSim.State.PUSHBACK:
+		if aboard.is_empty() and passengers == null:
+			_reset_to_bay(bus)
+		else:
+			_start_return(bus)
+		return
+	if (
+		fst >= FlightSim.State.DEBOARDING
+		and aboard.size() < BUS_CAPACITY
+		and (tick - int(bus["load_tick"])) % LOAD_INTERVAL_TICKS == 0
+	):
+		_board_inbound_wave(bus, fid, aboard)
+	if aboard.size() >= BUS_CAPACITY:
+		_start_return(bus)
+		return
+	var waiting := _has_inbound_waiting(fid)
+	var deboard_done := fst >= FlightSim.State.BOARDING
+	var ready_return := not waiting and (not aboard.is_empty() or deboard_done)
+	if ready_return or fst >= FlightSim.State.DOORS_CLOSED:
+		_start_return(bus)
+
+
+func _board_inbound_wave(bus: Dictionary, fid: String, aboard: Array) -> void:
+	if passengers == null:
+		return
+	var gate := String(bus["gate"])
+	var taken := 0
+	for p in passengers._passengers:
+		if aboard.size() >= BUS_CAPACITY or taken >= LOAD_PER_WAVE:
+			break
+		if (
+			p.is_done()
+			or not p.is_arriving()
+			or p.flight_id != fid
+			or p.stage != Passenger.Stage.DEPLANING
+		):
+			continue
+		if p.apron_mm < p.apron_total_mm():
+			continue
+		aboard.append(p.id)
+		_pax_to_gate[p.id] = gate
+		bus["last_board_tick"] = tick
+		PassengerArrivals.board_bus(passengers, p)
+		taken += 1
+
+
+func _step_unloading_inbound(bus: Dictionary) -> void:
+	var aboard: Array = bus["aboard"]
+	var exit_id := int(bus["exit"])
+	if not aboard.is_empty():
+		var door_count := mini(UNLOAD_PER_WAVE, aboard.size())
+		for _i in door_count:
+			var pid := int(aboard.pop_front())
+			_pax_to_gate.erase(pid)
+			if passengers == null:
+				continue
+			var p := passengers.get_passenger(pid)
+			if p == null or p.is_done():
+				continue
+			PassengerArrivals.unload_from_bus(passengers, p, exit_id)
+	if aboard.is_empty():
+		var gate := String(bus["gate"])
+		_reset_to_bay(bus)
+		bus_returned.emit(gate)
+
+
+func _has_inbound_waiting(fid: String) -> bool:
+	if passengers == null:
+		return false
+	for entry: Dictionary in passengers._arrival_schedule:
+		if String(entry.get("flight", "")) == fid:
+			return true
+	for p in passengers._passengers:
+		if (
+			not p.is_done()
+			and p.is_arriving()
+			and p.flight_id == fid
+			and p.stage == Passenger.Stage.DEPLANING
+		):
+			return true
+	return false
+
+
+func _release_stranded_inbound(bus: Dictionary) -> void:
+	if not bool(bus.get("inbound", false)) or passengers == null:
+		return
+	var fallback_door := 0
+	if grid != null:
+		var open := passengers.layout.open_exits(grid)
+		if not open.is_empty():
+			fallback_door = open[0]
+		elif not passengers.layout.exits.is_empty():
+			fallback_door = passengers.layout.exits[0]
+	for pid_var: Variant in bus.get("aboard", []):
+		var p := passengers.get_passenger(int(pid_var))
+		if p == null or p.is_done() or not p.is_arriving():
+			continue
+		if fallback_door != 0:
+			PassengerArrivals.unload_from_bus(passengers, p, fallback_door)
+		else:
+			PassengerArrivals.finish(passengers, p)
 
 
 func _clear_bus_pax(bus: Dictionary) -> void:

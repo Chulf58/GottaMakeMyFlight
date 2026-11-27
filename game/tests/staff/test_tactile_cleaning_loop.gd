@@ -527,7 +527,7 @@ func test_save_load_mid_bag_and_bin_detour_determinism_and_old_reject() -> void:
 		rec.erase("bin_detour_bin")
 		rec.erase("bin_detour_end")
 	assert_bool(_world.sim.from_snapshot(old_pax)).is_false()
-	assert_int(SaveGame.SAVE_VERSION).is_equal(48)
+	assert_int(SaveGame.SAVE_VERSION).is_equal(49)
 
 	# Load into second world and verify deterministic tick-by-tick replay.
 	var grid_b := BuildGrid.new()

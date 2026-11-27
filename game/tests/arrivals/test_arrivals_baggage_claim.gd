@@ -499,7 +499,7 @@ func test_deleted_carousel_mid_flight_unblocks_waiting_passenger_cleanly() -> vo
 	assert_int(bag_sim.inbound_lost_total).is_greater(0)
 
 
-func test_save_v48_round_trip_v47_refusal_and_save_links_validation() -> void:
+func test_save_v49_round_trip_v47_refusal_and_save_links_validation() -> void:
 	var m := _boot_main(202616)
 	var clock: SimClock = m.get_node("SimClock")
 	var flights: FlightSim = m.get_node("FlightSim")
@@ -540,7 +540,7 @@ func test_save_v48_round_trip_v47_refusal_and_save_links_validation() -> void:
 			break
 	assert_int(claimer_id).is_greater(0)
 
-	# SaveGame v48 round-trip.
+	# SaveGame v49 round-trip.
 	assert_bool(SaveTestKit.save_game(m).save_to_file(_save_path)).is_true()
 	var loaded := SaveTestKit.boot(self, 998)
 	_mains.append(loaded)
@@ -563,7 +563,7 @@ func test_save_v48_round_trip_v47_refusal_and_save_links_validation() -> void:
 
 	# Version 47 refusal.
 	var raw: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(_save_path))
-	assert_int(int(raw["save_version"])).is_equal(48)
+	assert_int(int(raw["save_version"])).is_equal(49)
 	var v47: Dictionary = raw.duplicate(true)
 	v47["save_version"] = 47
 	FileAccess.open(_save_path, FileAccess.WRITE).store_string(JSON.stringify(v47))

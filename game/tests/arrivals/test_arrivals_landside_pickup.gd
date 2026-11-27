@@ -548,7 +548,7 @@ func test_arrival_done_snapshot_and_inset_entrance_fallback_via_to_road_from() -
 		grid,
 		wing,
 		road_z,
-		inset.landside.definition.berth_get_out(p_curb.pickup_berth),
+		inset.landside.definition.berth_get_out(p_curb.pickup_berth) + Vector3(-0.75, 0.0, 0.0),
 		p_curb.apron
 	)
 
@@ -572,3 +572,38 @@ func _assert_walk_avoids_wing_and_road_z(
 			var pt := a.lerp(b, float(s) / float(steps))
 			var cell := grid.world_to_cell(pt)
 			assert_bool(wing.has_point(cell)).is_false()
+
+
+func test_curb_pickup_waiters_spread_along_sidewalk_without_stacking() -> void:
+	var land := _make_world(81)
+	var waiters: Array[Passenger] = []
+	for _i in 6:
+		var p := _spawn_landside_arriving(land, false)
+		PassengerArrivals.advance(land.sim, p)
+		assert_int(p.stage).is_equal(Passenger.Stage.TO_CURB_PICKUP)
+		waiters.append(p)
+	var berth := waiters[0].pickup_berth
+	var base := land.landside.definition.berth_get_out(berth)
+	for p in waiters:
+		assert_int(p.pickup_berth).is_equal(berth)
+	var ticks := 0
+	while (
+		ticks < 4000
+		and waiters.any(
+			func(p: Passenger) -> bool: return p.stage == Passenger.Stage.TO_CURB_PICKUP
+		)
+	):
+		land.step()
+		ticks += 1
+	var positions: Array[Vector3] = []
+	for p in waiters:
+		assert_int(p.stage).is_equal(Passenger.Stage.WAIT_CURB_PICKUP)
+		positions.append(p.apron_position())
+	for i in positions.size():
+		for j in range(i + 1, positions.size()):
+			var dist := (
+				Vector2(positions[i].x - positions[j].x, positions[i].z - positions[j].z).length()
+			)
+			assert_float(dist).is_greater_equal(0.70)
+	# Row 2 (6th waiter) steps onto the sidewalk (more negative Z), never onto the road.
+	assert_float(positions[5].z).is_less_equal(base.z - 0.70)
