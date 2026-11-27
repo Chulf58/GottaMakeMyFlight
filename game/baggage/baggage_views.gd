@@ -20,6 +20,9 @@ const CART_BAGS_NODE := "Cart_Bags"
 ## 0.26 m clears baggage_bag.glb's 0.256 m body+strap+handle height cleanly.
 const MAX_DESK_STACK := 4
 const MAX_ROOM_STACK := 4
+const MAX_CART_BAGS := 16
+const CART_DECK_Y := 0.36
+const CART_LAYER_STEP_M := 0.22
 const STACK_STEP_M := 0.26
 const STACK_YAW_RAD := 0.07
 ## Radius of a bag's turn on a corner piece, about the cell's inner corner.
@@ -50,6 +53,9 @@ var _shuttle_nodes := {}
 var _shuttle_prev := {}
 var _shuttle_cur := {}
 var _shuttle_pool: Array[Node3D] = []
+## Shuttle id -> Array[Node3D] of slotted suitcase nodes on the cart.
+var _shuttle_bag_nodes := {}
+var _cart_bag_pool: Array[Node3D] = []
 ## Mount_BagRest in the end piece's own frame.
 var _rest := Transform3D.IDENTITY
 ## The tick sync() last recorded, or -1.
@@ -82,6 +88,19 @@ func shuttle_node_for(shuttle_id: int) -> Node3D:
 
 func active_shuttle_count() -> int:
 	return _shuttle_nodes.size()
+
+
+func shuttle_bag_nodes(shuttle_id: int) -> Array[Node3D]:
+	var out: Array[Node3D] = []
+	var slots: Array = _shuttle_bag_nodes.get(shuttle_id, [])
+	for slot: Node3D in slots:
+		out.append(slot)
+	return out
+
+
+func shuttle_bag_count(shuttle_id: int) -> int:
+	var slots: Array = _shuttle_bag_nodes.get(shuttle_id, [])
+	return slots.size()
 
 
 ## The transform of node `mount_name` in `scene`'s root frame, or the
@@ -258,6 +277,10 @@ func sync() -> void:
 		if not _nodes.has(bag.id):
 			_nodes[bag.id] = _take()
 			_cur[bag.id] = Transform3D(turn_toward(place.basis, place.basis, 0.0), place.origin)
+		var bag_node: Node3D = _nodes[bag.id]
+		if not bag_node.has_meta(&"bag_color") or int(bag_node.get_meta(&"bag_color")) != bag.color:
+			Bag.paint_suitcase(bag_node, bag.color)
+			bag_node.set_meta(&"bag_color", bag.color)
 		var last: Transform3D = _cur[bag.id]
 		_prev[bag.id] = last
 		_cur[bag.id] = Transform3D(
@@ -317,14 +340,71 @@ func _sync_shuttles() -> void:
 			_shuttle_cur[shuttle.id] = place
 		_shuttle_prev[shuttle.id] = _shuttle_cur[shuttle.id]
 		_shuttle_cur[shuttle.id] = place
-		var bags_node := (
-			(_shuttle_nodes[shuttle.id] as Node3D).find_child(CART_BAGS_NODE, true, false) as Node3D
-		)
+		var cart_node: Node3D = _shuttle_nodes[shuttle.id]
+		var bags_node := cart_node.find_child(CART_BAGS_NODE, true, false) as Node3D
 		if bags_node != null:
 			bags_node.visible = shuttle.carrying_bags()
+			_sync_shuttle_bags(shuttle, bags_node)
 	for id in _shuttle_nodes.keys():
 		if not active.has(id):
 			_release_shuttle(id)
+
+
+func _sync_shuttle_bags(shuttle: BaggageShuttle, bags_node: Node3D) -> void:
+	var slots: Array = _shuttle_bag_nodes.get(shuttle.id, [])
+	var count := mini(shuttle.bag_ids.size(), MAX_CART_BAGS) if shuttle.carrying_bags() else 0
+	while slots.size() > count:
+		var extra: Node3D = slots.pop_back()
+		_release_cart_bag(extra)
+	while slots.size() < count:
+		var slot: Node3D = _take_cart_bag(bags_node)
+		slots.append(slot)
+	for i in count:
+		var slot: Node3D = slots[i]
+		var bag := sim.get_bag(shuttle.bag_ids[i])
+		var color_idx := bag.color if bag != null else 0
+		if not slot.has_meta(&"bag_color") or int(slot.get_meta(&"bag_color")) != color_idx:
+			Bag.paint_suitcase(slot, color_idx)
+			slot.set_meta(&"bag_color", color_idx)
+		slot.transform = _cart_slot_transform(i)
+		slot.visible = true
+	if slots.is_empty():
+		_shuttle_bag_nodes.erase(shuttle.id)
+	else:
+		_shuttle_bag_nodes[shuttle.id] = slots
+
+
+static func _cart_slot_transform(slot_index: int) -> Transform3D:
+	var layer := slot_index / 4
+	var cell := slot_index % 4
+	var col := cell % 2
+	var row := cell / 2
+	var x := -0.175 if col == 0 else 0.175
+	var z := -0.35 if row == 0 else 0.35
+	var y := CART_DECK_Y + float(layer) * CART_LAYER_STEP_M
+	var yaw := 0.06 if (layer % 2) == 1 else 0.0
+	return Transform3D(Basis(Vector3.UP, yaw).scaled(Vector3.ONE * 0.85), Vector3(x, y, z))
+
+
+func _take_cart_bag(bags_node: Node3D) -> Node3D:
+	var slot: Node3D = (
+		_cart_bag_pool.pop_back() if not _cart_bag_pool.is_empty() else BAG_SCENE.instantiate()
+	)
+	if slot.get_parent() != bags_node:
+		if slot.get_parent() != null:
+			slot.get_parent().remove_child(slot)
+		bags_node.add_child(slot)
+	slot.visible = true
+	return slot
+
+
+func _release_cart_bag(slot: Node3D) -> void:
+	slot.visible = false
+	if slot.get_parent() != self:
+		if slot.get_parent() != null:
+			slot.get_parent().remove_child(slot)
+		add_child(slot)
+	_cart_bag_pool.append(slot)
 
 
 ## Starts every bag over at the sim's place now, with no tick to run: a load
@@ -425,11 +505,19 @@ func _take_shuttle() -> Node3D:
 		reused.visible = true
 		return reused
 	var node := CART_SCENE.instantiate() as Node3D
+	var static_bags := node.find_child("Cart_Bags_Mesh", true, false) as Node3D
+	if static_bags != null:
+		static_bags.visible = false
 	add_child(node)
 	return node
 
 
 func _release_shuttle(id: int) -> void:
+	if _shuttle_bag_nodes.has(id):
+		var slots: Array = _shuttle_bag_nodes[id]
+		for slot: Node3D in slots:
+			_release_cart_bag(slot)
+		_shuttle_bag_nodes.erase(id)
 	var node: Node3D = _shuttle_nodes[id]
 	node.visible = false
 	_shuttle_pool.append(node)

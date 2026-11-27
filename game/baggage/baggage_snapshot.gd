@@ -11,7 +11,7 @@ extends RefCounted
 ## against the other parts: a settled passenger is retired and a desk can be
 ## demolished while its bags remain.
 
-const SAVE_VERSION := 2
+const SAVE_VERSION := 3
 const KEYS := [
 	"save_version",
 	"tick",
@@ -28,6 +28,7 @@ const BAG_KEYS := [
 	"passenger",
 	"flight",
 	"desk",
+	"color",
 	"state",
 	"cause",
 	"cell",
@@ -46,6 +47,9 @@ const SHUTTLE_KEYS := [
 	"cart_id",
 	"flight",
 	"phase",
+	"load_start_tick",
+	"load_step_ticks",
+	"next_load_tick",
 	"start_tick",
 	"arrive_tick",
 	"unload_tick",
@@ -56,11 +60,14 @@ const SHUTTLE_KEYS := [
 	"target_yaw",
 	"waypoints",
 	"bag_ids",
+	"pending_bag_ids",
 	"driver_staff_id",
 ]
 const RESULT_KEYS := ["loaded", "missed", "causes"]
 ## The whole-number fields of a saved bag that are ticks or ids, at least 0.
-const COUNT_FIELDS := ["id", "passenger", "desk", "wait_tick", "created_tick", "shuttle_id"]
+const COUNT_FIELDS := [
+	"id", "passenger", "desk", "color", "wait_tick", "created_tick", "shuttle_id"
+]
 
 
 static func save(sim: BaggageSim, next_id: int, next_shuttle_id := 1) -> Dictionary:
@@ -74,6 +81,7 @@ static func save(sim: BaggageSim, next_id: int, next_shuttle_id := 1) -> Diction
 					"passenger": bag.passenger,
 					"flight": bag.flight,
 					"desk": bag.desk,
+					"color": bag.color,
 					"state": bag.state,
 					"cause": bag.cause,
 					"cell": [bag.cell.x, bag.cell.y],
@@ -114,6 +122,9 @@ static func _save_shuttle(shuttle: BaggageShuttle) -> Dictionary:
 		"cart_id": shuttle.cart_id,
 		"flight": shuttle.flight,
 		"phase": shuttle.phase,
+		"load_start_tick": shuttle.load_start_tick,
+		"load_step_ticks": shuttle.load_step_ticks,
+		"next_load_tick": shuttle.next_load_tick,
 		"start_tick": shuttle.start_tick,
 		"arrive_tick": shuttle.arrive_tick,
 		"unload_tick": shuttle.unload_tick,
@@ -124,6 +135,7 @@ static func _save_shuttle(shuttle: BaggageShuttle) -> Dictionary:
 		"target_yaw": shuttle.target_yaw,
 		"waypoints": saved_waypoints,
 		"bag_ids": shuttle.bag_ids.duplicate(),
+		"pending_bag_ids": shuttle.pending_bag_ids.duplicate(),
 		"driver_staff_id": shuttle.driver_staff_id,
 	}
 
@@ -150,7 +162,7 @@ static func load(data: Dictionary) -> Dictionary:
 			data["bags"], int(data["tick"]), int(data["next_id"]), shuttle_by_id, bags
 		)
 	if problem == "":
-		problem = _shuttle_links_problem(shuttles, bags)
+		problem = _shuttle_links_problem(shuttles, bags, int(data["tick"]))
 	if problem == "":
 		problem = _read_results(data["results"], results)
 	if problem == "":
@@ -262,10 +274,20 @@ static func _read_shuttle(entry: Dictionary, shuttle: BaggageShuttle) -> String:
 	var problem := _keys_problem(entry, SHUTTLE_KEYS)
 	if problem != "":
 		return problem
-	for key in ["id", "cart_id"]:
+	for key in ["id", "cart_id", "load_step_ticks"]:
 		if not WholeNumber.is_whole(entry[key]) or int(entry[key]) < 1:
 			return "%s must be a positive whole number" % key
-	for key in ["start_tick", "arrive_tick", "unload_tick", "return_tick", "driver_staff_id"]:
+	if int(entry["load_step_ticks"]) > BaggageShuttle.LOAD_STEP_TICKS:
+		return "load_step_ticks must be at most %d" % BaggageShuttle.LOAD_STEP_TICKS
+	for key in [
+		"load_start_tick",
+		"next_load_tick",
+		"start_tick",
+		"arrive_tick",
+		"unload_tick",
+		"return_tick",
+		"driver_staff_id",
+	]:
 		if not _is_count(entry[key]):
 			return "%s must be a whole number of at least 0" % key
 	if typeof(entry["flight"]) != TYPE_STRING or entry["flight"] == "":
@@ -290,10 +312,20 @@ static func _read_shuttle(entry: Dictionary, shuttle: BaggageShuttle) -> String:
 		if not WholeNumber.is_whole(raw) or int(raw) < 1:
 			return "bag_ids must hold positive whole numbers"
 		ids.append(int(raw))
+	if typeof(entry["pending_bag_ids"]) != TYPE_ARRAY:
+		return "pending_bag_ids must be a list"
+	var pending: Array[int] = []
+	for raw in entry["pending_bag_ids"]:
+		if not WholeNumber.is_whole(raw) or int(raw) < 1:
+			return "pending_bag_ids must hold positive whole numbers"
+		pending.append(int(raw))
 	shuttle.id = int(entry["id"])
 	shuttle.cart_id = int(entry["cart_id"])
 	shuttle.flight = entry["flight"]
 	shuttle.phase = int(entry["phase"]) as BaggageShuttle.Phase
+	shuttle.load_start_tick = int(entry["load_start_tick"])
+	shuttle.load_step_ticks = int(entry["load_step_ticks"])
+	shuttle.next_load_tick = int(entry["next_load_tick"])
 	shuttle.start_tick = int(entry["start_tick"])
 	shuttle.arrive_tick = int(entry["arrive_tick"])
 	shuttle.unload_tick = int(entry["unload_tick"])
@@ -312,21 +344,40 @@ static func _read_shuttle(entry: Dictionary, shuttle: BaggageShuttle) -> String:
 	shuttle.target_yaw = float(entry["target_yaw"])
 	shuttle.waypoints = pts
 	shuttle.bag_ids = ids
+	shuttle.pending_bag_ids = pending
 	shuttle.driver_staff_id = int(entry["driver_staff_id"])
 	return ""
 
 
 static func _shuttle_rules(shuttle: BaggageShuttle, tick: int) -> String:
 	if (
-		shuttle.start_tick > shuttle.arrive_tick
+		shuttle.load_start_tick > shuttle.start_tick
+		or shuttle.start_tick > shuttle.arrive_tick
 		or shuttle.arrive_tick > shuttle.unload_tick
 		or shuttle.unload_tick > shuttle.return_tick
 	):
 		return "shuttle schedule ticks are out of order"
-	if shuttle.start_tick > tick or tick >= shuttle.return_tick:
+	if shuttle.load_start_tick > tick or tick >= shuttle.return_tick:
 		return "shuttle is outside its active tick span"
-	if shuttle.phase == BaggageShuttle.Phase.OUTBOUND and tick >= shuttle.arrive_tick:
-		return "outbound shuttle is past arrive_tick"
+	if (
+		shuttle.next_load_tick < shuttle.load_start_tick
+		or shuttle.next_load_tick > shuttle.start_tick
+	):
+		return "shuttle next_load_tick is outside loading interval"
+	if shuttle.phase == BaggageShuttle.Phase.LOADING:
+		if shuttle.load_start_tick >= shuttle.start_tick:
+			return "loading shuttle must have load_start_tick before start_tick"
+		if tick >= shuttle.start_tick:
+			return "loading shuttle is past start_tick"
+		if shuttle.next_load_tick < shuttle.load_start_tick + shuttle.load_step_ticks:
+			return "loading shuttle next_load_tick must follow first load step"
+		if (shuttle.next_load_tick - shuttle.load_start_tick) % shuttle.load_step_ticks != 0:
+			return "loading shuttle next_load_tick is misaligned with load_step_ticks"
+	if (
+		shuttle.phase == BaggageShuttle.Phase.OUTBOUND
+		and (tick < shuttle.start_tick or tick >= shuttle.arrive_tick)
+	):
+		return "outbound shuttle is outside [start_tick, arrive_tick)"
 	if (
 		shuttle.phase == BaggageShuttle.Phase.UNLOADING
 		and (tick < shuttle.arrive_tick or tick >= shuttle.unload_tick)
@@ -344,27 +395,82 @@ static func _shuttle_rules(shuttle: BaggageShuttle, tick: int) -> String:
 	return ""
 
 
-static func _shuttle_links_problem(shuttles: Array[BaggageShuttle], bags: Array[Bag]) -> String:
+static func _shuttle_links_problem(
+	shuttles: Array[BaggageShuttle], bags: Array[Bag], tick: int
+) -> String:
 	var by_id := {}
 	for bag in bags:
 		by_id[bag.id] = bag
+	var claimed := {}
 	for shuttle in shuttles:
-		if shuttle.carrying_bags():
-			if shuttle.bag_ids.is_empty():
-				return "shuttle %d: outbound or unloading shuttle must carry bags" % shuttle.id
-			for bag_id in shuttle.bag_ids:
-				var bag: Bag = by_id.get(bag_id)
-				if bag == null:
-					return "shuttle %d: names missing bag %d" % [shuttle.id, bag_id]
-				if bag.is_settled() or bag.state != Bag.State.IN_ROOM:
-					return "shuttle %d: names non-room bag %d" % [shuttle.id, bag_id]
-				if bag.shuttle_id != shuttle.id:
-					return (
-						"shuttle %d: names bag %d owned by shuttle %d"
-						% [shuttle.id, bag_id, bag.shuttle_id]
-					)
-		elif not shuttle.bag_ids.is_empty():
-			return "shuttle %d: returning shuttle must hold no bags" % shuttle.id
+		if shuttle.phase == BaggageShuttle.Phase.RETURNING:
+			if not shuttle.bag_ids.is_empty() or not shuttle.pending_bag_ids.is_empty():
+				return "shuttle %d: returning shuttle must hold no bags" % shuttle.id
+			continue
+		if shuttle.phase != BaggageShuttle.Phase.LOADING and not shuttle.pending_bag_ids.is_empty():
+			return "shuttle %d: only loading shuttles can hold pending bags" % shuttle.id
+		if shuttle.bag_ids.is_empty() and shuttle.pending_bag_ids.is_empty():
+			return "shuttle %d: active shuttle must carry or load bags" % shuttle.id
+		if shuttle.phase == BaggageShuttle.Phase.LOADING:
+			var schedule_problem := _loading_schedule_problem(shuttle, tick)
+			if schedule_problem != "":
+				return schedule_problem
+		var problem := _shuttle_bag_list_problem(shuttle, by_id, claimed, shuttle.bag_ids, true)
+		if problem != "":
+			return problem
+		problem = _shuttle_bag_list_problem(shuttle, by_id, claimed, shuttle.pending_bag_ids, false)
+		if problem != "":
+			return problem
+	return ""
+
+
+static func _loading_schedule_problem(shuttle: BaggageShuttle, tick: int) -> String:
+	if shuttle.bag_ids.is_empty():
+		return "shuttle %d: loading shuttle must hold at least one loaded bag" % shuttle.id
+	var expected_loaded := 1 + int((tick - shuttle.load_start_tick) / shuttle.load_step_ticks)
+	if shuttle.bag_ids.size() > expected_loaded:
+		return "shuttle %d: loaded bag count exceeds loading progress" % shuttle.id
+	if not shuttle.pending_bag_ids.is_empty():
+		if (
+			shuttle.next_load_tick <= tick
+			or shuttle.next_load_tick > tick + shuttle.load_step_ticks
+		):
+			return "shuttle %d: next_load_tick is inconsistent with current tick" % shuttle.id
+		if shuttle.bag_ids.size() != expected_loaded:
+			return "shuttle %d: loaded bag count disagrees with loading schedule" % shuttle.id
+		var expected_next := shuttle.load_start_tick + expected_loaded * shuttle.load_step_ticks
+		if shuttle.next_load_tick != expected_next:
+			return "shuttle %d: next_load_tick disagrees with loading progress" % shuttle.id
+	return ""
+
+
+static func _shuttle_bag_list_problem(
+	shuttle: BaggageShuttle,
+	by_id: Dictionary,
+	claimed: Dictionary,
+	list: Array[int],
+	owned: bool,
+) -> String:
+	for bag_id in list:
+		var bag: Bag = by_id.get(bag_id)
+		if bag == null:
+			return "shuttle %d: names missing bag %d" % [shuttle.id, bag_id]
+		if bag.flight != shuttle.flight:
+			return (
+				"shuttle %d: bag %d belongs to flight %s, not %s"
+				% [shuttle.id, bag_id, bag.flight, shuttle.flight]
+			)
+		if bag.is_settled() or bag.state != Bag.State.IN_ROOM:
+			return "shuttle %d: names non-room bag %d" % [shuttle.id, bag_id]
+		if claimed.has(bag_id):
+			return "shuttle %d: duplicates bag %d" % [shuttle.id, bag_id]
+		claimed[bag_id] = true
+		var expected_shuttle := shuttle.id if owned else 0
+		if bag.shuttle_id != expected_shuttle:
+			return (
+				"shuttle %d: names bag %d owned by shuttle %d"
+				% [shuttle.id, bag_id, bag.shuttle_id]
+			)
 	return ""
 
 
@@ -404,6 +510,7 @@ static func _read_bag(entry: Dictionary, bag: Bag) -> String:
 	bag.passenger = int(entry["passenger"])
 	bag.flight = entry["flight"]
 	bag.desk = int(entry["desk"])
+	bag.color = int(entry["color"])
 	bag.state = int(entry["state"]) as Bag.State
 	bag.cause = int(entry["cause"]) as Bag.Cause
 	bag.cell = Vector2i(int(entry["cell"][0]), int(entry["cell"][1]))
@@ -448,6 +555,8 @@ static func _field_problem(entry: Dictionary) -> String:
 		return problem
 	if typeof(entry["flight"]) != TYPE_STRING or entry["flight"] == "":
 		problem = "flight must be a flight id"
+	elif int(entry["color"]) >= Bag.SUITCASE_COLORS.size():
+		problem = "color is not a suitcase color"
 	elif not _is_member(entry["state"], Bag.State.values()):
 		problem = "state is not a bag state"
 	elif not _is_member(entry["cause"], Bag.Cause.values()):

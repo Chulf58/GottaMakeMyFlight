@@ -4,7 +4,8 @@ extends GdUnitTestSuite
 ## baggage-loop-completion-connect-gated-penalties-visible-wait): a placed
 ## baggage_cart dispatches an animated shuttle out to the parked plane's stand
 ## during LOAD_LEAD_TICKS carrying IN_ROOM bags before settling them LOADED;
-## without a cart, cutoff settles LOADED immediately. Also checks BaggageViews
+## without a cart, IN_ROOM bags stay waiting until doors close and miss LATE.
+## Also checks BaggageViews
 ## cart rendering, mid-shuttle snapshot round-trips, cart removal mid-trip,
 ## and the Tier-2 Ramp Agent hooks (shuttle_can_dispatch / assign_shuttle_driver).
 
@@ -51,6 +52,7 @@ func test_cart_shuttle_animates_out_to_stand_during_load_lead_and_settles_loaded
 	assert_array(dispatched).is_equal([[1, BagTestWorld.FLIGHT, cart_id]])
 	assert_int(_world.sim.shuttles().size()).is_equal(1)
 	var shuttle := _world.sim.shuttles()[0]
+	assert_int(shuttle.phase).is_equal(BaggageShuttle.Phase.LOADING)
 	assert_int(bag.shuttle_id).is_equal(shuttle.id)
 	assert_int(bag.state).is_equal(Bag.State.IN_ROOM)
 	assert_bool(shuttle.carrying_bags()).is_true()
@@ -62,6 +64,8 @@ func test_cart_shuttle_animates_out_to_stand_during_load_lead_and_settles_loaded
 	var cart_bags := cart_node.find_child(BaggageViews.CART_BAGS_NODE, true, false) as Node3D
 	assert_object(cart_bags).is_not_null()
 	assert_bool(cart_bags.visible).is_true()
+	_world.run_to(shuttle.start_tick)
+	assert_int(shuttle.phase).is_equal(BaggageShuttle.Phase.OUTBOUND)
 	# Mid-outbound: cart moves smoothly toward the plane stand cargo point.
 	var mid_tick := int((shuttle.start_tick + shuttle.arrive_tick) / 2.0)
 	_world.run_to(mid_tick)
@@ -87,12 +91,15 @@ func test_cart_shuttle_animates_out_to_stand_during_load_lead_and_settles_loaded
 	assert_int(_views.active_shuttle_count()).is_equal(0)
 
 
-func test_without_a_cart_cutoff_falls_back_to_immediate_loaded() -> void:
+func test_without_a_cart_cutoff_does_not_teleport_and_misses_at_doors_close() -> void:
 	var bag := _world.sim.check_in(1, BagTestWorld.FLIGHT, _desk)
 	_world.run_to(bag.cutoff_tick)
 	assert_array(_world.sim.shuttles()).is_empty()
-	assert_int(bag.state).is_equal(Bag.State.LOADED)
-	assert_int(bag.outcome_tick).is_equal(bag.cutoff_tick)
+	assert_int(bag.state).is_equal(Bag.State.IN_ROOM)
+	assert_int(bag.outcome_tick).is_equal(-1)
+	_world.run_to(600)
+	assert_int(bag.state).is_equal(Bag.State.MISSED)
+	assert_int(bag.cause).is_equal(Bag.Cause.LATE)
 
 
 func test_mid_shuttle_snapshot_round_trips_and_plays_like_control() -> void:
@@ -209,7 +216,10 @@ func test_decorative_cart_outside_bag_room_does_not_service_that_room() -> void:
 	var bag := _world.sim.check_in(1, BagTestWorld.FLIGHT, _desk)
 	_world.run_to(bag.cutoff_tick)
 	assert_array(_world.sim.shuttles()).is_empty()
-	assert_int(bag.state).is_equal(Bag.State.LOADED)
+	assert_int(bag.state).is_equal(Bag.State.IN_ROOM)
+	_world.run_to(600)
+	assert_int(bag.state).is_equal(Bag.State.MISSED)
+	assert_int(bag.cause).is_equal(Bag.Cause.LATE)
 
 
 func test_plan_route_guarantees_wall_clear_apron_segments() -> void:

@@ -66,6 +66,7 @@ func test_a_bag_is_drawn_between_its_last_two_tick_positions() -> void:
 
 
 func test_waiting_in_room_bags_stack_visibly_at_belt_end_and_settled_bags_go() -> void:
+	_world.cart()
 	var bags: Array[Bag] = []
 	for i in BaggageViews.MAX_ROOM_STACK + 2:
 		bags.append(_world.sim.check_in(i + 1, BagTestWorld.FLIGHT, _desk))
@@ -87,11 +88,14 @@ func test_waiting_in_room_bags_stack_visibly_at_belt_end_and_settled_bags_go() -
 	# Strictly rising heights across stacked suitcases.
 	assert_float(_origin(bags[1].id).y).is_greater(_origin(bags[0].id).y + 0.15)
 	_world.run_to(bags[0].cutoff_tick)
+	assert_int(_world.sim.shuttles().size()).is_equal(1)
+	var shuttle := _world.sim.shuttles()[0]
+	_world.run_to(shuttle.return_tick)
 	for bag in bags:
 		assert_int(bag.state).is_equal(Bag.State.LOADED)
 	assert_int(_views.active_count()).is_equal(0)
+	assert_int(_views.active_shuttle_count()).is_equal(0)
 	var nodes := _views.get_children().filter(func(n: Node) -> bool: return n is Node3D)
-	assert_int(nodes.size()).is_equal(BaggageViews.MAX_ROOM_STACK + 2)
 	assert_bool(nodes.any(func(n: Node3D) -> bool: return n.visible)).is_false()
 	assert_object(_views.rest_transform(_world.grid, Vector2i(5, 7))).is_null()
 

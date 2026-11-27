@@ -14,15 +14,21 @@ func _world(doors := 4000) -> BagTestWorld:
 func test_a_bag_reaching_the_room_on_the_cutoff_tick_is_loaded() -> void:
 	# Doors at 350: cutoff 150, the arrival tick.
 	var world := _world(BagTestWorld.ARRIVAL + BaggageSim.LOAD_LEAD_TICKS)
-	var bag := world.sim.check_in(4, BagTestWorld.FLIGHT, world.line())
+	var desk_id := world.line()
+	world.cart()
+	var bag := world.sim.check_in(4, BagTestWorld.FLIGHT, desk_id)
 	assert_int(bag.cutoff_tick).is_equal(BagTestWorld.ARRIVAL)
 	world.run_to(BagTestWorld.ARRIVAL - 1)
 	assert_int(bag.state).is_equal(Bag.State.RIDING)
 	assert_array(world.settled).is_empty()
 	world.step()
+	assert_int(world.sim.shuttles().size()).is_equal(1)
+	var unload := world.sim.shuttles()[0].unload_tick
+	assert_int(bag.state).is_equal(Bag.State.IN_ROOM)
+	world.run_to(unload)
 	assert_int(bag.state).is_equal(Bag.State.LOADED)
-	assert_int(bag.outcome_tick).is_equal(BagTestWorld.ARRIVAL)
-	assert_array(world.settled).is_equal([[bag.id, 4, BagTestWorld.FLIGHT, true, 150]])
+	assert_int(bag.outcome_tick).is_equal(unload)
+	assert_array(world.settled).is_equal([[bag.id, 4, BagTestWorld.FLIGHT, true, unload]])
 	assert_that(world.sim.results[BagTestWorld.FLIGHT]).is_equal(
 		{"loaded": 1, "missed": 0, "causes": {}}
 	)
@@ -91,20 +97,28 @@ func test_causes_name_a_desk_with_no_belt_and_a_belt_with_no_room() -> void:
 func test_a_queued_bag_waiting_for_space_is_missed_late() -> void:
 	var world := _world(BagTestWorld.ARRIVAL + BaggageSim.LOAD_LEAD_TICKS)
 	var desk_id := world.line()
+	world.cart()
 	var bags: Array[Bag] = []
 	for i in 6:
 		bags.append(world.sim.check_in(i + 1, BagTestWorld.FLIGHT, desk_id))
 	world.run_to(BagTestWorld.ARRIVAL)
-	assert_int(bags[0].state).is_equal(Bag.State.LOADED)
 	assert_int(bags[5].state).is_equal(Bag.State.MISSED)
 	assert_int(bags[5].cause).is_equal(Bag.Cause.LATE)
+	assert_int(world.sim.shuttles().size()).is_equal(1)
+	world.run_to(world.sim.shuttles()[0].unload_tick)
+	assert_int(bags[0].state).is_equal(Bag.State.LOADED)
 	assert_int(world.settled.size()).is_equal(6)
 
 
 func test_settled_bags_are_retired_and_results_follow_the_flight() -> void:
 	var world := _world(400)
-	var bag := world.sim.check_in(1, BagTestWorld.FLIGHT, world.line())
-	world.run_to(200 + BaggageSim.SETTLED_KEEP_TICKS - 1)
+	var desk_id := world.line()
+	world.cart()
+	var bag := world.sim.check_in(1, BagTestWorld.FLIGHT, desk_id)
+	world.run_to(bag.cutoff_tick)
+	assert_int(world.sim.shuttles().size()).is_equal(1)
+	var unload := world.sim.shuttles()[0].unload_tick
+	world.run_to(unload + BaggageSim.SETTLED_KEEP_TICKS - 1)
 	assert_object(world.sim.get_bag(bag.id)).is_not_null()
 	world.step()
 	assert_object(world.sim.get_bag(bag.id)).is_null()

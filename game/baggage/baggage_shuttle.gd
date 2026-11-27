@@ -9,10 +9,11 @@ extends RefCounted
 ## eddcd9cd) to bind a Ramp Agent driver/loader to the trip without rewriting
 ## the shuttle state machine.
 
-enum Phase { OUTBOUND, UNLOADING, RETURNING }
+enum Phase { LOADING, OUTBOUND, UNLOADING, RETURNING }
 
-## Travel timing bounds in sim ticks (20 ticks/s), keeping outbound + unload
-## strictly inside LOAD_LEAD_TICKS (200 ticks) before doors close.
+## Travel timing bounds in sim ticks (20 ticks/s), keeping loading + outbound
+## + unload strictly inside LOAD_LEAD_TICKS (200 ticks) before doors close.
+const LOAD_STEP_TICKS := 6
 const MIN_TRAVEL_TICKS := 40
 const MAX_TRAVEL_TICKS := 140
 const UNLOAD_TICKS := 20
@@ -27,7 +28,10 @@ const ROUTE_PAD_CELLS := 4
 var id := 0
 var cart_id := 0
 var flight := ""
-var phase := Phase.OUTBOUND
+var phase := Phase.LOADING
+var load_start_tick := 0
+var load_step_ticks := LOAD_STEP_TICKS
+var next_load_tick := 0
 var start_tick := 0
 var arrive_tick := 0
 var unload_tick := 0
@@ -40,12 +44,17 @@ var target_yaw := 0.0
 ## to a direct [origin_world, target_world] segment.
 var waypoints: Array[Vector3] = []
 var bag_ids: Array[int] = []
+var pending_bag_ids: Array[int] = []
 ## Staff member id assigned as driver/loader (0 = automated / unassigned).
 var driver_staff_id := 0
 
 
 func carrying_bags() -> bool:
-	return phase == Phase.OUTBOUND or phase == Phase.UNLOADING
+	return (
+		phase == Phase.OUTBOUND
+		or phase == Phase.UNLOADING
+		or (phase == Phase.LOADING and not bag_ids.is_empty())
+	)
 
 
 ## Where the cart parks beside the plane at `stand` (StandPlacement): starboard
@@ -75,7 +84,10 @@ func pose_at(at_tick: int, grid: BuildGrid) -> Transform3D:
 	var pts: Array[Vector3] = waypoints if waypoints.size() >= 2 else [origin_world, target_world]
 	var pos: Vector3
 	var yaw := origin_yaw
-	if phase == Phase.OUTBOUND:
+	if phase == Phase.LOADING:
+		pos = origin_world
+		yaw = origin_yaw
+	elif phase == Phase.OUTBOUND:
 		var span := maxi(1, arrive_tick - start_tick)
 		var t := clampf(float(at_tick - start_tick) / float(span), 0.0, 1.0)
 		var sample := _sample_path(pts, t, origin_yaw)

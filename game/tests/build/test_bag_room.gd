@@ -197,3 +197,15 @@ func test_remove_takes_the_belt_end_before_the_bag_room() -> void:
 	assert_array(_mode.grid.object_ids()).is_empty()
 	_click(BuildMode.Tool.REMOVE, Vector2i(4, 4))
 	assert_array(_mode.grid.room_ids()).is_empty()
+
+
+func test_bag_room_dispatch_ready_requires_placed_baggage_cart() -> void:
+	var room_id := _mark_bag_room(ROOM)
+	_mode.grid.apply(
+		BuildEdit.place_wall(Vector2i(4, 5), BuildGrid.Side.SOUTH, BuildGrid.WallKind.DOOR)
+	)
+	_lay(Vector2i(4, 4), Vector2i(4, 4))
+	assert_bool(RoomRules.status(_mode.grid, room_id).ok).is_true()
+	assert_bool(RoomRules.bag_room_dispatch_ready(_mode.grid, room_id)).is_false()
+	assert_bool(_click(BuildMode.Tool.CART, Vector2i(3, 3)).ok).is_true()
+	assert_bool(RoomRules.bag_room_dispatch_ready(_mode.grid, room_id)).is_true()

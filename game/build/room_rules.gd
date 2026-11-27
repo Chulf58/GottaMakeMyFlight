@@ -159,3 +159,10 @@ static func has_opening(grid: BuildGrid, area: Rect2i) -> bool:
 				if grid.can_step(cell, outside):
 					return true
 	return false
+
+
+static func bag_room_dispatch_ready(grid: BuildGrid, room_id: int) -> bool:
+	var s := status(grid, room_id)
+	if s == null or not s.ok or s.type_id != &"bag_room":
+		return false
+	return s.pieces.get(&"baggage_cart", 0) > 0

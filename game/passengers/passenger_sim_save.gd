@@ -86,6 +86,8 @@ extends RefCounted
 ## and PassengerThoughts.Kind.BUS_RIDE; version 39 saves are refused (no migration).
 ## 41: missed passenger walk-out phase (Passenger.missed_phase) and MISSED_FLIGHT
 ## thought; version 40 saves are refused (no migration).
+## 42: passenger checked_bag_color (Bag.SUITCASE_COLORS index); version 41 saves
+## are refused (no migration).
 
 
 ## JSON-safe state for a save (PassengerSim.to_snapshot()). Reads only: it
