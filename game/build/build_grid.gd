@@ -369,6 +369,21 @@ func is_walkable(cell: Vector2i) -> bool:
 	return occupant == 0 or _def_of(occupant).walk_through
 
 
+## Whether `cell` holds a baggage belt piece (staff may step over it with
+## high cost; passengers may not).
+func is_belt_cell(cell: Vector2i) -> bool:
+	if not in_bounds(cell):
+		return false
+	var occupant := _occupant[_index(cell)]
+	return occupant != 0 and BuildCatalog.is_belt(_objects[occupant]["def"])
+
+
+## A cell staff may step through: walkable floor or a baggage belt cell
+## (decision staff-step-over-belts-high-cost-fallback-with-step-up-lift).
+func is_staff_walkable(cell: Vector2i) -> bool:
+	return is_walkable(cell) or is_belt_cell(cell)
+
+
 ## Whether a passenger may step from `from` to the neighbouring cell `to`.
 ## A diagonal step needs both orthogonal detours open, so it never cuts the
 ## corner of a wall or an object.
@@ -452,12 +467,30 @@ func _is_divider_edge(a: Vector2i, b: Vector2i) -> bool:
 	return _divider_doors.has(GridPathing.door_edge_key(size.x, a, b))
 
 
-## A step staff may take: any can_step(), so staff walk through a security
-## scanner or arch along its axis like screened airport staff (decision
+## A step staff may take: walkable floor or baggage belts (crossed from any
+## direction, high-cost fallback in GridPathing; decision
+## staff-step-over-belts-high-cost-fallback-with-step-up-lift, 76c5cc1a), plus
+## security scanners and arches along their axis (decision
 ## staff-may-walk-through-security-scanners-and-lanes-so-shop-s). Passengers
-## route by can_route() and never do.
+## route by can_route() and remain strictly blocked by belts and security.
 func can_staff_route(from: Vector2i, to: Vector2i) -> bool:
-	return can_step(from, to)
+	var step := to - from
+	if step == Vector2i.ZERO or absi(step.x) > 1 or absi(step.y) > 1:
+		return false
+	if not is_staff_walkable(from) or not is_staff_walkable(to):
+		return false
+	if step.x == 0 or step.y == 0:
+		return _staff_straight_step_open(from, to)
+	var across := from + Vector2i(step.x, 0)
+	var down := from + Vector2i(0, step.y)
+	if not is_staff_walkable(across) or not is_staff_walkable(down):
+		return false
+	return (
+		_staff_straight_step_open(from, across)
+		and _staff_straight_step_open(across, to)
+		and _staff_straight_step_open(from, down)
+		and _staff_straight_step_open(down, to)
+	)
 
 
 func find_path(from: Vector2i, to: Vector2i) -> Array[Vector2i]:
@@ -1142,6 +1175,22 @@ func _straight_step_open(from: Vector2i, to: Vector2i) -> bool:
 func _passes_through(cell: Vector2i, step: Vector2i) -> bool:
 	var occupant := _occupant[_index(cell)]
 	if occupant == 0:
+		return true
+	var axis := _def_of(occupant).through_axis(_objects[occupant]["facing"])
+	return step == axis or step == -axis
+
+
+func _staff_straight_step_open(from: Vector2i, to: Vector2i) -> bool:
+	var step := to - from
+	var wall := _wall_value(from, SIDE_STEP.find(step))
+	if wall != WallKind.NONE and wall != WallKind.DOOR:
+		return false
+	return _staff_passes_through(from, step) and _staff_passes_through(to, step)
+
+
+func _staff_passes_through(cell: Vector2i, step: Vector2i) -> bool:
+	var occupant := _occupant[_index(cell)]
+	if occupant == 0 or BuildCatalog.is_belt(_objects[occupant]["def"]):
 		return true
 	var axis := _def_of(occupant).through_axis(_objects[occupant]["facing"])
 	return step == axis or step == -axis

@@ -7,8 +7,10 @@ extends GdUnitTestSuite
 ## than the passengers' way (decision
 ## desk-belts-run-one-row-back-desk-then-the-agent-row-then-the, v3).
 ##
-## The reference terminal, with belt pieces put round both desks' spots in the
-## save: each spot and the cell beside it form a closed two-cell pocket.
+## The reference terminal, with non-belt blocking pieces (statue_indoor) put
+## round both desks' spots in the save: each spot and the cell beside it form
+## a closed two-cell pocket (under 76c5cc1a, belts can be stepped over so they
+## no longer make a spot unreachable).
 
 const CHECKIN := StaffMember.Role.CHECKIN
 const LIMIT_TICKS := 600
@@ -32,7 +34,7 @@ func before_test() -> void:
 	var next: int = data["next_object_id"]
 	for cell in _ring():
 		(data["objects"] as Array).append(
-			{"id": next, "def": "baggage_belt", "anchor": [cell.x, cell.y], "facing": 0}
+			{"id": next, "def": "statue_indoor", "anchor": [cell.x, cell.y], "facing": 0}
 		)
 		next += 1
 	data["next_object_id"] = next
@@ -45,7 +47,7 @@ func before_test() -> void:
 	assert_int(_desks.size()).is_equal(2)
 
 
-## Belt cells that close each desk's spot and the cell beside it into a pocket.
+## Blocking statue cells that close each desk's spot and the cell beside it into a pocket.
 func _ring() -> Array[Vector2i]:
 	var ring: Array[Vector2i] = []
 	for x in range(10, 17):
@@ -169,7 +171,7 @@ func test_an_on_duty_agent_at_a_pocketed_spot_loads_released() -> void:
 	var next: int = grid_data["next_object_id"]
 	for cell in _ring():
 		(grid_data["objects"] as Array).append(
-			{"id": next, "def": "baggage_belt", "anchor": [cell.x, cell.y], "facing": 0}
+			{"id": next, "def": "statue_indoor", "anchor": [cell.x, cell.y], "facing": 0}
 		)
 		next += 1
 	grid_data["next_object_id"] = next

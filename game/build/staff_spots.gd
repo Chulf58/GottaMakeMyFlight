@@ -14,14 +14,17 @@ extends RefCounted
 ## load does not, so an old save still loads, and blocked() tells StaffSim
 ## which stations it can never staff.
 ##
-## Reach (decision desk-belts-run-one-row-back-desk-then-the-agent-row-then-the,
-## v3): reach() is every cell staff can walk to from an entrance door, by the
+## Reach (decision
+## staff-step-over-belts-high-cost-fallback-with-step-up-lift, 76c5cc1a,
+## superseding desk-belts-run-one-row-back-desk-then-the-agent-row-then-the):
+## reach() is every cell staff can walk to from an entrance door, by the
 ## steps StaffSim's paths take (BuildGrid.can_staff_route, which crosses
-## security scanners and lanes along their axis: decision
+## baggage belts as a high-cost fallback and security scanners and lanes along
+## their axis: decision
 ## staff-may-walk-through-security-scanners-and-lanes-so-shop-s). BuildGrid
 ## refuses an edit that takes a spot out of that set (reach_problem()), and
 ## unreachable() names a station whose spot an old save, or a layout built
-## before its entrance, left outside it.
+## before its entrance, left outside it. Staff spots themselves remain belt-free.
 
 ## Per station type, in the object's frame at facing 0: "spot" is where the
 ## member stands and "beside" the footprint cell it works next to.
