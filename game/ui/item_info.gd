@@ -82,11 +82,15 @@ func texts(tool: BuildMode.Tool) -> Array:
 			]
 		BuildMode.Tool.SCANNER:
 			lines = [
-				tr("A basic security scanner. Passengers walk through it to be screened."),
-				tr("A security officer works beside it. A full lane is faster but costs more."),
 				tr(
-					"An officer hired in Staff, or it stays closed. Keep its staff spot and way in clear."
+					# gdlint:ignore = max-line-length
+					"Compact, cheap starter scanner. Screens one passenger at a time; repacks block the line."
 				),
+				tr(
+					# gdlint:ignore = max-line-length
+					"A security officer works beside it. A Security lane is ~1.9x faster for busy airports."
+				),
+				tr("Needs an officer hired in Staff. Keep its staff spot and way in clear."),
 			]
 		BuildMode.Tool.SEATS:
 			lines = [
@@ -382,34 +386,6 @@ func texts(tool: BuildMode.Tool) -> Array:
 				),
 				tr("A plot next to land you already own."),
 			]
-		BuildMode.Tool.TRAY_TABLE:
-			lines = [
-				tr("The tray table of a security lane, where passengers unpack their bags."),
-				tr("It stands beside the arch, on the side the lane's parts go."),
-				tr("Part of a whole lane: arch, tray table, X-ray belt and pickup table."),
-			]
-		BuildMode.Tool.XRAY_BELT:
-			lines = [
-				tr("The X-ray belt of a security lane. Bags ride through it."),
-				tr("It stands beside the arch. A lane officer works at it."),
-				tr("Part of a whole lane. Needs a security officer hired in Staff."),
-			]
-		BuildMode.Tool.ARCH:
-			lines = [
-				tr("The arch of a security lane. Passengers walk through it."),
-				tr(
-					"Place the arch first and the other parts around it. Its front faces the queue."
-				),
-				tr(
-					"Part of a whole lane. Keep the spot in front and the walls around the lane clear."
-				),
-			]
-		BuildMode.Tool.PICKUP_TABLE:
-			lines = [
-				tr("The pickup table of a security lane, where passengers collect their bags."),
-				tr("It stands past the arch, where cleared passengers leave the lane."),
-				tr("Part of a whole lane: arch, tray table, X-ray belt and pickup table."),
-			]
 		BuildMode.Tool.SEARCH_TABLE:
 			lines = [
 				tr("An inspection table where officers check flagged carry-on bags."),
@@ -424,9 +400,18 @@ func texts(tool: BuildMode.Tool) -> Array:
 			]
 		BuildMode.Tool.SECURITY_LANE:
 			lines = [
-				tr("A complete security lane: tray table, X-ray belt, arch and pickup table."),
-				tr("Click once to place all four parts together. Press R to turn it."),
-				tr("Needs clear floor for the lane, queue, exit and two officer spots."),
+				tr(
+					# gdlint:ignore = max-line-length
+					"1-click 4-part X-ray lane (~1.9x faster throughput) with a non-blocking side repack berth."
+				),
+				tr(
+					# gdlint:ignore = max-line-length
+					"Places tray table, X-ray belt, arch and pickup table; press R to turn. Toggle Fast-Track on a built lane."
+				),
+				tr(
+					# gdlint:ignore = max-line-length
+					"Needs one officer to open; a second helper officer gives 2x search and repack speed."
+				),
 			]
 		BuildMode.Tool.BUSH:
 			lines = [

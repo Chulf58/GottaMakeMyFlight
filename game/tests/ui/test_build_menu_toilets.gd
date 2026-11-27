@@ -1,7 +1,8 @@
 class_name TestBuildMenuToilets
 extends GdUnitTestSuite
-## The toilet tools in the Facilities domain tab: Toilet room, Toilet stall and
-## Sink lead Facilities with their prices, rendered thumbnails, and hover popup
+## The toilet tools in the Facilities domain tab and contextual room tray:
+## Facilities leads with standalone items before rooms, while Toilet, Toilet
+## stall and Sink carry their prices, rendered thumbnails, and hover popup
 ## sizes and daily upkeep.
 
 const TOILET_TOOLS := [
@@ -48,11 +49,12 @@ func _picture(tool: BuildMode.Tool) -> TextureRect:
 	return _menu.card(tool).find_children("*", "TextureRect", true, false)[0] as TextureRect
 
 
-func test_toilet_tools_lead_the_facilities_tab() -> void:
+func test_toilet_tools_sit_in_the_facilities_tab_and_room_context() -> void:
 	var facilities := BuildMenu.category_index("facilities")
 	assert_int(facilities).is_equal(2)
 	var tools: Array = BuildMenu.categories()[facilities]["tools"]
-	assert_int(tools[0]).is_equal(BuildMode.Tool.TOILET_ROOM)
+	assert_bool(tools.has(BuildMode.Tool.TOILET_ROOM)).is_true()
+	assert_bool(BuildMenuCatalog.is_room_tool(BuildMode.Tool.TOILET_ROOM)).is_true()
 	assert_array(BuildMenuCatalog.ROOM_TOOLS[&"toilet"]).is_equal(
 		[BuildMode.Tool.TOILET_STALL, BuildMode.Tool.TOILET_SINK]
 	)

@@ -166,6 +166,17 @@
         "security_confiscation_bin.glb": "f53721dff38424d9210e3b53800db268c8dfed2d320e518a7ee2dedf49d9f183"
       }
     },
+    "security_lane": {
+      "png": "security_lane.png",
+      "class": "2x3",
+      "style": 6,
+      "sources": {
+        "pickup_table.glb": "a47ba7a4cb15a0210ac5b229471e6c520263cfc3c40372f89a2836f9308a8d39",
+        "security_arch.glb": "3a6c0f4481e11ee5aeaaf845ba1ee55752eebd127857991355fee316c7a70e11",
+        "tray_table.glb": "f8bedf3671f9ffe676b5d8615facda238c2cd250d659b0a60411d4b657e9a471",
+        "xray_belt.glb": "94af78f318877ca8164bd2359a37a6540bd1b52fee719855d32eda6086e2c356"
+      }
+    },
     "toilet_stall": {
       "png": "toilet_stall.png",
       "class": "1x2",
