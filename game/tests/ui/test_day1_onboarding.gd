@@ -284,9 +284,10 @@ func test_post_opening_hints_and_replayable_hints() -> void:
 		hints.advance(0.25, world, [])
 		t += 0.25
 	assert_str(hints.shown_id()).is_equal(HintRules.CLEANERS)
-	# Replayable hints: reset button is visible and reset_hints() re-enables and clears seen.
+	# Replayable hints: Reset hints is moved to GameMenu Settings, and reset_hints()
+	# re-enables and clears seen.
 	assert_bool(hints.settings_row().visible).is_true()
-	assert_bool(hints.reset_button().visible).is_true()
+	assert_object(hints.find_child("HintsReset", true, false)).is_null()
 	hints.set_enabled(false)
 	hints.reset_hints()
 	assert_bool(hints.is_enabled()).is_true()

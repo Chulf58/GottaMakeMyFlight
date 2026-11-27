@@ -69,8 +69,12 @@ const STATUSES := [OPEN, ACCEPTED, DECLINED, EXPIRED]
 ## 10: multi-tier airline loyalty (Bronze 3d +5%, Silver 7d +10%, Gold 12d +15%),
 ## loyalty_tier & is_hub on offers, and hub_grace_used tracking.
 ## A version 9 save is refused; there is no migration.
-const SAVE_VERSION := 10
-const SAVE_KEYS := ["save_version", "offers", "loyalty", "charters", "hub_grace_used"]
+## 11: required day1_intro_shown bool tracking the one-time Day-1 OfferPanel intro.
+## A version 10 save is refused; there is no migration.
+const SAVE_VERSION := 11
+const SAVE_KEYS := [
+	"save_version", "offers", "loyalty", "charters", "hub_grace_used", "day1_intro_shown"
+]
 const CHARTER_SEED_VERSION := 1
 const CHARTER_PREFIX := "CH"
 ## Cutoff ticks before departure (= FlightTimetable.departure_offset at BASE for
@@ -209,6 +213,8 @@ var _charters: Array[Dictionary] = []
 var _loyalty: Dictionary = {}
 ## Contract ids of Hub contracts that already used their +1 low-rating grace day.
 var _hub_grace_used: Dictionary = {}
+## Whether the Day-1 post-opening OfferPanel intro has been shown for this airport.
+var _day1_intro_shown := false
 ## True while from_snapshot() emits `changed`, so listeners do not treat a load
 ## as a player action that triggers a refill.
 var _loading := false
@@ -763,12 +769,23 @@ func to_snapshot() -> Dictionary:
 		"loyalty": _loyalty.duplicate(true),
 		"charters": charter_list,
 		"hub_grace_used": grace_list,
+		"day1_intro_shown": _day1_intro_shown,
 	}
 
 
 ## True while from_snapshot() is emitting `changed`.
 func is_loading() -> bool:
 	return _loading
+
+
+## True once the Day-1 post-opening OfferPanel intro has been shown for this airport.
+func is_day1_intro_shown() -> bool:
+	return _day1_intro_shown
+
+
+## Latches that the Day-1 OfferPanel intro has been shown so it never re-pops.
+func mark_day1_intro_shown() -> void:
+	_day1_intro_shown = true
 
 
 ## Restores a to_snapshot() dictionary, including one that went through JSON.
@@ -790,6 +807,7 @@ func from_snapshot(data: Dictionary) -> bool:
 	_charters = loaded_charters
 	_loyalty = loyalty
 	_hub_grace_used = loaded_grace
+	_day1_intro_shown = bool(data["day1_intro_shown"])
 	changed.emit()
 	_loading = false
 	return true
@@ -1512,7 +1530,7 @@ func _top_problem(data: Dictionary) -> String:
 	for key in data.keys():
 		if not SAVE_KEYS.has(key):
 			return "unknown key '%s'" % key
-	for key in ["save_version", "offers", "loyalty"]:
+	for key in ["save_version", "offers", "loyalty", "day1_intro_shown"]:
 		if not data.has(key):
 			return "missing key '%s'" % key
 	if not WholeNumber.is_whole(data["save_version"]) or data["save_version"] != SAVE_VERSION:
@@ -1520,6 +1538,8 @@ func _top_problem(data: Dictionary) -> String:
 	var problem := ""
 	if typeof(data["offers"]) != TYPE_ARRAY:
 		problem = "offers must be an array"
+	elif typeof(data["day1_intro_shown"]) != TYPE_BOOL:
+		problem = "day1_intro_shown must be a bool"
 	elif data.has("charters") and typeof(data["charters"]) != TYPE_ARRAY:
 		problem = "charters must be an array"
 	elif data.has("hub_grace_used") and typeof(data["hub_grace_used"]) != TYPE_ARRAY:

@@ -120,21 +120,16 @@ func test_the_three_toggles_are_equal_buttons_stacked_on_the_margin() -> void:
 	)
 
 
-## HUD 7/7 part f: Reset hints is the column's fourth button, the row under
-## Hints, the toggles' size, not a button off to the side of Hints.
-func test_reset_hints_is_the_column_button_under_hints() -> void:
+## HUD 4-zone enforcement (8f51e09c part 3): Reset hints moved out of the
+## left column into GameMenu Settings, leaving 3 toggles in LeftColumn.
+func test_reset_hints_is_absent_from_left_column() -> void:
 	var hints := _showing_hint()
 	await _settle()
+	assert_int(LeftColumn.SLOTS).is_equal(3)
+	assert_object(hints.find_child("HintsReset", true, false)).is_null()
+	assert_object(_main.find_child("HintsReset", true, false)).is_null()
 	var toggle := hints.toggle_button().get_global_rect()
-	var reset := hints.reset_button().get_global_rect()
-	print("RESET toggle=%s reset=%s" % [toggle, reset])
-	assert_float(reset.size.x).is_equal_approx(HudLayout.TOGGLE_W, 0.5)
-	assert_float(reset.size.y).is_equal_approx(HudLayout.BUTTON_H, 0.5)
-	assert_float(reset.position.x).is_equal_approx(HudLayout.MARGIN, 0.5)
-	assert_float(reset.position.y).is_equal_approx(LeftColumn.slot_top(LeftColumn.SLOT_RESET), 0.5)
-	assert_float(reset.position.y - toggle.end.y).is_equal_approx(HudLayout.GAP, 0.5)
-	# The departures list opens under it, never over it.
-	assert_float(_rect("DeparturesPanel").position.y).is_greater_equal(reset.end.y)
+	assert_float(_rect("DeparturesPanel").position.y).is_greater_equal(toggle.end.y)
 
 
 ## HUD 7/7 (board 3bd42402, conductor ruling: "Card replaces board" means the
@@ -191,19 +186,19 @@ func test_the_departures_list_opens_under_the_toggles_at_list_width() -> void:
 	)
 
 
-func test_hiding_reset_hints_collapses_the_48_px_gap() -> void:
+func test_hiding_hints_toggle_collapses_the_48_px_gap() -> void:
 	var hints := _showing_hint()
 	await _settle()
-	var with_reset := _rect("DeparturesPanel").position.y
-	assert_float(with_reset).is_equal_approx(float(LeftColumn.LIST_TOP), 0.5)
-	hints.reset_button().visible = false
+	var with_hints := _rect("DeparturesPanel").position.y
+	assert_float(with_hints).is_equal_approx(float(LeftColumn.LIST_TOP), 0.5)
+	hints.toggle_button().visible = false
 	await _settle()
-	var without_reset := _rect("DeparturesPanel").position.y
-	print("RESET_COLLAPSE with=%.1f without=%.1f" % [with_reset, without_reset])
-	assert_float(without_reset).is_equal_approx(
-		LeftColumn.slot_top(LeftColumn.SLOT_HINTS) + HudLayout.BUTTON_H + HudLayout.GAP, 0.5
+	var without_hints := _rect("DeparturesPanel").position.y
+	print("HINTS_COLLAPSE with=%.1f without=%.1f" % [with_hints, without_hints])
+	assert_float(without_hints).is_equal_approx(
+		LeftColumn.slot_top(LeftColumn.SLOT_DEPARTURES) + HudLayout.BUTTON_H + HudLayout.GAP, 0.5
 	)
-	assert_float(with_reset - without_reset).is_equal_approx(
+	assert_float(with_hints - without_hints).is_equal_approx(
 		float(HudLayout.BUTTON_H + HudLayout.GAP), 0.5
 	)
 

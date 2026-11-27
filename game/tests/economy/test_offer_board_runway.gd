@@ -26,9 +26,11 @@ const DAYS := 30
 ## evening-banks-plus-15-bonus: Day 2+ makes one peak-wave roll and draws
 ## ~65% into 07:00-10:00 / 17:00-20:00 with +15% Peak Demand fee bonus),
 ## and for Stage 2 S2-C (decision 92eaa854: OfferBoard v10 adds loyalty_tier,
-## is_hub, and hub_grace_used; STATE_AFTER and base offer draws stay unchanged).
+## is_hub, and hub_grace_used; STATE_AFTER and base offer draws stay unchanged),
+## and for OfferBoard v11 (day1_intro_shown bool in snapshot; STATE_AFTER and
+## base offer draws stay unchanged).
 const STATE_AFTER := -878261620875140187
-const BEFORE_HASHES := [2792917084, 107561319, 3439690774]
+const BEFORE_HASHES := [4024597466, 527401509, 532290164]
 
 
 func _rng() -> RandomNumberGenerator:

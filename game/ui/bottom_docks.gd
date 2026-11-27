@@ -79,7 +79,8 @@ static func left_floor_y(tree: SceneTree, top_y: float, layer: Vector2, bar_widt
 
 ## Lowest screen y AlertStack may reach on the right rail: GROUP_GAP above the
 ## category bar (or the open build tray stack) and GROUP_GAP above any visible
-## RIGHT_FLOOR_GROUP control (DebugCorner, DebugPanel) inside the rail's x-band.
+## RIGHT_FLOOR_GROUP control (DebugCorner, DebugPanel, PassengerInspect) inside
+## the rail's x-band.
 static func right_stop_y(
 	tree: SceneTree, layer: Vector2, tray_open: bool, stack_top: float
 ) -> float:
@@ -96,3 +97,40 @@ static func right_stop_y(
 		if rect.has_area() and rect.intersects(rail_band):
 			stop = minf(stop, rect.position.y - HudLayout.GROUP_GAP)
 	return stop
+
+
+## Bottom offset from viewport bottom for a right-anchored inspect card
+## (`card_width` wide at MARGIN from right edge): sits at MARGIN when clear of
+## CategoryBar, BuildTray/StatusCard/StaffCard, and any other RIGHT_FLOOR_GROUP
+## control (such as DebugCorner/DebugPanel), lifting GAP above whichever sits
+## under its x-band.
+static func right_floor_bottom(
+	tree: SceneTree,
+	layer: Vector2,
+	card_width: float,
+	bar_width: float,
+	tray_open: bool,
+	stack_top: float,
+	ignore: Control = null
+) -> float:
+	var bottom_y := float(HudLayout.MARGIN)
+	var card_left := layer.x - float(HudLayout.MARGIN) - card_width
+	if bar_width > 0.0:
+		var bar_right := (layer.x + bar_width) / 2.0
+		if bar_right + float(HudLayout.GROUP_GAP) > card_left:
+			bottom_y = maxf(bottom_y, float(BuildMenu.MARGIN + BuildMenu.BAR_H + HudLayout.GAP))
+	var stack_right := (layer.x + float(HudLayout.TRAY_W)) / 2.0
+	if tray_open and stack_right + float(HudLayout.GROUP_GAP) > card_left:
+		bottom_y = maxf(bottom_y, stack_top + float(HudLayout.GAP))
+	elif stack_top > float(BuildMenu.MARGIN + BuildMenu.BAR_H):
+		var col_right := (layer.x + float(BuildMenu.COLUMN_W)) / 2.0
+		if col_right + float(HudLayout.GROUP_GAP) > card_left:
+			bottom_y = maxf(bottom_y, stack_top + float(HudLayout.GAP))
+	for node in tree.get_nodes_in_group(RIGHT_FLOOR_GROUP) if tree != null else []:
+		var other := node as Control
+		if other == null or other == ignore or not other.is_visible_in_tree():
+			continue
+		var rect := other.get_global_rect()
+		if rect.has_area() and rect.end.x > card_left and rect.position.x < layer.x:
+			bottom_y = maxf(bottom_y, layer.y - rect.position.y + float(HudLayout.GAP))
+	return bottom_y

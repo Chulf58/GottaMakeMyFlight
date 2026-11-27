@@ -16,8 +16,9 @@ extends Node
 ##
 ## The seen memory and the on/off choice live per profile in the shared HUD
 ## settings file (HudFlagSetting; keys "hint_seen_<id>" and "hints"), never in a
-## save. The left column holds the on/off toggle (key H) and, in the row under
-## it, Reset hints (LeftColumn.SLOT_RESET). Off, hints show nothing and mark nothing seen.
+## save. The left column holds the on/off toggle (key H), while Reset hints
+## lives in GameMenu's Settings page. Off, hints show nothing and mark nothing
+## seen.
 ##
 ## Hints run in a normal launch only. A probe, a test or a PlaytestHook run has
 ## them off, with no row; the explicit switch (--hints, or GMMF_HINTS=1) turns
@@ -93,7 +94,6 @@ var _caption := Label.new()
 var _body := Label.new()
 var _row := VBoxContainer.new()
 var _toggle := Button.new()
-var _reset := Button.new()
 ## The follow hint's Show me button, visible only while that hint shows.
 var _show_me := Button.new()
 ## Whether the follow hint's seen mark is in the file. It is written when the
@@ -159,7 +159,6 @@ func _retranslate() -> void:
 	_caption.text = tr("Hint ({key} turns hints off)").format({"key": HOTKEY})
 	_show_me.text = tr("Show me")
 	_toggle.text = tr("Hints ({key})").format({"key": HOTKEY})
-	_reset.text = tr("Reset hints")
 	if _shown_id != &"":
 		_body.text = HintRules.text(_shown_id)
 
@@ -210,10 +209,6 @@ func settings_row() -> Control:
 
 func toggle_button() -> Button:
 	return _toggle
-
-
-func reset_button() -> Button:
-	return _reset
 
 
 func show_me_button() -> Button:
@@ -644,11 +639,3 @@ func _build() -> void:
 	_toggle.focus_mode = Control.FOCUS_NONE
 	_toggle.toggled.connect(set_enabled)
 	_row.add_child(_toggle)
-	_reset.name = "HintsReset"
-	_reset.text = tr("Reset hints")
-	LeftColumn.size_toggle(_reset)
-	_reset.add_to_group(LeftColumn.TOGGLE_ROW_GROUP)
-	_reset.set_meta(LeftColumn.META_SLOT, LeftColumn.SLOT_RESET)
-	_reset.focus_mode = Control.FOCUS_NONE
-	_reset.pressed.connect(reset_hints)
-	_row.add_child(_reset)

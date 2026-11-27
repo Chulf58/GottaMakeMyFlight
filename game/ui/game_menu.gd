@@ -1,3 +1,4 @@
+# gdlint:disable = max-public-methods
 class_name GameMenu
 extends Node
 ## The game menu (decision daily-incidents-technical-design-incidentdirector-
@@ -57,6 +58,9 @@ const ESC_KEY := "Esc"
 ## Optional: the play camera whose angle preset the Settings selector drives.
 ## Falls back to sibling `../TycoonCamera` when left unset.
 @export var camera: TycoonCamera
+## Optional: the HUD's Hints controller for the Settings Reset hints button.
+## Falls back to `../PassengerHud/Hints` when left unset.
+@export var hints: Hints
 ## Opens a folder in the system's file browser; tests swap in a recorder.
 var open_folder := Callable()
 ## Changes to a scene file; tests swap in a recorder. Defaults to the tree's
@@ -94,6 +98,7 @@ var _save_list: SaveList
 var _status: Label
 var _status_spec := {}
 var _incidents_switch: CheckButton
+var _reset_hints_btn: Button
 var _camera_angle_label: Label
 var _quit_log_switch: CheckButton
 var _quit_log_note: Label
@@ -258,6 +263,11 @@ func incidents_switch() -> CheckButton:
 	return _incidents_switch
 
 
+## The Reset hints button on the Settings page, or null while closed.
+func reset_hints_button() -> Button:
+	return _reset_hints_btn
+
+
 ## The version in Project Settings (application/config/version), "" when unset.
 static func version_text() -> String:
 	return str(ProjectSettings.get_setting("application/config/version", ""))
@@ -380,6 +390,9 @@ func _show() -> void:
 	_incidents_switch.button_pressed = director != null and director.is_enabled()
 	_incidents_switch.toggled.connect(_on_incidents_toggled)
 	_settings_page.add_child(_incidents_switch)
+	_reset_hints_btn = _button(
+		_settings_page, "ResetHints", tr("Reset hints"), _on_reset_hints_pressed
+	)
 	if quit_log != null:
 		_add_quit_log_controls()
 	_settings_back = _button(_settings_page, "Back", tr("Back"), press_back)
@@ -564,6 +577,29 @@ func _on_incidents_toggled(on: bool) -> void:
 		director.set_enabled(on)
 
 
+func _resolve_hints() -> Hints:
+	if is_instance_valid(hints):
+		return hints
+	var sibling := get_node_or_null("../PassengerHud/Hints") as Hints
+	if sibling != null:
+		hints = sibling
+		return hints
+	var tree := get_tree()
+	if tree != null and tree.root != null:
+		return tree.root.find_child("Hints", true, false) as Hints
+	return null
+
+
+func _on_reset_hints_pressed() -> void:
+	var resolved := _resolve_hints()
+	if resolved != null:
+		resolved.reset_hints()
+	else:
+		HudFlagSetting.save_flag(HudFlagSetting.PATH, Hints.SETTING_KEY, true, Hints.WHO)
+		for id in HintRules.IDS:
+			HudFlagSetting.save_flag(HudFlagSetting.PATH, Hints.SEEN_PREFIX + id, false, Hints.WHO)
+
+
 func _on_feedback_pressed() -> void:
 	if not feedback_url.is_empty() and open_url.is_valid():
 		open_url.call(feedback_url)
@@ -667,6 +703,7 @@ func _free_layer() -> void:
 	_status = null
 	_status_spec = {}
 	_incidents_switch = null
+	_reset_hints_btn = null
 	_quit_log_switch = null
 	_quit_log_note = null
 	_open_log_btn = null
@@ -779,6 +816,8 @@ func _retranslate() -> void:
 	(_settings_page.get_node("Title") as Label).text = tr("Settings")
 	_sync_camera_angle_picker()
 	_incidents_switch.text = tr("Incidents")
+	if _reset_hints_btn != null:
+		_reset_hints_btn.text = tr("Reset hints")
 	if _quit_log_switch != null:
 		_quit_log_switch.text = tr("Quit log")
 	if _quit_log_note != null:
